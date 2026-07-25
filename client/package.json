@@ -2,7 +2,7 @@
   "name": "entropy-decrease",
   "productName": "Entropy decrease",
   "private": true,
-  "version": "0.15.0",
+  "version": "0.15.1",
   "description": "熵减 - 跨端学习平台",
   "author": "Entropy Decrease Team",
   "main": "dist-electron/electron/main.js",

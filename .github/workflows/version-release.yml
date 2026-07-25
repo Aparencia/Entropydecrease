@@ -1,0 +1,46 @@
+name: Version & Release
+
+# 语义化版本自动化：
+# 合并到 master 时触发，
+# 依据 Conventional Commits 计算 SemVer 版本，
+# 自动更新 package.json/package-lock.json、生成 CHANGELOG、创建 Git tag 与 GitHub Release。
+on:
+  push:
+    branches: [master]
+
+# 同一分支串行执行，避免并发发布产生 tag/版本竞争
+concurrency:
+  group: version-release-${{ github.ref }}
+  cancel-in-progress: false
+
+# semantic-release 需要写入仓库内容（提交、tag、release）及评论 issue/PR
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Semantic Release
+    runs-on: ubuntu-latest
+    # 发布提交自身携带 [skip ci] 已可被 GitHub 拦截，此处再加一层双保险，防止回环触发
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    steps:
+      - name: Checkout（拉取完整历史用于提交分析）
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install release tooling
+        run: npm install --no-audit --no-fund
+
+      - name: Semantic Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release

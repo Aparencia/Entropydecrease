@@ -7,7 +7,8 @@
 
 import { safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { postJson, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
 // IPC Handler
@@ -59,22 +60,30 @@ function register(): void {
       }
 
       try {
-        const { data: resp, requestId } = await postJson<typeof reqBody, RecommendResp>(
+        const localHandler = async (): Promise<RecommendResp> => {
+          const prompt = `根据学习历史推荐最佳学习时长，返回JSON: {"recommended_minutes": 25, "break_minutes": 5, "reason": "...", "source": "local_ollama"}\n学习历史：${JSON.stringify(reqBody)}`;
+          const result = await generateText(prompt, '你是一个学习时间管理助手。请仅返回JSON。', { temperature: 0.4, maxTokens: 512 });
+          const parsed = JSON.parse(result.content);
+          return { recommended_minutes: parsed.recommended_minutes ?? 25, break_minutes: parsed.break_minutes ?? 5, reason: parsed.reason ?? '', source: 'local_ollama', model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
+        };
+
+        const { data: resp, source, requestId } = await callWithLocalFallback<typeof reqBody, RecommendResp>(
           '/api/v1/ai/recommend-duration',
           reqBody,
+          localHandler,
           args.authToken,
           args.userApiKey,
           40000,
         );
 
         const elapsed = Date.now() - startMs;
-        logger.info(`[AI] [recommend] ✔ Success: recommended=${resp.recommended_minutes}min, break=${resp.break_minutes}min, source=${resp.source}, model=${resp.model}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
+        logger.info(`[AI] [recommend] ✔ Success (${source}): recommended=${resp.recommended_minutes}min, break=${resp.break_minutes}min, source=${resp.source}, model=${resp.model}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
         return {
           recommendedMinutes: resp.recommended_minutes,
           breakMinutes: resp.break_minutes,
           reason: resp.reason,
           source: resp.source,
-          isLocalFallback: resp.source === 'local_rule',
+          isLocalFallback: resp.source === 'local_rule' || source === 'local',
           model: resp.model,
           tokensUsed: resp.tokens_used,
           latencyMs: resp.latency_ms,

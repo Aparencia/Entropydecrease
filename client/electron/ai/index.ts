@@ -7,6 +7,7 @@
 
 import { logger } from '../logger.js';
 import type { AIFeatureDef } from './utils.js';
+import { registerOllamaHandlers, initOllama } from './ollama/index.js';
 
 // 导入所有 AI 功能模块
 import { feature as summarizeFeature } from './handlers/summarizeHandler.js';
@@ -21,6 +22,8 @@ import { feature as socraticFeature } from './handlers/socraticHandler.js';
 import { feature as predictFeature } from './handlers/predictHandler.js';
 import { feature as rescueFeature } from './handlers/rescueHandler.js';
 import { feature as visionExtractFeature } from './handlers/visionExtractHandler.js';
+import { feature as sessionAnalyzeFeature } from './handlers/sessionAnalyzeHandler.js';
+import { feature as videoAnalyzeFeature } from './handlers/videoAnalyzeHandler.js';
 
 // ================================================================
 // 功能注册表
@@ -40,6 +43,8 @@ const features: AIFeatureDef[] = [
   predictFeature,
   rescueFeature,
   visionExtractFeature,
+  sessionAnalyzeFeature,
+  videoAnalyzeFeature,
 ];
 
 // ================================================================
@@ -51,6 +56,7 @@ const features: AIFeatureDef[] = [
  *
  * 遍历功能注册表，依次调用每个功能的 register() 方法，
  * 将对应的 safeHandle 绑定到 ipcMain。
+ * 同时注册 Ollama 本地推理相关 IPC handler。
  */
 export function registerAIHandlers(): void {
   logger.info(`[AI] Registering ${features.length} AI feature(s)...`);
@@ -58,5 +64,17 @@ export function registerAIHandlers(): void {
     feat.register();
     logger.info(`[AI] Registered: ${feat.name} (${feat.id}) v${feat.version}`);
   }
+
+  // 注册 Ollama 本地推理 IPC handler
+  registerOllamaHandlers();
+
   logger.info('[AI] All AI handlers registered successfully');
+}
+
+/**
+ * 初始化 AI 模块（包括 Ollama 配置加载与检测）
+ * 应在应用启动时、registerAIHandlers() 之前调用
+ */
+export async function initAIModule(): Promise<void> {
+  await initOllama();
 }

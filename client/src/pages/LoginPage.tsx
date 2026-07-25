@@ -39,17 +39,21 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-bg-primary px-4">
-      <div className="w-full max-w-sm">
+    <div className="relative min-h-screen flex items-center justify-center px-4 overflow-hidden">
+      {/* 双世界沉浸式背景（深海意识 / 晨曦觉醒，随主题自适应） */}
+      <div className="absolute inset-0 bg-bg-primary kb-immersive-bg" aria-hidden="true" />
+
+      <div className="relative w-full max-w-sm">
         {/* Logo & Title */}
         <div className="flex flex-col items-center gap-3 mb-8">
           <div
             className={cn(
-              'w-12 h-12 rounded-kb-lg flex items-center justify-center',
-              'bg-brand-600 text-white shadow-kb-md',
+              'w-14 h-14 rounded-kb-lg flex items-center justify-center',
+              'bg-gradient-to-br from-brand-500 to-brand-600 text-white',
+              'shadow-kb-lg ring-1 ring-white/20',
             )}
           >
-            <span className="text-h2 font-bold">课</span>
+            <span className="text-h1 font-bold">课</span>
           </div>
           <div className="text-center">
             <h1 className="text-h1 font-semibold text-text-primary">登录熵减</h1>

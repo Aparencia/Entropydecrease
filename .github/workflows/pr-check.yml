@@ -2,10 +2,42 @@ name: PR Quality Check
 
 on:
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
-  quality:
+  # ===========================================================================
+  # 路径变更检测 —— 决定哪些子项目需要执行检查
+  # ===========================================================================
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      client: ${{ steps.filter.outputs.client }}
+      sync-service: ${{ steps.filter.outputs.sync-service }}
+      ai-gateway: ${{ steps.filter.outputs.ai-gateway }}
+      website: ${{ steps.filter.outputs.website }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            client:
+              - 'client/**'
+            sync-service:
+              - 'server/sync-service/**'
+              - 'server/shared/**'
+            ai-gateway:
+              - 'server/ai-gateway/**'
+              - 'server/shared/**'
+            website:
+              - 'website/**'
+
+  # ===========================================================================
+  # Client —— React + Vite + Electron 前端
+  # ===========================================================================
+  client:
+    needs: changes
+    if: needs.changes.outputs.client == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,7 +47,85 @@ jobs:
           cache: 'npm'
           cache-dependency-path: client/package-lock.json
       - run: cd client && npm ci
-      - run: cd client && npm run lint
-      - run: cd client && npx tsc --noEmit
-      - run: cd client && npm run test -- --run
-      - run: cd client && npm run build
+      - name: Lint
+        run: cd client && npm run lint
+      - name: Typecheck
+        run: cd client && npx tsc --noEmit
+      - name: Test
+        run: cd client && npm run test -- --run
+      - name: Build
+        run: cd client && npm run build
+
+  # ===========================================================================
+  # Server / sync-service —— Go + Gin 同步服务
+  # ===========================================================================
+  sync-service:
+    needs: changes
+    if: needs.changes.outputs.sync-service == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server/sync-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: server/sync-service/go.sum
+      - name: Lint (go vet)
+        run: go vet ./...
+      - name: Build
+        run: go build ./...
+      - name: Test
+        run: go test ./... -v -count=1
+
+  # ===========================================================================
+  # Server / ai-gateway —— Python + FastAPI AI 网关
+  # ===========================================================================
+  ai-gateway:
+    needs: changes
+    if: needs.changes.outputs.ai-gateway == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server/ai-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: server/ai-gateway/requirements.txt
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install ruff pytest pytest-asyncio httpx
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Test
+        run: pytest tests/ -v --tb=short
+
+  # ===========================================================================
+  # Website —— Next.js 官网
+  # ===========================================================================
+  website:
+    needs: changes
+    if: needs.changes.outputs.website == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Build
+        run: npm run build

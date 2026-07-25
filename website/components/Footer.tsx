@@ -38,7 +38,7 @@ export function Footer() {
             <div className="flex flex-col gap-2.5">
               <span className="text-kb-text3 text-xs uppercase tracking-widest mb-1">开源</span>
               <a
-                href="https://github.com"
+                href="https://github.com/Aparencia/KeBan"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-kb-text2 hover:text-kb-text transition-colors duration-300"
@@ -46,7 +46,7 @@ export function Footer() {
                 GitHub
               </a>
               <a
-                href="https://github.com"
+                href="https://github.com/Aparencia/KeBan/releases"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-kb-text2 hover:text-kb-text transition-colors duration-300"
@@ -58,14 +58,36 @@ export function Footer() {
         </div>
 
         {/* 底栏 */}
-        <div className="mt-12 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-kb-text3"
+        <div className="mt-12 pt-6 flex flex-col items-center gap-3 text-xs text-kb-text3"
           style={{ borderTop: "1px solid var(--kb-border-default)" }}
         >
-          <span>© 2026 课伴 KeBan · 熵减 — 在无序的时光里，陪你慢慢生长</span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full animate-cyber-pulse" style={{ background: "var(--kb-cyber-cyan)" }} />
-            以负熵为食的生命体
-          </span>
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 w-full">
+            <span>© 2026 课伴 KeBan · 熵减 — 在无序的时光里，陪你慢慢生长</span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full animate-cyber-pulse" style={{ background: "var(--kb-cyber-cyan)" }} />
+              以负熵为食的生命体
+            </span>
+          </div>
+          {/* 备案信息 */}
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
+            <a
+              href="https://beian.miit.gov.cn/"
+              target="_blank"
+              rel="noreferrer"
+              className="text-kb-text3 hover:text-kb-text2 transition-colors duration-300"
+            >
+              闽ICP备2025100891号-1
+            </a>
+            <a
+              href="https://beian.mps.gov.cn/#/query/webSearch?code=35052102000672"
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 text-kb-text3 hover:text-kb-text2 transition-colors duration-300"
+            >
+              <img src="/beian.png" alt="" className="w-3.5 h-3.5" />
+              闽公网安备35052102000672号
+            </a>
+          </div>
         </div>
       </div>
     </footer>

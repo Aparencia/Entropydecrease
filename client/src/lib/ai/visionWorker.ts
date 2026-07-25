@@ -2,7 +2,7 @@
  * 视觉提取 Worker
  *
  * 实现 PipelineWorker 接口，将截图发送给多模态 AI 模型进行内容提取。
- * 通过 ai-gateway 的 /api/v1/vision/extract 端点调用 GLM-4V-Flash / Qwen-VL-Plus。
+ * 通过 IPC ai_vision_extract 调用主进程 handler，转发至 GLM-4V-Flash / Qwen-VL-Plus。
  */
 
 import type {
@@ -11,7 +11,8 @@ import type {
   ExtractionResult,
   ScreenshotData,
 } from '@/lib/capture/captureTypes';
-import { aiClient } from '@/lib/http/apiClient';
+import { supabase } from '@/lib/auth/supabaseClient';
+import { getActiveUserKey } from '@/lib/ai/apiKeyManager';
 
 // ================================================================
 // 视觉提取模式类型
@@ -30,23 +31,6 @@ export interface CodeBlock {
 export interface VisionExtractOptions {
   /** 提取模式，默认 'auto' */
   mode?: VisionExtractMode;
-}
-
-// ================================================================
-// 响应类型（与后端 VisionExtractResponse 对应）
-// ================================================================
-
-interface VisionExtractApiResponse {
-  text: string;
-  formulas: string[];
-  diagrams: string[];
-  key_points: string[];
-  code_blocks: CodeBlock[];
-  concepts: string[];
-  confidence: number;
-  model_used: string;
-  processing_time_ms: number;
-  mode: VisionExtractMode;
 }
 
 // ================================================================
@@ -103,17 +87,34 @@ export class VisionWorker implements PipelineWorker {
     // 从 metadata 中获取提取模式，或使用默认值
     const mode = (message.metadata?.visionMode as VisionExtractMode) ?? this.defaultMode;
 
-    // 调用后端视觉提取 API（带详细错误分类）
-    let response: VisionExtractApiResponse;
+    // 鉴权获取（懒加载）
+    const { data: { session } } = await supabase.auth.getSession();
+    const authToken = session?.access_token;
+    const userApiKey = getActiveUserKey();
+
+    // 调用主进程视觉提取 handler（带详细错误分类）
+    let ipcResult: {
+      text: string;
+      formulas: string[];
+      diagrams: string[];
+      keyPoints: string[];
+      codeBlocks: Array<{ language: string; code: string }>;
+      concepts: string[];
+      confidence: number;
+      modelUsed: string;
+      processingTimeMs: number;
+      mode: string;
+      requestId?: string;
+      source: 'local' | 'remote';
+    };
     try {
-      response = await aiClient.post<VisionExtractApiResponse>(
-        '/api/v1/vision/extract',
-        {
-          image_base64: base64,
-          language: 'zh',
-          mode,
-        },
-      );
+      ipcResult = await window.electronAPI!.invoke('ai_vision_extract', {
+        imageBase64: base64,
+        language: 'zh',
+        mode,
+        authToken,
+        userApiKey,
+      }) as typeof ipcResult;
     } catch (err: unknown) {
       const errorInfo = classifyVisionError(err);
       console.error(
@@ -134,30 +135,30 @@ export class VisionWorker implements PipelineWorker {
     }
 
     // 3. 内容相似度去重：提取文本与上次高度相似则跳过
-    if (response.text && this.isSimilarToLast(response.text)) {
+    if (ipcResult.text && this.isSimilarToLast(ipcResult.text)) {
       return null;
     }
 
     // 更新去重状态
-    if (response.text) {
-      this.lastProcessedText = response.text;
+    if (ipcResult.text) {
+      this.lastProcessedText = ipcResult.text;
       this.lastProcessTime = now;
     }
 
-    // 转换为 ExtractionResult
+    // 转换为 ExtractionResult（camelCase 字段名）
     return {
-      text: response.text,
-      confidence: response.confidence,
+      text: ipcResult.text,
+      confidence: ipcResult.confidence,
       source: 'vision',
-      model: response.model_used,
-      processingTimeMs: response.processing_time_ms,
+      model: ipcResult.modelUsed,
+      processingTimeMs: ipcResult.processingTimeMs,
       structured: {
-        formulas: response.formulas,
-        diagrams: response.diagrams,
-        keyPoints: response.key_points,
-        codeBlocks: response.code_blocks,
-        concepts: response.concepts,
-        mode: response.mode,
+        formulas: ipcResult.formulas,
+        diagrams: ipcResult.diagrams,
+        keyPoints: ipcResult.keyPoints,
+        codeBlocks: ipcResult.codeBlocks,
+        concepts: ipcResult.concepts,
+        mode: ipcResult.mode,
       },
     };
   }

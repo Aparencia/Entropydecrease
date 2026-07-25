@@ -36,7 +36,7 @@ AI_PROVIDERS: dict = {
             "free": "qwen-plus",             # 通用兜底模型
             "summary": "qwen-plus",         # 笔记摘要
             "flashcard": "qwen-plus",        # 闪卡生成（JSON Mode 稳定）
-            "vision": "qwen-vl-plus",        # 多模态视觉提取
+            "vision": "qwen2.5-vl-72b-instruct",  # 多模态视觉提取（课堂助手主力，百炼标准标识符）
             "asr": "paraformer-v2",          # 语音转文字（Paraformer）
             "anchor": "qwen-plus",           # 记忆锚点生成
             "socratic": "qwen-plus",         # 苏格拉底追问
@@ -82,7 +82,7 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
     "generate_cards": ("glm", "free"),
     "evaluate": ("glm", "free"),
     "recommend": ("glm", "free"),
-    "vision_extract": ("glm", "vision"),
+    "vision_extract": ("qwen", "vision"),
     "transcribe": ("qwen", "asr"),
     "tag_content": ("glm", "free"),
     "optimize_card": ("glm", "free"),
@@ -248,7 +248,7 @@ PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
     "generate_cards": ["glm", "qwen", "fallback"],        # GLM（免费）优先，Qwen 备选
     "evaluate":       ["glm", "deepseek", "fallback"],    # GLM（免费）优先，DeepSeek 备选
     "recommend":      ["glm", "deepseek", "fallback"],    # GLM（免费）优先，DeepSeek 备选
-    "vision_extract": ["glm", "qwen"],                   # GLM-4V-Flash（免费）优先，Qwen-VL 备选
+    "vision_extract": ["qwen", "glm"],                   # Qwen-VL-Max（百炼）优先，GLM-4V 备选
     "transcribe":     ["qwen", "glm", "fallback"],       # Qwen Paraformer 优先，GLM 备选
     "tag_content":    ["glm", "deepseek", "fallback"],    # GLM（免费）优先，DeepSeek 备选
     "optimize_card":  ["glm", "qwen", "fallback"],       # GLM（免费）优先，Qwen 备选

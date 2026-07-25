@@ -2,11 +2,13 @@
  * AI 摘要功能 Handler
  *
  * 处理 ai_summarize IPC 请求，调用 AI 网关生成文本摘要。
+ * 支持本地 Ollama 降级：优先调用本地模型，失败后降级到远程网关。
  */
 
 import { safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { postJson, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
 // IPC Handler
@@ -54,22 +56,39 @@ function register(): void {
       }
 
       try {
-        const { data: resp, requestId } = await postJson<typeof reqBody, SummarizeResp>(
+        // 本地 Ollama 降级链
+        const localHandler = async (): Promise<SummarizeResp> => {
+          const styleHint = args.style ? `，风格：${args.style}` : '';
+          const langHint = args.language ? `，语言：${args.language}` : '';
+          const lenHint = args.maxLength ? `，字数控制在${args.maxLength}字以内` : '';
+          const prompt = `请对以下内容进行摘要${styleHint}${langHint}${lenHint}：\n\n${args.text}`;
+          const result = await generateText(prompt, '你是一个专业的学习笔记摘要助手，擅长提炼核心要点。', { temperature: 0.5, maxTokens: 2048 });
+          return {
+            summary: result.content,
+            model: result.model,
+            tokens_used: result.tokens_used,
+            latency_ms: result.latency_ms,
+          };
+        };
+
+        const { data: resp, source, requestId } = await callWithLocalFallback<typeof reqBody, SummarizeResp>(
           '/api/v1/ai/summarize',
           reqBody,
+          localHandler,
           args.authToken,
           args.userApiKey,
           90000,
         );
 
         const elapsed = Date.now() - startMs;
-        logger.info(`[AI] [summarize] ✔ Success: model=${resp.model}, tokens=${resp.tokens_used}, backend_latency=${resp.latency_ms}ms, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
+        logger.info(`[AI] [summarize] ✔ Success (${source}): model=${resp.model}, tokens=${resp.tokens_used}, backend_latency=${resp.latency_ms}ms, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
         return {
           summary: resp.summary,
           model: resp.model,
           tokensUsed: resp.tokens_used,
           latencyMs: resp.latency_ms,
           requestId,
+          source,
         };
       } catch (err) {
         const elapsed = Date.now() - startMs;

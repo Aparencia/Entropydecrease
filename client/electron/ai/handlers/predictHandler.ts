@@ -6,7 +6,8 @@
 
 import { safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { postJson, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
 // IPC Handler
@@ -49,18 +50,26 @@ function register(): void {
       }
 
       try {
-        const { data: resp, requestId } = await postJson<typeof reqBody, PredictGenResp>(
+        const localHandler = async (): Promise<PredictGenResp> => {
+          const prompt = `基于以下笔记内容，生成预测性问题，返回JSON: {"predictions": [{"question": "...", "type": "...", "reason": "...", "curiosity_score": 0.8}], "status": "ok"}\n\n笔记：\n${args.content}`;
+          const result = await generateText(prompt, '你是一个预测驱动学习助手，擅长从笔记中生成引导性问题。请仅返回JSON。', { temperature: 0.6, maxTokens: 1024 });
+          const parsed = JSON.parse(result.content);
+          return { predictions: parsed.predictions ?? [], status: 'ok', model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
+        };
+
+        const { data: resp, source, requestId } = await callWithLocalFallback<typeof reqBody, PredictGenResp>(
           '/api/v1/ai/predict',
           reqBody,
+          localHandler,
           args.authToken,
           args.userApiKey,
           60000,
         );
 
         const elapsed = Date.now() - startMs;
-        logger.info(`[AI] [predict] ✔ Success: predictions=${resp.predictions.length}, status=${resp.status}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
+        logger.info(`[AI] [predict] ✔ Success (${source}): predictions=${resp.predictions.length}, status=${resp.status}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
         return {
-          predictions: resp.predictions.map((p) => ({
+          predictions: resp.predictions.map((p: { question: string; type: string; reason: string; curiosity_score: number }) => ({
             question: p.question,
             type: p.type,
             reason: p.reason,
@@ -71,6 +80,7 @@ function register(): void {
           tokensUsed: resp.tokens_used,
           latencyMs: resp.latency_ms,
           requestId,
+          source,
         };
       } catch (err) {
         const elapsed = Date.now() - startMs;

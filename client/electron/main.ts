@@ -14,7 +14,7 @@ import { writeFile, readFile } from 'fs/promises';
 import { readFileSync, existsSync } from 'fs';
 import { safeHandle, setMainWindowId } from './ipcUtils.js';
 import { logger } from './logger.js';
-import { registerAIHandlers } from './ai/index.js';
+import { registerAIHandlers, initAIModule } from './ai/index.js';
 import { loadPersistedGatewayUrl, setRuntimeGatewayUrl, gatewayUrl, isDevMode } from './ai/utils.js';
 import { initAutoUpdater, checkForUpdate, downloadUpdate, installUpdate, destroyAutoUpdater, setAutoCheckEnabled } from './updater.js';
 import { createMainWindow, saveCloseChoice, completeSyncBeforeQuit } from './windowManager.js';
@@ -234,6 +234,8 @@ if (!gotTheLock) {
     // 加载持久化的 AI 网关地址（在注册 handler 之前，确保 handler 可用正确的 URL）
     await loadPersistedGatewayUrl();
     logger.info(`[AI] Gateway URL resolved: ${gatewayUrl()}`);
+    // 初始化 AI 模块（加载 Ollama 配置、执行检测），须在注册 handler 之前完成
+    await initAIModule();
     registerAIHandlers();
     registerCaptureHandlers();
 

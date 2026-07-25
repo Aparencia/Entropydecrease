@@ -8,6 +8,21 @@ interface RequestOptions extends RequestInit {
   timeout?: number;
 }
 
+/**
+ * 共享的 token 刷新 Promise —— 并发请求同时命中 401 时只触发一次 refreshSession。
+ * 否则多次并发刷新会因 Supabase 的 refresh token 轮换而互相失效，
+ * 让本来有效的会话被误判为过期，从而偶发地强制用户重新登录。
+ */
+let sharedRefresh: ReturnType<typeof supabase.auth.refreshSession> | null = null;
+function refreshSessionShared() {
+  if (!sharedRefresh) {
+    sharedRefresh = supabase.auth.refreshSession().finally(() => {
+      sharedRefresh = null;
+    });
+  }
+  return sharedRefresh;
+}
+
 function createClient(baseUrlOrGetter: string | (() => string)) {
   const resolveUrl = typeof baseUrlOrGetter === 'function' ? baseUrlOrGetter : () => baseUrlOrGetter;
 
@@ -46,34 +61,33 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
         signal: controller.signal,
       });
 
-      // 401 → 尝试强制刷新 token 并重试一次
+      // 401 → 尝试刷新 token 并重试一次
       if (response.status === 401) {
-        const { data: { session: refreshed }, error: refreshError } = await supabase.auth.refreshSession();
+        // 复用共享刷新，避免并发 401 触发多次刷新导致 token 轮换互相失效
+        const { data: { session: refreshed }, error: refreshError } = await refreshSessionShared();
 
-        // 刷新失败（包括 refresh token 过期）→ 派发 session-expired 事件引导重登
+        // 仅当刷新本身失败（refresh token 真正过期/失效）才判定为登录过期
         if (refreshError || !refreshed?.access_token) {
           window.dispatchEvent(new CustomEvent('kb:session-expired'));
           throw new Error('HTTP 401: 登录已过期');
         }
 
-        // 拿到新 token，重试原请求
-        if (refreshed.access_token !== token) {
-          headers.set('Authorization', `Bearer ${refreshed.access_token}`);
-          const retryResponse = await fetch(`${baseUrl}${endpoint}`, {
-            ...rest,
-            headers,
-            signal: controller.signal,
-          });
+        // 刷新成功 → 用最新 token 重试一次原请求
+        headers.set('Authorization', `Bearer ${refreshed.access_token}`);
+        const retryResponse = await fetch(`${baseUrl}${endpoint}`, {
+          ...rest,
+          headers,
+          signal: controller.signal,
+        });
 
-          // 重试仍失败 → 同样派发 session-expired
-          if (!retryResponse.ok) {
-            window.dispatchEvent(new CustomEvent('kb:session-expired'));
-            throw new Error(`HTTP ${retryResponse.status}`);
-          }
-          const retryGwReqId = retryResponse.headers.get('ai-gateway-request-id');
-          if (retryGwReqId) console.debug(`[ai-gateway] request-id: ${retryGwReqId}`);
-          return retryResponse.json() as Promise<T>;
+        // 重试仍失败：会话有效但服务端因其他原因拒绝（权限 / 额度 / 网关 JWT 校验抖动等），
+        // 不属于登录过期，不再派发 session-expired，交由调用方按普通错误处理
+        if (!retryResponse.ok) {
+          throw new Error(`HTTP ${retryResponse.status}`);
         }
+        const retryGwReqId = retryResponse.headers.get('ai-gateway-request-id');
+        if (retryGwReqId) console.debug(`[ai-gateway] request-id: ${retryGwReqId}`);
+        return retryResponse.json() as Promise<T>;
       }
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);

@@ -176,7 +176,7 @@ class GLMProvider(AIProvider):
         system_prompt: str = "",
         model: str = "glm-4.6v-flash",
         temperature: float = 0.3,
-        max_tokens: int = 2048,
+        max_tokens: int = 1024,
         response_format: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
@@ -185,6 +185,8 @@ class GLMProvider(AIProvider):
         GLM-4V-Flash 支持图片 + 文本输入，通过 OpenAI 兼容接口发送
         多模态消息格式。
         """
+        # GLM 免费视觉模型 max_tokens 上限 1024
+        max_tokens = min(max_tokens, 1024)
         start_time = time.monotonic()
 
         # 构建多模态消息列表
@@ -245,7 +247,7 @@ class GLMProvider(AIProvider):
         system_prompt: str = "",
         model: str = "glm-4.6v-flash",
         temperature: float = 0.3,
-        max_tokens: int = 4096,
+        max_tokens: int = 1024,
         response_format: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
@@ -255,6 +257,8 @@ class GLMProvider(AIProvider):
         GLM-4V-Flash 支持在 user_content 中追加多个 image_url 项，
         模型能感知帧间时序关系，比逐图拼接质量更高。
         """
+        # GLM 免费视觉模型 max_tokens 上限 1024
+        max_tokens = min(max_tokens, 1024)
         start_time = time.monotonic()
 
         # 构建多模态消息列表

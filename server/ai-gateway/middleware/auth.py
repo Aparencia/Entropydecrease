@@ -121,7 +121,7 @@ def _resolve_jwks_url() -> str:
         return jwks_url
     supabase_url = APP_CONFIG.get("supabase_url", "")
     if supabase_url:
-        return f"{supabase_url.rstrip('/')}/.well-known/jwks.json"
+        return f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
     return ""
 
 

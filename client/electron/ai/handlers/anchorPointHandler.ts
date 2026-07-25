@@ -6,7 +6,8 @@
 
 import { safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { postJson, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
 // IPC Handler
@@ -53,18 +54,26 @@ function register(): void {
       }
 
       try {
-        const { data: resp, requestId } = await postJson<typeof reqBody, AnchorPointGenResp>(
+        const localHandler = async (): Promise<AnchorPointGenResp> => {
+          const prompt = `从以下笔记中生成记忆锚点，返回JSON: {"anchor_points": [{"concept": "...", "association": "...", "memory_technique": "...", "importance": 0.8}], "status": "ok"}\n\n笔记：\n${args.content}`;
+          const result = await generateText(prompt, '你是一个记忆锚点生成助手。请仅返回JSON。', { temperature: 0.6, maxTokens: 1024 });
+          const parsed = JSON.parse(result.content);
+          return { anchor_points: parsed.anchor_points ?? [], status: 'ok', model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
+        };
+
+        const { data: resp, source, requestId } = await callWithLocalFallback<typeof reqBody, AnchorPointGenResp>(
           '/api/v1/ai/anchor-point',
           reqBody,
+          localHandler,
           args.authToken,
           args.userApiKey,
           60000,
         );
 
         const elapsed = Date.now() - startMs;
-        logger.info(`[AI] [anchor-point] ✔ Success: anchor_points=${resp.anchor_points.length}, status=${resp.status}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
+        logger.info(`[AI] [anchor-point] ✔ Success (${source}): anchor_points=${resp.anchor_points.length}, status=${resp.status}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
         return {
-          anchorPoints: resp.anchor_points.map((ap) => ({
+          anchorPoints: resp.anchor_points.map((ap: { concept: string; association: string; memory_technique: string; importance: number }) => ({
             concept: ap.concept,
             association: ap.association,
             memoryTechnique: ap.memory_technique,
@@ -75,6 +84,7 @@ function register(): void {
           tokensUsed: resp.tokens_used,
           latencyMs: resp.latency_ms,
           requestId,
+          source,
         };
       } catch (err) {
         const elapsed = Date.now() - startMs;

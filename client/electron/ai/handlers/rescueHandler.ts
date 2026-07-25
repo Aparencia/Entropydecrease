@@ -6,7 +6,8 @@
 
 import { safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { postJson, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
 // IPC Handler
@@ -57,18 +58,26 @@ function register(): void {
       }
 
       try {
-        const { data: resp, requestId } = await postJson<typeof reqBody, RescueGenResp>(
+        const localHandler = async (): Promise<RescueGenResp> => {
+          const prompt = `学习者卡住了，请提供分层救援提示，返回JSON: {"rescue_levels": [{"level": 1, "label": "...", "suggestion": "...", "hint_question": "..."}], "encouragement": "...", "status": "ok"}\n\n卡住情境：${JSON.stringify(reqBody)}`;
+          const result = await generateText(prompt, '你是一个学习救援助手，擅长为卡住的学习者提供分层提示。请仅返回JSON。', { temperature: 0.6, maxTokens: 1024 });
+          const parsed = JSON.parse(result.content);
+          return { rescue_levels: parsed.rescue_levels ?? [], encouragement: parsed.encouragement ?? '加油！', status: 'ok', model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
+        };
+
+        const { data: resp, source, requestId } = await callWithLocalFallback<typeof reqBody, RescueGenResp>(
           '/api/v1/ai/rescue',
           reqBody,
+          localHandler,
           args.authToken,
           args.userApiKey,
           60000,
         );
 
         const elapsed = Date.now() - startMs;
-        logger.info(`[AI] [rescue] ✔ Success: levels=${resp.rescue_levels.length}, status=${resp.status}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
+        logger.info(`[AI] [rescue] ✔ Success (${source}): levels=${resp.rescue_levels.length}, status=${resp.status}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
         return {
-          rescueLevels: resp.rescue_levels.map((lv) => ({
+          rescueLevels: resp.rescue_levels.map((lv: { level: number; label: string; suggestion: string; hint_question: string }) => ({
             level: lv.level,
             label: lv.label,
             suggestion: lv.suggestion,
@@ -80,6 +89,7 @@ function register(): void {
           tokensUsed: resp.tokens_used,
           latencyMs: resp.latency_ms,
           requestId,
+          source,
         };
       } catch (err) {
         const elapsed = Date.now() - startMs;

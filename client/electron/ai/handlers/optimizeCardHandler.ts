@@ -6,7 +6,8 @@
 
 import { safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { postJson, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
 // IPC Handler
@@ -48,16 +49,26 @@ function register(): void {
       }
 
       try {
-        const { data: resp, requestId } = await postJson<typeof reqBody, OptimizeCardResp>(
+        const localHandler = async (): Promise<OptimizeCardResp> => {
+          const prompt = `请优化以下闪卡，返回JSON: {"suggested_front": "...", "suggested_back": "...", "improvements": ["..."]}
+正面：${args.front}
+反面：${args.back}`;
+          const result = await generateText(prompt, '你是一个闪卡优化助手，擅长改进问答对的表述。请仅返回JSON。', { temperature: 0.5, maxTokens: 1024 });
+          const parsed = JSON.parse(result.content);
+          return { suggested_front: parsed.suggested_front ?? args.front, suggested_back: parsed.suggested_back ?? args.back, improvements: parsed.improvements ?? [], model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
+        };
+
+        const { data: resp, source, requestId } = await callWithLocalFallback<typeof reqBody, OptimizeCardResp>(
           '/api/v1/ai/optimize-card',
           reqBody,
+          localHandler,
           args.authToken,
           args.userApiKey,
           60000,
         );
 
         const elapsed = Date.now() - startMs;
-        logger.info(`[AI] [optimize-card] ✔ Success: improvements=${resp.improvements.length}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
+        logger.info(`[AI] [optimize-card] ✔ Success (${source}): improvements=${resp.improvements.length}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
         return {
           suggestedFront: resp.suggested_front,
           suggestedBack: resp.suggested_back,
@@ -66,6 +77,7 @@ function register(): void {
           tokensUsed: resp.tokens_used,
           latencyMs: resp.latency_ms,
           requestId,
+          source,
         };
       } catch (err) {
         const elapsed = Date.now() - startMs;

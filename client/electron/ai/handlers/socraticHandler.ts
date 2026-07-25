@@ -7,7 +7,8 @@
 
 import { safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { postJson, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
 // 公共类型
@@ -64,16 +65,24 @@ function register(): void {
       }
 
       try {
-        const { data: resp, requestId } = await postJson<typeof reqBody, SocraticResp>(
+        const localHandler = async (): Promise<SocraticResp> => {
+          const prompt = `作为苏格拉底式导师，针对主题“${args.topic}”生成一个引导性问题，返回JSON: {"question": "...", "hint": "...", "thinking_direction": "...", "depth_level": 1, "turn_count": 1, "status": "ok"}`;
+          const result = await generateText(prompt, '你是一个苏格拉底式学习导师。请仅返回JSON。', { temperature: 0.7, maxTokens: 512 });
+          const parsed = JSON.parse(result.content);
+          return { question: parsed.question ?? '', hint: parsed.hint ?? '', thinking_direction: parsed.thinking_direction ?? '', depth_level: parsed.depth_level ?? 1, turn_count: parsed.turn_count ?? 1, status: 'ok', model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
+        };
+
+        const { data: resp, source, requestId } = await callWithLocalFallback<typeof reqBody, SocraticResp>(
           '/api/v1/ai/socratic',
           reqBody,
+          localHandler,
           args.authToken,
           args.userApiKey,
           60000,
         );
 
         const elapsed = Date.now() - startMs;
-        logger.info(`[AI] [socratic] ✔ Success: depth=${resp.depth_level}, turn=${resp.turn_count}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
+        logger.info(`[AI] [socratic] ✔ Success (${source}): depth=${resp.depth_level}, turn=${resp.turn_count}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
         return {
           question: resp.question,
           hint: resp.hint,
@@ -85,6 +94,7 @@ function register(): void {
           tokensUsed: resp.tokens_used,
           latencyMs: resp.latency_ms,
           requestId,
+          source,
         };
       } catch (err) {
         const elapsed = Date.now() - startMs;
@@ -136,16 +146,24 @@ function register(): void {
       }
 
       try {
-        const { data: resp, requestId } = await postJson<typeof reqBody, SocraticEvaluateResp>(
+        const localHandler = async (): Promise<SocraticEvaluateResp> => {
+          const prompt = `评估学生对问题的回答，返回JSON: {"dimensions": {"accuracy": 70, "completeness": 65, "logic": 75, "expression": 80}, "feedback": "...", "encouragement": "...", "status": "ok"}`;
+          const result = await generateText(prompt, '你是一个苏格拉底式评估助手。请仅返回JSON。', { temperature: 0.4, maxTokens: 512 });
+          const parsed = JSON.parse(result.content);
+          return { dimensions: parsed.dimensions ?? { accuracy: 60, completeness: 60, logic: 60, expression: 60 }, feedback: parsed.feedback ?? '', encouragement: parsed.encouragement ?? '继续加油！', status: 'ok', model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
+        };
+
+        const { data: resp, source, requestId } = await callWithLocalFallback<typeof reqBody, SocraticEvaluateResp>(
           '/api/v1/ai/socratic/evaluate',
           reqBody,
+          localHandler,
           args.authToken,
           args.userApiKey,
           60000,
         );
 
         const elapsed = Date.now() - startMs;
-        logger.info(`[AI] [socratic-eval] ✔ Success: accuracy=${resp.dimensions.accuracy}, completeness=${resp.dimensions.completeness}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
+        logger.info(`[AI] [socratic-eval] ✔ Success (${source}): accuracy=${resp.dimensions.accuracy}, completeness=${resp.dimensions.completeness}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
         return {
           dimensions: resp.dimensions,
           feedback: resp.feedback,
@@ -155,6 +173,7 @@ function register(): void {
           tokensUsed: resp.tokens_used,
           latencyMs: resp.latency_ms,
           requestId,
+          source,
         };
       } catch (err) {
         const elapsed = Date.now() - startMs;
@@ -208,18 +227,26 @@ function register(): void {
       }
 
       try {
-        const { data: resp, requestId } = await postJson<typeof reqBody, SocraticDeepeningResp>(
+        const localHandler = async (): Promise<SocraticDeepeningResp> => {
+          const prompt = `针对主题“${args.topic}”的对话摘要，生成深化探索角度，返回JSON: {"angles": [{"key": "...", "label": "...", "question": "..."}], "status": "ok"}`;
+          const result = await generateText(prompt, '你是一个苏格拉底式深化探索助手。请仅返回JSON。', { temperature: 0.7, maxTokens: 1024 });
+          const parsed = JSON.parse(result.content);
+          return { angles: parsed.angles ?? [], status: 'ok', model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
+        };
+
+        const { data: resp, source, requestId } = await callWithLocalFallback<typeof reqBody, SocraticDeepeningResp>(
           '/api/v1/ai/socratic/deepening',
           reqBody,
+          localHandler,
           args.authToken,
           args.userApiKey,
           60000,
         );
 
         const elapsed = Date.now() - startMs;
-        logger.info(`[AI] [socratic-deep] ✔ Success: angles=${resp.angles.length}, status=${resp.status}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
+        logger.info(`[AI] [socratic-deep] ✔ Success (${source}): angles=${resp.angles.length}, status=${resp.status}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
         return {
-          angles: resp.angles.map((a) => ({
+          angles: resp.angles.map((a: { key: string; label: string; question: string }) => ({
             key: a.key,
             label: a.label,
             question: a.question,
@@ -229,6 +256,7 @@ function register(): void {
           tokensUsed: resp.tokens_used,
           latencyMs: resp.latency_ms,
           requestId,
+          source,
         };
       } catch (err) {
         const elapsed = Date.now() - startMs;

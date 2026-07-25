@@ -1,0 +1,25 @@
+{
+  "name": "keban-release-tooling",
+  "version": "0.0.0",
+  "private": true,
+  "description": "仓库级发布工具链：基于 semantic-release 的 SemVer 版本自动化（不参与业务构建）",
+  "scripts": {
+    "release": "semantic-release",
+    "release:dry": "semantic-release --dry-run --no-ci",
+    "version:sync": "node scripts/version-bump.mjs",
+    "learning:record": "node scripts/session-record.mjs",
+    "learning:detect": "node scripts/session-detect.mjs",
+    "learning:route": "node scripts/session-route.mjs",
+    "learning:pipeline": "node scripts/session-detect.mjs && node scripts/session-route.mjs --status"
+  },
+  "devDependencies": {
+    "@semantic-release/changelog": "6.0.3",
+    "@semantic-release/commit-analyzer": "13.0.1",
+    "@semantic-release/exec": "7.1.0",
+    "@semantic-release/git": "10.0.1",
+    "@semantic-release/github": "11.0.1",
+    "@semantic-release/release-notes-generator": "14.0.3",
+    "conventional-changelog-conventionalcommits": "8.0.0",
+    "semantic-release": "24.2.3"
+  }
+}

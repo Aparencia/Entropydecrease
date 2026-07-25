@@ -18,8 +18,62 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL: string;
   /** Supabase 匿名公钥 */
   readonly VITE_SUPABASE_ANON_KEY: string;
+  /** Ollama 本地推理服务地址（可选，默认 http://localhost:11434） */
+  readonly VITE_OLLAMA_BASE_URL?: string;
 }
 
 interface ImportMeta {
   readonly env: ImportMetaEnv;
+}
+
+// ================================================================
+// Electron API 类型声明（window.electronAPI）
+// ================================================================
+
+import type { OllamaStatus, OllamaConfig, OllamaPullProgress } from './types/ollama';
+
+declare global {
+  interface Window {
+    electronAPI: {
+      invoke: (channel: string, ...args: unknown[]) => Promise<unknown>;
+      on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
+      send: (channel: string, ...args: unknown[]) => void;
+      onWindowClosing: (callback: () => void) => () => void;
+      closeAction: (action: 'quit' | 'minimize' | 'cancel', remember: boolean) => Promise<unknown>;
+      windowMinimize: () => Promise<void>;
+      windowMaximize: () => Promise<void>;
+      windowClose: () => Promise<void>;
+      windowIsMaximized: () => Promise<boolean>;
+      onMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void;
+      onSyncBeforeQuit: (callback: () => void) => () => void;
+      notifySyncComplete: () => void;
+      setAutoUpdate: (enabled: boolean) => Promise<unknown>;
+      backupSave: (data: string, defaultName?: string) => Promise<unknown>;
+      backupOpen: () => Promise<unknown>;
+      db: {
+        query: (table: string, method: string, args?: unknown[]) => Promise<unknown>;
+        insert: (table: string, item: unknown) => Promise<unknown>;
+        update: (table: string, id: string, changes: unknown) => Promise<unknown>;
+        delete: (table: string, id: string) => Promise<unknown>;
+        search: (table: string, query: string) => Promise<unknown>;
+        batch: (operations: unknown[]) => Promise<unknown>;
+      };
+      migration: {
+        check: () => Promise<unknown>;
+        importTable: (table: string, rows: unknown[]) => Promise<unknown>;
+        complete: () => Promise<unknown>;
+      };
+      storage: {
+        changePath: (newPath: string) => Promise<unknown>;
+        getActivePath: () => Promise<unknown>;
+      };
+      /** Ollama 本地推理 API */
+      ollama: {
+        getStatus: (forceRefresh?: boolean) => Promise<{ status: OllamaStatus; config: OllamaConfig }>;
+        setConfig: (config: Partial<OllamaConfig>) => Promise<OllamaConfig>;
+        pullModel: (modelName: string) => Promise<{ success: boolean }>;
+        onPullProgress: (callback: (progress: OllamaPullProgress) => void) => () => void;
+      };
+    };
+  }
 }

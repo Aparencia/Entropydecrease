@@ -204,7 +204,9 @@ export default function DownloadPage() {
             </div>
 
             <a
-              href="#"
+              href="https://github.com/Aparencia/KeBan/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-block px-12 py-4 rounded-2xl text-white font-medium text-lg transition-all duration-500 hover:scale-[1.04] active:scale-[0.97] mb-6"
               style={{
                 background: "linear-gradient(135deg, var(--kb-amber), var(--kb-accent-400))",
@@ -291,7 +293,7 @@ export default function DownloadPage() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <a
-              href="https://github.com"
+              href="https://github.com/Aparencia/KeBan"
               target="_blank"
               rel="noopener noreferrer"
               className="px-7 py-3 rounded-2xl font-medium text-kb-text transition-all duration-500 hover:scale-[1.03] glass-panel"
@@ -299,7 +301,7 @@ export default function DownloadPage() {
               GitHub 仓库 ↗
             </a>
             <a
-              href="https://github.com"
+              href="https://github.com/Aparencia/KeBan/releases"
               target="_blank"
               rel="noopener noreferrer"
               className="px-7 py-3 rounded-2xl font-medium text-kb-text2 transition-all duration-500 hover:text-kb-text hover:scale-[1.02]"

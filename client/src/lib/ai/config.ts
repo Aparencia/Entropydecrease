@@ -7,6 +7,8 @@ export interface AIConfig {
   provider: 'qwen' | 'deepseek' | 'glm' | 'custom';
   apiKey: string;
   gatewayUrl: string;
+  /** 是否启用本地 Ollama 推理（可选，由 Ollama 配置模块统一管理） */
+  localEnabled?: boolean;
 }
 
 export const AI_CONFIG_STORAGE_KEY = 'kb_ai_config';

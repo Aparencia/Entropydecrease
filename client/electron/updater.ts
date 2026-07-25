@@ -16,8 +16,8 @@ import { logger } from './logger.js';
 /** 自动检查开关（由渲染进程通过 IPC 设置，默认开启） */
 let autoCheckEnabled = true;
 
-/** 自动检查最小间隔（7 天，毫秒） */
-const AUTO_CHECK_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+/** 自动检查最小间隔（24 小时，毫秒） */
+const AUTO_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /** 上次检查更新的时间戳（持久化到 userData/update-check.json） */
 let lastCheckTimestamp = 0;
@@ -49,7 +49,7 @@ async function saveLastCheckTimestamp(): Promise<void> {
 }
 
 /**
- * 判断距上次检查是否已满 7 天
+ * 判断距上次检查是否已满 24 小时
  */
 function shouldAutoCheck(): boolean {
   return Date.now() - lastCheckTimestamp >= AUTO_CHECK_INTERVAL_MS;
@@ -186,7 +186,7 @@ export function initAutoUpdater(mainWindow: BrowserWindow | null): void {
   });
 
   // 启动时检查更新（延迟 10 秒，等窗口加载完）
-  // 加载持久化的上次检查时间戳，判断是否已满 7 天
+  // 加载持久化的上次检查时间戳，判断是否已满 24 小时
   loadLastCheckTimestamp().then((ts) => {
     lastCheckTimestamp = ts;
   }).finally(() => {
@@ -197,13 +197,13 @@ export function initAutoUpdater(mainWindow: BrowserWindow | null): void {
         logger.info('[AutoUpdater] Offline, skipping auto check');
         return;
       }
-      // 距上次检查不足 7 天，跳过本次自动检查
+      // 距上次检查不足 24 小时，跳过本次自动检查
       if (!shouldAutoCheck()) {
-        const daysLeft = Math.ceil((AUTO_CHECK_INTERVAL_MS - (Date.now() - lastCheckTimestamp)) / (24 * 60 * 60 * 1000));
-        logger.info(`[AutoUpdater] Auto check skipped (last check ${daysLeft} day(s) ago), next check in ${daysLeft} day(s)`);
+        const hoursLeft = Math.ceil((AUTO_CHECK_INTERVAL_MS - (Date.now() - lastCheckTimestamp)) / (60 * 60 * 1000));
+        logger.info(`[AutoUpdater] Auto check skipped, next check in ~${hoursLeft} hour(s)`);
         return;
       }
-      logger.info('[AutoUpdater] 7-day interval elapsed, performing auto check');
+      logger.info('[AutoUpdater] 24-hour interval elapsed, performing auto check');
       checkForUpdatesWithTimeout()
         .then(() => { saveLastCheckTimestamp(); })
         .catch((err: unknown) => {

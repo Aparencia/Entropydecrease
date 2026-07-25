@@ -7,7 +7,8 @@
 
 import { safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { postJson, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
 // IPC Handler
@@ -48,16 +49,28 @@ function register(): void {
       }
 
       try {
-        const { data: resp, requestId } = await postJson<typeof reqBody, TagContentResp>(
+        const localHandler = async (): Promise<TagContentResp> => {
+          const prompt = `请对以下内容进行分类，返回JSON格式: {"content_nature": "...", "cognitive_depth": "...", "subject": "..."}\n\n内容：\n${args.content}`;
+          const result = await generateText(prompt, '你是一个内容分类助手，擅长判断内容的性质、认知深度和学科。请仅返回JSON。', { temperature: 0.3, maxTokens: 512 });
+          try {
+            const parsed = JSON.parse(result.content);
+            return { content_nature: parsed.content_nature ?? 'unknown', cognitive_depth: parsed.cognitive_depth ?? 'unknown', subject: parsed.subject ?? 'unknown', model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
+          } catch {
+            return { content_nature: 'unknown', cognitive_depth: 'unknown', subject: 'unknown', model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
+          }
+        };
+
+        const { data: resp, source, requestId } = await callWithLocalFallback<typeof reqBody, TagContentResp>(
           '/api/v1/ai/tag-content',
           reqBody,
+          localHandler,
           args.authToken,
           args.userApiKey,
           30000,
         );
 
         const elapsed = Date.now() - startMs;
-        logger.info(`[AI] [tag] ✔ Success: nature=${resp.content_nature}, depth=${resp.cognitive_depth}, subject=${resp.subject}, model=${resp.model}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
+        logger.info(`[AI] [tag] ✔ Success (${source}): nature=${resp.content_nature}, depth=${resp.cognitive_depth}, subject=${resp.subject}, model=${resp.model}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
         return {
           contentNature: resp.content_nature,
           cognitiveDepth: resp.cognitive_depth,
@@ -66,6 +79,7 @@ function register(): void {
           tokensUsed: resp.tokens_used,
           latencyMs: resp.latency_ms,
           requestId,
+          source,
         };
       } catch (err) {
         const elapsed = Date.now() - startMs;
@@ -116,16 +130,28 @@ function register(): void {
       }
 
       try {
-        const { data: resp, requestId } = await postJson<typeof reqBody, SortInspirationResp>(
+        const localHandler = async (): Promise<SortInspirationResp> => {
+          const prompt = `请对以下灵感内容进行归档建议，返回JSON格式: {"suggestions": [{"category": "...", "reason": "...", "confidence": 0.8, "suggested_action": "..."}]}\n\n内容：\n${args.content}`;
+          const result = await generateText(prompt, '你是一个灵感归档助手，擅长为灵感内容推荐分类和归档建议。请仅返回JSON。', { temperature: 0.4, maxTokens: 1024 });
+          try {
+            const parsed = JSON.parse(result.content);
+            return { suggestions: parsed.suggestions ?? [], model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
+          } catch {
+            return { suggestions: [], model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
+          }
+        };
+
+        const { data: resp, source, requestId } = await callWithLocalFallback<typeof reqBody, SortInspirationResp>(
           '/api/v1/ai/sort-inspiration',
           reqBody,
+          localHandler,
           args.authToken,
           args.userApiKey,
           30000,
         );
 
         const elapsed = Date.now() - startMs;
-        logger.info(`[AI] [sort-insp] ✔ Success: suggestions=${resp.suggestions.length}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
+        logger.info(`[AI] [sort-insp] ✔ Success (${source}): suggestions=${resp.suggestions.length}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
         return {
           suggestions: resp.suggestions.map((s) => ({
             category: s.category,
@@ -137,6 +163,7 @@ function register(): void {
           tokensUsed: resp.tokens_used,
           latencyMs: resp.latency_ms,
           requestId,
+          source,
         };
       } catch (err) {
         const elapsed = Date.now() - startMs;

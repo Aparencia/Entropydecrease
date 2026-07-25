@@ -24,6 +24,9 @@ const ALLOWED_CHANNELS = [
   'ai_socratic_deepening',
   'ai_predict',
   'ai_rescue',
+  'ai_vision_extract',
+  'ai_session_analyze',
+  'ai_video_analyze',
   'ai:set-gateway-url',
   'screen_list_windows',
   'screen_capture_start',
@@ -70,6 +73,10 @@ const ALLOWED_CHANNELS = [
   'video_record_pause',
   'video_record_resume',
   'video_record_status',
+  // Ollama 本地推理 IPC channel
+  'ollama:get-status',
+  'ollama:set-config',
+  'ollama:pull-model',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */
@@ -87,6 +94,8 @@ const ALLOWED_EVENT_CHANNELS = [
   'video_record_error',
   'video_record_do_start',
   'video_record_do_stop',
+  // Ollama 模型拉取进度推送
+  'ollama:pull-progress',
 ] as const;
 
 /** 允许渲染进程单向发送的 channel 白名单（渲染进程 → 主进程，fire-and-forget） */
@@ -195,5 +204,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('storage:change-path', { newPath }),
     getActivePath: () =>
       ipcRenderer.invoke('storage:get-active-path'),
+  },
+  // ---- Ollama 本地推理 API ----
+  ollama: {
+    getStatus: (forceRefresh?: boolean) =>
+      ipcRenderer.invoke('ollama:get-status', forceRefresh),
+    setConfig: (config: Record<string, unknown>) =>
+      ipcRenderer.invoke('ollama:set-config', config),
+    pullModel: (modelName: string) =>
+      ipcRenderer.invoke('ollama:pull-model', modelName),
+    onPullProgress: (callback: (...args: unknown[]) => void) => {
+      const handler = (_event: unknown, ...args: unknown[]) => callback(...args);
+      ipcRenderer.on('ollama:pull-progress', handler);
+      return () => ipcRenderer.removeListener('ollama:pull-progress', handler);
+    },
   },
 });

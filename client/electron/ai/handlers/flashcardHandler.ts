@@ -6,7 +6,8 @@
 
 import { safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { postJson, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
 // IPC Handler
@@ -58,16 +59,30 @@ function register(): void {
       }
 
       try {
-        const { data: resp, requestId } = await postJson<typeof reqBody, CardGenResp>(
+        const localHandler = async (): Promise<CardGenResp> => {
+          const maxHint = args.maxCards ? `，最多生成${args.maxCards}张` : '';
+          const diffHint = args.difficulty ? `，难度：${args.difficulty}` : '';
+          const prompt = `请从以下笔记内容生成闪卡（问答对）${maxHint}${diffHint}。\n请以JSON格式返回，格式为: {"cards": [{"front": "问题", "back": "答案", "type": "basic", "confidence": 0.9}]}\n\n笔记内容：\n${args.note}`;
+          const result = await generateText(prompt, '你是一个专业的闪卡生成助手，擅长从笔记中提取核心知识点并生成问答对。请仅返回JSON。', { temperature: 0.5, maxTokens: 2048 });
+          try {
+            const parsed = JSON.parse(result.content);
+            return { cards: parsed.cards || [], total_extracted: (parsed.cards || []).length, model: result.model, tokens_used: result.tokens_used };
+          } catch {
+            return { cards: [], total_extracted: 0, model: result.model, tokens_used: result.tokens_used };
+          }
+        };
+
+        const { data: resp, source, requestId } = await callWithLocalFallback<typeof reqBody, CardGenResp>(
           '/api/v1/ai/generate-cards',
           reqBody,
+          localHandler,
           args.authToken,
           args.userApiKey,
           90000,
         );
 
         const elapsed = Date.now() - startMs;
-        logger.info(`[AI] [flashcard] ✔ Success: cards=${resp.cards.length}, total_extracted=${resp.total_extracted}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
+        logger.info(`[AI] [flashcard] ✔ Success (${source}): cards=${resp.cards.length}, total_extracted=${resp.total_extracted}, model=${resp.model}, tokens=${resp.tokens_used}, total=${elapsed}ms, reqId=${requestId ?? 'N/A'}`);
         return {
           cards: resp.cards.map((c) => ({
             front: c.front,
@@ -79,6 +94,7 @@ function register(): void {
           model: resp.model,
           tokensUsed: resp.tokens_used,
           requestId,
+          source,
         };
       } catch (err) {
         const elapsed = Date.now() - startMs;

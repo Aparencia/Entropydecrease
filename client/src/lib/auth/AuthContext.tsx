@@ -67,8 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // 非主动登出却丢失 session → token 刷新失败，引导重新登录
+      // 仅派发事件，由 useSessionExpiry 统一弹出提示并跳转，避免重复提示用户登录
       if (event === 'SIGNED_OUT' && !intentionalSignOutRef.current) {
-        toast({ type: 'warning', message: '登录已过期，请重新登录', duration: 8000 });
         window.dispatchEvent(new CustomEvent('kb:session-expired'));
       }
 
