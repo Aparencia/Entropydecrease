@@ -528,8 +528,8 @@ APP_CONFIG = {
     "supabase_url": _supabase_url,
     "supabase_jwks_url": os.getenv(
         "SUPABASE_JWKS_URL",
-        # 从 SUPABASE_URL 推导 JWKS 端点（Supabase 标准 .well-known/jwks.json）
-        f"{_supabase_url.rstrip('/')}/.well-known/jwks.json" if _supabase_url else "",
+        # 从 SUPABASE_URL 推导 JWKS 端点（Supabase 标准路径需含 /auth/v1 前缀）
+        f"{_supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json" if _supabase_url else "",
     ),
     "redis_url": os.getenv("REDIS_URL", "redis://localhost:6379/0"),
 }
