@@ -21,6 +21,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from config import call_with_fallback_for_request
 from chains.multimodal_analyze_chain import MultimodalAnalyzeChain
 from chains.video_analyze_chain import VideoAnalyzeChain
+from prompts.session_analyze import MERGE_NOTES_SYSTEM_PROMPT, build_merge_prompt
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/multimodal", tags=["多模态分析"])
@@ -168,6 +169,110 @@ async def analyze_session(
     return AnalyzeSessionResponse(
         content=result.get("content", ""),
         keyframes_analyzed=result.get("keyframes_analyzed", len(body.keyframes)),
+        model_used=result.get("model", "unknown"),
+    )
+
+
+# ============================================================
+# 片段笔记合并端点（增量分析课后整理）
+# ============================================================
+
+
+class MergeNotesRequest(BaseModel):
+    """片段笔记合并请求"""
+    partials: list[str] = Field(..., description="片段笔记列表（按时间顺序）")
+    duration: float = Field(default=0, description="课程总时长（秒）")
+    language: str = Field(default="zh-CN", description="输出语言")
+
+
+class MergeNotesResponse(BaseModel):
+    """片段笔记合并响应"""
+    content: str = Field(..., description="合并后的 Markdown 笔记")
+    model_used: str = Field(..., description="实际使用的模型")
+
+
+@router.post(
+    "/merge-notes",
+    response_model=MergeNotesResponse,
+    summary="合并片段笔记",
+)
+async def merge_notes(
+    request: Request,
+    body: MergeNotesRequest,
+) -> MergeNotesResponse:
+    """
+    将多个增量分析片段合并为完整结构化笔记（纯文本，无图片）
+
+    - 使用文本模型（非视觉模型），超时 30s
+    - 去重、统一结构、补充衔接、保留细节
+    """
+    start_time = time.monotonic()
+    user_id = getattr(request.state, "user_id", "anonymous")
+
+    logger.info(
+        "片段笔记合并请求: user=%s, partials=%d, duration=%.1fs",
+        user_id, len(body.partials), body.duration,
+    )
+
+    if not body.partials:
+        raise HTTPException(status_code=400, detail="partials 不能为空")
+
+    # 只有一个片段时直接返回，无需调用模型
+    if len(body.partials) == 1:
+        return MergeNotesResponse(
+            content=body.partials[0].strip(),
+            model_used="none (single partial)",
+        )
+
+    # 构建合并 prompt
+    merge_prompt = build_merge_prompt(
+        partials=body.partials,
+        duration_seconds=int(body.duration),
+    )
+
+    # 通过 fallback 链执行（纯文本生成，用文本模型）
+    async def _run_merge(provider, model_name):
+        result = await provider.generate(
+            prompt=merge_prompt,
+            system_prompt=MERGE_NOTES_SYSTEM_PROMPT,
+            model=model_name,
+            temperature=0.3,
+            max_tokens=4096,
+        )
+        return result
+
+    try:
+        result, used_provider, is_user_key = await call_with_fallback_for_request(
+            request.app, "summarize", request, _run_merge
+        )
+    except RuntimeError as e:
+        logger.error("片段笔记合并服务不可用: %s", str(e))
+        raise HTTPException(
+            status_code=503,
+            detail="AI 服务暂时不可用，请稍后重试",
+        )
+
+    latency_ms = int((time.monotonic() - start_time) * 1000)
+    logger.info(
+        "片段笔记合并完成: provider=%s, model=%s, latency=%dms",
+        used_provider, result.get("model", "unknown"), latency_ms,
+    )
+
+    # 清理模型输出（去除可能的代码块围栏）
+    content = result.get("content", "").strip()
+    if content.startswith("```markdown"):
+        content = content[len("```markdown"):].strip()
+        if content.endswith("```"):
+            content = content[:-3].strip()
+    elif content.startswith("```") and content.endswith("```"):
+        inner = content[3:].strip()
+        if inner.endswith("```"):
+            inner = inner[:-3].strip()
+        if "```" not in inner:
+            content = inner
+
+    return MergeNotesResponse(
+        content=content,
         model_used=result.get("model", "unknown"),
     )
 

@@ -3,6 +3,7 @@ import {
   Monitor, Play, Pause, Square, Eye, Mic, Layers,
   Settings2, ChevronRight, ChevronDown, Plus, ListPlus,
   Clock, CheckCircle2, XCircle, Loader2, PanelRightOpen, PanelRightClose,
+  Crosshair, Sparkles, Video, Info, Star,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
@@ -136,7 +137,15 @@ function WindowSelector({ windows, selected, onSelect, onRefresh, loading }: Win
                     className="w-16 h-9 rounded-kb-xs object-cover flex-shrink-0 border border-border/30"
                   />
                 )}
-                <span className="text-b3 leading-tight line-clamp-2">{win.title}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-b3 leading-tight line-clamp-2 block">{win.title}</span>
+                  {win.matched && (
+                    <span className="text-[10px] text-brand-500 leading-tight">匹配：{win.matched}</span>
+                  )}
+                </div>
+                {(win.score ?? 0) >= 100 && (
+                  <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
+                )}
               </button>
             ))}
           </div>
@@ -1129,34 +1138,37 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
           />
 
           {/* @ai-context Path 路径选择器：精细 / 智能 / 录制（三模式） */}
-          {([
-            { value: 'fine' as CapturePath, label: '精细' },
-            { value: 'smart' as CapturePath, label: '智能' },
-            { value: 'full_record' as CapturePath, label: '录制' },
-          ] as const).length > 0 && (
-            <div className="flex items-center gap-1 px-3 py-2 border-b border-border/20">
+          <div className="px-3 py-2 border-b border-border/20 space-y-1.5">
+            <div className="flex items-center gap-1">
               {[
-                { value: 'fine' as CapturePath, label: '精细' },
-                { value: 'smart' as CapturePath, label: '智能' },
-                { value: 'full_record' as CapturePath, label: '录制' },
-              ].map(({ value, label }) => (
+                { value: 'fine' as CapturePath, label: '精细', icon: Crosshair, brief: '逐帧截图' },
+                { value: 'smart' as CapturePath, label: '智能', icon: Sparkles, brief: 'AI关键帧' },
+                { value: 'full_record' as CapturePath, label: '录制', icon: Video, brief: '全程录像' },
+              ].map(({ value, label, icon: PathIcon, brief }) => (
                 <button
                   key={value}
                   onClick={() => setCapturePath(value)}
                   disabled={status === 'capturing' || status === 'processing'}
                   className={cn(
-                    'flex-1 py-1.5 rounded-kb-sm text-b3 font-medium transition-all duration-kb-fast',
+                    'flex-1 flex flex-col items-center gap-0.5 py-2 px-1 rounded-kb-sm transition-all duration-kb-fast border',
                     capturePath === value
-                      ? 'bg-brand-50 text-brand-600 ring-1 ring-brand-200/50'
-                      : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary/50',
+                      ? 'bg-brand-50 border-brand-200/50 text-brand-600'
+                      : 'border-transparent text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary/50',
                     (status === 'capturing' || status === 'processing') && 'opacity-50 cursor-not-allowed',
                   )}
                 >
-                  {label}
+                  <PathIcon className="w-4 h-4" strokeWidth={1.5} />
+                  <span className="text-b3 font-medium leading-tight">{label}</span>
+                  <span className={cn('text-[10px] leading-tight', capturePath === value ? 'text-brand-400' : 'text-text-tertiary/70')}>{brief}</span>
                 </button>
               ))}
             </div>
-          )}
+            <p className="text-[10px] text-text-tertiary leading-relaxed px-0.5">
+              {capturePath === 'fine' && '按固定间隔截屏，逐帧 OCR/AI 识别，适合板书密集场景'}
+              {capturePath === 'smart' && 'AI 检测画面变化自动截图，同步录音智能分段，资源占用低'}
+              {capturePath === 'full_record' && '录制完整课堂视频，课后 AI 生成结构化笔记'}
+            </p>
+          </div>
 
           {/* 采集控制栏 */}
           <ControlBar

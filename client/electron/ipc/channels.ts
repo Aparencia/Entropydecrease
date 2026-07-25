@@ -25,6 +25,9 @@ export const IPC_CHANNELS = {
 
   // 采集相关
   SCREEN_LIST_WINDOWS: 'screen_list_windows',
+  SCREEN_WATCH_WINDOWS_START: 'screen_watch_windows_start',
+  SCREEN_WATCH_WINDOWS_STOP: 'screen_watch_windows_stop',
+  SCREEN_WINDOWS_CHANGED: 'screen_windows_changed',
   SCREEN_CAPTURE_START: 'screen_capture_start',
   SCREEN_CAPTURE_STOP: 'screen_capture_stop',
   SCREEN_CAPTURE_FRAME: 'screen_capture_frame',

@@ -288,6 +288,45 @@ export async function pullModel(
 }
 
 /**
+ * 删除本地模型
+ * @param modelName 模型名称（如 'qwen2.5:7b'）
+ */
+export async function deleteModel(modelName: string): Promise<void> {
+  const config = getOllamaConfig();
+  const baseUrl = config.baseUrl;
+
+  logger.info(`[Ollama] Deleting model: ${modelName}`);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
+  try {
+    const resp = await fetch(`${baseUrl}/api/delete`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: modelName }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!resp.ok) {
+      const detail = await resp.text().catch(() => 'unknown error');
+      throw new Error(`Ollama delete failed: HTTP ${resp.status} - ${detail}`);
+    }
+
+    logger.info(`[Ollama] Model deleted successfully: ${modelName}`);
+    // 清除缓存，下次获取状态时刷新模型列表
+    _cachedStatus = null;
+  } catch (e) {
+    clearTimeout(timeoutId);
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error('Ollama delete timed out');
+    }
+    throw e;
+  }
+}
+
+/**
  * 应用启动时执行初始检测（如果 autoDetect 开启）
  */
 export async function initOllamaDetection(): Promise<void> {

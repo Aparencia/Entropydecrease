@@ -24,6 +24,7 @@ import { feature as rescueFeature } from './handlers/rescueHandler.js';
 import { feature as visionExtractFeature } from './handlers/visionExtractHandler.js';
 import { feature as sessionAnalyzeFeature } from './handlers/sessionAnalyzeHandler.js';
 import { feature as videoAnalyzeFeature } from './handlers/videoAnalyzeHandler.js';
+import { feature as mergeNotesFeature } from './handlers/mergeNotesHandler.js';
 
 // ================================================================
 // 功能注册表
@@ -45,6 +46,7 @@ const features: AIFeatureDef[] = [
   visionExtractFeature,
   sessionAnalyzeFeature,
   videoAnalyzeFeature,
+  mergeNotesFeature,
 ];
 
 // ================================================================

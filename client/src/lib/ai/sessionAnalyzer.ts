@@ -6,7 +6,7 @@
 import { supabase } from '@/lib/auth/supabaseClient';
 import { getActiveUserKey } from '@/lib/ai/apiKeyManager';
 import { classroomNoteStore } from '@/lib/storage/classroomNoteStore';
-import type { SessionBundle } from '@/lib/capture/captureTypes';
+import type { SessionBundle, KeyFrame } from '@/lib/capture/captureTypes';
 
 // ================================================================
 // 分析结果类型
@@ -77,6 +77,88 @@ export async function analyzeSession(
     });
   } catch (e) {
     console.warn('[sessionAnalyzer] 笔记持久化失败:', e);
+  }
+
+  return analyzeResult;
+}
+
+// ================================================================
+// 增量片段分析（边采边析）
+// ================================================================
+
+/**
+ * 小批次关键帧增量分析，返回 Markdown 片段笔记
+ * 复用现有 ai_session_analyze IPC（小批次走单 chunk 路径，本身就快）
+ */
+export async function analyzePartial(
+  keyframes: KeyFrame[],
+  options?: { language?: string },
+): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const userKey = getActiveUserKey();
+
+  const kfPayload = keyframes.map((kf) => ({
+    timestamp: kf.timestamp / 1000,
+    imageBase64: kf.imageBase64,
+    changeType: kf.changeType,
+  }));
+
+  const result = await window.electronAPI!.invoke('ai_session_analyze', {
+    keyframes: kfPayload,
+    audioSegments: [],
+    duration: keyframes.length > 0
+      ? (keyframes[keyframes.length - 1].timestamp - keyframes[0].timestamp) / 1000
+      : 0,
+    language: options?.language,
+    authToken: session?.access_token,
+    userApiKey: userKey,
+  }) as { content: string };
+
+  return result.content;
+}
+
+// ================================================================
+// 片段笔记合并（课后整理）
+// ================================================================
+
+/**
+ * 将多个增量分析片段合并为完整结构化笔记（纯文本，无图片，极快）
+ */
+export async function mergeNotes(
+  partials: string[],
+  options?: { duration?: number; language?: string },
+): Promise<AnalyzeResult> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const userKey = getActiveUserKey();
+
+  const result = await window.electronAPI!.invoke('ai_merge_notes', {
+    partials,
+    duration: options?.duration ?? 0,
+    language: options?.language ?? 'zh-CN',
+    authToken: session?.access_token,
+    userApiKey: userKey,
+  }) as { content: string; modelUsed: string; source: string };
+
+  const analyzeResult: AnalyzeResult = {
+    content: result.content,
+    keyframesAnalyzed: 0,
+    modelUsed: result.modelUsed,
+    source: result.source as 'local' | 'remote' | undefined,
+  };
+
+  // 自动持久化
+  try {
+    await classroomNoteStore.create({
+      sessionId: crypto.randomUUID(),
+      title: `课堂笔记 ${new Date().toLocaleString('zh-CN')}`,
+      content: analyzeResult.content,
+      keyframesAnalyzed: 0,
+      modelUsed: analyzeResult.modelUsed,
+      sourceType: 'smart',
+      duration: options?.duration ?? 0,
+    });
+  } catch (e) {
+    console.warn('[sessionAnalyzer] 合并笔记持久化失败:', e);
   }
 
   return analyzeResult;

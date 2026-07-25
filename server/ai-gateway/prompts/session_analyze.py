@@ -85,3 +85,65 @@ def build_session_prompt(
         keyframes_desc=f"截屏按时间顺序排列，共 {keyframes_count} 帧，每帧标注了出现时间",
         audio_context=audio_context,
     )
+
+
+# ============================================================
+# 片段笔记合并 Prompt（增量分析课后整理用）
+# ============================================================
+
+MERGE_NOTES_SYSTEM_PROMPT = (
+    "你是一个专业的课堂笔记整理助手。\n"
+    "你将收到多个课堂片段笔记（按时间顺序排列），需要将它们合并为一份完整、连贯的结构化笔记。\n"
+    "输出必须使用 Markdown 格式，数学公式用 LaTeX，代码保留语言标注。\n"
+    "始终以中文输出，除非用户明确要求其他语言。"
+)
+
+MERGE_NOTES_USER_TEMPLATE = (
+    "以下是一门课程（总时长约 {duration_desc}）的 {partials_count} 个片段笔记，"
+    "它们是在课堂进行中按时间顺序增量生成的。\n\n"
+    "请将它们合并为一份完整的结构化课堂笔记，要求：\n\n"
+    "1. **去除重复**：相邻片段可能有重叠内容，请去重并保持连贯\n"
+    "2. **统一结构**：使用 Markdown 二级标题（##）按知识模块重新组织\n"
+    "3. **补充衔接**：在片段之间添加必要的过渡语句，使笔记读起来流畅自然\n"
+    "4. **保留细节**：不要丢失任何公式、定义、代码或关键术语\n"
+    "5. **末尾摘要**：在笔记最后添加「核心知识点摘要」部分，列出 3-5 个最重要的知识点\n\n"
+    "---\n\n{partials_content}\n\n---\n\n"
+    "请直接输出合并后的 Markdown 笔记，不要添加额外说明。"
+)
+
+
+def build_merge_prompt(
+    partials: list[str],
+    duration_seconds: int,
+) -> str:
+    """
+    组装片段笔记合并的用户提示词
+
+    Args:
+        partials:          片段笔记列表（按时间顺序）
+        duration_seconds:  课程总时长（秒）
+
+    Returns:
+        填充后的合并提示词字符串
+    """
+    if duration_seconds >= 3600:
+        hours = duration_seconds // 3600
+        mins = (duration_seconds % 3600) // 60
+        duration_desc = f"{hours} 小时 {mins} 分钟"
+    elif duration_seconds >= 60:
+        mins = duration_seconds // 60
+        duration_desc = f"{mins} 分钟"
+    else:
+        duration_desc = f"{duration_seconds} 秒"
+
+    # 将各片段用分隔符拼接
+    parts: list[str] = []
+    for idx, partial in enumerate(partials):
+        parts.append(f"### 片段 {idx + 1}\n\n{partial.strip()}")
+    partials_content = "\n\n---\n\n".join(parts)
+
+    return MERGE_NOTES_USER_TEMPLATE.format(
+        duration_desc=duration_desc,
+        partials_count=len(partials),
+        partials_content=partials_content,
+    )

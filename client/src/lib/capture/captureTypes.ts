@@ -99,6 +99,8 @@ export interface WindowInfo {
   id: string;
   title: string;
   thumbnail?: string;          // base64 缩略图
+  score?: number;              // 推荐分数（关键词匹配）
+  matched?: string;            // 命中的关键词（用于显示推荐理由）
 }
 
 // 提取片段（UI 展示用）

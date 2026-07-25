@@ -8,6 +8,7 @@ import {
   Monitor, Play, Pause, Square, Eye, Mic, Layers,
   Settings2, ChevronDown, ChevronRight, Plus, ListPlus,
   Clock, CheckCircle2, XCircle, Loader2, Clapperboard,
+  Crosshair, Sparkles, Video, Info, Star,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useClassroomCapture } from '../hooks/useClassroomCapture';
@@ -21,10 +22,35 @@ import type { CapturePath } from '@/lib/capture';
 // 子组件
 // ================================================================
 
-const MODE_OPTIONS: { value: CaptureMode; label: string; icon: typeof Eye }[] = [
-  { value: 'vision', label: '视觉', icon: Eye },
-  { value: 'audio', label: '音频', icon: Mic },
-  { value: 'mixed', label: '混合', icon: Layers },
+const MODE_OPTIONS: { value: CaptureMode; label: string; icon: typeof Eye; desc: string }[] = [
+  { value: 'vision', label: '视觉', icon: Eye, desc: '仅截取屏幕画面进行文字识别' },
+  { value: 'audio', label: '音频', icon: Mic, desc: '仅录制声音进行语音转文字' },
+  { value: 'mixed', label: '混合', icon: Layers, desc: '同时采集画面与声音，融合分析' },
+];
+
+/** 采集路径配置：图标 + 简短描述 + 详细说明 */
+const PATH_OPTIONS: { value: CapturePath; label: string; icon: typeof Crosshair; brief: string; detail: string }[] = [
+  {
+    value: 'fine',
+    label: '精细',
+    icon: Crosshair,
+    brief: '逐帧截图',
+    detail: '按固定间隔截取屏幕画面，逐帧进行 OCR/AI 识别。适合板书密集、需要完整记录每一帧内容的场景。',
+  },
+  {
+    value: 'smart',
+    label: '智能',
+    icon: Sparkles,
+    brief: 'AI 关键帧',
+    detail: 'AI 自动检测画面变化，仅在幻灯片切换、板书出现等关键时刻截图，同时录制语音并智能分段。资源占用低，适合长时间课堂。',
+  },
+  {
+    value: 'full_record',
+    label: '录制',
+    icon: Video,
+    brief: '全程录像',
+    detail: '录制完整课堂视频（含音频），课后可通过 AI 生成结构化笔记。适合需要完整回放或课后深度分析的场景。',
+  },
 ];
 
 const STATUS_CONFIG: Record<SessionStatus, { label: string; color: string; icon: typeof Play }> = {
@@ -38,7 +64,7 @@ const STATUS_CONFIG: Record<SessionStatus, { label: string; color: string; icon:
 const LANGUAGE_OPTIONS: { value: CaptureSidebarConfig['language']; label: string }[] = [
   { value: 'zh', label: '中文' },
   { value: 'en', label: 'English' },
-  { value: 'mixed', label: '混合' },
+  { value: 'mixed', label: '多语' },
 ];
 
 function WindowSelector({ windows, selected, onSelect, onRefresh, loading }: {
@@ -54,7 +80,7 @@ function WindowSelector({ windows, selected, onSelect, onRefresh, loading }: {
           {loading ? '加载中...' : '↻ 刷新'}
         </button>
       </div>
-      <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+      <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
         {windows.length === 0 && !loading && (
           <p className="text-b3 text-text-tertiary py-2 text-center">未检测到可捕获窗口</p>
         )}
@@ -69,7 +95,15 @@ function WindowSelector({ windows, selected, onSelect, onRefresh, loading }: {
             {win.thumbnail && (
               <img src={win.thumbnail} alt="" className="w-14 h-8 rounded-kb-xs object-cover border border-border/30" />
             )}
-            <span className="text-b3 leading-tight line-clamp-1">{win.title}</span>
+            <div className="flex-1 min-w-0">
+              <span className="text-b3 leading-tight line-clamp-1 block">{win.title}</span>
+              {win.matched && (
+                <span className="text-[10px] text-brand-500 leading-tight">匹配：{win.matched}</span>
+              )}
+            </div>
+            {(win.score ?? 0) >= 100 && (
+              <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 flex-shrink-0" strokeWidth={1.5} />
+            )}
           </button>
         ))}
       </div>
@@ -180,22 +214,38 @@ export default function ClassroomPage() {
           {/* 路径选择 */}
           <div>
             <span className="text-b3 font-medium text-text-tertiary block mb-2">采集路径</span>
-            <div className="flex items-center gap-1">
-              {([
-                { value: 'fine' as CapturePath, label: '精细' },
-                { value: 'smart' as CapturePath, label: '智能' },
-                { value: 'full_record' as CapturePath, label: '录制' },
-              ]).map(({ value, label }) => (
+            <div className="flex flex-col gap-1.5">
+              {PATH_OPTIONS.map(({ value, label, icon: PathIcon, brief }) => (
                 <button key={value} onClick={() => capture.setCapturePath(value)}
                   disabled={capture.status === 'capturing' || capture.status === 'processing'}
-                  className={cn('flex-1 py-2 rounded-kb-sm text-b3 font-medium transition-all',
+                  className={cn(
+                    'flex items-center gap-2.5 px-3 py-2.5 rounded-kb-md text-left transition-all border',
                     capture.capturePath === value
-                      ? 'bg-brand-50 text-brand-600 ring-1 ring-brand-200/50'
-                      : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary/50',
-                    (capture.status === 'capturing' || capture.status === 'processing') && 'opacity-50 cursor-not-allowed')}>
-                  {label}
+                      ? 'bg-brand-50 border-brand-200/60 shadow-kb-sm'
+                      : 'border-transparent hover:bg-bg-tertiary/50',
+                    (capture.status === 'capturing' || capture.status === 'processing') && 'opacity-50 cursor-not-allowed',
+                  )}>
+                  <PathIcon className={cn('w-4 h-4 flex-shrink-0', capture.capturePath === value ? 'text-brand-600' : 'text-text-tertiary')} strokeWidth={1.5} />
+                  <div className="flex-1 min-w-0">
+                    <span className={cn('text-b3 font-medium block', capture.capturePath === value ? 'text-brand-700' : 'text-text-secondary')}>
+                      {label}
+                    </span>
+                    <span className={cn('text-[11px] leading-tight', capture.capturePath === value ? 'text-brand-500' : 'text-text-tertiary')}>
+                      {brief}
+                    </span>
+                  </div>
+                  {capture.capturePath === value && (
+                    <CheckCircle2 className="w-4 h-4 text-brand-500 flex-shrink-0" strokeWidth={1.5} />
+                  )}
                 </button>
               ))}
+            </div>
+            {/* 当前路径详细说明 */}
+            <div className="mt-2 flex items-start gap-2 px-3 py-2.5 rounded-kb-md bg-bg-secondary/60 border border-border/20">
+              <Info className="w-3.5 h-3.5 text-text-tertiary mt-0.5 flex-shrink-0" strokeWidth={1.5} />
+              <p className="text-[11px] leading-relaxed text-text-tertiary">
+                {PATH_OPTIONS.find((p) => p.value === capture.capturePath)?.detail}
+              </p>
             </div>
           </div>
 
@@ -235,19 +285,25 @@ export default function ClassroomPage() {
             </div>
           </div>
 
-          {/* 模式切换 */}
-          <div className="flex items-center gap-1">
-            {MODE_OPTIONS.map(({ value, label, icon: ModeIcon }) => (
-              <button key={value} onClick={() => capture.handleModeChange(value)}
-                disabled={capture.status === 'capturing' || capture.status === 'processing'}
-                className={cn('flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-kb-sm text-b3 font-medium transition-all',
-                  capture.mode === value
-                    ? 'bg-brand-50 text-brand-600 ring-1 ring-brand-200/50'
-                    : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary/50',
-                  (capture.status === 'capturing' || capture.status === 'processing') && 'opacity-50 cursor-not-allowed')}>
-                <ModeIcon className="w-3.5 h-3.5" strokeWidth={1.5} /> {label}
-              </button>
-            ))}
+          {/* 采集模式 */}
+          <div>
+            <span className="text-b3 font-medium text-text-tertiary block mb-2">采集模式</span>
+            <div className="flex items-center gap-1">
+              {MODE_OPTIONS.map(({ value, label, icon: ModeIcon }) => (
+                <button key={value} onClick={() => capture.handleModeChange(value)}
+                  disabled={capture.status === 'capturing' || capture.status === 'processing'}
+                  className={cn('flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-kb-sm text-b3 font-medium transition-all',
+                    capture.mode === value
+                      ? 'bg-brand-50 text-brand-600 ring-1 ring-brand-200/50'
+                      : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary/50',
+                    (capture.status === 'capturing' || capture.status === 'processing') && 'opacity-50 cursor-not-allowed')}>
+                  <ModeIcon className="w-3.5 h-3.5" strokeWidth={1.5} /> {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[11px] text-text-tertiary leading-relaxed">
+              {MODE_OPTIONS.find((m) => m.value === capture.mode)?.desc}
+            </p>
           </div>
 
           {/* 设置 */}
@@ -282,7 +338,15 @@ export default function ClassroomPage() {
         )}
 
         {capture.capturePath === 'smart' && (
-          <SmartCapturePanel bundle={capture.smartBundle} isRecording={capture.status === 'capturing'} />
+          <>
+            <SmartCapturePanel bundle={capture.smartBundle} isRecording={capture.status === 'capturing'} />
+            {capture.partialCount > 0 && (
+              <div className="mx-4 mt-2 flex items-center gap-2 px-3 py-2 rounded-kb-md bg-brand-50/50 border border-brand-100/50">
+                <CheckCircle2 className="w-4 h-4 text-brand-500" strokeWidth={1.5} />
+                <span className="text-b3 text-brand-600">已增量分析 {capture.partialCount} 段，课后将快速合并生成笔记</span>
+              </div>
+            )}
+          </>
         )}
 
         {capture.capturePath === 'full_record' && (

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card, Button } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
-import { Eye, EyeOff, Shield, ChevronDown, CheckCircle, Zap, Sparkles, BookOpen, Timer, Layers, Brain, Wand2, Lock, RefreshCw, Cpu, Download, HardDrive } from 'lucide-react';
+import { Eye, EyeOff, Shield, ChevronDown, CheckCircle, Zap, Sparkles, BookOpen, Timer, Layers, Brain, Wand2, Lock, RefreshCw, Cpu, Download, HardDrive, Trash2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AIConfig } from '@/lib/ai/config';
 import { useSettingsStore } from '@/stores/useSettingsStore';
@@ -498,7 +498,9 @@ export default function AIProviderSettings() {
 
 function OllamaSettingsSection() {
   const { toast } = useToast();
-  const { status, config, loading, refresh, setConfig, pullModel, pullProgress } = useOllamaStatus();
+  const { status, config, loading, refresh, setConfig, pullModel, deleteModel, pullProgress } = useOllamaStatus();
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // 非 Electron 环境不显示
   if (typeof window === 'undefined' || !window.electronAPI?.ollama) return null;
@@ -527,6 +529,20 @@ function OllamaSettingsSection() {
       toast({ type: 'success', message: `模型 ${modelName} 下载完成` });
     } catch {
       toast({ type: 'error', message: `模型 ${modelName} 下载失败` });
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteModel(deleteTarget);
+      toast({ type: 'success', message: `模型 ${deleteTarget} 已删除` });
+      setDeleteTarget(null);
+    } catch {
+      toast({ type: 'error', message: `模型 ${deleteTarget} 删除失败` });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -618,9 +634,23 @@ function OllamaSettingsSection() {
             <div className="flex flex-col gap-1">
               <p className="text-c1 font-medium text-text-tertiary">已拉取模型</p>
               {models.map((m) => (
-                <div key={m} className="flex items-center gap-2 px-2 py-1.5 rounded-kb-sm bg-bg-elevated">
+                <div key={m} className="flex items-center gap-2 px-2 py-1.5 rounded-kb-sm bg-bg-elevated group">
                   <HardDrive className="w-icon-xs h-icon-xs text-text-quaternary" strokeWidth={1.5} />
-                  <span className="text-b3 text-text-secondary font-mono">{m}</span>
+                  <span className="text-b3 text-text-secondary font-mono flex-1">{m}</span>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteTarget(m)}
+                    disabled={!isRunning}
+                    className={cn(
+                      'p-1 rounded-kb-sm text-text-quaternary transition-colors',
+                      'hover:text-semantic-error hover:bg-semantic-error/10',
+                      'opacity-0 group-hover:opacity-100',
+                      !isRunning && 'cursor-not-allowed opacity-0',
+                    )}
+                    title="删除模型"
+                  >
+                    <Trash2 className="w-icon-xs h-icon-xs" strokeWidth={1.5} />
+                  </button>
                 </div>
               ))}
             </div>
@@ -663,6 +693,45 @@ function OllamaSettingsSection() {
             })}
           </div>
         </>
+      )}
+
+      {/* 删除确认对话框 */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-sm mx-4 rounded-kb-lg bg-bg-elevated border border-border-default shadow-kb-card p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="flex items-center justify-center w-10 h-10 rounded-full bg-semantic-error/10">
+                <AlertTriangle className="w-5 h-5 text-semantic-error" strokeWidth={1.5} />
+              </span>
+              <h3 className="text-b1 font-semibold text-text-primary">删除模型</h3>
+            </div>
+            <p className="text-b3 text-text-secondary mb-2">
+              确定要删除本地模型 <code className="px-1.5 py-0.5 rounded bg-bg-default font-mono text-accent-default">{deleteTarget}</code> 吗？
+            </p>
+            <p className="text-c1 text-text-tertiary mb-6">
+              删除后模型文件将从磁盘移除，如需再次使用需重新下载。此操作不可撤销。
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+              >
+                取消
+              </Button>
+              <Button
+                variant="danger"
+                size="md"
+                onClick={handleDeleteConfirm}
+                loading={deleting}
+                disabled={deleting}
+              >
+                {deleting ? '删除中...' : '确认删除'}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </Card>
   );

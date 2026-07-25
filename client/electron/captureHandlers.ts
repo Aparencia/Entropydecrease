@@ -13,6 +13,7 @@ import { VideoRecorder } from './videoRecorder.js';
 import type { VideoRecordOptions } from './videoRecorder.js';
 import { safeHandle, getMainWindowId } from './ipcUtils.js';
 import { logger } from './logger.js';
+import { scoreAndFilterWindows } from './windowScorer.js';
 
 // ================================================================
 // 模块级状态
@@ -33,6 +34,14 @@ const START_DEBOUNCE_MS = 500;
 
 /** 单调递增会话标识，用于防止 stop 后残留的 debounce 重启采集 */
 let captureSessionToken = 0;
+
+/** 窗口监听轮询定时器 */
+let windowWatchTimer: ReturnType<typeof setInterval> | null = null;
+
+/** 上一次窗口列表的 id 集合（用于 diff 检测变化） */
+let lastWindowIds: Set<string> = new Set();
+
+const WINDOW_WATCH_INTERVAL_MS = 3000;
 
 // ================================================================
 // 公共 API
@@ -120,8 +129,7 @@ export function registerCaptureHandlers(): void {
         thumbnailSize: { width: 240, height: 135 },
       });
 
-      return sources.map((src) => {
-        // 压缩缩略图，避免窗口多时 UI 内存占用过大
+      const rawWindows = sources.map((src) => {
         const thumb = src.thumbnail.isEmpty() ? src.thumbnail : src.thumbnail.resize({ width: 120 });
         return {
           id: src.id,
@@ -129,10 +137,71 @@ export function registerCaptureHandlers(): void {
           thumbnail: thumb.toDataURL(),
         };
       });
+
+      // 智能评分、过滤与排序
+      return scoreAndFilterWindows(rawWindows);
     } catch (err) {
       logger.error('[IPC] screen_list_windows failed:', err);
       return [];
     }
+  });
+
+  // ---- 窗口变化监听（轮询） ----
+
+  safeHandle('screen_watch_windows_start', async () => {
+    if (windowWatchTimer) return { success: true }; // 已在监听
+
+    logger.info('[IPC] 窗口监听已启动, interval=' + WINDOW_WATCH_INTERVAL_MS + 'ms');
+
+    windowWatchTimer = setInterval(async () => {
+      try {
+        const sources = await desktopCapturer.getSources({
+          types: ['window'],
+          thumbnailSize: { width: 240, height: 135 },
+        });
+
+        const currentIds = new Set(sources.map((s) => s.id));
+
+        // 检测是否有变化（新增或关闭窗口）
+        const hasChanged =
+          currentIds.size !== lastWindowIds.size ||
+          [...currentIds].some((id) => !lastWindowIds.has(id));
+
+        if (hasChanged) {
+          lastWindowIds = currentIds;
+
+          const rawWindows = sources.map((src) => {
+            const thumb = src.thumbnail.isEmpty() ? src.thumbnail : src.thumbnail.resize({ width: 120 });
+            return { id: src.id, title: src.name, thumbnail: thumb.toDataURL() };
+          });
+
+          const scored = scoreAndFilterWindows(rawWindows);
+
+          // 推送到渲染进程
+          const mainWindowId = getMainWindowId();
+          if (mainWindowId) {
+            const win = BrowserWindow.fromId(mainWindowId);
+            if (win && !win.isDestroyed()) {
+              win.webContents.send('screen_windows_changed', scored);
+            }
+          }
+        }
+      } catch (err) {
+        logger.error('[IPC] window watch poll error:', err);
+      }
+    }, WINDOW_WATCH_INTERVAL_MS);
+
+    return { success: true };
+  });
+
+  safeHandle('screen_watch_windows_stop', async () => {
+    if (windowWatchTimer) {
+      clearInterval(windowWatchTimer);
+      windowWatchTimer = null;
+      lastWindowIds = new Set();
+      logger.info('[IPC] 窗口监听已停止');
+    }
+    return { success: true };
   });
 
   // ---- 系统音频捕获 ----

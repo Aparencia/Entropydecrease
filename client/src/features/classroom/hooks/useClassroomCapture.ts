@@ -21,7 +21,7 @@ import type {
   RecordingStatus,
   VideoRecording,
 } from '@/lib/capture';
-import { analyzeSession, analyzeVideo } from '@/lib/ai/sessionAnalyzer';
+import { analyzeSession, analyzeVideo, analyzePartial, mergeNotes } from '@/lib/ai/sessionAnalyzer';
 import type { AnalyzeResult } from '@/lib/ai/sessionAnalyzer';
 
 interface IPCAudioStartResult {
@@ -131,7 +131,13 @@ export function useClassroomCapture() {
     return () => { offCompleted(); offError(); };
   }, []);
 
-  // ── Path B：监听关键帧和 bundle ──
+  // ── Path B：监听关键帧和 bundle + 增量分析 ──
+  const partialNotesRef = useRef<string[]>([]);
+  const pendingKeyframesRef = useRef<KeyFrame[]>([]);
+  const isPartialAnalyzingRef = useRef(false);
+  const [partialCount, setPartialCount] = useState(0);
+  const INCREMENTAL_BATCH_SIZE = 5;
+
   useEffect(() => {
     const offKeyframe = captureEventBus.on<{ sessionId: string; keyframe: KeyFrame }>(
       'smart:keyframe',
@@ -140,6 +146,24 @@ export function useClassroomCapture() {
           ...prev,
           keyframes: [...(prev.keyframes ?? []), data.keyframe],
         }));
+
+        // 增量分析：累积到缓冲区，达到批次大小时触发后台分析
+        pendingKeyframesRef.current.push(data.keyframe);
+        if (pendingKeyframesRef.current.length >= INCREMENTAL_BATCH_SIZE && !isPartialAnalyzingRef.current) {
+          const batch = pendingKeyframesRef.current.splice(0, INCREMENTAL_BATCH_SIZE);
+          isPartialAnalyzingRef.current = true;
+          analyzePartial(batch, { language: config.language })
+            .then((partial) => {
+              partialNotesRef.current.push(partial);
+              setPartialCount(partialNotesRef.current.length);
+            })
+            .catch((err) => {
+              console.warn('[useClassroomCapture] 增量分析失败，跳过本批次:', err);
+            })
+            .finally(() => {
+              isPartialAnalyzingRef.current = false;
+            });
+        }
       },
     );
     const offBundleReady = captureEventBus.on<{ sessionId: string; bundle: SessionBundle }>(
@@ -147,7 +171,7 @@ export function useClassroomCapture() {
       (data) => setSmartBundle(data.bundle),
     );
     return () => { offKeyframe(); offBundleReady(); };
-  }, []);
+  }, [config.language]);
 
   // ── Path C：监听录制视频就绪 ──
   useEffect(() => {
@@ -271,6 +295,57 @@ export function useClassroomCapture() {
 
   useEffect(() => { refreshWindows(); }, [refreshWindows]);
 
+  // ── 窗口变化监听（后台轮询 + 最小化容错） ──
+  const windowMissingCountRef = useRef(0);
+  const WINDOW_MISSING_THRESHOLD = 10; // 连续消失 10 次轮询（~30s）才判定为真正关闭
+
+  useEffect(() => {
+    if (!window.electronAPI) return;
+
+    // 启动监听
+    window.electronAPI.invoke('screen_watch_windows_start').catch(() => {});
+
+    // 监听窗口变化推送
+    const unsubscribe = window.electronAPI.on('screen_windows_changed', (...args: unknown[]) => {
+      const newWindows = args[1] as WindowInfo[] | undefined;
+      if (!newWindows) return;
+      setWindows(newWindows);
+
+      // 检测当前选中窗口是否可见
+      setSelectedWindow((prev) => {
+        if (!prev) return prev;
+        const stillVisible = newWindows.some((w) => w.id === prev.id);
+
+        if (stillVisible) {
+          // 窗口恢复可见，重置计数
+          if (windowMissingCountRef.current > 0) {
+            windowMissingCountRef.current = 0;
+            toast({ type: 'success', message: '目标窗口已恢复，采集继续' });
+          }
+          return prev;
+        }
+
+        // 窗口不可见（可能最小化）
+        windowMissingCountRef.current += 1;
+        if (windowMissingCountRef.current === 1) {
+          // 首次消失，提示用户但不清除选中
+          toast({ type: 'warning', message: '目标窗口不可见（可能已最小化），恢复窗口后自动继续采集' });
+        } else if (windowMissingCountRef.current >= WINDOW_MISSING_THRESHOLD) {
+          // 超过阈值，判定为真正关闭
+          windowMissingCountRef.current = 0;
+          toast({ type: 'error', message: '目标窗口已关闭，请重新选择' });
+          return null;
+        }
+        return prev; // 保留选中状态，等待窗口恢复
+      });
+    });
+
+    return () => {
+      window.electronAPI?.invoke('screen_watch_windows_stop').catch(() => {});
+      unsubscribe();
+    };
+  }, [toast]);
+
   // ── 开始采集 ──
   const handleStart = useCallback(async () => {
     if (!selectedWindow || !window.electronAPI) return;
@@ -388,8 +463,41 @@ export function useClassroomCapture() {
       setStatus('idle');
 
       if (capturePath === 'smart' && smartBundle.keyframes && smartBundle.keyframes.length > 0) {
-        const confirmed = window.confirm('智能采集已完成，是否生成完整笔记？');
-        if (confirmed) handleAnalyze();
+        // 处理剩余未分析的关键帧（不足一批的尾部帧）
+        if (pendingKeyframesRef.current.length > 0 && !isPartialAnalyzingRef.current) {
+          try {
+            const remaining = pendingKeyframesRef.current.splice(0);
+            const partial = await analyzePartial(remaining, { language: config.language });
+            partialNotesRef.current.push(partial);
+            setPartialCount(partialNotesRef.current.length);
+          } catch { /* 静默失败 */ }
+        }
+
+        // 有增量片段→快速合并；无增量→回退全量分析
+        if (partialNotesRef.current.length > 0) {
+          setIsAnalyzing(true);
+          setAnalysisError(null);
+          try {
+            const result = await mergeNotes(partialNotesRef.current, {
+              duration: (smartBundle.duration ?? 0) / 1000,
+              language: config.language,
+            });
+            setAnalysisResult(result);
+          } catch (err) {
+            setAnalysisError(err instanceof Error ? err.message : '笔记合并失败');
+          } finally {
+            setIsAnalyzing(false);
+          }
+        } else {
+          // 回退到原有全量分析
+          const confirmed = window.confirm('智能采集已完成，是否生成完整笔记？');
+          if (confirmed) handleAnalyze();
+        }
+
+        // 清理增量状态
+        partialNotesRef.current = [];
+        pendingKeyframesRef.current = [];
+        setPartialCount(0);
       }
     } catch (err) {
       setStatus('error');
@@ -489,7 +597,7 @@ export function useClassroomCapture() {
     // 路径
     capturePath, setCapturePath, smartBundle,
     // 分析
-    isAnalyzing, analysisResult, analysisError,
+    isAnalyzing, analysisResult, analysisError, partialCount,
     // 录制
     recordingStatus, videoFilePath,
     // 操作

@@ -147,7 +147,7 @@ export class ScreenCapture {
     try {
       const source = await this.resolveSource();
       if (!source) {
-        console.warn('[ScreenCapture] 未找到匹配的截图源，跳过本帧');
+        logger.warn('[ScreenCapture] 目标窗口不可见（可能已最小化），跳过本帧');
         return;
       }
 
@@ -156,7 +156,7 @@ export class ScreenCapture {
         this.onScreenshot(frame);
       }
     } catch (error) {
-      console.error('[ScreenCapture] 截图失败:', error);
+      logger.error('[ScreenCapture] 截图失败:', error);
     }
   }
 
@@ -183,20 +183,23 @@ export class ScreenCapture {
     return screenSource ?? sources[0];
   }
 
-  /** 从 DesktopCapturerSource 提取帧数据 */
+  /** 从 DesktopCapturerSource 提取帧数据（JPEG 压缩输出，降低 AI 分析传输体积） */
   private extractFrame(source: DesktopCapturerSource): ScreenshotFrameData | null {
     const nativeImage = source.thumbnail;
     if (!nativeImage || nativeImage.isEmpty()) {
-      console.warn(`[ScreenCapture] source "${source.name}" 的缩略图为空`);
+      logger.warn(`[ScreenCapture] source "${source.name}" 的缩略图为空`);
       return null;
     }
 
-    const pngBuffer = nativeImage.toPNG();
-    const size = nativeImage.getSize();
+    // 缩放到 1280px 宽（多模态模型内部会缩到 672px，无需原尺寸）
+    const resized = nativeImage.resize({ width: 1280 });
+    // JPEG 压缩：质量 75（板书场景可后续在渲染进程按需提高）
+    const jpegBuffer = resized.toJPEG(75);
+    const size = resized.getSize();
 
-    // 复制一份纯 ArrayBuffer（toPNG 底层可能是 SharedArrayBuffer）
-    const arrayBuffer = new ArrayBuffer(pngBuffer.byteLength);
-    new Uint8Array(arrayBuffer).set(pngBuffer);
+    // 复制一份纯 ArrayBuffer
+    const arrayBuffer = new ArrayBuffer(jpegBuffer.byteLength);
+    new Uint8Array(arrayBuffer).set(jpegBuffer);
 
     const hasChanged = this.hasFrameChanged(arrayBuffer);
 

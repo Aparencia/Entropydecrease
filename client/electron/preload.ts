@@ -27,8 +27,11 @@ const ALLOWED_CHANNELS = [
   'ai_vision_extract',
   'ai_session_analyze',
   'ai_video_analyze',
+  'ai_merge_notes',
   'ai:set-gateway-url',
   'screen_list_windows',
+  'screen_watch_windows_start',
+  'screen_watch_windows_stop',
   'screen_capture_start',
   'screen_capture_stop',
   'audio_list_sources',
@@ -77,11 +80,13 @@ const ALLOWED_CHANNELS = [
   'ollama:get-status',
   'ollama:set-config',
   'ollama:pull-model',
+  'ollama:delete-model',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */
 const ALLOWED_EVENT_CHANNELS = [
   'screen_capture_frame',
+  'screen_windows_changed',
   'audio_capture_chunk',
   'audio_capture_do_start',
   'audio_capture_do_stop',
@@ -213,6 +218,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('ollama:set-config', config),
     pullModel: (modelName: string) =>
       ipcRenderer.invoke('ollama:pull-model', modelName),
+    deleteModel: (modelName: string) =>
+      ipcRenderer.invoke('ollama:delete-model', modelName),
     onPullProgress: (callback: (...args: unknown[]) => void) => {
       const handler = (_event: unknown, ...args: unknown[]) => callback(...args);
       ipcRenderer.on('ollama:pull-progress', handler);

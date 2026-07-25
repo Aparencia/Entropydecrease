@@ -72,6 +72,7 @@ declare global {
         getStatus: (forceRefresh?: boolean) => Promise<{ status: OllamaStatus; config: OllamaConfig }>;
         setConfig: (config: Partial<OllamaConfig>) => Promise<OllamaConfig>;
         pullModel: (modelName: string) => Promise<{ success: boolean }>;
+        deleteModel: (modelName: string) => Promise<{ success: boolean }>;
         onPullProgress: (callback: (progress: OllamaPullProgress) => void) => () => void;
       };
     };

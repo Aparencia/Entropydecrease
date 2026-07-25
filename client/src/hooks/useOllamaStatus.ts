@@ -21,6 +21,8 @@ export interface UseOllamaStatusReturn {
   setConfig: (partial: Partial<OllamaConfig>) => Promise<void>;
   /** 拉取模型 */
   pullModel: (modelName: string) => Promise<void>;
+  /** 删除本地模型 */
+  deleteModel: (modelName: string) => Promise<void>;
   /** 模型拉取进度（0-100），null 表示未在拉取 */
   pullProgress: OllamaPullProgress | null;
 }
@@ -124,6 +126,16 @@ export function useOllamaStatus(): UseOllamaStatusReturn {
     }
   }, [isElectron]);
 
+  // 删除本地模型
+  const removeModel = useCallback(async (modelName: string) => {
+    if (!isElectron) return;
+    await window.electronAPI.ollama.deleteModel(modelName);
+    // 删除成功后刷新状态
+    if (mountedRef.current) {
+      fetchStatus(true);
+    }
+  }, [isElectron, fetchStatus]);
+
   return {
     status,
     config,
@@ -131,6 +143,7 @@ export function useOllamaStatus(): UseOllamaStatusReturn {
     refresh,
     setConfig: updateConfig,
     pullModel: pull,
+    deleteModel: removeModel,
     pullProgress,
   };
 }

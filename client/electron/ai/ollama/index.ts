@@ -9,7 +9,7 @@
 
 import { ipcMain, BrowserWindow } from 'electron';
 import { logger } from '../../logger.js';
-import { getOllamaStatus, pullModel, initOllamaDetection } from './OllamaService.js';
+import { getOllamaStatus, pullModel, deleteModel, initOllamaDetection } from './OllamaService.js';
 import { loadOllamaConfig, updateOllamaConfig, getOllamaConfig } from './config.js';
 
 // ================================================================
@@ -85,6 +85,24 @@ export function registerOllamaHandlers(): void {
     }
   });
 
+  // ---- 删除模型 ----
+  ipcMain.handle('ollama:delete-model', async (_event, modelName: string) => {
+    if (!modelName || typeof modelName !== 'string') {
+      throw new Error('Invalid model name');
+    }
+
+    logger.info(`[Ollama] Delete model requested: ${modelName}`);
+
+    try {
+      await deleteModel(modelName);
+      return { success: true };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      logger.error(`[Ollama] Delete model failed: ${errorMsg}`);
+      throw err;
+    }
+  });
+
   logger.info('[Ollama] All IPC handlers registered');
 }
 
@@ -98,7 +116,7 @@ export async function initOllama(): Promise<void> {
 }
 
 // 统一导出
-export { getOllamaStatus, pullModel } from './OllamaService.js';
+export { getOllamaStatus, pullModel, deleteModel } from './OllamaService.js';
 export { getOllamaConfig, updateOllamaConfig, isLocalInferenceEnabled } from './config.js';
 export { generateText, generateVision, generateVisionMulti } from './OllamaProvider.js';
 export { isOllamaAvailable } from './OllamaService.js';
