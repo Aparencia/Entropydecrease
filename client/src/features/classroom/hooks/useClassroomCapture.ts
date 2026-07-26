@@ -23,6 +23,7 @@ import type {
 } from '@/lib/capture';
 import { analyzeSession, analyzeVideo, analyzePartial, mergeNotes } from '@/lib/ai/sessionAnalyzer';
 import type { AnalyzeResult } from '@/lib/ai/sessionAnalyzer';
+import { aiClient } from '@/lib/http/apiClient';
 
 interface IPCAudioStartResult {
   success: boolean;
@@ -136,6 +137,7 @@ export function useClassroomCapture() {
   const pendingKeyframesRef = useRef<KeyFrame[]>([]);
   const isPartialAnalyzingRef = useRef(false);
   const [partialCount, setPartialCount] = useState(0);
+  const [transcribedCount, setTranscribedCount] = useState(0);
   const INCREMENTAL_BATCH_SIZE = 5;
 
   useEffect(() => {
@@ -171,6 +173,46 @@ export function useClassroomCapture() {
       (data) => setSmartBundle(data.bundle),
     );
     return () => { offKeyframe(); offBundleReady(); };
+  }, [config.language]);
+
+  // ── Path B：流式 ASR — 语音段完成后立即转写 ──
+  useEffect(() => {
+    const offSegmentReady = captureEventBus.on<{ sessionId: string; segment: import('@/lib/capture').AudioSegment }>(
+      'smart:audio_segment_ready',
+      (data) => {
+        const seg = data.segment;
+        // 先将音频段加入 bundle
+        setSmartBundle((prev) => ({
+          ...prev,
+          audioSegments: [...(prev.audioSegments ?? []), seg],
+        }));
+
+        // 后台流式 ASR 转写（不阻塞采集）
+        if (!seg.audioBase64) return;
+        const lang = config.language === 'en' ? 'en' : config.language === 'mixed' ? 'auto' : 'zh';
+        aiClient.post<{ text: string }>('/api/v1/asr/transcribe', {
+          audio_base64: seg.audioBase64,
+          language: lang,
+          sample_rate: 16000,
+          channels: 1,
+        })
+          .then((resp) => {
+            const text = resp.text?.trim() || null;
+            // 将转写结果回填到对应的音频段
+            setSmartBundle((prev) => ({
+              ...prev,
+              audioSegments: (prev.audioSegments ?? []).map((s) =>
+                s.id === seg.id ? { ...s, audioText: text } : s,
+              ),
+            }));
+            if (text) setTranscribedCount((c) => c + 1);
+          })
+          .catch((err) => {
+            console.warn('[useClassroomCapture] 流式 ASR 转写失败:', err);
+          });
+      },
+    );
+    return () => { offSegmentReady(); };
   }, [config.language]);
 
   // ── Path C：监听录制视频就绪 ──
@@ -477,14 +519,22 @@ export function useClassroomCapture() {
         if (partialNotesRef.current.length > 0) {
           setIsAnalyzing(true);
           setAnalysisError(null);
+          const partials = [...partialNotesRef.current];
           try {
-            const result = await mergeNotes(partialNotesRef.current, {
+            const result = await mergeNotes(partials, {
               duration: (smartBundle.duration ?? 0) / 1000,
               language: config.language,
             });
             setAnalysisResult(result);
-          } catch (err) {
-            setAnalysisError(err instanceof Error ? err.message : '笔记合并失败');
+          } catch {
+            // 降级：本地拼接片段笔记（无需 AI，零网络，避免全量重发）
+            const fallbackContent = partials.join('\n\n---\n\n');
+            setAnalysisResult({
+              content: fallbackContent,
+              keyframesAnalyzed: smartBundle.keyframes?.length ?? 0,
+              modelUsed: 'local-concat',
+            });
+            toast({ type: 'warning', message: 'AI 合并不可用，已直接拼接片段笔记' });
           } finally {
             setIsAnalyzing(false);
           }
@@ -597,7 +647,7 @@ export function useClassroomCapture() {
     // 路径
     capturePath, setCapturePath, smartBundle,
     // 分析
-    isAnalyzing, analysisResult, analysisError, partialCount,
+    isAnalyzing, analysisResult, analysisError, partialCount, transcribedCount,
     // 录制
     recordingStatus, videoFilePath,
     // 操作

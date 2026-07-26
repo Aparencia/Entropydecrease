@@ -135,13 +135,15 @@ export interface KeyFrame {
   changeType: 'slide_change' | 'writing' | 'scene_change' | 'periodic';
 }
 
-/** @ai-context VAD 标记器切出的语音段，含编码后的音频数据 */
+/** @ai-context VAD 标记器切出的语音段，含编码后的音频数据，支持流式 ASR 转写 */
 export interface AudioSegment {
   id: string;
   timestampStart: number;
   timestampEnd: number;
   audioBase64: string;
   energy: number;
+  /** 流式 ASR 转写结果（课堂进行中即时填充，无需课后批量转写） */
+  audioText?: string | null;
 }
 
 /** @ai-context 全局时间轴条目，串联关键帧和语音段供后续分析回放 */

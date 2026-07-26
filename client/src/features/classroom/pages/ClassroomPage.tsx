@@ -346,6 +346,12 @@ export default function ClassroomPage() {
                 <span className="text-b3 text-brand-600">已增量分析 {capture.partialCount} 段，课后将快速合并生成笔记</span>
               </div>
             )}
+            {capture.transcribedCount > 0 && (
+              <div className="mx-4 mt-2 flex items-center gap-2 px-3 py-2 rounded-kb-md bg-emerald-50/50 border border-emerald-100/50">
+                <Mic className="w-4 h-4 text-emerald-500" strokeWidth={1.5} />
+                <span className="text-b3 text-emerald-600">已转写 {capture.transcribedCount} 段语音</span>
+              </div>
+            )}
           </>
         )}
 
@@ -361,7 +367,7 @@ export default function ClassroomPage() {
             error={capture.analysisError}
             onInsert={() => capture.handleDismissAnalysis()}
             onDismiss={capture.handleDismissAnalysis}
-            onRetry={capture.handleAnalyze}
+            onRetry={capture.analysisResult?.modelUsed === 'local-concat' ? undefined : capture.handleAnalyze}
           />
         )}
       </div>

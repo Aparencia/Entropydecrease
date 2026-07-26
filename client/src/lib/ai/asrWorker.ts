@@ -38,6 +38,11 @@ interface TranscribeApiResponse {
 
 export class ASRWorker implements PipelineWorker {
   name = 'asr-worker';
+  private readonly language: string;
+
+  constructor(language: string = 'zh') {
+    this.language = language;
+  }
 
   canProcess(message: PipelineMessage): boolean {
     return message.type === 'audio_chunk';
@@ -49,12 +54,12 @@ export class ASRWorker implements PipelineWorker {
     // ArrayBuffer → base64
     const base64 = arrayBufferToBase64(audioData.audioBuffer);
 
-    // 调用后端 ASR API
+    // 调用后端 ASR API（使用配置的语言）
     const response = await aiClient.post<TranscribeApiResponse>(
       '/api/v1/asr/transcribe',
       {
         audio_base64: base64,
-        language: 'zh',
+        language: this.language,
         sample_rate: audioData.sampleRate,
         channels: audioData.channels,
       },

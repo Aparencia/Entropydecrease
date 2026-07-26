@@ -2,8 +2,8 @@
  * VAD 音频标记器 — Path B 语音段检测与分段
  *
  * @ai-context
- * Path B 不做实时 ASR，而是通过 RMS 能量检测将连续语音切段，
- * 每段打包为 WAV base64 供后续按需转写，降低 AI 调用次数。
+ * Path B 通过 RMS 能量检测将连续语音切段，
+ * 每段完成后立即触发 onSegmentReady 回调，支持流式 ASR 转写。
  */
 
 import type { AudioChunkData, AudioSegment, TimelineEntry } from './captureTypes';
@@ -35,6 +35,9 @@ export class VADMarker {
   private readonly config: VADMarkerConfig;
   private segments: AudioSegment[] = [];
   private timeline: TimelineEntry[] = [];
+
+  /** 语音段完成回调（流式 ASR 触发点） */
+  onSegmentReady: ((segment: AudioSegment) => void) | null = null;
 
   // 当前语音段状态
   private isSpeaking = false;
@@ -172,6 +175,12 @@ export class VADMarker {
       audioBase64,
       energy: Math.round(avgEnergy * 10000) / 10000,
     });
+
+    // 流式触发：语音段完成后立即通知外部进行 ASR 转写
+    const newSegment = this.segments[this.segments.length - 1];
+    if (this.onSegmentReady) {
+      this.onSegmentReady(newSegment);
+    }
   }
 }
 

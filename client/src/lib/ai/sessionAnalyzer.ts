@@ -6,7 +6,8 @@
 import { supabase } from '@/lib/auth/supabaseClient';
 import { getActiveUserKey } from '@/lib/ai/apiKeyManager';
 import { classroomNoteStore } from '@/lib/storage/classroomNoteStore';
-import type { SessionBundle, KeyFrame } from '@/lib/capture/captureTypes';
+import { aiClient } from '@/lib/http/apiClient';
+import type { SessionBundle, KeyFrame, AudioSegment } from '@/lib/capture/captureTypes';
 
 // ================================================================
 // 分析结果类型
@@ -18,6 +19,42 @@ export interface AnalyzeResult {
   keyframesAnalyzed: number;
   modelUsed: string;
   source?: 'local' | 'remote';
+}
+
+// ================================================================
+// 音频段转写工具
+// ================================================================
+
+interface TranscribeResponse {
+  text: string;
+  confidence: number;
+  model_used: string;
+}
+
+/**
+ * 将音频段的 audioBase64 通过 ASR API 转写为文本
+ * 失败时静默返回 null，不阻塞整体分析流程
+ */
+async function transcribeSegment(
+  seg: AudioSegment,
+  language: string,
+): Promise<string | null> {
+  if (!seg.audioBase64) return null;
+  try {
+    const resp = await aiClient.post<TranscribeResponse>(
+      '/api/v1/asr/transcribe',
+      {
+        audio_base64: seg.audioBase64,
+        language,
+        sample_rate: 16000,
+        channels: 1,
+      },
+    );
+    return resp.text?.trim() || null;
+  } catch (e) {
+    console.warn('[sessionAnalyzer] 音频段转写失败:', e);
+    return null;
+  }
 }
 
 // ================================================================
@@ -42,11 +79,16 @@ export async function analyzeSession(
     imageBase64: kf.imageBase64,
     changeType: kf.changeType,
   }));
-  const audioSegments = bundle.audioSegments.map((seg) => ({
-    timestampStart: seg.timestampStart / 1000,
-    timestampEnd: seg.timestampEnd / 1000,
-    audioText: null,
-  }));
+
+  // 转写音频段：优先使用流式 ASR 已转写的文本，仅对未转写的段进行补充转写
+  const lang = options?.language === 'en' ? 'en' : options?.language === 'mixed' ? 'auto' : 'zh';
+  const audioSegments = await Promise.all(
+    bundle.audioSegments.map(async (seg) => ({
+      timestampStart: seg.timestampStart / 1000,
+      timestampEnd: seg.timestampEnd / 1000,
+      audioText: seg.audioText ?? await transcribeSegment(seg, lang),
+    })),
+  );
 
   const result = await window.electronAPI!.invoke('ai_session_analyze', {
     keyframes,

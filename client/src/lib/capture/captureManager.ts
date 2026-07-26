@@ -110,7 +110,7 @@ export class CaptureManager {
     this.capturePath = config.path ?? 'fine';
 
     // ================================================================
-    // Path B 智能模式：跳过 Pipeline/Worker，用轻量采样器替代
+    // Path B 智能模式：跳过 Pipeline/Worker，用轻量采样器 + 流式 ASR 替代
     // ================================================================
     if (this.capturePath === 'smart') {
       const session = await captureStore.createSession({
@@ -128,6 +128,14 @@ export class CaptureManager {
 
       this.smartSampler = new SmartSampler();
       this.vadMarker = new VADMarker();
+
+      // 流式 ASR：语音段完成后立即发射事件，由上层 Hook 触发转写
+      this.vadMarker.onSegmentReady = (segment) => {
+        captureEventBus.emit('smart:audio_segment_ready', {
+          sessionId: this.sessionId,
+          segment,
+        });
+      };
 
       captureEventBus.emit('session:started', {
         sessionId: this.sessionId,
@@ -176,9 +184,9 @@ export class CaptureManager {
       uiAutomationAvailable: false, // Electron 环境下后续检测
     });
 
-    // 根据决策动态注册 ASR Worker
+    // 根据决策动态注册 ASR Worker（传入用户配置的语言）
     if (this.lastDecision.audioEnabled && !this.asrWorker) {
-      this.asrWorker = new ASRWorker();
+      this.asrWorker = new ASRWorker(config.language || 'zh');
       this.pipeline.registerWorker(this.asrWorker);
       this.dispatcher.registerWorker(this.asrWorker);
     } else if (!this.lastDecision.audioEnabled && this.asrWorker) {
@@ -411,7 +419,7 @@ export class CaptureManager {
     }
 
     // ================================================================
-    // Path B 智能模式：VADMarker 检测语音段，不送入 ASR
+    // Path B 智能模式：VADMarker 检测语音段，流式触发 ASR 转写
     // ================================================================
     if (this.capturePath === 'smart' && this.vadMarker) {
       this.vadMarker.processChunk(audioData);
