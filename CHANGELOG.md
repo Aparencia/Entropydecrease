@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.17.1](https://github.com/Aparencia/KeBan/compare/v0.17.0...v0.17.1) (2026-07-26)
+
+### 🐛 缺陷修复
+
+* **classroom:** 智能采集语音识别流式化+merge降级+去重复传输 ([cd26df0](https://github.com/Aparencia/KeBan/commit/cd26df0b6cce555908108fb9faa5204396aa2ec1))
+
 ## [0.17.0](https://github.com/Aparencia/KeBan/compare/v0.16.0...v0.17.0) (2026-07-25)
 
 ### ✨ 新功能
