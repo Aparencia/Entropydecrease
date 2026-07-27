@@ -77,6 +77,31 @@ export function useClassroomCapture() {
   const audioCleanupRef = useRef<(() => void | Promise<void>) | null>(null);
   const frameRestartRef = useRef<(() => void) | null>(null);
 
+  // ── ASR 并发控制 ──
+  const MAX_CONCURRENT_ASR = 3;
+  const MAX_LIVE_TRANSCRIPTS = 200;
+  const asrSemaphoreRef = useRef({ active: 0, queue: [] as (() => void)[] });
+
+  const acquireAsrSlot = useCallback((): Promise<void> => {
+    const sem = asrSemaphoreRef.current;
+    if (sem.active < MAX_CONCURRENT_ASR) {
+      sem.active++;
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => {
+      sem.queue.push(() => { sem.active++; resolve(); });
+    });
+  }, []);
+
+  const releaseAsrSlot = useCallback(() => {
+    const sem = asrSemaphoreRef.current;
+    sem.active--;
+    if (sem.queue.length > 0) {
+      const next = sem.queue.shift()!;
+      next();
+    }
+  }, []);
+
   // 帧超时保底重启
   useEffect(() => {
     if (!window.electronAPI || !selectedWindow) {
@@ -184,6 +209,14 @@ export function useClassroomCapture() {
             .then((partial) => {
               partialNotesRef.current.push(partial);
               setPartialCount(partialNotesRef.current.length);
+              // 分析完成，释放 keyframe imageBase64 内存
+              const batchIds = new Set(batch.map((kf) => kf.id));
+              setSmartBundle((prev) => ({
+                ...prev,
+                keyframes: (prev.keyframes ?? []).map((kf) =>
+                  batchIds.has(kf.id) ? { ...kf, imageBase64: '' } : kf,
+                ),
+              }));
             })
             .catch((err) => {
               console.warn('[useClassroomCapture] 增量分析失败，跳过本批次:', err);
@@ -213,37 +246,48 @@ export function useClassroomCapture() {
           audioSegments: [...(prev.audioSegments ?? []), seg],
         }));
 
-        // 后台流式 ASR 转写（不阻塞采集）
+        // 后台流式 ASR 转写（不阻塞采集，受并发控制）
         if (!seg.audioBase64) return;
         const lang = config.language === 'en' ? 'en' : config.language === 'mixed' ? 'auto' : 'zh';
-        aiClient.post<{ text: string }>('/api/v1/asr/transcribe', {
-          audio_base64: seg.audioBase64,
-          language: lang,
-          sample_rate: 16000,
-          channels: 1,
-        })
-          .then((resp) => {
-            const text = resp.text?.trim() || null;
-            // 将转写结果回填到对应的音频段
-            setSmartBundle((prev) => ({
-              ...prev,
-              audioSegments: (prev.audioSegments ?? []).map((s) =>
-                s.id === seg.id ? { ...s, audioText: text } : s,
-              ),
-            }));
-            if (text) {
-              setTranscribedCount((c) => c + 1);
-              // 实时转录上屏
-              setLiveTranscripts((prev) => [...prev, { id: seg.id, text, timestamp: seg.timestampStart }]);
-            }
+        acquireAsrSlot().then(() => {
+          aiClient.post<{ text: string }>('/api/v1/asr/transcribe', {
+            audio_base64: seg.audioBase64,
+            language: lang,
+            sample_rate: 16000,
+            channels: 1,
           })
-          .catch((err) => {
-            console.warn('[useClassroomCapture] 流式 ASR 转写失败:', err);
-          });
+            .then((resp) => {
+              const text = resp.text?.trim() || null;
+              // 将转写结果回填到对应的音频段
+              setSmartBundle((prev) => ({
+                ...prev,
+                audioSegments: (prev.audioSegments ?? []).map((s) =>
+                  s.id === seg.id ? { ...s, audioText: text } : s,
+                ),
+              }));
+              if (text) {
+                setTranscribedCount((c) => c + 1);
+                // 实时转录上屏（FIFO 上限控制）
+                setLiveTranscripts((prev) => {
+                  const next = [...prev, { id: seg.id, text, timestamp: seg.timestampStart }];
+                  if (next.length > MAX_LIVE_TRANSCRIPTS) {
+                    return next.slice(next.length - MAX_LIVE_TRANSCRIPTS);
+                  }
+                  return next;
+                });
+              }
+            })
+            .catch((err) => {
+              console.warn('[useClassroomCapture] 流式 ASR 转写失败:', err);
+            })
+            .finally(() => {
+              releaseAsrSlot();
+            });
+        });
       },
     );
     return () => { offSegmentReady(); };
-  }, [config.language]);
+  }, [config.language, acquireAsrSlot, releaseAsrSlot]);
 
   // ── Path C：监听录制视频就绪 ──
   useEffect(() => {
@@ -312,6 +356,9 @@ export function useClassroomCapture() {
           const audioCtx = new AudioContext({ sampleRate: payload.options.sampleRate });
           const sourceNode = audioCtx.createMediaStreamSource(stream);
           const bufferSize = Math.ceil((payload.options.sampleRate * payload.options.chunkDurationMs) / 1000);
+          // TODO: ScriptProcessor 已被 Web Audio API 标记为废弃，
+          // 后续应迁移至 AudioWorklet（需要单独的 worklet 文件通过 audioWorklet.addModule 加载）。
+          // 迁移时需确保 Electron 的 audioWorklet 模块加载路径正确。
           const processor = audioCtx.createScriptProcessor(bufferSize, payload.options.channels, 1);
           processor.onaudioprocess = (e) => {
             const inputData = e.inputBuffer.getChannelData(0);
@@ -633,6 +680,11 @@ export function useClassroomCapture() {
       };
       const result = await analyzeSession(fullBundle, { language: config.language });
       setAnalysisResult(result);
+      // 全量分析完成，释放所有 keyframe imageBase64 内存
+      setSmartBundle((prev) => ({
+        ...prev,
+        keyframes: (prev.keyframes ?? []).map((kf) => ({ ...kf, imageBase64: '' })),
+      }));
     } catch (err) {
       if (err instanceof TypeError && err.message.includes('fetch')) {
         setAnalysisError('无法连接AI网关，请检查网络');

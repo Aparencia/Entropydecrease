@@ -46,7 +46,7 @@ export default defineConfig({
     ...(isElectronBuild ? [electronBuildConfigPlugin()] : []),
     ...(isElectronBuild ? [] : [VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'offline.html'],
       manifest: {
         name: '熵减 - 学习伴侣',
         short_name: '熵减',
@@ -79,7 +79,15 @@ export default defineConfig({
       workbox: {
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // 离线回退页面：当导航请求失败时返回 offline.html
+        navigateFallback: '/offline.html',
+        // 排除 API 路由和认证路由不使用 navigateFallback
+        navigateFallbackDenylist: [
+          /^\/api\//,
+          /^\/auth\//,
+        ],
         runtimeCaching: [
+          // Google Fonts 缓存
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'CacheFirst',
@@ -96,13 +104,32 @@ export default defineConfig({
               expiration: { maxEntries: 10, maxAgeSeconds: 365 * 24 * 60 * 60 },
             },
           },
+          // API 调用：StaleWhileRevalidate（先用缓存，后台更新）
           {
             urlPattern: /\/api\/.*/i,
-            handler: 'NetworkFirst',
+            handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'api-cache',
               expiration: { maxEntries: 50, maxAgeSeconds: 24 * 60 * 60 },
               networkTimeoutSeconds: 10,
+            },
+          },
+          // 图片/媒体资源：CacheFirst with max entries
+          {
+            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|avif)$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'image-cache',
+              expiration: { maxEntries: 60, maxAgeSeconds: 30 * 24 * 60 * 60 },
+            },
+          },
+          // 音频资源缓存
+          {
+            urlPattern: /\.(?:mp3|ogg|wav)$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'audio-cache',
+              expiration: { maxEntries: 30, maxAgeSeconds: 30 * 24 * 60 * 60 },
             },
           },
         ],

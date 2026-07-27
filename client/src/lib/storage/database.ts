@@ -8,6 +8,7 @@ import type {
   Consent, UserProfile, Inspiration, SearchIndexEntry
 } from '@/types/models';
 import type { ClassroomNote } from './classroomNoteStore';
+import type { CRDTDocRecord, CRDTChangeRecord } from '@/lib/sync/crdtEngine';
 
 export class KeBanDatabase extends Dexie {
   pomodoroSessions!: Table<PomodoroSession, string>;
@@ -33,6 +34,8 @@ export class KeBanDatabase extends Dexie {
   inspirations!: Table<Inspiration, string>;
   searchIndex!: Table<SearchIndexEntry, number>;
   classroomNotes!: Table<ClassroomNote, string>;
+  crdtDocs!: Table<CRDTDocRecord, string>;
+  crdtChanges!: Table<CRDTChangeRecord, number>;
 
   constructor() {
     super('keban');
@@ -214,6 +217,40 @@ export class KeBanDatabase extends Dexie {
     // v1.2.0: 新增课堂笔记表（课堂助手 AI 分析结果持久化）
     this.version(12).stores({
       classroomNotes: 'id, sessionId, sourceType, createdAt',
+    });
+
+    // v1.3.0: FSRS-5 算法扩展字段（stability / difficulty）
+    this.version(13).stores({
+      flashcards: 'id, deckId, front, back, createdAt, dueDate, interval, easeFactor, repetitions, lapses, sourceNoteId, stability, difficulty',
+    });
+
+    // v1.2.0: 全局统一搜索 —— searchIndex 表增加 entityId / entityType 索引字段
+    this.version(14).stores({
+      searchIndex: '++id, entityId, noteId, entityType, *tokens, title, content, updatedAt',
+    }).upgrade(async (tx) => {
+      // v12/v13 -> v14 迁移：为现有 searchIndex 记录补充 entityType = 'note'
+      try {
+        const entries = await tx.table('searchIndex').toArray();
+        if (entries.length > 0) {
+          for (const entry of entries) {
+            // 补充 entityId（等于 noteId）和 entityType
+            if (!entry.entityType) {
+              await tx.table('searchIndex').update(entry.id, {
+                entityType: 'note',
+                entityId: entry.noteId,
+              });
+            }
+          }
+        }
+      } catch {
+        // 迁移失败不阻塞启动
+      }
+    });
+
+    // v1.4.0: CRDT 同步引擎 — 新增 crdt_docs / crdt_changes 表
+    this.version(15).stores({
+      crdtDocs: 'tableName',
+      crdtChanges: '++seq, tableName, entityId, createdAt',
     });
   }
 }

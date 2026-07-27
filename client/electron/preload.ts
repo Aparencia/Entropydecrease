@@ -81,6 +81,9 @@ const ALLOWED_CHANNELS = [
   'ollama:set-config',
   'ollama:pull-model',
   'ollama:delete-model',
+  // AI 流式输出 IPC channel
+  'ai:stream:start',
+  'ai:stream:cancel',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */
@@ -101,6 +104,10 @@ const ALLOWED_EVENT_CHANNELS = [
   'video_record_do_stop',
   // Ollama 模型拉取进度推送
   'ollama:pull-progress',
+  // AI 流式输出推送
+  'ai:stream:chunk',
+  'ai:stream:end',
+  'ai:stream:error',
 ] as const;
 
 /** 允许渲染进程单向发送的 channel 白名单（渲染进程 → 主进程，fire-and-forget） */

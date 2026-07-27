@@ -106,6 +106,99 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
     put: <T = unknown>(url: string, body?: unknown) =>
       request<T>(url, { method: 'PUT', body: JSON.stringify(body) }),
     delete: <T = unknown>(url: string) => request<T>(url, { method: 'DELETE' }),
+
+    /**
+     * 流式 POST 请求：解析 SSE data: 行，逐 chunk yield 文本
+     * 复用现有 auth token 注入逻辑
+     */
+    postStream: async function* (url: string, body?: unknown): AsyncGenerator<string, void, unknown> {
+      const baseUrl = resolveUrl();
+      if (!baseUrl) {
+        throw new Error('[KeBan] API base URL not configured');
+      }
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const headers = new Headers();
+      if (token) headers.set('Authorization', `Bearer ${token}`);
+      headers.set('Content-Type', 'application/json');
+
+      const userKey = getActiveUserKey();
+      if (userKey) headers.set('X-User-API-Key', userKey);
+
+      const requestId = crypto.randomUUID();
+      headers.set('X-Request-ID', requestId);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000);
+
+      let response: Response;
+      try {
+        response = await fetch(`${baseUrl}${url}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      // 401 → 尝试刷新 token 并重试一次
+      if (response.status === 401) {
+        const { data: { session: refreshed }, error: refreshError } = await refreshSessionShared();
+        if (refreshError || !refreshed?.access_token) {
+          window.dispatchEvent(new CustomEvent('kb:session-expired'));
+          throw new Error('HTTP 401: 登录已过期');
+        }
+        headers.set('Authorization', `Bearer ${refreshed.access_token}`);
+        response = await fetch(`${baseUrl}${url}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      }
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.body) throw new Error('Response body is null');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const events = buffer.split('\n\n');
+          buffer = events.pop() || '';
+
+          for (const event of events) {
+            for (const line of event.split('\n')) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6).trim();
+                if (data === '[DONE]') return;
+                try {
+                  const parsed = JSON.parse(data);
+                  if (parsed.error) throw new Error(parsed.error);
+                  if (parsed.chunk) yield parsed.chunk;
+                } catch {
+                  if (data && data !== '[DONE]') yield data;
+                }
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    },
   };
 }
 

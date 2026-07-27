@@ -14,6 +14,7 @@ from routers.inspiration_draft import router as inspiration_draft_router
 from routers.socratic import router as socratic_router
 from routers.multimodal import router as multimodal_router
 from routers.course_detect import router as course_detect_router
+from routers.streaming import router as streaming_router
 
 __all__ = [
     "summarize_router",
@@ -30,4 +31,5 @@ __all__ = [
     "socratic_router",
     "multimodal_router",
     "course_detect_router",
+    "streaming_router",
 ]

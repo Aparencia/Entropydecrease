@@ -9,7 +9,7 @@ import asyncio
 import contextvars
 import logging
 import os
-from typing import Any, Callable, Awaitable
+from typing import Any, Callable, Awaitable, AsyncGenerator
 
 from pathlib import Path
 
@@ -428,6 +428,91 @@ async def call_with_fallback_for_request(
     # 用户 Key 失败，降级到服务端 fallback 链
     result, provider_key = await call_with_fallback(app, feature, fn)
     return result, provider_key, False
+
+
+async def call_with_fallback_stream(
+    app,
+    feature: str,
+    request,
+    fn: Callable[..., AsyncGenerator[str, None]],
+) -> tuple[AsyncGenerator[str, None], str, bool]:
+    """
+    流式版本的 call_with_fallback_for_request。
+
+    与 call_with_fallback_for_request 相同的 fallback 链逻辑，
+    但 fn 返回 AsyncGenerator[str, None] 而非 dict。
+
+    Args:
+        app:     FastAPI 应用实例
+        feature: 功能标识
+        request: FastAPI Request 对象
+        fn:      异步生成器函数，签名为 async fn(provider, model_name) -> AsyncGenerator[str, None]
+
+    Returns:
+        tuple: (generator, provider_key, is_user_key)
+    """
+    user_api_key = getattr(request.state, "user_api_key", None)
+
+    if not user_api_key:
+        # 无用户 Key，走服务端 fallback 链
+        chain = PROVIDER_FALLBACK_CHAIN.get(feature, ["fallback"])
+        budget = TIMEOUT_CONFIG.get(feature, 30) * 1.5
+
+        for provider_key in chain:
+            provider = app.state.providers.get(provider_key)
+            if not provider:
+                continue
+            model_name = _resolve_model_name(provider_key, feature)
+            try:
+                _FEATURE_CONTEXT.set(feature)
+                gen = fn(provider, model_name)
+                return gen, provider_key, False
+            except Exception as e:
+                logger.warning(
+                    "Provider [%s] stream failed for feature=%s: %s, trying next...",
+                    provider_key, feature, str(e),
+                )
+            finally:
+                _FEATURE_CONTEXT.set("")
+
+        raise RuntimeError("所有 AI 服务暂时不可用")
+
+    # 有用户 Key，先尝试用户 Key 的 Provider
+    provider, model_name, is_user_key = get_provider_for_request(app, feature, request)
+    if is_user_key:
+        try:
+            _FEATURE_CONTEXT.set(feature)
+            gen = fn(provider, model_name)
+            provider_key = MODEL_ROUTING.get(feature, ("unknown", ""))[0]
+            return gen, provider_key, True
+        except Exception as e:
+            logger.warning(
+                "用户 Key 流式调用失败，降级到服务端 fallback: feature=%s, error=%s",
+                feature, str(e),
+            )
+        finally:
+            _FEATURE_CONTEXT.set("")
+
+    # 降级到服务端 fallback 链
+    chain = PROVIDER_FALLBACK_CHAIN.get(feature, ["fallback"])
+    for provider_key in chain:
+        provider = app.state.providers.get(provider_key)
+        if not provider:
+            continue
+        model_name = _resolve_model_name(provider_key, feature)
+        try:
+            _FEATURE_CONTEXT.set(feature)
+            gen = fn(provider, model_name)
+            return gen, provider_key, False
+        except Exception as e:
+            logger.warning(
+                "Provider [%s] stream failed for feature=%s: %s, trying next...",
+                provider_key, feature, str(e),
+            )
+        finally:
+            _FEATURE_CONTEXT.set("")
+
+    raise RuntimeError("所有 AI 服务暂时不可用")
 
 
 # ============================================================

@@ -191,15 +191,22 @@ export function useFeynmanSession(noteId: string | null) {
     const text = sel.toString().trim();
     if (!text) { setSelectionPopup(null); return; }
 
-    const fullText = note?.explanation ?? '';
-    const startIdx = fullText.indexOf(text);
-
-    if (startIdx >= 0) {
-      setSelectionPopup({
-        text,
-        start: startIdx,
-        end: startIdx + text.length,
-      });
+    try {
+      const range = sel.getRangeAt(0);
+      const container = explanationRef.current;
+      const preRange = document.createRange();
+      preRange.selectNodeContents(container);
+      preRange.setEnd(range.startContainer, range.startOffset);
+      const startIdx = preRange.toString().length;
+      const endIdx = startIdx + text.length;
+      setSelectionPopup({ text, start: startIdx, end: endIdx });
+    } catch {
+      // 降级到 indexOf（文本不在容器内时兜底）
+      const fullText = note?.explanation ?? '';
+      const startIdx = fullText.indexOf(text);
+      if (startIdx >= 0) {
+        setSelectionPopup({ text, start: startIdx, end: startIdx + text.length });
+      }
     }
   }, [note]);
 

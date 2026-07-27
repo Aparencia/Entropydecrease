@@ -36,7 +36,7 @@ func InitDB() error {
 	}
 
 	// Auto-migrate all models.
-	if err := DB.AutoMigrate(&EntityVersion{}, &Operation{}, &GlobalSeqNo{}); err != nil {
+	if err := DB.AutoMigrate(&EntityVersion{}, &Operation{}, &GlobalSeqNo{}, &CRDTChange{}); err != nil {
 		return fmt.Errorf("auto-migration failed: %w", err)
 	}
 

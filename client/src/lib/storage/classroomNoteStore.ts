@@ -4,6 +4,7 @@
  */
 
 import { db } from './database';
+import { dexieSearchIndexer } from '@/lib/search/dexieSearchIndexer';
 
 export interface ClassroomNote {
   id: string;
@@ -29,6 +30,16 @@ export const classroomNoteStore = {
       updatedAt: now,
     };
     await db.classroomNotes.add(record);
+    // v1.2.0: 同步全局搜索索引
+    try {
+      await dexieSearchIndexer.upsert(
+        id,
+        'classroom',
+        note.title ?? '课堂笔记',
+        `${note.title ?? ''} ${note.content ?? ''}`.trim(),
+        now.getTime(),
+      );
+    } catch { /* 忽略 */ }
     return id;
   },
 
@@ -42,5 +53,7 @@ export const classroomNoteStore = {
 
   async delete(id: string): Promise<void> {
     await db.classroomNotes.delete(id);
+    // v1.2.0: 删除搜索索引
+    try { await dexieSearchIndexer.remove(id, 'classroom'); } catch { /* 忽略 */ }
   },
 };

@@ -6,9 +6,10 @@ import {
   flashcardReviewStore,
 } from '@/lib/storage';
 import { createWithLog, updateWithLog, deleteWithLog } from '@/lib/storage/writeWithLog';
-import { createNewCardState } from '@/lib/sm2';
+import { getScheduler } from '@/lib/schedulingFactory';
 import type { Flashcard, FlashcardDeck } from '@/types/models';
 import { useStudySessionStore } from './useStudySessionStore';
+import { dexieSearchIndexer } from '@/lib/search/dexieSearchIndexer';
 
 // ---------------------------------------------------------------------------
 // 类型定义
@@ -40,7 +41,7 @@ interface FlashcardState {
   createCard: (
     card: Omit<
       Flashcard,
-      'id' | 'easeFactor' | 'interval' | 'repetitions' | 'lapses' | 'dueDate' | 'createdAt' | 'updatedAt' | 'order'
+      'id' | 'easeFactor' | 'interval' | 'repetitions' | 'lapses' | 'dueDate' | 'stability' | 'difficulty' | 'createdAt' | 'updatedAt' | 'order'
     >,
   ) => Promise<string>;
   updateCard: (id: string, changes: Partial<Flashcard>) => Promise<void>;
@@ -157,14 +158,16 @@ export const useFlashcardStore = create<FlashcardState>((set, get) => {
 
     createCard: async (cardInput) => {
       const now = new Date();
-      const sm2Init = createNewCardState();
+      const initState = getScheduler().createNew();
       const cardData = {
         ...cardInput,
-        easeFactor: sm2Init.easeFactor,
-        interval: sm2Init.interval,
-        repetitions: sm2Init.repetitions,
-        lapses: sm2Init.lapses,
-        dueDate: sm2Init.dueDate,
+        easeFactor: initState.easeFactor,
+        interval: initState.interval,
+        repetitions: initState.repetitions,
+        lapses: initState.lapses,
+        dueDate: initState.dueDate,
+        stability: initState.stability,
+        difficulty: initState.difficulty,
         createdAt: now,
         updatedAt: now,
         order: Date.now(),
@@ -172,17 +175,38 @@ export const useFlashcardStore = create<FlashcardState>((set, get) => {
       const id = await createWithLog(flashcardStore, 'flashcards', cardData);
       const card: Flashcard = { id, ...cardData };
       set((state) => ({ cards: [...state.cards, card] }));
+      // v1.2.0: 同步全局搜索索引
+      try {
+        await dexieSearchIndexer.upsert(
+          id,
+          'flashcard',
+          card.front?.slice(0, 60) ?? '闪卡',
+          `${card.front ?? ''} ${card.back ?? ''}`.trim(),
+          now.getTime(),
+        );
+      } catch { /* 索引更新失败不阻塞卡片创建 */ }
       return id;
     },
 
     updateCard: async (id, changes) => {
       const updatedAt = new Date();
       await updateWithLog(flashcardStore, 'flashcards', id, { ...changes, updatedAt });
+      const updatedCard = { ...get().cards.find((c) => c.id === id), ...changes, updatedAt } as Flashcard;
       set((state) => ({
         cards: state.cards.map((c) =>
           c.id === id ? { ...c, ...changes, updatedAt } : c,
         ),
       }));
+      // v1.2.0: 同步全局搜索索引
+      try {
+        await dexieSearchIndexer.upsert(
+          id,
+          'flashcard',
+          updatedCard.front?.slice(0, 60) ?? '闪卡',
+          `${updatedCard.front ?? ''} ${updatedCard.back ?? ''}`.trim(),
+          updatedAt.getTime(),
+        );
+      } catch { /* 忽略 */ }
     },
 
     deleteCard: async (id) => {
@@ -190,6 +214,8 @@ export const useFlashcardStore = create<FlashcardState>((set, get) => {
       set((state) => ({
         cards: state.cards.filter((c) => c.id !== id),
       }));
+      // v1.2.0: 删除搜索索引
+      try { await dexieSearchIndexer.remove(id, 'flashcard'); } catch { /* 忽略 */ }
     },
 
     // -----------------------------------------------------------------------

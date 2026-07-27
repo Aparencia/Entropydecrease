@@ -1,7 +1,10 @@
 /**
  * 搜索引擎接口与配置类型
  * v0.9.0: 全文搜索功能基础类型定义
+ * v1.2.0: 全局统一搜索，支持多实体类型
  */
+
+import type { SearchEntityType } from '@/types/models';
 
 /** 搜索选项 */
 export interface SearchOptions {
@@ -17,13 +20,19 @@ export interface SearchOptions {
   noteIds?: string[];
   /** 限定搜索的标签范围 */
   tags?: string[];
+  /** v1.2.0: 限定搜索的实体类型（空数组或不传表示搜索全部） */
+  entityTypes?: SearchEntityType[];
 }
 
 /** 单条搜索结果 */
 export interface SearchResultItem {
-  /** 笔记 ID */
+  /** 笔记 ID（向后兼容，值等于 entityId） */
   noteId: string;
-  /** 笔记标题 */
+  /** v1.2.0: 实体唯一标识 */
+  entityId: string;
+  /** v1.2.0: 实体类型 */
+  entityType: SearchEntityType;
+  /** 标题 */
   title: string;
   /** 匹配片段（含高亮标记） */
   snippet: string;
@@ -31,7 +40,7 @@ export interface SearchResultItem {
   score: number;
   /** 匹配的 token 列表 */
   matchedTokens: string[];
-  /** 笔记最后更新时间 */
+  /** 最后更新时间 */
   updatedAt: number;
 }
 
@@ -58,11 +67,20 @@ export interface ISearchEngine {
   /** 执行搜索 */
   search(options: SearchOptions): Promise<SearchResult>;
 
-  /** 添加或更新一条索引 */
-  upsert(noteId: string, title: string, content: string, updatedAt: number): Promise<void>;
+  /**
+   * 添加或更新一条索引
+   * v1.2.0 扩展签名：支持多实体类型
+   */
+  upsert(
+    entityId: string,
+    entityType: SearchEntityType,
+    title: string,
+    content: string,
+    updatedAt: number,
+  ): Promise<void>;
 
   /** 删除一条索引 */
-  remove(noteId: string): Promise<void>;
+  remove(entityId: string, entityType?: SearchEntityType): Promise<void>;
 
   /** 重建全部索引 */
   rebuildIndex(): Promise<void>;

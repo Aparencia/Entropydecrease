@@ -12,7 +12,7 @@ import base64
 import logging
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from google import genai
 from google.genai import types
@@ -248,6 +248,34 @@ class GeminiProvider(AIProvider):
                     self._client.files.delete(name=uploaded_file.name)
                 except Exception:
                     logger.debug("Gemini 临时文件清理失败（可忽略）: %s", uploaded_file.name)
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+        model: str = _DEFAULT_MODEL,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        response_format: dict[str, Any] | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """流式调用 Gemini 生成内容"""
+        try:
+            config = types.GenerateContentConfig(
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+                system_instruction=system_prompt if system_prompt else None,
+            )
+            response = self._client.models.generate_content_stream(
+                model=model,
+                contents=prompt,
+                config=config,
+            )
+            for chunk in response:
+                if chunk.text:
+                    yield chunk.text
+        except Exception as e:
+            logger.error("GeminiProvider.generate_stream 失败: %s", str(e))
+            _handle_gemini_error(e, model)
 
     async def transcribe(
         self,

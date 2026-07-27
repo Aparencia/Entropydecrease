@@ -1,0 +1,113 @@
+/**
+ * 熵减 — 移动端 2D 模块导航网格
+ *
+ * 当 3D 场景降级时（移动端 PWA/浏览器），
+ * 替代 3D 空间导航，展示静态渐变背景 + 模块卡片网格。
+ */
+import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { Timer, FileText, Layers, Lightbulb, Sparkles, Clapperboard, BarChart3 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+const modules = [
+  { id: 'dashboard', label: '首页', route: '/', icon: BarChart3, color: 'from-indigo-500/20 to-indigo-600/10', iconColor: 'text-indigo-400' },
+  { id: 'pomodoro', label: '深潜', route: '/pomodoro', icon: Timer, color: 'from-orange-500/20 to-orange-600/10', iconColor: 'text-orange-400' },
+  { id: 'notes', label: '结礁', route: '/notes', icon: FileText, color: 'from-blue-500/20 to-blue-600/10', iconColor: 'text-blue-400' },
+  { id: 'flashcards', label: '闪卡', route: '/flashcards', icon: Layers, color: 'from-emerald-500/20 to-emerald-600/10', iconColor: 'text-emerald-400' },
+  { id: 'feynman', label: '费曼', route: '/feynman', icon: Lightbulb, color: 'from-violet-500/20 to-violet-600/10', iconColor: 'text-violet-400' },
+  { id: 'inspiration', label: '萤火海沟', route: '/inspiration', icon: Sparkles, color: 'from-pink-500/20 to-pink-600/10', iconColor: 'text-pink-400' },
+  { id: 'classroom', label: '回声定位', route: '/classroom', icon: Clapperboard, color: 'from-teal-500/20 to-teal-600/10', iconColor: 'text-teal-400' },
+];
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.05 },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 12, scale: 0.95 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 300, damping: 25 } },
+};
+
+export function MobileNavGrid() {
+  const navigate = useNavigate();
+
+  return (
+    <div className="fixed inset-0 -z-10 overflow-y-auto">
+      {/* 静态渐变背景 */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background: 'linear-gradient(135deg, #0f0f23 0%, #1a1a3e 30%, #0d1b2a 60%, #162447 100%)',
+        }}
+      />
+
+      {/* 微妙的粒子点缀效果（纯 CSS） */}
+      <div
+        className="absolute inset-0 opacity-20"
+        style={{
+          backgroundImage: `radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+                            radial-gradient(circle at 80% 70%, rgba(236, 72, 153, 0.12) 0%, transparent 50%),
+                            radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.08) 0%, transparent 50%)`,
+        }}
+      />
+
+      {/* 模块网格 */}
+      <motion.div
+        className="relative z-10 px-6 pt-16 pb-24"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
+        <motion.h1
+          className="text-xl font-light text-white/80 mb-1 tracking-wider"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          熵减
+        </motion.h1>
+        <motion.p
+          className="text-xs text-white/30 mb-8"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.1 }}
+        >
+          学习伴侣
+        </motion.p>
+
+        <div className="grid grid-cols-2 gap-3">
+          {modules.map((mod) => {
+            const Icon = mod.icon;
+            return (
+              <motion.button
+                key={mod.id}
+                variants={itemVariants}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => navigate(mod.route)}
+                className={cn(
+                  'flex flex-col items-start gap-3 p-5 rounded-2xl',
+                  'bg-gradient-to-br backdrop-blur-sm',
+                  'border border-white/5',
+                  'active:border-white/15',
+                  'transition-colors duration-200',
+                  mod.color,
+                )}
+              >
+                <div className={cn(
+                  'w-10 h-10 rounded-xl flex items-center justify-center',
+                  'bg-white/5 border border-white/10',
+                )}>
+                  <Icon className={cn('w-5 h-5', mod.iconColor)} strokeWidth={1.5} />
+                </div>
+                <span className="text-sm text-white/70 font-medium">{mod.label}</span>
+              </motion.button>
+            );
+          })}
+        </div>
+      </motion.div>
+    </div>
+  );
+}

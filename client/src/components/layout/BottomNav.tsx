@@ -1,12 +1,14 @@
 import { NavLink } from 'react-router-dom';
-import { Timer, FileText, Layers, Lightbulb } from 'lucide-react';
+import { Home, Timer, FileText, Layers, Lightbulb, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const tabs = [
-  { to: '/pomodoro', label: '番茄钟', icon: Timer },
-  { to: '/notes', label: '笔记', icon: FileText },
+  { to: '/', label: '首页', icon: Home },
+  { to: '/pomodoro', label: '深潜', icon: Timer },
+  { to: '/notes', label: '结礁', icon: FileText },
   { to: '/flashcards', label: '闪卡', icon: Layers },
   { to: '/feynman', label: '费曼', icon: Lightbulb },
+  { to: '/inspiration', label: '灵感', icon: Sparkles },
 ];
 
 export default function BottomNav() {
@@ -24,6 +26,7 @@ export default function BottomNav() {
           <NavLink
             key={to}
             to={to}
+            end={to === '/'}
             className={({ isActive }) =>
               cn(
                 'flex flex-col items-center justify-center gap-0.5',

@@ -4,7 +4,7 @@
  */
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 4;
 
 export const SCHEMA_DDL = /* sql */ `
 CREATE TABLE IF NOT EXISTS pomodoro_sessions (
@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS search_index (
   id INTEGER PRIMARY KEY AUTOINCREMENT, note_id TEXT NOT NULL,
   tokens TEXT NOT NULL DEFAULT '[]', title TEXT NOT NULL DEFAULT '',
   content TEXT NOT NULL DEFAULT '', updated_at REAL NOT NULL DEFAULT 0,
+  entity_id TEXT, entity_type TEXT,
   FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
 );
 -- 高频查询列索引
@@ -158,8 +159,54 @@ CREATE INDEX IF NOT EXISTS idx_predictions_note_id ON predictions(note_id);
 CREATE INDEX IF NOT EXISTS idx_predictions_created_at ON predictions(created_at);
 `;
 
+/** v3 迁移 DDL：CRDT 同步引擎元数据表（条件执行） */
+export const SCHEMA_V3_DDL = /* sql */ `
+CREATE TABLE IF NOT EXISTS crdt_docs (
+  table_name TEXT PRIMARY KEY,
+  snapshot TEXT NOT NULL DEFAULT '',
+  last_heads TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS crdt_changes (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  table_name TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  changeset TEXT NOT NULL,
+  operation TEXT NOT NULL CHECK (operation IN ('create','update','delete')),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_crdt_changes_table_name ON crdt_changes(table_name);
+`;
+
 /** 执行 DDL 并设置 PRAGMA user_version。幂等调用（CREATE IF NOT EXISTS）。 */
 export function initializeSchema(db: Database.Database): void {
   db.exec(SCHEMA_DDL);
+
+  // v2 迁移：FSRS-5 扩展字段（条件 ALTER TABLE，幂等）
+  const currentVersion = db.pragma('user_version', { simple: true }) as number;
+  if (currentVersion < 2) {
+    try {
+      db.exec(`ALTER TABLE flashcards ADD COLUMN stability REAL DEFAULT NULL`);
+    } catch { /* 列已存在 */ }
+    try {
+      db.exec(`ALTER TABLE flashcards ADD COLUMN difficulty REAL DEFAULT NULL`);
+    } catch { /* 列已存在 */ }
+  }
+
+  // v3 迁移：CRDT 同步引擎元数据表
+  if (currentVersion < 3) {
+    db.exec(SCHEMA_V3_DDL);
+  }
+
+  // v4 迁移：search_index 表增加 entity_id 和 entity_type 列
+  if (currentVersion < 4) {
+    try {
+      db.exec(`ALTER TABLE search_index ADD COLUMN entity_id TEXT`);
+    } catch { /* 列已存在 */ }
+    try {
+      db.exec(`ALTER TABLE search_index ADD COLUMN entity_type TEXT`);
+    } catch { /* 列已存在 */ }
+  }
+
   db.pragma(`user_version = ${SCHEMA_VERSION}`);
 }

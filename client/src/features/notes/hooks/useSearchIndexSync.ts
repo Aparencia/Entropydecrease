@@ -75,5 +75,5 @@ async function syncUpsert(note: Note): Promise<void> {
   const ts = note.updatedAt instanceof Date
     ? note.updatedAt.getTime()
     : new Date(note.updatedAt as unknown as string).getTime();
-  await dexieSearchIndexer.upsert(note.id, note.title, note.content, ts);
+  await dexieSearchIndexer.upsert(note.id, 'note', note.title, note.content, ts);
 }

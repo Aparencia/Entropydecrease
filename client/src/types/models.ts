@@ -12,10 +12,17 @@ export interface GoldenError {
   userAnswer: string;
 }
 
+/** 搜索索引支持的实体类型 */
+export type SearchEntityType = 'note' | 'flashcard' | 'feynman' | 'inspiration' | 'classroom';
+
 /** 笔记全文搜索索引条目 */
 export interface SearchIndexEntry {
   id?: number;
   noteId: string;
+  /** v1.2.0: 实体唯一标识（值等于 noteId，向后兼容） */
+  entityId: string;
+  /** v1.2.0: 实体类型 */
+  entityType: SearchEntityType;
   tokens: string[];
   title: string;
   content: string;
@@ -121,6 +128,9 @@ export interface Flashcard {
   lapses: number;                // 累计失误次数
   dueDate: Date;                 // 下次复习日期
   lastReviewDate?: Date;         // 上次复习日期
+  // FSRS-5 扩展字段（惰性迁移，初始为 null/undefined）
+  stability?: number;            // 记忆稳定性（天）
+  difficulty?: number;           // 记忆难度（1-10）
   createdAt: Date;
   updatedAt: Date;
   sourceNoteId?: string;          // 来源笔记 ID（用于双向关联）

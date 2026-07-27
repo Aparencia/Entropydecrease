@@ -4,6 +4,8 @@ import { createWithLog, updateWithLog, deleteWithLog } from '@/lib/storage/write
 import { db } from '@/lib/storage/database';
 import type { FeynmanNote, FeynmanSummary, FeynmanWeakPoint } from '@/types/models';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
+import { useFlashcardStore } from '@/features/flashcards/store/useFlashcardStore';
+import { dexieSearchIndexer } from '@/lib/search/dexieSearchIndexer';
 
 // ── Store 内部组合视图（用于 UI 展示）─────────────────────────
 
@@ -43,6 +45,9 @@ interface FeynmanState {
 
   // 批量加载
   loadWeakPointsForNotes: (noteIds: string[]) => Promise<void>;
+
+  // 闪卡转化
+  convertWeakPointsToFlashcards: (noteId: string, weakPointIds: string[], targetDeckId: string) => Promise<void>;
 
   // 统计
   getStats: () => { total: number; completed: number; weakPointsCount: number };
@@ -131,6 +136,10 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
         weakPoints: { ...state.weakPoints, [id]: [] },
         currentNoteId: id,
       }));
+      // v1.2.0: 同步全局搜索索引
+      try {
+        await dexieSearchIndexer.upsert(id, 'feynman', concept, concept, now.getTime());
+      } catch { /* 忽略 */ }
       return id;
     },
 
@@ -140,6 +149,16 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       const updated: FeynmanNote = { ...current, ...changes, updatedAt: new Date() };
       await updateWithLog(feynmanNoteStore, 'feynmanNotes', id, updated);
       set((state) => ({ notes: patchNote(state.notes, updated) }));
+      // v1.2.0: 同步全局搜索索引
+      try {
+        await dexieSearchIndexer.upsert(
+          id,
+          'feynman',
+          updated.concept,
+          `${updated.concept ?? ''} ${updated.explanation ?? ''}`.trim(),
+          new Date(updated.updatedAt).getTime(),
+        );
+      } catch { /* 忽略 */ }
     },
 
     deleteNote: async (id: string) => {
@@ -157,6 +176,9 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
           await deleteWithLog(feynmanWeakPointStore, 'feynmanWeakPoints', w.id!);
         }
       });
+
+      // v1.2.0: 删除搜索索引
+      try { await dexieSearchIndexer.remove(id, 'feynman'); } catch { /* 忽略 */ }
 
       set((state) => {
         const summaries2 = { ...state.summaries };
@@ -188,6 +210,16 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
 
       await updateWithLog(feynmanNoteStore, 'feynmanNotes', noteId, updated);
       set((state) => ({ notes: patchNote(state.notes, updated) }));
+      // v1.2.0: 同步全局搜索索引（explanation 变更时更新）
+      try {
+        await dexieSearchIndexer.upsert(
+          noteId,
+          'feynman',
+          updated.concept,
+          `${updated.concept ?? ''} ${explanation}`.trim(),
+          new Date(updated.updatedAt).getTime(),
+        );
+      } catch { /* 忽略 */ }
     },
 
     addWeakPoint: async (noteId: string, weakPoint: Omit<FeynmanWeakPoint, 'id' | 'noteId' | 'createdAt'>) => {
@@ -318,6 +350,47 @@ export const useFeynmanStore = create<FeynmanState>((set, get) => {
       await updateWithLog(feynmanNoteStore, 'feynmanNotes', noteId, updated);
       set((state) => ({ notes: patchNote(state.notes, updated) }));
       soundPlayer.play('feynman_complete');
+    },
+
+    // ── 闪卡转化 ──────────────────────────────────────────────
+
+    convertWeakPointsToFlashcards: async (noteId: string, weakPointIds: string[], targetDeckId: string) => {
+      const note = get().notes.find((n) => n.id === noteId);
+      if (!note) throw new Error('笔记不存在');
+
+      const wps = get().weakPoints[noteId] ?? [];
+      // 只转化指定的、未掌握的薄弱点
+      const toConvert = wps.filter(
+        (wp) => weakPointIds.includes(wp.id!) && !wp.mastered,
+      );
+
+      if (toConvert.length === 0) return;
+
+      const { createCard } = useFlashcardStore.getState();
+
+      for (const wp of toConvert) {
+        await createCard({
+          deckId: targetDeckId,
+          front: wp.text,
+          back: note.concept,
+          type: 'basic',
+          sourceNoteId: noteId,
+        });
+
+        // 标记为已掌握
+        const updated = { ...wp, mastered: true };
+        await updateWithLog(feynmanWeakPointStore, 'feynmanWeakPoints', wp.id!, updated);
+      }
+
+      // 更新本地 store 状态
+      set((state) => ({
+        weakPoints: {
+          ...state.weakPoints,
+          [noteId]: (state.weakPoints[noteId] ?? []).map((w) =>
+            weakPointIds.includes(w.id!) ? { ...w, mastered: true } : w,
+          ),
+        },
+      }));
     },
 
     // ── 批量加载 ──────────────────────────────────────────────

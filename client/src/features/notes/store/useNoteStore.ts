@@ -4,7 +4,7 @@ import { noteStore, noteFolderStore } from '@/lib/storage';
 import { createWithLog, updateWithLog, deleteWithLog } from '@/lib/storage/writeWithLog';
 import { dexieSearchIndexer } from '@/lib/search/dexieSearchIndexer';
 import type { SearchResultItem } from '@/lib/search/types';
-import type { Note, NoteFolder } from '@/types/models';
+import type { Note, NoteFolder, SearchEntityType } from '@/types/models';
 import { createTodoTemplateContent, createEmptyTodoTemplate } from '../lib/todoTemplate';
 import type { TodoItem } from '../lib/todoTemplate';
 
@@ -19,6 +19,8 @@ interface NoteState {
   selectedTags: string[];
   /** v0.9.0: 全文搜索结果 */
   searchResults: SearchResultItem[];
+  /** v1.2.0: 当前搜索选中的实体类型过滤（空数组表示全部） */
+  selectedEntityTypes: SearchEntityType[];
 
   // 笔记操作
   loadNotes: () => Promise<void>;
@@ -44,7 +46,9 @@ interface NoteState {
   // 搜索
   setSearchQuery: (query: string) => void;
   /** v0.9.0: 全文搜索（基于 Dexie 索引 + BM25 评分） */
-  searchNotes: (query: string, options?: { limit?: number; fuzzy?: boolean }) => Promise<void>;
+  searchNotes: (query: string, options?: { limit?: number; fuzzy?: boolean; entityTypes?: SearchEntityType[] }) => Promise<void>;
+  /** v1.2.0: 设置搜索实体类型过滤 */
+  setSelectedEntityTypes: (types: SearchEntityType[]) => void;
 
   // 标签筛选
   toggleTag: (tag: string) => void;
@@ -151,6 +155,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
     searchQuery: '',
     selectedTags: [],
     searchResults: [],
+    selectedEntityTypes: [],
 
     loadNotes: async () => {
       set({ isLoading: true });
@@ -179,7 +184,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
       const id = await createWithLog(noteStore, 'notes', noteData);
       // v0.9.0: 自动更新搜索索引
       try {
-        await dexieSearchIndexer.upsert(id, data.title, content, now.getTime());
+        await dexieSearchIndexer.upsert(id, 'note', data.title, content, now.getTime());
       } catch {
         // 索引更新失败不阻塞笔记创建
       }
@@ -200,7 +205,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
           const ts = updateData.updatedAt instanceof Date
             ? updateData.updatedAt.getTime()
             : new Date(updateData.updatedAt as unknown as string).getTime();
-          await dexieSearchIndexer.upsert(id, note.title, note.content, ts);
+          await dexieSearchIndexer.upsert(id, 'note', note.title, note.content, ts);
         }
       } catch {
         // 索引更新失败不阻塞笔记更新
@@ -290,11 +295,16 @@ export const useNoteStore = create<NoteState>((set, get) => {
           query,
           limit: options?.limit ?? 20,
           fuzzy: options?.fuzzy ?? false,
+          entityTypes: options?.entityTypes ?? get().selectedEntityTypes,
         });
         set({ searchResults: result.items });
       } catch {
         set({ searchResults: [] });
       }
+    },
+
+    setSelectedEntityTypes: (types) => {
+      set({ selectedEntityTypes: types });
     },
 
     toggleTag: (tag) => {

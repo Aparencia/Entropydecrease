@@ -9,7 +9,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from functools import wraps
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from config import TIMEOUT_CONFIG, _FEATURE_CONTEXT
 
@@ -116,6 +116,34 @@ class AIProvider(ABC):
             }
         """
         ...
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+        model: str = "",
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        response_format: dict[str, Any] | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """
+        流式生成内容（默认降级实现）
+
+        默认行为：先调用 generate() 获取完整结果，再一次性 yield。
+        子类应覆盖此方法以实现真正的流式输出。
+
+        Yields:
+            str: 生成的文本片段
+        """
+        result = await self.generate(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+        )
+        yield result.get("content", "")
 
     async def generate_vision(
         self,

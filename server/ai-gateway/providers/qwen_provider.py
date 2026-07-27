@@ -10,7 +10,7 @@
 import base64
 import time
 import logging
-from typing import Any
+from typing import Any, AsyncGenerator
 
 import openai
 from openai import AsyncOpenAI
@@ -376,4 +376,39 @@ class QwenProvider(AIProvider):
             }
         except Exception as e:
             logger.error("QwenProvider.generate_video 调用失败: %s", str(e))
+            _handle_provider_error(e, model)
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+        model: str = "qwen-plus",
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        response_format: dict[str, Any] | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """流式调用通义千问生成内容"""
+        messages: list[dict[str, str]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        try:
+            kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "stream": True,
+            }
+            if response_format:
+                kwargs["response_format"] = response_format
+
+            stream = await self._client.chat.completions.create(**kwargs)
+            async for chunk in stream:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if delta and delta.content:
+                    yield delta.content
+        except Exception as e:
+            logger.error("QwenProvider.generate_stream 失败: %s", str(e))
             _handle_provider_error(e, model)

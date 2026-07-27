@@ -11,12 +11,15 @@ import { useSync } from '@/lib/sync/SyncContext';
 import { SceneProvider } from '@/lib/3d/core/SceneProvider';
 import { SceneTransition } from '@/lib/3d/scenes/SceneTransition';
 import { SpatialNav } from '@/lib/3d/navigation/SpatialNav';
+import { MobileNavGrid } from '@/lib/3d/scenes/MobileNavGrid';
 import { FunctionalOverlay } from '@/components/overlay/FunctionalOverlay';
 import { useOrbitalStore } from '@/lib/3d/navigation/OrbitalStore';
 import { OnboardingOverlay } from '@/components/onboarding/OnboardingOverlay';
 import { ModuleTourToast } from '@/components/onboarding/ModuleTourToast';
 import { HelpCenter } from '@/components/onboarding/HelpCenter';
 import { useOnboardingStore } from '@/components/onboarding/useOnboardingStore';
+import { useRuntimeEnv } from '@/lib/env/useRuntimeEnv';
+import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 
 export default function AppLayout() {
   const { pathname } = useLocation();
@@ -25,6 +28,7 @@ export default function AppLayout() {
   const openHelp = useOnboardingStore((s) => s.openHelp);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const { sync } = useSync();
+  const { shouldDegrade3D } = useRuntimeEnv();
 
   // 监听 session 过期事件
   useSessionExpiry();
@@ -105,11 +109,16 @@ export default function AppLayout() {
       {/* Layer 2: 始终最顶层 — Electron标题栏 */}
       <CustomTitlebar />
 
-      {/* Layer 0: 3D场景全屏背景 */}
-      <SceneProvider interactive={!isInModule}>
-        <SceneTransition />
-        <SpatialNav />
-      </SceneProvider>
+      {/* Layer 0: 3D场景全屏背景 / 移动端2D降级 */}
+      {shouldDegrade3D ? (
+        /* 移动端降级：显示 2D 模块导航网格代替 3D 场景 */
+        !isInModule && <MobileNavGrid />
+      ) : (
+        <SceneProvider interactive={!isInModule}>
+          <SceneTransition />
+          <SpatialNav />
+        </SceneProvider>
+      )}
 
       {/* Layer 1: 功能覆盖层 */}
       <AnimatePresence mode="popLayout">
@@ -120,10 +129,10 @@ export default function AppLayout() {
         )}
       </AnimatePresence>
 
-      {/* 非模块内时显示简洁的状态提示 + 返回按钮 */}
-      {!isInModule && (
+      {/* 非模块内时显示简洁的状态提示 + 返回按钮（仅桌面端） */}
+      {!isInModule && !shouldDegrade3D && (
         <>
-          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-20">
+          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-20 hidden md:block">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -132,7 +141,7 @@ export default function AppLayout() {
               点击3D物体进入模块 · 按 Esc 返回仪表盘 · 数字键 1-6 快捷跳转
             </motion.div>
           </div>
-          {/* 浮动返回仪表盘按钮 */}
+          {/* 浮动返回仪表盘按钮（仅桌面端） */}
           <motion.button
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -140,7 +149,7 @@ export default function AppLayout() {
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
             onClick={() => { enterModule('dashboard'); navigate('/'); }}
-            className="fixed bottom-8 right-8 z-20 w-12 h-12 rounded-full bg-black/30 backdrop-blur-xl border border-white/15 flex items-center justify-center text-white/70 hover:text-white hover:bg-black/50 transition-colors"
+            className="fixed bottom-8 right-8 z-20 hidden md:flex w-12 h-12 rounded-full bg-black/30 backdrop-blur-xl border border-white/15 items-center justify-center text-white/70 hover:text-white hover:bg-black/50 transition-colors"
             aria-label="返回仪表盘"
           >
             <Home className="w-5 h-5" strokeWidth={1.5} />
@@ -156,6 +165,7 @@ export default function AppLayout() {
       <ModuleTourToast moduleId={currentModule} />
       <HelpCenter />
       <CommandPalette />
+      <PWAInstallPrompt />
       <CloseConfirmDialog open={showCloseDialog} onClose={() => setShowCloseDialog(false)} />
     </div>
   );

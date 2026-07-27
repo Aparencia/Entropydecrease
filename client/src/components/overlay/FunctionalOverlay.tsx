@@ -14,7 +14,9 @@ export function FunctionalOverlay({ children, className }: FunctionalOverlayProp
   return (
     <motion.div
       className={cn(
-        "fixed inset-0 z-10 flex items-center justify-center p-8",
+        "fixed inset-0 z-10 flex items-center justify-center",
+        "p-2 sm:p-4 md:p-8",
+        "pb-16 sm:pb-8 md:pb-8", // 移动端底部预留 BottomNav 空间
         "pointer-events-none", // 背景区域不拦截事件
         className
       )}
@@ -29,14 +31,17 @@ export function FunctionalOverlay({ children, className }: FunctionalOverlayProp
       {/* 功能面板 */}
       <motion.div
         className={cn(
-          "relative z-10 w-full max-w-5xl max-h-[85vh] overflow-y-auto",
-          "rounded-[24px_12px_20px_16px]", // 不对称圆角
+          "relative z-10 w-full",
+          "max-w-5xl",
+          "max-h-[calc(100vh-5rem)] sm:max-h-[85vh]", // 移动端适配底部导航
+          "overflow-y-auto",
+          "rounded-2xl sm:rounded-[24px_12px_20px_16px]", // 移动端统一圆角
           "bg-white/10 dark:bg-black/30",
           "backdrop-blur-2xl",
           "border border-white/20 dark:border-white/10",
           "shadow-[0_8px_40px_rgba(0,0,0,0.3)]",
           "pointer-events-auto", // 面板区域可交互
-          "p-8"
+          "p-3 sm:p-5 md:p-8"
         )}
         initial={{ scale: 0.9, y: 30 }}
         animate={{ scale: 1, y: 0 }}

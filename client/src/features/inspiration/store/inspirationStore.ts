@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '@/lib/storage/database';
 import type { SortSuggestion } from '@/lib/ai/types';
+import { dexieSearchIndexer } from '@/lib/search/dexieSearchIndexer';
 
 export interface InspirationTags {
   content_nature: 'concept' | 'question' | 'inspiration' | 'todo';
@@ -62,7 +63,18 @@ export const useInspirationStore = create<InspirationState>((set, get) => ({
     // Optimistic update: add to state immediately
     set((s) => ({ items: [item, ...s.items] }));
     // Persist to Dexie async
-    db.inspirations.add(item).catch(() => {
+    db.inspirations.add(item).then(async () => {
+      // v1.2.0: 同步全局搜索索引
+      try {
+        await dexieSearchIndexer.upsert(
+          item.id,
+          'inspiration',
+          content.slice(0, 60) || '灵感',
+          content,
+          new Date(item.createdAt).getTime(),
+        );
+      } catch { /* 忽略 */ }
+    }).catch(() => {
       // Rollback on failure
       set((s) => ({ items: s.items.filter(i => i.id !== item.id) }));
     });
@@ -95,6 +107,8 @@ export const useInspirationStore = create<InspirationState>((set, get) => ({
     db.inspirations.delete(id).catch(() => {
       // Silent failure
     });
+    // v1.2.0: 删除搜索索引
+    dexieSearchIndexer.remove(id, 'inspiration').catch(() => {});
   },
 
   updateSortStatus: (id, status, result) => {

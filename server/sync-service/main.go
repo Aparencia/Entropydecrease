@@ -90,6 +90,10 @@ func main() {
 		v1.GET("/pull", handlers.Pull)
 		v1.POST("/resolve", handlers.Resolve)
 		v1.GET("/status", handlers.Status)
+
+		// CRDT changeset endpoints (v1.4.0+)
+		v1.POST("/crdt/changes", handlers.CRDTPush)
+		v1.GET("/crdt/changes", handlers.CRDTPull)
 	}
 
 	// WebSocket real-time sync channel.

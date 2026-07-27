@@ -5,14 +5,16 @@ import {
   ArrowLeft, ArrowRight, Check, Highlighter, X,
   Star, Trash2, CheckCircle2, Circle, Sparkles,
   MessageCircle, Lightbulb, SearchCheck, HelpCircle,
+  Layers,
 } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
-import { Button, Skeleton, EmptyState, useToast, ContextMenu } from '@/components/ui';
+import { Button, Skeleton, EmptyState, useToast, ContextMenu, Modal } from '@/components/ui';
 import { AIButton } from '@/components/ui/AIButton';
 import type { ContextMenuGroup } from '@/components/ui';
 import { useContextMenu } from '@/lib/contextMenu';
 import { StepIndicator } from '../components/StepIndicator';
 import { useFeynmanStore } from '../store/useFeynmanStore';
+import { useFlashcardStore } from '@/features/flashcards/store/useFlashcardStore';
 import { useShallow } from 'zustand/react/shallow';
 import type { FeynmanWeakPoint } from '@/types/models';
 import { cn } from '@/lib/utils';
@@ -37,6 +39,7 @@ export default function FeynmanSessionPage() {
     advanceStep,
     setSelfRating,
     completeNote,
+    convertWeakPointsToFlashcards,
     getCurrentView,
   } = useFeynmanStore(useShallow(s => s));
 
@@ -50,6 +53,18 @@ export default function FeynmanSessionPage() {
   const [showAIEval, setShowAIEval] = useState(false);
   const [localAnswers, setLocalAnswers] = useState<string[]>([]);
   const [showQuestionPanel, setShowQuestionPanel] = useState(false);
+
+  // 闪卡转化状态
+  const [showDeckModal, setShowDeckModal] = useState(false);
+  const [selectedDeckId, setSelectedDeckId] = useState<string | null>(null);
+  const [isConverting, setIsConverting] = useState(false);
+  const flashcardDecks = useFlashcardStore((s) => s.decks);
+  const loadDecks = useFlashcardStore((s) => s.loadDecks);
+
+  // 完成笔记前确认弹窗
+  const [showConvertConfirm, setShowConvertConfirm] = useState(false);
+  // 是否在完成流程中（转化后自动完成笔记）
+  const [pendingCompleteAfterConvert, setPendingCompleteAfterConvert] = useState(false);
 
   // === 卡壳救援 ===
   const [rescueOpen, setRescueOpen] = useState(false);
@@ -213,8 +228,56 @@ export default function FeynmanSessionPage() {
     if (localSummary.trim() && localSummary !== currentSummary) {
       await setSimplifiedSummary(noteId, localSummary);
     }
+    // 检查是否有未掌握的薄弱点
+    const unmastered = noteWeakPoints.filter((wp) => !wp.mastered);
+    if (unmastered.length > 0) {
+      setShowConvertConfirm(true);
+      return;
+    }
     await completeNote(noteId);
-  }, [noteId, localSummary, summary, setSimplifiedSummary, completeNote]);
+  }, [noteId, localSummary, summary, setSimplifiedSummary, completeNote, noteWeakPoints]);
+
+  const handleConvertAndComplete = useCallback(async (convert: boolean) => {
+    if (!noteId) return;
+    setShowConvertConfirm(false);
+    if (convert) {
+      setPendingCompleteAfterConvert(true);
+      await loadDecks();
+      setSelectedDeckId(null);
+      setShowDeckModal(true);
+    } else {
+      await completeNote(noteId);
+    }
+  }, [noteId, loadDecks, completeNote]);
+
+  const handleOpenDeckModal = useCallback(async () => {
+    setPendingCompleteAfterConvert(false);
+    await loadDecks();
+    setSelectedDeckId(null);
+    setShowDeckModal(true);
+  }, [loadDecks]);
+
+  const handleConvertToFlashcards = useCallback(async () => {
+    if (!noteId || !selectedDeckId) return;
+    setIsConverting(true);
+    try {
+      const unmasteredIds = noteWeakPoints.filter((wp) => !wp.mastered).map((wp) => wp.id!);
+      const idsToConvert = unmasteredIds.length > 0 ? unmasteredIds : noteWeakPoints.map((wp) => wp.id!);
+      await convertWeakPointsToFlashcards(noteId, idsToConvert, selectedDeckId);
+      toast({ type: 'success', message: `已将 ${idsToConvert.length} 个薄弱点转为闪卡` });
+      setShowDeckModal(false);
+      // 如果是从完成确认弹窗跳转过来的，自动完成学习
+      if (pendingCompleteAfterConvert) {
+        setPendingCompleteAfterConvert(false);
+        await completeNote(noteId);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast({ type: 'error', message: `转化失败: ${msg}` });
+    } finally {
+      setIsConverting(false);
+    }
+  }, [noteId, selectedDeckId, noteWeakPoints, convertWeakPointsToFlashcards, toast, completeNote, pendingCompleteAfterConvert]);
 
   const handleRating = useCallback(async (r: number) => {
     if (!noteId) return;
@@ -302,15 +365,22 @@ export default function FeynmanSessionPage() {
     const text = sel.toString().trim();
     if (!text) { setSelectionPopup(null); return; }
 
-    const fullText = note?.explanation ?? '';
-    const startIdx = fullText.indexOf(text);
-
-    if (startIdx >= 0) {
-      setSelectionPopup({
-        text,
-        start: startIdx,
-        end: startIdx + text.length,
-      });
+    try {
+      const range = sel.getRangeAt(0);
+      const container = explanationRef.current;
+      const preRange = document.createRange();
+      preRange.selectNodeContents(container);
+      preRange.setEnd(range.startContainer, range.startOffset);
+      const startIdx = preRange.toString().length;
+      const endIdx = startIdx + text.length;
+      setSelectionPopup({ text, start: startIdx, end: endIdx });
+    } catch {
+      // 降级到 indexOf（文本不在容器内时兜底）
+      const fullText = note?.explanation ?? '';
+      const startIdx = fullText.indexOf(text);
+      if (startIdx >= 0) {
+        setSelectionPopup({ text, start: startIdx, end: startIdx + text.length });
+      }
     }
   }, [note]);
 
@@ -1171,12 +1241,28 @@ export default function FeynmanSessionPage() {
             <div className="p-kb-md">
               <div className="flex items-center justify-between mb-kb-md">
                 <h3 className="text-b1 font-semibold text-text-primary">薄弱点列表</h3>
-                <button
-                  onClick={() => setWeakPanelOpen(false)}
-                  className="p-1 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
-                >
-                  <X className="w-4 h-4" strokeWidth={1.5} />
-                </button>
+                <div className="flex items-center gap-1">
+                  {noteWeakPoints.some((wp) => !wp.mastered) && (
+                    <button
+                      onClick={handleOpenDeckModal}
+                      className={cn(
+                        'flex items-center gap-1 px-2 py-1 rounded-kb-md text-c1 font-medium',
+                        'bg-[#F59E0B]/10 text-[#B45309] dark:text-[#F59E0B]',
+                        'hover:bg-[#F59E0B]/20 transition-all duration-kb-fast',
+                      )}
+                      title="将未掌握的薄弱点转为闪卡"
+                    >
+                      <Layers className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      生成闪卡
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setWeakPanelOpen(false)}
+                    className="p-1 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
+                  >
+                    <X className="w-4 h-4" strokeWidth={1.5} />
+                  </button>
+                </div>
               </div>
               {noteWeakPoints.length === 0 ? (
                 <p className="text-b2 text-text-tertiary text-center py-4">
@@ -1305,6 +1391,103 @@ export default function FeynmanSessionPage() {
           else if (action === 'flashcard') navigate('/flashcards');
         }}
       />
+
+      {/* 牌组选择弹窗 */}
+      <Modal
+        open={showDeckModal}
+        onClose={() => setShowDeckModal(false)}
+        title="选择目标牌组"
+        description="将薄弱点转为闪卡，放入以下牌组中进行间隔复习"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setShowDeckModal(false)}>
+              取消
+            </Button>
+            <Button
+              size="sm"
+              disabled={!selectedDeckId || isConverting}
+              loading={isConverting}
+              onClick={handleConvertToFlashcards}
+            >
+              确认生成
+            </Button>
+          </div>
+        }
+      >
+        {flashcardDecks.length === 0 ? (
+          <p className="text-b2 text-text-tertiary text-center py-4">
+            还没有牌组，请先在闪卡模块创建牌组
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
+            {flashcardDecks.map((deck) => (
+              <button
+                key={deck.id}
+                onClick={() => setSelectedDeckId(deck.id)}
+                className={cn(
+                  'flex items-center gap-3 p-3 rounded-kb-md text-left',
+                  'border transition-all duration-kb-fast',
+                  selectedDeckId === deck.id
+                    ? 'border-[#F59E0B] bg-[#F59E0B]/5'
+                    : 'border-border/50 hover:bg-bg-tertiary',
+                )}
+              >
+                <div
+                  className="w-3 h-3 rounded-kb-full flex-shrink-0"
+                  style={{ backgroundColor: deck.color || '#6B7280' }}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-b2 font-medium text-text-primary truncate">{deck.name}</p>
+                  {deck.description && (
+                    <p className="text-c1 text-text-tertiary truncate">{deck.description}</p>
+                  )}
+                </div>
+                {selectedDeckId === deck.id && (
+                  <CheckCircle2 className="w-4 h-4 text-[#F59E0B] flex-shrink-0" strokeWidth={2} />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      {/* 完成笔记前：询问是否转化薄弱点 */}
+      <Modal
+        open={showConvertConfirm}
+        onClose={() => setShowConvertConfirm(false)}
+        title="完成学习"
+        description={`你还有 ${noteWeakPoints.filter((wp) => !wp.mastered).length} 个薄弱点未掌握，是否要将它们转为闪卡进行间隔复习？`}
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => handleConvertAndComplete(false)}
+            >
+              直接完成
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => handleConvertAndComplete(true)}
+            >
+              转为闪卡后完成
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto">
+          {noteWeakPoints
+            .filter((wp) => !wp.mastered)
+            .map((wp) => (
+              <div key={wp.id} className="flex items-start gap-2 p-2 rounded-kb-sm bg-bg-secondary">
+                <Circle className="w-3.5 h-3.5 mt-0.5 text-[#F59E0B] flex-shrink-0" strokeWidth={1.5} />
+                <p className="text-b3 text-text-secondary leading-relaxed">{wp.text}</p>
+              </div>
+            ))}
+        </div>
+      </Modal>
 
       {/* 动画样式 */}
       <style>{`

@@ -9,7 +9,7 @@
 
 import time
 import logging
-from typing import Any
+from typing import Any, AsyncGenerator
 
 import openai
 from openai import AsyncOpenAI
@@ -18,6 +18,20 @@ from providers.base_provider import AIProvider, with_retry_and_timeout
 from errors import ProviderUnavailableError, ModelResponseError, RateLimitExceededError
 
 logger = logging.getLogger(__name__)
+
+
+def _handle_provider_error(error: Exception, model: str) -> None:
+    """分类 Provider 错误并抛出对应异常（供各方法复用）"""
+    err_str = str(error).lower()
+    if isinstance(error, openai.APITimeoutError) or "timeout" in err_str:
+        raise ProviderUnavailableError("deepseek", f"网络超时: {error}") from error
+    if isinstance(error, openai.RateLimitError) or "rate_limit" in err_str or "429" in err_str:
+        raise RateLimitExceededError("deepseek", 0) from error
+    if isinstance(error, openai.APIConnectionError) or "connection" in err_str:
+        raise ProviderUnavailableError("deepseek", f"连接失败: {error}") from error
+    if "content" in err_str and ("filter" in err_str or "policy" in err_str or "审核" in err_str):
+        raise ModelResponseError(model, "内容未通过安全审核") from error
+    raise ModelResponseError(model, str(error)) from error
 
 
 class DeepSeekProvider(AIProvider):
@@ -148,3 +162,38 @@ class DeepSeekProvider(AIProvider):
     ) -> dict[str, Any]:
         """DeepSeek 不支持 ASR，始终抛出 NotImplementedError"""
         raise NotImplementedError("DeepSeekProvider 不支持语音转文字，请使用 Qwen 或 GLM Provider")
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+        model: str = "deepseek-chat",
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        response_format: dict[str, Any] | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """流式调用 DeepSeek 生成内容"""
+        messages: list[dict[str, str]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        try:
+            kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "stream": True,
+            }
+            if response_format:
+                kwargs["response_format"] = response_format
+
+            stream = await self._client.chat.completions.create(**kwargs)
+            async for chunk in stream:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if delta and delta.content:
+                    yield delta.content
+        except Exception as e:
+            logger.error("DeepSeekProvider.generate_stream 失败: %s", str(e))
+            _handle_provider_error(e, model)

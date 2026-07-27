@@ -29,6 +29,26 @@ export interface AIPlugin {
   rescue?(context: RescueContext): Promise<{ hints: string[]; resources: ResourceLink[]; alternativeApproach?: string }>;
   /** v0.9.0: 将灵感草稿转化为正式内容 */
   generateDraft?(inspirationId: string, type: 'flashcard' | 'feynman' | 'note', content: string): Promise<{ draft: DraftContent }>;
+
+  // ── 流式版本（可选，SSE） ────────────────────────────────
+  summarizeNoteStream?(noteContent: string, options?: SummarizeOptions): AsyncIterable<string>;
+  generateFlashcardsStream?(noteContent: string, options?: FlashcardOptions): AsyncIterable<string>;
+  evaluateExplanationStream?(concept: string, explanation: string, options?: EvaluateOptions): AsyncIterable<string>;
+  recommendDurationStream?(historyData: DurationHistoryData, options?: DurationOptions): AsyncIterable<string>;
+  extractScreenContentStream?(imageBase64: string, language?: string): AsyncIterable<string>;
+  tagContentStream?(content: string): AsyncIterable<string>;
+  optimizeCardStream?(front: string, back: string): AsyncIterable<string>;
+  sortInspirationStream?(content: string, existingTags?: Record<string, string>): AsyncIterable<string>;
+  generateFeynmanQuestionsStream?(concept: string, explanation: string): AsyncIterable<string>;
+  evaluateFeynmanAnswersStream?(concept: string, questions: string[], answers: string[]): AsyncIterable<string>;
+  generateAnchorPointStream?(noteId: string, content: string): AsyncIterable<string>;
+  socraticBrainstormStream?(topic: string, context?: string): AsyncIterable<string>;
+  socraticQuestionStream?(conversationId: string, topic: string, history: ChatMessage[]): AsyncIterable<string>;
+  socraticEvaluateStream?(topic: string, question: string, answer: string, history: ChatMessage[]): AsyncIterable<string>;
+  socraticDeepeningStream?(topic: string, dialogueSummary: string, history: ChatMessage[]): AsyncIterable<string>;
+  predictQuestionStream?(noteId: string, content: string): AsyncIterable<string>;
+  rescueStream?(context: RescueContext): AsyncIterable<string>;
+  generateDraftStream?(inspirationId: string, type: 'flashcard' | 'feynman' | 'note', content: string): AsyncIterable<string>;
 }
 
 // === Summarize ===

@@ -44,6 +44,7 @@ from routers import (
     socratic_router,
     multimodal_router,
     course_detect_router,
+    streaming_router,
 )
 from cache.redis_cache import get_cache
 
@@ -394,6 +395,7 @@ app.include_router(inspiration_draft_router) # v1.1.0: AI 草稿生成
 app.include_router(socratic_router)          # FEAT-022: 苏格拉底式学习（头脑风暴+四维度评估）
 app.include_router(multimodal_router)          # Path B: 多模态课堂分析（多图联合 → Markdown 笔记）
 app.include_router(course_detect_router)       # 课程识别（可选 AI 模式，单图推断课程信息）
+app.include_router(streaming_router)             # 流式输出（SSE，全量 AI 功能）
 
 
 # ============================================================

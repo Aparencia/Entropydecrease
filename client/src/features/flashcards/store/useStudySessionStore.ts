@@ -3,7 +3,9 @@ import {
   flashcardStore,
   flashcardReviewStore,
 } from '@/lib/storage';
-import { sm2, Rating } from '@/lib/sm2';
+import { Rating } from '@/lib/sm2';
+import { getScheduler } from '@/lib/schedulingFactory';
+import { getMaxNewCardsPerDay, getMaxReviewsPerDay } from '@/lib/schedulingFactory';
 import type { Flashcard, FlashcardReview, Confidence, GoldenError } from '@/types/models';
 import { useFlashcardStore } from './useFlashcardStore';
 import { generateId } from '@/lib/utils/uuid';
@@ -81,7 +83,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
     goldenErrors: [],
 
     // -----------------------------------------------------------------------
-    // startSession：加载到期卡片 + 补充新卡
+    // startSession：加载到期卡片 + 补充新卡（带每日限额）
     // -----------------------------------------------------------------------
     startSession: async (deckId) => {
       // 确保牌组卡片已加载到 flashcard store
@@ -94,6 +96,27 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         (c) => c.deckId === deckId,
       );
       const now = new Date();
+
+      // 每日限额：查询当日已复习数量
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const allReviews = await flashcardReviewStore.getAll();
+      const reviewsToday = allReviews.filter(
+        (r) => new Date(r.reviewedAt) >= todayStart,
+      ).length;
+      const maxReviews = getMaxReviewsPerDay();
+      const maxNewCards = getMaxNewCardsPerDay();
+
+      // 计算当日已学新卡数（repetitions === 0 且 lastReviewDate 为今日的卡片）
+      const newCardsStartedToday = allCards.filter(
+        (c) => c.repetitions === 0 && c.lastReviewDate && new Date(c.lastReviewDate) >= todayStart,
+      ).length;
+      const remainingNewCards = Math.max(0, maxNewCards - newCardsStartedToday);
+      const remainingReviews = Math.max(0, maxReviews - reviewsToday);
+
+      if (remainingReviews <= 0) {
+        // 今日复习额度已用尽，不启动会话
+        return;
+      }
 
       // 到期卡片：dueDate <= now 且 repetitions > 0（非全新卡）
       const dueCards = shuffle(
@@ -117,22 +140,24 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         });
       };
 
-      // 组装会话卡片列表
+      // 组装会话卡片列表（受每日限额约束）
       let sessionCards: Flashcard[];
       if (dueCards.length >= MIN_DUE_THRESHOLD) {
-        // 到期卡充足：只用到期卡（上限 MAX_SESSION_CARDS）
-        sessionCards = dedupe(dueCards).slice(0, MAX_SESSION_CARDS);
+        // 到期卡充足：只用到期卡（上限 MAX_SESSION_CARDS 和 remainingReviews）
+        const limit = Math.min(MAX_SESSION_CARDS, remainingReviews);
+        sessionCards = dedupe(dueCards).slice(0, limit);
       } else {
-        // 到期卡不足：补充新卡，总量不超过 MAX_SESSION_CARDS
+        // 到期卡不足：补充新卡，总量不超过 MAX_SESSION_CARDS 和 remainingReviews
         const dedupedDue = dedupe(dueCards);
-        // dedupedNew 继承 dedupedDue 的 ID，确保不会重复选入到期卡
         const dueIds = new Set(dedupedDue.map((c) => c.id!));
         const dedupedNew = dedupe(newCards, dueIds);
+        const totalLimit = Math.min(MAX_SESSION_CARDS, remainingReviews);
         const needNew = Math.min(
-          MAX_SESSION_CARDS - dedupedDue.length,
+          totalLimit - dedupedDue.length,
           dedupedNew.length,
+          remainingNewCards,
         );
-        sessionCards = [...dedupedDue, ...dedupedNew.slice(0, needNew)];
+        sessionCards = [...dedupedDue, ...dedupedNew.slice(0, Math.max(0, needNew))];
       }
 
       if (sessionCards.length === 0) {
@@ -169,16 +194,19 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
       const isWrong = rating === Rating.Again;
       const isGoldenError = confidence === 'high' && isWrong;
 
-      // 调用 SM-2 算法（goldenError 时缩短复习间隔）
-      const result = sm2(
+      // 调用调度策略（FSRS 或 SM-2，由用户设置决定）
+      const scheduler = getScheduler();
+      const result = scheduler.review(
         {
           easeFactor: card.easeFactor,
           interval: card.interval,
           repetitions: card.repetitions,
           lapses: card.lapses,
+          stability: card.stability,
+          difficulty: card.difficulty,
+          lastReview: card.lastReviewDate,
         },
         rating,
-        isGoldenError ? { goldenErrorMultiplier: 0.7 } : undefined,
       );
 
       // v0.9.0: 记录 goldenError
@@ -200,6 +228,8 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         repetitions: result.repetitions,
         lapses: result.lapses,
         dueDate: result.dueDate,
+        stability: result.stability,
+        difficulty: result.difficulty,
         lastReviewDate: updatedAt,
         updatedAt,
       });
@@ -214,6 +244,8 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
               repetitions: result.repetitions,
               lapses: result.lapses,
               dueDate: result.dueDate,
+              stability: result.stability,
+              difficulty: result.difficulty,
               lastReviewDate: updatedAt,
               updatedAt,
             }
@@ -245,6 +277,8 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         repetitions: result.repetitions,
         lapses: result.lapses,
         dueDate: result.dueDate,
+        stability: result.stability,
+        difficulty: result.difficulty,
         lastReviewDate: updatedAt,
       });
 

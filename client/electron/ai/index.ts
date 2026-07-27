@@ -8,6 +8,7 @@
 import { logger } from '../logger.js';
 import type { AIFeatureDef } from './utils.js';
 import { registerOllamaHandlers, initOllama } from './ollama/index.js';
+import { registerStreamHandler } from './streamHandler.js';
 
 // 导入所有 AI 功能模块
 import { feature as summarizeFeature } from './handlers/summarizeHandler.js';
@@ -69,6 +70,9 @@ export function registerAIHandlers(): void {
 
   // 注册 Ollama 本地推理 IPC handler
   registerOllamaHandlers();
+
+  // 注册流式输出 IPC handler
+  registerStreamHandler();
 
   logger.info('[AI] All AI handlers registered successfully');
 }

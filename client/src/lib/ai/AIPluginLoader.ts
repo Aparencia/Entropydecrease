@@ -73,6 +73,27 @@ class AIPluginLoader {
   }
 
   /**
+   * 流式版本的 withGuard：包装流式 AI 调用
+   * 流式失败时降级到非流式方法
+   */
+  private async *withStreamGuard(
+    streamFn: () => AsyncIterable<string>,
+    options: { contentCheck?: string; feature: string }
+  ): AsyncGenerator<string, void, unknown> {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new AIError('当前处于离线状态，无法使用 AI 功能', 'offline', false);
+    }
+    if (options.contentCheck && options.contentCheck.trim().length < 10) {
+      throw new AIError(
+        '内容太短，无法进行 AI 分析。请至少输入 10 个字符。',
+        'content_too_short',
+        false
+      );
+    }
+    yield* streamFn();
+  }
+
+  /**
    * 根据运行环境获取 AI 插件实例
    */
   async getAIPlugin(): Promise<AIPlugin> {
@@ -347,6 +368,246 @@ class AIPluginLoader {
         throw new AIError('当前 AI 插件不支持学习救援', 'service_unavailable', false);
       })(),
       { contentCheck: context.topic, feature: 'rescue' }
+    );
+  }
+
+  // ── 流式方法包装 ─────────────────────────────────────
+
+  /**
+   * 流式摘要
+   */
+  async *summarizeNoteStream(content: string, options?: SummarizeOptions): AsyncGenerator<string, void, unknown> {
+    yield* this.withStreamGuard(
+      () => (async function* (this: AIPluginLoader) {
+        const plugin = await this.getAIPlugin();
+        if (plugin.summarizeNoteStream) {
+          yield* plugin.summarizeNoteStream(content, options);
+        } else {
+          throw new AIError('当前插件不支持流式摘要', 'service_unavailable', true);
+        }
+      }).call(this),
+      { contentCheck: content, feature: 'summarize_stream' }
+    );
+  }
+
+  /**
+   * 流式闪卡生成
+   */
+  async *generateFlashcardsStream(content: string, options?: FlashcardOptions): AsyncGenerator<string, void, unknown> {
+    yield* this.withStreamGuard(
+      () => (async function* (this: AIPluginLoader) {
+        const plugin = await this.getAIPlugin();
+        if (plugin.generateFlashcardsStream) {
+          yield* plugin.generateFlashcardsStream(content, options);
+        } else {
+          throw new AIError('当前插件不支持流式闪卡生成', 'service_unavailable', true);
+        }
+      }).call(this),
+      { contentCheck: content, feature: 'flashcards_stream' }
+    );
+  }
+
+  /**
+   * 流式费曼评估
+   */
+  async *evaluateExplanationStream(concept: string, explanation: string, options?: EvaluateOptions): AsyncGenerator<string, void, unknown> {
+    yield* this.withStreamGuard(
+      () => (async function* (this: AIPluginLoader) {
+        const plugin = await this.getAIPlugin();
+        if (plugin.evaluateExplanationStream) {
+          yield* plugin.evaluateExplanationStream(concept, explanation, options);
+        } else {
+          throw new AIError('当前插件不支持流式评估', 'service_unavailable', true);
+        }
+      }).call(this),
+      { contentCheck: explanation, feature: 'evaluate_stream' }
+    );
+  }
+
+  /**
+   * 流式内容打标
+   */
+  async *tagContentStream(content: string): AsyncGenerator<string, void, unknown> {
+    yield* this.withStreamGuard(
+      () => (async function* (this: AIPluginLoader) {
+        const plugin = await this.getAIPlugin();
+        if (plugin.tagContentStream) {
+          yield* plugin.tagContentStream(content);
+        } else {
+          throw new AIError('当前插件不支持流式打标', 'service_unavailable', true);
+        }
+      }).call(this),
+      { contentCheck: content, feature: 'tag_stream' }
+    );
+  }
+
+  /**
+   * 流式闪卡优化
+   */
+  async *optimizeCardStream(front: string, back: string): AsyncGenerator<string, void, unknown> {
+    yield* this.withStreamGuard(
+      () => (async function* (this: AIPluginLoader) {
+        const plugin = await this.getAIPlugin();
+        if (plugin.optimizeCardStream) {
+          yield* plugin.optimizeCardStream(front, back);
+        } else {
+          throw new AIError('当前插件不支持流式闪卡优化', 'service_unavailable', true);
+        }
+      }).call(this),
+      { contentCheck: front + back, feature: 'optimize_card_stream' }
+    );
+  }
+
+  /**
+   * 流式灵感分拣
+   */
+  async *sortInspirationStream(content: string, existingTags?: Record<string, string>): AsyncGenerator<string, void, unknown> {
+    yield* this.withStreamGuard(
+      () => (async function* (this: AIPluginLoader) {
+        const plugin = await this.getAIPlugin();
+        if (plugin.sortInspirationStream) {
+          yield* plugin.sortInspirationStream(content, existingTags);
+        } else {
+          throw new AIError('当前插件不支持流式灵感分拣', 'service_unavailable', true);
+        }
+      }).call(this),
+      { contentCheck: content, feature: 'sort_stream' }
+    );
+  }
+
+  /**
+   * 流式费曼反问
+   */
+  async *generateFeynmanQuestionsStream(concept: string, explanation: string): AsyncGenerator<string, void, unknown> {
+    yield* this.withStreamGuard(
+      () => (async function* (this: AIPluginLoader) {
+        const plugin = await this.getAIPlugin();
+        if (plugin.generateFeynmanQuestionsStream) {
+          yield* plugin.generateFeynmanQuestionsStream(concept, explanation);
+        } else {
+          throw new AIError('当前插件不支持流式反问', 'service_unavailable', true);
+        }
+      }).call(this),
+      { contentCheck: explanation, feature: 'feynman_question_stream' }
+    );
+  }
+
+  /**
+   * 流式费曼回答评估
+   */
+  async *evaluateFeynmanAnswersStream(concept: string, questions: string[], answers: string[]): AsyncGenerator<string, void, unknown> {
+    yield* this.withStreamGuard(
+      () => (async function* (this: AIPluginLoader) {
+        const plugin = await this.getAIPlugin();
+        if (plugin.evaluateFeynmanAnswersStream) {
+          yield* plugin.evaluateFeynmanAnswersStream(concept, questions, answers);
+        } else {
+          throw new AIError('当前插件不支持流式回答评估', 'service_unavailable', true);
+        }
+      }).call(this),
+      { feature: 'feynman_evaluate_stream' }
+    );
+  }
+
+  /**
+   * 流式锚点生成
+   */
+  async *generateAnchorPointStream(noteId: string, content: string): AsyncGenerator<string, void, unknown> {
+    yield* this.withStreamGuard(
+      () => (async function* (this: AIPluginLoader) {
+        const plugin = await this.getAIPlugin();
+        if (plugin.generateAnchorPointStream) {
+          yield* plugin.generateAnchorPointStream(noteId, content);
+        } else {
+          throw new AIError('当前插件不支持流式锚点生成', 'service_unavailable', true);
+        }
+      }).call(this),
+      { contentCheck: content, feature: 'anchor_stream' }
+    );
+  }
+
+  /**
+   * 流式苏格拉底追问
+   */
+  async *socraticQuestionStream(conversationId: string, topic: string, history: ChatMessage[]): AsyncGenerator<string, void, unknown> {
+    yield* this.withStreamGuard(
+      () => (async function* (this: AIPluginLoader) {
+        const plugin = await this.getAIPlugin();
+        if (plugin.socraticQuestionStream) {
+          yield* plugin.socraticQuestionStream(conversationId, topic, history);
+        } else {
+          throw new AIError('当前插件不支持流式苏格拉底追问', 'service_unavailable', true);
+        }
+      }).call(this),
+      { contentCheck: topic, feature: 'socratic_stream' }
+    );
+  }
+
+  /**
+   * 流式苏格拉底评估
+   */
+  async *socraticEvaluateStream(topic: string, question: string, answer: string, history: ChatMessage[]): AsyncGenerator<string, void, unknown> {
+    yield* this.withStreamGuard(
+      () => (async function* (this: AIPluginLoader) {
+        const plugin = await this.getAIPlugin();
+        if (plugin.socraticEvaluateStream) {
+          yield* plugin.socraticEvaluateStream(topic, question, answer, history);
+        } else {
+          throw new AIError('当前插件不支持流式苏格拉底评估', 'service_unavailable', true);
+        }
+      }).call(this),
+      { contentCheck: answer, feature: 'socratic_evaluate_stream' }
+    );
+  }
+
+  /**
+   * 流式苏格拉底深化
+   */
+  async *socraticDeepeningStream(topic: string, dialogueSummary: string, history: ChatMessage[]): AsyncGenerator<string, void, unknown> {
+    yield* this.withStreamGuard(
+      () => (async function* (this: AIPluginLoader) {
+        const plugin = await this.getAIPlugin();
+        if (plugin.socraticDeepeningStream) {
+          yield* plugin.socraticDeepeningStream(topic, dialogueSummary, history);
+        } else {
+          throw new AIError('当前插件不支持流式苏格拉底深化', 'service_unavailable', true);
+        }
+      }).call(this),
+      { contentCheck: topic, feature: 'socratic_deepening_stream' }
+    );
+  }
+
+  /**
+   * 流式学习预测
+   */
+  async *predictQuestionStream(noteId: string, content: string): AsyncGenerator<string, void, unknown> {
+    yield* this.withStreamGuard(
+      () => (async function* (this: AIPluginLoader) {
+        const plugin = await this.getAIPlugin();
+        if (plugin.predictQuestionStream) {
+          yield* plugin.predictQuestionStream(noteId, content);
+        } else {
+          throw new AIError('当前插件不支持流式学习预测', 'service_unavailable', true);
+        }
+      }).call(this),
+      { contentCheck: content, feature: 'predict_stream' }
+    );
+  }
+
+  /**
+   * 流式学习救援
+   */
+  async *rescueStream(context: RescueContext): AsyncGenerator<string, void, unknown> {
+    yield* this.withStreamGuard(
+      () => (async function* (this: AIPluginLoader) {
+        const plugin = await this.getAIPlugin();
+        if (plugin.rescueStream) {
+          yield* plugin.rescueStream(context);
+        } else {
+          throw new AIError('当前插件不支持流式救援', 'service_unavailable', true);
+        }
+      }).call(this),
+      { contentCheck: context.topic, feature: 'rescue_stream' }
     );
   }
 }

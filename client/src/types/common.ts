@@ -12,10 +12,17 @@ export interface GoldenError {
   userAnswer: string;
 }
 
+/** 搜索索引支持的实体类型 */
+export type SearchEntityType = 'note' | 'flashcard' | 'feynman' | 'inspiration' | 'classroom';
+
 /** 笔记全文搜索索引条目 */
 export interface SearchIndexEntry {
   id?: number;
   noteId: string;
+  /** v1.2.0: 实体唯一标识（值等于 noteId，向后兼容） */
+  entityId: string;
+  /** v1.2.0: 实体类型 */
+  entityType: SearchEntityType;
   tokens: string[];
   title: string;
   content: string;

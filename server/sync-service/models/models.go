@@ -33,3 +33,17 @@ type GlobalSeqNo struct {
 	ID    uint  `gorm:"primaryKey"`
 	SeqNo int64 `gorm:"not null;default:0"`
 }
+
+// CRDTChange stores CRDT changesets uploaded by clients.
+// Each row is an immutable, append-only change record keyed by a global sequence number.
+type CRDTChange struct {
+	ID         uint   `gorm:"primaryKey"`
+	ServerSeqNo int64  `gorm:"uniqueIndex;not null" json:"serverSeqNo"`
+	DeviceID   string `gorm:"index;not null" json:"deviceId"`
+	UserID     string `gorm:"index:idx_crdt_user;not null" json:"userId"`
+	TableName  string `gorm:"index;not null" json:"tableName"`
+	EntityID   string `gorm:"not null" json:"entityId"`
+	Changeset  string `gorm:"type:text;not null" json:"changeset"` // base64-encoded Automerge changes
+	Operation  string `gorm:"not null" json:"operation"`            // create|update|delete
+	CreatedAt  string `gorm:"not null" json:"createdAt"`
+}

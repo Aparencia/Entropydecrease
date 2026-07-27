@@ -553,4 +553,116 @@ export class RemoteAIPlugin implements AIPlugin {
   private handleError(error: unknown): never {
     throw classifyRawError(error, 'fetch');
   }
+
+  // ── 流式方法实现 ─────────────────────────────────────
+
+  async *summarizeNoteStream(noteContent: string, options?: SummarizeOptions): AsyncIterable<string> {
+    yield* aiClient.postStream('/api/v1/ai/summarize/stream', {
+      text: noteContent,
+      params: { max_length: options?.maxLength, style: options?.style, language: options?.language },
+    });
+  }
+
+  async *generateFlashcardsStream(noteContent: string, options?: FlashcardOptions): AsyncIterable<string> {
+    yield* aiClient.postStream('/api/v1/ai/generate-cards/stream', {
+      text: noteContent,
+      params: { count: options?.count, difficulty: options?.difficulty, card_type: options?.cardType },
+    });
+  }
+
+  async *evaluateExplanationStream(concept: string, explanation: string, _options?: EvaluateOptions): AsyncIterable<string> {
+    yield* aiClient.postStream('/api/v1/ai/evaluate-explanation/stream', {
+      text: explanation,
+      text2: concept,
+    });
+  }
+
+  async *recommendDurationStream(historyData: DurationHistoryData, _options?: DurationOptions): AsyncIterable<string> {
+    const history = (historyData.sessions || []).map(s => ({
+      duration_minutes: s.duration, completed: s.completed, subject: s.subject || '', timestamp: s.date,
+    }));
+    yield* aiClient.postStream('/api/v1/ai/recommend-duration/stream', {
+      text: JSON.stringify({ history }),
+    });
+  }
+
+  async *tagContentStream(content: string): AsyncIterable<string> {
+    yield* aiClient.postStream('/api/v1/ai/tag-content/stream', { text: content });
+  }
+
+  async *optimizeCardStream(front: string, back: string): AsyncIterable<string> {
+    yield* aiClient.postStream('/api/v1/ai/optimize-card/stream', { text: front, text2: back });
+  }
+
+  async *sortInspirationStream(content: string, existingTags?: Record<string, string>): AsyncIterable<string> {
+    yield* aiClient.postStream('/api/v1/ai/sort-inspiration/stream', {
+      text: content,
+      params: { existing_tags: existingTags },
+    });
+  }
+
+  async *generateFeynmanQuestionsStream(concept: string, explanation: string): AsyncIterable<string> {
+    yield* aiClient.postStream('/api/v1/ai/feynman-question/stream', {
+      text: explanation,
+      text2: concept,
+    });
+  }
+
+  async *evaluateFeynmanAnswersStream(concept: string, questions: string[], answers: string[]): AsyncIterable<string> {
+    yield* aiClient.postStream('/api/v1/ai/feynman-evaluate-answers/stream', {
+      text: JSON.stringify({ concept, questions, answers }),
+    });
+  }
+
+  async *generateAnchorPointStream(noteId: string, content: string): AsyncIterable<string> {
+    yield* aiClient.postStream('/api/v1/ai/anchor-point/stream', { text: content, params: { note_id: noteId } });
+  }
+
+  async *socraticBrainstormStream(topic: string, context?: string): AsyncIterable<string> {
+    yield* aiClient.postStream('/api/v1/ai/socratic/stream', {
+      text: topic,
+      params: { context: context || '' },
+    });
+  }
+
+  async *socraticQuestionStream(conversationId: string, topic: string, history: ChatMessage[]): AsyncIterable<string> {
+    yield* aiClient.postStream('/api/v1/ai/socratic/stream', {
+      text: topic,
+      params: { conversation_id: conversationId, history: history.map(h => ({ role: h.role, content: h.content })) },
+    });
+  }
+
+  async *socraticEvaluateStream(topic: string, question: string, answer: string, history: ChatMessage[]): AsyncIterable<string> {
+    yield* aiClient.postStream('/api/v1/ai/socratic/evaluate/stream', {
+      text: answer,
+      text2: topic,
+      params: { question, history: history.map(h => ({ role: h.role, content: h.content })) },
+    });
+  }
+
+  async *socraticDeepeningStream(topic: string, dialogueSummary: string, history: ChatMessage[]): AsyncIterable<string> {
+    yield* aiClient.postStream('/api/v1/ai/socratic/deepening/stream', {
+      text: topic,
+      text2: dialogueSummary,
+      params: { history: history.map(h => ({ role: h.role, content: h.content })) },
+    });
+  }
+
+  async *predictQuestionStream(noteId: string, content: string): AsyncIterable<string> {
+    yield* aiClient.postStream('/api/v1/ai/predict/stream', { text: content, params: { note_id: noteId } });
+  }
+
+  async *rescueStream(context: RescueContext): AsyncIterable<string> {
+    yield* aiClient.postStream('/api/v1/ai/rescue/stream', {
+      text: context.relatedContent || context.topic,
+      params: { stuck_description: context.stuckPoint || '', mode: context.mode || 'general' },
+    });
+  }
+
+  async *generateDraftStream(inspirationId: string, type: 'flashcard' | 'feynman' | 'note', content: string): AsyncIterable<string> {
+    yield* aiClient.postStream('/api/v1/ai/inspiration-draft/stream', {
+      text: content,
+      params: { inspiration_id: inspirationId, type },
+    });
+  }
 }

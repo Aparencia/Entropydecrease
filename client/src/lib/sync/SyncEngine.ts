@@ -3,6 +3,8 @@ import { getDeviceId, getUnsyncedLogsBatch, markLogsSynced } from '../storage/op
 import { offlineQueue } from './OfflineQueue';
 import { networkManager } from './NetworkManager';
 import type { SyncConflict } from '../../types/models';
+import { crdtEngine, getSyncMode, CRDT_ENABLED_TABLES } from './crdtEngine';
+import type { CRDTChangeRecord } from './crdtEngine';
 
 /**
  * 同步引擎
@@ -16,6 +18,9 @@ export class SyncEngine {
 
   // Sync API base path (apiClient prepends VITE_API_BASE_URL automatically)
   private syncBasePath = '/api/v1/sync';
+
+  /** CRDT 同步 API 路径 */
+  private crdtBasePath = '/api/v1/sync/crdt';
 
   /**
    * 注册网络恢复时的自动同步监听
@@ -60,6 +65,7 @@ export class SyncEngine {
 
   /**
    * 执行完整同步流程：push → pull → replay offline queue
+   * 根据 feature flag 选择 oplog 或 CRDT 路径
    */
   async sync(): Promise<SyncResult> {
     if (this.syncInProgress) {
@@ -82,18 +88,39 @@ export class SyncEngine {
     };
 
     try {
-      // Step 1: Push local changes
-      const pushResult = await this.push();
-      result.pushed = pushResult.pushed;
-      result.conflicts.push(...pushResult.conflicts);
-      result.errors.push(...pushResult.errors);
+      const mode = getSyncMode();
 
-      // Step 2: Pull remote changes
-      const pullResult = await this.pull();
-      result.pulled = pullResult.pulled;
-      result.errors.push(...pullResult.errors);
+      if (mode === 'crdt') {
+        // ─── CRDT 同步路径 ──────────────────────────────────────────
+        // Step 1: 确保 CRDT 引擎已初始化
+        if (!crdtEngine.isInitialized()) {
+          await crdtEngine.init();
+        }
 
-      // Step 3: Replay offline queue
+        // Step 2: CRDT Push — 上传本地 changesets
+        const crdtPushResult = await this.crdtPush();
+        result.pushed = crdtPushResult.pushed;
+        result.errors.push(...crdtPushResult.errors);
+
+        // Step 3: CRDT Pull — 拉取远程 changesets 并自动合并
+        const crdtPullResult = await this.crdtPull();
+        result.pulled = crdtPullResult.pulled;
+        result.errors.push(...crdtPullResult.errors);
+      } else {
+        // ─── 传统 operationLog 同步路径 ────────────────────────────
+        // Step 1: Push local changes
+        const pushResult = await this.push();
+        result.pushed = pushResult.pushed;
+        result.conflicts.push(...pushResult.conflicts);
+        result.errors.push(...pushResult.errors);
+
+        // Step 2: Pull remote changes
+        const pullResult = await this.pull();
+        result.pulled = pullResult.pulled;
+        result.errors.push(...pullResult.errors);
+      }
+
+      // Step 4: Replay offline queue（两条路径共享）
       await this.replayOfflineQueue();
 
       this.emit({ type: 'sync-complete', result });
@@ -336,6 +363,150 @@ export class SyncEngine {
 
   private setLastSyncVersion(version: number): void {
     localStorage.setItem('keban_last_sync_version', version.toString());
+  }
+
+  // ─── CRDT 同步方法 ───────────────────────────────────────────────────────
+
+  /**
+   * CRDT Push: 将本地 crdt_changes 表中的待上传 changesets 推送到服务端
+   */
+  private async crdtPush(): Promise<{ pushed: number; errors: string[] }> {
+    const errors: string[] = [];
+    let pushed = 0;
+
+    try {
+      // 收集所有启用 CRDT 的表的待上传变更
+      const allPending: CRDTChangeRecord[] = [];
+      for (const tableName of CRDT_ENABLED_TABLES) {
+        const pending = await crdtEngine.getPendingChanges(50);
+        allPending.push(...pending.filter(p => p.tableName === tableName));
+      }
+
+      if (allPending.length === 0) return { pushed: 0, errors };
+
+      const deviceId = getDeviceId();
+      const response = await apiClient.post<{
+        accepted: number[];
+        errors: string[];
+      }>(`${this.crdtBasePath}/changes`, {
+        deviceId,
+        changes: allPending.map(c => ({
+          seq: c.seq,
+          tableName: c.tableName,
+          entityId: c.entityId,
+          changeset: c.changeset,
+          operation: c.operation,
+          createdAt: c.createdAt,
+        })),
+      });
+
+      // 标记已上传的变更
+      if (response.accepted && response.accepted.length > 0) {
+        await crdtEngine.markChangesUploaded(response.accepted);
+        pushed = response.accepted.length;
+      }
+
+      errors.push(...(response.errors || []));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(`CRDT push failed: ${message}`);
+    }
+
+    return { pushed, errors };
+  }
+
+  /**
+   * CRDT Pull: 从服务端拉取远程 changesets 并通过 Automerge 自动合并
+   */
+  private async crdtPull(): Promise<{ pulled: number; errors: string[] }> {
+    const errors: string[] = [];
+    let pulled = 0;
+
+    try {
+      const lastSeq = this.getCRDTLastSeq();
+      const deviceId = getDeviceId();
+
+      const response = await apiClient.get<{
+        changes: Array<{
+          seq: number;
+          tableName: string;
+          entityId: string;
+          changeset: string;
+          operation: string;
+          deviceId: string;
+          createdAt: string;
+        }>;
+        latestSeq: number;
+      }>(`${this.crdtBasePath}/changes?since=${lastSeq}&deviceId=${encodeURIComponent(deviceId)}`);
+
+      if (response.changes && response.changes.length > 0) {
+        // 按表分组应用远程变更
+        const byTable = new Map<string, Array<{ entityId: string; changeset: string }>>();
+        for (const change of response.changes) {
+          if (!byTable.has(change.tableName)) {
+            byTable.set(change.tableName, []);
+          }
+          byTable.get(change.tableName)!.push({
+            entityId: change.entityId,
+            changeset: change.changeset,
+          });
+        }
+
+        // 对每张表批量应用远程变更（Automerge 自动合并，无冲突）
+        for (const [tableName, changesets] of byTable) {
+          const affected = crdtEngine.applyRemoteChanges(tableName, changesets);
+
+          // 将合并后的数据写入 Dexie
+          await this.applyCRDTMergedData(tableName, affected);
+
+          // 持久化 CRDT 文档快照
+          await crdtEngine.persistDoc(tableName);
+
+          pulled += affected.size;
+        }
+
+        // 更新最后同步的 CRDT 序列号
+        if (response.latestSeq > lastSeq) {
+          this.setCRDTLastSeq(response.latestSeq);
+        }
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(`CRDT pull failed: ${message}`);
+    }
+
+    return { pulled, errors };
+  }
+
+  /**
+   * 将 CRDT 合并后的数据写入 Dexie
+   */
+  private async applyCRDTMergedData(
+    tableName: string,
+    affected: Map<string, Record<string, unknown>>,
+  ): Promise<void> {
+    if (affected.size === 0) return;
+
+    const { db } = await import('../storage/database');
+    const table = db.table(tableName);
+
+    for (const [entityId, data] of affected) {
+      if ((data as Record<string, unknown>).__deleted) {
+        await table.delete(entityId);
+      } else {
+        // 合并后的数据包含实体全部字段，使用 put 覆盖
+        await table.put({ ...data, id: entityId });
+      }
+    }
+  }
+
+  private getCRDTLastSeq(): number {
+    const stored = localStorage.getItem('keban_crdt_last_seq');
+    return stored ? parseInt(stored, 10) : 0;
+  }
+
+  private setCRDTLastSeq(seq: number): void {
+    localStorage.setItem('keban_crdt_last_seq', seq.toString());
   }
 
   private async applyRemoteOperations(

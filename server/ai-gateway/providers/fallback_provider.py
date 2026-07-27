@@ -8,7 +8,7 @@
 
 import time
 import logging
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from providers.base_provider import AIProvider
 
@@ -144,6 +144,30 @@ class FallbackProvider(AIProvider):
     async def health_check(self) -> dict:
         """Fallback 始终可用，无需实际请求"""
         return {"status": "healthy", "latency_ms": 0, "error": None}
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+        model: str = "fallback",
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        response_format: dict[str, Any] | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """流式降级响应 — 逐句 yield 友好提示"""
+        result = await self.generate(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+        )
+        # 逐句 yield 降级内容，模拟流式体验
+        content = result.get("content", "")
+        for line in content.split("\n"):
+            if line.strip():
+                yield line + "\n"
 
     async def transcribe(
         self,

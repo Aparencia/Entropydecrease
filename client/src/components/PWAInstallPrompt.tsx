@@ -65,7 +65,8 @@ export function PWAInstallPrompt() {
   return (
     <div
       className={cn(
-        'fixed bottom-4 left-4 right-4 z-50',
+        'fixed bottom-20 left-4 right-4 z-50',  // bottom-20 避开 BottomNav
+        'md:bottom-4', // 桌面端不受 BottomNav 影响
         'flex items-center justify-between gap-3',
         'rounded-kb-lg border border-white/10',
         'bg-bg-secondary/95 backdrop-blur-sm',

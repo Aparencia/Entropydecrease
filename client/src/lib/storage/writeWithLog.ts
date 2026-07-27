@@ -3,6 +3,7 @@ import { logOperation } from '@/lib/storage/operationLog';
 import { generateId } from '@/lib/utils/uuid';
 import { offlineQueue } from '@/lib/sync/OfflineQueue';
 import { cryptoManager } from '@/lib/crypto';
+import { crdtEngine, shouldUseCRDT } from '@/lib/sync/crdtEngine';
 
 /**
  * 带操作日志的统一写操作
@@ -59,6 +60,9 @@ export async function createWithLog<T extends { id: string }>(
   await repo.create(encryptedItem);
   await logOperation(entityType, id, 'create', encryptedItem);
 
+  // CRDT 路径：生成 changeset 并存入待上传队列
+  await applyCRDTChange(entityType, id, encryptedItem as unknown as Record<string, unknown>, 'create');
+
   return id;
 }
 
@@ -76,6 +80,9 @@ export async function updateWithLog<T extends { id: string }>(
   // 生成 JSON Patch（简化版）
   const patch = JSON.stringify(encryptedChanges);
   await logOperation(entityType, id, 'update', encryptedChanges, patch);
+
+  // CRDT 路径
+  await applyCRDTChange(entityType, id, encryptedChanges as unknown as Record<string, unknown>, 'update');
 }
 
 export async function deleteWithLog<T extends { id: string }>(
@@ -88,6 +95,9 @@ export async function deleteWithLog<T extends { id: string }>(
 
   await repo.delete(id);
   await logOperation(entityType, id, 'delete', existing);
+
+  // CRDT 路径：删除操作
+  await applyCRDTChange(entityType, id, null, 'delete');
 }
 
 /**
@@ -135,4 +145,55 @@ export async function deleteWithQueue<T extends { id: string }>(
   if (!isOnline) {
     await offlineQueue.enqueue(entityType, id, 'delete');
   }
+}
+
+/**
+ * CRDT 变更辅助：当 entityType 对应的表启用 CRDT 时，
+ * 生成 Automerge changeset → 存入 crdt_changes → 持久化文档快照
+ *
+ * AES-GCM 加密在调用此函数之前已完成（加密后的内容作为 CRDT 变更输入）
+ */
+async function applyCRDTChange(
+  entityType: string,
+  entityId: string,
+  data: Record<string, unknown> | null,
+  operation: 'create' | 'update' | 'delete',
+): Promise<void> {
+  const tableName = entityTypeToTableName(entityType);
+  if (!shouldUseCRDT(tableName)) return;
+
+  try {
+    // 确保 CRDT 引擎已初始化（懒初始化）
+    if (!crdtEngine.isInitialized()) {
+      await crdtEngine.init();
+    }
+
+    const changeset = crdtEngine.applyLocalChange(tableName, entityId, data, operation);
+    if (!changeset) return;
+
+    // 存入待上传队列 + 持久化文档快照
+    await crdtEngine.enqueueChange(changeset);
+    await crdtEngine.persistDoc(tableName);
+  } catch (err) {
+    // CRDT 路径失败不应阻塞主写入流程，仅记录警告
+    console.warn('[writeWithLog] CRDT change failed (non-blocking):', err);
+  }
+}
+
+/** entityType（操作日志中的键）→ Dexie 表名映射 */
+function entityTypeToTableName(entityType: string): string {
+  const map: Record<string, string> = {
+    'note': 'notes',
+    'folder': 'noteFolders',
+    'deck': 'flashcardDecks',
+    'card': 'flashcards',
+    'flashcardReview': 'flashcardReviews',
+    'pomodoroSession': 'pomodoroSessions',
+    'pomodoroSettings': 'pomodoroSettings',
+    'feynmanNote': 'feynmanNotes',
+    'feynmanSummary': 'feynmanSummaries',
+    'feynmanWeakPoint': 'feynmanWeakPoints',
+    'settings': 'appSettings',
+  };
+  return map[entityType] || entityType;
 }
