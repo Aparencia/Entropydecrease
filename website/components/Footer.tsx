@@ -34,6 +34,7 @@ export function Footer() {
               <Link href="/" className="text-kb-text2 hover:text-kb-text transition-colors duration-300">首页</Link>
               <Link href="/story" className="text-kb-text2 hover:text-kb-text transition-colors duration-300">品牌故事</Link>
               <Link href="/download" className="text-kb-text2 hover:text-kb-text transition-colors duration-300">下载</Link>
+              <Link href="/support" className="text-kb-text2 hover:text-kb-text transition-colors duration-300">支持我们</Link>
             </div>
             <div className="flex flex-col gap-2.5">
               <span className="text-kb-text3 text-xs uppercase tracking-widest mb-1">开源</span>

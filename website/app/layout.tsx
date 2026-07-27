@@ -20,10 +20,30 @@ const notoSerif = Noto_Serif_SC({
 });
 
 export const metadata: Metadata = {
-  title: "课伴 KeBan · 熵减 — 潜入深海，拾起认知的微光",
+  metadataBase: new URL("https://entropydecrease.com"),
+  title: {
+    default: "课伴 KeBan · 熵减 — 潜入深海，拾起认知的微光",
+    template: "%s | 课伴 KeBan",
+  },
   description:
     "课伴（熵减）是一款基于认知科学的学习伴侣应用。番茄钟、智能笔记、闪卡复习、费曼学习法——在无序的时光里，陪你慢慢生长。",
   keywords: ["课伴", "KeBan", "熵减", "学习工具", "番茄钟", "闪卡", "费曼学习法", "认知科学"],
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    locale: "zh_CN",
+    url: "https://entropydecrease.com",
+    siteName: "课伴 KeBan · 熵减",
+    title: "课伴 KeBan · 熵减 — 潜入深海，拾起认知的微光",
+    description:
+      "基于认知科学的本地优先学习工具：番茄钟、智能笔记、闪卡复习、费曼学习法。",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({

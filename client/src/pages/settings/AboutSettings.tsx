@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Button } from '@/components/ui';
+import { Card, Button, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
-import { Shield, Info, RefreshCw, Download, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
+import { Shield, Info, RefreshCw, Download, CheckCircle, Loader2, AlertCircle, Heart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface UpdateStatus {
@@ -25,6 +25,7 @@ export default function AboutSettings() {
   const [autoUpdate, setAutoUpdate] = useState<boolean>(
     () => localStorage.getItem(AUTO_UPDATE_KEY) !== 'false',
   );
+  const [sponsorOpen, setSponsorOpen] = useState(false);
 
   const isElectron = !!window.electronAPI;
 
@@ -277,6 +278,47 @@ export default function AboutSettings() {
           帮助你建立科学高效的学习习惯。
         </p>
       </div>
+
+      {/* 支持开发者 */}
+      <div className={cn(
+        'flex items-center gap-3 p-3 rounded-kb-md',
+        'bg-brand-500/5 border border-brand-500/20',
+      )}>
+        <Heart className="w-icon-sm h-icon-sm text-brand-500 flex-shrink-0" strokeWidth={1.5} />
+        <p className="text-b3 text-text-secondary leading-relaxed flex-1">
+          <span className="font-medium text-brand-600">喜欢熵减？</span>
+          你的赞赏会变成服务器电费，支撑它继续对抗宇宙的无序。
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setSponsorOpen(true)}
+        >
+          请作者喝杯蜜雪
+        </Button>
+      </div>
+
+      {/* 赞赏码弹窗 */}
+      <Modal
+        open={sponsorOpen}
+        onClose={() => setSponsorOpen(false)}
+        title="支持开发者"
+        description="微信扫一扫，请作者喝杯蜜雪 ☕"
+        size="sm"
+      >
+        <div className="flex flex-col items-center gap-kb-sm">
+          <img
+            src="/sponsor-qr.png"
+            alt="微信赞赏码"
+            className="w-full max-w-[260px] rounded-kb-lg bg-white p-2"
+          />
+          <p className="text-c1 text-text-tertiary text-center leading-relaxed">
+            赞赏是纯粹的心意支持，不与任何功能挂钩。
+            <br />
+            无论是否赞赏，熵减的本地功能永远免费。
+          </p>
+        </div>
+      </Modal>
     </Card>
   );
 }
