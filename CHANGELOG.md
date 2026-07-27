@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.18.0](https://github.com/Aparencia/KeBan/compare/v0.17.1...v0.18.0) (2026-07-27)
+
+### ✨ 新功能
+
+* v0.17.0 — 课堂模块组件化、课程智能检测与多模态分析增强 ([9f2cf56](https://github.com/Aparencia/KeBan/commit/9f2cf5678da78185335edfed629cf6b06967ea25))
+
 ## [0.17.1](https://github.com/Aparencia/KeBan/compare/v0.17.0...v0.17.1) (2026-07-26)
 
 ### 🐛 缺陷修复
