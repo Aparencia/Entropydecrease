@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.20.0](https://github.com/Aparencia/KeBan/compare/v0.19.0...v0.20.0) (2026-07-27)
+
+### ✨ 新功能
+
+* v0.18.0 — 官网 SEO 优化、支持页面与赞助二维码 ([0a332f1](https://github.com/Aparencia/KeBan/commit/0a332f1e5a51a2a721849209d18bb642c509a59a))
+
 ## [0.19.0](https://github.com/Aparencia/KeBan/compare/v0.18.0...v0.19.0) (2026-07-27)
 
 ### ✨ 新功能
