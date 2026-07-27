@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.20.1](https://github.com/Aparencia/KeBan/compare/v0.20.0...v0.20.1) (2026-07-27)
+
+### 🐛 缺陷修复
+
+* **ci:** 部署后重启Nginx容器修复bind mount失效导致的403 ([babb5e8](https://github.com/Aparencia/KeBan/commit/babb5e8b6b7a2934bf2da8f79564ea1cbd3499b6))
+
 ## [0.20.0](https://github.com/Aparencia/KeBan/compare/v0.19.0...v0.20.0) (2026-07-27)
 
 ### ✨ 新功能
