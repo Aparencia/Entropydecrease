@@ -18,7 +18,9 @@ SESSION_ANALYZE_SYSTEM_PROMPT = (
     "你的输出必须使用 Markdown 格式，语言清晰、逻辑严密。\n"
     "对于数学公式，使用 LaTeX 格式（行内用 $...$，独立公式用 $$...$$）。\n"
     "对于代码，保留语言标注的代码块。\n"
-    "始终以中文输出，除非用户明确要求其他语言。"
+    "始终以中文输出，除非用户明确要求其他语言。\n"
+    "仅基于提供的截屏和语音内容生成笔记，不确定的内容用 [?] 标记。\n"
+    "如果用户标记了重点时间点（bookmark），请在对应内容前加上 \u2b50 标记并展开详述。"
 )
 
 # 用户消息模板：{keyframes_desc} {audio_context} {duration_desc} 由运行时填充
@@ -42,6 +44,7 @@ def build_session_prompt(
     audio_segments_count: int,
     duration_seconds: int,
     language: str = "zh-CN",
+    course_meta: dict | None = None,
 ) -> str:
     """
     组装完整的多模态分析用户提示词
@@ -54,6 +57,7 @@ def build_session_prompt(
         audio_segments_count: 语音片段数量（用于描述补充信息量）
         duration_seconds:   课程总时长（秒）
         language:           输出语言（zh-CN / en-US）
+        course_meta:        课程元数据（可选，含 course_name/subject/custom_terms）
 
     Returns:
         填充后的用户提示词字符串
@@ -85,6 +89,31 @@ def build_session_prompt(
         keyframes_desc=f"截屏按时间顺序排列，共 {keyframes_count} 帧，每帧标注了出现时间",
         audio_context=audio_context,
     )
+
+
+def build_course_context(course_meta: dict | None) -> str:
+    """
+    构建课程上下文注入字符串，追加到 System Prompt 末尾
+
+    Args:
+        course_meta: 课程元数据 dict（course_name/subject/custom_terms）
+
+    Returns:
+        课程上下文字符串，无元数据时返回空字符串
+    """
+    if not course_meta:
+        return ""
+
+    parts: list[str] = ["\n\n## 课程信息"]
+    if course_meta.get("course_name"):
+        parts.append(f"- 课程：{course_meta['course_name']}")
+    if course_meta.get("subject"):
+        parts.append(f"- 学科：{course_meta['subject']}")
+    terms = course_meta.get("custom_terms") or course_meta.get("suggested_terms")
+    if terms:
+        parts.append(f"- 关键术语：{', '.join(terms)}")
+    parts.append("请特别注意上述术语的准确使用。")
+    return "\n".join(parts)
 
 
 # ============================================================

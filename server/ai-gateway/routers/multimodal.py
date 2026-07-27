@@ -66,6 +66,10 @@ class AnalyzeSessionRequest(BaseModel):
     )
     output_format: str = Field(default="markdown", description="输出格式：markdown")
     language: str = Field(default="zh-CN", description="输出语言：zh-CN / en-US")
+    course_meta: dict | None = Field(
+        default=None,
+        description="课程元数据（可选，含 course_name/subject/custom_terms）",
+    )
 
 
 class AnalyzeSessionResponse(BaseModel):
@@ -143,6 +147,7 @@ async def analyze_session(
             keyframes=keyframes_data,
             audio_text=audio_text,
             duration=int(body.duration),
+            course_meta=body.course_meta,
         )
 
     try:

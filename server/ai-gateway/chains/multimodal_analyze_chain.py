@@ -20,6 +20,7 @@ from providers.base_provider import AIProvider
 from prompts.session_analyze import (
     SESSION_ANALYZE_SYSTEM_PROMPT,
     build_session_prompt,
+    build_course_context,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ class MultimodalAnalyzeChain:
         keyframes: list[dict],
         audio_text: str | None,
         duration: int,
+        course_meta: dict | None = None,
     ) -> tuple[list[str], str]:
         """
         组装多图分析所需的图片列表和文本 Prompt
@@ -96,13 +98,18 @@ class MultimodalAnalyzeChain:
             keyframes_count=len(keyframes),
             audio_segments_count=1 if audio_text else 0,
             duration_seconds=duration,
+            course_meta=course_meta,
         )
+
+        # 课程上下文注入（追加到 Prompt 末尾）
+        course_context = build_course_context(course_meta)
 
         # 将时间标注和语音内容拼入 Prompt
         full_prompt = (
             f"{base_prompt}\n\n"
             f"---\n各帧时间标注：\n{keyframes_desc}"
             f"{audio_context}"
+            f"{course_context}"
         )
 
         return images, full_prompt
@@ -168,6 +175,7 @@ class MultimodalAnalyzeChain:
         keyframes: list[dict],
         audio_text: str | None,
         duration: int,
+        course_meta: dict | None = None,
     ) -> dict[str, Any]:
         """
         执行多模态课堂分析
@@ -176,9 +184,10 @@ class MultimodalAnalyzeChain:
         每 chunk ≤ _CHUNK_SIZE 帧，避免单次请求 token 超限。
 
         Args:
-            keyframes:  关键帧列表 [{timestamp, image_base64, change_type}]
-            audio_text: 语音转写文本（None 表示无语音）
-            duration:   课程总时长（秒）
+            keyframes:   关键帧列表 [{timestamp, image_base64, change_type}]
+            audio_text:  语音转写文本（None 表示无语音）
+            duration:    课程总时长（秒）
+            course_meta: 课程元数据（可选）
 
         Returns:
             dict: {
@@ -198,7 +207,7 @@ class MultimodalAnalyzeChain:
                 "keyframes_analyzed": 0,
             }
 
-        images, full_prompt = self._build_prompt(keyframes, audio_text, duration)
+        images, full_prompt = self._build_prompt(keyframes, audio_text, duration, course_meta)
         total_frames = len(images)
 
         # ---- 路径 A：单 chunk（≤ 阈值）----

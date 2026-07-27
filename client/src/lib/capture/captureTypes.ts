@@ -92,6 +92,19 @@ export interface CaptureSessionConfig {
   autoInsert: boolean;
   /** @ai-context 采集路径选择，默认 'fine' 走原有流水线 */
   path?: CapturePath;
+  /** @ai-context 课程元数据，用于分析时注入 Prompt 提升术语识别率 */
+  courseMeta?: CourseMeta;
+}
+
+/**
+ * @ai-context 课程上下文元数据
+ * 四级降级策略：用户手动 > 窗口标题匹配 > AI 识别 > 自定义术语表
+ */
+export interface CourseMeta {
+  courseName?: string;      // 课程名称
+  subject?: string;         // 学科（math/physics/cs/english/other）
+  customTerms?: string[];   // 自定义术语列表
+  detectedBy?: 'manual' | 'window_title' | 'ai';  // 来源标识
 }
 
 // 可捕获窗口信息（screen_list_windows 返回）
@@ -149,9 +162,11 @@ export interface AudioSegment {
 /** @ai-context 全局时间轴条目，串联关键帧和语音段供后续分析回放 */
 export interface TimelineEntry {
   timestamp: number;
-  type: 'keyframe' | 'voice_start' | 'voice_end' | 'silence';
+  type: 'keyframe' | 'voice_start' | 'voice_end' | 'silence' | 'bookmark';
   refId?: string;
   energy?: number;
+  /** bookmark 类型时的用户标注（可选） */
+  label?: string;
 }
 
 /** @ai-context 一次智能模式会话的完整数据汇总 */

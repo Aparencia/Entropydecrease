@@ -44,6 +44,7 @@ export type {
   SessionStatus,
   CaptureSession,
   CaptureSessionConfig,
+  CourseMeta,
   WindowInfo,
   ExtractedSegment,
   CaptureMode,

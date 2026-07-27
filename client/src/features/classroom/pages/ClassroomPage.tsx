@@ -3,7 +3,7 @@
  * 左侧窄栏：窗口选择 + 路径/模式 + 控制 + 设置
  * 右侧宽区：提取结果 / 智能时间轴 / 录制面板 / 分析预览
  */
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
 import {
   Monitor, Play, Pause, Square, Eye, Mic, Layers,
   Settings2, ChevronDown, ChevronRight, Plus, ListPlus,
@@ -12,10 +12,11 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useClassroomCapture } from '../hooks/useClassroomCapture';
+import { LiveTranscript } from '../components/LiveTranscript';
 import { SmartCapturePanel } from '@/features/notes/components/SmartCapturePanel';
 import { AnalysisPreview } from '@/features/notes/components/AnalysisPreview';
 import { VideoRecordPanel } from '@/features/notes/components/VideoRecordPanel';
-import type { WindowInfo, ExtractedSegment, CaptureMode, SessionStatus, CaptureSidebarConfig } from '@/lib/capture';
+import type { WindowInfo, ExtractedSegment, CaptureMode, SessionStatus, CaptureSidebarConfig, CourseMeta } from '@/lib/capture';
 import type { CapturePath } from '@/lib/capture';
 
 // ================================================================
@@ -178,6 +179,21 @@ export default function ClassroomPage() {
   const statusCfg = STATUS_CONFIG[capture.status];
   const StatusIcon = statusCfg.icon;
 
+  // M 快捷键：课中标记重点
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'm' || e.key === 'M') {
+      // 避免在输入框中触发
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      capture.handleBookmark();
+    }
+  }, [capture.handleBookmark]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
+
   const handleInsertSelected = () => {
     // 全页模式下暂无笔记编辑器目标，复制到剪贴板
     const texts = capture.segments.filter((s) => capture.selectedIds.has(s.id)).map((s) => s.text).join('\n\n');
@@ -282,6 +298,13 @@ export default function ClassroomPage() {
                   <Square className="w-4 h-4" strokeWidth={1.5} /> 停止
                 </button>
               )}
+              {capture.status === 'capturing' && (
+                <button onClick={capture.handleBookmark}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-kb-md text-b3 font-medium bg-amber-50 text-amber-600 hover:bg-amber-100 active:scale-95 transition-all"
+                  title="标记重点 (M)">
+                  <Star className="w-4 h-4" strokeWidth={1.5} /> 标记
+                </button>
+              )}
             </div>
           </div>
 
@@ -308,6 +331,14 @@ export default function ClassroomPage() {
 
           {/* 设置 */}
           <SettingsSection config={capture.config} onChange={capture.handleConfigChange} />
+
+          {/* 课程信息 */}
+          <CourseInfoSection
+            courseMeta={capture.courseMeta}
+            onChange={capture.setCourseMeta}
+            aiDetectEnabled={capture.aiDetectEnabled}
+            onAiDetectToggle={capture.setAiDetectEnabled}
+          />
         </div>
       </div>
 
@@ -352,6 +383,12 @@ export default function ClassroomPage() {
                 <span className="text-b3 text-emerald-600">已转写 {capture.transcribedCount} 段语音</span>
               </div>
             )}
+            {/* 实时转录上屏 */}
+            <LiveTranscript
+              transcripts={capture.liveTranscripts}
+              isActive={capture.status === 'capturing' && (capture.mode === 'audio' || capture.mode === 'mixed')}
+              className="mt-auto"
+            />
           </>
         )}
 
@@ -368,6 +405,7 @@ export default function ClassroomPage() {
             onInsert={() => capture.handleDismissAnalysis()}
             onDismiss={capture.handleDismissAnalysis}
             onRetry={capture.analysisResult?.modelUsed === 'local-concat' ? undefined : capture.handleAnalyze}
+            onGenerateCards={capture.handleGenerateCards}
           />
         )}
       </div>
@@ -409,6 +447,73 @@ function SettingsSection({ config, onChange }: {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ================================================================
+// 课程信息区（内联）
+// ================================================================
+
+const SUBJECT_OPTIONS = [
+  { value: 'math', label: '数学' },
+  { value: 'physics', label: '物理' },
+  { value: 'cs', label: '计算机' },
+  { value: 'english', label: '英语' },
+  { value: 'other', label: '其他' },
+];
+
+function CourseInfoSection({ courseMeta, onChange, aiDetectEnabled, onAiDetectToggle }: {
+  courseMeta: CourseMeta;
+  onChange: (meta: CourseMeta) => void;
+  aiDetectEnabled: boolean;
+  onAiDetectToggle: (enabled: boolean) => void;
+}) {
+  return (
+    <div className="space-y-3 pt-3 border-t border-border/20">
+      <div className="flex items-center gap-2 text-b3 text-text-tertiary">
+        <Sparkles className="w-4 h-4" strokeWidth={1.5} />
+        <span className="font-medium">课程信息</span>
+        {courseMeta.detectedBy && (
+          <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-kb-xs bg-brand-50 text-brand-500">
+            {courseMeta.detectedBy === 'ai' ? 'AI 识别' : courseMeta.detectedBy === 'window_title' ? '自动提取' : '手动'}
+          </span>
+        )}
+      </div>
+      <div>
+        <label className="text-b3 text-text-tertiary mb-1 block">课程名称</label>
+        <input
+          type="text"
+          value={courseMeta.courseName ?? ''}
+          onChange={(e) => onChange({ ...courseMeta, courseName: e.target.value || undefined, detectedBy: 'manual' })}
+          placeholder="如：高等数学、数据结构..."
+          className="w-full px-2.5 py-1.5 rounded-kb-sm text-b3 bg-bg-secondary border border-border/30 text-text-primary placeholder:text-text-tertiary/50 focus:outline-none focus:ring-1 focus:ring-brand-300"
+        />
+      </div>
+      <div>
+        <label className="text-b3 text-text-tertiary mb-1 block">学科</label>
+        <div className="flex gap-1 flex-wrap">
+          {SUBJECT_OPTIONS.map(({ value, label }) => (
+            <button key={value} onClick={() => onChange({ ...courseMeta, subject: value, detectedBy: 'manual' })}
+              className={cn('px-2 py-1 rounded-kb-sm text-[11px] font-medium transition-all',
+                courseMeta.subject === value
+                  ? 'bg-brand-50 text-brand-600 ring-1 ring-brand-200/50'
+                  : 'text-text-tertiary hover:bg-bg-tertiary hover:text-text-secondary')}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* AI 识别开关 */}
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={aiDetectEnabled}
+          onChange={(e) => onAiDetectToggle(e.target.checked)}
+          className="w-3.5 h-3.5 rounded accent-brand-600"
+        />
+        <span className="text-b3 text-text-tertiary">采集开始时 AI 自动识别课程</span>
+      </label>
     </div>
   );
 }

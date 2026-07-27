@@ -20,9 +20,11 @@ import type {
   KeyFrame,
   RecordingStatus,
   VideoRecording,
+  CourseMeta,
 } from '@/lib/capture';
 import { analyzeSession, analyzeVideo, analyzePartial, mergeNotes } from '@/lib/ai/sessionAnalyzer';
 import type { AnalyzeResult } from '@/lib/ai/sessionAnalyzer';
+import { detectCourseFromFrame } from '@/lib/ai/courseDetector';
 import { aiClient } from '@/lib/http/apiClient';
 
 interface IPCAudioStartResult {
@@ -58,6 +60,14 @@ export function useClassroomCapture() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalyzeResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+
+  // ── 实时转录 ──
+  const [liveTranscripts, setLiveTranscripts] = useState<{ id: string; text: string; timestamp: number }[]>([]);
+
+  // ── 课程上下文 ──
+  const [courseMeta, setCourseMeta] = useState<CourseMeta>({});
+  const [aiDetectEnabled, setAiDetectEnabled] = useState(false);
+  const courseDetectedRef = useRef(false);
 
   // ── Path C 全程录制 ──
   const [recordingStatus, setRecordingStatus] = useState<RecordingStatus | null>(null);
@@ -149,6 +159,22 @@ export function useClassroomCapture() {
           keyframes: [...(prev.keyframes ?? []), data.keyframe],
         }));
 
+        // AI 课程识别：仅第 1 帧触发一次
+        if (aiDetectEnabled && !courseDetectedRef.current) {
+          courseDetectedRef.current = true;
+          detectCourseFromFrame(data.keyframe.imageBase64)
+            .then((detected) => {
+              if (detected) {
+                setCourseMeta((prev) => ({
+                  ...prev,
+                  ...detected,
+                  detectedBy: 'ai',
+                }));
+              }
+            })
+            .catch(() => { /* 静默降级到规则模式 */ });
+        }
+
         // 增量分析：累积到缓冲区，达到批次大小时触发后台分析
         pendingKeyframesRef.current.push(data.keyframe);
         if (pendingKeyframesRef.current.length >= INCREMENTAL_BATCH_SIZE && !isPartialAnalyzingRef.current) {
@@ -173,7 +199,7 @@ export function useClassroomCapture() {
       (data) => setSmartBundle(data.bundle),
     );
     return () => { offKeyframe(); offBundleReady(); };
-  }, [config.language]);
+  }, [config.language, aiDetectEnabled]);
 
   // ── Path B：流式 ASR — 语音段完成后立即转写 ──
   useEffect(() => {
@@ -205,7 +231,11 @@ export function useClassroomCapture() {
                 s.id === seg.id ? { ...s, audioText: text } : s,
               ),
             }));
-            if (text) setTranscribedCount((c) => c + 1);
+            if (text) {
+              setTranscribedCount((c) => c + 1);
+              // 实时转录上屏
+              setLiveTranscripts((prev) => [...prev, { id: seg.id, text, timestamp: seg.timestampStart }]);
+            }
           })
           .catch((err) => {
             console.warn('[useClassroomCapture] 流式 ASR 转写失败:', err);
@@ -337,6 +367,17 @@ export function useClassroomCapture() {
 
   useEffect(() => { refreshWindows(); }, [refreshWindows]);
 
+  // ── 窗口选中时自动提取课程名（规则模式） ──
+  const COURSE_KEYWORDS = /((?:高等数学|线性代数|概率论|大学物理|数据结构|操作系统|编译原理|离散数学|复变函数|英语|高数|大物|C语言|Python|Java|机器学习|深度学习|人工智能|计算机网络|数据库)[^\s|]*)/;
+
+  useEffect(() => {
+    if (!selectedWindow) return;
+    const match = selectedWindow.title.match(COURSE_KEYWORDS);
+    if (match && !courseMeta.courseName) {
+      setCourseMeta((prev) => ({ ...prev, courseName: match[1], detectedBy: 'window_title' }));
+    }
+  }, [selectedWindow]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── 窗口变化监听（后台轮询 + 最小化容错） ──
   const windowMissingCountRef = useRef(0);
   const WINDOW_MISSING_THRESHOLD = 10; // 连续消失 10 次轮询（~30s）才判定为真正关闭
@@ -396,6 +437,7 @@ export function useClassroomCapture() {
       setStats({ frames: 0, extracted: 0 });
       setSegments([]);
       setSelectedIds(new Set());
+      setLiveTranscripts([]);
 
       // 预检网关
       try {
@@ -442,6 +484,7 @@ export function useClassroomCapture() {
         language: config.language,
         autoInsert: config.autoInsert,
         path: capturePath,
+        courseMeta: courseMeta.courseName ? courseMeta : undefined,
       });
       soundPlayer.play('capture_start');
 
@@ -639,6 +682,34 @@ export function useClassroomCapture() {
     setIsAnalyzing(false);
   }, []);
 
+  // ── 笔记→闪卡一键生成 ──
+  const handleGenerateCards = useCallback(async (content: string) => {
+    if (!window.electronAPI) return;
+    try {
+      toast({ type: 'info', message: '正在从笔记生成闪卡...' });
+      await window.electronAPI.invoke('ai_generate_cards', { content });
+      toast({ type: 'success', message: '闪卡已生成，可在闪卡模块查看' });
+    } catch (err) {
+      console.error('[useClassroomCapture] 生成闪卡失败:', err);
+      toast({ type: 'error', message: '闪卡生成失败，请重试' });
+    }
+  }, [toast]);
+
+  // ── 课中重点标记 ──
+  const [bookmarks, setBookmarks] = useState<{ timestamp: number; label?: string }[]>([]);
+
+  const handleBookmark = useCallback(() => {
+    if (status !== 'capturing') return;
+    const now = Date.now();
+    setBookmarks((prev) => [...prev, { timestamp: now }]);
+    // 同时插入 smartBundle timeline
+    setSmartBundle((prev) => ({
+      ...prev,
+      timeline: [...(prev.timeline ?? []), { timestamp: now, type: 'bookmark' as const }],
+    }));
+    toast({ type: 'success', message: `已标记重点 (${new Date(now).toLocaleTimeString()})` });
+  }, [status, toast]);
+
   return {
     // 窗口
     windows, windowsLoading, selectedWindow, setSelectedWindow, refreshWindows,
@@ -648,12 +719,17 @@ export function useClassroomCapture() {
     capturePath, setCapturePath, smartBundle,
     // 分析
     isAnalyzing, analysisResult, analysisError, partialCount, transcribedCount,
+    // 实时转录
+    liveTranscripts,
+    // 课程上下文
+    courseMeta, setCourseMeta, aiDetectEnabled, setAiDetectEnabled,
     // 录制
     recordingStatus, videoFilePath,
     // 操作
     handleStart, handlePause, handleStop, handleModeChange,
     handleToggleSelect, handleConfigChange,
-    handleAnalyze, handleVideoAnalyze, handleDismissAnalysis,
+    handleAnalyze, handleVideoAnalyze, handleDismissAnalysis, handleGenerateCards,
+    handleBookmark, bookmarks,
     // 派生
     canStart: !!selectedWindow,
   };
