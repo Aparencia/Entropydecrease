@@ -42,14 +42,16 @@ jobs:
           strip_components: 2
           rm: true
 
-      - name: Verify deployment
+      - name: Restart Nginx and verify deployment
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            sleep 2
+            # scp 的 rm:true 会重建挂载目录导致 bind mount 失效，必须重启容器
+            docker restart entropy-decrease-nginx
+            sleep 5
             curl -sf https://entropydecrease.com/ | grep -q "课伴" || exit 1
 
       - name: Notify IndexNow
