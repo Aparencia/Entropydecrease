@@ -3,7 +3,7 @@
   <p align="center"><strong>你的 AI 智能学习伙伴 — 让每一分钟学习都高效有价值</strong></p>
   <p align="center">
     <img src="https://img.shields.io/badge/status-beta-green.svg" alt="Status" />
-    <img src="https://img.shields.io/badge/version-v0.19.0-blue.svg" alt="Version" />
+    <img src="https://img.shields.io/badge/version-v0.20.0-blue.svg" alt="Version" />
     <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License" />
   </p>
 </p>
