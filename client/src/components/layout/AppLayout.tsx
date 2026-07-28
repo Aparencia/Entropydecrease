@@ -82,12 +82,12 @@ export default function AppLayout() {
         }
       }
 
-      // 数字键 1-6 快捷导航（需无修饰键）
+      // 数字键 0-7 快捷导航（需无修饰键）
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         const moduleKeys: Record<string, string> = {
           '1': '/', '2': '/pomodoro', '3': '/notes',
           '4': '/flashcards', '5': '/feynman', '6': '/inspiration',
-          '7': '/classroom',
+          '7': '/classroom', '0': '/settings',
         };
         if (moduleKeys[e.key]) {
           navigate(moduleKeys[e.key]);
@@ -138,7 +138,7 @@ export default function AppLayout() {
               animate={{ opacity: 1, y: 0 }}
               className="px-6 py-3 rounded-full bg-black/30 backdrop-blur-xl border border-white/10 text-white/70 text-sm"
             >
-              点击3D物体进入模块 · 按 Esc 返回仪表盘 · 数字键 1-6 快捷跳转
+              点击3D物体进入模块 · 按 Esc 返回仪表盘 · 数字键 0-7 快捷跳转
             </motion.div>
           </div>
           {/* 浮动返回仪表盘按钮（仅桌面端） */}

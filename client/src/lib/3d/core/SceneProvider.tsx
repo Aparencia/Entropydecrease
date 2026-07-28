@@ -36,6 +36,13 @@ export function SceneProvider({ children, interactive = false }: SceneProviderPr
           gl.shadowMap.enabled = true;
           gl.shadowMap.type = THREE.PCFSoftShadowMap;
           scene.fog = new THREE.FogExp2('#0a0a2e', 0.03);
+          // GPU 诊断：打印实际渲染器名称，出现 SwiftShader 即说明落入软件渲染（硬件加速失效）
+          const ctx = gl.getContext();
+          const dbgExt = ctx.getExtension('WEBGL_debug_renderer_info');
+          const rendererName = dbgExt
+            ? ctx.getParameter(dbgExt.UNMASKED_RENDERER_WEBGL)
+            : ctx.getParameter(ctx.RENDERER);
+          console.info('[3D] WebGL renderer:', rendererName);
         }}
       >
         <PerformanceMonitor />

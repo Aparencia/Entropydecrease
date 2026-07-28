@@ -718,21 +718,42 @@ export function CaptureSidebar({ onInsertText }: CaptureSidebarProps) {
             });
 
             const audioCtx = new AudioContext({ sampleRate: payload.options.sampleRate });
+            // 关键修复：AudioContext 在 IPC 回调（非用户手势）中创建时默认 suspended，
+            // ScriptProcessor.onaudioprocess 永不触发，必须显式 resume()。
+            if (audioCtx.state !== 'running') {
+              await audioCtx.resume();
+            }
             const sourceNode = audioCtx.createMediaStreamSource(stream);
-            const bufferSize = Math.ceil(
+            // 根因修复：createScriptProcessor 的 bufferSize 必须是 [256, 16384] 内 2 的幂，
+            // 直接传 chunkDurationMs 对应样本数（80000）会抛 IndexSizeError 中断管道。
+            // 用合法小缓冲切片，累积到 chunkDurationMs 再整块发送。
+            const PROCESSOR_BUFFER_SIZE = 4096;
+            const processor = audioCtx.createScriptProcessor(PROCESSOR_BUFFER_SIZE, payload.options.channels, 1);
+            const targetSamples = Math.ceil(
               (payload.options.sampleRate * payload.options.chunkDurationMs) / 1000,
             );
-            const processor = audioCtx.createScriptProcessor(bufferSize, payload.options.channels, 1);
+            let pending = new Float32Array(targetSamples);
+            let pendingOffset = 0;
 
             processor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
-              const pcmData = new Float32Array(inputData).buffer;
-              window.electronAPI?.send('audio_capture_chunk', {
-                audioBuffer: pcmData,
-                sampleRate: payload.options.sampleRate,
-                channels: payload.options.channels,
-                durationMs: payload.options.chunkDurationMs,
-              });
+              let srcOffset = 0;
+              while (srcOffset < inputData.length) {
+                const take = Math.min(targetSamples - pendingOffset, inputData.length - srcOffset);
+                pending.set(inputData.subarray(srcOffset, srcOffset + take), pendingOffset);
+                pendingOffset += take;
+                srcOffset += take;
+                if (pendingOffset >= targetSamples) {
+                  window.electronAPI?.send('audio_capture_chunk', {
+                    audioBuffer: pending.buffer,
+                    sampleRate: payload.options.sampleRate,
+                    channels: payload.options.channels,
+                    durationMs: payload.options.chunkDurationMs,
+                  });
+                  pending = new Float32Array(targetSamples);
+                  pendingOffset = 0;
+                }
+              }
             };
 
             sourceNode.connect(processor);

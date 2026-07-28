@@ -137,9 +137,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   on: (channel: AllowedEventChannel, callback: (...args: unknown[]) => void) => {
     if ((ALLOWED_EVENT_CHANNELS as readonly string[]).includes(channel)) {
-      ipcRenderer.on(channel, (_event, ...args) => callback(...args));
+      // 保留包装后的 handler 引用，卸载时只移除自己的监听器。
+      // 注意：不能使用 removeAllListeners(channel)——多个组件会订阅同一
+      // channel（如 audio_capture_chunk），removeAllListeners 会把其他
+      // 组件的监听器一并清除，导致音频流静默中断。
+      const handler = (_event: unknown, ...args: unknown[]) => callback(...args);
+      ipcRenderer.on(channel, handler);
       return () => {
-        ipcRenderer.removeAllListeners(channel);
+        ipcRenderer.removeListener(channel, handler);
       };
     }
     console.warn(`[preload] 不允许的事件 channel: ${channel}`);

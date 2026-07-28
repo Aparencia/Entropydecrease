@@ -101,17 +101,40 @@ export function useCaptureSession({
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: { chromeMediaSource: 'desktop', chromeMediaSourceId: p.sourceId } as MediaTrackConstraintSet });
           const ctx = new AudioContext({ sampleRate: p.options.sampleRate });
+          // 关键修复：AudioContext 在 IPC 回调（非用户手势）中创建时默认 suspended，
+          // ScriptProcessor.onaudioprocess 永不触发，必须显式 resume()。
+          if (ctx.state !== 'running') {
+            await ctx.resume();
+          }
           const src = ctx.createMediaStreamSource(stream);
-          const buf = Math.ceil((p.options.sampleRate * p.options.chunkDurationMs) / 1000);
-          const proc = ctx.createScriptProcessor(buf, p.options.channels, 1);
+          // 根因修复：createScriptProcessor 的 bufferSize 必须是 [256, 16384] 内 2 的幂，
+          // 直接传 chunkDurationMs 对应样本数（80000）会抛 IndexSizeError 中断管道。
+          // 用合法小缓冲切片，累积到 chunkDurationMs 再整块发送。
+          const PROCESSOR_BUFFER_SIZE = 4096;
+          const proc = ctx.createScriptProcessor(PROCESSOR_BUFFER_SIZE, p.options.channels, 1);
+          const targetSamples = Math.ceil((p.options.sampleRate * p.options.chunkDurationMs) / 1000);
+          let pending = new Float32Array(targetSamples);
+          let pendingOffset = 0;
           proc.onaudioprocess = (e) => {
-            const data = new Float32Array(e.inputBuffer.getChannelData(0));
-            // 计算 RMS 振幅并同步到氛围 store
+            const inputData = e.inputBuffer.getChannelData(0);
+            // 计算 RMS 振幅并同步到氛围 store（逐回调计算，保证可视化实时性）
             let sum = 0;
-            for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
-            const rms = Math.sqrt(sum / data.length);
+            for (let i = 0; i < inputData.length; i++) sum += inputData[i] * inputData[i];
+            const rms = Math.sqrt(sum / inputData.length);
             useAmbientStore.getState().setAudioAmplitude(Math.min(1, rms * 5));
-            window.electronAPI?.send('audio_capture_chunk', { audioBuffer: data.buffer, sampleRate: p.options.sampleRate, channels: p.options.channels, durationMs: p.options.chunkDurationMs });
+            // 累积样本，满 targetSamples 发送一个完整块
+            let srcOffset = 0;
+            while (srcOffset < inputData.length) {
+              const take = Math.min(targetSamples - pendingOffset, inputData.length - srcOffset);
+              pending.set(inputData.subarray(srcOffset, srcOffset + take), pendingOffset);
+              pendingOffset += take;
+              srcOffset += take;
+              if (pendingOffset >= targetSamples) {
+                window.electronAPI?.send('audio_capture_chunk', { audioBuffer: pending.buffer, sampleRate: p.options.sampleRate, channels: p.options.channels, durationMs: p.options.chunkDurationMs });
+                pending = new Float32Array(targetSamples);
+                pendingOffset = 0;
+              }
+            }
           };
           src.connect(proc); proc.connect(ctx.destination);
           audioCleanupRef.current = () => { proc.disconnect(); src.disconnect(); stream.getTracks().forEach((t) => t.stop()); void ctx.close(); };

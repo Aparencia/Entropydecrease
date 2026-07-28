@@ -101,8 +101,8 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
 
   return {
     get: <T = unknown>(url: string) => request<T>(url, { method: 'GET' }),
-    post: <T = unknown>(url: string, body?: unknown) =>
-      request<T>(url, { method: 'POST', body: JSON.stringify(body) }),
+    post: <T = unknown>(url: string, body?: unknown, options?: RequestOptions) =>
+      request<T>(url, { method: 'POST', body: JSON.stringify(body), ...options }),
     put: <T = unknown>(url: string, body?: unknown) =>
       request<T>(url, { method: 'PUT', body: JSON.stringify(body) }),
     delete: <T = unknown>(url: string) => request<T>(url, { method: 'DELETE' }),

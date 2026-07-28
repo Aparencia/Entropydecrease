@@ -21,15 +21,48 @@ import type {
   RecordingStatus,
   VideoRecording,
   CourseMeta,
+  VADStats,
 } from '@/lib/capture';
 import { analyzeSession, analyzeVideo, analyzePartial, mergeNotes } from '@/lib/ai/sessionAnalyzer';
 import type { AnalyzeResult } from '@/lib/ai/sessionAnalyzer';
 import { detectCourseFromFrame } from '@/lib/ai/courseDetector';
 import { aiClient } from '@/lib/http/apiClient';
+import { noteStore } from '@/lib/storage';
+import { createWithLog, updateWithLog } from '@/lib/storage/writeWithLog';
+import { markdownToTipTapJson, appendMarkdownToTipTapJson } from '../utils/tipTapConverter';
+import type { CourseNoteItem } from '../components/NoteInsertDialog';
 
 interface IPCAudioStartResult {
   success: boolean;
   error?: string;
+}
+
+// ================================================================
+// ASR 转写工具：超时 + 重试
+// ================================================================
+
+interface TranscribePayload {
+  audio_base64: string;
+  language: string;
+  sample_rate: number;
+  channels: number;
+}
+
+/** ASR 转写（15s 超时，失败后最多重试 1 次，指数退避） */
+async function transcribeWithRetry(payload: TranscribePayload, retries = 1): Promise<string | null> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const resp = await aiClient.post<{ text: string }>('/api/v1/asr/transcribe', payload, { timeout: 15000 });
+      return resp.text?.trim() || null;
+    } catch (err) {
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+      } else {
+        throw err;
+      }
+    }
+  }
+  return null;
 }
 
 export function useClassroomCapture() {
@@ -64,6 +97,15 @@ export function useClassroomCapture() {
   // ── 实时转录 ──
   const [liveTranscripts, setLiveTranscripts] = useState<{ id: string; text: string; timestamp: number }[]>([]);
 
+  // ── 音频健康监控 ──
+  const [audioHealth, setAudioHealth] = useState<{ lastChunkTime: number; chunkCount: number; isHealthy: boolean }>({
+    lastChunkTime: 0, chunkCount: 0, isHealthy: true,
+  });
+  const audioHealthRef = useRef({ lastChunkTime: 0, chunkCount: 0 });
+
+  // ── VAD 统计 ──
+  const [vadStats, setVadStats] = useState<VADStats | null>(null);
+
   // ── 课程上下文 ──
   const [courseMeta, setCourseMeta] = useState<CourseMeta>({});
   const [aiDetectEnabled, setAiDetectEnabled] = useState(false);
@@ -77,16 +119,28 @@ export function useClassroomCapture() {
   const audioCleanupRef = useRef<(() => void | Promise<void>) | null>(null);
   const frameRestartRef = useRef<(() => void) | null>(null);
 
-  // ── ASR 并发控制 ──
+  // toast 的稳定引用：音频生命周期 effect 依赖数组为 []，
+  // 直接闭包 toast 会随渲染变化而过期，故用 ref 桥接。
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+
+  // ── ASR 并发控制（带队列保护） ──
   const MAX_CONCURRENT_ASR = 3;
+  const MAX_ASR_QUEUE = 10;
   const MAX_LIVE_TRANSCRIPTS = 200;
   const asrSemaphoreRef = useRef({ active: 0, queue: [] as (() => void)[] });
+  const asrHealthRef = useRef({ lastSuccessTime: 0, consecutiveFailures: 0 });
 
-  const acquireAsrSlot = useCallback((): Promise<void> => {
+  const acquireAsrSlot = useCallback((): Promise<void> | null => {
     const sem = asrSemaphoreRef.current;
     if (sem.active < MAX_CONCURRENT_ASR) {
       sem.active++;
       return Promise.resolve();
+    }
+    // 队列保护：超出上限时丢弃最旧的排队任务
+    if (sem.queue.length >= MAX_ASR_QUEUE) {
+      sem.queue.shift(); // 移除最旧的等待者（其 Promise 永远不会 resolve，GC 会回收）
+      console.warn('[useClassroomCapture] ASR 队列已满，丢弃最旧的排队段');
     }
     return new Promise<void>((resolve) => {
       sem.queue.push(() => { sem.active++; resolve(); });
@@ -234,7 +288,7 @@ export function useClassroomCapture() {
     return () => { offKeyframe(); offBundleReady(); };
   }, [config.language, aiDetectEnabled]);
 
-  // ── Path B：流式 ASR — 语音段完成后立即转写 ──
+  // ── Path B：流式 ASR — 语音段完成后立即转写（带超时/重试/健康监测） ──
   useEffect(() => {
     const offSegmentReady = captureEventBus.on<{ sessionId: string; segment: import('@/lib/capture').AudioSegment }>(
       'smart:audio_segment_ready',
@@ -249,15 +303,18 @@ export function useClassroomCapture() {
         // 后台流式 ASR 转写（不阻塞采集，受并发控制）
         if (!seg.audioBase64) return;
         const lang = config.language === 'en' ? 'en' : config.language === 'mixed' ? 'auto' : 'zh';
-        acquireAsrSlot().then(() => {
-          aiClient.post<{ text: string }>('/api/v1/asr/transcribe', {
+        const slot = acquireAsrSlot();
+        if (!slot) return; // 队列已满且丢弃了本段
+        slot.then(() => {
+          transcribeWithRetry({
             audio_base64: seg.audioBase64,
             language: lang,
             sample_rate: 16000,
             channels: 1,
           })
-            .then((resp) => {
-              const text = resp.text?.trim() || null;
+            .then((text) => {
+              asrHealthRef.current.lastSuccessTime = Date.now();
+              asrHealthRef.current.consecutiveFailures = 0;
               // 将转写结果回填到对应的音频段
               setSmartBundle((prev) => ({
                 ...prev,
@@ -278,7 +335,11 @@ export function useClassroomCapture() {
               }
             })
             .catch((err) => {
+              asrHealthRef.current.consecutiveFailures++;
               console.warn('[useClassroomCapture] 流式 ASR 转写失败:', err);
+              if (asrHealthRef.current.consecutiveFailures === 3) {
+                toast({ type: 'error', message: 'ASR 服务连续失败，语音转写可能不可用，请检查网络或 AI 网关' });
+              }
             })
             .finally(() => {
               releaseAsrSlot();
@@ -287,7 +348,16 @@ export function useClassroomCapture() {
       },
     );
     return () => { offSegmentReady(); };
-  }, [config.language, acquireAsrSlot, releaseAsrSlot]);
+  }, [config.language, acquireAsrSlot, releaseAsrSlot, toast]);
+
+  // ── Path B：监听 VAD 统计事件 ──
+  useEffect(() => {
+    const offVadStats = captureEventBus.on<{ sessionId: string; stats: VADStats }>(
+      'smart:vad_stats',
+      (data) => setVadStats(data.stats),
+    );
+    return () => { offVadStats(); };
+  }, []);
 
   // ── Path C：监听录制视频就绪 ──
   useEffect(() => {
@@ -325,15 +395,66 @@ export function useClassroomCapture() {
     return off;
   }, [status, captureManager]);
 
-  // ── 监听音频块 ──
+  // ── 监听音频块（带健康跟踪） ──
   useEffect(() => {
     if (!window.electronAPI || status !== 'capturing') return;
     const off = window.electronAPI.on('audio_capture_chunk', (...args: unknown[]) => {
       const chunk = args[0] as AudioChunkData;
       captureManager.pushAudioChunk(chunk);
+      // 更新音频健康状态：收到音频块即视为健康
+      audioHealthRef.current = {
+        lastChunkTime: Date.now(),
+        chunkCount: audioHealthRef.current.chunkCount + 1,
+      };
+      setAudioHealth({
+        lastChunkTime: audioHealthRef.current.lastChunkTime,
+        chunkCount: audioHealthRef.current.chunkCount,
+        isHealthy: true,
+      });
     });
     return off;
   }, [status, captureManager]);
+
+  // ── 音频健康 watchdog：检测“从未收到音频块”与“音频中断”两种故障 ──
+  useEffect(() => {
+    if (status !== 'capturing') {
+      setAudioHealth({ lastChunkTime: 0, chunkCount: 0, isHealthy: true });
+      audioHealthRef.current = { lastChunkTime: 0, chunkCount: 0 };
+      return;
+    }
+    const audioEnabled = mode === 'audio' || mode === 'mixed';
+    if (!audioEnabled) return;
+
+    const capturingStartedAt = Date.now();
+    let warnedNever = false;
+    let warnedStopped = false;
+    const timer = setInterval(() => {
+      const { lastChunkTime } = audioHealthRef.current;
+      if (lastChunkTime === 0) {
+        // 场景一：开始采集后从未收到任何音频块（音频管道未启动/被挂起）
+        if (Date.now() - capturingStartedAt > 15000) {
+          setAudioHealth((prev) => (prev.isHealthy ? { ...prev, isHealthy: false } : prev));
+          if (!warnedNever) {
+            warnedNever = true;
+            toast({ type: 'error', message: '未检测到音频输入，音频采集可能未启动，请停止后重新开始采集' });
+          }
+        }
+      } else if (Date.now() - lastChunkTime > 10000) {
+        // 场景二：音频曾正常但中断超过 10s
+        setAudioHealth((prev) => ({ ...prev, isHealthy: false }));
+        if (!warnedStopped) {
+          warnedStopped = true;
+          toast({ type: 'warning', message: '音频输入中断超过 10s，请检查系统音频设置' });
+        }
+      } else {
+        // 恢复正常
+        setAudioHealth((prev) => (prev.isHealthy ? prev : { ...prev, isHealthy: true }));
+        warnedNever = false;
+        warnedStopped = false;
+      }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [status, mode, toast]);
 
   // ── 监听音频采集生命周期指令 ──
   useEffect(() => {
@@ -354,21 +475,54 @@ export function useClassroomCapture() {
             } as MediaTrackConstraintSet,
           });
           const audioCtx = new AudioContext({ sampleRate: payload.options.sampleRate });
+          // 关键修复：AudioContext 在 IPC 回调（非用户手势调用栈）中创建时，
+          // 受 Chrome autoplay policy 影响默认处于 suspended 状态，
+          // ScriptProcessor.onaudioprocess 永不触发 → 不产生任何音频块。
+          // 必须显式 resume() 确保上下文进入 running 状态。
+          if (audioCtx.state !== 'running') {
+            await audioCtx.resume();
+          }
+          console.info(`[useClassroomCapture] 音频管道已启动, AudioContext state=${audioCtx.state}, sampleRate=${audioCtx.sampleRate}`);
           const sourceNode = audioCtx.createMediaStreamSource(stream);
-          const bufferSize = Math.ceil((payload.options.sampleRate * payload.options.chunkDurationMs) / 1000);
+          // 根因修复：createScriptProcessor 的 bufferSize 必须是 [256, 16384] 内 2 的幂。
+          // 原代码直接传入 chunkDurationMs 对应的样本数（16kHz×5s = 80000），
+          // 既不是 2 的幂又超出 16384 上限，Chrome 会抛 IndexSizeError，
+          // 导致整个音频管道中断、产生 0 个音频块（ASR 从未被触发）。
+          // 正确做法：用合法的小缓冲（4096）切片，在渲染端累积到
+          // chunkDurationMs 对应的样本数后再整块发送，保证 VAD/ASR 拿到完整 5s 音频段。
+          const PROCESSOR_BUFFER_SIZE = 4096;
+          const processor = audioCtx.createScriptProcessor(PROCESSOR_BUFFER_SIZE, payload.options.channels, 1);
+          const targetSamples = Math.ceil((payload.options.sampleRate * payload.options.chunkDurationMs) / 1000);
+          let pending = new Float32Array(targetSamples);
+          let pendingOffset = 0;
+          let sentChunks = 0;
           // TODO: ScriptProcessor 已被 Web Audio API 标记为废弃，
           // 后续应迁移至 AudioWorklet（需要单独的 worklet 文件通过 audioWorklet.addModule 加载）。
           // 迁移时需确保 Electron 的 audioWorklet 模块加载路径正确。
-          const processor = audioCtx.createScriptProcessor(bufferSize, payload.options.channels, 1);
           processor.onaudioprocess = (e) => {
             const inputData = e.inputBuffer.getChannelData(0);
-            const pcmData = new Float32Array(inputData).buffer;
-            window.electronAPI?.send('audio_capture_chunk', {
-              audioBuffer: pcmData,
-              sampleRate: payload.options.sampleRate,
-              channels: payload.options.channels,
-              durationMs: payload.options.chunkDurationMs,
-            });
+            let srcOffset = 0;
+            // 将本次回调的样本填入 pending，满 targetSamples 即发送一个完整块
+            while (srcOffset < inputData.length) {
+              const take = Math.min(targetSamples - pendingOffset, inputData.length - srcOffset);
+              pending.set(inputData.subarray(srcOffset, srcOffset + take), pendingOffset);
+              pendingOffset += take;
+              srcOffset += take;
+              if (pendingOffset >= targetSamples) {
+                sentChunks++;
+                if (sentChunks === 1) {
+                  console.info(`[useClassroomCapture] 首个完整音频块已发送 (${targetSamples} 样本 / ${payload.options.chunkDurationMs}ms)，采集管道正常`);
+                }
+                window.electronAPI?.send('audio_capture_chunk', {
+                  audioBuffer: pending.buffer,
+                  sampleRate: payload.options.sampleRate,
+                  channels: payload.options.channels,
+                  durationMs: payload.options.chunkDurationMs,
+                });
+                pending = new Float32Array(targetSamples);
+                pendingOffset = 0;
+              }
+            }
           };
           sourceNode.connect(processor);
           processor.connect(audioCtx.destination);
@@ -381,6 +535,7 @@ export function useClassroomCapture() {
           };
         } catch (err) {
           console.error('[useClassroomCapture] Audio pipeline start failed:', err);
+          toastRef.current({ type: 'error', message: '音频采集启动失败，无法获取系统音频，请检查音频输出设备' });
         }
       })();
     });
@@ -762,6 +917,81 @@ export function useClassroomCapture() {
     toast({ type: 'success', message: `已标记重点 (${new Date(now).toLocaleTimeString()})` });
   }, [status, toast]);
 
+  // ================================================================
+  // 笔记持久化：同课程查询 / 追加 / 新建
+  // 复用 noteStore + createWithLog/updateWithLog，保证 content 加密、
+  // 操作日志与 CRDT 同步与全站一致；Note.content 存储 TipTap JSON。
+  // ================================================================
+
+  /** 查询同课程名的已有笔记（用于“追加到已有笔记”下拉列表） */
+  const fetchCourseNotes = useCallback(async (courseName: string): Promise<CourseNoteItem[]> => {
+    if (!courseName) return [];
+    try {
+      const matched = await noteStore.find((n) => n.title.includes(courseName));
+      return matched
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .slice(0, 10)
+        .map((n) => ({
+          id: n.id,
+          title: n.title,
+          content: n.content,
+          updatedAt: new Date(n.updatedAt).toISOString(),
+        }));
+    } catch (err) {
+      console.warn('[useClassroomCapture] 查询课程笔记失败:', err);
+      return [];
+    }
+  }, []);
+
+  /** 追加内容到已有笔记末尾（带时间分隔标记，合并 TipTap JSON） */
+  const appendToNote = useCallback(async (noteId: string, markdownContent: string, sessionLabel: string) => {
+    const existing = await noteStore.getById(noteId);
+    const mergedContent = appendMarkdownToTipTapJson(
+      existing?.content ?? '',
+      sessionLabel,
+      markdownContent,
+    );
+    await updateWithLog(noteStore, 'notes', noteId, {
+      content: mergedContent,
+      updatedAt: new Date(),
+      wordCount: markdownContent.length,
+    });
+  }, []);
+
+  /** 创建新的课程笔记（Markdown 转 TipTap JSON） */
+  const createCourseNote = useCallback(async (title: string, markdownContent: string) => {
+    const now = new Date();
+    const tipTapContent = markdownToTipTapJson(markdownContent);
+    await createWithLog(noteStore, 'notes', {
+      title,
+      content: tipTapContent,
+      template: 'blank',
+      tags: [courseMeta.courseName ?? '课堂笔记'],
+      createdAt: now,
+      updatedAt: now,
+      wordCount: markdownContent.length,
+      pinned: false,
+    });
+  }, [courseMeta]);
+
+  /** 计算当天同课程的采集序号（用于“第N次采集”标签） */
+  const getSessionSeq = useCallback(async (): Promise<number> => {
+    const name = courseMeta.courseName;
+    if (!name) return 1;
+    const notes = await fetchCourseNotes(name);
+    const today = new Date().toLocaleDateString('zh-CN');
+    const escaped = today.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let maxSeq = 0;
+    for (const note of notes) {
+      // content 为 TipTap JSON，直接在其字符串形式中检索分段标题
+      const matches = (note.content ?? '').matchAll(new RegExp(`${escaped} 第(\\d+)次采集`, 'g'));
+      for (const m of matches) {
+        maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
+      }
+    }
+    return maxSeq + 1;
+  }, [courseMeta.courseName, fetchCourseNotes]);
+
   return {
     // 窗口
     windows, windowsLoading, selectedWindow, setSelectedWindow, refreshWindows,
@@ -773,6 +1003,8 @@ export function useClassroomCapture() {
     isAnalyzing, analysisResult, analysisError, partialCount, transcribedCount,
     // 实时转录
     liveTranscripts,
+    // 音频健康 + VAD
+    audioHealth, vadStats,
     // 课程上下文
     courseMeta, setCourseMeta, aiDetectEnabled, setAiDetectEnabled,
     // 录制
@@ -782,6 +1014,8 @@ export function useClassroomCapture() {
     handleToggleSelect, handleConfigChange,
     handleAnalyze, handleVideoAnalyze, handleDismissAnalysis, handleGenerateCards,
     handleBookmark, bookmarks,
+    // 笔记持久化
+    fetchCourseNotes, appendToNote, createCourseNote, getSessionSeq,
     // 派生
     canStart: !!selectedWindow,
   };

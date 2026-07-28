@@ -36,9 +36,10 @@ app.commandLine.appendSwitch('enable-zero-copy');
 app.commandLine.appendSwitch('enable-features', 'WebGLDraftExtensions,SharedArrayBuffer');
 
 // Windows: ANGLE + Direct3D 11
+// 注意：值必须是 'd3d11'，曾误写为 'gl' 导致 ANGLE 被锁定 OpenGL 后端，
+// 引发 WEBGL_lose_context 缺失、上下文异常及渲染卡顿
 if (process.platform === 'win32') {
-  app.commandLine.appendSwitch('use-angle', 'gl');
-  app.commandLine.appendSwitch('enable-d3d11', '1');
+  app.commandLine.appendSwitch('use-angle', 'd3d11');
 }
 
 // macOS: Metal
@@ -212,11 +213,13 @@ if (!gotTheLock) {
 
       session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
         const extraConnectSrc = buildExtraConnectSrc();
-        // 开发环境：允许 unsafe-inline/unsafe-eval（Vite HMR 需要）
-        // 生产环境：禁止 unsafe-eval，保留 unsafe-inline（Tailwind 运行时需要）
+        // 开发环境：允许 unsafe-inline/unsafe-eval（Vite HMR 需要），worker-src 需要 blob:（Vite 8 HMR 客户端用 blob: 创建 SharedWorker）
+        // 生产环境：禁止 unsafe-eval，保留 unsafe-inline（Tailwind 运行时需要）；
+        //   script-src 必须保留 'wasm-unsafe-eval'，否则 automerge 的 WASM 模块被 CSP 拦截，
+        //   导致顶层 import 失败、React 无法挂载、应用卡在启动画面（仅放开 WASM 编译，不放开 JS eval）
         const csp = isDev
-          ? `default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*; connect-src 'self' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://entropydecrease.com wss://entropydecrease.com${extraConnectSrc}; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:;`
-          : `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://entropydecrease.com wss://entropydecrease.com${extraConnectSrc}; frame-ancestors 'none';`;
+          ? `default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*; worker-src 'self' blob: http://localhost:*; connect-src 'self' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://entropydecrease.com wss://entropydecrease.com${extraConnectSrc}; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:;`
+          : `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://entropydecrease.com wss://entropydecrease.com${extraConnectSrc}; frame-ancestors 'none';`;
 
         callback({
           responseHeaders: {

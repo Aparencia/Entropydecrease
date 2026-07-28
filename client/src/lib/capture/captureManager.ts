@@ -48,6 +48,7 @@ export class CaptureManager {
   private smartSampler: SmartSampler | null = null;
   private vadMarker: VADMarker | null = null;
   private smartStartTime = 0;
+  private vadStatsIntervalId: ReturnType<typeof setInterval> | null = null;
 
   /** @ai-context Path C 全程录制：记录录制开始时间用于计算 duration */
   private fullRecordStartTime = 0;
@@ -136,6 +137,16 @@ export class CaptureManager {
           segment,
         });
       };
+
+      // 每 5s 发射 VAD 统计信息，供 UI 显示音频健康状态
+      this.vadStatsIntervalId = setInterval(() => {
+        if (this.vadMarker && this.sessionId) {
+          captureEventBus.emit('smart:vad_stats', {
+            sessionId: this.sessionId,
+            stats: this.vadMarker.getStats(),
+          });
+        }
+      }, 5000);
 
       captureEventBus.emit('session:started', {
         sessionId: this.sessionId,
@@ -302,6 +313,10 @@ export class CaptureManager {
       this.vadMarker?.reset();
       this.smartSampler = null;
       this.vadMarker = null;
+      if (this.vadStatsIntervalId !== null) {
+        clearInterval(this.vadStatsIntervalId);
+        this.vadStatsIntervalId = null;
+      }
       this.sessionId = null;
       this.sessionConfig = null;
       this.capturePath = 'fine';

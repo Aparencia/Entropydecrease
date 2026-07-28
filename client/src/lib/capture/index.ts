@@ -13,7 +13,7 @@ export { CaptureManager } from './captureManager';
 export { SmartSampler } from './smartSampler';
 export type { SmartSamplerConfig } from './smartSampler';
 export { VADMarker } from './vadMarker';
-export type { VADMarkerConfig } from './vadMarker';
+export type { VADMarkerConfig, VADStats } from './vadMarker';
 export { VideoRecorderRenderer } from './videoRecorderRenderer';
 export { NoteGenerator } from './noteGenerator';
 export type {

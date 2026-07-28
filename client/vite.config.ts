@@ -169,8 +169,9 @@ export default defineConfig({
     },
   },
   // electron-updater 是纯 ESM 模块，仅 Electron 主进程使用，
-  // better-sqlite3 是原生 C++ addon，均排除 Vite 预构建以避免 ERR_REQUIRE_ESM / .node 加载错误
+  // better-sqlite3 是原生 C++ addon，均排除 Vite 预构建以避免 ERR_REQUIRE_ESM / .node 加载错误。
+  // @automerge/automerge 内含 WASM，预构建会丢失 automerge_wasm_bg.wasm 导致启动时模块初始化失败（React 无法挂载）
   optimizeDeps: {
-    exclude: ['electron-updater', 'better-sqlite3'],
+    exclude: ['electron-updater', 'better-sqlite3', '@automerge/automerge'],
   },
 })

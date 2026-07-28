@@ -3,16 +3,17 @@
  * 左侧窄栏：窗口选择 + 路径/模式 + 控制 + 设置
  * 右侧宽区：提取结果 / 智能时间轴 / 录制面板 / 分析预览
  */
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
 import {
   Monitor, Play, Pause, Square, Eye, Mic, Layers,
   Settings2, ChevronDown, ChevronRight, Plus, ListPlus,
   Clock, CheckCircle2, XCircle, Loader2, Clapperboard,
-  Crosshair, Sparkles, Video, Info, Star,
+  Crosshair, Sparkles, Video, Info, Star, AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useClassroomCapture } from '../hooks/useClassroomCapture';
 import { LiveTranscript } from '../components/LiveTranscript';
+import { NoteInsertDialog } from '../components/NoteInsertDialog';
 import { SmartCapturePanel } from '@/features/notes/components/SmartCapturePanel';
 import { AnalysisPreview } from '@/features/notes/components/AnalysisPreview';
 import { VideoRecordPanel } from '@/features/notes/components/VideoRecordPanel';
@@ -178,6 +179,17 @@ export default function ClassroomPage() {
   const capture = useClassroomCapture();
   const statusCfg = STATUS_CONFIG[capture.status];
   const StatusIcon = statusCfg.icon;
+
+  // ── 笔记插入弹窗状态 ──
+  const [showNoteDialog, setShowNoteDialog] = useState(false);
+  const [sessionSeq, setSessionSeq] = useState(1);
+
+  /** 点击“插入笔记”时打开弹窗，并计算当天采集序号 */
+  const handleOpenNoteDialog = useCallback(async () => {
+    const seq = await capture.getSessionSeq();
+    setSessionSeq(seq);
+    setShowNoteDialog(true);
+  }, [capture]);
 
   // M 快捷键：课中标记重点
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -383,6 +395,24 @@ export default function ClassroomPage() {
                 <span className="text-b3 text-emerald-600">已转写 {capture.transcribedCount} 段语音</span>
               </div>
             )}
+            {/* 音频健康警告：区分“从未启动”与“中途中断” */}
+            {capture.status === 'capturing' && !capture.audioHealth.isHealthy && (
+              <div className="mx-4 mt-2 flex items-center gap-2 px-3 py-2 rounded-kb-md bg-semantic-error/5 border border-semantic-error/15">
+                <AlertTriangle className="w-4 h-4 text-semantic-error flex-shrink-0" strokeWidth={1.5} />
+                <span className="text-b3 text-semantic-error">
+                  {capture.audioHealth.chunkCount === 0
+                    ? '未检测到音频输入，音频采集可能未启动，请停止后重新开始'
+                    : '音频输入中断，请检查系统音频设置'}
+                </span>
+              </div>
+            )}
+            {/* VAD 状态（校准中提示） */}
+            {capture.status === 'capturing' && capture.vadStats && !capture.vadStats.calibrated && (
+              <div className="mx-4 mt-2 flex items-center gap-2 px-3 py-2 rounded-kb-md bg-amber-50/50 border border-amber-100/50">
+                <Loader2 className="w-4 h-4 text-amber-500 animate-spin" strokeWidth={1.5} />
+                <span className="text-b3 text-amber-600">正在校准音频阈值 ({capture.vadStats.processedChunks}/10 块)...</span>
+              </div>
+            )}
             {/* 实时转录上屏 */}
             <LiveTranscript
               transcripts={capture.liveTranscripts}
@@ -402,10 +432,27 @@ export default function ClassroomPage() {
             result={capture.analysisResult}
             isAnalyzing={capture.isAnalyzing}
             error={capture.analysisError}
-            onInsert={() => capture.handleDismissAnalysis()}
+            onInsert={() => void handleOpenNoteDialog()}
             onDismiss={capture.handleDismissAnalysis}
             onRetry={capture.analysisResult?.modelUsed === 'local-concat' ? undefined : capture.handleAnalyze}
             onGenerateCards={capture.handleGenerateCards}
+          />
+        )}
+
+        {/* 笔记插入弹窗 */}
+        {showNoteDialog && capture.analysisResult && (
+          <NoteInsertDialog
+            content={capture.analysisResult.content}
+            courseName={capture.courseMeta.courseName ?? ''}
+            sessionSeq={sessionSeq}
+            fetchCourseNotes={capture.fetchCourseNotes}
+            appendToNote={capture.appendToNote}
+            createCourseNote={capture.createCourseNote}
+            onDone={(message) => {
+              setShowNoteDialog(false);
+              capture.handleDismissAnalysis();
+            }}
+            onClose={() => setShowNoteDialog(false)}
           />
         )}
       </div>

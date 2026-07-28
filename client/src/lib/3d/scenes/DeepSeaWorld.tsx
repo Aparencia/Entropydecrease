@@ -2,7 +2,8 @@
  * DeepSeaWorld — 深色模式「深海」3D场景
  * 深海生态系统：生物发光、海底粒子、有机暗流
  */
-import { EffectComposer, Bloom, DepthOfField, Vignette } from '@react-three/postprocessing';
+import { Bloom, DepthOfField, Vignette } from '@react-three/postprocessing';
+import { SafeEffectComposer } from '../core/SafeEffectComposer';
 import { usePerformanceStore } from '../core/PerformanceMonitor';
 
 export function DeepSeaWorld() {
@@ -20,7 +21,7 @@ export function DeepSeaWorld() {
 
       {/* 后处理（低性能时关闭） */}
       {tier !== 'low' && (
-        <EffectComposer>
+        <SafeEffectComposer>
           <Bloom
             intensity={0.5}
             luminanceThreshold={0.6}
@@ -33,7 +34,7 @@ export function DeepSeaWorld() {
             bokehScale={3}
           />
           <Vignette offset={0.3} darkness={0.7} />
-        </EffectComposer>
+        </SafeEffectComposer>
       )}
     </group>
   );

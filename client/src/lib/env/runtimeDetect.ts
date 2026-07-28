@@ -70,18 +70,28 @@ export function isTouchDevice(): boolean {
 
 /**
  * 是否支持 WebGL（用于判断是否可以运行 3D 场景）
+ *
+ * 结果模块级缓存：探测会创建真实 WebGL 上下文，浏览器每页上限约 16 个，
+ * 若每次渲染都重新探测会堆积上下文，触发 "Too many active WebGL contexts"
+ * 并导致主 3D Canvas 被强制 Context Lost。探测完毕后主动释放上下文。
  */
+let webglSupportCache: boolean | null = null;
+
 export function isWebGLSupported(): boolean {
   if (typeof window === 'undefined') return false;
+  if (webglSupportCache !== null) return webglSupportCache;
   try {
     const canvas = document.createElement('canvas');
-    return !!(
-      window.WebGLRenderingContext &&
-      (canvas.getContext('webgl') || canvas.getContext('experimental-webgl'))
-    );
+    const ctx = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    webglSupportCache = !!(window.WebGLRenderingContext && ctx);
+    // 探测完成后立即释放上下文，避免占用浏览器 WebGL 上下文配额
+    if (ctx) {
+      (ctx as WebGLRenderingContext).getExtension('WEBGL_lose_context')?.loseContext();
+    }
   } catch {
-    return false;
+    webglSupportCache = false;
   }
+  return webglSupportCache;
 }
 
 /**

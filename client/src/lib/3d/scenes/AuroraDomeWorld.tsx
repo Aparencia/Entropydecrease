@@ -6,8 +6,9 @@ import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Float } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette, ChromaticAberration } from '@react-three/postprocessing';
+import { Bloom, Vignette, ChromaticAberration } from '@react-three/postprocessing';
 import { BlendFunction } from 'postprocessing';
+import { SafeEffectComposer } from '../core/SafeEffectComposer';
 import { usePerformanceStore } from '../core/PerformanceMonitor';
 import { AuroraModuleEntity } from '../objects/AuroraModuleEntity';
 import { useOrbitalStore } from '../navigation/OrbitalStore';
@@ -341,7 +342,7 @@ export function AuroraDomeWorld() {
 
       {/* 后处理（低性能时关闭） */}
       {tier !== 'low' && (
-        <EffectComposer>
+        <SafeEffectComposer>
           <Bloom
             intensity={0.3}
             luminanceThreshold={0.8}
@@ -355,7 +356,7 @@ export function AuroraDomeWorld() {
             modulationOffset={0}
           />
           <Vignette offset={0.4} darkness={0.3} />
-        </EffectComposer>
+        </SafeEffectComposer>
       )}
     </group>
   );
