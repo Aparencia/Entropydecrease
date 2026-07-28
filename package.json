@@ -2,6 +2,7 @@
   "name": "keban-release-tooling",
   "version": "0.0.0",
   "private": true,
+  "license": "BUSL-1.1",
   "description": "仓库级发布工具链：基于 semantic-release 的 SemVer 版本自动化（不参与业务构建）",
   "scripts": {
     "release": "semantic-release",

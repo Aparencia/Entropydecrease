@@ -18,6 +18,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: ['5'], description: '打开浮出水面（费曼）' },
       { keys: ['6'], description: '打开灵感' },
       { keys: ['7'], description: '打开回声定位（课堂助手）' },
+      { keys: ['0'], description: '打开设置' },
       { keys: ['Esc'], description: '退出/返回当前模块' },
     ],
   },

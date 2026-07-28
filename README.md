@@ -3,8 +3,8 @@
   <p align="center"><strong>你的 AI 智能学习伙伴 — 让每一分钟学习都高效有价值</strong></p>
   <p align="center">
     <img src="https://img.shields.io/badge/status-beta-green.svg" alt="Status" />
-    <img src="https://img.shields.io/badge/version-v0.20.1-blue.svg" alt="Version" />
-    <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License" />
+    <img src="https://img.shields.io/badge/version-v0.22.0-blue.svg" alt="Version" />
+    <img src="https://img.shields.io/badge/license-BUSL--1.1-blue.svg" alt="License" />
   </p>
 </p>
 
@@ -278,4 +278,8 @@ npm run build   # 构建验证（TypeScript）
 
 ## 📄 许可证
 
-本项目基于 [Apache License 2.0](./LICENSE) 开源协议发布。
+本项目基于 [Business Source License 1.1](./LICENSE) 发布。
+
+- 源码公开可见，允许学习、修改和非商业使用
+- 禁止将本项目用于商业竞品目的（需购买商业许可）
+- 每个版本发布 4 年后自动转为 Apache License 2.0 开源协议
