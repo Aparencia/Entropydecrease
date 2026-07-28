@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.22.0](https://github.com/Aparencia/KeBan/compare/v0.21.0...v0.22.0) (2026-07-28)
+
+### ✨ 新功能
+
+* v0.20.1 — 课堂笔记插入、3D 安全合成器与捕获系统优化 ([0267a27](https://github.com/Aparencia/KeBan/commit/0267a2799fcbb15fc3aaf93e1e33aa45f42ba1ec))
+
 ## [0.21.0](https://github.com/Aparencia/KeBan/compare/v0.20.1...v0.21.0) (2026-07-28)
 
 ### ✨ 新功能
