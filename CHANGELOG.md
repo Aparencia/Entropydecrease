@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.23.0](https://github.com/Aparencia/KeBan/compare/v0.22.0...v0.23.0) (2026-07-28)
+
+### ✨ 新功能
+
+* v0.21.0 — 许可证变更为 BUSL 1.1 与快捷方式设置优化 ([601d2a8](https://github.com/Aparencia/KeBan/commit/601d2a80fe62078d66b068f82139aad8302a71de))
+
 ## [0.22.0](https://github.com/Aparencia/KeBan/compare/v0.21.0...v0.22.0) (2026-07-28)
 
 ### ✨ 新功能
