@@ -10,6 +10,8 @@
  * - 悬浮放大 + 发光（scale 1.5，box-shadow glow，200ms）
  * - 呼吸闪烁（随机 opacity 脉动，2-4s 周期）
  * - prefers-reduced-motion 时禁用所有动效
+ *
+ * @ai-context: UI 基础组件（shadcn/radix 封装）：KnowledgeGalaxy。
  */
 import { useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';

@@ -2,7 +2,7 @@ name: PR Quality Check
 
 on:
   pull_request:
-    branches: [master]
+    branches: [main, dev]
 
 jobs:
   # ===========================================================================

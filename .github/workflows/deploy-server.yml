@@ -2,7 +2,7 @@ name: Deploy AI Gateway
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths: ['server/**']
 
 jobs:
@@ -21,7 +21,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /opt/keban
+            cd /opt/entropydecrease
             docker-compose pull
             docker-compose up -d --force-recreate
             sleep 10

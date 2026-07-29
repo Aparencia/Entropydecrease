@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：CornellLayout。
+ */
 import { useEffect, useState, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';

@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：FeynmanStepNavigation。
+ */
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { Button } from '@/components/ui';

@@ -1,5 +1,7 @@
 /**
  * 引导系统状态管理 — 控制交互式引导流程
+ *
+ * @ai-context: 通用组件：useOnboardingStore。
  */
 import { create } from 'zustand';
 

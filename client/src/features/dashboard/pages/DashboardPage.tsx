@@ -5,6 +5,8 @@
  * 1. 英雄区域（Hero）— 全宽，粒子背景 + 核心数据 + fadeInUp入场
  * 2. 学习脉搏（Pulse）— 学习强度曲线 + 交融渐变
  * 3. 知识预览（Preview）— 最近笔记/闪卡/番茄钟的浮动卡片
+ *
+ * @ai-context: dashboard 功能模块页面：DashboardPage。
  */
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';

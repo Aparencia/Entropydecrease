@@ -3,13 +3,19 @@
  * 将融合后的内容自动格式化为 TipTap 节点并插入编辑器
  *
  * 核心能力：
- * 1. FusionSegment → TipTap JSON 节点转换
+ * 1. FusionSegment → TipTap JSON 节点转换（委托 tipTapNodeBuilder）
  * 2. 基于文本指纹的去重（30s 滑动窗口）
  * 3. 自动插入 / 手动暂存双模式
- * 4. 时间戳标记 + 公式提取
+ *
+ * @ai-context: 2026-07 拆分——TipTap 节点构建与 LaTeX 提取在
+ * tipTapNodeBuilder；本类保留去重/暂存/插入状态管理，旧导入路径经
+ * 文末 re-export 全兼容。
+ * @ai-context: 指纹 = 前 50 字符 + '::' + 总长度，非哈希——同前缀同长度
+ * 的不同文本会误判重复（30s 窗口内），为性能取舍的已知局限。
  */
 
 import type { FusionSegment } from './crossFusion';
+import { segmentToTipTapNodes, type TipTapNode } from './tipTapNodeBuilder';
 
 // ================================================================
 // 类型定义
@@ -41,27 +47,6 @@ export interface NoteInsertCommand {
   position: 'end';
 }
 
-/** TipTap JSON 节点（简化类型，避免使用 any） */
-interface TipTapNode {
-  type: string;
-  attrs?: Record<string, unknown>;
-  content?: TipTapNodeContent[];
-  marks?: TipTapMark[];
-}
-
-/** TipTap 节点内容 */
-interface TipTapNodeContent {
-  type: string;
-  text?: string;
-  marks?: TipTapMark[];
-}
-
-/** TipTap 文本标记 */
-interface TipTapMark {
-  type: string;
-  attrs?: Record<string, unknown>;
-}
-
 /** addSegment 返回结果 */
 export interface AddSegmentResult {
   shouldInsert: boolean;
@@ -80,10 +65,6 @@ const DEFAULT_CONFIG: NoteGeneratorConfig = {
 
 /** 文本指纹取前 N 字符 */
 const FINGERPRINT_LENGTH = 50;
-
-/** LaTeX 公式正则：匹配 $...$ 或 $$...$$ 或 \[...\] */
-const LATEX_INLINE_RE = /\$\$?([^$]+?)\$\$?/g;
-const LATEX_BRACKET_RE = /\\\[([\s\S]+?)\\\]/g;
 
 // ================================================================
 // NoteGenerator
@@ -126,52 +107,10 @@ export class NoteGenerator {
   }
 
   /**
-   * 将 FusionSegment 转换为 TipTap JSON 节点数组
-   * 包含时间戳标记、主文本、公式（如有）、分隔线
+   * 将 FusionSegment 转换为 TipTap JSON 节点数组（委托 tipTapNodeBuilder）
    */
   segmentToTipTapNodes(segment: FusionSegment): TipTapNode[] {
-    const nodes: TipTapNode[] = [];
-
-    // 1. 时间戳标记（灰色小字）
-    nodes.push({
-      type: 'paragraph',
-      attrs: { class: 'text-text-tertiary text-c2' },
-      content: [
-        {
-          type: 'text',
-          text: `[${formatTimestamp(segment.startTime)}]`,
-        },
-      ],
-    });
-
-    // 2. 主文本内容
-    if (segment.mergedText) {
-      nodes.push({
-        type: 'paragraph',
-        content: [
-          { type: 'text', text: segment.mergedText },
-        ],
-      });
-    }
-
-    // 3. 公式提取（视觉文本中的 LaTeX）
-    if (segment.hasFormula && segment.visionText) {
-      const formulas = extractFormulas(segment.visionText);
-      for (const formula of formulas) {
-        nodes.push({
-          type: 'codeBlock',
-          attrs: { language: 'latex' },
-          content: [
-            { type: 'text', text: formula },
-          ],
-        });
-      }
-    }
-
-    // 4. 分隔线
-    nodes.push({ type: 'horizontalRule' });
-
-    return nodes;
+    return segmentToTipTapNodes(segment);
   }
 
   /**
@@ -179,7 +118,7 @@ export class NoteGenerator {
    */
   generateInsertCommand(segment: FusionSegment): NoteInsertCommand {
     return {
-      content: this.segmentToTipTapNodes(segment),
+      content: segmentToTipTapNodes(segment),
       position: 'end',
     };
   }
@@ -291,51 +230,8 @@ export class NoteGenerator {
 }
 
 // ================================================================
-// 工具函数
+// 向后兼容 re-export
 // ================================================================
 
-/**
- * 格式化时间戳为 HH:MM:SS
- */
-function formatTimestamp(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  const pad = (n: number) => n.toString().padStart(2, '0');
-
-  if (hours > 0) {
-    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-  }
-  return `${pad(minutes)}:${pad(seconds)}`;
-}
-
-/**
- * 从文本中提取 LaTeX 公式
- * 支持 $...$、$$...$$、\[...\] 三种格式
- */
-function extractFormulas(text: string): string[] {
-  const formulas: string[] = [];
-  const seen = new Set<string>();
-
-  // 匹配 $$...$$ 和 $...$
-  for (const match of text.matchAll(LATEX_INLINE_RE)) {
-    const formula = match[1].trim();
-    if (formula && !seen.has(formula)) {
-      seen.add(formula);
-      formulas.push(formula);
-    }
-  }
-
-  // 匹配 \[...\]
-  for (const match of text.matchAll(LATEX_BRACKET_RE)) {
-    const formula = match[1].trim();
-    if (formula && !seen.has(formula)) {
-      seen.add(formula);
-      formulas.push(formula);
-    }
-  }
-
-  return formulas;
-}
+export { formatTimestamp, extractLatexFormulas } from './tipTapNodeBuilder';
+export type { TipTapNode } from './tipTapNodeBuilder';

@@ -1,5 +1,7 @@
 /**
  * WebGL上下文丢失恢复 — 监听context lost事件并自动重建
+ *
+ * @ai-context: 3D 场景核心（R3F）：ContextRecovery。
  */
 import { useThree } from '@react-three/fiber';
 import { useEffect, useState } from 'react';
@@ -22,8 +24,9 @@ export function ContextRecovery({ onContextLost }: { onContextLost?: () => void 
       setContextLost(false);
       console.log('[WebGL] Context restored');
       // 强制重新编译所有着色器
-      gl.info.programs?.forEach((program: any) => {
-        if (program?.destroy) program.destroy();
+      // three 的 WebGLProgram 未导出精确类型，此处仅需 destroy 能力，用结构类型约束
+      gl.info.programs?.forEach((program: { destroy?: () => void }) => {
+        program?.destroy?.();
       });
     };
 

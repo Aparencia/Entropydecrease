@@ -1,6 +1,8 @@
 /**
  * 头脑风暴面板 — Phase 1
  * 发散性思维卡片网格，支持多选（默认最多 3 个）
+ *
+ * @ai-context: 通用组件：BrainstormPanel。
  */
 
 import { motion } from 'framer-motion';

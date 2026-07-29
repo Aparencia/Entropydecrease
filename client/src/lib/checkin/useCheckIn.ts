@@ -1,3 +1,9 @@
+/**
+ * 学习打卡 Hook
+ *
+ * @ai-context: streakDays 连续性以本地日期字符串（YYYY-MM-DD）判定，
+ * 跨时区/改系统时间会产生断签，为已知接受的限制。
+ */
 import { useState, useEffect, useCallback } from 'react';
 import { db } from '@/lib/storage/database';
 import type { StudyCheckIn } from '@/types/models';

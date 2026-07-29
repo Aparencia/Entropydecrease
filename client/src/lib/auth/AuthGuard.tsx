@@ -1,3 +1,10 @@
+/**
+ * 路由守卫：未登录时重定向到登录页
+ *
+ * @ai-context: 本地优先原则下 Supabase 为可选依赖——占位配置（isPlaceholder）
+ * 时直接放行，保证纯离线用户不被登录页拦住。仅在云端已配置且确无会话时才跳转，
+ * 并携带 from 供登录后回跳。
+ */
 import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { isPlaceholder } from './supabaseClient';

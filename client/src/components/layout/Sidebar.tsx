@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 布局组件：Sidebar。
+ */
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {

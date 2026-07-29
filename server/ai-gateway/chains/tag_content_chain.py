@@ -1,10 +1,12 @@
 """
-课伴 AI 网关 — 内容打标 Chain
+熵减 AI 网关 — 内容打标 Chain
 
 对灵感/笔记内容进行三维度自动打标：
 1. content_nature: concept | question | inspiration | todo
 2. cognitive_depth: shallow | understanding | application
 3. subject: 自动识别学科领域
+
+@ai-context: 内容打标 Chain：为内容生成分类标签。
 """
 
 import json

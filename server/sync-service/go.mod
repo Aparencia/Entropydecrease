@@ -1,4 +1,4 @@
-module keban/sync-service
+module entropydecrease/sync-service
 
 go 1.25
 

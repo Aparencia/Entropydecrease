@@ -1,10 +1,12 @@
 """
-课伴 AI 网关 — ASR 语音转写 Chain
+熵减 AI 网关 — ASR 语音转写 Chain
 
 编排语音转文字的完整流程：
 1. 接收音频 base64 数据（PCM/WAV）
 2. 调用 Provider 的 transcribe 方法进行语音识别
 3. 后处理转写结果（格式化、分段等）
+
+@ai-context: 语音转写 Chain：编排音频转文字流程。
 """
 
 import logging

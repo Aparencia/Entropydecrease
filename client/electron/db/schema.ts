@@ -1,6 +1,8 @@
 /**
  * SQLite Schema DDL — 全部建表语句 + 索引 + 初始化入口
  * 列类型映射: string→TEXT, number→REAL/INTEGER, boolean→INTEGER, Date→TEXT(ISO), Array/Object→TEXT(JSON)
+ *
+ * @ai-context: SQLite 建表 DDL 唯一权威源——新增表需同步 dbIpcHandlers.ALLOWED_TABLES 白名单。
  */
 import type Database from 'better-sqlite3';
 

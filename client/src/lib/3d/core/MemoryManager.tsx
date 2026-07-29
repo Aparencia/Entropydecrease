@@ -1,5 +1,7 @@
 /**
  * 内存管理器 — Electron窗口失焦时暂停渲染，防止内存泄漏
+ *
+ * @ai-context: 3D 场景核心（R3F）：MemoryManager。
  */
 import { useThree, useFrame } from '@react-three/fiber';
 import { useEffect, useRef } from 'react';

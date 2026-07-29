@@ -1,3 +1,6 @@
+/**
+ * @ai-context: UI 基础组件（shadcn/radix 封装）：BrandLogo。
+ */
 import React from 'react';
 import { cn } from '@/lib/utils';
 

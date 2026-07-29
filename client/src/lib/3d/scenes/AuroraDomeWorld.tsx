@@ -1,6 +1,8 @@
 /**
  * AuroraDomeWorld — 浅色模式「晨曦穹顶」3D场景
  * 天文馆般的穹顶世界：太阳系行星轨道 + 星尘粒子 + 云层
+ *
+ * @ai-context: 3D 场景：AuroraDomeWorld。
  */
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';

@@ -1,3 +1,6 @@
+/**
+ * @ai-context: dashboard 功能模块 Hook：useElasticPageTransition。
+ */
 import { useEffect, useLayoutEffect, useState, useRef, useCallback } from 'react';
 import { motion, useMotionValue, useTransform, useSpring } from 'framer-motion';
 import { cn } from '@/lib/utils';

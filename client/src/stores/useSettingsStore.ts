@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 全局设置 Zustand store（persist 持久化）——aiConfig.gatewayUrl 为 AI 网关地址唯一权威来源，persist key 不可改否则用户设置丢失。
+ */
 import { create } from 'zustand';
 import { getAIConfig, saveAIConfig as persistAIConfig, updateAIGatewayUrl } from '@/lib/ai/config';
 import type { AIConfig } from '@/lib/ai/config';

@@ -1,3 +1,6 @@
+/**
+ * @ai-context: notes 功能模块 Hook：useEditActivityTracker。
+ */
 import { useRef, useCallback, useEffect } from 'react';
 
 interface UseEditActivityTrackerOptions {

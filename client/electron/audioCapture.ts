@@ -7,6 +7,8 @@
  * 3. 渲染进程通过 getUserMedia + chromeMediaSource: 'desktop' 获取 MediaStream
  * 4. 渲染进程使用 Web Audio API (AudioContext + ScriptProcessor) 切片
  * 5. PCM 数据块通过 IPC 回传主进程，添加单调时间戳后推送给消费者
+ *
+ * @ai-context: 系统音频捕获：渲染进程 getDisplayMedia 采集、主进程聚合分块。
  */
 
 import { desktopCapturer, DesktopCapturerSource, BrowserWindow } from 'electron';

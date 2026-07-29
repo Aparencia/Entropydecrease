@@ -1,3 +1,6 @@
+/**
+ * @ai-context: UI 基础组件（shadcn/radix 封装）：Toast。
+ */
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import * as RadixToast from '@radix-ui/react-toast';
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';

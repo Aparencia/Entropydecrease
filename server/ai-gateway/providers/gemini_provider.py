@@ -1,5 +1,5 @@
 """
-课伴 AI 网关 — GeminiProvider（Google Gemini 多模态模型）
+熵减 AI 网关 — GeminiProvider（Google Gemini 多模态模型）
 
 使用 google-genai（新版 SDK）调用 Gemini 系列模型。
 - 支持图片内联（base64）、文件上传、视频分析

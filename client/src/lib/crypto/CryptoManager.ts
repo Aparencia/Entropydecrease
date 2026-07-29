@@ -4,6 +4,9 @@
  * - 使用设备级随机密钥（无需用户输入 PIN）
  * - salt 持久化到 localStorage，密钥仅在内存中
  * - 应用重启后需重新初始化
+ *
+ * @ai-context: 警告——keban_crypto_salt / keban_device_key 两个 localStorage 键名绝对不可改名：改名会丢失密钥派生材料，导致用户已加密数据永久无法解密。品牌统一改名任务明确豁免此文件。
+ * @ai-context: encryptField/decryptField 未初始化时优雅降级返回原文，兼容未加密旧数据。
  */
 
 import { deriveKey, encrypt, decrypt, generateSalt } from './encryption';

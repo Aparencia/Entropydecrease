@@ -6,99 +6,22 @@
  * 1. VAD（Voice Activity Detection）驱动视觉抓取
  * 2. ASR/视觉文本去重对齐：基于时间轴对齐，合并重复内容
  * 3. 公式与语音联合校正：语音中的数学术语与视觉公式交叉验证
+ *
+ * @ai-context: 2026-07 拆分——类型/常量在 fusionTypes、文本纯函数在
+ * fusionTextUtils；本类保留 VAD 状态机与时间窗融合编排，旧导入路径
+ * 经文末 re-export 全兼容。
+ * @ai-context: fuseByTimeWindow 融合后会从缓冲区清除窗口内结果（副作用），
+ * 重复调用不会重复产出段落；VAD 状态机（isSpeaking/speechStartTime/
+ * lastSpeechTime）仅由 detectVoiceActivity 驱动。
  */
 
 import { captureEventBus } from './eventBus';
-
-// ================================================================
-// 类型定义
-// ================================================================
-
-/** VAD 配置 */
-export interface VADConfig {
-  /** 能量阈值，超过则视为有语音活动，默认 0.02 */
-  energyThreshold: number;
-  /** 静音持续时长（ms），超过则视为语音结束，默认 1500 */
-  silenceDuration: number;
-  /** 最短语音时长（ms），低于则忽略，默认 500 */
-  minSpeechDuration: number;
-}
-
-/** 融合后的片段 */
-export interface FusionSegment {
-  id: string;
-  /** 起始时间戳 */
-  startTime: number;
-  /** 结束时间戳 */
-  endTime: number;
-  /** 视觉提取文本 */
-  visionText: string;
-  /** ASR 转写文本 */
-  audioText: string;
-  /** 融合后文本 */
-  mergedText: string;
-  /** 综合置信度 */
-  confidence: number;
-  /** 是否包含公式 */
-  hasFormula: boolean;
-  sources: ('vision' | 'audio')[];
-}
-
-/** VAD 触发截图事件 */
-export interface VADTriggerEvent {
-  type: 'vad_triggered';
-  timestamp: number;
-}
-
-// ================================================================
-// 内部类型
-// ================================================================
-
-interface VisionResult {
-  timestamp: number;
-  text: string;
-  confidence: number;
-  structured?: Record<string, unknown>;
-}
-
-interface AudioResult {
-  timestamp: number;
-  text: string;
-  confidence: number;
-  segments?: Array<{ start: number; end: number; text: string }>;
-}
-
-// ================================================================
-// 默认配置
-// ================================================================
-
-const DEFAULT_VAD_CONFIG: VADConfig = {
-  energyThreshold: 0.02,
-  silenceDuration: 1500,
-  minSpeechDuration: 500,
-};
-
-const DEFAULT_FUSION_WINDOW_MS = 5000;
-
-/** Jaccard 相似度阈值，超过则视为重复 */
-const DEDUP_SIMILARITY_THRESHOLD = 0.75;
-
-/** 数学相关术语，用于语音与公式交叉验证 */
-const MATH_TERMS: string[] = [
-  // 代数
-  '二次方程', '一元二次', '方程', '导数', '微分', '积分', '极限',
-  '级数', '矩阵', '行列式', '向量', '概率', '统计',
-  // 几何
-  '三角形', '圆', '椭圆', '双曲线', '抛物线', '直线', '平面', '坐标系',
-  // 三角函数
-  '正弦', '余弦', '正切', '三角函数',
-  // 微积分
-  '导函数', '反导数', '不定积分', '定积分', '偏导数',
-  // LaTeX 关键词
-  'frac', 'sqrt', 'int', 'sum', 'lim', 'sin', 'cos', 'tan',
-  // 运算
-  '求和', '求积', '开根号', '根号', '立方', '平方', '指数', '对数',
-];
+import {
+  DEFAULT_VAD_CONFIG, DEFAULT_FUSION_WINDOW_MS,
+  type VADConfig, type FusionSegment, type VADTriggerEvent,
+  type VisionResult, type AudioResult,
+} from './fusionTypes';
+import { buildFusionSegment } from './fusionSegmentBuilder';
 
 // ================================================================
 // CrossFusionEngine
@@ -250,82 +173,12 @@ export class CrossFusionEngine {
       return [];
     }
 
-    // 构建融合片段
-    const allTimestamps = [
-      ...visionInWindow.map(r => r.timestamp),
-      ...audioInWindow.map(r => r.timestamp),
-    ];
-    const startTime = Math.min(...allTimestamps);
-    const endTime = Math.max(...allTimestamps);
-
-    // 合并视觉文本
-    const visionText = visionInWindow
-      .sort((a, b) => a.timestamp - b.timestamp)
-      .map(r => r.text)
-      .join('\n');
-
-    // 合并音频文本
-    const audioText = audioInWindow
-      .sort((a, b) => a.timestamp - b.timestamp)
-      .map(r => r.text)
-      .join('\n');
-
-    // 文本去重
-    const dedup = this.deduplicateText(visionText, audioText);
-
-    // 公式检测与校正
-    const visionFormulas = this.extractFormulas(visionInWindow);
-    const correctedFormulas = visionFormulas.length > 0
-      ? this.crossValidateFormulas(visionFormulas, audioText)
-      : [];
-
-    const hasFormula = correctedFormulas.length > 0 || visionFormulas.length > 0;
-
-    // 融合文本
-    let mergedText: string;
-    if (dedup.isDuplicate) {
-      // 重复时保留置信度更高的版本
-      const visionConfAvg = visionInWindow.length > 0
-        ? visionInWindow.reduce((s, r) => s + r.confidence, 0) / visionInWindow.length
-        : 0;
-      const audioConfAvg = audioInWindow.length > 0
-        ? audioInWindow.reduce((s, r) => s + r.confidence, 0) / audioInWindow.length
-        : 0;
-      mergedText = visionConfAvg >= audioConfAvg ? visionText : audioText;
-    } else {
-      mergedText = dedup.merged;
-    }
-
-    // 如果有校正后的公式，追加到合并文本
-    if (correctedFormulas.length > 0) {
-      mergedText += '\n\n公式校正结果：\n' + correctedFormulas.join('\n');
-    }
-
-    // 综合置信度
-    const allConfidences = [
-      ...visionInWindow.map(r => r.confidence),
-      ...audioInWindow.map(r => r.confidence),
-    ];
-    const confidence = allConfidences.length > 0
-      ? allConfidences.reduce((s, c) => s + c, 0) / allConfidences.length
-      : 0;
-
-    // 来源
-    const sources: ('vision' | 'audio')[] = [];
-    if (visionInWindow.length > 0) sources.push('vision');
-    if (audioInWindow.length > 0) sources.push('audio');
-
-    const segment: FusionSegment = {
-      id: `cf-${++this.segmentCounter}-${Date.now()}`,
-      startTime,
-      endTime,
-      visionText,
-      audioText,
-      mergedText,
-      confidence: Math.round(confidence * 1000) / 1000,
-      hasFormula,
-      sources,
-    };
+    // 构建融合片段（纯计算委托 fusionSegmentBuilder）
+    const segment = buildFusionSegment(
+      `cf-${++this.segmentCounter}-${Date.now()}`,
+      visionInWindow,
+      audioInWindow,
+    );
 
     this.completedSegments.push(segment);
     this.onSegmentComplete(segment);
@@ -411,111 +264,11 @@ export class CrossFusionEngine {
       }
     }
   }
-
-  /**
-   * 文本去重：ASR 和视觉提取的相似文本合并
-   * Jaccard 相似度 > 0.75 → 视为重复，保留置信度更高的版本
-   */
-  private deduplicateText(
-    visionText: string,
-    audioText: string,
-  ): { merged: string; isDuplicate: boolean } {
-    if (!visionText && !audioText) {
-      return { merged: '', isDuplicate: false };
-    }
-    if (!visionText) {
-      return { merged: audioText, isDuplicate: false };
-    }
-    if (!audioText) {
-      return { merged: visionText, isDuplicate: false };
-    }
-
-    const similarity = jaccardSimilarity(visionText, audioText);
-
-    if (similarity > DEDUP_SIMILARITY_THRESHOLD) {
-      // 高度相似，标记为重复，由调用方决定保留哪个版本
-      return { merged: visionText, isDuplicate: true };
-    }
-
-    // 不重复，合并文本
-    return {
-      merged: `${visionText}\n${audioText}`,
-      isDuplicate: false,
-    };
-  }
-
-  /**
-   * 从视觉结果中提取公式
-   */
-  private extractFormulas(visionResults: VisionResult[]): string[] {
-    const formulas: string[] = [];
-    for (const result of visionResults) {
-      if (result.structured) {
-        const f = result.structured.formulas;
-        if (Array.isArray(f)) {
-          formulas.push(...f.filter((item): item is string => typeof item === 'string'));
-        }
-      }
-    }
-    return formulas;
-  }
-
-  /**
-   * 公式校正：语音中的数学术语与视觉公式交叉验证
-   * 检测语音中的数学术语，与视觉提取的 LaTeX 公式进行匹配验证
-   */
-  private crossValidateFormulas(
-    visionFormulas: string[],
-    audioText: string,
-  ): string[] {
-    if (visionFormulas.length === 0 || !audioText) return [];
-
-    const corrected: string[] = [];
-
-    // 检测语音中提到的数学术语
-    const mentionedTerms = MATH_TERMS.filter(term => audioText.includes(term));
-
-    if (mentionedTerms.length === 0) return [];
-
-    // 对每个视觉公式，检查是否与语音中提到的术语相关
-    for (const formula of visionFormulas) {
-      const formulaLower = formula.toLowerCase();
-      const hasMatch = mentionedTerms.some(term => {
-        // 检查术语是否出现在公式中，或公式关键词是否在术语中
-        return formulaLower.includes(term.toLowerCase())
-          || term.toLowerCase().includes(formulaLower);
-      });
-
-      if (hasMatch) {
-        corrected.push(`[已验证] ${formula}`);
-      } else {
-        corrected.push(formula);
-      }
-    }
-
-    return corrected;
-  }
 }
 
 // ================================================================
-// 工具函数
+// 向后兼容 re-export（旧导入路径不变）
 // ================================================================
 
-/**
- * 计算两段文本的 Jaccard 字符集相似度
- */
-function jaccardSimilarity(a: string, b: string): number {
-  if (!a || !b) return 0;
-  if (a === b) return 1;
-
-  const setA = new Set(a);
-  const setB = new Set(b);
-
-  let intersectionSize = 0;
-  for (const ch of setA) {
-    if (setB.has(ch)) intersectionSize++;
-  }
-
-  const unionSize = setA.size + setB.size - intersectionSize;
-  return unionSize > 0 ? intersectionSize / unionSize : 0;
-}
+export type { VADConfig, FusionSegment, VADTriggerEvent } from './fusionTypes';
+export { jaccardSimilarity } from './fusionTextUtils';

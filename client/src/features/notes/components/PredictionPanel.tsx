@@ -1,6 +1,8 @@
 /**
  * 预测驱动学习面板 — 从笔记工具栏触发，展示 AI 预测题卡片
  * FEAT-023
+ *
+ * @ai-context: 通用组件：PredictionPanel。
  */
 import { useState, useCallback } from 'react';
 import { X, Sparkles, Send, ChevronRight } from 'lucide-react';

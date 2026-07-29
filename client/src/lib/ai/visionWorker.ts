@@ -3,6 +3,8 @@
  *
  * 实现 PipelineWorker 接口，将截图发送给多模态 AI 模型进行内容提取。
  * 通过 IPC ai_vision_extract 调用主进程 handler，转发至 GLM-4V-Flash / Qwen-VL-Plus。
+ *
+ * @ai-context: 视觉提取 Worker：截图→多模态识别管线；内部去重算法与 routeFusion 的 Jaccard 阈值需保持一致。
  */
 
 import type {

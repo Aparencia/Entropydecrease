@@ -1,4 +1,8 @@
+/**
+ * @ai-context: 布局组件：FeedbackPanel。
+ */
 import { useState, useCallback, useEffect } from 'react';
+import { readWithLegacyMigration } from '@/lib/utils/legacyLocalStorage';
 import { createPortal } from 'react-dom';
 import { X, Bug, Lightbulb, Star, Send, CheckCircle, Copy, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -27,7 +31,8 @@ interface FeedbackPanelProps {
 
 // ─── Constants ──────────────────────────────────────────────────
 
-const STORAGE_KEY = 'keban_feedback';
+const STORAGE_KEY = 'ed_feedback';
+const LEGACY_STORAGE_KEY = 'keban_feedback'; // 旧键，2027-01 前兼容
 const MAX_LENGTH = 500;
 const MAX_HISTORY = 20;
 
@@ -53,7 +58,7 @@ const TYPE_LABEL_MAP: Record<FeedbackType, string> = {
 
 function loadFeedback(): FeedbackItem[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = readWithLegacyMigration(STORAGE_KEY, LEGACY_STORAGE_KEY);
     if (!raw) return [];
     return JSON.parse(raw) as FeedbackItem[];
   } catch {

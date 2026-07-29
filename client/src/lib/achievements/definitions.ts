@@ -1,3 +1,11 @@
+/**
+ * 成就定义表
+ *
+ * @ai-context: key 是成就唯一标识，用户已解锁记录按 key 持久化匹配——
+ * key 一经发布绝不可改名或删除（否则用户成就丢失），仅允许追加新成就。
+ * icon 为 lucide-react 图标名，需与前端图标映射表保持一致。
+ */
+
 export interface AchievementDef {
   key: string;
   title: string;

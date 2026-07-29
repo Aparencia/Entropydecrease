@@ -1,6 +1,8 @@
 /**
  * 独立粒子系统组件 — 深海浮力微粒
  * 使用 THREE.Points + AdditiveBlending 实现高性能粒子渲染
+ *
+ * @ai-context: 3D 场景对象：ParticleSystem。
  */
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';

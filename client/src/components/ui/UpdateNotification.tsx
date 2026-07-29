@@ -4,6 +4,8 @@
  * 监听 autoUpdater 的 update-status 事件，
  * 显示更新状态（发现更新 → 下载进度 → 安装确认）。
  * 发现新版本时额外展示 releaseNotes 折叠面板。
+ *
+ * @ai-context: UI 基础组件（shadcn/radix 封装）：UpdateNotification。
  */
 import { useState, useEffect } from 'react';
 import DOMPurify from 'dompurify';

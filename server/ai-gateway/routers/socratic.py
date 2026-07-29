@@ -1,9 +1,11 @@
 """
-课伴 AI 网关 — 苏格拉底式学习路由
+熵减 AI 网关 — 苏格拉底式学习路由
 
 POST /api/v1/ai/socratic/brainstorm  — 头脑风暴（5+发散角度）
 POST /api/v1/ai/socratic/evaluate    — 四维度评估用户回答
 POST /api/v1/ai/socratic/deepening   — 生成个性化深化角度
+
+@ai-context: 苏格拉底式学习路由：头脑风暴式提问 + 四维度评估，多轮对话经 fallback 链。
 """
 
 import logging

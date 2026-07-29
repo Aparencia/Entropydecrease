@@ -1,3 +1,9 @@
+/**
+ * 默认命令集
+ *
+ * @ai-context: 导航类命令的路由路径必须与 routes 配置一致；新增模块时
+ * 需同步更新此处 + Sidebar + 快捷键文档（三处联动，缺一体验割裂）。
+ */
 import { commandRegistry } from './registry';
 import type { Command } from './registry';
 import { useOnboardingStore } from '@/components/onboarding/useOnboardingStore';

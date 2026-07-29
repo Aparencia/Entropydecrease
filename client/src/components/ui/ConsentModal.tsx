@@ -3,6 +3,8 @@
  *
  * 首次启动或版本升级时展示，
  * 用户需滚动到底部才能点击"同意"按钮。
+ *
+ * @ai-context: UI 基础组件（shadcn/radix 封装）：ConsentModal。
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Shield, FileText } from 'lucide-react';

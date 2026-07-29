@@ -2,6 +2,8 @@
  * Ollama 本地推理状态 React Hook
  *
  * 封装 IPC 调用，提供 Ollama 状态检测、配置管理和模型拉取能力。
+ *
+ * @ai-context: 本地 Ollama 服务状态轮询 Hook（IPC），未安装时静默失败不弹错（本地优先零打扰原则）。
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';

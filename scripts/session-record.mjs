@@ -81,7 +81,7 @@ function cmdInit() {
     sessionId,
     startedAt: now(),
     endedAt: null,
-    project: 'KeBan',
+    project: 'Entropydecrease',
     events: [],
   };
   saveSession(session);

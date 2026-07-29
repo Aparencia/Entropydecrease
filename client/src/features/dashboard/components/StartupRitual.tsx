@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：StartupRitual。
+ */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { BookOpen, Target, Wind, Check, LineSquiggle, X, ChevronRight, SkipForward } from 'lucide-react';
 import { cn } from '@/lib/utils';

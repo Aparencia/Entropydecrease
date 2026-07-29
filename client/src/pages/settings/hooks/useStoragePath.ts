@@ -1,4 +1,8 @@
+/**
+ * @ai-context: 设置页 Hook：useStoragePath。
+ */
 import { useState, useEffect } from 'react';
+import { readWithLegacyMigration } from '@/lib/utils/legacyLocalStorage';
 import { isElectron } from '@/lib/utils/platform';
 import { getStorageInfo } from '@/lib/storage';
 import type { StorageInfo } from '@/lib/storage';
@@ -19,7 +23,7 @@ export function useStoragePath() {
   useEffect(() => {
     let mounted = true;
     getStorageInfo().then((info) => { if (mounted && info) setStorageInfo(info); });
-    const savedPath = localStorage.getItem('keban-data-path');
+    const savedPath = readWithLegacyMigration('ed-data-path', 'keban-data-path');
 
     if (window.electronAPI) {
       const timeoutId = setTimeout(() => {

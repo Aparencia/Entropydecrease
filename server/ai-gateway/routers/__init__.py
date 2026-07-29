@@ -1,4 +1,4 @@
-"""课伴 AI 网关 — 路由模块"""
+"""熵减 AI 网关 — 路由模块"""
 
 from routers.summarize import router as summarize_router
 from routers.generate_cards import router as generate_cards_router

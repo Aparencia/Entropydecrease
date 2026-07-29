@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">📚 课伴 KeBan</h1>
+  <h1 align="center">📚 熵减 Entropydecrease</h1>
   <p align="center"><strong>你的 AI 智能学习伙伴 — 让每一分钟学习都高效有价值</strong></p>
   <p align="center">
     <img src="https://img.shields.io/badge/status-beta-green.svg" alt="Status" />
@@ -10,13 +10,13 @@
 
 ---
 
-## 📝 关于课伴
+## 📝 关于熵减
 
-**课伴（KeBan）** 是一款面向学生和终身学习者的高效学习桌面应用。它围绕全场景学习需求，基于费曼学习法、间隔重复等科学方法论，将时间管理、笔记记录、记忆巩固和深度理解整合在一个工具中，帮助你建立科学的学习闭环。
+**熵减（Entropydecrease）** 是一款面向学生和终身学习者的高效学习桌面应用。它围绕全场景学习需求，基于费曼学习法、间隔重复等科学方法论，将时间管理、笔记记录、记忆巩固和深度理解整合在一个工具中，帮助你建立科学的学习闭环。
 
 **解决的核心痛点：**
 
-| 痛点 | 课伴方案 |
+| 痛点 | 熵减方案 |
 |------|----------|
 | 学习时容易走神、效率低 | 沉浸式番茄钟 + 滑动退出 + 后台不中断计时 |
 | 网课内容记不下来 | 网课笔记提取：自动截屏 + AI 视觉识别 + ASR 语音转写 |
@@ -33,7 +33,7 @@
 
 ## ✨ 核心功能
 
-课伴围绕 **"学 → 记 → 练 → 悟 → 思"** 学习闭环，提供六大模块：
+熵减围绕 **"学 → 记 → 练 → 悟 → 思"** 学习闭环，提供六大模块：
 
 ### 🍅 番茄钟 — 时间管理
 
@@ -153,8 +153,8 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/Aparencia/KeBan.git
-cd KeBan/client
+git clone https://github.com/Aparencia/Entropydecrease.git
+cd Entropydecrease/client
 
 # 安装依赖并启动开发服务器
 npm install
@@ -172,14 +172,14 @@ npm run electron:build
 
 构建产物位于 `client/release/` 目录，格式为 Windows NSIS（`.exe`），支持当前用户安装，无需管理员权限。应用内置自动更新功能。
 
-也可以从 [GitHub Releases](https://github.com/Aparencia/KeBan/releases) 页面直接下载最新安装包。
+也可以从 [GitHub Releases](https://github.com/Aparencia/Entropydecrease/releases) 页面直接下载最新安装包。
 
 ---
 
 ## 📁 项目结构
 
 ```
-KeBan/
+Entropydecrease/
 ├── client/              # 前端客户端（React + Electron 桌面应用）
 │   ├── src/features/    #    业务功能模块（番茄钟、笔记、闪卡、费曼、灵感、仪表盘）
 │   ├── src/lib/         #    核心库（AI、存储、同步、加密、网络、捕获、音效等）

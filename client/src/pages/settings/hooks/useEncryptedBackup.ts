@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 设置页 Hook：useEncryptedBackup。
+ */
 import { useState, useRef } from 'react';
 import { exportAllData, downloadExport, importData, readFileAsText } from '@/lib/storage';
 import { encryptBackup, decryptBackup, type EncryptedBackup } from '@/lib/crypto/backupCrypto';
@@ -25,7 +28,7 @@ export function useEncryptedBackup() {
         const blob = new Blob([JSON.stringify(encrypted)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = `keban-backup-encrypted-${Date.now()}.json`; a.click();
+        a.href = url; a.download = `entropy-decrease-backup-encrypted-${Date.now()}.json`; a.click();
         URL.revokeObjectURL(url);
         toast({ type: 'success', message: '加密备份已下载' });
       } else {

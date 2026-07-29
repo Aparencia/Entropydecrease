@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：types。
+ */
 import type {
   WindowInfo,
   ExtractedSegment,

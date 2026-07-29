@@ -1,3 +1,9 @@
+/**
+ * Supabase 客户端单例
+ *
+ * @ai-context: URL/ANON_KEY 由 VITE_SUPABASE_* 环境变量注入（anon key 为
+ * 前端公开密钥，非泄密）。缺失时应用以离线模式运行，不得抛错阻塞启动。
+ */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.co';

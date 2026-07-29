@@ -3,6 +3,8 @@
  *
  * 为 import.meta.env 提供精确的类型提示，
  * 仅声明项目实际使用的 VITE_ 前缀变量。
+ *
+ * @ai-context: Vite 环境变量与 Electron IPC 返回类型的唯一权威声明——所有 IPC 接口返回类型必须在此声明，禁止调用点 as unknown/any 断言（项目硬性规范）。
  */
 
 /// <reference types="vite/client" />

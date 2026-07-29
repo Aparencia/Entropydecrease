@@ -1,5 +1,5 @@
 """
-课伴 AI 网关 — GLMProvider（智谱 AI / GLM）
+熵减 AI 网关 — GLMProvider（智谱 AI / GLM）
 
 通过 OpenAI 兼容 SDK 调用智谱 GLM API。
 - base_url: https://open.bigmodel.cn/api/paas/v4

@@ -1,5 +1,7 @@
 /**
  * FAQTab — 常见问题折叠面板
+ *
+ * @ai-context: 通用组件：FAQTab。
  */
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';

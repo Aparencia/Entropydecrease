@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 轻量虚拟列表 Hook（无第三方依赖），大列表渲染性能优化。
+ */
 import type { RefObject } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 

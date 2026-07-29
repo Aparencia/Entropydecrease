@@ -6,16 +6,18 @@
  */
 
 import { useMemo, useState, useCallback, useEffect } from 'react';
+import { readWithLegacyMigration } from '@/lib/utils/legacyLocalStorage';
 import { useInspirationStore } from '../store/inspirationStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useBatchSort } from './useBatchSort';
 import { countPendingInspirations, shouldShowReminder } from '../lib/sortPendingCalc';
 
-const DISMISSED_KEY = 'keban.lastDismissedPendingCount';
+const DISMISSED_KEY = 'ed.lastDismissedPendingCount';
+const LEGACY_DISMISSED_KEY = 'keban.lastDismissedPendingCount'; // 旧键，2027-01 前兼容
 
 function readLastDismissedCount(): number {
   try {
-    const raw = localStorage.getItem(DISMISSED_KEY);
+    const raw = readWithLegacyMigration(DISMISSED_KEY, LEGACY_DISMISSED_KEY);
     return raw ? parseInt(raw, 10) || 0 : 0;
   } catch {
     return 0;

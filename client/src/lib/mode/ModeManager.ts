@@ -1,4 +1,10 @@
 /**
+ * 应用模式管理器（local/hybrid/full）
+ *
+ * @ai-context: 模式决定 AI 与云存储开关组合，localStorage 键已迁移
+ * keban_app_mode → ed_app_mode（构造函数内一次性迁移，2027-01 前保留兼容）。
+ */
+/**
  * 应用运行模式管理器
  *
  * local:  纯本地模式（无网络、无账户）— 所有数据仅存本地，不依赖任何网络服务
@@ -15,7 +21,8 @@ export interface ModeConfig {
   cloudStorageEnabled: boolean;
 }
 
-const STORAGE_KEY = 'keban_app_mode';
+const STORAGE_KEY = 'ed_app_mode';
+const LEGACY_STORAGE_KEY = 'keban_app_mode'; // 品牌重构旧键，一次性迁移后移除
 const VALID_MODES: ReadonlySet<AppMode> = new Set(['local', 'hybrid', 'full']);
 
 type ModeListener = (mode: AppMode, config: ModeConfig) => void;
@@ -35,7 +42,16 @@ class ModeManager {
   constructor() {
     // 从 localStorage 恢复上次的模式
     try {
-      const saved = localStorage.getItem(STORAGE_KEY) as AppMode | null;
+      let saved = localStorage.getItem(STORAGE_KEY) as AppMode | null;
+      if (saved === null) {
+        // 一次性旧键迁移（复制到新键并删除旧键）
+        const legacy = localStorage.getItem(LEGACY_STORAGE_KEY) as AppMode | null;
+        if (legacy !== null) {
+          localStorage.setItem(STORAGE_KEY, legacy);
+          localStorage.removeItem(LEGACY_STORAGE_KEY);
+          saved = legacy;
+        }
+      }
       if (saved && VALID_MODES.has(saved)) {
         this.currentMode = saved;
       }

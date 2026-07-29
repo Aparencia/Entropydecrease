@@ -1,3 +1,6 @@
+/**
+ * @ai-context: pomodoro 功能模块：adaptiveEngine。
+ */
 import type { DurationHistoryData, DurationResult } from '@/lib/ai/types';
 
 /**

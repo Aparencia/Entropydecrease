@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：DeepSeaDashboardLayout。
+ */
 import { useState, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';

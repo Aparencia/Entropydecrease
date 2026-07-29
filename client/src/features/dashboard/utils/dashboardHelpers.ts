@@ -1,3 +1,6 @@
+/**
+ * @ai-context: dashboard 功能模块：dashboardHelpers。
+ */
 /* ── Dashboard 辅助工具函数与常量 ── */
 
 export const accentText: Record<string, string> = {

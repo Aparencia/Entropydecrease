@@ -35,9 +35,9 @@ Thumbs.db
 .env.local
 .env.*.local
 .env.production
+.env.test
 
-# Documentation (local only, not version controlled)
-docs/
+# Brainstorm scratch (personal notes)
 brainstorm*.md
 ui_brainstorm.md
 

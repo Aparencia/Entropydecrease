@@ -1,6 +1,8 @@
 /**
  * 深化区 — Phase 3
  * 5 个纵深角度卡片，引导用户从不同维度深入理解概念
+ *
+ * @ai-context: 通用组件：DeepeningZone。
  */
 
 import { useState } from 'react';

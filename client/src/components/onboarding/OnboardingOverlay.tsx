@@ -1,5 +1,7 @@
 /**
  * OnboardingOverlay — 主引导覆盖层，管理7个步骤的流转
+ *
+ * @ai-context: 通用组件：OnboardingOverlay。
  */
 import { useEffect, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';

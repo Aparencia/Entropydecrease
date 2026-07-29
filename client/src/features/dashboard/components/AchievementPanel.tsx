@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：AchievementPanel。
+ */
 import { useEffect, useState } from 'react';
 import {
   Timer, Layers, Lightbulb, FileText, Flame, Trophy, Medal,

@@ -1,3 +1,8 @@
+/**
+ * 右键菜单 Hook
+ *
+ * @ai-context: 菜单定位基于视口坐标并做边缘翻转，仅供 ContextMenu 组件族使用。
+ */
 import { useState, useCallback, useEffect } from 'react';
 
 /** useContextMenu 返回值 */

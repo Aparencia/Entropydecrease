@@ -5,6 +5,8 @@
  * 与 aiServiceFallback.ts 互补：
  * - aiServiceFallback 面向 AI 服务调用层的错误降级
  * - aiFallbackManager 面向 UI 层的可用性判断与缓存管理
+ *
+ * @ai-context: 云端网关→本地 Ollama 的降级链管理器，降级决策依据网关健康态与本地可用性。
  */
 
 // === 类型定义 ===

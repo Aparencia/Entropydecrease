@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 路由配置：index。
+ */
 import { lazy, Suspense } from 'react';
 import { createHashRouter } from 'react-router-dom';
 import type { RouteObject } from 'react-router-dom';

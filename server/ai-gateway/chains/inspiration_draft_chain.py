@@ -1,10 +1,12 @@
 """
-课伴 AI 网关 — AI 草稿生成 Chain（v1.1.0）
+熵减 AI 网关 — AI 草稿生成 Chain（v1.1.0）
 
 将灵感/零散想法转化为结构化学习材料草稿：
 - flashcard：闪卡草稿（复用 CardGenChain 的输出格式）
 - feynman：费曼讲解草稿（复用 FeynmanQuestionChain 的输出格式）
 - note：笔记草稿
+
+@ai-context: 灵感草稿 Chain（v1.1.0）：将零散灵感扩写为结构化草稿。
 """
 
 import json

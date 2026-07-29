@@ -3,12 +3,6 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
-## [0.24.0](https://github.com/Aparencia/KeBan/compare/v0.23.0...v0.24.0) (2026-07-29)
-
-### ✨ 新功能
-
-* v0.22.0 — 音效系统重构、UI 组件增强与 AI 余额查询 ([b8c20e2](https://github.com/Aparencia/KeBan/commit/b8c20e2497cfed8c0e690998bf27a078746ab401))
-
 ## [0.23.0](https://github.com/Aparencia/KeBan/compare/v0.22.0...v0.23.0) (2026-07-28)
 
 ### ✨ 新功能

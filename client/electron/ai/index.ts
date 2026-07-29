@@ -3,6 +3,8 @@
  *
  * 汇总所有 AI 功能 handler，提供 registerAIHandlers() 函数
  * 一次性注册全部 AI IPC handler。
+ *
+ * @ai-context: AI 模块注册引擎：收集全部 AIFeatureDef 并注册 IPC；新增 AI 功能在此登记 features 数组。
  */
 
 import { logger } from '../logger.js';

@@ -3,6 +3,8 @@
  *
  * 处理 ai_tag_content 和 ai_sort_inspiration IPC 请求，
  * 调用 AI 网关进行内容分类和灵感归档。
+ *
+ * @ai-context: 内容打标 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
 import { safeHandle } from '../../ipcUtils.js';

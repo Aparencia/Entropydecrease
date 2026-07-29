@@ -1,3 +1,6 @@
+// @ai-context
+// 支持页：赞赏码与非金钱支持方式。Support page: sponsor QR and non-monetary support options.
+// Why: 赞赏明示不与功能挂钩，规避应用内购合规风险。
 "use client";
 
 import { motion } from "framer-motion";
@@ -35,7 +38,7 @@ export default function SupportPage() {
             请作者喝杯蜜雪
           </h1>
           <p className="text-kb-text2 leading-relaxed max-w-md mx-auto">
-            课伴由一位独立开发者维护。
+            熵减由一位独立开发者维护。
             <br />
             你的每一份赞赏，都会变成服务器的电费与深夜的咖啡，
             <br />
@@ -64,7 +67,7 @@ export default function SupportPage() {
             <p className="text-xs text-kb-text3 leading-relaxed">
               赞赏是纯粹的心意支持，不与任何功能挂钩。
               <br />
-              无论是否赞赏，课伴的本地功能永远免费。
+              无论是否赞赏，熵减的本地功能永远免费。
             </p>
           </div>
         </SectionReveal>
@@ -75,7 +78,7 @@ export default function SupportPage() {
             <p className="text-sm text-kb-text3 mb-4">不方便赞赏？这些方式同样珍贵：</p>
             <div className="flex flex-wrap items-center justify-center gap-3 text-sm">
               <a
-                href="https://github.com/Aparencia/KeBan"
+                href="https://github.com/Aparencia/Entropydecrease"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-4 py-2 rounded-full text-kb-text2 hover:text-kb-text transition-colors duration-300"
@@ -90,7 +93,7 @@ export default function SupportPage() {
                 📣 推荐给身边的同学
               </span>
               <a
-                href="https://github.com/Aparencia/KeBan/issues"
+                href="https://github.com/Aparencia/Entropydecrease/issues"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-4 py-2 rounded-full text-kb-text2 hover:text-kb-text transition-colors duration-300"

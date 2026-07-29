@@ -1,3 +1,6 @@
+// @ai-context
+// 下载页：应用窗口 Mockup、下载入口、版本轨迹与开源信息。Download page: app mockup, download CTA, changelog.
+// Why: Mockup 为纯 CSS 风格化示意而非截图，避免版本迭代后截图过期。
 "use client";
 
 import { motion } from "framer-motion";
@@ -66,7 +69,7 @@ function AppMockup() {
         <span className="w-3 h-3 rounded-full" style={{ background: "#F87171" }} />
         <span className="w-3 h-3 rounded-full" style={{ background: "#FBBF24" }} />
         <span className="w-3 h-3 rounded-full" style={{ background: "#4ADE80" }} />
-        <span className="ml-3 text-xs text-kb-text3">课伴 · 熵减 — 深潜中</span>
+        <span className="ml-3 text-xs text-kb-text3">熵减 — 深潜中</span>
       </div>
 
       {/* 模拟界面内容 */}
@@ -198,13 +201,13 @@ export default function DownloadPage() {
                 熵
               </span>
               <div className="text-left">
-                <h2 className="font-serif text-xl font-bold text-kb-text">课伴 KeBan</h2>
+                <h2 className="font-serif text-xl font-bold text-kb-text">熵减 Entropydecrease</h2>
                 <p className="text-xs text-kb-text3">v0.15.0 正式版 · 2026-07</p>
               </div>
             </div>
 
             <a
-              href="https://github.com/Aparencia/KeBan/releases/latest"
+              href="https://github.com/Aparencia/Entropydecrease/releases/latest"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-block px-12 py-4 rounded-2xl text-white font-medium text-lg transition-all duration-500 hover:scale-[1.04] active:scale-[0.97] mb-6"
@@ -288,12 +291,12 @@ export default function DownloadPage() {
             开源共建
           </h2>
           <p className="text-kb-text2 text-sm max-w-md mx-auto mb-8 leading-relaxed">
-            课伴是一个开源项目。我们相信透明与协作能让这片认知深海更加丰饶。
+            熵减是一个开源项目。我们相信透明与协作能让这片认知深海更加丰饶。
             欢迎提交 Issue 与 Pull Request。
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <a
-              href="https://github.com/Aparencia/KeBan"
+              href="https://github.com/Aparencia/Entropydecrease"
               target="_blank"
               rel="noopener noreferrer"
               className="px-7 py-3 rounded-2xl font-medium text-kb-text transition-all duration-500 hover:scale-[1.03] glass-panel"
@@ -301,7 +304,7 @@ export default function DownloadPage() {
               GitHub 仓库 ↗
             </a>
             <a
-              href="https://github.com/Aparencia/KeBan/releases"
+              href="https://github.com/Aparencia/Entropydecrease/releases"
               target="_blank"
               rel="noopener noreferrer"
               className="px-7 py-3 rounded-2xl font-medium text-kb-text2 transition-all duration-500 hover:text-kb-text hover:scale-[1.02]"

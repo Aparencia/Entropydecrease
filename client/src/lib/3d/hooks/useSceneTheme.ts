@@ -1,5 +1,7 @@
 /**
  * 监听主题变化，返回当前应使用的3D场景类型
+ *
+ * @ai-context: 双世界主题（深海/穹顶）场景切换 Hook。
  */
 import { useState, useEffect } from 'react';
 

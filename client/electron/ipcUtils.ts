@@ -81,7 +81,7 @@ export function safeHandle<T extends any[]>(
 
   // 包装 handler 以执行 sender 验证
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const wrappedHandler = async (event: Electron.IpcMainInvokeEvent, ...args: any[]): Promise<unknown> => {
+  const wrappedHandler = async (event: Electron.IpcMainInvokeEvent, ...args: unknown[]): Promise<unknown> => {
     // sender 验证：仅允许主窗口 webContents 调用
     if (mainWindowWebContentsId !== null && event.sender.id !== mainWindowWebContentsId) {
       logger.warn(
@@ -94,7 +94,7 @@ export function safeHandle<T extends any[]>(
     return handler(event, ...args as T);
   };
 
-  ipcMain.handle(channel, wrappedHandler as any);
+  ipcMain.handle(channel, wrappedHandler as Parameters<typeof ipcMain.handle>[1]);
 }
 
 // ================================================================

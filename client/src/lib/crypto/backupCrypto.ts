@@ -11,6 +11,8 @@
  * 输出格式：JSON 字符串 { salt, iv, ciphertext }，均为 base64 编码
  *
  * 纯函数设计，无副作用，便于单元测试
+ *
+ * @ai-context: 310,000 迭代参数已固化进历史备份文件的派生逻辑，修改会使旧备份无法用原密码解密。备份文件自包含（salt/iv 随文件存储），与 CryptoManager 的设备密钥体系相互独立。
  */
 
 const PBKDF2_ITERATIONS = 310_000;

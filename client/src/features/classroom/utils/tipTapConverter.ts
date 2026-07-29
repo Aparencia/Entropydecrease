@@ -4,6 +4,8 @@
  * 课堂助手生成的分析结果是 Markdown 文本，而 Note.content 字段存储的是
  * TipTap JSON（NoteEditPage 仅识别 type === 'doc' 的 JSON，否则编辑器为空）。
  * 此模块负责将 Markdown 转为合法的 TipTap JSON 文档，保证笔记可正常打开编辑。
+ *
+ * @ai-context: classroom 功能模块：tipTapConverter。
  */
 
 interface TipTapNode {

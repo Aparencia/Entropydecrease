@@ -1,5 +1,5 @@
 """
-课伴 AI 网关 — Chain 模块
+熵减 AI 网关 — Chain 模块
 
 Chain（链）是业务逻辑的核心编排层，负责：
 - 加载和组装 Prompt 模板

@@ -1,137 +1,3 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useSettingsStore } from '@/stores/useSettingsStore';
-
-/** AI 网关健康状态 */
-export type GatewayHealthStatus = 'online' | 'offline' | 'checking' | 'degraded';
-
-/** 健康检测错误类型 */
-export type HealthErrorType = 'timeout' | 'connection_refused' | 'cors_error' | 'server_error' | 'network_disconnected' | 'dns_error' | 'unknown';
-
-/** Provider 状态信息 */
-export interface ProviderStatus {
-  status: string;
-  latency_ms: number;
-  error?: string;
-}
-
-/** 健康检测结果 */
-interface HealthResult {
-  status: GatewayHealthStatus;
-  /** 响应延迟（毫秒），仅在 online/degraded 时有值 */
-  latency?: number;
-  /** 网关版本号，仅在 online/degraded 时有值 */
-  version?: string;
-  /** 错误类型，仅在 offline 时可能有值 */
-  errorType?: HealthErrorType;
-  /** 各 Provider 状态详情 */
-  providers?: Record<string, ProviderStatus>;
-  /** 健康 Provider 数量 */
-  healthyCount?: number;
-  /** Provider 总数 */
-  totalCount?: number;
-}
-
-/** 检测超时时间（毫秒）—— quick 端点轻量检测，2s 足够 */
-const HEALTH_CHECK_TIMEOUT = 2000;
-
-/** 完整健康检测超时（毫秒）—— /health 端点需要 ping 各 Provider，预留更长时间 */
-const FULL_HEALTH_CHECK_TIMEOUT = 8000;
-
-/** 自动检测间隔（毫秒） */
-const AUTO_CHECK_INTERVAL = 30_000;
-
-// ── 模块级缓存（跨组件共享） ──
-let cachedResult: HealthResult | null = null;
-let cachedTimestamp = 0;
-let requestId = 0; // 竞态条件保护：仅最新请求写入缓存
-const CACHE_TTL_ONLINE = 2 * 60_000;    // 在线时 2 分钟内视为有效
-const CACHE_TTL_DEGRADED = 60_000;      // 降级时 1 分钟内视为有效
-const CACHE_TTL_OFFLINE = 5 * 60_000;   // 离线时 5 分钟内视为有效，避免反复 fetch 产生控制台噪音
-
-function getCacheTTL(): number {
-  if (cachedResult?.status === 'online') return CACHE_TTL_ONLINE;
-  if (cachedResult?.status === 'degraded') return CACHE_TTL_DEGRADED;
-  return CACHE_TTL_OFFLINE;
-}
-
-/** 获取当前缓存的网关健康状态（同步，无副作用） */
-export function getCachedGatewayStatus(): GatewayHealthStatus | null {
-  if (cachedResult && Date.now() - cachedTimestamp < getCacheTTL()) {
-    return cachedResult.status;
-  }
-  return null;
-}
-
-/** 供外部调用的预检测函数（不依赖 React 生命周期） */
-export function precheckGatewayHealth(): void {
-  if (cachedResult && Date.now() - cachedTimestamp < getCacheTTL()) return;
-
-  // 网络断开时直接返回，不发起无意义的请求
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    cachedResult = { status: 'offline', errorType: 'network_disconnected' };
-    cachedTimestamp = Date.now();
-    return;
-  }
-
-  const url = useSettingsStore.getState().aiConfig.gatewayUrl?.trim();
-  if (!url) {
-    cachedResult = { status: 'offline' };
-    cachedTimestamp = Date.now();
-    return;
-  }
-
-  const currentRequestId = ++requestId;
-  const start = performance.now();
-  fetch(`${url}/health/quick`, {
-    method: 'GET',
-    signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT),
-  })
-    .then(async (res) => {
-      if (currentRequestId !== requestId) return;
-      const latency = Math.round(performance.now() - start);
-      if (res.ok) {
-        let version: string | undefined;
-        let serverOk = false;
-        try {
-          const data = await res.json();
-          version = data.version;
-          // 验证服务端返回的 status 字段，而不仅仅依赖 HTTP 状态码
-          serverOk = data.status === 'ok' || data.status === 'healthy';
-        } catch {
-          // 无法解析 JSON 但 HTTP 200，仍视为在线
-          serverOk = true;
-        }
-        if (currentRequestId !== requestId) return;
-        cachedResult = serverOk
-          ? { status: 'online', latency, version }
-          : { status: 'offline', errorType: 'server_error' };
-      } else {
-        cachedResult = { status: 'offline', errorType: 'server_error' };
-      }
-      cachedTimestamp = Date.now();
-    })
-    .catch((err) => {
-      if (currentRequestId !== requestId) return;
-      let errorType: HealthErrorType = 'unknown';
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        errorType = 'timeout';
-      } else if (err instanceof TypeError) {
-        const msg = err.message.toLowerCase();
-        if (msg.includes('failed to fetch') || msg.includes('networkerror')) {
-          errorType = navigator.onLine ? 'connection_refused' : 'network_disconnected';
-        } else if (msg.includes('cors') || msg.includes('cross-origin')) {
-          errorType = 'cors_error';
-        }
-        // DNS 解析失败
-        if (msg.includes('dns') || msg.includes('getaddrinfo') || msg.includes('name or service not known')) {
-          errorType = 'dns_error';
-        }
-      }
-      cachedResult = { status: 'offline', errorType };
-      cachedTimestamp = Date.now();
-    });
-}
-
 /**
  * AI 网关健康状态检测 hook
  *
@@ -139,16 +5,27 @@ export function precheckGatewayHealth(): void {
  * - 进入设置页面时自动检测一次
  * - 每 30 秒自动轮询（仅在页面可见时）
  * - 提供手动触发检测的方法
+ *
+ * @ai-context: 2026-07 拆分——缓存/预检/错误分类在 gatewayHealthCache
+ * （非 React 层）；本 Hook 负责完整 /health 检测（8s 超时、AbortSignal.any
+ * 组合取消）与轮询/online-offline 事件编排。挂载时有有效缓存则跳过首检。
+ * @ai-context: checkHealth 内 AbortError 返回缓存兜底而非置 offline
+ * （手动 recheck 取消旧请求时避免状态闪烁），是刻意行为。
  */
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSettingsStore } from '@/stores/useSettingsStore';
+import {
+  readHealthCache, writeHealthCache, classifyHealthError,
+  FULL_HEALTH_CHECK_TIMEOUT, AUTO_CHECK_INTERVAL,
+  type HealthResult, type HealthErrorType,
+} from './gatewayHealthCache';
+
 export function useAIGatewayHealth() {
   const gatewayUrl = useSettingsStore((s) => s.aiConfig.gatewayUrl);
 
   // 从缓存初始化：有有效缓存则直接使用，否则为 checking
   const [result, setResult] = useState<HealthResult>(() => {
-    if (cachedResult && Date.now() - cachedTimestamp < getCacheTTL()) {
-      return cachedResult;
-    }
-    return { status: 'checking' };
+    return readHealthCache() ?? { status: 'checking' };
   });
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef = useRef(false);
@@ -190,34 +67,22 @@ export function useAIGatewayHealth() {
         try {
           const data = await response.json();
 
-          if (data.status === 'healthy') {
-            const online: HealthResult = {
-              status: 'online',
+          if (data.status === 'healthy' || data.status === 'degraded') {
+            const ok: HealthResult = {
+              status: data.status === 'healthy' ? 'online' : 'degraded',
               latency,
               version: data.version,
               providers: data.providers,
               healthyCount: data.healthy_count,
               totalCount: data.total_count,
             };
-            if (mountedRef.current) setResult(online);
-            return online;
-          } else if (data.status === 'degraded') {
-            const degraded: HealthResult = {
-              status: 'degraded',
-              latency,
-              version: data.version,
-              providers: data.providers,
-              healthyCount: data.healthy_count,
-              totalCount: data.total_count,
-            };
-            if (mountedRef.current) setResult(degraded);
-            return degraded;
-          } else {
-            // 未知状态，视为离线
-            const offline: HealthResult = { status: 'offline', errorType: 'server_error' };
-            if (mountedRef.current) setResult(offline);
-            return offline;
+            if (mountedRef.current) setResult(ok);
+            return ok;
           }
+          // 未知状态，视为离线
+          const offline: HealthResult = { status: 'offline', errorType: 'server_error' };
+          if (mountedRef.current) setResult(offline);
+          return offline;
         } catch {
           // 无法解析 JSON 但 HTTP 200，仍视为在线（降级处理）
           const online: HealthResult = { status: 'online', latency };
@@ -231,24 +96,10 @@ export function useAIGatewayHealth() {
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        return cachedResult ?? { status: 'offline', errorType: 'timeout' };
+        return readHealthCache() ?? { status: 'offline', errorType: 'timeout' };
       }
 
-      let errorType: HealthErrorType = 'unknown';
-      if (err instanceof TypeError) {
-        const msg = err.message.toLowerCase();
-        if (msg.includes('failed to fetch') || msg.includes('networkerror')) {
-          // 在线状态下 Failed to fetch 大概率是 connection refused 或 CORS
-          errorType = navigator.onLine ? 'connection_refused' : 'network_disconnected';
-        } else if (msg.includes('cors') || msg.includes('cross-origin')) {
-          errorType = 'cors_error';
-        }
-        // DNS 解析失败
-        if (msg.includes('dns') || msg.includes('getaddrinfo') || msg.includes('name or service not known')) {
-          errorType = 'dns_error';
-        }
-      }
-
+      const errorType: HealthErrorType = classifyHealthError(err);
       const offline: HealthResult = { status: 'offline', errorType };
       if (mountedRef.current) setResult(offline);
       return offline;
@@ -264,8 +115,7 @@ export function useAIGatewayHealth() {
   useEffect(() => {
     mountedRef.current = true;
 
-    const hasValidCache = cachedResult && Date.now() - cachedTimestamp < getCacheTTL();
-    if (!hasValidCache) {
+    if (!readHealthCache()) {
       void checkHealth();
     }
 
@@ -281,8 +131,7 @@ export function useAIGatewayHealth() {
     // 网络断开时立即更新状态
     const handleOffline = () => {
       const offline: HealthResult = { status: 'offline', errorType: 'network_disconnected' };
-      cachedResult = offline;
-      cachedTimestamp = Date.now();
+      writeHealthCache(offline);
       if (mountedRef.current) setResult(offline);
     };
 
@@ -325,3 +174,12 @@ export function useAIGatewayHealth() {
     recheck,
   };
 }
+
+// ─── 向后兼容 re-export（旧导入路径不变） ──────────────────────────────────
+
+export {
+  getCachedGatewayStatus, precheckGatewayHealth,
+} from './gatewayHealthCache';
+export type {
+  GatewayHealthStatus, HealthErrorType, ProviderStatus,
+} from './gatewayHealthCache';

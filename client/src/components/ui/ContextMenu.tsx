@@ -1,3 +1,6 @@
+/**
+ * @ai-context: UI 基础组件（shadcn/radix 封装）：ContextMenu。
+ */
 import React, { useCallback } from 'react';
 import * as RadixContextMenu from '@radix-ui/react-context-menu';
 import { motion } from 'framer-motion';

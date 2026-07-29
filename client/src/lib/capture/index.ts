@@ -1,6 +1,8 @@
 /**
  * 采集模块入口
  * 混合方案的事件驱动异步流水线架构核心
+ *
+ * @ai-context: 采集模块统一出口 barrel（含少量常量），保持旧导入路径兼容。
  */
 
 export { EventBus, captureEventBus } from './eventBus';

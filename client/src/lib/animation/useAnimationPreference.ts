@@ -10,7 +10,21 @@ import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { DURATION_ENTER, DURATION_EXIT } from './presets';
 
 /** localStorage 键：用户手动关闭动画 */
-const LS_ANIMATION_DISABLED = 'keban-animation-disabled';
+const LS_ANIMATION_DISABLED = 'ed-animation-disabled';
+const LEGACY_LS_ANIMATION_DISABLED = 'keban-animation-disabled'; // 品牌重构旧键，一次性迁移（兼容保留至 2027-01）
+
+/** 一次性旧键迁移：新键缺失且旧键存在时复制并删除旧键 */
+function migrateLegacyAnimationKey(): void {
+  try {
+    if (localStorage.getItem(LS_ANIMATION_DISABLED) === null) {
+      const legacy = localStorage.getItem(LEGACY_LS_ANIMATION_DISABLED);
+      if (legacy !== null) {
+        localStorage.setItem(LS_ANIMATION_DISABLED, legacy);
+        localStorage.removeItem(LEGACY_LS_ANIMATION_DISABLED);
+      }
+    }
+  } catch { /* localStorage 不可用时忽略 */ }
+}
 
 export interface AnimationPreference {
   /** 是否减弱动画（系统偏好或手动关闭） */
@@ -40,7 +54,8 @@ export function useAnimationPreference(): AnimationPreference {
 
   const [manualDisabled, setManualDisabledState] = useState<boolean>(() => {
     try {
-      return localStorage.getItem(LS_ANIMATION_DISABLED) === 'true';
+      migrateLegacyAnimationKey();
+    return localStorage.getItem(LS_ANIMATION_DISABLED) === 'true';
     } catch {
       return false;
     }

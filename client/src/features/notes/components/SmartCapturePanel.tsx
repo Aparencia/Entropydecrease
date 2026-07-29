@@ -1,6 +1,8 @@
 /**
  * 智能模式时间轴面板
  * 实时展示 Path B 智能采集过程中的关键帧和语音段事件流
+ *
+ * @ai-context: 通用组件：SmartCapturePanel。
  */
 
 import { useEffect, useRef } from 'react';

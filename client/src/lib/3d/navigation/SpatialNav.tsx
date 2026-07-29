@@ -1,6 +1,8 @@
 /**
  * 3D空间导航组件 — 在Canvas内渲染模块实体并处理交互
  * 根据主题自动切换深海/穹顶风格的模块表达
+ *
+ * @ai-context: 3D 空间导航组件——键盘/手势驱动的模块间轨道跳转，与 OrbitalStore 状态联动；渲染于 R3F Canvas 内，禁止使用 DOM API。
  */
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';

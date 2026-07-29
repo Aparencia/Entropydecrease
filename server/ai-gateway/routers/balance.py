@@ -1,5 +1,5 @@
 """
-课伴 AI 网关 — API 余额查询路由
+熵减 AI 网关 — API 余额查询路由
 
 GET /api/v1/ai/balance
 查询各 AI 服务提供商的 API 余额/配额信息。
@@ -7,6 +7,8 @@ GET /api/v1/ai/balance
 暂不支持：Gemini（无公开余额 API）
 
 缓存策略：Redis 缓存 5 分钟，减少对各 Provider 计费 API 的频繁调用。
+
+@ai-context: API 余额查询路由：聚合各 Provider 账户余额（阿里云百炼经 AK/SK 查询），供设置页展示。
 """
 
 import hashlib

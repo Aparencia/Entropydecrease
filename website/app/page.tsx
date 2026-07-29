@@ -1,3 +1,6 @@
+// @ai-context
+// 首页：深海主题 Hero、设计理念、六大功能模块与品牌引言的静态编排。Homepage: hero, philosophy, feature grid, brand quote.
+// Why: 文案数据以常量数组前置，视图层仅做映射，便于品牌语料统一维护。
 "use client";
 
 import Link from "next/link";
@@ -172,7 +175,7 @@ export default function HomePage() {
             视觉服务于认知
           </h2>
           <p className="text-kb-text2 max-w-lg mx-auto leading-relaxed">
-            课伴不追求极简的冷淡，也不追求娱乐的喧闹。
+            熵减不追求极简的冷淡，也不追求娱乐的喧闹。
             设计是认知科学与情绪体验的翻译器。
           </p>
         </SectionReveal>
@@ -301,7 +304,7 @@ export default function HomePage() {
               boxShadow: "var(--kb-shadow-accent)",
             }}
           >
-            下载课伴 · 开始深潜
+            下载熵减 · 开始深潜
           </Link>
         </SectionReveal>
       </section>

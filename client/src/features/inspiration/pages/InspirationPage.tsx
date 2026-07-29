@@ -1,4 +1,7 @@
-﻿import { useEffect, useState, useCallback, useRef } from 'react';
+/**
+ * @ai-context: inspiration 功能模块页面：InspirationPage。
+ */
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Send, X, Wand2, Layers } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';

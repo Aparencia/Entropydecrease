@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 布局组件：Navbar。
+ */
 import { ArrowLeft, Sun, Moon, Wifi, WifiOff, Signal, RefreshCw, CheckCircle2, ChevronRight } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '@/hooks/useTheme';

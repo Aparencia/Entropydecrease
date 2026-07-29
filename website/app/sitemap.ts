@@ -1,3 +1,6 @@
+// @ai-context
+// sitemap.xml 生成器：四个页面的优先级与更新频率声明。sitemap.xml generator.
+// Why: 静态导出模式需 force-static 显式声明，否则构建报错。
 import type { MetadataRoute } from "next";
 
 export const dynamic = "force-static";

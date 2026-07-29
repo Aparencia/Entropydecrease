@@ -3,6 +3,8 @@
  * - 不对称圆角（24px 12px 20px 16px）
  * - 悬浮时3D倾斜效果（perspective + rotateX/Y 跟随鼠标）
  * - 卡片之间有微妙的「交融渐变」过渡
+ *
+ * @ai-context: 通用组件：KnowledgePreviewCard。
  */
 import { useRef } from 'react';
 import { motion, useMotionValue, useTransform, useSpring } from 'framer-motion';

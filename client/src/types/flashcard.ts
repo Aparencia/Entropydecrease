@@ -1,8 +1,14 @@
-// ========== 闪卡相关类型 ==========
+/**
+ * 闪卡领域类型
+ *
+ * @ai-context: Flashcard 同时携带 SM-2 与 FSRS-5 两套调度算法字段，
+ * FSRS 字段（stability/difficulty）采用惰性迁移策略，初始为 undefined，
+ * 首次以 FSRS 调度复习时才写入。删除这两个字段会破坏 FSRS 用户的复习进度。
+ */
 
 import type { Confidence } from './common';
 
-// 闪卡牌组
+/** 闪卡牌组 */
 export interface FlashcardDeck {
   id: string;
   name: string;
@@ -14,7 +20,7 @@ export interface FlashcardDeck {
   order: number;
 }
 
-// 闪卡
+/** 闪卡 */
 export interface Flashcard {
   id: string;
   deckId: string;
@@ -28,13 +34,16 @@ export interface Flashcard {
   lapses: number;                // 累计失误次数
   dueDate: Date;                 // 下次复习日期
   lastReviewDate?: Date;         // 上次复习日期
+  // FSRS-5 扩展字段（惰性迁移，初始为 null/undefined）
+  stability?: number;            // 记忆稳定性（天）
+  difficulty?: number;           // 记忆难度（1-10）
   createdAt: Date;
   updatedAt: Date;
-  sourceNoteId?: string;          // 来源笔记 ID（用于双向关联）
+  sourceNoteId?: string;         // 来源笔记 ID（用于双向关联）
   order: number;
 }
 
-// 闪卡复习记录
+/** 闪卡复习记录 */
 export interface FlashcardReview {
   id: string;
   cardId: string;
@@ -52,7 +61,7 @@ export interface FlashcardReview {
   goldenError?: boolean;
 }
 
-// 牌组分享文件格式 (.kban-deck)
+/** 牌组分享文件格式 (.kban-deck) */
 export interface KbanDeckFile {
   version: '1.0' | '1.1';
   type: 'deck';

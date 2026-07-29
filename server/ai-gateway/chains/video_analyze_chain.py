@@ -1,5 +1,5 @@
 """
-课伴 AI 网关 — 视频分析 Chain
+熵减 AI 网关 — 视频分析 Chain
 
 @ai-context Path C 核心链路：客户端上传录制视频 →
 本 Chain 编排视频分析（优先原生视频 → 降级抽帧多图）→

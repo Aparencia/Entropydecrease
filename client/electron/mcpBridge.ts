@@ -150,7 +150,7 @@ async function startServer(config: { name: string; command: string; args: string
     entry.transport = transport;
 
     const client = new ClientCtor({
-      name: `keban-${config.name}`,
+      name: `entropydecrease-${config.name}`,
       version: '1.0.0',
     });
 

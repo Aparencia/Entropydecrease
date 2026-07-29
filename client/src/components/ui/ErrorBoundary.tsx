@@ -1,3 +1,6 @@
+/**
+ * @ai-context: UI 基础组件（shadcn/radix 封装）：ErrorBoundary。
+ */
 import { Component, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 

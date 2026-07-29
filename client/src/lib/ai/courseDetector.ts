@@ -2,6 +2,8 @@
  * 课程识别客户端 — AI 模式（可选）
  * 从首帧关键帧推断课程名称、学科、专业术语
  * 遵循「本地 Ollama 优先 + 云端降级」架构，失败静默降级
+ *
+ * @ai-context: 课程内容检测纯函数，供课堂助手判断当前是否处于学习场景。
  */
 
 import { aiClient } from '@/lib/http/apiClient';

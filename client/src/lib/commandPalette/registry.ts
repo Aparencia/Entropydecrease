@@ -1,3 +1,8 @@
+/**
+ * 命令面板注册表
+ *
+ * @ai-context: 全局命令注册中心，命令 id 需唯一；重复注册以后注册者覆盖。
+ */
 export interface Command {
   id: string;
   label: string;

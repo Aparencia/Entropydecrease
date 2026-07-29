@@ -1,9 +1,11 @@
 """
-课伴 AI 网关 — FallbackProvider（降级处理）
+熵减 AI 网关 — FallbackProvider（降级处理）
 
 当 AI 服务不可用时提供友好降级：
 - 返回预设的友好提示信息
 - 番茄钟推荐：基于本地规则引擎生成建议
+
+@ai-context: Fallback Provider：所有云端 Provider 不可用时的最终兜底，返回友好错误而非抛异常，保证网关可启动。
 """
 
 import time

@@ -1,6 +1,8 @@
 /**
  * SceneTransition — 管理深海 ↔ 穹顶的过渡动画
  * 两个场景同时存在，通过交叉淡入淡出实现平滑切换
+ *
+ * @ai-context: 3D 场景：SceneTransition。
  */
 import { useRef, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';

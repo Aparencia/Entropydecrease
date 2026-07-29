@@ -1,3 +1,7 @@
+// @ai-context
+// Redis 同步状态缓存，连接失败时优雅降级为 no-op。
+// Redis sync-state cache with graceful degradation: all helpers no-op when RDB is nil.
+// Why: 同步服务的核心链路走 PostgreSQL，Redis 仅承担加速职责，不可用不应阻塞启动。
 package cache
 
 import (

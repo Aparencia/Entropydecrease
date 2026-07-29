@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 设置页 Hook：useClearData。
+ */
 import { useState } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { db } from '@/lib/storage/database';

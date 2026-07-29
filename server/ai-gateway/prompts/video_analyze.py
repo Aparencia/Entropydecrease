@@ -1,5 +1,5 @@
 """
-课伴 AI 网关 — 视频分析 Prompt 模板
+熵减 AI 网关 — 视频分析 Prompt 模板
 
 @ai-context Path C 视频分析链路：客户端上传录制视频 →
 服务端视频模型分析 → 生成结构化 Markdown 课堂笔记。

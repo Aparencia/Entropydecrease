@@ -1,6 +1,8 @@
 /**
  * 模式指示器
  * 显示当前数据模式（本地/混合/云端）
+ *
+ * @ai-context: UI 基础组件（shadcn/radix 封装）：ModeIndicator。
  */
 import { HardDrive, Cloud, Globe } from 'lucide-react';
 import { useModeState } from '@/hooks/useMode';

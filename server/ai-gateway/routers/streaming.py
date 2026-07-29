@@ -1,10 +1,12 @@
 """
-课伴 AI 网关 — 流式输出路由（SSE）
+熵减 AI 网关 — 流式输出路由（SSE）
 
 为全部 19 个 AI 功能提供 /stream SSE 端点。
 格式：data: {"chunk": "..."}\n\n
 结束：data: [DONE]\n\n
 错误：data: {"error": "..."}\n\n
+
+@ai-context: 流式输出路由（SSE）：以 Server-Sent Events 流式返回全量 AI 功能结果。
 """
 
 import json

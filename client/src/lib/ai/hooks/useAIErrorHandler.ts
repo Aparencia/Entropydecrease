@@ -3,6 +3,8 @@
  *
  * 用于没有专用错误 UI 区域的快捷入口（右键菜单、工具栏按钮等），
  * 将 AI 错误分类后以 toast 形式展示给用户。
+ *
+ * @ai-context: ErrorHandler 功能的 React Hook 包装：仅做加载/错误状态编排，业务调用统一走 aiPluginLoader，禁止在 Hook 内写业务计算。
  */
 
 import { useCallback } from 'react';

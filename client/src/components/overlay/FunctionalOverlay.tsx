@@ -1,6 +1,8 @@
 /**
  * 功能覆盖层 — 当用户进入模块时，在3D场景上方显示功能UI
  * 使用毛玻璃面板，保持3D场景在背后可见
+ *
+ * @ai-context: 浮层/弹窗组件：FunctionalOverlay。
  */
 import { forwardRef } from 'react';
 import { motion } from 'framer-motion';

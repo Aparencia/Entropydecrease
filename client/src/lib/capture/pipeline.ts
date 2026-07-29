@@ -1,6 +1,8 @@
 /**
  * 异步处理流水线
  * 生产者-消费者模型，支持注册多个 Worker 并行消费数据
+ *
+ * @ai-context: 采集流水线：队列+Worker 调度+超时控制；processingTimeout=60s 为视觉提取长耗时设计。
  */
 
 import type { PipelineMessage, PipelineWorker, ExtractionResult } from './captureTypes';

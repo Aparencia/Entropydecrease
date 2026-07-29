@@ -1,3 +1,6 @@
+/**
+ * @ai-context: dashboard 功能模块 Hook：useTypewriter。
+ */
 import { useEffect, useRef, useState } from 'react';
 
 /**

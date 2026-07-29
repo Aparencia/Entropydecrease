@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 布局组件：BottomNav。
+ */
 import { NavLink, useLocation } from 'react-router-dom';
 import { Home, Timer, FileText, Layers, Lightbulb, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';

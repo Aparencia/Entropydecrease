@@ -1,3 +1,6 @@
+/**
+ * @ai-context: UI 基础组件（shadcn/radix 封装）：TypewriterText。
+ */
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 

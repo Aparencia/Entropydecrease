@@ -1,4 +1,8 @@
+/**
+ * @ai-context: 设置页组件：AboutSettings。
+ */
 import { useState, useEffect, useCallback } from 'react';
+import { readWithLegacyMigration } from '@/lib/utils/legacyLocalStorage';
 import { Card, Button, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { Shield, Info, RefreshCw, Download, CheckCircle, Loader2, AlertCircle, Heart } from 'lucide-react';
@@ -15,7 +19,8 @@ interface UpdateStatus {
 }
 
 /** localStorage key */
-const AUTO_UPDATE_KEY = 'keban-auto-update';
+const AUTO_UPDATE_KEY = 'ed-auto-update';
+const LEGACY_AUTO_UPDATE_KEY = 'keban-auto-update'; // 旧键，2027-01 前兼容
 
 export default function AboutSettings() {
   const { toast } = useToast();
@@ -23,7 +28,7 @@ export default function AboutSettings() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [autoUpdate, setAutoUpdate] = useState<boolean>(
-    () => localStorage.getItem(AUTO_UPDATE_KEY) !== 'false',
+    () => readWithLegacyMigration(AUTO_UPDATE_KEY, LEGACY_AUTO_UPDATE_KEY) !== 'false',
   );
   const [sponsorOpen, setSponsorOpen] = useState(false);
 
@@ -31,7 +36,7 @@ export default function AboutSettings() {
 
   // 启动时通知主进程当前的自动更新设置
   useEffect(() => {
-    const enabled = localStorage.getItem(AUTO_UPDATE_KEY) !== 'false';
+    const enabled = readWithLegacyMigration(AUTO_UPDATE_KEY, LEGACY_AUTO_UPDATE_KEY) !== 'false';
     window.electronAPI?.setAutoUpdate?.(enabled);
   }, []);
 

@@ -17,6 +17,8 @@
  * // 取消流式
  * cancelStream();
  * ```
+ *
+ * @ai-context: SSE 流消费与增量 JSON 解析；分片边界处理是易错点，chunk 可能截断多字节字符。
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';

@@ -2,6 +2,8 @@
  * AI 学习预测功能 Handler
  *
  * 处理 ai_predict IPC 请求，调用 AI 网关基于笔记内容生成预测性问题。
+ *
+ * @ai-context: 预测提问 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
 import { safeHandle } from '../../ipcUtils.js';

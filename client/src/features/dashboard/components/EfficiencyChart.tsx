@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：EfficiencyChart。
+ */
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {

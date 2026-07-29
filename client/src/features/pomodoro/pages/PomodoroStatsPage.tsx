@@ -1,3 +1,6 @@
+/**
+ * @ai-context: pomodoro 功能模块页面：PomodoroStatsPage。
+ */
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Clock, Target, Flame, TrendingUp } from 'lucide-react';

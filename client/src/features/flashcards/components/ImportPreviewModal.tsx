@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：ImportPreviewModal。
+ */
 import { Modal, Button } from '@/components/ui';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { Layers, AlertTriangle, Merge, SkipForward } from 'lucide-react';

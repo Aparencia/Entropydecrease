@@ -4,6 +4,8 @@
  * 处理 ai_merge_notes IPC 请求，将增量分析产生的多个片段笔记
  * 合并为一份完整结构化笔记。纯文本操作，无需多模态模型。
  * 对应端点：POST /api/v1/multimodal/merge-notes
+ *
+ * @ai-context: 笔记合并 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
 import { safeHandle } from '../../ipcUtils.js';

@@ -7,6 +7,8 @@
  * - 获取已拉取模型列表
  * - 触发模型拉取（流式进度）
  * - 健康缓存（30s TTL）
+ *
+ * @ai-context: Ollama 检测与状态服务：安装路径探测（Win/mac/Linux 三平台）+ /api/tags 服务探测 + 30s 状态缓存；未安装时全部静默失败（零打扰原则）。2026-07 拆分：模型管理在 ollamaModelManager.ts。
  */
 
 import { existsSync } from 'fs';
@@ -184,146 +186,16 @@ export async function getOllamaStatus(forceRefresh = false): Promise<OllamaStatu
  * 快速判断 Ollama 是否可用（已启用 + 正在运行）
  * 用于 AI Handler 降级链判断，不触发网络请求（使用缓存）
  */
+/** 使状态缓存失效（模型增删后由 ollamaModelManager 调用） */
+export function invalidateStatusCache(): void {
+  _cachedStatus = null;
+}
+
 export function isOllamaAvailable(): boolean {
   if (!_cachedStatus) return false;
   // 缓存过期则视为不可用（下次 getOllamaStatus 会刷新）
   if (Date.now() - _cachedStatus.lastChecked > HEALTH_CACHE_TTL) return false;
   return _cachedStatus.running;
-}
-
-/**
- * 拉取模型（流式进度）
- * @param modelName 模型名称（如 'qwen2.5:7b'）
- * @param onProgress 进度回调
- */
-export async function pullModel(
-  modelName: string,
-  onProgress?: (progress: PullProgressData) => void,
-): Promise<void> {
-  const config = getOllamaConfig();
-  const baseUrl = config.baseUrl;
-
-  logger.info(`[Ollama] Pulling model: ${modelName}`);
-
-  const resp = await fetch(`${baseUrl}/api/pull`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: modelName, stream: true }),
-  });
-
-  if (!resp.ok) {
-    const detail = await resp.text().catch(() => 'unknown error');
-    throw new Error(`Ollama pull failed: HTTP ${resp.status} - ${detail}`);
-  }
-
-  if (!resp.body) {
-    throw new Error('Ollama pull: no response body');
-  }
-
-  // 流式读取 NDJSON 进度
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        const data = JSON.parse(line) as {
-          status?: string;
-          completed?: number;
-          total?: number;
-          error?: string;
-        };
-
-        if (data.error) {
-          onProgress?.({
-            model: modelName,
-            status: 'error',
-            percent: 0,
-            error: data.error,
-          });
-          throw new Error(`Ollama pull error: ${data.error}`);
-        }
-
-        const status = data.status || '';
-        if (status === 'success') {
-          onProgress?.({ model: modelName, status: 'complete', percent: 100 });
-          logger.info(`[Ollama] Model pulled successfully: ${modelName}`);
-          // 刷新缓存
-          _cachedStatus = null;
-          return;
-        }
-
-        // 下载进度
-        if (data.total && data.completed != null) {
-          const percent = Math.round((data.completed / data.total) * 100);
-          onProgress?.({
-            model: modelName,
-            status: 'downloading',
-            percent,
-            completedBytes: data.completed,
-            totalBytes: data.total,
-          });
-        } else if (status.includes('verif')) {
-          onProgress?.({ model: modelName, status: 'verifying', percent: 99 });
-        }
-      } catch (e) {
-        if (e instanceof Error && e.message.startsWith('Ollama pull error')) throw e;
-        // JSON 解析失败，跳过该行
-      }
-    }
-  }
-
-  // 流结束但未收到 success
-  onProgress?.({ model: modelName, status: 'complete', percent: 100 });
-  _cachedStatus = null;
-}
-
-/**
- * 删除本地模型
- * @param modelName 模型名称（如 'qwen2.5:7b'）
- */
-export async function deleteModel(modelName: string): Promise<void> {
-  const config = getOllamaConfig();
-  const baseUrl = config.baseUrl;
-
-  logger.info(`[Ollama] Deleting model: ${modelName}`);
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30_000);
-
-  try {
-    const resp = await fetch(`${baseUrl}/api/delete`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: modelName }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (!resp.ok) {
-      const detail = await resp.text().catch(() => 'unknown error');
-      throw new Error(`Ollama delete failed: HTTP ${resp.status} - ${detail}`);
-    }
-
-    logger.info(`[Ollama] Model deleted successfully: ${modelName}`);
-    // 清除缓存，下次获取状态时刷新模型列表
-    _cachedStatus = null;
-  } catch (e) {
-    clearTimeout(timeoutId);
-    if (e instanceof Error && e.name === 'AbortError') {
-      throw new Error('Ollama delete timed out');
-    }
-    throw e;
-  }
 }
 
 /**
@@ -347,3 +219,6 @@ export async function initOllamaDetection(): Promise<void> {
     // 静默失败
   });
 }
+
+// ─── 向后兼容 re-export（模型管理已拆至 ollamaModelManager.ts） ───
+export { pullModel, deleteModel } from './ollamaModelManager.js';

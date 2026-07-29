@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：ConfidenceSelector。
+ */
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useReducedMotion } from '@/hooks/useReducedMotion';

@@ -1,6 +1,8 @@
 /**
  * 苏格拉底式学习流程 hook — 状态机 + 阶段转换逻辑
  * 从 SocraticSessionPage 提取，负责全部业务逻辑，页面仅保留 UI 渲染
+ *
+ * @ai-context: feynman 功能模块 Hook：useSocraticFlow。
  */
 
 import { useState, useCallback, useRef } from 'react';

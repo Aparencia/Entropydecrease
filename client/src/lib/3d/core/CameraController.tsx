@@ -1,5 +1,7 @@
 /**
  * 相机控制器 — 管理相机位置和飞行动画
+ *
+ * @ai-context: 3D 场景核心（R3F）：CameraController。
  */
 import { useFrame, useThree } from '@react-three/fiber';
 import { useRef } from 'react';

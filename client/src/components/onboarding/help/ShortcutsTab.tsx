@@ -1,5 +1,7 @@
 /**
  * ShortcutsTab — 快捷键速查表：分组展示，kbd 样式
+ *
+ * @ai-context: 通用组件：ShortcutsTab。
  */
 
 interface ShortcutGroup {

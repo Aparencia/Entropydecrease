@@ -1,10 +1,12 @@
+# @ai-context
 # Software copyright registration - source code document generator
 # Requirement: front 30 pages + back 30 pages, each page >= 50 lines
+# Why: paths derive from $PSScriptRoot so the script works regardless of checkout location.
 
-$OutputDir = "d:\Program own\aicode\work space\KeBan\docs\softcopy-materials"
+$root = Split-Path $PSScriptRoot -Parent
+$OutputDir = Join-Path $root "docs\softcopy-materials"
 if (-not (Test-Path $OutputDir)) { New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null }
 
-$root = "d:\Program own\aicode\work space\KeBan"
 $allCode = [System.Collections.ArrayList]::new()
 
 function Add-FileContent($filePath) {
@@ -86,9 +88,9 @@ Add-PatternFiles "client\electron\*.ts"
 # Service Worker
 Add-PatternFiles "client\src\service-worker\*.ts"
 
-# AI Gateway
+# AI Gateway (config.py refactored into config/ package during migration)
 Add-FileContent (Join-Path $root "server\ai-gateway\main.py")
-Add-FileContent (Join-Path $root "server\ai-gateway\config.py")
+Add-PatternFiles "server\ai-gateway\config\*.py"
 Add-FileContent (Join-Path $root "server\ai-gateway\errors.py")
 Add-PatternFiles "server\ai-gateway\routers\*.py"
 Add-PatternFiles "server\ai-gateway\chains\*.py"
@@ -115,7 +117,7 @@ $backStart = $totalLines - $frontLines
 $output = [System.Collections.ArrayList]::new()
 
 # Header
-[void]$output.Add("KeBan Source Code Document for Software Copyright Registration")
+[void]$output.Add("Entropydecrease Source Code Document for Software Copyright Registration")
 [void]$output.Add("=" * 60)
 [void]$output.Add("")
 

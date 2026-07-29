@@ -1,5 +1,7 @@
 /**
  * QuickStartTab — 快速上手指引：3D导航说明 + 模块一览表 + 重播引导
+ *
+ * @ai-context: 通用组件：QuickStartTab。
  */
 import { Compass, RotateCw, MousePointerClick, ScrollText } from 'lucide-react';
 import { useOnboardingStore } from '../useOnboardingStore';

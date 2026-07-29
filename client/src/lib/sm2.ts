@@ -3,6 +3,12 @@
  *
  * Rating 枚举值 0-3 对应 Again/Hard/Good/Easy
  * FlashcardReview.rating 字段使用 1-4，调用方需做 +1 映射
+ *
+ * @ai-context: 经典 SuperMemo SM-2 算法实现，与 fsrs.ts 通过 scheduler.ts
+ * 策略模式并存。间隔上限 1825 天（5年）；Hard 惩罚 ×0.6、Easy 奖励 ×1.3
+ * 为本项目自定义扩展（非原版 SM-2），修改会改变全体用户的复习节奏。
+ * @ai-context: 全部为纯函数，时间基准可通过 SM2Options.now 注入（测试用），
+ * 未注入时使用当前时间。无任何 I/O 副作用，可安全重构。
  */
 
 // ---------------------------------------------------------------------------
@@ -70,6 +76,11 @@ export interface SM2Options {
    * 默认 1.0（不调整），建议值 0.3-0.7
    */
   goldenErrorMultiplier?: number;
+  /**
+   * 时间基准注入（测试用）
+   * 未指定时使用 new Date()，与 fsrs() 的 now 参数保持对称设计
+   */
+  now?: Date;
 }
 
 /**
@@ -77,7 +88,7 @@ export interface SM2Options {
  *
  * @param card   当前卡片的 SM-2 状态字段
  * @param rating 用户评分（Rating 枚举，0-3）
- * @param options 可选参数（如 goldenErrorMultiplier）
+ * @param options 可选参数（如 goldenErrorMultiplier、now）
  * @returns 更新后的 SM-2 状态
  */
 export function sm2(card: SM2CardInput, rating: Rating, options?: SM2Options): SM2Result {
@@ -135,7 +146,7 @@ export function sm2(card: SM2CardInput, rating: Rating, options?: SM2Options): S
     easeFactor: newEF,
     interval: newInterval,
     repetitions: newReps,
-    dueDate: addDays(new Date(), newInterval),
+    dueDate: addDays(options?.now ?? new Date(), newInterval),
     lapses: newLapses,
   };
 }

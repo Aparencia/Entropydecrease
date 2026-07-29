@@ -1,3 +1,6 @@
+/**
+ * @ai-context: notes 功能模块 Hook：useWindowSelector。
+ */
 import { useState, useCallback, useEffect } from 'react';
 import type { WindowInfo } from '@/lib/capture';
 

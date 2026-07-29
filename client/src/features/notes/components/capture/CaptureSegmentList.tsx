@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：CaptureSegmentList。
+ */
 import { useRef, useEffect } from 'react';
 import { Eye, Plus, ListPlus, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';

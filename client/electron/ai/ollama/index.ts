@@ -5,6 +5,8 @@
  * - ollama:get-status → 返回 OllamaStatus
  * - ollama:set-config → 更新配置
  * - ollama:pull-model → 触发模型下载（流式进度推送）
+ *
+ * @ai-context: Ollama 模块 IPC 注册出口（状态/配置/模型管理通道）。
  */
 
 import { ipcMain, BrowserWindow } from 'electron';

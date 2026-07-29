@@ -1,6 +1,8 @@
 /**
  * LiveTranscript — 实时 ASR 转录滚动面板
  * 课中逐句显示语音转写结果，供用户确认采集质量
+ *
+ * @ai-context: 通用组件：LiveTranscript。
  */
 import { useRef, useEffect } from 'react';
 import { Mic } from 'lucide-react';

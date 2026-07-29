@@ -4,6 +4,8 @@
  * 封装 electron-updater 的 autoUpdater，
  * 处理更新检查、下载、安装等事件，
  * 通过 IPC 将状态推送到渲染进程。
+ *
+ * @ai-context: electron-updater 自动更新：24h 节流检查（产品规范），下载/安装经 IPC 由用户确认。
  */
 import * as electronUpdater from 'electron-updater';
 const { autoUpdater } = electronUpdater;

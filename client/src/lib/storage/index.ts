@@ -1,8 +1,17 @@
-export { db, KeBanDatabase } from './database';
+/**
+ * 存储层统一出口
+ *
+ * @ai-context: 预创建的 StorageAdapter 实例为 PWA 路径的既定用法；
+ * Electron 路径请使用 storageFactory.createStorage（运行时自动选择）。
+ * KeBanDatabase 为品牌重构前的兼容别名，新代码使用 EntropyDecreaseDatabase。
+ */
+
+export { db, EntropyDecreaseDatabase, KeBanDatabase, createDatabase } from './database';
 export { StorageAdapter } from './StorageAdapter';
 export type { IRepository, SyncResult } from './interfaces';
 export type { SyncConflict } from '@/types/models';
 export { logOperation, getUnsyncedLogs, markLogsSynced } from './operationLog';
+export { SENSITIVE_FIELDS, NON_SENSITIVE_TABLES } from './sensitiveFields';
 
 // 预创建的存储适配器实例
 import { db } from './database';

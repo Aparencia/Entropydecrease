@@ -3,6 +3,8 @@
  *
  * 处理 ai_summarize IPC 请求，调用 AI 网关生成文本摘要。
  * 支持本地 Ollama 降级：优先调用本地模型，失败后降级到远程网关。
+ *
+ * @ai-context: 笔记摘要 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
 import { safeHandle } from '../../ipcUtils.js';

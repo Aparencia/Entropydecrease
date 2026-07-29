@@ -3,6 +3,8 @@
  *
  * 替代重复的 useAI* hook 模板代码，统一状态管理、错误处理和音效播放逻辑。
  * 适用于没有缓存降级需求的简单 AI 功能调用场景。
+ *
+ * @ai-context: Feature 功能的 React Hook 包装：仅做加载/错误状态编排，业务调用统一走 aiPluginLoader，禁止在 Hook 内写业务计算。
  */
 
 import { useState, useCallback } from 'react';

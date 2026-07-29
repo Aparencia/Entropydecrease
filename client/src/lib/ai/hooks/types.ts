@@ -2,6 +2,8 @@
  * AI Hook 共享类型与工具函数
  *
  * 所有 useAI* hooks 共用的状态类型、初始状态和错误处理逻辑
+ *
+ * @ai-context: AI hooks 公共类型（加载/错误状态契约），供全部 useAI* Hook 共享。
  */
 
 import { AIError } from '../types';

@@ -6,6 +6,8 @@
  * - 自动挖空（按比例或按关键词）
  * - 用户先输入答案再揭示正确内容
  * - 差异高亮展示
+ *
+ * @ai-context: flashcards 功能模块 Hook：useGenerativeReview。
  */
 
 import { useState, useCallback, useMemo } from 'react';

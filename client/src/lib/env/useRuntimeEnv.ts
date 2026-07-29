@@ -2,6 +2,8 @@
  * 熵减 — React 运行时环境 Hook
  *
  * 提供响应式的环境检测，监听窗口大小变化等事件。
+ *
+ * @ai-context: 本 Hook 是 runtimeDetect 纯函数层的响应式包装（分工：纯函数可在任意上下文调用，本 Hook 仅供 React 组件）。shouldDegrade3D 是 3D 场景降级的唯一判据，改动会影响全部 3D 入口。
  */
 import { useState, useEffect } from 'react';
 import {

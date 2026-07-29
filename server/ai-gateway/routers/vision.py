@@ -1,8 +1,10 @@
 """
-课伴 AI 网关 — 视觉提取路由
+熵减 AI 网关 — 视觉提取路由
 
 POST /api/v1/vision/extract
 调用多模态模型（GLM-4V-Flash / Qwen-VL-Plus）从截图中提取学习内容。
+
+@ai-context: 视觉提取路由：单图多模态识别（板书/PPT），经 fallback 链。
 """
 
 import time

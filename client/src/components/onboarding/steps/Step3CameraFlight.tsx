@@ -1,5 +1,7 @@
 /**
  * Step3CameraFlight — 相机飞行演示
+ *
+ * @ai-context: 通用组件：Step3CameraFlight。
  */
 import { useEffect } from 'react';
 import { OnboardingCard } from '../OnboardingCard';

@@ -4,6 +4,8 @@
  * 顶部显示"← 滑动退出专注"防误触条，
  * 需拖拽滑块到右端（85%）才解锁退出。
  * 使用原生 Pointer Events，不依赖 Framer Motion。
+ *
+ * @ai-context: 通用组件：SlideToExit。
  */
 import { useState, useRef } from 'react';
 import { ArrowRight } from 'lucide-react';

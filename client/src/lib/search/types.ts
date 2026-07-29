@@ -2,6 +2,9 @@
  * 搜索引擎接口与配置类型
  * v0.9.0: 全文搜索功能基础类型定义
  * v1.2.0: 全局统一搜索，支持多实体类型
+ *
+ * @ai-context: ISearchEngine 是搜索层唯一契约，内存/IndexedDB/远程实现均须遵守。
+ * noteId 与 entityId 值相等系 v1.2.0 多实体扩展的向后兼容设计，不可删除 noteId。
  */
 
 import type { SearchEntityType } from '@/types/models';

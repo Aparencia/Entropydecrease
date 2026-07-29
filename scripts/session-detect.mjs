@@ -1,24 +1,29 @@
 #!/usr/bin/env node
 /**
- * 重复工作检测器 — 分析会话事件，识别跨会话重复模式
+ * @ai-context
+ * 重复工作检测器 — 加载会话事件，运行检测策略，合并输出模式清单。
+ * Repeat-work detector: loads session events, runs strategies, merges pattern list.
+ * Why: 合并时保留 verified/routed/resolved 的既有状态，避免每轮检测把人工裁决打回 candidate。
  *
  * 用法：
  *   node scripts/session-detect.mjs              # 分析所有会话，输出检测到的模式
  *   node scripts/session-detect.mjs --min=3      # 自定义最小重复次数（默认 2）
  *   node scripts/session-detect.mjs --verbose    # 显示详细匹配信息
  *
- * 检测策略：
- *   1. 命令重复：相同命令在 ≥2 个会话中出现
- *   2. 分类重复：相同 category 的事件序列在多个会话中重复
- *   3. 错误重复：相同错误消息跨会话出现
- *   4. 文件热点：相同文件在多个会话中被编辑
+ * 检测策略（见 session-detect-strategies.mjs）：
+ *   命令重复 / 分类重复 / 错误重复 / 文件热点
  *
  * 输出：.qoder/learning/patterns.json
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createHash } from 'node:crypto';
+import {
+  detectCommandRepeats,
+  detectCategoryRepeats,
+  detectErrorRepeats,
+  detectFileHotspots,
+} from './session-detect-strategies.mjs';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const learningDir = join(repoRoot, '.qoder', 'learning');
@@ -55,207 +60,6 @@ function loadAllSessions() {
 }
 
 // ================================================================
-// 签名生成
-// ================================================================
-
-function signature(type, key) {
-  const raw = `${type}:${key}`;
-  const hash = createHash('sha256').update(raw).digest('hex').slice(0, 12);
-  return `${type}_${hash}`;
-}
-
-// ================================================================
-// 检测策略
-// ================================================================
-
-/**
- * 策略 1：命令重复检测
- * 相同命令（规范化后）在多个会话中出现
- */
-function detectCommandRepeats(sessions) {
-  const commandMap = new Map(); // normalized command -> { sessions: Set, timestamps: [] }
-
-  for (const session of sessions) {
-    const seenInSession = new Set();
-    for (const event of session.events) {
-      if (event.type !== 'command' || !event.payload?.command) continue;
-      // 规范化：去除路径中的绝对前缀、合并多余空格
-      const normalized = event.payload.command
-        .replace(/\\/g, '/')
-        .replace(/\s+/g, ' ')
-        .trim();
-      if (seenInSession.has(normalized)) continue;
-      seenInSession.add(normalized);
-
-      if (!commandMap.has(normalized)) {
-        commandMap.set(normalized, { sessions: new Set(), timestamps: [] });
-      }
-      const entry = commandMap.get(normalized);
-      entry.sessions.add(session.sessionId);
-      entry.timestamps.push(event.timestamp);
-    }
-  }
-
-  const patterns = [];
-  for (const [cmd, info] of commandMap) {
-    if (info.sessions.size >= minOccurrences) {
-      const timestamps = info.timestamps.sort();
-      patterns.push({
-        id: `pat_${signature('cmd', cmd)}`,
-        signature: signature('cmd', cmd),
-        title: `重复命令: ${cmd.length > 60 ? cmd.slice(0, 57) + '...' : cmd}`,
-        category: 'command-repeat',
-        occurrences: info.sessions.size,
-        sessionRefs: [...info.sessions],
-        firstSeen: timestamps[0],
-        lastSeen: timestamps[timestamps.length - 1],
-        status: 'candidate',
-        routedTo: null,
-        detail: { command: cmd },
-      });
-    }
-  }
-  return patterns;
-}
-
-/**
- * 策略 2：分类序列重复检测
- * 相同 category 的事件在多个会话中形成相似序列
- */
-function detectCategoryRepeats(sessions) {
-  const categoryMap = new Map(); // category -> { sessions: Set, count: number }
-
-  for (const session of sessions) {
-    const categoriesInSession = new Set();
-    for (const event of session.events) {
-      if (!event.category) continue;
-      categoriesInSession.add(event.category);
-    }
-    for (const cat of categoriesInSession) {
-      if (!categoryMap.has(cat)) {
-        categoryMap.set(cat, { sessions: new Set(), count: 0 });
-      }
-      const entry = categoryMap.get(cat);
-      entry.sessions.add(session.sessionId);
-      entry.count++;
-    }
-  }
-
-  const patterns = [];
-  for (const [cat, info] of categoryMap) {
-    if (info.sessions.size >= minOccurrences) {
-      patterns.push({
-        id: `pat_${signature('cat', cat)}`,
-        signature: signature('cat', cat),
-        title: `重复工作类别: ${cat}`,
-        category: 'category-repeat',
-        occurrences: info.sessions.size,
-        sessionRefs: [...info.sessions],
-        firstSeen: null,
-        lastSeen: null,
-        status: 'candidate',
-        routedTo: null,
-        detail: { eventCategory: cat },
-      });
-    }
-  }
-  return patterns;
-}
-
-/**
- * 策略 3：错误重复检测
- * 相同错误消息跨会话出现
- */
-function detectErrorRepeats(sessions) {
-  const errorMap = new Map(); // normalized message -> { sessions: Set, timestamps: [] }
-
-  for (const session of sessions) {
-    const seenInSession = new Set();
-    for (const event of session.events) {
-      if (event.type !== 'error' || !event.payload?.message) continue;
-      // 规范化：取前 100 字符作为 key
-      const normalized = event.payload.message.slice(0, 100).trim();
-      if (seenInSession.has(normalized)) continue;
-      seenInSession.add(normalized);
-
-      if (!errorMap.has(normalized)) {
-        errorMap.set(normalized, { sessions: new Set(), timestamps: [] });
-      }
-      const entry = errorMap.get(normalized);
-      entry.sessions.add(session.sessionId);
-      entry.timestamps.push(event.timestamp);
-    }
-  }
-
-  const patterns = [];
-  for (const [msg, info] of errorMap) {
-    if (info.sessions.size >= minOccurrences) {
-      const timestamps = info.timestamps.sort();
-      patterns.push({
-        id: `pat_${signature('err', msg)}`,
-        signature: signature('err', msg),
-        title: `重复错误: ${msg.length > 50 ? msg.slice(0, 47) + '...' : msg}`,
-        category: 'error-repeat',
-        occurrences: info.sessions.size,
-        sessionRefs: [...info.sessions],
-        firstSeen: timestamps[0],
-        lastSeen: timestamps[timestamps.length - 1],
-        status: 'candidate',
-        routedTo: null,
-        detail: { errorMessage: msg },
-      });
-    }
-  }
-  return patterns;
-}
-
-/**
- * 策略 4：文件热点检测
- * 相同文件在多个会话中被编辑
- */
-function detectFileHotspots(sessions) {
-  const fileMap = new Map(); // filePath -> { sessions: Set, editCount: number }
-
-  for (const session of sessions) {
-    const seenInSession = new Set();
-    for (const event of session.events) {
-      if (!['file_edit', 'file_create'].includes(event.type)) continue;
-      const filePath = event.payload?.filePath;
-      if (!filePath) continue;
-      if (seenInSession.has(filePath)) continue;
-      seenInSession.add(filePath);
-
-      if (!fileMap.has(filePath)) {
-        fileMap.set(filePath, { sessions: new Set(), editCount: 0 });
-      }
-      const entry = fileMap.get(filePath);
-      entry.sessions.add(session.sessionId);
-      entry.editCount++;
-    }
-  }
-
-  const patterns = [];
-  for (const [filePath, info] of fileMap) {
-    if (info.sessions.size >= minOccurrences) {
-      patterns.push({
-        id: `pat_${signature('file', filePath)}`,
-        signature: signature('file', filePath),
-        title: `文件热点: ${filePath}`,
-        category: 'file-hotspot',
-        occurrences: info.sessions.size,
-        sessionRefs: [...info.sessions],
-        firstSeen: null,
-        lastSeen: null,
-        status: 'candidate',
-        routedTo: null,
-        detail: { filePath, editCount: info.editCount },
-      });
-    }
-  }
-  return patterns;
-}
-
-// ================================================================
 // 主流程
 // ================================================================
 
@@ -280,10 +84,10 @@ function main() {
 
   // 运行所有检测策略
   const allPatterns = [
-    ...detectCommandRepeats(sessions),
-    ...detectCategoryRepeats(sessions),
-    ...detectErrorRepeats(sessions),
-    ...detectFileHotspots(sessions),
+    ...detectCommandRepeats(sessions, minOccurrences),
+    ...detectCategoryRepeats(sessions, minOccurrences),
+    ...detectErrorRepeats(sessions, minOccurrences),
+    ...detectFileHotspots(sessions, minOccurrences),
   ];
 
   // 合并已有 patterns（保留已验证/已路由的状态）

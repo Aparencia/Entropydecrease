@@ -1,4 +1,6 @@
-/** @file 深海生物组件 barrel export */
+/** @file 深海生物组件 barrel export *
+ * @ai-context: 通用组件：index。
+ */
 export { default as BubbleStreak } from './BubbleStreak';
 export { default as CoralReefCalendar } from './CoralReefCalendar';
 export { default as AnglerfishAchievements } from './AnglerfishAchievements';

@@ -1,5 +1,7 @@
 /**
  * Step2Navigate — 导航教学：高亮所有模块实体，等待用户点击
+ *
+ * @ai-context: 通用组件：Step2Navigate。
  */
 import { useEffect, useState } from 'react';
 import { OnboardingCard } from '../OnboardingCard';

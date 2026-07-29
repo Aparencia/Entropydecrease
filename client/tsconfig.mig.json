@@ -1,0 +1,1 @@
+{"compilerOptions":{"ignoreDeprecations":"6.0","target":"ES2022","module":"ESNext","moduleResolution":"bundler","jsx":"react-jsx","strict":true,"skipLibCheck":true,"noEmit":true,"baseUrl":".","paths":{"@/*":["./src/*"]},"types":["vite/client"]},"include":["src/env.d.ts","src/types/**/*.ts","src/lib/**/*.ts","src/lib/**/*.tsx","src/hooks/**/*.ts","src/stores/**/*.ts"]}

@@ -1,4 +1,7 @@
-﻿import { useEffect, useRef, useState, useMemo } from 'react';
+/**
+ * @ai-context: pomodoro 功能模块页面：PomodoroPage。
+ */
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Play, Pause, RotateCcw, SkipForward, GraduationCap, BookOpen, Clock, Volume2, VolumeX, Focus } from 'lucide-react';

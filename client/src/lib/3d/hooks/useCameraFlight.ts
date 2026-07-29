@@ -1,5 +1,7 @@
 /**
  * 相机飞行动画hook — 用于模块间导航
+ *
+ * @ai-context: 3D 相机飞行动画 Hook，模块间导航的视觉过渡。
  */
 import { useThree } from '@react-three/fiber';
 import { useRef, useCallback } from 'react';

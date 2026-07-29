@@ -5,6 +5,8 @@
  * 消息协议：
  * - 入站：{ type: 'aggregate', payload: { data: AggregateInput, days: number } }
  * - 出站：{ type: 'result', data: AnalyticsAggregate } | { type: 'error', message: string }
+ *
+ * @ai-context: Web Worker：analyticsWorker。
  */
 import type { AggregateInput } from '../features/dashboard/utils/aggregator';
 import { aggregateAnalytics } from '../features/dashboard/utils/aggregator';

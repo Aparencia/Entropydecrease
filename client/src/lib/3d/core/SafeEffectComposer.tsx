@@ -7,6 +7,8 @@
  *
  * 本包装在挂载前校验上下文活性，并监听 lost/restored 事件动态卸载/恢复后处理，
  * 保证后处理不可用时优雅降级为无特效渲染，而非白屏。
+ *
+ * @ai-context: 3D 场景核心（R3F）：SafeEffectComposer。
  */
 import { EffectComposer } from '@react-three/postprocessing';
 import { useThree } from '@react-three/fiber';

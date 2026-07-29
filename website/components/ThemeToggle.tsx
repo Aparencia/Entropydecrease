@@ -1,3 +1,6 @@
+// @ai-context
+// 双世界主题切换器（深海意识 ⇄ 晨曦穹顶）。Dual-world theme toggle.
+// Why: 用 useSyncExternalStore 判定水合完成，服务端渲染占位避免主题闪烁。
 "use client";
 
 import { useTheme } from "next-themes";

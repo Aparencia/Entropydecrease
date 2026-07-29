@@ -1,5 +1,7 @@
 /**
  * Step4FunctionalPanel — 功能面板说明
+ *
+ * @ai-context: 通用组件：Step4FunctionalPanel。
  */
 import { useEffect } from 'react';
 import { OnboardingCard } from '../OnboardingCard';

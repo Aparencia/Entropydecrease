@@ -4,6 +4,8 @@
  * 管理 better-sqlite3 连接的初始化、获取与关闭。
  * 数据库文件默认存储于 Electron userData/keban.db。
  * WAL 模式 + 外键约束在初始化时自动开启。
+ *
+ * @ai-context: SQLite 连接生命周期（initialize/reinitialize/checkpointAndClose)；库文件 userData/keban.db 为存量数据标识，永久豁免改名。
  */
 
 import Database from 'better-sqlite3';

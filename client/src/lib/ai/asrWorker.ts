@@ -3,6 +3,8 @@
  *
  * 实现 PipelineWorker 接口，将音频块发送给 ASR 模型进行语音转文字。
  * 通过 ai-gateway 的 /api/v1/asr/transcribe 端点调用 Paraformer / GLM-4-Audio。
+ *
+ * @ai-context: 语音转写 Worker 封装，供智能采集链路调用。
  */
 
 import type {

@@ -1,4 +1,6 @@
-/** @file 学习分析聚合 Hook — Worker 通信 + 状态管理 + 刷新接口 */
+/** @file 学习分析聚合 Hook — Worker 通信 + 状态管理 + 刷新接口 *
+ * @ai-context: dashboard 功能模块 Hook：useLearningAnalytics。
+ */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { AnalyticsAggregate } from '../types/analytics';
 import type { AggregateInput } from '../utils/aggregator';

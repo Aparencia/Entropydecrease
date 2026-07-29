@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 采集会话 UI 状态 Zustand store（仅 UI 态，持久化在 lib/storage/captureStore）。
+ */
 import { create } from 'zustand';
 
 interface CaptureState {

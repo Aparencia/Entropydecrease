@@ -6,6 +6,8 @@
  * - 缓存最近一次成功的 AI 结果（LRU + TTL）
  * - 根据错误类型 + 网络状态，返回三级降级策略
  * - 与 LocalFallback.ts（本地规则引擎）职责互补，不重叠
+ *
+ * @ai-context: AI 服务多级降级封装（重试→降级→本地兜底），修改降级顺序影响全部 AI 功能可用性。
  */
 
 import { AIError, type AIErrorCode } from './types';

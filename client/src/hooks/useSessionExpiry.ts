@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 登录会话过期检测 Hook，过期触发登出与提示。
+ */
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui';

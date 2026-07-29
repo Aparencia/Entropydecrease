@@ -1,3 +1,6 @@
+/**
+ * @ai-context: dashboard 功能模块：atmosphereQuote。
+ */
 /* ── 氛围文案池（零压力，纯意境） ── */
 
 const ATMOSPHERE_QUOTES: Record<string, string[]> = {

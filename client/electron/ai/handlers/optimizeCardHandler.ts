@@ -2,6 +2,8 @@
  * AI 闪卡优化功能 Handler
  *
  * 处理 ai_optimize_card IPC 请求，调用 AI 网关优化已有闪卡的正反面内容。
+ *
+ * @ai-context: 卡片优化 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
 import { safeHandle } from '../../ipcUtils.js';

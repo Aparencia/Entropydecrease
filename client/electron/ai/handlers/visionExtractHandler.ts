@@ -4,6 +4,8 @@
  * 处理 ai_vision_extract IPC 请求，调用 AI 网关对图片进行多模态内容提取。
  * 支持本地 Ollama 降级：优先调用本地多模态模型，失败后降级到远程网关。
  * 对应端点：POST /api/v1/vision/extract
+ *
+ * @ai-context: 视觉提取（截图 OCR/理解） IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
 import { safeHandle } from '../../ipcUtils.js';

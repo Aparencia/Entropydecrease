@@ -1,3 +1,6 @@
+/**
+ * @ai-context: notes 功能模块 Hook：useAutoSave。
+ */
 import { useRef, useCallback, useState, useEffect } from 'react';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 

@@ -1,6 +1,8 @@
 /**
  * 基于 SQLite FTS5 的全文搜索引擎
  * unicode61 分词器 + BM25 排序，为笔记/闪卡/灵感等提供本地全文搜索。
+ *
+ * @ai-context: SQLite FTS5 全文搜索封装（若可用），LIKE 搜索的升级路径。
  */
 import type Database from 'better-sqlite3';
 import { getConnection } from './sqliteService.js';

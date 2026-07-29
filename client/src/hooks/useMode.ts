@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 应用模式（本地/云端）切换 Hook，包装 ModeManager；模式影响同步与 AI 路由全链路。
+ */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { modeManager, type AppMode, type ModeConfig } from '../lib/mode/ModeManager';
 import { useAuth } from '../lib/auth/AuthContext';

@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 页面组件：ResetPassword。
+ */
 import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';

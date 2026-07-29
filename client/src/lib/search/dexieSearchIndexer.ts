@@ -9,6 +9,11 @@
  * 性能优化：
  * - 使用 Dexie 多值索引 `*tokens` 先筛选候选文档，避免全表 toArray()
  * - 按 entityType 设置不同文档长度归一化权重
+ *
+ * @ai-context: 2026-07 拆分——评分/文本纯函数在 searchScoring，重建收集在
+ * searchIndexBuilder；本文件保留引擎类与单例，旧导入路径全兼容。
+ * @ai-context: 索引写入保留 noteId=entityId 双字段是 v1.2.0 向后兼容设计，
+ * 删除 noteId 会破坏旧索引记录清理逻辑。分词策略变更必须 rebuildIndex。
  */
 
 import { db } from '../storage/database';
@@ -20,74 +25,14 @@ import type {
   SearchResultItem,
 } from './types';
 import type { SearchEntityType } from '@/types/models';
-
-// ---------------------------------------------------------------------------
-// BM25 参数（简化版，适合小规模多实体搜索）
-// ---------------------------------------------------------------------------
-
-const BM25_K1 = 1.5;
-const BM25_B = 0.75;
+import {
+  BM25_K1, BM25_B, ENTITY_LENGTH_WEIGHT,
+  extractPlainText, computeIDF, buildSnippet,
+} from './searchScoring';
+import { collectIndexableItems } from './searchIndexBuilder';
 
 /** 每批重建索引的条目数量 */
 const REBUILD_BATCH_SIZE = 100;
-
-/**
- * 各实体类型的文档长度归一化权重
- * 闪卡/灵感内容较短，费曼笔记/课堂笔记内容较长，
- * 通过权重调整 BM25 中的 docLen / avgDocLen 比值，
- * 使短内容（如闪卡）不至于因为长度短而得分偏高。
- */
-const ENTITY_LENGTH_WEIGHT: Record<SearchEntityType, number> = {
-  note: 1.0,
-  flashcard: 0.6,   // 闪卡内容短，降低长度影响
-  feynman: 1.2,     // 费曼笔记偏长
-  inspiration: 0.7, // 灵感较短
-  classroom: 1.3,   // 课堂笔记较长
-};
-
-// ---------------------------------------------------------------------------
-// 工具函数
-// ---------------------------------------------------------------------------
-
-/**
- * 从 TipTap JSON 内容中提取纯文本
- * content 可能是 JSON 字符串（TipTap 文档结构）、也可能已经是纯文本
- */
-function extractPlainText(content: string): string {
-  try {
-    const doc = JSON.parse(content);
-    if (doc?.type === 'doc' && Array.isArray(doc.content)) {
-      const extract = (nodes: Array<Record<string, unknown>>): string => {
-        const parts: string[] = [];
-        for (const node of nodes) {
-          if (node.type === 'text' && typeof node.text === 'string') {
-            parts.push(node.text);
-          }
-          if (Array.isArray(node.content)) {
-            parts.push(extract(node.content as Array<Record<string, unknown>>));
-          }
-        }
-        return parts.join(' ');
-      };
-      return extract(doc.content);
-    }
-  } catch {
-    // 非 JSON 或解析失败，当作纯文本处理
-  }
-  return content;
-}
-
-/**
- * 计算 IDF（逆文档频率）
- * IDF(t) = log((N - df(t) + 0.5) / (df(t) + 0.5) + 1)
- */
-function computeIDF(totalDocs: number, docFreq: number): number {
-  return Math.log((totalDocs - docFreq + 0.5) / (docFreq + 0.5) + 1);
-}
-
-// ---------------------------------------------------------------------------
-// DexieSearchIndexer 类
-// ---------------------------------------------------------------------------
 
 export class DexieSearchIndexer implements ISearchEngine {
   private initialized = false;
@@ -279,96 +224,13 @@ export class DexieSearchIndexer implements ISearchEngine {
 
   /**
    * 重建全部搜索索引
-   * v1.2.0: 遍历 notes/flashcards/feynmanNotes/inspirations/classroomNotes 五张表
+   * v1.2.0: 遍历五张表（收集逻辑见 searchIndexBuilder）
    * 使用 requestIdleCallback 异步批量处理，每批 REBUILD_BATCH_SIZE 条
    */
   async rebuildIndex(): Promise<void> {
     await db.searchIndex.clear();
 
-    // ── 收集五张表的条目，统一转换为标准格式 ──────────────────────────────────
-    interface IndexableItem {
-      entityId: string;
-      entityType: SearchEntityType;
-      title: string;
-      content: string;
-      updatedAt: number;
-    }
-
-    const allItems: IndexableItem[] = [];
-
-    // notes: title + content
-    const notes = await db.notes.toArray();
-    for (const note of notes) {
-      const plainContent = extractPlainText(note.content);
-      allItems.push({
-        entityId: note.id,
-        entityType: 'note',
-        title: note.title,
-        content: plainContent,
-        updatedAt:
-          note.updatedAt instanceof Date
-            ? note.updatedAt.getTime()
-            : new Date(note.updatedAt).getTime(),
-      });
-    }
-
-    // flashcards: front + back
-    const flashcards = await db.flashcards.toArray();
-    for (const card of flashcards) {
-      allItems.push({
-        entityId: card.id,
-        entityType: 'flashcard',
-        title: card.front?.slice(0, 60) ?? '闪卡',
-        content: `${card.front ?? ''} ${card.back ?? ''}`.trim(),
-        updatedAt:
-          card.updatedAt instanceof Date
-            ? card.updatedAt.getTime()
-            : new Date(card.updatedAt ?? Date.now()).getTime(),
-      });
-    }
-
-    // feynmanNotes: concept + explanation
-    const feynmanNotes = await db.feynmanNotes.toArray();
-    for (const fn of feynmanNotes) {
-      allItems.push({
-        entityId: fn.id,
-        entityType: 'feynman',
-        title: fn.concept ?? '费曼笔记',
-        content: `${fn.concept ?? ''} ${fn.explanation ?? ''}`.trim(),
-        updatedAt:
-          fn.updatedAt instanceof Date
-            ? fn.updatedAt.getTime()
-            : new Date(fn.updatedAt ?? Date.now()).getTime(),
-      });
-    }
-
-    // inspirations: content (标题取前 60 字)
-    const inspirations = await db.inspirations.toArray();
-    for (const insp of inspirations) {
-      const content = insp.content ?? '';
-      allItems.push({
-        entityId: insp.id,
-        entityType: 'inspiration',
-        title: content.slice(0, 60) || '灵感',
-        content,
-        updatedAt: new Date(insp.updatedAt ?? Date.now()).getTime(),
-      });
-    }
-
-    // classroomNotes: title + content (Markdown)
-    const classroomNotes = await db.classroomNotes.toArray();
-    for (const cn of classroomNotes) {
-      allItems.push({
-        entityId: cn.id,
-        entityType: 'classroom',
-        title: cn.title ?? '课堂笔记',
-        content: `${cn.title ?? ''} ${cn.content ?? ''}`.trim(),
-        updatedAt:
-          cn.updatedAt instanceof Date
-            ? cn.updatedAt.getTime()
-            : new Date(cn.updatedAt ?? Date.now()).getTime(),
-      });
-    }
+    const allItems = await collectIndexableItems();
 
     // ── 批量写入索引 ───────────────────────────────────────────────────────
     let cursor = 0;
@@ -417,34 +279,9 @@ export class DexieSearchIndexer implements ISearchEngine {
 }
 
 // ---------------------------------------------------------------------------
-// 内部辅助：生成匹配上下文摘要
-// ---------------------------------------------------------------------------
-
-function buildSnippet(content: string, matchedTokens: string[]): string {
-  if (!content) return '';
-  const lowerContent = content.toLowerCase();
-
-  let bestIndex = -1;
-  for (const token of matchedTokens) {
-    const idx = lowerContent.indexOf(token);
-    if (idx !== -1 && (bestIndex === -1 || idx < bestIndex)) {
-      bestIndex = idx;
-    }
-  }
-
-  if (bestIndex === -1) {
-    return content.slice(0, 120) + (content.length > 120 ? '...' : '');
-  }
-
-  const start = Math.max(0, bestIndex - 30);
-  const end = Math.min(content.length, bestIndex + 90);
-  const prefix = start > 0 ? '...' : '';
-  const suffix = end < content.length ? '...' : '';
-  return `${prefix}${content.slice(start, end)}${suffix}`;
-}
-
-// ---------------------------------------------------------------------------
-// 单例导出
+// 单例导出 + 向后兼容 re-export
 // ---------------------------------------------------------------------------
 
 export const dexieSearchIndexer = new DexieSearchIndexer();
+
+export { extractPlainText, buildSnippet } from './searchScoring';

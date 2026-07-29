@@ -1,3 +1,6 @@
+// @ai-context
+// 深海发光粒子装饰组件。Deep-sea glow particle decoration.
+// Why: 用 mulberry32 确定性伪随机替代 Math.random，保证 SSR/CSR 渲染一致避免水合不匹配。
 "use client";
 
 import { useMemo } from "react";

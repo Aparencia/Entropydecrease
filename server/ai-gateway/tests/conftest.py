@@ -1,5 +1,5 @@
 """
-课伴 AI 网关 — pytest 公共夹具
+熵减 AI 网关 — pytest 公共夹具
 
 提供测试用的 FastAPI app、TestClient、mock Provider 等。
 """

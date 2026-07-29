@@ -1,8 +1,10 @@
 """
-课伴 AI 网关 — ASR 语音转写路由
+熵减 AI 网关 — ASR 语音转写路由
 
 POST /api/v1/asr/transcribe
 调用 Paraformer / GLM-4-Audio 等 ASR 模型将语音转写为文本。
+
+@ai-context: 语音转写路由：音频转文字（Paraformer/GLM-Audio），经 fallback 链。
 """
 
 import time

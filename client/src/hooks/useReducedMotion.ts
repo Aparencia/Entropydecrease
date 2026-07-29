@@ -1,3 +1,6 @@
+/**
+ * @ai-context: prefers-reduced-motion 媒体查询订阅，动效系统无障碍开关。
+ */
 import { useState, useEffect } from 'react';
 
 /**

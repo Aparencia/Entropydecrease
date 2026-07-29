@@ -3,6 +3,8 @@
  *
  * 根据用户设置（localStorage）返回对应的调度策略实例。
  * 默认使用 FSRS，用户可在设置页面切换回 SM-2。
+ *
+ * @ai-context: 本文件是调度模块唯一的副作用边界（localStorage 读写），sm2/fsrs/scheduler 均为纯函数。kb-* 键名已有存量用户数据，改名需迁移逻辑。
  */
 
 import { SM2Strategy, FSRSStrategy, type SchedulingStrategy } from './scheduler';

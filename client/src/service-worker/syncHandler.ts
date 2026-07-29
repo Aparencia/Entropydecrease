@@ -11,6 +11,8 @@
  *
  * 注意：Background Sync API 目前仅 Chromium 系浏览器完整支持，
  * 其他浏览器会静默降级，不影响正常功能。
+ *
+ * @ai-context: Service Worker：syncHandler。
  */
 
 declare const self: ServiceWorkerGlobalScope;
@@ -20,9 +22,9 @@ interface SyncEvent extends ExtendableEvent {
   waitUntil(promise: Promise<unknown>): void;
 }
 
-const SYNC_TAG = 'keban-sync';
-const PERIODIC_SYNC_TAG = 'keban-periodic-sync';
-const OFFLINE_QUEUE_KEY = 'keban_offline_queue';
+const SYNC_TAG = 'ed-sync';
+const PERIODIC_SYNC_TAG = 'ed-periodic-sync';
+const OFFLINE_QUEUE_KEY = 'ed_offline_queue';
 
 /**
  * 监听 sync 事件 —— 当网络恢复时由浏览器触发
@@ -54,7 +56,7 @@ async function replayOfflineQueue(): Promise<void> {
 
 /**
  * 注册一次 sync —— 由应用层在离线操作后调用
- * 例如：navigator.serviceWorker.ready.then(reg => reg.sync.register('keban-sync'))
+ * 例如：navigator.serviceWorker.ready.then(reg => reg.sync.register('ed-sync'))
  *
  * PWA 增强：
  * - 优先尝试 Background Sync API
@@ -162,7 +164,7 @@ function scheduleFallbackSync(): void {
         navigator.serviceWorker.controller.postMessage({ type: 'TRIGGER_SYNC' });
       } else {
         // SW 不可用时，直接派发事件让应用层同步
-        window.dispatchEvent(new CustomEvent('keban-sync-requested'));
+        window.dispatchEvent(new CustomEvent('ed-sync-requested'));
       }
     }, 2000);
   };

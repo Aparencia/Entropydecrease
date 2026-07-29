@@ -6,6 +6,8 @@
  * - 深色模式: 粒子为靛蓝/赛博青色
  * - 浅色模式: 粒子为琥珀/蓝色（更柔和）
  * - reduced-motion时隐藏
+ *
+ * @ai-context: 通用组件：ParticleBackground。
  */
 import { useMemo } from 'react';
 import { useReducedMotion } from '@/hooks/useReducedMotion';

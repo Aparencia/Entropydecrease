@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 页面组件：RegisterPage。
+ */
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, CheckCircle } from 'lucide-react';

@@ -1,3 +1,6 @@
+/**
+ * @ai-context: UI 基础组件（shadcn/radix 封装）：AchievementToast。
+ */
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Timer, Layers, Lightbulb, FileText, Flame, Trophy, Medal,

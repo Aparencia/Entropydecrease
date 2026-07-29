@@ -4,24 +4,18 @@ import { generateId } from '@/lib/utils/uuid';
 import { offlineQueue } from '@/lib/sync/OfflineQueue';
 import { cryptoManager } from '@/lib/crypto';
 import { crdtEngine, shouldUseCRDT } from '@/lib/sync/crdtEngine';
+import { enqueueCRDTChange } from '@/lib/sync/crdtPersistence';
+import { SENSITIVE_FIELDS } from './sensitiveFields';
 
 /**
  * 带操作日志的统一写操作
  * 每次写操作自动记录日志到 operationLog，支持后续同步
  * 写入前对敏感字段进行 AES-GCM 加密（CryptoManager 未初始化时优雅降级）
+ *
+ * @ai-context: 敏感字段加密映射唯一来源为 ./sensitiveFields.ts（与解密侧共享），禁止本地重新定义。
+ * @ai-context: CRDT 路径失败不阻塞主写入（降级仅告警）。
  */
 
-/**
- * 敏感字段映射：entityType -> 需要加密的字段名列表
- * 非敏感表（pomodoroSessions, pomodoroSettings, operationLog 等）不在此映射中
- */
-const SENSITIVE_FIELDS: Record<string, string[]> = {
-  notes: ['content'],
-  flashcards: ['front', 'back'],
-  feynmanNotes: ['explanation'],
-  feynmanSummaries: ['summary'],
-  feynmanWeakPoints: ['text'],
-};
 
 /**
  * 对数据中的敏感字段进行加密
@@ -172,7 +166,7 @@ async function applyCRDTChange(
     if (!changeset) return;
 
     // 存入待上传队列 + 持久化文档快照
-    await crdtEngine.enqueueChange(changeset);
+    await enqueueCRDTChange(changeset);
     await crdtEngine.persistDoc(tableName);
   } catch (err) {
     // CRDT 路径失败不应阻塞主写入流程，仅记录警告

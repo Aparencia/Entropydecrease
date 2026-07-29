@@ -1,3 +1,6 @@
+// @ai-context
+// 页脚：品牌语料、导航/开源链接与 ICP/公安备案信息。Footer: brand copy, links, ICP filing.
+// Why: 备案号受域名法律绑定，品牌重命名时豁免改动。
 import Link from "next/link";
 
 /**
@@ -18,7 +21,7 @@ export function Footer() {
               >
                 熵
               </span>
-              <span className="font-serif font-semibold text-kb-text">课伴 · 熵减</span>
+              <span className="font-serif font-semibold text-kb-text">熵减 · Entropydecrease</span>
             </div>
             <p className="text-sm text-kb-text3 max-w-xs leading-relaxed">
               万物终将冷却，但你可以选择向内心注入光。
@@ -39,7 +42,7 @@ export function Footer() {
             <div className="flex flex-col gap-2.5">
               <span className="text-kb-text3 text-xs uppercase tracking-widest mb-1">开源</span>
               <a
-                href="https://github.com/Aparencia/KeBan"
+                href="https://github.com/Aparencia/Entropydecrease"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-kb-text2 hover:text-kb-text transition-colors duration-300"
@@ -47,7 +50,7 @@ export function Footer() {
                 GitHub
               </a>
               <a
-                href="https://github.com/Aparencia/KeBan/releases"
+                href="https://github.com/Aparencia/Entropydecrease/releases"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-kb-text2 hover:text-kb-text transition-colors duration-300"
@@ -63,7 +66,7 @@ export function Footer() {
           style={{ borderTop: "1px solid var(--kb-border-default)" }}
         >
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 w-full">
-            <span>© 2026 课伴 KeBan · 熵减 — 在无序的时光里，陪你慢慢生长</span>
+            <span>© 2026 熵减 Entropydecrease — 在无序的时光里，陪你慢慢生长</span>
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full animate-cyber-pulse" style={{ background: "var(--kb-cyber-cyan)" }} />
               以负熵为食的生命体

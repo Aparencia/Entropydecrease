@@ -1,82 +1,35 @@
 """
-课伴 AI 网关 — 多模态课堂分析路由
+熵减 AI 网关 — 多模态课堂分析路由
 
 POST /api/v1/multimodal/analyze-session
+POST /api/v1/multimodal/merge-notes
+（/analyze-video 端点见 multimodal_video.py，经 include_router 挂载）
 
 @ai-context Path B 服务端入口：客户端上传关键帧序列 + 语音转写 →
 多模态模型联合分析 → 返回结构化 Markdown 课堂笔记。
-
 超时配置 120s（多图 + 长文本生成，需要充裕的等待窗口）。
+@ai-context 请求/响应模型见 multimodal_schemas.py；视频分析端点见
+multimodal_video.py（本文件以 include_router 统一挂载前缀）。
 """
 
-import os
-import shutil
-import tempfile
 import time
 import logging
 
-from pydantic import BaseModel, Field
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, HTTPException, Request
 
 from config import call_with_fallback_for_request
 from chains.multimodal_analyze_chain import MultimodalAnalyzeChain
-from chains.video_analyze_chain import VideoAnalyzeChain
 from prompts.session_analyze import MERGE_NOTES_SYSTEM_PROMPT, build_merge_prompt
+from routers.multimodal_schemas import (
+    AnalyzeSessionRequest,
+    AnalyzeSessionResponse,
+    MergeNotesRequest,
+    MergeNotesResponse,
+)
+from routers.multimodal_video import router as video_router
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/multimodal", tags=["多模态分析"])
-
-
-# ============================================================
-# Pydantic 请求/响应模型
-# ============================================================
-
-
-class KeyFrameInput(BaseModel):
-    """单帧关键帧输入"""
-    timestamp: float = Field(..., description="帧出现的时间戳（秒）")
-    image_base64: str = Field(..., description="PNG/JPEG 图片 base64 编码（不含 data: 前缀）")
-    change_type: str = Field(
-        default="scene_change",
-        description="画面变化类型：scene_change(场景切换) | ppt_flip(PPT翻页) | handwriting(板书手写)",
-    )
-
-
-class AudioSegmentInput(BaseModel):
-    """单段语音片段输入"""
-    timestamp_start: float = Field(..., description="语音开始时间（秒）")
-    timestamp_end: float = Field(..., description="语音结束时间（秒）")
-    audio_text: str | None = Field(
-        default=None,
-        description="语音转写文本（若客户端已完成 ASR 转写则直接传入，省去服务端二次转写）",
-    )
-
-
-class AnalyzeSessionRequest(BaseModel):
-    """多模态课堂分析请求
-
-    @ai-context 客户端在课程录制结束后批量上传关键帧和语音片段，
-    服务端一次性生成完整的结构化笔记。
-    """
-    duration: float = Field(..., description="课程总时长（秒）")
-    keyframes: list[KeyFrameInput] = Field(..., description="关键帧列表（按时间排序）")
-    audio_segments: list[AudioSegmentInput] = Field(
-        default_factory=list,
-        description="语音片段列表（可选，客户端已转写的文本）",
-    )
-    output_format: str = Field(default="markdown", description="输出格式：markdown")
-    language: str = Field(default="zh-CN", description="输出语言：zh-CN / en-US")
-    course_meta: dict | None = Field(
-        default=None,
-        description="课程元数据（可选，含 course_name/subject/custom_terms）",
-    )
-
-
-class AnalyzeSessionResponse(BaseModel):
-    """多模态课堂分析响应"""
-    content: str = Field(..., description="Markdown 格式的课堂笔记内容")
-    keyframes_analyzed: int = Field(..., description="实际分析的关键帧数量")
-    model_used: str = Field(..., description="实际使用的模型名称")
 
 
 # ============================================================
@@ -183,19 +136,6 @@ async def analyze_session(
 # ============================================================
 
 
-class MergeNotesRequest(BaseModel):
-    """片段笔记合并请求"""
-    partials: list[str] = Field(..., description="片段笔记列表（按时间顺序）")
-    duration: float = Field(default=0, description="课程总时长（秒）")
-    language: str = Field(default="zh-CN", description="输出语言")
-
-
-class MergeNotesResponse(BaseModel):
-    """片段笔记合并响应"""
-    content: str = Field(..., description="合并后的 Markdown 笔记")
-    model_used: str = Field(..., description="实际使用的模型")
-
-
 @router.post(
     "/merge-notes",
     response_model=MergeNotesResponse,
@@ -283,105 +223,7 @@ async def merge_notes(
 
 
 # ============================================================
-# 视频分析端点
+# 挂载视频分析子路由（/analyze-video）
 # ============================================================
 
-# 视频文件上传大小上限：500MB
-_VIDEO_MAX_SIZE = 500 * 1024 * 1024
-
-
-class AnalyzeVideoResponse(BaseModel):
-    """视频分析响应"""
-    content: str = Field(..., description="Markdown 格式的视频分析笔记")
-    duration_analyzed: int = Field(..., description="分析的视频时长（秒）")
-    model_used: str = Field(..., description="实际使用的模型名称")
-
-
-@router.post(
-    "/analyze-video",
-    response_model=AnalyzeVideoResponse,
-    summary="视频课堂分析",
-)
-async def analyze_video(
-    request: Request,
-    video_file: UploadFile = File(..., description="视频文件上传（mp4/webm/mkv，≤500MB）"),
-    duration: float = Form(..., description="视频时长（秒）"),
-    language: str = Form(default="zh-CN", description="输出语言：zh-CN / en-US"),
-) -> AnalyzeVideoResponse:
-    """
-    上传视频文件并分析，生成结构化 Markdown 课堂笔记
-
-    - 优先使用 Gemini 原生视频分析
-    - 降级为 Qwen-VL 抽帧多图分析
-    - 超时 300 秒（视频处理耗时较长）
-    """
-    start_time = time.monotonic()
-    user_id = getattr(request.state, "user_id", "anonymous")
-
-    logger.info(
-        "视频分析请求: user=%s, filename=%s, duration=%.1fs",
-        user_id, video_file.filename, duration,
-    )
-
-    # ---- 文件大小校验 ----
-    content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > _VIDEO_MAX_SIZE:
-        raise HTTPException(
-            status_code=413,
-            detail=f"视频文件超过大小上限（500MB，当前 {int(content_length) // 1024 // 1024}MB）",
-        )
-
-    # ---- 保存上传文件到临时目录 ----
-    tmp_dir = tempfile.mkdtemp(prefix="keban_video_")
-    suffix = os.path.splitext(video_file.filename or "video.mp4")[1] or ".mp4"
-    tmp_path = os.path.join(tmp_dir, f"video{suffix}")
-
-    try:
-        with open(tmp_path, "wb") as f:
-            shutil.copyfileobj(video_file.file, f)
-
-        file_size = os.path.getsize(tmp_path)
-        if file_size > _VIDEO_MAX_SIZE:
-            raise HTTPException(status_code=413, detail="视频文件超过 500MB 上限")
-
-        logger.info("视频已保存: path=%s, size=%dMB", tmp_path, file_size // 1024 // 1024)
-
-        # ---- 通过 fallback 链执行 ----
-        async def _run_video_chain(provider, model_name):
-            chain = VideoAnalyzeChain(provider=provider, model=model_name)
-            return await chain.run(
-                video_input=tmp_path,
-                duration=int(duration),
-                language=language,
-            )
-
-        try:
-            result, used_provider, is_user_key = await call_with_fallback_for_request(
-                request.app, "video_analyze", request, _run_video_chain
-            )
-        except RuntimeError as e:
-            logger.error("视频分析服务全部不可用: %s", str(e))
-            raise HTTPException(
-                status_code=503,
-                detail="所有视频分析 AI 服务暂时不可用，请稍后重试",
-            )
-
-        latency_ms = int((time.monotonic() - start_time) * 1000)
-
-        logger.info(
-            "视频分析完成: provider=%s, model=%s, duration=%ds, latency=%dms",
-            used_provider,
-            result.get("model", "unknown"),
-            int(duration),
-            latency_ms,
-        )
-
-        return AnalyzeVideoResponse(
-            content=result.get("content", ""),
-            duration_analyzed=result.get("duration_analyzed", int(duration)),
-            model_used=result.get("model", "unknown"),
-        )
-
-    finally:
-        # 清理临时文件
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+router.include_router(video_router)

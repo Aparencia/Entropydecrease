@@ -1,3 +1,6 @@
+// @ai-context
+// 根布局：站点元数据（SEO/OG）、思源字体加载与全局框架装配。Root layout: site metadata, Noto fonts, global shell.
+// Why: metadataBase 与 OG url 必须与生产域名一致，否则社交分享卡片解析失败。
 import type { Metadata } from "next";
 import { Noto_Sans_SC, Noto_Serif_SC } from "next/font/google";
 import "./globals.css";
@@ -22,12 +25,12 @@ const notoSerif = Noto_Serif_SC({
 export const metadata: Metadata = {
   metadataBase: new URL("https://entropydecrease.com"),
   title: {
-    default: "课伴 KeBan · 熵减 — 潜入深海，拾起认知的微光",
-    template: "%s | 课伴 KeBan",
+    default: "熵减 Entropydecrease — 潜入深海，拾起认知的微光",
+    template: "%s | 熵减 Entropydecrease",
   },
   description:
-    "课伴（熵减）是一款基于认知科学的学习伴侣应用。番茄钟、智能笔记、闪卡复习、费曼学习法——在无序的时光里，陪你慢慢生长。",
-  keywords: ["课伴", "KeBan", "熵减", "学习工具", "番茄钟", "闪卡", "费曼学习法", "认知科学"],
+    "熵减（Entropydecrease）是一款基于认知科学的学习伴侣应用。番茄钟、智能笔记、闪卡复习、费曼学习法——在无序的时光里，陪你慢慢生长。",
+  keywords: ["熵减", "Entropydecrease", "学习工具", "番茄钟", "闪卡", "费曼学习法", "认知科学"],
   alternates: {
     canonical: "/",
   },
@@ -35,8 +38,8 @@ export const metadata: Metadata = {
     type: "website",
     locale: "zh_CN",
     url: "https://entropydecrease.com",
-    siteName: "课伴 KeBan · 熵减",
-    title: "课伴 KeBan · 熵减 — 潜入深海，拾起认知的微光",
+    siteName: "熵减 Entropydecrease",
+    title: "熵减 Entropydecrease — 潜入深海，拾起认知的微光",
     description:
       "基于认知科学的本地优先学习工具：番茄钟、智能笔记、闪卡复习、费曼学习法。",
   },

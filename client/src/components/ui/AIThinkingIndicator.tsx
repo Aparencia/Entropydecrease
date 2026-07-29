@@ -3,6 +3,8 @@
  *
  * 三个赛博青色圆点依次明暗变化，
  * 传达"AI 正在陪伴你思考"的温暖感。
+ *
+ * @ai-context: UI 基础组件（shadcn/radix 封装）：AIThinkingIndicator。
  */
 import { motion } from 'framer-motion';
 

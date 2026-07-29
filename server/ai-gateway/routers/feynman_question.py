@@ -1,11 +1,13 @@
 """
-课伴 AI 网关 — 费曼反问路由
+熵减 AI 网关 — 费曼反问路由
 
 POST /api/v1/ai/feynman-question
   生成 1-3 个基于用户讲解的追问
 
 POST /api/v1/ai/feynman-evaluate-answers
   评估用户对追问的回答，返回理解度评分
+
+@ai-context: 费曼提问路由：基于笔记内容生成引导性问题，驱动深度理解。
 """
 
 import logging

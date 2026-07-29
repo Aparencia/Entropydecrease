@@ -3,6 +3,8 @@
  *
  * 处理 ai_recommend_duration IPC 请求，
  * 调用 AI 网关根据学习历史推荐最佳学习时长。
+ *
+ * @ai-context: 时长推荐 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
 import { safeHandle } from '../../ipcUtils.js';

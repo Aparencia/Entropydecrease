@@ -6,6 +6,10 @@ import type { IRepository } from './interfaces';
  * 渲染进程通过 window.electronAPI.db.* 调用主进程 SQLite，
  * 所有操作走 IPC invoke/handle 通道。
  * 仅在 Electron 环境下使用。
+ *
+ * @ai-context: 主进程侧已做 SQLite 层加解密，本适配器不做敏感字段处理
+ * （与 StorageAdapter 的解密路径不同源）。find 的 predicate 无法跨 IPC
+ * 序列化，故全量拉取后本地过滤——大表慎用。
  */
 export class IpcStorageAdapter<T extends { id: string }> implements IRepository<T> {
   private tableName: string;

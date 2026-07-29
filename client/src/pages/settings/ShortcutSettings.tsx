@@ -1,6 +1,8 @@
 /**
  * ShortcutSettings — 快捷键速查设置区块
  * 展示当前所有系统预设快捷键（只读）
+ *
+ * @ai-context: 设置页组件：ShortcutSettings。
  */
 import { Keyboard } from 'lucide-react';
 

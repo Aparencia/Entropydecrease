@@ -1,5 +1,7 @@
 /**
  * 用户协议页面
+ *
+ * @ai-context: 页面组件：TermsOfService。
  */
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, FileText } from 'lucide-react';
