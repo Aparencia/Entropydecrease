@@ -138,7 +138,9 @@ export function sm2(card: SM2CardInput, rating: Rating, options?: SM2Options): S
 
   // Golden error：高自信答错时缩短间隔
   const multiplier = options?.goldenErrorMultiplier;
-  if (multiplier !== undefined && multiplier > 0 && multiplier < 1) {
+  // 下界取 >= 0：传 0 表示尽可能缩短，经 Math.max 收敛到最小间隔 1 天；
+  // 上界仍为 < 1，因 1.0 的语义就是不调整
+  if (multiplier !== undefined && multiplier >= 0 && multiplier < 1) {
     newInterval = Math.max(1, Math.round(newInterval * multiplier));
   }
 

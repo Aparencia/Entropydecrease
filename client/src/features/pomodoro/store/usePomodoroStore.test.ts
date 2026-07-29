@@ -1,6 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock persistence layer to avoid storage coupling
+// 音效播放器：jsdom 无 AudioContext，真实调用会触发 fetch 音频文件（5s 超时）
+// 并留下悬挂异步任务导致测试进程不退出，故整体 mock
+vi.mock('@/lib/audio/SoundPlayer', () => ({
+  soundPlayer: {
+    play: vi.fn(),
+    playByCategory: vi.fn(),
+    preload: vi.fn().mockResolvedValue(undefined),
+    preloadAll: vi.fn().mockResolvedValue(undefined),
+    setVolume: vi.fn(),
+    getVolume: vi.fn().mockReturnValue(1),
+    setMuted: vi.fn(),
+    getSettings: vi.fn().mockReturnValue({}),
+  },
+}));
+
 vi.mock('@/lib/achievements/evaluator', () => ({
   checkAchievements: vi.fn().mockResolvedValue([]),
 }));
