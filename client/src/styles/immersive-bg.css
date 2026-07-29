@@ -1,0 +1,101 @@
+/*
+ * immersive-bg.css — 沉浸式全屏深海多层渐变背景
+ *
+ * 依赖：需要 tokens.css 中定义的以下 CSS 变量：
+ *   --kb-deep-surface              基础遮罩层（浅色半透白 / 深色半透蓝）
+ *   --kb-deep-surface-rgb          表面色 RGB 三元组（用于透明度混合）
+ *   --kb-deep-border               边框微光线（浅色 rgba(0,0,0,0.15) / 深色 rgba(34,211,238,0.12)）
+ *   --kb-deep-accent-rgb           赛博青 RGB 三元组（用于 rgba() 透明度混合）
+ *   --kb-brand-400                 品牌主色（color-mix 紫色发光）
+ *   --kb-deep-bg-surface           渐变段 1 起始色
+ *   --kb-deep-bg-surface-to        渐变段 1 终止色
+ *   --kb-deep-bg-sunlight          渐变段 2 起始色
+ *   --kb-deep-bg-sunlight-to       渐变段 2 终止色
+ *   --kb-deep-bg-twilight          渐变段 3 起始色
+ *   --kb-deep-bg-twilight-to       渐变段 3 终止色
+ *   --kb-deep-bg-midnight          渐变段 4 起始色
+ *   --kb-deep-bg-midnight-to       渐变段 4 终止色
+ *   --kb-duration-slow             过渡时长（可选，默认 400ms）
+ *
+ * 使用方式：在 ImmersiveCanvas.tsx 的容器 div 上添加 class="kb-immersive-bg"
+ *   示例：<div className="absolute inset-0 bg-bg-primary kb-immersive-bg" />
+ *
+ * 注意：本文件已通过 @import './tokens.css' 自行引入所需变量，
+ *       可在任何 CSS 入口独立使用，无需额外前置依赖。
+ *       当 tokens.css 被移除后，删除下方 @import './tokens.css' 行即可，
+ *       所需变量将由上层入口统一提供。
+ */
+
+/* tokens.css 已由 index.css 统一导入，此处不再重复引入 */
+
+/** 沉浸式全屏深海多层渐变背景 */
+.kb-immersive-bg {
+  position: relative;
+  transition: opacity var(--kb-duration-slow, 400ms) ease;
+  background:
+    /* 基础遮罩层：确保任何模式下背景都不会过亮 */
+    var(--kb-deep-surface),
+    /* 赛博青径向发光（带 oklch 特性检测降级） */
+    radial-gradient(ellipse at 50% 35%, rgba(var(--kb-deep-accent-rgb), 0.07) 0%, transparent 55%),
+    /* 品牌紫径向发光 — 海底热泉微光 */
+    radial-gradient(ellipse at 30% 85%,
+      color-mix(in srgb, var(--kb-brand-400) 5%, transparent) 0%,
+      transparent 45%),
+    /* 深度渐变：四段双色过渡，from→to 形成段内微渐变 */
+    linear-gradient(180deg,
+      var(--kb-deep-bg-surface) 0%,
+      var(--kb-deep-bg-surface-to) 15%,
+      var(--kb-deep-bg-sunlight) 25%,
+      var(--kb-deep-bg-sunlight-to) 40%,
+      var(--kb-deep-bg-twilight) 50%,
+      var(--kb-deep-bg-twilight-to) 68%,
+      var(--kb-deep-bg-midnight) 78%,
+      var(--kb-deep-bg-midnight-to) 100%);
+  animation: kb-bg-breathe 25s ease-in-out infinite;
+}
+
+/* 广色域发光增强 — 仅在浏览器支持 oklch 时启用 */
+@supports (color: oklch(0.5 0.1 200)) {
+  .kb-immersive-bg {
+    background:
+      var(--kb-deep-surface),
+      radial-gradient(ellipse at 50% 35%,
+        oklch(0.55 0.12 195 / 0.09) 0%, transparent 55%),
+      radial-gradient(ellipse at 30% 85%,
+        oklch(0.45 0.15 305 / 0.06) 0%, transparent 45%),
+      linear-gradient(180deg,
+        var(--kb-deep-bg-surface) 0%,
+        var(--kb-deep-bg-surface-to) 15%,
+        var(--kb-deep-bg-sunlight) 25%,
+        var(--kb-deep-bg-sunlight-to) 40%,
+        var(--kb-deep-bg-twilight) 50%,
+        var(--kb-deep-bg-twilight-to) 68%,
+        var(--kb-deep-bg-midnight) 78%,
+        var(--kb-deep-bg-midnight-to) 100%);
+  }
+  /* 额外高斯模糊辉光层，模拟 bloom 效果 */
+  .kb-immersive-bg::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 50% 35%,
+        oklch(0.55 0.12 195 / 0.06) 0%, transparent 50%);
+    filter: blur(60px);
+    pointer-events: none;
+  }
+}
+
+@keyframes kb-bg-breathe {
+  0%, 100% { opacity: 1; filter: brightness(1); }
+  50% { opacity: 0.92; filter: brightness(1.04); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kb-immersive-bg {
+    transition: none;
+    animation: none;
+  }
+  .kb-immersive-bg::after {
+    display: none;
+  }
+}

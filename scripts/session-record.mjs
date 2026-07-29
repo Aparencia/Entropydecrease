@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 /**
+ * @ai-context
+ * 会话事件记录器：采集并规范化 agent 会话事件到 .qoder/learning/events/。
+ * Session event recorder normalizing agent activity into JSON event logs.
+ * Why: 事件按会话分文件存储并以 .active-session 标记当前会话，避免并发写入互相覆盖。
+ *
  * 会话事件记录器 — 采集并规范化 agent 会话事件
  *
  * 用法：

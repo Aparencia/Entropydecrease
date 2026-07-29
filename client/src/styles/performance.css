@@ -1,0 +1,50 @@
+/* 性能关键样式规则 */
+
+/* GPU合成层提升 - 应用于所有动画容器 */
+[data-animate],
+.motion-safe *[style*="transform"] {
+  will-change: transform, opacity;
+  contain: layout style paint;
+}
+
+/* 减少动效模式 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 防止布局偏移 */
+.skeleton-container {
+  contain: strict;
+  content-visibility: auto;
+}
+
+/* 虚拟列表容器性能 */
+.virtual-list-container {
+  contain: strict;
+  will-change: scroll-position;
+  overflow-anchor: none;
+}
+
+/* 字体预加载防止FOUT */
+@font-face {
+  font-display: swap;
+}
+
+/* 保存成功粒子扩散动效 */
+@keyframes particle-burst {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(var(--px), var(--py)) scale(0.4);
+    opacity: 0;
+  }
+}

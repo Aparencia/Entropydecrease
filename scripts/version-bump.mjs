@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 /**
+ * @ai-context
+ * 全仓版本号同步：将 semantic-release 计算出的 SemVer 写入各子项目 package.json/lock。
+ * Repo-wide version sync driven by semantic-release prepare step.
+ * Why: 受管理目录取自 VERSION_SYNC_DIRS 环境变量，新增子项目无需改 CI 与 release 配置。
+ *
  * 通用版本同步脚本（全仓统一版本）
  *
  * 由 semantic-release 的 @semantic-release/exec 在 prepare 阶段调用：

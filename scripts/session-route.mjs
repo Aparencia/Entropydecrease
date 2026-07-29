@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 /**
+ * @ai-context
+ * 模式路由器：把已验证的重复模式路由到最小持久所有者（Skill/脚本/记忆）。
+ * Pattern router assigning verified repeat patterns to durable owners.
+ * Why: 路由规则以数据（ROUTING_RULES）声明，新增归属只需追加规则不改流程。
+ *
  * 模式路由器 — 将已验证的重复模式路由到最小持久所有者
  *
  * 用法：
