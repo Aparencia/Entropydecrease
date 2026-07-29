@@ -29,7 +29,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: mkdir -p /opt/entropydecrease/website
+          script: mkdir -p /opt/Entropydecrease/website
 
       - name: Upload static files to server
         uses: appleboy/scp-action@v0.1.7
@@ -38,7 +38,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: website/out/*
-          target: /opt/entropydecrease/website
+          target: /opt/Entropydecrease/website
           strip_components: 2
           rm: true
 
