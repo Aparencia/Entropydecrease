@@ -1152,4 +1152,84 @@ B14 清单预估的 310/316/307 行偏大，实测三页面为 278/295/287，**�
 
 ---
 
-*文档版本：v2.7 | 更新时间：2026-07-29 | 新增：第十四章 阶段 15 docs 重组收尾与去向对照清单*
+## 十五、Git 策略落地与完整性/安全性双审查
+
+### 15.1 Git 策略（main / dev，依 `standards/git-workflow.md`）
+
+| 项 | 结果 |
+|----|------|
+| 历史策略 | 续接课伴历史：`git reset --soft origin/master` 后提交迁移成果，31 个旧 tag 与全部 Release 保留（保障已安装客户端自动更新链路） |
+| 分支 | `main`（生产，push 触发 semantic-release）+ `dev`（开发主线），两者已同步至 c15c8ac |
+| 发布/CI | `.releaserc.json` 与 3 个部署/发版 workflow master→main；`pr-check.yml` PR 目标 `[main, dev]` |
+| Git Hooks | husky 9 + lint-staged + commitlint（type 集合对齐 .releaserc releaseRules）；**拦截冒烟已验证**：`update stuff` 被拒（exit 1）、`chore: ...` 通过 |
+| 密钥卫生门禁 | `.gitignore` 补 `.env.test`；两次提交前 `git status` 均无 .env 入暂存；git 跟踪 838 文件零 .env |
+| docs 入库 | 按工程文档 §6 移除 `docs/` 排除（源项目排除属存量偏差） |
+| 仓库更名销项 | `electron-builder.yml` owner 占位符 `YourGitHubUsername`→`Aparencia`（**否则客户端永远查不到更新**）；website 7 处 + README 3 处链接改新仓库名 |
+| 待用户执行 | GitHub 网页：master → main 改名、默认分支设 dev、main 分支保护（禁直推+要求 pr-check）；之后 push main+dev 并补跑 release:dry |
+
+> `release:dry` 当前报 `release branches are invalid`——远程仅有 master 无 main 分支所致，属预期；改名+push 后即可通过。
+
+### 15.2 完整性审查发现（阻塞级 2 项，已修复）
+
+| 等级 | 发现 | 根因 | 处置 |
+|------|------|------|------|
+| **阻塞** | `client/public/` 全部 54 文件（42 音效 wav + 6 音轨 mp3 + PWA 图标 + 离线页 + favicon）未迁移 | 阶段 1-15 从未在目标执行 `client` 完整 `vite build`，`tsc --noEmit` 不解析静态资产与 CSS | 已全量补齐，首次完整构建通过（PWA precache 343 条） |
+| **阻塞** | `client/src/styles/` 4 文件未迁移 | `tokens.css` 被 `index.css:5` @import、`performance.css` 被 `main.tsx:10` import——**构建期硬依赖** | 已补齐 |
+| **高危** | nginx 缺 `/api/v1/asr/` location | 客户端 3 处调用 `/api/v1/asr/transcribe`，gateway `transcribe.py` 有该前缀，但请求落入 `location /` 静态站点 → 生产环境语音转写必然 404（源项目同缺，存量） | 已新增 location（参照 vision 配置：50m body + 300s 超时） |
+| 低危 | scripts 3 个原样复制脚本缺 `@ai-context` | 阶段 14 仅给新拆分文件添加 | 已补齐 |
+| 信息 | 其余 11 文件缺 `@ai-context` | 均为纯配置文件（vite/vitest/eslint/next/postcss config）与 Go 测试文件 | 豁免，不计入缺口 |
+
+### 15.3 完整性审查验证矩阵
+
+| 模块 | 结果 |
+|------|------|
+| client 双 tsc | **0 错** |
+| client lint | **0 错误**（108 警告存量） |
+| client `npm run build` | **通过**（首次执行，即发现资产缺失的验证） |
+| ai-gateway pytest | 130 通过 / 3 失败（`TestJWTDevMode`）——源项目同样 3 失败，根因 `getaddrinfo failed`（测试依赖真实网络获取 JWKS），**属环境性失败 + §7 测试隔离违规存量缺陷** |
+| sync-service | `go build` / `go vet` / `go test` **全绿** |
+| website | `npm run build` **通过**（链接改名后重建），lint 0 错误 |
+| 源↔目标文件比对 | 修复后非豁免缺失 **0** |
+| 跳模块契约 | nginx location ↔ gateway 5 前缀 ↔ sync 1 组 全覆盖（修 asr 后）；端口 8000/8080 一致 |
+| 死引用 | 旧 module 路径/已删组件/旧拆分导入 **均 0** |
+| §1 >600 行 | 1 项：`client/src/index.css=927`（CSS 全局样式表，登记技术债） |
+| §1 300-600 行 | 33 项（策略 B 豁免，含阶段 10 已登记 21 项 + website/server 新入 12 项） |
+
+### 15.4 安全审查结果
+
+**本地审计**
+
+| 项 | 结果 |
+|----|------|
+| 密钥卫生 | git 跟踪 838 文件零 .env；真实密钥字面量（sk-/LTAI/ghp_/JWT/PEM）**0** |
+| Electron 基线 | **7/7 PASS**（contextIsolation 显式 true、nodeIntegration 关、sandbox/webSecurity 未禁、contextBridge、openExternal 白名单、CSP 在 cspPolicy.ts） |
+| JWT | 双服务 **PASS**——gateway `{"algorithms": [alg], "audience": "authenticated"}` 显式单算法防 alg 混淆 + iss 校验；sync-service 强制 `SigningMethodRSA` + sub 非空 |
+| Nginx | 安全四头、限流、HTTP→HTTPS 301、TLS≥1.2 **全 PASS** |
+| 部署隔离 | 生产 DB/Redis 绑 127.0.0.1、Redis requirepass **PASS** |
+| §7 测试隔离（静态） | 无 mock 的网络调用 **0**（但运行时暴露 TestJWTDevMode 依赖 JWKS，见 15.3） |
+
+**云端扫描**（3 批安全关键路径，全仓超 10,000 行限额故定向）
+
+| 批次 | 范围 | 结果 |
+|------|------|------|
+| 1 | 双服务 middleware、preload.ts、cspPolicy.ts | **无问题** |
+| 2 | sync-service handlers（含 WebSocket）、nginx.conf、docker-compose.prod.yml | **无问题** |
+| 3 | main.ts、ipcUtils.ts、balance.py（阿里云 V3 签名）、base_provider.py | **无问题** |
+
+### 15.5 登记技术债（中低危，不阻塞）
+
+| 项 | 说明与建议 |
+|----|---------|
+| 生产 `CORS_ORIGINS:-*}` | 未设变量时放通全部源。建议去掉默认值使缺失时启动失败，或改为生产域名 |
+| WS `CheckOrigin` 恒真 | 认证走 ?token= JWT 非 Cookie，跨站风险有限；建议按 ALLOWED_ORIGINS 收紧 |
+| 两个 Dockerfile 未设 `USER` | 容器以 root 运行（违反 security.md 部署清单）；建议加非 root 用户并重验构建 |
+| gateway JWT 开发降级模式 | 密钥未配时不验签名仅提 sub（有 RuntimeWarning）。建议 `APP_ENV=production` 时硬失败而非降级 |
+| npm 高危依赖 | client 8 个直接依赖 high（electron/electron-builder/react-router-dom/vite-plugin-pwa/postcss/concurrently 等，多为需 major 升级）；website 12 high；root 12 high+1 critical。升级需专项回归验证 |
+| Go 依赖 | `golang-jwt/jwt/v5 v5.2.1`、`golang.org/x/net v0.25.0` 存在已知 CVE；govulncheck 与 proxy.golang.org 均不可达，未能自动验证 |
+| `client/src/index.css=927` | §1 违规（CSS）；全局样式表拆分需谨慎，建议按令牌/布局/动效分文件 |
+| `TestJWTDevMode` 3 项 | 依赖真实网络（JWKS），离网必败；应改为 mock JWKS 响应（§7） |
+| npm audit 镁像限制 | 默认 registry 为 npmmirror 不支持 advisories API，需 `--registry=https://registry.npmjs.org` |
+
+---
+
+*文档版本：v2.8 | 更新时间：2026-07-29 | 新增：第十五章 Git 策略落地（main/dev、续接历史）与完整性/安全性双审查（含 2 阻塞 + 1 高危修复与技术债清单）*
