@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui';
 import { Search, X, Loader2, FileText, Layers, Brain, Lightbulb, GraduationCap } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { useNoteStore } from '../store/useNoteStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
@@ -121,6 +122,8 @@ export function NoteSearchBar() {
   };
 
   const handleTypeFilter = (type: SearchEntityType | 'all') => {
+    const currentType = selectedEntityTypes.length === 0 ? 'all' : selectedEntityTypes[0];
+    if (type !== currentType) soundPlayer.play('ui_tab_switch');
     const newTypes = type === 'all' ? [] : [type];
     setSelectedEntityTypes(newTypes);
     // 如果有搜索词，立即用新过滤条件搜索
@@ -229,7 +232,7 @@ export function EntityTypeBadge({ type }: { type: SearchEntityType }) {
         ENTITY_TYPE_COLORS[type],
       )}
     >
-      <EntityTypeIcon type className="w-2.5 h-2.5" />
+      <EntityTypeIcon type={type} className="w-2.5 h-2.5" />
       {ENTITY_TYPE_LABELS[type]}
     </span>
   );

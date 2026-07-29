@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { Card } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { Brain, Zap, BookOpen, RotateCcw } from 'lucide-react';
 import {
   getCurrentAlgorithm,
@@ -23,7 +24,7 @@ function Toggle({ checked, onChange }: {
 }) {
   return (
     <button
-      onClick={() => onChange(!checked)}
+      onClick={() => { soundPlayer.play(checked ? 'ui_toggle_off' : 'ui_toggle_on'); onChange(!checked); }}
       className={cn(
         'relative inline-flex h-6 w-11 items-center rounded-kb-full transition-colors duration-kb-fast flex-shrink-0',
         checked ? 'bg-brand-500' : 'bg-bg-tertiary',

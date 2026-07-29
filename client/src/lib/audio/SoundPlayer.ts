@@ -21,10 +21,15 @@ const SOUND_MAP: Record<string, string> = Object.fromEntries(
 
 export type SoundId = string;
 
+/** 同一音效默认节流间隔（毫秒） */
+const DEFAULT_THROTTLE_MS = 80;
+
 class SoundPlayer {
   private context: AudioContext | null = null;
   private buffers: Map<string, AudioBuffer> = new Map();
   private settings: SoundSettings = { ...DEFAULT_SOUND_SETTINGS };
+  /** 音效 ID → 上次播放时间戳（用于节流） */
+  private lastPlayedAt: Map<string, number> = new Map();
 
   private getContext(): AudioContext {
     if (!this.context) {
@@ -59,12 +64,21 @@ class SoundPlayer {
     try {
       const ctx = this.getContext();
       const response = await fetch(path, { signal: AbortSignal.timeout(5000) });
-      if (!response.ok) return;
+      if (!response.ok) {
+        // dev 环境提示加载失败（如 404），生产保持静默
+        if (import.meta.env.DEV) {
+          console.warn(`[SoundPlayer] 音效加载失败 (HTTP ${response.status}): ${soundId} → ${path}`);
+        }
+        return;
+      }
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
       this.buffers.set(path, audioBuffer);
-    } catch {
-      // 静默降级
+    } catch (err) {
+      // 静默降级；dev 环境输出失败详情便于排查
+      if (import.meta.env.DEV) {
+        console.warn(`[SoundPlayer] 音效加载失败: ${soundId} → ${path}`, err);
+      }
     }
   }
 
@@ -90,49 +104,76 @@ class SoundPlayer {
   /**
    * 播放音效（向后兼容，使用对应类别的设置）
    * @param soundId - 音效 ID
-   * @param options - 可选音量覆盖
+   * @param options - 可选音量覆盖 / 节流间隔覆盖（如 3D 悬停传 200）
    */
-  play(soundId: SoundId, options?: { volume?: number }): void {
+  play(soundId: SoundId, options?: { volume?: number; throttleMs?: number }): void {
     const def = findSoundDefinition(soundId);
     if (def) {
       if (this.settings.masterMute) return;
       const catSettings = this.settings.categories[def.category];
       if (!catSettings?.enabled) return;
       const vol = options?.volume ?? catSettings.volume / 100;
-      this.playInternal(soundId, vol);
+      this.playInternal(soundId, vol, options?.throttleMs);
     } else {
       // 未注册的音效，使用默认音量播放
       if (this.settings.masterMute) return;
-      this.playInternal(soundId, options?.volume ?? 0.7);
+      this.playInternal(soundId, options?.volume ?? 0.7, options?.throttleMs);
     }
   }
 
   /**
-   * 预览播放（忽略静音/禁用状态，用于设置页试听）
+   * 预览播放（忽略静音/禁用状态与节流，用于设置页试听）
    * @param soundId - 音效 ID
    */
   previewSound(soundId: string): void {
-    this.playInternal(soundId, 0.8);
+    this.playInternal(soundId, 0.8, 0);
   }
 
   /**
    * 内部播放实现
    * @param soundId - 音效 ID
    * @param volume - 音量 0-1
+   * @param throttleMs - 节流间隔（毫秒），同一音效距上次播放小于该值则跳过；传 0 禁用节流
    */
-  private playInternal(soundId: string, volume: number): void {
+  private playInternal(soundId: string, volume: number, throttleMs: number = DEFAULT_THROTTLE_MS): void {
     try {
+      if (throttleMs > 0) {
+        const now = Date.now();
+        const last = this.lastPlayedAt.get(soundId);
+        if (last !== undefined && now - last < throttleMs) return;
+        this.lastPlayedAt.set(soundId, now);
+      }
       const path = SOUND_MAP[soundId];
       if (!path) return;
       const buffer = this.buffers.get(path);
       if (!buffer) {
-        this.preload(soundId).then(() => this.playInternal(soundId, volume));
+        // 首播已记录时间戳，预加载后重试时跳过节流避免自阻塞
+        this.preload(soundId).then(() => this.playInternal(soundId, volume, 0));
         return;
       }
       const ctx = this.getContext();
       if (ctx.state === 'suspended') {
-        ctx.resume();
+        // suspended 时需等 resume 完成再播放，否则首次播放会丢音
+        ctx.resume()
+          .then(() => this.startSource(ctx, buffer, volume))
+          .catch(() => { /* 静默降级 */ });
+        return;
       }
+      // running 状态直接同步播放，不引入额外延迟
+      this.startSource(ctx, buffer, volume);
+    } catch {
+      // 静默降级，不影响主流程
+    }
+  }
+
+  /**
+   * 创建 BufferSource 并立即播放
+   * @param ctx - AudioContext
+   * @param buffer - 已解码的音频数据
+   * @param volume - 音量 0-1
+   */
+  private startSource(ctx: AudioContext, buffer: AudioBuffer, volume: number): void {
+    try {
       const source = ctx.createBufferSource();
       source.buffer = buffer;
       const gainNode = ctx.createGain();

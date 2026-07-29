@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useRef } from 
 import * as RadixToast from '@radix-ui/react-toast';
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
 // Types
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
@@ -14,7 +15,7 @@ interface ToastItem {
 }
 
 interface ToastContextValue {
-  toast: (options: { type: ToastType; message: string; duration?: number }) => void;
+  toast: (options: { type: ToastType; message: string; duration?: number; silent?: boolean }) => void;
 }
 
 // Context
@@ -26,6 +27,13 @@ export function useToast(): ToastContextValue {
   if (!ctx) throw new Error('useToast must be used within ToastProvider');
   return ctx;
 }
+
+// Toast 类型 → 反馈音效映射（info 不播放音效；silent: true 的调用点跳过，避免与专属音效叠加）
+const toastSoundMap: Partial<Record<ToastType, string>> = {
+  success: 'feedback_success',
+  error: 'feedback_error',
+  warning: 'feedback_warning',
+};
 
 // Default duration per type (ms)
 const defaultDuration: Record<ToastType, number> = {
@@ -102,9 +110,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const idRef = useRef(0);
 
-  const toast = useCallback(({ type, message, duration }: { type: ToastType; message: string; duration?: number }) => {
+  const toast = useCallback(({ type, message, duration, silent }: { type: ToastType; message: string; duration?: number; silent?: boolean }) => {
     const id = ++idRef.current;
     const d = duration ?? defaultDuration[type];
+    if (!silent && toastSoundMap[type]) soundPlayer.play(toastSoundMap[type]!);
     setToasts((prev) => [...prev, { id, type, message, duration: d }]);
   }, []);
 

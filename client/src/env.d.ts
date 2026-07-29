@@ -51,20 +51,20 @@ declare global {
       backupSave: (data: string, defaultName?: string) => Promise<unknown>;
       backupOpen: () => Promise<unknown>;
       db: {
-        query: (table: string, method: string, args?: unknown[]) => Promise<unknown>;
-        insert: (table: string, item: unknown) => Promise<unknown>;
+        query: <T = unknown>(table: string, method: string, args?: unknown[]) => Promise<T>;
+        insert: (table: string, item: unknown) => Promise<string>;
         update: (table: string, id: string, changes: unknown) => Promise<unknown>;
         delete: (table: string, id: string) => Promise<unknown>;
         search: (table: string, query: string) => Promise<unknown>;
         batch: (operations: unknown[]) => Promise<unknown>;
       };
       migration: {
-        check: () => Promise<unknown>;
-        importTable: (table: string, rows: unknown[]) => Promise<unknown>;
-        complete: () => Promise<unknown>;
+        check: () => Promise<{ needed: boolean; tableMapping: Array<{ dexie: string; sqlite: string }> }>;
+        importTable: (table: string, rows: unknown[]) => Promise<{ success: boolean; rowsImported?: number; error?: string }>;
+        complete: () => Promise<{ success: boolean; integrity?: string; error?: string }>;
       };
       storage: {
-        changePath: (newPath: string) => Promise<unknown>;
+        changePath: (newPath: string) => Promise<{ success: boolean; previousPath?: string; newPath?: string; error?: string }>;
         getActivePath: () => Promise<unknown>;
       };
       /** Ollama 本地推理 API */

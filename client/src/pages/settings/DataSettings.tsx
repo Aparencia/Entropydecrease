@@ -15,6 +15,7 @@ import type { StorageInfo } from '@/lib/storage';
 import { encryptBackup, decryptBackup, type EncryptedBackup } from '@/lib/crypto/backupCrypto';
 import { syncEngine } from '@/lib/sync/SyncEngine';
 import { db } from '@/lib/storage/database';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
 export default function DataSettings() {
   const { toast } = useToast();
@@ -92,7 +93,8 @@ export default function DataSettings() {
       setExporting(true);
       const json = await exportAllData();
       downloadExport(json);
-      toast({ type: 'success', message: '数据导出成功' });
+      soundPlayer.play('data_export');
+      toast({ type: 'success', message: '数据导出成功', silent: true });
     } catch {
       toast({ type: 'error', message: '导出失败，请重试' });
     } finally {
@@ -116,7 +118,8 @@ export default function DataSettings() {
       const text = await readFileAsText(file);
       const result = await importData(text);
       if (result.success) {
-        toast({ type: 'success', message: result.message });
+        soundPlayer.play('data_import');
+        toast({ type: 'success', message: result.message, silent: true });
         // 刷新页面以加载新数据
         setTimeout(() => window.location.reload(), 800);
       } else {
@@ -145,10 +148,12 @@ export default function DataSettings() {
         a.download = `keban-backup-encrypted-${Date.now()}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        toast({ type: 'success', message: '加密备份已下载' });
+        soundPlayer.play('data_export');
+        toast({ type: 'success', message: '加密备份已下载', silent: true });
       } else {
         downloadExport(json);
-        toast({ type: 'success', message: '数据导出成功（未加密）' });
+        soundPlayer.play('data_export');
+        toast({ type: 'success', message: '数据导出成功（未加密）', silent: true });
       }
     } catch {
       toast({ type: 'error', message: '备份失败，请重试' });
@@ -182,7 +187,8 @@ export default function DataSettings() {
         const plaintext = await decryptBackup(parsed as EncryptedBackup, restorePassword);
         const result = await importData(plaintext);
         if (result.success) {
-          toast({ type: 'success', message: result.message });
+          soundPlayer.play('data_import');
+          toast({ type: 'success', message: result.message, silent: true });
           setTimeout(() => window.location.reload(), 800);
         } else {
           toast({ type: 'error', message: result.message });
@@ -191,7 +197,8 @@ export default function DataSettings() {
         // Plain JSON backup
         const result = await importData(text);
         if (result.success) {
-          toast({ type: 'success', message: result.message });
+          soundPlayer.play('data_import');
+          toast({ type: 'success', message: result.message, silent: true });
           setTimeout(() => window.location.reload(), 800);
         } else {
           toast({ type: 'error', message: result.message });
@@ -452,7 +459,8 @@ export default function DataSettings() {
                   await db.notes.clear();
                   await db.noteFolders.clear();
                 });
-                toast({ type: 'success', message: '笔记数据已清除' });
+                soundPlayer.play('data_cleared');
+                toast({ type: 'success', message: '笔记数据已清除', silent: true });
               } catch {
                 toast({ type: 'error', message: '清除失败，请重试' });
               } finally {
@@ -546,7 +554,8 @@ export default function DataSettings() {
                   });
                   // 清除 localStorage
                   localStorage.clear();
-                  toast({ type: 'success', message: '所有数据已清除，即将刷新' });
+                  soundPlayer.play('data_cleared');
+                  toast({ type: 'success', message: '所有数据已清除，即将刷新', silent: true });
                   setTimeout(() => window.location.reload(), 1000);
                 } catch {
                   toast({ type: 'error', message: '清除失败，请重试' });

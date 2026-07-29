@@ -4,7 +4,7 @@
  * 首次启动或版本升级时展示，
  * 用户需滚动到底部才能点击"同意"按钮。
  */
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Shield, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
@@ -19,13 +19,26 @@ export default function ConsentModal({ onAccept }: ConsentModalProps) {
   const [canAccept, setCanAccept] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const handleScroll = () => {
+  const checkScrollPosition = useCallback(() => {
     if (!scrollRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-    // 滚动到底部 50px 范围内启用同意按钮
+    // 内容无需滚动或已滚动到底部 50px 范围内 → 启用同意按钮
     if (scrollHeight - scrollTop - clientHeight < 50) {
       setCanAccept(true);
     }
+  }, []);
+
+  // 挂载后检测：若内容不足以滚动则直接启用按钮
+  useEffect(() => {
+    // 等待一帧确保布局完成
+    const frame = requestAnimationFrame(() => {
+      checkScrollPosition();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [checkScrollPosition]);
+
+  const handleScroll = () => {
+    checkScrollPosition();
   };
 
   return (

@@ -4,10 +4,11 @@
  * 当 3D 场景降级时（移动端 PWA/浏览器），
  * 替代 3D 空间导航，展示静态渐变背景 + 模块卡片网格。
  */
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Timer, FileText, Layers, Lightbulb, Sparkles, Clapperboard, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
 const modules = [
   { id: 'dashboard', label: '首页', route: '/', icon: BarChart3, color: 'from-indigo-500/20 to-indigo-600/10', iconColor: 'text-indigo-400' },
@@ -29,11 +30,12 @@ const containerVariants = {
 
 const itemVariants = {
   hidden: { opacity: 0, y: 12, scale: 0.95 },
-  visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 300, damping: 25 } },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring' as const, stiffness: 300, damping: 25 } },
 };
 
 export function MobileNavGrid() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   return (
     <div className="fixed inset-0 -z-10 overflow-y-auto">
@@ -86,7 +88,7 @@ export function MobileNavGrid() {
                 key={mod.id}
                 variants={itemVariants}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => navigate(mod.route)}
+                onClick={() => { if (pathname !== mod.route) soundPlayer.play('ui_nav_switch'); navigate(mod.route); }}
                 className={cn(
                   'flex flex-col items-start gap-3 p-5 rounded-2xl',
                   'bg-gradient-to-br backdrop-blur-sm',

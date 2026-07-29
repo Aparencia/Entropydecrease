@@ -1,6 +1,6 @@
 ﻿import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Search, X, ArrowRight,
   LayoutDashboard, Timer, FileText, Layers, Lightbulb, BarChart3, Settings,
@@ -14,6 +14,7 @@ import { useToast } from '@/components/ui/Toast';
 import { commandRegistry } from '@/lib/commandPalette/registry';
 import { registerDefaultCommands } from '@/lib/commandPalette/defaultCommands';
 import type { Command } from '@/lib/commandPalette/registry';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
 const iconMap: Record<string, LucideIcon> = {
   LayoutDashboard, Timer, FileText, Layers, Lightbulb, BarChart3, Settings,
@@ -29,6 +30,13 @@ function CommandIcon({ name, className }: { name?: string; className?: string })
 
 const categoryLabels: Record<Command['category'], string> = {
   navigation: '导航', action: '操作', settings: '设置',
+};
+
+/** 导航命令 ID → 目标路由（用于判断目标≠当前时播放切换音效） */
+const NAV_COMMAND_ROUTES: Record<string, string> = {
+  'nav-dashboard': '/', 'nav-pomodoro': '/pomodoro', 'nav-notes': '/notes',
+  'nav-flashcards': '/flashcards', 'nav-feynman': '/feynman', 'nav-analytics': '/analytics',
+  'nav-classroom': '/classroom', 'nav-settings': '/settings',
 };
 const categoryColors: Record<Command['category'], string> = {
   navigation: 'bg-accent-500/15 text-accent-500',
@@ -49,6 +57,7 @@ function groupByCategory(commands: Command[]): Array<{ category: Command['catego
 
 export default function CommandPalette() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -111,9 +120,11 @@ export default function CommandPalette() {
 
   const executeCommand = useCallback(async (cmd: Command) => {
     close();
+    const targetRoute = NAV_COMMAND_ROUTES[cmd.id];
+    if (targetRoute !== undefined && targetRoute !== pathname) soundPlayer.play('ui_nav_switch');
     try { await cmd.execute(); }
     catch (err) { toast({ type: 'error', message: `命令执行失败：${err instanceof Error ? err.message : '未知错误'}` }); }
-  }, [close, toast]);
+  }, [close, toast, pathname]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex((i) => (flatList.length === 0 ? 0 : Math.min(i + 1, flatList.length - 1))); }

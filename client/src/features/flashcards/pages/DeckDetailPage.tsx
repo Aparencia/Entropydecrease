@@ -27,6 +27,7 @@ import { useFlashcardStore } from '../store/useFlashcardStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAIFlashcards } from '@/lib/ai/useAI';
 import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
 import type { Flashcard } from '@/types/models';
 import { createNewCardState } from '@/lib/sm2';
@@ -248,6 +249,7 @@ export default function DeckDetailPage() {
   const handleDeleteCard = async () => {
     if (deleteCardId === null) return;
     await deleteCard(deleteCardId);
+    soundPlayer.play('feedback_delete');
     setDeleteCardId(null);
   };
 

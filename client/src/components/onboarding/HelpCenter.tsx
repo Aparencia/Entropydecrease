@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Rocket, Keyboard, BookOpen, HelpCircle } from 'lucide-react';
 import { useOnboardingStore } from './useOnboardingStore';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { QuickStartTab } from './help/QuickStartTab';
 import { ShortcutsTab } from './help/ShortcutsTab';
 import { ModuleGuideTab } from './help/ModuleGuideTab';
@@ -86,7 +87,7 @@ export function HelpCenter() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => { if (tab.id !== activeTab) soundPlayer.play('ui_tab_switch'); setActiveTab(tab.id); }}
                 className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? 'text-white/90'

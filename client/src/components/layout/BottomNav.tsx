@@ -1,6 +1,7 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { Home, Timer, FileText, Layers, Lightbulb, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
 const tabs = [
   { to: '/', label: '首页', icon: Home },
@@ -12,6 +13,7 @@ const tabs = [
 ];
 
 export default function BottomNav() {
+  const { pathname } = useLocation();
   return (
     <nav
       className={cn(
@@ -27,6 +29,7 @@ export default function BottomNav() {
             key={to}
             to={to}
             end={to === '/'}
+            onClick={() => { const active = to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(to + '/'); if (!active) soundPlayer.play('ui_nav_switch'); }}
             className={({ isActive }) =>
               cn(
                 'flex flex-col items-center justify-center gap-0.5',

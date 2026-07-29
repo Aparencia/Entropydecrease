@@ -13,6 +13,7 @@ import type { KbanDeckFile } from '@/types/models';
 import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
 import type { Flashcard, FlashcardDeck } from '@/types/models';
 import { cn } from '@/lib/utils';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
 const LONG_PRESS_THRESHOLD_MS = 600;
 
@@ -457,7 +458,7 @@ export default function FlashcardsPage() {
         footer={
           <>
             <Button variant="secondary" onClick={() => { setModalOpen(false); setNewName(''); setNewDesc(''); }}>取消</Button>
-            <Button onClick={handleCreate} loading={creating} disabled={!newName.trim()}>创建</Button>
+            <Button onClick={() => { soundPlayer.play('ui_click'); handleCreate(); }} loading={creating} disabled={!newName.trim()}>创建</Button>
           </>
         }
       >

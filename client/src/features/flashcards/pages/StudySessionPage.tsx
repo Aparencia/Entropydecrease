@@ -9,6 +9,7 @@ import { GoldenErrorPanel } from '../components/GoldenErrorPanel';
 import { X, RotateCcw, BookOpen, PauseCircle, AlertTriangle, Sparkles, ExternalLink, Check, XIcon, Star } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { cn } from '@/lib/utils';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { useStudySessionStore } from '../store/useStudySessionStore';
 import { useFlashcardStore } from '../store/useFlashcardStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -226,7 +227,10 @@ export default function StudySessionPage() {
   };
 
   const handleDragStart = useCallback(() => {
-    if (isFlipped && !prefersReduced && !exitingRef.current) setDragActive(true);
+    if (isFlipped && !prefersReduced && !exitingRef.current) {
+      soundPlayer.play('ui_drag_start');
+      setDragActive(true);
+    }
   }, [isFlipped, prefersReduced]);
 
   const handleDrag = useCallback((_e: unknown, info: { offset: { x: number } }) => {
@@ -240,6 +244,7 @@ export default function StudySessionPage() {
     setDragActive(false);
     setDragLabel(null);
     if (!isFlipped || prefersReduced || exitingRef.current) return;
+    soundPlayer.play('ui_drop');
     const threshold = 100;
     if (info.offset.x < -threshold) {
       handleRate(Rating.Again);
@@ -666,7 +671,7 @@ export default function StudySessionPage() {
                     忽略
                   </Button>
                   <Button
-                    onClick={handleAdoptSuggestion}
+                    onClick={() => { soundPlayer.play('ui_click'); handleAdoptSuggestion(); }}
                     className="flex-1"
                     icon={<Check className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
                   >

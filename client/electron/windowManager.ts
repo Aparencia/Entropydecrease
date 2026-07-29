@@ -5,7 +5,7 @@
  * 及关闭行为偏好持久化。
  */
 
-import { BrowserWindow, app } from 'electron';
+import { BrowserWindow, app, shell } from 'electron';
 import * as path from 'path';
 import { access, readFile, writeFile } from 'fs/promises';
 import { logger } from './logger.js';
@@ -34,7 +34,7 @@ let syncBeforeQuitCompleted = false;
 let syncTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** 同步超时时间（毫秒）：渲染进程未响应则强制继续退出 */
-const SYNC_BEFORE_QUIT_TIMEOUT_MS = 3000;
+const SYNC_BEFORE_QUIT_TIMEOUT_MS = 1500;
 
 /** 读取保存的关闭选择 */
 export async function getCloseChoice(): Promise<string | null> {
@@ -100,6 +100,14 @@ export function createMainWindow(
     win.show();
     win.focus();
     logger.info('[Window] Window shown (ready-to-show)');
+  });
+
+  // 拦截外部链接：target="_blank" 或 window.open() 统一用系统默认浏览器打开
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://') || url.startsWith('http://')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
   });
 
   // 窗口最大化状态变化时通知前端
@@ -180,7 +188,7 @@ export function createMainWindow(
 
 /**
  * 退出前同步流程入口
- * 不立即设置退出标志，而是先触发渲染进程同步
+ * 立即隐藏窗口（感知零延迟），后台执行同步再真正关闭
  * 附带超时保护：若渲染进程在 SYNC_BEFORE_QUIT_TIMEOUT_MS 内未响应，强制继续退出
  */
 function syncAndQuit(
@@ -198,9 +206,13 @@ function syncAndQuit(
     onQuit();
     return;
   }
-  // 首次触发：发送同步请求给渲染进程
+
+  // ✨ 立即隐藏窗口，用户感知零延迟退出
+  win.hide();
+
+  // 后台触发同步
   syncBeforeQuitRequested = true;
-  logger.info('[Window] Sync before quit: requesting renderer sync');
+  logger.info('[Window] Sync before quit: window hidden, requesting renderer sync');
   win.webContents.send('sync:before-quit');
 
   // 超时保护：渲染进程未响应时强制完成同步流程
@@ -228,8 +240,6 @@ export function completeSyncBeforeQuit(): void {
   }
 
   logger.info('[Window] Sync before quit: completed, proceeding with quit');
-  const win = BrowserWindow.getAllWindows()[0];
-  if (win) {
-    win.close();
-  }
+  // 直接调用 app.quit()，避免再次触发 win.close() 的 close 事件循环
+  app.quit();
 }

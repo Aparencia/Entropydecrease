@@ -4,6 +4,7 @@ import { X, WifiOff, Signal, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useSync } from '@/lib/sync/SyncContext';
 import { cn } from '@/lib/utils';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
 const SYNC_COMPLETE_HIDE_DELAY_MS = 3000;
 
@@ -22,6 +23,7 @@ export default function SyncStatusBar() {
   // 同步完成后短暂显示绿色提示
   useEffect(() => {
     if (prevSyncingRef.current && !isSyncing) {
+      if (lastSyncAt) soundPlayer.play('sync_complete');
       setShowComplete(true);
       if (completeTimerRef.current) clearTimeout(completeTimerRef.current);
       completeTimerRef.current = setTimeout(() => setShowComplete(false), SYNC_COMPLETE_HIDE_DELAY_MS);

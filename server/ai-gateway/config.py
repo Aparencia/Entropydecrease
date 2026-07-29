@@ -28,6 +28,10 @@ _FEATURE_CONTEXT: contextvars.ContextVar[str] = contextvars.ContextVar("_feature
 # Provider 配置
 # ============================================================
 
+# 阿里云 AK/SK（用于查询百炼平台账户余额，与 DashScope API Key 独立）
+ALIYUN_ACCESS_KEY_ID: str = os.getenv("ALIYUN_ACCESS_KEY_ID", "")
+ALIYUN_ACCESS_KEY_SECRET: str = os.getenv("ALIYUN_ACCESS_KEY_SECRET", "")
+
 AI_PROVIDERS: dict = {
     "qwen": {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",

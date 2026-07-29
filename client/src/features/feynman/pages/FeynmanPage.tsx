@@ -9,6 +9,7 @@ import { useFeynmanStore } from '../store/useFeynmanStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useContextMenu } from '@/lib/contextMenu';
 import { useToast } from '@/components/ui';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import type { FeynmanNote } from '@/types/models';
 
 const stepLabels: Record<number, string> = { 1: '选择概念', 2: '讲解中', 3: '标注薄弱', 4: '简化重述' };
@@ -113,13 +114,15 @@ export default function FeynmanPage() {
   const handleDelete = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     await deleteNote(id);
+    soundPlayer.play('feedback_delete');
     setDeleteId(null);
   }, [deleteNote]);
 
   const handleConfirmDelete = useCallback(async (note: FeynmanNote) => {
     if (note.id) {
       await deleteNote(note.id);
-      toast({ type: 'success', message: '学习会话已删除' });
+      soundPlayer.play('feedback_delete');
+      toast({ type: 'success', message: '学习会话已删除', silent: true });
     }
     setDeleteId(null);
   }, [deleteNote, toast]);

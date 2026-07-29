@@ -12,6 +12,7 @@ import { useCaptureStore } from '@/stores/useCaptureStore';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useTheme } from '@/hooks/useTheme';
 import { SPRING, BEAT } from '@/lib/animation/springConfig';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import FeedbackPanel from './FeedbackPanel';
 
 /* ── 导航配置 ── */
@@ -280,6 +281,7 @@ export default function Sidebar() {
                 end
                 onMouseEnter={prefetchSettings}
                 onFocus={prefetchSettings}
+                onClick={() => { if (!location.pathname.startsWith('/settings')) soundPlayer.play('ui_nav_switch'); }}
                 className={({ isActive }) => cn(
                   'flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-[4px] transition-all duration-200 ml-auto active:scale-95 whitespace-nowrap',
                   isActive
@@ -320,6 +322,9 @@ interface SidebarItemProps {
 }
 
 function SidebarItem({ to, label, icon: Icon, shortcut, dotColor, collapsed, end, index = 0 }: SidebarItemProps) {
+  const location = useLocation();
+  // 切换到不同模块时播放导航音效（点击当前已激活项不响）
+  const isCurrentActive = end ? location.pathname === to : location.pathname === to || location.pathname.startsWith(to + '/');
   return (
     <motion.div
       custom={index}
@@ -331,6 +336,7 @@ function SidebarItem({ to, label, icon: Icon, shortcut, dotColor, collapsed, end
         to={to}
         end={end}
         title={collapsed ? label : undefined}
+        onClick={() => { if (!isCurrentActive) soundPlayer.play('ui_nav_switch'); }}
         className={({ isActive }) =>
           cn(
             'flex items-center gap-2 rounded-[var(--kb-radius-sm)] relative group',

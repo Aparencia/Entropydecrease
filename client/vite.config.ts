@@ -104,14 +104,14 @@ export default defineConfig({
               expiration: { maxEntries: 10, maxAgeSeconds: 365 * 24 * 60 * 60 },
             },
           },
-          // API 调用：StaleWhileRevalidate（先用缓存，后台更新）
+          // API 调用：NetworkFirst（网络优先，超时降级缓存；Workbox 规定 networkTimeoutSeconds 仅支持 NetworkFirst）
           {
             urlPattern: /\/api\/.*/i,
-            handler: 'StaleWhileRevalidate',
+            handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',
               expiration: { maxEntries: 50, maxAgeSeconds: 24 * 60 * 60 },
-              networkTimeoutSeconds: 10,
+              networkTimeoutSeconds: 3,
             },
           },
           // 图片/媒体资源：CacheFirst with max entries
@@ -123,13 +123,14 @@ export default defineConfig({
               expiration: { maxEntries: 60, maxAgeSeconds: 30 * 24 * 60 * 60 },
             },
           },
-          // 音频资源缓存
+          // 音频资源缓存：StaleWhileRevalidate 保证同名音效更新后老用户可在下次会话拿到新版本
+          // （CacheFirst 下重新生成的同名 wav 会被 30 天旧缓存遮蔽）
           {
             urlPattern: /\.(?:mp3|ogg|wav)$/i,
-            handler: 'CacheFirst',
+            handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'audio-cache',
-              expiration: { maxEntries: 30, maxAgeSeconds: 30 * 24 * 60 * 60 },
+              expiration: { maxEntries: 50, maxAgeSeconds: 30 * 24 * 60 * 60 },
             },
           },
         ],

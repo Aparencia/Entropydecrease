@@ -299,7 +299,7 @@ export default function NoteEditPage() {
                 createCard({ deckId: targetDeckId, front: card.front, back: card.back, type: 'basic', sourceNoteId: noteId ?? undefined }),
               ),
             );
-            toast({ type: 'success', message: `已生成 ${result.cards.length} 张闪卡` });
+            toast({ type: 'success', message: `已生成 ${result.cards.length} 张闪卡`, silent: true });
           })
           .catch(handleFlashcardError);
         break;
@@ -369,7 +369,7 @@ export default function NoteEditPage() {
         ),
       );
       setConvertedKeys(prev => new Set(prev).add(index));
-      toast({ type: 'success', message: `已生成 ${result.cards.length} 张闪卡` });
+      toast({ type: 'success', message: `已生成 ${result.cards.length} 张闪卡`, silent: true });
     } catch (error) {
       handleFlashcardError(error);
     }
@@ -387,7 +387,7 @@ export default function NoteEditPage() {
         ),
       );
       setConvertedKeys(new Set(aiData.keyPoints!.map((_, i) => i)));
-      toast({ type: 'success', message: `已从全部要点生成 ${result.cards.length} 张闪卡` });
+      toast({ type: 'success', message: `已从全部要点生成 ${result.cards.length} 张闪卡`, silent: true });
     } catch (error) {
       handleFlashcardError(error);
     }

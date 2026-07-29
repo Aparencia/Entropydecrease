@@ -4,6 +4,7 @@ import StarterKit from '@tiptap/starter-kit';
 import { GripVertical, Trash2, Copy, Pencil } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import type { FreeCanvasBlock } from '@/types/models';
 
 interface FreeTextBlockProps {
@@ -70,6 +71,7 @@ export default function FreeTextBlock({
       e.preventDefault();
       e.stopPropagation();
       isDraggingRef.current = true;
+      soundPlayer.play('ui_drag_start');
       const startX = e.clientX;
       const startY = e.clientY;
       const origX = block.position.x;
@@ -91,6 +93,7 @@ export default function FreeTextBlock({
 
       const handleMouseUp = (ev: MouseEvent) => {
         isDraggingRef.current = false;
+        soundPlayer.play('ui_drop');
         cancelAnimationFrame(rafId);
         // 清除拖拽中的 transform
         if (rootRef.current) {

@@ -14,7 +14,7 @@ import {
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useShallow } from 'zustand/react/shallow';
 
-const CATEGORIES: SoundCategory[] = ['operation', 'achievement', 'ai', 'pomodoro'];
+const CATEGORIES: SoundCategory[] = ['operation', 'achievement', 'ai', 'pomodoro', 'ui', 'feedback'];
 
 /**
  * Toggle 开关组件
@@ -192,7 +192,7 @@ function CategorySection({ category, settings, onUpdate, masterMute }: {
 
 /**
  * 音效设置页面
- * @ai-context 提供 4 类音效独立开关 + 独立音量滑块 + 全局静音 + 预览播放
+ * @ai-context 提供 6 类音效独立开关 + 独立音量滑块 + 全局静音 + 预览播放
  */
 export default function SoundSettings() {
   const { soundSettings, updateSoundSettings } = useSettingsStore(useShallow(s => s));
@@ -236,7 +236,7 @@ export default function SoundSettings() {
         />
       </div>
 
-      {/* 4 个类别区块 */}
+      {/* 6 个类别区块 */}
       <div className="space-y-2">
         {CATEGORIES.map((cat) => (
           <CategorySection

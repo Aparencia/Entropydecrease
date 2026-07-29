@@ -1,5 +1,5 @@
 /**
- * @ai-context 熵减音效系统分为 4 个独立类别（操作/成就/AI/深潜），
+ * @ai-context 熵减音效系统分为 6 个独立类别（操作/成就/AI/深潜/界面/反馈），
  * 每个类别可单独控制开关和音量。全局静音覆盖所有类别。
  * 音效配置持久化到 settingsStore（localStorage）。
  * 白噪音/BGM 为独立音频系统，由 useAudioPlayer 管理。
@@ -8,7 +8,7 @@
 /* ── 音效分类系统 ──────────────────────────────────── */
 
 /** 音效类别枚举 */
-export type SoundCategory = 'operation' | 'achievement' | 'ai' | 'pomodoro';
+export type SoundCategory = 'operation' | 'achievement' | 'ai' | 'pomodoro' | 'ui' | 'feedback';
 
 /** 单个音效定义 */
 export interface SoundDefinition {
@@ -37,6 +37,8 @@ export const CATEGORY_LABELS: Record<SoundCategory, string> = {
   achievement: '成就音效',
   ai: 'AI 音效',
   pomodoro: '深潜音效',
+  ui: '界面音效',
+  feedback: '反馈音效',
 };
 
 /** 音效类别描述映射 */
@@ -45,6 +47,8 @@ export const CATEGORY_DESCRIPTIONS: Record<SoundCategory, string> = {
   achievement: '打卡、成就解锁等激励反馈',
   ai: 'AI 分析完成等智能功能提示',
   pomodoro: '深潜启停、计时提醒',
+  ui: '按钮、开关、弹窗、导航等界面交互提示',
+  feedback: '成功、失败、删除、数据操作等结果反馈',
 };
 
 /** 默认音效设置 */
@@ -55,6 +59,8 @@ export const DEFAULT_SOUND_SETTINGS: SoundSettings = {
     achievement: { enabled: true, volume: 80 },
     ai: { enabled: true, volume: 70 },
     pomodoro: { enabled: true, volume: 80 },
+    ui: { enabled: true, volume: 50 },
+    feedback: { enabled: true, volume: 75 },
   },
 };
 
@@ -93,6 +99,29 @@ export const SOUND_DEFINITIONS: SoundDefinition[] = [
   { id: 'rate_remember', name: '评分-记得', category: 'pomodoro', filePath: '/sounds/rate_remember.wav' },
   { id: 'rate_fuzzy', name: '评分-模糊', category: 'pomodoro', filePath: '/sounds/rate_fuzzy.wav' },
   { id: 'rate_forgot', name: '评分-忘记', category: 'pomodoro', filePath: '/sounds/rate_forgot.wav' },
+
+  // 界面音效
+  { id: 'ui_click', name: '通用点击', category: 'ui', filePath: '/sounds/ui_click.wav' },
+  { id: 'ui_toggle_on', name: '开关开启', category: 'ui', filePath: '/sounds/ui_toggle_on.wav' },
+  { id: 'ui_toggle_off', name: '开关关闭', category: 'ui', filePath: '/sounds/ui_toggle_off.wav' },
+  { id: 'ui_modal_open', name: '弹窗打开', category: 'ui', filePath: '/sounds/ui_modal_open.wav' },
+  { id: 'ui_modal_close', name: '弹窗关闭', category: 'ui', filePath: '/sounds/ui_modal_close.wav' },
+  { id: 'ui_tab_switch', name: '标签切换', category: 'ui', filePath: '/sounds/ui_tab_switch.wav' },
+  { id: 'ui_nav_switch', name: '导航切换', category: 'ui', filePath: '/sounds/ui_nav_switch.wav' },
+  { id: 'ui_hover_3d', name: '3D 悬停', category: 'ui', filePath: '/sounds/ui_hover_3d.wav' },
+  { id: 'ui_module_enter', name: '模块进入', category: 'ui', filePath: '/sounds/ui_module_enter.wav' },
+  { id: 'ui_drag_start', name: '拖拽开始', category: 'ui', filePath: '/sounds/ui_drag_start.wav' },
+  { id: 'ui_drop', name: '拖拽放下', category: 'ui', filePath: '/sounds/ui_drop.wav' },
+
+  // 反馈音效
+  { id: 'feedback_success', name: '操作成功', category: 'feedback', filePath: '/sounds/feedback_success.wav' },
+  { id: 'feedback_error', name: '操作失败', category: 'feedback', filePath: '/sounds/feedback_error.wav' },
+  { id: 'feedback_warning', name: '警告提示', category: 'feedback', filePath: '/sounds/feedback_warning.wav' },
+  { id: 'feedback_delete', name: '删除完成', category: 'feedback', filePath: '/sounds/feedback_delete.wav' },
+  { id: 'data_export', name: '数据导出', category: 'feedback', filePath: '/sounds/data_export.wav' },
+  { id: 'data_import', name: '数据导入', category: 'feedback', filePath: '/sounds/data_import.wav' },
+  { id: 'data_cleared', name: '数据清除', category: 'feedback', filePath: '/sounds/data_cleared.wav' },
+  { id: 'sync_complete', name: '同步完成', category: 'feedback', filePath: '/sounds/sync_complete.wav' },
 ];
 
 /**

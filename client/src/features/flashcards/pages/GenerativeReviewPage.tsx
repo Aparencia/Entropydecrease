@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Card, Input, EmptyState } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useGenerativeReview, type ClozeMode } from '../hooks/useGenerativeReview';
 import {
@@ -195,7 +196,7 @@ export default function GenerativeReviewPage() {
                 <div className="grid grid-cols-2 gap-2">
                   <motion.button
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => setClozeMode('ratio')}
+                    onClick={() => { if (clozeMode !== 'ratio') soundPlayer.play('ui_tab_switch'); setClozeMode('ratio'); }}
                     className={cn(
                       'flex flex-col items-center gap-1 py-3 px-3 rounded-kb-md border transition-all duration-200',
                       clozeMode === 'ratio'
@@ -208,7 +209,7 @@ export default function GenerativeReviewPage() {
                   </motion.button>
                   <motion.button
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => setClozeMode('keyword')}
+                    onClick={() => { if (clozeMode !== 'keyword') soundPlayer.play('ui_tab_switch'); setClozeMode('keyword'); }}
                     className={cn(
                       'flex flex-col items-center gap-1 py-3 px-3 rounded-kb-md border transition-all duration-200',
                       clozeMode === 'keyword'

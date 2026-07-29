@@ -11,6 +11,8 @@ import { ModuleEntity } from '../objects/ModuleEntity';
 import { AuroraModuleEntity } from '../objects/AuroraModuleEntity';
 import { CameraController } from '../core/CameraController';
 import { useCameraFlight } from '../hooks/useCameraFlight';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
+import { useRuntimeEnv } from '@/lib/env/useRuntimeEnv';
 
 type GeometryType = 'dodecahedron' | 'torus' | 'box' | 'sphere' | 'octahedron' | 'icosahedron';
 
@@ -56,6 +58,7 @@ export function SpatialNav() {
   const theme = useSceneTheme();
   const { isInModule, currentModule, hoveredModule, highlightAll, enterModule, setHovered } = useOrbitalStore();
   const { flyTo, update } = useCameraFlight();
+  const { shouldDegrade3D } = useRuntimeEnv();
 
   // 每帧更新相机飞行
   useFrame((_, delta) => {
@@ -67,11 +70,18 @@ export function SpatialNav() {
     const module = MODULE_POSITIONS.find(m => m.id === id);
     if (!module) return;
 
+    soundPlayer.play('ui_module_enter');
     enterModule(id);
     // 相机飞向模块位置（加偏移）
     flyTo(addVectors(module.position, CAMERA_OFFSET));
     navigate(module.route);
   }, [enterModule, flyTo, navigate]);
+
+  // 悬停音效（移动端降级时不播放，仅在指针事件回调中触发）
+  const handleHover = useCallback((id: ModuleId | null) => {
+    if (id && !shouldDegrade3D) soundPlayer.play('ui_hover_3d', { throttleMs: 200 });
+    setHovered(id);
+  }, [setHovered, shouldDegrade3D]);
 
   // 计算相机目标位置
   const cameraTarget: [number, number, number] = (() => {
@@ -105,8 +115,8 @@ export function SpatialNav() {
               isActive={currentModule === module.id}
               showLabel={highlightAll}
               onClick={() => handleModuleClick(module.id)}
-              onPointerOver={() => setHovered(module.id)}
-              onPointerOut={() => setHovered(null)}
+              onPointerOver={() => handleHover(module.id)}
+              onPointerOut={() => handleHover(null)}
             />
           );
         })}
@@ -133,7 +143,7 @@ export function SpatialNav() {
             isActive={currentModule === module.id}
             showLabel={highlightAll}
             onClick={handleModuleClick}
-            onHover={setHovered}
+            onHover={handleHover}
           />
         );
       })}

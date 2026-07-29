@@ -48,3 +48,7 @@ logs/
 # Coverage
 coverage/
 .nyc_output/
+
+# Scripts temp
+scripts/.mp3tmp/
+scripts/sounds_backup_original/

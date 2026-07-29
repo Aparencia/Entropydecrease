@@ -1,4 +1,5 @@
 import { Modal, Button } from '@/components/ui';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { Layers, AlertTriangle, Merge, SkipForward } from 'lucide-react';
 import type { KbanDeckFile } from '@/types/models';
 
@@ -79,7 +80,7 @@ export default function ImportPreviewModal({
           <Button variant="secondary" onClick={onClose}>
             取消
           </Button>
-          <Button onClick={onConfirmNew} loading={loading}>
+          <Button onClick={() => { soundPlayer.play('ui_click'); onConfirmNew(); }} loading={loading}>
             确认导入
           </Button>
         </div>

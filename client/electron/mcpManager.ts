@@ -287,11 +287,11 @@ class McpManager {
 
     if (this.bridge) {
       try {
-        // 给 bridge 3 秒时间优雅关闭
+        // 给 bridge 1 秒时间优雅关闭（避免阻塞退出）
         await Promise.race([
           this.sendRequest('shutdown', {}),
           new Promise<void>((_, reject) =>
-            setTimeout(() => reject(new Error('Shutdown timeout')), 3000),
+            setTimeout(() => reject(new Error('Shutdown timeout')), 1000),
           ),
         ]);
       } catch {

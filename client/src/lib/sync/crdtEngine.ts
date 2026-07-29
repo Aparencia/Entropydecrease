@@ -71,6 +71,21 @@ function encodeChanges(changes: Uint8Array): string {
   return btoa(binary);
 }
 
+/**
+ * 将多条 Automerge 变更（每条为独立的自描述 chunk）顺序拼接为单一二进制
+ * 下行端通过 loadIncremental 解析，天然支持多 chunk 拼接格式
+ */
+function concatChanges(changes: Uint8Array[]): Uint8Array {
+  const totalLength = changes.reduce((sum, c) => sum + c.length, 0);
+  const merged = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const c of changes) {
+    merged.set(c, offset);
+    offset += c.length;
+  }
+  return merged;
+}
+
 /** 将 base64 字符串解码为 Automerge 二进制变更 */
 function decodeChanges(encoded: string): Uint8Array {
   const binary = atob(encoded);
@@ -198,11 +213,11 @@ export class CRDTEngine {
       });
     }
 
-    // 提取增量变更
-    const changesBinary = automerge.getChanges(state.doc, beforeHeads);
-    if (changesBinary.length === 0) return null;
+    // 提取增量变更（getChangesSince 接受 Heads；getChanges 只接受两个 Doc）
+    const changeChunks = automerge.getChangesSince(state.doc, beforeHeads);
+    if (changeChunks.length === 0) return null;
 
-    const changeset = encodeChanges(changesBinary);
+    const changeset = encodeChanges(concatChanges(changeChunks));
 
     return {
       tableName,
@@ -229,7 +244,8 @@ export class CRDTEngine {
     const remoteChanges = decodeChanges(changesetBase64);
 
     // Automerge 核心：应用远程变更并自动合并
-    state.doc = automerge.applyChanges(state.doc, remoteChanges)[0];
+    // loadIncremental 可解析一条或多条拼接的变更 chunk，与上行端 concatChanges 格式对称
+    state.doc = automerge.loadIncremental(state.doc, remoteChanges);
 
     // 返回合并后的完整文档数据（供上层写入 Dexie）
     return state.doc.entities as unknown as Record<string, unknown>;
@@ -263,7 +279,7 @@ export class CRDTEngine {
 
     for (const { entityId, changeset } of changesets) {
       const remoteChanges = decodeChanges(changeset);
-      state.doc = automerge.applyChanges(state.doc, remoteChanges)[0];
+      state.doc = automerge.loadIncremental(state.doc, remoteChanges);
 
       // 检查是否为删除操作（墓碑存在但实体不存在）
       if (state.doc.tombstones[entityId] && !state.doc.entities[entityId]) {
@@ -289,7 +305,8 @@ export class CRDTEngine {
     if (!state) return;
 
     const remoteDoc = automerge.load<CRDTTableDoc>(remoteDocBinary);
-    state.doc = automerge.merge(state.doc, remoteDoc)[0];
+    // merge 直接返回合并后的 Doc（非元组）
+    state.doc = automerge.merge(state.doc, remoteDoc);
   }
 
   // ─── 持久化 ────────────────────────────────────────────────────────────────

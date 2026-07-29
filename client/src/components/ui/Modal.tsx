@@ -3,6 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
 export type ModalSize = 'sm' | 'md' | 'lg';
 
@@ -42,6 +43,14 @@ const sizeClasses: Record<ModalSize, string> = {
 export const Modal: React.FC<ModalProps> = ({
   open, onClose, title, description, children, footer, size = 'md',
 }) => {
+  // 仅在 open 真实转换时播放开/关音效（挂载与卸载不播，避免路由切换误响）
+  const prevOpenRef = React.useRef(open);
+  React.useEffect(() => {
+    if (prevOpenRef.current === open) return;
+    prevOpenRef.current = open;
+    soundPlayer.play(open ? 'ui_modal_open' : 'ui_modal_close');
+  }, [open]);
+
   return (
     <Dialog.Root open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <AnimatePresence>

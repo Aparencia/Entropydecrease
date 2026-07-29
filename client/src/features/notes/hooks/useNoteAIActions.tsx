@@ -83,7 +83,7 @@ export function useNoteAIActions(editor: Editor | null, noteId: string | null) {
         ),
       );
       setConvertedKeys(prev => new Set(prev).add(index));
-      toast({ type: 'success', message: `已生成 ${result.cards.length} 张闪卡` });
+      toast({ type: 'success', message: `已生成 ${result.cards.length} 张闪卡`, silent: true });
     } catch (error) {
       handleFlashcardError(error);
     }
@@ -101,7 +101,7 @@ export function useNoteAIActions(editor: Editor | null, noteId: string | null) {
         ),
       );
       setConvertedKeys(new Set(aiData.keyPoints!.map((_, i) => i)));
-      toast({ type: 'success', message: `已从全部要点生成 ${result.cards.length} 张闪卡` });
+      toast({ type: 'success', message: `已从全部要点生成 ${result.cards.length} 张闪卡`, silent: true });
     } catch (error) {
       handleFlashcardError(error);
     }
