@@ -171,8 +171,16 @@ class TestJWTDevMode:
 
     @pytest.fixture(autouse=True)
     def _clear_secret(self, monkeypatch):
-        """为该组测试清空 jwt_secret，启用开发降级模式"""
+        """清空全部密钥材料，启用开发降级模式
+
+        必须同时清空 Supabase 端点并固定为 HS256：ES256 算法下
+        _jwt_verification_configured() 检查的是 jwks_url/supabase_url，
+        仅清空 jwt_secret 会让用例走真实验证路径去拉取 JWKS（依赖外网）。
+        """
         monkeypatch.setitem(APP_CONFIG, "jwt_secret", "")
+        monkeypatch.setitem(APP_CONFIG, "jwt_algorithm", "HS256")
+        monkeypatch.setitem(APP_CONFIG, "supabase_jwks_url", "")
+        monkeypatch.setitem(APP_CONFIG, "supabase_url", "")
 
     def test_no_token_returns_anonymous(self, client):
         """无 Bearer token 时应返回 anonymous 用户（放行请求）"""

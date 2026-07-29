@@ -266,7 +266,6 @@ async def get_balance(request: Request):
 
     # 逐个查询 Provider 余额
     results = []
-    providers_state = getattr(request.app.state, "providers", {})
 
     for provider_key, (display_name, query_fn) in _PROVIDER_QUERIES.items():
         cfg = AI_PROVIDERS.get(provider_key, {})

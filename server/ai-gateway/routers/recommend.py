@@ -7,7 +7,6 @@ POST /api/v1/ai/recommend-duration
 @ai-context: 番茄钟推荐路由：基于历史专注数据推荐时长/策略，含本地规则降级。
 """
 
-import time
 import logging
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request

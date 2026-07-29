@@ -7,7 +7,6 @@ POST /api/v1/ai/generate-cards
 @ai-context: 闪卡生成路由：从笔记抽取问答对生成闪卡（JSON Mode），经 fallback 链。
 """
 
-import time
 import hashlib
 import logging
 from pydantic import BaseModel, Field

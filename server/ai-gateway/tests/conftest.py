@@ -143,5 +143,5 @@ def mock_call_with_fallback(monkeypatch):
         result = await fn(provider, model_name)
         return result, routing[0]
 
-    monkeypatch.setattr("config.call_with_fallback", fake_call_with_fallback)
-    return fake_call_with_fallback
+    monkeypatch.setattr("config.call_with_fallback", fake_call)
+    return fake_call

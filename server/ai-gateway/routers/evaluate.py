@@ -7,7 +7,6 @@ POST /api/v1/ai/evaluate-explanation
 @ai-context: 费曼评估路由：对用户讲解打分并给反馈，经 fallback 链调用文本模型。
 """
 
-import time
 import logging
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request

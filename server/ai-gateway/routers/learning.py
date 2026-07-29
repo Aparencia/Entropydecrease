@@ -10,9 +10,7 @@ POST /api/v1/ai/rescue           — 卡壳三级救援
 """
 
 import logging
-from typing import Optional
 
-from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
 from config import call_with_fallback_for_request
@@ -21,14 +19,17 @@ from chains.socratic_chain import SocraticChain
 from chains.predict_chain import PredictChain
 from chains.rescue_chain import RescueChain
 from routers.learning_schemas import (
+    AnchorPointItem,
     AnchorPointRequest,
     AnchorPointResult,
-    SocraticRequest,
-    SocraticResult,
+    PredictItem,
     PredictRequest,
     PredictResult,
+    RescueLevelItem,
     RescueRequest,
     RescueResult,
+    SocraticRequest,
+    SocraticResult,
 )
 
 logger = logging.getLogger(__name__)
