@@ -10,7 +10,18 @@ import type {
 import type { ClassroomNote } from './classroomNoteStore';
 import type { CRDTDocRecord, CRDTChangeRecord } from '@/lib/sync/crdtEngine';
 
-export class KeBanDatabase extends Dexie {
+/**
+ * IndexedDB 数据库定义（Dexie）
+ *
+ * @ai-context: 警告——IndexedDB 数据库名 'keban' 与 v8 迁移读取的
+ * 'keban-inspirations' localStorage 键均为存量用户数据标识，绝对不可
+ * 改名（改名等于清空全体用户本地数据）。品牌统一任务明确豁免这两处。
+ * @ai-context: schema 版本只增不改——历史 version(n) 定义是既有用户
+ * 升级链路的一部分，修改历史版本会破坏升级；新增字段/表必须开新版本号。
+ * @ai-context: 类名 EntropyDecreaseDatabase 为 2026-07 品牌重构后命名，
+ * KeBanDatabase 为兼容别名，新代码禁止使用。
+ */
+export class EntropyDecreaseDatabase extends Dexie {
   pomodoroSessions!: Table<PomodoroSession, string>;
   pomodoroSettings!: Table<PomodoroSettings, string>;
   notes!: Table<Note, string>;
@@ -38,6 +49,7 @@ export class KeBanDatabase extends Dexie {
   crdtChanges!: Table<CRDTChangeRecord, number>;
 
   constructor() {
+    // 数据库名 'keban' 不可修改（存量用户数据），见文件头 @ai-context
     super('keban');
 
     this.version(1).stores({
@@ -179,6 +191,7 @@ export class KeBanDatabase extends Dexie {
       inspirations: 'id, createdAt, updatedAt, [tags.content_nature+tags.cognitive_depth+tags.subject]',
     }).upgrade(async (tx) => {
       try {
+        // 历史迁移键，不可改名（见文件头 @ai-context）
         const raw = localStorage.getItem('keban-inspirations');
         if (raw) {
           const items = JSON.parse(raw);
@@ -255,5 +268,25 @@ export class KeBanDatabase extends Dexie {
   }
 }
 
-export const db = new KeBanDatabase();
+/** @deprecated 品牌重构前的旧类名，仅为兼容保留，新代码使用 EntropyDecreaseDatabase */
+export { EntropyDecreaseDatabase as KeBanDatabase };
+
+/**
+ * 数据库实例工厂（测试可创建隔离实例）
+ *
+ * @ai-context: 测试中请使用本工厂配合 fake-indexeddb，禁止直接使用下方
+ * db 单例连接真实浏览器 IndexedDB。
+ */
+export function createDatabase(): EntropyDecreaseDatabase {
+  return new EntropyDecreaseDatabase();
+}
+
+/**
+ * 应用级共享单例
+ *
+ * @ai-context: 25+ 消费方直接 import { db }，属既定架构（模块级单例）。
+ * 渐进重构方向：新代码优先通过参数注入 db（参考 achievements/evaluator.ts
+ * 的默认参数 DI 模式），存量消费方在各自迁移批次中逐步改造。
+ */
+export const db = createDatabase();
 export { captureStore } from './captureStore';

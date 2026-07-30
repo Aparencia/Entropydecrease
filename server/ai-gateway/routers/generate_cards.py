@@ -1,11 +1,12 @@
 """
-课伴 AI 网关 — 闪卡生成路由
+熵减 AI 网关 — 闪卡生成路由
 
 POST /api/v1/ai/generate-cards
 调用通义千问从学习笔记中提取知识点，生成问答闪卡（JSON Mode）。
+
+@ai-context: 闪卡生成路由：从笔记抽取问答对生成闪卡（JSON Mode），经 fallback 链。
 """
 
-import time
 import hashlib
 import logging
 from pydantic import BaseModel, Field

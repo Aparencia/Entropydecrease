@@ -12,6 +12,9 @@ interface RequestOptions extends RequestInit {
  * 共享的 token 刷新 Promise —— 并发请求同时命中 401 时只触发一次 refreshSession。
  * 否则多次并发刷新会因 Supabase 的 refresh token 轮换而互相失效，
  * 让本来有效的会话被误判为过期，从而偶发地强制用户重新登录。
+ *
+ * @ai-context: 日志/错误前缀统一为 [EntropyDecrease]。VITE_API_BASE_URL
+ * 由环境文件注入，代码内零硬编码。
  */
 let sharedRefresh: ReturnType<typeof supabase.auth.refreshSession> | null = null;
 function refreshSessionShared() {
@@ -31,7 +34,7 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
     const baseUrl = resolveUrl();
 
     if (!baseUrl) {
-      throw new Error('[KeBan] API base URL not configured. Please set VITE_API_BASE_URL in .env');
+      throw new Error('[EntropyDecrease] API base URL not configured. Please set VITE_API_BASE_URL in .env');
     }
 
     const {
@@ -114,7 +117,7 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
     postStream: async function* (url: string, body?: unknown): AsyncGenerator<string, void, unknown> {
       const baseUrl = resolveUrl();
       if (!baseUrl) {
-        throw new Error('[KeBan] API base URL not configured');
+        throw new Error('[EntropyDecrease] API base URL not configured');
       }
 
       const {

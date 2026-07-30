@@ -1,3 +1,6 @@
+/**
+ * @ai-context: notes 功能模块 Hook：useNoteAIActions。
+ */
 import { useState, useCallback } from 'react';
 import type { Editor } from '@tiptap/react';
 import {

@@ -1,3 +1,6 @@
+/**
+ * @ai-context: pomodoro 功能模块状态管理：usePomodoroStore。
+ */
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { loadSettings, saveSettings, recordSession, playCompletionSound, sendNotification } from './usePomodoroPersistence';

@@ -1,3 +1,6 @@
+/**
+ * @ai-context: AI 每日额度余量查询 Hook（网关 /balance），额度制是商业化合规要求的一部分。
+ */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { supabase } from '@/lib/auth/supabaseClient';

@@ -1,10 +1,12 @@
 """
-课伴 AI 网关 — 预测驱动学习 Chain
+熵减 AI 网关 — 预测驱动学习 Chain
 
 从学习笔记中生成预测性问题：
 - 后续知识预测（knowledge_next）
 - 应用场景预测（application）
 - 跨学科连接（connection）
+
+@ai-context: 预测驱动学习 Chain：生成预测性问题激发主动思考。
 """
 
 import json

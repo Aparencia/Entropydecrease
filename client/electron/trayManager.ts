@@ -2,6 +2,8 @@
  * 系统托盘管理器
  *
  * 从 main.ts 拆分而来，负责创建系统托盘图标及右键菜单。
+ *
+ * @ai-context: 系统托盘：最小化到托盘/恢复/退出菜单。
  */
 
 import { Tray, Menu, nativeImage, app } from 'electron';

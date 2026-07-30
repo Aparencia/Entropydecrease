@@ -1,5 +1,5 @@
 """
-课伴 AI 网关 — 课程识别端点
+熵减 AI 网关 — 课程识别端点
 
 POST /api/v1/multimodal/detect-course
 
@@ -34,7 +34,7 @@ COURSE_DETECT_USER = (
     '{"course_name": "...", "subject": "math|physics|cs|english|other", '
     '"suggested_terms": ["...", "..."]}\n'
     "要求：\n"
-    "- course_name: 课程名称（如"高等数学""数据结构"），无法判断时留空字符串\n"
+    "- course_name: 课程名称（如“高等数学”“数据结构”），无法判断时留空字符串\n"
     "- subject: 学科分类，仅限 math/physics/cs/english/other\n"
     "- suggested_terms: 列出 3-5 个图中出现的专业术语\n"
     "无法判断时字段留空。"

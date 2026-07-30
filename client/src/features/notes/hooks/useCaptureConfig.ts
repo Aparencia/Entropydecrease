@@ -1,3 +1,6 @@
+/**
+ * @ai-context: notes 功能模块 Hook：useCaptureConfig。
+ */
 import { useState, useCallback } from 'react';
 import type { CaptureMode, CaptureSidebarConfig, CapturePath } from '@/lib/capture';
 

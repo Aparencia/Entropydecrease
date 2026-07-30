@@ -1,3 +1,6 @@
+/**
+ * @ai-context: notes 功能模块 Hook：useAnalyzeBridge。
+ */
 import { useRef, useCallback } from 'react';
 
 // ================================================================

@@ -1,3 +1,6 @@
+/**
+ * @ai-context: flashcards 功能模块状态管理：useStudySessionStore。
+ */
 import { create } from 'zustand';
 import {
   flashcardStore,

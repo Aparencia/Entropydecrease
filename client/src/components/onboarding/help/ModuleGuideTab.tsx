@@ -1,5 +1,7 @@
 /**
  * ModuleGuideTab — 6个模块的详细说明卡片，折叠/展开式
+ *
+ * @ai-context: 通用组件：ModuleGuideTab。
  */
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';

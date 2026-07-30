@@ -1,6 +1,10 @@
-// ========== 笔记相关类型 ==========
+/**
+ * 笔记领域类型
+ *
+ * @ai-context: 纯类型文件。Note.content 存储 TipTap JSON 序列化字符串。
+ */
 
-// 笔记
+/** 笔记 */
 export interface Note {
   id: string;
   title: string;
@@ -12,10 +16,10 @@ export interface Note {
   updatedAt: Date;
   wordCount: number;
   pinned: boolean;               // 是否置顶
-  videoNoteType?: string;         // 视频笔记类型标识（lecture/tutorial/etc）
+  videoNoteType?: string;        // 视频笔记类型标识（lecture/tutorial/etc）
 }
 
-// 笔记文件夹
+/** 笔记文件夹 */
 export interface NoteFolder {
   id: string;
   name: string;
@@ -25,7 +29,7 @@ export interface NoteFolder {
   order: number;                 // 排序权重
 }
 
-// 自由画布文本块
+/** 自由画布文本块 */
 export interface FreeCanvasBlock {
   id: string;
   type: 'text';
@@ -34,14 +38,14 @@ export interface FreeCanvasBlock {
   size: { width: number; height: number | 'auto' };
 }
 
-// 自由画布数据
+/** 自由画布数据 */
 export interface FreeCanvasData {
   blocks: FreeCanvasBlock[];
   canvasWidth: number;
   canvasHeight: number;
 }
 
-// 视频笔记元数据（嵌入 TipTap JSON content）
+/** 视频笔记元数据（嵌入 TipTap JSON content） */
 export interface VideoNoteMeta {
   videoUrl?: string;
   duration?: number;

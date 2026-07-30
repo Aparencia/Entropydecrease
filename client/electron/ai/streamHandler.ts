@@ -10,6 +10,8 @@
  *   - 'ai:stream:chunk'  { requestId, chunk }
  *   - 'ai:stream:end'    { requestId }
  *   - 'ai:stream:error'  { requestId, error }
+ *
+ * @ai-context: AI 流式请求 IPC（ai:stream:start）：postJsonStream 逐 chunk 经 ai:stream:chunk/end/error 事件推回渲染进程，requestId 关联。
  */
 
 import { safeHandle } from '../ipcUtils.js';

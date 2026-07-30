@@ -4,6 +4,8 @@
  * 处理 ai_video_analyze IPC 请求，调用 AI 网关对视频文件进行多模态分析。
  * 不支持本地 Ollama 降级（Ollama 不支持视频处理），仅走远程网关。
  * 对应端点：POST /api/v1/multimodal/analyze-video（multipart/form-data）
+ *
+ * @ai-context: 视频分析（multipart 上传） IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
 import { readFile } from 'fs/promises';

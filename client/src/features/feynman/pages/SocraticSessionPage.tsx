@@ -3,6 +3,8 @@
  * 三段式流程：Brainstorm → Socratic Dialogue → Deepening
  *
  * UI 渲染层，业务逻辑见 useSocraticFlow hook
+ *
+ * @ai-context: feynman 功能模块页面：SocraticSessionPage。
  */
 
 import { motion, AnimatePresence } from 'framer-motion';

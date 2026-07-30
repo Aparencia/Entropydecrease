@@ -3,6 +3,8 @@
  *
  * 统一管理所有 AI 错误的用户可见文案，
  * 取代分散在 aiServiceFallback.ts / hooks/types.ts 中的硬编码字符串。
+ *
+ * @ai-context: AIErrorCode→用户可读文案映射，新增错误码必须在此补充文案否则 UI 显示原始码。
  */
 
 import type { AIErrorCode } from './types';

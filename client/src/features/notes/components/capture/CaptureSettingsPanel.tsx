@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：CaptureSettingsPanel。
+ */
 import { useState } from 'react';
 import { Settings2, ChevronRight, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';

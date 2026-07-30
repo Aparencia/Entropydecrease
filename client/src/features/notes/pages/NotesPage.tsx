@@ -1,3 +1,6 @@
+/**
+ * @ai-context: notes 功能模块页面：NotesPage。
+ */
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Card, Tag, EmptyState, Modal } from '@/components/ui';

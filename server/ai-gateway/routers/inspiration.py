@@ -1,8 +1,10 @@
 """
-课伴 AI 网关 — 灵感分拣路由
+熵减 AI 网关 — 灵感分拣路由
 
 POST /api/v1/ai/sort-inspiration
 分析灵感/笔记内容，推荐最适合的归类目标（feynman/flashcard/note/todo）。
+
+@ai-context: 灵感排序路由：对灵感条目做智能排序/打分。
 """
 
 import logging

@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：FreeTextBlock。
+ */
 import { useRef, useCallback, useEffect, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';

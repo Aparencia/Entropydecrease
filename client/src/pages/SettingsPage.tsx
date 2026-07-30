@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 页面组件：SettingsPage。
+ */
 import { lazy, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { SPRING } from '@/lib/animation/springConfig';

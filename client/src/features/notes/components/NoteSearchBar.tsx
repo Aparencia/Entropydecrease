@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：NoteSearchBar。
+ */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui';

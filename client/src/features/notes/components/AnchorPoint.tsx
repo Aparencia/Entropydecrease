@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：AnchorPoint。
+ */
 import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Anchor, Clock } from 'lucide-react';

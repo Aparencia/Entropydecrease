@@ -1,3 +1,10 @@
+/**
+ * 离线操作队列
+ *
+ * @ai-context: 指数退避重试队列（nextRetryAt 水位），getReadyItems 仅返回
+ * 已到退避时间的项；cleanupExpired(5) 丢弃重试超限项——丢弃即放弃该操作
+ * 的云端同步（本地数据不受影响），这是产品接受的取舍。
+ */
 import { db } from '@/lib/storage/database';
 import { generateId } from '@/lib/utils/uuid';
 import type { OfflineQueueItem } from '@/types/models';
@@ -29,7 +36,7 @@ export class OfflineQueue {
     entityType: string,
     entityId: string,
     operation: 'create' | 'update' | 'delete',
-    payload?: any
+    payload?: unknown
   ): Promise<string> {
     const id = generateId();
     const deviceId = getDeviceId();

@@ -2,6 +2,8 @@
  * ClassroomPage — 课堂助手（回声定位）独立全页模块
  * 左侧窄栏：窗口选择 + 路径/模式 + 控制 + 设置
  * 右侧宽区：提取结果 / 智能时间轴 / 录制面板 / 分析预览
+ *
+ * @ai-context: classroom 功能模块页面：ClassroomPage。
  */
 import { useRef, useEffect, useCallback, useState } from 'react';
 import {

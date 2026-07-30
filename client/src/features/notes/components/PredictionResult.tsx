@@ -1,6 +1,8 @@
 /**
  * 预测结果可视化 — 揭示答案后的对比展示与统计
  * FEAT-023
+ *
+ * @ai-context: 通用组件：PredictionResult。
  */
 import { CheckCircle2, AlertCircle, MinusCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';

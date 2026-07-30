@@ -2,6 +2,13 @@
  * Ollama 本地推理 — 渲染进程侧类型定义
  *
  * 供设置页 UI、useOllamaStatus Hook 及 IPC 桥接层使用。
+ *
+ * @ai-context: OllamaConfig 与 Electron 主进程 ai/ollama/config.ts 的
+ * 配置结构必须严格同步（主进程是持久化权威源，渲染进程仅展示/编辑）。
+ * 修改字段时两侧同时更新，否则 IPC 传输后字段静默丢失。
+ * @ai-context: OLLAMA_RECOMMENDED_MODELS 是本文件唯一的运行时导出
+ * （常量数组），其余均为纯类型。推荐模型需与主进程下载逻辑支持的
+ * 模型列表保持一致。
  */
 
 // ================================================================

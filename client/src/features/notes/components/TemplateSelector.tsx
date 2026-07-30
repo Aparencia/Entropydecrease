@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：TemplateSelector。
+ */
 import { useState } from 'react';
 import { Modal } from '@/components/ui';
 import { List, Layout, GitBranch, PenTool, FileText, ListTodo } from 'lucide-react';

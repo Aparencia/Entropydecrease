@@ -5,6 +5,9 @@
  * 与 SM-2 同构的接口设计，支持策略模式热切换。
  *
  * Rating 枚举复用 sm2.ts 中的定义：Again(0) / Hard(1) / Good(2) / Easy(3)
+ *
+ * @ai-context: 19 个权重参数来自 fsrs-rs 官方默认值，参数间存在耦合，禁止单独微调。
+ * @ai-context: 纯函数；支持从 SM-2 历史 interval 惰性迁移初始 stability。
  */
 
 import { Rating, type IntervalPreview } from './sm2';

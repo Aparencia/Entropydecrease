@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 卡壳计时 Hook——用户停滞超阈值触发救援（rescue）建议入口。
+ */
 import { useRef, useCallback, useEffect } from 'react';
 
 export function useStuckTimer(options: {

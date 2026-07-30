@@ -1,4 +1,7 @@
-﻿import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+/**
+ * @ai-context: UI 基础组件（shadcn/radix 封装）：CommandPalette。
+ */
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {

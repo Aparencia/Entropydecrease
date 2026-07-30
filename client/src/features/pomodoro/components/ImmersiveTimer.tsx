@@ -4,6 +4,8 @@
  * 全屏渐变色场背景（随进度变化），
  * 弧形光带进度条 + 呼吸缩放大字号倒计时，
  * 底部极简 icon-only 操作。
+ *
+ * @ai-context: 通用组件：ImmersiveTimer。
  */
 import { useRef, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';

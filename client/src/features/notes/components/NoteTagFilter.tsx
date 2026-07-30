@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：NoteTagFilter。
+ */
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';

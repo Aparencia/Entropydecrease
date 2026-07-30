@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 本地规则时长推荐引擎——AI 降级链的最终兜底（离线可用，永不失败）。
+ */
 import type { DurationResult, DurationHistoryData, DurationOptions } from './types';
 
 /**

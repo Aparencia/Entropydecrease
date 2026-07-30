@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 同步状态 UI 组件：ConflictDialog。
+ */
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Modal } from '@/components/ui';

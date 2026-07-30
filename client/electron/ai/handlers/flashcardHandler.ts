@@ -2,6 +2,8 @@
  * AI 闪卡生成功能 Handler
  *
  * 处理 ai_generate_cards IPC 请求，调用 AI 网关从笔记生成闪卡。
+ *
+ * @ai-context: 闪卡生成 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
 import { safeHandle } from '../../ipcUtils.js';

@@ -1,4 +1,6 @@
-/** @file 7×24 学习热力图组件 — 纯 CSS Grid */
+/** @file 7×24 学习热力图组件 — 纯 CSS Grid *
+ * @ai-context: 通用组件：HeatmapChart。
+ */
 import React, { useState, useMemo, useCallback } from 'react';
 import type { HeatmapCell } from '../types/analytics';
 

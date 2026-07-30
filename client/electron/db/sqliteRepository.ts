@@ -3,6 +3,8 @@
  *
  * 在 Electron 主进程中直接调用 better-sqlite3（不走 IPC）。
  * 自动处理 camelCase ↔ snake_case 转换、JSON 序列化/反序列化、boolean ↔ INTEGER 映射。
+ *
+ * @ai-context: SQLite 通用仓储（泛型 CRUD），表名由调用方经白名单校验后传入。
  */
 
 import type { IRepository } from '../../src/lib/storage/interfaces';

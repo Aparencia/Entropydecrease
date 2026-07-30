@@ -1,3 +1,9 @@
+/**
+ * 存储仓库泛型契约
+ *
+ * @ai-context: IRepository 是双端存储（Dexie/IPC-SQLite）的统一契约，
+ * 修改签名需同步 StorageAdapter 与 IpcStorageAdapter 两个实现。
+ */
 // 存储仓库泛型接口
 import type { SyncConflict } from '@/types/models';
 

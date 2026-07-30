@@ -1,11 +1,12 @@
 """
-课伴 AI 网关 — 番茄钟推荐路由
+熵减 AI 网关 — 番茄钟推荐路由
 
 POST /api/v1/ai/recommend-duration
 调用 DeepSeek 根据用户历史专注数据推荐个性化番茄钟时长。
+
+@ai-context: 番茄钟推荐路由：基于历史专注数据推荐时长/策略，含本地规则降级。
 """
 
-import time
 import logging
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request

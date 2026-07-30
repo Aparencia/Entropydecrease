@@ -1,10 +1,12 @@
 """
-课伴 AI 网关 — DeepSeekProvider（深度求索）
+熵减 AI 网关 — DeepSeekProvider（深度求索）
 
 通过 OpenAI 兼容 SDK 调用 DeepSeek API。
 - base_url: https://api.deepseek.com/v1
 - 支持缓存命中（系统提示复用可降低成本）
 - 所有 prompt 使用中文
+
+@ai-context: DeepSeek Provider：OpenAI 兼容 SDK 接入深度求索，主用费曼评估/推荐等文本功能。
 """
 
 import time

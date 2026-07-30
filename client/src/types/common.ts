@@ -1,4 +1,10 @@
-// ========== 跨领域通用类型 ==========
+/**
+ * 跨领域通用类型 — 全栈业务字典的原子层
+ *
+ * @ai-context: 本文件是唯一权威定义源。models.ts 仅做 re-export 以保持
+ * 旧导入路径 `@/types/models` 兼容。新代码请直接从领域文件导入。
+ * @ai-context: 纯类型文件，无运行时代码，可安全重构。
+ */
 
 /** 三档自信度 */
 export type Confidence = 'low' | 'medium' | 'high';
@@ -42,7 +48,7 @@ export interface Prediction {
   isCorrect?: boolean;
 }
 
-// 学习打卡记录
+/** 学习打卡记录 */
 export interface StudyCheckIn {
   id: string;
   date: string;           // YYYY-MM-DD
@@ -51,7 +57,7 @@ export interface StudyCheckIn {
   streakDays: number;     // 连续打卡天数
 }
 
-// 成就解锁记录
+/** 成就解锁记录 */
 export interface Achievement {
   id: string;
   key: string;            // 成就唯一标识
@@ -61,15 +67,15 @@ export interface Achievement {
   unlockedAt: Date;
 }
 
-// 应用设置
+/** 应用设置（key-value 存储，value 为 JSON 字符串） */
 export interface AppSettings {
   id: string;
-  key: string;                   // 设置键名
-  value: string;                 // 设置值（JSON 字符串）
+  key: string;
+  value: string;
   updatedAt: Date;
 }
 
-// 隐私合规同意记录
+/** 隐私合规同意记录 */
 export interface Consent {
   id: string;
   type: 'privacy' | 'terms';
@@ -77,9 +83,7 @@ export interface Consent {
   acceptedAt: Date;
 }
 
-// ========== v0.7.0 账户体系完善新增类型 ==========
-
-// 用户资料（本地缓存，与 Supabase user metadata 同步）
+/** 用户资料（本地缓存，与 Supabase user metadata 同步） */
 export interface UserProfile {
   id: string;
   userId: string;         // Supabase user.id

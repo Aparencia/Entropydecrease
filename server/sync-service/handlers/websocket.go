@@ -1,13 +1,15 @@
+// @ai-context
+// WebSocket 入口与消息协议：升级握手、协议类型定义、广播入口与增量查询。
+// WebSocket entry points and message protocol: upgrade handshake, wire types, broadcast API.
+// Why: 协议类型（WSMessage/WSOperationPayload）留在本文件作为对外契约的单一定义点。
 package handlers
 
 import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"sync"
-	"time"
 
-	"keban/sync-service/models"
+	"entropydecrease/sync-service/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -23,22 +25,6 @@ var upgrader = websocket.Upgrader{
 		return true
 	},
 }
-
-// ---------- Timing constants ----------
-
-const (
-	// Time allowed to write a message to the peer.
-	writeWait = 10 * time.Second
-
-	// Time allowed to read the next pong message from the peer.
-	pongWait = 60 * time.Second
-
-	// Send pings to peer with this period. Must be less than pongWait.
-	pingPeriod = (pongWait * 9) / 10
-
-	// Maximum message size allowed from peer.
-	maxMessageSize = 65536
-)
 
 // ---------- Message protocol ----------
 
@@ -61,204 +47,6 @@ type WSOperationPayload struct {
 // WSSyncRequestPayload is sent by clients inside a "sync_request" message.
 type WSSyncRequestPayload struct {
 	SinceVersion int64 `json:"sinceVersion"`
-}
-
-// ---------- Connection ----------
-
-// WSConnection represents a single WebSocket connection bound to a user+device.
-type WSConnection struct {
-	UserID   string
-	DeviceID string
-	Conn     *websocket.Conn
-	Send     chan []byte
-	closed   bool
-	mu       sync.Mutex
-}
-
-// close safely marks the connection as closed and closes the underlying socket.
-func (c *WSConnection) close() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if !c.closed {
-		c.closed = true
-		close(c.Send)
-		_ = c.Conn.Close()
-	}
-}
-
-// isClosed returns whether the connection has already been torn down.
-func (c *WSConnection) isClosed() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.closed
-}
-
-// readPump reads messages from the WebSocket connection.
-// It handles ping/pong and incoming sync_request / operation messages.
-func (c *WSConnection) readPump() {
-	defer func() {
-		wsManager.unregister(c)
-		c.close()
-	}()
-
-	c.Conn.SetReadLimit(maxMessageSize)
-	_ = c.Conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.Conn.SetPongHandler(func(string) error {
-		_ = c.Conn.SetReadDeadline(time.Now().Add(pongWait))
-		return nil
-	})
-
-	for {
-		_, raw, err := c.Conn.ReadMessage()
-		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
-				log.Printf("[ws] read error user=%s device=%s: %v", c.UserID, c.DeviceID, err)
-			}
-			return
-		}
-
-		var msg WSMessage
-		if err := json.Unmarshal(raw, &msg); err != nil {
-			log.Printf("[ws] bad message from user=%s device=%s: %v", c.UserID, c.DeviceID, err)
-			continue
-		}
-
-		switch msg.Type {
-		case "ping":
-			// Respond with pong.
-			pong, _ := json.Marshal(WSMessage{Type: "pong"})
-			select {
-			case c.Send <- pong:
-			default:
-			}
-
-		case "sync_request":
-			// Client asks for updates since a given version.
-			var payload WSSyncRequestPayload
-			if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-				continue
-			}
-			ops := fetchOperationsSince(payload.SinceVersion, c.DeviceID)
-			data, _ := json.Marshal(ops)
-			resp, _ := json.Marshal(WSMessage{Type: "operation", Payload: data})
-			select {
-			case c.Send <- resp:
-			default:
-			}
-
-		case "operation":
-			// Client-pushed operation over WebSocket (future enhancement).
-			// For now, acknowledge receipt.
-			ack, _ := json.Marshal(WSMessage{Type: "ack", Payload: msg.Payload})
-			select {
-			case c.Send <- ack:
-			default:
-			}
-		}
-	}
-}
-
-// writePump pumps messages from the Send channel to the WebSocket connection.
-// It also sends periodic ping frames to keep the connection alive.
-func (c *WSConnection) writePump() {
-	ticker := time.NewTicker(pingPeriod)
-	defer func() {
-		ticker.Stop()
-		c.close()
-	}()
-
-	for {
-		select {
-		case message, ok := <-c.Send:
-			_ = c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if !ok {
-				// Channel closed.
-				_ = c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}
-			if err := c.Conn.WriteMessage(websocket.TextMessage, message); err != nil {
-				log.Printf("[ws] write error user=%s device=%s: %v", c.UserID, c.DeviceID, err)
-				return
-			}
-
-		case <-ticker.C:
-			_ = c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				return
-			}
-		}
-	}
-}
-
-// ---------- Connection manager ----------
-
-// WSManager keeps track of all live WebSocket connections, indexed by userID → deviceID.
-type WSManager struct {
-	mu          sync.RWMutex
-	connections map[string]map[string]*WSConnection
-}
-
-// Global singleton used by handlers.
-var wsManager = &WSManager{
-	connections: make(map[string]map[string]*WSConnection),
-}
-
-// register adds a connection to the manager.
-func (m *WSManager) register(c *WSConnection) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if _, ok := m.connections[c.UserID]; !ok {
-		m.connections[c.UserID] = make(map[string]*WSConnection)
-	}
-	// Replace any previous connection from the same device.
-	if old, exists := m.connections[c.UserID][c.DeviceID]; exists {
-		old.close()
-	}
-	m.connections[c.UserID][c.DeviceID] = c
-	log.Printf("[ws] registered user=%s device=%s", c.UserID, c.DeviceID)
-}
-
-// unregister removes a connection from the manager.
-func (m *WSManager) unregister(c *WSConnection) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if devices, ok := m.connections[c.UserID]; ok {
-		if existing, exists := devices[c.DeviceID]; exists && existing == c {
-			delete(devices, c.DeviceID)
-			log.Printf("[ws] unregistered user=%s device=%s", c.UserID, c.DeviceID)
-		}
-		if len(devices) == 0 {
-			delete(m.connections, c.UserID)
-		}
-	}
-}
-
-// broadcastToUser sends a message to all online devices of a user, optionally excluding one device.
-func (m *WSManager) broadcastToUser(userID string, excludeDeviceID string, message []byte) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	devices, ok := m.connections[userID]
-	if !ok {
-		return
-	}
-	for deviceID, conn := range devices {
-		if deviceID == excludeDeviceID {
-			continue
-		}
-		if conn.isClosed() {
-			continue
-		}
-		select {
-		case conn.Send <- message:
-		default:
-			// Buffer full → close connection to protect the server.
-			log.Printf("[ws] buffer overflow, closing user=%s device=%s", userID, deviceID)
-			go conn.close()
-		}
-	}
 }
 
 // ---------- Gin handler entry-points ----------

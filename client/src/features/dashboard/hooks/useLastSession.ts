@@ -1,3 +1,6 @@
+/**
+ * @ai-context: dashboard 功能模块 Hook：useLastSession。
+ */
 import { useEffect, useState } from 'react';
 import { createStorage } from '@/lib/storage/storageFactory';
 import type { Note } from '@/types/models';

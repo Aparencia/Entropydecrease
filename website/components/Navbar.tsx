@@ -1,3 +1,6 @@
+// @ai-context
+// 毛玻璃导航栏：桌面/移动双布局 + layoutId 指示器动画。Glass navbar with active indicator.
+// Why: 活动指示器用 framer layoutId 实现跨路由平滑过渡，而非各自独立动画。
 "use client";
 
 import Link from "next/link";
@@ -34,7 +37,7 @@ export function Navbar() {
             熵
           </span>
           <span className="font-serif text-lg font-semibold text-kb-text tracking-wide">
-            课伴<span className="text-kb-text3 text-sm ml-1.5 font-sans">KeBan</span>
+            熵减<span className="text-kb-text3 text-sm ml-1.5 font-sans">Entropydecrease</span>
           </span>
         </Link>
 

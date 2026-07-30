@@ -1,4 +1,12 @@
-// ========== 费曼学习相关类型 ==========
+/**
+ * 费曼学习领域类型
+ *
+ * @ai-context: 费曼学习法四步流程的数据契约。currentStep 业务映射：
+ * 1=讲解概念(explanation) → 2=标记薄弱点(FeynmanWeakPoint) →
+ * 3=回炉深究 → 4=简化重述(FeynmanSummary)。步骤间存在依赖关系，
+ * 不可跳步推进 currentStep。
+ * @ai-context: 纯类型文件，无运行时代码，可安全重构。
+ */
 
 // 费曼学习笔记
 export interface FeynmanNote {

@@ -1,5 +1,7 @@
 /**
  * OnboardingCard — 毛玻璃引导卡片容器
+ *
+ * @ai-context: 通用组件：OnboardingCard。
  */
 import { motion } from 'framer-motion';
 import type { ReactNode } from 'react';

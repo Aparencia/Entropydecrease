@@ -3,6 +3,8 @@
  *
  * 配置文件统一存放于 userData/ollama-config.json，
  * 与现有 ai-gateway-config.json、storage-config.json 同级。
+ *
+ * @ai-context: Ollama 配置持久化（userData/ollama-config.json 路径不可改）：baseUrl/enabled/autoDetect/镜像地址；渲染进程经 IPC 读写。
  */
 
 import { app } from 'electron';

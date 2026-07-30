@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 深海/穹顶双世界主题切换 Hook，与 useSceneTheme 3D 侧联动。
+ */
 import { useState, useEffect, useCallback } from 'react';
 
 type Theme = 'light' | 'dark';

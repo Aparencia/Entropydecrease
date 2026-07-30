@@ -1,29 +1,18 @@
-import type { Table } from 'dexie';
+import type { Table, UpdateSpec, IndexableType } from 'dexie';
 import type { IRepository } from './interfaces';
 import { cryptoManager } from '../crypto';
+import { SENSITIVE_FIELDS, NON_SENSITIVE_TABLES } from './sensitiveFields';
 
 /**
- * 敏感字段映射：entityType -> 需要解密的字段名列表
- * 与 writeWithLog.ts 中的加密映射保持一致
+ * Dexie 存储适配器
+ *
+ * @ai-context: PWA 环境下 IRepository 的 IndexedDB 实现（Electron 环境
+ * 使用 IpcStorageAdapter，二者由 storageFactory 按运行时选择）。
+ * 读取路径自动解密敏感字段，字段映射唯一来源为 ./sensitiveFields.ts，
+ * 禁止在本文件内重新定义映射（历史上双份映射曾导致解密失效 Bug）。
+ * @ai-context: WeakMap 解密缓存以原始记录对象引用为键，同一对象不重复
+ * 解密；Dexie 每次查询返回新对象，缓存命中仅发生在同一查询结果复用时。
  */
-const SENSITIVE_FIELDS: Record<string, string[]> = {
-  notes: ['content'],
-  flashcards: ['front', 'back'],
-  feynmanNotes: ['content'],
-  feynmanSummaries: ['content'],
-  feynmanWeakPoints: ['content'],
-};
-
-/**
- * 非敏感表白名单：这些表不含加密字段，可直接跳过解密路径
- */
-const NON_SENSITIVE_TABLES = new Set([
-  'pomodoroSessions',
-  'studyCheckIns',
-  'studyGoals',
-  'flashcardReviews',
-  'searchIndex',
-]);
 
 /**
  * WeakMap 解密缓存：同一对象引用不重复解密
@@ -96,7 +85,7 @@ export class StorageAdapter<T extends { id: string }> implements IRepository<T> 
   }
 
   async update(id: string, changes: Partial<T>): Promise<void> {
-    await this.table.update(id, changes as any);
+    await this.table.update(id, changes as UpdateSpec<T>);
   }
 
   async delete(id: string): Promise<void> {
@@ -126,7 +115,7 @@ export class StorageAdapter<T extends { id: string }> implements IRepository<T> 
     await this.table.clear();
   }
 
-  async where(index: string, value: any): Promise<T[]> {
+  async where(index: string, value: IndexableType): Promise<T[]> {
     const items = await this.table.where(index).equals(value).toArray();
     if (this.skipDecrypt) return items;
     return Promise.all(items.map(item => decryptSensitiveFields(this.entityType, item)));

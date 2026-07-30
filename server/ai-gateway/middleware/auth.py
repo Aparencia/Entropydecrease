@@ -1,5 +1,5 @@
 """
-课伴 AI 网关 — JWT 认证中间件
+熵减 AI 网关 — JWT 认证中间件
 
 从 Authorization 头提取 Bearer token 并验证。
 验证通过后将 user_id 注入 request.state。
@@ -8,6 +8,8 @@
 - HS256：使用对称密钥（HMAC）验证，密钥来自 SUPABASE_JWT_SECRET
 - ES256：使用 ECDSA P-256 公钥验证，公钥从 Supabase JWKS 端点获取（按 kid 匹配）
 - RS256：使用 RSA 公钥（PEM）验证
+
+@ai-context: JWT 认证中间件：校验 Supabase JWT（ES256 经 JWKS，或 HS256/RS256 经密钥），未配置时以占位密钥放行供本地开发。
 """
 
 import base64

@@ -1,3 +1,11 @@
+/**
+ * 存储工厂 — 运行时环境选择存储实现
+ *
+ * @ai-context: PWA→Dexie(IndexedDB)，Electron→IPC(SQLite)。判定依据是
+ * window.electronAPI 是否由 preload 注入。双端数据不互通，Electron 首次
+ * 启动走 migration IPC 从 IndexedDB 导入 SQLite。
+ */
+import type { Table } from 'dexie';
 import { StorageAdapter } from './StorageAdapter';
 import { IpcStorageAdapter } from './IpcStorageAdapter';
 import type { IRepository } from './interfaces';
@@ -44,7 +52,7 @@ export function createStorage<T extends { id: string }>(tableName: string): IRep
 
     case 'pwa':
     default:
-      return new StorageAdapter<T>(db.table(tableName) as any, tableName);
+      return new StorageAdapter<T>(db.table(tableName) as Table<T, string>, tableName);
   }
 }
 

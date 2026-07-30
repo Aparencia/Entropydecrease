@@ -1,3 +1,6 @@
+// @ai-context
+// PostgreSQL 连接初始化与自动迁移。PostgreSQL connection bootstrap and auto-migration.
+// Why: DSN 默认值中的 keban 库名/用户名属用户数据标识，永久豁免品牌重命名（跨版本数据兼容）。
 package models
 
 import (

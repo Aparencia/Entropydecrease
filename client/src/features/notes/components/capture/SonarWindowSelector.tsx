@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：SonarWindowSelector。
+ */
 import { useState } from 'react';
 import { Monitor, ChevronRight, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';

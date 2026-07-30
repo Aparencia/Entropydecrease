@@ -1,3 +1,6 @@
+/**
+ * @ai-context: Rescue 功能的 React Hook 包装：仅做加载/错误状态编排，业务调用统一走 aiPluginLoader，禁止在 Hook 内写业务计算。
+ */
 import { useState, useCallback } from 'react';
 import { aiPluginLoader } from '../AIPluginLoader';
 import { resolveAIFallback, setAICache, FallbackLevel } from '../aiServiceFallback';

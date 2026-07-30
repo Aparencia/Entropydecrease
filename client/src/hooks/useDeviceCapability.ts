@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 设备性能分级检测（内存/核数/GPU），供 3D 场景与动效降级决策。
+ */
 import { useReducedMotion } from './useReducedMotion';
 
 export interface DeviceCapability {

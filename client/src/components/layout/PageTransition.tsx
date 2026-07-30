@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 布局组件：PageTransition。
+ */
 import { motion, useReducedMotion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';

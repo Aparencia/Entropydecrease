@@ -1,5 +1,5 @@
 """
-课伴 AI 网关 — 频率限制中间件
+熵减 AI 网关 — 频率限制中间件
 
 基于 Redis 的滑动窗口频率限制：
 - 按 user_id + feature 计数
@@ -7,6 +7,8 @@
 - 用户 Key 独立限流：携带 X-User-API-Key 时对该 Key 单独限速
 - Redis 不可用时放行（降级到无限制）
 - 超限返回 HTTP 429
+
+@ai-context: 频率限制中间件：按用户+功能维度基于 Redis 计数执行每日上限（RATE_LIMITS），超限返回 429。
 """
 
 import hashlib

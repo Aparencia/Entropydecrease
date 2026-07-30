@@ -3,6 +3,8 @@
  *
  * 所有 Electron IPC channel 常量集中定义于此文件，
  * 便于全局搜索、重构及 preload 白名单维护。
+ *
+ * @ai-context: IPC channel 名称常量表——渲染/主进程通道契约，改名需两侧同步。
  */
 export const IPC_CHANNELS = {
   // AI 相关

@@ -3,6 +3,8 @@
  *
  * 在渲染进程与主进程之间建立安全的通信桥梁，
  * 通过 contextBridge 暴露白名单内的 IPC channel。
+ *
+ * @ai-context: IPC 桥接安全边界（contextBridge 白名单暴露）——渲染进程唯一的主进程访问面，新增通道必须显式登记，任何修改需安全审查。
  */
 
 import { contextBridge, ipcRenderer } from 'electron';

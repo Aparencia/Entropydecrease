@@ -1,4 +1,6 @@
-/** 迁移进度 UI — 全屏遮罩 + 玻璃拟态卡片，展示 IndexedDB → SQLite 迁移进度 */
+/** 迁移进度 UI — 全屏遮罩 + 玻璃拟态卡片，展示 IndexedDB → SQLite 迁移进度 *
+ * @ai-context: 通用组件：MigrationProgress。
+ */
 import { useState, useEffect, useCallback } from 'react';
 
 interface MigrationStatus { completed: boolean; currentTable: string; tablesTotal: number; tablesCompleted: number; rowsMigrated: number; error?: string }

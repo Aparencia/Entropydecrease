@@ -1,5 +1,7 @@
 /**
  * Step1Welcome — 欢迎画面
+ *
+ * @ai-context: 通用组件：Step1Welcome。
  */
 import { OnboardingCard } from '../OnboardingCard';
 import { useOnboardingStore } from '../useOnboardingStore';

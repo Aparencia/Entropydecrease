@@ -1,7 +1,10 @@
+/**
+ * @ai-context: 自由画布组件（巨型，待拆分）：手写/绘图白板，供笔记批注与费曼讲解涂鸦。
+ */
 import { useCallback, useRef, useState, useEffect, useMemo } from 'react';
 import { Plus, Trash2, Copy, Eraser, CheckSquare } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
 import FreeTextBlock from './FreeTextBlock';
+import { FreeCanvasOverlays } from './FreeCanvasOverlays';
 import type { FreeCanvasData, FreeCanvasBlock } from '@/types/models';
 
 interface FreeCanvasProps {
@@ -523,83 +526,14 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
         </div>
       </div>
 
-      {/* 右键快捷菜单 */}
-      <AnimatePresence>
-        {contextMenu && (
-          <>
-            <div
-              className="fixed inset-0 z-40"
-              onClick={() => setContextMenu(null)}
-              onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.12 }}
-              className="fixed z-50 min-w-[180px] py-1.5 bg-bg-elevated/95 backdrop-blur-2xl rounded-[var(--kb-radius-xl)] shadow-kb-lg border border-border/40 overflow-hidden"
-              style={{ left: contextMenu.x, top: contextMenu.y }}
-            >
-              {contextMenuActions.map(action => (
-                <button
-                  key={action.id}
-                  disabled={action.disabled}
-                  onClick={() => { action.execute(); setContextMenu(null); }}
-                  className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-bg-sunken/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                >
-                  <action.icon className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-                  <span>{action.label}</span>
-                </button>
-              ))}
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* 操作面板 */}
-      <AnimatePresence>
-        {paletteOpen && (
-          <>
-            <div
-              className="absolute inset-0 z-40"
-              onClick={() => setPaletteOpen(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: -8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: -8 }}
-              transition={{ duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
-              className="absolute left-1/2 top-12 z-50 -translate-x-1/2 w-[300px] bg-bg-elevated/90 backdrop-blur-2xl rounded-[var(--kb-radius-xl)] shadow-kb-lg border border-border/40 overflow-hidden"
-            >
-              <div className="px-4 py-2.5 border-b border-border/30 flex items-center justify-between">
-                <span className="text-xs text-muted-foreground font-medium">画布操作</span>
-                <kbd className="text-[10px] px-1.5 py-0.5 rounded bg-bg-sunken text-muted-foreground/70 font-mono">Shift+A</kbd>
-              </div>
-              <div className="py-1.5">
-                {actions.map(action => (
-                  <button
-                    key={action.id}
-                    disabled={action.disabled}
-                    onClick={() => {
-                      action.execute();
-                      setPaletteOpen(false);
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-bg-sunken/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                  >
-                    <action.icon className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-                    <span>{action.label}</span>
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* 右下角快捷键提示 */}
-      <div className="absolute bottom-3 right-3 z-10 flex items-center gap-1.5 text-xs text-muted-foreground/50 select-none pointer-events-none">
-        <span>Shift+A 操作面板 · 双击添加文本块 · Shift+拖拽框选 · 右键拖拽平移 · Ctrl+D 复制</span>
-      </div>
+      <FreeCanvasOverlays
+        contextMenu={contextMenu}
+        contextMenuActions={contextMenuActions}
+        onCloseMenu={() => setContextMenu(null)}
+        paletteOpen={paletteOpen}
+        actions={actions}
+        onClosePalette={() => setPaletteOpen(false)}
+      />
     </div>
   );
 }

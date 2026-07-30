@@ -3,6 +3,8 @@
  *
  * 当 3D 场景降级时（移动端 PWA/浏览器），
  * 替代 3D 空间导航，展示静态渐变背景 + 模块卡片网格。
+ *
+ * @ai-context: 3D 场景：MobileNavGrid。
  */
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';

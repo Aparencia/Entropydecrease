@@ -3,8 +3,8 @@ appId: com.entropydecrease.app
 productName: "Entropy decrease"
 publish:
   provider: github
-  owner: YourGitHubUsername
-  repo: KeBan
+  owner: Aparencia
+  repo: Entropydecrease
 directories:
   output: release
   buildResources: build

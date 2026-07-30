@@ -1,5 +1,7 @@
 /**
  * 3D导航状态管理 — 连接Zustand与React Router
+ *
+ * @ai-context: 3D 空间导航状态（模块轨道位置），MODULE_POSITIONS 与路由映射需与 routes 配置同步。
  */
 import { create } from 'zustand';
 

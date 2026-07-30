@@ -1,6 +1,8 @@
 /**
  * 轻量级事件总线
  * 用于采集层与处理层之间的解耦通信
+ *
+ * @ai-context: 采集链路事件总线（渲染进程内）——CaptureManager 与 UI Hook 的唯一通信通道，事件名是跨模块契约，改名需全链路同步。
  */
 
 type EventHandler<T = unknown> = (event: T) => void;

@@ -1,3 +1,9 @@
+/**
+ * 采集会话存储
+ *
+ * @ai-context: segments 以整数组覆盖方式追加（Dexie 不支持数组原子
+ * push），高频调用 addSegment 存在读改写竞态，调用方需串行化。
+ */
 import { db } from './database';
 import type { WindowCapture, ExtractedSegment } from '@/types/models';
 

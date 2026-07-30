@@ -1,3 +1,6 @@
+/**
+ * @ai-context: UI 基础组件（shadcn/radix 封装）：Tag。
+ */
 import React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { X } from 'lucide-react';

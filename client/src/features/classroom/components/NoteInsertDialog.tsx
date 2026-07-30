@@ -1,6 +1,8 @@
 /**
  * NoteInsertDialog — 课堂笔记插入弹窗
  * 分析完成后弹出，让用户选择：追加到已有笔记 / 创建新笔记 / 复制到剪贴板 / 放弃
+ *
+ * @ai-context: 通用组件：NoteInsertDialog。
  */
 import { useState, useEffect, useCallback } from 'react';
 import {

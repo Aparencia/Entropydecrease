@@ -1,8 +1,10 @@
 """
-课伴 AI 网关 — 内容打标路由
+熵减 AI 网关 — 内容打标路由
 
 POST /api/v1/ai/tag-content
 对灵感/笔记内容进行三维度自动打标。
+
+@ai-context: 内容打标路由：为笔记/灵感自动生成分类标签。
 """
 
 import logging

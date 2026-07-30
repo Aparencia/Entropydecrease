@@ -1,5 +1,5 @@
 """
-课伴 AI 网关 — pytest 公共夹具
+熵减 AI 网关 — pytest 公共夹具
 
 提供测试用的 FastAPI app、TestClient、mock Provider 等。
 """
@@ -143,5 +143,5 @@ def mock_call_with_fallback(monkeypatch):
         result = await fn(provider, model_name)
         return result, routing[0]
 
-    monkeypatch.setattr("config.call_with_fallback", fake_call_with_fallback)
-    return fake_call_with_fallback
+    monkeypatch.setattr("config.call_with_fallback", fake_call)
+    return fake_call

@@ -1,6 +1,8 @@
 /**
  * 图像变化检测器
  * 基于 pixelmatch 比较相邻帧，避免重复处理相同画面
+ *
+ * @ai-context: 帧间变化检测纯函数，供 SmartSampler 判定关键帧。
  */
 
 import pixelmatch from 'pixelmatch';

@@ -1,5 +1,5 @@
 """
-课伴 AI 网关 — 苏格拉底式学习路由测试
+熵减 AI 网关 — 苏格拉底式学习路由测试
 
 覆盖：
 - POST /api/v1/ai/socratic/brainstorm — 正常返回、参数验证、降级
@@ -239,8 +239,8 @@ class TestBrainstormRouter:
             "tokens_used": 200,
             "latency_ms": 500,
         }
-        with patch("routers.socratic.call_with_fallback", new_callable=AsyncMock) as mock_cwf:
-            mock_cwf.return_value = (mock_result, "qwen")
+        with patch("routers.socratic.call_with_fallback_for_request", new_callable=AsyncMock) as mock_cwf:
+            mock_cwf.return_value = (mock_result, "qwen", False)
             resp = client.post("/api/v1/ai/socratic/brainstorm", json={
                 "topic": "量子力学",
             })
@@ -266,7 +266,7 @@ class TestBrainstormRouter:
 
     def test_brainstorm_fallback(self, client):
         """服务不可用时返回降级响应"""
-        with patch("routers.socratic.call_with_fallback", new_callable=AsyncMock) as mock_cwf:
+        with patch("routers.socratic.call_with_fallback_for_request", new_callable=AsyncMock) as mock_cwf:
             mock_cwf.side_effect = RuntimeError("所有 AI 服务不可用")
             resp = client.post("/api/v1/ai/socratic/brainstorm", json={
                 "topic": "量子力学",
@@ -306,8 +306,8 @@ class TestEvaluateRouter:
             "tokens_used": 150,
             "latency_ms": 400,
         }
-        with patch("routers.socratic.call_with_fallback", new_callable=AsyncMock) as mock_cwf:
-            mock_cwf.return_value = (mock_result, "qwen")
+        with patch("routers.socratic.call_with_fallback_for_request", new_callable=AsyncMock) as mock_cwf:
+            mock_cwf.return_value = (mock_result, "qwen", False)
             resp = client.post("/api/v1/ai/socratic/evaluate", json={
                 "topic": "量子力学",
                 "question": "什么是波粒二象性？",
@@ -329,8 +329,8 @@ class TestEvaluateRouter:
             "tokens_used": 150,
             "latency_ms": 400,
         }
-        with patch("routers.socratic.call_with_fallback", new_callable=AsyncMock) as mock_cwf:
-            mock_cwf.return_value = (mock_result, "qwen")
+        with patch("routers.socratic.call_with_fallback_for_request", new_callable=AsyncMock) as mock_cwf:
+            mock_cwf.return_value = (mock_result, "qwen", False)
             resp = client.post("/api/v1/ai/socratic/evaluate", json={
                 "topic": "量子力学",
                 "question": "什么是波粒二象性？",
@@ -391,7 +391,7 @@ class TestEvaluateRouter:
 
     def test_evaluate_fallback(self, client):
         """服务不可用时返回降级响应"""
-        with patch("routers.socratic.call_with_fallback", new_callable=AsyncMock) as mock_cwf:
+        with patch("routers.socratic.call_with_fallback_for_request", new_callable=AsyncMock) as mock_cwf:
             mock_cwf.side_effect = RuntimeError("所有 AI 服务不可用")
             resp = client.post("/api/v1/ai/socratic/evaluate", json={
                 "topic": "量子力学",

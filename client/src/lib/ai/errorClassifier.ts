@@ -3,6 +3,8 @@
  *
  * 提取自 ElectronAIPlugin.handleError 和 RemoteAIPlugin.handleError 的公共逻辑，
  * 供两种传输方式（IPC / Fetch）共用。
+ *
+ * @ai-context: 原始错误→AIError 分类器（fetch/ipc 双来源），错误码字典见 ai-errors.ts，三处需同步。
  */
 
 import { AIError } from './types';

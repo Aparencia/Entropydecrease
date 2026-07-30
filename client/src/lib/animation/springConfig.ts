@@ -1,4 +1,10 @@
-/** 课伴物理弹簧动效配置 - 所有动画必须可中断 */
+/**
+ * 物理弹簧动效配置
+ *
+ * @ai-context: stiffness/damping 数值源自《颜色与风格简析》动效节奏规范，
+ * 与 BEAT 节拍常量联动构成全局动效体系；所有动画必须可中断（spring 类型天然可中断）。
+ * 修改参数会全局改变应用手感，需设计侧确认。
+ */
 export const SPRING = {
   default: { type: 'spring' as const, stiffness: 300, damping: 28 },
   bouncy: { type: 'spring' as const, stiffness: 400, damping: 20 },

@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 页面组件：OnboardingPage。
+ */
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {

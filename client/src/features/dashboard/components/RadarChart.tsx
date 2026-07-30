@@ -1,4 +1,6 @@
-/** @file 五维雷达图组件 — Recharts RadarChart */
+/** @file 五维雷达图组件 — Recharts RadarChart *
+ * @ai-context: 通用组件：RadarChart。
+ */
 import React, { useMemo } from 'react';
 import {
   RadarChart as RechartsRadar, PolarGrid, PolarAngleAxis,

@@ -1,8 +1,10 @@
 """
-课伴 AI 网关 — AI 草稿生成路由（v1.1.0）
+熵减 AI 网关 — AI 草稿生成路由（v1.1.0）
 
 POST /api/v1/ai/inspiration-draft
 将灵感/零散想法转化为结构化学习材料草稿（flashcard/feynman/note）
+
+@ai-context: 灵感草稿路由（v1.1.0）：由灵感片段生成结构化草稿。
 """
 
 import logging

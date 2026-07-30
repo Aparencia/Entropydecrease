@@ -1,3 +1,6 @@
+/**
+ * @ai-context: pomodoro 功能模块 Hook：useAIRecommendation。
+ */
 import { useState, useCallback } from 'react';
 import type { DurationHistoryData, DurationResult } from '@/lib/ai/types';
 import { calculateLocalRecommendation, requestAIEnhancement } from '../lib/adaptiveEngine';

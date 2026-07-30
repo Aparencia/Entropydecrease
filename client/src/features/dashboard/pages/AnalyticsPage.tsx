@@ -1,4 +1,6 @@
-/** @file 学习分析页面 — 五维雷达 / 热力图 / 趋势 / 时段推荐 */
+/** @file 学习分析页面 — 五维雷达 / 热力图 / 趋势 / 时段推荐 *
+ * @ai-context: dashboard 功能模块页面：AnalyticsPage。
+ */
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { BarChart3, Clock, Activity, RefreshCw } from 'lucide-react';

@@ -1,3 +1,7 @@
+// @ai-context
+// JWT 认证中间件（Supabase RS256）：HTTP 走 Authorization 头，WebSocket 走 ?token= 查询参数。
+// JWT auth middleware (Supabase RS256): HTTP uses Authorization header, WebSocket uses ?token= query.
+// Why: 浏览器无法在 WebSocket 升级请求上设置自定义头，故需独立的 WSAuthMiddleware。
 package middleware
 
 import (

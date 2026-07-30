@@ -3,6 +3,8 @@
  *
  * 协调模式：渲染进程读取 IndexedDB → IPC → 主进程写入 SQLite。
  * 迁移前自动备份、失败保留 IndexedDB 可重试、脚本幂等执行。
+ *
+ * @ai-context: IndexedDB→SQLite 数据迁移 IPC：表映射/分批导入；safeHandle 经参数注入避免循环依赖。
  */
 
 import type Database from 'better-sqlite3';
@@ -157,7 +159,7 @@ export function completeMigration(db: Database.Database): { ok: boolean; integri
  * 需要外部传入 safeHandle 以避免循环依赖。
  */
 export function registerMigrationHandlers(
-  safeHandle: (channel: string, handler: (event: Electron.IpcMainInvokeEvent, ...args: any[]) => Promise<unknown>) => void,
+  safeHandle: <Args extends unknown[]>(channel: string, handler: (event: Electron.IpcMainInvokeEvent, ...args: Args) => Promise<unknown>) => void,
 ): void {
   const db = getConnection();
 

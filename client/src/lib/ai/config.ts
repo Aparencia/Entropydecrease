@@ -1,6 +1,8 @@
 /**
  * AI 服务配置统一管理
  * 读写 localStorage 中的 AI 配置，供 SettingsPage、apiClient、AIPluginLoader 共用
+ *
+ * @ai-context: AI 网关地址配置：VITE_AI_GATEWAY_URL 注入，缺省回退生产域名 entropydecrease.com。
  */
 
 export interface AIConfig {

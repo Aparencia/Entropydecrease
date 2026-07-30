@@ -1,3 +1,6 @@
+/**
+ * @ai-context: legacy Hook：服务实例获取，新代码使用 aiPluginLoader 单例。
+ */
 import { useState, useEffect, useCallback } from 'react';
 import { resolveAIFallback, setAICache, type FallbackResult } from './aiServiceFallback';
 

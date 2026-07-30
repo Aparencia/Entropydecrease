@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { modeManager } from './ModeManager';
 import type { AppMode, ModeConfig } from './ModeManager';
 
-const STORAGE_KEY = 'keban_app_mode';
+const STORAGE_KEY = 'ed_app_mode';
 
 beforeEach(() => {
   localStorage.clear();

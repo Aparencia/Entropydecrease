@@ -1,3 +1,6 @@
+/**
+ * @ai-context: pomodoro 功能模块状态管理：usePomodoroPersistence。
+ */
 import { pomodoroSettingsStore, pomodoroSessionStore } from '@/lib/storage';
 import { createWithLog } from '@/lib/storage/writeWithLog';
 import type { PomodoroSession, PomodoroSettings } from '@/types/models';

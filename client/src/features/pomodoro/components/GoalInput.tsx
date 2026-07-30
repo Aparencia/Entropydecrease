@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：GoalInput。
+ */
 import { useState, useRef, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui';

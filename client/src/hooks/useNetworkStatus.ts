@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 网络在线状态订阅 Hook（online/offline 事件），离线降级的统一信号源。
+ */
 import { useState, useEffect } from 'react';
 import { networkManager, type NetworkState } from '../lib/sync/NetworkManager';
 

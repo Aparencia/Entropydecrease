@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 白噪音/BGM 独立音频系统 Hook（与音效 SoundPlayer 分离），管理播放循环与音量。
+ */
 import { useRef, useState, useCallback, useEffect } from 'react';
 
 interface AudioPlayerOptions {

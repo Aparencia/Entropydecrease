@@ -1,3 +1,13 @@
+/**
+ * 操作日志 — 同步链路的本地增量记录
+ *
+ * @ai-context: 警告——localStorage 键 keban_device_id 是设备同步身份，
+ * 改名会使设备被服务端视为新设备，引发全量重传与冲突误判，品牌统一
+ * 任务明确豁免此键名。
+ * @ai-context: 版本号在事务内递增保证原子性（Bug #20 修复），
+ * synced 索引以 0/1 数值查询系 Dexie 布尔索引限制。
+ */
+
 import { db } from './database';
 import { generateId } from '../utils/uuid';
 import type { OperationLog } from '@/types/models';

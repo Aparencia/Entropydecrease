@@ -1,3 +1,6 @@
+/**
+ * @ai-context: UI 基础组件（shadcn/radix 封装）：VirtualList。
+ */
 import { useRef } from 'react';
 import { useVirtualList } from '@/hooks/useVirtualList';
 

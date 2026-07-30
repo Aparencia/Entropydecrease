@@ -1,6 +1,8 @@
 /**
  * 课后分析结果预览面板
  * 展示 AI 多模态分析的 Markdown 笔记结果，支持一键插入 TipTap 编辑器
+ *
+ * @ai-context: 通用组件：AnalysisPreview。
  */
 
 import { useMemo } from 'react';

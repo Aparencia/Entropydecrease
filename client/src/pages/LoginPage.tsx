@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 页面组件：LoginPage。
+ */
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, AlertCircle } from 'lucide-react';

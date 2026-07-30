@@ -1,102 +1,22 @@
 /**
- * CRDT 同步引擎 — 基于 Automerge 实现无冲突多设备同步
+ * CRDT 同步引擎 — 基于 Automerge 的无冲突多设备同步（内存文档管理）
  *
- * 核心职责：
- * 1. 为每张核心表维护独立的 Automerge 文档
- * 2. 本地变更 → 生成 CRDT changeset
- * 3. 远程 changeset → 自动合并到本地文档
- * 4. 增量变更序列化管理
- *
- * 试点阶段：仅 notes 表启用 CRDT，其余表仍走 operationLog 路径
+ * @ai-context: 2026-07 拆分——类型/常量在 crdtTypes，编解码在 crdtCodec，
+ * crdt_changes 纯 db 操作在 crdtPersistence，feature flag 在 syncMode；
+ * 旧导入路径 '@/lib/sync/crdtEngine' 经文末 re-export 全部兼容。
+ * @ai-context: Automerge API 约束（历史踩坑）：增量提取用 getChangesSince
+ * (doc, heads)；合并远程用 loadIncremental；merge 返回 Doc 而非元组。
+ * @ai-context: db 动态 import 打破 database.ts ↔ 本文件的循环依赖。
  */
 import * as automerge from '@automerge/automerge';
-
-// ─── 类型定义 ────────────────────────────────────────────────────────────────
-
-/** CRDT 文档状态（一张表对应一个 Automerge 文档） */
-export interface CRDTDocState {
-  tableName: string;
-  doc: automerge.Doc<CRDTTableDoc>;
-  /** 上次持久化的 Automerge heads，用于增量 getChanges */
-  lastHeads: automerge.Heads | null;
-}
-
-/** Automerge 文档内部结构：entityId → 实体数据 */
-export interface CRDTTableDoc {
-  entities: Record<string, Record<string, unknown>>;
-  /** 墓碑标记：entityId → true（已删除） */
-  tombstones: Record<string, boolean>;
-}
-
-/** 变更集：可在客户端 / 服务端之间传输 */
-export interface CRDTChangeset {
-  /** 自增序号（本地 Dexie 分配） */
-  seq?: number;
-  tableName: string;
-  entityId: string;
-  /** Automerge 二进制变更的 base64 编码 */
-  changeset: string;
-  /** 操作类型（便于服务端快速过滤） */
-  operation: 'create' | 'update' | 'delete';
-  createdAt: string;
-}
-
-/** 从服务端拉取的远程变更 */
-export interface RemoteCRDTChange {
-  seq: number;
-  tableName: string;
-  entityId: string;
-  changeset: string;
-  operation: string;
-  deviceId: string;
-  createdAt: string;
-}
-
-// ─── 常量 ────────────────────────────────────────────────────────────────────
-
-/** 当前启用 CRDT 的表（试点阶段仅 notes） */
-export const CRDT_ENABLED_TABLES: string[] = ['notes'];
-
-/** feature flag key */
-export const SYNC_MODE_FLAG = 'sync_mode';
-
-// ─── 工具函数 ────────────────────────────────────────────────────────────────
-
-/** 将 Automerge 二进制变更编码为 base64 字符串 */
-function encodeChanges(changes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < changes.length; i++) {
-    binary += String.fromCharCode(changes[i]);
-  }
-  return btoa(binary);
-}
-
-/**
- * 将多条 Automerge 变更（每条为独立的自描述 chunk）顺序拼接为单一二进制
- * 下行端通过 loadIncremental 解析，天然支持多 chunk 拼接格式
- */
-function concatChanges(changes: Uint8Array[]): Uint8Array {
-  const totalLength = changes.reduce((sum, c) => sum + c.length, 0);
-  const merged = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const c of changes) {
-    merged.set(c, offset);
-    offset += c.length;
-  }
-  return merged;
-}
-
-/** 将 base64 字符串解码为 Automerge 二进制变更 */
-function decodeChanges(encoded: string): Uint8Array {
-  const binary = atob(encoded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-// ─── 引擎类 ──────────────────────────────────────────────────────────────────
+import {
+  CRDT_ENABLED_TABLES,
+  SYNC_MODE_FLAG,
+  type CRDTDocState,
+  type CRDTTableDoc,
+  type CRDTChangeset,
+} from './crdtTypes';
+import { encodeChanges, concatChanges, decodeChanges } from './crdtCodec';
 
 export class CRDTEngine {
   /** tableName → CRDTDocState */
@@ -151,6 +71,24 @@ export class CRDTEngine {
     return state;
   }
 
+  /** 惰性创建空文档状态（applyLocalChange/applyRemoteChanges 兜底共用） */
+  private ensureDocState(tableName: string): CRDTDocState {
+    let state = this.docs.get(tableName);
+    if (!state) {
+      const doc = automerge.init<CRDTTableDoc>();
+      state = {
+        tableName,
+        doc: automerge.change(doc, (d) => {
+          d.entities = {};
+          d.tombstones = {};
+        }),
+        lastHeads: null,
+      };
+      this.docs.set(tableName, state);
+    }
+    return state;
+  }
+
   // ─── 本地变更 ──────────────────────────────────────────────────────────────
 
   /**
@@ -170,20 +108,7 @@ export class CRDTEngine {
   ): CRDTChangeset | null {
     if (!this.isCRDTEnabled(tableName)) return null;
 
-    let state = this.docs.get(tableName);
-    if (!state) {
-      // 若未初始化则同步创建（initDoc 是 async，这里用惰性初始化兜底）
-      const doc = automerge.init<CRDTTableDoc>();
-      state = {
-        tableName,
-        doc: automerge.change(doc, (d) => {
-          d.entities = {};
-          d.tombstones = {};
-        }),
-        lastHeads: null,
-      };
-      this.docs.set(tableName, state);
-    }
+    const state = this.ensureDocState(tableName);
 
     const beforeHeads = automerge.getHeads(state.doc);
 
@@ -263,19 +188,7 @@ export class CRDTEngine {
 
     if (!this.isCRDTEnabled(tableName)) return affected;
 
-    let state = this.docs.get(tableName);
-    if (!state) {
-      const doc = automerge.init<CRDTTableDoc>();
-      state = {
-        tableName,
-        doc: automerge.change(doc, (d) => {
-          d.entities = {};
-          d.tombstones = {};
-        }),
-        lastHeads: null,
-      };
-      this.docs.set(tableName, state);
-    }
+    const state = this.ensureDocState(tableName);
 
     for (const { entityId, changeset } of changesets) {
       const remoteChanges = decodeChanges(changeset);
@@ -309,9 +222,7 @@ export class CRDTEngine {
     state.doc = automerge.merge(state.doc, remoteDoc);
   }
 
-  // ─── 持久化 ────────────────────────────────────────────────────────────────
-
-  /**
+    /**
    * 将 CRDT 文档快照持久化到 IndexedDB crdt_docs 表
    * 在每次本地变更后调用，确保重启后可恢复
    */
@@ -330,39 +241,6 @@ export class CRDTEngine {
       lastHeads: heads,
       updatedAt: new Date().toISOString(),
     });
-  }
-
-  /**
-   * 将 changeset 存入 crdt_changes 表等待上传
-   */
-  async enqueueChange(changeset: CRDTChangeset): Promise<void> {
-    const { db } = await import('@/lib/storage/database');
-    await db.crdtChanges.add({
-      tableName: changeset.tableName,
-      entityId: changeset.entityId,
-      changeset: changeset.changeset,
-      operation: changeset.operation,
-      createdAt: changeset.createdAt,
-    });
-  }
-
-  /**
-   * 获取待上传的 changesets（按 seq 排序）
-   */
-  async getPendingChanges(limit: number = 50): Promise<CRDTChangeRecord[]> {
-    const { db } = await import('@/lib/storage/database');
-    return db.crdtChanges
-      .orderBy('seq')
-      .limit(limit)
-      .toArray();
-  }
-
-  /**
-   * 标记 changesets 为已上传（按 seq 删除）
-   */
-  async markChangesUploaded(seqs: number[]): Promise<void> {
-    const { db } = await import('@/lib/storage/database');
-    await db.crdtChanges.bulkDelete(seqs);
   }
 
   // ─── 状态查询 ──────────────────────────────────────────────────────────────
@@ -400,45 +278,22 @@ export class CRDTEngine {
   }
 }
 
-// ─── Dexie 存储类型 ──────────────────────────────────────────────────────────
-
-/** crdt_docs 表行类型 */
-export interface CRDTDocRecord {
-  tableName: string;
-  snapshot: string;       // base64 编码的 Automerge 文档快照
-  lastHeads: string;      // JSON 序列化的 Automerge heads
-  updatedAt: string;      // ISO 8601
-}
-
-/** crdt_changes 表行类型 */
-export interface CRDTChangeRecord {
-  seq?: number;           // 自增主键
-  tableName: string;
-  entityId: string;
-  changeset: string;      // base64 编码的 Automerge 变更
-  operation: 'create' | 'update' | 'delete';
-  createdAt: string;      // ISO 8601
-}
-
 // ─── 单例 ────────────────────────────────────────────────────────────────────
 
 export const crdtEngine = new CRDTEngine();
 
-// ─── Feature Flag 工具 ───────────────────────────────────────────────────────
+// ─── Feature Flag（迁至 syncMode.ts，re-export 保持旧路径兼容） ──────────────
 
-/** 获取当前同步模式 */
-export function getSyncMode(): 'crdt' | 'oplog' {
-  const mode = localStorage.getItem(SYNC_MODE_FLAG);
-  return mode === 'crdt' ? 'crdt' : 'oplog';
-}
+export { getSyncMode, setSyncMode, shouldUseCRDT } from './syncMode';
 
-/** 设置同步模式（需要重启同步引擎生效） */
-export function setSyncMode(mode: 'crdt' | 'oplog'): void {
-  localStorage.setItem(SYNC_MODE_FLAG, mode);
-}
+// ─── 向后兼容 re-export（旧导入路径保持有效） ────────────────────────────────
 
-/** 检查指定表当前是否应使用 CRDT 路径 */
-export function shouldUseCRDT(tableName: string): boolean {
-  if (getSyncMode() !== 'crdt') return false;
-  return CRDT_ENABLED_TABLES.includes(tableName);
-}
+export { CRDT_ENABLED_TABLES, SYNC_MODE_FLAG } from './crdtTypes';
+export type {
+  CRDTDocState,
+  CRDTTableDoc,
+  CRDTChangeset,
+  RemoteCRDTChange,
+  CRDTDocRecord,
+  CRDTChangeRecord,
+} from './crdtTypes';

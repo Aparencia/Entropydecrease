@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 设置页组件：ModeSettings。
+ */
 import { motion } from 'framer-motion';
 import { Card } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';

@@ -1,13 +1,16 @@
+// @ai-context
+// 同步服务入口：初始化 DB/Redis、注册健康探针与同步路由、启动 Gin 服务。
+// Sync-service entry point: DB/Redis bootstrap, health probes, sync routes, Gin server startup.
+// Why: 健康处理器统一收敛到 handlers 包（HealthCheck/ReadyCheck），main 只做装配不含业务逻辑。
 package main
 
 import (
-	"net/http"
 	"os"
 
-	"keban/sync-service/cache"
-	"keban/sync-service/handlers"
-	"keban/sync-service/middleware"
-	"keban/sync-service/models"
+	"entropydecrease/sync-service/cache"
+	"entropydecrease/sync-service/handlers"
+	"entropydecrease/sync-service/middleware"
+	"entropydecrease/sync-service/models"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -44,43 +47,13 @@ func main() {
 
 	r := gin.Default()
 
-	// Health check — liveness probe
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":  "ok",
-			"service": "sync-service",
-			"version": "0.5.0",
-		})
-	})
-
+	// Health check — liveness probe.
 	// Also keep the legacy /api/health endpoint for backward compatibility.
-	r.GET("/api/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":  "ok",
-			"service": "sync-service",
-			"version": "0.5.0",
-		})
-	})
+	r.GET("/health", handlers.HealthCheck)
+	r.GET("/api/health", handlers.HealthCheck)
 
 	// Readiness probe — checks DB connectivity.
-	r.GET("/ready", func(c *gin.Context) {
-		sqlDB, err := models.DB.DB()
-		if err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status": "not_ready",
-				"error":  "db unavailable",
-			})
-			return
-		}
-		if err := sqlDB.Ping(); err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status": "not_ready",
-				"error":  "db ping failed",
-			})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"status": "ready"})
-	})
+	r.GET("/ready", handlers.ReadyCheck)
 
 	// Sync API v1
 	v1 := r.Group("/api/v1/sync")

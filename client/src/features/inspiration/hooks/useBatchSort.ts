@@ -1,3 +1,6 @@
+/**
+ * @ai-context: inspiration 功能模块 Hook：useBatchSort。
+ */
 import { useState, useCallback, useRef } from 'react';
 import { aiPluginLoader } from '@/lib/ai/AIPluginLoader';
 import { useInspirationStore } from '../store/inspirationStore';

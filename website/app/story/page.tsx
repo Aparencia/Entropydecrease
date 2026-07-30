@@ -1,3 +1,6 @@
+// @ai-context
+// 品牌故事页：四幕式叙事 + 滚动进度条 + 星图/水母动效。Brand story: four-act narrative with scroll progress.
+// Why: 动效组件（星图/水母）内聚在本页，因其叙事强绑定不具复用价值。
 "use client";
 
 import { motion, useScroll, useTransform } from "framer-motion";

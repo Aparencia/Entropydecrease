@@ -1,5 +1,7 @@
 /**
  * HelpCenter — 帮助中心主面板：4个Tab页签 + 毛玻璃样式
+ *
+ * @ai-context: 通用组件：HelpCenter。
  */
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';

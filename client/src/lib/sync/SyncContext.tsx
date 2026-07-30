@@ -1,3 +1,10 @@
+/**
+ * 同步状态 Context：向 UI 暴露同步进度、结果与手动触发入口
+ *
+ * @ai-context: 云同步为可选增强，未登录或离线时保持空闲态而非报错（本地优先）。
+ * 订阅 syncEngine 事件流更新状态；networkManager 恢复联网时触发补偿同步。
+ * @ai-context: 副作用集中于 effect 内的订阅/退订，Provider 外无全局写入。
+ */
 import React, { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import { syncEngine, type SyncResult, type SyncEvent } from './SyncEngine';
 import { useAuth } from '../auth/AuthContext';

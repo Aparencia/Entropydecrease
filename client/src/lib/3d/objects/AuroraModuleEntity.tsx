@@ -1,6 +1,8 @@
 /**
  * AuroraModuleEntity — 浅色模式下模块的行星形态视觉表达
  * 每个模块对应一颗行星，沿轨道绕太阳公转
+ *
+ * @ai-context: 3D 场景对象：AuroraModuleEntity。
  */
 import { useRef, useState, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';

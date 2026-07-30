@@ -3,6 +3,8 @@
  *
  * 处理 ai_feynman_question 和 ai_feynman_evaluate_answers IPC 请求，
  * 调用 AI 网关生成追问并评估用户回答。
+ *
+ * @ai-context: 费曼提问与答案评估 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
 import { safeHandle } from '../../ipcUtils.js';

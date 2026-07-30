@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：GoldenErrorPanel。
+ */
 import { motion } from 'framer-motion';
 import { Card, Button, EmptyState } from '@/components/ui';
 import { AlertTriangle, RotateCcw, Clock } from 'lucide-react';

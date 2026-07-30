@@ -1,3 +1,6 @@
+/**
+ * @ai-context: pomodoro 功能模块页面：PomodoroSettingsPage。
+ */
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';

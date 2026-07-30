@@ -1,8 +1,10 @@
 """
-课伴 AI 网关 — 笔记摘要路由
+熵减 AI 网关 — 笔记摘要路由
 
 POST /api/v1/ai/summarize
 调用通义千问对学习笔记生成结构化摘要。
+
+@ai-context: 笔记摘要路由：对长文本生成摘要，经 fallback 链调用文本模型。
 """
 
 import time

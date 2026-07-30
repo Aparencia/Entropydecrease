@@ -1,4 +1,6 @@
-/** @file 学习趋势折线图组件 — Recharts AreaChart */
+/** @file 学习趋势折线图组件 — Recharts AreaChart *
+ * @ai-context: 通用组件：TrendChart。
+ */
 import React, { useMemo } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip,

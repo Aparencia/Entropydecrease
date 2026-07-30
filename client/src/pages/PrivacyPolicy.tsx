@@ -1,5 +1,7 @@
 /**
  * 隐私政策页面
+ *
+ * @ai-context: 页面组件：PrivacyPolicy。
  */
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Shield } from 'lucide-react';

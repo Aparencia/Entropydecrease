@@ -1,6 +1,9 @@
 /**
  * 课堂笔记持久化存储
  * 将 AI 分析生成的课堂笔记保存到 IndexedDB (Dexie)
+ *
+ * @ai-context: 写入/删除时同步维护全局搜索索引（失败静默，搜索缺失
+ * 可通过 rebuildIndex 恢复）。content 为 Markdown 而非 TipTap JSON。
  */
 
 import { db } from './database';

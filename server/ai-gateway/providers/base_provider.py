@@ -1,5 +1,5 @@
 """
-课伴 AI 网关 — 抽象基类 AIProvider
+熵减 AI 网关 — 抽象基类 AIProvider
 
 所有模型 Provider 必须继承此基类并实现 generate 方法。
 统一返回格式：{"content": str, "tokens_used": int, "model": str, "latency_ms": int}

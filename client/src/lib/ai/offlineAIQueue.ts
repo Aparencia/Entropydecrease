@@ -3,6 +3,9 @@
  *
  * 断网时将 AI 请求持久化到 IndexedDB，恢复网络后按 FIFO 顺序自动消费。
  * 使用独立的 Dexie 实例，不与 sync-service 的 offlineQueue 共用。
+ *
+ * @ai-context: 离线 AI 请求排队与网络恢复重放，与 sync/OfflineQueue 相互独立（AI 请求专用）。
+ * @ai-context: 警告——IndexedDB 库名 'keban-ai-queue' 为存量数据标识，与主库 'keban' 同属品牌改名永久豁免项，绝对不可改名。
  */
 
 import Dexie, { type Table } from 'dexie';
@@ -35,6 +38,7 @@ class AIQueueDatabase extends Dexie {
   aiQueue!: Table<AIQueueItem, string>;
 
   constructor() {
+    // 库名为存量数据标识，永久豁免品牌改名（见文件头 @ai-context）
     super('keban-ai-queue');
     this.version(1).stores({
       aiQueue: 'id, feature, status, createdAt, nextRetryAt',

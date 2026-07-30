@@ -1,28 +1,20 @@
-"""  
-课伴 AI 网关 — FastAPI 应用入口
+"""
+熵减 AI 网关 — FastAPI 应用入口
 
-MVP-2 阶段的 AI 增强服务网关。
-- 安全头中间件（纵深防御，与 Nginx 互为补充）
-- CORS 中间件（生产环境严格模式 / 开发环境宽松模式）
-- JWT 认证中间件
-- 频率限制中间件
-- 健康检查端点
-- 全局异常处理器
+@ai-context: MVP-2 阶段的 AI 增强服务网关。本文件为组合层：日志配置见
+logging_setup，Provider 初始化见 provider_bootstrap，安全头/请求 ID 中间件
+见 security_middleware，健康检查见 health 路由。
+@ai-context: 中间件注册顺序（从内到外）RequestId → SecurityHeaders →
+RateLimit → InputValidation → JWTAuth → CORS（最后注册=最外层，最先处理，
+含 OPTIONS 预检）。CORS 生产严格/开发宽松，由 APP_ENV 切换。
 """
 
-import asyncio
 import logging
-import os
-import time
-import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pythonjsonlogger import jsonlogger
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
 
 from config import APP_CONFIG
 from errors import AIError
@@ -49,30 +41,14 @@ from routers import (
 )
 from cache.redis_cache import get_cache
 
+from logging_setup import setup_json_logging
+from provider_bootstrap import init_providers
+from security_middleware import SecurityHeadersMiddleware, RequestIdMiddleware
+from health import router as health_router
+
 # ============================================================
 # 结构化 JSON 日志配置
 # ============================================================
-
-
-def setup_json_logging():
-    """配置结构化 JSON 日志"""
-    log_handler = logging.StreamHandler()
-    log_formatter = jsonlogger.JsonFormatter(
-        fmt="%(timestamp)s %(level)s %(module)s %(message)s",
-        rename_fields={
-            "timestamp": "timestamp",
-            "levelname": "level",
-            "name": "module",
-            "message": "message",
-        },
-    )
-    log_handler.setFormatter(log_formatter)
-
-    root_logger = logging.getLogger()
-    root_logger.handlers.clear()
-    root_logger.addHandler(log_handler)
-    root_logger.setLevel(getattr(logging, os.getenv("LOG_LEVEL", "INFO")))
-
 
 setup_json_logging()
 logger = logging.getLogger(__name__)
@@ -87,7 +63,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时
-    logger.info("课伴 AI 网关启动中...")
+    logger.info("熵减 AI 网关启动中...")
     logger.info("版本: %s", APP_CONFIG["version"])
 
     # 初始化 Redis 连接
@@ -96,69 +72,12 @@ async def lifespan(app: FastAPI):
     logger.info("Redis 连接已建立")
 
     # 初始化各 Provider 并检查 API Key 配置
-    from config import AI_PROVIDERS, is_valid_api_key
-    from providers.qwen_provider import QwenProvider
-    from providers.deepseek_provider import DeepSeekProvider
-    from providers.glm_provider import GLMProvider
-    from providers.gemini_provider import GeminiProvider
-    from providers.fallback_provider import FallbackProvider
-
-    # 将 Provider 实例存储到 app.state，供路由层使用
-    app.state.providers = {}
-
-    qwen_cfg = AI_PROVIDERS.get("qwen", {})
-    if is_valid_api_key(qwen_cfg.get("api_key", "")):
-        app.state.providers["qwen"] = QwenProvider(
-            base_url=qwen_cfg["base_url"],
-            api_key=qwen_cfg["api_key"],
-        )
-        logger.info("Provider [qwen]: 已初始化")
-    else:
-        logger.warning("Provider [qwen]: API Key 未配置，跳过初始化")
-
-    deepseek_cfg = AI_PROVIDERS.get("deepseek", {})
-    if is_valid_api_key(deepseek_cfg.get("api_key", "")):
-        app.state.providers["deepseek"] = DeepSeekProvider(
-            base_url=deepseek_cfg["base_url"],
-            api_key=deepseek_cfg["api_key"],
-        )
-        logger.info("Provider [deepseek]: 已初始化")
-    else:
-        logger.warning("Provider [deepseek]: API Key 未配置，跳过初始化")
-
-    glm_cfg = AI_PROVIDERS.get("glm", {})
-    if is_valid_api_key(glm_cfg.get("api_key", "")):
-        app.state.providers["glm"] = GLMProvider(
-            base_url=glm_cfg["base_url"],
-            api_key=glm_cfg["api_key"],
-        )
-        logger.info("Provider [glm]: 已初始化")
-    else:
-        logger.warning("Provider [glm]: API Key 未配置，跳过初始化")
-
-    # Gemini: google-genai SDK，仅需 api_key
-    gemini_cfg = AI_PROVIDERS.get("gemini", {})
-    if is_valid_api_key(gemini_cfg.get("api_key", "")):
-        app.state.providers["gemini"] = GeminiProvider(
-            api_key=gemini_cfg["api_key"],
-        )
-        logger.info("Provider [gemini]: 已初始化")
-    else:
-        logger.warning("Provider [gemini]: API Key 未配置，跳过初始化")
-    
-    # FallbackProvider 始终可用
-    app.state.providers["fallback"] = FallbackProvider()
-    logger.info("Provider [fallback]: 已初始化（降级兜底）")
-
-    for name, cfg in AI_PROVIDERS.items():
-        has_key = is_valid_api_key(cfg.get("api_key", ""))
-        status = "已配置" if has_key else "未配置（API Key 缺失或为占位符）"
-        logger.info("Provider [%s]: %s", name, status)
+    init_providers(app)
 
     yield
 
     # 关闭时
-    logger.info("课伴 AI 网关关闭中...")
+    logger.info("熵减 AI 网关关闭中...")
     # 关闭 Redis 连接
     cache = get_cache()
     await cache.disconnect()
@@ -183,38 +102,6 @@ app = FastAPI(
     redoc_url=_redoc_url,
     openapi_url=_openapi_url,
 )
-
-
-# ============================================================
-# 纵深防御：安全头中间件（与 Nginx 互为补充）
-# ============================================================
-
-
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """为每个响应添加安全头（纵深防御，与 Nginx 互为补充）"""
-
-    async def dispatch(self, request: Request, call_next):
-        response: Response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; font-src 'self'"
-        )
-        return response
-
-
-class RequestIdMiddleware(BaseHTTPMiddleware):
-    """为每个请求生成/透传 request_id，并写入响应头"""
-
-    async def dispatch(self, request: Request, call_next):
-        request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
-        request.state.request_id = request_id
-        response: Response = await call_next(request)
-        response.headers["X-Request-ID"] = request_id
-        response.headers["ai-gateway-request-id"] = request_id
-        return response
 
 
 # ============================================================
@@ -289,99 +176,10 @@ async def ai_error_handler(request: Request, exc: AIError) -> JSONResponse:
 
 
 # ============================================================
-# 健康检查端点
-# ============================================================
-
-
-@app.get("/health", tags=["系统"])
-async def health_check():
-    """
-    健康检查端点
-
-    对每个 Provider 发送 ping 测试，记录响应时间和可用性。
-    并行 ping 所有 Provider（最坏耗时 5s），并缓存结果 30 秒。
-    """
-    # 30 秒 TTL 健康状态缓存
-    cache_ttl = 30
-    cached_result = getattr(app.state, "_health_cache", None)
-    cache_time = getattr(app.state, "_health_cache_time", 0)
-    now = time.monotonic()
-    if cached_result is not None and (now - cache_time) < cache_ttl:
-        return cached_result
-
-    async def _ping_provider(name, provider):
-        """单个 Provider 健康检测（带 5 秒超时）"""
-        try:
-            result = await asyncio.wait_for(provider.health_check(), timeout=5.0)
-            return name, result
-        except asyncio.TimeoutError:
-            return name, {"status": "unhealthy", "latency_ms": 5000, "error": "health check timeout"}
-        except Exception as e:
-            return name, {"status": "unhealthy", "latency_ms": 0, "error": str(e)}
-
-    # 并行 ping 所有 Provider
-    tasks = [
-        _ping_provider(name, provider)
-        for name, provider in app.state.providers.items()
-    ]
-    results = await asyncio.gather(*tasks) if tasks else []
-    providers_status = dict(results)
-
-    # Redis 连接状态检查
-    redis_status = "not_connected"
-    try:
-        cache = get_cache()
-        if cache._client is not None:
-            await cache._client.ping()
-            redis_status = "connected"
-    except Exception as e:
-        redis_status = f"error: {str(e)}"
-
-    # 整体健康状态
-    healthy_providers = sum(1 for p in providers_status.values() if p.get("status") == "healthy")
-    overall = "healthy" if healthy_providers > 0 else "degraded"
-
-    response = {
-        "status": overall,
-        "service": "ai-gateway",
-        "version": APP_CONFIG["version"],
-        "providers": providers_status,
-        "redis": redis_status,
-        "healthy_count": healthy_providers,
-        "total_count": len(providers_status),
-    }
-
-    # 缓存结果
-    app.state._health_cache = response
-    app.state._health_cache_time = now
-
-    return response
-
-
-@app.get("/health/live", tags=["系统"])
-async def liveness():
-    """K8s liveness probe — 仅检查进程存活"""
-    return {"status": "alive"}
-
-
-@app.get("/health/quick", tags=["系统"])
-async def health_quick():
-    """
-    轻量级健康检查 — 仅检查进程存活，不 ping 上游 Provider
-
-    供桌面客户端频繁轮询使用，避免每次触发重量级 Provider 健康检查。
-    """
-    return {
-        "status": "ok",
-        "service": "ai-gateway",
-        "version": APP_CONFIG["version"],
-    }
-
-
-# ============================================================
 # 注册路由
 # ============================================================
 
+app.include_router(health_router)                # 健康检查（/health, /health/quick, /health/live）
 app.include_router(summarize_router)
 app.include_router(generate_cards_router)
 app.include_router(evaluate_router)

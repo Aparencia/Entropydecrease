@@ -1,3 +1,6 @@
+// @ai-context
+// 超级椭圆卡片：连续曲率圆角 + 有色弥散阴影。Super-ellipse card with tinted diffuse shadow.
+// Why: 摒弃 1px 硬边框，以羽化阴影分隔层级，遵循品牌视觉规范。
 "use client";
 
 import { motion } from "framer-motion";

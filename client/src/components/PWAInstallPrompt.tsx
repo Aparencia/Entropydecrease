@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：PWAInstallPrompt。
+ */
 import { useState, useEffect, useCallback } from 'react';
 import { Download, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';

@@ -2,7 +2,7 @@ name: Deploy Website
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths: ['website/**']
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: mkdir -p /opt/keban/website
+          script: mkdir -p /opt/Entropydecrease/website
 
       - name: Upload static files to server
         uses: appleboy/scp-action@v0.1.7
@@ -38,7 +38,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: website/out/*
-          target: /opt/keban/website
+          target: /opt/Entropydecrease/website
           strip_components: 2
           rm: true
 
@@ -52,7 +52,7 @@ jobs:
             # scp 的 rm:true 会重建挂载目录导致 bind mount 失效，必须重启容器
             docker restart entropy-decrease-nginx
             sleep 5
-            curl -sf https://entropydecrease.com/ | grep -q "课伴" || exit 1
+            curl -sf https://entropydecrease.com/ | grep -q "熵减" || exit 1
 
       - name: Notify IndexNow
         run: |

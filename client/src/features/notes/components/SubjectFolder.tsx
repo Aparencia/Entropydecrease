@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：SubjectFolder。
+ */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronRight, Check, Folder } from 'lucide-react';
 import { cn } from '@/lib/utils';

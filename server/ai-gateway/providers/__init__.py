@@ -1,5 +1,5 @@
 """
-课伴 AI 网关 — Provider 模块
+熵减 AI 网关 — Provider 模块
 
 提供统一的 AI 模型调用接口，支持通义千问、DeepSeek、智谱 GLM 等国产模型。
 """

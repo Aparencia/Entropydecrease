@@ -1,3 +1,6 @@
+/**
+ * @ai-context: flashcards 功能模块页面：GenerativeReviewPage。
+ */
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Card, Input, EmptyState } from '@/components/ui';

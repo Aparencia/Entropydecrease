@@ -1,6 +1,8 @@
 /**
  * 质量控制器 — 根据性能等级动态调整场景参数
  * 在 Canvas 内使用，作为子组件
+ *
+ * @ai-context: 3D 场景核心（R3F）：QualityController。
  */
 import { useThree } from '@react-three/fiber';
 import { useEffect } from 'react';

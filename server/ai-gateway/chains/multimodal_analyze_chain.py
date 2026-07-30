@@ -1,5 +1,5 @@
 """
-课伴 AI 网关 — 多模态课堂分析 Chain
+熵减 AI 网关 — 多模态课堂分析 Chain
 
 @ai-context Path B 核心链路：客户端捕获关键帧序列 + 语音转写 →
 本 Chain 编排多图联合分析 → 输出结构化 Markdown 课堂笔记。

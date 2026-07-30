@@ -9,6 +9,8 @@
  * - useAISocratic      苏格拉底式学习（brainstorm + question）
  * - useAIPredict       学习预测
  * - useAIRescue        卡壳三级救援
+ *
+ * @ai-context: legacy Hook：早期 AI 调用入口，新代码使用 hooks/ 下的分功能 Hook。
  */
 
 // ── 已有 Hook ────────────────────────────────────────────────

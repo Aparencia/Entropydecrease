@@ -1,10 +1,14 @@
+// @ai-context
+// CRDT 变更集 handlers：Automerge 二进制变更（base64）的追加式推送与增量拉取。
+// CRDT changeset handlers: append-only push and incremental pull of base64 Automerge changes.
+// Why: 服务端不解析 changeset 内容，只做不可变存储与序号分配，合并语义完全由客户端 Automerge 负责。
 package handlers
 
 import (
 	"net/http"
 	"strconv"
 
-	"keban/sync-service/models"
+	"entropydecrease/sync-service/models"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -15,7 +19,7 @@ import (
 type crdtPushRequest struct {
 	DeviceID string `json:"deviceId"`
 	Changes  []struct {
-		Seq       int64  `json:"seq"`       // client-side seq (for acknowledgement)
+		Seq       int64  `json:"seq"` // client-side seq (for acknowledgement)
 		TableName string `json:"tableName"`
 		EntityID  string `json:"entityId"`
 		Changeset string `json:"changeset"` // base64 Automerge changes

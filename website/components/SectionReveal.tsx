@@ -1,3 +1,6 @@
+// @ai-context
+// 滚动进入视口的流体显现动画容器。Scroll-into-view reveal animation wrapper.
+// Why: viewport margin -80px 让动画在元素接近视口时提前触发，避免生硬。
 "use client";
 
 import { motion } from "framer-motion";

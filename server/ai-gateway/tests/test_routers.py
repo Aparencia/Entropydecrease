@@ -77,8 +77,8 @@ class TestSummarizeRouter:
             "model": "qwen-plus",
             "latency_ms": 800,
         }
-        with patch("routers.summarize.call_with_fallback", new_callable=AsyncMock) as mock_cwf:
-            mock_cwf.return_value = (mock_result, "qwen")
+        with patch("routers.summarize.call_with_fallback_for_request", new_callable=AsyncMock) as mock_cwf:
+            mock_cwf.return_value = (mock_result, "qwen", False)
             resp = client.post("/api/v1/ai/summarize", json={
                 "text": "这是一段足够长的学习笔记内容，包含多个知识点和概念。" * 3,
             })
@@ -95,7 +95,7 @@ class TestSummarizeRouter:
 
     def test_summarize_all_providers_fail(self, client):
         """所有 Provider 不可用时返回 503"""
-        with patch("routers.summarize.call_with_fallback", new_callable=AsyncMock) as mock_cwf:
+        with patch("routers.summarize.call_with_fallback_for_request", new_callable=AsyncMock) as mock_cwf:
             mock_cwf.side_effect = RuntimeError("所有 AI 服务暂时不可用")
             resp = client.post("/api/v1/ai/summarize", json={
                 "text": "这是一段足够长的学习笔记内容，用于测试降级场景。",
@@ -127,8 +127,8 @@ class TestGenerateCardsRouter:
             "model": "qwen-plus",
             "tokens_used": 300,
         }
-        with patch("routers.generate_cards.call_with_fallback", new_callable=AsyncMock) as mock_cwf:
-            mock_cwf.return_value = (mock_result, "qwen")
+        with patch("routers.generate_cards.call_with_fallback_for_request", new_callable=AsyncMock) as mock_cwf:
+            mock_cwf.return_value = (mock_result, "qwen", False)
             resp = client.post("/api/v1/ai/generate-cards", json={
                 "note": "光合作用是植物利用阳光、二氧化碳和水合成有机物质的过程。发生在叶绿体中，是地球上最重要的生物化学过程之一。",
             })
@@ -151,8 +151,8 @@ class TestGenerateCardsRouter:
             "model": "qwen-plus",
             "tokens_used": 100,
         }
-        with patch("routers.generate_cards.call_with_fallback", new_callable=AsyncMock) as mock_cwf:
-            mock_cwf.return_value = (mock_result, "qwen")
+        with patch("routers.generate_cards.call_with_fallback_for_request", new_callable=AsyncMock) as mock_cwf:
+            mock_cwf.return_value = (mock_result, "qwen", False)
             resp = client.post("/api/v1/ai/generate-cards", json={
                 "note": "这是一段足够长的学习笔记内容，但由于内容特殊性未能提取出知识点。" * 3,
             })
@@ -162,7 +162,7 @@ class TestGenerateCardsRouter:
 
     def test_generate_cards_all_providers_fail(self, client):
         """所有 Provider 不可用时返回 503"""
-        with patch("routers.generate_cards.call_with_fallback", new_callable=AsyncMock) as mock_cwf:
+        with patch("routers.generate_cards.call_with_fallback_for_request", new_callable=AsyncMock) as mock_cwf:
             mock_cwf.side_effect = RuntimeError("所有 AI 服务暂时不可用")
             resp = client.post("/api/v1/ai/generate-cards", json={
                 "note": "这是一段足够长的学习笔记内容，用于测试全部降级场景。" * 3,
@@ -198,8 +198,8 @@ class TestEvaluateRouter:
             "tokens_used": 200,
             "latency_ms": 600,
         }
-        with patch("routers.evaluate.call_with_fallback", new_callable=AsyncMock) as mock_cwf:
-            mock_cwf.return_value = (mock_result, "deepseek")
+        with patch("routers.evaluate.call_with_fallback_for_request", new_callable=AsyncMock) as mock_cwf:
+            mock_cwf.return_value = (mock_result, "deepseek", False)
             resp = client.post("/api/v1/ai/evaluate-explanation", json={
                 "concept": "光合作用",
                 "explanation": "光合作用是植物利用阳光把二氧化碳和水变成有机物的过程。",
@@ -220,7 +220,7 @@ class TestEvaluateRouter:
 
     def test_evaluate_fallback_on_all_fail(self, client):
         """所有 Provider 不可用时返回降级评估"""
-        with patch("routers.evaluate.call_with_fallback", new_callable=AsyncMock) as mock_cwf:
+        with patch("routers.evaluate.call_with_fallback_for_request", new_callable=AsyncMock) as mock_cwf:
             mock_cwf.side_effect = RuntimeError("所有 AI 服务暂时不可用")
             resp = client.post("/api/v1/ai/evaluate-explanation", json={
                 "concept": "光合作用",
@@ -256,8 +256,8 @@ class TestRecommendRouter:
             "tokens_used": 80,
             "latency_ms": 400,
         }
-        with patch("routers.recommend.call_with_fallback", new_callable=AsyncMock) as mock_cwf:
-            mock_cwf.return_value = (mock_result, "deepseek")
+        with patch("routers.recommend.call_with_fallback_for_request", new_callable=AsyncMock) as mock_cwf:
+            mock_cwf.return_value = (mock_result, "deepseek", False)
             resp = client.post("/api/v1/ai/recommend-duration", json={
                 "history": [
                     {"duration_minutes": 25, "completed": True},
@@ -280,8 +280,8 @@ class TestRecommendRouter:
             "tokens_used": 50,
             "latency_ms": 200,
         }
-        with patch("routers.recommend.call_with_fallback", new_callable=AsyncMock) as mock_cwf:
-            mock_cwf.return_value = (mock_result, "deepseek")
+        with patch("routers.recommend.call_with_fallback_for_request", new_callable=AsyncMock) as mock_cwf:
+            mock_cwf.return_value = (mock_result, "deepseek", False)
             resp = client.post("/api/v1/ai/recommend-duration", json={"history": []})
         assert resp.status_code == 200
         data = resp.json()
@@ -289,7 +289,7 @@ class TestRecommendRouter:
 
     def test_recommend_fallback_to_local_rule(self, client):
         """所有 Provider 不可用时降级为本地规则引擎"""
-        with patch("routers.recommend.call_with_fallback", new_callable=AsyncMock) as mock_cwf:
+        with patch("routers.recommend.call_with_fallback_for_request", new_callable=AsyncMock) as mock_cwf:
             mock_cwf.side_effect = RuntimeError("所有 AI 服务暂时不可用")
             resp = client.post("/api/v1/ai/recommend-duration", json={
                 "history": [

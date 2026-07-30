@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 布局组件：AppLayout。
+ */
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';

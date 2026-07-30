@@ -1,5 +1,7 @@
 /**
  * 性能监控 — FPS追踪与动态降级
+ *
+ * @ai-context: 3D 场景核心（R3F）：PerformanceMonitor。
  */
 import { useFrame } from '@react-three/fiber';
 import { useRef } from 'react';

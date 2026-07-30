@@ -3,6 +3,8 @@
  *
  * 处理 ai_socratic / ai_socratic_evaluate / ai_socratic_deepening IPC 请求，
  * 调用 AI 网关实现苏格拉底式追问、评估与深化。
+ *
+ * @ai-context: 苏格拉底追问（含评估/深化） IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
 import { safeHandle } from '../../ipcUtils.js';

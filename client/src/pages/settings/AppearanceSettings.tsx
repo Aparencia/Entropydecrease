@@ -1,11 +1,16 @@
+/**
+ * @ai-context: 设置页组件：AppearanceSettings。
+ */
 import { useState } from 'react';
+import { readWithLegacyMigration } from '@/lib/utils/legacyLocalStorage';
 import { Card } from '@/components/ui';
 import { useTheme } from '@/hooks/useTheme';
 import { Sun, Moon, Rows3, Grid3x3, AlignJustify } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /** 密度存储 key */
-const DENSITY_KEY = 'keban-density';
+const DENSITY_KEY = 'ed-density';
+const LEGACY_DENSITY_KEY = 'keban-density'; // 旧键，2027-01 前兼容
 
 /** 密度类型 */
 type Density = 'compact' | 'normal' | 'loose';
@@ -13,7 +18,7 @@ type Density = 'compact' | 'normal' | 'loose';
 /** 从 localStorage 读取当前密度 */
 function getStoredDensity(): Density {
   try {
-    const v = localStorage.getItem(DENSITY_KEY);
+    const v = readWithLegacyMigration(DENSITY_KEY, LEGACY_DENSITY_KEY);
     if (v === 'compact' || v === 'normal' || v === 'loose') return v;
   } catch { /* ignore */ }
   return 'normal';

@@ -3,6 +3,8 @@
  *
  * 使用 desktopCapturer API 定时截取指定窗口画面，
  * 通过 IPC 将 PNG 数据推送到渲染进程。
+ *
+ * @ai-context: 定时截图采集器：desktopCapturer 抓帧、间隔可配（100ms-60s 边界校验）。
  */
 
 import { desktopCapturer, DesktopCapturerSource, BrowserWindow } from 'electron';

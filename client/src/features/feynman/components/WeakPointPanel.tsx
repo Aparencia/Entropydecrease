@@ -1,26 +1,25 @@
+/**
+ * 薄弱点右侧抽屉面板（步骤 3）
+ *
+ * @ai-context: 从 FeynmanSessionPage 拆出。展示讲解中标记的薄弱点，
+ * 支持掌握状态切换/删除/一键生成闪卡。掌握态用删除线+绿色对勾区分。
+ * 薄弱点数据经 useFeynmanStore 持久化，回调由父组件注入。
+ */
 import { motion } from 'framer-motion';
-import { X, CheckCircle2, Circle, Trash2 } from 'lucide-react';
-import type { FeynmanWeakPoint } from '@/types/models';
+import { X, Layers, CheckCircle2, Circle, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { FeynmanWeakPoint } from '@/types/models';
 
 interface WeakPointPanelProps {
-  noteId: string | null;
   weakPoints: FeynmanWeakPoint[];
+  onToggleMastered: (wpId: string) => void;
+  onRemove: (wpId: string) => void;
+  onOpenDeckModal: () => void;
   onClose: () => void;
-  onToggleMastered: (noteId: string, weakPointId: string) => void;
-  onRemove: (noteId: string, weakPointId: string) => void;
 }
 
-/**
- * 薄弱点列表面板（步骤 3 右侧抽屉）。
- * 支持标记掌握、删除操作，带入场动画。
- */
 export function WeakPointPanel({
-  noteId,
-  weakPoints,
-  onClose,
-  onToggleMastered,
-  onRemove,
+  weakPoints, onToggleMastered, onRemove, onOpenDeckModal, onClose,
 }: WeakPointPanelProps) {
   return (
     <motion.aside
@@ -37,12 +36,28 @@ export function WeakPointPanel({
       <div className="p-kb-md">
         <div className="flex items-center justify-between mb-kb-md">
           <h3 className="text-b1 font-semibold text-text-primary">薄弱点列表</h3>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
-          >
-            <X className="w-4 h-4" strokeWidth={1.5} />
-          </button>
+          <div className="flex items-center gap-1">
+            {weakPoints.some((wp) => !wp.mastered) && (
+              <button
+                onClick={onOpenDeckModal}
+                className={cn(
+                  'flex items-center gap-1 px-2 py-1 rounded-kb-md text-c1 font-medium',
+                  'bg-[#F59E0B]/10 text-[#B45309] dark:text-[#F59E0B]',
+                  'hover:bg-[#F59E0B]/20 transition-all duration-kb-fast',
+                )}
+                title="将未掌握的薄弱点转为闪卡"
+              >
+                <Layers className="w-3.5 h-3.5" strokeWidth={1.5} />
+                生成闪卡
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
+            >
+              <X className="w-4 h-4" strokeWidth={1.5} />
+            </button>
+          </div>
         </div>
         {weakPoints.length === 0 ? (
           <p className="text-b2 text-text-tertiary text-center py-4">
@@ -53,8 +68,8 @@ export function WeakPointPanel({
             {weakPoints.map((wp, i) => (
               <motion.div
                 key={wp.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
                 transition={{ duration: 0.25, delay: i * 0.05 }}
                 className={cn(
                   'flex gap-2.5 p-3 rounded-kb-md',
@@ -63,7 +78,7 @@ export function WeakPointPanel({
                 )}
               >
                 <button
-                  onClick={() => noteId && wp.id && onToggleMastered(noteId, wp.id)}
+                  onClick={() => wp.id && onToggleMastered(wp.id)}
                   className="flex-shrink-0 mt-0.5"
                   title={wp.mastered ? '标记为未掌握' : '标记为已掌握'}
                 >
@@ -80,7 +95,7 @@ export function WeakPointPanel({
                   {wp.text}
                 </p>
                 <button
-                  onClick={() => noteId && wp.id && onRemove(noteId, wp.id)}
+                  onClick={() => wp.id && onRemove(wp.id)}
                   className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-0.5 text-text-tertiary hover:text-semantic-error transition-all duration-kb-fast"
                   title="删除"
                 >

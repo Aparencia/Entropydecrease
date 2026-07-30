@@ -4,6 +4,9 @@
  * - 密钥派生：PBKDF2（100,000 次迭代，SHA-256）
  * - 加密模式：AES-GCM（authenticated encryption）
  * - IV：12 字节随机数（每次加密重新生成）
+ *
+ * @ai-context: PBKDF2 迭代次数（100,000）与 CryptoManager 存量密钥派生绑定，提高迭代次数会使历史密文无法解密，禁止单独修改。
+ * @ai-context: 密钥不可导出（extractable=false），仅存内存。除随机数生成外为纯函数。
  */
 
 import { toBase64, fromBase64 } from './utils';

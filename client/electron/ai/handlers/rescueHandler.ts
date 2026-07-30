@@ -2,6 +2,8 @@
  * AI 学习救援功能 Handler
  *
  * 处理 ai_rescue IPC 请求，调用 AI 网关为卡住的学习者提供分层救援提示。
+ *
+ * @ai-context: 卡壳救援 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
 import { safeHandle } from '../../ipcUtils.js';

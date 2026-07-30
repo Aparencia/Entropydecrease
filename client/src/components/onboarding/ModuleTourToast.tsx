@@ -1,5 +1,7 @@
 /**
  * ModuleTourToast — 模块首次进入时的提示 toast
+ *
+ * @ai-context: 通用组件：ModuleTourToast。
  */
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';

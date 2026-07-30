@@ -4,6 +4,8 @@
  * 将应用日志写入 userData/logs/ 目录，每次启动生成独立日志文件。
  * 提供 info / warn / error / crash 四个级别，crash 额外记录进程状态。
  * fs 写入失败时静默降级到 console.error。
+ *
+ * @ai-context: 主进程日志系统（文件流 + 控制台），crash 级别写独立崩溃日志；initLogger 须在 app ready 后调用。
  */
 
 import { app } from 'electron';
@@ -27,7 +29,7 @@ class Logger {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const logFile = path.join(logsDir, `app-${timestamp}.log`);
       this.stream = fs.createWriteStream(logFile, { flags: 'a' });
-      this.stream.write(`# KeBan log started at ${new Date().toISOString()}\n`);
+      this.stream.write(`# EntropyDecrease log started at ${new Date().toISOString()}\n`);
     } catch (err) {
       console.error('[Logger] Failed to initialize file logger:', err);
       this.stream = null;

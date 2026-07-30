@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：StepIndicator。
+ */
 import { motion, useReducedMotion } from 'framer-motion';
 import { BookOpen, MessageSquare, Highlighter, RefreshCw, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';

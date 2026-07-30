@@ -1,3 +1,6 @@
+/**
+ * @ai-context: dashboard 功能模块：breathing。
+ */
 import type { BreathingPhase, BreathingState } from '../types';
 
 /** 每阶段时长 4s，四阶段共 16s 一个循环 */

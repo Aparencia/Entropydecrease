@@ -1,4 +1,12 @@
-// ========== 番茄钟相关类型 ==========
+/**
+ * 番茄钟领域类型
+ *
+ * @ai-context: 时长字段单位约定（易错点）：PomodoroSession.duration /
+ * actualDuration 单位为【秒】；PomodoroSettings.workDuration /
+ * shortBreakDuration / longBreakDuration / classDuration 单位为【分钟】。
+ * 换算逻辑散布在计时器 Hook 中，修改任一字段单位都会破坏历史数据统计。
+ * @ai-context: 纯类型文件，无运行时代码，可安全重构。
+ */
 
 // 番茄钟会话记录
 export interface PomodoroSession {

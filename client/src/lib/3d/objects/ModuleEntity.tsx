@@ -1,6 +1,8 @@
 /**
  * ModuleEntity — 每个学习模块在3D空间中的视觉表达
  * 支持多种几何体、悬浮动画、发光交互
+ *
+ * @ai-context: 3D 场景对象：ModuleEntity。
  */
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';

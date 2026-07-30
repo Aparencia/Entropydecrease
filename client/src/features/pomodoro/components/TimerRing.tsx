@@ -1,4 +1,7 @@
-﻿import { useRef, useEffect, useId } from 'react';
+/**
+ * @ai-context: 通用组件：TimerRing。
+ */
+import { useRef, useEffect, useId } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 

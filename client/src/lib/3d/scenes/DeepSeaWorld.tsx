@@ -1,6 +1,8 @@
 /**
  * DeepSeaWorld — 深色模式「深海」3D场景
  * 深海生态系统：生物发光、海底粒子、有机暗流
+ *
+ * @ai-context: 3D 场景：DeepSeaWorld。
  */
 import { Bloom, DepthOfField, Vignette } from '@react-three/postprocessing';
 import { SafeEffectComposer } from '../core/SafeEffectComposer';

@@ -1,5 +1,7 @@
 /**
  * Step5ExitDemo — 退出教学
+ *
+ * @ai-context: 通用组件：Step5ExitDemo。
  */
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';

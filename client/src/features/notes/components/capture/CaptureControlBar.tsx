@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：CaptureControlBar。
+ */
 import {
   Play, Pause, Square, Eye, Mic, Layers,
   Clock, Loader2, XCircle,

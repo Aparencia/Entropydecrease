@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 页面组件：VerifyEmail。
+ */
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { MailCheck, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';

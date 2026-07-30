@@ -4,6 +4,8 @@
  * 将自定义存储路径持久化到 userData/storage-config.json，
  * 确保主进程启动时能读取用户的路径偏好。
  * 配置文件始终存放在 app.getPath('userData')，即使用户选择了自定义数据路径。
+ *
+ * @ai-context: 自定义存储路径配置持久化；resolveDbPath 回退 userData/keban.db（豁免标识）。
  */
 
 import { app } from 'electron';

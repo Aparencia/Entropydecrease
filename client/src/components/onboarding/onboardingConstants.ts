@@ -1,5 +1,7 @@
 /**
  * 引导系统文案与配置数据
+ *
+ * @ai-context: 通用组件：onboardingConstants。
  */
 import type { ModuleId } from '@/lib/3d/navigation/OrbitalStore';
 

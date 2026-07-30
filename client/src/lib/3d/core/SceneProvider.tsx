@@ -1,6 +1,8 @@
 /**
  * 3D场景全局提供器 — React Three Fiber Canvas容器
  * 作为全屏背景层，z-index: -1
+ *
+ * @ai-context: 3D 场景核心（R3F）：SceneProvider。
  */
 import { Canvas } from '@react-three/fiber';
 import { Suspense } from 'react';

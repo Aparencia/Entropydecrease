@@ -4,6 +4,8 @@
  * - 品牌色渐变填充（深色靛蓝→赛博青，浅色蓝→琥珀）
  * - 呼吸动画（scale Y轴 ±2%，周期 4秒）
  * - reduced-motion 时禁用呼吸
+ *
+ * @ai-context: 通用组件：LearningPulse。
  */
 import { useMemo } from 'react';
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis } from 'recharts';

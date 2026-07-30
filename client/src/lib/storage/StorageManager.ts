@@ -1,3 +1,9 @@
+/**
+ * 存储配额查询（Storage Manager API）
+ *
+ * @ai-context: navigator.storage.estimate 在 Electron/部分浏览器不可用，
+ * 返回 null 时 UI 须隐藏配额展示而非报错。纯读取，无副作用。
+ */
 export interface StorageInfo {
   used: number;       // 已使用字节数
   quota: number;      // 配额字节数

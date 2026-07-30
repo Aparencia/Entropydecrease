@@ -1,10 +1,12 @@
 """
-课伴 AI 网关 — 视觉提取 Chain
+熵减 AI 网关 — 视觉提取 Chain
 
 编排多模态视觉内容提取的完整流程：
 1. 构建提取 prompt
 2. 调用多模态 Provider 处理图片
 3. 解析并结构化提取结果
+
+@ai-context: 视觉提取 Chain：单图多模态识别板书/PPT 并结构化输出。
 """
 
 import json

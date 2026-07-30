@@ -5,6 +5,8 @@
  * 包含完整性校验和备份功能。
  *
  * 注意：WAL checkpoint 应在调用本模块之前由 sqliteService.checkpointAndClose() 完成。
+ *
+ * @ai-context: SQLite 数据库文件迁移（keban.db/-wal/-shm 三文件为存量用户数据标识，永久豁免品牌改名）：复制后校验、旧库改 .bak。
  */
 
 import { copyFile, mkdir, stat, access, rm } from 'fs/promises';

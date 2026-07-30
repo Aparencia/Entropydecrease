@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：RescuePanel。
+ */
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';

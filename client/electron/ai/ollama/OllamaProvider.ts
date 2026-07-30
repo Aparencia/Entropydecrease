@@ -4,6 +4,8 @@
  * 通过 Ollama 的 OpenAI 兼容 API（/v1/chat/completions）执行推理，
  * 支持文本生成、单图视觉、多图分析三种模式。
  * 返回格式与远程 AI Gateway 保持一致。
+ *
+ * @ai-context: 本地 Ollama 推理封装（OpenAI 兼容 /v1/chat/completions）：供各 handler 的 localHandler 使用，prompt 需适配本地小模型。
  */
 
 import { logger } from '../../logger.js';

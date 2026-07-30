@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 同步状态 UI 组件：SyncStatusBar。
+ */
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, WifiOff, Signal, RefreshCw, CheckCircle2 } from 'lucide-react';

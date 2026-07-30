@@ -1,5 +1,7 @@
 /**
  * Step6Panorama — 全景总览：展示 2x3 模块网格
+ *
+ * @ai-context: 通用组件：Step6Panorama。
  */
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';

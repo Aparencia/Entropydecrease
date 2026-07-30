@@ -2,6 +2,8 @@
  * AI 评估功能 Handler
  *
  * 处理 ai_evaluate IPC 请求，调用 AI 网关评估用户对概念的解释。
+ *
+ * @ai-context: 费曼解释评估 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
 import { safeHandle } from '../../ipcUtils.js';

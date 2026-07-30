@@ -1,8 +1,10 @@
-﻿/**
+/**
  * AI 功能按钮
  *
  * 本地模式下 disabled + Tooltip 提示，
  * 可用模式下渐变样式 + Sparkles 图标前缀 + 呼吸光效。
+ *
+ * @ai-context: UI 基础组件（shadcn/radix 封装）：AIButton。
  */
 import { motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';

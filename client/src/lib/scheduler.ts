@@ -3,6 +3,9 @@
  *
  * 提供 SchedulingStrategy 统一接口，SM2Strategy 和 FSRSStrategy 两个实现。
  * 通过 schedulingFactory.ts 的 getScheduler() 获取当前激活的策略实例。
+ *
+ * @ai-context: 策略模式统一双算法接口，消费方仅依赖 SchedulingStrategy；新增算法需实现该接口并在 schedulingFactory 注册。
+ * @ai-context: 纯编排层，无副作用。
  */
 
 import {

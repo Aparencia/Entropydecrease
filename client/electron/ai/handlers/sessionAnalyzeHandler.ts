@@ -4,6 +4,8 @@
  * 处理 ai_session_analyze IPC 请求，调用 AI 网关对课堂关键帧与音频段进行多模态分析。
  * 支持本地 Ollama 降级：优先调用本地多模态模型，失败后降级到远程网关。
  * 对应端点：POST /api/v1/multimodal/analyze-session
+ *
+ * @ai-context: 课堂会话分析 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
 import { safeHandle } from '../../ipcUtils.js';

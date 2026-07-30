@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 侧边栏开合 UI 状态 Zustand store。
+ */
 import { create } from 'zustand';
 
 interface SidebarState {

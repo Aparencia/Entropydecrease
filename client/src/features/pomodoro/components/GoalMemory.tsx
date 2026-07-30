@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 通用组件：GoalMemory。
+ */
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/storage';
 import type { PomodoroGoal } from '@/types/models';

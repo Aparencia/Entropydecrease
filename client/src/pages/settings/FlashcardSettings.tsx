@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 设置页组件：FlashcardSettings。
+ */
 import { useState, useCallback } from 'react';
 import { Card } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';

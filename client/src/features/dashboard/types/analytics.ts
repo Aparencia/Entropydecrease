@@ -1,4 +1,6 @@
-/** @file 学习分析仪表盘聚合数据类型 */
+/** @file 学习分析仪表盘聚合数据类型 *
+ * @ai-context: dashboard 功能模块：analytics。
+ */
 
 /** 五维雷达数据 */
 export interface RadarDimension {

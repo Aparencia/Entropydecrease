@@ -1,3 +1,10 @@
+/**
+ * 应用根组件：全局 Provider 编排与路由挂载
+ *
+ * @ai-context: Provider 顺序即依赖顺序——Query/Toast 在外，Auth/Sync 依赖其后，
+ * 路由最内层。此处仅做编排，不写业务逻辑。
+ * @ai-context: 首屏用 useLayoutEffect 处理主题以避免闪白（在绘制前同步应用）。
+ */
 import { useState, useEffect, useLayoutEffect } from 'react';
 import { RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

@@ -1,3 +1,6 @@
+/**
+ * @ai-context: UI 基础组件（shadcn/radix 封装）：index。
+ */
 // Button
 export { Button } from './Button';
 export type { ButtonProps, ButtonVariant, ButtonSize } from './Button';

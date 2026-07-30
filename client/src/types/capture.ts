@@ -1,6 +1,12 @@
-// ========== 采集相关类型 ==========
-
-// ========== v0.4.0 混合方案新增类型 ==========
+/**
+ * 屏幕/音频采集领域类型
+ *
+ * @ai-context: 课堂助手"窗口捕获"链路的数据契约。渲染进程 captureManager
+ * 与 Electron 主进程 captureHandlers 双侧共用，字段变更必须两侧同步评估。
+ * @ai-context: CaptureEvent.data 刻意声明为 unknown（而非 any），消费方必须
+ * 按 type 字段判别后收窄具体类型，禁止直接断言。
+ * @ai-context: 纯类型文件，无运行时代码，可安全重构。
+ */
 
 // 窗口捕获会话
 export interface WindowCapture {
@@ -57,6 +63,6 @@ export interface WindowInfo {
 export interface CaptureEvent {
   type: 'screenshot' | 'audio_chunk' | 'ui_text' | 'extracted' | 'error';
   timestamp: number;            // 单调递增时间戳
-  data: unknown;                // 事件数据（具体类型由 type 决定）
+  data: unknown;                // 事件数据（具体类型由 type 决定，消费方须收窄）
   sessionId: string;
 }

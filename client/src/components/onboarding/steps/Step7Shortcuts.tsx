@@ -1,5 +1,7 @@
 /**
  * Step7Shortcuts — 快捷键速查
+ *
+ * @ai-context: 通用组件：Step7Shortcuts。
  */
 import { OnboardingCard } from '../OnboardingCard';
 import { useOnboardingStore } from '../useOnboardingStore';

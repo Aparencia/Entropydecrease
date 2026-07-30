@@ -1,3 +1,6 @@
+/**
+ * @ai-context: flashcards 功能模块页面：FlashcardsPage。
+ */
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, Button, Tag, Modal, Input, EmptyState, Skeleton, useToast } from '@/components/ui';

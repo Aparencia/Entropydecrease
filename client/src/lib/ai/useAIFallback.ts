@@ -1,6 +1,8 @@
 /**
  * AI 降级 React Hook 封装
  * 提供网络状态监听 + 缓存读写的响应式接口
+ *
+ * @ai-context: legacy Hook：降级状态订阅，新代码优先 useAIGatewayHealth。
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';

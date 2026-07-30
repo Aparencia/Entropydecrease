@@ -1,3 +1,6 @@
+/**
+ * @ai-context: 页面标题管理 Hook，标题模板含品牌名——品牌文案变更需检查此处。
+ */
 import { useLocation } from 'react-router-dom';
 
 const routeTitles: Record<string, string> = {

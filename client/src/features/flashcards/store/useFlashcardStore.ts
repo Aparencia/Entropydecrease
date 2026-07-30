@@ -1,3 +1,6 @@
+/**
+ * @ai-context: flashcards 功能模块状态管理：useFlashcardStore。
+ */
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import {

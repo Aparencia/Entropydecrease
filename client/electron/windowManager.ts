@@ -3,6 +3,8 @@
  *
  * 从 main.ts 拆分而来，负责 BrowserWindow 创建配置
  * 及关闭行为偏好持久化。
+ *
+ * @ai-context: 主窗口创建与关闭策略（退出确认/最小化到托盘/退出前同步等待）。
  */
 
 import { BrowserWindow, app, shell } from 'electron';

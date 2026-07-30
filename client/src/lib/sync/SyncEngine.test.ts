@@ -141,7 +141,7 @@ describe('SyncEngine', () => {
 
       expect(result.pulled).toBe(1);
       expect(result.errors).toHaveLength(0);
-      expect(localStorage.getItem('keban_last_sync_version')).toBe('10');
+      expect(localStorage.getItem('ed_last_sync_version')).toBe('10');
     });
 
     it('should return pulled=0 on API error', async () => {
