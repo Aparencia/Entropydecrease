@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.28.0](https://github.com/Aparencia/Entropydecrease/compare/v0.27.0...v0.28.0) (2026-07-30)
+
+### ✨ 新功能
+
+* **release:** 安装包自建服务器托管——下载页直链与自动更新双源 ([9bb9061](https://github.com/Aparencia/Entropydecrease/commit/9bb9061bec53792e24ca9345970eddc1d0e2e081))
+
 ## [0.27.0](https://github.com/Aparencia/Entropydecrease/compare/v0.26.0...v0.27.0) (2026-07-30)
 
 ### ✨ 新功能
