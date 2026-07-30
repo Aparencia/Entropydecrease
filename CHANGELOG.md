@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.28.4](https://github.com/Aparencia/Entropydecrease/compare/v0.28.3...v0.28.4) (2026-07-30)
+
+### 🐛 缺陷修复
+
+* **ci:** 官网部署启用 Git LFS 以拉取真实图片 ([889e609](https://github.com/Aparencia/Entropydecrease/commit/889e609136bc868e93f57c412229a508ed7bd402))
+
 ## [0.28.3](https://github.com/Aparencia/Entropydecrease/compare/v0.28.2...v0.28.3) (2026-07-30)
 
 ### 🐛 缺陷修复
