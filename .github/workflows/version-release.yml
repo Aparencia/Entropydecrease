@@ -31,6 +31,10 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: true
+          # RELEASE_TOKEN：细粒度 PAT（Contents:RW），持有者为仓库 admin，
+          # 配合 ruleset Bypass list（Repository admin）绕过 main 的 PR 强制规则；
+          # 未配置该 secret 时回退内置 token（checkout 可用，push 仍会被规则拦截）
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -42,5 +46,6 @@ jobs:
 
       - name: Semantic Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 同上：semantic-release 的 git push 与 GitHub Release 创建均使用 PAT
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
         run: npx semantic-release
