@@ -3,6 +3,17 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.27.0](https://github.com/Aparencia/Entropydecrease/compare/v0.26.0...v0.27.0) (2026-07-30)
+
+### ✨ 新功能
+
+* **classroom:** 回声定位页面布局优化与窗口选择增强 ([aca2166](https://github.com/Aparencia/Entropydecrease/commit/aca21668c68700c194d21ae315a41080d17c5281))
+* **dashboard:** 学习启动仪式体验重塑 v0.26.0 ([b91bd17](https://github.com/Aparencia/Entropydecrease/commit/b91bd17c27496483ae644aac2787ba6ea987665f))
+
+### 🐛 缺陷修复
+
+* **classroom:** 优化音频捕获回退与显示媒体处理 ([61d16e8](https://github.com/Aparencia/Entropydecrease/commit/61d16e859f327dc6416ef159c834091fafa3bb11))
+
 ## [0.26.0](https://github.com/Aparencia/Entropydecrease/compare/v0.25.0...v0.26.0) (2026-07-30)
 
 ### ✨ 新功能
