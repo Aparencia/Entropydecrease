@@ -37,9 +37,13 @@ jobs:
 
   build:
     needs: lint-test
+    # 本产品为 Windows-only（electron-builder.yml 仅定义 win target）。
+    # macOS 无有效构建目标必然报 ERR_ELECTRON_BUILDER_CANNOT_EXECUTE，
+    # 且默认 fail-fast 会连带取消 Windows 构建，导致 release/同步步骤永不执行。
+    # 如未来支持 mac，需补回带签名的 mac target 后再加入 matrix。
     strategy:
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -53,12 +57,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.os }}
-          # 注意：@actions/glob 不支持 {a,b} 花括号展开，必须逐行列出；
           # latest*.yml 与 *.blockmap 是 electron-updater 自动更新的必需文件
           path: |
             client/release/*.exe
-            client/release/*.dmg
-            client/release/*.AppImage
             client/release/*.blockmap
             client/release/latest*.yml
 
