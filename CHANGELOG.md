@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.28.1](https://github.com/Aparencia/Entropydecrease/compare/v0.28.0...v0.28.1) (2026-07-30)
+
+### 🐛 缺陷修复
+
+* **release:** 移除 macOS 构建腿以解除发版阻塞 ([afd0af7](https://github.com/Aparencia/Entropydecrease/commit/afd0af78867cfd433f4934d4cb38f474abb7c028))
+
 ## [0.28.0](https://github.com/Aparencia/Entropydecrease/compare/v0.27.0...v0.28.0) (2026-07-30)
 
 ### ✨ 新功能
