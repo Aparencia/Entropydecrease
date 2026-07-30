@@ -3,6 +3,26 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.25.0](https://github.com/Aparencia/Entropydecrease/compare/v0.24.0...v0.25.0) (2026-07-30)
+
+### ✨ 新功能
+
+* 熵减 Entropydecrease 品牌迁移与全仓规范化重构 ([baae5e7](https://github.com/Aparencia/Entropydecrease/commit/baae5e7ccbe2c2a793f89967322ca751a24ff4be))
+
+### 🐛 缺陷修复
+
+* **ai-gateway:** 修复 learning 端点运行时 NameError 并使 ruff/pytest 全绿 ([ea1c43b](https://github.com/Aparencia/Entropydecrease/commit/ea1c43b93ac320b8bd84997bbd11ebcc57d77599))
+* **ci:** 发版工作流改用 RELEASE_TOKEN 以绕过 main 分支保护 ([75c6fe9](https://github.com/Aparencia/Entropydecrease/commit/75c6fe99171da3f4e8cdf699b1ea886e19feff02))
+* **ci:** 放开 commitlint body/footer 行长限制，修复发版提交被自拦截 ([b1583c4](https://github.com/Aparencia/Entropydecrease/commit/b1583c4e8748bf45549c0915b76ab766bc8a4ee3))
+* **ci:** 部署工作流对齐真实服务器结构并修复三处失效缺陷 ([3b71f35](https://github.com/Aparencia/Entropydecrease/commit/3b71f358d97f02b57a1549767ec81808b1b3b244))
+* **client:** 修复测试挂起与 sm2 边界，客户端测试首次全绿 ([168e99e](https://github.com/Aparencia/Entropydecrease/commit/168e99ec2eb9fd050a1d8cf4d94c38b168209580))
+* 补齐迁移遗漏的客户端资产与 nginx ASR 路由代理 ([c15c8ac](https://github.com/Aparencia/Entropydecrease/commit/c15c8acbe5584a737e5cb18e4877514e8f561df3))
+
+# 更新日志
+
+本项目所有值得关注的变更都会记录在此文件中。
+版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
+
 ## [0.23.0](https://github.com/Aparencia/KeBan/compare/v0.22.0...v0.23.0) (2026-07-28)
 
 ### ✨ 新功能
