@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths: ['server/**']
+  # 手动触发入口：用于部署链路验证与紧急重部署（不依赖路径变更）
+  workflow_dispatch:
 
 jobs:
   deploy:
