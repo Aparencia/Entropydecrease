@@ -33,6 +33,7 @@ import { resolveDbPath } from './db/storageConfig.js';
 import { registerMigrationHandlers } from './db/migration.js';
 import { loadEnvironment } from './envLoader.js';
 import { installCspPolicy } from './cspPolicy.js';
+import { registerDisplayMediaHandler } from './displayMediaHandler.js';
 import { registerDbIpcHandlers } from './db/dbIpcHandlers.js';
 import { registerStorageIpcHandlers } from './storageIpcHandlers.js';
 import { registerKeyframeScheme, registerKeyframeIpcHandlers } from './ipc/keyframeStorage.js';
@@ -122,6 +123,10 @@ if (!gotTheLock) {
 
     // SEC-005: CSP 安全策略注入（详见 cspPolicy.ts）
     installCspPolicy(isDevMode());
+
+    // 系统音频环回捕获授权（详见 displayMediaHandler.ts）
+    // 必须在渲染进程发起 getDisplayMedia 之前注册，否则请求会被默认拒绝
+    registerDisplayMediaHandler();
 
     // 加载持久化的 AI 网关地址（在注册 handler 之前，确保 handler 可用正确的 URL）
     await loadPersistedGatewayUrl();
