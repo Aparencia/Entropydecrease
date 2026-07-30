@@ -87,6 +87,7 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
     "predict": ("qwen", "predict"),
     "rescue": ("qwen", "rescue"),
     "inspiration_draft": ("qwen", "inspiration_draft"),
+    "ritual_recall": ("glm", "free"),
     # FEAT-022: 苏格拉底式学习
     "socratic_brainstorm": ("qwen", "socratic"),
     "socratic_evaluate":   ("qwen", "socratic"),

@@ -5,6 +5,7 @@ import type {
   FlashcardReview, FeynmanNote, FeynmanSummary, FeynmanWeakPoint,
   OperationLog, AppSettings, StudyCheckIn, Achievement,
   PomodoroGoal, SyncConflict, OfflineQueueItem, WindowCapture,
+  RitualRecord,
 } from '@/types/models';
 
 /**
@@ -41,6 +42,8 @@ export interface ExportData {
     syncConflicts: SyncConflict[];
     offlineQueue: OfflineQueueItem[];
     windowCaptures: WindowCapture[];
+    // v0.26.0 A1 补全：
+    ritualRecords: RitualRecord[];
   };
 }
 
@@ -51,6 +54,7 @@ const EXPORT_TABLES = [
   'feynmanNotes', 'feynmanSummaries', 'feynmanWeakPoints',
   'operationLog', 'appSettings', 'studyCheckIns', 'achievements',
   'pomodoroGoals', 'syncConflicts', 'offlineQueue', 'windowCaptures',
+  'ritualRecords',
 ] as const;
 
 type ExportTableName = (typeof EXPORT_TABLES)[number];

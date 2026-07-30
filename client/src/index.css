@@ -244,10 +244,13 @@ body {
   --kb-font-scale: 1.05;
 }
 
-/* 减少动效支持 — 暂停所有动画而非移除，保留视觉状态 */
+/* 减少动效支持 — 动画瞬间跑完到终态（web.dev 推荐），而非冻结在初始帧。
+   注意：不可用 animation-play-state:paused，会把 fade-in-up 等入场动画冻结在
+   opacity:0 起始帧导致内容不可见（曾致启动仪式步骤区整片空白）。 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
-    animation-play-state: paused !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }

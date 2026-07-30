@@ -9,7 +9,7 @@
  */
 import { useState, useEffect } from 'react';
 import DOMPurify from 'dompurify';
-import { Download, RefreshCw, X, ChevronDown } from 'lucide-react';
+import { Download, RefreshCw, X, ChevronDown, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface UpdateStatus {
@@ -126,7 +126,22 @@ export default function UpdateNotification() {
             </>
           )}
           {updateStatus.status === 'error' && (
-            <p className="text-b3 text-semantic-error">更新检查失败：{updateStatus.message}</p>
+            <>
+              <p className="flex items-center gap-1.5 text-b1 font-medium text-text-primary">
+                <AlertCircle className="w-icon-sm h-icon-sm shrink-0 text-semantic-error" />
+                更新检查失败
+              </p>
+              <p className="text-b3 text-text-secondary mt-1 break-words">
+                {updateStatus.message}
+              </p>
+              <p className="text-b3 text-text-tertiary mt-1">不影响正常使用，可稍后在设置中手动检查更新。</p>
+              <button
+                onClick={() => setDismissed(true)}
+                className="mt-2 inline-flex items-center gap-1 px-3 py-1.5 bg-bg-tertiary text-text-primary rounded-kb-md text-b3 hover:bg-bg-card transition-colors"
+              >
+                <X className="w-icon-xs h-icon-xs" /> 关闭
+              </button>
+            </>
           )}
         </div>
         <button onClick={() => setDismissed(true)} className="text-text-tertiary hover:text-text-secondary">

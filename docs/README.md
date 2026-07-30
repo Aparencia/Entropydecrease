@@ -50,6 +50,10 @@ v0.3.0 ~ v1.1.0 各版本一个文件；v0.3.0/v0.4.0 为多文档合集（含�
 
 ADR、头脑风暴、估算、数据库迁移、知识卡片、MVP 画布、复盘、PRD、发布清单、Sprint 回顾、第三方评估共 11 个模板。
 
+## 📚 knowledge/ — 知识库
+
+踩坑记录 / 技术方案 / 学习笔记，按 [知识管理规范](./standards/knowledge-management.md) 组织。索引见 [knowledge/index.md](./knowledge/index.md)。
+
 ---
 
 *重组记录：原 10 目录 78+ 文件 → 4 目录；合并去重与去向对照清单见 [migration-spec.md](./product/migration-spec.md) 附录。*

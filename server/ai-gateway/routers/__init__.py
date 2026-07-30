@@ -16,6 +16,7 @@ from routers.multimodal import router as multimodal_router
 from routers.course_detect import router as course_detect_router
 from routers.streaming import router as streaming_router
 from routers.balance import router as balance_router
+from routers.ritual_recall import router as ritual_recall_router
 
 __all__ = [
     "summarize_router",
@@ -34,4 +35,5 @@ __all__ = [
     "course_detect_router",
     "streaming_router",
     "balance_router",
+    "ritual_recall_router",
 ]

@@ -16,3 +16,4 @@ export * from './feynman';
 export * from './sync';
 export * from './capture';
 export * from './inspiration';
+export * from './ritual';

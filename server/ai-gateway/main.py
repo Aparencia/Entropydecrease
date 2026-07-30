@@ -38,6 +38,7 @@ from routers import (
     course_detect_router,
     streaming_router,
     balance_router,
+    ritual_recall_router,
 )
 from cache.redis_cache import get_cache
 
@@ -204,6 +205,7 @@ app.include_router(multimodal_router)          # Path B: 多模态课堂分析�
 app.include_router(course_detect_router)       # 课程识别（可选 AI 模式，单图推断课程信息）
 app.include_router(streaming_router)             # 流式输出（SSE，全量 AI 功能）
 app.include_router(balance_router)               # API 余额查询
+app.include_router(ritual_recall_router)         # v0.26.0 B1.2: 仪式回顾小问
 
 
 # ============================================================

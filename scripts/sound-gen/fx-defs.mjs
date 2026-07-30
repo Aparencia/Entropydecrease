@@ -81,7 +81,28 @@ export const FX_SOUNDS = [
   { file: 'data_import', events: [T(0, 0.09, 'G5'), T(0.08, 0.09, 'E5'), T(0.16, 0.14, 'C5')] },
   { file: 'data_cleared', events: [T(0, 0.12, 'A4'), T(0.11, 0.18, 'E4')] },
   { file: 'sync_complete', reverb: { decay: 0.35, mix: 0.2 }, events: [T(0, 0.1, 'E5'), T(0.09, 0.2, 'A5')] },
+
+  /* ── 仪式呼吸引导类（v0.26.0 A2.3，4 条，柔和低增益冥想音）──
+     吸气=纯正弦上行蓄力、屏息=平稳低音、呼气=下行舒缓、圈满=柔和三音铃 */
+  {
+    file: 'ritual_breath_inhale', reverb: { decay: 0.5, mix: 0.25 },
+    events: [G(0, 0.5, 'C4', 'G4', { harmonics: 1, gain: 0.5, env: { a: 0.06, tau: 0.4, r: 0.12 } })],
+  },
+  {
+    file: 'ritual_breath_hold', peakScale: 0.7,
+    events: [T(0, 0.35, 'G4', { harmonics: 1, gain: 0.4, env: { a: 0.05, tau: 0.3, r: 0.1 } })],
+  },
+  {
+    file: 'ritual_breath_exhale', reverb: { decay: 0.5, mix: 0.25 },
+    events: [G(0, 0.6, 'G4', 'C4', { harmonics: 1, gain: 0.5, env: { a: 0.04, tau: 0.5, r: 0.15 } })],
+  },
+  {
+    file: 'ritual_breath_cycle', reverb: { decay: 0.8, mix: 0.3 },
+    events: [T(0, 0.4, 'C5', { harmonics: 2, gain: 0.4 }), T(0.14, 0.4, 'E5', { harmonics: 2, gain: 0.35 }),
+             T(0.28, 0.6, 'G5', { harmonics: 2, gain: 0.3, env: { tau: 0.3 } })],
+  },
 ];
+
 
 /* ── 短音效渲染 ── */
 export function renderFx(def) {

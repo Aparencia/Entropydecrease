@@ -99,6 +99,11 @@ export const SOUND_DEFINITIONS: SoundDefinition[] = [
   { id: 'rate_remember', name: '评分-记得', category: 'pomodoro', filePath: '/sounds/rate_remember.wav' },
   { id: 'rate_fuzzy', name: '评分-模糊', category: 'pomodoro', filePath: '/sounds/rate_fuzzy.wav' },
   { id: 'rate_forgot', name: '评分-忘记', category: 'pomodoro', filePath: '/sounds/rate_forgot.wav' },
+  // 仪式呼吸引导音（v0.26.0 A2.3）
+  { id: 'ritual_breath_inhale', name: '仪式-吸气', category: 'pomodoro', filePath: '/sounds/ritual_breath_inhale.wav' },
+  { id: 'ritual_breath_hold', name: '仪式-屏息', category: 'pomodoro', filePath: '/sounds/ritual_breath_hold.wav' },
+  { id: 'ritual_breath_exhale', name: '仪式-呼气', category: 'pomodoro', filePath: '/sounds/ritual_breath_exhale.wav' },
+  { id: 'ritual_breath_cycle', name: '仪式-圈满', category: 'pomodoro', filePath: '/sounds/ritual_breath_cycle.wav' },
 
   // 界面音效
   { id: 'ui_click', name: '通用点击', category: 'ui', filePath: '/sounds/ui_click.wav' },
