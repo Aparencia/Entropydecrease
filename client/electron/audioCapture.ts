@@ -9,6 +9,11 @@
  * 5. PCM 数据块通过 IPC 回传主进程，添加单调时间戳后推送给消费者
  *
  * @ai-context: 系统音频捕获：渲染进程 getDisplayMedia 采集、主进程聚合分块。
+ *
+ * TODO(现场课程): 当前仅支持系统音频环回（捕获电脑播放的声音，适配网课场景）。
+ * 后续「现场课程」需扩展麦克风输入源：listAudioSources 增加枚举
+ * navigator.mediaDevices 的 audioinput 设备，getUserMedia 直接以 deviceId
+ * 采集麦克风，并与环回源并列供用户选择（或双路混合）。
  */
 
 import { desktopCapturer, DesktopCapturerSource, BrowserWindow } from 'electron';
@@ -122,14 +127,18 @@ export class AudioCapture {
    * 开始音频捕获
    *
    * 1. 如果未指定 sourceId，自动选择第一个可用的系统音频源
-   * 2. 向渲染进程发送启动指令（含 sourceId + 配置）
-   * 3. 渲染进程负责 getUserMedia 和音频切片
+   * 2. 方案A：若指定的是窗口源（window:xxx），优先尝试窗口级音频捕获，
+   *    同时解析一个屏幕环回源作为降级候选（Windows 上窗口源音频支持
+   *    依赖 Chromium 版本，失败时渲染进程自动回退环回源）
+   * 3. 向渲染进程发送启动指令（含 sourceId + fallbackSourceId + 配置）
+   * 4. 渲染进程负责 getUserMedia 和音频切片
    */
   async start(win: BrowserWindow, sourceId?: string): Promise<void> {
     if (this.capturing || this.disposed) return;
 
     // 解析音频源
     let resolvedSourceId = sourceId ?? null;
+    let fallbackSourceId: string | null = null;
     if (!resolvedSourceId) {
       const sources = await listAudioSources();
       if (sources.length === 0) {
@@ -138,6 +147,15 @@ export class AudioCapture {
       }
       resolvedSourceId = sources[0].id;
       logger.info(`[AudioCapture] 自动选择音频源: ${sources[0].name} (${resolvedSourceId})`);
+    } else if (resolvedSourceId.startsWith('window:')) {
+      // 方案A：窗口源直采目标应用（如 B站客户端/浏览器）的音频，
+      // 预解析屏幕环回源作为降级候选，防御窗口级捕获不受支持的环境
+      const sources = await listAudioSources();
+      fallbackSourceId = sources[0]?.id ?? null;
+      logger.info(
+        `[AudioCapture] 方案A 窗口源音频捕获: ${resolvedSourceId}, ` +
+        `降级候选: ${fallbackSourceId ?? '无'}`,
+      );
     }
 
     this.capturing = true;
@@ -153,6 +171,7 @@ export class AudioCapture {
     if (!win.isDestroyed()) {
       win.webContents.send('audio_capture_do_start', {
         sourceId: resolvedSourceId,
+        fallbackSourceId,
         options: this.options,
       });
     }

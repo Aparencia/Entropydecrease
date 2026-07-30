@@ -4,6 +4,14 @@
  * @ai-context
  * Path B 通过 RMS 能量检测将连续语音切段，
  * 每段完成后立即触发 onSegmentReady 回调，支持流式 ASR 转写。
+ * @ai-context: 校准仅对 microphone 源生效；loopback（网课系统环回）为数字
+ * 信号无环境底噪，构造时直接标记已校准并使用预设阈值，不进入校准期
+ * （避免 UI 出现无意义的"正在校准音频阈值"提示）。
+ *
+ * TODO(现场课程): 背景噪声校准为「现场课程」麦克风输入场景预留——麦克风
+ * 存在真实环境底噪（空调/键盘/人声嘈杂），自适应阈值届时才真正发挥作用。
+ * 现场课程实现时以 sourceType: 'microphone' 构造启用校准，并将校准结果
+ * 持久化供下次会话作为初始阈值（避免每次启动等待 10 块采样期），请勿删除。
  */
 
 import type { AudioChunkData, AudioSegment, TimelineEntry } from './captureTypes';
@@ -14,19 +22,37 @@ import { encodeWavBase64 } from './wavEncoder';
 // ================================================================
 
 export interface VADMarkerConfig {
-  /** RMS 能量阈值，超过视为有语音，默认 0.01（校准后自适应调整） */
+  /** RMS 能量阈值，超过视为有语音，默认 0.01（microphone 校准后自适应调整） */
   energyThreshold: number;
-  /** 静音持续超过此时长视为语音段结束（ms），默认 1500 */
+  /** 静音持续超过此时长视为语音段结束（ms），默认 800（对齐主流流式 ASR 断句延迟） */
   silenceDurationMs: number;
   /** 最短语音时长（ms），低于则丢弃，默认 300 */
   minSpeechDurationMs: number;
+  /**
+   * 最长语音段时长（ms），达到即强制分段，默认 28000——
+   * 保证段长兼容 GLM-ASR 备选（≤30s 硬限制），也避免长段拉高转写延迟
+   */
+  maxSpeechDurationMs: number;
+  /**
+   * 音频源类型：loopback（系统环回，网课默认）跳过背景噪声校准；
+   * microphone（现场课程麦克风）启用前 N 块自适应校准
+   */
+  sourceType: 'loopback' | 'microphone';
 }
 
 const DEFAULT_VAD_MARKER_CONFIG: VADMarkerConfig = {
   energyThreshold: 0.01,
-  silenceDurationMs: 1500,
+  silenceDurationMs: 800,
   minSpeechDurationMs: 300,
+  maxSpeechDurationMs: 28_000,
+  sourceType: 'loopback',
 };
+
+/**
+ * loopback 预设阈值：与校准下限一致。数字环回静音时 RMS≈0，
+ * 校准结果恒为 max(0.008, ~0×2.5)=0.008，故直接预设省去校准期
+ */
+const LOOPBACK_ENERGY_THRESHOLD = 0.008;
 
 // ================================================================
 // VADMarker
@@ -68,7 +94,7 @@ export class VADMarker {
   private lastSampleRate = 16_000;
   private lastChannels = 1;
 
-  // ── 自适应阈值校准 ──
+  // ── 自适应阈值校准（仅 microphone 源启用，见文件头 TODO(现场课程)）──
   private calibrationSamples: number[] = [];
   private calibrated = false;
   private readonly CALIBRATION_CHUNKS = 10;
@@ -76,6 +102,14 @@ export class VADMarker {
 
   constructor(config?: Partial<VADMarkerConfig>) {
     this.config = { ...DEFAULT_VAD_MARKER_CONFIG, ...config };
+    // 网课模式（loopback）：数字环回无环境底噪，跳过校准直接用预设阈值，
+    // UI 不再出现"正在校准音频阈值"提示
+    if (this.config.sourceType === 'loopback') {
+      if (config?.energyThreshold === undefined) {
+        this.config.energyThreshold = LOOPBACK_ENERGY_THRESHOLD;
+      }
+      this.calibrated = true;
+    }
   }
 
   /**
@@ -97,7 +131,8 @@ export class VADMarker {
     }
     const rmsEnergy = Math.sqrt(sumSquares / samples.length);
 
-    // ── 自适应阈值校准：前 N 个块计算背景噪声底噪 ──
+    // ── 自适应阈值校准：前 N 个块计算背景噪声底噪（仅 microphone 源，
+    // loopback 在构造时已标记 calibrated，不进入此分支）──
     if (!this.calibrated) {
       this.calibrationSamples.push(rmsEnergy);
       if (this.calibrationSamples.length >= this.CALIBRATION_CHUNKS) {
@@ -124,6 +159,12 @@ export class VADMarker {
       this.speechBuffer.push(new Float32Array(samples));
       this.energyAccumulator += rmsEnergy;
       this.energySampleCount++;
+
+      // 连续语音达到最长段限制：强制分段（兼容 GLM-ASR ≤30s，降低长段转写延迟），
+      // 下一个有声块会自动开启新段，语音内容不丢失
+      if (now - this.speechStartTime >= this.config.maxSpeechDurationMs) {
+        this.finalizeSpeechSegment(now);
+      }
     } else if (this.isSpeaking) {
       // 静音中，判断是否超过静音阈值
       const silenceElapsed = now - this.lastVoiceTime;
@@ -171,7 +212,8 @@ export class VADMarker {
     this.energyAccumulator = 0;
     this.energySampleCount = 0;
     this.calibrationSamples = [];
-    this.calibrated = false;
+    // loopback 无需校准，复位后仍保持已校准状态
+    this.calibrated = this.config.sourceType === 'loopback';
     this.processedChunks = 0;
   }
 

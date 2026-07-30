@@ -10,6 +10,11 @@
  * 累积到 chunkDurationMs 再整块发送，保证 VAD/ASR 拿到完整音频段。
  * @ai-context: 健康 watchdog 区分两种故障——"开始后 15s 从未收到音频块"
  * （管道未启动）与"曾正常但中断 >10s"（设备变更/被抢占），各自独立提示。
+ * @ai-context: 静音诊断/窗口源回退/设备变更自动重启见 useAudioRecovery。
+ *
+ * TODO(现场课程): 当前音频源固定为系统环回/窗口源（网课场景）。现场课程需
+ * 支持麦克风输入：getUserMedia({ audio: { deviceId } }) 直采 audioinput 设备，
+ * 并启用 VADMarker 的背景噪声校准（见 vadMarker.ts 同名 TODO）。
  */
 import { useState, useEffect, useRef } from 'react';
 import type { AudioChunkData, CaptureMode, SessionStatus, CaptureManager } from '@/lib/capture';
@@ -23,6 +28,8 @@ const CHUNK_GAP_TIMEOUT_MS = 10000;
 
 interface AudioStartPayload {
   sourceId: string;
+  /** 方案A 窗口源不可用时的环回降级候选（主进程解析） */
+  fallbackSourceId?: string | null;
   options: { sampleRate: number; channels: number; chunkDurationMs: number };
 }
 
@@ -37,6 +44,30 @@ interface UseClassroomAudioOptions {
   status: SessionStatus;
   mode: CaptureMode;
   onNotify: (type: 'warning' | 'error', message: string) => void;
+}
+
+/**
+ * 以桌面源打开系统/窗口音频流。
+ * 方案A 防御：窗口源（window:xxx）音频捕获在部分 Windows/Chromium 环境
+ * 不受支持（NotFoundError/NotAllowedError），失败时自动回退环回降级候选。
+ */
+async function openDesktopAudioStream(payload: AudioStartPayload): Promise<MediaStream> {
+  const request = (id: string) => navigator.mediaDevices.getUserMedia({
+    audio: {
+      chromeMediaSource: 'desktop',
+      chromeMediaSourceId: id,
+    } as MediaTrackConstraintSet,
+  });
+  try {
+    return await request(payload.sourceId);
+  } catch (err) {
+    if (!payload.fallbackSourceId) throw err;
+    console.warn(
+      `[useClassroomCapture] 窗口源音频捕获失败(${payload.sourceId})，回退系统环回:`,
+      err,
+    );
+    return request(payload.fallbackSourceId);
+  }
 }
 
 export function useClassroomAudio({ captureManager, status, mode, onNotify }: UseClassroomAudioOptions) {
@@ -121,12 +152,8 @@ export function useClassroomAudio({ captureManager, status, mode, onNotify }: Us
       const payload = args[0] as AudioStartPayload;
       (async () => {
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              chromeMediaSource: 'desktop',
-              chromeMediaSourceId: payload.sourceId,
-            } as MediaTrackConstraintSet,
-          });
+          // 方案A：优先窗口源直采，失败自动回退环回降级候选
+          const stream = await openDesktopAudioStream(payload);
           const audioCtx = new AudioContext({ sampleRate: payload.options.sampleRate });
           // 关键修复：非用户手势调用栈中创建的 AudioContext 默认 suspended，
           // 必须显式 resume()，否则 onaudioprocess 永不触发（0 音频块）。

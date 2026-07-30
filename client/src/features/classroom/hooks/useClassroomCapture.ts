@@ -21,6 +21,7 @@ import type {
 } from '@/lib/capture';
 import { useClassroomEvents } from './useClassroomEvents';
 import { useClassroomAudio } from './useClassroomAudio';
+import { useAudioRecovery } from './useAudioRecovery';
 import { useWindowWatcher } from './useWindowWatcher';
 import { useSessionControl } from './useSessionControl';
 import { useClassroomAnalysis } from './useClassroomAnalysis';
@@ -59,7 +60,8 @@ export function useClassroomCapture() {
   const { selectedWindow } = windowWatcher;
 
   useEffect(() => {
-    if (!window.electronAPI || !selectedWindow) {
+    // 仅音频模式无截图采集，清空重启回调防止帧 watchdog 误重启截图
+    if (!window.electronAPI || !selectedWindow || mode === 'audio') {
       frameRestartRef.current = null;
       return;
     }
@@ -77,7 +79,7 @@ export function useClassroomCapture() {
         console.error('[useClassroomCapture] 保底重启失败:', err);
       }
     };
-  }, [selectedWindow, config.screenshotInterval, status]);
+  }, [selectedWindow, config.screenshotInterval, status, mode]);
 
   // CaptureManager 单例
   const captureManager = useMemo(
@@ -102,6 +104,11 @@ export function useClassroomCapture() {
 
   const { audioHealth, audioCleanupRef } = useClassroomAudio({
     captureManager, status, mode, onNotify: notify,
+  });
+
+  // 音频自动恢复：静音诊断 / 窗口源回退环回 / 设备变更重启
+  useAudioRecovery({
+    status, mode, audioSourceId: selectedWindow?.id, onNotify: notify,
   });
 
   const analysis = useClassroomAnalysis({

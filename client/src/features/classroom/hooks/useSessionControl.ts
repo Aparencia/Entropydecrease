@@ -67,8 +67,9 @@ export function useSessionControl({
   const probeGateway = useCallback(async () => {
     try {
       const gatewayUrl = requireGatewayUrl();
+      // GET 而非 HEAD：网关中间件对 HEAD 返回 405，会导致每次启动误报"网关不可用"
       const healthResp = await fetch(`${gatewayUrl}/health`, {
-        method: 'HEAD',
+        method: 'GET',
         signal: AbortSignal.timeout(5000),
       });
       if (!healthResp.ok) {
@@ -106,10 +107,15 @@ export function useSessionControl({
       }
 
       const audioEnabled = mode === 'audio' || mode === 'mixed';
-      await window.electronAPI.invoke('screen_capture_start', {
-        windowId: selectedWindow.id,
-        interval: config.screenshotInterval,
-      });
+      const visionEnabled = mode !== 'audio';
+      // 仅音频模式不启动截图采集：无视觉需求时截图纯属资源浪费，
+      // 且会让"帧"计数在音频模式下持续增长造成困惑
+      if (visionEnabled) {
+        await window.electronAPI.invoke('screen_capture_start', {
+          windowId: selectedWindow.id,
+          interval: config.screenshotInterval,
+        });
+      }
       await captureManager.startSession({
         windowId: selectedWindow.id,
         windowTitle: selectedWindow.title,
@@ -124,8 +130,11 @@ export function useSessionControl({
 
       if (audioEnabled) {
         try {
+          // 方案A：优先以选中窗口为音频源（直采 B站客户端/浏览器等目标应用声音），
+          // 窗口级捕获不受支持时主进程会下发环回降级候选，由渲染端自动回退
           const audioResult = await window.electronAPI.invoke('audio_capture_start', {
             chunkDurationMs: 5000, sampleRate: 16000, channels: 1,
+            sourceId: selectedWindow.id,
           }) as IPCAudioStartResult;
           if (!audioResult.success) {
             console.warn('[useClassroomCapture] Audio start failed:', audioResult.error);
