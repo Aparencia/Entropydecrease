@@ -49,7 +49,9 @@ RATE_LIMITS: dict[str, int] = {
     "evaluate": 10,
     "recommend": 15,
     "vision_extract": 20,
-    "transcribe": 30,
+    # 课堂实时转录为段级高频调用（VAD 每 5-30s 产生一段，一节课数百段），
+    # 对齐主流 ASR 按时长计费模式放宽次数限制；中间件对其豁免全局每日总量
+    "transcribe": 600,
     "tag_content": 30,
     "optimize_card": 15,
     "feynman_question": 15,

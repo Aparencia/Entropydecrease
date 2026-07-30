@@ -35,12 +35,16 @@ PATH_TO_FEATURE: dict[str, str] = {
     "/api/v1/ai/evaluate-explanation": "evaluate",
     "/api/v1/ai/recommend-duration": "recommend",
     "/api/v1/ai/vision": "vision_extract",
-    "/api/v1/ai/transcribe": "transcribe",
+    "/api/v1/asr/transcribe": "transcribe",
     "/api/v1/ai/tag-content": "tag_content",
     "/api/v1/ai/optimize-card": "optimize_card",
     "/api/v1/ai/feynman-question": "feynman_question",
     "/api/v1/ai/feynman-evaluate-answers": "feynman_evaluate",
 }
+
+# 豁免全局每日总量的功能：段级高频调用（如课堂实时转录一节课数百段），
+# 若计入 daily_total 会在几分钟内耗尽全部 AI 配额，仅受各自功能级上限约束
+GLOBAL_EXEMPT_FEATURES: frozenset[str] = frozenset({"transcribe"})
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -183,6 +187,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 "请明天再试，或升级套餐获取更多配额。"
             )
 
+        # 段级高频功能豁免全局每日总量（仅受功能级上限约束）
+        if feature in GLOBAL_EXEMPT_FEATURES:
+            return True, ""
+
         # ---- 第二层：全局每日总量限制（预检查，仅读取） ----
         global_key = f"rate_limit:{user_id}:global:{today}"
         try:
@@ -235,6 +243,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             await cache.increment(feature_key, expire=ttl)
         except Exception as exc:
             logger.warning("频率限制计数失败(功能级): %s", exc)
+
+        # 段级高频功能不计入全局每日总量
+        if feature in GLOBAL_EXEMPT_FEATURES:
+            return
 
         # ---- 第二层：全局每日总量计数 ----
         global_key = f"rate_limit:{user_id}:global:{today}"

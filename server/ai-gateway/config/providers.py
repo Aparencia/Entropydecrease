@@ -29,7 +29,7 @@ AI_PROVIDERS: dict = {
             "summary": "qwen-plus",         # 笔记摘要
             "flashcard": "qwen-plus",        # 闪卡生成（JSON Mode 稳定）
             "vision": "qwen2.5-vl-72b-instruct",  # 多模态视觉提取（课堂助手主力，百炼标准标识符）
-            "asr": "paraformer-v2",          # 语音转文字（Paraformer）
+            "asr": "qwen3-asr-flash",        # 语音转文字（OpenAI 兼容模式仅支持 Qwen3-ASR-Flash 系列）
             "anchor": "qwen-plus",           # 记忆锚点生成
             "socratic": "qwen-plus",         # 苏格拉底追问
             "predict": "qwen-plus",          # 预测驱动学习
@@ -52,7 +52,7 @@ AI_PROVIDERS: dict = {
         "models": {
             "free": "glm-4.6v-flash",       # 免费，多模态（文本+视觉），128K 上下文
             "vision": "glm-4.6v-flash",     # 多模态视觉（免费），128K 上下文
-            "asr": "glm-4-audio",            # 语音转文字
+            "asr": "glm-asr",                # 语音转文字（GLM-ASR，端点 audio/transcriptions）
         },
     },
     "gemini": {

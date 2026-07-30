@@ -6,15 +6,30 @@
  * 与全站一致；Note.content 存储 TipTap JSON（Markdown 需先转换）。
  * 采集序号从已有笔记内容中反查"YYYY/M/D 第N次采集"标记的最大值 +1，
  * 使同一天多次采集可追加到同一篇笔记且分段可读。
+ * @ai-context: 落地前先经 resolveKeyframeMarkers 把 [图:N] 标记替换为
+ * 本地关键帧图片（keyframe:// URL），无标记时按时间就近兜底插入。
  */
 import { useCallback } from 'react';
 import { noteStore } from '@/lib/storage';
 import { createWithLog, updateWithLog } from '@/lib/storage/writeWithLog';
 import { markdownToTipTapJson, appendMarkdownToTipTapJson } from '../utils/tipTapConverter';
+import { resolveKeyframeMarkers } from '../utils/tipTapImageUtils';
 import type { CourseNoteItem } from '../components/NoteInsertDialog';
-import type { CourseMeta } from '@/lib/capture';
+import type { CourseMeta, SessionBundle } from '@/lib/capture';
 
-export function useClassroomNotes(courseMeta: CourseMeta) {
+export function useClassroomNotes(courseMeta: CourseMeta, smartBundle?: Partial<SessionBundle>) {
+  /** [图:N] 标记 → 关键帧图片替换（相对秒数与 analyzePartial 同基准：首帧 timestamp） */
+  const applyKeyframeImages = useCallback((markdown: string): string => {
+    const kfs = smartBundle?.keyframes ?? [];
+    if (kfs.length === 0) return markdown;
+    const base = kfs[0].timestamp;
+    const refs = kfs.map((kf) => ({
+      fileUrl: kf.fileUrl,
+      relativeSeconds: Math.max(0, (kf.timestamp - base) / 1000),
+    }));
+    return resolveKeyframeMarkers(markdown, refs);
+  }, [smartBundle]);
+
   /** 查询同课程名的已有笔记（用于"追加到已有笔记"下拉列表） */
   const fetchCourseNotes = useCallback(async (courseName: string): Promise<CourseNoteItem[]> => {
     if (!courseName) return [];
@@ -41,19 +56,19 @@ export function useClassroomNotes(courseMeta: CourseMeta) {
     const mergedContent = appendMarkdownToTipTapJson(
       existing?.content ?? '',
       sessionLabel,
-      markdownContent,
+      applyKeyframeImages(markdownContent),
     );
     await updateWithLog(noteStore, 'notes', noteId, {
       content: mergedContent,
       updatedAt: new Date(),
       wordCount: markdownContent.length,
     });
-  }, []);
+  }, [applyKeyframeImages]);
 
   /** 创建新的课程笔记（Markdown 转 TipTap JSON） */
   const createCourseNote = useCallback(async (title: string, markdownContent: string) => {
     const now = new Date();
-    const tipTapContent = markdownToTipTapJson(markdownContent);
+    const tipTapContent = markdownToTipTapJson(applyKeyframeImages(markdownContent));
     await createWithLog(noteStore, 'notes', {
       title,
       content: tipTapContent,
@@ -64,7 +79,7 @@ export function useClassroomNotes(courseMeta: CourseMeta) {
       wordCount: markdownContent.length,
       pinned: false,
     });
-  }, [courseMeta]);
+  }, [courseMeta, applyKeyframeImages]);
 
   /** 计算当天同课程的采集序号（用于"第N次采集"标签） */
   const getSessionSeq = useCallback(async (): Promise<number> => {

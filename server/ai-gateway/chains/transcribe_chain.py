@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class TranscribeChain:
     """语音转文字处理链"""
 
-    def __init__(self, provider: AIProvider, model: str = "paraformer-v2"):
+    def __init__(self, provider: AIProvider, model: str = "qwen3-asr-flash"):
         self.provider = provider
         self.model = model
 
@@ -73,7 +73,7 @@ class TranscribeChain:
                 "segments": [{"start": 0.0, "end": 2.5, "text": "..."}],
                 "language": "zh",
                 "confidence": 0.95,
-                "model": "paraformer-v2",
+                "model": "qwen3-asr-flash",
                 "latency_ms": 500,
             }
         """

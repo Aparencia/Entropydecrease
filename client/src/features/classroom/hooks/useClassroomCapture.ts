@@ -21,6 +21,7 @@ import type {
 } from '@/lib/capture';
 import { useClassroomEvents } from './useClassroomEvents';
 import { useClassroomAudio } from './useClassroomAudio';
+import { useAudioRecovery } from './useAudioRecovery';
 import { useWindowWatcher } from './useWindowWatcher';
 import { useSessionControl } from './useSessionControl';
 import { useClassroomAnalysis } from './useClassroomAnalysis';
@@ -59,7 +60,8 @@ export function useClassroomCapture() {
   const { selectedWindow } = windowWatcher;
 
   useEffect(() => {
-    if (!window.electronAPI || !selectedWindow) {
+    // 仅音频模式无截图采集，清空重启回调防止帧 watchdog 误重启截图
+    if (!window.electronAPI || !selectedWindow || mode === 'audio') {
       frameRestartRef.current = null;
       return;
     }
@@ -77,7 +79,7 @@ export function useClassroomCapture() {
         console.error('[useClassroomCapture] 保底重启失败:', err);
       }
     };
-  }, [selectedWindow, config.screenshotInterval, status]);
+  }, [selectedWindow, config.screenshotInterval, status, mode]);
 
   // CaptureManager 单例
   const captureManager = useMemo(
@@ -104,16 +106,22 @@ export function useClassroomCapture() {
     captureManager, status, mode, onNotify: notify,
   });
 
+  // 音频自动恢复：静音诊断 / 窗口源回退环回 / 设备变更重启
+  useAudioRecovery({
+    status, mode, audioSourceId: selectedWindow?.id, onNotify: notify,
+  });
+
   const analysis = useClassroomAnalysis({
     language: config.language,
     smartBundle: events.smartBundle,
     setSmartBundle: events.setSmartBundle,
     videoFilePath: events.videoFilePath,
     recordingStatus: events.recordingStatus,
+    captureSessionIdRef: events.captureSessionIdRef,
     onWarn: (message) => notify('warning', message),
   });
 
-  const notes = useClassroomNotes(courseMeta);
+  const notes = useClassroomNotes(courseMeta, events.smartBundle);
 
   /** 开始采集前重置本轮会话数据 */
   const resetForStart = useCallback(() => {

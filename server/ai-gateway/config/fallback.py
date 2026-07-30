@@ -25,7 +25,7 @@ PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
     "evaluate":       ["glm", "deepseek", "fallback"],    # GLM（免费）优先，DeepSeek 备选
     "recommend":      ["glm", "deepseek", "fallback"],    # GLM（免费）优先，DeepSeek 备选
     "vision_extract": ["qwen", "glm"],                   # Qwen-VL-Max（百炼）优先，GLM-4V 备选
-    "transcribe":     ["qwen", "glm", "fallback"],       # Qwen Paraformer 优先，GLM 备选
+    "transcribe":     ["qwen", "glm", "fallback"],       # Qwen3-ASR-Flash 优先，GLM-ASR 备选
     "tag_content":    ["glm", "deepseek", "fallback"],    # GLM（免费）优先，DeepSeek 备选
     "optimize_card":  ["glm", "qwen", "fallback"],       # GLM（免费）优先，Qwen 备选
     "feynman_question": ["deepseek", "glm", "fallback"], # DeepSeek 为主，GLM 备选

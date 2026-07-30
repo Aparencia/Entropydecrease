@@ -1,0 +1,183 @@
+/**
+ * SmartSampler 感知哈希去重集成测试
+ *
+ * @ai-context
+ * 中文：jsdom 不提供 OffscreenCanvas / createImageBitmap，此处通过
+ * vi.stubGlobal 注入可控 mock：imageBuffer 首字节作为 seed，mock 的
+ * getImageData 按 seed 生成确定性灰度图案，从而精确控制帧间 dHash
+ * 汉明距离（seed1↔seed2 距离 64，seed1↔seed3 距离 3）。
+ * English: jsdom lacks OffscreenCanvas / createImageBitmap; controllable
+ * mocks are injected via vi.stubGlobal. The first byte of imageBuffer acts
+ * as a seed, and the mocked getImageData renders deterministic grayscale
+ * patterns per seed, giving precise control over inter-frame dHash Hamming
+ * distances (seed1↔seed2 = 64, seed1↔seed3 = 3).
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { SmartSampler } from './smartSampler';
+import type { ScreenshotData } from './captureTypes';
+
+// ================================================================
+// Mock：按 seed 生成确定性像素图案
+// ================================================================
+
+/** seed → 灰度图案：1=递增渐变；2=递减渐变（距 seed1 64 位）；3=距 seed1 3 位 */
+function grayForSeed(seed: number, x: number, y: number, width: number): number {
+  if (seed === 2) return (width - 1 - x) * 10;
+  if (seed === 3 && y === 0) return [30, 20, 10, 0, 10, 20, 30, 40, 50][x];
+  return x * 10;
+}
+
+class MockCtx {
+  private seed = 0;
+
+  drawImage(bitmap: { seed: number }): void {
+    this.seed = bitmap.seed;
+  }
+
+  getImageData(_x: number, _y: number, w: number, h: number): { data: Uint8ClampedArray } {
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const g = grayForSeed(this.seed, x, y, w);
+        const o = (y * w + x) * 4;
+        data[o] = data[o + 1] = data[o + 2] = g;
+        data[o + 3] = 255;
+      }
+    }
+    return { data };
+  }
+}
+
+class MockOffscreenCanvas {
+  private readonly ctx = new MockCtx();
+
+  constructor(public width: number, public height: number) {}
+
+  getContext(): MockCtx {
+    return this.ctx;
+  }
+
+  async convertToBlob(): Promise<Blob> {
+    return new Blob(['jpeg-mock'], { type: 'image/jpeg' });
+  }
+}
+
+/** 构造 ScreenshotData，imageBuffer 首字节为 seed */
+function makeFrame(seed: number, changeScore: number, hasChanged = true): ScreenshotData {
+  return {
+    imageBuffer: new Uint8Array([seed]).buffer,
+    width: 100,
+    height: 80,
+    hasChanged,
+    changeScore,
+  };
+}
+
+// ================================================================
+// 测试
+// ================================================================
+
+describe('SmartSampler 感知哈希去重', () => {
+  beforeEach(() => {
+    vi.stubGlobal('OffscreenCanvas', MockOffscreenCanvas);
+    vi.stubGlobal('createImageBitmap', async (blob: Blob) => {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      return { seed: bytes[0] ?? 0, width: 100, height: 80, close: vi.fn() };
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('连续相同帧仅采集 1 帧', async () => {
+    const sampler = new SmartSampler();
+    const f1 = await sampler.processFrame(makeFrame(1, 0.5));
+    expect(f1).not.toBeNull();
+
+    const f2 = await sampler.processFrame(makeFrame(1, 0.5));
+    expect(f2).toBeNull();
+    expect(sampler.getKeyframes()).toHaveLength(1);
+  });
+
+  it('内容不同的帧正常捕获', async () => {
+    const sampler = new SmartSampler();
+    const f1 = await sampler.processFrame(makeFrame(1, 0.5));
+    const f2 = await sampler.processFrame(makeFrame(2, 0.5));
+    expect(f1).not.toBeNull();
+    expect(f2).not.toBeNull();
+    expect(sampler.getKeyframes()).toHaveLength(2);
+  });
+
+  it('定时兜底触发同样去重，且跳过时重置兜底计时', async () => {
+    const nowSpy = vi.spyOn(Date, 'now');
+    const debugSpy = vi.spyOn(console, 'debug');
+    const sampler = new SmartSampler();
+
+    nowSpy.mockReturnValue(1_000_000);
+    await sampler.processFrame(makeFrame(1, 0.5));
+    expect(sampler.getKeyframes()).toHaveLength(1);
+
+    // 16s 后静止画面触发兜底 → 感知哈希判定重复，跳过
+    nowSpy.mockReturnValue(1_016_000);
+    const f2 = await sampler.processFrame(makeFrame(1, 0, false));
+    expect(f2).toBeNull();
+    expect(debugSpy).toHaveBeenCalledWith(
+      '[SmartSampler] 跳过帧：感知哈希重复',
+      expect.stringContaining('distance='),
+      expect.stringContaining('dupThreshold='),
+      expect.any(String),
+    );
+
+    // 跳过时已重置 lastCaptureTime：100ms 后的帧不再触发兜底判定
+    debugSpy.mockClear();
+    nowSpy.mockReturnValue(1_016_100);
+    const f3 = await sampler.processFrame(makeFrame(1, 0, false));
+    expect(f3).toBeNull();
+    expect(debugSpy).toHaveBeenCalledWith('[SmartSampler] 跳过帧：未满足捕获条件');
+    expect(sampler.getKeyframes()).toHaveLength(1);
+  });
+
+  it('小差异帧（距离 3 ≤ 常规阈值 5）被跳过', async () => {
+    const sampler = new SmartSampler();
+    await sampler.processFrame(makeFrame(1, 0.5));
+    const f2 = await sampler.processFrame(makeFrame(3, 0.5));
+    expect(f2).toBeNull();
+    expect(sampler.getKeyframes()).toHaveLength(1);
+  });
+
+  it('渐进板书帧使用收紧阈值：距离 3 > 2 仍正常捕获', async () => {
+    const sampler = new SmartSampler();
+    await sampler.processFrame(makeFrame(1, 0.5));
+    // score 0.15 → writing 区间且由变化触发，收紧阈值 2 < 距离 3 → 捕获
+    const f2 = await sampler.processFrame(makeFrame(3, 0.15));
+    expect(f2).not.toBeNull();
+    expect(f2!.changeType).toBe('writing');
+    expect(sampler.getKeyframes()).toHaveLength(2);
+  });
+
+  it('changeThreshold 提升至 0.12：0.08–0.12 区间的变化不再触发落帧', async () => {
+    const nowSpy = vi.spyOn(Date, 'now');
+    const sampler = new SmartSampler();
+
+    nowSpy.mockReturnValue(1_000_000);
+    await sampler.processFrame(makeFrame(1, 0.5));
+
+    // 100ms 后变化分数 0.1（旧阈值会触发）→ 不满足新阈值且未到兜底间隔
+    nowSpy.mockReturnValue(1_000_100);
+    const f2 = await sampler.processFrame(makeFrame(2, 0.1));
+    expect(f2).toBeNull();
+    expect(sampler.getKeyframes()).toHaveLength(1);
+  });
+
+  it('reset 后哈希状态清空，相同帧可重新捕获', async () => {
+    const sampler = new SmartSampler();
+    await sampler.processFrame(makeFrame(1, 0.5));
+    sampler.reset();
+    const f2 = await sampler.processFrame(makeFrame(1, 0.5));
+    expect(f2).not.toBeNull();
+    expect(sampler.getKeyframes()).toHaveLength(1);
+  });
+});

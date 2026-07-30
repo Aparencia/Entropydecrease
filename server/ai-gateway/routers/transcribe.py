@@ -2,9 +2,10 @@
 熵减 AI 网关 — ASR 语音转写路由
 
 POST /api/v1/asr/transcribe
-调用 Paraformer / GLM-4-Audio 等 ASR 模型将语音转写为文本。
+调用 Qwen3-ASR-Flash / GLM-ASR 等 ASR 模型将语音转写为文本。
 
-@ai-context: 语音转写路由：音频转文字（Paraformer/GLM-Audio），经 fallback 链。
+@ai-context: 语音转写路由：音频转文字（Qwen3-ASR-Flash/GLM-ASR），经 fallback 链。
+fallback 降级时通过 warning 字段透传提示，客户端据此识别失败而非静默当作"无语音"。
 """
 
 import time
@@ -48,6 +49,7 @@ class TranscribeResponse(BaseModel):
     confidence: float = Field(..., description="置信度 0-1")
     model_used: str = Field(..., description="使用的模型名称")
     processing_time_ms: int = Field(..., description="请求耗时（毫秒）")
+    warning: str | None = Field(default=None, description="降级提示（fallback 时透传，客户端据此识别失败）")
 
 
 # ============================================================
@@ -60,8 +62,8 @@ async def transcribe_audio(request: Request, body: TranscribeRequest) -> Transcr
     """
     将音频数据转写为文本
 
-    - 优先使用阿里云 Paraformer（低延迟中文 ASR）
-    - 备选 GLM-4-Audio
+    - 优先使用阿里云 Qwen3-ASR-Flash（OpenAI 兼容模式，低延迟中文 ASR）
+    - 备选 GLM-ASR
     - 返回转写文本、时间分段、置信度
     """
     start_time = time.monotonic()
@@ -113,6 +115,11 @@ async def transcribe_audio(request: Request, body: TranscribeRequest) -> Transcr
         len(result.get("text", "")), result.get("confidence", 0.0),
     )
 
+    # fallback 降级时透传 warning，供客户端识别失败（而非静默当作"无语音"）
+    warning = result.get("warning") or (
+        "ASR 服务降级，转写结果不可用" if result.get("model") == "fallback" else None
+    )
+
     return TranscribeResponse(
         text=result.get("text", ""),
         segments=segments,
@@ -120,4 +127,5 @@ async def transcribe_audio(request: Request, body: TranscribeRequest) -> Transcr
         confidence=result.get("confidence", 0.0),
         model_used=result.get("model", "unknown"),
         processing_time_ms=latency_ms,
+        warning=warning,
     )

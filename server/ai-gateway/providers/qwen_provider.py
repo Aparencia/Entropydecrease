@@ -11,7 +11,6 @@ QwenVisionMixin（qwen_vision.py）多重继承引入。错误分类器
 _handle_provider_error 定义于 qwen_vision.py 并由本文件复用。
 """
 
-import base64
 import time
 import logging
 from typing import Any, AsyncGenerator
@@ -105,31 +104,46 @@ class QwenProvider(AIProvider, QwenVisionMixin):
         language: str = "zh",
         sample_rate: int = 16000,
         channels: int = 1,
-        model: str = "paraformer-v2",
+        model: str = "qwen3-asr-flash",
     ) -> dict[str, Any]:
         """
-        调用阿里云 DashScope Paraformer 语音转文字
+        调用阿里云百炼 Qwen3-ASR-Flash 语音转文字
 
-        通过 OpenAI 兼容的 audio transcription 接口调用 Paraformer 模型。
+        @ai-context: DashScope 的 OpenAI 兼容模式仅 Qwen3-ASR-Flash 系列支持
+        ASR（Paraformer 仅支持原生异步 API 且要求公网音频 URL，无法直传）。
+        官方调用规范：chat.completions + input_audio 内容块（Base64 Data URL，
+        编码后 ≤10MB），语言经 extra_body.asr_options.language 指定，
+        language="auto" 时不传该字段由模型自动检测。
         """
         start_time = time.monotonic()
 
         try:
-            audio_bytes = base64.b64decode(audio_base64)
-            import io
-            audio_file = io.BytesIO(audio_bytes)
-            audio_file.name = "audio.wav"
+            # 音频以 Data URL 内嵌（客户端上送 WAV/PCM base64）
+            data_uri = f"data:audio/wav;base64,{audio_base64}"
+            # ITN 开启：数字/单位规范化（"三点一四"→"3.14"），对齐主流 ASR 默认行为，
+            # 课堂场景公式/数据密集，规范化文本对笔记质量至关重要
+            asr_options: dict[str, Any] = {"enable_itn": True}
+            if language != "auto":
+                asr_options["language"] = language
 
-            kwargs: dict[str, Any] = {
-                "model": model,
-                "file": audio_file,
-                "language": language if language != "auto" else "zh",
-            }
-
-            response = await self._client.audio.transcriptions.create(**kwargs)
+            response = await self._client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_audio", "input_audio": {"data": data_uri}},
+                        ],
+                    }
+                ],
+                extra_body={"asr_options": asr_options},
+            )
 
             latency_ms = int((time.monotonic() - start_time) * 1000)
-            text = response.text if hasattr(response, "text") else str(response)
+            # ASR 转写文本在 message.content 中返回
+            text = ""
+            if response.choices:
+                text = response.choices[0].message.content or ""
 
             logger.info(
                 "QwenProvider.transcribe 调用成功: model=%s, text_length=%d, latency=%dms",

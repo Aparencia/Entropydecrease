@@ -33,7 +33,7 @@ function stripInlineMd(s: string): string {
 
 /**
  * 将 Markdown 文本转换为 TipTap JSON 文档字符串
- * 支持：标题（#~######）、分隔线（---）、无序列表（- / *）、普通段落
+ * 支持：标题（#~######）、分隔线（---）、无序列表（- / *）、图片（![alt](src)）、普通段落
  */
 export function markdownToTipTapJson(md: string): string {
   const lines = md.split('\n');
@@ -72,6 +72,18 @@ export function markdownToTipTapJson(md: string): string {
     if (/^(-{3,}|\*{3,})$/.test(trimmed)) {
       flushList();
       nodes.push({ type: 'horizontalRule' });
+      continue;
+    }
+
+    // 图片：独立一行的 ![alt](src)
+    // 编辑器 Image 扩展为 inline 模式，image 节点需包裹在 paragraph 内
+    const img = trimmed.match(/^!\[([^\]]*)\]\(([^()\s]+)\)$/);
+    if (img) {
+      flushList();
+      nodes.push({
+        type: 'paragraph',
+        content: [{ type: 'image', attrs: { src: img[2], alt: img[1] } }],
+      });
       continue;
     }
 

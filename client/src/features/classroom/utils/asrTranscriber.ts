@@ -21,11 +21,23 @@ interface TranscribePayload {
   channels: number;
 }
 
-/** ASR 转写（15s 超时，失败后最多重试 1 次，指数退避） */
+/** 转写响应（与后端 TranscribeResponse 对应的关键字段） */
+interface TranscribeResponse {
+  text: string;
+  model_used?: string;
+  warning?: string | null;
+}
+
+/** ASR 转写（15s 超时，失败后最多重试 1 次，指数退避）；fallback 降级响应视为失败抛错 */
 export async function transcribeWithRetry(payload: TranscribePayload, retries = 1): Promise<string | null> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const resp = await aiClient.post<{ text: string }>('/api/v1/asr/transcribe', payload, { timeout: 15000 });
+      const resp = await aiClient.post<TranscribeResponse>('/api/v1/asr/transcribe', payload, { timeout: 15000 });
+      // fallback 降级响应（含 warning 或 fallback 空文本）按失败处理：
+      // 抛错进入重试，最终由上层 markFailure 健康监测捕获，不再静默当作"无语音"
+      if (resp.warning || (!resp.text?.trim() && resp.model_used === 'fallback')) {
+        throw new Error(resp.warning || 'ASR 服务降级，转写结果为空');
+      }
       return resp.text?.trim() || null;
     } catch (err) {
       if (attempt < retries) {

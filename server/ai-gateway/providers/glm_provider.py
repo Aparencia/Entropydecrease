@@ -114,12 +114,15 @@ class GLMProvider(AIProvider):
         language: str = "zh",
         sample_rate: int = 16000,
         channels: int = 1,
-        model: str = "glm-4-audio",
+        model: str = "glm-asr",
     ) -> dict[str, Any]:
         """
-        调用智谱 GLM-4-Audio 语音转文字
+        调用智谱 GLM-ASR 语音转文字
 
-        通过 OpenAI 兼容的 audio transcription 接口调用。
+        @ai-context: 官方端点 POST {base_url}/audio/transcriptions（multipart），
+        经 OpenAI 兼容 SDK 的 audio.transcriptions.create 调用。官方参数仅
+        model/file(或 file_base64)/prompt/hotwords/stream，不支持 language，
+        故不传；音频限制 wav/mp3、≤25MB、时长 ≤30 秒。
         """
         start_time = time.monotonic()
 
@@ -132,7 +135,6 @@ class GLMProvider(AIProvider):
             kwargs: dict[str, Any] = {
                 "model": model,
                 "file": audio_file,
-                "language": language if language != "auto" else "zh",
             }
 
             response = await self._client.audio.transcriptions.create(**kwargs)
@@ -306,6 +308,8 @@ class GLMProvider(AIProvider):
                 "tokens_used": tokens_used,
                 "model": model,
                 "latency_ms": latency_ms,
+                # clamp 后实际生效的 max_tokens，供 chain 侧截断检测使用
+                "max_tokens": max_tokens,
             }
 
         except Exception as e:

@@ -156,8 +156,15 @@ _cache_instance: RedisCache | None = None
 
 
 def get_cache() -> RedisCache:
-    """获取全局缓存实例"""
+    """
+    获取全局缓存实例
+
+    @ai-context: 必须用 APP_CONFIG["redis_url"]（来自环境变量 REDIS_URL）构造，
+    容器部署时 Redis 位于独立容器（redis:6379，带密码），若用无参默认值
+    redis://localhost:6379/0 会永远连接失败，导致限流与响应缓存静默失效。
+    """
     global _cache_instance
     if _cache_instance is None:
-        _cache_instance = RedisCache()
+        from config import APP_CONFIG
+        _cache_instance = RedisCache(APP_CONFIG["redis_url"])
     return _cache_instance

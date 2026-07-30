@@ -28,6 +28,8 @@ import type {
 } from '@/lib/capture';
 import { analyzePartial } from '@/lib/ai/sessionAnalyzer';
 import { detectCourseFromFrame } from '@/lib/ai/courseDetector';
+import { remapKeyframeMarkers } from '../utils/tipTapImageUtils';
+import { persistKeyframeImage } from '../utils/keyframePersistence';
 import { transcribeWithRetry, toAsrLanguage, useAsrSemaphore } from '../utils/asrTranscriber';
 
 /** 触发一次增量分析所需的关键帧数 */
@@ -69,7 +71,21 @@ export function useClassroomEvents({
   const pendingKeyframesRef = useRef<KeyFrame[]>([]);
   const isPartialAnalyzingRef = useRef(false);
   const courseDetectedRef = useRef(false);
+  /** @ai-context 会话时间基准（epoch ms）：记录首帧 timestamp，供 analyzePartial 换算相对秒数 */
+  const sessionStartMsRef = useRef<number | null>(null);
+  /** 采集会话 ID（smart:keyframe 事件携带），供笔记持久化关联与关键帧图片清理 */
+  const captureSessionIdRef = useRef<string | null>(null);
+  /** 已派发增量分析的关键帧累计数，用于 [图:N] 局部编号 → 全局编号重映射 */
+  const analyzedKeyframeOffsetRef = useRef(0);
   const asr = useAsrSemaphore();
+
+  // 会话结束回到 idle 时重置时间基准（暂停/恢复不重置，避免相对时间戳跳变）
+  useEffect(() => {
+    if (status === 'idle') {
+      sessionStartMsRef.current = null;
+      analyzedKeyframeOffsetRef.current = 0;
+    }
+  }, [status]);
 
   // 提取结果
   useEffect(() => {
@@ -104,10 +120,18 @@ export function useClassroomEvents({
     const offKeyframe = captureEventBus.on<{ sessionId: string; keyframe: KeyFrame }>(
       'smart:keyframe',
       (data) => {
+        // 记录首帧时间作为会话时间基准（epoch ms）
+        if (sessionStartMsRef.current === null) {
+          sessionStartMsRef.current = data.keyframe.timestamp;
+        }
+        captureSessionIdRef.current = data.sessionId;
         setSmartBundle((prev) => ({
           ...prev,
           keyframes: [...(prev.keyframes ?? []), data.keyframe],
         }));
+
+        // 后台异步保存关键帧图片并回填 fileUrl（失败静默；分析后 imageBase64 仍会被清空）
+        persistKeyframeImage(data.sessionId, data.keyframe, setSmartBundle);
 
         // AI 课程识别：仅第 1 帧触发一次
         if (aiDetectEnabled && !courseDetectedRef.current) {
@@ -125,10 +149,14 @@ export function useClassroomEvents({
         pendingKeyframesRef.current.push(data.keyframe);
         if (pendingKeyframesRef.current.length >= INCREMENTAL_BATCH_SIZE && !isPartialAnalyzingRef.current) {
           const batch = pendingKeyframesRef.current.splice(0, INCREMENTAL_BATCH_SIZE);
+          // 记录本批在全量关键帧序列中的偏移（派发顺序即到达顺序）
+          const globalOffset = analyzedKeyframeOffsetRef.current;
+          analyzedKeyframeOffsetRef.current += batch.length;
           isPartialAnalyzingRef.current = true;
-          analyzePartial(batch, { language })
+          analyzePartial(batch, sessionStartMsRef.current ?? batch[0].timestamp, { language })
             .then((partial) => {
-              partialNotesRef.current.push(partial);
+              // [图:N] 批内局部编号 → 全局编号，供合并后统一替换图片
+              partialNotesRef.current.push(remapKeyframeMarkers(partial, globalOffset, batch.length));
               setPartialCount(partialNotesRef.current.length);
               // 分析完成，释放 keyframe imageBase64 内存
               const batchIds = new Set(batch.map((kf) => kf.id));
@@ -150,7 +178,10 @@ export function useClassroomEvents({
     );
     const offBundleReady = captureEventBus.on<{ sessionId: string; bundle: SessionBundle }>(
       'smart:bundle_ready',
-      (data) => setSmartBundle(data.bundle),
+      (data) => {
+        captureSessionIdRef.current = data.sessionId;
+        setSmartBundle(data.bundle);
+      },
     );
     return () => { offKeyframe(); offBundleReady(); };
   }, [language, aiDetectEnabled, setCourseMeta]);
@@ -264,5 +295,6 @@ export function useClassroomEvents({
     videoFilePath, setVideoFilePath,
     partialCount, setPartialCount, transcribedCount,
     partialNotesRef, pendingKeyframesRef, isPartialAnalyzingRef,
+    captureSessionIdRef,
   };
 }

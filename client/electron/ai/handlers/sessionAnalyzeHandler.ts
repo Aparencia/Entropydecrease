@@ -37,6 +37,8 @@ function register(): void {
           audioText: string | null;
         }>;
         duration: number;          // 已转为秒
+        /** 分析模式：full 全量 / partial 增量片段（网关据此选择 Prompt 模板） */
+        mode?: 'full' | 'partial';
         language?: string;
         authToken?: string;
         userApiKey?: string;
@@ -45,7 +47,7 @@ function register(): void {
       const startMs = Date.now();
       const kfCount = args.keyframes?.length ?? 0;
       const segCount = args.audioSegments?.length ?? 0;
-      logger.info(`[AI] [session-analyze] IPC received: keyframes=${kfCount}, audioSegments=${segCount}, duration=${args.duration}s, language=${args.language ?? 'zh'}, hasAuth=${!!args.authToken}`);
+      logger.info(`[AI] [session-analyze] IPC received: keyframes=${kfCount}, audioSegments=${segCount}, duration=${args.duration}s, mode=${args.mode ?? 'full'}, language=${args.language ?? 'zh'}, hasAuth=${!!args.authToken}`);
 
       const reqBody = {
         keyframes: args.keyframes.map(kf => ({
@@ -59,6 +61,7 @@ function register(): void {
           audio_text: seg.audioText,
         })),
         duration: args.duration,
+        mode: args.mode ?? 'full',
         language: args.language ?? 'zh',
       };
 

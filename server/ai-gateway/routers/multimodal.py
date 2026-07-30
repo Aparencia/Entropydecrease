@@ -20,6 +20,7 @@ from fastapi import APIRouter, HTTPException, Request
 from config import call_with_fallback_for_request
 from chains.multimodal_analyze_chain import MultimodalAnalyzeChain
 from prompts.session_analyze import MERGE_NOTES_SYSTEM_PROMPT, build_merge_prompt
+from utils.text_dedup import dedup_paragraphs
 from routers.multimodal_schemas import (
     AnalyzeSessionRequest,
     AnalyzeSessionResponse,
@@ -58,8 +59,8 @@ async def analyze_session(
     user_id = getattr(request.state, "user_id", "anonymous")
 
     logger.info(
-        "多模态分析请求: user=%s, keyframes=%d, audio_segments=%d, duration=%.1fs",
-        user_id, len(body.keyframes), len(body.audio_segments), body.duration,
+        "多模态分析请求: user=%s, keyframes=%d, audio_segments=%d, duration=%.1fs, mode=%s",
+        user_id, len(body.keyframes), len(body.audio_segments), body.duration, body.mode,
     )
 
     # ---- 输入校验 ----
@@ -101,6 +102,7 @@ async def analyze_session(
             audio_text=audio_text,
             duration=int(body.duration),
             course_meta=body.course_meta,
+            mode=body.mode,
         )
 
     try:
@@ -215,6 +217,10 @@ async def merge_notes(
             inner = inner[:-3].strip()
         if "```" not in inner:
             content = inner
+
+    # @ai-context 模型合并后仍可能残留重复段落，做一次段落级 Jaccard 去重兜底
+    # (paragraph-level dedup as safety net after model merge)
+    content = dedup_paragraphs(content)
 
     return MergeNotesResponse(
         content=content,

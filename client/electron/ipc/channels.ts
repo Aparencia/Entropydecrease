@@ -56,6 +56,10 @@ export const IPC_CHANNELS = {
   // 文件系统
   FS_READ_FILE: 'fs:read-file',
 
+  // 课堂关键帧图片持久化
+  KEYFRAME_SAVE: 'keyframe_save',
+  KEYFRAME_CLEANUP: 'keyframe_cleanup',
+
   // 存储路径
   STORAGE_CHANGE_PATH: 'storage:change-path',
   STORAGE_GET_ACTIVE_PATH: 'storage:get-active-path',

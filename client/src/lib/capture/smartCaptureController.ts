@@ -30,7 +30,9 @@ export class SmartCaptureController {
   start(sessionId: string): void {
     this.smartStartTime = Date.now();
     this.smartSampler = new SmartSampler();
-    this.vadMarker = new VADMarker();
+    // 网课模式固定 loopback 源：跳过背景噪声校准，直接使用预设阈值
+    // TODO(现场课程): 麦克风输入时改为 sourceType: 'microphone' 启用校准
+    this.vadMarker = new VADMarker({ sourceType: 'loopback' });
 
     // 流式 ASR：语音段完成后立即发射事件，由上层 Hook 触发转写
     this.vadMarker.onSegmentReady = (segment) => {

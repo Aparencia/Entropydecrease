@@ -2,7 +2,7 @@
  * ASR 语音转写 Worker
  *
  * 实现 PipelineWorker 接口，将音频块发送给 ASR 模型进行语音转文字。
- * 通过 ai-gateway 的 /api/v1/asr/transcribe 端点调用 Paraformer / GLM-4-Audio。
+ * 通过 ai-gateway 的 /api/v1/asr/transcribe 端点调用 Qwen3-ASR-Flash / GLM-ASR。
  *
  * @ai-context: 语音转写 Worker 封装，供智能采集链路调用。
  */
@@ -32,6 +32,7 @@ interface TranscribeApiResponse {
   confidence: number;
   model_used: string;
   processing_time_ms: number;
+  warning?: string | null;
 }
 
 // ================================================================
@@ -67,7 +68,13 @@ export class ASRWorker implements PipelineWorker {
       },
     );
 
-    // 空结果跳过
+    // fallback 降级响应（含 warning 或 fallback 空文本）视为失败：
+    // 抛错交由 Pipeline 错误隔离与日志，不再静默当作"无语音"跳过
+    if (response.warning || (!response.text?.trim() && response.model_used === 'fallback')) {
+      throw new Error(response.warning || 'ASR 服务降级，转写结果为空');
+    }
+
+    // 空结果跳过（正常无语音）
     if (!response.text || response.text.trim() === '') {
       return null;
     }

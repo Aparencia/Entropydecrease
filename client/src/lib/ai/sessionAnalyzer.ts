@@ -29,6 +29,8 @@ interface TranscribeResponse {
   text: string;
   confidence: number;
   model_used: string;
+  /** 网关 ASR 降级时携带的警告信息（gateway warning on ASR fallback） */
+  warning?: string;
 }
 
 /**
@@ -50,6 +52,9 @@ async function transcribeSegment(
         channels: 1,
       },
     );
+    // @ai-context ASR fallback 空响应不视为成功转写，避免污染分析上下文
+    // (ASR fallback empty response must not be treated as success)
+    if (resp.warning || resp.model_used === 'fallback') return null;
     return resp.text?.trim() || null;
   } catch (e) {
     console.warn('[sessionAnalyzer] 音频段转写失败:', e);
@@ -67,15 +72,25 @@ async function transcribeSegment(
  */
 export async function analyzeSession(
   bundle: SessionBundle,
-  options?: { language?: string },
+  options?: { language?: string; sessionId?: string },
 ): Promise<AnalyzeResult> {
   // 鉴权获取
   const { data: { session } } = await supabase.auth.getSession();
   const userKey = getActiveUserKey();
 
-  // 构造 IPC 参数（camelCase，ms → s）
+  // 构造 IPC 参数（camelCase，epoch ms → 课程内相对秒数）
+  // @ai-context KeyFrame.timestamp 为 epoch 毫秒，直接 /1000 会被网关格式化为
+  // 巨大分钟数；与 analyzePartial / applyKeyframeImages 统一以首帧 timestamp
+  // 为基准做差（negative clamped to 0），无关键帧时才回退到首音频段
+  const sessionStartMs = bundle.keyframes.length > 0
+    ? bundle.keyframes[0].timestamp
+    : bundle.audioSegments.length > 0
+      ? bundle.audioSegments[0].timestampStart
+      : 0;
+  const toRelativeSeconds = (ms: number) => Math.max(0, (ms - sessionStartMs) / 1000);
+
   const keyframes = bundle.keyframes.map((kf) => ({
-    timestamp: kf.timestamp / 1000,
+    timestamp: toRelativeSeconds(kf.timestamp),
     imageBase64: kf.imageBase64,
     changeType: kf.changeType,
   }));
@@ -84,8 +99,8 @@ export async function analyzeSession(
   const lang = options?.language === 'en' ? 'en' : options?.language === 'mixed' ? 'auto' : 'zh';
   const audioSegments = await Promise.all(
     bundle.audioSegments.map(async (seg) => ({
-      timestampStart: seg.timestampStart / 1000,
-      timestampEnd: seg.timestampEnd / 1000,
+      timestampStart: toRelativeSeconds(seg.timestampStart),
+      timestampEnd: toRelativeSeconds(seg.timestampEnd),
       audioText: seg.audioText ?? await transcribeSegment(seg, lang),
     })),
   );
@@ -109,7 +124,8 @@ export async function analyzeSession(
   // 自动持久化分析结果
   try {
     await classroomNoteStore.create({
-      sessionId: crypto.randomUUID(),
+      // 优先使用真实采集 sessionId（供关键帧图片目录关联清理），缺省时保持随机 UUID
+      sessionId: options?.sessionId ?? crypto.randomUUID(),
       title: `课堂笔记 ${new Date().toLocaleString('zh-CN')}`,
       content: analyzeResult.content,
       keyframesAnalyzed: analyzeResult.keyframesAnalyzed,
@@ -131,16 +147,19 @@ export async function analyzeSession(
 /**
  * 小批次关键帧增量分析，返回 Markdown 片段笔记
  * 复用现有 ai_session_analyze IPC（小批次走单 chunk 路径，本身就快）
+ * @param sessionStartMs 会话开始的 epoch 毫秒，用于换算课程内相对秒数
  */
 export async function analyzePartial(
   keyframes: KeyFrame[],
+  sessionStartMs: number,
   options?: { language?: string },
 ): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
   const userKey = getActiveUserKey();
 
+  // @ai-context 时间戳以会话开始时刻为基准换算为相对秒数（relative seconds）
   const kfPayload = keyframes.map((kf) => ({
-    timestamp: kf.timestamp / 1000,
+    timestamp: Math.max(0, (kf.timestamp - sessionStartMs) / 1000),
     imageBase64: kf.imageBase64,
     changeType: kf.changeType,
   }));
@@ -151,6 +170,7 @@ export async function analyzePartial(
     duration: keyframes.length > 0
       ? (keyframes[keyframes.length - 1].timestamp - keyframes[0].timestamp) / 1000
       : 0,
+    mode: 'partial',
     language: options?.language,
     authToken: session?.access_token,
     userApiKey: userKey,
@@ -168,7 +188,7 @@ export async function analyzePartial(
  */
 export async function mergeNotes(
   partials: string[],
-  options?: { duration?: number; language?: string },
+  options?: { duration?: number; language?: string; sessionId?: string },
 ): Promise<AnalyzeResult> {
   const { data: { session } } = await supabase.auth.getSession();
   const userKey = getActiveUserKey();
@@ -191,7 +211,8 @@ export async function mergeNotes(
   // 自动持久化
   try {
     await classroomNoteStore.create({
-      sessionId: crypto.randomUUID(),
+      // 优先使用真实采集 sessionId（供关键帧图片目录关联清理），缺省时保持随机 UUID
+      sessionId: options?.sessionId ?? crypto.randomUUID(),
       title: `课堂笔记 ${new Date().toLocaleString('zh-CN')}`,
       content: analyzeResult.content,
       keyframesAnalyzed: 0,
