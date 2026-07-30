@@ -2,18 +2,24 @@
  * 智能采样器 — Path B 轻量采集核心
  *
  * @ai-context
- * Path B 不做逐帧 AI 推理，而是通过变化检测 + 定时间隔筛选出关键帧，
- * 再用 Canvas API 压缩为 JPEG base64，大幅降低存储与传输开销。
+ * 中文：Path B 不做逐帧 AI 推理，而是通过变化检测 + 定时间隔筛选出关键帧，
+ * 落帧前用感知哈希（dHash）与上一关键帧比对去重（静止画面不再被定时兜底
+ * 重复采集），再用 Canvas API 压缩为 JPEG base64，大幅降低存储与传输开销。
+ * English: Path B skips per-frame AI inference; keyframes are selected via
+ * change detection + periodic fallback, deduplicated against the last
+ * captured keyframe using a perceptual dHash before compression, then
+ * JPEG-encoded via Canvas API to cut storage/transfer cost.
  */
 
 import type { ScreenshotData, KeyFrame } from './captureTypes';
+import { computeFrameHash, hammingDistance, isSimilar } from './frameHash';
 
 // ================================================================
 // 配置类型
 // ================================================================
 
 export interface SmartSamplerConfig {
-  /** 变化分数阈值，高于此值视为画面切换，默认 0.08 */
+  /** 变化分数阈值，高于此值视为画面切换，默认 0.12 */
   changeThreshold: number;
   /** 定时间隔兜底（ms），超过则强制抓帧，默认 15000 */
   periodicIntervalMs: number;
@@ -24,11 +30,16 @@ export interface SmartSamplerConfig {
 }
 
 const DEFAULT_CONFIG: SmartSamplerConfig = {
-  changeThreshold: 0.08,
+  changeThreshold: 0.12,
   periodicIntervalMs: 15_000,
   jpegQuality: 0.7,
   maxWidth: 1280,
 };
+
+/** 感知哈希去重阈值：与上一关键帧汉明距离 ≤ 5（64 位）视为重复帧，跳过 */
+const HASH_DUP_THRESHOLD = 5;
+/** 渐进板书帧（变化触发且 0 < score < 0.3）收紧阈值：距离 ≤ 2 才跳过，避免漏采渐进内容 */
+const WRITING_HASH_DUP_THRESHOLD = 2;
 
 // ================================================================
 // SmartSampler
@@ -38,6 +49,8 @@ export class SmartSampler {
   private readonly config: SmartSamplerConfig;
   private keyframes: KeyFrame[] = [];
   private lastCaptureTime = 0;
+  /** 上一已捕获关键帧的感知哈希，用于帧间内容去重 */
+  private lastFrameHash: bigint | null = null;
 
   constructor(config?: Partial<SmartSamplerConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -83,7 +96,39 @@ export class SmartSampler {
       periodicTrigger,
     );
 
-    const imageBase64 = await this.compressToJpegBase64(frameData);
+    // 只解码一次 ImageBitmap，供感知哈希与 JPEG 压缩共用，避免重复解码
+    const bitmap = await createImageBitmap(
+      new Blob([frameData.imageBuffer], { type: 'image/png' }),
+    );
+
+    // 感知哈希去重：与上一已捕获关键帧比较，定时兜底触发同样走此去重
+    const hash = await computeFrameHash(bitmap);
+    if (hash !== null && this.lastFrameHash !== null) {
+      // 渐进板书帧收紧跳过阈值，避免漏采渐进内容
+      const isWritingChange = hasSignificantChange && changeType === 'writing';
+      const dupThreshold = isWritingChange
+        ? WRITING_HASH_DUP_THRESHOLD
+        : HASH_DUP_THRESHOLD;
+      if (isSimilar(hash, this.lastFrameHash, dupThreshold)) {
+        console.debug(
+          '[SmartSampler] 跳过帧：感知哈希重复',
+          `distance=${hammingDistance(hash, this.lastFrameHash)}`,
+          `dupThreshold=${dupThreshold}`,
+          `writing=${isWritingChange}`,
+        );
+        bitmap.close();
+        // 重置兜底计时，静止画面不再每帧重复触发兜底判定
+        this.lastCaptureTime = now;
+        return null;
+      }
+      console.debug(
+        '[SmartSampler] 感知哈希判定为新内容',
+        `distance=${hammingDistance(hash, this.lastFrameHash)}`,
+      );
+    }
+
+    const imageBase64 = await this.compressToJpegBase64(bitmap, frameData);
+    bitmap.close();
 
     const keyframe: KeyFrame = {
       id: crypto.randomUUID(),
@@ -94,6 +139,7 @@ export class SmartSampler {
 
     this.keyframes.push(keyframe);
     this.lastCaptureTime = now;
+    if (hash !== null) this.lastFrameHash = hash;
     return keyframe;
   }
 
@@ -106,6 +152,7 @@ export class SmartSampler {
   reset(): void {
     this.keyframes = [];
     this.lastCaptureTime = 0;
+    this.lastFrameHash = null;
   }
 
   // ================================================================
@@ -130,14 +177,18 @@ export class SmartSampler {
   }
 
   /**
-   * 将 PNG ArrayBuffer 压缩为 JPEG base64
+   * 将已解码的 ImageBitmap 压缩为 JPEG base64
    *
    * @ai-context
    * 渲染进程没有 sharp 等原生模块，使用 OffscreenCanvas + toBlob 实现
-   * 硬件加速的 GPU 友好压缩，避免主线程阻塞。
+   * 硬件加速的 GPU 友好压缩，避免主线程阻塞。位图由调用方解码并负责
+   * close()，以便与感知哈希共用同一次解码结果。
    */
-  private async compressToJpegBase64(frameData: ScreenshotData): Promise<string> {
-    const { imageBuffer, width, height } = frameData;
+  private async compressToJpegBase64(
+    bitmap: ImageBitmap,
+    frameData: ScreenshotData,
+  ): Promise<string> {
+    const { width, height } = frameData;
     const { maxWidth, jpegQuality } = this.config;
 
     // 等比缩放
@@ -145,19 +196,14 @@ export class SmartSampler {
     const targetW = Math.round(width * scale);
     const targetH = Math.round(height * scale);
 
-    // PNG ArrayBuffer → ImageBitmap（零拷贝解码）
-    const bitmap = await createImageBitmap(new Blob([imageBuffer], { type: 'image/png' }));
-
     const canvas = new OffscreenCanvas(targetW, targetH);
     const ctx = canvas.getContext('2d');
     if (!ctx) {
       // Fallback：2D 上下文获取失败时返回空字符串，由调用方决定是否跳过
-      bitmap.close();
       return '';
     }
 
     ctx.drawImage(bitmap, 0, 0, targetW, targetH);
-    bitmap.close();
 
     const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: jpegQuality });
     return blobToBase64(blob);

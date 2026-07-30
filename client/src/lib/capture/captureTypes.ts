@@ -146,6 +146,8 @@ export interface KeyFrame {
   timestamp: number;
   imageBase64: string;
   changeType: 'slide_change' | 'writing' | 'scene_change' | 'periodic';
+  /** 图片本地持久化后的可渲染 URL（keyframe:// 协议），保存失败时缺省 */
+  fileUrl?: string;
 }
 
 /** @ai-context VAD 标记器切出的语音段，含编码后的音频数据，支持流式 ASR 转写 */

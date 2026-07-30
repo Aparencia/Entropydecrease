@@ -32,11 +32,13 @@ interface UseClassroomAnalysisOptions {
   setSmartBundle: React.Dispatch<React.SetStateAction<Partial<SessionBundle>>>;
   videoFilePath: string | null;
   recordingStatus: RecordingStatus | null;
+  /** 真实采集会话 ID（关联笔记与关键帧图片目录），缺省时持久化处退化为随机 UUID */
+  captureSessionIdRef?: React.MutableRefObject<string | null>;
   onWarn: (message: string) => void;
 }
 
 export function useClassroomAnalysis({
-  language, smartBundle, setSmartBundle, videoFilePath, recordingStatus, onWarn,
+  language, smartBundle, setSmartBundle, videoFilePath, recordingStatus, captureSessionIdRef, onWarn,
 }: UseClassroomAnalysisOptions) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalyzeResult | null>(null);
@@ -55,7 +57,10 @@ export function useClassroomAnalysis({
         timeline: smartBundle.timeline ?? [],
         duration: smartBundle.duration ?? 0,
       };
-      const result = await analyzeSession(fullBundle, { language });
+      const result = await analyzeSession(fullBundle, {
+        language,
+        sessionId: captureSessionIdRef?.current ?? undefined,
+      });
       setAnalysisResult(result);
       // 全量分析完成，释放所有 keyframe imageBase64 内存
       setSmartBundle((prev) => ({
@@ -67,7 +72,7 @@ export function useClassroomAnalysis({
     } finally {
       setIsAnalyzing(false);
     }
-  }, [smartBundle, language, setSmartBundle]);
+  }, [smartBundle, language, setSmartBundle, captureSessionIdRef]);
 
   /** Path C：视频分析 */
   const handleVideoAnalyze = useCallback(async (filePath?: string) => {
@@ -97,12 +102,16 @@ export function useClassroomAnalysis({
       const result = await mergeNotes(partials, {
         duration: durationMs / 1000,
         language,
+        sessionId: captureSessionIdRef?.current ?? undefined,
       });
       setAnalysisResult(result);
     } catch {
       // 降级：本地拼接片段笔记（无需 AI，零网络，避免全量重发）
+      // 为每个片段插入分隔标题，避免拼接后内容边界不清
       setAnalysisResult({
-        content: partials.join('\n\n---\n\n'),
+        content: partials
+          .map((p, idx) => `## 片段 ${idx + 1}\n\n${p.trim()}`)
+          .join('\n\n---\n\n'),
         keyframesAnalyzed: keyframeCount,
         modelUsed: 'local-concat',
       });
@@ -110,7 +119,7 @@ export function useClassroomAnalysis({
     } finally {
       setIsAnalyzing(false);
     }
-  }, [language, onWarn]);
+  }, [language, onWarn, captureSessionIdRef]);
 
   const handleDismissAnalysis = useCallback(() => {
     setAnalysisResult(null);

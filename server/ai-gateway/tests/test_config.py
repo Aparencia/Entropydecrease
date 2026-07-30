@@ -141,7 +141,7 @@ class TestResolveModelName:
         """主 Provider 使用 MODEL_ROUTING 指定的 slot"""
         assert _resolve_model_name("glm", "summarize") == "glm-4.6v-flash"
         assert _resolve_model_name("deepseek", "evaluate") == "deepseek-chat"
-        assert _resolve_model_name("qwen", "transcribe") == "paraformer-v2"
+        assert _resolve_model_name("qwen", "transcribe") == "qwen3-asr-flash"
 
     def test_fallback_provider_uses_feature_or_free_slot(self):
         """fallback 到非主 Provider 时，优先使用功能 slot，否则使用 free slot"""

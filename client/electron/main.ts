@@ -35,6 +35,7 @@ import { loadEnvironment } from './envLoader.js';
 import { installCspPolicy } from './cspPolicy.js';
 import { registerDbIpcHandlers } from './db/dbIpcHandlers.js';
 import { registerStorageIpcHandlers } from './storageIpcHandlers.js';
+import { registerKeyframeScheme, registerKeyframeIpcHandlers } from './ipc/keyframeStorage.js';
 
 // ================================================================
 // 性能优化：启用 GPU 光栅化与零拷贝
@@ -59,6 +60,9 @@ if (process.platform === 'darwin') {
 // 环境变量加载（详见 envLoader.ts）
 // ================================================================
 loadEnvironment(__dirname);
+
+// keyframe:// 特权 scheme 注册（必须在 app ready 前，详见 ipc/keyframeStorage.ts）
+registerKeyframeScheme();
 
 // ================================================================
 // 模块级状态
@@ -139,6 +143,8 @@ if (!gotTheLock) {
     // 数据访问与存储/备份 IPC（详见 db/dbIpcHandlers.ts、storageIpcHandlers.ts）
     registerDbIpcHandlers();
     registerStorageIpcHandlers();
+    // 课堂关键帧图片持久化 IPC + keyframe:// 协议（详见 ipc/keyframeStorage.ts）
+    registerKeyframeIpcHandlers();
 
     // 隐藏默认 Electron 菜单栏
     Menu.setApplicationMenu(null);

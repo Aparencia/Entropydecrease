@@ -55,8 +55,24 @@ export const classroomNoteStore = {
   },
 
   async delete(id: string): Promise<void> {
+    const note = await db.classroomNotes.get(id);
     await db.classroomNotes.delete(id);
     // v1.2.0: 删除搜索索引
     try { await dexieSearchIndexer.remove(id, 'classroom'); } catch { /* 忽略 */ }
+    // 清理该会话的本地关键帧图片目录（仅桌面端，失败静默）
+    // 同一采集会话可能产生多条笔记（全量分析 + 片段合并共用 sessionId），
+    // 仅当没有其他笔记仍引用该 sessionId 时才执行清理
+    if (note?.sessionId && typeof window !== 'undefined' && window.electronAPI) {
+      try {
+        const otherRefs = await db.classroomNotes
+          .where('sessionId').equals(note.sessionId)
+          .filter((n) => n.id !== id)
+          .count();
+        if (otherRefs === 0) {
+          window.electronAPI.invoke('keyframe_cleanup', { sessionId: note.sessionId })
+            .catch(() => { /* 忽略 */ });
+        }
+      } catch { /* 忽略 */ }
+    }
   },
 };

@@ -44,16 +44,17 @@ export const FX_SOUNDS = [
   { file: 'pomodoro_start', events: [G(0, 0.35, 'C5', 'G4', { env: { a: 0.015, tau: 0.18 } }), N(0, 0.35, 'brown', { lp: 500, gain: 0.12 })] },
   { file: 'pomodoro_pause', events: [T(0, 0.12, 'E5', { harmonics: 1 })] },
   {
-    file: 'pomodoro_tick', peakScale: 0.55, // 极短低音量木鱼质感
-    events: [T(0, 0.04, 'A4', { harmonics: 2, env: { a: 0.005, tau: 0.008 } }), N(0, 0.015, 'white', { lp: 2500, hp: 800, gain: 0.25 })],
-  },
-  {
     file: 'pomodoro_tick_final', peakScale: 0.65, // tick 提高小三度（A4→C5）
     events: [T(0, 0.04, 'C5', { harmonics: 2, env: { a: 0.005, tau: 0.008 } }), N(0, 0.015, 'white', { lp: 3000, hp: 900, gain: 0.25 })],
   },
   { file: 'pomodoro_5min_warning', events: [T(0, 0.14, 'G5', { gain: 0.9, harmonics: 2 }), T(0.16, 0.2, 'E5', { harmonics: 2 })] },
   { file: 'pomodoro_work_complete', events: [T(0, 0.1, 'C5'), T(0.09, 0.1, 'E5'), T(0.18, 0.2, 'G5')] },
   { file: 'pomodoro_break_end', events: [T(0, 0.1, 'G4'), T(0.09, 0.18, 'C5')] },
+  {
+    file: 'pomodoro_complete', reverb: { decay: 0.7, mix: 0.28 }, // 整轮深潜完成：work_complete 琶音上延八度 C6，庆祝感强于单轮
+    events: [T(0, 0.12, 'C5', { harmonics: 3 }), T(0.1, 0.12, 'E5', { harmonics: 3 }),
+             T(0.2, 0.14, 'G5', { harmonics: 3 }), T(0.3, 0.42, 'C6', { harmonics: 4, env: { tau: 0.2 } })],
+  },
   { file: 'rate_remember', events: [T(0, 0.09, 'C5'), T(0.08, 0.14, 'E5')] },
   { file: 'rate_fuzzy', events: [T(0, 0.14, 'D5')] },
   { file: 'rate_forgot', events: [T(0, 0.09, 'E5'), T(0.08, 0.14, 'C5')] },

@@ -159,7 +159,9 @@ export function useSessionControl({
     if (session.pendingKeyframesRef.current.length > 0 && !session.isPartialAnalyzingRef.current) {
       try {
         const remaining = session.pendingKeyframesRef.current.splice(0);
-        const partial = await analyzePartial(remaining, { language: config.language });
+        // 与增量分析保持同一时间基准：会话首帧的 epoch 毫秒
+        const sessionStartMs = bundle.keyframes[0]?.timestamp ?? remaining[0].timestamp;
+        const partial = await analyzePartial(remaining, sessionStartMs, { language: config.language });
         session.partialNotesRef.current.push(partial);
         session.setPartialCount(session.partialNotesRef.current.length);
       } catch { /* 静默失败 */ }

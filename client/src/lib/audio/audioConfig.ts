@@ -91,11 +91,11 @@ export const SOUND_DEFINITIONS: SoundDefinition[] = [
   // 深潜音效
   { id: 'pomodoro_start', name: '深潜开始', category: 'pomodoro', filePath: '/sounds/pomodoro_start.wav' },
   { id: 'pomodoro_pause', name: '深潜暂停', category: 'pomodoro', filePath: '/sounds/pomodoro_pause.wav' },
-  { id: 'pomodoro_tick', name: '深潜滴答', category: 'pomodoro', filePath: '/sounds/pomodoro_tick.wav' },
   { id: 'pomodoro_tick_final', name: '深潜最终滴答', category: 'pomodoro', filePath: '/sounds/pomodoro_tick_final.wav' },
   { id: 'pomodoro_5min_warning', name: '5分钟提醒', category: 'pomodoro', filePath: '/sounds/pomodoro_5min_warning.wav' },
   { id: 'pomodoro_work_complete', name: '工作完成', category: 'pomodoro', filePath: '/sounds/pomodoro_work_complete.wav' },
   { id: 'pomodoro_break_end', name: '休息结束', category: 'pomodoro', filePath: '/sounds/pomodoro_break_end.wav' },
+  { id: 'pomodoro_complete', name: '整轮完成', category: 'pomodoro', filePath: '/sounds/pomodoro_complete.wav' },
   { id: 'rate_remember', name: '评分-记得', category: 'pomodoro', filePath: '/sounds/rate_remember.wav' },
   { id: 'rate_fuzzy', name: '评分-模糊', category: 'pomodoro', filePath: '/sounds/rate_fuzzy.wav' },
   { id: 'rate_forgot', name: '评分-忘记', category: 'pomodoro', filePath: '/sounds/rate_forgot.wav' },

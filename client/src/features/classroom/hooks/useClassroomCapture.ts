@@ -110,10 +110,11 @@ export function useClassroomCapture() {
     setSmartBundle: events.setSmartBundle,
     videoFilePath: events.videoFilePath,
     recordingStatus: events.recordingStatus,
+    captureSessionIdRef: events.captureSessionIdRef,
     onWarn: (message) => notify('warning', message),
   });
 
-  const notes = useClassroomNotes(courseMeta);
+  const notes = useClassroomNotes(courseMeta, events.smartBundle);
 
   /** 开始采集前重置本轮会话数据 */
   const resetForStart = useCallback(() => {

@@ -86,6 +86,9 @@ const ALLOWED_CHANNELS = [
   // AI 流式输出 IPC channel
   'ai:stream:start',
   'ai:stream:cancel',
+  // 课堂关键帧图片持久化 IPC channel
+  'keyframe_save',
+  'keyframe_cleanup',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */

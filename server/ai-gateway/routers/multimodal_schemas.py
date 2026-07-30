@@ -6,6 +6,8 @@
 联合分析）、merge-notes（增量片段合并）、analyze-video（视频分析）。
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -43,6 +45,10 @@ class AnalyzeSessionRequest(BaseModel):
     )
     output_format: str = Field(default="markdown", description="输出格式：markdown")
     language: str = Field(default="zh-CN", description="输出语言：zh-CN / en-US")
+    mode: Literal["full", "partial"] = Field(
+        default="full",
+        description="分析模式：full 全量课程分析 / partial 增量片段分析（仅输出片段知识点，不含全局信息）",
+    )
     course_meta: dict | None = Field(
         default=None,
         description="课程元数据（可选，含 course_name/subject/custom_terms）",
