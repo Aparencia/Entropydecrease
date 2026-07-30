@@ -3,6 +3,17 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.26.0](https://github.com/Aparencia/Entropydecrease/compare/v0.25.0...v0.26.0) (2026-07-30)
+
+### ✨ 新功能
+
+* **classroom:** 增强课堂会话分析管线（关键帧存储/帧去重/多模态优化） ([8733c87](https://github.com/Aparencia/Entropydecrease/commit/8733c87d89b2fe602abb0b0c7b0f70bcecf942d8))
+
+### 🐛 缺陷修复
+
+* **ai-gateway:** 修复 ASR 降级链断裂与 Redis 配置未生效 ([f7ddf96](https://github.com/Aparencia/Entropydecrease/commit/f7ddf96c388587986e006654ec867cab825fa95d))
+* **classroom:** 修复音频捕获静音无回退与仅音频模式误截图 ([dd996ba](https://github.com/Aparencia/Entropydecrease/commit/dd996ba57cb6b938a2b8556ac79533c55805bb5a))
+
 ## [0.25.0](https://github.com/Aparencia/Entropydecrease/compare/v0.24.0...v0.25.0) (2026-07-30)
 
 ### ✨ 新功能
