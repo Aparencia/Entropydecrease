@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.28.2](https://github.com/Aparencia/Entropydecrease/compare/v0.28.1...v0.28.2) (2026-07-30)
+
+### 🐛 缺陷修复
+
+* **release:** 解除 Windows Defender 对 rcedit 的文件锁并禁用 electron-builder 自发布 ([e009f53](https://github.com/Aparencia/Entropydecrease/commit/e009f5399cea6c0e25594ff666ad93dc44dc0897))
+
 ## [0.28.1](https://github.com/Aparencia/Entropydecrease/compare/v0.28.0...v0.28.1) (2026-07-30)
 
 ### 🐛 缺陷修复
