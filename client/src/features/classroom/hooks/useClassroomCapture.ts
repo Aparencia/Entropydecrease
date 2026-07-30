@@ -34,7 +34,8 @@ export function useClassroomCapture() {
   const [status, setStatus] = useState<SessionStatus>('idle');
   const [mode, setMode] = useState<CaptureMode>('mixed');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [capturePath, setCapturePath] = useState<CapturePath>('fine');
+  // 默认智能路径：AI 关键帧 + 流式 ASR，资源占用低，适用面最广
+  const [capturePath, setCapturePath] = useState<CapturePath>('smart');
   const [config, setConfig] = useState<CaptureSidebarConfig>({
     screenshotInterval: 5000,
     language: 'zh',
