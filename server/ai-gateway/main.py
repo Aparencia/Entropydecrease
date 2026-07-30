@@ -69,7 +69,15 @@ async def lifespan(app: FastAPI):
     # 初始化 Redis 连接
     cache = get_cache()
     await cache.connect()
-    logger.info("Redis 连接已建立")
+    # connect 内部失败时会降级（_client=None），此处按实际结果记录，
+    # 避免"连接已建立"的误导日志掩盖限流/缓存静默失效
+    if cache._client is not None:
+        logger.info("Redis 连接已建立")
+    else:
+        logger.error(
+            "Redis 连接失败，限流与响应缓存将全部降级失效（限流放行）。"
+            "请检查 REDIS_URL 环境变量与 redis 容器状态"
+        )
 
     # 初始化各 Provider 并检查 API Key 配置
     init_providers(app)

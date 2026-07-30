@@ -29,11 +29,21 @@ class ProviderUnavailableError(AIError):
 
 
 class RateLimitExceededError(AIError):
-    """频率限制超限"""
+    """
+    频率限制超限
+
+    @ai-context: limit=0 表示上游服务商返回 429（其配额/并发受限），
+    而非本项目的每日配额耗尽——两者文案必须区分，否则日志会出现
+    "已达上限（0 次）"这类自相矛盾的误导信息。
+    """
 
     def __init__(self, feature: str, limit: int):
+        if limit > 0:
+            message = f"今日 {feature} 功能使用次数已达上限（{limit} 次），请明天再试"
+        else:
+            message = f"{feature} 服务商当前访问量过大或配额受限（上游 429），请稍后重试"
         super().__init__(
-            message=f"今日 {feature} 功能使用次数已达上限（{limit} 次），请明天再试",
+            message=message,
             status_code=429,
             detail={"feature": feature, "limit": limit},
         )

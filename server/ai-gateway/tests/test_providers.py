@@ -183,6 +183,66 @@ class TestFallbackProvider:
         assert result["recommended_minutes"] == 25
         assert result["source"] == "local_rule"
 
+    @pytest.mark.asyncio
+    async def test_transcribe_accepts_feature_kwarg(self):
+        """
+        回归：transcribe 必须容忍 call_with_fallback 透传的 _feature 关键字。
+
+        云端 Provider 的 transcribe 由 with_retry_and_timeout 装饰并吞掉 _feature，
+        但 FallbackProvider 无装饰器，若签名不接受 **kwargs 会抛 TypeError，
+        导致 fallback 链最后一环失败、ASR 请求返回 503 而非降级响应。
+        """
+        # Arrange
+        provider = FallbackProvider()
+
+        # Act
+        result = await provider.transcribe(
+            audio_base64="ZmFrZQ==", language="zh", _feature="transcribe",
+        )
+
+        # Assert
+        assert result["model"] == "fallback"
+        assert result["text"] == ""
+        assert result["warning"]  # 必须透传降级提示供客户端识别失败
+
+    @pytest.mark.asyncio
+    async def test_transcribe_fallback_reachable_when_cloud_asr_fails(self):
+        """
+        回归：云端 ASR 全失败时，fallback 链末端必须能返回降级响应。
+
+        真实故障场景——Qwen 404 + GLM 400 后，若 FallbackProvider.transcribe
+        因签名不接受 _feature 抛 TypeError，整个请求会变成 503。
+        """
+        # Arrange：模拟 qwen/glm 的 transcribe 均失败，链末端为真实 FallbackProvider
+        class FailingASRProvider:
+            def __init__(self, name):
+                self.provider_name = name
+
+            async def transcribe(self, *args, **kwargs):
+                raise RuntimeError(f"{self.provider_name} ASR 上游故障")
+
+        app = MagicMock()
+        app.state.providers = {
+            "qwen": FailingASRProvider("qwen"),
+            "glm": FailingASRProvider("glm"),
+            "fallback": FallbackProvider(),
+        }
+
+        async def _run_chain(provider, model_name):
+            # 与 transcribe 路由一致：显式透传 _feature
+            return await provider.transcribe(
+                audio_base64="ZmFrZQ==", language="zh", model=model_name,
+                _feature="transcribe",
+            )
+
+        # Act
+        result, provider_key = await call_with_fallback(app, "transcribe", _run_chain)
+
+        # Assert
+        assert provider_key == "fallback"
+        assert result["model"] == "fallback"
+        assert result["warning"]
+
     def test_recommend_duration_fallback_short_history(self):
         history = [
             {"duration_minutes": 10, "completed": True},

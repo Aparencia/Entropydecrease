@@ -120,7 +120,9 @@ class QwenProvider(AIProvider, QwenVisionMixin):
         try:
             # 音频以 Data URL 内嵌（客户端上送 WAV/PCM base64）
             data_uri = f"data:audio/wav;base64,{audio_base64}"
-            asr_options: dict[str, Any] = {"enable_itn": False}
+            # ITN 开启：数字/单位规范化（"三点一四"→"3.14"），对齐主流 ASR 默认行为，
+            # 课堂场景公式/数据密集，规范化文本对笔记质量至关重要
+            asr_options: dict[str, Any] = {"enable_itn": True}
             if language != "auto":
                 asr_options["language"] = language
 

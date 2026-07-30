@@ -178,8 +178,16 @@ class FallbackProvider(AIProvider):
         sample_rate: int = 16000,
         channels: int = 1,
         model: str = "",
+        **kwargs: Any,
     ) -> dict[str, Any]:
-        """Fallback 不支持 ASR，返回友好降级结果"""
+        """
+        Fallback 不支持 ASR，返回友好降级结果
+
+        @ai-context: 必须接受 **kwargs —— 云端 Provider 的 transcribe 由
+        with_retry_and_timeout 装饰并在内部吞掉 _feature，而本方法无装饰器，
+        call_with_fallback 传入的 _feature 会直接透传到签名上。缺少 **kwargs
+        会抛 TypeError 使 fallback 链最后一环也失败，请求最终返回 503 而非降级响应。
+        """
         import time as _time
         start = _time.monotonic()
         logger.warning("使用 FallbackProvider 降级 ASR 响应")
