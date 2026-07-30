@@ -1230,6 +1230,28 @@ B14 清单预估的 310/316/307 行偏大，实测三页面为 278/295/287，**�
 | `TestJWTDevMode` 3 项 | 依赖真实网络（JWKS），离网必败；应改为 mock JWKS 响应（§7） |
 | npm audit 镁像限制 | 默认 registry 为 npmmirror 不支持 advisories API，需 `--registry=https://registry.npmjs.org` |
 
+### 15.6 发版链路修复与部署首跑验证（v0.25.0 实发闭环）
+
+PR #2 合并后 Version & Release 连续两次失败，逐层定位出两个独立根因并全部修复：
+
+| # | 根因 | 修复 |
+|---|------|------|
+| 1 | **GH013**：main ruleset 强制"必须走 PR"，把 semantic-release 自身的发版推送（`chore(release)` 提交 + tag → `HEAD:main`）一并拦截 | `version-release.yml` 的 checkout 与 semantic-release 环境改用 `secrets.RELEASE_TOKEN`（细粒度 PAT，带 `\|\| github.token` 回退）；ruleset Bypass list 添加 Repository admin（PR #3） |
+| 2 | **PAT 空权限 403**（`Permission denied to Aparencia`）：token 创建时未勾选仓库与权限 | PAT 补齐：Repository access=Entropydecrease、Contents/Issues/Pull requests 均 Read and write（细粒度 PAT 改权限即时生效，无需重新生成） |
+
+**发版验证**：rerun 后 Version & Release success（41s），产出 `chore(release): v0.25.0` + tag + GitHub Release，dev 已快进同步。此为比 `release:dry` 干跑更强的实发闭环验证，A3 销项。
+
+**部署首跑验证**（PR #4 为两个部署工作流补 `workflow_dispatch` 手动触发入口后执行）：
+
+| 工作流 | 结果 | 关键步骤 |
+|--------|------|---------|
+| Deploy Website | ✅ success（1m13s） | 构建 → scp 上传 `/opt/Entropydecrease/website` → nginx 重启 → 冒烟（首页含「熵减」）→ IndexNow |
+| Deploy AI Gateway（deploy-server） | ✅ success | 上传 server 源码 → `docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build` → 健康检查 |
+
+第十五章 15.2 登记的"部署链路从未实跑"风险就此关闭：重写后的部署配置（真实路径、`--env-file`、代码上传）已在生产服务器实际执行成功。
+
+**安全遗留（低危登记）**：RELEASE_TOKEN 为无过期 PAT，建议改 90 天期限并到期轮换。
+
 ---
 
-*文档版本：v2.8 | 更新时间：2026-07-29 | 新增：第十五章 Git 策略落地（main/dev、续接历史）与完整性/安全性双审查（含 2 阻塞 + 1 高危修复与技术债清单）*
+*文档版本：v2.9 | 更新时间：2026-07-30 | 新增：15.6 发版链路修复（GH013 + PAT 权限）与 v0.25.0 实发、部署双流首跑验证*
