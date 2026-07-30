@@ -30,6 +30,6 @@
   },
   "lint-staged": {
     "client/**/*.{ts,tsx}": "npm --prefix client exec oxlint --",
-    "website/**/*.{ts,tsx}": "npm --prefix website exec eslint --"
+    "website/**/*.{ts,tsx}": "npm --prefix website exec eslint -- --config website/eslint.config.mjs"
   }
 }

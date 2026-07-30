@@ -1,9 +1,11 @@
 // @ai-context
-// 下载页：应用窗口 Mockup、下载入口、版本轨迹与开源信息。Download page: app mockup, download CTA, changelog.
+// 下载页：应用窗口 Mockup、下载入口（DownloadCta 服务器直链 + GitHub 备用）、版本轨迹与开源信息。
+// Download page: app mockup, download CTA (server-hosted with GitHub fallback), changelog.
 // Why: Mockup 为纯 CSS 风格化示意而非截图，避免版本迭代后截图过期。
 "use client";
 
 import { motion } from "framer-motion";
+import { DownloadCta } from "@/components/DownloadCta";
 import { GlowOrb } from "@/components/GlowOrb";
 import { SectionReveal } from "@/components/SectionReveal";
 
@@ -44,13 +46,6 @@ const CHANGELOG = [
       "AI 网关稳定性优化",
     ],
   },
-];
-
-const SYSTEM_REQ = [
-  { label: "操作系统", value: "Windows 10 / 11 (64位)" },
-  { label: "处理器", value: "Intel i5 / AMD Ryzen 5 或更高" },
-  { label: "内存", value: "8 GB RAM 以上" },
-  { label: "存储空间", value: "500 MB 可用空间" },
 ];
 
 /* ---------- 应用窗口 Mockup ---------- */
@@ -182,57 +177,10 @@ export default function DownloadPage() {
         </SectionReveal>
       </section>
 
-      {/* 下载区 */}
+      {/* 下载区（服务器直链 + 动态版本 + GitHub 备用源） */}
       <section className="max-w-3xl mx-auto px-6 mb-24">
         <SectionReveal>
-          <div
-            className="rounded-3xl p-10 text-center"
-            style={{
-              background: "var(--kb-bg-elevated)",
-              border: "1px solid var(--kb-glass-border)",
-              boxShadow: "var(--kb-shadow-brand)",
-            }}
-          >
-            <div className="flex items-center justify-center gap-3 mb-6">
-              <span
-                className="w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-bold text-white"
-                style={{ background: "linear-gradient(135deg, var(--kb-brand-400), var(--kb-accent-500))" }}
-              >
-                熵
-              </span>
-              <div className="text-left">
-                <h2 className="font-serif text-xl font-bold text-kb-text">熵减 Entropydecrease</h2>
-                <p className="text-xs text-kb-text3">v0.15.0 正式版 · 2026-07</p>
-              </div>
-            </div>
-
-            <a
-              href="https://github.com/Aparencia/Entropydecrease/releases/latest"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block px-12 py-4 rounded-2xl text-white font-medium text-lg transition-all duration-500 hover:scale-[1.04] active:scale-[0.97] mb-6"
-              style={{
-                background: "linear-gradient(135deg, var(--kb-amber), var(--kb-accent-400))",
-                boxShadow: "var(--kb-shadow-accent)",
-              }}
-            >
-              ⬇ 下载 Windows 版
-            </a>
-
-            <p className="text-xs text-kb-text3 mb-8">
-              约 120 MB · 适用于 Windows 10/11 (64位) · 免费开源
-            </p>
-
-            {/* 系统要求 */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-left">
-              {SYSTEM_REQ.map((req) => (
-                <div key={req.label} className="rounded-xl p-3.5" style={{ background: "var(--kb-bg-tertiary)" }}>
-                  <p className="text-[10px] text-kb-text3 uppercase tracking-wider mb-1">{req.label}</p>
-                  <p className="text-xs text-kb-text2 leading-snug">{req.value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+          <DownloadCta />
         </SectionReveal>
       </section>
 
