@@ -4,10 +4,22 @@ name: Release Electron App
 on:
   push:
     tags: ['v*']
+  # 兜底触发：semantic-release 若以内置 GITHUB_TOKEN 推 tag，
+  # GitHub 防递归机制不会派发 push 事件，导致本工作流从不运行、
+  # Release 资产为空（latest.yml 404）。Release 发布事件可正常触发补跑。
+  release:
+    types: [published]
+  # 手动兜底：在 UI 选择对应 tag 运行，用于补发历史版本资产
+  workflow_dispatch:
 
 # 上传构建产物到 GitHub Release 需要写权限
 permissions:
   contents: write
+
+# 同一 tag 的多个触发源（push/release）串行执行，避免重复上传竞争
+concurrency:
+  group: release-electron-${{ github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   lint-test:
@@ -41,7 +53,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.os }}
-          path: client/release/*.{exe,dmg,AppImage}
+          # 注意：@actions/glob 不支持 {a,b} 花括号展开，必须逐行列出；
+          # latest*.yml 与 *.blockmap 是 electron-updater 自动更新的必需文件
+          path: |
+            client/release/*.exe
+            client/release/*.dmg
+            client/release/*.AppImage
+            client/release/*.blockmap
+            client/release/latest*.yml
 
   release:
     needs: build

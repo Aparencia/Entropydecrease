@@ -5,7 +5,7 @@ import type {
   FeynmanNote, FeynmanSummary, FeynmanWeakPoint,
   OperationLog, AppSettings, SyncConflict, OfflineQueueItem,
   StudyCheckIn, Achievement, PomodoroGoal, WindowCapture,
-  Consent, UserProfile, Inspiration, SearchIndexEntry
+  Consent, UserProfile, Inspiration, SearchIndexEntry, RitualRecord
 } from '@/types/models';
 import type { ClassroomNote } from './classroomNoteStore';
 import type { CRDTDocRecord, CRDTChangeRecord } from '@/lib/sync/crdtEngine';
@@ -47,6 +47,7 @@ export class EntropyDecreaseDatabase extends Dexie {
   classroomNotes!: Table<ClassroomNote, string>;
   crdtDocs!: Table<CRDTDocRecord, string>;
   crdtChanges!: Table<CRDTChangeRecord, number>;
+  ritualRecords!: Table<RitualRecord, string>;
 
   constructor() {
     // 数据库名 'keban' 不可修改（存量用户数据），见文件头 @ai-context
@@ -264,6 +265,11 @@ export class EntropyDecreaseDatabase extends Dexie {
     this.version(15).stores({
       crdtDocs: 'tableName',
       crdtChanges: '++seq, tableName, entityId, createdAt',
+    });
+
+    // v0.26.0: 学习启动仪式记录表（掌握标记/微目标/编排埋点，FEAT RIT-06/09）
+    this.version(16).stores({
+      ritualRecords: 'id, date, createdAt',
     });
   }
 }

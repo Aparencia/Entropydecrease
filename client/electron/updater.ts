@@ -98,6 +98,23 @@ function checkForUpdatesWithTimeout(): Promise<unknown> {
   });
 }
 
+/**
+ * 将 electron-updater 的原始错误映射为用户可读的提示。
+ * 原始 message 可能包含整段 HTTP headers / 堆栈（如 latest.yml 404），
+ * 不应直接透传到 UI；完整信息仍会经 logger 落盘供排查。
+ */
+function toFriendlyUpdateError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  if (/latest.*\.yml/i.test(raw) || /404/.test(raw)) {
+    return '更新服务暂时不可用（新版本文件尚未发布完成），请稍后再试';
+  }
+  if (/ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|net::ERR/i.test(raw)) {
+    return '网络连接异常，请检查网络后重试';
+  }
+  // 兜底：截断超长原始信息，避免刷屏
+  return raw.length > 100 ? `${raw.slice(0, 100)}…` : raw;
+}
+
 export function initAutoUpdater(mainWindow: BrowserWindow | null): void {
   // 开发模式下禁用自动更新
   if (!app.isPackaged) {
@@ -183,7 +200,7 @@ export function initAutoUpdater(mainWindow: BrowserWindow | null): void {
 
     sendToRenderer(mainWindow, 'update-status', {
       status: 'error',
-      message: error.message,
+      message: toFriendlyUpdateError(error),
     });
   });
 
@@ -210,11 +227,14 @@ export function initAutoUpdater(mainWindow: BrowserWindow | null): void {
         .then(() => { saveLastCheckTimestamp(); })
         .catch((err: unknown) => {
           logger.error('[AutoUpdater] Initial check failed', err);
+          // 失败同样写入节流时间戳：错误已提示过一次，
+          // 避免服务端问题未修复期间每次启动都重复弹出同一错误
+          saveLastCheckTimestamp();
           // 断网导致的失败不通知前端
           if (!net.isOnline()) return;
           sendToRenderer(mainWindow, 'update-status', {
             status: 'error',
-            message: err instanceof Error ? err.message : String(err),
+            message: toFriendlyUpdateError(err),
           });
         });
     }, 10_000);
@@ -233,7 +253,7 @@ export function checkForUpdate(): void {
       sendToRenderer(
         BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null,
         'update-status',
-        { status: 'error', message: err instanceof Error ? err.message : String(err) },
+        { status: 'error', message: toFriendlyUpdateError(err) },
       );
     });
 }

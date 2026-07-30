@@ -18,6 +18,7 @@
 
 import { desktopCapturer, DesktopCapturerSource, BrowserWindow } from 'electron';
 import { logger } from './logger';
+import { setPreferredDisplaySource } from './displayMediaHandler';
 
 // ================================================================
 // 类型定义
@@ -127,18 +128,15 @@ export class AudioCapture {
    * 开始音频捕获
    *
    * 1. 如果未指定 sourceId，自动选择第一个可用的系统音频源
-   * 2. 方案A：若指定的是窗口源（window:xxx），优先尝试窗口级音频捕获，
-   *    同时解析一个屏幕环回源作为降级候选（Windows 上窗口源音频支持
-   *    依赖 Chromium 版本，失败时渲染进程自动回退环回源）
-   * 3. 向渲染进程发送启动指令（含 sourceId + fallbackSourceId + 配置）
-   * 4. 渲染进程负责 getUserMedia 和音频切片
+   * 2. 将期望源登记到 displayMedia handler（渲染进程 getDisplayMedia 时生效）
+   * 3. 向渲染进程发送启动指令（含 sourceId + 配置）
+   * 4. 渲染进程负责 getDisplayMedia 与音频切片
    */
   async start(win: BrowserWindow, sourceId?: string): Promise<void> {
     if (this.capturing || this.disposed) return;
 
     // 解析音频源
     let resolvedSourceId = sourceId ?? null;
-    let fallbackSourceId: string | null = null;
     if (!resolvedSourceId) {
       const sources = await listAudioSources();
       if (sources.length === 0) {
@@ -147,16 +145,11 @@ export class AudioCapture {
       }
       resolvedSourceId = sources[0].id;
       logger.info(`[AudioCapture] 自动选择音频源: ${sources[0].name} (${resolvedSourceId})`);
-    } else if (resolvedSourceId.startsWith('window:')) {
-      // 方案A：窗口源直采目标应用（如 B站客户端/浏览器）的音频，
-      // 预解析屏幕环回源作为降级候选，防御窗口级捕获不受支持的环境
-      const sources = await listAudioSources();
-      fallbackSourceId = sources[0]?.id ?? null;
-      logger.info(
-        `[AudioCapture] 方案A 窗口源音频捕获: ${resolvedSourceId}, ` +
-        `降级候选: ${fallbackSourceId ?? '无'}`,
-      );
     }
+
+    // 登记期望源：渲染进程随后调用 getDisplayMedia，主进程 handler 据此授权
+    // 并附加 audio: 'loopback' 才能拿到真实系统音频（详见 displayMediaHandler.ts）
+    setPreferredDisplaySource(resolvedSourceId);
 
     this.capturing = true;
     this.boundWin = win;
@@ -171,7 +164,6 @@ export class AudioCapture {
     if (!win.isDestroyed()) {
       win.webContents.send('audio_capture_do_start', {
         sourceId: resolvedSourceId,
-        fallbackSourceId,
         options: this.options,
       });
     }

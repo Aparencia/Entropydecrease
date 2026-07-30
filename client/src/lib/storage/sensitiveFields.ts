@@ -25,4 +25,5 @@ export const NON_SENSITIVE_TABLES: ReadonlySet<string> = new Set([
   'studyGoals',
   'flashcardReviews',
   'searchIndex',
+  'ritualRecords',
 ]);

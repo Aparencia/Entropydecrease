@@ -28,6 +28,7 @@ TIMEOUT_CONFIG: dict[str, int] = {
     "predict": 15,
     "rescue": 30,             # 三级救援内容较多
     "inspiration_draft": 15,
+    "ritual_recall": 15,      # v0.26.0 B1.2：单个小问，快速返回
     # FEAT-022: 苏格拉底式学习
     "socratic_brainstorm": 20,
     "socratic_evaluate": 15,
@@ -63,6 +64,7 @@ RATE_LIMITS: dict[str, int] = {
     "predict": 15,
     "rescue": 10,             # 救援场景，适度限制
     "inspiration_draft": 15,
+    "ritual_recall": 20,      # v0.26.0 B1.2：每日启动仪式触发，适度上限
     # FEAT-022: 苏格拉底式学习
     "socratic_brainstorm": 15,
     "socratic_evaluate": 20,

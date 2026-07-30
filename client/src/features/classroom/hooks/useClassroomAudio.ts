@@ -28,8 +28,6 @@ const CHUNK_GAP_TIMEOUT_MS = 10000;
 
 interface AudioStartPayload {
   sourceId: string;
-  /** 方案A 窗口源不可用时的环回降级候选（主进程解析） */
-  fallbackSourceId?: string | null;
   options: { sampleRate: number; channels: number; chunkDurationMs: number };
 }
 
@@ -47,27 +45,35 @@ interface UseClassroomAudioOptions {
 }
 
 /**
- * 以桌面源打开系统/窗口音频流。
- * 方案A 防御：窗口源（window:xxx）音频捕获在部分 Windows/Chromium 环境
- * 不受支持（NotFoundError/NotAllowedError），失败时自动回退环回降级候选。
+ * 打开系统音频环回流。
+ *
+ * 必须走 getDisplayMedia 且同时请求 video —— 主进程的
+ * setDisplayMediaRequestHandler 会在授权时附加 audio: 'loopback'，
+ * 这是 Windows 下拿到真实系统音频的唯一可靠路径。
+ * 旧的 getUserMedia({ audio: { chromeMediaSource: 'desktop' } }) 在
+ * Electron 30+ 会静默返回恒为数字零的静音轨（RMS 0.00），不可再用。
+ * 拿到流后立即停掉视频轨，仅保留音频，避免屏幕捕获的额外开销。
  */
-async function openDesktopAudioStream(payload: AudioStartPayload): Promise<MediaStream> {
-  const request = (id: string) => navigator.mediaDevices.getUserMedia({
-    audio: {
-      chromeMediaSource: 'desktop',
-      chromeMediaSourceId: id,
-    } as MediaTrackConstraintSet,
+async function openDesktopAudioStream(): Promise<MediaStream> {
+  const stream = await navigator.mediaDevices.getDisplayMedia({
+    video: true,
+    audio: true,
   });
-  try {
-    return await request(payload.sourceId);
-  } catch (err) {
-    if (!payload.fallbackSourceId) throw err;
-    console.warn(
-      `[useClassroomCapture] 窗口源音频捕获失败(${payload.sourceId})，回退系统环回:`,
-      err,
-    );
-    return request(payload.fallbackSourceId);
+  const audioTracks = stream.getAudioTracks();
+  if (audioTracks.length === 0) {
+    stream.getTracks().forEach((t) => t.stop());
+    throw new Error('系统音频轨缺失：displayMedia 未返回 loopback 音频');
   }
+  // 视频轨仅用于触发 loopback 授权，立即停止释放屏幕捕获资源
+  stream.getVideoTracks().forEach((t) => {
+    t.stop();
+    stream.removeTrack(t);
+  });
+  console.info(
+    `[useClassroomCapture] 系统音频环回已获取: track="${audioTracks[0].label}", ` +
+    `enabled=${audioTracks[0].enabled}, muted=${audioTracks[0].muted}`,
+  );
+  return stream;
 }
 
 export function useClassroomAudio({ captureManager, status, mode, onNotify }: UseClassroomAudioOptions) {
@@ -152,8 +158,8 @@ export function useClassroomAudio({ captureManager, status, mode, onNotify }: Us
       const payload = args[0] as AudioStartPayload;
       (async () => {
         try {
-          // 方案A：优先窗口源直采，失败自动回退环回降级候选
-          const stream = await openDesktopAudioStream(payload);
+          // 系统音频环回（主进程 handler 附加 audio: 'loopback'）
+          const stream = await openDesktopAudioStream();
           const audioCtx = new AudioContext({ sampleRate: payload.options.sampleRate });
           // 关键修复：非用户手势调用栈中创建的 AudioContext 默认 suspended，
           // 必须显式 resume()，否则 onaudioprocess 永不触发（0 音频块）。

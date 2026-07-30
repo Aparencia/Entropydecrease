@@ -37,6 +37,7 @@ PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
     "predict":            ["qwen", "glm", "fallback"],   # Qwen 为主，GLM 备选
     "rescue":             ["qwen", "deepseek", "fallback"], # Qwen 为主，DeepSeek 备选
     "inspiration_draft":  ["qwen", "glm", "fallback"],   # Qwen 为主，GLM 备选
+    "ritual_recall":      ["glm", "deepseek", "fallback"], # v0.26.0 B1.2：GLM（免费快速）优先
     # FEAT-022: 苏格拉底式学习
     "socratic_brainstorm": ["qwen", "deepseek", "fallback"],
     "socratic_evaluate":   ["qwen", "deepseek", "fallback"],
