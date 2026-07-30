@@ -1,13 +1,22 @@
 # Electron Builder 打包配置 - 熵减桌面端
 appId: com.entropydecrease.app
 productName: "Entropy decrease"
+# 双发布源：第一项（generic = 自建服务器）被写入 app-update.yml 作为
+# electron-updater 的自动更新源；GitHub 保留为开源分发/灾备源。
+# 注意：存量客户端的 app-update.yml 仍指向 GitHub，过渡期内
+# GitHub Release 资产（含 latest.yml）不可停发，否则存量用户无法升级到新源。
 publish:
-  provider: github
-  owner: Aparencia
-  repo: Entropydecrease
+  - provider: generic
+    url: https://entropydecrease.com/downloads
+  - provider: github
+    owner: Aparencia
+    repo: Entropydecrease
+# 统一产物命名（无空格）：避免默认 "Entropy decrease Setup x.y.z.exe"
+# 在 URL/服务器文件名中产生空格转义问题
 directories:
   output: release
   buildResources: build
+artifactName: "Entropydecrease-Setup-${version}.${ext}"
 asarUnpack:
   - "**/*.node"
 files:

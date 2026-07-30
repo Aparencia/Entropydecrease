@@ -146,6 +146,8 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
       - /opt/Entropydecrease/website:/usr/share/nginx/html:ro
+      # 安装包下载目录：独立于 website（其部署会 rm 清空目录），由 release.yml 同步
+      - /opt/Entropydecrease/downloads:/usr/share/nginx/downloads:ro
     depends_on:
       - ai-gateway
       - sync-service

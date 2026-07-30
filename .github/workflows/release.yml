@@ -72,3 +72,62 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: release-*/*
+
+      # ---------------------------------------------------------------
+      # 同步 Windows 安装包至自建服务器（国内主下载源 + 自动更新源）
+      # latest.json 供官网下载页动态展示版本/直链；latest.yml 供 electron-updater
+      # ---------------------------------------------------------------
+      - name: Generate latest.json for website
+        run: |
+          YML=release-windows-latest/latest.yml
+          VERSION=$(grep -m1 '^version:' "$YML" | awk '{print $2}')
+          FILE=$(grep -m1 '^path:' "$YML" | sed 's/^path: //')
+          SIZE=$(stat -c%s "release-windows-latest/$FILE")
+          SHA256=$(sha256sum "release-windows-latest/$FILE" | awk '{print $1}')
+          DATE=$(date -u +%F)
+          printf '{"version":"%s","fileName":"%s","size":%s,"sha256":"%s","releaseDate":"%s"}\n' \
+            "$VERSION" "$FILE" "$SIZE" "$SHA256" "$DATE" > release-windows-latest/latest.json
+          cat release-windows-latest/latest.json
+
+      - name: Ensure downloads directory on server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: mkdir -p /opt/Entropydecrease/downloads
+
+      # 先传二进制（exe/blockmap），后传元数据（yml/json）：
+      # 避免 latest.yml 率先就位时指向尚未上传完成的安装包（更新 404 窗口期）
+      - name: Upload installer binaries to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: release-windows-latest/*.exe,release-windows-latest/*.blockmap
+          target: /opt/Entropydecrease/downloads
+          strip_components: 1
+
+      - name: Publish update metadata (last, avoids 404 window)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: release-windows-latest/latest.yml,release-windows-latest/latest.json
+          target: /opt/Entropydecrease/downloads
+          strip_components: 1
+
+      # 保留策略：仅保留最近 3 个版本的安装包，防止磁盘增长
+      - name: Prune old versions (keep last 3)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/Entropydecrease/downloads
+            ls -t -- *.exe 2>/dev/null | tail -n +4 | while read -r f; do
+              rm -f -- "$f" "$f.blockmap"
+            done

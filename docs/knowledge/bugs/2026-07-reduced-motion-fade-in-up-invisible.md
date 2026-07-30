@@ -84,4 +84,4 @@ computedStyle: opacity="0", animationPlayState="paused", animationFillMode="none
 
 - [web.dev — prefers-reduced-motion](https://web.dev/articles/prefers-reduced-motion)
 - 修复提交涉及文件：`client/src/index.css`
-- 关联特性：v0.26.0 学习启动仪式（`client/src/features/dashboard/components/ritual/`）
+- 关联特性：v0.27.0 学习启动仪式（`client/src/features/dashboard/components/ritual/`）
