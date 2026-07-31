@@ -148,6 +148,45 @@ jobs:
           target: /opt/Entropydecrease/downloads
           strip_components: 1
 
+      # ---------------------------------------------------------------
+      # 同步至 OSS（CDN 源站）
+      # 为何需要 OSS：ECS 出网仅约 6Mbps，而 CDN 预热需**每个边缘节点各
+      # 拉一份完整文件**，回源总量 = 节点数 x 172MB，以 ECS 为源站时
+      # 预热耗时达几十分钟至数小时且会打满带宽影响 API。
+      # OSS 出网带宽极大，可使预热降至分钟级且完全不占用 ECS。
+      #
+      # 路径与 ECS 保持一致（downloads/ 前缀），因此无需改变
+      # DOWNLOAD_BASE_URL，也无需改前端与 electron-updater 配置。
+      # ECS 同步仍保留：存量客户端的更新源仍指向 ECS，且作为兜底。
+      # ---------------------------------------------------------------
+      - name: Upload to OSS (CDN origin)
+        if: ${{ secrets.OSS_BUCKET != '' && secrets.ALIYUN_ACCESS_KEY_ID != '' }}
+        env:
+          AK_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+          AK_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+          # 未配置时默认杭州（与 ECS 同地域）
+          OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT || 'oss-cn-hangzhou.aliyuncs.com' }}
+          FILE_NAME: ${{ steps.meta.outputs.file }}
+        run: |
+          set -eo pipefail
+          curl -sL https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz -o /tmp/aliyun.tgz
+          tar -xzf /tmp/aliyun.tgz -C /tmp
+
+          oss_cp() {
+            /tmp/aliyun oss cp "$1" "oss://$OSS_BUCKET/downloads/$2" \
+              --force -e "$OSS_ENDPOINT" -i "$AK_ID" -k "$AK_SECRET"
+          }
+
+          cd release-windows-latest
+          # 同 ECS 的顺序约定：先二进制后元数据，避免 latest.yml 率先就位
+          # 而指向尚未上传完成的安装包
+          oss_cp "$FILE_NAME" "$FILE_NAME"
+          oss_cp "$FILE_NAME.blockmap" "$FILE_NAME.blockmap"
+          oss_cp latest.yml latest.yml
+          oss_cp latest.json latest.json
+          echo "OSS sync done: oss://$OSS_BUCKET/downloads/"
+
       # 保留策略：仅保留最近 3 个版本的安装包，防止磁盘增长
       - name: Prune old versions (keep last 3)
         uses: appleboy/ssh-action@v1
