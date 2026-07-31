@@ -104,6 +104,7 @@ jobs:
       # latest.json 供官网下载页动态展示版本/直链；latest.yml 供 electron-updater
       # ---------------------------------------------------------------
       - name: Generate latest.json for website
+        id: meta
         run: |
           YML=release-windows-latest/latest.yml
           VERSION=$(grep -m1 '^version:' "$YML" | awk '{print $2}')
@@ -114,6 +115,8 @@ jobs:
           printf '{"version":"%s","fileName":"%s","size":%s,"sha256":"%s","releaseDate":"%s"}\n' \
             "$VERSION" "$FILE" "$SIZE" "$SHA256" "$DATE" > release-windows-latest/latest.json
           cat release-windows-latest/latest.json
+          # 供下方 CDN 预热步骤拼接 URL
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
 
       - name: Ensure downloads directory on server
         uses: appleboy/ssh-action@v1
@@ -157,3 +160,37 @@ jobs:
             ls -t -- *.exe 2>/dev/null | tail -n +4 | while read -r f; do
               rm -f -- "$f" "$f.blockmap"
             done
+
+      # ---------------------------------------------------------------
+      # CDN 预热：大文件在 CDN 上按分片缓存，未被请求过的分片不在缓存中，
+      # 首批用户会退化为实时回源而受源站带宽限制。
+      # 实测：已缓存分片 10.5MB/s，未缓存分片仅 106KB/s（相差约 95 倍），
+      # 故预热不是可选优化而是大文件分发的必要步骤。
+      # 预热为异步任务，API 返回后后台继续拉取，此处不等待完成。
+      # ---------------------------------------------------------------
+      - name: Prefetch CDN cache
+        # 仅在已切换至 CDN 且配置了预热凭证时执行；未配置则跳过
+        if: ${{ secrets.DOWNLOAD_BASE_URL != '' && secrets.ALIYUN_ACCESS_KEY_ID != '' }}
+        # 预热失败不应推翻已成功的发布，仅标记警告
+        continue-on-error: true
+        env:
+          ALIBABA_CLOUD_ACCESS_KEY_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+          ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+          DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL }}
+          FILE_NAME: ${{ steps.meta.outputs.file }}
+        run: |
+          set -eo pipefail
+          curl -sL https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz -o /tmp/aliyun.tgz
+          tar -xzf /tmp/aliyun.tgz -C /tmp
+
+          BASE="${DOWNLOAD_BASE_URL%/}"
+          # 预热安装包与 blockmap（差量更新依赖）；
+          # latest.yml/json 按设计不缓存，且仅几百字节，无需预热
+          OBJECTS="$BASE/$FILE_NAME"$'\n'"$BASE/$FILE_NAME.blockmap"
+          echo "Prefetching:"
+          echo "$OBJECTS"
+
+          /tmp/aliyun cdn PushObjectCache \
+            --region cn-hangzhou \
+            --ObjectPath "$OBJECTS" \
+            --Area domestic
