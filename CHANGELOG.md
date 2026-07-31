@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.28.8](https://github.com/Aparencia/Entropydecrease/compare/v0.28.7...v0.28.8) (2026-07-31)
+
+### 🐛 缺陷修复
+
+* **release:** 校验发布资产完整性以根治静默的空 Release ([f01dc6b](https://github.com/Aparencia/Entropydecrease/commit/f01dc6be6f61b534d87f21560572491abdfa0baf))
+
 ## [0.28.7](https://github.com/Aparencia/Entropydecrease/compare/v0.28.6...v0.28.7) (2026-07-31)
 
 ### ⚡ 性能优化

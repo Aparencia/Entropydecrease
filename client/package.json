@@ -3,7 +3,7 @@
   "productName": "Entropy decrease",
   "private": true,
   "license": "BUSL-1.1",
-  "version": "0.28.7",
+  "version": "0.28.8",
   "description": "熵减 - 跨端学习平台",
   "author": "Entropy Decrease Team",
   "main": "dist-electron/electron/main.js",
