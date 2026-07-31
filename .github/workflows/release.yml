@@ -59,6 +59,24 @@ jobs:
           cache: 'npm'
           cache-dependency-path: client/package-lock.json
       - run: cd client && npm ci
+      # 进程环回原生模块（ADR-001）：windows-latest 自带 MSVC，针对 Electron ABI 编译。
+      # continue-on-error：它是可选增强（运行时未加载到则降级为端点环回），
+      # 不应因其编译失败而阻断整条发布流水线
+      - name: Build native process-audio module
+        continue-on-error: true
+        run: |
+          cd client
+          npm run native:install
+          npm run native:build
+      - name: Check native module artifact
+        shell: bash
+        run: |
+          cd client
+          if [ -f native/process-audio/build/Release/process_audio.node ]; then
+            echo "进程环回原生模块已就绪"
+          else
+            echo "::warning::进程环回原生模块未构建成功，本包仅支持端点环回采集"
+          fi
       # --publish never：发布由下方 release job 统一负责，避免 electron-builder
       # 因检测到 tag 而自行尝试发布（github provider 无 GH_TOKEN 会报错）
       #

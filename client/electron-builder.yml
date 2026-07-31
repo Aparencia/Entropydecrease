@@ -25,6 +25,10 @@ files:
   - dist/**/*
   - dist-electron/**/*
   - app-icon.png
+  # 进程环回原生模块（ADR-001）：仅打包编译产物，不带 src/node_modules。
+  # 经上方 asarUnpack 解到 app.asar.unpacked/，processAudioNative 按此路径加载；
+  # 未编译时此匹配为空，应用仍可正常启动（降级为端点环回）
+  - native/process-audio/build/Release/*.node
 # 图标说明：
 #   app-icon.png 为统一源文件（1024x1024 方形 PNG）。
 #   electron-builder 会自动将其转换为各平台所需格式：

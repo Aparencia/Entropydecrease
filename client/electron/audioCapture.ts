@@ -16,6 +16,8 @@
 import type { BrowserWindow } from 'electron';
 import { logger } from './logger.js';
 import { EndpointLoopbackProvider, listAudioSources } from './audio/endpointLoopbackProvider.js';
+import { ProcessLoopbackProvider } from './audio/processLoopbackProvider.js';
+import { isProcessLoopbackAvailable } from './audio/processAudioNative.js';
 import type {
   AudioCaptureOptions,
   AudioChunk,
@@ -28,6 +30,16 @@ import {
   type AudioSourceKind,
   type AudioSourcePreference,
 } from '../src/lib/capture/audioSourceStrategy.js';
+
+/**
+ * 进程环回特性开关（Phase 2：默认关）。
+ *
+ * 开启方式：环境变量 ENTROPY_PROCESS_LOOPBACK=1。
+ * Phase 3 经内测灰度后改为默认开并改由设置页控制。
+ */
+function isProcessLoopbackEnabled(): boolean {
+  return process.env.ENTROPY_PROCESS_LOOPBACK === '1';
+}
 
 // 保持既有导出路径不变（mediaCaptureHandlers 等调用方无需改动）
 export { listAudioSources };
@@ -74,6 +86,9 @@ export class AudioCapture {
   private provider: AudioSourceProvider | null = null;
   /** 本次采集的选源决策（供日志/会话元数据归因） */
   private decision: AudioSourceDecision | null = null;
+  /** 绑定的窗口与源 ID（运行时降级需重建 Provider） */
+  private boundWindow: BrowserWindow | null = null;
+  private boundSourceId: string | null = null;
 
   constructor(
     options: Partial<AudioCaptureOptions>,
@@ -117,9 +132,10 @@ export class AudioCapture {
     if (this.capturing || this.disposed) return;
 
     const resolvedSourceId = sourceId ?? null;
+    // 特性开关关闭时能力恒为不可用，选源必为端点环回（行为与 Phase 0 一致）
+    const processAvailable = isProcessLoopbackEnabled() && isProcessLoopbackAvailable();
     this.decision = selectAudioSource({
-      // Phase 0：进程环回尚未接入，能力探测恒为不可用（行为与重构前一致）
-      capabilities: { processLoopbackAvailable: false },
+      capabilities: { processLoopbackAvailable: processAvailable },
       sourceId: resolvedSourceId,
       preference: extras?.preference,
       microphone: extras?.microphone,
@@ -155,6 +171,8 @@ export class AudioCapture {
     win: BrowserWindow,
     sourceId: string | null,
   ): Promise<void> {
+    this.boundWindow = win;
+    this.boundSourceId = sourceId;
     this.provider?.dispose();
     this.provider = this.createProvider(kind);
     await this.provider.start({ window: win, sourceId, options: this.options });
@@ -167,11 +185,36 @@ export class AudioCapture {
       case 'endpoint_loopback':
         return new EndpointLoopbackProvider(sink);
       case 'process_loopback':
-        // Phase 2 接入；Phase 0 阶段选源不会产生该分支
-        throw new Error('进程环回 Provider 尚未接入');
+        // 采集中发生的致命错误（如目标进程退出）触发运行时降级
+        return new ProcessLoopbackProvider(sink, (message) => {
+          void this.degradeToEndpoint(message);
+        });
       case 'microphone':
         // TODO(现场课程): MicrophoneProvider 待实现
         throw new Error('麦克风 Provider 尚未实现');
+    }
+  }
+
+  /**
+   * 运行时降级：采集已开始后才发生的进程环回故障，无缝切到端点环回。
+   * 失败时仅记日志：此时已脱离 start 调用栈，抛错无人接收，
+   * 且上层 watchdog（useClassroomAudio）会在 15s 内提示用户。
+   */
+  private async degradeToEndpoint(reason: string): Promise<void> {
+    if (this.disposed || !this.capturing) return;
+    if (this.provider?.kind !== 'process_loopback') return;
+    if (!this.boundWindow || this.boundWindow.isDestroyed()) return;
+
+    logger.warn(`[AudioCapture] 进程环回运行中故障（${reason}），切换到端点环回`);
+    this.decision = {
+      kind: 'endpoint_loopback',
+      reason: `进程环回运行中故障后降级：${reason}`,
+      fallback: null,
+    };
+    try {
+      await this.startWithKind('endpoint_loopback', this.boundWindow, this.boundSourceId);
+    } catch (err) {
+      logger.error('[AudioCapture] 降级到端点环回失败', err);
     }
   }
 
@@ -208,6 +251,8 @@ export class AudioCapture {
     this.stop();
     this.provider?.dispose();
     this.provider = null;
+    this.boundWindow = null;
+    this.boundSourceId = null;
     this.disposed = true;
     logger.info('[AudioCapture] 已销毁');
   }
