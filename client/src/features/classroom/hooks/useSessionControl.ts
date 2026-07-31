@@ -12,6 +12,8 @@ import { useCallback } from 'react';
 import { requireGatewayUrl } from '@/lib/ai/config';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { analyzePartial } from '@/lib/ai/sessionAnalyzer';
+import { getAudioSourcePreference } from '@/lib/capture/audioSourcePreference';
+import type { AudioSourceKind } from '@/lib/capture/audioSourceStrategy';
 import type {
   CaptureManager,
   CaptureMode,
@@ -28,6 +30,10 @@ import type {
 interface IPCAudioStartResult {
   success: boolean;
   error?: string;
+  /** 实际生效的音频源（ADR-001 双源选择结果） */
+  sourceKind?: AudioSourceKind;
+  /** 选源理由（含降级说明），供内测问题归因 */
+  sourceReason?: string;
 }
 
 interface UseSessionControlOptions {
@@ -56,12 +62,14 @@ interface UseSessionControlOptions {
   onAnalyzeFull: () => void;
   onMergePartials: (partials: string[], durationMs: number, keyframeCount: number) => Promise<void>;
   onNotify: (type: 'warning', message: string) => void;
+  /** 音频源定下后回报（供诊断文案分支与 UI 展示） */
+  onAudioSourceResolved?: (kind: AudioSourceKind | null) => void;
 }
 
 export function useSessionControl({
   captureManager, selectedWindow, status, setStatus, mode, capturePath, config, courseMeta,
   frameRestartRef, audioCleanupRef, session,
-  onAnalyzeVideo, onAnalyzeFull, onMergePartials, onNotify,
+  onAnalyzeVideo, onAnalyzeFull, onMergePartials, onNotify, onAudioSourceResolved,
 }: UseSessionControlOptions) {
   /** 预检 AI 网关连通性（不可用仅提示，不阻断采集） */
   const probeGateway = useCallback(async () => {
@@ -130,14 +138,22 @@ export function useSessionControl({
 
       if (audioEnabled) {
         try {
-          // 方案A：优先以选中窗口为音频源（直采 B站客户端/浏览器等目标应用声音），
-          // 窗口级捕获不受支持时主进程会下发环回降级候选，由渲染端自动回退
+          // 选源由主进程的 selectAudioSource 决定（ADR-001）：锁定具体窗口时
+          // 优先进程环回（隔离其他应用杂音），否则用端点环回（不漏采）；
+          // 主进程读不到 localStorage，故偏好由渲染进程传入
           const audioResult = await window.electronAPI.invoke('audio_capture_start', {
             chunkDurationMs: 5000, sampleRate: 16000, channels: 1,
             sourceId: selectedWindow.id,
+            preference: getAudioSourcePreference(),
           }) as IPCAudioStartResult;
           if (!audioResult.success) {
             console.warn('[useClassroomCapture] Audio start failed:', audioResult.error);
+          } else {
+            console.info(
+              `[useClassroomCapture] 音频源=${audioResult.sourceKind ?? 'unknown'}` +
+              `（${audioResult.sourceReason ?? '-'}）`,
+            );
+            onAudioSourceResolved?.(audioResult.sourceKind ?? null);
           }
         } catch (audioErr) {
           console.warn('[useClassroomCapture] Audio unavailable:', audioErr);
@@ -147,7 +163,7 @@ export function useSessionControl({
       setStatus('error');
       console.error('[useClassroomCapture] Start failed:', err);
     }
-  }, [selectedWindow, setStatus, session, probeGateway, capturePath, captureManager, config, mode, courseMeta]);
+  }, [selectedWindow, setStatus, session, probeGateway, capturePath, captureManager, config, mode, courseMeta, onAudioSourceResolved]);
 
   const handlePause = useCallback(() => {
     if (status === 'capturing') {

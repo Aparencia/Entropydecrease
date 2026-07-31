@@ -1,0 +1,7 @@
+{
+  "name": "spike-chromium-source",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Electron 需要 package.json 指定入口才能以目录方式启动（spike 声源）",
+  "main": "main.js"
+}

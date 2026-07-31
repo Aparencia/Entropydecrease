@@ -19,6 +19,7 @@
   "include": [
     "./**/*.ts",
     "../src/lib/storage/interfaces.ts",
-    "../src/types/models.ts"
+    "../src/types/models.ts",
+    "../src/lib/capture/audioSourceStrategy.ts"
   ]
 }

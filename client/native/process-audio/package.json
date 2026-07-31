@@ -1,0 +1,17 @@
+{
+  "name": "@entropydecrease/process-audio",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Windows 进程环回音频采集原生模块（Phase 1 spike，独立于 client 构建）",
+  "main": "index.js",
+  "scripts": {
+    "build": "node-gyp rebuild",
+    "configure": "node-gyp configure"
+  },
+  "dependencies": {
+    "node-addon-api": "^8.3.0"
+  },
+  "devDependencies": {
+    "node-gyp": "^11.0.0"
+  }
+}

@@ -10,6 +10,7 @@ import SoundSettings from './settings/SoundSettings';
 import ModeSettings from './settings/ModeSettings';
 import ShortcutSettings from './settings/ShortcutSettings';
 import FlashcardSettings from './settings/FlashcardSettings';
+import AudioCaptureSettings from './settings/AudioCaptureSettings';
 
 // 延迟组：有网络/IPC/DB 操作的重组件
 const AIProviderSettings = lazy(() => import('./settings/AIProviderSettings'));
@@ -126,14 +127,17 @@ export default function SettingsPage() {
         <SettingsSection index={5}>
           <FlashcardSettings />
         </SettingsSection>
+        <SettingsSection index={6}>
+          <AudioCaptureSettings />
+        </SettingsSection>
         <Suspense fallback={<SettingsSectionSkeleton />}>
-          <SettingsSection index={6}>
+          <SettingsSection index={7}>
             <AIProviderSettings />
           </SettingsSection>
-          <SettingsSection index={7}>
+          <SettingsSection index={8}>
             <DataSettings />
           </SettingsSection>
-          <SettingsSection index={8}>
+          <SettingsSection index={9}>
             <AboutSettings />
           </SettingsSection>
         </Suspense>
