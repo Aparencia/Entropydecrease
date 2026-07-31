@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.28.12](https://github.com/Aparencia/Entropydecrease/compare/v0.28.11...v0.28.12) (2026-07-31)
+
+### 🐛 缺陷修复
+
+* **build:** 提交 .env.production 入库并增加构建期环境变量防护 ([cbd3ed8](https://github.com/Aparencia/Entropydecrease/commit/cbd3ed8b4e2e855545e2c7d237d5b10606e63ee3))
+
 ## [0.28.11](https://github.com/Aparencia/Entropydecrease/compare/v0.28.10...v0.28.11) (2026-07-31)
 
 ### 🐛 缺陷修复
