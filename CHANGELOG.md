@@ -3,6 +3,20 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.29.0](https://github.com/Aparencia/Entropydecrease/compare/v0.28.12...v0.29.0) (2026-07-31)
+
+### ✨ 新功能
+
+* **onboarding:** First Dive 新手引导系统与新手期双标签导航 ([030ac80](https://github.com/Aparencia/Entropydecrease/commit/030ac80a361da01ce4a73cfd002d66f4af39c9f6))
+
+### 🐛 缺陷修复
+
+* **auth:** 修复邮箱验证跳转死页面、重置密码链接失效与登录循环 ([213969c](https://github.com/Aparencia/Entropydecrease/commit/213969c68be22dffce8192ac0d5b805eef8d0532))
+* **classroom:** 修复精细采集三症状——视觉抓页面元数据、ASR静音幻觉、截断JSON泄漏 ([0e27603](https://github.com/Aparencia/Entropydecrease/commit/0e27603f15966e98e8e3c96a5b1ff69acf2a27e5))
+* **pomodoro:** 修复周期计数无重置路径与副作用双重执行 ([ed9e5d7](https://github.com/Aparencia/Entropydecrease/commit/ed9e5d7779226b62a456d3497df9c9388bbfc3c5))
+* **ui:** 修复 Tailwind var() 令牌色透明度修饰符静默失效致弹窗全透明 ([a3a4e18](https://github.com/Aparencia/Entropydecrease/commit/a3a4e1802c59fb06d031d6808a14d6217230a614))
+* **window:** 最小化时任务栏右键关闭无响应 ([b0f90e1](https://github.com/Aparencia/Entropydecrease/commit/b0f90e148d13991fabd9feb7326f6b6064be5075))
+
 ## [0.28.12](https://github.com/Aparencia/Entropydecrease/compare/v0.28.11...v0.28.12) (2026-07-31)
 
 ### 🐛 缺陷修复
