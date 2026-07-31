@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.28.9](https://github.com/Aparencia/Entropydecrease/compare/v0.28.8...v0.28.9) (2026-07-31)
+
+### 🐛 缺陷修复
+
+* **release:** 改用改写配置文件替代 -c.publish.0.url 覆盖更新源 ([880f7cc](https://github.com/Aparencia/Entropydecrease/commit/880f7ccc100493456395afeb2eeae56676a8dc01))
+
 ## [0.28.8](https://github.com/Aparencia/Entropydecrease/compare/v0.28.7...v0.28.8) (2026-07-31)
 
 ### 🐛 缺陷修复
