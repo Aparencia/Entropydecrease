@@ -24,6 +24,10 @@ jobs:
           cache-dependency-path: website/package-lock.json
 
       - name: Install dependencies and build
+        env:
+          # 下载源基址：配置了 CDN 后填入该 Secret（如 https://dl.entropydecrease.com）；
+          # 未配置时为空字符串，前端自动回退至自建服务器源
+          NEXT_PUBLIC_DOWNLOAD_BASE: ${{ secrets.DOWNLOAD_BASE_URL }}
         run: |
           cd website
           npm ci

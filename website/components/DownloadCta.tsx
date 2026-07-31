@@ -6,8 +6,15 @@
 
 import { useEffect, useState } from "react";
 
-/** 自建服务器下载源（release.yml CI 发版时同步安装包与 latest.json） */
-const DOWNLOAD_BASE = "https://entropydecrease.com/downloads";
+/**
+ * 下载源基址。优先用构建时注入的 CDN 域名（deploy-website.yml 从
+ * DOWNLOAD_BASE_URL Secret 传入）；未配置时回退自建服务器，
+ * 使 CDN 开通进度不阻塞代码，且随时可回退。
+ * 末尾斜杠统一去除，避免拼接出双斜杠。
+ */
+const DOWNLOAD_BASE = (
+  process.env.NEXT_PUBLIC_DOWNLOAD_BASE || "https://entropydecrease.com/downloads"
+).replace(/\/+$/, "");
 /** GitHub Releases 备用源 */
 const GITHUB_RELEASES = "https://github.com/Aparencia/Entropydecrease/releases/latest";
 

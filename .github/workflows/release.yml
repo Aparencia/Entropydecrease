@@ -61,7 +61,24 @@ jobs:
       - run: cd client && npm ci
       # --publish never：发布由下方 release job 统一负责，避免 electron-builder
       # 因检测到 tag 而自行尝试发布（github provider 无 GH_TOKEN 会报错）
-      - run: cd client && npm run electron:build -- --publish never
+      #
+      # DOWNLOAD_BASE_URL 已配置时，用 -c.publish.0.url 覆盖 generic 更新源为 CDN，
+      # 使新包内的 app-update.yml 指向 CDN；未配置时沿用 electron-builder.yml
+      # 中的自建服务器地址。注：存量客户端的更新源已固化在已安装的
+      # app-update.yml 中，故 ECS 与 GitHub 两侧资产均需继续发布。
+      - name: Build Electron app
+        shell: bash
+        env:
+          DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL }}
+        run: |
+          cd client
+          if [ -n "$DOWNLOAD_BASE_URL" ]; then
+            echo "Update feed -> $DOWNLOAD_BASE_URL"
+            npm run electron:build -- --publish never -c.publish.0.url="$DOWNLOAD_BASE_URL"
+          else
+            echo "Update feed -> 默认（electron-builder.yml 中的自建服务器）"
+            npm run electron:build -- --publish never
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.os }}
