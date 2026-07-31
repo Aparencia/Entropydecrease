@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.30.1](https://github.com/Aparencia/Entropydecrease/compare/v0.30.0...v0.30.1) (2026-07-31)
+
+### 🐛 缺陷修复
+
+* **build:** 修复 CI 编译原生模块失败（旧版 node-gyp 找不到 VS 2022） ([a5d8f3b](https://github.com/Aparencia/Entropydecrease/commit/a5d8f3b9459ee13263bdd14acc55bd30a698c03f))
+
 ## [0.30.0](https://github.com/Aparencia/Entropydecrease/compare/v0.29.0...v0.30.0) (2026-07-31)
 
 ### ✨ 新功能
