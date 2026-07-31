@@ -13,6 +13,7 @@ import type {
   ExtractionResult,
   AudioChunkData,
 } from '@/lib/capture/captureTypes';
+import { isSilentChunk, isLikelyHallucination } from '@/lib/capture/asrFilters';
 import { aiClient } from '@/lib/http/apiClient';
 
 // ================================================================
@@ -54,6 +55,11 @@ export class ASRWorker implements PipelineWorker {
   async process(message: PipelineMessage): Promise<ExtractionResult | null> {
     const audioData = message.data as AudioChunkData;
 
+    // 静音门控：低能量块不送 ASR（静音段会诱发模型幻觉文本，且白白消耗配额）
+    if (isSilentChunk(audioData.audioBuffer)) {
+      return null;
+    }
+
     // ArrayBuffer → base64
     const base64 = arrayBufferToBase64(audioData.audioBuffer);
 
@@ -76,6 +82,12 @@ export class ASRWorker implements PipelineWorker {
 
     // 空结果跳过（正常无语音）
     if (!response.text || response.text.trim() === '') {
+      return null;
+    }
+
+    // 幻觉过滤：重复字符灌水/纯标点/短句脏话是静音段 ASR 的典型幻觉形态，
+    // 不进入时间线（宁放过不误杀，规则见 asrFilters.ts）
+    if (isLikelyHallucination(response.text)) {
       return null;
     }
 
