@@ -81,7 +81,7 @@ export function Navbar() {
               boxShadow: "var(--kb-shadow-brand)",
             }}
           >
-            免费下载
+            前往下载
           </Link>
         </div>
       </nav>
