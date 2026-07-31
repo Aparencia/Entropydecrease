@@ -2,7 +2,7 @@
 
 ## 状态
 
-已接受（Phase 1 可行性验证已通过，Phase 0/2 待实施）
+已接受（Phase 0/1/2/3 已实施；线下课堂麦克风源 Phase 4 待做）
 
 ## 日期
 
@@ -124,6 +124,26 @@ Phase 1 spike 实测结果（`client/native/process-audio/`，全部通过）：
 - 手动回归必须包含：其他应用放提示音不进转写、系统音量 0、切换输出设备、
   目标窗口关闭、采集中降级触发、采集线程 30 分钟长跑
 - 不回归项：client 与 ai-gateway 现有测试全绿
+
+## 实施记录
+
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| Phase 1 | 原生模块可行性验证（`client/native/process-audio/`） | ✅ 全部验收通过 |
+| Phase 0 | `AudioSourceProvider` 抽象层 + 选源策略纯函数（12 例单测） | ✅ 零行为变更 |
+| Phase 2 | 流式采集（采集线程 + ThreadSafeFunction）、Provider 接入、构建链路（`native:build` / electron-builder / CI 编译） | ✅ flag 曾默认关 |
+| Phase 3 | 偏好持久化 + 设置页「课堂音频采集」、诊断文案按源分支、生效源经 IPC 回传并在 UI 可见、flag 默认开启 | ✅ 本阶段 |
+| Phase 4 | 线下课堂 `MicrophoneProvider`（视觉轨方案另案） | ⏳ 待做 |
+
+Phase 3 的关键取舍：
+
+- **flag 反转为默认开启**，`ENTROPY_PROCESS_LOOPBACK=0` 保留为应急总闸——
+  现场排障可不重新发版即关闭该能力
+- **诊断文案必须按源分支**：对进程环回提示"请检查系统默认输出设备"是误导
+  （它不受输出设备与系统音量影响），此时真实成因是目标窗口未发声
+- **devicechange 自动重启仅端点环回保留**：进程环回与输出设备解耦，无需重绑
+- 生效源与选源理由随 `audio_capture_start` 返回值回传渲染进程，写入日志与
+  UI，供内测问题归因
 
 ## 相关决策
 

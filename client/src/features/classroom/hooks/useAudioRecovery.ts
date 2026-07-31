@@ -2,14 +2,18 @@
  * 课堂音频自动恢复 hook（静音诊断 / 设备变更重启）
  *
  * @ai-context: 从 useClassroomAudio 拆出的独立恢复层。两条恢复路径：
- * ①输出设备不匹配诊断——系统环回只录默认输出设备，视频声音若输出到其他
- * 设备（HDMI/蓝牙）会表现为"音频块正常但持续静音"，检出后提示用户核对；
- * ②设备变更重启——默认输出设备切换后环回仍绑定旧设备，devicechange 时
- * 自动 stop→start 重新绑定。
+ * ①静音诊断——音频块正常但持续静音，成因随音频源不同（见下）；
+ * ②设备变更重启——仅端点环回需要（它绑定系统默认输出设备），进程环回
+ * 与输出设备无关，切设备时不必重启。
+ * @ai-context: 诊断文案必须按 sourceKind 分支（ADR-001）——对进程环回说
+ * "请检查默认输出设备"是误导，它根本不受输出设备与系统音量影响，此时
+ * 真实成因是目标窗口没在发声或声音来自别的应用。
  * @ai-context: 仅依赖 refs 的稳定回调，重启经 restartingRef 互斥防并发。
  */
 import { useEffect, useRef, useCallback } from 'react';
 import type { CaptureMode, SessionStatus } from '@/lib/capture';
+import type { AudioSourceKind } from '@/lib/capture/audioSourceStrategy';
+import { getAudioSourcePreference } from '@/lib/capture/audioSourcePreference';
 import {
   computeChunkRms, SilenceTracker,
   getDefaultOutputDeviceLabel, subscribeDeviceChange,
@@ -25,17 +29,25 @@ interface UseAudioRecoveryOptions {
   mode: CaptureMode;
   /** 会话选中窗口的源 ID，重启时沿用同一源 */
   audioSourceId?: string | null;
+  /** 本次会话实际生效的音频源（由 audio_capture_start 回传） */
+  sourceKind?: AudioSourceKind | null;
   onNotify: (type: 'warning' | 'error', message: string) => void;
 }
 
-export function useAudioRecovery({ status, mode, audioSourceId, onNotify }: UseAudioRecoveryOptions) {
+export function useAudioRecovery({
+  status, mode, audioSourceId, sourceKind, onNotify,
+}: UseAudioRecoveryOptions) {
   const notifyRef = useRef(onNotify);
   notifyRef.current = onNotify;
   const effectiveSourceRef = useRef<string | undefined>(audioSourceId ?? undefined);
   const silenceTrackerRef = useRef(new SilenceTracker());
   const restartingRef = useRef(false);
+  // 生效源用 ref 桥接：静音诊断的监听器依赖数组不含它，避免重订阅丢失计数
+  const sourceKindRef = useRef<AudioSourceKind | null>(sourceKind ?? null);
+  sourceKindRef.current = sourceKind ?? null;
 
   const audioEnabled = status === 'capturing' && (mode === 'audio' || mode === 'mixed');
+  const isProcessSource = sourceKind === 'process_loopback';
 
   // 会话开始时重置恢复状态（audioSourceId 取会话启动瞬间的快照）
   useEffect(() => {
@@ -53,7 +65,7 @@ export function useAudioRecovery({ status, mode, audioSourceId, onNotify }: UseA
       await window.electronAPI.invoke('audio_capture_stop');
       await new Promise((r) => setTimeout(r, RESTART_CLEANUP_DELAY_MS));
       const result = await window.electronAPI.invoke('audio_capture_start', {
-        ...AUDIO_START_OPTIONS, sourceId,
+        ...AUDIO_START_OPTIONS, sourceId, preference: getAudioSourcePreference(),
       }) as { success: boolean; error?: string };
       if (result.success) silenceTrackerRef.current.reset();
       else console.warn('[useAudioRecovery] 音频捕获重启失败:', result.error);
@@ -66,12 +78,20 @@ export function useAudioRecovery({ status, mode, audioSourceId, onNotify }: UseA
     }
   }, []);
 
-  // 静音诊断：音频块正常但持续无声 → 提示核对系统默认输出设备
+  // 静音诊断：音频块正常但持续无声 → 按生效源给出对应成因
   useEffect(() => {
     if (!audioEnabled || !window.electronAPI) return;
     const off = window.electronAPI.on('audio_capture_chunk', (...args: unknown[]) => {
       const chunk = args[0] as { audioBuffer: ArrayBuffer };
       if (!silenceTrackerRef.current.push(computeChunkRms(chunk.audioBuffer))) return;
+
+      if (sourceKindRef.current === 'process_loopback') {
+        // 进程环回不受系统音量/输出设备影响，成因只能是目标窗口没在发声
+        notifyRef.current('warning',
+          '持续收到静音音频：当前只采集目标窗口的声音，请确认该窗口正在播放，' +
+          '或在设置中改为采集「系统全部声音」');
+        return;
+      }
       void getDefaultOutputDeviceLabel().then((label) => {
         notifyRef.current('warning',
           `持续收到静音音频：请确认视频声音正在播放，且输出到系统默认设备${label ? `「${label}」` : ''}（系统音频捕获只能录到默认输出设备的声音）`);
@@ -80,9 +100,9 @@ export function useAudioRecovery({ status, mode, audioSourceId, onNotify }: UseA
     return off;
   }, [audioEnabled]);
 
-  // 设备变更自动重启：重新绑定新的默认输出设备
+  // 设备变更自动重启：仅端点环回需要（它绑定系统默认输出设备）
   useEffect(() => {
-    if (!audioEnabled || !window.electronAPI) return;
+    if (!audioEnabled || !window.electronAPI || isProcessSource) return;
     const unsubscribe = subscribeDeviceChange(() => {
       console.info('[useAudioRecovery] 检测到音频设备变更，自动重启音频捕获');
       void restartCapture(effectiveSourceRef.current).then((ok) => {
@@ -91,5 +111,5 @@ export function useAudioRecovery({ status, mode, audioSourceId, onNotify }: UseA
       });
     });
     return unsubscribe;
-  }, [audioEnabled, restartCapture]);
+  }, [audioEnabled, isProcessSource, restartCapture]);
 }

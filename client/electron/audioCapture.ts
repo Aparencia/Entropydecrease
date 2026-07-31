@@ -32,13 +32,13 @@ import {
 } from '../src/lib/capture/audioSourceStrategy.js';
 
 /**
- * 进程环回特性开关（Phase 2：默认关）。
+ * 进程环回特性开关（Phase 3：默认开）。
  *
- * 开启方式：环境变量 ENTROPY_PROCESS_LOOPBACK=1。
- * Phase 3 经内测灰度后改为默认开并改由设置页控制。
+ * 默认开启后用户仍可在设置页选“系统全部声音”强制用端点环回；
+ * ENTROPY_PROCESS_LOOPBACK=0 作为应急总闸（现场排障时无需重新发版即可关闭）。
  */
 function isProcessLoopbackEnabled(): boolean {
-  return process.env.ENTROPY_PROCESS_LOOPBACK === '1';
+  return process.env.ENTROPY_PROCESS_LOOPBACK !== '0';
 }
 
 // 保持既有导出路径不变（mediaCaptureHandlers 等调用方无需改动）
@@ -132,7 +132,7 @@ export class AudioCapture {
     if (this.capturing || this.disposed) return;
 
     const resolvedSourceId = sourceId ?? null;
-    // 特性开关关闭时能力恒为不可用，选源必为端点环回（行为与 Phase 0 一致）
+    // 应急总闸关闭时能力恒为不可用，选源退回端点环回
     const processAvailable = isProcessLoopbackEnabled() && isProcessLoopbackAvailable();
     this.decision = selectAudioSource({
       capabilities: { processLoopbackAvailable: processAvailable },

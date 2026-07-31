@@ -10,6 +10,7 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { AudioCapture, listAudioSources } from './audioCapture.js';
 import type { AudioCaptureOptions, AudioChunk } from './audioCapture.js';
+import type { AudioSourcePreference } from '../src/lib/capture/audioSourceStrategy.js';
 import { VideoRecorder } from './videoRecorder.js';
 import type { VideoRecordOptions } from './videoRecorder.js';
 import { safeHandle, getMainWindowId } from './ipcUtils.js';
@@ -55,7 +56,14 @@ export function registerMediaCaptureHandlers(): void {
 
   safeHandle(
     'audio_capture_start',
-    async (event, options?: Partial<AudioCaptureOptions> & { sourceId?: string }) => {
+    async (
+      event,
+      options?: Partial<AudioCaptureOptions> & {
+        sourceId?: string;
+        /** 用户在设置页选择的音频源偏好（主进程读不到 localStorage，由渲染进程传入） */
+        preference?: AudioSourcePreference;
+      },
+    ) => {
       if (activeAudioCapture) {
         activeAudioCapture.dispose();
         activeAudioCapture = null;
@@ -79,9 +87,17 @@ export function registerMediaCaptureHandlers(): void {
       });
 
       try {
-        await activeAudioCapture.start(senderWin, options?.sourceId);
+        await activeAudioCapture.start(senderWin, options?.sourceId, {
+          preference: options?.preference,
+        });
+        const decision = activeAudioCapture.sourceDecision;
         logger.info('[IPC] audio_capture_start 已启动');
-        return { success: true };
+        // 回传生效源：渲染进程据此分支诊断文案并写入会话元数据（内测归因）
+        return {
+          success: true,
+          sourceKind: activeAudioCapture.activeSourceKind,
+          sourceReason: decision?.reason,
+        };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logger.error('[IPC] audio_capture_start failed:', message);

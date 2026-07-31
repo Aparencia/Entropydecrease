@@ -12,6 +12,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { CaptureManager } from '@/lib/capture';
+import type { AudioSourceKind } from '@/lib/capture/audioSourceStrategy';
 import type {
   CaptureMode,
   CaptureSidebarConfig,
@@ -49,6 +50,10 @@ export function useClassroomCapture() {
 
   // ── 课中重点标记 ──
   const [bookmarks, setBookmarks] = useState<{ timestamp: number; label?: string }[]>([]);
+
+  // 本次会话实际生效的音频源（ADR-001）：由主进程选源后回传，
+  // 用于诊断文案分支与 UI 展示，避免对进程环回给出“检查输出设备”类误导提示
+  const [audioSourceKind, setAudioSourceKind] = useState<AudioSourceKind | null>(null);
 
   const notify = useCallback((type: 'success' | 'warning' | 'error' | 'info', message: string) => {
     toast({ type, message });
@@ -107,9 +112,9 @@ export function useClassroomCapture() {
     captureManager, status, mode, onNotify: notify,
   });
 
-  // 音频自动恢复：静音诊断 / 窗口源回退环回 / 设备变更重启
+  // 音频自动恢复：静音诊断（文案按生效源分支）/ 设备变更重启
   useAudioRecovery({
-    status, mode, audioSourceId: selectedWindow?.id, onNotify: notify,
+    status, mode, audioSourceId: selectedWindow?.id, sourceKind: audioSourceKind, onNotify: notify,
   });
 
   const analysis = useClassroomAnalysis({
@@ -150,6 +155,7 @@ export function useClassroomCapture() {
     onAnalyzeFull: analysis.handleAnalyze,
     onMergePartials: analysis.mergePartialNotes,
     onNotify: (type, message) => notify(type, message),
+    onAudioSourceResolved: setAudioSourceKind,
   });
 
   const handleModeChange = useCallback((newMode: CaptureMode) => {
@@ -214,6 +220,8 @@ export function useClassroomCapture() {
     liveTranscripts: events.liveTranscripts,
     // 音频健康 + VAD
     audioHealth, vadStats: events.vadStats,
+    // 本次会话生效的音频源（UI 可见，供内测归因）
+    audioSourceKind,
     // 课程上下文
     courseMeta, setCourseMeta, aiDetectEnabled, setAiDetectEnabled,
     // 录制
