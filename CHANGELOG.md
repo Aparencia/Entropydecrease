@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.28.5](https://github.com/Aparencia/Entropydecrease/compare/v0.28.4...v0.28.5) (2026-07-31)
+
+### ⚡ 性能优化
+
+* **download:** 阶段0 下载提速——BBR、并发兼容与多线程下载引导 ([f7aa5c3](https://github.com/Aparencia/Entropydecrease/commit/f7aa5c302eb196748ad7c5761e007658d5377519))
+
 ## [0.28.4](https://github.com/Aparencia/Entropydecrease/compare/v0.28.3...v0.28.4) (2026-07-30)
 
 ### 🐛 缺陷修复
