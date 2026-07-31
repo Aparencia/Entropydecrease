@@ -265,6 +265,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
+          # release job 不做 checkout（仅下载 artifact），gh 无法从 git 仓库
+          # 推断仓库而报 "not a git repository"，故必须显式指定 GH_REPO
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
         run: |
           set -eo pipefail
