@@ -91,13 +91,50 @@ const DOWNLOAD_BASE = (
 
 1. 阿里云 CDN 添加加速域名，如 `dl.entropydecrease.com`；
 2. **业务类型**选「大文件下载加速」；
-3. **源站**填 ECS 公网 IP，**回源 Host 填 `entropydecrease.com`**——这样命中 nginx 现有 `server_name`，**无需改动 nginx 配置，也无需为子域申请证书**（CDN 侧可免费签发 HTTPS 证书）；
-4. 缓存规则：
+3. **源站**填 ECS 公网 IP，**端口必须选 443（不能选 80）**——nginx 的 80 端口是纯 `return 301` 重定向，回源到 80 只会拿到重定向而非文件内容；
+4. **回源 Host 填 `entropydecrease.com`**——命中 nginx 现有 `server_name`，**无需改动 nginx 配置，也无需为子域申请证书**（CDN 侧可免费签发 HTTPS 证书，并以回源 Host 作 SNI）；
+5. 缓存规则：
    - `.exe` / `.blockmap` → 长缓存（如 30 天，文件名含版本号，天然唯一）
    - `.yml` / `.json` → **不缓存**（更新元数据必须实时；源站已设 `Cache-Control: no-cache`）
-5. DNS 添加 CNAME 指向 CDN 提供的地址；
-6. 在 GitHub 仓库 Secrets 添加 `DOWNLOAD_BASE_URL = https://dl.entropydecrease.com`；
-7. 触发官网部署与一次发版，验证生效。
+6. DNS 添加 CNAME 指向 CDN 提供的地址；
+7. 在 GitHub 仓库 Secrets 添加
+   `DOWNLOAD_BASE_URL = https://dl.entropydecrease.com/downloads`
+   ⚠️ **必须带 `/downloads` 路径**：安装包位于 nginx 的 `/downloads/` 下，而前端与
+   electron-updater 均以 `{BASE}/文件名` 拼接。若 BASE 不带该路径，回源会变成
+   `/文件名`，nginx 会去官网根目录寻找而返回 404。
+8. 触发官网部署与一次发版，验证生效。
+
+## 预热：大文件分发的必要步骤（非可选优化）
+
+阿里云 CDN 对大文件采用**分片缓存**，只有被请求过的分片才进入缓存。未预热时，首批用户会退化为**实时回源**，速度被源站带宽拖垮——此时 CDN 几乎毫无效果。
+
+**实测对比（同一文件、同一节点、RTT 5ms）**：
+
+| 分片状态 | 速率 | 172MB 耗时 |
+|---------|------|-----------|
+| 已缓存（HIT） | **10.5 MB/s** | **约 16 秒** |
+| 未缓存（回源） | 106 KB/s | 约 27 分钟 |
+
+相差约 **95 倍**。因此每次发版必须预热新版本，否则“接了 CDN 却仍然很慢”。
+
+### 已在 CI 中自动化
+
+`release.yml` 在同步安装包至源站后调用阿里云 `PushObjectCache` 接口预热：
+
+```yaml
+- name: Prefetch CDN cache
+  if: ${{ secrets.DOWNLOAD_BASE_URL != '' && secrets.ALIYUN_ACCESS_KEY_ID != '' }}
+  continue-on-error: true          # 预热失败不推翻已成功的发布
+  run: |
+    /tmp/aliyun cdn PushObjectCache --region cn-hangzhou \
+      --ObjectPath "$OBJECTS" --Area domestic
+```
+
+要点：
+- 预热对象仅需 `.exe` 与 `.blockmap`；`latest.yml/json` 按设计不缓存且仅几百字节，无需预热。
+- 预热是**异步任务**，API 返回后后台继续拉取，CI 不等待完成。
+- 预热会从源站回源拉取全量文件，**会占用 ECS 带宽**，可能短暂影响 API；属一次性行为。
+- 需额外两个 Secrets：`ALIYUN_ACCESS_KEY_ID` / `ALIYUN_ACCESS_KEY_SECRET`，建议专用 RAM 用户仅授予 CDN 刷新预热权限。
 
 ## 优缺点
 
@@ -122,6 +159,9 @@ OSS/存储侧可忽略（保留 3 个版本约 0.5GB）。流量稳定后可购�
 
 ## 注意事项
 
+- **不预热等于 CDN 白接**：大文件按分片缓存，未预热时首批用户实时回源，速度与直连源站无异（实测 106KB/s vs 已缓存 10.5MB/s）。诊断时切勿只看 `X-Cache: HIT` 就下结论——文件头部分片可能已 HIT 而中段仍需回源，应分别测量不同偏移量的 Range 速率。
+- **采购防踩坑**：本方案**不需要 OSS**，切勿购买「OSS 资源包」（尤其是「标准-同城冗余存储」容量包，与下载速度无关）。若要预付，应选「CDN/全站加速/ESA 资源包 → CDN/DCDN 下行流量 → 全国通用（中国内地）」。资源包**额度可叠加**，故先买最小规格、用完再加即可，无需预估准确；资源包过期不退。
+- **买包不等于费用封顶**：资源包用完后会**自动转为按量付费**，故费用预警与防盗链仍属必选。
 - **必须先设防再上线**：费用预算提醒 + 资源用量预警 + Referer 防盗链 + 单 IP 频次限制；可选用量封顶。公开大文件按量计费若被恶意刷取，账单会飙升。
 - **`latest.yml` 绝不可被 CDN 缓存**：否则客户端长期读到旧版本，表现为「明明发布了新版却检测不到更新」。
 - **存量客户端更新源已固化**：已安装版本的 `app-update.yml` 指向旧地址，故切换 CDN 后 **ECS 与 GitHub 两侧资产仍需继续发布**，不可下线。
