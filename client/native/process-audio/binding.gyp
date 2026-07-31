@@ -5,7 +5,9 @@
       "sources": [
         "src/addon.cc",
         "src/window_finder.cc",
-        "src/loopback_capture.cc"
+        "src/capture_session.cc",
+        "src/loopback_capture.cc",
+        "src/streaming_capture.cc"
       ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")"
