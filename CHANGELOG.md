@@ -3,6 +3,19 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.30.0](https://github.com/Aparencia/Entropydecrease/compare/v0.29.0...v0.30.0) (2026-07-31)
+
+### ✨ 新功能
+
+* **audio:** 原生模块支持流式采集（采集线程 + ThreadSafeFunction） ([b368bf8](https://github.com/Aparencia/Entropydecrease/commit/b368bf873daf8ac70e517650ffb9dbe65143de72))
+* **audio:** 接入进程环回 Provider 与构建链路（Phase 2，flag 默认关） ([bc37a96](https://github.com/Aparencia/Entropydecrease/commit/bc37a960edbbde50b3fde509429304426f193b8f))
+* **audio:** 进程环回采集原生模块 Phase 1 可行性验证 + ADR-001 ([be0f090](https://github.com/Aparencia/Entropydecrease/commit/be0f09009ce6b0d3649e22836b5176d85613b889))
+* **audio:** 进程环回默认启用 + 设置页音频源选择（Phase 3） ([4006a92](https://github.com/Aparencia/Entropydecrease/commit/4006a929a7f5c1cefa3a50dfe12e2ba5990e1418))
+
+### ♻️ 重构
+
+* **audio:** 引入 AudioSourceProvider 抽象层（Phase 0，零行为变更） ([d41773d](https://github.com/Aparencia/Entropydecrease/commit/d41773d5fba0622fc7845442fc6a5c03167e8ff6))
+
 ## [0.29.0](https://github.com/Aparencia/Entropydecrease/compare/v0.28.12...v0.29.0) (2026-07-31)
 
 ### ✨ 新功能
