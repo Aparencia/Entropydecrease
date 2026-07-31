@@ -62,27 +62,12 @@ jobs:
       # --publish never：发布由下方 release job 统一负责，避免 electron-builder
       # 因检测到 tag 而自行尝试发布（github provider 无 GH_TOKEN 会报错）
       #
-      # DOWNLOAD_BASE_URL 已配置时，用 -c.publish.0.url 覆盖 generic 更新源为 CDN，
-      # 使新包内的 app-update.yml 指向 CDN；未配置时沿用 electron-builder.yml
-      # 中的自建服务器地址。注：存量客户端的更新源已固化在已安装的
-      # app-update.yml 中，故 ECS 与 GitHub 两侧资产均需继续发布。
+      # 更新源（CDN）已直接固化在 electron-builder.yml 的 generic provider 中，
+      # 本地打包与 CI 打包产物的 app-update.yml 完全一致，不再用
+      # DOWNLOAD_BASE_URL sed 改写（行锚定模式在 yml 变动后会静默失效，已移除）
       - name: Build Electron app
         shell: bash
-        env:
-          DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL }}
-        run: |
-          cd client
-          if [ -n "$DOWNLOAD_BASE_URL" ]; then
-            # 不能用 -c.publish.0.url 覆盖：electron-builder 会将其解析成
-            # 对象 {publish:{0:{url}}} 而非数组元素，触发 schema 校验失败。
-            # 故直接改写配置文件中 generic provider 的 url（行锚定精确匹配）。
-            sed -i "s|^    url: https://entropydecrease.com/downloads$|    url: ${DOWNLOAD_BASE_URL%/}|" electron-builder.yml
-            echo 'generic provider after rewrite:'
-            grep -A1 'provider: generic' electron-builder.yml
-          else
-            echo "Update feed -> 默认（electron-builder.yml 中的自建服务器）"
-          fi
-          npm run electron:build -- --publish never
+        run: cd client && npm run electron:build -- --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.os }}

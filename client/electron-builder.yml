@@ -1,13 +1,15 @@
 # Electron Builder 打包配置 - 熵减桌面端
 appId: com.entropydecrease.app
 productName: "Entropy decrease"
-# 双发布源：第一项（generic = 自建服务器）被写入 app-update.yml 作为
+# 双发布源：第一项（generic = CDN，dl 域名，源站 OSS）被写入 app-update.yml 作为
 # electron-updater 的自动更新源；GitHub 保留为开源分发/灾备源。
-# 注意：存量客户端的 app-update.yml 仍指向 GitHub，过渡期内
-# GitHub Release 资产（含 latest.yml）不可停发，否则存量用户无法升级到新源。
+# 此处即最终值：CI 不再改写（历史上的 DOWNLOAD_BASE_URL sed 改写已移除），
+# 本地打包与 CI 打包产物的更新源完全一致；换域名直接改本文件。
+# 注意：存量客户端的 app-update.yml 仍指向 GitHub/ECS 旧源，过渡期内
+# GitHub Release 资产（含 latest.yml）与 ECS 侧不可停发，否则存量用户无法升级到新源。
 publish:
   - provider: generic
-    url: https://entropydecrease.com/downloads
+    url: https://dl.entropydecrease.com/downloads
   - provider: github
     owner: Aparencia
     repo: Entropydecrease
