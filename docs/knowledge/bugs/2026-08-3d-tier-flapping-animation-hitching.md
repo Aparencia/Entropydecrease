@@ -54,7 +54,18 @@
    - **持续判定**：同方向连续 2 个窗口（4s）才调整 tier；
    - **逐级调整**：`high→medium→low` 一次一级，避免悬崖式降级直接隐藏后处理；
    - **后台返回重置**：`visibilitychange` 变可见时重置测量基线，避免节流期数据被误判。
-2. **`MemoryManager` 清理死代码**：移除无效的"跳帧"逻辑与仅服务于它的 blur/focus 监听，保留内存占用上报。
+2. **`MemoryManager` 清理死代码**：移除无效的“跳帧”逻辑与仅服务于它的 blur/focus 监听，保留内存占用上报。
+
+## 后续演进（成熟方案落地）
+
+上述自研滞回/持续逻辑随后按 docs 重构规范迁移至 **drei `<PerformanceMonitor>`**（`refactor(3d)` 两次提交）：
+
+- **测量与防抖委托给 drei**：内置滑动均值（iterations×ms 采样）、bounds 滞回、threshold 比例持续判定与 flip-flop 保护，替代自研单窗口测量；`bounds` 固定为 `[25,50]` 保持原滞回区间。
+- **tier 迁移策略抽取为纯函数** `tierPolicy.stepTier`（逐级迁移，附 8 个 BDD 单测）——AI 编程规范 §1 副作用隔离 / §6 自底向上。
+- **后台重置改为“隐藏即卸载”**：`visibilitychange` 隐藏时卸载 drei 监控、返回重挂，自然重置采样基线（并顺带重置 drei 内部 flipped/fallback，防止 fallback 永久锁定）。
+- **公共 API 与画质不变**：`usePerformanceStore`（tier/fps）接口与三级语义未动；multisampling 与特效开关未触碰，呈现质量不受影响。
+
+> 保留自研 vs 采用 drei 的取舍：drei 的 `flipflops` 触发后会**永久停止采样**（需靠隐藏/重挂重置），且 `bounds` 默认 `[40,60]` 在 60Hz 屏上偏严——故需自定义 bounds 并理解其“fallback 即锁定”语义，不能直接裸用默认参数。
 
 ## 市场成熟方案（R3F 生态，均已确认在当前依赖版本可用）
 
@@ -77,4 +88,7 @@
 
 ## 相关提交
 
-- perf(3d): 性能分级引入滞回+持续判定+后台重置，消除 tier 抖动；清理无效跳帧死代码（待提交）
+- `8851a1f` perf(3d): 性能分级引入滞回+持续判定+后台重置，消除 tier 抖动；清理无效跳帧死代码
+- `1602c72` refactor(3d): 抽取 tier 迁移策略为纯函数模块 tierPolicy 并补充 BDD 单测
+- `72e584f` refactor(3d): 性能监控迁移至 drei PerformanceMonitor 成熟方案
+- 回滚点：标签 `backup/pre-3d-perf-refactor`（指向 `8851a1f`）
