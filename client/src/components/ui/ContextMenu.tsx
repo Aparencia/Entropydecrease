@@ -1,7 +1,10 @@
 /**
  * @ai-context: UI 基础组件（shadcn/radix 封装）：ContextMenu。
+ * 定位机制：Radix ContextMenu 的菜单锚点取自触发器真实收到的 contextmenu 事件坐标，
+ * 因此挂载后向隐藏触发器派发携带 position 坐标的原生事件来打开菜单；
+ * 绝不可强制传 open（锚点未初始化会导致菜单固定在屏幕左上角）。
  */
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import * as RadixContextMenu from '@radix-ui/react-context-menu';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -120,6 +123,8 @@ export const ContextMenu = <C,>({
   onSelect,
   onClose,
 }: ContextMenuProps<C>) => {
+  const triggerRef = useRef<HTMLSpanElement>(null);
+
   const handleSelect = useCallback(
     (itemKey: string) => {
       onSelect(itemKey, context);
@@ -128,10 +133,24 @@ export const ContextMenu = <C,>({
     [onSelect, context, onClose],
   );
 
+  // 向隐藏触发器派发带坐标的 contextmenu 事件，让 Radix 记录锚点并打开菜单；
+  // position 变化时（菜单未关闭又右键另一目标）重新派发以重定位
+  useEffect(() => {
+    triggerRef.current?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: position.x,
+      clientY: position.y,
+    }));
+  }, [position.x, position.y]);
+
   return (
-    <RadixContextMenu.Root open onOpenChange={(v) => { if (!v) onClose(); }}>
+    <RadixContextMenu.Root onOpenChange={(v) => { if (!v) onClose(); }}>
       {/* Hidden trigger at target position */}
       <RadixContextMenu.Trigger
+        ref={triggerRef}
+        // 阻止合成事件冒泡到页面的 onContextMenu，避免重复触发 handleContextMenu
+        onContextMenu={(e) => e.stopPropagation()}
         style={{
           position: 'fixed',
           left: position.x,
@@ -147,7 +166,7 @@ export const ContextMenu = <C,>({
 
       <RadixContextMenu.Portal>
         <RadixContextMenu.Content
-          avoidCollisions={false}
+          collisionPadding={8}
           onCloseAutoFocus={(e: Event) => e.preventDefault()}
           className={cn(
             'z-[9999] bg-bg-elevated/90 backdrop-blur-2xl border border-border/50 rounded-kb-md shadow-xl py-1 min-w-[160px]',
