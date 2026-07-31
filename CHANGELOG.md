@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.28.7](https://github.com/Aparencia/Entropydecrease/compare/v0.28.6...v0.28.7) (2026-07-31)
+
+### ⚡ 性能优化
+
+* **cdn:** 放宽源站限流并新增 OSS 源站同步以加速预热 ([3b05789](https://github.com/Aparencia/Entropydecrease/commit/3b057897c695ea7c1a737fa24d39ab7b9141c0c3))
+
 ## [0.28.6](https://github.com/Aparencia/Entropydecrease/compare/v0.28.5...v0.28.6) (2026-07-31)
 
 ### 🐛 缺陷修复
