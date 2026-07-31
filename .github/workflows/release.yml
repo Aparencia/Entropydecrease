@@ -240,3 +240,27 @@ jobs:
             --region cn-hangzhou \
             --ObjectPath "$OBJECTS" \
             --Area domestic
+
+      # ---------------------------------------------------------------
+      # 发布结果校验：“空 Release”已静默发生过两次（v0.27.0 因 macOS 腿
+      # 拖垮构建、v0.28.7 因 workflow 解析失败），而两次都是事后手工才
+      # 发现的——此时 electron-updater 拉不到 latest.yml，自动更新静默断链。
+      # 此步骤使该故障在 CI 中即时暴露。
+      # ---------------------------------------------------------------
+      - name: Verify release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eo pipefail
+          names=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+          echo "Assets of $TAG:"
+          echo "$names"
+          for required in '\.exe$' '\.exe\.blockmap$' '^latest\.yml$'; do
+            if ! echo "$names" | grep -qE "$required"; then
+              echo "::error::Release $TAG 缺少匹配 $required 的资产，自动更新将不可用"
+              exit 1
+            fi
+          done
+          echo "发布资产完整校验通过"
