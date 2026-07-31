@@ -1,21 +1,28 @@
 /**
- * 性能监控 — FPS追踪与动态降级
+ * 性能监控 — FPS追踪与动态降级（基于 drei 成熟方案）
  *
- * 降级策略（防止“动画闪烁/长期隐藏”的三项关键设计）：
- * 1. 滞回：低于 25 记为低、高于 50 记为高，25~50 为缓冲区不触发变更，
- *    避免 FPS 在单一阈值附近振荡导致 tier 来回抖动；
- * 2. 持续判定：同方向连续 2 个窗口（4s）才逐级调整 tier，
- *    防止瞬时卡顿（着色器编译、GC、场景切换）造成立即降级；
- * 3. 后台重置：从后台返回时重置测量基线，避免浏览器后台 rAF 节流
- *    被误判为性能恶化、回到前台后立即降级。
+ * 重构说明（docs/standards/refactoring.md，外部行为不变）：
+ * - FPS 测量与防抖委托给 drei <PerformanceMonitor>（工业级实现）：
+ *   内置滑动均值（iterations×ms 采样）、bounds 滞回、threshold 比例持续判定
+ *   与 flip-flop 保护，替代原自研单窗口测量 + 手写滞回/持续逻辑；
+ * - tier 迁移策略抽取至纯函数模块 tierPolicy（已单测）；
+ * - 本组件仅做装配：把 drei 回调映射为 tier 逐级迁移，并在窗口隐藏时
+ *   卸载监控以重置测量基线（后台 rAF 节流期 FPS 不可信，卸载重挂即自然
+ *   清零，避免回到前台被误判降级）。
  *
  * @ai-context: 3D 场景核心（R3F）：PerformanceMonitor。
  */
-import { useFrame } from '@react-three/fiber';
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
+import { PerformanceMonitor as DreiPerformanceMonitor } from '@react-three/drei';
 import { create } from 'zustand';
+import { stepTier, type PerformanceTier } from './tierPolicy';
 
-type PerformanceTier = 'high' | 'medium' | 'low';
+/** FPS 下界：持续低于此值触发降级（滞回缓冲区下限） */
+export const FPS_LOWER_BOUND = 25;
+/** FPS 上界：持续高于此值触发升级（滞回缓冲区上限） */
+export const FPS_UPPER_BOUND = 50;
+/** 升降震荡（flip-flop）允许次数上限，超过则回落稳定档 */
+const MAX_FLIPFLOPS = 4;
 
 interface PerformanceState {
   tier: PerformanceTier;
@@ -31,73 +38,39 @@ export const usePerformanceStore = create<PerformanceState>((set) => ({
   setFps: (fps) => set({ fps }),
 }));
 
-/** FPS 阈值：低于 LOWER 计低、高于 UPPER 计高，中间为缓冲区（滞回） */
-const LOWER_BOUND = 25;
-const UPPER_BOUND = 50;
-/** 触发 tier 变更所需的同方向连续窗口数（持续判定，每窗口 2s） */
-const SUSTAIN_WINDOWS = 2;
-/** FPS 测量窗口长度（ms） */
-const WINDOW_MS = 2000;
-
 export function PerformanceMonitor() {
-  const frameCount = useRef(0);
-  const lastTime = useRef(performance.now());
-  const lowStreak = useRef(0);
-  const highStreak = useRef(0);
-
-  // 从后台返回后重置测量基线：后台期间浏览器节流 rAF，
-  // 若不重置，返回后的第一个窗口会测出极低 FPS 被误判为降级
+  // 窗口隐藏时卸载监控：后台期间浏览器节流 rAF，FPS 读数不可信；
+  // 返回前台重挂即自然重置采样基线，避免误判降级。
+  // 附带收益：同时重置 drei 内部 flipped/fallback 计数，防止 fallback 永久锁定。
+  const [visible, setVisible] = useState(() => document.visibilityState === 'visible');
   useEffect(() => {
-    const reset = () => {
-      frameCount.current = 0;
-      lastTime.current = performance.now();
-      lowStreak.current = 0;
-      highStreak.current = 0;
-    };
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') reset();
-    };
+    const onVisibility = () => setVisible(document.visibilityState === 'visible');
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
-  useFrame(() => {
-    frameCount.current++;
-    const now = performance.now();
-    const elapsed = now - lastTime.current;
-    if (elapsed < WINDOW_MS) return;
+  if (!visible) return null;
 
-    const fps = Math.round(frameCount.current * (1000 / elapsed));
-    frameCount.current = 0;
-    lastTime.current = now;
-
-    // 在帧回调内取最新 tier，避免闭包捕获旧值
-    const { tier, setTier, setFps } = usePerformanceStore.getState();
-    setFps(fps);
-
-    if (fps < LOWER_BOUND) {
-      lowStreak.current++;
-      highStreak.current = 0;
-    } else if (fps > UPPER_BOUND) {
-      highStreak.current++;
-      lowStreak.current = 0;
-    } else {
-      // 缓冲区：双向计数清零，tier 保持不变
-      lowStreak.current = 0;
-      highStreak.current = 0;
-    }
-
-    // 持续同方向才逐级调整一级，避免悬崖式变更（high→low 会直接隐藏后处理）
-    if (lowStreak.current >= SUSTAIN_WINDOWS) {
-      lowStreak.current = 0;
-      if (tier === 'high') setTier('medium');
-      else if (tier === 'medium') setTier('low');
-    } else if (highStreak.current >= SUSTAIN_WINDOWS) {
-      highStreak.current = 0;
-      if (tier === 'low') setTier('medium');
-      else if (tier === 'medium') setTier('high');
-    }
-  });
-
-  return null;
+  return (
+    <DreiPerformanceMonitor
+      bounds={() => [FPS_LOWER_BOUND, FPS_UPPER_BOUND]}
+      flipflops={MAX_FLIPFLOPS}
+      onIncline={(api) => {
+        // 持续高 FPS（75%+ 样本 ≥ 上界）→ 逐级升档
+        const { tier, setTier, setFps } = usePerformanceStore.getState();
+        setFps(Math.round(api.fps));
+        setTier(stepTier(tier, 'up'));
+      }}
+      onDecline={(api) => {
+        // 持续低 FPS（75%+ 样本 < 下界）→ 逐级降档
+        const { tier, setTier, setFps } = usePerformanceStore.getState();
+        setFps(Math.round(api.fps));
+        setTier(stepTier(tier, 'down'));
+      }}
+      onFallback={() => {
+        // 震荡超限 → 稳定在中档：保留后处理特效、适度降低 DPR
+        usePerformanceStore.getState().setTier('medium');
+      }}
+    />
+  );
 }
