@@ -74,7 +74,31 @@ log_info "准备静态资源目录..."
 mkdir -p /opt/Entropydecrease/website /opt/Entropydecrease/downloads
 
 # ---------------------------------------------------------------------------
-# 4. 构建并启动服务
+# 4. 启用 BBR 拥塞控制（幂等）
+#    安装包下载实测单流仅 ~143KB/s、而多并发可达 ~550KB/s，典型的跳网
+#    丢包导致单流 TCP 吞吐劣化。BBR 对此类链路提升明显。
+#    容器共享宿主机内核，宿主机启用即对 Nginx 生效。
+# ---------------------------------------------------------------------------
+log_info "检查 TCP 拥塞控制算法..."
+CURRENT_CC=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo unknown)
+
+if [ "$CURRENT_CC" = "bbr" ]; then
+    log_info "BBR 已启用 ✓"
+elif sysctl net.ipv4.tcp_available_congestion_control 2>/dev/null | grep -q bbr; then
+    log_info "启用 BBR（当前: $CURRENT_CC）..."
+    # 写入失败（如非 root）不应中断部署，仅告警
+    if printf 'net.core.default_qdisc = fq\nnet.ipv4.tcp_congestion_control = bbr\n' \
+         > /etc/sysctl.d/99-bbr.conf 2>/dev/null && sysctl --system >/dev/null 2>&1; then
+        log_info "BBR 已启用（现为: $(sysctl -n net.ipv4.tcp_congestion_control)）✓"
+    else
+        log_warn "BBR 写入/生效失败（需 root 权限），已跳过，不影响部署"
+    fi
+else
+    log_warn "当前内核不支持 BBR（需 Linux ≥ 4.9），已跳过"
+fi
+
+# ---------------------------------------------------------------------------
+# 5. 构建并启动服务
 # ---------------------------------------------------------------------------
 log_info "构建 Docker 镜像（首次构建约需 3-5 分钟）..."
 
@@ -85,13 +109,13 @@ log_info "启动所有服务..."
 docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE" up -d
 
 # ---------------------------------------------------------------------------
-# 5. 等待服务就绪
+# 6. 等待服务就绪
 # ---------------------------------------------------------------------------
 log_info "等待服务启动..."
 sleep 10
 
 # ---------------------------------------------------------------------------
-# 6. 健康检查
+# 7. 健康检查
 # ---------------------------------------------------------------------------
 log_info "执行健康检查..."
 
