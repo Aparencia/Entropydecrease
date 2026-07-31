@@ -6,7 +6,9 @@
 
 | 日期 | 标题 | 标签 |
 |------|------|------|
+| 2026-07-31 | [CI 编译原生模块报「Could not find any Visual Studio installation」——旧版 node-gyp 找不到 VS 2022](./bugs/2026-07-ci-node-gyp-vs2022-not-found.md) | #CI #原生模块 #node-gyp #本地能跑CI挂 |
 | 2026-07-31 | [课堂助手精细采集三症状：视觉抓页面元数据、ASR 静音幻觉、截断 JSON 泄漏 UI](./bugs/2026-07-classroom-capture-asr-hallucination-json-leak.md) | #课堂助手 #多模态 #ASR幻觉 #prompt工程 |
+| 2026-07-31 | [番茄钟"跳过"退化为"取消"：一个 onClose 回调承载两种意图，空目标番茄无法启动](./bugs/2026-07-pomodoro-goal-skip-acts-as-cancel.md) | #React #番茄钟 #弹窗交互 #回调语义 #意图区分 |
 | 2026-07-31 | [登录失败后持续要求登录：AuthGuard 与“跳过登录”的模式降级缺口 + session-expired 事件风暴](./bugs/2026-07-login-loop-authguard-mode-gap.md) | #认证 #AuthGuard #路由守卫 #模式管理 #事件去重 #死循环 |
 | 2026-07-31 | [Tailwind v3 对 `var()` 令牌色的 `/透明度` 修饰符静默失效，明亮主题弹窗背景全透明](./bugs/2026-07-tailwind-var-alpha-modifier-silent-drop.md) | #Tailwind #CSS #主题 #DesignTokens #color-mix |
 | 2026-07-31 | [番茄钟计数异常：无重置路径的周期计数 + 跨模式状态残留 + store/hook 副作用双重执行](./bugs/2026-07-pomodoro-count-reset-and-duplicate-side-effects.md) | #Zustand #状态管理 #副作用 #番茄钟 #数据统计 |
@@ -31,4 +33,4 @@ _（暂无）_
 
 - **技术**：#CSS #a11y #React #Vite #Tailwind #Zustand #CI #GitLFS #electron-builder #GitHubActions #CDN #阿里云 #环境变量 #Supabase #DesignTokens #color-mix #认证 #AuthGuard
 - **类型**：#bug #方案 #学习 #复盘
-- **模块**：#启动仪式 #reduced-motion #animation #发布 #安装包 #性能诊断 #测量方法 #番茄钟 #主题 #状态管理 #副作用 #数据统计 #路由守卫 #模式管理 #事件去重
+- **模块**：#启动仪式 #reduced-motion #animation #发布 #安装包 #性能诊断 #测量方法 #番茄钟 #主题 #状态管理 #副作用 #数据统计 #路由守卫 #模式管理 #事件去重 #弹窗交互 #回调语义 #意图区分
