@@ -6,6 +6,7 @@
 
 | 日期 | 标题 | 标签 |
 |------|------|------|
+| 2026-07-31 | [`.env.production` 被 gitignore 致 CI 安装包云服务地址全为空（「云服务尚未配置」）](./bugs/2026-07-ci-env-production-gitignore-supabase-placeholder.md) | #CI #环境变量 #Vite #Supabase #GitHubActions #发布 |
 | 2026-07-31 | [下载慢诊断中的三次误判：对照实验缺失与观测行为污染测量](./bugs/2026-07-download-slow-misdiagnosis.md) | #性能诊断 #CDN #测量方法 #对照实验 #复盘 |
 | 2026-07-30 | [Git LFS 图标未在 CI 拉取致 electron-builder 打包报 `ERR_ELECTRON_BUILDER_CANNOT_EXECUTE`](./bugs/2026-07-git-lfs-icon-electron-builder-ci-failure.md) | #CI #GitLFS #electron-builder #GitHubActions #发布 |
 | 2026-07-30 | [reduced-motion 用 `animation-play-state: paused` 冻结入场动画致内容不可见](./bugs/2026-07-reduced-motion-fade-in-up-invisible.md) | #CSS #a11y #reduced-motion #animation |
@@ -24,6 +25,6 @@ _（暂无）_
 
 ## 标签速查
 
-- **技术**：#CSS #a11y #React #Vite #Tailwind #CI #GitLFS #electron-builder #GitHubActions #CDN #阿里云
+- **技术**：#CSS #a11y #React #Vite #Tailwind #CI #GitLFS #electron-builder #GitHubActions #CDN #阿里云 #环境变量 #Supabase
 - **类型**：#bug #方案 #学习 #复盘
 - **模块**：#启动仪式 #reduced-motion #animation #发布 #安装包 #性能诊断 #测量方法
