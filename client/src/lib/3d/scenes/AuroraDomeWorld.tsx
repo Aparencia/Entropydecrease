@@ -1,20 +1,16 @@
 /**
  * AuroraDomeWorld — 浅色模式「晨曦穹顶」3D场景
- * 天文馆般的穹顶世界：太阳系行星轨道 + 星尘粒子 + 云层
+ * 天文馆般的穹顶世界：太阳 + 星尘粒子 + 云层（模块行星由 SpatialNav 统一渲染）
  *
  * @ai-context: 3D 场景：AuroraDomeWorld。
  */
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { Float } from '@react-three/drei';
 import { Bloom, Vignette, ChromaticAberration } from '@react-three/postprocessing';
 import { BlendFunction } from 'postprocessing';
 import { SafeEffectComposer } from '../core/SafeEffectComposer';
 import { usePerformanceStore } from '../core/PerformanceMonitor';
-import { AuroraModuleEntity } from '../objects/AuroraModuleEntity';
-import { useOrbitalStore } from '../navigation/OrbitalStore';
-import type { ModuleId } from '../navigation/OrbitalStore';
 
 // ─── 天空穹顶着色器 ───────────────────────────────────────
 const domeVertexShader = /* glsl */ `
@@ -267,47 +263,9 @@ function CloudLayer() {
 }
 
 // ─── 行星轨道系统 ─────────────────────────────────────────
-const ORBIT_CONFIGS: Array<{
-  id: ModuleId;
-  radius: number;
-  speed: number;
-  initialAngle: number;
-}> = [
-  { id: 'dashboard', radius: 5, speed: 0.3, initialAngle: 0 },
-  { id: 'pomodoro', radius: 8, speed: 0.22, initialAngle: Math.PI * 0.33 },
-  { id: 'notes', radius: 11, speed: 0.16, initialAngle: Math.PI * 0.77 },
-  { id: 'flashcards', radius: 14, speed: 0.12, initialAngle: Math.PI * 1.2 },
-  { id: 'feynman', radius: 17, speed: 0.09, initialAngle: Math.PI * 1.6 },
-  { id: 'inspiration', radius: 20, speed: 0.06, initialAngle: Math.PI * 0.1 },
-];
-
-function PlanetarySystem() {
-  const { enterModule, setHovered } = useOrbitalStore();
-
-  const handleClick = (id: ModuleId) => {
-    enterModule(id);
-  };
-
-  const handleHover = (id: ModuleId | null) => {
-    setHovered(id);
-  };
-
-  return (
-    <group>
-      {ORBIT_CONFIGS.map((orbit) => (
-        <AuroraModuleEntity
-          key={orbit.id}
-          id={orbit.id}
-          orbitRadius={orbit.radius}
-          orbitSpeed={orbit.speed}
-          initialAngle={orbit.initialAngle}
-          onClick={handleClick}
-          onHover={handleHover}
-        />
-      ))}
-    </group>
-  );
-}
+// 模块行星（可点击导航）统一由 SpatialNav 渲染并负责路由跳转。
+// 本场景仅作环境背景，不重复生成行星实体——否则会出现两套可点击
+// 行星，外层行星只改状态不跳转，导致“点击 3D 物体”与功能错位。
 
 // ─── 主场景组件 ───────────────────────────────────────────
 export function AuroraDomeWorld() {
@@ -332,9 +290,6 @@ export function AuroraDomeWorld() {
 
       {/* 太阳系统 */}
       <SunSystem />
-
-      {/* 行星轨道系统 */}
-      <PlanetarySystem />
 
       {/* 星尘粒子 */}
       <StarDust count={particleCount} />
