@@ -163,7 +163,12 @@ export function createMainWindow(
       } else if (savedChoice === 'minimize') {
         win.hide();
       } else {
-        // 无记忆选择，通知前端弹出确认对话框
+        // 无记忆选择，通知前端弹出确认对话框。
+        // 窗口可能处于最小化/隐藏状态（如任务栏右键「关闭窗口」），
+        // 必须先恢复并聚焦，否则应用内对话框用户不可见，表现为“无法关闭”
+        if (win.isMinimized()) win.restore();
+        if (!win.isVisible()) win.show();
+        win.focus();
         win.webContents.send('window:closing');
       }
     } else if (!syncBeforeQuitCompleted) {
