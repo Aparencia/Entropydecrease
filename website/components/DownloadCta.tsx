@@ -90,16 +90,42 @@ export function DownloadCta() {
       <p className="text-xs text-kb-text3 mb-2">
         约 {sizeMB} MB · 适用于 Windows 10/11 (64位) · 免费开源
       </p>
-      <p className="text-xs mb-8">
-        <a
-          href={GITHUB_RELEASES}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-kb-text3 underline underline-offset-2 transition-colors duration-300 hover:text-kb-text2"
-        >
-          下载缓慢？使用 GitHub 备用源 ↗
-        </a>
-      </p>
+
+      {/* 下载提速引导：单连接受跳网丢包限制，多线程下载器可明显提速；
+          服务器已支持 Range 请求（断点续传） */}
+      <details className="text-xs mb-8 text-left max-w-md mx-auto">
+        <summary className="cursor-pointer text-kb-text3 transition-colors duration-300 hover:text-kb-text2 text-center">
+          下载缓慢？点此查看提速方式
+        </summary>
+        <div className="mt-4 rounded-xl p-4 space-y-3" style={{ background: "var(--kb-bg-tertiary)" }}>
+          <p className="text-kb-text2 leading-relaxed">
+            本站已支持<strong className="text-kb-text">断点续传与分段下载</strong>。浏览器默认只用单连接，
+            换用多线程下载工具（如 Motrix、IDM、aria2）通常可快几倍。
+          </p>
+          {latest && (
+            <div>
+              <p className="text-kb-text3 mb-1.5">直链（可复制到下载工具）：</p>
+              <code
+                className="block break-all rounded-lg px-3 py-2 font-mono text-[11px] text-kb-text2"
+                style={{ background: "var(--kb-bg-secondary)" }}
+              >
+                {downloadUrl}
+              </code>
+            </div>
+          )}
+          <p className="text-kb-text3">
+            仍然缓慢？试试{" "}
+            <a
+              href={GITHUB_RELEASES}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 transition-colors duration-300 hover:text-kb-text2"
+            >
+              GitHub 备用源 ↗
+            </a>
+          </p>
+        </div>
+      </details>
 
       {/* 系统要求 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-left">
