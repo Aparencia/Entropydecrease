@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.28.6](https://github.com/Aparencia/Entropydecrease/compare/v0.28.5...v0.28.6) (2026-07-31)
+
+### 🐛 缺陷修复
+
+* **nginx:** HTTP 下放行域名验证与 ACME 挑战路径 ([286e36d](https://github.com/Aparencia/Entropydecrease/commit/286e36dfb231f5f901524e20cc912958366abef3))
+
 ## [0.28.5](https://github.com/Aparencia/Entropydecrease/compare/v0.28.4...v0.28.5) (2026-07-31)
 
 ### ⚡ 性能优化
