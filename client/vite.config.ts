@@ -22,6 +22,16 @@ function electronBuildConfigPlugin(): Plugin {
       // 使用 Vite 的 loadEnv 加载 .env 文件（与 Vite 构建行为一致）
       // loadEnv 按约定加载：.env → .env.production → 系统环境变量（后者覆盖前者）
       const env = loadEnv('production', process.cwd(), '');
+      // 构建期防护：关键 VITE_ 变量缺失/占位符时立即终止构建，
+      // 防止产出「云服务尚未配置」的静默残废安装包
+      //（曾因 .env.production 被 gitignore、CI checkout 缺失而发生）
+      const required = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'VITE_API_BASE_URL', 'VITE_AI_GATEWAY_URL'];
+      const missing = required.filter((key) => !env[key] || env[key].includes('your-'));
+      if (missing.length > 0) {
+        throw new Error(
+          `[electron-build-config] 缺少必需环境变量: ${missing.join(', ')}，请检查 client/.env.production 是否存在且完整`,
+        );
+      }
       const config = {
         VITE_AI_GATEWAY_URL: env.VITE_AI_GATEWAY_URL || '',
         VITE_API_BASE_URL: env.VITE_API_BASE_URL || '',

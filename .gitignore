@@ -36,6 +36,10 @@ Thumbs.db
 .env.*.local
 .env.production
 .env.test
+# 例外：client/.env.production 全部为公开值（Supabase publishable anon key + 公网 URL，
+# 本就随安装包分发）。CI 打包（release.yml）依赖它注入渲染进程 VITE_ 变量，必须入库，
+# 否则产物中 Supabase/同步/AI 网关地址全为空（见 docs/knowledge/bugs/ 2026-07 记录）
+!client/.env.production
 
 # Brainstorm scratch (personal notes)
 brainstorm*.md
