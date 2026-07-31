@@ -185,9 +185,14 @@ jobs:
           curl -sL https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz -o /tmp/aliyun.tgz
           tar -xzf /tmp/aliyun.tgz -C /tmp
 
+          # 新版 aliyun CLI 的 oss 子命令已移除 -i/-k 短参数（会报
+          # unknown flag -i），故改用非交互式 configure 写入 profile 携带凭证
+          /tmp/aliyun configure set --profile ossci --mode AK --region cn-hangzhou \
+            --access-key-id "$AK_ID" --access-key-secret "$AK_SECRET"
+
           oss_cp() {
             /tmp/aliyun oss cp "$1" "oss://$OSS_BUCKET/downloads/$2" \
-              --force -e "$OSS_ENDPOINT" -i "$AK_ID" -k "$AK_SECRET"
+              --force -e "$OSS_ENDPOINT" --profile ossci
           }
 
           cd release-windows-latest
@@ -225,13 +230,18 @@ jobs:
         # 预热失败不应推翻已成功的发布，仅标记警告
         continue-on-error: true
         env:
-          ALIBABA_CLOUD_ACCESS_KEY_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
-          ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+          AK_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+          AK_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
           FILE_NAME: ${{ steps.meta.outputs.file }}
         run: |
           set -eo pipefail
-          curl -sL https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz -o /tmp/aliyun.tgz
-          tar -xzf /tmp/aliyun.tgz -C /tmp
+          # 上一步可能被跳过（未配 OSS），故不假设 CLI 已存在
+          if [ ! -x /tmp/aliyun ]; then
+            curl -sL https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz -o /tmp/aliyun.tgz
+            tar -xzf /tmp/aliyun.tgz -C /tmp
+          fi
+          /tmp/aliyun configure set --profile cdnci --mode AK --region cn-hangzhou \
+            --access-key-id "$AK_ID" --access-key-secret "$AK_SECRET"
 
           BASE="${DOWNLOAD_BASE_URL%/}"
           # 预热安装包与 blockmap（差量更新依赖）；
@@ -241,7 +251,7 @@ jobs:
           echo "$OBJECTS"
 
           /tmp/aliyun cdn PushObjectCache \
-            --region cn-hangzhou \
+            --profile cdnci \
             --ObjectPath "$OBJECTS" \
             --Area domestic
 
