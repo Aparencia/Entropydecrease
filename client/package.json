@@ -14,7 +14,7 @@
     "preview": "vite preview",
     "electron:dev": "concurrently -k -n vite,electron \"cross-env ELECTRON_BUILD=1 vite --mode test\" \"wait-on http://localhost:5173 && tsc -p electron/tsconfig.json && cross-env ELECTRON_BUILD=1 NODE_ENV=development VITE_AI_GATEWAY_URL=http://101.37.70.235:8000 electron .\"",
     "electron:build": "cross-env ELECTRON_BUILD=1 vite build && tsc -p electron/tsconfig.json && electron-builder",
-    "native:build": "electron-rebuild --module-dir native/process-audio --only @entropydecrease/process-audio",
+    "native:build": "node native/process-audio/build.mjs",
     "native:install": "npm --prefix native/process-audio install --no-audit --no-fund",
     "test": "vitest run",
     "test:watch": "vitest",

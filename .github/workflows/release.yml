@@ -59,7 +59,10 @@ jobs:
           cache: 'npm'
           cache-dependency-path: client/package-lock.json
       - run: cd client && npm ci
-      # 进程环回原生模块（ADR-001）：windows-latest 自带 MSVC，针对 Electron ABI 编译。
+      # 进程环回原生模块（ADR-001）：windows-latest 自带 VS 2022。
+      # 必须走 native:build 脚本（本地与 CI 同一入口）：直接用 client 下的
+      # electron-rebuild 会命中旧版 node-gyp，在 CI 报
+      # "Could not find any Visual Studio installation"（它仍在找 VS 2013/2015）。
       # continue-on-error：它是可选增强（运行时未加载到则降级为端点环回），
       # 不应因其编译失败而阻断整条发布流水线
       - name: Build native process-audio module
