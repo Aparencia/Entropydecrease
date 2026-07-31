@@ -150,7 +150,7 @@ export default function HomePage() {
                 boxShadow: "var(--kb-shadow-brand)",
               }}
             >
-              免费下载 →
+              免费获取 · 前往下载 →
             </Link>
             <Link
               href="/story"
@@ -304,7 +304,7 @@ export default function HomePage() {
               boxShadow: "var(--kb-shadow-accent)",
             }}
           >
-            下载熵减 · 开始深潜
+            前往下载 · 开始深潜
           </Link>
         </SectionReveal>
       </section>
