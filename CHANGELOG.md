@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.28.10](https://github.com/Aparencia/Entropydecrease/compare/v0.28.9...v0.28.10) (2026-07-31)
+
+### 🐛 缺陷修复
+
+* **release:** aliyun CLI 改用 profile 携带凭证 ([e4bed9b](https://github.com/Aparencia/Entropydecrease/commit/e4bed9b689576a33d466e87bf64978b6060b9129))
+
 ## [0.28.9](https://github.com/Aparencia/Entropydecrease/compare/v0.28.8...v0.28.9) (2026-07-31)
 
 ### 🐛 缺陷修复
