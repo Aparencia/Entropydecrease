@@ -41,6 +41,11 @@
 | [pain-points.md](./product/pain-points.md) | 网课学习全链路痛点图谱 |
 | [requirements-pool.md](./product/requirements-pool.md) | 需求池（含立项规划精要附录） |
 | [migration-spec.md](./product/migration-spec.md) | 项目迁移与重构规范（含各阶段收尾结论与豁免清单） |
+| [beta-tester-intro.md](./product/beta-tester-intro.md) | 内测简介（面向内测用户） |
+| [beta-recruitment-playbook.md](./product/beta-recruitment-playbook.md) | 内测招募与运营手册（招募→筛选→增长→运营→过渡全链路） |
+| [beta-recruitment-announcement.md](./product/beta-recruitment-announcement.md) | 内测用户招募公告（含一分钟短版 + 完整版） |
+| [beta-agreement.md](./product/beta-agreement.md) | 内测协议简版（双方权责、数据处理、风险告知、退出机制） |
+| [beta-tier-management.md](./product/beta-tier-management.md) | 内测用户分层管理方案（三层标准、升降级、各层运营动作） |
 
 ## 🗓 versions/ — 版本规划（扁平化）
 
