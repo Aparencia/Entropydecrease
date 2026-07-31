@@ -1,58 +1,38 @@
 /**
- * Electron 主进程系统音频捕获模块
+ * 音频采集编排器
  *
- * 架构：
- * 1. 主进程使用 desktopCapturer.getSources({ types: ['screen'] }) 枚举屏幕源作为音频环回候选
- * 2. 将音频 sourceId 传递给渲染进程
- * 3. 渲染进程通过 getUserMedia + chromeMediaSource: 'desktop' 获取 MediaStream
- * 4. 渲染进程使用 Web Audio API (AudioContext + ScriptProcessor) 切片
- * 5. PCM 数据块通过 IPC 回传主进程，添加单调时间戳后推送给消费者
+ * @ai-context: Phase 0 重构（见 ADR-001）——本文件由"直接驱动渲染进程采集"
+ * 改为「按策略选源 + 降级 + 统一补时间戳」的编排器，具体采集实现下沉到
+ * audio/*Provider。对外 API（AudioCapture 的 start/stop/dispose/
+ * handleRendererChunk/isCapturing/config）保持不变，故 mediaCaptureHandlers
+ * 无需改动，行为与重构前一致。
+ * @ai-context: 时间戳统一在编排器补，保证不同源切换（含降级）后时间基准连续。
  *
- * @ai-context: 系统音频捕获：渲染进程 getDisplayMedia 采集、主进程聚合分块。
- *
- * TODO(现场课程): 当前仅支持系统音频环回（捕获电脑播放的声音，适配网课场景）。
- * 后续「现场课程」需扩展麦克风输入源：listAudioSources 增加枚举
- * navigator.mediaDevices 的 audioinput 设备，getUserMedia 直接以 deviceId
- * 采集麦克风，并与环回源并列供用户选择（或双路混合）。
+ * TODO(现场课程): 麦克风 Provider（MicrophoneProvider）待补，届时经
+ * selectAudioSource 的 microphone 分支进入，VADMarker 以
+ * sourceType:'microphone' 构造启用背景噪声校准。
  */
 
-import { desktopCapturer, DesktopCapturerSource, BrowserWindow } from 'electron';
-import { logger } from './logger';
-import { setPreferredDisplaySource } from './displayMediaHandler';
+import type { BrowserWindow } from 'electron';
+import { logger } from './logger.js';
+import { EndpointLoopbackProvider, listAudioSources } from './audio/endpointLoopbackProvider.js';
+import type {
+  AudioCaptureOptions,
+  AudioChunk,
+  AudioSourceProvider,
+  RendererAudioChunk,
+} from './audio/audioSourceProvider.js';
+import {
+  selectAudioSource,
+  type AudioSourceDecision,
+  type AudioSourceKind,
+  type AudioSourcePreference,
+} from '../src/lib/capture/audioSourceStrategy.js';
 
-// ================================================================
-// 类型定义
-// ================================================================
-
-/** 音频源信息 */
-export interface AudioSourceInfo {
-  id: string;
-  name: string;
-}
-
-/** 音频捕获配置 */
-export interface AudioCaptureOptions {
-  chunkDurationMs: number;    // 音频块时长(ms)，默认 5000
-  sampleRate: number;         // 采样率，默认 16000
-  channels: number;           // 声道数，默认 1（单声道）
-}
-
-/** 音频块数据（主进程 → 渲染进程） */
-export interface AudioChunk {
-  audioBuffer: ArrayBuffer;   // PCM Float32 数据
-  sampleRate: number;
-  channels: number;
-  durationMs: number;
-  timestamp: number;          // 单调递增时间戳 (ms)
-}
-
-/** 渲染进程上报的原始音频块 */
-interface RendererAudioChunk {
-  audioBuffer: ArrayBuffer;
-  sampleRate: number;
-  channels: number;
-  durationMs: number;
-}
+// 保持既有导出路径不变（mediaCaptureHandlers 等调用方无需改动）
+export { listAudioSources };
+export type { AudioCaptureOptions, AudioChunk } from './audio/audioSourceProvider.js';
+export type { AudioSourceInfo } from './audio/endpointLoopbackProvider.js';
 
 // ================================================================
 // 默认配置
@@ -72,31 +52,16 @@ function monotonicTimestamp(): number {
   return lastTimestamp;
 }
 
-// ================================================================
-// 音频源枚举
-// ================================================================
-
-/**
- * 列出所有可用的系统音频源
- *
- * Electron 中系统音频环回（WASAPI Loopback）通过桌面捕获源实现：
- * 任意 screen/window 源均可配合 getUserMedia({ chromeMediaSource: 'desktop' })
- * 捕获系统音频。因此这里枚举 screen 类型源作为音频采集候选。
- */
-export async function listAudioSources(): Promise<AudioSourceInfo[]> {
-  const sources: DesktopCapturerSource[] = await desktopCapturer.getSources({
-    types: ['screen'],
-    thumbnailSize: { width: 1, height: 1 }, // 枚举不需要缩略图
-  });
-
-  return sources.map((src) => ({
-    id: src.id,
-    name: `系统音频 - ${src.name}`,
-  }));
+/** 额外的启动参数（选源相关，均可选以保持向后兼容） */
+export interface AudioCaptureStartExtras {
+  /** 设置页的源偏好，默认 auto */
+  preference?: AudioSourcePreference;
+  /** 线下课堂（麦克风）场景 */
+  microphone?: boolean;
 }
 
 // ================================================================
-// 音频捕获管理器
+// 音频采集编排器
 // ================================================================
 
 export class AudioCapture {
@@ -104,7 +69,11 @@ export class AudioCapture {
   private readonly onChunk: (chunk: AudioChunk) => void;
   private capturing = false;
   private disposed = false;
-  private boundWin: BrowserWindow | null = null;
+
+  /** 当前活跃的 Provider */
+  private provider: AudioSourceProvider | null = null;
+  /** 本次采集的选源决策（供日志/会话元数据归因） */
+  private decision: AudioSourceDecision | null = null;
 
   constructor(
     options: Partial<AudioCaptureOptions>,
@@ -124,90 +93,121 @@ export class AudioCapture {
     return this.options;
   }
 
+  /** 本次生效的音频源类型（未启动时为 null） */
+  get activeSourceKind(): AudioSourceKind | null {
+    return this.provider?.kind ?? null;
+  }
+
+  /** 本次选源决策（含理由，供会话元数据记录） */
+  get sourceDecision(): AudioSourceDecision | null {
+    return this.decision;
+  }
+
   /**
-   * 开始音频捕获
+   * 开始音频捕获。
    *
-   * 1. 如果未指定 sourceId，自动选择第一个可用的系统音频源
-   * 2. 将期望源登记到 displayMedia handler（渲染进程 getDisplayMedia 时生效）
-   * 3. 向渲染进程发送启动指令（含 sourceId + 配置）
-   * 4. 渲染进程负责 getDisplayMedia 与音频切片
+   * 按 selectAudioSource 的决策创建 Provider；若首选源启动失败且存在降级目标，
+   * 自动降级重试一次（降级事实通过 decision.reason 与日志暴露）。
    */
-  async start(win: BrowserWindow, sourceId?: string): Promise<void> {
+  async start(
+    win: BrowserWindow,
+    sourceId?: string,
+    extras?: AudioCaptureStartExtras,
+  ): Promise<void> {
     if (this.capturing || this.disposed) return;
 
-    // 解析音频源
-    let resolvedSourceId = sourceId ?? null;
-    if (!resolvedSourceId) {
-      const sources = await listAudioSources();
-      if (sources.length === 0) {
-        console.warn('[AudioCapture] 未找到可用的系统音频源');
-        throw new Error('No audio source available');
-      }
-      resolvedSourceId = sources[0].id;
-      logger.info(`[AudioCapture] 自动选择音频源: ${sources[0].name} (${resolvedSourceId})`);
-    }
-
-    // 登记期望源：渲染进程随后调用 getDisplayMedia，主进程 handler 据此授权
-    // 并附加 audio: 'loopback' 才能拿到真实系统音频（详见 displayMediaHandler.ts）
-    setPreferredDisplaySource(resolvedSourceId);
-
-    this.capturing = true;
-    this.boundWin = win;
+    const resolvedSourceId = sourceId ?? null;
+    this.decision = selectAudioSource({
+      // Phase 0：进程环回尚未接入，能力探测恒为不可用（行为与重构前一致）
+      capabilities: { processLoopbackAvailable: false },
+      sourceId: resolvedSourceId,
+      preference: extras?.preference,
+      microphone: extras?.microphone,
+    });
 
     logger.info(
-      `[AudioCapture] 开始捕获, sourceId=${resolvedSourceId}, ` +
-      `chunkDurationMs=${this.options.chunkDurationMs}, ` +
-      `sampleRate=${this.options.sampleRate}, channels=${this.options.channels}`,
+      `[AudioCapture] 选源: ${this.decision.kind}（${this.decision.reason}）` +
+      `${this.decision.fallback ? `, 降级目标=${this.decision.fallback}` : ''}`,
     );
 
-    // 通知渲染进程开始音频采集
-    if (!win.isDestroyed()) {
-      win.webContents.send('audio_capture_do_start', {
-        sourceId: resolvedSourceId,
-        options: this.options,
-      });
+    try {
+      await this.startWithKind(this.decision.kind, win, resolvedSourceId);
+    } catch (err) {
+      const fallback = this.decision.fallback;
+      if (!fallback) throw err;
+
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn(`[AudioCapture] ${this.decision.kind} 启动失败（${message}），降级到 ${fallback}`);
+      this.decision = {
+        kind: fallback,
+        reason: `${this.decision.kind} 启动失败后降级：${message}`,
+        fallback: null,
+      };
+      await this.startWithKind(fallback, win, resolvedSourceId);
+    }
+
+    this.capturing = true;
+  }
+
+  /** 按源类型创建并启动 Provider */
+  private async startWithKind(
+    kind: AudioSourceKind,
+    win: BrowserWindow,
+    sourceId: string | null,
+  ): Promise<void> {
+    this.provider?.dispose();
+    this.provider = this.createProvider(kind);
+    await this.provider.start({ window: win, sourceId, options: this.options });
+  }
+
+  /** Provider 工厂 */
+  private createProvider(kind: AudioSourceKind): AudioSourceProvider {
+    const sink = (data: RendererAudioChunk) => this.emitChunk(data);
+    switch (kind) {
+      case 'endpoint_loopback':
+        return new EndpointLoopbackProvider(sink);
+      case 'process_loopback':
+        // Phase 2 接入；Phase 0 阶段选源不会产生该分支
+        throw new Error('进程环回 Provider 尚未接入');
+      case 'microphone':
+        // TODO(现场课程): MicrophoneProvider 待实现
+        throw new Error('麦克风 Provider 尚未实现');
     }
   }
 
-  /**
-   * 停止音频捕获
-   */
-  stop(): void {
-    if (!this.capturing) return;
-
-    this.capturing = false;
-    logger.info('[AudioCapture] 停止捕获');
-
-    // 通知渲染进程停止音频采集
-    if (this.boundWin && !this.boundWin.isDestroyed()) {
-      this.boundWin.webContents.send('audio_capture_do_stop');
-    }
-    this.boundWin = null;
-  }
-
-  /**
-   * 接收来自渲染进程的音频块数据
-   * 由 IPC handler 调用，添加单调时间戳后通过回调发出
-   */
-  handleRendererChunk(data: RendererAudioChunk): void {
-    if (!this.capturing || this.disposed) return;
-
-    const chunk: AudioChunk = {
+  /** 统一补时间戳后向消费者分发 */
+  private emitChunk(data: RendererAudioChunk): void {
+    if (this.disposed) return;
+    this.onChunk({
       audioBuffer: data.audioBuffer,
       sampleRate: data.sampleRate,
       channels: data.channels,
       durationMs: data.durationMs,
       timestamp: monotonicTimestamp(),
-    };
+    });
+  }
 
-    this.onChunk(chunk);
+  /** 停止音频捕获 */
+  stop(): void {
+    if (!this.capturing) return;
+    this.capturing = false;
+    this.provider?.stop();
   }
 
   /**
-   * 销毁实例，释放所有资源
+   * 接收来自渲染进程的音频块数据（由 IPC handler 调用）。
+   * 仅当前 Provider 为渲染进程侧采集时有效。
    */
+  handleRendererChunk(data: RendererAudioChunk): void {
+    if (!this.capturing || this.disposed) return;
+    this.provider?.handleRendererChunk?.(data);
+  }
+
+  /** 销毁实例，释放所有资源 */
   dispose(): void {
     this.stop();
+    this.provider?.dispose();
+    this.provider = null;
     this.disposed = true;
     logger.info('[AudioCapture] 已销毁');
   }
