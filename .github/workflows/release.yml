@@ -91,6 +91,14 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    # secrets 上下文**不可用于 if 条件**（仅限 env/with/run），否则整个
+    # workflow 文件解析失败、所有触发立即 0 秒报错。
+    # 故先将条件所需值注入 job 级 env，再在 step 的 if 中用 env.* 引用。
+    env:
+      DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL }}
+      OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+      # 仅作存在性判定的布尔标志，避免将密钥本身提到 job 级 env
+      HAS_ALIYUN_AK: ${{ secrets.ALIYUN_ACCESS_KEY_ID != '' }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -160,16 +168,16 @@ jobs:
       # ECS 同步仍保留：存量客户端的更新源仍指向 ECS，且作为兜底。
       # ---------------------------------------------------------------
       - name: Upload to OSS (CDN origin)
-        if: ${{ secrets.OSS_BUCKET != '' && secrets.ALIYUN_ACCESS_KEY_ID != '' }}
+        if: env.OSS_BUCKET != '' && env.HAS_ALIYUN_AK == 'true'
         env:
           AK_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
           AK_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
-          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
-          # 未配置时默认杭州（与 ECS 同地域）
-          OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT || 'oss-cn-hangzhou.aliyuncs.com' }}
+          OSS_ENDPOINT_IN: ${{ secrets.OSS_ENDPOINT }}
           FILE_NAME: ${{ steps.meta.outputs.file }}
         run: |
           set -eo pipefail
+          # 未配置 OSS_ENDPOINT 时默认杭州（与 ECS 同地域）
+          OSS_ENDPOINT="${OSS_ENDPOINT_IN:-oss-cn-hangzhou.aliyuncs.com}"
           curl -sL https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz -o /tmp/aliyun.tgz
           tar -xzf /tmp/aliyun.tgz -C /tmp
 
@@ -209,13 +217,12 @@ jobs:
       # ---------------------------------------------------------------
       - name: Prefetch CDN cache
         # 仅在已切换至 CDN 且配置了预热凭证时执行；未配置则跳过
-        if: ${{ secrets.DOWNLOAD_BASE_URL != '' && secrets.ALIYUN_ACCESS_KEY_ID != '' }}
+        if: env.DOWNLOAD_BASE_URL != '' && env.HAS_ALIYUN_AK == 'true'
         # 预热失败不应推翻已成功的发布，仅标记警告
         continue-on-error: true
         env:
           ALIBABA_CLOUD_ACCESS_KEY_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
           ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
-          DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL }}
           FILE_NAME: ${{ steps.meta.outputs.file }}
         run: |
           set -eo pipefail
