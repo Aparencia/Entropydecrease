@@ -32,7 +32,7 @@ export const MODULE_POSITIONS: ModulePosition[] = [
   { id: 'pomodoro', position: [4, 2, -2], route: '/pomodoro', label: '深潜' },
   { id: 'notes', position: [-4, 1, -1], route: '/notes', label: '结礁' },
   { id: 'flashcards', position: [3, -2, -3], route: '/flashcards', label: '闪卡' },
-  { id: 'feynman', position: [-3, -1, -4], route: '/feynman', label: '反衰减呼吸' },
+  { id: 'feynman', position: [-3, -1, -4], route: '/feynman', label: '浮出水面' },
   { id: 'inspiration', position: [0, 3, -5], route: '/inspiration', label: '萤火海沟' },
   { id: 'classroom', position: [-2, -3, -2], route: '/classroom', label: '回声定位' },
 ];

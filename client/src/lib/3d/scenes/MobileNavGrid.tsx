@@ -11,6 +11,8 @@ import { motion } from 'framer-motion';
 import { Timer, FileText, Layers, Lightbulb, Sparkles, Clapperboard, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
+import { useIsNewbiePhase } from '@/features/onboarding/firstDive/useFirstDiveStore';
+import { getModuleSubtitle } from '@/features/onboarding/firstDive/moduleSubtitles';
 
 const modules = [
   { id: 'dashboard', label: '首页', route: '/', icon: BarChart3, color: 'from-indigo-500/20 to-indigo-600/10', iconColor: 'text-indigo-400' },
@@ -38,6 +40,8 @@ const itemVariants = {
 export function MobileNavGrid() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  // 新手期双标签（首潜完成后自动隐去）
+  const isNewbie = useIsNewbiePhase();
 
   return (
     <div className="fixed inset-0 -z-10 overflow-y-auto">
@@ -107,6 +111,9 @@ export function MobileNavGrid() {
                   <Icon className={cn('w-5 h-5', mod.iconColor)} strokeWidth={1.5} />
                 </div>
                 <span className="text-sm text-white/70 font-medium">{mod.label}</span>
+                {isNewbie && getModuleSubtitle(mod.id) && (
+                  <span className="text-[10px] text-white/40">{getModuleSubtitle(mod.id)}</span>
+                )}
               </motion.button>
             );
           })}

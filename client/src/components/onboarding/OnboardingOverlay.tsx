@@ -6,6 +6,7 @@
 import { useEffect, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useOnboardingStore, isGuideDone } from './useOnboardingStore';
+import { loadFirstDiveState } from '@/features/onboarding/firstDive/firstDiveStorage';
 import { Step1Welcome } from './steps/Step1Welcome';
 import { Step2Navigate } from './steps/Step2Navigate';
 import { Step3CameraFlight } from './steps/Step3CameraFlight';
@@ -19,7 +20,10 @@ export function OnboardingOverlay() {
     useOnboardingStore();
 
   // 初始化：检查 localStorage，若未完成则 1.5s 后自动启动
+  // 首潜（L0/L1）未结束时不自动启动，避免双引导叠加轰炸新用户
   useEffect(() => {
+    const diveStage = loadFirstDiveState().stage;
+    if (diveStage === 'landing' || diveStage === 'diving') return;
     if (!isGuideDone()) {
       const timer = setTimeout(() => startGuide(), 1500);
       return () => clearTimeout(timer);
