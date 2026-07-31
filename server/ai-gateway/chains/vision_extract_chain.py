@@ -36,6 +36,8 @@ VISION_MODE_PROMPTS: dict[str, str] = {
         '  "concepts": ["概念1", "概念2"]\n'
         "}\n\n"
         "注意：\n"
+        "- 忽略一切软件界面元素：浏览器标签页/地址栏/导航栏、视频网站的标题/播放量/发布日期/作者信息/推荐列表/弹幕评论等页面元数据\n"
+        "- 只提取教学画面本身的内容（板书/PPT/字幕/讲解要点）；若画面中没有教学内容，text 返回空字符串\n"
         "- 如果没有看到公式或图表，对应数组返回空 []\n"
         "- 数学公式使用 LaTeX 格式\n"
         "- 代码块保留原始格式\n"
@@ -114,7 +116,9 @@ VISION_MODE_PROMPTS: dict[str, str] = {
         '  "concepts": ["识别到的所有概念和术语"]\n'
         "}\n\n"
         "注意：\n"
-        "- 提取所有文字内容，包括标题、正文、注释\n"
+        "- 忽略一切软件界面元素：浏览器标签页/地址栏/导航栏、视频网站的标题/播放量/发布日期/作者信息/推荐列表/弹幕评论等页面元数据\n"
+        "- 只提取教学画面本身的内容；若画面中没有教学内容，text 返回空字符串\n"
+        "- 提取所有教学文字内容，包括标题、正文、注释\n"
         "- 识别所有数学公式并使用 LaTeX 格式\n"
         "- 详细描述所有图表和可视化内容\n"
         "- 提取所有代码块并标注语言\n"
@@ -189,8 +193,34 @@ class VisionExtractChain:
             except json.JSONDecodeError:
                 pass
 
-        # 解析失败，返回默认结构
-        logger.warning("视觉提取结果 JSON 解析失败，返回原始文本")
+        # 解析失败。区分两类情况：
+        # - 输出形似 JSON 但残缺（常见于 max_tokens 截断）→ 抢救 text 字段，
+        #   绝不把原始 JSON 片段泄漏到 UI 时间线
+        # - 输出本就是纯文本（未按要求返回 JSON）→ 原样作为 text
+        looks_like_json = bool(re.search(r'"text"\s*:|^\s*```|^\s*\{', content))
+        if looks_like_json:
+            salvaged = ""
+            text_match = re.search(r'"text"\s*:\s*"((?:[^"\\]|\\.)*)"', content, re.DOTALL)
+            if text_match:
+                try:
+                    # 经 json.loads 还原转义字符（\n、\" 等）
+                    salvaged = json.loads(f'"{text_match.group(1)}"')
+                except json.JSONDecodeError:
+                    salvaged = text_match.group(1)
+            logger.warning(
+                "视觉提取 JSON 残缺（疑似截断），已抢救 text 字段（%d 字符）", len(salvaged),
+            )
+            return {
+                "text": salvaged,
+                "formulas": [],
+                "diagrams": [],
+                "keyPoints": [],
+                "codeBlocks": [],
+                "concepts": [],
+            }
+
+        # 非 JSON 形态：视为模型直接输出了纯文本内容
+        logger.warning("视觉提取结果非 JSON 格式，返回原始文本")
         return {
             "text": content,
             "formulas": [],

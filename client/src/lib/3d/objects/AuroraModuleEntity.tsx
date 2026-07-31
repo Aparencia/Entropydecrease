@@ -9,6 +9,8 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Float, Html } from '@react-three/drei';
 import type { ModuleId } from '../navigation/OrbitalStore';
+import { useIsNewbiePhase } from '@/features/onboarding/firstDive/useFirstDiveStore';
+import { getModuleSubtitle } from '@/features/onboarding/firstDive/moduleSubtitles';
 
 export interface AuroraModuleEntityProps {
   id: ModuleId;
@@ -33,7 +35,7 @@ const PLANET_CONFIGS: Record<ModuleId, PlanetConfig> = {
   pomodoro: { radius: 0.7, color: '#F97316', emissive: '#EA580C', label: '深潜' },
   notes: { radius: 0.7, color: '#60A5FA', emissive: '#3B82F6', label: '结礁' },
   flashcards: { radius: 0.5, color: '#34D399', emissive: '#059669', label: '闪卡' },
-  feynman: { radius: 0.6, color: '#A78BFA', emissive: '#7C3AED', label: '反衰减呼吸' },
+  feynman: { radius: 0.6, color: '#A78BFA', emissive: '#7C3AED', label: '浮出水面' },
   inspiration: { radius: 0.4, color: '#F472B6', emissive: '#EC4899', label: '萤火海沟' },
   classroom: { radius: 0.55, color: '#14B8A6', emissive: '#0D9488', label: '回声定位' },
 };
@@ -53,6 +55,9 @@ export function AuroraModuleEntity({
   const ringRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = useState(false);
   const angleRef = useRef(initialAngle);
+  // 新手期双标签（首潜完成后自动隐去）
+  const isNewbie = useIsNewbiePhase();
+  const subtitle = getModuleSubtitle(id);
 
   const config = PLANET_CONFIGS[id];
 
@@ -168,6 +173,10 @@ export function AuroraModuleEntity({
             >
               <div className="rounded-lg bg-slate-900/80 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm whitespace-nowrap border border-indigo-500/30">
                 {config.label}
+                {/* 新手期双标签：隐喻名旁附直白副标题 */}
+                {isNewbie && subtitle && (
+                  <span className="ml-1.5 text-xs text-white/50">· {subtitle}</span>
+                )}
               </div>
             </Html>
           )}

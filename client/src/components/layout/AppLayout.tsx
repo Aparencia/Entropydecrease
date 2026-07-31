@@ -23,6 +23,7 @@ import { HelpCenter } from '@/components/onboarding/HelpCenter';
 import { useOnboardingStore } from '@/components/onboarding/useOnboardingStore';
 import { useRuntimeEnv } from '@/lib/env/useRuntimeEnv';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
+import { FirstDiveGate } from '@/features/onboarding/firstDive/FirstDiveGate';
 
 export default function AppLayout() {
   const { pathname } = useLocation();
@@ -164,6 +165,7 @@ export default function AppLayout() {
       <BottomNav />
 
       {/* 全局组件 */}
+      <FirstDiveGate />
       <OnboardingOverlay />
       <ModuleTourToast moduleId={currentModule} />
       <HelpCenter />

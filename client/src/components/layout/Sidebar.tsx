@@ -16,24 +16,26 @@ import { useAuth } from '@/lib/auth/AuthContext';
 import { useTheme } from '@/hooks/useTheme';
 import { SPRING, BEAT } from '@/lib/animation/springConfig';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
+import { useIsNewbiePhase } from '@/features/onboarding/firstDive/useFirstDiveStore';
 import FeedbackPanel from './FeedbackPanel';
 
 /* ── 导航配置 ── */
+// subtitle：新手期双标签副标题（隐喻名无法自解释，首潜完成前附直白说明）
 const navSection1 = [
   { to: '/', label: '首页', icon: Home, shortcut: '⌘ 1', exact: true },
 ];
 
 const navSection2 = [
-  { to: '/pomodoro', label: '深潜', icon: Timer, shortcut: '⌘ 2', dotColor: 'bg-brand-500' },
-  { to: '/notes', label: '结礁', icon: FileText, shortcut: '⌘ 3', dotColor: 'bg-note' },
-  { to: '/flashcards', label: '反衰减呼吸', icon: Layers, shortcut: '⌘ 4', dotColor: 'bg-flashcard' },
-  { to: '/feynman', label: '浮出水面', icon: Lightbulb, shortcut: '⌘ 5', dotColor: 'bg-feynman' },
+  { to: '/pomodoro', label: '深潜', subtitle: '专注番茄钟', icon: Timer, shortcut: '⌘ 2', dotColor: 'bg-brand-500' },
+  { to: '/notes', label: '结礁', subtitle: '学习笔记', icon: FileText, shortcut: '⌘ 3', dotColor: 'bg-note' },
+  { to: '/flashcards', label: '反衰减呼吸', subtitle: '记忆闪卡', icon: Layers, shortcut: '⌘ 4', dotColor: 'bg-flashcard' },
+  { to: '/feynman', label: '浮出水面', subtitle: '费曼讲解', icon: Lightbulb, shortcut: '⌘ 5', dotColor: 'bg-feynman' },
 ];
 
 const navSection3 = [
   { to: '/analytics', label: '数据分析', icon: BarChart3, shortcut: '⌘ 6' },
-  { to: '/inspiration', label: '萤火海沟', icon: Sparkles, shortcut: '⌘ 6' },
-  { to: '/classroom', label: '回声定位', icon: Clapperboard, shortcut: '⌘ 7', dotColor: 'bg-classroom' },
+  { to: '/inspiration', label: '萤火海沟', subtitle: '灵感收集', icon: Sparkles, shortcut: '⌘ 6' },
+  { to: '/classroom', label: '回声定位', subtitle: '课堂采集', icon: Clapperboard, shortcut: '⌘ 7', dotColor: 'bg-classroom' },
 ];
 
 /* ── 蔡格尼克效应：待继续任务提示池 ── */
@@ -73,6 +75,8 @@ export default function Sidebar() {
   const setCaptureOpen = useCaptureStore((s) => s.setOpen);
   const { user, isAuthenticated } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  // 新手期显示模块副标题（首潜完成后自动隐去）
+  const isNewbie = useIsNewbiePhase();
 
   // TODO: 接入真实学习进度数据
   const _progressItems: { subject: string; progress: number }[] = [];
@@ -194,9 +198,10 @@ export default function Sidebar() {
             </motion.div>
           )}
           {collapsed && <div className="my-1 mx-1.5 border-t border-border/20" />}
-          {navSection2.map(({ to, label, icon: Icon, shortcut, dotColor }, i) => (
+          {navSection2.map(({ to, label, subtitle, icon: Icon, shortcut, dotColor }, i) => (
             <SidebarItem
               key={to} to={to} label={label} icon={Icon}
+              subtitle={isNewbie ? subtitle : undefined}
               shortcut={collapsed ? undefined : shortcut}
               dotColor={dotColor} collapsed={collapsed} index={i + 1}
             />
@@ -209,9 +214,10 @@ export default function Sidebar() {
             </div>
           )}
           {collapsed && <div className="my-1 mx-1.5 border-t border-border/20" />}
-          {navSection3.map(({ to, label, icon: Icon, shortcut, dotColor }, i) => (
+          {navSection3.map(({ to, label, subtitle, icon: Icon, shortcut, dotColor }, i) => (
             <SidebarItem
               key={to} to={to} label={label} icon={Icon}
+              subtitle={isNewbie ? subtitle : undefined}
               shortcut={collapsed ? undefined : shortcut}
               dotColor={dotColor} collapsed={collapsed} index={i + 6}
             />
@@ -316,6 +322,8 @@ export default function Sidebar() {
 interface SidebarItemProps {
   to: string;
   label: string;
+  /** 新手期双标签副标题（如"专注番茄钟"），传入即显示 */
+  subtitle?: string;
   icon: React.ComponentType<{ className?: string; strokeWidth?: string | number }>;
   shortcut?: string;
   dotColor?: string;
@@ -324,7 +332,7 @@ interface SidebarItemProps {
   index?: number;
 }
 
-function SidebarItem({ to, label, icon: Icon, shortcut, dotColor, collapsed, end, index = 0 }: SidebarItemProps) {
+function SidebarItem({ to, label, subtitle, icon: Icon, shortcut, dotColor, collapsed, end, index = 0 }: SidebarItemProps) {
   const location = useLocation();
   // 切换到不同模块时播放导航音效（点击当前已激活项不响）
   const isCurrentActive = end ? location.pathname === to : location.pathname === to || location.pathname.startsWith(to + '/');
@@ -383,6 +391,9 @@ function SidebarItem({ to, label, icon: Icon, shortcut, dotColor, collapsed, end
                 isActive ? 'opacity-100' : 'opacity-60 group-hover:opacity-100',
               )}>
                 {label}
+                {subtitle && (
+                  <span className="ml-1.5 text-[11px] text-text-tertiary/70">· {subtitle}</span>
+                )}
               </span>
             )}
             {/* 快捷键提示 — hover 显示 */}

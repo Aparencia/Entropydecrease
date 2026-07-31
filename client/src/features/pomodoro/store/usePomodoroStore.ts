@@ -44,6 +44,8 @@ interface PomodoroState {
   sessionStartTime: number | null;
   /** 当前番茄目标文字 */
   currentGoal: string | null;
+  /** 首潜迷你会话标记：3 分钟体验潜水，会话时长按实际记录而非 settings 时长 */
+  isMiniDive: boolean;
   /** 是否处于沉浸专注模式 */
   isImmersive: boolean;
   /** 退出沉浸后标记，用于 resume 时自动重入 */
@@ -64,6 +66,8 @@ interface PomodoroState {
   lastSessionActualDuration: number | null;
 
   start: () => void;
+  /** 开始首潜 3 分钟迷你体验（新手引导专用，不改动用户设置） */
+  startMiniDive: () => void;
   pause: () => void;
   resume: () => void;
   reset: () => void;
@@ -90,6 +94,9 @@ const getPhaseDuration = (phase: Phase, settings: PomodoroSettings, mode?: Mode)
   }
 };
 
+/** 首潜迷你体验时长（3 分钟），见新手引导系统 */
+export const MINI_DIVE_SECONDS = 180;
+
 const getNextPhase = (
   currentPhase: Phase,
   completedCount: number,
@@ -104,6 +111,24 @@ const getNextPhase = (
       : 'short_break';
   }
   return 'work';
+};
+
+/**
+ * 计算阶段结束后的完成计数：
+ * - 长休结束 → 归零（一轮完成）
+ * - 工作结束 → +1；上课模式无长休，计数达到周期上限后回绕，避免无限累加
+ * - 其他阶段 → 不变
+ */
+const getNextCount = (
+  phase: Phase,
+  completedCount: number,
+  longBreakInterval: number,
+  mode?: Mode,
+): number => {
+  if (phase === 'long_break') return 0;
+  if (phase !== 'work') return completedCount;
+  if (mode === 'class') return (completedCount % longBreakInterval) + 1;
+  return completedCount + 1;
 };
 
 export const usePomodoroStore = create<PomodoroState>((set, get) => {
@@ -130,6 +155,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     settings: defaultSettings,
     sessionStartTime: null,
     currentGoal: null,
+    isMiniDive: false,
     isImmersive: false,
     wasImmersive: false,
     aiRecommendedDuration: undefined,
@@ -168,6 +194,18 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
       soundPlayer.play('pomodoro_start');
     },
 
+    startMiniDive: () => {
+      // 3 分钟真实专注：走完整 tick 链路（记会话/触发成就），duration 按 180s 如实记录
+      set((s) => ({
+        mode: 'self_study', phase: 'work',
+        remainingSeconds: MINI_DIVE_SECONDS, totalSeconds: MINI_DIVE_SECONDS,
+        isMiniDive: true, isRunning: true, isPaused: false,
+        sessionStartTime: Date.now(), currentGoal: '首潜 · 3 分钟体验',
+        lastAction: 'start' as PomodoroAction, lastActionCounter: s.lastActionCounter + 1,
+      }));
+      soundPlayer.play('pomodoro_start');
+    },
+
     pause: () => {
       set((s) => ({
         isRunning: false, isPaused: true,
@@ -199,12 +237,13 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
         isPaused: false,
         sessionStartTime: null,
         wasImmersive: false,
+        isMiniDive: false,
       });
     },
 
     skip: () => {
       const { phase, completedCount, settings, mode } = get();
-      const newCount = phase === 'long_break' ? 0 : (phase === 'work' ? completedCount + 1 : completedCount);
+      const newCount = getNextCount(phase, completedCount, settings.longBreakInterval, mode);
       const nextPhase = getNextPhase(phase, completedCount, settings.longBreakInterval, mode);
       const duration = getPhaseDuration(nextPhase, settings, mode);
       set({
@@ -214,12 +253,15 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
         completedCount: newCount,
         isRunning: false,
         isPaused: false,
+        isMiniDive: false,
       });
     },
 
     setMode: (mode) => {
-      const { settings, phase, isRunning, isPaused } = get();
-      set({ mode });
+      const { settings, phase, isRunning, isPaused, mode: prevMode } = get();
+      if (mode === prevMode) return;
+      // 切换模式 = 开启新周期：计数归零，避免跨模式累计（自习首轮跳到 8 的根因）
+      set({ mode, completedCount: 0 });
       // 切换模式后，若计时器未运行，重置当前阶段时长
       if (!isRunning && !isPaused) {
         const duration = getPhaseDuration(phase, settings, mode);
@@ -252,7 +294,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
       if (remainingSeconds <= 1) {
         // Phase completed
         const wasRunning = isRunning;
-        const newCount = phase === 'long_break' ? 0 : (phase === 'work' ? completedCount + 1 : completedCount);
+        const newCount = getNextCount(phase, completedCount, settings.longBreakInterval, mode);
         const nextPhase = getNextPhase(phase, completedCount, settings.longBreakInterval, mode);
         const duration = getPhaseDuration(nextPhase, settings, mode);
         const isCycleComplete = phase === 'long_break';
@@ -272,14 +314,17 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
         // 记录完成的番茄会话
         let actualDuration: number | null = null;
         if (phase === 'work') {
-          const { sessionStartTime: sst } = get();
-          const workMinutes = mode === 'class' ? settings.classDuration : settings.workDuration;
+          const { sessionStartTime: sst, isMiniDive } = get();
+          // 迷你潜水按实际 180s 记录，避免污染效率统计（首潜决策：计入成就）
+          const plannedSeconds = isMiniDive
+            ? MINI_DIVE_SECONDS
+            : (mode === 'class' ? settings.classDuration : settings.workDuration) * 60;
           actualDuration = sst
             ? Math.round((Date.now() - sst) / 1000)
-            : workMinutes * 60;
+            : plannedSeconds;
           recordSession({
             mode: get().mode,
-            duration: workMinutes * 60,
+            duration: plannedSeconds,
             actualDuration,
             completedAt: new Date(),
             interrupted: false,
@@ -328,6 +373,8 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
           completedCount: newCount,
           isRunning: shouldAutoStart,
           isPaused: !shouldAutoStart,
+          // 迷你潜水仅限一个工作阶段，阶段切换即恢复常规节律
+          isMiniDive: false,
           // 切换到新阶段时清空计时，下一个 start/resume 会重新设置
           sessionStartTime: null,
           // 发出 phase_complete 动作信号

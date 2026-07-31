@@ -1,10 +1,13 @@
 /**
  * 番茄钟副作用 hook
- * @ai-context 监听 usePomodoroStore 的 lastAction 信号，触发音效、通知、成就检测、会话记录
+ * @ai-context 监听 usePomodoroStore 的 lastAction 信号，触发视觉反馈（水墨涟漪）与通知权限请求
  *
  * 与 usePomodoroStore 配合使用：
- * - Store 仅负责纯状态变更（计时器 tick、阶段切换、设置更新）
- * - 本 hook 负责所有副作用（音效播放、浏览器通知、成就检测、会话持久化）
+ * - Store 负责状态变更及音效播放、会话持久化、浏览器通知（tick/skip/start 内联执行）
+ * - 本 hook 仅负责 store 无法执行的 DOM 级副作用（涟漪动画、权限请求）
+ *
+ * 注意：不要在此重复播放音效或记录会话——store 已执行过，
+ * 重复执行会导致会话统计翻倍（BUG：番茄会话重复记录）。
  *
  * 使用方式：在番茄钟页面顶层组件中调用一次即可
  * <code>usePomodoroEffects()</code>
@@ -12,10 +15,7 @@
 
 import { useEffect, useRef } from 'react';
 import { usePomodoroActionSignal } from '../store/usePomodoroStore';
-import { recordSession, playCompletionSound, sendNotification } from '../store/usePomodoroPersistence';
-import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { triggerInkRipple } from '@/lib/animation/InkRipple';
-import type { PomodoroAction } from '../store/usePomodoroStore';
 
 /**
  * 番茄钟副作用 hook
@@ -44,125 +44,10 @@ export function usePomodoroEffects(): void {
     if (signal.lastActionCounter === prevCounterRef.current) return;
     prevCounterRef.current = signal.lastActionCounter;
 
-    const action: PomodoroAction | null = signal.lastAction;
-    if (!action) return;
-
-    switch (action) {
-      case 'start':
-        soundPlayer.play('pomodoro_start');
-        break;
-
-      case 'pause':
-        soundPlayer.play('pomodoro_pause');
-        break;
-
-      case 'exit_immersive':
-        soundPlayer.play('pomodoro_pause');
-        break;
-
-      case 'tick_5min_warning':
-        // store 已确保 mode !== 'class' 时才发出此信号
-        soundPlayer.play('pomodoro_5min_warning');
-        break;
-
-      case 'tick_final':
-        // store 已确保 mode !== 'class' 时才发出此信号
-        soundPlayer.play('pomodoro_tick_final');
-        break;
-
-      case 'phase_complete':
-        handlePhaseComplete(signal);
-        break;
+    // 音效/会话记录/浏览器通知均由 store 内联执行，此处仅处理视觉反馈
+    if (signal.lastAction === 'phase_complete') {
+      // 水墨涟漪反馈：每次阶段完成时触发
+      triggerInkRipple(window.innerWidth / 2, window.innerHeight / 2);
     }
   }, [signal.lastActionCounter, signal.lastAction, signal]);
-}
-
-// ─────────────────────────────────────────────────────────────
-// 内部：phase_complete 副作用处理
-// ─────────────────────────────────────────────────────────────
-
-interface PhaseCompletePayload {
-  lastCompletedPhase: 'work' | 'short_break' | 'long_break' | null;
-  isCycleComplete: boolean;
-  lastSessionActualDuration: number | null;
-  mode: 'class' | 'self_study';
-  settings: {
-    soundEnabled: boolean;
-    notificationEnabled: boolean;
-    workDuration: number;
-    classDuration: number;
-  };
-  currentGoal: string | null;
-}
-
-function handlePhaseComplete(payload: PhaseCompletePayload): void {
-  const {
-    lastCompletedPhase,
-    isCycleComplete,
-    lastSessionActualDuration,
-    mode,
-    settings,
-    currentGoal,
-  } = payload;
-
-  if (!lastCompletedPhase) return;
-
-  // ── 水墨涟漪反馈：每次阶段完成时触发 ────────────────
-  triggerInkRipple(window.innerWidth / 2, window.innerHeight / 2);
-
-  // ── 记录会话（仅 work 阶段） ─────────────────────────────
-  if (lastCompletedPhase === 'work') {
-    const workMinutes = mode === 'class' ? settings.classDuration : settings.workDuration;
-    const actualDuration = lastSessionActualDuration ?? workMinutes * 60;
-
-    recordSession({
-      mode,
-      duration: workMinutes * 60,
-      actualDuration,
-      completedAt: new Date(),
-      interrupted: false,
-      goal: currentGoal ?? undefined,
-    })
-      .then(() => {
-        // 触发成就检查（动态 import 避免循环依赖）
-        import('@/lib/achievements/evaluator')
-          .then(({ checkAchievements }) => {
-            checkAchievements({ type: 'pomodoro_completed' })
-              .then((unlocked) => {
-                unlocked.forEach((a) => {
-                  window.dispatchEvent(
-                    new CustomEvent('achievement-unlocked', { detail: a }),
-                  );
-                });
-              })
-              .catch(() => {});
-          })
-          .catch(() => {});
-      })
-      .catch(() => {});
-  }
-
-  // ── 播放音效（上课模式静默） ──────────────────────────────
-  if (mode !== 'class') {
-    if (settings.soundEnabled) {
-      playCompletionSound();
-    }
-    if (lastCompletedPhase === 'work') {
-      soundPlayer.play('pomodoro_work_complete');
-    } else {
-      soundPlayer.play('pomodoro_break_end');
-      if (isCycleComplete) {
-        soundPlayer.play('pomodoro_complete');
-      }
-    }
-  }
-
-  // ── 发送浏览器通知 ────────────────────────────────────────
-  if (settings.notificationEnabled) {
-    if (lastCompletedPhase === 'work') {
-      sendNotification('又添了一段暖意', '继续深潜吧 ☕').catch(() => {});
-    } else {
-      sendNotification('休息结束！', '开始下一个番茄 🍅').catch(() => {});
-    }
-  }
 }

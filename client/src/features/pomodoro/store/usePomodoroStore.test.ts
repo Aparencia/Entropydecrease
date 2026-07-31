@@ -465,5 +465,54 @@ describe('Pomodoro Store', () => {
       usePomodoroStore.getState().setMode('class');
       expect(usePomodoroStore.getState().mode).toBe('class');
     });
+
+    it('should reset completedCount when switching mode', () => {
+      // 上课模式累计了 7 个番茄后切到自习模式，计数应归零
+      // （回归：旧计数带入新模式导致首轮长休要等到 8 个番茄）
+      usePomodoroStore.setState({ mode: 'class', completedCount: 7 });
+      usePomodoroStore.getState().setMode('self_study');
+      expect(usePomodoroStore.getState().completedCount).toBe(0);
+    });
+
+    it('should NOT reset completedCount when setting the same mode', () => {
+      usePomodoroStore.setState({ mode: 'self_study', completedCount: 2 });
+      usePomodoroStore.getState().setMode('self_study');
+      expect(usePomodoroStore.getState().completedCount).toBe(2);
+    });
+  });
+
+  // ── class mode completedCount ────────────────────────────
+
+  describe('class mode completedCount', () => {
+    const completeWorkPhase = () => {
+      usePomodoroStore.setState({ phase: 'work', remainingSeconds: 1, isRunning: true });
+      usePomodoroStore.getState().tick(); // work → short_break
+      usePomodoroStore.setState({ remainingSeconds: 1, isRunning: true });
+      usePomodoroStore.getState().tick(); // short_break → work
+    };
+
+    it('should never enter long_break in class mode', () => {
+      usePomodoroStore.setState({
+        mode: 'class', phase: 'work', completedCount: 3,
+        isRunning: true, remainingSeconds: 1,
+      });
+      usePomodoroStore.getState().tick();
+      expect(usePomodoroStore.getState().phase).toBe('short_break');
+    });
+
+    it('should wrap completedCount within longBreakInterval in class mode (no unbounded growth)', () => {
+      // 回归：上课模式无长休导致计数永不归零、一直累加（实测 9/4）
+      usePomodoroStore.setState({ mode: 'class', completedCount: 0 });
+      for (let i = 0; i < 9; i++) completeWorkPhase();
+      const count = usePomodoroStore.getState().completedCount;
+      expect(count).toBeGreaterThanOrEqual(1);
+      expect(count).toBeLessThanOrEqual(DEFAULT_SETTINGS.longBreakInterval);
+    });
+
+    it('should wrap count via skip in class mode as well', () => {
+      usePomodoroStore.setState({ mode: 'class', phase: 'work', completedCount: 4 });
+      usePomodoroStore.getState().skip();
+      expect(usePomodoroStore.getState().completedCount).toBe(1);
+    });
   });
 });

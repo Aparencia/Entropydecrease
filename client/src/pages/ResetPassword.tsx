@@ -1,9 +1,13 @@
 /**
- * @ai-context: 页面组件：ResetPassword。
+ * @ai-context: 页面组件：ResetPassword。重置密码采用邮箱验证码（OTP）流程：
+ * 请求重置 → 邮件收 6 位验证码 → 应用内输入验证码+新密码。
+ * Why: 桌面端邮件链接在系统浏览器打开、恢复会话无法回到应用（file:// 协议
+ * 也无法作为 redirectTo），链接回跳模式结构性不可用，故全程留在应用内。
+ * 依赖 Supabase Recovery 邮件模板包含 {{ .Token }} 验证码。
  */
 import { useState, useEffect, useRef, type FormEvent } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { Mail, Lock, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Mail, Lock, KeyRound, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { Button, Input, Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/auth/supabaseClient';
@@ -11,25 +15,17 @@ import { supabase } from '@/lib/auth/supabaseClient';
 type ViewMode = 'request' | 'reset';
 
 export default function ResetPassword() {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const tokenHash = searchParams.get('token_hash');
-  const type = searchParams.get('type');
-  const isResetMode = tokenHash && type === 'recovery';
-
-  const [viewMode, setViewMode] = useState<ViewMode>(isResetMode ? 'reset' : 'request');
+  const [viewMode, setViewMode] = useState<ViewMode>('request');
   const [email, setEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (isResetMode) setViewMode('reset');
-  }, [isResetMode]);
 
   useEffect(() => {
     return () => {
@@ -48,12 +44,10 @@ export default function ResetPassword() {
 
     setLoading(true);
     try {
-      const redirectTo = `${window.location.origin}${window.location.pathname}#/reset-password`;
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo,
-      });
+      // 不传 redirectTo：验证走应用内 OTP 验证码，不依赖邮件链接跳转
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim());
       if (resetError) throw resetError;
-      setSuccess(true);
+      setViewMode('reset');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '发送失败，请稍后重试';
       setError(msg);
@@ -66,6 +60,10 @@ export default function ResetPassword() {
     e.preventDefault();
     setError(null);
 
+    if (!otpCode.trim() || otpCode.trim().length < 6) {
+      setError('请输入邮件中的 6 位验证码');
+      return;
+    }
     if (!password || password.length < 8) {
       setError('密码长度至少 8 位');
       return;
@@ -77,6 +75,13 @@ export default function ResetPassword() {
 
     setLoading(true);
     try {
+      // 先用验证码换取恢复会话，再更新密码
+      const { error: otpError } = await supabase.auth.verifyOtp({
+        email: email.trim(),
+        token: otpCode.trim(),
+        type: 'recovery',
+      });
+      if (otpError) throw otpError;
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
       setSuccess(true);
@@ -107,7 +112,9 @@ export default function ResetPassword() {
               {viewMode === 'request' ? '重置密码' : '设置新密码'}
             </h1>
             <p className="text-b2 text-text-tertiary mt-1">
-              {viewMode === 'request' ? '输入邮箱以接收重置链接' : '输入你的新密码'}
+              {viewMode === 'request'
+                ? '输入邮箱以接收验证码'
+                : `验证码已发送至 ${email}`}
             </p>
           </div>
         </div>
@@ -117,41 +124,25 @@ export default function ResetPassword() {
           {success ? (
             <div className="flex flex-col items-center gap-4 py-2">
               <CheckCircle2 className="w-12 h-12 text-emerald-500" strokeWidth={1.5} />
-              <p className="text-b1 font-medium text-text-primary text-center">
-                {viewMode === 'request'
-                  ? '重置邮件已发送'
-                  : '密码重置成功'}
-              </p>
-              <p className="text-b2 text-text-tertiary text-center">
-                {viewMode === 'request'
-                  ? `如果 ${email} 已注册，你将收到一封重置密码的邮件`
-                  : '即将跳转到登录页...'}
-              </p>
-              {viewMode === 'request' && (
-                <Link
-                  to="/login"
-                  className="text-b2 text-brand-600 font-medium hover:text-brand-700 transition-colors mt-2"
-                >
-                  返回登录
-                </Link>
-              )}
+              <p className="text-b1 font-medium text-text-primary text-center">密码重置成功</p>
+              <p className="text-b2 text-text-tertiary text-center">即将跳转到登录页...</p>
             </div>
           ) : (
             <>
+              {error && (
+                <div
+                  className={cn(
+                    'flex items-start gap-2 px-3 py-2.5 rounded-kb-md mb-4',
+                    'bg-[#F43F5E]/10 border border-[#F43F5E]/30',
+                  )}
+                >
+                  <AlertCircle className="w-icon-sm h-icon-sm text-[#F43F5E] flex-shrink-0 mt-0.5" strokeWidth={1.5} />
+                  <p className="text-b3 text-[#F43F5E]">{error}</p>
+                </div>
+              )}
+
               {viewMode === 'request' ? (
                 <form onSubmit={handleRequestReset} className="flex flex-col gap-kb-md">
-                  {error && (
-                    <div
-                      className={cn(
-                        'flex items-start gap-2 px-3 py-2.5 rounded-kb-md',
-                        'bg-[#F43F5E]/10 border border-[#F43F5E]/30',
-                      )}
-                    >
-                      <AlertCircle className="w-icon-sm h-icon-sm text-[#F43F5E] flex-shrink-0 mt-0.5" strokeWidth={1.5} />
-                      <p className="text-b3 text-[#F43F5E]">{error}</p>
-                    </div>
-                  )}
-
                   <Input
                     label="注册邮箱"
                     type="email"
@@ -163,22 +154,21 @@ export default function ResetPassword() {
                   />
 
                   <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full mt-1">
-                    发送重置链接
+                    发送验证码
                   </Button>
                 </form>
               ) : (
                 <form onSubmit={handleResetPassword} className="flex flex-col gap-kb-md">
-                  {error && (
-                    <div
-                      className={cn(
-                        'flex items-start gap-2 px-3 py-2.5 rounded-kb-md',
-                        'bg-[#F43F5E]/10 border border-[#F43F5E]/30',
-                      )}
-                    >
-                      <AlertCircle className="w-icon-sm h-icon-sm text-[#F43F5E] flex-shrink-0 mt-0.5" strokeWidth={1.5} />
-                      <p className="text-b3 text-[#F43F5E]">{error}</p>
-                    </div>
-                  )}
+                  <Input
+                    label="邮箱验证码"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="邮件中的 6 位验证码"
+                    autoComplete="one-time-code"
+                    prefix={<KeyRound className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value)}
+                  />
 
                   <Input
                     label="新密码"
@@ -203,6 +193,14 @@ export default function ResetPassword() {
                   <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full mt-1">
                     重置密码
                   </Button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setViewMode('request'); setError(null); }}
+                    className="text-b3 text-text-tertiary hover:text-text-secondary transition-colors text-center"
+                  >
+                    没收到验证码？返回重新发送
+                  </button>
                 </form>
               )}
             </>

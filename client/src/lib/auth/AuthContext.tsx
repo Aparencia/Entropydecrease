@@ -100,7 +100,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isPlaceholder) {
       return { error: { message: '云服务尚未配置，请先在 .env 中设置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY' } as AuthError };
     }
-    const { error } = await supabase.auth.signUp({ email, password });
+    // emailRedirectTo：验证邮件链接在系统浏览器打开，桌面端无法回到应用，
+    // 故落地到官网验证成功页（需同步加入 Supabase Redirect URLs 白名单，
+    // 否则回退到 Site URL）
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: 'https://entropydecrease.com/verified' },
+    });
     return { error };
   }, []);
 

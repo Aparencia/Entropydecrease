@@ -1,4 +1,16 @@
 /** @type {import('tailwindcss').Config} */
+
+/**
+ * 令牌色 + 透明度修饰符支持（如 bg-bg-elevated/90、border-border/40）。
+ * Tailwind v3 无法对纯 var() 颜色应用 /alpha 修饰符（此前这些类静默丢失，
+ * 导致明亮主题下弹窗/面板背景全透明），用 color-mix 按透明度混入 transparent
+ * 实现（Chromium 111+ / Electron 35 支持）。
+ */
+const tokenColor = (variable) => ({ opacityValue }) =>
+  opacityValue === undefined
+    ? `var(${variable})`
+    : `color-mix(in srgb, var(${variable}) calc(${opacityValue} * 100%), transparent)`;
+
 module.exports = {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   darkMode: ['selector', '[data-theme="dark"]'],
@@ -6,30 +18,30 @@ module.exports = {
     extend: {
       colors: {
         brand: {
-          50: 'var(--kb-brand-50)',
-          100: 'var(--kb-brand-100)',
-          200: 'var(--kb-brand-200)',
-          300: 'var(--kb-brand-300)',
-          400: 'var(--kb-brand-400)',
-          500: 'var(--kb-brand-500)',
-          600: 'var(--kb-brand-600)',
-          700: 'var(--kb-brand-700)',
-          800: 'var(--kb-brand-800)',
-          900: 'var(--kb-brand-900)',
+          50: tokenColor('--kb-brand-50'),
+          100: tokenColor('--kb-brand-100'),
+          200: tokenColor('--kb-brand-200'),
+          300: tokenColor('--kb-brand-300'),
+          400: tokenColor('--kb-brand-400'),
+          500: tokenColor('--kb-brand-500'),
+          600: tokenColor('--kb-brand-600'),
+          700: tokenColor('--kb-brand-700'),
+          800: tokenColor('--kb-brand-800'),
+          900: tokenColor('--kb-brand-900'),
         },
         accent: {
-          DEFAULT: 'var(--accent)',
-          foreground: 'var(--accent-foreground)',
-          50: 'var(--kb-accent-50)',
-          100: 'var(--kb-accent-100)',
-          200: 'var(--kb-accent-200)',
-          300: 'var(--kb-accent-300)',
-          400: 'var(--kb-accent-400)',
-          500: 'var(--kb-accent-500)',
-          600: 'var(--kb-accent-600)',
-          700: 'var(--kb-accent-700)',
-          800: 'var(--kb-accent-800)',
-          900: 'var(--kb-accent-900)',
+          DEFAULT: tokenColor('--accent'),
+          foreground: tokenColor('--accent-foreground'),
+          50: tokenColor('--kb-accent-50'),
+          100: tokenColor('--kb-accent-100'),
+          200: tokenColor('--kb-accent-200'),
+          300: tokenColor('--kb-accent-300'),
+          400: tokenColor('--kb-accent-400'),
+          500: tokenColor('--kb-accent-500'),
+          600: tokenColor('--kb-accent-600'),
+          700: tokenColor('--kb-accent-700'),
+          800: tokenColor('--kb-accent-800'),
+          900: tokenColor('--kb-accent-900'),
         },
         pomodoro: { DEFAULT: '#5B8A72', light: '#AAC9B5' },
         note: { DEFAULT: '#6B9BD2', light: '#ADD6FF' },
@@ -37,62 +49,62 @@ module.exports = {
         feynman: { DEFAULT: '#C4956A', light: '#DEBB92' },
         classroom: { DEFAULT: '#14B8A6', light: '#5EEAD4' },
         /* 深海静谧功能色 */
-        focus: { DEFAULT: 'var(--kb-focus-blue)' },
-        amber: { DEFAULT: 'var(--kb-amber)' },
-        moss: { DEFAULT: 'var(--kb-moss-green)' },
-        cyber: { DEFAULT: 'var(--kb-cyber-cyan)' },
-        'stone-purple': 'var(--kb-stone-purple)',
+        focus: { DEFAULT: tokenColor('--kb-focus-blue') },
+        amber: { DEFAULT: tokenColor('--kb-amber') },
+        moss: { DEFAULT: tokenColor('--kb-moss-green') },
+        cyber: { DEFAULT: tokenColor('--kb-cyber-cyan') },
+        'stone-purple': tokenColor('--kb-stone-purple'),
         bg: {
-          primary: 'var(--kb-bg-primary)',
-          secondary: 'var(--kb-bg-secondary)',
-          tertiary: 'var(--kb-bg-tertiary)',
-          elevated: 'var(--kb-bg-elevated)',
+          primary: tokenColor('--kb-bg-primary'),
+          secondary: tokenColor('--kb-bg-secondary'),
+          tertiary: tokenColor('--kb-bg-tertiary'),
+          elevated: tokenColor('--kb-bg-elevated'),
         },
         text: {
-          primary: 'var(--kb-text-primary)',
-          secondary: 'var(--kb-text-secondary)',
-          tertiary: 'var(--kb-text-tertiary)',
-          inverse: 'var(--kb-text-inverse)',
+          primary: tokenColor('--kb-text-primary'),
+          secondary: tokenColor('--kb-text-secondary'),
+          tertiary: tokenColor('--kb-text-tertiary'),
+          inverse: tokenColor('--kb-text-inverse'),
         },
         border: {
-          DEFAULT: 'var(--kb-border-default)',
-          strong: 'var(--kb-border-strong)',
+          DEFAULT: tokenColor('--kb-border-default'),
+          strong: tokenColor('--kb-border-strong'),
         },
         semantic: {
-          success: 'var(--kb-color-success)',
-          warning: 'var(--kb-color-warning)',
-          error: 'var(--kb-color-error)',
-          info: 'var(--kb-color-info)',
+          success: tokenColor('--kb-color-success'),
+          warning: tokenColor('--kb-color-warning'),
+          error: tokenColor('--kb-color-error'),
+          info: tokenColor('--kb-color-info'),
         },
         // shadcn/ui 兼容色
-        background: 'var(--background)',
-        foreground: 'var(--foreground)',
+        background: tokenColor('--background'),
+        foreground: tokenColor('--foreground'),
         card: {
-          DEFAULT: 'var(--card)',
-          foreground: 'var(--card-foreground)',
+          DEFAULT: tokenColor('--card'),
+          foreground: tokenColor('--card-foreground'),
         },
         popover: {
-          DEFAULT: 'var(--popover)',
-          foreground: 'var(--popover-foreground)',
+          DEFAULT: tokenColor('--popover'),
+          foreground: tokenColor('--popover-foreground'),
         },
         primary: {
-          DEFAULT: 'var(--primary)',
-          foreground: 'var(--primary-foreground)',
+          DEFAULT: tokenColor('--primary'),
+          foreground: tokenColor('--primary-foreground'),
         },
         secondary: {
-          DEFAULT: 'var(--secondary)',
-          foreground: 'var(--secondary-foreground)',
+          DEFAULT: tokenColor('--secondary'),
+          foreground: tokenColor('--secondary-foreground'),
         },
         muted: {
-          DEFAULT: 'var(--muted)',
-          foreground: 'var(--muted-foreground)',
+          DEFAULT: tokenColor('--muted'),
+          foreground: tokenColor('--muted-foreground'),
         },
         destructive: {
-          DEFAULT: 'var(--destructive)',
-          foreground: 'var(--destructive-foreground)',
+          DEFAULT: tokenColor('--destructive'),
+          foreground: tokenColor('--destructive-foreground'),
         },
-        input: 'var(--input)',
-        ring: 'var(--ring)',
+        input: tokenColor('--input'),
+        ring: tokenColor('--ring'),
       },
       fontFamily: {
         sans: ['var(--kb-font-sans)'],

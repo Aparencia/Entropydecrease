@@ -7,6 +7,7 @@ import { Mail, Lock, AlertCircle } from 'lucide-react';
 import { Button, Input, Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth/AuthContext';
+import { modeManager } from '@/lib/mode/ModeManager';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -16,6 +17,16 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  /**
+   * 跳过登录：必须先把模式降级为 local，再回首页。
+   * 否则 hybrid/full 模式下 AuthGuard 会立即把未登录用户踢回登录页，
+   * 形成"持续要求登录"的死循环（内测反馈 bug）。
+   */
+  const handleSkipLogin = () => {
+    modeManager.setMode('local');
+    navigate('/', { replace: true });
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -136,11 +147,15 @@ export default function LoginPage() {
           </p>
         </Card>
 
-        {/* Skip link */}
+        {/* Skip link：降级到本地模式后再离开，避免 AuthGuard 循环重定向 */}
         <p className="text-c1 text-text-tertiary text-center mt-5">
-          <Link to="/" className="hover:text-text-secondary transition-colors">
+          <button
+            type="button"
+            onClick={handleSkipLogin}
+            className="hover:text-text-secondary transition-colors"
+          >
             跳过登录，继续使用本地功能
-          </Link>
+          </button>
         </p>
       </div>
     </div>
