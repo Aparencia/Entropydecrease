@@ -23,6 +23,7 @@ import { TextAlign } from '@tiptap/extension-text-align';
 import { Color } from '@tiptap/extension-color';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
+import { compressImageForNote } from '../lib/imageCompress';
 import type { SaveStatus } from '../components/NoteEditHeader';
 
 const SAVE_STATUS_HIDE_DELAY_MS = 2000;
@@ -98,7 +99,7 @@ export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNo
       TableHeader,
       TaskList,
       TaskItem.configure({ nested: true, HTMLAttributes: { class: 'todo-item' } }),
-      Image.configure({ inline: true }),
+      Image.configure({ inline: true, HTMLAttributes: { loading: 'lazy' } }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Color,
       TextStyle,
@@ -119,17 +120,14 @@ export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNo
     };
   }, [editor]);
 
-  /** 图片上传（读为 base64 内嵌） */
-  const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  /** 图片上传（P2-10：大图压缩降采样后读为 base64 内嵌，小图原样） */
+  const handleImageSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !editor) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      editor.chain().focus().setImage({ src: reader.result as string }).run();
-    };
-    reader.readAsDataURL(file);
-    // 清空 input 以便重复选择同一文件
+    // 先清空 input 以便重复选择同一文件
     e.target.value = '';
+    const src = await compressImageForNote(file);
+    editor.chain().focus().setImage({ src }).run();
   }, [editor]);
 
   return { editor, saveStatus, debouncedSave, handleImageSelect };
