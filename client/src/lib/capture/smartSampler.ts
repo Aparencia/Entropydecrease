@@ -40,6 +40,13 @@ const DEFAULT_CONFIG: SmartSamplerConfig = {
 const HASH_DUP_THRESHOLD = 5;
 /** 渐进板书帧（变化触发且 0 < score < 0.3）收紧阈值：距离 ≤ 2 才跳过，避免漏采渐进内容 */
 const WRITING_HASH_DUP_THRESHOLD = 2;
+/**
+ * 内存上限：仅最近 N 个关键帧保留 imageBase64，更早的剥离为空串。
+ * 单帧 base64 可达数百 KB，长时间采集（1h 约 240 帧）若无界持有会
+ * 在渲染进程累积数十 MB 且不释放（仅 reset 才清空）。更早帧的图片
+ * 已由 keyframe_save 增量落盘，元数据（id/timestamp/changeType）保留。
+ */
+const MAX_IMAGE_KEYFRAMES = 30;
 
 // ================================================================
 // SmartSampler
@@ -140,6 +147,10 @@ export class SmartSampler {
     this.keyframes.push(keyframe);
     this.lastCaptureTime = now;
     if (hash !== null) this.lastFrameHash = hash;
+
+    // 内存上限：剥离过早关键帧的 base64（已落盘），避免长时间采集内存无界增长
+    this.trimOldKeyframeImages();
+
     return keyframe;
   }
 
@@ -153,6 +164,21 @@ export class SmartSampler {
     this.keyframes = [];
     this.lastCaptureTime = 0;
     this.lastFrameHash = null;
+  }
+
+  /**
+   * 剥离过早关键帧的 imageBase64（保留元数据），将内存占用控制在
+   * MAX_IMAGE_KEYFRAMES 帧以内。用新对象替换避免突变已发射的事件引用。
+   */
+  private trimOldKeyframeImages(): void {
+    const n = this.keyframes.length;
+    if (n <= MAX_IMAGE_KEYFRAMES) return;
+    const cutoff = n - MAX_IMAGE_KEYFRAMES;
+    for (let i = 0; i < cutoff; i++) {
+      if (this.keyframes[i].imageBase64) {
+        this.keyframes[i] = { ...this.keyframes[i], imageBase64: '' };
+      }
+    }
   }
 
   // ================================================================
