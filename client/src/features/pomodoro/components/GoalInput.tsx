@@ -1,5 +1,10 @@
 /**
  * @ai-context: 通用组件：GoalInput。
+ * @ai-context: “跳过”与“取消”是两种意图：跳过 = 不设目标但开始计时
+ * （onSubmit('')），取消 = 关闭弹窗不开始（onClose，仅 Modal 关闭按钮）。
+ * 两者共用同一回调会使空目标番茄钟无法启动（内测反馈 bug）。
+ * @ai-context: "Skip" and "cancel" are distinct intents: skip starts the timer
+ * with an empty goal; cancel closes the dialog without starting.
  */
 import { useState, useRef, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
@@ -8,7 +13,9 @@ import GoalMemory from './GoalMemory';
 
 interface GoalInputProps {
   open: boolean;
+  /** 取消：关闭弹窗且不开始计时 */
   onClose: () => void;
+  /** 提交并开始计时；空字符串表示本次番茄不设目标 */
   onSubmit: (goal: string) => void;
   rememberGoal: boolean;
   onRememberChange: (v: boolean) => void;
@@ -32,14 +39,9 @@ export default function GoalInput({
     }
   }, [open]);
 
+  /** 提交目标并开始；输入为空时等同于“跳过”（无目标但仍然开始计时） */
   const handleSubmit = () => {
-    const trimmed = text.trim();
-    if (trimmed) {
-      onSubmit(trimmed);
-    } else {
-      // 空内容时等同于跳过
-      onClose();
-    }
+    onSubmit(text.trim());
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -63,7 +65,12 @@ export default function GoalInput({
       size="sm"
       footer={
         <>
+          {/* 取消：关闭弹窗，不开始番茄 */}
           <Button variant="ghost" size="md" onClick={onClose}>
+            取消
+          </Button>
+          {/* 跳过：不设目标，但仍然开始计时（用 secondary 与“取消”在视觉上拉开差异） */}
+          <Button variant="secondary" size="md" onClick={() => onSubmit('')}>
             跳过
           </Button>
           <Button variant="primary" size="md" onClick={handleSubmit}>
