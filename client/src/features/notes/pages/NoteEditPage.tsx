@@ -81,7 +81,7 @@ export default function NoteEditPage() {
   // 自由画布变更回调（稳定引用，避免每次渲染重建）
   const handleFreeCanvasChange = useCallback(
     (data: FreeCanvasData) => {
-      if (noteId) debouncedSave(JSON.stringify(data));
+      if (noteId) debouncedSave(() => JSON.stringify(data));
     },
     [noteId, debouncedSave],
   );
@@ -197,7 +197,7 @@ export default function NoteEditPage() {
               <CornellLayout
                 content={(() => { try { return JSON.parse(note.content || '{}'); } catch { return {}; } })()}
                 onChange={(data) => {
-                  if (noteId) debouncedSave(JSON.stringify(data));
+                  if (noteId) debouncedSave(() => JSON.stringify(data));
                 }}
               />
             ) : (

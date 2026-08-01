@@ -269,6 +269,10 @@ export class VADMarker {
     if (this.onSegmentReady) {
       this.onSegmentReady(newSegment);
     }
+    // 内存释放：段已移交转写（消费方在 emit 期间同步捕获 audioBase64 构造转写参数），
+    // 此处清空 base64（单段约 1.2MB）避免长会话无界累积。全量分析回退优先用
+    // 已转写的 audioText（sessionAnalyzer），无需再持有原始音频。
+    newSegment.audioBase64 = '';
   }
 }
 

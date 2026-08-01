@@ -1,7 +1,7 @@
 /**
  * @ai-context: 通用组件：TimerRing。
  */
-import { useRef, useEffect, useId } from 'react';
+import { useId } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
@@ -57,8 +57,6 @@ export default function TimerRing({
   phase,
   isRunning,
 }: TimerRingProps) {
-  const circleRef = useRef<SVGCircleElement>(null);
-  const rafRef = useRef<number>(0);
   const gradientId = useId();
   const glowGradientId = useId();
 
@@ -71,28 +69,10 @@ export default function TimerRing({
   const seconds = remainingSeconds % 60;
   const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
-  useEffect(() => {
-    const animate = () => {
-      const el = circleRef.current;
-      if (!el) return;
-
-      const size = window.innerWidth < 768 ? 200 : 280;
-      const strokeWidth = 6;
-      const r = (size - strokeWidth) / 2;
-      const circumference = 2 * Math.PI * r;
-
-      const currentProgress = totalSeconds > 0 ? remainingSeconds / totalSeconds : 0;
-      const offset = circumference * (1 - currentProgress);
-
-      el.setAttribute('stroke-dasharray', String(circumference));
-      el.setAttribute('stroke-dashoffset', String(offset));
-
-      rafRef.current = requestAnimationFrame(animate);
-    };
-
-    rafRef.current = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [remainingSeconds, totalSeconds]);
+  // 进度环由下方 JSX 的 strokeDashoffset prop + CSS transition（1s linear）驱动：
+  // remainingSeconds 每秒变化触发重渲染，offset 随之平滑过渡。原 RAF 循环以 60fps
+  // 重复 setAttribute 相同值（1h 计时约 21.6 万次无效 DOM 写）且 size 计算与 viewBox
+  // 不一致，纯属冗余，已移除。
 
   const size = 280;
   const strokeWidth = 6;
@@ -164,9 +144,8 @@ export default function TimerRing({
           className="stroke-border/20"
         />
 
-        {/* 进度环 — 带渐变 */}
+        {/* 进度环 — 带渐变，strokeDashoffset 变化由 CSS transition 平滑过渡 */}
         <circle
-          ref={circleRef}
           cx={size / 2}
           cy={size / 2}
           r={r}

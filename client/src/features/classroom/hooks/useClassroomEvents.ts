@@ -211,11 +211,14 @@ export function useClassroomEvents({
           })
             .then((text) => {
               asr.markSuccess();
-              // 将转写结果回填到对应的音频段
+              // 将转写结果回填到对应的音频段，并剥离 audioBase64 释放内存（单段约 1.2MB，
+              // 长课堂数百段否则无界累积——内测 5GB 内存主因）。全量分析回退路径优先用
+              // 已转写的 audioText（sessionAnalyzer: seg.audioText ?? transcribe），无需再持有原始音频；
+              // 转写失败的段不走此分支，仍保留 audioBase64 供回退补转写。
               setSmartBundle((prev) => ({
                 ...prev,
                 audioSegments: (prev.audioSegments ?? []).map((s) =>
-                  s.id === seg.id ? { ...s, audioText: text } : s,
+                  s.id === seg.id ? { ...s, audioText: text, audioBase64: '' } : s,
                 ),
               }));
               if (text) {

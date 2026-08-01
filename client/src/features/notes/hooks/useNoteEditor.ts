@@ -56,13 +56,15 @@ export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNo
   }, [noteKey]);
 
   const debouncedSave = useCallback(
-    (content: string) => {
+    (getContent: () => string) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(async () => {
         if (noteId) {
           setSaveStatus('saving');
           try {
-            await updateNote(noteId, { content });
+            // 序列化延迟到防抖回调内执行：避免每次键入都同步 JSON.stringify
+            // 整个文档（含 base64 图片可达数 MB）阻塞主线程，仅保存时序列化一次。
+            await updateNote(noteId, { content: getContent() });
             soundPlayer.play('note_autosave');
             setSaveStatus('saved');
             if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
@@ -103,7 +105,8 @@ export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNo
     ],
     content: initialContent,
     onUpdate: ({ editor: e }) => {
-      debouncedSave(JSON.stringify(e.getJSON()));
+      // 传入 getter 而非预序列化字符串：getJSON/stringify 延迟到防抖回调内执行
+      debouncedSave(() => JSON.stringify(e.getJSON()));
     },
   });
 

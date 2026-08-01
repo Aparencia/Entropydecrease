@@ -7,7 +7,7 @@
  *
  * @ai-context: 通用组件：ImmersiveTimer。
  */
-import { useRef, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Pause, Play, Square, Volume2, VolumeX } from 'lucide-react';
@@ -76,8 +76,6 @@ export default function ImmersiveTimer({
   onToggleWhiteNoise,
   onWhiteNoiseVolume,
 }: ImmersiveTimerProps) {
-  const progressRef = useRef<SVGCircleElement>(null);
-  const rafRef = useRef<number>(0);
   const prefersReduced = useReducedMotion();
 
   const {
@@ -103,20 +101,9 @@ export default function ImmersiveTimer({
     [progressPercent],
   );
 
-  // SVG 进度环动画 (RAF)
-  useEffect(() => {
-    const animate = () => {
-      const el = progressRef.current;
-      if (!el) return;
-      const currentProgress = totalSeconds > 0 ? remainingSeconds / totalSeconds : 1;
-      const offset = CIRCUMFERENCE * (1 - currentProgress);
-      el.setAttribute('stroke-dasharray', String(CIRCUMFERENCE));
-      el.setAttribute('stroke-dashoffset', String(offset));
-      rafRef.current = requestAnimationFrame(animate);
-    };
-    rafRef.current = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [remainingSeconds, totalSeconds]);
+  // 弧形光带进度由下方 JSX 的 strokeDashoffset prop + CSS transition（duration-1000）驱动：
+  // remainingSeconds 每秒变化触发重渲染，offset 随之平滑过渡。原 RAF 循环以 60fps
+  // 重复 setAttribute 相同值，纯属冗余，已移除。
 
   // 呼吸动画参数 — 匹配 BEAT.x5 (600ms 周期 → 实际用4s完整呼吸)
   const breatheAnimation = prefersReduced
@@ -184,9 +171,8 @@ export default function ImmersiveTimer({
             strokeWidth={STROKE_WIDTH}
           />
 
-          {/* 弧形光带进度条 */}
+          {/* 弧形光带进度条，strokeDashoffset 变化由 CSS transition 平滑过渡 */}
           <circle
-            ref={progressRef}
             cx={SIZE / 2}
             cy={SIZE / 2}
             r={R}

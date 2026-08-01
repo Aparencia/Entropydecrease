@@ -198,19 +198,25 @@ export const useNoteStore = create<NoteState>((set, get) => {
         updateData.wordCount = changes.content.length;
       }
       await updateWithLog(noteStore, 'notes', id, updateData);
-      // v0.9.0: 自动更新搜索索引
+      // 局部更新内存数组并重排（updatedAt 变化需重排），避免全量 loadNotes：
+      // 原实现每次自动保存都从 IndexedDB 全量重载所有笔记 + 触发全页重渲染，
+      // 笔记上百后打字明显卡顿（P0 性能修复）。
+      const existing = get().notes.find((n) => n.id === id);
+      const merged = existing ? { ...existing, ...updateData } : null;
+      set((s) => ({
+        notes: sortNotes(s.notes.map((n) => (n.id === id ? { ...n, ...updateData } : n))),
+      }));
+      // v0.9.0: 自动更新搜索索引（用内存合并结果，省去额外 getById 往返）
       try {
-        const note = await noteStore.getById(id);
-        if (note) {
+        if (merged) {
           const ts = updateData.updatedAt instanceof Date
             ? updateData.updatedAt.getTime()
             : new Date(updateData.updatedAt as unknown as string).getTime();
-          await dexieSearchIndexer.upsert(id, 'note', note.title, note.content, ts);
+          await dexieSearchIndexer.upsert(id, 'note', merged.title, merged.content ?? '', ts);
         }
       } catch {
         // 索引更新失败不阻塞笔记更新
       }
-      await get().loadNotes();
     },
 
     deleteNote: async (id) => {
