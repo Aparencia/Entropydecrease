@@ -91,6 +91,8 @@ const ALLOWED_CHANNELS = [
   'keyframe_cleanup',
   // 性能模式 IPC channel（三档：静谧/从容/澎湃）
   'performance:set-mode',
+  // P3-18 性能诊断 IPC channel
+  'perf:get-metrics',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */

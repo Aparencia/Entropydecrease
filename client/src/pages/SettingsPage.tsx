@@ -7,6 +7,7 @@ import { SPRING } from '@/lib/animation/springConfig';
 import ProfileSettings from './settings/ProfileSettings';
 import AppearanceSettings from './settings/AppearanceSettings';
 import PerformanceSettings from './settings/PerformanceSettings';
+import PerformanceDiagnostics from './settings/PerformanceDiagnostics';
 import SoundSettings from './settings/SoundSettings';
 import ModeSettings from './settings/ModeSettings';
 import ShortcutSettings from './settings/ShortcutSettings';
@@ -118,6 +119,9 @@ export default function SettingsPage() {
         </SettingsSection>
         <SettingsSection index={2}>
           <PerformanceSettings />
+          <div className="mt-3">
+            <PerformanceDiagnostics />
+          </div>
         </SettingsSection>
         <SettingsSection index={3}>
           <SoundSettings />

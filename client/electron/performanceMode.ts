@@ -72,4 +72,31 @@ export function registerPerformanceHandlers(): void {
     setPerformanceMode(mode);
     return { success: true, mode: getPerformanceMode() };
   });
+
+  // P3-18 性能诊断：汇总各进程 CPU/内存 + 系统内存，供内置诊断面板采集
+  safeHandle('perf:get-metrics', async () => {
+    const metrics = app.getAppMetrics();
+    let totalCpu = 0;
+    let totalMemoryKb = 0;
+    const processes = metrics.map((m) => {
+      totalCpu += m.cpu.percentCPUUsage;
+      totalMemoryKb += m.memory.workingSetSize;
+      return {
+        type: m.type,
+        pid: m.pid,
+        cpu: Math.round(m.cpu.percentCPUUsage * 10) / 10,
+        memoryMb: Math.round(m.memory.workingSetSize / 1024),
+      };
+    });
+    const sysMem = process.getSystemMemoryInfo?.();
+    return {
+      totalCpu: Math.round(totalCpu * 10) / 10,
+      totalMemoryMb: Math.round(totalMemoryKb / 1024),
+      processCount: metrics.length,
+      system: sysMem
+        ? { totalMb: Math.round(sysMem.total / 1024), freeMb: Math.round(sysMem.free / 1024) }
+        : null,
+      processes,
+    };
+  });
 }
