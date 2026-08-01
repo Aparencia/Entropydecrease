@@ -115,7 +115,7 @@ export default function NotesPage() {
   const navigate = useNavigate();
 
   const {
-    folders, selectedFolderId, selectedNoteId, searchQuery, selectedTags,
+    notes, folders, selectedFolderId, selectedNoteId, searchQuery, selectedTags,
     loadNotes, loadFolders, createNote, createFolder, updateFolder, selectNote, selectFolder,
     setSearchQuery, getFilteredNotes, createFromTemplate, toggleTag, getAllTags,
     deleteNote, togglePin,
@@ -136,9 +136,17 @@ export default function NotesPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadNotes(); loadFolders(); }, []);
 
-  const filteredNotes = getFilteredNotes();
-  const allTags = getAllTags();
-  const selectedNote = filteredNotes.find((n) => n.id === selectedNoteId) || null;
+  // 缓存过滤/标签/选中结果，避免每次渲染都全量 filter/sort 所有笔记（P1-7 性能修复）
+  const filteredNotes = useMemo(
+    () => getFilteredNotes(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 依赖 getFilteredNotes 读取的 store 字段
+    [getFilteredNotes, notes, searchQuery, selectedTags, selectedFolderId, folders],
+  );
+  const allTags = useMemo(() => getAllTags(), [getAllTags, notes]);
+  const selectedNote = useMemo(
+    () => filteredNotes.find((n) => n.id === selectedNoteId) || null,
+    [filteredNotes, selectedNoteId],
+  );
 
   const handleTemplateSelect = async (tpl: NoteTemplate) => {
     const id = await createFromTemplate(tpl, selectedFolderId ?? undefined);
