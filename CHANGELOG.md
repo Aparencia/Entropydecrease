@@ -3,6 +3,23 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.30.2](https://github.com/Aparencia/Entropydecrease/compare/v0.30.1...v0.30.2) (2026-08-01)
+
+### 🐛 缺陷修复
+
+* **3d:** canvas 层级提至 z-0，修复概览模式点击被根布局 div 拦截 ([168df42](https://github.com/Aparencia/Entropydecrease/commit/168df42061b204c317b7edf7d60169bbf52ceba0))
+* **3d:** 概览模式常驻显示模块标签与功能副标题，解决 3D 物体无法对应到功能 ([b605a6f](https://github.com/Aparencia/Entropydecrease/commit/b605a6fef95cf3f08c57332995487e722a535ea1))
+* **3d:** 移除晨曦穹顶场景重复的行星系统，导航行星统一由 SpatialNav 渲染 ([ff67320](https://github.com/Aparencia/Entropydecrease/commit/ff6732042ae5ae2a0bc19c41cf67c32c194673dc))
+
+### ⚡ 性能优化
+
+* **3d:** 性能分级引入滞回+持续判定+后台重置，消除 tier 抖动；清理无效跳帧死代码 ([8851a1f](https://github.com/Aparencia/Entropydecrease/commit/8851a1f9e96c9a93f82ebee2f472a0d136bb0cb4))
+
+### ♻️ 重构
+
+* **3d:** 性能监控迁移至 drei PerformanceMonitor 成熟方案 ([72e584f](https://github.com/Aparencia/Entropydecrease/commit/72e584f4198e437122b1e83c2495fdbbe644b355))
+* **3d:** 抽取 tier 迁移策略为纯函数模块 tierPolicy 并补充 BDD 单测 ([1602c72](https://github.com/Aparencia/Entropydecrease/commit/1602c7298f08c481fe3c493b1bfe689b67f4e29a))
+
 ## [0.30.1](https://github.com/Aparencia/Entropydecrease/compare/v0.30.0...v0.30.1) (2026-07-31)
 
 ### 🐛 缺陷修复
