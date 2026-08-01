@@ -3,6 +3,40 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.32.0](https://github.com/Aparencia/Entropydecrease/compare/v0.31.0...v0.32.0) (2026-08-01)
+
+### ✨ 新功能
+
+* **ai-gateway:** Phase1-4 优化 — 多Key池化/熔断器/Prompt防护/成本追踪/语义缓存/OTel ([5cb26f4](https://github.com/Aparencia/Entropydecrease/commit/5cb26f44b15f9c61e0edda6a4be93b67cb80c9d1))
+* **ai:** P2-11 激活离线 AI 队列（生命周期引导+摘要离线入队联网重放） ([03de962](https://github.com/Aparencia/Entropydecrease/commit/03de962710acd12c528e5b573b24a7ea69ba41fd))
+* **ai:** P2-12 摘要流式输出 UI 落地（渐进显示+失败降级非流式） ([b8e9a84](https://github.com/Aparencia/Entropydecrease/commit/b8e9a84c574031647215f9f58a102639551e92b7))
+* **notes:** 思维导图编辑器落地（React Flow+dagre 可交互导图，消除 mindmap 名实不副） ([f27d21d](https://github.com/Aparencia/Entropydecrease/commit/f27d21d4523aa0318e264e3c90c0737092e4ebe3))
+* **notes:** 阶段三自由画布 OneNote 式核心墨迹（钢笔/荧光笔/橡皮擦 + SVG 平滑笔画 + 色板笔粗） ([c4cd821](https://github.com/Aparencia/Entropydecrease/commit/c4cd8219984269b026dd9c933beaf8af877ba825))
+* **notes:** 阶段二双向链接（[[ wiki-link 自动补全 + 反向链接面板 + noteLinks 索引 + React Flow 笔记图谱） ([db7c1f8](https://github.com/Aparencia/Entropydecrease/commit/db7c1f8ab0af26456b95b01f42818d1153899fd7))
+* **notes:** 阶段四 Markdown 往返（tiptap-markdown 导出/导入，导图降级大纲，wikiLink 转文本） ([318470e](https://github.com/Aparencia/Entropydecrease/commit/318470e3bbd8f7350844ca5fa5cc98b08ab3204b))
+* **performance:** 三档性能模式（静谧/从容/澎湃）与渲染开销优化 ([4411656](https://github.com/Aparencia/Entropydecrease/commit/441165677aa04fe85612c252c32ba0337b613266))
+* **settings:** P3-18 内置性能诊断面板（FPS/CPU/内存实时采集+一键复制上报） ([dd2d66d](https://github.com/Aparencia/Entropydecrease/commit/dd2d66df2e78387bc8cf26010f0cc1dd59204c37))
+* 本地 ASR 引擎 + 留存系统 + 奖赏组件 + 主题闪烁修复 + 3D 导航优化 ([ad788fe](https://github.com/Aparencia/Entropydecrease/commit/ad788fe6ab146fbd135cea1a575e16df65e1b66a))
+
+### 🐛 缺陷修复
+
+* **capture:** 限制关键帧 base64 内存保留，修复长时间采集内存无界增长 ([ed2e656](https://github.com/Aparencia/Entropydecrease/commit/ed2e656fae3e10eef152f3161ad7d78a8ed84f4b))
+* **notes:** 修复表格/任务列表样式失效（TipTap v3 补 tiptap 类 + --kb-border 变量） ([aa9d3bb](https://github.com/Aparencia/Entropydecrease/commit/aa9d3bbb6a58d9cb97335eb8c93d39b1bc921886))
+
+### ⚡ 性能优化
+
+* **3d:** P3-15 粒子系统按 tier 跳帧更新（降 sin/cos 逐粒子开销） ([608bfed](https://github.com/Aparencia/Entropydecrease/commit/608bfedc136210931e67beac287bee971ed7a491))
+* **ai-gateway:** P2-13 流式输出加首 token/chunk 空闲超时保护 ([651c2c6](https://github.com/Aparencia/Entropydecrease/commit/651c2c6e17a7da46977f021ea748652296b62518))
+* **flashcards:** P1-8 当日复习数改用 reviewedAt 索引查询 ([d6a852e](https://github.com/Aparencia/Entropydecrease/commit/d6a852ec0672af315036612288c15c71cc3daba9))
+* **notes:** P1-7 笔记列表过滤/标签/选中结果 useMemo 缓存 ([6b2679d](https://github.com/Aparencia/Entropydecrease/commit/6b2679dd6cec2b5a55564b8a80eafc0408377f47))
+* **notes:** P2-10 笔记图片插入压缩降采样+懒加载（控内嵌 base64 体积） ([095af9c](https://github.com/Aparencia/Entropydecrease/commit/095af9c054c3389faf1852f7a800bf9c438f41df))
+* P0 性能修复（内存泄漏 + 打字卡顿 + 冗余 RAF） ([fb33cbe](https://github.com/Aparencia/Entropydecrease/commit/fb33cbe00cc79ee14ed7b00664fed7e85d327e44))
+* P1 性能优化（后处理分档 + 定时器清理 + 细粒度订阅） ([39c4614](https://github.com/Aparencia/Entropydecrease/commit/39c46140dea87117268ba37850bd4689317c3155))
+* P3 性能优化（base64 分块编码 + AI token 缓存） ([976ad27](https://github.com/Aparencia/Entropydecrease/commit/976ad27c905978e0bcd1ee4f231b781f2ed5bf6f))
+* **pomodoro:** P3-19 memo 化（CycleMarkers + 预设标签栏抽取，避免每秒重渲染） ([7dc119e](https://github.com/Aparencia/Entropydecrease/commit/7dc119efa45d537c4b8396d7991f5ad1e0b3afa1))
+* **storage:** P2-14 v20 存量迁移——旧会话内嵌 segments 物理搬迁至独立表 ([0e9c98d](https://github.com/Aparencia/Entropydecrease/commit/0e9c98d4b7c07fefbe87fee514c4ebcb73480c27))
+* **storage:** P2-14 采集片段拆分独立表（addSegment 原子追加，旧数据回退兼容） ([dd2a056](https://github.com/Aparencia/Entropydecrease/commit/dd2a0562718e94b09df579b9190adbc740a4df1a))
+
 ## [0.31.0](https://github.com/Aparencia/Entropydecrease/compare/v0.30.2...v0.31.0) (2026-08-01)
 
 ### ✨ 新功能
