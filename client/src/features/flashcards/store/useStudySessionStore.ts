@@ -41,6 +41,12 @@ interface StudySessionState {
   cardStartTime: Date | null;
   /** v0.9.0: 本次会话中收集的 goldenErrors */
   goldenErrors: GoldenError[];
+  /** v0.29: 上一次评分的 stability 变化（供 MemoryStrengthPulse 消费） */
+  lastStabilityBefore: number | null;
+  lastStabilityAfter: number | null;
+  lastRating: number | null;
+  /** v0.29: 记忆强度脉冲可见性 */
+  showStrengthPulse: boolean;
 
   // 会话操作
   startSession: (deckId: string) => Promise<void>;
@@ -84,6 +90,10 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
     isActive: false,
     cardStartTime: null,
     goldenErrors: [],
+    lastStabilityBefore: null,
+    lastStabilityAfter: null,
+    lastRating: null,
+    showStrengthPulse: false,
 
     // -----------------------------------------------------------------------
     // startSession：加载到期卡片 + 补充新卡（带每日限额）
@@ -100,12 +110,11 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
       );
       const now = new Date();
 
-      // 每日限额：查询当日已复习数量
+      // 每日限额：用 reviewedAt 索引查询当日已复习数量，避免 getAll 全量加载
+      // 所有复习记录（增长最快的数据，半年可达数万条）再内存 filter（P1-8 性能修复）
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const allReviews = await flashcardReviewStore.getAll();
-      const reviewsToday = allReviews.filter(
-        (r) => new Date(r.reviewedAt) >= todayStart,
-      ).length;
+      const reviewsToday = await flashcardReviewStore.getTable()
+        .where('reviewedAt').aboveOrEqual(todayStart).count();
       const maxReviews = getMaxReviewsPerDay();
       const maxNewCards = getMaxNewCardsPerDay();
 
@@ -308,6 +317,11 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
           isActive: false,
           isFlipped: false,
           cardStartTime: null,
+          // v0.29: 记忆强度追踪
+          lastStabilityBefore: card.stability ?? 0,
+          lastStabilityAfter: result.stability ?? 0,
+          lastRating: rating,
+          showStrengthPulse: true,
         });
       } else {
         // 推进到下一张卡片
@@ -319,6 +333,11 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
           goldenErrors: newGoldenErrors,
           isFlipped: false,
           cardStartTime: new Date(),
+          // v0.29: 记忆强度追踪
+          lastStabilityBefore: card.stability ?? 0,
+          lastStabilityAfter: result.stability ?? 0,
+          lastRating: rating,
+          showStrengthPulse: true,
         });
       }
     },
