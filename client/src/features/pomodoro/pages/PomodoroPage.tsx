@@ -4,32 +4,43 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Play, Pause, RotateCcw, SkipForward, GraduationCap, BookOpen, Clock, Volume2, VolumeX, Focus } from 'lucide-react';
+import { Play, Pause, RotateCcw, SkipForward, Clock, Volume2, VolumeX, Focus, Plus, GraduationCap, BookOpen, PenLine, BookMarked, Brain, Timer, Moon, Coffee, Dumbbell, Music, Languages, Calculator, Microscope } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/storage';
 import TimerRing from '../components/TimerRing';
 import GoalInput from '../components/GoalInput';
 import ImmersiveTimer from '../components/ImmersiveTimer';
 import SlideToExit from '../components/SlideToExit';
+import CycleMarkers from '../components/CycleMarkers';
+import PresetEditor from '../components/PresetEditor';
 import { usePomodoroStore } from '../store/usePomodoroStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAudioPlayer } from '@/lib/audio/useAudioPlayer';
 import { audioTracks, loadAudioPreferences, saveAudioPreferences } from '@/lib/audio/audioConfig';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { usePomodoroEffects } from '../hooks/usePomodoroEffects';
-import { SPRING, BEAT } from '@/lib/animation/springConfig';
+import { SPRING } from '@/lib/animation/springConfig';
+import { MAX_PRESETS } from '../lib/presetService';
 import type { AudioPreferences } from '@/lib/audio/audioConfig';
 
 const WHITE_NOISE_FADE_MS = 1000;
 const WHITE_NOISE_FADE_OUT_MS = 1500;
 const TIMER_TICK_INTERVAL_MS = 1000;
 
+/** 预设图标映射（lucide 图标名 → 组件） */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const PRESET_ICONS: Record<string, React.ComponentType<any>> = {
+  GraduationCap, BookOpen, PenLine, BookMarked, Brain, Timer,
+  Moon, Coffee, Dumbbell, Music, Languages, Calculator, Microscope,
+};
+
 export default function PomodoroPage() {
   const {
     phase, isRunning, isPaused, remainingSeconds, totalSeconds,
-    completedCount, mode, settings, currentGoal, isImmersive,
-    start, pause, resume, reset, skip, setMode, setCurrentGoal,
-    enterImmersive, exitImmersive, tick,
+    completedCount, settings, currentGoal, isImmersive,
+    activePreset, presets,
+    start, pause, resume, reset, skip, setPreset, setCurrentGoal,
+    enterImmersive, exitImmersive, tick, createPreset,
   } = usePomodoroStore(useShallow(s => s));
 
   usePomodoroEffects();
@@ -37,6 +48,7 @@ export default function PomodoroPage() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [rememberGoal, setRememberGoal] = useState(false);
+  const [presetEditorOpen, setPresetEditorOpen] = useState(false);
 
   // ── 白噪音 ──
   const [audioPrefs, setAudioPrefs] = useState<AudioPreferences>(() => loadAudioPreferences());
@@ -94,14 +106,18 @@ export default function PomodoroPage() {
     else setGoalModalOpen(true);
   };
 
+  /**
+   * 提交目标并开始番茄。goal 为空字符串时表示“跳过目标”：
+   * 仍然启动计时，但不记录目标（currentGoal 置 null，也不写目标记忆库）。
+   */
   const handleGoalSubmit = async (goal: string) => {
-    setCurrentGoal(goal);
+    setCurrentGoal(goal || null);
     setGoalModalOpen(false);
     // 使用微任务确保上述setState完成后再触发store更新
     await Promise.resolve();
     start();
     enterImmersive();
-    if (rememberGoal) {
+    if (rememberGoal && goal) {
       try {
         const existing = await db.pomodoroGoals.where('text').equals(goal).first();
         if (existing) {
@@ -121,13 +137,8 @@ export default function PomodoroPage() {
   const immersiveExit = prefersReduced ? {} : { opacity: 0, scale: 0.95 };
   const immersiveTransition = prefersReduced ? { duration: 0 } : { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] as const };
 
-  // 能量条数据 — 用 completedCount 生成
-  const energyBars = useMemo(() => {
-    return Array.from({ length: settings.longBreakInterval }, (_, i) => ({
-      filled: i < completedCount,
-      index: i,
-    }));
-  }, [completedCount, settings.longBreakInterval]);
+  // 循环标记数据 — 由活动预设的 longBreakInterval 驱动
+  const cycleTotal = activePreset?.longBreakInterval ?? settings.longBreakInterval;
 
   return (
     <>
@@ -144,7 +155,12 @@ export default function PomodoroPage() {
               transition={immersiveTransition}
             >
               <div className="absolute top-6 left-0 right-0 z-10"><SlideToExit onExit={exitImmersive} /></div>
-              <ImmersiveTimer />
+              <ImmersiveTimer
+                whiteNoiseEnabled={audioPrefs.whiteNoiseEnabled}
+                whiteNoiseVolume={audioPrefs.whiteNoiseVolume}
+                onToggleWhiteNoise={toggleWhiteNoise}
+                onWhiteNoiseVolume={handleWhiteNoiseVolume}
+              />
             </motion.div>
           )}
         </AnimatePresence>,
@@ -164,53 +180,71 @@ export default function PomodoroPage() {
         >
           {/* 背景环境光 — 由3D场景提供，已移除 */}
 
-          {/* Mode tabs — 胶囊切换 */}
+          {/* Preset tabs — 横向滚动预设列表 */}
           <motion.div
-            className="flex items-center gap-0.5 p-1 bg-bg-secondary/60 backdrop-blur-sm rounded-full border border-border/20"
+            className="flex items-center gap-0.5 p-1 bg-bg-secondary/60 backdrop-blur-sm rounded-full border border-border/20 max-w-full overflow-x-auto"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1, ...SPRING.gentle }}
           >
-            {([
-              { key: 'class' as const, label: '上课模式', sub: `${settings.classDuration}min`, Icon: GraduationCap },
-              { key: 'self_study' as const, label: '自习模式', sub: `${settings.workDuration}min`, Icon: BookOpen },
-            ]).map(({ key, label, sub, Icon }) => (
+            {presets.map((preset) => {
+              const Icon = PRESET_ICONS[preset.icon] ?? BookOpen;
+              const isActive = activePreset?.id === preset.id;
+              return (
+                <motion.button
+                  key={preset.id}
+                  onClick={() => setPreset(preset.id)}
+                  whileTap={{ scale: 0.97 }}
+                  className={cn(
+                    'relative flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-medium transition-all duration-300 whitespace-nowrap',
+                    isActive
+                      ? 'text-white shadow-[0_2px_12px_rgba(91,138,114,0.3)]'
+                      : 'text-text-secondary hover:text-text-primary',
+                  )}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="pomo-mode-bg"
+                      className="absolute inset-0 rounded-full bg-brand-500"
+                      transition={SPRING.default}
+                    />
+                  )}
+                  <span className="relative flex items-center gap-1.5">
+                    <Icon className="w-4 h-4" strokeWidth={1.5} />
+                    {preset.name}
+                    <span className={cn('text-[10px] opacity-60', isActive && 'opacity-80')}>· {preset.workDuration}min</span>
+                  </span>
+                </motion.button>
+              );
+            })}
+            {/* "+" 快捷创建预设入口（达上限时隐藏） */}
+            {presets.length < MAX_PRESETS && (
               <motion.button
-                key={key}
-                onClick={() => setMode(key)}
-                whileTap={{ scale: 0.97 }}
-                className={cn(
-                  'relative flex items-center gap-1.5 px-5 py-2 rounded-full text-[13px] font-medium transition-all duration-300',
-                  mode === key
-                    ? 'text-white shadow-[0_2px_12px_rgba(91,138,114,0.3)]'
-                    : 'text-text-secondary hover:text-text-primary',
-                )}
+                onClick={() => setPresetEditorOpen(true)}
+                whileTap={{ scale: 0.9 }}
+                className="flex items-center justify-center w-8 h-8 rounded-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/60 transition-all duration-200 flex-shrink-0"
+                aria-label="新建预设"
               >
-                {mode === key && (
-                  <motion.div
-                    layoutId="pomo-mode-bg"
-                    className="absolute inset-0 rounded-full bg-brand-500"
-                    transition={SPRING.default}
-                  />
-                )}
-                <span className="relative flex items-center gap-1.5">
-                  <Icon className="w-4 h-4" strokeWidth={1.5} />
-                  {label}
-                  <span className={cn('text-[10px] opacity-60', mode === key && 'opacity-80')}>· {sub}</span>
-                </span>
+                <Plus className="w-4 h-4" strokeWidth={1.5} />
               </motion.button>
-            ))}
+            )}
           </motion.div>
 
-          {/* 模式提示 */}
+          {/* 预设提示 */}
           <motion.div
-            className="mt-3 flex items-center gap-1.5 text-[11px] text-text-tertiary/60"
+            className="mt-3 flex items-center gap-1.5 text-[12px] text-text-secondary"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
           >
             <Clock className="w-3.5 h-3.5" strokeWidth={1.5} />
-            <span>{mode === 'class' ? `课堂 ${settings.classDuration}min · 短休 ${settings.shortBreakDuration}min` : `专注 ${settings.workDuration}min · 连续番茄+长休`}</span>
+            <span>
+              {activePreset
+                ? activePreset.longBreakInterval === 0
+                  ? `课堂 ${activePreset.workDuration}min · 短休 ${activePreset.shortBreakDuration}min`
+                  : `专注 ${activePreset.workDuration}min · 每 ${activePreset.longBreakInterval} 个番茄长休`
+                : `专注 ${settings.workDuration}min`}
+            </span>
           </motion.div>
 
           <div className="flex-1 min-h-[3rem]" />
@@ -240,33 +274,12 @@ export default function PomodoroPage() {
             />
           </motion.div>
 
-          {/* 能量条 — 横向展示 */}
-          <motion.div
-            className="flex items-center gap-1.5 mb-8"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25, ...SPRING.gentle }}
-          >
-            {energyBars.map(({ filled, index }) => (
-              <motion.div
-                key={index}
-                className={cn(
-                  'h-2 rounded-full transition-all',
-                  `duration-[${BEAT.x2}ms]`,
-                  filled
-                    ? 'bg-brand-500 shadow-[0_0_8px_rgba(91,138,114,0.4)]'
-                    : 'bg-border/30',
-                )}
-                style={{ width: filled ? '24px' : '16px' }}
-                initial={{ scaleX: 0 }}
-                animate={{ scaleX: 1 }}
-                transition={{ delay: 0.3 + index * 0.05, ...SPRING.bouncy }}
-              />
-            ))}
-            <span className="text-[11px] text-text-tertiary/60 ml-2 font-mono tabular-nums">
-              {completedCount}/{settings.longBreakInterval}
-            </span>
-          </motion.div>
+          {/* 循环标记 — 数量随预设变化 */}
+          <CycleMarkers
+            total={cycleTotal}
+            filled={completedCount}
+            className="mb-8"
+          />
 
           {/* 白噪音控制 */}
           <motion.div
@@ -356,6 +369,16 @@ export default function PomodoroPage() {
             onSubmit={handleGoalSubmit}
             rememberGoal={rememberGoal}
             onRememberChange={setRememberGoal}
+          />
+
+          {/* 预设快捷创建弹窗 */}
+          <PresetEditor
+            open={presetEditorOpen}
+            onClose={() => setPresetEditorOpen(false)}
+            onSave={async (data) => {
+              const preset = await createPreset(data);
+              setPreset(preset.id);
+            }}
           />
         </motion.div>
       )}

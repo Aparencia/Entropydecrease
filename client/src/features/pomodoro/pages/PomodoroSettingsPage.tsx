@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Timer, Zap, Bell, Save, RotateCcw, GraduationCap, Sparkles, CheckCircle2, Music, Volume2, Brain } from 'lucide-react';
+import { Timer, Zap, Bell, Save, RotateCcw, GraduationCap, Sparkles, CheckCircle2, Music, Volume2, Brain, Plus, Pencil, Trash2, Layers } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { Button, Card, Input, useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -13,13 +13,15 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAIDuration } from '@/lib/ai/useAI';
 import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 import { pomodoroSessionStore } from '@/lib/storage';
-import type { PomodoroSession } from '@/types/models';
+import type { PomodoroSession, PomodoroPreset } from '@/types/models';
 import {
   audioTracks,
   loadAudioPreferences,
   saveAudioPreferences,
 } from '@/lib/audio/audioConfig';
 import type { AudioPreferences } from '@/lib/audio/audioConfig';
+import PresetEditor from '../components/PresetEditor';
+import { MAX_PRESETS } from '../lib/presetService';
 
 const DEFAULT_SETTINGS = {
   workDuration: 25,
@@ -89,13 +91,16 @@ function SettingRow({
 }
 
 export default function PomodoroSettingsPage() {
-  const { settings, updateSettings, initialize, mode: _mode, aiRecommendedDuration, aiReasoning, setAIRecommendation } = usePomodoroStore(useShallow(s => s));
+  const { settings, updateSettings, initialize, mode: _mode, aiRecommendedDuration, aiReasoning, setAIRecommendation, presets, createPreset, updatePreset, deletePreset } = usePomodoroStore(useShallow(s => s));
 
   // Local form state (mirrors store settings)
   const [localSettings, setLocalSettings] = useState({ ...settings });
   const [saved, setSaved] = useState(false);
   const [resetDone, setResetDone] = useState(false);
   const [audioPrefs, setAudioPrefs] = useState<AudioPreferences>(() => loadAudioPreferences());
+  // 预设编辑弹窗状态
+  const [presetEditorOpen, setPresetEditorOpen] = useState(false);
+  const [editingPreset, setEditingPreset] = useState<PomodoroPreset | null>(null);
 
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -254,6 +259,97 @@ export default function PomodoroSettingsPage() {
             max={120}
             suffix={<span className="text-text-tertiary text-b3">分钟</span>}
           />
+        </div>
+      </Card>
+      </motion.div>
+
+      {/* 预设管理 */}
+      <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
+      <Card variant="default" padding="lg" className="mb-kb-md">
+        <div className="flex items-center justify-between mb-kb-md">
+          <div className="flex items-center gap-2">
+            <Layers className="w-icon-sm h-icon-sm text-brand-500" strokeWidth={1.5} />
+            <h2 className="text-h3 font-medium text-text-primary">预设管理</h2>
+          </div>
+          {presets.length < MAX_PRESETS && (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<Plus className="w-3.5 h-3.5" />}
+              onClick={() => { setEditingPreset(null); setPresetEditorOpen(true); }}
+            >
+              新建
+            </Button>
+          )}
+        </div>
+        <p className="text-c1 text-text-tertiary mb-kb-md">
+          每个预设拥有独立的节律参数，循环标记数量随预设变化。最多 {MAX_PRESETS} 个。
+        </p>
+        <div className="space-y-2">
+          {presets.map((preset) => (
+            <div
+              key={preset.id}
+              className="flex items-center justify-between p-3 rounded-kb-md bg-bg-secondary/40 border border-border/20"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-b2 font-medium text-text-primary">
+                  {preset.name}
+                  {preset.builtin && <span className="ml-2 text-c1 text-text-tertiary">(内置)</span>}
+                </p>
+                <p className="text-c1 text-text-tertiary mt-0.5">
+                  {preset.workDuration}min · 短休{preset.shortBreakDuration}min
+                  {preset.longBreakInterval > 0 ? ` · 每${preset.longBreakInterval}个长休` : ' · 无长休'}
+                  {preset.silent && ' · 静默'}
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => { setEditingPreset(preset); setPresetEditorOpen(true); }}
+                  className="p-1.5 rounded-md hover:bg-bg-tertiary text-text-tertiary hover:text-text-secondary transition-colors"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+                {!preset.builtin && (
+                  <button
+                    onClick={() => deletePreset(preset.id)}
+                    className="p-1.5 rounded-md hover:bg-semantic-error/10 text-text-tertiary hover:text-semantic-error transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+      </motion.div>
+
+      {/* 提示音与提醒（C1-C3） */}
+      <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
+      <Card variant="default" padding="lg" className="mb-kb-md">
+        <div className="flex items-center gap-2 mb-kb-sm">
+          <Bell className="w-icon-sm h-icon-sm text-semantic-warning" strokeWidth={1.5} />
+          <h2 className="text-h3 font-medium text-text-primary">提示音与提醒</h2>
+        </div>
+        <div className="divide-y divide-border/30">
+          <SettingRow label="预警时点" description="专注结束前多久提醒（0 = 关闭）">
+            <select
+              value={String(localSettings.warningMinutes ?? 5)}
+              onChange={(e) => setLocalSettings((prev) => ({ ...prev, warningMinutes: parseInt(e.target.value) }))}
+              className="bg-bg-tertiary border border-border/50 rounded-kb-md px-2 py-1 text-b2 text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-500/40"
+            >
+              <option value="0">关闭</option>
+              <option value="3">3 分钟</option>
+              <option value="5">5 分钟</option>
+              <option value="10">10 分钟</option>
+            </select>
+          </SettingRow>
+          <SettingRow label="最后 10 秒滴答" description="专注即将结束时的倒计时音效">
+            <Toggle
+              checked={localSettings.tickFinalEnabled ?? true}
+              onChange={() => handleToggle('tickFinalEnabled')}
+            />
+          </SettingRow>
         </div>
       </Card>
       </motion.div>
@@ -546,6 +642,22 @@ export default function PomodoroSettingsPage() {
           {resetDone ? '已重置 ✓' : '重置为默认'}
         </Button>
       </div>
+
+      {/* 预设编辑弹窗 */}
+      <PresetEditor
+        open={presetEditorOpen}
+        onClose={() => setPresetEditorOpen(false)}
+        initial={editingPreset}
+        onSave={async (data) => {
+          if (editingPreset) {
+            await updatePreset(editingPreset.id, data);
+            toast({ type: 'success', message: `预设「${data.name}」已更新` });
+          } else {
+            await createPreset(data);
+            toast({ type: 'success', message: `预设「${data.name}」已创建` });
+          }
+        }}
+      />
     </motion.div>
   );
 }

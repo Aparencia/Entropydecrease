@@ -1,12 +1,22 @@
 /**
  * @ai-context: pomodoro 功能模块状态管理：usePomodoroStore。
+ * v0.28 重构：mode('class'|'self_study') 泛化为 preset 驱动，
+ * longBreakInterval=0 统一表达“无长休”，消除 mode==='class' 特判。
+ * 预设 CRUD 委托给 ../lib/presetService.ts，本文件仅保留计时器状态机。
  */
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { loadSettings, saveSettings, recordSession, playCompletionSound, sendNotification } from './usePomodoroPersistence';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
+import type { PomodoroPreset } from '@/types/models';
+import {
+  getAllPresets, getPresetById, createPreset as svcCreatePreset,
+  updatePreset as svcUpdatePreset, deletePreset as svcDeletePreset,
+  reorderPresets as svcReorderPresets, seedBuiltinPresets,
+} from '../lib/presetService';
 
 type Phase = 'work' | 'short_break' | 'long_break';
+/** @deprecated 仅为兼容旧会话记录保留，新代码使用 preset */
 type Mode = 'class' | 'self_study';
 
 /** 番茄钟动作信号类型（供 usePomodoroEffects 监听） */
@@ -29,6 +39,12 @@ interface PomodoroSettings {
   soundEnabled: boolean;
   notificationEnabled: boolean;
   classDuration: number;
+  // v0.28 扩展
+  activePresetId?: string;
+  warningMinutes?: number;
+  tickFinalEnabled?: boolean;
+  completionSoundId?: string;
+  warningSoundId?: string;
 }
 
 interface PomodoroState {
@@ -38,8 +54,12 @@ interface PomodoroState {
   remainingSeconds: number;
   totalSeconds: number;
   completedCount: number;
+  /** @deprecated 兼容层：由 activePreset 派生，下版本移除 */
   mode: Mode;
   settings: PomodoroSettings;
+  // ── v0.28 预设系统 ──
+  presets: PomodoroPreset[];
+  activePreset: PomodoroPreset | null;
   /** 当前工作会话开始时间戳（ms），用于计算 actualDuration */
   sessionStartTime: number | null;
   /** 当前番茄目标文字 */
@@ -72,7 +92,9 @@ interface PomodoroState {
   resume: () => void;
   reset: () => void;
   skip: () => void;
+  /** @deprecated 使用 setPreset 替代 */
   setMode: (mode: Mode) => void;
+  setPreset: (presetId: string) => void;
   setCurrentGoal: (goal: string | null) => void;
   enterImmersive: () => void;
   exitImmersive: () => void;
@@ -81,31 +103,45 @@ interface PomodoroState {
   /** 设置 AI 推荐结果 */
   setAIRecommendation: (duration: number, reasoning: string) => void;
   initialize: () => Promise<void>;
+  // ── 预设 CRUD ──
+  createPreset: (data: Omit<PomodoroPreset, 'id' | 'sortOrder' | 'createdAt' | 'builtin'>) => Promise<PomodoroPreset>;
+  updatePreset: (id: string, changes: Partial<Omit<PomodoroPreset, 'id' | 'builtin'>>) => Promise<void>;
+  deletePreset: (id: string) => Promise<void>;
+  reorderPresets: (orderedIds: string[]) => Promise<void>;
 }
 
-const getPhaseDuration = (phase: Phase, settings: PomodoroSettings, mode?: Mode): number => {
+/** 根据预设获取阶段时长（秒） */
+const getPhaseDuration = (phase: Phase, preset: PomodoroPreset | null, settings: PomodoroSettings): number => {
+  if (!preset) {
+    // 回退到旧 settings（初始化前）
+    switch (phase) {
+      case 'work': return settings.workDuration * 60;
+      case 'short_break': return settings.shortBreakDuration * 60;
+      case 'long_break': return settings.longBreakDuration * 60;
+    }
+  }
   switch (phase) {
-    case 'work':
-      return (mode === 'class' ? settings.classDuration : settings.workDuration) * 60;
-    case 'short_break':
-      return settings.shortBreakDuration * 60;
-    case 'long_break':
-      return settings.longBreakDuration * 60;
+    case 'work': return preset.workDuration * 60;
+    case 'short_break': return preset.shortBreakDuration * 60;
+    case 'long_break': return preset.longBreakDuration * 60;
   }
 };
 
 /** 首潜迷你体验时长（3 分钟），见新手引导系统 */
 export const MINI_DIVE_SECONDS = 180;
 
+/** 获取预设的有效 longBreakInterval（0 = 无长休） */
+const getInterval = (preset: PomodoroPreset | null, settings: PomodoroSettings): number =>
+  preset ? preset.longBreakInterval : settings.longBreakInterval;
+
 const getNextPhase = (
   currentPhase: Phase,
   completedCount: number,
   longBreakInterval: number,
-  mode?: Mode,
 ): Phase => {
   if (currentPhase === 'work') {
-    // 上课模式始终短休，不进入长休
-    if (mode === 'class') return 'short_break';
+    // longBreakInterval=0 表示无长休（原上课模式），始终短休
+    if (longBreakInterval === 0) return 'short_break';
     return (completedCount + 1) % longBreakInterval === 0
       ? 'long_break'
       : 'short_break';
@@ -116,18 +152,18 @@ const getNextPhase = (
 /**
  * 计算阶段结束后的完成计数：
  * - 长休结束 → 归零（一轮完成）
- * - 工作结束 → +1；上课模式无长休，计数达到周期上限后回绕，避免无限累加
+ * - 工作结束 → +1；无长休模式计数达到周期上限后回绕，避免无限累加
  * - 其他阶段 → 不变
  */
 const getNextCount = (
   phase: Phase,
   completedCount: number,
   longBreakInterval: number,
-  mode?: Mode,
 ): number => {
   if (phase === 'long_break') return 0;
   if (phase !== 'work') return completedCount;
-  if (mode === 'class') return (completedCount % longBreakInterval) + 1;
+  // 无长休模式：回绕计数（用固定 4 作为显示上限）
+  if (longBreakInterval === 0) return (completedCount % 4) + 1;
   return completedCount + 1;
 };
 
@@ -153,6 +189,8 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     completedCount: 0,
     mode: 'self_study',
     settings: defaultSettings,
+    presets: [],
+    activePreset: null,
     sessionStartTime: null,
     currentGoal: null,
     isMiniDive: false,
@@ -168,21 +206,36 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
 
     initialize: async () => {
       const saved = await loadSettings();
-      if (saved) {
-        // 兼容旧数据：若缺少 classDuration，补上默认值
-        const merged = { ...defaultSettings, ...saved };
-        const phase = get().phase;
-        const mode = get().mode;
-        const duration = getPhaseDuration(phase, merged, mode);
-        set({
-          settings: merged,
-          remainingSeconds: get().isRunning || get().isPaused ? get().remainingSeconds : duration,
-          totalSeconds: get().isRunning || get().isPaused ? get().totalSeconds : duration,
-        });
-        // 如果启用了通知，主动请求权限
-        if (merged.notificationEnabled && 'Notification' in window && Notification.permission === 'default') {
-          await Notification.requestPermission();
-        }
+      const merged = saved ? { ...defaultSettings, ...saved } : defaultSettings;
+
+      // 种子化预设（首次启动时创建内置预设）
+      const presets = await seedBuiltinPresets(merged as Parameters<typeof seedBuiltinPresets>[0]);
+
+      // 恢复上次选中的预设
+      let activePreset: PomodoroPreset | null = null;
+      if (merged.activePresetId) {
+        activePreset = presets.find(p => p.id === merged.activePresetId) ?? null;
+      }
+      if (!activePreset && presets.length > 0) {
+        // 默认选中第二个（自习）或第一个
+        activePreset = presets.find(p => !p.silent) ?? presets[0];
+      }
+
+      const phase = get().phase;
+      const duration = getPhaseDuration(phase, activePreset, merged);
+      // 派生兼容 mode 字段
+      const mode: Mode = activePreset?.silent ? 'class' : 'self_study';
+      set({
+        settings: merged,
+        presets,
+        activePreset,
+        mode,
+        remainingSeconds: get().isRunning || get().isPaused ? get().remainingSeconds : duration,
+        totalSeconds: get().isRunning || get().isPaused ? get().totalSeconds : duration,
+      });
+      // 如果启用了通知，主动请求权限
+      if (merged.notificationEnabled && 'Notification' in window && Notification.permission === 'default') {
+        await Notification.requestPermission();
       }
     },
 
@@ -228,8 +281,8 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     },
 
     reset: () => {
-      const { phase, settings, mode } = get();
-      const duration = getPhaseDuration(phase, settings, mode);
+      const { phase, settings, activePreset } = get();
+      const duration = getPhaseDuration(phase, activePreset, settings);
       set({
         remainingSeconds: duration,
         totalSeconds: duration,
@@ -242,10 +295,11 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     },
 
     skip: () => {
-      const { phase, completedCount, settings, mode } = get();
-      const newCount = getNextCount(phase, completedCount, settings.longBreakInterval, mode);
-      const nextPhase = getNextPhase(phase, completedCount, settings.longBreakInterval, mode);
-      const duration = getPhaseDuration(nextPhase, settings, mode);
+      const { phase, completedCount, settings, activePreset } = get();
+      const interval = getInterval(activePreset, settings);
+      const newCount = getNextCount(phase, completedCount, interval);
+      const nextPhase = getNextPhase(phase, completedCount, interval);
+      const duration = getPhaseDuration(nextPhase, activePreset, settings);
       set({
         phase: nextPhase,
         remainingSeconds: duration,
@@ -257,16 +311,30 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
       });
     },
 
+    /** @deprecated 兼容层：将 mode 映射到内置预设 */
     setMode: (mode) => {
-      const { settings, phase, isRunning, isPaused, mode: prevMode } = get();
-      if (mode === prevMode) return;
-      // 切换模式 = 开启新周期：计数归零，避免跨模式累计（自习首轮跳到 8 的根因）
-      set({ mode, completedCount: 0 });
-      // 切换模式后，若计时器未运行，重置当前阶段时长
+      const { presets } = get();
+      const target = mode === 'class'
+        ? presets.find(p => p.silent)
+        : presets.find(p => !p.silent);
+      if (target) get().setPreset(target.id);
+    },
+
+    setPreset: (presetId) => {
+      const { settings, phase, isRunning, isPaused, activePreset } = get();
+      if (activePreset?.id === presetId) return;
+      const preset = get().presets.find(p => p.id === presetId) ?? null;
+      if (!preset) return;
+      // 切换预设 = 开启新周期：计数归零，避免跨预设累计
+      const mode: Mode = preset.silent ? 'class' : 'self_study';
+      set({ activePreset: preset, mode, completedCount: 0, phase: 'work' });
+      // 切换预设后，若计时器未运行，重置当前阶段时长
       if (!isRunning && !isPaused) {
-        const duration = getPhaseDuration(phase, settings, mode);
+        const duration = getPhaseDuration('work', preset, settings);
         set({ remainingSeconds: duration, totalSeconds: duration });
       }
+      // 持久化 activePresetId
+      saveSettings({ ...settings, activePresetId: presetId }).catch(() => {});
     },
 
     setCurrentGoal: (goal) => set({ currentGoal: goal }),
@@ -288,15 +356,17 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     },
 
     tick: () => {
-      const { remainingSeconds, isRunning, phase, completedCount, settings, mode } = get();
+      const { remainingSeconds, isRunning, phase, completedCount, settings, activePreset } = get();
       if (!isRunning) return;
+      const interval = getInterval(activePreset, settings);
+      const isSilent = activePreset?.silent ?? false;
 
       if (remainingSeconds <= 1) {
         // Phase completed
         const wasRunning = isRunning;
-        const newCount = getNextCount(phase, completedCount, settings.longBreakInterval, mode);
-        const nextPhase = getNextPhase(phase, completedCount, settings.longBreakInterval, mode);
-        const duration = getPhaseDuration(nextPhase, settings, mode);
+        const newCount = getNextCount(phase, completedCount, interval);
+        const nextPhase = getNextPhase(phase, completedCount, interval);
+        const duration = getPhaseDuration(nextPhase, activePreset, settings);
         const isCycleComplete = phase === 'long_break';
 
         // Determine auto-start behavior
@@ -318,12 +388,13 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
           // 迷你潜水按实际 180s 记录，避免污染效率统计（首潜决策：计入成就）
           const plannedSeconds = isMiniDive
             ? MINI_DIVE_SECONDS
-            : (mode === 'class' ? settings.classDuration : settings.workDuration) * 60;
+            : (activePreset?.workDuration ?? settings.workDuration) * 60;
           actualDuration = sst
             ? Math.round((Date.now() - sst) / 1000)
             : plannedSeconds;
           recordSession({
-            mode: get().mode,
+            mode: activePreset?.silent ? 'class' : 'self_study',
+            presetId: activePreset?.id,
             duration: plannedSeconds,
             actualDuration,
             completedAt: new Date(),
@@ -340,8 +411,8 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
             }).catch(() => {});
           }).catch(() => {});
         }
-        // BUG-005 fix: 上课模式（静默模式）跳过所有提示音播放
-        if (mode !== 'class') {
+        // 静默预设跳过所有提示音播放（继承 BUG-005 语义）
+        if (!isSilent) {
           // 播放提示音
           if (settings.soundEnabled) {
             playCompletionSound();
@@ -386,18 +457,19 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
         }));
       } else {
         const nextRemaining = remainingSeconds - 1;
-        // BUG-005 fix: 上课模式跳过预警和滴答音
-        if (mode !== 'class') {
-          // 5 分钟预警（工作阶段）
-          if (phase === 'work' && nextRemaining === 300) {
+        // 静默预设跳过预警和滴答音
+        if (!isSilent) {
+          // 预警（工作阶段）—— 支持自定义时点
+          const warningSec = (settings.warningMinutes ?? 5) * 60;
+          if (phase === 'work' && warningSec > 0 && nextRemaining === warningSec) {
             soundPlayer.play('pomodoro_5min_warning');
             set((s) => ({
               lastAction: 'tick_5min_warning' as PomodoroAction,
               lastActionCounter: s.lastActionCounter + 1,
             }));
           }
-          // 最后 10 秒滴答
-          if (phase === 'work' && nextRemaining <= 10 && nextRemaining > 0) {
+          // 最后 10 秒滴答（可关闭）
+          if (phase === 'work' && (settings.tickFinalEnabled ?? true) && nextRemaining <= 10 && nextRemaining > 0) {
             soundPlayer.play('pomodoro_tick_final');
             set((s) => ({
               lastAction: 'tick_final' as PomodoroAction,
@@ -410,12 +482,12 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     },
 
     updateSettings: (newSettings) => {
-      const { settings, phase, isRunning, isPaused, mode } = get();
+      const { settings, phase, isRunning, isPaused, activePreset } = get();
       const merged = { ...settings, ...newSettings };
 
       // If not running, update timer to reflect new duration
       if (!isRunning && !isPaused) {
-        const duration = getPhaseDuration(phase, merged, mode);
+        const duration = getPhaseDuration(phase, activePreset, merged);
         set({
           settings: merged,
           remainingSeconds: duration,
@@ -427,6 +499,46 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
 
       // 持久化设置
       saveSettings(merged).catch(() => {});
+    },
+
+    // ── 预设 CRUD（委托给 presetService，同步更新 store 状态） ──
+    createPreset: async (data) => {
+      const preset = await svcCreatePreset(data);
+      set((s) => ({ presets: [...s.presets, preset] }));
+      return preset;
+    },
+
+    updatePreset: async (id, changes) => {
+      await svcUpdatePreset(id, changes);
+      set((s) => ({
+        presets: s.presets.map(p => (p.id === id ? { ...p, ...changes } : p)),
+        activePreset: s.activePreset?.id === id
+          ? { ...s.activePreset, ...changes } as PomodoroPreset
+          : s.activePreset,
+      }));
+    },
+
+    deletePreset: async (id) => {
+      await svcDeletePreset(id);
+      const { activePreset, presets } = get();
+      const remaining = presets.filter(p => p.id !== id);
+      // 若删除的是当前活动预设，回退到第一个
+      let newActive = activePreset;
+      if (activePreset?.id === id) {
+        newActive = remaining[0] ?? null;
+        const duration = getPhaseDuration('work', newActive, get().settings);
+        set({ remainingSeconds: duration, totalSeconds: duration, phase: 'work', completedCount: 0 });
+      }
+      set({ presets: remaining, activePreset: newActive, mode: newActive?.silent ? 'class' : 'self_study' });
+    },
+
+    reorderPresets: async (orderedIds) => {
+      await svcReorderPresets(orderedIds);
+      set((s) => ({
+        presets: orderedIds
+          .map(id => s.presets.find(p => p.id === id))
+          .filter((p): p is PomodoroPreset => p != null),
+      }));
     },
   };
 });
@@ -459,9 +571,17 @@ export const usePomodoroPaused = () =>
 export const usePomodoroCompletedCount = () =>
   usePomodoroStore(s => s.completedCount);
 
-/** 仅订阅模式 */
+/** 仅订阅模式（@deprecated 使用 useActivePreset） */
 export const usePomodoroMode = () =>
   usePomodoroStore(s => s.mode);
+
+/** 订阅当前活动预设 */
+export const useActivePreset = () =>
+  usePomodoroStore(s => s.activePreset);
+
+/** 订阅预设列表 */
+export const usePresets = () =>
+  usePomodoroStore(s => s.presets);
 
 /** 订阅沉浸式状态（复合值，使用 useShallow） */
 export const usePomodoroImmersive = () =>
@@ -482,6 +602,7 @@ export const usePomodoroActionSignal = () =>
     isCycleComplete: s.isCycleComplete,
     lastSessionActualDuration: s.lastSessionActualDuration,
     mode: s.mode,
+    activePreset: s.activePreset,
     settings: s.settings,
     currentGoal: s.currentGoal,
   })));

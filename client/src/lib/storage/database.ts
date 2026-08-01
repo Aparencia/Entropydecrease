@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type {
-  PomodoroSession, PomodoroSettings, Note, NoteFolder,
+  PomodoroSession, PomodoroSettings, PomodoroPreset, Note, NoteFolder,
   FlashcardDeck, Flashcard, FlashcardReview,
   FeynmanNote, FeynmanSummary, FeynmanWeakPoint,
   OperationLog, AppSettings, SyncConflict, OfflineQueueItem,
@@ -48,6 +48,7 @@ export class EntropyDecreaseDatabase extends Dexie {
   crdtDocs!: Table<CRDTDocRecord, string>;
   crdtChanges!: Table<CRDTChangeRecord, number>;
   ritualRecords!: Table<RitualRecord, string>;
+  pomodoroPresets!: Table<PomodoroPreset, string>;
 
   constructor() {
     // 数据库名 'keban' 不可修改（存量用户数据），见文件头 @ai-context
@@ -270,6 +271,11 @@ export class EntropyDecreaseDatabase extends Dexie {
     // v0.26.0: 学习启动仪式记录表（掌握标记/微目标/编排埋点，FEAT RIT-06/09）
     this.version(16).stores({
       ritualRecords: 'id, date, createdAt',
+    });
+
+    // v0.28.0: 番茄钟模式预设表（自定义节律 + 循环标记数量随预设变化）
+    this.version(17).stores({
+      pomodoroPresets: 'id, sortOrder, builtin, createdAt',
     });
   }
 }

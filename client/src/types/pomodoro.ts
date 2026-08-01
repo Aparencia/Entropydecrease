@@ -11,7 +11,8 @@
 // 番茄钟会话记录
 export interface PomodoroSession {
   id: string;
-  mode: 'class' | 'self_study';  // 上课模式 / 自习模式
+  mode: 'class' | 'self_study';  // 上课模式 / 自习模式（兼容旧数据）
+  presetId?: string;             // 关联预设 ID（v0.28+，可选兼容）
   subject?: string;              // 科目（可选）
   duration: number;              // 计划时长（秒）
   actualDuration: number;        // 实际专注时长（秒）
@@ -32,6 +33,32 @@ export interface PomodoroSettings {
   soundEnabled: boolean;         // 声音提醒
   notificationEnabled: boolean;  // 浏览器通知
   classDuration: number;         // 上课模式课堂时长（分钟），默认 45
+  // ── v0.28 预设自定义扩展（全部可选，缺省走默认值） ──
+  activePresetId?: string;       // 记住上次选择的预设
+  warningMinutes?: number;       // 预警时点（分钟），0=关闭，默认 5
+  tickFinalEnabled?: boolean;    // 最后 10 秒滴答开关，默认 true
+  completionSoundId?: string;    // 完成音音色 ID
+  warningSoundId?: string;       // 预警音音色 ID
+}
+
+/**
+ * 番茄模式预设（v0.28 新增）
+ *
+ * @ai-context: longBreakInterval = 0 统一表达"无长休"（即原上课模式行为），
+ * 消除 mode === 'class' 特判。builtin 预设不可删除（"上课""自习"迁移而来）。
+ */
+export interface PomodoroPreset {
+  id: string;
+  name: string;              // "刷题" / "背单词"
+  icon: string;              // lucide 图标名（如 "PenLine", "BookMarked"）
+  workDuration: number;      // 专注时长（分钟）
+  shortBreakDuration: number; // 短休（分钟）
+  longBreakDuration: number;  // 长休（分钟）
+  longBreakInterval: number;  // 几个番茄后长休，0 = 无长休
+  silent: boolean;           // 静默模式（跳过全部音效）
+  builtin: boolean;          // 内置预设不可删除
+  sortOrder: number;         // 排序序号
+  createdAt: string;         // ISO 日期字符串
 }
 
 // 番茄目标记忆
