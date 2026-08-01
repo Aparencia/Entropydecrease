@@ -25,6 +25,7 @@ const PomodoroPage = lazy(() => import('@/features/pomodoro/pages/PomodoroPage')
 const PomodoroStatsPage = lazy(() => import('@/features/pomodoro/pages/PomodoroStatsPage'));
 const PomodoroSettingsPage = lazy(() => import('@/features/pomodoro/pages/PomodoroSettingsPage'));
 const NotesPage = lazy(() => import('@/features/notes/pages/NotesPage'));
+const NotesGraphPage = lazy(() => import('@/features/notes/pages/NotesGraphPage'));
 const NoteEditPage = lazy(() => import('@/features/notes/pages/NoteEditPage'));
 const FlashcardsPage = lazy(() => import('@/features/flashcards/pages/FlashcardsPage'));
 const DeckDetailPage = lazy(() => import('@/features/flashcards/pages/DeckDetailPage'));
@@ -74,6 +75,7 @@ const routes: RouteObject[] = [
       { path: '/pomodoro/stats', element: <SuspenseWrapper><PomodoroStatsPage /></SuspenseWrapper> },
       { path: '/pomodoro/settings', element: <SuspenseWrapper><PomodoroSettingsPage /></SuspenseWrapper> },
       { path: '/notes', element: <SuspenseWrapper><NotesPage /></SuspenseWrapper> },
+      { path: '/notes/graph', element: <SuspenseWrapper><NotesGraphPage /></SuspenseWrapper> },
       { path: '/notes/:id', element: <SuspenseWrapper><NoteEditPage /></SuspenseWrapper> },
       { path: '/flashcards', element: <SuspenseWrapper><FlashcardsPage /></SuspenseWrapper> },
       { path: '/flashcards/:deckId', element: <SuspenseWrapper><DeckDetailPage /></SuspenseWrapper> },

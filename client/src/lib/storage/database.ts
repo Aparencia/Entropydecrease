@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type {
-  PomodoroSession, PomodoroSettings, PomodoroPreset, Note, NoteFolder,
+  PomodoroSession, PomodoroSettings, PomodoroPreset, Note, NoteFolder, NoteLink,
   FlashcardDeck, Flashcard, FlashcardReview,
   FeynmanNote, FeynmanSummary, FeynmanWeakPoint,
   OperationLog, AppSettings, SyncConflict, OfflineQueueItem,
@@ -54,6 +54,7 @@ export class EntropyDecreaseDatabase extends Dexie {
   coralEcosystem!: Table<CoralRecord, string>;
   streakState!: Table<StreakState, string>;
   windowCaptureSegments!: Table<WindowCaptureSegment, string>;
+  noteLinks!: Table<NoteLink, string>;
 
   constructor() {
     // 数据库名 'keban' 不可修改（存量用户数据），见文件头 @ai-context
@@ -310,6 +311,11 @@ export class EntropyDecreaseDatabase extends Dexie {
           await tx.table('windowCaptures').update(session.id, { segments: [] });
         }
       }
+    });
+
+    // 阶段二：笔记双向链接索引表（由笔记内容 wiki-link 推导的出链，本地派生索引）
+    this.version(21).stores({
+      noteLinks: 'id, fromId, toId',
     });
   }
 }

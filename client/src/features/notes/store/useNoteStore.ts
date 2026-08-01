@@ -8,6 +8,7 @@ import type { Note, NoteFolder, SearchEntityType } from '@/types/models';
 import { createTodoTemplateContent, createEmptyTodoTemplate } from '../lib/todoTemplate';
 import { createDefaultMindmap } from '../lib/mindmap/mindmapOps';
 import { noteContentToPlainText } from '../lib/mindmap/mindmapText';
+import { recomputeLinks, removeLinks } from '../lib/links/noteLinkStore';
 import type { TodoItem } from '../lib/todoTemplate';
 
 interface NoteState {
@@ -181,6 +182,8 @@ export const useNoteStore = create<NoteState>((set, get) => {
       } catch {
         // 索引更新失败不阻塞笔记创建
       }
+      // 阶段二：重建出链索引（fire-and-forget，失败不阻塞）
+      recomputeLinks(id, content).catch(() => {});
       await get().loadNotes();
       return id;
     },
@@ -210,12 +213,18 @@ export const useNoteStore = create<NoteState>((set, get) => {
       } catch {
         // 索引更新失败不阻塞笔记更新
       }
+      // 阶段二：内容变更时重建出链索引
+      if (changes.content !== undefined && merged) {
+        recomputeLinks(id, merged.content ?? '').catch(() => {});
+      }
     },
 
     deleteNote: async (id) => {
       await deleteWithLog(noteStore, 'notes', id);
       // v0.9.0: 删除搜索索引
       try { await dexieSearchIndexer.remove(id); } catch { /* 忽略 */ }
+      // 阶段二：清理链接索引（fire-and-forget）
+      removeLinks(id).catch(() => {});
       const { selectedNoteId } = get();
       if (selectedNoteId === id) {
         set({ selectedNoteId: null });

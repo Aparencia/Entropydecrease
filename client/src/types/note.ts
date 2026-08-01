@@ -19,6 +19,16 @@ export interface Note {
   videoNoteType?: string;        // 视频笔记类型标识（lecture/tutorial/etc）
 }
 
+/** 笔记双向链接记录（阶段二：由笔记内容中 wiki-link 提及推导的出链） */
+export interface NoteLink {
+  id: string;
+  /** 来源笔记 id（含链接的笔记） */
+  fromId: string;
+  /** 目标笔记 id（被引用的笔记） */
+  toId: string;
+  createdAt: Date;
+}
+
 /** 笔记文件夹 */
 export interface NoteFolder {
   id: string;

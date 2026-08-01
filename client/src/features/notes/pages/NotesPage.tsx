@@ -10,7 +10,7 @@ import type { ContextMenuGroup } from '@/components/ui/ContextMenu';
 import { VirtualList } from '@/components/ui/VirtualList';
 import {
   Search, Plus, FolderPlus, FileText, PanelLeftClose, PanelLeft, Pin,
-  MoreVertical, Trash2, Copy, Download, BookOpen, Sparkles, ListTodo,
+  MoreVertical, Trash2, Copy, Download, BookOpen, Sparkles, ListTodo, Share2,
 } from 'lucide-react';
 import { TemplateSelector } from '../components/TemplateSelector';
 import type { NoteTemplate } from '../components/TemplateSelector';
@@ -338,6 +338,15 @@ export default function NotesPage() {
               {sidebarOpen ? <PanelLeftClose className="w-5 h-5" strokeWidth={1.5} /> : <PanelLeft className="w-5 h-5" strokeWidth={1.5} />}
             </motion.button>
             <NoteSearchBar />
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => navigate('/notes/graph')}
+              title="笔记图谱"
+              className="p-2 rounded-full text-text-tertiary hover:text-brand-600 hover:bg-brand-50 transition-all duration-200"
+            >
+              <Share2 className="w-4 h-4" strokeWidth={1.5} />
+            </motion.button>
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
               <Button size="sm" icon={<Plus className="w-4 h-4" strokeWidth={2} />} onClick={() => setTemplateOpen(true)}>
                 新建笔记

@@ -22,6 +22,7 @@ import { Image } from '@tiptap/extension-image';
 import { TextAlign } from '@tiptap/extension-text-align';
 import { Color } from '@tiptap/extension-color';
 import { TextStyle } from '@tiptap/extension-text-style';
+import { WikiLink } from '../components/editor/WikiLink';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { compressImageForNote } from '../lib/imageCompress';
 import type { SaveStatus } from '../components/NoteEditHeader';
@@ -103,6 +104,7 @@ export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNo
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Color,
       TextStyle,
+      WikiLink,
     ],
     content: initialContent,
     // TipTap v3 不再自动给编辑元素加 tiptap 类（v2 会自动加），

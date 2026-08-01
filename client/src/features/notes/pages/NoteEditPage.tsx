@@ -14,6 +14,7 @@ import { useNoteStore } from '../store/useNoteStore';
 import { CornellLayout } from '../components/CornellLayout';
 import FreeCanvas from '../components/FreeCanvas';
 import { MindmapEditor } from '../components/mindmap/MindmapEditor';
+import { BacklinksPanel } from '../components/BacklinksPanel';
 import { parseMindmapData, createDefaultMindmap } from '../lib/mindmap/mindmapOps';
 import type { FreeCanvasData, MindmapData } from '@/types/models';
 import { ContextMenu } from '@/components/ui/ContextMenu';
@@ -235,6 +236,8 @@ export default function NoteEditPage() {
                 <EditorContent editor={editor} />
                 {/* 非待办笔记模板时在底部显示统计 */}
                 {note.template !== 'todo' && <TodoStats editor={editor} />}
+                {/* 阶段二：反向链接面板（无引用时不显示） */}
+                <BacklinksPanel noteId={note.id} />
               </>
             )}
           </div>

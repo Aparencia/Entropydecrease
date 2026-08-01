@@ -233,6 +233,29 @@ body {
   outline: 2px solid var(--kb-brand-500);
 }
 
+/* 阶段二：wiki-link 双向链接 chip */
+.tiptap .wiki-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.375rem;
+  margin: 0 0.125rem;
+  border-radius: var(--kb-radius-sm, 6px);
+  background-color: var(--kb-brand-50, rgba(91, 138, 114, 0.12));
+  color: var(--kb-brand-700, #3f6b52);
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.tiptap .wiki-link::before {
+  content: '[[';
+  opacity: 0.5;
+}
+.tiptap .wiki-link::after {
+  content: ']]';
+  opacity: 0.5;
+}
+
 /* 信息密度 */
 [data-density="compact"] {
   --kb-spacing-scale: 0.75;
