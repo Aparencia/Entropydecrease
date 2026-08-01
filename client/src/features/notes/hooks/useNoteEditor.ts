@@ -105,6 +105,9 @@ export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNo
       TextStyle,
     ],
     content: initialContent,
+    // TipTap v3 不再自动给编辑元素加 tiptap 类（v2 会自动加），
+    // 需显式声明，否则 index.css 中 .tiptap 前缀的表格/任务列表/图片等样式全部失效。
+    editorProps: { attributes: { class: 'tiptap' } },
     onUpdate: ({ editor: e }) => {
       // 传入 getter 而非预序列化字符串：getJSON/stringify 延迟到防抖回调内执行
       debouncedSave(() => JSON.stringify(e.getJSON()));

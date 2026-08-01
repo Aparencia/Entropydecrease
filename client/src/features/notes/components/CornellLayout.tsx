@@ -35,6 +35,8 @@ function useCornellEditor(
       Placeholder.configure({ placeholder }),
     ],
     content: initialContent,
+    // TipTap v3 需显式声明 tiptap 类以启用 index.css 的 .tiptap 样式
+    editorProps: { attributes: { class: 'tiptap' } },
     onUpdate: ({ editor: e }) => {
       onChangeRef.current(e.getJSON());
     },
