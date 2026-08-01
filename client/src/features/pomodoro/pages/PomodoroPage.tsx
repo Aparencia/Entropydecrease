@@ -1,10 +1,10 @@
 /**
  * @ai-context: pomodoro 功能模块页面：PomodoroPage。
  */
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Play, Pause, RotateCcw, SkipForward, Clock, Volume2, VolumeX, Focus, Plus, GraduationCap, BookOpen, PenLine, BookMarked, Brain, Timer, Moon, Coffee, Dumbbell, Music, Languages, Calculator, Microscope } from 'lucide-react';
+import { Play, Pause, RotateCcw, SkipForward, Clock, Volume2, VolumeX, Focus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/storage';
 import TimerRing from '../components/TimerRing';
@@ -13,6 +13,8 @@ import ImmersiveTimer from '../components/ImmersiveTimer';
 import SlideToExit from '../components/SlideToExit';
 import CycleMarkers from '../components/CycleMarkers';
 import PresetEditor from '../components/PresetEditor';
+import PresetTabs from '../components/PresetTabs';
+import { CompletionCelebration } from '../components/CompletionCelebration';
 import { usePomodoroStore } from '../store/usePomodoroStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAudioPlayer } from '@/lib/audio/useAudioPlayer';
@@ -27,13 +29,6 @@ const WHITE_NOISE_FADE_MS = 1000;
 const WHITE_NOISE_FADE_OUT_MS = 1500;
 const TIMER_TICK_INTERVAL_MS = 1000;
 
-/** 预设图标映射（lucide 图标名 → 组件） */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const PRESET_ICONS: Record<string, React.ComponentType<any>> = {
-  GraduationCap, BookOpen, PenLine, BookMarked, Brain, Timer,
-  Moon, Coffee, Dumbbell, Music, Languages, Calculator, Microscope,
-};
-
 export default function PomodoroPage() {
   const {
     phase, isRunning, isPaused, remainingSeconds, totalSeconds,
@@ -41,6 +36,7 @@ export default function PomodoroPage() {
     activePreset, presets,
     start, pause, resume, reset, skip, setPreset, setCurrentGoal,
     enterImmersive, exitImmersive, tick, createPreset,
+    showCompletionOverlay, dismissCompletionOverlay, lastSessionActualDuration,
   } = usePomodoroStore(useShallow(s => s));
 
   usePomodoroEffects();
@@ -105,6 +101,9 @@ export default function PomodoroPage() {
     else if (isPaused) resume();
     else setGoalModalOpen(true);
   };
+
+  // P3-19 稳定回调引用，供 memo 化的 PresetTabs 避免每秒重渲染
+  const openPresetEditor = useCallback(() => setPresetEditorOpen(true), []);
 
   /**
    * 提交目标并开始番茄。goal 为空字符串时表示“跳过目标”：
@@ -180,55 +179,14 @@ export default function PomodoroPage() {
         >
           {/* 背景环境光 — 由3D场景提供，已移除 */}
 
-          {/* Preset tabs — 横向滚动预设列表 */}
-          <motion.div
-            className="flex items-center gap-0.5 p-1 bg-bg-secondary/60 backdrop-blur-sm rounded-full border border-border/20 max-w-full overflow-x-auto"
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1, ...SPRING.gentle }}
-          >
-            {presets.map((preset) => {
-              const Icon = PRESET_ICONS[preset.icon] ?? BookOpen;
-              const isActive = activePreset?.id === preset.id;
-              return (
-                <motion.button
-                  key={preset.id}
-                  onClick={() => setPreset(preset.id)}
-                  whileTap={{ scale: 0.97 }}
-                  className={cn(
-                    'relative flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-medium transition-all duration-300 whitespace-nowrap',
-                    isActive
-                      ? 'text-white shadow-[0_2px_12px_rgba(91,138,114,0.3)]'
-                      : 'text-text-secondary hover:text-text-primary',
-                  )}
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId="pomo-mode-bg"
-                      className="absolute inset-0 rounded-full bg-brand-500"
-                      transition={SPRING.default}
-                    />
-                  )}
-                  <span className="relative flex items-center gap-1.5">
-                    <Icon className="w-4 h-4" strokeWidth={1.5} />
-                    {preset.name}
-                    <span className={cn('text-[10px] opacity-60', isActive && 'opacity-80')}>· {preset.workDuration}min</span>
-                  </span>
-                </motion.button>
-              );
-            })}
-            {/* "+" 快捷创建预设入口（达上限时隐藏） */}
-            {presets.length < MAX_PRESETS && (
-              <motion.button
-                onClick={() => setPresetEditorOpen(true)}
-                whileTap={{ scale: 0.9 }}
-                className="flex items-center justify-center w-8 h-8 rounded-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/60 transition-all duration-200 flex-shrink-0"
-                aria-label="新建预设"
-              >
-                <Plus className="w-4 h-4" strokeWidth={1.5} />
-              </motion.button>
-            )}
-          </motion.div>
+          {/* Preset tabs — 横向滚动预设列表（P3-19 memo 化） */}
+          <PresetTabs
+            presets={presets}
+            activePresetId={activePreset?.id}
+            canCreate={presets.length < MAX_PRESETS}
+            onSelect={setPreset}
+            onCreate={openPresetEditor}
+          />
 
           {/* 预设提示 */}
           <motion.div
@@ -383,6 +341,18 @@ export default function PomodoroPage() {
         </motion.div>
       )}
       </AnimatePresence>
+
+      {/* v0.29: 深潜完成庆祝覆盖层 */}
+      <CompletionCelebration
+        visible={showCompletionOverlay}
+        durationSeconds={lastSessionActualDuration ?? (activePreset?.workDuration ?? settings.workDuration) * 60}
+        goal={currentGoal}
+        presetName={activePreset?.name ?? null}
+        totalDepth={((completedCount + 1) * (activePreset?.workDuration ?? 25)) * 4}
+        depthGained={(lastSessionActualDuration ?? (activePreset?.workDuration ?? 25) * 60) / 60 * 4}
+        onClose={dismissCompletionOverlay}
+        onContinue={() => { dismissCompletionOverlay(); setGoalModalOpen(true); }}
+      />
     </>
   );
 }

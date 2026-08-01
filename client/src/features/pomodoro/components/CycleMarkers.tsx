@@ -7,7 +7,10 @@
  * @ai-context: 从 PomodoroPage 内联 JSX 抽取为独立组件，
  * 供 PresetEditor 预览和 ImmersiveTimer 复用。
  * @ai-context: Extracted energy-bar markers; count driven by preset.longBreakInterval.
+ * @ai-context: P3-19 React.memo 包裹——props（total/filled/className）仅在完成数或
+ * 预设变化时改变，避免番茄钟每秒 tick 引发的父组件重渲染连带本组件空转。
  */
+import { memo } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { SPRING, BEAT } from '@/lib/animation/springConfig';
@@ -20,7 +23,7 @@ interface CycleMarkersProps {
   className?: string;
 }
 
-export default function CycleMarkers({ total, filled, className }: CycleMarkersProps) {
+export default memo(function CycleMarkers({ total, filled, className }: CycleMarkersProps) {
   if (total <= 0) return null;
 
   return (
@@ -49,4 +52,4 @@ export default function CycleMarkers({ total, filled, className }: CycleMarkersP
       </span>
     </div>
   );
-}
+});
