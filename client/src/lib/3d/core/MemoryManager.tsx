@@ -1,52 +1,17 @@
 /**
- * 内存管理器 — Electron窗口失焦时暂停渲染，防止内存泄漏
+ * 内存管理器 — 定期报告 GPU 内存占用
+ *
+ * 说明：窗口最小化/隐藏时浏览器会自动节流 rAF（渲染自然暂停），
+ * 无需在此手动跳帧。原“每 4 帧跳 3 帧”的实现（在 useFrame 内 return）
+ * 并不能阻止 R3F 渲染当前帧，属无效死代码，已移除。
  *
  * @ai-context: 3D 场景核心（R3F）：MemoryManager。
  */
-import { useThree, useFrame } from '@react-three/fiber';
-import { useEffect, useRef } from 'react';
+import { useThree } from '@react-three/fiber';
+import { useEffect } from 'react';
 
 export function MemoryManager() {
   const { gl } = useThree();
-  const isVisible = useRef(true);
-  const frameSkip = useRef(0);
-
-  // 监听窗口可见性
-  useEffect(() => {
-    const handleVisibility = () => {
-      isVisible.current = document.visibilityState === 'visible';
-    };
-
-    const handleBlur = () => {
-      isVisible.current = false;
-    };
-
-    const handleFocus = () => {
-      isVisible.current = true;
-    };
-
-    document.addEventListener('visibilitychange', handleVisibility);
-    window.addEventListener('blur', handleBlur);
-    window.addEventListener('focus', handleFocus);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('blur', handleBlur);
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, []);
-
-  // 窗口不可见时跳过渲染帧（每4帧渲染1帧，节省GPU）
-  useFrame(() => {
-    if (!isVisible.current) {
-      frameSkip.current++;
-      if (frameSkip.current % 4 !== 0) {
-        return; // 跳过此帧
-      }
-    } else {
-      frameSkip.current = 0;
-    }
-  });
 
   // 定期报告内存使用
   useEffect(() => {

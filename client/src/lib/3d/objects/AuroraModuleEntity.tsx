@@ -9,7 +9,6 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Float, Html } from '@react-three/drei';
 import type { ModuleId } from '../navigation/OrbitalStore';
-import { useIsNewbiePhase } from '@/features/onboarding/firstDive/useFirstDiveStore';
 import { getModuleSubtitle } from '@/features/onboarding/firstDive/moduleSubtitles';
 
 export interface AuroraModuleEntityProps {
@@ -55,8 +54,7 @@ export function AuroraModuleEntity({
   const ringRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = useState(false);
   const angleRef = useRef(initialAngle);
-  // 新手期双标签（首潜完成后自动隐去）
-  const isNewbie = useIsNewbiePhase();
+  // 功能副标题：隐喻名（深潜/结礁…）无法自解释，常驻直白功能名确保用户能把行星对应到功能
   const subtitle = getModuleSubtitle(id);
 
   const config = PLANET_CONFIGS[id];
@@ -173,8 +171,8 @@ export function AuroraModuleEntity({
             >
               <div className="rounded-lg bg-slate-900/80 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm whitespace-nowrap border border-indigo-500/30">
                 {config.label}
-                {/* 新手期双标签：隐喻名旁附直白副标题 */}
-                {isNewbie && subtitle && (
+                {/* 常驻功能副标题：隐喻名旁附直白功能名 */}
+                {subtitle && (
                   <span className="ml-1.5 text-xs text-white/50">· {subtitle}</span>
                 )}
               </div>

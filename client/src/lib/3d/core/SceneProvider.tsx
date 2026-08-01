@@ -1,6 +1,8 @@
 /**
  * 3D场景全局提供器 — React Three Fiber Canvas容器
- * 作为全屏背景层，z-index: -1
+ * 作为全屏背景层：z-0 使其位于根布局 div（z-auto）之上、可接收点击，
+ * 但仍低于所有 UI 浮层（标题栏 z-50 / FunctionalOverlay z-10 / 引导 z-40+）。
+ * 注意：不能用负 z-index，否则会落到根 div 之后被其透明盒拦截点击。
  *
  * @ai-context: 3D 场景核心（R3F）：SceneProvider。
  */
@@ -21,7 +23,7 @@ interface SceneProviderProps {
 
 export function SceneProvider({ children, interactive = false }: SceneProviderProps) {
   return (
-    <div className="fixed inset-0 -z-10" style={{ pointerEvents: interactive ? 'auto' : 'none' }}>
+    <div className="fixed inset-0 z-0" style={{ pointerEvents: interactive ? 'auto' : 'none' }}>
       <Canvas
         gl={{
           antialias: true,
