@@ -1,31 +1,15 @@
 /**
  * @ai-context: 深海/穹顶双世界主题切换 Hook，与 useSceneTheme 3D 侧联动。
+ * v0.28 修复：原实现为普通 useState，被 App/Navbar/Sidebar/AppearanceSettings
+ * 独立调用产生 4 个互不同步的实例，各自 effect 覆写 data-theme，导致
+ * 页面主题“有时亮有时暗”。现委托给 useThemeStore（Zustand 单一状态源），
+ * API 保持不变，消费方无需修改。
  */
-import { useState, useEffect, useCallback } from 'react';
-
-type Theme = 'light' | 'dark';
+import { useThemeStore } from '@/stores/useThemeStore';
 
 export function useTheme() {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window !== 'undefined') {
-      return (localStorage.getItem('kb-theme') as Theme)
-        || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    }
-    return 'light';
-  });
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('kb-theme', theme);
-  }, [theme]);
-
-  const toggleTheme = useCallback(() => {
-    setThemeState(prev => prev === 'light' ? 'dark' : 'light');
-  }, []);
-
-  const setTheme = useCallback((t: Theme) => {
-    setThemeState(t);
-  }, []);
-
+  const theme = useThemeStore(s => s.theme);
+  const toggleTheme = useThemeStore(s => s.toggleTheme);
+  const setTheme = useThemeStore(s => s.setTheme);
   return { theme, toggleTheme, setTheme };
 }

@@ -58,7 +58,7 @@ function addVectors(a: [number, number, number], b: [number, number, number]): [
 export function SpatialNav() {
   const navigate = useNavigate();
   const theme = useSceneTheme();
-  const { isInModule, currentModule, hoveredModule, highlightAll, enterModule, setHovered } = useOrbitalStore();
+  const { phase, overlayVisible, currentModule, hoveredModule, highlightAll, enterModule, setHovered } = useOrbitalStore();
   const { flyTo, update } = useCameraFlight();
   const { shouldDegrade3D } = useRuntimeEnv();
 
@@ -85,23 +85,25 @@ export function SpatialNav() {
     setHovered(id);
   }, [setHovered, shouldDegrade3D]);
 
-  // 计算相机目标位置
-  const cameraTarget: [number, number, number] = (() => {
-    if (isInModule && currentModule) {
-      const module = MODULE_POSITIONS.find(m => m.id === currentModule);
-      if (module) return addVectors(module.position, CAMERA_OFFSET);
-    }
-    return [0, 0, 10]; // 默认全景位置
-  })();
+  // 计算相机目标位置与注视点：非概览相位（entering/docked）时飞向并注视当前模块，否则全景位/场景中心
+  const inModuleView = phase !== 'overview' && currentModule;
+  const activeModulePos = inModuleView
+    ? MODULE_POSITIONS.find(m => m.id === currentModule)?.position
+    : undefined;
+  const cameraTarget: [number, number, number] = activeModulePos
+    ? addVectors(activeModulePos, CAMERA_OFFSET)
+    : [0, 0, 10]; // 默认全景位置
+  const cameraLookAt: [number, number, number] = activeModulePos ?? [0, 0, 0];
 
   // 深海模式渲染
   if (theme === 'deep-sea') {
     return (
       <>
-        <CameraController target={cameraTarget} speed={isInModule ? 3 : 2} />
+        <CameraController target={cameraTarget} lookAt={cameraLookAt} speed={inModuleView ? 3 : 2} />
         {MODULE_POSITIONS.map((module) => {
           const config = DEEP_SEA_CONFIG[module.id];
-          const isVisible = !isInModule || module.id === currentModule;
+          // 覆盖层不可见时（概览/peek）全部实体可见可点击；覆盖层可见时仅当前模块
+          const isVisible = !overlayVisible || module.id === currentModule;
           if (!isVisible) return null;
 
           return (
@@ -115,7 +117,7 @@ export function SpatialNav() {
               emissiveColor={config.emissiveColor}
               isHovered={hoveredModule === module.id || highlightAll}
               isActive={currentModule === module.id}
-              showLabel={highlightAll || !isInModule}
+              showLabel={highlightAll || !overlayVisible}
               onClick={() => handleModuleClick(module.id)}
               onPointerOver={() => handleHover(module.id)}
               onPointerOut={() => handleHover(null)}
@@ -129,10 +131,10 @@ export function SpatialNav() {
   // 穹顶模式渲染
   return (
     <>
-      <CameraController target={cameraTarget} speed={isInModule ? 3 : 2} />
+      <CameraController target={cameraTarget} lookAt={cameraLookAt} speed={inModuleView ? 3 : 2} />
       {MODULE_POSITIONS.map((module) => {
         const config = AURORA_ORBIT_CONFIG[module.id];
-        const isVisible = !isInModule || module.id === currentModule;
+        const isVisible = !overlayVisible || module.id === currentModule;
         if (!isVisible) return null;
 
         return (
@@ -143,7 +145,7 @@ export function SpatialNav() {
             orbitSpeed={config.orbitSpeed}
             initialAngle={config.initialAngle}
             isActive={currentModule === module.id}
-            showLabel={highlightAll || !isInModule}
+            showLabel={highlightAll || !overlayVisible}
             onClick={handleModuleClick}
             onHover={handleHover}
           />

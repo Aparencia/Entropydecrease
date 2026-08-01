@@ -7,6 +7,7 @@
  * 本文件仅负责布局组合与步骤切换动画，无业务逻辑。
  */
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ContextMenu } from '@/components/ui';
 import { StepIndicator } from '../components/StepIndicator';
@@ -20,6 +21,7 @@ import { StepSummary } from '../components/StepSummary';
 import { AmbientLight, FeynmanTopBar, FeynmanLoadingSkeleton, FeynmanNotFound, FeynmanBottomNav } from '../components/FeynmanChrome';
 import { ExplanationHighlights } from '../components/ExplanationHighlights';
 import { createStepVariants } from '../components/feynmanAnimations';
+import { ConceptInternalized } from '../components/ConceptInternalized';
 import { useFeynmanSession } from '../hooks/useFeynmanSession';
 import { useFeynmanAI } from '../hooks/useFeynmanAI';
 
@@ -59,6 +61,19 @@ export default function FeynmanSessionPage() {
   } = useFeynmanAI(note);
 
   const stepVariants = createStepVariants(!!prefersReduced);
+
+  // v0.29: 费曼完成庆祝状态
+  const [showCelebration, setShowCelebration] = useState(false);
+  const prevCompletedRef = useRef(isCompleted);
+  useEffect(() => {
+    if (isCompleted && !prevCompletedRef.current) {
+      setShowCelebration(true);
+    }
+    prevCompletedRef.current = isCompleted;
+  }, [isCompleted]);
+
+  const masteredCount = noteWeakPoints.filter((wp) => wp.mastered).length;
+  const convertedCount = noteWeakPoints.filter((wp) => wp.mastered).length;
 
   if (isLoading) {
     return <FeynmanLoadingSkeleton />;
@@ -281,6 +296,19 @@ export default function FeynmanSessionPage() {
         unmasteredPoints={noteWeakPoints.filter((wp) => !wp.mastered)}
         onDirectComplete={() => handleConvertAndComplete(false)}
         onConvertAndComplete={() => handleConvertAndComplete(true)}
+      />
+
+      {/* v0.29: 费曼完成庆祝 */}
+      <ConceptInternalized
+        visible={showCelebration}
+        concept={note?.concept ?? ''}
+        selfRating={rating}
+        weakPointsTotal={noteWeakPoints.length}
+        weakPointsMastered={masteredCount}
+        convertedCount={convertedCount}
+        onClose={() => setShowCelebration(false)}
+        onViewFlashcards={() => { setShowCelebration(false); navigate('/flashcards'); }}
+        onBackToList={() => { setShowCelebration(false); navigate('/feynman'); }}
       />
     </motion.div>
   );

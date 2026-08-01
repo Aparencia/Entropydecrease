@@ -113,5 +113,10 @@
     "vitest": "^4.1.10",
     "wait-on": "^9.0.10",
     "workbox-window": "^7.4.1"
+  },
+  "allowScripts": {
+    "electron@35.7.5": true,
+    "better-sqlite3@11.10.0": true,
+    "lzma-native@8.0.6": true
   }
 }

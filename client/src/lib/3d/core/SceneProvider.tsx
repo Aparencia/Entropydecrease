@@ -4,17 +4,19 @@
  * 但仍低于所有 UI 浮层（标题栏 z-50 / FunctionalOverlay z-10 / 引导 z-40+）。
  * 注意：不能用负 z-index，否则会落到根 div 之后被其透明盒拦截点击。
  *
- * 帧循环策略（性能优化核心）：
- * - 概览态（!isInModule）：frameloop=always 全帧渲染（可交互）；
- * - 模块态（isInModule，3D 被遗罩覆盖）：按性能模式降帧/暂停——
- *   静谧(low)=never 暂停、从容(medium)=demand 10fps、澎湃(high)=demand 30fps，
- *   避免 3D 在不可见时仍全帧渲染（持续开销最大头）。
- * - 模块态不渲染 PerformanceMonitor：降帧后的 FPS 是人为限制值，
- *   若用于测量会被误判为性能恶化而降级 tier。
+ * 帧循环策略（性能优化核心，随导航相位迁移）：
+ * - overview / entering：frameloop=always 全帧渲染（概览可交互；entering 为相机飞行过渡）；
+ * - docked（覆盖层遮挡）：frameloop=never 完全暂停渲染。
+ *   原因：覆盖层使用 backdrop-blur，若 canvas 持续更新会使模糊缓存每帧失效，
+ *   导致 GPU 合成风暴（内测反馈“主页流畅但切换其他页面卡顿”的根因）。
+ *   暂停后画面冻结为静态背景，blur 仅计算一次即被合成器缓存，视觉设计不变。
+ * - entering → docked 的停靠延迟由性能档位决定（静谧=0/从容=900ms/澎湃=1300ms），
+ *   保证相机飞行到位后才暂停渲染，避免生硬冻结。
+ * - PerformanceMonitor 仅 overview 相位测量：entering 的飞行帧率不代表设备能力，docked 无帧率可言。
  *
  * @ai-context: 3D 场景核心（R3F）：SceneProvider。
  */
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas } from '@react-three/fiber';
 import { Suspense, useEffect } from 'react';
 import { Preload } from '@react-three/drei';
 import { PerformanceMonitor } from './PerformanceMonitor';
@@ -28,32 +30,27 @@ import * as THREE from 'three';
 
 interface SceneProviderProps {
   children: React.ReactNode;
-  /** 是否允许 3D 场景接收指针事件（非模块内时为 true） */
+  /** 是否允许 3D 场景接收指针事件（覆盖层不可见时为 true） */
   interactive?: boolean;
 }
 
-/** 模块态降帧 ticker：demand 模式下按目标帧率触发渲染（invalidate） */
-function ModuleFpsTicker({ fps }: { fps: number }) {
-  const invalidate = useThree((s) => s.invalidate);
-  useEffect(() => {
-    if (fps <= 0) return; // 暂停档：不触发渲染
-    const id = setInterval(() => invalidate(), 1000 / fps);
-    return () => clearInterval(id);
-  }, [fps, invalidate]);
-  return null;
-}
-
 export function SceneProvider({ children, interactive = false }: SceneProviderProps) {
-  const isInModule = useOrbitalStore((s) => s.isInModule);
+  const phase = useOrbitalStore((s) => s.phase);
+  const currentModule = useOrbitalStore((s) => s.currentModule);
   const mode = usePerformanceModeStore((s) => s.mode);
-  const moduleFps = PERFORMANCE_MODE_CONFIG[mode].moduleFps;
 
-  // 帧循环策略：概览态全帧；模块态按档位降帧/暂停
-  const frameloop: 'always' | 'demand' | 'never' = !isInModule
-    ? 'always'
-    : moduleFps === 0
-      ? 'never'
-      : 'demand';
+  // entering → docked 停靠计时器：相机飞行过渡结束后才暂停渲染（相位/模块/档位变化时重置）
+  useEffect(() => {
+    if (phase !== 'entering') return;
+    const timer = setTimeout(
+      () => useOrbitalStore.getState().dock(),
+      PERFORMANCE_MODE_CONFIG[mode].dockDelayMs,
+    );
+    return () => clearTimeout(timer);
+  }, [phase, currentModule, mode]);
+
+  // 帧循环策略：docked 完全暂停（避免活动 canvas 使覆盖层 backdrop-blur 缓存失效）
+  const frameloop: 'always' | 'never' = phase === 'docked' ? 'never' : 'always';
 
   return (
     <div className="fixed inset-0 z-0" style={{ pointerEvents: interactive ? 'auto' : 'none' }}>
@@ -83,10 +80,8 @@ export function SceneProvider({ children, interactive = false }: SceneProviderPr
           console.info('[3D] WebGL renderer:', rendererName);
         }}
       >
-        {/* 模块态降帧 ticker（仅 demand 模式） */}
-        {frameloop === 'demand' && <ModuleFpsTicker fps={moduleFps} />}
-        {/* FPS 自动降档仅在概览态测量（模块态帧率被人为限制，不可作为性能依据） */}
-        {!isInModule && <PerformanceMonitor />}
+        {/* FPS 自动降档仅在概览态测量（entering 飞行帧率不代表设备能力，docked 无帧率可言） */}
+        {phase === 'overview' && <PerformanceMonitor />}
         <QualityController />
         <MemoryManager />
         <ContextRecovery />

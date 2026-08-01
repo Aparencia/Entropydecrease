@@ -24,6 +24,7 @@ import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { CardStage, SessionCompleteView } from '../components/CardStage';
 import { SessionHeader } from '../components/SessionHeader';
 import { RatingBar } from '../components/RatingBar';
+import { MemoryStrengthPulse } from '../components/MemoryStrengthPulse';
 import { OptimizeSuggestionModal, SessionSummaryModal } from '../components/StudySessionModals';
 import { useCardInteraction } from '../hooks/useCardInteraction';
 
@@ -50,6 +51,7 @@ export default function StudySessionPage() {
   const {
     sessionCards, currentIndex, isFlipped, completedCount, correctCount,
     isActive, goldenErrors, startSession, rateCard, flipCard, endSession, relearn,
+    lastStabilityBefore, lastStabilityAfter, lastRating, showStrengthPulse,
   } = useStudySessionStore(useShallow(s => s));
 
   const { selectDeck, loadCards, updateCard } = useFlashcardStore(useShallow(s => s));
@@ -248,6 +250,19 @@ export default function StudySessionPage() {
           onSelect={handleSessionSelect}
           onClose={ctxClose}
         />
+      )}
+
+      {/* v0.29: 记忆强度微动画 */}
+      {!isComplete && (
+        <div className="flex justify-center">
+          <MemoryStrengthPulse
+            stabilityBefore={lastStabilityBefore ?? 0}
+            stabilityAfter={lastStabilityAfter ?? 0}
+            rating={lastRating ?? 2}
+            visible={showStrengthPulse}
+            onFadeComplete={() => useStudySessionStore.setState({ showStrengthPulse: false })}
+          />
+        </div>
       )}
 
       {/* 底部评分区 */}

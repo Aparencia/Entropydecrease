@@ -11,6 +11,8 @@ import { logger } from '../logger.js';
 import type { AIFeatureDef } from './utils.js';
 import { registerOllamaHandlers, initOllama } from './ollama/index.js';
 import { registerStreamHandler } from './streamHandler.js';
+import { registerLocalAsrHandlers } from './local-asr/index.js';
+import { loadLocalAsrConfig } from './local-asr/config.js';
 
 // 导入所有 AI 功能模块
 import { feature as summarizeFeature } from './handlers/summarizeHandler.js';
@@ -73,6 +75,9 @@ export function registerAIHandlers(): void {
   // 注册 Ollama 本地推理 IPC handler
   registerOllamaHandlers();
 
+  // 注册本地 ASR（whisper.cpp）IPC handler
+  registerLocalAsrHandlers();
+
   // 注册流式输出 IPC handler
   registerStreamHandler();
 
@@ -85,4 +90,5 @@ export function registerAIHandlers(): void {
  */
 export async function initAIModule(): Promise<void> {
   await initOllama();
+  await loadLocalAsrConfig();
 }

@@ -1,9 +1,9 @@
 /**
  * @ai-context: 布局组件：AppLayout。
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion, MotionConfig } from 'framer-motion';
+import { motion, MotionConfig } from 'framer-motion';
 import { Home } from 'lucide-react';
 import CommandPalette from '../ui/CommandPalette';
 import { CloseConfirmDialog } from '../ui/CloseConfirmDialog';
@@ -16,7 +16,7 @@ import { SceneTransition } from '@/lib/3d/scenes/SceneTransition';
 import { SpatialNav } from '@/lib/3d/navigation/SpatialNav';
 import { MobileNavGrid } from '@/lib/3d/scenes/MobileNavGrid';
 import { FunctionalOverlay } from '@/components/overlay/FunctionalOverlay';
-import { useOrbitalStore } from '@/lib/3d/navigation/OrbitalStore';
+import { useOrbitalStore, MODULE_POSITIONS } from '@/lib/3d/navigation/OrbitalStore';
 import { OnboardingOverlay } from '@/components/onboarding/OnboardingOverlay';
 import { ModuleTourToast } from '@/components/onboarding/ModuleTourToast';
 import { HelpCenter } from '@/components/onboarding/HelpCenter';
@@ -30,7 +30,7 @@ import { PERFORMANCE_MODE_CONFIG } from '@/lib/performance/performanceMode';
 export default function AppLayout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { isInModule, currentModule, enterModule, exitModule, syncWithRoute } = useOrbitalStore();
+  const { isInModule, currentModule, overlayVisible, enterModule, exitModule, syncWithRoute } = useOrbitalStore();
   const openHelp = useOnboardingStore((s) => s.openHelp);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const { sync } = useSync();
@@ -43,7 +43,8 @@ export default function AppLayout() {
   useSessionExpiry();
 
   // 路由 → 3D状态同步（刷新页面或直接URL访问时恢复状态）
-  useEffect(() => {
+  // useLayoutEffect：在绘制前完成相位迁移，避免新页面内容在旧覆盖层内闪现一帧
+  useLayoutEffect(() => {
     syncWithRoute(pathname);
   }, [pathname, syncWithRoute]);
 
@@ -99,7 +100,11 @@ export default function AppLayout() {
           '7': '/classroom', '0': '/settings',
         };
         if (moduleKeys[e.key]) {
-          navigate(moduleKeys[e.key]);
+          const route = moduleKeys[e.key];
+          // 显式调用 enterModule：同路由 navigate 无效时仍能触发相位迁移（修复 Esc 后重复按键无响应）
+          const mod = MODULE_POSITIONS.find(m => m.route === route);
+          if (mod) enterModule(mod.id);
+          navigate(route);
         }
       }
 
@@ -124,20 +129,18 @@ export default function AppLayout() {
         /* 移动端降级：显示 2D 模块导航网格代替 3D 场景 */
         !isInModule && <MobileNavGrid />
       ) : (
-        <SceneProvider interactive={!isInModule}>
+        <SceneProvider interactive={!overlayVisible}>
           <SceneTransition />
           <SpatialNav />
         </SceneProvider>
       )}
 
-      {/* Layer 1: 功能覆盖层 */}
-      <AnimatePresence mode="popLayout">
-        {isInModule && (
-          <FunctionalOverlay key={currentModule}>
-            <Outlet />
-          </FunctionalOverlay>
-        )}
-      </AnimatePresence>
+      {/* Layer 1: 功能覆盖层 — 常驻挂载（visible 控制显隐），同模块 Esc/重入不卸载页面，避免动画重播 */}
+      {currentModule && (
+        <FunctionalOverlay key={currentModule} visible={overlayVisible}>
+          <Outlet />
+        </FunctionalOverlay>
+      )}
 
       {/* 非模块内时显示简洁的状态提示 + 返回按钮（仅桌面端） */}
       {!isInModule && !shouldDegrade3D && (

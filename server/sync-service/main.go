@@ -69,6 +69,14 @@ func main() {
 		v1.GET("/crdt/changes", handlers.CRDTPull)
 	}
 
+	// Social proof stats — public (no auth) read + authenticated report.
+	r.GET("/api/v1/stats/today", handlers.StatsToday)
+	statsAuth := r.Group("/api/v1/stats")
+	statsAuth.Use(middleware.AuthMiddleware())
+	{
+		statsAuth.POST("/report", handlers.ReportLearningEvent)
+	}
+
 	// WebSocket real-time sync channel.
 	// Uses WSAuthMiddleware which reads the JWT from ?token= query parameter
 	// (browsers cannot set custom headers on WebSocket upgrade requests).

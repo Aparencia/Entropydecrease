@@ -51,8 +51,8 @@ export interface PerformanceModeConfig {
   tierCap: PerformanceTier;
   /** DPR 上限（随 tier 联动，此处为参考值） */
   dprCap: number;
-  /** 模块态 3D 目标帧率（0 = 完全暂停渲染） */
-  moduleFps: number;
+  /** 进入模块后的停靠延迟（ms）：相机飞行过渡时长，到时才暂停 3D 渲染；0 = 立即停靠暂停 */
+  dockDelayMs: number;
   /** 是否减弱 UI 动画（Framer Motion） */
   reduceMotion: boolean;
   /** 后台采集频率倍率（1 = 正常） */
@@ -66,7 +66,7 @@ export const PERFORMANCE_MODE_CONFIG: Record<PerformanceMode, PerformanceModeCon
   low: {
     tierCap: 'low',
     dprCap: 1,
-    moduleFps: 0,
+    dockDelayMs: 0,
     reduceMotion: true,
     captureRateScale: 0.5,
     allowBackgroundThrottling: true,
@@ -74,7 +74,7 @@ export const PERFORMANCE_MODE_CONFIG: Record<PerformanceMode, PerformanceModeCon
   medium: {
     tierCap: 'medium',
     dprCap: 1.5,
-    moduleFps: 10,
+    dockDelayMs: 900,
     reduceMotion: false,
     captureRateScale: 1,
     allowBackgroundThrottling: false,
@@ -82,7 +82,7 @@ export const PERFORMANCE_MODE_CONFIG: Record<PerformanceMode, PerformanceModeCon
   high: {
     tierCap: 'high',
     dprCap: 2,
-    moduleFps: 30,
+    dockDelayMs: 1300,
     reduceMotion: false,
     captureRateScale: 1,
     allowBackgroundThrottling: false,

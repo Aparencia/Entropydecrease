@@ -5,6 +5,10 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>熵减</title>
+    <!-- 防主题闪烁：在 CSS 渲染前同步设置 data-theme（逻辑与 useThemeStore 一致） -->
+    <script>
+      (function(){try{var t=localStorage.getItem('kb-theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement.setAttribute('data-theme',t)}catch(e){}})();
+    </script>
   </head>
   <body>
     <!-- 启动缓冲带：纯 CSS，零 JS 依赖，React 挂载后接管并淡出 -->

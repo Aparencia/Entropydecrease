@@ -48,10 +48,10 @@ describe('performanceMode 配置层', () => {
       expect(PERFORMANCE_MODE_CONFIG.high.allowBackgroundThrottling).toBe(false);
     });
 
-    it('模块态帧率应为 low=0(暂停)/medium=10/high=30', () => {
-      expect(PERFORMANCE_MODE_CONFIG.low.moduleFps).toBe(0);
-      expect(PERFORMANCE_MODE_CONFIG.medium.moduleFps).toBe(10);
-      expect(PERFORMANCE_MODE_CONFIG.high.moduleFps).toBe(30);
+    it('停靠延迟应为 low=0(立即)/medium=900ms/high=1300ms', () => {
+      expect(PERFORMANCE_MODE_CONFIG.low.dockDelayMs).toBe(0);
+      expect(PERFORMANCE_MODE_CONFIG.medium.dockDelayMs).toBe(900);
+      expect(PERFORMANCE_MODE_CONFIG.high.dockDelayMs).toBe(1300);
     });
   });
 

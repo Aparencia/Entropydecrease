@@ -85,6 +85,11 @@ interface PomodoroState {
   /** phase_complete 时实际持续秒数 */
   lastSessionActualDuration: number | null;
 
+  /** v0.29: 深潜完成庆祝覆盖层可见性 */
+  showCompletionOverlay: boolean;
+  /** v0.29: 关闭完成庆祝 */
+  dismissCompletionOverlay: () => void;
+
   start: () => void;
   /** 开始首潜 3 分钟迷你体验（新手引导专用，不改动用户设置） */
   startMiniDive: () => void;
@@ -203,6 +208,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     lastCompletedPhase: null,
     isCycleComplete: false,
     lastSessionActualDuration: null,
+    showCompletionOverlay: false,
 
     initialize: async () => {
       const saved = await loadSettings();
@@ -337,6 +343,8 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
       saveSettings({ ...settings, activePresetId: presetId }).catch(() => {});
     },
 
+    dismissCompletionOverlay: () => set({ showCompletionOverlay: false }),
+
     setCurrentGoal: (goal) => set({ currentGoal: goal }),
 
     setAIRecommendation: (duration, reasoning) =>
@@ -454,6 +462,8 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
           lastCompletedPhase: phase,
           isCycleComplete,
           lastSessionActualDuration: actualDuration,
+          // v0.29: 工作阶段完成时触发庆祝覆盖层
+          showCompletionOverlay: phase === 'work' ? true : s.showCompletionOverlay,
         }));
       } else {
         const nextRemaining = remainingSeconds - 1;
