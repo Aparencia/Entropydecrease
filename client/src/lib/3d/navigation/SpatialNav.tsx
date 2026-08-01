@@ -115,7 +115,7 @@ export function SpatialNav() {
               emissiveColor={config.emissiveColor}
               isHovered={hoveredModule === module.id || highlightAll}
               isActive={currentModule === module.id}
-              showLabel={highlightAll}
+              showLabel={highlightAll || !isInModule}
               onClick={() => handleModuleClick(module.id)}
               onPointerOver={() => handleHover(module.id)}
               onPointerOut={() => handleHover(null)}
@@ -143,7 +143,7 @@ export function SpatialNav() {
             orbitSpeed={config.orbitSpeed}
             initialAngle={config.initialAngle}
             isActive={currentModule === module.id}
-            showLabel={highlightAll}
+            showLabel={highlightAll || !isInModule}
             onClick={handleModuleClick}
             onHover={handleHover}
           />
