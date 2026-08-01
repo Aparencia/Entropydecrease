@@ -3,6 +3,17 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.31.0](https://github.com/Aparencia/Entropydecrease/compare/v0.30.2...v0.31.0) (2026-08-01)
+
+### ✨ 新功能
+
+* **dashboard:** 首页统计与知识预览卡片支持点击跳转 ([35ac62e](https://github.com/Aparencia/Entropydecrease/commit/35ac62e76a652fd49372e6b033f25979d0737307))
+* **pomodoro:** 番茄钟模式预设自定义与周期标记 ([945ca57](https://github.com/Aparencia/Entropydecrease/commit/945ca578cd5bc8b611ba5b2c65fca5461295a434))
+
+### 🐛 缺陷修复
+
+* **pomodoro:** 修复目标跳过退化为取消致空目标番茄无法启动 ([c47bdc7](https://github.com/Aparencia/Entropydecrease/commit/c47bdc7ac6ee1889b56c759a70a857adafe33f1f))
+
 ## [0.30.2](https://github.com/Aparencia/Entropydecrease/compare/v0.30.1...v0.30.2) (2026-08-01)
 
 ### 🐛 缺陷修复
