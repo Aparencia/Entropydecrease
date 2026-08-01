@@ -22,8 +22,9 @@ export function DeepSeaWorld() {
         <meshBasicMaterial color="#0A1628" side={2} />
       </mesh>
 
-      {/* 后处理（低性能时关闭） */}
-      {tier !== 'low' && (
+      {/* 后处理：低档全关；中档关景深（DepthOfField 是最重的后处理 pass）；澎湃档全开。
+          条件置于 composer 层级（group 接受 false），避免 EffectComposer 子元素严格类型报错 */}
+      {tier === 'low' ? null : tier === 'high' ? (
         <SafeEffectComposer>
           <Bloom
             intensity={0.5}
@@ -35,6 +36,16 @@ export function DeepSeaWorld() {
             focusDistance={0.01}
             focalLength={0.02}
             bokehScale={3}
+          />
+          <Vignette offset={0.3} darkness={0.7} />
+        </SafeEffectComposer>
+      ) : (
+        <SafeEffectComposer>
+          <Bloom
+            intensity={0.5}
+            luminanceThreshold={0.6}
+            luminanceSmoothing={0.9}
+            mipmapBlur
           />
           <Vignette offset={0.3} darkness={0.7} />
         </SafeEffectComposer>

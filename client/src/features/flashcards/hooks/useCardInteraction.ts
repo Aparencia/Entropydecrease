@@ -43,6 +43,9 @@ export function useCardInteraction({
   const [confidence, setConfidence] = useState<Confidence | null>(null);
   const prevIndexRef = useRef(currentIndex);
   const exitingRef = useRef(false);
+  // 定时器 ref：卸载时清理，避免卸载后 setState（P1-9 性能修复）
+  const plusOneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 拖拽手势
   const dragX = useMotionValue(0);
@@ -74,6 +77,14 @@ export function useCardInteraction({
     exitingRef.current = exiting;
   }, [exiting]);
 
+  // 卸载时清理定时器，避免卸载后 setState / 会话结束后误触发 rateCard
+  useEffect(() => {
+    return () => {
+      if (plusOneTimerRef.current) clearTimeout(plusOneTimerRef.current);
+      if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+    };
+  }, []);
+
   const handleRate = useCallback((rating: Rating) => {
     if (exitingRef.current) return;
     // v0.9.0: default to 'medium' if no confidence selected
@@ -81,13 +92,13 @@ export function useCardInteraction({
     if (current && current.repetitions === 0 && rating !== Rating.Again) {
       setSessionMastered((n) => n + 1);
       setShowPlusOne(true);
-      setTimeout(() => setShowPlusOne(false), PLUS_ONE_ANIMATION_DURATION_MS);
+      plusOneTimerRef.current = setTimeout(() => setShowPlusOne(false), PLUS_ONE_ANIMATION_DURATION_MS);
     }
     setCardGlow(rating === Rating.Again ? 'wrong' : 'correct');
     setExitDir(rating === Rating.Again ? 'left' : 'right');
     setExiting(true);
     exitingRef.current = true;
-    setTimeout(() => {
+    exitTimerRef.current = setTimeout(() => {
       setExiting(false);
       exitingRef.current = false;
       setFlipDone(false);

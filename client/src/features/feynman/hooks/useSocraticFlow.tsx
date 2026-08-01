@@ -5,7 +5,7 @@
  * @ai-context: feynman 功能模块 Hook：useSocraticFlow。
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui';
 import { useAISocratic } from '@/lib/ai/hooks/useAISocratic';
@@ -68,7 +68,10 @@ function mapToDeepeningAngles(aiAngles: Array<{ key: string; label: string; ques
 export function useSocraticFlow() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { createNote, updateNote } = useFeynmanStore();
+  // 细粒度订阅 action（恒定引用），避免 useFeynmanStore() 无 selector 订阅整个 store
+  // 导致笔记列表/薄弱点等任意变化都重渲染苏格拉底会话页（P1-5 性能修复）
+  const createNote = useFeynmanStore((s) => s.createNote);
+  const updateNote = useFeynmanStore((s) => s.updateNote);
   const { brainstorm: brainstormAI, question: questionAI, evaluate: evaluateAI, deepening: deepeningAI } = useAISocratic();
 
   // ── State ──
@@ -85,11 +88,19 @@ export function useSocraticFlow() {
   const [deepeningFallbackMsg, setDeepeningFallbackMsg] = useState<string | null>(null);
 
   const conversationIdRef = useRef(`socratic_${Date.now()}`);
+  // 阶段过渡定时器 ref：卸载时清理，避免卸载后 setState/navigate（P1-9 性能修复）
+  const phaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
+    };
+  }, []);
 
   // ── 阶段过渡辅助 ──
   const transitionToPhase = useCallback((nextPhase: Phase, onEnter?: () => void | Promise<void>) => {
     setExiting(true);
-    setTimeout(async () => {
+    phaseTimerRef.current = setTimeout(async () => {
       setPhase(nextPhase);
       setExiting(false);
       if (onEnter) await onEnter();
@@ -254,7 +265,7 @@ export function useSocraticFlow() {
       toast({ type: 'success', message: '已保存为浮出水面概念！' });
 
       setExiting(true);
-      setTimeout(() => { navigate(`/feynman/${noteId}`); }, PHASE_TRANSITION_MS);
+      phaseTimerRef.current = setTimeout(() => { navigate(`/feynman/${noteId}`); }, PHASE_TRANSITION_MS);
     } catch {
       toast({ type: 'error', message: '保存失败，请稍后重试' });
       setSavingNote(false);

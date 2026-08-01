@@ -268,6 +268,9 @@ function CloudLayer() {
 // 行星，外层行星只改状态不跳转，导致“点击 3D 物体”与功能错位。
 
 // ─── 主场景组件 ───────────────────────────────────────────
+/** 色差偏移量（模块级常量，避免每帧 new Vector2 的 GC 压力） */
+const CHROMATIC_OFFSET = new THREE.Vector2(0.001, 0.001);
+
 export function AuroraDomeWorld() {
   // 有效 tier（自动 tier 受用户性能模式上限约束）
   const tier = useEffectiveTier();
@@ -298,8 +301,9 @@ export function AuroraDomeWorld() {
       {/* 云层效果（低性能时隐藏） */}
       {tier !== 'low' && <CloudLayer />}
 
-      {/* 后处理（低性能时关闭） */}
-      {tier !== 'low' && (
+      {/* 后处理：低档全关；中档关色差以降 GPU（色差是较贵的全屏 pass）；澎湃档全开。
+          条件置于 composer 层级（group 接受 false），避免 EffectComposer 子元素严格类型报错 */}
+      {tier === 'low' ? null : tier === 'high' ? (
         <SafeEffectComposer>
           <Bloom
             intensity={0.3}
@@ -309,9 +313,19 @@ export function AuroraDomeWorld() {
           />
           <ChromaticAberration
             blendFunction={BlendFunction.NORMAL}
-            offset={new THREE.Vector2(0.001, 0.001)}
+            offset={CHROMATIC_OFFSET}
             radialModulation={false}
             modulationOffset={0}
+          />
+          <Vignette offset={0.4} darkness={0.3} />
+        </SafeEffectComposer>
+      ) : (
+        <SafeEffectComposer>
+          <Bloom
+            intensity={0.3}
+            luminanceThreshold={0.8}
+            luminanceSmoothing={0.3}
+            mipmapBlur
           />
           <Vignette offset={0.4} darkness={0.3} />
         </SafeEffectComposer>
