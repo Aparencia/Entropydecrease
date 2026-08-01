@@ -296,6 +296,21 @@ export class EntropyDecreaseDatabase extends Dexie {
     this.version(19).stores({
       windowCaptureSegments: 'id, sessionId, timestamp',
     });
+
+    // P2-14 存量迁移（用户数据量小，直接搬迁）：将旧会话内嵌 segments
+    // 物理搬迁至 windowCaptureSegments 独立表并清空内嵌数组，彻底瘦身
+    // windowCaptures 记录。windowCaptures 不参与 CRDT 同步，迁移无跨端副作用。
+    this.version(20).stores({}).upgrade(async (tx) => {
+      const sessions = await tx.table('windowCaptures').toArray();
+      for (const session of sessions) {
+        const segs = (session as { segments?: unknown[] }).segments;
+        if (Array.isArray(segs) && segs.length > 0) {
+          const rows = segs.map((s) => ({ ...(s as object), sessionId: session.id }));
+          await tx.table('windowCaptureSegments').bulkPut(rows);
+          await tx.table('windowCaptures').update(session.id, { segments: [] });
+        }
+      }
+    });
   }
 }
 
