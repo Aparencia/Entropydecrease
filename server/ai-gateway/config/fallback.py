@@ -218,6 +218,7 @@ async def call_with_fallback_stream(
 
     与 call_with_fallback_for_request 相同的 fallback 链逻辑，
     但 fn 返回 AsyncGenerator[str, None] 而非 dict。
+    Phase1 加固：添加总预算超时保护（与非流式一致）+ 熔断器联动。
 
     Args:
         app:     FastAPI 应用实例
@@ -228,13 +229,28 @@ async def call_with_fallback_stream(
     Returns:
         tuple: (generator, provider_key, is_user_key)
     """
+    from providers.circuit_breaker import is_provider_available, get_circuit
+
+    budget = TIMEOUT_CONFIG.get(feature, 30) * 1.5
     user_api_key = getattr(request.state, "user_api_key", None)
 
     if not user_api_key:
-        # 无用户 Key，走服务端 fallback 链
+        # 无用户 Key，走服务端 fallback 链（带总预算超时）
         chain = PROVIDER_FALLBACK_CHAIN.get(feature, ["fallback"])
+        start_time = asyncio.get_event_loop().time()
 
         for provider_key in chain:
+            # 熔断器检查：跳过已熔断的 Provider
+            if not is_provider_available(provider_key):
+                logger.debug("Provider [%s] 已熔断，跳过 (stream feature=%s)", provider_key, feature)
+                continue
+
+            # 剩余预算检查
+            elapsed = asyncio.get_event_loop().time() - start_time
+            if elapsed >= budget:
+                logger.error("流式 fallback 预算耗尽: feature=%s, elapsed=%.1fs", feature, elapsed)
+                break
+
             provider = app.state.providers.get(provider_key)
             if not provider:
                 continue
@@ -242,12 +258,19 @@ async def call_with_fallback_stream(
             try:
                 _FEATURE_CONTEXT.set(feature)
                 gen = fn(provider, model_name)
+                # 通知熔断器成功
+                cb = get_circuit(provider_key)
+                if cb:
+                    await cb.on_success()
                 return gen, provider_key, False
             except Exception as e:
                 logger.warning(
                     "Provider [%s] stream failed for feature=%s: %s, trying next...",
                     provider_key, feature, str(e),
                 )
+                cb = get_circuit(provider_key)
+                if cb:
+                    await cb.on_failure()
             finally:
                 _FEATURE_CONTEXT.set("")
 
@@ -269,9 +292,18 @@ async def call_with_fallback_stream(
         finally:
             _FEATURE_CONTEXT.set("")
 
-    # 降级到服务端 fallback 链
+    # 降级到服务端 fallback 链（带总预算超时）
     chain = PROVIDER_FALLBACK_CHAIN.get(feature, ["fallback"])
+    start_time = asyncio.get_event_loop().time()
+
     for provider_key in chain:
+        if not is_provider_available(provider_key):
+            continue
+
+        elapsed = asyncio.get_event_loop().time() - start_time
+        if elapsed >= budget:
+            break
+
         provider = app.state.providers.get(provider_key)
         if not provider:
             continue
@@ -279,12 +311,18 @@ async def call_with_fallback_stream(
         try:
             _FEATURE_CONTEXT.set(feature)
             gen = fn(provider, model_name)
+            cb = get_circuit(provider_key)
+            if cb:
+                await cb.on_success()
             return gen, provider_key, False
         except Exception as e:
             logger.warning(
                 "Provider [%s] stream failed for feature=%s: %s, trying next...",
                 provider_key, feature, str(e),
             )
+            cb = get_circuit(provider_key)
+            if cb:
+                await cb.on_failure()
         finally:
             _FEATURE_CONTEXT.set("")
 

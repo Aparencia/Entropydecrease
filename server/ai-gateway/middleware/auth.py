@@ -48,20 +48,24 @@ def _jwt_verification_configured() -> bool:
 
 
 # 启动时检查密钥配置
+# Phase1 安全加固：生产环境缺少密钥材料时拒绝启动（而非降级放行）
+import os as _os
+_ALLOW_DEV_AUTH = _os.getenv("GATEWAY_ALLOW_DEV_AUTH", "false").lower() == "true"
+
 if not _jwt_verification_configured():
-    if APP_CONFIG.get("app_env") == "production":
-        warnings.warn(
-            "JWT 验证密钥材料未配置，JWT 验证将使用开发降级模式（不验证签名）。"
+    if APP_CONFIG.get("app_env") == "production" and not _ALLOW_DEV_AUTH:
+        raise RuntimeError(
+            "[FATAL] 生产环境 JWT 验证密钥材料未配置，拒绝启动。"
             "ES256 需配置 SUPABASE_JWKS_URL 或 SUPABASE_URL；"
-            "HS256/RS256 需配置 SUPABASE_JWT_SECRET。",
-            RuntimeWarning,
-            stacklevel=2,
+            "HS256/RS256 需配置 SUPABASE_JWT_SECRET。"
+            "如确需在生产环境使用开发降级模式，设置 GATEWAY_ALLOW_DEV_AUTH=true（不推荐）。"
         )
     else:
         warnings.warn(
-            "JWT 验证密钥材料未配置，JWT 验证将使用占位密钥，仅适用于本地开发。"
+            "JWT 验证密钥材料未配置，JWT 验证将使用开发降级模式（不验证签名）。"
             "ES256 需配置 SUPABASE_JWKS_URL 或 SUPABASE_URL；"
-            "HS256/RS256 需配置 SUPABASE_JWT_SECRET。",
+            "HS256/RS256 需配置 SUPABASE_JWT_SECRET。"
+            "⚠️ 仅限本地开发，生产环境将拒绝启动。",
             RuntimeWarning,
             stacklevel=2,
         )

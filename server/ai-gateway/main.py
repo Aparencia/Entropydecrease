@@ -5,15 +5,19 @@
 logging_setup，Provider 初始化见 provider_bootstrap，安全头/请求 ID 中间件
 见 security_middleware，健康检查见 health 路由。
 @ai-context: 中间件注册顺序（从内到外）RequestId → SecurityHeaders →
-RateLimit → InputValidation → JWTAuth → CORS（最后注册=最外层，最先处理，
-含 OPTIONS 预检）。CORS 生产严格/开发宽松，由 APP_ENV 切换。
+RateLimit → Budget → PromptGuard → InputValidation → JWTAuth → CORS。
+CORS 生产严格/开发宽松，由 APP_ENV 切换。
+@ai-context: Phase1-4 优化集成：熔断器、Prompt 防护、预算控制、
+GZip 压缩、并发 Semaphore、后台健康探活。
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from config import APP_CONFIG
@@ -21,6 +25,8 @@ from errors import AIError
 from middleware.auth import JWTAuthMiddleware
 from middleware.rate_limit import RateLimitMiddleware
 from middleware.input_validation import InputValidationMiddleware
+from middleware.prompt_guard import PromptGuardMiddleware
+from cost.budget import BudgetMiddleware
 from routers import (
     summarize_router,
     generate_cards_router,
@@ -43,7 +49,7 @@ from routers import (
 from cache.redis_cache import get_cache
 
 from logging_setup import setup_json_logging
-from provider_bootstrap import init_providers
+from provider_bootstrap import init_providers, start_health_probe
 from security_middleware import SecurityHeadersMiddleware, RequestIdMiddleware
 from health import router as health_router
 
@@ -54,6 +60,18 @@ from health import router as health_router
 setup_json_logging()
 logger = logging.getLogger(__name__)
 
+# ============================================================
+# Phase3: 并发控制（限制同时进行的 AI 调用数，防止供应商过载）
+# ============================================================
+
+# 全局 AI 并发上限（所有功能共享）
+AI_CONCURRENCY_LIMIT = int(APP_CONFIG.get("ai_concurrency_limit", "20"))
+# 高耗时功能独立并发上限（视频分析、多模态分析）
+AI_HEAVY_CONCURRENCY_LIMIT = int(APP_CONFIG.get("ai_heavy_concurrency_limit", "3"))
+
+ai_semaphore: asyncio.Semaphore | None = None
+ai_heavy_semaphore: asyncio.Semaphore | None = None
+
 
 # ============================================================
 # 应用生命周期
@@ -63,15 +81,22 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
+    global ai_semaphore, ai_heavy_semaphore
+
     # 启动时
     logger.info("熵减 AI 网关启动中...")
     logger.info("版本: %s", APP_CONFIG["version"])
 
+    # 初始化并发控制 Semaphore
+    ai_semaphore = asyncio.Semaphore(AI_CONCURRENCY_LIMIT)
+    ai_heavy_semaphore = asyncio.Semaphore(AI_HEAVY_CONCURRENCY_LIMIT)
+    app.state.ai_semaphore = ai_semaphore
+    app.state.ai_heavy_semaphore = ai_heavy_semaphore
+    logger.info("并发控制: AI 上限=%d, 重任务上限=%d", AI_CONCURRENCY_LIMIT, AI_HEAVY_CONCURRENCY_LIMIT)
+
     # 初始化 Redis 连接
     cache = get_cache()
     await cache.connect()
-    # connect 内部失败时会降级（_client=None），此处按实际结果记录，
-    # 避免"连接已建立"的误导日志掩盖限流/缓存静默失效
     if cache._client is not None:
         logger.info("Redis 连接已建立")
     else:
@@ -80,13 +105,22 @@ async def lifespan(app: FastAPI):
             "请检查 REDIS_URL 环境变量与 redis 容器状态"
         )
 
-    # 初始化各 Provider 并检查 API Key 配置
+    # 初始化各 Provider 并检查 API Key 配置（含 Key 池 + 熔断器）
     init_providers(app)
+
+    # 启动后台健康探活任务
+    probe_task = start_health_probe(app)
 
     yield
 
     # 关闭时
     logger.info("熵减 AI 网关关闭中...")
+    # 取消健康探活任务
+    probe_task.cancel()
+    try:
+        await probe_task
+    except asyncio.CancelledError:
+        pass
     # 关闭 Redis 连接
     cache = get_cache()
     await cache.disconnect()
@@ -116,28 +150,25 @@ app = FastAPI(
 # ============================================================
 # 中间件注册（执行顺序与注册顺序相反：后注册的先执行）
 #
-# 纵深防御策略：
-#   FastAPI 层添加安全头（X-Content-Type-Options / X-Frame-Options /
-#   Referrer-Policy / CSP），与 Nginx 互为补充。
-#   HSTS 由 Nginx 独占管理（FastAPI 层不重复添加）。
-#   X-XSS-Protection 已废弃，不再添加。
-#
-# 注册顺序（从内到外）：
+# 纵深防御策略（从内到外）：
 #   1. RequestId         — 最内层，先生成 request_id
 #   2. SecurityHeaders   — 响应安全头
-#   3. RateLimit         — 频率限制层（需要 user_id，故放在 JWTAuth 之后）
-#   4. InputValidation   — 输入校验层
-#   5. JWTAuth           — 认证层
-#   6. CORS              — 最后注册 = 最外层，最先处理请求（含 OPTIONS 预检）
+#   3. RateLimit         — 频率限制层（需要 user_id）
+#   4. Budget            — 预算控制层（需要 user_id，Phase2）
+#   5. PromptGuard       — Prompt 注入防护（Phase1）
+#   6. InputValidation   — 输入校验层
+#   7. JWTAuth           — 认证层
+#   8. CORS              — 最外层，最先处理请求（含 OPTIONS 预检）
 #
-# CORS 策略：
-#   - 生产环境：仅允许 CORS_ORIGINS 环境变量中配置的域名
-#   - 开发环境：允许所有来源（便于调试）
+# Phase3: GZip 压缩（最内层，仅压缩 > 500B 的响应）
 # ============================================================
 
+app.add_middleware(GZipMiddleware, minimum_size=500)  # Phase3: 响应压缩
 app.add_middleware(RequestIdMiddleware)         # 最内层：request_id
 app.add_middleware(SecurityHeadersMiddleware)   # 纵深防御安全头
 app.add_middleware(RateLimitMiddleware)         # 频率限制层（需要 user_id）
+app.add_middleware(BudgetMiddleware)            # Phase2: 预算控制层
+app.add_middleware(PromptGuardMiddleware)       # Phase1: Prompt 注入防护
 app.add_middleware(InputValidationMiddleware)   # 输入校验层
 app.add_middleware(JWTAuthMiddleware)           # 认证层
 
