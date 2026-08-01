@@ -15,6 +15,7 @@
 import { useEffect, useRef } from 'react';
 import { useNoteStore } from '../store/useNoteStore';
 import { dexieSearchIndexer } from '@/lib/search/dexieSearchIndexer';
+import { noteContentToPlainText } from '../lib/mindmap/mindmapText';
 import type { Note } from '@/types/models';
 
 /**
@@ -70,10 +71,10 @@ export function useSearchIndexSync(): void {
 // 内部辅助
 // ─────────────────────────────────────────────────────────────
 
-/** 同步单条笔记到搜索索引 */
+/** 同步单条笔记到搜索索引（导图/TipTap 统一提取纯文本，避免 JSON 噪声入索引） */
 async function syncUpsert(note: Note): Promise<void> {
   const ts = note.updatedAt instanceof Date
     ? note.updatedAt.getTime()
     : new Date(note.updatedAt as unknown as string).getTime();
-  await dexieSearchIndexer.upsert(note.id, 'note', note.title, note.content, ts);
+  await dexieSearchIndexer.upsert(note.id, 'note', note.title, noteContentToPlainText(note.content), ts);
 }

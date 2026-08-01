@@ -13,7 +13,9 @@ import { useShallow } from 'zustand/react/shallow';
 import { useNoteStore } from '../store/useNoteStore';
 import { CornellLayout } from '../components/CornellLayout';
 import FreeCanvas from '../components/FreeCanvas';
-import type { FreeCanvasData } from '@/types/models';
+import { MindmapEditor } from '../components/mindmap/MindmapEditor';
+import { parseMindmapData, createDefaultMindmap } from '../lib/mindmap/mindmapOps';
+import type { FreeCanvasData, MindmapData } from '@/types/models';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import { CaptureSidebar } from '../components/CaptureSidebar';
 import { TodoStats } from '../components/TodoStats';
@@ -81,6 +83,23 @@ export default function NoteEditPage() {
   // 自由画布变更回调（稳定引用，避免每次渲染重建）
   const handleFreeCanvasChange = useCallback(
     (data: FreeCanvasData) => {
+      if (noteId) debouncedSave(() => JSON.stringify(data));
+    },
+    [noteId, debouncedSave],
+  );
+
+  // 思维导图数据解析（模板笔记提供合法 JSON；损坏/空时回退默认导图）
+  const mindmapData = useMemo<MindmapData>(() => {
+    if (note?.template === 'mindmap' && note.content) {
+      const parsed = parseMindmapData(note.content);
+      if (parsed) return parsed;
+    }
+    return createDefaultMindmap();
+  }, [note?.id, note?.content, note?.template]);
+
+  // 思维导图变更回调（序列化整棵树防抖保存）
+  const handleMindmapChange = useCallback(
+    (data: MindmapData) => {
       if (noteId) debouncedSave(() => JSON.stringify(data));
     },
     [noteId, debouncedSave],
@@ -154,6 +173,7 @@ export default function NoteEditPage() {
 
   const isFree = note.template === 'free';
   const isCornell = note.template === 'cornell';
+  const isMindmap = note.template === 'mindmap';
 
   return (
     <div className="flex h-full">
@@ -171,8 +191,8 @@ export default function NoteEditPage() {
         onSummarize={ai.startSummarize}
       />
 
-      {/* 工具栏（康奈尔/自由画布模式隐藏） */}
-      {!isCornell && !isFree && (
+      {/* 工具栏（康奈尔/自由画布/思维导图模式隐藏） */}
+      {!isCornell && !isFree && !isMindmap && (
         <EditorToolbar editor={editor} onPickImage={() => imageInputRef.current?.click()} />
       )}
 
@@ -189,6 +209,10 @@ export default function NoteEditPage() {
       {isFree ? (
         <div className="flex-1 min-h-0 overflow-hidden">
           <FreeCanvas content={freeCanvasData} onChange={handleFreeCanvasChange} />
+        </div>
+      ) : isMindmap ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <MindmapEditor data={mindmapData} onChange={handleMindmapChange} />
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto px-kb-md py-kb-lg bg-[rgba(255,253,250,0.3)] dark:bg-[rgba(16,24,44,0.5)]">

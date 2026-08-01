@@ -6,6 +6,8 @@ import { dexieSearchIndexer } from '@/lib/search/dexieSearchIndexer';
 import type { SearchResultItem } from '@/lib/search/types';
 import type { Note, NoteFolder, SearchEntityType } from '@/types/models';
 import { createTodoTemplateContent, createEmptyTodoTemplate } from '../lib/todoTemplate';
+import { createDefaultMindmap } from '../lib/mindmap/mindmapOps';
+import { noteContentToPlainText } from '../lib/mindmap/mindmapText';
 import type { TodoItem } from '../lib/todoTemplate';
 
 interface NoteState {
@@ -109,17 +111,8 @@ const TEMPLATE_CONTENT: Record<Note['template'], string> = {
       { type: 'paragraph', content: [{ type: 'text', text: 'A2' }] },
     ],
   }),
-  mindmap: JSON.stringify({
-    type: 'doc',
-    content: [
-      { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: '中心主题' }] },
-      { type: 'bulletList', content: [
-        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: '分支一' }] }] },
-        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: '分支二' }] }] },
-        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: '分支三' }] }] },
-      ]},
-    ],
-  }),
+  /** 思维导图模板：创建时由 createFromTemplate 调 createDefaultMindmap 动态生成（全新节点 id），此处仅占位 */
+  mindmap: '',
   free: '',
   blank: '',
   video: JSON.stringify({
@@ -178,13 +171,13 @@ export const useNoteStore = create<NoteState>((set, get) => {
         tags: data.tags ?? [],
         createdAt: now,
         updatedAt: now,
-        wordCount: content.length,
+        wordCount: noteContentToPlainText(content).length,
         pinned: false,
       };
       const id = await createWithLog(noteStore, 'notes', noteData);
       // v0.9.0: 自动更新搜索索引
       try {
-        await dexieSearchIndexer.upsert(id, 'note', data.title, content, now.getTime());
+        await dexieSearchIndexer.upsert(id, 'note', data.title, noteContentToPlainText(content), now.getTime());
       } catch {
         // 索引更新失败不阻塞笔记创建
       }
@@ -195,7 +188,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
     updateNote: async (id, changes) => {
       const updateData: Partial<Note> = { ...changes, updatedAt: new Date() };
       if (changes.content !== undefined) {
-        updateData.wordCount = changes.content.length;
+        updateData.wordCount = noteContentToPlainText(changes.content).length;
       }
       await updateWithLog(noteStore, 'notes', id, updateData);
       // 局部更新内存数组并重排（updatedAt 变化需重排），避免全量 loadNotes：
@@ -212,7 +205,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
           const ts = updateData.updatedAt instanceof Date
             ? updateData.updatedAt.getTime()
             : new Date(updateData.updatedAt as unknown as string).getTime();
-          await dexieSearchIndexer.upsert(id, 'note', merged.title, merged.content ?? '', ts);
+          await dexieSearchIndexer.upsert(id, 'note', merged.title, noteContentToPlainText(merged.content ?? ''), ts);
         }
       } catch {
         // 索引更新失败不阻塞笔记更新
@@ -354,7 +347,10 @@ export const useNoteStore = create<NoteState>((set, get) => {
     },
 
     createFromTemplate: async (template, folderId?) => {
-      const content = TEMPLATE_CONTENT[template];
+      // 思维导图每次创建生成全新节点 id（不复用模板占位字符串）
+      const content = template === 'mindmap'
+        ? JSON.stringify(createDefaultMindmap())
+        : TEMPLATE_CONTENT[template];
       const title = TEMPLATE_TITLES[template];
       return get().createNote({ title, content, template, folderId });
     },

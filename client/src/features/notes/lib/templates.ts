@@ -42,17 +42,8 @@ export const TEMPLATE_CONTENT: Record<Note['template'], string> = {
       { type: 'paragraph', content: [{ type: 'text', text: 'A2' }] },
     ],
   }),
-  mindmap: JSON.stringify({
-    type: 'doc',
-    content: [
-      { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: '中心主题' }] },
-      { type: 'bulletList', content: [
-        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: '分支一' }] }] },
-        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: '分支二' }] }] },
-        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: '分支三' }] }] },
-      ]},
-    ],
-  }),
+  /** 思维导图：创建时由 useNoteStore.createFromTemplate 调 createDefaultMindmap 动态生成，此处仅占位 */
+  mindmap: '',
   free: '',
   blank: '',
   video: JSON.stringify({

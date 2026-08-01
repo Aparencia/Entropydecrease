@@ -10,6 +10,7 @@
 
 export * from './common';
 export * from './note';
+export * from './mindmap';
 export * from './flashcard';
 export * from './pomodoro';
 export * from './feynman';

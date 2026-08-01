@@ -18,7 +18,7 @@ interface TemplateOption {
 const templates: TemplateOption[] = [
   { id: 'outline', name: '大纲式', description: '层级分明的结构化笔记', icon: List },
   { id: 'cornell', name: '康奈尔笔记法', description: '线索·笔记·总结三栏法', icon: Layout },
-  { id: 'mindmap', name: '思维导图', description: '发散式可视化知识图谱', icon: GitBranch },
+  { id: 'mindmap', name: '思维导图', description: '可交互的可视化导图，支持节点增删与折叠', icon: GitBranch },
   { id: 'free', name: '自由笔记', description: '无拘束的自由书写空间', icon: PenTool },
   { id: 'blank', name: '空白笔记', description: '从零开始的纯净画布', icon: FileText },
   { id: 'todo', name: '待办笔记', description: '可勾选的任务清单笔记', icon: ListTodo },

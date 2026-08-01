@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@automerge/automerge": "^3.3.2",
+    "@dagrejs/dagre": "^3.0.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@modelcontextprotocol/server-filesystem": "^2026.7.10",
     "@modelcontextprotocol/server-memory": "^2026.7.4",
@@ -56,6 +57,7 @@
     "@tiptap/pm": "^3.27.3",
     "@tiptap/react": "^3.27.3",
     "@tiptap/starter-kit": "^3.27.3",
+    "@xyflow/react": "^12.11.2",
     "better-sqlite3": "^11.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -76,6 +78,9 @@
     "three": "^0.185.1",
     "uuid": "^14.0.1",
     "zustand": "^5.0.14"
+  },
+  "optionalDependencies": {
+    "sherpa-onnx-node": "^1.11.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
