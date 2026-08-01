@@ -24,20 +24,22 @@
 | P1-9 | useCardInteraction/useSocraticFlow setTimeout 统一 ref + cleanup | 23b4aa9 |
 | P3-16 | base64 编码改分块（O(n) 替 O(n²)） | dbcb63f |
 | P3-17 | AI supabaseClient 静态 import + token 缓存 60s | dbcb63f |
+| P2-12 | 摘要流式输出 UI 落地（useAISummarize.summarizeStream 渐进显示 + 完成派生 keyPoints + 失败降级非流式；AISummaryModal 流式分支） | 9eb015b |
+| P2-13 | 网关流式 event_generator 加首 token/chunk 空闲超时（手动 __anext__ + asyncio.wait_for，超时下发 error 事件） | c544965 |
+| P3-18 | 内置性能诊断面板（perf:get-metrics IPC 汇总 app.getAppMetrics + 系统内存；设置页 FPS/CPU/内存实时采集 + 一键复制上报） | c3e639d |
+| P3-15 | 粒子系统按 tier 跳帧更新（high 每帧/medium 隔 1/low 隔 2，增量位移乘 step 补偿速度） | a1efcbd |
+| P3-19 | 番茄钟 memo 化（CycleMarkers React.memo + 预设标签栏抽取为 memo 组件 PresetTabs，避免每秒 tick 重渲染） | a06628e |
+| P2-11 | 离线 AI 队列激活（OfflineAIQueueBootstrap 注册 toast + startAutoProcess；AIPluginLoader 离线时摘要 fire-and-forget 入队联网重放） | 30472fc |
+| P2-14 | 采集片段拆分独立表 windowCaptureSegments（v19，addSegment 原子追加免读改写竞态；getSegments 新表优先 + 旧会话内嵌回退，无数据迁移） | 9022dbf |
+| P2-10 | 笔记图片插入压缩降采样（>300KB 经 canvas 降采样至最长边 1920 + JPEG 重编码）+ Image 扩展 loading=lazy 懒加载；未做 blob 迁移（存量内嵌向后兼容） | 6fc6562 |
 
-### 延后项（需专门任务/产品决策，不在本轮仓促实施）
+### 剩余增量项（非阻塞，可后续推进）
 
-| 项 | 延后原因与建议 |
-|----|----------------|
-| P1-5 其余页面 | 番茄钟/闪卡/笔记/灵感页面的 `useShallow(s => s)` 整 store 订阅已用 useShallow 浅比较缓解；进一步拆细粒度 selector 需逐组件分析字段使用，建议增量推进（优先番茄钟，remainingSeconds 每秒变） |
-| P2-10 笔记图片 blob | 高风险重构：改笔记存储格式（base64→blob 引用），影响同步/搜索/渲染，需数据迁移 + 全链路测试。建议独立任务，短期先限制上传图片大小 |
-| P2-11 离线 AI 队列 | **决策建议：接入**（本地优先原则下离线 AI 有价值）。offlineAIQueue 已完整实现但未接入；需在 AIPluginLoader 捕获离线错误时 enqueue + 启动时 startAutoProcess。建议独立任务验证 |
-| P2-12 流式输出 UI | **决策建议：落地**（摘要/闪卡等长输出接入 useAIStream 提升体验）。流式全链路已建成但 UI 未消费；建议独立任务，否则评估移除死代码减负担 |
-| P2-13 流式降级超时 | 依赖 P2-12 决策；网关 call_with_fallback_stream 加首 token/空闲超时，随流式落地一并做 |
-| P2-14 segments 独立表 | DB schema 变更（新表 + 迁移），中高风险，建议独立任务 |
-| P3-15 粒子 GPU | 粒子 useFrame CPU 更新改 GPU shader 或降更新频率，中等工作量 |
-| P3-18 诊断面板 | 内置 FPS/CPU/内存面板（复用 PerformanceMonitor.fps + app.getAppMetrics），便于内测自助采集，建议优先做（直接服务内测反馈） |
-| P3-19 memo 化 | 各模块 variants/数组/卡片 memo 化，增量推进 |
+| 项 | 说明 |
+|----|------|
+| P1-5 其余页面 | 番茄钟已 memo 化（P3-19）；闪卡/笔记/灵感页面的 `useShallow(s => s)` 整 store 订阅已用浅比较缓解，进一步拆细粒度 selector 需逐组件分析字段使用，增量推进 |
+| P2-10 blob 迁移（可选） | 本轮已落地压缩+懒加载的安全子集；完整的 base64→blob 引用迁移（影响同步/搜索/渲染 + 数据迁移）仍为高风险可选项，视后续存储压力再评估 |
+| P2-14 存量迁移（可选） | 本轮采用加法式（新表 + 旧数据回退，无迁移）；如需将旧会话内嵌 segments 物理搬迁至独立表以彻底瘦身，可后续加 v20 upgrade 迁移 |
 
 ---
 
