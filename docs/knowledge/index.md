@@ -23,6 +23,7 @@
 
 | 日期 | 标题 | 标签 |
 |------|------|------|
+| 2026-08-01 | [熵减性能深度分析与优化路线图](./solutions/2026-08-performance-analysis-optimization-roadmap.md) | #性能分析 #内存泄漏 #重渲染 #3D性能 #基准测试 |
 | 2026-07-31 | [安装包分发加速：CDN 接入方案与下载源可切换设计](./solutions/2026-07-installer-cdn-distribution.md) | #CDN #阿里云 #安装包分发 #下载加速 |
 
 ## 🧠 learnings/ — 学习笔记
