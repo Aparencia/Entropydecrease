@@ -7,8 +7,12 @@
 错误：data: {"error": "..."}\n\n
 
 @ai-context: 流式输出路由（SSE）：以 Server-Sent Events 流式返回全量 AI 功能结果。
+@ai-context: P2-13 超时保护——event_generator 以手动 __anext__ + asyncio.wait_for
+ enforce 首 token 超时与 chunk 间空闲超时，避免 provider 挂起导致流无限等待；
+ 超时后下发 error 事件并结束，客户端据此降级非流式。
 """
 
+import asyncio
 import json
 import logging
 import time
@@ -23,6 +27,14 @@ from config import call_with_fallback_stream
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/ai", tags=["流式输出"])
+
+# ============================================================
+# P2-13 流式超时保护（秒）
+# ============================================================
+# 首 token 超时：从开始到第一个 chunk 的最长等待（含模型冷启动/排队）
+_FIRST_TOKEN_TIMEOUT = 30.0
+# chunk 间空闲超时：相邻 chunk 的最长间隔（防中途挂起）
+_CHUNK_IDLE_TIMEOUT = 30.0
 
 # ============================================================
 # Prompt 模板目录
@@ -284,10 +296,26 @@ async def stream_ai(request: Request, feature: str, body: StreamRequest):
         raise HTTPException(status_code=503, detail="所有 AI 服务暂时不可用，请稍后重试")
 
     async def event_generator() -> AsyncGenerator[str, None]:
-        """将 provider 的 async generator 包装为 SSE 事件流"""
+        """将 provider 的 async generator 包装为 SSE 事件流（P2-13：带首 token/空闲超时）"""
         start_time = time.monotonic()
+        agen = gen.__aiter__()
+        is_first = True
         try:
-            async for chunk_text in gen:
+            while True:
+                timeout = _FIRST_TOKEN_TIMEOUT if is_first else _CHUNK_IDLE_TIMEOUT
+                try:
+                    chunk_text = await asyncio.wait_for(agen.__anext__(), timeout=timeout)
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError:
+                    phase = "首 token" if is_first else "chunk 间隔"
+                    logger.error(
+                        "流式超时: feature=%s, provider=%s, %s 超时=%.1fs",
+                        feature, used_provider, phase, timeout,
+                    )
+                    yield _sse_error(f"AI 响应超时（{phase} {timeout:.0f}s）")
+                    break
+                is_first = False
                 if chunk_text:
                     yield _sse_chunk(chunk_text)
             yield _sse_done()
