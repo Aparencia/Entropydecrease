@@ -14,6 +14,7 @@ import { LocalDurationRecommender } from './LocalFallback';
 import { AIError } from './ai-errors';
 import { ensureOnline, ensureMinLength } from './aiGuards';
 import { getAIPlugin, getRemotePlugin, getElectronPlugin } from './aiPluginProvider';
+import { offlineAIQueue } from './offlineAIQueue';
 import type { AIPlugin, DurationHistoryData, DurationOptions, DurationResult,
   SummarizeResult, FlashcardResult, EvaluateResult,
   SummarizeOptions, FlashcardOptions, EvaluateOptions,
@@ -41,12 +42,23 @@ class AIPluginLoader {
   /**
    * 统一非流式调用包装：守卫 → 取插件 → 能力检查 → 调用
    * invoke 返回 undefined 表示当前插件未实现该可选能力
+   * @ai-context P2-11：opts.offline 提供离线入队描述（feature/endpoint/payload）时，
+   * 离线不再单纯报错，而是 fire-and-forget 入队（联网后自动重放）后再抛 offline 提示。
    */
   private async call<T>(
     invoke: (plugin: AIPlugin) => Promise<T> | undefined,
-    opts: { contentCheck?: string; unsupportedMsg: string },
+    opts: { contentCheck?: string; unsupportedMsg: string; offline?: { feature: string; endpoint: string; payload: unknown } },
   ): Promise<T> {
-    ensureOnline();
+    try {
+      ensureOnline();
+    } catch (err) {
+      if (opts.offline && err instanceof AIError && err.code === 'offline') {
+        // 离线入队（不阻塞、不报错，联网后自动重放；测试环境无 indexedDB 时静默失败）
+        offlineAIQueue.enqueue(opts.offline.feature, opts.offline.endpoint, opts.offline.payload).catch(() => {});
+        throw new AIError('当前处于离线状态，请求已加入队列，联网后自动完成', 'offline', false);
+      }
+      throw err;
+    }
     ensureMinLength(opts.contentCheck);
     const plugin = await getAIPlugin();
     const result = invoke(plugin);
@@ -75,10 +87,15 @@ class AIPluginLoader {
 
   // ── 非流式功能 ─────────────────────────────────────────
 
-  /** 摘要功能 */
+  /** 摘要功能（P2-11：离线入队，联网后自动重放） */
   async summarizeNote(content: string, options?: SummarizeOptions): Promise<SummarizeResult> {
     return this.call(p => p.summarizeNote(content, options),
-      { contentCheck: content, unsupportedMsg: '当前 AI 插件不支持摘要' });
+      { contentCheck: content, unsupportedMsg: '当前 AI 插件不支持摘要',
+        offline: {
+          feature: 'summarize',
+          endpoint: '/api/v1/ai/summarize',
+          payload: { text: content, options: { max_length: options?.maxLength, style: options?.style, language: options?.language } },
+        } });
   }
 
   /** 闪卡生成 */

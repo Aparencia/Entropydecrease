@@ -20,6 +20,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { db } from '@/lib/storage/database';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { getAIConfig } from '@/lib/ai/config';
+import { OfflineAIQueueBootstrap } from '@/lib/ai/OfflineAIQueueBootstrap';
 import '@/stores/useSettingsStore'; // 导入以触发音效设置初始化
 
 // 启动时预加载所有音效（不阻塞渲染）
@@ -114,6 +115,7 @@ function App() {
               <RouterProvider router={router} />
               <AchievementToast />
               <UpdateNotification />
+              <OfflineAIQueueBootstrap />
             </ErrorBoundary>
           </SyncProvider>
         </AuthProvider>
