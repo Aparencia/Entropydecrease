@@ -5,7 +5,10 @@ import { useCallback, useRef, useState, useEffect, useMemo } from 'react';
 import { Plus, Trash2, Copy, Eraser, CheckSquare } from 'lucide-react';
 import FreeTextBlock from './FreeTextBlock';
 import { FreeCanvasOverlays } from './FreeCanvasOverlays';
-import type { FreeCanvasData, FreeCanvasBlock } from '@/types/models';
+import { InkToolbar } from './canvas/InkToolbar';
+import { InkLayer } from './canvas/InkLayer';
+import { useInkDrawing, type InkTool } from '../lib/canvas/useInkDrawing';
+import type { FreeCanvasData, FreeCanvasBlock, InkStroke, InkPoint } from '@/types/models';
 
 interface FreeCanvasProps {
   content: FreeCanvasData | null;
@@ -43,6 +46,44 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
 
   const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(new Set());
   const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // 阶段三：墨迹工具状态 / ink tool state
+  const [inkTool, setInkTool] = useState<InkTool>('select');
+  const [inkColor, setInkColor] = useState('#1e293b');
+  const [inkWidth, setInkWidth] = useState(4);
+  const innerCanvasRef = useRef<HTMLDivElement>(null);
+
+  // 阶段三：墨迹笔画数据与绘制 / ink strokes data & drawing
+  const strokes = data.strokes ?? [];
+
+  const getCanvasPoint = useCallback((clientX: number, clientY: number): InkPoint => {
+    const rect = innerCanvasRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }, []);
+
+  const handleCommitStroke = useCallback((stroke: InkStroke) => {
+    const current = dataRef.current;
+    emitChange({ ...current, strokes: [...(current.strokes ?? []), stroke] });
+  }, [emitChange]);
+
+  const handleErase = useCallback((predicate: (s: InkStroke) => boolean) => {
+    const current = dataRef.current;
+    const prev = current.strokes ?? [];
+    const remaining = prev.filter((s) => !predicate(s));
+    if (remaining.length !== prev.length) {
+      emitChange({ ...current, strokes: remaining });
+    }
+  }, [emitChange]);
+
+  const { currentStroke, handlePointerDown, handlePointerMove, handlePointerUp } = useInkDrawing({
+    tool: inkTool,
+    color: inkColor,
+    width: inkWidth,
+    getCanvasPoint,
+    onCommitStroke: handleCommitStroke,
+    onErase: handleErase,
+  });
 
   // 框选状态
   const [selectionBox, setSelectionBox] = useState<{x1: number; y1: number; x2: number; y2: number} | null>(null);
@@ -125,6 +166,7 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
 
   // 双击空白区域添加文本块
   const handleCanvasDoubleClick = (e: React.MouseEvent) => {
+    if (inkTool !== 'select') return; // 绘制工具下不新建文本块
     const scrollContainer = scrollContainerRef.current;
     if (!scrollContainer) return;
 
@@ -489,6 +531,7 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
         onContextMenu={(e) => e.preventDefault()}
       >
         <div
+          ref={innerCanvasRef}
           style={{
             position: 'relative',
             width: data.canvasWidth,
@@ -510,6 +553,26 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
               onDuplicate={handleDuplicateBlock}
             />
           ))}
+
+          {/* 阶段三：墨迹渲染层 / ink rendering layer */}
+          <InkLayer
+            strokes={strokes}
+            currentStroke={currentStroke}
+            width={data.canvasWidth}
+            height={data.canvasHeight}
+          />
+
+          {/* 阶段三：绘制覆盖层（绘制工具激活时捕获指针事件） */}
+          {inkTool !== 'select' && (
+            <div
+              className="absolute inset-0"
+              style={{ zIndex: 8, cursor: inkTool === 'eraser' ? 'cell' : 'crosshair', touchAction: 'none' }}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerLeave={handlePointerUp}
+            />
+          )}
 
           {/* 框选矩形 */}
           {selectionBox && (
@@ -533,6 +596,16 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
         paletteOpen={paletteOpen}
         actions={actions}
         onClosePalette={() => setPaletteOpen(false)}
+      />
+
+      {/* 阶段三：墨迹工具栏 / ink toolbar */}
+      <InkToolbar
+        tool={inkTool}
+        color={inkColor}
+        width={inkWidth}
+        onToolChange={setInkTool}
+        onColorChange={setInkColor}
+        onWidthChange={setInkWidth}
       />
     </div>
   );

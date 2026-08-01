@@ -48,9 +48,26 @@ export interface FreeCanvasBlock {
   size: { width: number; height: number | 'auto' };
 }
 
+/** 墨迹点（画布坐标） / Ink point (canvas coordinates) */
+export interface InkPoint {
+  x: number;
+  y: number;
+}
+
+/** 墨迹笔画（阶段三 OneNote 式核心墨迹） / Ink stroke */
+export interface InkStroke {
+  id: string;
+  tool: 'pen' | 'highlighter';
+  color: string;
+  width: number;
+  points: InkPoint[];
+}
+
 /** 自由画布数据 */
 export interface FreeCanvasData {
   blocks: FreeCanvasBlock[];
+  /** 阶段三：墨迹笔画层（旧数据无此字段 → 默认 []，向后兼容） */
+  strokes?: InkStroke[];
   canvasWidth: number;
   canvasHeight: number;
 }
