@@ -7,7 +7,7 @@
  * 通过 onSummarize 提供。
  */
 import type { Ref } from 'react';
-import { ArrowLeft, Save, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Save, HelpCircle, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AIButton } from '@/components/ui/AIButton';
 
@@ -57,6 +57,8 @@ export interface NoteEditHeaderProps {
   onManualSave: () => void;
   onOpenRescue: () => void;
   onSummarize: () => void;
+  /** 阶段四：导出当前笔记为 Markdown */
+  onExportMarkdown: () => void;
 }
 
 const SECONDARY_BTN = cn(
@@ -68,7 +70,7 @@ const SECONDARY_BTN = cn(
 
 export function NoteEditHeader({
   title, titleRef, saveStatus, aiLoading,
-  onBack, onTitleBlur, onTitleKeyDown, onManualSave, onOpenRescue, onSummarize,
+  onBack, onTitleBlur, onTitleKeyDown, onManualSave, onOpenRescue, onSummarize, onExportMarkdown,
 }: NoteEditHeaderProps) {
   return (
     <div className="relative z-10 flex items-center gap-kb-sm px-kb-md py-3 border-b border-border/50 flex-shrink-0">
@@ -108,6 +110,11 @@ export function NoteEditHeader({
       <button onClick={onManualSave} className={SECONDARY_BTN}>
         <Save className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
         保存
+      </button>
+
+      <button onClick={onExportMarkdown} className={SECONDARY_BTN} title="导出为 Markdown">
+        <Download className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+        导出 Md
       </button>
 
       <button onClick={onOpenRescue} className={SECONDARY_BTN} title="卡壳了 (Ctrl+Shift+H)">

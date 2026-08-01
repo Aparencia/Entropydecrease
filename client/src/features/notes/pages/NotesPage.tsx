@@ -1,7 +1,7 @@
 /**
  * @ai-context: notes 功能模块页面：NotesPage。
  */
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Card, Tag, EmptyState, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui';
@@ -10,7 +10,7 @@ import type { ContextMenuGroup } from '@/components/ui/ContextMenu';
 import { VirtualList } from '@/components/ui/VirtualList';
 import {
   Search, Plus, FolderPlus, FileText, PanelLeftClose, PanelLeft, Pin,
-  MoreVertical, Trash2, Copy, Download, BookOpen, Sparkles, ListTodo, Share2,
+  MoreVertical, Trash2, Copy, Download, BookOpen, Sparkles, ListTodo, Share2, Upload,
 } from 'lucide-react';
 import { TemplateSelector } from '../components/TemplateSelector';
 import type { NoteTemplate } from '../components/TemplateSelector';
@@ -26,6 +26,7 @@ import type { Note } from '@/types/models';
 import { useAISummarize, useAIFlashcards } from '@/lib/ai/useAI';
 import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
+import { markdownToNoteContent } from '../lib/markdown/noteMarkdown';
 
 const templateLabels: Record<NoteTemplate | 'qa' | 'video' | 'todo', string> = {
   outline: '大纲式', cornell: '康奈尔', mindmap: '思维导图', free: '自由笔记', blank: '空白', qa: '问答', video: '视频笔记', todo: '待办',
@@ -156,6 +157,24 @@ export default function NotesPage() {
     const id = await createNote({ title: '新笔记', template: 'blank', folderId: selectedFolderId ?? undefined });
     selectNote(id); navigate(`/notes/${id}`);
   };
+
+  // 阶段四：导入 .md 文件为新笔记
+  const mdInputRef = useRef<HTMLInputElement>(null);
+  const handleImportMarkdown = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const md = await file.text();
+      const content = markdownToNoteContent(md);
+      const title = file.name.replace(/\.md$/i, '') || '导入笔记';
+      const id = await createNote({ title, content, template: 'blank', folderId: selectedFolderId ?? undefined });
+      toast({ type: 'success', message: 'Markdown 已导入' });
+      selectNote(id); navigate(`/notes/${id}`);
+    } catch {
+      toast({ type: 'error', message: 'Markdown 导入失败' });
+    }
+  }, [createNote, selectedFolderId, toast, selectNote, navigate]);
   const handleCreateFolder = async () => {
     if (newFolderName.trim()) { await createFolder(newFolderName.trim()); setNewFolderName(''); setShowNewFolder(false); }
   };
@@ -347,6 +366,22 @@ export default function NotesPage() {
             >
               <Share2 className="w-4 h-4" strokeWidth={1.5} />
             </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => mdInputRef.current?.click()}
+              title="导入 Markdown"
+              className="p-2 rounded-full text-text-tertiary hover:text-brand-600 hover:bg-brand-50 transition-all duration-200"
+            >
+              <Upload className="w-4 h-4" strokeWidth={1.5} />
+            </motion.button>
+            <input
+              ref={mdInputRef}
+              type="file"
+              accept=".md,text/markdown"
+              className="hidden"
+              onChange={handleImportMarkdown}
+            />
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
               <Button size="sm" icon={<Plus className="w-4 h-4" strokeWidth={2} />} onClick={() => setTemplateOpen(true)}>
                 新建笔记

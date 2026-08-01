@@ -15,6 +15,7 @@ import { CornellLayout } from '../components/CornellLayout';
 import FreeCanvas from '../components/FreeCanvas';
 import { MindmapEditor } from '../components/mindmap/MindmapEditor';
 import { BacklinksPanel } from '../components/BacklinksPanel';
+import { noteToMarkdown } from '../lib/markdown/noteMarkdown';
 import { parseMindmapData, createDefaultMindmap } from '../lib/mindmap/mindmapOps';
 import type { FreeCanvasData, MindmapData } from '@/types/models';
 import { ContextMenu } from '@/components/ui/ContextMenu';
@@ -155,6 +156,20 @@ export default function NoteEditPage() {
     soundPlayer.play('note_manual_save');
   };
 
+  // 阶段四：导出当前笔记为 Markdown（导图笔记降级为大纲）
+  const handleExportMarkdown = () => {
+    if (!note) return;
+    const md = noteToMarkdown(note.content);
+    const filename = `${(note.title || '未命名笔记').replace(/[\\/:*?"<>|]/g, '_')}.md`;
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (!note) {
     return (
       <div className="flex flex-col h-full items-center justify-center">
@@ -190,6 +205,7 @@ export default function NoteEditPage() {
         onManualSave={handleManualSave}
         onOpenRescue={() => { setRescueOpen(true); stuckTimer.start(); }}
         onSummarize={ai.startSummarize}
+        onExportMarkdown={handleExportMarkdown}
       />
 
       {/* 工具栏（康奈尔/自由画布/思维导图模式隐藏） */}
