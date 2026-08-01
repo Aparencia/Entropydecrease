@@ -30,7 +30,10 @@ export function useNoteAI(editor: Editor | null, noteId: string | null) {
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
   const [convertedKeys, setConvertedKeys] = useState<Set<number>>(new Set());
 
-  const { loading: aiLoading, data: aiData, error: aiError, needsConfig: aiNeedsConfig, summarize } = useAISummarize();
+  const {
+    loading: aiLoading, data: aiData, error: aiError, needsConfig: aiNeedsConfig,
+    streamingText, isStreaming, summarizeStream, cancelStream,
+  } = useAISummarize();
   const { loading: flashcardLoading, generate: generateFlashcards } = useAIFlashcards();
   const handleSummarizeError = useAIErrorHandler('AI 摘要生成失败');
   const handleFlashcardError = useAIErrorHandler('AI 闪卡生成失败');
@@ -64,7 +67,7 @@ export function useNoteAI(editor: Editor | null, noteId: string | null) {
     return result.cards.length;
   }, [generateFlashcards, ensureDefaultDeck, createCard, noteId]);
 
-  /** 顶栏入口：校验非空后生成摘要并弹出浮层 */
+  /** 顶栏入口：校验非空后立即弹出浮层并流式生成摘要（P2-12） */
   const startSummarize = useCallback(() => {
     if (!editor) return;
     const text = editor.getText();
@@ -72,10 +75,10 @@ export function useNoteAI(editor: Editor | null, noteId: string | null) {
       toast({ type: 'warning', message: '请先写一些笔记内容再生成摘要' });
       return;
     }
-    summarize(text)
-      .then(() => setSummaryModalOpen(true))
-      .catch(handleSummarizeError);
-  }, [editor, summarize, toast, handleSummarizeError]);
+    setConvertedKeys(new Set());
+    setSummaryModalOpen(true);
+    summarizeStream(text).catch(handleSummarizeError);
+  }, [editor, summarizeStream, toast, handleSummarizeError]);
 
   const handleInsertNote = useCallback((position: 'cursor' | 'start' | 'end') => {
     if (!editor || !aiData) return;
@@ -128,8 +131,8 @@ export function useNoteAI(editor: Editor | null, noteId: string | null) {
     const text = editor.getText();
     if (!text.trim()) { toast({ type: 'warning', message: '笔记内容为空' }); return; }
     setConvertedKeys(new Set());
-    summarize(text).catch(handleSummarizeError);
-  }, [editor, summarize, toast, handleSummarizeError]);
+    summarizeStream(text).catch(handleSummarizeError);
+  }, [editor, summarizeStream, toast, handleSummarizeError]);
 
   const handleExport = useCallback(() => {
     if (!aiData) return;
@@ -149,6 +152,7 @@ export function useNoteAI(editor: Editor | null, noteId: string | null) {
   return {
     summaryModalOpen, setSummaryModalOpen,
     aiLoading, aiData, aiError, aiNeedsConfig,
+    streamingText, isStreaming, cancelStream,
     flashcardLoading, convertedKeys,
     ensureDefaultDeck, persistCards,
     startSummarize, handleInsertNote, handleCopySummary,

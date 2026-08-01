@@ -263,6 +263,8 @@ export default function NoteEditPage() {
         loading={ai.aiLoading}
         error={ai.aiError}
         needsConfig={ai.aiNeedsConfig}
+        isStreaming={ai.isStreaming}
+        streamingText={ai.streamingText}
         flashcardLoading={ai.flashcardLoading}
         convertedKeys={ai.convertedKeys}
         onClose={() => ai.setSummaryModalOpen(false)}
@@ -273,6 +275,7 @@ export default function NoteEditPage() {
         onInsertNote={ai.handleInsertNote}
         onRegenerate={ai.handleRegenerate}
         onExport={ai.handleExport}
+        onCancelStream={ai.cancelStream}
       />
     )}
     </div>

@@ -23,6 +23,10 @@ export interface AISummaryModalProps {
   error: string | null | undefined;
   /** 错误源于缺少 API Key 配置时展示设置页引导 */
   needsConfig?: boolean;
+  /** P2-12 流式：是否正在流式输出 */
+  isStreaming?: boolean;
+  /** P2-12 流式：逐 chunk 累积的渐进文本 */
+  streamingText?: string;
   flashcardLoading: boolean;
   /** 已转化为闪卡的要点下标 */
   convertedKeys: Set<number>;
@@ -34,12 +38,14 @@ export interface AISummaryModalProps {
   onInsertNote: (position: 'cursor' | 'start' | 'end') => void;
   onRegenerate: () => void;
   onExport: () => void;
+  /** P2-12 流式：取消流式输出 */
+  onCancelStream?: () => void;
 }
 
 export function AISummaryModal({
-  data, loading, error, needsConfig, flashcardLoading, convertedKeys,
+  data, loading, error, needsConfig, isStreaming, streamingText, flashcardLoading, convertedKeys,
   onClose, onGoSettings, onCopySummary, onGenerateFlashcard,
-  onGenerateAllFlashcards, onInsertNote, onRegenerate, onExport,
+  onGenerateAllFlashcards, onInsertNote, onRegenerate, onExport, onCancelStream,
 }: AISummaryModalProps) {
   const [insertMenuOpen, setInsertMenuOpen] = useState(false);
   const keyPointCount = data?.keyPoints?.length ?? 0;
@@ -67,7 +73,32 @@ export function AISummaryModal({
           AI 摘要
         </h2>
 
-        {loading && (
+        {isStreaming && (
+          <div className="mt-kb-md flex flex-col gap-kb-md">
+            <div className="flex items-center gap-2 text-b3 text-text-secondary">
+              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              正在流式生成摘要…
+            </div>
+            <p className="text-b2 text-text-primary leading-relaxed whitespace-pre-wrap">
+              {streamingText}
+              <span className="inline-block w-0.5 h-4 ml-0.5 bg-brand-500 align-middle animate-pulse" />
+            </p>
+            {onCancelStream && (
+              <button
+                onClick={onCancelStream}
+                className="self-start inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--kb-radius-md)] text-b3 font-medium text-text-tertiary hover:text-semantic-error hover:bg-semantic-error/10 transition-all duration-200"
+              >
+                <X className="w-3 h-3" strokeWidth={1.5} />
+                停止生成
+              </button>
+            )}
+          </div>
+        )}
+
+        {loading && !isStreaming && (
           <div className="mt-kb-md flex items-center gap-2 text-b2 text-text-primary">
             <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
