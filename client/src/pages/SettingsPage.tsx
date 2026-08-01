@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { SPRING } from '@/lib/animation/springConfig';
 import ProfileSettings from './settings/ProfileSettings';
 import AppearanceSettings from './settings/AppearanceSettings';
+import PerformanceSettings from './settings/PerformanceSettings';
 import SoundSettings from './settings/SoundSettings';
 import ModeSettings from './settings/ModeSettings';
 import ShortcutSettings from './settings/ShortcutSettings';
@@ -116,28 +117,31 @@ export default function SettingsPage() {
           <AppearanceSettings />
         </SettingsSection>
         <SettingsSection index={2}>
-          <SoundSettings />
+          <PerformanceSettings />
         </SettingsSection>
         <SettingsSection index={3}>
-          <ModeSettings />
+          <SoundSettings />
         </SettingsSection>
         <SettingsSection index={4}>
-          <ShortcutSettings />
+          <ModeSettings />
         </SettingsSection>
         <SettingsSection index={5}>
-          <FlashcardSettings />
+          <ShortcutSettings />
         </SettingsSection>
         <SettingsSection index={6}>
+          <FlashcardSettings />
+        </SettingsSection>
+        <SettingsSection index={7}>
           <AudioCaptureSettings />
         </SettingsSection>
         <Suspense fallback={<SettingsSectionSkeleton />}>
-          <SettingsSection index={7}>
+          <SettingsSection index={8}>
             <AIProviderSettings />
           </SettingsSection>
-          <SettingsSection index={8}>
+          <SettingsSection index={9}>
             <DataSettings />
           </SettingsSection>
-          <SettingsSection index={9}>
+          <SettingsSection index={10}>
             <AboutSettings />
           </SettingsSection>
         </Suspense>

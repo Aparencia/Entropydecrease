@@ -7,7 +7,7 @@
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { usePerformanceStore } from '../core/PerformanceMonitor';
+import { useEffectiveTier } from '@/lib/performance/usePerformanceMode';
 
 interface ParticleSystemProps {
   count?: number;
@@ -25,7 +25,8 @@ export function ParticleSystem({
   speed = 1,
 }: ParticleSystemProps) {
   const pointsRef = useRef<THREE.Points>(null);
-  const tier = usePerformanceStore((s) => s.tier);
+  // 有效 tier（自动 tier 受用户性能模式上限约束）
+  const tier = useEffectiveTier();
 
   const particleCount = tier === 'low' ? 500 : tier === 'medium' ? 1200 : count;
 

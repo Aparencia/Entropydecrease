@@ -6,11 +6,12 @@
  */
 import { useThree } from '@react-three/fiber';
 import { useEffect } from 'react';
-import { usePerformanceStore } from './PerformanceMonitor';
+import { useEffectiveTier } from '@/lib/performance/usePerformanceMode';
 
 export function QualityController() {
   const { gl } = useThree();
-  const tier = usePerformanceStore((s) => s.tier);
+  // 有效 tier（自动 tier 受用户性能模式上限约束）
+  const tier = useEffectiveTier();
 
   useEffect(() => {
     switch (tier) {

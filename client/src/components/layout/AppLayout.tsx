@@ -3,7 +3,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, MotionConfig } from 'framer-motion';
 import { Home } from 'lucide-react';
 import CommandPalette from '../ui/CommandPalette';
 import { CloseConfirmDialog } from '../ui/CloseConfirmDialog';
@@ -24,6 +24,8 @@ import { useOnboardingStore } from '@/components/onboarding/useOnboardingStore';
 import { useRuntimeEnv } from '@/lib/env/useRuntimeEnv';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 import { FirstDiveGate } from '@/features/onboarding/firstDive/FirstDiveGate';
+import { usePerformanceModeStore } from '@/lib/performance/usePerformanceMode';
+import { PERFORMANCE_MODE_CONFIG } from '@/lib/performance/performanceMode';
 
 export default function AppLayout() {
   const { pathname } = useLocation();
@@ -33,6 +35,9 @@ export default function AppLayout() {
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const { sync } = useSync();
   const { shouldDegrade3D } = useRuntimeEnv();
+  // 性能模式：静谧(low)档全局减弱 Framer Motion 动画（transform/layout 动画直接到位）
+  const perfMode = usePerformanceModeStore((s) => s.mode);
+  const reduceMotion = PERFORMANCE_MODE_CONFIG[perfMode].reduceMotion;
 
   // 监听 session 过期事件
   useSessionExpiry();
@@ -109,6 +114,7 @@ export default function AppLayout() {
   }, [isInModule, enterModule, exitModule, navigate, openHelp]);
 
   return (
+    <MotionConfig reducedMotion={reduceMotion ? 'always' : 'user'}>
     <div className="flex flex-col h-screen overflow-hidden">
       {/* Layer 2: 始终最顶层 — Electron标题栏 */}
       <CustomTitlebar />
@@ -173,5 +179,6 @@ export default function AppLayout() {
       <PWAInstallPrompt />
       <CloseConfirmDialog open={showCloseDialog} onClose={() => setShowCloseDialog(false)} />
     </div>
+    </MotionConfig>
   );
 }

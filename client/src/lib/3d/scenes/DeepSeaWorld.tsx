@@ -6,10 +6,11 @@
  */
 import { Bloom, DepthOfField, Vignette } from '@react-three/postprocessing';
 import { SafeEffectComposer } from '../core/SafeEffectComposer';
-import { usePerformanceStore } from '../core/PerformanceMonitor';
+import { useEffectiveTier } from '@/lib/performance/usePerformanceMode';
 
 export function DeepSeaWorld() {
-  const tier = usePerformanceStore((s) => s.tier);
+  // 有效 tier（自动 tier 受用户性能模式上限约束）
+  const tier = useEffectiveTier();
 
   return (
     <group>

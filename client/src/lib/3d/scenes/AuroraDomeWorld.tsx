@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { Bloom, Vignette, ChromaticAberration } from '@react-three/postprocessing';
 import { BlendFunction } from 'postprocessing';
 import { SafeEffectComposer } from '../core/SafeEffectComposer';
-import { usePerformanceStore } from '../core/PerformanceMonitor';
+import { useEffectiveTier } from '@/lib/performance/usePerformanceMode';
 
 // ─── 天空穹顶着色器 ───────────────────────────────────────
 const domeVertexShader = /* glsl */ `
@@ -269,7 +269,8 @@ function CloudLayer() {
 
 // ─── 主场景组件 ───────────────────────────────────────────
 export function AuroraDomeWorld() {
-  const tier = usePerformanceStore((s) => s.tier);
+  // 有效 tier（自动 tier 受用户性能模式上限约束）
+  const tier = useEffectiveTier();
 
   // 根据性能等级调整粒子数
   const particleCount = tier === 'low' ? 500 : tier === 'medium' ? 1000 : 1500;

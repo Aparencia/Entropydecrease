@@ -37,6 +37,7 @@ import { registerDisplayMediaHandler } from './displayMediaHandler.js';
 import { registerDbIpcHandlers } from './db/dbIpcHandlers.js';
 import { registerStorageIpcHandlers } from './storageIpcHandlers.js';
 import { registerKeyframeScheme, registerKeyframeIpcHandlers } from './ipc/keyframeStorage.js';
+import { loadPerformanceMode, registerPerformanceHandlers } from './performanceMode.js';
 
 // ================================================================
 // 性能优化：启用 GPU 光栅化与零拷贝
@@ -150,6 +151,10 @@ if (!gotTheLock) {
     registerStorageIpcHandlers();
     // 课堂关键帧图片持久化 IPC + keyframe:// 协议（详见 ipc/keyframeStorage.ts）
     registerKeyframeIpcHandlers();
+
+    // 性能模式：加载持久化档位 + 注册 IPC（详见 performanceMode.ts）
+    loadPerformanceMode();
+    registerPerformanceHandlers();
 
     // 隐藏默认 Electron 菜单栏
     Menu.setApplicationMenu(null);

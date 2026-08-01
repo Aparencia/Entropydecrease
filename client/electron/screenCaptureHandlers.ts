@@ -14,6 +14,7 @@ import type { ScreenCaptureOptions, ScreenshotFrameData } from './screenCapture.
 import { safeHandle, getMainWindowId } from './ipcUtils.js';
 import { logger } from './logger.js';
 import { scoreAndFilterWindows } from './windowScorer.js';
+import { getCaptureRateScale } from './performanceMode.js';
 
 // ================================================================
 // 模块级状态
@@ -76,6 +77,12 @@ export function registerScreenCaptureHandlers(): void {
           const safeOptions = options || {};
           if (typeof safeOptions.interval === 'number' && (safeOptions.interval < 100 || safeOptions.interval > 60000)) {
             safeOptions.interval = 5000;
+          }
+
+          // 按性能模式缩放采集间隔（静谧档 scale=0.5 → 间隔翻倍、频率减半，降低开销）
+          const rateScale = getCaptureRateScale();
+          if (typeof safeOptions.interval === 'number' && rateScale !== 1) {
+            safeOptions.interval = Math.min(60000, Math.round(safeOptions.interval / rateScale));
           }
 
           activeCapture = new ScreenCapture(safeOptions, (frame: ScreenshotFrameData) => {

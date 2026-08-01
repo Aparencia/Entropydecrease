@@ -89,6 +89,8 @@ const ALLOWED_CHANNELS = [
   // 课堂关键帧图片持久化 IPC channel
   'keyframe_save',
   'keyframe_cleanup',
+  // 性能模式 IPC channel（三档：静谧/从容/澎湃）
+  'performance:set-mode',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */
