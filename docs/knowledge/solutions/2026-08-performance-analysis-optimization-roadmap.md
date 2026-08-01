@@ -7,6 +7,40 @@
 
 ---
 
+## 实施状态（2026-08-01 更新）
+
+### 已实施（已提交 dev，逐项验证 tsc + 测试通过）
+
+| 项 | 内容 | 提交 |
+|----|------|------|
+| P0-1 | 课堂音频段 audioBase64 转写后剥离（useClassroomEvents/vadMarker）——消除 5GB 内存主因 | ae1ec09 |
+| P0-2 | 笔记 updateNote 改局部更新，去全量 loadNotes + 多余 getById | ae1ec09 |
+| P0-3 | 键入 JSON.stringify 移入防抖回调内 | ae1ec09 |
+| P0-4 | 删除 TimerRing/ImmersiveTimer 冗余 RAF | ae1ec09 |
+| P1-5 | useSocraticFlow 无 selector 整 store 订阅改细粒度（其余页面用 useShallow 已缓解，增量优化） | 23b4aa9 |
+| P1-6 | 从容档降级后处理（浅色关色差/深色关景深）+ Vector2 常量化 | 23b4aa9 |
+| P1-7 | 笔记列表过滤/标签/选中 useMemo 缓存 | 3c527db |
+| P1-8 | 当日复习数改 reviewedAt 索引查询 | ec5a566 |
+| P1-9 | useCardInteraction/useSocraticFlow setTimeout 统一 ref + cleanup | 23b4aa9 |
+| P3-16 | base64 编码改分块（O(n) 替 O(n²)） | dbcb63f |
+| P3-17 | AI supabaseClient 静态 import + token 缓存 60s | dbcb63f |
+
+### 延后项（需专门任务/产品决策，不在本轮仓促实施）
+
+| 项 | 延后原因与建议 |
+|----|----------------|
+| P1-5 其余页面 | 番茄钟/闪卡/笔记/灵感页面的 `useShallow(s => s)` 整 store 订阅已用 useShallow 浅比较缓解；进一步拆细粒度 selector 需逐组件分析字段使用，建议增量推进（优先番茄钟，remainingSeconds 每秒变） |
+| P2-10 笔记图片 blob | 高风险重构：改笔记存储格式（base64→blob 引用），影响同步/搜索/渲染，需数据迁移 + 全链路测试。建议独立任务，短期先限制上传图片大小 |
+| P2-11 离线 AI 队列 | **决策建议：接入**（本地优先原则下离线 AI 有价值）。offlineAIQueue 已完整实现但未接入；需在 AIPluginLoader 捕获离线错误时 enqueue + 启动时 startAutoProcess。建议独立任务验证 |
+| P2-12 流式输出 UI | **决策建议：落地**（摘要/闪卡等长输出接入 useAIStream 提升体验）。流式全链路已建成但 UI 未消费；建议独立任务，否则评估移除死代码减负担 |
+| P2-13 流式降级超时 | 依赖 P2-12 决策；网关 call_with_fallback_stream 加首 token/空闲超时，随流式落地一并做 |
+| P2-14 segments 独立表 | DB schema 变更（新表 + 迁移），中高风险，建议独立任务 |
+| P3-15 粒子 GPU | 粒子 useFrame CPU 更新改 GPU shader 或降更新频率，中等工作量 |
+| P3-18 诊断面板 | 内置 FPS/CPU/内存面板（复用 PerformanceMonitor.fps + app.getAppMetrics），便于内测自助采集，建议优先做（直接服务内测反馈） |
+| P3-19 memo 化 | 各模块 variants/数组/卡片 memo 化，增量推进 |
+
+---
+
 ## 一、执行摘要
 
 ### 总体结论
