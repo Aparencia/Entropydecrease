@@ -112,12 +112,13 @@ export class ASRWorker implements PipelineWorker {
 // 工具函数
 // ================================================================
 
-/** 将 ArrayBuffer 转为 base64 字符串 */
+/** 将 ArrayBuffer 转为 base64 字符串（分块编码，避免逐字节字符串拼接的 O(n²)） */
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  const CHUNK = 0x8000; // 分块大小，避免 fromCharCode 单次参数过多
+  for (let i = 0; i < bytes.byteLength; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK) as unknown as number[]);
   }
   return btoa(binary);
 }
