@@ -4,7 +4,7 @@ import type {
   PomodoroSession, PomodoroSettings, Note, NoteFolder,
   FlashcardReview, FeynmanNote, FeynmanSummary, FeynmanWeakPoint,
   OperationLog, AppSettings, StudyCheckIn, Achievement,
-  PomodoroGoal, SyncConflict, OfflineQueueItem, WindowCapture,
+  PomodoroGoal, SyncConflict, OfflineQueueItem, WindowCapture, WindowCaptureSegment,
   RitualRecord,
 } from '@/types/models';
 
@@ -42,6 +42,8 @@ export interface ExportData {
     syncConflicts: SyncConflict[];
     offlineQueue: OfflineQueueItem[];
     windowCaptures: WindowCapture[];
+    // P2-14: 采集片段独立表（旧备份无此字段时导入安全跳过）
+    windowCaptureSegments: WindowCaptureSegment[];
     // v0.26.0 A1 补全：
     ritualRecords: RitualRecord[];
   };
@@ -54,6 +56,7 @@ const EXPORT_TABLES = [
   'feynmanNotes', 'feynmanSummaries', 'feynmanWeakPoints',
   'operationLog', 'appSettings', 'studyCheckIns', 'achievements',
   'pomodoroGoals', 'syncConflicts', 'offlineQueue', 'windowCaptures',
+  'windowCaptureSegments',
   'ritualRecords',
 ] as const;
 

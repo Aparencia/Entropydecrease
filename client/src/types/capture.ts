@@ -31,6 +31,14 @@ export interface ExtractedSegment {
   metadata?: SegmentMetadata;   // 附加元数据
 }
 
+/**
+ * 采集片段独立表行（P2-14）——在 ExtractedSegment 基础上绑定所属会话 ID，
+ * 存储于 windowCaptureSegments 表（'id, sessionId, timestamp'）。
+ */
+export interface WindowCaptureSegment extends ExtractedSegment {
+  sessionId: string;            // 所属采集会话 ID
+}
+
 // 片段元数据
 export interface SegmentMetadata {
   startTime?: number;           // 音频/视频起始时间（秒）

@@ -44,7 +44,7 @@ export function useClearData() {
         db.operationLog, db.appSettings,
         db.studyCheckIns, db.achievements,
         db.pomodoroGoals, db.syncConflicts, db.offlineQueue,
-        db.windowCaptures,
+        db.windowCaptures, db.windowCaptureSegments,
       ], async () => {
         await db.pomodoroSessions.clear();
         await db.pomodoroSettings.clear();
@@ -64,6 +64,7 @@ export function useClearData() {
         await db.syncConflicts.clear();
         await db.offlineQueue.clear();
         await db.windowCaptures.clear();
+        await db.windowCaptureSegments.clear();
       });
       localStorage.clear();
       toast({ type: 'success', message: '所有数据已清除，即将刷新' });

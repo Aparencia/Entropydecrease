@@ -4,9 +4,10 @@ import type {
   FlashcardDeck, Flashcard, FlashcardReview,
   FeynmanNote, FeynmanSummary, FeynmanWeakPoint,
   OperationLog, AppSettings, SyncConflict, OfflineQueueItem,
-  StudyCheckIn, Achievement, PomodoroGoal, WindowCapture,
+  StudyCheckIn, Achievement, PomodoroGoal, WindowCapture, WindowCaptureSegment,
   Consent, UserProfile, Inspiration, SearchIndexEntry, RitualRecord
 } from '@/types/models';
+import type { DeepSeaDiscovery, CoralRecord, StreakState } from '@/features/retention/types';
 import type { ClassroomNote } from './classroomNoteStore';
 import type { CRDTDocRecord, CRDTChangeRecord } from '@/lib/sync/crdtEngine';
 
@@ -49,6 +50,10 @@ export class EntropyDecreaseDatabase extends Dexie {
   crdtChanges!: Table<CRDTChangeRecord, number>;
   ritualRecords!: Table<RitualRecord, string>;
   pomodoroPresets!: Table<PomodoroPreset, string>;
+  deepSeaDiscoveries!: Table<DeepSeaDiscovery, string>;
+  coralEcosystem!: Table<CoralRecord, string>;
+  streakState!: Table<StreakState, string>;
+  windowCaptureSegments!: Table<WindowCaptureSegment, string>;
 
   constructor() {
     // 数据库名 'keban' 不可修改（存量用户数据），见文件头 @ai-context
@@ -276,6 +281,20 @@ export class EntropyDecreaseDatabase extends Dexie {
     // v0.28.0: 番茄钟模式预设表（自定义节律 + 循环标记数量随预设变化）
     this.version(17).stores({
       pomodoroPresets: 'id, sortOrder, builtin, createdAt',
+    });
+
+    // v0.29.0: 留存机制 — 深海发现 / 珊瑚生态 / 防断裂 streak
+    this.version(18).stores({
+      deepSeaDiscoveries: 'id, type, rarity, discoveredAt, sourceType',
+      coralEcosystem: 'id, type, health, plantedAt, depth',
+      streakState: 'id, lastActiveDate',
+    });
+
+    // P2-14: 采集片段独立表 — 将 segments 从 windowCaptures 内嵌数组拆出，
+    // addSegment 由全量读改写（O(n)+竞态）变为原子追加；旧会话内嵌 segments
+    // 仍可读（captureStore.getSegments 回退），无需数据迁移。
+    this.version(19).stores({
+      windowCaptureSegments: 'id, sessionId, timestamp',
     });
   }
 }
