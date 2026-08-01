@@ -309,10 +309,10 @@ export default function DashboardPage() {
   }, [showRitual, lastSession]);
 
   const heroStats = [
-    { label: '今日专注', value: todayPomodoroCount, unit: '次', accent: 'pomodoro', icon: Timer },
-    { label: '笔记总数', value: noteTotal, unit: '篇', accent: 'note', icon: FileText },
-    { label: '待复习', value: dueFlashcardCount, unit: '张', accent: 'flashcard', icon: Layers },
-    { label: '费曼进行中', value: feynmanInProgressCount, unit: '个', accent: 'feynman', icon: Lightbulb },
+    { label: '今日专注', value: todayPomodoroCount, unit: '次', accent: 'pomodoro', icon: Timer, path: '/pomodoro' },
+    { label: '笔记总数', value: noteTotal, unit: '篇', accent: 'note', icon: FileText, path: '/notes' },
+    { label: '待复习', value: dueFlashcardCount, unit: '张', accent: 'flashcard', icon: Layers, path: '/flashcards' },
+    { label: '费曼进行中', value: feynmanInProgressCount, unit: '个', accent: 'feynman', icon: Lightbulb, path: '/feynman' },
   ];
 
   /* ── 学习分析 ── */
@@ -332,6 +332,7 @@ export default function DashboardPage() {
         type: 'note',
         title: n.title || '无标题笔记',
         time: formatRelativeTime(new Date(n.updatedAt)),
+        targetPath: `/notes/${n.id}`,
       });
     });
 
@@ -347,6 +348,7 @@ export default function DashboardPage() {
         type: 'flashcard',
         title: card ? card.front.replace(/<[^>]*>/g, '').slice(0, 40) : '复习闪卡',
         time: formatRelativeTime(new Date(latestReview.reviewedAt)),
+        targetPath: '/flashcards',
       });
     }
 
@@ -361,6 +363,7 @@ export default function DashboardPage() {
         type: 'pomodoro',
         title: `${Math.round(latest.actualDuration / 60)} 分钟专注`,
         time: formatRelativeTime(new Date(latest.completedAt)),
+        targetPath: '/pomodoro',
       });
     }
 
@@ -374,6 +377,7 @@ export default function DashboardPage() {
         type: 'feynman',
         title: sortedFeynman[0].concept,
         time: formatRelativeTime(new Date(sortedFeynman[0].updatedAt)),
+        targetPath: `/feynman/${sortedFeynman[0].id}`,
       });
     }
 
@@ -420,14 +424,21 @@ export default function DashboardPage() {
               return (
                 <motion.div
                   key={stat.label}
+                  role="link"
+                  tabIndex={0}
+                  aria-label={`进入${stat.label}模块`}
+                  onClick={() => navigate(stat.path)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(stat.path); } }}
                   className={cn(
-                    'relative p-5 rounded-kb-xl',
+                    'relative p-5 rounded-kb-xl cursor-pointer',
                     'border border-border/15 backdrop-blur-sm',
                     'bg-bg-elevated/30 hover:bg-bg-elevated/50',
                     'transition-all duration-beat-x3 group',
+                    'focus-visible:outline-2 focus-visible:outline-brand-500',
                   )}
                   variants={heroStatVariant}
                   whileHover={{ y: -2, scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
                   transition={SPRING.default}
                 >
                   <div className="flex items-center gap-2 mb-3">
