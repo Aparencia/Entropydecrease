@@ -25,10 +25,38 @@ vi.mock('./usePomodoroPersistence', () => ({
   saveSettings: vi.fn().mockResolvedValue(undefined),
   recordSession: vi.fn().mockResolvedValue(undefined),
   playCompletionSound: vi.fn(),
+  sendNotification: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Mock 预设服务，避免 IndexedDB 依赖
+vi.mock('../lib/presetService', () => ({
+  MAX_PRESETS: 6,
+  getAllPresets: vi.fn().mockResolvedValue([]),
+  getPresetById: vi.fn().mockResolvedValue(undefined),
+  createPreset: vi.fn().mockResolvedValue({}),
+  updatePreset: vi.fn().mockResolvedValue(undefined),
+  deletePreset: vi.fn().mockResolvedValue(undefined),
+  reorderPresets: vi.fn().mockResolvedValue(undefined),
+  seedBuiltinPresets: vi.fn().mockResolvedValue([]),
 }));
 
 import { usePomodoroStore } from './usePomodoroStore';
 import { recordSession, playCompletionSound } from './usePomodoroPersistence';
+import type { PomodoroPreset } from '@/types/models';
+
+// 测试用内置预设
+const CLASS_PRESET: PomodoroPreset = {
+  id: 'preset-class', name: '上课', icon: 'GraduationCap',
+  workDuration: 45, shortBreakDuration: 5, longBreakDuration: 15,
+  longBreakInterval: 0, silent: true, builtin: true, sortOrder: 0,
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+const STUDY_PRESET: PomodoroPreset = {
+  id: 'preset-study', name: '自习', icon: 'BookOpen',
+  workDuration: 25, shortBreakDuration: 5, longBreakDuration: 15,
+  longBreakInterval: 4, silent: false, builtin: true, sortOrder: 1,
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
 
 // Default settings (mirrors store internals)
 const DEFAULT_SETTINGS = {
@@ -52,6 +80,8 @@ const DEFAULT_STATE = {
   completedCount: 0,
   mode: 'self_study' as const,
   settings: DEFAULT_SETTINGS,
+  presets: [CLASS_PRESET, STUDY_PRESET],
+  activePreset: STUDY_PRESET,
 };
 
 beforeEach(() => {
@@ -346,12 +376,22 @@ describe('Pomodoro Store', () => {
   // ── updateSettings ────────────────────────────────────────
 
   describe('updateSettings', () => {
-    it('should merge settings and update timer when not running', () => {
+    it('should merge settings and update timer when not running (no active preset)', () => {
+      // 无活动预设时，时长由 settings 驱动
+      usePomodoroStore.setState({ activePreset: null });
       usePomodoroStore.getState().updateSettings({ workDuration: 30 });
       const state = usePomodoroStore.getState();
       expect(state.settings.workDuration).toBe(30);
       expect(state.remainingSeconds).toBe(30 * 60);
       expect(state.totalSeconds).toBe(30 * 60);
+    });
+
+    it('should use preset duration when active preset exists', () => {
+      // 有活动预设时，时长由预设驱动（25min），不随 settings.workDuration 变化
+      usePomodoroStore.getState().updateSettings({ workDuration: 30 });
+      const state = usePomodoroStore.getState();
+      expect(state.settings.workDuration).toBe(30);
+      expect(state.remainingSeconds).toBe(25 * 60); // STUDY_PRESET.workDuration
     });
 
     it('should NOT update timer when running', () => {
@@ -464,18 +504,18 @@ describe('Pomodoro Store', () => {
     it('should switch mode', () => {
       usePomodoroStore.getState().setMode('class');
       expect(usePomodoroStore.getState().mode).toBe('class');
+      expect(usePomodoroStore.getState().activePreset?.id).toBe('preset-class');
     });
 
     it('should reset completedCount when switching mode', () => {
       // 上课模式累计了 7 个番茄后切到自习模式，计数应归零
-      // （回归：旧计数带入新模式导致首轮长休要等到 8 个番茄）
-      usePomodoroStore.setState({ mode: 'class', completedCount: 7 });
+      usePomodoroStore.setState({ mode: 'class', activePreset: CLASS_PRESET, completedCount: 7 });
       usePomodoroStore.getState().setMode('self_study');
       expect(usePomodoroStore.getState().completedCount).toBe(0);
     });
 
     it('should NOT reset completedCount when setting the same mode', () => {
-      usePomodoroStore.setState({ mode: 'self_study', completedCount: 2 });
+      usePomodoroStore.setState({ mode: 'self_study', activePreset: STUDY_PRESET, completedCount: 2 });
       usePomodoroStore.getState().setMode('self_study');
       expect(usePomodoroStore.getState().completedCount).toBe(2);
     });
@@ -493,7 +533,7 @@ describe('Pomodoro Store', () => {
 
     it('should never enter long_break in class mode', () => {
       usePomodoroStore.setState({
-        mode: 'class', phase: 'work', completedCount: 3,
+        mode: 'class', activePreset: CLASS_PRESET, phase: 'work', completedCount: 3,
         isRunning: true, remainingSeconds: 1,
       });
       usePomodoroStore.getState().tick();
@@ -502,15 +542,15 @@ describe('Pomodoro Store', () => {
 
     it('should wrap completedCount within longBreakInterval in class mode (no unbounded growth)', () => {
       // 回归：上课模式无长休导致计数永不归零、一直累加（实测 9/4）
-      usePomodoroStore.setState({ mode: 'class', completedCount: 0 });
+      usePomodoroStore.setState({ mode: 'class', activePreset: CLASS_PRESET, completedCount: 0 });
       for (let i = 0; i < 9; i++) completeWorkPhase();
       const count = usePomodoroStore.getState().completedCount;
       expect(count).toBeGreaterThanOrEqual(1);
-      expect(count).toBeLessThanOrEqual(DEFAULT_SETTINGS.longBreakInterval);
+      expect(count).toBeLessThanOrEqual(4);
     });
 
     it('should wrap count via skip in class mode as well', () => {
-      usePomodoroStore.setState({ mode: 'class', phase: 'work', completedCount: 4 });
+      usePomodoroStore.setState({ mode: 'class', activePreset: CLASS_PRESET, phase: 'work', completedCount: 4 });
       usePomodoroStore.getState().skip();
       expect(usePomodoroStore.getState().completedCount).toBe(1);
     });

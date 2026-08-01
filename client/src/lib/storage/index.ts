@@ -32,6 +32,7 @@ export const appSettingsStore = new StorageAdapter(db.appSettings, 'appSettings'
 export const syncConflictsStore = new StorageAdapter(db.syncConflicts, 'syncConflicts');
 export const offlineQueueStore = new StorageAdapter(db.offlineQueue, 'offlineQueue');
 export const pomodoroGoalStore = new StorageAdapter(db.pomodoroGoals, 'pomodoroGoals');
+export const pomodoroPresetStore = new StorageAdapter(db.pomodoroPresets, 'pomodoroPresets');
 export const ritualRecordStore = new StorageAdapter(db.ritualRecords, 'ritualRecords');
 
 // 导入导出与存储管理

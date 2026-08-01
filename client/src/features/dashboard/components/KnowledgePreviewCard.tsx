@@ -7,8 +7,9 @@
  * @ai-context: 通用组件：KnowledgePreviewCard。
  */
 import { useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, useMotionValue, useTransform, useSpring } from 'framer-motion';
-import { FileText, Layers, Timer, Lightbulb } from 'lucide-react';
+import { FileText, Layers, Timer, Lightbulb, ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SPRING } from '@/lib/animation/springConfig';
 
@@ -20,6 +21,8 @@ interface KnowledgeCard {
   title: string;
   excerpt?: string;
   time: string;
+  /** 点击跳转目标路径 */
+  targetPath?: string;
 }
 
 interface KnowledgePreviewCardProps {
@@ -70,8 +73,18 @@ const asymmetricRadius = [
 
 export default function KnowledgePreviewCard({ card, index }: KnowledgePreviewCardProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
+
+  const clickable = !!card.targetPath;
+  const handleClick = () => { if (card.targetPath) navigate(card.targetPath); };
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.key === 'Enter' || e.key === ' ') && card.targetPath) {
+      e.preventDefault();
+      navigate(card.targetPath);
+    }
+  };
 
   const rotateX = useSpring(
     useTransform(mouseY, [-0.5, 0.5], [8, -8]),
@@ -101,8 +114,12 @@ export default function KnowledgePreviewCard({ card, index }: KnowledgePreviewCa
   return (
     <motion.div
       ref={ref}
+      role={clickable ? 'link' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      aria-label={clickable ? `打开${config.label}：${card.title}` : undefined}
       className={cn(
-        'relative overflow-hidden cursor-default group',
+        'relative overflow-hidden group focus-visible:outline-2 focus-visible:outline-brand-500',
+        clickable ? 'cursor-pointer' : 'cursor-default',
         'border border-border/20 backdrop-blur-sm',
         'bg-bg-elevated/40 hover:bg-bg-elevated/60',
         'transition-colors duration-beat-x3',
@@ -116,7 +133,10 @@ export default function KnowledgePreviewCard({ card, index }: KnowledgePreviewCa
       }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
       whileHover={{ y: -4, scale: 1.02 }}
+      whileTap={clickable ? { scale: 0.97 } : undefined}
       transition={SPRING.default}
     >
       {/* 交融渐变遮罩 */}
@@ -142,7 +162,12 @@ export default function KnowledgePreviewCard({ card, index }: KnowledgePreviewCa
         <div className="flex items-center gap-1.5">
           <Icon className={cn('w-3.5 h-3.5', config.accentColor)} strokeWidth={1.5} />
           <span className={cn('text-c2 font-medium', config.accentColor)}>{config.label}</span>
-          <span className="text-c2 text-text-tertiary ml-auto">{card.time}</span>
+          <span className="text-c2 text-text-tertiary ml-auto flex items-center gap-1">
+            {card.time}
+            {clickable && (
+              <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-70 transition-opacity duration-beat-x2" />
+            )}
+          </span>
         </div>
 
         {/* 标题 */}

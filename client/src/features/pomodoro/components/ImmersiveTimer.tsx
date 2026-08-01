@@ -8,9 +8,9 @@
  * @ai-context: 通用组件：ImmersiveTimer。
  */
 import { useRef, useEffect, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { Pause, Play, Square } from 'lucide-react';
+import { Pause, Play, Square, Volume2, VolumeX } from 'lucide-react';
 import { usePomodoroStore } from '../store/usePomodoroStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
@@ -26,6 +26,17 @@ const PHASE_LABELS: Record<string, string> = {
   short_break: '休息中',
   long_break: '休息中',
 };
+
+interface ImmersiveTimerProps {
+  /** 背景音（白噪音）开关状态 */
+  whiteNoiseEnabled?: boolean;
+  /** 背景音音量 0-1 */
+  whiteNoiseVolume?: number;
+  /** 切换背景音开关 */
+  onToggleWhiteNoise?: () => void;
+  /** 调节背景音音量 */
+  onWhiteNoiseVolume?: (vol: number) => void;
+}
 
 /**
  * 根据进度计算背景渐变色场（完全不透明，确保计时器清晰可读）
@@ -59,7 +70,12 @@ function getBackgroundGradient(progressPercent: number): string {
     rgb(5, 4, 10) 100%)`;
 }
 
-export default function ImmersiveTimer() {
+export default function ImmersiveTimer({
+  whiteNoiseEnabled = false,
+  whiteNoiseVolume = 0.5,
+  onToggleWhiteNoise,
+  onWhiteNoiseVolume,
+}: ImmersiveTimerProps) {
   const progressRef = useRef<SVGCircleElement>(null);
   const rafRef = useRef<number>(0);
   const prefersReduced = useReducedMotion();
@@ -217,6 +233,49 @@ export default function ImmersiveTimer() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ ...SPRING.gentle, delay: 0.2 }}
       >
+        {/* 背景音开关 + 音量调节 */}
+        {onToggleWhiteNoise && (
+          <div className="flex items-center gap-2">
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={onToggleWhiteNoise}
+              aria-label={whiteNoiseEnabled ? '关闭背景音' : '开启背景音'}
+              className={cn(
+                'w-10 h-10 rounded-full flex items-center justify-center',
+                'bg-white/5 border backdrop-blur-sm',
+                'transition-colors duration-200',
+                whiteNoiseEnabled
+                  ? 'border-white/15 text-white/80 hover:text-white'
+                  : 'border-white/8 text-white/35 hover:text-white/60 hover:bg-white/8',
+              )}
+            >
+              {whiteNoiseEnabled
+                ? <Volume2 className="w-4 h-4" strokeWidth={1.5} />
+                : <VolumeX className="w-4 h-4" strokeWidth={1.5} />}
+            </motion.button>
+            <AnimatePresence>
+              {whiteNoiseEnabled && onWhiteNoiseVolume && (
+                <motion.input
+                  key="vol-slider"
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={whiteNoiseVolume}
+                  onChange={(e) => onWhiteNoiseVolume(parseFloat(e.target.value))}
+                  aria-label="背景音音量"
+                  className="w-20 h-1 cursor-pointer accent-[#5B8A72]"
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 80 }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.25, ease: 'easeOut' }}
+                />
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
         {/* 暂停/继续 */}
         <motion.button
           whileHover={{ scale: 1.1 }}
