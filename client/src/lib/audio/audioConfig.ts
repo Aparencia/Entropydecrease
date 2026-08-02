@@ -155,21 +155,31 @@ export interface AudioTrack {
   nameZh: string;
   src: string;
   category: 'white_noise' | 'bgm';
+  /** 推荐播放阶段：focus=专注、break=休息、both=皆宜 */
+  phase: 'focus' | 'break' | 'both';
 }
 
 export const audioTracks: AudioTrack[] = [
-  { id: 'rain', name: 'Rain', nameZh: '雨声', src: '/audio/rain.mp3', category: 'white_noise' },
-  { id: 'stream', name: 'Stream', nameZh: '流水', src: '/audio/stream.mp3', category: 'white_noise' },
-  { id: 'wind-wheat', name: 'Wind & Wheat', nameZh: '风扶麦浪', src: '/audio/wind-wheat.mp3', category: 'white_noise' },
-  { id: 'silkworm', name: 'Silkworm', nameZh: '蚕食桑叶', src: '/audio/silkworm.mp3', category: 'white_noise' },
-  { id: 'campfire', name: 'Campfire', nameZh: '篝火', src: '/audio/campfire.mp3', category: 'white_noise' },
-  { id: 'train', name: 'Train', nameZh: '绿皮火车', src: '/audio/train.mp3', category: 'white_noise' },
-  { id: 'cargo-ship', name: 'Cargo Ship', nameZh: '货轮', src: '/audio/cargo-ship.mp3', category: 'white_noise' },
-  { id: 'study-hall', name: 'Study Hall', nameZh: '自习课', src: '/audio/study-hall.mp3', category: 'white_noise' },
-  { id: 'traffic', name: 'Traffic', nameZh: '车流', src: '/audio/traffic.mp3', category: 'white_noise' },
-  { id: 'restaurant', name: 'Restaurant', nameZh: '餐馆', src: '/audio/restaurant.mp3', category: 'white_noise' },
-  { id: 'morning-rhythm', name: 'Morning Rhythm', nameZh: '晨间韵律', src: '/audio/morning-rhythm.mp3', category: 'bgm' },
+  // ── 专注推荐：频谱平稳、无突变瞬态、掩蔽环境噪声 ──
+  { id: 'rain', name: 'Rain', nameZh: '雨声', src: '/audio/rain.mp3', category: 'white_noise', phase: 'focus' },
+  { id: 'stream', name: 'Stream', nameZh: '流水', src: '/audio/stream.mp3', category: 'white_noise', phase: 'focus' },
+  { id: 'wind-wheat', name: 'Wind & Wheat', nameZh: '风扶麦浪', src: '/audio/wind-wheat.mp3', category: 'white_noise', phase: 'focus' },
+  { id: 'silkworm', name: 'Silkworm', nameZh: '蚕食桑叶', src: '/audio/silkworm.mp3', category: 'white_noise', phase: 'focus' },
+  { id: 'cargo-ship', name: 'Cargo Ship', nameZh: '货轮', src: '/audio/cargo-ship.mp3', category: 'white_noise', phase: 'focus' },
+  { id: 'study-hall', name: 'Study Hall', nameZh: '自习课', src: '/audio/study-hall.mp3', category: 'white_noise', phase: 'focus' },
+  // ── 皆宜：节律性/可预测瞬态，专注与休息均可 ──
+  { id: 'campfire', name: 'Campfire', nameZh: '篝火', src: '/audio/campfire.mp3', category: 'white_noise', phase: 'both' },
+  { id: 'train', name: 'Train', nameZh: '绿皮火车', src: '/audio/train.mp3', category: 'white_noise', phase: 'both' },
+  // ── 休息推荐：含人声/旋律，促进心理脱离与情绪恢复 ──
+  { id: 'traffic', name: 'Traffic', nameZh: '车流', src: '/audio/traffic.mp3', category: 'white_noise', phase: 'break' },
+  { id: 'restaurant', name: 'Restaurant', nameZh: '餐馆', src: '/audio/restaurant.mp3', category: 'white_noise', phase: 'break' },
+  { id: 'morning-rhythm', name: 'Morning Rhythm', nameZh: '晨间韵律', src: '/audio/morning-rhythm.mp3', category: 'bgm', phase: 'break' },
 ];
+
+/** 按阶段过滤音轨（'both' 在任何阶段都返回） */
+export function getTracksForPhase(phase: 'focus' | 'break'): AudioTrack[] {
+  return audioTracks.filter(t => t.phase === phase || t.phase === 'both');
+}
 
 export const AUDIO_PREFS_KEY = 'kb_audio_preferences';
 

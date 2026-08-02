@@ -66,13 +66,18 @@ export function useDeckCards({
 
   const handleSaveCard = useCallback(async () => {
     if (!cardFront.trim() || !cardBack.trim()) return;
+    // v0.30: deckId 缺失时明确报错，禁止静默跳过（用户反馈“有时看不见创建的闪卡”）
+    if (editingCardId === null && !deckId) {
+      toast({ type: 'error', message: '牌组信息异常，无法创建卡片，请返回重试' });
+      return;
+    }
     setSaving(true);
     try {
       if (editingCardId !== null) {
         await updateCard(editingCardId, { front: cardFront.trim(), back: cardBack.trim() });
-      } else if (deckId) {
+      } else {
         await createCard({
-          deckId,
+          deckId: deckId!,
           front: cardFront.trim(),
           back: cardBack.trim(),
           type: 'basic',
@@ -81,10 +86,12 @@ export function useDeckCards({
       setCardModalOpen(false);
       setCardFront('');
       setCardBack('');
+    } catch {
+      toast({ type: 'error', message: '保存卡片失败，请重试' });
     } finally {
       setSaving(false);
     }
-  }, [cardFront, cardBack, editingCardId, deckId, createCard, updateCard]);
+  }, [cardFront, cardBack, editingCardId, deckId, createCard, updateCard, toast]);
 
   const handleDeleteCard = useCallback(async () => {
     if (deleteCardId === null) return;

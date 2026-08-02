@@ -4,6 +4,7 @@
 import { useState, useCallback } from 'react';
 import { aiPluginLoader } from '../AIPluginLoader';
 import { type AIState, INITIAL_STATE, resolveAIErrorState } from './types';
+import { withTimeout } from './withTimeout';
 import type { FeynmanAnswerEvalResult } from '../types';
 
 /**
@@ -21,7 +22,7 @@ export function useAIFeynmanEvaluateAnswers() {
   ) => {
     setState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
     try {
-      const result = await aiPluginLoader.evaluateFeynmanAnswers(concept, questions, answers);
+      const result = await withTimeout(aiPluginLoader.evaluateFeynmanAnswers(concept, questions, answers));
       setState({ data: result, loading: false, error: null, isFallback: false, needsConfig: false });
       return result;
     } catch (error: unknown) {
@@ -33,5 +34,8 @@ export function useAIFeynmanEvaluateAnswers() {
     }
   }, []);
 
-  return { ...state, evaluateAnswers };
+  /** v0.30: 清空状态（配合“重置 AI 反馈”） */
+  const clear = useCallback(() => setState({ ...INITIAL_STATE }), []);
+
+  return { ...state, evaluateAnswers, clear };
 }

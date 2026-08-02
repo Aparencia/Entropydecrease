@@ -56,6 +56,7 @@ export default function FeynmanSessionPage() {
     handleGenerateQuestions,
     aiAnswerEvalLoading, aiAnswerEvalData, aiAnswerEvalError, aiAnswerEvalNeedsConfig,
     handleSubmitAnswers,
+    resetAIResults,
     menuOpen, menuPosition, menuContext, closeMenu,
     aiMenuGroups, handleMenuSelect, handleNoteContextMenu,
   } = useFeynmanAI(note);
@@ -198,6 +199,7 @@ export default function FeynmanSessionPage() {
                     data={aiEvalData}
                     onClose={() => setShowAIEval(false)}
                     onGoSettings={() => navigate('/settings')}
+                    onReset={resetAIResults}
                   />
                 )}
 

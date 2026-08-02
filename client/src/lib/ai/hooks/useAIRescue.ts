@@ -5,6 +5,7 @@ import { useState, useCallback } from 'react';
 import { aiPluginLoader } from '../AIPluginLoader';
 import { resolveAIFallback, setAICache, FallbackLevel } from '../aiServiceFallback';
 import { type AIState, INITIAL_STATE, resolveAIErrorState } from './types';
+import { withTimeout } from './withTimeout';
 import type { RescueContext, ResourceLink } from '../types';
 
 /**
@@ -28,7 +29,7 @@ export function useAIRescue() {
     setState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
     const cacheKey = `rescue:${context.topic.slice(0, 100)}:${context.stuckPoint?.slice(0, 50) || 'default'}`;
     try {
-      const result = await aiPluginLoader.rescue(context);
+      const result = await withTimeout(aiPluginLoader.rescue(context));
       setAICache(cacheKey, result);
       setState({ data: result, loading: false, error: null, isFallback: false, needsConfig: false });
       return result;

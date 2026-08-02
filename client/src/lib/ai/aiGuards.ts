@@ -15,13 +15,18 @@ export function ensureOnline(): void {
   }
 }
 
-/** 内容长度检查：少于 10 字符抛出 AIError('content_too_short') */
-export function ensureMinLength(content?: string): void {
-  if (content !== undefined && content.trim().length < 10) {
-    throw new AIError(
-      '内容太短，无法进行 AI 分析。请至少输入 10 个字符。',
-      'content_too_short',
-      false
-    );
+/**
+ * 内容长度检查：少于 min 字符抛出 AIError('content_too_short')
+ *
+ * v0.30: 差异化阈值——概念类（救援/追问主题）min=1 非空即可；
+ * 讲解/回答类 min=5；生成类（摘要/闪卡/锚点）保持 min=10。
+ * 错误码 'content_too_short' 为稳定契约，文案随阈值动态生成。
+ */
+export function ensureMinLength(content?: string, min = 10): void {
+  if (content !== undefined && content.trim().length < min) {
+    const message = min <= 1
+      ? '请输入内容后再使用 AI 功能。'
+      : `内容太短，无法进行 AI 分析。请至少输入 ${min} 个字符（当前 ${content.trim().length} 个）。`;
+    throw new AIError(message, 'content_too_short', false);
   }
 }

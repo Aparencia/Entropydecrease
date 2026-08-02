@@ -6,6 +6,7 @@ import { aiPluginLoader } from '../AIPluginLoader';
 import { getLocalFallbackMessage } from '../LocalFallback';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { type AIState, INITIAL_STATE, resolveAIErrorState } from './types';
+import { withTimeout } from './withTimeout';
 import type { EvaluateResult, EvaluateOptions } from '../types';
 
 /**
@@ -19,7 +20,7 @@ export function useAIEvaluate() {
   const evaluate = useCallback(async (concept: string, explanation: string, options?: EvaluateOptions) => {
     setState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
     try {
-      const result = await aiPluginLoader.evaluateExplanation(concept, explanation, options);
+      const result = await withTimeout(aiPluginLoader.evaluateExplanation(concept, explanation, options));
       soundPlayer.play('ai_analysis_done');
       setState({ data: result, loading: false, error: null, isFallback: false, needsConfig: false });
       return result;
@@ -29,5 +30,8 @@ export function useAIEvaluate() {
     }
   }, []);
 
-  return { ...state, evaluate };
+  /** v0.30: 清空状态（配合“重置 AI 反馈”） */
+  const clear = useCallback(() => setState({ ...INITIAL_STATE }), []);
+
+  return { ...state, evaluate, clear };
 }

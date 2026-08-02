@@ -2,7 +2,7 @@ import Dexie, { type Table } from 'dexie';
 import type {
   PomodoroSession, PomodoroSettings, PomodoroPreset, Note, NoteFolder, NoteLink,
   FlashcardDeck, Flashcard, FlashcardReview,
-  FeynmanNote, FeynmanSummary, FeynmanWeakPoint,
+  FeynmanNote, FeynmanSummary, FeynmanWeakPoint, FeynmanAIResult,
   OperationLog, AppSettings, SyncConflict, OfflineQueueItem,
   StudyCheckIn, Achievement, PomodoroGoal, WindowCapture, WindowCaptureSegment,
   Consent, UserProfile, Inspiration, SearchIndexEntry, RitualRecord
@@ -55,6 +55,7 @@ export class EntropyDecreaseDatabase extends Dexie {
   streakState!: Table<StreakState, string>;
   windowCaptureSegments!: Table<WindowCaptureSegment, string>;
   noteLinks!: Table<NoteLink, string>;
+  feynmanAIResults!: Table<FeynmanAIResult, string>;
 
   constructor() {
     // 数据库名 'keban' 不可修改（存量用户数据），见文件头 @ai-context
@@ -316,6 +317,11 @@ export class EntropyDecreaseDatabase extends Dexie {
     // 阶段二：笔记双向链接索引表（由笔记内容 wiki-link 推导的出链，本地派生索引）
     this.version(21).stores({
       noteLinks: 'id, fromId, toId',
+    });
+
+    // v0.30.0: 费曼会话 AI 交互结果持久化（用户反馈“AI 反馈内容返回列表后消失”）
+    this.version(22).stores({
+      feynmanAIResults: 'id, &noteId, updatedAt',
     });
   }
 }
