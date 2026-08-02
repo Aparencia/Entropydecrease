@@ -5,7 +5,7 @@
  * 评估的综合评分/维度进度条/优势/待改进/建议。数据来自 useAIEvaluate，
  * 评分阈值文案（≥80 出色 / ≥60 较好）为产品定义，勿随意调整。
  */
-import { X, Sparkles, CheckCircle2, Circle } from 'lucide-react';
+import { X, Sparkles, CheckCircle2, Circle, RotateCcw } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { cn } from '@/lib/utils';
 import type { EvaluateResult } from '@/lib/ai/types';
@@ -17,10 +17,12 @@ interface AIEvaluationResultProps {
   data: EvaluateResult | null;
   onClose: () => void;
   onGoSettings: () => void;
+  /** v0.30: 重置 AI 反馈（用户建议） */
+  onReset?: () => void;
 }
 
 export function AIEvaluationResult({
-  loading, error, needsConfig, data, onClose, onGoSettings,
+  loading, error, needsConfig, data, onClose, onGoSettings, onReset,
 }: AIEvaluationResultProps) {
   return (
     <div className={cn(
@@ -32,12 +34,24 @@ export function AIEvaluationResult({
           <Sparkles className="w-icon-sm h-icon-sm text-brand-500" strokeWidth={1.5} />
           AI 评估结果
         </h3>
-        <button
-          onClick={onClose}
-          className="p-1 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
-        >
-          <X className="w-4 h-4" strokeWidth={1.5} />
-        </button>
+        <div className="flex items-center gap-1">
+          {onReset && data && !loading && (
+            <button
+              onClick={onReset}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-kb-md text-c1 text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
+              title="清除评估结果，可重新评估"
+            >
+              <RotateCcw className="w-3.5 h-3.5" strokeWidth={1.5} />
+              重置
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="p-1 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
+          >
+            <X className="w-4 h-4" strokeWidth={1.5} />
+          </button>
+        </div>
       </div>
 
       {loading && (

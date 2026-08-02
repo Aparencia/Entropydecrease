@@ -1,9 +1,9 @@
 /**
  * @ai-context: flashcards 功能模块页面：FlashcardsPage。
  */
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useLayoutEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Card, Button, Tag, Modal, Input, EmptyState, Skeleton, useToast } from '@/components/ui';
+import { Button, Tag, Modal, Input, EmptyState, Skeleton, useToast } from '@/components/ui';
 import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu';
 import { Plus, Layers, Clock, Trash2, Layers3, Upload, BookOpen, Pencil, Share2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -19,6 +19,60 @@ import { cn } from '@/lib/utils';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
 const LONG_PRESS_THRESHOLD_MS = 600;
+
+/**
+ * 牌组描述行（v0.30）
+ *
+ * 无描述时始终预留一行高度，保证卡片尺寸一致；
+ * 描述超过一行时截断并展示“⋯”符号按钮，点击展开完整内容。
+ */
+function DeckCardDescription({ description }: { description?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const textRef = useRef<HTMLParagraphElement>(null);
+
+  // 收起状态下测量是否溢出一行（垂直换行或水平不可断行溢出均算）
+  useLayoutEffect(() => {
+    if (expanded) return;
+    const el = textRef.current;
+    if (el) {
+      setOverflows(
+        el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1,
+      );
+    }
+  }, [description, expanded]);
+
+  if (!description) {
+    // 无描述：占位一行高度（12px × 1.5 行高），确保卡片尺寸一致
+    return <div className="mt-0.5 min-h-[1.125rem]" aria-hidden="true" />;
+  }
+
+  return (
+    <div className="flex items-start gap-1 mt-0.5">
+      <p
+        ref={textRef}
+        className={cn(
+          // break-words：无空格长串（如 URL/连续字符）也能正常断行，
+          // 收起时配合 line-clamp-1 转为垂直溢出以便检测，展开时不撑出卡片
+          'text-b3 text-text-tertiary flex-1 min-w-0 min-h-[1.125rem] break-words',
+          !expanded && 'line-clamp-1',
+        )}
+      >
+        {description}
+      </p>
+      {overflows && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
+          className="flex-shrink-0 text-b3 leading-[1.125rem] text-text-tertiary hover:text-text-primary transition-colors"
+          title={expanded ? '收起描述' : '查看完整描述'}
+          aria-label={expanded ? '收起描述' : '查看完整描述'}
+        >
+          {expanded ? '▴' : '⋯'}
+        </button>
+      )}
+    </div>
+  );
+}
 
 interface DeckLocalStats {
   total: number;
@@ -380,9 +434,7 @@ export default function FlashcardsPage() {
                             )}
                             <h3 className="text-b1 font-semibold text-text-primary truncate">{deck.name}</h3>
                           </div>
-                          {deck.description && (
-                            <p className="text-b3 text-text-tertiary mt-0.5 line-clamp-2">{deck.description}</p>
-                          )}
+                          <DeckCardDescription description={deck.description} />
                         </div>
                         <Tag color="flashcard">{stats.total} 卡</Tag>
                       </div>

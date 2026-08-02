@@ -68,7 +68,8 @@ export function FeynmanTopBar({
       <h1 className="text-b1 font-semibold text-text-primary flex-1 truncate">
         {concept || '浮出水面'}
       </h1>
-      {hasExplanation && (
+      {/* v0.30: 已完成状态下隐藏卡壳救援与 AI 评估入口，避免状态矛盾 */}
+      {hasExplanation && !isCompleted && (
         <button
           onClick={onRescue}
           className={cn(
@@ -83,7 +84,7 @@ export function FeynmanTopBar({
           卡壳了
         </button>
       )}
-      {hasExplanation && (
+      {hasExplanation && !isCompleted && (
         <AIButton
           size="sm"
           loading={aiEvalLoading}

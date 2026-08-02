@@ -27,6 +27,7 @@ export const flashcardReviewStore = new StorageAdapter(db.flashcardReviews, 'fla
 export const feynmanNoteStore = new StorageAdapter(db.feynmanNotes, 'feynmanNotes');
 export const feynmanSummaryStore = new StorageAdapter(db.feynmanSummaries, 'feynmanSummaries');
 export const feynmanWeakPointStore = new StorageAdapter(db.feynmanWeakPoints, 'feynmanWeakPoints');
+export const feynmanAIResultStore = new StorageAdapter(db.feynmanAIResults, 'feynmanAIResults');
 export const operationLogStore = new StorageAdapter(db.operationLog, 'operationLog');
 export const appSettingsStore = new StorageAdapter(db.appSettings, 'appSettings');
 export const syncConflictsStore = new StorageAdapter(db.syncConflicts, 'syncConflicts');

@@ -2,7 +2,7 @@ import { db } from './database';
 import type {
   FlashcardDeck, Flashcard,
   PomodoroSession, PomodoroSettings, Note, NoteFolder,
-  FlashcardReview, FeynmanNote, FeynmanSummary, FeynmanWeakPoint,
+  FlashcardReview, FeynmanNote, FeynmanSummary, FeynmanWeakPoint, FeynmanAIResult,
   OperationLog, AppSettings, StudyCheckIn, Achievement,
   PomodoroGoal, SyncConflict, OfflineQueueItem, WindowCapture, WindowCaptureSegment,
   RitualRecord,
@@ -46,6 +46,8 @@ export interface ExportData {
     windowCaptureSegments: WindowCaptureSegment[];
     // v0.26.0 A1 补全：
     ritualRecords: RitualRecord[];
+    // v0.30.0: 费曼 AI 交互结果（旧备份无此字段时导入安全跳过）
+    feynmanAIResults: FeynmanAIResult[];
   };
 }
 
@@ -58,6 +60,7 @@ const EXPORT_TABLES = [
   'pomodoroGoals', 'syncConflicts', 'offlineQueue', 'windowCaptures',
   'windowCaptureSegments',
   'ritualRecords',
+  'feynmanAIResults',
 ] as const;
 
 type ExportTableName = (typeof EXPORT_TABLES)[number];

@@ -47,7 +47,7 @@ class AIPluginLoader {
    */
   private async call<T>(
     invoke: (plugin: AIPlugin) => Promise<T> | undefined,
-    opts: { contentCheck?: string; unsupportedMsg: string; offline?: { feature: string; endpoint: string; payload: unknown } },
+    opts: { contentCheck?: string; unsupportedMsg: string; minLength?: number; offline?: { feature: string; endpoint: string; payload: unknown } },
   ): Promise<T> {
     try {
       ensureOnline();
@@ -59,7 +59,7 @@ class AIPluginLoader {
       }
       throw err;
     }
-    ensureMinLength(opts.contentCheck);
+    ensureMinLength(opts.contentCheck, opts.minLength);
     const plugin = await getAIPlugin();
     const result = invoke(plugin);
     if (result === undefined) {
@@ -73,10 +73,10 @@ class AIPluginLoader {
    */
   private async *stream(
     getStreamFn: (plugin: AIPlugin) => AsyncIterable<string> | undefined,
-    opts: { contentCheck?: string; unsupportedMsg: string },
+    opts: { contentCheck?: string; unsupportedMsg: string; minLength?: number },
   ): AsyncGenerator<string, void, unknown> {
     ensureOnline();
-    ensureMinLength(opts.contentCheck);
+    ensureMinLength(opts.contentCheck, opts.minLength);
     const plugin = await getAIPlugin();
     const s = getStreamFn(plugin);
     if (!s) {
@@ -104,10 +104,10 @@ class AIPluginLoader {
       { contentCheck: content, unsupportedMsg: '当前 AI 插件不支持闪卡生成' });
   }
 
-  /** 费曼评估 */
+  /** 费曼评估（v0.30: 讲解类阈值 5） */
   async evaluateExplanation(concept: string, explanation: string, options?: EvaluateOptions): Promise<EvaluateResult> {
     return this.call(p => p.evaluateExplanation(concept, explanation, options),
-      { contentCheck: explanation, unsupportedMsg: '当前 AI 插件不支持费曼评估' });
+      { contentCheck: explanation, unsupportedMsg: '当前 AI 插件不支持费曼评估', minLength: 5 });
   }
 
   /**
@@ -132,10 +132,10 @@ class AIPluginLoader {
     }
   }
 
-  /** 费曼反问 — 生成 1-3 个追问 */
+  /** 费曼反问 — 生成 1-3 个追问（v0.30: 讲解类阈值 5） */
   async generateFeynmanQuestions(concept: string, explanation: string): Promise<FeynmanQuestionResult> {
     return this.call(p => p.generateFeynmanQuestions(concept, explanation),
-      { contentCheck: explanation, unsupportedMsg: '当前 AI 插件不支持费曼反问' });
+      { contentCheck: explanation, unsupportedMsg: '当前 AI 插件不支持费曼反问', minLength: 5 });
   }
 
   /** 费曼回答评估 — 评估用户对追问的回答 */
@@ -150,10 +150,10 @@ class AIPluginLoader {
       { contentCheck: content, unsupportedMsg: '当前 AI 插件不支持内容打标' });
   }
 
-  /** 闪卡优化 */
+  /** 闪卡优化（v0.30: 卡片正反面合计阈值 5） */
   async optimizeCard(front: string, back: string): Promise<OptimizeCardResult> {
     return this.call(p => p.optimizeCard?.(front, back),
-      { contentCheck: front + back, unsupportedMsg: '当前 AI 插件不支持闪卡优化' });
+      { contentCheck: front + back, unsupportedMsg: '当前 AI 插件不支持闪卡优化', minLength: 5 });
   }
 
   /** 灵感分拣 — AI 分析内容并推荐归类目标 */
@@ -168,28 +168,28 @@ class AIPluginLoader {
       { contentCheck: content, unsupportedMsg: '当前 AI 插件不支持锚点生成' });
   }
 
-  /** 苏格拉底式头脑风暴 — 激发创意与联想 */
+  /** 苏格拉底式头脑风暴 — 激发创意与联想（v0.30: 主题类非空即可） */
   async socraticBrainstorm(topic: string, context?: string): Promise<{ ideas: BrainstormIdea[] }> {
     return this.call(p => p.socraticBrainstorm?.(topic, context),
-      { contentCheck: topic, unsupportedMsg: '当前 AI 插件不支持苏格拉底头脑风暴' });
+      { contentCheck: topic, unsupportedMsg: '当前 AI 插件不支持苏格拉底头脑风暴', minLength: 1 });
   }
 
-  /** 苏格拉底式追问 — 引导深度思考 */
+  /** 苏格拉底式追问 — 引导深度思考（v0.30: 主题类非空即可） */
   async socraticQuestion(conversationId: string, topic: string, history: ChatMessage[]): Promise<{ question: string; hints: string[] }> {
     return this.call(p => p.socraticQuestion?.(conversationId, topic, history),
-      { contentCheck: topic, unsupportedMsg: '当前 AI 插件不支持苏格拉底追问' });
+      { contentCheck: topic, unsupportedMsg: '当前 AI 插件不支持苏格拉底追问', minLength: 1 });
   }
 
-  /** FEAT-022: 苏格拉底回答评估 — 四维度评分 */
+  /** FEAT-022: 苏格拉底回答评估 — 四维度评分（v0.30: 回答类阈值 5） */
   async socraticEvaluate(topic: string, question: string, answer: string, history: ChatMessage[]): Promise<SocraticEvaluateResult> {
     return this.call(p => p.socraticEvaluate?.(topic, question, answer, history),
-      { contentCheck: answer, unsupportedMsg: '当前 AI 插件不支持苏格拉底评估' });
+      { contentCheck: answer, unsupportedMsg: '当前 AI 插件不支持苏格拉底评估', minLength: 5 });
   }
 
-  /** FEAT-022: 苏格拉底深化角度生成 */
+  /** FEAT-022: 苏格拉底深化角度生成（v0.30: 主题类非空即可） */
   async socraticDeepening(topic: string, dialogueSummary: string, history: ChatMessage[]): Promise<SocraticDeepeningResult> {
     return this.call(p => p.socraticDeepening?.(topic, dialogueSummary, history),
-      { contentCheck: topic, unsupportedMsg: '当前 AI 插件不支持苏格拉底深化' });
+      { contentCheck: topic, unsupportedMsg: '当前 AI 插件不支持苏格拉底深化', minLength: 1 });
   }
 
   /** 学习预测 — 基于笔记预测可能的问题 */
@@ -198,10 +198,10 @@ class AIPluginLoader {
       { contentCheck: content, unsupportedMsg: '当前 AI 插件不支持学习预测' });
   }
 
-  /** 学习救援 — 当用户卡住时提供提示与资源 */
+  /** 学习救援 — 当用户卡住时提供提示与资源（v0.30: 概念名非空即可） */
   async rescue(context: RescueContext): Promise<{ hints: string[]; resources: ResourceLink[]; alternativeApproach?: string }> {
     return this.call(p => p.rescue?.(context),
-      { contentCheck: context.topic, unsupportedMsg: '当前 AI 插件不支持学习救援' });
+      { contentCheck: context.topic, unsupportedMsg: '当前 AI 插件不支持学习救援', minLength: 1 });
   }
 
   // ── 流式方法包装 ─────────────────────────────────────
@@ -218,10 +218,10 @@ class AIPluginLoader {
       { contentCheck: content, unsupportedMsg: '当前插件不支持流式闪卡生成' });
   }
 
-  /** 流式费曼评估 */
+  /** 流式费曼评估（v0.30: 讲解类阈值 5） */
   evaluateExplanationStream(concept: string, explanation: string, options?: EvaluateOptions) {
     return this.stream(p => p.evaluateExplanationStream?.(concept, explanation, options),
-      { contentCheck: explanation, unsupportedMsg: '当前插件不支持流式评估' });
+      { contentCheck: explanation, unsupportedMsg: '当前插件不支持流式评估', minLength: 5 });
   }
 
   /** 流式内容打标 */
@@ -230,10 +230,10 @@ class AIPluginLoader {
       { contentCheck: content, unsupportedMsg: '当前插件不支持流式打标' });
   }
 
-  /** 流式闪卡优化 */
+  /** 流式闪卡优化（v0.30: 阈值 5） */
   optimizeCardStream(front: string, back: string) {
     return this.stream(p => p.optimizeCardStream?.(front, back),
-      { contentCheck: front + back, unsupportedMsg: '当前插件不支持流式闪卡优化' });
+      { contentCheck: front + back, unsupportedMsg: '当前插件不支持流式闪卡优化', minLength: 5 });
   }
 
   /** 流式灵感分拣 */
@@ -242,10 +242,10 @@ class AIPluginLoader {
       { contentCheck: content, unsupportedMsg: '当前插件不支持流式灵感分拣' });
   }
 
-  /** 流式费曼反问 */
+  /** 流式费曼反问（v0.30: 讲解类阈值 5） */
   generateFeynmanQuestionsStream(concept: string, explanation: string) {
     return this.stream(p => p.generateFeynmanQuestionsStream?.(concept, explanation),
-      { contentCheck: explanation, unsupportedMsg: '当前插件不支持流式反问' });
+      { contentCheck: explanation, unsupportedMsg: '当前插件不支持流式反问', minLength: 5 });
   }
 
   /** 流式费曼回答评估 */
@@ -260,22 +260,22 @@ class AIPluginLoader {
       { contentCheck: content, unsupportedMsg: '当前插件不支持流式锚点生成' });
   }
 
-  /** 流式苏格拉底追问 */
+  /** 流式苏格拉底追问（v0.30: 主题类非空即可） */
   socraticQuestionStream(conversationId: string, topic: string, history: ChatMessage[]) {
     return this.stream(p => p.socraticQuestionStream?.(conversationId, topic, history),
-      { contentCheck: topic, unsupportedMsg: '当前插件不支持流式苏格拉底追问' });
+      { contentCheck: topic, unsupportedMsg: '当前插件不支持流式苏格拉底追问', minLength: 1 });
   }
 
-  /** 流式苏格拉底评估 */
+  /** 流式苏格拉底评估（v0.30: 回答类阈值 5） */
   socraticEvaluateStream(topic: string, question: string, answer: string, history: ChatMessage[]) {
     return this.stream(p => p.socraticEvaluateStream?.(topic, question, answer, history),
-      { contentCheck: answer, unsupportedMsg: '当前插件不支持流式苏格拉底评估' });
+      { contentCheck: answer, unsupportedMsg: '当前插件不支持流式苏格拉底评估', minLength: 5 });
   }
 
-  /** 流式苏格拉底深化 */
+  /** 流式苏格拉底深化（v0.30: 主题类非空即可） */
   socraticDeepeningStream(topic: string, dialogueSummary: string, history: ChatMessage[]) {
     return this.stream(p => p.socraticDeepeningStream?.(topic, dialogueSummary, history),
-      { contentCheck: topic, unsupportedMsg: '当前插件不支持流式苏格拉底深化' });
+      { contentCheck: topic, unsupportedMsg: '当前插件不支持流式苏格拉底深化', minLength: 1 });
   }
 
   /** 流式学习预测 */
@@ -284,10 +284,10 @@ class AIPluginLoader {
       { contentCheck: content, unsupportedMsg: '当前插件不支持流式学习预测' });
   }
 
-  /** 流式学习救援 */
+  /** 流式学习救援（v0.30: 概念名非空即可） */
   rescueStream(context: RescueContext) {
     return this.stream(p => p.rescueStream?.(context),
-      { contentCheck: context.topic, unsupportedMsg: '当前插件不支持流式救援' });
+      { contentCheck: context.topic, unsupportedMsg: '当前插件不支持流式救援', minLength: 1 });
   }
 }
 
