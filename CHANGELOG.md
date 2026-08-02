@@ -3,6 +3,13 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.33.0](https://github.com/Aparencia/Entropydecrease/compare/v0.32.0...v0.33.0) (2026-08-02)
+
+### ✨ 新功能
+
+* **audio:** 替换白噪音音源为真实自然声景（11轨×5分钟循环） ([09a3ee7](https://github.com/Aparencia/Entropydecrease/commit/09a3ee7abffb3f862072eef5c3ee6d255040fcac))
+* **feynman:** AI 反馈持久化 + 用户反馈五问题修复 ([f824547](https://github.com/Aparencia/Entropydecrease/commit/f82454771a83092c1c3bd4f103787a7aa0903550))
+
 ## [0.32.0](https://github.com/Aparencia/Entropydecrease/compare/v0.31.0...v0.32.0) (2026-08-01)
 
 ### ✨ 新功能
