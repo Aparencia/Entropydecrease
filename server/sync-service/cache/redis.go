@@ -43,6 +43,12 @@ func InitRedis() error {
 	return nil
 }
 
+// GetRedis returns the shared Redis client, or nil when Redis is unavailable.
+// Callers must nil-check the return value and degrade gracefully.
+func GetRedis() *redis.Client {
+	return RDB
+}
+
 // CloseRedis closes the Redis connection if it is open.
 func CloseRedis() {
 	if RDB != nil {
