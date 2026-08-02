@@ -10,15 +10,17 @@
  */
 
 import { createWriteStream, existsSync, rmSync } from 'fs';
-import { mkdir, rename, stat } from 'fs/promises';
+import { mkdir } from 'fs/promises';
 import { get as httpsGet } from 'https';
 import { get as httpGet } from 'http';
-import { createGunzip } from 'zlib';
 import * as path from 'path';
 import { BrowserWindow } from 'electron';
 import { logger } from '../../logger.js';
 import { getModelsDir, getModelDir, isModelReady, ASR_MODELS, type AsrEngine } from './config.js';
 import { resetAvailabilityCache } from './SherpaAsrService.js';
+
+/** 所有出站 HTTP 请求统一携带 UA，避免 CDN 返回 403 */
+const HTTP_HEADERS = { 'User-Agent': 'EntropyDecrease-Desktop/1.0 (Electron)' };
 
 // ================================================================
 // 运行时状态
@@ -49,12 +51,16 @@ export function getModelsStatus(): Array<{ engine: string; id: string; label: st
 }
 
 /**
- * 下载并解压指定引擎的模型
+ * 下载并解压指定引擎的模型（多源自动降级）
+ *
+ * 降级链：
+ *   1. GitHub Releases tar.bz2 整包（全球可用）
+ *   2. hf-mirror.com 逐文件下载（国内镜像）
+ *   3. huggingface.co 逐文件下载（直连兜底）
  *
  * @param engine - 'streaming' | 'offline'
- * @param useMirror - 是否使用国内镜像（默认 true）
  */
-export async function downloadModel(engine: AsrEngine, useMirror = true): Promise<string> {
+export async function downloadModel(engine: AsrEngine): Promise<string> {
   if (_downloading) {
     throw new Error(`已有模型正在下载中（${_downloading}），请等待完成`);
   }
@@ -65,47 +71,88 @@ export async function downloadModel(engine: AsrEngine, useMirror = true): Promis
 
   await mkdir(modelsDir, { recursive: true });
 
-  const url = useMirror ? modelDef.mirrorUrl : modelDef.downloadUrl;
-  const tmpFile = path.join(modelsDir, `${modelDef.dirName}.tar.bz2.tmp`);
-
   _downloading = engine;
   _downloadProgress = 0;
 
-  logger.info(`[LocalASR] Downloading ${engine} model from: ${url}`);
-
   try {
-    // 1. 下载 tar.bz2 文件
-    await downloadFile(url, tmpFile, (progress) => {
-      _downloadProgress = Math.round(progress * 0.7); // 下载占 70%
-      broadcastProgress(engine, _downloadProgress);
-    });
-
-    // 2. 解压 tar.bz2 到目标目录
-    broadcastProgress(engine, 75);
-    await extractTarBz2(tmpFile, modelsDir);
-
-    // 3. 校验关键文件
-    broadcastProgress(engine, 95);
-    if (!isModelReady(engine)) {
-      throw new Error(`模型解压后校验失败：缺少关键文件（${modelDef.files.join(', ')}）`);
+    // ── 策略 1：GitHub Releases tar.bz2 整包 ──
+    let ghError: unknown = null;
+    try {
+      logger.info(`[LocalASR] Trying GitHub release: ${modelDef.downloadUrl}`);
+      const tmpFile = path.join(modelsDir, `${modelDef.dirName}.tar.bz2.tmp`);
+      await downloadFile(modelDef.downloadUrl, tmpFile, (progress) => {
+        _downloadProgress = Math.round(progress * 0.7);
+        broadcastProgress(engine, _downloadProgress);
+      });
+      broadcastProgress(engine, 75);
+      await extractTarBz2(tmpFile, modelsDir);
+      try { rmSync(tmpFile, { force: true }); } catch { /* ignore */ }
+    } catch (err) {
+      ghError = err;
+      logger.warn(`[LocalASR] GitHub failed: ${err instanceof Error ? err.message : String(err)}`);
     }
 
-    // 4. 清理临时文件
-    try { rmSync(tmpFile, { force: true }); } catch { /* ignore */ }
+    // ── 策略 2 + 3：逐文件下载（hf-mirror → huggingface 直连） ──
+    if (ghError) {
+      if (!isModelReady(engine)) {
+        const bases = [
+          modelDef.mirrorBaseUrl,                                        // hf-mirror.com
+          modelDef.mirrorBaseUrl.replace('hf-mirror.com', 'huggingface.co'), // 直连兜底
+        ];
+        let lastErr: unknown = ghError;
+        for (const base of bases) {
+          try {
+            await downloadFromMirror(engine, base, targetDir);
+            lastErr = null;
+            break;
+          } catch (mirrorErr) {
+            lastErr = mirrorErr;
+            logger.warn(`[LocalASR] Mirror failed (${base}): ${mirrorErr instanceof Error ? mirrorErr.message : String(mirrorErr)}`);
+          }
+        }
+        if (lastErr) throw lastErr;
+      }
+    }
 
-    // 5. 重置识别器缓存
+    // 校验关键文件
+    broadcastProgress(engine, 95);
+    if (!isModelReady(engine)) {
+      throw new Error(`模型下载后校验失败：缺少关键文件（${modelDef.files.join(', ')}）`);
+    }
+
     resetAvailabilityCache();
-
     logger.info(`[LocalASR] ${engine} model ready at: ${targetDir}`);
     broadcastProgress(engine, 100);
     return targetDir;
   } catch (err) {
-    try { rmSync(tmpFile, { force: true }); } catch { /* ignore */ }
-    logger.error(`[LocalASR] Download failed for ${engine}:`, err);
+    logger.error(`[LocalASR] Download failed for ${engine}: ${err instanceof Error ? err.message : String(err)}`);
     throw err;
   } finally {
     _downloading = null;
     _downloadProgress = 0;
+  }
+}
+
+/**
+ * 从指定 baseUrl 逐文件下载模型（无需解压）
+ */
+async function downloadFromMirror(engine: AsrEngine, baseUrl: string, targetDir: string): Promise<void> {
+  const modelDef = ASR_MODELS[engine];
+  await mkdir(targetDir, { recursive: true });
+
+  logger.info(`[LocalASR] Downloading ${modelDef.files.length} files from: ${baseUrl}`);
+
+  for (let i = 0; i < modelDef.files.length; i++) {
+    const file = modelDef.files[i];
+    const fileUrl = `${baseUrl}/${file}`;
+    const destPath = path.join(targetDir, file);
+
+    logger.info(`[LocalASR] [${i + 1}/${modelDef.files.length}] ${fileUrl}`);
+    await downloadFile(fileUrl, destPath, (fraction) => {
+      const overall = Math.round(((i + fraction) / modelDef.files.length) * 90);
+      _downloadProgress = overall;
+      broadcastProgress(engine, overall);
+    });
   }
 }
 
@@ -136,7 +183,7 @@ function broadcastProgress(engine: string, progress: number): void {
   } catch { /* ignore */ }
 }
 
-/** HTTP(S) 文件下载（支持重定向） */
+/** HTTP(S) 文件下载（支持重定向，统一携带 UA） */
 function downloadFile(
   url: string,
   destPath: string,
@@ -151,7 +198,7 @@ function downloadFile(
 
     const getter = url.startsWith('https') ? httpsGet : httpGet;
 
-    getter(url, { timeout: 60000 }, (res) => {
+    getter(url, { timeout: 120000, headers: HTTP_HEADERS }, (res) => {
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         res.resume();
         const redirectUrl = res.headers.location.startsWith('http')
@@ -165,7 +212,7 @@ function downloadFile(
 
       if (res.statusCode !== 200) {
         res.resume();
-        reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+        reject(new Error(`Download failed: HTTP ${res.statusCode} — ${url}`));
         return;
       }
 

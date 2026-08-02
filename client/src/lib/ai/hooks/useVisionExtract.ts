@@ -4,7 +4,6 @@
 import { useState, useCallback } from 'react';
 import { aiPluginLoader } from '../AIPluginLoader';
 import { AIError } from '../types';
-import { hasUserKeys } from '../apiKeyManager';
 import type { VisionExtractResult } from '../types';
 
 /**
@@ -26,8 +25,8 @@ export function useVisionExtract() {
       return result;
     } catch (err) {
       const aiError = err instanceof AIError ? err : null;
-      if (aiError?.code === 'service_unavailable' && !hasUserKeys()) {
-        setError('当前还没有配置 API Key 呢，请前往设置页面配置');
+      if (aiError?.code === 'service_unavailable') {
+        setError('当前还没有配置 AI 网关地址呢，请前往设置页面配置');
         setNeedsConfig(true);
       } else {
         const msg = err instanceof Error ? err.message : '视觉提取失败';

@@ -14,7 +14,6 @@ import type {
   ScreenshotData,
 } from '@/lib/capture/captureTypes';
 import { supabase } from '@/lib/auth/supabaseClient';
-import { getActiveUserKey } from '@/lib/ai/apiKeyManager';
 
 // ================================================================
 // 视觉提取模式类型
@@ -92,7 +91,6 @@ export class VisionWorker implements PipelineWorker {
     // 鉴权获取（懒加载）
     const { data: { session } } = await supabase.auth.getSession();
     const authToken = session?.access_token;
-    const userApiKey = getActiveUserKey();
 
     // 调用主进程视觉提取 handler（带详细错误分类）
     let ipcResult: {
@@ -115,7 +113,6 @@ export class VisionWorker implements PipelineWorker {
         language: 'zh',
         mode,
         authToken,
-        userApiKey,
       }) as typeof ipcResult;
     } catch (err: unknown) {
       const errorInfo = classifyVisionError(err);

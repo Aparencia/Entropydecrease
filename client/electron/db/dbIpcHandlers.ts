@@ -10,6 +10,9 @@
 import { safeHandle } from '../ipcUtils.js';
 import { getConnection } from './sqliteService.js';
 import SqliteRepository from './sqliteRepository.js';
+// FTS5 全文搜索引擎——优先使用 BM25 排序搜索，LIKE 作为降级方案
+import { search as fts5Search, indexDocument, removeDocument, FTS_INDEXABLE_TABLES } from './fts5Search.js';
+import { logger } from '../logger.js';
 
 /** 动态表名场景下的通用行类型（替代 any 的受控收窄） */
 type SqliteRow = Record<string, unknown> & { id: string };
@@ -23,6 +26,18 @@ const ALLOWED_TABLES = new Set([
   'achievements', 'pomodoro_goals', 'pomodoro_sessions',
   'pomodoro_settings', 'window_captures', 'consent',
   'user_profile', 'inspirations', 'search_index',
+  // predictions — 预测题表（基于笔记内容生成的预测问答）
+  'predictions',
+  // assistant_sessions — AI 助手会话记录
+  'assistant_sessions',
+  // assistant_messages — AI 助手消息记录
+  'assistant_messages',
+  // assistant_triggers — AI 助手触发规则记录
+  'assistant_triggers',
+  // crdt_docs — CRDT 同步引擎文档快照（v3 迁移新增）
+  'crdt_docs',
+  // crdt_changes — CRDT 同步引擎变更日志（v3 迁移新增）
+  'crdt_changes',
 ]);
 
 /** camelCase → snake_case（用于表名映射） */
@@ -49,6 +64,13 @@ const TABLE_NAME_MAP: Record<string, string> = {
   userProfile: 'user_profile',
   inspirations: 'inspirations',
   searchIndex: 'search_index',
+  // 以下为 v1.0.0 新增表映射（预测题 + AI 助手 + CRDT 同步）
+  predictions: 'predictions',
+  assistantSessions: 'assistant_sessions',
+  assistantMessages: 'assistant_messages',
+  assistantTriggers: 'assistant_triggers',
+  crdtDocs: 'crdt_docs',
+  crdtChanges: 'crdt_changes',
 };
 
 function resolveTable(table: string): string {
@@ -57,6 +79,24 @@ function resolveTable(table: string): string {
     throw new Error(`[DB] Table "${table}" is not in the allowed whitelist`);
   }
   return snakeName;
+}
+
+/**
+ * 尝试从行数据中提取 FTS 索引所需的 title/content 字段。
+ * 如果表不在 FTS_INDEXABLE_TABLES 配置中，或行数据缺少对应字段，则返回 null。
+ * 这是增量索引维护的核心——只有配置了映射关系的表才会被索引。
+ */
+function extractFtsFields(tableName: string, row: Record<string, unknown>): { title: string; content: string } | null {
+  const cfg = FTS_INDEXABLE_TABLES.find((t) => t.table === tableName);
+  if (!cfg) return null; // 该表不需要 FTS 索引
+
+  // 从行数据中读取配置的字段（titleField 可选，contentField 必须有）
+  const title = cfg.titleField ? String(row[cfg.titleField] ?? '') : '';
+  const content = String(row[cfg.contentField] ?? '');
+
+  // 如果 content 为空，跳过索引（无意义）
+  if (!content) return null;
+  return { title, content };
 }
 
 /**
@@ -83,29 +123,104 @@ export function registerDbIpcHandlers(): void {
   safeHandle('db:insert', async (_event, params: { table: string; item: Record<string, unknown> }) => {
     const tableName = resolveTable(params.table);
     const repo = new SqliteRepository<SqliteRow>(tableName);
-    return await repo.create(params.item as SqliteRow);
+    const result = await repo.create(params.item as SqliteRow);
+
+    // 增量索引维护：对含 title/content 字段的表自动更新 FTS5 索引
+    // 在插入成功后同步执行，确保搜索索引与业务数据保持一致
+    const ftsFields = extractFtsFields(tableName, params.item);
+    if (ftsFields && params.item.id) {
+      try {
+        indexDocument(tableName, String(params.item.id), ftsFields.title, ftsFields.content);
+      } catch (err) {
+        // FTS 索引更新失败不应阻塞业务操作——仅记录警告
+        logger.warn(`[FTS5] Failed to index document after insert: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    return result;
   });
 
   /** db:update — 更新：接收 { table, id, changes } → update() */
   safeHandle('db:update', async (_event, params: { table: string; id: string; changes: Record<string, unknown> }) => {
     const tableName = resolveTable(params.table);
     const repo = new SqliteRepository<SqliteRow>(tableName);
-    return await repo.update(params.id, params.changes as Partial<SqliteRow>);
+    const result = await repo.update(params.id, params.changes as Partial<SqliteRow>);
+
+    // 增量索引维护：更新操作需要重新读取完整行数据（changes 可能只包含部分字段），
+    // 然后更新 FTS5 索引中的对应文档
+    if (Object.keys(params.changes).length > 0) {
+      try {
+        const dbConn = getConnection();
+        const fullRow = dbConn.prepare(`SELECT * FROM "${tableName}" WHERE id = ?`).get(params.id) as Record<string, unknown> | undefined;
+        if (fullRow) {
+          const ftsFields = extractFtsFields(tableName, fullRow);
+          if (ftsFields) {
+            indexDocument(tableName, params.id, ftsFields.title, ftsFields.content);
+          }
+        }
+      } catch (err) {
+        // FTS 索引更新失败不应阻塞业务操作——仅记录警告
+        logger.warn(`[FTS5] Failed to index document after update: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    return result;
   });
 
   /** db:delete — 删除：接收 { table, id } → delete() */
   safeHandle('db:delete', async (_event, params: { table: string; id: string }) => {
     const tableName = resolveTable(params.table);
     const repo = new SqliteRepository<SqliteRow>(tableName);
-    return await repo.delete(params.id);
+    const result = await repo.delete(params.id);
+
+    // 增量索引维护：删除业务数据后同步清理 FTS5 索引中的对应文档，
+    // 避免搜索结果指向已删除的数据（幽灵引用）
+    try {
+      removeDocument(tableName, params.id);
+    } catch (err) {
+      // FTS 索引删除失败不应阻塞业务操作——仅记录警告
+      logger.warn(`[FTS5] Failed to remove document from index: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    return result;
   });
 
-  /** db:search — 搜索：LIKE 模糊匹配（FTS5 在 T0.5 实现） */
+  /**
+   * db:search — 搜索：优先使用 FTS5 全文搜索（BM25 排序 + snippet 高亮），
+   * 当 FTS5 不可用（虚拟表未初始化、查询语法错误等）时降级到 LIKE 模糊匹配。
+   * FTS5 在 main.ts 启动链中通过 initializeFTS() 初始化。
+   */
   safeHandle('db:search', async (_event, params: { table: string; query: string }) => {
     const tableName = resolveTable(params.table);
+    const query = params.query?.trim();
+    if (!query) return [];
+
+    // 优先使用 FTS5 全文搜索（BM25 排序，结果质量更高）
+    try {
+      const ftsResults = fts5Search(query, { table: tableName, limit: 20, highlight: true });
+      if (ftsResults.length > 0) {
+        // FTS5 返回的是 { id, table, title, snippet, rank }，需要回查原表获取完整行
+        const dbConn = getConnection();
+        const ids = ftsResults.map((r) => r.id);
+        const placeholders = ids.map(() => '?').join(',');
+        const rows = dbConn.prepare(
+          `SELECT * FROM "${tableName}" WHERE id IN (${placeholders})`
+        ).all(...ids) as Array<Record<string, unknown>>;
+        // 按 FTS5 排序结果排列行（保持 BM25 相关性顺序）
+        const rowMap = new Map(rows.map((r) => [r.id as string, r]));
+        return ftsResults
+          .map((r) => rowMap.get(r.id))
+          .filter(Boolean) as Array<Record<string, unknown>>;
+      }
+    } catch (err) {
+      // FTS5 搜索失败（如虚拟表不存在、SQL 执行错误），降级到 LIKE 搜索。
+      // fts5Search() 不再内部吞没异常——致命错误会传播到这里被捕获。
+      logger.warn(`[DB] FTS5 search failed, falling back to LIKE: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // 降级方案：LIKE 模糊匹配（兼容 FTS5 不可用或结果为空时）
     const dbConn = getConnection();
-    const like = `%${params.query}%`;
-    // 对 notes 表搜索 title 和 content，其余表搜索所有 TEXT 列
+    const like = `%${query}%`;
     if (tableName === 'notes') {
       return dbConn.prepare(
         `SELECT * FROM notes WHERE title LIKE ? OR content LIKE ?`

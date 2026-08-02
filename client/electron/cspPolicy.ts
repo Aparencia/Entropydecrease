@@ -44,9 +44,10 @@ export function installCspPolicy(isDev: boolean): void {
       // 开发环境：允许 unsafe-inline/unsafe-eval（Vite HMR 需要），worker-src 需要 blob:
       // 生产环境：禁止 unsafe-eval，保留 unsafe-inline（Tailwind 运行时需要）
       // img-src 放行 keyframe:（课堂关键帧本地图片自定义协议，见 ipc/keyframeStorage.ts）
+      // media-src 放行 data:/blob:（AI 助手 TTS 以 base64 data URL 传递 MP3 音频）
       const csp = isDev
-        ? `default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*; worker-src 'self' blob: http://localhost:*; connect-src 'self' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://entropydecrease.com wss://entropydecrease.com${extraConnectSrc}; img-src 'self' data: blob: keyframe: https://*.supabase.co; font-src 'self' data:;`
-        : `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: keyframe: https://*.supabase.co; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://entropydecrease.com wss://entropydecrease.com${extraConnectSrc}; frame-ancestors 'none';`;
+        ? `default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*; worker-src 'self' blob: http://localhost:*; connect-src 'self' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://entropydecrease.com wss://entropydecrease.com${extraConnectSrc}; img-src 'self' data: blob: keyframe: https://*.supabase.co; media-src 'self' data: blob:; font-src 'self' data:;`
+        : `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: keyframe: https://*.supabase.co; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://entropydecrease.com wss://entropydecrease.com${extraConnectSrc}; frame-ancestors 'none';`;
 
       callback({
         responseHeaders: {

@@ -32,7 +32,6 @@ function register(): void {
         duration?: number;
         language?: string;
         authToken?: string;
-        userApiKey?: string;
       },
     ) => {
       const startMs = Date.now();
@@ -73,7 +72,6 @@ function register(): void {
           '/api/v1/multimodal/analyze-video',
           formData,
           args.authToken,
-          args.userApiKey,
           300000,
         );
 

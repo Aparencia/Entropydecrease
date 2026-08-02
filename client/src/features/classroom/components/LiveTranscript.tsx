@@ -18,9 +18,11 @@ interface LiveTranscriptProps {
   transcripts: TranscriptEntry[];
   isActive: boolean;
   className?: string;
+  /** 真流式进行中的 partial 文本（实时行，断句后清空） */
+  partialText?: string;
 }
 
-export function LiveTranscript({ transcripts, isActive, className }: LiveTranscriptProps) {
+export function LiveTranscript({ transcripts, isActive, className, partialText }: LiveTranscriptProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastCountRef = useRef(0);
 
@@ -32,7 +34,14 @@ export function LiveTranscript({ transcripts, isActive, className }: LiveTranscr
     lastCountRef.current = transcripts.length;
   }, [transcripts.length]);
 
-  if (transcripts.length === 0 && !isActive) return null;
+  // partial 更新时同样滚到底部（实时行始终可见）
+  useEffect(() => {
+    if (scrollRef.current && partialText) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [partialText]);
+
+  if (transcripts.length === 0 && !isActive && !partialText) return null;
 
   return (
     <div className={cn('flex flex-col border-t border-border/20', className)}>
@@ -53,7 +62,7 @@ export function LiveTranscript({ transcripts, isActive, className }: LiveTranscr
 
       {/* 转录内容滚动区 */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-1 max-h-40 min-h-[60px]">
-        {transcripts.length === 0 && (
+        {transcripts.length === 0 && !partialText && (
           <p className="text-[11px] text-text-tertiary text-center py-3 opacity-60">
             {isActive ? '等待语音输入...' : '采集开始后转录将在此显示'}
           </p>
@@ -74,6 +83,13 @@ export function LiveTranscript({ transcripts, isActive, className }: LiveTranscr
             </div>
           );
         })}
+        {/* 真流式进行中的实时行（边说边出，断句后转为已提交条目） */}
+        {partialText && (
+          <div className="flex gap-2 text-[12px] leading-relaxed text-brand-600">
+            <span className="text-[10px] text-brand-400 flex-shrink-0 mt-0.5">▍</span>
+            <span className="opacity-90">{partialText}</span>
+          </div>
+        )}
       </div>
     </div>
   );

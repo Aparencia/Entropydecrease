@@ -16,11 +16,10 @@ import { isLocalInferenceEnabled } from './ollama/config.js';
 import { isOllamaAvailable } from './ollama/OllamaService.js';
 
 /** 构建公共请求头（JSON 模式含 Content-Type，multipart 由 fetch 自动生成） */
-function buildHeaders(clientRequestId: string, json: boolean, authToken?: string, userApiKey?: string): Record<string, string> {
+function buildHeaders(clientRequestId: string, json: boolean, authToken?: string): Record<string, string> {
   const headers: Record<string, string> = { 'X-Request-ID': clientRequestId };
   if (json) headers['Content-Type'] = 'application/json';
   if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
-  if (userApiKey) headers['X-User-API-Key'] = userApiKey;
   return headers;
 }
 
@@ -44,7 +43,6 @@ async function executePost<TRes>(
   isJson: boolean,
   bodyDesc: string,
   authToken?: string,
-  userApiKey?: string,
   timeoutMs: number = 60000,
 ): Promise<{ data: TRes; requestId: string | undefined }> {
   const base = gatewayUrl();
@@ -57,9 +55,9 @@ async function executePost<TRes>(
 
   // ── 请求前日志 ──
   logger.info(`[AI] → POST ${url} [req-id: ${clientRequestId}]`);
-  logger.debug(`[AI] Request config: timeout=${timeoutMs}ms, hasAuth=${!!authToken}, hasUserKey=${!!userApiKey}, ${bodyDesc}`);
+  logger.debug(`[AI] Request config: timeout=${timeoutMs}ms, hasAuth=${!!authToken}, ${bodyDesc}`);
 
-  const headers = buildHeaders(clientRequestId, isJson, authToken, userApiKey);
+  const headers = buildHeaders(clientRequestId, isJson, authToken);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -122,11 +120,10 @@ export async function postJson<TReq, TRes>(
   apiPath: string,
   body: TReq,
   authToken?: string,
-  userApiKey?: string,
   timeoutMs: number = 60000,
 ): Promise<{ data: TRes; requestId: string | undefined }> {
   const bodyDesc = `bodyKeys=${Object.keys(body as Record<string, unknown>).join(',')}`;
-  return executePost<TRes>(apiPath, JSON.stringify(body), true, bodyDesc, authToken, userApiKey, timeoutMs);
+  return executePost<TRes>(apiPath, JSON.stringify(body), true, bodyDesc, authToken, timeoutMs);
 }
 
 /**
@@ -139,10 +136,9 @@ export async function postMultipart<TRes>(
   apiPath: string,
   formData: FormData,
   authToken?: string,
-  userApiKey?: string,
   timeoutMs: number = 300000,
 ): Promise<{ data: TRes; requestId: string | undefined }> {
-  return executePost<TRes>(apiPath, formData, false, 'body=FormData', authToken, userApiKey, timeoutMs);
+  return executePost<TRes>(apiPath, formData, false, 'body=FormData', authToken, timeoutMs);
 }
 
 /**
@@ -158,7 +154,6 @@ export async function callWithLocalFallback<TReq, TRes>(
   body: TReq,
   localHandler: () => Promise<TRes>,
   authToken?: string,
-  userApiKey?: string,
   timeoutMs: number = 60000,
 ): Promise<{ data: TRes; source: 'local' | 'remote'; requestId?: string }> {
   // 检查本地 Ollama 是否可用
@@ -179,7 +174,6 @@ export async function callWithLocalFallback<TReq, TRes>(
     apiPath,
     body,
     authToken,
-    userApiKey,
     timeoutMs,
   );
   return { data, source: 'remote', requestId };

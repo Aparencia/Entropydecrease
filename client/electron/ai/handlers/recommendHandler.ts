@@ -32,7 +32,6 @@ function register(): void {
           timestamp: string;
         }>;
         authToken?: string;
-        userApiKey?: string;
       },
     ) => {
       // 前端 camelCase → 后端 snake_case
@@ -74,7 +73,6 @@ function register(): void {
           reqBody,
           localHandler,
           args.authToken,
-          args.userApiKey,
           40000,
         );
 

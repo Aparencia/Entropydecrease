@@ -93,6 +93,19 @@ export function useClassroomAudio({ captureManager, status, mode, onNotify }: Us
     if (!window.electronAPI || status !== 'capturing') return;
     const off = window.electronAPI.on('audio_capture_chunk', (...args: unknown[]) => {
       const chunk = args[0] as AudioChunkData;
+      // TEMP DIAGNOSTIC（ASR 静默排查）：验证音频块是否到达渲染端及其能量/类型
+      try {
+        const diagSamples = new Float32Array(chunk.audioBuffer);
+        let diagSum = 0;
+        for (let i = 0; i < diagSamples.length; i++) diagSum += diagSamples[i] * diagSamples[i];
+        const diagRms = diagSamples.length > 0 ? Math.sqrt(diagSum / diagSamples.length) : 0;
+        console.info(
+          `[ASR-DIAG] 渲染端收到音频块: ${diagSamples.length} 样本, RMS=${diagRms.toFixed(6)}, ` +
+          `buffer类型=${Object.prototype.toString.call(chunk.audioBuffer)}, byteLength=${(chunk.audioBuffer as ArrayBuffer).byteLength}`,
+        );
+      } catch (diagErr) {
+        console.warn('[ASR-DIAG] 音频块检查失败:', diagErr);
+      }
       captureManager.pushAudioChunk(chunk);
       // 更新音频健康状态：收到音频块即视为健康
       healthRef.current = {

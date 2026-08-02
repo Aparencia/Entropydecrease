@@ -17,7 +17,6 @@ export async function* postJsonStream<TReq>(
   apiPath: string,
   body: TReq,
   authToken?: string,
-  userApiKey?: string,
   timeoutMs: number = 300000,
 ): AsyncGenerator<string, void, unknown> {
   const base = gatewayUrl();
@@ -35,9 +34,6 @@ export async function* postJsonStream<TReq>(
   };
   if (authToken) {
     headers['Authorization'] = `Bearer ${authToken}`;
-  }
-  if (userApiKey) {
-    headers['X-User-API-Key'] = userApiKey;
   }
 
   const controller = new AbortController();
@@ -98,19 +94,24 @@ export async function* postJsonStream<TReq>(
             if (data === '[DONE]') {
               return;
             }
+            // 先单独解析 JSON：仅捕获解析失败（回退纯文本），
+            // 避免把下方 parsed.error 的主动 throw 一并吞掉——
+            // 那个 throw 必须传播出去才能触发上层「流式失败→降级非流式」。
+            let parsed: { error?: string; chunk?: string } | null = null;
             try {
-              const parsed = JSON.parse(data);
-              if (parsed.error) {
-                throw new Error(`Stream error: ${parsed.error}`);
-              }
-              if (parsed.chunk) {
-                yield parsed.chunk;
-              }
-            } catch (e) {
+              parsed = JSON.parse(data);
+            } catch {
               // JSON 解析失败，尝试作为纯文本
-              if (data && data !== '[DONE]') {
+              if (data) {
                 yield data;
               }
+              continue;
+            }
+            if (parsed?.error) {
+              throw new Error(`Stream error: ${parsed.error}`);
+            }
+            if (parsed?.chunk) {
+              yield parsed.chunk;
             }
           }
         }

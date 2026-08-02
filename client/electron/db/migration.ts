@@ -47,6 +47,14 @@ const TABLE_MAPPING: Array<{ dexie: string; sqlite: string }> = [
   { dexie: 'consent', sqlite: 'consent' },
   { dexie: 'userProfile', sqlite: 'user_profile' },
   { dexie: 'inspirations', sqlite: 'inspirations' },
+  // 以下为 schema.ts 新增表的迁移映射（预测题 + AI 助手 + CRDT 同步）
+  // 注意：这些表在 IndexedDB 中可能没有对应数据，映射仅用于白名单一致性
+  { dexie: 'predictions', sqlite: 'predictions' },
+  { dexie: 'assistantSessions', sqlite: 'assistant_sessions' },
+  { dexie: 'assistantMessages', sqlite: 'assistant_messages' },
+  { dexie: 'assistantTriggers', sqlite: 'assistant_triggers' },
+  { dexie: 'crdtDocs', sqlite: 'crdt_docs' },
+  { dexie: 'crdtChanges', sqlite: 'crdt_changes' },
 ];
 
 /** 合法的 SQLite 表名集合 */

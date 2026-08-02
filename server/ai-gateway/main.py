@@ -181,7 +181,7 @@ if APP_CONFIG.get("app_env") == "production":
         allow_origins=APP_CONFIG["cors_origins"],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-User-API-Key", "X-Request-ID"],
+        allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-Request-ID"],
     )
 else:
     # 开发环境 CORS 宽松模式：允许所有来源（便于调试）

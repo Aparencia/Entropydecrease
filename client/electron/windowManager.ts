@@ -130,6 +130,18 @@ export function createMainWindow(
     win.webContents.once('did-finish-load', () => {
       win.webContents.openDevTools({ mode: 'right' });
     });
+    // 诊断用：将渲染进程 console 回流到主进程日志文件（仅 dev），
+    // 便于排查渲染端问题（如 ASR 静默）时无需人工复制 DevTools 输出。
+    win.webContents.on('console-message', (_event, ...args: unknown[]) => {
+      let message = '';
+      const first = args[0];
+      if (first && typeof first === 'object') {
+        message = String((first as Record<string, unknown>).message ?? '');
+      } else if (args.length > 1) {
+        message = String(args[1]);
+      }
+      if (message) logger.info(`[Renderer] ${message}`);
+    });
   } else {
     // 生产模式：加载打包后的 index.html
     win.loadFile(path.join(app.getAppPath(), 'dist', 'index.html'));

@@ -29,7 +29,6 @@ function register(): void {
         difficulty?: string;
         cardType?: string;
         authToken?: string;
-        userApiKey?: string;
       },
     ) => {
       const startMs = Date.now();
@@ -79,7 +78,6 @@ function register(): void {
           reqBody,
           localHandler,
           args.authToken,
-          args.userApiKey,
           90000,
         );
 

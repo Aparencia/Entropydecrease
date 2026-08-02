@@ -7,7 +7,6 @@
  */
 
 import { AIError } from '../types';
-import { hasUserKeys } from '../apiKeyManager';
 import { getCachedGatewayStatus } from '@/hooks/useAIGatewayHealth';
 import { getAIConfig } from '../config';
 
@@ -27,48 +26,41 @@ export const INITIAL_STATE: AIState<never> = {
 
 /**
  * 统一处理 service_unavailable 错误：
- * - 网关在线/降级 + 用户无自配 Key → 服务端 Provider 问题，提示稍后重试
+ * - 网关在线/降级 → 服务端 Provider 问题，提示稍后重试
  * - 网关离线 + 网关 URL 已配置 → 网关服务未启动，提示检查网关
- * - 网关离线/未知 + 网关 URL 未配置 + 用户无自配 Key → 引导用户配置
- * - 用户有自配 Key → 正常网络/服务错误提示
+ * - 网关离线/未知 + 网关 URL 未配置 → 引导用户配置
  */
 export function handleServiceUnavailable(): { error: string; needsConfig: boolean } {
   const gatewayStatus = getCachedGatewayStatus();
   const gatewayReachable = gatewayStatus === 'online' || gatewayStatus === 'degraded';
 
-  if (!hasUserKeys()) {
-    if (gatewayReachable) {
-      // 网关可达但服务不可用 → 服务端 Provider 问题（如 API Key 未配置/过期）
-      return {
-        error: 'AI 服务暂时不可用，可能是服务端模型配置问题，请稍后重试',
-        needsConfig: false,
-      };
-    }
-    // 网关不可达时，区分「URL 已配置但服务未运行」和「完全未配置」
-    const gatewayUrl = getAIConfig().gatewayUrl?.trim();
-    if (gatewayUrl) {
-      // 缓存为空（预检未完成）时不应急于判定“未连接”，给更中性的提示
-      if (gatewayStatus === null) {
-        return {
-          error: 'AI 服务暂时不可用，正在检测网关连接，请稍后重试',
-          needsConfig: false,
-        };
-      }
-      // 网关 URL 已配置但服务不可达 → 提示检查网关服务
-      return {
-        error: 'AI 网关未连接，请检查网关服务是否正在运行',
-        needsConfig: false,
-      };
-    }
-    // 网关 URL 未配置 + 用户无自配 Key → 引导用户配置
+  if (gatewayReachable) {
+    // 网关可达但服务不可用 → 服务端 Provider 问题（如 API Key 未配置/过期）
     return {
-      error: '当前还没有配置 AI 网关地址呢，请前往设置页面配置',
-      needsConfig: true,
+      error: 'AI 服务暂时不可用，可能是服务端模型配置问题，请稍后重试',
+      needsConfig: false,
     };
   }
+  // 网关不可达时，区分「URL 已配置但服务未运行」和「完全未配置」
+  const gatewayUrl = getAIConfig().gatewayUrl?.trim();
+  if (gatewayUrl) {
+    // 缓存为空（预检未完成）时不应急于判定“未连接”，给更中性的提示
+    if (gatewayStatus === null) {
+      return {
+        error: 'AI 服务暂时不可用，正在检测网关连接，请稍后重试',
+        needsConfig: false,
+      };
+    }
+    // 网关 URL 已配置但服务不可达 → 提示检查网关服务
+    return {
+      error: 'AI 网关未连接，请检查网关服务是否正在运行',
+      needsConfig: false,
+    };
+  }
+  // 网关 URL 未配置 → 引导用户配置
   return {
-    error: 'AI 服务暂时不可用，请稍后重试',
-    needsConfig: false,
+    error: '当前还没有配置 AI 网关地址呢，请前往设置页面配置',
+    needsConfig: true,
   };
 }
 

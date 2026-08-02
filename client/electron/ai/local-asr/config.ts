@@ -58,22 +58,26 @@ const DEFAULT_CONFIG: LocalAsrConfig = {
  *
  * streaming: Paraformer 流式中英双语（实时字幕，延迟 < 200ms）
  * offline:   SenseVoice 非流式多语言（课后精修，50ms/段，准确率最高）
+ *
+ * 下载源优先级：
+ *   1. GitHub Releases（tar.bz2 整包，全球可用）
+ *   2. hf-mirror.com（HuggingFace 国内镜像，逐文件下载，无需解压）
  */
 export const ASR_MODELS = {
   streaming: {
     id: 'streaming-paraformer',
     label: 'Paraformer 流式（实时字幕，中英双语）',
     description: '边说边出，延迟 < 200ms，适合课堂实时转录',
-    size: '~220MB',
+    size: '~860MB',
     dirName: 'sherpa-onnx-streaming-paraformer-bilingual-zh-en',
     files: [
       'encoder.onnx',
       'decoder.onnx',
-      'joiner.onnx',
       'tokens.txt',
     ],
     downloadUrl: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-paraformer-bilingual-zh-en.tar.bz2',
-    mirrorUrl: 'https://modelscope.cn/models/zhaochaoqun/sherpa-onnx-asr-models/resolve/main/sherpa-onnx-streaming-paraformer-bilingual-zh-en.tar.bz2',
+    /** hf-mirror.com 国内镜像（逐文件下载，无需解压） */
+    mirrorBaseUrl: 'https://hf-mirror.com/csukuangfj/sherpa-onnx-streaming-paraformer-bilingual-zh-en/resolve/main',
   },
   offline: {
     id: 'offline-sensevoice',
@@ -86,7 +90,8 @@ export const ASR_MODELS = {
       'tokens.txt',
     ],
     downloadUrl: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2',
-    mirrorUrl: 'https://modelscope.cn/models/zhaochaoqun/sherpa-onnx-asr-models/resolve/main/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2',
+    /** hf-mirror.com 国内镜像（逐文件下载，无需解压） */
+    mirrorBaseUrl: 'https://hf-mirror.com/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main',
   },
 } as const;
 

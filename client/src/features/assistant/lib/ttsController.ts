@@ -1,10 +1,15 @@
 /**
- * TTS 队列管理器
+ * TTS 队列管理器 — Edge TTS（微软神经语音）
  *
- * @ai-context: Web Speech API 封装——FIFO 队列、同时只播一条、
+ * @ai-context: 通过 IPC ai:tts:speak 调用主进程 Edge TTS 生成 MP3，
+ * 渲染进程用 HTMLAudioElement 播放。FIFO 队列、同时只播一条、
  * 播放状态回调驱动水母 speaking 态；失败静默降级（不阻塞对话流）。
- * MVP 使用浏览器内置 speechSynthesis，后续可无缝切换云端 TTS。
+ * 替代 Web Speech API（Electron 中 speechSynthesis 无中文语音/不可用）。
+ * 朗读前经 speechNormalizer 规范化：剔除代码块/emoji/URL/Markdown 标记，
+ * 保留正文并用中文标点制造自然停顿（见 speechNormalizer.ts）。
  */
+
+import { normalizeForSpeech } from './speechNormalizer';
 
 type SpeakStateCallback = (speaking: boolean) => void;
 
@@ -13,20 +18,21 @@ class TTSController {
   private speaking = false;
   private onStateChange: SpeakStateCallback | null = null;
   private volume = 0.7;
+  private currentAudio: HTMLAudioElement | null = null;
 
   setVolume(v: number): void {
     this.volume = Math.max(0, Math.min(1, v));
+    if (this.currentAudio) this.currentAudio.volume = this.volume;
   }
 
   setOnStateChange(cb: SpeakStateCallback | null): void {
     this.onStateChange = cb;
   }
 
-  /** 将文本加入朗读队列（FIFO） */
+  /** 将文本加入朗读队列（FIFO）。先经规范化管道清洗为可朗读文本。 */
   speak(text: string): void {
-    if (!('speechSynthesis' in window)) return;
-    // 去除 Markdown 标记，避免朗读出星号井号
-    const clean = text.replace(/[#*_`>[\]()]/g, '').trim();
+    // 规范化：剔除代码块/emoji/URL/Markdown 标记，保留正文（回答与朗读一致）
+    const clean = normalizeForSpeech(text);
     if (!clean) return;
     this.queue.push(clean);
     if (!this.speaking) this.processNext();
@@ -35,8 +41,11 @@ class TTSController {
   /** 立即停止朗读并清空队列 */
   stop(): void {
     this.queue = [];
+    if (this.currentAudio) {
+      this.currentAudio.pause();
+      this.currentAudio = null;
+    }
     if (this.speaking) {
-      window.speechSynthesis.cancel();
       this.speaking = false;
       this.onStateChange?.(false);
     }
@@ -46,7 +55,7 @@ class TTSController {
     return this.speaking;
   }
 
-  private processNext(): void {
+  private async processNext(): Promise<void> {
     const text = this.queue.shift();
     if (!text) {
       this.speaking = false;
@@ -57,26 +66,30 @@ class TTSController {
     this.speaking = true;
     this.onStateChange?.(true);
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'zh-CN';
-    utterance.volume = this.volume;
-    utterance.rate = 1.0;
-
-    // 尝试选择中文女声（优雅降级：找不到则用系统默认）
-    const voices = window.speechSynthesis.getVoices();
-    const zhVoice = voices.find(v => v.lang.startsWith('zh') && v.name.toLowerCase().includes('female'))
-      ?? voices.find(v => v.lang.startsWith('zh'));
-    if (zhVoice) utterance.voice = zhVoice;
-
-    utterance.onend = () => this.processNext();
-    utterance.onerror = () => this.processNext(); // 静默降级，继续下一条
-
     try {
-      window.speechSynthesis.speak(utterance);
+      const api = window.electronAPI;
+      if (!api) throw new Error('electronAPI 不可用');
+
+      // IPC 调用主进程 Edge TTS 生成 MP3，返回 base64 data URL
+      // （渲染进程运行在 localhost 源，无权加载 file:// 本地路径）
+      const result = await api.invoke('ai:tts:speak', { text }) as { ok: boolean; dataUrl: string };
+      if (!result.ok || !result.dataUrl) throw new Error('TTS 返回无效');
+
+      // 用 HTMLAudioElement 播放 data URL
+      await new Promise<void>((resolve, reject) => {
+        const audio = new Audio(result.dataUrl);
+        audio.volume = this.volume;
+        this.currentAudio = audio;
+        audio.onended = () => { this.currentAudio = null; resolve(); };
+        audio.onerror = () => { this.currentAudio = null; reject(new Error('音频播放失败')); };
+        audio.play().catch(reject);
+      });
     } catch {
-      // speechSynthesis 不可用时静默跳过
-      this.processNext();
+      // 静默降级——TTS 失败不阻塞对话流
     }
+
+    // 继续处理队列中的下一条
+    this.processNext();
   }
 }
 

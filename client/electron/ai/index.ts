@@ -12,6 +12,7 @@ import type { AIFeatureDef } from './utils.js';
 import { registerOllamaHandlers, initOllama } from './ollama/index.js';
 import { registerStreamHandler } from './streamHandler.js';
 import { registerChatHandlers } from './handlers/chatHandler.js';
+import { registerTtsHandlers } from './handlers/ttsHandler.js';
 import { registerLocalAsrHandlers } from './local-asr/index.js';
 import { loadLocalAsrConfig } from './local-asr/config.js';
 
@@ -76,7 +77,7 @@ export function registerAIHandlers(): void {
   // 注册 Ollama 本地推理 IPC handler
   registerOllamaHandlers();
 
-  // 注册本地 ASR（whisper.cpp）IPC handler
+  // 注册本地 ASR（sherpa-onnx）IPC handler
   registerLocalAsrHandlers();
 
   // 注册流式输出 IPC handler
@@ -84,6 +85,9 @@ export function registerAIHandlers(): void {
 
   // 注册学伴对话 IPC handler
   registerChatHandlers();
+
+  // 注册 Edge TTS 语音合成 IPC handler
+  registerTtsHandlers();
 
   logger.info('[AI] All AI handlers registered successfully');
 }

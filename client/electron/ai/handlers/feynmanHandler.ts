@@ -31,7 +31,6 @@ function register(): void {
         concept: string;
         explanation: string;
         authToken?: string;
-        userApiKey?: string;
       },
     ) => {
       const startMs = Date.now();
@@ -65,7 +64,6 @@ function register(): void {
           reqBody,
           localHandler,
           args.authToken,
-          args.userApiKey,
           40000,
         );
 
@@ -104,7 +102,6 @@ function register(): void {
         questions: string[];
         answers: string[];
         authToken?: string;
-        userApiKey?: string;
       },
     ) => {
       const startMs = Date.now();
@@ -142,7 +139,6 @@ function register(): void {
           reqBody,
           localHandler,
           args.authToken,
-          args.userApiKey,
           40000,
         );
 

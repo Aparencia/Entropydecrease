@@ -80,12 +80,9 @@ async def generate_cards(request: Request, body: CardGenRequest) -> CardGenRespo
     options_str = str(body.options.model_dump())
     cache_key = hashlib.sha256((body.note + options_str).encode()).hexdigest()
 
-    # 获取用户自带的 API Key（有 Key 时跳过缓存，确保使用用户自己的 Provider）
-    user_api_key = getattr(request.state, "user_api_key", None)
-
     # 检查 Redis AI 响应缓存
     cache = get_cache()
-    if cache._client is not None and not user_api_key:
+    if cache._client is not None:
         cached = await cache.get_ai_cache(cache_key)
         if cached:
             logger.info("闪卡生成缓存命中: user=%s", user_id)

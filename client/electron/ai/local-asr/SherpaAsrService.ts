@@ -43,7 +43,7 @@ interface OfflineStream {
   free(): void;
 }
 
-interface OnlineRecognizer {
+export interface OnlineRecognizer {
   createStream(): OnlineStream;
   decode(stream: OnlineStream): void;
   isReady(stream: OnlineStream): boolean;
@@ -52,7 +52,7 @@ interface OnlineRecognizer {
   reset(stream: OnlineStream): void;
 }
 
-interface OnlineStream {
+export interface OnlineStream {
   acceptWaveform(sampleRate: number, samples: Float32Array): void;
   inputFinished(): void;
   free(): void;
@@ -119,7 +119,7 @@ function getOfflineRecognizer(): OfflineRecognizer | null {
 }
 
 /** 获取/创建 Paraformer 流式识别器（单例） */
-function getOnlineRecognizer(): OnlineRecognizer | null {
+export function getOnlineRecognizer(): OnlineRecognizer | null {
   if (_onlineRecognizer) return _onlineRecognizer;
 
   const sherpa = loadSherpa();
@@ -169,6 +169,17 @@ export async function checkLocalAsrAvailable(): Promise<boolean> {
 
   const config = getLocalAsrConfig();
   return isModelReady(config.engine);
+}
+
+/**
+ * 真流式 ASR 是否可用（同步）：sherpa 已加载 + 本地 ASR 启用 + streaming（Paraformer）模型就绪。
+ * 供课堂智能采集决定是否走真流式链路（否则回退按段转写）。
+ */
+export function isStreamingAsrAvailable(): boolean {
+  const sherpa = loadSherpa();
+  if (!sherpa) return false;
+  if (!getLocalAsrConfig().enabled) return false;
+  return isModelReady('streaming');
 }
 
 /** 重置可用性缓存（模型下载完成后调用） */

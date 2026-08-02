@@ -25,7 +25,6 @@ from config.providers import (  # noqa: F401
     AI_PROVIDERS,
     MODEL_ROUTING,
     get_provider_for_feature,
-    get_provider_for_request,
 )
 from config.fallback import (  # noqa: F401
     PROVIDER_FALLBACK_CHAIN,
@@ -48,7 +47,6 @@ __all__ = [
     "AI_PROVIDERS",
     "MODEL_ROUTING",
     "get_provider_for_feature",
-    "get_provider_for_request",
     "PROVIDER_FALLBACK_CHAIN",
     "_resolve_model_name",
     "call_with_fallback",

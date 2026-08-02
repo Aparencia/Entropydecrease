@@ -51,11 +51,9 @@ export function registerStreamHandler(): void {
         payload: Record<string, unknown>;
         /** 认证 token */
         authToken?: string;
-        /** 用户 API Key */
-        userApiKey?: string;
       },
     ) => {
-      const { requestId, method, payload, authToken, userApiKey } = args;
+      const { requestId, method, payload, authToken } = args;
       const sender = event.sender;
 
       logger.info(`[AI] [stream] Start: requestId=${requestId}, method=${method}`);
@@ -83,7 +81,6 @@ export function registerStreamHandler(): void {
           method,
           payload,
           authToken,
-          userApiKey,
         );
 
         for await (const chunk of stream) {

@@ -4,7 +4,8 @@
  *
  * @ai-context: 左栏运行态组件，采集开始后替换整个配置区（双阶段左栏设计）。
  * 组件挂载即开始计时（页面仅在运行态渲染本组件，卸载自动归零），status
- * 为 capturing 时每秒累加，暂停时停表。继续采集复用 handleStart。
+ * 为 capturing 时每秒累加，暂停时停表。暂停/继续均由 handlePause 切换——
+ * 继续绝不能走 handleStart，否则会重置会话、丢失已采集数据。
  * @ai-context: Left-rail running-stage component that replaces the config area
  * while a session is active. Timer accumulates only while status==='capturing'.
  */

@@ -40,7 +40,6 @@ function register(): void {
         topic: string;
         history?: BackendHistoryItem[] | null;
         authToken?: string;
-        userApiKey?: string;
       },
     ) => {
       const startMs = Date.now();
@@ -79,7 +78,6 @@ function register(): void {
           reqBody,
           localHandler,
           args.authToken,
-          args.userApiKey,
           60000,
         );
 
@@ -121,7 +119,6 @@ function register(): void {
         answer: string;
         history?: BackendHistoryItem[];
         authToken?: string;
-        userApiKey?: string;
       },
     ) => {
       const startMs = Date.now();
@@ -160,7 +157,6 @@ function register(): void {
           reqBody,
           localHandler,
           args.authToken,
-          args.userApiKey,
           60000,
         );
 
@@ -199,7 +195,6 @@ function register(): void {
         dialogueSummary: string;
         history?: BackendHistoryItem[];
         authToken?: string;
-        userApiKey?: string;
       },
     ) => {
       const startMs = Date.now();
@@ -241,7 +236,6 @@ function register(): void {
           reqBody,
           localHandler,
           args.authToken,
-          args.userApiKey,
           60000,
         );
 

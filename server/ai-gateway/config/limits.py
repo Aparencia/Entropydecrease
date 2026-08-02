@@ -73,4 +73,6 @@ RATE_LIMITS: dict[str, int] = {
     "multimodal_analyze": 5,
     # Path C: 视频分析（单次成本最高，严格限制）
     "video_analyze": 3,
+    # 学伴对话（流式 SSE，对话轮次较多，适度放宽）
+    "chat": 20,
 }

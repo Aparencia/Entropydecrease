@@ -75,7 +75,7 @@ export function AsrModelPrompt() {
     setDownloading(engine);
     setProgress(0);
     try {
-      await window.electronAPI.invoke('local_asr_download_model', { engine, useMirror: true });
+      await window.electronAPI.invoke('local_asr_download_model', { engine });
     } catch (err) {
       console.warn('[AsrModelPrompt] 下载失败:', err);
       setDownloading(null);

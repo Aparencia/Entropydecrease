@@ -2,7 +2,7 @@
  * Electron IPC — 内容加工类 AI 功能（摘要/闪卡/打标/优化/分拣）
  *
  * @ai-context: 从 ElectronAIPlugin 拆出的按域函数集。每个函数负责
- * payload 组装（含 authToken/userApiKey 注入）与响应字段映射，
+ * payload 组装（含 authToken 注入）与响应字段映射，
  * IPC 通道名与主进程 ai/handlers 一一对应，改名需两端同步。
  * @ai-context: 错误统一经 classifyRawError(error,'ipc') 归类为 AIError。
  */
@@ -12,7 +12,6 @@ import type {
   TagContentResult, OptimizeCardResult, SortResult,
 } from './types';
 import { classifyRawError } from './errorClassifier';
-import { getActiveUserKey } from './apiKeyManager';
 
 // ── invoke('ai_summarize') ──────────────────────────────────
 export async function ipcSummarizeNote(
@@ -25,7 +24,6 @@ export async function ipcSummarizeNote(
       style: options?.style,
       language: options?.language,
       authToken,
-      userApiKey: getActiveUserKey(),
     }) as {
       summary: string; model: string; tokensUsed: number; latencyMs: number; requestId?: string;
     };
@@ -53,7 +51,6 @@ export async function ipcGenerateFlashcards(
       difficulty: options?.difficulty,
       cardType: options?.cardType,
       authToken,
-      userApiKey: getActiveUserKey(),
     }) as {
       cards: Array<{ front: string; back: string; type: string; confidence: number }>;
       totalExtracted: number; model: string; tokensUsed: number; requestId?: string;
@@ -83,7 +80,6 @@ export async function ipcTagContent(
     const result = await window.electronAPI!.invoke('ai_tag_content', {
       content,
       authToken,
-      userApiKey: getActiveUserKey(),
     }) as {
       contentNature: string; cognitiveDepth: string; subject: string;
       model: string; tokensUsed: number; latencyMs: number; requestId?: string;
@@ -111,7 +107,6 @@ export async function ipcOptimizeCard(
       front,
       back,
       authToken,
-      userApiKey: getActiveUserKey(),
     }) as {
       suggestedFront: string; suggestedBack: string; improvements: string[];
       model: string; tokensUsed: number; latencyMs: number; requestId?: string;
@@ -138,7 +133,6 @@ export async function ipcSortInspiration(
       content,
       existingTags,
       authToken,
-      userApiKey: getActiveUserKey(),
     }) as {
       suggestions: Array<{ category: string; reason: string; confidence: number; suggestedAction?: string }>;
       model: string; tokensUsed: number; latencyMs: number; requestId?: string;

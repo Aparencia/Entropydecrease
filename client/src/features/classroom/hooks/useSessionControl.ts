@@ -63,14 +63,17 @@ interface UseSessionControlOptions {
   onAnalyzeFull: () => void;
   onMergePartials: (partials: string[], durationMs: number, keyframeCount: number) => Promise<void>;
   onNotify: (type: 'warning', message: string) => void;
-  /** 音频源定下后回报（供诊断文案分支与 UI 展示） */
+  /** 音频源定下后回传（供诊断文案分支与 UI 展示） */
   onAudioSourceResolved?: (kind: AudioSourceKind | null) => void;
+  /** 设置真流式 ASR 激活标志（启动成功置 true，停止置 false） */
+  setStreamingAsrActive: (active: boolean) => void;
 }
 
 export function useSessionControl({
   captureManager, selectedWindow, status, setStatus, mode, capturePath, config, courseMeta,
   frameRestartRef, audioCleanupRef, session,
   onAnalyzeVideo, onAnalyzeFull, onMergePartials, onNotify, onAudioSourceResolved,
+  setStreamingAsrActive,
 }: UseSessionControlOptions) {
   /** 预检 AI 网关连通性（不可用仅提示，不阻断采集） */
   const probeGateway = useCallback(async () => {
@@ -142,11 +145,22 @@ export function useSessionControl({
 
       if (audioEnabled) {
         try {
+          // 检测真流式是否可用（仅 smart 路径）：本地 Paraformer 流式模型就绪时
+          // 用更小的采集粒度（400ms）并启用流式 ASR，实现边说边出；否则按段转写
+          let useStreaming = false;
+          if (capturePath === 'smart') {
+            try {
+              const avail = await window.electronAPI.invoke('local_asr_stream_available') as { available?: boolean };
+              useStreaming = !!avail?.available;
+            } catch {
+              useStreaming = false;
+            }
+          }
           // 选源由主进程的 selectAudioSource 决定（ADR-001）：锁定具体窗口时
           // 优先进程环回（隔离其他应用杂音），否则用端点环回（不漏采）；
           // 主进程读不到 localStorage，故偏好由渲染进程传入
           const audioResult = await window.electronAPI.invoke('audio_capture_start', {
-            chunkDurationMs: 5000, sampleRate: 16000, channels: 1,
+            chunkDurationMs: useStreaming ? 400 : 5000, sampleRate: 16000, channels: 1,
             sourceId: selectedWindow.id,
             preference: getAudioSourcePreference(),
           }) as IPCAudioStartResult;
@@ -158,6 +172,20 @@ export function useSessionControl({
               `（${audioResult.sourceReason ?? '-'}）`,
             );
             onAudioSourceResolved?.(audioResult.sourceKind ?? null);
+            // 音频采集启动成功且流式可用 → 启动真流式 ASR
+            if (useStreaming) {
+              try {
+                const streamResult = await window.electronAPI.invoke('local_asr_stream_start', { sampleRate: 16000 }) as { success?: boolean; error?: string };
+                if (streamResult?.success) {
+                  setStreamingAsrActive(true);
+                  console.info('[useClassroomCapture] 真流式 ASR 已启动（Paraformer）');
+                } else {
+                  console.warn('[useClassroomCapture] 真流式 ASR 启动失败，回退按段转写:', streamResult?.error);
+                }
+              } catch (streamErr) {
+                console.warn('[useClassroomCapture] 真流式 ASR 启动异常，回退按段转写:', streamErr);
+              }
+            }
           }
         } catch (audioErr) {
           console.warn('[useClassroomCapture] Audio unavailable:', audioErr);
@@ -167,7 +195,7 @@ export function useSessionControl({
       setStatus('error');
       console.error('[useClassroomCapture] Start failed:', err);
     }
-  }, [selectedWindow, setStatus, session, probeGateway, capturePath, captureManager, config, mode, courseMeta, onAudioSourceResolved]);
+  }, [selectedWindow, setStatus, session, probeGateway, capturePath, captureManager, config, mode, courseMeta, onAudioSourceResolved, setStreamingAsrActive]);
 
   const handlePause = useCallback(() => {
     if (status === 'capturing') {
@@ -237,6 +265,11 @@ export function useSessionControl({
 
       await window.electronAPI.invoke('screen_capture_stop');
       await window.electronAPI.invoke('audio_capture_stop');
+      // 停止真流式 ASR（若激活）；未激活时调用也无副作用
+      try {
+        await window.electronAPI.invoke('local_asr_stream_stop');
+      } catch { /* 静默 */ }
+      setStreamingAsrActive(false);
       await audioCleanupRef.current?.();
       audioCleanupRef.current = null;
       await captureManager.stopSession();
@@ -250,7 +283,7 @@ export function useSessionControl({
       setStatus('error');
       console.error('[useClassroomCapture] Stop failed:', err);
     }
-  }, [capturePath, captureManager, setStatus, frameRestartRef, audioCleanupRef, session, onAnalyzeVideo, finalizeSmartSession]);
+  }, [capturePath, captureManager, setStatus, frameRestartRef, audioCleanupRef, session, onAnalyzeVideo, finalizeSmartSession, setStreamingAsrActive]);
 
   return { handleStart, handlePause, handleStop };
 }

@@ -99,7 +99,7 @@ export default function ClassroomPage() {
             mode={capture.mode}
             audioHealthy={capture.audioHealth.isHealthy}
             onPause={capture.handlePause}
-            onResume={capture.handleStart}
+            onResume={capture.handlePause}
             onStop={capture.handleStop}
             onBookmark={capture.handleBookmark}
           />
@@ -223,6 +223,7 @@ export default function ClassroomPage() {
                 {/* 实时转录上屏 */}
                 <LiveTranscript
                   transcripts={capture.liveTranscripts}
+                  partialText={capture.partialText}
                   isActive={capture.status === 'capturing' && (capture.mode === 'audio' || capture.mode === 'mixed')}
                   className="mt-auto"
                 />

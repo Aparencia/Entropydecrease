@@ -9,7 +9,6 @@
  * 由主进程 streamHandler 原样转发，新增流式功能需网关+主进程+此处三端对齐。
  */
 import { AIError } from './ai-errors';
-import { getActiveUserKey } from './apiKeyManager';
 
 /**
  * 通过 IPC 流式推送获取 AI 响应
@@ -25,7 +24,7 @@ export async function* streamIpc(
   if (!api) throw new AIError('Electron API 不可用', 'service_unavailable', false);
 
   // 启动流式请求
-  api.invoke('ai:stream:start', { requestId, method, payload, authToken, userApiKey: getActiveUserKey() });
+  api.invoke('ai:stream:start', { requestId, method, payload, authToken });
 
   // 等待流式结果的 Promise-based 桥接
   const queue: Array<{ type: 'chunk'; chunk: string } | { type: 'end' } | { type: 'error'; error: string }> = [];

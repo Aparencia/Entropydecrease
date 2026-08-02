@@ -255,13 +255,6 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
                 content={"detail": e.message},
             )
 
-        # 提取用户自带的 API Key（X-User-API-Key），用于按用户 Key 路由 Provider
-        user_api_key = request.headers.get("X-User-API-Key", "").strip()
-        if user_api_key and len(user_api_key) > 8 and " " not in user_api_key:
-            request.state.user_api_key = user_api_key
-        else:
-            request.state.user_api_key = None
-
         return await call_next(request)
 
     async def _verify_token(self, request: Request) -> str:

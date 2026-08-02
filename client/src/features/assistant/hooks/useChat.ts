@@ -13,7 +13,8 @@ import { useAssistantStore } from '../store/useAssistantStore';
 import { SESSION_EXPIRE_MS, HISTORY_PAGE_SIZE, CONTEXT_WINDOW_ROUNDS } from '../constants';
 import type { ChatMessage } from '../types';
 import { supabase } from '@/lib/auth/supabaseClient';
-import { getActiveUserKey } from '@/lib/ai/apiKeyManager';
+import { ttsController } from '../lib/ttsController';
+import { SpeechSentenceStreamer } from '../lib/speechStreamer';
 
 /** 错误标记——MessageBubble 据此渲染重试/关闭按钮 */
 export const ERROR_MARKER = '__ASSISTANT_ERROR__';
@@ -108,10 +109,21 @@ export function useChat() {
 
     const requestId = crypto.randomUUID();
 
+    // 流式 TTS：文本边到边分句，第一句完整即送合成（不等全文），
+    // 配合 ttsController FIFO 队列形成“播放第1句时合成第2句”的流水线。
+    const audioPrefs = useAssistantStore.getState().preferences.audio;
+    const streamer = (audioPrefs.enabled && audioPrefs.ttsEnabled) ? new SpeechSentenceStreamer() : null;
+
     // preload api.on 返回取消订阅函数（事件对象已被剥离，args[0] 即数据）
     const unsubChunk = api.on('ai:stream:chunk', (...args: unknown[]) => {
       const data = args[0] as { requestId: string; chunk: string };
-      if (data.requestId === requestId) appendToLastMessage(data.chunk);
+      if (data.requestId === requestId) {
+        appendToLastMessage(data.chunk);
+        // 新完成的句子立即送 TTS（代码块内的内容被自动跳过）
+        if (streamer) {
+          for (const sentence of streamer.push(data.chunk)) ttsController.speak(sentence);
+        }
+      }
     });
     const unsubEnd = api.on('ai:stream:end', (...args: unknown[]) => {
       const data = args[0] as { requestId: string };
@@ -129,7 +141,6 @@ export function useChat() {
       // 鉴权：从 Supabase session 获取 token（同其他 AI 功能模式）
       const { data: { session } } = await supabase.auth.getSession();
       const authToken = session?.access_token ?? undefined;
-      const userApiKey = getActiveUserKey();
 
       // chatHandler 在整个流结束后才 return（invoke 阻塞至流完成），
       // 期间 chunk/end/error 事件由上方监听器处理。
@@ -140,8 +151,12 @@ export function useChat() {
         history,
         scene: 'study',
         authToken,
-        userApiKey,
       });
+
+      // TTS：流结束后冲刷末尾残余句子（未闭合代码块内的内容被丢弃）
+      if (streamer) {
+        for (const sentence of streamer.flush()) ttsController.speak(sentence);
+      }
     } catch {
       appendToLastMessage(ERROR_MARKER);
     } finally {

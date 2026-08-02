@@ -29,6 +29,7 @@ import { registerCaptureHandlers, disposeCaptureHandlers } from './captureHandle
 import { mcpManager } from './mcpManager.js';
 import { initialize, close as closeDb } from './db/sqliteService.js';
 import { initializeSchema } from './db/schema.js';
+import { initializeFTS, rebuildIndex, collectIndexableData } from './db/fts5Search.js';
 import { resolveDbPath } from './db/storageConfig.js';
 import { registerMigrationHandlers } from './db/migration.js';
 import { loadEnvironment } from './envLoader.js';
@@ -141,7 +142,14 @@ if (!gotTheLock) {
     const defaultDbPath = await resolveDbPath();
     const sqliteDb = initialize(defaultDbPath);
     initializeSchema(sqliteDb);
-    logger.info('[DB] SQLite initialized and schema ready');
+    // 初始化 FTS5 全文搜索虚拟表（幂等），使 db:search handler 可使用 BM25 排序搜索
+    // 必须在 initializeSchema 之后，因为 FTS5 依赖基础表已创建
+    initializeFTS(sqliteDb);
+    // 启动时构建存量索引——从 notes/flashcards/feynman_notes 等表读取已有数据，
+    // 填充 FTS5 虚拟表，使搜索功能立即可用（而非等待用户触发增量更新）
+    const indexData = collectIndexableData(sqliteDb);
+    rebuildIndex(indexData);
+    logger.info(`[DB] SQLite initialized and schema ready (FTS5 enabled, ${indexData.reduce((sum, t) => sum + t.rows.length, 0)} documents indexed)`);
 
     // v1.0.0: 注册数据迁移 IPC handlers（IndexedDB → SQLite）
     registerMigrationHandlers(safeHandle);

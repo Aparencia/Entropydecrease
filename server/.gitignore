@@ -20,3 +20,6 @@ tmp/
 # Docker volumes 数据
 postgres_data/
 redis_data/
+
+# 数据库备份文件（体积大，禁止提交）
+backups/

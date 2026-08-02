@@ -36,6 +36,7 @@ const ALLOWED_CHANNELS = [
   'ai:chat:history',
   'ai:chat:sessions',
   'ai:chat:new-session',
+  'ai:tts:speak',
   'screen_list_windows',
   'screen_watch_windows_start',
   'screen_watch_windows_stop',
@@ -106,6 +107,10 @@ const ALLOWED_CHANNELS = [
   'local_asr_get_models',
   'local_asr_download_model',
   'local_asr_delete_model',
+  // 本地 ASR 真流式（Paraformer 在线）IPC channel
+  'local_asr_stream_available',
+  'local_asr_stream_start',
+  'local_asr_stream_stop',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */
@@ -132,6 +137,9 @@ const ALLOWED_EVENT_CHANNELS = [
   'ai:stream:error',
   // 本地 ASR 模型下载进度推送
   'local_asr_download_progress',
+  // 本地 ASR 真流式转写结果推送（partial 实时 / final 断句）
+  'asr_stream_partial',
+  'asr_stream_final',
 ] as const;
 
 /** 允许渲染进程单向发送的 channel 白名单（渲染进程 → 主进程，fire-and-forget） */

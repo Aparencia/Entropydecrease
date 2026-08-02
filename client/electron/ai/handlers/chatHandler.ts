@@ -29,10 +29,9 @@ export function registerChatHandlers(): void {
         history: Array<{ role: string; content: string }>;
         scene: string;
         authToken?: string;
-        userApiKey?: string;
       },
     ) => {
-      const { requestId, sessionId, message, history, scene, authToken, userApiKey } = args;
+      const { requestId, sessionId, message, history, scene, authToken } = args;
       const sender = event.sender;
       const startMs = Date.now();
 
@@ -70,7 +69,7 @@ export function registerChatHandlers(): void {
       }
 
       try {
-        const stream = postJsonStream('/api/v1/ai/chat/stream', payload, authToken, userApiKey);
+        const stream = postJsonStream('/api/v1/ai/chat/stream', payload, authToken);
 
         for await (const chunk of stream) {
           fullResponse += chunk;

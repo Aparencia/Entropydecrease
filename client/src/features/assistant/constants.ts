@@ -31,6 +31,21 @@ export const CREATURE_SIZE_IDLE = 64;
 export const CREATURE_SIZE_PANEL = 48;
 export const PANEL_WIDTH = 380;
 
+// ── 水母漫游 ──────────────────────────────────────────────────
+
+/** 漫游目标点选取间隔（ms）：每 10-18s 随机 */
+export const WANDER_INTERVAL_MIN_MS = 10000;
+export const WANDER_INTERVAL_MAX_MS = 18000;
+/** 漫游移动时长（ms） */
+export const WANDER_DURATION_MIN_MS = 6000;
+export const WANDER_DURATION_MAX_MS = 10000;
+/** 拖拽后恢复漫游的延迟（ms） */
+export const WANDER_RESUME_DELAY_MS = 5000;
+/** 漫游活动区域（视口百分比范围） */
+export const WANDER_BOUNDS = { xMin: 0.05, xMax: 0.85, yMin: 0.15, yMax: 0.8 };
+/** 水母位置持久化键 */
+export const CREATURE_POS_STORAGE_KEY = 'assistant_creature_pos';
+
 // ── 默认偏好 ──────────────────────────────────────────────────
 
 export const DEFAULT_PREFERENCES: AssistantPreferences = {

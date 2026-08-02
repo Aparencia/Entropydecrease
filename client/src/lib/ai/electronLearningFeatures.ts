@@ -13,7 +13,6 @@ import type {
   AnchorPoint, PredictionPrompt, RescueContext, ResourceLink,
 } from './types';
 import { classifyRawError } from './errorClassifier';
-import { getActiveUserKey } from './apiKeyManager';
 
 // ── invoke('ai_evaluate') ───────────────────────────────────
 export async function ipcEvaluateExplanation(
@@ -24,7 +23,6 @@ export async function ipcEvaluateExplanation(
       concept,
       explanation,
       authToken,
-      userApiKey: getActiveUserKey(),
     }) as {
       overallScore: number;
       dimensions: Array<{ name: string; score: number; feedback: string }>;
@@ -69,7 +67,6 @@ export async function ipcRecommendDuration(
     const result = await window.electronAPI!.invoke('ai_recommend_duration', {
       history,
       authToken,
-      userApiKey: getActiveUserKey(),
     }) as {
       recommendedMinutes: number; breakMinutes: number; reason: string;
       source: string; isLocalFallback: boolean;
@@ -100,7 +97,6 @@ export async function ipcGenerateFeynmanQuestions(
       concept,
       explanation,
       authToken,
-      userApiKey: getActiveUserKey(),
     }) as {
       questions: Array<{ question: string; focus: string }>;
       model: string; tokensUsed: number; latencyMs: number; requestId?: string;
@@ -129,7 +125,6 @@ export async function ipcEvaluateFeynmanAnswers(
       questions,
       answers,
       authToken,
-      userApiKey: getActiveUserKey(),
     }) as {
       understandingScore: number; feedback: string;
       strongPoints: string[]; weakPoints: string[];
@@ -158,7 +153,6 @@ export async function ipcGenerateAnchorPoint(
       content,
       title: '',
       authToken,
-      userApiKey: getActiveUserKey(),
     }) as {
       anchorPoints: Array<{ concept: string; association: string; memoryTechnique: string; importance: number }>;
       status: string; model: string; tokensUsed: number; latencyMs: number;
@@ -185,7 +179,6 @@ export async function ipcPredictQuestion(
     const result = await window.electronAPI!.invoke('ai_predict', {
       content,
       authToken,
-      userApiKey: getActiveUserKey(),
     }) as {
       predictions: Array<{ question: string; type: string; reason: string; curiosityScore: number }>;
       status: string; model: string; tokensUsed: number; latencyMs: number;
@@ -214,7 +207,6 @@ export async function ipcRescue(
       stuckDescription: context.stuckPoint || context.topic,
       attemptedMethods: context.attempts?.join('; ') || '',
       authToken,
-      userApiKey: getActiveUserKey(),
     }) as {
       rescueLevels: Array<{ level: number; label: string; suggestion: string; hintQuestion: string }>;
       encouragement: string; status: string;

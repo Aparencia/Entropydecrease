@@ -27,7 +27,6 @@ function register(): void {
         front: string;
         back: string;
         authToken?: string;
-        userApiKey?: string;
       },
     ) => {
       const startMs = Date.now();
@@ -65,7 +64,6 @@ function register(): void {
           reqBody,
           localHandler,
           args.authToken,
-          args.userApiKey,
           60000,
         );
 

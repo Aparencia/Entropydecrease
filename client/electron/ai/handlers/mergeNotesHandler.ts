@@ -30,7 +30,6 @@ function register(): void {
         duration?: number;   // 秒
         language?: string;
         authToken?: string;
-        userApiKey?: string;
       },
     ) => {
       const startMs = Date.now();
@@ -105,7 +104,6 @@ function register(): void {
           reqBody,
           localHandler,
           args.authToken,
-          args.userApiKey,
           30000, // 纯文本合并，30s 超时足够
         );
 

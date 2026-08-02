@@ -4,14 +4,12 @@
 基于 Redis 的滑动窗口频率限制：
 - 按 user_id + feature 计数
 - 双层计数器：全局每日上限 + 功能级上限
-- 用户 Key 独立限流：携带 X-User-API-Key 时对该 Key 单独限速
 - Redis 不可用时放行（降级到无限制）
 - 超限返回 HTTP 429
 
 @ai-context: 频率限制中间件：按用户+功能维度基于 Redis 计数执行每日上限（RATE_LIMITS），超限返回 429。
 """
 
-import hashlib
 import logging
 from datetime import datetime
 
@@ -24,22 +22,51 @@ from config import RATE_LIMITS
 
 logger = logging.getLogger(__name__)
 
-# 用户 Key 独立限流参数
-USER_KEY_RATE_LIMIT_PER_MINUTE = 30  # 每个用户 Key 每分钟最多请求数
-USER_KEY_RATE_WINDOW_SECONDS = 60    # 限流窗口（秒）
-
-# API 路径到功能名称的映射
+# ============================================================
+# API 路径 → 功能名称映射
+# ============================================================
+# 中间件通过精确匹配请求路径确定功能名称，再查询 RATE_LIMITS 执行配额检查。
+# 新增路由时必须在此注册，否则请求将跳过频率限制（不受配额保护）。
+# 注意：通配路径（如 /{feature}/stream）无法精确匹配，需在路由层自行限流。
 PATH_TO_FEATURE: dict[str, str] = {
-    "/api/v1/ai/summarize": "summarize",
-    "/api/v1/ai/generate-cards": "generate_cards",
-    "/api/v1/ai/evaluate-explanation": "evaluate",
-    "/api/v1/ai/recommend-duration": "recommend",
-    "/api/v1/ai/vision": "vision_extract",
-    "/api/v1/asr/transcribe": "transcribe",
-    "/api/v1/ai/tag-content": "tag_content",
-    "/api/v1/ai/optimize-card": "optimize_card",
-    "/api/v1/ai/feynman-question": "feynman_question",
-    "/api/v1/ai/feynman-evaluate-answers": "feynman_evaluate",
+    # ---- 早期核心路由 ----
+    "/api/v1/ai/summarize": "summarize",               # 笔记摘要
+    "/api/v1/ai/generate-cards": "generate_cards",     # 闪卡生成
+    "/api/v1/ai/evaluate-explanation": "evaluate",     # 费曼评估
+    "/api/v1/ai/recommend-duration": "recommend",      # 番茄钟时长推荐
+    "/api/v1/vision/extract": "vision_extract",         # 视觉内容提取（修正为实际路由前缀 /api/v1/vision，原路径 /api/v1/ai/vision 会导致限流失效）
+    "/api/v1/asr/transcribe": "transcribe",            # 语音转文字（段级高频，豁免全局总量）
+    "/api/v1/ai/tag-content": "tag_content",           # 内容标签
+    "/api/v1/ai/optimize-card": "optimize_card",       # 闪卡优化
+    "/api/v1/ai/feynman-question": "feynman_question", # 费曼反问
+    "/api/v1/ai/feynman-evaluate-answers": "feynman_evaluate",  # 费曼回答评估
+    "/api/v1/ai/sort-inspiration": "sort_inspiration", # 灵感内容智能分拣
+
+    # ---- v1.0.0 新增路由（learning.py） ----
+    "/api/v1/ai/anchor-point": "anchor_point",         # 记忆锚点生成
+    "/api/v1/ai/socratic": "socratic",                 # 苏格拉底式追问（单轮）
+    "/api/v1/ai/predict": "predict",                   # 预测驱动学习
+    "/api/v1/ai/rescue": "rescue",                     # 卡壳三级救援
+
+    # ---- v1.1.0 新增路由 ----
+    "/api/v1/ai/inspiration-draft": "inspiration_draft",  # AI 草稿生成
+    "/api/v1/ai/ritual-recall": "ritual_recall",          # 仪式回顾小问（v0.26.0 B1.2）
+
+    # ---- FEAT-022: 苏格拉底式学习（socratic.py，prefix=/api/v1/ai/socratic） ----
+    "/api/v1/ai/socratic/brainstorm": "socratic_brainstorm",  # 苏格拉底头脑风暴
+    "/api/v1/ai/socratic/evaluate": "socratic_evaluate",      # 苏格拉底四维度评估
+    "/api/v1/ai/socratic/deepening": "socratic_deepening",    # 苏格拉底深化角度
+
+    # ---- Path B: 多模态课堂分析（multimodal.py + course_detect.py） ----
+    "/api/v1/multimodal/analyze-session": "multimodal_analyze",  # 多图联合课堂分析
+    "/api/v1/multimodal/merge-notes": "summarize",               # 合并片段笔记（复用 summarize 配额）
+    "/api/v1/multimodal/detect-course": "multimodal_analyze",    # AI 课程识别（复用 multimodal_analyze 配额）
+
+    # ---- 学伴对话（chat.py） ----
+    "/api/v1/ai/chat/stream": "chat",                  # 学伴对话流式端点
+
+    # 注意：/{feature}/stream（streaming.py）为通配路径，无法精确匹配，
+    # 其限流由流式路由内部通过 feature 参数自行处理。
 }
 
 # 豁免全局每日总量的功能：段级高频调用（如课堂实时转录一节课数百段），
@@ -58,19 +85,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # 获取 user_id（由 JWT 中间件注入）
         user_id = getattr(request.state, "user_id", "anonymous")
-
-        # ---- 用户 Key 独立限流 ----
-        user_api_key = getattr(request.state, "user_api_key", None)
-        if user_api_key:
-            is_allowed, detail = await self._check_user_key_rate_limit(user_api_key, feature)
-            if not is_allowed:
-                return JSONResponse(
-                    status_code=429,
-                    content={
-                        "detail": detail,
-                        "feature": feature,
-                    },
-                )
 
         # 检查常规频率限制（预检查模式，仅读取计数）
         is_allowed, detail = await self._check_rate_limit(user_id, feature)
@@ -91,53 +105,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             await self._increment_rate_limit(user_id, feature)
 
         return response
-
-    async def _check_user_key_rate_limit(
-        self, user_api_key: str, feature: str
-    ) -> tuple[bool, str]:
-        """
-        用户 Key 独立限流检查。
-
-        对携带 X-User-API-Key 的请求实施独立限流策略，
-        使用 Key 前 16 字符的 SHA256 哈希作为 Redis key，防止滥用。
-
-        Args:
-            user_api_key: 用户自带的 API Key
-            feature: 功能名称
-
-        Returns:
-            tuple: (是否允许, 拒绝原因)
-        """
-        cache = get_cache()
-        if not cache._client:
-            # Redis 不可用，降级放行
-            return True, ""
-
-        # 用 Key 前 16 字符的哈希作为限流标识（不暴露完整 Key）
-        key_hash = hashlib.sha256(user_api_key[:16].encode()).hexdigest()[:12]
-        rate_key = f"rate_limit:userkey:{key_hash}:{feature}"
-
-        try:
-            count = await cache.increment(rate_key, expire=USER_KEY_RATE_WINDOW_SECONDS)
-        except Exception as exc:
-            logger.warning("用户 Key 限流计数失败: %s", exc)
-            return True, ""  # Redis 异常，降级放行
-
-        if count > USER_KEY_RATE_LIMIT_PER_MINUTE:
-            logger.warning(
-                "用户 Key 限流触发: key_hash=%s, feature=%s, count=%d/%d",
-                key_hash, feature, count, USER_KEY_RATE_LIMIT_PER_MINUTE,
-            )
-            return False, (
-                "您的 API Key 请求过于频繁，请稍后再试"
-                f"（每分钟最多 {USER_KEY_RATE_LIMIT_PER_MINUTE} 次）"
-            )
-
-        logger.debug(
-            "用户 Key 限流通过: key_hash=%s, feature=%s, count=%d/%d",
-            key_hash, feature, count, USER_KEY_RATE_LIMIT_PER_MINUTE,
-        )
-        return True, ""
 
     async def _check_rate_limit(
         self, user_id: str, feature: str

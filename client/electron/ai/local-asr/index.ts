@@ -11,7 +11,7 @@
  * 渲染进程 asrTranscriber.ts 无需任何改动即可切换引擎。
  */
 
-import { ipcMain } from 'electron';
+import { ipcMain, BrowserWindow } from 'electron';
 import { logger } from '../../logger.js';
 import {
   getLocalAsrConfig,
@@ -24,7 +24,12 @@ import {
 import {
   transcribeLocal,
   checkLocalAsrAvailable,
+  isStreamingAsrAvailable,
 } from './SherpaAsrService.js';
+import {
+  startStreamingAsr,
+  stopStreamingAsr,
+} from './streamingAsr.js';
 import {
   downloadModel,
   deleteModel,
@@ -75,6 +80,30 @@ export function registerLocalAsrHandlers(): void {
     };
   });
 
+  // ── 真流式 ASR（Paraformer 在线，课堂 smart 采集实时转录） ──
+  // 渲染进程据此决定是否走真流式链路（否则回退按段转写）
+  ipcMain.handle('local_asr_stream_available', () => {
+    return { available: isStreamingAsrAvailable() };
+  });
+
+  // 启动真流式：创建在线流，后续音频块经 mediaCaptureHandlers 喂入，
+  // partial/final 结果经 asr_stream_partial / asr_stream_final 事件推回渲染进程
+  ipcMain.handle(
+    'local_asr_stream_start',
+    async (event, args: { sampleRate?: number }) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win) {
+        return { success: false, error: 'No valid window' };
+      }
+      return startStreamingAsr(win, args?.sampleRate ?? 16000);
+    },
+  );
+
+  ipcMain.handle('local_asr_stream_stop', async () => {
+    stopStreamingAsr();
+    return { success: true };
+  });
+
   // ── 模型管理 ──
   ipcMain.handle('local_asr_get_models', () => {
     return {
@@ -85,9 +114,9 @@ export function registerLocalAsrHandlers(): void {
 
   ipcMain.handle(
     'local_asr_download_model',
-    async (_event, args: { engine: AsrEngine; useMirror?: boolean }) => {
+    async (_event, args: { engine: AsrEngine }) => {
       logger.info(`[LocalASR] IPC download request: engine=${args.engine}`);
-      const modelPath = await downloadModel(args.engine, args.useMirror ?? true);
+      const modelPath = await downloadModel(args.engine);
       return { success: true, modelPath };
     },
   );

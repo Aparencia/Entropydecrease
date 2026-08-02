@@ -3,6 +3,9 @@
  * unicode61 分词器 + BM25 排序，为笔记/闪卡/灵感等提供本地全文搜索。
  *
  * @ai-context: SQLite FTS5 全文搜索封装（若可用），LIKE 搜索的升级路径。
+ * @ai-context: 错误处理策略——search() 在"无结果"时返回空数组，
+ * 但在 FTS5 虚拟表不存在等致命错误时抛出异常，由调用方（dbIpcHandlers）
+ * 决定是否降级到 LIKE 搜索。这样避免了异常被内部吞没导致降级路径不可达。
  */
 import type Database from 'better-sqlite3';
 import { getConnection } from './sqliteService.js';
@@ -72,6 +75,11 @@ export function removeDocument(table: string, id: string): void {
  *
  * 使用 FTS5 MATCH + BM25 排序 + snippet 高亮。
  * query 支持 FTS5 查询语法（AND、OR、NOT、前缀 *）。
+ *
+ * 错误处理策略：
+ * - 查询无结果时返回空数组（正常情况）
+ * - FTS5 虚拟表不存在、SQL 执行失败等致命错误时抛出异常，
+ *   由调用方（dbIpcHandlers.ts）捕获并降级到 LIKE 搜索
  */
 export function search(query: string, options?: SearchOptions): SearchResult[] {
   if (!query?.trim()) return [];
@@ -103,17 +111,14 @@ export function search(query: string, options?: SearchOptions): SearchResult[] {
     ? [query, options!.table!, limit, offset]
     : [query, limit, offset];
 
-  try {
-    const rows = db.prepare(sql).all(...params) as Array<{
-      id: string; table_name: string; title: string; snippet: string; rank: number;
-    }>;
-    return rows.map((r) => ({
-      id: r.id, table: r.table_name, title: r.title, snippet: r.snippet, rank: r.rank,
-    }));
-  } catch (err) {
-    logger.error('[FTS5] Search failed', err);
-    return [];
-  }
+  // 不再内部 catch 异常——让致命错误（如 FTS5 表不存在）传播给调用方，
+  // 由 dbIpcHandlers.ts 的外层 catch 捕获并降级到 LIKE 搜索
+  const rows = db.prepare(sql).all(...params) as Array<{
+    id: string; table_name: string; title: string; snippet: string; rank: number;
+  }>;
+  return rows.map((r) => ({
+    id: r.id, table: r.table_name, title: r.title, snippet: r.snippet, rank: r.rank,
+  }));
 }
 
 /** 批量重建全文索引（事务内先清空再逐表写入） */
@@ -134,4 +139,52 @@ export function rebuildIndex(tables: IndexTableInput[]): void {
 
   transaction();
   logger.info(`[FTS5] Index rebuilt for ${tables.length} table(s)`);
+}
+
+// ================================================================
+// FTS 可索引表配置——定义哪些表的哪些字段需要纳入全文搜索
+// ================================================================
+
+/**
+ * 需要纳入 FTS5 全文索引的表及其字段映射。
+ * titleField/contentField 映射到各业务表中语义对应的列名，
+ * 使不同表结构（如 notes.title vs feynman_notes.concept）
+ * 都能统一灌入 fts_content 虚拟表。
+ */
+export const FTS_INDEXABLE_TABLES: Array<{
+  table: string;
+  titleField?: string;   // 标题字段（可选，部分表没有标题）
+  contentField: string;  // 内容字段（必须有）
+}> = [
+  { table: 'notes', titleField: 'title', contentField: 'content' },
+  { table: 'flashcards', titleField: 'front', contentField: 'back' },
+  { table: 'feynman_notes', titleField: 'concept', contentField: 'explanation' },
+  { table: 'inspirations', contentField: 'content' },
+  { table: 'predictions', titleField: 'question', contentField: 'ai_answer' },
+];
+
+/**
+ * 从数据库中读取所有可索引表的存量数据，构造 rebuildIndex() 需要的格式。
+ * 启动时调用一次，用于填充 FTS5 虚拟表。
+ */
+export function collectIndexableData(db: Database.Database): IndexTableInput[] {
+  const result: IndexTableInput[] = [];
+
+  for (const cfg of FTS_INDEXABLE_TABLES) {
+    // 动态构建 SELECT 语句，将业务表字段映射为统一的 id/title/content
+    const titleExpr = cfg.titleField ? `"${cfg.titleField}" AS title` : "'' AS title";
+    const sql = `SELECT id, ${titleExpr}, "${cfg.contentField}" AS content FROM "${cfg.table}"`;
+
+    try {
+      const rows = db.prepare(sql).all() as Array<{ id: string; title: string; content: string }>;
+      if (rows.length > 0) {
+        result.push({ name: cfg.table, rows });
+      }
+    } catch (err) {
+      // 某张表查询失败不影响其他表——记录警告继续
+      logger.warn(`[FTS5] Failed to collect data from "${cfg.table}": ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  return result;
 }

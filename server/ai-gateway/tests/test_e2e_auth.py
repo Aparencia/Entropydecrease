@@ -148,18 +148,6 @@ class TestJWTNormalVerification:
         assert response.status_code == 401
         assert "sub" in response.json()["detail"] or "用户标识" in response.json()["detail"]
 
-    def test_user_api_key_extracted_from_header(self, client):
-        """X-User-API-Key 头应被提取到 request.state（通过中间件不报错验证）"""
-        with patch("jose.jwt.decode", return_value={"sub": "test-user"}):
-            response = client.get(
-                "/api/v1/ai/test",
-                headers={
-                    "Authorization": "Bearer fake.jwt.token",
-                    "X-User-API-Key": "sk-test-user-api-key-placeholder",
-                },
-            )
-        assert response.status_code == 200
-
 
 # ────────────────────────────────────────────────────────────
 # 开发降级模式（jwt_secret 为空）

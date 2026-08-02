@@ -5,6 +5,7 @@
  * 设计原则：可逆 > 不可逆——TTS 开关随时可切换。
  */
 import { useState, useRef } from 'react';
+import { Volume2, VolumeX } from 'lucide-react';
 import { useAssistantStore } from '../store/useAssistantStore';
 
 interface Props {
@@ -53,14 +54,19 @@ export function ChatInput({ onSend }: Props) {
           placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-cyber/40
           max-h-[100px] overflow-y-auto"
       />
-      {/* TTS 开关 */}
+      {/* TTS 开关：图标 + 文字标签 + aria-pressed，状态一目了然 */}
       <button
         onClick={toggleTts}
-        className={`p-2 rounded-lg text-xs transition-colors ${ttsEnabled ? 'text-cyber bg-cyber/10' : 'text-text-tertiary hover:text-text-primary'}`}
-        title={ttsEnabled ? '关闭语音朗读' : '开启语音朗读'}
+        className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors flex-shrink-0
+          ${ttsEnabled
+            ? 'bg-cyber/15 text-cyber ring-1 ring-cyber/40'
+            : 'bg-bg-tertiary/50 text-text-tertiary hover:text-text-secondary'}`}
+        title={ttsEnabled ? '语音朗读已开启（点击关闭）' : '语音朗读已关闭（点击开启）'}
+        aria-pressed={ttsEnabled}
         aria-label={ttsEnabled ? '关闭语音朗读' : '开启语音朗读'}
       >
-        🔊
+        {ttsEnabled ? <Volume2 className="w-3.5 h-3.5" strokeWidth={1.5} /> : <VolumeX className="w-3.5 h-3.5" strokeWidth={1.5} />}
+        {ttsEnabled ? '朗读开' : '朗读关'}
       </button>
       {/* 发送 */}
       <button

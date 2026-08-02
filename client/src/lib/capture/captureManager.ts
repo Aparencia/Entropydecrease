@@ -333,6 +333,10 @@ export class CaptureManager {
    * 推送音频块到流水线
    */
   pushAudioChunk(audioData: AudioChunkData): void {
+    // TEMP DIAGNOSTIC（ASR 静默排查）：音频块进入路由的分叉点
+    console.info(
+      `[ASR-DIAG] pushAudioChunk: path=${this.capturePath}, hasSession=${!!this.sessionId}, paused=${this.isPaused}`,
+    );
     if (!this.sessionId || this.isPaused) return;
 
     // @ai-context Path C 全程录制：音频由 MediaRecorder 直接采集，无需处理

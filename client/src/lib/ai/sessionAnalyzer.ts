@@ -4,7 +4,6 @@
  */
 
 import { supabase } from '@/lib/auth/supabaseClient';
-import { getActiveUserKey } from '@/lib/ai/apiKeyManager';
 import { classroomNoteStore } from '@/lib/storage/classroomNoteStore';
 import { aiClient } from '@/lib/http/apiClient';
 import type { SessionBundle, KeyFrame, AudioSegment } from '@/lib/capture/captureTypes';
@@ -76,7 +75,6 @@ export async function analyzeSession(
 ): Promise<AnalyzeResult> {
   // 鉴权获取
   const { data: { session } } = await supabase.auth.getSession();
-  const userKey = getActiveUserKey();
 
   // 构造 IPC 参数（camelCase，epoch ms → 课程内相对秒数）
   // @ai-context KeyFrame.timestamp 为 epoch 毫秒，直接 /1000 会被网关格式化为
@@ -111,7 +109,6 @@ export async function analyzeSession(
     duration: bundle.duration / 1000,
     language: options?.language,
     authToken: session?.access_token,
-    userApiKey: userKey,
   }) as { content: string; keyframesAnalyzed: number; modelUsed: string; source: string; requestId?: string };
 
   const analyzeResult: AnalyzeResult = {
@@ -155,7 +152,6 @@ export async function analyzePartial(
   options?: { language?: string },
 ): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
-  const userKey = getActiveUserKey();
 
   // @ai-context 时间戳以会话开始时刻为基准换算为相对秒数（relative seconds）
   const kfPayload = keyframes.map((kf) => ({
@@ -173,7 +169,6 @@ export async function analyzePartial(
     mode: 'partial',
     language: options?.language,
     authToken: session?.access_token,
-    userApiKey: userKey,
   }) as { content: string };
 
   return result.content;
@@ -191,14 +186,12 @@ export async function mergeNotes(
   options?: { duration?: number; language?: string; sessionId?: string },
 ): Promise<AnalyzeResult> {
   const { data: { session } } = await supabase.auth.getSession();
-  const userKey = getActiveUserKey();
 
   const result = await window.electronAPI!.invoke('ai_merge_notes', {
     partials,
     duration: options?.duration ?? 0,
     language: options?.language ?? 'zh-CN',
     authToken: session?.access_token,
-    userApiKey: userKey,
   }) as { content: string; modelUsed: string; source: string };
 
   const analyzeResult: AnalyzeResult = {
@@ -241,14 +234,12 @@ export async function analyzeVideo(
 ): Promise<AnalyzeResult> {
   // 鉴权获取
   const { data: { session } } = await supabase.auth.getSession();
-  const userKey = getActiveUserKey();
 
   const result = await window.electronAPI!.invoke('ai_video_analyze', {
     filePath,
     duration: options?.duration,
     language: options?.language,
     authToken: session?.access_token,
-    userApiKey: userKey,
   }) as { content: string; keyframesAnalyzed: number; modelUsed: string; source: string; requestId?: string };
 
   const analyzeResult: AnalyzeResult = {

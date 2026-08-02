@@ -10,7 +10,6 @@ import type {
   SocraticEvaluateResult, SocraticDeepeningResult,
 } from './types';
 import { classifyRawError } from './errorClassifier';
-import { getActiveUserKey } from './apiKeyManager';
 
 /** history role 前端→网关映射（assistant→tutor，其余→learner） */
 function toBackendHistory(history: ChatMessage[]): Array<{ role: string; content: string }> {
@@ -29,7 +28,6 @@ export async function ipcSocraticBrainstorm(
       topic,
       history: context ? [{ role: 'learner', content: context }] : null,
       authToken,
-      userApiKey: getActiveUserKey(),
     }) as {
       question: string; hint: string; thinkingDirection: string;
       depthLevel: number; turnCount: number;
@@ -63,7 +61,6 @@ export async function ipcSocraticQuestion(
       topic,
       history: backendHistory.length > 0 ? backendHistory : null,
       authToken,
-      userApiKey: getActiveUserKey(),
     }) as {
       question: string; hint: string; thinkingDirection: string;
       depthLevel: number; turnCount: number;
@@ -90,7 +87,6 @@ export async function ipcSocraticEvaluate(
       answer,
       history: toBackendHistory(history),
       authToken,
-      userApiKey: getActiveUserKey(),
     }) as {
       dimensions: { accuracy: number; completeness: number; logic: number; expression: number };
       feedback: string; encouragement: string; status: string;
@@ -120,7 +116,6 @@ export async function ipcSocraticDeepening(
       dialogueSummary,
       history: toBackendHistory(history),
       authToken,
-      userApiKey: getActiveUserKey(),
     }) as {
       angles: Array<{ key: string; label: string; question: string }>;
       status: string; model: string; tokensUsed: number; latencyMs: number;

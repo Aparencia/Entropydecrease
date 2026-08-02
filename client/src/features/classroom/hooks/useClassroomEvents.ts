@@ -51,10 +51,13 @@ interface UseClassroomEventsOptions {
   aiDetectEnabled: boolean;
   setCourseMeta: React.Dispatch<React.SetStateAction<CourseMeta>>;
   onNotify: (type: 'error', message: string) => void;
+  /** 真流式 ASR 是否激活（激活时跳过按段转写，改用流式 partial/final） */
+  streamingAsrActive: boolean;
 }
 
 export function useClassroomEvents({
   captureManager, status, capturePath, language, aiDetectEnabled, setCourseMeta, onNotify,
+  streamingAsrActive,
 }: UseClassroomEventsOptions) {
   const [segments, setSegments] = useState<ExtractedSegment[]>([]);
   const [stats, setStats] = useState({ frames: 0, extracted: 0 });
@@ -62,6 +65,8 @@ export function useClassroomEvents({
   const [smartBundle, setSmartBundle] = useState<Partial<SessionBundle>>({});
   const [liveTranscripts, setLiveTranscripts] = useState<LiveTranscript[]>([]);
   const [vadStats, setVadStats] = useState<VADStats | null>(null);
+  /** 真流式当前进行中的 partial 文本（实时上屏，断句后清空） */
+  const [partialText, setPartialText] = useState('');
   const [recordingStatus, setRecordingStatus] = useState<RecordingStatus | null>(null);
   const [videoFilePath, setVideoFilePath] = useState<string | null>(null);
   const [partialCount, setPartialCount] = useState(0);
@@ -77,6 +82,12 @@ export function useClassroomEvents({
   const captureSessionIdRef = useRef<string | null>(null);
   /** 已派发增量分析的关键帧累计数，用于 [图:N] 局部编号 → 全局编号重映射 */
   const analyzedKeyframeOffsetRef = useRef(0);
+  /** 真流式激活标志的 ref 桥接：供按段转写订阅器读取（避免重订阅） */
+  const streamingAsrActiveRef = useRef(streamingAsrActive);
+  streamingAsrActiveRef.current = streamingAsrActive;
+  /** 会话状态 ref 桥接：流式 partial/final 仅在 capturing 时上屏（暂停时不更新） */
+  const statusRef = useRef(status);
+  statusRef.current = status;
   const asr = useAsrSemaphore();
 
   // 会话结束回到 idle 时重置时间基准（暂停/恢复不重置，避免相对时间戳跳变）
@@ -191,6 +202,8 @@ export function useClassroomEvents({
     const offSegmentReady = captureEventBus.on<{ sessionId: string; segment: AudioSegment }>(
       'smart:audio_segment_ready',
       (data) => {
+        // 真流式激活时转写由流式 final 负责，跳过按段转写避免重复
+        if (streamingAsrActiveRef.current) return;
         const seg = data.segment;
         // 先将音频段加入 bundle
         setSmartBundle((prev) => ({
@@ -248,6 +261,53 @@ export function useClassroomEvents({
     return () => { offSegmentReady(); };
   }, [language, asr, onNotify]);
 
+  // 真流式 ASR：订阅主进程（Paraformer 在线）推送的 partial/final 结果
+  // partial → 实时行；final（断句）→ 提交到实时转录 + audioSegments（供课后分析）
+  // 仅 capturing 时上屏（暂停时主进程采集仍在跑，但不应更新 UI）
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    const offPartial = window.electronAPI.on('asr_stream_partial', (...args: unknown[]) => {
+      if (statusRef.current !== 'capturing') return;
+      const data = args[0] as { text: string };
+      setPartialText(data?.text ?? '');
+    });
+    const offFinal = window.electronAPI.on('asr_stream_final', (...args: unknown[]) => {
+      if (statusRef.current !== 'capturing') return;
+      const data = args[0] as { text: string; timestamp: number };
+      setPartialText('');
+      const text = data?.text?.trim();
+      if (!text) return;
+      const id = crypto.randomUUID();
+      const timestamp = data.timestamp || Date.now();
+      // 实时转录上屏（FIFO 上限控制）
+      setLiveTranscripts((prev) => {
+        const next = [...prev, { id, text, timestamp }];
+        return next.length > MAX_LIVE_TRANSCRIPTS
+          ? next.slice(next.length - MAX_LIVE_TRANSCRIPTS)
+          : next;
+      });
+      setTranscribedCount((c) => c + 1);
+      // 追加到 audioSegments（带 audioText，供课后分析；无需持有原始音频）
+      setSmartBundle((prev) => ({
+        ...prev,
+        audioSegments: [...(prev.audioSegments ?? []), {
+          id,
+          timestampStart: timestamp,
+          timestampEnd: timestamp,
+          audioBase64: '',
+          energy: 0,
+          audioText: text,
+        }],
+      }));
+    });
+    return () => { offPartial(); offFinal(); };
+  }, []);
+
+  // 离开采集中状态时清空流式 partial 行（避免暂停/停止后残留）
+  useEffect(() => {
+    if (status !== 'capturing') setPartialText('');
+  }, [status]);
+
   // Path B：VAD 统计
   useEffect(() => {
     const offVadStats = captureEventBus.on<{ sessionId: string; stats: VADStats }>(
@@ -297,6 +357,7 @@ export function useClassroomEvents({
     segments, setSegments, stats, setStats, extractionError,
     smartBundle, setSmartBundle,
     liveTranscripts, setLiveTranscripts,
+    partialText,
     vadStats, recordingStatus, setRecordingStatus,
     videoFilePath, setVideoFilePath,
     partialCount, setPartialCount, transcribedCount,

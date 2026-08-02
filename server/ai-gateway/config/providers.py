@@ -3,8 +3,7 @@
 
 @ai-context: 定义各国产/海外 Provider 的接入参数（base_url/api_key/模型槽位）
 与 feature→(provider, slot) 路由表。get_provider_for_feature 按路由表取服务端
-默认 Provider，API Key 无效或未初始化时逐级回退 GLM→fallback；
-get_provider_for_request 在此基础上支持用户自带 Key 的动态实例化（不缓存）。
+默认 Provider，API Key 无效或未初始化时逐级回退 GLM→fallback。
 @ai-context: Provider 类采用延迟导入（_get_provider_classes）避免循环引用。
 """
 
@@ -159,74 +158,3 @@ def _get_provider_classes() -> dict:
             "gemini": GeminiProvider,
         }
     return _PROVIDER_CLASSES
-
-
-def get_provider_for_request(app, feature: str, request) -> tuple:
-    """
-    根据请求中的用户 API Key 动态选择 Provider。
-
-    - 有用户 Key → 根据 MODEL_ROUTING 找到对应 provider_key，临时创建 Provider 实例
-    - 无用户 Key → 走现有 get_provider_for_feature 返回服务端默认 Provider
-
-    **不缓存用户 Key 创建的临时 Provider**，每次请求新建。
-
-    Args:
-        app: FastAPI 应用实例
-        feature: 功能标识，对应 MODEL_ROUTING 的 key
-        request: FastAPI Request 对象（通过 request.state.user_api_key 获取用户 Key）
-
-    Returns:
-        tuple: (provider, model_name, is_user_key)
-            - provider: Provider 实例
-            - model_name: 模型名称
-            - is_user_key: 是否使用了用户自带 Key
-    """
-    user_api_key = getattr(request.state, "user_api_key", None)
-
-    if not user_api_key:
-        # 无用户 Key，走服务端默认 Provider
-        provider, model_name = get_provider_for_feature(app, feature)
-        return provider, model_name, False
-
-    # 有用户 Key，根据 MODEL_ROUTING 找到对应 provider_key
-    provider_key, model_slot = MODEL_ROUTING.get(feature, ("fallback", "free"))
-
-    # 查找 Provider 配置（base_url）
-    provider_cfg = AI_PROVIDERS.get(provider_key, {})
-    base_url = provider_cfg.get("base_url", "")
-
-    if not base_url:
-        logger.warning(
-            "用户 Key 路由失败: feature=%s, provider_key=%s 无 base_url 配置，回退服务端默认",
-            feature, provider_key,
-        )
-        provider, model_name = get_provider_for_feature(app, feature)
-        return provider, model_name, False
-
-    # 动态实例化 Provider（使用用户 Key）
-    provider_classes = _get_provider_classes()
-    provider_cls = provider_classes.get(provider_key)
-    if not provider_cls:
-        logger.warning(
-            "用户 Key 路由失败: feature=%s, provider_key=%s 无对应 Provider 类，回退服务端默认",
-            feature, provider_key,
-        )
-        provider, model_name = get_provider_for_feature(app, feature)
-        return provider, model_name, False
-
-    try:
-        user_provider = provider_cls(base_url=base_url, api_key=user_api_key)
-    except Exception as e:
-        logger.warning(
-            "用户 Key 实例化 Provider 失败: feature=%s, provider_key=%s, error=%s，回退服务端默认",
-            feature, provider_key, str(e),
-        )
-        provider, model_name = get_provider_for_feature(app, feature)
-        return provider, model_name, False
-
-    model_name = provider_cfg.get("models", {}).get(model_slot, "fallback")
-    logger.info(
-        "用户 Key 路由: feature=%s, provider_key=%s, model=%s（使用用户自带 Key）",
-        feature, provider_key, model_name,
-    )
-    return user_provider, model_name, True

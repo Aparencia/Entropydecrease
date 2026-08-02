@@ -55,6 +55,10 @@ export function useClassroomCapture() {
   // 用于诊断文案分支与 UI 展示，避免对进程环回给出“检查输出设备”类误导提示
   const [audioSourceKind, setAudioSourceKind] = useState<AudioSourceKind | null>(null);
 
+  // 真流式 ASR 激活标志：smart 路径 + 本地 Paraformer 流式模型就绪时由
+  // useSessionControl 启动置 true；激活时转录走流式 partial/final，跳过按段转写
+  const [streamingAsrActive, setStreamingAsrActive] = useState(false);
+
   const notify = useCallback((type: 'success' | 'warning' | 'error' | 'info', message: string) => {
     toast({ type, message });
   }, [toast]);
@@ -106,6 +110,7 @@ export function useClassroomCapture() {
     captureManager, status, capturePath,
     language: config.language, aiDetectEnabled, setCourseMeta,
     onNotify: notify,
+    streamingAsrActive,
   });
 
   const { audioHealth, audioCleanupRef } = useClassroomAudio({
@@ -156,6 +161,7 @@ export function useClassroomCapture() {
     onMergePartials: analysis.mergePartialNotes,
     onNotify: (type, message) => notify(type, message),
     onAudioSourceResolved: setAudioSourceKind,
+    setStreamingAsrActive,
   });
 
   const handleModeChange = useCallback((newMode: CaptureMode) => {
@@ -218,6 +224,9 @@ export function useClassroomCapture() {
     transcribedCount: events.transcribedCount,
     // 实时转录
     liveTranscripts: events.liveTranscripts,
+    // 真流式进行中的 partial 文本 + 激活标志
+    partialText: events.partialText,
+    streamingAsrActive,
     // 音频健康 + VAD
     audioHealth, vadStats: events.vadStats,
     // 本次会话生效的音频源（UI 可见，供内测归因）

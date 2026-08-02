@@ -15,6 +15,7 @@ import { VideoRecorder } from './videoRecorder.js';
 import type { VideoRecordOptions } from './videoRecorder.js';
 import { safeHandle, getMainWindowId } from './ipcUtils.js';
 import { logger } from './logger.js';
+import { feedStreamingAsr, isStreamingActive } from './ai/local-asr/streamingAsr.js';
 
 // ================================================================
 // 模块级状态
@@ -83,6 +84,11 @@ export function registerMediaCaptureHandlers(): void {
       activeAudioCapture = new AudioCapture(captureOptions, (chunk: AudioChunk) => {
         if (senderWin && !senderWin.isDestroyed()) {
           senderWin.webContents.send('audio_capture_chunk', chunk);
+        }
+        // 真流式 ASR：激活时把音频块实时喂给 Paraformer 在线识别器
+        // （partial/final 结果由 streamingAsr 经事件推回渲染进程）
+        if (isStreamingActive()) {
+          feedStreamingAsr(chunk.audioBuffer, chunk.sampleRate);
         }
       });
 

@@ -59,7 +59,31 @@ export function ControlBar({
 
       {/* 控制按钮 */}
       <div className="flex items-center gap-2">
-        {status !== 'capturing' ? (
+        {status === 'capturing' ? (
+          <button
+            onClick={onPause}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium',
+              'bg-semantic-warning/10 text-semantic-warning hover:bg-semantic-warning/20',
+              'active:scale-95 transition-all duration-kb-fast',
+            )}
+          >
+            <Pause className="w-3.5 h-3.5" strokeWidth={1.5} />
+            暂停
+          </button>
+        ) : status === 'paused' ? (
+          <button
+            onClick={onPause}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium',
+              'bg-semantic-success/10 text-semantic-success hover:bg-semantic-success/20',
+              'active:scale-95 transition-all duration-kb-fast',
+            )}
+          >
+            <Play className="w-3.5 h-3.5" strokeWidth={1.5} />
+            继续
+          </button>
+        ) : (
           <button
             onClick={onStart}
             disabled={disabled}
@@ -72,18 +96,6 @@ export function ControlBar({
           >
             <Play className="w-3.5 h-3.5" strokeWidth={1.5} />
             开始
-          </button>
-        ) : (
-          <button
-            onClick={onPause}
-            className={cn(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium',
-              'bg-semantic-warning/10 text-semantic-warning hover:bg-semantic-warning/20',
-              'active:scale-95 transition-all duration-kb-fast',
-            )}
-          >
-            <Pause className="w-3.5 h-3.5" strokeWidth={1.5} />
-            暂停
           </button>
         )}
 

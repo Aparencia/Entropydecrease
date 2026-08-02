@@ -5,7 +5,6 @@
 预算分两级：token 上限（防滥用）和费用上限（控成本）。
 Redis 不可用时降级放行。超限返回 HTTP 429 + 友好提示。
 @ai-context: 预算阈值通过环境变量配置，支持运行时调整。
-BYOK 用户（携带 X-User-API-Key）不受服务端预算约束。
 """
 
 import logging
@@ -35,11 +34,6 @@ class BudgetMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # 仅对 AI 功能路径生效
         if not any(request.url.path.startswith(p) for p in BUDGET_CHECKED_PATHS):
-            return await call_next(request)
-
-        # BYOK 用户不受服务端预算约束
-        user_api_key = getattr(request.state, "user_api_key", None)
-        if user_api_key:
             return await call_next(request)
 
         # 获取 user_id

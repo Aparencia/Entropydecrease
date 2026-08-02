@@ -144,6 +144,10 @@ export class VADMarker {
 
     const now = Date.now();
     const hasVoice = rmsEnergy >= this.config.energyThreshold;
+    // TEMP DIAGNOSTIC（ASR 静默排查）：VAD 能量判定
+    console.info(
+      `[ASR-DIAG] VAD: RMS=${rmsEnergy.toFixed(6)}, 阈值=${this.config.energyThreshold}, hasVoice=${hasVoice}, sourceType=${this.config.sourceType}`,
+    );
 
     if (hasVoice) {
       if (!this.isSpeaking) {

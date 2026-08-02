@@ -12,8 +12,12 @@ import asyncio
 from typing import Any, Callable, Awaitable, AsyncGenerator
 
 from config.runtime import logger, _FEATURE_CONTEXT
-from config.providers import AI_PROVIDERS, MODEL_ROUTING, get_provider_for_request
+from config.providers import AI_PROVIDERS, MODEL_ROUTING
 from config.limits import TIMEOUT_CONFIG
+
+# 流式降级首 token 探测超时（秒）：生成器惰性求值，需等首 token 才能
+# 发现执行期错误（如 429）。与 routers/streaming.py 的首 token 超时保持一致。
+_FIRST_TOKEN_PROBE_TIMEOUT = 30.0
 
 # ============================================================
 # Provider Fallback 链：主 Provider 失败时依次尝试的备选
@@ -88,10 +92,11 @@ async def call_with_fallback(
     fn: Callable[..., Awaitable[dict[str, Any]]],
 ) -> tuple[dict[str, Any], str]:
     """
-    使用 Provider fallback 链执行 AI 调用。
+    使用 Provider fallback 链执行 AI 调用（非流式路径）。
 
     依次尝试 PROVIDER_FALLBACK_CHAIN 中为该 feature 配置的 Provider 列表，
     每个 Provider 最多重试 2 次（由 @with_retry_and_timeout 装饰器控制）。
+    熔断器联动：跳过已熔断的 Provider，调用成功/失败后通知熔断器更新状态。
     所有 Provider 均失败时抛出 RuntimeError(503)。
 
     Args:
@@ -105,12 +110,24 @@ async def call_with_fallback(
     Raises:
         RuntimeError: 所有 Provider 均不可用（status_code=503）
     """
+    # 导入熔断器模块：is_provider_available 检查 Provider 是否被熔断，
+    # get_circuit 获取熔断器实例以调用 on_success/on_failure 回调
+    from providers.circuit_breaker import is_provider_available, get_circuit
+
     chain = PROVIDER_FALLBACK_CHAIN.get(feature, ["fallback"])
     budget = TIMEOUT_CONFIG.get(feature, 30) * 1.5
 
     async def _run_fallback_chain():
         start_time = asyncio.get_event_loop().time()
         for provider_key in chain:
+            # ---- 熔断器检查：跳过已熔断的 Provider，避免无效请求耗时 ----
+            if not is_provider_available(provider_key):
+                logger.debug(
+                    "Provider [%s] 已熔断，跳过 (non-stream feature=%s)",
+                    provider_key, feature,
+                )
+                continue
+
             provider = app.state.providers.get(provider_key)
             if not provider:
                 logger.warning("Provider [%s] 未初始化，跳过", provider_key)
@@ -129,16 +146,24 @@ async def call_with_fallback(
             try:
                 _FEATURE_CONTEXT.set(feature)
                 result = await fn(provider, model_name)
+                # 调用成功：通知熔断器重置失败计数，恢复 Provider 健康状态
+                cb = get_circuit(provider_key)
+                if cb:
+                    await cb.on_success()
                 return result, provider_key
             except Exception as e:
                 logger.warning(
                     "Provider [%s] failed for feature=%s: %s, trying next...",
                     provider_key, feature, str(e),
                 )
+                # 调用失败：通知熔断器累加失败计数，连续失败达到阈值后自动熔断
+                cb = get_circuit(provider_key)
+                if cb:
+                    await cb.on_failure()
             finally:
                 _FEATURE_CONTEXT.set("")
 
-        # 所有 Provider 都失败
+        # 所有 Provider 都失败（含被熔断跳过的）
         raise RuntimeError("所有 AI 服务暂时不可用")
 
     try:
@@ -157,54 +182,23 @@ async def call_with_fallback_for_request(
     fn: Callable[..., Awaitable[dict[str, Any]]],
 ) -> tuple[dict[str, Any], str, bool]:
     """
-    支持用户 Key 的 fallback 链执行。
+    fallback 链执行（保持历史 3 元组签名以兼容既有路由调用点）。
 
-    如果请求中携带用户 API Key，优先使用用户 Key 创建的 Provider 执行。
-    用户 Key 失败时降级到服务端 fallback 链（GLM → fallback）。
-    无用户 Key 时直接走 call_with_fallback。
+    用户自带 Key（BYOK）能力已移除，统一走服务端 fallback 链。
+    第三个返回值 is_user_key 恒为 False（死值，保留仅为避免改动约 15 个路由）。
 
     Args:
         app:     FastAPI 应用实例
         feature: 功能标识
-        request: FastAPI Request 对象
+        request: FastAPI Request 对象（保留参数以兼容签名，不再使用）
         fn:      异步可调用对象，签名为 async fn(provider, model_name) -> dict
 
     Returns:
-        tuple: (result_dict, provider_key, is_user_key)
+        tuple: (result_dict, provider_key, is_user_key=False)
 
     Raises:
         RuntimeError: 所有 Provider 均不可用
     """
-    user_api_key = getattr(request.state, "user_api_key", None)
-
-    if not user_api_key:
-        # 无用户 Key，直接走服务端 fallback 链
-        result, provider_key = await call_with_fallback(app, feature, fn)
-        return result, provider_key, False
-
-    # 有用户 Key，先尝试用用户 Key 的 Provider
-    provider, model_name, is_user_key = get_provider_for_request(app, feature, request)
-
-    if is_user_key:
-        try:
-            _FEATURE_CONTEXT.set(feature)
-            result = await fn(provider, model_name)
-            # 从 MODEL_ROUTING 获取 provider_key 用于日志
-            provider_key = MODEL_ROUTING.get(feature, ("unknown", ""))[0]
-            logger.info(
-                "用户 Key 调用成功: feature=%s, provider=%s",
-                feature, provider_key,
-            )
-            return result, provider_key, True
-        except Exception as e:
-            logger.warning(
-                "用户 Key 调用失败，降级到服务端 fallback: feature=%s, error=%s",
-                feature, str(e),
-            )
-        finally:
-            _FEATURE_CONTEXT.set("")
-
-    # 用户 Key 失败，降级到服务端 fallback 链
     result, provider_key = await call_with_fallback(app, feature, fn)
     return result, provider_key, False
 
@@ -216,94 +210,38 @@ async def call_with_fallback_stream(
     fn: Callable[..., AsyncGenerator[str, None]],
 ) -> tuple[AsyncGenerator[str, None], str, bool]:
     """
-    流式版本的 call_with_fallback_for_request。
+    流式 fallback 链执行（保持历史 3 元组签名以兼容既有路由调用点）。
 
-    与 call_with_fallback_for_request 相同的 fallback 链逻辑，
-    但 fn 返回 AsyncGenerator[str, None] 而非 dict。
-    Phase1 加固：添加总预算超时保护（与非流式一致）+ 熔断器联动。
+    用户自带 Key（BYOK）能力已移除，统一走服务端 fallback 链。
+    第三个返回值 is_user_key 恒为 False。fn 返回 AsyncGenerator[str, None]。
+    Phase1 加固：总预算超时保护 + 熔断器联动 + 首 token 探测降级。
 
     Args:
         app:     FastAPI 应用实例
         feature: 功能标识
-        request: FastAPI Request 对象
+        request: FastAPI Request 对象（保留参数以兼容签名，不再使用）
         fn:      异步生成器函数，签名为 async fn(provider, model_name) -> AsyncGenerator[str, None]
 
     Returns:
-        tuple: (generator, provider_key, is_user_key)
+        tuple: (generator, provider_key, is_user_key=False)
     """
     from providers.circuit_breaker import is_provider_available, get_circuit
 
     budget = TIMEOUT_CONFIG.get(feature, 30) * 1.5
-    user_api_key = getattr(request.state, "user_api_key", None)
-
-    if not user_api_key:
-        # 无用户 Key，走服务端 fallback 链（带总预算超时）
-        chain = PROVIDER_FALLBACK_CHAIN.get(feature, ["fallback"])
-        start_time = asyncio.get_event_loop().time()
-
-        for provider_key in chain:
-            # 熔断器检查：跳过已熔断的 Provider
-            if not is_provider_available(provider_key):
-                logger.debug("Provider [%s] 已熔断，跳过 (stream feature=%s)", provider_key, feature)
-                continue
-
-            # 剩余预算检查
-            elapsed = asyncio.get_event_loop().time() - start_time
-            if elapsed >= budget:
-                logger.error("流式 fallback 预算耗尽: feature=%s, elapsed=%.1fs", feature, elapsed)
-                break
-
-            provider = app.state.providers.get(provider_key)
-            if not provider:
-                continue
-            model_name = _resolve_model_name(provider_key, feature)
-            try:
-                _FEATURE_CONTEXT.set(feature)
-                gen = fn(provider, model_name)
-                # 通知熔断器成功
-                cb = get_circuit(provider_key)
-                if cb:
-                    await cb.on_success()
-                return gen, provider_key, False
-            except Exception as e:
-                logger.warning(
-                    "Provider [%s] stream failed for feature=%s: %s, trying next...",
-                    provider_key, feature, str(e),
-                )
-                cb = get_circuit(provider_key)
-                if cb:
-                    await cb.on_failure()
-            finally:
-                _FEATURE_CONTEXT.set("")
-
-        raise RuntimeError("所有 AI 服务暂时不可用")
-
-    # 有用户 Key，先尝试用户 Key 的 Provider
-    provider, model_name, is_user_key = get_provider_for_request(app, feature, request)
-    if is_user_key:
-        try:
-            _FEATURE_CONTEXT.set(feature)
-            gen = fn(provider, model_name)
-            provider_key = MODEL_ROUTING.get(feature, ("unknown", ""))[0]
-            return gen, provider_key, True
-        except Exception as e:
-            logger.warning(
-                "用户 Key 流式调用失败，降级到服务端 fallback: feature=%s, error=%s",
-                feature, str(e),
-            )
-        finally:
-            _FEATURE_CONTEXT.set("")
-
-    # 降级到服务端 fallback 链（带总预算超时）
     chain = PROVIDER_FALLBACK_CHAIN.get(feature, ["fallback"])
     start_time = asyncio.get_event_loop().time()
 
     for provider_key in chain:
+        # 熔断器检查：跳过已熔断的 Provider
         if not is_provider_available(provider_key):
+            logger.debug("Provider [%s] 已熔断，跳过 (stream feature=%s)", provider_key, feature)
             continue
 
+        # 剩余预算检查
         elapsed = asyncio.get_event_loop().time() - start_time
-        if elapsed >= budget:
+        remaining = budget - elapsed
+        if remaining <= 0:
+            logger.error("流式 fallback 预算耗尽: feature=%s, elapsed=%.1fs", feature, elapsed)
             break
 
         provider = app.state.providers.get(provider_key)
@@ -313,13 +251,37 @@ async def call_with_fallback_stream(
         try:
             _FEATURE_CONTEXT.set(feature)
             gen = fn(provider, model_name)
+            # 首 token 探测：生成器是惰性求值，真正的 provider 调用（及 429
+            # 等执行期错误）发生在首次迭代时，仅创建生成器的 try/except 捕获
+            # 不到。此处等首 token，成功才认定该 provider 可用，否则捕获
+            # 执行期错误并降级到下一个 provider（修复 429 不切换模型的问题）。
+            agen = gen.__aiter__()
+            probe_timeout = min(_FIRST_TOKEN_PROBE_TIMEOUT, remaining)
+            first_chunk = await asyncio.wait_for(agen.__anext__(), timeout=probe_timeout)
+
+            # 首 token 成功：包装生成器，先吐首 token 再吐剩余
+            async def _wrapped_gen(a=agen, first=first_chunk):
+                yield first
+                async for c in a:
+                    yield c
+
+            # 通知熔断器成功
             cb = get_circuit(provider_key)
             if cb:
                 await cb.on_success()
-            return gen, provider_key, False
+            return _wrapped_gen(), provider_key, False
+        except StopAsyncIteration:
+            # 生成器为空（provider 正常但无输出）：返回空流，视为成功
+            async def _empty_gen():
+                if False:
+                    yield  # 使其成为异步生成器函数
+            cb = get_circuit(provider_key)
+            if cb:
+                await cb.on_success()
+            return _empty_gen(), provider_key, False
         except Exception as e:
             logger.warning(
-                "Provider [%s] stream failed for feature=%s: %s, trying next...",
+                "Provider [%s] stream failed (首token探测) for feature=%s: %s, trying next...",
                 provider_key, feature, str(e),
             )
             cb = get_circuit(provider_key)

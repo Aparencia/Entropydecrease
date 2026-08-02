@@ -1,6 +1,5 @@
 import { supabase } from '../auth/supabaseClient';
 import { requireGatewayUrl } from '../ai/config';
-import { getActiveUserKey } from '../ai/apiKeyManager';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -45,10 +44,6 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
     const headers = new Headers(customHeaders as HeadersInit);
     if (token) headers.set('Authorization', `Bearer ${token}`);
     headers.set('Content-Type', 'application/json');
-
-    // 用户自配置 API Key 时附加 X-User-API-Key header
-    const userKey = getActiveUserKey();
-    if (userKey) headers.set('X-User-API-Key', userKey);
 
     // 生成请求追踪 ID，便于 ai-gateway 端链路追踪
     const requestId = crypto.randomUUID();
@@ -128,9 +123,6 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
       const headers = new Headers();
       if (token) headers.set('Authorization', `Bearer ${token}`);
       headers.set('Content-Type', 'application/json');
-
-      const userKey = getActiveUserKey();
-      if (userKey) headers.set('X-User-API-Key', userKey);
 
       const requestId = crypto.randomUUID();
       headers.set('X-Request-ID', requestId);
