@@ -37,9 +37,10 @@ function formatDate(date: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function stripHtml(html: string): string {
+/** 从 TipTap JSON 或纯 HTML 中提取纯文本 */
+function extractPlainText(content: string): string {
   try {
-    const json = JSON.parse(html);
+    const json = JSON.parse(content);
     if (json?.content) {
       const extract = (nodes: unknown[]): string => {
         let text = '';
@@ -50,12 +51,17 @@ function stripHtml(html: string): string {
         }
         return text;
       };
-      return extract(json.content).slice(0, 120);
+      return extract(json.content);
     }
     return '';
   } catch {
-    return html.slice(0, 120);
+    return content;
   }
+}
+
+/** 列表预览用：截断至 120 字符 */
+function stripHtml(html: string): string {
+  return extractPlainText(html).slice(0, 120);
 }
 
 /* ── 动画 variants ── */
@@ -241,7 +247,7 @@ export default function NotesPage() {
       case 'export': handleExportNote(noteCtx); break;
       case 'delete': handleDeleteNote(noteCtx.id!); break;
       case 'ai-summary': {
-        const text = stripHtml(noteCtx.content);
+        const text = extractPlainText(noteCtx.content);
         if (text.length < 10) { toast({ type: 'warning', message: '笔记内容太少，无法生成摘要' }); break; }
         toast({ type: 'info', message: 'AI 正在生成摘要...' });
         try {
@@ -252,7 +258,7 @@ export default function NotesPage() {
         break;
       }
       case 'ai-flashcard': {
-        const text = stripHtml(noteCtx.content);
+        const text = extractPlainText(noteCtx.content);
         if (text.length < 20) { toast({ type: 'warning', message: '笔记内容太少，无法生成闪卡' }); break; }
         toast({ type: 'info', message: 'AI 正在生成闪卡...' });
         try {
