@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.33.1](https://github.com/Aparencia/Entropydecrease/compare/v0.33.0...v0.33.1) (2026-08-02)
+
+### 🐛 缺陷修复
+
+* **notes:** AI 摘要/闪卡使用完整文本，列表预览保留 120 字截断 ([5aee98c](https://github.com/Aparencia/Entropydecrease/commit/5aee98c6d26f67878fff02c457d2a6993829d4a3))
+
 ## [0.33.0](https://github.com/Aparencia/Entropydecrease/compare/v0.32.0...v0.33.0) (2026-08-02)
 
 ### ✨ 新功能
