@@ -200,6 +200,7 @@ export default function FeynmanSessionPage() {
                     onClose={() => setShowAIEval(false)}
                     onGoSettings={() => navigate('/settings')}
                     onReset={resetAIResults}
+                    onRetry={handleAIEval}
                   />
                 )}
 

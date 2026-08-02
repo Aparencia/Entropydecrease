@@ -199,12 +199,15 @@ export function useClassroomEvents({
         }));
 
         // 后台流式 ASR 转写（不阻塞采集，受并发控制）
-        if (!seg.audioBase64) return;
+        // ⚠️ 必须同步捕获 audioBase64：vadMarker 在 emit 后立即清空原对象字段释放内存，
+        // 而 slot.then() 是微任务（异步），此时 seg.audioBase64 已为 ''。
+        const audioData = seg.audioBase64;
+        if (!audioData) return;
         const slot = asr.acquire();
         if (!slot) return; // 队列已满且丢弃了本段
         slot.then(() => {
           transcribeWithRetry({
-            audio_base64: seg.audioBase64,
+            audio_base64: audioData,
             language: toAsrLanguage(language),
             sample_rate: 16000,
             channels: 1,

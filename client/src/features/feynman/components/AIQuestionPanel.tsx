@@ -6,7 +6,7 @@
  * onSubmit 回调注入。理解度评分阈值文案（≥8 举一反三 / ≥6 较好）为
  * 产品定义。数据来自 useAIFeynmanQuestion / useAIFeynmanEvaluateAnswers。
  */
-import { X, Check, Sparkles, MessageCircle, CheckCircle2, Circle } from 'lucide-react';
+import { X, Check, Sparkles, MessageCircle, CheckCircle2, Circle, RefreshCw } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { Button } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -172,14 +172,23 @@ export function AIQuestionPanel({
               {answerEvalError && !answerEvalLoading && (
                 <div className="p-3 rounded-kb-md bg-semantic-error/10 border border-semantic-error/20 text-b2 text-semantic-error">
                   {answerEvalError}
-                  {answerEvalNeedsConfig && (
+                  <div className="flex items-center gap-3 mt-2">
                     <button
-                      onClick={onGoSettings}
-                      className="mt-2 block text-b3 underline hover:no-underline"
+                      onClick={onSubmit}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium bg-bg-secondary text-text-secondary border border-border/50 hover:bg-bg-tertiary hover:text-text-primary active:scale-95 transition-all duration-kb-fast"
                     >
-                      前往设置页配置 API Key
+                      <RefreshCw className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      重新提交
                     </button>
-                  )}
+                    {answerEvalNeedsConfig && (
+                      <button
+                        onClick={onGoSettings}
+                        className="text-b3 underline hover:no-underline"
+                      >
+                        前往设置页配置 API Key
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 

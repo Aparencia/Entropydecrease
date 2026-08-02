@@ -98,6 +98,14 @@ const ALLOWED_CHANNELS = [
   'performance:set-mode',
   // P3-18 性能诊断 IPC channel
   'perf:get-metrics',
+  // 本地 ASR（sherpa-onnx）IPC channel
+  'local_asr_transcribe',
+  'local_asr_get_config',
+  'local_asr_update_config',
+  'local_asr_check_available',
+  'local_asr_get_models',
+  'local_asr_download_model',
+  'local_asr_delete_model',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */
@@ -122,6 +130,8 @@ const ALLOWED_EVENT_CHANNELS = [
   'ai:stream:chunk',
   'ai:stream:end',
   'ai:stream:error',
+  // 本地 ASR 模型下载进度推送
+  'local_asr_download_progress',
 ] as const;
 
 /** 允许渲染进程单向发送的 channel 白名单（渲染进程 → 主进程，fire-and-forget） */

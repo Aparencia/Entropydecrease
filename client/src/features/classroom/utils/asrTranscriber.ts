@@ -102,7 +102,7 @@ async function transcribeCloud(payload: TranscribePayload): Promise<string | nul
  * ASR 转写（本地优先，云端降级）
  *
  * 策略：
- * 1. 本地 ASR 可用 → IPC 调用 whisper.cpp（零成本、离线可用）
+ * 1. 本地 ASR 可用 → IPC 调用 sherpa-onnx（零成本、离线可用）
  * 2. 本地失败 + fallbackToCloud → 降级到云端网关（15s 超时，重试 1 次）
  * 3. 本地不可用 → 直接走云端
  */
