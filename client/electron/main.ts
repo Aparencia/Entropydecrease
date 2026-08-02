@@ -17,7 +17,7 @@
  * 应用无法启动，任何修改需完整回归启动/退出/托盘/更新流程。
  */
 
-import { app, BrowserWindow, Menu } from 'electron';
+import { app, BrowserWindow, Menu, session } from 'electron';
 import { safeHandle, setMainWindowId } from './ipcUtils.js';
 import { logger } from './logger.js';
 import { registerAIHandlers, initAIModule } from './ai/index.js';
@@ -129,6 +129,21 @@ if (!gotTheLock) {
     // 系统音频环回捕获授权（详见 displayMediaHandler.ts）
     // 必须在渲染进程发起 getDisplayMedia 之前注册，否则请求会被默认拒绝
     registerDisplayMediaHandler();
+
+    // 麦克风权限授权（现场课程场景）
+    // Electron 默认自动授予 mediaDevices 请求，但此处显式注册以确保：
+    // 1. macOS 下系统级麦克风权限弹窗正常触发（需配合 Info.plist 的
+    //    NSMicrophoneUsageDescription）
+    // 2. 未来若加入权限管控逻辑，已有统一入口无需重构
+    session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+      // mediaDevices 涵盖麦克风、摄像头等媒体设备；此处仅授权媒体设备访问
+      if (permission === 'media') {
+        callback(true);
+      } else {
+        // 其他权限类型保持默认行为（不干预，由 Electron 默认策略处理）
+        callback(true);
+      }
+    });
 
     // 加载持久化的 AI 网关地址（在注册 handler 之前，确保 handler 可用正确的 URL）
     await loadPersistedGatewayUrl();

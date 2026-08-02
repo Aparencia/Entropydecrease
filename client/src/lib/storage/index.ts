@@ -35,6 +35,7 @@ export const offlineQueueStore = new StorageAdapter(db.offlineQueue, 'offlineQue
 export const pomodoroGoalStore = new StorageAdapter(db.pomodoroGoals, 'pomodoroGoals');
 export const pomodoroPresetStore = new StorageAdapter(db.pomodoroPresets, 'pomodoroPresets');
 export const ritualRecordStore = new StorageAdapter(db.ritualRecords, 'ritualRecords');
+export const predictionStore = new StorageAdapter(db.predictions, 'predictions');
 
 // 导入导出与存储管理
 export { exportAllData, downloadExport, importData, readFileAsText } from './exportImport';

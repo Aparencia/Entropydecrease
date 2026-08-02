@@ -49,10 +49,17 @@ jobs:
       - run: cd client && npm ci
       - name: Lint
         run: cd client && npm run lint
-      - name: Typecheck
+      - name: Typecheck (renderer)
+        # 渲染进程（React + Vite）的 TypeScript 编译检查
         run: cd client && npx tsc --noEmit
-      - name: Test
-        run: cd client && npm run test -- --run
+      # Electron 主进程使用独立的 tsconfig（CommonJS / Node 目标），
+      # 与渲染进程的 Vite+DOM 配置不同，需单独检查以捕获主进程类型错误
+      - name: Typecheck (Electron main process)
+        run: cd client && npx tsc -p electron/tsconfig.json --noEmit
+      - name: Test (with coverage)
+        # 启用覆盖率收集，与 vitest.config.ts 中配置的阈值配合，
+        # 确保新增代码的测试覆盖不低于设定门槛
+        run: cd client && npm run test -- --run --coverage
       - name: Build
         run: cd client && npm run build
 

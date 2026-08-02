@@ -42,6 +42,16 @@ export const metadata: Metadata = {
     title: "熵减 Entropydecrease — 潜入深海，拾起认知的微光",
     description:
       "基于认知科学的本地优先学习工具：番茄钟、智能笔记、闪卡复习、费曼学习法。",
+    // OG Image：社交平台（微信/Twitter/Telegram 等）分享链接时展示的预览图，
+    // 直接影响点击率和品牌认知。图片位于 public/og-image.png，构建时自动打包。
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1024,
+        height: 1024,
+        alt: "熵减 Entropydecrease — 潜入深海，拾起认知的微光",
+      },
+    ],
   },
   robots: {
     index: true,

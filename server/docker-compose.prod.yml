@@ -110,6 +110,8 @@ services:
       QWEN_API_KEY: ${QWEN_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       GLM_API_KEY: ${GLM_API_KEY:-}
+      # Gemini API 密钥：用于视频分析功能（多模态视觉理解），从 .env.production 注入
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       REDIS_URL: redis://:${REDIS_PASSWORD:-entropy-decrease_redis_prod}@redis:6379/1
       SYNC_SERVICE_URL: http://sync-service:8080
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}

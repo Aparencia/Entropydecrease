@@ -10,8 +10,9 @@
  * @ai-context: computeChunkRms / SilenceTracker 为纯逻辑无副作用，可安全单测；
  * 设备枚举/订阅为浏览器 API 副作用，已物理分离。
  *
- * TODO(现场课程): 现场课程接入麦克风后，本模块需同步枚举 audioinput 设备，
- * 并对麦克风静音（拔出/系统禁用/权限吊销）给出对应诊断。
+ * @ai-context: 麦克风设备监测为后续迭代预留——麦克风采集已由 MicrophoneProvider
+ * 实现，但麦克风静音诊断（拔出/系统禁用/权限吊销）尚需在本模块扩展 audioinput
+ * 设备枚举与对应的 SilenceTracker 分支。
  */
 
 /** 输出设备信息 */

@@ -134,7 +134,7 @@ export class CaptureManager {
     // Path B 智能模式：跳过 Pipeline/Worker，用轻量采样器 + 流式 ASR 替代
     if (this.capturePath === 'smart') {
       const id = await this.initSessionRecord(config, 'vision');
-      this.smartController.start(id);
+      this.smartController.start(id, config.microphone);
 
       captureEventBus.emit('session:started', { sessionId: id, config, path: 'smart' });
       return id;

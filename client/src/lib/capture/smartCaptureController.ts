@@ -26,13 +26,20 @@ export class SmartCaptureController {
 
   /**
    * 启动 smart 采集：初始化采样器/分段器/统计定时器
+   *
+   * @param sessionId 会话 ID（由 CaptureManager 传入）
+   * @param microphone 是否使用麦克风源（现场课程场景），
+   *   true 时启用 VADMarker 的背景噪声校准，false 时使用 loopback 预设阈值
    */
-  start(sessionId: string): void {
+  start(sessionId: string, microphone?: boolean): void {
     this.smartStartTime = Date.now();
     this.smartSampler = new SmartSampler();
-    // 网课模式固定 loopback 源：跳过背景噪声校准，直接使用预设阈值
-    // TODO(现场课程): 麦克风输入时改为 sourceType: 'microphone' 启用校准
-    this.vadMarker = new VADMarker({ sourceType: 'loopback' });
+    // 根据采集源选择 VAD 模式：
+    // - 麦克风（现场课程）：启用自适应校准，前 N 块采样背景噪声自动调整阈值
+    // - 系统环回（网课）：数字信号无环境底噪，使用预设阈值跳过校准
+    this.vadMarker = new VADMarker({
+      sourceType: microphone ? 'microphone' : 'loopback',
+    });
 
     // 流式 ASR：语音段完成后立即发射事件，由上层 Hook 触发转写
     this.vadMarker.onSegmentReady = (segment) => {

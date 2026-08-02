@@ -9,6 +9,7 @@
  */
 import { BrowserWindow, ipcMain } from 'electron';
 import { AudioCapture, listAudioSources } from './audioCapture.js';
+import { listMicrophoneDevices } from './audio/microphoneProvider.js';
 import type { AudioCaptureOptions, AudioChunk } from './audioCapture.js';
 import type { AudioSourcePreference } from '../src/lib/capture/audioSourceStrategy.js';
 import { VideoRecorder } from './videoRecorder.js';
@@ -55,6 +56,16 @@ export function registerMediaCaptureHandlers(): void {
     }
   });
 
+  // 现场课程场景：枚举可用的麦克风设备（渲染进程通过此接口获取设备列表供用户选择）
+  safeHandle('audio_list_microphones', async () => {
+    try {
+      return await listMicrophoneDevices();
+    } catch (err) {
+      logger.error('[IPC] audio_list_microphones failed:', err);
+      return [];
+    }
+  });
+
   safeHandle(
     'audio_capture_start',
     async (
@@ -63,6 +74,8 @@ export function registerMediaCaptureHandlers(): void {
         sourceId?: string;
         /** 用户在设置页选择的音频源偏好（主进程读不到 localStorage，由渲染进程传入） */
         preference?: AudioSourcePreference;
+        /** 现场课程场景：启用麦克风采集（与系统环回互斥） */
+        microphone?: boolean;
       },
     ) => {
       if (activeAudioCapture) {
@@ -95,6 +108,8 @@ export function registerMediaCaptureHandlers(): void {
       try {
         await activeAudioCapture.start(senderWin, options?.sourceId, {
           preference: options?.preference,
+          // 现场课程场景：麦克风采集标记透传至选源策略与 Provider 工厂
+          microphone: options?.microphone,
         });
         const decision = activeAudioCapture.sourceDecision;
         logger.info('[IPC] audio_capture_start 已启动');

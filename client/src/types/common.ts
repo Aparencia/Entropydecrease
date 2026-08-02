@@ -93,3 +93,26 @@ export interface UserProfile {
   avatarUrl: string;      // Supabase Storage 头像 URL
   updatedAt: string;      // ISO 8601
 }
+
+/**
+ * AI 预测题记录 — 持久化 PredictionPanel 的预测结果
+ *
+ * 每条记录对应一次预测生成会话，包含多道预测题及用户的作答结果。
+ * 用于跨会话保留学习轨迹，下次打开笔记时可回顾历史预测。
+ */
+export interface PredictionRecord {
+  id: string;
+  /** 关联的笔记 ID */
+  noteId: string;
+  /** 预测题目列表（JSON 序列化存储） */
+  predictions: Array<{
+    question: string;
+    expectedAnswer: string;
+    difficulty?: number;
+    relatedConcepts?: string[];
+    userGuess: string;
+    accuracy?: 'correct' | 'partial' | 'incorrect';
+  }>;
+  /** 创建时间 */
+  createdAt: Date;
+}

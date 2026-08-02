@@ -229,65 +229,82 @@ async def call_with_fallback_stream(
 
     budget = TIMEOUT_CONFIG.get(feature, 30) * 1.5
     chain = PROVIDER_FALLBACK_CHAIN.get(feature, ["fallback"])
-    start_time = asyncio.get_event_loop().time()
 
-    for provider_key in chain:
-        # 熔断器检查：跳过已熔断的 Provider
-        if not is_provider_available(provider_key):
-            logger.debug("Provider [%s] 已熔断，跳过 (stream feature=%s)", provider_key, feature)
-            continue
+    async def _run_stream_fallback_chain():
+        """内部协程：遍历 fallback 链尝试获取可用的流式生成器。
 
-        # 剩余预算检查
-        elapsed = asyncio.get_event_loop().time() - start_time
-        remaining = budget - elapsed
-        if remaining <= 0:
-            logger.error("流式 fallback 预算耗尽: feature=%s, elapsed=%.1fs", feature, elapsed)
-            break
+        将循环逻辑封装为独立协程，以便外层用 asyncio.wait_for 施加
+        总预算超时兜底，防止所有 Provider 异常时预算耗尽仍不退出。
+        """
+        start_time = asyncio.get_event_loop().time()
 
-        provider = app.state.providers.get(provider_key)
-        if not provider:
-            continue
-        model_name = _resolve_model_name(provider_key, feature)
-        try:
-            _FEATURE_CONTEXT.set(feature)
-            gen = fn(provider, model_name)
-            # 首 token 探测：生成器是惰性求值，真正的 provider 调用（及 429
-            # 等执行期错误）发生在首次迭代时，仅创建生成器的 try/except 捕获
-            # 不到。此处等首 token，成功才认定该 provider 可用，否则捕获
-            # 执行期错误并降级到下一个 provider（修复 429 不切换模型的问题）。
-            agen = gen.__aiter__()
-            probe_timeout = min(_FIRST_TOKEN_PROBE_TIMEOUT, remaining)
-            first_chunk = await asyncio.wait_for(agen.__anext__(), timeout=probe_timeout)
+        for provider_key in chain:
+            # 熔断器检查：跳过已熔断的 Provider
+            if not is_provider_available(provider_key):
+                logger.debug("Provider [%s] 已熔断，跳过 (stream feature=%s)", provider_key, feature)
+                continue
 
-            # 首 token 成功：包装生成器，先吐首 token 再吐剩余
-            async def _wrapped_gen(a=agen, first=first_chunk):
-                yield first
-                async for c in a:
-                    yield c
+            # 剩余预算检查
+            elapsed = asyncio.get_event_loop().time() - start_time
+            remaining = budget - elapsed
+            if remaining <= 0:
+                logger.error("流式 fallback 预算耗尽: feature=%s, elapsed=%.1fs", feature, elapsed)
+                break
 
-            # 通知熔断器成功
-            cb = get_circuit(provider_key)
-            if cb:
-                await cb.on_success()
-            return _wrapped_gen(), provider_key, False
-        except StopAsyncIteration:
-            # 生成器为空（provider 正常但无输出）：返回空流，视为成功
-            async def _empty_gen():
-                if False:
-                    yield  # 使其成为异步生成器函数
-            cb = get_circuit(provider_key)
-            if cb:
-                await cb.on_success()
-            return _empty_gen(), provider_key, False
-        except Exception as e:
-            logger.warning(
-                "Provider [%s] stream failed (首token探测) for feature=%s: %s, trying next...",
-                provider_key, feature, str(e),
-            )
-            cb = get_circuit(provider_key)
-            if cb:
-                await cb.on_failure()
-        finally:
-            _FEATURE_CONTEXT.set("")
+            provider = app.state.providers.get(provider_key)
+            if not provider:
+                continue
+            model_name = _resolve_model_name(provider_key, feature)
+            try:
+                _FEATURE_CONTEXT.set(feature)
+                gen = fn(provider, model_name)
+                # 首 token 探测：生成器是惰性求值，真正的 provider 调用（及 429
+                # 等执行期错误）发生在首次迭代时，仅创建生成器的 try/except 捕获
+                # 不到。此处等首 token，成功才认定该 provider 可用，否则捕获
+                # 执行期错误并降级到下一个 provider（修复 429 不切换模型的问题）。
+                agen = gen.__aiter__()
+                probe_timeout = min(_FIRST_TOKEN_PROBE_TIMEOUT, remaining)
+                first_chunk = await asyncio.wait_for(agen.__anext__(), timeout=probe_timeout)
 
-    raise RuntimeError("所有 AI 服务暂时不可用")
+                # 首 token 成功：包装生成器，先吐首 token 再吐剩余
+                async def _wrapped_gen(a=agen, first=first_chunk):
+                    yield first
+                    async for c in a:
+                        yield c
+
+                # 通知熔断器成功
+                cb = get_circuit(provider_key)
+                if cb:
+                    await cb.on_success()
+                return _wrapped_gen(), provider_key, False
+            except StopAsyncIteration:
+                # 生成器为空（provider 正常但无输出）：返回空流，视为成功
+                async def _empty_gen():
+                    if False:
+                        yield  # 使其成为异步生成器函数
+                cb = get_circuit(provider_key)
+                if cb:
+                    await cb.on_success()
+                return _empty_gen(), provider_key, False
+            except Exception as e:
+                logger.warning(
+                    "Provider [%s] stream failed (首token探测) for feature=%s: %s, trying next...",
+                    provider_key, feature, str(e),
+                )
+                cb = get_circuit(provider_key)
+                if cb:
+                    await cb.on_failure()
+            finally:
+                _FEATURE_CONTEXT.set("")
+
+        raise RuntimeError("所有 AI 服务暂时不可用")
+
+    # 外层超时兜底：防止所有 Provider 异常时预算耗尽仍不退出
+    # 与非流式 call_with_fallback 保持一致，用 asyncio.wait_for 包裹整条链
+    try:
+        return await asyncio.wait_for(_run_stream_fallback_chain(), timeout=budget)
+    except asyncio.TimeoutError:
+        logger.error(
+            "流式 AI 服务超时（预算 %.1fs 已耗尽）: feature=%s", budget, feature,
+        )
+        raise RuntimeError(f"流式 AI 服务超时（预算 {budget}s 已耗尽）")

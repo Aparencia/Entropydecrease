@@ -8,15 +8,13 @@
  * 无需改动，行为与重构前一致。
  * @ai-context: 时间戳统一在编排器补，保证不同源切换（含降级）后时间基准连续。
  *
- * TODO(现场课程): 麦克风 Provider（MicrophoneProvider）待补，届时经
- * selectAudioSource 的 microphone 分支进入，VADMarker 以
- * sourceType:'microphone' 构造启用背景噪声校准。
  */
 
 import type { BrowserWindow } from 'electron';
 import { logger } from './logger.js';
 import { EndpointLoopbackProvider, listAudioSources } from './audio/endpointLoopbackProvider.js';
 import { ProcessLoopbackProvider } from './audio/processLoopbackProvider.js';
+import { MicrophoneProvider } from './audio/microphoneProvider.js';
 import { isProcessLoopbackAvailable } from './audio/processAudioNative.js';
 import type {
   AudioCaptureOptions,
@@ -190,8 +188,8 @@ export class AudioCapture {
           void this.degradeToEndpoint(message);
         });
       case 'microphone':
-        // TODO(现场课程): MicrophoneProvider 待实现
-        throw new Error('麦克风 Provider 尚未实现');
+        // 麦克风采集：渲染进程侧 getUserMedia，数据经 IPC 回传（详见 microphoneProvider.ts）
+        return new MicrophoneProvider(sink);
     }
   }
 

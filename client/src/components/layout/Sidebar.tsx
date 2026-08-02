@@ -17,6 +17,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { SPRING, BEAT } from '@/lib/animation/springConfig';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { useIsNewbiePhase } from '@/features/onboarding/firstDive/useFirstDiveStore';
+import { useLearningProgress } from '@/hooks/useLearningProgress';
 import FeedbackPanel from './FeedbackPanel';
 
 /* ── 导航配置 ── */
@@ -78,8 +79,8 @@ export default function Sidebar() {
   // 新手期显示模块副标题（首潜完成后自动隐去）
   const isNewbie = useIsNewbiePhase();
 
-  // TODO: 接入真实学习进度数据
-  const _progressItems: { subject: string; progress: number }[] = [];
+  // 从各学习模块 store 聚合真实进度数据（深潜/闪卡/笔记/费曼/打卡）
+  const progressItems = useLearningProgress();
   const ghostTasks = useMemo<string[]>(() => pickRandom(ghostTaskPool, 2), []);
 
   // 设置页 chunk 预加载：hover/focus 时提前下载，导航时瞬间渲染
@@ -222,6 +223,39 @@ export default function Sidebar() {
               dotColor={dotColor} collapsed={collapsed} index={i + 6}
             />
           ))}
+
+          {/* 学习进度 — 从真实数据源聚合各模块完成百分比 */}
+          {!collapsed && progressItems.length > 0 && (
+            <>
+              <div className="text-[10px] text-text-tertiary font-medium tracking-[0.08em] uppercase px-2.5 pt-4 pb-1 opacity-50">
+                进度
+              </div>
+              <div className="px-2.5 flex flex-col gap-1.5">
+                {progressItems.map((item, i) => (
+                  <motion.div
+                    key={item.subject}
+                    initial={{ opacity: 0, x: -4 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.2 + i * 0.04 }}
+                    className="flex flex-col gap-0.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-text-secondary/70">{item.subject}</span>
+                      <span className="text-[10px] text-text-tertiary/60 tabular-nums">{item.progress}%</span>
+                    </div>
+                    <div className="h-[3px] rounded-full bg-bg-tertiary/40 overflow-hidden">
+                      <motion.div
+                        className="h-full rounded-full bg-brand-500/60"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${item.progress}%` }}
+                        transition={{ duration: 0.6, ease: [0.25, 0.1, 0.25, 1], delay: 0.3 + i * 0.04 }}
+                      />
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </>
+          )}
 
           {/* Ghost Tasks — Zeigarnik Effect */}
           {!collapsed && (

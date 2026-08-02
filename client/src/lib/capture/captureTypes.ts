@@ -94,6 +94,8 @@ export interface CaptureSessionConfig {
   path?: CapturePath;
   /** @ai-context 课程元数据，用于分析时注入 Prompt 提升术语识别率 */
   courseMeta?: CourseMeta;
+  /** 现场课程场景：启用麦克风采集（与系统环回互斥） */
+  microphone?: boolean;
 }
 
 /**

@@ -58,6 +58,12 @@ export function Footer() {
                 更新日志
               </a>
             </div>
+            {/* 法律合规链接 — 隐私政策与用户协议 */}
+            <div className="flex flex-col gap-2.5">
+              <span className="text-kb-text3 text-xs uppercase tracking-widest mb-1">法律</span>
+              <Link href="/privacy" className="text-kb-text2 hover:text-kb-text transition-colors duration-300">隐私政策</Link>
+              <Link href="/terms" className="text-kb-text2 hover:text-kb-text transition-colors duration-300">用户协议</Link>
+            </div>
           </div>
         </div>
 

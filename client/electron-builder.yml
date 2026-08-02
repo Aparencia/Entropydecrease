@@ -43,6 +43,9 @@ win:
   icon: app-icon.png
 mac:
   icon: app-icon.png
+  # 现场课程场景：麦克风权限描述（macOS 系统弹窗文案，用户授权后可使用麦克风采集）
+  extendInfo:
+    NSMicrophoneUsageDescription: "熵减需要访问您的麦克风以采集课堂音频"
 linux:
   icon: app-icon.png
 nsis:

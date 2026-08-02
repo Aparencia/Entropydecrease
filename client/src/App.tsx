@@ -24,6 +24,9 @@ import { OfflineAIQueueBootstrap } from '@/lib/ai/OfflineAIQueueBootstrap';
 import { AssistantRoot } from '@/features/assistant/AssistantRoot';
 import { assistantEventBus } from '@/features/assistant/lib/eventBus';
 import { RETURN_THRESHOLD_MS } from '@/features/assistant/constants';
+// 留存机制：初始化 hook（store 加载）+ 深海发现弹窗（全局 portal）
+import { useRetentionInit } from '@/features/retention/hooks/useRetentionInit';
+import { DiscoveryReveal } from '@/features/retention/components/DiscoveryReveal';
 import '@/stores/useSettingsStore'; // 导入以触发音效设置初始化
 
 // 启动时预加载所有音效（不阻塞渲染）
@@ -41,6 +44,10 @@ const queryClient = new QueryClient({
 function App() {
   // Initialize theme on app mount
   useTheme();
+
+  // 留存机制：在 Provider 内、路由外初始化所有留存 store
+  // 放在此处确保无论用户从哪个路由进入，数据均已就绪
+  useRetentionInit();
 
   // ── 启动缓冲带：接管 HTML 内联 splash，首次渲染完成后淡出 ──
   useLayoutEffect(() => {
@@ -139,6 +146,9 @@ function App() {
               <OfflineAIQueueBootstrap />
               {/* AI 学伴：全局浮层，路由之外、Provider 之内，偏好关闭时零开销 */}
               <AssistantRoot />
+              {/* 留存机制：深海发现揭示弹窗（createPortal 到 body，与 AchievementToast 同级）
+                  仅当 discoveryStore 有待展示发现时才渲染实际 DOM */}
+              <DiscoveryReveal />
             </ErrorBoundary>
           </SyncProvider>
         </AuthProvider>

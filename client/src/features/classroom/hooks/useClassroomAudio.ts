@@ -4,23 +4,32 @@
  * @ai-context: 从 useClassroomCapture 拆出。渲染端音频管道由主进程
  * audio_capture_do_start/stop 指令驱动（Electron 中系统音频只能在渲染进程取到）。
  * 两处关键修复保留：①AudioContext 在 IPC 回调（非用户手势调用栈）中创建时受
- * Chrome autoplay policy 影响默认 suspended，onaudioprocess 永不触发，必须显式
- * resume()；②createScriptProcessor 的 bufferSize 必须是 [256,16384] 内 2 的幂，
- * 直接传 5s 样本数（80000）会抛 IndexSizeError 中断整条管道，故用 4096 小缓冲
- * 累积到 chunkDurationMs 再整块发送，保证 VAD/ASR 拿到完整音频段。
+ * Chrome autoplay policy 影响默认 suspended，音频回调永不触发，必须显式
+ * resume()；②原 ScriptProcessor 的 bufferSize 必须是 [256,16384] 内 2 的幂
+ * （仅降级路径需要，详见 lib/audioPipeline.ts）。
  * @ai-context: 健康 watchdog 区分两种故障——"开始后 15s 从未收到音频块"
  * （管道未启动）与"曾正常但中断 >10s"（设备变更/被抢占），各自独立提示。
  * @ai-context: 静音诊断/窗口源回退/设备变更自动重启见 useAudioRecovery。
  *
- * TODO(现场课程): 当前音频源固定为系统环回/窗口源（网课场景）。现场课程需
- * 支持麦克风输入：getUserMedia({ audio: { deviceId } }) 直采 audioinput 设备，
- * 并启用 VADMarker 的背景噪声校准（见 vadMarker.ts 同名 TODO）。
+ * @ai-context: AudioWorklet 迁移说明（2025）
+ *   ScriptProcessor 已被 Web Audio API 规范标记为 deprecated，未来 Chromium 可能移除。
+ *   新架构使用 AudioWorklet（audio-chunk-processor.js），音频处理在独立渲染线程执行。
+ *   管道逻辑已提取到 lib/audioPipeline.ts，本 hook 仅负责生命周期管理和健康监控。
+ *   降级策略：若 audioWorklet API 不可用，自动回退到 ScriptProcessor 路径。
+ *
+ * @ai-context: 音频源切换——本 hook 支持两种采集路径：
+ *   - 系统环回（网课场景）：通过 getDisplayMedia + loopback 采集系统混音
+ *   - 麦克风（现场课程场景）：通过 getUserMedia 直接采集麦克风输入
+ *   由主进程 audio_capture_do_start IPC 指令中的 microphone 字段分支。
  */
 import { useState, useEffect, useRef } from 'react';
 import type { AudioChunkData, CaptureMode, SessionStatus, CaptureManager } from '@/lib/capture';
+import {
+  isAudioWorkletSupported,
+  startAudioWorkletPipeline,
+  startScriptProcessorPipeline,
+} from '@/lib/audioPipeline';
 
-/** ScriptProcessor 合法缓冲大小（2 的幂，位于 [256,16384]） */
-const PROCESSOR_BUFFER_SIZE = 4096;
 /** 开始采集后多久仍无音频块则判定管道未启动 */
 const NEVER_RECEIVED_TIMEOUT_MS = 15000;
 /** 音频中断多久判定为异常 */
@@ -29,6 +38,8 @@ const CHUNK_GAP_TIMEOUT_MS = 10000;
 interface AudioStartPayload {
   sourceId: string;
   options: { sampleRate: number; channels: number; chunkDurationMs: number };
+  /** 现场课程场景：启用麦克风采集（与系统环回互斥） */
+  microphone?: boolean;
 }
 
 export interface AudioHealth {
@@ -72,6 +83,50 @@ async function openDesktopAudioStream(): Promise<MediaStream> {
   console.info(
     `[useClassroomCapture] 系统音频环回已获取: track="${audioTracks[0].label}", ` +
     `enabled=${audioTracks[0].enabled}, muted=${audioTracks[0].muted}`,
+  );
+  return stream;
+}
+
+/**
+ * 打开麦克风音频流（现场课程场景）。
+ *
+ * 与系统环回不同，麦克风直接使用 getUserMedia API，无需视频轨触发授权。
+ * deviceId 为 null 时使用系统默认麦克风；传入具体 deviceId 可选择指定设备。
+ *
+ * 错误场景：
+ * - NotAllowedError：用户拒绝授权或系统级权限未开启
+ * - NotFoundError：无可用麦克风设备
+ * - NotReadableError：设备被其他应用独占
+ */
+async function openMicrophoneStream(deviceId: string | null): Promise<MediaStream> {
+  // 构造 audio 约束：deviceId 为 null 时不指定，由系统选择默认麦克风
+  const audioConstraints: MediaTrackConstraints = {
+    // 指定采样率与声道数，与下游 VAD/ASR 管道期望一致（16kHz/单声道）
+    sampleRate: 16000,
+    channelCount: 1,
+    // 关闭浏览器内置降噪/回声消除，保留原始音频供 VAD 校准与 ASR 处理
+    // （内置降噪会压缩动态范围，影响 RMS 能量计算的准确性）
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false,
+  };
+  if (deviceId) {
+    audioConstraints.deviceId = { exact: deviceId };
+  }
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: audioConstraints,
+  });
+
+  const audioTracks = stream.getAudioTracks();
+  if (audioTracks.length === 0) {
+    stream.getTracks().forEach((t) => t.stop());
+    throw new Error('麦克风音频轨缺失：getUserMedia 未返回音频');
+  }
+  console.info(
+    `[useClassroomCapture] 麦克风已获取: track="${audioTracks[0].label}", ` +
+    `deviceId=${deviceId ?? '(默认)'}, settings=`,
+    audioTracks[0].getSettings(),
   );
   return stream;
 }
@@ -171,61 +226,49 @@ export function useClassroomAudio({ captureManager, status, mode, onNotify }: Us
       const payload = args[0] as AudioStartPayload;
       (async () => {
         try {
-          // 系统音频环回（主进程 handler 附加 audio: 'loopback'）
-          const stream = await openDesktopAudioStream();
+          // 根据采集源选择不同的音频流获取路径：
+          // - 麦克风（现场课程）：getUserMedia 直接采集麦克风输入
+          // - 系统环回（网课默认）：getDisplayMedia + loopback 采集系统混音
+          const stream = payload.microphone
+            ? await openMicrophoneStream(payload.sourceId || null)
+            : await openDesktopAudioStream();
           const audioCtx = new AudioContext({ sampleRate: payload.options.sampleRate });
           // 关键修复：非用户手势调用栈中创建的 AudioContext 默认 suspended，
-          // 必须显式 resume()，否则 onaudioprocess 永不触发（0 音频块）。
+          // 必须显式 resume()，否则音频处理回调永不触发（0 音频块）。
           if (audioCtx.state !== 'running') {
             await audioCtx.resume();
           }
           console.info(`[useClassroomCapture] 音频管道已启动, AudioContext state=${audioCtx.state}, sampleRate=${audioCtx.sampleRate}`);
-          const sourceNode = audioCtx.createMediaStreamSource(stream);
-          // 根因修复：bufferSize 必须是 [256,16384] 内 2 的幂，用小缓冲切片后累积整块发送。
-          const processor = audioCtx.createScriptProcessor(PROCESSOR_BUFFER_SIZE, payload.options.channels, 1);
-          const targetSamples = Math.ceil((payload.options.sampleRate * payload.options.chunkDurationMs) / 1000);
-          let pending = new Float32Array(targetSamples);
-          let pendingOffset = 0;
-          let sentChunks = 0;
-          // TODO: ScriptProcessor 已被 Web Audio API 标记为废弃，
-          // 后续应迁移至 AudioWorklet（需单独 worklet 文件经 audioWorklet.addModule 加载）。
-          processor.onaudioprocess = (e) => {
-            const inputData = e.inputBuffer.getChannelData(0);
-            let srcOffset = 0;
-            // 将本次回调的样本填入 pending，满 targetSamples 即发送一个完整块
-            while (srcOffset < inputData.length) {
-              const take = Math.min(targetSamples - pendingOffset, inputData.length - srcOffset);
-              pending.set(inputData.subarray(srcOffset, srcOffset + take), pendingOffset);
-              pendingOffset += take;
-              srcOffset += take;
-              if (pendingOffset >= targetSamples) {
-                sentChunks++;
-                if (sentChunks === 1) {
-                  console.info(`[useClassroomCapture] 首个完整音频块已发送 (${targetSamples} 样本 / ${payload.options.chunkDurationMs}ms)，采集管道正常`);
-                }
-                window.electronAPI?.send('audio_capture_chunk', {
-                  audioBuffer: pending.buffer,
-                  sampleRate: payload.options.sampleRate,
-                  channels: payload.options.channels,
-                  durationMs: payload.options.chunkDurationMs,
-                });
-                pending = new Float32Array(targetSamples);
-                pendingOffset = 0;
-              }
-            }
+
+          // IPC 转发回调：收到完整音频块后通过 Electron IPC 发送给主进程
+          const onChunk = (buffer: ArrayBuffer, durationMs: number) => {
+            window.electronAPI?.send('audio_capture_chunk', {
+              audioBuffer: buffer,
+              sampleRate: payload.options.sampleRate,
+              channels: payload.options.channels,
+              durationMs,
+            });
           };
-          sourceNode.connect(processor);
-          processor.connect(audioCtx.destination);
-          audioCleanupRef.current = async () => {
-            processor.onaudioprocess = null;
-            processor.disconnect();
-            sourceNode.disconnect();
-            stream.getTracks().forEach((t) => t.stop());
-            await audioCtx.close();
-          };
+
+          // 优先使用 AudioWorklet，不可用时降级到 ScriptProcessor
+          if (isAudioWorkletSupported()) {
+            console.info('[useClassroomCapture] 使用 AudioWorklet 音频管道（推荐）');
+            audioCleanupRef.current = await startAudioWorkletPipeline(
+              audioCtx, stream, payload.options, onChunk,
+            );
+          } else {
+            console.warn('[useClassroomCapture] AudioWorklet 不可用，降级到 ScriptProcessor');
+            audioCleanupRef.current = startScriptProcessorPipeline(
+              audioCtx, stream, payload.options, onChunk,
+            );
+          }
         } catch (err) {
           console.error('[useClassroomCapture] Audio pipeline start failed:', err);
-          notifyRef.current('error', '音频采集启动失败，无法获取系统音频，请检查音频输出设备');
+          // 根据采集源类型给出不同的诊断提示
+          const hint = payload.microphone
+            ? '音频采集启动失败，无法获取麦克风输入，请检查麦克风设备和权限设置'
+            : '音频采集启动失败，无法获取系统音频，请检查音频输出设备';
+          notifyRef.current('error', hint);
         }
       })();
     });

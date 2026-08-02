@@ -31,6 +31,8 @@ import { AISummaryModal } from '../components/AISummaryModal';
 import { useNoteEditor } from '../hooks/useNoteEditor';
 import { useNoteAI } from '../hooks/useNoteAI';
 import { useEditorContextMenu } from '../hooks/useEditorContextMenu';
+import { useAIAnchorPoint } from '@/lib/ai/hooks/useAIAnchorPoint';
+import { AnchorPointSidebar } from '../components/AnchorPoint';
 
 export default function NoteEditPage() {
   const { id } = useParams<{ id: string }>();
@@ -67,6 +69,60 @@ export default function NoteEditPage() {
     persistCards: ai.persistCards,
     onFlashcardError: ai.handleFlashcardError,
   });
+
+  // === 记忆锚点自动触发 ===
+  // 策略：追踪用户编辑活跃度，每 12 分钟活跃编辑后自动触发 AI 锚点生成。
+  // 活跃度基于编辑器 onUpdate 回调——每次编辑重置 30 秒无操作计时器，
+  // 累计活跃时间达到阈值后触发并重置计时器。
+  const ANCHOR_ACTIVE_THRESHOLD_MS = 12 * 60 * 1000; // 12 分钟活跃编辑阈值
+  const ANCHOR_IDLE_TIMEOUT_MS = 30 * 1000; // 30 秒无操作视为暂停
+  const anchorAI = useAIAnchorPoint();
+  const anchorActiveTimeRef = useRef(0); // 累计活跃编辑时间（毫秒）
+  const anchorLastEditRef = useRef(Date.now()); // 上次编辑时间戳
+  const anchorTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [anchorPoints, setAnchorPoints] = useState<Array<{ id: string; concept: string; explanation?: string; createdAt: string }>>([] );
+
+  // 编辑器活跃跟踪定时器：每 5 秒检查累计活跃时间
+  useEffect(() => {
+    if (!editor || !noteId) return;
+
+    // 监听编辑器 onUpdate 事件，重置上次编辑时间
+    const handleUpdate = () => { anchorLastEditRef.current = Date.now(); };
+    editor.on('update', handleUpdate);
+
+    // 定时累计活跃编辑时间，达到阈值时触发锚点生成
+    anchorTimerRef.current = setInterval(async () => {
+      const now = Date.now();
+      // 如果 30 秒内有编辑操作，累加活跃时间
+      if (now - anchorLastEditRef.current < ANCHOR_IDLE_TIMEOUT_MS) {
+        anchorActiveTimeRef.current += 5000; // 每 5 秒累加
+      }
+      // 活跃时间超过阈值且笔记内容足够时，触发 AI 锚点生成
+      if (anchorActiveTimeRef.current >= ANCHOR_ACTIVE_THRESHOLD_MS) {
+        const text = editor.getText();
+        if (text.trim().length > 100) {
+          const result = await anchorAI.generateAnchorPoints(noteId, text);
+          if (result?.anchorPoints) {
+            // 将 AI 锚点转换为侧边栏组件所需格式
+            const mapped = result.anchorPoints.map((ap, i) => ({
+              id: `${noteId}-anchor-${Date.now()}-${i}`,
+              concept: ap.concept,
+              explanation: ap.explanation,
+              createdAt: new Date().toISOString(),
+            }));
+            setAnchorPoints((prev) => [...prev, ...mapped]);
+          }
+        }
+        // 重置活跃时间计时器，开始下一轮累计
+        anchorActiveTimeRef.current = 0;
+      }
+    }, 5000);
+
+    return () => {
+      editor.off('update', handleUpdate);
+      if (anchorTimerRef.current) clearInterval(anchorTimerRef.current);
+    };
+  }, [editor, noteId, anchorAI]);
 
   // 解析自由画布数据
   const freeCanvasData = useMemo<FreeCanvasData | null>(() => {
@@ -271,6 +327,11 @@ export default function NoteEditPage() {
         />
       )}
     </div>
+
+    {/* AI 记忆锚点侧边栏 — 活跃编辑 12 分钟后自动生成 */}
+    {anchorPoints.length > 0 && noteId && (
+      <AnchorPointSidebar noteId={noteId} anchorPoints={anchorPoints} />
+    )}
 
     {/* 回声定位侧边栏 */}
     {captureOpen && (

@@ -8,7 +8,7 @@
  *
  * @ai-context: dashboard 功能模块页面：DashboardPage。
  */
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -23,6 +23,20 @@ import { useNoteStore } from '@/features/notes/store/useNoteStore';
 import { useFeynmanStore } from '@/features/feynman/store/useFeynmanStore';
 import { useCheckIn } from '@/lib/checkin/useCheckIn';
 import { useAuth } from '@/lib/auth/AuthContext';
+// 留存机制组件：连续打卡气泡、珊瑚生态、深度计、学习画像
+// 使用 lazy 动态导入避免增加首屏 bundle 体积
+import { useEcosystemStore } from '@/features/retention/store/useEcosystemStore';
+import { useRetentionSettings } from '@/features/retention/store/useRetentionSettings';
+import {
+  generateTimeInsights, generateConsistencyInsights,
+  generateEfficiencyInsights, computeIdentityTags,
+} from '@/features/retention/lib/profileEngine';
+import type { StreakState } from '@/features/retention/types';
+// React.lazy 动态导入留存组件（具名导出需 .then 包装为 default export）
+const StreakBubble = lazy(() => import('@/features/retention/components/StreakBubble').then(m => ({ default: m.StreakBubble })));
+const DepthMeter = lazy(() => import('@/features/retention/components/DepthMeter').then(m => ({ default: m.DepthMeter })));
+const CoralEcosystem = lazy(() => import('@/features/retention/components/CoralEcosystem').then(m => ({ default: m.CoralEcosystem })));
+const LearningProfile = lazy(() => import('@/features/retention/components/LearningProfile').then(m => ({ default: m.LearningProfile })));
 import { useLearningAnalytics } from '../hooks/useLearningAnalytics';
 import StartupRitual from '../components/StartupRitual';
 import { useLastSession } from '../hooks/useLastSession';
@@ -238,6 +252,41 @@ export default function DashboardPage() {
 
   const { streakDays } = useCheckIn('dashboard');
 
+  // ── 留存机制数据准备 ──
+  // 珊瑚生态数据（供 StreakBubble / DepthMeter / CoralEcosystem 消费）
+  const retentionEnabled = useRetentionSettings((s) => s.enabled);
+  const coralData = useEcosystemStore();
+
+  // 基于珊瑚种植日期构建 StreakState（StreakBubble 组件所需）
+  // 复用已有的珊瑚数据避免额外存储开销
+  const streakState: StreakState | null = useMemo(() => {
+    if (!retentionEnabled || coralData.corals.length === 0) return null;
+    const uniqueDays = new Set(
+      coralData.corals.map((c) => new Date(c.plantedAt).toISOString().split('T')[0]),
+    );
+    const sorted = [...uniqueDays].sort().reverse();
+    // 连续天数 = 从最近日期向前逐日检查，遇到间隔即停止
+    let currentStreak = 1;
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = new Date(sorted[i - 1]);
+      const curr = new Date(sorted[i]);
+      const diffDays = (prev.getTime() - curr.getTime()) / (1000 * 60 * 60 * 24);
+      if (diffDays === 1) {
+        currentStreak++;
+      } else {
+        break;
+      }
+    }
+    return {
+      id: 'streak-main',
+      currentStreak, // 从最近日期向前推算的连续打卡天数
+      longestStreak: sorted.length,
+      lastActiveDate: sorted[0] || new Date().toISOString().split('T')[0],
+      restDayPreference: 0,
+      retainedPercent: 50,
+    };
+  }, [retentionEnabled, coralData.corals]);
+
   const loadDecks = useFlashcardStore((s) => s.loadDecks);
   const notes = useNoteStore((s) => s.notes);
   const loadNotes = useNoteStore((s) => s.loadNotes);
@@ -317,6 +366,28 @@ export default function DashboardPage() {
 
   /* ── 学习分析 ── */
   const { data: analytics, loading: analyticsLoading } = useLearningAnalytics(14);
+
+  // ── 留存：基于已有分析数据生成学习画像（离线规则引擎，无需网络）
+  // 放在 analytics / feynmanNotes / flashcardReviews 声明之后，确保变量已就绪
+  const profileData = useMemo(() => {
+    if (!analytics) return { insights: [], identityTags: [] };
+    const insights = [
+      ...generateTimeInsights(analytics.heatmap),
+      ...generateConsistencyInsights(analytics.trend),
+      ...generateEfficiencyInsights(analytics.radar),
+    ];
+    // 从已有统计推算身份标签解锁状态
+    const totalMinutes = analytics.trend.reduce((s, t) => s + t.value, 0);
+    const identityTags = computeIdentityTags({
+      totalFocusMinutes: totalMinutes,
+      feynmanCompleted: feynmanNotes.filter((n) => n.status === 'completed').length,
+      totalReviews: flashcardReviews.length,
+      longestStreak: streakDays,
+      coralCount: coralData.corals.length,
+      totalDepth: coralData.totalDepth,
+    });
+    return { insights, identityTags };
+  }, [analytics, feynmanNotes, flashcardReviews, streakDays, coralData]);
 
   /* ── 知识预览卡片数据 ── */
   const knowledgeCards = useMemo<KnowledgeCard[]>(() => {
@@ -491,6 +562,41 @@ export default function DashboardPage() {
           </motion.div>
         </motion.div>
       </section>
+
+      {/* ════ 留存机制：深海养成可视化区域 ════ */}
+      {/* 放置在英雄区下方、学习脉搏上方：视觉优先级中等，不抢首屏注意力
+          仅当留存总开关开启且有数据时才渲染（组件内部各自守卫） */}
+      {retentionEnabled && (
+        <section className="relative max-w-[1100px] mx-auto px-6 py-rhythm-sm">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-rhythm-sm">
+            {/* 左列：累计深度计（身份认同——"我已经是怎样的人"） */}
+            <Suspense fallback={<div className="h-24 rounded-xl bg-white/5 animate-pulse-skeleton" />}>
+              <DepthMeter />
+            </Suspense>
+
+            {/* 中列：珊瑚生态缸缩略入口（点击展开全屏，损失规避机制） */}
+            <Suspense fallback={<div className="h-24 rounded-xl bg-white/5 animate-pulse-skeleton" />}>
+              <CoralEcosystem />
+            </Suspense>
+
+            {/* 右列：学习画像洞察 + 身份标签（离线规则引擎驱动） */}
+            <Suspense fallback={<div className="h-24 rounded-xl bg-white/5 animate-pulse-skeleton" />}>
+              <LearningProfile
+                insights={profileData.insights}
+                identityTags={profileData.identityTags}
+              />
+            </Suspense>
+          </div>
+
+          {/* 连续打卡气泡：绝对定位于区域右上角，不占据文档流空间
+              无排名、无比较（4.5 节约束），洋流休息日显示为水波纹 */}
+          <div className="absolute top-0 right-6 z-10">
+            <Suspense fallback={null}>
+              <StreakBubble streakState={streakState} />
+            </Suspense>
+          </div>
+        </section>
+      )}
 
       {/* ════ 学习脉搏区域 ════ */}
       <section className="relative max-w-[1100px] mx-auto px-6 py-rhythm-lg kb-section-blend">

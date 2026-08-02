@@ -1,5 +1,5 @@
 // @ai-context
-// sitemap.xml 生成器：四个页面的优先级与更新频率声明。sitemap.xml generator.
+// sitemap.xml 生成器：所有页面的优先级与更新频率声明。sitemap.xml generator.
 // Why: 静态导出模式需 force-static 显式声明，否则构建报错。
 import type { MetadataRoute } from "next";
 
@@ -35,6 +35,19 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: new Date(),
       changeFrequency: "monthly",
       priority: 0.5,
+    },
+    // 隐私政策与用户协议 — 法律合规页面，更新频率较低
+    {
+      url: `${BASE_URL}/privacy`,
+      lastModified: new Date(),
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
+    {
+      url: `${BASE_URL}/terms`,
+      lastModified: new Date(),
+      changeFrequency: "yearly",
+      priority: 0.3,
     },
   ];
 }

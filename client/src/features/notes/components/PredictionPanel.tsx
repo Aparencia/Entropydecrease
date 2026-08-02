@@ -4,12 +4,14 @@
  *
  * @ai-context: 通用组件：PredictionPanel。
  */
-import { useState, useCallback } from 'react';
-import { X, Sparkles, Send, ChevronRight } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import { X, Sparkles, Send, ChevronRight, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAIPredict } from '@/lib/ai/useAI';
 import type { PredictionPrompt } from '@/lib/ai/types';
 import { PredictionResult } from './PredictionResult';
+import { db } from '@/lib/storage/database';
+import type { PredictionRecord } from '@/types/models';
 
 interface PredictionPanelProps {
   noteId: string;
@@ -45,7 +47,19 @@ function SkeletonCards() {
 export function PredictionPanel({ noteId, noteContent, onClose }: PredictionPanelProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [predictions, setPredictions] = useState<PredictionItem[]>([]);
+  const [historyRecords, setHistoryRecords] = useState<PredictionRecord[]>([]);
   const { loading, error, predict } = useAIPredict();
+
+  // 加载该笔记的历史预测记录，用于跨会话回顾
+  useEffect(() => {
+    db.predictions
+      .where('noteId')
+      .equals(noteId)
+      .reverse()
+      .sortBy('createdAt')
+      .then((records) => setHistoryRecords(records as PredictionRecord[]))
+      .catch(() => { /* 加载历史记录失败不阻塞主流程 */ });
+  }, [noteId]);
 
   const handleGenerate = useCallback(async () => {
     setPhase('loading');
@@ -92,6 +106,34 @@ export function PredictionPanel({ noteId, noteContent, onClose }: PredictionPane
     );
     setPhase('revealed');
   }, []);
+
+  // 揭示答案后将预测结果持久化到 IndexedDB，供跨会话回顾
+  const handleRevealAndSave = useCallback(async () => {
+    handleReveal();
+    // 延迟保存以确保 predictions state 已更新为揭示后的状态
+    setTimeout(async () => {
+      try {
+        const record: PredictionRecord = {
+          id: crypto.randomUUID(),
+          noteId,
+          predictions: predictions.map((p) => ({
+            question: p.question,
+            expectedAnswer: p.expectedAnswer,
+            difficulty: p.difficulty,
+            relatedConcepts: p.relatedConcepts,
+            userGuess: p.userGuess,
+            accuracy: p.accuracy,
+          })),
+          createdAt: new Date(),
+        };
+        await db.predictions.put(record);
+        // 将新记录追加到历史列表
+        setHistoryRecords((prev) => [record, ...prev]);
+      } catch {
+        // 持久化失败不阻塞用户交互
+      }
+    }, 100);
+  }, [handleReveal, noteId, predictions]);
 
   const allGuessed = predictions.length > 0 && predictions.every((p) => p.userGuess.trim().length > 0);
 
@@ -232,13 +274,43 @@ export function PredictionPanel({ noteId, noteContent, onClose }: PredictionPane
             }))}
           />
         )}
+
+        {/* 历史预测记录回顾 — 从 IndexedDB 加载的过往预测结果 */}
+        {phase === 'idle' && historyRecords.length > 0 && (
+          <div className="mt-6">
+            <div className="flex items-center gap-1.5 mb-3">
+              <History className="w-3.5 h-3.5 text-text-tertiary" strokeWidth={1.5} />
+              <span className="text-b3 text-text-tertiary font-medium">历史预测记录</span>
+            </div>
+            <div className="flex flex-col gap-2">
+              {historyRecords.map((record) => (
+                <div
+                  key={record.id}
+                  className="rounded-kb-md p-3 bg-bg-secondary/40 border border-border/20"
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-c1 text-text-tertiary">
+                      {new Date(record.createdAt).toLocaleDateString()} {new Date(record.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span className="text-c1 text-brand-600 font-medium">
+                      {record.predictions.filter((p) => p.accuracy === 'correct').length}/{record.predictions.length} 正确
+                    </span>
+                  </div>
+                  <div className="text-c1 text-text-secondary/70 truncate">
+                    {record.predictions.map((p) => p.question).join(' · ')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 底部操作栏 */}
       {phase === 'guessing' && (
         <div className="px-kb-lg py-3 border-t border-border/40 flex-shrink-0">
           <button
-            onClick={handleReveal}
+            onClick={handleRevealAndSave}
             disabled={!allGuessed}
             className={cn(
               'w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-kb-md text-b2 font-medium',

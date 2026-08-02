@@ -262,7 +262,39 @@ jobs:
             --Area domestic
 
       # ---------------------------------------------------------------
-      # 发布结果校验：“空 Release”已静默发生过两次（v0.27.0 因 macOS 腿
+      # 安装包体积监控：防止包体积无序膨胀影响用户下载体验与 CDN 成本。
+      # 当 .exe 超过阈值时仅输出警告（不阻塞发布），以便团队及时排查
+      # 是否误打包了大文件或依赖。
+      # ---------------------------------------------------------------
+      - name: Check installer size
+        env:
+          # 安装包体积警告阈值（单位：字节），200MB
+          SIZE_THRESHOLD: 209715200
+        run: |
+          set -eo pipefail
+          echo '## 📦 安装包体积报告' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo "| 文件 | 大小 |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|------|" >> "$GITHUB_STEP_SUMMARY"
+          for exe in release-windows-latest/*.exe; do
+            [ -f "$exe" ] || continue
+            SIZE=$(stat -c%s "$exe")
+            NAME=$(basename "$exe")
+            # 转换为人类可读的 MB
+            SIZE_MB=$(awk "BEGIN {printf \"%.2f\", $SIZE / 1048576}")
+            THRESHOLD_MB=$(awk "BEGIN {printf \"%.0f\", $SIZE_THRESHOLD / 1048576}")
+            echo "| $NAME | ${SIZE_MB} MB |" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$SIZE" -gt "$SIZE_THRESHOLD" ]; then
+              echo "::warning::${NAME} 体积 ${SIZE_MB}MB 超过阈值 ${THRESHOLD_MB}MB，请检查是否误打包了大文件或依赖"
+              echo '' >> "$GITHUB_STEP_SUMMARY"
+              echo "> ⚠️ **${NAME}** 体积 ${SIZE_MB} MB 超过阈值 ${THRESHOLD_MB} MB，请关注包体积膨胀" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "${NAME}: ${SIZE_MB} MB（阈值 ${THRESHOLD_MB} MB，正常）"
+            fi
+          done
+
+      # ---------------------------------------------------------------
+      # 发布结果校验："空 Release"已静默发生过两次（v0.27.0 因 macOS 腿
       # 拖垮构建、v0.28.7 因 workflow 解析失败），而两次都是事后手工才
       # 发现的——此时 electron-updater 拉不到 latest.yml，自动更新静默断链。
       # 此步骤使该故障在 CI 中即时暴露。

@@ -3,8 +3,9 @@
  *
  * @ai-context: 从 NoteEditPage 拆出。仅在 TipTap 有非空选区时接管右键
  * （否则 fallthrough 到浏览器默认菜单）；康奈尔模板不启用。
- * 四项 AI 操作：生成闪卡（走 persistCards 落库）、解释概念/提炼要点
- * （v0.5.0-B1.4 待实现）、高亮标记（直接执行 TipTap 命令）。
+ * 四项 AI 操作：生成闪卡（走 persistCards 落库）、解释概念（调用
+ * summarize API paragraph 风格）、提炼要点（调用 summarize API bullet
+ * 风格）、高亮标记（直接执行 TipTap 命令）。
  */
 import { useMemo, useCallback } from 'react';
 import type { Editor } from '@tiptap/react';
@@ -12,6 +13,7 @@ import { Sparkles } from 'lucide-react';
 import type { ContextMenuGroup } from '@/components/ui/ContextMenu';
 import { useContextMenu } from '@/lib/contextMenu';
 import { useToast } from '@/components/ui';
+import { aiPluginLoader } from '@/lib/ai/AIPluginLoader';
 
 interface UseEditorContextMenuOptions {
   editor: Editor | null;
@@ -49,14 +51,38 @@ export function useEditorContextMenu({
           .then((count) => toast({ type: 'success', message: `已生成 ${count} 张闪卡`, silent: true }))
           .catch(onFlashcardError);
         break;
-      case 'ai-explain':
-        // TODO [v0.5.0-B1.4]: 调用 AI 解释选中概念 — 需调用 summarize API 并展示解释结果
-        toast({ type: 'info', message: 'AI 解释功能即将上线' });
+      case 'ai-explain': {
+        // AI 解释概念：调用 summarize API，以段落风格对选中文本生成解释
+        toast({ type: 'info', message: '正在生成解释…', duration: 1500 });
+        aiPluginLoader
+          .summarizeNote(selectedText, { maxLength: 300, style: 'paragraph', language: 'zh' })
+          .then((result) => {
+            // 展示 AI 解释结果（截取摘要文本，toast 最长 6 秒）
+            toast({ type: 'success', message: result.summary, duration: 6000 });
+          })
+          .catch((err: unknown) => {
+            // 离线或 AI 不可用时给出友好提示
+            const msg = err instanceof Error ? err.message : '未知错误';
+            toast({ type: 'error', message: `AI 解释失败：${msg}` });
+          });
         break;
-      case 'ai-distill':
-        // TODO [v0.5.0-B1.4]: 调用 AI 提炼要点 — 需调用 summarize API 提取关键点
-        toast({ type: 'info', message: 'AI 提炼功能即将上线' });
+      }
+      case 'ai-distill': {
+        // AI 提炼要点：调用 summarize API，以 bullet 风格提取选中文本的关键点
+        toast({ type: 'info', message: '正在提炼要点…', duration: 1500 });
+        aiPluginLoader
+          .summarizeNote(selectedText, { maxLength: 200, style: 'bullet', language: 'zh' })
+          .then((result) => {
+            // 展示提炼出的关键要点
+            toast({ type: 'success', message: result.summary, duration: 6000 });
+          })
+          .catch((err: unknown) => {
+            // 离线或 AI 不可用时给出友好提示
+            const msg = err instanceof Error ? err.message : '未知错误';
+            toast({ type: 'error', message: `AI 提炼失败：${msg}` });
+          });
         break;
+      }
       case 'ai-highlight':
         // 使用 TipTap 高亮命令直接标记选中文本
         editor.chain().focus().toggleHighlight().run();

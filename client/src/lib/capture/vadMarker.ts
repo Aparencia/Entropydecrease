@@ -6,12 +6,12 @@
  * 每段完成后立即触发 onSegmentReady 回调，支持流式 ASR 转写。
  * @ai-context: 校准仅对 microphone 源生效；loopback（网课系统环回）为数字
  * 信号无环境底噪，构造时直接标记已校准并使用预设阈值，不进入校准期
- * （避免 UI 出现无意义的"正在校准音频阈值"提示）。
+ * （避免 UI 出现无意义的“正在校准音频阈值”提示）。
  *
- * TODO(现场课程): 背景噪声校准为「现场课程」麦克风输入场景预留——麦克风
- * 存在真实环境底噪（空调/键盘/人声嘈杂），自适应阈值届时才真正发挥作用。
- * 现场课程实现时以 sourceType: 'microphone' 构造启用校准，并将校准结果
- * 持久化供下次会话作为初始阈值（避免每次启动等待 10 块采样期），请勿删除。
+ * @ai-context: 背景噪声校准为现场课程麦克风输入场景设计——麦克风存在真实
+ * 环境底噪（空调/键盘/人声嘴杂），以 sourceType: 'microphone' 构造时
+ * 启用前 N 块自适应校准。后续可考虑将校准结果持久化供下次会话作为初始
+ * 阈值，避免每次启动等待采样期。
  */
 
 import type { AudioChunkData, AudioSegment, TimelineEntry } from './captureTypes';
@@ -94,7 +94,7 @@ export class VADMarker {
   private lastSampleRate = 16_000;
   private lastChannels = 1;
 
-  // ── 自适应阈值校准（仅 microphone 源启用，见文件头 TODO(现场课程)）──
+  // ── 自适应阈值校准（仅 microphone 源启用，见文件头 @ai-context 说明）──
   private calibrationSamples: number[] = [];
   private calibrated = false;
   private readonly CALIBRATION_CHUNKS = 10;

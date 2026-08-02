@@ -2,16 +2,30 @@
 // 下载页：应用窗口 Mockup、下载入口（DownloadCta 服务器直链 + GitHub 备用）、版本轨迹与开源信息。
 // Download page: app mockup, download CTA (server-hosted with GitHub fallback), changelog.
 // Why: Mockup 为纯 CSS 风格化示意而非截图，避免版本迭代后截图过期。
+// 版本轨迹数据从 public/versions.json 动态加载，发版后仅需更新该 JSON 文件，无需修改页面代码。
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { DownloadCta } from "@/components/DownloadCta";
 import { GlowOrb } from "@/components/GlowOrb";
 import { SectionReveal } from "@/components/SectionReveal";
 
-/* ---------- 数据 ---------- */
+/* ---------- 版本轨迹数据结构 ---------- */
 
-const CHANGELOG = [
+/** 单个版本条目，与 public/versions.json 中的 changelog 数组结构对应 */
+interface ChangelogEntry {
+  version: string;
+  tag: string;
+  date: string;
+  highlights: string[];
+}
+
+/**
+ * 兜底版本数据（versions.json 不可达时展示）。
+ * 保持与 JSON 文件同步，确保页面始终有内容可渲染。
+ */
+const FALLBACK_CHANGELOG: ChangelogEntry[] = [
   {
     version: "v0.15.0",
     tag: "正式版",
@@ -19,31 +33,7 @@ const CHANGELOG = [
     highlights: [
       "核心功能矩阵全面交付",
       "身份体系与用户账户完善",
-      "自定义标题栏（无框窗口）",
-      "笔记导入/导出（Markdown/HTML/PDF）",
       "自适应番茄钟与学习仪表盘增强",
-    ],
-  },
-  {
-    version: "v0.9.0",
-    tag: "稳定版",
-    date: "2026-06",
-    highlights: [
-      "性能优化与体验精打磨",
-      "笔记全文搜索 + 标签系统",
-      "高自信错误追踪（黄金错误）",
-      "生成式复习模式",
-    ],
-  },
-  {
-    version: "v0.8.0",
-    tag: "安全版",
-    date: "2026-05",
-    highlights: [
-      "安全加固与课堂助手链路修复",
-      "22 个品牌音效集成",
-      "关闭窗口行为确认",
-      "AI 网关稳定性优化",
     ],
   },
 ];
@@ -151,6 +141,26 @@ function AppMockup() {
 /* ---------- 页面 ---------- */
 
 export default function DownloadPage() {
+  // 从 public/versions.json 动态加载版本轨迹数据
+  // 兼容 Next.js 静态导出（output: "export"）——运行时客户端 fetch，不依赖服务端渲染
+  const [changelog, setChangelog] = useState<ChangelogEntry[]>(FALLBACK_CHANGELOG);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/versions.json", { signal: controller.signal, cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+      .then((data: { changelog?: ChangelogEntry[] }) => {
+        // 仅当返回有效数据时替换兜底，否则保持 FALLBACK_CHANGELOG
+        if (data?.changelog && Array.isArray(data.changelog) && data.changelog.length > 0) {
+          setChangelog(data.changelog);
+        }
+      })
+      .catch(() => {
+        /* versions.json 不可达时静默回退兜底数据，不影响页面渲染 */
+      });
+    return () => controller.abort();
+  }, []);
+
   return (
     <div className="pt-36 pb-8">
       {/* 标题区 */}
@@ -196,7 +206,7 @@ export default function DownloadPage() {
         </SectionReveal>
 
         <div className="space-y-5">
-          {CHANGELOG.map((release, i) => (
+          {changelog.map((release, i) => (
             <SectionReveal key={release.version} delay={i * 0.1}>
               <div
                 className="rounded-2xl p-7 transition-shadow duration-500 hover:shadow-kb-card"

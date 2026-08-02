@@ -95,6 +95,8 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
     "multimodal_analyze": ("qwen", "vision"),
     # Path C: 视频分析（Gemini 原生视频 → Markdown 笔记）
     "video_analyze": ("gemini", "video"),
+    # 学伴对话（流式 SSE 多轮交互，Qwen 通用模型兜底）
+    "chat": ("qwen", "free"),
 }
 
 # ============================================================

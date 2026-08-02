@@ -555,4 +555,192 @@ describe('Pomodoro Store', () => {
       expect(usePomodoroStore.getState().completedCount).toBe(1);
     });
   });
+
+  // ── 迷你潜水（startMiniDive）───────────────────────────────
+
+  describe('startMiniDive — 首潜 3 分钟体验', () => {
+    it('应设置 180 秒计时器并立即开始运行', () => {
+      usePomodoroStore.getState().startMiniDive();
+      const state = usePomodoroStore.getState();
+      expect(state.remainingSeconds).toBe(180);
+      expect(state.totalSeconds).toBe(180);
+      expect(state.isRunning).toBe(true);
+      expect(state.isPaused).toBe(false);
+      expect(state.isMiniDive).toBe(true);
+      expect(state.phase).toBe('work');
+      expect(state.currentGoal).toBe('首潜 · 3 分钟体验');
+    });
+
+    it('迷你潜水完成后应清除 isMiniDive 标记', () => {
+      usePomodoroStore.setState({
+        isRunning: true, remainingSeconds: 1, phase: 'work',
+        completedCount: 0, isMiniDive: true,
+        activePreset: STUDY_PRESET,
+      });
+      usePomodoroStore.getState().tick();
+      // 阶段切换后 isMiniDive 应重置
+      expect(usePomodoroStore.getState().isMiniDive).toBe(false);
+    });
+  });
+
+  // ── 沉浸专注模式 ─────────────────────────────────────────────
+
+  describe('沉浸专注模式（enterImmersive / exitImmersive）', () => {
+    it('enterImmersive 应设置 isImmersive=true', () => {
+      usePomodoroStore.getState().enterImmersive();
+      expect(usePomodoroStore.getState().isImmersive).toBe(true);
+    });
+
+    it('exitImmersive 应暂停计时器并标记 wasImmersive', () => {
+      usePomodoroStore.setState({ isRunning: true, isImmersive: true });
+      usePomodoroStore.getState().exitImmersive();
+      const state = usePomodoroStore.getState();
+      expect(state.isImmersive).toBe(false);
+      expect(state.wasImmersive).toBe(true);
+      expect(state.isRunning).toBe(false);
+      expect(state.isPaused).toBe(true);
+      // 动作信号应为 exit_immersive
+      expect(state.lastAction).toBe('exit_immersive');
+    });
+
+    it('resume 时若 wasImmersive=true 应自动重新进入沉浸', () => {
+      usePomodoroStore.setState({
+        isRunning: false, isPaused: true,
+        isImmersive: false, wasImmersive: true,
+        sessionStartTime: null,
+      });
+      usePomodoroStore.getState().resume();
+      const state = usePomodoroStore.getState();
+      expect(state.isRunning).toBe(true);
+      expect(state.isImmersive).toBe(true);
+      expect(state.wasImmersive).toBe(false);
+    });
+  });
+
+  // ── AI 推荐集成 ────────────────────────────────────────────────
+
+  describe('AI 推荐集成（setAIRecommendation）', () => {
+    it('应存储 AI 推荐的工作时长和理由', () => {
+      usePomodoroStore.getState().setAIRecommendation(30, '基于过去 7 天的学习数据分析');
+      const state = usePomodoroStore.getState();
+      expect(state.aiRecommendedDuration).toBe(30);
+      expect(state.aiReasoning).toBe('基于过去 7 天的学习数据分析');
+    });
+
+    it('重复调用应覆盖旧推荐值', () => {
+      usePomodoroStore.getState().setAIRecommendation(25, '初始推荐');
+      usePomodoroStore.getState().setAIRecommendation(35, '更新推荐');
+      const state = usePomodoroStore.getState();
+      expect(state.aiRecommendedDuration).toBe(35);
+      expect(state.aiReasoning).toBe('更新推荐');
+    });
+  });
+
+  // ── 当前目标（setCurrentGoal） ──────────────────────────────────
+
+  describe('setCurrentGoal — 设置当前番茄目标', () => {
+    it('应正确设置目标文字', () => {
+      usePomodoroStore.getState().setCurrentGoal('复习 FSRS 算法');
+      expect(usePomodoroStore.getState().currentGoal).toBe('复习 FSRS 算法');
+    });
+
+    it('应支持清空目标（设为 null）', () => {
+      usePomodoroStore.getState().setCurrentGoal('某目标');
+      usePomodoroStore.getState().setCurrentGoal(null);
+      expect(usePomodoroStore.getState().currentGoal).toBeNull();
+    });
+  });
+
+  // ── 动作信号（lastAction / lastActionCounter）─────────────────
+
+  describe('动作信号（lastAction / lastActionCounter）', () => {
+    it('start 应发出 start 信号并递增 counter', () => {
+      const beforeCounter = usePomodoroStore.getState().lastActionCounter;
+      usePomodoroStore.getState().start();
+      const state = usePomodoroStore.getState();
+      expect(state.lastAction).toBe('start');
+      expect(state.lastActionCounter).toBe(beforeCounter + 1);
+    });
+
+    it('pause 应发出 pause 信号', () => {
+      usePomodoroStore.getState().start();
+      const counter = usePomodoroStore.getState().lastActionCounter;
+      usePomodoroStore.getState().pause();
+      const state = usePomodoroStore.getState();
+      expect(state.lastAction).toBe('pause');
+      expect(state.lastActionCounter).toBe(counter + 1);
+    });
+
+    it('phase_complete 时 lastCompletedPhase 应记录完成的阶段', () => {
+      usePomodoroStore.setState({
+        isRunning: true, remainingSeconds: 1, phase: 'work', completedCount: 0,
+      });
+      usePomodoroStore.getState().tick();
+      const state = usePomodoroStore.getState();
+      expect(state.lastAction).toBe('phase_complete');
+      expect(state.lastCompletedPhase).toBe('work');
+    });
+
+    it('长休结束时 isCycleComplete 应为 true', () => {
+      usePomodoroStore.setState({
+        isRunning: true, remainingSeconds: 1, phase: 'long_break', completedCount: 4,
+      });
+      usePomodoroStore.getState().tick();
+      const state = usePomodoroStore.getState();
+      expect(state.lastCompletedPhase).toBe('long_break');
+      expect(state.isCycleComplete).toBe(true);
+    });
+  });
+
+  // ── showCompletionOverlay（v0.29 庆祝覆盖层）───────────────────
+
+  describe('showCompletionOverlay — 深潜完成庆祝', () => {
+    it('工作阶段完成时应显示庆祝覆盖层', () => {
+      usePomodoroStore.setState({
+        isRunning: true, remainingSeconds: 1, phase: 'work', completedCount: 0,
+      });
+      usePomodoroStore.getState().tick();
+      expect(usePomodoroStore.getState().showCompletionOverlay).toBe(true);
+    });
+
+    it('dismissCompletionOverlay 应关闭覆盖层', () => {
+      usePomodoroStore.setState({ showCompletionOverlay: true });
+      usePomodoroStore.getState().dismissCompletionOverlay();
+      expect(usePomodoroStore.getState().showCompletionOverlay).toBe(false);
+    });
+
+    it('休息阶段完成时不应触发庆祝覆盖层', () => {
+      usePomodoroStore.setState({
+        isRunning: true, remainingSeconds: 1, phase: 'short_break', completedCount: 1,
+        showCompletionOverlay: false,
+      });
+      usePomodoroStore.getState().tick();
+      expect(usePomodoroStore.getState().showCompletionOverlay).toBe(false);
+    });
+  });
+
+  // ── setPreset（预设切换）────────────────────────────────────────
+
+  describe('setPreset — 预设切换', () => {
+    it('切换预设应重置计数并回到 work 阶段', () => {
+      usePomodoroStore.setState({
+        presets: [CLASS_PRESET, STUDY_PRESET],
+        activePreset: STUDY_PRESET,
+        completedCount: 3,
+        phase: 'short_break',
+      });
+      usePomodoroStore.getState().setPreset('preset-class');
+      const state = usePomodoroStore.getState();
+      expect(state.activePreset?.id).toBe('preset-class');
+      expect(state.completedCount).toBe(0);
+      expect(state.phase).toBe('work');
+    });
+
+    it('切换到相同预设应无任何操作', () => {
+      usePomodoroStore.setState({ activePreset: STUDY_PRESET, completedCount: 2 });
+      usePomodoroStore.getState().setPreset('preset-study');
+      // completedCount 不变说明没有重新切换
+      expect(usePomodoroStore.getState().completedCount).toBe(2);
+    });
+  });
 });

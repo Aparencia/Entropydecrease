@@ -10,8 +10,9 @@
  * @ai-context: audio: 'loopback' 捕获系统输出混音（含本应用自身声音）；
  * 若需静音本地播放改用 'loopbackWithMute'。handler 全局唯一，重复注册会覆盖。
  *
- * TODO(现场课程): 麦克风输入不走 displayMedia 路径，直接以 deviceId 调用
- * getUserMedia({ audio: { deviceId } }) 即可，无需本模块参与。
+ * @ai-context: 麦克风输入不走 displayMedia 路径，直接以 deviceId 调用
+ * getUserMedia({ audio: { deviceId } }) 即可，由 MicrophoneProvider + 
+ * useClassroomAudio 的 openMicrophoneStream 实现，无需本模块参与。
  */
 
 import { session, desktopCapturer } from 'electron';

@@ -5,7 +5,7 @@ import type {
   FeynmanNote, FeynmanSummary, FeynmanWeakPoint, FeynmanAIResult,
   OperationLog, AppSettings, SyncConflict, OfflineQueueItem,
   StudyCheckIn, Achievement, PomodoroGoal, WindowCapture, WindowCaptureSegment,
-  Consent, UserProfile, Inspiration, SearchIndexEntry, RitualRecord
+  Consent, UserProfile, Inspiration, SearchIndexEntry, RitualRecord, PredictionRecord
 } from '@/types/models';
 import type { DeepSeaDiscovery, CoralRecord, StreakState } from '@/features/retention/types';
 import type { ClassroomNote } from './classroomNoteStore';
@@ -56,6 +56,8 @@ export class EntropyDecreaseDatabase extends Dexie {
   windowCaptureSegments!: Table<WindowCaptureSegment, string>;
   noteLinks!: Table<NoteLink, string>;
   feynmanAIResults!: Table<FeynmanAIResult, string>;
+  /** AI 预测题记录表 — 持久化预测驱动学习的结果 */
+  predictions!: Table<PredictionRecord, string>;
 
   constructor() {
     // 数据库名 'keban' 不可修改（存量用户数据），见文件头 @ai-context
@@ -322,6 +324,11 @@ export class EntropyDecreaseDatabase extends Dexie {
     // v0.30.0: 费曼会话 AI 交互结果持久化（用户反馈“AI 反馈内容返回列表后消失”）
     this.version(22).stores({
       feynmanAIResults: 'id, &noteId, updatedAt',
+    });
+
+    // AI 预测题持久化 — 保存预测驱动学习的结果，跨会话可回顾
+    this.version(23).stores({
+      predictions: 'id, noteId, createdAt',
     });
   }
 }
