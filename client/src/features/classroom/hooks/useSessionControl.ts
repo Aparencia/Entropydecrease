@@ -12,6 +12,7 @@ import { useCallback } from 'react';
 import { requireGatewayUrl } from '@/lib/ai/config';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { analyzePartial } from '@/lib/ai/sessionAnalyzer';
+import { refreshLocalAsrStatus } from '../utils/asrTranscriber';
 import { getAudioSourcePreference } from '@/lib/capture/audioSourcePreference';
 import type { AudioSourceKind } from '@/lib/capture/audioSourceStrategy';
 import type {
@@ -95,6 +96,9 @@ export function useSessionControl({
       session.resetForStart();
 
       await probeGateway();
+
+      // 刷新本地 ASR 可用性缓存（会话开始时检测一次，避免每段都 IPC 查询）
+      refreshLocalAsrStatus().catch(() => { /* 静默失败，降级走云端 */ });
 
       // Path C 全程录制：走独立 IPC 通道，不启动截图/音频流水线
       if (capturePath === 'full_record') {

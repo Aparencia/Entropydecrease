@@ -9,6 +9,7 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Check, HelpCircle, CheckCircle2 } from 'lucide-react';
 import { Button, Skeleton, EmptyState } from '@/components/ui';
 import { AIButton } from '@/components/ui/AIButton';
+import { useModeState } from '@/hooks/useMode';
 import { cn } from '@/lib/utils';
 
 // ── 环境光 ──
@@ -52,6 +53,7 @@ interface FeynmanTopBarProps {
 export function FeynmanTopBar({
   concept, hasExplanation, isCompleted, aiEvalLoading, onBack, onRescue, onAIEval,
 }: FeynmanTopBarProps) {
+  const { config } = useModeState();
   return (
     <motion.div
       className="flex items-center gap-kb-sm px-kb-md py-3 border-b border-border/50 flex-shrink-0 relative z-10"
@@ -89,7 +91,7 @@ export function FeynmanTopBar({
           size="sm"
           loading={aiEvalLoading}
           disabled={aiEvalLoading}
-          tooltip="请先完成讲解内容"
+          tooltip={config.aiEnabled ? '请先完成讲解内容' : '当前模式未启用 AI 功能，请切换到混合模式'}
           onClick={onAIEval}
           title={aiEvalLoading ? 'AI 评估中…' : 'AI 评估讲解质量'}
         >

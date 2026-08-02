@@ -46,6 +46,8 @@ PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
     "multimodal_analyze": ["qwen", "glm"],
     # Path C: 视频分析（Gemini 原生视频优先，Qwen-VL 抽帧降级）
     "video_analyze": ["gemini", "qwen"],
+    # 学伴对话（Qwen 为主，DeepSeek 备选）
+    "chat": ["qwen", "deepseek", "fallback"],
 }
 
 

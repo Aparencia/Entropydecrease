@@ -31,6 +31,11 @@ const ALLOWED_CHANNELS = [
   'ai_video_analyze',
   'ai_merge_notes',
   'ai:set-gateway-url',
+  // AI 学伴对话 IPC channel
+  'ai:chat:send',
+  'ai:chat:history',
+  'ai:chat:sessions',
+  'ai:chat:new-session',
   'screen_list_windows',
   'screen_watch_windows_start',
   'screen_watch_windows_stop',
@@ -93,6 +98,14 @@ const ALLOWED_CHANNELS = [
   'performance:set-mode',
   // P3-18 性能诊断 IPC channel
   'perf:get-metrics',
+  // 本地 ASR（sherpa-onnx）IPC channel
+  'local_asr_transcribe',
+  'local_asr_get_config',
+  'local_asr_update_config',
+  'local_asr_check_available',
+  'local_asr_get_models',
+  'local_asr_download_model',
+  'local_asr_delete_model',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */
@@ -117,6 +130,8 @@ const ALLOWED_EVENT_CHANNELS = [
   'ai:stream:chunk',
   'ai:stream:end',
   'ai:stream:error',
+  // 本地 ASR 模型下载进度推送
+  'local_asr_download_progress',
 ] as const;
 
 /** 允许渲染进程单向发送的 channel 白名单（渲染进程 → 主进程，fire-and-forget） */

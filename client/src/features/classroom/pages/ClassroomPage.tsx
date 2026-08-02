@@ -27,6 +27,7 @@ import { CourseInfoCard } from '../components/CourseInfoCard';
 import { SmartCapturePanel } from '@/features/notes/components/SmartCapturePanel';
 import { AnalysisPreview } from '@/features/notes/components/AnalysisPreview';
 import { VideoRecordPanel } from '@/features/notes/components/VideoRecordPanel';
+import { AsrModelPrompt } from '../components/AsrModelPrompt';
 
 export default function ClassroomPage() {
   const capture = useClassroomCapture();
@@ -158,6 +159,8 @@ export default function ClassroomPage() {
         {showIdleGuide ? (
           /* 空态：当前配置说明书 + 课程信息卡 */
           <div className="flex-1 overflow-y-auto">
+            {/* 本地 ASR 模型下载引导（首次进入时显示，可选增强） */}
+            <AsrModelPrompt />
             <IdleGuidePanel
               capturePath={capture.capturePath}
               mode={capture.mode}

@@ -8,6 +8,7 @@ import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { loadSettings, saveSettings, recordSession, playCompletionSound, sendNotification } from './usePomodoroPersistence';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
+import { assistantEventBus } from '@/features/assistant/lib/eventBus';
 import type { PomodoroPreset } from '@/types/models';
 import {
   getAllPresets, getPresetById, createPreset as svcCreatePreset,
@@ -418,6 +419,12 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
               });
             }).catch(() => {});
           }).catch(() => {});
+
+          // @ai-context: 发射 session:end 事件——驱动 AI 学伴主动触发（专注结束关怀）
+          assistantEventBus.emit('session:end', {
+            currentHour: new Date().getHours(),
+            sessionMinutes: Math.round((actualDuration ?? plannedSeconds) / 60),
+          });
         }
         // 静默预设跳过所有提示音播放（继承 BUG-005 语义）
         if (!isSilent) {

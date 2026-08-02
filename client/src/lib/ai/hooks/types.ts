@@ -47,6 +47,13 @@ export function handleServiceUnavailable(): { error: string; needsConfig: boolea
     // 网关不可达时，区分「URL 已配置但服务未运行」和「完全未配置」
     const gatewayUrl = getAIConfig().gatewayUrl?.trim();
     if (gatewayUrl) {
+      // 缓存为空（预检未完成）时不应急于判定“未连接”，给更中性的提示
+      if (gatewayStatus === null) {
+        return {
+          error: 'AI 服务暂时不可用，正在检测网关连接，请稍后重试',
+          needsConfig: false,
+        };
+      }
       // 网关 URL 已配置但服务不可达 → 提示检查网关服务
       return {
         error: 'AI 网关未连接，请检查网关服务是否正在运行',

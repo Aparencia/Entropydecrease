@@ -1,0 +1,102 @@
+/**
+ * AI 深海学伴助手 — 类型定义
+ *
+ * @ai-context: 助手模块全部共享类型——消息、会话、触发规则、音频偏好；
+ * 前后端字段映射：前端 camelCase ↔ 网关 snake_case 在 chatHandler 中转换。
+ */
+
+// ── 消息 ──────────────────────────────────────────────────────
+
+export type MessageRole = 'user' | 'assistant' | 'system';
+export type MessageContentType = 'text' | 'action_card' | 'suggestion';
+
+export interface ChatMessage {
+  id: string;
+  sessionId: string;
+  role: MessageRole;
+  content: string;
+  contentType: MessageContentType;
+  /** 主动触发来源标记 */
+  trigger?: ProactiveTriggerType;
+  tokensUsed?: number;
+  model?: string;
+  latencyMs?: number;
+  createdAt: number;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  isArchived: boolean;
+  metadata?: string;
+}
+
+// ── 主动触发 ──────────────────────────────────────────────────
+
+export type ProactiveTriggerType =
+  | 'greeting-startup'
+  | 'greeting-return'
+  | 'session-summary'
+  | 'idle-nudge'
+  | 'review-reminder';
+
+export type AppEventType =
+  | 'app:startup'
+  | 'session:end'
+  | 'user:idle'
+  | 'user:return'
+  | 'review:due'
+  | 'achievement:unlocked';
+
+export type MessageStrategy =
+  | { type: 'template'; templates: string[] }
+  | { type: 'ai_generate'; prompt: string };
+
+export interface ProactiveRule {
+  id: ProactiveTriggerType;
+  event: AppEventType;
+  condition?: (ctx: TriggerContext) => boolean;
+  cooldown: number;
+  priority: number;
+  message: MessageStrategy;
+}
+
+export interface TriggerContext {
+  /** 距上次打开的天数 */
+  daysSinceLastVisit?: number;
+  /** 本次学习时长（分钟） */
+  sessionMinutes?: number;
+  /** 到期闪卡数 */
+  dueCardCount?: number;
+  /** 当前小时 */
+  currentHour: number;
+}
+
+// ── 音频 ──────────────────────────────────────────────────────
+
+export interface AudioPreferences {
+  enabled: boolean;
+  soundEffects: boolean;
+  ttsEnabled: boolean;
+  volume: number;
+}
+
+// ── 助手偏好（设置页持久化） ──────────────────────────────────
+
+export interface AssistantPreferences {
+  enabled: boolean;
+  audio: AudioPreferences;
+  proactiveEnabled: boolean;
+  quietHoursStart: number; // 0-23
+  quietHoursEnd: number;   // 0-23
+}
+
+// ── 水母状态 ──────────────────────────────────────────────────
+
+export type CreatureState = 'idle' | 'alerting' | 'speaking' | 'listening' | 'resting';
+
+// ── 面板状态 ──────────────────────────────────────────────────
+
+export type PanelState = 'hidden' | 'bubble' | 'expanded';

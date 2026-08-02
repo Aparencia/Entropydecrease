@@ -5,7 +5,7 @@
  * 评估的综合评分/维度进度条/优势/待改进/建议。数据来自 useAIEvaluate，
  * 评分阈值文案（≥80 出色 / ≥60 较好）为产品定义，勿随意调整。
  */
-import { X, Sparkles, CheckCircle2, Circle, RotateCcw } from 'lucide-react';
+import { X, Sparkles, CheckCircle2, Circle, RotateCcw, RefreshCw } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { cn } from '@/lib/utils';
 import type { EvaluateResult } from '@/lib/ai/types';
@@ -19,10 +19,12 @@ interface AIEvaluationResultProps {
   onGoSettings: () => void;
   /** v0.30: 重置 AI 反馈（用户建议） */
   onReset?: () => void;
+  /** v0.31: 评估失败后重新评估 */
+  onRetry?: () => void;
 }
 
 export function AIEvaluationResult({
-  loading, error, needsConfig, data, onClose, onGoSettings, onReset,
+  loading, error, needsConfig, data, onClose, onGoSettings, onReset, onRetry,
 }: AIEvaluationResultProps) {
   return (
     <div className={cn(
@@ -64,14 +66,25 @@ export function AIEvaluationResult({
       {error && !loading && (
         <div className="p-3 rounded-kb-md bg-semantic-error/10 border border-semantic-error/20 text-b2 text-semantic-error">
           {error}
-          {needsConfig && (
-            <button
-              onClick={onGoSettings}
-              className="mt-2 block text-b3 underline hover:no-underline"
-            >
-              前往设置页配置 API Key
-            </button>
-          )}
+          <div className="flex items-center gap-3 mt-2">
+            {onRetry && (
+              <button
+                onClick={onRetry}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium bg-bg-secondary text-text-secondary border border-border/50 hover:bg-bg-tertiary hover:text-text-primary active:scale-95 transition-all duration-kb-fast"
+              >
+                <RefreshCw className="w-3.5 h-3.5" strokeWidth={1.5} />
+                重新评估
+              </button>
+            )}
+            {needsConfig && (
+              <button
+                onClick={onGoSettings}
+                className="text-b3 underline hover:no-underline"
+              >
+                前往设置页配置 API Key
+              </button>
+            )}
+          </div>
         </div>
       )}
 
