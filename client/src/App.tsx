@@ -21,6 +21,9 @@ import { db } from '@/lib/storage/database';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { getAIConfig } from '@/lib/ai/config';
 import { OfflineAIQueueBootstrap } from '@/lib/ai/OfflineAIQueueBootstrap';
+import { AssistantRoot } from '@/features/assistant/AssistantRoot';
+import { assistantEventBus } from '@/features/assistant/lib/eventBus';
+import { RETURN_THRESHOLD_MS } from '@/features/assistant/constants';
 import '@/stores/useSettingsStore'; // 导入以触发音效设置初始化
 
 // 启动时预加载所有音效（不阻塞渲染）
@@ -78,6 +81,24 @@ function App() {
     });
   }, []);
 
+  // @ai-context: 应用生命周期事件——启动 & 久别回归，驱动 AI 学伴主动触发引擎
+  useEffect(() => {
+    try {
+      const lastVisit = localStorage.getItem('kb-last-visit');
+      const now = Date.now();
+      const currentHour = new Date().getHours();
+
+      assistantEventBus.emit('app:startup', { currentHour });
+
+      if (lastVisit && now - Number(lastVisit) > RETURN_THRESHOLD_MS) {
+        const days = Math.floor((now - Number(lastVisit)) / (24 * 60 * 60 * 1000));
+        assistantEventBus.emit('user:return', { currentHour, daysSinceLastVisit: days });
+      }
+
+      localStorage.setItem('kb-last-visit', String(now));
+    } catch { /* localStorage 不可用时静默降级 */ }
+  }, []);
+
   const [consentGiven, setConsentGiven] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -116,6 +137,8 @@ function App() {
               <AchievementToast />
               <UpdateNotification />
               <OfflineAIQueueBootstrap />
+              {/* AI 学伴：全局浮层，路由之外、Provider 之内，偏好关闭时零开销 */}
+              <AssistantRoot />
             </ErrorBoundary>
           </SyncProvider>
         </AuthProvider>

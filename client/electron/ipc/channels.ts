@@ -24,6 +24,10 @@ export const IPC_CHANNELS = {
   AI_PREDICT: 'ai_predict',
   AI_RESCUE: 'ai_rescue',
   AI_SET_GATEWAY_URL: 'ai:set-gateway-url',
+  AI_CHAT_SEND: 'ai:chat:send',
+  AI_CHAT_HISTORY: 'ai:chat:history',
+  AI_CHAT_SESSIONS: 'ai:chat:sessions',
+  AI_CHAT_NEW_SESSION: 'ai:chat:new-session',
 
   // 采集相关
   SCREEN_LIST_WINDOWS: 'screen_list_windows',

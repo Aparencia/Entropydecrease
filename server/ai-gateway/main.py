@@ -45,6 +45,7 @@ from routers import (
     streaming_router,
     balance_router,
     ritual_recall_router,
+    chat_router,
 )
 from cache.redis_cache import get_cache
 
@@ -237,6 +238,7 @@ app.include_router(course_detect_router)       # 课程识别（可选 AI 模式
 app.include_router(streaming_router)             # 流式输出（SSE，全量 AI 功能）
 app.include_router(balance_router)               # API 余额查询
 app.include_router(ritual_recall_router)         # v0.26.0 B1.2: 仪式回顾小问
+app.include_router(chat_router)                  # 学伴对话（SSE 流式）
 
 
 # ============================================================

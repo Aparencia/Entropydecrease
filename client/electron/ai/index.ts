@@ -11,6 +11,7 @@ import { logger } from '../logger.js';
 import type { AIFeatureDef } from './utils.js';
 import { registerOllamaHandlers, initOllama } from './ollama/index.js';
 import { registerStreamHandler } from './streamHandler.js';
+import { registerChatHandlers } from './handlers/chatHandler.js';
 import { registerLocalAsrHandlers } from './local-asr/index.js';
 import { loadLocalAsrConfig } from './local-asr/config.js';
 
@@ -80,6 +81,9 @@ export function registerAIHandlers(): void {
 
   // 注册流式输出 IPC handler
   registerStreamHandler();
+
+  // 注册学伴对话 IPC handler
+  registerChatHandlers();
 
   logger.info('[AI] All AI handlers registered successfully');
 }

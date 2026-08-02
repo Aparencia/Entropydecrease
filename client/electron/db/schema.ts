@@ -6,7 +6,7 @@
  */
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const SCHEMA_DDL = /* sql */ `
 CREATE TABLE IF NOT EXISTS pomodoro_sessions (
@@ -159,6 +159,27 @@ CREATE INDEX IF NOT EXISTS idx_flashcard_reviews_reviewed_at ON flashcard_review
 CREATE INDEX IF NOT EXISTS idx_feynman_notes_created_at ON feynman_notes(created_at);
 CREATE INDEX IF NOT EXISTS idx_predictions_note_id ON predictions(note_id);
 CREATE INDEX IF NOT EXISTS idx_predictions_created_at ON predictions(created_at);
+CREATE TABLE IF NOT EXISTS assistant_sessions (
+  id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '新对话',
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+  is_archived INTEGER NOT NULL DEFAULT 0, metadata TEXT
+);
+CREATE TABLE IF NOT EXISTS assistant_messages (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES assistant_sessions(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK(role IN ('user','assistant','system')),
+  content TEXT NOT NULL, content_type TEXT NOT NULL DEFAULT 'text',
+  trigger_type TEXT, tokens_used INTEGER, model TEXT, latency_ms INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS assistant_triggers (
+  id TEXT PRIMARY KEY, rule_id TEXT NOT NULL,
+  triggered_at INTEGER NOT NULL, dismissed INTEGER NOT NULL DEFAULT 0,
+  responded INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_asst_msg_session ON assistant_messages(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_asst_sess_active ON assistant_sessions(is_archived, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_asst_trig_rule ON assistant_triggers(rule_id, triggered_at);
 `;
 
 /** v3 迁移 DDL：CRDT 同步引擎元数据表（条件执行） */
@@ -209,6 +230,9 @@ export function initializeSchema(db: Database.Database): void {
       db.exec(`ALTER TABLE search_index ADD COLUMN entity_type TEXT`);
     } catch { /* 列已存在 */ }
   }
+
+  // v5 迁移：AI 助手会话/消息/触发表（CREATE IF NOT EXISTS 幂等）
+  // 表 DDL 已包含在 SCHEMA_DDL 中，此处无需额外操作
 
   db.pragma(`user_version = ${SCHEMA_VERSION}`);
 }

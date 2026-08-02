@@ -31,6 +31,11 @@ const ALLOWED_CHANNELS = [
   'ai_video_analyze',
   'ai_merge_notes',
   'ai:set-gateway-url',
+  // AI 学伴对话 IPC channel
+  'ai:chat:send',
+  'ai:chat:history',
+  'ai:chat:sessions',
+  'ai:chat:new-session',
   'screen_list_windows',
   'screen_watch_windows_start',
   'screen_watch_windows_stop',
