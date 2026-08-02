@@ -159,11 +159,16 @@ export interface AudioTrack {
 
 export const audioTracks: AudioTrack[] = [
   { id: 'rain', name: 'Rain', nameZh: '雨声', src: '/audio/rain.mp3', category: 'white_noise' },
-  { id: 'cafe', name: 'Cafe', nameZh: '咖啡厅', src: '/audio/cafe.mp3', category: 'white_noise' },
-  { id: 'forest', name: 'Forest', nameZh: '森林', src: '/audio/forest.mp3', category: 'white_noise' },
-  { id: 'waves', name: 'Waves', nameZh: '海浪', src: '/audio/waves.mp3', category: 'white_noise' },
-  { id: 'piano', name: 'Piano', nameZh: '钢琴曲', src: '/audio/piano.mp3', category: 'bgm' },
-  { id: 'ambient', name: 'Ambient', nameZh: '轻音乐', src: '/audio/ambient.mp3', category: 'bgm' },
+  { id: 'stream', name: 'Stream', nameZh: '流水', src: '/audio/stream.mp3', category: 'white_noise' },
+  { id: 'wind-wheat', name: 'Wind & Wheat', nameZh: '风扶麦浪', src: '/audio/wind-wheat.mp3', category: 'white_noise' },
+  { id: 'silkworm', name: 'Silkworm', nameZh: '蚕食桑叶', src: '/audio/silkworm.mp3', category: 'white_noise' },
+  { id: 'campfire', name: 'Campfire', nameZh: '篝火', src: '/audio/campfire.mp3', category: 'white_noise' },
+  { id: 'train', name: 'Train', nameZh: '绿皮火车', src: '/audio/train.mp3', category: 'white_noise' },
+  { id: 'cargo-ship', name: 'Cargo Ship', nameZh: '货轮', src: '/audio/cargo-ship.mp3', category: 'white_noise' },
+  { id: 'study-hall', name: 'Study Hall', nameZh: '自习课', src: '/audio/study-hall.mp3', category: 'white_noise' },
+  { id: 'traffic', name: 'Traffic', nameZh: '车流', src: '/audio/traffic.mp3', category: 'white_noise' },
+  { id: 'restaurant', name: 'Restaurant', nameZh: '餐馆', src: '/audio/restaurant.mp3', category: 'white_noise' },
+  { id: 'morning-rhythm', name: 'Morning Rhythm', nameZh: '晨间韵律', src: '/audio/morning-rhythm.mp3', category: 'bgm' },
 ];
 
 export const AUDIO_PREFS_KEY = 'kb_audio_preferences';
@@ -182,7 +187,7 @@ export const defaultAudioPreferences: AudioPreferences = {
   whiteNoiseTrackId: 'rain',
   whiteNoiseVolume: 0.5,
   bgmEnabled: false,
-  bgmTrackId: 'piano',
+  bgmTrackId: 'morning-rhythm',
   bgmVolume: 0.3,
 };
 
