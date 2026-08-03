@@ -72,10 +72,14 @@ export async function loadRecoveryPack(): Promise<RecoveryPack | null> {
   const selected = selectRecoveryCards(allCards, now);
   if (selected.length === 0) return null;
 
-  // 统计到期卡最多的牌组作为 CTA 跳转目标
+  // 到期总数含新卡（与 UI 文案"共 X 张卡片到了复习时间"一致）；
+  // 牌组 CTA 仍只统计旧卡（repetitions>0，恢复场景针对旧知识）
+  let totalDue = 0;
   const dueByDeck = new Map<string, number>();
   for (const c of allCards) {
-    if (c.repetitions > 0 && new Date(c.dueDate).getTime() <= now) {
+    if (new Date(c.dueDate).getTime() > now) continue;
+    totalDue += 1;
+    if (c.repetitions > 0) {
       dueByDeck.set(c.deckId, (dueByDeck.get(c.deckId) ?? 0) + 1);
     }
   }
@@ -88,7 +92,7 @@ export async function loadRecoveryPack(): Promise<RecoveryPack | null> {
   return {
     gapDays,
     cards: selected,
-    totalDue: maxDue > 0 ? [...dueByDeck.values()].reduce((a, b) => a + b, 0) : 0,
+    totalDue,
     topDeckId,
   };
 }

@@ -42,7 +42,8 @@ export function useAnchorReminder(): string | null {
       if (now - lastFiredRef.current < INTERVAL_MS) return;
       lastFiredRef.current = now;
       busyRef.current = true;
-      generateAnchorPoints('pomodoro-focus', currentGoal)
+      // silent：专注期间的定时提醒不播放分析完成音效（绝不打扰专注）
+      generateAnchorPoints('pomodoro-focus', currentGoal, { silent: true })
         .then((result) => {
           const top = result?.anchorPoints
             ?.slice()
@@ -56,9 +57,14 @@ export function useAnchorReminder(): string | null {
     return () => clearInterval(timer);
   }, [active, currentGoal, generateAnchorPoints]);
 
-  // 会话停止时清空，浮层展示 15 秒后自动消失
+  // 会话停止时清空浮层并重置计时：否则下一个番茄开始后
+  // lastFired 旧时间戳会使首次提醒在几十秒内立即触发
   useEffect(() => {
-    if (!active) { setAnchorText(null); return undefined; }
+    if (!active) {
+      setAnchorText(null);
+      lastFiredRef.current = 0;
+      return undefined;
+    }
     if (!anchorText) return undefined;
     const t = setTimeout(() => setAnchorText(null), ANCHOR_DISPLAY_MS);
     return () => clearTimeout(t);

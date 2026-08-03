@@ -17,6 +17,9 @@ import { getGoldenErrorRecords } from '@/features/flashcards/lib/goldenErrorQuer
 const WEAK_POINT_LIMIT = 20;
 /** 黄金错误取最近 N 条参与摘要 */
 const GOLDEN_ERROR_LIMIT = 10;
+/** dismiss key 前缀与保留上限：避免 localStorage 按 noteId 无限累积 */
+const DISMISS_PREFIX = 'feynman_precheck_dismissed_';
+const DISMISS_KEEP = 100;
 
 interface ConceptPrecheckCardProps {
   concept: string;
@@ -39,8 +42,8 @@ async function buildWeakHistory(): Promise<string> {
 }
 
 export function ConceptPrecheckCard({ concept, noteId }: ConceptPrecheckCardProps) {
-  const dismissKey = `feynman_precheck_dismissed_${noteId}`;
-  const [dismissed, setDismissed] = useState(() => localStorage.getItem(dismissKey) === '1');
+  const dismissKey = `${DISMISS_PREFIX}${noteId}`;
+  const [dismissed, setDismissed] = useState(() => localStorage.getItem(dismissKey) !== null);
   const [intentOpen, setIntentOpen] = useState(false);
   const { result, loading, error, precheck } = useAIConceptPrecheck();
 
@@ -54,16 +57,32 @@ export function ConceptPrecheckCard({ concept, noteId }: ConceptPrecheckCardProp
   }, [concept, dismissed, precheck]);
 
   const dismiss = () => {
-    localStorage.setItem(dismissKey, '1');
+    localStorage.setItem(dismissKey, String(Date.now()));
     setDismissed(true);
+    // 控制总量：超出保留上限时淘汰最旧的 dismiss 记录
+    const entries: Array<{ key: string; ts: number }> = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(DISMISS_PREFIX)) {
+        entries.push({ key, ts: Number(localStorage.getItem(key)) || 0 });
+      }
+    }
+    if (entries.length > DISMISS_KEEP) {
+      entries
+        .sort((a, b) => a.ts - b.ts)
+        .slice(0, entries.length - DISMISS_KEEP)
+        .forEach((e) => localStorage.removeItem(e.key));
+    }
   };
 
   const questions = result?.questions ?? [];
-  // 静默场景：已关闭 / 加载中 / 失败 / 无问题 → 不渲染（可选增强不打扰）
-  if (dismissed || loading || !!error || questions.length === 0) return null;
+  // 静默场景：已关闭 / 加载中 / 失败 / 无问题 → 不渲染（可选增强不打扰）。
+  // 条件置于 AnimatePresence 内部，关闭时才能播放 exit 动画
+  const hidden = dismissed || loading || !!error || questions.length === 0;
 
   return (
     <AnimatePresence>
+      {!hidden && (
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -121,6 +140,7 @@ export function ConceptPrecheckCard({ concept, noteId }: ConceptPrecheckCardProp
           </ul>
         )}
       </motion.div>
+      )}
     </AnimatePresence>
   );
 }

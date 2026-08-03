@@ -80,7 +80,7 @@ function FeynmanGraphInner() {
             edges={edges}
             nodeTypes={nodeTypes}
             onNodeClick={(_e, node: Node) => navigate(`/feynman/${node.id}`)}
-            nodesDraggable
+            nodesDraggable={false}
             nodesConnectable={false}
             fitView
             fitViewOptions={{ padding: 0.2 }}

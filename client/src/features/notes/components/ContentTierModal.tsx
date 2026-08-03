@@ -47,8 +47,12 @@ export function ContentTierModal({ open, onClose, noteText }: ContentTierModalPr
   const copyCore = async () => {
     if (!tier) return;
     const text = tier.core.map((item, i) => `${i + 1}. ${item.text}`).join('\n');
-    await navigator.clipboard.writeText(text);
-    toast({ type: 'success', message: '核心概念已复制到剪贴板' });
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({ type: 'success', message: '核心概念已复制到剪贴板' });
+    } catch {
+      toast({ type: 'error', message: '复制失败，请手动选择复制' });
+    }
   };
 
   const renderTier = (key: 'core' | 'support' | 'detail', items: ContentTierItem[]) => {

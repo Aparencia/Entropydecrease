@@ -16,6 +16,9 @@ interface FeynmanRecorderProps {
   onExplanationChange: (v: string) => void;
 }
 
+/** 单次录音时长上限：防止 PCM 累积无限增长（10 分钟 ≈ 19MB） */
+const MAX_RECORD_MS = 10 * 60 * 1000;
+
 /** base64 → Blob（会话内回放用） */
 function base64ToBlob(base64: string, type: string): Blob {
   const binary = atob(base64);
@@ -38,9 +41,13 @@ export function FeynmanRecorder({ explanation, onExplanationChange }: FeynmanRec
   onChangeRef.current = onExplanationChange;
 
   const recordingRef = useRef(false);
+  const startingRef = useRef(false);
   const samplesRef = useRef<Float32Array[]>([]);
   const sampleRateRef = useRef(16000);
   const unsubsRef = useRef<Array<() => void>>([]);
+  const recordLimitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ref 同步最新 playback URL：卸载闭包只捕获初始值，必须经 ref 才能正确 revoke
+  const playbackUrlRef = useRef<string | null>(null);
 
   // 可用性探测：ASR 模型未就绪则隐藏入口
   useEffect(() => {
@@ -56,13 +63,28 @@ export function FeynmanRecorder({ explanation, onExplanationChange }: FeynmanRec
     unsubsRef.current = [];
   }, []);
 
+  /** 更新回放 URL 并回收旧的（ref 同步，保证卸载时可回收） */
+  const updatePlaybackUrl = useCallback((next: string | null) => {
+    if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current);
+    playbackUrlRef.current = next;
+    setPlaybackUrl(next);
+  }, []);
+
   const stop = useCallback(async () => {
     if (!recordingRef.current) return;
-    recordingRef.current = false;
-    cleanupIpc();
+    if (recordLimitTimerRef.current) {
+      clearTimeout(recordLimitTimerRef.current);
+      recordLimitTimerRef.current = null;
+    }
     const api = window.electronAPI;
     try {
+      // 先停 ASR：主进程会 flush 最后一段 final，此时订阅仍在且
+      // recordingRef 仍为 true，最后一句话能正常追加进讲解文本
       await api?.invoke('local_asr_stream_stop');
+    } catch { /* 静默降级 */ }
+    recordingRef.current = false;
+    cleanupIpc();
+    try {
       await api?.invoke('audio_capture_stop');
     } catch { /* 静默降级 */ }
     setRecording(false);
@@ -78,18 +100,18 @@ export function FeynmanRecorder({ explanation, onExplanationChange }: FeynmanRec
       for (const c of chunks) { merged.set(c, offset); offset += c.length; }
       try {
         const wavBase64 = encodeWavBase64(merged, sampleRateRef.current, 1);
-        setPlaybackUrl((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
-          return URL.createObjectURL(base64ToBlob(wavBase64, 'audio/wav'));
-        });
+        updatePlaybackUrl(URL.createObjectURL(base64ToBlob(wavBase64, 'audio/wav')));
       } catch { /* 编码失败不影响转写文本 */ }
     }
-  }, [cleanupIpc]);
+  }, [cleanupIpc, updatePlaybackUrl]);
 
   const start = useCallback(async () => {
     const api = window.electronAPI;
-    if (!api || recordingRef.current) return;
+    // startingRef 同步上锁：防止异步启动期间双击重复启动（监听器泄漏/文本重复追加）
+    if (!api || recordingRef.current || startingRef.current) return;
+    startingRef.current = true;
     setError(null);
+    let captureStarted = false;
     try {
       const status = await api.invoke('audio_capture_status') as { active: boolean };
       if (status?.active) {
@@ -103,15 +125,20 @@ export function FeynmanRecorder({ explanation, onExplanationChange }: FeynmanRec
         setError(capture?.error || '麦克风启动失败，请检查设备与权限');
         return;
       }
+      captureStarted = true;
       const asrStart = await api.invoke('local_asr_stream_start', { sampleRate: 16000 }) as { success: boolean };
       if (!asrStart?.success) {
-        await api.invoke('audio_capture_stop');
+        await api.invoke('audio_capture_stop').catch(() => {});
         setError('语音识别启动失败，请重试');
         return;
       }
     } catch {
+      // 异常若发生在本组件已启动采集之后，必须回收麦克风，避免残留占用阻塞其他音频功能
+      if (captureStarted) api.invoke('audio_capture_stop').catch(() => {});
       setError('录音启动失败，请重试');
       return;
+    } finally {
+      startingRef.current = false;
     }
 
     samplesRef.current = [];
@@ -141,13 +168,19 @@ export function FeynmanRecorder({ explanation, onExplanationChange }: FeynmanRec
 
     recordingRef.current = true;
     setRecording(true);
-  }, []);
+    // 时长上限自动停止：避免长时间录音 PCM 内存无限增长
+    recordLimitTimerRef.current = setTimeout(() => { void stop(); }, MAX_RECORD_MS);
+  }, [stop]);
 
   // 卸载兜底：释放麦克风与 ASR 流、回收 blob URL
   useEffect(() => {
     return () => {
-      if (recordingRef.current) {
+      if (recordLimitTimerRef.current) clearTimeout(recordLimitTimerRef.current);
+      // startingRef 覆盖"启动中途卸载"竞态：capture 已在主进程启动但
+      // recordingRef 尚未置 true，此时也必须释放，否则麦克风残留占用
+      if (recordingRef.current || startingRef.current) {
         recordingRef.current = false;
+        startingRef.current = false;
         cleanupIpc();
         const api = window.electronAPI;
         api?.invoke('local_asr_stream_stop').catch(() => {});
@@ -156,8 +189,7 @@ export function FeynmanRecorder({ explanation, onExplanationChange }: FeynmanRec
     };
   }, [cleanupIpc]);
   useEffect(() => {
-    return () => { if (playbackUrl) URL.revokeObjectURL(playbackUrl); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current); };
   }, []);
 
   // 可选增强：ASR 不可用时隐藏入口
@@ -189,7 +221,7 @@ export function FeynmanRecorder({ explanation, onExplanationChange }: FeynmanRec
             <Play className="w-3.5 h-3.5" strokeWidth={1.5} />
             <audio src={playbackUrl} controls className="h-7 max-w-[200px]" />
             <button
-              onClick={() => { URL.revokeObjectURL(playbackUrl); setPlaybackUrl(null); }}
+              onClick={() => updatePlaybackUrl(null)}
               className="p-1 rounded hover:text-red-500 transition-colors"
               title="删除录音"
             >

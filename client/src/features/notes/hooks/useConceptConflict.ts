@@ -9,6 +9,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import type { Note } from '@/types/models';
 import type { ConceptConflict } from '@/lib/ai/types';
 import { useAIConflictDetect } from '@/lib/ai/hooks/useAIConflictDetect';
+import { extractNoteText } from '../lib/extractNoteText';
 
 /** 触发检测的最少当前笔记字数 */
 const MIN_NOTE_LEN = 100;
@@ -18,23 +19,6 @@ const SETTLE_DELAY_MS = 5000;
 const HISTORY_NOTE_COUNT = 5;
 /** 单篇历史笔记截取长度 */
 const HISTORY_SLICE_LEN = 600;
-
-/** 从 TipTap JSON 或纯文本中提取纯文本 */
-function extractText(content: string): string {
-  try {
-    const json = JSON.parse(content);
-    if (json?.content) {
-      const walk = (nodes: unknown[]): string => nodes.map((n) => {
-        const node = n as { text?: string; content?: unknown[] };
-        return (node.text ?? '') + (node.content ? walk(node.content) : '');
-      }).join('');
-      return walk(json.content);
-    }
-    return '';
-  } catch {
-    return content;
-  }
-}
 
 /**
  * 概念冲突自动检测 hook
@@ -60,7 +44,7 @@ export function useConceptConflict(noteId: string | null, noteText: string, allN
         .filter((n) => n.id !== noteId)
         .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
         .slice(0, HISTORY_NOTE_COUNT)
-        .map((n) => `【${n.title || '未命名'}】\n${extractText(n.content).slice(0, HISTORY_SLICE_LEN)}`)
+        .map((n) => `【${n.title || '未命名'}】\n${extractNoteText(n.content).slice(0, HISTORY_SLICE_LEN)}`)
         .join('\n\n');
       if (history.trim().length < 30) return; // 无历史可比对
 

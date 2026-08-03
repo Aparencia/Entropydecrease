@@ -249,35 +249,41 @@ export function useSocraticFlow() {
 
   const handleDeepeningSubmit = useCallback(async (answers: Record<string, string>) => {
     setSavingNote(true);
+    const explanation = [
+      `## 苏格拉底式学习：${topic}\n`,
+      `### 发散思考`,
+      ...selected.map(s => `- ${s}`),
+      '',
+      `### 追问对话摘要`,
+      ...rounds.map(r => `**Q${r.roundNumber}**: ${r.aiQuestion}\n**A**: ${r.userAnswer}`),
+      '',
+      `### 深化理解`,
+      ...Object.entries(answers).map(([key, val]) => `**${key}**: ${val}`),
+    ].join('\n');
+
+    let noteId: string;
     try {
-      const explanation = [
-        `## 苏格拉底式学习：${topic}\n`,
-        `### 发散思考`,
-        ...selected.map(s => `- ${s}`),
-        '',
-        `### 追问对话摘要`,
-        ...rounds.map(r => `**Q${r.roundNumber}**: ${r.aiQuestion}\n**A**: ${r.userAnswer}`),
-        '',
-        `### 深化理解`,
-        ...Object.entries(answers).map(([key, val]) => `**${key}**: ${val}`),
-      ].join('\n');
-
-      const noteId = await createNote(topic);
+      noteId = await createNote(topic);
       await updateNote(noteId, { explanation, status: 'completed', currentStep: 4 });
-
-      // E4 苏格拉底-费曼数据互通：对话评估中得分 <6 的维度写入该笔记薄弱点
-      for (const text of collectWeakDimensions(rounds)) {
-        await addWeakPoint(noteId, { text, position: { start: 0, end: 0 }, mastered: false });
-      }
-
-      toast({ type: 'success', message: '已保存为浮出水面概念！' });
-
-      setExiting(true);
-      phaseTimerRef.current = setTimeout(() => { navigate(`/feynman/${noteId}`); }, PHASE_TRANSITION_MS);
     } catch {
       toast({ type: 'error', message: '保存失败，请稍后重试' });
       setSavingNote(false);
+      return;
     }
+
+    // E4 苏格拉底-费曼数据互通：对话评估中得分 <6 的维度写入该笔记薄弱点。
+    // 独立静默失败：薄弱点是可选增强，若混入主 try 会在笔记已落库后
+    // 误报"保存失败"，用户重试将创建重复笔记
+    try {
+      for (const text of collectWeakDimensions(rounds)) {
+        await addWeakPoint(noteId, { text, position: { start: 0, end: 0 }, mastered: false });
+      }
+    } catch { /* 可选增强静默降级 */ }
+
+    toast({ type: 'success', message: '已保存为浮出水面概念！' });
+
+    setExiting(true);
+    phaseTimerRef.current = setTimeout(() => { navigate(`/feynman/${noteId}`); }, PHASE_TRANSITION_MS);
   }, [topic, selected, rounds, createNote, updateNote, addWeakPoint, toast, navigate]);
 
   const handleGoBack = useCallback(() => {

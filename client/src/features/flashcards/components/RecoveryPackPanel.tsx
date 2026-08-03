@@ -12,6 +12,7 @@ import { Sparkles, X, PlayCircle } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { loadRecoveryPack, type RecoveryPack } from '../lib/recoveryPack';
 import { fetchRecallQuestion } from '@/features/dashboard/lib/ritualRecallService';
+import { extractNoteText } from '@/features/notes/lib/extractNoteText';
 import { noteStore } from '@/lib/storage';
 
 /** 收起后本次应用会话内不再展示 */
@@ -45,7 +46,8 @@ export default function RecoveryPackPanel() {
         const latest = [...notes].sort(
           (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
         )[0];
-        const plain = latest.content.replace(/<[^>]+>/g, ' ').slice(0, 1500);
+        // content 为 TipTap JSON 字符串，需递归提取 text 节点（HTML 正则无效）
+        const plain = extractNoteText(latest.content).slice(0, 1500);
         const q = await fetchRecallQuestion(latest.id, latest.title, plain);
         if (!cancelled && q) setEchoQuestion(q.question);
       } catch {

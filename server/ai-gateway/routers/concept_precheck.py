@@ -95,7 +95,8 @@ async def concept_precheck(request: Request, body: ConceptPrecheckRequest) -> Co
         logger.error("概念预检服务全部不可用: %s", str(e))
         raise HTTPException(status_code=503, detail="所有 AI 服务暂时不可用，请稍后重试")
 
-    if cache._client is not None:
+    # 仅缓存有效结果：fallback 空结果入缓存会导致 AI 恢复后 1 小时内持续静默失效
+    if cache._client is not None and chain_result.get("model") != "fallback":
         await cache.set_ai_cache(cache_key, chain_result, expire=3600)
 
     return ConceptPrecheckResponse(

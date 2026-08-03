@@ -93,7 +93,8 @@ async def generate_quiz(request: Request, body: QuizGenRequest) -> QuizGenRespon
         logger.error("迷你测试生成服务全部不可用: %s", str(e))
         raise HTTPException(status_code=503, detail="所有 AI 服务暂时不可用，请稍后重试")
 
-    if cache._client is not None:
+    # 仅缓存有效结果：fallback 空结果不入缓存，避免 AI 恢复后 1 小时内持续失效
+    if cache._client is not None and chain_result.get("model") != "fallback":
         await cache.set_ai_cache(cache_key, chain_result, expire=3600)
 
     return QuizGenResponse(

@@ -121,8 +121,8 @@ async def error_pattern(request: Request, body: ErrorPatternRequest) -> ErrorPat
         logger.error("错误模式分析服务全部不可用: %s", str(e))
         raise HTTPException(status_code=503, detail="所有 AI 服务暂时不可用，请稍后重试")
 
-    # 缓存成功结果（Redis 可用时）
-    if cache._client is not None:
+    # 缓存成功结果（Redis 可用时）——fallback 结果不入缓存，避免 AI 恢复后 1 小时内持续失效
+    if cache._client is not None and chain_result.get("model") != "fallback":
         await cache.set_ai_cache(cache_key, chain_result, expire=3600)
 
     # 构建响应对象

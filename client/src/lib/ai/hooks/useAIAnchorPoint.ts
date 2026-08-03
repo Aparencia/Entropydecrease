@@ -19,12 +19,17 @@ export function useAIAnchorPoint() {
     ...INITIAL_STATE,
   });
 
-  const generateAnchorPoints = useCallback(async (noteId: string, content: string) => {
+  const generateAnchorPoints = useCallback(async (
+    noteId: string,
+    content: string,
+    options?: { silent?: boolean },
+  ) => {
     setState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
     const cacheKey = `anchor_point:${noteId}`;
     try {
       const result = await aiPluginLoader.generateAnchorPoint(noteId, content);
-      soundPlayer.play('ai_analysis_done');
+      // 番茄专注场景传 silent：定时锚点提醒不应播放音效打断专注
+      if (!options?.silent) soundPlayer.play('ai_analysis_done');
       setAICache(cacheKey, result);
       setState({ data: result, loading: false, error: null, isFallback: false, needsConfig: false });
       return result;
