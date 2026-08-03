@@ -11,6 +11,7 @@
 | 2026-08-02 | [ASR 报错「whisper.cpp 执行失败」在代码库零匹配：运行构建落后源码 8 个版本](./bugs/2026-08-asr-whisper-cpp-stale-build-mismatch.md) | #ASR #版本错位 #sherpa-onnx #构建产物 #诊断方法 |
 | 2026-08-01 | [3D 动画有时不显示/不流畅：性能分级无滞回导致 tier 抖动，特效反复卸载；后台返回误判降级](./bugs/2026-08-3d-tier-flapping-animation-hitching.md) | #3D性能 #R3F #性能分级 #滞回 #drei #WebGL |
 | 2026-08-01 | [首页 3D 物体点击与功能错位：浅色模式下背景场景重复渲染了一套“只改状态不跳转”的行星](./bugs/2026-08-homepage-3d-duplicate-planets-misaligned-click.md) | #3D导航 #react-three-fiber #职责边界 #单一数据源 #浅色模式 |
+| 2026-08-01 | [页面主题“有时亮有时暗”：useTheme 多实例竞态覆盖 data-theme](./bugs/2026-08-theme-flicker-multi-instance-race.md) | #主题 #竞态 #Zustand #useState多实例 #data-theme #内测反馈 |
 | 2026-07-31 | [CI 编译原生模块报「Could not find any Visual Studio installation」——旧版 node-gyp 找不到 VS 2022](./bugs/2026-07-ci-node-gyp-vs2022-not-found.md) | #CI #原生模块 #node-gyp #本地能跑CI挂 |
 | 2026-07-31 | [课堂助手精细采集三症状：视觉抓页面元数据、ASR 静音幻觉、截断 JSON 泄漏 UI](./bugs/2026-07-classroom-capture-asr-hallucination-json-leak.md) | #课堂助手 #多模态 #ASR幻觉 #prompt工程 |
 | 2026-07-31 | [番茄钟"跳过"退化为"取消"：一个 onClose 回调承载两种意图，空目标番茄无法启动](./bugs/2026-07-pomodoro-goal-skip-acts-as-cancel.md) | #React #番茄钟 #弹窗交互 #回调语义 #意图区分 |
@@ -37,6 +38,6 @@ _（暂无）_
 
 ## 标签速查
 
-- **技术**：#CSS #a11y #React #Vite #Tailwind #Zustand #CI #GitLFS #electron-builder #GitHubActions #CDN #阿里云 #环境变量 #Supabase #DesignTokens #color-mix #认证 #AuthGuard #3D导航 #react-three-fiber #3D性能 #R3F #drei #WebGL #ASR #sherpa-onnx
+- **技术**：#CSS #a11y #React #Vite #Tailwind #Zustand #CI #GitLFS #electron-builder #GitHubActions #CDN #阿里云 #环境变量 #Supabase #DesignTokens #color-mix #认证 #AuthGuard #3D导航 #react-three-fiber #3D性能 #R3F #drei #WebGL #ASR #sherpa-onnx #data-theme
 - **类型**：#bug #方案 #学习 #复盘
-- **模块**：#启动仪式 #reduced-motion #animation #发布 #安装包 #性能诊断 #测量方法 #番茄钟 #主题 #状态管理 #副作用 #数据统计 #路由守卫 #模式管理 #事件去重 #弹窗交互 #回调语义 #意图区分 #职责边界 #单一数据源 #浅色模式 #性能分级 #滞回 #版本错位 #构建产物 #诊断方法
+- **模块**：#启动仪式 #reduced-motion #animation #发布 #安装包 #性能诊断 #测量方法 #番茄钟 #主题 #状态管理 #副作用 #数据统计 #路由守卫 #模式管理 #事件去重 #弹窗交互 #回调语义 #意图区分 #职责边界 #单一数据源 #浅色模式 #性能分级 #滞回 #版本错位 #构建产物 #诊断方法 #竞态 #useState多实例 #内测反馈
