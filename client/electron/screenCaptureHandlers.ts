@@ -27,6 +27,13 @@ let activeCapture: ScreenCapture | null = null;
 let startDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 const START_DEBOUNCE_MS = 500;
 
+/**
+ * 被防抖顶替的 screen_capture_start 调用的结算回调。
+ * @ai-context 防抖替换旧请求时必须显式 settle 旧 Promise，否则旧调用的
+ * invoke 永久 pending，渲染层若以 loading 态等待返回将永久卡死。
+ */
+let pendingStartResolve: ((result: { success: boolean }) => void) | null = null;
+
 /** 单调递增会话标识，用于防止 stop 后残留的 debounce 重启采集 */
 let captureSessionToken = 0;
 
@@ -45,18 +52,25 @@ export function registerScreenCaptureHandlers(): void {
   safeHandle(
     'screen_capture_start',
     async (event, options: ScreenCaptureOptions) => {
-      // 防抖：500ms 内多次调用只响应最后一次
+      // 防抖：500ms 内多次调用只响应最后一次——先结算被顶替的旧请求，
+      // 避免旧 invoke 永久 pending 卡死渲染层 loading 态
       if (startDebounceTimer) {
         clearTimeout(startDebounceTimer);
         startDebounceTimer = null;
+      }
+      if (pendingStartResolve) {
+        pendingStartResolve({ success: false });
+        pendingStartResolve = null;
       }
 
       // 记录本次会话 token，用于 debounce 回调时校验是否仍然有效
       const token = ++captureSessionToken;
 
       return new Promise<{ success: boolean }>((resolve) => {
+        pendingStartResolve = resolve;
         startDebounceTimer = setTimeout(() => {
           startDebounceTimer = null;
+          pendingStartResolve = null;
 
           // 如果在 debounce 期间调用了 stop（token 已变），放弃本次启动
           if (token !== captureSessionToken) {

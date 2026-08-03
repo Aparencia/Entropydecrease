@@ -51,6 +51,8 @@ export class EndpointLoopbackProvider implements AudioSourceProvider {
   private readonly sink: AudioChunkSink;
   private capturing = false;
   private disposed = false;
+  /** 启动中互斥锁：守卫与 capturing 置位间存在 await（listAudioSources）空隙，同步上锁防并发双启动 */
+  private starting = false;
   private boundWindow: AudioProviderStartContext['window'] | null = null;
 
   constructor(sink: AudioChunkSink) {
@@ -58,38 +60,44 @@ export class EndpointLoopbackProvider implements AudioSourceProvider {
   }
 
   async start(ctx: AudioProviderStartContext): Promise<void> {
-    if (this.capturing || this.disposed) return;
+    if (this.capturing || this.starting || this.disposed) return;
 
-    // 解析音频源：未指定时自动取首个屏幕源
-    let resolvedSourceId = ctx.sourceId;
-    if (!resolvedSourceId) {
-      const sources = await listAudioSources();
-      if (sources.length === 0) {
-        throw new Error('No audio source available');
+    // 进入即同步上锁，finally 释放：堵住守卫与状态翻转间的 await 空隙
+    this.starting = true;
+    try {
+      // 解析音频源：未指定时自动取首个屏幕源
+      let resolvedSourceId = ctx.sourceId;
+      if (!resolvedSourceId) {
+        const sources = await listAudioSources();
+        if (sources.length === 0) {
+          throw new Error('No audio source available');
+        }
+        resolvedSourceId = sources[0].id;
+        logger.info(`[EndpointLoopback] 自动选择音频源: ${sources[0].name} (${resolvedSourceId})`);
       }
-      resolvedSourceId = sources[0].id;
-      logger.info(`[EndpointLoopback] 自动选择音频源: ${sources[0].name} (${resolvedSourceId})`);
-    }
 
-    // 登记期望源：渲染进程随后调用 getDisplayMedia，主进程 handler 据此授权
-    // 并附加 audio: 'loopback' 才能拿到真实系统音频（详见 displayMediaHandler.ts）
-    setPreferredDisplaySource(resolvedSourceId);
+      // 登记期望源：渲染进程随后调用 getDisplayMedia，主进程 handler 据此授权
+      // 并附加 audio: 'loopback' 才能拿到真实系统音频（详见 displayMediaHandler.ts）
+      setPreferredDisplaySource(resolvedSourceId);
 
-    this.capturing = true;
-    this.boundWindow = ctx.window;
+      this.capturing = true;
+      this.boundWindow = ctx.window;
 
-    logger.info(
-      `[EndpointLoopback] 开始捕获, sourceId=${resolvedSourceId}, ` +
-      `chunkDurationMs=${ctx.options.chunkDurationMs}, ` +
-      `sampleRate=${ctx.options.sampleRate}, channels=${ctx.options.channels}`,
-    );
+      logger.info(
+        `[EndpointLoopback] 开始捕获, sourceId=${resolvedSourceId}, ` +
+        `chunkDurationMs=${ctx.options.chunkDurationMs}, ` +
+        `sampleRate=${ctx.options.sampleRate}, channels=${ctx.options.channels}`,
+      );
 
-    // 通知渲染进程开始音频采集
-    if (!ctx.window.isDestroyed()) {
-      ctx.window.webContents.send('audio_capture_do_start', {
-        sourceId: resolvedSourceId,
-        options: ctx.options,
-      });
+      // 通知渲染进程开始音频采集
+      if (!ctx.window.isDestroyed()) {
+        ctx.window.webContents.send('audio_capture_do_start', {
+          sourceId: resolvedSourceId,
+          options: ctx.options,
+        });
+      }
+    } finally {
+      this.starting = false;
     }
   }
 

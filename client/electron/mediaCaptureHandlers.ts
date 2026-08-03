@@ -207,18 +207,20 @@ export function registerMediaCaptureHandlers(): void {
     if (!activeVideoRecorder) {
       return { success: false, error: 'No active recording' };
     }
+    // 竞态防护：先同步取引用并置空，双停时第二次调用直接返回无活跃录制；
+    // 也避免 await 期间新录制启动后被误 dispose
+    const recorder = activeVideoRecorder;
+    activeVideoRecorder = null;
     try {
-      const filePath = await activeVideoRecorder.stopRecording();
-      const finalStatus = activeVideoRecorder.status;
+      const filePath = await recorder.stopRecording();
+      const finalStatus = recorder.status;
       logger.info('[IPC] video_record_stop 已完成');
-      activeVideoRecorder.dispose();
-      activeVideoRecorder = null;
+      recorder.dispose();
       return { success: true, filePath, finalStatus };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.error('[IPC] video_record_stop failed:', message);
-      activeVideoRecorder?.dispose();
-      activeVideoRecorder = null;
+      recorder.dispose();
       return { success: false, error: message };
     }
   });

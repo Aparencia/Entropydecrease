@@ -79,6 +79,8 @@ export class AudioCapture {
   private readonly onChunk: (chunk: AudioChunk) => void;
   private capturing = false;
   private disposed = false;
+  /** 启动中互斥锁：守卫与 capturing 置位间存在 await 空隙，同步上锁防并发双启动 */
+  private starting = false;
 
   /** 当前活跃的 Provider */
   private provider: AudioSourceProvider | null = null;
@@ -127,40 +129,47 @@ export class AudioCapture {
     sourceId?: string,
     extras?: AudioCaptureStartExtras,
   ): Promise<void> {
-    if (this.capturing || this.disposed) return;
+    if (this.capturing || this.starting || this.disposed) return;
 
-    const resolvedSourceId = sourceId ?? null;
-    // 应急总闸关闭时能力恒为不可用，选源退回端点环回
-    const processAvailable = isProcessLoopbackEnabled() && isProcessLoopbackAvailable();
-    this.decision = selectAudioSource({
-      capabilities: { processLoopbackAvailable: processAvailable },
-      sourceId: resolvedSourceId,
-      preference: extras?.preference,
-      microphone: extras?.microphone,
-    });
-
-    logger.info(
-      `[AudioCapture] 选源: ${this.decision.kind}（${this.decision.reason}）` +
-      `${this.decision.fallback ? `, 降级目标=${this.decision.fallback}` : ''}`,
-    );
-
+    // 进入即同步上锁，finally 释放：堵住守卫检查与状态翻转之间的 await 空隙，
+    // 防止并发双启动导致 provider 被重复创建/降级链交叉触发
+    this.starting = true;
     try {
-      await this.startWithKind(this.decision.kind, win, resolvedSourceId);
-    } catch (err) {
-      const fallback = this.decision.fallback;
-      if (!fallback) throw err;
+      const resolvedSourceId = sourceId ?? null;
+      // 应急总闸关闭时能力恒为不可用，选源退回端点环回
+      const processAvailable = isProcessLoopbackEnabled() && isProcessLoopbackAvailable();
+      this.decision = selectAudioSource({
+        capabilities: { processLoopbackAvailable: processAvailable },
+        sourceId: resolvedSourceId,
+        preference: extras?.preference,
+        microphone: extras?.microphone,
+      });
 
-      const message = err instanceof Error ? err.message : String(err);
-      logger.warn(`[AudioCapture] ${this.decision.kind} 启动失败（${message}），降级到 ${fallback}`);
-      this.decision = {
-        kind: fallback,
-        reason: `${this.decision.kind} 启动失败后降级：${message}`,
-        fallback: null,
-      };
-      await this.startWithKind(fallback, win, resolvedSourceId);
+      logger.info(
+        `[AudioCapture] 选源: ${this.decision.kind}（${this.decision.reason}）` +
+        `${this.decision.fallback ? `, 降级目标=${this.decision.fallback}` : ''}`,
+      );
+
+      try {
+        await this.startWithKind(this.decision.kind, win, resolvedSourceId);
+      } catch (err) {
+        const fallback = this.decision.fallback;
+        if (!fallback) throw err;
+
+        const message = err instanceof Error ? err.message : String(err);
+        logger.warn(`[AudioCapture] ${this.decision.kind} 启动失败（${message}），降级到 ${fallback}`);
+        this.decision = {
+          kind: fallback,
+          reason: `${this.decision.kind} 启动失败后降级：${message}`,
+          fallback: null,
+        };
+        await this.startWithKind(fallback, win, resolvedSourceId);
+      }
+
+      this.capturing = true;
+    } finally {
+      this.starting = false;
     }
-
-    this.capturing = true;
   }
 
   /** 按源类型创建并启动 Provider */

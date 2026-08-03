@@ -107,6 +107,22 @@ export class VideoRecorder {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     this.filePath = path.join(dir, `recording-${timestamp}.webm`);
     this.writeStream = fs.createWriteStream(this.filePath, { flags: 'a' });
+    // 写流必须监听 error：WriteStream 的 'error' 事件无默认处理，
+    // 磁盘故障/路径失效时会以未捕获异常直接崩溃主进程
+    this.writeStream.on('error', (err) => {
+      logger.error('[VideoRecorder] 文件写入失败:', err.message);
+      this.recording = false;
+      this.paused = false;
+      this.stopStatusTimer();
+      this.writeStream?.destroy();
+      this.writeStream = null;
+      if (this.boundWin && !this.boundWin.isDestroyed()) {
+        this.boundWin.webContents.send('video_record_error', {
+          message: `文件写入失败: ${err.message}`,
+          filePath: this.filePath,
+        });
+      }
+    });
     this.fileSizeBytes = 0;
     this.startTime = Date.now();
     this.pausedDurationMs = 0;
