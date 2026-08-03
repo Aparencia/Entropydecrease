@@ -13,7 +13,9 @@ import { useOrbitalStore } from '@/lib/3d/navigation/OrbitalStore';
 
 export function Step5ExitDemo() {
   const { nextStep, autoDemo } = useOnboardingStore();
-  const { isInModule, exitModule } = useOrbitalStore();
+  // 细粒度 selector：避免 hoveredModule 等高频字段连带重渲染
+  const isInModule = useOrbitalStore((s) => s.isInModule);
+  const exitModule = useOrbitalStore((s) => s.exitModule);
   const navigate = useNavigate();
   const text = STEP_TEXTS[4];
 

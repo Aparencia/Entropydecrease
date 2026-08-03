@@ -9,7 +9,6 @@
 import { useEffect, useCallback, useRef, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { EditorContent } from '@tiptap/react';
-import { useShallow } from 'zustand/react/shallow';
 import { useNoteStore } from '../store/useNoteStore';
 import { CornellLayout } from '../components/CornellLayout';
 import FreeCanvas from '../components/FreeCanvas';
@@ -60,7 +59,12 @@ export default function NoteEditPage() {
     },
   });
 
-  const { notes, updateNote, selectNote, loadNotes } = useNoteStore(useShallow(s => s));
+  // 细粒度 selector：整 store 订阅（useShallow(s => s)）会在任何字段变化时
+  // 重渲染整页，键入场景下与 healthText 叠加放大卡顿
+  const notes = useNoteStore((s) => s.notes);
+  const updateNote = useNoteStore((s) => s.updateNote);
+  const selectNote = useNoteStore((s) => s.selectNote);
+  const loadNotes = useNoteStore((s) => s.loadNotes);
   const note = notes.find((n) => n.id === noteId) || null;
 
   const titleRef = useRef<HTMLInputElement>(null);
@@ -82,13 +86,27 @@ export default function NoteEditPage() {
   const [tierOpen, setTierOpen] = useState(false);
 
   // === N3 笔记健康度：跟踪编辑器实时文本供工具栏指示器计算 ===
+  // 流畅度修复：原版每次键入同步 setHealthText 导致 457 行整页每键重渲染。
+  // 现改为 1s 防抖 + 打开消费面板时惰性取最新快照，键入路径不再触发整页重渲染
   const [healthText, setHealthText] = useState('');
   useEffect(() => {
     if (!editor) return;
     setHealthText(editor.getText());
-    const onHealthUpdate = () => setHealthText(editor.getText());
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onHealthUpdate = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => setHealthText(editor.getText()), 1000);
+    };
     editor.on('update', onHealthUpdate);
-    return () => { editor.off('update', onHealthUpdate); };
+    return () => {
+      editor.off('update', onHealthUpdate);
+      if (timer) clearTimeout(timer);
+    };
+  }, [editor]);
+
+  /** 惰性快照：打开消费 healthText 的面板前取编辑器最新文本，避免防抖窗口内数据滞后 */
+  const refreshHealthText = useCallback(() => {
+    if (editor) setHealthText(editor.getText());
   }, [editor]);
 
   // === N6 概念冲突检测：内容稳定后自动比对新旧理解 ===
@@ -244,6 +262,18 @@ export default function NoteEditPage() {
     soundPlayer.play('note_manual_save');
   };
 
+  // 合书测试入口：先同步最新文本快照再打开（healthText 为防抖值，可能滞后≤ 1s）
+  const handleOpenClosedBook = useCallback(() => {
+    refreshHealthText();
+    setClosedBook(true);
+  }, [refreshHealthText]);
+
+  // 内容分层入口：同理先取最新快照
+  const handleOpenTier = useCallback(() => {
+    refreshHealthText();
+    setTierOpen(true);
+  }, [refreshHealthText]);
+
   // 阶段四：导出当前笔记为 Markdown（导图笔记降级为大纲）
   const handleExportMarkdown = () => {
     if (!note) return;
@@ -364,7 +394,7 @@ export default function NoteEditPage() {
           <div className="absolute right-4 top-4 z-10 flex flex-col gap-2">
           <Tip text="合书测试：隐藏笔记，凭回忆自测" side="left">
             <button
-              onClick={() => setClosedBook(true)}
+              onClick={handleOpenClosedBook}
               className="p-2 rounded-full bg-bg-primary/80 backdrop-blur-sm border border-border/40 text-text-tertiary hover:text-brand-600 hover:border-brand-300 shadow-sm transition-all duration-200"
             >
               <EyeOff className="w-4 h-4" strokeWidth={1.5} />
@@ -373,7 +403,7 @@ export default function NoteEditPage() {
           {/* N5 内容分层入口：策略性遗忘标记 */}
           <Tip text="内容分层：聚焦核心概念" side="left">
             <button
-              onClick={() => setTierOpen(true)}
+              onClick={handleOpenTier}
               className="p-2 rounded-full bg-bg-primary/80 backdrop-blur-sm border border-border/40 text-text-tertiary hover:text-brand-600 hover:border-brand-300 shadow-sm transition-all duration-200"
             >
               <Layers className="w-4 h-4" strokeWidth={1.5} />

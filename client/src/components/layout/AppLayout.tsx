@@ -31,7 +31,14 @@ import { PERFORMANCE_MODE_CONFIG } from '@/lib/performance/performanceMode';
 export default function AppLayout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { isInModule, currentModule, overlayVisible, enterModule, exitModule, syncWithRoute } = useOrbitalStore();
+  // 细粒度 selector 订阅：整 store 订阅会被 hoveredModule 等高频字段变化
+  // 连带重渲染整棵布局树（含 Outlet 页面），是流畅度关键瓶颈
+  const isInModule = useOrbitalStore((s) => s.isInModule);
+  const currentModule = useOrbitalStore((s) => s.currentModule);
+  const overlayVisible = useOrbitalStore((s) => s.overlayVisible);
+  const enterModule = useOrbitalStore((s) => s.enterModule);
+  const exitModule = useOrbitalStore((s) => s.exitModule);
+  const syncWithRoute = useOrbitalStore((s) => s.syncWithRoute);
   const openHelp = useOnboardingStore((s) => s.openHelp);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const { sync } = useSync();
