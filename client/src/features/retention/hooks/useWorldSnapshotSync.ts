@@ -40,8 +40,8 @@ export function useWorldSnapshotSync(): void {
       });
       const row = { id: SNAPSHOT_ID, payload, updated_at: new Date().toISOString() };
       try {
-        // 先查后写实现 upsert（db 桥无 put 语义）
-        const existing = await window.electronAPI.db.query('worldSnapshots', 'get', [SNAPSHOT_ID]);
+        // 先查后写实现 upsert（db 桥查询方法白名单为 getAll/getById/count）
+        const existing = await window.electronAPI.db.query('worldSnapshots', 'getById', [SNAPSHOT_ID]);
         if (existing) {
           await window.electronAPI.db.update('worldSnapshots', SNAPSHOT_ID, {
             payload, updated_at: row.updated_at,

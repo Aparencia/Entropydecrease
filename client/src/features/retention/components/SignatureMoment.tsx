@@ -74,15 +74,15 @@ export function SignatureMoment() {
       setAct('event');
       soundPlayer.play('achievement_unlocked');
       timers.current.push(setTimeout(dismiss, STATIC_MS));
-      return;
+    } else {
+      setAct('silence');
+      soundPlayer.play('achievement_unlocked');
+      timers.current.push(setTimeout(() => setAct('event'), ACT1_MS));
+      timers.current.push(setTimeout(() => setAct('afterglow'), ACT1_MS + ACT2_MS));
+      timers.current.push(setTimeout(dismiss, ACT1_MS + ACT2_MS + ACT3_MS));
     }
 
-    setAct('silence');
-    soundPlayer.play('achievement_unlocked');
-    timers.current.push(setTimeout(() => setAct('event'), ACT1_MS));
-    timers.current.push(setTimeout(() => setAct('afterglow'), ACT1_MS + ACT2_MS));
-    timers.current.push(setTimeout(dismiss, ACT1_MS + ACT2_MS + ACT3_MS));
-
+    // 两条路径都必须清理：防止卸载后定时器触发 setState
     return clearTimers;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signatureSeq]);

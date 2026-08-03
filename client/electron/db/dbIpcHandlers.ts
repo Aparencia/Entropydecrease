@@ -77,6 +77,8 @@ const TABLE_NAME_MAP: Record<string, string> = {
   crdtChanges: 'crdt_changes',
   // v6 新增：A4 实施意图
   implementationIntentions: 'implementation_intentions',
+  // v7 新增：世界状态快照（MCP 记忆接口跨进程桥）
+  worldSnapshots: 'world_snapshots',
 };
 
 function resolveTable(table: string): string {
