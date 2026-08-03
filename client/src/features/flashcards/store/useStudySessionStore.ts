@@ -13,6 +13,7 @@ import type { Flashcard, FlashcardReview, Confidence, GoldenError } from '@/type
 import { useFlashcardStore } from './useFlashcardStore';
 import { generateId } from '@/lib/utils/uuid';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
+import { useWorldEvents } from '@/features/retention/store/useWorldEvents';
 
 // ---------------------------------------------------------------------------
 // 常量
@@ -219,6 +220,10 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
 
       const card = sessionCards[currentIndex];
       if (!card || card.id === undefined) return;
+
+      // 宪法第一条：复习行为=秩序波纹。任何评分都是一次对混沌的推退
+      // （包括 Again——唤醒本身即正向，零负向语义），经世界事件总线驱动深海场景
+      useWorldEvents.getState().emitOrderRipple('flashcards');
 
       // v0.9.0: goldenError 判定 — 高自信答错（Again）
       const isWrong = rating === Rating.Again;

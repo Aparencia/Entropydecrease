@@ -10,6 +10,7 @@
  * for the 3D scene layer. Streak wiring lands with the tide batch.
  */
 import { useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useEcosystemStore } from '../store/useEcosystemStore';
 import { useDiscoveryStore } from '../store/useDiscoveryStore';
 import { useRetentionSettings } from '../store/useRetentionSettings';
@@ -40,4 +41,17 @@ export function useWorldSignals(): WorldSignalsWithGlow {
     });
     return { ...signals, glowScale: vitalityToGlowScale(signals.vitality) };
   }, [corals, totalDepth, discoveriesCount, enabled]);
+}
+
+/**
+ * 细粒度选择器版本（3D 逐帧层专用） / Selector variant for frame-critical layers
+ *
+ * @ai-context 内部复用 useWorldSignals 派生结果，再用 useShallow 选取子集：
+ * 仅当所选字段变化时才触发组件重渲染（如 ChaosMist 只选 mist）。
+ */
+export function useWorldSignalsSelect<T extends Partial<WorldSignalsWithGlow>>(
+  selector: (s: WorldSignalsWithGlow) => T,
+): T {
+  const signals = useWorldSignals();
+  return useShallow(selector)(signals);
 }
