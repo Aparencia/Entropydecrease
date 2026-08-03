@@ -9,9 +9,9 @@
  * 请求响应契约与网关 progress_narrative 路由的 Pydantic model 对齐。
  */
 
-import { safeHandle } from '../../ipcUtils.js';
+import { requireText, safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, parseModelJson, type AIFeatureDef } from '../utils.js';
 import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
@@ -31,6 +31,7 @@ function register(): void {
         authToken?: string;
       },
     ) => {
+      requireText(args?.statsText, 'statsText');
       const startMs = Date.now();
       logger.info(`[AI] [progress-narrative] IPC received: stats_length=${args.statsText?.length ?? 0}, hasAuth=${!!args.authToken}`);
 
@@ -54,7 +55,8 @@ function register(): void {
         const localHandler = async (): Promise<NarrativeGenResp> => {
           const prompt = `以下是用户本周的学习统计：\n${reqBody.stats_text}\n\n请把这段统计写成一句温暖、具体的微进展叙述（不超过两句话，正向语言），返回JSON: {"narrative": "..."}`;
           const result = await generateText(prompt, '你是一位温暖的学习教练，擅长把学习统计讲述成看得见的进步。请仅返回JSON。', { temperature: 0.7, maxTokens: 256 });
-          const parsed = JSON.parse(result.content);
+          // 宽松解析：本地小模型常输出围栏/解释文字，裸 parse 会误降级到云端
+          const parsed = parseModelJson<Partial<NarrativeGenResp>>(result.content, {});
           return { narrative: parsed.narrative ?? '', status: 'success', model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
         };
 

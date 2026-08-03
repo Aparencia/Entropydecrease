@@ -7,9 +7,9 @@
  * @ai-context: 概念预检 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；本地降级同样走 JSON 生成。
  */
 
-import { safeHandle } from '../../ipcUtils.js';
+import { requireText, safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, parseModelJson, type AIFeatureDef } from '../utils.js';
 import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
@@ -30,6 +30,7 @@ function register(): void {
         authToken?: string;
       },
     ) => {
+      requireText(args?.concept, 'concept');
       const startMs = Date.now();
       logger.info(`[AI] [conceptPrecheck] IPC received: concept=${args.concept.slice(0, 50)}, weak_len=${(args.weakHistory ?? '').length}, hasAuth=${!!args.authToken}`);
 
@@ -54,7 +55,8 @@ function register(): void {
         const localHandler = async (): Promise<ConceptPrecheckResp> => {
           const prompt = `针对概念「${reqBody.concept}」设计 1-2 个探测性问题，暴露学习者常见误解（非知识记忆考察），仅返回JSON: {"questions": [{"question": "...", "intent": "..."}]}\n\n【学习者历史薄弱点】\n${reqBody.weakHistory || '（暂无）'}`;
           const result = await generateText(prompt, '你是一位善于发现学习误区的热心教练。请仅返回JSON。', { temperature: 0.5, maxTokens: 1000 });
-          const parsed = JSON.parse(result.content);
+          // 宽松解析：本地小模型常输出围栏/解释文字，裸 parse 会误降级到云端
+          const parsed = parseModelJson<Partial<ConceptPrecheckResp>>(result.content, {});
           return {
             questions: parsed.questions ?? [],
             model: result.model,

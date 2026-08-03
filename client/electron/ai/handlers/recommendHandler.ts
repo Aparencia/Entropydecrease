@@ -7,9 +7,9 @@
  * @ai-context: 时长推荐 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
-import { safeHandle } from '../../ipcUtils.js';
+import { requireArray, safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, parseModelJson, type AIFeatureDef } from '../utils.js';
 import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
@@ -35,6 +35,7 @@ function register(): void {
       },
     ) => {
       // 前端 camelCase → 后端 snake_case
+      requireArray(args?.history, 'history');
       const startMs = Date.now();
       logger.info(`[AI] [recommend] IPC received: sessions_count=${args.history.length}, hasAuth=${!!args.authToken}`);
       logger.debug(`[AI] [recommend] History preview: ${args.history.length} sessions, first=${args.history[0]?.timestamp ?? 'N/A'}, last=${args.history[args.history.length - 1]?.timestamp ?? 'N/A'}`);
@@ -64,7 +65,8 @@ function register(): void {
         const localHandler = async (): Promise<RecommendResp> => {
           const prompt = `根据学习历史推荐最佳学习时长，返回JSON: {"recommended_minutes": 25, "break_minutes": 5, "reason": "...", "source": "local_ollama"}\n学习历史：${JSON.stringify(reqBody)}`;
           const result = await generateText(prompt, '你是一个学习时间管理助手。请仅返回JSON。', { temperature: 0.4, maxTokens: 512 });
-          const parsed = JSON.parse(result.content);
+          // 宽松解析：本地小模型常输出围栏/解释文字，裸 parse 会误降级到云端
+          const parsed = parseModelJson<Partial<RecommendResp>>(result.content, {});
           return { recommended_minutes: parsed.recommended_minutes ?? 25, break_minutes: parsed.break_minutes ?? 5, reason: parsed.reason ?? '', source: 'local_ollama', model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
         };
 

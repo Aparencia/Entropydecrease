@@ -6,9 +6,9 @@
  * @ai-context: 预测提问 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
-import { safeHandle } from '../../ipcUtils.js';
+import { requireText, safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, parseModelJson, type AIFeatureDef } from '../utils.js';
 import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
@@ -28,6 +28,7 @@ function register(): void {
         authToken?: string;
       },
     ) => {
+      requireText(args?.content, 'content');
       const startMs = Date.now();
       logger.info(`[AI] [predict] IPC received: content_length=${args.content.length}, hasAuth=${!!args.authToken}`);
       logger.debug(`[AI] [predict] Content preview: ${args.content.slice(0, 80)}...`);
@@ -54,7 +55,8 @@ function register(): void {
         const localHandler = async (): Promise<PredictGenResp> => {
           const prompt = `基于以下笔记内容，生成预测性问题，返回JSON: {"predictions": [{"question": "...", "type": "...", "reason": "...", "curiosity_score": 0.8}], "status": "ok"}\n\n笔记：\n${args.content}`;
           const result = await generateText(prompt, '你是一个预测驱动学习助手，擅长从笔记中生成引导性问题。请仅返回JSON。', { temperature: 0.6, maxTokens: 1024 });
-          const parsed = JSON.parse(result.content);
+          // 宽松解析：本地小模型常输出围栏/解释文字，裸 parse 会误降级到云端
+          const parsed = parseModelJson<Partial<PredictGenResp>>(result.content, {});
           return { predictions: parsed.predictions ?? [], status: 'ok', model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
         };
 

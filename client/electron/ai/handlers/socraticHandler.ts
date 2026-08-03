@@ -7,9 +7,9 @@
  * @ai-context: 苏格拉底追问（含评估/深化） IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
-import { safeHandle } from '../../ipcUtils.js';
+import { requireText, safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, parseModelJson, type AIFeatureDef } from '../utils.js';
 import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
@@ -42,6 +42,7 @@ function register(): void {
         authToken?: string;
       },
     ) => {
+      requireText(args?.topic, 'topic');
       const startMs = Date.now();
       logger.info(`[AI] [socratic] IPC received: topic_length=${args.topic.length}, history=${args.history?.length ?? 0}, hasAuth=${!!args.authToken}`);
       logger.debug(`[AI] [socratic] Topic preview: ${args.topic.slice(0, 80)}`);
@@ -69,7 +70,8 @@ function register(): void {
         const localHandler = async (): Promise<SocraticResp> => {
           const prompt = `作为苏格拉底式导师，针对主题“${args.topic}”生成一个引导性问题，返回JSON: {"question": "...", "hint": "...", "thinking_direction": "...", "depth_level": 1, "turn_count": 1, "status": "ok"}`;
           const result = await generateText(prompt, '你是一个苏格拉底式学习导师。请仅返回JSON。', { temperature: 0.7, maxTokens: 512 });
-          const parsed = JSON.parse(result.content);
+          // 宽松解析：本地小模型常输出围栏/解释文字，裸 parse 会误降级到云端
+          const parsed = parseModelJson<Partial<SocraticResp>>(result.content, {});
           return { question: parsed.question ?? '', hint: parsed.hint ?? '', thinking_direction: parsed.thinking_direction ?? '', depth_level: parsed.depth_level ?? 1, turn_count: parsed.turn_count ?? 1, status: 'ok', model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
         };
 
@@ -121,6 +123,9 @@ function register(): void {
         authToken?: string;
       },
     ) => {
+      requireText(args?.topic, 'topic');
+      requireText(args?.question, 'question');
+      requireText(args?.answer, 'answer');
       const startMs = Date.now();
       logger.info(`[AI] [socratic-eval] IPC received: topic_length=${args.topic.length}, question_length=${args.question.length}, answer_length=${args.answer.length}, history=${args.history?.length ?? 0}, hasAuth=${!!args.authToken}`);
       logger.debug(`[AI] [socratic-eval] Topic: ${args.topic.slice(0, 60)}, Q: ${args.question.slice(0, 60)}`);
@@ -148,7 +153,8 @@ function register(): void {
         const localHandler = async (): Promise<SocraticEvaluateResp> => {
           const prompt = `评估学生对问题的回答，返回JSON: {"dimensions": {"accuracy": 70, "completeness": 65, "logic": 75, "expression": 80}, "feedback": "...", "encouragement": "...", "status": "ok"}`;
           const result = await generateText(prompt, '你是一个苏格拉底式评估助手。请仅返回JSON。', { temperature: 0.4, maxTokens: 512 });
-          const parsed = JSON.parse(result.content);
+          // 宽松解析：本地小模型常输出围栏/解释文字，裸 parse 会误降级到云端
+          const parsed = parseModelJson<Partial<SocraticEvaluateResp>>(result.content, {});
           return { dimensions: parsed.dimensions ?? { accuracy: 60, completeness: 60, logic: 60, expression: 60 }, feedback: parsed.feedback ?? '', encouragement: parsed.encouragement ?? '继续加油！', status: 'ok', model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
         };
 
@@ -197,6 +203,8 @@ function register(): void {
         authToken?: string;
       },
     ) => {
+      requireText(args?.topic, 'topic');
+      requireText(args?.dialogueSummary, 'dialogueSummary');
       const startMs = Date.now();
       logger.info(`[AI] [socratic-deep] IPC received: topic_length=${args.topic.length}, summary_length=${args.dialogueSummary.length}, history=${args.history?.length ?? 0}, hasAuth=${!!args.authToken}`);
       logger.debug(`[AI] [socratic-deep] Topic: ${args.topic.slice(0, 60)}, Summary preview: ${args.dialogueSummary.slice(0, 80)}`);
@@ -227,7 +235,8 @@ function register(): void {
         const localHandler = async (): Promise<SocraticDeepeningResp> => {
           const prompt = `针对主题“${args.topic}”的对话摘要，生成深化探索角度，返回JSON: {"angles": [{"key": "...", "label": "...", "question": "..."}], "status": "ok"}`;
           const result = await generateText(prompt, '你是一个苏格拉底式深化探索助手。请仅返回JSON。', { temperature: 0.7, maxTokens: 1024 });
-          const parsed = JSON.parse(result.content);
+          // 宽松解析：本地小模型常输出围栏/解释文字，裸 parse 会误降级到云端
+          const parsed = parseModelJson<Partial<SocraticDeepeningResp>>(result.content, {});
           return { angles: parsed.angles ?? [], status: 'ok', model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
         };
 

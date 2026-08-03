@@ -7,9 +7,9 @@
  * @ai-context: 费曼提问与答案评估 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
-import { safeHandle } from '../../ipcUtils.js';
+import { requireArray, requireText, safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, parseModelJson, type AIFeatureDef } from '../utils.js';
 import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
@@ -33,6 +33,8 @@ function register(): void {
         authToken?: string;
       },
     ) => {
+      requireText(args?.concept, 'concept');
+      requireText(args?.explanation, 'explanation');
       const startMs = Date.now();
       logger.info(`[AI] [feynman-q] IPC received: concept_length=${args.concept.length}, explanation_length=${args.explanation.length}, hasAuth=${!!args.authToken}`);
       logger.debug(`[AI] [feynman-q] Concept: ${args.concept.slice(0, 60)}`);
@@ -55,7 +57,8 @@ function register(): void {
         const localHandler = async (): Promise<FeynmanQuestionResp> => {
           const prompt = `针对概念“${args.concept}”和解释“${args.explanation}”，生成苏格拉底式追问，返回JSON: {"questions": [{"question": "...", "focus": "..."}]}`;
           const result = await generateText(prompt, '你是一个费曼学习法追问助手。请仅返回JSON。', { temperature: 0.7, maxTokens: 1024 });
-          const parsed = JSON.parse(result.content);
+          // 宽松解析：本地小模型常输出围栏/解释文字，裸 parse 会误降级到云端
+          const parsed = parseModelJson<Partial<FeynmanQuestionResp>>(result.content, {});
           return { questions: parsed.questions ?? [], model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
         };
 
@@ -104,6 +107,9 @@ function register(): void {
         authToken?: string;
       },
     ) => {
+      requireText(args?.concept, 'concept');
+      requireArray(args?.questions, 'questions');
+      requireArray(args?.answers, 'answers');
       const startMs = Date.now();
       logger.info(`[AI] [feynman-eval] IPC received: concept_length=${args.concept.length}, questions=${args.questions.length}, answers=${args.answers.length}, hasAuth=${!!args.authToken}`);
       logger.debug(`[AI] [feynman-eval] Concept: ${args.concept.slice(0, 60)}, Q count=${args.questions.length}`);
@@ -130,7 +136,8 @@ function register(): void {
         const localHandler = async (): Promise<FeynmanAnswerEvalResp> => {
           const prompt = `评估用户对概念“${args.concept}”的回答，返回JSON: {"understanding_score": 70, "feedback": "...", "strong_points": ["..."], "weak_points": ["..."]}`;
           const result = await generateText(prompt, '你是一个费曼学习法评估助手。请仅返回JSON。', { temperature: 0.4, maxTokens: 1024 });
-          const parsed = JSON.parse(result.content);
+          // 宽松解析：本地小模型常输出围栏/解释文字，裸 parse 会误降级到云端
+          const parsed = parseModelJson<Partial<FeynmanAnswerEvalResp>>(result.content, {});
           return { understanding_score: parsed.understanding_score ?? 60, feedback: parsed.feedback ?? '', strong_points: parsed.strong_points ?? [], weak_points: parsed.weak_points ?? [], model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
         };
 

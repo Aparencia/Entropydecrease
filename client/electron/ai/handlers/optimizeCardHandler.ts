@@ -6,9 +6,9 @@
  * @ai-context: 卡片优化 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
-import { safeHandle } from '../../ipcUtils.js';
+import { requireText, safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, parseModelJson, type AIFeatureDef } from '../utils.js';
 import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
@@ -29,6 +29,8 @@ function register(): void {
         authToken?: string;
       },
     ) => {
+      requireText(args?.front, 'front');
+      requireText(args?.back, 'back');
       const startMs = Date.now();
       logger.info(`[AI] [optimize-card] IPC received: front_length=${args.front.length}, back_length=${args.back.length}, hasAuth=${!!args.authToken}`);
       logger.debug(`[AI] [optimize-card] Front preview: ${args.front.slice(0, 60)}, Back preview: ${args.back.slice(0, 60)}`);
@@ -55,7 +57,8 @@ function register(): void {
 正面：${args.front}
 反面：${args.back}`;
           const result = await generateText(prompt, '你是一个闪卡优化助手，擅长改进问答对的表述。请仅返回JSON。', { temperature: 0.5, maxTokens: 1024 });
-          const parsed = JSON.parse(result.content);
+          // 宽松解析：本地小模型常输出围栏/解释文字，裸 parse 会误降级到云端
+          const parsed = parseModelJson<Partial<OptimizeCardResp>>(result.content, {});
           return { suggested_front: parsed.suggested_front ?? args.front, suggested_back: parsed.suggested_back ?? args.back, improvements: parsed.improvements ?? [], model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
         };
 

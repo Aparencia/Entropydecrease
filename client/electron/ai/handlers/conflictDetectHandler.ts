@@ -7,9 +7,9 @@
  * @ai-context: 概念冲突检测 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；本地降级同样走 JSON 生成。
  */
 
-import { safeHandle } from '../../ipcUtils.js';
+import { requireText, safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, parseModelJson, type AIFeatureDef } from '../utils.js';
 import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
@@ -30,6 +30,8 @@ function register(): void {
         authToken?: string;
       },
     ) => {
+      requireText(args?.newNoteText, 'newNoteText');
+      requireText(args?.historyText, 'historyText');
       const startMs = Date.now();
       logger.info(`[AI] [conflictDetect] IPC received: new_len=${args.newNoteText.length}, history_len=${args.historyText.length}, hasAuth=${!!args.authToken}`);
 
@@ -56,7 +58,8 @@ function register(): void {
         const localHandler = async (): Promise<ConflictDetectResp> => {
           const prompt = `分析新笔记与历史理解之间的概念冲突（只报告真正的矛盾），仅返回JSON: {"conflicts": [{"old_claim": "...", "new_claim": "...", "topic": "...", "suggestion": "..."}]}\n\n【新笔记】\n${reqBody.newNoteText}\n\n【历史理解】\n${reqBody.historyText}`;
           const result = await generateText(prompt, '你是一位概念转变研究专家，擅长识别学习者新旧理解之间的矛盾。请仅返回JSON。', { temperature: 0.3, maxTokens: 2000 });
-          const parsed = JSON.parse(result.content);
+          // 宽松解析：本地小模型常输出围栏/解释文字，裸 parse 会误降级到云端
+          const parsed = parseModelJson<Partial<ConflictDetectResp>>(result.content, {});
           return {
             conflicts: parsed.conflicts ?? [],
             model: result.model,

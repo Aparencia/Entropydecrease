@@ -98,6 +98,42 @@ export function safeHandle<T extends any[]>(
 }
 
 // ================================================================
+// IPC 入参校验（P1-4：防缺参/错型导致主进程 TypeError 崩溃）
+// ================================================================
+
+/**
+ * 校验必填非空字符串入参。
+ *
+ * @param value - 待校验值（渲染进程传入，实际可能缺失/错型）
+ * @param field - 字段名（仅用于错误信息）
+ * @returns 校验通过的原值
+ * @throws 入参缺失或类型错误时抛出带字段名的明确错误
+ * @ai-context handler 首行调用：把"缺参导致的裸 .length TypeError"前移为
+ * 带字段名的可诊断错误，避免向云端网关发出无效请求
+ */
+export function requireText(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(`IPC 入参错误: ${field} 必须为非空字符串`);
+  }
+  return value;
+}
+
+/**
+ * 校验必填数组入参（允许空数组，仅拒绝非数组类型）。
+ *
+ * @param value - 待校验值
+ * @param field - 字段名（仅用于错误信息）
+ * @returns 校验通过的数组
+ * @throws 入参缺失或类型错误时抛出带字段名的明确错误
+ */
+export function requireArray<T = unknown>(value: unknown, field: string): T[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`IPC 入参错误: ${field} 必须为数组`);
+  }
+  return value as T[];
+}
+
+// ================================================================
 // IPC 消息批量化（渲染进程侧防抖工具）
 // ================================================================
 

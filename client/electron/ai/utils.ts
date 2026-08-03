@@ -40,3 +40,6 @@ export {
 export {
   postJsonStream,
 } from './gatewayStream.js';
+export {
+  parseModelJson,
+} from './jsonParse.js';

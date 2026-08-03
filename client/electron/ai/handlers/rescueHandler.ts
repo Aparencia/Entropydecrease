@@ -6,9 +6,9 @@
  * @ai-context: 卡壳救援 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；请求响应契约与网关 Pydantic model 对齐。
  */
 
-import { safeHandle } from '../../ipcUtils.js';
+import { requireText, safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, parseModelJson, type AIFeatureDef } from '../utils.js';
 import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
@@ -30,6 +30,8 @@ function register(): void {
         authToken?: string;
       },
     ) => {
+      requireText(args?.content, 'content');
+      requireText(args?.stuckDescription, 'stuckDescription');
       const startMs = Date.now();
       logger.info(`[AI] [rescue] IPC received: content_length=${args.content.length}, stuck_length=${args.stuckDescription.length}, methods=${args.attemptedMethods ?? 'none'}, hasAuth=${!!args.authToken}`);
       logger.debug(`[AI] [rescue] Stuck description: ${args.stuckDescription.slice(0, 80)}`);
@@ -62,7 +64,8 @@ function register(): void {
         const localHandler = async (): Promise<RescueGenResp> => {
           const prompt = `学习者卡住了，请提供分层救援提示，返回JSON: {"rescue_levels": [{"level": 1, "label": "...", "suggestion": "...", "hint_question": "..."}], "encouragement": "...", "status": "ok"}\n\n卡住情境：${JSON.stringify(reqBody)}`;
           const result = await generateText(prompt, '你是一个学习救援助手，擅长为卡住的学习者提供分层提示。请仅返回JSON。', { temperature: 0.6, maxTokens: 1024 });
-          const parsed = JSON.parse(result.content);
+          // 宽松解析：本地小模型常输出围栏/解释文字，裸 parse 会误降级到云端
+          const parsed = parseModelJson<Partial<RescueGenResp>>(result.content, {});
           return { rescue_levels: parsed.rescue_levels ?? [], encouragement: parsed.encouragement ?? '加油！', status: 'ok', model: result.model, tokens_used: result.tokens_used, latency_ms: result.latency_ms };
         };
 

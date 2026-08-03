@@ -7,9 +7,9 @@
  * @ai-context: 错误模式分析 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；本地降级返回空模式列表（前端回退纯本地统计）。
  */
 
-import { safeHandle } from '../../ipcUtils.js';
+import { requireArray, safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, parseModelJson, type AIFeatureDef } from '../utils.js';
 import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
@@ -29,6 +29,7 @@ function register(): void {
         authToken?: string;
       },
     ) => {
+      requireArray(args?.goldenErrors, 'goldenErrors');
       const startMs = Date.now();
       logger.info(`[AI] [errorPattern] IPC received: errors_count=${args.goldenErrors.length}, hasAuth=${!!args.authToken}`);
 
@@ -57,7 +58,8 @@ function register(): void {
             .join('\n');
           const prompt = `分析以下黄金错误记录，识别错误模式，返回JSON: {"patterns": [{"type": "concept_blind|concept_confusion|overconfidence", "keywords": ["..."], "explanation": "...", "suggestion": "..."}], "top_offenders": [{"flashcardId": "...", "count": 1}], "summary": "不超过50字总结"}\n\n${errorsText}`;
           const result = await generateText(prompt, '你是一个教育心理学专家，擅长识别学习者的典型错误模式。请仅返回JSON。', { temperature: 0.3, maxTokens: 2048 });
-          const parsed = JSON.parse(result.content);
+          // 宽松解析：本地小模型常输出围栏/解释文字，裸 parse 会误降级到云端
+          const parsed = parseModelJson<Partial<ErrorPatternResp>>(result.content, {});
           return {
             patterns: parsed.patterns ?? [],
             top_offenders: parsed.top_offenders ?? [],

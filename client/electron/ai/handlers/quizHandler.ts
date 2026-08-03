@@ -7,9 +7,9 @@
  * @ai-context: 迷你测试生成 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；本地降级同样走 JSON 生成。
  */
 
-import { safeHandle } from '../../ipcUtils.js';
+import { requireText, safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, parseModelJson, type AIFeatureDef } from '../utils.js';
 import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
@@ -29,6 +29,7 @@ function register(): void {
         authToken?: string;
       },
     ) => {
+      requireText(args?.notesText, 'notesText');
       const startMs = Date.now();
       logger.info(`[AI] [quizGen] IPC received: text_len=${args.notesText.length}, hasAuth=${!!args.authToken}`);
 
@@ -54,7 +55,8 @@ function register(): void {
         const localHandler = async (): Promise<QuizGenResp> => {
           const prompt = `基于以下笔记内容生成 5-8 道迷你测试题（混合填空fill_blank/单选choice/简答short_answer），仅返回JSON: {"questions": [{"type": "...", "question": "...", "options": [], "answer": "...", "explanation": "...", "concept": "..."}]}\n\n${reqBody.notesText}`;
           const result = await generateText(prompt, '你是一位教育评估专家，擅长设计检测真实理解程度的测验题目。请仅返回JSON。', { temperature: 0.5, maxTokens: 3000 });
-          const parsed = JSON.parse(result.content);
+          // 宽松解析：本地小模型常输出围栏/解释文字，裸 parse 会误降级到云端
+          const parsed = parseModelJson<Partial<QuizGenResp>>(result.content, {});
           return {
             questions: parsed.questions ?? [],
             model: result.model,

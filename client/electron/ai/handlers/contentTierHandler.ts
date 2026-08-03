@@ -7,9 +7,9 @@
  * @ai-context: 内容分层 IPC handler——AIFeatureDef 注册表模式，经 callWithLocalFallback 支持本地 Ollama 优先/云端网关降级；本地降级同样走 JSON 生成。
  */
 
-import { safeHandle } from '../../ipcUtils.js';
+import { requireText, safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
-import { callWithLocalFallback, gatewayUrl, type AIFeatureDef } from '../utils.js';
+import { callWithLocalFallback, gatewayUrl, parseModelJson, type AIFeatureDef } from '../utils.js';
 import { generateText } from '../ollama/OllamaProvider.js';
 
 // ================================================================
@@ -29,6 +29,7 @@ function register(): void {
         authToken?: string;
       },
     ) => {
+      requireText(args?.notesText, 'notesText');
       const startMs = Date.now();
       logger.info(`[AI] [contentTier] IPC received: text_len=${args.notesText.length}, hasAuth=${!!args.authToken}`);
 
@@ -52,7 +53,8 @@ function register(): void {
         const localHandler = async (): Promise<ContentTierResp> => {
           const prompt = `将以下笔记内容分为三层：core（核心概念，含 reason）、support（支撑材料）、detail（参考细节），仅返回JSON: {"core": [{"text": "...", "reason": "..."}], "support": [{"text": "..."}], "detail": [{"text": "..."}]}\n\n${reqBody.notesText}`;
           const result = await generateText(prompt, '你是一位认知负荷管理专家，擅长从笔记中提炼核心概念。请仅返回JSON。', { temperature: 0.3, maxTokens: 2500 });
-          const parsed = JSON.parse(result.content);
+          // 宽松解析：本地小模型常输出围栏/解释文字，裸 parse 会误降级到云端
+          const parsed = parseModelJson<Partial<ContentTierResp>>(result.content, {});
           return {
             core: parsed.core ?? [],
             support: parsed.support ?? [],
