@@ -14,6 +14,7 @@ import { MessageCircle, Lightbulb, SearchCheck } from 'lucide-react';
 import { useToast, type ContextMenuGroup } from '@/components/ui';
 import { useContextMenu } from '@/lib/contextMenu';
 import { useAIEvaluate, useAIFeynmanQuestion, useAIFeynmanEvaluateAnswers } from '@/lib/ai/useAI';
+import { useWorldEvents } from '@/features/retention/store/useWorldEvents';
 import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 import { useStuckTimer } from '@/hooks/useStuckTimer';
 import { assistantEventBus } from '@/features/assistant/lib/eventBus';
@@ -155,7 +156,13 @@ export function useFeynmanAI(note: FeynmanNote | null) {
     }
     setShowAIEval(true);
     aiEvaluate(note.concept, note.explanation)
-      .then((result) => { persistAIResult({ evalResult: result }); })
+      .then((result) => {
+        persistAIResult({ evalResult: result });
+        // 宪法第三条签名时刻挂载点：评估通过（≥75）= 掌握一个概念
+        if (result && result.overallScore >= 75) {
+          useWorldEvents.getState().emitSignatureMoment(note.concept);
+        }
+      })
       .catch(handleEvalError);
   }, [note, toast, aiEvaluate, handleEvalError, persistAIResult]);
 
@@ -182,6 +189,10 @@ export function useFeynmanAI(note: FeynmanNote | null) {
     const evalResult = await aiEvaluateAnswers(note.concept, questions, answers).catch(handleEvalError);
     if (evalResult) {
       persistAIResult({ answers, answerEvalData: evalResult });
+      // 追问后评估通过同样视为概念掌握（签名时刻挂载点；0-10 制，7.5≈百分制 75）
+      if (evalResult.understandingScore >= 7.5) {
+        useWorldEvents.getState().emitSignatureMoment(note.concept);
+      }
     }
   }, [note, aiQuestionData, localAnswers, toast, aiEvaluateAnswers, handleEvalError, persistAIResult]);
 

@@ -27,6 +27,7 @@ import { RETURN_THRESHOLD_MS } from '@/features/assistant/constants';
 // 留存机制：初始化 hook（store 加载）+ 深海发现弹窗（全局 portal）
 import { useRetentionInit } from '@/features/retention/hooks/useRetentionInit';
 import { DiscoveryReveal } from '@/features/retention/components/DiscoveryReveal';
+import { SignatureMoment } from '@/features/retention/components/SignatureMoment';
 import '@/stores/useSettingsStore'; // 导入以触发音效设置初始化
 import { startPomodoroScheduler } from '@/features/pomodoro/lib/pomodoroScheduler';
 
@@ -153,6 +154,9 @@ function App() {
               {/* 留存机制：深海发现揭示弹窗（createPortal 到 body，与 AchievementToast 同级）
                   仅当 discoveryStore 有待展示发现时才渲染实际 DOM */}
               <DiscoveryReveal />
+              {/* 签名时刻（宪法第三条）：掌握一个概念时的三幕演出，
+                  由世界事件总线驱动，仅事件发生时渲染 DOM */}
+              <SignatureMoment />
             </ErrorBoundary>
           </SyncProvider>
         </AuthProvider>

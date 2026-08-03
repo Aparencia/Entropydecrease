@@ -22,15 +22,28 @@ interface WorldEventsState {
   /** 最近一次波纹起源 / Latest ripple origin */
   rippleOrigin: RippleOrigin;
 
+  /** 签名时刻序列号（宪法第三条：掌握一个概念） / Signature moment counter */
+  signatureSeq: number;
+  /** 被掌握的概念名（签名时刻文案） / Mastered concept name */
+  signatureConcept: string;
+
   /** 发射秩序波纹（复习/掌握的即时正反馈） / Emit an order ripple */
   emitOrderRipple: (origin?: RippleOrigin) => void;
+  /** 触发签名时刻（概念掌握：费曼评估通过/卡片牢固） / Trigger signature moment */
+  emitSignatureMoment: (concept: string) => void;
 }
 
 export const useWorldEvents = create<WorldEventsState>((set) => ({
   rippleSeq: 0,
   rippleOrigin: 'center',
+  signatureSeq: 0,
+  signatureConcept: '',
 
   emitOrderRipple: (origin = 'center') => {
     set((s) => ({ rippleSeq: s.rippleSeq + 1, rippleOrigin: origin }));
+  },
+
+  emitSignatureMoment: (concept) => {
+    set((s) => ({ signatureSeq: s.signatureSeq + 1, signatureConcept: concept }));
   },
 }));
