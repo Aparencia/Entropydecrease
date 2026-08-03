@@ -13,6 +13,8 @@ build/
 *.dll
 client/src-tauri/target/
 dist-electron/
+# process-audio 原生模块 node-gyp 产物目录（bin/win32-x64-*/process-audio.node）
+client/native/process-audio/bin/
 client/release/
 
 # IDE
