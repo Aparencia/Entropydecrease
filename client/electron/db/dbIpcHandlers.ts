@@ -34,6 +34,8 @@ const ALLOWED_TABLES = new Set([
   'assistant_messages',
   // assistant_triggers — AI 助手触发规则记录
   'assistant_triggers',
+  // world_snapshots — 世界状态快照（渲染进程 retention 数据→MCP 记忆服务器跨进程桥）
+  'world_snapshots',
   // crdt_docs — CRDT 同步引擎文档快照（v3 迁移新增）
   'crdt_docs',
   // crdt_changes — CRDT 同步引擎变更日志（v3 迁移新增）

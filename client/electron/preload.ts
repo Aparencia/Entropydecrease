@@ -120,6 +120,9 @@ const ALLOWED_CHANNELS = [
   'local_asr_stream_available',
   'local_asr_stream_start',
   'local_asr_stream_stop',
+  // MCP 学习记忆服务器应用内授权开关
+  'memory_server:get_consent',
+  'memory_server:set_consent',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */

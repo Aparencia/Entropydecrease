@@ -6,7 +6,7 @@
  */
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export const SCHEMA_DDL = /* sql */ `
 CREATE TABLE IF NOT EXISTS pomodoro_sessions (
@@ -189,6 +189,10 @@ CREATE TABLE IF NOT EXISTS implementation_intentions (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_impl_intention_status ON implementation_intentions(status, trigger_at);
+-- v7：世界状态快照（渲染进程 retention 数据→主进程 sqlite→MCP 记忆服务器的跨进程桥）
+CREATE TABLE IF NOT EXISTS world_snapshots (
+  id TEXT PRIMARY KEY, payload TEXT NOT NULL DEFAULT '{}', updated_at TEXT NOT NULL
+);
 `;
 
 /** v3 迁移 DDL：CRDT 同步引擎元数据表（条件执行） */
@@ -244,6 +248,9 @@ export function initializeSchema(db: Database.Database): void {
   // 表 DDL 已包含在 SCHEMA_DDL 中，此处无需额外操作
 
   // v6 迁移：A4 实施意图表 implementation_intentions
+  // 表 DDL 已包含在 SCHEMA_DDL 中（CREATE IF NOT EXISTS 幂等），此处无需额外操作
+
+  // v7 迁移：世界状态快照表 world_snapshots
   // 表 DDL 已包含在 SCHEMA_DDL 中（CREATE IF NOT EXISTS 幂等），此处无需额外操作
 
   db.pragma(`user_version = ${SCHEMA_VERSION}`);

@@ -148,12 +148,36 @@ export function queryStreak(db: Database.Database): Record<string, unknown> {
   };
 }
 
-/** learning_memory.discoveries — 深海发现（当前存于客户端 IndexedDB，sqlite 未接线） */
-export function queryDiscoveries(): Record<string, unknown> {
+/** 读取渲染进程同步过来的世界快照（useWorldSnapshotSync 写入，无则 null） */
+function readWorldSnapshot(db: Database.Database): {
+  corals?: { total: number; healthy: number; bleached: number; totalDepth: number };
+  discoveries?: { count: number };
+  capturedAt?: string;
+} | null {
+  try {
+    const row = db.prepare("SELECT payload FROM world_snapshots WHERE id = 'latest'").get() as
+      { payload: string } | undefined;
+    if (!row) return null;
+    return JSON.parse(row.payload);
+  } catch {
+    return null;
+  }
+}
+
+/** learning_memory.discoveries — 深海发现（优先读世界快照，无则占位） */
+export function queryDiscoveries(db: Database.Database): Record<string, unknown> {
+  const snap = readWorldSnapshot(db);
+  if (!snap?.discoveries) {
+    return {
+      count: null,
+      items: [],
+      note: '尚未获取到发现图鉴快照（应用启动并产生发现后自动同步）',
+    };
+  }
   return {
-    count: null,
-    items: [],
-    note: '发现图鉴暂存于客户端本地存储，跨进程接线将在后续批次完成',
+    count: snap.discoveries.count,
+    capturedAt: snap.capturedAt ?? null,
+    note: '图鉴明细存于客户端本地，此处为累计数量快照',
   };
 }
 
@@ -185,11 +209,12 @@ export function queryRecentSessions(db: Database.Database, limitRaw: unknown): R
 }
 
 /**
- * learning_memory.world_state — 世界状态快照（sqlite 派生版）
- * @ai-context 珊瑚/发现实体存于渲染进程 IndexedDB，此处以 sqlite 过程数据
- * 派生近似信号并显式标注 provenance，避免误导消费方。
+ * learning_memory.world_state — 世界状态快照
+ * @ai-context 优先消费渲染进程同步的精确快照（珊瑚健康度→雾与活力）；
+ * 无快照时回退 sqlite 过程数据派生值并显式标注 provenance。
  */
 export function queryWorldState(db: Database.Database): Record<string, unknown> {
+  const snap = readWorldSnapshot(db);
   const focus = db.prepare(`
     SELECT COALESCE(SUM(actual_duration), 0) AS totalSeconds FROM pomodoro_sessions WHERE interrupted = 0
   `).get() as { totalSeconds: number };
@@ -198,11 +223,31 @@ export function queryWorldState(db: Database.Database): Record<string, unknown> 
   ).get() as { n: number }).n;
   const totalCards = (db.prepare('SELECT COUNT(*) AS n FROM flashcards').get() as { n: number }).n;
 
-  return {
+  const base = {
     depthMeters: Math.round(focus.totalSeconds / 60),
     depthNote: '以专注分钟折算的潜航深度（1 分钟 ≈ 1 米）',
     hazyShare: totalCards > 0 ? Math.round((due / totalCards) * 100) / 100 : 0,
     hazyNote: '朦胧知识占比（0-1）——雾的浓度，复习即拨开',
-    provenance: '由主库过程数据派生；珊瑚/发现等世界实体的精确状态以后续批次为准',
+  };
+
+  if (snap?.corals) {
+    const { total, healthy, bleached, totalDepth } = snap.corals;
+    return {
+      ...base,
+      ecosystem: {
+        coralTotal: total,
+        coralHealthy: healthy,
+        coralBleached: bleached,
+        vitality: total > 0 ? Math.round((healthy / total) * 100) / 100 : null,
+        accumulatedDepthMeters: totalDepth,
+      },
+      capturedAt: snap.capturedAt ?? null,
+      provenance: '珊瑚生态来自渲染进程同步快照（精确态）；潜航深度与朦胧占比由主库派生',
+    };
+  }
+
+  return {
+    ...base,
+    provenance: '由主库过程数据派生；珊瑚精确态待应用启动后同步',
   };
 }

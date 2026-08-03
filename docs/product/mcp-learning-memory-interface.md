@@ -59,7 +59,7 @@
 
 ## 七、依赖与排期
 
-- **实施现状**（P2 第二批）：服务器入口与 8 个只读工具已落地；授权方式为 userData 目录下的 `memory-server-consent` 标记文件（应用内设置页授权开关待后续批次）；`discoveries`/`world_state` 精确态（珊瑚/发现存于渲染进程 IndexedDB）为派生值占位，跨进程接线待后续批次。
+- **实施现状**（P2 已完成）：服务器入口与 8 个只读工具已落地；授权提供双通道：userData 下 `memory-server-consent` 标记文件 + 应用内设置页开关（数据与存储→学习记忆接口）；`discoveries`/`world_state` 精确态经世界快照跨进程桥（useWorldSnapshotSync → world_snapshots 表）接入，无快照时回退派生值并标注 provenance。
 - **关联短板**：前序战略文档「短板3：本地向量检索缺位」若先落地，可追加 `learning_memory.semantic_search` 工具，本草案预留扩展位。
 
 ## 八、宿主接入方式（用户侧配置）
@@ -78,5 +78,5 @@
 }
 ```
 
-首次使用前需创建授权标记（服务器无标记即拒绝启动并提示）：
-`%APPDATA%/entropy-decrease/memory-server-consent`（Windows）。
+首次使用前需授权（二选一）：应用内「设置→数据与存储→学习记忆接口」开启，或手动创建标记文件
+`%APPDATA%/entropy-decrease/memory-server-consent`（Windows）。服务器无授权即拒绝启动并提示。

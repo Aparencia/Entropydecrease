@@ -27,6 +27,7 @@ import { createMainWindow, saveCloseChoice, completeSyncBeforeQuit } from './win
 import { destroyTray } from './trayManager.js';
 import { registerCaptureHandlers, disposeCaptureHandlers } from './captureHandlers.js';
 import { mcpManager } from './mcpManager.js';
+import { registerMemoryServerConsentHandlers } from './memoryServerConsent.js';
 import { initialize, close as closeDb } from './db/sqliteService.js';
 import { initializeSchema } from './db/schema.js';
 import { initializeFTS, rebuildIndex, collectIndexableData } from './db/fts5Search.js';
@@ -172,6 +173,8 @@ if (!gotTheLock) {
     // 数据访问与存储/备份 IPC（详见 db/dbIpcHandlers.ts、storageIpcHandlers.ts）
     registerDbIpcHandlers();
     registerStorageIpcHandlers();
+    // MCP 学习记忆服务器应用内授权开关（详见 memoryServerConsent.ts）
+    registerMemoryServerConsentHandlers();
     // 课堂关键帧图片持久化 IPC + keyframe:// 协议（详见 ipc/keyframeStorage.ts）
     registerKeyframeIpcHandlers();
 

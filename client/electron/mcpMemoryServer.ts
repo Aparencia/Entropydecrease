@@ -141,7 +141,7 @@ async function main(): Promise<void> {
     discoveries: {
       description: '深海发现图鉴（跨进程接线建设中，当前返回占位）',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-      run: () => queryDiscoveries(),
+      run: () => queryDiscoveries(db),
     },
     recent_sessions: {
       description: '最近学习会话摘要（深潜与费曼）',

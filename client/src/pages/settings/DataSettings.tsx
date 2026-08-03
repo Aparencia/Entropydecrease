@@ -11,6 +11,7 @@ import { StoragePathSection } from './StoragePathSection';
 import { ImportExportSection } from './ImportExportSection';
 import { EncryptedBackupSection } from './EncryptedBackupSection';
 import { ClearDataSection } from './ClearDataSection';
+import { MemoryServerSection } from './MemoryServerSection';
 
 export default function DataSettings() {
   return (
@@ -18,6 +19,7 @@ export default function DataSettings() {
       <h2 className="text-b1 font-semibold text-text-primary">数据与存储</h2>
 
       <StoragePathSection />
+      <MemoryServerSection />
       <ImportExportSection />
       <EncryptedBackupSection />
       <ClearDataSection />
