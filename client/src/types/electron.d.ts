@@ -17,6 +17,8 @@ declare global {
       invoke: (channel: string, ...args: unknown[]) => Promise<unknown>;
       on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
       send: (channel: string, ...args: unknown[]) => void;
+      /** 拖拽文件 → 绝对路径（知识入籍 PDF 拖拽，Electron 35 webUtils） */
+      getPathForFile: (file: File) => string;
       /** 监听主进程发出的窗口关闭事件，返回取消监听函数 */
       onWindowClosing: (callback: () => void) => () => void;
       /** 向主进程发送关闭行为选择 */

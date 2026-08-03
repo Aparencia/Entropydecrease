@@ -108,6 +108,8 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
     "conflict_detect": ("qwen", "free"),
     # E1: 概念预检（JSON Mode，Qwen 通用模型）
     "concept_precheck": ("qwen", "free"),
+    # 阶段 A: 知识入籍概念化（JSON Mode，免费档优先）
+    "import_concept": ("glm", "free"),
 }
 
 # ============================================================

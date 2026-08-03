@@ -63,6 +63,8 @@ PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
     "conflict_detect": ["qwen", "glm", "fallback"],
     # E1: 概念预检（Qwen 为主，GLM 备选）
     "concept_precheck": ["qwen", "glm", "fallback"],
+    # 阶段 A: 知识入籍概念化（GLM 免费优先，Qwen 备选）
+    "import_concept": ["glm", "qwen", "fallback"],
 }
 
 

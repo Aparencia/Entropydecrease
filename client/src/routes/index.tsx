@@ -45,6 +45,7 @@ const AnalyticsPage = lazy(() => import('@/features/dashboard/pages/AnalyticsPag
 const InspirationPage = lazy(() => import('@/features/inspiration/pages/InspirationPage'));
 const ClassroomPage = lazy(() => import('@/features/classroom/pages/ClassroomPage'));
 const OnboardingPage = lazy(() => import('@/pages/OnboardingPage'));
+const SettlingPage = lazy(() => import('@/features/settling/pages/SettlingPage'));
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
 const ResetPasswordPage = lazy(() => import('@/pages/ResetPassword'));
@@ -101,6 +102,7 @@ const routes: RouteObject[] = [
       { path: '/analytics', element: <SuspenseWrapper><AnalyticsPage /></SuspenseWrapper> },
       { path: '/inspiration', element: <SuspenseWrapper><InspirationPage /></SuspenseWrapper> },
       { path: '/classroom', element: <SuspenseWrapper><ClassroomPage /></SuspenseWrapper> },
+      { path: '/settling', element: <SuspenseWrapper><SettlingPage /></SuspenseWrapper> },
     ],
   },
   {

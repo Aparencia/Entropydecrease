@@ -7,7 +7,7 @@
  * @ai-context: IPC 桥接安全边界（contextBridge 白名单暴露）——渲染进程唯一的主进程访问面，新增通道必须显式登记，任何修改需安全审查。
  */
 
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 /** 允许渲染进程调用的 IPC channel 白名单 */
 const ALLOWED_CHANNELS = [
@@ -37,6 +37,8 @@ const ALLOWED_CHANNELS = [
   'ai_merge_notes',
   // A3 微进展叙述（每周一次的统计叙述生成）
   'ai_progress_narrate',
+  // 阶段 A：知识入籍概念化（切块文本 → 概念候选）
+  'ai_import_concept',
   'ai:set-gateway-url',
   // AI 学伴对话 IPC channel
   'ai:chat:send',
@@ -123,6 +125,11 @@ const ALLOWED_CHANNELS = [
   // MCP 学习记忆服务器应用内授权开关
   'memory_server:get_consent',
   'memory_server:set_consent',
+  // 知识入籍 IPC channel（阶段 A：PDF 解析/URL 抓取/入籍记录）
+  'import:parse-pdf',
+  'import:fetch-url',
+  'import:get-settling-records',
+  'import:add-settling-record',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */
@@ -232,6 +239,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ---- 自动更新 API ----
   /** 设置是否自动检查更新 */
   setAutoUpdate: (enabled: boolean) => ipcRenderer.invoke('update:set-auto-check', enabled),
+  // ---- 阶段 A：知识入籍拖拽 API（Electron 35 移除 File.path，必须经 webUtils 转换） ----
+  /** 拖拽文件 → 绝对路径（供 import:parse-pdf 使用） */
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   // ---- v0.9.0: 备份 API ----
   /** 保存备份文件（显示系统保存对话框） */
   backupSave: (data: string, defaultName?: string) => ipcRenderer.invoke('backup:save', data, defaultName),

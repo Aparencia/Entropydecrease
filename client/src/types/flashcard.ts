@@ -40,6 +40,8 @@ export interface Flashcard {
   createdAt: Date;
   updatedAt: Date;
   sourceNoteId?: string;         // 来源笔记 ID（用于双向关联）
+  /** 来源溯源（知识入籍：文件名/URL/粘贴来源，v8 迁移新增） / Settling source reference */
+  sourceRef?: string;
   order: number;
   // 卡片标签（用于分类筛选与智能检索，v1.1 牌组分享格式已携带此字段）
   tags?: string[];

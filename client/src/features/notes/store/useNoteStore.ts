@@ -33,6 +33,8 @@ interface NoteState {
     template?: Note['template'];
     folderId?: string;
     tags?: string[];
+    /** 来源溯源（知识入籍流程写入） */
+    sourceRef?: string;
   }) => Promise<string>;
   updateNote: (id: string, changes: Partial<Note>) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
@@ -170,6 +172,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
         template: data.template ?? 'blank',
         folderId: data.folderId,
         tags: data.tags ?? [],
+        sourceRef: data.sourceRef,
         createdAt: now,
         updatedAt: now,
         wordCount: noteContentToPlainText(content).length,

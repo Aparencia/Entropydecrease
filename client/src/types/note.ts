@@ -2,6 +2,7 @@
  * 笔记领域类型
  *
  * @ai-context: 纯类型文件。Note.content 存储 TipTap JSON 序列化字符串。
+ * sourceRef 由知识入籍流程（阶段 A）写入，用于溯源；sqlite 侧列名 source_ref（v8 迁移）。
  */
 
 /** 笔记 */
@@ -17,6 +18,8 @@ export interface Note {
   wordCount: number;
   pinned: boolean;               // 是否置顶
   videoNoteType?: string;        // 视频笔记类型标识（lecture/tutorial/etc）
+  /** 来源溯源（知识入籍：文件名/URL/粘贴来源，v8 迁移新增） / Settling source reference */
+  sourceRef?: string;
 }
 
 /** 笔记双向链接记录（阶段二：由笔记内容中 wiki-link 提及推导的出链） */

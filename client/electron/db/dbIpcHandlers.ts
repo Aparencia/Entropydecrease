@@ -42,6 +42,8 @@ const ALLOWED_TABLES = new Set([
   'crdt_changes',
   // implementation_intentions — A4 实施意图（v6 迁移新增）
   'implementation_intentions',
+  // imports — 知识入籍记录（v8 迁移新增）
+  'imports',
 ]);
 
 /** camelCase → snake_case（用于表名映射） */
@@ -79,6 +81,8 @@ const TABLE_NAME_MAP: Record<string, string> = {
   implementationIntentions: 'implementation_intentions',
   // v7 新增：世界状态快照（MCP 记忆接口跨进程桥）
   worldSnapshots: 'world_snapshots',
+  // v8 新增：知识入籍记录（阶段 A 入口问题）
+  imports: 'imports',
 };
 
 function resolveTable(table: string): string {

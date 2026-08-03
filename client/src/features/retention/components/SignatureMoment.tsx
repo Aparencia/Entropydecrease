@@ -14,7 +14,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useWorldEvents } from '../store/useWorldEvents';
+import { useWorldEvents, type SignatureVariant } from '../store/useWorldEvents';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
 /** 三幕时长（毫秒）/ Act durations */
@@ -28,9 +28,10 @@ type Act = 'silence' | 'event' | 'afterglow';
 
 /**
  * 可变重奏演出变体（宪法第三条 §1：同一成就不重播同一演出）
- * star=孤星亮起（默认）；trinity=三星连线（知识成网）；bloom=光尘上浮（秩序开花）
+ * star=孤星亮起（默认）；trinity=三星连线（知识成网）；bloom=光尘上浮（秩序开花）；
+ * constellation=星域成片点亮（入籍变体专属：一片星域逐一亮起）
  */
-type SignatureVisual = 'star' | 'trinity' | 'bloom';
+type SignatureVisual = 'star' | 'trinity' | 'bloom' | 'constellation';
 const VISUALS: SignatureVisual[] = ['star', 'trinity', 'bloom'];
 
 export function SignatureMoment() {
@@ -40,7 +41,7 @@ export function SignatureMoment() {
   const [active, setActive] = useState(false);
   const [act, setAct] = useState<Act>('silence');
   const [concept, setConcept] = useState('');
-  const [variant, setVariant] = useState<'mastery' | 'genesis'>('mastery');
+  const [variant, setVariant] = useState<SignatureVariant>('mastery');
   const [visual, setVisual] = useState<SignatureVisual>('star');
   const timers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const reduced = useMemo(
@@ -65,8 +66,9 @@ export function SignatureMoment() {
     clearTimers();
     setConcept(signatureConcept);
     setVariant(signatureVariant);
-    // 可变重奏：每次事件随机选取演出变体（可变比率，对抗多巴胺适应）
-    setVisual(VISUALS[Math.floor(Math.random() * VISUALS.length)]);
+    // 可变重奏：每次事件随机选取演出变体（可变比率，对抗多巴胺适应）；
+    // 入籍变体固定星域成片（阶段 A：一批概念同时安放，成片点亮恰合其意）
+    setVisual(signatureVariant === 'settling' ? 'constellation' : VISUALS[Math.floor(Math.random() * VISUALS.length)]);
     setActive(true);
 
     if (reduced) {
@@ -109,6 +111,49 @@ export function SignatureMoment() {
 
   /** 可变重奏演出渲染（痕迹由场景层永久保留，此处是演出） */
   const renderVisual = () => {
+    if (visual === 'constellation') {
+      // 星域成片点亮：一批新星逐一发光，连成一片星域（知识入籍）
+      const STARS: Array<[number, number, number]> = [
+        [60, 40, 7], [110, 24, 5], [165, 38, 8], [195, 85, 5],
+        [150, 105, 6], [90, 96, 5], [36, 90, 6], [120, 62, 4],
+      ];
+      const LINKS: Array<[number, number, number, number]> = [
+        [60, 40, 110, 24], [110, 24, 165, 38], [165, 38, 195, 85],
+        [195, 85, 150, 105], [150, 105, 90, 96], [90, 96, 36, 90],
+        [36, 90, 60, 40], [120, 62, 60, 40], [120, 62, 165, 38],
+        [120, 62, 150, 105], [120, 62, 90, 96],
+      ];
+      return (
+        <motion.svg
+          width={232} height={140} viewBox="0 0 232 140"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4 }}
+        >
+          {!reduced && LINKS.map(([x1, y1, x2, y2], i) => (
+            <motion.line
+              key={`cl${i}`}
+              x1={x1} y1={y1} x2={x2} y2={y2}
+              stroke="#22D3EE" strokeWidth={0.7}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.35 }}
+              transition={{ delay: 0.5 + i * 0.1, duration: 0.6 }}
+            />
+          ))}
+          {STARS.map(([x, y, r], i) => (
+            <motion.circle
+              key={`cs${i}`}
+              cx={x} cy={y} r={r}
+              fill="#67E8F9"
+              style={{ filter: 'drop-shadow(0 0 10px #22D3EE)' }}
+              initial={{ opacity: 0, scale: 0.2 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: i * 0.13, type: 'spring', stiffness: 220, damping: 20 }}
+            />
+          ))}
+        </motion.svg>
+      );
+    }
     if (visual === 'trinity') {
       // 三星连线：知识结成网
       return (
@@ -223,7 +268,19 @@ export function SignatureMoment() {
               {renderVisual()}
 
               <div>
-                {variant === 'genesis' ? (
+                {variant === 'settling' ? (
+                  <>
+                    <div style={{
+                      fontFamily: "'LXGW WenKai Lite','Noto Serif SC',serif",
+                      fontSize: 30, fontWeight: 700, letterSpacing: 3, color: '#E0E6F0',
+                    }}>
+                      「{concept || '新知识'}」已安放
+                    </div>
+                    <div style={{ fontSize: 14, color: '#90A0B8', marginTop: 12, letterSpacing: 3 }}>
+                      这片星域因你而点亮 · 可以从容地慢慢长明
+                    </div>
+                  </>
+                ) : variant === 'genesis' ? (
                   <>
                     <div style={{
                       fontFamily: "'LXGW WenKai Lite','Noto Serif SC',serif",

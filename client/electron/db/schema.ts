@@ -6,7 +6,7 @@
  */
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export const SCHEMA_DDL = /* sql */ `
 CREATE TABLE IF NOT EXISTS pomodoro_sessions (
@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS notes (
   template TEXT NOT NULL DEFAULT 'free' CHECK (template IN ('outline','cornell','mindmap','free','qa','blank','video')),
   folder_id TEXT, tags TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
   word_count INTEGER NOT NULL DEFAULT 0, pinned INTEGER NOT NULL DEFAULT 0, video_note_type TEXT,
+  source_ref TEXT,
   FOREIGN KEY (folder_id) REFERENCES note_folders(id) ON DELETE SET NULL
 );
 CREATE TABLE IF NOT EXISTS note_folders (
@@ -45,7 +46,7 @@ CREATE TABLE IF NOT EXISTS flashcards (
   ease_factor REAL NOT NULL DEFAULT 2.5, "interval" REAL NOT NULL DEFAULT 0,
   repetitions INTEGER NOT NULL DEFAULT 0, lapses INTEGER NOT NULL DEFAULT 0,
   due_date TEXT NOT NULL, last_review_date TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-  source_note_id TEXT, "order" INTEGER NOT NULL DEFAULT 0,
+  source_note_id TEXT, source_ref TEXT, "order" INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (deck_id) REFERENCES flashcard_decks(id) ON DELETE CASCADE,
   FOREIGN KEY (source_note_id) REFERENCES notes(id) ON DELETE SET NULL
 );
@@ -193,6 +194,15 @@ CREATE INDEX IF NOT EXISTS idx_impl_intention_status ON implementation_intention
 CREATE TABLE IF NOT EXISTS world_snapshots (
   id TEXT PRIMARY KEY, payload TEXT NOT NULL DEFAULT '{}', updated_at TEXT NOT NULL
 );
+-- v8：知识入籍记录（阶段 A 入口问题；source_ref 溯源列见 v8 迁移块）
+CREATE TABLE IF NOT EXISTS imports (
+  id TEXT PRIMARY KEY,
+  source TEXT NOT NULL CHECK (source IN ('text','pdf','url','clipboard')),
+  raw_name TEXT NOT NULL DEFAULT '',
+  concept_count INTEGER NOT NULL DEFAULT 0,
+  settled_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_imports_settled_at ON imports(settled_at);
 `;
 
 /** v3 迁移 DDL：CRDT 同步引擎元数据表（条件执行） */
@@ -252,6 +262,17 @@ export function initializeSchema(db: Database.Database): void {
 
   // v7 迁移：世界状态快照表 world_snapshots
   // 表 DDL 已包含在 SCHEMA_DDL 中（CREATE IF NOT EXISTS 幂等），此处无需额外操作
+
+  // v8 迁移：知识入籍——imports 表（DDL 已含在 SCHEMA_DDL）；
+  // notes/flashcards 增加 source_ref 溯源列（条件 ALTER TABLE，幂等，不破坏存量）
+  if (currentVersion < 8) {
+    try {
+      db.exec(`ALTER TABLE notes ADD COLUMN source_ref TEXT`);
+    } catch { /* 列已存在 */ }
+    try {
+      db.exec(`ALTER TABLE flashcards ADD COLUMN source_ref TEXT`);
+    } catch { /* 列已存在 */ }
+  }
 
   db.pragma(`user_version = ${SCHEMA_VERSION}`);
 }

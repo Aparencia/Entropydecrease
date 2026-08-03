@@ -40,6 +40,7 @@ declare global {
       invoke: (channel: string, ...args: unknown[]) => Promise<unknown>;
       on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
       send: (channel: string, ...args: unknown[]) => void;
+      getPathForFile: (file: File) => string;
       onWindowClosing: (callback: () => void) => () => void;
       closeAction: (action: 'quit' | 'minimize' | 'cancel', remember: boolean) => Promise<unknown>;
       windowMinimize: () => Promise<void>;

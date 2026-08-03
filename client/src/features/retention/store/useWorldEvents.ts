@@ -16,8 +16,8 @@ import { create } from 'zustand';
 /** 波纹起源锚点：模块实体 ID（场景内定位）或 'center' 场景中心 / Ripple origin */
 export type RippleOrigin = 'center' | 'pomodoro' | 'notes' | 'flashcards' | 'feynman' | 'inspiration';
 
-/** 签名时刻变体：掌握（常规）/ 创世（首潜加长版，宪法第三条 §5） / Signature variants */
-export type SignatureVariant = 'mastery' | 'genesis';
+/** 签名时刻变体：掌握（常规）/ 创世（首潜加长版，宪法第三条 §5）/ 入籍（知识安放，阶段 A） / Signature variants */
+export type SignatureVariant = 'mastery' | 'genesis' | 'settling';
 
 interface WorldEventsState {
   /** 波纹序列号：每次 emit 自增，场景层据此生成新波纹 / Ripple sequence counter */
@@ -29,7 +29,7 @@ interface WorldEventsState {
   signatureSeq: number;
   /** 被掌握的概念名（签名时刻文案） / Mastered concept name */
   signatureConcept: string;
-  /** 签名时刻变体 / Signature variant (mastery | genesis) */
+  /** 签名时刻变体 / Signature variant (mastery | genesis | settling) */
   signatureVariant: SignatureVariant;
 
   /** 发射秩序波纹（复习/掌握的即时正反馈） / Emit an order ripple */
