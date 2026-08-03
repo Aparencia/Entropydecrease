@@ -34,6 +34,7 @@ import { initializeFTS, rebuildIndex, collectIndexableData } from './db/fts5Sear
 import { resolveDbPath } from './db/storageConfig.js';
 import { registerMigrationHandlers } from './db/migration.js';
 import { registerImportHandlers } from './importHandlers.js';
+import { registerSovereigntyHandlers } from './sovereigntyHandlers.js';
 import { loadEnvironment } from './envLoader.js';
 import { installCspPolicy } from './cspPolicy.js';
 import { registerDisplayMediaHandler } from './displayMediaHandler.js';
@@ -177,6 +178,8 @@ if (!gotTheLock) {
     registerStorageIpcHandlers();
     // 知识入籍 IPC（PDF 解析/URL 抓取/入籍记录，详见 importHandlers.ts）
     registerImportHandlers();
+    // 世界主权 IPC（世界之书导出/恢复，详见 sovereigntyHandlers.ts）
+    registerSovereigntyHandlers();
     // 知识星座 IPC（只读图谱聚合，详见 db/knowledgeQueries.ts）
     registerKnowledgeIpcHandlers();
     // MCP 学习记忆服务器应用内授权开关（详见 memoryServerConsent.ts）

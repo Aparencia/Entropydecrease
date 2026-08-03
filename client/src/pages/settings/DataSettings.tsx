@@ -12,6 +12,7 @@ import { ImportExportSection } from './ImportExportSection';
 import { EncryptedBackupSection } from './EncryptedBackupSection';
 import { ClearDataSection } from './ClearDataSection';
 import { MemoryServerSection } from './MemoryServerSection';
+import { WorldSovereigntySection } from './WorldSovereigntySection';
 
 export default function DataSettings() {
   return (
@@ -21,6 +22,7 @@ export default function DataSettings() {
       <StoragePathSection />
       <MemoryServerSection />
       <ImportExportSection />
+      <WorldSovereigntySection />
       <EncryptedBackupSection />
       <ClearDataSection />
     </Card>
