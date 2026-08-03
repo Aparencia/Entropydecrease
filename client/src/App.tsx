@@ -28,9 +28,13 @@ import { RETURN_THRESHOLD_MS } from '@/features/assistant/constants';
 import { useRetentionInit } from '@/features/retention/hooks/useRetentionInit';
 import { DiscoveryReveal } from '@/features/retention/components/DiscoveryReveal';
 import '@/stores/useSettingsStore'; // 导入以触发音效设置初始化
+import { startPomodoroScheduler } from '@/features/pomodoro/lib/pomodoroScheduler';
 
 // 启动时预加载所有音效（不阻塞渲染）
 soundPlayer.preloadAll();
+
+// 番茄钟全局计时调度器：tick 驱动与页面生命周期解耦（切页后计时不停摆）
+startPomodoroScheduler();
 
 const queryClient = new QueryClient({
   defaultOptions: {

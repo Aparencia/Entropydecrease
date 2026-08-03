@@ -77,6 +77,7 @@ const DEFAULT_STATE = {
   isPaused: false,
   remainingSeconds: 25 * 60,
   totalSeconds: 25 * 60,
+  endAt: null as number | null,
   completedCount: 0,
   mode: 'self_study' as const,
   settings: DEFAULT_SETTINGS,
@@ -129,6 +130,33 @@ describe('Pomodoro Store', () => {
       const before = usePomodoroStore.getState().remainingSeconds;
       usePomodoroStore.getState().tick();
       expect(usePomodoroStore.getState().remainingSeconds).toBe(before);
+    });
+
+    it('should snap remainingSeconds to endAt wall clock when drift exceeds 1s', () => {
+      // Arrange：模拟休眠唤醒——递减模型认为还剩 500s，但墙钟显示实际只剩 100s
+      usePomodoroStore.setState({
+        isRunning: true,
+        remainingSeconds: 500,
+        endAt: Date.now() + 100 * 1000,
+      });
+
+      // Act
+      usePomodoroStore.getState().tick();
+
+      // Assert：吸附到墙钟值而非继续 -1
+      expect(usePomodoroStore.getState().remainingSeconds).toBe(100);
+    });
+
+    it('should keep -1 rhythm when wall clock drift is within 1s', () => {
+      // Arrange：刚 start，墙钟与递减模型误差 ≤1s，不应跳秒
+      usePomodoroStore.getState().start();
+      const before = usePomodoroStore.getState().remainingSeconds;
+
+      // Act
+      usePomodoroStore.getState().tick();
+
+      // Assert
+      expect(usePomodoroStore.getState().remainingSeconds).toBe(before - 1);
     });
   });
 

@@ -1,7 +1,7 @@
 /**
  * @ai-context: pomodoro 功能模块页面：PomodoroPage。
  */
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Play, Pause, RotateCcw, SkipForward, Clock, Volume2, VolumeX, Focus } from 'lucide-react';
@@ -29,7 +29,6 @@ import type { AudioPreferences } from '@/lib/audio/audioConfig';
 
 const WHITE_NOISE_FADE_MS = 1000;
 const WHITE_NOISE_FADE_OUT_MS = 1500;
-const TIMER_TICK_INTERVAL_MS = 1000;
 
 export default function PomodoroPage() {
   const {
@@ -37,13 +36,12 @@ export default function PomodoroPage() {
     completedCount, settings, currentGoal, isImmersive,
     activePreset, presets,
     start, pause, resume, reset, skip, setPreset, setCurrentGoal,
-    enterImmersive, exitImmersive, tick, createPreset,
+    enterImmersive, exitImmersive, createPreset,
     showCompletionOverlay, dismissCompletionOverlay, lastSessionActualDuration,
   } = usePomodoroStore(useShallow(s => s));
 
   usePomodoroEffects();
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [rememberGoal, setRememberGoal] = useState(false);
   const [presetEditorOpen, setPresetEditorOpen] = useState(false);
@@ -77,14 +75,8 @@ export default function PomodoroPage() {
     whiteNoisePlayer.setVolume(vol);
   };
 
-  useEffect(() => {
-    if (isRunning) {
-      intervalRef.current = setInterval(() => tick(), TIMER_TICK_INTERVAL_MS);
-    } else {
-      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-    }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [isRunning, tick]);
+  // @ai-context: tick 驱动已上移至全局调度器 pomodoroScheduler.ts（App 启动时注册），
+  // 不再由本页面组件级 setInterval 驱动——切离页面后计时仍持续推进
 
   useEffect(() => {
     if (isRunning || isPaused) {
@@ -141,13 +133,34 @@ export default function PomodoroPage() {
   // 循环标记数据 — 由活动预设的 longBreakInterval 驱动
   const cycleTotal = activePreset?.longBreakInterval ?? settings.longBreakInterval;
 
+  // 双模式过渡排序：沉浸层（portal）与普通视图分属两个独立 AnimatePresence 实例，
+  // mode="wait" 跨实例无效——此前切换时沉浸退场(0.5s)与普通进场(0.3s)同屏叠加
+  // 约 0.6s，表现为组件重复的双曝光残帧。此处用视图状态机显式串行化
+  // “新视图必须等旧视图退场动画完成后才进场”：切换期间仅渲染旧视图退场动画，
+  // onExitComplete 后再迁至目标视图。全部动画参数保留，仅消除叠加。
+  const [view, setView] = useState<'normal' | 'immersive' | 'switching-to-immersive' | 'switching-to-normal'>(
+    () => (isImmersive ? 'immersive' : 'normal'),
+  );
+
+  useEffect(() => {
+    if (isImmersive) {
+      // 'switching-to-normal' → 'immersive'：沉浸退场中用户又重新进入，直接重新挂载
+      setView(v => (v === 'immersive' || v === 'switching-to-immersive')
+        ? v
+        : v === 'switching-to-normal' ? 'immersive' : 'switching-to-immersive');
+    } else {
+      setView(v => (v === 'normal' || v === 'switching-to-normal')
+        ? v
+        : v === 'switching-to-immersive' ? 'normal' : 'switching-to-normal');
+    }
+  }, [isImmersive]);
+
   return (
     <>
-      {/* 沉浸模式 — portal 到 body，AnimatePresence 在 portal 内部管理动效 */}
-      {/* 沉浸模式切换：mode="wait" 确保沉浸模式完全退出后再显示普通模式，避免双视图叠加残帧 */}
+      {/* 沉浸层 — createPortal 挂到 body（z-40 盖住覆盖层）；挂载时机由上方视图状态机门控 */}
       {createPortal(
-        <AnimatePresence mode="wait">
-          {isImmersive && (
+        <AnimatePresence onExitComplete={() => setView(v => (v === 'switching-to-normal' ? 'normal' : v))}>
+          {view === 'immersive' && (
             <motion.div
               key="immersive"
               className="fixed inset-0 z-40 flex flex-col overflow-hidden"
@@ -169,9 +182,9 @@ export default function PomodoroPage() {
         document.body,
       )}
 
-      {/* 普通模式 */}
-      <AnimatePresence mode="popLayout">
-      {!isImmersive && (
+      {/* 普通视图 — 仅在沉浸层退场完成后（或初始即普通模式时）挂载 */}
+      <AnimatePresence mode="popLayout" onExitComplete={() => setView(v => (v === 'switching-to-immersive' ? 'immersive' : v))}>
+        {view === 'normal' && (
         <motion.div
           key="normal"
           className="flex flex-col items-center justify-center min-h-0 flex-1 px-4 py-12 relative"
@@ -358,7 +371,7 @@ export default function PomodoroPage() {
             }}
           />
         </motion.div>
-      )}
+        )}
       </AnimatePresence>
 
       {/* v0.29: 深潜完成庆祝覆盖层 */}
