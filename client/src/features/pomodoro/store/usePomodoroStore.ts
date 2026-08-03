@@ -448,6 +448,13 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
             }).catch(() => {});
           }).catch(() => {});
 
+          // 宪法第六条世界数据回路：深潜完成=种下珊瑚（沉积地层+1，世界生长）。
+          // 动态 import 避免模块循环；plantCoral 内部受留存开关控制，失败静默降级
+          import('@/features/retention/store/useEcosystemStore').then(({ useEcosystemStore }) => {
+            const minutes = Math.max(1, Math.round((actualDuration ?? plannedSeconds) / 60));
+            useEcosystemStore.getState().plantCoral(minutes, 'pomodoro', `dive-${Date.now()}`).catch(() => {});
+          }).catch(() => {});
+
           // @ai-context: 发射 session:end 事件——驱动 AI 学伴主动触发（专注结束关怀）
           assistantEventBus.emit('session:end', {
             currentHour: new Date().getHours(),

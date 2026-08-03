@@ -16,6 +16,9 @@ import { create } from 'zustand';
 /** 波纹起源锚点：模块实体 ID（场景内定位）或 'center' 场景中心 / Ripple origin */
 export type RippleOrigin = 'center' | 'pomodoro' | 'notes' | 'flashcards' | 'feynman' | 'inspiration';
 
+/** 签名时刻变体：掌握（常规）/ 创世（首潜加长版，宪法第三条 §5） / Signature variants */
+export type SignatureVariant = 'mastery' | 'genesis';
+
 interface WorldEventsState {
   /** 波纹序列号：每次 emit 自增，场景层据此生成新波纹 / Ripple sequence counter */
   rippleSeq: number;
@@ -26,11 +29,13 @@ interface WorldEventsState {
   signatureSeq: number;
   /** 被掌握的概念名（签名时刻文案） / Mastered concept name */
   signatureConcept: string;
+  /** 签名时刻变体 / Signature variant (mastery | genesis) */
+  signatureVariant: SignatureVariant;
 
   /** 发射秩序波纹（复习/掌握的即时正反馈） / Emit an order ripple */
   emitOrderRipple: (origin?: RippleOrigin) => void;
-  /** 触发签名时刻（概念掌握：费曼评估通过/卡片牢固） / Trigger signature moment */
-  emitSignatureMoment: (concept: string) => void;
+  /** 触发签名时刻（概念掌握/首潜创世） / Trigger signature moment */
+  emitSignatureMoment: (concept: string, variant?: SignatureVariant) => void;
 }
 
 export const useWorldEvents = create<WorldEventsState>((set) => ({
@@ -38,12 +43,17 @@ export const useWorldEvents = create<WorldEventsState>((set) => ({
   rippleOrigin: 'center',
   signatureSeq: 0,
   signatureConcept: '',
+  signatureVariant: 'mastery',
 
   emitOrderRipple: (origin = 'center') => {
     set((s) => ({ rippleSeq: s.rippleSeq + 1, rippleOrigin: origin }));
   },
 
-  emitSignatureMoment: (concept) => {
-    set((s) => ({ signatureSeq: s.signatureSeq + 1, signatureConcept: concept }));
+  emitSignatureMoment: (concept, variant = 'mastery') => {
+    set((s) => ({
+      signatureSeq: s.signatureSeq + 1,
+      signatureConcept: concept,
+      signatureVariant: variant,
+    }));
   },
 }));

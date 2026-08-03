@@ -14,6 +14,7 @@ import type { DiveStepId, FirstDiveStage, FirstDiveStateV2, OnboardingProfile } 
 import { DIVE_STEPS, orderStepsByProfile } from './diveSteps';
 import { loadFirstDiveState, saveFirstDiveState } from './firstDiveStorage';
 import { seedHandbookDeck } from './seedHandbook';
+import { useWorldEvents } from '@/features/retention/store/useWorldEvents';
 
 /** 各首潜步骤对应的数据表计数（基线差值检测的数据源） */
 export type StepCounts = Record<DiveStepId, number>;
@@ -151,6 +152,11 @@ export const useFirstDiveStore = create<FirstDiveStoreState>((set, get) => ({
       };
       persist(next);
       set({ ...next, justCompleted: current });
+
+      // 宪法第三条 §5 创世版签名时刻：首潜全部完成=世界首次点亮
+      if (allDone) {
+        useWorldEvents.getState().emitSignatureMoment('首潜', 'genesis');
+      }
     }
   },
 

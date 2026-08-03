@@ -29,9 +29,11 @@ type Act = 'silence' | 'event' | 'afterglow';
 export function SignatureMoment() {
   const signatureSeq = useWorldEvents((s) => s.signatureSeq);
   const signatureConcept = useWorldEvents((s) => s.signatureConcept);
+  const signatureVariant = useWorldEvents((s) => s.signatureVariant);
   const [active, setActive] = useState(false);
   const [act, setAct] = useState<Act>('silence');
   const [concept, setConcept] = useState('');
+  const [variant, setVariant] = useState<'mastery' | 'genesis'>('mastery');
   const timers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const reduced = useMemo(
     () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -54,6 +56,7 @@ export function SignatureMoment() {
     if (signatureSeq === 0) return;
     clearTimers();
     setConcept(signatureConcept);
+    setVariant(signatureVariant);
     setActive(true);
 
     if (reduced) {
@@ -143,15 +146,31 @@ export function SignatureMoment() {
               </div>
 
               <div>
-                <div style={{
-                  fontFamily: "'LXGW WenKai Lite','Noto Serif SC',serif",
-                  fontSize: 30, fontWeight: 700, letterSpacing: 2, color: '#E0E6F0',
-                }}>
-                  「{concept || '这个概念'}」
-                </div>
-                <div style={{ fontSize: 14, color: '#90A0B8', marginTop: 12, letterSpacing: 3 }}>
-                  已成为你秩序的一部分
-                </div>
+                {variant === 'genesis' ? (
+                  <>
+                    <div style={{
+                      fontFamily: "'LXGW WenKai Lite','Noto Serif SC',serif",
+                      fontSize: 34, fontWeight: 700, letterSpacing: 4, color: '#E0E6F0',
+                    }}>
+                      第一颗星，亮了
+                    </div>
+                    <div style={{ fontSize: 14, color: '#90A0B8', marginTop: 14, letterSpacing: 3 }}>
+                      从这次首潜开始，这个世界开始记住你
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{
+                      fontFamily: "'LXGW WenKai Lite','Noto Serif SC',serif",
+                      fontSize: 30, fontWeight: 700, letterSpacing: 2, color: '#E0E6F0',
+                    }}>
+                      「{concept || '这个概念'}」
+                    </div>
+                    <div style={{ fontSize: 14, color: '#90A0B8', marginTop: 12, letterSpacing: 3 }}>
+                      已成为你秩序的一部分
+                    </div>
+                  </>
+                )}
               </div>
 
               {act === 'afterglow' && !reduced && (

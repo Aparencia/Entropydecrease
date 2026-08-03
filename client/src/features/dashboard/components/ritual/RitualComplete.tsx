@@ -16,6 +16,7 @@ import { Flame, Target, Sparkles } from 'lucide-react';
 import type { MicroGoal } from '../../types';
 import type { MasteryMark } from '@/types/ritual';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { WorldConditions } from './WorldConditions';
 
 interface Props {
   goal?: MicroGoal;
@@ -73,6 +74,8 @@ export function RitualComplete({ goal, masteryMark, streakDays, onEnter }: Props
             上次内容掌握度：{MASTERY_LABEL[masteryMark]}
           </p>
         )}
+        {/* 宪法第六条：仪式成为世界的每日开场——今日海况一句话叙事 */}
+        <WorldConditions />
       </div>
 
       <button
