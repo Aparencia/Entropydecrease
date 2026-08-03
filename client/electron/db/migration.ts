@@ -9,6 +9,7 @@
 
 import type Database from 'better-sqlite3';
 import { getConnection } from './sqliteService.js';
+import { isImportableTable } from './importWhitelist.js';
 import { logger } from '../logger.js';
 
 // ================================================================
@@ -57,8 +58,8 @@ const TABLE_MAPPING: Array<{ dexie: string; sqlite: string }> = [
   { dexie: 'crdtChanges', sqlite: 'crdt_changes' },
 ];
 
-/** 合法的 SQLite 表名集合 */
-const VALID_SQLITE_TABLES = new Set(TABLE_MAPPING.map((m) => m.sqlite));
+/** 合法 SQLite 表名列表（迁移白名单；与 importWhitelist 扩展表共同构成可导入集） */
+const MIGRATION_TABLE_LIST = TABLE_MAPPING.map((m) => m.sqlite);
 
 /** camelCase → snake_case */
 function toSnake(s: string): string {
@@ -91,7 +92,7 @@ export function needsMigration(db: Database.Database): boolean {
  * @returns 成功插入的行数
  */
 export function importTable(sqliteTable: string, rows: Record<string, unknown>[]): number {
-  if (!VALID_SQLITE_TABLES.has(sqliteTable)) {
+  if (!isImportableTable(sqliteTable, MIGRATION_TABLE_LIST)) {
     throw new Error(`[Migration] Table "${sqliteTable}" is not in the migration whitelist`);
   }
 

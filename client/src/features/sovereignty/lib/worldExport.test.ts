@@ -197,4 +197,40 @@ describe('validateWorldImport（恢复前校验）', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain('恢复数据量超出上限');
   });
+
+  it('拒绝 rows 含非对象行（防 Object.keys(null) 崩溃与空列 SQL）', () => {
+    // Arrange
+    const raw = makeBundle({ tables: [{ table: 'notes', rows: [{ id: 'n1' }, null, 'raw', 42] }] });
+
+    // Act
+    const result = validateWorldImport(raw);
+
+    // Assert
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('含非对象行');
+  });
+
+  it('拒绝入籍记录超限（100001 条 > 100000）', () => {
+    // Arrange
+    const records = Array.from({ length: 100_001 }, (_, i) => ({ id: `r${i}` }));
+    const raw = makeBundle({ settlingRecords: records });
+
+    // Act
+    const result = validateWorldImport(raw);
+
+    // Assert
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('入籍记录超出上限');
+  });
+
+  it('接受空世界（零记录 + 空恢复层）：迁移前或清库后仍可恢复', () => {
+    // Arrange
+    const raw = makeBundle({ settlingRecords: [], tables: [] });
+
+    // Act
+    const result = validateWorldImport(raw);
+
+    // Assert
+    expect(result.ok).toBe(true);
+  });
 });

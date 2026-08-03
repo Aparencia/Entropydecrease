@@ -26,6 +26,8 @@ interface ExportResult {
   success: boolean;
   canceled?: boolean;
   path?: string | null;
+  /** 导出行数超过恢复上限（文件仍可作备份，但无法恢复） */
+  overLimit?: boolean;
   error?: string;
 }
 
@@ -52,11 +54,15 @@ export function WorldSovereigntySection() {
       if (res.canceled) return; // 用户取消保存框：静默
       if (res.success) {
         soundPlayer.play('data_export');
-        toast({
-          type: 'success',
-          message: res.path ? `世界之书已导出：${res.path}` : '世界之书已导出',
-          silent: true,
-        });
+        if (res.overLimit) {
+          toast({ type: 'error', message: '导出完成，但数据量超过恢复上限（10 万行）——此文件可作备份，无法用于恢复' });
+        } else {
+          toast({
+            type: 'success',
+            message: res.path ? `世界之书已导出：${res.path}` : '世界之书已导出',
+            silent: true,
+          });
+        }
       } else {
         toast({ type: 'error', message: res.error ?? '世界导出失败，请重试' });
       }

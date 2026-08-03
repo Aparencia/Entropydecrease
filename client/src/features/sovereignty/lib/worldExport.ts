@@ -23,6 +23,8 @@ export const WORLD_EXPORT_FORMAT_VERSION = 1;
 export const WORLD_EXPORT_MAX_NODES = 5000;
 /** 恢复层总行数上限 / Max total restore rows */
 export const WORLD_EXPORT_MAX_ROWS = 100_000;
+/** 叙述层入籍记录上限（防超大文件拖垮解析，与行上限对称） / Max settling records */
+export const WORLD_EXPORT_MAX_RECORDS = 100_000;
 
 /** 恢复层表名白名单（与 schema.ts / importTable 白名单对齐） / Restore whitelist */
 export const WORLD_TABLE_WHITELIST = [
@@ -157,6 +159,12 @@ export function validateWorldImport(raw: unknown): WorldImportResult {
   if (!Array.isArray(raw.settlingRecords)) {
     return { ok: false, error: '入籍记录格式不正确' };
   }
+  if (raw.settlingRecords.length > WORLD_EXPORT_MAX_RECORDS) {
+    return {
+      ok: false,
+      error: `入籍记录超出上限（${raw.settlingRecords.length} 条 > ${WORLD_EXPORT_MAX_RECORDS}）`,
+    };
+  }
 
   if (!Array.isArray(raw.tables)) {
     return { ok: false, error: '恢复数据缺失（tables 不是数组）' };
@@ -171,6 +179,12 @@ export function validateWorldImport(raw: unknown): WorldImportResult {
     }
     if (!Array.isArray(item.rows)) {
       return { ok: false, error: `恢复数据格式不正确（${item.table}.rows 不是数组）` };
+    }
+    for (const row of item.rows) {
+      // 行必须是对象：防 Object.keys(null) 崩溃与空列 SQL 错误，且保证列名可推断
+      if (!isPlainObject(row)) {
+        return { ok: false, error: `恢复数据格式不正确（${item.table}.rows 含非对象行）` };
+      }
     }
     totalRows += item.rows.length;
   }

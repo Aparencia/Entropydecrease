@@ -17,7 +17,7 @@
  * then rebuilds the FTS index.
  */
 import { dialog } from 'electron';
-import { writeFile, readFile } from 'fs/promises';
+import { writeFile, readFile, stat } from 'fs/promises';
 import { safeHandle } from './ipcUtils.js';
 import { logger } from './logger.js';
 import { getConnection } from './db/sqliteService.js';
@@ -28,6 +28,7 @@ import {
   buildWorldExport,
   validateWorldImport,
   WORLD_TABLE_WHITELIST,
+  WORLD_EXPORT_MAX_ROWS,
   type WorldTableBundle,
 } from '../src/features/sovereignty/lib/worldExport.js';
 
@@ -35,6 +36,8 @@ import {
 const SNAPSHOT_ID = 'latest';
 /** 入籍记录导出上限（叙述层防超大响应；恢复层 tables.imports 不受限） */
 const MAX_RECORDS = 5000;
+/** 恢复文件大小防御上限（防超大文件读入内存拖垮 JSON.parse） / Max import file bytes */
+const MAX_IMPORT_BYTES = 256 * 1024 * 1024;
 
 /** 恢复层表白名单（父表在前，满足外键约束；与 worldExport 白名单同源） */
 const EXPORT_TABLES = WORLD_TABLE_WHITELIST;
@@ -94,8 +97,13 @@ export function registerSovereigntyHandlers(): void {
       await writeFile(result.filePath, JSON.stringify(bundle, null, 2), 'utf-8');
       const rowCount = tables.reduce((s, t) => s + t.rows.length, 0);
       const nodeCount = Array.isArray(bundle.graph.nodes) ? bundle.graph.nodes.length : 0;
+      // 对称性提示：导出不受限（备份语义），但超过恢复上限时提醒用户
+      const overLimit = rowCount > WORLD_EXPORT_MAX_ROWS;
+      if (overLimit) {
+        logger.warn(`[Sovereignty] Export exceeds restore limit (${rowCount} > ${WORLD_EXPORT_MAX_ROWS} rows); the file will not be restorable`);
+      }
       logger.info(`[Sovereignty] World exported to ${result.filePath} (${rowCount} rows, ${nodeCount} nodes)`);
-      return { success: true, canceled: false, path: result.filePath };
+      return { success: true, canceled: false, path: result.filePath, overLimit };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       logger.error('[Sovereignty] Export failed', err);
@@ -121,7 +129,14 @@ export function registerSovereigntyHandlers(): void {
     }
 
     try {
-      const text = await readFile(result.filePaths[0], 'utf-8');
+      // 大小防御：超大文件先拒绝，避免全量读入内存 + JSON.parse 内存峰值
+      const fileStat = await stat(result.filePaths[0]);
+      if (fileStat.size > MAX_IMPORT_BYTES) {
+        return { success: false, error: '文件过大（超过 256MB），无法恢复' };
+      }
+      const rawText = await readFile(result.filePaths[0], 'utf-8');
+      // 兼容 Windows 记事本保存的 UTF-8 BOM
+      const text = rawText.charCodeAt(0) === 0xfeff ? rawText.slice(1) : rawText;
       let parsed: unknown;
       try {
         parsed = JSON.parse(text);
