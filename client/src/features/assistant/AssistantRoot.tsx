@@ -10,6 +10,9 @@ import { useAssistantStore } from './store/useAssistantStore';
 import { useChat } from './hooks/useChat';
 import { useProactiveEngine, reportBubbleDismissed, reportBubbleResponded } from './hooks/useProactiveEngine';
 import { useAssistantAudio } from './hooks/useAssistantAudio';
+import { useBehaviorSignals } from './hooks/useBehaviorSignals';
+import { useBedtimeReminder } from './hooks/useBedtimeReminder';
+import { useIntentionCoach } from './hooks/useIntentionCoach';
 import { CreatureAvatar } from './components/CreatureAvatar';
 import { ConversationPanel } from './components/ConversationPanel';
 
@@ -22,6 +25,12 @@ export function AssistantRoot() {
   const { sendMessage, retryLastMessage, dismissError } = useChat();
   const { playSound } = useAssistantAudio();
   useProactiveEngine();
+  // A1/A5 行为信号源：情绪分级与认知负荷共用，只发事件不干预
+  useBehaviorSignals();
+  // F3 睡前复习推荐：晚间窗口检测到期卡，只发事件由引擎决策是否触发
+  useBedtimeReminder();
+  // A4 实施意图教练：周期扫描到期意图，发 intention:due 事件
+  useIntentionCoach();
 
   if (!enabled) return null;
 

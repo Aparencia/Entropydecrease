@@ -115,3 +115,50 @@ export function computeRitualStreak(
   return streak;
 }
 
+// ── A4 实施意图教练（implementation intention）──
+
+/** 实施意图结构化拆解结果 */
+export interface ParsedIntention {
+  ifPart: string;
+  thenPart: string;
+}
+
+/**
+ * 合成实施意图文本（A4）："如果 [ifPart]，我就 [thenPart]"。
+ * 任一部分为空则返回空串（实施意图需要情境与行动两要素）。
+ */
+export function composeIntention(ifPart: string, thenPart: string): string {
+  const ifTrim = ifPart.trim();
+  const thenTrim = thenPart.trim();
+  if (!ifTrim || !thenTrim) return '';
+  return `如果${ifTrim}，我就${thenTrim}`;
+}
+
+/**
+ * 反向解析实施意图文本（A4）——拆解 composeIntention 产物。
+ * 不符合"如果…，我就…"结构时返回 null。
+ */
+export function parseIntention(text: string): ParsedIntention | null {
+  const match = /^如果(.+)，我就(.+)$/.exec(text.trim());
+  if (!match) return null;
+  const ifPart = match[1].trim();
+  const thenPart = match[2].trim();
+  if (!ifPart || !thenPart) return null;
+  return { ifPart, thenPart };
+}
+
+/**
+ * 判断实施意图是否到期可提醒（A4）。
+ * trigger_at 为空表示不设定时提醒（任意时刻均视为到期）；
+ * 否则仅当当前时间 ≥ trigger_at 时到期。非法日期串视为未设。
+ */
+export function isIntentionDue(
+  triggerAt: string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!triggerAt) return true;
+  const due = new Date(triggerAt).getTime();
+  if (Number.isNaN(due)) return true;
+  return now.getTime() >= due;
+}
+

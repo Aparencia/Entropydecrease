@@ -38,6 +38,8 @@ const ALLOWED_TABLES = new Set([
   'crdt_docs',
   // crdt_changes — CRDT 同步引擎变更日志（v3 迁移新增）
   'crdt_changes',
+  // implementation_intentions — A4 实施意图（v6 迁移新增）
+  'implementation_intentions',
 ]);
 
 /** camelCase → snake_case（用于表名映射） */
@@ -71,6 +73,8 @@ const TABLE_NAME_MAP: Record<string, string> = {
   assistantTriggers: 'assistant_triggers',
   crdtDocs: 'crdt_docs',
   crdtChanges: 'crdt_changes',
+  // v6 新增：A4 实施意图
+  implementationIntentions: 'implementation_intentions',
 };
 
 function resolveTable(table: string): string {

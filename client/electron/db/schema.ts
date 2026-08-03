@@ -6,7 +6,7 @@
  */
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const SCHEMA_DDL = /* sql */ `
 CREATE TABLE IF NOT EXISTS pomodoro_sessions (
@@ -180,6 +180,15 @@ CREATE TABLE IF NOT EXISTS assistant_triggers (
 CREATE INDEX IF NOT EXISTS idx_asst_msg_session ON assistant_messages(session_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_asst_sess_active ON assistant_sessions(is_archived, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_asst_trig_rule ON assistant_triggers(rule_id, triggered_at);
+CREATE TABLE IF NOT EXISTS implementation_intentions (
+  id TEXT PRIMARY KEY,
+  if_clause TEXT NOT NULL DEFAULT '',
+  then_clause TEXT NOT NULL DEFAULT '',
+  trigger_at TEXT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','completed','skipped')),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_impl_intention_status ON implementation_intentions(status, trigger_at);
 `;
 
 /** v3 迁移 DDL：CRDT 同步引擎元数据表（条件执行） */
@@ -233,6 +242,9 @@ export function initializeSchema(db: Database.Database): void {
 
   // v5 迁移：AI 助手会话/消息/触发表（CREATE IF NOT EXISTS 幂等）
   // 表 DDL 已包含在 SCHEMA_DDL 中，此处无需额外操作
+
+  // v6 迁移：A4 实施意图表 implementation_intentions
+  // 表 DDL 已包含在 SCHEMA_DDL 中（CREATE IF NOT EXISTS 幂等），此处无需额外操作
 
   db.pragma(`user_version = ${SCHEMA_VERSION}`);
 }

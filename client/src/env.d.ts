@@ -77,6 +77,23 @@ declare global {
         deleteModel: (modelName: string) => Promise<{ success: boolean }>;
         onPullProgress: (callback: (progress: OllamaPullProgress) => void) => () => void;
       };
+      // ── A2 语音输入（新增） ──
+      audio_capture_status: () => Promise<{ active: boolean }>;
+      local_asr_stream_available: () => Promise<{ available: boolean }>;
+      audio_capture_start: (options: { microphone: boolean; chunkDurationMs?: number; sampleRate?: number; channels?: number }) => Promise<{ success: boolean; error?: string }>;
+      local_asr_stream_start: (options: { sampleRate?: number }) => Promise<{ success: boolean; error?: string }>;
+      local_asr_stream_stop: () => Promise<{ success: boolean }>;
+      audio_capture_stop: () => Promise<{ success: boolean }>;
+      // ── A3 微进展叙述（新增） ──
+      ai_progress_narrate: (args: { statsText: string; authToken?: string }) => Promise<{
+        narrative: string;
+        status: string;
+        model: string;
+        tokensUsed: number;
+        latencyMs: number;
+        requestId?: string;
+        source?: string;
+      }>;
     };
   }
 }

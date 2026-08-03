@@ -51,6 +51,7 @@ PATH_TO_FEATURE: dict[str, str] = {
     # ---- v1.1.0 新增路由 ----
     "/api/v1/ai/inspiration-draft": "inspiration_draft",  # AI 草稿生成
     "/api/v1/ai/ritual-recall": "ritual_recall",          # 仪式回顾小问（v0.26.0 B1.2）
+    "/api/v1/ai/progress-narrative": "progress_narrative", # A3 微进展叙述（每周一次）
 
     # ---- FEAT-022: 苏格拉底式学习（socratic.py，prefix=/api/v1/ai/socratic） ----
     "/api/v1/ai/socratic/brainstorm": "socratic_brainstorm",  # 苏格拉底头脑风暴
@@ -64,6 +65,9 @@ PATH_TO_FEATURE: dict[str, str] = {
 
     # ---- 学伴对话（chat.py） ----
     "/api/v1/ai/chat/stream": "chat",                  # 学伴对话流式端点
+
+    # ---- F4: 黄金错误模式分析（error_pattern.py） ----
+    "/api/v1/ai/error-pattern": "error_pattern",       # 错误模式分析
 
     # 注意：/{feature}/stream（streaming.py）为通配路径，无法精确匹配，
     # 其限流由流式路由内部通过 feature 参数自行处理。

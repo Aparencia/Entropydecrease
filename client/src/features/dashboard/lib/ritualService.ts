@@ -13,6 +13,7 @@
 import { ritualRecordStore } from '@/lib/storage';
 import { flashcardStore, flashcardDeckStore } from '@/lib/storage';
 import { useFlashcardStore } from '@/features/flashcards/store/useFlashcardStore';
+import { createIntention } from '@/features/assistant/lib/intentionRepository';
 import type { RitualRecord, MasteryMark } from '@/types/ritual';
 import type { LastSessionData, RitualOutcome } from '../types';
 import { getTodayStr, shouldScheduleReviewCard } from '../utils/ritualHelpers';
@@ -41,6 +42,14 @@ export async function saveRitualRecord(
   };
   try {
     await ritualRecordStore.create(record);
+    // A4 实施意图同步落库（SQLite，仓储内部静默降级，不阻塞仪式收尾）
+    if (outcome.intention) {
+      await createIntention({
+        ifPart: outcome.intention.ifPart,
+        thenPart: outcome.intention.thenPart,
+        triggerAt: outcome.intention.triggerAt,
+      });
+    }
     return record.id;
   } catch {
     return undefined; // 落库失败不阻塞仪式关闭

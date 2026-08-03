@@ -12,8 +12,8 @@
 import { useState, useRef, useCallback, useMemo } from 'react';
 import type { RitualStep } from '../types';
 
-/** A1 默认编排：三步标准流程 */
-export const DEFAULT_RITUAL_PLAN: RitualStep[] = ['review', 'goal', 'breathing'];
+/** A1 默认编排：四步标准流程（A4 新增可选实施意图步，步内可跳过） */
+export const DEFAULT_RITUAL_PLAN: RitualStep[] = ['review', 'goal', 'intention', 'breathing'];
 
 /** A1 固定编排变体标识（Beta.1 由 ritualPlanner 输出） */
 export const DEFAULT_PLAN_VARIANT = 'standard';

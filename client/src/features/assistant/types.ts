@@ -40,7 +40,16 @@ export type ProactiveTriggerType =
   | 'greeting-return'
   | 'session-summary'
   | 'idle-nudge'
-  | 'review-reminder';
+  | 'review-reminder'
+  | 'bedtime-review'
+  | 'commit-dive'
+  | 'stuck-incubation'
+  | 'emotion-mild'
+  | 'emotion-moderate'
+  | 'emotion-deep'
+  | 'cognitive-overload'
+  | 'intention-reminder'
+  | 'progress-narrative';
 
 export type AppEventType =
   | 'app:startup'
@@ -48,7 +57,15 @@ export type AppEventType =
   | 'user:idle'
   | 'user:return'
   | 'review:due'
-  | 'achievement:unlocked';
+  | 'review:bedtime'
+  | 'achievement:unlocked'
+  | 'emotion:struggle'
+  | 'cognitive:overload'
+  | 'stuck:incubation'
+  | 'intention:due';
+
+/** A1 情绪困扰分级：1 轻度（打字放缓）/ 2 中度（反复修改）/ 3 重度（长时间停滞） */
+export type EmotionLevel = 1 | 2 | 3;
 
 export type MessageStrategy =
   | { type: 'template'; templates: string[] }
@@ -72,6 +89,14 @@ export interface TriggerContext {
   dueCardCount?: number;
   /** 当前小时 */
   currentHour: number;
+  /** A5 认知负荷估算值（0-100），cognitive:overload 事件携带 */
+  loadLevel?: number;
+  /** A1 情绪困扰分级，emotion:struggle 事件携带 */
+  emotionLevel?: EmotionLevel;
+  /** T4 卡壳来源模块，stuck:incubation 事件携带 */
+  stuckSource?: 'note' | 'feynman';
+  /** A4 到期实施意图 ID，intention:due 事件携带 */
+  intentionId?: string;
 }
 
 // ── 音频 ──────────────────────────────────────────────────────

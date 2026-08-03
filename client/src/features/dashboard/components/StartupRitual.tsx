@@ -11,7 +11,7 @@
  */
 import { useState, useRef, useCallback } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
-import type { LastSessionData, MicroGoal, QuickTag, RitualOutcome, RitualSkipScope, RitualPlan, MemoryEchoItem, RecallQuestion } from '../types';
+import type { LastSessionData, MicroGoal, QuickTag, RitualOutcome, RitualSkipScope, RitualPlan, MemoryEchoItem, RecallQuestion, RitualIntention } from '../types';
 import type { MasteryMark } from '@/types/ritual';
 import { useRitualMachine } from '../hooks/useRitualMachine';
 import { useRitualA11y } from '../hooks/useRitualA11y';
@@ -19,6 +19,7 @@ import { useBreathGuideSound } from '../hooks/useBreathGuideSound';
 import { BreathingProvider } from './ritual/BreathingProvider';
 import { RitualStepReview } from './ritual/RitualStepReview';
 import { RitualStepGoal } from './ritual/RitualStepGoal';
+import { RitualStepIntention } from './ritual/RitualStepIntention';
 import { RitualStepBreathing } from './ritual/RitualStepBreathing';
 import { RitualComplete } from './ritual/RitualComplete';
 import { RitualSkipMenu } from './ritual/RitualSkipMenu';
@@ -52,6 +53,10 @@ export default function StartupRitual(props: Props) {
   const [mastery, setMastery] = useState<MasteryMark | null>(null);
   const [goalText, setGoalText] = useState('');
   const [pickedTags, setPickedTags] = useState<string[]>([]);
+  // A4 实施意图（可选步）受控状态
+  const [intentionIf, setIntentionIf] = useState('');
+  const [intentionThen, setIntentionThen] = useState('');
+  const [triggerTime, setTriggerTime] = useState('');
   const [cycleLit, setCycleLit] = useState(false);
   const [done, setDone] = useState(false);
   const [sound, setSound] = useState(soundOn);
@@ -59,12 +64,30 @@ export default function StartupRitual(props: Props) {
 
   const { onPhaseChange, onCycleComplete } = useBreathGuideSound(sound);
 
-  const buildOutcome = useCallback((): RitualOutcome => ({
-    goal: goalText.trim() ? ({ text: goalText.trim(), tags: pickedTags } as MicroGoal) : undefined,
-    masteryMark: mastery ?? undefined,
-    durationMs: machine.getElapsedMs(),
-    planVariant: machine.planVariant,
-  }), [goalText, pickedTags, mastery, machine]);
+  /** A4：HH:mm 提醒时间 → 当日 ISO 时间戳（留空则不设定时提醒） */
+  const buildTriggerAt = useCallback((): string | undefined => {
+    if (!triggerTime) return undefined;
+    const [h, m] = triggerTime.split(':').map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return undefined;
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d.toISOString();
+  }, [triggerTime]);
+
+  const buildOutcome = useCallback((): RitualOutcome => {
+    // 实施意图需情境与行动两要素均非空才回传（跳过/未填则 undefined）
+    const intention: RitualIntention | undefined =
+      intentionIf.trim() && intentionThen.trim()
+        ? { ifPart: intentionIf.trim(), thenPart: intentionThen.trim(), triggerAt: buildTriggerAt() }
+        : undefined;
+    return {
+      goal: goalText.trim() ? ({ text: goalText.trim(), tags: pickedTags } as MicroGoal) : undefined,
+      masteryMark: mastery ?? undefined,
+      intention,
+      durationMs: machine.getElapsedMs(),
+      planVariant: machine.planVariant,
+    };
+  }, [goalText, pickedTags, mastery, machine, intentionIf, intentionThen, buildTriggerAt]);
 
   const handleNext = useCallback(() => {
     if (machine.isLast) { setDone(true); return; }
@@ -131,6 +154,18 @@ export default function StartupRitual(props: Props) {
                     quickTags={quickTags}
                     onPickTag={handlePickTag}
                     onSubmit={handleNext}
+                  />
+                )}
+                {machine.currentStep === 'intention' && (
+                  <RitualStepIntention
+                    ifPart={intentionIf}
+                    thenPart={intentionThen}
+                    onIfChange={setIntentionIf}
+                    onThenChange={setIntentionThen}
+                    triggerTime={triggerTime}
+                    onTriggerTimeChange={setTriggerTime}
+                    onSubmit={handleNext}
+                    onSkipStep={handleNext}
                   />
                 )}
                 {machine.currentStep === 'breathing' && (

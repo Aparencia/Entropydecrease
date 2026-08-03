@@ -10,8 +10,10 @@ import { useEffect, useRef } from 'react';
 import { assistantEventBus } from '../lib/eventBus';
 import { PROACTIVE_RULES } from '../lib/proactiveRules';
 import { pickTemplate } from '../lib/messageTemplates';
+import { getStatsCacheText, refreshStatsCache } from '../lib/progressStats';
 import { useAssistantStore } from '../store/useAssistantStore';
-import { MAX_TRIGGERS_PER_HOUR, MAX_CONSECUTIVE_IGNORES } from '../constants';
+import { MAX_TRIGGERS_PER_HOUR, MAX_CONSECUTIVE_IGNORES, PROGRESS_NARRATIVE_STORAGE_KEY } from '../constants';
+import { getAuthToken } from '@/lib/ai/aiPluginProvider';
 import type { TriggerContext, ProactiveRule } from '../types';
 
 /** 内存态冷却追踪（避免频繁读库） */
@@ -20,6 +22,37 @@ let hourlyCount = 0;
 let hourlyResetAt = Date.now() + 60 * 60 * 1000;
 let consecutiveIgnores = 0;
 
+/** A3 {stats} 占位符缓存未就绪时的通用正向兜底文案 */
+const FALLBACK_STATS_TEXT = '你的每一点坚持都算数';
+
+/** A3：记录本次叙述时间，使周节奏条件在 7 天内自然失效 */
+function markNarrativeShown(): void {
+  try {
+    localStorage.setItem(PROGRESS_NARRATIVE_STORAGE_KEY, String(Date.now()));
+  } catch { /* localStorage 不可用时忽略——最多导致重复叙述，无副作用 */ }
+}
+
+/**
+ * A3：网关/本地模型异步增强叙述。
+ * 先用离线模板气泡即时反馈，AI 生成成功后覆盖为个性化叙述；
+ * 失败保留模板气泡（本地优先降级，用户无感）。
+ */
+async function enhanceNarrative(statsText: string, ruleId: string): Promise<void> {
+  const api = window.electronAPI;
+  if (!api) return;
+  try {
+    const authToken = await getAuthToken();
+    const res = await api.invoke('ai_progress_narrate', {
+      statsText,
+      authToken: authToken ?? undefined,
+    }) as { narrative?: string; status?: string };
+    if (res?.narrative && res.status === 'success') {
+      // getState 读取避免闭包捕获旧的 showBubble 引用
+      useAssistantStore.getState().showBubble(res.narrative, ruleId);
+    }
+  } catch { /* 静默降级：保留离线模板拼装的统计气泡 */ }
+}
+
 export function useProactiveEngine(): void {
   const preferences = useAssistantStore(s => s.preferences);
   const showBubble = useAssistantStore(s => s.showBubble);
@@ -27,6 +60,9 @@ export function useProactiveEngine(): void {
   prefsRef.current = preferences;
 
   useEffect(() => {
+    // A3 预取：挂载时异步采集周统计入缓存，触发时同步可读
+    void refreshStatsCache();
+
     const unsubscribes: Array<() => void> = [];
 
     for (const rule of PROACTIVE_RULES) {
@@ -68,9 +104,17 @@ export function useProactiveEngine(): void {
     lastTriggeredMap.set(rule.id, Date.now());
     hourlyCount++;
 
-    // MVP: ai_generate 降级为 template（后续接入网关个性化生成）
-    const message = pickTemplate(rule.id);
+    // ai_generate 策略离线降级为 template；{stats} 用预取的周统计填充，
+    // 缓存未就绪（非 Electron/采集失败）时用通用正向文案兜底
+    const statsText = getStatsCacheText() ?? FALLBACK_STATS_TEXT;
+    const message = pickTemplate(rule.id).replace('{stats}', statsText);
     showBubble(message, rule.id);
+
+    // A3 微进展叙述：记录节奏 + 异步 AI 增强（成功后覆盖气泡）
+    if (rule.id === 'progress-narrative') {
+      markNarrativeShown();
+      void enhanceNarrative(statsText, rule.id);
+    }
   }
 }
 

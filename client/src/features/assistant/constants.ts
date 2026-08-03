@@ -16,6 +16,43 @@ export const IDLE_THRESHOLD_MS = 3 * 60 * 1000;
 /** 久别回归阈值（ms）：超过 24h 未打开 */
 export const RETURN_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
+// ── 行为信号（A1 情绪感知 / A5 认知负荷） ──────────────────
+
+/** 行为采样窗口（ms）：滚动统计打字/切换信号的时长 */
+export const BEHAVIOR_WINDOW_MS = 2 * 60 * 1000;
+/** 行为信号评估周期（ms）：多久基于窗口数据评估一次情绪/负荷 */
+export const BEHAVIOR_EVAL_INTERVAL_MS = 30 * 1000;
+/** 打字速度骤降比例：当前窗口击键速率低于基线的比例（A1 轻度信号） */
+export const TYPING_DROP_RATIO = 0.4;
+/** 删除键占比阈值：窗口内退格/删除占总击键比例（A1 中度信号） */
+export const DELETE_KEY_RATIO = 0.3;
+/** 重度停滞阈值（ms）：有输入焦点但完全无键入的时长（A1 重度信号） */
+export const STAGNATION_THRESHOLD_MS = 8 * 60 * 1000;
+/** 认知负荷 EMA 平滑系数（越小越平滑） */
+export const LOAD_EMA_ALPHA = 0.3;
+/** 认知负荷高阈值：越过即发射 cognitive:overload */
+export const LOAD_HIGH_THRESHOLD = 70;
+/** 认知负荷回落阈值：降至此值以下才允许再次触发（迟滞防抖） */
+export const LOAD_RECOVER_THRESHOLD = 50;
+/** 认知负荷信号：窗口内路由/页面切换次数上限（超过视为高频切换） */
+export const SWITCH_BURST_COUNT = 6;
+/** 认知负荷信号：编辑爆发比达到此值即视为高负荷持续输出（burstScore 记满分） */
+export const EDIT_BURST_RATIO = 0.7;
+
+// ── A3 微进展叙述 ──────────────────────────────────────────
+
+/** 上次叙述时间戳的 localStorage 键 */
+export const PROGRESS_NARRATIVE_STORAGE_KEY = 'assistant_progress_narrative_at';
+/** 叙述节奏：每 7 天一次 */
+export const PROGRESS_NARRATIVE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// ── A2 语音对话 ────────────────────────────────────────────────
+
+/** 语音拾音块时长（ms）：与课堂 smart 采集真流式一致 */
+export const VOICE_CHUNK_DURATION_MS = 400;
+/** 语音拾音静音超时（ms）：持续无声自动停止，避免忘关麦克风 */
+export const VOICE_SILENCE_TIMEOUT_MS = 6 * 1000;
+
 // ── 会话 ──────────────────────────────────────────────────────
 
 /** 会话过期时间（ms）：超过此时间自动新建 */

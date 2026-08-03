@@ -5,8 +5,8 @@ import type { MasteryMark } from '@/types/ritual';
 
 /* ── 学习启动仪式（FEAT-017）类型定义 ── */
 
-/** 仪式三步骤 */
-export type RitualStep = 'review' | 'goal' | 'breathing';
+/** 仪式步骤（A4 新增可选的 intention 实施意图步） */
+export type RitualStep = 'review' | 'goal' | 'intention' | 'breathing';
 
 /** 微目标 */
 export interface MicroGoal {
@@ -94,10 +94,20 @@ export interface QuickTag {
 export interface RitualOutcome {
   goal?: MicroGoal;
   masteryMark?: MasteryMark;
+  /** A4 实施意图（可选步骤，未填写则为 undefined） */
+  intention?: RitualIntention;
   /** 仪式总时长（毫秒） */
   durationMs: number;
   /** 编排变体埋点（A1 固定 standard） */
   planVariant: string;
+}
+
+/** A4 实施意图（if…then… 执行计划，轻档不出示、可跳过） */
+export interface RitualIntention {
+  ifPart: string;
+  thenPart: string;
+  /** 可选提醒时间（ISO）；空表示不设定时提醒 */
+  triggerAt?: string;
 }
 
 /** 跳过范围：仅本次 / 今天不再显示 / 永久关闭 */

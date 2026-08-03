@@ -22,15 +22,15 @@ function ctx(overrides: Partial<RitualPlanContext> = {}): RitualPlanContext {
 }
 
 describe('buildRitualPlan', () => {
-  it('should return full three steps for standard new user', () => {
+  it('should return full steps including intention for standard new user', () => {
     const plan = buildRitualPlan(ctx());
-    expect(plan.steps).toEqual(['review', 'goal', 'breathing']);
+    expect(plan.steps).toEqual(['review', 'goal', 'intention', 'breathing']);
     expect(plan.planVariant).toBe('standard-A');
   });
 
   it('should drop review when no last session', () => {
     const plan = buildRitualPlan(ctx({ hasLastSession: false }));
-    expect(plan.steps).toEqual(['goal', 'breathing']);
+    expect(plan.steps).toEqual(['goal', 'intention', 'breathing']);
   });
 
   it('should use light plan for 7-day streak with autoAdapt', () => {
@@ -41,12 +41,12 @@ describe('buildRitualPlan', () => {
 
   it('should NOT auto-light when autoAdapt is off', () => {
     const plan = buildRitualPlan(ctx({ streakDays: 10, autoAdapt: false }));
-    expect(plan.steps).toEqual(['review', 'goal', 'breathing']);
+    expect(plan.steps).toEqual(['review', 'goal', 'intention', 'breathing']);
   });
 
   it('should keep full plan for deep intensity even at long streak', () => {
     const plan = buildRitualPlan(ctx({ streakDays: 20, intensity: 'deep' }));
-    expect(plan.steps).toEqual(['review', 'goal', 'breathing']);
+    expect(plan.steps).toEqual(['review', 'goal', 'intention', 'breathing']);
     expect(plan.planVariant).toBe('deep-A');
   });
 
@@ -63,7 +63,7 @@ describe('buildRitualPlan', () => {
 
   it('should frontload breathing for B group', () => {
     const plan = buildRitualPlan(ctx({ abGroup: 'B' }));
-    expect(plan.steps).toEqual(['breathing', 'review', 'goal']);
+    expect(plan.steps).toEqual(['breathing', 'review', 'goal', 'intention']);
     expect(plan.planVariant).toBe('standard-B');
   });
 

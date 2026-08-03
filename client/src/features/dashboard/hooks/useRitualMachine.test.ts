@@ -34,13 +34,16 @@ describe('useRitualMachine', () => {
     act(() => result.current.next());
     act(() => result.current.next());
 
-    // Assert
+    // Assert — 默认四步：review→goal→intention
+    expect(result.current.currentStep).toBe('intention');
+    expect(result.current.isLast).toBe(false);
+
+    // Act — 推进到末步呼吸并被钳制
+    act(() => result.current.next());
     expect(result.current.currentStep).toBe('breathing');
     expect(result.current.isLast).toBe(true);
-
-    // Act — 越界推进被钳制
     act(() => result.current.next());
-    expect(result.current.stepIndex).toBe(2);
+    expect(result.current.stepIndex).toBe(3);
   });
 
   it('should go back and clamp at the first step', () => {

@@ -32,6 +32,8 @@ import { feature as visionExtractFeature } from './handlers/visionExtractHandler
 import { feature as sessionAnalyzeFeature } from './handlers/sessionAnalyzeHandler.js';
 import { feature as videoAnalyzeFeature } from './handlers/videoAnalyzeHandler.js';
 import { feature as mergeNotesFeature } from './handlers/mergeNotesHandler.js';
+import { feature as errorPatternFeature } from './handlers/errorPatternHandler.js';
+import { feature as progressNarrativeFeature } from './handlers/progressNarratorHandler.js';
 
 // ================================================================
 // 功能注册表
@@ -54,6 +56,8 @@ const features: AIFeatureDef[] = [
   sessionAnalyzeFeature,
   videoAnalyzeFeature,
   mergeNotesFeature,
+  errorPatternFeature,
+  progressNarrativeFeature,
 ];
 
 // ================================================================

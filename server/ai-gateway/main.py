@@ -45,7 +45,9 @@ from routers import (
     streaming_router,
     balance_router,
     ritual_recall_router,
+    progress_narrative_router,
     chat_router,
+    error_pattern_router,
 )
 from cache.redis_cache import get_cache
 
@@ -235,7 +237,9 @@ app.include_router(inspiration_draft_router) # v1.1.0: AI 草稿生成
 app.include_router(socratic_router)          # FEAT-022: 苏格拉底式学习（头脑风暴+四维度评估）
 app.include_router(multimodal_router)          # Path B: 多模态课堂分析（多图联合 → Markdown 笔记）
 app.include_router(course_detect_router)       # 课程识别（可选 AI 模式，单图推断课程信息）
+app.include_router(progress_narrative_router)  # A3: 微进展叙述——注册于 streaming_router 之前，避免被通配路由拦截
 app.include_router(chat_router)                  # 学伴对话（SSE 流式）——必须在 streaming_router 之前注册，避免被 /{feature}/stream 通配拦截
+app.include_router(error_pattern_router)         # F4: 黄金错误模式分析——同样注册于 streaming_router 之前
 app.include_router(streaming_router)             # 流式输出（SSE，全量 AI 功能）
 app.include_router(balance_router)               # API 余额查询
 app.include_router(ritual_recall_router)         # v0.26.0 B1.2: 仪式回顾小问

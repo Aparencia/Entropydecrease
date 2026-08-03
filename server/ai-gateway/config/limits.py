@@ -29,6 +29,7 @@ TIMEOUT_CONFIG: dict[str, int] = {
     "rescue": 30,             # 三级救援内容较多
     "inspiration_draft": 15,
     "ritual_recall": 15,      # v0.26.0 B1.2：单个小问，快速返回
+    "progress_narrative": 15, # A3 微进展叙述：两句话短文本，快速返回
     # FEAT-022: 苏格拉底式学习
     "socratic_brainstorm": 20,
     "socratic_evaluate": 15,
@@ -39,6 +40,10 @@ TIMEOUT_CONFIG: dict[str, int] = {
     "video_analyze": 300,
     # 学伴对话（流式 SSE，多轮交互 + 长上下文，需要更宽裕的超时）
     "chat": 60,
+    # F4: 黄金错误模式分析（JSON Mode，输入最多 20 条错误）
+    "error_pattern": 20,
+    # N1: 课程级迷你测试生成（JSON Mode，生成 5-10 题耗时较长）
+    "quiz_gen": 30,
 }
 
 # ============================================================
@@ -67,6 +72,7 @@ RATE_LIMITS: dict[str, int] = {
     "rescue": 10,             # 救援场景，适度限制
     "inspiration_draft": 15,
     "ritual_recall": 20,      # v0.26.0 B1.2：每日启动仪式触发，适度上限
+    "progress_narrative": 5,  # A3 微进展叙述：每周一次节奏，低频即可
     # FEAT-022: 苏格拉底式学习
     "socratic_brainstorm": 15,
     "socratic_evaluate": 20,
@@ -77,4 +83,8 @@ RATE_LIMITS: dict[str, int] = {
     "video_analyze": 3,
     # 学伴对话（流式 SSE，对话轮次较多，适度放宽）
     "chat": 20,
+    # F4: 黄金错误模式分析（非高频场景，适度限制）
+    "error_pattern": 10,
+    # N1: 课程级迷你测试生成（生成成本高，严格限频）
+    "quiz_gen": 5,
 }

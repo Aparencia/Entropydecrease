@@ -15,6 +15,9 @@ import {
   composeStructuredGoal,
   shouldScheduleReviewCard,
   computeRitualStreak,
+  composeIntention,
+  parseIntention,
+  isIntentionDue,
   MAX_QUICK_TAGS,
 } from './ritualHelpers';
 
@@ -199,6 +202,62 @@ describe('computeRitualStreak', () => {
 
     // Act & Assert
     expect(computeRitualStreak(records, '2026-07-30')).toBe(2);
+  });
+});
+
+// ── A4 实施意图纯函数 ──
+
+describe('composeIntention', () => {
+  it('should compose "如果…，我就…" text', () => {
+    expect(composeIntention('晚饭后想刷手机', '先打开笔记写 5 分钟')).toBe('如果晚饭后想刷手机，我就先打开笔记写 5 分钟');
+  });
+
+  it('should return empty string when either part is empty', () => {
+    expect(composeIntention('', '行动')).toBe('');
+    expect(composeIntention('情境', '  ')).toBe('');
+  });
+
+  it('should trim whitespace around both parts', () => {
+    expect(composeIntention('  情境 ', ' 行动  ')).toBe('如果情境，我就行动');
+  });
+});
+
+describe('parseIntention', () => {
+  it('should round-trip with composeIntention', () => {
+    const text = composeIntention('学累了想放弃', '做一组深呼吸再继续');
+    expect(parseIntention(text)).toEqual({ ifPart: '学累了想放弃', thenPart: '做一组深呼吸再继续' });
+  });
+
+  it('should return null for non-matching text', () => {
+    expect(parseIntention('普通目标文本')).toBeNull();
+    expect(parseIntention('')).toBeNull();
+  });
+
+  it('should return null when a part is empty', () => {
+    expect(parseIntention('如果，我就行动')).toBeNull();
+  });
+});
+
+describe('isIntentionDue', () => {
+  const now = new Date('2026-08-03T12:00:00');
+
+  it('should treat empty trigger_at as always due', () => {
+    expect(isIntentionDue(null, now)).toBe(true);
+    expect(isIntentionDue(undefined, now)).toBe(true);
+    expect(isIntentionDue('', now)).toBe(true);
+  });
+
+  it('should be due when now >= trigger_at', () => {
+    expect(isIntentionDue('2026-08-03T11:00:00', now)).toBe(true);
+    expect(isIntentionDue('2026-08-03T12:00:00', now)).toBe(true);
+  });
+
+  it('should not be due before trigger_at', () => {
+    expect(isIntentionDue('2026-08-03T13:00:00', now)).toBe(false);
+  });
+
+  it('should treat invalid date string as unset (due)', () => {
+    expect(isIntentionDue('not-a-date', now)).toBe(true);
   });
 });
 

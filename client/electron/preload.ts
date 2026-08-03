@@ -26,10 +26,13 @@ const ALLOWED_CHANNELS = [
   'ai_socratic_deepening',
   'ai_predict',
   'ai_rescue',
+  'ai_error_pattern',
   'ai_vision_extract',
   'ai_session_analyze',
   'ai_video_analyze',
   'ai_merge_notes',
+  // A3 微进展叙述（每周一次的统计叙述生成）
+  'ai_progress_narrate',
   'ai:set-gateway-url',
   // AI 学伴对话 IPC channel
   'ai:chat:send',
@@ -45,6 +48,8 @@ const ALLOWED_CHANNELS = [
   'audio_list_sources',
   'audio_capture_start',
   'audio_capture_stop',
+  // A2 语音对话：启动前查询是否已有活跃采集（互斥保护，避免误伤课堂采集）
+  'audio_capture_status',
   'get-app-version',
   'dialog:selectDirectory',
   'get-default-storage-path',

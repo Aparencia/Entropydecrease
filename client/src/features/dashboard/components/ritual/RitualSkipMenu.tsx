@@ -10,6 +10,7 @@
  */
 import { useState, useRef, useEffect } from 'react';
 import { SkipForward } from 'lucide-react';
+import { Tip } from '@/components/ui/Tip';
 import type { RitualSkipScope } from '../../types';
 
 interface Props {
@@ -38,16 +39,18 @@ export function RitualSkipMenu({ onSkip }: Props) {
 
   return (
     <div ref={rootRef} className="absolute top-4 right-4 z-10">
+      {/* 跳过仪式按钮，升级 title 为 Tip */}
+      <Tip text="跳过仪式">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        title="跳过仪式"
         className="p-1.5 rounded-kb-sm text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary/50 transition-all duration-200"
       >
         <SkipForward className="w-4 h-4" strokeWidth={1.5} />
       </button>
+      </Tip>
 
       {open && (
         <div

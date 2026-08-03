@@ -42,6 +42,7 @@ PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
     "rescue":             ["qwen", "deepseek", "fallback"], # Qwen 为主，DeepSeek 备选
     "inspiration_draft":  ["qwen", "glm", "fallback"],   # Qwen 为主，GLM 备选
     "ritual_recall":      ["glm", "deepseek", "fallback"], # v0.26.0 B1.2：GLM（免费快速）优先
+    "progress_narrative": ["glm", "deepseek", "fallback"], # A3 微进展叙述：短文本生成，GLM 优先
     # FEAT-022: 苏格拉底式学习
     "socratic_brainstorm": ["qwen", "deepseek", "fallback"],
     "socratic_evaluate":   ["qwen", "deepseek", "fallback"],
@@ -52,6 +53,10 @@ PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
     "video_analyze": ["gemini", "qwen"],
     # 学伴对话（Qwen 为主，DeepSeek 备选）
     "chat": ["qwen", "deepseek", "fallback"],
+    # F4: 黄金错误模式分析（Qwen 为主，GLM 备选）
+    "error_pattern": ["qwen", "glm", "fallback"],
+    # N1: 课程级迷你测试生成（Qwen 为主，GLM 备选）
+    "quiz_gen": ["qwen", "glm", "fallback"],
 }
 
 

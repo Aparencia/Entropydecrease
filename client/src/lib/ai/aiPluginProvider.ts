@@ -23,6 +23,25 @@ let tokenCachedAt = 0;
 const TOKEN_CACHE_TTL_MS = 60_000;
 
 /**
+ * 获取当前 Supabase access_token（带 60s 缓存）
+ * @ai-context: 从 getElectronPlugin 抽出——供渲染层需要显式透传 authToken
+ * 的场景复用（如 A3 ai_progress_narrate IPC）。失败返回 null，调用方降级。
+ */
+export async function getAuthToken(): Promise<string | null> {
+  try {
+    const now = Date.now();
+    if (cachedToken === null || now - tokenCachedAt > TOKEN_CACHE_TTL_MS) {
+      const { data: { session } } = await supabase.auth.getSession();
+      cachedToken = session?.access_token ?? null;
+      tokenCachedAt = now;
+    }
+    return cachedToken;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 获取远程 AI 插件实例（懒加载）
  */
 export function getRemotePlugin(): RemoteAIPlugin {
@@ -40,17 +59,8 @@ export async function getElectronPlugin(): Promise<ElectronAIPlugin> {
   if (!electronPlugin) {
     electronPlugin = new ElectronAIPlugin();
   }
-  try {
-    const now = Date.now();
-    if (cachedToken === null || now - tokenCachedAt > TOKEN_CACHE_TTL_MS) {
-      const { data: { session } } = await supabase.auth.getSession();
-      cachedToken = session?.access_token ?? null;
-      tokenCachedAt = now;
-    }
-    electronPlugin.setAuthToken(cachedToken);
-  } catch {
-    // Supabase token injection failed, proceed with null token
-  }
+  // Supabase token 注入失败时以 null 继续，插件内部走离线降级
+  electronPlugin.setAuthToken(await getAuthToken());
   return electronPlugin;
 }
 

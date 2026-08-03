@@ -55,8 +55,8 @@ export function buildRitualPlan(ctx: RitualPlanContext): RitualPlan {
     (autoAdapt && streakDays >= ADAPT_STREAK_THRESHOLD && intensity !== 'deep');
 
   let steps: RitualStep[] = isLight
-    ? ['goal', 'breathing']              // 轻档：一行目标 + 呼吸
-    : ['review', 'goal', 'breathing'];   // 标准/深度：完整三步
+    ? ['goal', 'breathing']                        // 轻档：一行目标 + 呼吸（不加新步骤，保持极简）
+    : ['review', 'goal', 'intention', 'breathing']; // 标准/深度：含 A4 实施意图步（步内可跳过）
 
   // 无上次会话数据 → 裁剪回顾
   if (!hasLastSession) {

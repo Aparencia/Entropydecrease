@@ -87,6 +87,7 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
     "rescue": ("qwen", "rescue"),
     "inspiration_draft": ("qwen", "inspiration_draft"),
     "ritual_recall": ("glm", "free"),
+    "progress_narrative": ("glm", "free"),  # A3 微进展叙述：短文本，免费档即可
     # FEAT-022: 苏格拉底式学习
     "socratic_brainstorm": ("qwen", "socratic"),
     "socratic_evaluate":   ("qwen", "socratic"),
@@ -97,6 +98,8 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
     "video_analyze": ("gemini", "video"),
     # 学伴对话（流式 SSE 多轮交互，Qwen 通用模型兜底）
     "chat": ("qwen", "free"),
+    # F4: 黄金错误模式分析（JSON Mode，Qwen 通用模型）
+    "error_pattern": ("qwen", "free"),
 }
 
 # ============================================================
