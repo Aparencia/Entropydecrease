@@ -62,6 +62,11 @@ class GLMProvider(AIProvider):
 
         使用 openai 兼容 SDK 发起请求，glm-4.6v-flash 模型免费。
         """
+        # GLM 免费 flash 模型输出上限 1024 tokens（与 generate_vision 的 clamp 对齐）：
+        # 超限会被 API 参数校验直接拒绝，导致 Qwen 限流降级到 GLM 时
+        # fallback 链在最需要兑底的时刻断裂（重试 3 次后集体失效）
+        if "flash" in model.lower():
+            max_tokens = min(max_tokens, 1024)
         start_time = time.monotonic()
 
         # 构建消息列表（中文系统提示）
