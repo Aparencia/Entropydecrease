@@ -70,10 +70,14 @@ export async function getActiveIntentions(): Promise<ImplementationIntention[]> 
 /**
  * 找出当前到期可提醒的意图（active 且 trigger_at 已到/未设）。
  * 觉察 > 管控：只返回最近一条，避免多意图同时打扰。
+ * @param excludeIds 需跳过的意图 ID（如已提醒过的），避免队头阻塞后续意图
  */
-export async function findDueIntention(now: Date = new Date()): Promise<ImplementationIntention | undefined> {
+export async function findDueIntention(
+  now: Date = new Date(),
+  excludeIds?: ReadonlySet<string>,
+): Promise<ImplementationIntention | undefined> {
   const actives = await getActiveIntentions();
-  return actives.find(i => isIntentionDue(i.trigger_at, now));
+  return actives.find(i => !excludeIds?.has(i.id) && isIntentionDue(i.trigger_at, now));
 }
 
 /**

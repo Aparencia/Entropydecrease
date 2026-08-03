@@ -45,6 +45,13 @@ export const EDIT_BURST_RATIO = 0.7;
 export const PROGRESS_NARRATIVE_STORAGE_KEY = 'assistant_progress_narrative_at';
 /** 叙述节奏：每 7 天一次 */
 export const PROGRESS_NARRATIVE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+/** 叙述气泡延迟（ms）：与问候同批触发时延迟展示，避免瞬间覆盖问候语 */
+export const PROGRESS_NARRATIVE_DELAY_MS = 8 * 1000;
+
+// ── A4 实施意图 ────────────────────────────────────────────
+
+/** 已提醒意图 ID 列表的 localStorage 键（每条意图至多提醒一次） */
+export const INTENTION_REMINDED_STORAGE_KEY = 'assistant_intention_reminded_ids';
 
 // ── A2 语音对话 ────────────────────────────────────────────────
 

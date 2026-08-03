@@ -12,7 +12,7 @@ import { PROACTIVE_RULES } from '../lib/proactiveRules';
 import { pickTemplate } from '../lib/messageTemplates';
 import { getStatsCacheText, refreshStatsCache } from '../lib/progressStats';
 import { useAssistantStore } from '../store/useAssistantStore';
-import { MAX_TRIGGERS_PER_HOUR, MAX_CONSECUTIVE_IGNORES, PROGRESS_NARRATIVE_STORAGE_KEY } from '../constants';
+import { MAX_TRIGGERS_PER_HOUR, MAX_CONSECUTIVE_IGNORES, PROGRESS_NARRATIVE_STORAGE_KEY, PROGRESS_NARRATIVE_DELAY_MS } from '../constants';
 import { getAuthToken } from '@/lib/ai/aiPluginProvider';
 import type { TriggerContext, ProactiveRule } from '../types';
 
@@ -21,6 +21,8 @@ const lastTriggeredMap = new Map<string, number>();
 let hourlyCount = 0;
 let hourlyResetAt = Date.now() + 60 * 60 * 1000;
 let consecutiveIgnores = 0;
+/** 最近一次气泡被关闭的时刻（延迟展示类规则用它判断用户是否已表达不想被打扰） */
+let lastDismissedAt = 0;
 
 /** A3 {stats} 占位符缓存未就绪时的通用正向兜底文案 */
 const FALLBACK_STATS_TEXT = '你的每一点坚持都算数';
@@ -47,8 +49,12 @@ async function enhanceNarrative(statsText: string, ruleId: string): Promise<void
       authToken: authToken ?? undefined,
     }) as { narrative?: string; status?: string };
     if (res?.narrative && res.status === 'success') {
-      // getState 读取避免闭包捕获旧的 showBubble 引用
-      useAssistantStore.getState().showBubble(res.narrative, ruleId);
+      // 竞态守卫：AI 返回时用户可能已展开面板或关闭气泡——
+      // 仅当当前仍在展示本规则的气泡时才覆盖，不抢占用户当前状态
+      const s = useAssistantStore.getState();
+      if (s.panelState === 'bubble' && s.bubbleTriggerId === ruleId) {
+        s.showBubble(res.narrative, ruleId);
+      }
     }
   } catch { /* 静默降级：保留离线模板拼装的统计气泡 */ }
 }
@@ -108,12 +114,23 @@ export function useProactiveEngine(): void {
     // 缓存未就绪（非 Electron/采集失败）时用通用正向文案兜底
     const statsText = getStatsCacheText() ?? FALLBACK_STATS_TEXT;
     const message = pickTemplate(rule.id).replace('{stats}', statsText);
-    showBubble(message, rule.id);
+    // progress-narrative 走下方延迟展示分支，其余规则立即展示
+    if (rule.id !== 'progress-narrative') {
+      showBubble(message, rule.id);
+    }
 
-    // A3 微进展叙述：记录节奏 + 异步 AI 增强（成功后覆盖气泡）
+    // A3 微进展叙述：同步记录节奏；气泡延迟展示——app:startup 同批的
+    // 问候语先曝光，避免叙述瞬间覆盖问候；延迟期间用户已展开面板
+    // 或关闭过气泡则放弃展示（奖赏回来 ≠ 抢回注意力）
     if (rule.id === 'progress-narrative') {
       markNarrativeShown();
-      void enhanceNarrative(statsText, rule.id);
+      const scheduleAt = Date.now();
+      window.setTimeout(() => {
+        const s = useAssistantStore.getState();
+        if (s.panelState === 'expanded' || lastDismissedAt > scheduleAt) return;
+        s.showBubble(message, rule.id);
+        void enhanceNarrative(statsText, rule.id);
+      }, PROGRESS_NARRATIVE_DELAY_MS);
     }
   }
 }
@@ -121,6 +138,7 @@ export function useProactiveEngine(): void {
 /** 外部调用：标记用户忽略了气泡 */
 export function reportBubbleDismissed(): void {
   consecutiveIgnores++;
+  lastDismissedAt = Date.now();
 }
 
 /** 外部调用：标记用户回应了气泡（奖赏回来——重置退让计数） */

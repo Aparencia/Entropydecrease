@@ -64,13 +64,15 @@ export default function StartupRitual(props: Props) {
 
   const { onPhaseChange, onCycleComplete } = useBreathGuideSound(sound);
 
-  /** A4：HH:mm 提醒时间 → 当日 ISO 时间戳（留空则不设定时提醒） */
+  /** A4：HH:mm 提醒时间 → ISO 时间戳（留空则不设定时提醒；时刻已过则顺延到明天） */
   const buildTriggerAt = useCallback((): string | undefined => {
     if (!triggerTime) return undefined;
     const [h, m] = triggerTime.split(':').map(Number);
     if (Number.isNaN(h) || Number.isNaN(m)) return undefined;
     const d = new Date();
     d.setHours(h, m, 0, 0);
+    // 下午补做仪式时选的早间时刻已过去——顺延到明天而非创建后立即提醒
+    if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
     return d.toISOString();
   }, [triggerTime]);
 
