@@ -19,6 +19,7 @@ import { OrbitControls } from '@react-three/drei';
 import { useOrbitalStore, MODULE_POSITIONS, type ModuleId } from './OrbitalStore';
 import { useSceneTheme } from '../hooks/useSceneTheme';
 import { ModuleEntity } from '../objects/ModuleEntity';
+import { useWorldSignals } from '@/features/retention/hooks/useWorldSignals';
 import { AuroraModuleEntity } from '../objects/AuroraModuleEntity';
 import { CameraController } from '../core/CameraController';
 import { useCameraFlight } from '../hooks/useCameraFlight';
@@ -76,6 +77,8 @@ export function SpatialNav() {
   const { phase, overlayVisible, currentModule, hoveredModule, highlightAll, enterModule, setHovered } = useOrbitalStore();
   const { flyTo, update } = useCameraFlight();
   const { shouldDegrade3D } = useRuntimeEnv();
+  // 世界信号：实体辉光随学习数据（珊瑚健康度）明暗——宪法第一条接线（第一批仅深海实体）
+  const worldSignals = useWorldSignals();
 
   // 点击入口记录的行星实时世界坐标（飞行 effect 优先消费），点击后才有效
   const clickFlightPosRef = useRef<Partial<Record<ModuleId, [number, number, number]>>>({});
@@ -200,6 +203,7 @@ export function SpatialNav() {
               geometry={config.geometry}
               color={config.color}
               emissiveColor={config.emissiveColor}
+              glowScale={worldSignals.glowScale}
               isHovered={hoveredModule === module.id || highlightAll}
               // 选中态需结合相位：Esc 退出后 currentModule 保留（页面状态存活），但视觉选中必须解除
               isActive={phase !== 'overview' && currentModule === module.id}

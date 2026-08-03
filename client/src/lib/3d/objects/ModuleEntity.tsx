@@ -22,6 +22,12 @@ interface ModuleEntityProps {
   isHovered: boolean;
   isActive: boolean;
   showLabel?: boolean;
+  /**
+   * 世界活力辉光乘数（宪法第一条：掌握度=亮度）。
+   * 由 useWorldSignals 派生，域 0.6–1.15：只调明暗、永不惩罚性暗淡。
+   * World vitality glow multiplier (constitution §1: mastery = brightness).
+   */
+  glowScale?: number;
   onClick: () => void;
   onPointerOver: () => void;
   onPointerOut: () => void;
@@ -75,6 +81,7 @@ export function ModuleEntity({
   isHovered,
   isActive,
   showLabel = false,
+  glowScale = 1,
   onClick,
   onPointerOver,
   onPointerOut,
@@ -96,7 +103,8 @@ export function ModuleEntity({
 
   // Target states for lerp transitions
   const targetScale = isActive ? 1.3 : isHovered ? 1.15 : 1.0;
-  const targetEmissive = isActive ? 1.2 : isHovered ? 0.8 : 0.3;
+  // 辉光 = 交互态基值 × 世界活力（学习数据的亮度映射，宪法第一条）
+  const targetEmissive = (isActive ? 1.2 : isHovered ? 0.8 : 0.3) * glowScale;
 
   useFrame((_, delta) => {
     if (!meshRef.current) return;
