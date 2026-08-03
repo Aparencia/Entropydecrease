@@ -110,7 +110,7 @@ jobs:
       # 仅作存在性判定的布尔标志，避免将密钥本身提到 job 级 env
       HAS_ALIYUN_AK: ${{ secrets.ALIYUN_ACCESS_KEY_ID != '' }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: release-*
       - uses: softprops/action-gh-release@v2
