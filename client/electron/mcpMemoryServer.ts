@@ -93,6 +93,7 @@ async function main(): Promise<void> {
   const {
     queryProfile, queryMastery, queryReviewCandidates, queryFocusStats,
     queryStreak, queryDiscoveries, queryRecentSessions, queryWorldState,
+    queryKnowledgeGraph,
   } = await import('./mcp/memoryQueries.js');
 
   /** 工具表：name → 描述 + JSON Schema + 处理函数（全部只读摘要） */
@@ -139,7 +140,7 @@ async function main(): Promise<void> {
       run: () => queryStreak(db),
     },
     discoveries: {
-      description: '深海发现图鉴（跨进程接线建设中，当前返回占位）',
+      description: '深海发现图鉴：累计发现数量（跨进程快照同步，明细存于客户端本地）',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       run: () => queryDiscoveries(db),
     },
@@ -156,6 +157,15 @@ async function main(): Promise<void> {
       description: '世界状态快照：潜航深度与朦胧占比（派生值，含 provenance 标注）',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       run: () => queryWorldState(db),
+    },
+    knowledge_graph: {
+      description: '知识图谱摘要：概念节点（掌握档位+同源关联数）与费曼薄弱点（关联卡片数），无卡片背面原文',
+      inputSchema: {
+        type: 'object',
+        properties: { limit: { type: 'number', description: '返回上限（1-100，默认 20）' } },
+        additionalProperties: false,
+      },
+      run: (a) => queryKnowledgeGraph(db, a.limit),
     },
   };
 

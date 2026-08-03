@@ -181,6 +181,53 @@ export function queryDiscoveries(db: Database.Database): Record<string, unknown>
   };
 }
 
+/** learning_memory.knowledge_graph — 知识图谱摘要（节点档位 + 关联数，无卡片背面原文） */
+export function queryKnowledgeGraph(db: Database.Database, limitRaw: unknown): Record<string, unknown> {
+  const limit = clampLimit(limitRaw);
+
+  // 节点一：概念卡（摘要级：concept 截断 60 字 + 掌握档位 + 同源簇大小）
+  const cards = db.prepare(`
+    SELECT id, front, ease_factor, "interval", source_ref
+    FROM flashcards ORDER BY updated_at DESC LIMIT ?
+  `).all(limit) as Array<{
+    id: string; front: string; ease_factor: number; interval: number; source_ref: string | null;
+  }>;
+  const refRows = db.prepare(`
+    SELECT source_ref, COUNT(*) AS n FROM flashcards
+    WHERE source_ref IS NOT NULL AND source_ref != '' GROUP BY source_ref
+  `).all() as Array<{ source_ref: string; n: number }>;
+  const refSize = new Map(refRows.map((r) => [r.source_ref, r.n]));
+
+  // 节点二：费曼薄弱点（in_progress，关联卡片数 = 概念精确匹配）
+  const feynman = db.prepare(`
+    SELECT f.id, f.concept,
+      (SELECT COUNT(*) FROM flashcards c WHERE c.front = f.concept) AS linkedCards
+    FROM feynman_notes f WHERE f.status = 'in_progress'
+    ORDER BY f.updated_at DESC LIMIT ?
+  `).all(limit) as Array<{ id: string; concept: string; linkedCards: number }>;
+
+  const nodes: Array<Record<string, unknown>> = [
+    ...cards.map((c) => ({
+      id: `card:${c.id}`,
+      concept: c.front.slice(0, 60),
+      tier: hazeTier(c.ease_factor, c.interval),
+      sourceLinks: c.source_ref ? (refSize.get(c.source_ref) ?? 1) : 0,
+    })),
+    ...feynman.map((f) => ({
+      id: `feynman:${f.id}`,
+      concept: f.concept.slice(0, 60),
+      tier: '成长中',
+      weakLinks: f.linkedCards,
+    })),
+  ];
+
+  return {
+    total: nodes.length,
+    nodes,
+    note: '图谱摘要：概念前 60 字 + 掌握档位 + 关联数；原始数据始终保留在用户本地',
+  };
+}
+
 /** learning_memory.recent_sessions — 最近学习会话摘要 */
 export function queryRecentSessions(db: Database.Database, limitRaw: unknown): Record<string, unknown> {
   const limit = clampLimit(limitRaw);

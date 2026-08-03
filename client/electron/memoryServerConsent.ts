@@ -16,9 +16,26 @@ import * as fs from 'fs';
 import { logger } from './logger.js';
 
 const CONSENT_MARKER = 'memory-server-consent';
+const ACCESS_LOG_FILE = 'memory-server-access.log';
+/** 审计列表长度上限（最近 50 条，倒序） */
+const ACCESS_LOG_MAX = 50;
 
 function markerPath(): string {
   return path.join(app.getPath('userData'), CONSENT_MARKER);
+}
+
+/** 读取访问审计日志（最近 50 条，倒序；日志行格式：ISO8601 learning_memory.<tool>） */
+function readAccessLog(): { entries: Array<{ at: string; tool: string }>; total: number } {
+  const p = path.join(app.getPath('userData'), ACCESS_LOG_FILE);
+  if (!fs.existsSync(p)) return { entries: [], total: 0 };
+  const text = fs.readFileSync(p, 'utf-8');
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const entries = lines.slice(-ACCESS_LOG_MAX).reverse().map((line) => {
+    const idx = line.indexOf(' ');
+    if (idx <= 0) return { at: line, tool: '' };
+    return { at: line.slice(0, idx), tool: line.slice(idx + 1) };
+  });
+  return { entries, total: lines.length };
 }
 
 export function registerMemoryServerConsentHandlers(): void {
@@ -50,5 +67,25 @@ export function registerMemoryServerConsentHandlers(): void {
       logger.error('[MemoryServer] consent toggle failed:', message);
       return { success: false, error: message };
     }
+  });
+
+  // 访问审计：谁在何时读过你的记忆（计划 C2：最近 50 条）
+  ipcMain.handle('memory_server:get_access_log', () => {
+    try {
+      return readAccessLog();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[MemoryServer] read access log failed:', message);
+      return { entries: [], total: 0, error: message };
+    }
+  });
+
+  // 宿主配置：三步引导第一步「复制配置」的素材（供 Claude Desktop 等粘贴）
+  ipcMain.handle('memory_server:get_host_config', () => {
+    return {
+      command: process.execPath,
+      env: { ELECTRON_RUN_AS_NODE: '1' },
+      args: [path.join(__dirname, 'mcpMemoryServer.js')],
+    };
   });
 }

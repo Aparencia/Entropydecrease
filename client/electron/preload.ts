@@ -125,6 +125,9 @@ const ALLOWED_CHANNELS = [
   // MCP 学习记忆服务器应用内授权开关
   'memory_server:get_consent',
   'memory_server:set_consent',
+  // 阶段 C：访问审计（最近 50 条）+ 宿主配置（三步引导第一步）
+  'memory_server:get_access_log',
+  'memory_server:get_host_config',
   // 知识入籍 IPC channel（阶段 A：PDF 解析/URL 抓取/入籍记录）
   'import:parse-pdf',
   'import:fetch-url',
