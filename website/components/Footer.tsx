@@ -95,7 +95,8 @@ export function Footer() {
               rel="noreferrer"
               className="flex items-center gap-1 text-kb-text3 hover:text-kb-text2 transition-colors duration-300"
             >
-              <img src="/beian.png" alt="" className="w-3.5 h-3.5" />
+              {/* 公安备案官方徽标按原尺寸（36×40）展示，不缩放避免模糊 */}
+              <img src="/beian.png" alt="" />
               闽公网安备35052102000672号
             </a>
           </div>
