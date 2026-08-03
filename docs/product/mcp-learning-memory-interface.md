@@ -1,6 +1,6 @@
 # MCP 学习记忆服务器 · 接口清单草案（P2 战略项）
 
-> **状态**: 草案 v1 · 已立项（2026-08-03），实施排在熵可视化 P1 之后
+> **状态**: 已实施主体（2026-08-03，`client/electron/mcpMemoryServer.ts` + `client/electron/mcp/memoryQueries.ts`）
 > **上位文档**: `docs/product/ai-era-survival-positioning.md`（内层防御：成为用户个人 AI 的学习记忆基座）
 > **约束来源**: `docs/product/entropy-visualization-constitution.md` 第二条焦虑防线（本草案所有输出字段必须通过该防线）
 
@@ -59,6 +59,24 @@
 
 ## 七、依赖与排期
 
-- **前置**：熵可视化 P1 完成（`world_state` 依赖世界状态模型定型）。
-- **预估**：架构复用度高，主体工作约 1.5-2 周（server 进程 + 8 工具 + 设置 UI + 审计）。
+- **实施现状**（P2 第二批）：服务器入口与 8 个只读工具已落地；授权方式为 userData 目录下的 `memory-server-consent` 标记文件（应用内设置页授权开关待后续批次）；`discoveries`/`world_state` 精确态（珊瑚/发现存于渲染进程 IndexedDB）为派生值占位，跨进程接线待后续批次。
 - **关联短板**：前序战略文档「短板3：本地向量检索缺位」若先落地，可追加 `learning_memory.semantic_search` 工具，本草案预留扩展位。
+
+## 八、宿主接入方式（用户侧配置）
+
+因 better-sqlite3 为 Electron ABI 原生模块，外部宿主需以 `ELECTRON_RUN_AS_NODE` 方式启动：
+
+```json
+{
+  "mcpServers": {
+    "keban-learning-memory": {
+      "command": "<熵减安装目录>/entropy-decrease.exe",
+      "args": ["<安装目录>/resources/app/dist-electron/electron/mcpMemoryServer.js"],
+      "env": { "ELECTRON_RUN_AS_NODE": "1" }
+    }
+  }
+}
+```
+
+首次使用前需创建授权标记（服务器无标记即拒绝启动并提示）：
+`%APPDATA%/entropy-decrease/memory-server-consent`（Windows）。
