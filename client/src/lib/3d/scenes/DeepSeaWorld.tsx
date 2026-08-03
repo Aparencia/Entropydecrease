@@ -11,6 +11,8 @@ import { SafeEffectComposer } from '../core/SafeEffectComposer';
 import { useEffectiveTier } from '@/lib/performance/usePerformanceMode';
 import { ChaosMist } from '../objects/ChaosMist';
 import { OrderRipples } from '../objects/OrderRipples';
+import { TideBreath } from '../objects/TideBreath';
+import { StrataField } from '../objects/StrataField';
 
 export function DeepSeaWorld() {
   // 有效 tier（自动 tier 受用户性能模式上限约束）
@@ -29,6 +31,9 @@ export function DeepSeaWorld() {
       {/* 熵可视化层（宪法 P1）：混沌雾=遗忘，秩序波纹=复习 */}
       <ChaosMist />
       <OrderRipples />
+      {/* 叙事层叠加（宪法第十条）：潮汐=熵的呼吸，地层=累计专注的岩芯 */}
+      <TideBreath />
+      <StrataField />
 
       {/* 后处理：低档全关；中档关景深（DepthOfField 是最重的后处理 pass）；澎湃档全开。
           条件置于 composer 层级（group 接受 false），避免 EffectComposer 子元素严格类型报错 */}

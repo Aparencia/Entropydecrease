@@ -3,11 +3,11 @@
  * World signals subscription hook
  *
  * @ai-context: 订阅珊瑚生态/深海发现/留存设置 store，实时派生世界信号集，
- * 供 3D 场景层（SpatialNav 实体辉光、后续混沌雾/萤火/洋流）消费。
- * streak 尚未接入 store（StreakBubble 走 props 传递），潮汐批次接线时补真实值。
+ * 供 3D 场景层（SpatialNav 实体辉光、混沌雾/潮汐/沉积层）消费。
+ * streak 从珊瑚种植日期派生（与 DashboardPage 口径一致，无额外存储）。
  *
  * @ai-context: Subscribes to retention stores and derives live world signals
- * for the 3D scene layer. Streak wiring lands with the tide batch.
+ * for the 3D scene layer. Streak is derived from coral plant dates.
  */
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
@@ -15,6 +15,7 @@ import { useEcosystemStore } from '../store/useEcosystemStore';
 import { useDiscoveryStore } from '../store/useDiscoveryStore';
 import { useRetentionSettings } from '../store/useRetentionSettings';
 import {
+  computeCurrentStreakFromCorals,
   deriveWorldSignals,
   vitalityToGlowScale,
   type WorldSignals,
@@ -35,8 +36,7 @@ export function useWorldSignals(): WorldSignalsWithGlow {
       corals,
       totalDepth,
       discoveriesCount,
-      // TODO(潮汐批次): streak store 接线后替换为真实连击值
-      currentStreak: 0,
+      currentStreak: computeCurrentStreakFromCorals(corals),
       enabled,
     });
     return { ...signals, glowScale: vitalityToGlowScale(signals.vitality) };

@@ -60,6 +60,29 @@ export interface WorldSignals {
 const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
 
 /**
+ * 从珊瑚种植日期派生当前连击天数 / Derive current streak from coral plant dates
+ *
+ * @ai-context 与 DashboardPage 的 StreakState 构建口径一致（复用珊瑚数据、
+ * 无额外存储）：按日期去重倒序，从最近日期向前逐日检查，遇间隔即止。
+ * 洋流休息日机制由 streakEngine 在展示层处理，此处只算原始连击。
+ */
+export function computeCurrentStreakFromCorals(corals: CoralRecord[]): number {
+  if (corals.length === 0) return 0;
+  const uniqueDays = [...new Set(
+    corals.map((c) => new Date(c.plantedAt).toISOString().split('T')[0]),
+  )].sort().reverse();
+
+  let streak = 1;
+  for (let i = 1; i < uniqueDays.length; i++) {
+    const prev = new Date(uniqueDays[i - 1]).getTime();
+    const curr = new Date(uniqueDays[i]).getTime();
+    if ((prev - curr) / 86_400_000 === 1) streak++;
+    else break;
+  }
+  return streak;
+}
+
+/**
  * 派生世界信号集 / Derive the world signal set
  *
  * @ai-context 奖赏回来原则：白化珊瑚映射为"朦胧雾"而非消亡——

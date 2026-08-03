@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest';
 import {
   deriveWorldSignals,
   vitalityToGlowScale,
+  computeCurrentStreakFromCorals,
   WORLD_ANCHORS,
 } from './worldState';
 import type { CoralRecord } from '../types';
@@ -22,6 +23,13 @@ function makeCoral(health: CoralRecord['health'], id = Math.random().toString(36
     sourceSession: 'test',
     depth: 10,
   };
+}
+
+/** 指定日期偏移的珊瑚（daysAgo=0 为今天） / Coral planted daysAgo days ago */
+function coralOnDay(daysAgo: number): CoralRecord {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  return { ...makeCoral('healthy'), plantedAt: d };
 }
 
 const base = {
@@ -122,5 +130,27 @@ describe('vitalityToGlowScale', () => {
     expect(vitalityToGlowScale(1)).toBeCloseTo(1.15);
     expect(vitalityToGlowScale(-2)).toBeCloseTo(0.6);
     expect(vitalityToGlowScale(9)).toBeCloseTo(1.15);
+  });
+});
+
+describe('computeCurrentStreakFromCorals', () => {
+  it('should return 0 for empty corals', () => {
+    expect(computeCurrentStreakFromCorals([])).toBe(0);
+  });
+
+  it('should count consecutive days and dedupe same-day plants', () => {
+    // Arrange：今天 2 次种植 + 前 2 天连续
+    const corals = [coralOnDay(0), coralOnDay(0), coralOnDay(1), coralOnDay(2)];
+
+    // Act & Assert
+    expect(computeCurrentStreakFromCorals(corals)).toBe(3);
+  });
+
+  it('should stop at the first gap (与 DashboardPage 口径一致)', () => {
+    // Arrange：今天、昨天，第三天断裂
+    const corals = [coralOnDay(0), coralOnDay(1), coralOnDay(3)];
+
+    // Act & Assert
+    expect(computeCurrentStreakFromCorals(corals)).toBe(2);
   });
 });
