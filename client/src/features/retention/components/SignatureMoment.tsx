@@ -26,6 +26,13 @@ const STATIC_MS = 3000;
 
 type Act = 'silence' | 'event' | 'afterglow';
 
+/**
+ * 可变重奏演出变体（宪法第三条 §1：同一成就不重播同一演出）
+ * star=孤星亮起（默认）；trinity=三星连线（知识成网）；bloom=光尘上浮（秩序开花）
+ */
+type SignatureVisual = 'star' | 'trinity' | 'bloom';
+const VISUALS: SignatureVisual[] = ['star', 'trinity', 'bloom'];
+
 export function SignatureMoment() {
   const signatureSeq = useWorldEvents((s) => s.signatureSeq);
   const signatureConcept = useWorldEvents((s) => s.signatureConcept);
@@ -34,6 +41,7 @@ export function SignatureMoment() {
   const [act, setAct] = useState<Act>('silence');
   const [concept, setConcept] = useState('');
   const [variant, setVariant] = useState<'mastery' | 'genesis'>('mastery');
+  const [visual, setVisual] = useState<SignatureVisual>('star');
   const timers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const reduced = useMemo(
     () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -57,6 +65,8 @@ export function SignatureMoment() {
     clearTimers();
     setConcept(signatureConcept);
     setVariant(signatureVariant);
+    // 可变重奏：每次事件随机选取演出变体（可变比率，对抗多巴胺适应）
+    setVisual(VISUALS[Math.floor(Math.random() * VISUALS.length)]);
     setActive(true);
 
     if (reduced) {
@@ -87,6 +97,88 @@ export function SignatureMoment() {
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
+
+  /** 星核（三个变体共用的发光体） / Shared glowing star core */
+  const starCore = (
+    <div style={{
+      position: 'absolute', inset: 44, borderRadius: '50%',
+      background: 'radial-gradient(circle at 40% 36%, #E0F7FF, #67E8F9 60%, #0891B2)',
+      boxShadow: '0 0 34px #22D3EE, 0 0 90px rgba(34,211,238,0.4)',
+    }} />
+  );
+
+  /** 可变重奏演出渲染（痕迹由场景层永久保留，此处是演出） */
+  const renderVisual = () => {
+    if (visual === 'trinity') {
+      // 三星连线：知识结成网
+      return (
+        <motion.svg
+          width={180} height={140} viewBox="0 0 180 140"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: 'spring', stiffness: 180, damping: 24 }}
+        >
+          {[[90, 24], [34, 108], [146, 108]].map(([x, y], i) => (
+            <motion.line
+              key={`l${i}`}
+              x1={90} y1={24}
+              x2={x} y2={y}
+              stroke="#22D3EE" strokeWidth={0.8}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.55 }}
+              transition={{ delay: 0.3 + i * 0.18, duration: 0.5 }}
+            />
+          ))}
+          {[[90, 24, 9], [34, 108, 6], [146, 108, 6]].map(([x, y, r], i) => (
+            <motion.circle
+              key={`s${i}`}
+              cx={x} cy={y} r={r}
+              fill="#67E8F9"
+              style={{ filter: 'drop-shadow(0 0 12px #22D3EE)' }}
+              initial={{ opacity: 0, scale: 0.2 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: i * 0.22, type: 'spring', stiffness: 220, damping: 20 }}
+            />
+          ))}
+        </motion.svg>
+      );
+    }
+    if (visual === 'bloom') {
+      // 光尘上浮：秩序开花
+      return (
+        <div style={{ position: 'relative', width: 120, height: 120 }}>
+          {!reduced && [0, 1, 2, 3, 4, 5].map((i) => (
+            <motion.span
+              key={i}
+              initial={{ opacity: 0, y: 10, x: (i - 2.5) * 14 }}
+              animate={{ opacity: [0, 0.9, 0], y: -70 - (i % 3) * 18 }}
+              transition={{ duration: 2.4, delay: i * 0.3, repeat: Infinity, ease: 'easeOut' }}
+              style={{
+                position: 'absolute', left: '50%', bottom: 30, width: 3, height: 3,
+                borderRadius: '50%', background: '#A5F3FC', boxShadow: '0 0 8px #22D3EE',
+              }}
+            />
+          ))}
+          {starCore}
+        </div>
+      );
+    }
+    // 默认：孤星亮起 + 秩序波纹
+    return (
+      <div style={{ position: 'relative', width: 120, height: 120 }}>
+        {!reduced && [0, 0.5, 1].map((d) => (
+          <motion.span
+            key={d}
+            initial={{ scale: 0.2, opacity: 0.8 }}
+            animate={{ scale: 2.6, opacity: 0 }}
+            transition={{ duration: 2, delay: d, ease: 'easeOut', repeat: Infinity }}
+            style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1px solid #22D3EE' }}
+          />
+        ))}
+        {starCore}
+      </div>
+    );
+  };
 
   if (!active) return null;
 
@@ -127,23 +219,8 @@ export function SignatureMoment() {
               transition={{ type: 'spring', stiffness: 200, damping: 26 }}
               style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 26, textAlign: 'center', padding: '0 32px' }}
             >
-              {/* 亮起的星 + 秩序波纹（痕迹由场景层永久保留，此处是演出） */}
-              <div style={{ position: 'relative', width: 120, height: 120 }}>
-                {!reduced && [0, 0.5, 1].map((d) => (
-                  <motion.span
-                    key={d}
-                    initial={{ scale: 0.2, opacity: 0.8 }}
-                    animate={{ scale: 2.6, opacity: 0 }}
-                    transition={{ duration: 2, delay: d, ease: 'easeOut', repeat: Infinity }}
-                    style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1px solid #22D3EE' }}
-                  />
-                ))}
-                <div style={{
-                  position: 'absolute', inset: 44, borderRadius: '50%',
-                  background: 'radial-gradient(circle at 40% 36%, #E0F7FF, #67E8F9 60%, #0891B2)',
-                  boxShadow: '0 0 34px #22D3EE, 0 0 90px rgba(34,211,238,0.4)',
-                }} />
-              </div>
+              {/* 可变重奏演出区（star/trinity/bloom 随机） */}
+              {renderVisual()}
 
               <div>
                 {variant === 'genesis' ? (
