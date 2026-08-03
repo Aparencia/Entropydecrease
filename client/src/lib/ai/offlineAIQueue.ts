@@ -188,6 +188,24 @@ async function processItem(item: AIQueueItem): Promise<boolean> {
 }
 
 /**
+ * 恢复上次运行卡死在 processing 状态的记录
+ *
+ * @ai-context 应用退出/崩溃时正在消费的记录会停留在 processing，
+ * 而 processQueue 只查 pending——不恢复则这些已向用户承诺“已排队”
+ * 的请求永久静默丢失。启动时统一重置为 pending 重新参与消费。
+ */
+async function recoverStuckItems(): Promise<void> {
+  try {
+    await aiQueueDB.aiQueue.where('status').equals('processing').modify({ status: 'pending' });
+  } catch {
+    // IndexedDB 不可用时静默降级，不影响主流程
+  }
+}
+
+/** 消费互斥锁：防止启动消费与 online 事件消费并发进入导致同一请求重复上报 */
+let processingLock = false;
+
+/**
  * 消费队列：按 FIFO 顺序串行处理所有待消费条目
  *
  * 并发上限 1（串行消费，避免瞬间大量请求）。
@@ -195,35 +213,40 @@ async function processItem(item: AIQueueItem): Promise<boolean> {
  * 处理完成后统一显示批量完成通知，避免多条 toast 连续弹出干扰用户。
  */
 async function processQueue(): Promise<void> {
+  if (processingLock) return;
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return; // 仍然离线，跳过
   }
+  processingLock = true;
+  try {
+    const now = Date.now();
+    const pendingItems = await aiQueueDB.aiQueue
+      .where('status')
+      .equals('pending')
+      .and((item) => item.nextRetryAt <= now)
+      .sortBy('createdAt');
 
-  const now = Date.now();
-  const pendingItems = await aiQueueDB.aiQueue
-    .where('status')
-    .equals('pending')
-    .and((item) => item.nextRetryAt <= now)
-    .sortBy('createdAt');
+    // UX 设计理由：统计本批次成功完成的数量，处理完后统一展示汇总 toast，
+    // 避免逐条弹出造成视觉噪音（当积压多条请求时尤为明显）
+    let completedCount = 0;
+    for (const item of pendingItems) {
+      const success = await processItem(item);
+      if (success) completedCount++;
+      // 每条处理完短暂间隔，避免过快连击
+      await new Promise((resolve) => setTimeout(resolve, BASE_DELAY_MS));
+    }
 
-  // UX 设计理由：统计本批次成功完成的数量，处理完后统一展示汇总 toast，
-  // 避免逐条弹出造成视觉噪音（当积压多条请求时尤为明显）
-  let completedCount = 0;
-  for (const item of pendingItems) {
-    const success = await processItem(item);
-    if (success) completedCount++;
-    // 每条处理完短暂间隔，避免过快连击
-    await new Promise((resolve) => setTimeout(resolve, BASE_DELAY_MS));
-  }
-
-  // 批量完成汇总通知（仅当有成功完成的条目时才显示）
-  if (completedCount > 0) {
-    showToast(
-      'success',
-      completedCount === 1
-        ? '离线 AI 请求已完成'
-        : `离线队列已完成 ${completedCount} 个请求`,
-    );
+    // 批量完成汇总通知（仅当有成功完成的条目时才显示）
+    if (completedCount > 0) {
+      showToast(
+        'success',
+        completedCount === 1
+          ? '离线 AI 请求已完成'
+          : `离线队列已完成 ${completedCount} 个请求`,
+      );
+    }
+  } finally {
+    processingLock = false;
   }
 }
 
@@ -259,6 +282,7 @@ let listenersAttached = false;
  * 启动队列监听（应用初始化时调用一次）
  *
  * - 注册 window online 事件监听
+ * - 恢复上次卡死在 processing 的记录（防数据静默丢失）
  * - 应用启动时若在线则立即消费
  */
 function startAutoProcess(): void {
@@ -267,10 +291,13 @@ function startAutoProcess(): void {
 
   window.addEventListener('online', onNetworkRestored);
 
-  // 启动时若在线则立即消费
-  if (typeof navigator !== 'undefined' && navigator.onLine) {
-    void processQueue();
-  }
+  // 先恢复卡死记录再判断是否立即消费，确保 processing 残留不丢
+  void recoverStuckItems().then(() => {
+    // 启动时若在线则立即消费
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      void processQueue();
+    }
+  });
 }
 
 /**
