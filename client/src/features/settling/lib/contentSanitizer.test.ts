@@ -14,15 +14,26 @@ describe('sanitizeExtractedText', () => {
     expect(result).toBe('');
   });
 
-  it('should merge broken English lines into one sentence', () => {
-    // Arrange：PDF 提取常见的断行
+  it('should merge broken English lines with a space to avoid word sticking', () => {
+    // Arrange：PDF 提取常见的英文断行——直接拼接会产生 brokenline 粘连
     const raw = 'This is a broken\nline that should\nbe merged.';
 
     // Act
     const result = sanitizeExtractedText(raw);
 
+    // Assert：词边界保留空格
+    expect(result).toBe('This is a broken line that should be merged.');
+  });
+
+  it('should not insert a space between CJK and CJK, or CJK and ASCII edges', () => {
+    // Arrange：中文字符间直接连接；中英边界也不插空格（保持原文排布）
+    const raw = '这是被换行打断的\n中文句子，应当合并。\n学习费曼\nLearning 方法。';
+
+    // Act
+    const result = sanitizeExtractedText(raw);
+
     // Assert
-    expect(result).toBe('This is a brokenline that shouldbe merged.');
+    expect(result).toBe('这是被换行打断的中文句子，应当合并。\n学习费曼Learning 方法。');
   });
 
   it('should merge broken Chinese lines without inserting spaces', () => {

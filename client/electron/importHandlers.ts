@@ -57,6 +57,9 @@ function toSettlingRecord(row: ImportRow): SettlingRecord {
 
 /**
  * SSRF 防护：仅允许公网 HTTP(S)，拦截内网/回环/链路本地地址。
+ * 覆盖 WHATWG URL 规范化的十进制/八进制/十六进制 IPv4（统一变成点分
+ * 十进制后可被 /^127\./ 等捕获）与 IPv6 内网前缀（ULA fc00::/7、
+ * link-local fe80::/10、IPv4-mapped ::ffff:）。
  * @returns 违规原因；null 表示放行 / Return block reason or null
  */
 export function validateFetchUrl(rawUrl: string): string | null {
@@ -82,7 +85,10 @@ export function validateFetchUrl(rawUrl: string): string | null {
     /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
     /^169\.254\./.test(host) ||
     host === '::1' ||
-    host === '0:0:0:0:0:0:0:1';
+    host === '0:0:0:0:0:0:0:1' ||
+    // IPv6 内网前缀：ULA fc00::/7（fc00-fdff）与 link-local fe80::/10（fe80-febf）
+    /^f[cd]/.test(host) ||
+    /^fe[89ab]/.test(host);
   return isPrivate ? '不允许访问内网或本机地址' : null;
 }
 
@@ -111,6 +117,32 @@ async function fetchWithRedirectGuard(initialUrl: string): Promise<Response> {
     }
     return res;
   }
+}
+
+/**
+ * 流式读取响应体并截断到上限字符数（防超大响应内存风险）
+ * Stream the response body, bounded to maxChars characters.
+ */
+async function readBodyBounded(res: Response, maxChars: number): Promise<string> {
+  if (!res.body) return (await res.text()).slice(0, maxChars);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let body = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      body += decoder.decode(value, { stream: true });
+      if (body.length >= maxChars) {
+        body = body.slice(0, maxChars);
+        await reader.cancel(); // 提前终止下载
+        break;
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return body;
 }
 
 /**
@@ -228,8 +260,15 @@ export function registerImportHandlers(): void {
       if (!res.ok) {
         return { success: false, error: `网页访问失败（HTTP ${res.status}），可手动粘贴内容` };
       }
-      const raw = await res.text();
-      const { title, text } = extractHtmlText(raw.slice(0, MAX_BODY_CHARS));
+      // Content-Length 预检：超大响应直接拒绝，避免无谓下载
+      const declared = Number(res.headers.get('content-length') ?? 0);
+      if (declared > MAX_BODY_CHARS) {
+        return { success: false, error: '网页内容过大，可手动粘贴正文内容' };
+      }
+      // 流式截断：即使服务器不声明 Content-Length 或分块传输，
+      // 也只累计前 MAX_BODY_CHARS 字符，防止超大响应拖垮主进程内存
+      const raw = await readBodyBounded(res, MAX_BODY_CHARS);
+      const { title, text } = extractHtmlText(raw);
       if (!text) {
         return { success: false, error: '未能从该网页提取到正文，可手动粘贴内容' };
       }

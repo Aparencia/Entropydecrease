@@ -24,6 +24,24 @@ const SENTENCE_END_RE = /[。！？.!?…]$/;
 /** 疑似页码/装饰行（纯数字、纯符号、空格夹杂） / Page-number-like lines */
 const JUNK_LINE_RE = /^[\d\s\-—–·•*|/\\]+$/;
 
+/** ASCII 字母数字（英文断行合并时需补空格，避免单词粘连） / ASCII word chars */
+const ASCII_WORD_RE = /[A-Za-z0-9]/;
+
+/**
+ * 断行合并：中英文混排场景的换行还原。
+ * 中文字符间直接连接；两侧均为 ASCII 字母/数字时插入空格
+ * （PDF 断行常把 "broken line" 切成 "broken\nline"，直接拼接会变
+ * "brokenline"，破坏英文语义）。
+ * Join a wrapped line to the pending one; insert a space when both
+ * edges are ASCII word characters (English word-wrap restoration).
+ */
+function joinPending(pending: string, collapsed: string): string {
+  const prevChar = pending[pending.length - 1] ?? '';
+  const nextChar = collapsed[0] ?? '';
+  const needsSpace = ASCII_WORD_RE.test(prevChar) && ASCII_WORD_RE.test(nextChar);
+  return needsSpace ? `${pending} ${collapsed}` : `${pending}${collapsed}`;
+}
+
 /**
  * 单行清理：压缩内部连续空白 / Collapse inner whitespace of a line
  */
@@ -73,7 +91,7 @@ export function sanitizeExtractedText(raw: string): string {
 
     // 上行末尾无句读 → 与当前行合并（断行还原）
     if (pending && !SENTENCE_END_RE.test(pending)) {
-      pending = `${pending}${collapsed}`;
+      pending = joinPending(pending, collapsed);
       continue;
     }
 

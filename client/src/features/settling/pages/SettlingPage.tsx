@@ -54,6 +54,8 @@ export default function SettlingPage() {
   const [concepts, setConcepts] = useState<ConceptCandidate[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isConceptualizing, setIsConceptualizing] = useState(false);
+  /** 实际安放的概念数（过滤空名称后，done 页展示用） / Actually settled count */
+  const [settledCount, setSettledCount] = useState(0);
 
   /** 进入预览：统一过内容清理（断行合并/页眉丢弃），提升 AI 概念化输入质量 */
   const enterPreview = (input: ParsedInput) => {
@@ -117,11 +119,20 @@ export default function SettlingPage() {
     if (valid.length === 0) { setError('请至少填写一个概念名称'); return; }
     setStep('settling'); setError(null);
     const res = await settleConcepts({ title: parsed.title, source: parsed.source, rawName: parsed.rawName, concepts: valid });
-    if (res.ok) setStep('done');
-    else { setError(res.error ?? '安放失败，可稍后重试'); setStep('preview'); }
+    if (res.ok) {
+      setSettledCount(valid.length);
+      setStep('done');
+    } else {
+      // 部分失败：从概念列表移除已成功安放项，重试不会重复创建笔记/卡片
+      // （settleConcepts 按序安放，noteIds 即前 N 个概念的成功结果）
+      const remaining = valid.slice(res.noteIds.length);
+      setConcepts(remaining.length > 0 ? remaining : [emptyConcept()]);
+      setError(res.error ?? '安放失败，可稍后重试');
+      setStep('preview');
+    }
   };
 
-  const resetAll = () => { setStep('source'); setParsed(null); setConcepts([]); setText(''); setUrl(''); setTitle(''); setError(null); };
+  const resetAll = () => { setStep('source'); setParsed(null); setConcepts([]); setText(''); setUrl(''); setTitle(''); setError(null); setSettledCount(0); };
   const updateConcept = (i: number, patch: Partial<ConceptCandidate>) =>
     setConcepts((cs) => cs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
 
@@ -226,7 +237,7 @@ export default function SettlingPage() {
   const renderDone = () => (
     <div className="flex flex-col items-center gap-4 py-16 text-center">
       <div className="text-4xl">🌌</div>
-      <div className="text-lg font-medium text-slate-200">已安放 {concepts.length} 个概念</div>
+      <div className="text-lg font-medium text-slate-200">已安放 {settledCount} 个概念</div>
       <p className="text-sm text-slate-400">它们已在你的世界里亮起，呈雾中轮廓 · 可以从容地慢慢复习</p>
       <div className="mt-4 flex gap-3">
         <button onClick={() => navigate('/')} className={primaryBtn}>回到世界</button>
