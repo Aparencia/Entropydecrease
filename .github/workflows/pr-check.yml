@@ -21,7 +21,7 @@ jobs:
       ai-gateway: ${{ steps.filter.outputs.ai-gateway }}
       website: ${{ steps.filter.outputs.website }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -45,7 +45,7 @@ jobs:
     if: needs.changes.outputs.client == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -79,7 +79,7 @@ jobs:
       run:
         working-directory: server/sync-service
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           # Go 1.25 尚未发布，使用当前最新稳定版 1.24（截至 2026 年 8 月）
@@ -103,7 +103,7 @@ jobs:
       run:
         working-directory: server/ai-gateway
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -129,7 +129,7 @@ jobs:
       run:
         working-directory: website
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
