@@ -73,8 +73,9 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
     });
   },
   exitModule: () => {
-    // 保留 currentModule：覆盖层保持挂载（不可见），页面状态存活，重入时不重播动画
-    set({ phase: 'overview', overlayVisible: false, isInModule: false });
+    // 保留 currentModule：覆盖层保持挂载（不可见），页面状态存活，重入时不重播动画；
+    // 清除悬停态：退出后实体不应残留悬停视觉（覆盖层显示期间指针事件已关闭，hovered 可能滞留）
+    set({ phase: 'overview', overlayVisible: false, isInModule: false, hoveredModule: null });
   },
   dock: () => {
     if (get().phase === 'entering') {

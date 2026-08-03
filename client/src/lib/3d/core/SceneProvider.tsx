@@ -11,12 +11,16 @@
  *   导致 GPU 合成风暴（内测反馈“主页流畅但切换其他页面卡顿”的根因）。
  *   暂停后画面冻结为静态背景，blur 仅计算一次即被合成器缓存，视觉设计不变。
  * - entering → docked 的停靠延迟由性能档位决定（静谧=0/从容=900ms/澎湃=1300ms），
- *   保证相机飞行到位后才暂停渲染，避免生硬冻结。
+ *   保证相机飞行到位后才暂停渲染，避免生硬冻结；下限 clamp 到 700ms（飞行时长
+ *   600ms），防止静谧档在飞行中途冻结导致相机停在半途、停靠视角错位。
  * - PerformanceMonitor 仅 overview 相位测量：entering 的飞行帧率不代表设备能力，docked 无帧率可言。
+ * - 帧循环唤醒：R3F 从 frameloop='never' 切回 'always' 时不会自动重启渲染循环
+ *   （循环停止后无帧可检查新值，且 setFrameloop 不调 invalidate），
+ *   需由 LoopResumer 在相位迁移后显式唤醒，否则多次切换后画面永久冻结。
  *
  * @ai-context: 3D 场景核心（R3F）：SceneProvider。
  */
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import { Suspense, useEffect } from 'react';
 import { Preload } from '@react-three/drei';
 import { PerformanceMonitor } from './PerformanceMonitor';
@@ -34,17 +38,41 @@ interface SceneProviderProps {
   interactive?: boolean;
 }
 
+/**
+ * 渲染循环唤醒器 — 修复“多次切换功能后页面无渲染”
+ *
+ * R3F 的循环在 frameloop='never' 下会 cancelAnimationFrame 彻底停止；
+ * 切回 'always' 时 setFrameloop 只改 store 值，不会重启循环，
+ * 而期间所有 invalidate() 又因 frameloop 尚为 'never' 被早退丢弃。
+ * 因此在相位/档位迁移后（此时 frameloop prop 已应用）显式 invalidate：
+ * 'always' 下 render 每帧返回 1，一次唤醒即可让循环永续运行；
+ * docked（'never'）时 invalidate 自动早退，无副作用。
+ */
+function LoopResumer() {
+  const invalidate = useThree((s) => s.invalidate);
+  const phase = useOrbitalStore((s) => s.phase);
+  const mode = usePerformanceModeStore((s) => s.mode);
+
+  useEffect(() => {
+    invalidate();
+  }, [phase, mode, invalidate]);
+
+  return null;
+}
+
 export function SceneProvider({ children, interactive = false }: SceneProviderProps) {
   const phase = useOrbitalStore((s) => s.phase);
   const currentModule = useOrbitalStore((s) => s.currentModule);
   const mode = usePerformanceModeStore((s) => s.mode);
 
-  // entering → docked 停靠计时器：相机飞行过渡结束后才暂停渲染（相位/模块/档位变化时重置）
+  // entering → docked 停靠计时器：相机飞行过渡结束后才暂停渲染（相位/模块/档位变化时重置）。
+  // 下限 clamp 到 700ms（相机飞行固定 600ms）：静谧档 dockDelayMs=0 会在飞行中途
+  // 冻结渲染（frameloop='never'），相机停在半途且朝向插值未完成，停靠后视角错位
   useEffect(() => {
     if (phase !== 'entering') return;
     const timer = setTimeout(
       () => useOrbitalStore.getState().dock(),
-      PERFORMANCE_MODE_CONFIG[mode].dockDelayMs,
+      Math.max(PERFORMANCE_MODE_CONFIG[mode].dockDelayMs, 700),
     );
     return () => clearTimeout(timer);
   }, [phase, currentModule, mode]);
@@ -82,6 +110,7 @@ export function SceneProvider({ children, interactive = false }: SceneProviderPr
       >
         {/* FPS 自动降档仅在概览态测量（entering 飞行帧率不代表设备能力，docked 无帧率可言） */}
         {phase === 'overview' && <PerformanceMonitor />}
+        <LoopResumer />
         <QualityController />
         <MemoryManager />
         <ContextRecovery />

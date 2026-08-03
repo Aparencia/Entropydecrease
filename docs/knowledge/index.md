@@ -6,6 +6,8 @@
 
 | 日期 | 标题 | 标签 |
 |------|------|------|
+| 2026-08-03 | [番茄钟沉浸↔普通切换“组件重复”：两个独立 AnimatePresence 实例间 mode="wait" 无效，双视图叠加约 0.6s](./bugs/2026-08-pomodoro-immersive-dual-view-overlap.md) | #番茄钟 #framer-motion #AnimatePresence #portal #过渡排序 |
+| 2026-08-03 | [主页选中功能后相机飞行视角错位、正对空白处：flyTo 只插值位置不改朝向，叠加 docked 渲染冻结无人纠错](./bugs/2026-08-camera-flight-orientation-mismatch-docked-freeze.md) | #3D导航 #相机飞行 #四元数 #frameloop #性能档位 |
 | 2026-08-02 | [ASR 报错「whisper.cpp 执行失败」在代码库零匹配：运行构建落后源码 8 个版本](./bugs/2026-08-asr-whisper-cpp-stale-build-mismatch.md) | #ASR #版本错位 #sherpa-onnx #构建产物 #诊断方法 |
 | 2026-08-01 | [3D 动画有时不显示/不流畅：性能分级无滞回导致 tier 抖动，特效反复卸载；后台返回误判降级](./bugs/2026-08-3d-tier-flapping-animation-hitching.md) | #3D性能 #R3F #性能分级 #滞回 #drei #WebGL |
 | 2026-08-01 | [首页 3D 物体点击与功能错位：浅色模式下背景场景重复渲染了一套“只改状态不跳转”的行星](./bugs/2026-08-homepage-3d-duplicate-planets-misaligned-click.md) | #3D导航 #react-three-fiber #职责边界 #单一数据源 #浅色模式 |

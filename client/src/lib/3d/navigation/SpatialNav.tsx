@@ -7,9 +7,12 @@
  * - entering 模式：useCameraFlight 独占相机，CameraController 暂停
  * - docked 模式：CameraController 接管（渲染已暂停，实际不执行 lerp）
  *
+ * 相机飞行统一由相位迁移响应式驱动（覆盖 3D 点击/数字键/路由同步等全部入口）；
+ * 点击入口额外记录行星实时坐标供飞行使用（行星在公转，固定坐标会飞向错误位置）。
+ *
  * @ai-context: 3D 空间导航组件——键盘/手势驱动的模块间轨道跳转，与 OrbitalStore 状态联动；渲染于 R3F Canvas 内，禁止使用 DOM API。
  */
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
@@ -60,6 +63,9 @@ const AURORA_ORBIT_CONFIG: Record<ModuleId, {
 /** 相机飞入模块时的偏移（从模块位置向相机方向偏移） */
 const CAMERA_OFFSET: [number, number, number] = [0, 0, 4];
 
+/** 概览态相机全景位（退出模块时相机飞回此位置） */
+const OVERVIEW_CAMERA_POS: [number, number, number] = [0, 0, 10];
+
 function addVectors(a: [number, number, number], b: [number, number, number]): [number, number, number] {
   return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 }
@@ -71,6 +77,11 @@ export function SpatialNav() {
   const { flyTo, update } = useCameraFlight();
   const { shouldDegrade3D } = useRuntimeEnv();
 
+  // 点击入口记录的行星实时世界坐标（飞行 effect 优先消费），点击后才有效
+  const clickFlightPosRef = useRef<Partial<Record<ModuleId, [number, number, number]>>>({});
+  // 上一次已处理的飞行键（entering:模块 / overview / docked），防止重复飞行
+  const flightKeyRef = useRef<string | null>(null);
+
   // 每帧更新相机飞行
   useFrame((_, delta) => {
     // 防止浏览器节流导致的帧时间尖峰
@@ -78,31 +89,56 @@ export function SpatialNav() {
     update(safeDelta);
   });
 
-  // 点击模块实体（深海模式使用固定坐标）
+  // 响应式相机飞行：统一覆盖全部入口（3D 点击/数字键/返回首页/路由同步）。
+  // 此前 flyTo 仅在点击回调中命令式调用，数字键等入口进入时无镜头移动；
+  // 退出（Esc）时相机也需从模块停靠位飞回全景位。
+  useEffect(() => {
+    const flightKey = phase === 'entering' ? `entering:${currentModule}` : phase;
+    if (flightKeyRef.current === flightKey) return;
+    const prevKey = flightKeyRef.current;
+    flightKeyRef.current = flightKey;
+
+    if (phase === 'entering' && currentModule) {
+      const module = MODULE_POSITIONS.find((m) => m.id === currentModule);
+      if (!module) return;
+      // 优先使用点击时记录的实时坐标，fallback 到固定坐标
+      const basePos = clickFlightPosRef.current[currentModule] ?? module.position;
+      delete clickFlightPosRef.current[currentModule];
+      // 注视点传入模块实时坐标：飞行期间朝向同步转向模块，
+      // 否则相机抵达后仍保持概览态旧朝向，叠加 docked 渲染冻结导致视角错位
+      flyTo(addVectors(basePos, CAMERA_OFFSET), basePos);
+    } else if (phase === 'overview' && prevKey && prevKey !== 'overview') {
+      // 退出模块：返回全景位并转向场景中心（初始挂载即 overview 时 prevKey 为 null，不飞行）
+      flyTo(OVERVIEW_CAMERA_POS, [0, 0, 0]);
+    }
+  }, [phase, currentModule, flyTo]);
+
+  // 点击模块实体：飞行由相位迁移 effect 统一触发（深海模式使用固定坐标）
   const handleModuleClick = useCallback((id: ModuleId) => {
     const module = MODULE_POSITIONS.find(m => m.id === id);
     if (!module) return;
 
     soundPlayer.play('ui_module_enter');
     enterModule(id);
-    // 相机飞向模块位置（加偏移）
-    flyTo(addVectors(module.position, CAMERA_OFFSET));
     navigate(module.route);
-  }, [enterModule, flyTo, navigate]);
+  }, [enterModule, navigate]);
 
-  // 点击 Aurora 模式行星：使用行星实时世界坐标作为 flyTo 目标，而非 MODULE_POSITIONS 固定坐标
+  // 点击 Aurora 模式行星：记录实时世界坐标供飞行 effect 消费，而非使用 MODULE_POSITIONS 固定坐标
   // 因为行星在轨道上持续公转，固定坐标会导致相机飞向错误位置（漂移根因之一）
   const handleAuroraClick = useCallback((id: ModuleId, currentPosition?: [number, number, number]) => {
     const module = MODULE_POSITIONS.find(m => m.id === id);
     if (!module) return;
 
     soundPlayer.play('ui_module_enter');
+    // enterModule 在"同模块已停靠且覆盖层可见"时为无操作（不产生飞行），此时不记录，避免陈旧坐标被后续进入误用
+    const s = useOrbitalStore.getState();
+    const willNoop = s.currentModule === id && s.phase === 'docked' && s.overlayVisible;
+    if (!willNoop && currentPosition) {
+      clickFlightPosRef.current[id] = currentPosition;
+    }
     enterModule(id);
-    // 优先使用行星当前实时世界坐标，fallback 到固定坐标
-    const basePos = currentPosition ?? module.position;
-    flyTo(addVectors(basePos, CAMERA_OFFSET));
     navigate(module.route);
-  }, [enterModule, flyTo, navigate]);
+  }, [enterModule, navigate]);
 
   // 悬停音效（移动端降级时不播放，仅在指针事件回调中触发）
   const handleHover = useCallback((id: ModuleId | null) => {
@@ -110,7 +146,7 @@ export function SpatialNav() {
     setHovered(id);
   }, [setHovered, shouldDegrade3D]);
 
-  // 计算相机目标位置与注视点：非概览相位（entering/docked）时飞向并注视当前模块，否则全景位/场景中心
+  // 计算相机目标位置与注视点：非概览相位（entering/docked）时注视当前模块，否则全景位/场景中心
   const inModuleView = phase !== 'overview' && currentModule;
   const activeModulePos = inModuleView
     ? MODULE_POSITIONS.find(m => m.id === currentModule)?.position
@@ -165,7 +201,8 @@ export function SpatialNav() {
               color={config.color}
               emissiveColor={config.emissiveColor}
               isHovered={hoveredModule === module.id || highlightAll}
-              isActive={currentModule === module.id}
+              // 选中态需结合相位：Esc 退出后 currentModule 保留（页面状态存活），但视觉选中必须解除
+              isActive={phase !== 'overview' && currentModule === module.id}
               showLabel={highlightAll || !overlayVisible}
               onClick={() => handleModuleClick(module.id)}
               onPointerOver={() => handleHover(module.id)}
@@ -211,7 +248,9 @@ export function SpatialNav() {
             orbitRadius={config.orbitRadius}
             orbitSpeed={config.orbitSpeed}
             initialAngle={config.initialAngle}
-            isActive={currentModule === module.id}
+            // 选中态需结合相位：Esc 退出后 currentModule 保留（页面状态存活），
+            // 若不解除，行星将持续保持放大/光环/停止公转的"选中"表现
+            isActive={phase !== 'overview' && currentModule === module.id}
             showLabel={highlightAll || !overlayVisible}
             onClick={handleAuroraClick}
             onHover={handleHover}
