@@ -147,7 +147,7 @@ jobs:
       # 先传二进制（exe/blockmap），后传元数据（yml/json）：
       # 避免 latest.yml 率先就位时指向尚未上传完成的安装包（更新 404 窗口期）
       - name: Upload installer binaries to server
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
@@ -157,7 +157,7 @@ jobs:
           strip_components: 1
 
       - name: Publish update metadata (last, avoids 404 window)
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
