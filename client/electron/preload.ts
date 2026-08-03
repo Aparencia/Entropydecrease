@@ -130,6 +130,8 @@ const ALLOWED_CHANNELS = [
   'import:fetch-url',
   'import:get-settling-records',
   'import:add-settling-record',
+  // 知识星座 IPC channel（阶段 B：只读图谱聚合）
+  'knowledge:get-graph',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */

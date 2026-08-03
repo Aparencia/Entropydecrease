@@ -38,6 +38,7 @@ import { loadEnvironment } from './envLoader.js';
 import { installCspPolicy } from './cspPolicy.js';
 import { registerDisplayMediaHandler } from './displayMediaHandler.js';
 import { registerDbIpcHandlers } from './db/dbIpcHandlers.js';
+import { registerKnowledgeIpcHandlers } from './db/knowledgeQueries.js';
 import { registerStorageIpcHandlers } from './storageIpcHandlers.js';
 import { registerKeyframeScheme, registerKeyframeIpcHandlers } from './ipc/keyframeStorage.js';
 import { loadPerformanceMode, registerPerformanceHandlers } from './performanceMode.js';
@@ -176,6 +177,8 @@ if (!gotTheLock) {
     registerStorageIpcHandlers();
     // 知识入籍 IPC（PDF 解析/URL 抓取/入籍记录，详见 importHandlers.ts）
     registerImportHandlers();
+    // 知识星座 IPC（只读图谱聚合，详见 db/knowledgeQueries.ts）
+    registerKnowledgeIpcHandlers();
     // MCP 学习记忆服务器应用内授权开关（详见 memoryServerConsent.ts）
     registerMemoryServerConsentHandlers();
     // 课堂关键帧图片持久化 IPC + keyframe:// 协议（详见 ipc/keyframeStorage.ts）

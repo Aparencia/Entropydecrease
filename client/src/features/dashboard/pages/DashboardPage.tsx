@@ -37,7 +37,12 @@ const StreakBubble = lazy(() => import('@/features/retention/components/StreakBu
 const DepthMeter = lazy(() => import('@/features/retention/components/DepthMeter').then(m => ({ default: m.DepthMeter })));
 const CoralEcosystem = lazy(() => import('@/features/retention/components/CoralEcosystem').then(m => ({ default: m.CoralEcosystem })));
 const LearningProfile = lazy(() => import('@/features/retention/components/LearningProfile').then(m => ({ default: m.LearningProfile })));
+// React.lazy 动态导入知识星座组件（阶段 B：双轨渲染；3D 轨仅 high 档加载）
+const KnowledgeConstellation = lazy(() => import('@/features/constellation/components/KnowledgeConstellation').then(m => ({ default: m.KnowledgeConstellation })));
+const KnowledgeSky = lazy(() => import('@/lib/3d/scenes/KnowledgeSky').then(m => ({ default: m.KnowledgeSky })));
 import { useLearningAnalytics } from '../hooks/useLearningAnalytics';
+import { useKnowledgeGraph } from '@/features/constellation/hooks/useKnowledgeGraph';
+import { useEffectiveTier } from '@/lib/performance/usePerformanceMode';
 import StartupRitual from '../components/StartupRitual';
 import { useLastSession } from '../hooks/useLastSession';
 import { saveRitualRecord, createReviewCardIfNeeded, loadRitualRecords } from '../lib/ritualService';
@@ -159,6 +164,10 @@ export default function DashboardPage() {
   const [ritualIntensity, setRitualIntensity] = useState<RitualIntensity>('standard');
   const [ritualAutoAdapt, setRitualAutoAdapt] = useState(true);
   const lastSession = useLastSession();
+
+  /* ── 知识星座（阶段 B：宪法第六条的空间化外壳，只读聚合 + 纯函数派生） ── */
+  const { graph: knowledgeGraph, loading: knowledgeLoading, error: knowledgeError } = useKnowledgeGraph();
+  const effectiveTier = useEffectiveTier();
 
   useEffect(() => {
     (async () => {
@@ -597,6 +606,25 @@ export default function DashboardPage() {
           </div>
         </section>
       )}
+
+      {/* ════ 知识星座区域（阶段 B）════ */}
+      {/* 宪法第六条：星座是珊瑚引擎的空间化外壳，不新增引擎。双轨按
+          useEffectiveTier 切换：high → 3D 轨（独立 Canvas，dpr≤1.5），
+          否则 DOM/SVG 轨（L1 每档 ≤15 节点）。冷启动引导由
+          KnowledgeConstellation 承担（high 档空态同样回落该分支）。 */}
+      <section className="relative max-w-[1100px] mx-auto px-6 py-rhythm-sm">
+        <div className="flex items-center gap-2 mb-rhythm-sm">
+          <h2 className="text-b1 font-semibold text-text-primary">知识星座</h2>
+          <span className="text-c1 text-text-tertiary">概念掌握度的空间化</span>
+        </div>
+        <Suspense fallback={<div className="h-56 rounded-kb-xl bg-bg-elevated/30 animate-pulse-skeleton" />}>
+          {effectiveTier === 'high' && knowledgeGraph && !knowledgeGraph.coldStart && knowledgeGraph.nodes.length > 0 ? (
+            <KnowledgeSky graph={knowledgeGraph} />
+          ) : (
+            <KnowledgeConstellation graph={knowledgeGraph} loading={knowledgeLoading} error={knowledgeError} />
+          )}
+        </Suspense>
+      </section>
 
       {/* ════ 学习脉搏区域 ════ */}
       <section className="relative max-w-[1100px] mx-auto px-6 py-rhythm-lg kb-section-blend">
