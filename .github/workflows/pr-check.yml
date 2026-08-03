@@ -10,6 +10,11 @@ jobs:
   # ===========================================================================
   changes:
     runs-on: ubuntu-latest
+    # dorny/paths-filter 需要读取 PR 变更文件列表；Dependabot PR 的只读 token
+    # 默认不含该权限，显式声明后 Dependabot PR 的路径检测才能正常工作
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       client: ${{ steps.filter.outputs.client }}
       sync-service: ${{ steps.filter.outputs.sync-service }}
