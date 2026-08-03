@@ -5,8 +5,12 @@ import { useState } from 'react';
 import { readWithLegacyMigration } from '@/lib/utils/legacyLocalStorage';
 import { Card } from '@/components/ui';
 import { useTheme } from '@/hooks/useTheme';
-import { Sun, Moon, Rows3, Grid3x3, AlignJustify } from 'lucide-react';
+import { Sun, Moon, Rows3, Grid3x3, AlignJustify, Waves } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  getWorldSoundscapeEnabled,
+  setWorldSoundscapeEnabled,
+} from '@/lib/audio/worldSoundscapeConfig';
 
 /** 密度存储 key */
 const DENSITY_KEY = 'ed-density';
@@ -34,6 +38,13 @@ const densityConfig: { key: Density; label: string; icon: React.FC<React.SVGProp
 export default function AppearanceSettings() {
   const { theme, setTheme } = useTheme();
   const [density, setDensity] = useState<Density>(getStoredDensity);
+  const [soundscape, setSoundscape] = useState(getWorldSoundscapeEnabled);
+
+  const handleSoundscapeToggle = () => {
+    const next = !soundscape;
+    setSoundscape(next);
+    setWorldSoundscapeEnabled(next);
+  };
 
   const handleDensityChange = (key: Density) => {
     setDensity(key);
@@ -147,6 +158,31 @@ export default function AppearanceSettings() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* 世界声景（宪法 P2：双世界环境底噪，默认关闭） */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <label className="text-b2 font-medium text-text-secondary">世界声景</label>
+          <span className="text-b3 text-text-tertiary">
+            深海=雨声 · 穹顶=麦浪风声，音量克制，随主题自动切换
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={handleSoundscapeToggle}
+          aria-pressed={soundscape}
+          className={cn(
+            'flex items-center gap-2 py-2 px-4 rounded-kb-full border-2 text-b2 font-medium',
+            'transition-all duration-200',
+            soundscape
+              ? 'border-brand-500 bg-brand-50 text-brand-700'
+              : 'border-border/50 bg-bg-elevated text-text-secondary hover:border-brand-300',
+          )}
+        >
+          <Waves className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+          {soundscape ? '已开启' : '已关闭'}
+        </button>
       </div>
     </Card>
   );

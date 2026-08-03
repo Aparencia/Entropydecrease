@@ -26,8 +26,12 @@ import { assistantEventBus } from '@/features/assistant/lib/eventBus';
 import { RETURN_THRESHOLD_MS } from '@/features/assistant/constants';
 // 留存机制：初始化 hook（store 加载）+ 深海发现弹窗（全局 portal）
 import { useRetentionInit } from '@/features/retention/hooks/useRetentionInit';
+import { useWorldSnapshotSync } from '@/features/retention/hooks/useWorldSnapshotSync';
 import { DiscoveryReveal } from '@/features/retention/components/DiscoveryReveal';
 import { SignatureMoment } from '@/features/retention/components/SignatureMoment';
+import { FatigueEmpathy } from '@/features/retention/components/FatigueEmpathy';
+import { WorldRecap } from '@/features/retention/components/WorldRecap';
+import { WorldSoundscape } from '@/lib/audio/WorldSoundscape';
 import '@/stores/useSettingsStore'; // 导入以触发音效设置初始化
 import { startPomodoroScheduler } from '@/features/pomodoro/lib/pomodoroScheduler';
 
@@ -53,6 +57,8 @@ function App() {
   // 留存机制：在 Provider 内、路由外初始化所有留存 store
   // 放在此处确保无论用户从哪个路由进入，数据均已就绪
   useRetentionInit();
+  // 世界状态快照同步：retention 数据→sqlite→MCP 记忆服务器（单向桥，失败静默）
+  useWorldSnapshotSync();
 
   // ── 启动缓冲带：接管 HTML 内联 splash，首次渲染完成后淡出 ──
   useLayoutEffect(() => {
@@ -157,6 +163,11 @@ function App() {
               {/* 签名时刻（宪法第三条）：掌握一个概念时的三幕演出，
                   由世界事件总线驱动，仅事件发生时渲染 DOM */}
               <SignatureMoment />
+              {/* 宪法 P2：疲劳共情（觉察式建议）+ 延时摄影开场（每日生长摘要）
+                  + 世界声景（双世界环境底噪，默认关闭可开启） */}
+              <FatigueEmpathy />
+              <WorldRecap />
+              <WorldSoundscape />
             </ErrorBoundary>
           </SyncProvider>
         </AuthProvider>
