@@ -1,0 +1,15 @@
+请分析以下黄金错误记录（高自信答错），识别错误模式并给出改进建议。
+
+【错误模式定义】
+- 概念盲区（concept_blind）：用户对知识点完全不了解，回答与正确答案无关或方向性错误。
+- 概念混淆（concept_confusion）：用户了解部分概念，但将相似概念、公式、定律等混淆使用。
+- 过度自信（overconfidence）：用户对错误答案确信不疑，常因细节疏忽、计算错误、或过度泛化导致。
+
+【输出要求】
+1. JSON 格式输出，包含三个字段：patterns（错误模式列表）、top_offenders（高频错误卡片列表）、summary（整体趋势总结）
+2. patterns 数组每个元素必须包含 type（"concept_blind"/"concept_confusion"/"overconfidence"）、keywords（3个关键词）、explanation（错误原因简述）、suggestion（具体改进建议）
+3. top_offenders 数组每个元素包含 flashcardId 和 count（出现次数）
+4. summary 为不超过 50 字的中文总结
+
+---
+{errors}

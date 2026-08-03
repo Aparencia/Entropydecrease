@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, GraduationCap, BookOpen, PenLine, BookMarked, Brain, Timer, Moon, Coffee, Dumbbell, Music, Languages, Calculator, Microscope } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Tip } from '@/components/ui/Tip';
 import { Button, Input } from '@/components/ui';
 import CycleMarkers from './CycleMarkers';
 import type { PomodoroPreset } from '@/types/models';
@@ -88,9 +89,12 @@ export default function PresetEditor({ open, onClose, onSave, initial }: PresetE
               <h2 className="text-h3 font-semibold text-text-primary">
                 {initial ? '编辑预设' : '新建预设'}
               </h2>
+              {/* 关闭按钮，带 tooltip */}
+              <Tip text="关闭">
               <button onClick={onClose} className="p-1.5 rounded-full hover:bg-bg-secondary text-text-tertiary">
                 <X className="w-4 h-4" />
               </button>
+              </Tip>
             </div>
 
             <div className="space-y-4">

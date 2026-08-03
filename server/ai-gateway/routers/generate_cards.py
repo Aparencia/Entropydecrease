@@ -35,6 +35,8 @@ class CardGenOptions(BaseModel):
         default="mixed",
         description="卡片类型：question_answer/fill_blank/true_false/mixed",
     )
+    # F1 多情境提取：为重要知识点额外生成表述不同的变体卡片
+    variants: bool = Field(default=False, description="是否生成多情境变体卡片")
 
 
 class CardGenRequest(BaseModel):

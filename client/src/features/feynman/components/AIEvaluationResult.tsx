@@ -8,6 +8,7 @@
 import { X, Sparkles, CheckCircle2, Circle, RotateCcw, RefreshCw } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { cn } from '@/lib/utils';
+import { Tip } from '@/components/ui/Tip';
 import type { EvaluateResult } from '@/lib/ai/types';
 
 interface AIEvaluationResultProps {
@@ -47,12 +48,15 @@ export function AIEvaluationResult({
               重置
             </button>
           )}
+          {/* 关闭评估面板按钮，带 tooltip */}
+          <Tip text="关闭">
           <button
             onClick={onClose}
             className="p-1 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
           >
             <X className="w-4 h-4" strokeWidth={1.5} />
           </button>
+          </Tip>
         </div>
       </div>
 

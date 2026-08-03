@@ -37,8 +37,8 @@ export async function exportDeck(deckId: string): Promise<KbanDeckFile> {
     cards: cards.map((card) => ({
       front: card.front,
       back: card.back,
-      // TODO: Flashcard 类型尚未定义 tags 字段，此处兼容旧数据
-      tags: ('tags' in card ? (card as Flashcard & { tags?: string[] }).tags : undefined) || [],
+      // Flashcard.tags 已在类型定义中声明为可选字段，直接透传即可
+      tags: card.tags || [],
       type: card.type,
       sourceNoteId: card.sourceNoteId,
     })),
@@ -86,7 +86,13 @@ export async function importDeck(file: File): Promise<{
   };
 }
 
-/** 由分享文件中的卡片数据构造全新 Flashcard（调度状态重置） */
+/**
+ * 由分享文件中的卡片数据构造全新 Flashcard（调度状态重置）
+ *
+ * @ai-context: 导入的卡片一律重置调度状态（easeFactor 2.5 / interval 0），
+ * 分享者的复习进度对接收者无意义（产品决策）。
+ * 导入时透传 tags 字段，若分享文件不含标签则不设置（保持 undefined）。
+ */
 function buildImportedCard(
   card: KbanDeckFile['cards'][number],
   deckId: string,
@@ -107,6 +113,8 @@ function buildImportedCard(
     updatedAt: now,
     sourceNoteId: card.sourceNoteId,
     order: 0,
+    // 透传分享文件中的卡片标签（若存在且非空则保留，否则不设置以免写入空数组）
+    ...(card.tags && card.tags.length > 0 ? { tags: card.tags } : {}),
   };
 }
 

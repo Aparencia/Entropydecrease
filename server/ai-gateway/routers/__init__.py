@@ -20,6 +20,10 @@ from routers.ritual_recall import router as ritual_recall_router
 from routers.progress_narrative import router as progress_narrative_router
 from routers.chat import router as chat_router
 from routers.error_pattern import router as error_pattern_router
+from routers.quiz_gen import router as quiz_gen_router
+from routers.content_tier import router as content_tier_router
+from routers.conflict_detect import router as conflict_detect_router
+from routers.concept_precheck import router as concept_precheck_router
 
 __all__ = [
     "summarize_router",
@@ -42,4 +46,8 @@ __all__ = [
     "progress_narrative_router",
     "chat_router",
     "error_pattern_router",
+    "quiz_gen_router",
+    "content_tier_router",
+    "conflict_detect_router",
+    "concept_precheck_router",
 ]

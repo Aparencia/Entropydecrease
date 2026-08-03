@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { Tip } from '@/components/ui/Tip';
 import { useSidebarStore } from '@/stores/useSidebarStore';
 import { useCaptureStore } from '@/stores/useCaptureStore';
 import { useAuth } from '@/lib/auth/AuthContext';
@@ -288,20 +289,24 @@ export default function Sidebar() {
         )}>
           {collapsed ? (
             <div className="flex flex-col items-center gap-1.5">
-              <button
-                onClick={toggleTheme}
-                className="w-7 h-7 flex items-center justify-center rounded-[4px] text-text-secondary hover:text-text-primary hover:bg-brand-500/5 transition-colors duration-200 active:scale-90"
-                title="切换主题"
-              >
-                {theme === 'light' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-              </button>
-              <button
-                onClick={toggle}
-                className="w-7 h-7 flex items-center justify-center rounded-[4px] text-text-secondary hover:text-text-primary hover:bg-brand-500/5 transition-colors duration-200 active:scale-90"
-                title="展开侧边栏"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              {/* 折叠态：主题切换按钮，带 tooltip 提示 */}
+              <Tip text={theme === 'light' ? '切换至深色模式' : '切换至浅色模式'} side="right">
+                <button
+                  onClick={toggleTheme}
+                  className="w-7 h-7 flex items-center justify-center rounded-[4px] text-text-secondary hover:text-text-primary hover:bg-brand-500/5 transition-colors duration-200 active:scale-90"
+                >
+                  {theme === 'light' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+                </button>
+              </Tip>
+              {/* 折叠态：展开侧边栏按钮，带 tooltip 提示 */}
+              <Tip text="展开侧边栏" side="right">
+                <button
+                  onClick={toggle}
+                  className="w-7 h-7 flex items-center justify-center rounded-[4px] text-text-secondary hover:text-text-primary hover:bg-brand-500/5 transition-colors duration-200 active:scale-90"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </Tip>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 whitespace-nowrap">
@@ -335,13 +340,15 @@ export default function Sidebar() {
                 <Settings className="w-3 h-3" />
                 设置
               </NavLink>
-              <button
-                onClick={toggle}
-                className="w-6 h-6 flex items-center justify-center rounded-[4px] text-text-secondary hover:text-text-primary hover:bg-brand-500/5 transition-colors duration-200 active:scale-90"
-                title="收起侧边栏"
-              >
-                <ChevronLeft className="w-3 h-3" />
-              </button>
+              {/* 收起侧边栏按钮，带 tooltip 提示 */}
+              <Tip text="收起侧边栏" side="right">
+                <button
+                  onClick={toggle}
+                  className="w-6 h-6 flex items-center justify-center rounded-[4px] text-text-secondary hover:text-text-primary hover:bg-brand-500/5 transition-colors duration-200 active:scale-90"
+                >
+                  <ChevronLeft className="w-3 h-3" />
+                </button>
+              </Tip>
             </div>
           )}
         </div>
@@ -377,11 +384,12 @@ function SidebarItem({ to, label, subtitle, icon: Icon, shortcut, dotColor, coll
       initial="hidden"
       animate="visible"
     >
-      <NavLink
-        to={to}
-        end={end}
-        title={collapsed ? label : undefined}
-        onClick={() => { if (!isCurrentActive) soundPlayer.play('ui_nav_switch'); }}
+        {/* 折叠态使用 Tip 组件显示模块名，展开态由文字标签自解释 */}
+        <Tip text={collapsed ? label : undefined} side="right">
+          <NavLink
+            to={to}
+            end={end}
+            onClick={() => { if (!isCurrentActive) soundPlayer.play('ui_nav_switch'); }}
         className={({ isActive }) =>
           cn(
             'flex items-center gap-2 rounded-[var(--kb-radius-sm)] relative group',
@@ -438,7 +446,8 @@ function SidebarItem({ to, label, subtitle, icon: Icon, shortcut, dotColor, coll
             )}
           </>
         )}
-      </NavLink>
+          </NavLink>
+        </Tip>
     </motion.div>
   );
 }

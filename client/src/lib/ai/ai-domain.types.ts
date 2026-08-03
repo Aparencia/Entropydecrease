@@ -125,3 +125,102 @@ export interface SocraticDeepeningResult {
   tokensUsed?: number;
   latencyMs?: number;
 }
+
+/** F4: 错误模式条目——type 三值与网关 error_pattern_v1.txt 契约一致 */
+export interface ErrorPatternItem {
+  /** 错误类型：概念盲区 / 概念混淆 / 过度自信 */
+  type: 'concept_blind' | 'concept_confusion' | 'overconfidence';
+  /** 关联关键词（3 个） */
+  keywords: string[];
+  /** 错误原因简述 */
+  explanation: string;
+  /** 具体改进建议 */
+  suggestion: string;
+}
+
+/** F4: 错误模式分析结果 */
+export interface ErrorPatternResult {
+  patterns: ErrorPatternItem[];
+  /** 高频错误卡片及其出现次数 */
+  topOffenders: Array<{ flashcardId: string; count: number }>;
+  /** 整体趋势总结（≤ 50 字） */
+  summary: string;
+  model?: string;
+  tokensUsed?: number;
+}
+
+/** N1: 迷你测试题型 */
+export type QuizQuestionType = 'fill_blank' | 'choice' | 'short_answer';
+
+/** N1: 单道测试题 */
+export interface QuizQuestion {
+  type: QuizQuestionType;
+  /** 题干（填空题用 ____ 表示空格） */
+  question: string;
+  /** 选择题选项，其他题型为空数组 */
+  options: string[];
+  /** 正确答案（choice 为选项字母） */
+  answer: string;
+  /** 一句话解析 */
+  explanation: string;
+  /** 考察的概念关键词（错题定位用） */
+  concept: string;
+}
+
+/** N1: 迷你测试生成结果 */
+export interface QuizGenResult {
+  questions: QuizQuestion[];
+  model?: string;
+  tokensUsed?: number;
+}
+
+/** N5: 内容分层条目 */
+export interface ContentTierItem {
+  /** 原文片段摘录 */
+  text: string;
+  /** core 层专用：为何是核心 */
+  reason?: string;
+}
+
+/** N5: 内容三层分层结果（策略性遗忘标记） */
+export interface ContentTierResult {
+  core: ContentTierItem[];
+  support: ContentTierItem[];
+  detail: ContentTierItem[];
+  model?: string;
+  tokensUsed?: number;
+}
+
+/** N6: 单条概念冲突 */
+export interface ConceptConflict {
+  /** 历史理解中的矛盾表述 */
+  oldClaim: string;
+  /** 新笔记中的矛盾表述 */
+  newClaim: string;
+  /** 冲突涉及的概念主题 */
+  topic: string;
+  /** 先破后立的修正建议 */
+  suggestion: string;
+}
+
+/** N6: 概念冲突检测结果 */
+export interface ConflictDetectResult {
+  conflicts: ConceptConflict[];
+  model?: string;
+  tokensUsed?: number;
+}
+
+/** E1: 单个概念预检探测问题 */
+export interface PrecheckQuestion {
+  /** 探测性问题 */
+  question: string;
+  /** 想暴露的错误认知或误解 */
+  intent: string;
+}
+
+/** E1: 概念预检结果（错误概念先破后立） */
+export interface ConceptPrecheckResult {
+  questions: PrecheckQuestion[];
+  model?: string;
+  tokensUsed?: number;
+}

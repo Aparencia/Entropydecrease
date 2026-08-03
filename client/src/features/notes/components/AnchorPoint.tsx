@@ -1,21 +1,32 @@
 /**
- * @ai-context: 通用组件：AnchorPoint。
+ * @ai-context: AI 锚点侧边栏——展示锚点概念；N4 对 importance 最高的锚点
+ * 显示“适合费曼讲解”标记，一键创建费曼会话并跳转（奖赏回来：把难点变机会）。
+ * N6 在锚点下方展示概念冲突卡（新旧理解矛盾），引导“先破后立”。
  */
-import { useMemo } from 'react';
+import { useMemo, useCallback, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Anchor, Clock } from 'lucide-react';
+import { Anchor, Clock, GraduationCap, GitCompare, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useFeynmanStore } from '@/features/feynman/store/useFeynmanStore';
+import type { ConceptConflict } from '@/lib/ai/types';
 
 interface AnchorPointItem {
   id: string;
   concept: string;
   explanation?: string;
   createdAt: string;
+  /** N4 AI 评估的重要度 0-1，最高者推荐费曼讲解 */
+  importance?: number;
 }
 
 interface AnchorPointSidebarProps {
   noteId: string;
   anchorPoints: AnchorPointItem[];
+  /** N6: 概念冲突列表（可为空） */
+  conflicts?: ConceptConflict[];
+  /** N6: 关闭冲突提示 */
+  onDismissConflicts?: () => void;
 }
 
 function formatTimeAgo(dateStr: string): string {
@@ -34,11 +45,33 @@ const itemVariants = {
   exit: { opacity: 0, x: -8, transition: { duration: 0.2 } },
 };
 
-export function AnchorPointSidebar({ anchorPoints }: AnchorPointSidebarProps) {
+export function AnchorPointSidebar({ anchorPoints, conflicts = [], onDismissConflicts }: AnchorPointSidebarProps) {
+  const navigate = useNavigate();
+  const createFeynmanNote = useFeynmanStore((s) => s.createNote);
+  const [navigatingId, setNavigatingId] = useState<string | null>(null);
+
   const sorted = useMemo(
     () => [...anchorPoints].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [anchorPoints],
   );
+
+  // N4：importance 最高且 ≥0.6 的锚点推荐费曼讲解
+  const topAnchorId = useMemo(() => {
+    const candidates = sorted.filter((a) => (a.importance ?? 0) >= 0.6);
+    if (candidates.length === 0) return null;
+    return candidates.reduce((m, a) => ((a.importance ?? 0) > (m.importance ?? 0) ? a : m)).id;
+  }, [sorted]);
+
+  const handleFeynman = useCallback(async (anchor: AnchorPointItem) => {
+    if (navigatingId) return;
+    setNavigatingId(anchor.id);
+    try {
+      const id = await createFeynmanNote(anchor.concept);
+      navigate(`/feynman/${id}`);
+    } catch {
+      setNavigatingId(null); // 失败时恢复可点击，静默不打扰
+    }
+  }, [navigatingId, createFeynmanNote, navigate]);
 
   return (
     <div className="w-56 flex-shrink-0 border-l border-border/40 bg-bg-primary/80 overflow-y-auto">
@@ -95,6 +128,23 @@ export function AnchorPointSidebar({ anchorPoints }: AnchorPointSidebarProps) {
                   </p>
                 )}
 
+                {/* N4 费曼讲解引导：最高重要度锚点专属 */}
+                {anchor.id === topAnchorId && (
+                  <button
+                    onClick={() => handleFeynman(anchor)}
+                    disabled={navigatingId !== null}
+                    className={cn(
+                      'mt-1.5 ml-3 flex items-center gap-1 px-2 py-1 rounded-kb-full',
+                      'text-c1 font-medium bg-accent-50 text-accent-600',
+                      'hover:bg-accent-100 transition-colors duration-kb-fast',
+                      'disabled:opacity-60',
+                    )}
+                  >
+                    <GraduationCap className="w-3 h-3" strokeWidth={1.5} />
+                    {navigatingId === anchor.id ? '正在准备…' : '适合费曼讲解，试试？'}
+                  </button>
+                )}
+
                 {/* 时间 */}
                 <div className="flex items-center gap-1 pl-3">
                   <Clock className="w-2.5 h-2.5 text-text-tertiary/60" strokeWidth={1.5} />
@@ -105,6 +155,39 @@ export function AnchorPointSidebar({ anchorPoints }: AnchorPointSidebarProps) {
               </motion.div>
             ))}
           </AnimatePresence>
+        )}
+
+        {/* N6 概念冲突卡：新旧理解矛盾提示（先破后立） */}
+        {conflicts.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-border/30 flex flex-col gap-2">
+            <div className="flex items-center gap-1.5 px-2">
+              <GitCompare className="w-3.5 h-3.5 text-semantic-warning" strokeWidth={1.5} />
+              <span className="text-b3 font-medium text-text-primary">概念冲突</span>
+              {onDismissConflicts && (
+                <button
+                  onClick={onDismissConflicts}
+                  className="ml-auto p-0.5 rounded-full text-text-tertiary hover:text-text-primary transition-colors"
+                  aria-label="关闭冲突提示"
+                >
+                  <X className="w-3 h-3" strokeWidth={1.5} />
+                </button>
+              )}
+            </div>
+            {conflicts.map((c, i) => (
+              <div key={i} className="rounded-kb-md p-2.5 bg-bg-elevated border border-semantic-warning/30 shadow-kb-sm">
+                {c.topic && <p className="text-c1 font-semibold text-text-primary mb-1">{c.topic}</p>}
+                <p className="text-c1 text-text-secondary leading-relaxed">
+                  <span className="text-semantic-error/80">旧理解：</span>{c.oldClaim}
+                </p>
+                <p className="text-c1 text-text-secondary leading-relaxed mt-0.5">
+                  <span className="text-semantic-success/80">新内容：</span>{c.newClaim}
+                </p>
+                {c.suggestion && (
+                  <p className="text-c1 text-text-tertiary leading-relaxed mt-1 pt-1 border-t border-border/20">{c.suggestion}</p>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

@@ -25,6 +25,13 @@ logger = logging.getLogger(__name__)
 # Prompt 模板路径
 PROMPT_TEMPLATE_PATH = Path(__file__).parent.parent / "prompts" / "card_gen_v1.txt"
 
+# F1 多情境提取：变体附加指令（状态依赖记忆——同一知识点多情境编码增强提取鲁棒性）
+VARIANTS_ADDENDUM = (
+    "\n\n【多情境要求】对最重要的知识点，请额外生成 1 个表述不同的变体卡片："
+    "换一种问法（正反双向/不同语境/不同题型），答案指向同一知识点。"
+    "变体卡片的 type 字段以 '_variant' 结尾（如 'question_answer_variant'）。"
+)
+
 # 最大输入长度（字符数）
 MAX_INPUT_LENGTH = 8000
 
@@ -104,6 +111,8 @@ class CardGenChain:
         max_cards = options.get("max_cards", 10)
         difficulty = options.get("difficulty", "medium")
         card_type = options.get("card_type", "mixed")
+        # F1 多情境提取卡片：为知识点生成不同表述变体
+        variants = bool(options.get("variants", False))
 
         # 将知识点拼成文本，限制数量
         points_text = "\n".join(f"- {kp}" for kp in knowledge_points[:max_cards * 2])
@@ -115,6 +124,8 @@ class CardGenChain:
             card_type=card_type,
             note=points_text,
         )
+        if variants:
+            prompt += VARIANTS_ADDENDUM
 
         result = await self.provider.generate(
             prompt=prompt,
@@ -127,7 +138,9 @@ class CardGenChain:
 
         cards = try_parse_cards(result["content"])
         logger.info("阶段二生成完成：共 %d 张卡片", len(cards))
-        return cards[:max_cards]
+        # 多情境模式下允许变体超额，上限放宽 50%
+        cap = int(max_cards * 1.5) if variants else max_cards
+        return cards[:cap]
 
     async def run(
         self,

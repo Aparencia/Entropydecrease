@@ -12,6 +12,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { flashcardStore } from '@/lib/storage';
 import { importDeck, importDeckNew, importDeckOverwrite, importDeckSkip, importDeckMerge, exportDeck, downloadDeckFile } from '@/lib/storage/exportImport';
 import ImportPreviewModal from '../components/ImportPreviewModal';
+import RecoveryPackPanel from '../components/RecoveryPackPanel';
 import type { KbanDeckFile } from '@/types/models';
 import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
 import type { Flashcard, FlashcardDeck } from '@/types/models';
@@ -339,6 +340,8 @@ export default function FlashcardsPage() {
 
       {/* ── 牌组网格 ── */}
       <div className="flex-1 overflow-y-auto px-kb-md pb-kb-lg relative z-10">
+        {/* F5 中断恢复包：多日未复习时顶部展示回温包（内部自判条件） */}
+        <RecoveryPackPanel />
         {isLoading ? (
           <motion.div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-kb-md"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>

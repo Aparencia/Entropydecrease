@@ -8,6 +8,7 @@ import { Timer, Zap, Bell, Save, RotateCcw, GraduationCap, Sparkles, CheckCircle
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { Button, Card, Input, useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { Tip } from '@/components/ui/Tip';
 import { usePomodoroStore } from '../store/usePomodoroStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAIDuration } from '@/lib/ai/useAI';
@@ -303,19 +304,25 @@ export default function PomodoroSettingsPage() {
                 </p>
               </div>
               <div className="flex items-center gap-1">
+                {/* 编辑预设按钮，带 tooltip */}
+                <Tip text="编辑预设">
                 <button
                   onClick={() => { setEditingPreset(preset); setPresetEditorOpen(true); }}
                   className="p-1.5 rounded-md hover:bg-bg-tertiary text-text-tertiary hover:text-text-secondary transition-colors"
                 >
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
+                </Tip>
                 {!preset.builtin && (
+                  /* 删除预设按钮，带 tooltip */
+                  <Tip text="删除预设">
                   <button
                     onClick={() => deletePreset(preset.id)}
                     className="p-1.5 rounded-md hover:bg-semantic-error/10 text-text-tertiary hover:text-semantic-error transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
+                  </Tip>
                 )}
               </div>
             </div>

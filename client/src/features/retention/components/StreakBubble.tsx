@@ -31,14 +31,14 @@ export function StreakBubble({ streakState }: StreakBubbleProps) {
 
   return (
     <div className="relative">
-      {/* 气泡按钮 / Bubble button */}
+      {/* 气泡按钮 / Bubble button —— 浅色模式适配：加深背景色与文字色，确保白底上可读 */}
       <motion.button
         onClick={() => setExpanded(!expanded)}
         className={cn(
           'flex items-center gap-1.5 px-3 py-1.5 rounded-full',
-          'bg-orange-400/10 border border-orange-300/20',
-          'text-orange-300 text-xs font-medium',
-          'hover:bg-orange-400/20 transition-colors',
+          'bg-orange-100 dark:bg-orange-400/10 border border-orange-200 dark:border-orange-300/20',
+          'text-orange-600 dark:text-orange-300 text-xs font-medium',
+          'hover:bg-orange-200 dark:hover:bg-orange-400/20 transition-colors',
         )}
         whileTap={prefersReduced ? {} : { scale: 0.95 }}
       >

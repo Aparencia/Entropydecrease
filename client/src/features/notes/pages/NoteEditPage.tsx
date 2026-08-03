@@ -25,6 +25,7 @@ import { useCaptureStore } from '@/stores/useCaptureStore';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { RescuePanel } from '@/components/RescuePanel';
 import { useStuckTimer } from '@/hooks/useStuckTimer';
+import { assistantEventBus } from '@/features/assistant/lib/eventBus';
 import { NoteEditHeader } from '../components/NoteEditHeader';
 import { EditorToolbar } from '../components/EditorToolbar';
 import { AISummaryModal } from '../components/AISummaryModal';
@@ -33,6 +34,12 @@ import { useNoteAI } from '../hooks/useNoteAI';
 import { useEditorContextMenu } from '../hooks/useEditorContextMenu';
 import { useAIAnchorPoint } from '@/lib/ai/hooks/useAIAnchorPoint';
 import { AnchorPointSidebar } from '../components/AnchorPoint';
+import { ClosedBookTest } from '../components/ClosedBookTest';
+import { ContentTierModal } from '../components/ContentTierModal';
+import { useConceptConflict } from '../hooks/useConceptConflict';
+import { Tip } from '@/components/ui/Tip';
+import { EyeOff, Layers } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export default function NoteEditPage() {
   const { id } = useParams<{ id: string }>();
@@ -45,6 +52,11 @@ export default function NoteEditPage() {
   const stuckTimer = useStuckTimer({
     onThreshold: () => {
       window.dispatchEvent(new Event('rescue:show-incubation'));
+      // @ai-context: T4 孵化效应——同步发射助手事件，驱动学伴主动触发气泡
+      assistantEventBus.emit('stuck:incubation', {
+        currentHour: new Date().getHours(),
+        stuckSource: 'note',
+      });
     },
   });
 
@@ -63,6 +75,25 @@ export default function NoteEditPage() {
 
   const ai = useNoteAI(editor, noteId);
 
+  // === N2 合书测试模式 ===
+  const [closedBook, setClosedBook] = useState(false);
+
+  // === N5 策略性遗忘标记 ===
+  const [tierOpen, setTierOpen] = useState(false);
+
+  // === N3 笔记健康度：跟踪编辑器实时文本供工具栏指示器计算 ===
+  const [healthText, setHealthText] = useState('');
+  useEffect(() => {
+    if (!editor) return;
+    setHealthText(editor.getText());
+    const onHealthUpdate = () => setHealthText(editor.getText());
+    editor.on('update', onHealthUpdate);
+    return () => { editor.off('update', onHealthUpdate); };
+  }, [editor]);
+
+  // === N6 概念冲突检测：内容稳定后自动比对新旧理解 ===
+  const { conflicts, dismiss: dismissConflicts } = useConceptConflict(noteId, healthText, notes);
+
   const ctxMenu = useEditorContextMenu({
     editor,
     disabled: note?.template === 'cornell',
@@ -80,7 +111,7 @@ export default function NoteEditPage() {
   const anchorActiveTimeRef = useRef(0); // 累计活跃编辑时间（毫秒）
   const anchorLastEditRef = useRef(Date.now()); // 上次编辑时间戳
   const anchorTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [anchorPoints, setAnchorPoints] = useState<Array<{ id: string; concept: string; explanation?: string; createdAt: string }>>([] );
+  const [anchorPoints, setAnchorPoints] = useState<Array<{ id: string; concept: string; explanation?: string; createdAt: string; importance?: number }>>([]);
 
   // 编辑器活跃跟踪定时器：每 5 秒检查累计活跃时间
   useEffect(() => {
@@ -103,12 +134,13 @@ export default function NoteEditPage() {
         if (text.trim().length > 100) {
           const result = await anchorAI.generateAnchorPoints(noteId, text);
           if (result?.anchorPoints) {
-            // 将 AI 锚点转换为侧边栏组件所需格式
+            // 将 AI 锚点转换为侧边栏组件所需格式（N4：携带 importance 供费曼引导）
             const mapped = result.anchorPoints.map((ap, i) => ({
               id: `${noteId}-anchor-${Date.now()}-${i}`,
               concept: ap.concept,
               explanation: ap.explanation,
               createdAt: new Date().toISOString(),
+              importance: ap.importance,
             }));
             setAnchorPoints((prev) => [...prev, ...mapped]);
           }
@@ -266,7 +298,7 @@ export default function NoteEditPage() {
 
       {/* 工具栏（康奈尔/自由画布/思维导图模式隐藏） */}
       {!isCornell && !isFree && !isMindmap && (
-        <EditorToolbar editor={editor} onPickImage={() => imageInputRef.current?.click()} />
+        <EditorToolbar editor={editor} onPickImage={() => imageInputRef.current?.click()} healthContent={healthText} />
       )}
 
       {/* 隐藏的图片上传 input */}
@@ -288,8 +320,12 @@ export default function NoteEditPage() {
           <MindmapEditor data={mindmapData} onChange={handleMindmapChange} />
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto px-kb-md py-kb-lg bg-[rgba(255,253,250,0.3)] dark:bg-[rgba(16,24,44,0.5)]">
-          <div className="max-w-[720px] mx-auto" onContextMenu={ctxMenu.onContextMenu}>
+        <div className="relative flex-1 min-h-0">
+        <div className="h-full overflow-y-auto px-kb-md py-kb-lg bg-[rgba(255,253,250,0.3)] dark:bg-[rgba(16,24,44,0.5)]">
+          <div
+            className={cn('max-w-[720px] mx-auto transition-all duration-300', closedBook && 'blur-md select-none pointer-events-none')}
+            onContextMenu={closedBook ? undefined : ctxMenu.onContextMenu}
+          >
             {isCornell ? (
               <CornellLayout
                 content={(() => { try { return JSON.parse(note.content || '{}'); } catch { return {}; } })()}
@@ -314,6 +350,38 @@ export default function NoteEditPage() {
             )}
           </div>
         </div>
+        {/* N2 合书测试：遮罩层/入口按钮（康奈尔布局不适用） */}
+        {closedBook ? (
+          <div className="absolute inset-0 z-20 overflow-y-auto bg-bg-primary/40">
+            <ClosedBookTest
+              noteTitle={note.title}
+              noteText={healthText}
+              onReveal={() => setClosedBook(false)}
+              onClose={() => setClosedBook(false)}
+            />
+          </div>
+        ) : !isCornell && (
+          <div className="absolute right-4 top-4 z-10 flex flex-col gap-2">
+          <Tip text="合书测试：隐藏笔记，凭回忆自测" side="left">
+            <button
+              onClick={() => setClosedBook(true)}
+              className="p-2 rounded-full bg-bg-primary/80 backdrop-blur-sm border border-border/40 text-text-tertiary hover:text-brand-600 hover:border-brand-300 shadow-sm transition-all duration-200"
+            >
+              <EyeOff className="w-4 h-4" strokeWidth={1.5} />
+            </button>
+          </Tip>
+          {/* N5 内容分层入口：策略性遗忘标记 */}
+          <Tip text="内容分层：聚焦核心概念" side="left">
+            <button
+              onClick={() => setTierOpen(true)}
+              className="p-2 rounded-full bg-bg-primary/80 backdrop-blur-sm border border-border/40 text-text-tertiary hover:text-brand-600 hover:border-brand-300 shadow-sm transition-all duration-200"
+            >
+              <Layers className="w-4 h-4" strokeWidth={1.5} />
+            </button>
+          </Tip>
+          </div>
+        )}
+        </div>
       )}
 
       {/* 选中文本右键菜单 */}
@@ -328,9 +396,9 @@ export default function NoteEditPage() {
       )}
     </div>
 
-    {/* AI 记忆锚点侧边栏 — 活跃编辑 12 分钟后自动生成 */}
-    {anchorPoints.length > 0 && noteId && (
-      <AnchorPointSidebar noteId={noteId} anchorPoints={anchorPoints} />
+    {/* AI 记忆锚点侧边栏 — 活跃编辑 12 分钟后自动生成；N6 冲突卡也在此展示 */}
+    {(anchorPoints.length > 0 || conflicts.length > 0) && noteId && (
+      <AnchorPointSidebar noteId={noteId} anchorPoints={anchorPoints} conflicts={conflicts} onDismissConflicts={dismissConflicts} />
     )}
 
     {/* 回声定位侧边栏 */}
@@ -382,6 +450,8 @@ export default function NoteEditPage() {
         onCancelStream={ai.cancelStream}
       />
     )}
+    {/* N5 内容分层弹窗（策略性遗忘标记） */}
+    <ContentTierModal open={tierOpen} onClose={() => setTierOpen(false)} noteText={healthText} />
     </div>
   );
 }

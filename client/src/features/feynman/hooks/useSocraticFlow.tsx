@@ -12,6 +12,7 @@ import { useAISocratic } from '@/lib/ai/hooks/useAISocratic';
 import { useFeynmanStore } from '../store/useFeynmanStore';
 import type { BrainstormIdea } from '../components/BrainstormPanel';
 import type { DeepeningAngle } from '../components/DeepeningZone';
+import { collectWeakDimensions } from '../lib/collectWeakDimensions';
 import type { SocraticRound } from '../types';
 import {
   GitCompareArrows, Ban, Wrench, Landmark, Flame,
@@ -72,6 +73,7 @@ export function useSocraticFlow() {
   // 导致笔记列表/薄弱点等任意变化都重渲染苏格拉底会话页（P1-5 性能修复）
   const createNote = useFeynmanStore((s) => s.createNote);
   const updateNote = useFeynmanStore((s) => s.updateNote);
+  const addWeakPoint = useFeynmanStore((s) => s.addWeakPoint);
   const { brainstorm: brainstormAI, question: questionAI, evaluate: evaluateAI, deepening: deepeningAI } = useAISocratic();
 
   // ── State ──
@@ -262,6 +264,12 @@ export function useSocraticFlow() {
 
       const noteId = await createNote(topic);
       await updateNote(noteId, { explanation, status: 'completed', currentStep: 4 });
+
+      // E4 苏格拉底-费曼数据互通：对话评估中得分 <6 的维度写入该笔记薄弱点
+      for (const text of collectWeakDimensions(rounds)) {
+        await addWeakPoint(noteId, { text, position: { start: 0, end: 0 }, mastered: false });
+      }
+
       toast({ type: 'success', message: '已保存为浮出水面概念！' });
 
       setExiting(true);
@@ -270,7 +278,7 @@ export function useSocraticFlow() {
       toast({ type: 'error', message: '保存失败，请稍后重试' });
       setSavingNote(false);
     }
-  }, [topic, selected, rounds, createNote, updateNote, toast, navigate]);
+  }, [topic, selected, rounds, createNote, updateNote, addWeakPoint, toast, navigate]);
 
   const handleGoBack = useCallback(() => {
     if (phase === 'brainstorm') {

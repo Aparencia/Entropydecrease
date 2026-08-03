@@ -33,6 +33,10 @@ import { feature as sessionAnalyzeFeature } from './handlers/sessionAnalyzeHandl
 import { feature as videoAnalyzeFeature } from './handlers/videoAnalyzeHandler.js';
 import { feature as mergeNotesFeature } from './handlers/mergeNotesHandler.js';
 import { feature as errorPatternFeature } from './handlers/errorPatternHandler.js';
+import { feature as quizGenFeature } from './handlers/quizHandler.js';
+import { feature as contentTierFeature } from './handlers/contentTierHandler.js';
+import { feature as conflictDetectFeature } from './handlers/conflictDetectHandler.js';
+import { feature as conceptPrecheckFeature } from './handlers/conceptPrecheckHandler.js';
 import { feature as progressNarrativeFeature } from './handlers/progressNarratorHandler.js';
 
 // ================================================================
@@ -57,6 +61,10 @@ const features: AIFeatureDef[] = [
   videoAnalyzeFeature,
   mergeNotesFeature,
   errorPatternFeature,
+  quizGenFeature,
+  contentTierFeature,
+  conflictDetectFeature,
+  conceptPrecheckFeature,
   progressNarrativeFeature,
 ];
 

@@ -44,6 +44,12 @@ TIMEOUT_CONFIG: dict[str, int] = {
     "error_pattern": 20,
     # N1: 课程级迷你测试生成（JSON Mode，生成 5-10 题耗时较长）
     "quiz_gen": 30,
+    # N5: 内容分层（JSON Mode，三层摘录）
+    "content_tier": 30,
+    # N6: 概念冲突检测（JSON Mode，跨文本比对）
+    "conflict_detect": 30,
+    # E1: 概念预检（JSON Mode，1-2 个探测问题）
+    "concept_precheck": 30,
 }
 
 # ============================================================
@@ -81,10 +87,17 @@ RATE_LIMITS: dict[str, int] = {
     "multimodal_analyze": 5,
     # Path C: 视频分析（单次成本最高，严格限制）
     "video_analyze": 3,
-    # 学伴对话（流式 SSE，对话轮次较多，适度放宽）
-    "chat": 20,
+    # 学伴对话（流式 SSE）：多轮闲聊场景下单次会话即可超过 20 条，
+    # 原值导致内测用户当日配额耗尽后消息持续 429（"有概率发送失败"），放宽至 100
+    "chat": 100,
     # F4: 黄金错误模式分析（非高频场景，适度限制）
     "error_pattern": 10,
     # N1: 课程级迷你测试生成（生成成本高，严格限频）
     "quiz_gen": 5,
+    # N5: 内容分层（生成成本高，严格限频）
+    "content_tier": 5,
+    # N6: 概念冲突检测（生成成本高，严格限频）
+    "conflict_detect": 5,
+    # E1: 概念预检（生成成本高，严格限频）
+    "concept_precheck": 5,
 }

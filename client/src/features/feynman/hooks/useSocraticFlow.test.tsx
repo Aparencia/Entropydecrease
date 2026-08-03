@@ -49,10 +49,11 @@ vi.mock('@/lib/ai/hooks/useAISocratic', () => ({
 // Mock feynman store 的 action
 const mockCreateNote = vi.fn().mockResolvedValue('note-id-123');
 const mockUpdateNote = vi.fn().mockResolvedValue(undefined);
+const mockAddWeakPoint = vi.fn().mockResolvedValue('wp-id-1');
 
 vi.mock('../store/useFeynmanStore', () => ({
   useFeynmanStore: (selector: (s: unknown) => unknown) => {
-    const state = { createNote: mockCreateNote, updateNote: mockUpdateNote };
+    const state = { createNote: mockCreateNote, updateNote: mockUpdateNote, addWeakPoint: mockAddWeakPoint };
     // 支持 selector 模式（zustand 风格）
     if (typeof selector === 'function') return selector(state);
     return state;

@@ -39,7 +39,9 @@ export function SceneTransition({ children }: SceneTransitionProps) {
   useFrame((_, delta) => {
     if (!isTransitioning) return;
 
-    transitionProgress.current += delta / TRANSITION_DURATION;
+    // 防止浏览器节流导致的帧时间尖峰，最大允许 100ms
+    const safeDelta = Math.min(delta, 0.1);
+    transitionProgress.current += safeDelta / TRANSITION_DURATION;
 
     if (transitionProgress.current >= 1) {
       transitionProgress.current = 1;

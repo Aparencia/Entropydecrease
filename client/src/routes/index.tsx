@@ -15,6 +15,11 @@ if (typeof window !== 'undefined') {
       prefetchRoute(() => import('@/features/dashboard/pages/DashboardPage'));
       prefetchRoute(() => import('@/features/notes/pages/NoteEditPage'));
       prefetchRoute(() => import('@/features/pomodoro/pages/PomodoroPage'));
+      // 修复：增加高频页面预加载，减少模块切换时的加载等待与视觉跳变
+      prefetchRoute(() => import('@/features/notes/pages/NotesPage'));
+      prefetchRoute(() => import('@/features/flashcards/pages/FlashcardsPage'));
+      prefetchRoute(() => import('@/features/feynman/pages/FeynmanPage'));
+      prefetchRoute(() => import('@/pages/SettingsPage'));
     }, 2000); // 启动2秒后开始预加载
   });
 }
@@ -33,6 +38,7 @@ const StudySessionPage = lazy(() => import('@/features/flashcards/pages/StudySes
 const GenerativeReviewPage = lazy(() => import('@/features/flashcards/pages/GenerativeReviewPage'));
 const FeynmanPage = lazy(() => import('@/features/feynman/pages/FeynmanPage'));
 const FeynmanSessionPage = lazy(() => import('@/features/feynman/pages/FeynmanSessionPage'));
+const FeynmanGraphPage = lazy(() => import('@/features/feynman/pages/FeynmanGraphPage'));
 const SocraticSessionPage = lazy(() => import('@/features/feynman/pages/SocraticSessionPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 const AnalyticsPage = lazy(() => import('@/features/dashboard/pages/AnalyticsPage'));
@@ -46,13 +52,19 @@ const VerifyEmailPage = lazy(() => import('@/pages/VerifyEmail'));
 const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'));
 const TermsOfService = lazy(() => import('@/pages/TermsOfService'));
 
-// Loading fallback
+// 骨架屏加载占位：用 animate-pulse 灰色块替代旋转 spinner，减少模块切换时的视觉跳变
 function PageLoader() {
   return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="flex flex-col items-center gap-kb-md">
-        <div className="w-8 h-8 border-2 border-brand-200 border-t-brand-600 rounded-kb-full animate-spin" />
-        <span className="text-b2 text-text-tertiary">加载中...</span>
+    <div className="flex flex-col gap-4 p-6 min-h-[60vh] animate-pulse">
+      {/* 模拟标题行 */}
+      <div className="h-6 w-1/3 rounded bg-gray-200/30 dark:bg-white/10" />
+      {/* 模拟内容块 */}
+      <div className="h-4 w-2/3 rounded bg-gray-200/20 dark:bg-white/5" />
+      <div className="h-4 w-1/2 rounded bg-gray-200/20 dark:bg-white/5" />
+      {/* 模拟卡片区域 */}
+      <div className="grid grid-cols-2 gap-4 mt-4">
+        <div className="h-24 rounded-lg bg-gray-200/20 dark:bg-white/5" />
+        <div className="h-24 rounded-lg bg-gray-200/20 dark:bg-white/5" />
       </div>
     </div>
   );
@@ -82,6 +94,7 @@ const routes: RouteObject[] = [
       { path: '/flashcards/:deckId/study', element: <SuspenseWrapper><StudySessionPage /></SuspenseWrapper> },
       { path: '/flashcards/:deckId/generative-review', element: <SuspenseWrapper><GenerativeReviewPage /></SuspenseWrapper> },
       { path: '/feynman', element: <SuspenseWrapper><FeynmanPage /></SuspenseWrapper> },
+      { path: '/feynman/graph', element: <SuspenseWrapper><FeynmanGraphPage /></SuspenseWrapper> },
       { path: '/feynman/:sessionId', element: <SuspenseWrapper><FeynmanSessionPage /></SuspenseWrapper> },
       { path: '/socratic', element: <SuspenseWrapper><SocraticSessionPage /></SuspenseWrapper> },
       { path: '/settings', element: <SuspenseWrapper><SettingsPage /></SuspenseWrapper> },

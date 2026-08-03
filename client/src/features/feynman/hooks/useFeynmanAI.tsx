@@ -16,6 +16,7 @@ import { useContextMenu } from '@/lib/contextMenu';
 import { useAIEvaluate, useAIFeynmanQuestion, useAIFeynmanEvaluateAnswers } from '@/lib/ai/useAI';
 import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 import { useStuckTimer } from '@/hooks/useStuckTimer';
+import { assistantEventBus } from '@/features/assistant/lib/eventBus';
 import { feynmanAIResultStore } from '@/lib/storage';
 import { createWithLog, updateWithLog } from '@/lib/storage/writeWithLog';
 import type { FeynmanNote, FeynmanAIResult } from '@/types/models';
@@ -126,6 +127,11 @@ export function useFeynmanAI(note: FeynmanNote | null) {
   const stuckTimer = useStuckTimer({
     onThreshold: () => {
       window.dispatchEvent(new Event('rescue:show-incubation'));
+      // @ai-context: T4 孵化效应——同步发射助手事件，驱动学伴主动触发气泡
+      assistantEventBus.emit('stuck:incubation', {
+        currentHour: new Date().getHours(),
+        stuckSource: 'feynman',
+      });
     },
   });
 

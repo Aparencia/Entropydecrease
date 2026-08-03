@@ -17,7 +17,8 @@ export interface AuroraModuleEntityProps {
   orbitSpeed: number;
   initialAngle?: number;
   showLabel?: boolean;
-  onClick?: (id: ModuleId) => void;
+  /** 点击回调，携带行星当前实时世界坐标（用于 flyTo 飞向实际位置而非固定坐标） */
+  onClick?: (id: ModuleId, currentPosition?: [number, number, number]) => void;
   onHover?: (id: ModuleId | null) => void;
   isActive?: boolean;
 }
@@ -38,6 +39,9 @@ const PLANET_CONFIGS: Record<ModuleId, PlanetConfig> = {
   inspiration: { radius: 0.4, color: '#F472B6', emissive: '#EC4899', label: '萤火海沟' },
   classroom: { radius: 0.55, color: '#14B8A6', emissive: '#0D9488', label: '回声定位' },
 };
+
+/** 轨道位置最大距离约束（兜底），超出则等比缩放回安全范围 */
+const MAX_DISTANCE = 6;
 
 export function AuroraModuleEntity({
   id,
@@ -77,33 +81,44 @@ export function AuroraModuleEntity({
   useFrame((_, delta) => {
     if (!groupRef.current) return;
 
+    // 防止浏览器节流（如标签切换）导致的帧时间尖峰，最大允许 100ms
+    const safeDelta = Math.min(delta, 0.1);
+
     // 悬浮或激活时停止公转
     if (!hovered && !isActive) {
-      angleRef.current += delta * orbitSpeed;
+      angleRef.current += safeDelta * orbitSpeed;
     }
 
-    const x = Math.cos(angleRef.current) * orbitRadius;
-    const z = Math.sin(angleRef.current) * orbitRadius;
+    let x = Math.cos(angleRef.current) * orbitRadius;
+    let z = Math.sin(angleRef.current) * orbitRadius;
     const y = Math.sin(angleRef.current * 0.5) * 0.5; // 轻微上下浮动
+
+    // 轨道位置 clamp 兜底：防止长时间运行或异常导致行星漂出可视范围
+    const dist = Math.sqrt(x * x + z * z);
+    if (dist > MAX_DISTANCE) {
+      const scale = MAX_DISTANCE / dist;
+      x *= scale;
+      z *= scale;
+    }
 
     groupRef.current.position.set(x, y, z);
 
     // 悬浮时放大
     const targetScale = hovered || isActive ? 1.4 : 1.0;
     const currentScale = groupRef.current.scale.x;
-    const newScale = THREE.MathUtils.lerp(currentScale, targetScale, delta * 5);
+    const newScale = THREE.MathUtils.lerp(currentScale, targetScale, safeDelta * 5);
     groupRef.current.scale.setScalar(newScale);
 
     // 行星自转
     if (meshRef.current) {
-      meshRef.current.rotation.y += delta * 0.5;
+      meshRef.current.rotation.y += safeDelta * 0.5;
     }
 
     // 光环透明度动画
     if (ringRef.current) {
       const ringMat = ringRef.current.material as THREE.MeshBasicMaterial;
       const targetOpacity = hovered || isActive ? 0.6 : 0;
-      ringMat.opacity = THREE.MathUtils.lerp(ringMat.opacity, targetOpacity, delta * 5);
+      ringMat.opacity = THREE.MathUtils.lerp(ringMat.opacity, targetOpacity, safeDelta * 5);
     }
   });
 
@@ -119,8 +134,15 @@ export function AuroraModuleEntity({
     document.body.style.cursor = 'default';
   };
 
+  // 点击时获取行星当前实时世界坐标，而非使用固定坐标（修复漂移后 flyTo 目标偏移问题）
   const handleClick = () => {
-    onClick?.(id);
+    let worldPos: [number, number, number] | undefined;
+    if (groupRef.current) {
+      const wp = new THREE.Vector3();
+      groupRef.current.getWorldPosition(wp);
+      worldPos = [wp.x, wp.y, wp.z];
+    }
+    onClick?.(id, worldPos);
   };
 
   return (

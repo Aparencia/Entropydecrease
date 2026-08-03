@@ -10,11 +10,13 @@
 import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { Tip } from '@/components/ui/Tip';
 import { Pause, Play, Square, Volume2, VolumeX } from 'lucide-react';
 import { usePomodoroStore } from '../store/usePomodoroStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { SPRING, BEAT } from '@/lib/animation/springConfig';
+import { AnchorReminderOverlay } from './AnchorReminderOverlay';
 
 const SIZE = 280;
 const STROKE_WIDTH = 8;
@@ -212,6 +214,9 @@ export default function ImmersiveTimer({
         </div>
       </div>
 
+      {/* T2 记忆锚点提醒浮层 — work 阶段每 12 分钟一句话要点，15 秒自动消失 */}
+      <AnchorReminderOverlay />
+
       {/* 底部操作区 — 极简 icon-only */}
       <motion.div
         className="absolute bottom-16 flex items-center gap-6"
@@ -222,6 +227,8 @@ export default function ImmersiveTimer({
         {/* 背景音开关 + 音量调节 */}
         {onToggleWhiteNoise && (
           <div className="flex items-center gap-2">
+            {/* 沉浸模式背景音开关，带 tooltip */}
+            <Tip text={whiteNoiseEnabled ? '关闭背景音' : '开启背景音'}>
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
@@ -240,6 +247,7 @@ export default function ImmersiveTimer({
                 ? <Volume2 className="w-4 h-4" strokeWidth={1.5} />
                 : <VolumeX className="w-4 h-4" strokeWidth={1.5} />}
             </motion.button>
+            </Tip>
             <AnimatePresence>
               {whiteNoiseEnabled && onWhiteNoiseVolume && (
                 <motion.input
@@ -262,7 +270,8 @@ export default function ImmersiveTimer({
           </div>
         )}
 
-        {/* 暂停/继续 */}
+        {/* 暂停/继续按钮，带 tooltip */}
+        <Tip text={isRunning ? '暂停' : '继续'}>
         <motion.button
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
@@ -278,8 +287,10 @@ export default function ImmersiveTimer({
             ? <Pause className="w-5 h-5" strokeWidth={1.5} />
             : <Play className="w-5 h-5 ml-0.5" strokeWidth={1.5} />}
         </motion.button>
+        </Tip>
 
-        {/* 停止 */}
+        {/* 停止按钮，带 tooltip */}
+        <Tip text="停止">
         <motion.button
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
@@ -293,6 +304,7 @@ export default function ImmersiveTimer({
         >
           <Square className="w-4 h-4" strokeWidth={1.5} />
         </motion.button>
+        </Tip>
       </motion.div>
     </div>
   );

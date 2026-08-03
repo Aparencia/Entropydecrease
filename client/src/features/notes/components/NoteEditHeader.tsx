@@ -9,6 +9,7 @@
 import type { Ref } from 'react';
 import { ArrowLeft, Save, HelpCircle, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Tip } from '@/components/ui/Tip';
 import { AIButton } from '@/components/ui/AIButton';
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
@@ -74,6 +75,8 @@ export function NoteEditHeader({
 }: NoteEditHeaderProps) {
   return (
     <div className="relative z-10 flex items-center gap-kb-sm px-kb-md py-3 border-b border-border/50 flex-shrink-0">
+      {/* 返回按钮，带 tooltip */}
+      <Tip text="返回">
       <button
         onClick={onBack}
         className="p-1.5 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
@@ -81,6 +84,7 @@ export function NoteEditHeader({
       >
         <ArrowLeft className="w-icon-md h-icon-md" strokeWidth={1.5} />
       </button>
+      </Tip>
 
       <input
         ref={titleRef}

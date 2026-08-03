@@ -9,7 +9,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Modal, Input, EmptyState, Skeleton, ContextMenu } from '@/components/ui';
 import type { ContextMenuGroup } from '@/components/ui';
-import { Plus, BookOpen, Trash2, MessageCircle, Lightbulb, SearchCheck } from 'lucide-react';
+import { Plus, BookOpen, Trash2, MessageCircle, Lightbulb, SearchCheck, Network } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useFeynmanStore } from '../store/useFeynmanStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -145,6 +145,15 @@ export default function FeynmanPage() {
           <h1 className="text-h1 font-semibold text-text-primary">浮出水面</h1>
           <p className="text-b2 text-text-tertiary mt-0.5">用讲解检验理解，以简化证明掌握</p>
         </div>
+        <div className="flex items-center gap-2">
+          {/* E3 概念网络入口 */}
+          <button
+            onClick={() => navigate('/feynman/graph')}
+            title="概念网络"
+            className="p-2 rounded-full text-text-tertiary hover:text-amber-500 hover:bg-bg-tertiary transition-colors"
+          >
+            <Network className="w-5 h-5" strokeWidth={1.5} />
+          </button>
         <motion.button
           whileHover={{ scale: 1.03, filter: 'drop-shadow(0 0 8px rgba(245,158,11,0.3))' }}
           whileTap={{ scale: 0.95 }}
@@ -155,6 +164,7 @@ export default function FeynmanPage() {
           <Plus className="w-icon-sm h-icon-sm" strokeWidth={2} />
           新学习
         </motion.button>
+        </div>
       </motion.div>
 
       {/* ── 会话列表 ── */}

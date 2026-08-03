@@ -12,6 +12,7 @@ import { Highlighter, X } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useFeynmanStagger } from './feynmanAnimations';
+import { FeynmanRecorder } from './FeynmanRecorder';
 
 // ── 步骤 1: 选择概念 ──
 
@@ -64,6 +65,8 @@ export function StepConcept({ concept, explanation, onExplanationChange }: StepC
             )}
           />
         </div>
+        {/* E2 口头讲解入口（ASR 不可用时自动隐藏） */}
+        <FeynmanRecorder explanation={explanation} onExplanationChange={onExplanationChange} />
       </motion.div>
       <motion.div variants={item} className={cn(
         'p-kb-md rounded-kb-lg',

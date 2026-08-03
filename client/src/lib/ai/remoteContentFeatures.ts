@@ -45,11 +45,12 @@ export async function httpSummarizeNote(noteContent: string, options?: Summarize
 // ── POST /api/v1/ai/generate-cards ─────────────────────────
 export async function httpGenerateFlashcards(noteContent: string, options?: FlashcardOptions): Promise<FlashcardResult> {
   try {
-    // 构建后端 CardGenRequest: { note, options: { max_cards, difficulty, card_type } }
+    // 构建后端 CardGenRequest: { note, options: { max_cards, difficulty, card_type, variants } }
     const backendOptions: Record<string, unknown> = {};
     if (options?.count != null) backendOptions.max_cards = options.count;
     if (options?.difficulty != null) backendOptions.difficulty = options.difficulty;
     if (options?.cardType != null) backendOptions.card_type = options.cardType;
+    if (options?.variants) backendOptions.variants = true;
 
     const result = await aiClient.post<{
       cards: Array<{ front: string; back: string; type: string; confidence: number }>;

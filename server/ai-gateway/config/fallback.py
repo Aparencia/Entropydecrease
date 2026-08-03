@@ -57,6 +57,12 @@ PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
     "error_pattern": ["qwen", "glm", "fallback"],
     # N1: 课程级迷你测试生成（Qwen 为主，GLM 备选）
     "quiz_gen": ["qwen", "glm", "fallback"],
+    # N5: 内容分层（Qwen 为主，GLM 备选）
+    "content_tier": ["qwen", "glm", "fallback"],
+    # N6: 概念冲突检测（Qwen 为主，GLM 备选）
+    "conflict_detect": ["qwen", "glm", "fallback"],
+    # E1: 概念预检（Qwen 为主，GLM 备选）
+    "concept_precheck": ["qwen", "glm", "fallback"],
 }
 
 

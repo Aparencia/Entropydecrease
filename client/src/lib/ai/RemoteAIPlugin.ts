@@ -4,6 +4,9 @@ import type { AIPlugin, SummarizeResult, FlashcardResult, EvaluateResult, Durati
   TagContentResult, SortResult,
   AnchorPoint, BrainstormIdea, ChatMessage, SocraticEvaluateResult, SocraticDeepeningResult,
   PredictionPrompt, RescueContext, ResourceLink,
+  ErrorPatternResult, QuizGenResult,
+  ContentTierResult, ConflictDetectResult,
+ConceptPrecheckResult,
 } from './types';
 import { aiClient } from '../http/apiClient';
 import {
@@ -14,6 +17,9 @@ import {
   httpEvaluateExplanation, httpRecommendDuration,
   httpGenerateFeynmanQuestions, httpEvaluateFeynmanAnswers,
   httpGenerateAnchorPoint, httpPredictQuestion, httpRescue,
+  httpAnalyzeErrorPatterns, httpGenerateQuiz,
+  httpContentTier, httpConflictDetect,
+  httpConceptPrecheck,
 } from './remoteLearningFeatures';
 import {
   httpSocraticBrainstorm, httpSocraticQuestion,
@@ -102,6 +108,26 @@ export class RemoteAIPlugin implements AIPlugin {
 
   async rescue(context: RescueContext): Promise<{ hints: string[]; resources: ResourceLink[]; alternativeApproach?: string }> {
     return httpRescue(context);
+  }
+
+  async analyzeErrorPatterns(goldenErrors: Array<{ flashcardId: string; correctAnswer: string; userAnswer: string }>): Promise<ErrorPatternResult> {
+    return httpAnalyzeErrorPatterns(goldenErrors);
+  }
+
+  async generateQuiz(notesText: string): Promise<QuizGenResult> {
+    return httpGenerateQuiz(notesText);
+  }
+
+  async contentTier(notesText: string): Promise<ContentTierResult> {
+    return httpContentTier(notesText);
+  }
+
+  async conflictDetect(newNoteText: string, historyText: string): Promise<ConflictDetectResult> {
+    return httpConflictDetect(newNoteText, historyText);
+  }
+
+  async conceptPrecheck(concept: string, weakHistory?: string): Promise<ConceptPrecheckResult> {
+    return httpConceptPrecheck(concept, weakHistory);
   }
 
   // ── 流式方法实现（SSE，payload 组装 + aiClient.postStream） ─

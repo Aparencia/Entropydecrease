@@ -100,6 +100,14 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
     "chat": ("qwen", "free"),
     # F4: 黄金错误模式分析（JSON Mode，Qwen 通用模型）
     "error_pattern": ("qwen", "free"),
+    # N1: 课程级迷你测试生成（JSON Mode，Qwen 通用模型）
+    "quiz_gen": ("qwen", "free"),
+    # N5: 内容分层（JSON Mode，Qwen 通用模型）
+    "content_tier": ("qwen", "free"),
+    # N6: 概念冲突检测（JSON Mode，Qwen 通用模型）
+    "conflict_detect": ("qwen", "free"),
+    # E1: 概念预检（JSON Mode，Qwen 通用模型）
+    "concept_precheck": ("qwen", "free"),
 }
 
 # ============================================================

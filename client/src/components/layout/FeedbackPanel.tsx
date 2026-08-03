@@ -447,7 +447,11 @@ export default function FeedbackPanel({ isOpen, onClose }: FeedbackPanelProps) {
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        // 关闭前先移除焦点，防止 aria-hidden 与焦点冲突
+        (document.activeElement as HTMLElement)?.blur?.();
+        onClose();
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -464,7 +468,11 @@ export default function FeedbackPanel({ isOpen, onClose }: FeedbackPanelProps) {
           'transition-opacity duration-kb-normal',
           isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none',
         )}
-        onClick={onClose}
+        // 点击背景前先移除焦点，防止 aria-hidden 与焦点冲突
+        onClick={() => {
+          (document.activeElement as HTMLElement)?.blur?.();
+          onClose();
+        }}
         aria-hidden={!isOpen}
       />
 
@@ -488,7 +496,11 @@ export default function FeedbackPanel({ isOpen, onClose }: FeedbackPanelProps) {
           </h2>
           <button
             type="button"
-            onClick={onClose}
+            // 关闭前先移除焦点，防止 aria-hidden 与焦点冲突
+            onClick={() => {
+              (document.activeElement as HTMLElement)?.blur?.();
+              onClose();
+            }}
             className={cn(
               'p-1 rounded-kb-md',
               'text-text-tertiary hover:text-text-primary hover:bg-bg-secondary',

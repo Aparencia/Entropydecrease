@@ -28,11 +28,13 @@ function register(): void {
         maxCards?: number;
         difficulty?: string;
         cardType?: string;
+        /** F1 多情境提取：生成表述不同的变体卡片 */
+        variants?: boolean;
         authToken?: string;
       },
     ) => {
       const startMs = Date.now();
-      logger.info(`[AI] [flashcard] IPC received: note_length=${args.note.length}, maxCards=${args.maxCards ?? 'default'}, difficulty=${args.difficulty ?? 'default'}, cardType=${args.cardType ?? 'default'}, hasAuth=${!!args.authToken}`);
+      logger.info(`[AI] [flashcard] IPC received: note_length=${args.note.length}, maxCards=${args.maxCards ?? 'default'}, difficulty=${args.difficulty ?? 'default'}, cardType=${args.cardType ?? 'default'}, variants=${args.variants ?? false}, hasAuth=${!!args.authToken}`);
       logger.debug(`[AI] [flashcard] Note preview: ${args.note.slice(0, 80)}...`);
 
       const reqBody = {
@@ -41,6 +43,7 @@ function register(): void {
           ...(args.maxCards != null && { max_cards: args.maxCards }),
           ...(args.difficulty != null && { difficulty: args.difficulty }),
           ...(args.cardType != null && { card_type: args.cardType }),
+          ...(args.variants && { variants: true }),
         },
       };
 

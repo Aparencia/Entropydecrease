@@ -21,7 +21,9 @@ import type { AIPlugin, DurationHistoryData, DurationOptions, DurationResult,
   VisionExtractResult, TagContentResult, OptimizeCardResult,
   FeynmanQuestionResult, FeynmanAnswerEvalResult, SortResult,
   AnchorPoint, BrainstormIdea, ChatMessage, SocraticEvaluateResult, SocraticDeepeningResult,
-  PredictionPrompt, RescueContext, ResourceLink } from './types';
+  PredictionPrompt, RescueContext, ResourceLink,
+  ErrorPatternResult, QuizGenResult,
+  ContentTierResult, ConflictDetectResult, ConceptPrecheckResult } from './types';
 
 class AIPluginLoader {
   private localRecommender: LocalDurationRecommender;
@@ -202,6 +204,36 @@ class AIPluginLoader {
   async rescue(context: RescueContext): Promise<{ hints: string[]; resources: ResourceLink[]; alternativeApproach?: string }> {
     return this.call(p => p.rescue?.(context),
       { contentCheck: context.topic, unsupportedMsg: '当前 AI 插件不支持学习救援', minLength: 1 });
+  }
+
+  /** F4 错误模式分析 — 黄金错误记录非空即可 */
+  async analyzeErrorPatterns(goldenErrors: Array<{ flashcardId: string; correctAnswer: string; userAnswer: string }>): Promise<ErrorPatternResult> {
+    return this.call(p => p.analyzeErrorPatterns?.(goldenErrors),
+      { contentCheck: goldenErrors[0]?.correctAnswer ?? '', unsupportedMsg: '当前 AI 插件不支持错误模式分析', minLength: 1 });
+  }
+
+  /** N1 迷你测试生成 — 笔记文本非空即可 */
+  async generateQuiz(notesText: string): Promise<QuizGenResult> {
+    return this.call(p => p.generateQuiz?.(notesText),
+      { contentCheck: notesText, unsupportedMsg: '当前 AI 插件不支持迷你测试生成', minLength: 30 });
+  }
+
+  /** N5 内容分层 — 笔记文本非空即可 */
+  async contentTier(notesText: string): Promise<ContentTierResult> {
+    return this.call(p => p.contentTier?.(notesText),
+      { contentCheck: notesText, unsupportedMsg: '当前 AI 插件不支持内容分层', minLength: 30 });
+  }
+
+  /** N6 概念冲突检测 — 新旧文本均需非空 */
+  async conflictDetect(newNoteText: string, historyText: string): Promise<ConflictDetectResult> {
+    return this.call(p => p.conflictDetect?.(newNoteText, historyText),
+      { contentCheck: newNoteText + historyText, unsupportedMsg: '当前 AI 插件不支持概念冲突检测', minLength: 60 });
+  }
+
+  /** E1 概念预检 — 概念非空即可（历史薄弱点可选） */
+  async conceptPrecheck(concept: string, weakHistory?: string): Promise<ConceptPrecheckResult> {
+    return this.call(p => p.conceptPrecheck?.(concept, weakHistory),
+      { contentCheck: concept, unsupportedMsg: '当前 AI 插件不支持概念预检', minLength: 2 });
   }
 
   // ── 流式方法包装 ─────────────────────────────────────

@@ -12,7 +12,7 @@ import { useCallback, useEffect } from 'react';
 import { useAssistantStore } from '../store/useAssistantStore';
 import { SESSION_EXPIRE_MS, HISTORY_PAGE_SIZE, CONTEXT_WINDOW_ROUNDS } from '../constants';
 import type { ChatMessage } from '../types';
-import { supabase } from '@/lib/auth/supabaseClient';
+import { getAuthToken } from '@/lib/ai/aiPluginProvider';
 import { ttsController } from '../lib/ttsController';
 import { SpeechSentenceStreamer } from '../lib/speechStreamer';
 
@@ -138,9 +138,9 @@ export function useChat() {
     });
 
     try {
-      // 鉴权：从 Supabase session 获取 token（同其他 AI 功能模式）
-      const { data: { session } } = await supabase.auth.getSession();
-      const authToken = session?.access_token ?? undefined;
+      // 鉴权：复用统一 getAuthToken（内部带过期主动刷新），
+      // 避免休眠唤醒后 token 过期导致网关 401、消息"发不出去"
+      const authToken = (await getAuthToken()) ?? undefined;
 
       // chatHandler 在整个流结束后才 return（invoke 阻塞至流完成），
       // 期间 chunk/end/error 事件由上方监听器处理。

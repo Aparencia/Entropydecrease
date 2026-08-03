@@ -29,24 +29,26 @@ export function DepthMeter() {
   const healthyCount = corals.filter((c) => c.health === 'healthy').length;
 
   return (
-    <div className="flex flex-col gap-2 p-3 rounded-xl bg-white/5 border border-white/5">
-      {/* 标题行 / Header row */}
+    /* 浅色模式适配：白色半透明背景 + 灰色边框 + 微阴影，确保在浅灰页面上有清晰视觉边界 */
+    <div className="flex flex-col gap-2 p-3 rounded-xl bg-white/80 dark:bg-white/5 border border-gray-200 dark:border-white/5 shadow-sm dark:shadow-none">
+      {/* 标题行 / Header row —— 浅色模式使用深灰文字提升对比度 */}
       <div className="flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-xs text-white/50">
+        <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-white/50">
           <Anchor className="w-3.5 h-3.5" strokeWidth={1.5} />
           累计深度
         </span>
-        <span className="text-sm font-semibold text-cyan-300">{depthLabel}</span>
+        {/* 浅色模式使用深蓝青色，保证在白底上可读 */}
+        <span className="text-sm font-semibold text-cyan-600 dark:text-cyan-300">{depthLabel}</span>
       </div>
 
-      {/* 当前分层 / Current zone */}
+      {/* 当前分层 / Current zone —— 浅色模式文字颜色加深 */}
       <div className="flex items-center justify-between text-[11px]">
-        <span className="text-white/40">当前：{zone.name}</span>
-        <span className="text-white/30">{healthyCount} 株珊瑚</span>
+        <span className="text-gray-600 dark:text-white/40">当前：{zone.name}</span>
+        <span className="text-gray-400 dark:text-white/30">{healthyCount} 株珊瑚</span>
       </div>
 
-      {/* 进度条 / Progress bar */}
-      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+      {/* 进度条 / Progress bar —— 浅色模式轨道使用更深的灰色背景，提升进度条可见度 */}
+      <div className="h-1.5 rounded-full bg-gray-200 dark:bg-white/10 overflow-hidden">
         <motion.div
           className="h-full rounded-full"
           style={{ background: `linear-gradient(90deg, ${zone.color}, #38bdf8)` }}

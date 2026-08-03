@@ -4,16 +4,18 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Card, Tag, EmptyState, Modal } from '@/components/ui';
+import { Tip } from '@/components/ui/Tip';
 import { useToast } from '@/components/ui';
 import { ContextMenu } from '@/components/ui/ContextMenu';
 import type { ContextMenuGroup } from '@/components/ui/ContextMenu';
 import { VirtualList } from '@/components/ui/VirtualList';
 import {
   Search, Plus, FolderPlus, FileText, PanelLeftClose, PanelLeft, Pin,
-  MoreVertical, Trash2, Copy, Download, BookOpen, Sparkles, ListTodo, Share2, Upload,
+  MoreVertical, Trash2, Copy, Download, BookOpen, Sparkles, ListTodo, Share2, Upload, ClipboardCheck,
 } from 'lucide-react';
 import { TemplateSelector } from '../components/TemplateSelector';
 import type { NoteTemplate } from '../components/TemplateSelector';
+import { MiniQuizDialog } from '../components/MiniQuizDialog';
 import SubjectFolder from '../components/SubjectFolder';
 import { NoteSearchBar } from '../components/NoteSearchBar';
 import { NoteTagFilter } from '../components/NoteTagFilter';
@@ -117,6 +119,7 @@ function colorForType(template: string): string {
 export default function NotesPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [quizOpen, setQuizOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [showNewFolder, setShowNewFolder] = useState(false);
   const navigate = useNavigate();
@@ -274,7 +277,8 @@ export default function NotesPage() {
   return (
     <div className="flex h-full overflow-hidden">
       {/* ── 左栏：文件夹 ── */}
-      <AnimatePresence>
+      {/* 侧边栏折叠/展开：mode="wait" 确保旧侧边栏完全收起后再展开新内容，避免动画残帧 */}
+      <AnimatePresence mode="wait">
         {sidebarOpen && (
           <motion.aside
             initial={{ width: 0, opacity: 0 }}
@@ -286,6 +290,8 @@ export default function NotesPage() {
             <div className="opacity-[0.85] hover:opacity-100 transition-opacity duration-300 flex flex-col h-full">
             <div className="flex items-center justify-between p-kb-md pb-2">
               <span className="text-[13px] font-semibold text-text-primary">文件夹</span>
+              {/* 新建文件夹按钮，带 tooltip */}
+              <Tip text="新建文件夹">
               <motion.button
                 whileTap={{ scale: 0.9, rotate: 90 }}
                 onClick={() => setShowNewFolder((v) => !v)}
@@ -293,6 +299,7 @@ export default function NotesPage() {
               >
                 <FolderPlus className="w-4 h-4" strokeWidth={1.5} />
               </motion.button>
+              </Tip>
             </div>
 
             {showNewFolder && (
@@ -355,6 +362,8 @@ export default function NotesPage() {
         {/* 工具栏 */}
         <div className="sticky top-0 z-20 flex flex-col gap-2 px-4 py-3 border-b border-border/30 flex-shrink-0 backdrop-blur-md bg-bg-primary/80">
           <div className="flex items-center gap-2">
+            {/* 侧边栏收展按钮，带 tooltip */}
+            <Tip text={sidebarOpen ? '收起侧边栏' : '展开侧边栏'}>
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={() => setSidebarOpen((v) => !v)}
@@ -362,25 +371,41 @@ export default function NotesPage() {
             >
               {sidebarOpen ? <PanelLeftClose className="w-5 h-5" strokeWidth={1.5} /> : <PanelLeft className="w-5 h-5" strokeWidth={1.5} />}
             </motion.button>
+            </Tip>
             <NoteSearchBar />
+            {/* 笔记图谱按钮，升级原生 title 为 Tip 组件 */}
+            <Tip text="笔记图谱">
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => navigate('/notes/graph')}
-              title="笔记图谱"
               className="p-2 rounded-full text-text-tertiary hover:text-brand-600 hover:bg-brand-50 transition-all duration-200"
             >
               <Share2 className="w-4 h-4" strokeWidth={1.5} />
             </motion.button>
+            </Tip>
+            {/* 导入 Markdown 按钮，升级原生 title 为 Tip 组件 */}
+            <Tip text="导入 Markdown">
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => mdInputRef.current?.click()}
-              title="导入 Markdown"
               className="p-2 rounded-full text-text-tertiary hover:text-brand-600 hover:bg-brand-50 transition-all duration-200"
             >
               <Upload className="w-4 h-4" strokeWidth={1.5} />
             </motion.button>
+            </Tip>
+            {/* 迷你测试按钮（N1）：选定多篇笔记生成课程级小测试 */}
+            <Tip text="迷你测试">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setQuizOpen(true)}
+              className="p-2 rounded-full text-text-tertiary hover:text-brand-600 hover:bg-brand-50 transition-all duration-200"
+            >
+              <ClipboardCheck className="w-4 h-4" strokeWidth={1.5} />
+            </motion.button>
+            </Tip>
             <input
               ref={mdInputRef}
               type="file"
@@ -530,6 +555,8 @@ export default function NotesPage() {
                           <span className="text-[11px] text-text-tertiary ml-auto font-mono tabular-nums">{formatDate(note.updatedAt)}</span>
                         </div>
                       </div>
+                      {/* 笔记操作菜单触发按钮，带 tooltip */}
+                      <Tip text="笔记操作">
                       <motion.button
                         whileTap={{ scale: 0.85 }}
                         onClick={(e) => {
@@ -544,6 +571,7 @@ export default function NotesPage() {
                       >
                         <MoreVertical className="w-4 h-4 text-text-secondary" strokeWidth={1.5} />
                       </motion.button>
+                      </Tip>
                     </div>
                   </div>
                 </motion.div>
@@ -614,7 +642,8 @@ export default function NotesPage() {
         </AnimatePresence>
       </aside>
 
-      {/* 移动端浮动新建 */}
+      {/* 移动端浮动新建笔记按钮，带 tooltip */}
+      <Tip text="新建笔记" side="left">
       <motion.button
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.9 }}
@@ -623,8 +652,11 @@ export default function NotesPage() {
       >
         <Plus className="w-6 h-6" strokeWidth={2} />
       </motion.button>
+      </Tip>
 
       <TemplateSelector open={templateOpen} onClose={() => setTemplateOpen(false)} onSelect={handleTemplateSelect} />
+
+      <MiniQuizDialog open={quizOpen} onClose={() => setQuizOpen(false)} notes={filteredNotes} />
 
       <Modal
         open={!!deleteTargetId}

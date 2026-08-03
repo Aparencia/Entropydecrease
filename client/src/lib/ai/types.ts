@@ -20,6 +20,9 @@ import type {
   AnchorPoint, BrainstormIdea, ChatMessage, PredictionPrompt,
   RescueContext, ResourceLink, DraftContent,
   SocraticEvaluateResult, SocraticDeepeningResult,
+  ErrorPatternResult, QuizGenResult,
+  ContentTierResult, ConflictDetectResult,
+  ConceptPrecheckResult,
 } from './ai-domain.types';
 
 export interface AIPlugin {
@@ -49,6 +52,16 @@ export interface AIPlugin {
   rescue?(context: RescueContext): Promise<{ hints: string[]; resources: ResourceLink[]; alternativeApproach?: string }>;
   /** v0.9.0: 将灵感草稿转化为正式内容 */
   generateDraft?(inspirationId: string, type: 'flashcard' | 'feynman' | 'note', content: string): Promise<{ draft: DraftContent }>;
+  /** F4: 分析黄金错误记录，识别错误模式（概念盲区/混淆/过度自信） */
+  analyzeErrorPatterns?(goldenErrors: Array<{ flashcardId: string; correctAnswer: string; userAnswer: string }>): Promise<ErrorPatternResult>;
+  /** N1: 基于多篇笔记生成课程级迷你测试（填空/单选/简答混合） */
+  generateQuiz?(notesText: string): Promise<QuizGenResult>;
+  /** N5: 笔记内容三层分层（核心/支撑/细节，策略性遗忘标记） */
+  contentTier?(notesText: string): Promise<ContentTierResult>;
+  /** N6: 新笔记与历史理解的概念冲突检测 */
+  conflictDetect?(newNoteText: string, historyText: string): Promise<ConflictDetectResult>;
+  /** E1: 费曼讲解前概念预检（错误概念探测问题） */
+  conceptPrecheck?(concept: string, weakHistory?: string): Promise<ConceptPrecheckResult>;
 
   // ── 流式版本（可选，SSE） ────────────────────────────────
   summarizeNoteStream?(noteContent: string, options?: SummarizeOptions): AsyncIterable<string>;
@@ -87,6 +100,10 @@ export type {
   AnchorPoint, BrainstormIdea, ChatMessage, PredictionPrompt,
   RescueContext, ResourceLink, DraftContent,
   SocraticEvaluateResult, SocraticDeepeningResult,
+  ErrorPatternItem, ErrorPatternResult,
+  QuizQuestion, QuizQuestionType, QuizGenResult,
+  ContentTierItem, ContentTierResult, ConceptConflict, ConflictDetectResult,
+  PrecheckQuestion, ConceptPrecheckResult,
 } from './ai-domain.types';
 
 export { AIError } from './ai-errors';

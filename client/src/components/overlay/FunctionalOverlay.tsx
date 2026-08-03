@@ -24,9 +24,17 @@ export function FunctionalOverlay({ children, visible, className }: FunctionalOv
 
   // 隐藏时设置 inert：阻断指针事件、焦点与辅助技术访问（React 18 无 inert prop）
   useEffect(() => {
-    if (rootRef.current) rootRef.current.inert = !visible;
+    if (rootRef.current) {
+      // 设置 inert 前先移除焦点，避免 aria-hidden 与焦点的竞态冲突
+      if (!visible && rootRef.current.contains(document.activeElement)) {
+        (document.activeElement as HTMLElement)?.blur?.();
+      }
+      rootRef.current.inert = !visible;
+    }
   }, [visible]);
 
+  // 已移除 aria-hidden：inert 属性已完整覆盖其语义（阻断辅助技术+焦点），
+  // 同时避免 aria-hidden 同步生效而 inert 异步生效导致的焦点竞态警告
   return (
     <motion.div
       ref={rootRef}
@@ -38,9 +46,9 @@ export function FunctionalOverlay({ children, visible, className }: FunctionalOv
       )}
       initial={{ opacity: 0 }}
       animate={{ opacity: visible ? 1 : 0 }}
-      transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+      /* 修复：外层过渡统一为 spring 类型，与内层面板保持一致，避免 ease 与 spring 混用导致动画节奏不协调 */
+      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
       style={{ pointerEvents: visible ? 'auto' : 'none' }}
-      aria-hidden={!visible}
     >
       {/* 半透明背景遮罩 */}
       <div className={cn(
@@ -63,6 +71,8 @@ export function FunctionalOverlay({ children, visible, className }: FunctionalOv
           visible ? "pointer-events-auto" : "pointer-events-none",
           "p-3 sm:p-5 md:p-8"
         )}
+        /* 修复：提示浏览器提前创建合成层，避免动画时触发重绘/重排，提升动画流畅度 */
+        style={{ willChange: 'transform, opacity' }}
         initial={{ scale: 0.9, y: 30 }}
         animate={visible ? { scale: 1, y: 0 } : { scale: 0.9, y: 30 }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}

@@ -21,17 +21,26 @@ let electronPlugin: ElectronAIPlugin | null = null;
 let cachedToken: string | null = null;
 let tokenCachedAt = 0;
 const TOKEN_CACHE_TTL_MS = 60_000;
+/** 提前刷新窗口：token 距过期不足此时长时主动 refresh，避免设备休眠唤醒后首条 AI 请求 401 */
+const TOKEN_REFRESH_AHEAD_MS = 10_000;
 
 /**
  * 获取当前 Supabase access_token（带 60s 缓存）
  * @ai-context: 从 getElectronPlugin 抽出——供渲染层需要显式透传 authToken
- * 的场景复用（如 A3 ai_progress_narrate IPC）。失败返回 null，调用方降级。
+ * 的场景复用（如 A3 ai_progress_narrate IPC、学伴对话）。失败返回 null，调用方降级。
+ * getSession 不保证返回未过期 token（设备休眠后 refresh 定时器可能失效），
+ * 故在此基于 expires_at 主动 refreshSession，避免网关 401 造成"消息发送失败"。
  */
 export async function getAuthToken(): Promise<string | null> {
   try {
     const now = Date.now();
     if (cachedToken === null || now - tokenCachedAt > TOKEN_CACHE_TTL_MS) {
-      const { data: { session } } = await supabase.auth.getSession();
+      let session = (await supabase.auth.getSession()).data.session;
+      // token 已过期或即将过期 → 主动刷新
+      if (session?.expires_at && session.expires_at * 1000 <= now + TOKEN_REFRESH_AHEAD_MS) {
+        const { data } = await supabase.auth.refreshSession();
+        session = data.session ?? session;
+      }
       cachedToken = session?.access_token ?? null;
       tokenCachedAt = now;
     }

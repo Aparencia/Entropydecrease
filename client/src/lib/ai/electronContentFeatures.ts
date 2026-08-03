@@ -50,6 +50,7 @@ export async function ipcGenerateFlashcards(
       maxCards: options?.count,
       difficulty: options?.difficulty,
       cardType: options?.cardType,
+      variants: options?.variants,
       authToken,
     }) as {
       cards: Array<{ front: string; back: string; type: string; confidence: number }>;

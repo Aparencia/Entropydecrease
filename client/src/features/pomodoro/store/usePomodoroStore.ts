@@ -94,6 +94,8 @@ interface PomodoroState {
   start: () => void;
   /** 开始首潜 3 分钟迷你体验（新手引导专用，不改动用户设置） */
   startMiniDive: () => void;
+  /** T3: 开始 5 分钟承诺深潜（拖延重启专用，最小承诺降低启动门槛） */
+  startCommitDive: () => void;
   pause: () => void;
   resume: () => void;
   reset: () => void;
@@ -135,6 +137,9 @@ const getPhaseDuration = (phase: Phase, preset: PomodoroPreset | null, settings:
 
 /** 首潜迷你体验时长（3 分钟），见新手引导系统 */
 export const MINI_DIVE_SECONDS = 180;
+
+/** T3 5 分钟承诺深潜时长（拖延情绪调节：不要求完美，只要求开始） */
+export const COMMIT_DIVE_SECONDS = 300;
 
 /** 获取预设的有效 longBreakInterval（0 = 无长休） */
 const getInterval = (preset: PomodoroPreset | null, settings: PomodoroSettings): number =>
@@ -261,6 +266,18 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
         remainingSeconds: MINI_DIVE_SECONDS, totalSeconds: MINI_DIVE_SECONDS,
         isMiniDive: true, isRunning: true, isPaused: false,
         sessionStartTime: Date.now(), currentGoal: '首潜 · 3 分钟体验',
+        lastAction: 'start' as PomodoroAction, lastActionCounter: s.lastActionCounter + 1,
+      }));
+      soundPlayer.play('pomodoro_start');
+    },
+
+    startCommitDive: () => {
+      // T3: 5 分钟承诺深潜——复用 isMiniDive 记录链路（时长按实际记录，不走预设）
+      set((s) => ({
+        mode: 'self_study', phase: 'work',
+        remainingSeconds: COMMIT_DIVE_SECONDS, totalSeconds: COMMIT_DIVE_SECONDS,
+        isMiniDive: true, isRunning: true, isPaused: false,
+        sessionStartTime: Date.now(), currentGoal: '就 5 分钟 · 随时可以停',
         lastAction: 'start' as PomodoroAction, lastActionCounter: s.lastActionCounter + 1,
       }));
       soundPlayer.play('pomodoro_start');

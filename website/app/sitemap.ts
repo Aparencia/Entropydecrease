@@ -36,6 +36,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 0.5,
     },
+    // 常见问题帮助中心 — 内容随产品迭代更新，中等优先级
+    {
+      url: `${BASE_URL}/faq`,
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.6,
+    },
     // 隐私政策与用户协议 — 法律合规页面，更新频率较低
     {
       url: `${BASE_URL}/privacy`,

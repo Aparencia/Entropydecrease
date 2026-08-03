@@ -69,13 +69,24 @@ PATH_TO_FEATURE: dict[str, str] = {
     # ---- F4: 黄金错误模式分析（error_pattern.py） ----
     "/api/v1/ai/error-pattern": "error_pattern",       # 错误模式分析
 
+    # ---- N1: 课程级迷你测试生成（quiz_gen.py） ----
+    "/api/v1/ai/generate-quiz": "quiz_gen",            # 迷你测试生成
+
+    # ---- N5/N6: 内容分层与概念冲突检测（content_tier.py + conflict_detect.py） ----
+    "/api/v1/ai/content-tier": "content_tier",         # 内容三层分层
+    "/api/v1/ai/conflict-detect": "conflict_detect",   # 概念冲突检测
+
+    # ---- E1: 概念预检（concept_precheck.py） ----
+    "/api/v1/ai/concept-precheck": "concept_precheck", # 费曼讲解前探测问题
+
     # 注意：/{feature}/stream（streaming.py）为通配路径，无法精确匹配，
     # 其限流由流式路由内部通过 feature 参数自行处理。
 }
 
-# 豁免全局每日总量的功能：段级高频调用（如课堂实时转录一节课数百段），
-# 若计入 daily_total 会在几分钟内耗尽全部 AI 配额，仅受各自功能级上限约束
-GLOBAL_EXEMPT_FEATURES: frozenset[str] = frozenset({"transcribe"})
+# 豁免全局每日总量的功能：段级高频调用（如课堂实时转录一节课数百段）
+# 与高频多轮对话（学伴 chat），若计入 daily_total 会很快耗尽全部 AI 配额，
+# 仅受各自功能级上限约束
+GLOBAL_EXEMPT_FEATURES: frozenset[str] = frozenset({"transcribe", "chat"})
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

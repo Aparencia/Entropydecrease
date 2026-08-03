@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Waves, Anchor } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Tip } from '@/components/ui/Tip';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { DEEP_SEA_EASE } from '@/lib/animation/presets';
 
@@ -97,7 +98,8 @@ export function CompletionCelebration({
             exit={prefersReduced ? { opacity: 0 } : { opacity: 0, y: -10, scale: 0.98 }}
             transition={{ duration: 0.4, ease: DEEP_SEA_EASE, delay: 0.1 }}
           >
-            {/* 关闭按钮 / Close button */}
+            {/* 关闭按钮，带 tooltip */}
+            <Tip text="关闭" side="left">
             <button
               onClick={onClose}
               className="absolute top-3 right-3 p-1.5 rounded-lg text-white/40 hover:text-white/80 hover:bg-white/10 transition-colors"
@@ -105,6 +107,7 @@ export function CompletionCelebration({
             >
               <X className="w-4 h-4" />
             </button>
+            </Tip>
 
             {/* 光柱图标 / Light beam icon */}
             <motion.div

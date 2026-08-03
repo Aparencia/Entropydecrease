@@ -138,6 +138,12 @@ export function registerMediaCaptureHandlers(): void {
     return { success: true };
   });
 
+  // A2 语音对话互斥保护：启动前先查询是否已有活跃采集（如课堂采集），
+  // 避免 audio_capture_start 的幂等 dispose 误伤正在进行的课堂采集
+  safeHandle('audio_capture_status', async () => {
+    return { active: activeAudioCapture !== null && activeAudioCapture.isCapturing };
+  });
+
   ipcMain.on(
     'audio_capture_chunk',
     (_event, data: unknown) => {

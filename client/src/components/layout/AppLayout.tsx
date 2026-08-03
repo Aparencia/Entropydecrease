@@ -3,8 +3,9 @@
  */
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { motion, MotionConfig } from 'framer-motion';
+import { motion, MotionConfig, AnimatePresence } from 'framer-motion';
 import { Home } from 'lucide-react';
+import { Tip } from '@/components/ui/Tip';
 import CommandPalette from '../ui/CommandPalette';
 import { CloseConfirmDialog } from '../ui/CloseConfirmDialog';
 import { CustomTitlebar } from './CustomTitlebar';
@@ -136,9 +137,22 @@ export default function AppLayout() {
       )}
 
       {/* Layer 1: 功能覆盖层 — 常驻挂载（visible 控制显隐），同模块 Esc/重入不卸载页面，避免动画重播 */}
+      {/* 修复：移除 key={currentModule}，防止模块切换时整棵组件树强制卸载/重挂载导致旧组件瞬间消失无退出动画 */}
       {currentModule && (
-        <FunctionalOverlay key={currentModule} visible={overlayVisible}>
-          <Outlet />
+        <FunctionalOverlay visible={overlayVisible}>
+          {/* 路由级 AnimatePresence：mode="wait" 确保旧页面完成退出动画后再挂载新页面，避免残帧 */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={pathname}
+              /* 简单的 opacity 淡入淡出，不影响 3D 场景的相机飞行和停靠时序 */
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </FunctionalOverlay>
       )}
 
@@ -154,7 +168,8 @@ export default function AppLayout() {
               点击3D物体进入模块 · 按 Esc 返回仪表盘 · 数字键 0-7 快捷跳转
             </motion.div>
           </div>
-          {/* 浮动返回仪表盘按钮（仅桌面端） */}
+          {/* 浮动返回仪表盘按钮，带 tooltip（仅桌面端） */}
+          <Tip text="返回仪表盘" side="left">
           <motion.button
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -167,6 +182,7 @@ export default function AppLayout() {
           >
             <Home className="w-5 h-5" strokeWidth={1.5} />
           </motion.button>
+          </Tip>
         </>
       )}
 

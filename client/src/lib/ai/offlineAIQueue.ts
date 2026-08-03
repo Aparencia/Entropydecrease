@@ -54,6 +54,27 @@ type ToastFn = (options: { type: 'success' | 'error' | 'warning' | 'info'; messa
 
 let toastFn: ToastFn | null = null;
 
+// ── 队列状态订阅（供 React 层监听队列大小变化，驱动徽标 UI 更新）─────────────────
+
+/** 队列大小变化监听器回调签名 */
+type QueueSizeListener = (size: number) => void;
+const queueSizeListeners: Set<QueueSizeListener> = new Set();
+
+/**
+ * 注册队列大小变化监听器（供 React 组件订阅队列状态，驱动徽标渲染）
+ * @returns 取消订阅函数，组件卸载时调用以释放引用
+ */
+function subscribeQueueSize(listener: QueueSizeListener): () => void {
+  queueSizeListeners.add(listener);
+  return () => queueSizeListeners.delete(listener);
+}
+
+/** 查询当前队列大小并通知所有监听器（每次入队/出队后调用） */
+async function notifyQueueSize(): Promise<void> {
+  const size = await getQueueSize();
+  queueSizeListeners.forEach((fn) => fn(size));
+}
+
 /**
  * 注册 Toast 回调函数（由 React 组件在挂载时调用）
  * @example
@@ -121,7 +142,10 @@ async function enqueue(feature: string, endpoint: string, payload: unknown): Pro
   }
 
   await aiQueueDB.aiQueue.add(item);
-  showToast('info', '已加入队列，联网后自动重试');
+  // UX 设计理由：入队后立即给出轻量反馈，告知用户请求不会丢失，联网后将自动处理
+  showToast('info', '请求已排队，联网后将自动处理');
+  // 通知 UI 层更新队列徽标计数
+  await notifyQueueSize();
 
   return id;
 }
@@ -130,7 +154,7 @@ async function enqueue(feature: string, endpoint: string, payload: unknown): Pro
  * 处理单条队列记录
  * 成功：从队列删除；失败：更新 retryCount / nextRetryAt 或标记 failed
  */
-async function processItem(item: AIQueueItem): Promise<void> {
+async function processItem(item: AIQueueItem): Promise<boolean> {
   // 标记为处理中
   await aiQueueDB.aiQueue.update(item.id, { status: 'processing' });
 
@@ -138,7 +162,9 @@ async function processItem(item: AIQueueItem): Promise<void> {
     await aiClient.post(item.endpoint, item.payload);
     // 消费成功，删除记录
     await aiQueueDB.aiQueue.delete(item.id);
-    showToast('success', '离线 AI 请求已完成');
+    // 通知 UI 层更新队列徽标（单条完成时由 processQueue 汇总显示批量通知）
+    await notifyQueueSize();
+    return true;
   } catch {
     const newRetryCount = item.retryCount + 1;
     if (newRetryCount >= MAX_RETRY_COUNT) {
@@ -156,6 +182,8 @@ async function processItem(item: AIQueueItem): Promise<void> {
         nextRetryAt: calcNextRetryAt(newRetryCount),
       });
     }
+    // 处理失败，返回 false（由 processQueue 汇总统计）
+    return false;
   }
 }
 
@@ -164,6 +192,7 @@ async function processItem(item: AIQueueItem): Promise<void> {
  *
  * 并发上限 1（串行消费，避免瞬间大量请求）。
  * 仅处理 status=pending 且 nextRetryAt <= now 的记录。
+ * 处理完成后统一显示批量完成通知，避免多条 toast 连续弹出干扰用户。
  */
 async function processQueue(): Promise<void> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -177,10 +206,24 @@ async function processQueue(): Promise<void> {
     .and((item) => item.nextRetryAt <= now)
     .sortBy('createdAt');
 
+  // UX 设计理由：统计本批次成功完成的数量，处理完后统一展示汇总 toast，
+  // 避免逐条弹出造成视觉噪音（当积压多条请求时尤为明显）
+  let completedCount = 0;
   for (const item of pendingItems) {
-    await processItem(item);
+    const success = await processItem(item);
+    if (success) completedCount++;
     // 每条处理完短暂间隔，避免过快连击
     await new Promise((resolve) => setTimeout(resolve, BASE_DELAY_MS));
+  }
+
+  // 批量完成汇总通知（仅当有成功完成的条目时才显示）
+  if (completedCount > 0) {
+    showToast(
+      'success',
+      completedCount === 1
+        ? '离线 AI 请求已完成'
+        : `离线队列已完成 ${completedCount} 个请求`,
+    );
   }
 }
 
@@ -245,6 +288,7 @@ export const offlineAIQueue = {
   processQueue,
   getQueueSize,
   clearQueue,
+  subscribeQueueSize,
   startAutoProcess,
   stopAutoProcess,
   registerQueueToast,

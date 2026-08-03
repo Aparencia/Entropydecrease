@@ -11,6 +11,7 @@ import { Button, Skeleton, EmptyState } from '@/components/ui';
 import { AIButton } from '@/components/ui/AIButton';
 import { useModeState } from '@/hooks/useMode';
 import { cn } from '@/lib/utils';
+import { Tip } from '@/components/ui/Tip';
 
 // ── 环境光 ──
 
@@ -61,12 +62,15 @@ export function FeynmanTopBar({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.35, delay: 0.05 }}
     >
+      {/* 返回按钮，带 tooltip */}
+      <Tip text="返回">
       <button
         onClick={onBack}
         className="p-1.5 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
       >
         <ArrowLeft className="w-icon-md h-icon-md" strokeWidth={1.5} />
       </button>
+      </Tip>
       <h1 className="text-b1 font-semibold text-text-primary flex-1 truncate">
         {concept || '浮出水面'}
       </h1>

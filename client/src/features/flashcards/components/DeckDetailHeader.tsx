@@ -5,6 +5,7 @@
  * 按钮在请求中显示思考指示器；导出按钮导出后触发浏览器下载（.json）。
  */
 import { Button } from '@/components/ui';
+import { Tip } from '@/components/ui/Tip';
 import { ArrowLeft, Sparkles, Plus, Loader2, Download } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 
@@ -25,12 +26,15 @@ export function DeckDetailHeader({
 }: DeckDetailHeaderProps) {
   return (
     <div className="flex items-center gap-kb-sm px-kb-md py-3 border-b border-border/50 flex-shrink-0">
+      {/* 返回按钮，带 tooltip */}
+      <Tip text="返回">
       <button
         onClick={onBack}
         className="p-1.5 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
       >
         <ArrowLeft className="w-icon-md h-icon-md" strokeWidth={1.5} />
       </button>
+      </Tip>
       <div className="flex items-center gap-2 flex-1 min-w-0">
         {deckColor && (
           <span
@@ -55,17 +59,19 @@ export function DeckDetailHeader({
         AI 生成闪卡
       </Button>
 
+      {/* 导出牌组按钮，升级原生 title 为 Tip 组件 */}
+      <Tip text="导出牌组">
       <button
         onClick={onExport}
         disabled={exporting}
         className="p-1.5 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast disabled:opacity-50"
         aria-label="导出牌组"
-        title="导出牌组"
       >
         {exporting
           ? <Loader2 className="w-icon-sm h-icon-sm animate-spin" strokeWidth={1.5} />
           : <Download className="w-icon-sm h-icon-sm" strokeWidth={1.5} />}
       </button>
+      </Tip>
     </div>
   );
 }

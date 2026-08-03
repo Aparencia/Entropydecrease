@@ -41,6 +41,8 @@ export interface Flashcard {
   updatedAt: Date;
   sourceNoteId?: string;         // 来源笔记 ID（用于双向关联）
   order: number;
+  // 卡片标签（用于分类筛选与智能检索，v1.1 牌组分享格式已携带此字段）
+  tags?: string[];
 }
 
 /** 闪卡复习记录 */

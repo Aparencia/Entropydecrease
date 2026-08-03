@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { Sparkles, X, Copy, RefreshCw, Download, ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Tip } from '@/components/ui/Tip';
 import { AIButton } from '@/components/ui/AIButton';
 
 /** AI 摘要结果数据（与 useAISummarize 返回结构一致） */
@@ -128,13 +129,15 @@ export function AISummaryModal({
             <div className="group relative">
               <p className="text-b3 font-medium text-text-secondary uppercase tracking-wide mb-1">摘要</p>
               <p className="text-b2 text-text-primary leading-relaxed pr-8">{data.summary}</p>
+              {/* 复制摘要按钮，升级原生 title 为 Tip */}
+              <Tip text="复制摘要">
               <button
                 onClick={onCopySummary}
-                title="复制摘要"
                 className="absolute top-0 right-0 p-1.5 rounded-kb-sm text-text-tertiary hover:text-brand-600 hover:bg-brand-50 opacity-0 group-hover:opacity-100 transition-all duration-kb-fast"
               >
                 <Copy className="w-3.5 h-3.5" strokeWidth={1.5} />
               </button>
+              </Tip>
             </div>
 
             {/* 关键要点 + 逐项闪卡按钮 */}

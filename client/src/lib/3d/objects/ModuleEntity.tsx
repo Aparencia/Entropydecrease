@@ -101,12 +101,15 @@ export function ModuleEntity({
   useFrame((_, delta) => {
     if (!meshRef.current) return;
 
+    // 防止浏览器节流（如标签切换）导致的帧时间尖峰，最大允许 100ms
+    const safeDelta = Math.min(delta, 0.1);
+
     // Self rotation
-    meshRef.current.rotateOnAxis(rotationConfig.axis, delta * rotationConfig.speed);
+    meshRef.current.rotateOnAxis(rotationConfig.axis, safeDelta * rotationConfig.speed);
 
     // Smooth scale transition
     const currentScale = meshRef.current.scale.x;
-    const newScale = THREE.MathUtils.lerp(currentScale, targetScale, delta * 4);
+    const newScale = THREE.MathUtils.lerp(currentScale, targetScale, safeDelta * 4);
     meshRef.current.scale.setScalar(newScale);
 
     // Smooth emissive transition
@@ -114,7 +117,7 @@ export function ModuleEntity({
       materialRef.current.emissiveIntensity = THREE.MathUtils.lerp(
         materialRef.current.emissiveIntensity,
         targetEmissive,
-        delta * 4,
+        safeDelta * 4,
       );
     }
   });

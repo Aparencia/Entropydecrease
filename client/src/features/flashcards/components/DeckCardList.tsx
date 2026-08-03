@@ -9,6 +9,7 @@ import { motion } from 'framer-motion';
 import { Card, Tag } from '@/components/ui';
 import { BookOpen, Sparkles, Clock, CheckCircle2, Pencil, Trash2, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Tip } from '@/components/ui/Tip';
 import type { Flashcard } from '@/types/models';
 
 export interface DeckStats {
@@ -119,6 +120,8 @@ export function DeckCardList({
                     查看上下文
                   </button>
                 )}
+                {/* 编辑卡片按钮，带 tooltip */}
+                <Tip text="编辑卡片">
                 <button
                   onClick={() => onEdit(card)}
                   className="p-1.5 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
@@ -126,6 +129,9 @@ export function DeckCardList({
                 >
                   <Pencil className="w-4 h-4" strokeWidth={1.5} />
                 </button>
+                </Tip>
+                {/* 删除卡片按钮，带 tooltip */}
+                <Tip text="删除卡片">
                 <button
                   onClick={() => onDelete(card.id ?? null)}
                   className="p-1.5 rounded-kb-full text-text-tertiary hover:text-[#F43F5E] hover:bg-[#F43F5E]/10 transition-all duration-kb-fast"
@@ -133,6 +139,7 @@ export function DeckCardList({
                 >
                   <Trash2 className="w-4 h-4" strokeWidth={1.5} />
                 </button>
+                </Tip>
               </div>
             </Card>
           </motion.div>

@@ -9,6 +9,9 @@ import type {
   AnchorPoint, BrainstormIdea, ChatMessage,
   SocraticEvaluateResult, SocraticDeepeningResult,
   PredictionPrompt, RescueContext, ResourceLink,
+  ErrorPatternResult, QuizGenResult,
+  ContentTierResult, ConflictDetectResult,
+  ConceptPrecheckResult,
 } from './types';
 import {
   ipcSummarizeNote, ipcGenerateFlashcards, ipcTagContent,
@@ -18,6 +21,9 @@ import {
   ipcEvaluateExplanation, ipcRecommendDuration,
   ipcGenerateFeynmanQuestions, ipcEvaluateFeynmanAnswers,
   ipcGenerateAnchorPoint, ipcPredictQuestion, ipcRescue,
+  ipcAnalyzeErrorPatterns, ipcGenerateQuiz,
+  ipcContentTier, ipcConflictDetect,
+  ipcConceptPrecheck,
 } from './electronLearningFeatures';
 import {
   ipcSocraticBrainstorm, ipcSocraticQuestion,
@@ -111,6 +117,26 @@ export class ElectronAIPlugin implements AIPlugin {
 
   async rescue(context: RescueContext): Promise<{ hints: string[]; resources: ResourceLink[]; alternativeApproach?: string }> {
     return ipcRescue(this.authToken, context);
+  }
+
+  async analyzeErrorPatterns(goldenErrors: Array<{ flashcardId: string; correctAnswer: string; userAnswer: string }>): Promise<ErrorPatternResult> {
+    return ipcAnalyzeErrorPatterns(this.authToken, goldenErrors);
+  }
+
+  async generateQuiz(notesText: string): Promise<QuizGenResult> {
+    return ipcGenerateQuiz(this.authToken, notesText);
+  }
+
+  async contentTier(notesText: string): Promise<ContentTierResult> {
+    return ipcContentTier(this.authToken, notesText);
+  }
+
+  async conflictDetect(newNoteText: string, historyText: string): Promise<ConflictDetectResult> {
+    return ipcConflictDetect(this.authToken, newNoteText, historyText);
+  }
+
+  async conceptPrecheck(concept: string, weakHistory?: string): Promise<ConceptPrecheckResult> {
+    return ipcConceptPrecheck(this.authToken, concept, weakHistory);
   }
 
   // ── 流式方法实现（payload 组装 + 委托流式桥） ─────────

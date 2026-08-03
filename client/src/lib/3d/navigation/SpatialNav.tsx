@@ -2,11 +2,17 @@
  * 3D空间导航组件 — 在Canvas内渲染模块实体并处理交互
  * 根据主题自动切换深海/穹顶风格的模块表达
  *
+ * 相机控制权分层（防止两套系统冲突）：
+ * - overview 模式：OrbitControls 接管缩放和拖拽旋转，CameraController 暂停
+ * - entering 模式：useCameraFlight 独占相机，CameraController 暂停
+ * - docked 模式：CameraController 接管（渲染已暂停，实际不执行 lerp）
+ *
  * @ai-context: 3D 空间导航组件——键盘/手势驱动的模块间轨道跳转，与 OrbitalStore 状态联动；渲染于 R3F Canvas 内，禁止使用 DOM API。
  */
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useFrame } from '@react-three/fiber';
+import { OrbitControls } from '@react-three/drei';
 import { useOrbitalStore, MODULE_POSITIONS, type ModuleId } from './OrbitalStore';
 import { useSceneTheme } from '../hooks/useSceneTheme';
 import { ModuleEntity } from '../objects/ModuleEntity';
@@ -33,19 +39,22 @@ const DEEP_SEA_CONFIG: Record<ModuleId, {
   classroom: { geometry: 'torus', color: '#14B8A6', emissiveColor: '#2DD4BF' },
 };
 
-/** 穹顶模式下每个模块的轨道配置 */
+/**
+ * 穹顶模式下每个模块的轨道配置
+ * 轨道半径已缩减（原值最大 9，现最大 5.5），防止行星漂出可视范围导致漂移感
+ */
 const AURORA_ORBIT_CONFIG: Record<ModuleId, {
   orbitRadius: number;
   orbitSpeed: number;
   initialAngle: number;
 }> = {
   dashboard: { orbitRadius: 0, orbitSpeed: 0, initialAngle: 0 },
-  pomodoro: { orbitRadius: 3, orbitSpeed: 0.3, initialAngle: 0 },
-  notes: { orbitRadius: 4.5, orbitSpeed: 0.2, initialAngle: Math.PI * 0.4 },
-  flashcards: { orbitRadius: 6, orbitSpeed: 0.15, initialAngle: Math.PI * 0.8 },
-  feynman: { orbitRadius: 7.5, orbitSpeed: 0.12, initialAngle: Math.PI * 1.2 },
-  inspiration: { orbitRadius: 9, orbitSpeed: 0.1, initialAngle: Math.PI * 1.6 },
-  classroom: { orbitRadius: 5.5, orbitSpeed: 0.18, initialAngle: Math.PI * 0.6 },
+  pomodoro: { orbitRadius: 2.5, orbitSpeed: 0.3, initialAngle: 0 },
+  notes: { orbitRadius: 3.5, orbitSpeed: 0.2, initialAngle: Math.PI * 0.4 },
+  flashcards: { orbitRadius: 4.5, orbitSpeed: 0.15, initialAngle: Math.PI * 0.8 },
+  feynman: { orbitRadius: 5, orbitSpeed: 0.12, initialAngle: Math.PI * 1.2 },
+  inspiration: { orbitRadius: 5.5, orbitSpeed: 0.1, initialAngle: Math.PI * 1.6 },
+  classroom: { orbitRadius: 4, orbitSpeed: 0.18, initialAngle: Math.PI * 0.6 },
 };
 
 /** 相机飞入模块时的偏移（从模块位置向相机方向偏移） */
@@ -64,10 +73,12 @@ export function SpatialNav() {
 
   // 每帧更新相机飞行
   useFrame((_, delta) => {
-    update(delta);
+    // 防止浏览器节流导致的帧时间尖峰
+    const safeDelta = Math.min(delta, 0.1);
+    update(safeDelta);
   });
 
-  // 点击模块实体
+  // 点击模块实体（深海模式使用固定坐标）
   const handleModuleClick = useCallback((id: ModuleId) => {
     const module = MODULE_POSITIONS.find(m => m.id === id);
     if (!module) return;
@@ -76,6 +87,20 @@ export function SpatialNav() {
     enterModule(id);
     // 相机飞向模块位置（加偏移）
     flyTo(addVectors(module.position, CAMERA_OFFSET));
+    navigate(module.route);
+  }, [enterModule, flyTo, navigate]);
+
+  // 点击 Aurora 模式行星：使用行星实时世界坐标作为 flyTo 目标，而非 MODULE_POSITIONS 固定坐标
+  // 因为行星在轨道上持续公转，固定坐标会导致相机飞向错误位置（漂移根因之一）
+  const handleAuroraClick = useCallback((id: ModuleId, currentPosition?: [number, number, number]) => {
+    const module = MODULE_POSITIONS.find(m => m.id === id);
+    if (!module) return;
+
+    soundPlayer.play('ui_module_enter');
+    enterModule(id);
+    // 优先使用行星当前实时世界坐标，fallback 到固定坐标
+    const basePos = currentPosition ?? module.position;
+    flyTo(addVectors(basePos, CAMERA_OFFSET));
     navigate(module.route);
   }, [enterModule, flyTo, navigate]);
 
@@ -95,11 +120,35 @@ export function SpatialNav() {
     : [0, 0, 10]; // 默认全景位置
   const cameraLookAt: [number, number, number] = activeModulePos ?? [0, 0, 0];
 
+  // CameraController 暂停条件：
+  // - entering 相位：useCameraFlight 的 flyTo 独占相机控制权，两套系统不能同时修改位置
+  // - overview 相位：OrbitControls 接管相机（缩放/旋转），CameraController 暂停避免冲突
+  const isCameraPaused = phase === 'entering' || phase === 'overview';
+
   // 深海模式渲染
   if (theme === 'deep-sea') {
     return (
       <>
-        <CameraController target={cameraTarget} lookAt={cameraLookAt} speed={inModuleView ? 3 : 2} />
+        {/* overview 模式下 OrbitControls 接管缩放和拖拽旋转 */}
+        {phase === 'overview' && (
+          <OrbitControls
+            enablePan={false}
+            minDistance={5}
+            maxDistance={18}
+            minPolarAngle={Math.PI / 6}   // 俯仰角上限 30°（防止翻到场景顶部）
+            maxPolarAngle={Math.PI / 2 + Math.PI / 6} // 俯仰角下限 120°（防止翻到场景底部）
+            enableDamping
+            dampingFactor={0.08}
+            // 支持触摸拖拽旋转（移动端）
+            touches={{ ONE: 0, TWO: 2 }}
+          />
+        )}
+        <CameraController
+          target={cameraTarget}
+          lookAt={cameraLookAt}
+          speed={inModuleView ? 3 : 2}
+          paused={isCameraPaused}
+        />
         {MODULE_POSITIONS.map((module) => {
           const config = DEEP_SEA_CONFIG[module.id];
           // 覆盖层不可见时（概览/peek）全部实体可见可点击；覆盖层可见时仅当前模块
@@ -131,7 +180,25 @@ export function SpatialNav() {
   // 穹顶模式渲染
   return (
     <>
-      <CameraController target={cameraTarget} lookAt={cameraLookAt} speed={inModuleView ? 3 : 2} />
+      {/* overview 模式下 OrbitControls 接管缩放和拖拽旋转 */}
+      {phase === 'overview' && (
+        <OrbitControls
+          enablePan={false}
+          minDistance={5}
+          maxDistance={18}
+          minPolarAngle={Math.PI / 6}   // 俯仰角上限 30°
+          maxPolarAngle={Math.PI / 2 + Math.PI / 6} // 俯仰角下限 120°
+          enableDamping
+          dampingFactor={0.08}
+          touches={{ ONE: 0, TWO: 2 }}
+        />
+      )}
+      <CameraController
+        target={cameraTarget}
+        lookAt={cameraLookAt}
+        speed={inModuleView ? 3 : 2}
+        paused={isCameraPaused}
+      />
       {MODULE_POSITIONS.map((module) => {
         const config = AURORA_ORBIT_CONFIG[module.id];
         const isVisible = !overlayVisible || module.id === currentModule;
@@ -146,7 +213,7 @@ export function SpatialNav() {
             initialAngle={config.initialAngle}
             isActive={currentModule === module.id}
             showLabel={highlightAll || !overlayVisible}
-            onClick={handleModuleClick}
+            onClick={handleAuroraClick}
             onHover={handleHover}
           />
         );

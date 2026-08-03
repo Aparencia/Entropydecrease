@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Play, Pause, RotateCcw, SkipForward, Clock, Volume2, VolumeX, Focus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Tip } from '@/components/ui/Tip';
 import { db } from '@/lib/storage';
 import TimerRing from '../components/TimerRing';
 import GoalInput from '../components/GoalInput';
@@ -15,6 +16,7 @@ import CycleMarkers from '../components/CycleMarkers';
 import PresetEditor from '../components/PresetEditor';
 import PresetTabs from '../components/PresetTabs';
 import { CompletionCelebration } from '../components/CompletionCelebration';
+import { EnergySuggestionBar } from '../components/EnergySuggestionBar';
 import { usePomodoroStore } from '../store/usePomodoroStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAudioPlayer } from '@/lib/audio/useAudioPlayer';
@@ -142,8 +144,9 @@ export default function PomodoroPage() {
   return (
     <>
       {/* 沉浸模式 — portal 到 body，AnimatePresence 在 portal 内部管理动效 */}
+      {/* 沉浸模式切换：mode="wait" 确保沉浸模式完全退出后再显示普通模式，避免双视图叠加残帧 */}
       {createPortal(
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           {isImmersive && (
             <motion.div
               key="immersive"
@@ -188,9 +191,9 @@ export default function PomodoroPage() {
             onCreate={openPresetEditor}
           />
 
-          {/* 预设提示 */}
+          {/* 预设提示 —— mt-4 保证与上方 PresetTabs 间距充足，避免视觉重叠 */}
           <motion.div
-            className="mt-3 flex items-center gap-1.5 text-[12px] text-text-secondary"
+            className="mt-4 flex items-center gap-1.5 text-[12px] text-text-secondary"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
@@ -204,6 +207,13 @@ export default function PomodoroPage() {
                 : `专注 ${settings.workDuration}min`}
             </span>
           </motion.div>
+
+          {/* T5: 精力-任务匹配提示条（未运行时展示，纯本地计算） */}
+          {!isRunning && !isPaused && (
+            <div className="mt-3 w-full max-w-md">
+              <EnergySuggestionBar />
+            </div>
+          )}
 
           <div className="flex-1 min-h-[3rem]" />
 
@@ -246,6 +256,8 @@ export default function PomodoroPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
+            {/* 白噪音开关按钮，带 tooltip 提示 */}
+            <Tip text={audioPrefs.whiteNoiseEnabled ? '关闭背景音' : '开启背景音'}>
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={toggleWhiteNoise}
@@ -258,6 +270,7 @@ export default function PomodoroPage() {
                 ? <Volume2 className="w-4 h-4" strokeWidth={1.5} />
                 : <VolumeX className="w-4 h-4" strokeWidth={1.5} />}
             </motion.button>
+            </Tip>
             <span className="text-[11px] text-text-tertiary select-none">{whiteNoiseTrack.nameZh}</span>
             <input
               type="range" min={0} max={1} step={0.05}
@@ -274,6 +287,8 @@ export default function PomodoroPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35, ...SPRING.gentle }}
           >
+            {/* 重置按钮，带 tooltip 提示 */}
+            <Tip text="重置计时器">
             <motion.button
               whileTap={{ scale: 0.9, rotate: -180 }}
               onClick={reset}
@@ -281,6 +296,7 @@ export default function PomodoroPage() {
             >
               <RotateCcw className="w-4 h-4" strokeWidth={1.5} />
             </motion.button>
+            </Tip>
 
             <motion.button
               whileHover={{ scale: 1.05, boxShadow: '0 8px 32px rgba(91,138,114,0.45)' }}
@@ -296,6 +312,8 @@ export default function PomodoroPage() {
               {mainButtonIcon}
             </motion.button>
 
+            {/* 跳过按钮，带 tooltip 提示 */}
+            <Tip text="跳过当前阶段">
             <motion.button
               whileTap={{ scale: 0.9, x: 3 }}
               onClick={skip}
@@ -303,6 +321,7 @@ export default function PomodoroPage() {
             >
               <SkipForward className="w-4 h-4" strokeWidth={1.5} />
             </motion.button>
+            </Tip>
           </motion.div>
 
           {/* 沉浸模式入口 */}

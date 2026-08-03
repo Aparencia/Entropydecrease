@@ -24,7 +24,16 @@ export function ChatInput({ onSend }: Props) {
   // A2 语音输入：麦克风按钮状态与控制
   const { listening, partialText, error, toggle, clearError } = useVoiceInput({
     onFinalText: (final) => {
-      if (final.trim()) onSend(final);
+      const trimmed = final.trim();
+      if (trimmed) {
+        if (isStreaming) {
+          // 回复流式进行中不能发送：把识别文本回填输入框，避免静默丢失
+          // （直接调 onSend 会被 sendMessage 的 isStreaming 守卫吞掉）
+          setText(trimmed);
+        } else {
+          onSend(trimmed);
+        }
+      }
       clearError();
       inputRef.current?.focus();
     },

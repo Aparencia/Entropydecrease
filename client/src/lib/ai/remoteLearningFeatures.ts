@@ -11,6 +11,9 @@ import type {
   DurationOptions, DurationHistoryData, DurationResult,
   FeynmanQuestionResult, FeynmanAnswerEvalResult,
   AnchorPoint, PredictionPrompt, RescueContext, ResourceLink,
+  ErrorPatternResult, QuizGenResult, QuizQuestion,
+  ContentTierResult, ConflictDetectResult,
+  ConceptPrecheckResult,
 } from './types';
 import { classifyRawError } from './errorClassifier';
 import { aiClient } from '../http/apiClient';
@@ -241,6 +244,126 @@ export async function httpRescue(
       hints,
       resources: [], // 后端暂不返回资源链接
       alternativeApproach,
+    };
+  } catch (error: unknown) {
+    throw classifyRawError(error, 'fetch');
+  }
+}
+
+// ── POST /api/v1/ai/error-pattern ────────────────────
+export async function httpAnalyzeErrorPatterns(
+  goldenErrors: Array<{ flashcardId: string; correctAnswer: string; userAnswer: string }>,
+): Promise<ErrorPatternResult> {
+  try {
+    const result = await aiClient.post<{
+      patterns: Array<{ type: string; keywords: string[]; explanation: string; suggestion: string }>;
+      top_offenders: Array<{ flashcardId: string; count: number }>;
+      summary: string; model: string; tokens_used: number;
+    }>(
+      '/api/v1/ai/error-pattern',
+      { goldenErrors },
+    );
+
+    return {
+      patterns: result.patterns.map(p => ({
+        type: p.type as ErrorPatternResult['patterns'][number]['type'],
+        keywords: p.keywords,
+        explanation: p.explanation,
+        suggestion: p.suggestion,
+      })),
+      topOffenders: result.top_offenders,
+      summary: result.summary,
+      model: result.model,
+      tokensUsed: result.tokens_used,
+    };
+  } catch (error: unknown) {
+    throw classifyRawError(error, 'fetch');
+  }
+}
+
+// ── POST /api/v1/ai/generate-quiz — N1 迷你测试生成 ──
+export async function httpGenerateQuiz(notesText: string): Promise<QuizGenResult> {
+  try {
+    const result = await aiClient.post<{
+      questions: QuizQuestion[]; model: string; tokens_used: number;
+    }>(
+      '/api/v1/ai/generate-quiz',
+      { notesText },
+    );
+    return {
+      questions: result.questions,
+      model: result.model,
+      tokensUsed: result.tokens_used,
+    };
+  } catch (error: unknown) {
+    throw classifyRawError(error, 'fetch');
+  }
+}
+
+// ── POST /api/v1/ai/content-tier — N5 内容分层 ────────
+export async function httpContentTier(notesText: string): Promise<ContentTierResult> {
+  try {
+    const result = await aiClient.post<{
+      core: ContentTierResult['core']; support: ContentTierResult['support']; detail: ContentTierResult['detail'];
+      model: string; tokens_used: number;
+    }>(
+      '/api/v1/ai/content-tier',
+      { notesText },
+    );
+    return {
+      core: result.core,
+      support: result.support,
+      detail: result.detail,
+      model: result.model,
+      tokensUsed: result.tokens_used,
+    };
+  } catch (error: unknown) {
+    throw classifyRawError(error, 'fetch');
+  }
+}
+
+// ── POST /api/v1/ai/conflict-detect — N6 概念冲突检测 ──
+export async function httpConflictDetect(newNoteText: string, historyText: string): Promise<ConflictDetectResult> {
+  try {
+    const result = await aiClient.post<{
+      conflicts: Array<{ old_claim: string; new_claim: string; topic: string; suggestion: string }>;
+      model: string; tokens_used: number;
+    }>(
+      '/api/v1/ai/conflict-detect',
+      { newNoteText, historyText },
+    );
+    return {
+      conflicts: (result.conflicts || []).map((c) => ({
+        oldClaim: c.old_claim,
+        newClaim: c.new_claim,
+        topic: c.topic ?? '',
+        suggestion: c.suggestion ?? '',
+      })),
+      model: result.model,
+      tokensUsed: result.tokens_used,
+    };
+  } catch (error: unknown) {
+    throw classifyRawError(error, 'fetch');
+  }
+}
+
+// ── POST /api/v1/ai/concept-precheck — E1 概念预检 ──
+export async function httpConceptPrecheck(concept: string, weakHistory?: string): Promise<ConceptPrecheckResult> {
+  try {
+    const result = await aiClient.post<{
+      questions: Array<{ question: string; intent: string }>;
+      model: string; tokens_used: number;
+    }>(
+      '/api/v1/ai/concept-precheck',
+      { concept, weakHistory: weakHistory ?? '' },
+    );
+    return {
+      questions: (result.questions || []).map((q) => ({
+        question: q.question,
+        intent: q.intent ?? '',
+      })),
+      model: result.model,
+      tokensUsed: result.tokens_used,
     };
   } catch (error: unknown) {
     throw classifyRawError(error, 'fetch');

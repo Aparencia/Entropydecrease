@@ -28,10 +28,10 @@ export function CoralEcosystem() {
 
   return (
     <>
-      {/* 缩略入口 / Thumbnail entry */}
+      {/* 缩略入口 / Thumbnail entry —— 浅色模式适配：白色背景 + 灰色边框 + 微阴影，确保在浅灰页面上可见 */}
       <button
         onClick={() => setExpanded(true)}
-        className="flex items-center gap-2 p-2.5 rounded-xl bg-white/5 border border-white/5 hover:bg-white/8 transition-colors w-full"
+        className="flex items-center gap-2 p-2.5 rounded-xl bg-white/80 dark:bg-white/5 border border-gray-200 dark:border-white/5 shadow-sm dark:shadow-none hover:bg-gray-100 dark:hover:bg-white/8 transition-colors w-full"
       >
         {/* 迷你珊瑚预览 / Mini coral preview */}
         <div className="flex -space-x-1">
@@ -46,11 +46,12 @@ export function CoralEcosystem() {
             />
           ))}
         </div>
-        <span className="text-[11px] text-white/50 flex-1 text-left">
+        {/* 浅色模式文字颜色加深，提升可读性 */}
+        <span className="text-[11px] text-gray-600 dark:text-white/50 flex-1 text-left">
           我的深海生态 · {corals.length} 株
         </span>
         {bleachedCount > 0 && (
-          <span className="text-[10px] text-white/30">{bleachedCount} 株休眠中</span>
+          <span className="text-[10px] text-gray-400 dark:text-white/30">{bleachedCount} 株休眠中</span>
         )}
       </button>
 

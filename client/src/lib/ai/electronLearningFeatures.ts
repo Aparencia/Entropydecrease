@@ -11,6 +11,9 @@ import type {
   DurationOptions, DurationHistoryData, DurationResult,
   FeynmanQuestionResult, FeynmanAnswerEvalResult,
   AnchorPoint, PredictionPrompt, RescueContext, ResourceLink,
+  ErrorPatternResult, QuizGenResult, QuizQuestion,
+  ContentTierResult, ConflictDetectResult,
+  ConceptPrecheckResult,
 } from './types';
 import { classifyRawError } from './errorClassifier';
 
@@ -30,7 +33,19 @@ export async function ipcEvaluateExplanation(
       model: string; tokensUsed: number; latencyMs: number; requestId?: string;
     };
     return {
-      // HACK: 网关历史版本曾返回百分制，>10 时除以 10 归一化
+      /**
+       * HACK：评分归一化兼容处理
+       *
+       * 背景原因：AI 网关历史版本（v1.0 之前）曾返回百分制评分（0-100），
+       * 现行网关已统一为十分制（0-10）。为避免旧版网关返回的百分制数据
+       * 导致前端显示异常，当 overallScore > 10 时自动除以 10 归一化。
+       *
+       * 保留理由：自部署的私有化网关可能仍有旧版本在运行，无法确定全量
+       * 升级时点，因此该兼容逻辑必须保持幂等。
+       *
+       * @todo 当确认所有生产/私有化网关均已升级到 v1.0+ 后，可安全移除此 HACK。
+       * 跟踪方式：在 AI 网关发版日志中搜索「评分归一化」关键词确认全量升级状态。
+       */
       overallScore: result.overallScore > 10 ? result.overallScore / 10 : result.overallScore,
       dimensions: result.dimensions.map(d => ({
         name: d.name,
@@ -220,6 +235,104 @@ export async function ipcRescue(
       hints,
       resources: [],
       alternativeApproach,
+    };
+  } catch (error: unknown) {
+    throw classifyRawError(error, 'ipc');
+  }
+}
+
+// ── invoke('ai_error_pattern') ────────────────────────
+export async function ipcAnalyzeErrorPatterns(
+  authToken: string | null,
+  goldenErrors: Array<{ flashcardId: string; correctAnswer: string; userAnswer: string }>,
+): Promise<ErrorPatternResult> {
+  try {
+    const result = await window.electronAPI!.invoke('ai_error_pattern', {
+      goldenErrors,
+      authToken,
+    }) as {
+      patterns: Array<{ type: string; keywords: string[]; explanation: string; suggestion: string }>;
+      topOffenders: Array<{ flashcardId: string; count: number }>;
+      summary: string; model: string; tokensUsed: number;
+    };
+
+    return {
+      patterns: (result.patterns || []).map(p => ({
+        type: p.type as ErrorPatternResult['patterns'][number]['type'],
+        keywords: p.keywords,
+        explanation: p.explanation,
+        suggestion: p.suggestion,
+      })),
+      topOffenders: result.topOffenders || [],
+      summary: result.summary,
+      model: result.model,
+      tokensUsed: result.tokensUsed,
+    };
+  } catch (error: unknown) {
+    throw classifyRawError(error, 'ipc');
+  }
+}
+
+// ── invoke('ai_generate_quiz') — N1 迷你测试生成 ────
+export async function ipcGenerateQuiz(authToken: string | null, notesText: string): Promise<QuizGenResult> {
+  try {
+    const result = await window.electronAPI!.invoke('ai_generate_quiz', {
+      notesText, authToken,
+    }) as { questions: QuizQuestion[]; model: string; tokensUsed: number };
+    return {
+      questions: result.questions || [],
+      model: result.model,
+      tokensUsed: result.tokensUsed,
+    };
+  } catch (error: unknown) {
+    throw classifyRawError(error, 'ipc');
+  }
+}
+
+// ── invoke('ai_content_tier') — N5 内容分层 ───────────
+export async function ipcContentTier(authToken: string | null, notesText: string): Promise<ContentTierResult> {
+  try {
+    const result = await window.electronAPI!.invoke('ai_content_tier', {
+      notesText, authToken,
+    }) as ContentTierResult & { model: string; tokensUsed: number };
+    return {
+      core: result.core || [],
+      support: result.support || [],
+      detail: result.detail || [],
+      model: result.model,
+      tokensUsed: result.tokensUsed,
+    };
+  } catch (error: unknown) {
+    throw classifyRawError(error, 'ipc');
+  }
+}
+
+// ── invoke('ai_conflict_detect') — N6 概念冲突检测 ────
+export async function ipcConflictDetect(authToken: string | null, newNoteText: string, historyText: string): Promise<ConflictDetectResult> {
+  try {
+    const result = await window.electronAPI!.invoke('ai_conflict_detect', {
+      newNoteText, historyText, authToken,
+    }) as ConflictDetectResult & { model: string; tokensUsed: number };
+    return {
+      conflicts: result.conflicts || [],
+      model: result.model,
+      tokensUsed: result.tokensUsed,
+    };
+  } catch (error: unknown) {
+    throw classifyRawError(error, 'ipc');
+  }
+}
+
+// ── invoke('ai_concept_precheck') — E1 概念预检 ─────
+export async function ipcConceptPrecheck(authToken: string | null, concept: string, weakHistory?: string): Promise<ConceptPrecheckResult> {
+  try {
+    const result = await window.electronAPI!.invoke('ai_concept_precheck', {
+      concept, weakHistory, authToken,
+    }) as ConceptPrecheckResult & { model: string; tokensUsed: number };
+    return {
+      questions: result.questions || [],
+      model: result.model,
+      tokensUsed: result.tokensUsed,
     };
   } catch (error: unknown) {
     throw classifyRawError(error, 'ipc');

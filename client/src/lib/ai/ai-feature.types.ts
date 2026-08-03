@@ -27,6 +27,8 @@ export interface FlashcardOptions {
   count?: number;
   difficulty?: 'easy' | 'medium' | 'hard';
   cardType?: 'question_answer' | 'fill_blank' | 'true_false' | 'mixed';
+  /** F1 多情境提取：为重要知识点生成表述不同的变体卡片 */
+  variants?: boolean;
 }
 
 export interface Flashcard {

@@ -11,6 +11,7 @@ import { memo } from 'react';
 import { motion } from 'framer-motion';
 import { BookOpen, PenLine, BookMarked, Brain, Timer, Moon, Coffee, Dumbbell, Music, Languages, Calculator, Microscope, GraduationCap, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Tip } from '@/components/ui/Tip';
 import { SPRING } from '@/lib/animation/springConfig';
 import type { PomodoroPreset } from '@/types/models';
 
@@ -67,8 +68,9 @@ export default memo(function PresetTabs({ presets, activePresetId, canCreate, on
           </motion.button>
         );
       })}
-      {/* "+" 快捷创建预设入口（达上限时隐藏） */}
+      {/* "+" 快捷创建预设入口，带 tooltip（达上限时隐藏） */}
       {canCreate && (
+        <Tip text="新建预设">
         <motion.button
           onClick={onCreate}
           whileTap={{ scale: 0.9 }}
@@ -77,6 +79,7 @@ export default memo(function PresetTabs({ presets, activePresetId, canCreate, on
         >
           <Plus className="w-4 h-4" strokeWidth={1.5} />
         </motion.button>
+        </Tip>
       )}
     </motion.div>
   );

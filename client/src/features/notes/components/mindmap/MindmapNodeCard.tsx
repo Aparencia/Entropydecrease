@@ -12,6 +12,7 @@ import { memo, useEffect, useRef } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import { Plus, ChevronRight, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Tip } from '@/components/ui/Tip';
 import { useMindmapActions } from './MindmapContext';
 import type { MindmapFlowNodeData } from '../../lib/mindmap/mindmapConvert';
 
@@ -65,26 +66,28 @@ function MindmapNodeCardBase({ id, data, selected }: MindmapNodeProps) {
         </span>
       )}
 
-      {/* 加子节点（hover 显示） / add child on hover */}
+      {/* 加子节点（hover 显示），升级 title 为 Tip */}
       {!isEditing && (
+        <Tip text="添加子节点" side="right">
         <button
           onClick={(e) => { e.stopPropagation(); actions.onAddChild(id); }}
-          title="添加子节点"
           className="absolute -right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-brand-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-kb-fast hover:bg-brand-600 z-10"
         >
           <Plus className="w-3 h-3" strokeWidth={2.5} />
         </button>
+        </Tip>
       )}
 
-      {/* 折叠切换（有子节点时） / collapse toggle */}
+      {/* 折叠切换（有子节点时），升级 title 为 Tip */}
       {hasChildren && !isEditing && (
+        <Tip text={collapsed ? '展开' : '折叠'} side="right">
         <button
           onClick={(e) => { e.stopPropagation(); actions.onToggleCollapse(id); }}
-          title={collapsed ? '展开' : '折叠'}
           className="absolute -right-3 -bottom-3 w-5 h-5 rounded-full bg-bg-tertiary border border-border/60 text-text-secondary flex items-center justify-center hover:text-text-primary z-10"
         >
           {collapsed ? <ChevronRight className="w-3 h-3" strokeWidth={2} /> : <ChevronDown className="w-3 h-3" strokeWidth={2} />}
         </button>
+        </Tip>
       )}
     </div>
   );

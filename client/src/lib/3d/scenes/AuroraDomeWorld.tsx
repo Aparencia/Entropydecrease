@@ -68,7 +68,9 @@ function SunSystem() {
   const timeRef = useRef(0);
 
   useFrame((_, delta) => {
-    timeRef.current += delta;
+    // 防止浏览器节流导致的帧时间尖峰，最大允许 100ms
+    const safeDelta = Math.min(delta, 0.1);
+    timeRef.current += safeDelta;
 
     // 脉动动画：scale 1.0 ↔ 1.05，周期4秒
     const pulse = 1.0 + Math.sin(timeRef.current * (Math.PI * 2 / 4)) * 0.05;
@@ -158,15 +160,18 @@ function StarDust({ count }: { count: number }) {
   useFrame((_, delta) => {
     if (!pointsRef.current || !velocitiesRef.current) return;
 
+    // 防止浏览器节流导致的帧时间尖峰，最大允许 100ms
+    const safeDelta = Math.min(delta, 0.1);
+
     const posAttr = pointsRef.current.geometry.attributes.position;
     const posArray = posAttr.array as Float32Array;
     const vel = velocitiesRef.current;
 
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
-      posArray[i3] += vel[i3] * delta;
-      posArray[i3 + 1] += vel[i3 + 1] * delta;
-      posArray[i3 + 2] += vel[i3 + 2] * delta;
+      posArray[i3] += vel[i3] * safeDelta;
+      posArray[i3 + 1] += vel[i3 + 1] * safeDelta;
+      posArray[i3 + 2] += vel[i3 + 2] * safeDelta;
 
       // 超出边界则重置到太阳附近
       const dist = Math.sqrt(
@@ -232,11 +237,13 @@ function CloudLayer() {
 
   useFrame((_, delta) => {
     if (!cloudsRef.current) return;
+    // 防止浏览器节流导致的帧时间尖峰，最大允许 100ms
+    const safeDelta = Math.min(delta, 0.1);
     cloudsRef.current.children.forEach((cloud, i) => {
       const data = cloudData[i];
-      cloud.position.x += Math.sin(Date.now() * 0.0001 + i) * data.speed * delta;
-      cloud.position.z += Math.cos(Date.now() * 0.0001 + i * 2) * data.speed * delta * 0.5;
-      cloud.rotation.z += delta * 0.005;
+      cloud.position.x += Math.sin(Date.now() * 0.0001 + i) * data.speed * safeDelta;
+      cloud.position.z += Math.cos(Date.now() * 0.0001 + i * 2) * data.speed * safeDelta * 0.5;
+      cloud.rotation.z += safeDelta * 0.005;
     });
   });
 

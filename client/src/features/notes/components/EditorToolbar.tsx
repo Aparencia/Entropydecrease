@@ -13,6 +13,7 @@ import {
   Table2, ListTodo, ImageIcon, AlignLeft, AlignCenter, AlignRight, AlignJustify, Palette,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { NoteHealthIndicator } from './NoteHealthIndicator';
 
 interface ToolbarButtonProps {
   icon: React.FC<React.SVGProps<SVGSVGElement> & { strokeWidth?: number | string }>;
@@ -48,9 +49,11 @@ export interface EditorToolbarProps {
   editor: Editor | null;
   /** 触发隐藏的图片上传 input */
   onPickImage: () => void;
+  /** N3 笔记健康度检测的文本内容（传入时在工具栏末端显示指示器） */
+  healthContent?: string;
 }
 
-export function EditorToolbar({ editor, onPickImage }: EditorToolbarProps) {
+export function EditorToolbar({ editor, onPickImage, healthContent }: EditorToolbarProps) {
   return (
     <div className="sticky top-0 z-20 mx-auto mt-2 flex items-center gap-1 px-4 py-1.5 rounded-[var(--kb-radius-lg)] border border-border/20 flex-shrink-0 overflow-x-auto max-w-fit bg-bg-elevated/70 backdrop-blur-xl shadow-[0_2px_16px_-4px_rgba(0,0,0,0.06)] opacity-70 hover:opacity-100 transition-opacity duration-300">
       <ToolbarButton icon={Undo2} label="撤销" onClick={() => editor?.chain().focus().undo().run()} />
@@ -62,7 +65,16 @@ export function EditorToolbar({ editor, onPickImage }: EditorToolbarProps) {
           icon={level === 1 ? Heading1 : level === 2 ? Heading2 : Heading3}
           label={`标题 ${level}`}
           isActive={editor?.isActive('heading', { level })}
-          onClick={() => editor?.chain().focus().toggleHeading({ level }).run()}
+          onClick={() => {
+            if (!editor) return;
+            // 切换标题（字号）时 TipTap 会重建节点并重置 textAlign 等段落属性，
+            // 先读取当前对齐方式，切换后立即恢复，避免"调字号丢排版"
+            const align = (editor.getAttributes('paragraph').textAlign
+              ?? editor.getAttributes('heading').textAlign) as string | undefined;
+            const chain = editor.chain().focus().toggleHeading({ level });
+            if (align) chain.setTextAlign(align as 'left' | 'center' | 'right' | 'justify');
+            chain.run();
+          }}
         />
       ))}
       <ToolbarDivider />
@@ -125,7 +137,12 @@ export function EditorToolbar({ editor, onPickImage }: EditorToolbarProps) {
       <ToolbarButton
         icon={Table2}
         label="插入表格"
-        onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+        isActive={editor?.isActive('table')}
+        onClick={() => {
+          // 光标已在表格内时再插入会在单元格中无限嵌套表格，直接拦截
+          if (!editor || editor.isActive('table')) return;
+          editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+        }}
       />
       <ToolbarButton
         icon={ListTodo}
@@ -161,6 +178,13 @@ export function EditorToolbar({ editor, onPickImage }: EditorToolbarProps) {
           onChange={(e) => editor?.chain().focus().setColor(e.target.value).run()}
         />
       </label>
+      {/* N3 笔记健康度指示器 */}
+      {healthContent !== undefined && (
+        <>
+          <ToolbarDivider />
+          <NoteHealthIndicator content={healthContent} />
+        </>
+      )}
     </div>
   );
 }

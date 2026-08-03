@@ -22,6 +22,7 @@ import { AmbientLight, FeynmanTopBar, FeynmanLoadingSkeleton, FeynmanNotFound, F
 import { ExplanationHighlights } from '../components/ExplanationHighlights';
 import { createStepVariants } from '../components/feynmanAnimations';
 import { ConceptInternalized } from '../components/ConceptInternalized';
+import { ConceptPrecheckCard } from '../components/ConceptPrecheckCard';
 import { useFeynmanSession } from '../hooks/useFeynmanSession';
 import { useFeynmanAI } from '../hooks/useFeynmanAI';
 
@@ -137,13 +138,16 @@ export default function FeynmanSessionPage() {
             transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] as const }}
             className="max-w-2xl mx-auto"
           >
-            {/* 步骤 1: 选择概念 */}
+            {/* 步骤 1: 选择概念（E1 概念预检卡可选先行） */}
             {currentStep === 1 && (
-              <StepConcept
-                concept={note?.concept}
-                explanation={localExplanation}
-                onExplanationChange={setLocalExplanation}
-              />
+              <>
+                {noteId && <ConceptPrecheckCard concept={note?.concept ?? ''} noteId={noteId} />}
+                <StepConcept
+                  concept={note?.concept}
+                  explanation={localExplanation}
+                  onExplanationChange={setLocalExplanation}
+                />
+              </>
             )}
 
             {/* 步骤 2: 讲解概念 */}

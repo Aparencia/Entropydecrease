@@ -22,6 +22,8 @@ import { soundPlayer } from '@/lib/audio/SoundPlayer';
 const MIN_DUE_THRESHOLD = 10;
 /** 单次会话最多卡片数 */
 const MAX_SESSION_CARDS = 20;
+/** 黄金错误加速复习：下次间隔压缩上限（天） */
+const GOLDEN_ERROR_MAX_INTERVAL_DAYS = 1;
 
 // ---------------------------------------------------------------------------
 // 类型定义
@@ -73,6 +75,22 @@ function shuffle<T>(arr: T[]): T[] {
     [result[i], result[j]] = [result[j], result[i]];
   }
   return result;
+}
+
+/**
+ * F2 黄金错误加速复习：高自信答错是最大学习机会，压缩下次复习间隔。
+ * 仅在调度结果之上做后处理（dueDate 提前 + interval 封顶），不修改 FSRS 权重。
+ */
+function compressForGoldenError(
+  dueDate: Date,
+  interval: number,
+  now: Date,
+): { dueDate: Date; interval: number } {
+  const maxDue = new Date(now.getTime() + GOLDEN_ERROR_MAX_INTERVAL_DAYS * 24 * 60 * 60 * 1000);
+  return {
+    dueDate: dueDate > maxDue ? maxDue : dueDate,
+    interval: Math.min(interval, GOLDEN_ERROR_MAX_INTERVAL_DAYS),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -232,14 +250,23 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
           }]
         : goldenErrors;
 
-      // 更新卡片持久化存储
+      // F2 黄金错误加速复习：压缩该卡下次复习间隔（调度结果后处理）
       const updatedAt = new Date();
+      let effectiveDueDate = result.dueDate;
+      let effectiveInterval = result.interval;
+      if (isGoldenError) {
+        const compressed = compressForGoldenError(result.dueDate, result.interval, updatedAt);
+        effectiveDueDate = compressed.dueDate;
+        effectiveInterval = compressed.interval;
+      }
+
+      // 更新卡片持久化存储
       await flashcardStore.update(card.id, {
         easeFactor: result.easeFactor,
-        interval: result.interval,
+        interval: effectiveInterval,
         repetitions: result.repetitions,
         lapses: result.lapses,
-        dueDate: result.dueDate,
+        dueDate: effectiveDueDate,
         stability: result.stability,
         difficulty: result.difficulty,
         lastReviewDate: updatedAt,
@@ -252,10 +279,10 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
           ? {
               ...c,
               easeFactor: result.easeFactor,
-              interval: result.interval,
+              interval: effectiveInterval,
               repetitions: result.repetitions,
               lapses: result.lapses,
-              dueDate: result.dueDate,
+              dueDate: effectiveDueDate,
               stability: result.stability,
               difficulty: result.difficulty,
               lastReviewDate: updatedAt,
@@ -273,8 +300,10 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         easeFactorBefore: card.easeFactor,
         easeFactorAfter: result.easeFactor,
         intervalBefore: card.interval,
-        intervalAfter: result.interval,
+        intervalAfter: effectiveInterval,
         reviewedAt: updatedAt,
+        confidence,
+        goldenError: isGoldenError,
         timeSpent: cardStartTime
           ? Math.round((updatedAt.getTime() - cardStartTime.getTime()) / 1000)
           : 0,
@@ -285,10 +314,10 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
       const flashcardState = useFlashcardStore.getState();
       flashcardState.updateCard(card.id, {
         easeFactor: result.easeFactor,
-        interval: result.interval,
+        interval: effectiveInterval,
         repetitions: result.repetitions,
         lapses: result.lapses,
-        dueDate: result.dueDate,
+        dueDate: effectiveDueDate,
         stability: result.stability,
         difficulty: result.difficulty,
         lastReviewDate: updatedAt,

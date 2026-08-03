@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: "/", label: "首页" },
   { href: "/story", label: "品牌故事" },
   { href: "/download", label: "下载" },
+  { href: "/faq", label: "常见问题" },
 ];
 
 /**
