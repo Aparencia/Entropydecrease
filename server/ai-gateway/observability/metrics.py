@@ -9,7 +9,6 @@
 """
 
 import logging
-import time
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)

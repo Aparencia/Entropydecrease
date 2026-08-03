@@ -14,6 +14,7 @@
 
 import base64
 import logging
+import os
 import time
 import warnings
 from typing import Optional
@@ -49,8 +50,7 @@ def _jwt_verification_configured() -> bool:
 
 # 启动时检查密钥配置
 # Phase1 安全加固：生产环境缺少密钥材料时拒绝启动（而非降级放行）
-import os as _os
-_ALLOW_DEV_AUTH = _os.getenv("GATEWAY_ALLOW_DEV_AUTH", "false").lower() == "true"
+_ALLOW_DEV_AUTH = os.getenv("GATEWAY_ALLOW_DEV_AUTH", "false").lower() == "true"
 
 if not _jwt_verification_configured():
     if APP_CONFIG.get("app_env") == "production" and not _ALLOW_DEV_AUTH:

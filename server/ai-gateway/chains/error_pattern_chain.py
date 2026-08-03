@@ -56,8 +56,6 @@ class ErrorPatternChain:
                 "latency_ms": 123,
             }
         """
-        opts = options or {}
-
         # 构建输入文本
         errors_text = "\n".join([
             f"【错误 #{i+1}】\n正确答案：{e['correctAnswer']}\n用户回答：{e['userAnswer']}\n---"

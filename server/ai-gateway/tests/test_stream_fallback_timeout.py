@@ -70,7 +70,7 @@ def _make_failing_stream_fn(error_msg="模拟故障"):
     def fn(provider, model_name):
         async def _gen():
             raise RuntimeError(error_msg)
-            yield "unreachable"  # noqa: 使 _gen 成为异步生成器
+            yield "unreachable"  # 使 _gen 成为异步生成器（此句不可达，仅为语法需要）
         return _gen()
     return fn
 
