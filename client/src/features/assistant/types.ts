@@ -97,6 +97,8 @@ export interface TriggerContext {
   stuckSource?: 'note' | 'feynman';
   /** A4 到期实施意图 ID，intention:due 事件携带 */
   intentionId?: string;
+  /** F3 睡前复习目标牌组（到期卡最多），review:bedtime 事件携带 */
+  topDeckId?: string;
 }
 
 // ── 音频 ──────────────────────────────────────────────────────

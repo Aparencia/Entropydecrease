@@ -48,6 +48,9 @@ const sessionMenuGroups: ContextMenuGroup[] = [
 export default function StudySessionPage() {
   const { deckId } = useParams<{ deckId: string }>();
   const navigate = useNavigate();
+  // F3 睡前迷你复习：?mini=N 限制会话卡数（hash 路由 search 在 hash 内解析）
+  const searchParams = new URLSearchParams(window.location.hash.split('?')[1] ?? '');
+  const miniLimit = Number(searchParams.get('mini') ?? 0) || undefined;
 
   const {
     sessionCards, currentIndex, isFlipped, completedCount, correctCount,
@@ -112,10 +115,10 @@ export default function StudySessionPage() {
     if (deckId) {
       selectDeck(deckId);
       loadCards(deckId).then(() => {
-        startSession(deckId);
+        startSession(deckId, miniLimit);
       });
     }
-  }, [deckId, selectDeck, loadCards, startSession]);
+  }, [deckId, selectDeck, loadCards, startSession, miniLimit]);
 
   useEffect(() => {
     if (isComplete) setShowSummary(true);

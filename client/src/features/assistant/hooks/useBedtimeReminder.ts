@@ -6,8 +6,9 @@
  * 可选增强设计：任何检测异常静默跳过，绝不打扰用户。
  */
 import { useEffect } from 'react';
-import { flashcardStore, flashcardReviewStore } from '@/lib/storage';
+import { flashcardReviewStore } from '@/lib/storage';
 import { assistantEventBus } from '../lib/eventBus';
+import { findDueCards, findTopDueDeck } from '../lib/bedtimeReview';
 
 /** 睡前推荐窗口起点（21:30，以分钟计） */
 const BEDTIME_START_MIN = 21 * 60 + 30;
@@ -33,15 +34,16 @@ export function useBedtimeReminder(): void {
         if (reviewsToday > 0) return;
 
         // 到期卡计数（dueDate 索引范围查询，避免全表加载）
-        const dueCount = await flashcardStore.getTable()
-          .where('dueDate').belowOrEqual(now)
-          .and((c) => c.repetitions > 0)
-          .count();
-        if (dueCount < MIN_DUE_CARDS) return;
+        const dueCards = await findDueCards(now);
+        if (dueCards.length < MIN_DUE_CARDS) return;
+
+        // F3 闭环：到期卡最多的牌组作为迷你复习目标（无牌组则纯提醒）
+        const topDeckId = await findTopDueDeck(now);
 
         assistantEventBus.emit('review:bedtime', {
           currentHour: now.getHours(),
-          dueCardCount: dueCount,
+          dueCardCount: dueCards.length,
+          topDeckId,
         });
       } catch {
         // 可选增强：检测失败静默跳过
