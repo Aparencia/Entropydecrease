@@ -48,7 +48,8 @@ class TranscribeResponse(BaseModel):
     text: str = Field(..., description="转写文本")
     segments: list[TranscribeSegment] = Field(default_factory=list, description="时间分段列表")
     language: str = Field(..., description="检测到的语言")
-    confidence: float = Field(..., description="置信度 0-1")
+    # GW-2#11: ASR API 不提供置信度，恒为占位 0.0——前端不应据此做阈值过滤
+    confidence: float = Field(default=0.0, description="置信度占位（ASR API 不提供，恒为 0）")
     model_used: str = Field(..., description="使用的模型名称")
     processing_time_ms: int = Field(..., description="请求耗时（毫秒）")
     warning: str | None = Field(default=None, description="降级提示（fallback 时透传，客户端据此识别失败）")

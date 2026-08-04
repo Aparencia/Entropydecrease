@@ -91,6 +91,16 @@ if not _jwt_verification_configured():
             stacklevel=2,
         )
 
+# GW-2#14: 死配置检测——存在非空 JWT_SECRET 而 SUPABASE_JWT_SECRET 为空时
+# 打印告警：运维按字面配置 JWT_SECRET 会误以为认证密钥已就绪（实际从未生效）
+_legacy_jwt_secret = os.getenv("JWT_SECRET", "")
+if _legacy_jwt_secret and not APP_CONFIG.get("jwt_secret", ""):
+    logger.warning(
+        "检测到 JWT_SECRET 已配置但 SUPABASE_JWT_SECRET 为空："
+        "网关只读取 SUPABASE_JWT_SECRET，JWT_SECRET 是死配置不会生效，"
+        "请将密钥迁移到 SUPABASE_JWT_SECRET（或删除 JWT_SECRET 避免误导）。"
+    )
+
 # 启动日志：输当前 JWT 验证算法与配置状态（GW-2#1: 避免"已配置"假象）
 logger.info(
     "JWT 验证算法: %s (验证材料已配置=%s)",

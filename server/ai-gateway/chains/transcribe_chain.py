@@ -94,6 +94,7 @@ class TranscribeChain:
         # 后处理
         result = self._postprocess_result(result)
         result.setdefault("language", language)
+        # GW-2#11: ASR API 不返回置信度，0.0 为占位常量而非测量值
         result.setdefault("confidence", 0.0)
         result.setdefault("model", self.model)
 

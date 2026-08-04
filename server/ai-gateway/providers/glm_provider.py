@@ -173,7 +173,10 @@ class GLMProvider(AIProvider):
                 "text": text,
                 "segments": [],
                 "language": language,
-                "confidence": 0.9,
+                # GW-2#11: OpenAI 兼容 ASR 响应不提供置信度字段，
+                # 原硬编码 0.9 是编造数据——改为 0.0 明确表示"无置信度数据"，
+                # 客户端不应据此做阈值过滤（与 QwenProvider GW-M15 对齐）
+                "confidence": 0.0,
                 "model": model,
                 "latency_ms": latency_ms,
             }

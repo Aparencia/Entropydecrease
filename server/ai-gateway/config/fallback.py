@@ -2,7 +2,9 @@
 熵减 AI 网关 — Provider Fallback 链与调用编排
 
 @ai-context: 主 Provider 失败时按 PROVIDER_FALLBACK_CHAIN 依次降级。整条链
-共享 TIMEOUT_CONFIG*1.5 的总预算，每次切换前扣除已耗时，避免叠加超时。
+共享 TIMEOUT_CONFIG*3.0 的总预算（GW-2#12: 实现为 *3.0——约 3 个备选
+Provider × 每次调用超时上限的兑底语义；注释曾写 *1.5 与实现漂移），
+每次切换前扣除已耗时，避免叠加超时。
 call_with_fallback（dict）/ call_with_fallback_stream（AsyncGenerator）各有
 带用户 Key 的变体：用户 Key 优先，失败再降级服务端链。_resolve_model_name
 在 fallback 到备选 Provider 时按 主slot→功能slot→通用slot→首个模型 逐级回退。

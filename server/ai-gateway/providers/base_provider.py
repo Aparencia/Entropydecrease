@@ -65,6 +65,19 @@ def with_retry_and_timeout(max_retries: int = 2):
                 # 未指定 feature 时取配置最大值，确保不会误杀慢请求
                 timeout = max(TIMEOUT_CONFIG.values()) if TIMEOUT_CONFIG else 30
 
+            # GW-2#13: Key 轮询统一入口——原实现只在各 Provider 的 generate
+            # 方法内手动调用 _rotate_api_key，视觉/流式/ASR/视频路径从不轮换，
+            # 多 Key 配置形同虚设（RPM 压力全压主 Key，主 Key 熔断后无 Key 可换）。
+            # 此处对所有被装饰方法统一轮询；无 KeyPool/单 Key 时内部短路返回。
+            # FallbackProvider 等无装饰器方法不受影响。
+            try:
+                rotate = getattr(self, "_rotate_api_key", None)
+                if rotate is not None:
+                    await rotate()
+            except Exception:
+                # 轮询失败不阻断业务调用（保持原行为）
+                pass
+
             last_error: Exception | None = None
             for attempt in range(max_retries + 1):
                 try:

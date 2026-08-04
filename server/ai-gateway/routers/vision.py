@@ -135,9 +135,14 @@ async def extract_vision(request: Request, body: VisionExtractRequest) -> Vision
     if not isinstance(concepts, list):
         concepts = []
 
-    # 置信度评估：基于提取内容是否非空
-    has_content = bool(text.strip())
-    confidence = 0.9 if has_content else 0.3
+    # GW-2#11: confidence 语义定义为"结构化提取完整度"而非模型置信度——
+    # 原实现按文本是否非空硬编码 0.9/0.3，数值无统计意义且误导前端
+    #（低质量识别也显示 0.9）。完整度 = text 权重 0.5 + 辅助字段
+    #（公式/图表/要点/代码/概念）非空比例权重 0.5，反映解析覆盖度
+    filled_text = 1.0 if text.strip() else 0.0
+    aux_fields = [formulas, diagrams, key_points, code_blocks, concepts]
+    aux_filled = sum(1 for v in aux_fields if v) / len(aux_fields)
+    confidence = round(filled_text * 0.5 + aux_filled * 0.5, 2)
 
     # 实际使用的模式
     effective_mode = result.get("mode", body.mode or "auto")
