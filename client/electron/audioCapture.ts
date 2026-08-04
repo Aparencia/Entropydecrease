@@ -219,6 +219,10 @@ export class AudioCapture {
       fallback: null,
     };
     try {
+      // ELEC2-L2: startWithKind 前二次校验——首次守卫后到此处存在 await 边界，
+      // stop() 可能已置 capturing=false；继续启动会产生幽灵采集（provider
+      // 已重启但无人会停止它）。降级结果以 capturing 最新状态为准
+      if (!this.capturing) return;
       await this.startWithKind('endpoint_loopback', this.boundWindow, this.boundSourceId);
     } catch (err) {
       logger.error('[AudioCapture] 降级到端点环回失败', err);

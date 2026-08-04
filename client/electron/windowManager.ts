@@ -78,6 +78,12 @@ export function createMainWindow(
   isQuittingRef: { value: boolean },
   onQuit: () => void,
 ): BrowserWindow {
+  // ELEC2-L1: 窗口创建（含 macOS activate 重建）时重置退出前同步状态机——
+  // 旧状态残留 requested=true 且 completed=false 时，新窗口 close 永远
+  // preventDefault 无法关闭（同步事件只在旧窗口的 webContents 上发送过）
+  syncBeforeQuitRequested = false;
+  syncBeforeQuitCompleted = false;
+
   const win = new BrowserWindow({
     width: WINDOW_DEFAULT_WIDTH,
     height: WINDOW_DEFAULT_HEIGHT,
