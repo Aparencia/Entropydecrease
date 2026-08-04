@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from cache.redis_cache import get_cache
-from config import RATE_LIMITS
+from config import RATE_LIMITS, TIMEOUT_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +107,19 @@ PATH_TO_FEATURE: dict[str, str] = {
 # 与高频多轮对话（学伴 chat），若计入 daily_total 会很快耗尽全部 AI 配额，
 # 仅受各自功能级上限约束
 GLOBAL_EXEMPT_FEATURES: frozenset[str] = frozenset({"transcribe", "chat"})
+
+# GW-2#9: 启动校验——PATH_TO_FEATURE 登记的 feature 必须同时在
+# TIMEOUT_CONFIG 与 RATE_LIMITS 登记，否则静默兜底（300s 超时/默认 10 次限流）
+# 会掩盖配置缺失（import_concept 曾因此落入 300s 超时预算）
+_MISSING_CONFIG = sorted(
+    f for f in set(PATH_TO_FEATURE.values())
+    if f not in RATE_LIMITS or f not in TIMEOUT_CONFIG
+)
+if _MISSING_CONFIG:
+    logger.warning(
+        "以下 feature 缺少 TIMEOUT_CONFIG/RATE_LIMITS 登记（将使用兜底值）: %s",
+        _MISSING_CONFIG,
+    )
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

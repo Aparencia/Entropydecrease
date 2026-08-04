@@ -143,6 +143,14 @@ def _normalize_pem_key(raw: str) -> str:
 _jwks_cache: Optional[dict] = None
 _jwks_cache_time: float = 0.0
 _JWKS_CACHE_TTL: int = 3600  # 缓存有效期（秒），默认 1 小时
+# GW-2#8: 网络类失败时允许复用过期缓存的宽限窗口（秒）——密钥轮换的越权
+# 风险与网络抖动导致的可用性风险权衡：JWKS 1 小时才刷新一次，期间 Supabase
+# 任何一次网络故障若 fail-closed 会让全部请求 401（认证风暴）
+_JWKS_STALE_GRACE_SECONDS: int = 300
+# GW-2#8: 网络失败后的重试退避（秒），避免每次请求都打 JWKS 端点
+_JWKS_FAIL_RETRY_SECONDS: int = 60
+# 网络失败后下次刷新尝试的最早时间戳（0 表示无退避）
+_jwks_retry_after: float = 0.0
 # GW-M3: 防缓存击穿锁 + 共享连接池客户端（避免每次请求新建 TCP/TLS 连接）
 _jwks_lock: asyncio.Lock = asyncio.Lock()
 _jwks_client: Optional[httpx.AsyncClient] = None
@@ -181,10 +189,20 @@ async def _fetch_jwks(jwks_url: str) -> dict:
     GW-M3: 网络失败时 fail-closed（拒绝验证）而非返回过期缓存——
     密钥轮换后过期缓存会让旧 token 在验证窗口内继续有效（越权窗口）。
     asyncio.Lock 防止冷启动多请求并发刷新（缓存击穿）。
+    GW-2#8: 区分两类失败——HTTP 状态错误（密钥轮换/端点失效）保持
+    fail-closed；网络类失败（超时/DNS/TLS/连接）短暂复用过期缓存
+    （最多 5 分钟宽限）并退避 60s 重试，避免 Supabase 短暂抖动全站 401。
     """
-    global _jwks_cache, _jwks_cache_time
+    global _jwks_cache, _jwks_cache_time, _jwks_retry_after
     now = time.time()
     if _jwks_cache is not None and (now - _jwks_cache_time) < _JWKS_CACHE_TTL:
+        return _jwks_cache
+    # 缓存过期但在宽限窗口内且未到重试时间：降级复用（网络抖动自愈窗口）
+    if (
+        _jwks_cache is not None
+        and (now - _jwks_cache_time) < _JWKS_CACHE_TTL + _JWKS_STALE_GRACE_SECONDS
+        and now < _jwks_retry_after
+    ):
         return _jwks_cache
     async with _jwks_lock:
         # 双重检查：等待锁期间其他协程可能已刷新缓存
@@ -196,10 +214,23 @@ async def _fetch_jwks(jwks_url: str) -> dict:
             resp.raise_for_status()
             _jwks_cache = resp.json()
             _jwks_cache_time = time.time()
+            _jwks_retry_after = 0.0
             logger.info("JWKS 获取成功，缓存已更新: %s", jwks_url)
             return _jwks_cache
+        except httpx.HTTPStatusError as e:
+            # HTTP 状态错误（401/404/5xx）：密钥轮换或端点失效，fail-closed
+            logger.error("JWKS 获取失败: %s, status=%s", jwks_url, e.response.status_code)
+            raise
         except Exception as e:
-            logger.error("JWKS 获取失败: %s, error=%s", jwks_url, str(e))
+            # 网络类失败（超时/DNS/TLS/连接中断）：短暂复用过期缓存降级
+            logger.error("JWKS 获取失败(网络): %s, error=%s", jwks_url, str(e))
+            if _jwks_cache is not None:
+                _jwks_retry_after = time.time() + _JWKS_FAIL_RETRY_SECONDS
+                logger.warning(
+                    "JWKS 网络失败，降级复用过期缓存（%ds 内重试）",
+                    _JWKS_FAIL_RETRY_SECONDS,
+                )
+                return _jwks_cache
             raise
 
 

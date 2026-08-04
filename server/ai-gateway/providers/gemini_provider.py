@@ -91,11 +91,17 @@ class GeminiProvider(AIProvider):
             latency_ms = int((time.monotonic() - start_time) * 1000)
             content = response.text or ""
             tokens_used = 0
+            input_tokens = 0
+            output_tokens = 0
             if response.usage_metadata:
                 tokens_used = response.usage_metadata.total_token_count or 0
+                # GW-2#6: Gemini usage_metadata 的拆分字段供成本记账
+                input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
             logger.info("GeminiProvider.generate 成功: model=%s, tokens=%d, latency=%dms",
                         model, tokens_used, latency_ms)
             return {"content": content, "tokens_used": tokens_used,
+                    "input_tokens": input_tokens, "output_tokens": output_tokens,
                     "model": model, "latency_ms": latency_ms}
         except Exception as e:
             logger.error("GeminiProvider.generate 失败: %s", str(e))
@@ -294,7 +300,20 @@ class GeminiProvider(AIProvider):
                 contents=prompt,
                 config=config,
             )
-            for chunk in response:
+
+            # GW-2#5: 同步 SDK 生成器的迭代（含底层阻塞网络 IO）直接在事件循环
+            # 线程执行会卡死整个网关（流式期间全站延迟升高）。改为逐块
+            # asyncio.to_thread 搬进线程池，chunk 间让出控制权
+            def _next_chunk(iterator):
+                try:
+                    return next(iterator)
+                except StopIteration:
+                    return None
+
+            while True:
+                chunk = await asyncio.to_thread(_next_chunk, response)
+                if chunk is None:
+                    break
                 if chunk.text:
                     yield chunk.text
                 # 让出事件循环控制权

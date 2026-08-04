@@ -214,12 +214,22 @@ async def call_with_fallback(
                 try:
                     tokens_used = result.get("tokens_used", 0)
                     model_name = result.get("model", model_name)
+                    # GW-2#6: 优先使用 provider 返回的真实 input/output 拆分
+                    #（OpenAI 兼容 usage 均有 prompt/completion tokens）；
+                    # 缺失时按经验比例估算（output 占比 60%）——原对半拆分
+                    # 系统性低估费用（output 单价普遍 2-3 倍于 input），
+                    # 导致超预算用户未被拦截
+                    input_tokens = result.get("input_tokens", 0)
+                    output_tokens = result.get("output_tokens", 0)
+                    if not input_tokens and not output_tokens and tokens_used:
+                        output_tokens = int(tokens_used * 0.6)
+                        input_tokens = tokens_used - output_tokens
                     await get_cost_tracker().record(
                         user_id=user_id,
                         feature=feature,
                         model=model_name,
-                        input_tokens=tokens_used // 2 if tokens_used else 0,
-                        output_tokens=tokens_used // 2 if tokens_used else 0,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
                     )
                 except Exception as cost_err:
                     logger.debug("CostTracker 记录失败（可忽略）: %s", cost_err)

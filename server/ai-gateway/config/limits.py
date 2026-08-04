@@ -50,6 +50,8 @@ TIMEOUT_CONFIG: dict[str, int] = {
     "conflict_detect": 30,
     # E1: 概念预检（JSON Mode，1-2 个探测问题）
     "concept_precheck": 30,
+    # 知识入籍概念化（JSON Mode，切块文本→概念候选，与同批 JSON Mode 链一致）
+    "import_concept": 30,
 }
 
 # ============================================================
@@ -100,4 +102,6 @@ RATE_LIMITS: dict[str, int] = {
     "conflict_detect": 5,
     # E1: 概念预检（生成成本高，严格限频）
     "concept_precheck": 5,
+    # 知识入籍概念化（批量导入场景，适度限频）
+    "import_concept": 10,
 }

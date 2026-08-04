@@ -111,11 +111,14 @@ async def error_pattern(request: Request, body: ErrorPatternRequest) -> ErrorPat
     logger.info("错误模式分析请求: user=%s, errors_count=%d", user_id, len(body.goldenErrors))
 
     # 生成 AI 响应缓存键（基于输入错误记录）
+    # GW-2#10: 缓存键加入 user_id 隔离——错误模式分析结果基于用户私有
+    # 学习数据，原键不含用户维度，内容相同的不同用户会串用彼此的分析结论
+    #（隐私泄露 + 正确性错误）；同时不再截断 50 字符（sha256 本身压缩长度）
     errors_str = "|".join([
-        f"{e.flashcardId}:{e.correctAnswer[:50]}:{e.userAnswer[:50]}"
+        f"{e.flashcardId}:{e.correctAnswer}:{e.userAnswer}"
         for e in body.goldenErrors
     ])
-    cache_key = hashlib.sha256(errors_str.encode()).hexdigest()
+    cache_key = hashlib.sha256(f"{user_id}:{errors_str}".encode()).hexdigest()
 
     # 检查 Redis AI 响应缓存
     cache = get_cache()

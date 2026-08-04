@@ -102,8 +102,14 @@ class GLMProvider(AIProvider):
             # 提取结果
             content = response.choices[0].message.content or ""
             tokens_used = 0
+            input_tokens = 0
+            output_tokens = 0
             if response.usage:
                 tokens_used = response.usage.total_tokens or 0
+                # GW-2#6: 提取真实 input/output 拆分供成本记账（OpenAI 兼容
+                # usage 字段），fallback 链不再对半估算
+                input_tokens = getattr(response.usage, "prompt_tokens", 0) or 0
+                output_tokens = getattr(response.usage, "completion_tokens", 0) or 0
 
             logger.info(
                 "GLMProvider 调用成功: model=%s, tokens=%d, latency=%dms",
@@ -113,6 +119,8 @@ class GLMProvider(AIProvider):
             return {
                 "content": content,
                 "tokens_used": tokens_used,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
                 "model": model,
                 "latency_ms": latency_ms,
             }

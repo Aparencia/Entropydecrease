@@ -25,6 +25,7 @@ from fastapi import APIRouter, Request
 
 from cache.redis_cache import get_cache
 from config import AI_PROVIDERS, is_valid_api_key, ALIYUN_ACCESS_KEY_ID, ALIYUN_ACCESS_KEY_SECRET
+from config.key_pool import get_primary_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/ai", tags=["余额查询"])
@@ -301,7 +302,10 @@ async def _query_all_balances(cache, start_time: float) -> dict:
 
     for provider_key, (display_name, query_fn) in _PROVIDER_QUERIES.items():
         cfg = AI_PROVIDERS.get(provider_key, {})
-        api_key = cfg.get("api_key", "")
+        # GW-2#7: 优先从 Key 池取主 Key（复数环境变量 DEEPSEEK_API_KEYS 的
+        # 首 Key）——原实现只读 AI_PROVIDERS 的单数变量 DEEPSEEK_API_KEY，
+        # 部署仅配置复数变量时余额查询被静默跳过（余额面板缺 DeepSeek 条目）
+        api_key = get_primary_key(provider_key) or cfg.get("api_key", "")
 
         # 跳过未配置的 Provider
         if not is_valid_api_key(api_key):
