@@ -20,9 +20,11 @@ interface StepConceptProps {
   concept?: string;
   explanation: string;
   onExplanationChange: (v: string) => void;
+  /** E2: 费曼笔记 id，供录音持久化关联（跨会话回放） */
+  noteId?: string | null;
 }
 
-export function StepConcept({ concept, explanation, onExplanationChange }: StepConceptProps) {
+export function StepConcept({ concept, explanation, onExplanationChange, noteId }: StepConceptProps) {
   const { container, item } = useFeynmanStagger();
   return (
     <motion.div
@@ -65,8 +67,8 @@ export function StepConcept({ concept, explanation, onExplanationChange }: StepC
             )}
           />
         </div>
-        {/* E2 口头讲解入口（ASR 不可用时自动隐藏） */}
-        <FeynmanRecorder explanation={explanation} onExplanationChange={onExplanationChange} />
+        {/* E2 口头讲解入口（ASR 不可用时自动隐藏；noteId 关联录音持久化） */}
+        <FeynmanRecorder explanation={explanation} onExplanationChange={onExplanationChange} noteId={noteId} />
       </motion.div>
       <motion.div variants={item} className={cn(
         'p-kb-md rounded-kb-lg',

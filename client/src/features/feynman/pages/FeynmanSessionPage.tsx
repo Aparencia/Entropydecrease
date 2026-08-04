@@ -146,6 +146,7 @@ export default function FeynmanSessionPage() {
                   concept={note?.concept}
                   explanation={localExplanation}
                   onExplanationChange={setLocalExplanation}
+                  noteId={noteId}
                 />
               </>
             )}

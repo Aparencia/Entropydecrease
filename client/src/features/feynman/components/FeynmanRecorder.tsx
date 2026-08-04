@@ -2,9 +2,11 @@
  * 费曼录音讲解组件（E2 录音 + 回放自评）
  *
  * @ai-context: step1 讲解区的"口头讲解"入口：麦克风采集 + 本地流式 ASR
- * 实时转写填入 explanation；同步累积音频块，停止后编码为会话内 WAV blob
- * 供回放自评（不持久化音频，仅持久化文本）。ASR 不可用时整个入口隐藏
- * （可选增强原则）。链路复用 audio_capture_start + local_asr_stream_start。
+ * 实时转写填入 explanation；同步累积音频块，停止后编码为 WAV 并持久化
+ * 到 {userData}/recordings（以 feynman-{noteId} 为 stem，本地优先不上传），
+ * 跨会话回放可用。无 noteId 时保持会话内回放（不落盘）。ASR 不可用时
+ * 整个入口隐藏（可选增强原则）。链路复用 audio_capture_start +
+ * local_asr_stream_start + recording:save/load/delete。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Mic, Square, Play, Trash2 } from 'lucide-react';
@@ -14,12 +16,19 @@ import { cn } from '@/lib/utils';
 interface FeynmanRecorderProps {
   explanation: string;
   onExplanationChange: (v: string) => void;
+  /** E2: 关联费曼笔记 id——录音以此持久化命名，跨会话回放 */
+  noteId?: string | null;
 }
 
 /** 单次录音时长上限：防止 PCM 累积无限增长（10 分钟 ≈ 19MB） */
 const MAX_RECORD_MS = 10 * 60 * 1000;
 
-/** base64 → Blob（会话内回放用） */
+/** 录音文件 stem：feynman-{noteId}（uuid 安全字符，符合主进程 SAFE_NAME_RE） */
+function recordingStem(noteId: string): string {
+  return `feynman-${noteId}`;
+}
+
+/** base64 → Blob（回放用） */
 function base64ToBlob(base64: string, type: string): Blob {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -27,7 +36,7 @@ function base64ToBlob(base64: string, type: string): Blob {
   return new Blob([bytes], { type });
 }
 
-export function FeynmanRecorder({ explanation, onExplanationChange }: FeynmanRecorderProps) {
+export function FeynmanRecorder({ explanation, onExplanationChange, noteId }: FeynmanRecorderProps) {
   const [asrAvailable, setAsrAvailable] = useState(false);
   const [recording, setRecording] = useState(false);
   const [partialText, setPartialText] = useState('');
@@ -48,6 +57,11 @@ export function FeynmanRecorder({ explanation, onExplanationChange }: FeynmanRec
   const recordLimitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // ref 同步最新 playback URL：卸载闭包只捕获初始值，必须经 ref 才能正确 revoke
   const playbackUrlRef = useRef<string | null>(null);
+  // ref 同步最新 noteId：stop 闭包与事件回调中读取，避免 useCallback 空依赖失效
+  const noteIdRef = useRef(noteId);
+  noteIdRef.current = noteId;
+  // 最近一次持久化 Promise：删除前先等待完成，防止 save 晚于 delete 写回文件（孤儿残留）
+  const savePromiseRef = useRef<Promise<unknown> | null>(null);
 
   // 可用性探测：ASR 模型未就绪则隐藏入口
   useEffect(() => {
@@ -70,6 +84,18 @@ export function FeynmanRecorder({ explanation, onExplanationChange }: FeynmanRec
     setPlaybackUrl(next);
   }, []);
 
+  // E2 跨会话回放：挂载时加载该笔记已持久化的录音（不存在静默）
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api || !noteId) return;
+    let cancelled = false;
+    api.recording.load(recordingStem(noteId)).then((r) => {
+      if (cancelled || !r?.success || !r.base64) return;
+      updatePlaybackUrl(URL.createObjectURL(base64ToBlob(r.base64, 'audio/wav')));
+    }).catch(() => { /* 加载失败静默——仅影响回放 */ });
+    return () => { cancelled = true; };
+  }, [noteId, updatePlaybackUrl]);
+
   const stop = useCallback(async () => {
     if (!recordingRef.current) return;
     if (recordLimitTimerRef.current) {
@@ -90,7 +116,7 @@ export function FeynmanRecorder({ explanation, onExplanationChange }: FeynmanRec
     setRecording(false);
     setPartialText('');
 
-    // 会话内回放：累积的 PCM → WAV blob URL（不持久化）
+    // 回放：累积的 PCM → WAV，持久化（有笔记关联）或仅会话内 blob URL
     const chunks = samplesRef.current;
     samplesRef.current = [];
     if (chunks.length > 0) {
@@ -101,6 +127,11 @@ export function FeynmanRecorder({ explanation, onExplanationChange }: FeynmanRec
       try {
         const wavBase64 = encodeWavBase64(merged, sampleRateRef.current, 1);
         updatePlaybackUrl(URL.createObjectURL(base64ToBlob(wavBase64, 'audio/wav')));
+        // E2: 本地优先持久化（{userData}/recordings/feynman-{noteId}.wav），跨会话可回放
+        const stem = noteIdRef.current ? recordingStem(noteIdRef.current) : null;
+        if (stem) {
+          savePromiseRef.current = api?.recording.save(stem, wavBase64).catch(() => { /* 落盘失败静默——回放仍可用 */ });
+        }
       } catch { /* 编码失败不影响转写文本 */ }
     }
   }, [cleanupIpc, updatePlaybackUrl]);
@@ -221,7 +252,19 @@ export function FeynmanRecorder({ explanation, onExplanationChange }: FeynmanRec
             <Play className="w-3.5 h-3.5" strokeWidth={1.5} />
             <audio src={playbackUrl} controls className="h-7 max-w-[200px]" />
             <button
-              onClick={() => updatePlaybackUrl(null)}
+              onClick={() => {
+                // E2: 持久化录音删除本地文件，避免孤儿文件堆积。
+                // 先等待在途 save 完成再删，防止 save 晚于 delete 写回（删除失效）
+                const stem = noteIdRef.current ? recordingStem(noteIdRef.current) : null;
+                const pending = savePromiseRef.current;
+                savePromiseRef.current = null;
+                if (stem) {
+                  void Promise.resolve(pending).catch(() => {}).then(() => {
+                    window.electronAPI?.recording.delete(stem).catch(() => {});
+                  });
+                }
+                updatePlaybackUrl(null);
+              }}
               className="p-1 rounded hover:text-red-500 transition-colors"
               title="删除录音"
             >
