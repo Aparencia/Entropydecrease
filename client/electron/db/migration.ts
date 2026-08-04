@@ -104,6 +104,8 @@ export function importTable(sqliteTable: string, rows: Record<string, unknown>[]
   }
 
   // 构建列名（从第一行推断，camelCase → snake_case）
+  // CL-H2: 列集合以首行为准；每行取值时显式按该列集合对齐，
+  // 防止行间字段集合/顺序不一致时按位置错位写入（SQLite 不校验列类型，会静默损坏）
   const cols = Object.keys(rows[0]).map(toSnake);
 
   const placeholders = cols.map(() => '?').join(', ');
@@ -113,8 +115,13 @@ export function importTable(sqliteTable: string, rows: Record<string, unknown>[]
 
   const txn = db.transaction((items: Record<string, unknown>[]) => {
     for (const item of items) {
-      const values = Object.keys(item).map((k) => {
-        const val = item[k];
+      // 先将本行 key 归一化为 snake_case，再按首行列集合取值（缺失补 null）
+      const snakeRow: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(item)) {
+        snakeRow[toSnake(k)] = v;
+      }
+      const values = cols.map((col) => {
+        const val = snakeRow[col];
         // 自动 JSON 序列化对象/数组字段
         if (val !== null && typeof val === 'object' && !(val instanceof Date)) {
           return JSON.stringify(val);
@@ -123,7 +130,8 @@ export function importTable(sqliteTable: string, rows: Record<string, unknown>[]
         if (typeof val === 'boolean') return val ? 1 : 0;
         // Date → ISO string
         if (val instanceof Date) return val.toISOString();
-        return val;
+        // 缺失字段补 null（better-sqlite3 不接受 undefined 绑定）
+        return val === undefined ? null : val;
       });
       stmt.run(...values);
     }
@@ -199,7 +207,7 @@ export function registerMigrationHandlers(
       // 迁移完成后重建 FTS5 全文索引（迁移数据绕过业务写入路径，未触发增量索引维护）
       try {
         const indexData = collectIndexableData(db);
-        rebuildIndex(indexData);
+        await rebuildIndex(indexData);
         logger.info(`[Migration] FTS5 index rebuilt: ${indexData.reduce((sum, t) => sum + t.rows.length, 0)} documents`);
       } catch (ftsErr) {
         logger.warn(`[Migration] FTS5 index rebuild failed (non-fatal): ${ftsErr instanceof Error ? ftsErr.message : String(ftsErr)}`);

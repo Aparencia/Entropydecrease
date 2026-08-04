@@ -235,11 +235,13 @@ export function registerDbIpcHandlers(): void {
     }
 
     // 降级方案：LIKE 模糊匹配（兼容 FTS5 不可用或结果为空时）
+    // CL-H3: 与 FTS5 路径一致限制 20 行——常见词（"的/了/是"）LIKE 命中海量行，
+    // 无 LIMIT 会同步全表扫描 + 全量结果经 IPC 传输，卡死主进程与渲染层
     const dbConn = getConnection();
     const like = `%${query}%`;
     if (tableName === 'notes') {
       return dbConn.prepare(
-        `SELECT * FROM notes WHERE title LIKE ? OR content LIKE ?`
+        `SELECT * FROM notes WHERE title LIKE ? OR content LIKE ? LIMIT 20`
       ).all(like, like);
     }
     // 通用回退：获取表的 TEXT 列并搜索
@@ -247,7 +249,7 @@ export function registerDbIpcHandlers(): void {
     const textCols = colInfo.filter((c) => c.type === 'TEXT' && c.name !== 'id');
     if (textCols.length === 0) return [];
     const where = textCols.map((c) => `"${c.name}" LIKE ?`).join(' OR ');
-    return dbConn.prepare(`SELECT * FROM "${tableName}" WHERE ${where}`).all(...textCols.map(() => like));
+    return dbConn.prepare(`SELECT * FROM "${tableName}" WHERE ${where} LIMIT 20`).all(...textCols.map(() => like));
   });
 
   /** db:batch — 批量操作：事务执行 */

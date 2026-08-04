@@ -62,6 +62,8 @@ interface StudySessionState {
   clearDeckSession: (deckId: string) => void;
   /** v0.9.0: 获取当前会话及历史 goldenErrors */
   getGoldenErrors: () => GoldenError[];
+  /** CL-H5: 评分处理中标志——防双击/连点导致同一卡片被调度两次 */
+  isRating: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +115,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
     lastStabilityAfter: null,
     lastRating: null,
     showStrengthPulse: false,
+    isRating: false,
 
     // -----------------------------------------------------------------------
     // startSession：加载到期卡片 + 补充新卡（带每日限额）
@@ -213,17 +216,26 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
     // rateCard：评分并推进到下一张
     // -----------------------------------------------------------------------
     rateCard: async (rating, confidence) => {
-      const { sessionCards, currentIndex, cardStartTime, isFlipped, goldenErrors } = get();
+      const { sessionCards, currentIndex, cardStartTime, isFlipped, goldenErrors, isRating } = get();
 
       // 必须已翻面才能评分
       if (!isFlipped) return;
 
-      const card = sessionCards[currentIndex];
-      if (!card || card.id === undefined) return;
+      // CL-H5: 防重入——rateCard 中有 await 落库窗口（isFlipped 尚未重置），
+      // 快速双击/触屏误触会让同一卡片被调度两次（双条复习记录 + 重复调度）
+      if (isRating) return;
+      set({ isRating: true });
 
-      // 宪法第一条：复习行为=秩序波纹。任何评分都是一次对混沌的推退
-      // （包括 Again——唤醒本身即正向，零负向语义），经世界事件总线驱动深海场景
-      useWorldEvents.getState().emitOrderRipple('flashcards');
+      const card = sessionCards[currentIndex];
+      if (!card || card.id === undefined) {
+        set({ isRating: false });
+        return;
+      }
+
+      try {
+        // 宪法第一条：复习行为=秩序波纹。任何评分都是一次对混沌的推退
+        // （包括 Again——唤醒本身即正向，零负向语义），经世界事件总线驱动深海场景
+        useWorldEvents.getState().emitOrderRipple('flashcards');
 
       // v0.9.0: goldenError 判定 — 高自信答错（Again）
       const isWrong = rating === Rating.Again;
@@ -340,6 +352,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
           isActive: false,
           isFlipped: false,
           cardStartTime: null,
+          isRating: false,
           // v0.29: 记忆强度追踪
           lastStabilityBefore: card.stability ?? 0,
           lastStabilityAfter: result.stability ?? 0,
@@ -356,12 +369,17 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
           goldenErrors: newGoldenErrors,
           isFlipped: false,
           cardStartTime: new Date(),
+          isRating: false,
           // v0.29: 记忆强度追踪
           lastStabilityBefore: card.stability ?? 0,
           lastStabilityAfter: result.stability ?? 0,
           lastRating: rating,
           showStrengthPulse: true,
         });
+      }
+      } finally {
+        // 异常路径（落库失败）也必须释放锁，避免评分永久不可用
+        set({ isRating: false });
       }
     },
 

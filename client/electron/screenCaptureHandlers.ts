@@ -123,6 +123,14 @@ export function registerScreenCaptureHandlers(): void {
       startDebounceTimer = null;
     }
 
+    // CL-H1: 结算防抖中悬挂的 start Promise——若在 500ms 防抖窗口内调用
+    // stop，debounce 回调永不执行，pendingStartResolve 必须在此显式 settle，
+    // 否则渲染层 invoke('screen_capture_start') 永久挂起（loading 态卡死）
+    if (pendingStartResolve) {
+      pendingStartResolve({ success: false });
+      pendingStartResolve = null;
+    }
+
     if (activeCapture) {
       activeCapture.dispose();
       activeCapture = null;
@@ -222,6 +230,11 @@ export function disposeScreenCaptureHandlers(): void {
   if (startDebounceTimer) {
     clearTimeout(startDebounceTimer);
     startDebounceTimer = null;
+  }
+  // CL-H1: 应用退出路径同样需要结算悬挂的 start Promise
+  if (pendingStartResolve) {
+    pendingStartResolve({ success: false });
+    pendingStartResolve = null;
   }
   if (windowWatchTimer) {
     clearInterval(windowWatchTimer);

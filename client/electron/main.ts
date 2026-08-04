@@ -169,15 +169,19 @@ if (!gotTheLock) {
     // 期间增量索引写入（indexDocument/removeDocument）自动进入队列，
     // 重建完成后由 setFtsIndexReady(true) 统一 flush，不丢索引
     setTimeout(() => {
-      try {
-        const indexData = collectIndexableData(sqliteDb);
-        rebuildIndex(indexData);
-        logger.info(`[DB] FTS5 index rebuilt: ${indexData.reduce((sum, t) => sum + t.rows.length, 0)} documents indexed`);
-      } catch (err) {
-        logger.warn(`[FTS5] Startup index rebuild failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
-      } finally {
-        setFtsIndexReady(true);
-      }
+      // CL-H4: rebuildIndex 已改为异步分批执行（每批让出事件循环），
+      // 数万文档重建不再阻塞主进程窗口/托盘/IPC
+      (async () => {
+        try {
+          const indexData = collectIndexableData(sqliteDb);
+          await rebuildIndex(indexData);
+          logger.info(`[DB] FTS5 index rebuilt: ${indexData.reduce((sum, t) => sum + t.rows.length, 0)} documents indexed`);
+        } catch (err) {
+          logger.warn(`[FTS5] Startup index rebuild failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+          setFtsIndexReady(true);
+        }
+      })();
     }, 0);
     logger.info('[DB] SQLite initialized and schema ready (FTS5 enabled)');
 
