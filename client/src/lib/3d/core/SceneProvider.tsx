@@ -99,14 +99,18 @@ export function SceneProvider({ children, interactive = false }: SceneProviderPr
 
   // entering → docked 停靠计时器：相机飞行过渡结束后才暂停渲染（相位/模块/档位变化时重置）。
   // 下限 clamp 到 700ms（相机飞行固定 600ms）：静谧档 dockDelayMs=0 会在飞行中途
-  // 冻结渲染（frameloop='never'），相机停在半途且朝向插值未完成，停靠后视角错位
+  // 冻结渲染（frameloop='never'），相机停在半途且朝向插值未完成，停靠后视角错位。
+  // 兼容 2.5s 强制停靠上限：快速连续切换页面时 currentModule 变化会反复重置本计时器
+  // （正确行为），但若计时器因任何原因丢失/被节流，兜底确保相位收敛到 docked，
+  // 避免卡在 entering 导致覆盖层永不显示（页面不渲染）。
   useEffect(() => {
     if (phase !== 'entering') return;
     const timer = setTimeout(
       () => useOrbitalStore.getState().dock(),
       Math.max(PERFORMANCE_MODE_CONFIG[mode].dockDelayMs, 700),
     );
-    return () => clearTimeout(timer);
+    const fallback = setTimeout(() => useOrbitalStore.getState().dock(), 2500);
+    return () => { clearTimeout(timer); clearTimeout(fallback); };
   }, [phase, currentModule, mode]);
 
   // 帧循环策略：docked 完全暂停（避免活动 canvas 使覆盖层 backdrop-blur 缓存失效）

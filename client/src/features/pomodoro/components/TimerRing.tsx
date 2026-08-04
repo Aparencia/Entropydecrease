@@ -82,12 +82,12 @@ export default function TimerRing({
 
   return (
     <div className="relative flex items-center justify-center">
-      {/* 环境光晕 — 呼吸动画 */}
+      {/* 环境光晕 — 呼吸动画（尺寸随表盘百分比缩放，适配小窗口） */}
       <motion.div
         className="absolute rounded-full pointer-events-none"
         style={{
-          width: size + 60,
-          height: size + 60,
+          width: '122%',
+          height: '122%',
           background: `radial-gradient(circle, ${color}22 0%, transparent 70%)`,
         }}
         animate={{
@@ -102,7 +102,9 @@ export default function TimerRing({
       />
 
       <svg
-        className="block w-[200px] h-[200px] md:w-[280px] md:h-[280px]"
+        /* 响应式一屏适配：表盘边长随 vmin 缩放（下限 150px 保可读、上限 280px 保设计），
+           viewBox 维持 280 坐标系不变，任意窗口尺寸下表盘不溢出、无需滚动 */
+        className="block w-[clamp(150px,34vmin,280px)] h-[clamp(150px,34vmin,280px)]"
         viewBox={`0 0 ${size} ${size}`}
         overflow="visible"
       >
@@ -172,7 +174,7 @@ export default function TimerRing({
             isLast10 && 'animate-pulse',
           )}
           style={{
-            fontSize: 'clamp(3.5rem, 8vw, 5.5rem)',
+            fontSize: 'clamp(2.25rem, 10vmin, 5.5rem)',
             color: isLast10 ? '#C4956A' : 'var(--kb-text-primary)',
             fontVariantNumeric: 'tabular-nums',
           }}

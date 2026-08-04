@@ -6,6 +6,8 @@
 
 | 日期 | 标题 | 标签 |
 |------|------|------|
+| 2026-08-04 | [课堂真流式 ASR 永不激活：设置页缺失"启用本地语音识别"开关，enabled 恒为 false](./bugs/2026-08-streaming-asr-enable-toggle-missing.md) | #ASR #真流式 #设置页 #IPC死代码 #功能闸门 |
+| 2026-08-04 | [课堂助手生产包报「无法获取音频，启动失败」：file:// 下 AudioWorklet 模块加载失败且无降级](./bugs/2026-08-classroom-asr-file-protocol-worklet-load-failure.md) | #ASR #AudioWorklet #file协议 #降级兜底 #课堂助手 |
 | 2026-08-04 | [深色模式 3D 场景不渲染：双 EffectComposer 以 renderPriority=1 互相抢占渲染权](./bugs/2026-08-dark-mode-dual-effectcomposer-render-takeover.md) | #R3F #EffectComposer #后处理 #renderPriority #深色模式 #3D渲染 |
 | 2026-08-03 | [番茄钟沉浸↔普通切换“组件重复”：两个独立 AnimatePresence 实例间 mode="wait" 无效，双视图叠加约 0.6s](./bugs/2026-08-pomodoro-immersive-dual-view-overlap.md) | #番茄钟 #framer-motion #AnimatePresence #portal #过渡排序 |
 | 2026-08-03 | [主页选中功能后相机飞行视角错位、正对空白处：flyTo 只插值位置不改朝向，叠加 docked 渲染冻结无人纠错](./bugs/2026-08-camera-flight-orientation-mismatch-docked-freeze.md) | #3D导航 #相机飞行 #四元数 #frameloop #性能档位 |

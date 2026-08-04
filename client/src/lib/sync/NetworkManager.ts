@@ -100,11 +100,15 @@ export class NetworkManager {
   }
 
   private handleOnline(): void {
+    // 浏览器 online 事件只是"网卡恢复"的提示，不代表远端服务可达：
+    // 不立即断言 online，由心跳 ping 实测验证（成功→online，失败→weak）。
+    // 此前立即置 online 会在 online 事件抖动时每次都通知监听器，
+    // 触发自动同步洪泛——服务器不可达时每次同步都超时刷屏
+    //（内测控制台大量 ERR_CONNECTION_TIMED_OUT 的根因之一）。
     this.updateState({
-      status: 'online',
       lastOnlineAt: new Date(),
     });
-    // 恢复心跳
+    // 恢复心跳（startHeartbeat 会立即 ping 一次并按实测结果更新状态）
     this.startHeartbeat();
   }
 
@@ -134,6 +138,11 @@ export class NetworkManager {
   private async ping(): Promise<void> {
     // 心跳 URL 未配置时跳过检测
     if (!this.heartbeatUrl) {
+      // 无心跳目标（纯本地部署）时以浏览器 online 状态降级判定，
+      // 否则 handleOnline 不再断言 online 后状态会永远卡在 offline/weak
+      if (navigator.onLine) {
+        this.updateState({ status: 'online', lastOnlineAt: new Date() });
+      }
       return;
     }
 

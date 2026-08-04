@@ -90,10 +90,35 @@ export async function reorderPresets(orderedIds: string[]): Promise<void> {
  * 首次启动种子化：若预设表为空，根据用户当前 settings 创建两个内置预设
  * - "上课"：workDuration=classDuration, longBreakInterval=0, silent=true
  * - "自习"：workDuration=workDuration, longBreakInterval=settings.longBreakInterval
+ *
+ * 并发防护：dev 环境 StrictMode 双调用 useEffect 时两次 initialize 会在首次
+ * 写入提交前都读到空表，各自种子化造成内置预设翻倍（占用预设名额）。
+ * 用模块级 promise 串行化同会话内的并发调用；并修复已存在的重复内置脏数据。
  */
-export async function seedBuiltinPresets(settings: PomodoroSettings): Promise<PomodoroPreset[]> {
+let seedingPromise: Promise<PomodoroPreset[]> | null = null;
+
+export function seedBuiltinPresets(settings: PomodoroSettings): Promise<PomodoroPreset[]> {
+  if (!seedingPromise) seedingPromise = doSeedBuiltinPresets(settings);
+  return seedingPromise;
+}
+
+async function doSeedBuiltinPresets(settings: PomodoroSettings): Promise<PomodoroPreset[]> {
   const existing = await pomodoroPresetStore.getAll();
-  if (existing.length > 0) return existing.sort((a, b) => a.sortOrder - b.sortOrder);
+
+  // 修复历史脏数据：同名重复内置预设（旧版并发种子化竞态产物）仅保留 sortOrder 最小者
+  const seenNames = new Set<string>();
+  const sortedAll = [...existing].sort((a, b) => a.sortOrder - b.sortOrder);
+  const duplicates = sortedAll.filter((p) => {
+    if (!p.builtin) return false;
+    if (seenNames.has(p.name)) return true;
+    seenNames.add(p.name);
+    return false;
+  });
+  if (duplicates.length > 0) {
+    await Promise.all(duplicates.map((d) => pomodoroPresetStore.delete(d.id)));
+  }
+  const clean = sortedAll.filter((p) => !duplicates.includes(p));
+  if (clean.length > 0) return clean;
 
   const now = new Date().toISOString();
   const classPreset: PomodoroPreset = {

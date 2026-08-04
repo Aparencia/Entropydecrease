@@ -17,6 +17,7 @@ import { BrainCircuit, ShieldCheck, Copy, ScrollText } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { isElectron } from '@/lib/utils/platform';
+import { copyText } from '@/lib/utils/clipboard';
 import { cn } from '@/lib/utils';
 
 /** 开启前向用户披露的记忆清单（承诺透明） */
@@ -134,10 +135,12 @@ export function MemoryServerSection() {
       null,
       2,
     );
-    try {
-      await navigator.clipboard.writeText(text);
+    // copyText 三级降级（Electron 主进程 clipboard → Web API → execCommand）：
+    // 此前直接用 navigator.clipboard 在 Electron 非聚焦态下必败（内测反馈根因）
+    const ok = await copyText(text);
+    if (ok) {
       toast({ type: 'success', message: '服务器配置已复制——粘贴到你的 AI 宿主即可', silent: true });
-    } catch {
+    } else {
       toast({ type: 'error', message: '复制失败，请选中下方配置手动复制' });
     }
   };

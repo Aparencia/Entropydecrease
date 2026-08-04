@@ -8,7 +8,7 @@
  * 图标选择网格预置 13 个学习相关 lucide 图标。
  * @ai-context: Preset create/edit modal with live cycle-marker preview.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, GraduationCap, BookOpen, PenLine, BookMarked, Brain, Timer, Moon, Coffee, Dumbbell, Music, Languages, Calculator, Microscope } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -50,6 +50,21 @@ export default function PresetEditor({ open, onClose, onSave, initial }: PresetE
   const [longBreak, setLongBreak] = useState(initial?.longBreakDuration ?? 15);
   const [interval, setInterval_] = useState(initial?.longBreakInterval ?? 4);
   const [silent, setSilent] = useState(initial?.silent ?? false);
+
+  // 打开时重置表单：本组件随 AnimatePresence 常驻挂载（不随 open 卸载），
+  // useState 初值只在首次挂载生效——不复位会残留上一次的标题/参数
+  //（内测反馈"自定义预设时上一次标题仍存留"的根因）。
+  // 新建模式（initial=null）清空全部字段；编辑模式载入目标预设。
+  useEffect(() => {
+    if (!open) return;
+    setName(initial?.name ?? '');
+    setIcon(initial?.icon ?? 'BookOpen');
+    setWorkDuration(initial?.workDuration ?? 25);
+    setShortBreak(initial?.shortBreakDuration ?? 5);
+    setLongBreak(initial?.longBreakDuration ?? 15);
+    setInterval_(initial?.longBreakInterval ?? 4);
+    setSilent(initial?.silent ?? false);
+  }, [open, initial]);
 
   const handleSubmit = () => {
     if (!name.trim()) return;

@@ -1,7 +1,7 @@
 import { apiClient } from '@/lib/http/apiClient';
 import { getDeviceId } from '../storage/operationLog';
 import { offlineQueue } from './OfflineQueue';
-import { networkManager } from './NetworkManager';
+import { networkManager, type NetworkStatus } from './NetworkManager';
 import type { SyncConflict } from '@/types/models';
 import { crdtEngine, getSyncMode } from './crdtEngine';
 import { oplogPush, oplogPull, safeJsonParse } from './oplogSyncChannel';
@@ -23,6 +23,13 @@ export class SyncEngine {
   private networkRecoveryCleanup: (() => void) | null = null;
   private listeners: Set<(event: SyncEvent) => void> = new Set();
 
+  /** 自动同步（网络恢复触发）最小间隔 */
+  private static readonly AUTO_SYNC_MIN_GAP_MS = 10_000;
+  /** 自动同步连续失败后的退避上限（5 分钟） */
+  private static readonly AUTO_SYNC_MAX_BACKOFF_MS = 5 * 60_000;
+  private lastAutoSyncAt = 0;
+  private autoSyncFailures = 0;
+
   // Sync API base path (apiClient prepends VITE_API_BASE_URL automatically)
   private syncBasePath = '/api/v1/sync';
 
@@ -31,17 +38,43 @@ export class SyncEngine {
 
   /**
    * 注册网络恢复时的自动同步监听
-   * 不再使用定时器，仅在网络恢复时触发一次同步
+   * 不使用定时器；仅在"转为 online"的跳变沿触发，并带失败退避。
+   * 历史缺陷：对任何 status==='online' 的通知都触发 sync（含延迟抖动的
+   * 节流通知，最快每秒一次）；服务器不可达时变成超时请求洪泛
+   *（内测控制台大量 ERR_CONNECTION_TIMED_OUT 的根因）。
    */
   registerNetworkRecoverySync(): void {
     // 先清理旧的监听器
     this.unregisterNetworkRecoverySync();
+    let prevStatus: NetworkStatus = networkManager.getState().status;
     const cleanup = networkManager.subscribe((state) => {
-      if (state.status === 'online') {
-        this.sync();
-      }
+      const becameOnline = state.status === 'online' && prevStatus !== 'online';
+      prevStatus = state.status;
+      if (becameOnline) void this.autoSync();
     });
     this.networkRecoveryCleanup = cleanup;
+  }
+
+  /**
+   * 带退避的自动同步：连续失败（服务器不可达）时指数拉大触发间隔
+   * （10s → 20s → 40s → …，封顶 5min），成功后重置；手动 sync() 不受此限制。
+   */
+  private async autoSync(): Promise<void> {
+    const now = Date.now();
+    const gapMs = this.autoSyncFailures === 0
+      ? SyncEngine.AUTO_SYNC_MIN_GAP_MS
+      : Math.min(
+          SyncEngine.AUTO_SYNC_MAX_BACKOFF_MS,
+          SyncEngine.AUTO_SYNC_MIN_GAP_MS * 2 ** this.autoSyncFailures,
+        );
+    if (now - this.lastAutoSyncAt < gapMs) return;
+    this.lastAutoSyncAt = now;
+    const result = await this.sync();
+    if (result.errors.length > 0) {
+      this.autoSyncFailures += 1;
+    } else {
+      this.autoSyncFailures = 0;
+    }
   }
 
   /**

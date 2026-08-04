@@ -3,7 +3,10 @@
  * 每个类别可单独控制开关和音量。全局静音覆盖所有类别。
  * 音效配置持久化到 settingsStore（localStorage）。
  * 白噪音/BGM 为独立音频系统，由 useAudioPlayer 管理。
+ * 资源路径统一经 publicAssetUrl 解析（Electron file:// 下绝对路径会 404）。
  */
+
+import { publicAssetUrl } from '@/lib/assets/publicAssetUrl';
 
 /* ── 音效分类系统 ──────────────────────────────────── */
 
@@ -159,7 +162,7 @@ export interface AudioTrack {
   phase: 'focus' | 'break' | 'both';
 }
 
-export const audioTracks: AudioTrack[] = [
+export const audioTracks: AudioTrack[] = ([
   // ── 专注推荐：频谱平稳、无突变瞬态、掩蔽环境噪声 ──
   { id: 'rain', name: 'Rain', nameZh: '雨声', src: '/audio/rain.mp3', category: 'white_noise', phase: 'focus' },
   { id: 'stream', name: 'Stream', nameZh: '流水', src: '/audio/stream.mp3', category: 'white_noise', phase: 'focus' },
@@ -174,7 +177,10 @@ export const audioTracks: AudioTrack[] = [
   { id: 'traffic', name: 'Traffic', nameZh: '车流', src: '/audio/traffic.mp3', category: 'white_noise', phase: 'break' },
   { id: 'restaurant', name: 'Restaurant', nameZh: '餐馆', src: '/audio/restaurant.mp3', category: 'white_noise', phase: 'break' },
   { id: 'morning-rhythm', name: 'Morning Rhythm', nameZh: '晨间韵律', src: '/audio/morning-rhythm.mp3', category: 'bgm', phase: 'break' },
-];
+] as AudioTrack[])
+  // src 经 publicAssetUrl 解析：Electron 生产环境 file:// 协议下
+  // 绝对路径会指向文件系统根而 404（内测反馈"构建后无音频"根因）
+  .map((t) => ({ ...t, src: publicAssetUrl(t.src) }));
 
 /** 按阶段过滤音轨（'both' 在任何阶段都返回） */
 export function getTracksForPhase(phase: 'focus' | 'break'): AudioTrack[] {

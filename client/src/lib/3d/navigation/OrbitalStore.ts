@@ -52,6 +52,13 @@ export const MODULE_POSITIONS: ModulePosition[] = [
   { id: 'classroom', position: [-2, -3, -2], route: '/classroom', label: '回声定位' },
 ];
 
+/** 导航洪泛防护：enterModule 最小调用间隔。
+ * Chromium 对客户端导航（pushState/hash）有洪泛保护（crbug.com/1038223），
+ * 超阈后导航会被限流丢弃——此时轨道状态已迁移而路由未变，
+ * 覆盖层与实际页面错位/空白（内测控制台 "Throttling navigation" 警告）。 */
+const ENTER_MODULE_MIN_GAP_MS = 200;
+let lastEnterModuleAt = 0;
+
 export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   currentModule: null,
   phase: 'overview',
@@ -64,6 +71,10 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
     const s = get();
     // 已停靠且覆盖层可见于同模块：无操作（修复重复按键无响应）
     if (s.currentModule === id && s.phase === 'docked' && s.overlayVisible) return;
+    // 洪泛防护：过密的进入调用直接忽略，避免导航被 Chromium 限流丢弃
+    const now = Date.now();
+    if (now - lastEnterModuleAt < ENTER_MODULE_MIN_GAP_MS) return;
+    lastEnterModuleAt = now;
     set({
       currentModule: id,
       phase: 'entering',
@@ -99,8 +110,18 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
       set({ currentModule: null, phase: 'overview', overlayVisible: false, isInModule: false });
       return;
     }
-    // 相机飞行中：跳过（dock 计时器负责相位迁移）
-    if (s.phase === 'entering') return;
+    // 相机飞行中：不整体重走相位迁移（dock 计时器负责 entering → docked），
+    // 但必须把 currentModule 校正到路由目标——此前直接 return 丢弃路由同步，
+    // 快速连续切换页面（"多次从主页切换到其他页面"）时 currentModule 永久滞留旧值，
+    // 停靠后相机/覆盖层与实际路由错位，叠加渲染冻结表现为页面不渲染。
+    // 更新 currentModule 后：SpatialNav 飞行 effect 自动重定向新模块，
+    // SceneProvider 停靠计时器随之重置，相位最终收敛到正确目标。
+    if (s.phase === 'entering') {
+      if (targetId && targetId !== s.currentModule) {
+        set({ currentModule: targetId });
+      }
+      return;
+    }
     // 同模块且已停靠：仅确保覆盖层可见（重入/子路由导航场景）
     if (targetId === s.currentModule && s.phase === 'docked') {
       if (!s.overlayVisible) set({ overlayVisible: true });

@@ -53,15 +53,24 @@ describe('NetworkManager', () => {
       nm.stop();
     });
 
-    it('should switch to online when browser fires online event', () => {
+    it('online 事件不直接断言 online，须经心跳实测后才转为 online（防 online 抖动触发同步洪泛）', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('server down'));
       Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
       const nm = new NetworkManager({ heartbeatUrl: '/health' });
       nm.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(nm.getState().status).toBe('offline');
 
-      // Simulate coming back online
+      // 模拟网卡恢复：心跳转为可达
+      mockFetch.mockResolvedValue({ ok: true });
       Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
       window.dispatchEvent(new Event('online'));
 
+      // online 事件本身不改变状态（仅记录 lastOnlineAt 并触发心跳验证）
+      expect(nm.getState().status).toBe('offline');
+
+      // 心跳验证完成后才转为 online
+      await vi.advanceTimersByTimeAsync(0);
       const state = nm.getState();
       expect(state.status).toBe('online');
       expect(state.lastOnlineAt).toBeInstanceOf(Date);

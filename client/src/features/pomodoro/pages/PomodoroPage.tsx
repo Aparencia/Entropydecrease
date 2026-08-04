@@ -3,6 +3,7 @@
  */
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Play, Pause, RotateCcw, SkipForward, Clock, Volume2, VolumeX, Focus } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -33,6 +34,7 @@ const WHITE_NOISE_FADE_MS = 1000;
 const WHITE_NOISE_FADE_OUT_MS = 1500;
 
 export default function PomodoroPage() {
+  const navigate = useNavigate();
   const {
     phase, isRunning, isPaused, remainingSeconds, totalSeconds,
     completedCount, settings, currentGoal, isImmersive,
@@ -104,6 +106,8 @@ export default function PomodoroPage() {
 
   // P3-19 稳定回调引用，供 memo 化的 PresetTabs 避免每秒重渲染
   const openPresetEditor = useCallback(() => setPresetEditorOpen(true), []);
+  // 预设管理入口：跳转深潜设置页（删除/排序/编辑预设）
+  const managePresets = useCallback(() => navigate('/pomodoro/settings'), [navigate]);
 
   /**
    * 提交目标并开始番茄。goal 为空字符串时表示“跳过目标”：
@@ -193,7 +197,10 @@ export default function PomodoroPage() {
         {view === 'normal' && (
         <motion.div
           key="normal"
-          className="flex flex-col items-center justify-center min-h-0 flex-1 px-4 py-12 relative"
+          /* 响应式一屏适配：页面高度锚定视口（clamp 兼顾小窗口下限与大屏上限），
+             内部按 顶部信息 / 中部表盘(flex-1 吸收剩余空间) / 底部控制 三段弹性布局，
+             全部纵向间距用 vh clamp 随窗口缩放，任何窗口尺寸下均无需滚动 */
+          className="flex flex-col items-center min-h-0 flex-1 px-4 relative h-[clamp(320px,calc(85vh-5rem),760px)] max-h-full pt-[clamp(0.5rem,2.5vh,3rem)] pb-[clamp(0.5rem,1.8vh,1.5rem)]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -202,8 +209,8 @@ export default function PomodoroPage() {
           {/* 深潜氛围背景：垂直深度渐变 + 上浮气泡（浅色晨光海面 / 深色深海） */}
           <DiveBackground degradation={diveDegradation} />
 
-          {/* 仪式页头：模块色「潜」印 + 衬线大字 */}
-          <header className="relative z-10 flex items-center gap-3 mb-8">
+          {/* 仪式页头：模块色「潜」印 + 衬线大字（间距随视口高度缩放） */}
+          <header className="relative z-10 flex items-center gap-3 mb-[clamp(0.375rem,1.8vh,2rem)]">
             <div className="kb-dive-seal shrink-0" aria-hidden="true">潜</div>
             <div>
               <h1 className="kb-dive-title">深潜</h1>
@@ -218,11 +225,12 @@ export default function PomodoroPage() {
             canCreate={presets.length < MAX_PRESETS}
             onSelect={setPreset}
             onCreate={openPresetEditor}
+            onManage={managePresets}
           />
 
-          {/* 预设提示 —— mt-4 保证与上方 PresetTabs 间距充足，避免视觉重叠 */}
+          {/* 预设提示 —— 间距随视口缩放，与上方 PresetTabs 保持一致呼吸 */}
           <motion.div
-            className="mt-4 flex items-center gap-1.5 text-[12px] text-text-secondary"
+            className="mt-[clamp(0.25rem,1vh,1rem)] flex items-center gap-1.5 text-[12px] text-text-secondary"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
@@ -239,16 +247,16 @@ export default function PomodoroPage() {
 
           {/* T5: 精力-任务匹配提示条（未运行时展示，纯本地计算） */}
           {!isRunning && !isPaused && (
-            <div className="mt-3 w-full max-w-md">
+            <div className="mt-2 w-full max-w-md">
               <EnergySuggestionBar />
             </div>
           )}
 
-          <div className="flex-1 min-h-[3rem]" />
-
+          {/* 中部表盘区：flex-1 吸收剩余高度，TimerRing 随 vmin 缩放，永不溢出 */}
+          <div className="flex-1 min-h-0 w-full flex flex-col items-center justify-center">
           {/* Timer Ring */}
           <motion.div
-            className="my-8 relative"
+            className="relative flex flex-col items-center"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.15, ...SPRING.gentle }}
@@ -270,17 +278,18 @@ export default function PomodoroPage() {
               isRunning={isRunning}
             />
           </motion.div>
+          </div>
 
           {/* 循环标记 — 数量随预设变化 */}
           <CycleMarkers
             total={cycleTotal}
             filled={completedCount}
-            className="mb-8"
+            className="mb-[clamp(0.25rem,1.2vh,2rem)]"
           />
 
           {/* 白噪音控制 */}
           <motion.div
-            className="flex items-center gap-2 mb-8 px-4 py-2 bg-bg-elevated/40 backdrop-blur-sm rounded-full border border-border/20"
+            className="flex items-center gap-2 mb-[clamp(0.375rem,1.5vh,2rem)] px-4 py-2 bg-bg-elevated/40 backdrop-blur-sm rounded-full border border-border/20"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
@@ -311,7 +320,7 @@ export default function PomodoroPage() {
 
           {/* Controls — 居中大按钮 + 品牌色光晕 */}
           <motion.div
-            className="flex items-center gap-4 mb-8"
+            className="flex items-center gap-4 mb-[clamp(0.25rem,1.2vh,2rem)]"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35, ...SPRING.gentle }}
@@ -364,7 +373,7 @@ export default function PomodoroPage() {
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
               onClick={() => enterImmersive()}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-medium text-text-tertiary hover:text-text-primary hover:bg-bg-secondary/40 transition-all duration-200 mb-6"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-medium text-text-tertiary hover:text-text-primary hover:bg-bg-secondary/40 transition-all duration-200"
             >
               <Focus className="w-4 h-4" strokeWidth={1.5} />
               进入专注模式

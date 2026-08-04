@@ -16,11 +16,12 @@ import {
   getWorldSoundscapeEnabled,
   WORLD_SOUNDSCAPE_CHANGE_EVENT,
 } from './worldSoundscapeConfig';
+import { publicAssetUrl } from '@/lib/assets/publicAssetUrl';
 
-/** 主题 → 环境音源映射 */
+/** 主题 → 环境音源映射（publicAssetUrl 适配 Electron file:// 相对解析） */
 const THEME_SOUND: Record<'deep-sea' | 'aurora-dome', string> = {
-  'deep-sea': '/audio/rain.mp3',
-  'aurora-dome': '/audio/wind-wheat.mp3',
+  'deep-sea': publicAssetUrl('/audio/rain.mp3'),
+  'aurora-dome': publicAssetUrl('/audio/wind-wheat.mp3'),
 };
 
 export function WorldSoundscape() {

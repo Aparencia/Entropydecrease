@@ -10,6 +10,11 @@
  * 符合项目"可选增强"设计原则。
  * @ai-context: 音频输入要求：16kHz 单声道 Float32 PCM。
  * 渲染进程发来的音频块已满足此格式（process-audio native addon 输出）。
+ * @ai-context: sherpa-onnx-node API 兼容：旧版（<=1.12）导出工厂函数
+ * createOfflineRecognizer/createOnlineRecognizer；新版（1.13+，如 1.13.4）
+ * 改为导出类 OfflineRecognizer/OnlineRecognizer（new 构造，config 形状不变）。
+ * 下方工厂包装双路径兼容，否则升级依赖后 TypeError: ... is not a function
+ * （2026-08 真流式启动失败根因，离线路径同样受影响）。
  */
 
 import * as path from 'path';
@@ -26,9 +31,16 @@ import {
 // sherpa-onnx 动态加载（可选依赖，加载失败不崩溃）
 // ================================================================
 
+/** 识别器构造器签名（新版 API：类导出） */
+type RecognizerCtor<T> = new (config: Record<string, unknown>) => T;
+
 interface SherpaOnnx {
-  createOfflineRecognizer(config: Record<string, unknown>): OfflineRecognizer;
-  createOnlineRecognizer(config: Record<string, unknown>): OnlineRecognizer;
+  /** 旧版 API（<=1.12）：工厂函数 */
+  createOfflineRecognizer?: (config: Record<string, unknown>) => OfflineRecognizer;
+  createOnlineRecognizer?: (config: Record<string, unknown>) => OnlineRecognizer;
+  /** 新版 API（1.13+）：类导出 */
+  OfflineRecognizer?: RecognizerCtor<OfflineRecognizer>;
+  OnlineRecognizer?: RecognizerCtor<OnlineRecognizer>;
 }
 
 interface OfflineRecognizer {
@@ -38,9 +50,12 @@ interface OfflineRecognizer {
 }
 
 interface OfflineStream {
+  /** 旧版：(sampleRate, samples)；新版 1.13+：({ samples, sampleRate })，统一走 feedWaveform */
   acceptWaveform(sampleRate: number, samples: Float32Array): void;
+  acceptWaveform(waveform: { samples: Float32Array; sampleRate: number }): void;
   inputFinished(): void;
-  free(): void;
+  /** 新版 OnlineStream/OfflineStream 未提供 free（句柄由 GC 回收），故为可选 */
+  free?(): void;
 }
 
 export interface OnlineRecognizer {
@@ -53,13 +68,55 @@ export interface OnlineRecognizer {
 }
 
 export interface OnlineStream {
+  /** 旧版：(sampleRate, samples)；新版 1.13+：({ samples, sampleRate })，统一走 feedWaveform */
   acceptWaveform(sampleRate: number, samples: Float32Array): void;
+  acceptWaveform(waveform: { samples: Float32Array; sampleRate: number }): void;
   inputFinished(): void;
-  free(): void;
+  free?(): void;
+}
+
+/**
+ * 向流喂入音频：自动适配新旧 API 签名差异。
+ * 旧版（<=1.12）acceptWaveform(sampleRate, samples) 双参；
+ * 新版（1.13+）acceptWaveform({ samples, sampleRate }) 单对象。
+ * 按函数形参数（length）判别，调用方无需感知版本。
+ */
+export function feedWaveform(
+  stream: OnlineStream | OfflineStream,
+  sampleRate: number,
+  samples: Float32Array,
+): void {
+  if (stream.acceptWaveform.length <= 1) {
+    stream.acceptWaveform({ samples, sampleRate });
+  } else {
+    stream.acceptWaveform(sampleRate, samples);
+  }
 }
 
 let _sherpa: SherpaOnnx | null = null;
 let _loadAttempted = false;
+
+/** 创建离线识别器：优先旧版工厂函数，缺失时用新版类构造 */
+function instantiateOffline(sherpa: SherpaOnnx, config: Record<string, unknown>): OfflineRecognizer {
+  if (typeof sherpa.createOfflineRecognizer === 'function') {
+    return sherpa.createOfflineRecognizer(config);
+  }
+  if (typeof sherpa.OfflineRecognizer === 'function') {
+    return new sherpa.OfflineRecognizer(config);
+  }
+  throw new Error('sherpa-onnx-node 既无 createOfflineRecognizer 工厂也无 OfflineRecognizer 类，请核对依赖版本');
+}
+
+/** 创建在线识别器：优先旧版工厂函数，缺失时用新版类构造 */
+function instantiateOnline(sherpa: SherpaOnnx, config: Record<string, unknown>): OnlineRecognizer {
+  if (typeof sherpa.createOnlineRecognizer === 'function') {
+    return sherpa.createOnlineRecognizer(config);
+  }
+  if (typeof sherpa.OnlineRecognizer === 'function') {
+    return new sherpa.OnlineRecognizer(config);
+  }
+  throw new Error('sherpa-onnx-node 既无 createOnlineRecognizer 工厂也无 OnlineRecognizer 类，请核对依赖版本');
+}
 
 /** 尝试加载 sherpa-onnx-node（仅尝试一次） */
 function loadSherpa(): SherpaOnnx | null {
@@ -97,7 +154,7 @@ function getOfflineRecognizer(): OfflineRecognizer | null {
   const threads = config.threads > 0 ? config.threads : Math.max(1, os.cpus().length - 1);
 
   try {
-    _offlineRecognizer = sherpa.createOfflineRecognizer({
+    _offlineRecognizer = instantiateOffline(sherpa, {
       featConfig: { sampleRate: 16000, featureDim: 80 },
       modelConfig: {
         senseVoice: {
@@ -131,7 +188,7 @@ export function getOnlineRecognizer(): OnlineRecognizer | null {
   const threads = config.threads > 0 ? config.threads : Math.max(1, os.cpus().length - 1);
 
   try {
-    _onlineRecognizer = sherpa.createOnlineRecognizer({
+    _onlineRecognizer = instantiateOnline(sherpa, {
       featConfig: { sampleRate: 16000, featureDim: 80 },
       modelConfig: {
         paraformer: {
@@ -219,7 +276,7 @@ export async function transcribeOffline(
 
   const stream = recognizer.createStream();
   try {
-    stream.acceptWaveform(16000, pcmData);
+    feedWaveform(stream, 16000, pcmData);
     stream.inputFinished();
     recognizer.decode(stream);
     const result = recognizer.getResult(stream);
@@ -229,7 +286,7 @@ export async function transcribeOffline(
     logger.debug(`[LocalASR] Offline transcribe: ${text.length} chars, ${durationMs}ms`);
     return { text, engine: 'offline', durationMs };
   } finally {
-    stream.free();
+    stream.free?.();
   }
 }
 
@@ -258,7 +315,7 @@ export async function transcribeStreaming(
     const chunkSize = 1600;
     for (let offset = 0; offset < pcmData.length; offset += chunkSize) {
       const chunk = pcmData.subarray(offset, Math.min(offset + chunkSize, pcmData.length));
-      stream.acceptWaveform(16000, chunk);
+      feedWaveform(stream, 16000, chunk);
       while (recognizer.isReady(stream)) {
         recognizer.decode(stream);
       }
@@ -277,7 +334,7 @@ export async function transcribeStreaming(
     logger.debug(`[LocalASR] Streaming transcribe: ${text.length} chars, ${durationMs}ms`);
     return { text, engine: 'streaming', durationMs };
   } finally {
-    stream.free();
+    stream.free?.();
   }
 }
 

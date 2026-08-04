@@ -26,19 +26,32 @@ import * as fs from 'fs';
 // 路径解析（无 electron 依赖：独立进程内手动推导 userData）
 // ================================================================
 
-const APP_DIR_NAME = 'entropy-decrease';
+/**
+ * 应用实际 userData 目录名取自 Electron app.name：默认 productName
+ * （"Entropy decrease"），无 productName 时才回退 name（"entropy-decrease"）。
+ * 独立进程无法调用 app.getPath('userData')，只能按此顺序推导候选目录，
+ * 取第一个真实存在的目录——否则授权标记、keban.db、访问日志会全部错位。
+ */
+const APP_DIR_NAMES = ['Entropy decrease', 'entropy-decrease'];
 const CONSENT_MARKER = 'memory-server-consent';
 const ACCESS_LOG = 'memory-server-access.log';
 
 function resolveUserDataDir(): string {
+  let base: string;
   switch (process.platform) {
     case 'win32':
-      return path.join(process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'), APP_DIR_NAME);
+      base = process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming');
+      break;
     case 'darwin':
-      return path.join(os.homedir(), 'Library', 'Application Support', APP_DIR_NAME);
+      base = path.join(os.homedir(), 'Library', 'Application Support');
+      break;
     default:
-      return path.join(process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config'), APP_DIR_NAME);
+      base = process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config');
   }
+  return (
+    APP_DIR_NAMES.map((name) => path.join(base, name)).find((dir) => fs.existsSync(dir)) ??
+    path.join(base, APP_DIR_NAMES[0])
+  );
 }
 
 /** 与 storageConfig.resolveDbPath 同口径：优先自定义路径，回退 userData/keban.db */

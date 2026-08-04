@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { Layers, ChevronDown, ChevronRight, Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { copyText } from '@/lib/utils/clipboard';
 import { useAIContentTier } from '@/lib/ai/hooks/useAIContentTier';
 import type { ContentTierItem } from '@/lib/ai/types';
 
@@ -47,10 +48,11 @@ export function ContentTierModal({ open, onClose, noteText }: ContentTierModalPr
   const copyCore = async () => {
     if (!tier) return;
     const text = tier.core.map((item, i) => `${i + 1}. ${item.text}`).join('\n');
-    try {
-      await navigator.clipboard.writeText(text);
+    // copyText 三级降级（Electron 下 navigator.clipboard 非聚焦态会失败）
+    const ok = await copyText(text);
+    if (ok) {
       toast({ type: 'success', message: '核心概念已复制到剪贴板' });
-    } catch {
+    } else {
       toast({ type: 'error', message: '复制失败，请手动选择复制' });
     }
   };

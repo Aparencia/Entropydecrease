@@ -154,19 +154,26 @@ export default function AppLayout() {
             : undefined}
           maskClassName={currentModule === 'inspiration' ? '!bg-[var(--kb-bg-primary)] !backdrop-blur-none' : undefined}
         >
-          {/* 路由级 AnimatePresence：mode="wait" 确保旧页面完成退出动画后再挂载新页面，避免残帧 */}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={pathname}
-              /* 简单的 opacity 淡入淡出，不影响 3D 场景的相机飞行和停靠时序 */
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Outlet />
-            </motion.div>
-          </AnimatePresence>
+          {/* 路由级过渡：grid 叠放 + 同期交叉淡入淡出。
+              历史方案 mode="wait" 要求旧页退出回调交接后才挂载新页；在
+              reduced-motion / StrictMode(dev) / HMR 等条件下交接会偶发丢失，
+              新页永不挂载——即内测反馈"回到主页时主页不显示"的根因。
+              交叉淡入淡出下新页立即挂载、旧页淡出后卸载，退出即使延迟也不阻塞内容展示 */}
+          <div className="grid">
+            <AnimatePresence>
+              <motion.div
+                key={pathname}
+                style={{ gridArea: '1 / 1' }}
+                /* 简单的 opacity 淡入淡出，不影响 3D 场景的相机飞行和停靠时序 */
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Outlet />
+              </motion.div>
+            </AnimatePresence>
+          </div>
         </FunctionalOverlay>
       )}
 
