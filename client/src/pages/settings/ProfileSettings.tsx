@@ -21,6 +21,13 @@ export default function ProfileSettings() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  // 跟踪最新 avatarUrl 用于 cleanup 时 revoke blob URL
+  const avatarUrlRef = useRef(avatarUrl);
+
+  // 同步 avatarUrl 到 ref
+  useEffect(() => {
+    avatarUrlRef.current = avatarUrl;
+  }, [avatarUrl]);
 
   useEffect(() => {
     if (!user) {
@@ -28,6 +35,14 @@ export default function ProfileSettings() {
       return;
     }
     loadProfile();
+
+    // 组件卸载时释放 blob URL 防止泄漏
+    return () => {
+      const currentUrl = avatarUrlRef.current;
+      if (currentUrl && currentUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(currentUrl);
+      }
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -156,6 +171,10 @@ export default function ProfileSettings() {
 
     if (isPlaceholder) {
       // 未配置 Supabase 时，用本地预览
+      // 先释放旧 blob URL 防止泄漏
+      if (avatarUrl && avatarUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(avatarUrl);
+      }
       const localUrl = URL.createObjectURL(file);
       setAvatarUrl(localUrl);
       toast({ type: 'success', message: '头像已预览（云服务未配置，重启后失效）' });

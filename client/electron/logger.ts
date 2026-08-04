@@ -17,6 +17,36 @@ class Logger {
   private stream: fs.WriteStream | null = null;
   private initialized = false;
 
+  /**
+   * 清理超过 maxAgeMs 的过期日志文件（M19）
+   * 文件名格式 app-<ISO 时间戳>.log（如 app-2026-08-04T12-34-56-789Z.log），
+   * 解析其中的时间戳并删除早于保留期的文件；无法解析的文件跳过不删
+   */
+  private cleanupOldLogs(logsDir: string, maxAgeMs: number): void {
+    let removed = 0;
+    try {
+      const cutoff = Date.now() - maxAgeMs;
+      for (const file of fs.readdirSync(logsDir)) {
+        const m = file.match(/^app-(.+\.log)$/);
+        if (!m) continue;
+        // 还原 ISO 时间戳：2026-08-04T12-34-56-789Z → 2026-08-04T12:34:56.789Z
+        // （仅替换时间段的 -，日期部分的 - 保留，故从尾部锚定匹配）
+        const iso = m[1].replace(/(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/, '$1:$2:$3.$4Z');
+        const fileTime = new Date(iso).getTime();
+        if (Number.isNaN(fileTime)) continue; // 无法解析的文件名跳过
+        if (fileTime < cutoff) {
+          fs.unlinkSync(path.join(logsDir, file));
+          removed++;
+        }
+      }
+    } catch (err) {
+      console.error('[Logger] Failed to cleanup old log files:', err);
+    }
+    if (removed > 0) {
+      console.log(`[Logger] Cleaned up ${removed} log file(s) older than ${maxAgeMs / 86400000} days`);
+    }
+  }
+
   /** 初始化日志目录和文件流（异步，需在 app ready 后调用） */
   async initLogger(): Promise<void> {
     if (this.initialized) return;
@@ -25,6 +55,9 @@ class Logger {
     try {
       const logsDir = path.join(app.getPath('userData'), 'logs');
       await mkdir(logsDir, { recursive: true });
+
+      // M19: 日志轮转——启动时清理超过 30 天的历史日志文件
+      this.cleanupOldLogs(logsDir, 30 * 24 * 60 * 60 * 1000);
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const logFile = path.join(logsDir, `app-${timestamp}.log`);

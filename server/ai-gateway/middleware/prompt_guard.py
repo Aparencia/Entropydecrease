@@ -106,11 +106,17 @@ class PromptGuardMiddleware(BaseHTTPMiddleware):
             return texts
 
         if isinstance(data, str) and len(data) > 10:
+            # 超长字段（>1000 字符）跳过注入检测（多为 base64 编码内容）
+            if len(data) > 1000:
+                return texts
             texts.append(data)
         elif isinstance(data, dict):
             for key, value in data.items():
                 # 跳过非内容字段
                 if key in ("model", "temperature", "max_tokens", "response_format"):
+                    continue
+                # 跳过名字包含 image、base64、audio 的字段（二进制/多媒体数据）
+                if any(skip_word in str(key).lower() for skip_word in ("image", "base64", "audio")):
                     continue
                 texts.extend(self._extract_text_fields(value, max_depth - 1))
         elif isinstance(data, list):

@@ -41,20 +41,22 @@ export class OfflineQueue {
     const id = generateId();
     const deviceId = getDeviceId();
 
-    // 获取当前队列最大版本号
-    const items = await db.offlineQueue.orderBy('createdAt').reverse().limit(1).toArray();
-    const version = items.length > 0 ? (items[0].version || 0) + 1 : 1;
+    // 在 Dexie 事务内完成"读 max version + 1 + 写入"，避免版本号竞态
+    await db.transaction('rw', db.offlineQueue, async () => {
+      const items = await db.offlineQueue.orderBy('createdAt').reverse().limit(1).toArray();
+      const version = items.length > 0 ? (items[0].version || 0) + 1 : 1;
 
-    await db.offlineQueue.add({
-      id,
-      entityType,
-      entityId,
-      operation,
-      payload: payload ? JSON.stringify(payload) : undefined,
-      version,
-      deviceId,
-      createdAt: new Date(),
-      retryCount: 0,
+      await db.offlineQueue.add({
+        id,
+        entityType,
+        entityId,
+        operation,
+        payload: payload ? JSON.stringify(payload) : undefined,
+        version,
+        deviceId,
+        createdAt: new Date(),
+        retryCount: 0,
+      });
     });
 
     return id;

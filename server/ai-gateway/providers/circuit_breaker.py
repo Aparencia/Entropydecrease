@@ -15,6 +15,14 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
+# 将 set_circuit_state 定义为模块级函数，避免循环导入
+_circuit_metrics_available = True
+try:
+    from observability.metrics import set_circuit_state
+except ImportError:
+    _circuit_metrics_available = False
+    set_circuit_state = lambda p, s: None
+
 
 class CircuitState(str, Enum):
     CLOSED = "closed"        # 正常放行
@@ -61,6 +69,7 @@ class CircuitBreaker:
         self._last_failure_time: float = 0.0
         self._half_open_calls = 0
         self._lock = asyncio.Lock()
+        self._cond = asyncio.Condition(self._lock)
 
     @property
     def state(self) -> CircuitState:
@@ -78,30 +87,33 @@ class CircuitBreaker:
 
     async def before_call(self) -> None:
         """调用前检查，熔断时抛出 CircuitOpenError"""
-        state = self.state
-        if state == CircuitState.OPEN:
-            remaining = self.recovery_timeout - (time.time() - self._last_failure_time)
-            raise CircuitOpenError(self.provider, max(remaining, 0))
+        async with self._cond:
+            state = self.state
+            if state == CircuitState.OPEN:
+                remaining = self.recovery_timeout - (time.time() - self._last_failure_time)
+                raise CircuitOpenError(self.provider, max(remaining, 0))
 
-        if state == CircuitState.HALF_OPEN:
-            async with self._lock:
+            if state == CircuitState.HALF_OPEN:
+                set_circuit_state(self.provider, 2)
                 if self._half_open_calls >= self.half_open_max_calls:
                     raise CircuitOpenError(self.provider, 1.0)
                 self._half_open_calls += 1
 
     async def on_success(self) -> None:
         """调用成功回调"""
-        async with self._lock:
+        async with self._cond:
             if self._state == CircuitState.OPEN or self.state == CircuitState.HALF_OPEN:
                 logger.info("CircuitBreaker [%s]: HALF_OPEN → CLOSED（恢复正常）", self.provider)
-            self._state = CircuitState.CLOSED
-            self._failure_count = 0
-            self._success_count += 1
-            self._half_open_calls = 0
+                self._state = CircuitState.CLOSED
+                self._failure_count = 0
+                self._success_count += 1
+                self._half_open_calls = 0
+                self._cond.notify_all()
+            set_circuit_state(self.provider, 0)
 
     async def on_failure(self) -> None:
         """调用失败回调"""
-        async with self._lock:
+        async with self._cond:
             self._failure_count += 1
             self._last_failure_time = time.time()
 
@@ -119,6 +131,7 @@ class CircuitBreaker:
                     "CircuitBreaker [%s]: CLOSED → OPEN（连续失败 %d 次，熔断 %ds）",
                     self.provider, self._failure_count, self.recovery_timeout,
                 )
+            set_circuit_state(self.provider, 1)
 
     def get_stats(self) -> dict:
         """获取熔断器统计信息"""

@@ -90,7 +90,10 @@ export function EncryptedBackupSection() {
         }
       }
     } catch (err) {
-      if (err instanceof Error && err.message.includes('decrypt')) {
+      // 判断是否为解密失败（AES-GCM 密码错误抛出 DOMException OperationError）
+      if (err instanceof DOMException && err.name === 'OperationError') {
+        toast({ type: 'error', message: '解密失败，请检查密码是否正确' });
+      } else if (err instanceof Error && err.message.includes('DECRYPT_FAILED')) {
         toast({ type: 'error', message: '解密失败，请检查密码是否正确' });
       } else {
         toast({ type: 'error', message: '恢复失败，请检查文件格式' });

@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 PRICE_TABLE: dict[str, dict[str, float]] = {
     "qwen-plus":              {"input": 0.004, "output": 0.012},
+    "qwen3-vl-flash":          {"input": 0.00015, "output": 0.0015},
     "qwen2.5-vl-72b-instruct": {"input": 0.02, "output": 0.06},
     "qwen3-asr-flash":        {"input": 0.0,   "output": 0.008},
     "glm-4.6v-flash":         {"input": 0.0,   "output": 0.0},

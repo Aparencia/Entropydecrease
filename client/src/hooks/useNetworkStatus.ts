@@ -25,6 +25,8 @@ export function useNetworkStatus() {
 
     return () => {
       unsubscribe();
+      // 最后一个订阅者退订时停止心跳
+      networkManager.stop();
     };
   }, []);
 

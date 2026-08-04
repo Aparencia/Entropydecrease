@@ -8,8 +8,17 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/redis/go-redis/v9"
+)
+
+// M3: Redis 键 TTL 常量——所有缓存键都必须有过期时间，防止无界增长。
+const (
+	// lastSyncVersionTTL 用户最后同步版本缓存有效期（7 天）。
+	lastSyncVersionTTL = 7 * 24 * time.Hour
+	// deviceOnlineTTL 设备在线集合有效期（24 小时），SAdd 后需刷新。
+	deviceOnlineTTL = 24 * time.Hour
 )
 
 // RDB is the shared Redis client. It is nil when Redis is unavailable,
@@ -58,13 +67,13 @@ func CloseRedis() {
 
 // ---------- Sync-state cache helpers ----------
 
-// SetLastSyncVersion caches the user's last known sync version.
+// SetLastSyncVersion caches the user's last known sync version (TTL 7 天)。
 func SetLastSyncVersion(ctx context.Context, userID string, version int64) error {
 	if RDB == nil {
 		return nil
 	}
 	key := fmt.Sprintf("sync:%s:lastVersion", userID)
-	return RDB.Set(ctx, key, version, 0).Err() // no expiry
+	return RDB.Set(ctx, key, version, lastSyncVersionTTL).Err()
 }
 
 // GetLastSyncVersion returns the cached last-sync version for a user,
@@ -81,13 +90,26 @@ func GetLastSyncVersion(ctx context.Context, userID string) (int64, error) {
 	return val, err
 }
 
-// SetDeviceOnline marks a device as online for the given user.
+// SetDeviceOnline marks a device as online for the given user (集合 TTL 24 小时，每次写入刷新过期时间)。
 func SetDeviceOnline(ctx context.Context, userID, deviceID string) error {
 	if RDB == nil {
 		return nil
 	}
 	key := fmt.Sprintf("sync:%s:devices", userID)
-	return RDB.SAdd(ctx, key, deviceID).Err()
+	if err := RDB.SAdd(ctx, key, deviceID).Err(); err != nil {
+		return err
+	}
+	// SADD 本身不带 TTL，需显式刷新集合过期时间
+	return RDB.Expire(ctx, key, deviceOnlineTTL).Err()
+}
+
+// SetDeviceOffline removes a device from the online set (WebSocket 断开时调用，M3)。
+func SetDeviceOffline(ctx context.Context, userID, deviceID string) error {
+	if RDB == nil {
+		return nil
+	}
+	key := fmt.Sprintf("sync:%s:devices", userID)
+	return RDB.SRem(ctx, key, deviceID).Err()
 }
 
 // GetOnlineDevices returns the set of device IDs currently marked online

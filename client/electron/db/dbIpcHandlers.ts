@@ -251,6 +251,10 @@ export function registerDbIpcHandlers(): void {
   });
 
   /** db:batch — 批量操作：事务执行 */
+  // SEC(M13): insert/update 分支先经 repo.filterAllowedColumns() 过滤非法列名，
+  // 再拼入 SQL（repo 内部统一使用 q() 包裹列名，防列名注入）
+  // SEC(M17): 直接调用 repo.create()/repo.update() 替代手写 SQL，
+  // JSON 字段会经 entityToRow 序列化、boolean 字段正确映射为 INTEGER 0/1
   safeHandle('db:batch', async (_event, params: { operations: Array<{ type: string; table: string; [key: string]: unknown }> }) => {
     const dbConn = getConnection();
 
@@ -258,21 +262,27 @@ export function registerDbIpcHandlers(): void {
       for (const op of params.operations) {
         const tableName = resolveTable(op.table as string);
         switch (op.type) {
-          case 'insert': {
+          // 'create' 为渲染进程 IpcStorageAdapter.bulkCreate 使用的类型名（兼容映射）
+          case 'insert':
+          case 'create': {
+            const repo = new SqliteRepository<SqliteRow>(tableName);
             const item = op.item as Record<string, unknown>;
-            const cols = Object.keys(item);
-            const placeholders = cols.map(() => '?').join(', ');
-            const sql = `INSERT INTO "${tableName}" (${cols.map((c) => `"${c}"`).join(', ')}) VALUES (${placeholders})`;
-            dbConn.prepare(sql).run(...Object.values(item));
+            const sanitized = repo.filterAllowedColumns(item);
+            if (Object.keys(sanitized).length === 0) {
+              throw new Error(`[DB] Batch insert has no allowed columns for table "${tableName}"`);
+            }
+            if (!sanitized.id) {
+              throw new Error(`[DB] Batch insert requires an "id" field for table "${tableName}"`);
+            }
+            repo.create(sanitized as Omit<SqliteRow, 'id'> & { id: string });
             break;
           }
           case 'update': {
+            const repo = new SqliteRepository<SqliteRow>(tableName);
             const changes = op.changes as Record<string, unknown>;
-            const entries = Object.entries(changes);
-            if (entries.length === 0) break;
-            const setClauses = entries.map(([col]) => `"${col}" = ?`).join(', ');
-            const sql = `UPDATE "${tableName}" SET ${setClauses} WHERE id = ?`;
-            dbConn.prepare(sql).run(...entries.map(([, v]) => v), op.id as string);
+            const sanitized = repo.filterAllowedColumns(changes);
+            if (Object.keys(sanitized).length === 0) break;
+            repo.update(op.id as string, sanitized);
             break;
           }
           case 'delete':

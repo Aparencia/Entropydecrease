@@ -5,6 +5,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 
@@ -30,21 +31,25 @@ func Pull(c *gin.Context) {
 	if err := models.DB.
 		Where("user_id = ? AND server_seq_no > ? AND device_id != ?", userID, sinceVersion, deviceID).
 		Order("server_seq_no ASC").
+		Limit(1000). // M2: 增量查询限制返回行数
 		Find(&ops).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	// M2: hasMore 标志，客户端可继续翻页（恰好 1000 条时多拉一次空结果，无害）
+	hasMore := len(ops) >= 1000
 
 	result := make([]gin.H, 0, len(ops))
 	var latestVersion int64 = sinceVersion
 
 	for _, op := range ops {
 		result = append(result, gin.H{
-			"entityType": op.EntityType,
-			"entityId":   op.EntityID,
-			"operation":  op.Operation,
-			"data":       fromJSON(op.Payload),
-			"version":    op.ServerSeqNo,
+			"entityType":  op.EntityType,
+			"entityId":    op.EntityID,
+			"operation":   op.Operation,
+			"data":        fromJSON(op.Payload),
+			"version":     op.ServerSeqNo,
+			"serverSeqNo": op.ServerSeqNo, // M11: Pull 以 ServerSeqNo 为游标
 		})
 		if op.ServerSeqNo > latestVersion {
 			latestVersion = op.ServerSeqNo
@@ -54,6 +59,7 @@ func Pull(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"operations":    result,
 		"latestVersion": latestVersion,
+		"hasMore":       hasMore,
 	})
 }
 
@@ -62,11 +68,24 @@ func Status(c *gin.Context) {
 	userID := c.GetString("user_id")
 
 	var opCount, evCount int64
-	models.DB.Model(&models.Operation{}).Where("user_id = ?", userID).Count(&opCount)
-	models.DB.Model(&models.EntityVersion{}).Where("user_id = ?", userID).Count(&evCount)
+	// M9: 统计查询失败时记录日志并返回 503，不再吞没 DB 错误
+	if err := models.DB.Model(&models.Operation{}).Where("user_id = ?", userID).Count(&opCount).Error; err != nil {
+		log.Printf("[status] count operations failed user=%s: %v", userID, err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "db unavailable"})
+		return
+	}
+	if err := models.DB.Model(&models.EntityVersion{}).Where("user_id = ?", userID).Count(&evCount).Error; err != nil {
+		log.Printf("[status] count entity versions failed user=%s: %v", userID, err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "db unavailable"})
+		return
+	}
 
 	var g models.GlobalSeqNo
-	models.DB.First(&g)
+	if err := models.DB.First(&g).Error; err != nil {
+		log.Printf("[status] read GlobalSeqNo failed user=%s: %v", userID, err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "db unavailable"})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"totalOperations": opCount,

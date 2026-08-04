@@ -29,6 +29,13 @@ import {
 } from './mcpEnv.js';
 
 // ================================================================
+// 常量
+// ================================================================
+
+/** 单次请求超时（ms）——bridge 无响应时拒绝并清理 pending，防请求悬挂 */
+const REQUEST_TIMEOUT_MS = 30_000;
+
+// ================================================================
 // 管理器
 // ================================================================
 
@@ -190,6 +197,8 @@ class McpManager {
 
   /**
    * 向 bridge 发送请求并等待响应
+   * SEC(M15): 30s 超时兜底——bridge 挂起/失联时拒绝请求并清理 pending 条目，
+   * 避免调用方（渲染进程 await）无限悬挂
    */
   private sendRequest(method: BridgeRequest['method'], params: Record<string, unknown>): Promise<unknown> {
     return new Promise((resolve, reject) => {
@@ -201,11 +210,29 @@ class McpManager {
       const id = `req_${++this.requestCounter}`;
       const request: BridgeRequest = { id, method, params };
 
-      this.pending.set(id, { resolve, reject });
+      // 超时定时器：resolve/reject 任意路径都会通过包装函数清理
+      const timeoutId = setTimeout(() => {
+        if (this.pending.has(id)) {
+          this.pending.delete(id);
+          reject(new Error(`[MCP] Request ${id} (${method}) timed out after ${REQUEST_TIMEOUT_MS}ms`));
+        }
+      }, REQUEST_TIMEOUT_MS);
+
+      this.pending.set(id, {
+        resolve: (value: unknown) => {
+          clearTimeout(timeoutId);
+          resolve(value);
+        },
+        reject: (reason: Error) => {
+          clearTimeout(timeoutId);
+          reject(reason);
+        },
+      });
 
       this.bridge.send(request, (err) => {
         if (err) {
           this.pending.delete(id);
+          clearTimeout(timeoutId);
           reject(new Error(`Failed to send request: ${err.message}`));
         }
       });

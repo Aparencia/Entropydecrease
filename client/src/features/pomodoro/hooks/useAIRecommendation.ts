@@ -38,7 +38,7 @@ export function useAIRecommendation() {
   const getRecommendation = useCallback(
     async (
       history: DurationHistoryData,
-      aiRecommendFn?: (data: DurationHistoryData) => Promise<DurationResult>,
+      aiRecommendFn?: (data: DurationHistoryData, signal?: AbortSignal) => Promise<DurationResult>,
       lastRecommendation?: number,
     ) => {
       setLoading(true);

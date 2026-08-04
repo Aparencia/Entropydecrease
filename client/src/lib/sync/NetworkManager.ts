@@ -29,6 +29,9 @@ export class NetworkManager {
   private heartbeatUrl: string;
   private heartbeatIntervalMs: number;
   private weakThresholdMs: number;
+  private lastLatencyNotify = 0;
+  private readonly LATENCY_NOTIFY_THROTTLE = 1000; // 延迟变化通知节流 1s
+  private refCount = 0; // 引用计数，用于管理 start/stop 生命周期
 
   constructor(options?: {
     heartbeatUrl?: string;
@@ -56,9 +59,11 @@ export class NetworkManager {
   }
 
   /**
-   * 启动网络状态监听
+   * 启动网络状态监听（引用计数，首次调用时启动）
    */
   start(): void {
+    this.refCount++;
+    if (this.refCount > 1) return; // 已有活跃实例
     window.addEventListener('online', this.handleOnline);
     window.addEventListener('offline', this.handleOffline);
 
@@ -67,9 +72,11 @@ export class NetworkManager {
   }
 
   /**
-   * 停止网络状态监听
+   * 停止网络状态监听（引用计数，末次调用时停止）
    */
   stop(): void {
+    this.refCount--;
+    if (this.refCount > 0) return; // 仍有活跃实例
     window.removeEventListener('online', this.handleOnline);
     window.removeEventListener('offline', this.handleOffline);
     this.stopHeartbeat();
@@ -166,9 +173,16 @@ export class NetworkManager {
     const prev = this.state;
     this.state = { ...this.state, ...partial };
 
-    // 只在状态实际变化时通知
+    // 状态变化立即通知；延迟变化节流到 1s 避免高频通知
     if (prev.status !== this.state.status) {
+      this.lastLatencyNotify = Date.now();
       this.listeners.forEach((listener) => listener(this.getState()));
+    } else if (prev.latency !== this.state.latency) {
+      const now = Date.now();
+      if (now - this.lastLatencyNotify >= this.LATENCY_NOTIFY_THROTTLE) {
+        this.lastLatencyNotify = now;
+        this.listeners.forEach((listener) => listener(this.getState()));
+      }
     }
   }
 }

@@ -12,7 +12,7 @@
  * writes the imports trace record, then fires the settling signature moment.
  * Failures return a Result object instead of throwing.
  */
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNoteStore } from '@/features/notes/store/useNoteStore';
 import { useFlashcardStore } from '@/features/flashcards/store/useFlashcardStore';
 import { useWorldEvents } from '@/features/retention/store/useWorldEvents';
@@ -66,6 +66,8 @@ async function ensureSettlingDeck(): Promise<string> {
  */
 export function useSettleConcepts() {
   const [isSettling, setIsSettling] = useState(false);
+  // 持久化已成功安放的概念索引，重试时跳过（避免重复创建）
+  const settledIndicesRef = useRef<Set<number>>(new Set());
 
   const settleConcepts = async (input: SettleInput): Promise<SettleResult> => {
     if (input.concepts.length === 0) {
@@ -77,7 +79,12 @@ export function useSettleConcepts() {
     try {
       const deckId = await ensureSettlingDeck();
 
-      for (const c of input.concepts) {
+      for (const [i, c] of input.concepts.entries()) {
+        // 跳过已成功安放的概念（避免重试重复创建）
+        if (settledIndicesRef.current.has(i)) {
+          continue;
+        }
+
         const noteId = await useNoteStore.getState().createNote({
           title: c.name,
           content: summaryToNoteContent(c.summary),
@@ -97,6 +104,9 @@ export function useSettleConcepts() {
           tags: [SETTLING_TAG],
         });
         cardIds.push(cardId);
+
+        // 标记该索引已成功安放
+        settledIndicesRef.current.add(i);
       }
 
       // 入籍记录（imports 表，溯源；失败不阻塞安放）
@@ -115,6 +125,9 @@ export function useSettleConcepts() {
         input.concepts[input.concepts.length - 1]?.name ?? input.title,
         'settling',
       );
+
+      // 全成功：清除已安放索引，下次是全新安放
+      settledIndicesRef.current.clear();
 
       return { ok: true, noteIds, cardIds, recordId };
     } catch (err) {

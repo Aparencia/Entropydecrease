@@ -12,6 +12,7 @@
 @ai-context: JWT 认证中间件：校验 Supabase JWT（ES256 经 JWKS，或 HS256/RS256 经密钥），未配置时以占位密钥放行供本地开发。
 """
 
+import asyncio
 import base64
 import logging
 import os
@@ -131,7 +132,7 @@ def _resolve_jwks_url() -> str:
     return ""
 
 
-def _fetch_jwks(jwks_url: str) -> dict:
+async def _fetch_jwks(jwks_url: str) -> dict:
     """
     获取 JWKS（带 TTL 缓存，默认 1 小时刷新一次）。
 
@@ -142,7 +143,7 @@ def _fetch_jwks(jwks_url: str) -> dict:
     if _jwks_cache is not None and (now - _jwks_cache_time) < _JWKS_CACHE_TTL:
         return _jwks_cache
     try:
-        resp = httpx.get(jwks_url, timeout=10)
+        resp = await asyncio.to_thread(httpx.get, jwks_url, timeout=10)
         resp.raise_for_status()
         _jwks_cache = resp.json()
         _jwks_cache_time = now
@@ -165,7 +166,7 @@ def _b64url_to_int(val: str) -> int:
     return int.from_bytes(base64.urlsafe_b64decode(val), "big")
 
 
-def _get_es256_public_key(kid: Optional[str] = None):
+async def _get_es256_public_key(kid: Optional[str] = None):
     """
     从 JWKS 端点获取 ECDSA P-256 公钥（ES256 验签用）。
 
@@ -188,7 +189,7 @@ def _get_es256_public_key(kid: Optional[str] = None):
         )
         return "not-configured"
 
-    jwks = _fetch_jwks(jwks_url)
+    jwks = await _fetch_jwks(jwks_url)
     for key in jwks.get("keys", []):
         # 按 kid 匹配；kid 为空时取第一个 EC P-256 类型的 key
         if kid and key.get("kid") != kid:
@@ -209,7 +210,7 @@ def _get_es256_public_key(kid: Optional[str] = None):
     raise ValueError(f"JWKS 中未找到 kid={kid} 对应的 EC P-256 公钥")
 
 
-def _get_public_key(kid: Optional[str] = None):
+async def _get_public_key(kid: Optional[str] = None):
     """
     获取用于 JWT 验证的密钥。
 
@@ -219,7 +220,7 @@ def _get_public_key(kid: Optional[str] = None):
     """
     alg = APP_CONFIG.get("jwt_algorithm", "HS256")
     if alg == "ES256":
-        return _get_es256_public_key(kid)
+        return await _get_es256_public_key(kid)
     raw = APP_CONFIG["jwt_secret"]
     if not raw:
         # 未配置时返回占位符，jose 会在验证时报错（优雅降级）
@@ -325,7 +326,11 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             except Exception as e:
                 logger.warning("解析 token header 获取 kid 失败: %s", str(e))
 
-        public_key = _get_public_key(kid=kid)
+        try:
+            public_key = await _get_public_key(kid=kid)
+        except Exception as e:
+            logger.error("获取公钥失败: %s", str(e))
+            raise AuthenticationError("认证服务异常，请稍后重试") from e
 
         # 构建解码参数
         decode_kwargs: dict = {

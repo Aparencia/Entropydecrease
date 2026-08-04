@@ -69,17 +69,12 @@ export function useLearningProgress(): LearningProgressItem[] {
         result.push({ subject: '深潜专注', progress: 0 });
       }
 
-      // ── 2. 闪卡复习：直接从 DB 查全量卡片计算复习比例 ──
+      // ── 2. 闪卡复习：已学卡占总卡比例 ──
       try {
         const allCards = await db.flashcards.toArray();
         if (allCards.length > 0) {
-          const now = new Date();
-          const dueCards = allCards.filter(
-            (c: any) => c.repetitions > 0 && new Date(c.dueDate) <= now,
-          );
           const reviewedCards = allCards.filter((c: any) => c.repetitions > 0);
-          const denominator = dueCards.length > 0 ? dueCards.length : allCards.length;
-          const flashcardProgress = Math.min(100, Math.round((reviewedCards.length / Math.max(denominator, 1)) * 100));
+          const flashcardProgress = Math.min(100, Math.round((reviewedCards.length / allCards.length) * 100));
           result.push({ subject: '闪卡复习', progress: flashcardProgress });
         } else {
           result.push({ subject: '闪卡复习', progress: 0 });

@@ -140,6 +140,10 @@ export class CryptoManager {
   /**
    * 获取或创建设备级随机密钥材料
    * 每个 userId 隔离存储，确保不同用户的密钥材料独立
+   *
+   * @security 此加密仅防"本地文件拷贝"场景（其他人直接复制 IndexedDB 文件
+   * 无法读取加密字段），不防应用内 XSS——密钥材料明文存储在 localStorage 中，
+   * 任何同源脚本均可读取。若 Electron 环境可用 safeStorage 则优先使用。
    */
   private getOrCreateDeviceKey(userId: string): string {
     const storageKey = `${DEVICE_KEY_STORAGE_KEY}_${userId}`;

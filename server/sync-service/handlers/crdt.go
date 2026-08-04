@@ -7,6 +7,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"entropydecrease/sync-service/models"
 
@@ -30,28 +31,35 @@ type crdtPushRequest struct {
 
 // CRDTPush accepts a batch of CRDT changesets from a client and stores them.
 // Each changeset is assigned a server-side sequence number (GlobalSeqNo).
+// M7: 整个批次在单个事务内执行（要么全部成功要么全部回滚）；
+// M8: 请求体限制 1MB（changeset 为 base64，超大请求主要来自此端点）。
 func CRDTPush(c *gin.Context) {
+	// M8: 限制请求体最大 1MB
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
+
 	var req crdtPushRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large (max 1MB)"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	userID := c.GetString("user_id")
-	accepted := make([]int64, 0) // client-side seq numbers that were accepted
+	accepted := make([]int64, 0, len(req.Changes)) // client-side seq numbers that were accepted
 	pushErrors := make([]string, 0)
 
-	for _, ch := range req.Changes {
-		var serverSeq int64
-
-		txErr := models.DB.Transaction(func(tx *gorm.DB) error {
+	// M7: 整个循环包裹在单个事务内
+	txErr := models.DB.Transaction(func(tx *gorm.DB) error {
+		for _, ch := range req.Changes {
 			seqNo, err := nextSeqNo(tx)
 			if err != nil {
 				return err
 			}
-			serverSeq = seqNo
 
-			return tx.Create(&models.CRDTChange{
+			if err := tx.Create(&models.CRDTChange{
 				ServerSeqNo: seqNo,
 				DeviceID:    req.DeviceID,
 				UserID:      userID,
@@ -60,15 +68,18 @@ func CRDTPush(c *gin.Context) {
 				Changeset:   ch.Changeset,
 				Operation:   ch.Operation,
 				CreatedAt:   ch.CreatedAt,
-			}).Error
-		})
-
-		if txErr != nil {
-			pushErrors = append(pushErrors, "crdt tx error: "+txErr.Error())
-			continue
+			}).Error; err != nil {
+				return err
+			}
+			accepted = append(accepted, ch.Seq)
 		}
-		_ = serverSeq // serverSeq is assigned but client uses its own seq for ack
-		accepted = append(accepted, ch.Seq)
+		return nil
+	})
+
+	if txErr != nil {
+		pushErrors = append(pushErrors, "crdt tx error: "+txErr.Error())
+		// M7: 事务回滚后 accepted 全部失效，必须清空
+		accepted = nil
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -96,10 +107,13 @@ func CRDTPull(c *gin.Context) {
 	if err := models.DB.
 		Where("user_id = ? AND server_seq_no > ? AND device_id != ?", userID, since, deviceID).
 		Order("server_seq_no ASC").
+		Limit(1000). // M2: 增量查询限制返回行数
 		Find(&changes).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	// M2: hasMore 标志，客户端可继续翻页（恰好 1000 条时多拉一次空结果，无害）
+	hasMore := len(changes) >= 1000
 
 	result := make([]gin.H, 0, len(changes))
 	var latestSeq int64 = since
@@ -122,5 +136,6 @@ func CRDTPull(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"changes":   result,
 		"latestSeq": latestSeq,
+		"hasMore":   hasMore,
 	})
 }

@@ -276,6 +276,15 @@ export class CRDTEngine {
     if (!state) return null;
     return automerge.save(state.doc);
   }
+
+  /**
+   * 重置 CRDT 引擎（导入备份后调用）
+   * 清空内存文档，清空 initialized 标记，下次 init 从新数据重建
+   */
+  reset(): void {
+    this.docs.clear();
+    this.initialized = false;
+  }
 }
 
 // ─── 单例 ────────────────────────────────────────────────────────────────────

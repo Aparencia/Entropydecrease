@@ -131,6 +131,16 @@ export async function importData(
       }
     });
 
+    // 导入成功后重置 CRDT 引擎（清内存文档、清 crdt_changes、重置 sync 游标）
+    try {
+      const { crdtEngine } = await import('@/lib/sync/crdtEngine');
+      crdtEngine.reset();
+    } catch { /* CRDT 重置失败不阻塞导入 */ }
+    await db.crdtChanges.clear();
+    await db.crdtDocs.clear();
+    const { setCRDTLastSeq } = await import('@/lib/sync/syncCursors');
+    setCRDTLastSeq(0);
+
     return { success: true, message: '数据导入成功' };
   } catch (err) {
     const msg = err instanceof Error ? err.message : '未知错误';

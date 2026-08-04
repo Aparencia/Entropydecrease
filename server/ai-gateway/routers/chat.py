@@ -28,6 +28,8 @@ router = APIRouter(prefix="/api/v1/ai", tags=["学伴对话"])
 # ============================================================
 _FIRST_TOKEN_TIMEOUT = 30.0
 _CHUNK_IDLE_TIMEOUT = 30.0
+# 流式端点总体存活时间上限（秒），超时后强制结束
+_MAX_STREAM_DURATION = 300.0
 
 # ============================================================
 # System Prompt
@@ -130,8 +132,17 @@ async def chat_stream(body: ChatStreamRequest, request: Request):
         try:
             agen = gen.__aiter__()
             is_first = True
+            start_time = time.time()
 
             while True:
+                # 总体存活时间检查
+                if time.time() - start_time > _MAX_STREAM_DURATION:
+                    logger.error(
+                        "[chat] 流式总体超时: provider=%s, duration=%.1fs > %ds",
+                        used_provider, time.time() - start_time, _MAX_STREAM_DURATION,
+                    )
+                    yield _sse_error(f"AI 响应超时（总体 {int(_MAX_STREAM_DURATION)}s）")
+                    break
                 if await request.is_disconnected():
                     break
                 timeout = _FIRST_TOKEN_TIMEOUT if is_first else _CHUNK_IDLE_TIMEOUT
@@ -155,7 +166,7 @@ async def chat_stream(body: ChatStreamRequest, request: Request):
 
         except Exception as e:
             logger.error("[chat] Stream error: %s", e, exc_info=True)
-            yield _sse_error(str(e))
+            yield _sse_error("AI 服务响应异常，请稍后重试")
 
     return StreamingResponse(
         event_generator(),

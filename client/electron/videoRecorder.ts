@@ -8,7 +8,7 @@
  * 3. 视频数据块通过 IPC video_record_chunk 回传主进程并追加写入文件
  */
 
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { logger } from './logger.js';
@@ -44,6 +44,12 @@ const DEFAULT_OPTIONS: Required<VideoRecordOptions> = {
 
 const RECORDINGS_DIR_NAME = 'keban-recordings';
 
+/** 孤儿录制文件最大存活时长（ms）——24 小时（M20） */
+const ORPHAN_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** 渲染进程停止确认等待时长（ms）——超时后不再等待尾帧（M18） */
+const STOP_CONFIRM_TIMEOUT_MS = 500;
+
 // ================================================================
 // 视频录制管理器
 // ================================================================
@@ -69,6 +75,8 @@ export class VideoRecorder {
   private fileSizeBytes = 0;
   /** 状态推送定时器 */
   private statusTimer: ReturnType<typeof setInterval> | null = null;
+  /** 录制是否已正常结束（正常停止后置 true；dispose 仅删除未完成的临时文件） */
+  private completed = false;
 
   constructor(options?: VideoRecordOptions) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
@@ -149,25 +157,39 @@ export class VideoRecorder {
 
   /**
    * 停止录制，返回视频文件路径
+   * M18: 先通知渲染进程停止 MediaRecorder，等待渲染进程确认
+   * video_record_stopped（或 500ms 超时兜底）；期间保持 recording=true
+   * 使 handleRendererChunk 继续接收尾帧；最后关闭文件流、置 recording=false
    */
   async stopRecording(): Promise<string> {
     if (!this.recording) {
       throw new Error('[VideoRecorder] 当前未在录制');
     }
 
-    this.recording = false;
+    // 保存窗口快照（dispose 场景下 boundWin 可能被并发置空）
+    const win = this.boundWin;
     this.paused = false;
     this.stopStatusTimer();
 
-    // 通知渲染进程停止 MediaRecorder
-    if (this.boundWin && !this.boundWin.isDestroyed()) {
-      this.boundWin.webContents.send('video_record_do_stop');
+    // 1. 通知渲染进程停止 MediaRecorder（触发最后一个 ondataavailable 尾帧）
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('video_record_do_stop');
     }
 
-    // 等待最后一批 chunk 写入完成（给渲染进程 500ms 缓冲）
-    await new Promise<void>((resolve) => setTimeout(resolve, 500));
+    // 2. 等待渲染进程确认 stop 完成（video_record_stopped 事件），超时兜底
+    await new Promise<void>((resolve) => {
+      const timeoutId = setTimeout(() => {
+        ipcMain.removeListener('video_record_stopped', onConfirmed);
+        resolve();
+      }, STOP_CONFIRM_TIMEOUT_MS);
+      function onConfirmed(): void {
+        clearTimeout(timeoutId);
+        resolve();
+      }
+      ipcMain.once('video_record_stopped', onConfirmed);
+    });
 
-    // 关闭文件流
+    // 3. 关闭文件流（此时尾帧已全部写入）
     const finalPath = this.filePath;
     await new Promise<void>((resolve) => {
       if (this.writeStream) {
@@ -177,6 +199,10 @@ export class VideoRecorder {
       }
     });
     this.writeStream = null;
+
+    // 4. 最后置 recording = false（等待期间 handleRendererChunk 仍接收尾帧）
+    this.recording = false;
+    this.completed = true;
 
     logger.info(
       `[VideoRecorder] 停止录制, duration=${this.getDurationMs()}ms, ` +
@@ -242,12 +268,16 @@ export class VideoRecorder {
     this.boundWin = win;
   }
 
-  /** 销毁实例，释放资源 */
+  /** 销毁实例，释放资源（M20: 删除未正常完成的临时录制文件） */
   dispose(): void {
+    const cleanupFile = () => this.deleteRecordingFile();
     if (this.recording) {
-      this.stopRecording().catch((err) => {
+      this.stopRecording().then(cleanupFile).catch((err) => {
         logger.error('[VideoRecorder] dispose 时停止录制失败:', err);
+        cleanupFile();
       });
+    } else {
+      cleanupFile();
     }
     this.stopStatusTimer();
     this.disposed = true;
@@ -281,5 +311,60 @@ export class VideoRecorder {
       clearInterval(this.statusTimer);
       this.statusTimer = null;
     }
+  }
+
+  /**
+   * 删除未正常完成的临时录制文件（M20）
+   * 正常停止（completed=true）的文件由渲染进程持有路径，必须保留；
+   * 录制被中断/异常/废弃时删除，防止临时目录堆积
+   */
+  private deleteRecordingFile(): void {
+    if (this.completed || !this.filePath) return;
+    const target = this.filePath;
+    this.filePath = null;
+    try {
+      if (fs.existsSync(target)) {
+        fs.unlinkSync(target);
+        logger.info(`[VideoRecorder] 已删除未完成的临时录制文件: ${target}`);
+      }
+    } catch (err) {
+      logger.warn(`[VideoRecorder] 删除录制文件失败: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+}
+
+// ================================================================
+// 孤儿录制文件清理（M20）
+// ================================================================
+
+/**
+ * 清理 keban-recordings/ 目录下超过 maxAgeMs 的孤儿录制文件。
+ * 应用启动时调用一次——崩溃/强杀残留的录制分片在此处回收，
+ * 防止临时目录无限膨胀；正在进行的录制（mtime 新）不受影响。
+ */
+export function cleanupOrphanRecordings(maxAgeMs: number = ORPHAN_MAX_AGE_MS): void {
+  const dir = path.join(app.getPath('temp'), RECORDINGS_DIR_NAME);
+  let removed = 0;
+  try {
+    if (!fs.existsSync(dir)) return;
+    const cutoff = Date.now() - maxAgeMs;
+    for (const file of fs.readdirSync(dir)) {
+      const fullPath = path.join(dir, file);
+      try {
+        const st = fs.statSync(fullPath);
+        if (st.isFile() && st.mtimeMs < cutoff) {
+          fs.unlinkSync(fullPath);
+          removed++;
+        }
+      } catch {
+        // 单个文件删除失败不阻塞其余清理
+      }
+    }
+  } catch (err) {
+    logger.warn(`[VideoRecorder] 孤儿录制文件清理失败: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+  if (removed > 0) {
+    logger.info(`[VideoRecorder] 已清理 ${removed} 个超过 ${Math.round(maxAgeMs / 3600000)}h 的孤儿录制文件`);
   }
 }

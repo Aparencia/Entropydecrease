@@ -2,8 +2,8 @@
  * @ai-context: flashcards 功能模块状态管理：useStudySessionStore。
  */
 import { create } from 'zustand';
+import { createWithLog } from '@/lib/storage/writeWithLog';
 import {
-  flashcardStore,
   flashcardReviewStore,
 } from '@/lib/storage';
 import { Rating } from '@/lib/sm2';
@@ -265,18 +265,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         effectiveInterval = compressed.interval;
       }
 
-      // 更新卡片持久化存储
-      await flashcardStore.update(card.id, {
-        easeFactor: result.easeFactor,
-        interval: effectiveInterval,
-        repetitions: result.repetitions,
-        lapses: result.lapses,
-        dueDate: effectiveDueDate,
-        stability: result.stability,
-        difficulty: result.difficulty,
-        lastReviewDate: updatedAt,
-        updatedAt,
-      });
+      // 更新卡片持久化存储（由 useFlashcardStore.updateCard 统一走 writeWithLog）
 
       // 同步更新本地 sessionCards 中的对应卡片
       const updatedCards = sessionCards.map((c, i) =>
@@ -313,9 +302,9 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
           ? Math.round((updatedAt.getTime() - cardStartTime.getTime()) / 1000)
           : 0,
       };
-      await flashcardReviewStore.create(review);
+      await createWithLog(flashcardReviewStore, 'flashcardReviews', review);
 
-      // 同步 flashcard store 中对应的卡片状态
+      // 同步 flashcard store 中对应的卡片状态（含操作日志）
       const flashcardState = useFlashcardStore.getState();
       flashcardState.updateCard(card.id, {
         easeFactor: result.easeFactor,
@@ -392,8 +381,11 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
       const currentCard = sessionCards[currentIndex];
       if (!currentCard) return;
       // 将当前卡片追加到队列末尾，不递增 completedCount
+      // 同时推进 currentIndex 并重置 cardStartTime 以正确计时
       set((state) => ({
         sessionCards: [...state.sessionCards, currentCard],
+        currentIndex: currentIndex + 1,
+        cardStartTime: new Date(),
       }));
     },
 

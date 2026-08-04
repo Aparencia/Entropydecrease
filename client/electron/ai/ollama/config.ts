@@ -57,6 +57,43 @@ const DEFAULT_CONFIG: OllamaConfig = {
 };
 
 // ================================================================
+// baseUrl 安全校验（SSRF 防护）
+// ================================================================
+
+/**
+ * 校验 Ollama baseUrl — 仅允许本机回环地址，拒绝其他所有主机名/IP。
+ * 防止渲染进程把 baseUrl 指向内网或公网地址（SSRF 攻击面）。
+ * 允许：http://localhost:* / http://127.0.0.1:* / http://[::1]:*
+ * （含 WHATWG URL 规范化的 IPv4-mapped 形式 ::ffff:127.0.0.1）
+ * @returns 违规原因；null 表示通过 / Return block reason or null
+ */
+export function validateOllamaBaseUrl(rawUrl: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return 'URL 格式无效';
+  }
+  if (parsed.protocol !== 'http:') {
+    return '仅支持 http:// 协议';
+  }
+  // hostname 已去除 []，IPv6 形如 ::1，IPv4-mapped 形如 ::ffff:127.0.0.1
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const isLoopback =
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '::1' ||
+    host === '0:0:0:0:0:0:0:1' ||
+    // IPv4-mapped IPv6（::ffff:127.0.0.1）规范化后必须一并放行（仍指向本机）
+    host === '::ffff:127.0.0.1' ||
+    host === '::ffff:7f00:1';
+  if (!isLoopback) {
+    return '仅允许连接本机 Ollama 服务（localhost / 127.0.0.1 / [::1]）';
+  }
+  return null;
+}
+
+// ================================================================
 // 运行时状态
 // ================================================================
 
@@ -91,7 +128,9 @@ export async function loadOllamaConfig(): Promise<void> {
     const parsed = JSON.parse(raw);
     _config = {
       enabled: typeof parsed.enabled === 'boolean' ? parsed.enabled : DEFAULT_CONFIG.enabled,
+      // SEC: 持久化文件中的 baseUrl 同样校验——防止历史/被篡改配置绕过 SSRF 防护
       baseUrl: typeof parsed.baseUrl === 'string' && parsed.baseUrl.trim()
+        && validateOllamaBaseUrl(parsed.baseUrl.trim()) === null
         ? parsed.baseUrl.trim().replace(/\/$/, '')
         : DEFAULT_CONFIG.baseUrl,
       models: {
@@ -115,11 +154,19 @@ export async function loadOllamaConfig(): Promise<void> {
  */
 export async function updateOllamaConfig(partial: Partial<OllamaConfig>): Promise<OllamaConfig> {
   const current = getOllamaConfig();
+  // SEC: baseUrl SSRF 校验——仅允许本机回环地址，违规直接拒绝更新
+  let nextBaseUrl = current.baseUrl;
+  if (partial.baseUrl) {
+    const trimmed = partial.baseUrl.trim().replace(/\/$/, '');
+    const blockReason = validateOllamaBaseUrl(trimmed);
+    if (blockReason) {
+      throw new Error(`[Ollama] baseUrl 校验失败：${blockReason}`);
+    }
+    nextBaseUrl = trimmed;
+  }
   const updated: OllamaConfig = {
     enabled: partial.enabled ?? current.enabled,
-    baseUrl: partial.baseUrl
-      ? partial.baseUrl.trim().replace(/\/$/, '')
-      : current.baseUrl,
+    baseUrl: nextBaseUrl,
     models: {
       text: partial.models?.text ?? current.models.text,
       vision: partial.models?.vision ?? current.models.vision,

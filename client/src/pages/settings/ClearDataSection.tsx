@@ -100,9 +100,11 @@ export function ClearDataSection() {
       // 清除 localStorage 中的加密密钥派生材料（需在表清除后执行，以免影响表清除）
       // 注意：不清除所有 localStorage 键，仅清除应用相关键，避免破坏其他应用的数据
       const appKeys = Object.keys(localStorage).filter(k =>
-        k.startsWith('keban_') || k.startsWith('entropydecrease_') || k.startsWith('entropy_')
+        k.startsWith('keban_') || k.startsWith('keban-') || k.startsWith('entropydecrease_') || k.startsWith('entropy_')
       );
       appKeys.forEach(k => localStorage.removeItem(k));
+      // 清除后显式重置应用模式为 local
+      localStorage.setItem('ed_app_mode', 'local');
       soundPlayer.play('data_cleared');
       toast({ type: 'success', message: '所有数据已清除，即将刷新', silent: true });
       setTimeout(() => window.location.reload(), 1000);

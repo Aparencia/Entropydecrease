@@ -46,6 +46,50 @@ CREATE VIRTUAL TABLE IF NOT EXISTS fts_content USING fts5(
 );`;
 
 // ================================================================
+// 就绪状态与增量写入队列（M21）
+// ================================================================
+
+/**
+ * FTS 索引是否已就绪。启动时全量重建在 setTimeout 中异步执行，
+ * 完成前为 false——期间增量写入（indexDocument/removeDocument）
+ * 进入 pendingFtsOps 队列，待 setFtsIndexReady(true) 时统一 flush，
+ * 保证不丢索引也不阻塞业务写入。
+ */
+let ftsIndexReady = false;
+
+/** 重建完成前积压的增量索引操作 */
+const pendingFtsOps: Array<() => void> = [];
+
+/** 设置索引就绪状态；置 true 时 flush 积压队列 */
+export function setFtsIndexReady(ready: boolean): void {
+  ftsIndexReady = ready;
+  if (!ready) return;
+  const ops = pendingFtsOps.splice(0);
+  for (const op of ops) {
+    try {
+      op();
+    } catch (err) {
+      // 单个积压操作失败不阻塞其余 flush
+      logger.warn(`[FTS5] Flush queued index op failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+}
+
+/** 索引是否已就绪（重建完成） */
+export function isFtsIndexReady(): boolean {
+  return ftsIndexReady;
+}
+
+/** 就绪则立即执行，否则入队等待重建完成 */
+function whenFtsReady(op: () => void): void {
+  if (ftsIndexReady) {
+    op();
+  } else {
+    pendingFtsOps.push(op);
+  }
+}
+
+// ================================================================
 // 公共 API
 // ================================================================
 
@@ -55,19 +99,23 @@ export function initializeFTS(db: Database.Database): void {
   logger.info('[FTS5] Full-text search virtual table initialized');
 }
 
-/** 索引或更新一条文档（先删后插保证幂等） */
+/** 索引或更新一条文档（先删后插保证幂等；M21: 重建完成前入队延迟执行） */
 export function indexDocument(table: string, id: string, title: string, content: string): void {
-  const db = getConnection();
-  db.prepare(`DELETE FROM fts_content WHERE id = ? AND table_name = ?`).run(id, table);
-  db.prepare(`INSERT INTO fts_content (id, table_name, title, content) VALUES (?, ?, ?, ?)`)
-    .run(id, table, title, content);
+  whenFtsReady(() => {
+    const db = getConnection();
+    db.prepare(`DELETE FROM fts_content WHERE id = ? AND table_name = ?`).run(id, table);
+    db.prepare(`INSERT INTO fts_content (id, table_name, title, content) VALUES (?, ?, ?, ?)`)
+      .run(id, table, title, content);
+  });
 }
 
-/** 从全文索引中删除一条文档 */
+/** 从全文索引中删除一条文档（M21: 重建完成前入队延迟执行） */
 export function removeDocument(table: string, id: string): void {
-  getConnection()
-    .prepare(`DELETE FROM fts_content WHERE id = ? AND table_name = ?`)
-    .run(id, table);
+  whenFtsReady(() => {
+    getConnection()
+      .prepare(`DELETE FROM fts_content WHERE id = ? AND table_name = ?`)
+      .run(id, table);
+  });
 }
 
 /**

@@ -5,7 +5,13 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"entropydecrease/sync-service/cache"
 	"entropydecrease/sync-service/handlers"
@@ -91,7 +97,31 @@ func main() {
 	}
 
 	logger.Info("sync-service starting", zap.String("addr", ":8080"))
-	if err := r.Run(":8080"); err != nil {
-		logger.Fatal("Failed to start server", zap.Error(err))
+
+	// M5: 优雅关闭——signal.NotifyContext 监听 SIGINT/SIGTERM，
+	// 收到信号后先向 WS 广播 CloseMessage，再 Shutdown HTTP 服务器。
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: r,
 	}
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Fatal("Failed to start server", zap.Error(err))
+		}
+	}()
+
+	<-ctx.Done()
+	logger.Info("shutdown signal received, closing WebSocket connections")
+	handlers.ShutdownAllConnections()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Warn("graceful shutdown incomplete", zap.Error(err))
+	}
+	logger.Info("sync-service stopped")
 }

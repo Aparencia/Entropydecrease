@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -38,6 +39,15 @@ func InitDB() error {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
+	// M4: 配置连接池（上限 50 并发连接，空闲 25，单连接最长 30 分钟）
+	sqlDB, err := DB.DB()
+	if err != nil {
+		return fmt.Errorf("failed to get underlying sql.DB: %w", err)
+	}
+	sqlDB.SetMaxOpenConns(50)
+	sqlDB.SetMaxIdleConns(25)
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+
 	// Auto-migrate all models.
 	if err := DB.AutoMigrate(&EntityVersion{}, &Operation{}, &GlobalSeqNo{}, &CRDTChange{}); err != nil {
 		return fmt.Errorf("auto-migration failed: %w", err)
@@ -45,7 +55,10 @@ func InitDB() error {
 
 	// Seed the GlobalSeqNo row if it doesn't exist yet.
 	var count int64
-	DB.Model(&GlobalSeqNo{}).Count(&count)
+	// M9: 不再吞没 Count 错误，失败时直接中止启动
+	if err := DB.Model(&GlobalSeqNo{}).Count(&count).Error; err != nil {
+		return fmt.Errorf("failed to count GlobalSeqNo: %w", err)
+	}
 	if count == 0 {
 		if err := DB.Create(&GlobalSeqNo{SeqNo: 0}).Error; err != nil {
 			return fmt.Errorf("failed to seed GlobalSeqNo: %w", err)

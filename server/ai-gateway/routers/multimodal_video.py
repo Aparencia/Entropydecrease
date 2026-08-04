@@ -55,11 +55,16 @@ async def analyze_video(
 
     # ---- 文件大小校验 ----
     content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > _VIDEO_MAX_SIZE:
-        raise HTTPException(
-            status_code=413,
-            detail=f"视频文件超过大小上限（500MB，当前 {int(content_length) // 1024 // 1024}MB）",
-        )
+    if content_length:
+        try:
+            content_length_int = int(content_length)
+        except (ValueError, TypeError):
+            content_length_int = 0
+        if content_length_int > _VIDEO_MAX_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"视频文件超过大小上限（500MB，当前 {content_length_int // 1024 // 1024}MB）",
+            )
 
     # ---- 保存上传文件到临时目录 ----
     tmp_dir = tempfile.mkdtemp(prefix="entropydecrease_video_")

@@ -52,15 +52,16 @@ export function calculateLocalRecommendation(history: DurationHistoryData): Dura
  */
 export async function requestAIEnhancement(
   history: DurationHistoryData,
-  aiRecommendFn: (data: DurationHistoryData) => Promise<DurationResult>,
+  aiRecommendFn: (data: DurationHistoryData, signal?: AbortSignal) => Promise<DurationResult>,
   lastRecommendation?: number,
 ): Promise<DurationResult> {
-  try {
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('AI请求超时')), 3000),
-    );
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-    const result = await Promise.race([aiRecommendFn(history), timeoutPromise]);
+  try {
+    const result = await aiRecommendFn(history, controller.signal);
+    // AI 请求成功后清理 timer，避免泄漏
+    clearTimeout(timeoutId);
 
     // 推荐变化约束：与上次差异 ≤ ±5分钟
     if (lastRecommendation != null && Math.abs(result.recommendedDuration - lastRecommendation) > 5) {
@@ -71,6 +72,8 @@ export async function requestAIEnhancement(
 
     return result;
   } catch {
+    // 清除 timer（AbortController 触发时需清理）
+    clearTimeout(timeoutId);
     return calculateLocalRecommendation(history);
   }
 }

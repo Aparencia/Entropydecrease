@@ -35,7 +35,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     pendingCount: 0,
     conflictCount: 0,
   });
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(() => networkManager.getState().status !== 'offline');
 
   useEffect(() => {
     const unsubNetwork = networkManager.subscribe((netState) => {
@@ -59,7 +59,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
             isSyncing: false,
             lastSyncAt: new Date(),
             lastResult: event.result,
-            conflictCount: prev.conflictCount + event.result.conflicts.length,
+            conflictCount: event.result.conflicts.length,
           }));
           break;
         case 'sync-error':

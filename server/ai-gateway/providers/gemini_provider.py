@@ -47,6 +47,10 @@ class GeminiProvider(AIProvider):
                          api_key, provider_name="gemini")
         self._client = genai.Client(api_key=api_key)
 
+    def _reinit_client(self) -> None:
+        """重新初始化 Gemini 客户端（Key 轮换后调用）"""
+        self._client = genai.Client(api_key=self.api_key)
+
     @with_retry_and_timeout()
     async def generate(
         self,
@@ -58,6 +62,8 @@ class GeminiProvider(AIProvider):
         response_format: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """调用 Gemini 生成纯文本内容"""
+        # Key 轮询：将请求分散到多个 Key 以突破单一 Key 的 RPM 限制
+        await self._rotate_api_key()
         start_time = time.monotonic()
         try:
             config = types.GenerateContentConfig(
@@ -65,7 +71,8 @@ class GeminiProvider(AIProvider):
                 max_output_tokens=max_tokens,
                 system_instruction=system_prompt if system_prompt else None,
             )
-            response = self._client.models.generate_content(
+            response = await asyncio.to_thread(
+                self._client.models.generate_content,
                 model=model,
                 contents=prompt,
                 config=config,
@@ -112,7 +119,8 @@ class GeminiProvider(AIProvider):
                 max_output_tokens=max_tokens,
                 system_instruction=system_prompt if system_prompt else None,
             )
-            response = self._client.models.generate_content(
+            response = await asyncio.to_thread(
+                self._client.models.generate_content,
                 model=model, contents=contents, config=config,
             )
             latency_ms = int((time.monotonic() - start_time) * 1000)
@@ -206,7 +214,7 @@ class GeminiProvider(AIProvider):
                 )
             elif isinstance(video_input, str) and Path(video_input).is_file():
                 # 文件路径：使用 File API 上传
-                uploaded_file = self._client.files.upload(file=video_input)
+                uploaded_file = await asyncio.to_thread(self._client.files.upload, file=video_input)
                 # 轮询等待文件处理完成
                 await _wait_for_file_active(self._client, uploaded_file.name)
                 video_part = types.Part.from_uri(
@@ -226,7 +234,8 @@ class GeminiProvider(AIProvider):
                 max_output_tokens=max_tokens,
                 system_instruction=system_prompt if system_prompt else None,
             )
-            response = self._client.models.generate_content(
+            response = await asyncio.to_thread(
+                self._client.models.generate_content,
                 model=model, contents=contents, config=config,
             )
             latency_ms = int((time.monotonic() - start_time) * 1000)
@@ -245,7 +254,7 @@ class GeminiProvider(AIProvider):
             # 清理上传的临时文件
             if uploaded_file:
                 try:
-                    self._client.files.delete(name=uploaded_file.name)
+                    await asyncio.to_thread(self._client.files.delete, name=uploaded_file.name)
                 except Exception:
                     logger.debug("Gemini 临时文件清理失败（可忽略）: %s", uploaded_file.name)
 
@@ -265,7 +274,8 @@ class GeminiProvider(AIProvider):
                 max_output_tokens=max_tokens,
                 system_instruction=system_prompt if system_prompt else None,
             )
-            response = self._client.models.generate_content_stream(
+            response = await asyncio.to_thread(
+                self._client.models.generate_content_stream,
                 model=model,
                 contents=prompt,
                 config=config,
@@ -273,6 +283,8 @@ class GeminiProvider(AIProvider):
             for chunk in response:
                 if chunk.text:
                     yield chunk.text
+                # 让出事件循环控制权
+                await asyncio.sleep(0)
         except Exception as e:
             logger.error("GeminiProvider.generate_stream 失败: %s", str(e))
             _handle_gemini_error(e, model)
@@ -299,7 +311,7 @@ async def _wait_for_file_active(client: genai.Client, file_name: str, timeout: i
     import time as _time
     deadline = _time.monotonic() + timeout
     while _time.monotonic() < deadline:
-        file_info = client.files.get(name=file_name)
+        file_info = await asyncio.to_thread(client.files.get, name=file_name)
         state = getattr(file_info, "state", None)
         # state 可能是枚举值或字符串
         state_str = str(state).upper() if state else "ACTIVE"

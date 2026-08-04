@@ -6,6 +6,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"entropydecrease/sync-service/models"
@@ -27,8 +28,15 @@ type resolveRequest struct {
 func Resolve(c *gin.Context) {
 	userID := c.GetString("user_id")
 
+	// M8: 限制请求体最大 1MB
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
+
 	var req resolveRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large (max 1MB)"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

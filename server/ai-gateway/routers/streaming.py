@@ -35,6 +35,8 @@ router = APIRouter(prefix="/api/v1/ai", tags=["流式输出"])
 _FIRST_TOKEN_TIMEOUT = 30.0
 # chunk 间空闲超时：相邻 chunk 的最长间隔（防中途挂起）
 _CHUNK_IDLE_TIMEOUT = 30.0
+# 流式端点总体存活时间上限（秒），超时后强制结束
+_MAX_STREAM_DURATION = 300.0
 
 # ============================================================
 # Prompt 模板目录
@@ -304,6 +306,14 @@ async def stream_ai(request: Request, feature: str, body: StreamRequest):
         is_first = True
         try:
             while True:
+                # 总体存活时间检查
+                if time.monotonic() - start_time > _MAX_STREAM_DURATION:
+                    logger.error(
+                        "流式总体超时: feature=%s, provider=%s, duration=%.1fs > %ds",
+                        feature, used_provider, time.monotonic() - start_time, _MAX_STREAM_DURATION,
+                    )
+                    yield _sse_error(f"AI 响应超时（总体 {int(_MAX_STREAM_DURATION)}s）")
+                    break
                 timeout = _FIRST_TOKEN_TIMEOUT if is_first else _CHUNK_IDLE_TIMEOUT
                 try:
                     chunk_text = await asyncio.wait_for(agen.__anext__(), timeout=timeout)
@@ -328,7 +338,7 @@ async def stream_ai(request: Request, feature: str, body: StreamRequest):
             )
         except Exception as e:
             logger.error("流式生成异常: feature=%s, error=%s", feature, str(e))
-            yield _sse_error(str(e))
+            yield _sse_error("AI 服务响应异常，请稍后重试")
             yield _sse_done()
 
     return StreamingResponse(

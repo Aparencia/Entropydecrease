@@ -319,3 +319,26 @@ class AIProvider(ABC):
         except Exception as e:
             latency = (time.monotonic() - start) * 1000
             return {"status": "unhealthy", "latency_ms": round(latency, 1), "error": str(e)}
+
+    async def _rotate_api_key(self) -> None:
+        """
+        轮询 API Key（从 KeyPool 获取下一个可用 Key）
+
+        每次调用 generate 前执行，将请求分散到多个 Key 以突破单一 Key 的 RPM 限制。
+        若 KeyPool 未配置或无额外 Key，保持当前 Key 不变。
+        """
+        from config.key_pool import get_key_pool
+        pool = get_key_pool(self.provider_name)
+        if pool is None or pool.size <= 1:
+            return  # 单 Key 或无 KeyPool，无需轮询
+        new_key = await pool.next_key()
+        if new_key and new_key != self.api_key:
+            self.api_key = new_key
+            self._reinit_client()
+            logger.debug("Provider [%s] 已轮换 API Key", self.provider_name)
+
+    def _reinit_client(self) -> None:
+        """重新初始化底层 HTTP 客户端（子类实现）"""
+        raise NotImplementedError(
+            f"{self.__class__.__name__} 必须实现 _reinit_client 方法"
+        )

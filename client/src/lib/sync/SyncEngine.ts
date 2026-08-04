@@ -19,6 +19,7 @@ import { crdtPush, crdtPull } from './crdtSyncChannel';
  */
 export class SyncEngine {
   private syncInProgress = false;
+  private paused = false;
   private networkRecoveryCleanup: (() => void) | null = null;
   private listeners: Set<(event: SyncEvent) => void> = new Set();
 
@@ -58,15 +59,32 @@ export class SyncEngine {
    * 阻止新的同步请求（用于路径切换等关键操作前）
    */
   pause(): void {
+    this.paused = true;
     this.syncInProgress = true;
   }
 
   /**
    * 恢复同步引擎
-   * 解除同步锁定（用于路径切换完成后）
+   * 解除同步锁定，如有进行中的 sync 等待其完成再触发补偿 sync
    */
-  resume(): void {
+  async resume(): Promise<void> {
+    this.paused = false;
+    // 如有进行中的 sync，等待其完成
+    if (this.syncInProgress) {
+      await new Promise<void>((resolve) => {
+        const check = () => {
+          if (!this.syncInProgress) {
+            resolve();
+          } else {
+            setTimeout(check, 50);
+          }
+        };
+        check();
+      });
+    }
     this.syncInProgress = false;
+    // 触发补偿同步
+    this.sync();
   }
 
   /**
@@ -74,7 +92,7 @@ export class SyncEngine {
    * 根据 feature flag 选择 oplog 或 CRDT 路径
    */
   async sync(): Promise<SyncResult> {
-    if (this.syncInProgress) {
+    if (this.paused || this.syncInProgress) {
       return { pushed: 0, pulled: 0, conflicts: [], errors: ['Sync already in progress'] };
     }
 
@@ -130,7 +148,10 @@ export class SyncEngine {
       result.errors.push(message);
       this.emit({ type: 'sync-error', error: message });
     } finally {
-      this.syncInProgress = false;
+      // 仅当非 pause 时才清锁（pause 期间保持锁定）
+      if (!this.paused) {
+        this.syncInProgress = false;
+      }
     }
 
     return result;

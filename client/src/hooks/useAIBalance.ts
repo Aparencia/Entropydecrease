@@ -114,7 +114,7 @@ export function useAIBalance() {
       return success;
     } catch (err) {
       let errorMsg = '查询失败';
-      if (err instanceof DOMException && err.name === 'AbortError') {
+      if (err instanceof DOMException && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
         errorMsg = '查询超时，请稍后重试';
       } else if (err instanceof TypeError && err.message.includes('Failed to fetch')) {
         errorMsg = navigator.onLine ? '无法连接到 AI 网关' : '网络已断开';

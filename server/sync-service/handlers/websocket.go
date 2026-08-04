@@ -5,11 +5,14 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
+	"time"
 
 	"entropydecrease/sync-service/models"
 
@@ -100,16 +103,18 @@ var upgrader = websocket.Upgrader{
 type WSMessage struct {
 	Type    string          `json:"type"` // "operation", "ack", "ping", "pong", "sync_request"
 	Payload json.RawMessage `json:"payload"`
+	HasMore bool            `json:"hasMore,omitempty"` // M2: sync_request 分页标志（payload 为 operation 数组时有效）
 }
 
 // WSOperationPayload is carried inside "operation" messages pushed to clients.
 type WSOperationPayload struct {
-	EntityType string      `json:"entityType"`
-	EntityID   string      `json:"entityId"`
-	Operation  string      `json:"operation"`
-	Data       interface{} `json:"data,omitempty"`
-	Version    int64       `json:"version"`
-	DeviceID   string      `json:"deviceId"` // originating device
+	EntityType  string      `json:"entityType"`
+	EntityID    string      `json:"entityId"`
+	Operation   string      `json:"operation"`
+	Data        interface{} `json:"data,omitempty"`
+	Version     int64       `json:"version"`
+	ServerSeqNo int64       `json:"serverSeqNo"` // M11: 全局序号，Pull 以它为游标；Version 仅为实体版本
+	DeviceID    string      `json:"deviceId"`    // originating device
 }
 
 // WSSyncRequestPayload is sent by clients inside a "sync_request" message.
@@ -119,11 +124,24 @@ type WSSyncRequestPayload struct {
 
 // ---------- Gin handler entry-points ----------
 
+// deviceIDPattern: M12 对 deviceID 做字符白名单校验（字母数字下划线连字符，≤64 字符）。
+var deviceIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
+// isValidDeviceID 校验 deviceID 是否满足长度与字符白名单。
+func isValidDeviceID(deviceID string) bool {
+	return deviceIDPattern.MatchString(deviceID)
+}
+
 // HandleWebSocketWithGin is the Gin-compatible entry point for WebSocket upgrades.
 // It expects user_id to have been extracted by the JWT middleware already.
 func HandleWebSocketWithGin(c *gin.Context, userID string, deviceID string) {
 	if deviceID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "device_id query parameter is required"})
+		return
+	}
+	// M12: deviceID 白名单校验（长度 + 字符集），防止恶意超长/特殊字符参数
+	if !isValidDeviceID(deviceID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid device_id: must match [A-Za-z0-9_-]{1,64}"})
 		return
 	}
 
@@ -140,7 +158,15 @@ func HandleWebSocketWithGin(c *gin.Context, userID string, deviceID string) {
 		Send:     make(chan []byte, 256),
 	}
 
-	wsManager.register(wsConn)
+	// M12: 每用户连接数上限检查，超限则拒绝（发送 ClosePolicyViolation 帧后关闭）
+	if !wsManager.register(wsConn) {
+		_ = conn.WriteControl(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "too many connections"),
+			time.Now().Add(writeWait))
+		_ = conn.Close()
+		log.Printf("[ws] rejected user=%s device=%s: connection limit reached", userID, deviceID)
+		return
+	}
 
 	go wsConn.writePump()
 	go wsConn.readPump()
@@ -163,30 +189,42 @@ func BroadcastOperation(userID string, sourceDeviceID string, ops []WSOperationP
 	wsManager.broadcastToUser(userID, sourceDeviceID, msg)
 }
 
+// ShutdownAllConnections gracefully closes all live WebSocket connections.
+// M5: 服务优雅关闭前向所有连接广播 CloseMessage。
+func ShutdownAllConnections() {
+	wsManager.closeAll()
+}
+
 // ---------- helpers ----------
 
 // fetchOperationsSince queries the DB for operations newer than sinceVersion, excluding the requesting device.
-func fetchOperationsSince(userID string, sinceVersion int64, excludeDeviceID string) []WSOperationPayload {
+// M2: Limit(1000) + hasMore 分页；M9: 查询失败返回错误不再吞没；M10: 由调用方传入带超时的 ctx。
+func fetchOperationsSince(ctx context.Context, userID string, sinceVersion int64, excludeDeviceID string) ([]WSOperationPayload, bool, error) {
 	var ops []operationRow
-	_ = models.DB.
+	if err := models.DB.WithContext(ctx).
 		Table("operations").
 		Select("entity_type, entity_id, operation, payload, server_seq_no, device_id").
 		Where("user_id = ? AND server_seq_no > ? AND device_id != ?", userID, sinceVersion, excludeDeviceID).
 		Order("server_seq_no ASC").
-		Find(&ops).Error
+		Limit(1000). // M2: 增量查询限制返回行数
+		Find(&ops).Error; err != nil {
+		return nil, false, err
+	}
 
+	hasMore := len(ops) >= 1000 // M2: 恰好 1000 条时多拉一次空结果，无害
 	result := make([]WSOperationPayload, 0, len(ops))
 	for _, op := range ops {
 		result = append(result, WSOperationPayload{
-			EntityType: op.EntityType,
-			EntityID:   op.EntityID,
-			Operation:  op.Operation,
-			Data:       fromJSON(op.Payload),
-			Version:    op.ServerSeqNo,
-			DeviceID:   op.DeviceID,
+			EntityType:  op.EntityType,
+			EntityID:    op.EntityID,
+			Operation:   op.Operation,
+			Data:        fromJSON(op.Payload),
+			Version:     op.ServerSeqNo,
+			ServerSeqNo: op.ServerSeqNo, // M11: 广播同时携带 ServerSeqNo 与 Version
+			DeviceID:    op.DeviceID,
 		})
 	}
-	return result
+	return result, hasMore, nil
 }
 
 // operationRow is a lightweight projection used by fetchOperationsSince.

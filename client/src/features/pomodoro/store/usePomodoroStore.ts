@@ -266,6 +266,7 @@ totalPausedMs: 0,
         // 墙钟截止点：tick 据此校准，避免 interval 漂移/后台节流累积误差
         endAt: Date.now() + s.remainingSeconds * 1000,
         lastAction: 'start' as PomodoroAction, lastActionCounter: s.lastActionCounter + 1,
+        totalPausedMs: 0, pausedAt: null,
       }));
       soundPlayer.play('pomodoro_start');
     },
@@ -337,6 +338,8 @@ totalPausedMs: 0,
         sessionStartTime: null,
         wasImmersive: false,
         isMiniDive: false,
+        totalPausedMs: 0,
+        pausedAt: null,
       });
     },
 
@@ -355,6 +358,8 @@ totalPausedMs: 0,
         isPaused: false,
         endAt: null,
         isMiniDive: false,
+        totalPausedMs: 0,
+        pausedAt: null,
       });
     },
 
@@ -400,6 +405,7 @@ totalPausedMs: 0,
       }
       set((s) => ({
         isImmersive: false, wasImmersive: true, isRunning: false, isPaused: true, endAt: null,
+        pausedAt: Date.now(),
         lastAction: 'exit_immersive' as PomodoroAction, lastActionCounter: s.lastActionCounter + 1,
       }));
     },
@@ -512,6 +518,8 @@ totalPausedMs: 0,
           isMiniDive: false,
           // 切换到新阶段时清空计时，下一个 start/resume 会重新设置
           sessionStartTime: null,
+          totalPausedMs: 0,
+          pausedAt: null,
           // 发出 phase_complete 动作信号
           lastAction: 'phase_complete' as PomodoroAction,
           lastActionCounter: s.lastActionCounter + 1,
@@ -568,17 +576,43 @@ totalPausedMs: 0,
               completedAt: new Date(),
               interrupted: false,
               goal: get().currentGoal ?? undefined,
-            }).then(() => {});
+            }).then(() => {
+              // 触发成就检查（动态 import 避免循环依赖）
+              import('@/lib/achievements/evaluator').then(({ checkAchievements }) => {
+                checkAchievements({ type: 'pomodoro_completed' }).then((unlocked) => {
+                  unlocked.forEach(a => {
+                    window.dispatchEvent(new CustomEvent('achievement-unlocked', { detail: a }));
+                  });
+                });
+              }).catch(() => {});
+            }).catch(() => {});
+
+            // 宪法第六条世界数据回路：深潜完成=种下珊瑚（沉积地层+1，世界生长）。
+            // 动态 import 避免模块循环；plantCoral 内部受留存开关控制，失败静默降级
+            import('@/features/retention/store/useEcosystemStore').then(({ useEcosystemStore }) => {
+              const minutes = Math.max(1, Math.round((actualDuration ?? plannedSeconds) / 60));
+              useEcosystemStore.getState().plantCoral(minutes, 'pomodoro', `dive-${Date.now()}`).catch(() => {});
+            }).catch(() => {});
+
+            // @ai-context: 发射 session:end 事件——驱动 AI 学伴主动触发（专注结束关怀）
+            assistantEventBus.emit('session:end', {
+              currentHour: new Date().getHours(),
+              sessionMinutes: Math.round((actualDuration ?? plannedSeconds) / 60),
+            });
           }
 
           set((s) => ({
+            phase: nextPhase,
             remainingSeconds: shouldAutoStart ? duration : 0,
             totalSeconds: duration,
+            completedCount: newCount,
             isRunning: shouldAutoStart,
-            isPaused: false,
+            isPaused: !shouldAutoStart,
             endAt: shouldAutoStart ? Date.now() + duration * 1000 : null,
             isMiniDive: false,
             sessionStartTime: null,
+            totalPausedMs: 0,
+            pausedAt: null,
             lastAction: 'phase_complete' as PomodoroAction,
             lastActionCounter: s.lastActionCounter + 1,
             lastCompletedPhase: phase,

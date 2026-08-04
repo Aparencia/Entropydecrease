@@ -12,7 +12,7 @@ import { AudioCapture, listAudioSources } from './audioCapture.js';
 import { listMicrophoneDevices } from './audio/microphoneProvider.js';
 import type { AudioCaptureOptions, AudioChunk } from './audioCapture.js';
 import type { AudioSourcePreference } from '../src/lib/capture/audioSourceStrategy.js';
-import { VideoRecorder } from './videoRecorder.js';
+import { VideoRecorder, cleanupOrphanRecordings } from './videoRecorder.js';
 import type { VideoRecordOptions } from './videoRecorder.js';
 import { safeHandle, getMainWindowId } from './ipcUtils.js';
 import { logger } from './logger.js';
@@ -45,6 +45,10 @@ function verifySender(senderId: number, channel: string): boolean {
  * 注册音频捕获与视频录制相关的 IPC handler
  */
 export function registerMediaCaptureHandlers(): void {
+  // ---- 启动清理（M20）----
+  // 崩溃/强杀残留的孤儿录制文件在注册时回收（仅清 24h 前的），防临时目录堆积
+  cleanupOrphanRecordings();
+
   // ---- 系统音频捕获 ----
 
   safeHandle('audio_list_sources', async () => {

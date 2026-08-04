@@ -5,6 +5,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"sync"
@@ -118,10 +119,9 @@ func (c *WSConnection) readPump() {
 			if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 				continue
 			}
-			ops := fetchOperationsSince(c.UserID, payload.SinceVersion, c.DeviceID)
-			data, _ := json.Marshal(ops)
-			resp, _ := json.Marshal(WSMessage{Type: "operation", Payload: data})
-			c.send(resp)
+			// M10: 查库改为异步执行（goroutine），结果经 Send 通道回投，
+			// 避免慢查询阻塞 readPump 导致心跳超时。
+			go c.handleSyncRequest(payload.SinceVersion)
 
 		case "operation":
 			// Client-pushed operation over WebSocket (future enhancement).
@@ -130,6 +130,28 @@ func (c *WSConnection) readPump() {
 			c.send(ack)
 		}
 	}
+}
+
+// handleSyncRequest 异步处理 sync_request：带超时查询增量操作并回投结果。
+// M10: context.WithTimeout 防止查询长时间阻塞；M9: 查询失败记录日志并通知客户端。
+func (c *WSConnection) handleSyncRequest(sinceVersion int64) {
+	// 查询超时上限 15 秒，超时后丢弃本次请求（不阻塞心跳）
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	ops, hasMore, err := fetchOperationsSince(ctx, c.UserID, sinceVersion, c.DeviceID)
+	if err != nil {
+		log.Printf("[ws] sync_request query failed user=%s device=%s: %v", c.UserID, c.DeviceID, err)
+		errPayload, _ := json.Marshal(map[string]string{"error": "sync query failed"})
+		resp, _ := json.Marshal(WSMessage{Type: "sync_error", Payload: errPayload})
+		c.send(resp)
+		return
+	}
+
+	data, _ := json.Marshal(ops)
+	// M2: hasMore 分页标志放在 WSMessage 顶层（payload 保持 operation 数组，向后兼容）
+	resp, _ := json.Marshal(WSMessage{Type: "operation", Payload: data, HasMore: hasMore})
+	c.send(resp)
 }
 
 // writePump pumps messages from the Send channel to the WebSocket connection.

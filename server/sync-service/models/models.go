@@ -18,11 +18,13 @@ type EntityVersion struct {
 
 // Operation is an append-only log of all sync operations.
 // We avoid gorm.Model because we manage CreatedAt ourselves (client-supplied timestamp).
+// OpID 为客户端生成的操作 ID，配合 (user_id, device_id, op_id) 唯一索引实现推送幂等（M6）。
 type Operation struct {
 	ID          uint   `gorm:"primaryKey"`
 	ServerSeqNo int64  `gorm:"uniqueIndex;not null" json:"serverSeqNo"`
-	DeviceID    string `gorm:"index;not null" json:"deviceId"`
-	UserID      string `gorm:"index:idx_op_user;not null" json:"userId"`
+	OpID        string `gorm:"column:op_id;uniqueIndex:idx_user_device_op,priority:3" json:"opId"`
+	DeviceID    string `gorm:"uniqueIndex:idx_user_device_op,priority:2;index;not null" json:"deviceId"`
+	UserID      string `gorm:"uniqueIndex:idx_user_device_op,priority:1;index:idx_op_user;not null" json:"userId"`
 	EntityType  string `gorm:"index;not null" json:"entityType"`
 	EntityID    string `gorm:"not null" json:"entityId"`
 	Operation   string `gorm:"not null" json:"operation"` // create|update|delete

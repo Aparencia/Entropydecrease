@@ -11,7 +11,7 @@
  * URLs are restricted to HTTP(S) with SSRF guard + 10s timeout. All
  * failures return Result objects so the UI can fall back to manual paste.
  */
-import { dialog } from 'electron';
+import { app, dialog } from 'electron';
 import * as path from 'path';
 import { readFile, stat } from 'fs/promises';
 import { randomUUID } from 'crypto';
@@ -203,6 +203,18 @@ export function registerImportHandlers(): void {
       filePath = picked.filePaths[0];
     } else {
       filePath = payload.filePath;
+      // SEC(M16): 路径边界检查——仅允许 userData 或 temp 目录下的文件
+      // （path.relative 方式参考 storageIpcHandlers.ts，防兄弟目录/穿越绕过）
+      const appDataPath = app.getPath('userData');
+      const tempPath = app.getPath('temp');
+      const resolvedPath = path.resolve(filePath);
+      const relToApp = path.relative(appDataPath, resolvedPath);
+      const relToTemp = path.relative(tempPath, resolvedPath);
+      const isInApp = !relToApp.startsWith('..') && !path.isAbsolute(relToApp);
+      const isInTemp = !relToTemp.startsWith('..') && !path.isAbsolute(relToTemp);
+      if (!isInApp && !isInTemp) {
+        return { success: false, error: '不允许读取该路径的文件' };
+      }
     }
 
     try {
