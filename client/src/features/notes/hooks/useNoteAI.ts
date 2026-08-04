@@ -13,6 +13,7 @@ import { useFlashcardStore } from '@/features/flashcards/store/useFlashcardStore
 import { useAISummarize, useAIFlashcards } from '@/lib/ai/useAI';
 import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 import { useToast } from '@/components/ui';
+import { getCoreTier } from '../lib/contentTierStore';
 
 type SummaryData = NonNullable<ReturnType<typeof useAISummarize>['data']>;
 
@@ -50,7 +51,11 @@ export function useNoteAI(editor: Editor | null, noteId: string | null) {
 
   /** 将 AI 生成的卡片批量落库到目标牌组，返回卡片数 */
   const persistCards = useCallback(async (source: string): Promise<number> => {
-    const result = await generateFlashcards(source);
+    // N5 闭环：存在新鲜的核心层缓存时，闪卡只从核心层文本生成
+    // （策略性遗忘 → 闪卡只记核心；缓存过期/缺失静默回退原文）
+    const coreTier = getCoreTier(noteId);
+    const effectiveSource = coreTier ?? source;
+    const result = await generateFlashcards(effectiveSource);
     if (!result) throw new Error('generate failed');
     const targetDeckId = await ensureDefaultDeck();
     await Promise.all(

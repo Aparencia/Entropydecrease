@@ -386,7 +386,6 @@ export default function NoteEditPage() {
             <ClosedBookTest
               noteTitle={note.title}
               noteText={healthText}
-              onReveal={() => setClosedBook(false)}
               onClose={() => setClosedBook(false)}
             />
           </div>
@@ -481,7 +480,7 @@ export default function NoteEditPage() {
       />
     )}
     {/* N5 内容分层弹窗（策略性遗忘标记） */}
-    <ContentTierModal open={tierOpen} onClose={() => setTierOpen(false)} noteText={healthText} />
+    <ContentTierModal open={tierOpen} onClose={() => setTierOpen(false)} noteText={healthText} noteId={noteId} />
     </div>
   );
 }
