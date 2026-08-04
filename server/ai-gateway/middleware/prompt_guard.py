@@ -106,9 +106,8 @@ class PromptGuardMiddleware(BaseHTTPMiddleware):
             return texts
 
         if isinstance(data, str) and len(data) > 10:
-            # 超长字段（>1000 字符）跳过注入检测（多为 base64 编码内容）
-            if len(data) > 1000:
-                return texts
+            # GW-M9: 不再跳过超长文本——长文注入是注入攻击的主流载体
+            # （长文拆解/分段绕过），长文本正则扫描成本可控
             texts.append(data)
         elif isinstance(data, dict):
             for key, value in data.items():
@@ -120,7 +119,8 @@ class PromptGuardMiddleware(BaseHTTPMiddleware):
                     continue
                 texts.extend(self._extract_text_fields(value, max_depth - 1))
         elif isinstance(data, list):
-            for item in data[:20]:  # 限制数组遍历数量
+            # GW-M9: 全量检测数组元素——仅检测前 20 项可被截断绕过
+            for item in data:
                 texts.extend(self._extract_text_fields(item, max_depth - 1))
 
         return texts

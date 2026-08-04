@@ -63,11 +63,15 @@ class RedisCache:
     async def get(self, key: str) -> str | None:
         """获取缓存值，Redis 不可用时返回 None"""
         if not self._client:
+            await self._maybe_reconnect()  # GW-M7: 惰性重连
+        if not self._client:
             return None
         try:
             return await self._client.get(key)
         except Exception as exc:
             logger.warning("Redis GET 失败 key=%s: %s", key, exc)
+            # 连接可能已失效，尝试重连供下次使用
+            await self._maybe_reconnect()
             return None
 
     async def set(self, key: str, value: str, expire: int = 0) -> bool:
@@ -76,6 +80,8 @@ class RedisCache:
 
         Redis 不可用时静默跳过。返回是否设置成功。
         """
+        if not self._client:
+            await self._maybe_reconnect()  # GW-M7: 惰性重连
         if not self._client:
             return False
         try:
@@ -86,6 +92,7 @@ class RedisCache:
             return True
         except Exception as exc:
             logger.warning("Redis SET 失败 key=%s: %s", key, exc)
+            await self._maybe_reconnect()
             return False
 
     async def increment(self, key: str, expire: int = 86400) -> int:
@@ -103,6 +110,8 @@ class RedisCache:
             int: 递增后的值；Redis 不可用时返回 0
         """
         if not self._client:
+            await self._maybe_reconnect()  # GW-M7: 惰性重连
+        if not self._client:
             return 0
         try:
             pipe = self._client.pipeline()
@@ -112,7 +121,19 @@ class RedisCache:
             return results[0]
         except Exception as exc:
             logger.warning("Redis INCR 失败 key=%s: %s", key, exc)
+            await self._maybe_reconnect()
             return 0
+
+    async def _maybe_reconnect(self) -> None:
+        """
+        GW-M7: 惰性重连——Redis 重启/网络抖动后连接失效，
+        下次操作时自动尝试恢复，避免限流/缓存静默失效至进程重启。
+        connect() 内部已捕获异常，此处不会向上抛出。
+        """
+        try:
+            await self.connect()
+        except Exception:
+            pass
 
     async def get_ai_cache(self, prompt_hash: str) -> dict[str, Any] | None:
         """

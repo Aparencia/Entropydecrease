@@ -197,7 +197,12 @@ async def call_with_fallback(
             try:
                 async def _do_call():
                     _FEATURE_CONTEXT.set(feature)
-                    return await fn(provider, model_name)
+                    try:
+                        return await fn(provider, model_name)
+                    finally:
+                        # GW-L3: 成功路径也重置 context——避免同任务后续
+                        # 无 _feature 的 provider 调用继承上次 feature
+                        _FEATURE_CONTEXT.set("")
 
                 # Phase3: 并发信号量保护（视频/多模态走 heavy 上限）
                 result = await _run_under_semaphore(app, feature, _do_call)

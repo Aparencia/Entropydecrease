@@ -28,10 +28,12 @@ router = APIRouter(prefix="/api/v1/asr", tags=["语音转写"])
 
 class TranscribeRequest(BaseModel):
     """语音转写请求"""
-    audio_base64: str = Field(..., description="PCM/WAV 音频 base64 编码")
-    language: str = Field(default="zh", description="语言代码：zh/en/auto")
-    sample_rate: int = Field(default=16000, description="采样率")
-    channels: int = Field(default=1, description="声道数")
+    # GW-M15: base64 上限 32M 字符（约 24MB 音频）——Qwen3-ASR-Flash 官方
+    # 编码后 ≤10MB，此处放宽以兼容 WAV 高采样率；超大载荷由中间件前缀上限兜底
+    audio_base64: str = Field(..., min_length=1, max_length=32_000_000, description="PCM/WAV 音频 base64 编码")
+    language: str = Field(default="zh", max_length=16, description="语言代码：zh/en/auto")
+    sample_rate: int = Field(default=16000, ge=8000, le=96000, description="采样率")
+    channels: int = Field(default=1, ge=1, le=2, description="声道数")
 
 
 class TranscribeSegment(BaseModel):

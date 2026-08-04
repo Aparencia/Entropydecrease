@@ -9,6 +9,7 @@
 @ai-context: 输入校验中间件：对请求体做基础合法性与体积防御，拦截明显恶意载荷。
 """
 
+import json
 import logging
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -59,12 +60,26 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
                     # 畸形 Content-Length 头，忽略该检查（后续 JSON 解析会进一步校验）
                     pass
 
-            # 解析 JSON 请求体并检查文本字段（body 全量读入内存前先受
-            # Content-Length 限制；chunked 大载荷由路由层 Pydantic max_length 兜底）
+            # GW-M8: 流式读取请求体并实时计数——chunked 编码（无 Content-Length 头）
+            # 无法预检，逐块累计超限立即拒绝，防止大载荷全量读入内存
             content_type = request.headers.get("content-type", "")
             if "application/json" in content_type:
                 try:
-                    body = await request.json()
+                    body_bytes = bytearray()
+                    async for chunk in request.stream():
+                        body_bytes.extend(chunk)
+                        if len(body_bytes) > max_content_length:
+                            return JSONResponse(
+                                status_code=413,
+                                content={
+                                    "detail": f"request body exceeds {max_content_length} bytes",
+                                },
+                            )
+                    if not body_bytes:
+                        return await call_next(request)
+                    # 缓存回请求对象，保证下游路由仍能读取 body
+                    request._body = bytes(body_bytes)
+                    body = json.loads(body_bytes)
                     validation_error = self._check_fields(body, "")
                     if validation_error:
                         return JSONResponse(

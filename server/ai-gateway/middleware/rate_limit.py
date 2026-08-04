@@ -22,6 +22,20 @@ from config import RATE_LIMITS
 
 logger = logging.getLogger(__name__)
 
+# GW-M12: 原子限流检查 Lua 脚本——INCR + 超限回滚（DECR）在同一脚本内完成，
+# 消除"检查后回退"的竞态窗口（并发请求中一个失败误减他人占用）与负数计数
+_LUA_CHECK_RATE = """
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+if count > tonumber(ARGV[1]) then
+    redis.call('DECR', KEYS[1])
+    return -1
+end
+return count
+"""
+
 # ============================================================
 # API 路径 → 功能名称映射
 # ============================================================
@@ -106,12 +120,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # 获取 user_id（由 JWT 中间件注入）
         user_id = getattr(request.state, "user_id", "anonymous")
+        # GW-M11: 匿名用户按 IP 分桶——所有匿名请求共享同一配额会被
+        # 恶意用户耗尽（误伤合法匿名用户），IP 维度隔离各自计数
+        if user_id == "anonymous":
+            client_ip = request.client.host if request.client else "unknown"
+            xff = request.headers.get("x-forwarded-for", "")
+            if xff:
+                client_ip = xff.split(",")[0].strip() or client_ip
+            user_id = f"anonymous:{client_ip}"
 
-        # 检查常规频率限制（原子 INCR 操作，防止 TOCTOU 竞态）
+        # 检查常规频率限制（Lua 原子 INCR+校验，防止 TOCTOU 竞态）
         is_allowed, detail = await check_rate_limit(user_id, feature)
         if not is_allowed:
-            # 超过限额，回退计数
-            await rollback_rate_limit(user_id, feature)
             return JSONResponse(
                 status_code=429,
                 content={
@@ -163,15 +183,10 @@ async def check_rate_limit(user_id: str, feature: str) -> tuple[bool, str]:
     )
     ttl = max(seconds_until_end_of_day, 60)
 
-    # ---- 第一层：功能级限制（原子 INCR + 检查） ----
+    # ---- 第一层：功能级限制（Lua 原子 INCR + 检查，超限自动回滚） ----
     feature_key = f"rate_limit:{user_id}:{feature}:{today}"
-    try:
-        feature_count = await cache.increment(feature_key, expire=ttl)
-    except Exception as exc:
-        logger.warning("频率限制检查失败(功能级): %s", exc)
-        return True, ""
-
-    if feature_count > feature_limit:
+    feature_count = await _lua_check_limit(feature_key, feature_limit, ttl)
+    if feature_count < 0:
         return False, (
             f"「{feature}」今日使用次数已达上限（{feature_limit} 次/天），"
             "请明天再试，或升级套餐获取更多配额。"
@@ -181,15 +196,10 @@ async def check_rate_limit(user_id: str, feature: str) -> tuple[bool, str]:
     if feature in GLOBAL_EXEMPT_FEATURES:
         return True, ""
 
-    # ---- 第二层：全局每日总量限制（原子 INCR + 检查） ----
+    # ---- 第二层：全局每日总量限制（Lua 原子 INCR + 检查） ----
     global_key = f"rate_limit:{user_id}:global:{today}"
-    try:
-        global_count = await cache.increment(global_key, expire=ttl)
-    except Exception as exc:
-        logger.warning("频率限制检查失败(全局): %s", exc)
-        return True, ""
-
-    if global_count > daily_limit:
+    global_count = await _lua_check_limit(global_key, daily_limit, ttl)
+    if global_count < 0:
         return False, (
             f"今日 AI 功能总使用次数已达上限（{daily_limit} 次/天），"
             "请明天再试，或升级套餐获取更多配额。"
@@ -200,6 +210,22 @@ async def check_rate_limit(user_id: str, feature: str) -> tuple[bool, str]:
         user_id, feature, feature_count, feature_limit, global_count, daily_limit,
     )
     return True, ""
+
+
+async def _lua_check_limit(key: str, limit: int, ttl: int) -> int:
+    """Lua 原子限流检查：返回 -1 表示超限（计数已自动回滚），否则返回当前计数。
+
+    Redis 不可用/脚本执行失败时返回 0（fail-open，与既有策略一致）。
+    """
+    cache = get_cache()
+    if not cache._client:
+        return 0
+    try:
+        result = await cache._client.eval(_LUA_CHECK_RATE, 1, key, limit, ttl)
+        return int(result)
+    except Exception as exc:
+        logger.warning("限流 Lua 检查失败 key=%s: %s", key, exc)
+        return 0
 
 
 async def rollback_rate_limit(user_id: str, feature: str) -> None:

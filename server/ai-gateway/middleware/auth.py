@@ -119,6 +119,17 @@ def _normalize_pem_key(raw: str) -> str:
 _jwks_cache: Optional[dict] = None
 _jwks_cache_time: float = 0.0
 _JWKS_CACHE_TTL: int = 3600  # 缓存有效期（秒），默认 1 小时
+# GW-M3: 防缓存击穿锁 + 共享连接池客户端（避免每次请求新建 TCP/TLS 连接）
+_jwks_lock: asyncio.Lock = asyncio.Lock()
+_jwks_client: Optional[httpx.AsyncClient] = None
+
+
+def _get_jwks_client() -> httpx.AsyncClient:
+    """获取共享 JWKS HTTP 客户端（懒初始化，连接池复用）"""
+    global _jwks_client
+    if _jwks_client is None:
+        _jwks_client = httpx.AsyncClient(timeout=10)
+    return _jwks_client
 
 
 def _resolve_jwks_url() -> str:
@@ -136,26 +147,29 @@ async def _fetch_jwks(jwks_url: str) -> dict:
     """
     获取 JWKS（带 TTL 缓存，默认 1 小时刷新一次）。
 
-    网络失败时若已有缓存，则返回过期缓存以保证服务可用性。
+    GW-M3: 网络失败时 fail-closed（拒绝验证）而非返回过期缓存——
+    密钥轮换后过期缓存会让旧 token 在验证窗口内继续有效（越权窗口）。
+    asyncio.Lock 防止冷启动多请求并发刷新（缓存击穿）。
     """
     global _jwks_cache, _jwks_cache_time
     now = time.time()
     if _jwks_cache is not None and (now - _jwks_cache_time) < _JWKS_CACHE_TTL:
         return _jwks_cache
-    try:
-        resp = await asyncio.to_thread(httpx.get, jwks_url, timeout=10)
-        resp.raise_for_status()
-        _jwks_cache = resp.json()
-        _jwks_cache_time = now
-        logger.info("JWKS 获取成功，缓存已更新: %s", jwks_url)
-        return _jwks_cache
-    except Exception as e:
-        logger.error("JWKS 获取失败: %s, error=%s", jwks_url, str(e))
-        # 降级：返回过期缓存（若有），避免单次网络抖动导致验签全失败
-        if _jwks_cache is not None:
-            logger.warning("JWKS 获取失败，使用过期缓存（可能已过期）")
+    async with _jwks_lock:
+        # 双重检查：等待锁期间其他协程可能已刷新缓存
+        now = time.time()
+        if _jwks_cache is not None and (now - _jwks_cache_time) < _JWKS_CACHE_TTL:
             return _jwks_cache
-        raise
+        try:
+            resp = await _get_jwks_client().get(jwks_url)
+            resp.raise_for_status()
+            _jwks_cache = resp.json()
+            _jwks_cache_time = time.time()
+            logger.info("JWKS 获取成功，缓存已更新: %s", jwks_url)
+            return _jwks_cache
+        except Exception as e:
+            logger.error("JWKS 获取失败: %s, error=%s", jwks_url, str(e))
+            raise
 
 
 def _b64url_to_int(val: str) -> int:

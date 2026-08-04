@@ -214,13 +214,28 @@ async def ai_error_handler(request: Request, exc: AIError) -> JSONResponse:
         "AIError: %s (status=%d, path=%s)",
         exc.message, exc.status_code, request.url.path,
     )
+    # GW-M6: 不向客户端透传上游错误细节——exc.message/reason 可能含
+    # provider 内部信息、prompt 片段、配额详情，仅返回通用文案与结构化字段
+    safe_detail = {
+        k: v for k, v in exc.detail.items()
+        if k in ("provider", "feature", "limit", "model")
+    }
     return JSONResponse(
         status_code=exc.status_code,
         content={
-            "detail": exc.message,
-            **exc.detail,
+            "detail": _GENERIC_ERROR_MESSAGES.get(exc.status_code, "AI 服务暂时不可用"),
+            **safe_detail,
         },
     )
+
+
+# 上游错误脱敏后的通用错误文案（GW-M6）
+_GENERIC_ERROR_MESSAGES: dict[int, str] = {
+    401: "认证失败，请重新登录",
+    429: "请求过于频繁，请稍后重试",
+    502: "模型服务响应异常，请稍后重试",
+    503: "AI 服务暂时不可用，请稍后重试",
+}
 
 
 # ============================================================

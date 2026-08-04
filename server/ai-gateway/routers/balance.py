@@ -11,6 +11,7 @@ GET /api/v1/ai/balance
 @ai-context: API 余额查询路由：聚合各 Provider 账户余额（阿里云百炼经 AK/SK 查询），供设置页展示。
 """
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -32,6 +33,18 @@ router = APIRouter(prefix="/api/v1/ai", tags=["余额查询"])
 CACHE_KEY = "ai_balance:all"
 CACHE_TTL = 300  # 5 分钟
 
+# GW-M13: 共享 HTTP 客户端（连接池复用，避免每请求新建 TCP/TLS 连接）
+_balance_client: httpx.AsyncClient | None = None
+# GW-M13: 缓存击穿锁——缓存过期瞬间多个并发请求同时回源时只放行一个
+_refresh_lock: asyncio.Lock = asyncio.Lock()
+
+
+def _get_balance_client() -> httpx.AsyncClient:
+    global _balance_client
+    if _balance_client is None:
+        _balance_client = httpx.AsyncClient(timeout=10)
+    return _balance_client
+
 
 # ============================================================
 # Provider 余额查询实现
@@ -44,13 +57,14 @@ async def _query_glm_balance(api_key: str) -> dict:
     API: GET https://open.bigmodel.cn/api/paas/v4/finance/balance
     返回格式: {"code": 200, "data": {"balance": "xx.xx"}}
     """
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            "https://open.bigmodel.cn/api/paas/v4/finance/balance",
-            headers={"Authorization": f"Bearer {api_key}"},
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    # GW-M13: 共享客户端直接使用（不可用 async with——退出会关闭连接池）
+    client = _get_balance_client()
+    resp = await client.get(
+        "https://open.bigmodel.cn/api/paas/v4/finance/balance",
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    resp.raise_for_status()
+    data = resp.json()
 
     if data.get("code") != 200:
         raise ValueError(f"GLM 返回错误: {data.get('msg', '未知错误')}")
@@ -74,13 +88,14 @@ async def _query_deepseek_balance(api_key: str) -> dict:
     API: GET https://api.deepseek.com/user/balance
     返回格式: {"code": 0, "data": {"currency": "CNY", "total_balance": "xx.xx", ...}}
     """
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            "https://api.deepseek.com/user/balance",
-            headers={"Authorization": f"Bearer {api_key}"},
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    # GW-M13: 共享客户端直接使用（不可用 async with——退出会关闭连接池）
+    client = _get_balance_client()
+    resp = await client.get(
+        "https://api.deepseek.com/user/balance",
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    resp.raise_for_status()
+    data = resp.json()
 
     if data.get("code") != 0:
         raise ValueError(f"DeepSeek 返回错误: {data.get('message', '未知错误')}")
@@ -185,13 +200,14 @@ async def _query_qwen_balance(api_key: str) -> dict:
         action="QueryAccountBalance",
     )
 
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"https://{_ALIYUN_BSS_ENDPOINT}/",
-            headers=headers,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    # GW-M13: 共享客户端直接使用（不可用 async with——退出会关闭连接池）
+    client = _get_balance_client()
+    resp = await client.get(
+        f"https://{_ALIYUN_BSS_ENDPOINT}/",
+        headers=headers,
+    )
+    resp.raise_for_status()
+    data = resp.json()
 
     if data.get("Code") != "200" or not data.get("Success"):
         raise ValueError(f"阿里云返回错误: {data.get('Message', '未知错误')}")
@@ -264,6 +280,22 @@ async def get_balance(request: Request):
         except (json.JSONDecodeError, TypeError):
             pass  # 缓存损坏，重新查询
 
+    # GW-M13: 防缓存击穿——缓存过期瞬间只放行一个回源请求，
+    # 其余请求等待锁后直接复用首个请求写回的缓存
+    async with _refresh_lock:
+        cached = await cache.get(CACHE_KEY)
+        if cached:
+            try:
+                result = json.loads(cached)
+                result["from_cache"] = True
+                return result
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return await _query_all_balances(cache, start_time)
+
+
+async def _query_all_balances(cache, start_time: float) -> dict:
+    """查询全部 Provider 余额并写缓存（在防击穿锁内调用）"""
     # 逐个查询 Provider 余额
     results = []
 
