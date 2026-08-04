@@ -27,22 +27,40 @@ import { useWindowWatcher } from './useWindowWatcher';
 import { useSessionControl } from './useSessionControl';
 import { useClassroomAnalysis } from './useClassroomAnalysis';
 import { useClassroomNotes } from './useClassroomNotes';
+import { useConfirm } from './useConfirm';
+import { useGatewayHealth } from './useGatewayHealth';
+import { isLocalAsrReady } from '../utils/asrTranscriber';
+import { loadLaunchPref, saveLaunchPref } from '../utils/classroomPreference';
 
 export function useClassroomCapture() {
   const { toast } = useToast();
 
+  // 应用内确认对话框（P0-5：替代 window.confirm，Promise 化）
+  const confirm = useConfirm();
+  const { askConfirm } = confirm;
+
+  // 网关健康状态机（P0-4 软阻断：进入页面预检，down 时 15s 自动复检）
+  const gatewayHealth = useGatewayHealth();
+
   // ── 会话状态 ──
   const [status, setStatus] = useState<SessionStatus>('idle');
-  const [mode, setMode] = useState<CaptureMode>('mixed');
+  // P0-3 启动偏好记忆：惰性初始化恢复上次的录制模式与采集路径，
+  // 存储缺失/损坏时 loadLaunchPref 内部静默回落默认（mixed / smart）
+  const [mode, setMode] = useState<CaptureMode>(() => loadLaunchPref().mode);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   // 默认智能路径：AI 关键帧 + 流式 ASR，资源占用低，适用面最广
-  const [capturePath, setCapturePath] = useState<CapturePath>('smart');
+  const [capturePath, setCapturePath] = useState<CapturePath>(() => loadLaunchPref().capturePath);
   const [config, setConfig] = useState<CaptureSidebarConfig>({
     screenshotInterval: 5000,
     language: 'zh',
     autoInsert: false,
-    mode: 'mixed',
+    mode: loadLaunchPref().mode,
   });
+
+  // P0-3 写回：路径/模式变更即持久化（初次挂载写回恢复值无害，保持简单）
+  useEffect(() => {
+    saveLaunchPref({ capturePath, mode });
+  }, [capturePath, mode]);
 
   // ── 课程上下文 ──
   const [courseMeta, setCourseMeta] = useState<CourseMeta>({});
@@ -129,7 +147,8 @@ export function useClassroomCapture() {
     videoFilePath: events.videoFilePath,
     recordingStatus: events.recordingStatus,
     captureSessionIdRef: events.captureSessionIdRef,
-    onWarn: (message) => notify('warning', message),
+    // 直通 toast：降级警告可附带 action 按钮（如「重新合并」，见 Toast.tsx）
+    onWarn: (message, action) => toast({ type: 'warning', message, action }),
   });
 
   const notes = useClassroomNotes(courseMeta, events.smartBundle);
@@ -160,9 +179,26 @@ export function useClassroomCapture() {
     onAnalyzeFull: analysis.handleAnalyze,
     onMergePartials: analysis.mergePartialNotes,
     onNotify: (type, message) => notify(type, message),
+    askConfirm,
     onAudioSourceResolved: setAudioSourceKind,
     setStreamingAsrActive,
   });
+
+  /** P0-4 软阻断启动入口：checking 禁用；down 时确认后 localOnly 启动 */
+  const requestStart = useCallback(async () => {
+    if (!selectedWindow || gatewayHealth.status === 'checking') return;
+    if (gatewayHealth.status === 'down' && !isLocalAsrReady()) {
+      const ok = await askConfirm({
+        title: 'AI 网关不可用',
+        description: '仅本地采集继续？（课后分析需联网）',
+        confirmLabel: '本地继续',
+      });
+      if (!ok) return;
+      await handleStart({ localOnly: true });
+      return;
+    }
+    await handleStart();
+  }, [selectedWindow, gatewayHealth.status, askConfirm, handleStart]);
 
   const handleModeChange = useCallback((newMode: CaptureMode) => {
     setMode(newMode);
@@ -214,6 +250,7 @@ export function useClassroomCapture() {
     // 会话
     status, mode, selectedIds, config,
     segments: events.segments, stats: events.stats, extractionError: events.extractionError,
+    setExtractionError: events.setExtractionError,
     // 路径
     capturePath, setCapturePath, smartBundle: events.smartBundle,
     // 分析
@@ -240,11 +277,19 @@ export function useClassroomCapture() {
     handleToggleSelect, handleConfigChange,
     handleAnalyze: analysis.handleAnalyze,
     handleVideoAnalyze: analysis.handleVideoAnalyze,
+    handleRetryMerge: analysis.handleRetryMerge,
     handleDismissAnalysis: analysis.handleDismissAnalysis,
     handleGenerateCards, handleBookmark, bookmarks,
     // 笔记持久化
     ...notes,
+    // 确认对话框（P0-5：供 ClassroomPage 挂载 ConfirmDialog）
+    confirmRequest: confirm.request,
+    handleConfirm: confirm.handleConfirm,
+    handleCancel: confirm.handleCancel,
+    // 网关健康（P0-4 软阻断：checking 禁用启动按钮，down 走确认流程）
+    gatewayStatus: gatewayHealth.status,
+    requestStart,
     // 派生
-    canStart: !!selectedWindow,
+    canStart: !!selectedWindow && gatewayHealth.status !== 'checking',
   };
 }

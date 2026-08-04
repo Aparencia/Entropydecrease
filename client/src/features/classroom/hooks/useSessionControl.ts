@@ -1,18 +1,18 @@
 /**
  * 课堂会话启停控制 hook（三路径启动 / 暂停 / 停止与收尾分析）
  *
- * @ai-context: 从 useClassroomCapture 拆出。启动前预检网关（不可用仅警告
- * 不阻断，本地优先原则）；full_record 走独立 video_record_* IPC，不启动
- * 截图/音频流水线；音频启动失败不阻断视觉采集。
+ * @ai-context: 从 useClassroomCapture 拆出。网关健康预检已前移到
+ * useGatewayHealth（P0-4 软阻断），本 hook 不再自带探针；full_record 走
+ * 独立 video_record_* IPC，不启动截图/音频流水线；音频启动失败不阻断视觉采集。
  * @ai-context: 停止时 smart 路径的收尾策略：先补分析不足一批的尾部关键帧，
  * 再优先 mergeNotes 合并增量片段（省去全量重发），完全无片段才询问用户是否
  * 全量分析。frameRestartRef 最先清空以防 watchdog 在停止过程中触发。
  */
 import { useCallback } from 'react';
-import { requireGatewayUrl } from '@/lib/ai/config';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { analyzePartial } from '@/lib/ai/sessionAnalyzer';
 import { refreshLocalAsrStatus } from '../utils/asrTranscriber';
+import { loadSessionHotwords, clearSessionHotwords } from '../utils/hotwordRuntime';
 import { getAudioSourcePreference } from '@/lib/capture/audioSourcePreference';
 import type { AudioSourceKind } from '@/lib/capture/audioSourceStrategy';
 import type {
@@ -63,6 +63,11 @@ interface UseSessionControlOptions {
   onAnalyzeFull: () => void;
   onMergePartials: (partials: string[], durationMs: number, keyframeCount: number) => Promise<void>;
   onNotify: (type: 'warning', message: string) => void;
+  /** 应用内确认对话框（替代 window.confirm，P0-5；timeout: 0 = 不设超时） */
+  askConfirm: (
+    req: { title: string; description?: string; confirmLabel?: string },
+    opts?: { timeout?: number },
+  ) => Promise<boolean>;
   /** 音频源定下后回传（供诊断文案分支与 UI 展示） */
   onAudioSourceResolved?: (kind: AudioSourceKind | null) => void;
   /** 设置真流式 ASR 激活标志（启动成功置 true，停止置 false） */
@@ -72,36 +77,24 @@ interface UseSessionControlOptions {
 export function useSessionControl({
   captureManager, selectedWindow, status, setStatus, mode, capturePath, config, courseMeta,
   frameRestartRef, audioCleanupRef, session,
-  onAnalyzeVideo, onAnalyzeFull, onMergePartials, onNotify, onAudioSourceResolved,
+  onAnalyzeVideo, onAnalyzeFull, onMergePartials, askConfirm, onAudioSourceResolved,
   setStreamingAsrActive,
 }: UseSessionControlOptions) {
-  /** 预检 AI 网关连通性（不可用仅提示，不阻断采集） */
-  const probeGateway = useCallback(async () => {
-    try {
-      const gatewayUrl = requireGatewayUrl();
-      // GET 而非 HEAD：网关中间件对 HEAD 返回 405，会导致每次启动误报"网关不可用"
-      const healthResp = await fetch(`${gatewayUrl}/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!healthResp.ok) {
-        onNotify('warning', 'AI网关不可用，采集可继续但课后分析可能失败');
-      }
-    } catch {
-      onNotify('warning', '无法连接AI网关，请检查网络。采集仍可进行，课后分析需要网络。');
-    }
-  }, [onNotify]);
-
-  const handleStart = useCallback(async () => {
+  const handleStart = useCallback(async (opts?: { localOnly?: boolean }) => {
+    // localOnly（P0-4 软阻断确认后传入）：网关探针已前移删除，此参数仅承载
+    // "用户已知网关不可用、仅本地采集"语义，启动时序不受影响
+    void opts;
     if (!selectedWindow || !window.electronAPI) return;
     try {
       setStatus('capturing');
       session.resetForStart();
 
-      await probeGateway();
-
       // 刷新本地 ASR 可用性缓存（会话开始时检测一次，避免每段都 IPC 查询）
       refreshLocalAsrStatus().catch(() => { /* 静默失败，降级走云端 */ });
+
+      // P1-3 热词/替换词表：按当前课程加载"课程专属 + 全局"词条
+      // （fire-and-forget：不 await、不阻塞启动时序；失败内部静默降级为空词表）
+      void loadSessionHotwords(courseMeta.courseName);
 
       // Path C 全程录制：走独立 IPC 通道，不启动截图/音频流水线
       if (capturePath === 'full_record') {
@@ -195,7 +188,7 @@ export function useSessionControl({
       setStatus('error');
       console.error('[useClassroomCapture] Start failed:', err);
     }
-  }, [selectedWindow, setStatus, session, probeGateway, capturePath, captureManager, config, mode, courseMeta, onAudioSourceResolved, setStreamingAsrActive]);
+  }, [selectedWindow, setStatus, session, capturePath, captureManager, config, mode, courseMeta, onAudioSourceResolved, setStreamingAsrActive]);
 
   const handlePause = useCallback(() => {
     if (status === 'capturing') {
@@ -212,40 +205,51 @@ export function useSessionControl({
     const bundle = session.smartBundle;
     if (!bundle.keyframes || bundle.keyframes.length === 0) return;
 
-    // 处理剩余未分析的关键帧（不足一批的尾部帧）
-    if (session.pendingKeyframesRef.current.length > 0 && !session.isPartialAnalyzingRef.current) {
+    // ── 同步收割阶段（任何 await 之前）──
+    // 停止后 UI 已回配置态，用户可立即启动新会话；增量状态必须在首个
+    // await 之前收割并清空，否则本函数尾部的 await 期间新会话累积的
+    // 数据会被误清理（resetForStart 不重置这两个 ref）。
+    // ① 尾帧：splice 出局部副本并同步清空 ref，分析 await 只消费副本
+    const tailFrames = (session.pendingKeyframesRef.current.length > 0
+      && !session.isPartialAnalyzingRef.current)
+      ? session.pendingKeyframesRef.current.splice(0)
+      : [];
+    // ② 增量片段：复制后立即清空 ref 与计数，尾帧结果不再回写共享 ref
+    const partials = [...session.partialNotesRef.current];
+    session.partialNotesRef.current = [];
+    session.setPartialCount(0);
+
+    // ── 异步消费阶段：只读局部副本，不再触碰共享增量状态 ──
+    // 尾帧与增量分析同一时间基准：会话首帧的 epoch 毫秒
+    let tailPartial: string | null = null;
+    if (tailFrames.length > 0) {
       try {
-        const remaining = session.pendingKeyframesRef.current.splice(0);
-        // 与增量分析保持同一时间基准：会话首帧的 epoch 毫秒
-        const sessionStartMs = bundle.keyframes[0]?.timestamp ?? remaining[0].timestamp;
-        const partial = await analyzePartial(remaining, sessionStartMs, { language: config.language });
-        session.partialNotesRef.current.push(partial);
-        session.setPartialCount(session.partialNotesRef.current.length);
+        const sessionStartMs = bundle.keyframes[0]?.timestamp ?? tailFrames[0].timestamp;
+        tailPartial = await analyzePartial(tailFrames, sessionStartMs, { language: config.language });
       } catch { /* 静默失败 */ }
     }
 
-    if (session.partialNotesRef.current.length > 0) {
-      await onMergePartials(
-        [...session.partialNotesRef.current],
-        bundle.duration ?? 0,
-        bundle.keyframes.length,
-      );
+    const allPartials = tailPartial ? [...partials, tailPartial] : partials;
+    if (allPartials.length > 0) {
+      await onMergePartials(allPartials, bundle.duration ?? 0, bundle.keyframes.length);
     } else {
-      const confirmed = window.confirm('智能采集已完成，是否生成完整笔记？');
+      // timeout: 0 —— 停止收尾决策不设超时，用户离开再久也不丢失全量分析入口
+      const confirmed = await askConfirm({
+        title: '智能采集已完成',
+        description: '是否生成完整笔记？',
+        confirmLabel: '生成笔记',
+      }, { timeout: 0 });
       if (confirmed) onAnalyzeFull();
     }
-
-    // 清理增量状态
-    session.partialNotesRef.current = [];
-    session.pendingKeyframesRef.current = [];
-    session.setPartialCount(0);
-  }, [session, config.language, onMergePartials, onAnalyzeFull]);
+  }, [session, config.language, onMergePartials, onAnalyzeFull, askConfirm]);
 
   const handleStop = useCallback(async () => {
     if (!window.electronAPI) return;
     try {
       // 最先清除重启回调，防止 watchdog 在停止过程中触发
       frameRestartRef.current = null;
+      // P1-3：清空会话词表运行时，防止陈旧词条作用于残余转写回调
+      clearSessionHotwords();
 
       if (capturePath === 'full_record') {
         const stopResult = await window.electronAPI.invoke('video_record_stop') as {
@@ -257,7 +261,14 @@ export function useSessionControl({
         setStatus('idle');
         session.setRecordingStatus(null);
         if (stopResult.filePath) {
-          const confirmed = window.confirm('全程录制已完成，是否生成课堂笔记？');
+          // 应用内确认（P0-5 替代 window.confirm）：停止收尾已全部完成，
+          // await 仅推迟"是否进入视频分析"的用户决策，分支行为不变；
+          // timeout: 0 —— 不设超时，避免 60s 未操作丢失视频分析入口
+          const confirmed = await askConfirm({
+            title: '全程录制已完成',
+            description: '是否生成课堂笔记？',
+            confirmLabel: '生成笔记',
+          }, { timeout: 0 });
           if (confirmed) onAnalyzeVideo(stopResult.filePath);
         }
         return;
@@ -283,7 +294,7 @@ export function useSessionControl({
       setStatus('error');
       console.error('[useClassroomCapture] Stop failed:', err);
     }
-  }, [capturePath, captureManager, setStatus, frameRestartRef, audioCleanupRef, session, onAnalyzeVideo, finalizeSmartSession, setStreamingAsrActive]);
+  }, [capturePath, captureManager, setStatus, frameRestartRef, audioCleanupRef, session, onAnalyzeVideo, askConfirm, finalizeSmartSession, setStreamingAsrActive]);
 
   return { handleStart, handlePause, handleStop };
 }

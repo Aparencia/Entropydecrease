@@ -12,25 +12,32 @@
  * all option copy lives in constants.ts. Keep this file under 300 lines.
  */
 import { useEffect, useCallback, useState } from 'react';
-import { Mic, CheckCircle2, XCircle, Loader2, Clapperboard, AlertTriangle, Radar } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { XCircle, Radar, SpellCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useClassroomCapture } from '../hooks/useClassroomCapture';
+import { classifyAnalysisError } from '../utils/analysisErrors';
 import { LiveTranscript } from '../components/LiveTranscript';
 import { NoteInsertDialog } from '../components/NoteInsertDialog';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { ClassroomStatusBanners } from '../components/ClassroomStatusBanners';
 import { SegmentList } from '../components/SegmentList';
 import { WindowSelectCard } from '../components/WindowSelectCard';
 import { PathModeSelector } from '../components/PathModeSelector';
 import { SettingsCollapse } from '../components/SettingsCollapse';
 import { SonarControls } from '../components/SonarControls';
+import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import { IdleGuidePanel } from '../components/IdleGuidePanel';
 import { CourseInfoCard } from '../components/CourseInfoCard';
 import { SmartCapturePanel } from '@/features/notes/components/SmartCapturePanel';
 import { AnalysisPreview } from '@/features/notes/components/AnalysisPreview';
 import { VideoRecordPanel } from '@/features/notes/components/VideoRecordPanel';
 import { AsrModelPrompt } from '../components/AsrModelPrompt';
+import { HotwordDialog } from '../components/HotwordDialog';
 
 export default function ClassroomPage() {
   const capture = useClassroomCapture();
+  const navigate = useNavigate();
 
   // ── 阶段判定：运行态（左栏变形为仪表盘）/ 配置态（右侧显示说明书） ──
   const isRunning = capture.status === 'capturing' || capture.status === 'processing' || capture.status === 'paused';
@@ -45,6 +52,8 @@ export default function ClassroomPage() {
   // ── 笔记插入弹窗状态 ──
   const [showNoteDialog, setShowNoteDialog] = useState(false);
   const [sessionSeq, setSessionSeq] = useState(1);
+  // ── 热词/替换词表弹窗状态（P1-3） ──
+  const [showHotwordDialog, setShowHotwordDialog] = useState(false);
 
   /** 点击"插入笔记"时打开弹窗，并计算当天采集序号 */
   const handleOpenNoteDialog = useCallback(async () => {
@@ -82,12 +91,21 @@ export default function ClassroomPage() {
     <div className="flex h-full min-h-0">
       {/* ── 左侧控制面板：一屏容纳，不滚动 ── */}
       <div className="w-80 flex-shrink-0 border-r border-border/30 flex flex-col overflow-hidden">
-        {/* 标题 */}
-        <div className="flex items-center gap-2.5 px-4 py-4 border-b border-border/30">
-          <Clapperboard className="w-5 h-5 text-brand-500" strokeWidth={1.5} />
-          <h1 className="text-b1 font-semibold text-text-primary">回声定位</h1>
+        {/* 标题：回声定位仪式标识（compact） */}
+        <div className="flex items-center px-4 py-3.5 border-b border-border/30">
+          <ModuleRitualHeader
+            title="回声定位"
+            sealChar="回"
+            sealColor="#14B8A6"
+            compact
+          />
+          {/* P1-3：热词/替换词表入口 */}
+          <button onClick={() => setShowHotwordDialog(true)} title="热词 / 替换词表"
+            className="ml-auto p-1.5 rounded-kb-lg text-text-tertiary hover:text-text-primary hover:bg-bg-secondary active:scale-95 transition-all">
+            <SpellCheck className="w-4 h-4" strokeWidth={1.5} />
+          </button>
           {capture.status === 'capturing' && (
-            <span className="ml-auto w-2.5 h-2.5 rounded-full bg-semantic-error animate-pulse" />
+            <span className="ml-1.5 w-2.5 h-2.5 rounded-full bg-semantic-error animate-pulse" />
           )}
         </div>
 
@@ -123,7 +141,7 @@ export default function ClassroomPage() {
               <SettingsCollapse config={capture.config} onChange={capture.handleConfigChange} />
             </div>
             <div className="p-4 border-t border-border/20">
-              <button onClick={capture.handleStart} disabled={!capture.canStart}
+              <button onClick={capture.requestStart} disabled={!capture.canStart}
                 className={cn(
                   'w-full flex items-center justify-center gap-2 py-3 rounded-kb-lg text-b2 font-semibold transition-all active:scale-[0.98]',
                   capture.canStart
@@ -131,10 +149,12 @@ export default function ClassroomPage() {
                     : 'bg-bg-secondary text-text-tertiary cursor-not-allowed',
                 )}>
                 <Radar className="w-5 h-5" strokeWidth={1.5} />
-                开始回声定位
+                {capture.gatewayStatus === 'checking' ? '检查网关中…' : '开始回声定位'}
               </button>
               {!capture.canStart && (
-                <p className="mt-1.5 text-center text-[11px] text-text-tertiary">请先选择目标窗口</p>
+                <p className="mt-1.5 text-center text-[11px] text-text-tertiary">
+                  {capture.gatewayStatus === 'checking' ? '正在确认 AI 网关可用性' : '请先选择目标窗口'}
+                </p>
               )}
             </div>
           </>
@@ -143,18 +163,36 @@ export default function ClassroomPage() {
 
       {/* ── 右侧内容区：独立滚动 ── */}
       <div className="flex-1 flex flex-col min-h-0 min-w-0">
-        {/* 错误提示 */}
-        {capture.extractionError && (
-          <div className="mx-4 mt-3 p-3 rounded-kb-lg bg-semantic-error/5 border border-semantic-error/10">
-            <div className="flex items-start gap-2">
-              <XCircle className="w-4 h-4 mt-0.5 text-semantic-error" strokeWidth={1.5} />
-              <div>
-                <p className="text-b3 text-semantic-error font-medium">{capture.extractionError}</p>
-                <p className="text-b3 text-text-tertiary mt-0.5">请在设置中检查AI网关配置</p>
+        {/* 错误提示（P0-1：按错误类渲染差异化文案与操作按钮，取代固定文案） */}
+        {capture.extractionError && (() => {
+          const errInfo = classifyAnalysisError(capture.extractionError);
+          return (
+            <div className="mx-4 mt-3 p-3 rounded-kb-lg bg-semantic-error/5 border border-semantic-error/10">
+              <div className="flex items-start gap-2">
+                <XCircle className="w-4 h-4 mt-0.5 text-semantic-error" strokeWidth={1.5} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-b3 text-semantic-error font-medium">{capture.extractionError}</p>
+                  <p className="text-b3 text-text-tertiary mt-0.5">{errInfo.message}</p>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    {errInfo.action !== 'settings' && (
+                      /* 提取随采集流自动继续：重试=清除滞留横幅，等待下一帧结果 */
+                      <button onClick={() => capture.setExtractionError(null)}
+                        className="px-2.5 py-1 rounded-kb-sm text-[11px] font-medium bg-brand-50 text-brand-600 hover:bg-brand-100 active:scale-95 transition-all">
+                        重试
+                      </button>
+                    )}
+                    {errInfo.action !== 'retry' && (
+                      <button onClick={() => navigate('/settings')}
+                        className="px-2.5 py-1 rounded-kb-sm text-[11px] font-medium bg-brand-50 text-brand-600 hover:bg-brand-100 active:scale-95 transition-all">
+                        打开设置
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {showIdleGuide ? (
           /* 空态：当前配置说明书 + 课程信息卡 */
@@ -190,36 +228,14 @@ export default function ClassroomPage() {
             {capture.capturePath === 'smart' && (
               <>
                 <SmartCapturePanel bundle={capture.smartBundle} isRecording={capture.status === 'capturing'} />
-                {capture.partialCount > 0 && (
-                  <div className="mx-4 mt-2 flex items-center gap-2 px-3 py-2 rounded-kb-md bg-brand-50/50 border border-brand-100/50">
-                    <CheckCircle2 className="w-4 h-4 text-brand-500" strokeWidth={1.5} />
-                    <span className="text-b3 text-brand-600">已增量分析 {capture.partialCount} 段，课后将快速合并生成笔记</span>
-                  </div>
-                )}
-                {capture.transcribedCount > 0 && (
-                  <div className="mx-4 mt-2 flex items-center gap-2 px-3 py-2 rounded-kb-md bg-emerald-50/50 border border-emerald-100/50">
-                    <Mic className="w-4 h-4 text-emerald-500" strokeWidth={1.5} />
-                    <span className="text-b3 text-emerald-600">已转写 {capture.transcribedCount} 段语音</span>
-                  </div>
-                )}
-                {/* 音频健康警告：区分"从未启动"与"中途中断" */}
-                {capture.status === 'capturing' && !capture.audioHealth.isHealthy && (
-                  <div className="mx-4 mt-2 flex items-center gap-2 px-3 py-2 rounded-kb-md bg-semantic-error/5 border border-semantic-error/15">
-                    <AlertTriangle className="w-4 h-4 text-semantic-error flex-shrink-0" strokeWidth={1.5} />
-                    <span className="text-b3 text-semantic-error">
-                      {capture.audioHealth.chunkCount === 0
-                        ? '未检测到音频输入，音频采集可能未启动，请停止后重新开始'
-                        : '音频输入中断，请检查系统音频设置'}
-                    </span>
-                  </div>
-                )}
-                {/* VAD 状态（校准中提示） */}
-                {capture.status === 'capturing' && capture.vadStats && !capture.vadStats.calibrated && (
-                  <div className="mx-4 mt-2 flex items-center gap-2 px-3 py-2 rounded-kb-md bg-amber-50/50 border border-amber-100/50">
-                    <Loader2 className="w-4 h-4 text-amber-500 animate-spin" strokeWidth={1.5} />
-                    <span className="text-b3 text-amber-600">正在校准音频阈值 ({capture.vadStats.processedChunks}/10 块)...</span>
-                  </div>
-                )}
+                {/* 状态横幅组（增量分析/转写/音频健康/VAD，抽组件控行数） */}
+                <ClassroomStatusBanners
+                  status={capture.status}
+                  partialCount={capture.partialCount}
+                  transcribedCount={capture.transcribedCount}
+                  audioHealth={capture.audioHealth}
+                  vadStats={capture.vadStats}
+                />
                 {/* 实时转录上屏 */}
                 <LiveTranscript
                   transcripts={capture.liveTranscripts}
@@ -234,15 +250,19 @@ export default function ClassroomPage() {
               <VideoRecordPanel recordingStatus={capture.recordingStatus} isRecording={capture.status === 'capturing'} />
             )}
 
-            {/* 分析预览 */}
+            {/* 分析预览（P0-2：local-concat 降级可重试合并；P0-1：错误按类给按钮） */}
             {(capture.isAnalyzing || capture.analysisResult || capture.analysisError) && (
               <AnalysisPreview
                 result={capture.analysisResult}
                 isAnalyzing={capture.isAnalyzing}
-                error={capture.analysisError}
+                error={capture.analysisError?.message ?? null}
                 onInsert={() => void handleOpenNoteDialog()}
                 onDismiss={capture.handleDismissAnalysis}
-                onRetry={capture.analysisResult?.modelUsed === 'local-concat' ? undefined : capture.handleAnalyze}
+                onRetry={capture.analysisResult?.modelUsed === 'local-concat'
+                  ? capture.handleRetryMerge
+                  : capture.analysisError?.action === 'settings' ? undefined : capture.handleAnalyze}
+                onGoSettings={capture.analysisError && capture.analysisError.action !== 'retry'
+                  ? () => navigate('/settings') : undefined}
                 onGenerateCards={capture.handleGenerateCards}
               />
             )}
@@ -264,6 +284,14 @@ export default function ClassroomPage() {
             }}
             onClose={() => setShowNoteDialog(false)}
           />
+        )}
+        {/* 应用内确认对话框（P0-5：替代 window.confirm） */}
+        <ConfirmDialog open={!!capture.confirmRequest} title={capture.confirmRequest?.title ?? ''}
+          description={capture.confirmRequest?.description} confirmLabel={capture.confirmRequest?.confirmLabel}
+          onConfirm={capture.handleConfirm} onCancel={capture.handleCancel} />
+        {/* 热词/替换词表管理（P1-3：本地词表 CRUD，会话启动自动按课程应用） */}
+        {showHotwordDialog && (
+          <HotwordDialog open courseId={capture.courseMeta.courseName} onClose={() => setShowHotwordDialog(false)} />
         )}
       </div>
     </div>

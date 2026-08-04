@@ -38,8 +38,19 @@ interface TranscribeResponse {
 let _localAsrAvailable: boolean | null = null;
 let _localAsrFallbackToCloud = true;
 
+/** 本地→云端降级可见性回调（由 useClassroomEvents 注入 toast） */
+let _asrFallbackCallback: (() => void) | null = null;
+/** 会话级节流：一次会话最多提示一次降级，refreshLocalAsrStatus 在会话启动时复位 */
+let _asrFallbackNotified = false;
+
+/** 注册/注销 ASR 本地→云端降级回调（传 null 注销） */
+export function setOnAsrFallback(cb: (() => void) | null): void {
+  _asrFallbackCallback = cb;
+}
+
 /** 刷新本地 ASR 可用性缓存（课堂会话开始时调用一次） */
 export async function refreshLocalAsrStatus(): Promise<boolean> {
+  _asrFallbackNotified = false; // 新会话复位降级提示节流
   try {
     if (!window.electronAPI) {
       _localAsrAvailable = false;
@@ -115,6 +126,11 @@ export async function transcribeWithRetry(payload: TranscribePayload, retries = 
     } catch (localErr) {
       console.warn('[asrTranscriber] 本地 ASR 失败，尝试云端降级:', localErr);
       if (!_localAsrFallbackToCloud) throw localErr;
+      // 降级可见性：会话级节流 1 次，回调由 useClassroomEvents 注入
+      if (!_asrFallbackNotified) {
+        _asrFallbackNotified = true;
+        _asrFallbackCallback?.();
+      }
     }
   }
 
@@ -140,21 +156,49 @@ export function toAsrLanguage(configLanguage: 'zh' | 'en' | 'mixed'): string {
   return 'zh';
 }
 
-export function useAsrSemaphore() {
-  const semaphoreRef = useRef({ active: 0, queue: [] as (() => void)[] });
-  const healthRef = useRef({ lastSuccessTime: 0, consecutiveFailures: 0 });
+interface AsrSemaphoreOptions {
+  /**
+   * 队列保护丢弃段时的可观测回调。
+   * @param droppedTotal 会话内累计丢弃段数
+   * @param consecutiveDrops 连续丢弃次数（期间无段顺利入队/获取槽位时重置）
+   */
+  onDrop?: (droppedTotal: number, consecutiveDrops: number) => void;
+}
 
-  /** 申请并发槽位；返回 null 表示本段已被队列保护丢弃 */
+export function useAsrSemaphore(options?: AsrSemaphoreOptions) {
+  const semaphoreRef = useRef({
+    active: 0,
+    queue: [] as (() => void)[],
+    droppedTotal: 0,
+    consecutiveDrops: 0,
+  });
+  const healthRef = useRef({ lastSuccessTime: 0, consecutiveFailures: 0 });
+  // ref 桥接：acquire 的 useCallback 依赖数组保持为空
+  const onDropRef = useRef(options?.onDrop);
+  onDropRef.current = options?.onDrop;
+
+  /**
+   * 申请并发槽位。
+   * @ai-context 注意：本函数实际永不返回 null——队列满时丢弃的是已在队列
+   * 中的最旧等待者，而非本次请求。返回类型保留 `Promise<void> | null` 仅为
+   * 向后兼容既有消费点的判空写法（useClassroomEvents）。
+   */
   const acquire = useCallback((): Promise<void> | null => {
     const sem = semaphoreRef.current;
     if (sem.active < MAX_CONCURRENT_ASR) {
       sem.active++;
+      sem.consecutiveDrops = 0;
       return Promise.resolve();
     }
     // 队列保护：超出上限时丢弃最旧的排队任务
     if (sem.queue.length >= MAX_ASR_QUEUE) {
       sem.queue.shift(); // 移除最旧的等待者（其 Promise 永远不会 resolve，GC 会回收）
-      console.warn('[useClassroomCapture] ASR 队列已满，丢弃最旧的排队段');
+      sem.droppedTotal++;
+      sem.consecutiveDrops++;
+      console.warn(`[useClassroomCapture] ASR 队列已满，丢弃最旧的排队段（累计 ${sem.droppedTotal}）`);
+      onDropRef.current?.(sem.droppedTotal, sem.consecutiveDrops);
+    } else {
+      sem.consecutiveDrops = 0;
     }
     return new Promise<void>((resolve) => {
       sem.queue.push(() => { sem.active++; resolve(); });

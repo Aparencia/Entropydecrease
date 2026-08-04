@@ -11,13 +11,14 @@ import {
   Sparkles,
   FilePlus,
   X,
-  AlertCircle,
+  AlertTriangle,
   RotateCcw,
   Layers,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { cn } from '@/lib/utils';
 import type { AnalyzeResult } from '@/lib/ai/sessionAnalyzer';
+import { AnalysisErrorCard } from './AnalysisErrorCard';
 
 // ================================================================
 // Props
@@ -33,6 +34,8 @@ interface AnalysisPreviewProps {
   onRetry?: () => void;
   /** 可选：从笔记生成闪卡 */
   onGenerateCards?: (content: string) => void;
+  /** 可选：错误态「打开设置」（P0-1；既有调用方不传则行为零变化） */
+  onGoSettings?: () => void;
 }
 
 // ================================================================
@@ -131,6 +134,7 @@ export function AnalysisPreview({
   onDismiss,
   onRetry,
   onGenerateCards,
+  onGoSettings,
 }: AnalysisPreviewProps) {
   const sanitizedHtml = useMemo(() => {
     if (!result?.content) return '';
@@ -164,47 +168,16 @@ export function AnalysisPreview({
   }
 
   // ----------------------------------------------------------------
-  // 分析失败状态
+  // 分析失败状态（错误分支已抽至 AnalysisErrorCard，P0-1 可操作化）
   // ----------------------------------------------------------------
   if (error && !result) {
     return (
-      <div
-        className={cn(
-          'mx-3 my-2 p-4 rounded-kb-lg',
-          'bg-semantic-error/5 backdrop-blur-xl border border-semantic-error/15 shadow-kb-md',
-        )}
-      >
-        <div className="flex items-start gap-2 mb-3">
-          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0 text-semantic-error" strokeWidth={1.5} />
-          <div className="flex-1 min-w-0">
-            <p className="text-b2 font-medium text-semantic-error">分析失败</p>
-            <p className="text-b3 text-text-tertiary mt-1 leading-relaxed">{error}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {onRetry && (
-            <button
-              onClick={onRetry}
-              className={cn(
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium',
-                'bg-brand-50 text-brand-600 hover:bg-brand-100 active:scale-95 transition-all duration-kb-fast',
-              )}
-            >
-              <RotateCcw className="w-3.5 h-3.5" strokeWidth={1.5} />
-              重试
-            </button>
-          )}
-          <button
-            onClick={onDismiss}
-            className={cn(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium',
-              'bg-bg-secondary text-text-secondary hover:bg-bg-tertiary active:scale-95 transition-all duration-kb-fast',
-            )}
-          >
-            关闭
-          </button>
-        </div>
-      </div>
+      <AnalysisErrorCard
+        error={error}
+        onRetry={onRetry}
+        onDismiss={onDismiss}
+        onGoSettings={onGoSettings}
+      />
     );
   }
 
@@ -237,6 +210,26 @@ export function AnalysisPreview({
           <X className="w-4 h-4" strokeWidth={1.5} />
         </button>
       </div>
+
+      {/* local-concat 降级徽章（P0-2）：云端合并失败本地拼接的可见性提示 */}
+      {result.modelUsed === 'local-concat' && (
+        <div className="flex items-center gap-2 mx-4 mt-2 px-3 py-2 rounded-kb-md bg-amber-50/50 border border-amber-200/40">
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" strokeWidth={1.5} />
+          <span className="text-b3 text-amber-600 flex-1">云端不可用，本次笔记为本地拼接</span>
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              className={cn(
+                'inline-flex items-center gap-1 px-2 py-1 rounded-kb-sm text-[11px] font-medium flex-shrink-0',
+                'bg-amber-100/60 text-amber-700 hover:bg-amber-100 active:scale-95 transition-all duration-kb-fast',
+              )}
+            >
+              <RotateCcw className="w-3 h-3" strokeWidth={1.5} />
+              重新合并
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Markdown 内容区 */}
       <div

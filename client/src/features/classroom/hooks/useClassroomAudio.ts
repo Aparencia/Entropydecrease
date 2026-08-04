@@ -148,29 +148,19 @@ export function useClassroomAudio({ captureManager, status, mode, onNotify }: Us
     if (!window.electronAPI || status !== 'capturing') return;
     const off = window.electronAPI.on('audio_capture_chunk', (...args: unknown[]) => {
       const chunk = args[0] as AudioChunkData;
-      // TEMP DIAGNOSTIC（ASR 静默排查）：验证音频块是否到达渲染端及其能量/类型
-      try {
-        const diagSamples = new Float32Array(chunk.audioBuffer);
-        let diagSum = 0;
-        for (let i = 0; i < diagSamples.length; i++) diagSum += diagSamples[i] * diagSamples[i];
-        const diagRms = diagSamples.length > 0 ? Math.sqrt(diagSum / diagSamples.length) : 0;
-        console.info(
-          `[ASR-DIAG] 渲染端收到音频块: ${diagSamples.length} 样本, RMS=${diagRms.toFixed(6)}, ` +
-          `buffer类型=${Object.prototype.toString.call(chunk.audioBuffer)}, byteLength=${(chunk.audioBuffer as ArrayBuffer).byteLength}`,
-        );
-      } catch (diagErr) {
-        console.warn('[ASR-DIAG] 音频块检查失败:', diagErr);
-      }
       captureManager.pushAudioChunk(chunk);
-      // 更新音频健康状态：收到音频块即视为健康
+      // healthRef 保持逐块更新（watchdog 只读 ref，精度不受影响）
       healthRef.current = {
         lastChunkTime: Date.now(),
         chunkCount: healthRef.current.chunkCount + 1,
       };
-      setAudioHealth({
-        lastChunkTime: healthRef.current.lastChunkTime,
-        chunkCount: healthRef.current.chunkCount,
-        isHealthy: true,
+      // 性能卫生：仅每 10 块或健康态翻转（不健康→健康）时才 setState，
+      // 消除流式 400ms 块下约 2.5Hz 的整页重渲染
+      const { lastChunkTime, chunkCount } = healthRef.current;
+      setAudioHealth((prev) => {
+        if (!prev.isHealthy) return { lastChunkTime, chunkCount, isHealthy: true };
+        if (chunkCount % 10 === 0) return { lastChunkTime, chunkCount, isHealthy: true };
+        return prev;
       });
     });
     return off;
@@ -201,8 +191,13 @@ export function useClassroomAudio({ captureManager, status, mode, onNotify }: Us
           }
         }
       } else if (Date.now() - lastChunkTime > CHUNK_GAP_TIMEOUT_MS) {
-        // 场景二：音频曾正常但中断超过 10s
-        setAudioHealth((prev) => ({ ...prev, isHealthy: false }));
+        // 场景二：音频曾正常但中断超过 10s。chunkCount 从 healthRef 取真实
+        // 逐块计数——state 因降频可能滞后（前 9 块恒为 0），沿用会让横幅
+        // 把"音频中断"误判为"从未检测到音频"（ClassroomStatusBanners 按
+        // chunkCount === 0 分支）
+        setAudioHealth((prev) => (prev.isHealthy
+          ? { ...prev, chunkCount: healthRef.current.chunkCount, isHealthy: false }
+          : prev));
         if (!warnedStopped) {
           warnedStopped = true;
           onNotify('warning', '音频输入中断超过 10s，请检查系统音频设置');

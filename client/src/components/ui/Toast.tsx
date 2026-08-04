@@ -10,15 +10,34 @@ import { soundPlayer } from '@/lib/audio/SoundPlayer';
 // Types
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
+/**
+ * 可选操作按钮（如降级提示的「重新合并」）。
+ * @ai-context: Optional inline action button rendered before the close
+ * button; clicking it dismisses the toast first, then runs onClick in a
+ * try/catch so a throwing callback can never keep the toast on screen.
+ */
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface ToastItem {
   id: number;
   type: ToastType;
   message: string;
   duration: number;
+  action?: ToastAction;
 }
 
 interface ToastContextValue {
-  toast: (options: { type: ToastType; message: string; duration?: number; silent?: boolean }) => void;
+  toast: (options: {
+    type: ToastType;
+    message: string;
+    duration?: number;
+    silent?: boolean;
+    /** 可选操作按钮；含 action 时默认时长延长至 6000ms */
+    action?: ToastAction;
+  }) => void;
 }
 
 // Context
@@ -45,6 +64,9 @@ const defaultDuration: Record<ToastType, number> = {
   error: 3000,
   warning: 3000,
 };
+
+// 含 action 按钮时的默认时长（给用户足够的阅读与点击时间）
+const ACTION_DEFAULT_DURATION = 6000;
 
 // Radix toast type mapping
 const radixTypeMap: Record<ToastType, RadixToast.ToastProps['type']> = {
@@ -95,6 +117,24 @@ const ToastItemCard: React.FC<{
       <RadixToast.Title className="text-b2 text-text-primary flex-1 font-normal">
         {item.message}
       </RadixToast.Title>
+      {/* Optional action button (left of close button); click → dismiss first,
+          then run the callback (try/catch 防回调抛错导致 toast 滞留) */}
+      {item.action && (
+        <button
+          onClick={() => {
+            onOpenChange(item.id, false);
+            try { item.action?.onClick(); } catch (err) {
+              console.warn('[Toast] action 回调执行失败:', err);
+            }
+          }}
+          className={cn(
+            'flex-shrink-0 px-2 py-1 rounded-kb-sm text-b3 font-medium',
+            'text-brand-500 hover:bg-bg-secondary/60 transition-colors',
+          )}
+        >
+          {item.action.label}
+        </button>
+      )}
       {/* Close button */}
       <RadixToast.Close asChild>
         <button
@@ -113,11 +153,14 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const idRef = useRef(0);
 
-  const toast = useCallback(({ type, message, duration, silent }: { type: ToastType; message: string; duration?: number; silent?: boolean }) => {
+  const toast = useCallback(({ type, message, duration, silent, action }: {
+    type: ToastType; message: string; duration?: number; silent?: boolean; action?: ToastAction;
+  }) => {
     const id = ++idRef.current;
-    const d = duration ?? defaultDuration[type];
+    // 含 action 时默认延长展示时长（未显式指定 duration 才生效）
+    const d = duration ?? (action ? ACTION_DEFAULT_DURATION : defaultDuration[type]);
     if (!silent && toastSoundMap[type]) soundPlayer.play(toastSoundMap[type]!);
-    setToasts((prev) => [...prev, { id, type, message, duration: d }]);
+    setToasts((prev) => [...prev, { id, type, message, duration: d, action }]);
   }, []);
 
   const handleOpenChange = useCallback((id: number, open: boolean) => {

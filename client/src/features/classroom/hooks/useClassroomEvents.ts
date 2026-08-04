@@ -10,6 +10,7 @@
  * 防止长课堂内存无限增长。ASR 连续失败 3 次提示用户。
  */
 import { useState, useEffect, useRef } from 'react';
+import { useToast } from '@/components/ui/Toast';
 import { captureEventBus } from '@/lib/capture';
 import type {
   CaptureManager,
@@ -30,7 +31,8 @@ import { analyzePartial } from '@/lib/ai/sessionAnalyzer';
 import { detectCourseFromFrame } from '@/lib/ai/courseDetector';
 import { remapKeyframeMarkers } from '../utils/tipTapImageUtils';
 import { persistKeyframeImage } from '../utils/keyframePersistence';
-import { transcribeWithRetry, toAsrLanguage, useAsrSemaphore } from '../utils/asrTranscriber';
+import { transcribeWithRetry, toAsrLanguage, useAsrSemaphore, isLocalAsrReady, setOnAsrFallback } from '../utils/asrTranscriber';
+import { applySessionReplaces } from '../utils/hotwordRuntime';
 
 /** 触发一次增量分析所需的关键帧数 */
 const INCREMENTAL_BATCH_SIZE = 5;
@@ -88,7 +90,20 @@ export function useClassroomEvents({
   /** 会话状态 ref 桥接：流式 partial/final 仅在 capturing 时上屏（暂停时不更新） */
   const statusRef = useRef(status);
   statusRef.current = status;
-  const asr = useAsrSemaphore();
+  const { toast } = useToast();
+  const asr = useAsrSemaphore({
+    onDrop: (total, consec) => {
+      if (total !== 1 && total % 5 !== 0) return; // 阈值范式：首次丢弃 + 每累计 5 段
+      const hint = consec >= 3 && isLocalAsrReady() ? '，建议在设置中切换本地 ASR' : '';
+      toast({ type: 'warning', silent: true, message: `网络繁忙，ASR 转写队列已丢弃 ${total} 段音频${hint}` });
+    },
+  });
+
+  // ASR 本地→云端降级可见性：注册 toast 回调（会话级节流在 asrTranscriber 内部）
+  useEffect(() => {
+    setOnAsrFallback(() => toast({ type: 'warning', silent: true, message: '本地 ASR 不可用，已降级为云端转写' }));
+    return () => setOnAsrFallback(null);
+  }, [toast]);
 
   // 会话结束回到 idle 时重置时间基准（暂停/恢复不重置，避免相对时间戳跳变）
   useEffect(() => {
@@ -217,7 +232,7 @@ export function useClassroomEvents({
         const audioData = seg.audioBase64;
         if (!audioData) return;
         const slot = asr.acquire();
-        if (!slot) return; // 队列已满且丢弃了本段
+        if (!slot) return; // 兼容性判空：acquire 实际永不返回 null（丢弃的是最旧等待者）
         slot.then(() => {
           transcribeWithRetry({
             audio_base64: audioData,
@@ -239,9 +254,10 @@ export function useClassroomEvents({
               }));
               if (text) {
                 setTranscribedCount((c) => c + 1);
-                // 实时转录上屏（FIFO 上限控制）
+                // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3 替换词后处理），
+                // 上方 audioSegments.audioText 保留原始转写可回溯
                 setLiveTranscripts((prev) => {
-                  const next = [...prev, { id: seg.id, text, timestamp: seg.timestampStart }];
+                  const next = [...prev, { id: seg.id, text: applySessionReplaces(text), timestamp: seg.timestampStart }];
                   return next.length > MAX_LIVE_TRANSCRIPTS
                     ? next.slice(next.length - MAX_LIVE_TRANSCRIPTS)
                     : next;
@@ -279,9 +295,9 @@ export function useClassroomEvents({
       if (!text) return;
       const id = crypto.randomUUID();
       const timestamp = data.timestamp || Date.now();
-      // 实时转录上屏（FIFO 上限控制）
+      // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3），audioSegments 存原始转写
       setLiveTranscripts((prev) => {
-        const next = [...prev, { id, text, timestamp }];
+        const next = [...prev, { id, text: applySessionReplaces(text), timestamp }];
         return next.length > MAX_LIVE_TRANSCRIPTS
           ? next.slice(next.length - MAX_LIVE_TRANSCRIPTS)
           : next;
@@ -354,7 +370,7 @@ export function useClassroomEvents({
   }, [status, captureManager]);
 
   return {
-    segments, setSegments, stats, setStats, extractionError,
+    segments, setSegments, stats, setStats, extractionError, setExtractionError,
     smartBundle, setSmartBundle,
     liveTranscripts, setLiveTranscripts,
     partialText,
