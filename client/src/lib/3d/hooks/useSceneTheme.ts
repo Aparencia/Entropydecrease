@@ -7,17 +7,17 @@ import { useState, useEffect } from 'react';
 
 export type SceneTheme = 'deep-sea' | 'aurora-dome';
 
+function readTheme(): SceneTheme {
+  const el = document.documentElement;
+  return el.getAttribute('data-theme') === 'dark' ? 'deep-sea' : 'aurora-dome';
+}
+
 export function useSceneTheme(): SceneTheme {
-  const [theme, setTheme] = useState<SceneTheme>(() => {
-    const el = document.documentElement;
-    return el.getAttribute('data-theme') === 'dark' ? 'deep-sea' : 'aurora-dome';
-  });
+  const [theme, setTheme] = useState<SceneTheme>(() => readTheme());
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
-      const el = document.documentElement;
-      const isDark = el.getAttribute('data-theme') === 'dark';
-      setTheme(isDark ? 'deep-sea' : 'aurora-dome');
+      setTheme(readTheme());
     });
 
     observer.observe(document.documentElement, {

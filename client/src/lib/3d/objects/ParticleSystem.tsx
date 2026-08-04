@@ -104,8 +104,8 @@ export function ParticleSystem({
   });
 
   return (
-    <points ref={pointsRef}>
-      <bufferGeometry>
+    <points ref={pointsRef} key={`ps-${particleCount}`}>
+      <bufferGeometry key={`ps-geo-${particleCount}`}>
         <bufferAttribute
           attach="attributes-position"
           array={positions}

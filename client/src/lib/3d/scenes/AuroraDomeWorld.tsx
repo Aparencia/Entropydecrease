@@ -7,9 +7,6 @@
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { Bloom, Vignette, ChromaticAberration } from '@react-three/postprocessing';
-import { BlendFunction } from 'postprocessing';
-import { SafeEffectComposer } from '../core/SafeEffectComposer';
 import { useEffectiveTier } from '@/lib/performance/usePerformanceMode';
 
 // ─── 天空穹顶着色器 ───────────────────────────────────────
@@ -65,44 +62,132 @@ function SkyDome() {
 function SunSystem() {
   const sunRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
+  const rayRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
 
+  const rayUniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uColor: { value: new THREE.Color('#FCD34D') },
+  }), []);
+
   useFrame((_, delta) => {
-    // 防止浏览器节流导致的帧时间尖峰，最大允许 100ms
     const safeDelta = Math.min(delta, 0.1);
     timeRef.current += safeDelta;
+    rayUniforms.uTime.value = timeRef.current;
 
-    // 脉动动画：scale 1.0 ↔ 1.05，周期4秒
     const pulse = 1.0 + Math.sin(timeRef.current * (Math.PI * 2 / 4)) * 0.05;
-
-    if (sunRef.current) {
-      sunRef.current.scale.setScalar(pulse);
-    }
-    if (glowRef.current) {
-      glowRef.current.scale.setScalar(pulse * 1.02);
-    }
+    if (sunRef.current) sunRef.current.scale.setScalar(pulse);
+    if (glowRef.current) glowRef.current.scale.setScalar(pulse * 1.02);
   });
+
+  const rayVertexShader = `varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`;
+  const rayFragmentShader = `
+    uniform float uTime;uniform vec3 uColor;varying vec2 vUv;
+    void main(){
+      float angle = atan(vUv.y-0.5, vUv.x-0.5);
+      float dist = distance(vUv, vec2(0.5));
+      float ray = sin(angle * 12.0 + uTime * 0.3) * 0.5 + 0.5;
+      ray *= 1.0 - smoothstep(0.0, 0.5, dist);
+      float alpha = ray * 0.15;
+      gl_FragColor = vec4(uColor, alpha);
+    }`;
 
   return (
     <group>
-      {/* 太阳核心 */}
       <mesh ref={sunRef}>
         <sphereGeometry args={[1.5, 32, 32]} />
         <meshBasicMaterial color="#FFF8E7" toneMapped={false} />
       </mesh>
-
-      {/* 外围光晕 */}
       <mesh ref={glowRef}>
         <sphereGeometry args={[2.5, 32, 32]} />
-        <meshBasicMaterial
-          color="#FFF8E7"
-          transparent
-          opacity={0.3}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-        />
+        <meshBasicMaterial color="#FFF8E7" transparent opacity={0.3} blending={THREE.AdditiveBlending} depthWrite={false} />
+      </mesh>
+      {/* 太阳光芒射线 */}
+      <mesh ref={rayRef}>
+        <planeGeometry args={[6, 6]} />
+        <shaderMaterial uniforms={rayUniforms} vertexShader={rayVertexShader} fragmentShader={rayFragmentShader}
+          transparent depthWrite={false} blending={THREE.AdditiveBlending} side={THREE.DoubleSide} />
       </mesh>
     </group>
+  );
+}
+
+// ─── 极光效果 ─────────────────────────────────────────────
+function AuroraBorealis() {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const timeRef = useRef(0);
+
+  const uniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uColorA: { value: new THREE.Color('#22D3EE') },
+    uColorB: { value: new THREE.Color('#818CF8') },
+    uColorC: { value: new THREE.Color('#34D399') },
+  }), []);
+
+  useFrame((_, delta) => {
+    timeRef.current += Math.min(delta, 0.1);
+    uniforms.uTime.value = timeRef.current;
+  });
+
+  const auroraVertexShader = `
+    varying vec2 vUv;
+    varying vec3 vPosition;
+    void main() {
+      vUv = uv;
+      vPosition = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `;
+
+  const auroraFragmentShader = `
+    uniform float uTime;
+    uniform vec3 uColorA;
+    uniform vec3 uColorB;
+    uniform vec3 uColorC;
+    varying vec2 vUv;
+    varying vec3 vPosition;
+
+    void main() {
+      float speed = 0.15;
+      float x = vUv.x * 3.0 + uTime * speed;
+      float y = vUv.y * 5.0;
+
+      // 多层噪声模拟极光丝带
+      float wave1 = sin(x * 1.5 + uTime * 0.2) * 0.5 + 0.5;
+      float wave2 = cos(x * 2.0 + uTime * 0.15 + y * 0.5) * 0.4 + 0.4;
+      float wave3 = sin(x * 0.8 + y * 1.2 + uTime * 0.1) * 0.3;
+
+      float intensity = wave1 * wave2 + wave3 * 0.3;
+      intensity = clamp(intensity * 1.5 - 0.3, 0.0, 1.0);
+      intensity = pow(intensity, 1.5);
+
+      // 垂直衰减（顶部淡出）
+      float verticalFade = 1.0 - vUv.y;
+      intensity *= smoothstep(0.0, 0.3, verticalFade) * smoothstep(0.5, 0.0, verticalFade);
+
+      // 颜色渐变
+      vec3 colorA = mix(uColorA, uColorB, sin(uTime * 0.05 + x) * 0.5 + 0.5);
+      vec3 colorB = mix(uColorB, uColorC, cos(uTime * 0.03 + y) * 0.5 + 0.5);
+      vec3 finalColor = mix(colorA, colorB, wave1);
+
+      float alpha = intensity * 0.35;
+      gl_FragColor = vec4(finalColor, alpha);
+    }
+  `;
+
+  return (
+    <mesh position={[0, 10, -30]} rotation={[0.3, 0, 0]}>
+      <planeGeometry args={[60, 20, 64, 64]} />
+      <shaderMaterial
+        uniforms={uniforms}
+        vertexShader={auroraVertexShader}
+        fragmentShader={auroraFragmentShader}
+        transparent
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
   );
 }
 
@@ -191,8 +276,8 @@ function StarDust({ count }: { count: number }) {
   });
 
   return (
-    <points ref={pointsRef}>
-      <bufferGeometry>
+    <points ref={pointsRef} key={`star-${count}`}>
+      <bufferGeometry key={`star-geo-${count}`}>
         <bufferAttribute
           attach="attributes-position"
           args={[positions, 3]}
@@ -217,45 +302,45 @@ function StarDust({ count }: { count: number }) {
   );
 }
 
-// ─── 云层效果 ─────────────────────────────────────────────
+// ─── 云层效果（增强版） ─────────────────────────────────
 function CloudLayer() {
   const cloudsRef = useRef<THREE.Group>(null);
 
   const cloudData = useMemo(() => {
-    return Array.from({ length: 4 }, () => ({
+    return Array.from({ length: 8 }, (_, i) => ({
       position: [
-        (Math.random() - 0.5) * 40,
-        15 + Math.random() * 20,
-        (Math.random() - 0.5) * 40,
+        (Math.random() - 0.5) * 50,
+        12 + Math.random() * 25,
+        (Math.random() - 0.5) * 50,
       ] as [number, number, number],
-      rotation: Math.random() * Math.PI,
-      scale: 8 + Math.random() * 12,
-      speed: 0.02 + Math.random() * 0.03,
-      opacity: 0.1 + Math.random() * 0.1,
+      rotation: Math.random() * Math.PI * 2,
+      scale: 6 + Math.random() * 15,
+      speed: 0.01 + Math.random() * 0.04,
+      opacity: 0.06 + Math.random() * 0.12,
+      aspect: 0.4 + Math.random() * 0.8,
     }));
   }, []);
 
   useFrame((_, delta) => {
     if (!cloudsRef.current) return;
-    // 防止浏览器节流导致的帧时间尖峰，最大允许 100ms
     const safeDelta = Math.min(delta, 0.1);
     cloudsRef.current.children.forEach((cloud, i) => {
       const data = cloudData[i];
-      cloud.position.x += Math.sin(Date.now() * 0.0001 + i) * data.speed * safeDelta;
-      cloud.position.z += Math.cos(Date.now() * 0.0001 + i * 2) * data.speed * safeDelta * 0.5;
-      cloud.rotation.z += safeDelta * 0.005;
+      if (!data) return;
+      cloud.position.x += Math.sin(data.speed * 0.5) * data.speed * safeDelta * 2;
+      cloud.position.z += Math.cos(data.speed * 0.3) * data.speed * safeDelta * 2;
+      cloud.rotation.z += safeDelta * 0.003;
+      // 边界循环
+      if (cloud.position.x > 30) cloud.position.x = -30;
+      if (cloud.position.z > 30) cloud.position.z = -30;
     });
   });
 
   return (
     <group ref={cloudsRef}>
       {cloudData.map((cloud, i) => (
-        <mesh
-          key={i}
-          position={cloud.position}
-          rotation={[0, 0, cloud.rotation]}
-        >
-          <planeGeometry args={[cloud.scale, cloud.scale * 0.6]} />
+        <mesh key={i} position={cloud.position} rotation={[0, 0, cloud.rotation]}>
+          <planeGeometry args={[cloud.scale, cloud.scale * cloud.aspect]} />
           <meshBasicMaterial
             color="#FFFFFF"
             transparent
@@ -275,9 +360,6 @@ function CloudLayer() {
 // 行星，外层行星只改状态不跳转，导致“点击 3D 物体”与功能错位。
 
 // ─── 主场景组件 ───────────────────────────────────────────
-/** 色差偏移量（模块级常量，避免每帧 new Vector2 的 GC 压力） */
-const CHROMATIC_OFFSET = new THREE.Vector2(0.001, 0.001);
-
 export function AuroraDomeWorld() {
   // 有效 tier（自动 tier 受用户性能模式上限约束）
   const tier = useEffectiveTier();
@@ -302,41 +384,36 @@ export function AuroraDomeWorld() {
       {/* 太阳系统 */}
       <SunSystem />
 
+      {/* 极光效果（双层，澎湃档全开，中档一层，低档关闭） */}
+      {tier !== 'low' && (
+        <>
+          <AuroraBorealis />
+          {/* 第二层极光，对面方向，不同颜色 */}
+          {tier === 'high' && (
+            <mesh position={[0, 12, 25]} rotation={[-0.2, Math.PI * 0.7, 0]}>
+              <planeGeometry args={[50, 18, 48, 48]} />
+              <shaderMaterial
+                uniforms={{ uTime: { value: 0 }, uColorA: { value: new THREE.Color('#34D399') }, uColorB: { value: new THREE.Color('#FCD34D') }, uColorC: { value: new THREE.Color('#818CF8') } }}
+                vertexShader={`varying vec2 vUv;varying vec3 vPosition;void main(){vUv=uv;vPosition=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`}
+                fragmentShader={`
+                  uniform float uTime;uniform vec3 uColorA;uniform vec3 uColorB;uniform vec3 uColorC;varying vec2 vUv;varying vec3 vPosition;
+                  void main(){float x=vUv.x*2.5+uTime*0.12;float y=vUv.y*4.0;float w1=sin(x*1.8+uTime*0.15)*0.5+0.5;float w2=cos(x*2.2+uTime*0.12+y*0.6)*0.4+0.4;float w3=sin(x*0.6+y*1.0+uTime*0.08)*0.3;float intensity=w1*w2+w3*0.3;intensity=clamp(intensity*1.5-0.3,0.0,1.0);intensity=pow(intensity,1.5);float vf=1.0-vUv.y;intensity*=smoothstep(0.0,0.3,vf)*smoothstep(0.5,0.0,vf);vec3 cA=mix(uColorA,uColorB,sin(uTime*0.04+x)*0.5+0.5);vec3 cB=mix(uColorB,uColorC,cos(uTime*0.02+y)*0.5+0.5);vec3 fc=mix(cA,cB,w1);gl_FragColor=vec4(fc,intensity*0.2);}
+                `}
+                transparent depthWrite={false} blending={THREE.AdditiveBlending} side={THREE.DoubleSide}
+              />
+            </mesh>
+          )}
+        </>
+      )}
+
       {/* 星尘粒子 */}
       <StarDust count={particleCount} />
 
       {/* 云层效果（低性能时隐藏） */}
       {tier !== 'low' && <CloudLayer />}
 
-      {/* 后处理：低档全关；中档关色差以降 GPU（色差是较贵的全屏 pass）；澎湃档全开。
-          条件置于 composer 层级（group 接受 false），避免 EffectComposer 子元素严格类型报错 */}
-      {tier === 'low' ? null : tier === 'high' ? (
-        <SafeEffectComposer>
-          <Bloom
-            intensity={0.3}
-            luminanceThreshold={0.8}
-            luminanceSmoothing={0.3}
-            mipmapBlur
-          />
-          <ChromaticAberration
-            blendFunction={BlendFunction.NORMAL}
-            offset={CHROMATIC_OFFSET}
-            radialModulation={false}
-            modulationOffset={0}
-          />
-          <Vignette offset={0.4} darkness={0.3} />
-        </SafeEffectComposer>
-      ) : (
-        <SafeEffectComposer>
-          <Bloom
-            intensity={0.3}
-            luminanceThreshold={0.8}
-            luminanceSmoothing={0.3}
-            mipmapBlur
-          />
-          <Vignette offset={0.4} darkness={0.3} />
-        </SafeEffectComposer>
-      )}
+      {/* 后处理已移至 SceneTransition 统一管理 —— 两个场景各带 composer 会以 renderPriority=1
+          互相抢占渲染权导致画面丢失，故场景内不再挂载 composer */}
     </group>
   );
 }

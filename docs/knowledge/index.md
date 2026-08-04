@@ -6,6 +6,7 @@
 
 | 日期 | 标题 | 标签 |
 |------|------|------|
+| 2026-08-04 | [深色模式 3D 场景不渲染：双 EffectComposer 以 renderPriority=1 互相抢占渲染权](./bugs/2026-08-dark-mode-dual-effectcomposer-render-takeover.md) | #R3F #EffectComposer #后处理 #renderPriority #深色模式 #3D渲染 |
 | 2026-08-03 | [番茄钟沉浸↔普通切换“组件重复”：两个独立 AnimatePresence 实例间 mode="wait" 无效，双视图叠加约 0.6s](./bugs/2026-08-pomodoro-immersive-dual-view-overlap.md) | #番茄钟 #framer-motion #AnimatePresence #portal #过渡排序 |
 | 2026-08-03 | [主页选中功能后相机飞行视角错位、正对空白处：flyTo 只插值位置不改朝向，叠加 docked 渲染冻结无人纠错](./bugs/2026-08-camera-flight-orientation-mismatch-docked-freeze.md) | #3D导航 #相机飞行 #四元数 #frameloop #性能档位 |
 | 2026-08-02 | [ASR 报错「whisper.cpp 执行失败」在代码库零匹配：运行构建落后源码 8 个版本](./bugs/2026-08-asr-whisper-cpp-stale-build-mismatch.md) | #ASR #版本错位 #sherpa-onnx #构建产物 #诊断方法 |

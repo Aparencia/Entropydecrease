@@ -1,16 +1,26 @@
 /**
- * ModuleEntity — 每个学习模块在3D空间中的视觉表达
- * 支持多种几何体、悬浮动画、发光交互
+ * ModuleEntity — 每个学习模块在3D空间中的精致化视觉表达
+ * 多层细节：自发光核心 + Fresnel轮廓 + 线框辉光 + 轨道粒子 + 地面辉光
  *
  * @ai-context: 3D 场景对象：ModuleEntity。
+ * 宪法第一条接入：glowScale 映射学习数据（掌握度=亮度），域 0.6–1.15。
+ * 宪法第四条：三级性能降级嵌入（high/medium/low）。
  */
-import { useRef } from 'react';
+import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Float, Html } from '@react-three/drei';
 import { getModuleSubtitle } from '@/features/onboarding/firstDive/moduleSubtitles';
+import { useEffectiveTier } from '@/lib/performance/usePerformanceMode';
+import {
+  createModuleTexture, createNormalMap, createRoughnessMap,
+  createFlashcardTexture, idToSeed,
+} from './proceduralTextures';
 
 type GeometryType = 'dodecahedron' | 'torus' | 'box' | 'sphere' | 'octahedron' | 'icosahedron';
+
+/** 法线贴图强度（模块级复用，避免每帧 new Vector2） */
+const NORMAL_SCALE = new THREE.Vector2(0.5, 0.5);
 
 interface ModuleEntityProps {
   id: string;
@@ -22,157 +32,348 @@ interface ModuleEntityProps {
   isHovered: boolean;
   isActive: boolean;
   showLabel?: boolean;
-  /**
-   * 世界活力辉光乘数（宪法第一条：掌握度=亮度）。
-   * 由 useWorldSignals 派生，域 0.6–1.15：只调明暗、永不惩罚性暗淡。
-   * World vitality glow multiplier (constitution §1: mastery = brightness).
-   */
   glowScale?: number;
   onClick: () => void;
   onPointerOver: () => void;
   onPointerOut: () => void;
 }
 
-/**
- * 根据geometry类型渲染对应的几何体
- */
+/** 几何体工厂 */
 function ModuleGeometry({ geometry }: { geometry: GeometryType }) {
   switch (geometry) {
-    case 'dodecahedron':
-      return <dodecahedronGeometry args={[0.8, 0]} />;
-    case 'torus':
-      return <torusGeometry args={[0.6, 0.25, 16, 32]} />;
-    case 'box':
-      return <boxGeometry args={[1, 1.2, 0.6]} />;
-    case 'sphere':
-      return <sphereGeometry args={[0.7, 32, 32]} />;
-    case 'octahedron':
-      return <octahedronGeometry args={[0.8, 0]} />;
-    case 'icosahedron':
-      return <icosahedronGeometry args={[0.7, 0]} />;
+    case 'dodecahedron': return <dodecahedronGeometry args={[0.8, 0]} />;
+    case 'torus': return <torusGeometry args={[0.6, 0.25, 16, 32]} />;
+    case 'box': return <boxGeometry args={[1, 1.2, 0.6]} />;
+    case 'sphere': return <sphereGeometry args={[0.7, 32, 32]} />;
+    case 'octahedron': return <octahedronGeometry args={[0.8, 0]} />;
+    case 'icosahedron': return <icosahedronGeometry args={[0.7, 0]} />;
   }
 }
 
-/**
- * 闪卡专用几何 — 两个平行的 PlaneGeometry (卡片堆)
- */
-function FlashcardGeometry() {
+/** 闪卡专用 */
+function FlashcardGeometry({ textures }: { textures?: { mapA?: THREE.CanvasTexture; mapB?: THREE.CanvasTexture } | null }) {
   return (
     <group>
       <mesh position={[0, 0, 0.05]} rotation={[0, 0, 0.05]}>
         <planeGeometry args={[0.9, 1.2]} />
-        <meshStandardMaterial color="#3B82F6" emissive="#3B82F6" emissiveIntensity={0.3} side={THREE.DoubleSide} />
+        <meshStandardMaterial color="#3B82F6" emissive="#3B82F6" emissiveIntensity={0.3} map={textures?.mapA} side={THREE.DoubleSide} />
       </mesh>
       <mesh position={[0, 0, -0.05]} rotation={[0, 0, -0.05]}>
         <planeGeometry args={[0.9, 1.2]} />
-        <meshStandardMaterial color="#6366F1" emissive="#6366F1" emissiveIntensity={0.3} side={THREE.DoubleSide} />
+        <meshStandardMaterial color="#6366F1" emissive="#6366F1" emissiveIntensity={0.3} map={textures?.mapB} side={THREE.DoubleSide} />
       </mesh>
     </group>
   );
 }
 
+// ─── 细节层 1：Fresnel 辉光轮廓 ─────────────────────
+function FresnelGlow({ color, isActive, isHovered, geometry }: {
+  color: string; isActive: boolean; isHovered: boolean; geometry: GeometryType;
+}) {
+  const glowRef = useRef<THREE.Mesh>(null);
+  const targetIntensity = isActive ? 1.0 : isHovered ? 0.6 : 0.2;
+
+  useFrame((_, delta) => {
+    if (!glowRef.current) return;
+    const mat = glowRef.current.material as THREE.ShaderMaterial;
+    mat.uniforms.uIntensity.value = THREE.MathUtils.lerp(
+      mat.uniforms.uIntensity.value, targetIntensity, Math.min(delta * 4, 1),
+    );
+  });
+
+  const uniforms = useMemo(() => ({
+    uColor: { value: new THREE.Color(color) },
+    uIntensity: { value: 0.2 },
+  }), [color]);
+
+  return (
+    <mesh ref={glowRef} scale={[1.12, 1.12, 1.12]}>
+      <ModuleGeometry geometry={geometry} />
+      <shaderMaterial
+        uniforms={uniforms}
+        vertexShader={`varying vec3 vNormal;varying vec3 vPosition;void main(){vNormal=normalize(normalMatrix*normal);vPosition=(modelViewMatrix*vec4(position,1.0)).xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`}
+        fragmentShader={`uniform vec3 uColor;uniform float uIntensity;varying vec3 vNormal;varying vec3 vPosition;void main(){vec3 viewDir=normalize(-vPosition);float rim=1.0-max(0.0,dot(viewDir,vNormal));rim=pow(rim,2.5);float alpha=rim*uIntensity*0.6;gl_FragColor=vec4(uColor,alpha);}`}
+        transparent depthWrite={false} side={THREE.FrontSide} blending={THREE.AdditiveBlending}
+      />
+    </mesh>
+  );
+}
+
+// ─── 细节层 2：辉光线框（EdgesGeometry） ────────────
+function WireframeGlow({ color, isActive, isHovered, geometry }: {
+  color: string; isActive: boolean; isHovered: boolean; geometry: GeometryType;
+}) {
+  const lineRef = useRef<THREE.LineSegments>(null);
+  const edgesGeom = useMemo(() => {
+    // 生成临时几何体来计算边
+    let geo: THREE.BufferGeometry;
+    switch (geometry) {
+      case 'dodecahedron': geo = new THREE.DodecahedronGeometry(0.8); break;
+      case 'torus': geo = new THREE.TorusGeometry(0.6, 0.25, 16, 32); break;
+      case 'box': geo = new THREE.BoxGeometry(1, 1.2, 0.6); break;
+      case 'sphere': geo = new THREE.SphereGeometry(0.7, 24, 24); break;
+      case 'octahedron': geo = new THREE.OctahedronGeometry(0.8); break;
+      case 'icosahedron': geo = new THREE.IcosahedronGeometry(0.7); break;
+    }
+    const edges = new THREE.EdgesGeometry(geo);
+    geo.dispose();
+    return edges;
+  }, [geometry]);
+
+  useFrame((_, delta) => {
+    if (!lineRef.current) return;
+    const mat = lineRef.current.material as THREE.LineBasicMaterial;
+    const target = isActive ? 0.8 : isHovered ? 0.5 : 0.15;
+    mat.opacity = THREE.MathUtils.lerp(mat.opacity, target, Math.min(delta * 3, 1));
+  });
+
+  return (
+    <lineSegments ref={lineRef} geometry={edgesGeom} scale={[1.06, 1.06, 1.06]}>
+      <lineBasicMaterial color={color} transparent opacity={0.15} blending={THREE.AdditiveBlending} />
+    </lineSegments>
+  );
+}
+
+// ─── 细节层 3：核心呼吸光 ────────────────────────────
+function CoreBreath({ color, isActive, isHovered }: {
+  color: string; isActive: boolean; isHovered: boolean;
+}) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const timeRef = useRef(0);
+
+  useFrame((_, delta) => {
+    timeRef.current += Math.min(delta, 0.1);
+    if (!meshRef.current) return;
+    // 呼吸脉动：活跃时快速，悬浮时中等，默认缓慢
+    const speed = isActive ? 2.5 : isHovered ? 1.5 : 0.8;
+    const pulse = 0.7 + Math.sin(timeRef.current * speed) * 0.3;
+    meshRef.current.scale.setScalar(pulse);
+    const mat = meshRef.current.material as THREE.MeshBasicMaterial;
+    mat.opacity = THREE.MathUtils.lerp(
+      mat.opacity, isActive ? 0.6 : isHovered ? 0.4 : 0.2, Math.min(delta * 3, 1),
+    );
+  });
+
+  return (
+    <mesh ref={meshRef}>
+      <sphereGeometry args={[0.3, 16, 16]} />
+      <meshBasicMaterial color={color} transparent opacity={0.2} blending={THREE.AdditiveBlending} depthWrite={false} />
+    </mesh>
+  );
+}
+
+// ─── 细节层 4：轨道粒子环（动态旋转） ────────────────
+// 使用固定最大 buffer（MAX_COUNT=40）+ drawRange 控制可见粒子数，
+// 彻底避免 buffer resize 导致的 WebGL 错误
+const MAX_ORBITAL = 40;
+
+function OrbitalRing({ isActive, isHovered, color }: {
+  isActive: boolean; isHovered: boolean; color: string;
+}) {
+  const pointsRef = useRef<THREE.Points>(null);
+  const visibleCount = isActive ? 40 : isHovered ? 20 : 0;
+  const angleRef = useRef(0);
+
+  // 固定分配最大 buffer，避免 resize
+  const { positions, colors } = useMemo(() => {
+    const pos = new Float32Array(MAX_ORBITAL * 3);
+    const col = new Float32Array(MAX_ORBITAL * 3);
+    const baseColor = new THREE.Color(color);
+    const white = new THREE.Color('#ffffff');
+    for (let i = 0; i < MAX_ORBITAL; i++) {
+      const angle = (i / MAX_ORBITAL) * Math.PI * 2;
+      const radius = 1.4 + Math.random() * 0.2;
+      const tilt = (Math.random() - 0.5) * 0.6;
+      pos[i * 3] = Math.cos(angle) * radius;
+      pos[i * 3 + 1] = Math.sin(angle * 0.7) * 0.3 + tilt;
+      pos[i * 3 + 2] = Math.sin(angle) * radius;
+      const t = Math.random();
+      const c = baseColor.clone().lerp(white, t * 0.5);
+      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+    }
+    return { positions: pos, colors: col };
+  }, [color]);
+
+  useFrame((_, delta) => {
+    if (!pointsRef.current) return;
+    // drawRange 控制可见粒子数（buffer 大小固定不变）
+    pointsRef.current.geometry.setDrawRange(0, visibleCount);
+    if (visibleCount === 0) return;
+    angleRef.current += Math.min(delta, 0.1) * (isActive ? 1.5 : 0.6);
+    const posAttr = pointsRef.current.geometry.attributes.position as THREE.BufferAttribute;
+    const pos = posAttr.array as Float32Array;
+    for (let i = 0; i < visibleCount; i++) {
+      const a = (i / visibleCount) * Math.PI * 2 + angleRef.current;
+      const radius = 1.4 + (Math.sin(i * 0.5) * 0.08 + 0.08);
+      const tilt = (Math.sin(i * 0.3) * 0.3);
+      pos[i * 3] = Math.cos(a) * radius;
+      pos[i * 3 + 1] = Math.sin(a * 0.7) * 0.3 + tilt;
+      pos[i * 3 + 2] = Math.sin(a) * radius;
+    }
+    posAttr.needsUpdate = true;
+  });
+
+  if (visibleCount === 0) return null;
+
+  return (
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} count={MAX_ORBITAL} />
+        <bufferAttribute attach="attributes-color" args={[colors, 3]} count={MAX_ORBITAL} />
+      </bufferGeometry>
+      <pointsMaterial
+        vertexColors size={0.05} transparent
+        opacity={isActive ? 0.9 : 0.5} blending={THREE.AdditiveBlending}
+        depthWrite={false} sizeAttenuation
+      />
+    </points>
+  );
+}
+
+// ─── 细节层 5：地面辉光圆环 ──────────────────────────
+function GroundGlow({ color, isActive }: { color: string; isActive: boolean }) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const timeRef = useRef(0);
+
+  useFrame((_, delta) => {
+    timeRef.current += Math.min(delta, 0.1);
+    if (!meshRef.current) return;
+    const mat = meshRef.current.material as THREE.MeshBasicMaterial;
+    const pulse = 0.3 + Math.sin(timeRef.current * 0.5) * 0.15;
+    mat.opacity = isActive ? pulse : pulse * 0.5;
+  });
+
+  const ringColor = useMemo(() => new THREE.Color(color), [color]);
+
+  return (
+    <mesh ref={meshRef} position={[0, -0.9, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[0.6, 1.4, 48]} />
+      <meshBasicMaterial color={ringColor} transparent opacity={0.15} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
+// ─── 主组件 ──────────────────────────────────────────
 export function ModuleEntity({
-  id,
-  position,
-  label,
-  geometry,
-  color,
-  emissiveColor,
-  isHovered,
-  isActive,
-  showLabel = false,
-  glowScale = 1,
-  onClick,
-  onPointerOver,
-  onPointerOut,
+  id, position, label, geometry, color, emissiveColor,
+  isHovered, isActive, showLabel = false, glowScale = 1,
+  onClick, onPointerOver, onPointerOut,
 }: ModuleEntityProps) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const materialRef = useRef<THREE.MeshStandardMaterial>(null);
-  // 功能副标题：隐喻名（深潜/结礁…）无法自解释，常驻直白功能名确保用户能把几何体对应到功能
   const subtitle = getModuleSubtitle(id);
+  const tier = useEffectiveTier();
+  const isLowTier = tier === 'low';
+  const isMidTier = tier === 'medium';
 
-  // Each entity has a unique rotation axis and speed
   const rotationConfig = useRef({
     axis: new THREE.Vector3(
-      Math.random() - 0.5,
-      Math.random() - 0.5,
-      Math.random() - 0.5,
+      Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5,
     ).normalize(),
     speed: 0.2 + Math.random() * 0.3,
   }).current;
 
-  // Target states for lerp transitions
   const targetScale = isActive ? 1.3 : isHovered ? 1.15 : 1.0;
-  // 辉光 = 交互态基值 × 世界活力（学习数据的亮度映射，宪法第一条）
   const targetEmissive = (isActive ? 1.2 : isHovered ? 0.8 : 0.3) * glowScale;
+  const targetMetalness = isActive ? 0.5 : 0.3;
+  const targetRoughness = isActive ? 0.2 : 0.4;
 
   useFrame((_, delta) => {
     if (!meshRef.current) return;
-
-    // 防止浏览器节流（如标签切换）导致的帧时间尖峰，最大允许 100ms
     const safeDelta = Math.min(delta, 0.1);
-
-    // Self rotation
     meshRef.current.rotateOnAxis(rotationConfig.axis, safeDelta * rotationConfig.speed);
-
-    // Smooth scale transition
-    const currentScale = meshRef.current.scale.x;
-    const newScale = THREE.MathUtils.lerp(currentScale, targetScale, safeDelta * 4);
-    meshRef.current.scale.setScalar(newScale);
-
-    // Smooth emissive transition
-    if (materialRef.current) {
-      materialRef.current.emissiveIntensity = THREE.MathUtils.lerp(
-        materialRef.current.emissiveIntensity,
-        targetEmissive,
-        safeDelta * 4,
+    const cs = meshRef.current.scale.x;
+    meshRef.current.scale.setScalar(THREE.MathUtils.lerp(cs, targetScale, safeDelta * 4));
+    const mat = meshRef.current.material as THREE.MeshStandardMaterial;
+    if (mat) {
+      mat.emissiveIntensity = THREE.MathUtils.lerp(
+        mat.emissiveIntensity, targetEmissive, safeDelta * 4,
       );
+      if (!isLowTier) {
+        mat.metalness = THREE.MathUtils.lerp(mat.metalness, targetMetalness, safeDelta * 4);
+        mat.roughness = THREE.MathUtils.lerp(mat.roughness, targetRoughness, safeDelta * 4);
+      }
     }
   });
 
-  // Use special geometry for flashcards
   const isFlashcard = id === 'flashcards';
+  const seed = useMemo(() => idToSeed(id), [id]);
+
+  // 生成程序化纹理（仅不低档）
+  const textures = useMemo(() => {
+    if (isLowTier) return null;
+    return {
+      map: createModuleTexture(color, emissiveColor, seed),
+      normalMap: createNormalMap(seed),
+      roughnessMap: createRoughnessMap(seed),
+    };
+  }, [color, emissiveColor, seed, isLowTier]);
+
+  // 闪卡纹理
+  const flashcardTextures = useMemo(() => {
+    if (isLowTier) return null;
+    return { mapA: createFlashcardTexture('#3B82F6'), mapB: createFlashcardTexture('#6366F1') };
+  }, [isLowTier]);
 
   return (
     <Float speed={1.0} rotationIntensity={0.5} floatIntensity={0.8}>
       <group
         position={position}
-        onClick={onClick}
-        onPointerOver={onPointerOver}
-        onPointerOut={onPointerOut}
+        onClick={onClick} onPointerOver={onPointerOver} onPointerOut={onPointerOut}
       >
         {isFlashcard ? (
-          <FlashcardGeometry />
+          <FlashcardGeometry textures={flashcardTextures} />
         ) : (
-          <mesh ref={meshRef}>
-            <ModuleGeometry geometry={geometry} />
-            <meshStandardMaterial
-              ref={materialRef}
-              color={color}
-              emissive={emissiveColor}
-              emissiveIntensity={0.3}
-              metalness={0.3}
-              roughness={0.4}
-              transparent
-              opacity={0.9}
-            />
-          </mesh>
+          <>
+            {/* 核心呼吸光 */}
+            {!isLowTier && <CoreBreath color={emissiveColor} isActive={isActive} isHovered={isHovered} />}
+
+            {/* 主体 — 字面量标签分支（变量作 JSX 标签会被 React 视为组件而非 R3F 内置元素，导致材质创建失败） */}
+            <mesh ref={meshRef}>
+              <ModuleGeometry geometry={geometry} />
+              {isLowTier ? (
+                <meshStandardMaterial
+                  color={color} emissive={emissiveColor} emissiveIntensity={0.3}
+                  transparent opacity={0.9}
+                />
+              ) : (
+                <meshPhysicalMaterial
+                  color={color} emissive={emissiveColor} emissiveIntensity={0.3}
+                  metalness={0.3} roughness={0.4} clearcoat={0.15} clearcoatRoughness={0.3}
+                  transparent opacity={0.92} envMapIntensity={0.4}
+                  map={textures?.map}
+                  normalMap={textures?.normalMap}
+                  normalScale={NORMAL_SCALE}
+                  roughnessMap={textures?.roughnessMap}
+                />
+              )}
+            </mesh>
+
+            {/* Fresnel 辉光轮廓 */}
+            {!isLowTier && (
+              <FresnelGlow color={emissiveColor} isActive={isActive} isHovered={isHovered} geometry={geometry} />
+            )}
+
+            {/* 辉光线框 */}
+            {!isMidTier && !isLowTier && (
+              <WireframeGlow color={emissiveColor} isActive={isActive} isHovered={isHovered} geometry={geometry} />
+            )}
+
+            {/* 轨道粒子环 */}
+            {!isLowTier && (isActive || isHovered) && (
+              <OrbitalRing isActive={isActive} isHovered={isHovered} color={emissiveColor} />
+            )}
+
+            {/* 地面辉光 */}
+            {!isLowTier && <GroundGlow color={emissiveColor} isActive={isActive} />}
+          </>
         )}
 
-        {/* Hover label or forced show label */}
+        {/* 标签 */}
         {(showLabel || isHovered) && (
-          <Html
-            center
-            distanceFactor={8}
-            position={[0, 1.3, 0]}
-            style={{ pointerEvents: 'none' }}
-          >
+          <Html center distanceFactor={8} position={[0, 1.3, 0]} style={{ pointerEvents: 'none' }}>
             <div className="rounded-lg bg-slate-900/80 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm whitespace-nowrap border border-indigo-500/30">
               {label}
-              {/* 常驻功能副标题：隐喻名旁附直白功能名 */}
-              {subtitle && (
-                <span className="ml-1.5 text-xs text-white/50">· {subtitle}</span>
-              )}
+              {subtitle && <span className="ml-1.5 text-xs text-white/50">· {subtitle}</span>}
             </div>
           </Html>
         )}

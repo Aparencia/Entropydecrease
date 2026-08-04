@@ -21,7 +21,7 @@
  * @ai-context: 3D 场景核心（R3F）：SceneProvider。
  */
 import { Canvas, useThree } from '@react-three/fiber';
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useLayoutEffect } from 'react';
 import { Preload } from '@react-three/drei';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { QualityController } from './QualityController';
@@ -30,6 +30,7 @@ import { ContextRecovery } from './ContextRecovery';
 import { useOrbitalStore } from '../navigation/OrbitalStore';
 import { usePerformanceModeStore } from '@/lib/performance/usePerformanceMode';
 import { PERFORMANCE_MODE_CONFIG } from '@/lib/performance/performanceMode';
+import { useSceneTheme } from '../hooks/useSceneTheme';
 import * as THREE from 'three';
 
 interface SceneProviderProps {
@@ -39,7 +40,28 @@ interface SceneProviderProps {
 }
 
 /**
- * 渲染循环唤醒器 — 修复“多次切换功能后页面无渲染”
+ * 主题感知雾效/背景 — 深色用深蓝雾，浅色用浅蓝雾
+ * 确保主题切换时雾色和背景色同步更新
+ */
+function ThemeAwareEnvironment() {
+  const { scene } = useThree();
+  const theme = useSceneTheme();
+
+  useEffect(() => {
+    if (theme === 'deep-sea') {
+      scene.fog = new THREE.FogExp2('#0a0a2e', 0.03);
+      scene.background = new THREE.Color('#0a0a2e');
+    } else {
+      scene.fog = new THREE.FogExp2('#e8f4f8', 0.015);
+      scene.background = new THREE.Color('#e8f4f8');
+    }
+  }, [theme, scene]);
+
+  return null;
+}
+
+/**
+ * 渲染循环唤醒器 — 修复"多次切换功能后页面无渲染"
  *
  * R3F 的循环在 frameloop='never' 下会 cancelAnimationFrame 彻底停止；
  * 切回 'always' 时 setFrameloop 只改 store 值，不会重启循环，
@@ -47,15 +69,25 @@ interface SceneProviderProps {
  * 因此在相位/档位迁移后（此时 frameloop prop 已应用）显式 invalidate：
  * 'always' 下 render 每帧返回 1，一次唤醒即可让循环永续运行；
  * docked（'never'）时 invalidate 自动早退，无副作用。
+ *
+ * 修复：使用 useLayoutEffect（同步执行，确保 frameloop prop 已挂载）
+ * + setTimeout 兜底：React 18 中 useEffect 为异步微任务，frameloop
+ * prop 可能在同一个微任务中尚未被 R3F 内部处理，导致 invalidate()
+ * 因 frameloop 仍为 'never' 被早退丢弃。
  */
 function LoopResumer() {
   const invalidate = useThree((s) => s.invalidate);
   const phase = useOrbitalStore((s) => s.phase);
   const mode = usePerformanceModeStore((s) => s.mode);
+  const theme = useSceneTheme();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    // 第一轮：同步执行，确保 frameloop 已挂载
     invalidate();
-  }, [phase, mode, invalidate]);
+    // 第二轮：setTimeout 兜底，确保 React 事务完成、R3F 已处理 frameloop 变更
+    const timer = setTimeout(() => invalidate(), 0);
+    return () => clearTimeout(timer);
+  }, [phase, mode, theme, invalidate]);
 
   return null;
 }
@@ -98,7 +130,7 @@ export function SceneProvider({ children, interactive = false }: SceneProviderPr
           gl.toneMappingExposure = 1.0;
           gl.shadowMap.enabled = true;
           gl.shadowMap.type = THREE.PCFSoftShadowMap;
-          scene.fog = new THREE.FogExp2('#0a0a2e', 0.03);
+          // 注意：fog 和 background 由 ThemeAwareEnvironment 组件管理（主题感知）
           // GPU 诊断：打印实际渲染器名称，出现 SwiftShader 即说明落入软件渲染（硬件加速失效）
           const ctx = gl.getContext();
           const dbgExt = ctx.getExtension('WEBGL_debug_renderer_info');
@@ -111,6 +143,7 @@ export function SceneProvider({ children, interactive = false }: SceneProviderPr
         {/* FPS 自动降档仅在概览态测量（entering 飞行帧率不代表设备能力，docked 无帧率可言） */}
         {phase === 'overview' && <PerformanceMonitor />}
         <LoopResumer />
+        <ThemeAwareEnvironment />
         <QualityController />
         <MemoryManager />
         <ContextRecovery />
