@@ -122,11 +122,17 @@ export async function oplogPull(
     }>(`${basePath}/pull?deviceId=${encodeURIComponent(deviceId)}&sinceVersion=${lastVersion}`);
 
     if (response.operations.length > 0) {
-      await applyRemoteOperations(response.operations);
-      setLastSyncVersion(response.latestVersion);
+      // SYNC2-L1: 游标只推进到最后成功应用的版本——原实现直接用
+      // response.latestVersion 一次性跳过全部，若中间某条 apply 失败
+      //（表缺失/数据异常），该操作被永久跳过（sinceVersion 已越过它）
+      const { applied, lastVersion: appliedVersion } = await applyRemoteOperations(response.operations);
+      if (appliedVersion > lastVersion) {
+        setLastSyncVersion(appliedVersion);
+      }
+      return { pulled: applied, errors };
     }
 
-    return { pulled: response.operations.length, errors };
+    return { pulled: 0, errors };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     errors.push(`Pull failed: ${message}`);
@@ -134,27 +140,51 @@ export async function oplogPull(
   }
 }
 
-/** 将远端操作应用到本地 Dexie（create/update 用 put 幂等覆盖） */
+/**
+ * 将远端操作应用到本地 Dexie（create/update 用 put 幂等覆盖）
+ * 逐条 try/catch：单条失败即停止，返回已成功应用的计数与最后成功版本。
+ * 未知 entityType 的操作跳过但不阻断游标推进（与应用成功等价，
+ * 否则 sinceVersion 不推进会反复拉取同一批数据）。
+ */
 async function applyRemoteOperations(
-  operations: Array<{ entityType: string; entityId: string; operation: string; data: unknown }>,
-): Promise<void> {
+  operations: Array<{ entityType: string; entityId: string; operation: string; data: unknown; version: number }>,
+): Promise<{ applied: number; lastVersion: number }> {
   const { db } = await import('../storage/database');
+  let applied = 0;
+  let lastVersion = -1;
 
   for (const op of operations) {
     const tableName = getEntityTableName(op.entityType);
-    if (!tableName) continue;
+    if (!tableName) {
+      // 未知类型：跳过但继续推进游标，避免永久重复拉取
+      lastVersion = Math.max(lastVersion, op.version);
+      continue;
+    }
 
-    const table = db.table(tableName);
-    switch (op.operation) {
-      case 'create':
-      case 'update':
-        await table.put(op.data);
-        break;
-      case 'delete':
-        await table.delete(op.entityId);
-        break;
+    try {
+      const table = db.table(tableName);
+      switch (op.operation) {
+        case 'create':
+        case 'update':
+          await table.put(op.data);
+          break;
+        case 'delete':
+          await table.delete(op.entityId);
+          break;
+      }
+      applied += 1;
+      lastVersion = Math.max(lastVersion, op.version);
+    } catch (err) {
+      // 单条失败：停止应用，游标停在失败前的最后成功版本，
+      // 下轮拉取重试该操作（避免数据永久丢失）
+      const message = err instanceof Error ? err.message : String(err);
+      // eslint-disable-next-line no-console -- 远端操作应用失败需记录以便排查
+      console.warn(`[oplogSyncChannel] 远端操作应用失败 [${op.entityType}:${op.entityId}] v${op.version}: ${message}`);
+      break;
     }
   }
+
+  return { applied, lastVersion };
 }
 
 /** entityType（服务端操作记录中的键）→ Dexie 表名映射 */

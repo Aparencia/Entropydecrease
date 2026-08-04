@@ -42,8 +42,10 @@ export class OfflineQueue {
     const deviceId = getDeviceId();
 
     // 在 Dexie 事务内完成"读 max version + 1 + 写入"，避免版本号竞态
+    // SYNC2-L4: 取最大值必须按 version（单调自增主键）而非 createdAt——
+    // Date 毫秒精度下同一毫秒的并发写入会取到错误基线，产生重复版本号
     await db.transaction('rw', db.offlineQueue, async () => {
-      const items = await db.offlineQueue.orderBy('createdAt').reverse().limit(1).toArray();
+      const items = await db.offlineQueue.orderBy('version').reverse().limit(1).toArray();
       const version = items.length > 0 ? (items[0].version || 0) + 1 : 1;
 
       await db.offlineQueue.add({

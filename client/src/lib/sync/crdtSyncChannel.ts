@@ -25,10 +25,12 @@ export async function crdtPush(
 
   try {
     // 收集所有启用 CRDT 的表的待上传变更
+    // SYNC2-L3: 按表分别取（每表各自 limit 50）——原实现每表取全局前 50
+    // 条再 filter，靠后表的高 seq 变更会被靠前表挤掉，形成推送饥饿
     const allPending: CRDTChangeRecord[] = [];
     for (const tableName of CRDT_ENABLED_TABLES) {
-      const pending = await getPendingCRDTChanges(50);
-      allPending.push(...pending.filter(p => p.tableName === tableName));
+      const pending = await getPendingCRDTChanges(50, tableName);
+      allPending.push(...pending);
     }
 
     if (allPending.length === 0) return { pushed: 0, errors };

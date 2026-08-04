@@ -70,7 +70,13 @@ export class SyncEngine {
     if (now - this.lastAutoSyncAt < gapMs) return;
     this.lastAutoSyncAt = now;
     const result = await this.sync();
-    if (result.errors.length > 0) {
+    // SYNC2-L2: 并发锁/离线是正常状态而非故障——原实现把这两个错误计入
+    // autoSyncFailures，网络恢复瞬间的并发 sync 会误触发指数退避，
+    // 导致自动同步长时间被抑制
+    const actionableErrors = result.errors.filter(
+      (e) => e !== 'Sync already in progress' && e !== 'Device is offline',
+    );
+    if (actionableErrors.length > 0) {
       this.autoSyncFailures += 1;
     } else {
       this.autoSyncFailures = 0;
