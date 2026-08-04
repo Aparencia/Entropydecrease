@@ -46,6 +46,11 @@ const InspirationPage = lazy(() => import('@/features/inspiration/pages/Inspirat
 const ClassroomPage = lazy(() => import('@/features/classroom/pages/ClassroomPage'));
 const OnboardingPage = lazy(() => import('@/pages/OnboardingPage'));
 const SettlingPage = lazy(() => import('@/features/settling/pages/SettlingPage'));
+const SopListPage = lazy(() => import('@/features/sop/pages/SopListPage'));
+const SopEditorPage = lazy(() => import('@/features/sop/pages/SopEditorPage'));
+const SopRunPage = lazy(() => import('@/features/sop/pages/SopRunPage'));
+const InboxPage = lazy(() => import('@/features/inbox/pages/InboxPage'));
+const CertificatePage = lazy(() => import('@/features/dashboard/pages/CertificatePage'));
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
 const ResetPasswordPage = lazy(() => import('@/pages/ResetPassword'));
@@ -103,7 +108,16 @@ const routes: RouteObject[] = [
       { path: '/inspiration', element: <SuspenseWrapper><InspirationPage /></SuspenseWrapper> },
       { path: '/classroom', element: <SuspenseWrapper><ClassroomPage /></SuspenseWrapper> },
       { path: '/settling', element: <SuspenseWrapper><SettlingPage /></SuspenseWrapper> },
+      { path: '/sop', element: <SuspenseWrapper><SopListPage /></SuspenseWrapper> },
+      { path: '/sop/editor/:id?', element: <SuspenseWrapper><SopEditorPage /></SuspenseWrapper> },
+      { path: '/inbox', element: <SuspenseWrapper><InboxPage /></SuspenseWrapper> },
+      { path: '/certificate', element: <SuspenseWrapper><CertificatePage /></SuspenseWrapper> },
     ],
+  },
+  {
+    // SOP 全屏沉浸执行器：仿 /onboarding 先例挂在 AuthGuard/AppLayout 之外，绕开 3D canvas
+    path: '/sop/run/:runId',
+    element: <SuspenseWrapper><SopRunPage /></SuspenseWrapper>,
   },
   {
     path: '/onboarding',

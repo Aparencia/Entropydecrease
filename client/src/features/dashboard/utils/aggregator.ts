@@ -1,6 +1,7 @@
 /** @file 学习分析聚合纯函数 — 五维雷达 / 热力图 / 趋势 / 推荐 */
 import type { PomodoroSession, Note, Flashcard, FeynmanNote, FlashcardReview } from '@/types/models';
 import type { RadarDimension, HeatmapCell, TrendPoint, TimeSlotRecommendation, GoalProgress, AnalyticsAggregate } from '../types/analytics';
+import { buildHourlyCurve, getEnergyLevel, type RhythmSession } from '@/features/pomodoro/lib/rhythmEngine';
 
 const DAY_MS = 86_400_000;
 const toISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -50,20 +51,45 @@ export function computeRadarData(
   ];
 }
 
-/** 按时段+星期聚合学习分钟数，返回 7×24 热力图矩阵 */
+/**
+ * 按时段+星期聚合学习分钟数，返回 7×24 热力图矩阵。
+ * D5 扩展：efficiency=该时段完成率均值（效率维度），
+ * peak=该小时是否为个人黄金时段（rhythmEngine 高峰档，用于黄金时段标注）。
+ */
 export function computeHeatmap(sessions: PomodoroSession[], days = 30): HeatmapCell[] {
   const rs = recent(sessions, (s) => new Date(s.completedAt), days);
   const m: Record<string, number> = {};
+  const eff: Record<string, { sum: number; count: number }> = {};
   rs.forEach((s) => {
     const d = new Date(s.completedAt);
     const dow = d.getDay() === 0 ? 6 : d.getDay() - 1;
     const key = `${dow}-${d.getHours()}`;
     m[key] = (m[key] ?? 0) + Math.round(s.actualDuration / 60);
+    // 效率维度：完成率（实际/计划），截断 0-1.2 防异常值
+    const rate = s.duration > 0 ? Math.min(1.2, s.actualDuration / s.duration) : 0;
+    const e = eff[key] ?? { sum: 0, count: 0 };
+    e.sum += rate; e.count += 1;
+    eff[key] = e;
   });
+
+  // 黄金时段：按小时构建个人效率曲线，high 档 = 黄金时段。
+  // 注意：曲线固定使用 30 天窗口（buildHourlyCurve 内部 LOOKBACK_DAYS=30），
+  // 而分钟数按 days 参数过滤——两者窗口不同是有意设计：peak 表达"个人时段
+  // 习惯"（长窗口更稳定），days<30 时 minutes 聚焦近期，互不冲突。
+  const curve = buildHourlyCurve(
+    sessions.map((s) => ({ duration: s.duration, completed: !s.interrupted, date: new Date(s.completedAt).toISOString() }) as RhythmSession),
+  );
+
   const cells: HeatmapCell[] = [];
   for (let dow = 0; dow < 7; dow++)
-    for (let h = 0; h < 24; h++)
-      cells.push({ dayOfWeek: dow, hour: h, value: m[`${dow}-${h}`] ?? 0 });
+    for (let h = 0; h < 24; h++) {
+      const e = eff[`${dow}-${h}`];
+      cells.push({
+        dayOfWeek: dow, hour: h, value: m[`${dow}-${h}`] ?? 0,
+        efficiency: e && e.count > 0 ? Math.round((e.sum / e.count) * 100) / 100 : undefined,
+        peak: getEnergyLevel(curve, h) === 'high',
+      });
+    }
   return cells;
 }
 

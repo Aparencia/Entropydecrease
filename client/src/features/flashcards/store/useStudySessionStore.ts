@@ -26,6 +26,12 @@ const MAX_SESSION_CARDS = 20;
 /** 黄金错误加速复习：下次间隔压缩上限（天） */
 const GOLDEN_ERROR_MAX_INTERVAL_DAYS = 1;
 
+/**
+ * R9 成就检查会话级节流：startSession 重置，每次会话只触发一次检查，
+ * 避免评分高频路径反复全表 count（模块级变量，store 为单例）
+ */
+let achievementCheckedInSession = false;
+
 // ---------------------------------------------------------------------------
 // 类型定义
 // ---------------------------------------------------------------------------
@@ -52,7 +58,8 @@ interface StudySessionState {
   showStrengthPulse: boolean;
 
   // 会话操作
-  startSession: (deckId: string) => Promise<void>;
+  /** @param limit 可选卡数上限（F3 睡前迷你复习等轻量会话用） */
+  startSession: (deckId: string, limit?: number) => Promise<void>;
   rateCard: (rating: Rating, confidence?: Confidence) => Promise<void>;
   flipCard: () => void;
   endSession: () => void;
@@ -120,8 +127,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
     // -----------------------------------------------------------------------
     // startSession：加载到期卡片 + 补充新卡（带每日限额）
     // -----------------------------------------------------------------------
-    startSession: async (deckId) => {
-      // 确保牌组卡片已加载到 flashcard store
+    startSession: async (deckId, limit) => {
       const { cards, loadCards } = useFlashcardStore.getState();
       if (cards.length === 0 || useFlashcardStore.getState().selectedDeckId !== deckId) {
         await loadCards(deckId);
@@ -194,6 +200,11 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         sessionCards = [...dedupedDue, ...dedupedNew.slice(0, Math.max(0, needNew))];
       }
 
+      // 可选 limit（F3 睡前迷你复习：仅复习前 5 张，降低入睡前启动门槛）
+      if (limit && limit > 0 && sessionCards.length > limit) {
+        sessionCards = sessionCards.slice(0, limit);
+      }
+
       if (sessionCards.length === 0) {
         // 无可学习卡片，不启动会话
         return;
@@ -210,6 +221,8 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         isActive: true,
         cardStartTime: new Date(),
       });
+      // R9: 新会话重置成就检查节流标记
+      achievementCheckedInSession = false;
     },
 
     // -----------------------------------------------------------------------
@@ -315,6 +328,21 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
           : 0,
       };
       await createWithLog(flashcardReviewStore, 'flashcardReviews', review);
+
+      // R9 百卡复习成就：每次会话仅检查一次（评分高频路径避免反复全表 count）；
+      // 检查失败时复位节流标记，允许本会话稍后重试
+      if (!achievementCheckedInSession) {
+        achievementCheckedInSession = true;
+        import('@/lib/achievements/evaluator').then(({ checkAchievements }) => {
+          return checkAchievements({ type: 'review_completed' });
+        }).then((unlocked) => {
+          unlocked.forEach(a => {
+            window.dispatchEvent(new CustomEvent('achievement-unlocked', { detail: a }));
+          });
+        }).catch(() => {
+          achievementCheckedInSession = false;
+        });
+      }
 
       // 同步 flashcard store 中对应的卡片状态（含操作日志）
       const flashcardState = useFlashcardStore.getState();

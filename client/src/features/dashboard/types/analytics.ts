@@ -14,6 +14,10 @@ export interface HeatmapCell {
   dayOfWeek: number;  // 0=周一 ~ 6=周日
   hour: number;       // 0-23
   value: number;      // 学习强度（分钟数）
+  /** D5: 该时段完成率均值 0-1（效率维度，缺省=无样本） */
+  efficiency?: number;
+  /** D5: 该小时是否为个人黄金时段（rhythmEngine 高峰档） */
+  peak?: boolean;
 }
 
 /** 趋势数据点 */

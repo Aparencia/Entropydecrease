@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Timer, Layers, Lightbulb, FileText, Flame, Trophy, Medal,
+  Timer, Layers, Lightbulb, FileText, Flame, Trophy, Medal, Repeat, ListChecks, Award,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -14,8 +14,9 @@ import { db } from '@/lib/storage/database';
 import { ACHIEVEMENT_DEFS } from '@/lib/achievements/definitions';
 import type { Achievement } from '@/types/models';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { useNavigate } from 'react-router-dom';
 
-const ICON_MAP: Record<string, LucideIcon> = { Timer, Layers, Lightbulb, FileText, Flame, Trophy, Medal };
+const ICON_MAP: Record<string, LucideIcon> = { Timer, Layers, Lightbulb, FileText, Flame, Trophy, Medal, Repeat, ListChecks };
 
 function formatDate(date: Date): string {
   const d = new Date(date);
@@ -23,8 +24,8 @@ function formatDate(date: Date): string {
 }
 
 export default function AnglerfishAchievements() {
+  const navigate = useNavigate();
   const [unlockedMap, setUnlockedMap] = useState<Record<string, Achievement>>({});
-  const [loading, setLoading] = useState(true);
   const prefersReduced = useReducedMotion();
 
   useEffect(() => {
@@ -34,8 +35,7 @@ export default function AnglerfishAchievements() {
         const map: Record<string, Achievement> = {};
         achievements.forEach((a) => { map[a.key] = a; });
         setUnlockedMap(map);
-      })
-      .finally(() => setLoading(false));
+      });
   }, []);
 
   const unlockedCount = Object.keys(unlockedMap).length;
@@ -50,7 +50,17 @@ export default function AnglerfishAchievements() {
       {/* 标题 */}
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-[10px] font-medium text-cyan-200/60">灯笼鱼成就</h3>
-        <span className="text-[9px] text-amber-300/50">{unlockedCount}/{ACHIEVEMENT_DEFS.length}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[9px] text-amber-300/50">{unlockedCount}/{ACHIEVEMENT_DEFS.length}</span>
+          {/* R9 成就证书入口：跳转打印页生成证书 */}
+          <button
+            onClick={() => navigate('/certificate')}
+            className="flex items-center gap-0.5 text-[9px] text-cyan-200/50 hover:text-cyan-200 transition-colors"
+            title="生成成就证书"
+          >
+            <Award className="w-3 h-3" strokeWidth={1.5} /> 证书
+          </button>
+        </div>
       </div>
 
       {/* 成就网格 */}
