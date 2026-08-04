@@ -111,6 +111,8 @@ GLOBAL_EXEMPT_FEATURES: frozenset[str] = frozenset({"transcribe", "chat"})
 # GW-2#9: 启动校验——PATH_TO_FEATURE 登记的 feature 必须同时在
 # TIMEOUT_CONFIG 与 RATE_LIMITS 登记，否则静默兜底（300s 超时/默认 10 次限流）
 # 会掩盖配置缺失（import_concept 曾因此落入 300s 超时预算）
+# GW-3(X6): 校验提取为公共函数——流式路由（/{feature}/stream）的
+# _FEATURE_TO_CONFIG_KEY 注册表同样调用，覆盖此前校验盲区
 _MISSING_CONFIG = sorted(
     f for f in set(PATH_TO_FEATURE.values())
     if f not in RATE_LIMITS or f not in TIMEOUT_CONFIG
@@ -120,6 +122,20 @@ if _MISSING_CONFIG:
         "以下 feature 缺少 TIMEOUT_CONFIG/RATE_LIMITS 登记（将使用兜底值）: %s",
         _MISSING_CONFIG,
     )
+
+
+def warn_missing_feature_config(features: set[str], source: str) -> None:
+    """GW-3(X6): 校验一组 feature 是否同时登记 TIMEOUT_CONFIG 与 RATE_LIMITS。
+
+    中间件（PATH_TO_FEATURE）与流式路由（_FEATURE_TO_CONFIG_KEY）共用本函数，
+    新增功能漏配时启动即告警，避免静默落入 300s 兜底超时/默认 10 次限流。
+    """
+    missing = sorted(f for f in features if f not in RATE_LIMITS or f not in TIMEOUT_CONFIG)
+    if missing:
+        logger.warning(
+            "[%s] 以下 feature 缺少 TIMEOUT_CONFIG/RATE_LIMITS 登记（将使用兜底值）: %s",
+            source, missing,
+        )
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

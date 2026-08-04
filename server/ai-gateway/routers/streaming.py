@@ -24,7 +24,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from config import call_with_fallback_stream
-from middleware.rate_limit import check_rate_limit
+from middleware.rate_limit import check_rate_limit, warn_missing_feature_config
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/ai", tags=["流式输出"])
@@ -164,6 +164,10 @@ _FEATURE_TO_CONFIG_KEY: dict[str, str] = {
     "rescue": "rescue",
     "inspiration-draft": "inspiration_draft",
 }
+
+# GW-3(X6): 启动校验——流式 feature 同样必须登记 TIMEOUT_CONFIG/RATE_LIMITS
+#（原校验只覆盖中间件 PATH_TO_FEATURE，流式注册表漏配不告警）
+warn_missing_feature_config(set(_FEATURE_TO_CONFIG_KEY.values()), "streaming")
 
 
 # ============================================================

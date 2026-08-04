@@ -126,6 +126,9 @@ class DeepSeekProvider(AIProvider):
                     cache_miss_tokens = prompt_tokens - cache_hit_tokens
                     # DeepSeek 缓存命中按 1/4 价格计费
                     effective_tokens = int(cache_hit_tokens * 0.25) + cache_miss_tokens + completion_tokens
+                    # GW-3(X4): input 记账改用缓存未命中部分（命中部分按 1/4
+                    # 计费）——原实现用原始 prompt_tokens，缓存命中场景成本高估
+                    input_tokens = cache_miss_tokens
                     logger.info(
                         "DeepSeek 缓存命中: hit=%d, miss=%d, 实际计费 token=%d",
                         cache_hit_tokens, cache_miss_tokens, effective_tokens,

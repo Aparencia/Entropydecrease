@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import type { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase, isPlaceholder } from './supabaseClient';
 import { useToast } from '@/components/ui';
+import { cryptoManager } from '@/lib/crypto';
 
 interface AuthState {
   user: User | null;
@@ -36,6 +37,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   /** 标记用户主动登出，避免将主动登出误判为 session 过期 */
   const intentionalSignOutRef = useRef(false);
+
+  // GW-3(X1): 加密初始化接入登录生命周期——init 原无调用方，safeStorage 加密
+  // 路径从未激活（敏感字段恒明文写入）。登录成功后派生设备级 AES 密钥
+  //（Electron 环境经 safeStorage 加密落盘），登出/未登录时清除密钥。
+  // init 失败时显式提示（已置 initFailed 标记），不静默降级为明文
+  useEffect(() => {
+    const userId = state.user?.id;
+    if (userId) {
+      cryptoManager.init(userId).catch((err) => {
+        console.warn('[Auth] CryptoManager init failed, sensitive fields will be stored in plaintext:', err);
+        toast({ type: 'warning', message: '本地加密初始化失败，敏感字段将以明文存储' });
+      });
+    } else {
+      cryptoManager.clear();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.user?.id]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {

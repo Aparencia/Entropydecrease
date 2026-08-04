@@ -143,11 +143,17 @@ class GeminiProvider(AIProvider):
             latency_ms = int((time.monotonic() - start_time) * 1000)
             content = response.text or ""
             tokens_used = 0
+            input_tokens = 0
+            output_tokens = 0
             if response.usage_metadata:
                 tokens_used = response.usage_metadata.total_token_count or 0
+                # GW-3(X4): 视觉路径同样返回 input/output 拆分供成本记账
+                input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
             logger.info("GeminiProvider.generate_vision 成功: model=%s, tokens=%d, latency=%dms",
                         model, tokens_used, latency_ms)
             return {"content": content, "tokens_used": tokens_used,
+                    "input_tokens": input_tokens, "output_tokens": output_tokens,
                     "model": model, "latency_ms": latency_ms}
         except Exception as e:
             logger.error("GeminiProvider.generate_vision 失败: %s", str(e))
@@ -194,11 +200,17 @@ class GeminiProvider(AIProvider):
             latency_ms = int((time.monotonic() - start_time) * 1000)
             content = response.text or ""
             tokens_used = 0
+            input_tokens = 0
+            output_tokens = 0
             if response.usage_metadata:
                 tokens_used = response.usage_metadata.total_token_count or 0
+                # GW-3(X4): 多图路径同样返回 input/output 拆分供成本记账
+                input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
             logger.info("GeminiProvider.generate_vision_multi 成功: model=%s, images=%d, tokens=%d, latency=%dms",
                         model, len(images_base64), tokens_used, latency_ms)
             return {"content": content, "tokens_used": tokens_used,
+                    "input_tokens": input_tokens, "output_tokens": output_tokens,
                     "model": model, "latency_ms": latency_ms}
         except Exception as e:
             logger.error("GeminiProvider.generate_vision_multi 失败: %s", str(e))
@@ -261,11 +273,17 @@ class GeminiProvider(AIProvider):
             latency_ms = int((time.monotonic() - start_time) * 1000)
             content = response.text or ""
             tokens_used = 0
+            input_tokens = 0
+            output_tokens = 0
             if response.usage_metadata:
                 tokens_used = response.usage_metadata.total_token_count or 0
+                # GW-3(X4): 视频路径同样返回 input/output 拆分供成本记账
+                input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
             logger.info("GeminiProvider.generate_video 成功: model=%s, tokens=%d, latency=%dms",
                         model, tokens_used, latency_ms)
             return {"content": content, "tokens_used": tokens_used,
+                    "input_tokens": input_tokens, "output_tokens": output_tokens,
                     "model": model, "latency_ms": latency_ms}
         except Exception as e:
             logger.error("GeminiProvider.generate_video 失败: %s", str(e))

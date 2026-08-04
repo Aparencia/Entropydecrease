@@ -137,9 +137,12 @@ async def error_pattern(request: Request, body: ErrorPatternRequest) -> ErrorPat
     # GW-2#10: 缓存键加入 user_id 隔离——错误模式分析结果基于用户私有
     # 学习数据，原键不含用户维度，内容相同的不同用户会串用彼此的分析结论
     #（隐私泄露 + 正确性错误）；同时不再截断 50 字符（sha256 本身压缩长度）
+    # GW-3(X5): 键仅含 chain 实际消费的字段（前 20 条 correctAnswer/userAnswer，
+    # flashcardId 不参与分析）——原键含 flashcardId 与全量文本，同内容不同
+    # flashcardId 不命中缓存，命中率低（多付 AI 调用成本）
     errors_str = "|".join([
-        f"{e.flashcardId}:{e.correctAnswer}:{e.userAnswer}"
-        for e in body.goldenErrors
+        f"{e.correctAnswer}:{e.userAnswer}"
+        for e in body.goldenErrors[:20]
     ])
     cache_key = hashlib.sha256(f"{user_id}:{errors_str}".encode()).hexdigest()
 

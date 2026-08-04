@@ -51,6 +51,8 @@ class McpManager {
   /** ELEC2-M1: init 重试计数与定时器（指数退避，环境故障自愈） */
   private retryAttempts = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  /** GW-3(X1): 退出标志——shutdown 发起后禁止再调度 init 重试 */
+  private shuttingDown = false;
   /** 待响应的请求回调 */
   private pending = new Map<string, {
     resolve: (value: unknown) => void;
@@ -135,6 +137,12 @@ class McpManager {
       // ELEC2-M1: 重置 initialized 并指数退避重试——原实现保留 true 导致
       // MCP 功能本次运行永久静默禁用（bridge 故障/环境变量缺失后无自愈机会）
       this.initialized = false;
+      // GW-3(X1): shutdown 已发起时不再调度重试——否则退出窗口期（timer
+      // 回调已触发、init 的 sendRequest in-flight）会 fork 孤儿子进程
+      if (this.shuttingDown) {
+        logger.warn('[MCP] Init failed during shutdown, skip retry scheduling');
+        return;
+      }
       this.scheduleRetryInit();
     }
   }
@@ -204,6 +212,11 @@ class McpManager {
    */
   async shutdown(): Promise<void> {
     logger.info('[MCP] Shutting down MCP Manager...');
+
+    // GW-3(X1): 置位退出标志 + 复位重试计数——in-flight init 失败后不再
+    // 调度重试；重试计数复位防止 dev 热重载重启后直接耗尽
+    this.shuttingDown = true;
+    this.retryAttempts = 0;
 
     // ELEC2-M1: 取消未执行的重试定时器（退出时不再自愈）
     if (this.retryTimer) {
