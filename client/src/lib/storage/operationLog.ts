@@ -60,7 +60,10 @@ export async function logOperation<T extends Record<string, unknown>>(
       payload: serializedPayload,
       patch,
       createdAt: new Date(),
-      synced: false,
+      // SYNC2-H4: 写入数值 0/1（与查询 equals(0)/equals(1) 保持一致）——
+      // IndexedDB 键相等判定要求同类型，boolean 与 number 不相等会
+      // 导致 getUnsyncedLogs 永远返回空、oplog push 静默失效
+      synced: 0,
       version,
       deviceId,
     });
@@ -81,11 +84,29 @@ export async function getUnsyncedLogsBatch(batchSize: number = 50): Promise<Oper
   return logs.slice(0, batchSize);
 }
 
-// 标记日志为已同步
+// 标记日志为已同步（SYNC2-H4: 写入数值 1 与查询一致）
 export async function markLogsSynced(ids: string[]): Promise<void> {
   await db.operationLog.bulkUpdate(ids.map(id => ({
     key: id,
-    changes: { synced: true }
+    changes: { synced: 1 }
+  })));
+}
+
+/**
+ * SYNC2-H1: 将指定实体的全部未同步日志标记为已同步。
+ * 冲突 resolve 成功后调用——resolve 已代表该实体最终状态，
+ * 若不清除本地日志，下次 push 时旧版本日志仍会冲突（服务端
+ * 版本已推进），形成永久循环冲突。
+ */
+export async function markEntityLogsSynced(entityType: string, entityId: string): Promise<void> {
+  const logs = await db.operationLog
+    .where('entityType').equals(entityType)
+    .filter(l => l.entityId === entityId && l.synced === 0)
+    .toArray();
+  if (logs.length === 0) return;
+  await db.operationLog.bulkUpdate(logs.map(l => ({
+    key: l.id,
+    changes: { synced: 1 },
   })));
 }
 

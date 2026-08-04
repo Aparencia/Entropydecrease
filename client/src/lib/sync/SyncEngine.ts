@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/http/apiClient';
-import { getDeviceId } from '../storage/operationLog';
+import { getDeviceId, markEntityLogsSynced } from '../storage/operationLog';
 import { offlineQueue } from './OfflineQueue';
 import { networkManager, type NetworkStatus } from './NetworkManager';
 import type { SyncConflict } from '@/types/models';
@@ -90,10 +90,13 @@ export class SyncEngine {
   /**
    * 暂停同步引擎
    * 阻止新的同步请求（用于路径切换等关键操作前）
+   * SYNC2-H3: 不再置 syncInProgress=true——该标志是"sync 执行中"的锁，
+   * 由 sync() 的 finally 负责释放；pause 直接置位会导致无 sync 运行时
+   * 锁永不清除，resume() 轮询等待永久挂起（同步引擎瘫痪）。
+   * paused 标志本身已足以阻止新 sync 启动。
    */
   pause(): void {
     this.paused = true;
-    this.syncInProgress = true;
   }
 
   /**
@@ -102,11 +105,18 @@ export class SyncEngine {
    */
   async resume(): Promise<void> {
     this.paused = false;
-    // 如有进行中的 sync，等待其完成
+    // 如有进行中的 sync，等待其完成（SYNC2-H3: 15s 超时保护，
+    // 防止 sync 异常挂起导致 resume 永久等待）
     if (this.syncInProgress) {
       await new Promise<void>((resolve) => {
+        const startedAt = Date.now();
         const check = () => {
           if (!this.syncInProgress) {
+            resolve();
+          } else if (Date.now() - startedAt > 15000) {
+            // 超时兜底：强制清锁继续（sync 的 finally 可能因异常路径未执行）
+            logger.warn('[SyncEngine] resume: waiting for in-flight sync timed out, forcing unlock');
+            this.syncInProgress = false;
             resolve();
           } else {
             setTimeout(check, 50);
@@ -289,6 +299,13 @@ export class SyncEngine {
         data,
         version: strategy === 'remote' ? conflict.remoteVersion : Math.max(conflict.localVersion, conflict.remoteVersion) + 1,
       });
+
+      if (response.resolved) {
+        // SYNC2-H1: resolve 成功后该实体的本地日志全部标记已同步——
+        // resolve 已代表该实体最终状态；若不清理，旧版本日志下次 push
+        // 仍会冲突（服务端版本已推进），形成永久循环冲突
+        await markEntityLogsSynced(conflict.entityType, conflict.entityId);
+      }
 
       return { resolved: response.resolved, errors };
     } catch (error: unknown) {

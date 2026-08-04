@@ -18,7 +18,8 @@ export interface OperationLog {
   operation: 'create' | 'update' | 'delete';
   payload?: string;              // JSON 格式的变更数据
   createdAt: Date;
-  synced: boolean;               // 是否已同步到云端
+  /** 是否已同步到云端（SYNC2-H4: 存储为数值 0/1——IndexedDB 键相等判定要求同类型，boolean 与 number 0/1 不相等会导致查询失效） */
+  synced: 0 | 1;
   // MVP-2 新增同步字段
   version: number;
   deviceId: string;

@@ -2,6 +2,7 @@ import { apiClient } from '@/lib/http/apiClient';
 import { getDeviceId, getUnsyncedLogsBatch, markLogsSynced } from '../storage/operationLog';
 import type { SyncConflict } from '@/types/models';
 import { getLastSyncVersion, setLastSyncVersion } from './syncCursors';
+import type { OperationLog } from '@/types/sync';
 
 /**
  * oplog 同步通道（传统 operationLog 推拉路径）
@@ -71,13 +72,16 @@ export async function oplogPush(
     // Handle conflicts
     if (response.conflicts.length > 0) {
       for (const conflict of response.conflicts) {
+        // SYNC2-H2: 冲突对象必须携带真实本地数据——原实现 localData 硬编码 '{}'
+        // 导致用户选择"保留本地"时提交空对象覆盖服务端实体（数据清空）
+        const { localDataStr, localVersion } = await resolveLocalConflictData(logs, conflict.entityType, conflict.entityId);
         conflicts.push({
           id: crypto.randomUUID(),
           entityType: conflict.entityType,
           entityId: conflict.entityId,
-          localData: '{}',
+          localData: localDataStr,
           remoteData: JSON.stringify(conflict.serverData),
-          localVersion: logs.find(l => l.entityId === conflict.entityId)?.version || 0,
+          localVersion,
           remoteVersion: conflict.serverVersion,
           status: 'pending',
           createdAt: new Date(),
@@ -170,4 +174,44 @@ function getEntityTableName(entityType: string): string | null {
     'settings': 'appSettings',
   };
   return typeMap[entityType] || null;
+}
+
+/**
+ * SYNC2-H2: 解析冲突实体的本地数据与版本。
+ * 优先取该实体最后一条携带 payload 的日志（本地最终写入状态）；
+ * 无 payload（纯 delete 日志）时回退读取业务表当前数据。
+ * localVersion 取该实体最后一条日志的版本（原实现取第一条=最小版本）。
+ */
+async function resolveLocalConflictData(
+  logs: OperationLog[],
+  entityType: string,
+  entityId: string,
+): Promise<{ localDataStr: string; localVersion: number }> {
+  const entityLogs = logs.filter(l => l.entityId === entityId && l.entityType === entityType);
+  const lastLog = entityLogs[entityLogs.length - 1];
+  const lastPayloadLog = [...entityLogs].reverse().find(l => l.payload);
+
+  if (lastPayloadLog?.payload) {
+    return {
+      localDataStr: lastPayloadLog.payload,
+      localVersion: lastLog?.version ?? lastPayloadLog.version,
+    };
+  }
+
+  // 纯 delete 或 payload 缺失：尝试从业务表读取当前数据
+  if (lastLog) {
+    const { db } = await import('../storage/database');
+    const tableName = getEntityTableName(entityType);
+    if (tableName) {
+      try {
+        const row = await db.table(tableName).get(entityId);
+        if (row) {
+          return { localDataStr: JSON.stringify(row), localVersion: lastLog.version };
+        }
+      } catch {
+        // 表不存在/读取失败时回退空对象（保持原有行为）
+      }
+    }
+  }
+  return { localDataStr: '{}', localVersion: lastLog?.version ?? 0 };
 }
