@@ -140,6 +140,10 @@ const ALLOWED_CHANNELS = [
   'sovereignty:import-world',
   // 知识星座 IPC channel（阶段 B：只读图谱聚合）
   'knowledge:get-graph',
+  // E2 费曼录音持久化 IPC channel（{userData}/recordings 读写）
+  'recording:save',
+  'recording:load',
+  'recording:delete',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */
@@ -314,6 +318,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('storage:change-path', { newPath }),
     getActivePath: () =>
       ipcRenderer.invoke('storage:get-active-path'),
+  },
+  // ---- E2: 费曼录音持久化 API ----
+  recording: {
+    save: (stem: string, base64: string) =>
+      ipcRenderer.invoke('recording:save', { stem, base64 }),
+    load: (stem: string) =>
+      ipcRenderer.invoke('recording:load', { stem }),
+    delete: (stem: string) =>
+      ipcRenderer.invoke('recording:delete', { stem }),
   },
   // ---- Ollama 本地推理 API ----
   ollama: {

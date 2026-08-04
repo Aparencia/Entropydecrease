@@ -50,6 +50,8 @@ declare global {
       onMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void;
       onSyncBeforeQuit: (callback: () => void) => () => void;
       notifySyncComplete: () => void;
+      /** 监听全局快捷键触发（payload: { id, text? }，shortcutManager 驱动） */
+      onShortcutTriggered: (callback: (payload: { id: string; text?: string }) => void) => () => void;
       setAutoUpdate: (enabled: boolean) => Promise<unknown>;
       /** FRONT2-M5: safeStorage 系统级加密（密钥材料落盘保护） */
       safeStorageEncrypt: (plain: string) => Promise<string>;
@@ -72,6 +74,12 @@ declare global {
       storage: {
         changePath: (newPath: string) => Promise<{ success: boolean; previousPath?: string; newPath?: string; error?: string }>;
         getActivePath: () => Promise<unknown>;
+      };
+      /** E2: 费曼录音持久化（{userData}/recordings） */
+      recording: {
+        save: (stem: string, base64: string) => Promise<{ success: boolean; fileName?: string }>;
+        load: (stem: string) => Promise<{ success: boolean; base64?: string; notFound?: boolean; error?: string }>;
+        delete: (stem: string) => Promise<{ success: boolean }>;
       };
       /** Ollama 本地推理 API */
       ollama: {

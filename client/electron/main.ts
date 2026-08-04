@@ -44,6 +44,7 @@ import { registerStorageIpcHandlers } from './storageIpcHandlers.js';
 import { registerKeyframeScheme, registerKeyframeIpcHandlers } from './ipc/keyframeStorage.js';
 import { loadPerformanceMode, registerPerformanceHandlers } from './performanceMode.js';
 import { registerShortcuts, unregisterShortcuts } from './shortcutManager.js';
+import { registerRecordingIpcHandlers } from './recordingStorage.js';
 
 // ================================================================
 // 性能优化：启用 GPU 光栅化与零拷贝
@@ -294,6 +295,9 @@ if (!gotTheLock) {
     // G7 全局快捷键框架：注册 SHORTCUT_DEFS 声明的系统级快捷键
     // （capture-clipboard 等），触发事件经 shortcut:triggered 推送给渲染层
     registerShortcuts(() => mainWindow);
+
+    // E2 费曼录音持久化 IPC（{userData}/recordings 读写）
+    registerRecordingIpcHandlers();
 
     initAutoUpdater(mainWindow);
 

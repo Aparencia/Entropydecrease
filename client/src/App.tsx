@@ -22,6 +22,7 @@ import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { getAIConfig } from '@/lib/ai/config';
 import { OfflineAIQueueBootstrap } from '@/lib/ai/OfflineAIQueueBootstrap';
 import { AssistantRoot } from '@/features/assistant/AssistantRoot';
+import { ShortcutRoot } from '@/features/shortcut/ShortcutRoot';
 import { assistantEventBus } from '@/features/assistant/lib/eventBus';
 import { RETURN_THRESHOLD_MS } from '@/features/assistant/constants';
 // 留存机制：初始化 hook（store 加载）+ 深海发现弹窗（全局 portal）
@@ -157,6 +158,9 @@ function App() {
               <OfflineAIQueueBootstrap />
               {/* AI 学伴：全局浮层，路由之外、Provider 之内，偏好关闭时零开销 */}
               <AssistantRoot />
+              {/* 全局快捷键：订阅主进程 shortcut:triggered 并按 id 分发
+                  （capture-clipboard 收藏剪贴板到收件箱） */}
+              <ShortcutRoot />
               {/* 留存机制：深海发现揭示弹窗（createPortal 到 body，与 AchievementToast 同级）
                   仅当 discoveryStore 有待展示发现时才渲染实际 DOM */}
               <DiscoveryReveal />
