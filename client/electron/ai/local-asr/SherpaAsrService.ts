@@ -161,6 +161,17 @@ export function getOnlineRecognizer(): OnlineRecognizer | null {
 // ================================================================
 
 /**
+ * TODO(P1-3 热词增强): 经查 sherpa-onnx-node 类型声明，hotwords 仅 transducer
+ * 系模型支持（OfflineStream createStream(hotwords)，见 non-streaming-asr.js 注释
+ * "Hotwords are supported only by transducer models"）；本项目使用的
+ * SenseVoice（offline）与 Paraformer（streaming）均不支持。故本期不透传热词，
+ * 渲染进程词表 boost 词条已由 hotwordRuntime.getSessionBoostWords() 预留，
+ * 未来若换用 zipformer-transducer 模型，可给 local_asr_transcribe /
+ * local_asr_stream_start 的 IPC payload 增加可选 hotwords 字段（旧载荷须兼容）
+ * 并在 createStream 时传入。云端网关热词透传同为遗留项（不改 transcribe.py）。
+ */
+
+/**
  * 检测本地 ASR 是否可用（sherpa-onnx 已加载 + 模型已下载）
  */
 export async function checkLocalAsrAvailable(): Promise<boolean> {

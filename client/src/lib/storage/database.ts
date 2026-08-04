@@ -9,6 +9,7 @@ import type {
 } from '@/types/models';
 import type { DeepSeaDiscovery, CoralRecord, StreakState } from '@/features/retention/types';
 import type { ClassroomNote } from './classroomNoteStore';
+import type { HotwordEntry } from './hotwordStore';
 import type { CRDTDocRecord, CRDTChangeRecord } from '@/lib/sync/crdtEngine';
 
 /**
@@ -58,6 +59,8 @@ export class EntropyDecreaseDatabase extends Dexie {
   feynmanAIResults!: Table<FeynmanAIResult, string>;
   /** AI 预测题记录表 — 持久化预测驱动学习的结果 */
   predictions!: Table<PredictionRecord, string>;
+  /** 课堂助手热词/替换词表（P1-3）— boost 热词增强 / replace 替换纠错 */
+  hotwords!: Table<HotwordEntry, string>;
 
   constructor() {
     // 数据库名 'keban' 不可修改（存量用户数据），见文件头 @ai-context
@@ -330,6 +333,12 @@ export class EntropyDecreaseDatabase extends Dexie {
     this.version(23).stores({
       predictions: 'id, noteId, createdAt',
     });
+
+    // 课堂助手 P1-3：热词/替换词表（boost 热词增强 / replace 替换纠错，
+    // courseId 绑定课程名，空 = 全局词条；消费方见 lib/storage/hotwordStore）
+    this.version(24).stores({
+      hotwords: 'id, kind, courseId, createdAt',
+    });
   }
 }
 
@@ -354,4 +363,8 @@ export function createDatabase(): EntropyDecreaseDatabase {
  * 的默认参数 DI 模式），存量消费方在各自迁移批次中逐步改造。
  */
 export const db = createDatabase();
+// 多开/双版本共存兜底：另一实例升级 schema 触发 versionchange 时，
+// 本连接若拒绝会让对方升级失败（VersionError）；主动 close 让位，
+// 后续访问由 Dexie 自动重连（不做启动提示弹窗，保持最小改动）
+db.on('versionchange', () => { db.close(); });
 export { captureStore } from './captureStore';

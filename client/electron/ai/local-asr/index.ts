@@ -39,6 +39,8 @@ import {
 
 export function registerLocalAsrHandlers(): void {
   // ── 转写（核心接口，渲染进程 asrTranscriber.ts 调用） ──
+  // TODO(P1-3): 本 IPC payload 暂未含可选 hotwords 字段——SenseVoice/Paraformer
+  // 不支持热词（详见 SherpaAsrService.ts 的 TODO 结论），届时新增字段须保持旧载荷兼容
   ipcMain.handle(
     'local_asr_transcribe',
     async (_event, args: {
