@@ -29,7 +29,8 @@ APP_CONFIG = {
     "jwt_secret": os.getenv("SUPABASE_JWT_SECRET", ""),
     # GW-2#1: 算法由环境变量注入（默认 HS256 与 Supabase 默认签发机制对齐）；
     # 原硬编码 ES256 导致默认 HS256 项目（无 JWKS 端点）全站 401
-    "jwt_algorithm": os.getenv("SUPABASE_JWT_ALGORITHM", "HS256"),
+    # GW-3: strip().upper() 规范化——小写 hs256/es256 配置也能正确匹配
+    "jwt_algorithm": os.getenv("SUPABASE_JWT_ALGORITHM", "HS256").strip().upper(),
     "supabase_url": _supabase_url,
     "supabase_jwks_url": os.getenv(
         "SUPABASE_JWKS_URL",

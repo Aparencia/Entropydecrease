@@ -101,7 +101,10 @@ export async function markLogsSynced(ids: string[]): Promise<void> {
 export async function markEntityLogsSynced(entityType: string, entityId: string): Promise<void> {
   const logs = await db.operationLog
     .where('entityType').equals(entityType)
-    .filter(l => l.entityId === entityId && l.synced === 0)
+    // GW-3: 用 `!== 1` 而非 `=== 0`——旧数据 synced 可能为 boolean false
+    //（历史版本写入）或 undefined，严格相等会漏标，形成永久孤数据；
+    // 且这些旧日志若未来迁移为 0 会重新参与 push 触发冲突循环
+    .filter(l => l.entityId === entityId && l.synced !== 1)
     .toArray();
   if (logs.length === 0) return;
   await db.operationLog.bulkUpdate(logs.map(l => ({

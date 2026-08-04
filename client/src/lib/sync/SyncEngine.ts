@@ -198,10 +198,10 @@ export class SyncEngine {
       result.errors.push(message);
       this.emit({ type: 'sync-error', error: message });
     } finally {
-      // 仅当非 pause 时才清锁（pause 期间保持锁定）
-      if (!this.paused) {
-        this.syncInProgress = false;
-      }
+      // GW-3: 无条件清锁——原实现 pause 期间跳过清锁（paused=true），
+      // 若 sync 在 pause 后完成，锁残留 true，resume 轮询 15s 超时才恢复；
+      // pause 阻止新 sync 启动靠 paused 标志本身即可，锁只表示"sync 执行中"
+      this.syncInProgress = false;
     }
 
     return result;

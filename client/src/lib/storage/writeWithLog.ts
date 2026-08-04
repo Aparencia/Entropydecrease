@@ -173,7 +173,14 @@ async function applyCRDTChange(
     // applyLocalChange 已前滚内存 doc，若 enqueue/persistDoc 失败，
     // 内存与队列/快照基线漂移，下次变更会生成非法 changeset
     //（MissingDependencyError），该表 CRDT 路径从此永久失效
-    await crdtEngine.resetTable(tableName);
+    // GW-3: resetTable 本身可能失败（IndexedDB 异常），嵌套保护避免
+    //"降级路径"反而阻塞主写入（resetTable 失败时内存状态未重建，
+    // 下次 init 会从快照重建，风险低于阻塞业务写入）
+    try {
+      await crdtEngine.resetTable(tableName);
+    } catch (resetErr) {
+      console.warn('[writeWithLog] CRDT resetTable also failed (non-blocking):', resetErr);
+    }
     console.warn('[writeWithLog] CRDT change failed, table reset (non-blocking):', err);
   }
 }

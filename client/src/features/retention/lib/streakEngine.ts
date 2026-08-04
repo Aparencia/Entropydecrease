@@ -16,10 +16,15 @@ const toISO = (d: Date) =>
  * 将本地日期字符串（YYYY-MM-DD）解析为本地午夜 Date
  * FRONT2-M3: new Date("YYYY-MM-DD") 会按 UTC 午夜解析，UTC+8 时
  * lastDate 实际落在前一天的 08:00，与本地日期的 today 间隔计算差一天
+ * GW-3: 格式校验——异常数据（空串/ISO 串）会生成 Invalid Date 或
+ * 1899 年日期，导致 gap 计算失真；不匹配时回退原生解析并容忍 NaN
  */
 function parseLocalDate(dateStr: string): Date {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return new Date(dateStr);
 }
 
 /** 断裂后保留百分比 / Retained percent after break */
@@ -36,9 +41,13 @@ export function isRestDay(date: Date, restDayPreference: number): boolean {
 /**
  * 计算两个日期之间的天数差（不含起始日）
  * Calculate day difference between two dates (exclusive of start)
+ * GW-3: 异常日期（Invalid Date）按 Infinity 处理——走断裂语义
+ *（保留 50%）而非 NaN 传播导致连击被静默错误计算
  */
 function daysBetween(a: Date, b: Date): number {
-  return Math.floor((b.getTime() - a.getTime()) / 86_400_000);
+  const diff = b.getTime() - a.getTime();
+  if (Number.isNaN(diff)) return Infinity;
+  return Math.floor(diff / 86_400_000);
 }
 
 /**

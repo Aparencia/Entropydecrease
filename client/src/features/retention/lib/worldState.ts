@@ -88,7 +88,10 @@ export function computeCurrentStreakFromCorals(corals: CoralRecord[]): number {
   for (let i = 1; i < uniqueDays.length; i++) {
     const prev = new Date(uniqueDays[i - 1]).getTime();
     const curr = new Date(uniqueDays[i]).getTime();
-    if ((prev - curr) / 86_400_000 === 1) streak++;
+    // GW-3: Math.round 容差——当前 UTC 解析精确 86400000ms，但防御未来
+    // 日期格式变更（本地时区偏移）引入的 DST 23/25 小时抖动
+    const dayDiff = Math.round((prev - curr) / 86_400_000);
+    if (dayDiff === 1) streak++;
     else break;
   }
   return streak;

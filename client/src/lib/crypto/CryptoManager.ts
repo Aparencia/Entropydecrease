@@ -171,12 +171,11 @@ export class CryptoManager {
     if (api?.safeStorageEncrypt && api?.safeStorageDecrypt) {
       const storedEnc = localStorage.getItem(encryptedKey);
       if (storedEnc) {
-        try {
-          return await api.safeStorageDecrypt(storedEnc);
-        } catch {
-          // OS 密钥轮换/系统重装导致解密失败：回退重建新密钥材料
-          console.warn('[CryptoManager] safeStorage 解密失败，重建密钥材料');
-        }
+        // GW-3: 解密失败绝不自动重建密钥——旧密钥材料丢失会使此前加密的
+        // 全部敏感字段永久不可解密（原实现静默重建并覆写 _enc 键，数据
+        // 不可逆损坏）。异常向上传播到 init 的 catch → initFailed + 抛错，
+        // 由 UI 提示"加密数据不可用"并保留旧密文等待用户恢复
+        return await api.safeStorageDecrypt(storedEnc);
       }
       const deviceKey = this.generateDeviceKey();
       try {

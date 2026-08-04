@@ -213,6 +213,14 @@ async def check_rate_limit(user_id: str, feature: str) -> tuple[bool, str]:
     global_key = f"rate_limit:{user_id}:global:{today}"
     global_count = await _lua_check_limit(global_key, daily_limit, ttl)
     if global_count < 0:
+        # GW-3: global 超限时 Lua 只回滚 global 层（feature 层未超限不会回滚）——
+        # 在此回滚本请求对 feature 层的占用，防止计数泄漏（每次超限请求都
+        # 把 feature 计数 +1 直至 feature 也超限）。并发语义：DECR 恰好抵消
+        # 本请求（或并发同层请求）的 INCR 占用，不会误伤其他用户
+        try:
+            await cache._client.decr(feature_key)
+        except Exception as exc:
+            logger.debug("频率限制 feature 回滚失败: %s", exc)
         return False, (
             f"今日 AI 功能总使用次数已达上限（{daily_limit} 次/天），"
             "请明天再试，或升级套餐获取更多配额。"

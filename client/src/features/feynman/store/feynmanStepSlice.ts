@@ -217,6 +217,17 @@ export const createStepSlice: FeynmanSlice<StepSlice> = (set, get) => ({
           // 标记失败可接受：下次转换最多重复建该张卡
         }
       }
+      // GW-3: 同步 store——原实现 catch 后 set() 不执行，store 仍显示未
+      // mastered，重试时 toConvert 从 store 取到已建卡的 wp 再次建卡
+      //（DB 已 mastered 与 UI 态不一致）
+      set((state) => ({
+        weakPoints: {
+          ...state.weakPoints,
+          [noteId]: (state.weakPoints[noteId] ?? []).map((w) =>
+            createdWpIds.includes(w.id!) ? { ...w, mastered: true } : w,
+          ),
+        },
+      }));
       throw err;
     }
 

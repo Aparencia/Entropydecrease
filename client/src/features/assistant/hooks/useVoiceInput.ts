@@ -94,7 +94,11 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
       while (stopPendingRef.current && Date.now() - waitStart < 5000) {
         await new Promise((r) => setTimeout(r, 50));
       }
-      if (stopPendingRef.current) return; // 超时放弃本次启动
+      if (stopPendingRef.current) {
+        // GW-3: 超时静默放弃会让用户点击无响应——给出明确错误提示
+        setError('停止拾音未完成，请稍后重试');
+        return;
+      }
     }
     setError(null);
 

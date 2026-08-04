@@ -73,8 +73,8 @@ class GeminiProvider(AIProvider):
         response_format: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """调用 Gemini 生成纯文本内容"""
-        # Key 轮询：将请求分散到多个 Key 以突破单一 Key 的 RPM 限制
-        await self._rotate_api_key()
+        # GW-3: 内部不再轮询——已上移至 with_retry_and_timeout wrapper 统一
+        # 处理，避免与 wrapper 双重轮询（偶数 Key 配置下轮询失效）
         start_time = time.monotonic()
         try:
             config = types.GenerateContentConfig(
@@ -303,7 +303,9 @@ class GeminiProvider(AIProvider):
 
             # GW-2#5: 同步 SDK 生成器的迭代（含底层阻塞网络 IO）直接在事件循环
             # 线程执行会卡死整个网关（流式期间全站延迟升高）。改为逐块
-            # asyncio.to_thread 搬进线程池，chunk 间让出控制权
+            # 搬进专用线程池，chunk 间让出控制权
+            # GW-3: 用 run_in_provider_pool 而非 asyncio.to_thread（默认线程池）
+            #——专用池隔离慢调用，避免流式并发占满默认池影响其他组件
             def _next_chunk(iterator):
                 try:
                     return next(iterator)
@@ -311,7 +313,7 @@ class GeminiProvider(AIProvider):
                     return None
 
             while True:
-                chunk = await asyncio.to_thread(_next_chunk, response)
+                chunk = await run_in_provider_pool(_next_chunk, response)
                 if chunk is None:
                     break
                 if chunk.text:

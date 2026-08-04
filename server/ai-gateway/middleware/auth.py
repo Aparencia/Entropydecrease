@@ -219,6 +219,14 @@ async def _fetch_jwks(jwks_url: str) -> dict:
         now = time.time()
         if _jwks_cache is not None and (now - _jwks_cache_time) < _JWKS_CACHE_TTL:
             return _jwks_cache
+        # GW-3: 锁内复用退避窗口——排队期间首个请求已失败并设 retry_after，
+        # 后续请求不再重复打 JWKS 端点（原实现只查新鲜缓存，锁内并发风暴）
+        if (
+            _jwks_cache is not None
+            and (now - _jwks_cache_time) < _JWKS_CACHE_TTL + _JWKS_STALE_GRACE_SECONDS
+            and now < _jwks_retry_after
+        ):
+            return _jwks_cache
         try:
             resp = await _get_jwks_client().get(jwks_url)
             resp.raise_for_status()
@@ -228,13 +236,33 @@ async def _fetch_jwks(jwks_url: str) -> dict:
             logger.info("JWKS 获取成功，缓存已更新: %s", jwks_url)
             return _jwks_cache
         except httpx.HTTPStatusError as e:
-            # HTTP 状态错误（401/404/5xx）：密钥轮换或端点失效，fail-closed
-            logger.error("JWKS 获取失败: %s, status=%s", jwks_url, e.response.status_code)
+            status = e.response.status_code
+            # GW-3: 5xx 为临时性故障（网关抖动/维护），与网络类失败同样走
+            # 宽限复用；401/403/404 等确定性状态（密钥轮换/端点失效）保持
+            # fail-closed——原实现把所有 HTTP 错误一律 fail-closed，Supabase
+            # 短暂 5xx 即全站 401
+            if (
+                status >= 500
+                and _jwks_cache is not None
+                and (now - _jwks_cache_time) < _JWKS_CACHE_TTL + _JWKS_STALE_GRACE_SECONDS
+            ):
+                _jwks_retry_after = time.time() + _JWKS_FAIL_RETRY_SECONDS
+                logger.warning(
+                    "JWKS 5xx 临时故障（status=%d），降级复用过期缓存（%ds 内重试）",
+                    status, _JWKS_FAIL_RETRY_SECONDS,
+                )
+                return _jwks_cache
+            logger.error("JWKS 获取失败: %s, status=%s", jwks_url, status)
             raise
         except Exception as e:
-            # 网络类失败（超时/DNS/TLS/连接中断）：短暂复用过期缓存降级
+            # 网络类失败（超时/DNS/TLS/连接中断）：仅宽限窗口内复用过期缓存，
+            # 超出后 fail-closed——原实现无条件复用，宽限窗口形同虚设
+            #（过期密钥无限期生效，密钥轮换后越权窗口无上限）
             logger.error("JWKS 获取失败(网络): %s, error=%s", jwks_url, str(e))
-            if _jwks_cache is not None:
+            if (
+                _jwks_cache is not None
+                and (now - _jwks_cache_time) < _JWKS_CACHE_TTL + _JWKS_STALE_GRACE_SECONDS
+            ):
                 _jwks_retry_after = time.time() + _JWKS_FAIL_RETRY_SECONDS
                 logger.warning(
                     "JWKS 网络失败，降级复用过期缓存（%ds 内重试）",

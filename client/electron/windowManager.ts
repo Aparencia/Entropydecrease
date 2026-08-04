@@ -83,6 +83,13 @@ export function createMainWindow(
   // preventDefault 无法关闭（同步事件只在旧窗口的 webContents 上发送过）
   syncBeforeQuitRequested = false;
   syncBeforeQuitCompleted = false;
+  // GW-3: 同步清理超时定时器——旧 timer 回调检查 !syncBeforeQuitCompleted
+  //（重置后必为 false）会触发 completeSyncBeforeQuit → app.quit()，
+  // 刚重建的窗口被意外退出
+  if (syncTimeoutTimer) {
+    clearTimeout(syncTimeoutTimer);
+    syncTimeoutTimer = null;
+  }
 
   const win = new BrowserWindow({
     width: WINDOW_DEFAULT_WIDTH,

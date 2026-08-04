@@ -105,6 +105,10 @@ class QwenVisionMixin:
                 "tokens_used": tokens_used,
                 "model": model,
                 "latency_ms": latency_ms,
+                # GW-3: 返回实际请求的 max_tokens 供 chain 侧截断检测
+                #（与 GLM generate_vision 对齐）——vision_extract 主 provider
+                # 是 qwen，缺此字段时截断检测对主链路完全无效
+                "max_tokens": max_tokens,
             }
 
         except Exception as e:
