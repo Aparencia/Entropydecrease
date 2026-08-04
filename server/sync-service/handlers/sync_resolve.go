@@ -48,6 +48,10 @@ func Resolve(c *gin.Context) {
 		}
 
 		txErr := models.DB.Transaction(func(tx *gorm.DB) error {
+			seqNo, err := nextSeqNo(tx)
+			if err != nil {
+				return err
+			}
 
 			// Upsert EntityVersion.
 			var ev models.EntityVersion
