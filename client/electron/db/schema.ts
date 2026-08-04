@@ -5,6 +5,7 @@
  * @ai-context: SQLite 建表 DDL 唯一权威源——新增表需同步 dbIpcHandlers.ALLOWED_TABLES 白名单。
  */
 import type Database from 'better-sqlite3';
+import { logger } from '../logger.js';
 
 export const SCHEMA_VERSION = 8;
 
@@ -231,12 +232,12 @@ export function initializeSchema(db: Database.Database): void {
   // v2 迁移：FSRS-5 扩展字段（条件 ALTER TABLE，幂等）
   const currentVersion = db.pragma('user_version', { simple: true }) as number;
   if (currentVersion < 2) {
-    try {
-      db.exec(`ALTER TABLE flashcards ADD COLUMN stability REAL DEFAULT NULL`);
-    } catch { /* 列已存在 */ }
-    try {
-      db.exec(`ALTER TABLE flashcards ADD COLUMN difficulty REAL DEFAULT NULL`);
-    } catch { /* 列已存在 */ }
+    const ok = alterTableAddColumn(db, `ALTER TABLE flashcards ADD COLUMN stability REAL DEFAULT NULL`)
+      && alterTableAddColumn(db, `ALTER TABLE flashcards ADD COLUMN difficulty REAL DEFAULT NULL`);
+    if (!ok) {
+      logger.error('[Schema] v2 迁移失败，不设置 user_version，下次启动重试');
+      return;
+    }
   }
 
   // v3 迁移：CRDT 同步引擎元数据表
@@ -246,12 +247,12 @@ export function initializeSchema(db: Database.Database): void {
 
   // v4 迁移：search_index 表增加 entity_id 和 entity_type 列
   if (currentVersion < 4) {
-    try {
-      db.exec(`ALTER TABLE search_index ADD COLUMN entity_id TEXT`);
-    } catch { /* 列已存在 */ }
-    try {
-      db.exec(`ALTER TABLE search_index ADD COLUMN entity_type TEXT`);
-    } catch { /* 列已存在 */ }
+    const ok = alterTableAddColumn(db, `ALTER TABLE search_index ADD COLUMN entity_id TEXT`)
+      && alterTableAddColumn(db, `ALTER TABLE search_index ADD COLUMN entity_type TEXT`);
+    if (!ok) {
+      logger.error('[Schema] v4 迁移失败，不设置 user_version，下次启动重试');
+      return;
+    }
   }
 
   // v5 迁移：AI 助手会话/消息/触发表（CREATE IF NOT EXISTS 幂等）
@@ -266,13 +267,32 @@ export function initializeSchema(db: Database.Database): void {
   // v8 迁移：知识入籍——imports 表（DDL 已含在 SCHEMA_DDL）；
   // notes/flashcards 增加 source_ref 溯源列（条件 ALTER TABLE，幂等，不破坏存量）
   if (currentVersion < 8) {
-    try {
-      db.exec(`ALTER TABLE notes ADD COLUMN source_ref TEXT`);
-    } catch { /* 列已存在 */ }
-    try {
-      db.exec(`ALTER TABLE flashcards ADD COLUMN source_ref TEXT`);
-    } catch { /* 列已存在 */ }
+    const ok = alterTableAddColumn(db, `ALTER TABLE notes ADD COLUMN source_ref TEXT`)
+      && alterTableAddColumn(db, `ALTER TABLE flashcards ADD COLUMN source_ref TEXT`);
+    if (!ok) {
+      logger.error('[Schema] v8 迁移失败，不设置 user_version，下次启动重试');
+      return;
+    }
   }
 
   db.pragma(`user_version = ${SCHEMA_VERSION}`);
+}
+
+/**
+ * CL-L7: 条件 ALTER TABLE ADD COLUMN——"列已存在"（幂等重试）静默视为成功，
+ * 其他错误（SQLITE_BUSY/磁盘/权限）记录日志并返回 false，由调用方决定
+ * 不推进 user_version（保留下次启动重试机会），避免迁移失败被永久掩盖。
+ */
+function alterTableAddColumn(db: Database.Database, sql: string): boolean {
+  try {
+    db.exec(sql);
+    return true;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/duplicate column/i.test(msg)) {
+      return true; // 列已存在：幂等重试的正常情况
+    }
+    logger.error(`[Schema] ALTER TABLE 失败（非 duplicate column）: ${msg}`);
+    return false;
+  }
 }

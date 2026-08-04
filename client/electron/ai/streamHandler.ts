@@ -75,6 +75,18 @@ export function registerStreamHandler(): void {
       const abortController = new AbortController();
       activeStreams.set(requestId, abortController);
 
+      // CL-L9: 发起流式请求的窗口销毁时清理活跃流——否则 for await 继续从
+      // 网关拉取直到流结束/超时（默认 300s），多次开关窗口累积残留流
+      const wc = event.sender;
+      wc.once('destroyed', () => {
+        const controller = activeStreams.get(requestId);
+        if (controller) {
+          controller.abort();
+          activeStreams.delete(requestId);
+          logger.info(`[AI] [stream] Window destroyed, aborted stream: requestId=${requestId}`);
+        }
+      });
+
       // 50ms 节流缓冲
       let chunkBuffer = '';
       let throttleTimer: ReturnType<typeof setTimeout> | null = null;

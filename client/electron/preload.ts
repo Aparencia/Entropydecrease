@@ -218,8 +218,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       console.warn(`[preload] 不允许的发送 channel: ${channel}`);
     }
   },
-  /** 监听主进程发出的窗口关闭事件 */
+  /** 监听主进程发出的窗口关闭事件（CL-L6: 统一纳入 ALLOWED_EVENT_CHANNELS 校验） */
   onWindowClosing: (callback: () => void) => {
+    if (!(ALLOWED_EVENT_CHANNELS as readonly string[]).includes('window:closing')) {
+      console.warn('[preload] 不允许的事件 channel: window:closing');
+      return () => {};
+    }
     const handler = () => callback();
     ipcRenderer.on('window:closing', handler);
     return () => ipcRenderer.removeListener('window:closing', handler);
@@ -234,12 +238,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   windowClose: () => ipcRenderer.invoke('window:close'),
   windowIsMaximized: () => ipcRenderer.invoke('window:isMaximized') as Promise<boolean>,
   onMaximizedChanged: (callback: (isMaximized: boolean) => void) => {
+    if (!(ALLOWED_EVENT_CHANNELS as readonly string[]).includes('window:maximized-changed')) {
+      console.warn('[preload] 不允许的事件 channel: window:maximized-changed');
+      return () => {};
+    }
     const handler = (_event: unknown, isMaximized: boolean) => callback(isMaximized);
     ipcRenderer.on('window:maximized-changed', handler);
     return () => ipcRenderer.removeListener('window:maximized-changed', handler);
   },
-  /** 监听退出前同步事件 */
+  /** 监听退出前同步事件（CL-L6: 统一纳入 ALLOWED_EVENT_CHANNELS 校验） */
   onSyncBeforeQuit: (callback: () => void) => {
+    if (!(ALLOWED_EVENT_CHANNELS as readonly string[]).includes('sync:before-quit')) {
+      console.warn('[preload] 不允许的事件 channel: sync:before-quit');
+      return () => {};
+    }
     const handler = () => callback();
     ipcRenderer.on('sync:before-quit', handler);
     return () => ipcRenderer.removeListener('sync:before-quit', handler);

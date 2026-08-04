@@ -84,12 +84,14 @@ export function insertMessage(msg: Omit<MessageRow, 'id' | 'created_at'> & { id?
 
 export function getMessages(sessionId: string, limit = 50, before?: number): MessageRow[] {
   const db = getConnection();
+  // CL-L5: limit 钳制——渲染进程可传任意大值导致一次拉取整表消息经 IPC 全量传输
+  const safeLimit = Math.min(Math.max(1, Math.floor(limit)), 200);
   if (before) {
     return db.prepare('SELECT * FROM assistant_messages WHERE session_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT ?')
-      .all(sessionId, before, limit) as MessageRow[];
+      .all(sessionId, before, safeLimit) as MessageRow[];
   }
   return db.prepare('SELECT * FROM assistant_messages WHERE session_id = ? ORDER BY created_at DESC LIMIT ?')
-    .all(sessionId, limit) as MessageRow[];
+    .all(sessionId, safeLimit) as MessageRow[];
 }
 
 // ── 触发记录 ──────────────────────────────────────────────────

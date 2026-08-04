@@ -182,7 +182,12 @@ export class VideoRecorder {
         ipcMain.removeListener('video_record_stopped', onConfirmed);
         resolve();
       }, STOP_CONFIRM_TIMEOUT_MS);
-      function onConfirmed(): void {
+      function onConfirmed(event: Electron.IpcMainEvent): void {
+        // CL-L8: 仅接受绑定窗口的确认——非绑定窗口可发送伪造事件提前结束
+        // 等待窗口（与 SEC-005 sender 验证策略一致）
+        if (win && !win.isDestroyed() && event.sender.id !== win.webContents.id) {
+          return;
+        }
         clearTimeout(timeoutId);
         resolve();
       }

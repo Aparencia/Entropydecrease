@@ -115,6 +115,20 @@ if (!gotTheLock) {
 
   process.on('uncaughtException', (error) => {
     logger.crash('Uncaught Exception', error);
+    // CL-L10: 主进程在未知异常后处于"带病运行"状态（数据库连接可能损坏、
+    // 事件监听可能缺失）；记录后执行崩溃恢复——checkpoint 落盘 + relaunch
+    try {
+      const { checkpointAndClose } = require('./db/sqliteService.js') as typeof import('./db/sqliteService.js');
+      checkpointAndClose();
+      logger.info('[Main] Database checkpointed during crash recovery');
+    } catch (checkpointErr) {
+      logger.error('[Main] Checkpoint during crash recovery failed', checkpointErr);
+    }
+    // 延迟重启，确保崩溃日志已落盘
+    setTimeout(() => {
+      app.relaunch();
+      app.exit(1);
+    }, 500);
   });
 
   process.on('unhandledRejection', (reason) => {
@@ -224,6 +238,15 @@ if (!gotTheLock) {
       }
       if (parsedUrl.protocol !== 'https:' && parsedUrl.hostname !== 'localhost' && parsedUrl.hostname !== '127.0.0.1') {
         throw new Error('生产环境必须使用 HTTPS');
+      }
+      // CL-L2: 端口与路径收紧——同一受信任域名的任意端口/路径都会被 CSP
+      // connect-src 动态放行，同域攻击者可诱导请求到非预期端点；路径后缀
+      // 还会污染后续 ${base}${apiPath} 拼接
+      if (parsedUrl.port !== '') {
+        throw new Error('不允许自定义端口，请使用默认端口');
+      }
+      if (parsedUrl.pathname !== '/' && parsedUrl.pathname !== '') {
+        throw new Error('不允许自定义路径');
       }
 
       await setRuntimeGatewayUrl(url);
