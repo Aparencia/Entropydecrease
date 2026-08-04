@@ -53,6 +53,8 @@ from routers import (
     conflict_detect_router,
     concept_precheck_router,
     import_concept_router,
+    license_router,
+    beta_router,
 )
 from cache.redis_cache import get_cache
 
@@ -265,6 +267,8 @@ app.include_router(content_tier_router)          # N5: 内容分层——同样�
 app.include_router(conflict_detect_router)       # N6: 概念冲突检测——同样注册于 streaming_router 之前
 app.include_router(concept_precheck_router)      # E1: 概念预检——同样注册于 streaming_router 之前
 app.include_router(import_concept_router)         # 阶段 A: 知识入籍概念化——同样注册于 streaming_router 之前
+app.include_router(license_router)                # 激活码验证（POST /api/v1/license/activate）
+app.include_router(beta_router)                   # 内测邀请 API（POST /api/v1/beta/use-invite）
 app.include_router(streaming_router)             # 流式输出（SSE，全量 AI 功能）
 app.include_router(balance_router)               # API 余额查询
 app.include_router(ritual_recall_router)         # v0.26.0 B1.2: 仪式回顾小问

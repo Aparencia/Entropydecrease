@@ -13,6 +13,8 @@ import ModeSettings from './settings/ModeSettings';
 import ShortcutSettings from './settings/ShortcutSettings';
 import FlashcardSettings from './settings/FlashcardSettings';
 import AudioCaptureSettings from './settings/AudioCaptureSettings';
+import { BetaProfile } from '@/features/beta/BetaProfile';
+import { useBetaProfile } from '@/features/beta/hooks/useBetaProfile';
 
 // 延迟组：有网络/IPC/DB 操作的重组件
 const AIProviderSettings = lazy(() => import('./settings/AIProviderSettings'));
@@ -93,6 +95,9 @@ function SettingsSection({ children, index = 0 }: { children: React.ReactNode; i
 }
 
 export default function SettingsPage() {
+  // 加载内测身份
+  useBetaProfile();
+
   return (
     <motion.div
       className="flex flex-col h-full overflow-y-auto"
@@ -115,37 +120,40 @@ export default function SettingsPage() {
           <ProfileSettings />
         </SettingsSection>
         <SettingsSection index={1}>
-          <AppearanceSettings />
+          <BetaProfile />
         </SettingsSection>
         <SettingsSection index={2}>
+          <AppearanceSettings />
+        </SettingsSection>
+        <SettingsSection index={3}>
           <PerformanceSettings />
           <div className="mt-3">
             <PerformanceDiagnostics />
           </div>
         </SettingsSection>
-        <SettingsSection index={3}>
+        <SettingsSection index={4}>
           <SoundSettings />
         </SettingsSection>
-        <SettingsSection index={4}>
+        <SettingsSection index={5}>
           <ModeSettings />
         </SettingsSection>
-        <SettingsSection index={5}>
+        <SettingsSection index={6}>
           <ShortcutSettings />
         </SettingsSection>
-        <SettingsSection index={6}>
+        <SettingsSection index={7}>
           <FlashcardSettings />
         </SettingsSection>
-        <SettingsSection index={7}>
+        <SettingsSection index={8}>
           <AudioCaptureSettings />
         </SettingsSection>
         <Suspense fallback={<SettingsSectionSkeleton />}>
-          <SettingsSection index={8}>
+          <SettingsSection index={9}>
             <AIProviderSettings />
           </SettingsSection>
-          <SettingsSection index={9}>
+          <SettingsSection index={10}>
             <DataSettings />
           </SettingsSection>
-          <SettingsSection index={10}>
+          <SettingsSection index={11}>
             <AboutSettings />
           </SettingsSection>
         </Suspense>

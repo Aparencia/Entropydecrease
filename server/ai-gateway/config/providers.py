@@ -12,6 +12,32 @@ import os
 from config.runtime import logger, is_valid_api_key
 
 # ============================================================
+# Tier 分级模型路由
+# ============================================================
+# 按用户 tier 限制可路由的模型 Provider。
+# 与客户端 types/beta.ts 中的 TIER_PERKS 保持同步。
+
+TIER_MODEL_ACCESS: dict[str, set[str]] = {
+    "free":     {"glm"},
+    "observer": {"glm", "qwen"},
+    "active":   {"glm", "qwen", "deepseek"},
+    "core":     {"glm", "qwen", "deepseek", "gemini"},
+    "pro":      {"glm", "qwen", "deepseek"},
+    "lifetime": {"glm", "qwen", "deepseek", "gemini"},
+}
+
+# Tier 优先级
+_TIER_RANK = {"free": 0, "observer": 1, "active": 2, "pro": 3, "core": 4, "lifetime": 5}
+
+
+def get_effective_tier(beta_tier: str | None = None, paid_tier: str | None = None) -> str:
+    """取 beta 身份与付费身份中的最高者"""
+    beta = _TIER_RANK.get(beta_tier or "free", 0)
+    paid = _TIER_RANK.get(paid_tier or "free", 0)
+    effective = max(beta, paid)
+    return {v: k for k, v in _TIER_RANK.items()}.get(effective, "free")
+
+# ============================================================
 # Provider 配置
 # ============================================================
 
@@ -143,20 +169,33 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
 # ============================================================
 
 
-def get_provider_for_feature(app, feature: str):
+def get_provider_for_feature(app, feature: str, user_tier: str = "free"):
     """
     根据 MODEL_ROUTING 表获取对应 Provider 实例和模型名称。
 
     如果目标 Provider 未初始化或 API Key 无效，自动回退到 GLM/fallback。
+    按用户 tier 限制可路由的 Provider（tier 不足时降级到免费模型）。
 
     Args:
         app: FastAPI 应用实例（通过 app.state.providers 获取 Provider）
         feature: 功能标识，对应 MODEL_ROUTING 的 key
+        user_tier: 用户有效 tier，默认 "free"
 
     Returns:
         tuple: (provider_instance, model_name)
     """
     provider_key, model_slot = MODEL_ROUTING.get(feature, ("fallback", "free"))
+
+    # 检查用户 tier 是否有权访问该 Provider
+    allowed_providers = TIER_MODEL_ACCESS.get(user_tier, TIER_MODEL_ACCESS["free"])
+    if provider_key not in allowed_providers:
+        logger.info(
+            "Tier [%s] 无权访问 Provider [%s]（feature=%s），降级到免费模型",
+            user_tier, provider_key, feature,
+        )
+        provider_key = "glm"
+        model_slot = "free"
+
     provider = app.state.providers.get(provider_key)
     # 检查 Provider 是否配置了有效 API Key
     if provider and not is_valid_api_key(provider.api_key):

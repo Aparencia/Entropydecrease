@@ -25,6 +25,8 @@ from routers.content_tier import router as content_tier_router
 from routers.conflict_detect import router as conflict_detect_router
 from routers.concept_precheck import router as concept_precheck_router
 from routers.import_concept import router as import_concept_router
+from routers.license import router as license_router
+from routers.beta import router as beta_router
 
 __all__ = [
     "summarize_router",
@@ -52,4 +54,6 @@ __all__ = [
     "conflict_detect_router",
     "concept_precheck_router",
     "import_concept_router",
+    "license_router",
+    "beta_router",
 ]

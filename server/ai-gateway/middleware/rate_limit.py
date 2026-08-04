@@ -22,6 +22,38 @@ from config import RATE_LIMITS, TIMEOUT_CONFIG
 
 logger = logging.getLogger(__name__)
 
+# ============================================================
+# Tier 分级配额表
+# ============================================================
+# 按用户 tier 读取不同的每日限额与费用上限。
+# 客户端 useTierAccess hook 与服务器端本表保持同步。
+
+TIER_LIMITS: dict[str, dict[str, int | float]] = {
+    "free":     {"daily": 15,  "cost": 0.5},
+    "observer": {"daily": 50,  "cost": 1.5},
+    "active":   {"daily": 80,  "cost": 2.0},
+    "core":     {"daily": 120, "cost": 3.0},
+    "pro":      {"daily": 80,  "cost": 2.0},
+    "lifetime": {"daily": 120, "cost": 3.0},
+}
+
+DEFAULT_TIER = "free"
+
+# Tier 优先级（模块级常量，避免每次调用重新创建字典）
+_TIER_RANK = {"free": 0, "observer": 1, "active": 2, "pro": 3, "core": 4, "lifetime": 5}
+
+
+def get_tier_limits(beta_tier: str | None = None, paid_tier: str | None = None) -> dict:
+    """
+    解析用户有效 tier 并返回对应配额。
+    beta 身份与付费身份取最高者。
+    """
+    beta = _TIER_RANK.get(beta_tier or "free", 0)
+    paid = _TIER_RANK.get(paid_tier or "free", 0)
+    effective = max(beta, paid)
+    tier_key = {v: k for k, v in _TIER_RANK.items()}.get(effective, DEFAULT_TIER)
+    return TIER_LIMITS.get(tier_key, TIER_LIMITS[DEFAULT_TIER])
+
 # GW-M12: 原子限流检查 Lua 脚本——INCR + 超限回滚（DECR）在同一脚本内完成，
 # 消除"检查后回退"的竞态窗口（并发请求中一个失败误减他人占用）与负数计数
 _LUA_CHECK_RATE = """
@@ -149,6 +181,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # 获取 user_id（由 JWT 中间件注入）
         user_id = getattr(request.state, "user_id", "anonymous")
+        # 获取用户 tier 信息（由 JWT 或 auth 中间件注入）
+        beta_tier = getattr(request.state, "beta_tier", None)
+        paid_tier = getattr(request.state, "paid_tier", None)
         # GW-M11: 匿名用户按 IP 分桶——所有匿名请求共享同一配额会被
         # 恶意用户耗尽（误伤合法匿名用户），IP 维度隔离各自计数
         if user_id == "anonymous":
@@ -159,7 +194,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             user_id = f"anonymous:{client_ip}"
 
         # 检查常规频率限制（Lua 原子 INCR+校验，防止 TOCTOU 竞态）
-        is_allowed, detail = await check_rate_limit(user_id, feature)
+        is_allowed, detail = await check_rate_limit(user_id, feature, beta_tier, paid_tier)
         if not is_allowed:
             return JSONResponse(
                 status_code=429,
@@ -179,7 +214,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return response
 
 
-async def check_rate_limit(user_id: str, feature: str) -> tuple[bool, str]:
+async def check_rate_limit(user_id: str, feature: str, beta_tier: str | None = None, paid_tier: str | None = None) -> tuple[bool, str]:
     """
     检查用户是否超出频率限制（原子 INCR 操作，防止 TOCTOU 竞态）
 
@@ -190,6 +225,8 @@ async def check_rate_limit(user_id: str, feature: str) -> tuple[bool, str]:
     Args:
         user_id: 用户 ID
         feature: 功能名称
+        beta_tier: 用户内测 tier（可选，用于分级配额）
+        paid_tier: 用户付费 tier（可选，用于分级配额）
 
     Returns:
         tuple: (是否允许, 拒绝原因)
@@ -203,7 +240,9 @@ async def check_rate_limit(user_id: str, feature: str) -> tuple[bool, str]:
 
     # 从配置读取限额
     feature_limit = RATE_LIMITS.get(feature, 10)
-    daily_limit = RATE_LIMITS.get("daily_total", 50)
+    # 按用户 tier 获取每日配额
+    tier_limits = get_tier_limits(beta_tier, paid_tier)
+    daily_limit = int(tier_limits.get("daily", 50))
 
     # 计算到当日结束的剩余秒数（至少 60 秒）
     now = datetime.now()

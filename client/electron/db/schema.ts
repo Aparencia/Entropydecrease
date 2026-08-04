@@ -354,6 +354,9 @@ export function initializeSchema(db: Database.Database): void {
   // v9 迁移：SOP 模板/步骤/执行记录 + 统一收件箱（sop_templates/sop_steps/sop_runs/inbox_items）
   // 表 DDL 已包含在 SCHEMA_DDL 中（CREATE IF NOT EXISTS 幂等），此处无需额外操作
 
+  // v10 迁移：内测身份/激活码/邀请码表（beta_profile/licenses/invite_codes）
+  // 表 DDL 已包含在 SCHEMA_DDL 中（CREATE IF NOT EXISTS 幂等），此处无需额外操作
+
   db.pragma(`user_version = ${SCHEMA_VERSION}`);
 }
 
