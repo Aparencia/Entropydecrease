@@ -169,6 +169,8 @@ const ALLOWED_EVENT_CHANNELS = [
   // 本地 ASR 真流式转写结果推送（partial 实时 / final 断句）
   'asr_stream_partial',
   'asr_stream_final',
+  // 全局快捷键触发推送（payload: { id, text? }，shortcutManager 驱动）
+  'shortcut:triggered',
 ] as const;
 
 /** 允许渲染进程单向发送的 channel 白名单（渲染进程 → 主进程，fire-and-forget） */
@@ -256,6 +258,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('sync:before-quit', handler);
     return () => ipcRenderer.removeListener('sync:before-quit', handler);
   },
+  /** 监听全局快捷键触发（payload: { id, text? }，shortcutManager 驱动） */
+  onShortcutTriggered: (callback: (payload: { id: string; text?: string }) => void) => {
+    if (!(ALLOWED_EVENT_CHANNELS as readonly string[]).includes('shortcut:triggered')) {
+      console.warn('[preload] 不允许的事件 channel: shortcut:triggered');
+      return () => {};
+    }
+    const handler = (_event: unknown, payload: { id: string; text?: string }) => callback(payload);
+    ipcRenderer.on('shortcut:triggered', handler);
+    return () => ipcRenderer.removeListener('shortcut:triggered', handler);
+  },
   /** 通知主进程同步已完成 */
   notifySyncComplete: () => {
     ipcRenderer.invoke('sync:quit-complete');
@@ -263,6 +275,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ---- 自动更新 API ----
   /** 设置是否自动检查更新 */
   setAutoUpdate: (enabled: boolean) => ipcRenderer.invoke('update:set-auto-check', enabled),
+  // FRONT2-M5: safeStorage 系统级加密（密钥材料落盘保护，CryptoManager 消费）
+  safeStorageEncrypt: (plain: string) => ipcRenderer.invoke('crypto:safe-storage-encrypt', plain),
+  safeStorageDecrypt: (encoded: string) => ipcRenderer.invoke('crypto:safe-storage-decrypt', encoded),
   // ---- 阶段 A：知识入籍拖拽 API（Electron 35 移除 File.path，必须经 webUtils 转换） ----
   /** 拖拽文件 → 绝对路径（供 import:parse-pdf 使用） */
   getPathForFile: (file: File) => webUtils.getPathForFile(file),

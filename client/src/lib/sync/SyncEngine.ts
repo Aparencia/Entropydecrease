@@ -121,7 +121,8 @@ export class SyncEngine {
             resolve();
           } else if (Date.now() - startedAt > 15000) {
             // 超时兜底：强制清锁继续（sync 的 finally 可能因异常路径未执行）
-            logger.warn('[SyncEngine] resume: waiting for in-flight sync timed out, forcing unlock');
+            // eslint-disable-next-line no-console -- 同步引擎超时兜底需记录
+            console.warn('[SyncEngine] resume: waiting for in-flight sync timed out, forcing unlock');
             this.syncInProgress = false;
             resolve();
           } else {

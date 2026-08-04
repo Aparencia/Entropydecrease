@@ -17,7 +17,7 @@
  * 应用无法启动，任何修改需完整回归启动/退出/托盘/更新流程。
  */
 
-import { app, BrowserWindow, Menu, session, clipboard } from 'electron';
+import { app, BrowserWindow, Menu, session, clipboard, safeStorage } from 'electron';
 import { safeHandle, setMainWindowId, requireText } from './ipcUtils.js';
 import { logger } from './logger.js';
 import { registerAIHandlers, initAIModule } from './ai/index.js';
@@ -43,6 +43,7 @@ import { registerKnowledgeIpcHandlers } from './db/knowledgeQueries.js';
 import { registerStorageIpcHandlers } from './storageIpcHandlers.js';
 import { registerKeyframeScheme, registerKeyframeIpcHandlers } from './ipc/keyframeStorage.js';
 import { loadPerformanceMode, registerPerformanceHandlers } from './performanceMode.js';
+import { registerShortcuts, unregisterShortcuts } from './shortcutManager.js';
 
 // ================================================================
 // 性能优化：启用 GPU 光栅化与零拷贝
@@ -202,6 +203,24 @@ if (!gotTheLock) {
     // v1.0.0: 注册数据迁移 IPC handlers（IndexedDB → SQLite）
     registerMigrationHandlers(safeHandle);
 
+    // FRONT2-M5: 密钥材料安全存储 IPC——safeStorage 为 OS 级加密（Windows
+    // DPAPI/macOS Keychain），渲染进程设备密钥经此加密后才落 localStorage，
+    // 杜绝 XSS 直读明文密钥解密全部数据（CryptoManager 消费）
+    safeHandle('crypto:safe-storage-encrypt', async (_event, plain: unknown) => {
+      const text = requireText(plain, 'plain');
+      if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error('safeStorage 在当前平台不可用');
+      }
+      return safeStorage.encryptString(text).toString('base64');
+    });
+    safeHandle('crypto:safe-storage-decrypt', async (_event, encoded: unknown) => {
+      const b64 = requireText(encoded, 'encoded');
+      if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error('safeStorage 在当前平台不可用');
+      }
+      return safeStorage.decryptString(Buffer.from(b64, 'base64'));
+    });
+
     // 数据访问与存储/备份 IPC（详见 db/dbIpcHandlers.ts、storageIpcHandlers.ts）
     registerDbIpcHandlers();
     registerStorageIpcHandlers();
@@ -271,6 +290,10 @@ if (!gotTheLock) {
 
     // SEC-005: 设置主窗口 ID 以启用 IPC sender 验证
     setMainWindowId(mainWindow.webContents.id);
+
+    // G7 全局快捷键框架：注册 SHORTCUT_DEFS 声明的系统级快捷键
+    // （capture-clipboard 等），触发事件经 shortcut:triggered 推送给渲染层
+    registerShortcuts(() => mainWindow);
 
     initAutoUpdater(mainWindow);
 
@@ -363,6 +386,8 @@ if (!gotTheLock) {
     destroyAutoUpdater();
     destroyTray();
     closeDb();
+    // G7: 释放全局快捷键（globalShortcut 不随进程自动回收）
+    unregisterShortcuts();
     mainWindow = null;
 
     // 关闭 MCP Bridge 子进程（防止孤儿进程阻塞退出）

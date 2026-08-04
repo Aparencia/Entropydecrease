@@ -601,6 +601,32 @@ totalPausedMs: 0,
             });
           }
 
+          // FRONT2-M2: 墙钟校准完成分支补齐音效与通知——原实现"直接复用上面的
+          // 完成逻辑"漏掉了这两块（正常分支 L482-506 有），休眠唤醒后的阶段
+          // 完成无任何提示，用户错过阶段转换
+          if (!isSilent) {
+            if (settings.soundEnabled) {
+              playCompletionSound();
+            }
+            if (phase === 'work') {
+              soundPlayer.play('pomodoro_work_complete');
+            } else {
+              soundPlayer.play('pomodoro_break_end');
+              // 长休结束 = 一整轮完成
+              if (phase === 'long_break') {
+                soundPlayer.play('pomodoro_complete');
+              }
+            }
+          }
+          // 发送浏览器通知
+          if (settings.notificationEnabled) {
+            if (phase === 'work') {
+              sendNotification('又添了一段暖意', '继续深潜吧 ☕').catch(() => {});
+            } else {
+              sendNotification('休息结束！', '开始下一个番茄 🍅').catch(() => {});
+            }
+          }
+
           set((s) => ({
             phase: nextPhase,
             remainingSeconds: shouldAutoStart ? duration : 0,

@@ -12,6 +12,16 @@ import type { StreakState } from '../types';
 const toISO = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+/**
+ * 将本地日期字符串（YYYY-MM-DD）解析为本地午夜 Date
+ * FRONT2-M3: new Date("YYYY-MM-DD") 会按 UTC 午夜解析，UTC+8 时
+ * lastDate 实际落在前一天的 08:00，与本地日期的 today 间隔计算差一天
+ */
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 /** 断裂后保留百分比 / Retained percent after break */
 export const RETAINED_PERCENT = 50;
 
@@ -58,7 +68,7 @@ export function updateStreak(
     return state;
   }
 
-  const lastDate = new Date(state.lastActiveDate);
+  const lastDate = parseLocalDate(state.lastActiveDate);
   const gap = daysBetween(lastDate, today);
   const restDayPref = state.restDayPreference;
 

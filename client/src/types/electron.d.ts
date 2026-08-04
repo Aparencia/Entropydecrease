@@ -39,6 +39,9 @@ declare global {
       notifySyncComplete: () => void;
       /** 设置是否自动检查更新 */
       setAutoUpdate: (enabled: boolean) => Promise<{ success: boolean }>;
+      /** FRONT2-M5: safeStorage 系统级加密（密钥材料落盘保护） */
+      safeStorageEncrypt: (plain: string) => Promise<string>;
+      safeStorageDecrypt: (encoded: string) => Promise<string>;
       /** v1.0.0: 数据访问 API */
       db: {
         query: <T = unknown>(table: string, method: string, args?: unknown[]) => Promise<T>;

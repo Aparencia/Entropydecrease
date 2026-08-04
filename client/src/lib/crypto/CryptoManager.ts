@@ -17,6 +17,9 @@ const DEVICE_KEY_STORAGE_KEY = 'keban_device_key';
 
 export class CryptoManager {
   private key: CryptoKey | null = null;
+  /** FRONT2-M5: init 派生失败标记——供 UI 提示"加密未启用"，
+   * 避免用户以为敏感字段已加密（原实现静默置 null 后明文写入） */
+  private initFailed = false;
   private static instance: CryptoManager | null = null;
 
   private constructor() {}
@@ -45,15 +48,20 @@ export class CryptoManager {
         this.saveSalt(salt);
       }
 
-      // 获取或生成设备级随机密钥材料
-      const deviceKey = this.getOrCreateDeviceKey(userId);
+      // 获取或生成设备级随机密钥材料（Electron 环境经 safeStorage 加密落盘）
+      const deviceKey = await this.getOrCreateDeviceKey(userId);
 
       // 派生 AES-GCM 密钥（PBKDF2，100,000 次迭代）
       this.key = await deriveKey(deviceKey, salt);
+      this.initFailed = false;
     } catch (error) {
       // eslint-disable-next-line no-console -- 加密初始化失败需记录
       console.error('[CryptoManager] Failed to initialize key:', error);
       this.key = null;
+      // FRONT2-M5: 显式标记初始化失败并向上抛出——原实现静默置 null 后
+      // encryptField 走"未就绪"分支明文写入敏感字段，用户误以为已加密
+      this.initFailed = true;
+      throw error;
     }
   }
 
@@ -62,6 +70,14 @@ export class CryptoManager {
    */
   isReady(): boolean {
     return this.key !== null;
+  }
+
+  /**
+   * 检查密钥初始化是否失败（FRONT2-M5）
+   * 初始化失败时加密不可用且不会静默降级为明文——UI 应据此提示用户
+   */
+  hasInitFailed(): boolean {
+    return this.initFailed;
   }
 
   /**
@@ -142,18 +158,57 @@ export class CryptoManager {
    * 每个 userId 隔离存储，确保不同用户的密钥材料独立
    *
    * @security 此加密仅防"本地文件拷贝"场景（其他人直接复制 IndexedDB 文件
-   * 无法读取加密字段），不防应用内 XSS——密钥材料明文存储在 localStorage 中，
-   * 任何同源脚本均可读取。若 Electron 环境可用 safeStorage 则优先使用。
+   * 无法读取加密字段）。FRONT2-M5: Electron 环境优先经 safeStorage（OS 级
+   * 加密：Windows DPAPI / macOS Keychain）加密后落 localStorage，杜绝
+   * XSS 直读明文密钥；Web 环境无 safeStorage 时回退明文（原行为）。
    */
-  private getOrCreateDeviceKey(userId: string): string {
+  private async getOrCreateDeviceKey(userId: string): Promise<string> {
     const storageKey = `${DEVICE_KEY_STORAGE_KEY}_${userId}`;
+    const encryptedKey = `${storageKey}_enc`;
+
+    // 1) Electron 环境：优先 safeStorage 加密存储
+    const api = window.electronAPI;
+    if (api?.safeStorageEncrypt && api?.safeStorageDecrypt) {
+      const storedEnc = localStorage.getItem(encryptedKey);
+      if (storedEnc) {
+        try {
+          return await api.safeStorageDecrypt(storedEnc);
+        } catch {
+          // OS 密钥轮换/系统重装导致解密失败：回退重建新密钥材料
+          console.warn('[CryptoManager] safeStorage 解密失败，重建密钥材料');
+        }
+      }
+      const deviceKey = this.generateDeviceKey();
+      try {
+        const encoded = await api.safeStorageEncrypt(deviceKey);
+        localStorage.setItem(encryptedKey, encoded);
+        // 清理旧的明文版本（若存在）
+        localStorage.removeItem(storageKey);
+        return deviceKey;
+      } catch (err) {
+        // safeStorage 不可用（Linux 无 keyring 等）：回退明文存储
+        console.warn('[CryptoManager] safeStorage 不可用，回退明文存储:', err);
+        return this.getOrCreateDeviceKeyPlain(storageKey);
+      }
+    }
+
+    // 2) Web 环境：回退明文存储（原行为）
+    return this.getOrCreateDeviceKeyPlain(storageKey);
+  }
+
+  /** 生成 32 字节随机密钥材料（hex 字符串） */
+  private generateDeviceKey(): string {
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    return Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  /** 明文 localStorage 存储（Web 环境兜底） */
+  private getOrCreateDeviceKeyPlain(storageKey: string): string {
     let deviceKey = localStorage.getItem(storageKey);
     if (!deviceKey) {
-      // 生成 32 字节随机密钥材料，转 hex 字符串存储
-      const bytes = crypto.getRandomValues(new Uint8Array(32));
-      deviceKey = Array.from(bytes)
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
+      deviceKey = this.generateDeviceKey();
       localStorage.setItem(storageKey, deviceKey);
     }
     return deviceKey;

@@ -105,7 +105,10 @@ export function useLearningProgress(): LearningProgressItem[] {
 
       // ── 5. 连续打卡：连续天数映射进度（30天 = 100%） ──
       try {
-        const today = new Date().toISOString().split('T')[0];
+        // FRONT2-M3: 用本地日期（与 useCheckIn 写入格式一致）——原实现取 UTC
+        // 日期，UTC+8 用户凌晨 0-8 点会查到 UTC 昨天，打卡进度显示 0
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
         const todayRecord = await db.studyCheckIns.where('date').equals(today).first();
         if (todayRecord) {
           const streakProgress = Math.min(100, Math.round((todayRecord.streakDays / 30) * 100));

@@ -60,6 +60,18 @@ export interface WorldSignals {
 const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
 
 /**
+ * 本地日期字符串（YYYY-MM-DD）
+ * FRONT2-M3: 不用 toISOString().split('T')[0]（UTC 日期）——UTC+8 用户
+ * 凌晨 00:00-08:00 的种植会被判入前一天，连击断裂
+ */
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
  * 从珊瑚种植日期派生当前连击天数 / Derive current streak from coral plant dates
  *
  * @ai-context 与 DashboardPage 的 StreakState 构建口径一致（复用珊瑚数据、
@@ -69,7 +81,7 @@ const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
 export function computeCurrentStreakFromCorals(corals: CoralRecord[]): number {
   if (corals.length === 0) return 0;
   const uniqueDays = [...new Set(
-    corals.map((c) => new Date(c.plantedAt).toISOString().split('T')[0]),
+    corals.map((c) => toLocalDateStr(new Date(c.plantedAt))),
   )].sort().reverse();
 
   let streak = 1;

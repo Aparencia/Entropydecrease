@@ -100,8 +100,12 @@ export const useEcosystemStore = create<EcosystemState>((set, get) => ({
         }
       }
 
-      const totalDepth = restored.reduce((sum, c) => sum + c.depth, 0);
-      set({ corals: restored, totalDepth });
+      // FRONT2-M4: 写库完成后重新读库再 set——原实现用旧快照整体覆盖，
+      // 两个会话并发完成（如番茄钟与闪卡同时触发）时后写者覆盖前者的
+      // 珊瑚，store 中珊瑚丢失、totalDepth 少算（DB 有但 UI 态丢）
+      const latest = await db.coralEcosystem.toArray();
+      const totalDepth = latest.reduce((sum, c) => sum + c.depth, 0);
+      set({ corals: latest, totalDepth });
     } catch { /* 静默失败 */ }
   },
 

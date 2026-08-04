@@ -51,6 +51,9 @@ declare global {
       onSyncBeforeQuit: (callback: () => void) => () => void;
       notifySyncComplete: () => void;
       setAutoUpdate: (enabled: boolean) => Promise<unknown>;
+      /** FRONT2-M5: safeStorage 系统级加密（密钥材料落盘保护） */
+      safeStorageEncrypt: (plain: string) => Promise<string>;
+      safeStorageDecrypt: (encoded: string) => Promise<string>;
       backupSave: (data: string, defaultName?: string) => Promise<unknown>;
       backupOpen: () => Promise<unknown>;
       db: {
