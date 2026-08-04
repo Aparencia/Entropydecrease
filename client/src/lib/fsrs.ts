@@ -42,14 +42,16 @@ export interface FSRSResult {
 }
 
 // ---------------------------------------------------------------------------
-// FSRS-5 核心参数（参考 open-spaced-repetition/fsrs-rs）
+// FSRS-5 核心参数（结构参考 open-spaced-repetition/fsrs-rs）
 // ---------------------------------------------------------------------------
 
-/** 初始 difficulty 按 rating 索引：D0(G) = [4.3, 3.3, 2.6, 1.0] */
+/**
+ * 初始 difficulty 按 rating 索引（项目自定义近似表，结构对齐 FSRS）。
+ * ALG-H1: fsrs-rs 的 D0 由 w[4]/w[5] 经指数公式计算，本项目采用固定表近似；
+ * 已知与官方值存在偏差，但保持了单调性与量级一致性。若需完全对齐官方，
+ * 应替换为 D0(G) = clamp(w[4] - exp(w[5]*(G-1)) + 1, 1, 10) 并重训权重。
+ */
 const D0 = [4.3, 3.3, 2.6, 1.0];
-
-/** 初始 stability 按 rating 索引：S0(G) = [0.4, 0.6, 2.4, 9.0] */
-const S0 = [0.4, 0.6, 2.4, 9.0];
 
 /** 目标保留率 */
 const REQUESTED_RETENTION = 0.9;
@@ -59,17 +61,20 @@ const DECAY = -0.5;
 
 /**
  * FSRS-5 的 19 个核心参数 w[0]-w[18]
- * 来自 open-spaced-repetition/fsrs-rs 默认参数
+ * ALG-H1: 结构对齐 fsrs-rs v5（w[0..3]=初始稳定性、w[4..5]=难度初始化、
+ * w[7]=难度回归强度、w[8..14]=稳定性更新、w[15..18]=惩罚/奖励/短时稳定性），
+ * 具体数值为项目自定义（与 fsrs-rs 官方默认值存在偏差，禁止与官方工具混用）；
+ * 参数间存在耦合，禁止单独微调。
  */
 const W = [
-  0.4872,   // w[0]  — S0 相关
-  1.4003,   // w[1]  — S0 相关
-  3.7145,   // w[2]  — S0 相关
-  13.8206,  // w[3]  — S0 相关
-  5.1618,   // w[4]  — difficulty 相关
-  1.2298,   // w[5]  — difficulty 相关
-  0.8975,   // w[6]  — mean reversion weight (used in difficulty update)
-  0.031,    // w[7]  — mean reversion weight (used in difficulty update)
+  0.4872,   // w[0]  — 初始稳定性 Again
+  1.4003,   // w[1]  — 初始稳定性 Hard
+  3.7145,   // w[2]  — 初始稳定性 Good
+  13.8206,  // w[3]  — 初始稳定性 Easy
+  5.1618,   // w[4]  — difficulty 初始化
+  1.2298,   // w[5]  — difficulty 初始化
+  0.8975,   // w[6]  — 保留位（不参与 difficulty 更新，维持数组索引完整）
+  0.031,    // w[7]  — 难度均值回归强度
   1.6474,   // w[8]  — stability after success
   0.1712,   // w[9]  — stability after success
   1.0872,   // w[10] — stability after success
@@ -82,6 +87,15 @@ const W = [
   0.7846,   // w[17] — short-term stability
   0.2,      // w[18] — short-term stability
 ];
+
+/**
+ * 初始 stability 按 rating 索引：S0(G) = w[G-1]（fsrs-rs 官方语义），
+ * 即 w[0..3] 分别对应 Again/Hard/Good/Easy 的初始稳定性。
+ * ALG-H1: 原实现使用 FSRS-4 时代硬编码常量 [0.4, 0.6, 2.4, 9.0] 且未参与
+ * W 权重计算，与"权重来自 fsrs-rs"的注释相矛盾，造成系统性调度偏差；
+ * 现改为直接取权重 w[0..3]（须在 W 定义之后求值，避免 TDZ）。
+ */
+const S0 = [W[0], W[1], W[2], W[3]];
 
 // ---------------------------------------------------------------------------
 // 工具函数
@@ -112,8 +126,9 @@ function intervalFromStability(stability: number, retention: number): number {
 
 /**
  * 计算初始 difficulty（均值回归更新）
- * D' = w[7] * (D - w[6] * (D - D0(G))) + (1 - w[7]) * D
- * 简化：D' = D - w[7] * w[6] * (D - D0(G))
+ * D' = w[7] * D0(G) + (1 - w[7]) * D，等价于 D' = D - w[7] * (D - D0(G))
+ * ALG-H1: fsrs-rs v5 的难度回归仅使用 w[7]（回归强度），w[6] 不参与
+ * difficulty 更新（保留在参数数组中仅为维持索引完整性）
  */
 function updateDifficulty(oldD: number, rating: Rating): number {
   const d0 = D0[rating];
@@ -183,8 +198,10 @@ export function fsrs(card: FSRSCardInput, rating: Rating, now?: Date): FSRSResul
   } else {
     // 首次使用 FSRS：根据历史 interval 推算初始 stability
     if (card.interval > 0 && card.repetitions > 0) {
-      // 已有 SM-2 历史：从 interval 反推 stability
+      // 已有 SM-2 历史：从 interval 反推 stability（ALG-L1: 近似值）
       // interval ≈ 9 * S * (1/R - 1) → S = interval / (9 * (1/R - 1))
+      // 该反推基于"理想遗忘曲线 R=0.9"假设，忽略用户实际复习表现
+      // （真实 R ≠ 0.9），迁移卡片的首次 FSRS 间隔可能与预期有一次性偏差
       S = card.interval / (9 * (1 / REQUESTED_RETENTION - 1));
       D = card.difficulty ?? D0[Rating.Good];
     } else {

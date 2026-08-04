@@ -40,8 +40,8 @@ const W = [
   2.8278, 0.7846, 0.2,
 ];
 
-/** 初始 stability 按评分索引：S0 = [0.4, 0.6, 2.4, 9.0] */
-const S0 = [0.4, 0.6, 2.4, 9.0];
+/** 初始 stability 按评分索引：S0(G) = w[G-1]（ALG-H1 官方对齐后为 W[0..3]） */
+const S0 = [W[0], W[1], W[2], W[3]];
 
 /** 初始 difficulty 按评分索引：D0 = [4.3, 3.3, 2.6, 1.0] */
 const D0 = [4.3, 3.3, 2.6, 1.0];
@@ -76,7 +76,7 @@ describe('FSRS-5 算法', () => {
   // ── 新卡片首次复习 ─────────────────────────────────────────────────────
 
   describe('新卡片首次复习（stability=0，interval=0）', () => {
-    it('Again 评分：应使用 S0[0]=0.4 和 D0[0]=4.3', () => {
+    it('Again 评分：应使用 S0[0]=w[0] 和 D0[0]=4.3（ALG-H1: S0 取权重而非旧常量）', () => {
       const result = fsrs(NEW_CARD, Rating.Again, NOW);
       expect(result.stability).toBe(S0[Rating.Again]);
       expect(result.difficulty).toBe(D0[Rating.Again]);
@@ -85,21 +85,21 @@ describe('FSRS-5 算法', () => {
       expect(result.lapses).toBe(0);
     });
 
-    it('Hard 评分：应使用 S0[1]=0.6 和 D0[1]=3.3', () => {
+    it('Hard 评分：应使用 S0[1]=w[1] 和 D0[1]=3.3（ALG-H1）', () => {
       const result = fsrs(NEW_CARD, Rating.Hard, NOW);
       expect(result.stability).toBe(S0[Rating.Hard]);
       expect(result.difficulty).toBe(D0[Rating.Hard]);
       expect(result.repetitions).toBe(1);
     });
 
-    it('Good 评分：应使用 S0[2]=2.4 和 D0[2]=2.6', () => {
+    it('Good 评分：应使用 S0[2]=w[2] 和 D0[2]=2.6（ALG-H1）', () => {
       const result = fsrs(NEW_CARD, Rating.Good, NOW);
       expect(result.stability).toBe(S0[Rating.Good]);
       expect(result.difficulty).toBe(D0[Rating.Good]);
       expect(result.repetitions).toBe(1);
     });
 
-    it('Easy 评分：应使用 S0[3]=9.0 和 D0[3]=1.0', () => {
+    it('Easy 评分：应使用 S0[3]=w[3] 和 D0[3]=1.0（ALG-H1）', () => {
       const result = fsrs(NEW_CARD, Rating.Easy, NOW);
       expect(result.stability).toBe(S0[Rating.Easy]);
       expect(result.difficulty).toBe(D0[Rating.Easy]);

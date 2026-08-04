@@ -318,16 +318,24 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
 
       // 同步 flashcard store 中对应的卡片状态（含操作日志）
       const flashcardState = useFlashcardStore.getState();
-      flashcardState.updateCard(card.id, {
-        easeFactor: result.easeFactor,
-        interval: effectiveInterval,
-        repetitions: result.repetitions,
-        lapses: result.lapses,
-        dueDate: effectiveDueDate,
-        stability: result.stability,
-        difficulty: result.difficulty,
-        lastReviewDate: updatedAt,
-      });
+      try {
+        // ALG-M2: updateCard 为异步写（原未 await 的 rejection 是 unhandled）。
+        // 若此处失败（review 已落库、card 未更新），捕获并继续推进 UI——
+        // 内存态（updatedCards）已是最新，DB 旧值将在下次复习时被覆盖，
+        // 不丢数据；失败仅造成一次性的调度偏差，而非半写卡死或重复调度
+        await flashcardState.updateCard(card.id, {
+          easeFactor: result.easeFactor,
+          interval: effectiveInterval,
+          repetitions: result.repetitions,
+          lapses: result.lapses,
+          dueDate: effectiveDueDate,
+          stability: result.stability,
+          difficulty: result.difficulty,
+          lastReviewDate: updatedAt,
+        });
+      } catch (updateErr) {
+        console.error('[StudySession] 卡片状态更新失败（复习记录已保存）:', updateErr);
+      }
 
       const nextIndex = currentIndex + 1;
       const isLastCard = nextIndex >= sessionCards.length;
