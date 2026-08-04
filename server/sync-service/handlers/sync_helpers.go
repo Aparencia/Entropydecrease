@@ -10,6 +10,7 @@ import (
 	"entropydecrease/sync-service/models"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ConflictInfo is returned to the client when a version conflict is detected.
@@ -48,7 +49,7 @@ func fromJSON(s string) interface{} {
 // nextSeqNo atomically increments and returns the new GlobalSeqNo inside tx.
 func nextSeqNo(tx *gorm.DB) (int64, error) {
 	var g models.GlobalSeqNo
-	if err := tx.Set("gorm:query_option", "FOR UPDATE").First(&g).Error; err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&g).Error; err != nil {
 		return 0, err
 	}
 	g.SeqNo++

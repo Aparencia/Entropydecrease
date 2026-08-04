@@ -25,7 +25,7 @@ DAILY_TOKEN_LIMIT = int(os.getenv("BUDGET_DAILY_TOKEN_LIMIT", "200000"))
 DAILY_COST_LIMIT_YUAN = float(os.getenv("BUDGET_DAILY_COST_LIMIT", "2.0"))
 
 # 需要预算检查的路径前缀
-BUDGET_CHECKED_PATHS = ("/api/v1/ai/", "/api/v1/asr/")
+BUDGET_CHECKED_PATHS = ("/api/v1/ai/", "/api/v1/asr/", "/api/v1/multimodal/", "/api/v1/vision/")
 
 
 class BudgetMiddleware(BaseHTTPMiddleware):

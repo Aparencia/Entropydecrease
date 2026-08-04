@@ -166,12 +166,12 @@ func BroadcastOperation(userID string, sourceDeviceID string, ops []WSOperationP
 // ---------- helpers ----------
 
 // fetchOperationsSince queries the DB for operations newer than sinceVersion, excluding the requesting device.
-func fetchOperationsSince(sinceVersion int64, excludeDeviceID string) []WSOperationPayload {
+func fetchOperationsSince(userID string, sinceVersion int64, excludeDeviceID string) []WSOperationPayload {
 	var ops []operationRow
 	_ = models.DB.
 		Table("operations").
 		Select("entity_type, entity_id, operation, payload, server_seq_no, device_id").
-		Where("server_seq_no > ? AND device_id != ?", sinceVersion, excludeDeviceID).
+		Where("user_id = ? AND server_seq_no > ? AND device_id != ?", userID, sinceVersion, excludeDeviceID).
 		Order("server_seq_no ASC").
 		Find(&ops).Error
 

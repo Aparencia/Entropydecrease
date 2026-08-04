@@ -36,13 +36,18 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
         if request.method in ("POST", "PUT", "PATCH"):
             # 检查 Content-Length 头
             content_length = request.headers.get("content-length")
-            if content_length and int(content_length) > MAX_CONTENT_LENGTH:
-                return JSONResponse(
-                    status_code=422,
-                    content={
-                        "detail": f"request body exceeds {MAX_CONTENT_LENGTH} bytes (max 1MB)",
-                    },
-                )
+            if content_length:
+                try:
+                    if int(content_length) > MAX_CONTENT_LENGTH:
+                        return JSONResponse(
+                            status_code=422,
+                            content={
+                                "detail": f"request body exceeds {MAX_CONTENT_LENGTH} bytes (max 1MB)",
+                            },
+                        )
+                except (ValueError, TypeError):
+                    # 畸形 Content-Length 头，忽略该检查（后续 JSON 解析会进一步校验）
+                    pass
 
             # 解析 JSON 请求体并检查文本字段
             content_type = request.headers.get("content-type", "")

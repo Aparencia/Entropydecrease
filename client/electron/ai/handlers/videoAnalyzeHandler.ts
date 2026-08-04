@@ -46,11 +46,15 @@ function register(): void {
       }
 
       try {
-        // SEC: 路径安全校验 — 仅允许读取应用数据目录或临时目录（与 main.ts fs:read-file 保持一致）
+        // SEC: 路径安全校验 — 使用 path.relative 做路径边界检查
         const resolvedPath = path.resolve(args.filePath);
         const appDataPath = app.getPath('userData');
         const tempPath = app.getPath('temp');
-        if (!resolvedPath.startsWith(appDataPath) && !resolvedPath.startsWith(tempPath)) {
+        const relToApp = path.relative(appDataPath, resolvedPath);
+        const relToTemp = path.relative(tempPath, resolvedPath);
+        const isInApp = !relToApp.startsWith('..') && !path.isAbsolute(relToApp);
+        const isInTemp = !relToTemp.startsWith('..') && !path.isAbsolute(relToTemp);
+        if (!isInApp && !isInTemp) {
           throw new Error(`[AI] [video-analyze] File path not allowed: ${resolvedPath}`);
         }
 

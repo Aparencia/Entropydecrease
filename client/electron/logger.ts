@@ -29,6 +29,10 @@ class Logger {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const logFile = path.join(logsDir, `app-${timestamp}.log`);
       this.stream = fs.createWriteStream(logFile, { flags: 'a' });
+      this.stream.on('error', (err) => {
+        console.error('[Logger] Write stream error, falling back to console:', err);
+        this.stream = null;
+      });
       this.stream.write(`# EntropyDecrease log started at ${new Date().toISOString()}\n`);
     } catch (err) {
       console.error('[Logger] Failed to initialize file logger:', err);

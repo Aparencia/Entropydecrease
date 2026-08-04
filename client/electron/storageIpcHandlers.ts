@@ -49,7 +49,12 @@ export function registerStorageIpcHandlers(): void {
     const tempPath = app.getPath('temp');
     const resolvedPath = path.resolve(filePath);
 
-    if (!resolvedPath.startsWith(appDataPath) && !resolvedPath.startsWith(tempPath)) {
+    // SEC: 使用 path.relative 做路径边界检查，防止兄弟目录绕过（如 entropy-decrease2）
+    const relToApp = path.relative(appDataPath, resolvedPath);
+    const relToTemp = path.relative(tempPath, resolvedPath);
+    const isInApp = !relToApp.startsWith('..') && !path.isAbsolute(relToApp);
+    const isInTemp = !relToTemp.startsWith('..') && !path.isAbsolute(relToTemp);
+    if (!isInApp && !isInTemp) {
       throw new Error('不允许读取该路径的文件');
     }
 
@@ -97,11 +102,11 @@ export function registerStorageIpcHandlers(): void {
 
       logger.info(`[Storage] Switching storage path: ${normalizedOld} → ${normalizedNew}`);
 
-      // 2. 为旧数据库创建备份
-      await createBackup(normalizedOld);
-
-      // 3. WAL checkpoint 并关闭旧连接
+      // 2. WAL checkpoint 并关闭旧连接（在备份前执行，确保备份文件一致性）
       checkpointAndClose();
+
+      // 3. 为旧数据库创建备份（checkpoint 后的库文件，不含活跃 WAL）
+      await createBackup(normalizedOld);
 
       // 4. 迁移数据库文件
       const migrationResult = await migrateDatabaseFiles(normalizedOld, normalizedNew);

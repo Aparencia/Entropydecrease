@@ -9,7 +9,8 @@
  * @ai-context: Ollama 模块 IPC 注册出口（状态/配置/模型管理通道）。
  */
 
-import { ipcMain, BrowserWindow } from 'electron';
+import { BrowserWindow } from 'electron';
+import { safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
 import { getOllamaStatus, pullModel, deleteModel, initOllamaDetection } from './OllamaService.js';
 import { loadOllamaConfig, updateOllamaConfig, getOllamaConfig } from './config.js';
@@ -26,7 +27,7 @@ export function registerOllamaHandlers(): void {
   logger.info('[Ollama] Registering IPC handlers...');
 
   // ---- 获取状态 ----
-  ipcMain.handle('ollama:get-status', async (_event, forceRefresh?: boolean) => {
+  safeHandle('ollama:get-status', async (_event, forceRefresh?: boolean) => {
     try {
       const status = await getOllamaStatus(forceRefresh ?? false);
       const config = getOllamaConfig();
@@ -41,7 +42,7 @@ export function registerOllamaHandlers(): void {
   });
 
   // ---- 更新配置 ----
-  ipcMain.handle('ollama:set-config', async (_event, partial: Record<string, unknown>) => {
+  safeHandle('ollama:set-config', async (_event, partial: Record<string, unknown>) => {
     try {
       const updated = await updateOllamaConfig(partial);
       logger.info(`[Ollama] Config updated via IPC: enabled=${updated.enabled}`);
@@ -53,7 +54,7 @@ export function registerOllamaHandlers(): void {
   });
 
   // ---- 拉取模型 ----
-  ipcMain.handle('ollama:pull-model', async (event, modelName: string) => {
+  safeHandle('ollama:pull-model', async (event, modelName: string) => {
     if (!modelName || typeof modelName !== 'string') {
       throw new Error('Invalid model name');
     }
@@ -88,7 +89,7 @@ export function registerOllamaHandlers(): void {
   });
 
   // ---- 删除模型 ----
-  ipcMain.handle('ollama:delete-model', async (_event, modelName: string) => {
+  safeHandle('ollama:delete-model', async (_event, modelName: string) => {
     if (!modelName || typeof modelName !== 'string') {
       throw new Error('Invalid model name');
     }

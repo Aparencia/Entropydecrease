@@ -79,6 +79,12 @@ PATH_TO_FEATURE: dict[str, str] = {
     # ---- E1: 概念预检（concept_precheck.py） ----
     "/api/v1/ai/concept-precheck": "concept_precheck", # 费曼讲解前探测问题
 
+    # ---- 知识入籍概念化（import_concept.py） ----
+    "/api/v1/ai/import/concepts": "import_concept",  # 切块文本→概念候选
+
+    # ---- Path C: 视频分析（multimodal_video.py） ----
+    "/api/v1/multimodal/analyze-video": "video_analyze",  # 视频课堂分析
+
     # 注意：/{feature}/stream（streaming.py）为通配路径，无法精确匹配，
     # 其限流由流式路由内部通过 feature 参数自行处理。
 }

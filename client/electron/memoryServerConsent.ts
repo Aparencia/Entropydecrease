@@ -10,7 +10,8 @@
  * @ai-context: In-app consent toggle for the memory server. The marker file
  * remains the single source of truth; this module only reads/writes it.
  */
-import { app, ipcMain } from 'electron';
+import { app } from 'electron';
+import { safeHandle } from './ipcUtils.js';
 import * as path from 'path';
 import * as fs from 'fs';
 import { logger } from './logger.js';
@@ -39,7 +40,7 @@ function readAccessLog(): { entries: Array<{ at: string; tool: string }>; total:
 }
 
 export function registerMemoryServerConsentHandlers(): void {
-  ipcMain.handle('memory_server:get_consent', () => {
+  safeHandle('memory_server:get_consent', async () => {
     try {
       return fs.existsSync(markerPath());
     } catch {
@@ -47,7 +48,7 @@ export function registerMemoryServerConsentHandlers(): void {
     }
   });
 
-  ipcMain.handle('memory_server:set_consent', (_event, enabled: unknown) => {
+  safeHandle('memory_server:set_consent', async (_event, enabled: unknown) => {
     try {
       const p = markerPath();
       if (enabled === true) {
@@ -70,7 +71,7 @@ export function registerMemoryServerConsentHandlers(): void {
   });
 
   // 访问审计：谁在何时读过你的记忆（计划 C2：最近 50 条）
-  ipcMain.handle('memory_server:get_access_log', () => {
+  safeHandle('memory_server:get_access_log', async () => {
     try {
       return readAccessLog();
     } catch (err) {
@@ -81,7 +82,7 @@ export function registerMemoryServerConsentHandlers(): void {
   });
 
   // 宿主配置：三步引导第一步「复制配置」的素材（供 Claude Desktop 等粘贴）
-  ipcMain.handle('memory_server:get_host_config', () => {
+  safeHandle('memory_server:get_host_config', async () => {
     return {
       command: process.execPath,
       env: { ELECTRON_RUN_AS_NODE: '1' },

@@ -9,6 +9,7 @@
 
 import type Database from 'better-sqlite3';
 import { getConnection } from './sqliteService.js';
+import { rebuildIndex, collectIndexableData } from './fts5Search.js';
 import { isImportableTable } from './importWhitelist.js';
 import { logger } from '../logger.js';
 
@@ -195,6 +196,14 @@ export function registerMigrationHandlers(
   safeHandle('migration:complete', async () => {
     try {
       const result = completeMigration(db);
+      // 迁移完成后重建 FTS5 全文索引（迁移数据绕过业务写入路径，未触发增量索引维护）
+      try {
+        const indexData = collectIndexableData(db);
+        rebuildIndex(indexData);
+        logger.info(`[Migration] FTS5 index rebuilt: ${indexData.reduce((sum, t) => sum + t.rows.length, 0)} documents`);
+      } catch (ftsErr) {
+        logger.warn(`[Migration] FTS5 index rebuild failed (non-fatal): ${ftsErr instanceof Error ? ftsErr.message : String(ftsErr)}`);
+      }
       return { success: result.ok, integrity: result.integrity };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

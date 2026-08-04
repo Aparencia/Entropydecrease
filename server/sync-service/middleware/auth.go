@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -19,22 +20,18 @@ import (
 
 // rsaPublicKey 缓存解析后的 RSA 公钥，避免每次请求重复解析
 var rsaPublicKey *rsa.PublicKey
+var rsaPubKeyOnce sync.Once
 
-// getRSAPublicKey 从环境变量 SUPABASE_JWT_SECRET 读取 PEM 格式公钥并解析。
-// 解析失败时 log.Fatal 退出；未配置时返回 nil 并打印警告。
-func getRSAPublicKey() *rsa.PublicKey {
-	if rsaPublicKey != nil {
-		return rsaPublicKey
-	}
-
+// initRSAPublicKey 在启动阶段预加载 RSA 公钥，失败时以 Fatal 退出。
+// 这样可确保在第一个请求到达前公钥就已就绪，避免请求路径上的竞态与 log.Fatal。
+func initRSAPublicKey() {
 	pemStr := os.Getenv("SUPABASE_JWT_SECRET")
 	if pemStr == "" {
 		log.Println("[WARN] SUPABASE_JWT_SECRET 未配置，JWT 验证将失败。" +
 			"请从 Supabase Dashboard > Settings > API > JWT Settings 获取 RSA 公钥。")
-		return nil
+		return
 	}
 
-	// 尝试解析 PEM 块
 	block, _ := pem.Decode([]byte(pemStr))
 	if block == nil {
 		log.Fatal("[FATAL] SUPABASE_JWT_SECRET 不是有效的 PEM 格式，请检查环境变量配置")
@@ -51,6 +48,13 @@ func getRSAPublicKey() *rsa.PublicKey {
 	}
 
 	rsaPublicKey = rsaPub
+}
+
+// getRSAPublicKey 返回解析后的 RSA 公钥（启动阶段预加载，无需同步原语）。
+func getRSAPublicKey() *rsa.PublicKey {
+	rsaPubKeyOnce.Do(func() {
+		initRSAPublicKey()
+	})
 	return rsaPublicKey
 }
 
@@ -119,12 +123,16 @@ func validateJWT(tokenString string, c *gin.Context) string {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, jwt.ErrSignatureInvalid
 		}
+		// 严格限定仅 RS256 算法，防止 RS384/RS512 误用
+		if token.Method.Alg() != jwt.SigningMethodRS256.Alg() {
+			return nil, jwt.ErrSignatureInvalid
+		}
 		pubKey := getRSAPublicKey()
 		if pubKey == nil {
 			return nil, jwt.ErrSignatureInvalid
 		}
 		return pubKey, nil
-	})
+	}, jwt.WithValidMethods([]string{"RS256"}))
 
 	if err != nil || !token.Valid {
 		c.JSON(http.StatusUnauthorized, gin.H{

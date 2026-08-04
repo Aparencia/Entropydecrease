@@ -135,7 +135,9 @@ export function registerDbIpcHandlers(): void {
   safeHandle('db:insert', async (_event, params: { table: string; item: Record<string, unknown> }) => {
     const tableName = resolveTable(params.table);
     const repo = new SqliteRepository<SqliteRow>(tableName);
-    const result = await repo.create(params.item as SqliteRow);
+    // SEC: 过滤非法列名，防止列名注入
+    const sanitized = repo.filterAllowedColumns(params.item as SqliteRow);
+    const result = await repo.create(sanitized as Omit<SqliteRow, 'id'> & { id: string });
 
     // 增量索引维护：对含 title/content 字段的表自动更新 FTS5 索引
     // 在插入成功后同步执行，确保搜索索引与业务数据保持一致
@@ -156,7 +158,9 @@ export function registerDbIpcHandlers(): void {
   safeHandle('db:update', async (_event, params: { table: string; id: string; changes: Record<string, unknown> }) => {
     const tableName = resolveTable(params.table);
     const repo = new SqliteRepository<SqliteRow>(tableName);
-    const result = await repo.update(params.id, params.changes as Partial<SqliteRow>);
+    // SEC: 过滤非法列名，防止列名注入
+    const sanitized = repo.filterAllowedColumns(params.changes as Partial<SqliteRow>);
+    const result = await repo.update(params.id, sanitized);
 
     // 增量索引维护：更新操作需要重新读取完整行数据（changes 可能只包含部分字段），
     // 然后更新 FTS5 索引中的对应文档

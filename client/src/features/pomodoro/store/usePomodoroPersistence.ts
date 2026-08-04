@@ -49,7 +49,7 @@ export async function recordSession(
  */
 export function playCompletionSound(): void {
   playBeep(BEEP_FREQUENCY_HZ, BEEP_DURATION_SHORT_MS);
-  setTimeout(() => playBeep(BEEP_DURATION_LONG_MS, BEEP_DURATION_SHORT_MS), BEEP_FREQUENCY_LOW_HZ);
+  setTimeout(() => playBeep(BEEP_FREQUENCY_LOW_HZ, BEEP_DURATION_LONG_MS), BEEP_DURATION_SHORT_MS);
 }
 
 /**

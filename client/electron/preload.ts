@@ -218,8 +218,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   /** 监听主进程发出的窗口关闭事件 */
   onWindowClosing: (callback: () => void) => {
-    ipcRenderer.on('window:closing', callback);
-    return () => ipcRenderer.removeAllListeners('window:closing');
+    const handler = () => callback();
+    ipcRenderer.on('window:closing', handler);
+    return () => ipcRenderer.removeListener('window:closing', handler);
   },
   /** 向主进程发送关闭行为选择 */
   closeAction: (action: 'quit' | 'minimize' | 'cancel', remember: boolean) => {
@@ -237,8 +238,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   /** 监听退出前同步事件 */
   onSyncBeforeQuit: (callback: () => void) => {
-    ipcRenderer.on('sync:before-quit', callback);
-    return () => ipcRenderer.removeAllListeners('sync:before-quit');
+    const handler = () => callback();
+    ipcRenderer.on('sync:before-quit', handler);
+    return () => ipcRenderer.removeListener('sync:before-quit', handler);
   },
   /** 通知主进程同步已完成 */
   notifySyncComplete: () => {

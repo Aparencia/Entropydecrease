@@ -41,38 +41,68 @@ export function ClearDataSection() {
     setShowClearConfirm(false);
     setClearing(true);
     try {
-      // 清除所有 Dexie 表
+      // 清除所有 Dexie 表（保持与 database.ts 中的表定义同步）
       await db.transaction('rw', [
-        db.pomodoroSessions, db.pomodoroSettings,
-        db.notes, db.noteFolders,
+        db.pomodoroSessions, db.pomodoroSettings, db.pomodoroPresets, db.pomodoroGoals,
+        db.notes, db.noteFolders, db.noteLinks,
         db.flashcardDecks, db.flashcards, db.flashcardReviews,
-        db.feynmanNotes, db.feynmanSummaries, db.feynmanWeakPoints,
+        db.feynmanNotes, db.feynmanSummaries, db.feynmanWeakPoints, db.feynmanAIResults,
         db.operationLog, db.appSettings,
         db.studyCheckIns, db.achievements,
-        db.pomodoroGoals, db.syncConflicts, db.offlineQueue,
-        db.windowCaptures,
+        db.syncConflicts, db.offlineQueue,
+        db.windowCaptures, db.windowCaptureSegments,
+        db.consent, db.userProfile,
+        db.inspirations, db.searchIndex,
+        db.classroomNotes,
+        db.crdtDocs, db.crdtChanges,
+        db.ritualRecords,
+        db.deepSeaDiscoveries, db.coralEcosystem,
+        db.streakState,
+        db.predictions,
+        db.hotwords,
       ], async () => {
         await db.pomodoroSessions.clear();
         await db.pomodoroSettings.clear();
+        await db.pomodoroPresets.clear();
+        await db.pomodoroGoals.clear();
         await db.notes.clear();
         await db.noteFolders.clear();
+        await db.noteLinks.clear();
         await db.flashcardDecks.clear();
         await db.flashcards.clear();
         await db.flashcardReviews.clear();
         await db.feynmanNotes.clear();
         await db.feynmanSummaries.clear();
         await db.feynmanWeakPoints.clear();
+        await db.feynmanAIResults.clear();
         await db.operationLog.clear();
         await db.appSettings.clear();
         await db.studyCheckIns.clear();
         await db.achievements.clear();
-        await db.pomodoroGoals.clear();
         await db.syncConflicts.clear();
         await db.offlineQueue.clear();
         await db.windowCaptures.clear();
+        await db.windowCaptureSegments.clear();
+        await db.consent.clear();
+        await db.userProfile.clear();
+        await db.inspirations.clear();
+        await db.searchIndex.clear();
+        await db.classroomNotes.clear();
+        await db.crdtDocs.clear();
+        await db.crdtChanges.clear();
+        await db.ritualRecords.clear();
+        await db.deepSeaDiscoveries.clear();
+        await db.coralEcosystem.clear();
+        await db.streakState.clear();
+        await db.predictions.clear();
+        await db.hotwords.clear();
       });
-      // 清除 localStorage
-      localStorage.clear();
+      // 清除 localStorage 中的加密密钥派生材料（需在表清除后执行，以免影响表清除）
+      // 注意：不清除所有 localStorage 键，仅清除应用相关键，避免破坏其他应用的数据
+      const appKeys = Object.keys(localStorage).filter(k =>
+        k.startsWith('keban_') || k.startsWith('entropydecrease_') || k.startsWith('entropy_')
+      );
+      appKeys.forEach(k => localStorage.removeItem(k));
       soundPlayer.play('data_cleared');
       toast({ type: 'success', message: '所有数据已清除，即将刷新', silent: true });
       setTimeout(() => window.location.reload(), 1000);

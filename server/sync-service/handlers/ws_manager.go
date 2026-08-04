@@ -65,13 +65,8 @@ func (m *WSManager) broadcastToUser(userID string, excludeDeviceID string, messa
 		if deviceID == excludeDeviceID {
 			continue
 		}
-		if conn.isClosed() {
-			continue
-		}
-		select {
-		case conn.Send <- message:
-		default:
-			// Buffer full → close connection to protect the server.
+		if !conn.send(message) {
+			// Buffer full or closed → close connection to protect the server.
 			log.Printf("[ws] buffer overflow, closing user=%s device=%s", userID, deviceID)
 			go conn.close()
 		}

@@ -59,6 +59,23 @@ func (c *WSConnection) isClosed() bool {
 	return c.closed
 }
 
+// send safely sends data to the connection's Send channel, holding the lock
+// to prevent send-on-closed-channel panics. Returns false if the channel is
+// closed or the buffer is full.
+func (c *WSConnection) send(data []byte) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return false
+	}
+	select {
+	case c.Send <- data:
+		return true
+	default:
+		return false
+	}
+}
+
 // readPump reads messages from the WebSocket connection.
 // It handles ping/pong and incoming sync_request / operation messages.
 func (c *WSConnection) readPump() {
@@ -93,10 +110,7 @@ func (c *WSConnection) readPump() {
 		case "ping":
 			// Respond with pong.
 			pong, _ := json.Marshal(WSMessage{Type: "pong"})
-			select {
-			case c.Send <- pong:
-			default:
-			}
+			c.send(pong)
 
 		case "sync_request":
 			// Client asks for updates since a given version.
@@ -104,22 +118,16 @@ func (c *WSConnection) readPump() {
 			if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 				continue
 			}
-			ops := fetchOperationsSince(payload.SinceVersion, c.DeviceID)
+			ops := fetchOperationsSince(c.UserID, payload.SinceVersion, c.DeviceID)
 			data, _ := json.Marshal(ops)
 			resp, _ := json.Marshal(WSMessage{Type: "operation", Payload: data})
-			select {
-			case c.Send <- resp:
-			default:
-			}
+			c.send(resp)
 
 		case "operation":
 			// Client-pushed operation over WebSocket (future enhancement).
 			// For now, acknowledge receipt.
 			ack, _ := json.Marshal(WSMessage{Type: "ack", Payload: msg.Payload})
-			select {
-			case c.Send <- ack:
-			default:
-			}
+			c.send(ack)
 		}
 	}
 }

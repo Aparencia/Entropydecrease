@@ -103,7 +103,24 @@ function entityToRow(entity: Record<string, unknown>, meta: TableMeta): Record<s
 
 /** 用双引号包裹列名，防止 SQLite 保留字冲突 */
 function q(col: string): string {
-  return `"${col}"`;
+  // SEC: 转义列名中的双引号，防止列名注入（如 `a" --` 闭合引号后注释掉剩余 SQL）
+  return `"${col.replace(/"/g, '""')}"`;
+}
+
+/** 缓存每张表的列名白名单 */
+const columnCache = new Map<string, Set<string>>();
+
+/**
+ * 获取表的合法列名集合（从 PRAGMA table_info 查询并缓存）
+ */
+function getTableColumns(tableName: string): Set<string> {
+  const cached = columnCache.get(tableName);
+  if (cached) return cached;
+  const db = getConnection();
+  const rows = db.prepare(`PRAGMA table_info("${tableName.replace(/"/g, '""')}")`).all() as Array<{ name: string }>;
+  const cols = new Set(rows.map((r) => r.name));
+  columnCache.set(tableName, cols);
+  return cols;
 }
 
 // ================================================================
@@ -121,6 +138,21 @@ export default class SqliteRepository<T extends { id: string }> implements IRepo
 
   private get db(): Database.Database {
     return getConnection();
+  }
+
+  /**
+   * 过滤非法列名，仅保留表中真实存在的列
+   * SEC: 防止列名注入（防御纵深：配合 q() 的双引号转义）
+   */
+  filterAllowedColumns(data: Record<string, unknown>): Record<string, unknown> {
+    const allowed = getTableColumns(this.tableName);
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (allowed.has(key)) {
+        result[key] = value;
+      }
+    }
+    return result;
   }
 
   async getAll(): Promise<T[]> {

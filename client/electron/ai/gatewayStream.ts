@@ -18,6 +18,8 @@ export async function* postJsonStream<TReq>(
   body: TReq,
   authToken?: string,
   timeoutMs: number = 300000,
+  /** 外部 AbortSignal（如用户取消流式请求），与内部超时 signal 组合 */
+  externalSignal?: AbortSignal,
 ): AsyncGenerator<string, void, unknown> {
   const base = gatewayUrl();
   if (!base) {
@@ -38,6 +40,15 @@ export async function* postJsonStream<TReq>(
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  // 组合外部 signal：如果外部 signal 被 abort，也 abort 内部 controller
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort();
+    } else {
+      externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+  }
 
   let resp: Response;
   try {
@@ -74,6 +85,8 @@ export async function* postJsonStream<TReq>(
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  /** SSE 缓冲最大字节数，防止恶意服务端无分隔符输出耗尽内存 */
+  const MAX_BUFFER_SIZE = 1 * 1024 * 1024; // 1MB
 
   try {
     while (true) {
@@ -81,6 +94,11 @@ export async function* postJsonStream<TReq>(
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
+
+      // 缓冲上限检查：防止恶意服务端无分隔符输出耗尽内存
+      if (buffer.length > MAX_BUFFER_SIZE) {
+        throw new Error(`SSE buffer exceeded ${MAX_BUFFER_SIZE} bytes, possible malicious stream`);
+      }
 
       // 按 \n\n 分割 SSE 事件
       const events = buffer.split('\n\n');

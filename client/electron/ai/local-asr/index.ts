@@ -11,7 +11,8 @@
  * 渲染进程 asrTranscriber.ts 无需任何改动即可切换引擎。
  */
 
-import { ipcMain, BrowserWindow } from 'electron';
+import { BrowserWindow } from 'electron';
+import { safeHandle } from '../../ipcUtils.js';
 import { logger } from '../../logger.js';
 import {
   getLocalAsrConfig,
@@ -41,7 +42,7 @@ export function registerLocalAsrHandlers(): void {
   // ── 转写（核心接口，渲染进程 asrTranscriber.ts 调用） ──
   // TODO(P1-3): 本 IPC payload 暂未含可选 hotwords 字段——SenseVoice/Paraformer
   // 不支持热词（详见 SherpaAsrService.ts 的 TODO 结论），届时新增字段须保持旧载荷兼容
-  ipcMain.handle(
+  safeHandle(
     'local_asr_transcribe',
     async (_event, args: {
       audioBase64: string;
@@ -62,16 +63,16 @@ export function registerLocalAsrHandlers(): void {
   );
 
   // ── 配置 ──
-  ipcMain.handle('local_asr_get_config', () => {
+  safeHandle('local_asr_get_config', async () => {
     return getLocalAsrConfig();
   });
 
-  ipcMain.handle('local_asr_update_config', async (_event, partial: Partial<LocalAsrConfig>) => {
+  safeHandle('local_asr_update_config', async (_event, partial: Partial<LocalAsrConfig>) => {
     return updateLocalAsrConfig(partial);
   });
 
   // ── 可用性检测 ──
-  ipcMain.handle('local_asr_check_available', async () => {
+  safeHandle('local_asr_check_available', async () => {
     const available = await checkLocalAsrAvailable();
     const config = getLocalAsrConfig();
     return {
@@ -84,13 +85,13 @@ export function registerLocalAsrHandlers(): void {
 
   // ── 真流式 ASR（Paraformer 在线，课堂 smart 采集实时转录） ──
   // 渲染进程据此决定是否走真流式链路（否则回退按段转写）
-  ipcMain.handle('local_asr_stream_available', () => {
+  safeHandle('local_asr_stream_available', async () => {
     return { available: isStreamingAsrAvailable() };
   });
 
   // 启动真流式：创建在线流，后续音频块经 mediaCaptureHandlers 喂入，
   // partial/final 结果经 asr_stream_partial / asr_stream_final 事件推回渲染进程
-  ipcMain.handle(
+  safeHandle(
     'local_asr_stream_start',
     async (event, args: { sampleRate?: number }) => {
       const win = BrowserWindow.fromWebContents(event.sender);
@@ -101,20 +102,20 @@ export function registerLocalAsrHandlers(): void {
     },
   );
 
-  ipcMain.handle('local_asr_stream_stop', async () => {
+  safeHandle('local_asr_stream_stop', async () => {
     stopStreamingAsr();
     return { success: true };
   });
 
   // ── 模型管理 ──
-  ipcMain.handle('local_asr_get_models', () => {
+  safeHandle('local_asr_get_models', async () => {
     return {
       models: getModelsStatus(),
       download: getDownloadStatus(),
     };
   });
 
-  ipcMain.handle(
+  safeHandle(
     'local_asr_download_model',
     async (_event, args: { engine: AsrEngine }) => {
       logger.info(`[LocalASR] IPC download request: engine=${args.engine}`);
@@ -123,7 +124,7 @@ export function registerLocalAsrHandlers(): void {
     },
   );
 
-  ipcMain.handle(
+  safeHandle(
     'local_asr_delete_model',
     async (_event, args: { engine: AsrEngine }) => {
       await deleteModel(args.engine);

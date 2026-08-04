@@ -65,6 +65,10 @@ interface PomodoroState {
   activePreset: PomodoroPreset | null;
   /** 当前工作会话开始时间戳（ms），用于计算 actualDuration */
   sessionStartTime: number | null;
+  /** 暂停时刻时间戳（ms），用于排除暂停时间对 actualDuration 的影响 */
+  pausedAt: number | null;
+  /** 累计暂停时间（ms），actualDuration = (now - sessionStartTime - totalPausedMs) / 1000 */
+  totalPausedMs: number;
   /** 当前番茄目标文字 */
   currentGoal: string | null;
   /** 首潜迷你会话标记：3 分钟体验潜水，会话时长按实际记录而非 settings 时长 */
@@ -206,6 +210,8 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     presets: [],
     activePreset: null,
     sessionStartTime: null,
+pausedAt: null,
+totalPausedMs: 0,
     currentGoal: null,
     isMiniDive: false,
     isImmersive: false,
@@ -293,13 +299,16 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
     pause: () => {
       set((s) => ({
         isRunning: false, isPaused: true, endAt: null,
+        pausedAt: Date.now(),
         lastAction: 'pause' as PomodoroAction, lastActionCounter: s.lastActionCounter + 1,
       }));
       soundPlayer.play('pomodoro_pause');
     },
 
     resume: () => {
-      const { sessionStartTime, wasImmersive } = get();
+      const { sessionStartTime, wasImmersive, pausedAt, totalPausedMs } = get();
+      // 累计暂停时长（暂停时刻到恢复时刻的间隔）
+      const additionalPause = pausedAt ? Date.now() - pausedAt : 0;
       set((s) => ({
         isRunning: true,
         isPaused: false,
@@ -307,6 +316,9 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
         endAt: Date.now() + s.remainingSeconds * 1000,
         // 如果 sessionStartTime 为空（重置后），重新记录
         sessionStartTime: sessionStartTime ?? Date.now(),
+        // 累计暂停时间
+        totalPausedMs: totalPausedMs + additionalPause,
+        pausedAt: null,
         // 若上次是从沉浸模式退出的，自动重新进入沉浸
         isImmersive: wasImmersive ? true : get().isImmersive,
         wasImmersive: false,
@@ -427,7 +439,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
             ? MINI_DIVE_SECONDS
             : (activePreset?.workDuration ?? settings.workDuration) * 60;
           actualDuration = sst
-            ? Math.round((Date.now() - sst) / 1000)
+            ? Math.round(((Date.now() - sst - get().totalPausedMs) / 1000))
             : plannedSeconds;
           recordSession({
             mode: activePreset?.silent ? 'class' : 'self_study',
@@ -520,11 +532,68 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => {
             nextRemaining = wallRemaining;
           }
         }
+        // 墙钟校准后若剩余时间 ≤ 0，立即完成（避免 UI 显示 00:00 停摆 1 秒）
+        if (nextRemaining <= 0) {
+          // 直接复用上面的完成逻辑
+          const wasRunning = isRunning;
+          const newCount = getNextCount(phase, completedCount, interval);
+          const nextPhase = getNextPhase(phase, completedCount, interval);
+          const duration = getPhaseDuration(nextPhase, activePreset, settings);
+          const isCycleComplete = phase === 'long_break';
+
+          let shouldAutoStart = false;
+          if (nextPhase !== 'work' && settings.autoStartBreak) {
+            shouldAutoStart = true;
+          } else if (nextPhase === 'work' && settings.autoStartWork) {
+            shouldAutoStart = true;
+          }
+          if (nextPhase !== 'work' && wasRunning) {
+            shouldAutoStart = true;
+          }
+
+          let actualDuration: number | null = null;
+          if (phase === 'work') {
+            const { sessionStartTime: sst, isMiniDive } = get();
+            const plannedSeconds = isMiniDive
+              ? MINI_DIVE_SECONDS
+              : (activePreset?.workDuration ?? settings.workDuration) * 60;
+            actualDuration = sst
+              ? Math.round(((Date.now() - sst - get().totalPausedMs) / 1000))
+              : plannedSeconds;
+            recordSession({
+              mode: activePreset?.silent ? 'class' : 'self_study',
+              presetId: activePreset?.id,
+              duration: plannedSeconds,
+              actualDuration,
+              completedAt: new Date(),
+              interrupted: false,
+              goal: get().currentGoal ?? undefined,
+            }).then(() => {});
+          }
+
+          set((s) => ({
+            remainingSeconds: shouldAutoStart ? duration : 0,
+            totalSeconds: duration,
+            isRunning: shouldAutoStart,
+            isPaused: false,
+            endAt: shouldAutoStart ? Date.now() + duration * 1000 : null,
+            isMiniDive: false,
+            sessionStartTime: null,
+            lastAction: 'phase_complete' as PomodoroAction,
+            lastActionCounter: s.lastActionCounter + 1,
+            lastCompletedPhase: phase,
+            isCycleComplete,
+            lastSessionActualDuration: actualDuration,
+            showCompletionOverlay: phase === 'work' ? true : s.showCompletionOverlay,
+          }));
+          return;
+        }
         // 静默预设跳过预警和滴答音
         if (!isSilent) {
           // 预警（工作阶段）—— 支持自定义时点
           const warningSec = (settings.warningMinutes ?? 5) * 60;
-          if (phase === 'work' && warningSec > 0 && nextRemaining === warningSec) {
+          // 使用 <= 而非严格相等，避免墙钟校准跳变时跳过预警
+          if (phase === 'work' && warningSec > 0 && nextRemaining <= warningSec && nextRemaining > warningSec - 3) {
             soundPlayer.play('pomodoro_5min_warning');
             set((s) => ({
               lastAction: 'tick_5min_warning' as PomodoroAction,

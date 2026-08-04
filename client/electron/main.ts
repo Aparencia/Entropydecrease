@@ -140,12 +140,11 @@ if (!gotTheLock) {
     //    NSMicrophoneUsageDescription）
     // 2. 未来若加入权限管控逻辑，已有统一入口无需重构
     session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-      // mediaDevices 涵盖麦克风、摄像头等媒体设备；此处仅授权媒体设备访问
+      // 仅授权媒体设备访问（麦克风、摄像头），其他权限拒绝
       if (permission === 'media') {
         callback(true);
       } else {
-        // 其他权限类型保持默认行为（不干预，由 Electron 默认策略处理）
-        callback(true);
+        callback(false);
       }
     });
 

@@ -36,17 +36,18 @@ func Resolve(c *gin.Context) {
 	switch req.Strategy {
 	case "local", "manual":
 		// Client wins / manual merge: overwrite server with supplied data.
-		if req.Data == nil && req.Strategy == "manual" {
-			break // nothing to write
+		if req.Data == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "local/manual strategy requires data field"})
+			return
+		}
+
+		payloadJSON := toJSON(req.Data)
+		if payloadJSON == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "data field produced empty payload"})
+			return
 		}
 
 		txErr := models.DB.Transaction(func(tx *gorm.DB) error {
-			seqNo, err := nextSeqNo(tx)
-			if err != nil {
-				return err
-			}
-
-			payloadJSON := toJSON(req.Data)
 
 			// Upsert EntityVersion.
 			var ev models.EntityVersion

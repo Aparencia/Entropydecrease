@@ -27,6 +27,26 @@ function loadEnvFile(filePath: string, overrideKeys: Set<string>): void {
       if (eqIdx === -1) continue;
       const key = trimmed.slice(0, eqIdx).trim();
       let value = trimmed.slice(eqIdx + 1).trim();
+      // 移除行内注释（# 号，但需跳过引号内的 #）
+      if (value.includes('#')) {
+        // 简单处理：不在引号内的 # 视为注释起始
+        let inQuote = false;
+        let quoteChar = '';
+        let commentIdx = -1;
+        for (let i = 0; i < value.length; i++) {
+          const ch = value[i];
+          if ((ch === '"' || ch === "'") && (!inQuote || ch === quoteChar)) {
+            inQuote = !inQuote;
+            quoteChar = inQuote ? ch : '';
+          } else if (ch === '#' && !inQuote) {
+            commentIdx = i;
+            break;
+          }
+        }
+        if (commentIdx >= 0) {
+          value = value.slice(0, commentIdx).trimEnd();
+        }
+      }
       // 移除首尾引号
       if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
         value = value.slice(1, -1);

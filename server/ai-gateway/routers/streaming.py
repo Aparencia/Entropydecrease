@@ -212,12 +212,14 @@ def _build_prompt(feature: str, body: StreamRequest) -> tuple[str, str, float, i
 
     # 通用模板变量注入
     try:
+        # 显式分离 param 与保留占位符，防止 params 覆盖 text/text2
+        safe_params = {k: str(v) for k, v in body.params.items() if k not in ("text", "text2")}
         prompt = template.format(
             text=body.text[:8000] if body.text else "",
             text2=body.text2[:4000] if body.text2 else "",
-            **{k: str(v) for k, v in body.params.items()},
+            **safe_params,
         )
-    except (KeyError, IndexError):
+    except (KeyError, IndexError, ValueError):
         # 模板变量不匹配时，降级为简单拼接
         prompt = f"{template}\n\n{body.text}"
         if body.text2:

@@ -81,6 +81,8 @@ export function registerStreamHandler(): void {
           method,
           payload,
           authToken,
+          undefined,
+          abortController.signal,
         );
 
         for await (const chunk of stream) {

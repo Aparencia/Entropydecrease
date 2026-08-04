@@ -97,8 +97,12 @@ export class CryptoManager {
       }
       // 非加密格式（旧数据），直接返回
       return encrypted;
-    } catch {
+    } catch (err) {
       // JSON 解析失败说明是未加密的旧数据，直接返回
+      // 但若值看起来像加密格式（以 { 开头），可能是解密失败，记录日志
+      if (encrypted.trim().startsWith('{')) {
+        console.error('[Crypto] decryptField failed: ciphertext format detected but decryption failed', err);
+      }
       return encrypted;
     }
   }
