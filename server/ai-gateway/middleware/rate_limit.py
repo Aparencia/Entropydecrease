@@ -108,10 +108,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         user_id = getattr(request.state, "user_id", "anonymous")
 
         # 检查常规频率限制（原子 INCR 操作，防止 TOCTOU 竞态）
-        is_allowed, detail = await self._check_rate_limit(user_id, feature)
+        is_allowed, detail = await check_rate_limit(user_id, feature)
         if not is_allowed:
             # 超过限额，回退计数
-            await self._rollback_rate_limit(user_id, feature)
+            await rollback_rate_limit(user_id, feature)
             return JSONResponse(
                 status_code=429,
                 content={
@@ -125,100 +125,99 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # 非 2xx 响应时回退计数（失败请求不消耗配额）
         if not (200 <= response.status_code < 300):
-            await self._rollback_rate_limit(user_id, feature)
+            await rollback_rate_limit(user_id, feature)
 
         return response
 
-    async def _check_rate_limit(
-        self, user_id: str, feature: str
-    ) -> tuple[bool, str]:
-        """
-        检查用户是否超出频率限制（原子 INCR 操作，防止 TOCTOU 竞态）
 
-        使用 Redis INCR 原子递增后检查返回值，避免"读-判断-写"模式下的竞态条件。
-        超过限额时由调用方（dispatch）调用 _rollback_rate_limit 回退计数。
+async def check_rate_limit(user_id: str, feature: str) -> tuple[bool, str]:
+    """
+    检查用户是否超出频率限制（原子 INCR 操作，防止 TOCTOU 竞态）
 
-        Args:
-            user_id: 用户 ID
-            feature: 功能名称
+    使用 Redis INCR 原子递增后检查返回值，避免"读-判断-写"模式下的竞态条件。
+    超过限额时由调用方调用 rollback_rate_limit 回退计数。
+    中间件与流式路由（/{feature}/stream 通配路径）共用本函数。
 
-        Returns:
-            tuple: (是否允许, 拒绝原因)
-        """
-        cache = get_cache()
-        if not cache._client:
-            logger.debug("频率限制检查: user=%s, feature=%s (Redis 不可用，放行)", user_id, feature)
-            return True, ""
+    Args:
+        user_id: 用户 ID
+        feature: 功能名称
 
-        today = datetime.now().strftime("%Y-%m-%d")
-
-        # 从配置读取限额
-        feature_limit = RATE_LIMITS.get(feature, 10)
-        daily_limit = RATE_LIMITS.get("daily_total", 50)
-
-        # 计算到当日结束的剩余秒数（至少 60 秒）
-        now = datetime.now()
-        seconds_until_end_of_day = (
-            (24 - now.hour) * 3600 - now.minute * 60 - now.second
-        )
-        ttl = max(seconds_until_end_of_day, 60)
-
-        # ---- 第一层：功能级限制（原子 INCR + 检查） ----
-        feature_key = f"rate_limit:{user_id}:{feature}:{today}"
-        try:
-            feature_count = await cache.increment(feature_key, expire=ttl)
-        except Exception as exc:
-            logger.warning("频率限制检查失败(功能级): %s", exc)
-            return True, ""
-
-        if feature_count > feature_limit:
-            return False, (
-                f"「{feature}」今日使用次数已达上限（{feature_limit} 次/天），"
-                "请明天再试，或升级套餐获取更多配额。"
-            )
-
-        # 段级高频功能豁免全局每日总量
-        if feature in GLOBAL_EXEMPT_FEATURES:
-            return True, ""
-
-        # ---- 第二层：全局每日总量限制（原子 INCR + 检查） ----
-        global_key = f"rate_limit:{user_id}:global:{today}"
-        try:
-            global_count = await cache.increment(global_key, expire=ttl)
-        except Exception as exc:
-            logger.warning("频率限制检查失败(全局): %s", exc)
-            return True, ""
-
-        if global_count > daily_limit:
-            return False, (
-                f"今日 AI 功能总使用次数已达上限（{daily_limit} 次/天），"
-                "请明天再试，或升级套餐获取更多配额。"
-            )
-
-        logger.debug(
-            "频率限制检查通过: user=%s, feature=%s, feature_count=%d/%d, global_count=%d/%d",
-            user_id, feature, feature_count, feature_limit, global_count, daily_limit,
-        )
+    Returns:
+        tuple: (是否允许, 拒绝原因)
+    """
+    cache = get_cache()
+    if not cache._client:
+        logger.debug("频率限制检查: user=%s, feature=%s (Redis 不可用，放行)", user_id, feature)
         return True, ""
 
-    async def _rollback_rate_limit(self, user_id: str, feature: str) -> None:
-        """
-        回退频率限制计数器（原子 INCR 超出限额或请求失败时调用）
-        """
-        cache = get_cache()
-        if not cache._client:
-            return
-        today = datetime.now().strftime("%Y-%m-%d")
-        feature_key = f"rate_limit:{user_id}:{feature}:{today}"
-        try:
-            await cache._client.decr(feature_key)
-        except Exception as exc:
-            logger.debug("频率限制回退失败(功能级): %s", exc)
+    today = datetime.now().strftime("%Y-%m-%d")
 
-        if feature in GLOBAL_EXEMPT_FEATURES:
-            return
-        global_key = f"rate_limit:{user_id}:global:{today}"
-        try:
-            await cache._client.decr(global_key)
-        except Exception as exc:
-            logger.debug("频率限制回退失败(全局): %s", exc)
+    # 从配置读取限额
+    feature_limit = RATE_LIMITS.get(feature, 10)
+    daily_limit = RATE_LIMITS.get("daily_total", 50)
+
+    # 计算到当日结束的剩余秒数（至少 60 秒）
+    now = datetime.now()
+    seconds_until_end_of_day = (
+        (24 - now.hour) * 3600 - now.minute * 60 - now.second
+    )
+    ttl = max(seconds_until_end_of_day, 60)
+
+    # ---- 第一层：功能级限制（原子 INCR + 检查） ----
+    feature_key = f"rate_limit:{user_id}:{feature}:{today}"
+    try:
+        feature_count = await cache.increment(feature_key, expire=ttl)
+    except Exception as exc:
+        logger.warning("频率限制检查失败(功能级): %s", exc)
+        return True, ""
+
+    if feature_count > feature_limit:
+        return False, (
+            f"「{feature}」今日使用次数已达上限（{feature_limit} 次/天），"
+            "请明天再试，或升级套餐获取更多配额。"
+        )
+
+    # 段级高频功能豁免全局每日总量
+    if feature in GLOBAL_EXEMPT_FEATURES:
+        return True, ""
+
+    # ---- 第二层：全局每日总量限制（原子 INCR + 检查） ----
+    global_key = f"rate_limit:{user_id}:global:{today}"
+    try:
+        global_count = await cache.increment(global_key, expire=ttl)
+    except Exception as exc:
+        logger.warning("频率限制检查失败(全局): %s", exc)
+        return True, ""
+
+    if global_count > daily_limit:
+        return False, (
+            f"今日 AI 功能总使用次数已达上限（{daily_limit} 次/天），"
+            "请明天再试，或升级套餐获取更多配额。"
+        )
+
+    logger.debug(
+        "频率限制检查通过: user=%s, feature=%s, feature_count=%d/%d, global_count=%d/%d",
+        user_id, feature, feature_count, feature_limit, global_count, daily_limit,
+    )
+    return True, ""
+
+
+async def rollback_rate_limit(user_id: str, feature: str) -> None:
+    """回退频率限制计数器（原子 INCR 超出限额或请求失败时调用）"""
+    cache = get_cache()
+    if not cache._client:
+        return
+    today = datetime.now().strftime("%Y-%m-%d")
+    feature_key = f"rate_limit:{user_id}:{feature}:{today}"
+    try:
+        await cache._client.decr(feature_key)
+    except Exception as exc:
+        logger.debug("频率限制回退失败(功能级): %s", exc)
+
+    if feature in GLOBAL_EXEMPT_FEATURES:
+        return
+    global_key = f"rate_limit:{user_id}:global:{today}"
+    try:
+        await cache._client.decr(global_key)
+    except Exception as exc:
+        logger.debug("频率限制回退失败(全局): %s", exc)

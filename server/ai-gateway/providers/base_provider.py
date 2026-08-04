@@ -8,12 +8,29 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 from typing import Any, AsyncGenerator
 
 from config import TIMEOUT_CONFIG, _FEATURE_CONTEXT
 
 logger = logging.getLogger(__name__)
+
+# GW-H6: Provider SDK 专用线程池——同步 SDK 调用（google-genai 等）经
+# run_in_executor 隔离到独立线程池，避免慢调用堆积耗尽默认线程池
+# （默认池 min(32, cpu+4) 被占满后健康检查等所有 to_thread 调用都会排队）。
+# 线程池大小按可容忍的并发慢调用数设定，超时后线程虽无法强杀，
+# 但不再影响其他组件，属于隔离而非取消策略（Python 线程不可中断）。
+PROVIDER_THREAD_POOL: ThreadPoolExecutor = ThreadPoolExecutor(
+    max_workers=8,
+    thread_name_prefix="ai-provider-sdk",
+)
+
+
+async def run_in_provider_pool(fn, *args, **kwargs):
+    """在 Provider SDK 专用线程池中执行同步阻塞调用。"""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(PROVIDER_THREAD_POOL, lambda: fn(*args, **kwargs))
 
 
 def with_retry_and_timeout(max_retries: int = 2):

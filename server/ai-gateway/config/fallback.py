@@ -22,6 +22,31 @@ _FIRST_TOKEN_PROBE_TIMEOUT = 30.0
 
 _FIRST_TOKEN_RETRY_TIMEOUT = 5.0  # 首 token 探测重试的超时预算（秒）
 
+# 高耗时功能（走独立并发上限 ai_heavy_semaphore）
+_HEAVY_CONCURRENCY_FEATURES: frozenset[str] = frozenset(
+    {"video_analyze", "multimodal_analyze"}
+)
+
+
+def _get_concurrency_semaphore(app, feature: str):
+    """获取并发信号量；未初始化（如测试环境）时返回 None 表示不限流。
+
+    @ai-context: Phase3 并发控制——主信号量限制全部 AI 调用，
+    heavy 信号量进一步限制高耗时功能（视频/多模态分析）。
+    """
+    if feature in _HEAVY_CONCURRENCY_FEATURES:
+        return getattr(app.state, "ai_heavy_semaphore", None)
+    return getattr(app.state, "ai_semaphore", None)
+
+
+async def _run_under_semaphore(app, feature: str, coro_factory: Callable[[], Awaitable[Any]]) -> Any:
+    """在信号量保护下执行 AI 调用（信号量缺失时直通）。"""
+    sem = _get_concurrency_semaphore(app, feature)
+    if sem is None:
+        return await coro_factory()
+    async with sem:
+        return await coro_factory()
+
 # ============================================================
 # Provider Fallback 链：主 Provider 失败时依次尝试的备选
 # ============================================================
@@ -109,6 +134,7 @@ async def call_with_fallback(
     app,
     feature: str,
     fn: Callable[..., Awaitable[dict[str, Any]]],
+    user_id: str = "system",
 ) -> tuple[dict[str, Any], str]:
     """
     使用 Provider fallback 链执行 AI 调用（非流式路径）。
@@ -122,6 +148,7 @@ async def call_with_fallback(
         app:     FastAPI 应用实例（通过 app.state.providers 获取 Provider）
         feature: 功能标识，对应 PROVIDER_FALLBACK_CHAIN 的 key
         fn:      异步可调用对象，签名为 async fn(provider, model_name) -> dict
+        user_id: 记账归属用户（预算控制按此维度计数）
 
     Returns:
         tuple: (result_dict, provider_key)
@@ -168,18 +195,22 @@ async def call_with_fallback(
             )
 
             try:
-                _FEATURE_CONTEXT.set(feature)
-                result = await fn(provider, model_name)
+                async def _do_call():
+                    _FEATURE_CONTEXT.set(feature)
+                    return await fn(provider, model_name)
+
+                # Phase3: 并发信号量保护（视频/多模态走 heavy 上限）
+                result = await _run_under_semaphore(app, feature, _do_call)
                 # 调用成功：通知熔断器重置失败计数，恢复 Provider 健康状态
                 cb = get_circuit(provider_key)
                 if cb:
                     await cb.on_success()
-                # 记录成本
+                # 记录成本（按真实用户记账，预算中间件按 user_id 维度查询）
                 try:
                     tokens_used = result.get("tokens_used", 0)
                     model_name = result.get("model", model_name)
                     await get_cost_tracker().record(
-                        user_id="system",
+                        user_id=user_id,
                         feature=feature,
                         model=model_name,
                         input_tokens=tokens_used // 2 if tokens_used else 0,
@@ -235,7 +266,10 @@ async def call_with_fallback_for_request(
     Raises:
         RuntimeError: 所有 Provider 均不可用
     """
-    result, provider_key = await call_with_fallback(app, feature, fn)
+    # GW-H2: 预算记账必须归属真实用户，预算中间件（BudgetMiddleware）
+    # 按 request.state.user_id 查询日用量，写死 system 会导致限额永不触发
+    user_id = getattr(request.state, "user_id", "system")
+    result, provider_key = await call_with_fallback(app, feature, fn, user_id=user_id)
     return result, provider_key, False
 
 
@@ -313,11 +347,20 @@ async def call_with_fallback_stream(
                     probe_timeout = min(_FIRST_TOKEN_PROBE_TIMEOUT, remaining)
                     first_chunk = await asyncio.wait_for(agen.__anext__(), timeout=probe_timeout)
 
-                    # 首 token 成功：包装生成器，先吐首 token 再吐剩余
-                    async def _wrapped_gen(a=agen, first=first_chunk):
-                        yield first
-                        async for c in a:
-                            yield c
+                    # 首 token 成功：包装生成器，先吐首 token 再吐剩余；
+                    # 并发信号量在生成器整个生命周期内持有，防止流式长连接堆积
+                    sem = _get_concurrency_semaphore(app, feature)
+                    if sem is None:
+                        async def _wrapped_gen(a=agen, first=first_chunk):
+                            yield first
+                            async for c in a:
+                                yield c
+                    else:
+                        async def _wrapped_gen(a=agen, first=first_chunk, s=sem):
+                            async with s:
+                                yield first
+                                async for c in a:
+                                    yield c
 
                     # 通知熔断器成功
                     cb = get_circuit(provider_key)

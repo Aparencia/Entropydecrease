@@ -8,6 +8,7 @@
 本文件 router 无 prefix，由 multimodal.py 统一挂载 /api/v1/multimodal 前缀。
 """
 
+import asyncio
 import os
 import shutil
 import tempfile
@@ -25,6 +26,26 @@ router = APIRouter(tags=["多模态分析"])
 
 # 视频文件上传大小上限：500MB
 _VIDEO_MAX_SIZE = 500 * 1024 * 1024
+
+
+def _copy_with_limit(src, dst_path: str, max_size: int) -> int:
+    """边读边计字节数复制文件，超限抛 ValueError（在专用线程中执行）。
+
+    GW-H8: 原 shutil.copyfileobj 同步拷贝阻塞事件循环数秒至数十秒，
+    且大小检查依赖 content-length（chunked 可绕过，先落盘后才发现超限）；
+    改为线程内逐块复制 + 实时计数，超限立即中止；文件句柄由 with 管理。
+    """
+    total = 0
+    with open(dst_path, "wb") as dst:
+        while True:
+            chunk = src.read(1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_size:
+                raise ValueError("video file too large")
+            dst.write(chunk)
+    return total
 
 
 @router.post(
@@ -72,8 +93,12 @@ async def analyze_video(
     tmp_path = os.path.join(tmp_dir, f"video{suffix}")
 
     try:
-        with open(tmp_path, "wb") as f:
-            shutil.copyfileobj(video_file.file, f)
+        # GW-H8: 拷贝下沉到线程池并实时计数，避免同步 IO 阻塞事件循环
+        # （500MB 拷贝可达数十秒）；chunked 编码绕过 content-length 时由计数兜底
+        try:
+            await asyncio.to_thread(_copy_with_limit, video_file.file, tmp_path, _VIDEO_MAX_SIZE)
+        except ValueError:
+            raise HTTPException(status_code=413, detail="视频文件超过 500MB 上限")
 
         file_size = os.path.getsize(tmp_path)
         if file_size > _VIDEO_MAX_SIZE:

@@ -13,6 +13,7 @@
 使用 ffmpeg 均匀抽取关键帧后转为多图分析。
 """
 
+import asyncio
 import base64
 import logging
 import tempfile
@@ -30,8 +31,32 @@ logger = logging.getLogger(__name__)
 # 降级抽帧配置：均匀抽取的帧数上限
 _FALLBACK_FRAME_COUNT = 10
 
+# GW-H9: 子进程超时（秒）——ffprobe 时长探测与 ffmpeg 单帧抽取
+_PROBE_TIMEOUT = 30.0
+_FFMPEG_FRAME_TIMEOUT = 15.0
 
-def _extract_frames_ffmpeg(video_path: str, frame_count: int) -> list[str]:
+
+async def _run_subprocess(cmd: list[str], timeout: float) -> tuple[int, bytes, bytes]:
+    """异步执行子进程并等待完成（带超时，超时后强杀防僵尸进程）。
+
+    GW-H9: 原 subprocess.run 同步阻塞事件循环（单次最长 30s），
+    并发视频分析会相互拖垮；改为 create_subprocess_exec 非阻塞执行。
+    """
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise TimeoutError(f"子进程超时（{timeout:.0f}s）: {cmd[0]}")
+    return proc.returncode or 0, stdout, stderr
+
+
+async def _extract_frames_ffmpeg(video_path: str, frame_count: int) -> list[str]:
     """
     使用 ffmpeg 从视频中均匀抽取关键帧（返回 base64 列表）
 
@@ -44,8 +69,6 @@ def _extract_frames_ffmpeg(video_path: str, frame_count: int) -> list[str]:
     Raises:
         RuntimeError: ffmpeg 不可用或抽帧失败
     """
-    import subprocess
-
     try:
         # 获取视频时长
         probe_cmd = [
@@ -54,10 +77,10 @@ def _extract_frames_ffmpeg(video_path: str, frame_count: int) -> list[str]:
             "-of", "default=noprint_wrappers=1:nokey=1",
             video_path,
         ]
-        result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
-        if result.returncode != 0:
-            raise RuntimeError(f"ffprobe 获取时长失败: {result.stderr}")
-        duration = float(result.stdout.strip())
+        code, stdout, stderr = await _run_subprocess(probe_cmd, _PROBE_TIMEOUT)
+        if code != 0:
+            raise RuntimeError(f"ffprobe 获取时长失败: {stderr.decode(errors='replace')}")
+        duration = float(stdout.decode(errors="replace").strip())
 
         # 均匀间隔抽帧
         interval = max(duration / (frame_count + 1), 1.0)
@@ -75,7 +98,11 @@ def _extract_frames_ffmpeg(video_path: str, frame_count: int) -> list[str]:
                     str(out_path),
                     "-y",
                 ]
-                subprocess.run(cmd, capture_output=True, timeout=15, check=True)
+                code, _, stderr = await _run_subprocess(cmd, _FFMPEG_FRAME_TIMEOUT)
+                if code != 0:
+                    raise RuntimeError(
+                        f"ffmpeg 抽帧失败: {stderr.decode(errors='replace')}"
+                    )
                 if out_path.exists():
                     frames.append(base64.b64encode(out_path.read_bytes()).decode())
 
@@ -87,6 +114,8 @@ def _extract_frames_ffmpeg(video_path: str, frame_count: int) -> list[str]:
 
     except FileNotFoundError as e:
         raise RuntimeError("ffmpeg 未安装，无法进行视频抽帧降级") from e
+    except asyncio.TimeoutError as e:
+        raise RuntimeError(f"视频抽帧超时: {e}") from e
     except Exception as e:
         raise RuntimeError(f"视频抽帧失败: {e}") from e
 
@@ -171,7 +200,7 @@ class VideoAnalyzeChain:
             )
 
         try:
-            frames = _extract_frames_ffmpeg(str(video_input), _FALLBACK_FRAME_COUNT)
+            frames = await _extract_frames_ffmpeg(str(video_input), _FALLBACK_FRAME_COUNT)
         except RuntimeError as e:
             raise RuntimeError(f"视频分析失败：Provider 不支持视频且抽帧不可用: {e}") from e
 

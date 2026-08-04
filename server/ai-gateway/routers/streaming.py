@@ -24,6 +24,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from config import call_with_fallback_stream
+from middleware.rate_limit import check_rate_limit, rollback_rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/ai", tags=["流式输出"])
@@ -273,6 +274,13 @@ async def stream_ai(request: Request, feature: str, body: StreamRequest):
     user_id = getattr(request.state, "user_id", "anonymous")
     logger.info("流式请求: user=%s, feature=%s, text_length=%d", user_id, feature, len(body.text))
 
+    # GW-H3: 流式通配路径 /{feature}/stream 无法被中间件精确匹配，
+    # 此处复用与中间件一致的 Redis 限流逻辑（含功能级 + 全局每日总量）
+    is_allowed, detail = await check_rate_limit(user_id, config_key)
+    if not is_allowed:
+        await rollback_rate_limit(user_id, config_key)
+        raise HTTPException(status_code=429, detail=detail)
+
     try:
         prompt, system_prompt, temperature, max_tokens = _build_prompt(feature, body)
     except HTTPException:
@@ -306,6 +314,13 @@ async def stream_ai(request: Request, feature: str, body: StreamRequest):
         is_first = True
         try:
             while True:
+                # 客户端断连检测：立即终止并释放上游生成器，避免幽灵计费
+                if await request.is_disconnected():
+                    logger.info(
+                        "流式客户端断连: feature=%s, provider=%s, duration=%.1fs",
+                        feature, used_provider, time.monotonic() - start_time,
+                    )
+                    break
                 # 总体存活时间检查
                 if time.monotonic() - start_time > _MAX_STREAM_DURATION:
                     logger.error(
@@ -340,6 +355,13 @@ async def stream_ai(request: Request, feature: str, body: StreamRequest):
             logger.error("流式生成异常: feature=%s, error=%s", feature, str(e))
             yield _sse_error("AI 服务响应异常，请稍后重试")
             yield _sse_done()
+        finally:
+            # GW-H4: 所有退出路径（完成/超时/断连/异常）必须关闭上游生成器，
+            # 否则上游 HTTP 连接保持打开、模型继续生成并按 token 计费（幽灵计费）
+            try:
+                await agen.aclose()
+            except Exception as close_err:
+                logger.debug("流式生成器关闭失败（可忽略）: %s", close_err)
 
     return StreamingResponse(
         event_generator(),

@@ -35,6 +35,7 @@ class FallbackProvider(AIProvider):
         temperature: float = 0.7,
         max_tokens: int = 2048,
         response_format: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """
         降级响应 — 返回友好提示而非真实 AI 生成结果
@@ -44,6 +45,11 @@ class FallbackProvider(AIProvider):
         - 闪卡生成：返回空卡片列表
         - 费曼评估：返回通用鼓励性反馈
         - 番茄钟推荐：基于本地规则引擎给出建议
+
+        @ai-context: 必须接受 **kwargs——17+ 处 chain 以 _feature= 关键字调用
+        provider.generate，本方法无 @with_retry_and_timeout 装饰器吞掉该参数，
+        缺少 **kwargs 会在云端全部失败时抛 TypeError，使设计好的降级内容永不返回
+        （请求最终 500/503 而非友好降级）。
         """
         start_time = time.monotonic()
 
@@ -155,8 +161,9 @@ class FallbackProvider(AIProvider):
         temperature: float = 0.7,
         max_tokens: int = 2048,
         response_format: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> AsyncGenerator[str, None]:
-        """流式降级响应 — 逐句 yield 友好提示"""
+        """流式降级响应 — 逐句 yield 友好提示（同 generate，接受任意关键字参数）"""
         result = await self.generate(
             prompt=prompt,
             system_prompt=system_prompt,
