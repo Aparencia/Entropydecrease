@@ -21,6 +21,7 @@ import SubjectFolder from '../components/SubjectFolder';
 import { NoteSearchBar } from '../components/NoteSearchBar';
 import { NoteTagFilter } from '../components/NoteTagFilter';
 import { cn } from '@/lib/utils';
+import { copyText } from '@/lib/utils/clipboard';
 import { useNavigate } from 'react-router-dom';
 import { useNoteStore } from '../store/useNoteStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -256,7 +257,7 @@ export default function NotesPage() {
         toast({ type: 'info', message: 'AI 正在生成摘要...' });
         try {
           const result = await summarize(text, { maxLength: 200, style: 'bullet', language: 'zh' });
-          if (result?.summary) { await navigator.clipboard.writeText(result.summary); toast({ type: 'success', message: 'AI 摘要已生成并复制到剪贴板', silent: true }); }
+          if (result?.summary) { await copyText(result.summary); toast({ type: 'success', message: 'AI 摘要已生成并复制到剪贴板', silent: true }); }
           else { toast({ type: 'warning', message: 'AI 未能生成摘要，请检查内容或稍后重试', silent: true }); }
         } catch (error) { handleSummarizeError(error); }
         break;

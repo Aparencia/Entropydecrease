@@ -12,7 +12,7 @@
 
 import type { BrowserWindow } from 'electron';
 import { logger } from '../../logger.js';
-import { getOnlineRecognizer, type OnlineStream } from './SherpaAsrService.js';
+import { getOnlineRecognizer, feedWaveform, type OnlineStream } from './SherpaAsrService.js';
 
 /** partial 推送节流：两次 partial 推送的最小间隔（ms） */
 const PARTIAL_EMIT_INTERVAL_MS = 150;
@@ -91,7 +91,8 @@ export function feedStreamingAsr(audioBuffer: ArrayBuffer, sampleRate?: number):
   const rate = sampleRate ?? _sampleRate;
 
   try {
-    _stream.acceptWaveform(rate, samples);
+    // 统一适配层：新旧版 sherpa-onnx-node 的 acceptWaveform 签名不同
+    feedWaveform(_stream, rate, samples);
     while (recognizer.isReady(_stream)) {
       recognizer.decode(_stream);
     }
@@ -129,7 +130,8 @@ export function feedStreamingAsr(audioBuffer: ArrayBuffer, sampleRate?: number):
 export function stopStreamingAsr(): void {
   if (_stream) {
     try {
-      _stream.free();
+      // 新版（1.13+）流对象无 free 方法（句柄由 GC 回收），可选调用
+      _stream.free?.();
     } catch (err) {
       logger.warn(`[StreamingASR] 释放流失败: ${err}`);
     }

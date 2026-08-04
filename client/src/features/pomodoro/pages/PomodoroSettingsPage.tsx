@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Timer, Zap, Bell, Save, RotateCcw, GraduationCap, Sparkles, CheckCircle2, Music, Volume2, Brain, Plus, Pencil, Trash2, Layers } from 'lucide-react';
+import { Timer, Zap, Bell, Save, RotateCcw, GraduationCap, Sparkles, CheckCircle2, Music, Volume2, Brain, Plus, Pencil, Trash2, Layers, ChevronUp, ChevronDown } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { Button, Card, Input, useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -92,7 +92,7 @@ function SettingRow({
 }
 
 export default function PomodoroSettingsPage() {
-  const { settings, updateSettings, initialize, mode: _mode, aiRecommendedDuration, aiReasoning, setAIRecommendation, presets, createPreset, updatePreset, deletePreset } = usePomodoroStore(useShallow(s => s));
+  const { settings, updateSettings, initialize, mode: _mode, aiRecommendedDuration, aiReasoning, setAIRecommendation, presets, createPreset, updatePreset, deletePreset, reorderPresets } = usePomodoroStore(useShallow(s => s));
 
   // Local form state (mirrors store settings)
   const [localSettings, setLocalSettings] = useState({ ...settings });
@@ -167,6 +167,26 @@ export default function PomodoroSettingsPage() {
     setLocalSettings({ ...DEFAULT_SETTINGS });
     setResetDone(true);
     resetTimerRef.current = setTimeout(() => setResetDone(false), 2000);
+  };
+
+  // 预设排序：上移/下移一位后持久化新顺序（sortOrder 由 reorderPresets 重写）
+  const handleMovePreset = (id: string, dir: -1 | 1) => {
+    const index = presets.findIndex((p) => p.id === id);
+    const target = index + dir;
+    if (index < 0 || target < 0 || target >= presets.length) return;
+    const ids = presets.map((p) => p.id);
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    reorderPresets(ids);
+  };
+
+  // 删除预设：带结果反馈（内置预设被 service 拒绝时明确提示）
+  const handleDeletePreset = async (id: string, name: string) => {
+    try {
+      await deletePreset(id);
+      toast({ type: 'success', message: `预设「${name}」已删除` });
+    } catch (e) {
+      toast({ type: 'error', message: e instanceof Error ? e.message : '删除失败' });
+    }
   };
 
   return (
@@ -287,7 +307,7 @@ export default function PomodoroSettingsPage() {
           每个预设拥有独立的节律参数，循环标记数量随预设变化。最多 {MAX_PRESETS} 个。
         </p>
         <div className="space-y-2">
-          {presets.map((preset) => (
+          {presets.map((preset, index) => (
             <div
               key={preset.id}
               className="flex items-center justify-between p-3 rounded-kb-md bg-bg-secondary/40 border border-border/20"
@@ -304,6 +324,25 @@ export default function PomodoroSettingsPage() {
                 </p>
               </div>
               <div className="flex items-center gap-1">
+                {/* 排序按钮：上移/下移（首位/末位时禁用） */}
+                <Tip text="上移">
+                <button
+                  onClick={() => handleMovePreset(preset.id, -1)}
+                  disabled={index === 0}
+                  className="p-1.5 rounded-md hover:bg-bg-tertiary text-text-tertiary hover:text-text-secondary transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                >
+                  <ChevronUp className="w-3.5 h-3.5" />
+                </button>
+                </Tip>
+                <Tip text="下移">
+                <button
+                  onClick={() => handleMovePreset(preset.id, 1)}
+                  disabled={index === presets.length - 1}
+                  className="p-1.5 rounded-md hover:bg-bg-tertiary text-text-tertiary hover:text-text-secondary transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+                </Tip>
                 {/* 编辑预设按钮，带 tooltip */}
                 <Tip text="编辑预设">
                 <button
@@ -313,17 +352,21 @@ export default function PomodoroSettingsPage() {
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
                 </Tip>
-                {!preset.builtin && (
-                  /* 删除预设按钮，带 tooltip */
-                  <Tip text="删除预设">
-                  <button
-                    onClick={() => deletePreset(preset.id)}
-                    className="p-1.5 rounded-md hover:bg-semantic-error/10 text-text-tertiary hover:text-semantic-error transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                  </Tip>
-                )}
+                {/* 删除按钮：自定义预设可删；内置预设置灰并提示原因（避免误以为可删） */}
+                <Tip text={preset.builtin ? '内置预设不可删除' : '删除预设'}>
+                <button
+                  onClick={() => !preset.builtin && handleDeletePreset(preset.id, preset.name)}
+                  disabled={preset.builtin}
+                  className={cn(
+                    'p-1.5 rounded-md transition-colors',
+                    preset.builtin
+                      ? 'text-text-tertiary/30 cursor-not-allowed'
+                      : 'hover:bg-semantic-error/10 text-text-tertiary hover:text-semantic-error',
+                  )}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+                </Tip>
               </div>
             </div>
           ))}

@@ -57,6 +57,8 @@ const ALLOWED_CHANNELS = [
   // A2 语音对话：启动前查询是否已有活跃采集（互斥保护，避免误伤课堂采集）
   'audio_capture_status',
   'get-app-version',
+  // 剪贴板写入（渲染进程 navigator.clipboard 在 Electron 受限上下文下不可靠）
+  'clipboard:write-text',
   'dialog:selectDirectory',
   'get-default-storage-path',
   'update:check',

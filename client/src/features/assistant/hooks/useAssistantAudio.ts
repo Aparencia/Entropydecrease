@@ -8,11 +8,13 @@
 import { useEffect, useCallback } from 'react';
 import { useAssistantStore } from '../store/useAssistantStore';
 import { ttsController } from '../lib/ttsController';
+import { publicAssetUrl } from '@/lib/assets/publicAssetUrl';
 
+// publicAssetUrl 适配 Electron file:// 相对解析（绝对路径会 404）
 const SOUND_PATHS = {
-  bubble: '/sounds/assistant-bubble.mp3',
-  speakStart: '/sounds/assistant-speak-start.mp3',
-  ack: '/sounds/assistant-ack.mp3',
+  bubble: publicAssetUrl('/sounds/assistant-bubble.mp3'),
+  speakStart: publicAssetUrl('/sounds/assistant-speak-start.mp3'),
+  ack: publicAssetUrl('/sounds/assistant-ack.mp3'),
 } as const;
 
 export type SoundName = keyof typeof SOUND_PATHS;

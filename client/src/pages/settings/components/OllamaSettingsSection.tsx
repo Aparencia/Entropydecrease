@@ -133,18 +133,24 @@ export function OllamaSettingsSection() {
             </div>
             <button
               type="button"
+              role="switch"
+              aria-checked={isEnabled && isRunning}
+              aria-label={isEnabled ? '关闭本地推理' : '开启本地推理'}
               onClick={handleToggle}
               disabled={!isRunning}
               className={cn(
-                'relative w-10 h-5.5 rounded-full transition-colors duration-200 flex-shrink-0',
-                isEnabled && isRunning ? 'bg-accent-default' : 'bg-bg-inverted/20',
+                // 类名必须用默认 spacing 刻度存在的值（h-6/w-11/h-4/w-4），
+                // h-5.5/w-4.5 不在刻度内会静默不生效，开关高度归零只剩文字
+                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 flex-shrink-0',
+                // 开启态用品牌主色 + 品牌微光，与深色底拉开对比（与 ASR 开关同一视觉语言）
+                isEnabled && isRunning ? 'bg-brand-500 shadow-brand' : 'bg-bg-inverted/20',
                 !isRunning && 'opacity-50 cursor-not-allowed',
               )}
             >
               <span
                 className={cn(
-                  'absolute top-0.5 w-4.5 h-4.5 rounded-full bg-white shadow-sm transition-transform duration-200',
-                  isEnabled && isRunning ? 'translate-x-5' : 'translate-x-0.5',
+                  'inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200',
+                  isEnabled && isRunning ? 'translate-x-6' : 'translate-x-1',
                 )}
               />
             </button>

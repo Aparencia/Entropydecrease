@@ -79,4 +79,5 @@
 ```
 
 首次使用前需授权（二选一）：应用内「设置→数据与存储→学习记忆接口」开启，或手动创建标记文件
-`%APPDATA%/entropy-decrease/memory-server-consent`（Windows）。服务器无授权即拒绝启动并提示。
+`%APPDATA%/Entropy decrease/memory-server-consent`（Windows，目录名 = Electron `productName`；
+服务器按 `productName` → `name` 顺序推导候选 userData 目录，取首个真实存在者）。服务器无授权即拒绝启动并提示。

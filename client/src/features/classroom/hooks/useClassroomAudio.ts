@@ -24,11 +24,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import type { AudioChunkData, CaptureMode, SessionStatus, CaptureManager } from '@/lib/capture';
-import {
-  isAudioWorkletSupported,
-  startAudioWorkletPipeline,
-  startScriptProcessorPipeline,
-} from '@/lib/audioPipeline';
+import { startAudioPipeline } from '@/lib/audioPipeline';
 
 /** 开始采集后多久仍无音频块则判定管道未启动 */
 const NEVER_RECEIVED_TIMEOUT_MS = 15000;
@@ -245,18 +241,11 @@ export function useClassroomAudio({ captureManager, status, mode, onNotify }: Us
             });
           };
 
-          // 优先使用 AudioWorklet，不可用时降级到 ScriptProcessor
-          if (isAudioWorkletSupported()) {
-            console.info('[useClassroomCapture] 使用 AudioWorklet 音频管道（推荐）');
-            audioCleanupRef.current = await startAudioWorkletPipeline(
-              audioCtx, stream, payload.options, onChunk,
-            );
-          } else {
-            console.warn('[useClassroomCapture] AudioWorklet 不可用，降级到 ScriptProcessor');
-            audioCleanupRef.current = startScriptProcessorPipeline(
-              audioCtx, stream, payload.options, onChunk,
-            );
-          }
+          // 统一入口：优先 AudioWorklet，模块加载失败自动降级 ScriptProcessor
+          // （生产 file:// 下 addModule 会因 opaque origin 失败，降级保底）
+          audioCleanupRef.current = await startAudioPipeline(
+            audioCtx, stream, payload.options, onChunk,
+          );
         } catch (err) {
           console.error('[useClassroomCapture] Audio pipeline start failed:', err);
           // 根据采集源类型给出不同的诊断提示

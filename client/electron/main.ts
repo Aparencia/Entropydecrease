@@ -17,8 +17,8 @@
  * 应用无法启动，任何修改需完整回归启动/退出/托盘/更新流程。
  */
 
-import { app, BrowserWindow, Menu, session } from 'electron';
-import { safeHandle, setMainWindowId } from './ipcUtils.js';
+import { app, BrowserWindow, Menu, session, clipboard } from 'electron';
+import { safeHandle, setMainWindowId, requireText } from './ipcUtils.js';
 import { logger } from './logger.js';
 import { registerAIHandlers, initAIModule } from './ai/index.js';
 import { loadPersistedGatewayUrl, setRuntimeGatewayUrl, gatewayUrl, isDevMode } from './ai/utils.js';
@@ -229,6 +229,14 @@ if (!gotTheLock) {
     // 通用 IPC handlers
     safeHandle('get-app-version', async () => {
       return app.getVersion();
+    });
+
+    // 剪贴板写入：渲染进程 navigator.clipboard 在 Electron 非聚焦/受限上下文下
+    // 会抛 "Document is not focused" 而失败，改由主进程 clipboard 模块写入更可靠。
+    safeHandle('clipboard:write-text', async (_event, text: unknown) => {
+      const value = requireText(text, 'text');
+      clipboard.writeText(value);
+      return { success: true };
     });
 
     // 创建主窗口（内部会创建托盘）

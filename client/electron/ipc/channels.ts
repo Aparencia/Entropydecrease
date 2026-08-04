@@ -108,6 +108,7 @@ export const IPC_CHANNELS = {
 
   // 系统
   APP_GET_VERSION: 'get-app-version',
+  CLIPBOARD_WRITE_TEXT: 'clipboard:write-text',
   GET_DEFAULT_STORAGE_PATH: 'get-default-storage-path',
   DIALOG_SELECT_DIRECTORY: 'dialog:selectDirectory',
 

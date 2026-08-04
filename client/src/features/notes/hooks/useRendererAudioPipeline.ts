@@ -13,11 +13,7 @@
  *   优先使用 AudioWorklet，不可用时降级到 ScriptProcessor。
  */
 import { useRef, useEffect } from 'react';
-import {
-  isAudioWorkletSupported,
-  startAudioWorkletPipeline,
-  startScriptProcessorPipeline,
-} from '@/lib/audioPipeline';
+import { startAudioPipeline } from '@/lib/audioPipeline';
 
 interface AudioStartPayload {
   sourceId: string;
@@ -66,18 +62,10 @@ export function useRendererAudioPipeline() {
               });
             };
 
-            // 优先使用 AudioWorklet，不可用时降级到 ScriptProcessor
-            if (isAudioWorkletSupported()) {
-              console.info('[useRendererAudioPipeline] 使用 AudioWorklet 音频管道（推荐）');
-              audioCleanupRef.current = await startAudioWorkletPipeline(
-                audioCtx, stream, payload.options, onChunk,
-              );
-            } else {
-              console.warn('[useRendererAudioPipeline] AudioWorklet 不可用，降级到 ScriptProcessor');
-              audioCleanupRef.current = startScriptProcessorPipeline(
-                audioCtx, stream, payload.options, onChunk,
-              );
-            }
+            // 统一入口：优先 AudioWorklet，模块加载失败自动降级 ScriptProcessor
+            audioCleanupRef.current = await startAudioPipeline(
+              audioCtx, stream, payload.options, onChunk,
+            );
           } catch (err) {
             // eslint-disable-next-line no-console -- 音频管道启动失败
             console.error('[CaptureSidebar] Renderer audio pipeline start failed:', err);

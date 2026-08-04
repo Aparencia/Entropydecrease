@@ -13,10 +13,13 @@ import {
   type SoundCategory,
   type SoundSettings,
 } from './audioConfig';
+import { publicAssetUrl } from '@/lib/assets/publicAssetUrl';
 
-/** 音效 ID → 文件路径映射（从 SOUND_DEFINITIONS 动态生成） */
+/** 音效 ID → 文件路径映射（从 SOUND_DEFINITIONS 动态生成）
+ * publicAssetUrl 将绝对路径转为随构建 base 解析的 URL：Electron file://
+ * 协议下 '/sounds/x.wav' 会解析到文件系统根而 404，必须相对文档解析 */
 const SOUND_MAP: Record<string, string> = Object.fromEntries(
-  SOUND_DEFINITIONS.map((d) => [d.id, d.filePath]),
+  SOUND_DEFINITIONS.map((d) => [d.id, publicAssetUrl(d.filePath)]),
 );
 
 export type SoundId = string;

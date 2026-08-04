@@ -35,13 +35,14 @@ const { mockOfflineQueue } = vi.hoisted(() => ({
 }));
 vi.mock('./OfflineQueue', () => ({ offlineQueue: mockOfflineQueue }));
 
-const { mockNetworkGetState } = vi.hoisted(() => ({
+const { mockNetworkGetState, mockNetworkSubscribe } = vi.hoisted(() => ({
   mockNetworkGetState: vi.fn().mockReturnValue({ status: 'online' }),
+  mockNetworkSubscribe: vi.fn().mockReturnValue(() => {}),
 }));
 vi.mock('./NetworkManager', () => ({
   networkManager: {
     getState: mockNetworkGetState,
-    subscribe: vi.fn().mockReturnValue(() => {}),
+    subscribe: mockNetworkSubscribe,
   },
 }));
 
@@ -233,6 +234,48 @@ describe('SyncEngine', () => {
       await engine.sync();
 
       expect(events).toHaveLength(0);
+    });
+  });
+
+  // ── 自动同步洪泛防护（网络恢复触发） ───────────────────
+  describe('registerNetworkRecoverySync() 洪泛防护', () => {
+    it('仅在"转为 online"跳变沿触发同步，持续 online 的重复通知不重复触发', async () => {
+      mockGet.mockResolvedValue({ operations: [], latestVersion: 0 });
+      const engine = new SyncEngine();
+      engine.registerNetworkRecoverySync();
+      const listener = mockNetworkSubscribe.mock.calls.at(-1)?.[0];
+      expect(listener).toBeDefined();
+
+      // 持续 online（无跳变）→ 不触发
+      listener({ status: 'online' });
+      await new Promise((r) => setTimeout(r, 0));
+      expect(mockGet).not.toHaveBeenCalled();
+
+      // weak → online 跳变沿 → 触发一次
+      listener({ status: 'weak' });
+      listener({ status: 'online' });
+      await new Promise((r) => setTimeout(r, 0));
+      expect(mockGet).toHaveBeenCalledTimes(1);
+    });
+
+    it('同步连续失败后指数退避：短窗口内的后续跳变不再发请求', async () => {
+      mockGet.mockRejectedValue(new Error('ERR_CONNECTION_TIMED_OUT'));
+      const engine = new SyncEngine();
+      engine.registerNetworkRecoverySync();
+      const listener = mockNetworkSubscribe.mock.calls.at(-1)?.[0];
+      expect(listener).toBeDefined();
+
+      // 第一次跳变：触发并失败（计入退避）
+      listener({ status: 'weak' });
+      listener({ status: 'online' });
+      await new Promise((r) => setTimeout(r, 0));
+
+      // 第二次跳变：仍在退避窗口（≥20s）内 → 不再发请求
+      listener({ status: 'weak' });
+      listener({ status: 'online' });
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(mockGet).toHaveBeenCalledTimes(1);
     });
   });
 });

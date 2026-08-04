@@ -4,6 +4,7 @@
  * @ai-context: 从 useClassroomAudio.ts 和 useRendererAudioPipeline.ts 提取的公共逻辑。
  * ScriptProcessor 已被 Web Audio API 规范标记为 deprecated，未来 Chromium 可能移除。
  * 本模块封装两种实现路径，供各 hook 按需调用：
+ *   - startAudioPipeline: 统一入口，优先 AudioWorklet，加载失败自动降级
  *   - startAudioWorkletPipeline: 推荐路径，音频处理在独立渲染线程执行
  *   - startScriptProcessorPipeline: 降级路径，AudioWorklet 不可用时回退
  *
@@ -106,6 +107,32 @@ export async function startAudioWorkletPipeline(
     stream.getTracks().forEach((t) => t.stop());
     await audioCtx.close();
   };
+}
+
+/**
+ * 启动音频切片管道（统一入口）
+ *
+ * 优先 AudioWorklet；API 不支持或 worklet 模块加载失败时自动降级 ScriptProcessor。
+ * 生产模式页面经 file:// 加载，opaque origin 会导致 addModule 的模块脚本
+ * 校验失败（开发模式 http:// 下正常），仅检测 API 可用性不足以兜底
+ * （见 2026-08 课堂助手生产包「无法获取音频」案例）。
+ */
+export async function startAudioPipeline(
+  audioCtx: AudioContext,
+  stream: MediaStream,
+  options: AudioPipelineOptions,
+  onChunk: AudioChunkCallback,
+): Promise<() => Promise<void>> {
+  if (isAudioWorkletSupported()) {
+    try {
+      return await startAudioWorkletPipeline(audioCtx, stream, options, onChunk);
+    } catch (err) {
+      console.warn('[audioPipeline] AudioWorklet 管道启动失败，降级到 ScriptProcessor:', err);
+    }
+  } else {
+    console.warn('[audioPipeline] AudioWorklet API 不可用，降级到 ScriptProcessor');
+  }
+  return startScriptProcessorPipeline(audioCtx, stream, options, onChunk);
 }
 
 /**

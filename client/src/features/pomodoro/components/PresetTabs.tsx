@@ -9,7 +9,7 @@
  */
 import { memo } from 'react';
 import { motion } from 'framer-motion';
-import { BookOpen, PenLine, BookMarked, Brain, Timer, Moon, Coffee, Dumbbell, Music, Languages, Calculator, Microscope, GraduationCap, Plus } from 'lucide-react';
+import { BookOpen, PenLine, BookMarked, Brain, Timer, Moon, Coffee, Dumbbell, Music, Languages, Calculator, Microscope, GraduationCap, Plus, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tip } from '@/components/ui/Tip';
 import { SPRING } from '@/lib/animation/springConfig';
@@ -28,9 +28,11 @@ interface PresetTabsProps {
   canCreate: boolean;
   onSelect: (id: string) => void;
   onCreate: () => void;
+  /** 预设管理入口（深潜设置页：删除/排序/编辑），省略时不渲染 */
+  onManage?: () => void;
 }
 
-export default memo(function PresetTabs({ presets, activePresetId, canCreate, onSelect, onCreate }: PresetTabsProps) {
+export default memo(function PresetTabs({ presets, activePresetId, canCreate, onSelect, onCreate, onManage }: PresetTabsProps) {
   return (
     <motion.div
       className="flex items-center gap-0.5 p-1 bg-bg-secondary/60 backdrop-blur-sm rounded-full border border-border/20 max-w-full overflow-x-auto"
@@ -78,6 +80,19 @@ export default memo(function PresetTabs({ presets, activePresetId, canCreate, on
           aria-label="新建预设"
         >
           <Plus className="w-4 h-4" strokeWidth={1.5} />
+        </motion.button>
+        </Tip>
+      )}
+      {/* 预设管理入口（删除/排序/编辑在深潜设置页），带 tooltip */}
+      {onManage && (
+        <Tip text="预设管理（删除 / 排序）">
+        <motion.button
+          onClick={onManage}
+          whileTap={{ scale: 0.9 }}
+          className="flex items-center justify-center w-8 h-8 rounded-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/60 transition-all duration-200 flex-shrink-0"
+          aria-label="预设管理"
+        >
+          <SlidersHorizontal className="w-4 h-4" strokeWidth={1.5} />
         </motion.button>
         </Tip>
       )}
