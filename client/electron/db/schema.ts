@@ -7,7 +7,7 @@
 import type Database from 'better-sqlite3';
 import { logger } from '../logger.js';
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 10;
 
 export const SCHEMA_DDL = /* sql */ `
 CREATE TABLE IF NOT EXISTS pomodoro_sessions (
@@ -204,6 +204,82 @@ CREATE TABLE IF NOT EXISTS imports (
   settled_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_imports_settled_at ON imports(settled_at);
+-- v9：SOP 标准作业流程模板/步骤/执行记录 + 统一收件箱（Wave 0 地基）
+CREATE TABLE IF NOT EXISTS sop_templates (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  icon TEXT NOT NULL DEFAULT '',
+  category TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT 'user' CHECK (source IN ('builtin','user')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sop_steps (
+  id TEXT PRIMARY KEY,
+  template_id TEXT NOT NULL,
+  step_type TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  config TEXT NOT NULL DEFAULT '{}',
+  "order" INTEGER NOT NULL DEFAULT 0,
+  FOREIGN KEY (template_id) REFERENCES sop_templates(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS sop_runs (
+  id TEXT PRIMARY KEY,
+  template_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running','awaiting_module','completed','aborted')),
+  current_step_index INTEGER NOT NULL DEFAULT 0,
+  step_progress TEXT NOT NULL DEFAULT '{}',
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  FOREIGN KEY (template_id) REFERENCES sop_templates(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS inbox_items (
+  id TEXT PRIMARY KEY,
+  source TEXT NOT NULL DEFAULT 'clipboard' CHECK (source IN ('clipboard','inspiration','import')),
+  title TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','settled','archived')),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sop_steps_template_order ON sop_steps(template_id,"order");
+CREATE INDEX IF NOT EXISTS idx_sop_runs_status_started ON sop_runs(status,started_at);
+CREATE INDEX IF NOT EXISTS idx_inbox_items_status_created ON inbox_items(status,created_at DESC);
+-- v10：内测身份/激活码/邀请码表（临时收入方案）
+CREATE TABLE IF NOT EXISTS beta_profile (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  tier TEXT NOT NULL DEFAULT 'observer',
+  cohort INTEGER NOT NULL DEFAULT 1,
+  joined_at TEXT NOT NULL,
+  lifetime_pro INTEGER NOT NULL DEFAULT 0,
+  badges TEXT NOT NULL DEFAULT '[]',
+  perks_config TEXT NOT NULL DEFAULT '{}',
+  synced_at TEXT
+);
+CREATE TABLE IF NOT EXISTS licenses (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  type TEXT NOT NULL,
+  tier TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  machine_id TEXT,
+  activated_at TEXT,
+  expires_at TEXT,
+  synced_at TEXT
+);
+CREATE TABLE IF NOT EXISTS invite_codes (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  issuer_user_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  used_by_user_id TEXT,
+  used_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_beta_profile_user_id ON beta_profile(user_id);
+CREATE INDEX IF NOT EXISTS idx_licenses_code ON licenses(code);
+CREATE INDEX IF NOT EXISTS idx_invite_codes_issuer ON invite_codes(issuer_user_id);
 `;
 
 /** v3 迁移 DDL：CRDT 同步引擎元数据表（条件执行） */
@@ -274,6 +350,9 @@ export function initializeSchema(db: Database.Database): void {
       return;
     }
   }
+
+  // v9 迁移：SOP 模板/步骤/执行记录 + 统一收件箱（sop_templates/sop_steps/sop_runs/inbox_items）
+  // 表 DDL 已包含在 SCHEMA_DDL 中（CREATE IF NOT EXISTS 幂等），此处无需额外操作
 
   db.pragma(`user_version = ${SCHEMA_VERSION}`);
 }

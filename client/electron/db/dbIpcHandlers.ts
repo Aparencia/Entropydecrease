@@ -44,6 +44,20 @@ const ALLOWED_TABLES = new Set([
   'implementation_intentions',
   // imports — 知识入籍记录（v8 迁移新增）
   'imports',
+  // sop_templates — SOP 标准作业流程模板（v9 迁移新增）
+  'sop_templates',
+  // sop_steps — SOP 模板步骤（v9 迁移新增）
+  'sop_steps',
+  // sop_runs — SOP 执行记录（v9 迁移新增）
+  'sop_runs',
+  // inbox_items — 统一收件箱（v9 迁移新增）
+  'inbox_items',
+  // beta_profile — 内测身份本地缓存（v10 新增，临时收入方案）
+  'beta_profile',
+  // licenses — 激活码本地缓存（v10 新增）
+  'licenses',
+  // invite_codes — 邀请码本地缓存（v10 新增）
+  'invite_codes',
 ]);
 
 /** camelCase → snake_case（用于表名映射） */
@@ -83,6 +97,15 @@ const TABLE_NAME_MAP: Record<string, string> = {
   worldSnapshots: 'world_snapshots',
   // v8 新增：知识入籍记录（阶段 A 入口问题）
   imports: 'imports',
+  // v9 新增：SOP 标准作业流程 + 统一收件箱（Wave 0 地基）
+  sopTemplates: 'sop_templates',
+  sopSteps: 'sop_steps',
+  sopRuns: 'sop_runs',
+  inboxItems: 'inbox_items',
+  // v10 新增：内测身份/激活码/邀请码（临时收入方案）
+  betaProfile: 'beta_profile',
+  licenses: 'licenses',
+  inviteCodes: 'invite_codes',
 };
 
 function resolveTable(table: string): string {
