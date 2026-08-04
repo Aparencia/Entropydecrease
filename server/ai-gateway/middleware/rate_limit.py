@@ -229,7 +229,13 @@ async def _lua_check_limit(key: str, limit: int, ttl: int) -> int:
 
 
 async def rollback_rate_limit(user_id: str, feature: str) -> None:
-    """回退频率限制计数器（原子 INCR 超出限额或请求失败时调用）"""
+    """回退频率限制计数器。
+
+    ⚠️ 仅允许在 check_rate_limit 返回 True（本次 INCR 已生效）之后、
+    请求未成功消费配额（非 2xx）时调用——此时功能级与全局计数均已 +1，
+    回滚两层是准确的。超限路径（check 返回 False）Lua 脚本已原子回滚，
+    禁止调用本函数，否则双重 DECR 会把配额刷穿（GW-2#2）。
+    """
     cache = get_cache()
     if not cache._client:
         return

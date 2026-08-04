@@ -57,9 +57,25 @@ class ErrorPatternChain:
             }
         """
         # 构建输入文本
+        # GW-2#3: 防御性取值——原实现直接键索引 e['correctAnswer']/e['userAnswer']，
+        # 调用方传入缺字段 dict 时 KeyError 导致 500；改为 get() + str() 归一化，
+        # 并过滤空值项（避免 prompt 中出现无意义的空错误记录）
+        def _safe_text(value: Any) -> str:
+            return str(value) if value is not None else ""
+
+        normalized_errors: list[tuple[str, str]] = []
+        for e in golden_errors[:20]:  # 最多分析前 20 条
+            if not isinstance(e, dict):
+                continue
+            correct = _safe_text(e.get("correctAnswer"))
+            user = _safe_text(e.get("userAnswer"))
+            if not correct and not user:
+                continue
+            normalized_errors.append((correct, user))
+
         errors_text = "\n".join([
-            f"【错误 #{i+1}】\n正确答案：{e['correctAnswer']}\n用户回答：{e['userAnswer']}\n---"
-            for i, e in enumerate(golden_errors[:20])  # 最多分析前 20 条
+            f"【错误 #{i+1}】\n正确答案：{correct}\n用户回答：{user}\n---"
+            for i, (correct, user) in enumerate(normalized_errors)
         ])
 
         template = self._load_prompt_template()

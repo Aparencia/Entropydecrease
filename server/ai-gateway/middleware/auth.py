@@ -33,20 +33,40 @@ logger = logging.getLogger(__name__)
 # 不需要认证的路径白名单
 PUBLIC_PATHS = {"/health", "/health/quick", "/health/live"}
 
+# GW-2#1: 占位符识别——SUPABASE_URL 模板中的示例项目域名与常见示例密钥
+# 被视为"未配置"，避免"已配置"假象导致认证链路断裂后全站 401 且难排查
+_PLACEHOLDER_PROJECT_ID = "your-project-id"
+_PLACEHOLDER_SECRETS = {
+    "change-this-to-a-random-string-in-production",
+    "your-jwt-secret",
+    "placeholder",
+    "supabase_jwt_secret",
+}
+
+
+def _is_placeholder_text(value: str) -> bool:
+    """判断配置值是否为占位符/示例值"""
+    return value.strip().lower() in _PLACEHOLDER_SECRETS
+
+
 def _jwt_verification_configured() -> bool:
     """
     检查当前算法是否具备验证所需的密钥材料。
 
-    - HS256/RS256：需要 SUPABASE_JWT_SECRET（对称密钥或 PEM 公钥）
-    - ES256：需要 SUPABASE_JWKS_URL 或 SUPABASE_URL（用于获取 JWKS 公钥）
+    - HS256/RS256：需要 SUPABASE_JWT_SECRET（对称密钥或 PEM 公钥），
+      占位符/示例值视为未配置；
+    - ES256：需要 SUPABASE_JWKS_URL 或 SUPABASE_URL（用于获取 JWKS 公钥），
+      URL 含 your-project-id 占位符域名时视为未配置。
     """
     alg = APP_CONFIG.get("jwt_algorithm", "HS256")
     if alg == "ES256":
-        return bool(
+        jwks_url = (
             APP_CONFIG.get("supabase_jwks_url", "")
             or APP_CONFIG.get("supabase_url", "")
         )
-    return bool(APP_CONFIG.get("jwt_secret", ""))
+        return bool(jwks_url) and _PLACEHOLDER_PROJECT_ID not in jwks_url
+    secret = APP_CONFIG.get("jwt_secret", "")
+    return bool(secret) and not _is_placeholder_text(secret)
 
 
 # 启动时检查密钥配置
@@ -71,8 +91,12 @@ if not _jwt_verification_configured():
             stacklevel=2,
         )
 
-# 启动日志：输当前 JWT 验证算法
-logger.info("JWT 验证算法: %s", APP_CONFIG["jwt_algorithm"])
+# 启动日志：输当前 JWT 验证算法与配置状态（GW-2#1: 避免"已配置"假象）
+logger.info(
+    "JWT 验证算法: %s (验证材料已配置=%s)",
+    APP_CONFIG["jwt_algorithm"],
+    _jwt_verification_configured(),
+)
 
 
 def _normalize_pem_key(raw: str) -> str:
@@ -136,6 +160,13 @@ def _resolve_jwks_url() -> str:
     """解析 JWKS 端点 URL：优先 SUPABASE_JWKS_URL，其次从 SUPABASE_URL 推导"""
     jwks_url = APP_CONFIG.get("supabase_jwks_url", "")
     if jwks_url:
+        if _PLACEHOLDER_PROJECT_ID in jwks_url:
+            # GW-2#1: 占位符域名推导出的 JWKS 端点必然不可达，显式告警
+            #（此分支通常不会被走到——_jwt_verification_configured 已将其判为未配置）
+            logger.warning(
+                "ES256 验签 JWKS URL 含占位符域名 %s，请配置真实的 SUPABASE_URL/SUPABASE_JWKS_URL",
+                jwks_url,
+            )
         return jwks_url
     supabase_url = APP_CONFIG.get("supabase_url", "")
     if supabase_url:

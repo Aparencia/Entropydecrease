@@ -66,6 +66,39 @@ class ErrorPatternResponse(BaseModel):
 # ============================================================
 
 
+def _validate_pattern_item(item: Any) -> dict | None:
+    """校验 LLM 输出的错误模式项：缺失必填字段/类型非法时返回 None（过滤）。
+
+    GW-2#3: LLM JSON 输出截断或格式漂移时，PatternItem(**p) 严格构造会抛
+    ValidationError 导致 500——与 quiz_gen_chain._validate_question 相同的
+    逐项校验+过滤模式，非法项丢弃而非崩溃。
+    """
+    if not isinstance(item, dict):
+        return None
+    required = {"type", "keywords", "explanation", "suggestion"}
+    if not all(k in item and item[k] not in (None, "") for k in required):
+        return None
+    keywords = item.get("keywords")
+    if not isinstance(keywords, list) or not all(isinstance(k, str) for k in keywords):
+        return None
+    return item
+
+
+def _validate_top_offender(item: Any) -> dict | None:
+    """校验 LLM 输出的高频错误卡片项：缺 flashcardId 时返回 None（过滤）。"""
+    if not isinstance(item, dict):
+        return None
+    flashcard_id = item.get("flashcardId")
+    if not isinstance(flashcard_id, str) or not flashcard_id:
+        return None
+    try:
+        count = int(item.get("count", 0))
+    except (TypeError, ValueError):
+        # GW-2#3: count 非数字时容错为 0，而非让 pydantic 抛 500
+        count = 0
+    return {"flashcardId": flashcard_id, "count": count}
+
+
 @router.post("/error-pattern", response_model=ErrorPatternResponse, summary="分析黄金错误模式")
 async def error_pattern(request: Request, body: ErrorPatternRequest) -> ErrorPatternResponse:
     """
@@ -126,12 +159,27 @@ async def error_pattern(request: Request, body: ErrorPatternRequest) -> ErrorPat
         await cache.set_ai_cache(cache_key, chain_result, expire=3600)
 
     # 构建响应对象
-    patterns = [
-        PatternItem(**p) for p in patterns_data
-    ]
-    top_offenders = [
-        TopOffender(**o) for o in top_offenders_data
-    ]
+    # GW-2#3: LLM 输出逐项校验+过滤，缺字段项不导致 500（截断/格式漂移降级）
+    patterns = []
+    dropped_patterns = 0
+    for p in patterns_data:
+        validated = _validate_pattern_item(p)
+        if validated is not None:
+            patterns.append(PatternItem(**validated))
+        else:
+            dropped_patterns += 1
+
+    top_offenders = []
+    for o in top_offenders_data:
+        validated = _validate_top_offender(o)
+        if validated is not None:
+            top_offenders.append(TopOffender(**validated))
+
+    if dropped_patterns > 0:
+        logger.warning(
+            "错误模式分析: %d 条模式项因缺字段被过滤（LLM 输出质量问题）",
+            dropped_patterns,
+        )
 
     return ErrorPatternResponse(
         patterns=patterns,

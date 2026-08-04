@@ -249,6 +249,10 @@ class GLMProvider(AIProvider):
                 "tokens_used": tokens_used,
                 "model": model,
                 "latency_ms": latency_ms,
+                # GW-2#4: clamp 后实际生效的 max_tokens，供 chain 侧截断检测使用
+                #（与 generate_vision_multi 保持一致；原实现缺此字段，
+                # full 模式请求 4096 被 clamp 到 1024 后截断不可感知）
+                "max_tokens": max_tokens,
             }
 
         except Exception as e:

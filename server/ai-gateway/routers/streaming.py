@@ -24,7 +24,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from config import call_with_fallback_stream
-from middleware.rate_limit import check_rate_limit, rollback_rate_limit
+from middleware.rate_limit import check_rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/ai", tags=["流式输出"])
@@ -278,7 +278,9 @@ async def stream_ai(request: Request, feature: str, body: StreamRequest):
     # 此处复用与中间件一致的 Redis 限流逻辑（含功能级 + 全局每日总量）
     is_allowed, detail = await check_rate_limit(user_id, config_key)
     if not is_allowed:
-        await rollback_rate_limit(user_id, config_key)
+        # GW-2#2: 超限时禁止再次 rollback——Lua 脚本已在超限分支内原子 DECR，
+        # 路由层再 rollback 会双重回滚（feature 减到负数、global 被无条件 DECR），
+        # 恶意用户可反复刷超限请求把自己的配额刷低甚至清零
         raise HTTPException(status_code=429, detail=detail)
 
     try:

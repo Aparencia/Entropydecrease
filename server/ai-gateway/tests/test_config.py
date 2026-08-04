@@ -9,6 +9,7 @@
 - _resolve_model_name() 在 fallback 链中正确选择模型名
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -254,9 +255,12 @@ class TestGetProviderForFeature:
 class TestConfigAssertions:
     """配置值精确断言（JWT 算法、API Key 校验、超时配置、Fallback 链尾）"""
 
-    def test_jwt_algorithm_is_es256(self):
-        """APP_CONFIG jwt_algorithm 必须为 ES256（与 Supabase JWKS 一致）"""
-        assert APP_CONFIG["jwt_algorithm"] == "ES256"
+    def test_jwt_algorithm_defaults_to_hs256(self):
+        """APP_CONFIG jwt_algorithm 默认 HS256（GW-2#1: 与 Supabase 默认对称密钥
+        签发机制对齐；原硬编码 ES256 导致无 JWKS 的默认项目全站 401）。
+        显式配置 SUPABASE_JWT_ALGORITHM 时使用配置值。"""
+        expected = os.getenv("SUPABASE_JWT_ALGORITHM", "HS256")
+        assert APP_CONFIG["jwt_algorithm"] == expected
 
     def test_is_valid_api_key_rejects_placeholder(self):
         """占位符 API Key 应被识别为无效"""

@@ -278,8 +278,23 @@ class VisionExtractChain:
             _feature="vision_extract",
         )
 
+        # GW-2#4: 显式截断检测——GLM 等 provider 可能把 max_tokens clamp 到
+        # 低于请求值（full 模式请求 4096 被 clamp 到 1024），输出在接近上限时
+        # 大概率被截断。原实现静默返回残缺 JSON（结构化字段丢失）且照常缓存，
+        # 用户无感知；此处记录 truncated 告警供排查与降级重试决策
+        content = result["content"]
+        actual_max_tokens = result.get("max_tokens")
+        if actual_max_tokens and len(content) > actual_max_tokens * 3:
+            # 1 token ≈ 3 字符的保守估算（中文 1 token ≈ 1-2 字符，英文 ≈ 4）
+            logger.warning(
+                "视觉提取疑似截断: mode=%s, model=%s, content=%d 字符, "
+                "max_tokens=%d（provider clamp 后），结构化字段可能缺失",
+                effective_mode, result.get("model", self.model),
+                len(content), actual_max_tokens,
+            )
+
         # 解析结构化结果
-        structured = self._parse_response(result["content"])
+        structured = self._parse_response(content)
 
         return {
             "content": result["content"],
