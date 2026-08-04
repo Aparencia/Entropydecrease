@@ -3,6 +3,58 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.35.0](https://github.com/Aparencia/Entropydecrease/compare/v0.34.0...v0.35.0) (2026-08-04)
+
+### ✨ 新功能
+
+* **ai-gateway:** DeepSeek v4 Flash 统一接入与多 Key 轮询 + sync 幂等写入 ([cc41b6f](https://github.com/Aparencia/Entropydecrease/commit/cc41b6f6679f32d9e2d1c0638680f480299330a9))
+* **ai,classroom:** streaming ASR/TTS, gateway refactor, handler IPC consolidation ([d60a239](https://github.com/Aparencia/Entropydecrease/commit/d60a23927a2fed09b57c68c0403d766c0b4f7a09))
+* **assistant,ai-gateway,db:** 创新目录三/四/五部分增强落地 ([b721398](https://github.com/Aparencia/Entropydecrease/commit/b7213985026c723cbb32b9bad75923a10138b788))
+* **audio,retention:** capture pipeline overhaul, FSRS retention, gateway hardening ([0cace68](https://github.com/Aparencia/Entropydecrease/commit/0cace6810bb683b2940b75c2277fedf968f4a822))
+* **classroom:** P0 止血——错误四分类、降级/丢弃可见性与启动配置记忆 ([8b56d2c](https://github.com/Aparencia/Entropydecrease/commit/8b56d2c9ff5bb8b6300037ca7b81c5ee3894d15d))
+* **classroom:** 热词/替换词表与本地持久化 ([1d9c491](https://github.com/Aparencia/Entropydecrease/commit/1d9c4918da6fe4005db5cd9e16082e82d7b6453e))
+* **classroom:** 网关健康软阻断与应用内确认对话框 ([852ad2a](https://github.com/Aparencia/Entropydecrease/commit/852ad2a8f5bf3ebfe16b4129baf59f7f66c6cacf))
+* **constellation:** 知识星座双轨渲染——纯函数派生图谱+DOM/SVG轨与3D轨按性能档切换（阶段B） ([a2875d4](https://github.com/Aparencia/Entropydecrease/commit/a2875d4ce6cee19ef9bbd1d60e73bbf30b3d9b3a))
+* **mcp:** 学习记忆接口闭环——应用内授权开关与世界快照跨进程桥 ([5cb8427](https://github.com/Aparencia/Entropydecrease/commit/5cb8427591c83b1e7289f52439f287bffb8440ce))
+* **mcp:** 学习记忆服务器主体落地（宪法P2第二批·内层防御） ([ff3f861](https://github.com/Aparencia/Entropydecrease/commit/ff3f8617ae2102e21bb6fe4447a44ac678167b4b))
+* **mcp:** 知识图谱 MCP 工具与应用内演示剧本——learning_memory.knowledge_graph+三步引导+访问审计+快照事件同步（阶段C） ([e65035c](https://github.com/Aparencia/Entropydecrease/commit/e65035c50aa3f327a6e0ba832a2db5a454388bed))
+* **notes,assistant,ai-gateway:** 修复内测三缺陷并批量落地创新功能增强 ([73d1d6b](https://github.com/Aparencia/Entropydecrease/commit/73d1d6bf78361e5908d2a06a2b2ea31445b97fb5))
+* **ritual:** 模块仪式化页头与沉浸视觉升级——萤火海沟/秩序之井/深潜背景 ([38d0427](https://github.com/Aparencia/Entropydecrease/commit/38d04270ec77263c134e4abeada276bcdefd16c7))
+* **settling:** 知识入籍闭环阶段A与审查修复 ([45c414e](https://github.com/Aparencia/Entropydecrease/commit/45c414ee4e918469f9f28069c5bf671c792389d4))
+* **sovereignty:** 世界之书导出/恢复与数据主权页——worldExport纯函数+BDD测试、主权IPC（校验先行+事务幂等导入+FTS重建）、我的世界设置区块（阶段D） ([216d9c3](https://github.com/Aparencia/Entropydecrease/commit/216d9c3ac09372b348bc27f69c26b5042fa9e60a))
+* **world:** 声景体系、疲劳共情与延时摄影开场（宪法P2收官） ([34ed940](https://github.com/Aparencia/Entropydecrease/commit/34ed940646293e526b1af52beb727696069c16a1))
+* **world:** 混沌雾与秩序波纹（宪法P1第二批·熵可视化层） ([7057ce0](https://github.com/Aparencia/Entropydecrease/commit/7057ce069f7908896b9554ba9cf60da93e5f5c91))
+* **world:** 潮汐节律与沉积地层（宪法P1第四批·叙事层C/D深海先行） ([77cfaf3](https://github.com/Aparencia/Entropydecrease/commit/77cfaf3f5eaae0a3be3235cf155cb63e9a2d4f3d))
+* **world:** 熵可视化世界信号派生层与深海实体辉光接线（宪法P1第一批） ([795565b](https://github.com/Aparencia/Entropydecrease/commit/795565b0cb41225647309a5ac4faa3315bc7f0d5))
+* **world:** 签名时刻三幕演出（宪法P1第三批·掌握一个概念） ([3165d00](https://github.com/Aparencia/Entropydecrease/commit/3165d00e93dc409399dcf7a1c8869c7e2a904767))
+* **world:** 签名时刻可变重奏演出库（宪法P2第一批） ([57b2e43](https://github.com/Aparencia/Entropydecrease/commit/57b2e43e50f349be17d076c487bdd01b9a6639dc))
+* **world:** 首潜创世时刻与世界数据回路闭合（宪法P1第五批） ([9238745](https://github.com/Aparencia/Entropydecrease/commit/9238745187a98476218f4a55d6c950693449f849))
+
+### 🐛 缺陷修复
+
+* **3d:** 深色模式 3D 场景不渲染修复——双 EffectComposer 渲染抢占收敛与场景过渡重写 ([1395058](https://github.com/Aparencia/Entropydecrease/commit/1395058f0d9731172cd4a0420d2812406b8a65e2))
+* **3d:** 相机飞行视角错位与渲染循环冻结修复 ([c3be476](https://github.com/Aparencia/Entropydecrease/commit/c3be476e5f2083e4e8de5d9ed288c51d793b3949))
+* **ai-gateway:** 清理基线 ruff 违规——移除未用变量/导入、import 移至顶部、修正无效 noqa 指令 ([05576ff](https://github.com/Aparencia/Entropydecrease/commit/05576ff451602e6ced54e703b33e52e179c5f846))
+* **ai-queue:** 离线队列消费互斥锁与卡死记录恢复 ([75d2f26](https://github.com/Aparencia/Entropydecrease/commit/75d2f2694226f01876bf853055d6b266167a3650))
+* **ai:** AI handler 增加 IPC 入参校验与宽松 JSON 解析 ([68dcd1b](https://github.com/Aparencia/Entropydecrease/commit/68dcd1bb72346d3a8d8c98f4b76f058570a58d48))
+* **assistant,dashboard:** 修复 A3/A4 使用中高概率缺陷 ([e7fce42](https://github.com/Aparencia/Entropydecrease/commit/e7fce4266b09d5bbc795aca6f7f5b91ceb5f8dcc))
+* **capture:** 采集链路竞态治理与健壮性加固 ([caf7cef](https://github.com/Aparencia/Entropydecrease/commit/caf7cef2f4e3456f7cf86454dab91b59486cdb64))
+* **ci:** 为 changes job 显式声明 pull-requests 读权限，修复 Dependabot PR 路径检测必失败 ([56c1bfe](https://github.com/Aparencia/Entropydecrease/commit/56c1bfec4f7cc7fb2bab06afe57fd8dc1cb1215d))
+* **feynman,flashcards,pomodoro,ai-gateway:** 修复代码审查发现的创新功能缺陷 ([3cc1f91](https://github.com/Aparencia/Entropydecrease/commit/3cc1f91c0e74a869a31a6a66f61527238d017b11))
+* **gateway:** GLM flash 模型 max_tokens 上限 clamp 到 1024 ([950d54a](https://github.com/Aparencia/Entropydecrease/commit/950d54a36bcd5c1b46a440b1af6ce3babcb1ccb6))
+* **pomodoro:** 计时全局调度解耦、墙钟校准与沉浸双视图叠加修复 ([875831c](https://github.com/Aparencia/Entropydecrease/commit/875831c299b5d29296649f883876e2dd47417024))
+* **settling:** 审查修复——IPv6 SSRF 绕过/英文断行粘连/重试重复安放/响应体内存/完成计数 ([4a203b5](https://github.com/Aparencia/Entropydecrease/commit/4a203b56ec4c199f8530f661a6a18075e440c0a1))
+* **sovereignty:** 审查修复——恢复表白名单扩展（world_snapshots/imports）+ 校验加固 + BOM/大小防御 + 超限提示 ([a1be346](https://github.com/Aparencia/Entropydecrease/commit/a1be346a5c60ff0fd4f662985c2e6ad57a782196))
+* sync_resolve.go 编译错误 - 恢复事务内 seqNo 分配 ([490d5a5](https://github.com/Aparencia/Entropydecrease/commit/490d5a5cbbf08addf11ab2d3b0fc07f19bf2b6c9))
+* **website:** 公安备案徽标按原尺寸展示避免缩放模糊 ([ee832ae](https://github.com/Aparencia/Entropydecrease/commit/ee832aea31d59e4a6b3fde92c7e320cceb3e8891))
+* **world:** 审计修复——快照桥两处静默死链与签名时刻定时器泄漏 ([d85836d](https://github.com/Aparencia/Entropydecrease/commit/d85836d5cd3104c6633a62bf0164fde034371da1))
+* 全仓库第二轮审计修复 - 四区域50项中等问题+5项严重 ([226259a](https://github.com/Aparencia/Entropydecrease/commit/226259a61ec48454c21bf3f4461eb796ad88c150))
+* 全仓库逻辑合理性检修复 - 三阶段修复27项问题 ([5a2d504](https://github.com/Aparencia/Entropydecrease/commit/5a2d50491afa8d9a5a563336afa6a34d5cb88abb))
+
+### ⚡ 性能优化
+
+* **ui:** 细粒度 selector 订阅与键入防抖，消除整页连带重渲染 ([218f5a1](https://github.com/Aparencia/Entropydecrease/commit/218f5a1c7646f107eb2c7f43579ab92263000598))
+
 ## [0.34.0](https://github.com/Aparencia/Entropydecrease/compare/v0.33.1...v0.34.0) (2026-08-02)
 
 ### ✨ 新功能
