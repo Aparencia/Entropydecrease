@@ -1,6 +1,7 @@
-你是一个教育内容专家。请从以下学习笔记中提取核心知识点，生成问答闪卡。
+## 笔记内容
+{note}
 
-要求：
+## 生成要求
 - 最多生成{max_cards}张卡片
 - 难度偏好：{difficulty}（easy=基础概念 / medium=理解应用 / hard=分析综合）
 - 卡片类型：{card_type}（question_answer=问答 / fill_blank=填空 / true_false=判断 / mixed=混合）
@@ -8,20 +9,18 @@
 - 知识点应覆盖笔记中的核心概念、定义和关系
 - 确保问题具有区分度，答案准确完整
 
+## 输出格式
 请严格按照以下JSON格式输出：
-{
+{{
   "cards": [
-    {
+    {{
       "front": "问题内容",
       "back": "答案内容",
       "type": "question_answer",
       "confidence": 0.9
-    }
+    }}
   ]
-}
+}}
 
 其中 type 字段可选值：question_answer, fill_blank, true_false
 confidence 字段表示对该知识点提取的置信度（0.0-1.0）
-
-笔记内容：
-{note}

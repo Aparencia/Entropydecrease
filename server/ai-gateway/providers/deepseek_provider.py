@@ -47,6 +47,13 @@ class DeepSeekProvider(AIProvider):
             api_key=api_key,
         )
 
+    def _reinit_client(self) -> None:
+        """重新初始化 OpenAI 客户端（Key 轮换后调用）"""
+        self._client = AsyncOpenAI(
+            base_url=self.base_url,
+            api_key=self.api_key,
+        )
+
     @with_retry_and_timeout()
     async def generate(
         self,
@@ -62,6 +69,8 @@ class DeepSeekProvider(AIProvider):
 
         DeepSeek 支持 prompt 缓存，系统提示复用可降低 token 成本。
         """
+        # Key 轮询：将请求分散到多个 Key 以突破单一 Key 的 RPM 限制
+        await self._rotate_api_key()
         start_time = time.monotonic()
 
         # 构建消息列表

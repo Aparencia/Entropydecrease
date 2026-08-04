@@ -224,7 +224,6 @@ class TestFallbackProvider:
         app = MagicMock()
         app.state.providers = {
             "qwen": FailingASRProvider("qwen"),
-            "glm": FailingASRProvider("glm"),
             "fallback": FallbackProvider(),
         }
 
@@ -300,28 +299,29 @@ class TestCallWithFallback:
         async def mock_fn(provider, model_name):
             return {"content": "主响应", "model": model_name, "tokens_used": 10, "latency_ms": 5}
 
-        # 当前 summarize 的 fallback chain 以 glm 为主 Provider
-        app = self._make_app({"qwen": AsyncMock(), "glm": primary, "fallback": FallbackProvider()})
+        # 当前 summarize 的 fallback chain 以 deepseek 为主 Provider
+        app = self._make_app({"deepseek": primary, "qwen": AsyncMock(), "fallback": FallbackProvider()})
         result, provider_key = await call_with_fallback(app, "summarize", mock_fn)
         assert result["content"] == "主响应"
-        assert provider_key == "glm"
+        assert provider_key == "deepseek"
 
     @pytest.mark.asyncio
     async def test_fallback_on_primary_failure(self):
         """主 Provider 失败时自动回退到下一个"""
-        class FailingGLM:
-            provider_name = "glm"
-            async def generate(self, *a, **kw): raise RuntimeError("glm 故障")
+        class FailingDeepSeek:
+            provider_name = "deepseek"
+            async def generate(self, *a, **kw): raise RuntimeError("deepseek 故障")
 
         class WorkingQwen:
             provider_name = "qwen"
+            async def generate(self, *a, **kw): return {"content": "ok"}
 
         async def mock_fn(provider, model_name):
-            if getattr(provider, "provider_name", None) == "glm":
-                raise RuntimeError("glm 故障")
+            if getattr(provider, "provider_name", None) == "deepseek":
+                raise RuntimeError("deepseek 故障")
             return {"content": "Qwen 备选响应", "model": model_name, "tokens_used": 5, "latency_ms": 2}
 
-        app = self._make_app({"qwen": WorkingQwen(), "glm": FailingGLM(), "fallback": FallbackProvider()})
+        app = self._make_app({"deepseek": FailingDeepSeek(), "qwen": WorkingQwen(), "fallback": FallbackProvider()})
         result, provider_key = await call_with_fallback(app, "summarize", mock_fn)
         assert provider_key == "qwen"
 
@@ -332,8 +332,8 @@ class TestCallWithFallback:
             raise RuntimeError("全部故障")
 
         app = self._make_app({
+            "deepseek": MagicMock(),
             "qwen": MagicMock(),
-            "glm": MagicMock(),
             "fallback": MagicMock(),
         })
 

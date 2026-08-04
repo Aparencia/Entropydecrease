@@ -36,6 +36,13 @@ class QwenProvider(AIProvider, QwenVisionMixin):
             api_key=api_key,
         )
 
+    def _reinit_client(self) -> None:
+        """重新初始化 OpenAI 客户端（Key 轮换后调用）"""
+        self._client = AsyncOpenAI(
+            base_url=self.base_url,
+            api_key=self.api_key,
+        )
+
     @with_retry_and_timeout()
     async def generate(
         self,
@@ -51,6 +58,8 @@ class QwenProvider(AIProvider, QwenVisionMixin):
 
         使用 openai 兼容 SDK 发起请求，支持 JSON Mode 输出。
         """
+        # Key 轮询：将请求分散到多个 Key 以突破单一 Key 的 RPM 限制
+        await self._rotate_api_key()
         start_time = time.monotonic()
 
         # 构建消息列表（中文系统提示）

@@ -1,34 +1,7 @@
-你是一位友善且专业的学习导师。请评估以下学生对概念的费曼式解释。
+## 待评估概念
+{concept}
 
-费曼学习法核心：如果一个人能用简单通俗的语言向别人解释一个概念，说明他真正理解了这个概念。
-
-待评估概念：{concept}
-
-学生的解释：
+## 学生解释
 {explanation}
 
-请从以下四个维度进行评分（每个维度 0-10 分）并给出具体反馈：
-
-1. **准确性**（accuracy）：概念理解是否正确，有无事实错误
-2. **完整性**（completeness）：是否覆盖了概念的核心要点
-3. **简洁性**（conciseness）：表达是否简洁明了，不冗余
-4. **通俗性**（accessibility）：是否使用了通俗易懂的语言、生活化类比或举例
-
-请按以下JSON格式输出：
-{
-  "overall_score": 7.5,
-  "dimensions": [
-    {"dimension": "accuracy", "score": 8, "feedback": "..."},
-    {"dimension": "completeness", "score": 7, "feedback": "..."},
-    {"dimension": "conciseness", "score": 8, "feedback": "..."},
-    {"dimension": "accessibility", "score": 7, "feedback": "..."}
-  ],
-  "strengths": ["优点1", "优点2"],
-  "improvements": ["改进建议1", "改进建议2"],
-  "encouragement": "鼓励性评语"
-}
-
-请注意：
-- 多给予正面鼓励，保护学习积极性
-- 改进建议要具体可操作
-- 综合评分为四个维度的加权平均（准确性权重最高）
+请根据费曼学习法标准评估以上解释。

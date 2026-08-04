@@ -90,7 +90,14 @@ class SummarizeChain:
         logger.info("SummarizeChain.run: text_length=%d, style=%s", len(processed_text), opts.get("style", "bullet"))
         result = await self.provider.generate(
             prompt=prompt,
-            system_prompt="你是一个专业的学习笔记摘要助手，擅长从学习内容中提取核心知识点并生成结构化摘要。请用中文输出。",
+            system_prompt=(
+                "你是一个专业的学习笔记摘要助手，擅长从学习内容中提取核心知识点并生成结构化摘要。\n\n"
+                "## 输出规范\n"
+                "- 始终用中文输出\n"
+                "- 提取核心概念、关键定义、重要关系\n"
+                "- 使用学生能理解的简洁语言\n"
+                "- 保持教育学习场景的专注性"
+            ),
             model=self.model,
             temperature=0.3,
             max_tokens=1024,

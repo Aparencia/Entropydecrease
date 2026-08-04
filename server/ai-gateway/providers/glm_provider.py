@@ -47,6 +47,13 @@ class GLMProvider(AIProvider):
             api_key=api_key,
         )
 
+    def _reinit_client(self) -> None:
+        """重新初始化 OpenAI 客户端（Key 轮换后调用）"""
+        self._client = AsyncOpenAI(
+            base_url=self.base_url,
+            api_key=self.api_key,
+        )
+
     @with_retry_and_timeout()
     async def generate(
         self,
@@ -62,6 +69,8 @@ class GLMProvider(AIProvider):
 
         使用 openai 兼容 SDK 发起请求，glm-4.6v-flash 模型免费。
         """
+        # Key 轮询：将请求分散到多个 Key 以突破单一 Key 的 RPM 限制
+        await self._rotate_api_key()
         # GLM 免费 flash 模型输出上限 1024 tokens（与 generate_vision 的 clamp 对齐）：
         # 超限会被 API 参数校验直接拒绝，导致 Qwen 限流降级到 GLM 时
         # fallback 链在最需要兑底的时刻断裂（重试 3 次后集体失效）

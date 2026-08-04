@@ -70,14 +70,23 @@ class CardGenChain:
             list[str]: 提取的知识点列表
         """
         extract_prompt = (
-            "请从以下学习笔记中提取所有核心知识点，每个知识点用一行描述。\n"
-            "只需要列出知识点，不要编号，不要额外解释。\n\n"
-            f"笔记内容：\n{note}"
+            "## 笔记内容\n"
+            f"{note}\n\n"
+            "## 提取要求\n"
+            "请从以上学习笔记中提取所有核心知识点，每行一个知识点。"
+            "只需要列出知识点，不要编号，不要额外解释。"
         )
 
         result = await self.provider.generate(
             prompt=extract_prompt,
-            system_prompt="你是一个教育内容专家，擅长从学习材料中识别核心概念、定义和关键关系。请用中文输出。",
+            system_prompt=(
+                "你是一个教育内容专家，擅长从学习材料中识别核心概念、定义和关键关系。\n\n"
+                "## 输出规范\n"
+                "- 每行一个知识点\n"
+                "- 不要编号，不要列表符号\n"
+                "- 使用简洁准确的表述\n"
+                "- 用中文输出"
+            ),
             model=self.model,
             temperature=0.3,
             max_tokens=1024,
@@ -129,7 +138,14 @@ class CardGenChain:
 
         result = await self.provider.generate(
             prompt=prompt,
-            system_prompt="你是一个教育内容专家，擅长从知识点中生成高质量问答闪卡。请务必以JSON格式输出结果。",
+            system_prompt=(
+                "你是一个教育内容专家，擅长从知识点中生成高质量问答闪卡。\n\n"
+                "## 输出规范\n"
+                "- 必须严格按照 JSON 格式输出\n"
+                "- 每张卡片包含 front、back、type、confidence 四个字段\n"
+                "- 确保问题具有区分度，答案准确完整\n"
+                "- 用中文输出"
+            ),
             model=self.model,
             temperature=0.4,
             max_tokens=2048,

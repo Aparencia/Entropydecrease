@@ -27,7 +27,8 @@ AI_PROVIDERS: dict = {
             "free": "qwen-plus",             # 通用兜底模型
             "summary": "qwen-plus",         # 笔记摘要
             "flashcard": "qwen-plus",        # 闪卡生成（JSON Mode 稳定）
-            "vision": "qwen2.5-vl-72b-instruct",  # 多模态视觉提取（课堂助手主力，百炼标准标识符）
+            "vision": "qwen3-vl-flash",            # 多模态视觉提取（低开销主力，百炼标准标识符）
+            "vision_high": "qwen2.5-vl-72b-instruct",  # 多模态视觉质量兜底（质量保证，备用）
             "asr": "qwen3-asr-flash",        # 语音转文字（OpenAI 兼容模式仅支持 Qwen3-ASR-Flash 系列）
             "anchor": "qwen-plus",           # 记忆锚点生成
             "socratic": "qwen-plus",         # 苏格拉底追问
@@ -40,9 +41,28 @@ AI_PROVIDERS: dict = {
         "base_url": "https://api.deepseek.com/v1",
         "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
         "models": {
-            "free": "deepseek-chat",         # 通用兜底模型
+            "free": "deepseek-chat",         # 通用兜底模型（v4 Flash 0731）
             "evaluate": "deepseek-chat",     # 费曼评估
             "recommend": "deepseek-chat",    # 番茄钟推荐
+            "summary": "deepseek-chat",      # 笔记摘要
+            "flashcard": "deepseek-chat",    # 闪卡生成
+            "anchor": "deepseek-chat",       # 记忆锚点
+            "socratic": "deepseek-chat",     # 苏格拉底追问
+            "predict": "deepseek-chat",      # 预测驱动
+            "rescue": "deepseek-chat",       # 三级救援
+            "inspiration_draft": "deepseek-chat", # AI 草稿
+            "tag": "deepseek-chat",          # 标签
+            "optimize": "deepseek-chat",     # 优化卡片
+            "sort": "deepseek-chat",         # 灵感排序
+            "ritual": "deepseek-chat",       # 仪式回顾
+            "progress": "deepseek-chat",     # 进展叙述
+            "chat": "deepseek-chat",         # 学伴对话
+            "error": "deepseek-chat",        # 错误模式
+            "quiz": "deepseek-chat",         # 迷你测试
+            "tier": "deepseek-chat",         # 内容分层
+            "conflict": "deepseek-chat",     # 冲突检测
+            "precheck": "deepseek-chat",     # 概念预检
+            "import_concept": "deepseek-chat",# 知识入籍
         },
     },
     "glm": {
@@ -69,47 +89,53 @@ AI_PROVIDERS: dict = {
 # ============================================================
 
 MODEL_ROUTING: dict[str, tuple[str, str]] = {
-    "summarize": ("glm", "free"),
-    "generate_cards": ("glm", "free"),
-    "evaluate": ("glm", "free"),
-    "recommend": ("glm", "free"),
-    "vision_extract": ("qwen", "vision"),
-    "transcribe": ("qwen", "asr"),
-    "tag_content": ("glm", "free"),
-    "optimize_card": ("glm", "free"),
+    # ============================================================
+    # 纯文字 AI 功能 → 统一 DeepSeek v4 Flash 0731（deepseek-chat）
+    # 利用 DeepSeek 的 prompt 缓存机制降低 token 成本。
+    # 多模态/ASR 功能保持原路由不变。
+    # ============================================================
+    "summarize": ("deepseek", "summary"),
+    "generate_cards": ("deepseek", "flashcard"),
+    "evaluate": ("deepseek", "evaluate"),
+    "recommend": ("deepseek", "recommend"),
+    "tag_content": ("deepseek", "tag"),
+    "optimize_card": ("deepseek", "optimize"),
     "feynman_question": ("deepseek", "evaluate"),
     "feynman_evaluate": ("deepseek", "evaluate"),
-    "sort_inspiration": ("glm", "free"),
+    "sort_inspiration": ("deepseek", "sort"),
     # v1.0.0/v1.1.0 新增 Chain
-    "anchor_point": ("qwen", "anchor"),
-    "socratic": ("qwen", "socratic"),
-    "predict": ("qwen", "predict"),
-    "rescue": ("qwen", "rescue"),
-    "inspiration_draft": ("qwen", "inspiration_draft"),
-    "ritual_recall": ("glm", "free"),
-    "progress_narrative": ("glm", "free"),  # A3 微进展叙述：短文本，免费档即可
+    "anchor_point": ("deepseek", "anchor"),
+    "socratic": ("deepseek", "socratic"),
+    "predict": ("deepseek", "predict"),
+    "rescue": ("deepseek", "rescue"),
+    "inspiration_draft": ("deepseek", "inspiration_draft"),
+    "ritual_recall": ("deepseek", "ritual"),
+    "progress_narrative": ("deepseek", "progress"),
     # FEAT-022: 苏格拉底式学习
-    "socratic_brainstorm": ("qwen", "socratic"),
-    "socratic_evaluate":   ("qwen", "socratic"),
-    "socratic_deepening":  ("qwen", "socratic"),
-    # Path B: 多模态课堂分析（多图联合 → Markdown 笔记）
+    "socratic_brainstorm": ("deepseek", "socratic"),
+    "socratic_evaluate":   ("deepseek", "socratic"),
+    "socratic_deepening":  ("deepseek", "socratic"),
+    # 学伴对话（流式 SSE 多轮交互）
+    "chat": ("deepseek", "chat"),
+    # F4: 黄金错误模式分析（JSON Mode）
+    "error_pattern": ("deepseek", "error"),
+    # N1: 课程级迷你测试生成（JSON Mode）
+    "quiz_gen": ("deepseek", "quiz"),
+    # N5: 内容分层（JSON Mode）
+    "content_tier": ("deepseek", "tier"),
+    # N6: 概念冲突检测（JSON Mode）
+    "conflict_detect": ("deepseek", "conflict"),
+    # E1: 概念预检（JSON Mode）
+    "concept_precheck": ("deepseek", "precheck"),
+    # 阶段 A: 知识入籍概念化（JSON Mode）
+    "import_concept": ("deepseek", "import_concept"),
+    # ============================================================
+    # 多模态 / ASR / 视频 — 保持原路由不变
+    # ============================================================
+    "vision_extract": ("qwen", "vision"),
+    "transcribe": ("qwen", "asr"),
     "multimodal_analyze": ("qwen", "vision"),
-    # Path C: 视频分析（Gemini 原生视频 → Markdown 笔记）
     "video_analyze": ("gemini", "video"),
-    # 学伴对话（流式 SSE 多轮交互，Qwen 通用模型兜底）
-    "chat": ("qwen", "free"),
-    # F4: 黄金错误模式分析（JSON Mode，Qwen 通用模型）
-    "error_pattern": ("qwen", "free"),
-    # N1: 课程级迷你测试生成（JSON Mode，Qwen 通用模型）
-    "quiz_gen": ("qwen", "free"),
-    # N5: 内容分层（JSON Mode，Qwen 通用模型）
-    "content_tier": ("qwen", "free"),
-    # N6: 概念冲突检测（JSON Mode，Qwen 通用模型）
-    "conflict_detect": ("qwen", "free"),
-    # E1: 概念预检（JSON Mode，Qwen 通用模型）
-    "concept_precheck": ("qwen", "free"),
-    # 阶段 A: 知识入籍概念化（JSON Mode，免费档优先）
-    "import_concept": ("glm", "free"),
 }
 
 # ============================================================

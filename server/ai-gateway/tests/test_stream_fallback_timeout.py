@@ -106,15 +106,15 @@ class TestModelRoutingChat:
         """MODEL_ROUTING 必须包含 chat 条目"""
         assert "chat" in MODEL_ROUTING, "MODEL_ROUTING 缺少 'chat' 条目"
 
-    def test_chat_routing_provider_is_qwen(self):
-        """chat 主路由 Provider 应为 qwen"""
+    def test_chat_routing_provider_is_deepseek(self):
+        """chat 主路由 Provider 应为 deepseek"""
         provider, slot = MODEL_ROUTING["chat"]
-        assert provider == "qwen", f"chat 主路由应为 qwen，实际为 {provider}"
+        assert provider == "deepseek", f"chat 主路由应为 deepseek，实际为 {provider}"
 
-    def test_chat_routing_slot_is_free(self):
-        """chat 路由 slot 应为 free（通用模型兜底）"""
+    def test_chat_routing_slot_is_chat(self):
+        """chat 路由 slot 应为 chat"""
         provider, slot = MODEL_ROUTING["chat"]
-        assert slot == "free", f"chat slot 应为 free，实际为 {slot}"
+        assert slot == "chat", f"chat slot 应为 chat，实际为 {slot}"
 
     def test_chat_routing_tuple_format(self):
         """chat 路由应为 (provider, slot) 二元组格式"""
@@ -131,8 +131,8 @@ class TestModelRoutingChat:
 async def test_stream_first_provider_success():
     """第一个 provider 成功时正确返回异步生成器"""
     app = _make_app({
-        "qwen": MagicMock(provider_name="qwen"),
         "deepseek": MagicMock(provider_name="deepseek"),
+        "qwen": MagicMock(provider_name="qwen"),
         "fallback": MagicMock(provider_name="fallback"),
     })
 
@@ -141,7 +141,7 @@ async def test_stream_first_provider_success():
         app, "chat", None, fn,
     )
 
-    assert provider_key == "qwen"
+    assert provider_key == "deepseek"
     assert is_user_key is False
 
     # 消费生成器，验证所有 chunk 正确吐出
@@ -189,8 +189,8 @@ async def test_stream_outer_timeout_budget(monkeypatch):
 async def test_stream_fallback_to_second_provider():
     """第一个 provider 失败时应降级到第二个 provider"""
     app = _make_app({
-        "qwen": MagicMock(provider_name="qwen"),
         "deepseek": MagicMock(provider_name="deepseek"),
+        "qwen": MagicMock(provider_name="qwen"),
         "fallback": MagicMock(provider_name="fallback"),
     })
 
@@ -199,20 +199,20 @@ async def test_stream_fallback_to_second_provider():
     def fn(provider, model_name):
         call_count["n"] += 1
         if call_count["n"] == 1:
-            # 第一次调用（qwen）失败
-            return _make_failing_stream_fn("qwen 故障")(provider, model_name)
+            # 第一次调用（deepseek）失败
+            return _make_failing_stream_fn("deepseek 故障")(provider, model_name)
         else:
-            # 第二次调用（deepseek）成功
-            return _make_stream_fn(["from", "deepseek"])(provider, model_name)
+            # 第二次调用（qwen）成功
+            return _make_stream_fn(["from", "qwen"])(provider, model_name)
 
     gen, provider_key, is_user_key = await call_with_fallback_stream(
         app, "chat", None, fn,
     )
 
-    assert provider_key == "deepseek"
+    assert provider_key == "qwen"
     assert is_user_key is False
 
     collected = []
     async for chunk in gen:
         collected.append(chunk)
-    assert collected == ["from", "deepseek"]
+    assert collected == ["from", "qwen"]

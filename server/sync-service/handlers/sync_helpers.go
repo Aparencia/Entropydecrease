@@ -6,9 +6,11 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 
 	"entropydecrease/sync-service/models"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -57,4 +59,14 @@ func nextSeqNo(tx *gorm.DB) (int64, error) {
 		return 0, err
 	}
 	return g.SeqNo, nil
+}
+
+// isUniqueViolation 判断错误是否为 PostgreSQL 唯一约束冲突（23505）。
+// M6/M7: 用于幂等写入时区分"重复操作"与"真实 DB 错误"。
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505"
+	}
+	return false
 }

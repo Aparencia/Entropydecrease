@@ -207,8 +207,10 @@ class RecommendChain:
             result = await self.provider.generate(
                 prompt=prompt,
                 system_prompt=(
-                    "你是一个专注力管理助手，擅长根据用户的专注历史数据给出个性化的番茄钟时长建议。"
-                    "请基于数据分析给出科学的推荐。请务必以JSON格式输出。"
+                    "你是一个专注力管理助手，擅长根据用户的专注历史数据给出个性化的番茄钟时长建议。\n"
+                    "请基于数据分析给出科学的推荐。\n\n"
+                    "## 输出格式\n"
+                    "请务必以 JSON 格式输出，包含：recommended_minutes、break_minutes、reason。"
                 ),
                 model=self.model,
                 temperature=0.3,

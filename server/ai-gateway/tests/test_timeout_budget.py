@@ -78,9 +78,9 @@ def _make_app(providers_dict):
 @pytest.mark.asyncio
 async def test_first_provider_success():
     """第一个 Provider 成功时正确返回结果"""
-    glm_provider = SuccessProvider(name="glm", response={"content": "summary from glm"})
+    deepseek_provider = SuccessProvider(name="deepseek", response={"content": "summary from deepseek"})
     app = _make_app({
-        "glm": glm_provider,
+        "deepseek": deepseek_provider,
         "qwen": SuccessProvider(name="qwen"),
         "fallback": SuccessProvider(name="fallback"),
     })
@@ -89,17 +89,17 @@ async def test_first_provider_success():
         return await provider.generate()
 
     result, provider_key = await call_with_fallback(app, "summarize", fn)
-    assert result["content"] == "summary from glm"
-    assert provider_key == "glm"
+    assert result["content"] == "summary from deepseek"
+    assert provider_key == "deepseek"
 
 
 @pytest.mark.asyncio
 async def test_fallback_to_second_provider():
     """第一个 Provider 失败时降级到第二个 Provider"""
-    glm_provider = FailingProvider(name="glm")
+    deepseek_provider = FailingProvider(name="deepseek")
     qwen_provider = SuccessProvider(name="qwen", response={"content": "from qwen"})
     app = _make_app({
-        "glm": glm_provider,
+        "deepseek": deepseek_provider,
         "qwen": qwen_provider,
         "fallback": SuccessProvider(name="fallback"),
     })
@@ -116,7 +116,7 @@ async def test_fallback_to_second_provider():
 async def test_fallback_to_last_provider():
     """前两个 Provider 失败时降级到最后一个 fallback Provider"""
     app = _make_app({
-        "glm": FailingProvider(name="glm"),
+        "deepseek": FailingProvider(name="deepseek"),
         "qwen": FailingProvider(name="qwen"),
         "fallback": SuccessProvider(name="fallback", response={"content": "fallback response"}),
     })
@@ -133,7 +133,7 @@ async def test_fallback_to_last_provider():
 async def test_all_providers_fail():
     """所有 Provider 均失败时抛出 RuntimeError"""
     app = _make_app({
-        "glm": FailingProvider(name="glm"),
+        "deepseek": FailingProvider(name="deepseek"),
         "qwen": FailingProvider(name="qwen"),
         "fallback": FailingProvider(name="fallback"),
     })
@@ -163,8 +163,8 @@ async def test_timeout_budget_exhausted(monkeypatch):
     # 设置极短超时：summarize=1s → budget = 1 * 1.5 = 1.5s
     monkeypatch.setitem(TIMEOUT_CONFIG, "summarize", 1)
 
-    slow_provider = SlowProvider(name="glm", delay=5.0)  # sleep 5s >> budget 1.5s
-    app = _make_app({"glm": slow_provider})
+    slow_provider = SlowProvider(name="deepseek", delay=5.0)  # sleep 5s >> budget 1.5s
+    app = _make_app({"deepseek": slow_provider})
 
     async def fn(provider, model_name):
         return await provider.generate()
@@ -183,9 +183,9 @@ async def test_timeout_budget_with_short_config(monkeypatch):
     # 为避免边界问题，使用 0.2s
     monkeypatch.setitem(TIMEOUT_CONFIG, "summarize", 0.2)
 
-    slow_provider = SlowProvider(name="glm", delay=3.0)
+    slow_provider = SlowProvider(name="deepseek", delay=3.0)
     app = _make_app({
-        "glm": slow_provider,
+        "deepseek": slow_provider,
         "qwen": SlowProvider(name="qwen", delay=3.0),
         "fallback": SlowProvider(name="fallback", delay=3.0),
     })
@@ -201,16 +201,16 @@ async def test_timeout_budget_with_short_config(monkeypatch):
 async def test_fn_receives_correct_model_name():
     """fn 回调应接收正确的 model_name（由 _resolve_model_name 解析）"""
     received_models = []
-    glm_provider = SuccessProvider(name="glm")
-    app = _make_app({"glm": glm_provider})
+    deepseek_provider = SuccessProvider(name="deepseek")
+    app = _make_app({"deepseek": deepseek_provider})
 
     async def fn(provider, model_name):
         received_models.append(model_name)
         return {"content": "ok"}
 
     await call_with_fallback(app, "summarize", fn)
-    # summarize → glm.free → glm-4.6v-flash
-    assert "glm-4.6v-flash" in received_models
+    # summarize → deepseek.summary → deepseek-chat
+    assert "deepseek-chat" in received_models
 
 
 @pytest.mark.asyncio
