@@ -9,7 +9,7 @@ import { X } from 'lucide-react';
 import { IMMERSIVE_EASE, IMMERSIVE_DURATION } from '../constants';
 import type { ImmersivePhase, DegradationLevel } from '../types';
 import PulseAnimation from './PulseAnimation';
-import DeepSeaAmbient from './DeepSeaAmbient';
+import OrderWellBackground from './OrderWellBackground';
 import InspirationConstellation from './InspirationConstellation';
 
 interface ImmersiveCanvasProps {
@@ -89,13 +89,13 @@ function ImmersiveCanvas({
           {/* 背景层：深色 + 微弱噪点纹理，不用 backdrop-blur */}
           <div className="absolute inset-0 bg-bg-primary kb-immersive-bg" />
 
-          {/* 深海环境动画层 z-[1] */}
-          <div className="relative z-[1]">
-            <DeepSeaAmbient degradation={degradation} />
+          {/* 深海环境动画层 z-[1]：暗物质场 + 秩序之井（与常态页同源叙事，沉浸模式强制深色） */}
+          <div className="absolute inset-0 z-[1]">
+            <OrderWellBackground degradation={degradation} forceDark />
           </div>
 
           {/* 灵感星座光点层 z-[10]：全阶段可见，始终显示在背景之上 */}
-          <div className="relative z-[10]">
+          <div className="absolute inset-0 z-[10] pointer-events-none">
             <InspirationConstellation inspirations={inspirations} degradation={degradation} />
           </div>
 
@@ -107,8 +107,8 @@ function ImmersiveCanvas({
             />
           )}
 
-          {/* 脉冲波纹动画层 z-[30] */}
-          <div className="relative z-[30]">
+          {/* 脉冲波纹动画层 z-[30]：纯动画层，不拦截指针 */}
+          <div className="absolute inset-0 z-[30] pointer-events-none">
             <PulseAnimation
               phase={phase}
               clickPoint={clickPoint}

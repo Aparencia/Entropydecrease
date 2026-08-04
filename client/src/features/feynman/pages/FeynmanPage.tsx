@@ -8,6 +8,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Modal, Input, EmptyState, Skeleton, ContextMenu } from '@/components/ui';
+import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import type { ContextMenuGroup } from '@/components/ui';
 import { Plus, BookOpen, Trash2, MessageCircle, Lightbulb, SearchCheck, Network } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -141,10 +142,12 @@ export default function FeynmanPage() {
         className="flex items-center justify-between px-kb-md py-kb-md flex-shrink-0 relative z-10"
         variants={headerVariants}
       >
-        <div>
-          <h1 className="text-h1 font-semibold text-text-primary">浮出水面</h1>
-          <p className="text-b2 text-text-tertiary mt-0.5">用讲解检验理解，以简化证明掌握</p>
-        </div>
+        <ModuleRitualHeader
+          title="浮出水面"
+          note="用讲解检验理解，以简化证明掌握"
+          sealChar="浮"
+          sealColor="#C4956A"
+        />
         <div className="flex items-center gap-2">
           {/* E3 概念网络入口 */}
           <button

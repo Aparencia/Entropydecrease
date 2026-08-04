@@ -409,7 +409,7 @@ function SidebarItem({ to, label, subtitle, icon: Icon, shortcut, dotColor, coll
               <motion.span
                 layoutId="sidebar-active-indicator"
                 className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-brand-500 rounded-full"
-                style={{ boxShadow: '0 0 8px rgba(91,138,114,0.5)' }}
+                style={{ boxShadow: '0 0 8px color-mix(in srgb, var(--kb-brand-500) 50%, transparent)' }}
                 transition={SPRING.default}
               />
             )}

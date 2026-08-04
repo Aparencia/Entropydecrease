@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Sparkles, Brain, MessageCircle, Layers, CheckCircle2 } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
+import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import { Button } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import BrainstormPanel from '../components/BrainstormPanel';
@@ -63,6 +64,7 @@ export default function SocraticSessionPage() {
         >
           <ArrowLeft className="w-icon-md h-icon-md" strokeWidth={1.5} />
         </button>
+        <ModuleRitualHeader sealChar="浮" sealColor="#C4956A" compact />
         <h1 className="text-b1 font-semibold text-text-primary flex-1 truncate">
           苏格拉底式学习
         </h1>

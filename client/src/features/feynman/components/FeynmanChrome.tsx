@@ -8,6 +8,7 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Check, HelpCircle, CheckCircle2 } from 'lucide-react';
 import { Button, Skeleton, EmptyState } from '@/components/ui';
+import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import { AIButton } from '@/components/ui/AIButton';
 import { useModeState } from '@/hooks/useMode';
 import { cn } from '@/lib/utils';
@@ -71,6 +72,7 @@ export function FeynmanTopBar({
         <ArrowLeft className="w-icon-md h-icon-md" strokeWidth={1.5} />
       </button>
       </Tip>
+      <ModuleRitualHeader sealChar="浮" sealColor="#C4956A" compact />
       <h1 className="text-b1 font-semibold text-text-primary flex-1 truncate">
         {concept || '浮出水面'}
       </h1>

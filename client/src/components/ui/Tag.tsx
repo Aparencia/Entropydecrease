@@ -20,10 +20,10 @@ const tagVariants = cva(
     variants: {
       color: {
         brand: 'bg-brand-100/70 text-brand-700',
-        pomodoro: 'bg-rose-100/70 text-rose-700',
-        note: 'bg-accent-100/70 text-accent-700',
-        flashcard: 'bg-cyan-100/70 text-cyan-700',
-        feynman: 'bg-indigo-100/70 text-indigo-700',
+        pomodoro: 'bg-pomodoro-light/40 text-pomodoro',
+        note: 'bg-note-light/40 text-note',
+        flashcard: 'bg-flashcard-light/40 text-flashcard',
+        feynman: 'bg-feynman-light/40 text-feynman',
         default: 'bg-bg-tertiary text-text-secondary',
       },
     },

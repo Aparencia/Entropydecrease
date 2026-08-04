@@ -1,0 +1,518 @@
+/* ═══════════════════════════════════════════
+   萤火海沟 · 暗物质场与秩序之井
+   造序仪式视觉语言（设计稿 Celestial Abyss Ritual 落地）
+   @ai-context 两套独立 UI：深色=深海版（白热井光/靛蓝暗物质），浅色=晨曦晨雾版（天光/淡蓝晨雾/琥珀金光柱）；
+   全部视觉浓度抽为 --kb-abyss-* 变量，类只引用变量；L1/L2 降级由组件侧控制 DOM 数量
+   ═══════════════════════════════════════════ */
+
+/* ── 双主题变量：浅色 · 晨曦晨雾版（天光 + 晨雾 + 琥珀金光柱） ── */
+:root {
+  /* 海面天光基底 */
+  --kb-abyss-bg-well: rgba(245, 158, 11, 0.09);            /* 井口晨光 */
+  --kb-abyss-bg-sky: rgba(59, 130, 246, 0.10);             /* 顶部天光 */
+  /* 晨雾：淡蓝白（比底色有色相，轻盈缥缈） */
+  --kb-abyss-turb-a: rgba(191, 219, 254, 0.42);            /* 淡蓝雾丝 */
+  --kb-abyss-turb-b: rgba(245, 158, 11, 0.07);             /* 晨曦金光斑 */
+  --kb-abyss-turb-c: rgba(219, 234, 254, 0.55);            /* 蓝白雾团 */
+  --kb-abyss-fog-color: rgba(191, 219, 254, 0.38);
+  --kb-abyss-far-a: rgba(250, 248, 245, 0.82);             /* 顶部天光羽化 */
+  --kb-abyss-far-b: rgba(250, 248, 245, 0.48);
+  /* 秩序之井：琥珀金光柱（晨光版，非白热） */
+  --kb-abyss-core-top: rgba(245, 158, 11, 0);
+  --kb-abyss-core-mid: rgba(245, 158, 11, 0.10);
+  --kb-abyss-core-bot: rgba(245, 158, 11, 0.38);
+  --kb-abyss-halo-mid: rgba(251, 191, 36, 0.12);
+  --kb-abyss-halo-bot: rgba(6, 182, 212, 0.22);            /* 青与金交融 */
+  /* 井口光圈：金主青辅 */
+  --kb-abyss-aperture-a: rgba(245, 158, 11, 0.26);
+  --kb-abyss-aperture-b: rgba(59, 130, 246, 0.14);
+  --kb-abyss-aperture-border: rgba(245, 158, 11, 0.40);
+  --kb-abyss-aperture-glow: rgba(245, 158, 11, 0.25);
+  /* 星芒与尘埃 */
+  --kb-abyss-flare: rgba(245, 158, 11, 0.55);
+  --kb-abyss-flare-core: rgba(245, 158, 11, 0.65);
+  --kb-abyss-dust-color: rgba(245, 158, 11, 0.7);
+  /* 海面波光：晨光碎金闪烁（浅色专属，深色禁用） */
+  --kb-abyss-glimmer: rgba(245, 158, 11, 0.55);
+  --kb-abyss-glimmer-soft: rgba(255, 255, 255, 0.6);
+}
+
+/* ── 双主题变量：深色 · 深海版（白热井光/靛蓝/赛博青暗物质） ── */
+[data-theme="dark"] {
+  --kb-abyss-bg-well: color-mix(in srgb, var(--kb-accent-500) 7%, transparent);
+  --kb-abyss-bg-sky: color-mix(in srgb, var(--kb-brand-500) 6%, transparent);
+  --kb-abyss-turb-a: color-mix(in srgb, var(--kb-brand-500) 8%, transparent);
+  --kb-abyss-turb-b: color-mix(in srgb, var(--kb-accent-500) 5%, transparent);
+  --kb-abyss-turb-c: color-mix(in srgb, var(--kb-bg-secondary) 55%, transparent);
+  --kb-abyss-fog-color: color-mix(in srgb, var(--kb-bg-secondary) 62%, transparent);
+  --kb-abyss-far-a: color-mix(in srgb, var(--kb-bg-primary) 88%, transparent);
+  --kb-abyss-far-b: color-mix(in srgb, var(--kb-bg-primary) 35%, transparent);
+  --kb-abyss-core-top: rgba(255, 255, 255, 0);
+  --kb-abyss-core-mid: rgba(255, 255, 255, 0.14);
+  --kb-abyss-core-bot: rgba(255, 255, 255, 0.95);
+  --kb-abyss-halo-mid: color-mix(in srgb, var(--kb-amber) 6%, transparent);
+  --kb-abyss-halo-bot: color-mix(in srgb, var(--kb-cyber-cyan) 16%, transparent);
+  --kb-abyss-aperture-a: color-mix(in srgb, var(--kb-accent-500) 16%, transparent);
+  --kb-abyss-aperture-b: color-mix(in srgb, var(--kb-amber) 10%, transparent);
+  --kb-abyss-aperture-border: color-mix(in srgb, var(--kb-accent-500) 22%, transparent);
+  --kb-abyss-aperture-glow: color-mix(in srgb, var(--kb-accent-500) 18%, transparent);
+  --kb-abyss-flare: color-mix(in srgb, var(--kb-accent-500) 30%, transparent);
+  --kb-abyss-flare-core: rgba(255, 255, 255, 0.75);
+  --kb-abyss-dust-color: rgba(255, 255, 255, 0.85);
+  /* 深海无海面波光（保持纯暗物质场） */
+  --kb-abyss-glimmer: transparent;
+  --kb-abyss-glimmer-soft: transparent;
+}
+
+/* ── 暗物质场容器：基底渐变 + 微颗粒噪点 ──
+   @ai-context absolute 相对功能面板定位（面板 transform 上下文内稳定覆盖，不随内容滚动、无 fixed 跳变） */
+.kb-abyss {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    /* 井口辉光基底（底部中央） */
+    radial-gradient(ellipse 55% 30% at 50% 100%, var(--kb-abyss-bg-well), transparent 70%),
+    /* 顶部环境（远海 / 晨曦） */
+    radial-gradient(ellipse 90% 50% at 50% -5%, var(--kb-abyss-bg-sky), transparent 60%),
+    var(--kb-bg-primary);
+}
+
+/* 噪点纹理层：feTurbulence 静态颗粒，给暗物质"物质感" */
+.kb-abyss-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+}
+
+/* ── 暗物质 · 近景湍流漩涡：缓慢旋转的纤维状暗物质丝 ── */
+.kb-abyss-turbulence {
+  position: absolute;
+  left: 50%;
+  bottom: -20%;
+  width: 130vw;
+  height: 130vw;
+  transform: translateX(-50%);
+  background:
+    radial-gradient(ellipse 45% 35% at 35% 40%, var(--kb-abyss-turb-a), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 65% 55%, var(--kb-abyss-turb-b), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 50% 50%, var(--kb-abyss-turb-c), transparent 75%);
+  filter: blur(42px);
+  animation: kb-abyss-rotate 90s linear infinite;
+}
+
+@keyframes kb-abyss-rotate {
+  from { transform: translateX(-50%) rotate(0deg); }
+  to   { transform: translateX(-50%) rotate(360deg); }
+}
+
+/* ── 暗物质 · 中景雾团：密度不均的雾块缓慢漂移 ── */
+.kb-abyss-fog {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(56px);
+  background: var(--kb-abyss-fog-color);
+  animation: kb-fog-drift var(--kb-fog-duration, 40s) ease-in-out infinite alternate;
+}
+
+@keyframes kb-fog-drift {
+  from { transform: translate3d(-3%, -1%, 0) scale(1); opacity: 0.55; }
+  to   { transform: translate3d(4%, 2%, 0) scale(1.08); opacity: 0.8; }
+}
+
+/* ── 海面波光：晨光碎金闪烁（浅色晨雾版专属，深色下变量为透明自动隐身） ── */
+.kb-abyss-glimmer {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(2px 2px at 16% 24%, var(--kb-abyss-glimmer), transparent 75%),
+    radial-gradient(1.5px 1.5px at 27% 32%, var(--kb-abyss-glimmer-soft), transparent 75%),
+    radial-gradient(2.5px 2.5px at 38% 19%, var(--kb-abyss-glimmer), transparent 75%),
+    radial-gradient(1.5px 1.5px at 52% 28%, var(--kb-abyss-glimmer-soft), transparent 75%),
+    radial-gradient(2px 2px at 63% 21%, var(--kb-abyss-glimmer), transparent 75%),
+    radial-gradient(1.5px 1.5px at 74% 34%, var(--kb-abyss-glimmer-soft), transparent 75%),
+    radial-gradient(2px 2px at 85% 22%, var(--kb-abyss-glimmer), transparent 75%),
+    radial-gradient(2.5px 2.5px at 45% 40%, var(--kb-abyss-glimmer-soft), transparent 75%),
+    radial-gradient(2px 2px at 68% 42%, var(--kb-abyss-glimmer), transparent 75%),
+    radial-gradient(1.5px 1.5px at 22% 44%, var(--kb-abyss-glimmer-soft), transparent 75%);
+  animation: kb-glimmer-twinkle 7s ease-in-out infinite;
+}
+
+@keyframes kb-glimmer-twinkle {
+  0%, 100% { opacity: 0.2; }
+  50%      { opacity: 0.75; }
+}
+
+/* ── 暗物质 · 远景羽化：四周渐隐 + 顶部吞噬边缘 ── */
+.kb-abyss-far {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 120% 60% at 50% 0%, var(--kb-abyss-far-a), transparent 65%),
+    linear-gradient(180deg, var(--kb-abyss-far-b) 0%, transparent 18%),
+    linear-gradient(0deg, var(--kb-abyss-far-b) 0%, transparent 22%);
+}
+
+/* ═══════════════════════════════════════════
+   秩序之井 · 底部唯一光源
+   ═══════════════════════════════════════════ */
+
+.kb-well {
+  position: absolute;
+  left: 50%;
+  bottom: -4vh;
+  width: 300px;
+  height: 46vh;
+  transform: translateX(-50%);
+}
+
+/* 井口呼吸光圈：秩序与混沌的交界线 */
+.kb-well-aperture {
+  position: absolute;
+  left: 50%;
+  bottom: 10%;
+  width: 260px;
+  height: 96px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse, var(--kb-abyss-aperture-a) 0%, transparent 62%),
+    radial-gradient(ellipse, var(--kb-abyss-aperture-b) 0%, transparent 45%);
+  border: 1px solid var(--kb-abyss-aperture-border);
+  box-shadow:
+    0 0 40px var(--kb-abyss-aperture-glow),
+    inset 0 0 30px color-mix(in srgb, var(--kb-amber) 8%, transparent);
+  animation: kb-aperture-breathe 6s ease-in-out infinite;
+}
+
+@keyframes kb-aperture-breathe {
+  0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.75; }
+  50%      { transform: translateX(-50%) scale(1.045); opacity: 1; }
+}
+
+/* 光柱：白热核心 + 琥珀金/赛博青双色余晖（锐利硬边） */
+.kb-well-beam {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 132px;
+  height: 100%;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* 白热核心：接近纯白（深色）/ 靛蓝（浅色），边缘收束为清晰硬边 */
+.kb-well-beam-core {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    var(--kb-abyss-core-top) 0%,
+    var(--kb-abyss-core-mid) 38%,
+    var(--kb-abyss-core-bot) 88%,
+    var(--kb-abyss-core-bot) 100%
+  );
+  clip-path: polygon(38% 0, 62% 0, 100% 100%, 0 100%);
+  filter: blur(1px);
+}
+
+/* 双色余晖：窄晕层，边缘锐利 */
+.kb-well-beam-halo {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    var(--kb-abyss-core-top) 0%,
+    var(--kb-abyss-halo-mid) 52%,
+    var(--kb-abyss-halo-bot) 100%
+  );
+  clip-path: polygon(24% 0, 76% 0, 100% 100%, 0 100%);
+  filter: blur(6px);
+}
+
+/* 星芒：井口十字衍射光芒 */
+.kb-well-star-flare {
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  transform: translateX(-50%);
+  width: 380px;
+  height: 380px;
+  pointer-events: none;
+  animation: kb-flare-breathe 7s ease-in-out infinite;
+}
+
+.kb-well-star-flare::before,
+.kb-well-star-flare::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--kb-abyss-flare) 46%,
+    var(--kb-abyss-flare-core) 50%,
+    var(--kb-abyss-flare) 54%,
+    transparent 100%
+  );
+}
+
+.kb-well-star-flare::before { width: 100%; height: 1.5px; }
+.kb-well-star-flare::after  { width: 1.5px; height: 100%; }
+
+@keyframes kb-flare-breathe {
+  0%, 100% { opacity: 0.5; transform: translateX(-50%) scale(0.96); }
+  50%      { opacity: 0.9; transform: translateX(-50%) scale(1.04); }
+}
+
+/* 丁达尔尘埃：光柱内上升的微粒，在光束中显影 */
+.kb-well-dust {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 132px;
+  height: 100%;
+  transform: translateX(-50%);
+}
+
+.kb-well-dust span {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  border-radius: 50%;
+  background: var(--kb-abyss-dust-color);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--kb-amber) 70%, transparent);
+  animation: kb-dust-rise var(--kb-dust-duration, 14s) linear var(--kb-dust-delay, 0s) infinite;
+  opacity: 0;
+}
+
+@keyframes kb-dust-rise {
+  0%   { transform: translate(-50%, 0) scale(0.6); opacity: 0; }
+  12%  { opacity: var(--kb-dust-opacity, 0.5); }
+  85%  { opacity: var(--kb-dust-opacity, 0.5); }
+  100% { transform: translate(-50%, -42vh) scale(1.15); opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════
+   双仪式动画
+   ═══════════════════════════════════════════ */
+
+/* 记录仪式：琥珀金光点坠落 → 落点扩散秩序波纹（600ms，beat-x5） */
+.kb-ember {
+  position: fixed;
+  left: var(--kb-ember-x, 50%);
+  top: var(--kb-ember-y, 30%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--kb-amber);
+  box-shadow:
+    0 0 8px var(--kb-amber),
+    0 0 20px color-mix(in srgb, var(--kb-amber) 70%, transparent);
+  z-index: 70;
+  pointer-events: none;
+}
+
+.kb-ember-trail {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 160px;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--kb-amber) 55%, transparent) 100%);
+  border-radius: 2px;
+  filter: blur(1px);
+}
+
+/* 秩序波纹：坠落落点处两圈扩散环 */
+.kb-order-ripple {
+  position: fixed;
+  left: var(--kb-ripple-x, 50%);
+  top: var(--kb-ripple-y, 85%);
+  width: 0;
+  height: 0;
+  z-index: 70;
+  pointer-events: none;
+}
+
+.kb-order-ripple::before,
+.kb-order-ripple::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--kb-accent-500) 75%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--kb-accent-500) 35%, transparent);
+  animation: kb-ripple-out 600ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+.kb-order-ripple::after {
+  animation-delay: 90ms;
+  border-color: color-mix(in srgb, var(--kb-amber) 70%, transparent);
+}
+
+@keyframes kb-ripple-out {
+  0%   { width: 0; height: 0; opacity: 0.9; }
+  100% { width: 220px; height: 220px; opacity: 0; }
+}
+
+/* 整理仪式：赛博青呼吸 → 200ms 琥珀金顿悟闪光 */
+.kb-epiphany-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+  opacity: 0;
+  background: color-mix(in srgb, var(--kb-amber) 14%, transparent);
+}
+
+.kb-epiphany-flash.kb-epiphany-flash--active {
+  animation: kb-epiphany 640ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+@keyframes kb-epiphany {
+  0%   { opacity: 0; }
+  15%  { opacity: 1; }            /* 顿悟闪光峰值 200ms 附近 */
+  30%  { opacity: 0.35; }
+  55%  { opacity: 0.6; }          /* 余韵回闪 */
+  100% { opacity: 0; }
+}
+
+/* 井口辉光脉冲：记录/整理后井光增强的"呼应" */
+.kb-well-pulse {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  width: 320px;
+  height: 36vh;
+  transform: translateX(-50%);
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 50% 45% at 50% 100%, color-mix(in srgb, var(--kb-accent-500) 26%, transparent), transparent 70%);
+  opacity: 0;
+  animation: kb-well-pulse 900ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+@keyframes kb-well-pulse {
+  0%   { opacity: 0; }
+  30%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════
+   仪式碑文 · 排版
+   ═══════════════════════════════════════════ */
+
+/* 主标题：衬线大字 64-96px，字距拉开（宪法第五条跳率 ≥4x） */
+.kb-ritual-title {
+  font-family: var(--kb-font-serif);
+  font-size: clamp(2.5rem, 6vw, 4.25rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0.18em;
+  margin-left: 0.18em; /* 补偿字距带来的视觉偏移 */
+  color: var(--kb-text-primary);
+  text-shadow:
+    0 0 24px color-mix(in srgb, var(--kb-accent-500) 24%, transparent),
+    0 0 60px color-mix(in srgb, var(--kb-accent-500) 12%, transparent);
+  animation: kb-title-emerge 900ms var(--kb-spring-gentle) both;
+}
+
+/* 标题渐隐：文字被雾吞没的尾部 */
+.kb-ritual-title::after {
+  content: '';
+  display: block;
+  margin-top: 0.1em;
+  height: 1px;
+  width: 4.5em;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--kb-accent-500) 55%, transparent), transparent);
+}
+
+@keyframes kb-title-emerge {
+  from { opacity: 0; transform: translateY(14px); filter: blur(6px); }
+  to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+/* 竖排注文：从右向左书写（writing-mode） */
+.kb-vertical-note {
+  writing-mode: vertical-rl;
+  font-family: var(--kb-font-serif);
+  font-size: 0.75rem;
+  line-height: 2.2;
+  letter-spacing: 0.35em;
+  color: var(--kb-text-tertiary);
+  opacity: 0.85;
+}
+
+/* 琥珀印章：圆形「序」印，纹理 + 微旋转 */
+.kb-seal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--kb-amber) 62%, transparent);
+  color: color-mix(in srgb, var(--kb-amber) 82%, transparent);
+  font-family: var(--kb-font-serif);
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  background:
+    radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--kb-amber) 14%, transparent), transparent 60%),
+    radial-gradient(circle at 68% 70%, color-mix(in srgb, var(--kb-amber) 8%, transparent), transparent 55%);
+  box-shadow:
+    0 0 18px color-mix(in srgb, var(--kb-amber) 18%, transparent),
+    inset 0 0 12px color-mix(in srgb, var(--kb-amber) 12%, transparent);
+  transform: rotate(-6deg);
+  user-select: none;
+}
+
+/* 仪式空状态：冷启动「海沟尚暗，等待第一只萤火」 */
+.kb-ritual-empty {
+  font-family: var(--kb-font-serif);
+  text-align: center;
+}
+
+.kb-ritual-empty-title {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  margin-left: 0.22em;
+  color: var(--kb-text-secondary);
+  text-shadow: 0 0 30px color-mix(in srgb, var(--kb-accent-500) 18%, transparent);
+}
+
+.kb-ritual-empty-note {
+  margin-top: 1.2em;
+  font-size: 0.8rem;
+  letter-spacing: 0.3em;
+  color: var(--kb-text-tertiary);
+  opacity: 0.7;
+}
+
+/* ═══════════════════════════════════════════
+   降级与无障碍
+   ═══════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-abyss-turbulence,
+  .kb-abyss-fog,
+  .kb-abyss-glimmer,
+  .kb-well-aperture,
+  .kb-well-star-flare,
+  .kb-well-dust span {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+  .kb-ritual-title {
+    animation: none !important;
+  }
+}

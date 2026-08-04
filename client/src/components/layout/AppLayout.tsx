@@ -146,7 +146,14 @@ export default function AppLayout() {
       {/* Layer 1: 功能覆盖层 — 常驻挂载（visible 控制显隐），同模块 Esc/重入不卸载页面，避免动画重播 */}
       {/* 修复：移除 key={currentModule}，防止模块切换时整棵组件树强制卸载/重挂载导致旧组件瞬间消失无退出动画 */}
       {currentModule && (
-        <FunctionalOverlay visible={overlayVisible}>
+        <FunctionalOverlay
+          visible={overlayVisible}
+          /* 萤火海沟自带全屏暗物质场：透明面板让深海背景透出，遮罩用深海底色实现整屏无缝（其他模块保持毛玻璃） */
+          panelClassName={currentModule === 'inspiration'
+            ? '!bg-transparent !backdrop-blur-none !shadow-none !border-white/5'
+            : undefined}
+          maskClassName={currentModule === 'inspiration' ? '!bg-[var(--kb-bg-primary)] !backdrop-blur-none' : undefined}
+        >
           {/* 路由级 AnimatePresence：mode="wait" 确保旧页面完成退出动画后再挂载新页面，避免残帧 */}
           <AnimatePresence mode="wait">
             <motion.div

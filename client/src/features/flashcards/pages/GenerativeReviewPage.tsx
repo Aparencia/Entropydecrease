@@ -10,8 +10,9 @@ import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useGenerativeReview, type ClozeMode } from '../hooks/useGenerativeReview';
 import {
-  ArrowLeft, BookOpen, Eye, RotateCcw, Lightbulb, ChevronRight,
+  ArrowLeft, BookOpen, Eye, RotateCcw, ChevronRight,
 } from 'lucide-react';
+import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import { useNavigate } from 'react-router-dom';
 
 /**
@@ -159,8 +160,7 @@ export default function GenerativeReviewPage() {
         </button>
         <div className="flex-1">
           <h1 className="text-h2 font-semibold text-text-primary flex items-center gap-2">
-            <Lightbulb className="w-5 h-5 text-amber-500" strokeWidth={1.5} />
-            生成式复习
+            <ModuleRitualHeader title="生成式复习" sealChar="呼" sealColor="#7BC4B8" compact />
           </h1>
           <p className="text-c1 text-text-tertiary">先填写，后揭示 — 主动回忆加深记忆</p>
         </div>

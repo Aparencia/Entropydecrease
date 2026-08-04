@@ -12,6 +12,7 @@
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import { chunkText } from '../lib/textChunker';
 import { sanitizeExtractedText } from '../lib/contentSanitizer';
 import { useSettleConcepts } from '../hooks/useSettleConcepts';
@@ -249,8 +250,12 @@ export default function SettlingPage() {
   return (
     <div className="mx-auto max-w-2xl px-6 py-8">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-slate-100">知识入籍</h1>
-        <p className="mt-1 text-sm text-slate-400">让外部知识在你的世界里安家 · 提炼概念 → 安放 → 从容复习</p>
+        <ModuleRitualHeader
+          title="知识入籍"
+          note="让外部知识在你的世界里安家 · 提炼概念 → 安放 → 从容复习"
+          sealChar="籍"
+          sealColor="#F59E0B"
+        />
       </div>
       {error && (
         <div className="mb-4 rounded-md border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-200">{error}</div>

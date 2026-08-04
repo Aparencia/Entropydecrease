@@ -4,6 +4,7 @@
 import { useEffect, useState, useCallback, useRef, useLayoutEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Tag, Modal, Input, EmptyState, Skeleton, useToast } from '@/components/ui';
+import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu';
 import { Plus, Layers, Clock, Trash2, Layers3, Upload, BookOpen, Pencil, Share2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -293,15 +294,17 @@ export default function FlashcardsPage() {
         />
       </div>
 
-      {/* ── 顶部 ── */}
+      {/* ── 顶部：仪式页头（反衰减呼吸） ── */}
       <motion.div
         className="flex items-center justify-between px-kb-md py-kb-md flex-shrink-0 relative z-10"
         variants={headerVariants}
       >
-        <div>
-          <h1 className="text-h1 font-semibold text-text-primary">闪卡</h1>
-          <p className="text-b2 text-text-tertiary mt-0.5">间隔重复，高效记忆</p>
-        </div>
+        <ModuleRitualHeader
+          title="反衰减呼吸"
+          note="间隔重复，高效记忆"
+          sealChar="呼"
+          sealColor="#7BC4B8"
+        />
         <div className="flex items-center gap-2">
           <motion.button
             whileHover={{ scale: 1.03 }}

@@ -43,6 +43,9 @@ const KnowledgeSky = lazy(() => import('@/lib/3d/scenes/KnowledgeSky').then(m =>
 import { useLearningAnalytics } from '../hooks/useLearningAnalytics';
 import { useKnowledgeGraph } from '@/features/constellation/hooks/useKnowledgeGraph';
 import { useEffectiveTier } from '@/lib/performance/usePerformanceMode';
+import { useDeviceCapability } from '@/hooks/useDeviceCapability';
+import DashboardNebula from '../components/DashboardNebula';
+import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import StartupRitual from '../components/StartupRitual';
 import { useLastSession } from '../hooks/useLastSession';
 import { saveRitualRecord, createReviewCardIfNeeded, loadRitualRecords } from '../lib/ritualService';
@@ -168,6 +171,10 @@ export default function DashboardPage() {
   /* ── 知识星座（阶段 B：宪法第六条的空间化外壳，只读聚合 + 纯函数派生） ── */
   const { graph: knowledgeGraph, loading: knowledgeLoading, error: knowledgeError } = useKnowledgeGraph();
   const effectiveTier = useEffectiveTier();
+
+  // 设备降级级别推导（星云粒子/动画按级裁剪）
+  const { shouldDisableHeavyAnimations, prefersReducedMotion } = useDeviceCapability();
+  const nebulaDegradation = prefersReducedMotion ? 'L2' : shouldDisableHeavyAnimations ? 'L1' : 'L0';
 
   useEffect(() => {
     (async () => {
@@ -466,6 +473,9 @@ export default function DashboardPage() {
 
   return (
     <div className="relative min-h-full overflow-x-hidden">
+      {/* 星云氛围背景：靛蓝/赛博青/琥珀星云 + 闪烁星点 */}
+      <DashboardNebula degradation={nebulaDegradation} />
+
       {/* ════ 英雄区域 ════ */}
       <section className="relative w-full overflow-hidden">
 
@@ -476,12 +486,17 @@ export default function DashboardPage() {
           initial="hidden"
           animate="visible"
         >
-          {/* 问候语 + 日期 */}
+          {/* 问候语 + 日期 + 仪式印章 */}
           <motion.div className="mb-rhythm-lg" {...fadeInUp}>
-            <h1 className="text-d2 font-semibold text-text-primary tracking-tight mb-2">
-              {greetingText}
-            </h1>
-            <p className="text-b2 text-text-tertiary">{getTodayLabel()}</p>
+            <div className="flex items-start gap-3">
+              <ModuleRitualHeader sealChar="星" sealColor="#6366F1" compact />
+              <div>
+                <h1 className="text-d2 font-semibold text-text-primary tracking-tight mb-2">
+                  {greetingText}
+                </h1>
+                <p className="text-b2 text-text-tertiary">{getTodayLabel()}</p>
+              </div>
+            </div>
             {streakDays > 0 && (
               <motion.span
                 className="inline-flex items-center gap-1 mt-3 px-3 py-1 rounded-kb-full bg-brand-500/10 text-brand-500 text-c1 font-medium"
@@ -579,17 +594,17 @@ export default function DashboardPage() {
         <section className="relative max-w-[1100px] mx-auto px-6 py-rhythm-sm">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-rhythm-sm">
             {/* 左列：累计深度计（身份认同——"我已经是怎样的人"） */}
-            <Suspense fallback={<div className="h-24 rounded-xl bg-white/5 animate-pulse-skeleton" />}>
+            <Suspense fallback={<div className="h-24 rounded-kb-xl bg-bg-elevated/30 animate-pulse-skeleton" />}>
               <DepthMeter />
             </Suspense>
 
             {/* 中列：珊瑚生态缸缩略入口（点击展开全屏，损失规避机制） */}
-            <Suspense fallback={<div className="h-24 rounded-xl bg-white/5 animate-pulse-skeleton" />}>
+            <Suspense fallback={<div className="h-24 rounded-kb-xl bg-bg-elevated/30 animate-pulse-skeleton" />}>
               <CoralEcosystem />
             </Suspense>
 
             {/* 右列：学习画像洞察 + 身份标签（离线规则引擎驱动） */}
-            <Suspense fallback={<div className="h-24 rounded-xl bg-white/5 animate-pulse-skeleton" />}>
+            <Suspense fallback={<div className="h-24 rounded-kb-xl bg-bg-elevated/30 animate-pulse-skeleton" />}>
               <LearningProfile
                 insights={profileData.insights}
                 identityTags={profileData.identityTags}
@@ -613,10 +628,14 @@ export default function DashboardPage() {
           否则 DOM/SVG 轨（L1 每档 ≤15 节点）。冷启动引导由
           KnowledgeConstellation 承担（high 档空态同样回落该分支）。 */}
       <section className="relative max-w-[1100px] mx-auto px-6 py-rhythm-sm">
-        <div className="flex items-center gap-2 mb-rhythm-sm">
-          <h2 className="text-b1 font-semibold text-text-primary">知识星座</h2>
-          <span className="text-c1 text-text-tertiary">概念掌握度的空间化</span>
-        </div>
+        <ModuleRitualHeader
+          title="知识星座"
+          note="概念掌握度的空间化"
+          sealChar="星"
+          sealColor="#6366F1"
+          compact
+          className="mb-rhythm-sm"
+        />
         <Suspense fallback={<div className="h-56 rounded-kb-xl bg-bg-elevated/30 animate-pulse-skeleton" />}>
           {effectiveTier === 'high' && knowledgeGraph && !knowledgeGraph.coldStart && knowledgeGraph.nodes.length > 0 ? (
             <KnowledgeSky graph={knowledgeGraph} />
@@ -638,11 +657,16 @@ export default function DashboardPage() {
       <section className="relative max-w-[1100px] mx-auto px-6 pb-rhythm-xl">
         {/* 标题 */}
         <motion.div
-          className="flex items-center gap-2 mb-rhythm-sm"
+          className="mb-rhythm-sm"
           {...fadeInUp}
         >
-          <h2 className="text-b1 font-semibold text-text-primary">知识预览</h2>
-          <span className="text-c1 text-text-tertiary">最近的学习足迹</span>
+          <ModuleRitualHeader
+            title="知识预览"
+            note="最近的学习足迹"
+            sealChar="星"
+            sealColor="#6366F1"
+            compact
+          />
         </motion.div>
 
         {/* 卡片网格 - 有机流动布局 */}
@@ -651,7 +675,7 @@ export default function DashboardPage() {
             {Array.from({ length: 4 }).map((_, i) => (
               <div
                 key={i}
-                className="h-[140px] rounded-kb-xl bg-bg-elevated/30 animate-pulse-skeleton"
+                className="h-[140px] bg-bg-elevated/30 animate-pulse-skeleton"
                 style={{ borderRadius: '24px 12px 20px 16px' }}
               />
             ))}

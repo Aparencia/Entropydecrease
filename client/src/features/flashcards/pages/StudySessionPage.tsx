@@ -11,6 +11,7 @@
 import { useEffect, useCallback, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, EmptyState, useToast } from '@/components/ui';
+import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu';
 import { X, BookOpen, PauseCircle, AlertTriangle, Sparkles } from 'lucide-react';
 import { useStudySessionStore } from '../store/useStudySessionStore';
@@ -173,7 +174,7 @@ export default function StudySessionPage() {
           >
             <X className="w-icon-md h-icon-md" strokeWidth={1.5} />
           </button>
-          <h1 className="text-h2 font-semibold text-text-primary flex-1">学习</h1>
+          <ModuleRitualHeader title="学习" sealChar="呼" sealColor="#7BC4B8" compact />
         </div>
         <div className="flex-1 flex items-center justify-center">
           <EmptyState

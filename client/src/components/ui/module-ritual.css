@@ -1,0 +1,104 @@
+/* ═══════════════════════════════════════════
+   模块仪式页头 · 共享
+   @ai-context 模块列表页的统一仪式页头：模块色印章 + 衬线大字 + 注文；
+   印章色由组件内联 --kb-module-seal 变量注入（模块色令牌值）；
+   compact 变体用于窄栏/工具栏场景（Notes 三栏 / Classroom 左栏）
+   ═══════════════════════════════════════════ */
+
+:root {
+  --kb-module-seal: #F59E0B;   /* 默认琥珀（入籍/顿悟），模块页覆盖为各自模块色 */
+}
+
+/* ── 标准页头 ── */
+.kb-module-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+/* 模块印章：单字圆印 */
+.kb-module-seal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--kb-module-seal) 70%, transparent);
+  color: color-mix(in srgb, var(--kb-module-seal) 88%, transparent);
+  font-family: var(--kb-font-serif);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  background:
+    radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--kb-module-seal) 15%, transparent), transparent 60%),
+    radial-gradient(circle at 68% 70%, color-mix(in srgb, var(--kb-module-seal) 9%, transparent), transparent 55%);
+  box-shadow:
+    0 0 16px color-mix(in srgb, var(--kb-module-seal) 20%, transparent),
+    inset 0 0 10px color-mix(in srgb, var(--kb-module-seal) 12%, transparent);
+  transform: rotate(-6deg);
+  user-select: none;
+}
+
+/* 衬线大字标题 */
+.kb-module-title {
+  font-family: var(--kb-font-serif);
+  font-size: clamp(1.4rem, 2.6vw, 1.9rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.14em;
+  margin-left: 0.14em;
+  color: var(--kb-text-primary);
+  text-shadow: 0 0 20px color-mix(in srgb, var(--kb-module-seal) 26%, transparent);
+}
+
+/* 注文 */
+.kb-module-note {
+  margin-top: 0.3rem;
+  font-family: var(--kb-font-serif);
+  font-size: 0.72rem;
+  letter-spacing: 0.24em;
+  color: var(--kb-text-tertiary);
+  opacity: 0.85;
+}
+
+/* 右侧操作区 */
+.kb-module-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+/* ── compact 变体：窄栏 / 工具栏（Notes 三栏、Classroom 左栏） ── */
+.kb-module-header--compact {
+  gap: 0.5rem;
+}
+
+.kb-module-header--compact .kb-module-seal {
+  width: 30px;
+  height: 30px;
+  border-width: 1.5px;
+  font-size: 0.82rem;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--kb-module-seal) 18%, transparent);
+}
+
+.kb-module-header--compact .kb-module-title {
+  font-size: 1rem;
+  letter-spacing: 0.12em;
+  margin-left: 0.12em;
+  text-shadow: 0 0 12px color-mix(in srgb, var(--kb-module-seal) 20%, transparent);
+  white-space: nowrap;
+}
+
+.kb-module-header--compact .kb-module-note {
+  display: none;
+}
+
+/* ── 无障碍 ── */
+@media (prefers-reduced-motion: reduce) {
+  .kb-module-seal {
+    transition: none;
+  }
+}

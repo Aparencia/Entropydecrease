@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { TemplateSelector } from '../components/TemplateSelector';
 import type { NoteTemplate } from '../components/TemplateSelector';
+import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import { MiniQuizDialog } from '../components/MiniQuizDialog';
 import SubjectFolder from '../components/SubjectFolder';
 import { NoteSearchBar } from '../components/NoteSearchBar';
@@ -372,6 +373,14 @@ export default function NotesPage() {
               {sidebarOpen ? <PanelLeftClose className="w-5 h-5" strokeWidth={1.5} /> : <PanelLeft className="w-5 h-5" strokeWidth={1.5} />}
             </motion.button>
             </Tip>
+            {/* 结礁仪式标识（compact）：三栏布局下的模块归属 */}
+            <ModuleRitualHeader
+              title="结礁"
+              sealChar="礁"
+              sealColor="#6B9BD2"
+              compact
+              className="mr-1"
+            />
             <NoteSearchBar />
             {/* 笔记图谱按钮，升级原生 title 为 Tip 组件 */}
             <Tip text="笔记图谱">

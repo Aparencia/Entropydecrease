@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Send, X, Wand2, Layers } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
-import { EmptyState, useToast } from '@/components/ui';
+import { useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useInspirationStore, type InspirationTags } from '../store/inspirationStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -18,11 +18,15 @@ import InspirationCard from '../components/InspirationCard';
 import ImmersiveCanvas from '../components/ImmersiveCanvas';
 import GlassInspirationCard from '../components/GlassInspirationCard';
 import SortPendingBanner from '../components/SortPendingBanner';
+import OrderWellBackground from '../components/OrderWellBackground';
+import RitualHeader from '../components/RitualHeader';
+import FallingEmber, { type EmberEvent } from '../components/FallingEmber';
+import { useDeviceCapability } from '@/hooks/useDeviceCapability';
 import { CONTENT_NATURE_OPTIONS, COGNITIVE_DEPTH_OPTIONS, NATURE_MAP } from '../constants';
 import { groupInspirationsByNature } from '../lib/orbLayout';
 import type { FilterState } from '../types';
 import {
-  pageVariants, headerVariants, inputVariants, filterVariants,
+  pageVariants, inputVariants, filterVariants,
   listVariants,
 } from '../constants';
 
@@ -49,10 +53,24 @@ export default function InspirationPage() {
   const [filters, setFilters] = useState<FilterState>({ content_nature: null, cognitive_depth: null, subject: null });
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // 造序仪式演出状态：记录坠落光点 / 整理顿悟闪光
+  const [ember, setEmber] = useState<EmberEvent | null>(null);
+  const [epiphany, setEpiphany] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // 设备降级级别推导（与沉浸模式同源：L0 全量 / L1 低端 / L2 减弱动效）
+  const { shouldDisableHeavyAnimations, prefersReducedMotion } = useDeviceCapability();
+  const abyssDegradation = prefersReducedMotion ? 'L2' : shouldDisableHeavyAnimations ? 'L1' : 'L0';
 
   useEffect(() => { loadAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!batchMode) setSelectedIds(new Set()); }, [batchMode]);
+
+  // 整理完成（batchSort 结束）→ 触发 200ms 琥珀金顿悟闪光
+  const prevProcessing = useRef(false);
+  useEffect(() => {
+    if (prevProcessing.current && !batchProcessing && !prefersReducedMotion) setEpiphany(true);
+    prevProcessing.current = batchProcessing;
+  }, [batchProcessing, prefersReducedMotion]);
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -65,6 +83,13 @@ export default function InspirationPage() {
     setInput('');
     const defaultTags: InspirationTags = { content_nature: 'inspiration', cognitive_depth: 'shallow', subject: '未分类' };
     addItem(content, defaultTags);
+    // 记录仪式：琥珀金光点从输入区坠落至秩序之井
+    const rect = textareaRef.current?.getBoundingClientRect();
+    setEmber({
+      id: Date.now(),
+      x: rect ? rect.left + rect.width / 2 : window.innerWidth / 2,
+      y: rect ? rect.top : 96,
+    });
     const addedId = useInspirationStore.getState().items[0]?.id;
     try {
       const result = await tagContent(content);
@@ -139,44 +164,34 @@ export default function InspirationPage() {
       initial="hidden"
       animate="visible"
     >
-      {/* 背景环境光 — 由3D场景提供，已移除 */}
+      {/* 暗物质场 + 秩序之井背景（fixed 视口层） */}
+      <OrderWellBackground degradation={abyssDegradation} />
 
-      {/* ── Header ── */}
-      <motion.div className="flex items-center gap-3 relative z-10" variants={headerVariants}>
-        <motion.div
-          className="w-9 h-9 rounded-kb-lg bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center shadow-lg shadow-purple-500/20"
-          whileHover={{ scale: 1.1, rotate: -5 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 15 }}
-        >
-          <Sparkles className="w-5 h-5 text-text-inverse" strokeWidth={1.5} />
-        </motion.div>
-        <div>
-          <h1 className="text-h2 font-bold text-text-primary">萤火海沟</h1>
-          <p className="text-c1 text-text-tertiary">随手捕捉萤火海沟，AI 自动整理分类</p>
-        </div>
+      {/* ── 仪式碑文 Header ── */}
+      <RitualHeader title="萤火海沟" note="随手捕捉萤火 · AI 自动整理分类">
         {/* 沉浸式入口按钮 */}
         <motion.button
           onClick={enter}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-gradient-to-r from-purple-500 to-cyan-500 text-text-inverse hover:from-purple-600 hover:to-cyan-600 shadow-sm shadow-purple-500/20"
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-gradient-to-r from-accent-500 to-brand-500 text-text-inverse hover:from-accent-600 hover:to-brand-600 shadow-sm shadow-accent-500/20"
         >
           <Sparkles className="w-3.5 h-3.5" />
           沉浸
         </motion.button>
-      </motion.div>
+      </RitualHeader>
 
       {/* ── Quick input area — 磨砂玻璃 + focus 光效 ── */}
       <motion.div
         variants={inputVariants}
         className={cn(
           'relative bg-bg-secondary/40 backdrop-blur-2xl border border-white/12 dark:border-white/6 rounded-[var(--kb-radius-xl)] p-kb-md',
-          'focus-within:border-purple-400/50 focus-within:shadow-[0_0_24px_rgba(147,51,234,0.1)]',
+          'focus-within:border-accent-400/50 focus-within:shadow-[0_0_24px_rgba(6,182,212,0.1)]',
           'transition-all duration-300',
         )}
       >
         {/* top accent line */}
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-purple-400/30 to-transparent" />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent-400/30 to-transparent" />
         <textarea
           ref={textareaRef}
           value={input}
@@ -229,7 +244,7 @@ export default function InspirationPage() {
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors',
                   batchMode
-                    ? 'bg-purple-500/10 border-purple-400/40 text-purple-600 dark:text-purple-400'
+                    ? 'bg-accent-500/10 border-accent-400/40 text-accent-600 dark:text-accent-400'
                     : 'bg-bg-secondary border-border/40 text-text-tertiary hover:text-text-secondary',
                 )}
               >
@@ -263,8 +278,8 @@ export default function InspirationPage() {
                     disabled={selectedIds.size === 0 || batchProcessing}
                     className={cn(
                       'flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium',
-                      'bg-gradient-to-r from-purple-500 to-cyan-500 text-text-inverse',
-                      'hover:from-purple-600 hover:to-cyan-600 shadow-sm shadow-purple-500/20',
+                      'bg-gradient-to-r from-accent-500 to-brand-500 text-text-inverse',
+                      'hover:from-accent-600 hover:to-brand-600 shadow-sm shadow-accent-500/20',
                       'disabled:opacity-50 disabled:cursor-not-allowed',
                     )}
                   >
@@ -280,7 +295,7 @@ export default function InspirationPage() {
             {batchProcessing && total > 0 && (
               <div className="w-full h-1.5 rounded-full bg-bg-secondary overflow-hidden mt-1">
                 <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-purple-500 to-cyan-500"
+                  className="h-full rounded-full bg-gradient-to-r from-accent-500 to-brand-500"
                   initial={{ width: 0 }}
                   animate={{ width: `${(progress / total) * 100}%` }}
                   transition={{ duration: 0.3 }}
@@ -299,7 +314,7 @@ export default function InspirationPage() {
                     onClick={() => setFilters(f => ({ ...f, subject: f.subject === s ? null : s }))}
                     className={cn('px-2 py-0.5 rounded-full text-xs font-medium border transition-colors',
                       filters.subject === s
-                        ? 'text-slate-700 bg-slate-100 border-slate-300 dark:text-slate-200 dark:bg-slate-700 dark:border-slate-500'
+                        ? 'text-brand-700 bg-brand-100 border-brand-300 dark:text-brand-300 dark:bg-brand-900/20 dark:border-brand-700'
                         : 'text-text-tertiary bg-bg-secondary border-border/40 hover:text-text-secondary')}>
                     {s}
                   </motion.button>
@@ -360,11 +375,11 @@ export default function InspirationPage() {
       ) : (
         <motion.div className="relative z-10"
           initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5 }}>
-          <EmptyState
-            icon={<Sparkles className="w-12 h-12 text-purple-300" strokeWidth={1} />}
-            title="萤火尚未亮起"
-            description="收集微小的闪烁，它们终将照亮整片夜空"
-          />
+          {/* 冷启动仪式空状态：海沟尚暗，等待第一只萤火 */}
+          <div className="kb-ritual-empty py-kb-xl">
+            <p className="kb-ritual-empty-title">海沟尚暗</p>
+            <p className="kb-ritual-empty-note">等待第一只萤火</p>
+          </div>
         </motion.div>
       )}
 
@@ -426,6 +441,17 @@ export default function InspirationPage() {
           submitting={submitting}
         />
       </ImmersiveCanvas>
+
+      {/* ── 造序仪式演出层 ── */}
+      {/* 记录：琥珀金光点坠落至秩序之井 */}
+      <FallingEmber ember={ember} onComplete={() => setEmber(null)} />
+      {/* 整理：200ms 琥珀金顿悟闪光 */}
+      {epiphany && (
+        <div
+          className="kb-epiphany-flash kb-epiphany-flash--active"
+          onAnimationEnd={() => setEpiphany(false)}
+        />
+      )}
     </motion.div>
   );
 }

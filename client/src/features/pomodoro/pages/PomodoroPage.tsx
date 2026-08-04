@@ -23,6 +23,8 @@ import { useAudioPlayer } from '@/lib/audio/useAudioPlayer';
 import { audioTracks, loadAudioPreferences, saveAudioPreferences } from '@/lib/audio/audioConfig';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { usePomodoroEffects } from '../hooks/usePomodoroEffects';
+import { useDeviceCapability } from '@/hooks/useDeviceCapability';
+import DiveBackground from '../components/DiveBackground';
 import { SPRING } from '@/lib/animation/springConfig';
 import { MAX_PRESETS } from '../lib/presetService';
 import type { AudioPreferences } from '@/lib/audio/audioConfig';
@@ -45,6 +47,10 @@ export default function PomodoroPage() {
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [rememberGoal, setRememberGoal] = useState(false);
   const [presetEditorOpen, setPresetEditorOpen] = useState(false);
+
+  // 设备降级级别推导（与萤火海沟/沉浸模式同源：L0 全量 / L1 低端 / L2 减弱动效）
+  const { shouldDisableHeavyAnimations, prefersReducedMotion } = useDeviceCapability();
+  const diveDegradation = prefersReducedMotion ? 'L2' : shouldDisableHeavyAnimations ? 'L1' : 'L0';
 
   // ── 白噪音 ──
   const [audioPrefs, setAudioPrefs] = useState<AudioPreferences>(() => loadAudioPreferences());
@@ -193,7 +199,17 @@ export default function PomodoroPage() {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.3 }}
         >
-          {/* 背景环境光 — 由3D场景提供，已移除 */}
+          {/* 深潜氛围背景：垂直深度渐变 + 上浮气泡（浅色晨光海面 / 深色深海） */}
+          <DiveBackground degradation={diveDegradation} />
+
+          {/* 仪式页头：模块色「潜」印 + 衬线大字 */}
+          <header className="relative z-10 flex items-center gap-3 mb-8">
+            <div className="kb-dive-seal shrink-0" aria-hidden="true">潜</div>
+            <div>
+              <h1 className="kb-dive-title">深潜</h1>
+              <p className="kb-dive-note mt-1.5">专注即下潜 · 每一分钟都是深度</p>
+            </div>
+          </header>
 
           {/* Preset tabs — 横向滚动预设列表（P3-19 memo 化） */}
           <PresetTabs
@@ -312,15 +328,17 @@ export default function PomodoroPage() {
             </Tip>
 
             <motion.button
-              whileHover={{ scale: 1.05, boxShadow: '0 8px 32px rgba(91,138,114,0.45)' }}
+              whileHover={{ scale: 1.05, boxShadow: '0 8px 32px color-mix(in srgb, var(--kb-brand-500) 45%, transparent)' }}
               whileTap={{ scale: 0.97 }}
               onClick={handleMainButton}
               className={cn(
                 'w-16 h-16 rounded-full flex items-center justify-center',
                 'bg-brand-500 text-white',
-                'shadow-[0_4px_20px_rgba(91,138,114,0.35),0_0_40px_rgba(91,138,114,0.15)]',
                 'transition-shadow duration-300',
               )}
+              style={{
+                boxShadow: '0 4px 20px color-mix(in srgb, var(--kb-brand-500) 35%, transparent), 0 0 40px color-mix(in srgb, var(--kb-brand-500) 15%, transparent)',
+              }}
             >
               {mainButtonIcon}
             </motion.button>

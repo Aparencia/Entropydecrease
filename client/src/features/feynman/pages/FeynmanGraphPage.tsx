@@ -16,6 +16,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { ArrowLeft, Network } from 'lucide-react';
+import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import { useFeynmanStore } from '../store/useFeynmanStore';
 import { layoutFeynmanGraph } from '../lib/feynmanGraph';
 
@@ -68,8 +69,7 @@ function FeynmanGraphInner() {
         >
           <ArrowLeft className="w-5 h-5" strokeWidth={1.5} />
         </button>
-        <Network className="w-5 h-5 text-amber-500" strokeWidth={1.5} />
-        <h1 className="text-h2 font-semibold text-text-primary">概念网络</h1>
+        <ModuleRitualHeader title="概念网络" sealChar="浮" sealColor="#C4956A" compact />
         <span className="text-c1 text-text-tertiary">{nodes.length} 个概念 · {edges.length} 条关联</span>
       </div>
 

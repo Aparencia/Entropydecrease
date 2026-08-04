@@ -10,6 +10,7 @@ import type { Ref } from 'react';
 import { ArrowLeft, Save, HelpCircle, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tip } from '@/components/ui/Tip';
+import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import { AIButton } from '@/components/ui/AIButton';
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
@@ -85,6 +86,9 @@ export function NoteEditHeader({
         <ArrowLeft className="w-icon-md h-icon-md" strokeWidth={1.5} />
       </button>
       </Tip>
+
+      {/* 结礁仪式标识（compact）：编辑器顶栏的模块归属 */}
+      <ModuleRitualHeader sealChar="礁" sealColor="#6B9BD2" compact />
 
       <input
         ref={titleRef}

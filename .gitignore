@@ -28,6 +28,9 @@ client/release/
 # Git worktree
 vPpiCi/
 
+# Superdesign 临时文件
+.superdesign/tmp/
+
 # OS
 .DS_Store
 Thumbs.db

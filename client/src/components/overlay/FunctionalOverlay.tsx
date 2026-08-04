@@ -17,9 +17,13 @@ interface FunctionalOverlayProps {
   /** 是否可见（false = 淡出并禁用交互，但保持挂载以保留页面状态） */
   visible: boolean;
   className?: string;
+  /** 功能面板追加类：用于覆盖面板默认毛玻璃/投影（如萤火海沟的透明面板让暗物质场透出） */
+  panelClassName?: string;
+  /** 全屏遮罩追加类：用于覆盖默认遮罩浓度（如萤火海沟的深海氛围遮罩） */
+  maskClassName?: string;
 }
 
-export function FunctionalOverlay({ children, visible, className }: FunctionalOverlayProps) {
+export function FunctionalOverlay({ children, visible, className, panelClassName, maskClassName }: FunctionalOverlayProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   // 隐藏时设置 inert：阻断指针事件、焦点与辅助技术访问（React 18 无 inert prop）
@@ -50,13 +54,15 @@ export function FunctionalOverlay({ children, visible, className }: FunctionalOv
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
       style={{ pointerEvents: visible ? 'auto' : 'none' }}
     >
-      {/* 半透明背景遮罩 */}
+      {/* 半透明背景遮罩 — 隐藏时移除 backdrop-blur，避免 Electron 中 backdrop-filter 合成层遮挡下方 canvas */}
       <div className={cn(
-        "absolute inset-0 bg-black/20 backdrop-blur-sm",
+        "absolute inset-0 bg-black/20",
+        visible && "backdrop-blur-sm",
+        maskClassName,
         visible ? "pointer-events-auto" : "pointer-events-none"
       )} />
 
-      {/* 功能面板 */}
+      {/* 功能面板 — 隐藏时移除 backdrop-blur，避免 backdrop-filter 合成层遮挡 canvas */}
       <motion.div
         className={cn(
           "relative z-10 w-full",
@@ -65,9 +71,10 @@ export function FunctionalOverlay({ children, visible, className }: FunctionalOv
           "overflow-y-auto",
           "rounded-2xl sm:rounded-[24px_12px_20px_16px]", // 移动端统一圆角
           "bg-white/10 dark:bg-black/30",
-          "backdrop-blur-2xl",
+          visible && "backdrop-blur-2xl",
           "border border-white/20 dark:border-white/10",
           "shadow-[0_8px_40px_rgba(0,0,0,0.3)]",
+          panelClassName,
           visible ? "pointer-events-auto" : "pointer-events-none",
           "p-3 sm:p-5 md:p-8"
         )}

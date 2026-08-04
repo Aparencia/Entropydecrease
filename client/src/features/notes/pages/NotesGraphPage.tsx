@@ -16,6 +16,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { ArrowLeft, Share2 } from 'lucide-react';
+import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import { useNoteStore } from '../store/useNoteStore';
 import { getAllLinks } from '../lib/links/noteLinkStore';
 import { layoutNoteGraph, type GraphLink } from '../lib/links/noteGraphLayout';
@@ -70,8 +71,7 @@ function NotesGraphInner() {
         >
           <ArrowLeft className="w-5 h-5" strokeWidth={1.5} />
         </button>
-        <Share2 className="w-5 h-5 text-brand-500" strokeWidth={1.5} />
-        <h1 className="text-h2 font-semibold text-text-primary">笔记图谱</h1>
+        <ModuleRitualHeader title="笔记图谱" sealChar="礁" sealColor="#6B9BD2" compact />
         <span className="text-c1 text-text-tertiary">{nodes.length} 篇笔记 · {edges.length} 条链接</span>
       </div>
 
