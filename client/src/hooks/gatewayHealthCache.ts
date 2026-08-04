@@ -107,6 +107,25 @@ export function classifyHealthError(err: unknown): HealthErrorType {
   return errorType;
 }
 
+/**
+ * /health/quick 响应体校验（precheckGatewayHealth 与 useGatewayHealth
+ * 探针共用的同一口径）：HTTP ok 时进一步校验服务端 status 字段
+ * （'ok' | 'healthy'）；响应体无法解析 JSON 但 HTTP ok 仍视为在线。
+ */
+export async function verifyHealthResponse(res: Response): Promise<{ ok: boolean; version?: string }> {
+  if (!res.ok) return { ok: false };
+  try {
+    const data = await res.json();
+    return {
+      ok: data.status === 'ok' || data.status === 'healthy',
+      version: data.version,
+    };
+  } catch {
+    // 无法解析 JSON 但 HTTP 200，仍视为在线
+    return { ok: true };
+  }
+}
+
 /** 供外部调用的预检测函数（不依赖 React 生命周期） */
 export function precheckGatewayHealth(): void {
   if (readHealthCache()) return;
@@ -132,25 +151,11 @@ export function precheckGatewayHealth(): void {
     .then(async (res) => {
       if (currentRequestId !== requestId) return;
       const latency = Math.round(performance.now() - start);
-      if (res.ok) {
-        let version: string | undefined;
-        let serverOk = false;
-        try {
-          const data = await res.json();
-          version = data.version;
-          // 验证服务端返回的 status 字段，而不仅仅依赖 HTTP 状态码
-          serverOk = data.status === 'ok' || data.status === 'healthy';
-        } catch {
-          // 无法解析 JSON 但 HTTP 200，仍视为在线
-          serverOk = true;
-        }
-        if (currentRequestId !== requestId) return;
-        writeHealthCache(serverOk
-          ? { status: 'online', latency, version }
-          : { status: 'offline', errorType: 'server_error' });
-      } else {
-        writeHealthCache({ status: 'offline', errorType: 'server_error' });
-      }
+      const verdict = await verifyHealthResponse(res);
+      if (currentRequestId !== requestId) return;
+      writeHealthCache(verdict.ok
+        ? { status: 'online', latency, version: verdict.version }
+        : { status: 'offline', errorType: 'server_error' });
     })
     .catch((err) => {
       if (currentRequestId !== requestId) return;
