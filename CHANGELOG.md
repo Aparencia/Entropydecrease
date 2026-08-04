@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.35.1](https://github.com/Aparencia/Entropydecrease/compare/v0.35.0...v0.35.1) (2026-08-04)
+
+### 🐛 缺陷修复
+
+* **seo:** 统一主域 301 重定向并添加百度站点验证文件 ([7b0ed0a](https://github.com/Aparencia/Entropydecrease/commit/7b0ed0a215f88503e0a05ef25e5ab0d8312b1ab1))
+
 ## [0.35.0](https://github.com/Aparencia/Entropydecrease/compare/v0.34.0...v0.35.0) (2026-08-04)
 
 ### ✨ 新功能
