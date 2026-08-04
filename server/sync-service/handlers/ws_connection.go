@@ -40,6 +40,10 @@ type WSConnection struct {
 	Send     chan []byte
 	closed   bool
 	mu       sync.Mutex
+
+	// SYNC-H2: sync_request 在飞查询信号槽（容量 2）——客户端可连续发送
+	// 任意数量 sync_request，每个都启动 goroutine 查库会打满数据库连接池
+	syncReqSlots chan struct{}
 }
 
 // close safely marks the connection as closed and closes the underlying socket.
@@ -121,7 +125,17 @@ func (c *WSConnection) readPump() {
 			}
 			// M10: 查库改为异步执行（goroutine），结果经 Send 通道回投，
 			// 避免慢查询阻塞 readPump 导致心跳超时。
-			go c.handleSyncRequest(payload.SinceVersion)
+			// SYNC-H2: 在飞查询超限时丢弃本次请求（客户端轮询会重发），
+			// 防止单连接洪泛打满数据库连接池（上限 50）拖垮全部用户
+			select {
+			case c.syncReqSlots <- struct{}{}:
+				go func() {
+					defer func() { <-c.syncReqSlots }()
+					c.handleSyncRequest(payload.SinceVersion)
+				}()
+			default:
+				log.Printf("[ws] sync_request dropped (in-flight limit reached) user=%s device=%s", c.UserID, c.DeviceID)
+			}
 
 		case "operation":
 			// Client-pushed operation over WebSocket (future enhancement).

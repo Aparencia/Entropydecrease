@@ -156,6 +156,8 @@ func HandleWebSocketWithGin(c *gin.Context, userID string, deviceID string) {
 		DeviceID: deviceID,
 		Conn:     conn,
 		Send:     make(chan []byte, 256),
+		// SYNC-H2: 每连接最多 2 个在飞 sync_request 查询
+		syncReqSlots: make(chan struct{}, 2),
 	}
 
 	// M12: 每用户连接数上限检查，超限则拒绝（发送 ClosePolicyViolation 帧后关闭）
