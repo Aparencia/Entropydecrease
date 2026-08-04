@@ -113,7 +113,12 @@ export function useClassroomCapture() {
   const captureManager = useMemo(
     () => new CaptureManager({
       onFrameWatchdogTimeout: () => frameRestartRef.current?.(),
+      // CL-M10: 连续重启耗尽时提示用户手动处理，避免无限自动重启
+      onFrameWatchdogExhausted: () => {
+        notify('error', '画面采集异常，已停止自动恢复，请重新选择窗口或重启采集');
+      },
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- notify 为稳定引用
     [],
   );
 

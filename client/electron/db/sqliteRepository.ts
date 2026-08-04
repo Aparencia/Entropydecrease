@@ -111,6 +111,15 @@ function q(col: string): string {
 const columnCache = new Map<string, Set<string>>();
 
 /**
+ * CL-M6: 使列名白名单缓存失效——schema 变更（ALTER TABLE）或数据库
+ * 连接重开（reinitialize 到新路径）后必须调用，否则 filterAllowedColumns
+ * 会用旧列集合过滤掉新列，导致新列数据静默丢弃。
+ */
+export function clearColumnCache(): void {
+  columnCache.clear();
+}
+
+/**
  * 获取表的合法列名集合（从 PRAGMA table_info 查询并缓存）
  */
 function getTableColumns(tableName: string): Set<string> {

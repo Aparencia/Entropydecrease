@@ -87,10 +87,18 @@ export async function* postJsonStream<TReq>(
   let buffer = '';
   /** SSE 缓冲最大字节数，防止恶意服务端无分隔符输出耗尽内存 */
   const MAX_BUFFER_SIZE = 1 * 1024 * 1024; // 1MB
+  /** CL-M2: 读取阶段无数据超时（ms）——原超时仅覆盖 fetch 建连阶段，
+   *  服务端建连后挂起不发数据会导致读取永久等待 */
+  const READ_TIMEOUT_MS = 30_000;
 
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      // CL-M2: 外部取消信号检查——abort 后立即停止消费，避免继续拉取
+      if (externalSignal?.aborted) {
+        break;
+      }
+
+      let { done, value } = await readWithTimeout(reader, READ_TIMEOUT_MS);
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
@@ -136,6 +144,37 @@ export async function* postJsonStream<TReq>(
       }
     }
   } finally {
+    // CL-M2: 所有退出路径（[DONE] 提前 return/异常/取消）必须 cancel 响应流，
+    // 否则底层 TCP 连接保持打开直到 GC（连接泄漏）；cancel 对已自然结束的流为 no-op
+    try {
+      await reader.cancel();
+    } catch {
+      // 流已关闭时 cancel 抛错可忽略
+    }
     reader.releaseLock();
+  }
+}
+
+/**
+ * CL-M2: 带超时的流读取——读取阶段无数据超时（30s）时取消流并抛错，
+ * 防止服务端建连后挂起导致调用方永久等待；超时同时 cancel reader
+ * 释放底层 TCP 连接（否则挂起的 read() 永远不结束）。
+ */
+async function readWithTimeout(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  timeoutMs: number,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      // 取消流：让挂起的 read() 立即结束，并释放底层连接
+      reader.cancel().catch(() => {});
+      reject(new Error(`Stream read timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([reader.read(), timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }

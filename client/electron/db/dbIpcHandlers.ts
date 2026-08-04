@@ -260,6 +260,16 @@ export function registerDbIpcHandlers(): void {
   safeHandle('db:batch', async (_event, params: { operations: Array<{ type: string; table: string; [key: string]: unknown }> }) => {
     const dbConn = getConnection();
 
+    // CL-M5: 批量操作条数上限——超大数组单事务同步执行会长期持有写锁
+    // （所有其他 db:* IPC 排队）并阻塞主进程事件循环
+    const MAX_BATCH_OPS = 1000;
+    if (!Array.isArray(params.operations) || params.operations.length === 0) {
+      throw new Error('[DB] Batch operations must be a non-empty array');
+    }
+    if (params.operations.length > MAX_BATCH_OPS) {
+      throw new Error(`[DB] Batch operations exceed limit (max ${MAX_BATCH_OPS}, got ${params.operations.length})`);
+    }
+
     const txn = dbConn.transaction(() => {
       for (const op of params.operations) {
         const tableName = resolveTable(op.table as string);

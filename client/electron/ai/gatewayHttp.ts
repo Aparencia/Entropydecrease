@@ -13,7 +13,7 @@ import { randomUUID } from 'crypto';
 import { logger } from '../logger.js';
 import { gatewayUrl } from './gatewayConfig.js';
 import { isLocalInferenceEnabled } from './ollama/config.js';
-import { isOllamaAvailable } from './ollama/OllamaService.js';
+import { isOllamaAvailable, getOllamaStatus } from './ollama/OllamaService.js';
 
 /** 构建公共请求头（JSON 模式含 Content-Type，multipart 由 fetch 自动生成） */
 function buildHeaders(clientRequestId: string, json: boolean, authToken?: string): Record<string, string> {
@@ -156,8 +156,23 @@ export async function callWithLocalFallback<TReq, TRes>(
   authToken?: string,
   timeoutMs: number = 60000,
 ): Promise<{ data: TRes; source: 'local' | 'remote'; requestId?: string }> {
-  // 检查本地 Ollama 是否可用
-  if (isLocalInferenceEnabled() && isOllamaAvailable()) {
+  // CL-M11: 本地探测缓存过期时先刷新一次再决策——isOllamaAvailable 对过期
+  // 缓存直接返回 false，若仅因缓存过期而静默跳过本地推理，用户以为在用本地
+  // 模型实际全走云端（隐私与成本预期偏差，且不可观测）
+  let localAvailable = false;
+  if (isLocalInferenceEnabled()) {
+    localAvailable = isOllamaAvailable();
+    if (!localAvailable) {
+      try {
+        const fresh = await getOllamaStatus(true);
+        localAvailable = fresh.running;
+      } catch {
+        localAvailable = false; // 探测异常时安全降级远程
+      }
+    }
+  }
+
+  if (localAvailable) {
     try {
       const localResult = await localHandler();
       logger.info(`[AI] ← Local Ollama success for ${apiPath}`);

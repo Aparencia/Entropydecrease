@@ -15,7 +15,7 @@
  * useClassroomAudio 的 openMicrophoneStream 实现，无需本模块参与。
  */
 
-import { session, desktopCapturer } from 'electron';
+import { session, desktopCapturer, type WebFrameMain } from 'electron';
 import { logger } from './logger';
 
 /**
@@ -30,6 +30,18 @@ export function setPreferredDisplaySource(sourceId: string | null): void {
 }
 
 /**
+ * CL-M8: 校验 displayMedia 请求来源是否为应用自身 frame。
+ * 生产打包为 file:// 路径，开发为 http://localhost:端口。
+ * 未通过校验一律拒绝——防止渲染层注入代码静默获取整屏 + 系统音频混音。
+ */
+function isTrustedFrame(frame: WebFrameMain | null): boolean {
+  if (!frame) return false;
+  const url = frame.url || '';
+  if (url.startsWith('file://')) return true;
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(url);
+}
+
+/**
  * 注册 displayMedia 请求处理器（须在 app.whenReady 后调用一次）
  *
  * 渲染进程调用 navigator.mediaDevices.getDisplayMedia() 时进入此 handler，
@@ -37,7 +49,15 @@ export function setPreferredDisplaySource(sourceId: string | null): void {
  */
 export function registerDisplayMediaHandler(): void {
   session.defaultSession.setDisplayMediaRequestHandler(
-    (_request, callback) => {
+    (request, callback) => {
+      // CL-M8: 仅响应应用自身 frame 的请求——忽略 request 参数时
+      // 任何来源（含注入 iframe/脚本）都能无感获取整屏画面 + 系统音频混音
+      if (!isTrustedFrame(request.frame)) {
+        const url = request.frame?.url ?? 'unknown';
+        logger.warn(`[DisplayMedia] 拒绝非应用来源的捕获请求: ${url}`);
+        callback({});
+        return;
+      }
       void (async () => {
         try {
           const sources = await desktopCapturer.getSources({

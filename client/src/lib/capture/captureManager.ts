@@ -60,6 +60,12 @@ export class CaptureManager {
   private frameWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly frameWatchdogTimeoutMs: number;
   private onFrameWatchdogTimeout: (() => void) | null = null;
+  /** CL-M10: 帧超时连续重启计数（收到有效帧清零） */
+  private frameRestartAttempts = 0;
+  /** CL-M10: 连续重启上限——超过后停止自动恢复并通知 UI（防止幽灵采集循环） */
+  private readonly MAX_FRAME_RESTARTS = 3;
+  /** CL-M10: 重启次数耗尽回调（通知 UI 提示用户手动处理） */
+  private onFrameWatchdogExhausted: (() => void) | null = null;
 
   constructor(options?: {
     apiBaseUrl?: string;
@@ -68,11 +74,14 @@ export class CaptureManager {
     frameWatchdogTimeoutMs?: number;
     /** 帧超时触发时的回调（通常为重启截图采集的函数） */
     onFrameWatchdogTimeout?: () => void;
+    /** CL-M10: 连续重启达到上限时的回调（提示用户手动处理） */
+    onFrameWatchdogExhausted?: () => void;
   }) {
     // apiBaseUrl 保留供未来直接使用，当前 VisionWorker 通过 aiClient 全局配置
     void options?.apiBaseUrl;
     this.frameWatchdogTimeoutMs = options?.frameWatchdogTimeoutMs ?? 3000;
     this.onFrameWatchdogTimeout = options?.onFrameWatchdogTimeout ?? null;
+    this.onFrameWatchdogExhausted = options?.onFrameWatchdogExhausted ?? null;
 
     this.crossFusion = new CrossFusionEngine(
       (segment) => {
@@ -484,10 +493,24 @@ export class CaptureManager {
       clearTimeout(this.frameWatchdogTimer);
     }
     if (!this.sessionId || !this.onFrameWatchdogTimeout) return;
+    // CL-M10: 收到有效帧即清零重启计数（根因恢复后允许重新计数）
+    this.frameRestartAttempts = 0;
     this.frameWatchdogTimer = setTimeout(() => {
       this.frameWatchdogTimer = null;
+      // CL-M10: 连续重启达到上限后停止自动恢复——若根因未恢复（窗口销毁/
+      // 采集异常），原实现每 ~3.2s 无限重启（幽灵采集 + 日志刷屏 + 与用户
+      // 手动停止竞争导致"停止后自动复活"）
+      if (this.frameRestartAttempts >= this.MAX_FRAME_RESTARTS) {
+        console.warn(
+          `[CaptureManager] 帧超时连续重启 ${this.MAX_FRAME_RESTARTS} 次仍未恢复，停止自动重启`,
+        );
+        this.stopFrameWatchdog();
+        this.onFrameWatchdogExhausted?.();
+        return;
+      }
+      this.frameRestartAttempts += 1;
       // eslint-disable-next-line no-console -- 保底重启警告
-      console.warn(`[CaptureManager] 帧超时 ${this.frameWatchdogTimeoutMs}ms，触发保底重启`);
+      console.warn(`[CaptureManager] 帧超时 ${this.frameWatchdogTimeoutMs}ms，触发保底重启 (${this.frameRestartAttempts}/${this.MAX_FRAME_RESTARTS})`);
       this.onFrameWatchdogTimeout?.();
     }, this.frameWatchdogTimeoutMs);
   }
