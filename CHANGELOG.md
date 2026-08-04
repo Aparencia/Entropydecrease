@@ -3,6 +3,20 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.34.0](https://github.com/Aparencia/Entropydecrease/compare/v0.33.1...v0.34.0) (2026-08-02)
+
+### ✨ 新功能
+
+* **assistant:** add AI deep-sea companion MVP — chat, proactive triggers, TTS, jellyfish avatar ([59ce053](https://github.com/Aparencia/Entropydecrease/commit/59ce053eec5b453e5bfa60d53154accfed3b8582))
+* **classroom,feynman:** local ASR IPC groundwork, AI error retry, nginx health timeout ([2df5044](https://github.com/Aparencia/Entropydecrease/commit/2df50444af7c986f8f3993aca28dd1b38d2e75fc))
+
+### 🐛 缺陷修复
+
+* **ai-gateway:** register chat_router before streaming_router to avoid wildcard route shadowing ([1f97a54](https://github.com/Aparencia/Entropydecrease/commit/1f97a546814df39af76cb9d9af1724075a248b10))
+* **assistant:** inject authToken and userApiKey into chat IPC call — resolves 401 ([4a188b5](https://github.com/Aparencia/Entropydecrease/commit/4a188b5c6e82b8437b7f7b55326c1ed4a2290952))
+* **notes:** AI 摘要/闪卡使用完整文本，列表预览保留 120 字截断 ([68cd9f8](https://github.com/Aparencia/Entropydecrease/commit/68cd9f83dff442b9ff2a980ccbd2cfa0af8cbcb4))
+* **sync-service:** add GetRedis() accessor — resolves undefined cache.GetRedis build error ([506db0a](https://github.com/Aparencia/Entropydecrease/commit/506db0af3140fd281fb3e9546be2ae42f62a5e4a))
+
 ## [0.33.1](https://github.com/Aparencia/Entropydecrease/compare/v0.33.0...v0.33.1) (2026-08-02)
 
 ### 🐛 缺陷修复
