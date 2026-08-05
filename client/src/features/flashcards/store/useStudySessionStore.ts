@@ -8,7 +8,7 @@ import {
 } from '@/lib/storage';
 import { Rating } from '@/lib/sm2';
 import { getScheduler } from '@/lib/schedulingFactory';
-import { getMaxNewCardsPerDay, getMaxReviewsPerDay } from '@/lib/schedulingFactory';
+import { getMaxNewCardsPerDay, getMaxReviewsPerDay, getMaxSessionCards } from '@/lib/schedulingFactory';
 import type { Flashcard, FlashcardReview, Confidence, GoldenError } from '@/types/models';
 import { useFlashcardStore } from './useFlashcardStore';
 import { generateId } from '@/lib/utils/uuid';
@@ -21,8 +21,7 @@ import { useWorldEvents } from '@/features/retention/store/useWorldEvents';
 
 /** 到期卡片不足此数量时，补充新卡 */
 const MIN_DUE_THRESHOLD = 10;
-/** 单次会话最多卡片数 */
-const MAX_SESSION_CARDS = 20;
+/** 单次会话上限：由设置页配置（kb-max-session-cards，默认 20） */
 /** 黄金错误加速复习：下次间隔压缩上限（天） */
 const GOLDEN_ERROR_MAX_INTERVAL_DAYS = 1;
 
@@ -181,17 +180,18 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
       };
 
       // 组装会话卡片列表（受每日限额约束）
+      const maxSessionCards = getMaxSessionCards();
       let sessionCards: Flashcard[];
       if (dueCards.length >= MIN_DUE_THRESHOLD) {
-        // 到期卡充足：只用到期卡（上限 MAX_SESSION_CARDS 和 remainingReviews）
-        const limit = Math.min(MAX_SESSION_CARDS, remainingReviews);
+        // 到期卡充足：只用到期卡（上限 maxSessionCards 和 remainingReviews）
+        const limit = Math.min(maxSessionCards, remainingReviews);
         sessionCards = dedupe(dueCards).slice(0, limit);
       } else {
-        // 到期卡不足：补充新卡，总量不超过 MAX_SESSION_CARDS 和 remainingReviews
+        // 到期卡不足：补充新卡，总量不超过 maxSessionCards 和 remainingReviews
         const dedupedDue = dedupe(dueCards);
         const dueIds = new Set(dedupedDue.map((c) => c.id!));
         const dedupedNew = dedupe(newCards, dueIds);
-        const totalLimit = Math.min(MAX_SESSION_CARDS, remainingReviews);
+        const totalLimit = Math.min(maxSessionCards, remainingReviews);
         const needNew = Math.min(
           totalLimit - dedupedDue.length,
           dedupedNew.length,

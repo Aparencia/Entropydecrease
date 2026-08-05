@@ -18,11 +18,17 @@ export const MAX_NEW_CARDS_KEY = 'kb-max-new-cards-per-day';
 /** localStorage key：每日复习上限 */
 export const MAX_REVIEWS_KEY = 'kb-max-reviews-per-day';
 
+/** localStorage key：单次会话复习上限（内测反馈：一次性复习数量需可配置） */
+export const MAX_SESSION_CARDS_KEY = 'kb-max-session-cards';
+
 /** 默认每日新卡上限 */
 export const DEFAULT_MAX_NEW_CARDS = 20;
 
 /** 默认每日复习上限 */
-export const DEFAULT_MAX_REVIEWS = 100
+export const DEFAULT_MAX_REVIEWS = 100;
+
+/** 默认单次会话复习上限 */
+export const DEFAULT_MAX_SESSION_CARDS = 20;
 
 // 缓存策略实例，避免每次调用都 new
 let cachedStrategy: SchedulingStrategy | null = null;
@@ -100,4 +106,23 @@ export function getMaxReviewsPerDay(): number {
  */
 export function setMaxReviewsPerDay(value: number): void {
   localStorage.setItem(MAX_REVIEWS_KEY, String(Math.max(1, value)));
+}
+
+/**
+ * 获取单次会话复习上限
+ */
+export function getMaxSessionCards(): number {
+  const stored = localStorage.getItem(MAX_SESSION_CARDS_KEY);
+  if (stored) {
+    const val = parseInt(stored, 10);
+    if (!isNaN(val) && val > 0) return val;
+  }
+  return DEFAULT_MAX_SESSION_CARDS;
+}
+
+/**
+ * 设置单次会话复习上限
+ */
+export function setMaxSessionCards(value: number): void {
+  localStorage.setItem(MAX_SESSION_CARDS_KEY, String(Math.max(1, value)));
 }

@@ -110,7 +110,7 @@ const emptyVariants = {
 
 export default function FlashcardsPage() {
   const navigate = useNavigate();
-  const { decks, isLoading, loadDecks, createDeck, deleteDeck } = useFlashcardStore(useShallow(s => s));
+  const { decks, isLoading, loadDecks, createDeck, renameDeck, deleteDeck } = useFlashcardStore(useShallow(s => s));
 
   const [allCards, setAllCards] = useState<Flashcard[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -118,6 +118,10 @@ export default function FlashcardsPage() {
   const [newDesc, setNewDesc] = useState('');
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  // 牌组重命名弹窗状态（右键「编辑牌组」）
+  const [renameTarget, setRenameTarget] = useState<FlashcardDeck | null>(null);
+  const [renameName, setRenameName] = useState('');
+  const [renaming, setRenaming] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
@@ -146,7 +150,12 @@ export default function FlashcardsPage() {
   const handleDeckSelect = useCallback(async (itemKey: string, deck: FlashcardDeck) => {
     switch (itemKey) {
       case 'study': navigate(`/flashcards/${deck.id}`); break;
-      case 'edit': navigate(`/flashcards/${deck.id}`); break;
+      case 'edit': {
+        // 编辑牌组 = 重命名（store 已有 renameDeck，补齐 UI 入口）
+        setRenameTarget(deck);
+        setRenameName(deck.name);
+        break;
+      }
       case 'share': {
         try {
           const data = await exportDeck(deck.id);
@@ -262,6 +271,20 @@ export default function FlashcardsPage() {
     const cards = await flashcardStore.getAll();
     setAllCards(cards);
     setDeleteTarget(null);
+  };
+
+  // 牌组重命名保存
+  const handleRename = async () => {
+    if (!renameTarget || !renameName.trim() || renameName.trim() === renameTarget.name) {
+      setRenameTarget(null);
+      return;
+    }
+    setRenaming(true);
+    try {
+      await renameDeck(renameTarget.id, renameName.trim());
+      toast({ type: 'success', message: `牌组已重命名为「${renameName.trim()}」`, silent: true });
+      setRenameTarget(null);
+    } finally { setRenaming(false); }
   };
 
   const handlePointerDown = (id: string) => {
@@ -557,6 +580,30 @@ export default function FlashcardsPage() {
         }
       >
         <div />
+      </Modal>
+
+      {/* ── 编辑牌组（重命名）Modal ── */}
+      <Modal
+        open={renameTarget !== null}
+        onClose={() => setRenameTarget(null)}
+        title="编辑牌组"
+        description="修改牌组名称"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRenameTarget(null)}>取消</Button>
+            <Button onClick={handleRename} loading={renaming} disabled={!renameName.trim() || renameName.trim() === renameTarget?.name}>保存</Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-kb-md">
+          <Input
+            label="牌组名称"
+            placeholder="例如：数据结构基础"
+            value={renameName}
+            onChange={(e) => setRenameName(e.target.value)}
+            autoFocus
+          />
+        </div>
       </Modal>
 
       {/* ── 导入预览 ── */}
