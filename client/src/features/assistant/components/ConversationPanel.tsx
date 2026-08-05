@@ -24,6 +24,7 @@ export function ConversationPanel({ onSend, onClose, onRetry, onDismiss }: Props
 
   return (
     <motion.div
+      data-work-area="conversation-panel"
       initial={{ x: PANEL_WIDTH, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: PANEL_WIDTH, opacity: 0 }}

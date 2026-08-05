@@ -55,6 +55,7 @@ export type AppEventType =
   | 'app:startup'
   | 'session:end'
   | 'user:idle'
+  | 'user:active'
   | 'user:return'
   | 'review:due'
   | 'review:bedtime'

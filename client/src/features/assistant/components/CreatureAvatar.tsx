@@ -8,16 +8,21 @@
  * idle 时自主漫游（随机目标点 + 贝塞尔缓动），拖拽后 5s 恢复漫游。
  * 位置持久化到 localStorage，下次打开应用水母在老位置。
  */
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { motion, useMotionValue, animate } from 'framer-motion';
+import { Pin } from 'lucide-react';
 import { useAssistantStore } from '../store/useAssistantStore';
 import { CreatureBubble } from './CreatureBubble';
+import { useWorkAreaBounds } from '../hooks/useWorkAreaBounds';
+import { ContextMenu } from '@/components/ui/ContextMenu';
+import type { ContextMenuGroup } from '@/components/ui/ContextMenu';
 import {
   CREATURE_SIZE_IDLE,
   WANDER_INTERVAL_MIN_MS, WANDER_INTERVAL_MAX_MS,
   WANDER_DURATION_MIN_MS, WANDER_DURATION_MAX_MS,
   WANDER_RESUME_DELAY_MS, WANDER_BOUNDS,
   CREATURE_POS_STORAGE_KEY,
+  ESCAPE_SPRING_STIFFNESS, ESCAPE_SPRING_DAMPING,
 } from '../constants';
 import type { CreatureState } from '../types';
 
@@ -64,6 +69,15 @@ export function CreatureAvatar({ onClick, onBubbleClick, onBubbleDismiss }: Prop
   const creatureState = useAssistantStore(s => s.creatureState);
   const bubbleMessage = useAssistantStore(s => s.bubbleMessage);
   const panelState = useAssistantStore(s => s.panelState);
+  const userActive = useAssistantStore(s => s.userActive);
+  const isFixed = useAssistantStore(s => s.isFixed);
+  const setIsFixed = useAssistantStore(s => s.setIsFixed);
+  const setAutoFixed = useAssistantStore(s => s.setAutoFixed);
+
+  const { isInWorkArea, getRandomTargetOutside } = useWorkAreaBounds();
+
+  // 右键菜单状态
+  const [ctxMenuPos, setCtxMenuPos] = useState<{ x: number; y: number } | null>(null);
 
   // 位置由 MotionValue 驱动（GPU 合成，不触发 React 重渲染）
   const initial = useRef(loadSavedPosition());
@@ -75,11 +89,43 @@ export function CreatureAvatar({ onClick, onBubbleClick, onBubbleDismiss }: Prop
   const wanderAnimRef = useRef<{ stop: () => void } | null>(null);
   const isDraggingRef = useRef(false);
 
+  // 受惊弹开动画状态（一过性 scale 脉冲）
+  const [startledScale, setStartledScale] = useState<number[] | null>(null);
+  const prevUserActiveRef = useRef(userActive);
+
+  // 用 ref 保持 userActive 最新值供异步回调（wanderTo setTimeout 闭包）
+  const userActiveRef = useRef(userActive);
+  userActiveRef.current = userActive;
+
   /** 在视口漫游区域内随机选取目标点并平滑移动 */
   const wanderTo = useCallback(() => {
-    const { xMin, xMax, yMin, yMax } = WANDER_BOUNDS;
-    const targetX = window.innerWidth * (xMin + Math.random() * (xMax - xMin));
-    const targetY = window.innerHeight * (yMin + Math.random() * (yMax - yMin));
+    // 固定状态不漫游
+    if (useAssistantStore.getState().isFixed) return;
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    let targetX: number;
+    let targetY: number;
+
+    if (userActiveRef.current) {
+      // 用户活跃时：仅在工作区外漫游
+      const target = getRandomTargetOutside(vw, vh, CREATURE_SIZE_IDLE);
+      targetX = target.x;
+      targetY = target.y;
+
+      // 检查目标是否仍在工作区内（小窗口无安全区时自动固定）
+      if (isInWorkArea(targetX, targetY, CREATURE_SIZE_IDLE)) {
+        setAutoFixed(true);
+        return;
+      }
+    } else {
+      // 用户空闲时：全屏漫游
+      const { xMin, xMax, yMin, yMax } = WANDER_BOUNDS;
+      targetX = vw * (xMin + Math.random() * (xMax - xMin));
+      targetY = vh * (yMin + Math.random() * (yMax - yMin));
+    }
+
     const duration = (WANDER_DURATION_MIN_MS + Math.random() * (WANDER_DURATION_MAX_MS - WANDER_DURATION_MIN_MS)) / 1000;
 
     // 停止上一次漫游动画
@@ -89,7 +135,7 @@ export function CreatureAvatar({ onClick, onBubbleClick, onBubbleDismiss }: Prop
       ease: 'easeInOut',
     });
     animate(posY, targetY, { duration, ease: 'easeInOut' });
-  }, [posX, posY]);
+  }, [posX, posY, getRandomTargetOutside, isInWorkArea, setAutoFixed]);
 
   /** 调度下一次漫游（随机间隔） */
   const scheduleWander = useCallback(() => {
@@ -112,6 +158,45 @@ export function CreatureAvatar({ onClick, onBubbleClick, onBubbleDismiss }: Prop
     };
   }, [scheduleWander]);
 
+  // 用户空闲→活跃转换：如果在工作区内则受惊弹开
+  useEffect(() => {
+    const wasIdle = prevUserActiveRef.current === false;
+    const nowActive = userActive === true;
+    prevUserActiveRef.current = userActive;
+
+    if (wasIdle && nowActive) {
+      const cx = posX.get();
+      const cy = posY.get();
+      if (isInWorkArea(cx, cy, CREATURE_SIZE_IDLE)) {
+        // 停止当前漫游
+        wanderAnimRef.current?.stop();
+        if (wanderTimerRef.current) clearTimeout(wanderTimerRef.current);
+
+        // 选取逃逸目标点
+        const target = getRandomTargetOutside(window.innerWidth, window.innerHeight, CREATURE_SIZE_IDLE);
+
+        // 弹簧动画：受惊弹开
+        wanderAnimRef.current = animate(posX, target.x, {
+          type: 'spring',
+          stiffness: ESCAPE_SPRING_STIFFNESS,
+          damping: ESCAPE_SPRING_DAMPING,
+        });
+        animate(posY, target.y, {
+          type: 'spring',
+          stiffness: ESCAPE_SPRING_STIFFNESS,
+          damping: ESCAPE_SPRING_DAMPING,
+        });
+
+        // 触发受惊视觉反馈（scale 弹性脉冲）
+        setStartledScale([1, 1.35, 0.9, 1.1, 1]);
+        setTimeout(() => setStartledScale(null), 600);
+
+        // 逃逸完成后重新调度漫游
+        setTimeout(() => { if (!isDraggingRef.current) scheduleWander(); }, ESCAPE_SPRING_DAMPING * 20);
+      }
+    }
+  }, [userActive, posX, posY, isInWorkArea, getRandomTargetOutside, scheduleWander]);
+
   // 拖拽结束：持久化位置 + 5s 后恢复漫游
   const handleDragEnd = useCallback(() => {
     isDraggingRef.current = false;
@@ -120,7 +205,38 @@ export function CreatureAvatar({ onClick, onBubbleClick, onBubbleDismiss }: Prop
     setTimeout(() => { if (!isDraggingRef.current) wanderTo(); }, WANDER_RESUME_DELAY_MS);
   }, [posX, posY, wanderTo]);
 
+  // 右键菜单组
+  const ctxMenuGroups = useMemo<ContextMenuGroup[]>(() => [
+    {
+      items: [
+        {
+          key: isFixed ? 'unfix' : 'fix',
+          label: isFixed ? '恢复漫游' : '固定位置',
+          icon: <Pin className="w-4 h-4" strokeWidth={1.5} />,
+        },
+      ],
+    },
+  ], [isFixed]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenuPos({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleCtxMenuSelect = useCallback((key: string) => {
+    if (key === 'fix') {
+      setIsFixed(true);
+    } else if (key === 'unfix') {
+      setIsFixed(false);
+      // 恢复漫游
+      scheduleWander();
+    }
+    setCtxMenuPos(null);
+  }, [setIsFixed, scheduleWander]);
+
   return (
+    <>
     <motion.div
       className="fixed top-0 left-0 z-50 flex flex-col items-end"
       style={{ x: posX, y: posY, width: CREATURE_SIZE_IDLE }}
@@ -147,15 +263,16 @@ export function CreatureAvatar({ onClick, onBubbleClick, onBubbleDismiss }: Prop
       {/* 水母主体 */}
       <motion.button
         onClick={onClick}
+        onContextMenu={handleContextMenu}
         className="relative outline-none border-none bg-transparent cursor-pointer"
         style={{ width: CREATURE_SIZE_IDLE, height: CREATURE_SIZE_IDLE }}
         animate={{
           y: creatureState === 'resting' ? [0, 4, 0] : [0, -3, 0],
-          scale: creatureState === 'alerting' ? [1, 1.08, 1] : 1,
+          scale: startledScale ?? (creatureState === 'alerting' ? [1, 1.08, 1] : 1),
         }}
         transition={{
           y: { duration: creatureState === 'resting' ? 6 : 4, repeat: Infinity, ease: 'easeInOut' },
-          scale: { duration: 0.6, repeat: creatureState === 'alerting' ? 3 : 0 },
+          scale: { duration: startledScale ? 0.5 : 0.6, repeat: startledScale ? 0 : (creatureState === 'alerting' ? 3 : 0) },
         }}
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.95 }}
@@ -182,5 +299,16 @@ export function CreatureAvatar({ onClick, onBubbleClick, onBubbleDismiss }: Prop
         ))}
       </motion.button>
     </motion.div>
+
+    {ctxMenuPos && (
+      <ContextMenu
+        groups={ctxMenuGroups}
+        position={ctxMenuPos}
+        context={null}
+        onSelect={(key) => handleCtxMenuSelect(key)}
+        onClose={() => setCtxMenuPos(null)}
+      />
+    )}
+    </>
   );
 }
