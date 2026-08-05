@@ -64,6 +64,7 @@ export function FunctionalOverlay({ children, visible, className, panelClassName
 
       {/* 功能面板 — 隐藏时移除 backdrop-blur，避免 backdrop-filter 合成层遮挡 canvas */}
       <motion.div
+        data-work-area="module-content"
         className={cn(
           "relative z-10 w-full",
           "max-w-5xl",

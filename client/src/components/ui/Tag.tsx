@@ -37,6 +37,10 @@ export interface TagProps {
   color?: TagColor;
   closable?: boolean;
   onClose?: () => void;
+  /** 点击回调（存在时渲染为可交互元素：cursor + hover/active 反馈） */
+  onClick?: (e: React.MouseEvent<HTMLSpanElement>) => void;
+  /** 选中态（用于标签筛选等场景高亮） */
+  active?: boolean;
   children: React.ReactNode;
   className?: string;
 }
@@ -45,11 +49,23 @@ export const Tag: React.FC<TagProps> = ({
   color,
   closable = false,
   onClose,
+  onClick,
+  active = false,
   children,
   className,
 }) => {
   return (
-    <span className={cn(tagVariants({ color }), className)}>
+    <span
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      aria-pressed={onClick ? active : undefined}
+      className={cn(
+        tagVariants({ color }),
+        onClick && 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/10 active:scale-[0.97] select-none',
+        active && 'ring-1 ring-brand-500/40 bg-brand-50/60 shadow-sm',
+        className,
+      )}
+    >
       {children}
       {closable && (
         <button
