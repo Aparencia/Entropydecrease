@@ -12,8 +12,8 @@
 import { app } from 'electron';
 import * as path from 'path';
 import { mkdir, writeFile, readFile, rm } from 'fs/promises';
-import { safeHandle } from '../ipcUtils.js';
-import { logger } from '../logger.js';
+import { safeHandle } from './ipcUtils.js';
+import { logger } from './logger.js';
 
 /** 安全文件名：字母数字/下划线/连字符，1-80 字符（防路径穿越） */
 const SAFE_NAME_RE = /^[A-Za-z0-9_-]{1,80}$/;
