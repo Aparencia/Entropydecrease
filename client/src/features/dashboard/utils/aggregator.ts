@@ -8,6 +8,11 @@ const toISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padSta
 const recent = <T>(arr: T[], dt: (i: T) => Date, days: number) => { const c = Date.now() - days * DAY_MS; return arr.filter((i) => dt(i).getTime() >= c); };
 const norm = (v: number, m: number) => (m === 0 ? 0 : Math.min(100, Math.round((v / m) * 100)));
 
+// ── 非番茄钟学习分钟折算（学习脉搏反映全部学习行为，内测反馈）──
+const NOTE_EDIT_MINUTES = 10;   // 每篇笔记当天更新折算 10 分钟（按 id+日期去重防自动保存虚高）
+const REVIEW_MINUTES = 2;       // 每次闪卡复习折算 2 分钟
+const FEYNMAN_MINUTES = 15;     // 每篇费曼输出折算 15 分钟
+
 /** 聚合输入类型 */
 export interface AggregateInput {
   sessions: PomodoroSession[]; notes: Note[]; flashcards: Flashcard[];
@@ -93,8 +98,13 @@ export function computeHeatmap(sessions: PomodoroSession[], days = 30): HeatmapC
   return cells;
 }
 
-/** 每日学习时长趋势（含 7 天滑动均值 label） */
-export function computeTrend(sessions: PomodoroSession[], days = 30): TrendPoint[] {
+/** 每日学习时长趋势（含 7 天滑动均值 label）
+ * 数据源：番茄钟 sessions（实际分钟）+ 可选折算（笔记/复习/费曼）
+ */
+export function computeTrend(
+  sessions: PomodoroSession[], days = 30,
+  extras?: { notes?: Note[]; reviews?: FlashcardReview[]; feynmanNotes?: FeynmanNote[] },
+): TrendPoint[] {
   const cutoff = Date.now() - days * DAY_MS;
   const dm: Record<string, number> = {};
   sessions.forEach((s) => {
@@ -102,6 +112,29 @@ export function computeTrend(sessions: PomodoroSession[], days = 30): TrendPoint
     if (d.getTime() < cutoff) return;
     const k = toISO(d); dm[k] = (dm[k] ?? 0) + Math.round(s.actualDuration / 60);
   });
+
+  // 非番茄钟学习折算（笔记按 (id, 日期) 去重：自动保存会频繁更新 updatedAt）
+  const seenNotes = new Set<string>();
+  extras?.notes?.forEach((n) => {
+    const d = new Date(n.updatedAt);
+    if (d.getTime() < cutoff) return;
+    const k = toISO(d);
+    const key = `${n.id}-${k}`;
+    if (seenNotes.has(key)) return;
+    seenNotes.add(key);
+    dm[k] = (dm[k] ?? 0) + NOTE_EDIT_MINUTES;
+  });
+  extras?.reviews?.forEach((r) => {
+    const d = new Date(r.reviewedAt);
+    if (d.getTime() < cutoff) return;
+    const k = toISO(d); dm[k] = (dm[k] ?? 0) + REVIEW_MINUTES;
+  });
+  extras?.feynmanNotes?.forEach((f) => {
+    const d = new Date(f.updatedAt);
+    if (d.getTime() < cutoff) return;
+    const k = toISO(d); dm[k] = (dm[k] ?? 0) + FEYNMAN_MINUTES;
+  });
+
   const dates: string[] = [];
   for (let i = days - 1; i >= 0; i--) {
     const k = toISO(new Date(Date.now() - i * DAY_MS));
@@ -154,7 +187,9 @@ export function aggregateAnalytics(data: AggregateInput, days = 30): AnalyticsAg
   return {
     radar: computeRadarData(data.sessions, data.notes, data.flashcards, data.feynmanNotes, data.reviews, days),
     heatmap,
-    trend: computeTrend(data.sessions, days),
+    trend: computeTrend(data.sessions, days, {
+      notes: data.notes, reviews: data.reviews, feynmanNotes: data.feynmanNotes,
+    }),
     recommendations: computeRecommendations(heatmap),
     period: { start: toISO(new Date(Date.now() - days * DAY_MS)), end: toISO(new Date()) },
     goals: computeGoalProgress(data.sessions, data.notes, data.reviews),

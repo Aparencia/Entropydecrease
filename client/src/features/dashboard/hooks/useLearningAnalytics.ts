@@ -32,6 +32,16 @@ export function useLearningAnalytics(days = 30): UseLearningAnalyticsReturn {
   const fetchData = useCallback(async (worker: Worker) => {
     setLoading(true); setError(null);
     try {
+      // 竞态修复：挂载时 notes/feynmanNotes 可能尚未加载完成（loadNotes 异步），
+      // 直接聚合会按空数据计算——学习画像出勤率/持续性恒 0。先确保数据就绪。
+      const noteState = useNoteStore.getState();
+      if (noteState.notes.length === 0 && !noteState.isLoading) {
+        await noteState.loadNotes();
+      }
+      const feynmanState = useFeynmanStore.getState();
+      if (feynmanState.notes.length === 0 && !feynmanState.isLoading) {
+        await feynmanState.loadNotes();
+      }
       const notes = useNoteStore.getState().notes;
       const feynmanNotes = useFeynmanStore.getState().notes;
       const [sessions, flashcards, reviews] = await Promise.all([
