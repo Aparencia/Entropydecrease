@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 熵减 AI 网关 —— 知识编译引擎 Chain
 

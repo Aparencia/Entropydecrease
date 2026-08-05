@@ -9,7 +9,7 @@ POST /api/v1/ai/podcast
 
 import logging
 from pydantic import BaseModel, Field, field_validator
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request
 
 from config import call_with_fallback_for_request
 from chains.podcast_chain import PodcastChain

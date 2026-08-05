@@ -9,7 +9,7 @@ POST /api/v1/ai/infographic
 
 import logging
 from pydantic import BaseModel, Field, field_validator, ConfigDict
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request
 
 from config import call_with_fallback_for_request
 from chains.infographic_chain import InfographicChain

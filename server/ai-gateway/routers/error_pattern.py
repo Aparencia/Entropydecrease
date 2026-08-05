@@ -9,6 +9,7 @@ POST /api/v1/ai/error-pattern
 """
 import hashlib
 import logging
+from typing import Any
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 

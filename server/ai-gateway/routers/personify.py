@@ -9,7 +9,7 @@ POST /api/v1/ai/personify
 
 import logging
 from pydantic import BaseModel, Field, field_validator
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request
 
 from config import call_with_fallback_for_request
 from chains.personify_chain import PersonifyChain
