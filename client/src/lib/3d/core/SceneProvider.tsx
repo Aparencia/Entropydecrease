@@ -44,7 +44,7 @@ interface SceneProviderProps {
  * 确保主题切换时雾色和背景色同步更新
  */
 function ThemeAwareEnvironment() {
-  const { scene } = useThree();
+  const { gl, scene, camera } = useThree();
   const theme = useSceneTheme();
 
   useEffect(() => {
@@ -55,7 +55,13 @@ function ThemeAwareEnvironment() {
       scene.fog = new THREE.FogExp2('#e8f4f8', 0.015);
       scene.background = new THREE.Color('#e8f4f8');
     }
-  }, [theme, scene]);
+    // docked 相位 frameloop='never' 下渲染循环已冻结，invalidate() 早退不触发
+    // 重绘——主题切换后 scene 对象虽已更新但画布仍显示旧帧（背景不立即生效）。
+    // 延迟到宏任务手动渲染一帧：确保同批 theme 消费者的 Three 属性更新全部
+    // 提交后再绘制，一次性开销不破坏冻结策略（内测反馈修复）。
+    const timer = setTimeout(() => gl.render(scene, camera), 0);
+    return () => clearTimeout(timer);
+  }, [theme, scene, camera, gl]);
 
   return null;
 }

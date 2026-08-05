@@ -1,7 +1,7 @@
 /**
  * @ai-context: 布局组件：AppLayout。
  */
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion, MotionConfig, AnimatePresence } from 'framer-motion';
 import { Home } from 'lucide-react';
@@ -17,7 +17,7 @@ import { SceneTransition } from '@/lib/3d/scenes/SceneTransition';
 import { SpatialNav } from '@/lib/3d/navigation/SpatialNav';
 import { MobileNavGrid } from '@/lib/3d/scenes/MobileNavGrid';
 import { FunctionalOverlay } from '@/components/overlay/FunctionalOverlay';
-import { useOrbitalStore, MODULE_POSITIONS } from '@/lib/3d/navigation/OrbitalStore';
+import { useOrbitalStore, routeToModuleId } from '@/lib/3d/navigation/OrbitalStore';
 import { OnboardingOverlay } from '@/components/onboarding/OnboardingOverlay';
 import { ModuleTourToast } from '@/components/onboarding/ModuleTourToast';
 import { HelpCenter } from '@/components/onboarding/HelpCenter';
@@ -28,9 +28,47 @@ import { FirstDiveGate } from '@/features/onboarding/firstDive/FirstDiveGate';
 import { usePerformanceModeStore } from '@/lib/performance/usePerformanceMode';
 import { PERFORMANCE_MODE_CONFIG } from '@/lib/performance/performanceMode';
 
+/**
+ * 路由层级映射：子路由 -> 父路由
+ * 在 ESC 处理器中用于"向上导航一级"而非直接退出模块
+ */
+function findParentRoute(pathname: string): string | null {
+  const patterns: Array<{
+    pattern: RegExp;
+    parent: string | ((match: RegExpMatchArray) => string);
+  }> = [
+    // Pomodoro 子页面
+    { pattern: /^\/pomodoro\/(stats|settings)$/, parent: '/pomodoro' },
+    // Notes 子页面
+    { pattern: /^\/notes\/graph$/, parent: '/notes' },
+    { pattern: /^\/notes\/([^/]+)$/, parent: '/notes' },
+    // Flashcards 子页面（二级子路由回到所属牌组详情）
+    { pattern: /^\/flashcards\/([^/]+)\/(study|generative-review)$/, parent: (m) => `/flashcards/${m[1]}` },
+    { pattern: /^\/flashcards\/([^/]+)$/, parent: '/flashcards' },
+    // Feynman 子页面
+    { pattern: /^\/feynman\/([^/]+)$/, parent: '/feynman' },
+    { pattern: /^\/socratic$/, parent: '/feynman' },
+    // SOP 子页面
+    { pattern: /^\/sop\/editor/, parent: '/sop' },
+    // 非模块页面（settings/analytics/settling/inbox/certificate -> 仪表盘）
+    { pattern: /^\/(settings|analytics|settling|inbox|certificate)$/, parent: '/' },
+  ];
+
+  for (const { pattern, parent } of patterns) {
+    const match = pathname.match(pattern);
+    if (match) {
+      return typeof parent === 'function' ? parent(match) : parent;
+    }
+  }
+  return null;
+}
+
 export default function AppLayout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  // 跟踪当前路径（ref 避免 ESC 处理器闭包读到旧值，同时避免加入 effect 依赖）
+  const pathnameRef = useRef(pathname);
+  useEffect(() => { pathnameRef.current = pathname; }, [pathname]);
   // 细粒度 selector 订阅：整 store 订阅会被 hoveredModule 等高频字段变化
   // 连带重渲染整棵布局树（含 Outlet 页面），是流畅度关键瓶颈
   const isInModule = useOrbitalStore((s) => s.isInModule);
@@ -46,6 +84,11 @@ export default function AppLayout() {
   // 性能模式：静谧(low)档全局减弱 Framer Motion 动画（transform/layout 动画直接到位）
   const perfMode = usePerformanceModeStore((s) => s.mode);
   const reduceMotion = PERFORMANCE_MODE_CONFIG[perfMode].reduceMotion;
+  // 笔记编辑/图谱路由需要满高面板：面板默认高度由内容决定（auto），
+  // 高度链 h-full → flex-1 会逐级失效，导致 React Flow 等依赖 100% 高度的
+  // 画布类组件容器高度为 0（思维导图/自由画布/图谱不渲染）。
+  // 给这些路由的面板补 !h-full 让高度链恢复（max-h 仍生效）。
+  const isFullHeightRoute = /^\/notes\/[^/]+$/.test(pathname);
 
   // 监听 session 过期事件
   useSessionExpiry();
@@ -91,10 +134,21 @@ export default function AppLayout() {
       }
 
       if (e.key === 'Escape') {
-        if (isInModule) {
+        // 层级感知：子路由 -> 父路由，根路由 -> 退出模块
+        const currentPath = pathnameRef.current;
+        const parentRoute = findParentRoute(currentPath);
+
+        if (parentRoute) {
+          // 有父路由 -> 向上导航一级（不退出模块，保持模块 docked 态）
+          e.preventDefault();
+          navigate(parentRoute);
+        } else if (isInModule) {
+          // 已是模块根路由 -> 退出模块回到 3D 概览
+          e.preventDefault();
           exitModule();
-        } else {
-          // 在 3D 场景模式下按 Esc 返回仪表盘
+        } else if (currentPath !== '/') {
+          // 3D 场景模式下按 Esc 返回仪表盘（仅非首页时）
+          e.preventDefault();
           enterModule('dashboard');
           navigate('/');
         }
@@ -110,8 +164,10 @@ export default function AppLayout() {
         if (moduleKeys[e.key]) {
           const route = moduleKeys[e.key];
           // 显式调用 enterModule：同路由 navigate 无效时仍能触发相位迁移（修复 Esc 后重复按键无响应）
-          const mod = MODULE_POSITIONS.find(m => m.route === route);
-          if (mod) enterModule(mod.id);
+          // 使用 routeToModuleId 统一映射：对非 MODULE_POSITIONS 成员（如 /settings）
+          // 也能正确调用 enterModule，避免 navigate 同路由无变化时相位无法恢复
+          const modId = routeToModuleId(route);
+          if (modId) enterModule(modId);
           navigate(route);
         }
       }
@@ -151,7 +207,9 @@ export default function AppLayout() {
           /* 萤火海沟自带全屏暗物质场：透明面板让深海背景透出，遮罩用深海底色实现整屏无缝（其他模块保持毛玻璃） */
           panelClassName={currentModule === 'inspiration'
             ? '!bg-transparent !backdrop-blur-none !shadow-none !border-white/5'
-            : undefined}
+            : isFullHeightRoute
+              ? '!h-full'
+              : undefined}
           maskClassName={currentModule === 'inspiration' ? '!bg-[var(--kb-bg-primary)] !backdrop-blur-none' : undefined}
         >
           {/* 路由级过渡：grid 叠放 + 同期交叉淡入淡出。
@@ -159,10 +217,11 @@ export default function AppLayout() {
               reduced-motion / StrictMode(dev) / HMR 等条件下交接会偶发丢失，
               新页永不挂载——即内测反馈"回到主页时主页不显示"的根因。
               交叉淡入淡出下新页立即挂载、旧页淡出后卸载，退出即使延迟也不阻塞内容展示 */}
-          <div className="grid">
+          <div className="grid h-full">
             <AnimatePresence>
               <motion.div
                 key={pathname}
+                className="h-full"
                 style={{ gridArea: '1 / 1' }}
                 /* 简单的 opacity 淡入淡出，不影响 3D 场景的相机飞行和停靠时序 */
                 initial={{ opacity: 0 }}

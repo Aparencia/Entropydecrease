@@ -9,7 +9,7 @@
  * @ai-context: 3D 场景：SceneTransition。
  */
 import { useRef, useState, useEffect } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSceneTheme } from '../hooks/useSceneTheme';
 import { DeepSeaWorld } from './DeepSeaWorld';
@@ -22,6 +22,7 @@ export interface SceneTransitionProps {
 const TRANSITION_DURATION = 0.5;
 
 export function SceneTransition({ children }: SceneTransitionProps) {
+  const { gl, scene, camera } = useThree();
   const theme = useSceneTheme();
   const isTransitioning = useRef(false);
   const transitionProgress = useRef(0);
@@ -55,10 +56,14 @@ export function SceneTransition({ children }: SceneTransitionProps) {
       if (auroraGroupRef.current) auroraGroupRef.current.visible = !isDeepSea;
       setDeepSeaVisible(isDeepSea);
       setAuroraVisible(!isDeepSea);
+      // docked 相位 frameloop='never' 下渲染循环冻结：可见性虽已切换但无帧
+      // 绘制，canvas 仍显示旧场景（内测反馈：主题切换背景不生效）。
+      // 手动渲染一帧让场景切换立即呈现，一次性开销不破坏冻结策略。
+      gl.render(scene, camera);
     }, TRANSITION_DURATION * 1000 + 100);
 
     return () => clearTimeout(timer);
-  }, [theme]);
+  }, [theme, gl, scene, camera]);
 
   useFrame((_, delta) => {
     if (!isTransitioning.current) return;

@@ -52,6 +52,20 @@ export const MODULE_POSITIONS: ModulePosition[] = [
   { id: 'classroom', position: [-2, -3, -2], route: '/classroom', label: '回声定位' },
 ];
 
+/**
+ * 路由 → 模块ID 映射
+ * 与 syncWithRoute 中的映射逻辑一致，供外部（如数字键处理器）使用
+ */
+export function routeToModuleId(pathname: string): ModuleId | null {
+  const module = MODULE_POSITIONS.find(m => {
+    if (m.route === '/') return pathname === '/';
+    return pathname === m.route || pathname.startsWith(m.route + '/');
+  });
+  return module
+    ? module.id
+    : (pathname === '/settings' || pathname === '/analytics') ? 'dashboard' : null;
+}
+
 /** 导航洪泛防护：enterModule 最小调用间隔。
  * Chromium 对客户端导航（pushState/hash）有洪泛保护（crbug.com/1038223），
  * 超阈后导航会被限流丢弃——此时轨道状态已迁移而路由未变，
@@ -97,14 +111,7 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   setHighlightAll: (v) => set({ highlightAll: v }),
   syncWithRoute: (pathname: string) => {
     const s = get();
-    // 精确匹配或前缀匹配（支持子路由如 /flashcards/:deckId/study）
-    const module = MODULE_POSITIONS.find(m => {
-      if (m.route === '/') return pathname === '/';
-      return pathname === m.route || pathname.startsWith(m.route + '/');
-    });
-    const targetId: ModuleId | null = module
-      ? module.id
-      : (pathname === '/settings' || pathname === '/analytics') ? 'dashboard' : null;
+    const targetId = routeToModuleId(pathname);
 
     if (!targetId) {
       set({ currentModule: null, phase: 'overview', overlayVisible: false, isInModule: false });
