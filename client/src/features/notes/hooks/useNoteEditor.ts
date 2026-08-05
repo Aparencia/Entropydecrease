@@ -116,14 +116,10 @@ export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNo
     },
   });
 
-  // 确保编辑器在组件卸载或笔记切换时正确销毁
-  useEffect(() => {
-    return () => {
-      if (editor) {
-        editor.destroy();
-      }
-    };
-  }, [editor]);
+  // 编辑器生命周期由 @tiptap/react v3 useEditor 托管：其 scheduleDestroy 延迟
+  // 销毁机制可抵御 React 18 StrictMode 双调用（自定义 destroy effect 会在
+  // 双调用 cleanup 阶段同步销毁实例，导致后续 effect 拿到 schema=null 的
+  // 已销毁编辑器而崩溃），卸载时 v3 会在下一 tick 自动销毁。
 
   /** 图片上传（P2-10：大图压缩降采样后读为 base64 内嵌，小图原样） */
   const handleImageSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -2,8 +2,10 @@
  * @ai-context: 通用组件：SubjectFolder。
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ChevronRight, Check, Folder } from 'lucide-react';
+import { ChevronRight, Check, Folder, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu';
+import { useContextMenu } from '@/lib/contextMenu';
 import type { NoteFolder } from '@/types/models';
 
 interface SubjectFolderProps {
@@ -11,6 +13,8 @@ interface SubjectFolderProps {
   isSelected: boolean;
   onSelect: (id: string) => void;
   onRename: (id: string, newName: string) => Promise<void>;
+  /** 删除分组（父层弹确认框后执行） / Delete folder (parent confirms first) */
+  onDelete: (id: string) => void;
 }
 
 export default function SubjectFolder({
@@ -18,10 +22,40 @@ export default function SubjectFolder({
   isSelected,
   onSelect,
   onRename,
+  onDelete,
 }: SubjectFolderProps) {
   const [isRenaming, setIsRenaming] = useState(false);
   const [newName, setNewName] = useState(folder.name);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const {
+    isOpen: ctxOpen, position: ctxPos, context: ctxFolder,
+    handleContextMenu: ctxHandleMenu, close: ctxClose,
+  } = useContextMenu<NoteFolder>();
+
+  const folderMenuGroups: ContextMenuGroup[] = [
+    {
+      label: '分组操作',
+      items: [
+        { key: 'rename', label: '重命名', icon: <Pencil className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'delete', label: '删除分组', icon: <Trash2 className="w-4 h-4" strokeWidth={1.5} />, danger: true },
+      ],
+    },
+  ];
+
+  const handleMenuSelect = useCallback((itemKey: string, target: NoteFolder) => {
+    if (itemKey === 'rename') {
+      setNewName(target.name);
+      setIsRenaming(true);
+    } else if (itemKey === 'delete') {
+      onDelete(target.id);
+    }
+  }, [onDelete]);
+
+  const startRename = useCallback(() => {
+    setNewName(folder.name);
+    setIsRenaming(true);
+  }, [folder.name]);
 
   useEffect(() => {
     if (isRenaming && inputRef.current) {
@@ -33,9 +67,8 @@ export default function SubjectFolder({
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    setNewName(folder.name);
-    setIsRenaming(true);
-  }, [folder.name]);
+    startRename();
+  }, [startRename]);
 
   const handleRenameConfirm = useCallback(async () => {
     if (newName.trim() && newName.trim() !== folder.name) {
@@ -54,9 +87,15 @@ export default function SubjectFolder({
   }, [handleRenameConfirm, folder.name]);
 
   return (
+    <>
     <div
       onClick={() => onSelect(folder.id)}
       onDoubleClick={handleDoubleClick}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        ctxHandleMenu(e, folder);
+      }}
       className={cn(
         'flex items-center gap-2 px-3 py-2 rounded-[var(--kb-radius-sm)] cursor-pointer',
         'transition-all duration-200 text-[13px]',
@@ -89,5 +128,17 @@ export default function SubjectFolder({
         <span className="flex-1 min-w-0 truncate">{folder.name}</span>
       )}
     </div>
+
+    {/* 右键菜单：重命名 / 删除分组 */}
+    {ctxOpen && ctxFolder && (
+      <ContextMenu
+        groups={folderMenuGroups}
+        position={ctxPos}
+        context={ctxFolder}
+        onSelect={handleMenuSelect}
+        onClose={ctxClose}
+      />
+    )}
+    </>
   );
 }

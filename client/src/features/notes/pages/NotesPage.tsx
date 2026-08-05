@@ -12,6 +12,7 @@ import { VirtualList } from '@/components/ui/VirtualList';
 import {
   Search, Plus, FolderPlus, FileText, PanelLeftClose, PanelLeft, Pin,
   MoreVertical, Trash2, Copy, Download, BookOpen, Sparkles, ListTodo, Share2, Upload, ClipboardCheck,
+  Layers, CheckSquare, Square,
 } from 'lucide-react';
 import { TemplateSelector } from '../components/TemplateSelector';
 import type { NoteTemplate } from '../components/TemplateSelector';
@@ -25,12 +26,14 @@ import { copyText } from '@/lib/utils/clipboard';
 import { useNavigate } from 'react-router-dom';
 import { useNoteStore } from '../store/useNoteStore';
 import { useShallow } from 'zustand/react/shallow';
+import { useBatchSelection } from '@/hooks/useBatchSelection';
 import { useContextMenu } from '@/lib/contextMenu';
-import type { Note } from '@/types/models';
+import type { Note, NoteFolder } from '@/types/models';
 import { useAISummarize, useAIFlashcards } from '@/lib/ai/useAI';
 import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { markdownToNoteContent } from '../lib/markdown/noteMarkdown';
+import { collectFolderTreeIds } from '../lib/folderTree';
 
 const templateLabels: Record<NoteTemplate | 'qa' | 'video' | 'todo', string> = {
   outline: '大纲式', cornell: '康奈尔', mindmap: '思维导图', free: '自由笔记', blank: '空白', qa: '问答', video: '视频笔记', todo: '待办',
@@ -127,10 +130,10 @@ export default function NotesPage() {
   const navigate = useNavigate();
 
   const {
-    notes, folders, selectedFolderId, selectedNoteId, searchQuery, selectedTags,
+    notes, folders, selectedFolderId, selectedNoteId, searchQuery, selectedTags, selectedTemplate,
     loadNotes, loadFolders, createNote, createFolder, updateFolder, selectNote, selectFolder,
-    setSearchQuery, getFilteredNotes, createFromTemplate, toggleTag, getAllTags,
-    deleteNote, togglePin,
+    setSearchQuery, getFilteredNotes, createFromTemplate, toggleTag, toggleTemplate, clearTagFilter, getAllTags,
+    deleteNote, deleteNotesBatch, deleteFolder, deleteFolderWithNotes, togglePin,
   } = useNoteStore(useShallow(s => s));
 
   const { toast } = useToast();
@@ -144,6 +147,8 @@ export default function NotesPage() {
     handleContextMenu: handleNoteContextMenu, close: closeCtxMenu,
   } = useContextMenu<Note>();
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleteFolderTarget, setDeleteFolderTarget] = useState<NoteFolder | null>(null);
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadNotes(); loadFolders(); }, []);
@@ -152,13 +157,27 @@ export default function NotesPage() {
   const filteredNotes = useMemo(
     () => getFilteredNotes(),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 依赖 getFilteredNotes 读取的 store 字段
-    [getFilteredNotes, notes, searchQuery, selectedTags, selectedFolderId, folders],
+    [getFilteredNotes, notes, searchQuery, selectedTags, selectedTemplate, selectedFolderId, folders],
   );
   const allTags = useMemo(() => getAllTags(), [getAllTags, notes]);
   const selectedNote = useMemo(
     () => filteredNotes.find((n) => n.id === selectedNoteId) || null,
     [filteredNotes, selectedNoteId],
   );
+
+  // 批量管理模式（对齐萤火海沟批量整理交互）
+  const batch = useBatchSelection<Note>({ items: filteredNotes });
+
+  // 批量删除确认
+  const handleConfirmBatchDelete = useCallback(async () => {
+    const ids = Array.from(batch.selectedIds);
+    if (ids.length === 0) return;
+    await deleteNotesBatch(ids);
+    soundPlayer.play('feedback_delete');
+    toast({ type: 'success', message: `已删除 ${ids.length} 篇笔记`, silent: true });
+    setBatchDeleteOpen(false);
+    batch.exit();
+  }, [batch, deleteNotesBatch, toast]);
 
   const handleTemplateSelect = async (tpl: NoteTemplate) => {
     const id = await createFromTemplate(tpl, selectedFolderId ?? undefined);
@@ -200,6 +219,30 @@ export default function NotesPage() {
     if (deleteTargetId) { await deleteNote(deleteTargetId); soundPlayer.play('feedback_delete'); toast({ type: 'success', message: '笔记已删除', silent: true }); }
     setDeleteTargetId(null);
   }, [deleteTargetId, deleteNote, toast]);
+
+  // 分组删除：确认后执行（默认笔记移回根目录；可勾选同时删除组内全部笔记）
+  const [deleteFolderWithNotesChecked, setDeleteFolderWithNotesChecked] = useState(false);
+  // 递归统计分组树（含子孙分组）下的笔记数，供弹窗文案与复选框展示
+  // （必须在 handleConfirmDeleteFolder 之前声明——后者依赖它，TDZ 防护）
+  const folderTreeNoteCount = useMemo(() => {
+    if (!deleteFolderTarget) return 0;
+    const treeIds = collectFolderTreeIds(folders, deleteFolderTarget.id);
+    return notes.filter((n) => n.folderId && treeIds.includes(n.folderId)).length;
+  }, [deleteFolderTarget, folders, notes]);
+  const handleConfirmDeleteFolder = useCallback(async () => {
+    if (!deleteFolderTarget) return;
+    if (deleteFolderWithNotesChecked) {
+      await deleteFolderWithNotes(deleteFolderTarget.id);
+      soundPlayer.play('feedback_delete');
+      toast({ type: 'success', message: `分组「${deleteFolderTarget.name}」及其 ${folderTreeNoteCount} 篇笔记已删除`, silent: true });
+    } else {
+      await deleteFolder(deleteFolderTarget.id);
+      soundPlayer.play('feedback_delete');
+      toast({ type: 'success', message: `分组「${deleteFolderTarget.name}」已删除，组内笔记已移至全部笔记`, silent: true });
+    }
+    setDeleteFolderTarget(null);
+    setDeleteFolderWithNotesChecked(false);
+  }, [deleteFolderTarget, deleteFolder, deleteFolderWithNotes, deleteFolderWithNotesChecked, folderTreeNoteCount, toast]);
   const handleDuplicateNote = useCallback(async (note: Note) => {
     await createNote({ title: note.title + ' (副本)', content: note.content, folderId: note.folderId, tags: note.tags, template: note.template });
     toast({ type: 'success', message: '笔记已复制' });
@@ -277,7 +320,7 @@ export default function NotesPage() {
   }, [handleSelectNote, handleTogglePin, handleDuplicateNote, handleExportNote, handleDeleteNote, toast, summarize, aiGenerateCards, handleSummarizeError, handleFlashcardError]);
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full overflow-x-auto overflow-y-hidden">
       {/* ── 左栏：文件夹 ── */}
       {/* 侧边栏折叠/展开：mode="wait" 确保旧侧边栏完全收起后再展开新内容，避免动画残帧 */}
       <AnimatePresence mode="wait">
@@ -349,10 +392,47 @@ export default function NotesPage() {
                   isSelected={selectedFolderId === f.id}
                   onSelect={selectFolder}
                   onRename={handleRenameFolder}
+                  onDelete={(id) => {
+                    const target = folders.find((x) => x.id === id);
+                    if (target) {
+                      setDeleteFolderTarget(target);
+                      setDeleteFolderWithNotesChecked(false);
+                    }
+                  }}
                 />
               ))}
             </nav>
 
+            {/* 标签筛选区：点击标签筛选笔记（再点取消，可逆）；选中高亮 */}
+            <div className="mt-3 border-t border-border/20 pt-2">
+              <div className="flex items-center justify-between px-3 py-1">
+                <span className="text-[12px] font-semibold text-text-tertiary">标签</span>
+                {selectedTags.length > 0 && (
+                  <button
+                    onClick={clearTagFilter}
+                    className="text-[11px] text-brand-600 hover:text-brand-700 transition-colors"
+                  >
+                    清除筛选
+                  </button>
+                )}
+              </div>
+              {allTags.length === 0 ? (
+                <p className="px-3 py-1 text-[11px] text-text-tertiary/60">暂无标签</p>
+              ) : (
+                <div className="flex flex-wrap gap-1 px-3 py-1">
+                  {allTags.map((tag) => (
+                    <Tag
+                      key={tag}
+                      color="default"
+                      active={selectedTags.includes(tag)}
+                      onClick={() => toggleTag(tag)}
+                    >
+                      {tag}
+                    </Tag>
+                  ))}
+                </div>
+              )}
+            </div>
 
           </div>
           </motion.aside>
@@ -360,7 +440,7 @@ export default function NotesPage() {
       </AnimatePresence>
 
       {/* ── 中栏：笔记列表 ── */}
-      <main className="relative z-10 flex-1 flex flex-col overflow-hidden">
+      <main className="relative z-10 flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* 工具栏 */}
         <div className="sticky top-0 z-20 flex flex-col gap-2 px-4 py-3 border-b border-border/30 flex-shrink-0 backdrop-blur-md bg-bg-primary/80">
           <div className="flex items-center gap-2">
@@ -416,6 +496,22 @@ export default function NotesPage() {
               <ClipboardCheck className="w-4 h-4" strokeWidth={1.5} />
             </motion.button>
             </Tip>
+            {/* 批量管理按钮（多选删除，对齐萤火海沟批量模式） */}
+            <Tip text={batch.batchMode ? '退出批量管理' : '批量管理'}>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => batch.setBatchMode(v => !v)}
+              className={cn(
+                'p-2 rounded-full transition-all duration-200',
+                batch.batchMode
+                  ? 'bg-brand-50 text-brand-600'
+                  : 'text-text-tertiary hover:text-brand-600 hover:bg-brand-50',
+              )}
+            >
+              <Layers className="w-4 h-4" strokeWidth={1.5} />
+            </motion.button>
+            </Tip>
             <input
               ref={mdInputRef}
               type="file"
@@ -429,13 +525,49 @@ export default function NotesPage() {
               </Button>
             </motion.div>
           </div>
+          {/* 批量操作条（批量模式下显示，对齐萤火海沟交互） */}
+          <AnimatePresence>
+            {batch.batchMode && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="flex items-center gap-2 flex-wrap"
+              >
+                <motion.button whileTap={{ scale: 0.95 }} onClick={batch.selectAll}
+                  className="px-2.5 py-1 rounded-full text-xs font-medium text-text-secondary bg-bg-secondary border border-border/40 hover:text-text-primary transition-colors">
+                  全选
+                </motion.button>
+                <motion.button whileTap={{ scale: 0.95 }} onClick={batch.clear}
+                  className="px-2.5 py-1 rounded-full text-xs font-medium text-text-tertiary bg-bg-secondary border border-border/40 hover:text-text-secondary transition-colors">
+                  取消全选
+                </motion.button>
+                <span className="text-c1 text-text-tertiary">已选中 {batch.count} 篇</span>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setBatchDeleteOpen(true)}
+                  disabled={batch.count === 0}
+                  className={cn(
+                    'flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium',
+                    'bg-semantic-error/10 text-semantic-error border border-semantic-error/30',
+                    'hover:bg-semantic-error/20 transition-colors',
+                    'disabled:opacity-40 disabled:cursor-not-allowed',
+                  )}
+                >
+                  <Trash2 className="w-3 h-3" strokeWidth={1.5} />
+                  删除选中
+                </motion.button>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <NoteTagFilter />
         </div>
 
         {/* 列表 */}
-        <div className="flex-1 overflow-y-auto px-4 py-3">
+        <div className="flex-1 flex flex-col overflow-hidden px-4 py-3">
+          <div className="flex-1 overflow-y-auto min-h-0">
           {filteredNotes.length === 0 ? (
-            <div className="flex flex-col items-center justify-center min-h-[50vh] gap-6 select-none">
+            <div className="flex flex-col items-center justify-center gap-6 select-none">
               {/* 优雅空状态插图 */}
               <div className="relative w-32 h-32 flex items-center justify-center">
                 <div className="absolute inset-0 rounded-[var(--kb-radius-xl)] bg-gradient-to-br from-brand-100/60 to-accent-100/40 dark:from-brand-900/20 dark:to-accent-900/10 rotate-6" />
@@ -461,7 +593,7 @@ export default function NotesPage() {
           ) : filteredNotes.length > 50 ? (
             <VirtualList
               items={filteredNotes}
-              estimateSize={110}
+              estimateSize={140}
               overscan={6}
               className="overflow-y-auto"
               height="100%"
@@ -470,14 +602,26 @@ export default function NotesPage() {
                 <Card
                   hoverable
                   padding="md"
-                  onClick={() => handleSelectNote(note.id!)}
-                  onContextMenu={(e) => handleNoteContextMenu(e, note)}
+                  onClick={() => batch.batchMode ? batch.toggle(note.id!) : handleSelectNote(note.id!)}
+                  onContextMenu={batch.batchMode ? undefined : (e) => handleNoteContextMenu(e, note)}
                   className={cn(
-                    'group relative transition-all duration-300 mb-2',
-                    'hover:-translate-y-[2px] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.08)]',
-                    selectedNoteId === note.id && 'border-brand-400/60 bg-brand-50/20 shadow-[inset_0_0_0_1px_rgba(91,138,114,0.08)]',
+                    'group relative transition-all duration-300 mb-2 h-[140px] overflow-hidden',
+                    !batch.batchMode && 'hover:-translate-y-[2px] hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.08)]',
+                    batch.batchMode
+                      ? batch.selectedIds.has(note.id!)
+                        ? 'border-brand-400/60 bg-brand-50/20 shadow-[inset_0_0_0_1px_rgba(91,138,114,0.08)]'
+                        : 'hover:border-brand-300/40'
+                      : selectedNoteId === note.id && 'border-brand-400/60 bg-brand-50/20 shadow-[inset_0_0_0_1px_rgba(91,138,114,0.08)]',
                   )}
                 >
+                  {/* 批量模式勾选指示 */}
+                  {batch.batchMode && (
+                    <span className="absolute top-2 right-2 z-10">
+                      {batch.selectedIds.has(note.id!)
+                        ? <CheckSquare className="w-5 h-5 text-brand-500" strokeWidth={1.5} />
+                        : <Square className="w-5 h-5 text-text-tertiary/50" strokeWidth={1.5} />}
+                    </span>
+                  )}
                   <div
                     className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                     style={{
@@ -494,8 +638,8 @@ export default function NotesPage() {
                       </div>
                       <p className="text-[13px] text-text-secondary mt-1 line-clamp-2 leading-relaxed">{stripHtml(note.content)}</p>
                       <div className="flex items-center gap-2 mt-2 flex-wrap">
-                        <Tag color="note">{templateLabels[note.template as NoteTemplate]}</Tag>
-                        {note.tags.map((tag) => (<Tag key={tag} color="default">{tag}</Tag>))}
+                        <Tag color="note" onClick={(e) => { e.stopPropagation(); toggleTemplate(note.template); }} active={selectedTemplate === note.template}>{templateLabels[note.template as NoteTemplate]}</Tag>
+                        {note.tags.map((tag) => (<Tag key={tag} color="default" onClick={(e) => { e.stopPropagation(); toggleTag(tag); }} active={selectedTags.includes(tag)}>{tag}</Tag>))}
                         <span className="text-[11px] text-text-tertiary ml-auto font-mono tabular-nums">{formatDate(note.updatedAt)}</span>
                       </div>
                     </div>
@@ -522,23 +666,35 @@ export default function NotesPage() {
                   <div
                     className={cn(
                       'group relative p-4 border border-border/30 bg-bg-elevated/80 backdrop-blur-sm cursor-pointer',
+                      'h-[140px] overflow-hidden',
                       'transition-all duration-300',
-                      'hover:shadow-[0_8px_32px_-8px_rgba(91,138,114,0.12),0_0_0_1px_rgba(91,138,114,0.06)]',
-                      'hover:border-brand-300/40',
-                      selectedNoteId === note.id && 'border-brand-400/60 bg-brand-50/20 shadow-[inset_0_0_0_1px_rgba(91,138,114,0.08)]',
+                      !batch.batchMode && 'hover:shadow-[0_8px_32px_-8px_rgba(91,138,114,0.12),0_0_0_1px_rgba(91,138,114,0.06)] hover:border-brand-300/40',
+                      batch.batchMode
+                        ? batch.selectedIds.has(note.id!)
+                          ? 'border-brand-400/60 bg-brand-50/20 shadow-[inset_0_0_0_1px_rgba(91,138,114,0.08)]'
+                          : 'hover:border-brand-300/40'
+                        : selectedNoteId === note.id && 'border-brand-400/60 bg-brand-50/20 shadow-[inset_0_0_0_1px_rgba(91,138,114,0.08)]',
                     )}
                     style={{ borderRadius: asymmetricRadius(note.id!) }}
-                    onClick={() => handleSelectNote(note.id!)}
-                    onContextMenu={(e) => handleNoteContextMenu(e, note)}
-                    onMouseMove={(e) => {
+                    onClick={() => batch.batchMode ? batch.toggle(note.id!) : handleSelectNote(note.id!)}
+                    onContextMenu={batch.batchMode ? undefined : (e) => handleNoteContextMenu(e, note)}
+                    onMouseMove={batch.batchMode ? undefined : (e) => {
                       const el = e.currentTarget;
                       const { rx, ry } = calc3DTilt(e, el);
                       el.style.transform = `perspective(1200px) rotateX(${rx}deg) rotateY(${ry}deg) translateZ(4px)`;
                     }}
-                    onMouseLeave={(e) => {
+                    onMouseLeave={batch.batchMode ? undefined : (e) => {
                       e.currentTarget.style.transform = 'perspective(1200px) rotateX(0deg) rotateY(0deg) translateZ(0px)';
                     }}
                   >
+                    {/* 批量模式勾选指示 */}
+                    {batch.batchMode && (
+                      <span className="absolute top-2 right-2 z-10">
+                        {batch.selectedIds.has(note.id!)
+                          ? <CheckSquare className="w-5 h-5 text-brand-500" strokeWidth={1.5} />
+                          : <Square className="w-5 h-5 text-text-tertiary/50" strokeWidth={1.5} />}
+                      </span>
+                    )}
                     {/* 左侧色条 — 模板色 + 微发光 */}
                     <div
                       className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"
@@ -558,14 +714,15 @@ export default function NotesPage() {
                           {stripHtml(note.content)}
                         </p>
                         <div className="flex items-center gap-2 mt-2.5 flex-wrap">
-                          <Tag color="note">{templateLabels[note.template as NoteTemplate]}</Tag>
+                          <Tag color="note" onClick={(e) => { e.stopPropagation(); toggleTemplate(note.template); }} active={selectedTemplate === note.template}>{templateLabels[note.template as NoteTemplate]}</Tag>
                           {note.tags.map((tag) => (
-                            <Tag key={tag} color="default">{tag}</Tag>
+                            <Tag key={tag} color="default" onClick={(e) => { e.stopPropagation(); toggleTag(tag); }} active={selectedTags.includes(tag)}>{tag}</Tag>
                           ))}
                           <span className="text-[11px] text-text-tertiary ml-auto font-mono tabular-nums">{formatDate(note.updatedAt)}</span>
                         </div>
                       </div>
-                      {/* 笔记操作菜单触发按钮，带 tooltip */}
+                      {/* 笔记操作菜单触发按钮，带 tooltip（批量模式下隐藏） */}
+                      {!batch.batchMode && (
                       <Tip text="笔记操作">
                       <motion.button
                         whileTap={{ scale: 0.85 }}
@@ -582,12 +739,14 @@ export default function NotesPage() {
                         <MoreVertical className="w-4 h-4 text-text-secondary" strokeWidth={1.5} />
                       </motion.button>
                       </Tip>
+                      )}
                     </div>
                   </div>
                 </motion.div>
               ))}
             </motion.div>
           )}
+          </div>
         </div>
 
         {ctxMenuOpen && ctxMenuNote && (
@@ -677,6 +836,62 @@ export default function NotesPage() {
           <>
             <Button variant="secondary" onClick={() => setDeleteTargetId(null)}>取消</Button>
             <Button variant="danger" icon={<Trash2 className="w-4 h-4" strokeWidth={1.5} />} onClick={handleConfirmDelete}>删除</Button>
+          </>
+        }
+      >
+        <div />
+      </Modal>
+
+      {/* 删除分组确认：组内笔记移回根目录，可选同时删除组内全部笔记 */}
+      <Modal
+        open={!!deleteFolderTarget}
+        onClose={() => { setDeleteFolderTarget(null); setDeleteFolderWithNotesChecked(false); }}
+        title="删除分组"
+        description={deleteFolderTarget
+          ? `确定要删除分组「${deleteFolderTarget.name}」吗？${folderTreeNoteCount > 0 ? `组内 ${folderTreeNoteCount} 篇笔记将移至「全部笔记」，` : ''}笔记内容不会被删除。`
+          : ''}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setDeleteFolderTarget(null); setDeleteFolderWithNotesChecked(false); }}>取消</Button>
+            <Button
+              variant="danger"
+              icon={<Trash2 className="w-4 h-4" strokeWidth={1.5} />}
+              onClick={handleConfirmDeleteFolder}
+            >
+              {deleteFolderWithNotesChecked ? `删除分组与 ${folderTreeNoteCount} 篇笔记` : '删除分组'}
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          {/* 附加选项：同时删除组内全部笔记（含子孙分组，不可撤销） */}
+          {folderTreeNoteCount > 0 && (
+            <label className="flex items-start gap-2 p-2.5 rounded-kb-md border border-semantic-error/25 bg-semantic-error/5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={deleteFolderWithNotesChecked}
+                onChange={(e) => setDeleteFolderWithNotesChecked(e.target.checked)}
+                className="mt-0.5 accent-[var(--kb-brand-500)]"
+              />
+              <span className="text-b3 text-text-secondary">
+                同时删除组内全部笔记（含子分组，共 <b className="text-semantic-error">{folderTreeNoteCount}</b> 篇）
+                <span className="block text-c1 text-semantic-error mt-0.5">笔记内容将永久丢失，此操作不可撤销</span>
+              </span>
+            </label>
+          )}
+        </div>
+      </Modal>
+
+      {/* 批量删除确认：真删除不可撤销 */}
+      <Modal
+        open={batchDeleteOpen}
+        onClose={() => setBatchDeleteOpen(false)}
+        title="批量删除笔记"
+        description={`确定要删除选中的 ${batch.count} 篇笔记吗？此操作不可撤销。`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setBatchDeleteOpen(false)}>取消</Button>
+            <Button variant="danger" icon={<Trash2 className="w-4 h-4" strokeWidth={1.5} />} onClick={handleConfirmBatchDelete}>删除 {batch.count} 篇</Button>
           </>
         }
       >

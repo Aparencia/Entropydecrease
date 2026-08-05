@@ -26,6 +26,7 @@ import { RescuePanel } from '@/components/RescuePanel';
 import { useStuckTimer } from '@/hooks/useStuckTimer';
 import { assistantEventBus } from '@/features/assistant/lib/eventBus';
 import { NoteEditHeader } from '../components/NoteEditHeader';
+import { NoteTagsEditor } from '../components/NoteTagsEditor';
 import { EditorToolbar } from '../components/EditorToolbar';
 import { AISummaryModal } from '../components/AISummaryModal';
 import { useNoteEditor } from '../hooks/useNoteEditor';
@@ -90,7 +91,9 @@ export default function NoteEditPage() {
   // 现改为 1s 防抖 + 打开消费面板时惰性取最新快照，键入路径不再触发整页重渲染
   const [healthText, setHealthText] = useState('');
   useEffect(() => {
-    if (!editor) return;
+    // @ai-context: StrictMode 双调用下编辑器可能处于已销毁态（schema=null），
+    // getText 会抛 TypeError，此处双重防御。
+    if (!editor || editor.isDestroyed) return;
     setHealthText(editor.getText());
     let timer: ReturnType<typeof setTimeout> | null = null;
     const onHealthUpdate = () => {
@@ -325,6 +328,9 @@ export default function NoteEditPage() {
         onSummarize={ai.startSummarize}
         onExportMarkdown={handleExportMarkdown}
       />
+
+      {/* 标签编辑行（所有模板共用） */}
+      {noteId && <NoteTagsEditor noteId={noteId} tags={note.tags} />}
 
       {/* 工具栏（康奈尔/自由画布/思维导图模式隐藏） */}
       {!isCornell && !isFree && !isMindmap && (

@@ -54,14 +54,8 @@ function useCornellEditor(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, JSON.stringify(initialContent)]);
 
-  // 确保编辑器在组件卸载时正确销毁
-  useEffect(() => {
-    return () => {
-      if (editor) {
-        editor.destroy();
-      }
-    };
-  }, [editor]);
+  // 编辑器生命周期由 @tiptap/react v3 useEditor 托管（scheduleDestroy 延迟销毁
+  // 机制抵御 React 18 StrictMode 双调用，卸载时自动销毁），无需自定义 destroy。
 
   return editor;
 }

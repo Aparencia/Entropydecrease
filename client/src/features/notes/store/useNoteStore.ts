@@ -9,6 +9,7 @@ import { createTodoTemplateContent, createEmptyTodoTemplate } from '../lib/todoT
 import { createDefaultMindmap } from '../lib/mindmap/mindmapOps';
 import { noteContentToPlainText } from '../lib/mindmap/mindmapText';
 import { recomputeLinks, removeLinks } from '../lib/links/noteLinkStore';
+import { collectFolderTreeIds } from '../lib/folderTree';
 import type { TodoItem } from '../lib/todoTemplate';
 
 interface NoteState {
@@ -20,6 +21,8 @@ interface NoteState {
   selectedFolderId: string | null;
   searchQuery: string;
   selectedTags: string[];
+  /** 模板筛选：null=全部（内测反馈：卡片模板 Tag 可点击筛选） */
+  selectedTemplate: Note['template'] | null;
   /** v0.9.0: 全文搜索结果 */
   searchResults: SearchResultItem[];
   /** v1.2.0: 当前搜索选中的实体类型过滤（空数组表示全部） */
@@ -38,6 +41,8 @@ interface NoteState {
   }) => Promise<string>;
   updateNote: (id: string, changes: Partial<Note>) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
+  /** 批量删除笔记（多选模式；逐篇清理搜索/链接索引后统一重载） */
+  deleteNotesBatch: (ids: string[]) => Promise<void>;
   togglePin: (id: string) => Promise<void>;
   selectNote: (id: string | null) => void;
 
@@ -46,6 +51,8 @@ interface NoteState {
   createFolder: (name: string, parentId?: string, color?: string) => Promise<string>;
   updateFolder: (id: string, changes: Partial<NoteFolder>) => Promise<void>;
   deleteFolder: (id: string) => Promise<void>;
+  /** 删除分组树并同时删除组内全部笔记（含子孙分组，不可撤销） */
+  deleteFolderWithNotes: (id: string) => Promise<void>;
   selectFolder: (id: string | null) => void;
 
   // 搜索
@@ -58,6 +65,8 @@ interface NoteState {
   // 标签筛选
   toggleTag: (tag: string) => void;
   clearTagFilter: () => void;
+  /** 模板筛选（点击卡片模板 Tag 切换；再点取消） */
+  toggleTemplate: (template: Note['template']) => void;
   getAllTags: () => string[];
 
   // 标签管理（单篇笔记级别）
@@ -150,6 +159,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
     selectedFolderId: null,
     searchQuery: '',
     selectedTags: [],
+    selectedTemplate: null,
     searchResults: [],
     selectedEntityTypes: [],
 
@@ -235,6 +245,20 @@ export const useNoteStore = create<NoteState>((set, get) => {
       await get().loadNotes();
     },
 
+    deleteNotesBatch: async (ids) => {
+      if (ids.length === 0) return;
+      for (const id of ids) {
+        await deleteWithLog(noteStore, 'notes', id);
+        try { await dexieSearchIndexer.remove(id); } catch { /* 忽略 */ }
+        removeLinks(id).catch(() => {});
+      }
+      const { selectedNoteId } = get();
+      if (selectedNoteId && ids.includes(selectedNoteId)) {
+        set({ selectedNoteId: null });
+      }
+      await get().loadNotes();
+    },
+
     togglePin: async (id) => {
       const note = await noteStore.getById(id);
       if (note) {
@@ -271,16 +295,48 @@ export const useNoteStore = create<NoteState>((set, get) => {
     },
 
     deleteFolder: async (id) => {
-      // 将该文件夹下的笔记移到根目录（folderId 设为 undefined）
-      const notes = await noteStore.where('folderId', id);
-      for (const note of notes) {
+      // 递归收集分组树（数据层支持 parentId 嵌套，UI 仅渲染一级）
+      const { notes, folders, selectedFolderId } = get();
+      const treeIds = collectFolderTreeIds(folders, id);
+      // 整棵分组树下的笔记移到根目录（folderId 设为 undefined）
+      const affected = notes.filter((n) => n.folderId && treeIds.includes(n.folderId));
+      for (const note of affected) {
         if (note.id !== undefined) {
           await noteStore.update(note.id, { folderId: undefined });
         }
       }
-      await deleteWithLog(noteFolderStore, 'noteFolders', id);
-      const { selectedFolderId } = get();
-      if (selectedFolderId === id) {
+      // 删除分组树（含根与全部子孙，避免 parentId 悬挂）
+      for (const folderId of treeIds) {
+        await deleteWithLog(noteFolderStore, 'noteFolders', folderId);
+      }
+      if (selectedFolderId && treeIds.includes(selectedFolderId)) {
+        set({ selectedFolderId: null });
+      }
+      await get().loadFolders();
+      await get().loadNotes();
+    },
+
+    deleteFolderWithNotes: async (id) => {
+      const { notes, folders, selectedNoteId, selectedFolderId } = get();
+      const treeIds = collectFolderTreeIds(folders, id);
+      // 整棵分组树下的笔记全部真删除（清理搜索/链接索引）
+      const noteIds = notes
+        .filter((n) => n.folderId && treeIds.includes(n.folderId))
+        .map((n) => n.id)
+        .filter((nid): nid is string => nid !== undefined);
+      for (const noteId of noteIds) {
+        await deleteWithLog(noteStore, 'notes', noteId);
+        try { await dexieSearchIndexer.remove(noteId); } catch { /* 忽略 */ }
+        removeLinks(noteId).catch(() => {});
+      }
+      // 删除分组树（含根与全部子孙）
+      for (const folderId of treeIds) {
+        await deleteWithLog(noteFolderStore, 'noteFolders', folderId);
+      }
+      if (selectedNoteId && noteIds.includes(selectedNoteId)) {
+        set({ selectedNoteId: null });
+      }
+      if (selectedFolderId && treeIds.includes(selectedFolderId)) {
         set({ selectedFolderId: null });
       }
       await get().loadFolders();
@@ -329,6 +385,11 @@ export const useNoteStore = create<NoteState>((set, get) => {
 
     clearTagFilter: () => {
       set({ selectedTags: [] });
+    },
+
+    toggleTemplate: (template) => {
+      const { selectedTemplate } = get();
+      set({ selectedTemplate: selectedTemplate === template ? null : template });
     },
 
     addTag: async (noteId, tag) => {
@@ -386,7 +447,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
     },
 
     getFilteredNotes: () => {
-      const { notes, selectedFolderId, searchQuery, selectedTags } = get();
+      const { notes, selectedFolderId, searchQuery, selectedTags, selectedTemplate } = get();
       let filtered = notes;
 
       if (selectedFolderId !== null) {
@@ -406,6 +467,10 @@ export const useNoteStore = create<NoteState>((set, get) => {
         filtered = filtered.filter((n) =>
           selectedTags.some((tag) => n.tags.includes(tag)),
         );
+      }
+
+      if (selectedTemplate) {
+        filtered = filtered.filter((n) => n.template === selectedTemplate);
       }
 
       return sortNotes(filtered);

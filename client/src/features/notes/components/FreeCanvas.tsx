@@ -283,12 +283,15 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
       return;
     }
 
-    // ---- 普通左键：清除选中 ----
+    // ---- 普通左键：清除选中（仅空白区域；块内保留编辑器焦点，否则点击文本块无法输入） ----
     if (e.button === 0 && !e.shiftKey) {
-      setSelectedBlockIds(new Set());
-      (document.activeElement as HTMLElement)?.blur?.();
-      suppressSelectRef.current = true;
-      setTimeout(() => { suppressSelectRef.current = false; }, 100);
+      const insideBlock = !!(e.target as HTMLElement).closest?.('[data-freeblock]');
+      if (!insideBlock) {
+        setSelectedBlockIds(new Set());
+        (document.activeElement as HTMLElement)?.blur?.();
+        suppressSelectRef.current = true;
+        setTimeout(() => { suppressSelectRef.current = false; }, 100);
+      }
     }
   };
 
