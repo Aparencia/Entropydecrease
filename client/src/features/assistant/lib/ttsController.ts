@@ -29,6 +29,11 @@ class TTSController {
     this.onStateChange = cb;
   }
 
+  /** 获取当前状态回调（供临时消费者卸载时恢复全局回调） */
+  getStateCallback(): SpeakStateCallback | null {
+    return this.onStateChange;
+  }
+
   /** 将文本加入朗读队列（FIFO）。先经规范化管道清洗为可朗读文本。 */
   speak(text: string): void {
     // 规范化：剔除代码块/emoji/URL/Markdown 标记，保留正文（回答与朗读一致）

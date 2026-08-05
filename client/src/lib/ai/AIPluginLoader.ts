@@ -20,7 +20,7 @@ import type { AIPlugin, DurationHistoryData, DurationOptions, DurationResult,
   SummarizeOptions, FlashcardOptions, EvaluateOptions,
   VisionExtractResult, TagContentResult, OptimizeCardResult,
   FeynmanQuestionResult, FeynmanAnswerEvalResult, SortResult,
-  AnchorPoint, BrainstormIdea, ChatMessage, SocraticEvaluateResult, SocraticDeepeningResult,
+  AnchorPoint, BrainstormIdea, ChatMessage, SocraticEvaluateResult, SocraticDeepeningResult, SocraticMirrorResult,
   PredictionPrompt, RescueContext, ResourceLink,
   ErrorPatternResult, QuizGenResult,
   ContentTierResult, ConflictDetectResult, ConceptPrecheckResult } from './types';
@@ -194,6 +194,12 @@ class AIPluginLoader {
       { contentCheck: topic, unsupportedMsg: '当前 AI 插件不支持苏格拉底深化', minLength: 1 });
   }
 
+  /** Phase 2: 苏格拉底反问镜（mirror 模式）— topic 类非空即可 */
+  async socraticMirror(topic: string, question: string): Promise<SocraticMirrorResult> {
+    return this.call(p => p.socraticMirror?.(topic, question),
+      { contentCheck: topic, unsupportedMsg: '当前 AI 插件不支持苏格拉底反问镜', minLength: 1 });
+  }
+
   /** 学习预测 — 基于笔记预测可能的问题 */
   async predictQuestion(noteId: string, content: string): Promise<{ predictions: PredictionPrompt[] }> {
     return this.call(p => p.predictQuestion?.(noteId, content),
@@ -308,6 +314,12 @@ class AIPluginLoader {
   socraticDeepeningStream(topic: string, dialogueSummary: string, history: ChatMessage[]) {
     return this.stream(p => p.socraticDeepeningStream?.(topic, dialogueSummary, history),
       { contentCheck: topic, unsupportedMsg: '当前插件不支持流式苏格拉底深化', minLength: 1 });
+  }
+
+  /** Phase 2: 流式苏格拉底反问镜 */
+  socraticMirrorStream(topic: string, question: string) {
+    return this.stream(p => p.socraticMirrorStream?.(topic, question),
+      { contentCheck: topic, unsupportedMsg: '当前插件不支持流式苏格拉底反问镜', minLength: 1 });
   }
 
   /** 流式学习预测 */

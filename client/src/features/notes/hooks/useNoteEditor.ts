@@ -41,6 +41,7 @@ interface UseNoteEditorOptions {
 
 export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNoteEditorOptions) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [isDirty, setIsDirty] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -60,6 +61,7 @@ export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNo
   const debouncedSave = useCallback(
     (getContent: () => string) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      setIsDirty(true);
       debounceRef.current = setTimeout(async () => {
         if (noteId) {
           setSaveStatus('saving');
@@ -69,10 +71,12 @@ export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNo
             await updateNote(noteId, { content: getContent() });
             soundPlayer.play('note_autosave');
             setSaveStatus('saved');
+            setIsDirty(false);
             if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
             saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), SAVE_STATUS_HIDE_DELAY_MS);
           } catch {
             setSaveStatus('failed');
+            // 保存失败不清除 dirty 标记，下次保存仍会尝试
           }
         }
       }, AUTOSAVE_DEBOUNCE_MS);
@@ -121,7 +125,19 @@ export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNo
   // 双调用 cleanup 阶段同步销毁实例，导致后续 effect 拿到 schema=null 的
   // 已销毁编辑器而崩溃），卸载时 v3 会在下一 tick 自动销毁。
 
-  /** 图片上传（P2-10：大图压缩降采样后读为 base64 内嵌，小图原样） */
+  // 切换笔记时更新编辑器内容（useEditor 的 content 只在初始化时消费一次）
+  // 使用 emitUpdate:false 避免触发 onUpdate → debouncedSave 误保存
+  // 注意：TipTap v3.27 的 History 命令仅 undo/redo，无 clearHistory（v2 遗留 API），
+  // 调用会抛 "Command not found"——切换后不重置历史栈（setContent 后 undo 行为
+  // 由 v3 托管，跨笔记撤销属可接受边界，避免运行时崩溃）。
+  useEffect(() => {
+    if (!editor || !initialContent) return;
+    // 避免在首次挂载时重复设置（此时编辑器内容已由 content prop 初始化）
+    const currentJson = editor.getJSON();
+    if (JSON.stringify(currentJson) === JSON.stringify(initialContent)) return;
+    editor.commands.setContent(initialContent, { emitUpdate: false });
+  }, [editor, noteKey, initialContent]);
+
   const handleImageSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !editor) return;
@@ -131,5 +147,5 @@ export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNo
     editor.chain().focus().setImage({ src }).run();
   }, [editor]);
 
-  return { editor, saveStatus, debouncedSave, handleImageSelect };
+  return { editor, saveStatus, isDirty, debouncedSave, handleImageSelect };
 }

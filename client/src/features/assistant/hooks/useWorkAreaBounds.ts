@@ -71,9 +71,6 @@ function getRandomTargetOutside(
     };
   }
 
-  // 定义候选安全区域：每个区域是 [left, top, right, bottom] 矩形
-  const candidates: Array<[number, number, number, number]> = [];
-
   // 收集所有工作区矩形的边界信息
   let minWorkLeft = viewportW;
   let maxWorkRight = 0;
@@ -87,65 +84,54 @@ function getRandomTargetOutside(
   }
 
   const topMargin = 60; // 避开标题栏区域
+  const maxX = viewportW - creatureSize - margin;
+  const maxY = viewportH - creatureSize - margin;
+
+  /** 安全添加候选区域：左/右/上/下边界各自 clamp 后校验有效性 */
+  function tryAddCandidate(l: number, t: number, r: number, b: number): void {
+    const clampedL = Math.max(margin, l);
+    const clampedR = Math.min(maxX, r);
+    const clampedT = Math.max(topMargin, t);
+    const clampedB = Math.min(maxY, b);
+    if (clampedR > clampedL && clampedB > clampedT) {
+      candidates.push([clampedL, clampedT, clampedR, clampedB]);
+    }
+  }
+
+  // 定义候选安全区域：每个区域是 [left, top, right, bottom] 矩形
+  const candidates: Array<[number, number, number, number]> = [];
 
   // 安全区 1: 左侧（工作区左侧到左边缘）
   if (minWorkLeft - margin > margin) {
-    candidates.push([
-      margin,
-      topMargin,
-      Math.min(minWorkLeft - margin, viewportW - creatureSize - margin),
-      viewportH - creatureSize - margin,
-    ]);
+    tryAddCandidate(margin, topMargin, minWorkLeft - margin, maxY);
   }
 
   // 安全区 2: 右侧（工作区右侧到右边缘）
-  if (viewportW - maxWorkRight - margin > margin) {
-    candidates.push([
-      Math.max(maxWorkRight + margin, margin),
-      topMargin,
-      viewportW - creatureSize - margin,
-      viewportH - creatureSize - margin,
-    ]);
+  if (maxWorkRight + margin < maxX) {
+    tryAddCandidate(maxWorkRight + margin, topMargin, maxX, maxY);
   }
 
   // 安全区 3: 上方（工作区上方到顶部）
   if (minWorkTop - margin > topMargin) {
-    candidates.push([
-      margin,
-      topMargin,
-      viewportW - creatureSize - margin,
-      Math.min(minWorkTop - margin, viewportH - creatureSize - margin),
-    ]);
+    tryAddCandidate(margin, topMargin, maxX, minWorkTop - margin);
   }
 
   // 安全区 4: 下方（工作区下方到底部）
-  if (viewportH - maxWorkBottom - margin > margin) {
-    candidates.push([
-      margin,
-      Math.max(maxWorkBottom + margin, topMargin),
-      viewportW - creatureSize - margin,
-      viewportH - creatureSize - margin,
-    ]);
+  if (maxWorkBottom + margin < maxY) {
+    tryAddCandidate(margin, maxWorkBottom + margin, maxX, maxY);
   }
 
-  // 如果没有候选区域（工作区几乎占满全屏），退回顶部右上角
+  // 如果没有候选区域（工作区几乎占满全屏），退回全屏随机位置
   if (candidates.length === 0) {
     return {
-      x: viewportW - creatureSize - margin,
-      y: topMargin,
+      x: margin + Math.random() * (maxX - margin),
+      y: topMargin + Math.random() * (maxY - topMargin),
     };
   }
 
   // 随机选取一个候选区域，再在区域内随机取点
   const region = candidates[Math.floor(Math.random() * candidates.length)];
   const [l, t, r, b] = region;
-  if (r <= l || b <= t) {
-    // 区域无效，退回到左上角
-    return {
-      x: margin,
-      y: topMargin,
-    };
-  }
   return {
     x: l + Math.random() * (r - l),
     y: t + Math.random() * (b - t),

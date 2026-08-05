@@ -7,7 +7,7 @@
  */
 import type {
   BrainstormIdea, ChatMessage,
-  SocraticEvaluateResult, SocraticDeepeningResult,
+  SocraticEvaluateResult, SocraticDeepeningResult, SocraticMirrorResult,
 } from './types';
 import { classifyRawError } from './errorClassifier';
 
@@ -123,6 +123,35 @@ export async function ipcSocraticDeepening(
 
     return {
       angles: result.angles,
+      status: result.status,
+      model: result.model,
+      tokensUsed: result.tokensUsed,
+      latencyMs: result.latencyMs,
+    };
+  } catch (error) {
+    throw classifyRawError(error, 'ipc');
+  }
+}
+
+// ── invoke('ai_socratic') mirror ──────────────────────────────
+export async function ipcSocraticMirror(
+  authToken: string | null, topic: string, question: string,
+): Promise<SocraticMirrorResult> {
+  try {
+    const result = await window.electronAPI!.invoke('ai_socratic', {
+      topic,
+      question,
+      mode: 'mirror',
+      authToken,
+    }) as {
+      mirrorQuestion: string; reflectionHint: string; perspectiveShift?: string;
+      status: string; model: string; tokensUsed: number; latencyMs: number;
+    };
+
+    return {
+      mirrorQuestion: result.mirrorQuestion,
+      reflectionHint: result.reflectionHint,
+      perspectiveShift: result.perspectiveShift,
       status: result.status,
       model: result.model,
       tokensUsed: result.tokensUsed,

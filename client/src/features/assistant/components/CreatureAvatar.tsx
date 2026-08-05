@@ -9,7 +9,7 @@
  * 位置持久化到 localStorage，下次打开应用水母在老位置。
  */
 import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
-import { motion, useMotionValue, animate } from 'framer-motion';
+import { motion, useMotionValue, animate, type AnimationPlaybackControls } from 'framer-motion';
 import { Pin } from 'lucide-react';
 import { useAssistantStore } from '../store/useAssistantStore';
 import { CreatureBubble } from './CreatureBubble';
@@ -86,7 +86,9 @@ export function CreatureAvatar({ onClick, onBubbleClick, onBubbleDismiss }: Prop
 
   // 漫游控制
   const wanderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wanderAnimRef = useRef<{ stop: () => void } | null>(null);
+  // 类型对齐 animate() 返回值：AnimationPlaybackControls 同时提供 stop() 与 finished
+  // Promise（旧声明仅 { stop } 导致 .finished 访问报类型错误）
+  const wanderAnimRef = useRef<AnimationPlaybackControls | null>(null);
   const isDraggingRef = useRef(false);
 
   // 受惊弹开动画状态（一过性 scale 脉冲）
@@ -191,8 +193,11 @@ export function CreatureAvatar({ onClick, onBubbleClick, onBubbleDismiss }: Prop
         setStartledScale([1, 1.35, 0.9, 1.1, 1]);
         setTimeout(() => setStartledScale(null), 600);
 
-        // 逃逸完成后重新调度漫游
-        setTimeout(() => { if (!isDraggingRef.current) scheduleWander(); }, ESCAPE_SPRING_DAMPING * 20);
+        // 逃逸完成后重新调度漫游（使用 finished 感知弹簧动画真实结束）
+        // stop() 会 reject finished——拖拽/二次逃逸打断时静默吞掉，避免 unhandled rejection
+        wanderAnimRef.current?.finished.then(() => {
+          if (!isDraggingRef.current) scheduleWander();
+        }).catch(() => {});
       }
     }
   }, [userActive, posX, posY, isInWorkArea, getRandomTargetOutside, scheduleWander]);

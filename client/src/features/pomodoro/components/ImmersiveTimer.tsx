@@ -6,8 +6,9 @@
  * 底部极简 icon-only 操作。
  *
  * @ai-context: 通用组件：ImmersiveTimer。
+ * @ai-context: 3.8 心流音乐引擎 + 3.13 具身学习休息引导集成于此。
  */
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Tip } from '@/components/ui/Tip';
@@ -17,6 +18,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { SPRING, BEAT } from '@/lib/animation/springConfig';
 import { AnchorReminderOverlay } from './AnchorReminderOverlay';
+import { useFlowMusic } from '@/hooks/useFlowMusic';
 
 const SIZE = 280;
 const STROKE_WIDTH = 8;
@@ -38,7 +40,23 @@ interface ImmersiveTimerProps {
   onToggleWhiteNoise?: () => void;
   /** 调节背景音音量 */
   onWhiteNoiseVolume?: (vol: number) => void;
+  /** M4 清醒期重放：上次专注会话的关键词列表 */
+  lastSessionKeywords?: string[];
+  /** 3.8 专注守护灵分心分数（0-100），用于心流音乐引擎 */
+  focusScore?: number;
+  /** 3.8 心流音乐引擎是否激活 */
+  flowMusicEnabled?: boolean;
 }
+
+/** 3.13 具身学习休息活动列表 */
+const EMBODIED_ACTIVITIES = [
+  { id: 'stretch', label: '站立拉伸', icon: '🧘' },
+  { id: 'gesture', label: '手势比划概念', icon: '✋' },
+  { id: 'walk-think', label: '空间行走思考', icon: '🚶' },
+];
+
+/** 3.13 休息活动轮换间隔（ms） */
+const ACTIVITY_ROTATE_INTERVAL = 30_000;
 
 /**
  * 根据进度计算背景渐变色场（完全不透明，确保计时器清晰可读）
@@ -77,6 +95,9 @@ export default function ImmersiveTimer({
   whiteNoiseVolume = 0.5,
   onToggleWhiteNoise,
   onWhiteNoiseVolume,
+  lastSessionKeywords,
+  focusScore = 0,
+  flowMusicEnabled = false,
 }: ImmersiveTimerProps) {
   const prefersReduced = useReducedMotion();
 
@@ -90,6 +111,16 @@ export default function ImmersiveTimer({
     resume,
     reset,
   } = usePomodoroStore(useShallow(s => s));
+
+  // 3.8 心流音乐引擎（工作阶段激活）
+  const flowMusic = useFlowMusic(focusScore);
+  useEffect(() => {
+    if (flowMusicEnabled && phase === 'work') {
+      flowMusic.activate();
+    } else {
+      flowMusic.deactivate();
+    }
+  }, [flowMusicEnabled, phase, flowMusic]);
 
   const progress = totalSeconds > 0 ? remainingSeconds / totalSeconds : 1;
   const progressPercent = (1 - progress) * 100;
@@ -119,6 +150,21 @@ export default function ImmersiveTimer({
         },
       };
 
+  const isBreak = phase === 'short_break' || phase === 'long_break';
+
+  // 3.13 休息活动轮换索引
+  const [activityIndex, setActivityIndex] = useState(0);
+  useEffect(() => {
+    if (!isBreak) {
+      setActivityIndex(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setActivityIndex(prev => (prev + 1) % EMBODIED_ACTIVITIES.length);
+    }, ACTIVITY_ROTATE_INTERVAL);
+    return () => clearInterval(interval);
+  }, [isBreak]);
+
   return (
     <div
       className="fixed inset-0 flex flex-col items-center justify-center select-none"
@@ -137,6 +183,42 @@ export default function ImmersiveTimer({
         >
           {currentGoal}
         </motion.p>
+      )}
+
+      {/* M4 清醒期重放引导：休息时显示上次会话的关键词，渐入渐出 */}
+      {isBreak && lastSessionKeywords && lastSessionKeywords.length > 0 && (
+        <motion.div
+          className="absolute top-28 left-0 right-0 flex flex-col items-center gap-1.5 px-8"
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+        >
+          <span className="text-[10px] text-white/25 tracking-widest uppercase">
+            ˖ 记忆重放 ˖
+          </span>
+          <div className="flex flex-wrap justify-center gap-1.5">
+            {lastSessionKeywords.map((kw, i) => (
+              <motion.span
+                key={kw}
+                className="px-2.5 py-0.5 rounded-full text-[11px] font-medium text-white/60 border border-white/10 bg-white/5"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.3 + i * 0.12, duration: 0.4 }}
+              >
+                {kw}
+              </motion.span>
+            ))}
+          </div>
+          <motion.p
+            className="text-[11px] text-white/30 mt-0.5 italic"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8, duration: 0.6 }}
+          >
+            ～ 回想一下刚才学的内容 ～
+          </motion.p>
+        </motion.div>
       )}
 
       {/* 中央计时器区域 */}
@@ -216,6 +298,27 @@ export default function ImmersiveTimer({
 
       {/* T2 记忆锚点提醒浮层 — work 阶段每 12 分钟一句话要点，15 秒自动消失 */}
       <AnchorReminderOverlay />
+
+      {/* 3.13 休息阶段具身学习活动建议 — 底部非侵入式卡片 */}
+      {isBreak && (
+        <motion.div
+          className="absolute bottom-36 left-0 right-0 flex justify-center px-8"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 8 }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+        >
+          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/8 backdrop-blur-sm">
+            <span className="text-sm">{EMBODIED_ACTIVITIES[activityIndex].icon}</span>
+            <span className="text-[11px] text-white/50 font-medium tracking-wide">
+              {EMBODIED_ACTIVITIES[activityIndex].label}
+            </span>
+            <span className="text-[9px] text-white/20 ml-1">
+              {activityIndex + 1}/{EMBODIED_ACTIVITIES.length}
+            </span>
+          </div>
+        </motion.div>
+      )}
 
       {/* 底部操作区 — 极简 icon-only */}
       <motion.div

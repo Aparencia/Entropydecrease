@@ -9,15 +9,19 @@
  * local_asr_stream_start + recording:save/load/delete。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Mic, Square, Play, Trash2 } from 'lucide-react';
+import { Mic, Square, Play, Trash2, Sparkles } from 'lucide-react';
 import { encodeWavBase64 } from '@/lib/capture/wavEncoder';
 import { cn } from '@/lib/utils';
+import { useAIEvaluate } from '@/lib/ai/useAI';
+import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 
 interface FeynmanRecorderProps {
   explanation: string;
   onExplanationChange: (v: string) => void;
   /** E2: 关联费曼笔记 id——录音以此持久化命名，跨会话回放 */
   noteId?: string | null;
+  /** E2 自评: 当前讲解的概念名（用于 AI 评估上下文） */
+  concept?: string;
 }
 
 /** 单次录音时长上限：防止 PCM 累积无限增长（10 分钟 ≈ 19MB） */
@@ -36,18 +40,24 @@ function base64ToBlob(base64: string, type: string): Blob {
   return new Blob([bytes], { type });
 }
 
-export function FeynmanRecorder({ explanation, onExplanationChange, noteId }: FeynmanRecorderProps) {
+export function FeynmanRecorder({ explanation, onExplanationChange, noteId, concept }: FeynmanRecorderProps) {
   const [asrAvailable, setAsrAvailable] = useState(false);
   const [recording, setRecording] = useState(false);
   const [partialText, setPartialText] = useState('');
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // E2 录音后 AI 自评：讲解停止且可回放时触发，结果紧凑展示
+  const { data: evalData, loading: evalLoading, error: evalError, evaluate } = useAIEvaluate();
+  const [showEval, setShowEval] = useState(false);
+
   // 最新 props 引用：事件回调中拼接转写文本
   const explanationRef = useRef(explanation);
   explanationRef.current = explanation;
   const onChangeRef = useRef(onExplanationChange);
   onChangeRef.current = onExplanationChange;
+  const conceptRef = useRef(concept);
+  conceptRef.current = concept;
 
   const recordingRef = useRef(false);
   const startingRef = useRef(false);
@@ -223,6 +233,15 @@ export function FeynmanRecorder({ explanation, onExplanationChange, noteId }: Fe
     return () => { if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current); };
   }, []);
 
+  // E2 AI 自评：以当前概念 + 讲解文本（含录音转写）调用评估
+  const handleAIEval = useCallback(() => {
+    const c = conceptRef.current;
+    if (!c || !explanationRef.current.trim()) return;
+    setShowEval(true);
+    evaluate(c, explanationRef.current)
+      .catch(() => { /* 错误由 hook 状态呈现（error/needsConfig） */ });
+  }, [evaluate]);
+
   // 可选增强：ASR 不可用时隐藏入口
   if (!asrAvailable) return null;
 
@@ -270,6 +289,15 @@ export function FeynmanRecorder({ explanation, onExplanationChange, noteId }: Fe
             >
               <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
             </button>
+            {/* E2 录音后自评入口 */}
+            <button
+              onClick={handleAIEval}
+              className="flex items-center gap-1 px-2 py-1 rounded-kb-full text-c1 font-medium bg-brand-50 text-brand-600 hover:bg-brand-100 active:scale-95 transition-all"
+              title="基于讲解内容做 AI 自评"
+            >
+              <Sparkles className="w-3 h-3" strokeWidth={1.5} />
+              {evalLoading && showEval ? '评估中…' : 'AI 自评'}
+            </button>
           </span>
         )}
       </div>
@@ -277,6 +305,38 @@ export function FeynmanRecorder({ explanation, onExplanationChange, noteId }: Fe
         <p className="text-c1 text-text-tertiary italic">💬 {partialText}</p>
       )}
       {error && <p className="text-c1 text-red-500">{error}</p>}
+
+      {/* E2 AI 自评结果（紧凑卡） */}
+      {showEval && (
+        <div className="p-3 rounded-kb-md bg-brand-600/5 border border-brand-500/20">
+          {evalLoading && (
+            <p className="flex items-center gap-2 text-c1 text-text-tertiary">
+              <AIThinkingIndicator size={3} gap={2} />
+              AI 正在评估你的讲解…
+            </p>
+          )}
+          {evalError && !evalLoading && (
+            <p className="text-c1 text-semantic-error leading-relaxed">
+              {evalError}
+            </p>
+          )}
+          {evalData && !evalLoading && (
+            <div className="flex items-start gap-2.5">
+              <div className="w-9 h-9 rounded-kb-full bg-brand-600/10 text-brand-600 flex items-center justify-center font-bold text-b1 flex-shrink-0">
+                {evalData.overallScore}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-b3 font-medium text-text-primary">
+                  {evalData.overallScore >= 80 ? '讲得非常出色！' : evalData.overallScore >= 60 ? '掌握较好，还有提升空间' : '建议继续深化理解'}
+                </p>
+                {evalData.suggestions[0] && (
+                  <p className="text-c1 text-text-secondary leading-relaxed mt-0.5">建议：{evalData.suggestions[0]}</p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

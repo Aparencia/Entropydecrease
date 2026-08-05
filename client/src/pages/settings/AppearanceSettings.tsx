@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { readWithLegacyMigration } from '@/lib/utils/legacyLocalStorage';
 import { Card } from '@/components/ui';
 import { useTheme } from '@/hooks/useTheme';
-import { Sun, Moon, Rows3, Grid3x3, AlignJustify, Waves } from 'lucide-react';
+import { Sun, Moon, Rows3, Grid3x3, AlignJustify, Waves, Eye, Heart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   getWorldSoundscapeEnabled,
@@ -39,11 +39,38 @@ export default function AppearanceSettings() {
   const { theme, setTheme } = useTheme();
   const [density, setDensity] = useState<Density>(getStoredDensity);
   const [soundscape, setSoundscape] = useState(getWorldSoundscapeEnabled);
+  const [eyeCareEnabled, setEyeCareEnabled] = useState(() => {
+    try { return localStorage.getItem('ed-eye-care') === 'true'; } catch { return false; }
+  });
+  const [focusGuardianEnabled, setFocusGuardianEnabled] = useState(() => {
+    try { return localStorage.getItem('ed-focus-guardian') === 'true'; } catch { return false; }
+  });
+  const [digitalWellbeingEnabled, setDigitalWellbeingEnabled] = useState(() => {
+    try { return localStorage.getItem('ed-digital-wellbeing') === 'true'; } catch { return false; }
+  });
 
   const handleSoundscapeToggle = () => {
     const next = !soundscape;
     setSoundscape(next);
     setWorldSoundscapeEnabled(next);
+  };
+
+  const handleEyeCareToggle = () => {
+    const next = !eyeCareEnabled;
+    setEyeCareEnabled(next);
+    try { localStorage.setItem('ed-eye-care', String(next)); } catch { /* ignore */ }
+  };
+
+  const handleFocusGuardianToggle = () => {
+    const next = !focusGuardianEnabled;
+    setFocusGuardianEnabled(next);
+    try { localStorage.setItem('ed-focus-guardian', String(next)); } catch { /* ignore */ }
+  };
+
+  const handleDigitalWellbeingToggle = () => {
+    const next = !digitalWellbeingEnabled;
+    setDigitalWellbeingEnabled(next);
+    try { localStorage.setItem('ed-digital-wellbeing', String(next)); } catch { /* ignore */ }
   };
 
   const handleDensityChange = (key: Density) => {
@@ -182,6 +209,81 @@ export default function AppearanceSettings() {
         >
           <Waves className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
           {soundscape ? '已开启' : '已关闭'}
+        </button>
+      </div>
+
+      {/* 护眼模式 */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <label className="text-b2 font-medium text-text-secondary">护眼模式</label>
+          <span className="text-b3 text-text-tertiary">
+            暖色调 sepia 滤镜，减轻夜间用眼疲劳（22:00 后自动开启）
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={handleEyeCareToggle}
+          aria-pressed={eyeCareEnabled}
+          className={cn(
+            'flex items-center gap-2 py-2 px-4 rounded-kb-full border-2 text-b2 font-medium',
+            'transition-all duration-200',
+            eyeCareEnabled
+              ? 'border-brand-500 bg-brand-50 text-brand-700'
+              : 'border-border/50 bg-bg-elevated text-text-secondary hover:border-brand-300',
+          )}
+        >
+          <Eye className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+          {eyeCareEnabled ? '已开启' : '已关闭'}
+        </button>
+      </div>
+
+      {/* 专注守护灵 */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <label className="text-b2 font-medium text-text-secondary">专注守护灵</label>
+          <span className="text-b3 text-text-tertiary">
+            检测分心行为，5 级渐进干预——从底部提示到全屏覆盖
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={handleFocusGuardianToggle}
+          aria-pressed={focusGuardianEnabled}
+          className={cn(
+            'flex items-center gap-2 py-2 px-4 rounded-kb-full border-2 text-b2 font-medium',
+            'transition-all duration-200',
+            focusGuardianEnabled
+              ? 'border-brand-500 bg-brand-50 text-brand-700'
+              : 'border-border/50 bg-bg-elevated text-text-secondary hover:border-brand-300',
+          )}
+        >
+          <Heart className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+          {focusGuardianEnabled ? '已开启' : '已关闭'}
+        </button>
+      </div>
+
+      {/* 数字养生守门人 */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <label className="text-b2 font-medium text-text-secondary">数字养生守门人</label>
+          <span className="text-b3 text-text-tertiary">
+            连续使用提醒 · 夜间护眼 · 周末离线 · 番茄间隙远眺 · 久坐提醒
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={handleDigitalWellbeingToggle}
+          aria-pressed={digitalWellbeingEnabled}
+          className={cn(
+            'flex items-center gap-2 py-2 px-4 rounded-kb-full border-2 text-b2 font-medium',
+            'transition-all duration-200',
+            digitalWellbeingEnabled
+              ? 'border-brand-500 bg-brand-50 text-brand-700'
+              : 'border-border/50 bg-bg-elevated text-text-secondary hover:border-brand-300',
+          )}
+        >
+          <Heart className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+          {digitalWellbeingEnabled ? '已开启' : '已关闭'}
         </button>
       </div>
     </Card>

@@ -33,6 +33,12 @@ import { SignatureMoment } from '@/features/retention/components/SignatureMoment
 import { FatigueEmpathy } from '@/features/retention/components/FatigueEmpathy';
 import { WorldRecap } from '@/features/retention/components/WorldRecap';
 import { WorldSoundscape } from '@/lib/audio/WorldSoundscape';
+import { useFocusGuardian } from '@/hooks/useFocusGuardian';
+import { FocusGuardianOverlay } from '@/components/FocusGuardianOverlay';
+import { useDigitalWellbeing } from '@/hooks/useDigitalWellbeing';
+import { DigitalWellbeingOverlay } from '@/components/DigitalWellbeingOverlay';
+import { useLocalStorageFlag } from '@/hooks/useLocalStorageFlag';
+import { EyeCareModeStyle, useEyeCareMode } from '@/components/EyeCareMode';
 import '@/stores/useSettingsStore'; // 导入以触发音效设置初始化
 import { startPomodoroScheduler } from '@/features/pomodoro/lib/pomodoroScheduler';
 import { usePomodoroStore } from '@/features/pomodoro/store/usePomodoroStore';
@@ -66,6 +72,19 @@ function App() {
   useRetentionInit();
   // 世界状态快照同步：retention 数据→sqlite→MCP 记忆服务器（单向桥，失败静默）
   useWorldSnapshotSync();
+
+  // 3.9 专注守护灵（M18: 开关响应 storage 事件，设置页变更即时生效）
+  const guardian = useFocusGuardian();
+  const focusGuardianEnabled = useLocalStorageFlag('ed-focus-guardian');
+  const [dismissedOverlay, setDismissedOverlay] = useState(false);
+
+  // 3.10 数字养生守门人
+  const wellbeing = useDigitalWellbeing();
+  const digitalWellbeingEnabled = useLocalStorageFlag('ed-digital-wellbeing');
+  const eyeCareEnabled = useLocalStorageFlag('ed-eye-care');
+
+  // 3.10 护眼模式
+  useEyeCareMode(eyeCareEnabled || wellbeing.eyeCareMode);
 
   // ── 启动缓冲带：接管 HTML 内联 splash，首次渲染完成后淡出 ──
   useLayoutEffect(() => {
@@ -178,6 +197,34 @@ function App() {
               <FatigueEmpathy />
               <WorldRecap />
               <WorldSoundscape />
+
+              {/* 3.9 专注守护灵 — 全屏覆盖层（L3+） */}
+              {focusGuardianEnabled && (
+                <FocusGuardianOverlay
+                  level={guardian.level}
+                  show={guardian.level >= 3 && !dismissedOverlay}
+                  onDismiss={() => setDismissedOverlay(true)}
+                  onSuggestBreak={() => {
+                    setDismissedOverlay(true);
+                    guardian.resetScore();
+                    // 重置覆盖状态以便下次可重新显示
+                    setTimeout(() => setDismissedOverlay(false), 60_000);
+                  }}
+                />
+              )}
+
+              {/* 3.10 数字养生守门人 — 休息活动浮层 */}
+              {digitalWellbeingEnabled && (
+                <DigitalWellbeingOverlay
+                  show={wellbeing.showRestActivity}
+                  restActivities={wellbeing.restActivities}
+                  isLocked={wellbeing.isLocked}
+                  onDismiss={wellbeing.dismissRestActivity}
+                />
+              )}
+
+              {/* 3.10 护眼模式样式注入（全局挂载一次） */}
+              <EyeCareModeStyle />
             </ErrorBoundary>
           </SyncProvider>
         </AuthProvider>

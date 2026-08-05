@@ -1,4 +1,4 @@
-"""
+﻿"""
 熵减 AI 网关 — 苏格拉底深化角度生成 Chain
 
 基于主题和对话历史，生成 5 个个性化的纵深思考角度
@@ -71,7 +71,7 @@ class SocraticDeepeningChain:
             except (json.JSONDecodeError, ValueError):
                 pass
 
-        if data is None:
+        if data is None or not isinstance(data, dict):
             logger.warning("无法解析深化角度 JSON，返回降级结果")
             return {"angles": []}
 

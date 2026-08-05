@@ -15,8 +15,9 @@ import { useBehaviorSignals } from './hooks/useBehaviorSignals';
 import { useUserActivity } from './hooks/useUserActivity';
 import { useBedtimeReminder } from './hooks/useBedtimeReminder';
 import { useIntentionCoach } from './hooks/useIntentionCoach';
-import { findTopDueDeck } from './lib/bedtimeReview';
+import { useClassScheduleTrigger } from './hooks/useClassScheduleTrigger';
 import { IncubationBreathing } from './components/IncubationBreathing';
+import { BedtimeRoutine } from './components/BedtimeRoutine';
 import { CreatureAvatar } from './components/CreatureAvatar';
 import { ConversationPanel } from './components/ConversationPanel';
 
@@ -27,6 +28,9 @@ export function AssistantRoot() {
   const setCreatureState = useAssistantStore(s => s.setCreatureState);
   // T4 孵化呼吸引导浮层可见性（stuck-incubation 气泡点击触发）
   const [incubationOpen, setIncubationOpen] = useState(false);
+  // F3 睡前仪式完整版浮层可见性
+  const [bedtimeRoutineOpen, setBedtimeRoutineOpen] = useState(false);
+  const [bedtimeTopDeckId, setBedtimeTopDeckId] = useState<string | undefined>(undefined);
 
   const { sendMessage, retryLastMessage, dismissError } = useChat();
   const { playSound } = useAssistantAudio();
@@ -39,6 +43,8 @@ export function AssistantRoot() {
   useBedtimeReminder();
   // A4 实施意图教练：周期扫描到期意图，发 intention:due 事件
   useIntentionCoach();
+  // 1.16 课前预习：周期扫描课表，开课前 30 分钟发 schedule:class-upcoming 事件
+  useClassScheduleTrigger();
 
   if (!enabled) return null;
 
@@ -57,18 +63,12 @@ export function AssistantRoot() {
       setIncubationOpen(true);
       return;
     }
-    // F3 闭环：睡前复习气泡点击直接拉起 5 卡迷你复习会话
-    // （到期卡最多的牌组，?mini=5 限制卡数；hash 路由在 Router 外导航）
-    if (useAssistantStore.getState().bubbleTriggerId === 'bedtime-review') {
-      void findTopDueDeck().then((deckId) => {
-        if (deckId) {
-          useAssistantStore.getState().hideBubble();
-          window.location.hash = `#/flashcards/${deckId}/study?mini=5`;
-          return;
-        }
-        setPanelState('expanded');
-        setCreatureState('listening');
-      });
+    // F3 闭环：睡前仪式气泡点击 → 打开完整三步仪式浮层
+    if (useAssistantStore.getState().bubbleTriggerId === 'bedtime-routine') {
+      const ctx = useAssistantStore.getState().bubbleTriggerContext;
+      useAssistantStore.getState().hideBubble();
+      setBedtimeTopDeckId(typeof ctx?.topDeckId === 'string' ? ctx.topDeckId : undefined);
+      setBedtimeRoutineOpen(true);
       return;
     }
     setPanelState('expanded');
@@ -94,6 +94,8 @@ export function AssistantRoot() {
       />
       {/* T4 孵化呼吸引导（卡壳救援气泡的落地动作） */}
       <IncubationBreathing open={incubationOpen} onClose={() => setIncubationOpen(false)} />
+      {/* F3 睡前仪式完整版（三步引导：复习 → 回顾 → 清醒期引导） */}
+      <BedtimeRoutine open={bedtimeRoutineOpen} onClose={() => setBedtimeRoutineOpen(false)} topDeckId={bedtimeTopDeckId} />
       <AnimatePresence>
         {panelState === 'expanded' && (
           <ConversationPanel onSend={sendMessage} onClose={handleClosePanel} onRetry={retryLastMessage} onDismiss={dismissError} />

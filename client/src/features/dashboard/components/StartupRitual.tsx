@@ -162,6 +162,7 @@ export default function StartupRitual(props: Props) {
                   streakDays={streakDays}
                   durationMs={machine.getElapsedMs()}
                   onClose={handleClosingClose}
+                  suspenseQuestion={recallQuestion?.question}
                 />
               ) : (
                 <RitualComplete

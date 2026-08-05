@@ -12,7 +12,7 @@ import { useEffect, useState, useMemo, useCallback, lazy, Suspense } from 'react
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  Timer, FileText, Layers, Lightbulb, Sparkles,
+  Timer, FileText, Layers, Lightbulb, Sparkles, Hourglass,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SPRING, fadeInUp } from '@/lib/animation/springConfig';
@@ -27,6 +27,8 @@ import { useAuth } from '@/lib/auth/AuthContext';
 // 使用 lazy 动态导入避免增加首屏 bundle 体积
 import { useEcosystemStore } from '@/features/retention/store/useEcosystemStore';
 import { useRetentionSettings } from '@/features/retention/store/useRetentionSettings';
+import SocialProofBanner from '@/features/retention/components/SocialProofBanner';
+import PlannerPanel from '@/features/planner/components/PlannerPanel';
 import {
   generateTimeInsights, generateConsistencyInsights,
   generateEfficiencyInsights, computeIdentityTags,
@@ -56,6 +58,8 @@ import { usePomodoroStore } from '@/features/pomodoro/store/usePomodoroStore';
 
 import LearningPulse from '../components/LearningPulse';
 import KnowledgePreviewCard from '../components/KnowledgePreviewCard';
+import GrowthStory from '../components/GrowthStory';
+import CognitiveLoadWidget from '../components/CognitiveLoadWidget';
 import type { RitualSettings, RitualOutcome, RitualSkipScope, RitualIntensity, MemoryEchoItem, RecallQuestion } from '../types';
 import type { PomodoroSession, Flashcard, FlashcardReview } from '@/types/models';
 import type { KnowledgeCard } from '../components/KnowledgePreviewCard';
@@ -555,6 +559,9 @@ export default function DashboardPage() {
             })}
           </motion.div>
 
+          {/* 社交证据横幅：匿名聚合统计（设置关闭/离线时静默隐藏） */}
+          <SocialProofBanner />
+
           {/* 快捷操作 */}
           <motion.div
             className="flex gap-3 mt-rhythm-md"
@@ -583,6 +590,11 @@ export default function DashboardPage() {
                 </motion.button>
               );
             })}
+          </motion.div>
+
+          {/* 今日航线：个性化学习计划（AI 优先，本地规则兜底） */}
+          <motion.div className="mt-rhythm-md" {...fadeInUp}>
+            <PlannerPanel />
           </motion.div>
         </motion.div>
       </section>
@@ -643,6 +655,41 @@ export default function DashboardPage() {
             <KnowledgeConstellation graph={knowledgeGraph} loading={knowledgeLoading} error={knowledgeError} />
           )}
         </Suspense>
+      </section>
+
+      {/* ════ 成长叙事 + 认知负荷（1.11 D1 / 1.13 A5）════ */}
+      {/* 自我效能感叙事：只陈述本周事实 + 正向收尾；认知负荷实时仪表盘
+          （数据来自 useBehaviorSignals 经 cognitiveLoadStore 发布） */}
+      <section className="relative max-w-[1100px] mx-auto px-6 py-rhythm-sm">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-rhythm-sm">
+          <div className="md:col-span-2">
+            <GrowthStory aggregate={analytics} loading={analyticsLoading} />
+          </div>
+          <CognitiveLoadWidget />
+        </div>
+      </section>
+
+      {/* ════ 3.16 知识时光胶囊入口 ════ */}
+      <section className="relative max-w-[1100px] mx-auto px-6 py-rhythm-sm">
+        <div className="flex items-center justify-between gap-4 rounded-kb-xl border border-border-subtle bg-bg-elevated/60 px-5 py-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="w-10 h-10 rounded-kb-full bg-amber-500/10 text-amber-600 flex items-center justify-center flex-shrink-0">
+              <Hourglass className="w-5 h-5" strokeWidth={1.4} />
+            </span>
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-text-primary">知识时光胶囊</div>
+              <div className="text-xs text-text-tertiary truncate">把现在的学习状态封存，30/60/90 天后开启回看成长</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/timecapsule')}
+            className="flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-kb-lg text-xs font-medium text-brand-600 border border-brand-300/50 bg-brand-500/5 hover:bg-brand-500/10 transition-colors"
+          >
+            <Hourglass className="w-4 h-4" strokeWidth={1.5} />
+            封装时光胶囊
+          </button>
+        </div>
       </section>
 
       {/* ════ 学习脉搏区域 ════ */}

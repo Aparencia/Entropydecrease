@@ -55,6 +55,21 @@ from routers import (
     import_concept_router,
     license_router,
     beta_router,
+    learning_plan_router,
+    session_qa_router,
+    debate_router,
+    counterintuitive_router,
+    personify_router,
+    mnemonic_router,
+    podcast_router,
+    learning_coach_router,
+    infographic_router,
+    freshness_router,
+    embodied_router,
+    learning_narrative_router,
+    haiku_router,
+    compile_router,
+    micro_card_router,
 )
 from cache.redis_cache import get_cache
 
@@ -272,6 +287,21 @@ app.include_router(beta_router)                   # 内测邀请 API（POST /api
 app.include_router(streaming_router)             # 流式输出（SSE，全量 AI 功能）
 app.include_router(balance_router)               # API 余额查询
 app.include_router(ritual_recall_router)         # v0.26.0 B1.2: 仪式回顾小问
+app.include_router(learning_plan_router)         # P1: 今日学习计划（个性化学习路径）
+app.include_router(session_qa_router)            # D2: 课堂内容问答（带引用来源）
+app.include_router(debate_router)                # Phase2: AI 辩论对手
+app.include_router(counterintuitive_router)      # Phase2: 反直觉发现器
+app.include_router(personify_router)             # Phase2: 概念拟人化
+app.include_router(mnemonic_router)              # Phase2: 记忆术生成器
+app.include_router(podcast_router)               # Phase2: AI 播客生成器
+app.include_router(learning_coach_router)        # Phase2: AI 学习教练
+app.include_router(infographic_router)           # Phase2: 知识信息图生成器
+app.include_router(freshness_router)             # Phase3: 知识保鲜检测
+app.include_router(embodied_router)              # Phase3: 概念具身化
+app.include_router(learning_narrative_router)    # Phase3: 学习叙事 RPG
+app.include_router(haiku_router)                 # Phase3: 学习俳句
+app.include_router(compile_router)               # Phase4: 知识编译引擎——同样注册于 streaming_router 之前
+app.include_router(micro_card_router)            # Phase4: 微学习卡片流——同样注册于 streaming_router 之前
 
 
 # ============================================================

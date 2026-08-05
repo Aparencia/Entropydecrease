@@ -17,4 +17,11 @@ Chain（链）是业务逻辑的核心编排层，负责：
 - PredictChain: 预测驱动学习（v1.0.0）
 - RescueChain: 卡壳三级救援（v1.0.0）
 - InspirationDraftChain: AI 草稿生成（v1.1.0）
+- DebateChain: AI 辩论对手（Phase2）
+- CounterintuitiveChain: 反直觉发现器（Phase2）
+- PersonifyChain: 概念拟人化（Phase2）
+- MnemonicChain: 个性化记忆术生成器（Phase2）
+- PodcastChain: AI 播客生成器（Phase2）
+- LearningCoachChain: AI 学习教练（Phase2）
+- InfographicChain: 知识信息图生成器（Phase2）
 """

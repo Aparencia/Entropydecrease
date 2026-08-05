@@ -7,7 +7,7 @@
  * （todo 模板把统计置顶，其余置底）；工具栏仅在 free/cornell 外显示。
  */
 import { useEffect, useCallback, useRef, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useBlocker } from 'react-router-dom';
 import { EditorContent } from '@tiptap/react';
 import { useNoteStore } from '../store/useNoteStore';
 import { CornellLayout } from '../components/CornellLayout';
@@ -34,11 +34,14 @@ import { useNoteAI } from '../hooks/useNoteAI';
 import { useEditorContextMenu } from '../hooks/useEditorContextMenu';
 import { useAIAnchorPoint } from '@/lib/ai/hooks/useAIAnchorPoint';
 import { AnchorPointSidebar } from '../components/AnchorPoint';
+import { FEYNMAN_RECOMMEND_MIN_CONTENT } from '../components/FeynmanRecommendSidebar';
 import { ClosedBookTest } from '../components/ClosedBookTest';
 import { ContentTierModal } from '../components/ContentTierModal';
 import { useConceptConflict } from '../hooks/useConceptConflict';
 import { Tip } from '@/components/ui/Tip';
-import { EyeOff, Layers } from 'lucide-react';
+import { Button } from '@/components/ui';
+import { EyeOff, Layers, Volume2 } from 'lucide-react';
+import { SoundAnchorPicker } from '@/features/soundanchor/components/SoundAnchorPicker';
 import { cn } from '@/lib/utils';
 
 export default function NoteEditPage() {
@@ -66,12 +69,13 @@ export default function NoteEditPage() {
   const updateNote = useNoteStore((s) => s.updateNote);
   const selectNote = useNoteStore((s) => s.selectNote);
   const loadNotes = useNoteStore((s) => s.loadNotes);
+  const isLoading = useNoteStore((s) => s.isLoading);
   const note = notes.find((n) => n.id === noteId) || null;
 
   const titleRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  const { editor, saveStatus, debouncedSave, handleImageSelect } = useNoteEditor({
+  const { editor, saveStatus, isDirty, debouncedSave, handleImageSelect } = useNoteEditor({
     noteId,
     rawContent: note?.content,
     noteKey: note?.id,
@@ -85,6 +89,7 @@ export default function NoteEditPage() {
 
   // === N5 策略性遗忘标记 ===
   const [tierOpen, setTierOpen] = useState(false);
+  const [soundAnchorOpen, setSoundAnchorOpen] = useState(false);
 
   // === N3 笔记健康度：跟踪编辑器实时文本供工具栏指示器计算 ===
   // 流畅度修复：原版每次键入同步 setHealthText 导致 457 行整页每键重渲染。
@@ -239,6 +244,40 @@ export default function NoteEditPage() {
     if (noteId) selectNote(noteId);
   }, [noteId, selectNote]);
 
+  // 编辑未保存确认：beforeunload（关闭标签页）+ useBlocker（应用内导航）
+  const hasPendingChanges = isDirty || saveStatus === 'saving' || saveStatus === 'failed';
+  useEffect(() => {
+    if (!hasPendingChanges) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasPendingChanges]);
+  // M19: 捕获 blocker——导航被拦截时弹确认框，而不是静默卡住页面
+  const blocker = useBlocker(
+    useCallback(
+      ({ currentLocation, nextLocation }) =>
+        hasPendingChanges && currentLocation.pathname !== nextLocation.pathname,
+      [hasPendingChanges],
+    ),
+  );
+
+  // M19: 保存并离开——文本模板立即落盘后再放行；自由画布/导图/康奈尔走各自
+  // 防抖保存管线（卸载清空为既有行为），此处直接放行
+  const handleSaveAndLeave = () => {
+    if (editor && noteId && note && !['free', 'mindmap', 'cornell'].includes(note.template)) {
+      updateNote(noteId, {
+        content: JSON.stringify(editor.getJSON()),
+        title: titleRef.current?.value || note?.title,
+      });
+    }
+    // 基线修复：proceed 仅在 blocked 态存在（unblocked/proceeding 为 undefined），
+    // 确认框只在 blocked 时展示，此处仍显式收窄避免 TS2722
+    if (blocker.state === 'blocked') blocker.proceed();
+  };
+
   // 标题保存
   const handleTitleBlur = () => {
     if (noteId && titleRef.current) {
@@ -281,7 +320,8 @@ export default function NoteEditPage() {
   const handleExportMarkdown = () => {
     if (!note) return;
     const md = noteToMarkdown(note.content);
-    const filename = `${(note.title || '未命名笔记').replace(/[\\/:*?"<>|]/g, '_')}.md`;
+    const rawName = (note.title || '未命名笔记').replace(/[\\/:*?"<>|]/g, '_').replace(/^\.+/, '').slice(0, 200).trim() || '未命名笔记';
+    const filename = `${rawName}.md`;
     const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -290,6 +330,17 @@ export default function NoteEditPage() {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center">
+        <div className="flex items-center gap-2 text-text-tertiary">
+          <div className="w-4 h-4 border-2 border-brand-400/30 border-t-brand-400 rounded-full animate-spin" />
+          <span className="text-b2">加载中...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!note) {
     return (
@@ -332,9 +383,23 @@ export default function NoteEditPage() {
       {/* 标签编辑行（所有模板共用） */}
       {noteId && <NoteTagsEditor noteId={noteId} tags={note.tags} />}
 
+      {/* 3.11 声音记忆锚点：绑定当前笔记概念的声音 */}
+      {noteId && (
+        <div className="px-kb-md pt-1">
+          <button
+            type="button"
+            onClick={() => setSoundAnchorOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-kb-full text-xs text-brand-600 hover:text-brand-700 hover:bg-brand-500/10 border border-brand-300/40 bg-brand-500/5 transition-colors"
+          >
+            <Volume2 className="w-3.5 h-3.5" strokeWidth={1.6} />
+            绑定声音锚点
+          </button>
+        </div>
+      )}
+
       {/* 工具栏（康奈尔/自由画布/思维导图模式隐藏） */}
       {!isCornell && !isFree && !isMindmap && (
-        <EditorToolbar editor={editor} onPickImage={() => imageInputRef.current?.click()} healthContent={healthText} />
+        <EditorToolbar editor={editor} onPickImage={() => imageInputRef.current?.click()} healthContent={healthText} onToggleClosedBook={handleOpenClosedBook} />
       )}
 
       {/* 隐藏的图片上传 input */}
@@ -431,9 +496,17 @@ export default function NoteEditPage() {
       )}
     </div>
 
-    {/* AI 记忆锚点侧边栏 — 活跃编辑 12 分钟后自动生成；N6 冲突卡也在此展示 */}
-    {(anchorPoints.length > 0 || conflicts.length > 0) && noteId && (
-      <AnchorPointSidebar noteId={noteId} anchorPoints={anchorPoints} conflicts={conflicts} onDismissConflicts={dismissConflicts} />
+    {/* AI 记忆锚点侧边栏 — 活跃编辑 12 分钟后自动生成；N6 冲突卡、N4 费曼推荐也在此展示 */}
+    {/* N4: 正文达推荐阈值时提前显示侧边栏（含费曼引导卡），锚点仍按 12 分钟节奏生成 */}
+    {(anchorPoints.length > 0 || conflicts.length > 0 || healthText.trim().length >= FEYNMAN_RECOMMEND_MIN_CONTENT) && noteId && (
+      <AnchorPointSidebar
+        noteId={noteId}
+        anchorPoints={anchorPoints}
+        conflicts={conflicts}
+        onDismissConflicts={dismissConflicts}
+        noteContent={healthText}
+        noteTitle={note?.title ?? ''}
+      />
     )}
 
     {/* 回声定位侧边栏 */}
@@ -487,6 +560,46 @@ export default function NoteEditPage() {
     )}
     {/* N5 内容分层弹窗（策略性遗忘标记） */}
     <ContentTierModal open={tierOpen} onClose={() => setTierOpen(false)} noteText={healthText} noteId={noteId} />
+
+    {/* 3.11 声音记忆锚点选择器：绑定当前笔记概念 */}
+    <SoundAnchorPicker
+      open={soundAnchorOpen}
+      conceptId={noteId ?? 'note'}
+      conceptTitle={note.title || '未命名笔记'}
+      onClose={() => setSoundAnchorOpen(false)}
+    />
+
+    {/* M19: 导航拦截确认框——未保存更改时离开需显式确认，不再静默拦截 */}
+    {blocker.state === 'blocked' && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="unsaved-dialog-title"
+      >
+        <div className="w-full max-w-sm rounded-2xl border border-border/40 bg-bg-secondary p-5 shadow-xl">
+          <h3 id="unsaved-dialog-title" className="text-b1 font-semibold text-text-primary mb-2">
+            {saveStatus === 'failed' ? '保存失败' : '有未保存的更改'}
+          </h3>
+          <p className="text-c1 text-text-secondary mb-4">
+            {saveStatus === 'failed'
+              ? '上次保存失败，离开将丢失未保存的内容'
+              : '离开前要保存这次编辑吗？'}
+          </p>
+          <div className="flex gap-2 justify-end">
+            <Button variant="primary" size="sm" onClick={handleSaveAndLeave}>
+              {saveStatus === 'failed' ? '仍要离开' : '保存并离开'}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => { if (blocker.state === 'blocked') blocker.proceed(); }}>
+              放弃更改
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => { if (blocker.state === 'blocked') blocker.reset(); }}>
+              取消
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 }

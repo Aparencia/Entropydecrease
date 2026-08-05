@@ -53,6 +53,26 @@ TIMEOUT_CONFIG: dict[str, int] = {
     "concept_precheck": 30,
     # 知识入籍概念化（JSON Mode，切块文本→概念候选，与同批 JSON Mode 链一致）
     "import_concept": 30,
+    # P1: 今日学习计划（个性化学习路径，生成 2-4 项任务）
+    "learning_plan": 30,
+    # D2: 课堂内容问答（转写上下文较长，需要宽裕超时）
+    "session_qa": 30,
+    # Phase3: 服务端 AI Chains（JSON Mode）
+    "freshness": 20,           # G4: 知识保鲜检测（最多 20 条知识）
+    "embodied": 20,            # W6: 概念具身化（3-5 个动作建议）
+    "learning_narrative": 30,  # 学习叙事 RPG（150-200 字故事，耗时较长）
+    "haiku": 15,               # R6: 学习俳句（短输出，快速返回）
+    # Phase4: 服务端 AI Chains（JSON Mode）
+    "compile": 40,             # 知识编译引擎（多笔记 + 5 种输出，生成量最大）
+    "micro_card": 30,          # 微学习卡片流（5-10 张卡片，生成量较大）
+    # Phase2: 内容生成式 AI Chains（JSON Mode）
+    "debate": 30,              # AI 辩论对手（论点+反论点+证据质量）
+    "counterintuitive": 15,    # 反直觉发现器（短事实）
+    "personify": 30,           # 概念拟人化（人设卡+关系戏剧）
+    "mnemonic": 20,            # 记忆术生成器（3 种记忆术）
+    "podcast": 40,             # AI 播客生成器（多段对话脚本，生成量较大）
+    "learning_coach": 40,      # AI 学习教练（周计划+每日任务，生成量较大）
+    "infographic": 30,         # 知识信息图生成器（多节+关系）
 }
 
 # ============================================================
@@ -105,4 +125,24 @@ RATE_LIMITS: dict[str, int] = {
     "concept_precheck": 5,
     # 知识入籍概念化（批量导入场景，适度限频）
     "import_concept": 10,
+    # P1: 今日学习计划（低频——每日一次生成即可）
+    "learning_plan": 5,
+    # D2: 课堂问答（课后复盘场景，适度限频）
+    "session_qa": 20,
+    # Phase3: 服务端 AI Chains
+    "freshness": 10,           # G4: 知识保鲜检测（批量检测，适度限频）
+    "embodied": 10,            # W6: 概念具身化（非高频场景）
+    "learning_narrative": 5,   # 学习叙事 RPG（每周一次节奏，低频即可）
+    "haiku": 20,               # R6: 学习俳句（每日一次，适度上限）
+    # Phase4: 服务端 AI Chains
+    "compile": 10,             # 知识编译引擎（生成成本高，严格限频）
+    "micro_card": 10,          # 微学习卡片流（生成成本高，严格限频）
+    # Phase2: 内容生成式 AI Chains
+    "debate": 10,              # AI 辩论对手（每轮成本较高，适度限频）
+    "counterintuitive": 5,     # 反直觉发现器（每日一次节奏）
+    "personify": 10,           # 概念拟人化（非高频场景）
+    "mnemonic": 15,            # 记忆术生成器（随闪卡复习触发）
+    "podcast": 5,              # AI 播客生成器（生成成本高，严格限频）
+    "learning_coach": 5,       # AI 学习教练（每周计划节奏，低频）
+    "infographic": 10,         # 知识信息图生成器（生成成本高，严格限频）
 }

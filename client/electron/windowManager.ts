@@ -275,3 +275,78 @@ export function completeSyncBeforeQuit(): void {
   // 直接调用 app.quit()，避免再次触发 win.close() 的 close 事件循环
   app.quit();
 }
+
+// ================================================================
+// 3.18 电子墨水学习板次窗口
+// ================================================================
+
+/** 墨水屏次窗口单例 */
+let einkWindow: BrowserWindow | null = null;
+
+/**
+ * 创建（或复用）墨水屏次窗口
+ *
+ * E-Ink 优化由前端 EinkPage 承担（白底黑字、大字号、无动画），此处仅提供
+ * 固定小尺寸、不可缩放、白底防闪的窗口壳；加载同一应用 hash 路由 #/eink。
+ */
+export function createEinkWindow(): BrowserWindow {
+  if (einkWindow && !einkWindow.isDestroyed()) {
+    einkWindow.show();
+    einkWindow.focus();
+    return einkWindow;
+  }
+
+  const win = new BrowserWindow({
+    width: 480,
+    height: 640,
+    resizable: false,
+    title: '墨水屏学习板',
+    show: false,
+    backgroundColor: '#FFFFFF', // 白底防闪，契合墨水屏
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  });
+  einkWindow = win;
+
+  win.once('ready-to-show', () => {
+    win.show();
+    win.focus();
+  });
+  win.on('closed', () => {
+    if (einkWindow === win) einkWindow = null;
+  });
+
+  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+  if (isDev) {
+    win.loadURL('http://localhost:5173/#/eink');
+  } else {
+    win.loadFile(path.join(app.getAppPath(), 'dist', 'index.html'), { hash: '/eink' });
+  }
+
+  logger.info('[Eink] Eink window created');
+  return win;
+}
+
+/**
+ * 向墨水屏窗口推送当前卡片
+ *
+ * 防竞态双路径：窗口还在加载时注册 once('did-finish-load') 发送；
+ * 已加载完成（isLoading() 为 false，once 不会再触发）则立即发送。
+ */
+export function showEinkCard(card: unknown): void {
+  const win = createEinkWindow();
+  const send = (): void => {
+    if (!win.isDestroyed()) win.webContents.send('eink:card', card);
+  };
+  win.webContents.once('did-finish-load', send);
+  if (!win.webContents.isLoading()) send();
+}
+
+/** 隐藏墨水屏窗口（幂等） */
+export function hideEinkWindow(): void {
+  if (einkWindow && !einkWindow.isDestroyed()) einkWindow.close();
+}

@@ -3,10 +3,12 @@
  */
 import { useState } from 'react';
 import { Modal } from '@/components/ui';
-import { List, Layout, GitBranch, PenTool, FileText, ListTodo } from 'lucide-react';
+import { List, Layout, GitBranch, PenTool, FileText, ListTodo, MessageSquareText, Clapperboard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type NoteTemplate = 'outline' | 'cornell' | 'mindmap' | 'free' | 'blank' | 'todo';
+// 与 Note 模型（types/note.ts template 字段）保持一致：
+// qa（问答笔记）/video（视频笔记）已由 store 层 TEMPLATE_CONTENT/TITLES 支持
+export type NoteTemplate = 'outline' | 'cornell' | 'mindmap' | 'free' | 'qa' | 'blank' | 'video' | 'todo';
 
 interface TemplateOption {
   id: NoteTemplate;
@@ -20,7 +22,9 @@ const templates: TemplateOption[] = [
   { id: 'cornell', name: '康奈尔笔记法', description: '线索·笔记·总结三栏法', icon: Layout },
   { id: 'mindmap', name: '思维导图', description: '可交互的可视化导图，支持节点增删与折叠', icon: GitBranch },
   { id: 'free', name: '自由笔记', description: '无拘束的自由书写空间', icon: PenTool },
+  { id: 'qa', name: '问答笔记', description: 'Q&A 结构，适合课后自测与错题整理', icon: MessageSquareText },
   { id: 'blank', name: '空白笔记', description: '从零开始的纯净画布', icon: FileText },
+  { id: 'video', name: '视频笔记', description: '带时间戳标记的视频学习记录', icon: Clapperboard },
   { id: 'todo', name: '待办笔记', description: '可勾选的任务清单笔记', icon: ListTodo },
 ];
 

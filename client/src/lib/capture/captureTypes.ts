@@ -166,10 +166,10 @@ export interface AudioSegment {
 /** @ai-context 全局时间轴条目，串联关键帧和语音段供后续分析回放 */
 export interface TimelineEntry {
   timestamp: number;
-  type: 'keyframe' | 'voice_start' | 'voice_end' | 'silence' | 'bookmark';
+  type: 'keyframe' | 'voice_start' | 'voice_end' | 'silence' | 'bookmark' | 'auto_anchor';
   refId?: string;
   energy?: number;
-  /** bookmark 类型时的用户标注（可选） */
+  /** bookmark/auto_anchor 类型时的标注文本（可选） */
   label?: string;
 }
 

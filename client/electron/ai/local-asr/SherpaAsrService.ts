@@ -20,6 +20,7 @@
 import * as path from 'path';
 import * as os from 'os';
 import { logger } from '../../logger.js';
+import { cleanAsrResult } from '../../../src/lib/capture/asrFilters.js';
 import {
   getLocalAsrConfig,
   getModelDir,
@@ -201,7 +202,10 @@ export function getOnlineRecognizer(): OnlineRecognizer | null {
       },
       endpointConfig: {
         rule1: { minTrailingSilence: 2.4 },
-        rule2: { minTrailingSilence: 1.2 },
+        // rule2 必须配 minUtteranceLength：仅给 minTrailingSilence 时默认 0，
+        // 等于"1.2s 停顿即断句"——中文口语停顿频繁，短句被切碎会导致
+        // 相邻句边界词重复观感。8s 覆盖绝大多数短句，兼顾实时性
+        rule2: { minTrailingSilence: 1.2, minUtteranceLength: 8 },
         rule3: { minUtteranceLength: 20 },
       },
     });
@@ -280,7 +284,8 @@ export async function transcribeOffline(
     stream.inputFinished();
     recognizer.decode(stream);
     const result = recognizer.getResult(stream);
-    const text = result.text?.trim() ?? '';
+    // 输出后处理：相邻重复压缩 + 幻觉过滤（与流式路径一致，见 streamingAsr.ts）
+    const text = cleanAsrResult(result.text ?? '');
     const durationMs = Date.now() - startTime;
 
     logger.debug(`[LocalASR] Offline transcribe: ${text.length} chars, ${durationMs}ms`);
@@ -328,7 +333,8 @@ export async function transcribeStreaming(
     }
 
     const result = recognizer.getResult(stream);
-    const text = result.text?.trim() ?? '';
+    // 输出后处理：相邻重复压缩 + 幻觉过滤（与流式路径一致，见 streamingAsr.ts）
+    const text = cleanAsrResult(result.text ?? '');
     const durationMs = Date.now() - startTime;
 
     logger.debug(`[LocalASR] Streaming transcribe: ${text.length} chars, ${durationMs}ms`);

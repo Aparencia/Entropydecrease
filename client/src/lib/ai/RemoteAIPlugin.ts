@@ -2,7 +2,7 @@ import type { AIPlugin, SummarizeResult, FlashcardResult, EvaluateResult, Durati
   SummarizeOptions, FlashcardOptions, EvaluateOptions, DurationOptions, DurationHistoryData,
   OptimizeCardResult, FeynmanQuestionResult, FeynmanAnswerEvalResult,
   TagContentResult, SortResult,
-  AnchorPoint, BrainstormIdea, ChatMessage, SocraticEvaluateResult, SocraticDeepeningResult,
+  AnchorPoint, BrainstormIdea, ChatMessage, SocraticEvaluateResult, SocraticDeepeningResult, SocraticMirrorResult,
   PredictionPrompt, RescueContext, ResourceLink,
   ErrorPatternResult, QuizGenResult,
   ContentTierResult, ConflictDetectResult,
@@ -23,7 +23,7 @@ import {
 } from './remoteLearningFeatures';
 import {
   httpSocraticBrainstorm, httpSocraticQuestion,
-  httpSocraticEvaluate, httpSocraticDeepening,
+  httpSocraticEvaluate, httpSocraticDeepening, httpSocraticMirror,
 } from './remoteSocraticFeatures';
 
 /**
@@ -100,6 +100,10 @@ export class RemoteAIPlugin implements AIPlugin {
 
   async socraticDeepening(topic: string, dialogueSummary: string, history: ChatMessage[]): Promise<SocraticDeepeningResult> {
     return httpSocraticDeepening(topic, dialogueSummary, history);
+  }
+
+  async socraticMirror(topic: string, question: string): Promise<SocraticMirrorResult> {
+    return httpSocraticMirror(topic, question);
   }
 
   async predictQuestion(noteId: string, content: string): Promise<{ predictions: PredictionPrompt[] }> {

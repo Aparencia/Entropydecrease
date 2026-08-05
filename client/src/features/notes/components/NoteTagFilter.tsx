@@ -6,23 +6,13 @@ import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNoteStore } from '../store/useNoteStore';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
-import { useMemo } from 'react';
 
 /**
  * 笔记标签筛选器
  * v0.9.0: chip 样式多选标签筛选
  */
 export function NoteTagFilter() {
-  const notes = useNoteStore((s) => s.notes);
-  const allTags = useMemo(() => {
-    const tagSet = new Set<string>();
-    for (const note of notes) {
-      for (const tag of note.tags) {
-        tagSet.add(tag);
-      }
-    }
-    return Array.from(tagSet).sort();
-  }, [notes]);
+  const allTags = useNoteStore((s) => s.getAllTags());
   const selectedTags = useNoteStore((s) => s.selectedTags);
   const toggleTag = useNoteStore((s) => s.toggleTag);
   const clearTagFilter = useNoteStore((s) => s.clearTagFilter);

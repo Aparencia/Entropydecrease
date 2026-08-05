@@ -6,6 +6,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"sync"
 	"time"
@@ -96,6 +97,45 @@ func (m *WSManager) broadcastToUser(userID string, excludeDeviceID string, messa
 			go conn.close()
 		}
 	}
+}
+
+// sendToUser sends a message to all online devices of a user (social features).
+// 用于跨用户推送（社交功能），与 broadcastToUser 的区别：不排除任何设备、不限定接收者设备集合。
+func (m *WSManager) sendToUser(userID string, message []byte) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	devices, ok := m.connections[userID]
+	if !ok {
+		return
+	}
+	for _, conn := range devices {
+		if !conn.send(message) {
+			// Buffer full or closed → close connection to protect the server.
+			log.Printf("[ws] buffer overflow, closing user=%s", userID)
+			go conn.close()
+		}
+	}
+}
+
+// marshalWSMessage 将 (type, payload) 编码为 WSMessage 线格式字节。
+// payload 为任意 JSON 可序列化值；nil 时 payload 字段为 null。
+func marshalWSMessage(msgType string, payload interface{}) []byte {
+	var data []byte
+	if payload != nil {
+		var err error
+		data, err = json.Marshal(payload)
+		if err != nil {
+			log.Printf("[ws] marshal payload failed type=%s: %v", msgType, err)
+			return nil
+		}
+	}
+	msg, err := json.Marshal(WSMessage{Type: msgType, Payload: data})
+	if err != nil {
+		log.Printf("[ws] marshal message failed type=%s: %v", msgType, err)
+		return nil
+	}
+	return msg
 }
 
 // closeAll 向所有在线连接广播 CloseMessage 并关闭（M5：优雅关闭）。

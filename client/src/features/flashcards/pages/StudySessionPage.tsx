@@ -13,10 +13,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button, EmptyState, useToast } from '@/components/ui';
 import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu';
-import { X, BookOpen, PauseCircle, AlertTriangle, Sparkles } from 'lucide-react';
+import { X, BookOpen, PauseCircle, AlertTriangle, Sparkles, Tablet } from 'lucide-react';
 import { useStudySessionStore } from '../store/useStudySessionStore';
 import { useFlashcardStore } from '../store/useFlashcardStore';
-import { useShallow } from 'zustand/react/shallow';
 import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
 import { calculateIntervals } from '@/lib/sm2';
 import type { Flashcard } from '@/types/models';
@@ -28,6 +27,13 @@ import { RatingBar } from '../components/RatingBar';
 import { MemoryStrengthPulse } from '../components/MemoryStrengthPulse';
 import { OptimizeSuggestionModal, SessionSummaryModal } from '../components/StudySessionModals';
 import { useCardInteraction } from '../hooks/useCardInteraction';
+import { ModeSelector } from '../components/ModeSelector';
+import { AudioReviewMode } from '../components/AudioReviewMode';
+import { WritingReviewMode } from '../components/WritingReviewMode';
+import { SpeakingReviewMode } from '../components/SpeakingReviewMode';
+import { SituationalReviewMode } from '../components/SituationalReviewMode';
+import { extractPlainText, type ReviewMode } from '../lib/reviewMode';
+import { ttsController } from '@/features/assistant/lib/ttsController';
 
 const sessionMenuGroups: ContextMenuGroup[] = [
   {
@@ -52,13 +58,30 @@ export default function StudySessionPage() {
   const searchParams = new URLSearchParams(window.location.hash.split('?')[1] ?? '');
   const miniLimit = Number(searchParams.get('mini') ?? 0) || undefined;
 
-  const {
-    sessionCards, currentIndex, isFlipped, completedCount, correctCount,
-    isActive, goldenErrors, startSession, rateCard, flipCard, endSession, relearn,
-    lastStabilityBefore, lastStabilityAfter, lastRating, showStrengthPulse,
-  } = useStudySessionStore(useShallow(s => s));
+  // M15: 细粒度订阅——整 store 订阅（useShallow(s => s)）会在任何字段变化时重渲染
+  // 重型子组件（卡片舞台/录音等），改为每个用到的字段单独订阅
+  const sessionCards = useStudySessionStore((s) => s.sessionCards);
+  const currentIndex = useStudySessionStore((s) => s.currentIndex);
+  const isFlipped = useStudySessionStore((s) => s.isFlipped);
+  const completedCount = useStudySessionStore((s) => s.completedCount);
+  const correctCount = useStudySessionStore((s) => s.correctCount);
+  const isActive = useStudySessionStore((s) => s.isActive);
+  const goldenErrors = useStudySessionStore((s) => s.goldenErrors);
+  const startSession = useStudySessionStore((s) => s.startSession);
+  const rateCard = useStudySessionStore((s) => s.rateCard);
+  const flipCard = useStudySessionStore((s) => s.flipCard);
+  const endSession = useStudySessionStore((s) => s.endSession);
+  const relearn = useStudySessionStore((s) => s.relearn);
+  const lastStabilityBefore = useStudySessionStore((s) => s.lastStabilityBefore);
+  const lastStabilityAfter = useStudySessionStore((s) => s.lastStabilityAfter);
+  const lastRating = useStudySessionStore((s) => s.lastRating);
+  const showStrengthPulse = useStudySessionStore((s) => s.showStrengthPulse);
+  const reviewMode = useStudySessionStore((s) => s.reviewMode);
+  const setReviewMode = useStudySessionStore((s) => s.setReviewMode);
 
-  const { selectDeck, loadCards, updateCard } = useFlashcardStore(useShallow(s => s));
+  const selectDeck = useFlashcardStore((s) => s.selectDeck);
+  const loadCards = useFlashcardStore((s) => s.loadCards);
+  const updateCard = useFlashcardStore((s) => s.updateCard);
   const { toast } = useToast();
   const {
     optimize: aiOptimize,
@@ -166,6 +189,32 @@ export default function StudySessionPage() {
     toast({ type: 'success', message: '已更新卡片内容' });
   };
 
+  // 3.5 多感官复习：切换模式——离开听力模式停止 TTS；翻面状态回到正面
+  const handleModeChange = (mode: ReviewMode) => {
+    if (mode === reviewMode) return;
+    ttsController.stop();
+    if (isFlipped) flipCard();
+    setReviewMode(mode);
+  };
+
+  // 3.18 电子墨水学习板：次窗口展示当前卡片（仅在 Electron 环境可用）
+  const handleEinkShow = () => {
+    if (!current) return;
+    const api = window.electronAPI;
+    if (!api) {
+      toast({ type: 'warning', message: '墨水屏复习仅在桌面应用（Electron）中可用' });
+      return;
+    }
+    // M15: 非 Electron 或窗口创建失败时优雅降级（toast 提示），避免 unhandled rejection
+    api.invoke('eink:show-card', {
+      id: current.id,
+      front: extractPlainText(current.front),
+      back: extractPlainText(current.back),
+    }).catch(() => {
+      toast({ type: 'warning', message: '墨水屏窗口打开失败，请在桌面应用中重试' });
+    });
+  };
+
   // 无可学习卡片
   if (total === 0 && !isActive) {
     return (
@@ -206,33 +255,86 @@ export default function StudySessionPage() {
         onClose={() => navigate(`/flashcards/${deckId}`)}
       />
 
+      {/* 3.5 多感官复习：模式切换栏（阅读为默认） */}
+      <ModeSelector mode={reviewMode} onChange={handleModeChange} />
+
       {/* 卡片主体 */}
       <div
-        className="flex-1 flex items-center justify-center px-kb-md overflow-hidden"
+        className="relative flex-1 flex items-center justify-center px-kb-md overflow-hidden"
         onContextMenu={(e) => { if (current) ctxHandleMenu(e, current); }}
       >
+        {/* 3.18 墨水屏复习：Electron 次窗口展示当前卡片 */}
+        {!isComplete && current && (
+          <button
+            type="button"
+            onClick={handleEinkShow}
+            className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2.5 py-1.5 rounded-kb-full text-xs text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary border border-border-subtle bg-bg-elevated/70 transition-colors"
+            title="在墨水屏窗口复习当前卡片"
+          >
+            <Tablet className="w-4 h-4" strokeWidth={1.5} />
+            墨水屏复习
+          </button>
+        )}
         {!isComplete && current ? (
-          <CardStage
-            card={current}
-            isFlipped={isFlipped}
-            entering={ci.entering}
-            exiting={ci.exiting}
-            exitDir={ci.exitDir}
-            cardGlow={ci.cardGlow}
-            prefersReduced={prefersReduced}
-            dragX={ci.dragX}
-            dragActive={ci.dragActive}
-            dragOverlayRed={ci.dragOverlayRed}
-            dragOverlayGreen={ci.dragOverlayGreen}
-            optimizeLoading={optimizeLoading}
-            onFlip={flipCard}
-            onFlipEnd={() => ci.setFlipDone(true)}
-            onDragStart={ci.handleDragStart}
-            onDrag={ci.handleDrag}
-            onDragEnd={ci.handleDragEnd}
-            onOpenSourceNote={(noteId) => navigate(`/notes/${noteId}`)}
-            onOptimize={handleOptimizeClick}
-          />
+          reviewMode === 'reading' ? (
+            <CardStage
+              card={current}
+              isFlipped={isFlipped}
+              entering={ci.entering}
+              exiting={ci.exiting}
+              exitDir={ci.exitDir}
+              cardGlow={ci.cardGlow}
+              prefersReduced={prefersReduced}
+              dragX={ci.dragX}
+              dragActive={ci.dragActive}
+              dragOverlayRed={ci.dragOverlayRed}
+              dragOverlayGreen={ci.dragOverlayGreen}
+              optimizeLoading={optimizeLoading}
+              onFlip={flipCard}
+              onFlipEnd={() => ci.setFlipDone(true)}
+              onDragStart={ci.handleDragStart}
+              onDrag={ci.handleDrag}
+              onDragEnd={ci.handleDragEnd}
+              onOpenSourceNote={(noteId) => navigate(`/notes/${noteId}`)}
+              onOptimize={handleOptimizeClick}
+            />
+          ) : reviewMode === 'listening' ? (
+            <div key={current.id} className="w-full animate-fade-in-up">
+              <AudioReviewMode
+                card={current}
+                isFlipped={isFlipped}
+                onFlip={flipCard}
+                onFlipEnd={() => ci.setFlipDone(true)}
+              />
+            </div>
+          ) : reviewMode === 'writing' ? (
+            <div key={current.id} className="w-full animate-fade-in-up">
+              <WritingReviewMode
+                card={current}
+                isFlipped={isFlipped}
+                onFlip={flipCard}
+                onFlipEnd={() => ci.setFlipDone(true)}
+              />
+            </div>
+          ) : reviewMode === 'speaking' ? (
+            <div key={current.id} className="w-full animate-fade-in-up">
+              <SpeakingReviewMode
+                card={current}
+                isFlipped={isFlipped}
+                onFlip={flipCard}
+                onFlipEnd={() => ci.setFlipDone(true)}
+              />
+            </div>
+          ) : (
+            <div key={current.id} className="w-full animate-fade-in-up">
+              <SituationalReviewMode
+                card={current}
+                isFlipped={isFlipped}
+                onFlip={flipCard}
+                onFlipEnd={() => ci.setFlipDone(true)}
+              />
+            </div>
+          )
         ) : (
           <SessionCompleteView
             completedCount={completedCount}

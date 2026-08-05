@@ -89,6 +89,21 @@ AI_PROVIDERS: dict = {
             "conflict": "deepseek-chat",     # 冲突检测
             "precheck": "deepseek-chat",     # 概念预检
             "import_concept": "deepseek-chat",# 知识入籍
+            "learning_plan": "deepseek-chat", # 今日学习计划（P1）
+            "session_qa": "deepseek-chat",    # 课堂问答（D2）
+            "freshness": "deepseek-chat",     # 知识保鲜检测（Phase3）
+            "embodied": "deepseek-chat",      # 概念具身化（Phase3）
+            "narrative": "deepseek-chat",     # 学习叙事 RPG（Phase3）
+            "haiku": "deepseek-chat",         # 学习俳句（Phase3）
+            "compile": "deepseek-chat",       # 知识编译引擎（Phase4）
+            "micro_card": "deepseek-chat",    # 微学习卡片流（Phase4）
+            "debate": "deepseek-chat",        # AI 辩论对手（Phase2）
+            "counterintuitive": "deepseek-chat", # 反直觉发现器（Phase2）
+            "personify": "deepseek-chat",     # 概念拟人化（Phase2）
+            "mnemonic": "deepseek-chat",      # 记忆术生成器（Phase2）
+            "podcast": "deepseek-chat",       # AI 播客生成器（Phase2）
+            "learning_coach": "deepseek-chat", # AI 学习教练（Phase2）
+            "infographic": "deepseek-chat",   # 知识信息图生成器（Phase2）
         },
     },
     "glm": {
@@ -155,6 +170,34 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
     "concept_precheck": ("deepseek", "precheck"),
     # 阶段 A: 知识入籍概念化（JSON Mode）
     "import_concept": ("deepseek", "import_concept"),
+    # P1: 今日学习计划（JSON Mode）
+    "learning_plan": ("deepseek", "learning_plan"),
+    # D2: 课堂问答（JSON Mode）
+    "session_qa": ("deepseek", "session_qa"),
+    # ============================================================
+    # Phase3: 服务端 AI Chains（JSON Mode）
+    # ============================================================
+    "freshness": ("deepseek", "freshness"),         # G4: 知识保鲜检测
+    "embodied": ("deepseek", "embodied"),           # W6: 概念具身化
+    "learning_narrative": ("deepseek", "narrative"), # 学习叙事 RPG
+    "haiku": ("deepseek", "haiku"),                 # R6: 学习俳句
+    # ============================================================
+    # Phase4: 服务端 AI Chains（JSON Mode）
+    # ============================================================
+    "compile": ("deepseek", "compile"),              # 知识编译引擎（多笔记→5种学习资源）
+    "micro_card": ("deepseek", "micro_card"),        # 微学习卡片流（复杂知识→30秒卡片）
+    # ============================================================
+    # Phase2: 内容生成式 AI Chains（JSON Mode）
+    # 此前遗漏登记——缺失时 MODEL_ROUTING 默认 (fallback, free) 导致
+    # 这些功能永远只调用 FallbackProvider（返回非 JSON 文本），真实模型从未被调用
+    # ============================================================
+    "debate": ("deepseek", "debate"),                # AI 辩论对手（学术/政策/价值/思辨）
+    "counterintuitive": ("deepseek", "counterintuitive"), # 反直觉发现器（每日推送）
+    "personify": ("deepseek", "personify"),          # 概念拟人化（人设卡+关系戏剧）
+    "mnemonic": ("deepseek", "mnemonic"),            # 个性化记忆术生成器（谐音/故事/空间）
+    "podcast": ("deepseek", "podcast"),              # AI 播客生成器（双角色对话）
+    "learning_coach": ("deepseek", "learning_coach"), # AI 学习教练（周计划生成）
+    "infographic": ("deepseek", "infographic"),      # 知识信息图生成器（3 种风格）
     # ============================================================
     # 多模态 / ASR / 视频 — 保持原路由不变
     # ============================================================

@@ -37,6 +37,9 @@ export interface Flashcard {
   // FSRS-5 扩展字段（惰性迁移，初始为 null/undefined）
   stability?: number;            // 记忆稳定性（天）
   difficulty?: number;           // 记忆难度（1-10）
+  /** 自适应挑战档位（惰性迁移，复习时由 suggestDifficultyTier 写入）
+   *  / Adaptive challenge tier (lazy, written by suggestDifficultyTier) */
+  difficultyTier?: 'basic' | 'challenge' | 'master';
   createdAt: Date;
   updatedAt: Date;
   sourceNoteId?: string;         // 来源笔记 ID（用于双向关联）

@@ -99,6 +99,12 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
   // 拖出块取消选中的抑制标志
   const suppressSelectRef = useRef(false);
 
+  // 组件卸载时清理残留的 document 级事件监听（右键拖拽中卸载）
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    return () => dragCleanupRef.current?.();
+  }, []);
+
   // 选中块回调
   const handleSelectBlock = useCallback((id: string, addToSelection: boolean = false) => {
     if (suppressSelectRef.current) {
@@ -206,6 +212,7 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
 
       const handleMouseUp = () => {
         container.style.cursor = '';
+        dragCleanupRef.current = null;
         // 未拖动 → 显示右键快捷菜单
         if (!hasMoved) {
           const rect = container.getBoundingClientRect();
@@ -222,6 +229,11 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
 
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
+      dragCleanupRef.current = () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        container.style.cursor = '';
+      };
       return;
     }
 

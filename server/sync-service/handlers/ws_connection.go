@@ -142,6 +142,18 @@ func (c *WSConnection) readPump() {
 			// For now, acknowledge receipt.
 			ack, _ := json.Marshal(WSMessage{Type: "ack", Payload: msg.Payload})
 			c.send(ack)
+
+		// Phase 4 社交功能消息：协作深潜房间（4.1）
+		case "room:create", "room:join", "room:leave", "room:presence", "room:cheer":
+			handleRoomWSMessage(c, msg)
+
+		// Phase 4 社交功能消息：番茄钟协作接力（4.2）——客户端上报状态转发给搭档
+		case "relay:partner-status":
+			handleRelayWSMessage(c, msg)
+
+		// Phase 4 社交功能消息：虚拟自习室座位状态同步（4.4）
+		case "studyroom:seat-status":
+			handleStudyRoomWSMessage(c, msg)
 		}
 	}
 }

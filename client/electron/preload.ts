@@ -39,6 +39,10 @@ const ALLOWED_CHANNELS = [
   'ai_progress_narrate',
   // 阶段 A：知识入籍概念化（切块文本 → 概念候选）
   'ai_import_concept',
+  // P1：今日学习计划（个性化学习路径）
+  'ai_learning_plan',
+  // D2：课堂内容问答（带引用来源）
+  'ai_session_qa',
   'ai:set-gateway-url',
   // AI 学伴对话 IPC channel
   'ai:chat:send',
@@ -144,6 +148,9 @@ const ALLOWED_CHANNELS = [
   'recording:save',
   'recording:load',
   'recording:delete',
+  // 3.18 电子墨水学习板次窗口
+  'eink:show-card',
+  'eink:hide',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */
@@ -175,6 +182,8 @@ const ALLOWED_EVENT_CHANNELS = [
   'asr_stream_final',
   // 全局快捷键触发推送（payload: { id, text? }，shortcutManager 驱动）
   'shortcut:triggered',
+  // 3.18 电子墨水学习板：主进程推送复习卡片到次窗口
+  'eink:card',
 ] as const;
 
 /** 允许渲染进程单向发送的 channel 白名单（渲染进程 → 主进程，fire-and-forget） */

@@ -21,7 +21,7 @@ import warnings
 from typing import Optional
 
 import httpx
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -342,6 +342,23 @@ async def _get_public_key(kid: Optional[str] = None):
     if alg == "HS256":
         return raw
     return _normalize_pem_key(raw)
+
+
+async def verify_token(request: Request) -> str:
+    """
+    FastAPI 依赖：返回 JWT 中间件注入的用户 ID。
+
+    供需要显式用户身份的路由（如激活码 license）使用；普通路由由
+    JWTAuthMiddleware 统一注入 request.state.user_id。未认证（中间件
+    未注入或注入 anonymous）时返回 401。
+
+    @ai-context: FastAPI dependency that returns the user id injected by
+    JWTAuthMiddleware; 401 when the request is unauthenticated.
+    """
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id or user_id == "anonymous":
+        raise HTTPException(status_code=401, detail="未认证")
+    return user_id
 
 
 class JWTAuthMiddleware(BaseHTTPMiddleware):

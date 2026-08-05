@@ -8,12 +8,14 @@ import {
 } from '@/lib/storage';
 import { Rating } from '@/lib/sm2';
 import { getScheduler } from '@/lib/schedulingFactory';
+import { suggestDifficultyTier } from '@/lib/scheduler';
 import { getMaxNewCardsPerDay, getMaxReviewsPerDay, getMaxSessionCards } from '@/lib/schedulingFactory';
 import type { Flashcard, FlashcardReview, Confidence, GoldenError } from '@/types/models';
 import { useFlashcardStore } from './useFlashcardStore';
 import { generateId } from '@/lib/utils/uuid';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { useWorldEvents } from '@/features/retention/store/useWorldEvents';
+import { loadReviewMode, saveReviewMode, type ReviewMode } from '../lib/reviewMode';
 
 // ---------------------------------------------------------------------------
 // 常量
@@ -70,6 +72,10 @@ interface StudySessionState {
   getGoldenErrors: () => GoldenError[];
   /** CL-H5: 评分处理中标志——防双击/连点导致同一卡片被调度两次 */
   isRating: boolean;
+
+  // 3.5 多感官复习：当前复习模式（阅读/听力/书写/讲解/情境），持久化到 localStorage
+  reviewMode: ReviewMode;
+  setReviewMode: (mode: ReviewMode) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +128,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
     lastRating: null,
     showStrengthPulse: false,
     isRating: false,
+    reviewMode: loadReviewMode(),
 
     // -----------------------------------------------------------------------
     // startSession：加载到期卡片 + 补充新卡（带每日限额）
@@ -290,6 +297,14 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         effectiveInterval = compressed.interval;
       }
 
+      // 自适应挑战阶梯：按调度结果（间隔/失误）计算建议档位，惰性写入
+      const nextTier = suggestDifficultyTier({
+        interval: effectiveInterval,
+        repetitions: result.repetitions,
+        lapses: result.lapses,
+        difficulty: result.difficulty,
+      });
+
       // 更新卡片持久化存储（由 useFlashcardStore.updateCard 统一走 writeWithLog）
 
       // 同步更新本地 sessionCards 中的对应卡片
@@ -304,6 +319,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
               dueDate: effectiveDueDate,
               stability: result.stability,
               difficulty: result.difficulty,
+              difficultyTier: nextTier,
               lastReviewDate: updatedAt,
               updatedAt,
             }
@@ -359,6 +375,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
           dueDate: effectiveDueDate,
           stability: result.stability,
           difficulty: result.difficulty,
+          difficultyTier: nextTier,
           lastReviewDate: updatedAt,
         });
       } catch (updateErr) {
@@ -477,6 +494,14 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
     // -----------------------------------------------------------------------
     getGoldenErrors: () => {
       return get().goldenErrors;
+    },
+
+    // -----------------------------------------------------------------------
+    // setReviewMode：切换多感官复习模式并持久化
+    // -----------------------------------------------------------------------
+    setReviewMode: (mode) => {
+      set({ reviewMode: mode });
+      saveReviewMode(mode);
     },
   };
 });

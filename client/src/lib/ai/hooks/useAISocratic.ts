@@ -13,7 +13,7 @@ import {
   CACHE_TTL_5MIN,
 } from '../aiServiceFallback';
 import { type AIState, INITIAL_STATE, resolveAIErrorState } from './types';
-import type { BrainstormIdea, ChatMessage, SocraticEvaluateResult, SocraticDeepeningResult } from '../types';
+import type { BrainstormIdea, ChatMessage, SocraticEvaluateResult, SocraticDeepeningResult, SocraticMirrorResult } from '../types';
 
 /**
  * AI 苏格拉底式学习 hook
@@ -42,6 +42,9 @@ export function useAISocratic() {
     ...INITIAL_STATE,
   });
   const [deepeningState, setDeepeningState] = useState<AIState<SocraticDeepeningResult>>({
+    ...INITIAL_STATE,
+  });
+  const [mirrorState, setMirrorState] = useState<AIState<SocraticMirrorResult>>({
     ...INITIAL_STATE,
   });
 
@@ -249,10 +252,61 @@ export function useAISocratic() {
     }
   }, []);
 
+  /** Phase 2: 苏格拉底反问镜（mirror 模式）— 将用户问题以另一种视角反弹回去 */
+  const mirrorQuestion = useCallback(async (topic: string, question: string) => {
+    // M10: 缓存 key 使用完整 topic+question——截断会产生同前缀碰撞，
+    // 不同问题命中同一缓存（setAICache 为内存 Map，长 key 无存储成本）
+    const cacheKey = `socratic_mirror:${topic}:${question}`;
+
+    const cached = getAICache<SocraticMirrorResult>(cacheKey);
+    if (cached) {
+      setMirrorState({ data: cached, loading: false, error: null, isFallback: false, needsConfig: false });
+      return cached;
+    }
+
+    setMirrorState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
+
+    try {
+      const result = await dedupeRequest(cacheKey, async () => {
+        return aiPluginLoader.socraticMirror(topic, question);
+      });
+
+      const isBackendFallback = (result as { status?: string })?.status === 'fallback';
+
+      if (isBackendFallback) {
+        setMirrorState({
+          data: result,
+          loading: false,
+          error: 'AI 服务暂时不可用，已为您生成默认反思提示',
+          isFallback: true,
+          needsConfig: false,
+        });
+        return result;
+      }
+
+      soundPlayer.play('ai_analysis_done');
+      setAICache(cacheKey, result, CACHE_TTL_5MIN);
+      setMirrorState({ data: result, loading: false, error: null, isFallback: false, needsConfig: false });
+      return result;
+    } catch (error: unknown) {
+      const fallback = resolveAIFallback<SocraticMirrorResult>(cacheKey, error as Error);
+      if (fallback.level === FallbackLevel.CACHE_HIT) {
+        setMirrorState({ data: fallback.data, loading: false, error: fallback.message, isFallback: true, needsConfig: false });
+        return fallback.data;
+      }
+      setMirrorState(resolveAIErrorState(error, {
+        message: 'AI 反问镜服务暂时不可用',
+        suggestion: '您可以尝试从相反的角度思考自己的问题',
+      }));
+      return null;
+    }
+  }, []);
+
   return {
     brainstorm: { ...brainstormState, brainstorm },
     question: { ...questionState, askQuestion },
     evaluate: { ...evaluateState, evaluateAnswer },
     deepening: { ...deepeningState, generateDeepeningAngles },
+    mirror: { ...mirrorState, mirrorQuestion },
   };
 }

@@ -21,6 +21,8 @@ const POLL_MS = 30_000;
 export interface UseKnowledgeGraphResult {
   /** 派生图谱；首载失败或尚无数据时为 null（组件自行降级展示） */
   graph: KnowledgeGraph | null;
+  /** 原始聚合数据（卡片/费曼/复习），供阶段 4 派生层取溯源与复习记录 */
+  raw: KnowledgeGraphData | null;
   /** 仅首载为 true；后台刷新不闪烁 */
   loading: boolean;
   /** 最近一次失败原因（成功或首载前为 null） */
@@ -32,6 +34,7 @@ export interface UseKnowledgeGraphResult {
 /** 知识星座数据 Hook / Knowledge constellation data hook */
 export function useKnowledgeGraph(pollMs: number = POLL_MS): UseKnowledgeGraphResult {
   const [graph, setGraph] = useState<KnowledgeGraph | null>(null);
+  const [raw, setRaw] = useState<KnowledgeGraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,6 +43,7 @@ export function useKnowledgeGraph(pollMs: number = POLL_MS): UseKnowledgeGraphRe
     try {
       // IPC 返回形状见 features/constellation/types.ts（结构化类型断言）
       const data = await window.electronAPI.invoke('knowledge:get-graph') as KnowledgeGraphData;
+      setRaw(data);
       setGraph(buildKnowledgeGraph(data));
       setError(null);
     } catch (err) {
@@ -66,5 +70,5 @@ export function useKnowledgeGraph(pollMs: number = POLL_MS): UseKnowledgeGraphRe
     };
   }, [load, pollMs]);
 
-  return { graph, loading, error, refresh: load };
+  return { graph, raw, loading, error, refresh: load };
 }

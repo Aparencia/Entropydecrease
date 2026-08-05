@@ -10,6 +10,7 @@ import { Anchor, Clock, GraduationCap, GitCompare, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFeynmanStore } from '@/features/feynman/store/useFeynmanStore';
 import type { ConceptConflict } from '@/lib/ai/types';
+import { FeynmanRecommendSidebar } from './FeynmanRecommendSidebar';
 
 interface AnchorPointItem {
   id: string;
@@ -27,6 +28,10 @@ interface AnchorPointSidebarProps {
   conflicts?: ConceptConflict[];
   /** N6: 关闭冲突提示 */
   onDismissConflicts?: () => void;
+  /** N4: 笔记正文（编辑器实时文本）——供费曼推荐概念提取 */
+  noteContent?: string;
+  /** N4: 笔记标题——费曼推荐概念优先取标题 */
+  noteTitle?: string;
 }
 
 function formatTimeAgo(dateStr: string): string {
@@ -45,7 +50,7 @@ const itemVariants = {
   exit: { opacity: 0, x: -8, transition: { duration: 0.2 } },
 };
 
-export function AnchorPointSidebar({ anchorPoints, conflicts = [], onDismissConflicts }: AnchorPointSidebarProps) {
+export function AnchorPointSidebar({ anchorPoints, conflicts = [], onDismissConflicts, noteContent, noteTitle }: AnchorPointSidebarProps) {
   const navigate = useNavigate();
   const createFeynmanNote = useFeynmanStore((s) => s.createNote);
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
@@ -188,6 +193,11 @@ export function AnchorPointSidebar({ anchorPoints, conflicts = [], onDismissConf
               </div>
             ))}
           </div>
+        )}
+
+        {/* N4 笔记→费曼自动引导：内容达阈值且可提取概念时展示推荐卡 */}
+        {noteContent !== undefined && (
+          <FeynmanRecommendSidebar noteContent={noteContent} noteTitle={noteTitle ?? ''} />
         )}
       </div>
     </div>

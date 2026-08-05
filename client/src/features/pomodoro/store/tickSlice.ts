@@ -54,11 +54,28 @@ function finalizeWorkPhase(get: () => PomodoroState): number | null {
     useEcosystemStore.getState().plantCoral(minutes, 'pomodoro', `dive-${Date.now()}`).catch(() => {});
   }).catch(() => {});
 
+  // 宪法第六条世界数据回路·花园侧：深潜完成=播下一颗种子（专注花园）。
+  // 动态 import 避免模块循环；失败静默降级，不影响番茄钟主流程
+  import('@/features/garden/lib/gardenStore').then(({ useGardenStore }) => {
+    const minutes = Math.max(1, Math.round((actualDuration ?? plannedSeconds) / 60));
+    useGardenStore.getState().addPlant({
+      sourceSessionId: `dive-${Date.now()}`,
+      focusMinutes: minutes,
+    });
+  }).catch(() => {});
+
   // @ai-context: 发射 session:end 事件——驱动 AI 学伴主动触发（专注结束关怀）
   assistantEventBus.emit('session:end', {
     currentHour: new Date().getHours(),
     sessionMinutes: Math.round((actualDuration ?? plannedSeconds) / 60),
   });
+
+  // @ai-context: 社交接力上报（轻事件）——存在活跃接力配对时向搭档上报
+  // 一次完成事件（只含分钟数，无内容）。动态 import + fire-and-forget：
+  // 任何失败静默，绝不阻塞番茄钟主流程。
+  import('@/features/social/lib/relayNotify').then(({ notifyRelayComplete }) => {
+    notifyRelayComplete((actualDuration ?? plannedSeconds) / 60).catch(() => {});
+  }).catch(() => {});
 
   return actualDuration;
 }

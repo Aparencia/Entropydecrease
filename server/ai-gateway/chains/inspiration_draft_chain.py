@@ -1,4 +1,4 @@
-"""
+﻿"""
 熵减 AI 网关 — AI 草稿生成 Chain（v1.1.0）
 
 将灵感/零散想法转化为结构化学习材料草稿：
@@ -76,7 +76,7 @@ class InspirationDraftChain:
             except (json.JSONDecodeError, ValueError):
                 pass
 
-        if data is None:
+        if data is None or not isinstance(data, dict):
             logger.warning("无法解析草稿 JSON，返回降级结果")
             return {}
 

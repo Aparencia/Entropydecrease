@@ -51,12 +51,24 @@ const SopEditorPage = lazy(() => import('@/features/sop/pages/SopEditorPage'));
 const SopRunPage = lazy(() => import('@/features/sop/pages/SopRunPage'));
 const InboxPage = lazy(() => import('@/features/inbox/pages/InboxPage'));
 const CertificatePage = lazy(() => import('@/features/dashboard/pages/CertificatePage'));
+const GardenPage = lazy(() => import('@/features/garden/components/GardenPage'));
+const RecipesPage = lazy(() => import('@/features/recipes/pages/RecipesPage'));
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
 const ResetPasswordPage = lazy(() => import('@/pages/ResetPassword'));
 const VerifyEmailPage = lazy(() => import('@/pages/VerifyEmail'));
 const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'));
 const TermsOfService = lazy(() => import('@/pages/TermsOfService'));
+const SoundAnchorPage = lazy(() => import('@/features/soundanchor/pages/SoundAnchorPage'));
+const TimeCapsulePage = lazy(() => import('@/features/timecapsule/pages/TimeCapsulePage'));
+const ConstellationPage = lazy(() => import('@/features/constellation/pages/ConstellationPage'));
+const EinkPage = lazy(() => import('@/features/eink/pages/EinkPage'));
+const SocialDivePage = lazy(() => import('@/features/social/pages/DeepDivePage'));
+const SocialRelayPage = lazy(() => import('@/features/social/pages/RelayPage'));
+const SocialMirrorPage = lazy(() => import('@/features/social/pages/SocialMirrorPage'));
+const StudyRoomPage = lazy(() => import('@/features/social/pages/StudyRoomPage'));
+const WikiPage = lazy(() => import('@/features/wiki/pages/WikiPage'));
+const MicroCardsPage = lazy(() => import('@/features/microcards/pages/MicroCardsPage'));
 
 // 骨架屏加载占位：用 animate-pulse 灰色块替代旋转 spinner，减少模块切换时的视觉跳变
 function PageLoader() {
@@ -112,7 +124,23 @@ const routes: RouteObject[] = [
       { path: '/sop/editor/:id?', element: <SuspenseWrapper><SopEditorPage /></SuspenseWrapper> },
       { path: '/inbox', element: <SuspenseWrapper><InboxPage /></SuspenseWrapper> },
       { path: '/certificate', element: <SuspenseWrapper><CertificatePage /></SuspenseWrapper> },
+      { path: '/garden', element: <SuspenseWrapper><GardenPage /></SuspenseWrapper> },
+      { path: '/recipes', element: <SuspenseWrapper><RecipesPage /></SuspenseWrapper> },
+      { path: '/soundanchor', element: <SuspenseWrapper><SoundAnchorPage /></SuspenseWrapper> },
+      { path: '/timecapsule', element: <SuspenseWrapper><TimeCapsulePage /></SuspenseWrapper> },
+      { path: '/constellation', element: <SuspenseWrapper><ConstellationPage /></SuspenseWrapper> },
+      { path: '/social/dive', element: <SuspenseWrapper><SocialDivePage /></SuspenseWrapper> },
+      { path: '/social/relay', element: <SuspenseWrapper><SocialRelayPage /></SuspenseWrapper> },
+      { path: '/social/mirror', element: <SuspenseWrapper><SocialMirrorPage /></SuspenseWrapper> },
+      { path: '/social/studyroom', element: <SuspenseWrapper><StudyRoomPage /></SuspenseWrapper> },
+      { path: '/wiki', element: <SuspenseWrapper><WikiPage /></SuspenseWrapper> },
+      { path: '/microcards', element: <SuspenseWrapper><MicroCardsPage /></SuspenseWrapper> },
     ],
+  },
+  {
+    // 电子墨水学习板次窗口：仿 /onboarding 先例挂在 AuthGuard/AppLayout 之外，避免重定向循环
+    path: '/eink',
+    element: <SuspenseWrapper><EinkPage /></SuspenseWrapper>,
   },
   {
     // SOP 全屏沉浸执行器：仿 /onboarding 先例挂在 AuthGuard/AppLayout 之外，绕开 3D canvas

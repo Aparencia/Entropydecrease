@@ -119,14 +119,16 @@ export interface TierPerks {
   models: string[];
   multimodal: boolean;
   earlyAccess: number;     // 提前天数，0=无
+  /** Pro 权益：跨设备同步（免费层单设备，同步引擎已就绪） */
+  multiDeviceSync: boolean;
 }
 
 /** 按 tier 的权益配置表 */
 export const TIER_PERKS: Record<UserTier, TierPerks> = {
-  free:     { dailyAiCalls: 15,  dailyCostLimit: 0.5,  models: ['glm-4.6v-flash'],             multimodal: false, earlyAccess: 0 },
-  observer: { dailyAiCalls: 50,  dailyCostLimit: 1.5,  models: ['glm-4.6v-flash', 'qwen-plus'],  multimodal: false, earlyAccess: 0 },
-  active:   { dailyAiCalls: 80,  dailyCostLimit: 2.0,  models: ['glm-4.6v-flash', 'qwen-plus', 'deepseek-chat'], multimodal: true, earlyAccess: 3 },
-  core:     { dailyAiCalls: 120, dailyCostLimit: 3.0,  models: ['all'],                         multimodal: true, earlyAccess: 5 },
-  pro:      { dailyAiCalls: 80,  dailyCostLimit: 2.0,  models: ['glm-4.6v-flash', 'qwen-plus', 'deepseek-chat'], multimodal: false, earlyAccess: 0 },
-  lifetime: { dailyAiCalls: 120, dailyCostLimit: 3.0,  models: ['all'],                         multimodal: true, earlyAccess: 5 },
+  free:     { dailyAiCalls: 15,  dailyCostLimit: 0.5,  models: ['glm-4.6v-flash'],             multimodal: false, earlyAccess: 0, multiDeviceSync: false },
+  observer: { dailyAiCalls: 50,  dailyCostLimit: 1.5,  models: ['glm-4.6v-flash', 'qwen-plus'],  multimodal: false, earlyAccess: 0, multiDeviceSync: true },
+  active:   { dailyAiCalls: 80,  dailyCostLimit: 2.0,  models: ['glm-4.6v-flash', 'qwen-plus', 'deepseek-chat'], multimodal: true, earlyAccess: 3, multiDeviceSync: true },
+  core:     { dailyAiCalls: 120, dailyCostLimit: 3.0,  models: ['all'],                         multimodal: true, earlyAccess: 5, multiDeviceSync: true },
+  pro:      { dailyAiCalls: 80,  dailyCostLimit: 2.0,  models: ['glm-4.6v-flash', 'qwen-plus', 'deepseek-chat'], multimodal: false, earlyAccess: 0, multiDeviceSync: true },
+  lifetime: { dailyAiCalls: 120, dailyCostLimit: 3.0,  models: ['all'],                         multimodal: true, earlyAccess: 5, multiDeviceSync: true },
 };

@@ -1,4 +1,4 @@
-"""
+﻿"""
 熵减 AI 网关 — 苏格拉底头脑风暴 Chain
 
 从5个发散角度（类比/反例/应用/历史/争议）生成创意联想
@@ -56,7 +56,7 @@ class SocraticBrainstormChain:
             except (json.JSONDecodeError, ValueError):
                 pass
 
-        if data is None:
+        if data is None or not isinstance(data, dict):
             logger.warning("无法解析头脑风暴 JSON，返回降级结果")
             return {"ideas": []}
 

@@ -9,6 +9,7 @@ vi.mock('@/lib/storage', () => ({
     create: vi.fn().mockResolvedValue('mock-uuid-1'),
     update: vi.fn().mockResolvedValue(undefined),
     delete: vi.fn().mockResolvedValue(undefined),
+    bulkDelete: vi.fn().mockResolvedValue(undefined),
     where: vi.fn().mockResolvedValue([]),
   },
   noteFolderStore: {
@@ -36,7 +37,7 @@ vi.mock('@/lib/storage/writeWithLog', () => ({
 }));
 
 vi.mock('@/lib/search/dexieSearchIndexer', () => ({
-  dexieSearchIndexer: { remove: vi.fn().mockResolvedValue(undefined) },
+  dexieSearchIndexer: { remove: vi.fn().mockResolvedValue(undefined), upsert: vi.fn().mockResolvedValue(undefined) },
 }));
 
 vi.mock('../lib/links/noteLinkStore', () => ({
@@ -79,6 +80,8 @@ beforeEach(() => {
     selectedNoteId: null,
     selectedFolderId: null,
     searchQuery: '',
+    selectedTemplate: null,
+    selectedTags: [],
   });
 });
 
@@ -227,6 +230,81 @@ describe('Note Store - Pure Business Logic', () => {
       expect(noteFolderStore.delete).toHaveBeenCalledWith('f1');
       expect(noteFolderStore.delete).toHaveBeenCalledWith('f2');
       expect(noteFolderStore.delete).toHaveBeenCalledWith('f3');
+    });
+  });
+
+  // ── deleteNotesBatch ────────────────────────────────────────
+
+  describe('deleteNotesBatch', () => {
+    beforeEach(() => {
+      useNoteStore.setState({ notes: SAMPLE_NOTES, selectedNoteId: 'n1' });
+      vi.clearAllMocks();
+    });
+
+    it('空数组直接返回', async () => {
+      await useNoteStore.getState().deleteNotesBatch([]);
+      expect(noteStore.bulkDelete).not.toHaveBeenCalled();
+    });
+
+    it('批量删除笔记并清理搜索索引和链接', async () => {
+      await useNoteStore.getState().deleteNotesBatch(['n1', 'n3']);
+      expect(noteStore.bulkDelete).toHaveBeenCalledWith(['n1', 'n3']);
+      expect(dexieSearchIndexer.remove).toHaveBeenCalledWith('n1');
+      expect(dexieSearchIndexer.remove).toHaveBeenCalledWith('n3');
+    });
+
+    it('删除选中笔记时清空 selectedNoteId', async () => {
+      expect(useNoteStore.getState().selectedNoteId).toBe('n1');
+      await useNoteStore.getState().deleteNotesBatch(['n1', 'n2']);
+      expect(useNoteStore.getState().selectedNoteId).toBeNull();
+    });
+
+    it('删除非选中笔记时保留 selectedNoteId', async () => {
+      await useNoteStore.getState().deleteNotesBatch(['n2']);
+      expect(useNoteStore.getState().selectedNoteId).toBe('n1');
+    });
+  });
+
+  // ── toggleTemplate ──────────────────────────────────────────
+
+  describe('toggleTemplate', () => {
+    // 测试隔离：store 为模块级单例，前面用例会把 selectedTemplate 置为非空，
+    // 不重置则「再点取消」用例实际从非空状态开始，两次 toggle 后回到非空（污染）
+    beforeEach(() => {
+      useNoteStore.setState({ selectedTemplate: null });
+    });
+
+    it('初始为 null', () => {
+      expect(useNoteStore.getState().selectedTemplate).toBeNull();
+    });
+
+    it('点击模板切换为选中', () => {
+      useNoteStore.getState().toggleTemplate('outline');
+      expect(useNoteStore.getState().selectedTemplate).toBe('outline');
+    });
+
+    it('再点同一模板取消选中（回 null）', () => {
+      useNoteStore.getState().toggleTemplate('outline');
+      useNoteStore.getState().toggleTemplate('outline');
+      expect(useNoteStore.getState().selectedTemplate).toBeNull();
+    });
+
+    it('切换不同模板时只保留最后一个', () => {
+      useNoteStore.getState().toggleTemplate('outline');
+      useNoteStore.getState().toggleTemplate('cornell');
+      expect(useNoteStore.getState().selectedTemplate).toBe('cornell');
+    });
+
+    it('与 getFilteredNotes 联用：按模板筛选', () => {
+      useNoteStore.setState({ notes: [
+        { id: 'n1', title: 'A', content: '', template: 'outline', tags: [], createdAt: new Date(), updatedAt: new Date(), wordCount: 0, pinned: false },
+        { id: 'n2', title: 'B', content: '', template: 'cornell', tags: [], createdAt: new Date(), updatedAt: new Date(), wordCount: 0, pinned: false },
+        { id: 'n3', title: 'C', content: '', template: 'outline', tags: [], createdAt: new Date(), updatedAt: new Date(), wordCount: 0, pinned: false },
+      ] });
+      useNoteStore.getState().toggleTemplate('outline');
+      const result = useNoteStore.getState().getFilteredNotes();
+      expect(result).toHaveLength(2);
+      expect(result.map((n) => n.id)).toEqual(['n1', 'n3']);
     });
   });
 });

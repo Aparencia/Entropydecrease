@@ -6,7 +6,7 @@
  * getFilteredNotes 同步生效）+ 模板筛选 tabs（与卡片模板 Tag 共用 selectedTemplate
  * 状态，双向联动，再点取消，可逆）。
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
@@ -23,6 +23,8 @@ const TEMPLATE_TABS: Array<{ type: NoteTemplate | 'all'; label: string }> = [
   { type: 'mindmap', label: '思维导图' },
   { type: 'free', label: '自由笔记' },
   { type: 'blank', label: '空白' },
+  { type: 'qa', label: '问答' },
+  { type: 'video', label: '视频笔记' },
   { type: 'todo', label: '待办' },
 ];
 
@@ -39,6 +41,11 @@ export function NoteSearchBar() {
     toggleTemplate: s.toggleTemplate,
   })));
   const [localQuery, setLocalQuery] = useState(searchQuery);
+
+  // 外部 searchQuery 变化时同步（如命令面板全局搜索切换后返回）
+  useEffect(() => {
+    setLocalQuery(searchQuery);
+  }, [searchQuery]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;

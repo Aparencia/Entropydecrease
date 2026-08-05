@@ -56,14 +56,14 @@ export const PROACTIVE_RULES: ProactiveRule[] = [
     priority: 12,
     message: { type: 'template', templates: MESSAGE_TEMPLATES['review-reminder'] },
   },
-  // ── F3 睡前复习推荐：晚间窗口 + 到期卡充足时发射，每日至多一次 ──
+  // ── F3 睡前仪式完整版：晚间窗口 + 到期卡充足时触发完整三步仪式，每日至多一次 ──
   {
-    id: 'bedtime-review',
+    id: 'bedtime-routine',
     event: 'review:bedtime',
-    condition: ctx => (ctx.dueCardCount ?? 0) >= 5,
+    condition: ctx => (ctx.dueCardCount ?? 0) >= 3,
     cooldown: 24 * 60 * 60 * 1000,
     priority: 13,
-    message: { type: 'template', templates: MESSAGE_TEMPLATES['bedtime-review'] },
+    message: { type: 'template', templates: MESSAGE_TEMPLATES['bedtime-routine'] },
   },
   // ── T4 孵化效应引导：笔记/费曼卡壳超 10 分钟时发射，长冷却防反复打扰 ──
   {
@@ -130,5 +130,23 @@ export const PROACTIVE_RULES: ProactiveRule[] = [
     priority: 6,
     // 策略声明为 ai_generate（网关个性化）；引擎 MVP 降级为 template + 统计填充
     message: { type: 'ai_generate', prompt: '基于用户本周学习统计生成一段温暖的微进展叙述，突出具体进步数字，不超过两句话。' },
+  },
+  // ── 课前预习（1.16）：课表触发器在开课前 30 分钟内发射 schedule:class-upcoming；
+  // 条件二次确认时间窗（防御钩子提前发射），24h 冷却保证每节课至多提醒一次 ──
+  {
+    id: 'pre-class-prep',
+    event: 'schedule:class-upcoming',
+    condition: ctx => (ctx.upcomingClass?.startsInMinutes ?? 31) <= 30,
+    cooldown: 24 * 60 * 60 * 1000,
+    priority: 10,
+    message: { type: 'template', templates: MESSAGE_TEMPLATES['pre-class-prep'] },
+  },
+  // ── Phase 2: 反直觉发现器 — 每日启动时推送一条反直觉事实 ──
+  {
+    id: 'counterintuitive-daily',
+    event: 'app:startup',
+    cooldown: 24 * 60 * 60 * 1000,
+    priority: 4,
+    message: { type: 'template', templates: MESSAGE_TEMPLATES['counterintuitive-daily'] },
   },
 ];

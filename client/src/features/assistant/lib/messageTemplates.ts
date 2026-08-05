@@ -34,6 +34,11 @@ export const MESSAGE_TEMPLATES: Record<ProactiveTriggerType, string[]> = {
     '睡前翻 5 张卡片，让睡眠帮你巩固记忆？',
     '入睡前花 2 分钟轻复习，记忆会在夜里悄悄生根。',
   ],
+  // ── F3 睡前仪式完整版（三步引导：复习 → 回顾 → 清醒期引导） ──
+  'bedtime-routine': [
+    '睡前仪式时间到了，花 2 分钟复习，让睡眠帮你巩固记忆。',
+    '睡前花一点时间回顾今天的内容，大脑会在睡眠中自动整理。',
+  ],
   // ── T3 5 分钟承诺入口（拖延情绪调节：不要求完美，只要求开始） ──
   'commit-dive': [
     '不想开始也没关系，就 5 分钟，随时可以停。',
@@ -79,6 +84,25 @@ export const MESSAGE_TEMPLATES: Record<ProactiveTriggerType, string[]> = {
     '你正在稳步前进：{stats}。继续保持这个节奏就好。',
     '看看这些微小的进步：{stats}。这正是熵减的力量。',
   ],
+  // ── 课前预习（1.16）：临近上课时建议回顾预测题，{course}/{minutes} 由上下文替换 ──
+  'pre-class-prep': [
+    '距「{course}」开课还有 {minutes} 分钟——花 2 分钟回顾一下上次的预测题，带着问题去听课会更高效。',
+    '「{course}」马上开始了。趁课前翻一眼之前的预测记录，让大脑提前进入状态？',
+    '还有 {minutes} 分钟就要上「{course}」了，先看看上节课预测的问题，准备好接受新知识。',
+  ],
+  // ── 好奇心改写（1.15）：非独立触发类型，仅作为普通通知的 30% 概率改写池 ──
+  'curiosity-rewrite': [
+    '还记得上周那个有趣的概念吗？它正在等你回来复习。',
+    '有个小秘密藏在你学过的知识里——去翻一翻，它会让你会心一笑。',
+    '你上次留下的思考痕迹还在那里，要不要去看看它后来怎么样了？',
+    '有些知识会悄悄生长，回来看看它们长成什么样了。',
+  ],
+  // ── Phase 2: 反直觉发现器 — 每日推送一条反直觉事实 ──
+  'counterintuitive-daily': [
+    '今日反直觉发现：{fact} — {explanation}',
+    '你知道吗？{fact} 这背后是 {explanation}',
+    '一个颠覆常识的事实：{fact} 想了解更多？{explanation}',
+  ],
 };
 
 /**
@@ -88,4 +112,14 @@ export const MESSAGE_TEMPLATES: Record<ProactiveTriggerType, string[]> = {
 export function pickTemplate(trigger: ProactiveTriggerType): string {
   const list = MESSAGE_TEMPLATES[trigger];
   return list[Math.floor(Math.random() * list.length)];
+}
+
+/**
+ * 好奇心改写（1.15）：以指定概率把普通通知改写为好奇心驱动版本。
+ * 随机概率让改写难以预测，避免用户对文案产生适应（可变 > 固定）。
+ * 未命中时原样返回，保证通知信息不丢失。
+ */
+export function maybeCuriosityRewrite(message: string, chance = 0.3): string {
+  if (Math.random() >= chance) return message;
+  return pickTemplate('curiosity-rewrite');
 }

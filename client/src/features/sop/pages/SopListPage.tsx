@@ -9,14 +9,15 @@
  * read-only (copy-to-user); user templates are editable. Starting a run
  * navigates to the fullscreen runner.
  */
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Play, Pencil, Copy, Trash2, History } from 'lucide-react';
+import { Plus, Play, Pencil, Copy, Trash2, History, Download, Upload } from 'lucide-react';
 import RitualHeader from '@/features/inspiration/components/RitualHeader';
 import { Button } from '@/components/ui';
 import { useToast } from '@/components/ui';
 import { useSopStore } from '../store/useSopStore';
 import { lintSopTemplate } from '../lib/sopLint';
+import { exportTemplateJson, importTemplateJson, downloadJsonFile } from '../lib/sopRepository';
 import { templateTotalMinutes } from '../types';
 import type { SopRunRow, SopTemplate } from '../types';
 
@@ -27,12 +28,13 @@ const RUN_STATUS_META: Record<SopRunRow['status'], { label: string; cls: string 
   aborted: { label: '已中止', cls: 'bg-rose-500/15 text-rose-400' },
 };
 
-function TemplateCard({ template, onStart, onEdit, onCopy, onDelete }: {
+function TemplateCard({ template, onStart, onEdit, onCopy, onDelete, onExport }: {
   template: SopTemplate;
   onStart: (t: SopTemplate) => void;
   onEdit: (t: SopTemplate) => void;
   onCopy: (t: SopTemplate) => void;
   onDelete: (t: SopTemplate) => void;
+  onExport: (t: SopTemplate) => void;
 }) {
   const issues = useMemo(() => lintSopTemplate(template), [template]);
   const total = templateTotalMinutes(template);
@@ -75,6 +77,9 @@ function TemplateCard({ template, onStart, onEdit, onCopy, onDelete }: {
           </Button>
         )}
         <div className="ml-auto flex items-center gap-1">
+          <Button size="sm" variant="ghost" icon={<Download className="w-3.5 h-3.5" />} onClick={() => onExport(template)}>
+            导出
+          </Button>
           {isBuiltin && (
             <Button size="sm" variant="ghost" icon={<Copy className="w-3.5 h-3.5" />} onClick={() => onCopy(template)}>
               复制
@@ -131,9 +136,45 @@ export default function SopListPage() {
     toast({ type: ok ? 'success' : 'error', message: ok ? '已删除模板' : '删除失败' });
   };
 
+  /** 导出模板为分享文件（本地下载，不经云端） */
+  const handleExport = async (t: SopTemplate) => {
+    const json = await exportTemplateJson(t.id);
+    if (!json) { toast({ type: 'error', message: '导出失败' }); return; }
+    const safeName = t.name.replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 40) || 'sop-template';
+    downloadJsonFile(json, `entropy-sop-${safeName}.json`);
+    toast({ type: 'success', message: '已导出模板分享文件' });
+  };
+
+  /** 从分享文件导入模板（校验后入库） */
+  const handleImportFile = async (file: File) => {
+    const text = await file.text().catch(() => '');
+    if (!text) { toast({ type: 'error', message: '读取文件失败' }); return; }
+    const result = await importTemplateJson(text);
+    if (result.error) { toast({ type: 'error', message: result.error }); return; }
+    toast({ type: 'success', message: '模板已导入' });
+    await loadAll();
+    if (result.id) navigate(`/sop/editor/${result.id}`);
+  };
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6 px-kb-lg py-kb-xl">
       <RitualHeader title="SOP 流程库" note="步骤成章 复利生长">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void handleImportFile(file);
+            e.target.value = '';
+          }}
+        />
+        <Button size="sm" variant="secondary" icon={<Upload className="w-3.5 h-3.5" />} onClick={() => fileInputRef.current?.click()}>
+          导入
+        </Button>
         <Button size="sm" variant="ai" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => navigate('/sop/editor')}>
           新建模板
         </Button>
@@ -160,6 +201,7 @@ export default function SopListPage() {
               onEdit={(tt) => navigate(`/sop/editor/${tt.id}`)}
               onCopy={handleCopy}
               onDelete={handleDelete}
+              onExport={handleExport}
             />
           ))}
         </div>

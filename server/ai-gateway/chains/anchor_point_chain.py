@@ -1,4 +1,4 @@
-"""
+﻿"""
 熵减 AI 网关 — 记忆锚点生成 Chain
 
 从学习笔记中提取 3-5 个记忆锚点：
@@ -76,7 +76,7 @@ class AnchorPointChain:
             except (json.JSONDecodeError, ValueError):
                 pass
 
-        if data is None:
+        if data is None or not isinstance(data, dict):
             logger.warning("无法解析记忆锚点 JSON，返回降级结果")
             return []
 

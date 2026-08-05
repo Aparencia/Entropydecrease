@@ -128,8 +128,33 @@ PATH_TO_FEATURE: dict[str, str] = {
     # ---- 知识入籍概念化（import_concept.py） ----
     "/api/v1/ai/import/concepts": "import_concept",  # 切块文本→概念候选
 
+    # ---- P1: 今日学习计划（learning_plan.py） ----
+    "/api/v1/ai/learning-plan": "learning_plan",  # 个性化学习路径
+
+    # ---- D2: 课堂内容问答（session_qa.py） ----
+    "/api/v1/ai/session-qa": "session_qa",  # 课堂问答（带引用来源）
+
     # ---- Path C: 视频分析（multimodal_video.py） ----
     "/api/v1/multimodal/analyze-video": "video_analyze",  # 视频课堂分析
+
+    # ---- Phase3: 服务端 AI Chains ----
+    "/api/v1/ai/freshness": "freshness",           # G4: 知识保鲜检测
+    "/api/v1/ai/embodied": "embodied",             # W6: 概念具身化
+    "/api/v1/ai/learning-narrative": "learning_narrative",  # 学习叙事 RPG
+    "/api/v1/ai/haiku": "haiku",                   # R6: 学习俳句
+
+    # ---- Phase4: 服务端 AI Chains ----
+    "/api/v1/ai/compile": "compile",               # 知识编译引擎
+    "/api/v1/ai/micro-card": "micro_card",         # 微学习卡片流
+
+    # ---- Phase2: 内容生成式 AI Chains ----
+    "/api/v1/ai/debate": "debate",                 # AI 辩论对手
+    "/api/v1/ai/counterintuitive": "counterintuitive",  # 反直觉发现器
+    "/api/v1/ai/personify": "personify",           # 概念拟人化
+    "/api/v1/ai/mnemonic": "mnemonic",             # 记忆术生成器
+    "/api/v1/ai/podcast": "podcast",               # AI 播客生成器
+    "/api/v1/ai/learning-coach": "learning_coach", # AI 学习教练
+    "/api/v1/ai/infographic": "infographic",       # 知识信息图生成器
 
     # 注意：/{feature}/stream（streaming.py）为通配路径，无法精确匹配，
     # 其限流由流式路由内部通过 feature 参数自行处理。

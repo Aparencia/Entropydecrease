@@ -241,6 +241,116 @@ export async function deleteTemplate(id: string): Promise<boolean> {
   }
 }
 
+// ============================================================
+// 模板分享（导入/导出）——本地优先：模板为静态 JSON，
+// 导出/导入不经过任何云端，可跨设备/跨用户分享
+// ============================================================
+
+/** 分享文件格式标识 */
+export const SOP_EXPORT_FORMAT = 'kban-sop-template' as const;
+
+/** 分享文件载荷（不含 id/时间戳，导入时重新生成） */
+export interface SopExportFile {
+  format: typeof SOP_EXPORT_FORMAT;
+  version: 1;
+  exportedAt: string; // ISO 8601
+  template: {
+    name: string;
+    description: string;
+    icon: string;
+    category: string;
+    steps: Array<{ step_type: string; title: string; config: SopStepConfig }>;
+  };
+}
+
+/**
+ * 导出模板为分享 JSON 字符串（含完整步骤）。
+ * @returns JSON 字符串；模板不存在返回 null
+ */
+export async function exportTemplateJson(id: string): Promise<string | null> {
+  const t = await getTemplate(id);
+  if (!t) return null;
+  const payload: SopExportFile = {
+    format: SOP_EXPORT_FORMAT,
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    template: {
+      name: t.name,
+      description: t.description,
+      icon: t.icon,
+      category: t.category,
+      steps: t.steps.map((s) => ({
+        step_type: s.step_type,
+        title: s.title,
+        config: {
+          durationMinutes: s.configParsed.durationMinutes,
+          target: s.configParsed.target,
+          module: s.configParsed.module,
+        },
+      })),
+    },
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
+/** 从分享 JSON 导入模板（结构校验后入库）
+ * @returns { id } 成功；{ error } 失败原因
+ */
+export async function importTemplateJson(json: string): Promise<{ id?: string; error?: string }> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return { error: '不是有效的 JSON 文件' };
+  }
+
+  const p = parsed as Partial<SopExportFile>;
+  if (!p || p.format !== SOP_EXPORT_FORMAT || !p.template) {
+    return { error: '文件格式不正确——需为熵减 SOP 模板分享文件（.json）' };
+  }
+  const { name, description = '', icon = '', category = '', steps } = p.template;
+  if (typeof name !== 'string' || !name.trim() || !Array.isArray(steps) || steps.length === 0) {
+    return { error: '模板缺少名称或步骤列表' };
+  }
+
+  // 步骤字段校验（错误级阻止导入，lint 建议由编辑器展示）
+  const validTypes = new Set(['focus', 'review', 'break', 'module', 'output']);
+  for (const s of steps) {
+    if (!s || !validTypes.has(s.step_type) || typeof s.title !== 'string' || !s.title.trim()) {
+      return { error: `步骤「${s?.title ?? '未知'}」类型或标题不完整` };
+    }
+  }
+
+  const id = await createTemplate({
+    name: name.trim(),
+    description,
+    icon,
+    category,
+    steps: steps.map((s) => ({
+      step_type: s.step_type,
+      title: s.title.trim(),
+      config: {
+        durationMinutes: s.config?.durationMinutes,
+        target: s.config?.target,
+        module: s.config?.module,
+      },
+    })),
+  });
+  if (!id) return { error: '导入失败，请重试' };
+  return { id };
+}
+
+/** 触发浏览器下载 JSON 文件（Electron 渲染进程可用） */
+export function downloadJsonFile(content: string, filename: string): void {
+  const blob = new Blob([content], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /** 创建执行记录（从模板开始运行） */
 export async function createRun(templateId: string): Promise<string | undefined> {
   const api = getApi();

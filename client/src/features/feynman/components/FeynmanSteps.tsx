@@ -67,8 +67,8 @@ export function StepConcept({ concept, explanation, onExplanationChange, noteId 
             )}
           />
         </div>
-        {/* E2 口头讲解入口（ASR 不可用时自动隐藏；noteId 关联录音持久化） */}
-        <FeynmanRecorder explanation={explanation} onExplanationChange={onExplanationChange} noteId={noteId} />
+        {/* E2 口头讲解入口（ASR 不可用时自动隐藏；noteId 关联录音持久化，concept 供录音后 AI 自评） */}
+        <FeynmanRecorder explanation={explanation} onExplanationChange={onExplanationChange} noteId={noteId} concept={concept} />
       </motion.div>
       <motion.div variants={item} className={cn(
         'p-kb-md rounded-kb-lg',

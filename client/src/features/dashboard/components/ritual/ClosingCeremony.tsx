@@ -11,7 +11,7 @@
  * startup ritual; persistence stays in ritualService via the page layer.
  */
 import { motion } from 'framer-motion';
-import { Sparkles, Target, Timer, Flame, Layers } from 'lucide-react';
+import { Sparkles, Target, Timer, Flame, Layers, HelpCircle } from 'lucide-react';
 import type { MicroGoal } from '../../types';
 import type { MasteryMark } from '@/types/ritual';
 import { shouldScheduleReviewCard } from '../../utils/ritualHelpers';
@@ -25,6 +25,8 @@ interface Props {
   durationMs: number;
   /** 结束仪式 → 触发完成（页面层落库 + 复习卡闭环） */
   onClose: () => void;
+  /** D2 蔡格尼克悬念：AI 回顾小问的问题文本 */
+  suspenseQuestion?: string;
 }
 
 const MASTERY_LABEL: Record<MasteryMark, string> = {
@@ -40,7 +42,7 @@ function formatDuration(ms: number): string {
   return m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`;
 }
 
-export function ClosingCeremony({ goal, masteryMark, streakDays, durationMs, onClose }: Props) {
+export function ClosingCeremony({ goal, masteryMark, streakDays, durationMs, onClose, suspenseQuestion }: Props) {
   const reviewCardPlanned = shouldScheduleReviewCard(masteryMark);
 
   return (
@@ -99,6 +101,27 @@ export function ClosingCeremony({ goal, masteryMark, streakDays, durationMs, onC
             ? '已掌握的内容无需额外复习卡'
             : '标记掌握度后可为模糊内容安排复习卡'}
       </div>
+
+      {/* D2 蔡格尼克悬念引擎：AI 回顾小问，制造未完成感 */}
+      {suspenseQuestion && (
+        <motion.div
+          className="w-full rounded-kb-lg border border-indigo-500/20 bg-indigo-500/5 px-4 py-3"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.5 }}
+        >
+          <div className="flex items-start gap-2">
+            <HelpCircle className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
+            <div className="flex flex-col gap-1">
+              <span className="text-[11px] text-indigo-400/70 font-medium tracking-wider uppercase">未解悬念</span>
+              <p className="text-sm text-text-primary leading-relaxed">{suspenseQuestion}</p>
+              <p className="text-[11px] text-text-tertiary mt-0.5">
+                下次学习时回想一下这个问题，看看有没有新的理解
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       <button
         type="button"

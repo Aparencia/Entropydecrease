@@ -49,6 +49,44 @@ export interface ScheduleResult {
 export type { IntervalPreview };
 
 // ---------------------------------------------------------------------------
+// 难度阶梯（自适应挑战）
+// ---------------------------------------------------------------------------
+
+/** 卡片难度档位 / Card difficulty tier */
+export type DifficultyTier = 'basic' | 'challenge' | 'master';
+
+/** 升档间隔阈值（天）：超过即建议升阶 / Tier-up interval threshold (days) */
+export const TIER_UP_INTERVAL_DAYS = 14;
+/** 大师档间隔阈值（天） / Master tier interval threshold (days) */
+export const MASTER_INTERVAL_DAYS = 60;
+/** 失误降级阈值（累计失误次数） / Lapse downgrade threshold */
+export const TIER_DOWN_LAPSES = 5;
+
+/**
+ * 建议卡片难度档位（纯函数，FSRS-5 间隔驱动）。
+ *
+ * 自适应挑战阶梯的档位信号：interval 达到阈值（>14 天）建议升阶到
+ * challenge，超过 60 天升到 master；但累计失误过多（≥5 次）或连续
+ * 正确次数不足 3 次时强制回落到 basic（稳定性优先，不鼓励硬拔）。
+ * 消费方（DifficultyLadder / 复习流）据此展示阶梯与「升阶挑战」入口。
+ * @ai-context: Pure function. Interval drives tier-up suggestions; lapses
+ * force a downgrade to keep the ladder honest.
+ */
+export function suggestDifficultyTier(
+  card: Pick<CardInput, 'interval' | 'repetitions' | 'lapses' | 'difficulty'>,
+): DifficultyTier {
+  const interval = Number(card.interval) || 0;
+  const repetitions = Number(card.repetitions) || 0;
+  const lapses = Number(card.lapses) || 0;
+
+  // 稳定性优先：高失误或尚未形成记忆 → 基础档
+  if (lapses >= TIER_DOWN_LAPSES || repetitions < 3) return 'basic';
+  if (interval > MASTER_INTERVAL_DAYS) return 'master';
+  if (interval > TIER_UP_INTERVAL_DAYS) return 'challenge';
+  return 'basic';
+}
+
+// ---------------------------------------------------------------------------
 // 策略接口
 // ---------------------------------------------------------------------------
 

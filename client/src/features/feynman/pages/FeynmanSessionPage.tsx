@@ -8,7 +8,7 @@
  */
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ContextMenu } from '@/components/ui';
 import { StepIndicator } from '../components/StepIndicator';
 import { RescuePanel } from '@/components/RescuePanel';
@@ -25,10 +25,13 @@ import { ConceptInternalized } from '../components/ConceptInternalized';
 import { ConceptPrecheckCard } from '../components/ConceptPrecheckCard';
 import { useFeynmanSession } from '../hooks/useFeynmanSession';
 import { useFeynmanAI } from '../hooks/useFeynmanAI';
+import { useFeynmanStore } from '../store/useFeynmanStore';
 
 export default function FeynmanSessionPage() {
   const navigate = useNavigate();
   const prefersReduced = useReducedMotion();
+  const [searchParams] = useSearchParams();
+  const createNote = useFeynmanStore((s) => s.createNote);
 
   const {
     noteId, isLoading, note, noteWeakPoints,
@@ -63,6 +66,18 @@ export default function FeynmanSessionPage() {
   } = useFeynmanAI(note);
 
   const stepVariants = createStepVariants(!!prefersReduced);
+
+  // N4 笔记→费曼引导：/feynman/new?concept=xxx 进入时自动创建费曼笔记并跳转。
+  // createdRef 防重复创建（React StrictMode 双调用/重渲染竞态）
+  const createdRef = useRef(false);
+  useEffect(() => {
+    const concept = searchParams.get('concept');
+    if (noteId || !concept || createdRef.current) return;
+    createdRef.current = true;
+    createNote(concept)
+      .then((id) => { if (id) navigate(`/feynman/${id}`, { replace: true }); })
+      .catch(() => { /* 创建失败停留原页，不打扰 */ });
+  }, [noteId, searchParams, createNote, navigate]);
 
   // v0.29: 费曼完成庆祝状态
   const [showCelebration, setShowCelebration] = useState(false);

@@ -83,6 +83,30 @@ export async function checkAchievements(
       case 'sop_first_run':
         shouldUnlock = event.type === 'sop_completed';
         break;
+      // ── 赛季型成就（R12 扩展）──
+      case 'pomodoro_200':
+        shouldUnlock = event.type === 'pomodoro_completed'
+          && (await safeCount(database.pomodoroSessions.count())) >= 200;
+        break;
+      case 'reviews_500':
+        shouldUnlock = event.type === 'review_completed'
+          && (await safeCount(database.flashcardReviews.count())) >= 500;
+        break;
+      case 'feynman_30':
+        shouldUnlock = event.type === 'feynman_completed'
+          && (await safeCount(database.feynmanNotes.where('status').equals('completed').count())) >= 30;
+        break;
+      case 'notes_50':
+        shouldUnlock = event.type === 'note_created'
+          && (await safeCount(database.notes.count())) >= 50;
+        break;
+      case 'streak_60':
+        shouldUnlock = event.type === 'streak_updated' && event.days >= 60;
+        break;
+      case 'cards_200':
+        shouldUnlock = event.type === 'flashcard_created'
+          && (await safeCount(database.flashcards.count())) >= 200;
+        break;
     }
 
     if (shouldUnlock) {

@@ -69,6 +69,9 @@ export function useClassroomCapture() {
   // ── 课中重点标记 ──
   const [bookmarks, setBookmarks] = useState<{ timestamp: number; label?: string }[]>([]);
 
+  // M2: 录制中自动锚点（每 15 分钟触发；label 取当时最近的实时转写）
+  const [autoAnchors, setAutoAnchors] = useState<{ timestamp: number; label?: string }[]>([]);
+
   // 本次会话实际生效的音频源（ADR-001）：由主进程选源后回传，
   // 用于诊断文案分支与 UI 展示，避免对进程环回给出“检查输出设备”类误导提示
   const [audioSourceKind, setAudioSourceKind] = useState<AudioSourceKind | null>(null);
@@ -136,9 +139,24 @@ export function useClassroomCapture() {
     streamingAsrActive,
   });
 
-  const { audioHealth, audioCleanupRef } = useClassroomAudio({
+  const { audioHealth, audioCleanupRef, setAutoAnchorCallback } = useClassroomAudio({
     captureManager, status, mode, onNotify: notify,
   });
+
+  // M2: 自动锚点回调——记录锚点（label 取最新实时转写片段）并通知用户
+  const handleAutoAnchor = useCallback(() => {
+    const latest = events.liveTranscripts[events.liveTranscripts.length - 1];
+    const label = latest?.text ? latest.text.slice(0, 60) : undefined;
+    setAutoAnchors((prev) => [...prev, { timestamp: Date.now(), label }]);
+    notify('info', '已自动标记锚点（连续录制满 15 分钟）');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- events 引用稳定
+  }, [events.liveTranscripts, notify]);
+
+  // 把自动锚点回调注册给 audio hook（触发时记录到 UI 状态）
+  useEffect(() => {
+    setAutoAnchorCallback(handleAutoAnchor);
+    return () => setAutoAnchorCallback(null);
+  }, [setAutoAnchorCallback, handleAutoAnchor]);
 
   // 音频自动恢复：静音诊断（文案按生效源分支）/ 设备变更重启
   useAudioRecovery({
@@ -164,6 +182,7 @@ export function useClassroomCapture() {
     events.setSegments([]);
     events.setLiveTranscripts([]);
     setSelectedIds(new Set());
+    setAutoAnchors([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- events setter 引用稳定
   }, []);
 
@@ -236,18 +255,24 @@ export function useClassroomCapture() {
   }, [notify]);
 
   // ── 课中重点标记 ──
+  // M2: 统一走 captureManager.pushBookmark（smart 路径广播 smart:bookmark，
+  // useClassroomEvents 订阅写入 smartBundle.timeline，单一数据流）
+  // events.setSmartBundle 为稳定 setState 引用，解构后显式入依赖（oxlint exhaustive-deps）
+  const { setSmartBundle } = events;
   const handleBookmark = useCallback(() => {
     if (status !== 'capturing') return;
     const now = Date.now();
     setBookmarks((prev) => [...prev, { timestamp: now }]);
-    // 同时插入 smartBundle timeline
-    events.setSmartBundle((prev) => ({
-      ...prev,
-      timeline: [...(prev.timeline ?? []), { timestamp: now, type: 'bookmark' as const }],
-    }));
+    // M7: smart 路径由 smart:bookmark 广播写入 timeline；非 smart 路径（fine/
+    // full_record）广播不存在，本地状态之外兜底直接写 timeline，保留原有持久化
+    if (!captureManager.pushBookmark('bookmark')) {
+      setSmartBundle((prev) => ({
+        ...prev,
+        timeline: [...(prev.timeline ?? []), { timestamp: now, type: 'bookmark' }],
+      }));
+    }
     notify('success', `已标记重点 (${new Date(now).toLocaleTimeString()})`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- events setter 引用稳定
-  }, [status, notify]);
+  }, [status, notify, captureManager, setSmartBundle]);
 
   return {
     // 窗口
@@ -285,6 +310,8 @@ export function useClassroomCapture() {
     handleRetryMerge: analysis.handleRetryMerge,
     handleDismissAnalysis: analysis.handleDismissAnalysis,
     handleGenerateCards, handleBookmark, bookmarks,
+    // M2 自动锚点（时间线展示）
+    autoAnchors,
     // 笔记持久化
     ...notes,
     // 确认对话框（P0-5：供 ClassroomPage 挂载 ConfirmDialog）

@@ -296,6 +296,23 @@ export class CaptureManager {
   }
 
   /**
+   * 课中重点标记（含 M2 自动锚点）
+   * smart 路径广播 smart:bookmark 事件，由 useClassroomEvents 订阅写入
+   * smartBundle.timeline（单一数据流；fine/full_record 路径直接忽略）。
+   * @returns 是否实际广播（true=smart 路径已写入 timeline；false=非 smart 路径）
+   */
+  pushBookmark(type: 'bookmark' | 'auto_anchor' = 'bookmark', label?: string): boolean {
+    if (!this.sessionId || this.capturePath !== 'smart') return false;
+    captureEventBus.emit('smart:bookmark', {
+      sessionId: this.sessionId,
+      timestamp: Date.now(),
+      type,
+      label,
+    });
+    return true;
+  }
+
+  /**
    * 推送截图帧到流水线
    */
   pushFrame(frameData: ScreenshotData): void {

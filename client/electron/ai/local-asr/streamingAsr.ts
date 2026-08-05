@@ -12,6 +12,7 @@
 
 import type { BrowserWindow } from 'electron';
 import { logger } from '../../logger.js';
+import { cleanAsrResult } from '../../../src/lib/capture/asrFilters.js';
 import { getOnlineRecognizer, feedWaveform, type OnlineStream } from './SherpaAsrService.js';
 
 /** partial 推送节流：两次 partial 推送的最小间隔（ms） */
@@ -80,6 +81,10 @@ export function startStreamingAsr(
  * 流程：acceptWaveform → while isReady: decode → 检查 isEndpoint：
  * - 命中端点：取 final 文本推送 asr_stream_final，reset 流开启下一句；
  * - 未命中：取 partial 文本，变化且满足节流间隔时推送 asr_stream_partial。
+ *
+ * @ai-context: 输出端统一经 cleanAsrResult（相邻重复压缩 + 幻觉过滤）——
+ * Paraformer 流式在静音段存在重复输出最后词/短句的已知行为（"就是就是"），
+ * 直接透传会让重复文本上屏；压缩/过滤在推送前完成，渲染进程无需感知。
  */
 export function feedStreamingAsr(audioBuffer: ArrayBuffer, sampleRate?: number): void {
   if (!_stream || !_win || _win.isDestroyed()) return;
@@ -99,7 +104,8 @@ export function feedStreamingAsr(audioBuffer: ArrayBuffer, sampleRate?: number):
 
     // 端点检测：断句 → 推送 final 并 reset
     if (recognizer.isEndpoint(_stream)) {
-      const finalText = recognizer.getResult(_stream).text?.trim() ?? '';
+      // 输出后处理：相邻重复压缩 + 幻觉过滤（静音段重复输出防护）
+      const finalText = cleanAsrResult(recognizer.getResult(_stream).text ?? '');
       recognizer.reset(_stream);
       _lastPartialText = '';
       _lastPartialEmitAt = 0;
@@ -109,8 +115,8 @@ export function feedStreamingAsr(audioBuffer: ArrayBuffer, sampleRate?: number):
       return;
     }
 
-    // partial：文本变化且满足节流间隔时推送
-    const partialText = recognizer.getResult(_stream).text?.trim() ?? '';
+    // partial：文本变化且满足节流间隔时推送（同样经重复压缩，预览与定稿一致）
+    const partialText = cleanAsrResult(recognizer.getResult(_stream).text ?? '');
     const now = Date.now();
     if (
       partialText &&
@@ -126,10 +132,26 @@ export function feedStreamingAsr(audioBuffer: ArrayBuffer, sampleRate?: number):
   }
 }
 
-/** 停止流式 ASR：释放流并清理状态 */
+/**
+ * 停止流式 ASR：先 flush 未定稿的尾句再释放流。
+ *
+ * @ai-context: 释放前若流内已有部分识别文本（未触发端点），取一次最终结果
+ * 推送——FeynmanRecorder 的停止时序依赖此行为（注释承诺"flush 最后一段
+ * final"），缺失会导致最后一句丢失。flush 后释放流并清理状态。
+ */
 export function stopStreamingAsr(): void {
   if (_stream) {
     try {
+      // flush 尾句：仅在窗口存活且流内已有可交付文本时推送
+      if (_win && !_win.isDestroyed()) {
+        const recognizer = getOnlineRecognizer();
+        const tailText = recognizer
+          ? cleanAsrResult(recognizer.getResult(_stream).text ?? '')
+          : '';
+        if (tailText) {
+          emit('asr_stream_final', { text: tailText, timestamp: Date.now() });
+        }
+      }
       // 新版（1.13+）流对象无 free 方法（句柄由 GC 回收），可选调用
       _stream.free?.();
     } catch (err) {

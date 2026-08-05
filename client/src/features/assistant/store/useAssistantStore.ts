@@ -27,6 +27,8 @@ interface AssistantState {
   creatureState: CreatureState;
   bubbleMessage: string | null;
   bubbleTriggerId: string | null;
+  /** F3 气泡触发上下文（含 topDeckId 等） */
+  bubbleTriggerContext?: Record<string, unknown>;
 
   // ── 用户活跃状态 ──
   userActive: boolean;
@@ -49,7 +51,7 @@ interface AssistantState {
   setUserActive: (v: boolean) => void;
   setIsFixed: (v: boolean) => void;
   setAutoFixed: (v: boolean) => void;
-  showBubble: (msg: string, triggerId: string | null) => void;
+  showBubble: (msg: string, triggerId: string | null, context?: Record<string, unknown>) => void;
   hideBubble: () => void;
   setSessionId: (id: string | null) => void;
   addMessage: (msg: ChatMessage) => void;
@@ -79,8 +81,8 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
   setIsFixed: (v) => set({ isFixed: v, autoFixed: false }),
   setAutoFixed: (v) => set({ autoFixed: v, isFixed: v }),
 
-  showBubble: (msg, triggerId) => set({ bubbleMessage: msg, bubbleTriggerId: triggerId, panelState: 'bubble', creatureState: 'alerting' }),
-  hideBubble: () => set({ bubbleMessage: null, bubbleTriggerId: null, panelState: 'hidden', creatureState: 'idle' }),
+  showBubble: (msg, triggerId, context) => set({ bubbleMessage: msg, bubbleTriggerId: triggerId, bubbleTriggerContext: context, panelState: 'bubble', creatureState: 'alerting' }),
+  hideBubble: () => set({ bubbleMessage: null, bubbleTriggerId: null, bubbleTriggerContext: undefined, panelState: 'hidden', creatureState: 'idle' }),
 
   setSessionId: (id) => set({ sessionId: id }),
   addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),

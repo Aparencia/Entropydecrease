@@ -1,4 +1,4 @@
-"""
+﻿"""
 熵减 AI 网关 — 卡壳三级救援 Chain
 
 当学习者卡壳时提供三级递进帮助：
@@ -75,7 +75,7 @@ class RescueChain:
             except (json.JSONDecodeError, ValueError):
                 pass
 
-        if data is None:
+        if data is None or not isinstance(data, dict):
             logger.warning("无法解析三级救援 JSON，返回降级结果")
             return self._fallback_rescue()
 

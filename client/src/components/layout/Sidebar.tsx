@@ -2,23 +2,25 @@
  * @ai-context: 布局组件：Sidebar。
  */
 import { useState, useMemo, useCallback, useRef } from 'react';
-import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   Home, Timer, FileText, Layers, Lightbulb, Settings,
   MessageSquare, Clapperboard, BarChart3, Sparkles,
   Sun, Moon, ChevronRight, ChevronLeft, User as UserIcon,
+  Flower2, ChefHat, Orbit, Users, Handshake, Radar, Armchair,
+  BookOpen, CreditCard,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Tip } from '@/components/ui/Tip';
 import { useSidebarStore } from '@/stores/useSidebarStore';
-import { useCaptureStore } from '@/stores/useCaptureStore';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useTheme } from '@/hooks/useTheme';
 import { SPRING, BEAT } from '@/lib/animation/springConfig';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { useIsNewbiePhase } from '@/features/onboarding/firstDive/useFirstDiveStore';
 import { useLearningProgress } from '@/hooks/useLearningProgress';
+import { useSocialSync } from '@/features/social/lib/useSocialSync';
 import FeedbackPanel from './FeedbackPanel';
 
 /* ── 导航配置 ── */
@@ -35,9 +37,22 @@ const navSection2 = [
 ];
 
 const navSection3 = [
+  { to: '/garden', label: '专注花园', subtitle: '养成式专注', icon: Flower2, shortcut: '⌘ 6', dotColor: 'bg-brand-500' },
+  { to: '/recipes', label: '知识料理书', subtitle: '烹饪式学习', icon: ChefHat, shortcut: '⌘ 6', dotColor: 'bg-accent-400' },
+  { to: '/constellation', label: '星座大厅', subtitle: '知识可视化', icon: Orbit, shortcut: '⌘ 6', dotColor: 'bg-brand-500' },
   { to: '/analytics', label: '数据分析', icon: BarChart3, shortcut: '⌘ 6' },
   { to: '/inspiration', label: '萤火海沟', subtitle: '灵感收集', icon: Sparkles, shortcut: '⌘ 6' },
   { to: '/classroom', label: '回声定位', subtitle: '课堂采集', icon: Clapperboard, shortcut: '⌘ 7', dotColor: 'bg-classroom' },
+  { to: '/wiki', label: '知识维基', subtitle: '协作共编', icon: BookOpen, shortcut: '⌘ 6', dotColor: 'bg-cyber' },
+  { to: '/microcards', label: '微卡流', subtitle: '微学习卡片', icon: CreditCard, shortcut: '⌘ 6', dotColor: 'bg-cyber' },
+];
+
+/* ── 共潜（社交）：仅在 sync 启用时显示（local 模式隐藏） ── */
+const navSectionSocial = [
+    { to: '/social/dive', label: '协作深潜', subtitle: '共潜房间', icon: Users, shortcut: '⌘ 6', dotColor: 'bg-cyber' },
+  { to: '/social/relay', label: '番茄接力', subtitle: '搭档接力', icon: Handshake, shortcut: '⌘ 6', dotColor: 'bg-cyber' },
+  { to: '/social/mirror', label: '同频镜像', subtitle: '匿名同频', icon: Radar, shortcut: '⌘ 6', dotColor: 'bg-cyber' },
+  { to: '/social/studyroom', label: '虚拟自习室', subtitle: '并肩学习', icon: Armchair, shortcut: '⌘ 6', dotColor: 'bg-cyber' },
 ];
 
 /* ── 蔡格尼克效应：待继续任务提示池 ── */
@@ -71,14 +86,13 @@ export default function Sidebar() {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const toggle = useSidebarStore((s) => s.toggle);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const navigate = useNavigate();
   const location = useLocation();
-  const captureOpen = useCaptureStore((s) => s.open);
-  const setCaptureOpen = useCaptureStore((s) => s.setOpen);
   const { user, isAuthenticated } = useAuth();
   const { theme, toggleTheme } = useTheme();
   // 新手期显示模块副标题（首潜完成后自动隐去）
   const isNewbie = useIsNewbiePhase();
+  // 社交功能仅在 sync 启用时显示侧栏入口（local 模式隐藏）
+  const { syncEnabled } = useSocialSync();
 
   // 从各学习模块 store 聚合真实进度数据（深潜/闪卡/笔记/费曼/打卡）
   const progressItems = useLearningProgress();
@@ -92,8 +106,6 @@ export default function Sidebar() {
       import('@/pages/SettingsPage');
     }
   }, []);
-
-  const isOnNotes = location.pathname.startsWith('/notes');
 
   const meta = user?.user_metadata as Record<string, unknown> | undefined;
   const displayName = (meta?.['display_name'] as string) || (meta?.['full_name'] as string) || user?.email?.split('@')[0] || '未登录';
@@ -224,6 +236,26 @@ export default function Sidebar() {
               dotColor={dotColor} collapsed={collapsed} index={i + 6}
             />
           ))}
+
+          {/* Section: 共潜（社交）— 仅 sync 启用时显示 */}
+          {syncEnabled && (
+            <>
+              {!collapsed && (
+                <div className="text-[10px] text-text-tertiary font-medium tracking-[0.08em] uppercase px-2.5 pt-4 pb-1 opacity-50">
+                  共潜
+                </div>
+              )}
+              {collapsed && <div className="my-1 mx-1.5 border-t border-border/20" />}
+              {navSectionSocial.map(({ to, label, subtitle, icon: Icon, shortcut, dotColor }, i) => (
+                <SidebarItem
+                  key={to} to={to} label={label} icon={Icon}
+                  subtitle={isNewbie ? subtitle : undefined}
+                  shortcut={collapsed ? undefined : shortcut}
+                  dotColor={dotColor} collapsed={collapsed} index={i + 10}
+                />
+              ))}
+            </>
+          )}
 
           {/* 学习进度 — 从真实数据源聚合各模块完成百分比 */}
           {!collapsed && progressItems.length > 0 && (

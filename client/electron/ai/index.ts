@@ -39,6 +39,8 @@ import { feature as conflictDetectFeature } from './handlers/conflictDetectHandl
 import { feature as conceptPrecheckFeature } from './handlers/conceptPrecheckHandler.js';
 import { feature as progressNarrativeFeature } from './handlers/progressNarratorHandler.js';
 import { feature as importConceptFeature } from './handlers/importConceptHandler.js';
+import { feature as learningPlanFeature } from './handlers/learningPlanHandler.js';
+import { feature as sessionQaFeature } from './handlers/sessionQaHandler.js';
 
 // ================================================================
 // 功能注册表
@@ -68,6 +70,8 @@ const features: AIFeatureDef[] = [
   conceptPrecheckFeature,
   progressNarrativeFeature,
   importConceptFeature,
+  learningPlanFeature,
+  sessionQaFeature,
 ];
 
 // ================================================================

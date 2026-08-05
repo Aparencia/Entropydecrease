@@ -34,6 +34,7 @@ import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { markdownToNoteContent } from '../lib/markdown/noteMarkdown';
 import { collectFolderTreeIds } from '../lib/folderTree';
+import { extractNoteText } from '../lib/extractNoteText';
 
 const templateLabels: Record<NoteTemplate | 'qa' | 'video' | 'todo', string> = {
   outline: '大纲式', cornell: '康奈尔', mindmap: '思维导图', free: '自由笔记', blank: '空白', qa: '问答', video: '视频笔记', todo: '待办',
@@ -44,31 +45,9 @@ function formatDate(date: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** 从 TipTap JSON 或纯 HTML 中提取纯文本 */
-function extractPlainText(content: string): string {
-  try {
-    const json = JSON.parse(content);
-    if (json?.content) {
-      const extract = (nodes: unknown[]): string => {
-        let text = '';
-        for (const node of nodes) {
-          const n = node as { text?: string; content?: unknown[] };
-          if (n.text) text += n.text;
-          if (n.content) text += extract(n.content);
-        }
-        return text;
-      };
-      return extract(json.content);
-    }
-    return '';
-  } catch {
-    return content;
-  }
-}
-
-/** 列表预览用：截断至 120 字符 */
+/** 列表预览用：截断至 120 字符（使用 extractNoteText 提取纯文本） */
 function stripHtml(html: string): string {
-  return extractPlainText(html).slice(0, 120);
+  return extractNoteText(html).slice(0, 120);
 }
 
 /* ── 动画 variants ── */
@@ -168,15 +147,23 @@ export default function NotesPage() {
   // 批量管理模式（对齐萤火海沟批量整理交互）
   const batch = useBatchSelection<Note>({ items: filteredNotes });
 
+  // 响应式笔记总数（侧边栏"全部笔记"计数）
+  const totalNotes = useNoteStore((s) => s.notes.length);
+
   // 批量删除确认
   const handleConfirmBatchDelete = useCallback(async () => {
     const ids = Array.from(batch.selectedIds);
     if (ids.length === 0) return;
-    await deleteNotesBatch(ids);
-    soundPlayer.play('feedback_delete');
-    toast({ type: 'success', message: `已删除 ${ids.length} 篇笔记`, silent: true });
-    setBatchDeleteOpen(false);
-    batch.exit();
+    try {
+      await deleteNotesBatch(ids);
+      soundPlayer.play('feedback_delete');
+      toast({ type: 'success', message: `已删除 ${ids.length} 篇笔记`, silent: true });
+    } catch (err) {
+      toast({ type: 'error', message: `删除失败：${err instanceof Error ? err.message : '未知错误'}` });
+    } finally {
+      setBatchDeleteOpen(false);
+      batch.exit();
+    }
   }, [batch, deleteNotesBatch, toast]);
 
   const handleTemplateSelect = async (tpl: NoteTemplate) => {
@@ -231,17 +218,22 @@ export default function NotesPage() {
   }, [deleteFolderTarget, folders, notes]);
   const handleConfirmDeleteFolder = useCallback(async () => {
     if (!deleteFolderTarget) return;
-    if (deleteFolderWithNotesChecked) {
-      await deleteFolderWithNotes(deleteFolderTarget.id);
-      soundPlayer.play('feedback_delete');
-      toast({ type: 'success', message: `分组「${deleteFolderTarget.name}」及其 ${folderTreeNoteCount} 篇笔记已删除`, silent: true });
-    } else {
-      await deleteFolder(deleteFolderTarget.id);
-      soundPlayer.play('feedback_delete');
-      toast({ type: 'success', message: `分组「${deleteFolderTarget.name}」已删除，组内笔记已移至全部笔记`, silent: true });
+    try {
+      if (deleteFolderWithNotesChecked) {
+        await deleteFolderWithNotes(deleteFolderTarget.id);
+        soundPlayer.play('feedback_delete');
+        toast({ type: 'success', message: `分组「${deleteFolderTarget.name}」及其 ${folderTreeNoteCount} 篇笔记已删除`, silent: true });
+      } else {
+        await deleteFolder(deleteFolderTarget.id);
+        soundPlayer.play('feedback_delete');
+        toast({ type: 'success', message: `分组「${deleteFolderTarget.name}」已删除，组内笔记已移至全部笔记`, silent: true });
+      }
+    } catch (err) {
+      toast({ type: 'error', message: `删除失败：${err instanceof Error ? err.message : '未知错误'}` });
+    } finally {
+      setDeleteFolderTarget(null);
+      setDeleteFolderWithNotesChecked(false);
     }
-    setDeleteFolderTarget(null);
-    setDeleteFolderWithNotesChecked(false);
   }, [deleteFolderTarget, deleteFolder, deleteFolderWithNotes, deleteFolderWithNotesChecked, folderTreeNoteCount, toast]);
   const handleDuplicateNote = useCallback(async (note: Note) => {
     await createNote({ title: note.title + ' (副本)', content: note.content, folderId: note.folderId, tags: note.tags, template: note.template });
@@ -295,7 +287,7 @@ export default function NotesPage() {
       case 'export': handleExportNote(noteCtx); break;
       case 'delete': handleDeleteNote(noteCtx.id!); break;
       case 'ai-summary': {
-        const text = extractPlainText(noteCtx.content);
+        const text = extractNoteText(noteCtx.content);
         if (text.length < 10) { toast({ type: 'warning', message: '笔记内容太少，无法生成摘要' }); break; }
         toast({ type: 'info', message: 'AI 正在生成摘要...' });
         try {
@@ -306,7 +298,7 @@ export default function NotesPage() {
         break;
       }
       case 'ai-flashcard': {
-        const text = extractPlainText(noteCtx.content);
+        const text = extractNoteText(noteCtx.content);
         if (text.length < 20) { toast({ type: 'warning', message: '笔记内容太少，无法生成闪卡' }); break; }
         toast({ type: 'info', message: 'AI 正在生成闪卡...' });
         try {
@@ -383,7 +375,7 @@ export default function NotesPage() {
                   <motion.span layoutId="folder-active" className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 bg-brand-500 rounded-[1px]" transition={{ type: 'spring', stiffness: 350, damping: 30 }} />
                 )}
                 <span>全部笔记</span>
-                <span className="text-[11px] text-text-tertiary font-mono">{useNoteStore.getState().notes.length}</span>
+                <span className="text-[11px] text-text-tertiary font-mono">{totalNotes}</span>
               </motion.button>
               {folders.map((f) => (
                 <SubjectFolder
@@ -675,16 +667,23 @@ export default function NotesPage() {
                           : 'hover:border-brand-300/40'
                         : selectedNoteId === note.id && 'border-brand-400/60 bg-brand-50/20 shadow-[inset_0_0_0_1px_rgba(91,138,114,0.08)]',
                     )}
-                    style={{ borderRadius: asymmetricRadius(note.id!) }}
                     onClick={() => batch.batchMode ? batch.toggle(note.id!) : handleSelectNote(note.id!)}
                     onContextMenu={batch.batchMode ? undefined : (e) => handleNoteContextMenu(e, note)}
                     onMouseMove={batch.batchMode ? undefined : (e) => {
                       const el = e.currentTarget;
-                      const { rx, ry } = calc3DTilt(e, el);
-                      el.style.transform = `perspective(1200px) rotateX(${rx}deg) rotateY(${ry}deg) translateZ(4px)`;
+                      const rect = el.getBoundingClientRect();
+                      const x = (e.clientX - rect.left) / rect.width - 0.5;
+                      const y = (e.clientY - rect.top) / rect.height - 0.5;
+                      el.style.setProperty('--tilt-rx', `${-y * 5}deg`);
+                      el.style.setProperty('--tilt-ry', `${x * 5}deg`);
                     }}
                     onMouseLeave={batch.batchMode ? undefined : (e) => {
-                      e.currentTarget.style.transform = 'perspective(1200px) rotateX(0deg) rotateY(0deg) translateZ(0px)';
+                      e.currentTarget.style.setProperty('--tilt-rx', '0deg');
+                      e.currentTarget.style.setProperty('--tilt-ry', '0deg');
+                    }}
+                    style={{
+                      borderRadius: asymmetricRadius(note.id!),
+                      transform: 'perspective(1200px) rotateX(var(--tilt-rx, 0deg)) rotateY(var(--tilt-ry, 0deg)) translateZ(4px)',
                     }}
                   >
                     {/* 批量模式勾选指示 */}

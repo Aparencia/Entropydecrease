@@ -26,6 +26,7 @@ import type {
   CaptureSidebarConfig,
   CourseMeta,
   AudioSegment,
+  TimelineEntry,
 } from '@/lib/capture';
 import { analyzePartial } from '@/lib/ai/sessionAnalyzer';
 import { detectCourseFromFrame } from '@/lib/ai/courseDetector';
@@ -33,11 +34,14 @@ import { remapKeyframeMarkers } from '../utils/tipTapImageUtils';
 import { persistKeyframeImage } from '../utils/keyframePersistence';
 import { transcribeWithRetry, toAsrLanguage, useAsrSemaphore, isLocalAsrReady, setOnAsrFallback } from '../utils/asrTranscriber';
 import { applySessionReplaces } from '../utils/hotwordRuntime';
+import { cleanAsrResult } from '@/lib/capture/asrFilters';
 
 /** 触发一次增量分析所需的关键帧数 */
 const INCREMENTAL_BATCH_SIZE = 5;
 /** 实时转录列表上限（FIFO） */
 const MAX_LIVE_TRANSCRIPTS = 200;
+/** 时间线条目上限（FIFO，防止长课堂无界增长） */
+const MAX_TIMELINE_ENTRIES = 500;
 
 export interface LiveTranscript {
   id: string;
@@ -242,6 +246,8 @@ export function useClassroomEvents({
           })
             .then((text) => {
               asr.markSuccess();
+              // 输出清洗：相邻重复压缩 + 幻觉过滤（本地路径主进程已 clean，此处兑底云端降级）
+              const cleaned = cleanAsrResult(text ?? '');
               // 将转写结果回填到对应的音频段，并剥离 audioBase64 释放内存（单段约 1.2MB，
               // 长课堂数百段否则无界累积——内测 5GB 内存主因）。全量分析回退路径优先用
               // 已转写的 audioText（sessionAnalyzer: seg.audioText ?? transcribe），无需再持有原始音频；
@@ -249,15 +255,15 @@ export function useClassroomEvents({
               setSmartBundle((prev) => ({
                 ...prev,
                 audioSegments: (prev.audioSegments ?? []).map((s) =>
-                  s.id === seg.id ? { ...s, audioText: text, audioBase64: '' } : s,
+                  s.id === seg.id ? { ...s, audioText: cleaned, audioBase64: '' } : s,
                 ),
               }));
-              if (text) {
+              if (cleaned) {
                 setTranscribedCount((c) => c + 1);
                 // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3 替换词后处理），
-                // 上方 audioSegments.audioText 保留原始转写可回溯
+                // 上方 audioSegments.audioText 保留清洗后转写可回溯
                 setLiveTranscripts((prev) => {
-                  const next = [...prev, { id: seg.id, text: applySessionReplaces(text), timestamp: seg.timestampStart }];
+                  const next = [...prev, { id: seg.id, text: applySessionReplaces(cleaned), timestamp: seg.timestampStart }];
                   return next.length > MAX_LIVE_TRANSCRIPTS
                     ? next.slice(next.length - MAX_LIVE_TRANSCRIPTS)
                     : next;
@@ -291,11 +297,12 @@ export function useClassroomEvents({
       if (statusRef.current !== 'capturing') return;
       const data = args[0] as { text: string; timestamp: number };
       setPartialText('');
-      const text = data?.text?.trim();
+      // 双保险：主进程已 clean，此处兜底云端/旧版本主进程的未清洗输出
+      const text = cleanAsrResult(data?.text ?? '');
       if (!text) return;
       const id = crypto.randomUUID();
       const timestamp = data.timestamp || Date.now();
-      // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3），audioSegments 存原始转写
+      // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3），audioSegments 存清洗后转写
       setLiveTranscripts((prev) => {
         const next = [...prev, { id, text: applySessionReplaces(text), timestamp }];
         return next.length > MAX_LIVE_TRANSCRIPTS
@@ -323,6 +330,39 @@ export function useClassroomEvents({
   useEffect(() => {
     if (status !== 'capturing') setPartialText('');
   }, [status]);
+
+  // Path B：课中重点标记（M2 含自动锚点）——captureManager.pushBookmark 广播，
+  // 统一在此写入 smartBundle.timeline（单一数据流，手动/自动同链路）
+  useEffect(() => {
+    const offBookmark = captureEventBus.on<{
+      sessionId: string;
+      timestamp: number;
+      type: TimelineEntry['type'];
+      label?: string;
+    }>(
+      'smart:bookmark',
+      (data) => {
+        // M8: 校验事件 sessionId 与当前采集会话一致——旧会话/跨会话的迟到事件
+        // 不写入当前时间线（captureSessionIdRef 未建立时无法校验，放行）
+        if (captureSessionIdRef.current && data.sessionId !== captureSessionIdRef.current) return;
+        setSmartBundle((prev) => {
+          const next = [...(prev.timeline ?? []), {
+            timestamp: data.timestamp,
+            type: data.type,
+            label: data.label,
+          }];
+          // M8: 时间线上限 500 条，超出丢弃最旧条目
+          return {
+            ...prev,
+            timeline: next.length > MAX_TIMELINE_ENTRIES
+              ? next.slice(next.length - MAX_TIMELINE_ENTRIES)
+              : next,
+          };
+        });
+      },
+    );
+    return () => { offBookmark(); };
+  }, []);
 
   // Path B：VAD 统计
   useEffect(() => {

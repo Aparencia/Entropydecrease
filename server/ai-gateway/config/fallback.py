@@ -84,6 +84,24 @@ PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
     "conflict_detect":     ["deepseek", "qwen", "fallback"],
     "concept_precheck":    ["deepseek", "qwen", "fallback"],
     "import_concept":      ["deepseek", "qwen", "fallback"],
+    "freshness":          ["deepseek", "qwen", "fallback"],  # Phase3: 知识保鲜检测
+    "embodied":           ["deepseek", "qwen", "fallback"],  # Phase3: 概念具身化
+    "learning_narrative": ["deepseek", "qwen", "fallback"],  # Phase3: 学习叙事 RPG
+    "haiku":              ["deepseek", "qwen", "fallback"],  # Phase3: 学习俳句
+    "compile":            ["deepseek", "qwen", "fallback"],  # Phase4: 知识编译引擎
+    "micro_card":         ["deepseek", "qwen", "fallback"],  # Phase4: 微学习卡片流
+    # ============================================================
+    # Phase2: 内容生成式 AI Chains（JSON Mode）
+    # 此前遗漏登记——缺失时默认 ["fallback"] 导致这些功能只调用
+    # FallbackProvider（返回非 JSON 文本），真实模型从未被调用
+    # ============================================================
+    "debate":             ["deepseek", "qwen", "fallback"],  # AI 辩论对手
+    "counterintuitive":   ["deepseek", "qwen", "fallback"],  # 反直觉发现器
+    "personify":          ["deepseek", "qwen", "fallback"],  # 概念拟人化
+    "mnemonic":           ["deepseek", "qwen", "fallback"],  # 记忆术生成器
+    "podcast":            ["deepseek", "qwen", "fallback"],  # AI 播客生成器
+    "learning_coach":     ["deepseek", "qwen", "fallback"],  # AI 学习教练
+    "infographic":        ["deepseek", "qwen", "fallback"],  # 知识信息图生成器
     # ============================================================
     # 多模态 / ASR / 视频 — 移除 GLM 免费模型
     # vision_extract/multimodal_analyze 支持同 provider 不同模型降级

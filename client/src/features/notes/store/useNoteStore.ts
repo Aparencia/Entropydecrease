@@ -10,6 +10,7 @@ import { createDefaultMindmap } from '../lib/mindmap/mindmapOps';
 import { noteContentToPlainText } from '../lib/mindmap/mindmapText';
 import { recomputeLinks, removeLinks } from '../lib/links/noteLinkStore';
 import { collectFolderTreeIds } from '../lib/folderTree';
+import { extractNoteText } from '../lib/extractNoteText';
 import type { TodoItem } from '../lib/todoTemplate';
 
 interface NoteState {
@@ -247,11 +248,13 @@ export const useNoteStore = create<NoteState>((set, get) => {
 
     deleteNotesBatch: async (ids) => {
       if (ids.length === 0) return;
-      for (const id of ids) {
-        await deleteWithLog(noteStore, 'notes', id);
-        try { await dexieSearchIndexer.remove(id); } catch { /* 忽略 */ }
-        removeLinks(id).catch(() => {});
-      }
+      // 批量删除笔记（bulkDelete 代替逐条串行，大幅减少 IndexedDB 事务开销）
+      await noteStore.bulkDelete(ids);
+      // 并行清理搜索索引与链接索引（fire-and-forget，失败不阻塞）
+      await Promise.all([
+        Promise.all(ids.map((id) => dexieSearchIndexer.remove(id).catch(() => {}))),
+        Promise.all(ids.map((id) => removeLinks(id).catch(() => {}))),
+      ]);
       const { selectedNoteId } = get();
       if (selectedNoteId && ids.includes(selectedNoteId)) {
         set({ selectedNoteId: null });
@@ -302,7 +305,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
       const affected = notes.filter((n) => n.folderId && treeIds.includes(n.folderId));
       for (const note of affected) {
         if (note.id !== undefined) {
-          await noteStore.update(note.id, { folderId: undefined });
+          await updateWithLog(noteStore, 'notes', note.id, { folderId: undefined });
         }
       }
       // 删除分组树（含根与全部子孙，避免 parentId 悬挂）
@@ -459,7 +462,7 @@ export const useNoteStore = create<NoteState>((set, get) => {
         filtered = filtered.filter(
           (n) =>
             n.title.toLowerCase().includes(query) ||
-            n.content.toLowerCase().includes(query),
+            (n.content && extractNoteText(n.content).toLowerCase().includes(query)),
         );
       }
 

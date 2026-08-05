@@ -23,7 +23,7 @@ import { logger } from './logger.js';
 import { registerAIHandlers, initAIModule } from './ai/index.js';
 import { loadPersistedGatewayUrl, setRuntimeGatewayUrl, gatewayUrl, isDevMode } from './ai/utils.js';
 import { initAutoUpdater, checkForUpdate, downloadUpdate, installUpdate, destroyAutoUpdater, setAutoCheckEnabled } from './updater.js';
-import { createMainWindow, saveCloseChoice, completeSyncBeforeQuit } from './windowManager.js';
+import { createMainWindow, saveCloseChoice, completeSyncBeforeQuit, showEinkCard, hideEinkWindow } from './windowManager.js';
 import { destroyTray } from './trayManager.js';
 import { registerCaptureHandlers, disposeCaptureHandlers } from './captureHandlers.js';
 import { mcpManager } from './mcpManager.js';
@@ -339,6 +339,17 @@ if (!gotTheLock) {
       } else if (action === 'minimize') {
         mainWindow.hide();
       }
+    });
+
+    // 3.18 电子墨水学习板：推送卡片到墨水屏次窗口 / 隐藏次窗口
+safeHandle('eink:show-card', async (_event, card: unknown) => {
+      showEinkCard(card);
+      return { success: true };
+    });
+
+safeHandle('eink:hide', async () => {
+      hideEinkWindow();
+      return { success: true };
     });
 
     // 更新相关 IPC handler

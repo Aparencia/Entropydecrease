@@ -84,11 +84,13 @@ function startCaptureWith(senderWin: BrowserWindow | null, options: ScreenCaptur
 export function registerScreenCaptureHandlers(): void {
   // 性能模式变更 → 活跃采集按新频率优雅重启（即时生效，替代"等下次启动"）
   unsubscribeModeChange = onPerformanceModeChange(() => {
-    if (!activeCapture || !activeOptions) return;
-    const senderWin = activeSenderWin;
-    const options = activeOptions;
+    // 先本地快照再使用，避免回调执行期间 stop 并发置空变量
+    const capture = activeCapture;
+    const opts = activeOptions;
+    const sender = activeSenderWin;
+    if (!capture || !opts) return;
     logger.info('[IPC] 性能模式变更，采集按新频率重启');
-    startCaptureWith(senderWin, options);
+    startCaptureWith(sender, opts);
   });
 
   safeHandle(

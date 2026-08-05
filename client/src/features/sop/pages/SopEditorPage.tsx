@@ -10,11 +10,12 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowUp, ArrowDown, Plus, Save, Trash2, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { ArrowUp, ArrowDown, Plus, Save, Trash2, ArrowLeft, AlertTriangle, ListChecks, Workflow } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
 import { useToast } from '@/components/ui';
 import { useSopStore, STEP_TYPE_META } from '../store/useSopStore';
 import { lintSopTemplate } from '../lib/sopLint';
+import SopFlowView from '../components/SopFlowView';
 import type { SopStepConfig, SopStepType } from '../types';
 
 /** 编辑器草稿步骤 */
@@ -46,6 +47,8 @@ export default function SopEditorPage() {
   const [steps, setSteps] = useState<DraftStep[]>([]);
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
+  /** 1.12 视图模式：edit=步骤编辑器 / flow=流程视图 */
+  const [viewMode, setViewMode] = useState<'edit' | 'flow'>('edit');
 
   // 加载模板（编辑模式）→ 填充草稿
   useEffect(() => {
@@ -184,12 +187,35 @@ export default function SopEditorPage() {
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <h2 className="text-b2 font-semibold text-text-primary">步骤</h2>
-          <Button size="sm" variant="secondary" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setSteps((prev) => [...prev, emptyDraftStep()])}>
-            添加步骤
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* 1.12 编辑/流程视图切换 */}
+            <div className="flex rounded-full border border-border/40 bg-bg-tertiary/60 p-0.5">
+              <button
+                onClick={() => setViewMode('edit')}
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-c1 font-medium transition-colors ${viewMode === 'edit' ? 'bg-bg-elevated text-text-primary shadow-kb-sm' : 'text-text-tertiary hover:text-text-secondary'}`}
+              >
+                <ListChecks className="w-3 h-3" />
+                编辑
+              </button>
+              <button
+                onClick={() => setViewMode('flow')}
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-c1 font-medium transition-colors ${viewMode === 'flow' ? 'bg-bg-elevated text-text-primary shadow-kb-sm' : 'text-text-tertiary hover:text-text-secondary'}`}
+              >
+                <Workflow className="w-3 h-3" />
+                流程视图
+              </button>
+            </div>
+            <Button size="sm" variant="secondary" icon={<Plus className="w-3.5 h-3.5" />} onClick={() => setSteps((prev) => [...prev, emptyDraftStep()])}>
+              添加步骤
+            </Button>
+          </div>
         </div>
 
-        {steps.map((s, i) => (
+        {/* 1.12 流程视图：从左到右的步骤序列图（只读预览） */}
+        {viewMode === 'flow' && <SopFlowView steps={steps} />}
+
+        {viewMode === 'edit' &&
+          steps.map((s, i) => (
           <div key={s.id} className="flex flex-col gap-2 rounded-xl border border-border/30 bg-bg-secondary/40 p-3">
             <div className="flex items-center gap-2">
               <span className="w-5 text-center text-c1 text-text-tertiary">{i + 1}</span>

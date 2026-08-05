@@ -34,6 +34,9 @@ import { AnalysisPreview } from '@/features/notes/components/AnalysisPreview';
 import { VideoRecordPanel } from '@/features/notes/components/VideoRecordPanel';
 import { AsrModelPrompt } from '../components/AsrModelPrompt';
 import { HotwordDialog } from '../components/HotwordDialog';
+import SessionQAPanel from '../components/SessionQAPanel';
+import { PredictionOverlay } from '../components/PredictionOverlay';
+import { TimelineAnchor } from '../components/TimelineAnchor';
 
 export default function ClassroomPage() {
   const capture = useClassroomCapture();
@@ -48,6 +51,11 @@ export default function ClassroomPage() {
     || !!capture.videoFilePath;
   const showIdleGuide = !isRunning && !hasSessionData
     && !capture.isAnalyzing && !capture.analysisResult && !capture.analysisError;
+
+  // ── 课堂问答上下文：拼接各路径转写文本（fine 段 + smart 实时转录）──
+  const qaTranscript = capture.capturePath === 'fine'
+    ? capture.segments.map((s) => s.text).join('\n')
+    : capture.liveTranscripts.map((t) => t.text).join('\n');
 
   // ── 笔记插入弹窗状态 ──
   const [showNoteDialog, setShowNoteDialog] = useState(false);
@@ -243,6 +251,13 @@ export default function ClassroomPage() {
                   isActive={capture.status === 'capturing' && (capture.mode === 'audio' || capture.mode === 'mixed')}
                   className="mt-auto"
                 />
+                {/* M2 自动锚点：连续录制每 15 分钟生成，点击查看锚点文本 */}
+                <TimelineAnchor anchors={capture.autoAnchors} className="mt-2" />
+                {/* M1 课堂实时弹幕：录制中每 30s 基于转写做 AI 预测（右下角悬浮条） */}
+                <PredictionOverlay
+                  liveTranscripts={capture.liveTranscripts}
+                  isActive={capture.status === 'capturing'}
+                />
               </>
             )}
 
@@ -266,6 +281,9 @@ export default function ClassroomPage() {
                 onGenerateCards={capture.handleGenerateCards}
               />
             )}
+
+            {/* D2 课堂问答：基于本次转写提问（有转写数据时显示） */}
+            <SessionQAPanel transcript={qaTranscript} className="mt-auto" />
           </>
         )}
 

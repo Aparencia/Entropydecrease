@@ -1,4 +1,4 @@
-"""
+﻿"""
 熵减 AI 网关 — 内容打标 Chain
 
 对灵感/笔记内容进行三维度自动打标：
@@ -77,7 +77,7 @@ class TagContentChain:
             except (json.JSONDecodeError, ValueError):
                 pass
 
-        if data is None:
+        if data is None or not isinstance(data, dict):
             logger.warning("无法解析打标 JSON，返回默认标签")
             return {
                 "content_nature": "inspiration",

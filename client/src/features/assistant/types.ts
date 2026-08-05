@@ -42,6 +42,7 @@ export type ProactiveTriggerType =
   | 'idle-nudge'
   | 'review-reminder'
   | 'bedtime-review'
+  | 'bedtime-routine'
   | 'commit-dive'
   | 'stuck-incubation'
   | 'emotion-mild'
@@ -49,7 +50,12 @@ export type ProactiveTriggerType =
   | 'emotion-deep'
   | 'cognitive-overload'
   | 'intention-reminder'
-  | 'progress-narrative';
+  | 'progress-narrative'
+  | 'pre-class-prep'
+  // 非触发类型：好奇心改写池（引擎对普通通知做 30% 概率改写，见 maybeCuriosityRewrite）
+  | 'curiosity-rewrite'
+  // Phase 2: 反直觉发现器
+  | 'counterintuitive-daily';
 
 export type AppEventType =
   | 'app:startup'
@@ -63,7 +69,8 @@ export type AppEventType =
   | 'emotion:struggle'
   | 'cognitive:overload'
   | 'stuck:incubation'
-  | 'intention:due';
+  | 'intention:due'
+  | 'schedule:class-upcoming';
 
 /** A1 情绪困扰分级：1 轻度（打字放缓）/ 2 中度（反复修改）/ 3 重度（长时间停滞） */
 export type EmotionLevel = 1 | 2 | 3;
@@ -100,6 +107,13 @@ export interface TriggerContext {
   intentionId?: string;
   /** F3 睡前复习目标牌组（到期卡最多），review:bedtime 事件携带 */
   topDeckId?: string;
+  /** 课前预习：即将开始的课程信息，schedule:class-upcoming 事件携带 */
+  upcomingClass?: {
+    id: string;
+    course: string;
+    /** 距上课开始还有多少分钟（0-30） */
+    startsInMinutes: number;
+  };
 }
 
 // ── 音频 ──────────────────────────────────────────────────────

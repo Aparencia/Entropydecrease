@@ -210,6 +210,167 @@ export interface ConflictDetectResult {
   tokensUsed?: number;
 }
 
+// ════════════════════════════════════════════════════════════════
+// Phase 2 新 AI 功能类型
+// ════════════════════════════════════════════════════════════════
+
+/** 苏格拉底反问镜（mirror 模式）结果 */
+export interface SocraticMirrorResult {
+  /** 镜像反问：将用户问题以另一种视角反弹回去 */
+  mirrorQuestion: string;
+  /** 反思提示 */
+  reflectionHint: string;
+  /** 视角切换建议 */
+  perspectiveShift?: string;
+  status?: string;
+  model?: string;
+  tokensUsed?: number;
+  latencyMs?: number;
+}
+
+/** 辩论类型 */
+export type DebateType = 'academic' | 'policy' | 'value' | 'speculative';
+
+/** 单轮辩论 */
+export interface DebateRound {
+  roundNumber: number;
+  /** AI 论点 */
+  aiArgument: string;
+  /** 用户反驳 */
+  userCounter: string;
+  /** AI 对用户反驳的回应 */
+  aiRebuttal?: string;
+  /** 本轮得分（AI 评估） */
+  score?: number;
+}
+
+/** 辩论结果 */
+export interface DebateResult {
+  rounds: DebateRound[];
+  topic: string;
+  debateType: DebateType;
+  /** 综合评分 */
+  totalScore: number;
+  /** 评分说明 */
+  scoringBreakdown: string;
+  status?: string;
+}
+
+/** 反直觉事实 */
+export interface CounterintuitiveFact {
+  fact: string;
+  explanation: string;
+  source?: string;
+  /** 相关领域 */
+  domain?: string;
+  /** 反直觉程度 1-10 */
+  surpriseLevel?: number;
+}
+
+/** 概念拟人化 - 关系戏剧类型 */
+export type RelationshipType = 'mentor' | 'twin' | 'rival' | 'parent_child' | 'ally';
+
+/** 概念拟人化 - 关系戏剧 */
+export interface RelationshipDrama {
+  targetConcept: string;
+  relationship: RelationshipType;
+  story: string;
+}
+
+/** 概念拟人化数据 */
+export interface PersonaData {
+  concept: string;
+  name: string;
+  personality: string;
+  backstory: string;
+  catchphrase: string;
+  relationships: RelationshipDrama[];
+  appearance?: string;
+}
+
+/** 记忆术类型 */
+export type MnemonicType = 'phonetic' | 'story' | 'spatial';
+
+/** 记忆术数据 */
+export interface MnemonicData {
+  type: MnemonicType;
+  text: string;
+  /** 助记提示 */
+  hint?: string;
+  /** 关联图片描述 */
+  visualClue?: string;
+  /** 效果评分 1-10 */
+  effectivenessScore?: number;
+}
+
+/** 播客角色 */
+export type SpeakerRole = 'host' | 'guest';
+
+/** 播客片段 */
+export interface PodcastSegment {
+  speaker: SpeakerRole;
+  text: string;
+  duration?: number;
+}
+
+/** 播客数据 */
+export interface PodcastData {
+  title: string;
+  segments: PodcastSegment[];
+  /** 总时长（秒） */
+  totalDuration?: number;
+  /** 嘉宾介绍 */
+  guestIntro?: string;
+  model?: string;
+  tokensUsed?: number;
+  latencyMs?: number;
+}
+
+/** 学习教练周计划 - 单日任务 */
+export interface CoachDayTask {
+  day: string;
+  tasks: string[];
+  focus: string;
+  estimatedMinutes: number;
+}
+
+/** 学习教练周计划 */
+export interface WeeklyCoachPlan {
+  weekLabel: string;
+  days: CoachDayTask[];
+  weeklyGoal: string;
+  encouragement: string;
+  status?: string;
+  model?: string;
+  tokensUsed?: number;
+  latencyMs?: number;
+}
+
+/** 信息图部分 */
+export interface InfographicSection {
+  title: string;
+  points: string[];
+  icon?: string;
+}
+
+/** 信息图关系连接 */
+export interface InfographicRelation {
+  from: string;
+  to: string;
+  label: string;
+}
+
+/** 信息图数据 */
+export interface InfographicData {
+  title: string;
+  sections: InfographicSection[];
+  relations: InfographicRelation[];
+  theme: 'academic' | 'tech' | 'warm';
+  model?: string;
+  tokensUsed?: number;
+  latencyMs?: number;
+}
+
 /** E1: 单个概念预检探测问题 */
 export interface PrecheckQuestion {
   /** 探测性问题 */

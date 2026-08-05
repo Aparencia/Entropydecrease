@@ -1,4 +1,4 @@
-"""
+﻿"""
 熵减 AI 网关 — 灵感分拣 Chain
 
 分析灵感/笔记内容，推荐最适合的归类目标：
@@ -82,7 +82,7 @@ class SortInspirationChain:
             except (json.JSONDecodeError, ValueError):
                 pass
 
-        if data is None:
+        if data is None or not isinstance(data, dict):
             logger.warning("无法解析分拣 JSON，返回默认建议")
             return [
                 {

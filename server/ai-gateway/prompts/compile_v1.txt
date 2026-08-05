@@ -1,0 +1,24 @@
+## 课程/主题
+{theme}
+
+## 课程/主题笔记
+{notes}
+
+## 编译要求
+请将以上多篇笔记编译为一份结构化学习资源，覆盖 5 种输出：
+
+1. **知识摘要（summary）**：一段 150-250 字的中文摘要，提炼全部笔记的核心知识主线。
+2. **概念图谱（concept_map）**：提取 5-8 个核心概念，列出每个概念直接关联的 2-4 个概念（related 必须是概念名），并给出掌握度估计（mastery_estimate，0.0-1.0 的小数，基于笔记详略程度推断）。
+3. **闪卡精华集（flashcard_highlights）**：精选 3-5 张高价值闪卡，正面（front）为自问句式，背面（back）为简洁答案。
+4. **费曼精选（feynman_picks）**：挑选 2-3 个可用大白话向别人解释的核心概念（concept + 一句话 takeaway）。
+5. **学习路径推荐（learning_path）**：给出 3-5 步递进学习路径，每步含步骤名（step）与具体动作（action）。
+
+## 输出格式
+必须输出合法 JSON（不要输出 JSON 之外的任何文字），结构如下：
+{{
+  "summary": "知识摘要",
+  "concept_map": [{{"concept": "概念名", "related": ["关联概念1", "关联概念2"], "mastery_estimate": 0.6}}],
+  "flashcard_highlights": [{{"front": "正面问题", "back": "背面答案"}}],
+  "feynman_picks": [{{"concept": "概念", "takeaway": "一句话大白话"}}],
+  "learning_path": [{{"step": "步骤名", "action": "具体动作"}}]
+}}

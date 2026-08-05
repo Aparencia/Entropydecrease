@@ -10,6 +10,8 @@ import { useModeState } from '@/hooks/useMode';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { modeManager, type AppMode } from '@/lib/mode/ModeManager';
 import { useAuth } from '@/lib/auth/AuthContext';
+import { useTierAccess } from '@/features/beta/hooks/useTierAccess';
+import { TIER_PERKS } from '@/types/beta';
 import {
   Monitor, Wifi, Cloud, Check, WifiOff, Signal,
   Sparkles, RefreshCw, HardDrive, Shield,
@@ -85,6 +87,8 @@ export default function ModeSettings() {
   const prefersReduced = useReducedMotion();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
+  const { tier } = useTierAccess();
+  const multiDeviceSync = TIER_PERKS[tier]?.multiDeviceSync ?? false;
 
   const handleChangeMode = (newMode: AppMode) => {
     if (mode === newMode) return;
@@ -217,6 +221,21 @@ export default function ModeSettings() {
             </motion.button>
           );
         })}
+      </div>
+
+      {/* 多设备同步权益提示（D4：免费层单设备，Pro/内测多设备） */}
+      <div className={cn(
+        'flex items-center gap-2 rounded-kb-lg px-3 py-2 text-c1',
+        multiDeviceSync
+          ? 'bg-emerald-500/10 text-emerald-600'
+          : 'bg-bg-tertiary/40 text-text-tertiary',
+      )}>
+        <Shield className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={1.5} />
+        {multiDeviceSync ? (
+          <span>多设备同步已解锁——学习数据可在你的多台设备间保持一致</span>
+        ) : (
+          <span>免费层为单设备同步——升级 Pro 可解锁多设备数据同步</span>
+        )}
       </div>
     </Card>
   );
