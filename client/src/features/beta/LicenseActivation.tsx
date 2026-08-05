@@ -10,7 +10,7 @@ import { Key, Check, AlertTriangle, Sparkles, ExternalLink } from 'lucide-react'
 import { Button, Input, useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useBetaStore } from '@/features/beta/betaStore';
-import { type License, type LicenseType } from '@/types/beta';
+import { type License, type LicenseType, type UserTier } from '@/types/beta';
 import { useAuth } from '@/lib/auth/AuthContext';
 
 /** 激活码格式校验正则 */

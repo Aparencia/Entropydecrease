@@ -66,7 +66,12 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
 
         // 仅当刷新本身失败（refresh token 真正过期/失效）才判定为登录过期
         if (refreshError || !refreshed?.access_token) {
-          window.dispatchEvent(new CustomEvent('kb:session-expired'));
+          // 仅当 Supabase 存在会话（云端模式）才判定登录过期；本地优先/未登录
+          // 用户无会话时，网关 401（凭证缺失/失效）只抛普通错误，不踢登录
+          const { data: { session: current } } = await supabase.auth.getSession();
+          if (current) {
+            window.dispatchEvent(new CustomEvent('kb:session-expired'));
+          }
           throw new Error('HTTP 401: 登录已过期');
         }
 
@@ -146,7 +151,11 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
       if (response.status === 401) {
         const { data: { session: refreshed }, error: refreshError } = await refreshSessionShared();
         if (refreshError || !refreshed?.access_token) {
-          window.dispatchEvent(new CustomEvent('kb:session-expired'));
+          // 同上：无 Supabase 会话时网关 401 不触发登录过期（本地模式）
+          const { data: { session: current } } = await supabase.auth.getSession();
+          if (current) {
+            window.dispatchEvent(new CustomEvent('kb:session-expired'));
+          }
           throw new Error('HTTP 401: 登录已过期');
         }
         headers.set('Authorization', `Bearer ${refreshed.access_token}`);

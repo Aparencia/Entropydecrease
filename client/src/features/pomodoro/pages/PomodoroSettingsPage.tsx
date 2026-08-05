@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Timer, Zap, Bell, Save, RotateCcw, GraduationCap, Sparkles, CheckCircle2, Music, Volume2, Brain, Plus, Pencil, Trash2, Layers, ChevronUp, ChevronDown } from 'lucide-react';
+import { Timer, Zap, Bell, Save, RotateCcw, GraduationCap, Sparkles, CheckCircle2, Music, Volume2, Brain, Plus, Pencil, Trash2, Layers, ChevronUp, ChevronDown, ArrowLeft } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { Button, Card, Input, useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -196,10 +196,25 @@ export default function PomodoroSettingsPage() {
       animate="visible"
       variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.07, delayChildren: 0.06 } } }}
     >
-      <motion.h1
-        className="text-h1 font-semibold text-text-primary mb-kb-lg"
+      <motion.div
+        className="flex items-center gap-2 mb-kb-lg"
         variants={{ hidden: { opacity: 0, y: -12, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}
-      >深潜设置</motion.h1>
+      >
+        {/* 返回深潜模块（内测反馈：设置页此前无出口，只能 Esc 退到 3D 场景） */}
+        <Tip text="返回深潜">
+          <button
+            onClick={() => navigate('/pomodoro')}
+            aria-label="返回深潜"
+            className="p-1.5 rounded-kb-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-kb-fast"
+          >
+            <ArrowLeft className="w-icon-md h-icon-md" strokeWidth={1.5} />
+          </button>
+        </Tip>
+        <motion.h1
+          className="text-h1 font-semibold text-text-primary"
+          variants={{ hidden: { opacity: 0, y: -12, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}
+        >深潜设置</motion.h1>
+      </motion.div>
 
       {/* Duration settings */}
       <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>

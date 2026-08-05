@@ -35,12 +35,18 @@ import { WorldRecap } from '@/features/retention/components/WorldRecap';
 import { WorldSoundscape } from '@/lib/audio/WorldSoundscape';
 import '@/stores/useSettingsStore'; // 导入以触发音效设置初始化
 import { startPomodoroScheduler } from '@/features/pomodoro/lib/pomodoroScheduler';
+import { usePomodoroStore } from '@/features/pomodoro/store/usePomodoroStore';
 
 // 启动时预加载所有音效（不阻塞渲染）
 soundPlayer.preloadAll();
 
 // 番茄钟全局计时调度器：tick 驱动与页面生命周期解耦（切页后计时不停摆）
 startPomodoroScheduler();
+
+// 番茄钟持久化初始化：此前 initialize 仅在设置页挂载时触发（PomodoroSettingsPage），
+// 深潜主页启动不加载——用户设置的时长/预设刷新后回退默认值（25 分钟），
+// 且完成的番茄按默认时长落库（学习脉搏数据失真）。App 启动即初始化，幂等安全。
+usePomodoroStore.getState().initialize().catch(() => {});
 
 const queryClient = new QueryClient({
   defaultOptions: {
