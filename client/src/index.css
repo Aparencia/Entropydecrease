@@ -34,11 +34,14 @@ body {
 [data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
 
 /* ── TipTap 编辑器样式 ── */
+/* 阅读模式（自适应排版引擎 3.17）：容器挂载 --ed-* 变量时消费，
+   未挂载（默认态）时回退原值，保持零侵入 */
 .tiptap {
   outline: none;
   min-height: 60vh;
-  font-size: 1rem;
-  line-height: 1.75;
+  font-size: var(--ed-font-size-base, 1rem);
+  line-height: var(--ed-line-height, 1.75);
+  letter-spacing: var(--ed-letter-spacing, 0em);
   color: var(--kb-text-primary);
 }
 

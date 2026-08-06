@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Modal, Input, EmptyState, Skeleton, ContextMenu } from '@/components/ui';
 import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import type { ContextMenuGroup } from '@/components/ui';
-import { Plus, BookOpen, Trash2, MessageCircle, Lightbulb, SearchCheck, Network } from 'lucide-react';
+import { Plus, BookOpen, Trash2, MessageCircle, Lightbulb, SearchCheck, Network, Swords, Brain, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useFeynmanStore } from '../store/useFeynmanStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -20,6 +20,10 @@ import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import type { FeynmanNote } from '@/types/models';
 import { FeynmanNoteCard } from '../components/FeynmanNoteCard';
 import { WeakPointsSummary } from '../components/WeakPointsSummary';
+import DebatePanel from '../components/DebatePanel';
+import { useAICounterintuitive } from '@/lib/ai/hooks/useAICounterintuitive';
+import { useAIPersonify } from '@/lib/ai/hooks/useAIPersonify';
+import PersonaCard from '@/components/PersonaCard';
 
 /* ── 动画 variants ── */
 const pageVariants = {
@@ -102,6 +106,11 @@ export default function FeynmanPage() {
     setDeleteId(null);
   }, [deleteNote, toast]);
 
+  // 概念拟人化弹层：把概念塑造成角色（懒加载 + 本地降级兜底）
+  const { persona, loading: personaLoading, error: personaError, isFallback: personaIsFallback, personify } = useAIPersonify();
+  const [personaOpen, setPersonaOpen] = useState(false);
+  const [personaTopic, setPersonaTopic] = useState('');
+
   const ctxMenuGroups = useMemo<ContextMenuGroup[]>(() => [
     { label: '会话操作', items: [
       { key: 'open', label: '打开学习', icon: <BookOpen className="w-4 h-4" strokeWidth={1.5} /> },
@@ -110,6 +119,10 @@ export default function FeynmanPage() {
       { key: 'ai-follow-up', label: 'AI 追问', icon: <MessageCircle className="w-4 h-4" strokeWidth={1.5} /> },
       { key: 'ai-simplify', label: '通俗化解释', icon: <Lightbulb className="w-4 h-4" strokeWidth={1.5} /> },
       { key: 'ai-gap-check', label: '查漏补缺', icon: <SearchCheck className="w-4 h-4" strokeWidth={1.5} /> },
+      // P3 AI 辩论：以概念为主题的正反辩论（DebatePanel 自管回合状态）
+      { key: 'ai-debate', label: 'AI 辩论', icon: <Swords className="w-4 h-4" strokeWidth={1.5} /> },
+      // 概念拟人化：把概念塑造成角色（懒加载，AI 不可用时本地降级）
+      { key: 'ai-personify', label: '🎭 概念拟人化', icon: <Sparkles className="w-4 h-4" strokeWidth={1.5} /> },
     ]},
     { items: [
       { key: 'delete', label: '删除', icon: <Trash2 className="w-4 h-4" strokeWidth={1.5} />, danger: true },
@@ -125,8 +138,31 @@ export default function FeynmanPage() {
       case 'ai-gap-check':
         toast({ type: 'info', message: 'AI 功能即将上线' });
         break;
+      // P3 AI 辩论：以概念为主题的正反辩论
+      case 'ai-debate':
+        setDebateTopic(noteCtx.concept);
+        setDebateOpen(true);
+        break;
+      // 概念拟人化：懒加载生成角色（AI 不可用时 useAIPersonify 自带本地降级）
+      case 'ai-personify':
+        setPersonaTopic(noteCtx.concept);
+        setPersonaOpen(true);
+        void personify(noteCtx.concept);
+        break;
     }
-  }, [navigate, handleConfirmDelete, toast]);
+  }, [navigate, handleConfirmDelete, toast, personify]);
+
+  // P3 辩论弹层状态
+  const [debateOpen, setDebateOpen] = useState(false);
+  const [debateTopic, setDebateTopic] = useState('');
+
+  // P7 反直觉事实（每日缓存，含本地降级）
+  const { fact, loading: factLoading, error: factError, isFallback: factIsFallback, fetchFact } = useAICounterintuitive();
+  const [factOpen, setFactOpen] = useState(false);
+  const handleOpenFact = useCallback(() => {
+    fetchFact();
+    setFactOpen(true);
+  }, [fetchFact]);
 
   const stats = getStats();
 
@@ -149,6 +185,14 @@ export default function FeynmanPage() {
           sealColor="#C4956A"
         />
         <div className="flex items-center gap-2">
+          {/* P7 反直觉事实入口（每日一条，本地缓存降级） */}
+          <button
+            onClick={handleOpenFact}
+            title="今日反直觉事实"
+            className="p-2 rounded-full text-text-tertiary hover:text-amber-500 hover:bg-bg-tertiary transition-colors"
+          >
+            <Brain className="w-5 h-5" strokeWidth={1.5} />
+          </button>
           {/* E3 概念网络入口 */}
           <button
             onClick={() => navigate('/feynman/graph')}
@@ -280,6 +324,67 @@ export default function FeynmanPage() {
           onClose={closeCtxMenu}
         />
       )}
+
+      {/* P3 AI 辩论弹层：以概念为主题的正反辩论 */}
+      <Modal
+        open={debateOpen}
+        onClose={() => setDebateOpen(false)}
+        title="⚖️ AI 辩论"
+        description={`围绕「${debateTopic}」展开正反论证`}
+        size="lg"
+      >
+        {debateTopic && <DebatePanel topic={debateTopic} onClose={() => setDebateOpen(false)} />}
+      </Modal>
+
+      {/* P7 今日反直觉事实弹层 */}
+      <Modal
+        open={factOpen}
+        onClose={() => setFactOpen(false)}
+        title="💡 今日反直觉事实"
+        description="打破思维定势，看见认知盲区"
+        size="sm"
+      >
+        {factLoading && (
+          <div className="py-6 text-center text-c1 text-text-tertiary animate-pulse">正在寻找反直觉事实…</div>
+        )}
+        {!factLoading && fact && (
+          <div className="flex flex-col gap-3">
+            {fact.domain && (
+              <span className="self-start rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2.5 py-0.5 text-[10px] font-medium">
+                {fact.domain} · 惊讶度 {fact.surpriseLevel ?? '?'}/10
+              </span>
+            )}
+            <p className="text-b2 text-text-primary font-medium leading-relaxed">{fact.fact}</p>
+            <p className="text-c1 text-text-secondary leading-relaxed">{fact.explanation}</p>
+            {factIsFallback && <p className="text-c1 text-text-tertiary">（AI 服务不可用，已展示本地事实）</p>}
+          </div>
+        )}
+        {!factLoading && !fact && <p className="py-6 text-center text-c1 text-text-tertiary">{factError ?? '暂无内容'}</p>}
+      </Modal>
+
+      {/* 🎭 概念拟人化弹层：把概念塑造成角色（懒加载生成，AI 不可用时展示本地降级角色） */}
+      <Modal
+        open={personaOpen}
+        onClose={() => setPersonaOpen(false)}
+        title="🎭 概念拟人化"
+        description={personaTopic ? `「${personaTopic}」化身知识角色` : '让概念拥有性格与故事'}
+        size="sm"
+      >
+        {personaLoading && (
+          <div className="py-6 text-center text-c1 text-text-tertiary animate-pulse">正在构思角色…</div>
+        )}
+        {!personaLoading && persona && (
+          <div className="flex flex-col gap-3">
+            <PersonaCard persona={persona} />
+            {personaIsFallback && (
+              <p className="text-c1 text-text-tertiary">{personaError ?? 'AI 服务不可用，已展示默认角色'}</p>
+            )}
+          </div>
+        )}
+        {!personaLoading && !persona && (
+          <p className="py-6 text-center text-c1 text-text-tertiary">{personaError ?? '暂无内容'}</p>
+        )}
+      </Modal>
     </motion.div>
   );
 }

@@ -8,18 +8,23 @@
  * 统计。右键菜单提供搁置（dueDate 推后一年）/标记困难（easeFactor -0.2，
  * 下限 1.3）/AI 优化。
  */
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, EmptyState, useToast } from '@/components/ui';
 import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu';
-import { X, BookOpen, PauseCircle, AlertTriangle, Sparkles, Tablet } from 'lucide-react';
+import { X, BookOpen, PauseCircle, AlertTriangle, Sparkles, Tablet, Gauge } from 'lucide-react';
 import { useStudySessionStore } from '../store/useStudySessionStore';
 import { useFlashcardStore } from '../store/useFlashcardStore';
 import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
 import { calculateIntervals } from '@/lib/sm2';
+import type { DifficultyTier } from '@/lib/scheduler';
+import DifficultyLadder from '../components/DifficultyLadder';
 import type { Flashcard } from '@/types/models';
 import { useAIOptimizeCard } from '@/lib/ai/useAI';
+import { useAIMnemonic } from '@/lib/ai/hooks/useAIMnemonic';
+import { Modal } from '@/components/ui/Modal';
+import MnemonicBadge from '../components/MnemonicBadge';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { CardStage, SessionCompleteView } from '../components/CardStage';
 import { SessionHeader } from '../components/SessionHeader';
@@ -34,22 +39,6 @@ import { SpeakingReviewMode } from '../components/SpeakingReviewMode';
 import { SituationalReviewMode } from '../components/SituationalReviewMode';
 import { extractPlainText, type ReviewMode } from '../lib/reviewMode';
 import { ttsController } from '@/features/assistant/lib/ttsController';
-
-const sessionMenuGroups: ContextMenuGroup[] = [
-  {
-    label: '学习操作',
-    items: [
-      { key: 'suspend', label: '搁置当前卡', icon: <PauseCircle className="w-4 h-4" strokeWidth={1.5} /> },
-      { key: 'mark-hard', label: '标记困难', icon: <AlertTriangle className="w-4 h-4" strokeWidth={1.5} /> },
-    ],
-  },
-  {
-    label: 'AI 操作',
-    items: [
-      { key: 'ai-optimize', label: 'AI 优化卡片内容', icon: <Sparkles className="w-4 h-4" strokeWidth={1.5} /> },
-    ],
-  },
-];
 
 export default function StudySessionPage() {
   const { deckId } = useParams<{ deckId: string }>();
@@ -93,10 +82,35 @@ export default function StudySessionPage() {
   const prefersReduced = useReducedMotion();
   const [showOptimizeModal, setShowOptimizeModal] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  // P2 记忆术徽章：右键菜单懒加载生成（点击才调用，控 AI 用量）
+  const { mnemonic: mnemonicData, loading: mnemonicLoading, error: mnemonicError, generateMnemonic } = useAIMnemonic();
+  const [showMnemonicModal, setShowMnemonicModal] = useState(false);
+  // 难度阶梯弹窗：右键菜单「🎯 难度阶梯」展示当前卡的自适应挑战档位
+  const [showDifficultyModal, setShowDifficultyModal] = useState(false);
 
   const total = sessionCards.length;
   const current = sessionCards[currentIndex];
   const isComplete = !isActive && completedCount > 0;
+
+  // 右键菜单分组（组件内动态生成：无当前卡时禁用难度阶梯入口）
+  const sessionMenuGroups = useMemo<ContextMenuGroup[]>(() => [
+    {
+      label: '学习操作',
+      items: [
+        { key: 'suspend', label: '搁置当前卡', icon: <PauseCircle className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'mark-hard', label: '标记困难', icon: <AlertTriangle className="w-4 h-4" strokeWidth={1.5} /> },
+      ],
+    },
+    {
+      label: 'AI 操作',
+      items: [
+        { key: 'ai-optimize', label: 'AI 优化卡片内容', icon: <Sparkles className="w-4 h-4" strokeWidth={1.5} /> },
+        { key: 'ai-mnemonic', label: '✨ 记忆术提示', icon: <Sparkles className="w-4 h-4" strokeWidth={1.5} /> },
+        // 自适应挑战阶梯：展示当前卡档位（间隔信号驱动），无当前卡时禁用
+        { key: 'difficulty-ladder', label: '🎯 难度阶梯', icon: <Gauge className="w-4 h-4" strokeWidth={1.5} />, disabled: !current },
+      ],
+    },
+  ], [current]);
 
   const ci = useCardInteraction({
     current, currentIndex, isFlipped, prefersReduced, rateCard, relearn,
@@ -131,8 +145,30 @@ export default function StudySessionPage() {
         setShowOptimizeModal(true);
         break;
       }
+      case 'ai-mnemonic': {
+        // P2 记忆术：生成谐音/故事/空间联想提示（懒加载，失败 toast 降级）
+        try {
+          await generateMnemonic(card.front, card.back);
+          setShowMnemonicModal(true);
+        } catch {
+          toast({ type: 'warning', message: '记忆术生成失败，请稍后重试' });
+        }
+        break;
+      }
+      case 'difficulty-ladder': {
+        // 自适应挑战阶梯：展示当前卡档位（纯本地展示，无需 AI 调用）
+        setShowDifficultyModal(true);
+        break;
+      }
     }
-  }, [updateCard, toast, aiOptimize]);
+  }, [updateCard, toast, aiOptimize, generateMnemonic]);
+
+  /** 难度阶梯升阶：把建议档位写入当前卡（复习流后续按此档位驱动） */
+  const handleDifficultyPromote = (tier: DifficultyTier) => {
+    if (!current) return;
+    updateCard(current.id, { difficultyTier: tier });
+    toast({ type: 'success', message: `已升阶至「${tier === 'master' ? '大师档' : tier === 'challenge' ? '挑战档' : '基础档'}」，等下次复习验收` });
+  };
 
   useEffect(() => {
     if (deckId) {
@@ -396,6 +432,48 @@ export default function StudySessionPage() {
           onDismiss={() => setShowOptimizeModal(false)}
         />
       )}
+
+      {/* P2 记忆术提示弹层：谐音/故事/空间联想（懒加载生成） */}
+      <Modal
+        open={showMnemonicModal}
+        onClose={() => setShowMnemonicModal(false)}
+        title="✨ 记忆术提示"
+        description="通过联想让记忆更牢固"
+        size="sm"
+      >
+        {mnemonicLoading && (
+          <div className="py-6 text-center text-c1 text-text-tertiary animate-pulse">
+            正在构思记忆术…
+          </div>
+        )}
+        {mnemonicError && !mnemonicLoading && (
+          <p className="py-6 text-center text-c1 text-text-tertiary">记忆术生成失败，请稍后重试</p>
+        )}
+        {mnemonicData && !mnemonicLoading && <MnemonicBadge mnemonic={mnemonicData} />}
+      </Modal>
+
+      {/* 自适应挑战阶梯弹窗：展示当前卡档位（间隔信号驱动），升阶写入 difficultyTier */}
+      <Modal
+        open={showDifficultyModal}
+        onClose={() => setShowDifficultyModal(false)}
+        title="🎯 难度阶梯"
+        description="自适应挑战：讲给小孩 → 创新应用，按间隔信号逐级升阶"
+        size="sm"
+      >
+        {current ? (
+          <DifficultyLadder
+            card={{
+              interval: current.interval,
+              repetitions: current.repetitions,
+              lapses: current.lapses,
+              difficultyTier: current.difficultyTier,
+            }}
+            onPromote={handleDifficultyPromote}
+          />
+        ) : (
+          <p className="py-6 text-center text-c1 text-text-tertiary">当前没有可展示的卡片</p>
+        )}
+      </Modal>
 
       {showSummary && (
         <SessionSummaryModal

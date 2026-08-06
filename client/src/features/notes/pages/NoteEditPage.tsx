@@ -39,10 +39,17 @@ import { ClosedBookTest } from '../components/ClosedBookTest';
 import { ContentTierModal } from '../components/ContentTierModal';
 import { useConceptConflict } from '../hooks/useConceptConflict';
 import { Tip } from '@/components/ui/Tip';
-import { Button } from '@/components/ui';
-import { EyeOff, Layers, Volume2 } from 'lucide-react';
+import { Button, useToast } from '@/components/ui';
+import { Modal } from '@/components/ui/Modal';
+import { EyeOff, Layers, Volume2, ScanText, BarChart3, BookMarked, BookOpen } from 'lucide-react';
 import { SoundAnchorPicker } from '@/features/soundanchor/components/SoundAnchorPicker';
 import { cn } from '@/lib/utils';
+import { aiPluginLoader } from '@/lib/ai/AIPluginLoader';
+import { useAIInfographic } from '@/lib/ai/hooks/useAIInfographic';
+import InfographicRenderer from '@/components/InfographicRenderer';
+import RollingRecallMode from '../components/RollingRecallMode';
+import { ReadingGuide } from '@/components/ReadingGuide';
+import { useAdaptiveTypography } from '@/hooks/useAdaptiveTypography';
 
 export default function NoteEditPage() {
   const { id } = useParams<{ id: string }>();
@@ -74,6 +81,10 @@ export default function NoteEditPage() {
 
   const titleRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  // P4 截图视觉提取：独立文件入口（不干扰原生图片插入流程）
+  const visionInputRef = useRef<HTMLInputElement>(null);
+  const [visionExtracting, setVisionExtracting] = useState(false);
+  const { toast } = useToast();
 
   const { editor, saveStatus, isDirty, debouncedSave, handleImageSelect } = useNoteEditor({
     noteId,
@@ -82,10 +93,60 @@ export default function NoteEditPage() {
     updateNote,
   });
 
+  /** P4 AI 提取图片文字/公式：base64 → extractScreenContent → 插入编辑器 */
+  const handleVisionExtract = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !editor) return;
+    setVisionExtracting(true);
+    toast({ type: 'info', message: 'AI 正在提取图片内容…', duration: 1500 });
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          // 剥离 data:image/...;base64, 前缀（插件契约要求裸 base64）
+          resolve(result.includes(',') ? result.slice(result.indexOf(',') + 1) : result);
+        };
+        reader.onerror = () => reject(new Error('图片读取失败'));
+        reader.readAsDataURL(file);
+      });
+      const result = await aiPluginLoader.extractScreenContent(base64, 'zh');
+      const parts = [result.text];
+      if (result.keyPoints.length > 0) parts.push('', '**要点**', ...result.keyPoints.map((k) => `- ${k}`));
+      if (result.formulas.length > 0) parts.push('', '**公式**', ...result.formulas);
+      const insertText = parts.filter(Boolean).join('\n');
+      editor.chain().focus().insertContent(insertText).run();
+      soundPlayer.play('ai_analysis_done');
+      toast({ type: 'success', message: `已提取图片内容（${insertText.length} 字符）`, silent: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '未知错误';
+      toast({ type: 'error', message: `AI 提取失败：${msg}` });
+    } finally {
+      setVisionExtracting(false);
+    }
+  }, [editor, toast]);
+
   const ai = useNoteAI(editor, noteId);
 
   // === N2 合书测试模式 ===
   const [closedBook, setClosedBook] = useState(false);
+
+  // === 滚书背诵模式（4 轮渐进回忆，与合书测试平行入口）===
+  const [recallOpen, setRecallOpen] = useState(false);
+
+  // === 阅读模式（自适应排版 + 阅读引导线）===
+  const [readingMode, setReadingMode] = useState(false);
+
+  // === 知识信息图生成（AI 网关不可用时 hook 内部回退默认图，优雅降级）===
+  const [infographicOpen, setInfographicOpen] = useState(false);
+  const {
+    infographic,
+    loading: infographicLoading,
+    error: infographicError,
+    isFallback,
+    generateInfographic,
+  } = useAIInfographic();
 
   // === N5 策略性遗忘标记 ===
   const [tierOpen, setTierOpen] = useState(false);
@@ -116,6 +177,41 @@ export default function NoteEditPage() {
   const refreshHealthText = useCallback(() => {
     if (editor) setHealthText(editor.getText());
   }, [editor]);
+
+  // === 阅读模式排版：内容难度估算（1-5，文本长度启发式）→ 自适应 CSS 变量 ===
+  const contentDifficulty = useMemo(() => {
+    const len = (healthText || '').trim().length;
+    if (len < 200) return 1;
+    if (len < 600) return 2;
+    if (len < 1200) return 3;
+    if (len < 2000) return 4;
+    return 5;
+  }, [healthText]);
+
+  const typographyVars = useAdaptiveTypography({
+    contentDifficulty,
+    enableReadingGuide: readingMode,
+  });
+
+  // 阅读模式：切换编辑器可编辑态（开启=只读，关闭/卸载=恢复可编辑）
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    editor.setEditable(!readingMode);
+  }, [editor, readingMode]);
+
+  // 卸载时兜底恢复可编辑（防 StrictMode 双挂载/路由切换遗留只读态）
+  useEffect(() => {
+    return () => {
+      if (editor && !editor.isDestroyed) editor.setEditable(true);
+    };
+  }, [editor]);
+
+  // AI 信息图降级提示：网关不可用时 toast 温和告知（结果仍展示默认图，不阻断）
+  useEffect(() => {
+    if (infographicError) {
+      toast({ type: 'info', message: infographicError, duration: 3000 });
+    }
+  }, [infographicError, toast]);
 
   // === N6 概念冲突检测：内容稳定后自动比对新旧理解 ===
   const { conflicts, dismiss: dismissConflicts } = useConceptConflict(noteId, healthText, notes);
@@ -310,6 +406,24 @@ export default function NoteEditPage() {
     setClosedBook(true);
   }, [refreshHealthText]);
 
+  // 滚书背诵入口：与合书测试同策略，先取最新快照再打开
+  const handleOpenRollingRecall = useCallback(() => {
+    refreshHealthText();
+    setRecallOpen(true);
+  }, [refreshHealthText]);
+
+  // 知识信息图入口：取编辑器实时文本调用 AI 网关；hook 内部失败时回退默认图
+  const handleGenerateInfographic = useCallback(async () => {
+    if (!editor) return;
+    const text = editor.getText().trim();
+    if (text.length < 20) {
+      toast({ type: 'info', message: '笔记内容太少，先写一些内容再生成信息图' });
+      return;
+    }
+    setInfographicOpen(true);
+    await generateInfographic(note?.title || '笔记', 'academic');
+  }, [editor, note?.title, generateInfographic, toast]);
+
   // 内容分层入口：同理先取最新快照
   const handleOpenTier = useCallback(() => {
     refreshHealthText();
@@ -402,6 +516,51 @@ export default function NoteEditPage() {
         <EditorToolbar editor={editor} onPickImage={() => imageInputRef.current?.click()} healthContent={healthText} onToggleClosedBook={handleOpenClosedBook} />
       )}
 
+      {/* P4 AI 提取图片文字 / 信息图 / 滚书背诵 / 阅读模式 入口（独立于图片插入流程） */}
+      {!isCornell && !isFree && !isMindmap && (
+        <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border/20 bg-bg-elevated/20">
+          <button
+            onClick={() => visionInputRef.current?.click()}
+            disabled={visionExtracting}
+            className="flex items-center gap-1.5 rounded-kb-sm px-2.5 py-1 text-c1 text-text-tertiary transition-colors hover:text-brand-600 hover:bg-brand-500/10 disabled:opacity-50"
+            title="选择截图/图片，AI 提取文字与公式后插入笔记"
+          >
+            <ScanText className="w-3.5 h-3.5" strokeWidth={1.5} />
+            {visionExtracting ? '提取中…' : 'AI 提取图片文字'}
+          </button>
+          <button
+            onClick={handleGenerateInfographic}
+            disabled={infographicLoading}
+            className="flex items-center gap-1.5 rounded-kb-sm px-2.5 py-1 text-c1 text-text-tertiary transition-colors hover:text-brand-600 hover:bg-brand-500/10 disabled:opacity-50"
+            title="AI 将笔记内容转化为结构化信息图"
+          >
+            <BarChart3 className="w-3.5 h-3.5" strokeWidth={1.5} />
+            {infographicLoading ? '生成中…' : '生成信息图'}
+          </button>
+          <button
+            onClick={handleOpenRollingRecall}
+            className="flex items-center gap-1.5 rounded-kb-sm px-2.5 py-1 text-c1 text-text-tertiary transition-colors hover:text-brand-600 hover:bg-brand-500/10"
+            title="滚书背诵：4 轮渐进式回忆（通读→精读→闭卷→默写）"
+          >
+            <BookMarked className="w-3.5 h-3.5" strokeWidth={1.5} />
+            滚书背诵
+          </button>
+          <button
+            onClick={() => setReadingMode((v) => !v)}
+            className={cn(
+              'flex items-center gap-1.5 rounded-kb-sm px-2.5 py-1 text-c1 transition-colors',
+              readingMode
+                ? 'text-brand-600 bg-brand-500/10'
+                : 'text-text-tertiary hover:text-brand-600 hover:bg-brand-500/10',
+            )}
+            title="阅读模式：自适应排版 + 阅读引导线，专注阅读"
+          >
+            <BookOpen className="w-3.5 h-3.5" strokeWidth={1.5} />
+            {readingMode ? '退出阅读' : '阅读模式'}
+          </button>
+        </div>
+      )}
+
       {/* 隐藏的图片上传 input */}
       <input
         ref={imageInputRef}
@@ -409,6 +568,15 @@ export default function NoteEditPage() {
         accept="image/*"
         className="hidden"
         onChange={handleImageSelect}
+      />
+
+      {/* P4 隐藏的 AI 提取图片 input */}
+      <input
+        ref={visionInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleVisionExtract}
       />
 
       {/* 编辑区 */}
@@ -422,7 +590,13 @@ export default function NoteEditPage() {
         </div>
       ) : (
         <div className="relative flex-1 min-h-0">
-        <div className="h-full overflow-y-auto px-kb-md py-kb-lg bg-[rgba(255,253,250,0.3)] dark:bg-[rgba(16,24,44,0.5)]">
+        <div
+          data-reading-guide-container
+          className="h-full overflow-y-auto px-kb-md py-kb-lg bg-[rgba(255,253,250,0.3)] dark:bg-[rgba(16,24,44,0.5)]"
+          style={readingMode ? (typographyVars as React.CSSProperties) : undefined}
+        >
+          {/* 阅读模式：引导线叠加（fixed 定位，不占文档流） */}
+          {readingMode && <ReadingGuide />}
           <div
             className={cn('max-w-[720px] mx-auto transition-all duration-300', closedBook && 'blur-md select-none pointer-events-none')}
             onContextMenu={closedBook ? undefined : ctxMenu.onContextMenu}
@@ -560,6 +734,47 @@ export default function NoteEditPage() {
     )}
     {/* N5 内容分层弹窗（策略性遗忘标记） */}
     <ContentTierModal open={tierOpen} onClose={() => setTierOpen(false)} noteText={healthText} noteId={noteId} />
+
+    {/* 知识信息图弹窗：AI 生成中显示 spinner，失败时 hook 已回退默认图（降级提示见 toast） */}
+    <Modal
+      open={infographicOpen}
+      onClose={() => setInfographicOpen(false)}
+      title="知识信息图"
+      description={infographicError ?? 'AI 将笔记内容可视化为结构化信息图'}
+      size="lg"
+    >
+      {infographicLoading ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="flex items-center gap-2 text-text-tertiary">
+            <div className="w-4 h-4 border-2 border-brand-400/30 border-t-brand-400 rounded-full animate-spin" />
+            <span className="text-b2">AI 正在生成信息图…</span>
+          </div>
+        </div>
+      ) : infographic ? (
+        <div className="max-h-[60vh] overflow-y-auto">
+          <InfographicRenderer data={infographic} />
+          {isFallback && (
+            <p className="mt-3 text-c1 text-text-tertiary">AI 信息图服务暂不可用，已展示默认信息图。</p>
+          )}
+        </div>
+      ) : null}
+    </Modal>
+
+    {/* 滚书背诵弹窗：4 轮渐进式回忆 */}
+    <Modal
+      open={recallOpen}
+      onClose={() => setRecallOpen(false)}
+      title="滚书背诵"
+      description="4 轮渐进式回忆：通读标记 → 精读理解 → 闭卷回忆 → 默写输出"
+      size="lg"
+    >
+      <RollingRecallMode
+        noteContent={healthText}
+        noteTitle={note.title}
+        onClose={() => setRecallOpen(false)}
+        className="max-h-[60vh]"
+      />
+    </Modal>
 
     {/* 3.11 声音记忆锚点选择器：绑定当前笔记概念 */}
     <SoundAnchorPicker

@@ -60,6 +60,9 @@ import LearningPulse from '../components/LearningPulse';
 import KnowledgePreviewCard from '../components/KnowledgePreviewCard';
 import GrowthStory from '../components/GrowthStory';
 import CognitiveLoadWidget from '../components/CognitiveLoadWidget';
+import JellyfishRadar from '../components/deep-sea/creatures/JellyfishRadar';
+import CoralReefCalendar from '../components/deep-sea/creatures/CoralReefCalendar';
+import { useLearningProgress } from '@/hooks/useLearningProgress';
 import type { RitualSettings, RitualOutcome, RitualSkipScope, RitualIntensity, MemoryEchoItem, RecallQuestion } from '../types';
 import type { PomodoroSession, Flashcard, FlashcardReview } from '@/types/models';
 import type { KnowledgeCard } from '../components/KnowledgePreviewCard';
@@ -409,6 +412,12 @@ export default function DashboardPage() {
     return { insights, identityTags };
   }, [analytics, feynmanNotes, flashcardReviews, streakDays, coralData]);
 
+  // 🧩 五维能力雷达图（analytics.radar 由聚合 Worker 按 days 窗口产出，直接消费）
+  const radarData = analytics?.radar ?? [];
+
+  // 📈 学习进度条（各模块学习完成百分比）
+  const progressItems = useLearningProgress();
+
   /* ── 知识预览卡片数据 ── */
   const knowledgeCards = useMemo<KnowledgeCard[]>(() => {
     const cards: KnowledgeCard[] = [];
@@ -667,6 +676,12 @@ export default function DashboardPage() {
           </div>
           <CognitiveLoadWidget />
         </div>
+        {/* 🧩 五维能力雷达图：下方全宽，学习能力可视化 */}
+        {radarData.length > 0 && (
+          <div className="mt-rhythm-sm">
+            <JellyfishRadar data={radarData} loading={analyticsLoading} />
+          </div>
+        )}
       </section>
 
       {/* ════ 3.16 知识时光胶囊入口 ════ */}

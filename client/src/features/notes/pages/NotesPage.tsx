@@ -12,7 +12,7 @@ import { VirtualList } from '@/components/ui/VirtualList';
 import {
   Search, Plus, FolderPlus, FileText, PanelLeftClose, PanelLeft, Pin,
   MoreVertical, Trash2, Copy, Download, BookOpen, Sparkles, ListTodo, Share2, Upload, ClipboardCheck,
-  Layers, CheckSquare, Square,
+  Layers, CheckSquare, Square, FoldVertical,
 } from 'lucide-react';
 import { TemplateSelector } from '../components/TemplateSelector';
 import type { NoteTemplate } from '../components/TemplateSelector';
@@ -30,11 +30,14 @@ import { useBatchSelection } from '@/hooks/useBatchSelection';
 import { useContextMenu } from '@/lib/contextMenu';
 import type { Note, NoteFolder } from '@/types/models';
 import { useAISummarize, useAIFlashcards } from '@/lib/ai/useAI';
+import { useAIPodcast } from '@/lib/ai/hooks/useAIPodcast';
 import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { markdownToNoteContent } from '../lib/markdown/noteMarkdown';
 import { collectFolderTreeIds } from '../lib/folderTree';
 import { extractNoteText } from '../lib/extractNoteText';
+import PodcastPlayer from '@/features/assistant/components/PodcastPlayer';
+import OrigamiView, { type FoldType } from '@/components/OrigamiView';
 
 const templateLabels: Record<NoteTemplate | 'qa' | 'video' | 'todo', string> = {
   outline: '大纲式', cornell: '康奈尔', mindmap: '思维导图', free: '自由笔记', blank: '空白', qa: '问答', video: '视频笔记', todo: '待办',
@@ -82,6 +85,25 @@ function asymmetricRadius(id: string): string {
   return `${tl}px ${tr}px ${br}px ${bl}px`;
 }
 
+/** 折纸视图五种折叠类型（与 OrigamiView 的 FoldType 枚举对齐） */
+const ORIGAMI_FOLD_TYPES: FoldType[] = ['fold', 'triangle', 'pinwheel', 'box', 'flower'];
+
+/** 为每篇笔记确定性分配折叠类型（基于 id hash 轮转五种折法） */
+function origamiFoldType(id: string): FoldType {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+  return ORIGAMI_FOLD_TYPES[Math.abs(h) % ORIGAMI_FOLD_TYPES.length];
+}
+
+/** 笔记内容 → 折纸面板细节（纯文本按行拆分，截断防面板溢出） */
+function origamiDetails(content: string): string[] {
+  return extractNoteText(content)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 24);
+}
+
 /** 3D鼠标追踪倾斜 — 计算 rotateX/Y */
 function calc3DTilt(e: React.MouseEvent<HTMLDivElement>, el: HTMLDivElement): { rx: number; ry: number } {
   const rect = el.getBoundingClientRect();
@@ -106,6 +128,8 @@ export default function NotesPage() {
   const [quizOpen, setQuizOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [showNewFolder, setShowNewFolder] = useState(false);
+  // 折纸视图开关：默认关闭，开启后笔记卡片以 OrigamiView 网格展示
+  const [origamiMode, setOrigamiMode] = useState(false);
   const navigate = useNavigate();
 
   const {
@@ -117,7 +141,11 @@ export default function NotesPage() {
 
   const { toast } = useToast();
   const { summarize } = useAISummarize();
-  const { generate: aiGenerateCards } = useAIFlashcards();
+  const { generateStream: aiGenerateCardsStream } = useAIFlashcards();
+  // P1 AI 播客：笔记转双人播客（useAIPodcast 自带网关直连与本地降级）
+  const { podcast: podcastData, loading: podcastLoading, error: podcastError, generatePodcast } = useAIPodcast();
+  const [podcastTopic, setPodcastTopic] = useState('');
+  const [showPodcast, setShowPodcast] = useState(false);
   const handleSummarizeError = useAIErrorHandler('AI 摘要生成失败');
   const handleFlashcardError = useAIErrorHandler('AI 闪卡生成失败');
 
@@ -273,6 +301,8 @@ export default function NotesPage() {
     { label: 'AI 操作', items: [
       { key: 'ai-summary', label: '生成摘要', icon: <Sparkles className="w-4 h-4" strokeWidth={1.5} /> },
       { key: 'ai-flashcard', label: '生成闪卡', icon: <BookOpen className="w-4 h-4" strokeWidth={1.5} /> },
+      // P1 AI 播客：笔记转双人播客脚本 + TTS 播放
+      { key: 'ai-podcast', label: '🎧 生成播客', icon: <Sparkles className="w-4 h-4" strokeWidth={1.5} /> },
     ]},
     { items: [
       { key: 'delete', label: '删除', icon: <Trash2 className="w-4 h-4" strokeWidth={1.5} />, danger: true },
@@ -300,16 +330,25 @@ export default function NotesPage() {
       case 'ai-flashcard': {
         const text = extractNoteText(noteCtx.content);
         if (text.length < 20) { toast({ type: 'warning', message: '笔记内容太少，无法生成闪卡' }); break; }
-        toast({ type: 'info', message: 'AI 正在生成闪卡...' });
+        toast({ type: 'info', message: 'AI 闪卡生成中...' });
         try {
-          const result = await aiGenerateCards(text, { count: 10, difficulty: 'medium' });
+          // A 组流式接入：走 /generate-cards/stream SSE（打字机累积），失败自动降级非流式
+          const result = await aiGenerateCardsStream(text, { count: 10, difficulty: 'medium' });
           if (result?.cards?.length) { toast({ type: 'success', message: `AI 已生成 ${result.cards.length} 张闪卡，请在笔记编辑页中使用右键菜单逐张添加`, silent: true }); }
           else { toast({ type: 'warning', message: 'AI 未能生成闪卡，请检查内容或稍后重试', silent: true }); }
         } catch (error) { handleFlashcardError(error); }
         break;
       }
+      case 'ai-podcast': {
+        // P1 AI 播客：以笔记标题为主题生成播客（useAIPodcast 自带网关直连 + 本地降级）
+        const topic = noteCtx.title || '知识小酌';
+        setPodcastTopic(topic);
+        setShowPodcast(true);
+        void generatePodcast(topic, 'basic');
+        break;
+      }
     }
-  }, [handleSelectNote, handleTogglePin, handleDuplicateNote, handleExportNote, handleDeleteNote, toast, summarize, aiGenerateCards, handleSummarizeError, handleFlashcardError]);
+  }, [handleSelectNote, handleTogglePin, handleDuplicateNote, handleExportNote, handleDeleteNote, toast, summarize, aiGenerateCardsStream, generatePodcast, handleSummarizeError, handleFlashcardError]);
 
   return (
     <div className="flex h-full overflow-x-auto overflow-y-hidden">
@@ -504,6 +543,23 @@ export default function NotesPage() {
               <Layers className="w-4 h-4" strokeWidth={1.5} />
             </motion.button>
             </Tip>
+            {/* 折纸视图开关：开启后笔记以 OrigamiView 网格展示（默认关闭，列表视图不受影响） */}
+            <Tip text={origamiMode ? '退出折纸视图' : '折纸视图'}>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setOrigamiMode(v => !v)}
+              aria-pressed={origamiMode}
+              className={cn(
+                'p-2 rounded-full transition-all duration-200',
+                origamiMode
+                  ? 'bg-brand-50 text-brand-600'
+                  : 'text-text-tertiary hover:text-brand-600 hover:bg-brand-50',
+              )}
+            >
+              <FoldVertical className="w-4 h-4" strokeWidth={1.5} />
+            </motion.button>
+            </Tip>
             <input
               ref={mdInputRef}
               type="file"
@@ -558,6 +614,30 @@ export default function NotesPage() {
         {/* 列表 */}
         <div className="flex-1 flex flex-col overflow-hidden px-4 py-3">
           <div className="flex-1 overflow-y-auto min-h-0">
+          {origamiMode && filteredNotes.length > 0 ? (
+            /* ── 折纸视图：OrigamiView 网格（折叠类型由笔记 id hash 确定性分配） ── */
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 pb-2 items-start">
+              {filteredNotes.map((note) => {
+                const text = extractNoteText(note.content);
+                return (
+                  <div
+                    key={note.id}
+                    className="cursor-pointer"
+                    onClick={() => batch.batchMode ? batch.toggle(note.id!) : handleSelectNote(note.id!)}
+                    onContextMenu={batch.batchMode ? undefined : (e) => handleNoteContextMenu(e, note)}
+                  >
+                    <OrigamiView
+                      title={note.title || '无标题'}
+                      summary={text.slice(0, 100)}
+                      details={origamiDetails(note.content)}
+                      foldType={origamiFoldType(note.id!)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+          <>
           {filteredNotes.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-6 select-none">
               {/* 优雅空状态插图 */}
@@ -745,6 +825,8 @@ export default function NotesPage() {
               ))}
             </motion.div>
           )}
+          </>
+          )}
           </div>
         </div>
 
@@ -754,6 +836,25 @@ export default function NotesPage() {
             context={ctxMenuNote} onSelect={handleCtxMenuSelect} onClose={closeCtxMenu}
           />
         )}
+
+        {/* P1 AI 播客弹层：笔记转双人播客（脚本 + TTS 分段播放） */}
+        <Modal
+          open={showPodcast}
+          onClose={() => setShowPodcast(false)}
+          title="🎧 AI 播客"
+          description={`围绕「${podcastTopic}」的双人知识播客`}
+          size="lg"
+        >
+          {podcastLoading && !podcastData && (
+            <div className="py-8 text-center text-c1 text-text-tertiary animate-pulse">
+              正在编排播客脚本…
+            </div>
+          )}
+          {podcastError && !podcastLoading && !podcastData && (
+            <p className="py-6 text-center text-c1 text-text-tertiary">{podcastError}</p>
+          )}
+          {podcastData && <PodcastPlayer podcast={podcastData} onClose={() => setShowPodcast(false)} />}
+        </Modal>
       </main>
 
       {/* ── 右栏：预览 ── */}
