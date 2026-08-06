@@ -1,13 +1,17 @@
 /**
- * @ai-context: pomodoro 功能模块页面：PomodoroSettingsPage。
+ * 深潜设置页（装配页）
+ *
+ * @ai-context: 各设置区块已拆分至 components/settings/（单文件 ≤300 行规范），
+ * 本页仅保留状态与业务 handlers，按顺序装配区块。
+ *
+ * @ai-context: Pomodoro settings page — sections extracted to
+ * components/settings/*; this page owns form state and handlers only.
  */
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Timer, Zap, Bell, Save, RotateCcw, GraduationCap, Sparkles, CheckCircle2, Music, Volume2, Brain, Plus, Pencil, Trash2, Layers, ChevronUp, ChevronDown, ArrowLeft } from 'lucide-react';
-import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
-import { Button, Card, Input, useToast } from '@/components/ui';
-import { cn } from '@/lib/utils';
+import { Save, RotateCcw, ArrowLeft } from 'lucide-react';
+import { Button, useToast } from '@/components/ui';
 import { Tip } from '@/components/ui/Tip';
 import { usePomodoroStore } from '../store/usePomodoroStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -15,13 +19,12 @@ import { useAIDuration } from '@/lib/ai/useAI';
 import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 import { pomodoroSessionStore } from '@/lib/storage';
 import type { PomodoroSession, PomodoroPreset } from '@/types/models';
-import {
-  audioTracks,
-  loadAudioPreferences,
-  saveAudioPreferences,
-} from '@/lib/audio/audioConfig';
-import type { AudioPreferences } from '@/lib/audio/audioConfig';
-import PresetEditor from '../components/PresetEditor';
+import { DurationSettings } from '../components/settings/DurationSettings';
+import { PresetManager } from '../components/settings/PresetManager';
+import { ReminderSettings } from '../components/settings/ReminderSettings';
+import { AIRecSettings } from '../components/settings/AIRecSettings';
+import { EnhancementSettings } from '../components/settings/EnhancementSettings';
+import { AudioSettings } from '../components/settings/AudioSettings';
 import { MAX_PRESETS } from '../lib/presetService';
 
 const DEFAULT_SETTINGS = {
@@ -36,72 +39,13 @@ const DEFAULT_SETTINGS = {
   classDuration: 45,
 };
 
-// Toggle switch component
-function Toggle({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={onChange}
-      className={cn(
-        'relative w-11 h-6 rounded-kb-full transition-colors duration-kb-fast ease-kb-default',
-        'flex-shrink-0',
-        'hover:scale-[1.02] active:scale-[0.98]',
-        checked ? 'bg-brand-600' : 'bg-bg-tertiary border border-border/50',
-      )}
-    >
-      <span
-        className={cn(
-          'absolute top-0.5 left-0.5 w-5 h-5 rounded-kb-full bg-white shadow-kb-sm',
-          'transition-transform duration-kb-fast ease-kb-default',
-          checked && 'translate-x-5',
-        )}
-      />
-    </button>
-  );
-}
-
-// Setting row helper
-function SettingRow({
-  label,
-  description,
-  children,
-}: {
-  label: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between py-kb-sm">
-      <div className="flex-1 min-w-0">
-        <p className="text-b2 font-medium text-text-primary">{label}</p>
-        {description && (
-          <p className="text-c1 text-text-tertiary mt-0.5">{description}</p>
-        )}
-      </div>
-      <div className="flex-shrink-0 ml-kb-md">{children}</div>
-    </div>
-  );
-}
-
 export default function PomodoroSettingsPage() {
-  const { settings, updateSettings, initialize, mode: _mode, aiRecommendedDuration, aiReasoning, setAIRecommendation, presets, createPreset, updatePreset, deletePreset, reorderPresets } = usePomodoroStore(useShallow(s => s));
+  const { settings, updateSettings, initialize, aiRecommendedDuration, aiReasoning, setAIRecommendation, presets, activePreset, createPreset, updatePreset, deletePreset, reorderPresets } = usePomodoroStore(useShallow(s => s));
 
   // Local form state (mirrors store settings)
   const [localSettings, setLocalSettings] = useState({ ...settings });
   const [saved, setSaved] = useState(false);
   const [resetDone, setResetDone] = useState(false);
-  const [audioPrefs, setAudioPrefs] = useState<AudioPreferences>(() => loadAudioPreferences());
-  // 预设编辑弹窗状态
-  const [presetEditorOpen, setPresetEditorOpen] = useState(false);
-  const [editingPreset, setEditingPreset] = useState<PomodoroPreset | null>(null);
 
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -115,8 +59,6 @@ export default function PomodoroSettingsPage() {
     needsConfig: aiRecNeedsConfig,
     recommend: aiRecommend,
   } = useAIDuration();
-  const [aiRecApplied, setAIRecApplied] = useState(false);
-  const [fineTuneValue, setFineTuneValue] = useState<number | null>(null);
   const { toast } = useToast();
   const handleRecommendError = useAIErrorHandler('获取推荐失败');
   const navigate = useNavigate();
@@ -141,11 +83,11 @@ export default function PomodoroSettingsPage() {
 
   const handleDurationChange = (key: string, value: string) => {
     const num = parseInt(value, 10);
-    if (!isNaN(num) && num > 0 && num <= 180) {
-      setLocalSettings((prev) => ({ ...prev, [key]: num }));
-    } else if (value === '' || value === '0') {
-      setLocalSettings((prev) => ({ ...prev, [key]: 0 }));
-    }
+    if (Number.isNaN(num)) return;
+    // 钳制非法输入：长休间隔允许 0（无长休），其余时长下限 1、上限 180
+    const max = key === 'longBreakInterval' ? 12 : 180;
+    const clamped = Math.max(key === 'longBreakInterval' ? 0 : 1, Math.min(num, max));
+    setLocalSettings((prev) => ({ ...prev, [key]: clamped }));
   };
 
   const handleToggle = (key: string) => {
@@ -155,9 +97,28 @@ export default function PomodoroSettingsPage() {
     }));
   };
 
+  const handleWarningMinutesChange = (minutes: number) => {
+    setLocalSettings((prev) => ({ ...prev, warningMinutes: Math.max(0, Math.min(10, minutes)) }));
+  };
+
   const handleSave = () => {
     updateSettings(localSettings);
-    saveAudioPreferences(audioPrefs);
+    // 时长设置与预设体系打通：同步应用到当前活动预设
+    // （此前仅写全局 settings，而实际计时由预设驱动——设置"无效"的根因）
+    const active = usePomodoroStore.getState().activePreset;
+    if (active) {
+      updatePreset(active.id, {
+        workDuration: localSettings.workDuration,
+        shortBreakDuration: localSettings.shortBreakDuration,
+        longBreakDuration: localSettings.longBreakDuration,
+        longBreakInterval: localSettings.longBreakInterval,
+      }).catch(() => toast({ type: 'error', message: '预设同步失败，请重试' }));
+    }
+    // 课堂时长同步到静默（上课）内置预设——classDuration 仅在种子化时用过一次
+    const silentPreset = presets.find((p) => p.silent);
+    if (silentPreset && silentPreset.workDuration !== localSettings.classDuration) {
+      updatePreset(silentPreset.id, { workDuration: localSettings.classDuration }).catch(() => {});
+    }
     setSaved(true);
     savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
   };
@@ -169,7 +130,7 @@ export default function PomodoroSettingsPage() {
     resetTimerRef.current = setTimeout(() => setResetDone(false), 2000);
   };
 
-  // 预设排序：上移/下移一位后持久化新顺序（sortOrder 由 reorderPresets 重写）
+  // 预设排序：上移/下移一位后持久化新顺序
   const handleMovePreset = (id: string, dir: -1 | 1) => {
     const index = presets.findIndex((p) => p.id === id);
     const target = index + dir;
@@ -179,7 +140,6 @@ export default function PomodoroSettingsPage() {
     reorderPresets(ids);
   };
 
-  // 删除预设：带结果反馈（内置预设被 service 拒绝时明确提示）
   const handleDeletePreset = async (id: string, name: string) => {
     try {
       await deletePreset(id);
@@ -187,6 +147,50 @@ export default function PomodoroSettingsPage() {
     } catch (e) {
       toast({ type: 'error', message: e instanceof Error ? e.message : '删除失败' });
     }
+  };
+
+  const handleSavePreset = async (
+    data: Omit<PomodoroPreset, 'id' | 'sortOrder' | 'createdAt' | 'builtin'>,
+    editing: PomodoroPreset | null,
+  ) => {
+    if (editing) {
+      await updatePreset(editing.id, data);
+    } else {
+      await createPreset(data);
+    }
+  };
+
+  // AI 推荐请求：加载历史会话 → 调用推荐（本地优先，AI 失败自动降级）
+  const handleRecommend = async () => {
+    try {
+      const sessions: PomodoroSession[] = await pomodoroSessionStore.getAll();
+      const historySessions = sessions.map((s) => ({
+        duration: Math.round(s.duration / 60),
+        completed: !s.interrupted,
+        date: s.completedAt instanceof Date ? s.completedAt.toISOString() : String(s.completedAt),
+        subject: s.subject,
+      }));
+      const avgFocus = sessions.length > 0
+        ? sessions.reduce((sum, s) => sum + Math.round(s.actualDuration / 60), 0) / sessions.length
+        : undefined;
+      await aiRecommend({
+        sessions: historySessions,
+        averageFocusTime: avgFocus ? Math.round(avgFocus) : undefined,
+        preferredDuration: localSettings.workDuration,
+      });
+    } catch (error) {
+      handleRecommendError(error);
+    }
+  };
+
+  // 应用推荐时长：同步 settings 与当前活动预设（预设驱动实际计时）
+  const handleApplyAI = (finalDuration: number) => {
+    setLocalSettings((prev) => ({ ...prev, workDuration: finalDuration }));
+    updateSettings({ workDuration: finalDuration });
+    const active = usePomodoroStore.getState().activePreset;
+    if (active) updatePreset(active.id, { workDuration: finalDuration }).catch(() => {});
+    setAIRecommendation(finalDuration, aiReasoning ?? '');
+    toast({ type: 'success', message: `已应用推荐时长：${finalDuration} 分钟` });
   };
 
   return (
@@ -200,7 +204,7 @@ export default function PomodoroSettingsPage() {
         className="flex items-center gap-2 mb-kb-lg"
         variants={{ hidden: { opacity: 0, y: -12, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}
       >
-        {/* 返回深潜模块（内测反馈：设置页此前无出口，只能 Esc 退到 3D 场景） */}
+        {/* 返回深潜模块 */}
         <Tip text="返回深潜">
           <button
             onClick={() => navigate('/pomodoro')}
@@ -216,474 +220,44 @@ export default function PomodoroSettingsPage() {
         >深潜设置</motion.h1>
       </motion.div>
 
-      {/* Duration settings */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
-      <Card variant="default" padding="lg" className="mb-kb-md">
-        <div className="flex items-center gap-2 mb-kb-md">
-          <Timer className="w-icon-sm h-icon-sm text-pomodoro" strokeWidth={1.5} />
-          <h2 className="text-h3 font-medium text-text-primary">时长设置</h2>
-        </div>
+      <DurationSettings
+        localSettings={localSettings}
+        activePresetName={activePreset?.name ?? null}
+        aiRecommendedDuration={aiRecommendedDuration}
+        aiReasoning={aiReasoning}
+        onDurationChange={handleDurationChange}
+      />
 
-        <div className="space-y-kb-md">
-          {/* AI 推荐时长提示 */}
-          {aiRecommendedDuration != null && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-kb-md bg-brand-50 border border-brand-200/30">
-              <Brain className="w-4 h-4 flex-shrink-0" strokeWidth={1.5} style={{ color: 'var(--kb-focus-blue)' }} />
-              <p className="text-c1 text-text-secondary">
-                <span className="font-medium" style={{ color: 'var(--kb-focus-blue)' }}>AI 推荐 {aiRecommendedDuration} 分钟</span>
-                {aiReasoning && <span className="ml-1 text-text-tertiary">— {aiReasoning}</span>}
-              </p>
-            </div>
-          )}
-          <Input
-            label="工作时长（自习模式）"
-            type="number"
-            value={String(localSettings.workDuration)}
-            onChange={(e) => handleDurationChange('workDuration', e.target.value)}
-            min={1}
-            max={180}
-            suffix={<span className="text-text-tertiary text-b3">分钟</span>}
-          />
-          <Input
-            label="短休息"
-            type="number"
-            value={String(localSettings.shortBreakDuration)}
-            onChange={(e) => handleDurationChange('shortBreakDuration', e.target.value)}
-            min={1}
-            max={60}
-            suffix={<span className="text-text-tertiary text-b3">分钟</span>}
-          />
-          <Input
-            label="长休息"
-            type="number"
-            value={String(localSettings.longBreakDuration)}
-            onChange={(e) => handleDurationChange('longBreakDuration', e.target.value)}
-            min={1}
-            max={60}
-            suffix={<span className="text-text-tertiary text-b3">分钟</span>}
-          />
-          <Input
-            label="长休息间隔"
-            type="number"
-            value={String(localSettings.longBreakInterval)}
-            onChange={(e) => handleDurationChange('longBreakInterval', e.target.value)}
-            min={1}
-            max={12}
-            suffix={<span className="text-text-tertiary text-b3">个番茄</span>}
-          />
-        </div>
-      </Card>
-      </motion.div>
+      <PresetManager
+        presets={presets}
+        canCreate={presets.length < MAX_PRESETS}
+        onDelete={handleDeletePreset}
+        onMove={handleMovePreset}
+        onSavePreset={handleSavePreset}
+      />
 
-      {/* Class mode settings */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
-      <Card variant="default" padding="lg" className="mb-kb-md">
-        <div className="flex items-center gap-2 mb-kb-md">
-          <GraduationCap className="w-icon-sm h-icon-sm text-brand-600" strokeWidth={1.5} />
-          <h2 className="text-h3 font-medium text-text-primary">上课模式设置</h2>
-        </div>
-        <p className="text-c1 text-text-tertiary mb-kb-md">
-          上课模式下，使用固定课堂时长，课间自动短休，不进入长休息。
-        </p>
-        <div className="space-y-kb-md">
-          <Input
-            label="课堂时长"
-            type="number"
-            value={String(localSettings.classDuration)}
-            onChange={(e) => handleDurationChange('classDuration', e.target.value)}
-            min={10}
-            max={120}
-            suffix={<span className="text-text-tertiary text-b3">分钟</span>}
-          />
-        </div>
-      </Card>
-      </motion.div>
+      <ReminderSettings
+        localSettings={localSettings}
+        onToggle={handleToggle}
+        onWarningMinutesChange={handleWarningMinutesChange}
+      />
 
-      {/* 预设管理 */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
-      <Card variant="default" padding="lg" className="mb-kb-md">
-        <div className="flex items-center justify-between mb-kb-md">
-          <div className="flex items-center gap-2">
-            <Layers className="w-icon-sm h-icon-sm text-brand-500" strokeWidth={1.5} />
-            <h2 className="text-h3 font-medium text-text-primary">预设管理</h2>
-          </div>
-          {presets.length < MAX_PRESETS && (
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<Plus className="w-3.5 h-3.5" />}
-              onClick={() => { setEditingPreset(null); setPresetEditorOpen(true); }}
-            >
-              新建
-            </Button>
-          )}
-        </div>
-        <p className="text-c1 text-text-tertiary mb-kb-md">
-          每个预设拥有独立的节律参数，循环标记数量随预设变化。最多 {MAX_PRESETS} 个。
-        </p>
-        <div className="space-y-2">
-          {presets.map((preset, index) => (
-            <div
-              key={preset.id}
-              className="flex items-center justify-between p-3 rounded-kb-md bg-bg-secondary/40 border border-border/20"
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-b2 font-medium text-text-primary">
-                  {preset.name}
-                  {preset.builtin && <span className="ml-2 text-c1 text-text-tertiary">(内置)</span>}
-                </p>
-                <p className="text-c1 text-text-tertiary mt-0.5">
-                  {preset.workDuration}min · 短休{preset.shortBreakDuration}min
-                  {preset.longBreakInterval > 0 ? ` · 每${preset.longBreakInterval}个长休` : ' · 无长休'}
-                  {preset.silent && ' · 静默'}
-                </p>
-              </div>
-              <div className="flex items-center gap-1">
-                {/* 排序按钮：上移/下移（首位/末位时禁用） */}
-                <Tip text="上移">
-                <button
-                  onClick={() => handleMovePreset(preset.id, -1)}
-                  disabled={index === 0}
-                  className="p-1.5 rounded-md hover:bg-bg-tertiary text-text-tertiary hover:text-text-secondary transition-colors disabled:opacity-30 disabled:pointer-events-none"
-                >
-                  <ChevronUp className="w-3.5 h-3.5" />
-                </button>
-                </Tip>
-                <Tip text="下移">
-                <button
-                  onClick={() => handleMovePreset(preset.id, 1)}
-                  disabled={index === presets.length - 1}
-                  className="p-1.5 rounded-md hover:bg-bg-tertiary text-text-tertiary hover:text-text-secondary transition-colors disabled:opacity-30 disabled:pointer-events-none"
-                >
-                  <ChevronDown className="w-3.5 h-3.5" />
-                </button>
-                </Tip>
-                {/* 编辑预设按钮，带 tooltip */}
-                <Tip text="编辑预设">
-                <button
-                  onClick={() => { setEditingPreset(preset); setPresetEditorOpen(true); }}
-                  className="p-1.5 rounded-md hover:bg-bg-tertiary text-text-tertiary hover:text-text-secondary transition-colors"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-                </Tip>
-                {/* 删除按钮：自定义预设可删；内置预设置灰并提示原因（避免误以为可删） */}
-                <Tip text={preset.builtin ? '内置预设不可删除' : '删除预设'}>
-                <button
-                  onClick={() => !preset.builtin && handleDeletePreset(preset.id, preset.name)}
-                  disabled={preset.builtin}
-                  className={cn(
-                    'p-1.5 rounded-md transition-colors',
-                    preset.builtin
-                      ? 'text-text-tertiary/30 cursor-not-allowed'
-                      : 'hover:bg-semantic-error/10 text-text-tertiary hover:text-semantic-error',
-                  )}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-                </Tip>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-      </motion.div>
+      <AIRecSettings
+        loading={aiRecLoading}
+        data={aiRecData}
+        error={aiRecError}
+        isFallback={aiRecFallback}
+        needsConfig={aiRecNeedsConfig}
+        onRecommend={handleRecommend}
+        onApply={handleApplyAI}
+      />
 
-      {/* 提示音与提醒（C1-C3） */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
-      <Card variant="default" padding="lg" className="mb-kb-md">
-        <div className="flex items-center gap-2 mb-kb-sm">
-          <Bell className="w-icon-sm h-icon-sm text-semantic-warning" strokeWidth={1.5} />
-          <h2 className="text-h3 font-medium text-text-primary">提示音与提醒</h2>
-        </div>
-        <div className="divide-y divide-border/30">
-          <SettingRow label="预警时点" description="专注结束前多久提醒（0 = 关闭）">
-            <select
-              value={String(localSettings.warningMinutes ?? 5)}
-              onChange={(e) => setLocalSettings((prev) => ({ ...prev, warningMinutes: parseInt(e.target.value) }))}
-              className="bg-bg-tertiary border border-border/50 rounded-kb-md px-2 py-1 text-b2 text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-500/40"
-            >
-              <option value="0">关闭</option>
-              <option value="3">3 分钟</option>
-              <option value="5">5 分钟</option>
-              <option value="10">10 分钟</option>
-            </select>
-          </SettingRow>
-          <SettingRow label="最后 10 秒滴答" description="专注即将结束时的倒计时音效">
-            <Toggle
-              checked={localSettings.tickFinalEnabled ?? true}
-              onChange={() => handleToggle('tickFinalEnabled')}
-            />
-          </SettingRow>
-        </div>
-      </Card>
-      </motion.div>
+      <EnhancementSettings
+        localSettings={localSettings}
+        onToggle={handleToggle}
+      />
 
-      {/* Automation settings */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
-      <Card variant="default" padding="lg" className="mb-kb-md">
-        <div className="flex items-center gap-2 mb-kb-sm">
-          <Zap className="w-icon-sm h-icon-sm text-semantic-warning" strokeWidth={1.5} />
-          <h2 className="text-h3 font-medium text-text-primary">自动化</h2>
-        </div>
-
-        <div className="divide-y divide-border/30">
-          <SettingRow label="自动开始休息" description="工作结束后自动进入休息">
-            <Toggle
-              checked={localSettings.autoStartBreak}
-              onChange={() => handleToggle('autoStartBreak')}
-            />
-          </SettingRow>
-          <SettingRow label="自动开始下一个番茄" description="休息结束后自动开始工作">
-            <Toggle
-              checked={localSettings.autoStartWork}
-              onChange={() => handleToggle('autoStartWork')}
-            />
-          </SettingRow>
-        </div>
-      </Card>
-      </motion.div>
-
-      {/* Notification settings */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
-      <Card variant="default" padding="lg" className="mb-kb-xl">
-        <div className="flex items-center gap-2 mb-kb-sm">
-          <Bell className="w-icon-sm h-icon-sm text-brand-600" strokeWidth={1.5} />
-          <h2 className="text-h3 font-medium text-text-primary">提醒方式</h2>
-        </div>
-
-        <div className="divide-y divide-border/30">
-          <SettingRow label="声音提醒" description="阶段切换时播放提示音">
-            <Toggle
-              checked={localSettings.soundEnabled}
-              onChange={() => handleToggle('soundEnabled')}
-            />
-          </SettingRow>
-          <SettingRow label="浏览器通知" description="通过系统通知提醒阶段切换">
-            <Toggle
-              checked={localSettings.notificationEnabled}
-              onChange={() => handleToggle('notificationEnabled')}
-            />
-          </SettingRow>
-        </div>
-      </Card>
-      </motion.div>
-
-      {/* AI 智能推荐 */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
-      <Card variant="default" padding="lg" className="mb-kb-xl">
-        <div className="flex items-center gap-2 mb-kb-md">
-          <Sparkles className="w-icon-sm h-icon-sm text-brand-500" strokeWidth={1.5} />
-          <h2 className="text-h3 font-medium text-text-primary">智能推荐</h2>
-        </div>
-        <p className="text-b2 text-text-tertiary mb-kb-md">
-          AI 分析你的历史专注数据，为你推荐最适合的工作时长。
-          {aiRecFallback && aiRecData && (
-            <span className="ml-1 text-semantic-warning text-c1">（基于本地分析）</span>
-          )}
-        </p>
-
-        <Button
-          variant="secondary"
-          size="md"
-          icon={aiRecLoading ? <AIThinkingIndicator size={4} gap={3} /> : <Sparkles className="w-icon-sm h-icon-sm" />}
-          disabled={aiRecLoading}
-          onClick={async () => {
-            try {
-              const sessions: PomodoroSession[] = await pomodoroSessionStore.getAll();
-              const historySessions = sessions.map((s) => ({
-                duration: Math.round(s.duration / 60),
-                completed: !s.interrupted,
-                date: s.completedAt instanceof Date ? s.completedAt.toISOString() : String(s.completedAt),
-                subject: s.subject,
-              }));
-              const avgFocus = sessions.length > 0
-                ? sessions.reduce((sum, s) => sum + Math.round(s.actualDuration / 60), 0) / sessions.length
-                : undefined;
-              await aiRecommend({
-                sessions: historySessions,
-                averageFocusTime: avgFocus ? Math.round(avgFocus) : undefined,
-                preferredDuration: localSettings.workDuration,
-              });
-              setAIRecApplied(false);
-            } catch (error) {
-              handleRecommendError(error);
-            }
-          }}
-          className="w-full"
-        >
-          {aiRecLoading ? '分析中…' : '获取智能推荐'}
-        </Button>
-
-        {aiRecError && (
-          <div className="mt-kb-sm p-3 rounded-kb-md bg-semantic-error/10 border border-semantic-error/20 text-b2 text-semantic-error">
-            {aiRecError}
-            {aiRecNeedsConfig && (
-              <button
-                onClick={() => navigate('/settings')}
-                className="mt-2 block text-b3 underline hover:no-underline"
-              >
-                前往设置页配置 API Key
-              </button>
-            )}
-          </div>
-        )}
-
-        {aiRecData && !aiRecLoading && (
-          <div className={cn(
-            'mt-kb-md p-kb-md rounded-kb-lg',
-            'bg-brand-600/5 border border-brand-500/20',
-            'flex flex-col gap-2',
-          )}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-b1 font-semibold text-text-primary">
-                  AI 推荐：{fineTuneValue ?? aiRecData.recommendedDuration} 分钟
-                </p>
-                <p className="text-b2 text-text-secondary mt-0.5">{aiRecData.reasoning}</p>
-              </div>
-              <span className={cn(
-                'text-c1 font-medium px-2 py-0.5 rounded-kb-sm',
-                aiRecData.confidence === 'high'
-                  ? 'bg-semantic-success/10 text-semantic-success'
-                  : aiRecData.confidence === 'medium'
-                    ? 'bg-semantic-warning/10 text-semantic-warning'
-                    : 'bg-text-tertiary/10 text-text-tertiary',
-              )}>
-                {aiRecData.confidence === 'high' ? '高置信度' : aiRecData.confidence === 'medium' ? '中等' : '低'}
-              </span>
-            </div>
-
-            {/* 手动微调滑块 */}
-            <div className="mt-1">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-c1 text-text-tertiary">手动微调</span>
-                <span className="text-c1 font-medium" style={{ color: 'var(--kb-focus-blue)' }}>
-                  {fineTuneValue ?? aiRecData.recommendedDuration} 分钟
-                </span>
-              </div>
-              <input
-                type="range"
-                min={Math.max(10, aiRecData.recommendedDuration - 5)}
-                max={Math.min(60, aiRecData.recommendedDuration + 5)}
-                value={fineTuneValue ?? aiRecData.recommendedDuration}
-                onChange={(e) => setFineTuneValue(parseInt(e.target.value, 10))}
-                className="w-full h-1.5 rounded-kb-full cursor-pointer"
-                style={{ accentColor: 'var(--kb-focus-blue)' }}
-              />
-              <div className="flex justify-between text-c2 text-text-tertiary/60 mt-0.5">
-                <span>{Math.max(10, aiRecData.recommendedDuration - 5)}分钟</span>
-                <span>{Math.min(60, aiRecData.recommendedDuration + 5)}分钟</span>
-              </div>
-            </div>
-
-            {aiRecFallback && (
-              <p className="text-c1 text-semantic-warning flex items-center gap-1">
-                <span>⚠</span> 当前基于本地规则引擎分析（无网络）
-              </p>
-            )}
-            <Button
-              size="sm"
-              icon={aiRecApplied ? <CheckCircle2 className="w-icon-sm h-icon-sm" /> : undefined}
-              disabled={aiRecApplied}
-              onClick={() => {
-                const finalDuration = fineTuneValue ?? aiRecData.recommendedDuration;
-                setLocalSettings((prev) => ({ ...prev, workDuration: finalDuration }));
-                updateSettings({ workDuration: finalDuration });
-                setAIRecommendation(finalDuration, aiRecData.reasoning);
-                setAIRecApplied(true);
-                toast({ type: 'success', message: `已应用推荐时长：${finalDuration} 分钟` });
-              }}
-              className="self-start"
-            >
-              {aiRecApplied ? '已应用推荐' : '应用推荐时长'}
-            </Button>
-          </div>
-        )}
-      </Card>
-      </motion.div>
-
-      {/* 音效设置 */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
-      <Card variant="default" padding="lg" className="mb-kb-xl">
-        <div className="flex items-center gap-2 mb-kb-sm">
-          <Music className="w-icon-sm h-icon-sm text-brand-500" strokeWidth={1.5} />
-          <h2 className="text-h3 font-medium text-text-primary">音效设置</h2>
-        </div>
-
-        {/* 白噪音 */}
-        <div className="divide-y divide-border/30">
-          <SettingRow label="白噪音" description="工作阶段自动播放白噪音">
-            <Toggle
-              checked={audioPrefs.whiteNoiseEnabled}
-              onChange={() => setAudioPrefs((p) => ({ ...p, whiteNoiseEnabled: !p.whiteNoiseEnabled }))}
-            />
-          </SettingRow>
-
-          <SettingRow label="白噪音轨道" description="选择背景音效">
-            <select
-              value={audioPrefs.whiteNoiseTrackId}
-              onChange={(e) => setAudioPrefs((p) => ({ ...p, whiteNoiseTrackId: e.target.value }))}
-              className="bg-bg-tertiary border border-border/50 rounded-kb-md px-2 py-1 text-b2 text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-500/40"
-            >
-              {audioTracks.filter((t) => t.category === 'white_noise').map((t) => (
-                <option key={t.id} value={t.id}>{t.nameZh}</option>
-              ))}
-            </select>
-          </SettingRow>
-
-          <SettingRow label="白噪音音量" description="调整白噪音音量">
-            <div className="flex items-center gap-2">
-              <Volume2 className="w-4 h-4 text-text-tertiary" strokeWidth={1.5} />
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={audioPrefs.whiteNoiseVolume}
-                onChange={(e) => setAudioPrefs((p) => ({ ...p, whiteNoiseVolume: parseFloat(e.target.value) }))}
-                className="w-24 h-1 accent-brand-500 cursor-pointer"
-              />
-            </div>
-          </SettingRow>
-
-          {/* 背景音乐 */}
-          <SettingRow label="背景音乐" description="工作阶段播放轻音乐">
-            <Toggle
-              checked={audioPrefs.bgmEnabled}
-              onChange={() => setAudioPrefs((p) => ({ ...p, bgmEnabled: !p.bgmEnabled }))}
-            />
-          </SettingRow>
-
-          <SettingRow label="背景音乐轨道" description="选择背景音乐">
-            <select
-              value={audioPrefs.bgmTrackId}
-              onChange={(e) => setAudioPrefs((p) => ({ ...p, bgmTrackId: e.target.value }))}
-              className="bg-bg-tertiary border border-border/50 rounded-kb-md px-2 py-1 text-b2 text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-500/40"
-            >
-              {audioTracks.filter((t) => t.category === 'bgm').map((t) => (
-                <option key={t.id} value={t.id}>{t.nameZh}</option>
-              ))}
-            </select>
-          </SettingRow>
-
-          <SettingRow label="背景音乐音量" description="调整背景音乐音量">
-            <div className="flex items-center gap-2">
-              <Volume2 className="w-4 h-4 text-text-tertiary" strokeWidth={1.5} />
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={audioPrefs.bgmVolume}
-                onChange={(e) => setAudioPrefs((p) => ({ ...p, bgmVolume: parseFloat(e.target.value) }))}
-                className="w-24 h-1 accent-brand-500 cursor-pointer"
-              />
-            </div>
-          </SettingRow>
-        </div>
-      </Card>
-      </motion.div>
+      <AudioSettings />
 
       {/* Action buttons */}
       <div className="flex flex-col gap-kb-sm">
@@ -707,22 +281,6 @@ export default function PomodoroSettingsPage() {
           {resetDone ? '已重置 ✓' : '重置为默认'}
         </Button>
       </div>
-
-      {/* 预设编辑弹窗 */}
-      <PresetEditor
-        open={presetEditorOpen}
-        onClose={() => setPresetEditorOpen(false)}
-        initial={editingPreset}
-        onSave={async (data) => {
-          if (editingPreset) {
-            await updatePreset(editingPreset.id, data);
-            toast({ type: 'success', message: `预设「${data.name}」已更新` });
-          } else {
-            await createPreset(data);
-            toast({ type: 'success', message: `预设「${data.name}」已创建` });
-          }
-        }}
-      />
     </motion.div>
   );
 }

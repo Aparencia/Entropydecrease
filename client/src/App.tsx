@@ -42,6 +42,7 @@ import { EyeCareModeStyle, useEyeCareMode } from '@/components/EyeCareMode';
 import '@/stores/useSettingsStore'; // 导入以触发音效设置初始化
 import { startPomodoroScheduler } from '@/features/pomodoro/lib/pomodoroScheduler';
 import { usePomodoroStore } from '@/features/pomodoro/store/usePomodoroStore';
+import { PomodoroAudioLayer } from '@/features/pomodoro/components/PomodoroAudioLayer';
 
 // 启动时预加载所有音效（不阻塞渲染）
 soundPlayer.preloadAll();
@@ -197,6 +198,10 @@ function App() {
               <FatigueEmpathy />
               <WorldRecap />
               <WorldSoundscape />
+
+              {/* 番茄钟全局音频层：白噪音/BGM 播放器与页面生命周期解耦，
+                  切到其他模块时计时与背景音继续（仅渲染 null） */}
+              <PomodoroAudioLayer />
 
               {/* 3.9 专注守护灵 — 全屏覆盖层（L3+） */}
               {focusGuardianEnabled && (

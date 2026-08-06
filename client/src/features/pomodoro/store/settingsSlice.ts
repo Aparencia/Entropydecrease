@@ -10,9 +10,9 @@
  * setMode is the deprecated compat shim mapping onto builtin presets.
  */
 import { saveSettings } from './usePomodoroPersistence';
-import { getPhaseDuration, type Mode, type PomodoroSlice, type PomodoroState } from './pomodoroStoreTypes';
+import { getPhaseDuration, type Mode, type PomodoroSettings, type PomodoroSlice, type PomodoroState } from './pomodoroStoreTypes';
 
-export const createSettingsSlice: PomodoroSlice<Pick<PomodoroState, 'mode' | 'settings' | 'currentGoal' | 'aiRecommendedDuration' | 'aiReasoning' | 'setMode' | 'setPreset' | 'setCurrentGoal' | 'updateSettings' | 'setAIRecommendation'>> = (set, get) => ({
+export const createSettingsSlice: PomodoroSlice<Pick<PomodoroState, 'mode' | 'settings' | 'currentGoal' | 'aiRecommendedDuration' | 'aiReasoning' | 'setPreset' | 'setCurrentGoal' | 'updateSettings' | 'setAIRecommendation'>> = (set, get) => ({
   mode: 'self_study',
   settings: {
     workDuration: 25,
@@ -29,28 +29,26 @@ export const createSettingsSlice: PomodoroSlice<Pick<PomodoroState, 'mode' | 'se
   aiRecommendedDuration: undefined,
   aiReasoning: undefined,
 
-  /** @deprecated 兼容层：将 mode 映射到内置预设 */
-  setMode: (mode) => {
-    const { presets } = get();
-    const target = mode === 'class'
-      ? presets.find(p => p.silent)
-      : presets.find(p => !p.silent);
-    if (target) get().setPreset(target.id);
-  },
-
   setPreset: (presetId) => {
-    const { settings, phase, isRunning, isPaused, activePreset } = get();
+    const { settings, isRunning, activePreset } = get();
     if (activePreset?.id === presetId) return;
     const preset = get().presets.find(p => p.id === presetId) ?? null;
     if (!preset) return;
-    // 切换预设 = 开启新周期：计数归零，避免跨预设累计
+    // 切换预设 = 开启新周期：计数归零 + 阶段回到 work + 立即应用新预设时长
+    // （运行中也重置剩余时间与墙钟截止点——原实现只改阶段不改时长，
+    // 导致完成落库按新预设、计时按旧预设的时长失真）
     const mode: Mode = preset.silent ? 'class' : 'self_study';
-    set({ activePreset: preset, mode, completedCount: 0, phase: 'work' });
-    // 切换预设后，若计时器未运行，重置当前阶段时长
-    if (!isRunning && !isPaused) {
-      const duration = getPhaseDuration('work', preset, settings);
-      set({ remainingSeconds: duration, totalSeconds: duration });
-    }
+    const duration = getPhaseDuration('work', preset, settings);
+    set({
+      activePreset: preset,
+      mode,
+      completedCount: 0,
+      phase: 'work',
+      remainingSeconds: duration,
+      totalSeconds: duration,
+      // 运行中重设墙钟截止点；暂停/空闲保持 null
+      endAt: isRunning ? Date.now() + duration * 1000 : null,
+    });
     // 持久化 activePresetId
     saveSettings({ ...settings, activePresetId: presetId }).catch(() => {});
   },
@@ -62,7 +60,25 @@ export const createSettingsSlice: PomodoroSlice<Pick<PomodoroState, 'mode' | 'se
 
   updateSettings: (newSettings) => {
     const { settings, phase, isRunning, isPaused, activePreset } = get();
-    const merged = { ...settings, ...newSettings };
+    // 钳制非法时长：0/负数/超上限直接忽略，防止 0 秒番茄与越界值
+    // （设置页输入框曾被允许提交 0，而 PresetEditor 有钳制、此处没有）
+    const sanitized: Partial<PomodoroSettings> = {};
+    for (const [key, value] of Object.entries(newSettings)) {
+      if (typeof value !== 'number' || Number.isNaN(value)) {
+        (sanitized as Record<string, unknown>)[key] = value;
+        continue;
+      }
+      if (key === 'longBreakInterval') {
+        if (value >= 0 && value <= 12) (sanitized as Record<string, unknown>)[key] = value;
+        continue;
+      }
+      if (key === 'workDuration' || key === 'shortBreakDuration' || key === 'longBreakDuration' || key === 'classDuration') {
+        if (value >= 1 && value <= 180) (sanitized as Record<string, unknown>)[key] = value;
+        continue;
+      }
+      (sanitized as Record<string, unknown>)[key] = value;
+    }
+    const merged = { ...settings, ...sanitized };
 
     // If not running, update timer to reflect new duration
     if (!isRunning && !isPaused) {

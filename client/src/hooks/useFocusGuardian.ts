@@ -173,10 +173,10 @@ export function useFocusGuardian() {
         else if (newScore >= THRESHOLD_L2) newLevel = 2;
         else if (newScore >= THRESHOLD_L1) newLevel = 1;
 
-        // 等级变化时发射事件
+        // 等级变化时发射事件（携带分数，供番茄钟心流音乐等下游订阅）
         if (newLevel !== levelRef.current) {
           levelRef.current = newLevel;
-          wellbeingEventBus.emit('focus:level-changed', { level: newLevel, hour: new Date().getHours() });
+          wellbeingEventBus.emit('focus:level-changed', { level: newLevel, score: newScore, hour: new Date().getHours() });
           if (newLevel >= 3) {
             wellbeingEventBus.emit('focus:distraction-detected', { level: newLevel });
           }

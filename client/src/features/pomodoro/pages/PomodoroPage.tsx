@@ -1,13 +1,11 @@
 /**
  * @ai-context: pomodoro 功能模块页面：PomodoroPage。
  */
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Play, Pause, RotateCcw, SkipForward, Clock, Volume2, VolumeX, Focus } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Tip } from '@/components/ui/Tip';
+import { Clock } from 'lucide-react';
 import { db } from '@/lib/storage';
 import TimerRing from '../components/TimerRing';
 import GoalInput from '../components/GoalInput';
@@ -18,20 +16,18 @@ import PresetEditor from '../components/PresetEditor';
 import PresetTabs from '../components/PresetTabs';
 import { CompletionCelebration } from '../components/CompletionCelebration';
 import { EnergySuggestionBar } from '../components/EnergySuggestionBar';
-import { usePomodoroStore } from '../store/usePomodoroStore';
+import { PomodoroControls } from '../components/PomodoroControls';
+import { usePomodoroStore, usePomodoroActionSignal } from '../store/usePomodoroStore';
 import { useShallow } from 'zustand/react/shallow';
-import { useAudioPlayer } from '@/lib/audio/useAudioPlayer';
-import { audioTracks, loadAudioPreferences, saveAudioPreferences } from '@/lib/audio/audioConfig';
+import { wellbeingEventBus } from '@/lib/wellbeing/wellbeingEventBus';
+import { useEcosystemStore } from '@/features/retention/store/useEcosystemStore';
+import { calculateDepth } from '@/features/retention/lib/coralEngine';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { usePomodoroEffects } from '../hooks/usePomodoroEffects';
 import { useDeviceCapability } from '@/hooks/useDeviceCapability';
 import DiveBackground from '../components/DiveBackground';
 import { SPRING } from '@/lib/animation/springConfig';
 import { MAX_PRESETS } from '../lib/presetService';
-import type { AudioPreferences } from '@/lib/audio/audioConfig';
-
-const WHITE_NOISE_FADE_MS = 1000;
-const WHITE_NOISE_FADE_OUT_MS = 1500;
 
 export default function PomodoroPage() {
   const navigate = useNavigate();
@@ -39,8 +35,8 @@ export default function PomodoroPage() {
     phase, isRunning, isPaused, remainingSeconds, totalSeconds,
     completedCount, settings, currentGoal, isImmersive,
     activePreset, presets,
-    start, pause, resume, reset, skip, setPreset, setCurrentGoal,
-    enterImmersive, exitImmersive, createPreset,
+    start, setPreset, setCurrentGoal,
+    exitImmersive, createPreset,
     showCompletionOverlay, dismissCompletionOverlay, lastSessionActualDuration,
   } = usePomodoroStore(useShallow(s => s));
 
@@ -54,34 +50,28 @@ export default function PomodoroPage() {
   const { shouldDisableHeavyAnimations, prefersReducedMotion } = useDeviceCapability();
   const diveDegradation = prefersReducedMotion ? 'L2' : shouldDisableHeavyAnimations ? 'L1' : 'L0';
 
-  // ── 白噪音 ──
-  const [audioPrefs, setAudioPrefs] = useState<AudioPreferences>(() => loadAudioPreferences());
-  const whiteNoiseTrack = useMemo(
-    () => audioTracks.find((t) => t.id === audioPrefs.whiteNoiseTrackId) ?? audioTracks[0],
-    [audioPrefs.whiteNoiseTrackId],
-  );
-  const whiteNoisePlayer = useAudioPlayer({
-    src: whiteNoiseTrack.src, volume: audioPrefs.whiteNoiseVolume,
-    loop: true, fadeInMs: WHITE_NOISE_FADE_MS, fadeOutMs: WHITE_NOISE_FADE_OUT_MS,
-  });
-
+  // ── 守护灵分心分数（体验增强：心流音乐联动，开关 guardianLinkEnabled）──
+  // App 级 useFocusGuardian 在等级变化时经事件总线广播分数，此处只订阅不采集
+  const [focusScore, setFocusScore] = useState(0);
   useEffect(() => {
-    if (isRunning && phase === 'work' && audioPrefs.whiteNoiseEnabled) {
-      whiteNoisePlayer.play();
-    } else {
-      whiteNoisePlayer.pause();
-    }
-  }, [isRunning, phase, audioPrefs.whiteNoiseEnabled]); // eslint-disable-line
+    return wellbeingEventBus.on('focus:level-changed', (ctx) => {
+      if (typeof ctx.score === 'number') setFocusScore(ctx.score);
+    });
+  }, []);
 
-  const toggleWhiteNoise = () => {
-    const next = { ...audioPrefs, whiteNoiseEnabled: !audioPrefs.whiteNoiseEnabled };
-    setAudioPrefs(next); saveAudioPreferences(next);
-  };
-  const handleWhiteNoiseVolume = (vol: number) => {
-    const next = { ...audioPrefs, whiteNoiseVolume: vol };
-    setAudioPrefs(next); saveAudioPreferences(next);
-    whiteNoisePlayer.setVolume(vol);
-  };
+  // ── 休息记忆重放（体验增强，开关 breakReplayEnabled）：──
+  // 工作阶段完成时从目标提取关键词，供沉浸模式休息期间展示（M4 清醒期重放）
+  const lastKeywordsRef = useRef<string[]>([]);
+  const pomoSignal = usePomodoroActionSignal();
+  useEffect(() => {
+    if (pomoSignal.lastAction === 'phase_complete' && pomoSignal.lastCompletedPhase === 'work') {
+      lastKeywordsRef.current = extractGoalKeywords(pomoSignal.currentGoal);
+    }
+  }, [pomoSignal.lastAction, pomoSignal.lastActionCounter, pomoSignal.lastCompletedPhase, pomoSignal.currentGoal]);
+
+  // 庆祝层累计深度：统一读取珊瑚生态真实深度（原实现基于回绕的 completedCount
+  // 伪算，每轮长休归零后"累计深度"会倒退）
+  const totalDepth = useEcosystemStore((s) => s.totalDepth);
 
   // @ai-context: tick 驱动已上移至全局调度器 pomodoroScheduler.ts（App 启动时注册），
   // 不再由本页面组件级 setInterval 驱动——切离页面后计时仍持续推进
@@ -98,12 +88,6 @@ export default function PomodoroPage() {
     return () => { document.title = '熵减'; };
   }, [remainingSeconds, phase, isRunning, isPaused]);
 
-  const handleMainButton = () => {
-    if (isRunning) pause();
-    else if (isPaused) resume();
-    else setGoalModalOpen(true);
-  };
-
   // P3-19 稳定回调引用，供 memo 化的 PresetTabs 避免每秒重渲染
   const openPresetEditor = useCallback(() => setPresetEditorOpen(true), []);
   // 预设管理入口：跳转深潜设置页（删除/排序/编辑预设）
@@ -119,7 +103,7 @@ export default function PomodoroPage() {
     // 使用微任务确保上述setState完成后再触发store更新
     await Promise.resolve();
     start();
-    enterImmersive();
+    // 不再强制进入沉浸模式：是否沉浸由用户自行选择（普通视图有"进入专注模式"入口）
     if (rememberGoal && goal) {
       try {
         const existing = await db.pomodoroGoals.where('text').equals(goal).first();
@@ -132,7 +116,6 @@ export default function PomodoroPage() {
     }
   };
 
-  const mainButtonIcon = isRunning ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />;
   const prefersReduced = useReducedMotion();
 
   const immersiveEnter = prefersReduced ? {} : { opacity: 0, scale: 0.9 };
@@ -181,10 +164,12 @@ export default function PomodoroPage() {
             >
               <div className="absolute top-6 left-0 right-0 z-10"><SlideToExit onExit={exitImmersive} /></div>
               <ImmersiveTimer
-                whiteNoiseEnabled={audioPrefs.whiteNoiseEnabled}
-                whiteNoiseVolume={audioPrefs.whiteNoiseVolume}
-                onToggleWhiteNoise={toggleWhiteNoise}
-                onWhiteNoiseVolume={handleWhiteNoiseVolume}
+                // 背景音偏好由 ImmersiveTimer 内部读全局音频 store
+                // 创新功能接线（开关在 深潜设置 → 体验增强，全部缺省关闭）：
+                // M4 清醒期重放 / 守护灵分心联动 / 心流音乐
+                lastSessionKeywords={settings.breakReplayEnabled ? lastKeywordsRef.current : undefined}
+                focusScore={settings.guardianLinkEnabled ? focusScore : 0}
+                flowMusicEnabled={settings.flowMusicEnabled}
               />
             </motion.div>
           )}
@@ -287,98 +272,8 @@ export default function PomodoroPage() {
             className="mb-[clamp(0.25rem,1.2vh,2rem)]"
           />
 
-          {/* 白噪音控制 */}
-          <motion.div
-            className="flex items-center gap-2 mb-[clamp(0.375rem,1.5vh,2rem)] px-4 py-2 bg-bg-elevated/40 backdrop-blur-sm rounded-full border border-border/20"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            {/* 白噪音开关按钮，带 tooltip 提示 */}
-            <Tip text={audioPrefs.whiteNoiseEnabled ? '关闭背景音' : '开启背景音'}>
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={toggleWhiteNoise}
-              className={cn(
-                'p-1.5 rounded-full transition-all duration-200',
-                audioPrefs.whiteNoiseEnabled ? 'text-brand-500' : 'text-text-tertiary hover:text-text-secondary',
-              )}
-            >
-              {audioPrefs.whiteNoiseEnabled
-                ? <Volume2 className="w-4 h-4" strokeWidth={1.5} />
-                : <VolumeX className="w-4 h-4" strokeWidth={1.5} />}
-            </motion.button>
-            </Tip>
-            <span className="text-[11px] text-text-tertiary select-none">{whiteNoiseTrack.nameZh}</span>
-            <input
-              type="range" min={0} max={1} step={0.05}
-              value={audioPrefs.whiteNoiseVolume}
-              onChange={(e) => handleWhiteNoiseVolume(parseFloat(e.target.value))}
-              className="w-16 h-1 accent-brand-500 cursor-pointer"
-            />
-          </motion.div>
-
-          {/* Controls — 居中大按钮 + 品牌色光晕 */}
-          <motion.div
-            className="flex items-center gap-4 mb-[clamp(0.25rem,1.2vh,2rem)]"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35, ...SPRING.gentle }}
-          >
-            {/* 重置按钮，带 tooltip 提示 */}
-            <Tip text="重置计时器">
-            <motion.button
-              whileTap={{ scale: 0.9, rotate: -180 }}
-              onClick={reset}
-              className="w-10 h-10 rounded-full border border-border/30 flex items-center justify-center text-text-tertiary hover:text-text-secondary hover:border-border/50 transition-all duration-200"
-            >
-              <RotateCcw className="w-4 h-4" strokeWidth={1.5} />
-            </motion.button>
-            </Tip>
-
-            <motion.button
-              whileHover={{ scale: 1.05, boxShadow: '0 8px 32px color-mix(in srgb, var(--kb-brand-500) 45%, transparent)' }}
-              whileTap={{ scale: 0.97 }}
-              onClick={handleMainButton}
-              className={cn(
-                'w-16 h-16 rounded-full flex items-center justify-center',
-                'bg-brand-500 text-white',
-                'transition-shadow duration-300',
-              )}
-              style={{
-                boxShadow: '0 4px 20px color-mix(in srgb, var(--kb-brand-500) 35%, transparent), 0 0 40px color-mix(in srgb, var(--kb-brand-500) 15%, transparent)',
-              }}
-            >
-              {mainButtonIcon}
-            </motion.button>
-
-            {/* 跳过按钮，带 tooltip 提示 */}
-            <Tip text="跳过当前阶段">
-            <motion.button
-              whileTap={{ scale: 0.9, x: 3 }}
-              onClick={skip}
-              className="w-10 h-10 rounded-full border border-border/30 flex items-center justify-center text-text-tertiary hover:text-text-secondary hover:border-border/50 transition-all duration-200"
-            >
-              <SkipForward className="w-4 h-4" strokeWidth={1.5} />
-            </motion.button>
-            </Tip>
-          </motion.div>
-
-          {/* 沉浸模式入口 */}
-          {(isRunning || isPaused) && (
-            <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => enterImmersive()}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-medium text-text-tertiary hover:text-text-primary hover:bg-bg-secondary/40 transition-all duration-200"
-            >
-              <Focus className="w-4 h-4" strokeWidth={1.5} />
-              进入专注模式
-            </motion.button>
-          )}
+          {/* 白噪音 + 主控制 + 沉浸入口（拆至 PomodoroControls） */}
+          <PomodoroControls onStart={() => setGoalModalOpen(true)} />
 
           <GoalInput
             open={goalModalOpen}
@@ -401,17 +296,38 @@ export default function PomodoroPage() {
         )}
       </AnimatePresence>
 
-      {/* v0.29: 深潜完成庆祝覆盖层 */}
+      {/* v0.29: 深潜完成庆祝覆盖层（累计深度统一取珊瑚生态真实值） */}
       <CompletionCelebration
         visible={showCompletionOverlay}
         durationSeconds={lastSessionActualDuration ?? (activePreset?.workDuration ?? settings.workDuration) * 60}
         goal={currentGoal}
         presetName={activePreset?.name ?? null}
-        totalDepth={((completedCount + 1) * (activePreset?.workDuration ?? 25)) * 4}
-        depthGained={(lastSessionActualDuration ?? (activePreset?.workDuration ?? 25) * 60) / 60 * 4}
+        totalDepth={totalDepth}
+        depthGained={calculateDepth((lastSessionActualDuration ?? (activePreset?.workDuration ?? 25) * 60) / 60)}
         onClose={dismissCompletionOverlay}
         onContinue={() => { dismissCompletionOverlay(); setGoalModalOpen(true); }}
       />
     </>
   );
+}
+
+/**
+ * 从番茄目标提取关键词（休息记忆重放用）
+ *
+ * @ai-context: 本地规则实现，零 AI 依赖（本地优先原则）：按常见分隔符分词，
+ * 过滤停用词与过短/过长的片段，去重后最多取 5 个。目标为空返回空数组。
+ */
+function extractGoalKeywords(goal: string | null): string[] {
+  if (!goal) return [];
+  const STOP_WORDS = new Set([
+    '这个', '那个', '今天', '明天', '一个', '什么', '怎么', '一下', '内容', '部分',
+    '进行', '复习', '学习', '完成', '单词', '笔记', '数学', '英语', '语文', '物理',
+    '化学', '生物', '历史', '地理', '政治', '开始', '继续', '准备', '整理', '背诵',
+    '阅读', '练习', '做题', '章节', '单元', '第一', '第二', '第三',
+  ]);
+  const words = goal
+    .split(/[\s,，。.!！?？;；:：、/\\()（）[\]【】]+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length >= 2 && w.length <= 12 && !STOP_WORDS.has(w));
+  return Array.from(new Set(words)).slice(0, 5);
 }

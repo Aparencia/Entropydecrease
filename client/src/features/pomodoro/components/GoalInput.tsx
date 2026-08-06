@@ -45,7 +45,8 @@ export default function GoalInput({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    // 中文输入法选词时的回车（composition）不应提交表单，否则选词会误开始番茄
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSubmit();
     }

@@ -42,6 +42,11 @@ export interface PomodoroSettings {
   tickFinalEnabled?: boolean;
   completionSoundId?: string;
   warningSoundId?: string;
+  // 体验增强开关（v0.30，全部可选缺省关闭，不改变既有行为）
+  breakReplayEnabled?: boolean;     // 休息记忆重放：休息时展示上次专注目标关键词
+  flowMusicEnabled?: boolean;       // 心流音乐：按专注状态自动调整背景音乐
+  guardianLinkEnabled?: boolean;    // 守护灵联动：按分心分数实时调节心流音乐
+  autoSwitchAudioPhase?: boolean;   // 阶段音轨自动切换：休息/专注自动换音轨
 }
 
 export interface PomodoroState {
@@ -102,11 +107,11 @@ export interface PomodoroState {
   resume: () => void;
   reset: () => void;
   skip: () => void;
+  /** 中断当前工作会话（投入 ≥30s 时落库 interrupted 记录，不污染完成统计） */
+  abortSession: () => void;
   tick: () => void;
   enterImmersive: () => void;
   exitImmersive: () => void;
-  /** @deprecated 使用 setPreset 替代 */
-  setMode: (mode: Mode) => void;
   setPreset: (presetId: string) => void;
   setCurrentGoal: (goal: string | null) => void;
   updateSettings: (settings: Partial<PomodoroSettings>) => void;

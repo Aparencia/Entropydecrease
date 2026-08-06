@@ -105,147 +105,120 @@ function playPhaseFeedback(phase: string, isSilent: boolean, settings: { soundEn
   }
 }
 
+/**
+ * 统一的阶段完成处理（tick 正常分支与墙钟校准分支共用，行为完全一致）
+ *
+ * @ai-context: 原实现两分支各写一份约 40 行重复代码，且校准分支的
+ * remainingSeconds 误用 0（autoStart 关闭时休息被吞）。本函数收敛
+ * 全部迁移逻辑，剩余时间一律设为新阶段完整时长。
+ */
+function runPhaseCompletion(
+  set: (fn: (s: PomodoroState) => Partial<PomodoroState>) => void,
+  get: () => PomodoroState,
+): void {
+  const { phase, completedCount, settings, activePreset, isRunning } = get();
+  const interval = getInterval(activePreset, settings);
+  const isSilent = activePreset?.silent ?? false;
+  const wasRunning = isRunning;
+
+  const newCount = getNextCount(phase, completedCount, interval);
+  const nextPhase = getNextPhase(phase, completedCount, interval);
+  const duration = getPhaseDuration(nextPhase, activePreset, settings);
+  const isCycleComplete = phase === 'long_break';
+
+  // Determine auto-start behavior
+  let shouldAutoStart = false;
+  if (nextPhase !== 'work' && settings.autoStartBreak) {
+    shouldAutoStart = true;
+  } else if (nextPhase === 'work' && settings.autoStartWork) {
+    shouldAutoStart = true;
+  }
+  // Breaks always auto-start if timer was running
+  if (nextPhase !== 'work' && wasRunning) {
+    shouldAutoStart = true;
+  }
+
+  // 记录完成的番茄会话
+  let actualDuration: number | null = null;
+  if (phase === 'work') {
+    actualDuration = finalizeWorkPhase(get);
+  }
+  playPhaseFeedback(phase, isSilent, settings);
+
+  set((s) => ({
+    phase: nextPhase,
+    remainingSeconds: duration,
+    totalSeconds: duration,
+    completedCount: newCount,
+    isRunning: shouldAutoStart,
+    isPaused: !shouldAutoStart,
+    // 自动进入下一阶段时重设墙钟截止点；否则清空等待下次 start/resume
+    endAt: shouldAutoStart ? Date.now() + duration * 1000 : null,
+    // 迷你潜水仅限一个工作阶段，阶段切换即恢复常规节律
+    isMiniDive: false,
+    // 切换到新阶段时清空计时，下一个 start/resume 会重新设置
+    sessionStartTime: null,
+    totalPausedMs: 0,
+    pausedAt: null,
+    // 发出 phase_complete 动作信号
+    lastAction: 'phase_complete',
+    lastActionCounter: s.lastActionCounter + 1,
+    lastCompletedPhase: phase,
+    isCycleComplete,
+    lastSessionActualDuration: actualDuration,
+    // v0.29: 工作阶段完成时触发庆祝覆盖层
+    showCompletionOverlay: phase === 'work' ? true : s.showCompletionOverlay,
+  }));
+}
+
 export const createTickSlice: PomodoroSlice<{ tick: () => void }> = (set, get) => ({
   tick: () => {
-    const { remainingSeconds, isRunning, phase, completedCount, settings, activePreset } = get();
+    const { remainingSeconds, isRunning, phase, settings, activePreset } = get();
     if (!isRunning) return;
-    const interval = getInterval(activePreset, settings);
     const isSilent = activePreset?.silent ?? false;
 
     if (remainingSeconds <= 1) {
       // Phase completed
-      const wasRunning = isRunning;
-      const newCount = getNextCount(phase, completedCount, interval);
-      const nextPhase = getNextPhase(phase, completedCount, interval);
-      const duration = getPhaseDuration(nextPhase, activePreset, settings);
-      const isCycleComplete = phase === 'long_break';
-
-      // Determine auto-start behavior
-      let shouldAutoStart = false;
-      if (nextPhase !== 'work' && settings.autoStartBreak) {
-        shouldAutoStart = true;
-      } else if (nextPhase === 'work' && settings.autoStartWork) {
-        shouldAutoStart = true;
-      }
-      // Breaks always auto-start if timer was running
-      if (nextPhase !== 'work' && wasRunning) {
-        shouldAutoStart = true;
-      }
-
-      // 记录完成的番茄会话
-      let actualDuration: number | null = null;
-      if (phase === 'work') {
-        actualDuration = finalizeWorkPhase(get);
-      }
-      playPhaseFeedback(phase, isSilent, settings);
-
-      set((s) => ({
-        phase: nextPhase,
-        remainingSeconds: duration,
-        totalSeconds: duration,
-        completedCount: newCount,
-        isRunning: shouldAutoStart,
-        isPaused: !shouldAutoStart,
-        // 自动进入下一阶段时重设墙钟截止点；否则清空等待下次 start/resume
-        endAt: shouldAutoStart ? Date.now() + duration * 1000 : null,
-        // 迷你潜水仅限一个工作阶段，阶段切换即恢复常规节律
-        isMiniDive: false,
-        // 切换到新阶段时清空计时，下一个 start/resume 会重新设置
-        sessionStartTime: null,
-        totalPausedMs: 0,
-        pausedAt: null,
-        // 发出 phase_complete 动作信号
-        lastAction: 'phase_complete',
-        lastActionCounter: s.lastActionCounter + 1,
-        lastCompletedPhase: phase,
-        isCycleComplete,
-        lastSessionActualDuration: actualDuration,
-        // v0.29: 工作阶段完成时触发庆祝覆盖层
-        showCompletionOverlay: phase === 'work' ? true : s.showCompletionOverlay,
-      }));
-    } else {
-      let nextRemaining = remainingSeconds - 1;
-      // 墙钟校准：系统休眠唤醒/setInterval 漂移后，与 endAt 误差超过 1s 时直接吸附，
-      // 避免递减模型累积误差（误差 ≤1s 时保持 -1 节奏，防止 UI 跳秒）
-      const { endAt } = get();
-      if (endAt != null) {
-        const wallRemaining = Math.max(0, Math.round((endAt - Date.now()) / 1000));
-        if (Math.abs(wallRemaining - nextRemaining) > 1) {
-          nextRemaining = wallRemaining;
-        }
-      }
-      // 墙钟校准后若剩余时间 ≤ 0，立即完成（避免 UI 显示 00:00 停摆 1 秒）
-      if (nextRemaining <= 0) {
-        // 直接复用上面的完成逻辑
-        const wasRunning = isRunning;
-        const newCount = getNextCount(phase, completedCount, interval);
-        const nextPhase = getNextPhase(phase, completedCount, interval);
-        const duration = getPhaseDuration(nextPhase, activePreset, settings);
-        const isCycleComplete = phase === 'long_break';
-
-        let shouldAutoStart = false;
-        if (nextPhase !== 'work' && settings.autoStartBreak) {
-          shouldAutoStart = true;
-        } else if (nextPhase === 'work' && settings.autoStartWork) {
-          shouldAutoStart = true;
-        }
-        if (nextPhase !== 'work' && wasRunning) {
-          shouldAutoStart = true;
-        }
-
-        let actualDuration: number | null = null;
-        if (phase === 'work') {
-          actualDuration = finalizeWorkPhase(get);
-        }
-
-        // FRONT2-M2: 墙钟校准完成分支补齐音效与通知——原实现"直接复用上面的
-        // 完成逻辑"漏掉了这两块（正常分支有），休眠唤醒后的阶段
-        // 完成无任何提示，用户错过阶段转换
-        playPhaseFeedback(phase, isSilent, settings);
-
-        set((s) => ({
-          phase: nextPhase,
-          remainingSeconds: shouldAutoStart ? duration : 0,
-          totalSeconds: duration,
-          completedCount: newCount,
-          isRunning: shouldAutoStart,
-          isPaused: !shouldAutoStart,
-          endAt: shouldAutoStart ? Date.now() + duration * 1000 : null,
-          isMiniDive: false,
-          sessionStartTime: null,
-          totalPausedMs: 0,
-          pausedAt: null,
-          lastAction: 'phase_complete',
-          lastActionCounter: s.lastActionCounter + 1,
-          lastCompletedPhase: phase,
-          isCycleComplete,
-          lastSessionActualDuration: actualDuration,
-          showCompletionOverlay: phase === 'work' ? true : s.showCompletionOverlay,
-        }));
-        return;
-      }
-      // 静默预设跳过预警和滴答音
-      if (!isSilent) {
-        // 预警（工作阶段）—— 支持自定义时点
-        const warningSec = (settings.warningMinutes ?? 5) * 60;
-        // 使用 <= 而非严格相等，避免墙钟校准跳变时跳过预警
-        if (phase === 'work' && warningSec > 0 && nextRemaining <= warningSec && nextRemaining > warningSec - 3) {
-          soundPlayer.play('pomodoro_5min_warning');
-          set((s) => ({
-            lastAction: 'tick_5min_warning',
-            lastActionCounter: s.lastActionCounter + 1,
-          }));
-        }
-        // 最后 10 秒滴答（可关闭）
-        if (phase === 'work' && (settings.tickFinalEnabled ?? true) && nextRemaining <= 10 && nextRemaining > 0) {
-          soundPlayer.play('pomodoro_tick_final');
-          set((s) => ({
-            lastAction: 'tick_final',
-            lastActionCounter: s.lastActionCounter + 1,
-          }));
-        }
-      }
-      set({ remainingSeconds: nextRemaining });
+      runPhaseCompletion(set, get);
+      return;
     }
+
+    let nextRemaining = remainingSeconds - 1;
+    // 墙钟校准：系统休眠唤醒/setInterval 漂移后，与 endAt 误差超过 1s 时直接吸附，
+    // 避免递减模型累积误差（误差 ≤1s 时保持 -1 节奏，防止 UI 跳秒）
+    const { endAt } = get();
+    if (endAt != null) {
+      const wallRemaining = Math.max(0, Math.round((endAt - Date.now()) / 1000));
+      if (Math.abs(wallRemaining - nextRemaining) > 1) {
+        nextRemaining = wallRemaining;
+      }
+    }
+    // 墙钟校准后若剩余时间 ≤ 0，立即完成（避免 UI 显示 00:00 停摆 1 秒）
+    if (nextRemaining <= 0) {
+      runPhaseCompletion(set, get);
+      return;
+    }
+    // 静默预设跳过预警和滴答音
+    if (!isSilent) {
+      // 预警（工作阶段）—— 支持自定义时点
+      const warningSec = (settings.warningMinutes ?? 5) * 60;
+      // 使用 <= 而非严格相等，避免墙钟校准跳变时跳过预警
+      if (phase === 'work' && warningSec > 0 && nextRemaining <= warningSec && nextRemaining > warningSec - 3) {
+        soundPlayer.play('pomodoro_5min_warning');
+        set((s) => ({
+          lastAction: 'tick_5min_warning',
+          lastActionCounter: s.lastActionCounter + 1,
+        }));
+      }
+      // 最后 10 秒滴答（可关闭）
+      if (phase === 'work' && (settings.tickFinalEnabled ?? true) && nextRemaining <= 10 && nextRemaining > 0) {
+        soundPlayer.play('pomodoro_tick_final');
+        set((s) => ({
+          lastAction: 'tick_final',
+          lastActionCounter: s.lastActionCounter + 1,
+        }));
+      }
+    }
+    set({ remainingSeconds: nextRemaining });
   },
 });
