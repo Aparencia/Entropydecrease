@@ -47,6 +47,9 @@ export interface PomodoroSettings {
   flowMusicEnabled?: boolean;       // 心流音乐：按专注状态自动调整背景音乐
   guardianLinkEnabled?: boolean;    // 守护灵联动：按分心分数实时调节心流音乐
   autoSwitchAudioPhase?: boolean;   // 阶段音轨自动切换：休息/专注自动换音轨
+  // Chronos 时间生物增强（P2，全部可选缺省关闭）
+  ambientAdaptation?: boolean;      // 环境光自适应：摄像头亮度采样驱动生物自发光
+  chronosEnabled?: boolean;         // Chronos 时间生物形态（缺省 true，关闭回退经典环）
 }
 
 export interface PomodoroState {

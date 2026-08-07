@@ -17,6 +17,7 @@ import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { BEAT } from '@/lib/animation/springConfig';
 import { useAudioPrefsStore } from '@/lib/audio/audioPrefsStore';
 import { AnchorReminderOverlay } from './AnchorReminderOverlay';
+import { ChronosCanvas } from './chronos/ChronosCanvas';
 import { ImmersiveRing } from './ImmersiveRing';
 import { ImmersiveControls } from './ImmersiveControls';
 import { useFlowMusic } from '@/hooks/useFlowMusic';
@@ -42,6 +43,12 @@ interface ImmersiveTimerProps {
   focusScore?: number;
   /** 3.8 心流音乐引擎是否激活 */
   flowMusicEnabled?: boolean;
+  /** 专注完成绽放触发（Chronos 时间生物） */
+  bloom?: boolean;
+  /** 环境光亮度 0-1（P2 暗环境自发光补偿） */
+  ambientLight?: number;
+  /** Chronos 生物形态开关（缺省 true，关闭回退经典环） */
+  chronosEnabled?: boolean;
 }
 
 /** 3.13 具身学习休息活动列表 */
@@ -94,6 +101,9 @@ export default function ImmersiveTimer({
   lastSessionKeywords,
   focusScore = 0,
   flowMusicEnabled = false,
+  bloom = false,
+  ambientLight = 0.5,
+  chronosEnabled = true,
 }: ImmersiveTimerProps) {
   const prefersReduced = useReducedMotion();
 
@@ -137,7 +147,9 @@ export default function ImmersiveTimer({
     [progressPercent],
   );
 
-  // 呼吸动画参数 — 匹配 BEAT.x5 (600ms 周期 → 实际用6s完整呼吸)
+  const isBreak = phase === 'short_break' || phase === 'long_break';
+
+  // 经典环呼吸动画参数（chronosEnabled=false 时回退）
   const breatheAnimation = prefersReduced
     ? {}
     : {
@@ -148,8 +160,6 @@ export default function ImmersiveTimer({
           ease: 'easeInOut' as const,
         },
       };
-
-  const isBreak = phase === 'short_break' || phase === 'long_break';
 
   // 3.13 休息活动轮换索引
   const [activityIndex, setActivityIndex] = useState(0);
@@ -220,8 +230,23 @@ export default function ImmersiveTimer({
         </motion.div>
       )}
 
-      {/* 中央计时器区域 */}
-      <ImmersiveRing progress={progress} timeStr={timeStr} label={label} breatheAnimation={breatheAnimation} />
+      {/* 中央计时器区域 — Chronos 时间生物（可回退经典环） */}
+      {chronosEnabled ? (
+        <ChronosCanvas
+          mode="full"
+          phase={phase}
+          isRunning={isRunning}
+          remainingSeconds={remainingSeconds}
+          started
+          intensity={focusScore > 0 ? focusScore : 50}
+          ambientLight={ambientLight}
+          bloom={bloom}
+          timeStr={timeStr}
+          label={label}
+        />
+      ) : (
+        <ImmersiveRing progress={progress} timeStr={timeStr} label={label} breatheAnimation={breatheAnimation} />
+      )}
 
       {/* T2 记忆锚点提醒浮层 — work 阶段每 12 分钟一句话要点，15 秒自动消失 */}
       <AnchorReminderOverlay />

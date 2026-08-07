@@ -8,6 +8,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Clock } from 'lucide-react';
 import { db } from '@/lib/storage';
 import TimerRing from '../components/TimerRing';
+import { ChronosCanvas } from '../components/chronos/ChronosCanvas';
+import { useAmbientLight } from '../hooks/useAmbientLight';
 import GoalInput from '../components/GoalInput';
 import ImmersiveTimer from '../components/ImmersiveTimer';
 import SlideToExit from '../components/SlideToExit';
@@ -66,6 +68,20 @@ export default function PomodoroPage() {
       lastKeywordsRef.current = extractGoalKeywords(pomoSignal.currentGoal);
     }
   }, [pomoSignal.lastAction, pomoSignal.lastActionCounter, pomoSignal.lastCompletedPhase, pomoSignal.currentGoal]);
+
+  // ── Chronos 绽放触发：工作阶段完成时短暂置 true（时间生物完成动画）──
+  const [chronosBloom, setChronosBloom] = useState(false);
+  useEffect(() => {
+    if (pomoSignal.lastAction === 'phase_complete' && pomoSignal.lastCompletedPhase === 'work') {
+      setChronosBloom(true);
+      const t = setTimeout(() => setChronosBloom(false), 150);
+      return () => clearTimeout(t);
+    }
+  }, [pomoSignal.lastAction, pomoSignal.lastActionCounter, pomoSignal.lastCompletedPhase]);
+
+  // ── Chronos P2：环境光自适应（缺省关闭，开启时才申请摄像头权限）──
+  const ambientBrightness = useAmbientLight(settings.ambientAdaptation ?? false);
+  const chronosEnabled = settings.chronosEnabled ?? true;
 
   // 庆祝层累计深度：统一读取珊瑚生态真实深度（原实现基于回绕的 completedCount
   // 伪算，每轮长休归零后"累计深度"会倒退）
@@ -185,6 +201,9 @@ export default function PomodoroPage() {
                 lastSessionKeywords={settings.breakReplayEnabled ? lastKeywordsRef.current : undefined}
                 focusScore={settings.guardianLinkEnabled ? focusScore : 0}
                 flowMusicEnabled={settings.flowMusicEnabled}
+                bloom={chronosBloom}
+                ambientLight={ambientBrightness}
+                chronosEnabled={chronosEnabled}
               />
             </motion.div>
           )}
@@ -268,12 +287,27 @@ export default function PomodoroPage() {
                 {currentGoal}
               </motion.p>
             )}
-            <TimerRing
-              totalSeconds={totalSeconds}
-              remainingSeconds={remainingSeconds}
-              phase={phase}
-              isRunning={isRunning}
-            />
+            {chronosEnabled ? (
+              <ChronosCanvas
+                mode="compact"
+                phase={phase}
+                isRunning={isRunning}
+                remainingSeconds={remainingSeconds}
+                started={isRunning || isPaused || remainingSeconds < totalSeconds}
+                intensity={settings.guardianLinkEnabled ? focusScore : 50}
+                ambientLight={ambientBrightness}
+                bloom={chronosBloom}
+                timeStr={`${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(remainingSeconds % 60).padStart(2, '0')}`}
+                label={phase === 'work' ? '专注中' : phase === 'short_break' ? '短休息' : '长休息'}
+              />
+            ) : (
+              <TimerRing
+                totalSeconds={totalSeconds}
+                remainingSeconds={remainingSeconds}
+                phase={phase}
+                isRunning={isRunning}
+              />
+            )}
           </motion.div>
           </div>
 
