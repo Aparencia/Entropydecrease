@@ -60,7 +60,7 @@
     "@tiptap/starter-kit": "^3.27.3",
     "@tiptap/suggestion": "3.27.3",
     "@xyflow/react": "^12.11.2",
-    "better-sqlite3": "^11.0.0",
+    "better-sqlite3": "^13.0.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dexie": "^4.4.4",
