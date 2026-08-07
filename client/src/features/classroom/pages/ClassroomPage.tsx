@@ -26,6 +26,7 @@ import { WindowSelectCard } from '../components/WindowSelectCard';
 import { PathModeSelector } from '../components/PathModeSelector';
 import { SettingsCollapse } from '../components/SettingsCollapse';
 import { SonarControls } from '../components/SonarControls';
+import { VisionModeSelector } from '../components/VisionModeSelector';
 import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import { IdleGuidePanel } from '../components/IdleGuidePanel';
 import { CourseInfoCard } from '../components/CourseInfoCard';
@@ -37,6 +38,7 @@ import { HotwordDialog } from '../components/HotwordDialog';
 import SessionQAPanel from '../components/SessionQAPanel';
 import { PredictionOverlay } from '../components/PredictionOverlay';
 import { TimelineAnchor } from '../components/TimelineAnchor';
+import { ChapterNav } from '../components/ChapterNav';
 
 export default function ClassroomPage() {
   const capture = useClassroomCapture();
@@ -146,6 +148,8 @@ export default function ClassroomPage() {
                 mode={capture.mode}
                 onModeChange={capture.handleModeChange}
               />
+              {/* P8 视觉提取模式：写入截图 metadata.visionMode，VisionWorker 按模式提取 */}
+              <VisionModeSelector value={capture.visionMode} onChange={capture.setVisionMode} />
               <SettingsCollapse config={capture.config} onChange={capture.handleConfigChange} />
             </div>
             <div className="p-4 border-t border-border/20">
@@ -249,6 +253,7 @@ export default function ClassroomPage() {
                   transcripts={capture.liveTranscripts}
                   partialText={capture.partialText}
                   isActive={capture.status === 'capturing' && (capture.mode === 'audio' || capture.mode === 'mixed')}
+                  onEditTranscript={capture.handleEditTranscript}
                   className="mt-auto"
                 />
                 {/* M2 自动锚点：连续录制每 15 分钟生成，点击查看锚点文本 */}
@@ -284,6 +289,11 @@ export default function ClassroomPage() {
 
             {/* D2 课堂问答：基于本次转写提问（有转写数据时显示） */}
             <SessionQAPanel transcript={qaTranscript} className="mt-auto" />
+
+            {/* P2-2 章节速览：从笔记 Markdown 提取章节导航 */}
+            {capture.analysisResult?.content && (
+              <ChapterNav content={capture.analysisResult.content} />
+            )}
           </>
         )}
 

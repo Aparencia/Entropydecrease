@@ -13,6 +13,13 @@ import type { AnalyzeResult } from '@/lib/ai/sessionAnalyzer';
 import type { SessionBundle, CaptureSidebarConfig, RecordingStatus } from '@/lib/capture';
 import { classifyAnalysisError } from '../utils/analysisErrors';
 import type { AnalysisErrorInfo } from '../utils/analysisErrors';
+import { oralCleanup } from '@/lib/capture/oralCleanup';
+
+/** 对分析结果做口语书面化后处理（P1-4），返回新 result */
+function withOralCleanup(result: AnalyzeResult): AnalyzeResult {
+  if (!result.content) return result;
+  return { ...result, content: oralCleanup(result.content) };
+}
 
 interface UseClassroomAnalysisOptions {
   language: CaptureSidebarConfig['language'];
@@ -53,7 +60,7 @@ export function useClassroomAnalysis({
         language,
         sessionId: captureSessionIdRef?.current ?? undefined,
       });
-      setAnalysisResult(result);
+      setAnalysisResult(withOralCleanup(result));
       // 全量分析完成，释放所有 keyframe imageBase64 内存
       setSmartBundle((prev) => ({
         ...prev,
@@ -78,7 +85,7 @@ export function useClassroomAnalysis({
         duration: recordingStatus?.duration,
         language,
       });
-      setAnalysisResult(result);
+      setAnalysisResult(withOralCleanup(result));
     } catch (err) {
       setAnalysisError(classifyAnalysisError(err));
     } finally {
@@ -98,14 +105,15 @@ export function useClassroomAnalysis({
         language,
         sessionId: captureSessionIdRef?.current ?? undefined,
       });
-      setAnalysisResult(result);
+      setAnalysisResult(withOralCleanup(result));
     } catch {
       // 降级：本地拼接片段笔记（无需 AI，零网络，避免全量重发）
       // 为每个片段插入分隔标题，避免拼接后内容边界不清
+      const localContent = oralCleanup(partials
+        .map((p, idx) => `## 片段 ${idx + 1}\n\n${p.trim()}`)
+        .join('\n\n---\n\n'));
       setAnalysisResult({
-        content: partials
-          .map((p, idx) => `## 片段 ${idx + 1}\n\n${p.trim()}`)
-          .join('\n\n---\n\n'),
+        content: localContent,
         keyframesAnalyzed: keyframeCount,
         modelUsed: 'local-concat',
       });

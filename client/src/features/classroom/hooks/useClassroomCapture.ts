@@ -132,6 +132,13 @@ export function useClassroomCapture() {
     };
   }, [captureManager]);
 
+  // P8 视觉提取模式（auto/text/formula/diagram/code/full）：同步到 CaptureManager，
+  // 写入截图消息 metadata 供 VisionWorker 消费（VisionWorker 已支持，此前缺 UI 入口）
+  const [visionMode, setVisionMode] = useState<'auto' | 'text' | 'formula' | 'diagram' | 'code' | 'full'>('auto');
+  useEffect(() => {
+    captureManager.setVisionMode(visionMode);
+  }, [captureManager, visionMode]);
+
   const events = useClassroomEvents({
     captureManager, status, capturePath,
     language: config.language, aiDetectEnabled, setCourseMeta,
@@ -241,18 +248,39 @@ export function useClassroomCapture() {
     setConfig((prev) => ({ ...prev, ...patch }));
   }, []);
 
-  // ── 笔记→闪卡一键生成 ──
-  const handleGenerateCards = useCallback(async (content: string) => {
+  // ── 笔记→闪卡一键生成（P2-3：支持全量/仅重点模式） ──
+  const handleGenerateCards = useCallback(async (content: string, mode?: 'full' | 'bookmarks') => {
     if (!window.electronAPI) return;
     try {
-      notify('info', '正在从笔记生成闪卡...');
-      await window.electronAPI.invoke('ai_generate_cards', { content });
+      let cardContent = content;
+      if (mode === 'bookmarks') {
+        const bookmarkTimestamps = (events.smartBundle?.timeline ?? [])
+          .filter((e) => e.type === 'bookmark')
+          .map((e) => e.timestamp);
+        if (bookmarkTimestamps.length > 0) {
+          const bookmarkTexts = bookmarkTimestamps.map((ts) => {
+            const withText = events.liveTranscripts.filter((t) => t.text);
+            if (withText.length === 0) return '';
+            const closest = withText.reduce((best, cur) =>
+              Math.abs(cur.timestamp - ts) < Math.abs(best.timestamp - ts) ? cur : best,
+            );
+            return closest?.text ? `- ${closest.text}` : '';
+          }).filter(Boolean);
+          if (bookmarkTexts.length > 0) {
+            cardContent = `# 课堂重点标记\n\n${bookmarkTexts.join('\n')}`;
+          }
+        }
+        notify('info', `正在从 ${bookmarkTimestamps.length} 个重点标记生成闪卡...`);
+      } else {
+        notify('info', '正在从笔记生成闪卡...');
+      }
+      await window.electronAPI.invoke('ai_generate_cards', { content: cardContent });
       notify('success', '闪卡已生成，可在闪卡模块查看');
     } catch (err) {
       console.error('[useClassroomCapture] 生成闪卡失败:', err);
       notify('error', '闪卡生成失败，请重试');
     }
-  }, [notify]);
+  }, [notify, events.smartBundle, events.liveTranscripts]);
 
   // ── 课中重点标记 ──
   // M2: 统一走 captureManager.pushBookmark（smart 路径广播 smart:bookmark，
@@ -283,6 +311,8 @@ export function useClassroomCapture() {
     setExtractionError: events.setExtractionError,
     // 路径
     capturePath, setCapturePath, smartBundle: events.smartBundle,
+    // P8 视觉提取模式
+    visionMode, setVisionMode,
     // 分析
     isAnalyzing: analysis.isAnalyzing,
     analysisResult: analysis.analysisResult,
@@ -291,6 +321,7 @@ export function useClassroomCapture() {
     transcribedCount: events.transcribedCount,
     // 实时转录
     liveTranscripts: events.liveTranscripts,
+    handleEditTranscript: events.handleEditTranscript,
     // 真流式进行中的 partial 文本 + 激活标志
     partialText: events.partialText,
     streamingAsrActive,

@@ -9,7 +9,7 @@
  * @ai-context: 语音段就绪后经信号量限流转写；实时转录列表 FIFO 上限 200 条，
  * 防止长课堂内存无限增长。ASR 连续失败 3 次提示用户。
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { captureEventBus } from '@/lib/capture';
 import type {
@@ -33,7 +33,7 @@ import { detectCourseFromFrame } from '@/lib/ai/courseDetector';
 import { remapKeyframeMarkers } from '../utils/tipTapImageUtils';
 import { persistKeyframeImage } from '../utils/keyframePersistence';
 import { transcribeWithRetry, toAsrLanguage, useAsrSemaphore, isLocalAsrReady, setOnAsrFallback } from '../utils/asrTranscriber';
-import { applySessionReplaces } from '../utils/hotwordRuntime';
+import { applySessionReplaces, getSessionHotwordsString } from '../utils/hotwordRuntime';
 import { cleanAsrResult } from '@/lib/capture/asrFilters';
 
 /** 触发一次增量分析所需的关键帧数 */
@@ -238,12 +238,14 @@ export function useClassroomEvents({
         const slot = asr.acquire();
         if (!slot) return; // 兼容性判空：acquire 实际永不返回 null（丢弃的是最旧等待者）
         slot.then(() => {
+          // 构建热词增强字符串（zipformer 支持空格分隔的热词列表，自动截断防超限）
+          const hotwords = getSessionHotwordsString() || undefined;
           transcribeWithRetry({
             audio_base64: audioData,
             language: toAsrLanguage(language),
             sample_rate: 16000,
             channels: 1,
-          })
+          }, 1, hotwords || undefined)
             .then((text) => {
               asr.markSuccess();
               // 输出清洗：相邻重复压缩 + 幻觉过滤（本地路径主进程已 clean，此处兑底云端降级）
@@ -252,16 +254,18 @@ export function useClassroomEvents({
               // 长课堂数百段否则无界累积——内测 5GB 内存主因）。全量分析回退路径优先用
               // 已转写的 audioText（sessionAnalyzer: seg.audioText ?? transcribe），无需再持有原始音频；
               // 转写失败的段不走此分支，仍保留 audioBase64 供回退补转写。
+              // audioText 存热词替换后文本供下游笔记/问答/闪卡消费；audioTextRaw 存原始清洗后文本保真溯源
+              const replacedText = cleaned ? applySessionReplaces(cleaned) : '';
               setSmartBundle((prev) => ({
                 ...prev,
                 audioSegments: (prev.audioSegments ?? []).map((s) =>
-                  s.id === seg.id ? { ...s, audioText: cleaned, audioBase64: '' } : s,
+                  s.id === seg.id ? { ...s, audioText: replacedText, audioTextRaw: cleaned, audioBase64: '' } : s,
                 ),
               }));
               if (cleaned) {
                 setTranscribedCount((c) => c + 1);
                 // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3 替换词后处理），
-                // 上方 audioSegments.audioText 保留清洗后转写可回溯
+                // 原始清洗后转写经 audioTextRaw 可回溯
                 setLiveTranscripts((prev) => {
                   const next = [...prev, { id: seg.id, text: applySessionReplaces(cleaned), timestamp: seg.timestampStart }];
                   return next.length > MAX_LIVE_TRANSCRIPTS
@@ -302,7 +306,7 @@ export function useClassroomEvents({
       if (!text) return;
       const id = crypto.randomUUID();
       const timestamp = data.timestamp || Date.now();
-      // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3），audioSegments 存清洗后转写
+      // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3）
       setLiveTranscripts((prev) => {
         const next = [...prev, { id, text: applySessionReplaces(text), timestamp }];
         return next.length > MAX_LIVE_TRANSCRIPTS
@@ -310,7 +314,8 @@ export function useClassroomEvents({
           : next;
       });
       setTranscribedCount((c) => c + 1);
-      // 追加到 audioSegments（带 audioText，供课后分析；无需持有原始音频）
+      // 追加到 audioSegments（带替换后 audioText，供课后分析；audioTextRaw 保真溯源）
+      const replacedText = applySessionReplaces(text);
       setSmartBundle((prev) => ({
         ...prev,
         audioSegments: [...(prev.audioSegments ?? []), {
@@ -319,7 +324,8 @@ export function useClassroomEvents({
           timestampEnd: timestamp,
           audioBase64: '',
           energy: 0,
-          audioText: text,
+          audioText: replacedText,
+          audioTextRaw: text,
         }],
       }));
     });
@@ -409,10 +415,25 @@ export function useClassroomEvents({
     return off;
   }, [status, captureManager]);
 
+  // P1-2：转写编辑回调——修正直播转录文本，audioText 存修正后文本供下游消费
+  const handleEditTranscript = useCallback((id: string, newText: string) => {
+    setLiveTranscripts((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, editedText: newText } : t)),
+    );
+    // 同步更新 smartBundle 对应 audioSegment：audioText 存修正后文本，audioTextRaw 保真原始
+    setSmartBundle((prev) => ({
+      ...prev,
+      audioSegments: (prev.audioSegments ?? []).map((s) =>
+        s.id === id ? { ...s, audioText: newText, audioTextRaw: s.audioText } : s,
+      ),
+    }));
+  }, []);
+
   return {
     segments, setSegments, stats, setStats, extractionError, setExtractionError,
     smartBundle, setSmartBundle,
     liveTranscripts, setLiveTranscripts,
+    handleEditTranscript,
     partialText,
     vadStats, recordingStatus, setRecordingStatus,
     videoFilePath, setVideoFilePath,

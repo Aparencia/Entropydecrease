@@ -12,7 +12,7 @@
  * recommended (score>0) by default, with a "show all" toggle exposing every
  * capturable window as the manual-pick fallback.
  */
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type MouseEvent as ReactMouseEvent } from 'react';
 import { Monitor, RefreshCw, Star, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { WindowInfo } from '@/lib/capture';
@@ -71,6 +71,14 @@ export function WindowSelectCard({ windows, selected, onSelect, onRefresh, loadi
     return () => document.removeEventListener('mousedown', handleDocDown);
   }, [open]);
 
+  // 点击浮层内空白/非交互区域：立即关闭浮层。
+  // 浮层打开时会覆盖下方配置区（采集路径/模式等），若点击命中浮层内
+  // 无交互元素，既不会关闭浮层也不会触达下层按钮——形成无反馈死区，
+  // 用户感知为“页面无法点击”。此处让“点空白即关闭”，下层配置恢复可点。
+  const handlePopoverDown = (e: ReactMouseEvent) => {
+    if (!(e.target as HTMLElement).closest('button')) setOpen(false);
+  };
+
   const handleToggle = () => {
     if (disabled) return;
     const next = !open;
@@ -121,7 +129,8 @@ export function WindowSelectCard({ windows, selected, onSelect, onRefresh, loadi
 
       {/* 窗口列表浮层：推荐 + 可展开的全部窗口 */}
       {open && (
-        <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-kb-md border border-border/40 bg-bg-secondary backdrop-blur-xl shadow-kb-md p-2">
+        <div onMouseDown={handlePopoverDown}
+          className="absolute left-0 right-0 top-full mt-1 z-20 rounded-kb-md border border-border/40 bg-bg-secondary backdrop-blur-xl shadow-kb-md p-2">
           <div className="flex items-center justify-between px-1 pb-1.5">
             <span className="text-[11px] text-text-tertiary">推荐窗口</span>
             <button onClick={onRefresh} disabled={loading}

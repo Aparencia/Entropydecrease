@@ -12,7 +12,7 @@ import { useCallback } from 'react';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { analyzePartial } from '@/lib/ai/sessionAnalyzer';
 import { refreshLocalAsrStatus } from '../utils/asrTranscriber';
-import { loadSessionHotwords, clearSessionHotwords } from '../utils/hotwordRuntime';
+import { loadSessionHotwords, clearSessionHotwords, getSessionHotwordsString } from '../utils/hotwordRuntime';
 import { getAudioSourcePreference } from '@/lib/capture/audioSourcePreference';
 import type { AudioSourceKind } from '@/lib/capture/audioSourceStrategy';
 import type {
@@ -153,7 +153,7 @@ export function useSessionControl({
           // 优先进程环回（隔离其他应用杂音），否则用端点环回（不漏采）；
           // 主进程读不到 localStorage，故偏好由渲染进程传入
           const audioResult = await window.electronAPI.invoke('audio_capture_start', {
-            chunkDurationMs: useStreaming ? 400 : 5000, sampleRate: 16000, channels: 1,
+            chunkDurationMs: useStreaming ? 400 : 2000, sampleRate: 16000, channels: 1,
             sourceId: selectedWindow.id,
             preference: getAudioSourcePreference(),
           }) as IPCAudioStartResult;
@@ -165,13 +165,14 @@ export function useSessionControl({
               `（${audioResult.sourceReason ?? '-'}）`,
             );
             onAudioSourceResolved?.(audioResult.sourceKind ?? null);
-            // 音频采集启动成功且流式可用 → 启动真流式 ASR
+            // 音频采集启动成功且流式可用 → 启动真流式 ASR（透传热词增强）
             if (useStreaming) {
               try {
-                const streamResult = await window.electronAPI.invoke('local_asr_stream_start', { sampleRate: 16000 }) as { success?: boolean; error?: string };
+                const hotwords = getSessionHotwordsString() || undefined;
+                const streamResult = await window.electronAPI.invoke('local_asr_stream_start', { sampleRate: 16000, hotwords }) as { success?: boolean; error?: string };
                 if (streamResult?.success) {
                   setStreamingAsrActive(true);
-                  console.info('[useClassroomCapture] 真流式 ASR 已启动（Paraformer）');
+                  console.info('[useClassroomCapture] 真流式 ASR 已启动（Zipformer）');
                 } else {
                   console.warn('[useClassroomCapture] 真流式 ASR 启动失败，回退按段转写:', streamResult?.error);
                 }
