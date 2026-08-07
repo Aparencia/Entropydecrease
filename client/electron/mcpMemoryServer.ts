@@ -226,7 +226,7 @@ async function main(): Promise<void> {
     // HTTP SSE 模式：通过 HTTP 服务器暴露 MCP 端点，供外部 MCP 客户端连接
     const http = await import('http');
     const { SSEServerTransport } = await import('@modelcontextprotocol/sdk/server/sse.js');
-    let transport: SSEServerTransport | null = null;
+    let transport: InstanceType<typeof SSEServerTransport> | null = null;
 
     const httpServer = http.default.createServer(async (req, res) => {
       if (req.method === 'GET' && req.url === '/sse') {
