@@ -10,7 +10,7 @@ import { ContextMenu } from '@/components/ui/ContextMenu';
 import type { ContextMenuGroup } from '@/components/ui/ContextMenu';
 import { VirtualList } from '@/components/ui/VirtualList';
 import {
-  Search, Plus, FolderPlus, FileText, PanelLeftClose, PanelLeft, Pin,
+  Search, Plus, FolderPlus, FileText, PanelLeftClose, PanelLeft, PanelRightClose, Pin,
   MoreVertical, Trash2, Copy, Download, BookOpen, Sparkles, ListTodo, Share2, Upload, ClipboardCheck,
   Layers, CheckSquare, Square, FoldVertical,
 } from 'lucide-react';
@@ -33,11 +33,12 @@ import { useAISummarize, useAIFlashcards } from '@/lib/ai/useAI';
 import { useAIPodcast } from '@/lib/ai/hooks/useAIPodcast';
 import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
-import { markdownToNoteContent } from '../lib/markdown/noteMarkdown';
+import { markdownToNoteContent, noteToMarkdown } from '../lib/markdown/noteMarkdown';
 import { collectFolderTreeIds } from '../lib/folderTree';
 import { extractNoteText } from '../lib/extractNoteText';
 import PodcastPlayer from '@/features/assistant/components/PodcastPlayer';
 import OrigamiView, { type FoldType } from '@/components/OrigamiView';
+import { Input } from '@/components/ui/Input';
 
 const templateLabels: Record<NoteTemplate | 'qa' | 'video' | 'todo', string> = {
   outline: '大纲式', cornell: '康奈尔', mindmap: '思维导图', free: '自由笔记', blank: '空白', qa: '问答', video: '视频笔记', todo: '待办',
@@ -48,9 +49,21 @@ function formatDate(date: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** 列表预览用：截断至 120 字符（使用 extractNoteText 提取纯文本） */
+/** 列表预览用：截断至 120 字符（使用 extractNoteText 提取纯文本）；有搜索词时返回匹配上下文片段 */
 function stripHtml(html: string): string {
   return extractNoteText(html).slice(0, 120);
+}
+
+/** 知识半衰期标记：返回剩余天数（负数=已过期）及色值 */
+function expiryBadge(expiresAt: Date | undefined): { days: number; label: string; color: string } | null {
+  if (!expiresAt) return null;
+  const now = Date.now();
+  const diff = new Date(expiresAt).getTime() - now;
+  const days = Math.round(diff / 86400000);
+  if (days <= 0) return { days, label: '已过期', color: 'text-semantic-error' };
+  if (days <= 7) return { days, label: `${days} 天后过期`, color: 'text-semantic-warning' };
+  if (days <= 30) return { days, label: `${days} 天后过期`, color: 'text-text-tertiary' };
+  return null; // 超过 30 天不显示
 }
 
 /* ── 动画 variants ── */
@@ -123,7 +136,12 @@ function colorForType(template: string): string {
 }
 
 export default function NotesPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // 侧栏三态（左右互斥二选一，可全隐藏）：'left'=文件夹栏 / 'right'=预览栏 / 'none'=中栏全宽
+  const [sideMode, setSideMode] = useState<'left' | 'right' | 'none'>('left');
+  // 循环切换：左栏 → 预览栏 → 无侧栏 → 左栏
+  const cycleSideMode = useCallback(() => {
+    setSideMode((m) => (m === 'left' ? 'right' : m === 'right' ? 'none' : 'left'));
+  }, []);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -136,7 +154,7 @@ export default function NotesPage() {
     notes, folders, selectedFolderId, selectedNoteId, searchQuery, selectedTags, selectedTemplate,
     loadNotes, loadFolders, createNote, createFolder, updateFolder, selectNote, selectFolder,
     setSearchQuery, getFilteredNotes, createFromTemplate, toggleTag, toggleTemplate, clearTagFilter, getAllTags,
-    deleteNote, deleteNotesBatch, deleteFolder, deleteFolderWithNotes, togglePin,
+    deleteNote, deleteNotesBatch, deleteFolder, deleteFolderWithNotes, togglePin, setExpiry,
   } = useNoteStore(useShallow(s => s));
 
   const { toast } = useToast();
@@ -268,28 +286,60 @@ export default function NotesPage() {
     toast({ type: 'success', message: '笔记已复制' });
   }, [createNote, toast]);
   const handleExportNote = useCallback((note: Note) => {
-    let text = note.title + '\n\n';
-    try {
-      const json = JSON.parse(note.content);
-      if (json?.content) {
-        const extract = (nodes: unknown[]): string => {
-          let t = '';
-          for (const node of nodes) {
-            const n = node as { text?: string; content?: unknown[]; type?: string };
-            if (n.text) t += n.text;
-            if (n.content) t += extract(n.content);
-            if (n.type === 'paragraph' || n.type === 'heading') t += '\n';
-          }
-          return t;
-        };
-        text += extract(json.content);
-      }
-    } catch { text += note.content; }
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
-    const a = document.createElement('a'); a.href = url; a.download = `${note.title || 'note'}-${Date.now()}.txt`; a.click();
+    // 使用 noteToMarkdown 将 TipTap JSON 转为 Markdown（保留标题层级、列表、代码块等格式）
+    const md = noteToMarkdown(note.content);
+    const text = `# ${note.title}\n\n${md}`;
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = `${note.title || 'note'}-${Date.now()}.md`; a.click();
     URL.revokeObjectURL(url);
-    toast({ type: 'success', message: '笔记已导出' });
+    toast({ type: 'success', message: '笔记已导出为 Markdown' });
   }, [toast]);
+
+  // ---- 剪藏（网页/PDF 导入笔记） ----
+  const [clipUrl, setClipUrl] = useState('');
+  const [clipOpen, setClipOpen] = useState(false);
+  const [clipLoading, setClipLoading] = useState(false);
+  const clipInputRef = useRef<HTMLInputElement>(null);
+
+  const handleClipUrl = useCallback(async () => {
+    if (!clipUrl.trim() || !window.electronAPI?.invoke) return;
+    setClipLoading(true);
+    try {
+      const result = await window.electronAPI.invoke('import:fetch-url', { url: clipUrl.trim() }) as { success: boolean; content?: { title: string; text: string }; error?: string };
+      if (result.success && result.content) {
+        const { title, text } = result.content;
+        await createNote({ title: title.slice(0, 100), content: text, template: 'blank', folderId: selectedFolderId ?? undefined });
+        toast({ type: 'success', message: `网页已剪藏为笔记：${title.slice(0, 30)}`, silent: true });
+        setClipUrl('');
+      } else {
+        toast({ type: 'warning', message: result.error || '剪藏失败，请手动粘贴内容' });
+      }
+    } catch {
+      toast({ type: 'error', message: '剪藏失败，请检查网络或手动粘贴' });
+    } finally {
+      setClipLoading(false);
+    }
+  }, [clipUrl, createNote, selectedFolderId, toast]);
+
+  const handleClipPdf = useCallback(async () => {
+    if (!window.electronAPI?.invoke) return;
+    setClipLoading(true);
+    try {
+      const result = await window.electronAPI.invoke('import:parse-pdf') as { success: boolean; content?: { title: string; text: string }; canceled?: boolean; error?: string };
+      if (result.canceled) { setClipLoading(false); return; }
+      if (result.success && result.content) {
+        const { title, text } = result.content;
+        await createNote({ title: title.slice(0, 100), content: text, template: 'blank', folderId: selectedFolderId ?? undefined });
+        toast({ type: 'success', message: `PDF 已导入为笔记：${title.slice(0, 30)}`, silent: true });
+      } else {
+        toast({ type: 'warning', message: result.error || 'PDF 导入失败' });
+      }
+    } catch {
+      toast({ type: 'error', message: 'PDF 导入失败' });
+    } finally {
+      setClipLoading(false);
+    }
+  }, [createNote, selectedFolderId, toast]);
 
   const ctxMenuGroups = useMemo<ContextMenuGroup[]>(() => [
     { label: '笔记操作', items: [
@@ -297,6 +347,7 @@ export default function NotesPage() {
       { key: 'pin', label: '置顶/取消置顶', icon: <Pin className="w-4 h-4" strokeWidth={1.5} /> },
       { key: 'duplicate', label: '复制', icon: <Copy className="w-4 h-4" strokeWidth={1.5} /> },
       { key: 'export', label: '导出', icon: <Download className="w-4 h-4" strokeWidth={1.5} /> },
+      { key: 'expiry', label: '设置保质期', icon: <span className="w-4 h-4 flex items-center justify-center text-xs">⏳</span> },
     ]},
     { label: 'AI 操作', items: [
       { key: 'ai-summary', label: '生成摘要', icon: <Sparkles className="w-4 h-4" strokeWidth={1.5} /> },
@@ -316,6 +367,16 @@ export default function NotesPage() {
       case 'duplicate': handleDuplicateNote(noteCtx); break;
       case 'export': handleExportNote(noteCtx); break;
       case 'delete': handleDeleteNote(noteCtx.id!); break;
+            case 'expiry': {
+              const days = prompt('设置知识保质期（天）：\n输入天数，例如 30 表示 30 天后过期；留空或输入 0 可清除已设保质期。', '30');
+              if (days === null) break;
+              const n = parseInt(days, 10);
+              if (isNaN(n) || n < 0) { toast({ type: 'warning', message: '请输入有效天数' }); break; }
+              const expiresAt = n > 0 ? new Date(Date.now() + n * 86400000) : null;
+              await setExpiry(noteCtx.id!, expiresAt);
+              toast({ type: 'success', message: expiresAt ? `保质期已设为 ${n} 天` : '已清除保质期', silent: true });
+              break;
+            }
       case 'ai-summary': {
         const text = extractNoteText(noteCtx.content);
         if (text.length < 10) { toast({ type: 'warning', message: '笔记内容太少，无法生成摘要' }); break; }
@@ -351,12 +412,17 @@ export default function NotesPage() {
   }, [handleSelectNote, handleTogglePin, handleDuplicateNote, handleExportNote, handleDeleteNote, toast, summarize, aiGenerateCardsStream, generatePodcast, handleSummarizeError, handleFlashcardError]);
 
   return (
-    <div className="flex h-full overflow-x-auto overflow-y-hidden">
-      {/* ── 左栏：文件夹 ── */}
-      {/* 侧边栏折叠/展开：mode="wait" 确保旧侧边栏完全收起后再展开新内容，避免动画残帧 */}
+    /* 高度由 AppLayout 路由过渡容器（grid）显式锚定继承，与面板内容区精确一致：
+     * 面板为 height:auto + max-h 容器，h-full 链曾退化为内容自然高（页面随笔记数量伸缩），
+     * Notes 面板 !p-0 去内边距后，锚定公式收敛到布局层 grid（h-[calc(85vh-2px)] 等两档），页面层回归 h-full。
+     * overflow-hidden：左右栏三态互斥后最多两栏（中栏 + 单侧栏），总宽可控，无横向滚动条 */
+    <div className="flex h-full overflow-hidden">
+      {/* ── 左栏：文件夹（三态互斥：sideMode==='left' 显示，预览栏隐藏） ── */}
+      {/* mode="wait" 确保旧侧栏完全收起后再展开新内容，避免动画残帧 */}
       <AnimatePresence mode="wait">
-        {sidebarOpen && (
+        {sideMode === 'left' && (
           <motion.aside
+            key="folder-sidebar"
             initial={{ width: 0, opacity: 0 }}
             animate={{ width: 200, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
@@ -476,13 +542,14 @@ export default function NotesPage() {
         <div className="sticky top-0 z-20 flex flex-col gap-2 px-4 py-3 border-b border-border/30 flex-shrink-0 backdrop-blur-md bg-bg-primary/80">
           <div className="flex items-center gap-2">
             {/* 侧边栏收展按钮，带 tooltip */}
-            <Tip text={sidebarOpen ? '收起侧边栏' : '展开侧边栏'}>
+            {/* 三态侧栏切换：文件夹栏 → 预览栏 → 无侧栏 → 文件夹栏（左右互斥二选一） */}
+            <Tip text={sideMode === 'left' ? '切换到预览栏' : sideMode === 'right' ? '隐藏预览栏' : '显示文件夹栏'}>
             <motion.button
               whileTap={{ scale: 0.9 }}
-              onClick={() => setSidebarOpen((v) => !v)}
+              onClick={cycleSideMode}
               className="hidden md:flex p-1.5 rounded-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/40 transition-all duration-200"
             >
-              {sidebarOpen ? <PanelLeftClose className="w-5 h-5" strokeWidth={1.5} /> : <PanelLeft className="w-5 h-5" strokeWidth={1.5} />}
+              {sideMode === 'left' ? <PanelLeftClose className="w-5 h-5" strokeWidth={1.5} /> : sideMode === 'right' ? <PanelRightClose className="w-5 h-5" strokeWidth={1.5} /> : <PanelLeft className="w-5 h-5" strokeWidth={1.5} />}
             </motion.button>
             </Tip>
             {/* 结礁仪式标识（compact）：三栏布局下的模块归属 */}
@@ -514,6 +581,18 @@ export default function NotesPage() {
               className="p-2 rounded-full text-text-tertiary hover:text-brand-600 hover:bg-brand-50 transition-all duration-200"
             >
               <Upload className="w-4 h-4" strokeWidth={1.5} />
+            </motion.button>
+            </Tip>
+            {/* 剪藏按钮：导入网页或 PDF 为笔记 */}
+            <Tip text={clipLoading ? '剪藏中…' : '剪藏'}>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setClipOpen(true)}
+              disabled={clipLoading}
+              className="p-2 rounded-full text-text-tertiary hover:text-brand-600 hover:bg-brand-50 transition-all duration-200 disabled:opacity-40 relative"
+            >
+              <span className="w-4 h-4 flex items-center justify-center text-xs font-bold">{clipLoading ? '…' : '+'}</span>
             </motion.button>
             </Tip>
             {/* 迷你测试按钮（N1）：选定多篇笔记生成课程级小测试 */}
@@ -566,6 +645,13 @@ export default function NotesPage() {
               accept=".md,text/markdown"
               className="hidden"
               onChange={handleImportMarkdown}
+            />
+            <input
+              ref={clipInputRef}
+              type="file"
+              accept=".pdf"
+              className="hidden"
+              onChange={handleClipPdf}
             />
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
               <Button size="sm" icon={<Plus className="w-4 h-4" strokeWidth={2} />} onClick={() => setTemplateOpen(true)}>
@@ -706,6 +792,7 @@ export default function NotesPage() {
                       <div className="flex items-center gap-2">
                         {note.pinned && <Pin className="w-3.5 h-3.5 text-accent-400 flex-shrink-0" strokeWidth={1.5} />}
                         {note.template === 'todo' && <ListTodo className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" strokeWidth={1.5} />}
+                        {note.mood && <span className="text-sm flex-shrink-0">{note.mood}</span>}
                         <h3 className="text-[14px] font-medium text-text-primary truncate">{note.title}</h3>
                       </div>
                       <p className="text-[13px] text-text-secondary mt-1 line-clamp-2 leading-relaxed">{stripHtml(note.content)}</p>
@@ -713,6 +800,7 @@ export default function NotesPage() {
                         <Tag color="note" onClick={(e) => { e.stopPropagation(); toggleTemplate(note.template); }} active={selectedTemplate === note.template}>{templateLabels[note.template as NoteTemplate]}</Tag>
                         {note.tags.map((tag) => (<Tag key={tag} color="default" onClick={(e) => { e.stopPropagation(); toggleTag(tag); }} active={selectedTags.includes(tag)}>{tag}</Tag>))}
                         <span className="text-[11px] text-text-tertiary ml-auto font-mono tabular-nums">{formatDate(note.updatedAt)}</span>
+                                                {(() => { const eb = expiryBadge(note.expiresAt); return eb ? <span className={`text-[10px] font-mono ${eb.color}`}>{eb.label}</span> : null; })()}
                       </div>
                     </div>
                   </div>
@@ -798,6 +886,7 @@ export default function NotesPage() {
                             <Tag key={tag} color="default" onClick={(e) => { e.stopPropagation(); toggleTag(tag); }} active={selectedTags.includes(tag)}>{tag}</Tag>
                           ))}
                           <span className="text-[11px] text-text-tertiary ml-auto font-mono tabular-nums">{formatDate(note.updatedAt)}</span>
+                                                  {(() => { const eb = expiryBadge(note.expiresAt); return eb ? <span className={`text-[10px] font-mono ${eb.color}`}>{eb.label}</span> : null; })()}
                         </div>
                       </div>
                       {/* 笔记操作菜单触发按钮，带 tooltip（批量模式下隐藏） */}
@@ -857,8 +946,18 @@ export default function NotesPage() {
         </Modal>
       </main>
 
-      {/* ── 右栏：预览 ── */}
-      <aside className="relative z-[5] hidden lg:flex flex-col w-80 flex-shrink-0 border-l border-border/30 bg-bg-primary/40 backdrop-blur-xl overflow-y-auto" style={{ filter: 'saturate(0.9) brightness(0.98)' }}>
+      {/* ── 右栏：预览（三态互斥：sideMode==='right' 显示，文件夹栏隐藏） ── */}
+      <AnimatePresence mode="wait">
+        {sideMode === 'right' && (
+          <motion.aside
+            key="preview-sidebar"
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 320, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+            className="relative z-[5] hidden lg:flex flex-col w-80 flex-shrink-0 border-l border-border/30 bg-bg-primary/40 backdrop-blur-xl overflow-y-auto"
+            style={{ filter: 'saturate(0.9) brightness(0.98)' }}
+          >
         <AnimatePresence mode="wait">
           {selectedNote ? (
             <motion.div
@@ -908,8 +1007,10 @@ export default function NotesPage() {
             />
           </motion.div>
         )}
-        </AnimatePresence>
-      </aside>
+          </AnimatePresence>
+          </motion.aside>
+        )}
+      </AnimatePresence>
 
       {/* 移动端浮动新建笔记按钮，带 tooltip */}
       <Tip text="新建笔记" side="left">
@@ -926,6 +1027,47 @@ export default function NotesPage() {
       <TemplateSelector open={templateOpen} onClose={() => setTemplateOpen(false)} onSelect={handleTemplateSelect} />
 
       <MiniQuizDialog open={quizOpen} onClose={() => setQuizOpen(false)} notes={filteredNotes} />
+      
+            {/* 剪藏弹窗：URL 网页剪藏 + PDF 导入 */}
+            <Modal
+              open={clipOpen}
+              onClose={() => setClipOpen(false)}
+              title="剪藏"
+              description="将网页内容或 PDF 文件导入为笔记"
+              size="sm"
+            >
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <label className="text-c1 text-text-tertiary">网页 URL</label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="输入网页链接…"
+                      value={clipUrl}
+                      onChange={(e) => setClipUrl(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleClipUrl(); }}
+                      className="flex-1"
+                    />
+                    <Button size="sm" onClick={handleClipUrl} disabled={clipLoading || !clipUrl.trim()}>
+                      {clipLoading ? '剪藏中…' : '剪藏'}
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="flex-1 h-px bg-border/30" />
+                  <span className="text-c1 text-text-tertiary">或</span>
+                  <span className="flex-1 h-px bg-border/30" />
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => { handleClipPdf(); setClipOpen(false); }}
+                  disabled={clipLoading}
+                  className="w-full"
+                >
+                  选择 PDF 文件导入
+                </Button>
+              </div>
+            </Modal>
 
       <Modal
         open={!!deleteTargetId}

@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS notes (
   template TEXT NOT NULL DEFAULT 'free' CHECK (template IN ('outline','cornell','mindmap','free','qa','blank','video')),
   folder_id TEXT, tags TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
   word_count INTEGER NOT NULL DEFAULT 0, pinned INTEGER NOT NULL DEFAULT 0, video_note_type TEXT,
-  source_ref TEXT,
+  source_ref TEXT, expires_at TEXT, mood TEXT,
   FOREIGN KEY (folder_id) REFERENCES note_folders(id) ON DELETE SET NULL
 );
 CREATE TABLE IF NOT EXISTS note_folders (

@@ -21,9 +21,13 @@ const LEVEL_STYLE = {
 interface NoteHealthIndicatorProps {
   /** 笔记文本内容（markdown 或纯文本） */
   content: string;
+  /** 笔记标题（用于关键词覆盖率评估） */
+  title?: string;
+  /** 笔记标签（用于关键词覆盖率评估） */
+  tags?: string[];
 }
 
-export function NoteHealthIndicator({ content }: NoteHealthIndicatorProps) {
+export function NoteHealthIndicator({ content, title, tags }: NoteHealthIndicatorProps) {
   const [debounced, setDebounced] = useState(content);
 
   useEffect(() => {
@@ -32,8 +36,8 @@ export function NoteHealthIndicator({ content }: NoteHealthIndicatorProps) {
   }, [content]);
 
   const health: NoteHealthResult | null = useMemo(
-    () => assessNoteHealth(debounced),
-    [debounced],
+    () => assessNoteHealth(debounced, title, tags),
+    [debounced, title, tags],
   );
 
   if (!health) return null;
@@ -64,9 +68,31 @@ export function NoteHealthIndicator({ content }: NoteHealthIndicatorProps) {
           'group-hover/health:opacity-100 group-hover/health:scale-100',
         )}
       >
-        <p className="font-medium mb-1">
-          健康度 {health.score}（结构 {health.structure} · 生成 {health.generative} · 覆盖 {health.coverage}）
-        </p>
+        <p className="font-medium mb-1.5">健康度 {health.score}</p>
+        <div className="space-y-1 mb-1.5">
+          {[
+            { label: '结构', value: health.structure },
+            { label: '生成', value: health.generative },
+            { label: '覆盖', value: health.coverage },
+            { label: '关键词', value: health.keywordCoverage },
+            { label: '可读性', value: health.readability },
+            { label: '概念密度', value: health.conceptDensity },
+          ].map(({ label, value }) => (
+            <div key={label} className="flex items-center gap-1.5">
+              <span className="w-8 text-right text-[10px] text-white/60">{label}</span>
+              <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{
+                    width: `${value}%`,
+                    background: value >= 70 ? 'rgb(16,185,129)' : value >= 40 ? 'rgb(251,191,36)' : 'rgb(239,68,68)',
+                  }}
+                />
+              </div>
+              <span className="w-5 text-right text-[10px] font-mono text-white/80">{value}</span>
+            </div>
+          ))}
+        </div>
         {health.suggestions.map((s) => (
           <p key={s} className="text-white/80">· {s}</p>
         ))}

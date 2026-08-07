@@ -12,6 +12,12 @@ export interface NoteHealthResult {
   structure: number;
   generative: number;
   coverage: number;
+  /** 关键词覆盖率（标题/标签关键词在正文中的出现密度） */
+  keywordCoverage: number;
+  /** 可读性（段落长度、句子复杂度） */
+  readability: number;
+  /** 概念密度（关键概念数与总字数比） */
+  conceptDensity: number;
   /** 改进建议（正向语言） */
   suggestions: string[];
 }
@@ -89,17 +95,75 @@ function scoreCoverage(text: string): { score: number; tip: string | null } {
   };
 }
 
+/** 关键词覆盖率：标题/标签关键词在正文中的出现密度 */
+function scoreKeywordCoverage(text: string, title: string, tags: string[]): { score: number; tip: string | null } {
+  const keywords = [
+    ...title.split(/[\s,，、/\\\-_]+/).filter(Boolean),
+    ...tags.flatMap((t) => t.split(/[\s,，、/\\\-_]+/).filter(Boolean)),
+  ];
+  const uniqueKeywords = [...new Set(keywords.map((k) => k.toLowerCase()))];
+  if (uniqueKeywords.length === 0) return { score: 100, tip: null };
+  const textLower = text.toLowerCase();
+  const hits = uniqueKeywords.filter((k) => textLower.includes(k)).length;
+  const ratio = hits / uniqueKeywords.length;
+  const score = Math.round(ratio * 100);
+  return {
+    score,
+    tip: ratio < 0.5 ? '标题中的关键词在正文中较少出现，试着围绕主题展开论述。' : null,
+  };
+}
+
+/** 可读性：段落长度、句子复杂度 */
+function scoreReadability(text: string): { score: number; tip: string | null } {
+  const paragraphs = text.split('\n').map((p) => p.trim()).filter((p) => p.length > 0);
+  if (paragraphs.length === 0) return { score: 100, tip: null };
+  const avgLen = paragraphs.reduce((s, p) => s + p.length, 0) / paragraphs.length;
+  // 平均段落长度 40-120 字为最佳，过长或过短都扣分
+  const idealLow = 40, idealHigh = 120;
+  let score = 100;
+  if (avgLen < idealLow) score -= Math.round((idealLow - avgLen) / idealLow * 30);
+  if (avgLen > idealHigh) score -= Math.round((avgLen - idealHigh) / idealHigh * 40);
+  // 超长段落（>300 字）过多扣分
+  const longCount = paragraphs.filter((p) => p.length > 300).length;
+  score -= Math.min(longCount * 10, 30);
+  score = Math.max(0, Math.min(100, score));
+  return {
+    score,
+    tip: avgLen > idealHigh ? '段落偏长，拆分成小段更容易阅读回顾。' : avgLen < idealLow ? '内容比较零散，试着把短句组合成完整的段落。' : null,
+  };
+}
+
+/** 概念密度：中文字数 vs 总字符数占比（衡量实质内容充实度） */
+function scoreConceptDensity(text: string): { score: number; tip: string | null } {
+  const total = text.length;
+  if (total === 0) return { score: 0, tip: null };
+  const chinese = (text.match(/[\u4e00-\u9fff]/g) || []).length;
+  const ratio = chinese / total;
+  // 中文字符占比 0.5-0.8 为正常，低则说明过多符号/数字/空格
+  let score = 100;
+  if (ratio < 0.5) score -= Math.round((0.5 - ratio) / 0.3 * 40);
+  if (ratio > 0.85) score -= 10; // 过密，缺少标点分段
+  score = Math.max(0, Math.min(100, score));
+  return {
+    score,
+    tip: ratio < 0.5 ? '符号和空格较多，适当增加文字内容会让笔记更充实。' : null,
+  };
+}
+
 /**
  * 计算笔记健康度
  * @ai-context: 输入 markdown 或纯文本；短内容（<30 字）返回 null 表示不评估
  */
-export function assessNoteHealth(text: string): NoteHealthResult | null {
+export function assessNoteHealth(text: string, title?: string, tags?: string[]): NoteHealthResult | null {
   const trimmed = text.trim();
   if (trimmed.length < 30) return null;
 
   const structure = scoreStructure(trimmed);
   const generative = scoreGenerative(trimmed);
   const coverage = scoreCoverage(trimmed);
+  const keyword = scoreKeywordCoverage(trimmed, title || '', tags || []);
+  const readability = scoreReadability(trimmed);
+  const conceptDensity = scoreConceptDensity(trimmed);
 
   const score = Math.round(
     structure.score * WEIGHTS.structure
@@ -107,8 +171,12 @@ export function assessNoteHealth(text: string): NoteHealthResult | null {
     + coverage.score * WEIGHTS.coverage,
   );
 
-  const suggestions = [structure.tip, generative.tip, coverage.tip].filter(Boolean) as string[];
-  return { score, structure: structure.score, generative: generative.score, coverage: coverage.score, suggestions };
+  const suggestions = [structure.tip, generative.tip, coverage.tip, keyword.tip, readability.tip, conceptDensity.tip].filter(Boolean) as string[];
+  return {
+    score, structure: structure.score, generative: generative.score, coverage: coverage.score,
+    keywordCoverage: keyword.score, readability: readability.score, conceptDensity: conceptDensity.score,
+    suggestions,
+  };
 }
 
 /** 健康度分级（用于 UI 着色） */

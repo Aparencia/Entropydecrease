@@ -6,8 +6,10 @@
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Pause, Headphones, Volume2, Mic, User } from 'lucide-react';
+import { Play, Pause, Headphones, Volume2, Mic, User, Share2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/components/ui';
+import { copyText } from '@/lib/utils/clipboard';
 import { ttsController } from '@/features/assistant/lib/ttsController';
 import type { PodcastData, SpeakerRole } from '@/lib/ai/types';
 
@@ -25,6 +27,7 @@ const SPEAKER_META: Record<SpeakerRole, { label: string; icon: typeof Mic; color
 export default function PodcastPlayer({ podcast, className, onClose }: PodcastPlayerProps) {
   const [playing, setPlaying] = useState(false);
   const [currentSegment, setCurrentSegment] = useState<number | null>(null);
+  const { toast } = useToast();
   // H2: 轮询句柄与播放序号——切换片段时先清旧 interval，卸载时清理，
   // 防止旧 interval 的 stale closure 覆盖用户新选中的片段
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -120,6 +123,17 @@ export default function PodcastPlayer({ podcast, className, onClose }: PodcastPl
               <span className="text-text-tertiary text-[16px]">&times;</span>
             </button>
           )}
+          <button
+            onClick={async () => {
+              const text = `🎙 AI 播客：${podcast.title}\n\n${podcast.segments.map((s) => `[${s.speaker}] ${s.text}`).slice(0, 5).join('\n')}\n\n—— 来自熵减 AI 学习助手`;
+              await copyText(text);
+              toast({ type: 'success', message: '播客内容已复制，可分享给好友', silent: true });
+            }}
+            className="p-1 rounded-lg hover:bg-bg-tertiary/30 transition-colors"
+            aria-label="分享播客"
+          >
+            <Share2 className="w-4 h-4 text-text-tertiary" strokeWidth={1.5} />
+          </button>
         </div>
       </div>
 

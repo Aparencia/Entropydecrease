@@ -20,6 +20,10 @@ export interface Note {
   videoNoteType?: string;        // 视频笔记类型标识（lecture/tutorial/etc）
   /** 来源溯源（知识入籍：文件名/URL/粘贴来源，v8 迁移新增） / Settling source reference */
   sourceRef?: string;
+  /** 知识半衰期：过期时间（可选，到期后笔记标记为"过时"） / Expiration date for knowledge decay */
+  expiresAt?: Date;
+  /** 情绪锚点：学习时的情绪标记（emoji 枚举） / Mood anchor for learning emotion */
+  mood?: string;
 }
 
 /** 笔记双向链接记录（阶段二：由笔记内容中 wiki-link 提及推导的出链） */

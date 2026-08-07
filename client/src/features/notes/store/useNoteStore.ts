@@ -80,6 +80,10 @@ interface NoteState {
   createFromTemplate: (template: Note['template'], folderId?: string) => Promise<string>;
   /** v0.11.0: 创建待办笔记（从灵感分拣桥接） */
   createTodoNote: (todo: Omit<TodoItem, 'id'>, subject?: string) => Promise<string>;
+  /** 知识半衰期：设置笔记过期时间 */
+  setExpiry: (id: string, expiresAt: Date | null) => Promise<void>;
+  /** 情绪锚点：设置学习情绪标记 */
+  setMood: (id: string, mood: string | null) => Promise<void>;
 
   // 计算属性
   getFilteredNotes: () => Note[];
@@ -449,6 +453,20 @@ export const useNoteStore = create<NoteState>((set, get) => {
       return get().createNote({ title, content, template: 'todo', folderId });
     },
 
+    setExpiry: async (id, expiresAt) => {
+      await updateWithLog(noteStore, 'notes', id, { expiresAt: expiresAt ?? undefined });
+      set((s) => ({
+        notes: sortNotes(s.notes.map((n) => (n.id === id ? { ...n, expiresAt: expiresAt ?? undefined } : n))),
+      }));
+    },
+
+    setMood: async (id, mood) => {
+      await updateWithLog(noteStore, 'notes', id, { mood: mood ?? undefined });
+      set((s) => ({
+        notes: sortNotes(s.notes.map((n) => (n.id === id ? { ...n, mood: mood ?? undefined } : n))),
+      }));
+    },
+
     getFilteredNotes: () => {
       const { notes, selectedFolderId, searchQuery, selectedTags, selectedTemplate } = get();
       let filtered = notes;
@@ -459,11 +477,12 @@ export const useNoteStore = create<NoteState>((set, get) => {
 
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
-        filtered = filtered.filter(
-          (n) =>
-            n.title.toLowerCase().includes(query) ||
-            (n.content && extractNoteText(n.content).toLowerCase().includes(query)),
-        );
+        filtered = filtered.filter((n) => {
+          const titleMatch = n.title.toLowerCase().includes(query);
+          const contentMatch = n.content && extractNoteText(n.content).toLowerCase().includes(query);
+          const tagMatch = n.tags.some((tag) => tag.toLowerCase().includes(query));
+          return titleMatch || contentMatch || tagMatch;
+        });
       }
 
       if (selectedTags.length > 0) {

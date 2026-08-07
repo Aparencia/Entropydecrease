@@ -12,6 +12,8 @@ import { EditorContent } from '@tiptap/react';
 import { useNoteStore } from '../store/useNoteStore';
 import { CornellLayout } from '../components/CornellLayout';
 import FreeCanvas from '../components/FreeCanvas';
+import { WikiLinkPreview } from '../components/WikiLinkPreview';
+import { PredictionPrompt } from '../components/PredictionPrompt';
 import { MindmapEditor } from '../components/mindmap/MindmapEditor';
 import { BacklinksPanel } from '../components/BacklinksPanel';
 import { noteToMarkdown } from '../lib/markdown/noteMarkdown';
@@ -41,7 +43,7 @@ import { useConceptConflict } from '../hooks/useConceptConflict';
 import { Tip } from '@/components/ui/Tip';
 import { Button, useToast } from '@/components/ui';
 import { Modal } from '@/components/ui/Modal';
-import { EyeOff, Layers, Volume2, ScanText, BarChart3, BookMarked, BookOpen } from 'lucide-react';
+import { EyeOff, Layers, Volume2, ScanText, BarChart3, BookMarked, BookOpen, Download } from 'lucide-react';
 import { SoundAnchorPicker } from '@/features/soundanchor/components/SoundAnchorPicker';
 import { cn } from '@/lib/utils';
 import { aiPluginLoader } from '@/lib/ai/AIPluginLoader';
@@ -80,6 +82,7 @@ export default function NoteEditPage() {
   const note = notes.find((n) => n.id === noteId) || null;
 
   const titleRef = useRef<HTMLInputElement>(null);
+  const editorWrapperRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   // P4 截图视觉提取：独立文件入口（不干扰原生图片插入流程）
   const visionInputRef = useRef<HTMLInputElement>(null);
@@ -513,7 +516,7 @@ export default function NoteEditPage() {
 
       {/* 工具栏（康奈尔/自由画布/思维导图模式隐藏） */}
       {!isCornell && !isFree && !isMindmap && (
-        <EditorToolbar editor={editor} onPickImage={() => imageInputRef.current?.click()} healthContent={healthText} onToggleClosedBook={handleOpenClosedBook} />
+        <EditorToolbar editor={editor} onPickImage={() => imageInputRef.current?.click()} healthContent={healthText} healthTitle={note?.title} healthTags={note?.tags} onToggleClosedBook={handleOpenClosedBook} />
       )}
 
       {/* P4 AI 提取图片文字 / 信息图 / 滚书背诵 / 阅读模式 入口（独立于图片插入流程） */}
@@ -616,11 +619,15 @@ export default function NoteEditPage() {
                     <TodoStats editor={editor} />
                   </div>
                 )}
-                <EditorContent editor={editor} />
+                <div ref={editorWrapperRef}>
+                                <PredictionPrompt noteTitle={note?.title || ''} noteContent={note?.content || ''} noteId={noteId || ''} onDismiss={() => {}} />
+                                <EditorContent editor={editor} />
+                              </div>
                 {/* 非待办笔记模板时在底部显示统计 */}
                 {note.template !== 'todo' && <TodoStats editor={editor} />}
                 {/* 阶段二：反向链接面板（无引用时不显示） */}
                 <BacklinksPanel noteId={note.id} />
+                <WikiLinkPreview editorContainerRef={editorWrapperRef} />
               </>
             )}
           </div>
@@ -756,6 +763,26 @@ export default function NoteEditPage() {
           {isFallback && (
             <p className="mt-3 text-c1 text-text-tertiary">AI 信息图服务暂不可用，已展示默认信息图。</p>
           )}
+          <div className="flex justify-end mt-3">
+            <button
+              onClick={() => {
+                const svg = document.querySelector('.infographic-renderer svg');
+                if (!svg) return;
+                const svgData = new XMLSerializer().serializeToString(svg);
+                const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `infographic-${Date.now()}.svg`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-kb-md text-c1 font-medium text-text-secondary hover:text-text-primary hover:bg-bg-tertiary/40 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" strokeWidth={1.5} />
+              导出 SVG
+            </button>
+          </div>
         </div>
       ) : null}
     </Modal>
