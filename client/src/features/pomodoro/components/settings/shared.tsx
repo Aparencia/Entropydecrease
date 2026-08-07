@@ -1,20 +1,13 @@
 /**
  * 深潜设置页共享 UI 原语
  *
- * @ai-context: 设置页按区块拆分后共用的 Toggle / SettingRow / 区块动画 variants。
+ * @ai-context: 下潜档案版设置页共用的 Toggle / SettingRow。
  * 拆分为独立文件以控制页面行数（AI 编程规范 §1：单文件 ≤300 行）。
  *
  * @ai-context: Shared UI primitives for the pomodoro settings page sections.
  */
 import type { ReactNode } from 'react';
-import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-
-/** 区块进场动画（与页面 stagger 子项一致的视觉参数） */
-export const BLOCK_VARIANTS = {
-  hidden: { opacity: 0, y: 16, scale: 0.97 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
-};
 
 /** 开关组件 */
 export function Toggle({
@@ -68,14 +61,5 @@ export function SettingRow({
       </div>
       <div className="flex-shrink-0 ml-kb-md">{children}</div>
     </div>
-  );
-}
-
-/** 区块外壳：统一进场动画 */
-export function SettingsBlock({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <motion.div variants={BLOCK_VARIANTS} className={className}>
-      {children}
-    </motion.div>
   );
 }

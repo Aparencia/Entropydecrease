@@ -1,30 +1,35 @@
 /**
- * 深潜设置页 — 智能推荐区块（AI 时长推荐）
+ * NavigationCard — 智能领航（AI 推荐 + 体验增强卡）
  *
- * @ai-context: 从 PomodoroSettingsPage 拆分。推荐请求由页面封装
- * （含历史会话加载与错误处理），本区块负责展示、手动微调与应用回调。
+ * 覆盖原 AIRecSettings + EnhancementSettings 全部能力：
+ * AI 推荐/推理/置信度/手动微调/应用/API Key 引导 + 4 个体验增强开关。
+ *
+ * @ai-context: 深潜设置页改造——智能领航卡。
  */
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, CheckCircle2 } from 'lucide-react';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
-import { Button, Card } from '@/components/ui';
+import { Button } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { Toggle, SettingRow } from '../shared';
 import type { DurationResult } from '@/lib/ai/types';
-import { SettingsBlock } from './shared';
+import type { PomodoroSettings } from '../../../store/pomodoroStoreTypes';
 
-interface AIRecSettingsProps {
+interface NavigationCardProps {
+  localSettings: PomodoroSettings;
   loading: boolean;
   data: DurationResult | null;
   error: string | null;
   isFallback: boolean;
   needsConfig: boolean;
   onRecommend: () => void;
-  /** 应用推荐时长（页面层负责同步到 settings 与活动预设） */
   onApply: (duration: number) => void;
+  onToggle: (key: string) => void;
 }
 
-export function AIRecSettings({
+export function NavigationCard({
+  localSettings,
   loading,
   data,
   error,
@@ -32,9 +37,9 @@ export function AIRecSettings({
   needsConfig,
   onRecommend,
   onApply,
-}: AIRecSettingsProps) {
+  onToggle,
+}: NavigationCardProps) {
   const navigate = useNavigate();
-  // 手动微调值与已应用标记为本区块局部状态；新推荐到达时重置
   const [fineTuneValue, setFineTuneValue] = useState<number | null>(null);
   const [applied, setApplied] = useState(false);
 
@@ -46,19 +51,20 @@ export function AIRecSettings({
   const displayDuration = fineTuneValue ?? data?.recommendedDuration;
 
   return (
-    <SettingsBlock className="mb-kb-xl">
-      <Card variant="default" padding="lg">
-        <div className="flex items-center gap-2 mb-kb-md">
-          <Sparkles className="w-icon-sm h-icon-sm text-brand-500" strokeWidth={1.5} />
-          <h2 className="text-h3 font-medium text-text-primary">智能推荐</h2>
-        </div>
-        <p className="text-b2 text-text-tertiary mb-kb-md">
-          AI 分析你的历史专注数据，为你推荐最适合的工作时长。
+    <div className="rounded-kb-lg border border-border/40 bg-bg-secondary/60 p-kb-md">
+      <div className="flex items-center gap-2 mb-kb-sm">
+        <Sparkles className="w-icon-sm h-icon-sm text-brand-500" strokeWidth={1.5} />
+        <h2 className="text-h3 font-medium text-text-primary">智能领航</h2>
+      </div>
+
+      {/* ── AI 时长推荐 ── */}
+      <div className="mb-kb-md">
+        <p className="text-c1 text-text-tertiary mb-kb-sm">
+          AI 分析你的历史潜次，推荐最适合的专注时长。
           {isFallback && data && (
-            <span className="ml-1 text-semantic-warning text-c1">（基于本地分析）</span>
+            <span className="ml-1 text-semantic-warning">（基于本地分析）</span>
           )}
         </p>
-
         <Button
           variant="secondary"
           size="md"
@@ -67,7 +73,7 @@ export function AIRecSettings({
           onClick={onRecommend}
           className="w-full"
         >
-          {loading ? '分析中…' : '获取智能推荐'}
+          {loading ? '分析中…' : '获取领航建议'}
         </Button>
 
         {error && (
@@ -93,7 +99,7 @@ export function AIRecSettings({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-b1 font-semibold text-text-primary">
-                  AI 推荐：{displayDuration} 分钟
+                  领航建议：{displayDuration} 分钟
                 </p>
                 <p className="text-b2 text-text-secondary mt-0.5">{data.reasoning}</p>
               </div>
@@ -105,11 +111,10 @@ export function AIRecSettings({
                     ? 'bg-semantic-warning/10 text-semantic-warning'
                     : 'bg-text-tertiary/10 text-text-tertiary',
               )}>
-                {data.confidence === 'high' ? '高置信度' : data.confidence === 'medium' ? '中等' : '低'}
+                {data.confidence === 'high' ? '高置信' : data.confidence === 'medium' ? '中等' : '低'}
               </span>
             </div>
 
-            {/* 手动微调滑块 */}
             <div className="mt-1">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-c1 text-text-tertiary">手动微调</span>
@@ -148,11 +153,42 @@ export function AIRecSettings({
               }}
               className="self-start"
             >
-              {applied ? '已应用推荐' : '应用推荐时长'}
+              {applied ? '已应用' : '应用建议'}
             </Button>
           </div>
         )}
-      </Card>
-    </SettingsBlock>
+      </div>
+
+      {/* ── 深海装备（体验增强）── */}
+      <div className="pt-kb-md border-t border-border/30">
+        <h3 className="text-b2 font-medium text-text-primary mb-kb-sm">深海装备</h3>
+        <div className="divide-y divide-border/30">
+          <SettingRow label="休息记忆重放" description="休息时展示本次目标关键词，促进主动回忆">
+            <Toggle
+              checked={localSettings.breakReplayEnabled ?? false}
+              onChange={() => onToggle('breakReplayEnabled')}
+            />
+          </SettingRow>
+          <SettingRow label="心流音乐" description="根据专注状态自动调整背景音乐">
+            <Toggle
+              checked={localSettings.flowMusicEnabled ?? false}
+              onChange={() => onToggle('flowMusicEnabled')}
+            />
+          </SettingRow>
+          <SettingRow label="守护灵联动" description="结合分心检测实时调节心流音乐">
+            <Toggle
+              checked={localSettings.guardianLinkEnabled ?? false}
+              onChange={() => onToggle('guardianLinkEnabled')}
+            />
+          </SettingRow>
+          <SettingRow label="阶段音轨自动切换" description="休息时自动切换为休息推荐音轨">
+            <Toggle
+              checked={localSettings.autoSwitchAudioPhase ?? false}
+              onChange={() => onToggle('autoSwitchAudioPhase')}
+            />
+          </SettingRow>
+        </div>
+      </div>
+    </div>
   );
 }

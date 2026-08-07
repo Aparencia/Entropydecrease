@@ -120,6 +120,9 @@ export const IPC_CHANNELS = {
   EINK_SHOW_CARD: 'eink:show-card',
   EINK_HIDE: 'eink:hide',
   EINK_CARD: 'eink:card',
+
+  // 系统音量
+  SYSTEM_GET_VOLUME: 'system:get-volume',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

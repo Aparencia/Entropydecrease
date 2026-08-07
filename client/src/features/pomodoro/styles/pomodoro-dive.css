@@ -1,18 +1,16 @@
 /* ═══════════════════════════════════════════
-   深潜 · 潜水舱氛围层
-   @ai-context 深潜番茄钟的沉浸背景：垂直深度渐变（顶部海面光→底部深海黑）+ 上浮气泡 +
-   深度光带 + 底部雾；双主题变量：浅色=晨光海面，深色=深海；L1/L2 降级由组件侧裁剪 DOM
+   深潜 · 仪式页头样式
+   @ai-context 深潜番茄钟的印章/标题/注文样式与渐变变量。
+   DiveBackground 组件已移除（渐变移至 FunctionalOverlay 面板），
+   气泡/光带/雾动画样式随组件一并清理。
    ═══════════════════════════════════════════ */
 
-/* ── 双主题变量 ── */
+/* ── 双主题变量（渐变变量供 FunctionalOverlay 面板背景使用）── */
 :root {
   /* 浅色 · 晨光海面：自上而下由天光渐入水色 */
   --kb-dive-top: rgba(191, 219, 254, 0.55);
   --kb-dive-mid: rgba(250, 248, 245, 0.35);
   --kb-dive-bot: rgba(147, 197, 253, 0.5);
-  --kb-dive-bubble: rgba(59, 130, 246, 0.5);
-  --kb-dive-ray: rgba(59, 130, 246, 0.07);
-  --kb-dive-fog: rgba(219, 234, 254, 0.4);
   --kb-dive-seal: #5B8A72;                 /* 深潜模块色印 */
 }
 
@@ -21,72 +19,7 @@
   --kb-dive-top: rgba(24, 42, 72, 0.9);
   --kb-dive-mid: rgba(12, 21, 36, 0.85);
   --kb-dive-bot: rgba(4, 10, 20, 0.96);
-  --kb-dive-bubble: rgba(34, 211, 238, 0.3);
-  --kb-dive-ray: rgba(34, 211, 238, 0.06);
-  --kb-dive-fog: rgba(12, 21, 36, 0.7);
   --kb-dive-seal: #5B8A72;
-}
-
-/* ── 深潜背景容器 ── */
-.kb-dive {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  overflow: hidden;
-  pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    var(--kb-dive-top) 0%,
-    var(--kb-dive-mid) 42%,
-    var(--kb-dive-bot) 100%
-  );
-}
-
-/* ── 上浮气泡：缓慢上浮 + 轻微摇摆 ── */
-.kb-dive-bubble {
-  position: absolute;
-  bottom: -5vh;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, var(--kb-dive-bubble), transparent 70%);
-  animation: kb-bubble-rise var(--kb-bubble-duration, 12s) linear var(--kb-bubble-delay, 0s) infinite;
-  opacity: 0;
-}
-
-@keyframes kb-bubble-rise {
-  0%   { transform: translate(0, 0) scale(1); opacity: 0; }
-  10%  { opacity: var(--kb-bubble-opacity, 0.45); }
-  85%  { opacity: var(--kb-bubble-opacity, 0.45); }
-  100% { transform: translate(var(--kb-bubble-sway, 24px), -46vh) scale(1.25); opacity: 0; }
-}
-
-/* ── 深度光带：水面折射的微光斜带 ── */
-.kb-dive-ray {
-  position: absolute;
-  left: 50%;
-  border-radius: 50%;
-  background: linear-gradient(90deg, transparent 0%, var(--kb-dive-ray) 50%, transparent 100%);
-  animation: kb-dive-ray-drift 16s ease-in-out infinite alternate;
-}
-
-@keyframes kb-dive-ray-drift {
-  from { transform: translateX(-70px) scaleY(1); opacity: 0.4; }
-  to   { transform: translateX(70px) scaleY(1.12); opacity: 0.85; }
-}
-
-/* ── 底部深海雾 ── */
-.kb-dive-fog {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 28%;
-  background: linear-gradient(180deg, transparent 0%, var(--kb-dive-fog) 100%);
-  animation: kb-dive-fog-breathe 22s ease-in-out infinite;
-}
-
-@keyframes kb-dive-fog-breathe {
-  0%, 100% { opacity: 0.55; }
-  50%      { opacity: 0.9; }
 }
 
 /* ═══════════════════════════════════════════
@@ -136,17 +69,4 @@
   letter-spacing: 0.3em;
   color: var(--kb-text-tertiary);
   opacity: 0.85;
-}
-
-/* ═══════════════════════════════════════════
-   降级与无障碍
-   ═══════════════════════════════════════════ */
-
-@media (prefers-reduced-motion: reduce) {
-  .kb-dive-bubble,
-  .kb-dive-ray,
-  .kb-dive-fog {
-    animation: none !important;
-    opacity: 1 !important;
-  }
 }

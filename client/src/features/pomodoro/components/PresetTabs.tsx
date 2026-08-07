@@ -7,13 +7,14 @@
  *
  * @ai-context: 设置页/番茄钟组件：PresetTabs。纯展示 + 回调上抛，无内部状态。
  */
-import { memo } from 'react';
+import { memo, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { BookOpen, PenLine, BookMarked, Brain, Timer, Moon, Coffee, Dumbbell, Music, Languages, Calculator, Microscope, GraduationCap, Plus, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tip } from '@/components/ui/Tip';
 import { SPRING } from '@/lib/animation/springConfig';
 import type { PomodoroPreset } from '@/types/models';
+import PresetContextMenu from './PresetContextMenu';
 
 /** 预设图标映射（lucide 图标名 → 组件） */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,10 +31,25 @@ interface PresetTabsProps {
   onCreate: () => void;
   /** 预设管理入口（深潜设置页：删除/排序/编辑），省略时不渲染 */
   onManage?: () => void;
+  /** 右键编辑预设 */
+  onEditPreset?: (preset: PomodoroPreset) => void;
+  /** 右键复制为新预设 */
+  onDuplicatePreset?: (preset: PomodoroPreset) => void;
+  /** 右键删除预设 */
+  onDeletePreset?: (id: string) => void;
 }
 
-export default memo(function PresetTabs({ presets, activePresetId, canCreate, onSelect, onCreate, onManage }: PresetTabsProps) {
+export default memo(function PresetTabs({ presets, activePresetId, canCreate, onSelect, onCreate, onManage, onEditPreset, onDuplicatePreset, onDeletePreset }: PresetTabsProps) {
+  const [ctxMenu, setCtxMenu] = useState<{ preset: PomodoroPreset; x: number; y: number } | null>(null);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, preset: PomodoroPreset) => {
+    e.preventDefault();
+    setCtxMenu({ preset, x: e.clientX, y: e.clientY });
+  }, []);
+
+  const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
   return (
+    <>
     <motion.div
       className="flex items-center gap-0.5 p-1 bg-bg-secondary/60 backdrop-blur-sm rounded-full border border-border/20 max-w-full overflow-x-auto"
       initial={{ opacity: 0, y: -10 }}
@@ -47,6 +63,7 @@ export default memo(function PresetTabs({ presets, activePresetId, canCreate, on
           <motion.button
             key={preset.id}
             onClick={() => onSelect(preset.id)}
+            onContextMenu={(e) => handleContextMenu(e, preset)}
             whileTap={{ scale: 0.97 }}
             className={cn(
               'relative flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-medium transition-all duration-300 whitespace-nowrap',
@@ -97,5 +114,17 @@ export default memo(function PresetTabs({ presets, activePresetId, canCreate, on
         </Tip>
       )}
     </motion.div>
+      {/* 右键菜单 */}
+      {ctxMenu && onEditPreset && onDuplicatePreset && onDeletePreset && (
+        <PresetContextMenu
+          preset={ctxMenu.preset}
+          position={{ x: ctxMenu.x, y: ctxMenu.y }}
+          onClose={closeCtxMenu}
+          onEdit={onEditPreset}
+          onDuplicate={onDuplicatePreset}
+          onDelete={onDeletePreset}
+        />
+      )}
+    </>
   );
 });

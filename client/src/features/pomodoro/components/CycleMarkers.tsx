@@ -24,7 +24,16 @@ interface CycleMarkersProps {
 }
 
 export default memo(function CycleMarkers({ total, filled, className }: CycleMarkersProps) {
-  if (total <= 0) return null;
+  // 无长休预设：不渲染标记条，但保留计数文字 0/0
+  if (total <= 0) {
+    return (
+      <div className={cn('flex items-center gap-1.5', className)}>
+        <span className="text-[11px] text-text-tertiary/60 font-mono tabular-nums">
+          {filled}/{total}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className={cn('flex items-center gap-1.5', className)}>

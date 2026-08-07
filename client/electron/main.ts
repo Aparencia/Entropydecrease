@@ -19,6 +19,7 @@
 
 import { app, BrowserWindow, Menu, session, clipboard, safeStorage } from 'electron';
 import { safeHandle, setMainWindowId, requireText } from './ipcUtils.js';
+import { getMachineId } from './machineId.js';
 import { logger } from './logger.js';
 import { registerAIHandlers, initAIModule } from './ai/index.js';
 import { loadPersistedGatewayUrl, setRuntimeGatewayUrl, gatewayUrl, isDevMode } from './ai/utils.js';
@@ -278,6 +279,11 @@ if (!gotTheLock) {
       return app.getVersion();
     });
 
+    // 设备指纹（激活码一码多设备绑定；仅主进程持有，渲染进程只读获取）
+    safeHandle('machine-id:get', async () => {
+      return getMachineId();
+    });
+
     // 剪贴板写入：渲染进程 navigator.clipboard 在 Electron 非聚焦/受限上下文下
     // 会抛 "Document is not focused" 而失败，改由主进程 clipboard 模块写入更可靠。
     safeHandle('clipboard:write-text', async (_event, text: unknown) => {
@@ -350,6 +356,24 @@ safeHandle('eink:show-card', async (_event, card: unknown) => {
 safeHandle('eink:hide', async () => {
       hideEinkWindow();
       return { success: true };
+    });
+
+    // 系统音量（Windows 下通过 PowerShell 获取）
+    safeHandle('system:get-volume', async () => {
+      try {
+        const { execFile } = await import('child_process');
+        const { promisify } = await import('util');
+        const execFileAsync = promisify(execFile);
+        const { stdout } = await execFileAsync('powershell', [
+          '-Command',
+          '(New-Object -ComObject WMPlayer.OCX).settings.volume',
+        ], { timeout: 3000 });
+        const vol = parseInt(stdout.trim(), 10);
+        return { success: true, volume: Number.isNaN(vol) ? 50 : Math.max(0, Math.min(100, vol)) };
+      } catch {
+        // 非 Windows 或 PowerShell 不可用时返回默认值 50
+        return { success: true, volume: 50 };
+      }
     });
 
     // 更新相关 IPC handler

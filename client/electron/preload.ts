@@ -61,6 +61,8 @@ const ALLOWED_CHANNELS = [
   // A2 语音对话：启动前查询是否已有活跃采集（互斥保护，避免误伤课堂采集）
   'audio_capture_status',
   'get-app-version',
+  // 设备指纹（激活码一码多设备绑定；仅主进程生成，渲染进程只读）
+  'machine-id:get',
   // 剪贴板写入（渲染进程 navigator.clipboard 在 Electron 受限上下文下不可靠）
   'clipboard:write-text',
   'dialog:selectDirectory',
@@ -95,6 +97,8 @@ const ALLOWED_CHANNELS = [
   'sync:quit-complete',
   // 文件读取（课堂助手视频分析）
   'fs:read-file',
+  // 系统音量
+  'system:get-volume',
   // Path C 视频录制 IPC channel
   'video_record_start',
   'video_record_stop',
@@ -294,6 +298,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ---- 阶段 A：知识入籍拖拽 API（Electron 35 移除 File.path，必须经 webUtils 转换） ----
   /** 拖拽文件 → 绝对路径（供 import:parse-pdf 使用） */
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
+  // ---- 设备指纹 API（激活码绑定用） ----
+  /** 获取设备指纹（主进程生成，首次调用后恒定） */
+  getMachineId: () => ipcRenderer.invoke('machine-id:get'),
   // ---- v0.9.0: 备份 API ----
   /** 保存备份文件（显示系统保存对话框） */
   backupSave: (data: string, defaultName?: string) => ipcRenderer.invoke('backup:save', data, defaultName),

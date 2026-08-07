@@ -5,11 +5,8 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Clock, Sparkles } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { db } from '@/lib/storage';
-import { pomodoroSessionStore } from '@/lib/storage';
-import { aiPluginLoader } from '@/lib/ai/AIPluginLoader';
-import { useAIRecommendation } from '../hooks/useAIRecommendation';
 import TimerRing from '../components/TimerRing';
 import GoalInput from '../components/GoalInput';
 import ImmersiveTimer from '../components/ImmersiveTimer';
@@ -18,19 +15,18 @@ import CycleMarkers from '../components/CycleMarkers';
 import PresetEditor from '../components/PresetEditor';
 import PresetTabs from '../components/PresetTabs';
 import { CompletionCelebration } from '../components/CompletionCelebration';
-import { EnergySuggestionBar } from '../components/EnergySuggestionBar';
 import { PomodoroControls } from '../components/PomodoroControls';
 import { usePomodoroStore, usePomodoroActionSignal } from '../store/usePomodoroStore';
 import { useShallow } from 'zustand/react/shallow';
+import type { PomodoroPreset } from '@/types/models';
 import { wellbeingEventBus } from '@/lib/wellbeing/wellbeingEventBus';
 import { useEcosystemStore } from '@/features/retention/store/useEcosystemStore';
 import { calculateDepth } from '@/features/retention/lib/coralEngine';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { usePomodoroEffects } from '../hooks/usePomodoroEffects';
-import { useDeviceCapability } from '@/hooks/useDeviceCapability';
-import DiveBackground from '../components/DiveBackground';
 import { SPRING } from '@/lib/animation/springConfig';
 import { MAX_PRESETS } from '../lib/presetService';
+import '../styles/pomodoro-dive.css';
 
 export default function PomodoroPage() {
   const navigate = useNavigate();
@@ -39,7 +35,7 @@ export default function PomodoroPage() {
     completedCount, settings, currentGoal, isImmersive,
     activePreset, presets,
     start, setPreset, setCurrentGoal,
-    exitImmersive, createPreset,
+    exitImmersive, createPreset, updatePreset, deletePreset,
     showCompletionOverlay, dismissCompletionOverlay, lastSessionActualDuration,
   } = usePomodoroStore(useShallow(s => s));
 
@@ -48,33 +44,9 @@ export default function PomodoroPage() {
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [rememberGoal, setRememberGoal] = useState(false);
   const [presetEditorOpen, setPresetEditorOpen] = useState(false);
+  const [editingPreset, setEditingPreset] = useState<PomodoroPreset | null>(null);
   
-    // AI 时长推荐（T1：本地节律引擎即时结果，AI 增强可选且 3s 超时降级）
-    const { recommendation, loading: recLoading, error: recError, getRecommendation } = useAIRecommendation();
-    const [aiEnhance, setAiEnhance] = useState(false);
-    const handleGetRecommendation = useCallback(async () => {
-      try {
-        const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-        const sessions = await pomodoroSessionStore.getTable()
-          .where('completedAt').aboveOrEqual(since)
-          .toArray();
-        const history = {
-          sessions: sessions.map((s) => ({
-            duration: Math.round(s.duration / 60),
-            completed: !s.interrupted && s.actualDuration >= s.duration * 0.8,
-            date: new Date(s.completedAt).toISOString(),
-            subject: s.subject || '',
-          })),
-        };
-        await getRecommendation(history, aiEnhance ? (data) => aiPluginLoader.recommendDuration(data) : undefined);
-      } catch {
-        // 静默失败（本地推荐失败也无妨，不打扰主界面）
-      }
-    }, [getRecommendation, aiEnhance]);
 
-  // 设备降级级别推导（与萤火海沟/沉浸模式同源：L0 全量 / L1 低端 / L2 减弱动效）
-  const { shouldDisableHeavyAnimations, prefersReducedMotion } = useDeviceCapability();
-  const diveDegradation = prefersReducedMotion ? 'L2' : shouldDisableHeavyAnimations ? 'L1' : 'L0';
 
   // ── 守护灵分心分数（体验增强：心流音乐联动，开关 guardianLinkEnabled）──
   // App 级 useFocusGuardian 在等级变化时经事件总线广播分数，此处只订阅不采集
@@ -115,7 +87,24 @@ export default function PomodoroPage() {
   }, [remainingSeconds, phase, isRunning, isPaused]);
 
   // P3-19 稳定回调引用，供 memo 化的 PresetTabs 避免每秒重渲染
-  const openPresetEditor = useCallback(() => setPresetEditorOpen(true), []);
+  const openPresetEditor = useCallback(() => {
+    setEditingPreset(null);
+    setPresetEditorOpen(true);
+  }, []);
+  // 右键编辑预设
+  const handleEditPreset = useCallback((preset: PomodoroPreset) => {
+    setEditingPreset(preset);
+    setPresetEditorOpen(true);
+  }, []);
+  // 右键复制为新预设
+  const handleDuplicatePreset = useCallback(async (preset: PomodoroPreset) => {
+    const { id: _id, builtin: _builtin, sortOrder: _sortOrder, createdAt: _createdAt, ...data } = preset;
+    await createPreset({ ...data, name: `${preset.name}（副本）` });
+  }, [createPreset]);
+  // 右键删除预设
+  const handleDeletePreset = useCallback(async (id: string) => {
+    await deletePreset(id);
+  }, [deletePreset]);
   // 预设管理入口：跳转深潜设置页（删除/排序/编辑预设）
   const managePresets = useCallback(() => navigate('/pomodoro/settings'), [navigate]);
 
@@ -217,8 +206,7 @@ export default function PomodoroPage() {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.3 }}
         >
-          {/* 深潜氛围背景：垂直深度渐变 + 上浮气泡（浅色晨光海面 / 深色深海） */}
-          <DiveBackground degradation={diveDegradation} />
+          {/* 深潜氛围背景 */}
 
           {/* 仪式页头：模块色「潜」印 + 衬线大字（间距随视口高度缩放） */}
           <header className="relative z-10 flex items-center gap-3 mb-[clamp(0.375rem,1.8vh,2rem)]">
@@ -237,6 +225,9 @@ export default function PomodoroPage() {
             onSelect={setPreset}
             onCreate={openPresetEditor}
             onManage={managePresets}
+            onEditPreset={handleEditPreset}
+            onDuplicatePreset={handleDuplicatePreset}
+            onDeletePreset={handleDeletePreset}
           />
 
           {/* 预设提示 —— 间距随视口缩放，与上方 PresetTabs 保持一致呼吸 */}
@@ -256,59 +247,7 @@ export default function PomodoroPage() {
             </span>
           </motion.div>
 
-          {/* T5: 精力-任务匹配提示条（未运行时展示，纯本地计算） */}
-          {!isRunning && !isPaused && (
-            <div className="mt-2 w-full max-w-md">
-              <EnergySuggestionBar />
-              {/* AI 时长推荐：本地节律即时计算，AI 增强可选（3s 超时自动降级） */}
-              <div className="mt-2 rounded-kb-lg border border-border/30 bg-bg-elevated/40 p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-c1 text-text-secondary flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-brand-500" strokeWidth={1.5} />
-                    AI 时长推荐
-                  </span>
-                  <label className="flex items-center gap-1.5 text-c1 text-text-tertiary cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={aiEnhance}
-                      onChange={(e) => setAiEnhance(e.target.checked)}
-                      className="accent-brand-500"
-                    />
-                    AI 增强
-                  </label>
-                </div>
-                {recommendation ? (
-                  <div className="mt-2 flex items-baseline gap-2">
-                    <span className="text-b2 font-semibold text-text-primary">
-                      {recommendation.recommendedDuration} 分钟
-                    </span>
-                    {recommendation.breakMinutes ? (
-                      <span className="text-c1 text-text-tertiary">· 休息 {recommendation.breakMinutes} 分钟</span>
-                    ) : null}
-                    <span className="ml-auto text-[10px] text-text-tertiary">
-                      {recommendation.source === 'ai' ? 'AI 增强' : '本地节律'}
-                      {recommendation.confidence === 'high' ? ' · 高置信' : recommendation.confidence === 'medium' ? ' · 中置信' : ''}
-                    </span>
-                  </div>
-                ) : null}
-                {recError && !recommendation ? (
-                  <p className="mt-1 text-c1 text-semantic-error">{recError}</p>
-                ) : null}
-                {!recommendation && (
-                  <p className="mt-1 text-c1 text-text-tertiary">
-                    基于近 30 天专注节律推荐时长（数据不足时回退加权平均）
-                  </p>
-                )}
-                <button
-                  onClick={() => void handleGetRecommendation()}
-                  disabled={recLoading}
-                  className="mt-2 px-3 py-1.5 rounded-kb-sm bg-brand-500/15 text-brand-600 dark:text-brand-400 text-c1 border border-brand-500/30 transition-all active:scale-95 disabled:opacity-50"
-                >
-                  {recLoading ? '计算中…' : recommendation ? '重新推荐' : '获取推荐'}
-                </button>
-              </div>
-            </div>
-          )}
+
 
           {/* 中部表盘区：flex-1 吸收剩余高度，TimerRing 随 vmin 缩放，永不溢出 */}
           <div className="flex-1 min-h-0 w-full flex flex-col items-center justify-center">
@@ -356,13 +295,18 @@ export default function PomodoroPage() {
             onRememberChange={setRememberGoal}
           />
 
-          {/* 预设快捷创建弹窗 */}
+          {/* 预设快捷创建/编辑弹窗 */}
           <PresetEditor
             open={presetEditorOpen}
             onClose={() => setPresetEditorOpen(false)}
+            initial={editingPreset}
             onSave={async (data) => {
-              const preset = await createPreset(data);
-              setPreset(preset.id);
+              if (editingPreset) {
+                await updatePreset(editingPreset.id, data);
+              } else {
+                const preset = await createPreset(data);
+                setPreset(preset.id);
+              }
             }}
           />
         </motion.div>

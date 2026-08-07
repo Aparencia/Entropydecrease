@@ -20,6 +20,8 @@ interface AudioPrefsState {
   bgmEnabled: boolean;
   bgmTrackId: string;
   bgmVolume: number;
+  /** 音频输出设备类型，用于估算实际分贝 */
+  deviceType: AudioDeviceType;
   /** 切换白噪音开关 */
   toggleWhiteNoise: () => void;
   /** 设置白噪音音量（0-1，钳制） */
@@ -32,6 +34,8 @@ interface AudioPrefsState {
   setBgmVolume: (vol: number) => void;
   /** 切换 BGM 音轨 */
   setBgmTrack: (trackId: string) => void;
+  /** 设置音频输出设备类型 */
+  setDeviceType: (type: AudioDeviceType) => void;
 }
 
 export const useAudioPrefsStore = create<AudioPrefsState>()(
@@ -44,6 +48,7 @@ export const useAudioPrefsStore = create<AudioPrefsState>()(
       toggleBgm: () => set((s) => ({ bgmEnabled: !s.bgmEnabled })),
       setBgmVolume: (vol) => set({ bgmVolume: Math.max(0, Math.min(1, vol)) }),
       setBgmTrack: (trackId) => set({ bgmTrackId: trackId }),
+      setDeviceType: (type) => set({ deviceType: type }),
     }),
     { name: AUDIO_PREFS_KEY },
   ),
