@@ -9,6 +9,9 @@
 - ES256：使用 ECDSA P-256 公钥验证，公钥从 Supabase JWKS 端点获取（按 kid 匹配）
 - RS256：使用 RSA 公钥（PEM）验证
 
+未配置 SUPABASE_JWT_ALGORITHM 时按 token 实际算法自动适配（GW-2#1 延伸：
+从根上消除 HS256/ES256 配置错位导致的全站 401），显式配置则强制白名单。
+
 @ai-context: JWT 认证中间件：校验 Supabase JWT（ES256 经 JWKS，或 HS256/RS256 经密钥），未配置时以占位密钥放行供本地开发。
 """
 
@@ -53,20 +56,32 @@ def _jwt_verification_configured() -> bool:
     """
     检查当前算法是否具备验证所需的密钥材料。
 
-    - HS256/RS256：需要 SUPABASE_JWT_SECRET（对称密钥或 PEM 公钥），
+    - 显式配置 HS256/RS256：需要 SUPABASE_JWT_SECRET（对称密钥或 PEM 公钥），
       占位符/示例值视为未配置；
-    - ES256：需要 SUPABASE_JWKS_URL 或 SUPABASE_URL（用于获取 JWKS 公钥），
-      URL 含 your-project-id 占位符域名时视为未配置。
+    - 显式配置 ES256：需要 SUPABASE_JWKS_URL 或 SUPABASE_URL（用于获取 JWKS 公钥），
+      URL 含 your-project-id 占位符域名时视为未配置；
+    - 未配置算法（自动适配模式）：任一算法的密钥材料可用即视为已配置，
+      验证时按 token 实际算法选用对应材料（GW-2#1 延伸）。
     """
-    alg = APP_CONFIG.get("jwt_algorithm", "HS256")
+    alg = APP_CONFIG.get("jwt_algorithm", "").strip().upper()
     if alg == "ES256":
         jwks_url = (
             APP_CONFIG.get("supabase_jwks_url", "")
             or APP_CONFIG.get("supabase_url", "")
         )
         return bool(jwks_url) and _PLACEHOLDER_PROJECT_ID not in jwks_url
+    if alg:
+        secret = APP_CONFIG.get("jwt_secret", "")
+        return bool(secret) and not _is_placeholder_text(secret)
+    # 自动适配模式：任一算法密钥材料可用即真实验证（fail-closed，不降级）
     secret = APP_CONFIG.get("jwt_secret", "")
-    return bool(secret) and not _is_placeholder_text(secret)
+    jwks_url = (
+        APP_CONFIG.get("supabase_jwks_url", "")
+        or APP_CONFIG.get("supabase_url", "")
+    )
+    has_secret = bool(secret) and not _is_placeholder_text(secret)
+    has_jwks = bool(jwks_url) and _PLACEHOLDER_PROJECT_ID not in jwks_url
+    return has_secret or has_jwks
 
 
 # 启动时检查密钥配置
@@ -104,7 +119,7 @@ if _legacy_jwt_secret and not APP_CONFIG.get("jwt_secret", ""):
 # 启动日志：输当前 JWT 验证算法与配置状态（GW-2#1: 避免"已配置"假象）
 logger.info(
     "JWT 验证算法: %s (验证材料已配置=%s)",
-    APP_CONFIG["jwt_algorithm"],
+    APP_CONFIG["jwt_algorithm"] or "auto",
     _jwt_verification_configured(),
 )
 
@@ -324,18 +339,17 @@ async def _get_es256_public_key(kid: Optional[str] = None):
     raise ValueError(f"JWKS 中未找到 kid={kid} 对应的 EC P-256 公钥")
 
 
-async def _get_public_key(kid: Optional[str] = None):
+async def _get_public_key(alg: str, kid: Optional[str] = None):
     """
-    获取用于 JWT 验证的密钥。
+    按 token 实际签名算法获取用于 JWT 验证的密钥。
 
     - HS256：返回对称密钥字符串（SUPABASE_JWT_SECRET）
     - ES256：从 JWKS 端点获取 ECDSA P-256 公钥（按 kid 匹配）
     - RS256：返回 RSA 公钥 PEM 格式
     """
-    alg = APP_CONFIG.get("jwt_algorithm", "HS256")
     if alg == "ES256":
         return await _get_es256_public_key(kid)
-    raw = APP_CONFIG["jwt_secret"]
+    raw = APP_CONFIG.get("jwt_secret", "")
     if not raw:
         # 未配置时返回占位符，jose 会在验证时报错（优雅降级）
         return "not-configured"
@@ -443,29 +457,36 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         # 使用 python-jose 解码并验证 JWT token
         from jose import jwt, JWTError, ExpiredSignatureError
 
-        alg = APP_CONFIG.get("jwt_algorithm", "HS256")
-
-        # ES256 需要从 token header 提取 kid，以匹配 JWKS 中的公钥
+        # 解析 token header：获取实际签名算法与 kid（ES256 按 kid 匹配 JWKS 公钥）
+        token_alg = None
         kid = None
-        if alg == "ES256":
-            try:
-                import json
-                header_b64 = token.split('.')[0]
-                header_b64 += '=' * (-len(header_b64) % 4)
-                token_header = json.loads(base64.urlsafe_b64decode(header_b64))
-                kid = token_header.get("kid")
-            except Exception as e:
-                logger.warning("解析 token header 获取 kid 失败: %s", str(e))
+        try:
+            import json
+            header_b64 = token.split('.')[0]
+            header_b64 += '=' * (-len(header_b64) % 4)
+            token_header = json.loads(base64.urlsafe_b64decode(header_b64))
+            token_alg = (token_header.get("alg") or "").strip().upper()
+            kid = token_header.get("kid")
+        except Exception as e:
+            logger.warning("解析 token header 获取 alg/kid 失败: %s", str(e))
+
+        # 算法白名单：显式配置 SUPABASE_JWT_ALGORITHM 时强制该算法；
+        # 未配置时自动适配（GW-2#1 延伸——不猜默认算法，按 token 实际 alg 验证，
+        # 消除 HS256/ES256 配置错位导致的全站 401）
+        configured_alg = APP_CONFIG.get("jwt_algorithm", "").strip().upper()
+        allowed_algs = [configured_alg] if configured_alg else ["HS256", "ES256", "RS256"]
+        if not token_alg or token_alg not in allowed_algs:
+            raise AuthenticationError(f"token 验证失败: 不支持的签名算法 {token_alg or '未知'}")
 
         try:
-            public_key = await _get_public_key(kid=kid)
+            public_key = await _get_public_key(token_alg, kid=kid)
         except Exception as e:
             logger.error("获取公钥失败: %s", str(e))
             raise AuthenticationError("认证服务异常，请稍后重试") from e
 
         # 构建解码参数
         decode_kwargs: dict = {
-            "algorithms": [alg],
+            "algorithms": [token_alg],
             "audience": "authenticated",  # Supabase JWT 的标准 audience
         }
         # 当配置了 supabase_url 时，验证 iss claim

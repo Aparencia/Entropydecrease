@@ -255,11 +255,11 @@ class TestGetProviderForFeature:
 class TestConfigAssertions:
     """配置值精确断言（JWT 算法、API Key 校验、超时配置、Fallback 链尾）"""
 
-    def test_jwt_algorithm_defaults_to_hs256(self):
-        """APP_CONFIG jwt_algorithm 默认 HS256（GW-2#1: 与 Supabase 默认对称密钥
-        签发机制对齐；原硬编码 ES256 导致无 JWKS 的默认项目全站 401）。
-        显式配置 SUPABASE_JWT_ALGORITHM 时使用配置值。"""
-        expected = os.getenv("SUPABASE_JWT_ALGORITHM", "HS256")
+    def test_jwt_algorithm_defaults_to_auto(self):
+        """APP_CONFIG jwt_algorithm 默认空串=自动适配模式（GW-2#1 延伸：不猜默认
+        算法，按 token 实际 alg 选择密钥材料，消除 HS256/ES256 配置错位导致的
+        全站 401）。显式配置 SUPABASE_JWT_ALGORITHM 时使用配置值。"""
+        expected = os.getenv("SUPABASE_JWT_ALGORITHM", "").strip().upper()
         assert APP_CONFIG["jwt_algorithm"] == expected
 
     def test_is_valid_api_key_rejects_placeholder(self):

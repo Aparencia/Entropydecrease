@@ -8,7 +8,7 @@
  * @ai-context: Daily plan hook: loads today's plan, generates via AI when
  * missing, falls back to local rule planning on AI failure (offline-first).
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth/AuthContext';
 import {
   buildLocalPlan, buildPlanContextText, loadPlan, planFromAI,
@@ -26,19 +26,25 @@ export interface UseLearningPlanReturn {
 }
 
 export function useLearningPlan(): UseLearningPlanReturn {
-  const { session } = useAuth();
+  const { session, loading: authLoading } = useAuth();
   const [plan, setPlan] = useState<LearningPlan | null>(null);
   const [loading, setLoading] = useState(true);
+  // 防重入：session 恢复过程中 generate 重建会重复触发 useEffect，
+  // 并发发出无 token 与带 token 两个请求（前者必 401 且浪费网关流量）
+  const generatingRef = useRef(false);
 
   /** 生成计划：AI 优先，本地规则兜底 */
   const generate = useCallback(async (): Promise<void> => {
+    if (generatingRef.current) return;
+    generatingRef.current = true;
     setLoading(true);
     try {
       const ctx = await buildPlanContextText();
       let next: LearningPlan | null = null;
 
-      // AI 路径（Electron 可用时；失败/空结果静默回退）
-      if (window.electronAPI) {
+      // AI 路径：仅已登录且 Electron 可用时调用（未登录时网关必 401，
+      // 本地优先原则——无 token 直接走本地规则规划，不发无意义请求）
+      if (window.electronAPI && session?.access_token) {
         try {
           const resp = await window.electronAPI.invoke('ai_learning_plan', {
             masterySummary: ctx.masterySummary,
@@ -46,7 +52,7 @@ export function useLearningPlan(): UseLearningPlanReturn {
             peakHours: ctx.peakHours,
             weeklyGoalMinutes: ctx.weeklyGoalMinutes,
             todayMinutes: ctx.todayMinutes,
-            authToken: session?.access_token ?? null,
+            authToken: session.access_token,
           }) as {
             date?: string;
             items?: Array<{ module: string; title?: string; minutes?: number; task?: string; reason?: string; order?: number }>;
@@ -76,11 +82,15 @@ export function useLearningPlan(): UseLearningPlanReturn {
         setPlan(null);
       }
     } finally {
+      generatingRef.current = false;
       setLoading(false);
     }
   }, [session?.access_token]);
 
   useEffect(() => {
+    // 等待 auth 就绪：session 恢复前不触发生成（避免无 token 请求 401
+    // 与 session 变化导致的重复并发调用）
+    if (authLoading) return;
     const existing = loadPlan(todayISO());
     if (existing) {
       setPlan(existing);
@@ -88,7 +98,7 @@ export function useLearningPlan(): UseLearningPlanReturn {
     } else {
       void generate();
     }
-  }, [generate]);
+  }, [generate, authLoading]);
 
   const regenerate = useCallback(async () => {
     await generate();
