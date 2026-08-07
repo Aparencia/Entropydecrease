@@ -20,7 +20,7 @@ export interface AggregateInput {
 }
 
 /** 计算五维雷达：专注度 / 效率 / 持续性 / 广度 / 活跃度 */
-export function computeRadarData(
+function computeRadarData(
   sessions: PomodoroSession[], notes: Note[], _fc: Flashcard[],
   feynman: FeynmanNote[], reviews: FlashcardReview[], days = 30,
 ): RadarDimension[] {
@@ -173,7 +173,7 @@ export function computeRecommendations(heatmap: HeatmapCell[], count = 3): TimeS
  * 计算目标进度：基于近期数据推算本周学习时长、复习数、笔记数目标
  * @ai-context: 目标值采用固定周目标，后续可改为用户自定义
  */
-export function computeGoalProgress(
+function computeGoalProgress(
   sessions: PomodoroSession[], notes: Note[], reviews: FlashcardReview[], days = 7,
 ): GoalProgress[] {
   const rs = recent(sessions, (s) => new Date(s.completedAt), days);
@@ -214,7 +214,7 @@ export function aggregateAnalytics(data: AggregateInput, days = 30): AnalyticsAg
  * 完成率高 → 技能充足；计划时长长 → 挑战高。心流区 = 挑战与技能匹配的
  * 桶（中中/中高/高中/高高）。纯本地计算，零 AI 依赖。
  */
-export function computeFlowChannel(sessions: PomodoroSession[], days = 30): FlowChannelData {
+function computeFlowChannel(sessions: PomodoroSession[], days = 30): FlowChannelData {
   const rs = recent(sessions, (s) => new Date(s.completedAt), days);
   const counts = new Map<string, number>();
 
@@ -270,7 +270,7 @@ export function computeFlowChannel(sessions: PomodoroSession[], days = 30): Flow
  * 相邻两次复习的实际间隔 vs 上次复习后的计划间隔（intervalAfter 天）。
  * 仅统计近期（窗口内）发生的第二次及以上复习，样本 <3 时返回 null。
  */
-export function computeReviewTimeliness(reviews: FlashcardReview[], sinceMs: number): number | null {
+function computeReviewTimeliness(reviews: FlashcardReview[], sinceMs: number): number | null {
   // 按卡片分组并按时间排序
   const byCard = new Map<string, FlashcardReview[]>();
   for (const r of reviews) {
@@ -299,7 +299,7 @@ export function computeReviewTimeliness(reviews: FlashcardReview[], sinceMs: num
 /** 掌握度变化：本周 vs 上周各卡复习后的平均计划间隔（天）差值。
  * 间隔越长代表记忆强度越强（FSRS/SM-2 语义一致）；样本 <3 返回 null。
  */
-export function computeMasteryDelta(reviews: FlashcardReview[]): number | null {
+function computeMasteryDelta(reviews: FlashcardReview[]): number | null {
   const now = Date.now();
   const weekMs = 7 * DAY_MS;
   const thisWeek: number[] = [];
@@ -315,7 +315,7 @@ export function computeMasteryDelta(reviews: FlashcardReview[]): number | null {
 }
 
 /** 计算本周回顾摘要（固定自然周窗口：最近 7 天 vs 前 7 天） */
-export function computeWeeklySummary(data: AggregateInput): WeeklySummary {
+function computeWeeklySummary(data: AggregateInput): WeeklySummary {
   const now = Date.now();
   const weekMs = 7 * DAY_MS;
   const thisWeekStart = now - weekMs;
@@ -379,7 +379,7 @@ function collectCourses(rs: PomodoroSession[], rn: Note[]): string[] {
  * - L2 概念：课程下匹配的笔记（tags 含课程名）+ 费曼概念（concept 含课程名）；
  *   概念掌握度 = 费曼完成状态分级 / 笔记复习间隔归一化
  */
-export function computeDrillData(data: AggregateInput, days = 30): MasteryDrillData {
+function computeDrillData(data: AggregateInput, days = 30): MasteryDrillData {
   const rs = recent(data.sessions, (s) => new Date(s.completedAt), days);
   const rn = recent(data.notes, (n) => new Date(n.updatedAt), days);
   const rr = recent(data.reviews, (r) => new Date(r.reviewedAt), days);

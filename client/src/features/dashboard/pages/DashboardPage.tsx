@@ -62,7 +62,14 @@ import GrowthStory from '../components/GrowthStory';
 import CognitiveLoadWidget from '../components/CognitiveLoadWidget';
 import JellyfishRadar from '../components/deep-sea/creatures/JellyfishRadar';
 import CoralReefCalendar from '../components/deep-sea/creatures/CoralReefCalendar';
+import BubbleStreak from '../components/deep-sea/creatures/BubbleStreak';
+import PearlGoal from '../components/deep-sea/creatures/PearlGoal';
+import PlanktonStream, { type ActivityItem } from '../components/deep-sea/creatures/PlanktonStream';
+import AnglerfishAchievements from '../components/deep-sea/creatures/AnglerfishAchievements';
 import { useLearningProgress } from '@/hooks/useLearningProgress';
+import { getDailyConfig } from '@/features/retention/lib/dailyVariation';
+import { METAPHOR_MAP } from '@/lib/metaphors/metaphorDictionary';
+import type { GoalProgress } from '../types/analytics';
 import type { RitualSettings, RitualOutcome, RitualSkipScope, RitualIntensity, MemoryEchoItem, RecallQuestion } from '../types';
 import type { PomodoroSession, Flashcard, FlashcardReview } from '@/types/models';
 import type { KnowledgeCard } from '../components/KnowledgePreviewCard';
@@ -270,10 +277,12 @@ export default function DashboardPage() {
   const userName = user?.user_metadata?.display_name || user?.email?.split('@')[0];
   const greetingText = useMemo(() => {
     const quote = getAtmosphereQuote();
-    return userName ? `${quote} — ${userName}` : quote;
+    // 每日确定性鼓励文案（对抗感觉适应，与时段氛围互补）
+    const encouragement = getDailyConfig().encouragement;
+    return userName ? `${quote} · ${encouragement} · ${userName}` : `${quote} · ${encouragement}`;
   }, [userName]);
 
-  const { streakDays } = useCheckIn('dashboard');
+  const { streakDays, todayCheckIn, loading: checkInLoading } = useCheckIn('dashboard');
 
   // ── 留存机制数据准备 ──
   // 珊瑚生态数据（供 StreakBubble / DepthMeter / CoralEcosystem 消费）
@@ -418,10 +427,82 @@ export default function DashboardPage() {
   // 📈 学习进度条（各模块学习完成百分比）
   const progressItems = useLearningProgress();
 
+  // 📅 珊瑚礁月历数据：最近 31 天是否有学习活动（trend 有值即打卡）
+  const calendarDays = useMemo(() => {
+    const now = new Date();
+    const byDate = new Map((analytics?.trend ?? []).map((t) => [t.date, t.value]));
+    return Array.from({ length: 31 }, (_, i) => {
+      const d = new Date(now);
+      d.setDate(d.getDate() - (30 - i));
+      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return {
+        day: d.getDate(),
+        checked: (byDate.get(iso) ?? 0) > 0,
+        isToday: i === 30,
+      };
+    });
+  }, [analytics]);
+
+  // 🎯 目标进度（PearlGoal）：直接消费聚合层 goals（AnalyticsAggregate 内置）
+  const goalData: GoalProgress[] = analytics?.goals ?? [];
+
+  /** lucide 图标 → ActivityItem.icon（strokeWidth 类型收窄） */
+  const toActivityIcon = (icon: React.ComponentType<{ className?: string; strokeWidth?: string | number }>): ActivityItem['icon'] =>
+    icon as unknown as ActivityItem['icon'];
+
+  // 🌊 最近活动（PlanktonStream）：各模块最近记录（async 查询，静默失败）
+  const [recentActivities, setRecentActivities] = useState<ActivityItem[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const acts: ActivityItem[] = [];
+        const ps = await pomodoroSessionStore.getTable().orderBy('completedAt').last();
+        if (ps) {
+          acts.push({
+            icon: toActivityIcon(Timer), text: '完成一次深潜', time: formatRelativeTime(new Date(ps.completedAt)),
+            accent: 'pomodoro', timestamp: new Date(ps.completedAt).getTime(),
+          });
+        }
+        const rv = await flashcardReviewStore.getTable().orderBy('reviewedAt').last();
+        if (rv) {
+          acts.push({
+            icon: toActivityIcon(Layers), text: '复习了闪卡', time: formatRelativeTime(new Date(rv.reviewedAt)),
+            accent: 'flashcard', timestamp: new Date(rv.reviewedAt).getTime(),
+          });
+        }
+        const sortedNotes = [...notes].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        if (sortedNotes.length > 0) {
+          const n = sortedNotes[0];
+          acts.push({
+            icon: toActivityIcon(FileText), text: `编辑了「${n.title}」`, time: formatRelativeTime(new Date(n.updatedAt)),
+            accent: 'note', timestamp: new Date(n.updatedAt).getTime(),
+          });
+        }
+        if (feynmanNotes.length > 0) {
+          const f = [...feynmanNotes].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+          acts.push({
+            icon: toActivityIcon(Lightbulb), text: `讲解了「${f.concept}」`, time: formatRelativeTime(new Date(f.updatedAt)),
+            accent: 'feynman', timestamp: new Date(f.updatedAt).getTime(),
+          });
+        }
+        if (!cancelled) setRecentActivities(acts.slice(0, 4));
+      } catch {
+        // 静默失败（活动流是可选增强）
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [notes, feynmanNotes]);
+
+  // 🪼 知识预览空状态文案（隐喻词典，确定性轮换）
+  const emptyQuote = useMemo(() => {
+    const pool = METAPHOR_MAP.emptyStates.pomodoro;
+    return pool[new Date().getDate() % pool.length];
+  }, []);
+
   /* ── 知识预览卡片数据 ── */
   const knowledgeCards = useMemo<KnowledgeCard[]>(() => {
     const cards: KnowledgeCard[] = [];
-
     // 最近笔记
     const sortedNotes = [...notes].sort((a, b) =>
       new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
@@ -640,6 +721,17 @@ export default function DashboardPage() {
               <StreakBubble streakState={streakState} />
             </Suspense>
           </div>
+
+          {/* 📅 珊瑚礁月历：本月打卡热力图（与 StreakBubble 的气泡计数互补） */}
+          <div className="mt-rhythm-sm">
+            <CoralReefCalendar days={calendarDays} month={new Date().getMonth()} year={new Date().getFullYear()} />
+          </div>
+
+          {/* 深海生物补充展示：气泡打卡柱 + 成就徽章网格（与留存生态视觉同源） */}
+          <div className="mt-rhythm-sm grid grid-cols-1 md:grid-cols-2 gap-rhythm-sm">
+            <BubbleStreak streakDays={streakDays} todayChecked={!!todayCheckIn} loading={checkInLoading} />
+            <AnglerfishAchievements />
+          </div>
         </section>
       )}
 
@@ -684,6 +776,31 @@ export default function DashboardPage() {
         )}
       </section>
 
+      {/* 📈 学习进度：各模块完成百分比（useLearningProgress 复用） */}
+      {progressItems.length > 0 && (
+        <section className="relative max-w-[1100px] mx-auto px-6 py-rhythm-sm">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {progressItems.map((item) => (
+              <div
+                key={item.subject}
+                className="rounded-kb-xl border border-border/15 bg-bg-elevated/30 p-4"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-c1 text-text-secondary truncate">{item.subject}</span>
+                  <span className="text-c1 text-text-tertiary tabular-nums">{item.progress}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-bg-tertiary/40 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-brand-500/70 transition-all duration-700"
+                    style={{ width: `${Math.min(100, Math.max(0, item.progress))}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* ════ 3.16 知识时光胶囊入口 ════ */}
       <section className="relative max-w-[1100px] mx-auto px-6 py-rhythm-sm">
         <div className="flex items-center justify-between gap-4 rounded-kb-xl border border-border-subtle bg-bg-elevated/60 px-5 py-4">
@@ -714,6 +831,16 @@ export default function DashboardPage() {
           loading={analyticsLoading}
         />
       </section>
+
+      {/* 🎯 目标进度 + 🌊 最近活动（深海生物可视化：PearlGoal / PlanktonStream） */}
+      {goalData.length > 0 && (
+        <section className="relative max-w-[1100px] mx-auto px-6 py-rhythm-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-rhythm-sm">
+            <PearlGoal goals={goalData} loading={analyticsLoading} />
+            <PlanktonStream activities={recentActivities} loading={analyticsLoading} />
+          </div>
+        </section>
+      )}
 
       {/* ════ 知识预览区域 ════ */}
       <section className="relative max-w-[1100px] mx-auto px-6 pb-rhythm-xl">
@@ -758,7 +885,7 @@ export default function DashboardPage() {
         ) : (
           <div className="text-center py-rhythm-xl">
             <p className="text-b2 text-text-tertiary">
-              还没有学习记录，开始你的第一次学习吧
+              {emptyQuote}
             </p>
           </div>
         )}
