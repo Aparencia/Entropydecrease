@@ -13,14 +13,21 @@ import { createWriteStream, existsSync, rmSync } from 'fs';
 import { mkdir } from 'fs/promises';
 import { get as httpsGet } from 'https';
 import { get as httpGet } from 'http';
+import { Transform } from 'stream';
 import * as path from 'path';
 import { BrowserWindow } from 'electron';
 import { logger } from '../../logger.js';
-import { getModelsDir, getModelDir, isModelReady, ASR_MODELS, type AsrEngine } from './config.js';
+import { getModelsDir, getModelDir, isModelReady, ASR_MODELS } from './config.js';
 import { resetAvailabilityCache } from './SherpaAsrService.js';
 
 /** 所有出站 HTTP 请求统一携带 UA，避免 CDN 返回 403 */
 const HTTP_HEADERS = { 'User-Agent': 'EntropyDecrease-Desktop/1.0 (Electron)' };
+
+/** 已废弃的旧模型目录名（Paraformer、SenseVoice），不再被使用，应清理 */
+const OBSOLETE_MODEL_DIRS = [
+  'sherpa-onnx-streaming-paraformer-bilingual-zh-en',
+  'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17',
+];
 
 // ================================================================
 // 运行时状态
@@ -38,36 +45,65 @@ export function getDownloadStatus(): { downloading: string | null; progress: num
   return { downloading: _downloading, progress: _downloadProgress };
 }
 
-/** 获取所有引擎模型的状态列表 */
+/** 获取模型状态列表 */
 export function getModelsStatus(): Array<{ engine: string; id: string; label: string; description: string; size: string; ready: boolean }> {
-  return (Object.keys(ASR_MODELS) as AsrEngine[]).map(engine => ({
-    engine,
-    id: ASR_MODELS[engine].id,
-    label: ASR_MODELS[engine].label,
-    description: ASR_MODELS[engine].description,
-    size: ASR_MODELS[engine].size,
-    ready: isModelReady(engine),
-  }));
+  return [{
+    engine: 'streaming',
+    id: ASR_MODELS.streaming.id,
+    label: ASR_MODELS.streaming.label,
+    description: ASR_MODELS.streaming.description,
+    size: ASR_MODELS.streaming.size,
+    ready: isModelReady(),
+  }];
 }
 
 /**
- * 下载并解压指定引擎的模型（多源自动降级）
+ * 清理已废弃的旧模型文件（Paraformer、SenseVoice），释放磁盘空间。
+ * 在应用启动时或模型下载完成后调用，幂等执行。
+ */
+export function cleanupOldModels(): void {
+  const modelsDir = getModelsDir();
+  if (!existsSync(modelsDir)) return;
+  let removed = 0;
+  for (const dirName of OBSOLETE_MODEL_DIRS) {
+    const dirPath = path.join(modelsDir, dirName);
+    if (existsSync(dirPath)) {
+      try {
+        rmSync(dirPath, { recursive: true, force: true });
+        logger.info(`[LocalASR] 已清理旧模型: ${dirName}`);
+        removed++;
+      } catch (err) {
+        logger.warn(`[LocalASR] 清理旧模型失败 ${dirName}: ${err}`);
+      }
+    }
+  }
+  if (removed > 0) {
+    resetAvailabilityCache();
+    logger.info(`[LocalASR] 清理完成，共移除 ${removed} 个旧模型目录`);
+  }
+}
+
+/**
+ * 下载并解压模型（多源自动降级）
  *
  * 降级链：
  *   1. GitHub Releases tar.bz2 整包（全球可用）
  *   2. hf-mirror.com 逐文件下载（国内镜像）
  *   3. huggingface.co 逐文件下载（直连兜底）
- *
- * @param engine - 'streaming' | 'offline'
  */
-export async function downloadModel(engine: AsrEngine): Promise<string> {
+export async function downloadModel(engine: string): Promise<string> {
   if (_downloading) {
     throw new Error(`已有模型正在下载中（${_downloading}），请等待完成`);
   }
 
-  const modelDef = ASR_MODELS[engine];
+  // 当前仅支持 streaming 引擎，参数验证确保前端误传时能给出明确错误
+  if (engine !== 'streaming') {
+    throw new Error(`不支持的引擎: ${engine}（当前仅支持 streaming）`);
+  }
+
+  const modelDef = ASR_MODELS.streaming;
   const modelsDir = getModelsDir();
-  const targetDir = getModelDir(engine);
+  const targetDir = getModelDir();
 
   await mkdir(modelsDir, { recursive: true });
 
@@ -77,9 +113,9 @@ export async function downloadModel(engine: AsrEngine): Promise<string> {
   try {
     // ── 策略 1：GitHub Releases tar.bz2 整包 ──
     let ghError: unknown = null;
+    const tmpFile = path.join(modelsDir, `${modelDef.dirName}.tar.bz2.tmp`);
     try {
       logger.info(`[LocalASR] Trying GitHub release: ${modelDef.downloadUrl}`);
-      const tmpFile = path.join(modelsDir, `${modelDef.dirName}.tar.bz2.tmp`);
       await downloadFile(modelDef.downloadUrl, tmpFile, (progress) => {
         _downloadProgress = Math.round(progress * 0.7);
         broadcastProgress(engine, _downloadProgress);
@@ -89,12 +125,14 @@ export async function downloadModel(engine: AsrEngine): Promise<string> {
       try { rmSync(tmpFile, { force: true }); } catch { /* ignore */ }
     } catch (err) {
       ghError = err;
+      // 解压失败时清理残留的 tmp 文件（force: true 在文件不存在时也不抛）
+      try { rmSync(tmpFile, { force: true }); } catch { /* ignore */ }
       logger.warn(`[LocalASR] GitHub failed: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     // ── 策略 2 + 3：逐文件下载（hf-mirror → huggingface 直连） ──
     if (ghError) {
-      if (!isModelReady(engine)) {
+      if (!isModelReady()) {
         const bases = [
           modelDef.mirrorBaseUrl,                                        // hf-mirror.com
           modelDef.mirrorBaseUrl.replace('hf-mirror.com', 'huggingface.co'), // 直连兜底
@@ -116,13 +154,15 @@ export async function downloadModel(engine: AsrEngine): Promise<string> {
 
     // 校验关键文件
     broadcastProgress(engine, 95);
-    if (!isModelReady(engine)) {
+    if (!isModelReady()) {
       throw new Error(`模型下载后校验失败：缺少关键文件（${modelDef.files.join(', ')}）`);
     }
 
     resetAvailabilityCache();
     logger.info(`[LocalASR] ${engine} model ready at: ${targetDir}`);
     broadcastProgress(engine, 100);
+    // 新模型下载完成后清理旧模型
+    cleanupOldModels();
     return targetDir;
   } catch (err) {
     logger.error(`[LocalASR] Download failed for ${engine}: ${err instanceof Error ? err.message : String(err)}`);
@@ -136,8 +176,8 @@ export async function downloadModel(engine: AsrEngine): Promise<string> {
 /**
  * 从指定 baseUrl 逐文件下载模型（无需解压）
  */
-async function downloadFromMirror(engine: AsrEngine, baseUrl: string, targetDir: string): Promise<void> {
-  const modelDef = ASR_MODELS[engine];
+async function downloadFromMirror(engine: string, baseUrl: string, targetDir: string): Promise<void> {
+  const modelDef = ASR_MODELS.streaming;
   await mkdir(targetDir, { recursive: true });
 
   logger.info(`[LocalASR] Downloading ${modelDef.files.length} files from: ${baseUrl}`);
@@ -157,14 +197,14 @@ async function downloadFromMirror(engine: AsrEngine, baseUrl: string, targetDir:
 }
 
 /**
- * 删除指定引擎的模型
+ * 删除模型
  */
-export async function deleteModel(engine: AsrEngine): Promise<void> {
-  const modelDir = getModelDir(engine);
+export async function deleteModel(_engine: string): Promise<void> {
+  const modelDir = getModelDir();
   if (existsSync(modelDir)) {
     rmSync(modelDir, { recursive: true, force: true });
     resetAvailabilityCache();
-    logger.info(`[LocalASR] ${engine} model deleted: ${modelDir}`);
+    logger.info(`[LocalASR] streaming model deleted: ${modelDir}`);
   }
 }
 
@@ -183,7 +223,7 @@ function broadcastProgress(engine: string, progress: number): void {
   } catch { /* ignore */ }
 }
 
-/** HTTP(S) 文件下载（支持重定向，统一携带 UA） */
+/** HTTP(S) 文件下载（支持重定向，统一携带 UA，通过 Transform 流保持背压） */
 function downloadFile(
   url: string,
   destPath: string,
@@ -198,20 +238,21 @@ function downloadFile(
 
     const getter = url.startsWith('https') ? httpsGet : httpGet;
 
-    getter(url, { timeout: 120000, headers: HTTP_HEADERS }, (res) => {
+    const req = getter(url, { timeout: 120000, headers: HTTP_HEADERS }, (res) => {
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         res.resume();
         const redirectUrl = res.headers.location.startsWith('http')
           ? res.headers.location
           : new URL(res.headers.location, url).href;
         downloadFile(redirectUrl, destPath, onProgress, maxRedirects - 1)
-          .then(resolve)
-          .catch(reject);
+          .then((result) => { clearTimeout(totalTimeout); resolve(result); })
+          .catch((err) => { clearTimeout(totalTimeout); reject(err); });
         return;
       }
 
       if (res.statusCode !== 200) {
         res.resume();
+        clearTimeout(totalTimeout);
         reject(new Error(`Download failed: HTTP ${res.statusCode} — ${url}`));
         return;
       }
@@ -222,20 +263,44 @@ function downloadFile(
 
       const fileStream = createWriteStream(destPath);
 
-      res.on('data', (chunk: Buffer) => {
-        receivedBytes += chunk.length;
-        const now = Date.now();
-        if (totalBytes > 0 && now - lastEmit > 500) {
-          lastEmit = now;
-          onProgress(receivedBytes / totalBytes);
-        }
+      // 使用 Transform 流计算进度（保持背压控制）
+      // 不能用 data 事件 + pipe 同时存在（破坏 pipe 的背压机制，导致内存堆积）
+      const progressStream = new Transform({
+        transform(chunk: Buffer, _encoding, callback) {
+          receivedBytes += chunk.length;
+          const now = Date.now();
+          if (totalBytes > 0 && now - lastEmit > 500) {
+            lastEmit = now;
+            onProgress(receivedBytes / totalBytes);
+          }
+          // 无 content-length（分块传输）时跳过中间进度，
+          // 完成时仍会触发 onProgress(1)，进度从 0 跳到 100%
+          callback(null, chunk);
+        },
       });
 
-      res.pipe(fileStream);
-      fileStream.on('finish', () => { fileStream.close(); onProgress(1); resolve(); });
-      fileStream.on('error', reject);
-      res.on('error', reject);
-    }).on('error', reject);
+      progressStream.on('error', (err) => { clearTimeout(totalTimeout); reject(err); });
+      fileStream.on('finish', () => {
+        clearTimeout(totalTimeout);
+        fileStream.close();
+        onProgress(1);
+        resolve();
+      });
+      fileStream.on('error', (err) => { clearTimeout(totalTimeout); reject(err); });
+      res.on('error', (err) => { clearTimeout(totalTimeout); reject(err); });
+
+      res.pipe(progressStream).pipe(fileStream);
+    });
+
+    req.on('error', (err) => {
+      clearTimeout(totalTimeout);
+      reject(err);
+    });
+
+    // 总下载超时：10 分钟无响应则终止（防止网络卡死时请求永久挂起）
+    const totalTimeout = setTimeout(() => {
+      req.destroy(new Error('Download timeout: 10 minutes exceeded'));
+    }, 600000);
   });
 }
 

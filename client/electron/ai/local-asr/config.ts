@@ -4,11 +4,10 @@
  * 配置文件存放于 userData/local-asr-config.json，
  * 与 ollama-config.json、ai-gateway-config.json 同级。
  *
- * @ai-context: 本地 ASR 配置持久化：enabled/引擎模式/模型目录/语言偏好/线程数。
+ * @ai-context: 本地 ASR 配置持久化：enabled/语言偏好/线程数。
+ * 单一引擎：zipformer-transducer 中英双语流式模型（支持热词增强）。
  * 渲染进程经 IPC local_asr_get_config / local_asr_update_config 读写。
  * 用户首次启用时触发模型下载（modelManager），下载完成前 enabled 不生效。
- * @ai-context: 双引擎架构——streaming（Paraformer，实时字幕）和
- * offline（SenseVoice，课后精修），用户可选默认引擎。
  */
 
 import { app } from 'electron';
@@ -21,15 +20,10 @@ import { logger } from '../../logger.js';
 // 类型定义
 // ================================================================
 
-/** ASR 引擎模式 */
-export type AsrEngine = 'streaming' | 'offline';
-
 /** 本地 ASR 用户配置 */
 export interface LocalAsrConfig {
   /** 用户是否启用本地 ASR（需模型已下载才生效） */
   enabled: boolean;
-  /** 默认引擎：streaming（Paraformer 实时）/ offline（SenseVoice 精修） */
-  engine: AsrEngine;
   /** 推理语言（zh/en/auto） */
   language: string;
   /** CPU 推理线程数（0 = 自动检测核心数） */
@@ -47,17 +41,34 @@ const CONFIG_FILE_NAME = 'local-asr-config.json';
 /** 默认配置 */
 const DEFAULT_CONFIG: LocalAsrConfig = {
   enabled: false,
-  engine: 'offline',
   language: 'zh',
   threads: 0,
   fallbackToCloud: true,
 };
 
 /**
+ * zipformer 模型包关键文件名（单一事实来源）
+ *
+ * 必须与上游模型包实际文件名完全一致：
+ * GitHub Release 整包与 HF 仓库均为 -epoch-99-avg-1 命名，
+ * 不是 paraformer 包的简化名（encoder.onnx/decoder.onnx）。
+ * 曾因沿用简化名导致 isModelReady() 恒为 false、下载后校验失败。
+ *
+ * sherpa-onnx 的 zipformer2（transducer 类）模型需要 encoder/decoder/joiner
+ * 三件套，缺 joiner 时识别器创建失败（joiner: '' does not exist）。
+ */
+export const MODEL_FILES = {
+  encoder: 'encoder-epoch-99-avg-1.onnx',
+  decoder: 'decoder-epoch-99-avg-1.onnx',
+  joiner: 'joiner-epoch-99-avg-1.onnx',
+  tokens: 'tokens.txt',
+} as const;
+
+/**
  * 模型定义（供设置页展示 + modelManager 下载）
  *
- * streaming: Paraformer 流式中英双语（实时字幕，延迟 < 200ms）
- * offline:   SenseVoice 非流式多语言（课后精修，50ms/段，准确率最高）
+ * 统一模型：zipformer-transducer 流式中英双语（支持热词增强）
+ * 同时承担实时流式转写与课后按段转写。
  *
  * 下载源优先级：
  *   1. GitHub Releases（tar.bz2 整包，全球可用）
@@ -65,33 +76,20 @@ const DEFAULT_CONFIG: LocalAsrConfig = {
  */
 export const ASR_MODELS = {
   streaming: {
-    id: 'streaming-paraformer',
-    label: 'Paraformer 流式（实时字幕，中英双语）',
-    description: '边说边出，延迟 < 200ms，适合课堂实时转录',
-    size: '~860MB',
-    dirName: 'sherpa-onnx-streaming-paraformer-bilingual-zh-en',
+    id: 'streaming-zipformer',
+    label: 'Zipformer 流式（实时字幕，中英双语，支持热词）',
+    description: '边说边出，延迟 < 200ms，支持热词增强，适合课堂实时转录',
+    size: '~650MB',
+    dirName: 'sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20',
     files: [
-      'encoder.onnx',
-      'decoder.onnx',
-      'tokens.txt',
+      MODEL_FILES.encoder,
+      MODEL_FILES.decoder,
+      MODEL_FILES.joiner,
+      MODEL_FILES.tokens,
     ],
-    downloadUrl: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-paraformer-bilingual-zh-en.tar.bz2',
+    downloadUrl: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20.tar.bz2',
     /** hf-mirror.com 国内镜像（逐文件下载，无需解压） */
-    mirrorBaseUrl: 'https://hf-mirror.com/csukuangfj/sherpa-onnx-streaming-paraformer-bilingual-zh-en/resolve/main',
-  },
-  offline: {
-    id: 'offline-sensevoice',
-    label: 'SenseVoice 离线精修（中/英/粤/日/韩）',
-    description: '50ms/段极速推理，中文准确率最高，适合课后全量分析',
-    size: '~230MB',
-    dirName: 'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17',
-    files: [
-      'model.int8.onnx',
-      'tokens.txt',
-    ],
-    downloadUrl: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2',
-    /** hf-mirror.com 国内镜像（逐文件下载，无需解压） */
-    mirrorBaseUrl: 'https://hf-mirror.com/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main',
+    mirrorBaseUrl: 'https://hf-mirror.com/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main',
   },
 } as const;
 
@@ -115,10 +113,9 @@ export function getModelsDir(): string {
   return path.join(app.getPath('userData'), 'asr-models');
 }
 
-/** 获取指定引擎的模型目录完整路径 */
-export function getModelDir(engine?: AsrEngine): string {
-  const eng = engine ?? getLocalAsrConfig().engine;
-  const modelDef = ASR_MODELS[eng];
+/** 获取模型目录完整路径 */
+export function getModelDir(): string {
+  const modelDef = ASR_MODELS.streaming;
   return path.join(getModelsDir(), modelDef.dirName);
 }
 
@@ -140,12 +137,11 @@ export async function loadLocalAsrConfig(): Promise<void> {
     const parsed = JSON.parse(raw);
     _config = {
       enabled: typeof parsed.enabled === 'boolean' ? parsed.enabled : DEFAULT_CONFIG.enabled,
-      engine: parsed.engine === 'streaming' ? 'streaming' : 'offline',
       language: typeof parsed.language === 'string' ? parsed.language : DEFAULT_CONFIG.language,
       threads: typeof parsed.threads === 'number' ? parsed.threads : DEFAULT_CONFIG.threads,
       fallbackToCloud: typeof parsed.fallbackToCloud === 'boolean' ? parsed.fallbackToCloud : DEFAULT_CONFIG.fallbackToCloud,
     };
-    logger.info(`[LocalASR] Config loaded: enabled=${_config.enabled}, engine=${_config.engine}, lang=${_config.language}`);
+    logger.info(`[LocalASR] Config loaded: enabled=${_config.enabled}, lang=${_config.language}`);
   } catch {
     _config = { ...DEFAULT_CONFIG };
     logger.info('[LocalASR] No persisted config found, using defaults');
@@ -159,40 +155,40 @@ export async function updateLocalAsrConfig(partial: Partial<LocalAsrConfig>): Pr
   const current = getLocalAsrConfig();
   const updated: LocalAsrConfig = {
     enabled: partial.enabled ?? current.enabled,
-    engine: partial.engine ?? current.engine,
     language: partial.language ?? current.language,
     threads: partial.threads ?? current.threads,
     fallbackToCloud: partial.fallbackToCloud ?? current.fallbackToCloud,
   };
 
-  _config = updated;
-
   try {
     const configPath = getAsrConfigPath();
     await writeFile(configPath, JSON.stringify(updated, null, 2), 'utf-8');
-    logger.info(`[LocalASR] Config saved: enabled=${updated.enabled}, engine=${updated.engine}`);
+    // 持久化成功后再更新内存，保证重启后状态一致
+    _config = updated;
+    logger.info(`[LocalASR] Config saved: enabled=${updated.enabled}`);
   } catch (err) {
     logger.error('[LocalASR] Failed to persist config', err);
+    // 内存未更新，保持与持久化状态一致
   }
 
   return { ...updated };
 }
 
 /**
- * 判断本地 ASR 是否可用（enabled + 对应引擎模型目录存在）
+ * 判断本地 ASR 是否可用（enabled + 模型目录存在）
  */
 export function isLocalAsrEnabled(): boolean {
   const config = getLocalAsrConfig();
   if (!config.enabled) return false;
-  return isModelReady(config.engine);
+  return isModelReady();
 }
 
 /**
- * 检查指定引擎的模型是否已下载就绪
+ * 检查模型是否已下载就绪
  */
-export function isModelReady(engine: AsrEngine): boolean {
-  const modelDir = getModelDir(engine);
-  const modelDef = ASR_MODELS[engine];
+export function isModelReady(): boolean {
+  const modelDir = getModelDir();
+  const modelDef = ASR_MODELS.streaming;
   // 检查关键文件是否存在
   return modelDef.files.every(f => existsSync(path.join(modelDir, f)));
 }

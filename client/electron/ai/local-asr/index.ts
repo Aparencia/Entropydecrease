@@ -20,7 +20,6 @@ import {
   isLocalAsrEnabled,
   isModelReady,
   type LocalAsrConfig,
-  type AsrEngine,
 } from './config.js';
 import {
   transcribeLocal,
@@ -36,12 +35,13 @@ import {
   deleteModel,
   getModelsStatus,
   getDownloadStatus,
+  cleanupOldModels,
 } from './modelManager.js';
 
 export function registerLocalAsrHandlers(): void {
   // ── 转写（核心接口，渲染进程 asrTranscriber.ts 调用） ──
-  // TODO(P1-3): 本 IPC payload 暂未含可选 hotwords 字段——SenseVoice/Paraformer
-  // 不支持热词（详见 SherpaAsrService.ts 的 TODO 结论），届时新增字段须保持旧载荷兼容
+  // 热词增强：渲染进程可通过 hotwords 字段传入 zipformer 支持的热词字符串
+  // （hotwordRuntime.getSessionBoostWords() 预留），旧载荷保持兼容
   safeHandle(
     'local_asr_transcribe',
     async (_event, args: {
@@ -50,6 +50,7 @@ export function registerLocalAsrHandlers(): void {
       sampleRate?: number;
       channels?: number;
       isWav?: boolean;
+      hotwords?: string;
     }) => {
       if (!isLocalAsrEnabled()) {
         throw new Error('本地 ASR 未启用或模型未下载');
@@ -58,6 +59,7 @@ export function registerLocalAsrHandlers(): void {
         language: args.language,
         sampleRate: args.sampleRate,
         channels: args.channels,
+        hotwords: args.hotwords,
       });
     },
   );
@@ -78,12 +80,11 @@ export function registerLocalAsrHandlers(): void {
     return {
       available,
       enabled: config.enabled,
-      engine: config.engine,
-      modelDownloaded: isModelReady(config.engine),
+      modelDownloaded: isModelReady(),
     };
   });
 
-  // ── 真流式 ASR（Paraformer 在线，课堂 smart 采集实时转录） ──
+  // ── 真流式 ASR（Zipformer 在线，课堂 smart 采集实时转录） ──
   // 渲染进程据此决定是否走真流式链路（否则回退按段转写）
   safeHandle('local_asr_stream_available', async () => {
     return { available: isStreamingAsrAvailable() };
@@ -93,12 +94,12 @@ export function registerLocalAsrHandlers(): void {
   // partial/final 结果经 asr_stream_partial / asr_stream_final 事件推回渲染进程
   safeHandle(
     'local_asr_stream_start',
-    async (event, args: { sampleRate?: number }) => {
+    async (event, args: { sampleRate?: number; hotwords?: string }) => {
       const win = BrowserWindow.fromWebContents(event.sender);
       if (!win) {
         return { success: false, error: 'No valid window' };
       }
-      return startStreamingAsr(win, args?.sampleRate ?? 16000);
+      return startStreamingAsr(win, args?.sampleRate ?? 16000, args?.hotwords);
     },
   );
 
@@ -117,7 +118,7 @@ export function registerLocalAsrHandlers(): void {
 
   safeHandle(
     'local_asr_download_model',
-    async (_event, args: { engine: AsrEngine }) => {
+    async (_event, args: { engine: string }) => {
       logger.info(`[LocalASR] IPC download request: engine=${args.engine}`);
       const modelPath = await downloadModel(args.engine);
       return { success: true, modelPath };
@@ -126,11 +127,17 @@ export function registerLocalAsrHandlers(): void {
 
   safeHandle(
     'local_asr_delete_model',
-    async (_event, args: { engine: AsrEngine }) => {
+    async (_event, args: { engine: string }) => {
       await deleteModel(args.engine);
       return { success: true };
     },
   );
 
   logger.info('[LocalASR] IPC handlers registered (sherpa-onnx)');
+  // 启动时清理已废弃的旧模型文件（Paraformer、SenseVoice）
+  try {
+    cleanupOldModels();
+  } catch (err) {
+    logger.warn(`[LocalASR] Failed to cleanup old models on startup: ${err}`);
+  }
 }
