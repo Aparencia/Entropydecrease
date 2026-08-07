@@ -333,6 +333,7 @@ class AIProvider(ABC):
         sample_rate: int = 16000,
         channels: int = 1,
         model: str = "",
+        hotwords: str = "",
     ) -> dict[str, Any]:
         """
         语音转文字

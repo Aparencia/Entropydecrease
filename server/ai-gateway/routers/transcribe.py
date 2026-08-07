@@ -34,6 +34,7 @@ class TranscribeRequest(BaseModel):
     language: str = Field(default="zh", max_length=16, description="语言代码：zh/en/auto")
     sample_rate: int = Field(default=16000, ge=8000, le=96000, description="采样率")
     channels: int = Field(default=1, ge=1, le=2, description="声道数")
+    hotwords: str = Field(default="", max_length=500, description="热词增强字符串（空格分隔，透传 ASR 引擎）")
 
 
 class TranscribeSegment(BaseModel):
@@ -88,6 +89,7 @@ async def transcribe_audio(request: Request, body: TranscribeRequest) -> Transcr
             language=body.language,
             sample_rate=body.sample_rate,
             channels=body.channels,
+            hotwords=body.hotwords,
         )
 
     try:

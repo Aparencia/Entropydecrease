@@ -57,6 +57,7 @@ class TranscribeChain:
         language: str = "zh",
         sample_rate: int = 16000,
         channels: int = 1,
+        hotwords: str = "",
     ) -> dict[str, Any]:
         """
         将音频 base64 数据转写为文本
@@ -66,6 +67,7 @@ class TranscribeChain:
             language: 语言代码（zh/en/auto）
             sample_rate: 采样率
             channels: 声道数
+            hotwords: 热词增强字符串（空格分隔）
 
         Returns:
             {
@@ -88,6 +90,7 @@ class TranscribeChain:
             sample_rate=sample_rate,
             channels=channels,
             model=self.model,
+            hotwords=hotwords,
             _feature="transcribe",
         )
 

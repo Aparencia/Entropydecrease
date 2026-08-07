@@ -138,6 +138,7 @@ class GLMProvider(AIProvider):
         sample_rate: int = 16000,
         channels: int = 1,
         model: str = "glm-asr",
+        hotwords: str = "",
     ) -> dict[str, Any]:
         """
         调用智谱 GLM-ASR 语音转文字
@@ -146,6 +147,7 @@ class GLMProvider(AIProvider):
         经 OpenAI 兼容 SDK 的 audio.transcriptions.create 调用。官方参数仅
         model/file(或 file_base64)/prompt/hotwords/stream，不支持 language，
         故不传；音频限制 wav/mp3、≤25MB、时长 ≤30 秒。
+        hotwords 经 kwargs 透传（GLM-ASR 官方支持）。
         """
         start_time = time.monotonic()
 
@@ -159,6 +161,8 @@ class GLMProvider(AIProvider):
                 "model": model,
                 "file": audio_file,
             }
+            if hotwords:
+                kwargs["hotwords"] = hotwords
 
             response = await self._client.audio.transcriptions.create(**kwargs)
 

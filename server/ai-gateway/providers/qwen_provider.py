@@ -123,6 +123,7 @@ class QwenProvider(AIProvider, QwenVisionMixin):
         sample_rate: int = 16000,
         channels: int = 1,
         model: str = "qwen3-asr-flash",
+        hotwords: str = "",
     ) -> dict[str, Any]:
         """
         调用阿里云百炼 Qwen3-ASR-Flash 语音转文字
@@ -132,6 +133,7 @@ class QwenProvider(AIProvider, QwenVisionMixin):
         官方调用规范：chat.completions + input_audio 内容块（Base64 Data URL，
         编码后 ≤10MB），语言经 extra_body.asr_options.language 指定，
         language="auto" 时不传该字段由模型自动检测。
+        hotwords 经 asr_options.hotwords 透传（Qwen3-ASR-Flash 支持热词增强）。
         """
         start_time = time.monotonic()
 
@@ -143,6 +145,8 @@ class QwenProvider(AIProvider, QwenVisionMixin):
             asr_options: dict[str, Any] = {"enable_itn": True}
             if language != "auto":
                 asr_options["language"] = language
+            if hotwords:
+                asr_options["hotwords"] = hotwords
 
             response = await self._client.chat.completions.create(
                 model=model,

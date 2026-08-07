@@ -349,6 +349,7 @@ class GeminiProvider(AIProvider):
         sample_rate: int = 16000,
         channels: int = 1,
         model: str = "",
+        hotwords: str = "",
     ) -> dict[str, Any]:
         """Gemini 不提供独立 ASR，暂不支持"""
         raise NotImplementedError("GeminiProvider 不支持独立语音转文字")
