@@ -63,8 +63,8 @@ export default function AnglerfishAchievements() {
         </div>
       </div>
 
-      {/* 成就网格 */}
-      <div className="grid grid-cols-4 gap-2">
+      {/* 成就网格：桌面 9 列（18 项排 2 行，横向徽章横幅）；窄屏回退 4 列 */}
+      <div className="grid grid-cols-4 md:grid-cols-9 gap-2">
         {ACHIEVEMENT_DEFS.map((def, i) => {
           const Icon = ICON_MAP[def.icon] ?? Timer;
           const unlocked = unlockedMap[def.key];

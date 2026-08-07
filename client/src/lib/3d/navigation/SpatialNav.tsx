@@ -42,11 +42,14 @@ const DEEP_SEA_CONFIG: Record<ModuleId, {
   inspiration: { geometry: 'sphere', color: '#EC4899', emissiveColor: '#F472B6' },
   classroom: { geometry: 'torus', color: '#14B8A6', emissiveColor: '#2DD4BF' },
   constellation: { geometry: 'octahedron', color: '#F59E0B', emissiveColor: '#FBBF24' },
+  sop: { geometry: 'box', color: '#84CC16', emissiveColor: '#A3E635' },
 };
 
 /**
  * 穹顶模式下每个模块的轨道配置
- * 轨道半径已缩减（原值最大 9，现最大 5.5），防止行星漂出可视范围导致漂移感
+ * 与深海 MODULE_POSITIONS 的语义分组呼应（行动组右/产出组左/扩展组上下）：
+ * 行动组 initialAngle 集中 0° 附近（±0.3π）、产出组集中在 π 附近、灵感 π/2、课堂 3π/2；
+ * orbitRadius 按环：内环 2.5-3.0、中环 3.5-4.2、外环 4.6-5.2。
  */
 const AURORA_ORBIT_CONFIG: Record<ModuleId, {
   orbitRadius: number;
@@ -54,13 +57,17 @@ const AURORA_ORBIT_CONFIG: Record<ModuleId, {
   initialAngle: number;
 }> = {
   dashboard: { orbitRadius: 0, orbitSpeed: 0, initialAngle: 0 },
+  // 内环·行动组（右半场，核心学习动作）
   pomodoro: { orbitRadius: 2.5, orbitSpeed: 0.3, initialAngle: 0 },
-  notes: { orbitRadius: 3.5, orbitSpeed: 0.2, initialAngle: Math.PI * 0.4 },
-  flashcards: { orbitRadius: 4.5, orbitSpeed: 0.15, initialAngle: Math.PI * 0.8 },
-  feynman: { orbitRadius: 5, orbitSpeed: 0.12, initialAngle: Math.PI * 1.2 },
-  inspiration: { orbitRadius: 5.5, orbitSpeed: 0.1, initialAngle: Math.PI * 1.6 },
-  classroom: { orbitRadius: 4, orbitSpeed: 0.18, initialAngle: Math.PI * 0.6 },
-  constellation: { orbitRadius: 4.8, orbitSpeed: 0.14, initialAngle: Math.PI * 1.9 },
+  flashcards: { orbitRadius: 3.5, orbitSpeed: 0.22, initialAngle: Math.PI * 0.3 },
+  feynman: { orbitRadius: 4.2, orbitSpeed: 0.16, initialAngle: Math.PI * -0.3 },
+  // 中环·产出组（左半场，知识沉淀）
+  sop: { orbitRadius: 2.8, orbitSpeed: 0.25, initialAngle: Math.PI * 0.8 },
+  notes: { orbitRadius: 3.5, orbitSpeed: 0.2, initialAngle: Math.PI * 0.7 },
+  constellation: { orbitRadius: 4.6, orbitSpeed: 0.14, initialAngle: Math.PI * 1.3 },
+  // 外环·扩展组（上下，氛围/工具）
+  inspiration: { orbitRadius: 5.0, orbitSpeed: 0.12, initialAngle: Math.PI * 0.5 },
+  classroom: { orbitRadius: 5.0, orbitSpeed: 0.16, initialAngle: Math.PI * 1.5 },
 };
 
 /** 相机飞入模块时的偏移（从模块位置向相机方向偏移） */

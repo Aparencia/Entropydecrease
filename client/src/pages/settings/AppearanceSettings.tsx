@@ -5,12 +5,16 @@ import { useState } from 'react';
 import { readWithLegacyMigration } from '@/lib/utils/legacyLocalStorage';
 import { Card } from '@/components/ui';
 import { useTheme } from '@/hooks/useTheme';
-import { Sun, Moon, Rows3, Grid3x3, AlignJustify, Waves, Eye, Heart } from 'lucide-react';
+import { Sun, Moon, Rows3, Grid3x3, AlignJustify, Waves, Eye, Heart, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   getWorldSoundscapeEnabled,
   setWorldSoundscapeEnabled,
 } from '@/lib/audio/worldSoundscapeConfig';
+import { useHomeScheme } from '@/features/dashboard/hooks/useHomeScheme';
+import type { HomeSchemeSetting } from '@/features/dashboard/hooks/useHomeScheme';
+import { useDomeNebula } from '@/features/dashboard/hooks/useDomeNebula';
+import { setDomeNebulaEnabled } from '@/features/dashboard/config/homeSchemeConfig';
 
 /** 密度存储 key */
 const DENSITY_KEY = 'ed-density';
@@ -37,6 +41,8 @@ const densityConfig: { key: Density; label: string; icon: React.FC<React.SVGProp
 
 export default function AppearanceSettings() {
   const { theme, setTheme } = useTheme();
+  const { setting: homeScheme, setScheme } = useHomeScheme();
+  const domeNebula = useDomeNebula();
   const [density, setDensity] = useState<Density>(getStoredDensity);
   const [soundscape, setSoundscape] = useState(getWorldSoundscapeEnabled);
   const [eyeCareEnabled, setEyeCareEnabled] = useState(() => {
@@ -80,6 +86,21 @@ export default function AppearanceSettings() {
     } catch { /* ignore */ }
     // 立即应用到 DOM
     document.documentElement.setAttribute('data-density', key);
+  };
+
+  /** 首页方案选项：跟随主题 / 深海世界 / 穹顶世界 */
+  const schemeOptions: Array<{ key: HomeSchemeSetting; label: string; icon: React.FC<React.SVGProps<SVGSVGElement> & { strokeWidth?: number | string }>; desc: string }> = [
+    { key: 'auto', label: '跟随主题', icon: AlignJustify, desc: '深色=深海 · 浅色=穹顶' },
+    { key: 'deep-sea', label: '深海世界', icon: Waves, desc: '毛玻璃发光沉浸' },
+    { key: 'aurora-dome', label: '穹顶世界', icon: Sun, desc: '平面阴影效率' },
+  ];
+
+  const handleSchemeChange = (key: HomeSchemeSetting) => {
+    void setScheme(key);
+  };
+
+  const handleDomeNebulaToggle = () => {
+    setDomeNebulaEnabled(!domeNebula);
   };
 
   return (
@@ -134,6 +155,57 @@ export default function AppearanceSettings() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* 首页方案（三视图表面语言：跟随主题/深海/穹顶，可独立于主题自由组合） */}
+      <div className="flex flex-col gap-kb-sm">
+        <label className="text-b2 font-medium text-text-secondary">首页方案</label>
+        <div className="grid grid-cols-3 gap-2">
+          {schemeOptions.map(({ key, label, icon: Icon, desc }) => (
+            <button
+              key={key}
+              onClick={() => handleSchemeChange(key)}
+              className={cn(
+                'flex flex-col items-start gap-1 py-2.5 px-3 rounded-[var(--kb-radius-md)]',
+                'border-2 text-b2 font-medium transition-all duration-200',
+                homeScheme === key
+                  ? 'border-brand-500 bg-brand-50 text-brand-700'
+                  : 'border-border/50 bg-bg-elevated text-text-secondary hover:border-brand-300 hover:bg-bg-tertiary',
+              )}
+            >
+              <span className="flex items-center gap-2">
+                <Icon className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+                {label}
+              </span>
+              <span className="text-c1 font-normal text-text-tertiary">{desc}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 穹顶星云背景（可微调：关闭后穹顶退化为纯净晨光渐变） */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <label className="text-b2 font-medium text-text-secondary">穹顶星云背景</label>
+          <span className="text-b3 text-text-tertiary">
+            穹顶方案的云层/星点层次，关闭后更纯净（觉察是镜子，有权移开视线）
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={handleDomeNebulaToggle}
+          aria-pressed={domeNebula}
+          className={cn(
+            'flex items-center gap-2 py-2 px-4 rounded-kb-full border-2 text-b2 font-medium',
+            'transition-all duration-200',
+            domeNebula
+              ? 'border-brand-500 bg-brand-50 text-brand-700'
+              : 'border-border/50 bg-bg-elevated text-text-secondary hover:border-brand-300',
+          )}
+        >
+          <Sparkles className="w-icon-sm h-icon-sm" strokeWidth={1.5} />
+          {domeNebula ? '已开启' : '已关闭'}
+        </button>
       </div>
 
       {/* 信息密度 */}
