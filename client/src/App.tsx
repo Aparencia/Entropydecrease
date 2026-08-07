@@ -39,6 +39,7 @@ import { useDigitalWellbeing } from '@/hooks/useDigitalWellbeing';
 import { DigitalWellbeingOverlay } from '@/components/DigitalWellbeingOverlay';
 import { useLocalStorageFlag } from '@/hooks/useLocalStorageFlag';
 import { EyeCareModeStyle, useEyeCareMode } from '@/components/EyeCareMode';
+import { applyDailyHueShift } from '@/features/retention/lib/dailyVariation';
 import '@/stores/useSettingsStore'; // 导入以触发音效设置初始化
 import { startPomodoroScheduler } from '@/features/pomodoro/lib/pomodoroScheduler';
 import { usePomodoroStore } from '@/features/pomodoro/store/usePomodoroStore';
@@ -67,6 +68,8 @@ const queryClient = new QueryClient({
 function App() {
   // Initialize theme on app mount
   useTheme();
+  // 每日确定性色相微调（对抗感觉适应：每天微妙的新鲜感，纯本地无网络）
+  applyDailyHueShift();
 
   // 留存机制：在 Provider 内、路由外初始化所有留存 store
   // 放在此处确保无论用户从哪个路由进入，数据均已就绪

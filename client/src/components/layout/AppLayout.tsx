@@ -159,7 +159,7 @@ export default function AppLayout() {
         const moduleKeys: Record<string, string> = {
           '1': '/', '2': '/pomodoro', '3': '/notes',
           '4': '/flashcards', '5': '/feynman', '6': '/inspiration',
-          '7': '/classroom', '0': '/settings',
+          '7': '/classroom', '8': '/constellation', '0': '/settings',
         };
         if (moduleKeys[e.key]) {
           const route = moduleKeys[e.key];

@@ -15,6 +15,8 @@ import FlashcardSettings from './settings/FlashcardSettings';
 import AudioCaptureSettings from './settings/AudioCaptureSettings';
 import { BetaProfile } from '@/features/beta/BetaProfile';
 import { useBetaProfile } from '@/features/beta/hooks/useBetaProfile';
+import { UpgradePrompt } from '@/features/beta/UpgradePrompt';
+import { useTierAccess } from '@/features/beta/hooks/useTierAccess';
 
 // 延迟组：有网络/IPC/DB 操作的重组件
 const AIProviderSettings = lazy(() => import('./settings/AIProviderSettings'));
@@ -97,6 +99,8 @@ function SettingsSection({ children, index = 0 }: { children: React.ReactNode; i
 export default function SettingsPage() {
   // 加载内测身份
   useBetaProfile();
+  // AI 配额信息（UpgradePrompt 展示 tier 权益与升级入口）
+  const { dailyAiCalls } = useTierAccess();
 
   return (
     <motion.div
@@ -121,6 +125,10 @@ export default function SettingsPage() {
         </SettingsSection>
         <SettingsSection index={1}>
           <BetaProfile />
+          {/* 升级引导：非阻断式配额提示（区分内测/免费话术，可关闭） */}
+          <div className="mt-3">
+            <UpgradePrompt featureName="AI 功能" totalCount={dailyAiCalls} />
+          </div>
         </SettingsSection>
         <SettingsSection index={2}>
           <AppearanceSettings />
