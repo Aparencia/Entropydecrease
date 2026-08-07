@@ -20,16 +20,16 @@ import { supabase } from '@/lib/auth/supabaseClient';
 // ================================================================
 
 /** 视觉提取模式 */
-export type VisionExtractMode = 'auto' | 'text' | 'formula' | 'diagram' | 'code' | 'full';
+type VisionExtractMode = 'auto' | 'text' | 'formula' | 'diagram' | 'code' | 'full';
 
 /** 代码块结构 */
-export interface CodeBlock {
+interface CodeBlock {
   language: string;
   code: string;
 }
 
 /** 视觉提取选项 */
-export interface VisionExtractOptions {
+interface VisionExtractOptions {
   /** 提取模式，默认 'auto' */
   mode?: VisionExtractMode;
 }
@@ -196,7 +196,7 @@ export class VisionWorker implements PipelineWorker {
 // ================================================================
 
 /** 视觉提取错误类型 */
-export type VisionErrorType =
+type VisionErrorType =
   | 'network'        // 网络不可达 / fetch 失败
   | 'timeout'        // 请求超时
   | 'auth'           // 认证失败 401/403
@@ -205,7 +205,7 @@ export type VisionErrorType =
   | 'unknown';       // 未分类
 
 /** 分类后的错误信息 */
-export interface VisionErrorInfo {
+interface VisionErrorInfo {
   type: VisionErrorType;
   message: string;
   statusCode?: number;

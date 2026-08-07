@@ -1,7 +1,7 @@
 /**
  * @ai-context: Socratic 功能的 React Hook 包装：仅做加载/错误状态编排，业务调用统一走 aiPluginLoader，禁止在 Hook 内写业务计算。
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { aiPluginLoader } from '../AIPluginLoader';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import {
@@ -14,6 +14,26 @@ import {
 } from '../aiServiceFallback';
 import { type AIState, INITIAL_STATE, resolveAIErrorState } from './types';
 import type { BrainstormIdea, ChatMessage, SocraticEvaluateResult, SocraticDeepeningResult, SocraticMirrorResult } from '../types';
+
+/**
+ * 宽松解析流式累积的苏格拉底追问 JSON（socratic_v1 模板强制 JSON：
+ * {"question": "...", "hints": [...]}；AI 输出可能带前后缀说明文字）
+ */
+function parseSocraticQuestionJson(text: string): { question: string; hints: string[] } | null {
+  const tryParse = (s: string): { question: string; hints: string[] } | null => {
+    try {
+      const parsed = JSON.parse(s) as { question?: string; hints?: string[] };
+      if (typeof parsed.question === 'string' && parsed.question.trim()) {
+        return { question: parsed.question, hints: Array.isArray(parsed.hints) ? parsed.hints : [] };
+      }
+    } catch { /* fallthrough */ }
+    return null;
+  };
+  const direct = tryParse(text);
+  if (direct) return direct;
+  const block = text.match(/\{[\s\S]*\}/);
+  return block ? tryParse(block[0]) : null;
+}
 
 /**
  * AI 苏格拉底式学习 hook
@@ -47,6 +67,12 @@ export function useAISocratic() {
   const [mirrorState, setMirrorState] = useState<AIState<SocraticMirrorResult>>({
     ...INITIAL_STATE,
   });
+  /** 追问流式渐进文本（逐 chunk 累积，打字机展示） */
+  const [streamingQuestion, setStreamingQuestion] = useState('');
+  /** 是否正在流式追问输出 */
+  const [isQuestionStreaming, setIsQuestionStreaming] = useState(false);
+  const questionCancelRef = useRef(false);
+  const questionStreamIdRef = useRef(0);
 
   /** 苏格拉底式头脑风暴 — 带 300 秒缓存 + 请求去重 + 降级处理 */
   const brainstorm = useCallback(async (topic: string, context?: string) => {
@@ -106,7 +132,6 @@ export function useAISocratic() {
   const askQuestion = useCallback(async (conversationId: string, topic: string, history: ChatMessage[]) => {
     setQuestionState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
     const cacheKey = `socratic_question:${conversationId}:${topic.slice(0, 100)}`;
-
     try {
       const result = await aiPluginLoader.socraticQuestion(conversationId, topic, history);
 
@@ -140,6 +165,57 @@ export function useAISocratic() {
       return null;
     }
   }, []);
+
+  /**
+   * A 组流式接入：苏格拉底追问打字机（/socratic/stream SSE）
+   * 逐 chunk 累积 JSON（socratic_v1 模板强制 {"question","hints"}），完成后宽松解析；
+   * 流式失败自动降级非流式 askQuestion。onChunk 回调供 UI 渐进展示。
+   */
+  const askQuestionStream = useCallback(async (
+    conversationId: string,
+    topic: string,
+    history: ChatMessage[],
+    onChunk?: (partial: string) => void,
+  ) => {
+    questionCancelRef.current = false;
+    const streamId = ++questionStreamIdRef.current;
+    setQuestionState(prev => ({ ...prev, loading: true, error: null, needsConfig: false }));
+    setIsQuestionStreaming(true);
+    setStreamingQuestion('');
+    let accumulated = '';
+    try {
+      const iterable = aiPluginLoader.socraticQuestionStream(conversationId, topic, history);
+      for await (const chunk of iterable) {
+        if (questionCancelRef.current || questionStreamIdRef.current !== streamId) return null;
+        accumulated += chunk;
+        setStreamingQuestion(accumulated);
+        onChunk?.(accumulated);
+      }
+      if (questionCancelRef.current || questionStreamIdRef.current !== streamId) return null;
+      const parsed = parseSocraticQuestionJson(accumulated);
+      if (!parsed) {
+        throw new Error('AI 流式返回无法解析为苏格拉底追问 JSON');
+      }
+      soundPlayer.play('ai_analysis_done');
+      setQuestionState({ data: parsed, loading: false, error: null, isFallback: false, needsConfig: false });
+      setIsQuestionStreaming(false);
+      return parsed;
+    } catch (error: unknown) {
+      if (questionCancelRef.current || questionStreamIdRef.current !== streamId) return null;
+      // 流式失败 → 降级非流式（非流式内部自行处理错误态与降级链）
+      setIsQuestionStreaming(false);
+      return askQuestion(conversationId, topic, history);
+    }
+  }, [askQuestion]);
+
+  /** 取消当前流式追问 */
+  const cancelQuestionStream = useCallback(() => {
+    questionCancelRef.current = true;
+    setIsQuestionStreaming(false);
+  }, []);
+
+  // 组件卸载时自动取消，避免对已卸载组件 setState
+  useEffect(() => () => { questionCancelRef.current = true; }, []);
 
   /** FEAT-022: 苏格拉底回答评估 — 带 300 秒缓存 + 请求去重 + 降级处理 */
   const evaluateAnswer = useCallback(async (topic: string, question: string, answer: string, history: ChatMessage[]) => {
@@ -304,7 +380,14 @@ export function useAISocratic() {
 
   return {
     brainstorm: { ...brainstormState, brainstorm },
-    question: { ...questionState, askQuestion },
+    question: {
+      ...questionState,
+      askQuestion,
+      askQuestionStream,
+      cancelQuestionStream,
+      streamingQuestion,
+      isQuestionStreaming,
+    },
     evaluate: { ...evaluateState, evaluateAnswer },
     deepening: { ...deepeningState, generateDeepeningAngles },
     mirror: { ...mirrorState, mirrorQuestion },

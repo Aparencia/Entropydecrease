@@ -42,10 +42,10 @@ const SUGGESTIONS = [
 export function RescuePanel({ isOpen, onClose, context, onSuggestion }: RescuePanelProps) {
   const [activeLevel, setActiveLevel] = useState<RescueLevel>(1);
   const [showIncubation, setShowIncubation] = useState(false);
-  const { loading, data, error, needsConfig, rescue } = useAIRescue();
+  const { loading, data, error, needsConfig, streamingText, rescueStream } = useAIRescue();
   const navigate = useNavigate();
 
-  // 面板打开时触发救援请求
+  // 面板打开时触发救援请求（P5 流式：打字机渐进展示，失败自动降级非流式）
   useEffect(() => {
     if (isOpen && context.topic) {
       const rescueCtx: RescueContext = {
@@ -53,9 +53,9 @@ export function RescuePanel({ isOpen, onClose, context, onSuggestion }: RescuePa
         relatedContent: context.relatedContent,
         mode: (context.mode as RescueContext['mode']) ?? 'general',
       };
-      rescue(rescueCtx);
+      rescueStream(rescueCtx);
     }
-  }, [isOpen, context.topic, context.relatedContent, context.mode, rescue]);
+  }, [isOpen, context.topic, context.relatedContent, context.mode, rescueStream]);
 
   // 卡壳超10分钟显示孵化建议（由外部 useStuckTimer 触发）
   useEffect(() => {
@@ -146,8 +146,15 @@ export function RescuePanel({ isOpen, onClose, context, onSuggestion }: RescuePa
             <div className="flex-1 overflow-y-auto px-kb-md py-kb-md">
               {loading && (
                 <div className="flex items-center gap-2 text-b2 text-text-secondary py-8 justify-center">
-                  <AIThinkingIndicator size={4} gap={3} />
-                  AI 正在思考救援方案…
+                  {/* P5 流式：首 chunk 到达前显示思考动画，之后打字机渐进展示 */}
+                  {streamingText ? (
+                    <p className="text-b2 text-text-secondary leading-relaxed whitespace-pre-wrap">{streamingText}</p>
+                  ) : (
+                    <>
+                      <AIThinkingIndicator size={4} gap={3} />
+                      AI 正在思考救援方案…
+                    </>
+                  )}
                 </div>
               )}
 
