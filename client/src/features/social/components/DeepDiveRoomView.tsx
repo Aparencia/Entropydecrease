@@ -15,6 +15,7 @@ import { DoorOpen, Timer } from 'lucide-react';
 import { Card, CardContent, Button } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth/AuthContext';
+import { useShallow } from 'zustand/react/shallow';
 import { usePomodoroStore } from '@/features/pomodoro/store/usePomodoroStore';
 import { CHEER_EMOJIS, type RoomStateResult } from '../hooks/useRoomState';
 import type { PresenceStatus, RoomPresence } from '../types';
@@ -41,12 +42,12 @@ const STATUS_LABELS: Record<PresenceStatus, string> = {
 export default function DeepDiveRoomView({ roomId, state, onLeave }: DeepDiveRoomViewProps) {
   const { room, cheerFor } = state;
   const { user } = useAuth();
-  const pomodoro = usePomodoroStore((s) => ({
+  const pomodoro = usePomodoroStore(useShallow((s) => ({
     phase: s.phase,
     isRunning: s.isRunning,
     remainingSeconds: s.remainingSeconds,
     totalSeconds: s.totalSeconds,
-  }));
+  })));
 
   // 自己的番茄进度百分比（休息阶段显示 0，避免误导）
   const selfProgress = useMemo(() => {

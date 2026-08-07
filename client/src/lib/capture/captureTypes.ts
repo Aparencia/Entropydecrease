@@ -159,8 +159,10 @@ export interface AudioSegment {
   timestampEnd: number;
   audioBase64: string;
   energy: number;
-  /** 流式 ASR 转写结果（课堂进行中即时填充，无需课后批量转写） */
+  /** 流式 ASR 转写结果（课堂进行中即时填充，无需课后批量转写）——已应用热词替换的文本，供下游笔记/问答/闪卡消费 */
   audioText?: string | null;
+  /** 原始 ASR 转写文本（热词替换前），保真溯源用 */
+  audioTextRaw?: string | null;
 }
 
 /** @ai-context 全局时间轴条目，串联关键帧和语音段供后续分析回放 */

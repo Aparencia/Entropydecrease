@@ -24,6 +24,8 @@ interface SocraticDialogueProps {
   loading: boolean;
   /** 当所有轮次完成时为 true */
   completed?: boolean;
+  /** A 组流式接入：追问打字机渐进文本（生成中逐字展示，完成前 loading 波浪让位） */
+  streamingQuestion?: string;
 }
 
 function RoundBubble({ round }: { round: SocraticRound }) {
@@ -144,8 +146,32 @@ function AIThinkingWave() {
   );
 }
 
+/** 追问打字机气泡：流式渐进文本 + 光标，替代思考波浪（首 chunk 到达后切换） */
+function StreamingQuestionBubble({ text }: { text: string }) {
+  return (
+    <div className="flex items-start gap-2.5 max-w-[88%]">
+      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm shadow-brand-500/20">
+        <Sparkles className="w-4 h-4 text-white" strokeWidth={1.5} />
+      </div>
+      <div className={cn(
+        'px-4 py-3 rounded-2xl rounded-tl-md',
+        'bg-brand-50/80 dark:bg-brand-950/40 border border-brand-200/30 dark:border-brand-700/30',
+        'text-b2 text-text-primary leading-relaxed',
+        'shadow-sm',
+      )}>
+        {text}
+        <motion.span
+          className="inline-block w-[2px] h-[1.1em] bg-brand-500 align-text-bottom ml-0.5"
+          animate={{ opacity: [1, 0, 1] }}
+          transition={{ duration: 0.8, repeat: Infinity }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function SocraticDialogue({
-  rounds, currentRound, maxRounds, onSubmitAnswer, loading, completed,
+  rounds, currentRound, maxRounds, onSubmitAnswer, loading, completed, streamingQuestion,
 }: SocraticDialogueProps) {
   const [answer, setAnswer] = useState('');
 
@@ -187,8 +213,8 @@ export default function SocraticDialogue({
           <RoundBubble key={round.roundNumber} round={round} />
         ))}
 
-        {/* AI 思考波浪动画 */}
-        {loading && <AIThinkingWave />}
+        {/* AI 思考波浪动画（首 chunk 到达前）；之后切换为追问打字机气泡 */}
+        {loading && (streamingQuestion ? <StreamingQuestionBubble text={streamingQuestion} /> : <AIThinkingWave />)}
       </div>
 
       {/* 输入区（追问未完成时显示）— 底部固定风格 */}

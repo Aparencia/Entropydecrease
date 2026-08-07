@@ -32,6 +32,7 @@ export default function SocraticSessionPage() {
     dialogueCompleted, savingNote, exiting,
     deepeningAngles, deepeningFallbackMsg, deepeningLoading,
     brainstormLoading, brainstormError, questionLoading,
+    streamingQuestion,
     handleStartBrainstorm, handleSelectIdea, handleToDialogue,
     handleSubmitAnswer, handleToDeepening, handleDeepeningSubmit, handleGoBack,
     maxRounds,
@@ -181,6 +182,7 @@ export default function SocraticSessionPage() {
                   onSubmitAnswer={handleSubmitAnswer}
                   loading={questionLoading}
                   completed={dialogueCompleted}
+                  streamingQuestion={streamingQuestion}
                 />
               </motion.div>
             )}

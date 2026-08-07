@@ -38,6 +38,7 @@ const PLANET_CONFIGS: Record<ModuleId, PlanetConfig> = {
   feynman: { radius: 0.6, color: '#A78BFA', emissive: '#7C3AED', label: '浮出水面' },
   inspiration: { radius: 0.4, color: '#F472B6', emissive: '#EC4899', label: '萤火海沟' },
   classroom: { radius: 0.55, color: '#14B8A6', emissive: '#0D9488', label: '回声定位' },
+  constellation: { radius: 0.5, color: '#FBBF24', emissive: '#F59E0B', label: '星座' },
 };
 
 /** 轨道位置最大距离约束（兜底），超出则等比缩放回安全范围 */

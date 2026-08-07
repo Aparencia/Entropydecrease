@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Handshake, Zap, Target } from 'lucide-react';
 import { Card, CardContent, Button, Input, useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { useShallow } from 'zustand/react/shallow';
 import { usePomodoroStore } from '@/features/pomodoro/store/usePomodoroStore';
 import {
   acceptPair, getCachedPair, getIncomingPairs, getRelayState, getRelayStats,
@@ -47,11 +48,11 @@ export default function RelayPanel({ offlineReason }: RelayPanelProps) {
   // M5: accept/reject 防双击——ref 同步守卫（state 闭包在快速双击时可能未刷新）
   const actionRef = useRef<string | null>(null);
 
-  const pomodoro = usePomodoroStore((s) => ({
+  const pomodoro = usePomodoroStore(useShallow((s) => ({
     phase: s.phase,
     isRunning: s.isRunning,
     remainingSeconds: s.remainingSeconds,
-  }));
+  })));
 
   const refresh = useCallback(async () => {
     const [incomingPairs, relayStats, cached] = await Promise.all([

@@ -51,6 +51,7 @@
 | [beta-agreement.md](./product/beta-agreement.md) | 内测协议简版（双方权责、数据处理、风险告知、退出机制） |
 | [beta-tier-management.md](./product/beta-tier-management.md) | 内测用户分层管理方案（三层标准、升降级、各层运营动作） |
 | [beta-exclusive-system.md](./product/beta-exclusive-system.md) | 内测人员专属系统设计方案（身份权益体系） |
+| [client-feature-checklist.md](./product/client-feature-checklist.md) | 客户端功能清单与验收标准（v0.35.2 基线） |
 
 ## 🔭 Foresight/ — 前瞻构想
 

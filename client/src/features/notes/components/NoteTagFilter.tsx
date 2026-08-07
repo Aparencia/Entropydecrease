@@ -4,6 +4,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useShallow } from 'zustand/react/shallow';
 import { useNoteStore } from '../store/useNoteStore';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 
@@ -12,7 +13,7 @@ import { useReducedMotion } from '@/hooks/useReducedMotion';
  * v0.9.0: chip 样式多选标签筛选
  */
 export function NoteTagFilter() {
-  const allTags = useNoteStore((s) => s.getAllTags());
+  const allTags = useNoteStore(useShallow((s) => s.getAllTags()));
   const selectedTags = useNoteStore((s) => s.selectedTags);
   const toggleTag = useNoteStore((s) => s.toggleTag);
   const clearTagFilter = useNoteStore((s) => s.clearTagFilter);

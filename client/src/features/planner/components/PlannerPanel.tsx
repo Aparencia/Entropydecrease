@@ -10,15 +10,26 @@
  * differently from local-rule fallback plans.
  */
 import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { RefreshCw, Sparkles, Compass, Check } from 'lucide-react';
+import { RefreshCw, Sparkles, Compass, Check, CalendarRange } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLearningPlan } from '../hooks/useLearningPlan';
 import { PLAN_MODULE_META } from '../types';
+import { Modal, Button } from '@/components/ui';
+import CoachPlanView from './CoachPlanView';
+import { useAILearningCoach } from '@/lib/ai/hooks/useAILearningCoach';
 
 export default function PlannerPanel() {
   const navigate = useNavigate();
   const { plan, loading, regenerate, toggleDone } = useLearningPlan();
+  // P6 学习教练：AI 生成周学习计划（懒加载，失败 isFallback 展示降级文案）
+  const { plan: coachPlan, loading: coachLoading, isFallback: coachFallback, generatePlan } = useAILearningCoach();
+  const [coachOpen, setCoachOpen] = useState(false);
+  const handleOpenCoach = () => {
+    setCoachOpen(true);
+    if (!coachPlan) void generatePlan();
+  };
 
   // 加载中：骨架占位
   if (loading) {
@@ -72,6 +83,15 @@ export default function PlannerPanel() {
         >
           <RefreshCw className="w-3.5 h-3.5" strokeWidth={1.5} />
           重排
+        </button>
+        {/* P6 学习教练：AI 周计划入口 */}
+        <button
+          onClick={handleOpenCoach}
+          className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-text-tertiary transition-colors hover:text-brand-500 hover:bg-brand-500/10"
+          aria-label="AI 教练周计划"
+        >
+          <CalendarRange className="w-3.5 h-3.5" strokeWidth={1.5} />
+          AI 教练
         </button>
       </div>
 
@@ -132,6 +152,31 @@ export default function PlannerPanel() {
           {plan.note}
         </p>
       )}
+
+      {/* P6 AI 教练周计划弹层 */}
+      <Modal
+        open={coachOpen}
+        onClose={() => setCoachOpen(false)}
+        title="🧭 AI 教练周计划"
+        description="基于本周学习数据生成下周安排"
+        size="lg"
+      >
+        {coachPlan ? (
+          <CoachPlanView plan={coachPlan} loading={coachLoading} isFallback={coachFallback} />
+        ) : (
+          <div className="py-10 text-center text-c1 text-text-tertiary animate-pulse">
+            {coachLoading ? 'AI 教练正在规划你的学习周…' : '暂无周计划，点击下方按钮生成'}
+          </div>
+        )}
+        {coachPlan && (
+          <div className="mt-4 flex justify-end">
+            <Button size="sm" variant="secondary" onClick={() => void generatePlan()}>
+              <RefreshCw className="w-3 h-3 mr-1" strokeWidth={1.5} />
+              重新生成
+            </Button>
+          </div>
+        )}
+      </Modal>
     </motion.div>
   );
 }

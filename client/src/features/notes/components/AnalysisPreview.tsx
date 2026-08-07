@@ -32,8 +32,8 @@ interface AnalysisPreviewProps {
   onInsert: (content: string) => void;
   onDismiss: () => void;
   onRetry?: () => void;
-  /** 可选：从笔记生成闪卡 */
-  onGenerateCards?: (content: string) => void;
+  /** 可选：从笔记生成闪卡（P2-3：支持全量/仅重点模式） */
+  onGenerateCards?: (content: string, mode?: 'full' | 'bookmarks') => void;
   /** 可选：错误态「打开设置」（P0-1；既有调用方不传则行为零变化） */
   onGoSettings?: () => void;
 }
@@ -253,16 +253,29 @@ export function AnalysisPreview({
       {/* 底部操作栏 */}
       <div className="flex items-center justify-end gap-2 px-4 py-2.5 border-t border-border/20 bg-bg-secondary/50">
         {onGenerateCards && (
-          <button
-            onClick={() => onGenerateCards(result.content)}
-            className={cn(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium mr-auto',
-              'bg-flashcard-50 text-flashcard-600 hover:bg-flashcard-100 active:scale-95 transition-all duration-kb-fast',
-            )}
-          >
-            <Layers className="w-3.5 h-3.5" strokeWidth={1.5} />
-            生成闪卡
-          </button>
+          <>
+            <button
+              onClick={() => onGenerateCards(result.content)}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium mr-auto',
+                'bg-flashcard-50 text-flashcard-600 hover:bg-flashcard-100 active:scale-95 transition-all duration-kb-fast',
+              )}
+            >
+              <Layers className="w-3.5 h-3.5" strokeWidth={1.5} />
+              生成闪卡
+            </button>
+            <button
+              onClick={() => onGenerateCards(result.content, 'bookmarks')}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-kb-md text-b3 font-medium',
+                'bg-flashcard-50/50 text-flashcard-600 hover:bg-flashcard-100 active:scale-95 transition-all duration-kb-fast',
+              )}
+              title="仅从课中标记的重点生成闪卡"
+            >
+              <Layers className="w-3.5 h-3.5" strokeWidth={1.5} />
+              仅重点
+            </button>
+          </>
         )}
         <button
           onClick={onDismiss}

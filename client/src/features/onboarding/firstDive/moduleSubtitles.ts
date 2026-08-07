@@ -12,6 +12,7 @@ export const MODULE_SUBTITLES: Record<string, string> = {
   feynman: '费曼讲解',
   inspiration: '灵感收集',
   classroom: '课堂采集',
+  constellation: '知识可视化',
 };
 
 /** 取模块副标题；无副标题（如首页）返回 undefined */

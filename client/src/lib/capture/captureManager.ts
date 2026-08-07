@@ -56,6 +56,16 @@ export class CaptureManager {
   /** @ai-context Path C 全程录制：记录录制开始时间用于计算 duration */
   private fullRecordStartTime = 0;
 
+  /** P8 视觉提取模式（VisionWorker 消费 message.metadata.visionMode；undefined=auto） */
+  private visionMode: 'auto' | 'text' | 'formula' | 'diagram' | 'code' | 'full' | undefined;
+
+  /**
+   * 设置视觉提取模式（公式/图表/代码等），写入截图消息 metadata 供 VisionWorker 消费
+   */
+  setVisionMode(mode: 'auto' | 'text' | 'formula' | 'diagram' | 'code' | 'full'): void {
+    this.visionMode = mode;
+  }
+
   // ---- 帧超时保底重启 ----
   private frameWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly frameWatchdogTimeoutMs: number;
@@ -341,6 +351,10 @@ export class CaptureManager {
       this.sessionId,
       frameData,
     );
+    // P8 视觉提取模式注入：VisionWorker 读取 metadata.visionMode 选择提取策略
+    if (this.visionMode && this.visionMode !== 'auto') {
+      message.metadata = { ...message.metadata, visionMode: this.visionMode };
+    }
 
     const accepted = this.pipeline.push(message);
     if (accepted) {

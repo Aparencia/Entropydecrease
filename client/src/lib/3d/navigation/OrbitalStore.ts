@@ -10,7 +10,7 @@
  */
 import { create } from 'zustand';
 
-export type ModuleId = 'dashboard' | 'pomodoro' | 'notes' | 'flashcards' | 'feynman' | 'inspiration' | 'classroom';
+export type ModuleId = 'dashboard' | 'pomodoro' | 'notes' | 'flashcards' | 'feynman' | 'inspiration' | 'classroom' | 'constellation';
 
 /** 导航相位：概览态 / 进入中（相机飞行） / 停靠（渲染暂停） */
 export type OrbitalPhase = 'overview' | 'entering' | 'docked';
@@ -50,6 +50,7 @@ export const MODULE_POSITIONS: ModulePosition[] = [
   { id: 'feynman', position: [-3, -1, -4], route: '/feynman', label: '浮出水面' },
   { id: 'inspiration', position: [0, 3, -5], route: '/inspiration', label: '萤火海沟' },
   { id: 'classroom', position: [-2, -3, -2], route: '/classroom', label: '回声定位' },
+  { id: 'constellation', position: [4, -3, -4], route: '/constellation', label: '星座' },
 ];
 
 /**

@@ -5,8 +5,11 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Clock } from 'lucide-react';
+import { Clock, Sparkles } from 'lucide-react';
 import { db } from '@/lib/storage';
+import { pomodoroSessionStore } from '@/lib/storage';
+import { aiPluginLoader } from '@/lib/ai/AIPluginLoader';
+import { useAIRecommendation } from '../hooks/useAIRecommendation';
 import TimerRing from '../components/TimerRing';
 import GoalInput from '../components/GoalInput';
 import ImmersiveTimer from '../components/ImmersiveTimer';
@@ -45,6 +48,29 @@ export default function PomodoroPage() {
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [rememberGoal, setRememberGoal] = useState(false);
   const [presetEditorOpen, setPresetEditorOpen] = useState(false);
+  
+    // AI 时长推荐（T1：本地节律引擎即时结果，AI 增强可选且 3s 超时降级）
+    const { recommendation, loading: recLoading, error: recError, getRecommendation } = useAIRecommendation();
+    const [aiEnhance, setAiEnhance] = useState(false);
+    const handleGetRecommendation = useCallback(async () => {
+      try {
+        const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const sessions = await pomodoroSessionStore.getTable()
+          .where('completedAt').aboveOrEqual(since)
+          .toArray();
+        const history = {
+          sessions: sessions.map((s) => ({
+            duration: Math.round(s.duration / 60),
+            completed: !s.interrupted && s.actualDuration >= s.duration * 0.8,
+            date: new Date(s.completedAt).toISOString(),
+            subject: s.subject || '',
+          })),
+        };
+        await getRecommendation(history, aiEnhance ? (data) => aiPluginLoader.recommendDuration(data) : undefined);
+      } catch {
+        // 静默失败（本地推荐失败也无妨，不打扰主界面）
+      }
+    }, [getRecommendation, aiEnhance]);
 
   // 设备降级级别推导（与萤火海沟/沉浸模式同源：L0 全量 / L1 低端 / L2 减弱动效）
   const { shouldDisableHeavyAnimations, prefersReducedMotion } = useDeviceCapability();
@@ -234,6 +260,53 @@ export default function PomodoroPage() {
           {!isRunning && !isPaused && (
             <div className="mt-2 w-full max-w-md">
               <EnergySuggestionBar />
+              {/* AI 时长推荐：本地节律即时计算，AI 增强可选（3s 超时自动降级） */}
+              <div className="mt-2 rounded-kb-lg border border-border/30 bg-bg-elevated/40 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-c1 text-text-secondary flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-brand-500" strokeWidth={1.5} />
+                    AI 时长推荐
+                  </span>
+                  <label className="flex items-center gap-1.5 text-c1 text-text-tertiary cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={aiEnhance}
+                      onChange={(e) => setAiEnhance(e.target.checked)}
+                      className="accent-brand-500"
+                    />
+                    AI 增强
+                  </label>
+                </div>
+                {recommendation ? (
+                  <div className="mt-2 flex items-baseline gap-2">
+                    <span className="text-b2 font-semibold text-text-primary">
+                      {recommendation.recommendedDuration} 分钟
+                    </span>
+                    {recommendation.breakMinutes ? (
+                      <span className="text-c1 text-text-tertiary">· 休息 {recommendation.breakMinutes} 分钟</span>
+                    ) : null}
+                    <span className="ml-auto text-[10px] text-text-tertiary">
+                      {recommendation.source === 'ai' ? 'AI 增强' : '本地节律'}
+                      {recommendation.confidence === 'high' ? ' · 高置信' : recommendation.confidence === 'medium' ? ' · 中置信' : ''}
+                    </span>
+                  </div>
+                ) : null}
+                {recError && !recommendation ? (
+                  <p className="mt-1 text-c1 text-semantic-error">{recError}</p>
+                ) : null}
+                {!recommendation && (
+                  <p className="mt-1 text-c1 text-text-tertiary">
+                    基于近 30 天专注节律推荐时长（数据不足时回退加权平均）
+                  </p>
+                )}
+                <button
+                  onClick={() => void handleGetRecommendation()}
+                  disabled={recLoading}
+                  className="mt-2 px-3 py-1.5 rounded-kb-sm bg-brand-500/15 text-brand-600 dark:text-brand-400 text-c1 border border-brand-500/30 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {recLoading ? '计算中…' : recommendation ? '重新推荐' : '获取推荐'}
+                </button>
+              </div>
             </div>
           )}
 

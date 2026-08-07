@@ -179,7 +179,8 @@ export function useSocraticFlow() {
       evaluateAI.evaluateAnswer(topic, currentQuestion, answer, history),
       currentRound >= MAX_ROUNDS
         ? Promise.resolve(null)
-        : questionAI.askQuestion(conversationIdRef.current, topic, history),
+        // A 组流式接入：苏格拉底追问打字机（失败自动降级非流式 askQuestion）
+        : questionAI.askQuestionStream(conversationIdRef.current, topic, history),
     ]);
 
     if (evalResult?.dimensions) {
@@ -305,6 +306,9 @@ export function useSocraticFlow() {
     brainstormLoading: brainstormAI.loading,
     brainstormError: brainstormAI.error,
     questionLoading: questionAI.loading,
+    // A 组流式接入：追问打字机渐进文本与状态（SocraticDialogue 消费）
+    streamingQuestion: questionAI.streamingQuestion,
+    isQuestionStreaming: questionAI.isQuestionStreaming,
     // handlers
     handleStartBrainstorm, handleSelectIdea, handleToDialogue,
     handleSubmitAnswer, handleToDeepening, handleDeepeningSubmit, handleGoBack,

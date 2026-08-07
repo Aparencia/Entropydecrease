@@ -8,7 +8,7 @@
  */
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Timer, FileText, Layers, Lightbulb, Sparkles, Clapperboard, BarChart3 } from 'lucide-react';
+import { Timer, FileText, Layers, Lightbulb, Sparkles, Clapperboard, BarChart3, Orbit } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { useIsNewbiePhase } from '@/features/onboarding/firstDive/useFirstDiveStore';
@@ -22,6 +22,7 @@ const modules = [
   { id: 'feynman', label: '费曼', route: '/feynman', icon: Lightbulb, color: 'from-violet-500/20 to-violet-600/10', iconColor: 'text-violet-400' },
   { id: 'inspiration', label: '萤火海沟', route: '/inspiration', icon: Sparkles, color: 'from-pink-500/20 to-pink-600/10', iconColor: 'text-pink-400' },
   { id: 'classroom', label: '回声定位', route: '/classroom', icon: Clapperboard, color: 'from-teal-500/20 to-teal-600/10', iconColor: 'text-teal-400' },
+  { id: 'constellation', label: '星座大厅', route: '/constellation', icon: Orbit, color: 'from-amber-500/20 to-amber-600/10', iconColor: 'text-amber-400' },
 ];
 
 const containerVariants = {

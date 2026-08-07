@@ -41,6 +41,7 @@ const DEEP_SEA_CONFIG: Record<ModuleId, {
   feynman: { geometry: 'torus', color: '#8B5CF6', emissiveColor: '#A78BFA' },
   inspiration: { geometry: 'sphere', color: '#EC4899', emissiveColor: '#F472B6' },
   classroom: { geometry: 'torus', color: '#14B8A6', emissiveColor: '#2DD4BF' },
+  constellation: { geometry: 'octahedron', color: '#F59E0B', emissiveColor: '#FBBF24' },
 };
 
 /**
@@ -59,6 +60,7 @@ const AURORA_ORBIT_CONFIG: Record<ModuleId, {
   feynman: { orbitRadius: 5, orbitSpeed: 0.12, initialAngle: Math.PI * 1.2 },
   inspiration: { orbitRadius: 5.5, orbitSpeed: 0.1, initialAngle: Math.PI * 1.6 },
   classroom: { orbitRadius: 4, orbitSpeed: 0.18, initialAngle: Math.PI * 0.6 },
+  constellation: { orbitRadius: 4.8, orbitSpeed: 0.14, initialAngle: Math.PI * 1.9 },
 };
 
 /** 相机飞入模块时的偏移（从模块位置向相机方向偏移） */
