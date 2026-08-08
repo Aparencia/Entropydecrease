@@ -34,15 +34,15 @@ const DEEP_SEA_CONFIG: Record<ModuleId, {
   color: string;
   emissiveColor: string;
 }> = {
-  dashboard: { geometry: 'dodecahedron', color: '#6366F1', emissiveColor: '#818CF8' },
-  pomodoro: { geometry: 'octahedron', color: '#F97316', emissiveColor: '#FB923C' },
-  notes: { geometry: 'box', color: '#3B82F6', emissiveColor: '#60A5FA' },
-  flashcards: { geometry: 'icosahedron', color: '#10B981', emissiveColor: '#34D399' },
-  feynman: { geometry: 'torus', color: '#8B5CF6', emissiveColor: '#A78BFA' },
-  inspiration: { geometry: 'sphere', color: '#EC4899', emissiveColor: '#F472B6' },
-  classroom: { geometry: 'torus', color: '#14B8A6', emissiveColor: '#2DD4BF' },
-  constellation: { geometry: 'octahedron', color: '#F59E0B', emissiveColor: '#FBBF24' },
-  sop: { geometry: 'box', color: '#84CC16', emissiveColor: '#A3E635' },
+  dashboard: { geometry: 'dodecahedron', color: '#40AB92', emissiveColor: '#57C6A9' },
+  pomodoro: { geometry: 'octahedron', color: '#E8833A', emissiveColor: '#F4A05E' },
+  notes: { geometry: 'box', color: '#4A9BD9', emissiveColor: '#6FB4E8' },
+  flashcards: { geometry: 'icosahedron', color: '#43C58B', emissiveColor: '#63DBA5' },
+  feynman: { geometry: 'torus', color: '#F0E3C8', emissiveColor: '#F8F0DC' },
+  inspiration: { geometry: 'sphere', color: '#E8B84B', emissiveColor: '#F2CF7D' },
+  classroom: { geometry: 'torus', color: '#2FB8AC', emissiveColor: '#4ED0C2' },
+  constellation: { geometry: 'octahedron', color: '#9FB8D8', emissiveColor: '#C3D6EA' },
+  sop: { geometry: 'box', color: '#B5D84E', emissiveColor: '#CCE672' },
 };
 
 /**
