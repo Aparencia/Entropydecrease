@@ -223,7 +223,7 @@ export default function SocraticDialogue({
           className={cn(
             'flex items-end gap-2 p-3 rounded-2xl',
             'border border-border/40 bg-bg-elevated/80 backdrop-blur-sm',
-            'focus-within:border-brand-400/50 focus-within:shadow-[0_0_16px_rgba(59,130,246,0.08)]',
+            'focus-within:border-brand-400/50 focus-within:shadow-[0_0_16px_rgba(74,155,217,0.08)]',
             'transition-all duration-300',
           )}
           initial={{ opacity: 0, y: 10 }}

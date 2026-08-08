@@ -26,10 +26,10 @@ interface DashboardCardProps {
 
 const ACCENT_GLOW: Record<NonNullable<DashboardCardProps['accent']>, string> = {
   pomodoro: 'hover:shadow-[0_0_24px_-6px_rgba(249,115,22,0.45)]',
-  note: 'hover:shadow-[0_0_24px_-6px_rgba(59,130,246,0.45)]',
+  note: 'hover:shadow-[0_0_24px_-6px_rgba(74,155,217,0.45)]',
   flashcard: 'hover:shadow-[0_0_24px_-6px_rgba(16,185,129,0.45)]',
-  feynman: 'hover:shadow-[0_0_24px_-6px_rgba(139,92,246,0.45)]',
-  brand: 'hover:shadow-[0_0_24px_-6px_rgba(99,102,241,0.45)]',
+  feynman: 'hover:shadow-[0_0_24px_-6px_rgba(74,155,217,0.45)]',
+  brand: 'hover:shadow-[0_0_24px_-6px_rgba(64,171,146,0.45)]',
   default: 'hover:shadow-[0_0_24px_-6px_rgba(255,255,255,0.25)]',
 };
 

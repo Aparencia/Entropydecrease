@@ -85,7 +85,7 @@ export function FirstDiveGuide() {
       <div className={cn(
         'rounded-2xl px-5 py-4',
         'bg-[#0A1826]/92 backdrop-blur-2xl border border-cyber/15',
-        'shadow-[0_8px_32px_rgba(4,10,20,0.5),0_0_24px_rgba(6,182,212,0.08)]',
+        'shadow-[0_8px_32px_rgba(4,10,20,0.5),0_0_24px_rgba(74,155,217,0.08)]',
       )}>
         <AnimatePresence mode="wait">
           {showPraise ? (
@@ -144,7 +144,7 @@ export function FirstDiveGuide() {
                   className={cn(
                     'flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-medium',
                     'bg-cyber/90 text-text-inverse hover:bg-cyber transition-colors',
-                    'shadow-[0_2px_12px_rgba(6,182,212,0.35)]',
+                    'shadow-[0_2px_12px_rgba(74,155,217,0.35)]',
                     'disabled:opacity-50 disabled:pointer-events-none',
                   )}
                 >

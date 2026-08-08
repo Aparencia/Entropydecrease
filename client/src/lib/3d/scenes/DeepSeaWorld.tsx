@@ -179,8 +179,8 @@ function CausticLight() {
         const y = Math.random() * 256;
         const r = 5 + Math.random() * 20;
         const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-        g.addColorStop(0, 'rgba(6,182,212,0.08)');
-        g.addColorStop(1, 'rgba(6,182,212,0)');
+        g.addColorStop(0, 'rgba(74,155,217,0.08)');
+        g.addColorStop(1, 'rgba(74,155,217,0)');
         ctx.fillStyle = g;
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);

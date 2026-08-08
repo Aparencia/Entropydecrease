@@ -93,7 +93,7 @@ export default function BubbleStreak({ streakDays, todayChecked, loading }: Prop
       </div>
 
       {/* 有色弥散阴影 */}
-      <div className="absolute inset-0 pointer-events-none rounded-[var(--kb-radius-lg)] shadow-[inset_0_0_30px_rgba(34,211,238,0.03)]" />
+      <div className="absolute inset-0 pointer-events-none rounded-[var(--kb-radius-lg)] shadow-[inset_0_0_30px_rgba(111,180,232,0.03)]" />
     </motion.div>
   );
 }

@@ -90,9 +90,9 @@
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 420px 260px at 18% 82%, rgba(99, 102, 241, 0.10), transparent 70%),
+    radial-gradient(ellipse 420px 260px at 18% 82%, rgba(64, 171, 146, 0.10), transparent 70%),
     radial-gradient(ellipse 360px 220px at 72% 78%, rgba(20, 184, 166, 0.08), transparent 70%),
-    radial-gradient(ellipse 300px 200px at 88% 60%, rgba(139, 92, 246, 0.07), transparent 70%),
+    radial-gradient(ellipse 300px 200px at 88% 60%, rgba(232, 184, 75, 0.07), transparent 70%),
     radial-gradient(ellipse 260px 180px at 8% 55%, rgba(56, 189, 248, 0.06), transparent 70%);
   animation: kb-seafloor-drift 26s ease-in-out infinite alternate;
   will-change: transform;

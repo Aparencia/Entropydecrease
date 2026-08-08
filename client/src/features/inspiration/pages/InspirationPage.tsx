@@ -186,7 +186,7 @@ export default function InspirationPage() {
         variants={inputVariants}
         className={cn(
           'relative bg-bg-secondary/40 backdrop-blur-2xl border border-white/12 dark:border-white/6 rounded-[var(--kb-radius-xl)] p-kb-md',
-          'focus-within:border-accent-400/50 focus-within:shadow-[0_0_24px_rgba(6,182,212,0.1)]',
+          'focus-within:border-accent-400/50 focus-within:shadow-[0_0_24px_rgba(74,155,217,0.1)]',
           'transition-all duration-300',
         )}
       >

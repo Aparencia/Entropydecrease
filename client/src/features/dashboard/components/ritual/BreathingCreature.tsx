@@ -25,8 +25,8 @@ function Jellyfish() {
       <defs>
         <radialGradient id="jelly-bell" cx="50%" cy="40%" r="60%">
           <stop offset="0%" stopColor="rgba(99,179,237,0.55)" />
-          <stop offset="70%" stopColor="rgba(59,130,246,0.28)" />
-          <stop offset="100%" stopColor="rgba(59,130,246,0.05)" />
+          <stop offset="70%" stopColor="rgba(74,155,217,0.28)" />
+          <stop offset="100%" stopColor="rgba(74,155,217,0.05)" />
         </radialGradient>
       </defs>
       {/* 外层光晕 */}
@@ -55,8 +55,8 @@ function AuroraBand() {
     <svg viewBox="0 0 176 176" className="w-full h-full" style={breathStyle} aria-hidden>
       <defs>
         <linearGradient id="aurora-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="rgba(129,140,248,0.05)" />
-          <stop offset="40%" stopColor="rgba(129,140,248,0.45)" />
+          <stop offset="0%" stopColor="rgba(111,180,232,0.05)" />
+          <stop offset="40%" stopColor="rgba(111,180,232,0.45)" />
           <stop offset="60%" stopColor="rgba(52,211,153,0.4)" />
           <stop offset="100%" stopColor="rgba(52,211,153,0.05)" />
         </linearGradient>

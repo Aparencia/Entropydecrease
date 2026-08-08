@@ -36,7 +36,7 @@ const colorMap = {
 
 const glowColorMap = {
   brand: '0 0 8px 2px rgba(251, 146, 60, 0.6)',
-  accent: '0 0 8px 2px rgba(34, 211, 238, 0.6)',
+  accent: '0 0 8px 2px rgba(111, 180, 232, 0.6)',
   purple: '0 0 8px 2px color-mix(in srgb, var(--kb-amber) 60%, transparent)',
 };
 

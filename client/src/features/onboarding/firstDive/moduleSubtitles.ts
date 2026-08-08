@@ -13,6 +13,7 @@ export const MODULE_SUBTITLES: Record<string, string> = {
   inspiration: '灵感收集',
   classroom: '课堂采集',
   constellation: '知识可视化',
+  sop: '流程模板与执行',
 };
 
 /** 取模块副标题；无副标题（如首页）返回 undefined */

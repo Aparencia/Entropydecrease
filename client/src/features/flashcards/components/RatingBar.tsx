@@ -26,7 +26,7 @@ const ratingStyles = [
   { label: 'Again', rating: Rating.Again, color: 'bg-gradient-to-b from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700', glow: 'shadow-[0_4px_16px_rgba(244,63,94,0.35)]' },
   { label: 'Hard', rating: Rating.Hard, color: 'bg-gradient-to-b from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700', glow: 'shadow-[0_4px_16px_rgba(245,158,11,0.3)]' },
   { label: 'Good', rating: Rating.Good, color: 'bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700', glow: 'shadow-[0_4px_16px_rgba(16,185,129,0.3)]' },
-  { label: 'Easy', rating: Rating.Easy, color: 'bg-gradient-to-b from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700', glow: 'shadow-[0_4px_16px_rgba(59,130,246,0.3)]' },
+  { label: 'Easy', rating: Rating.Easy, color: 'bg-gradient-to-b from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700', glow: 'shadow-[0_4px_16px_rgba(74,155,217,0.3)]' },
 ];
 
 export interface RatingBarProps {

@@ -31,7 +31,7 @@ export function FlipCard({ front, back, isFlipped, onFlip, onFlipEnd, exiting, g
       : glow === 'wrong'
         ? 'ring-2 ring-rose-400/50 shadow-[0_0_32px_rgba(244,63,94,0.3)]'
         : isFlipped
-          ? 'ring-1 ring-brand-400/30 shadow-[0_0_20px_rgba(59,130,246,0.12)]'
+          ? 'ring-1 ring-brand-400/30 shadow-[0_0_20px_rgba(74,155,217,0.12)]'
           : '';
 
   // 评分响应的 Y 位移和透明度

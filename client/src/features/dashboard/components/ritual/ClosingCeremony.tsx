@@ -126,7 +126,7 @@ export function ClosingCeremony({ goal, masteryMark, streakDays, durationMs, onC
       <button
         type="button"
         onClick={onClose}
-        className="flex items-center gap-1.5 px-5 py-2.5 rounded-kb-full bg-focus text-white text-sm font-medium hover:bg-focus/90 active:scale-95 transition-all duration-200 shadow-[0_0_12px_rgba(59,130,246,0.35)]"
+        className="flex items-center gap-1.5 px-5 py-2.5 rounded-kb-full bg-focus text-white text-sm font-medium hover:bg-focus/90 active:scale-95 transition-all duration-200 shadow-[0_0_12px_rgba(74,155,217,0.35)]"
       >
         <Sparkles className="w-4 h-4" strokeWidth={2} />
         开始学习

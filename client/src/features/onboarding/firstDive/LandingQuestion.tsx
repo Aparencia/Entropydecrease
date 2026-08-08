@@ -78,7 +78,7 @@ export function LandingQuestion() {
             className={cn(
               'w-full text-left px-5 py-4 rounded-2xl transition-all duration-300 group',
               'bg-white/[0.04] border border-white/10 backdrop-blur-sm',
-              'hover:bg-cyber/10 hover:border-cyber/30 hover:shadow-[0_0_24px_rgba(6,182,212,0.15)]',
+              'hover:bg-cyber/10 hover:border-cyber/30 hover:shadow-[0_0_24px_rgba(74,155,217,0.15)]',
               submitting && 'opacity-50 pointer-events-none',
             )}
             initial={{ opacity: 0, y: 16 }}

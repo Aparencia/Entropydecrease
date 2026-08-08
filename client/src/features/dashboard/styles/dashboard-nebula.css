@@ -8,19 +8,19 @@
 /* ── 双主题变量 ── */
 :root {
   /* 浅色 · 晨曦星云：淡蓝/金 */
-  --kb-nebula-core-a: rgba(59, 130, 246, 0.06);
+  --kb-nebula-core-a: rgba(74, 155, 217, 0.06);
   --kb-nebula-core-b: rgba(245, 158, 11, 0.05);
-  --kb-nebula-core-c: rgba(6, 182, 212, 0.04);
-  --kb-nebula-star: rgba(59, 130, 246, 0.35);
+  --kb-nebula-core-c: rgba(74, 155, 217, 0.04);
+  --kb-nebula-star: rgba(74, 155, 217, 0.35);
   --kb-nebula-star-soft: rgba(255, 255, 255, 0.5);
 }
 
 [data-theme="dark"] {
   /* 深色 · 深空星云：靛蓝/赛博青 */
-  --kb-nebula-core-a: rgba(99, 102, 241, 0.08);
-  --kb-nebula-core-b: rgba(6, 182, 212, 0.06);
-  --kb-nebula-core-c: rgba(139, 92, 246, 0.04);
-  --kb-nebula-star: rgba(99, 102, 241, 0.4);
+  --kb-nebula-core-a: rgba(64, 171, 146, 0.08);
+  --kb-nebula-core-b: rgba(74, 155, 217, 0.06);
+  --kb-nebula-core-c: rgba(232, 184, 75, 0.04);
+  --kb-nebula-star: rgba(64, 171, 146, 0.4);
   --kb-nebula-star-soft: rgba(255, 255, 255, 0.35);
 }
 
