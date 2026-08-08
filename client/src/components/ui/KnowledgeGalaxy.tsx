@@ -20,7 +20,7 @@ import { useReducedMotion } from '@/hooks/useReducedMotion';
 export interface StarPoint {
   id: string;
   title: string;
-  color: 'brand' | 'accent' | 'purple'; // 橙=独立闪卡、青=笔记关联、紫=费曼关联
+  color: 'brand' | 'accent' | 'purple'; // 橙=独立闪卡、青=笔记关联、琥珀=费曼关联
 }
 
 export interface KnowledgeGalaxyProps {
@@ -31,13 +31,13 @@ export interface KnowledgeGalaxyProps {
 const colorMap = {
   brand: 'bg-brand-400',
   accent: 'bg-accent-400',
-  purple: 'bg-purple-400',
+  purple: 'bg-amber',
 };
 
 const glowColorMap = {
   brand: '0 0 8px 2px rgba(251, 146, 60, 0.6)',
   accent: '0 0 8px 2px rgba(34, 211, 238, 0.6)',
-  purple: '0 0 8px 2px rgba(192, 132, 252, 0.6)',
+  purple: '0 0 8px 2px color-mix(in srgb, var(--kb-amber) 60%, transparent)',
 };
 
 /** 用确定性哈希为每个星点生成稳定的随机值 */
