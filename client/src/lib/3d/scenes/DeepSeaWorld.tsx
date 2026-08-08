@@ -107,10 +107,10 @@ function BioluminescentLayer({ count }: { count: number }) {
     const sz = new Float32Array(count);
 
     const colors_pool = [
-      new THREE.Color('#00BFFF'),  // 赛博青
+      new THREE.Color('#4A9BD9'),  // 磷光蓝
       new THREE.Color('#6FB4E8'),  // 磷光蓝
       new THREE.Color('#4A9BD9'),  // 磷光蓝深
-      new THREE.Color('#6366F1'),  // 品牌
+      new THREE.Color('#57C6A9'),  // 磷光青绿
     ];
 
     for (let i = 0; i < count; i++) {
@@ -220,7 +220,7 @@ function LightRays() {
 
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
-    uColor: { value: new THREE.Color('#00BFFF') },
+    uColor: { value: new THREE.Color('#4A9BD9') },
   }), []);
 
   useFrame((_, delta) => {
@@ -334,7 +334,7 @@ export function DeepSeaWorld() {
           count={particleCount}
           bounds={{ x: 30, y: [-15, 5], z: 30 }}
           baseColor="#aaddff"
-          secondaryColor="#6366F1"
+          secondaryColor="#57C6A9"
         />
       )}
 

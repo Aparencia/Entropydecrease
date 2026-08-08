@@ -22,7 +22,7 @@ export const CONTENT_NATURE_OPTIONS: TagOption<InspirationTags['content_nature']
 /** 认知深度筛选选项 @ai-context 灵感卡片标签：浅层 / 理解层 / 应用层 */
 export const COGNITIVE_DEPTH_OPTIONS: TagOption<InspirationTags['cognitive_depth']>[] = [
   { value: 'shallow',      label: '浅层',   color: 'text-slate-500',  bg: 'bg-slate-50 border-slate-200 dark:bg-slate-800/30 dark:border-slate-600' },
-  { value: 'understanding', label: '理解层', color: 'text-indigo-600', bg: 'bg-indigo-50 border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-700' },
+  { value: 'understanding', label: '理解层', color: 'text-cyber', bg: 'bg-cyber/10 border-cyber/30 dark:bg-cyber/20 dark:border-cyber/40' },
   { value: 'application',   label: '应用层', color: 'text-rose-600',   bg: 'bg-rose-50 border-rose-200 dark:bg-rose-900/20 dark:border-rose-700' },
 ];
 
@@ -44,7 +44,7 @@ export const DEPTH_MAP = Object.fromEntries(
 export const SORT_TYPE_MAP: Record<string, SortTypeInfo> = {
   feynman:     { label: '浮出水面讲解', color: 'text-amber-700',   bg: 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-700' },
   flashcard:   { label: '反衰减呼吸',    color: 'text-cyber', bg: 'bg-cyber/10 border-cyber/30 dark:bg-cyber/20 dark:border-cyber/40' },
-  note:        { label: '结礁',     color: 'text-indigo-700',  bg: 'bg-indigo-50 border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-700' },
+  note:        { label: '结礁',     color: 'text-cyber', bg: 'bg-cyber/10 border-cyber/30 dark:bg-cyber/20 dark:border-cyber/40' },
   todo:        { label: '待办',     color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700' },
   action_item: { label: '立即执行', color: 'text-red-700 dark:text-red-400', bg: 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-700' },
 };

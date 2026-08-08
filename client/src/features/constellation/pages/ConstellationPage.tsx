@@ -87,7 +87,7 @@ export default function ConstellationPage() {
         title="星座大厅"
         note="知识宇宙的多种打开方式"
         sealChar="座"
-        sealColor="#6366F1"
+        sealColor="#40AB92"
         compact
         className="mb-rhythm-sm"
       />

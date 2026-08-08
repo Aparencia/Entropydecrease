@@ -217,7 +217,7 @@ export function TodayView({
             title="知识预览"
             note="最近的学习足迹"
             sealChar="星"
-            sealColor="#6366F1"
+            sealColor="#40AB92"
             compact
           />
         </motion.div>

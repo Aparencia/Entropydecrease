@@ -54,7 +54,7 @@ const TIER_PROGRESS: Record<DifficultyTier, number> = {
 const TIER_META: Record<DifficultyTier, { label: string; className: string }> = {
   basic: { label: '基础档', className: 'bg-emerald-500/15 text-emerald-400' },
   challenge: { label: '挑战档', className: 'bg-amber-500/15 text-amber-400' },
-  master: { label: '大师档', className: 'bg-violet-500/15 text-violet-400' },
+  master: { label: '大师档', className: 'bg-amber/15 text-amber' },
 };
 
 export interface DifficultyLadderProps {

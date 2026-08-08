@@ -33,12 +33,12 @@ export default function PearlGoal({ goals, loading }: Props) {
 
   return (
     <motion.div
-      className="rounded-[var(--kb-radius-lg)] border border-cyan-400/15 bg-bg-elevated/20 backdrop-blur-sm p-3"
+      className="rounded-[var(--kb-radius-lg)] border border-cyber/15 bg-bg-elevated/20 backdrop-blur-sm p-3"
       whileHover={{ scale: 1.01 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
       aria-label="目标进度"
     >
-      <h3 className="text-[10px] font-medium text-cyan-200/60 mb-3">深海珍珠 -- 本周目标</h3>
+      <h3 className="text-[10px] font-medium text-cyber/60 mb-3">深海珍珠 -- 本周目标</h3>
       <div className="flex items-end justify-around gap-3">
         {goals.map((goal, i) => {
           const ps = pearlStyle(goal.progressPercent);
@@ -73,7 +73,7 @@ export default function PearlGoal({ goals, loading }: Props) {
                 </span>
               </motion.div>
               {/* 标签 */}
-              <span className="text-[8px] text-cyan-200/50 text-center leading-tight max-w-[60px]">
+              <span className="text-[8px] text-cyber/50 text-center leading-tight max-w-[60px]">
                 {goal.title}
               </span>
               <span className="text-[7px] text-text-tertiary/40 tabular-nums">

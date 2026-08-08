@@ -53,7 +53,7 @@ export default function DebatePanel({ topic, onClose }: DebatePanelProps) {
       {/* 头部 */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/10">
         <div className="flex items-center gap-2">
-          <Swords className="w-4 h-4 text-violet-500" strokeWidth={1.5} />
+          <Swords className="w-4 h-4 text-cyber" strokeWidth={1.5} />
           <span className="text-[13px] font-semibold text-text-primary">AI 辩论对手</span>
           {isFallback && (
             <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-400">降级</span>
@@ -67,7 +67,7 @@ export default function DebatePanel({ topic, onClose }: DebatePanelProps) {
       {/* 内容 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* 主题展示 */}
-        <div className="rounded-xl bg-violet-500/5 border border-violet-500/15 p-3">
+        <div className="rounded-xl bg-cyber/5 border border-cyber/15 p-3">
           <p className="text-[12px] text-text-tertiary mb-1">辩论主题</p>
           <p className="text-[14px] font-medium text-text-primary">{topic}</p>
         </div>
@@ -84,7 +84,7 @@ export default function DebatePanel({ topic, onClose }: DebatePanelProps) {
                   className={cn(
                     'rounded-xl border p-3 text-left transition-all',
                     debateType === dt.value
-                      ? 'border-violet-500/40 bg-violet-500/10'
+                      ? 'border-cyber/40 bg-cyber/10'
                       : 'border-border/20 bg-bg-elevated/30 hover:border-border/40',
                   )}
                 >
@@ -95,7 +95,7 @@ export default function DebatePanel({ topic, onClose }: DebatePanelProps) {
             </div>
             <button
               onClick={handleStartDebate}
-              className="w-full py-2.5 rounded-xl bg-violet-500 text-white text-[13px] font-medium hover:bg-violet-600 transition-colors"
+              className="w-full py-2.5 rounded-xl bg-cyber text-text-inverse text-[13px] font-medium hover:bg-cyber/90 transition-colors"
             >
               开始辩论
             </button>
@@ -133,7 +133,7 @@ export default function DebatePanel({ topic, onClose }: DebatePanelProps) {
                   className="space-y-2"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-500 font-medium">
+                    <span className="rounded-full bg-cyber/10 px-2 py-0.5 text-[10px] text-cyber font-medium">
                       第 {round.roundNumber} 轮
                     </span>
                     {round.score !== undefined && (
@@ -141,8 +141,8 @@ export default function DebatePanel({ topic, onClose }: DebatePanelProps) {
                     )}
                   </div>
                   {/* AI 论点 */}
-                  <div className="rounded-xl bg-violet-500/5 border border-violet-500/15 p-3">
-                    <p className="text-[11px] text-violet-500 font-medium mb-1">AI 论点</p>
+                  <div className="rounded-xl bg-cyber/5 border border-cyber/15 p-3">
+                    <p className="text-[11px] text-cyber font-medium mb-1">AI 论点</p>
                     <p className="text-[13px] text-text-primary leading-relaxed">{round.aiArgument}</p>
                   </div>
                   {/* 用户反驳 */}
@@ -165,7 +165,7 @@ export default function DebatePanel({ topic, onClose }: DebatePanelProps) {
 
             {loading && (
               <div className="flex items-center gap-2 text-text-tertiary py-2">
-                <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
+                <div className="w-2 h-2 rounded-full bg-cyber animate-pulse" />
                 <span className="text-[12px]">AI 正在思考论点...</span>
               </div>
             )}
@@ -176,7 +176,7 @@ export default function DebatePanel({ topic, onClose }: DebatePanelProps) {
       {/* 输入区 */}
       {debateStarted && (
         <div className="border-t border-border/10 p-3">
-          <div className="flex items-end gap-2 rounded-xl border border-border/20 bg-bg-elevated/50 p-2 focus-within:border-violet-400/50 transition-colors">
+          <div className="flex items-end gap-2 rounded-xl border border-border/20 bg-bg-elevated/50 p-2 focus-within:border-cyber/50 transition-colors">
             <textarea
               value={userInput}
               onChange={e => setUserInput(e.target.value)}
@@ -191,7 +191,7 @@ export default function DebatePanel({ topic, onClose }: DebatePanelProps) {
               className={cn(
                 'p-2 rounded-lg transition-all',
                 userInput.trim() && !loading
-                  ? 'bg-violet-500 text-white hover:bg-violet-600'
+                  ? 'bg-cyber text-text-inverse hover:bg-cyber/90'
                   : 'bg-bg-tertiary text-text-tertiary cursor-not-allowed',
               )}
             >

@@ -917,23 +917,6 @@ body::before {
 
 /* ── 深色模式独立设计升级 ── */
 [data-theme="dark"] {
-  /* 品牌色切换：蓝→靛蓝（更深邃神秘） */
-  --kb-brand-500: #6366F1;
-  --kb-brand-600: #4F46E5;
-  --kb-brand-400: #818CF8;
-
-  /* 辅助色切换：琥珀→赛博青（冷暖对比） */
-  --kb-accent-500: #06B6D4;
-  --kb-accent-400: #22D3EE;
-  --kb-accent-600: #0891B2;
-
-  /* 独立阴影系统（黑色投影 + 蓝光弥散双层） */
-  --kb-shadow-sm: 0 1px 3px rgba(12,21,36,0.4), 0 0 8px rgba(99,102,241,0.05);
-  --kb-shadow-md: 0 4px 12px rgba(12,21,36,0.5), 0 0 16px rgba(99,102,241,0.08);
-  --kb-shadow-lg: 0 8px 24px rgba(12,21,36,0.6), 0 0 24px rgba(99,102,241,0.12);
-  --kb-shadow-brand: 0 4px 16px rgba(99,102,241,0.25);
-  --kb-shadow-accent: 0 4px 16px rgba(6,182,212,0.2);
-
   /* 文字优化：深色模式加粗+加行高 */
   --kb-font-weight-body: 500;
   --kb-line-height-body: 2.0;

@@ -18,9 +18,9 @@ const ANON_ID_KEY = 'ed_anon_id_v1';
 
 /** 贡献者调色板（按 userId hash 稳定取色） */
 const CONTRIBUTOR_COLORS = [
-  '#F59E0B', '#3B82F6', '#10B981', '#EF4444',
-  '#8B5CF6', '#EC4899', '#14B8A6', '#F97316',
-  '#6366F1', '#84CC16',
+  '#F59E0B', '#4A9BD9', '#10B981', '#EF4444',
+  '#E8B84B', '#F2CF7D', '#14B8A6', '#F97316',
+  '#40AB92', '#B5D84E',
 ];
 
 /** 按 userId 稳定分配贡献者颜色 */

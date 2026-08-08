@@ -41,7 +41,7 @@ export function DashboardWelcome({ greetingText, streakDays, streakState }: Dash
 
         <motion.div className="mb-rhythm-md" {...fadeInUp}>
           <div className="flex items-start gap-3">
-            <ModuleRitualHeader sealChar="星" sealColor="#6366F1" compact />
+            <ModuleRitualHeader sealChar="星" sealColor="#40AB92" compact />
             <div>
               <h1 className="text-d2 font-semibold text-text-primary tracking-tight mb-2">
                 {greetingText}

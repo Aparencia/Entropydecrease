@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import type { MnemonicData, MnemonicType } from '@/lib/ai/types';
 
 const MNEMONIC_META: Record<MnemonicType, { label: string; color: string; icon: string }> = {
-  phonetic: { label: '谐音', color: 'bg-pink-500/15 text-pink-500 border-pink-500/20', icon: '🔊' },
+  phonetic: { label: '谐音', color: 'bg-amber/15 text-amber border-amber/20', icon: '🔊' },
   story: { label: '故事', color: 'bg-amber-500/15 text-amber-500 border-amber-500/20', icon: '📖' },
   spatial: { label: '空间', color: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/20', icon: '🗺️' },
 };

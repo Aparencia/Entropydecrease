@@ -343,7 +343,7 @@ function FlowChannelCard({ cells, insight }: { cells: import('../types/analytics
   return (
     <motion.div variants={cardVariants} className="rounded-[var(--kb-radius-xl)] border border-border/30 bg-bg-elevated/50 backdrop-blur-sm p-5">
       <h2 className="text-[13px] font-semibold text-text-primary mb-1 flex items-center gap-2">
-        <Waves className="w-4 h-4 text-cyan-500" strokeWidth={1.5} />
+        <Waves className="w-4 h-4 text-cyber" strokeWidth={1.5} />
         心流通道
         <span className="text-[10px] font-normal text-text-tertiary">挑战 × 能力匹配（近 30 天）</span>
       </h2>
@@ -378,7 +378,7 @@ function FlowChannelCard({ cells, insight }: { cells: import('../types/analytics
                     className={cn(
                       'flex h-[26px] flex-1 items-center justify-center rounded-[6px] text-[11px] font-medium tabular-nums transition-colors',
                       count === 0 && 'bg-bg-tertiary/15 text-text-tertiary/50',
-                      count > 0 && !isFlow && 'bg-cyan-500/15 text-cyan-400',
+                      count > 0 && !isFlow && 'bg-cyber/15 text-cyber',
                       count > 0 && isFlow && 'bg-emerald-500/25 text-emerald-300',
                     )}
                     style={count > 0 ? { opacity: 0.4 + ratio * 0.6 } : undefined}

@@ -105,15 +105,15 @@ export function ClosingCeremony({ goal, masteryMark, streakDays, durationMs, onC
       {/* D2 蔡格尼克悬念引擎：AI 回顾小问，制造未完成感 */}
       {suspenseQuestion && (
         <motion.div
-          className="w-full rounded-kb-lg border border-indigo-500/20 bg-indigo-500/5 px-4 py-3"
+          className="w-full rounded-kb-lg border border-brand-500/20 bg-brand-500/5 px-4 py-3"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3, duration: 0.5 }}
         >
           <div className="flex items-start gap-2">
-            <HelpCircle className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
+            <HelpCircle className="w-4 h-4 text-brand-400 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
             <div className="flex flex-col gap-1">
-              <span className="text-[11px] text-indigo-400/70 font-medium tracking-wider uppercase">未解悬念</span>
+              <span className="text-[11px] text-brand-400/70 font-medium tracking-wider uppercase">未解悬念</span>
               <p className="text-sm text-text-primary leading-relaxed">{suspenseQuestion}</p>
               <p className="text-[11px] text-text-tertiary mt-0.5">
                 下次学习时回想一下这个问题，看看有没有新的理解

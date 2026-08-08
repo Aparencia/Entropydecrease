@@ -29,7 +29,7 @@ const DEFAULT_DEEPENING_ANGLES: DeepeningAngle[] = [
   { key: 'analogy', label: '类比联想', question: '这个概念像什么？能用生活中什么东西来比喻？', icon: null, color: 'text-blue-500 bg-blue-500/10' },
   { key: 'counter', label: '反例验证', question: '什么情况下这个概念不成立？有例外吗？', icon: null, color: 'text-amber-600 bg-amber-500/10 dark:text-amber-400' },
   { key: 'apply', label: '实际应用', question: '在实际生活或工作中，这个概念怎么用？', icon: null, color: 'text-emerald-600 bg-emerald-500/10 dark:text-emerald-400' },
-  { key: 'history', label: '历史脉络', question: '这个概念是怎么来的？谁发现的？为什么？', icon: null, color: 'text-cyan-600 bg-cyan-500/10 dark:text-cyan-400' },
+  { key: 'history', label: '历史脉络', question: '这个概念是怎么来的？谁发现的？为什么？', icon: null, color: 'text-cyber bg-cyber/10 dark:text-cyber' },
   { key: 'debate', label: '争议反思', question: '关于这个概念，有什么不同的看法或争论？', icon: null, color: 'text-orange-600 bg-orange-500/10 dark:text-orange-400' },
 ];
 
@@ -51,7 +51,7 @@ const FALLBACK_COLORS = [
   'text-blue-500 bg-blue-500/10',
   'text-amber-600 bg-amber-500/10 dark:text-amber-400',
   'text-emerald-600 bg-emerald-500/10 dark:text-emerald-400',
-  'text-cyan-600 bg-cyan-500/10 dark:text-cyan-400',
+  'text-cyber bg-cyber/10 dark:text-cyber',
   'text-orange-600 bg-orange-500/10 dark:text-orange-400',
 ];
 
