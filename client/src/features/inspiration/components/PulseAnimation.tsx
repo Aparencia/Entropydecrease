@@ -27,9 +27,9 @@ interface PulseAnimationProps {
 function ringColor(index: number, total: number): string {
   const t = total <= 1 ? 0 : index / (total - 1);
   // 青: rgba(74, 155, 217, 0.6)  →  琥珀: rgba(245, 158, 11, 0.4)
-  const r = Math.round(34 + (245 - 34) * t);
-  const g = Math.round(211 + (158 - 211) * t);
-  const b = Math.round(238 + (11 - 238) * t);
+  const r = Math.round(74 + (245 - 74) * t);
+  const g = Math.round(155 + (158 - 155) * t);
+  const b = Math.round(217 + (11 - 217) * t);
   const a = 0.6 + (0.4 - 0.6) * t;
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
