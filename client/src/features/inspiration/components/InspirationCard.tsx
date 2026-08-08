@@ -104,7 +104,7 @@ function OrbCollapsed({ item, batchMode, selected, onToggleSelect, onExpand, bre
             type="checkbox"
             checked={selected}
             onChange={() => {}}
-            className="w-3.5 h-3.5 rounded accent-purple-500 cursor-pointer"
+            className="w-3.5 h-3.5 rounded accent-brand-500 cursor-pointer"
           />
         </div>
       )}
@@ -187,7 +187,7 @@ function OrbExpanded({ item, onClose }: OrbExpandedProps) {
             onClick={handleSort} disabled={sortLoading}
             className={cn(
               'flex items-center gap-1 px-2 py-0.5 rounded-kb-md text-xs font-medium',
-              'bg-gradient-to-r from-purple-500 to-cyan-500 text-text-inverse',
+              'bg-gradient-to-r from-cyber to-brand-500 text-text-inverse',
               'disabled:opacity-60 disabled:cursor-not-allowed',
             )}
           >

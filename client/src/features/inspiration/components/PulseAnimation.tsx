@@ -26,7 +26,7 @@ interface PulseAnimationProps {
 /** 圆环颜色插值：赛博青 → 琥珀 */
 function ringColor(index: number, total: number): string {
   const t = total <= 1 ? 0 : index / (total - 1);
-  // 青: rgba(34, 211, 238, 0.6)  →  琥珀: rgba(245, 158, 11, 0.4)
+  // 青: rgba(74, 155, 217, 0.6)  →  琥珀: rgba(245, 158, 11, 0.4)
   const r = Math.round(34 + (245 - 34) * t);
   const g = Math.round(211 + (158 - 211) * t);
   const b = Math.round(238 + (11 - 238) * t);
@@ -72,7 +72,7 @@ function ReducedMotion({ clickPoint }: { clickPoint: { x: number; y: number } })
           height: PULSE_RING_SIZE * 2,
           transform: 'translate(-50%, -50%)',
           borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(34,211,238,0.25) 0%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(74,155,217,0.25) 0%, transparent 70%)',
           animation: 'fadeIn 0.4s ease-out forwards',
         }}
       />
@@ -160,7 +160,7 @@ function PulseAnimation({
               height: 40,
               transform: 'translate(-50%, -50%)',
               borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(34, 211, 238, 0.15) 0%, transparent 70%)',
+              background: 'radial-gradient(circle, rgba(74, 155, 217, 0.15) 0%, transparent 70%)',
               pointerEvents: 'none',
             }}
           />
@@ -172,7 +172,7 @@ function PulseAnimation({
               top: clickPoint.y,
               width: 16,
               height: 16,
-              background: 'radial-gradient(circle, rgba(34, 211, 238, 0.9) 0%, rgba(34, 211, 238, 0.3) 70%)',
+              background: 'radial-gradient(circle, rgba(74, 155, 217, 0.9) 0%, rgba(74, 155, 217, 0.3) 70%)',
             }}
           />
         </>
@@ -187,7 +187,7 @@ function PulseAnimation({
             top: clickPoint.y,
             width: 60,
             height: 60,
-            background: 'radial-gradient(circle, rgba(34, 211, 238, 0.8) 0%, transparent 70%)',
+            background: 'radial-gradient(circle, rgba(74, 155, 217, 0.8) 0%, transparent 70%)',
           }}
         />
       )}

@@ -174,7 +174,7 @@ export default function InspirationPage() {
           onClick={enter}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-gradient-to-r from-accent-500 to-brand-500 text-text-inverse hover:from-accent-600 hover:to-brand-600 shadow-sm shadow-accent-500/20"
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-gradient-to-r from-cyber to-brand-500 text-text-inverse hover:from-cyber/90 hover:to-brand-600 shadow-sm shadow-cyber/20"
         >
           <Sparkles className="w-3.5 h-3.5" />
           沉浸
@@ -278,8 +278,8 @@ export default function InspirationPage() {
                     disabled={selectedIds.size === 0 || batchProcessing}
                     className={cn(
                       'flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium',
-                      'bg-gradient-to-r from-accent-500 to-brand-500 text-text-inverse',
-                      'hover:from-accent-600 hover:to-brand-600 shadow-sm shadow-accent-500/20',
+                      'bg-gradient-to-r from-cyber to-brand-500 text-text-inverse',
+                      'hover:from-cyber/90 hover:to-brand-600 shadow-sm shadow-cyber/20',
                       'disabled:opacity-50 disabled:cursor-not-allowed',
                     )}
                   >
@@ -295,7 +295,7 @@ export default function InspirationPage() {
             {batchProcessing && total > 0 && (
               <div className="w-full h-1.5 rounded-full bg-bg-secondary overflow-hidden mt-1">
                 <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-accent-500 to-brand-500"
+                  className="h-full rounded-full bg-gradient-to-r from-cyber to-brand-500"
                   initial={{ width: 0 }}
                   animate={{ width: `${(progress / total) * 100}%` }}
                   transition={{ duration: 0.3 }}
