@@ -13,8 +13,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Link2, Sparkles, ThumbsUp, ThumbsDown, RefreshCw } from 'lucide-react';
 import { useNoteStore } from '../store/useNoteStore';
 import { recomputeLinks } from '../lib/links/noteLinkStore';
-import { extractNoteText } from '../lib/extractNoteText';
-import { cn } from '@/lib/utils';
 
 interface EchoSuggestion {
   id: string;
