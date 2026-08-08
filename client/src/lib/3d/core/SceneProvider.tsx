@@ -50,7 +50,7 @@ function ThemeAwareEnvironment() {
   useEffect(() => {
     if (theme === 'deep-sea') {
       scene.fog = new THREE.FogExp2('#0a0a2e', 0.03);
-      scene.background = new THREE.Color('#0a0a2e');
+      scene.background = new THREE.Color('#0A1620');
     } else {
       scene.fog = new THREE.FogExp2('#e8f4f8', 0.015);
       scene.background = new THREE.Color('#e8f4f8');
@@ -135,7 +135,7 @@ export function SceneProvider({ children, interactive = false }: SceneProviderPr
         camera={{ fov: 60, near: 0.1, far: 1000, position: [0, 0, 10] }}
         dpr={[1, 2]}
         style={{ background: 'transparent' }}
-        onCreated={({ gl, scene }) => {
+        onCreated={({ gl }) => {
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.toneMappingExposure = 1.0;
           gl.shadowMap.enabled = true;

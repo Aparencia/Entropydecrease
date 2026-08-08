@@ -15,6 +15,9 @@ import { OrderRipples } from '../objects/OrderRipples';
 import { TideBreath } from '../objects/TideBreath';
 import { StrataField } from '../objects/StrataField';
 import { ParticleSystem } from '../objects/ParticleSystem';
+import { JellyfishField } from '../objects/JellyfishField';
+import { FishSchool } from '../objects/FishSchool';
+import { LeviathanShadow } from '../objects/LeviathanShadow';
 
 // ─── 深海背景着色器（渐变+深渊光感） ─────────────────
 const abyssVertexShader = `
@@ -69,8 +72,8 @@ const abyssFragmentShader = `
 /** 深海背景穹顶 */
 function AbyssDome() {
   const uniforms = useMemo(() => ({
-    uColorTop: { value: new THREE.Color('#0A1628') },
-    uColorMid: { value: new THREE.Color('#0D1F3C') },
+    uColorTop: { value: new THREE.Color('#0A1620') },
+    uColorMid: { value: new THREE.Color('#0F1F2E') },
     uColorBottom: { value: new THREE.Color('#0A0E1A') },
     uGlowColor: { value: new THREE.Color('#1A5276') },
     uTime: { value: 0 },
@@ -213,7 +216,6 @@ function CausticLight() {
 
 // ─── 体积光柱（God rays 简化版） ─────────────────────
 function LightRays() {
-  const meshRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
 
   const uniforms = useMemo(() => ({
@@ -354,6 +356,11 @@ export function DeepSeaWorld() {
       {/* 叙事层叠加（宪法第十条）：潮汐=熵的呼吸，地层=累计专注的岩芯 */}
       <TideBreath />
       <StrataField />
+
+      {/* 深海生命层（2026-08-07 新增）：鱼群=思绪游弋，水母=灵感浮现，巨影=未知敬畏 */}
+      <FishSchool />
+      <JellyfishField />
+      <LeviathanShadow />
 
       {/* 后处理 — ── 临时诊断：完全禁用 composer，验证实体是否因此可见 ── */}
       {null}

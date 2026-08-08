@@ -41,7 +41,7 @@ const domeFragmentShader = /* glsl */ `
 function SkyDome() {
   const uniforms = useMemo(() => ({
     uColorTop: { value: new THREE.Color('#FCD34D') },
-    uColorMid: { value: new THREE.Color('#60A5FA') },
+    uColorMid: { value: new THREE.Color('#4A7DB0') },
     uColorBottom: { value: new THREE.Color('#F8FAFC') },
   }), []);
 
@@ -114,13 +114,12 @@ function SunSystem() {
 
 // ─── 极光效果 ─────────────────────────────────────────────
 function AuroraBorealis() {
-  const meshRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
 
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
-    uColorA: { value: new THREE.Color('#22D3EE') },
-    uColorB: { value: new THREE.Color('#818CF8') },
+    uColorA: { value: new THREE.Color('#6FB4E8') },
+    uColorB: { value: new THREE.Color('#9FB8D8') },
     uColorC: { value: new THREE.Color('#34D399') },
   }), []);
 
@@ -307,7 +306,7 @@ function CloudLayer() {
   const cloudsRef = useRef<THREE.Group>(null);
 
   const cloudData = useMemo(() => {
-    return Array.from({ length: 8 }, (_, i) => ({
+    return Array.from({ length: 8 }, () => ({
       position: [
         (Math.random() - 0.5) * 50,
         12 + Math.random() * 25,
@@ -393,7 +392,7 @@ export function AuroraDomeWorld() {
             <mesh position={[0, 12, 25]} rotation={[-0.2, Math.PI * 0.7, 0]}>
               <planeGeometry args={[50, 18, 48, 48]} />
               <shaderMaterial
-                uniforms={{ uTime: { value: 0 }, uColorA: { value: new THREE.Color('#34D399') }, uColorB: { value: new THREE.Color('#FCD34D') }, uColorC: { value: new THREE.Color('#818CF8') } }}
+                uniforms={{ uTime: { value: 0 }, uColorA: { value: new THREE.Color('#34D399') }, uColorB: { value: new THREE.Color('#FCD34D') }, uColorC: { value: new THREE.Color('#9FB8D8') } }}
                 vertexShader={`varying vec2 vUv;varying vec3 vPosition;void main(){vUv=uv;vPosition=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`}
                 fragmentShader={`
                   uniform float uTime;uniform vec3 uColorA;uniform vec3 uColorB;uniform vec3 uColorC;varying vec2 vUv;varying vec3 vPosition;
