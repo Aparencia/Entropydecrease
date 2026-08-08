@@ -340,6 +340,82 @@
 /* ============================================
    双光源材质（按钮质感） - 环境光 + 自发光 + 微噪点 + 按压点亮
    ============================================ */
+:root .kb-btn-primary-material,
+:root .kb-btn-ai-material {
+  position: relative;
+  overflow: hidden;
+}
+/* 浅色 · 主按钮：晨光（顶部受光）+ 琥珀自发光 */
+:root .kb-btn-primary-material {
+  background: linear-gradient(180deg, #C97A22 0%, #B05E12 55%, #A3550E 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+    0 2px 6px rgba(154, 79, 12, 0.22);
+  transition:
+    box-shadow 150ms var(--kb-ease-smooth),
+    background 150ms var(--kb-ease-smooth),
+    transform 150ms var(--kb-ease-out);
+}
+:root .kb-btn-primary-material:hover {
+  background: linear-gradient(180deg, #D88A2E 0%, #C06A15 55%, #B05E12 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
+    0 4px 10px rgba(154, 79, 12, 0.28);
+}
+:root .kb-btn-primary-material:active {
+  background: linear-gradient(180deg, #B05E12 0%, #9A4F0C 55%, #8A450A 100%);
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 1px 3px rgba(154, 79, 12, 0.2);
+  transform: scale(0.97);
+}
+/* 浅色 · AI 按钮：磷光蓝 */
+:root .kb-btn-ai-material {
+  background: linear-gradient(180deg, #3B6FA8 0%, #2B5F9E 55%, #24517F 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
+    0 2px 6px rgba(43, 95, 158, 0.22);
+  transition:
+    box-shadow 150ms var(--kb-ease-smooth),
+    background 150ms var(--kb-ease-smooth),
+    transform 150ms var(--kb-ease-out);
+}
+:root .kb-btn-ai-material:hover {
+  background: linear-gradient(180deg, #4A7DB0 0%, #3B6FA8 55%, #2B5F9E 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.08),
+    0 4px 10px rgba(43, 95, 158, 0.28);
+}
+:root .kb-btn-ai-material:active {
+  background: linear-gradient(180deg, #2B5F9E 0%, #24517F 55%, #1E4366 100%);
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 1px 3px rgba(43, 95, 158, 0.2);
+  transform: scale(0.97);
+}
+/* 浅色微噪点（晨光实体表面，更淡） */
+:root .kb-btn-primary-material::after,
+:root .kb-btn-ai-material::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+  opacity: 0.025;
+  transition: opacity 150ms ease;
+}
+:root .kb-btn-primary-material:hover::after,
+:root .kb-btn-ai-material:hover::after {
+  opacity: 0.05;
+}
+
 [data-theme="dark"] .kb-btn-primary-material,
 [data-theme="dark"] .kb-btn-ai-material {
   position: relative;
@@ -422,82 +498,6 @@
 [data-theme="dark"] .kb-btn-primary-material:hover::after,
 [data-theme="dark"] .kb-btn-ai-material:hover::after {
   opacity: 0.06;
-}
-
-:root .kb-btn-primary-material,
-:root .kb-btn-ai-material {
-  position: relative;
-  overflow: hidden;
-}
-/* 浅色 · 主按钮：晨光（顶部受光）+ 琥珀自发光 */
-:root .kb-btn-primary-material {
-  background: linear-gradient(180deg, #C97A22 0%, #B05E12 55%, #A3550E 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
-    0 2px 6px rgba(154, 79, 12, 0.22);
-  transition:
-    box-shadow 150ms var(--kb-ease-smooth),
-    background 150ms var(--kb-ease-smooth),
-    transform 150ms var(--kb-ease-out);
-}
-:root .kb-btn-primary-material:hover {
-  background: linear-gradient(180deg, #D88A2E 0%, #C06A15 55%, #B05E12 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.32),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
-    0 4px 10px rgba(154, 79, 12, 0.28);
-}
-:root .kb-btn-primary-material:active {
-  background: linear-gradient(180deg, #B05E12 0%, #9A4F0C 55%, #8A450A 100%);
-  box-shadow:
-    inset 0 2px 6px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 1px 3px rgba(154, 79, 12, 0.2);
-  transform: scale(0.97);
-}
-/* 浅色 · AI 按钮：磷光蓝 */
-:root .kb-btn-ai-material {
-  background: linear-gradient(180deg, #3B6FA8 0%, #2B5F9E 55%, #24517F 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
-    0 2px 6px rgba(43, 95, 158, 0.22);
-  transition:
-    box-shadow 150ms var(--kb-ease-smooth),
-    background 150ms var(--kb-ease-smooth),
-    transform 150ms var(--kb-ease-out);
-}
-:root .kb-btn-ai-material:hover {
-  background: linear-gradient(180deg, #4A7DB0 0%, #3B6FA8 55%, #2B5F9E 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.26),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.08),
-    0 4px 10px rgba(43, 95, 158, 0.28);
-}
-:root .kb-btn-ai-material:active {
-  background: linear-gradient(180deg, #2B5F9E 0%, #24517F 55%, #1E4366 100%);
-  box-shadow:
-    inset 0 2px 6px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 1px 3px rgba(43, 95, 158, 0.2);
-  transform: scale(0.97);
-}
-/* 浅色微噪点（晨光实体表面，更淡） */
-:root .kb-btn-primary-material::after,
-:root .kb-btn-ai-material::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
-  background-size: 120px 120px;
-  opacity: 0.025;
-  transition: opacity 150ms ease;
-}
-:root .kb-btn-primary-material:hover::after,
-:root .kb-btn-ai-material:hover::after {
-  opacity: 0.05;
 }
 /* reduced-motion：动效退化（按压点亮仅保留纯色变化） */
 @media (prefers-reduced-motion: reduce) {
