@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type {
-  PomodoroSession, PomodoroSettings, PomodoroPreset, Note, NoteFolder, NoteLink,
+  PomodoroSession, PomodoroSettings, PomodoroPreset, Note, NoteFolder, NoteLink, NoteConcept,
   FlashcardDeck, Flashcard, FlashcardReview,
   FeynmanNote, FeynmanSummary, FeynmanWeakPoint, FeynmanAIResult,
   OperationLog, AppSettings, SyncConflict, OfflineQueueItem,
@@ -61,6 +61,8 @@ export class EntropyDecreaseDatabase extends Dexie {
   predictions!: Table<PredictionRecord, string>;
   /** 课堂助手热词/替换词表（P1-3）— boost 热词增强 / replace 替换纠错 */
   hotwords!: Table<HotwordEntry, string>;
+  /** 笔记概念索引（AI 提取的笔记概念实体） */
+  noteConcepts!: Table<NoteConcept, string>;
 
   constructor() {
     // 数据库名 'keban' 不可修改（存量用户数据），见文件头 @ai-context
@@ -338,6 +340,11 @@ export class EntropyDecreaseDatabase extends Dexie {
     // courseId 绑定课程名，空 = 全局词条；消费方见 lib/storage/hotwordStore）
     this.version(24).stores({
       hotwords: 'id, kind, courseId, createdAt',
+    });
+
+    // 笔记概念索引（AI 提取的笔记概念实体，用于费曼推荐和概念图谱）
+    this.version(25).stores({
+      noteConcepts: 'id, noteId, name, relevance, createdAt',
     });
   }
 }

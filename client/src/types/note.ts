@@ -10,7 +10,7 @@ export interface Note {
   id: string;
   title: string;
   content: string;               // TipTap JSON 内容
-  template: 'outline' | 'cornell' | 'mindmap' | 'free' | 'qa' | 'blank' | 'video' | 'todo';
+  template: 'outline' | 'cornell' | 'mindmap' | 'free' | 'qa' | 'qa-grid' | 'timeline' | 'blank' | 'video' | 'todo';
   folderId?: string;
   tags: string[];
   createdAt: Date;
@@ -34,6 +34,10 @@ export interface NoteLink {
   /** 目标笔记 id（被引用的笔记） */
   toId: string;
   createdAt: Date;
+  /** 链接周围的上下文文本（前后各 N 字符，用于反向链接预览） */
+  contextText?: string;
+  /** 关联强度（0-1，基于上下文相关性估算） */
+  relevanceScore?: number;
 }
 
 /** 笔记文件夹 */
@@ -85,4 +89,24 @@ export interface VideoNoteMeta {
   duration?: number;
   platform?: string;
   captureSessionId?: string;    // 关联的 WindowCapture 会话 ID
+}
+
+/**
+ * 笔记概念实体（由 AI 从笔记内容中提取）
+ * Note concept entity extracted by AI from note content
+ */
+export interface NoteConcept {
+  id: string;
+  /** 所属笔记 id */
+  noteId: string;
+  /** 概念名称 */
+  name: string;
+  /** 相关度（0-1） */
+  relevance: number;
+  /** 在笔记中出现的上下文文本 */
+  context: string;
+  /** 创建时间 */
+  createdAt: Date;
+  /** 更新时间（如重新提取时更新） */
+  updatedAt: Date;
 }

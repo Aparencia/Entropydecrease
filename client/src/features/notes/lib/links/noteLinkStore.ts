@@ -11,7 +11,7 @@
  */
 import { db } from '@/lib/storage/database';
 import type { NoteLink } from '@/types/models';
-import { extractLinkTargets } from './linkExtractor';
+import { extractLinkTargets, extractLinkContexts } from './linkExtractor';
 
 /**
  * 重算某笔记的出链：先删旧出链，再按内容提取写入新出链（幂等）。
@@ -20,6 +20,10 @@ import { extractLinkTargets } from './linkExtractor';
 export async function recomputeLinks(fromId: string, content: string): Promise<void> {
   // 排除自链 / exclude self-links
   const targets = extractLinkTargets(content).filter((id) => id !== fromId);
+  // 提取上下文文本用于反向链接预览 / extract context for backlink preview
+  const contexts = extractLinkContexts(content);
+  const contextMap = new Map(contexts.map((c) => [c.id, c.contextText]));
+
   await db.transaction('rw', db.noteLinks, async () => {
     await db.noteLinks.where('fromId').equals(fromId).delete();
     const now = new Date();
@@ -28,6 +32,8 @@ export async function recomputeLinks(fromId: string, content: string): Promise<v
       fromId,
       toId,
       createdAt: now,
+      contextText: contextMap.get(toId) || undefined,
+      relevanceScore: contextMap.has(toId) ? 0.7 : undefined,
     }));
     if (rows.length > 0) await db.noteLinks.bulkPut(rows);
   });

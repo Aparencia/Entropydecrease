@@ -131,6 +131,12 @@ const TEMPLATE_CONTENT: Record<Note['template'], string> = {
   /** 思维导图模板：创建时由 createFromTemplate 调 createDefaultMindmap 动态生成（全新节点 id），此处仅占位 */
   mindmap: '',
   free: '',
+  'qa-grid': JSON.stringify({
+    rows: [],
+  }),
+  timeline: JSON.stringify({
+    events: [],
+  }),
   blank: '',
   video: JSON.stringify({
     type: 'doc',
@@ -149,6 +155,8 @@ const TEMPLATE_TITLES: Record<Note['template'], string> = {
   qa: '问答笔记',
   mindmap: '思维导图笔记',
   free: '自由笔记',
+  'qa-grid': '问答网格',
+  timeline: '时间线笔记',
   blank: '空白笔记',
   video: '视频笔记',
   /** v0.11.0 */

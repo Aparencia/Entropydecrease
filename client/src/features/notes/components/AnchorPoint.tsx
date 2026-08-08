@@ -50,7 +50,7 @@ const itemVariants = {
   exit: { opacity: 0, x: -8, transition: { duration: 0.2 } },
 };
 
-export function AnchorPointSidebar({ anchorPoints, conflicts = [], onDismissConflicts, noteContent, noteTitle }: AnchorPointSidebarProps) {
+export function AnchorPointSidebar({ noteId, anchorPoints, conflicts = [], onDismissConflicts, noteContent, noteTitle }: AnchorPointSidebarProps) {
   const navigate = useNavigate();
   const createFeynmanNote = useFeynmanStore((s) => s.createNote);
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
@@ -197,7 +197,7 @@ export function AnchorPointSidebar({ anchorPoints, conflicts = [], onDismissConf
 
         {/* N4 笔记→费曼自动引导：内容达阈值且可提取概念时展示推荐卡 */}
         {noteContent !== undefined && (
-          <FeynmanRecommendSidebar noteContent={noteContent} noteTitle={noteTitle ?? ''} />
+          <FeynmanRecommendSidebar noteId={noteId} noteContent={noteContent} noteTitle={noteTitle ?? ''} />
         )}
       </div>
     </div>
