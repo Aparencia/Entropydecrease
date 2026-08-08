@@ -26,8 +26,8 @@ interface Props {
 const glowColors: Record<string, string> = {
   pomodoro: 'rgba(251,146,60,0.5)',
   note: 'rgba(91,138,114,0.5)',
-  flashcard: 'rgba(168,85,247,0.5)',
-  feynman: 'rgba(34,211,238,0.5)',
+  flashcard: 'rgba(232,184,75,0.5)',
+  feynman: 'rgba(74,155,217,0.5)',
 };
 
 const dotColors: Record<string, string> = {
@@ -49,24 +49,24 @@ export default function PlanktonStream({ activities, loading }: Props) {
 
   if (activities.length === 0) {
     return (
-      <div className="rounded-[var(--kb-radius-lg)] border border-cyan-400/10 bg-bg-elevated/20 backdrop-blur-sm p-6 flex flex-col items-center justify-center gap-2">
+      <div className="rounded-[var(--kb-radius-lg)] border border-cyber/10 bg-bg-elevated/20 backdrop-blur-sm p-6 flex flex-col items-center justify-center gap-2">
         <div className="w-8 h-8 rounded-full bg-cyber/10 flex items-center justify-center">
           <div className="w-2 h-2 rounded-full bg-cyber/40 animate-pulse" />
         </div>
-        <span className="text-[10px] text-cyan-200/40">深海寂静中，开始学习后将有微光汇聚</span>
+        <span className="text-[10px] text-cyber/40">深海寂静中，开始学习后将有微光汇聚</span>
       </div>
     );
   }
 
   return (
     <motion.div
-      className="rounded-[var(--kb-radius-lg)] border border-cyan-400/15 bg-bg-elevated/20 backdrop-blur-sm overflow-hidden"
+      className="rounded-[var(--kb-radius-lg)] border border-cyber/15 bg-bg-elevated/20 backdrop-blur-sm overflow-hidden"
       whileHover={{ scale: 1.01 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
       aria-label="最近活动"
     >
       <div className="p-3">
-        <h3 className="text-[10px] font-medium text-cyan-200/60 mb-2">浮游生物流</h3>
+        <h3 className="text-[10px] font-medium text-cyber/60 mb-2">浮游生物流</h3>
         <div className="flex flex-col gap-1.5">
           <AnimatePresence>
             {activities.map((item, i) => {

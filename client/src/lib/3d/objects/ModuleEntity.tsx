@@ -374,7 +374,7 @@ export function ModuleEntity({
   // 闪卡纹理
   const flashcardTextures = useMemo(() => {
     if (isLowTier) return null;
-    return { mapA: createFlashcardTexture('#3B82F6'), mapB: createFlashcardTexture('#6366F1') };
+    return { mapA: createFlashcardTexture('#43C58B'), mapB: createFlashcardTexture('#63DBA5') };
   }, [isLowTier]);
 
   return (

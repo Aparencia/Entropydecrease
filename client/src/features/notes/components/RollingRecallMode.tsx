@@ -233,7 +233,7 @@ export default function RollingRecallMode({ noteContent, noteTitle, className, o
                     onChange={e => setWriteOutput(e.target.value)}
                     placeholder="尽最大努力凭记忆写出完整内容..."
                     rows={8}
-                    className="w-full rounded-xl border border-border/20 bg-bg-elevated/30 p-3 text-[13px] text-text-primary placeholder:text-text-tertiary/60 outline-none resize-none focus:border-violet-500/40 transition-colors"
+                    className="w-full rounded-xl border border-border/20 bg-bg-elevated/30 p-3 text-[13px] text-text-primary placeholder:text-text-tertiary/60 outline-none resize-none focus:border-accent-500/40 transition-colors"
                   />
                 </div>
               )}
