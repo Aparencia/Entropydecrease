@@ -49,7 +49,7 @@ function ThemeAwareEnvironment() {
 
   useEffect(() => {
     if (theme === 'deep-sea') {
-      scene.fog = new THREE.FogExp2('#0a0a2e', 0.03);
+      scene.fog = new THREE.FogExp2('#0A1620', 0.03);
       scene.background = new THREE.Color('#0A1620');
     } else {
       scene.fog = new THREE.FogExp2('#e8f4f8', 0.015);
