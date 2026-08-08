@@ -76,7 +76,7 @@ export async function seedHandbookDeck(
       id: HANDBOOK_DECK_ID,
       name: HANDBOOK_DECK_NAME,
       description: HANDBOOK_DECK_DESCRIPTION,
-      color: '#06B6D4', // 赛博青 — 微光水母的颜色
+      color: '#4A9BD9', // 磷光蓝 — 微光水母的颜色
       createdAt: now,
       updatedAt: now,
       order: 0, // 排在最前，新用户第一眼可见

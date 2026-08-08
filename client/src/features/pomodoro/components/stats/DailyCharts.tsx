@@ -64,7 +64,7 @@ export function DailyCharts({ chartData, chartRange, onChartRangeChange }: Daily
                 formatter={(value) => [`${value} 个`, '深潜数']}
                 labelFormatter={(label) => `日期: ${label}`}
               />
-              <Bar dataKey="count" fill="#7C3AED" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="count" fill="#4A9BD9" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
@@ -91,10 +91,10 @@ export function DailyCharts({ chartData, chartRange, onChartRangeChange }: Daily
               <Line
                 type="monotone"
                 dataKey="minutes"
-                stroke="#7C3AED"
+                stroke="#4A9BD9"
                 strokeWidth={2}
-                dot={{ r: 3, fill: '#7C3AED' }}
-                activeDot={{ r: 5, fill: '#7C3AED' }}
+                dot={{ r: 3, fill: '#4A9BD9' }}
+                activeDot={{ r: 5, fill: '#4A9BD9' }}
               />
             </LineChart>
           </ResponsiveContainer>

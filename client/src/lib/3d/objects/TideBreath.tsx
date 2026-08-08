@@ -53,12 +53,12 @@ export function TideBreath() {
 
   return (
     <group>
-      {/* 潮汐光：与场景主光源（#00BFFF）同族但偏赛博青，涨潮时世界"变深变亮" */}
-      <pointLight ref={lightRef} position={[0, 4, 2]} intensity={EBB_INTENSITY} color="#22D3EE" distance={40} />
+      {/* 潮汐光：与场景主光源（#4A9BD9）同族但偏磷光蓝，涨潮时世界"变深变亮" */}
+      <pointLight ref={lightRef} position={[0, 4, 2]} intensity={EBB_INTENSITY} color="#6FB4E8" distance={40} />
       {/* 潮线：海床上的扁平光环，涨落可见 */}
       <mesh ref={tideRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -3.5, 0]}>
         <ringGeometry args={[3.4, 9, 48]} />
-        <meshBasicMaterial color="#22D3EE" transparent opacity={0.05} side={THREE.DoubleSide} depthWrite={false} />
+        <meshBasicMaterial color="#6FB4E8" transparent opacity={0.05} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
     </group>
   );

@@ -37,7 +37,7 @@ export default function MicroCardsPage() {
         title="微学习卡片"
         note="把大知识切成小卡片 —— 左滑已会，右滑不会，上滑深入"
         sealChar="卡"
-        sealColor="#A78BFA"
+        sealColor="#43C58B"
         actions={<CreditCard className="w-5 h-5 text-flashcard" strokeWidth={1.5} />}
       />
 

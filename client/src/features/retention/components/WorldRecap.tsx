@@ -104,7 +104,7 @@ export function WorldRecap() {
         style={{
           position: 'fixed', left: 24, bottom: 24, zIndex: 55, cursor: 'pointer',
           maxWidth: 320, padding: '16px 20px', borderRadius: '16px 10px 14px 12px',
-          background: 'rgba(13,24,44,0.78)', border: '1px solid rgba(129,140,248,0.25)',
+          background: 'rgba(13,24,44,0.78)', border: '1px solid rgba(111,180,232,0.25)',
           backdropFilter: 'blur(14px)', boxShadow: '0 8px 30px rgba(4,10,20,0.5)',
         }}
       >
@@ -115,7 +115,7 @@ export function WorldRecap() {
           <ul style={{ margin: '10px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
             {lines.map((l) => (
               <li key={l} style={{ fontSize: 12.5, color: '#90A0B8', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22D3EE', boxShadow: '0 0 6px #22D3EE' }} />
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#6FB4E8', boxShadow: '0 0 6px #6FB4E8' }} />
                 {l}
               </li>
             ))}

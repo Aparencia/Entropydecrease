@@ -105,7 +105,7 @@ export function SignatureMoment() {
     <div style={{
       position: 'absolute', inset: 44, borderRadius: '50%',
       background: 'radial-gradient(circle at 40% 36%, #E0F7FF, #67E8F9 60%, #0891B2)',
-      boxShadow: '0 0 34px #22D3EE, 0 0 90px rgba(34,211,238,0.4)',
+      boxShadow: '0 0 34px #6FB4E8, 0 0 90px rgba(111,180,232,0.4)',
     }} />
   );
 
@@ -134,7 +134,7 @@ export function SignatureMoment() {
             <motion.line
               key={`cl${i}`}
               x1={x1} y1={y1} x2={x2} y2={y2}
-              stroke="#22D3EE" strokeWidth={0.7}
+              stroke="#6FB4E8" strokeWidth={0.7}
               initial={{ opacity: 0 }}
               animate={{ opacity: 0.35 }}
               transition={{ delay: 0.5 + i * 0.1, duration: 0.6 }}
@@ -145,7 +145,7 @@ export function SignatureMoment() {
               key={`cs${i}`}
               cx={x} cy={y} r={r}
               fill="#67E8F9"
-              style={{ filter: 'drop-shadow(0 0 10px #22D3EE)' }}
+              style={{ filter: 'drop-shadow(0 0 10px #6FB4E8)' }}
               initial={{ opacity: 0, scale: 0.2 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: i * 0.13, type: 'spring', stiffness: 220, damping: 20 }}
@@ -168,7 +168,7 @@ export function SignatureMoment() {
               key={`l${i}`}
               x1={90} y1={24}
               x2={x} y2={y}
-              stroke="#22D3EE" strokeWidth={0.8}
+              stroke="#6FB4E8" strokeWidth={0.8}
               initial={{ opacity: 0 }}
               animate={{ opacity: 0.55 }}
               transition={{ delay: 0.3 + i * 0.18, duration: 0.5 }}
@@ -179,7 +179,7 @@ export function SignatureMoment() {
               key={`s${i}`}
               cx={x} cy={y} r={r}
               fill="#67E8F9"
-              style={{ filter: 'drop-shadow(0 0 12px #22D3EE)' }}
+              style={{ filter: 'drop-shadow(0 0 12px #6FB4E8)' }}
               initial={{ opacity: 0, scale: 0.2 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: i * 0.22, type: 'spring', stiffness: 220, damping: 20 }}
@@ -200,7 +200,7 @@ export function SignatureMoment() {
               transition={{ duration: 2.4, delay: i * 0.3, repeat: Infinity, ease: 'easeOut' }}
               style={{
                 position: 'absolute', left: '50%', bottom: 30, width: 3, height: 3,
-                borderRadius: '50%', background: '#A5F3FC', boxShadow: '0 0 8px #22D3EE',
+                borderRadius: '50%', background: '#C3D6EA', boxShadow: '0 0 8px #6FB4E8',
               }}
             />
           ))}
@@ -217,7 +217,7 @@ export function SignatureMoment() {
             initial={{ scale: 0.2, opacity: 0.8 }}
             animate={{ scale: 2.6, opacity: 0 }}
             transition={{ duration: 2, delay: d, ease: 'easeOut', repeat: Infinity }}
-            style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1px solid #22D3EE' }}
+            style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1px solid #6FB4E8' }}
           />
         ))}
         {starCore}

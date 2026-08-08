@@ -23,7 +23,7 @@ export function ParticleSystem({
   count = 2000,
   bounds = { x: 30, y: [-20, 5], z: 30 },
   baseColor = '#aaddff',
-  secondaryColor = '#6366F1',
+  secondaryColor = '#57C6A9',
   speed = 1,
 }: ParticleSystemProps) {
   const pointsRef = useRef<THREE.Points>(null);
