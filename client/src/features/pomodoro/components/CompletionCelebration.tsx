@@ -111,15 +111,15 @@ export function CompletionCelebration({
 
             {/* 光柱图标 / Light beam icon */}
             <motion.div
-              className="w-16 h-16 rounded-full bg-cyan-400/10 flex items-center justify-center"
+              className="w-16 h-16 rounded-full bg-cyber/10 flex items-center justify-center"
               animate={prefersReduced ? {} : { scale: [1, 1.1, 1] }}
               transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
             >
-              <Waves className="w-8 h-8 text-cyan-300" strokeWidth={1.5} />
+              <Waves className="w-8 h-8 text-cyber" strokeWidth={1.5} />
             </motion.div>
 
             {/* 守夜人文案 / Guardian quote */}
-            <p className="text-sm text-cyan-200/80 font-medium">{quote}</p>
+            <p className="text-sm text-cyber/80 font-medium">{quote}</p>
 
             {/* 本次摘要 / Session summary */}
             <div className="w-full space-y-2 py-2">
@@ -134,11 +134,11 @@ export function CompletionCelebration({
                 <span className="flex items-center gap-1">
                   <Anchor className="w-3 h-3" /> 累计深度
                 </span>
-                <span className="text-cyan-300 font-medium">{depthLabel}</span>
+                <span className="text-cyber font-medium">{depthLabel}</span>
               </div>
               <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
                 <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-blue-500"
+                  className="h-full rounded-full bg-gradient-to-r from-cyber to-blue-500"
                   initial={{ width: '0%' }}
                   animate={{ width: `${Math.min(100, (depthGained / Math.max(totalDepth, 1)) * 100 + 5)}%` }}
                   transition={{ duration: 1, ease: DEEP_SEA_EASE, delay: 0.3 }}
@@ -157,7 +157,7 @@ export function CompletionCelebration({
               </button>
               <button
                 onClick={handleContinue}
-                className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white bg-cyan-600/80 hover:bg-cyan-500/80 transition-colors"
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium text-text-inverse bg-cyber/80 hover:bg-cyber/70 transition-colors"
               >
                 继续深潜
               </button>
@@ -197,7 +197,7 @@ function BubbleParticles() {
       {bubbles.map((b) => (
         <motion.div
           key={b.id}
-          className="absolute rounded-full bg-cyan-300/20 border border-cyan-200/10"
+          className="absolute rounded-full bg-cyber/20 border border-cyber/10"
           style={{ left: `${b.x}%`, width: b.size, height: b.size, bottom: -20 }}
           animate={{ y: [0, -window.innerHeight - 40], opacity: [0.6, 0] }}
           transition={{

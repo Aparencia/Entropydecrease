@@ -444,7 +444,9 @@ describe('Pomodoro Store', () => {
   describe('completedCount reset after long_break', () => {
     /** Helper: fast-forward through one complete phase (tick until remainingSeconds <= 1 then tick once more) */
     const completePhase = () => {
-      usePomodoroStore.setState({ remainingSeconds: 1, isRunning: true });
+      // 快进需同步推进墙钟锚点：endAt 置为已过期，模拟墙钟也已走完
+      // （真实运行中 remaining=1 时墙钟必然同步归零；不同步会触发"锚点未归零等待"）
+      usePomodoroStore.setState({ remainingSeconds: 1, isRunning: true, endAt: Date.now() - 1 });
       usePomodoroStore.getState().tick();
     };
 
@@ -787,6 +789,117 @@ describe('Pomodoro Store', () => {
       expect(state.endAt).not.toBeNull();
       expect(state.completedCount).toBe(0);
       expect(state.phase).toBe('work');
+    });
+  });
+
+  // ── updatePreset（编辑预设：活动预设计时空闲时同步刷新时长）─────────────────
+
+  describe('updatePreset — 编辑活动预设', () => {
+    it('计时空闲时编辑活动预设应刷新当前阶段时长（表盘立即反映新时长）', async () => {
+      usePomodoroStore.setState({ activePreset: STUDY_PRESET, remainingSeconds: 25 * 60, totalSeconds: 25 * 60 });
+      await usePomodoroStore.getState().updatePreset('preset-study', { workDuration: 30 });
+      const state = usePomodoroStore.getState();
+      expect(state.activePreset?.workDuration).toBe(30);
+      expect(state.remainingSeconds).toBe(30 * 60);
+      expect(state.totalSeconds).toBe(30 * 60);
+    });
+
+    it('编辑非活动预设不应触碰当前计时时长', async () => {
+      usePomodoroStore.setState({ activePreset: STUDY_PRESET, remainingSeconds: 25 * 60, totalSeconds: 25 * 60 });
+      await usePomodoroStore.getState().updatePreset('preset-class', { workDuration: 40 });
+      expect(usePomodoroStore.getState().remainingSeconds).toBe(25 * 60);
+    });
+
+    it('运行/暂停中编辑活动预设不打断计时，阶段完成后才按新时长生效', async () => {
+      usePomodoroStore.setState({
+        activePreset: STUDY_PRESET, isRunning: true,
+        remainingSeconds: 600, totalSeconds: 25 * 60,
+      });
+      await usePomodoroStore.getState().updatePreset('preset-study', { workDuration: 30 });
+      const state = usePomodoroStore.getState();
+      expect(state.remainingSeconds).toBe(600);
+      expect(state.totalSeconds).toBe(25 * 60);
+      expect(state.isRunning).toBe(true);
+    });
+
+    it('编辑 silent 字段应同步派生 mode（class/self_study 兼容层一致）', async () => {
+      usePomodoroStore.setState({ activePreset: STUDY_PRESET });
+      await usePomodoroStore.getState().updatePreset('preset-study', { silent: true });
+      expect(usePomodoroStore.getState().mode).toBe('class');
+    });
+  });
+
+  // ── deletePreset（删除活动预设：空闲开启新周期，运行中不打断）────────────────
+
+  describe('deletePreset — 删除活动预设', () => {
+    it('计时空闲时删除活动预设应回退第一个并重置新周期时长', async () => {
+      usePomodoroStore.setState({
+        presets: [CLASS_PRESET, STUDY_PRESET],
+        activePreset: STUDY_PRESET,
+        phase: 'short_break',
+        remainingSeconds: 5 * 60, totalSeconds: 5 * 60,
+        completedCount: 2,
+      });
+      await usePomodoroStore.getState().deletePreset('preset-study');
+      const state = usePomodoroStore.getState();
+      expect(state.activePreset?.id).toBe('preset-class');
+      expect(state.phase).toBe('work');
+      expect(state.completedCount).toBe(0);
+      // 回退预设 work 时长（45min 上课）同步到表盘
+      expect(state.remainingSeconds).toBe(45 * 60);
+      expect(state.totalSeconds).toBe(45 * 60);
+    });
+
+    it('运行中删除活动预设不应打断当前计时（回退预设仅生效于下一阶段）', async () => {
+      usePomodoroStore.setState({
+        presets: [CLASS_PRESET, STUDY_PRESET],
+        activePreset: STUDY_PRESET,
+        isRunning: true,
+        phase: 'work',
+        remainingSeconds: 600, totalSeconds: 25 * 60,
+        endAt: Date.now() + 600 * 1000,
+        completedCount: 1,
+      });
+      await usePomodoroStore.getState().deletePreset('preset-study');
+      const state = usePomodoroStore.getState();
+      expect(state.activePreset?.id).toBe('preset-class');
+      // 当前阶段不被重置：剩余秒数/阶段/计数/运行状态原样保留
+      expect(state.remainingSeconds).toBe(600);
+      expect(state.phase).toBe('work');
+      expect(state.completedCount).toBe(1);
+      expect(state.isRunning).toBe(true);
+    });
+  });
+
+  // ── tick 墙钟锚点路径（准点完成：锚点未归零不提前完成）─────────────────────
+
+  describe('tick — 墙钟锚点准点完成', () => {
+    it('remaining=1 且墙钟未归零时吸附等待，不提前完成阶段', () => {
+      // 递减模型已到 1，但墙钟还剩约 2s：应吸附到 2 而非直接完成
+      usePomodoroStore.setState({
+        isRunning: true,
+        phase: 'work',
+        remainingSeconds: 1,
+        endAt: Date.now() + 2000,
+      });
+      usePomodoroStore.getState().tick();
+      const state = usePomodoroStore.getState();
+      expect(state.phase).toBe('work');
+      expect(state.remainingSeconds).toBe(2);
+    });
+
+    it('remaining=1 且墙钟已归零时立即完成阶段', () => {
+      usePomodoroStore.setState({
+        isRunning: true,
+        phase: 'work',
+        remainingSeconds: 1,
+        endAt: Date.now() - 100, // 已过期
+        completedCount: 0,
+      });
+      usePomodoroStore.getState().tick();
+      const state = usePomodoroStore.getState();
+      expect(state.phase).toBe('short_break');
+      expect(state.completedCount).toBe(1);
     });
   });
 

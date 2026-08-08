@@ -7,11 +7,19 @@
  *
  * @ai-context: Chronos 时间生物渲染容器，替代 TimerRing / ImmersiveRing 视觉层。
  */
+import { useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { useReducedMotion } from 'framer-motion';
 import { useSceneTheme } from '@/lib/3d/hooks/useSceneTheme';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { usePerformanceModeStore } from '@/lib/performance/usePerformanceMode';
 import { CHRONOS_STYLES, CHRONOS_PHASES, CHRONOS_STATE_LABELS, toChronosPhase, type ChronosPhase } from './chronosStyles';
 import { ChronosSphere } from './ChronosSphere';
+import { ChronosParticleField } from './ChronosParticleField';
+
+/** 长按判定阈值（ms），与 ChronosSphere 手势语义一致 */
+const LONG_PRESS_MS = 800;
+/** 点击判定阈值（ms） */
+const TAP_MAX_MS = 500;
 
 interface ChronosCanvasProps {
   /** full = 沉浸全屏；compact = 普通视图表盘尺寸 */
@@ -33,15 +41,50 @@ interface ChronosCanvasProps {
   timeStr: string;
 }
 
-/** 2D 静态回退形态（reduced motion / 极端低配） */
-function ChronosStatic({ phase, timeStr }: {
+/** 2D 静态回退形态（系统级 reduced motion / 极端低配） */
+function ChronosStatic({ phase, timeStr, onTap, onLongPress }: {
   phase: ChronosPhase;
   timeStr: string;
+  onTap?: () => void;
+  onLongPress?: () => void;
 }) {
   const phaseColor = CHRONOS_PHASES[phase].body;
   const state = CHRONOS_STATE_LABELS[phase];
+  // 静态形态保留 tap/长按交互语义（与 3D 形态一致），保证降级路径下核心交互不失效
+  const pointerDownRef = useRef(0);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFiredRef = useRef(false);
+  const cancelLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+  const handlePointerDown = () => {
+    longPressFiredRef.current = false;
+    pointerDownRef.current = Date.now();
+    cancelLongPress();
+    if (onLongPress) {
+      longPressTimerRef.current = setTimeout(() => {
+        longPressFiredRef.current = true;
+        onLongPress();
+      }, LONG_PRESS_MS);
+    }
+  };
+  const handlePointerUp = () => {
+    cancelLongPress();
+    if (longPressFiredRef.current) return;
+    if (Date.now() - pointerDownRef.current < TAP_MAX_MS && onTap) onTap();
+  };
   return (
-    <div className="relative flex items-center justify-center w-full h-full">
+    <div
+      className="relative flex items-center justify-center w-full h-full cursor-pointer"
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={cancelLongPress}
+      role="button"
+      aria-label={`${state.name} ${timeStr}`}
+    >
       {/* 静态光环 + 渐变球体 */}
       <div
         className="rounded-full"
@@ -80,16 +123,19 @@ export function ChronosCanvas({
   timeStr,
 }: ChronosCanvasProps) {
   const theme = useSceneTheme();
+  // 系统级 prefers-reduced-motion 判定（非 MotionConfig 上下文）：性能模式低档
+  // 只降帧/降粒子（ChronosSphere 内 useEffectiveTier），不得把 3D 生物静态化
   const reduced = useReducedMotion();
+  const perfMode = usePerformanceModeStore((s) => s.mode);
   const style = CHRONOS_STYLES[theme];
   const chronosPhase = toChronosPhase(phase, isRunning, remainingSeconds, started);
   // 状态指示：完整状态机（沉睡/呼吸/专注/短休/长休/即将完成），优先于静态 label
   const state = CHRONOS_STATE_LABELS[chronosPhase];
   const stateColor = CHRONOS_PHASES[chronosPhase].body;
 
-  // 降级：减少动效偏好 → 2D 静态形态
+  // 降级：系统减少动效偏好 → 2D 静态形态（保留 tap/长按交互）
   if (reduced) {
-    return <ChronosStatic phase={chronosPhase} timeStr={timeStr} />;
+    return <ChronosStatic phase={chronosPhase} timeStr={timeStr} onTap={onTap} onLongPress={onLongPress} />;
   }
 
   return (
@@ -101,8 +147,11 @@ export function ChronosCanvas({
       role="timer"
     >
       <Canvas
-        camera={{ position: [0, 0, 4.2], fov: 45 }}
-        dpr={[1, 1.5]}
+        /* camera z=5.0：视锥半高 ≈2.07，粒子场环带（≤2.2）完整落在视锥内，
+           原 z=4.2 时半高仅 1.74，环境微粒场大部分被视锥裁剪（"无粒子效果"根因之一） */
+        camera={{ position: [0, 0, 5.0], fov: 45 }}
+        // 低档性能：限制渲染分辨率上限为 1x（跳帧/降粒子由 ChronosSphere 内处理）
+        dpr={perfMode === 'low' ? [1, 1] : [1, 1.5]}
         gl={{ antialias: true, alpha: true }}
         className={mode === 'full' ? '!absolute inset-0' : ''}
         style={{ pointerEvents: 'auto' }}
@@ -118,6 +167,12 @@ export function ChronosCanvas({
           bloom={bloom}
           onTap={onTap}
           onLongPress={onLongPress}
+        />
+        {/* 环境微粒场：环绕生物的外层生命场（状态联动收拢/散开） */}
+        <ChronosParticleField
+          phase={chronosPhase}
+          style={style}
+          bloom={bloom}
         />
       </Canvas>
       {/* 中央状态区：时间 + 状态名 + 交互提示（HTML 层，与 3D 叠加） */}

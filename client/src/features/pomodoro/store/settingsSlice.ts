@@ -59,7 +59,7 @@ export const createSettingsSlice: PomodoroSlice<Pick<PomodoroState, 'mode' | 'se
     set({ aiRecommendedDuration: duration, aiReasoning: reasoning }),
 
   updateSettings: (newSettings) => {
-    const { settings, phase, isRunning, isPaused, activePreset } = get();
+    const { settings } = get();
     // 钳制非法时长：0/负数/超上限直接忽略，防止 0 秒番茄与越界值
     // （设置页输入框曾被允许提交 0，而 PresetEditor 有钳制、此处没有）
     const sanitized: Partial<PomodoroSettings> = {};
@@ -79,18 +79,9 @@ export const createSettingsSlice: PomodoroSlice<Pick<PomodoroState, 'mode' | 'se
       (sanitized as Record<string, unknown>)[key] = value;
     }
     const merged = { ...settings, ...sanitized };
-
-    // If not running, update timer to reflect new duration
-    if (!isRunning && !isPaused) {
-      const duration = getPhaseDuration(phase, activePreset, merged);
-      set({
-        settings: merged,
-        remainingSeconds: duration,
-        totalSeconds: duration,
-      });
-    } else {
-      set({ settings: merged });
-    }
+    set({ settings: merged });
+    // 统一时长同步入口：空闲时按新设置刷新当前阶段展示时长（运行/暂停中不打断）
+    get().syncDisplayDuration();
 
     // 持久化设置
     saveSettings(merged).catch(() => {});

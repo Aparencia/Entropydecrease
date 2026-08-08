@@ -11,8 +11,8 @@
  * coral planting → session:end event; silent presets skip all sounds.
  */
 import {
-  MINI_DIVE_SECONDS, getInterval, getNextCount, getNextPhase, getPhaseDuration,
-  type PomodoroSlice, type PomodoroState,
+  MINI_DIVE_SECONDS, computeActualDuration, getInterval, getNextCount, getNextPhase, getPhaseDuration,
+  type Phase, type PomodoroSettings, type PomodoroSlice, type PomodoroState,
 } from './pomodoroStoreTypes';
 import { recordSession, playCompletionSound, sendNotification } from './usePomodoroPersistence';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
@@ -25,8 +25,9 @@ function finalizeWorkPhase(get: () => PomodoroState): number | null {
   const plannedSeconds = isMiniDive
     ? MINI_DIVE_SECONDS
     : (activePreset?.workDuration ?? settings.workDuration) * 60;
-  const actualDuration = sst
-    ? Math.round((Date.now() - sst - totalPausedMs) / 1000)
+  // 实际投入时长（排除暂停），无会话起点时回退计划时长
+  const actualDuration = sst != null
+    ? (computeActualDuration(sst, totalPausedMs) ?? plannedSeconds)
     : plannedSeconds;
   recordSession({
     mode: activePreset?.silent ? 'class' : 'self_study',
@@ -171,14 +172,69 @@ function runPhaseCompletion(
   }));
 }
 
+/**
+ * 阶段内时间感知副作用：5 分钟预警与最后 10 秒滴答音（静默预设跳过）
+ *
+ * @ai-context: 从 tick 内联提取（递减与墙钟吸附两条路径共用）；
+ * 预警用窗口判定（<=warningSec 且 >warningSec-3）而非严格相等，
+ * 避免墙钟校准跳变时漏报。
+ */
+function emitPhaseSignals(
+  get: () => PomodoroState,
+  set: (fn: (s: PomodoroState) => Partial<PomodoroState>) => void,
+  phase: Phase,
+  nextRemaining: number,
+  isSilent: boolean,
+  settings: PomodoroSettings,
+): void {
+  if (isSilent) return;
+  // 预警（工作阶段）—— 支持自定义时点
+  const warningSec = (settings.warningMinutes ?? 5) * 60;
+  if (phase === 'work' && warningSec > 0 && nextRemaining <= warningSec && nextRemaining > warningSec - 3) {
+    soundPlayer.play('pomodoro_5min_warning');
+    set((s) => ({
+      lastAction: 'tick_5min_warning',
+      lastActionCounter: s.lastActionCounter + 1,
+    }));
+  }
+  // 最后 10 秒滴答（可关闭）
+  if (phase === 'work' && (settings.tickFinalEnabled ?? true) && nextRemaining <= 10 && nextRemaining > 0) {
+    soundPlayer.play('pomodoro_tick_final');
+    set((s) => ({
+      lastAction: 'tick_final',
+      lastActionCounter: s.lastActionCounter + 1,
+    }));
+  }
+}
+
 export const createTickSlice: PomodoroSlice<{ tick: () => void }> = (set, get) => ({
   tick: () => {
-    const { remainingSeconds, isRunning, phase, settings, activePreset } = get();
+    const { remainingSeconds, isRunning, phase, settings, activePreset, endAt } = get();
     if (!isRunning) return;
     const isSilent = activePreset?.silent ?? false;
 
+    // ── 无墙钟锚点（异常/测试路径）：维持递减节奏，剩余 ≤1 即完成 ──
+    if (endAt == null) {
+      if (remainingSeconds <= 1) {
+        runPhaseCompletion(set, get);
+        return;
+      }
+      emitPhaseSignals(get, set, phase, remainingSeconds - 1, isSilent, settings);
+      set({ remainingSeconds: remainingSeconds - 1 });
+      return;
+    }
+
+    // ── 墙钟锚点路径：递减 + 校准吸附 + 准点完成 ──
+    const wallRemaining = Math.max(0, Math.round((endAt - Date.now()) / 1000));
+
+    // 剩余 ≤1 时以墙钟为准：锚点未归零则吸附等待（避免提前完成），归零立即完成
     if (remainingSeconds <= 1) {
-      // Phase completed
+      if (wallRemaining > 0) {
+        // 校准后同值短路：调度器终点附近密集轮询时避免多余 store 更新
+        if (wallRemaining === remainingSeconds) return;
+        set({ remainingSeconds: wallRemaining });
+        return;
+      }
       runPhaseCompletion(set, get);
       return;
     }
@@ -186,39 +242,15 @@ export const createTickSlice: PomodoroSlice<{ tick: () => void }> = (set, get) =
     let nextRemaining = remainingSeconds - 1;
     // 墙钟校准：系统休眠唤醒/setInterval 漂移后，与 endAt 误差超过 1s 时直接吸附，
     // 避免递减模型累积误差（误差 ≤1s 时保持 -1 节奏，防止 UI 跳秒）
-    const { endAt } = get();
-    if (endAt != null) {
-      const wallRemaining = Math.max(0, Math.round((endAt - Date.now()) / 1000));
-      if (Math.abs(wallRemaining - nextRemaining) > 1) {
-        nextRemaining = wallRemaining;
-      }
+    if (Math.abs(wallRemaining - nextRemaining) > 1) {
+      nextRemaining = wallRemaining;
     }
     // 墙钟校准后若剩余时间 ≤ 0，立即完成（避免 UI 显示 00:00 停摆 1 秒）
     if (nextRemaining <= 0) {
       runPhaseCompletion(set, get);
       return;
     }
-    // 静默预设跳过预警和滴答音
-    if (!isSilent) {
-      // 预警（工作阶段）—— 支持自定义时点
-      const warningSec = (settings.warningMinutes ?? 5) * 60;
-      // 使用 <= 而非严格相等，避免墙钟校准跳变时跳过预警
-      if (phase === 'work' && warningSec > 0 && nextRemaining <= warningSec && nextRemaining > warningSec - 3) {
-        soundPlayer.play('pomodoro_5min_warning');
-        set((s) => ({
-          lastAction: 'tick_5min_warning',
-          lastActionCounter: s.lastActionCounter + 1,
-        }));
-      }
-      // 最后 10 秒滴答（可关闭）
-      if (phase === 'work' && (settings.tickFinalEnabled ?? true) && nextRemaining <= 10 && nextRemaining > 0) {
-        soundPlayer.play('pomodoro_tick_final');
-        set((s) => ({
-          lastAction: 'tick_final',
-          lastActionCounter: s.lastActionCounter + 1,
-        }));
-      }
-    }
+    emitPhaseSignals(get, set, phase, nextRemaining, isSilent, settings);
     set({ remainingSeconds: nextRemaining });
   },
 });

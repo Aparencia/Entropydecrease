@@ -84,7 +84,7 @@ export function FirstDiveGuide() {
     >
       <div className={cn(
         'rounded-2xl px-5 py-4',
-        'bg-[#0A1826]/92 backdrop-blur-2xl border border-cyan-400/15',
+        'bg-[#0A1826]/92 backdrop-blur-2xl border border-cyber/15',
         'shadow-[0_8px_32px_rgba(4,10,20,0.5),0_0_24px_rgba(6,182,212,0.08)]',
       )}>
         <AnimatePresence mode="wait">
@@ -98,7 +98,7 @@ export function FirstDiveGuide() {
               exit={{ opacity: 0, y: -6 }}
             >
               <MicroLight size={16} />
-              <p className="text-[13px] text-cyan-100/85 leading-relaxed">{praiseText}</p>
+              <p className="text-[13px] text-cyber/85 leading-relaxed">{praiseText}</p>
             </motion.div>
           ) : currentStep ? (
             /* 当前步骤引导 */
@@ -124,9 +124,9 @@ export function FirstDiveGuide() {
                       className={cn(
                         'h-1.5 rounded-full transition-all duration-500',
                         completedSteps.includes(s.id)
-                          ? 'w-5 bg-cyan-400/80'
+                          ? 'w-5 bg-cyber/80'
                           : s.id === currentStep.id
-                            ? 'w-3.5 bg-cyan-400/40 animate-pulse'
+                            ? 'w-3.5 bg-cyber/40 animate-pulse'
                             : 'w-1.5 bg-white/15',
                       )}
                     />
@@ -143,7 +143,7 @@ export function FirstDiveGuide() {
                   disabled={currentStep.id === 'pomodoro' && pomodoroRunning && pathname.startsWith(currentStep.route)}
                   className={cn(
                     'flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-medium',
-                    'bg-cyan-500/90 text-white hover:bg-cyan-400 transition-colors',
+                    'bg-cyber/90 text-text-inverse hover:bg-cyber transition-colors',
                     'shadow-[0_2px_12px_rgba(6,182,212,0.35)]',
                     'disabled:opacity-50 disabled:pointer-events-none',
                   )}

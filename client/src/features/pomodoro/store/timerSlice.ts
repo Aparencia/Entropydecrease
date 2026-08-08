@@ -14,7 +14,7 @@ import { loadSettings, recordSession } from './usePomodoroPersistence';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { seedBuiltinPresets } from '../lib/presetService';
 import {
-  COMMIT_DIVE_SECONDS, MINI_DIVE_SECONDS, getPhaseDuration,
+  COMMIT_DIVE_SECONDS, MINI_DIVE_SECONDS, computeActualMs, getPhaseDuration,
   getInterval, getNextPhase,
   type Mode, type PomodoroSlice, type PomodoroState,
 } from './pomodoroStoreTypes';
@@ -46,6 +46,7 @@ export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
   | 'showCompletionOverlay' | 'dismissCompletionOverlay' | 'initialize'
   | 'start' | 'startMiniDive' | 'startCommitDive' | 'pause' | 'resume'
   | 'reset' | 'skip' | 'abortSession' | 'enterImmersive' | 'exitImmersive'
+  | 'syncDisplayDuration'
 >> = (set, get) => ({
   // ── 计时器状态 ──
   phase: 'work',
@@ -197,8 +198,8 @@ export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
    */
   abortSession: () => {
     const { phase, sessionStartTime, totalPausedMs, currentGoal, activePreset, settings } = get();
-    if (phase !== 'work' || !sessionStartTime) return;
-    const actualMs = Date.now() - sessionStartTime - totalPausedMs;
+    if (phase !== 'work' || sessionStartTime == null) return;
+    const actualMs = computeActualMs(sessionStartTime, totalPausedMs) ?? 0;
     if (actualMs < MIN_ABORT_RECORD_MS) return;
     const plannedSeconds = (activePreset?.workDuration ?? settings.workDuration) * 60;
     recordSession({
@@ -228,6 +229,19 @@ export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
   },
 
   dismissCompletionOverlay: () => set({ showCompletionOverlay: false }),
+
+  /**
+   * 统一时长同步入口（settingsSlice.updateSettings / presetSlice.updatePreset /
+   * deletePreset 共用）：计时空闲时按当前 activePreset/settings 刷新当前阶段的
+   * remainingSeconds/totalSeconds，保证参数变更立即反映到 UI 表盘；
+   * 运行/暂停中不打断计时（阶段完成后由 tick 自然按新参数进入下一阶段）。
+   */
+  syncDisplayDuration: () => {
+    const { phase, activePreset, settings, isRunning, isPaused } = get();
+    if (isRunning || isPaused) return;
+    const duration = getPhaseDuration(phase, activePreset, settings);
+    set({ remainingSeconds: duration, totalSeconds: duration });
+  },
 });
 
 /**

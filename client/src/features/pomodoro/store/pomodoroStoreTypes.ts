@@ -115,7 +115,15 @@ export interface PomodoroState {
   tick: () => void;
   enterImmersive: () => void;
   exitImmersive: () => void;
+  /** 切换预设（= 开启新周期：计数归零、阶段回 work、立即应用新时长） */
   setPreset: (presetId: string) => void;
+  /**
+   * 统一时长同步入口：计时空闲时按当前 activePreset/settings 刷新当前阶段的
+   * remainingSeconds/totalSeconds（UI 表盘立即反映参数变更）。
+   * 运行/暂停中不打断计时（阶段完成后自然按新参数进入下一阶段）。
+   * settingsSlice.updateSettings / presetSlice.updatePreset / deletePreset 共用。
+   */
+  syncDisplayDuration: () => void;
   setCurrentGoal: (goal: string | null) => void;
   updateSettings: (settings: Partial<PomodoroSettings>) => void;
   /** 设置 AI 推荐结果 */
@@ -193,4 +201,29 @@ export function getNextCount(
   // 无长休模式：回绕计数（用固定 4 作为显示上限）
   if (longBreakInterval === 0) return (completedCount % 4) + 1;
   return completedCount + 1;
+}
+
+/**
+ * 计算会话实际投入毫秒数（排除暂停时间）：now - sessionStartTime - totalPausedMs。
+ * sessionStartTime 为空（未开始/阶段已切换）时返回 null。
+ * @ai-context: 时间感知统一事实源——abortSession 中断阈值与 finalizeWorkPhase
+ * 落库时长共用，保证中断/完成统计口径一致。
+ */
+export function computeActualMs(
+  sessionStartTime: number | null,
+  totalPausedMs: number,
+  now: number = Date.now(),
+): number | null {
+  if (sessionStartTime == null) return null;
+  return now - sessionStartTime - totalPausedMs;
+}
+
+/** 实际投入秒数（round 取整），无会话起点时返回 null */
+export function computeActualDuration(
+  sessionStartTime: number | null,
+  totalPausedMs: number,
+  now: number = Date.now(),
+): number | null {
+  const ms = computeActualMs(sessionStartTime, totalPausedMs, now);
+  return ms == null ? null : Math.round(ms / 1000);
 }

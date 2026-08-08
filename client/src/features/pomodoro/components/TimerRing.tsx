@@ -146,8 +146,11 @@ export default function TimerRing({
           className="stroke-border/20"
         />
 
-        {/* 进度环 — 带渐变，strokeDashoffset 变化由 CSS transition 平滑过渡 */}
+        {/* 进度环 — 带渐变，strokeDashoffset 变化由 CSS transition 平滑过渡。
+            key={phase}：阶段切换时重挂载，取消"旧 offset → 满环"的 1s 回转过渡，
+            新阶段满环瞬时呈现（时间感知：切换瞬间 UI 即反映新阶段） */}
         <circle
+          key={phase}
           cx={size / 2}
           cy={size / 2}
           r={r}
@@ -160,7 +163,7 @@ export default function TimerRing({
           style={{
             transform: 'rotate(-90deg)',
             transformOrigin: '50% 50%',
-            transition: 'stroke-dashoffset 1s linear',
+            transition: 'stroke-dashoffset 1s linear, stroke 0.5s ease',
             filter: `drop-shadow(0 0 6px ${color}40)`,
           }}
         />

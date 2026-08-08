@@ -102,9 +102,9 @@ export function OnboardingOverlay() {
             key={i}
             className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
               i === currentStep
-                ? 'bg-indigo-400 w-4'
+                ? 'bg-brand-400 w-4'
                 : i < currentStep
-                  ? 'bg-indigo-400/50'
+                  ? 'bg-brand-400/50'
                   : 'bg-white/20'
             }`}
           />
@@ -113,7 +113,7 @@ export function OnboardingOverlay() {
 
       {/* 自动演示模式提示 */}
       {autoDemo && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-3 py-1 rounded-full bg-indigo-500/30 backdrop-blur-sm border border-indigo-400/30 text-indigo-200 text-xs">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-3 py-1 rounded-full bg-brand-500/30 backdrop-blur-sm border border-brand-400/30 text-brand-200 text-xs">
           自动演示中...
         </div>
       )}

@@ -44,12 +44,15 @@ export default memo(function CycleMarkers({ total, filled, className }: CycleMar
             key={i}
             className={cn(
               'h-2 rounded-full transition-all',
-              `duration-[${BEAT.x2}ms]`,
               isFilled
                 ? 'bg-brand-500 shadow-[0_0_8px_rgba(91,138,114,0.4)]'
                 : 'bg-border/30',
             )}
-            style={{ width: isFilled ? '24px' : '16px' }}
+            /* transitionDuration 内联：Tailwind JIT 无法生成运行时拼接的 duration-[...] 任意值类 */
+            style={{
+              width: isFilled ? '24px' : '16px',
+              transitionDuration: `${BEAT.x2}ms`,
+            }}
             initial={{ scaleX: 0 }}
             animate={{ scaleX: 1 }}
             transition={{ delay: 0.3 + i * 0.05, ...SPRING.bouncy }}

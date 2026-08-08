@@ -73,7 +73,7 @@ export function Step5ExitDemo() {
           {!autoDemo && (
             <button
               onClick={handleExit}
-              className="block mx-auto px-6 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium transition-colors"
+              className="block mx-auto px-6 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 text-text-inverse text-sm font-medium transition-colors"
             >
               退出并继续 →
             </button>

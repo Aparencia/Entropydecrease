@@ -5,6 +5,9 @@
  * @ai-context: 拆分自 811 行单体：类型/纯函数在 pomodoroStoreTypes，
  * 计时器状态机在 timerSlice + tickSlice，配置/预设切换在 settingsSlice，
  * 预设 CRUD 在 presetSlice。旧导入路径与全部选择器 hooks 全兼容。
+ * 时长同步统一入口：settingsSlice.updateSettings / presetSlice.updatePreset /
+ * deletePreset 均委托 timerSlice.syncDisplayDuration（空闲时刷新表盘时长，
+ * 运行中不打断计时），保证预设/设置变更与 UI 显示的单一事实源。
  * @ai-context: Split from the 811-line monolith into four slices; this
  * entry preserves every legacy export and selector hook.
  */

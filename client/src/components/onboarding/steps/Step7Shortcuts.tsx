@@ -31,7 +31,7 @@ export function Step7Shortcuts() {
 
         <button
           onClick={finishGuide}
-          className="w-full px-5 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-medium transition-colors"
+          className="w-full px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-text-inverse font-medium transition-colors"
         >
           开始使用
         </button>

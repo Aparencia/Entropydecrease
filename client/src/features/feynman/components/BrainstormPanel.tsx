@@ -28,7 +28,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string; shadow: string
   '类比': { bg: 'bg-blue-500/10', text: 'text-blue-600 dark:text-blue-400', shadow: 'shadow-blue-500/10' },
   '反例': { bg: 'bg-amber-500/10', text: 'text-amber-700 dark:text-amber-400', shadow: 'shadow-amber-500/10' },
   '应用': { bg: 'bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', shadow: 'shadow-emerald-500/10' },
-  '历史': { bg: 'bg-cyan-500/10', text: 'text-cyan-600 dark:text-cyan-400', shadow: 'shadow-cyan-500/10' },
+  '历史': { bg: 'bg-cyber/10', text: 'text-cyber', shadow: 'shadow-cyber/10' },
   '争议': { bg: 'bg-orange-500/10', text: 'text-orange-600 dark:text-orange-400', shadow: 'shadow-orange-500/10' },
 };
 

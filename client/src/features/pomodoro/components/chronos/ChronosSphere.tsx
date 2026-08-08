@@ -302,19 +302,20 @@ export function ChronosSphere({ phase, style, intensity = 50, ambientLight = 0.5
       {/* 光子内层：球体内部发光光点 */}
       <points ref={photonRef} geometry={photonGeo}>
         <pointsMaterial
-          size={0.055}
+          size={0.09}
           color={style.photonColor}
           transparent
           opacity={0.95}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
+          depthTest={false}
         />
       </points>
 
       {/* 微粒外层：球壳微粒 */}
       <points ref={pointsRef} geometry={particleGeo}>
         <pointsMaterial
-          size={0.045}
+          size={0.075}
           vertexColors
           transparent
           opacity={0.85}

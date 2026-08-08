@@ -119,8 +119,18 @@ export default function PomodoroPage() {
     } else {
       document.title = '深潜 - 熵减';
     }
-    return () => { document.title = '熵减'; };
+    // cleanup 与上方 effect 分离：仅卸载时恢复默认标题，
+    // 避免每秒 tick 依赖变化时先 cleanup（置 '熵减'）再重设造成的标题闪烁
   }, [remainingSeconds, phase, isRunning, isPaused]);
+
+  useEffect(() => {
+    return () => { document.title = '熵减'; };
+  }, []);
+
+  // 页面卸载时清掉庆祝层残留：完成瞬间切走页面，下次进入不再弹出旧庆祝层
+  useEffect(() => {
+    return () => { dismissCompletionOverlay(); };
+  }, [dismissCompletionOverlay]);
 
   // P3-19 稳定回调引用，供 memo 化的 PresetTabs 避免每秒重渲染
   const openPresetEditor = useCallback(() => {
@@ -151,8 +161,7 @@ export default function PomodoroPage() {
   const handleGoalSubmit = async (goal: string) => {
     setCurrentGoal(goal || null);
     setGoalModalOpen(false);
-    // 使用微任务确保上述setState完成后再触发store更新
-    await Promise.resolve();
+    // store 更新为同步（zustand set 即时生效），start() 无需等待 React state 落盘
     start();
     // 不再强制进入沉浸模式：是否沉浸由用户自行选择（普通视图有"进入专注模式"入口）
     if (rememberGoal && goal) {
@@ -198,6 +207,21 @@ export default function PomodoroPage() {
         : v === 'switching-to-immersive' ? 'normal' : 'switching-to-normal');
     }
   }, [isImmersive]);
+
+  // 沉浸模式 ESC 退出：捕获阶段监听优先于 AppLayout 全局 ESC（退出模块），
+  // 避免沉浸中按 ESC 直接切走页面且 exitImmersive 未调用导致 isImmersive 残留
+  useEffect(() => {
+    if (view !== 'immersive') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        exitImmersive();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [view, exitImmersive]);
 
   return (
     <>

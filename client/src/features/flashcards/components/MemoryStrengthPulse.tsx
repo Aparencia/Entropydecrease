@@ -31,7 +31,7 @@ const RATING_COLORS: Record<number, { bar: string; text: string; label: string }
   0: { bar: 'bg-rose-400', text: 'text-rose-400', label: '记忆减弱' },
   1: { bar: 'bg-amber-400', text: 'text-amber-400', label: '轻微巩固' },
   2: { bar: 'bg-emerald-400', text: 'text-emerald-400', label: '记忆增强' },
-  3: { bar: 'bg-cyan-400', text: 'text-cyan-400', label: '深度巩固' },
+  3: { bar: 'bg-cyber', text: 'text-cyber', label: '深度巩固' },
 };
 
 /** 自动淡出延迟（ms） / Auto fade delay */
