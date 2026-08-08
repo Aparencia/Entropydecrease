@@ -2,12 +2,13 @@
  * @ai-context: 自由画布组件（巨型，待拆分）：手写/绘图白板，供笔记批注与费曼讲解涂鸦。
  */
 import { useCallback, useRef, useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Copy, Eraser, CheckSquare } from 'lucide-react';
+import { Plus, Trash2, Copy, Eraser, CheckSquare, LayoutGrid, Sparkles } from 'lucide-react';
 import FreeTextBlock from './FreeTextBlock';
 import { FreeCanvasOverlays } from './FreeCanvasOverlays';
 import { InkToolbar } from './canvas/InkToolbar';
 import { InkLayer } from './canvas/InkLayer';
 import { useInkDrawing, type InkTool } from '../lib/canvas/useInkDrawing';
+import { useCanvasAILayout, type LayoutMode } from '../hooks/useCanvasAILayout';
 import type { FreeCanvasData, FreeCanvasBlock, InkStroke, InkPoint } from '@/types/models';
 
 interface FreeCanvasProps {
@@ -46,6 +47,8 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
 
   const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(new Set());
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [aiLayoutMode, setAiLayoutMode] = useState<LayoutMode | null>(null);
+  const { loading: aiLayoutLoading, layout: aiLayout } = useCanvasAILayout();
 
   // 阶段三：墨迹工具状态 / ink tool state
   const [inkTool, setInkTool] = useState<InkTool>('select');
@@ -612,6 +615,48 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
         actions={actions}
         onClosePalette={() => setPaletteOpen(false)}
       />
+
+      {/* AI 智能排版按钮 */}
+      {data.blocks.length > 1 && (
+        <div className="absolute bottom-20 left-4 z-10 flex gap-1">
+          {aiLayoutMode ? (
+            <div className="flex items-center gap-1 px-2 py-1.5 rounded-kb-md bg-bg-elevated/90 backdrop-blur-sm border border-border/30 shadow-kb-sm">
+              <span className="text-c1 text-text-tertiary mr-1">AI 排版</span>
+              {(['tree', 'timeline', 'cluster'] as LayoutMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={async () => {
+                    setAiLayoutMode(mode);
+                    const newBlocks = await aiLayout(data.blocks, mode);
+                    emitChange({ ...data, blocks: newBlocks });
+                    setAiLayoutMode(null);
+                  }}
+                  disabled={aiLayoutLoading}
+                  className="px-2 py-0.5 rounded-kb-sm text-c1 font-medium bg-brand-50 text-brand-700 hover:bg-brand-100 disabled:opacity-50 transition-colors"
+                >
+                  {mode === 'tree' ? '树形' : mode === 'timeline' ? '时间线' : '聚类'}
+                </button>
+              ))}
+              <button
+                onClick={() => setAiLayoutMode(null)}
+                className="px-1.5 py-0.5 rounded-kb-sm text-c1 text-text-tertiary hover:text-text-primary transition-colors"
+              >
+                取消
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAiLayoutMode('tree')}
+              disabled={aiLayoutLoading}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-kb-md bg-bg-elevated/90 backdrop-blur-sm border border-border/30 shadow-kb-sm text-c1 text-text-tertiary hover:text-brand-600 hover:border-brand-300 transition-colors disabled:opacity-50"
+              title="AI 智能排版"
+            >
+              <Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />
+              {aiLayoutLoading ? '排版中...' : 'AI 整理'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 阶段三：墨迹工具栏 / ink toolbar */}
       <InkToolbar
