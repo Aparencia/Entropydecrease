@@ -15,7 +15,8 @@
 | 累计专注 | 珊瑚地形 |
 | 灵感数 | 萤火 |
 
-品牌美学 DNA：「深海生物发光美学」——深海萤火 / 认知琥珀金 / 赛博青。
+品牌美学 DNA：「深海生物发光美学」——深海萤火 / 磷光青绿 / 认知琥珀金。
+AI 专用色：深海磷光蓝 `#4A9BD9` / `#2B5F9E`（仅 AI 功能）。
 
 **第二条 焦虑防线**：零负向语言、零倒计时（禁止红色倒计时压力）、零赤字、一切可关闭、回归奖赏。
 
@@ -30,10 +31,10 @@
 | | 深色「深海意识」（主用） | 浅色「晨曦穹顶」 |
 |--|--|--|
 | 背景 | `#0C1524` / `#12203A` / `#182A48` | `#FAF8F5` / `#F2EDE6` / `#EBE5DC` |
-| 品牌主色 | 靛蓝 `brand-400 #6366F1` / `brand-500 #818CF8` | 蓝 `brand-500 #3B82F6` / `brand-600 #2563EB` |
-| 品牌辅色 | 赛博青 `accent-500 #06B6D4` / `accent-600 #22D3EE`（AI 呼吸灯） | 琥珀金 `accent-500 #F59E0B` |
+| 品牌主色 | 磷光青绿 `brand-400 #40AB92` / `brand-500 #57C6A9` | 晨光琥珀金 `brand-500 #B05E12` / `brand-600 #C9761F` |
+| 品牌辅色 | 认知琥珀金 `accent-500 #D18A2A` / `accent-600 #E8A74A` | 晨空蓝 `accent-500 #4A7DB0` / `accent-600 #3B689A` |
 | 文字 | `#E0E6F0` / `#90A0B8` / `#607088` | `#2C2720` / `#7A7570` / `#9C9590` |
-| 功能色 | `--kb-amber #FBBF24`（顿悟）、moss `#82C9A3`（进展）、cyber-cyan `#22D3EE`（AI） | 同族浅色 |
+| 功能色 | `--kb-amber #FBBF24`（顿悟）、moss `#82C9A3`（进展）、深海磷光蓝 `#4A9BD9`（AI） | 同族浅色 |
 
 模块色（Tailwind 级）：pomodoro `#5B8A72`（深潜）、note `#6B9BD2`（结礁）、flashcard `#7BC4B8`（反衰减呼吸）、feynman `#C4956A`（浮出水面）、classroom `#14B8A6`（回声定位）。
 
@@ -56,14 +57,14 @@
 ## 组件风格约束
 
 - 毛玻璃面板：`bg-bg-secondary/60 backdrop-blur-xl border border-border/40`
-- 按钮：primary `bg-brand-600` / secondary 边框 / ghost / ai 渐变 `from-accent-500 to-brand-500`；active:scale-0.97
+- 按钮：primary 双光源材质（kb-btn-primary-material：环境光+自发光+微噪点+按压点亮）/ secondary 边框 / ghost / ai 磷光蓝材质（kb-btn-ai-material）；active:scale-0.97
 - 图标：Lucide 线性 1.5 stroke；尺寸 14/16/20/24/32
 - 卡片 hoverable：-translate-y-0.5 + shadow 增强
 - 布局三层：Layer 0 3D 场景（z-0）/ Layer 1 功能面板（毛玻璃）/ Layer 2 标题栏
 
 ## 已知设计缺口（改进方向线索）
 
-1. **硬编码色**：InspirationPage 用 `from-purple-400 to-purple-600`、`purple-500 to-cyan-500`、slate 灰，偏离品牌靛蓝/赛博青令牌
+1. ~~**硬编码色**：InspirationPage 用 `from-purple-400 to-purple-600`、`purple-500 to-cyan-500`、slate 灰，偏离品牌靛蓝/赛博青令牌~~ ✅ 2026-08-08 已归位（生物发光色板 + 材质类落地）
 2. **3D 场景仍为概念原型**：深海缺粒子系统/生物发光体/焦散光落地
 3. **动效分布不均**：灵感激活动效集中在 inspiration 模块；仪表盘统计卡 `kb-stat-breathe` 为唯一常驻动效
 4. **叙事弱化**：部分状态直接暴露内部数据（如星座 title=sortStatus），未做叙事化翻译
