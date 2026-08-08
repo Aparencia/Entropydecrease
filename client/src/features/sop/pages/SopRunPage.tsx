@@ -100,7 +100,7 @@ export default function SopRunPage() {
         </div>
         <div className="mt-2 flex items-center justify-between text-c1 text-text-tertiary">
           <span>已完成 {doneCount}/{steps.length} 步</span>
-          {isAwaiting && <span className="text-violet-400">模块执行中——完成后返回本页继续</span>}
+          {isAwaiting && <span className="text-cyber">模块执行中——完成后返回本页继续</span>}
         </div>
       </div>
 

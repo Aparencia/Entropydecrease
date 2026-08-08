@@ -99,7 +99,7 @@ export default function SessionQAPanel({ transcript, className }: SessionQAPanel
             <div className="px-4 py-3">
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="flex items-center gap-2 text-b3 font-semibold text-text-primary">
-                  <MessageCircleQuestion className="w-4 h-4 text-cyan-500" strokeWidth={1.5} />
+                  <MessageCircleQuestion className="w-4 h-4 text-cyber" strokeWidth={1.5} />
                   问这节课
                 </h3>
                 <button
@@ -117,7 +117,7 @@ export default function SessionQAPanel({ transcript, className }: SessionQAPanel
                   onChange={(e) => setQuestion(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') void handleAsk(); }}
                   placeholder="例如：老师刚才讲的那个定理怎么推导的？"
-                  className="min-w-0 flex-1 rounded-kb-lg border border-border/30 bg-bg-elevated/40 px-3 py-2 text-b3 text-text-primary placeholder:text-text-tertiary focus:border-cyan-400/50 focus:outline-none"
+                  className="min-w-0 flex-1 rounded-kb-lg border border-border/30 bg-bg-elevated/40 px-3 py-2 text-b3 text-text-primary placeholder:text-text-tertiary focus:border-cyber/50 focus:outline-none"
                   aria-label="课堂问题输入"
                 />
                 <button
@@ -126,7 +126,7 @@ export default function SessionQAPanel({ transcript, className }: SessionQAPanel
                   className={cn(
                     'flex items-center gap-1.5 rounded-kb-lg px-3 py-2 text-b3 font-medium transition-all active:scale-95',
                     canAsk
-                      ? 'bg-cyan-600 text-white hover:bg-cyan-500'
+                      ? 'bg-cyber text-text-inverse hover:bg-cyber/90'
                       : 'bg-bg-tertiary/40 text-text-tertiary cursor-not-allowed',
                   )}
                   aria-label="提问"
@@ -141,15 +141,15 @@ export default function SessionQAPanel({ transcript, className }: SessionQAPanel
                 <motion.div
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mt-3 rounded-kb-lg border border-cyan-500/15 bg-cyan-500/[0.04] p-3"
+                  className="mt-3 rounded-kb-lg border border-cyber/15 bg-cyber/[0.04] p-3"
                 >
                   <p className="text-b3 text-text-primary leading-relaxed">{answer}</p>
                   {references.length > 0 && (
                     <ul className="mt-2 space-y-1 border-t border-border/20 pt-2">
                       {references.map((ref, i) => (
                         <li key={i} className="flex items-start gap-1.5 text-c1 text-text-tertiary">
-                          <Quote className="mt-0.5 w-3 h-3 flex-shrink-0 text-cyan-500/60" strokeWidth={1.5} />
-                          <span className="tabular-nums text-cyan-500/80">{ref.time}</span>
+                          <Quote className="mt-0.5 w-3 h-3 flex-shrink-0 text-cyber/60" strokeWidth={1.5} />
+                          <span className="tabular-nums text-cyber/80">{ref.time}</span>
                           <span className="line-clamp-2">{ref.text}</span>
                         </li>
                       ))}

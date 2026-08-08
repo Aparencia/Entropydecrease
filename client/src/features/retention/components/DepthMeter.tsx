@@ -38,7 +38,7 @@ export function DepthMeter() {
           累计深度
         </span>
         {/* 浅色模式使用深蓝青色，保证在白底上可读 */}
-        <span className="text-sm font-semibold text-cyan-600 dark:text-cyan-300">{depthLabel}</span>
+        <span className="text-sm font-semibold text-cyber dark:text-cyber">{depthLabel}</span>
       </div>
 
       {/* 当前分层 / Current zone —— 浅色模式文字颜色加深 */}

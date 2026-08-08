@@ -53,7 +53,7 @@ export function LearningProfile({
           {unlockedTags.map((tag) => (
             <span
               key={tag.key}
-              className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-cyan-100 dark:bg-cyan-400/10 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-300/20"
+              className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-cyber/10 text-cyber border-cyber/30"
               title={tag.description}
             >
               {tag.title}
@@ -75,14 +75,14 @@ export function LearningProfile({
                 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors',
                 /* 浅色模式在线时使用更深紫色，确保白底可读 */
                 isOnline
-                  ? 'text-violet-600 dark:text-violet-300 bg-violet-100 dark:bg-violet-400/10 hover:bg-violet-200 dark:hover:bg-violet-400/20'
+                  ? 'text-cyber dark:text-cyber bg-cyber dark:bg-cyber/10 hover:bg-cyber dark:hover:bg-cyber/20'
                   : 'text-gray-400 dark:text-white/30 bg-gray-100 dark:bg-white/5 cursor-not-allowed',
               )}
               title={isOnline ? 'AI 深度分析' : '需要网络连接'}
             >
               {aiLoading ? (
                 /* 加载动画边框颜色在浅色模式下使用深紫 */
-                <span className="w-3 h-3 border border-violet-400/50 dark:border-violet-300/50 border-t-violet-600 dark:border-t-violet-300 rounded-full animate-spin" />
+                <span className="w-3 h-3 border border-cyber/50 dark:border-cyber/50 border-t-cyber dark:border-t-cyber rounded-full animate-spin" />
               ) : isOnline ? (
                 <Sparkles className="w-3 h-3" />
               ) : (

@@ -37,7 +37,7 @@ export default function SocialProofBanner() {
       transition={{ duration: 0.5, delay: 0.35 }}
       className="mt-rhythm-md inline-flex items-center gap-2 rounded-kb-full border border-border/15 bg-bg-elevated/30 px-4 py-1.5 backdrop-blur-sm"
     >
-      <Waves className="w-3.5 h-3.5 text-cyan-400/80" strokeWidth={1.5} />
+      <Waves className="w-3.5 h-3.5 text-cyber/80" strokeWidth={1.5} />
       <span className="text-c1 text-text-tertiary">
         今日 <span className="text-text-secondary font-medium">{stats.activeUsers}</span> 位潜航员在学，累计
         <span className="text-text-secondary font-medium"> {minutes}</span> · 你也在这片海里

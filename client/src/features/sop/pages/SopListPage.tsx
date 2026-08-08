@@ -23,7 +23,7 @@ import type { SopRunRow, SopTemplate } from '../types';
 
 const RUN_STATUS_META: Record<SopRunRow['status'], { label: string; cls: string }> = {
   running: { label: '进行中', cls: 'bg-emerald-500/15 text-emerald-400' },
-  awaiting_module: { label: '模块中', cls: 'bg-violet-500/15 text-violet-400' },
+  awaiting_module: { label: '模块中', cls: 'bg-cyber/15 text-cyber' },
   completed: { label: '已完成', cls: 'bg-blue-500/15 text-blue-400' },
   aborted: { label: '已中止', cls: 'bg-rose-500/15 text-rose-400' },
 };

@@ -79,7 +79,7 @@ export function StreakBubble({ streakState }: StreakBubbleProps) {
                   <div
                     className={cn(
                       'w-5 h-5 rounded-full flex items-center justify-center text-[9px]',
-                      day.isActive && 'bg-cyan-400/30 text-cyan-200 shadow-[0_0_6px_rgba(34,211,238,0.3)]',
+                      day.isActive && 'bg-cyber/30 text-cyber shadow-[0_0_6px_rgba(74,155,217,0.3)]',
                       day.isRestDay && !day.isActive && 'bg-blue-400/10 text-blue-300/50 border border-blue-300/20 border-dashed',
                       !day.isActive && !day.isRestDay && 'bg-white/5 text-white/20',
                       day.isToday && 'ring-1 ring-white/30',

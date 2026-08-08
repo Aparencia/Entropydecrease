@@ -85,7 +85,7 @@ export function BedtimeRoutine({ open, onClose, topDeckId }: Props) {
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.4 }}
           >
-            <div className="flex items-center gap-2 text-indigo-400">
+            <div className="flex items-center gap-2 text-brand-400">
               <Moon className="w-5 h-5" strokeWidth={1.5} />
               <span className="text-b1 font-semibold text-text-primary">睡前仪式 · 第一步</span>
             </div>
@@ -123,7 +123,7 @@ export function BedtimeRoutine({ open, onClose, topDeckId }: Props) {
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.4 }}
           >
-            <div className="flex items-center gap-2 text-indigo-400">
+            <div className="flex items-center gap-2 text-brand-400">
               <Check className="w-5 h-5" strokeWidth={1.5} />
               <span className="text-b1 font-semibold text-text-primary">睡前仪式 · 完成</span>
             </div>

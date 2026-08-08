@@ -43,6 +43,6 @@ export const PLAN_MODULE_META: Record<PlanModule, { label: string; route: string
   pomodoro:    { label: '深潜',       route: '/pomodoro',    badge: 'bg-orange-500/15 text-orange-400' },
   notes:       { label: '结礁',       route: '/notes',       badge: 'bg-blue-500/15 text-blue-400' },
   flashcards:  { label: '呼吸',       route: '/flashcards',  badge: 'bg-emerald-500/15 text-emerald-400' },
-  feynman:     { label: '浮出水面',   route: '/feynman',     badge: 'bg-violet-500/15 text-violet-400' },
-  inspiration: { label: '灵感',       route: '/inspiration', badge: 'bg-pink-500/15 text-pink-400' },
+  feynman:     { label: '浮出水面',   route: '/feynman',     badge: 'bg-cyber/15 text-cyber' },
+  inspiration: { label: '灵感',       route: '/inspiration', badge: 'bg-amber/15 text-amber' },
 };

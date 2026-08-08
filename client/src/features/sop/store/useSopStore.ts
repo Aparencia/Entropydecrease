@@ -146,6 +146,6 @@ export const STEP_TYPE_META: Record<SopStep['step_type'], { label: string; badge
   focus: { label: '专注', badge: 'bg-blue-500/15 text-blue-400' },
   review: { label: '回顾', badge: 'bg-emerald-500/15 text-emerald-400' },
   break: { label: '休息', badge: 'bg-amber-500/15 text-amber-400' },
-  module: { label: '跳转', badge: 'bg-violet-500/15 text-violet-400' },
+  module: { label: '跳转', badge: 'bg-cyber/15 text-cyber' },
   output: { label: '产出', badge: 'bg-rose-500/15 text-rose-400' },
 };

@@ -21,9 +21,9 @@ export interface InboxItem {
 
 /** 来源元信息（UI 徽章与筛选共用） */
 export const SOURCE_META: Record<InboxItem['source'], { label: string; badge: string }> = {
-  clipboard: { label: '剪贴板', badge: 'bg-cyan-500/15 text-cyan-400' },
+  clipboard: { label: '剪贴板', badge: 'bg-cyber/15 text-cyber' },
   inspiration: { label: '灵感', badge: 'bg-amber-500/15 text-amber-400' },
-  import: { label: '导入', badge: 'bg-violet-500/15 text-violet-400' },
+  import: { label: '导入', badge: 'bg-cyber/15 text-cyber' },
 };
 
 /** 状态元信息 */

@@ -137,8 +137,8 @@ export default function SettlingPage() {
   const updateConcept = (i: number, patch: Partial<ConceptCandidate>) =>
     setConcepts((cs) => cs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
 
-  const cardInput = 'w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-cyan-400/60';
-  const primaryBtn = 'rounded-md bg-cyan-500/20 px-5 py-2 text-sm text-cyan-200 hover:bg-cyan-500/30';
+  const cardInput = 'w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-cyber/60';
+  const primaryBtn = 'rounded-md bg-cyber/20 px-5 py-2 text-sm text-cyber hover:bg-cyber/30';
   const ghostBtn = 'rounded-md px-4 py-2 text-sm text-slate-400 hover:text-slate-200';
 
   /** 概念卡编辑（AI 候选可改可删可增） / Editable concept cards */
@@ -164,7 +164,7 @@ export default function SettlingPage() {
         </div>
       ))}
       <button onClick={() => setConcepts((cs) => [...cs, emptyConcept()])}
-        className="rounded-md border border-dashed border-white/15 py-2 text-sm text-slate-400 hover:border-cyan-400/50 hover:text-cyan-300">
+        className="rounded-md border border-dashed border-white/15 py-2 text-sm text-slate-400 hover:border-cyber/50 hover:text-cyber">
         ＋ 添加概念
       </button>
     </div>
@@ -175,7 +175,7 @@ export default function SettlingPage() {
       <div className="flex gap-2">
         {SOURCE_TABS.map((t) => (
           <button key={t.id} onClick={() => { setTab(t.id); setError(null); }}
-            className={`rounded-full px-4 py-1.5 text-sm transition-colors ${tab === t.id ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}`}>
+            className={`rounded-full px-4 py-1.5 text-sm transition-colors ${tab === t.id ? 'bg-cyber/20 text-cyber' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}`}>
             {t.label}
           </button>
         ))}
@@ -192,7 +192,7 @@ export default function SettlingPage() {
       {tab === 'pdf' && (
         <div onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
           onDragLeave={() => setIsDragging(false)} onDrop={handleDropPdf}
-          className={`flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-6 py-14 text-center transition-colors ${isDragging ? 'border-cyan-400/70 bg-cyan-500/10' : 'border-white/15 bg-white/[0.02]'}`}>
+          className={`flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-6 py-14 text-center transition-colors ${isDragging ? 'border-cyber/70 bg-cyber/10' : 'border-white/15 bg-white/[0.02]'}`}>
           <p className="text-sm text-slate-300">拖拽 PDF 到此处，或</p>
           <button onClick={handlePickPdf} className={primaryBtn}>选择 PDF 文件</button>
           <p className="text-xs text-slate-500">仅提取文本层；图片型扫描件可手动粘贴内容</p>
@@ -228,7 +228,7 @@ export default function SettlingPage() {
       <div className="mt-2 flex justify-end gap-3">
         <button onClick={() => setStep('source')} className={ghostBtn}>返回</button>
         <button onClick={handleSettle} disabled={concepts.length === 0 || isSettling}
-          className="rounded-md bg-cyan-500/25 px-6 py-2 text-sm text-cyan-100 hover:bg-cyan-500/40 disabled:cursor-not-allowed disabled:opacity-40">
+          className="rounded-md bg-cyber/25 px-6 py-2 text-sm text-cyber hover:bg-cyber/40 disabled:cursor-not-allowed disabled:opacity-40">
           {isSettling ? '正在安放…' : '安放入世界'}
         </button>
       </div>
