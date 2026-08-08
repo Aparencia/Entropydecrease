@@ -8,21 +8,22 @@
  */
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Timer, FileText, Layers, Lightbulb, Sparkles, Clapperboard, BarChart3, Orbit } from 'lucide-react';
+import { Timer, FileText, Layers, Lightbulb, Sparkles, Clapperboard, BarChart3, Orbit, ListChecks } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { useIsNewbiePhase } from '@/features/onboarding/firstDive/useFirstDiveStore';
 import { getModuleSubtitle } from '@/features/onboarding/firstDive/moduleSubtitles';
 
 const modules = [
-  { id: 'dashboard', label: '首页', route: '/', icon: BarChart3, color: 'from-indigo-500/20 to-indigo-600/10', iconColor: 'text-indigo-400' },
+  { id: 'dashboard', label: '首页', route: '/', icon: BarChart3, color: 'from-brand-500/20 to-brand-600/10', iconColor: 'text-brand-400' },
   { id: 'pomodoro', label: '深潜', route: '/pomodoro', icon: Timer, color: 'from-orange-500/20 to-orange-600/10', iconColor: 'text-orange-400' },
-  { id: 'notes', label: '结礁', route: '/notes', icon: FileText, color: 'from-blue-500/20 to-blue-600/10', iconColor: 'text-blue-400' },
+  { id: 'notes', label: '结礁', route: '/notes', icon: FileText, color: 'from-accent-500/20 to-accent-600/10', iconColor: 'text-accent-400' },
   { id: 'flashcards', label: '闪卡', route: '/flashcards', icon: Layers, color: 'from-emerald-500/20 to-emerald-600/10', iconColor: 'text-emerald-400' },
-  { id: 'feynman', label: '费曼', route: '/feynman', icon: Lightbulb, color: 'from-violet-500/20 to-violet-600/10', iconColor: 'text-violet-400' },
+  { id: 'feynman', label: '费曼', route: '/feynman', icon: Lightbulb, color: 'from-amber/20 to-amber/10', iconColor: 'text-amber' },
   { id: 'inspiration', label: '萤火海沟', route: '/inspiration', icon: Sparkles, color: 'from-pink-500/20 to-pink-600/10', iconColor: 'text-pink-400' },
   { id: 'classroom', label: '回声定位', route: '/classroom', icon: Clapperboard, color: 'from-teal-500/20 to-teal-600/10', iconColor: 'text-teal-400' },
   { id: 'constellation', label: '星座大厅', route: '/constellation', icon: Orbit, color: 'from-amber-500/20 to-amber-600/10', iconColor: 'text-amber-400' },
+  { id: 'sop', label: '标准作业', route: '/sop', icon: ListChecks, color: 'from-lime-500/20 to-lime-600/10', iconColor: 'text-lime-400' },
 ];
 
 const containerVariants = {
