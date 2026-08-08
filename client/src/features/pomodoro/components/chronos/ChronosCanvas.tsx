@@ -27,6 +27,8 @@ interface ChronosCanvasProps {
   /** 完成绽放触发（P1） */
   bloom?: boolean;
   onTap?: () => void;
+  /** 长按生物回调（进入沉睡） */
+  onLongPress?: () => void;
   /** 中央显示内容（时间字符串） */
   timeStr: string;
   /** 中央显示标签（如 专注中） */
@@ -75,6 +77,7 @@ export function ChronosCanvas({
   ambientLight,
   bloom,
   onTap,
+  onLongPress,
   timeStr,
   label,
 }: ChronosCanvasProps) {
@@ -101,6 +104,7 @@ export function ChronosCanvas({
         dpr={[1, 1.5]}
         gl={{ antialias: true, alpha: true }}
         className={mode === 'full' ? '!absolute inset-0' : ''}
+        style={{ pointerEvents: 'auto' }}
       >
         <ambientLight intensity={0.6} />
         <pointLight position={[3, 3, 4]} intensity={1.2} />
@@ -112,6 +116,7 @@ export function ChronosCanvas({
           ambientLight={ambientLight}
           bloom={bloom}
           onTap={onTap}
+          onLongPress={onLongPress}
         />
       </Canvas>
       {/* 中央数字（HTML 层，与 3D 叠加） */}

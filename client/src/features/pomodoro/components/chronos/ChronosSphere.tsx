@@ -13,8 +13,14 @@
 import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { useEffectiveTier } from '@/lib/performance/usePerformanceMode';
 import type { ChronosPhase, ChronosStyle } from './chronosStyles';
 import { CHRONOS_PHASES } from './chronosStyles';
+
+/** 长按判定阈值（ms）：超过则触发 onLongPress 而非 onTap */
+const LONG_PRESS_MS = 800;
+/** 点击判定阈值（ms）：超过则不视为 tap */
+const TAP_MAX_MS = 500;
 
 interface ChronosSphereProps {
   /** 生物阶段 */
@@ -29,6 +35,8 @@ interface ChronosSphereProps {
   bloom?: boolean;
   /** 点击生物回调 */
   onTap?: () => void;
+  /** 长按生物回调（进入沉睡） */
+  onLongPress?: () => void;
 }
 
 /** 简易伪随机噪声（确定性，避免重渲染抖动） */
@@ -38,12 +46,23 @@ function noise(x: number, y: number, z: number, t: number): number {
   );
 }
 
-export function ChronosSphere({ phase, style, intensity = 50, ambientLight = 0.5, bloom = false, onTap }: ChronosSphereProps) {
+export function ChronosSphere({ phase, style, intensity = 50, ambientLight = 0.5, bloom = false, onTap, onLongPress }: ChronosSphereProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const pointsRef = useRef<THREE.Points>(null);
   const ringRef = useRef<THREE.Mesh>(null);
   const ringMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const materialRef = useRef<THREE.MeshStandardMaterial>(null);
+
+  // 性能档位（P3-15 同源）：low 隔 2 帧更新粒子/顶点
+  const tier = useEffectiveTier();
+  const frameSkip = tier === 'low' ? 3 : tier === 'medium' ? 2 : 1;
+  const frameRef = useRef(0);
+
+  // 当前值（useFrame 中向 targets 收敛，实现平滑过渡）
+  const current = useRef({
+    color: new THREE.Color(CHRONOS_PHASES[phase].body),
+    emissive: CHRONOS_PHASES[phase].emissiveIntensity,
+  });
 
   // 目标值（阶段变化时更新，useFrame 中 lerp）
   const targets = useRef({
@@ -60,6 +79,39 @@ export function ChronosSphere({ phase, style, intensity = 50, ambientLight = 0.5
   targets.current.breathe = palette.breatheAmplitude;
   targets.current.particleRadius = palette.particleRadius;
   targets.current.spin = palette.spinSpeed;
+
+  // ── 手势：tap（<500ms）与 long-press（800ms）区分 ──
+  const pointerDownRef = useRef(0);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFiredRef = useRef(false);
+
+  const cancelLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handlePointerDown = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    longPressFiredRef.current = false;
+    pointerDownRef.current = Date.now();
+    cancelLongPress();
+    if (onLongPress) {
+      longPressTimerRef.current = setTimeout(() => {
+        longPressFiredRef.current = true;
+        onLongPress();
+      }, LONG_PRESS_MS);
+    }
+  };
+
+  const handlePointerUp = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    cancelLongPress();
+    if (longPressFiredRef.current) return;
+    const elapsed = Date.now() - pointerDownRef.current;
+    if (elapsed < TAP_MAX_MS && onTap) onTap();
+  };
 
   // 有机球体：细分二十面体 + 原始顶点缓存
   const geometry = useMemo(() => {
@@ -111,10 +163,22 @@ export function ChronosSphere({ phase, style, intensity = 50, ambientLight = 0.5
     prevBloom.current = bloom;
   }, [bloom]);
 
+  // 卸载时清理长按定时器
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    };
+  }, []);
+
   // 每帧动画
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
     const safeDelta = Math.min(clock.getDelta(), 0.1);
+
+    // 低档跳帧：非更新帧直接返回（呼吸缩放仍每帧执行，视觉无感）
+    frameRef.current += 1;
+    const shouldUpdate = frameRef.current % frameSkip === 0;
+    const step = frameSkip;
 
     // 绽放进度推进（P1 完成动画）
     if (isBlooming.current) {
@@ -129,10 +193,16 @@ export function ChronosSphere({ phase, style, intensity = 50, ambientLight = 0.5
     // 守护灵联动：低分 → 节奏放缓（P2）
     const focusFactor = 0.7 + (intensity / 100) * 0.6;
 
+    // 颜色/发光平滑过渡：向目标 lerp（阶段切换不再瞬跳）
+    const lerpK = Math.min(safeDelta * 2.5, 1);
+    current.current.color.lerp(targets.current.bodyColor, lerpK);
+    current.current.emissive += (targets.current.emissive - current.current.emissive) * lerpK;
+
     // 环境光补偿：暗环境增强自发光，亮环境减弱（P2）
     if (materialRef.current) {
       const ambientBoost = 1 + (0.5 - ambientLight) * 1.2;
-      materialRef.current.emissiveIntensity = targets.current.emissive * Math.max(0.4, ambientBoost);
+      materialRef.current.emissiveIntensity = current.current.emissive * Math.max(0.4, ambientBoost);
+      materialRef.current.color.copy(current.current.color);
     }
 
     // 呼吸缩放
@@ -140,39 +210,44 @@ export function ChronosSphere({ phase, style, intensity = 50, ambientLight = 0.5
       const breath = 1 + Math.sin(t * 1.2 * focusFactor) * targets.current.breathe;
       meshRef.current.scale.setScalar(breath * bloomPulse);
       meshRef.current.rotation.y += safeDelta * targets.current.spin * focusFactor;
-
-      // 顶点扰动（细胞膜）
-      const pos = geometry.attributes.position as THREE.BufferAttribute;
-      const original = geometry.userData.original as Float32Array;
-      const amp = style.noiseAmplitude * (0.6 + targets.current.breathe * 8);
-      for (let i = 0; i < pos.count; i++) {
-        const i3 = i * 3;
-        const ox = original[i3];
-        const oy = original[i3 + 1];
-        const oz = original[i3 + 2];
-        const n = noise(ox * 4, oy * 4, oz * 4, t * focusFactor);
-        pos.setXYZ(i3 / 3, ox + n * amp, oy + n * amp, oz + n * amp);
-      }
-      pos.needsUpdate = true;
     }
 
-    // 粒子：向球体聚拢/散开 + 绽放爆发
-    if (pointsRef.current) {
-      const posAttr = particleGeo.attributes.position as THREE.BufferAttribute;
-      const targetR = targets.current.particleRadius;
-      for (let i = 0; i < posAttr.count; i++) {
-        const x = posAttr.getX(i);
-        const y = posAttr.getY(i);
-        const z = posAttr.getZ(i);
-        const len = Math.sqrt(x * x + y * y + z * z) || 1;
-        const targetLen = targetR * (isBlooming.current ? 1 + bloomRef.current * 2 : 1);
-        // 向目标半径缓动
-        const newLen = len + (targetLen - len) * Math.min(safeDelta * 1.5, 1);
-        const k = newLen / len;
-        posAttr.setXYZ(i, x * k, y * k, z * k);
+    // 跳帧更新：顶点扰动 + 粒子（low/medium 档降开销）
+    if (shouldUpdate) {
+      // 顶点扰动（细胞膜）
+      if (meshRef.current) {
+        const pos = geometry.attributes.position as THREE.BufferAttribute;
+        const original = geometry.userData.original as Float32Array;
+        const amp = style.noiseAmplitude * (0.6 + targets.current.breathe * 8);
+        for (let i = 0; i < pos.count; i++) {
+          const i3 = i * 3;
+          const ox = original[i3];
+          const oy = original[i3 + 1];
+          const oz = original[i3 + 2];
+          const n = noise(ox * 4, oy * 4, oz * 4, t * focusFactor);
+          pos.setXYZ(i3 / 3, ox + n * amp, oy + n * amp, oz + n * amp);
+        }
+        pos.needsUpdate = true;
       }
-      posAttr.needsUpdate = true;
-      pointsRef.current.rotation.y += safeDelta * 0.15;
+
+      // 粒子：向球体聚拢/散开 + 绽放爆发
+      if (pointsRef.current) {
+        const posAttr = particleGeo.attributes.position as THREE.BufferAttribute;
+        const targetR = targets.current.particleRadius;
+        for (let i = 0; i < posAttr.count; i++) {
+          const x = posAttr.getX(i);
+          const y = posAttr.getY(i);
+          const z = posAttr.getZ(i);
+          const len = Math.sqrt(x * x + y * y + z * z) || 1;
+          const targetLen = targetR * (isBlooming.current ? 1 + bloomRef.current * 2 : 1);
+          // 向目标半径缓动（step 补偿跳帧）
+          const newLen = len + (targetLen - len) * Math.min(safeDelta * step * 1.5, 1);
+          const k = newLen / len;
+          posAttr.setXYZ(i, x * k, y * k, z * k);
+        }
+        posAttr.needsUpdate = true;
+        pointsRef.current.rotation.y += safeDelta * 0.15;
+      }
     }
 
     // 呼吸波纹（扩散环）
@@ -185,14 +260,18 @@ export function ChronosSphere({ phase, style, intensity = 50, ambientLight = 0.5
   });
 
   return (
-    <group onClick={(e) => { e.stopPropagation(); onTap?.(); }}>
+    <group
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={cancelLongPress}
+    >
       {/* 有机球体主体 */}
       <mesh ref={meshRef} geometry={geometry} castShadow>
         <meshStandardMaterial
           ref={materialRef}
-          color={CHRONOS_PHASES[phase].body}
+          color={current.current.color}
           emissive={style.emissiveColor}
-          emissiveIntensity={targets.current.emissive}
+          emissiveIntensity={current.current.emissive}
           roughness={0.35}
           metalness={0.15}
           flatShading

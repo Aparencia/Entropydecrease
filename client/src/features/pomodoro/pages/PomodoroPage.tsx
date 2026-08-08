@@ -38,10 +38,30 @@ export default function PomodoroPage() {
     activePreset, presets,
     start, setPreset, setCurrentGoal,
     exitImmersive, createPreset, updatePreset, deletePreset,
+    pause, resume, reset, skip,
     showCompletionOverlay, dismissCompletionOverlay, lastSessionActualDuration,
   } = usePomodoroStore(useShallow(s => s));
 
   usePomodoroEffects();
+
+  // ── Chronos 点击交互（时间生物 = 核心交互点）──
+  // 沉睡/呼吸 → 开始；专注 → 暂停/继续；休息 → 提前结束休息
+  const handleChronosTap = useCallback(() => {
+    if (isRunning || isPaused) {
+      if (phase === 'work') {
+        if (isRunning) pause();
+        else resume();
+      } else {
+        skip(); // 休息阶段点击提前结束休息
+      }
+    } else {
+      setGoalModalOpen(true); // 沉睡/呼吸 → 打开目标弹窗开始专注
+    }
+  }, [isRunning, isPaused, phase, pause, resume, skip]);
+  // 长按 → 进入沉睡（重置）
+  const handleChronosLongPress = useCallback(() => {
+    reset();
+  }, [reset]);
 
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [rememberGoal, setRememberGoal] = useState(false);
@@ -297,6 +317,8 @@ export default function PomodoroPage() {
                 intensity={settings.guardianLinkEnabled ? focusScore : 50}
                 ambientLight={ambientBrightness}
                 bloom={chronosBloom}
+                onTap={handleChronosTap}
+                onLongPress={handleChronosLongPress}
                 timeStr={`${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(remainingSeconds % 60).padStart(2, '0')}`}
                 label={phase === 'work' ? '专注中' : phase === 'short_break' ? '短休息' : '长休息'}
               />

@@ -11,7 +11,7 @@
  */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { AUDIO_PREFS_KEY, defaultAudioPreferences } from './audioConfig';
+import { AUDIO_PREFS_KEY, defaultAudioPreferences, type AudioDeviceType } from './audioConfig';
 
 interface AudioPrefsState {
   whiteNoiseEnabled: boolean;

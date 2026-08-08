@@ -116,7 +116,22 @@ export default function ImmersiveTimer({
     pause,
     resume,
     reset,
+    skip,
   } = usePomodoroStore(useShallow(s => s));
+
+  // Chronos 点击交互（时间生物 = 核心交互点）：
+  // 专注 → 暂停/继续；休息 → 提前结束休息；长按 → 沉睡
+  const handleChronosTap = () => {
+    if (phase === 'work') {
+      if (isRunning) pause();
+      else resume();
+    } else {
+      skip();
+    }
+  };
+  const handleChronosLongPress = () => {
+    reset();
+  };
 
   // 背景音偏好：外部传入优先（向后兼容），缺省读全局音频偏好 store
   const storePrefs = useAudioPrefsStore();
@@ -241,6 +256,8 @@ export default function ImmersiveTimer({
           intensity={focusScore > 0 ? focusScore : 50}
           ambientLight={ambientLight}
           bloom={bloom}
+          onTap={handleChronosTap}
+          onLongPress={handleChronosLongPress}
           timeStr={timeStr}
           label={label}
         />

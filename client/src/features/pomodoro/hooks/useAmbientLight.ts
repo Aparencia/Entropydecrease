@@ -7,27 +7,29 @@
  * 隐私优先：默认关闭（enabled=false 不申请摄像头权限）；仅在设置页
  * 显式开启后采样。采样频率 2s 一次，失败自动停用。
  *
+ * 实现要点：复用单个隐藏 video 元素（muted 满足自动播放策略），
+ * 等待 loadeddata 后再采样，避免空白帧与 play() 被拒绝。
+ *
  * @ai-context: Chronos P2 环境自适应 hook，getUserMedia 亮度采样。
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 const SAMPLE_INTERVAL_MS = 2000;
-const VIDEO_SIZE = 32; // 极低分辨率采样帧（1×1 像素足够测亮度）
+const VIDEO_SIZE = 32; // 极低分辨率采样帧
 
 export function useAmbientLight(enabled: boolean): number {
   const [brightness, setBrightness] = useState(0.5); // 中性默认
   const streamRef = useRef<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const sample = useCallback(async () => {
     try {
-      const video = document.createElement('video');
-      video.srcObject = streamRef.current;
-      await video.play();
-      const canvas = document.createElement('canvas');
-      canvas.width = VIDEO_SIZE;
-      canvas.height = VIDEO_SIZE;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+      const video = videoRef.current;
+      if (!video || video.readyState < 2) return; // 未就绪（无 loadeddata）跳过
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext('2d');
+      if (!canvas || !ctx) return;
       ctx.drawImage(video, 0, 0, VIDEO_SIZE, VIDEO_SIZE);
       const { data } = ctx.getImageData(0, 0, VIDEO_SIZE, VIDEO_SIZE);
       let sum = 0;
@@ -47,6 +49,7 @@ export function useAmbientLight(enabled: boolean): number {
       // 关闭：停止流并复位
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
+      videoRef.current = null;
       setBrightness(0.5);
       return;
     }
@@ -63,6 +66,30 @@ export function useAmbientLight(enabled: boolean): number {
           return;
         }
         streamRef.current = stream;
+        // 复用单个隐藏 video（muted 满足自动播放策略）+ 隐藏 canvas
+        const video = document.createElement('video');
+        video.muted = true;
+        video.playsInline = true;
+        video.style.display = 'none';
+        video.srcObject = stream;
+        document.body.appendChild(video);
+        videoRef.current = video;
+        const canvas = document.createElement('canvas');
+        canvas.width = VIDEO_SIZE;
+        canvas.height = VIDEO_SIZE;
+        canvasRef.current = canvas;
+        // 等待首帧就绪后开始采样（loadeddata → play → 定时采样）
+        await new Promise<void>((resolve) => {
+          const onReady = () => {
+            video.removeEventListener('loadeddata', onReady);
+            resolve();
+          };
+          video.addEventListener('loadeddata', onReady);
+          // 兜底：2s 未就绪也继续（静默）
+          setTimeout(resolve, 2000);
+        });
+        if (cancelled) return;
+        await video.play().catch(() => {});
         await sample();
         interval = setInterval(sample, SAMPLE_INTERVAL_MS);
       } catch {
@@ -74,6 +101,9 @@ export function useAmbientLight(enabled: boolean): number {
       if (interval) clearInterval(interval);
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
+      videoRef.current?.remove();
+      videoRef.current = null;
+      canvasRef.current = null;
     };
   }, [enabled, sample]);
 

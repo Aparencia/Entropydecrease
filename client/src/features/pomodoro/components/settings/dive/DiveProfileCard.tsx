@@ -7,7 +7,7 @@
  * @ai-context: 深潜设置页改造——数据驱动卡片。
  */
 import { Waves } from 'lucide-react';
-import type { DiveProfileStats } from '../../hooks/useDiveProfile';
+import type { DiveProfileStats } from '../../../hooks/useDiveProfile';
 
 export function DiveProfileCard({ stats }: { stats: DiveProfileStats }) {
   return (
