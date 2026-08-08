@@ -33,8 +33,8 @@ const glowColors: Record<string, string> = {
 const dotColors: Record<string, string> = {
   pomodoro: 'bg-accent-400',
   note: 'bg-brand-400',
-  flashcard: 'bg-purple-400',
-  feynman: 'bg-cyan-400',
+  flashcard: 'bg-amber',
+  feynman: 'bg-cyber',
 };
 
 export default function PlanktonStream({ activities, loading }: Props) {
@@ -50,8 +50,8 @@ export default function PlanktonStream({ activities, loading }: Props) {
   if (activities.length === 0) {
     return (
       <div className="rounded-[var(--kb-radius-lg)] border border-cyan-400/10 bg-bg-elevated/20 backdrop-blur-sm p-6 flex flex-col items-center justify-center gap-2">
-        <div className="w-8 h-8 rounded-full bg-cyan-400/10 flex items-center justify-center">
-          <div className="w-2 h-2 rounded-full bg-cyan-400/40 animate-pulse" />
+        <div className="w-8 h-8 rounded-full bg-cyber/10 flex items-center justify-center">
+          <div className="w-2 h-2 rounded-full bg-cyber/40 animate-pulse" />
         </div>
         <span className="text-[10px] text-cyan-200/40">深海寂静中，开始学习后将有微光汇聚</span>
       </div>
@@ -79,13 +79,13 @@ export default function PlanktonStream({ activities, loading }: Props) {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 8 }}
                   transition={{ delay: i * 0.06, duration: 0.3 }}
-                  className="flex items-center gap-2.5 px-2 py-1.5 rounded-[var(--kb-radius-sm)] hover:bg-cyan-400/5 transition-colors duration-300 cursor-default"
+                  className="flex items-center gap-2.5 px-2 py-1.5 rounded-[var(--kb-radius-sm)] hover:bg-cyber/5 transition-colors duration-300 cursor-default"
                   onMouseEnter={() => setHoveredIdx(i)}
                   onMouseLeave={() => setHoveredIdx(null)}
                 >
                   {/* 发光节点 */}
                   <div
-                    className={cn('p-1 rounded-full shrink-0 transition-shadow duration-300', dotColors[item.accent] || 'bg-cyan-400')}
+                    className={cn('p-1 rounded-full shrink-0 transition-shadow duration-300', dotColors[item.accent] || 'bg-cyber')}
                     style={{
                       boxShadow: isHovered ? `0 0 10px ${glowColors[item.accent] || glowColors.pomodoro}` : 'none',
                     }}

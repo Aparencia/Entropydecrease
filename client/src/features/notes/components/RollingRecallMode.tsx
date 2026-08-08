@@ -16,7 +16,7 @@ const ROUND_META: Record<RecallRound, { label: string; icon: typeof BookOpen; de
   1: { label: '通读标记', icon: BookOpen, desc: '通读笔记，标记关键点', color: 'text-blue-500 bg-blue-500/10 border-blue-500/20' },
   2: { label: '精读理解', icon: BookMarked, desc: '精读并用自己的话总结理解', color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' },
   3: { label: '闭卷回忆', icon: Brain, desc: '合上笔记，凭记忆回答问题', color: 'text-amber-500 bg-amber-500/10 border-amber-500/20' },
-  4: { label: '默写输出', icon: Pencil, desc: '凭记忆完整默写', color: 'text-violet-500 bg-violet-500/10 border-violet-500/20' },
+  4: { label: '默写输出', icon: Pencil, desc: '凭记忆完整默写', color: 'text-accent-500 bg-accent-500/10 border-accent-500/20' },
 };
 
 const FIBONACCI_HINTS = [1, 2, 3, 5, 8, 13];
@@ -249,7 +249,7 @@ export default function RollingRecallMode({ noteContent, noteTitle, className, o
                       ? 'bg-emerald-500 text-white hover:bg-emerald-600'
                       : currentRound === 3
                         ? 'bg-amber-500 text-white hover:bg-amber-600'
-                        : 'bg-violet-500 text-white hover:bg-violet-600',
+                        : 'bg-cyber text-text-inverse hover:bg-cyber/90',
                 )}
               >
                 <Check className="w-4 h-4" strokeWidth={2} />

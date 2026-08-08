@@ -25,6 +25,7 @@ import type {
   WindowInfo,
   KeyFrame,
   SessionBundle,
+  ExtractedSegment,
 } from '@/lib/capture';
 
 /** 主进程音频启动返回值 */
@@ -58,6 +59,10 @@ interface UseSessionControlOptions {
     pendingKeyframesRef: React.MutableRefObject<KeyFrame[]>;
     isPartialAnalyzingRef: React.MutableRefObject<boolean>;
     setPartialCount: (n: number) => void;
+    /** 实时转写最新值 ref 桥（audio 模式无关键帧时作为收尾片段来源） */
+    liveTranscriptsRef: React.MutableRefObject<{ id: string; text: string; timestamp: number }[]>;
+    /** fine 路径提取段最新值 ref 桥（停止后作为“生成笔记”素材） */
+    segmentsRef: React.MutableRefObject<ExtractedSegment[]>;
   };
   onAnalyzeVideo: (filePath: string) => void;
   onAnalyzeFull: () => void;
@@ -204,14 +209,21 @@ export function useSessionControl({
   /** smart 路径收尾：补分析尾帧 → 合并增量 → 无增量则询问全量分析 */
   const finalizeSmartSession = useCallback(async () => {
     const bundle = session.smartBundle;
-    if (!bundle.keyframes || bundle.keyframes.length === 0) return;
+    const transcripts = session.liveTranscriptsRef?.current ?? [];
+    const transcriptTexts = transcripts.map((t) => t.text).filter((t) => t.trim());
+    const hasFrames = (bundle.keyframes?.length ?? 0) > 0;
+    const hasPending = session.pendingKeyframesRef.current.length > 0;
+    const hasPartials = session.partialNotesRef.current.length > 0;
+    // 守卫放宽：audio 模式不启动截图采集 → 无关键帧，转写是唯一产物；
+    // 此前仅判 keyframes 导致 audio 会话停止后无任何“生成笔记”入口（内测反馈）
+    if (!hasFrames && !hasPending && !hasPartials && transcriptTexts.length === 0) return;
 
     // ── 同步收割阶段（任何 await 之前）──
     // 停止后 UI 已回配置态，用户可立即启动新会话；增量状态必须在首个
     // await 之前收割并清空，否则本函数尾部的 await 期间新会话累积的
     // 数据会被误清理（resetForStart 不重置这两个 ref）。
     // ① 尾帧：splice 出局部副本并同步清空 ref，分析 await 只消费副本
-    const tailFrames = (session.pendingKeyframesRef.current.length > 0
+    const tailFrames = (hasPending
       && !session.isPartialAnalyzingRef.current)
       ? session.pendingKeyframesRef.current.splice(0)
       : [];
@@ -225,16 +237,20 @@ export function useSessionControl({
     let tailPartial: string | null = null;
     if (tailFrames.length > 0) {
       try {
-        const sessionStartMs = bundle.keyframes[0]?.timestamp ?? tailFrames[0].timestamp;
+        const sessionStartMs = bundle.keyframes?.[0]?.timestamp ?? tailFrames[0].timestamp;
         tailPartial = await analyzePartial(tailFrames, sessionStartMs, { language: config.language });
       } catch { /* 静默失败 */ }
     }
 
-    const allPartials = tailPartial ? [...partials, tailPartial] : partials;
-    if (allPartials.length > 0) {
-      await onMergePartials(allPartials, bundle.duration ?? 0, bundle.keyframes.length);
+    // 片段来源：增量分析 + 尾帧分析；两者皆空时（audio 模式无关键帧）
+    // 以实时转写文本为笔记素材，保证“停止后可生成笔记”
+    const allPartials = [...partials, ...(tailPartial ? [tailPartial] : [])];
+    const notesInput = allPartials.length > 0 ? allPartials : transcriptTexts;
+    if (notesInput.length > 0) {
+      await onMergePartials(notesInput, bundle.duration ?? 0, bundle.keyframes?.length ?? 0);
     } else {
-      // timeout: 0 —— 停止收尾决策不设超时，用户离开再久也不丢失全量分析入口
+      // 无任何文本片段（转写失败等）：询问全量分析——analyzeSession 支持
+      // 仅音频段（无关键帧）场景，会现场补充转写
       const confirmed = await askConfirm({
         title: '智能采集已完成',
         description: '是否生成完整笔记？',
@@ -243,6 +259,21 @@ export function useSessionControl({
       if (confirmed) onAnalyzeFull();
     }
   }, [session, config.language, onMergePartials, onAnalyzeFull, askConfirm]);
+
+  /** fine 路径收尾：提取段 → 确认 → AI 整理为笔记（与 smart/full_record 一致） */
+  const finalizeFineSession = useCallback(async () => {
+    const texts = (session.segmentsRef?.current ?? [])
+      .map((s) => s.text).filter((t) => t.trim());
+    if (texts.length === 0) return;
+    const confirmed = await askConfirm({
+      title: '采集已完成',
+      description: `已提取 ${texts.length} 段内容，是否生成完整笔记？`,
+      confirmLabel: '生成笔记',
+    }, { timeout: 0 });
+    if (confirmed) {
+      await onMergePartials(texts, 0, 0);
+    }
+  }, [session, askConfirm, onMergePartials]);
 
   const handleStop = useCallback(async () => {
     if (!window.electronAPI) return;
@@ -290,12 +321,15 @@ export function useSessionControl({
 
       if (capturePath === 'smart') {
         await finalizeSmartSession();
+      } else if (capturePath === 'fine') {
+        // fine 路径停止后同样提供“生成笔记”收尾（此前无任何入口）
+        await finalizeFineSession();
       }
     } catch (err) {
       setStatus('error');
       console.error('[useClassroomCapture] Stop failed:', err);
     }
-  }, [capturePath, captureManager, setStatus, frameRestartRef, audioCleanupRef, session, onAnalyzeVideo, askConfirm, finalizeSmartSession, setStreamingAsrActive]);
+  }, [capturePath, captureManager, setStatus, frameRestartRef, audioCleanupRef, session, onAnalyzeVideo, askConfirm, finalizeSmartSession, finalizeFineSession, setStreamingAsrActive]);
 
   return { handleStart, handlePause, handleStop };
 }

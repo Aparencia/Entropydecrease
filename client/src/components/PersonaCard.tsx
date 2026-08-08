@@ -14,7 +14,7 @@ const RELATIONSHIP_META: Record<RelationshipType, { label: string; color: string
   twin: { label: '双胞胎', color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20', icon: '👯' },
   rival: { label: '宿敌', color: 'text-red-500 bg-red-500/10 border-red-500/20', icon: '⚔️' },
   parent_child: { label: '父子', color: 'text-amber-500 bg-amber-500/10 border-amber-500/20', icon: '👨‍👦' },
-  ally: { label: '盟友', color: 'text-violet-500 bg-violet-500/10 border-violet-500/20', icon: '🤝' },
+  ally: { label: '盟友', color: 'text-accent-500 bg-accent-500/10 border-accent-500/20', icon: '🤝' },
 };
 
 interface PersonaCardProps {
@@ -30,7 +30,7 @@ export default function PersonaCard({ persona, className }: PersonaCardProps) {
       className={cn('rounded-2xl border border-border/20 bg-bg-elevated/50 overflow-hidden', className)}
     >
       {/* 头部 — 角色名 + 概念 */}
-      <div className="bg-gradient-to-r from-brand-500/10 to-violet-500/10 p-4 border-b border-border/10">
+      <div className="bg-gradient-to-r from-brand-500/10 to-accent-500/10 p-4 border-b border-border/10">
         <div className="flex items-center gap-1 text-[11px] text-text-tertiary mb-1">
           <span className="rounded-full bg-brand-500/10 px-2 py-0.5 text-brand-500">{persona.concept}</span>
         </div>

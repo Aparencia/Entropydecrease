@@ -30,8 +30,9 @@ export function VisionModeSelector({
   onChange: (mode: VisionMode) => void;
 }) {
   return (
-    <div className="px-4 py-3 border-b border-border/20">
-      <div className="flex items-center justify-between mb-2">
+    /* 裸组件：由左栏配置区统一编排（space-y + p-3），不带自身卡片容器 */
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
         <span className="text-[12px] font-medium text-text-secondary">视觉提取</span>
         <span className="text-[10px] text-text-tertiary">
           {MODES.find((m) => m.value === value)?.hint}

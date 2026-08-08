@@ -42,20 +42,20 @@ export default function AnglerfishAchievements() {
 
   return (
     <motion.div
-      className="rounded-[var(--kb-radius-lg)] border border-cyan-400/15 bg-bg-elevated/20 backdrop-blur-sm p-3 overflow-hidden"
+      className="rounded-[var(--kb-radius-lg)] border border-cyber/15 bg-bg-elevated/20 backdrop-blur-sm p-3 overflow-hidden"
       whileHover={{ scale: 1.01 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
       aria-label={`成就墙，已解锁 ${unlockedCount} 个`}
     >
       {/* 标题 */}
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-[10px] font-medium text-cyan-200/60">灯笼鱼成就</h3>
+        <h3 className="text-[10px] font-medium text-cyber/60">灯笼鱼成就</h3>
         <div className="flex items-center gap-2">
           <span className="text-[9px] text-amber-300/50">{unlockedCount}/{ACHIEVEMENT_DEFS.length}</span>
           {/* R9 成就证书入口：跳转打印页生成证书 */}
           <button
             onClick={() => navigate('/certificate')}
-            className="flex items-center gap-0.5 text-[9px] text-cyan-200/50 hover:text-cyan-200 transition-colors"
+            className="flex items-center gap-0.5 text-[9px] text-cyber/50 hover:text-cyber transition-colors"
             title="生成成就证书"
           >
             <Award className="w-3 h-3" strokeWidth={1.5} /> 证书

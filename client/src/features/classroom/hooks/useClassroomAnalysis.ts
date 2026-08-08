@@ -45,13 +45,16 @@ export function useClassroomAnalysis({
 
   /** Path B：全量分析（无增量片段时的回退路径） */
   const handleAnalyze = useCallback(async () => {
-    if (!smartBundle.keyframes || smartBundle.keyframes.length === 0) return;
+    // 守卫：关键帧或音频段任一非空即可分析（audio 模式无关键帧，
+    // analyzeSession 会以首音频段为时间基准并补充转写——此前仅判
+    // keyframes 导致 audio 会话无法全量分析）
+    if (!smartBundle.keyframes?.length && !smartBundle.audioSegments?.length) return;
     setIsAnalyzing(true);
     setAnalysisError(null);
     setAnalysisResult(null);
     try {
       const fullBundle: SessionBundle = {
-        keyframes: smartBundle.keyframes,
+        keyframes: smartBundle.keyframes ?? [],
         audioSegments: smartBundle.audioSegments ?? [],
         timeline: smartBundle.timeline ?? [],
         duration: smartBundle.duration ?? 0,

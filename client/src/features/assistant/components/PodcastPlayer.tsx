@@ -21,7 +21,7 @@ interface PodcastPlayerProps {
 
 const SPEAKER_META: Record<SpeakerRole, { label: string; icon: typeof Mic; color: string }> = {
   host: { label: '主持人', icon: Mic, color: 'text-brand-500 bg-brand-500/10' },
-  guest: { label: '嘉宾', icon: User, color: 'text-violet-500 bg-violet-500/10' },
+  guest: { label: '嘉宾', icon: User, color: 'text-accent-500 bg-accent-500/10' },
 };
 
 export default function PodcastPlayer({ podcast, className, onClose }: PodcastPlayerProps) {
@@ -139,7 +139,7 @@ export default function PodcastPlayer({ podcast, className, onClose }: PodcastPl
 
       {/* 嘉宾介绍 */}
       {podcast.guestIntro && (
-        <div className="px-4 py-2 bg-gradient-to-r from-brand-500/5 to-violet-500/5 border-b border-border/10">
+        <div className="px-4 py-2 bg-gradient-to-r from-brand-500/5 to-accent-500/5 border-b border-border/10">
           <p className="text-[11px] text-text-tertiary">嘉宾介绍</p>
           <p className="text-[12px] text-text-secondary">{podcast.guestIntro}</p>
         </div>

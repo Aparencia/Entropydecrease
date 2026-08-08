@@ -108,8 +108,8 @@ function BioluminescentLayer({ count }: { count: number }) {
 
     const colors_pool = [
       new THREE.Color('#00BFFF'),  // 赛博青
-      new THREE.Color('#818CF8'),  // 靛蓝
-      new THREE.Color('#22D3EE'),  // 青
+      new THREE.Color('#6FB4E8'),  // 磷光蓝
+      new THREE.Color('#4A9BD9'),  // 磷光蓝深
       new THREE.Color('#6366F1'),  // 品牌
     ];
 
@@ -323,9 +323,9 @@ export function DeepSeaWorld() {
 
       {/* 环境光照 */}
       <ambientLight intensity={0.2} color="#1E3A5F" />
-      <pointLight position={[0, 5, 0]} intensity={0.5} color="#00BFFF" distance={50} />
-      <pointLight position={[-5, -3, -5]} intensity={0.2} color="#6366F1" distance={30} />
-      <pointLight position={[5, -2, 5]} intensity={0.15} color="#22D3EE" distance={30} />
+      <pointLight position={[0, 5, 0]} intensity={0.5} color="#4A9BD9" distance={50} />
+      <pointLight position={[-5, -3, -5]} intensity={0.2} color="#57C6A9" distance={30} />
+      <pointLight position={[5, -2, 5]} intensity={0.15} color="#6FB4E8" distance={30} />
       <hemisphereLight color="#1E3A5F" groundColor="#0A0E1A" intensity={0.3} />
 
       {/* 环境粒子 */}

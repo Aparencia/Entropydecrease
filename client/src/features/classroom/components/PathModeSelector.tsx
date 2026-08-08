@@ -25,12 +25,12 @@ export function PathModeSelector({ capturePath, onPathChange, mode, onModeChange
     <div className="space-y-4">
       {/* 采集路径 */}
       <div>
-        <span className="text-b3 font-medium text-text-tertiary block mb-2">采集路径</span>
+        <span className="text-b3 font-medium text-text-tertiary block mb-1.5">采集路径</span>
         <div className="flex flex-col gap-1.5">
           {PATH_OPTIONS.map(({ value, label, icon: PathIcon, brief }) => (
             <button key={value} onClick={() => onPathChange(value)} disabled={disabled}
               className={cn(
-                'flex items-center gap-2.5 px-3 py-2 rounded-kb-md text-left transition-all border',
+                'flex items-center gap-2.5 px-3 py-1.5 rounded-kb-md text-left transition-all border',
                 capturePath === value
                   ? 'bg-brand-50 border-brand-200/60 shadow-kb-sm'
                   : 'border-transparent hover:bg-bg-tertiary/50',
@@ -53,12 +53,12 @@ export function PathModeSelector({ capturePath, onPathChange, mode, onModeChange
 
       {/* 采集模式 */}
       <div>
-        <span className="text-b3 font-medium text-text-tertiary block mb-2">采集模式</span>
+        <span className="text-b3 font-medium text-text-tertiary block mb-1.5">采集模式</span>
         <div className="flex items-center gap-1">
           {MODE_OPTIONS.map(({ value, label, icon: ModeIcon }) => (
             <button key={value} onClick={() => onModeChange(value)} disabled={disabled}
               className={cn(
-                'flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-kb-sm text-b3 font-medium transition-all',
+                'flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 rounded-kb-sm text-b3 font-medium transition-all',
                 mode === value
                   ? 'bg-brand-50 text-brand-600 ring-1 ring-brand-200/50'
                   : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary/50',

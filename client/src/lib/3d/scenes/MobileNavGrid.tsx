@@ -59,9 +59,9 @@ export function MobileNavGrid() {
       <div
         className="absolute inset-0 opacity-20"
         style={{
-          backgroundImage: `radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
-                            radial-gradient(circle at 80% 70%, rgba(236, 72, 153, 0.12) 0%, transparent 50%),
-                            radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.08) 0%, transparent 50%)`,
+          backgroundImage: `radial-gradient(circle at 20% 30%, rgba(64, 171, 146, 0.15) 0%, transparent 50%),
+                            radial-gradient(circle at 80% 70%, rgba(232, 184, 75, 0.12) 0%, transparent 50%),
+                            radial-gradient(circle at 50% 50%, rgba(67, 197, 139, 0.08) 0%, transparent 50%)`,
         }}
       />
 

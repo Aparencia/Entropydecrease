@@ -47,7 +47,7 @@ export default function BubbleStreak({ streakDays, todayChecked, loading }: Prop
         {!prefersReduced && bubbles.map((b) => (
           <motion.div
             key={b.id}
-            className="absolute rounded-full border border-cyan-300/20 bg-cyan-400/10"
+            className="absolute rounded-full border border-cyber/20 bg-cyber/10"
             style={{
               width: b.size,
               height: b.size,
@@ -85,7 +85,7 @@ export default function BubbleStreak({ streakDays, todayChecked, loading }: Prop
         <span className="text-[10px] text-cyan-200/50">天连续打卡</span>
         <div className={`text-[9px] font-medium px-2 py-0.5 rounded-full ${
           todayChecked
-            ? 'bg-cyan-400/15 text-cyan-300'
+            ? 'bg-cyber/15 text-cyan-300'
             : 'bg-bg-tertiary/30 text-text-tertiary'
         }`}>
           {todayChecked ? '今日已打卡' : '今日未打卡'}

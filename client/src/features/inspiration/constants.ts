@@ -15,7 +15,7 @@ import type { TagOption, SortStatusEntry, SortTypeInfo } from './types';
 export const CONTENT_NATURE_OPTIONS: TagOption<InspirationTags['content_nature']>[] = [
   { value: 'concept',     label: '概念', color: 'text-accent-600',   bg: 'bg-accent-50 border-accent-200 dark:bg-accent-900/20 dark:border-accent-700' },
   { value: 'question',    label: '疑问', color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-700' },
-  { value: 'inspiration', label: '萤火', color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200 dark:bg-purple-900/20 dark:border-purple-700' },
+  { value: 'inspiration', label: '萤火', color: 'text-accent-600', bg: 'bg-accent-500/10 border-accent-500/30 dark:bg-accent-500/20 dark:border-accent-500/40' },
   { value: 'todo',        label: '待办', color: 'text-green-600',  bg: 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-700' },
 ];
 
@@ -43,7 +43,7 @@ export const DEPTH_MAP = Object.fromEntries(
 /** AI 分拣类型映射 @ai-context 分拣建议面板中各类型的标签文案与视觉配色 */
 export const SORT_TYPE_MAP: Record<string, SortTypeInfo> = {
   feynman:     { label: '浮出水面讲解', color: 'text-amber-700',   bg: 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-700' },
-  flashcard:   { label: '反衰减呼吸',    color: 'text-cyan-700',    bg: 'bg-cyan-50 border-cyan-200 dark:bg-cyan-900/20 dark:border-cyan-700' },
+  flashcard:   { label: '反衰减呼吸',    color: 'text-cyber', bg: 'bg-cyber/10 border-cyber/30 dark:bg-cyber/20 dark:border-cyber/40' },
   note:        { label: '结礁',     color: 'text-indigo-700',  bg: 'bg-indigo-50 border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-700' },
   todo:        { label: '待办',     color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700' },
   action_item: { label: '立即执行', color: 'text-red-700 dark:text-red-400', bg: 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-700' },
@@ -51,7 +51,7 @@ export const SORT_TYPE_MAP: Record<string, SortTypeInfo> = {
 
 /** 分拣状态视觉配置 @ai-context 卡片右上角角标展示当前分拣阶段 */
 export const SORT_STATUS_CONFIG = {
-  sorting:     { label: '分拣中...', icon: Loader2,      color: 'text-cyan-500',     bg: 'bg-cyan-50 border-cyan-200 dark:bg-cyan-900/20 dark:border-cyan-700',         animate: true },
+  sorting:     { label: '分拣中...', icon: Loader2,      color: 'text-cyber', bg: 'bg-cyber/10 border-cyber/30 dark:bg-cyber/20 dark:border-cyber/40',         animate: true },
   sorted:      { label: '已分拣',   icon: null,           color: 'text-amber-700 dark:text-amber-400',     bg: 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-700',     animate: false },
   confirmed:   { label: '已确认',   icon: CheckCircle2,   color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700', animate: false },
   transformed: { label: '已转化',   icon: CheckCircle2,   color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700', animate: false },

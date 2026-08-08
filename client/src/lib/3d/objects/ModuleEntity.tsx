@@ -111,7 +111,7 @@ function FlashcardGeometry({ textures, emissiveColor, isActive, isHovered }: {
       {/* 正面卡片 + 矩形辉光线框 */}
       <mesh ref={frontRef} position={[0, 0, 0.05]} rotation={[0, 0, 0.05]}>
         <planeGeometry args={[0.9, 1.2]} />
-        <meshStandardMaterial color="#3B82F6" emissive="#3B82F6" emissiveIntensity={0.3} map={textures?.mapA} side={THREE.DoubleSide} />
+        <meshStandardMaterial color="#43C58B" emissive="#43C58B" emissiveIntensity={0.3} map={textures?.mapA} side={THREE.DoubleSide} />
       </mesh>
       <lineSegments ref={frontLineRef} geometry={edgesGeom} position={[0, 0, 0.05]} rotation={[0, 0, 0.05]} scale={[1.06, 1.06, 1.06]}>
         <lineBasicMaterial color={emissiveColor} transparent opacity={0.25} blending={THREE.AdditiveBlending} />
@@ -119,7 +119,7 @@ function FlashcardGeometry({ textures, emissiveColor, isActive, isHovered }: {
       {/* 背面卡片 + 矩形辉光线框 */}
       <mesh ref={backRef} position={[0, 0, -0.05]} rotation={[0, 0, -0.05]}>
         <planeGeometry args={[0.9, 1.2]} />
-        <meshStandardMaterial color="#6366F1" emissive="#6366F1" emissiveIntensity={0.3} map={textures?.mapB} side={THREE.DoubleSide} />
+        <meshStandardMaterial color="#63DBA5" emissive="#63DBA5" emissiveIntensity={0.3} map={textures?.mapB} side={THREE.DoubleSide} />
       </mesh>
       <lineSegments ref={backLineRef} geometry={edgesGeom} position={[0, 0, -0.05]} rotation={[0, 0, -0.05]} scale={[1.06, 1.06, 1.06]}>
         <lineBasicMaterial color={emissiveColor} transparent opacity={0.25} blending={THREE.AdditiveBlending} />

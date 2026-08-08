@@ -94,7 +94,7 @@ export function WindowSelectCard({ windows, selected, onSelect, onRefresh, loadi
 
   return (
     <div ref={rootRef} className="relative">
-      <span className="text-b3 font-medium text-text-tertiary block mb-2">目标窗口</span>
+      <span className="text-b3 font-medium text-text-tertiary block mb-1.5">目标窗口</span>
 
       {/* 已选窗口卡片 / 未选引导按钮 */}
       <button onClick={handleToggle} disabled={disabled}

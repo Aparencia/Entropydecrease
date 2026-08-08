@@ -146,6 +146,13 @@ export function useClassroomCapture() {
     streamingAsrActive,
   });
 
+  // 转写/提取段最新值 ref 桥：停止收尾（useSessionControl）在事件回调
+  // 之外读取实时数据，必须绕过闭包读到最新值
+  const liveTranscriptsRef = useRef(events.liveTranscripts);
+  liveTranscriptsRef.current = events.liveTranscripts;
+  const segmentsRef = useRef(events.segments);
+  segmentsRef.current = events.segments;
+
   const { audioHealth, audioCleanupRef, setAutoAnchorCallback } = useClassroomAudio({
     captureManager, status, mode, onNotify: notify,
   });
@@ -205,6 +212,8 @@ export function useClassroomCapture() {
       pendingKeyframesRef: events.pendingKeyframesRef,
       isPartialAnalyzingRef: events.isPartialAnalyzingRef,
       setPartialCount: events.setPartialCount,
+      liveTranscriptsRef,
+      segmentsRef,
     },
     onAnalyzeVideo: analysis.handleVideoAnalyze,
     onAnalyzeFull: analysis.handleAnalyze,
