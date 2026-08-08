@@ -320,7 +320,6 @@ export default function PomodoroPage() {
                 onTap={handleChronosTap}
                 onLongPress={handleChronosLongPress}
                 timeStr={`${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(remainingSeconds % 60).padStart(2, '0')}`}
-                label={phase === 'work' ? '专注中' : phase === 'short_break' ? '短休息' : '长休息'}
               />
             ) : (
               <TimerRing

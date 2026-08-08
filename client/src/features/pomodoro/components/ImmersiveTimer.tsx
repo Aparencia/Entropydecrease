@@ -259,7 +259,6 @@ export default function ImmersiveTimer({
           onTap={handleChronosTap}
           onLongPress={handleChronosLongPress}
           timeStr={timeStr}
-          label={label}
         />
       ) : (
         <ImmersiveRing progress={progress} timeStr={timeStr} label={label} breatheAnimation={breatheAnimation} />

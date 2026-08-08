@@ -10,7 +10,7 @@
 import { Canvas } from '@react-three/fiber';
 import { useReducedMotion } from 'framer-motion';
 import { useSceneTheme } from '@/lib/3d/hooks/useSceneTheme';
-import { CHRONOS_STYLES, CHRONOS_PHASES, toChronosPhase, type ChronosPhase } from './chronosStyles';
+import { CHRONOS_STYLES, CHRONOS_PHASES, CHRONOS_STATE_LABELS, toChronosPhase, type ChronosPhase } from './chronosStyles';
 import { ChronosSphere } from './ChronosSphere';
 
 interface ChronosCanvasProps {
@@ -31,17 +31,15 @@ interface ChronosCanvasProps {
   onLongPress?: () => void;
   /** 中央显示内容（时间字符串） */
   timeStr: string;
-  /** 中央显示标签（如 专注中） */
-  label: string;
 }
 
 /** 2D 静态回退形态（reduced motion / 极端低配） */
-function ChronosStatic({ phase, timeStr, label }: {
+function ChronosStatic({ phase, timeStr }: {
   phase: ChronosPhase;
   timeStr: string;
-  label: string;
 }) {
   const phaseColor = CHRONOS_PHASES[phase].body;
+  const state = CHRONOS_STATE_LABELS[phase];
   return (
     <div className="relative flex items-center justify-center w-full h-full">
       {/* 静态光环 + 渐变球体 */}
@@ -59,9 +57,10 @@ function ChronosStatic({ phase, timeStr, label }: {
         <span className="font-timer font-light tracking-tight leading-none text-text-primary" style={{ fontSize: 'clamp(2rem, 8vmin, 4.5rem)', fontVariantNumeric: 'tabular-nums' }}>
           {timeStr}
         </span>
-        <span className="text-[11px] mt-2 font-medium tracking-[0.15em] uppercase text-text-tertiary">
-          {label}
+        <span className="text-[11px] mt-2 font-medium tracking-[0.15em] uppercase" style={{ color: phaseColor }}>
+          {state.icon} {state.name}
         </span>
+        <span className="text-[10px] mt-1 text-text-tertiary/60">{state.hint}</span>
       </div>
     </div>
   );
@@ -79,16 +78,18 @@ export function ChronosCanvas({
   onTap,
   onLongPress,
   timeStr,
-  label,
 }: ChronosCanvasProps) {
   const theme = useSceneTheme();
   const reduced = useReducedMotion();
   const style = CHRONOS_STYLES[theme];
   const chronosPhase = toChronosPhase(phase, isRunning, remainingSeconds, started);
+  // 状态指示：完整状态机（沉睡/呼吸/专注/短休/长休/即将完成），优先于静态 label
+  const state = CHRONOS_STATE_LABELS[chronosPhase];
+  const stateColor = CHRONOS_PHASES[chronosPhase].body;
 
   // 降级：减少动效偏好 → 2D 静态形态
   if (reduced) {
-    return <ChronosStatic phase={chronosPhase} timeStr={timeStr} label={label} />;
+    return <ChronosStatic phase={chronosPhase} timeStr={timeStr} />;
   }
 
   return (
@@ -96,7 +97,7 @@ export function ChronosCanvas({
       className={mode === 'full'
         ? 'absolute inset-0 flex items-center justify-center pointer-events-none'
         : 'relative w-[clamp(150px,34vmin,280px)] h-[clamp(150px,34vmin,280px)] pointer-events-none'}
-      aria-label={`${label} ${timeStr}`}
+      aria-label={`${state.name} ${timeStr}`}
       role="timer"
     >
       <Canvas
@@ -119,7 +120,7 @@ export function ChronosCanvas({
           onLongPress={onLongPress}
         />
       </Canvas>
-      {/* 中央数字（HTML 层，与 3D 叠加） */}
+      {/* 中央状态区：时间 + 状态名 + 交互提示（HTML 层，与 3D 叠加） */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
         <span
           className="font-timer font-light tracking-tight leading-none text-text-primary"
@@ -127,9 +128,13 @@ export function ChronosCanvas({
         >
           {timeStr}
         </span>
-        <span className="text-[11px] mt-2 font-medium tracking-[0.15em] uppercase text-text-tertiary">
-          {label}
+        <span
+          className="text-[11px] mt-2 font-medium tracking-[0.15em] uppercase transition-colors duration-500"
+          style={{ color: stateColor }}
+        >
+          {state.icon} {state.name}
         </span>
+        <span className="text-[10px] mt-1 text-text-tertiary/60">{state.hint}</span>
       </div>
     </div>
   );
