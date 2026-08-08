@@ -20,10 +20,7 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary: [
-          'bg-brand-600 text-white',
-          'hover:bg-brand-700 hover:shadow-md hover:shadow-brand-600/20',
-          'active:bg-brand-800',
-          'shadow-kb-sm',
+          'kb-btn-primary-material text-[var(--primary-foreground)]',
         ].join(' '),
         secondary: [
           'bg-bg-tertiary text-text-primary',
@@ -43,10 +40,7 @@ const buttonVariants = cva(
           'shadow-kb-sm',
         ].join(' '),
         ai: [
-          'bg-gradient-to-r from-accent-500 to-brand-500 text-white',
-          'hover:from-accent-600 hover:to-brand-600',
-          'hover:shadow-md hover:shadow-accent-500/20',
-          'shadow-kb-sm',
+          'kb-btn-ai-material text-[var(--primary-foreground)]',
         ].join(' '),
       },
       size: {
