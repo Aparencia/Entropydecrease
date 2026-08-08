@@ -39,6 +39,7 @@ const PLANET_CONFIGS: Record<ModuleId, PlanetConfig> = {
   inspiration: { radius: 0.4, color: '#F472B6', emissive: '#EC4899', label: '萤火海沟' },
   classroom: { radius: 0.55, color: '#14B8A6', emissive: '#0D9488', label: '回声定位' },
   constellation: { radius: 0.5, color: '#FBBF24', emissive: '#F59E0B', label: '星座' },
+  sop: { radius: 0.45, color: '#A3E635', emissive: '#65A30D', label: '标准作业' },
 };
 
 /** 轨道位置最大距离约束（兜底），超出则等比缩放回安全范围 */
@@ -192,7 +193,7 @@ export function AuroraModuleEntity({
               position={[0, config.radius + 0.6, 0]}
               style={{ pointerEvents: 'none' }}
             >
-              <div className="rounded-lg bg-slate-900/80 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm whitespace-nowrap border border-indigo-500/30">
+              <div className="rounded-lg bg-slate-900/80 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm whitespace-nowrap border border-brand-400/30">
                 {config.label}
                 {/* 常驻功能副标题：隐喻名旁附直白功能名 */}
                 {subtitle && (

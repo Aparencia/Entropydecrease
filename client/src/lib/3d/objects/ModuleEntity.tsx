@@ -6,7 +6,7 @@
  * 宪法第一条接入：glowScale 映射学习数据（掌握度=亮度），域 0.6–1.15。
  * 宪法第四条：三级性能降级嵌入（high/medium/low）。
  */
-import { useRef, useMemo, useEffect } from 'react';
+import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Float, Html } from '@react-three/drei';
@@ -50,18 +50,80 @@ function ModuleGeometry({ geometry }: { geometry: GeometryType }) {
   }
 }
 
-/** 闪卡专用 */
-function FlashcardGeometry({ textures }: { textures?: { mapA?: THREE.CanvasTexture; mapB?: THREE.CanvasTexture } | null }) {
+/**
+ * 闪卡专用：保留平面卡片造型，与其他模块一致的交互表现
+ * 矩形辉光线框（透明度逻辑同 WireframeGlow）+ 自转 + 悬停/激活缩放与发光增强
+ */
+function FlashcardGeometry({ textures, emissiveColor, isActive, isHovered }: {
+  textures?: { mapA?: THREE.CanvasTexture; mapB?: THREE.CanvasTexture } | null;
+  emissiveColor: string;
+  isActive: boolean;
+  isHovered: boolean;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const frontRef = useRef<THREE.Mesh>(null);
+  const backRef = useRef<THREE.Mesh>(null);
+  const frontLineRef = useRef<THREE.LineSegments>(null);
+  const backLineRef = useRef<THREE.LineSegments>(null);
+
+  // 卡片矩形边框几何体（平面四边，与卡片同尺寸）
+  const edgesGeom = useMemo(() => {
+    const plane = new THREE.PlaneGeometry(0.9, 1.2);
+    const edges = new THREE.EdgesGeometry(plane);
+    plane.dispose();
+    return edges;
+  }, []);
+
+  // 与其他模块主体一致的自转配置
+  const rotationConfig = useRef({
+    axis: new THREE.Vector3(
+      Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5,
+    ).normalize(),
+    speed: 0.2 + Math.random() * 0.3,
+  }).current;
+
+  const targetScale = isActive ? 1.3 : isHovered ? 1.15 : 1.0;
+  const targetEmissive = isActive ? 1.2 : isHovered ? 0.8 : 0.3;
+
+  useFrame((_, delta) => {
+    const safeDelta = Math.min(delta, 0.1);
+    // 自转 + 交互缩放（与其他模块一致）
+    if (groupRef.current) {
+      groupRef.current.rotateOnAxis(rotationConfig.axis, safeDelta * rotationConfig.speed);
+      const cs = groupRef.current.scale.x;
+      groupRef.current.scale.setScalar(THREE.MathUtils.lerp(cs, targetScale, safeDelta * 4));
+    }
+    // 卡片发光增强（与其他模块一致）
+    [frontRef, backRef].forEach((ref) => {
+      const mat = ref.current?.material as THREE.MeshStandardMaterial | undefined;
+      if (mat) mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, targetEmissive, safeDelta * 4);
+    });
+    // 线框透明度（与 WireframeGlow 相同逻辑：基线 0.25，悬停 0.6，激活 0.85）
+    const targetLine = isActive ? 0.85 : isHovered ? 0.6 : 0.25;
+    [frontLineRef, backLineRef].forEach((ref) => {
+      const mat = ref.current?.material as THREE.LineBasicMaterial | undefined;
+      if (mat) mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetLine, safeDelta * 3);
+    });
+  });
+
   return (
-    <group>
-      <mesh position={[0, 0, 0.05]} rotation={[0, 0, 0.05]}>
+    <group ref={groupRef}>
+      {/* 正面卡片 + 矩形辉光线框 */}
+      <mesh ref={frontRef} position={[0, 0, 0.05]} rotation={[0, 0, 0.05]}>
         <planeGeometry args={[0.9, 1.2]} />
         <meshStandardMaterial color="#3B82F6" emissive="#3B82F6" emissiveIntensity={0.3} map={textures?.mapA} side={THREE.DoubleSide} />
       </mesh>
-      <mesh position={[0, 0, -0.05]} rotation={[0, 0, -0.05]}>
+      <lineSegments ref={frontLineRef} geometry={edgesGeom} position={[0, 0, 0.05]} rotation={[0, 0, 0.05]} scale={[1.06, 1.06, 1.06]}>
+        <lineBasicMaterial color={emissiveColor} transparent opacity={0.25} blending={THREE.AdditiveBlending} />
+      </lineSegments>
+      {/* 背面卡片 + 矩形辉光线框 */}
+      <mesh ref={backRef} position={[0, 0, -0.05]} rotation={[0, 0, -0.05]}>
         <planeGeometry args={[0.9, 1.2]} />
         <meshStandardMaterial color="#6366F1" emissive="#6366F1" emissiveIntensity={0.3} map={textures?.mapB} side={THREE.DoubleSide} />
       </mesh>
+      <lineSegments ref={backLineRef} geometry={edgesGeom} position={[0, 0, -0.05]} rotation={[0, 0, -0.05]} scale={[1.06, 1.06, 1.06]}>
+        <lineBasicMaterial color={emissiveColor} transparent opacity={0.25} blending={THREE.AdditiveBlending} />
+      </lineSegments>
     </group>
   );
 }
@@ -100,6 +162,7 @@ function FresnelGlow({ color, isActive, isHovered, geometry }: {
 }
 
 // ─── 细节层 2：辉光线框（EdgesGeometry） ────────────
+// 常驻显示：默认透明度 0.4 持续可见，悬停/选中时进一步增强
 function WireframeGlow({ color, isActive, isHovered, geometry }: {
   color: string; isActive: boolean; isHovered: boolean; geometry: GeometryType;
 }) {
@@ -123,13 +186,14 @@ function WireframeGlow({ color, isActive, isHovered, geometry }: {
   useFrame((_, delta) => {
     if (!lineRef.current) return;
     const mat = lineRef.current.material as THREE.LineBasicMaterial;
-    const target = isActive ? 0.8 : isHovered ? 0.5 : 0.15;
+    // 常驻可见基线 0.4，交互时平滑增强（悬停 0.6 / 激活 0.85）
+    const target = isActive ? 0.85 : isHovered ? 0.6 : 0.4;
     mat.opacity = THREE.MathUtils.lerp(mat.opacity, target, Math.min(delta * 3, 1));
   });
 
   return (
     <lineSegments ref={lineRef} geometry={edgesGeom} scale={[1.06, 1.06, 1.06]}>
-      <lineBasicMaterial color={color} transparent opacity={0.15} blending={THREE.AdditiveBlending} />
+      <lineBasicMaterial color={color} transparent opacity={0.25} blending={THREE.AdditiveBlending} />
     </lineSegments>
   );
 }
@@ -263,7 +327,6 @@ export function ModuleEntity({
   const subtitle = getModuleSubtitle(id);
   const tier = useEffectiveTier();
   const isLowTier = tier === 'low';
-  const isMidTier = tier === 'medium';
 
   const rotationConfig = useRef({
     axis: new THREE.Vector3(
@@ -321,7 +384,22 @@ export function ModuleEntity({
         onClick={onClick} onPointerOver={onPointerOver} onPointerOut={onPointerOut}
       >
         {isFlashcard ? (
-          <FlashcardGeometry textures={flashcardTextures} />
+          <>
+            {/* 核心呼吸光（与其他模块一致） */}
+            {!isLowTier && <CoreBreath color={emissiveColor} isActive={isActive} isHovered={isHovered} />}
+            <FlashcardGeometry
+              textures={flashcardTextures}
+              emissiveColor={emissiveColor}
+              isActive={isActive}
+              isHovered={isHovered}
+            />
+            {/* 轨道粒子环（与其他模块一致） */}
+            {!isLowTier && (isActive || isHovered) && (
+              <OrbitalRing isActive={isActive} isHovered={isHovered} color={emissiveColor} />
+            )}
+            {/* 地面辉光（与其他模块一致） */}
+            {!isLowTier && <GroundGlow color={emissiveColor} isActive={isActive} />}
+          </>
         ) : (
           <>
             {/* 核心呼吸光 */}
@@ -353,10 +431,8 @@ export function ModuleEntity({
               <FresnelGlow color={emissiveColor} isActive={isActive} isHovered={isHovered} geometry={geometry} />
             )}
 
-            {/* 辉光线框 */}
-            {!isMidTier && !isLowTier && (
-              <WireframeGlow color={emissiveColor} isActive={isActive} isHovered={isHovered} geometry={geometry} />
-            )}
+            {/* 辉光线框（全档位常驻显示：性能降级也不关闭） */}
+            <WireframeGlow color={emissiveColor} isActive={isActive} isHovered={isHovered} geometry={geometry} />
 
             {/* 轨道粒子环 */}
             {!isLowTier && (isActive || isHovered) && (
@@ -371,7 +447,7 @@ export function ModuleEntity({
         {/* 标签 */}
         {(showLabel || isHovered) && (
           <Html center distanceFactor={8} position={[0, 1.3, 0]} style={{ pointerEvents: 'none' }}>
-            <div className="rounded-lg bg-slate-900/80 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm whitespace-nowrap border border-indigo-500/30">
+            <div className="rounded-lg bg-slate-900/80 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm whitespace-nowrap border border-brand-400/30">
               {label}
               {subtitle && <span className="ml-1.5 text-xs text-white/50">· {subtitle}</span>}
             </div>
