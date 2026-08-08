@@ -174,6 +174,15 @@
   --input: var(--kb-border-default);
   --ring: var(--kb-brand-300);
   --radius: 0.75rem;
+
+  /* 潜水/沉浸面板渐变（全局定义：FunctionalOverlay 面板背景依赖，
+     此前仅在 pomodoro-dive.css 按模块定义，未进番茄模块时变量缺失致面板透明） */
+  --kb-dive-top: rgba(191, 219, 254, 0.55);
+  --kb-dive-mid: rgba(250, 248, 245, 0.35);
+  --kb-dive-bot: rgba(147, 197, 253, 0.5);
+  --kb-dive-bubble: rgba(59, 130, 246, 0.5);
+  --kb-dive-ray: rgba(59, 130, 246, 0.07);
+  --kb-dive-fog: rgba(219, 234, 254, 0.4);
 }
 
 /* ========== 动画 @keyframes ========== */
@@ -252,69 +261,78 @@
 
 /* ---- 极夜深海（深色主题） ---- */
 [data-theme="dark"] {
-  /* 品牌主色 - 深空蓝紫（深色模式） */
-  --kb-brand-50: #1A1B3A;
-  --kb-brand-100: #252755;
-  --kb-brand-200: #353878;
-  --kb-brand-300: #4A4E9E;
-  --kb-brand-400: #6366F1;
-  --kb-brand-500: #818CF8;
-  --kb-brand-600: #6366F1;
-  --kb-brand-700: #5558E0;
-  --kb-brand-800: #4649C8;
-  --kb-brand-900: #373AB0;
+  /* 品牌主色 - 深海萤火磷光青绿（深色模式） */
+  --kb-brand-50: #0C211C;
+  --kb-brand-100: #122E27;
+  --kb-brand-200: #184037;
+  --kb-brand-300: #1F5748;
+  --kb-brand-400: #287160;
+  --kb-brand-500: #328E79;
+  --kb-brand-600: #40AB92;
+  --kb-brand-700: #57C6A9;
+  --kb-brand-800: #7DDCC1;
+  --kb-brand-900: #A9F0DB;
 
-  /* 品牌辅色 - 赛博青（深色模式） */
-  --kb-accent-50: #0A1E28;
-  --kb-accent-100: #0E2E3C;
-  --kb-accent-200: #164E63;
-  --kb-accent-300: #0E7490;
-  --kb-accent-400: #0891B2;
-  --kb-accent-500: #06B6D4;
-  --kb-accent-600: #22D3EE;
-  --kb-accent-700: #67E8F9;
-  --kb-accent-800: #A5F3FC;
-  --kb-accent-900: #CFFAFE;
+  /* 品牌辅色 - 认知琥珀金（深色模式，成就/强调） */
+  --kb-accent-50: #2B1A08;
+  --kb-accent-100: #3A240C;
+  --kb-accent-200: #4E3010;
+  --kb-accent-300: #6B4214;
+  --kb-accent-400: #8F5818;
+  --kb-accent-500: #B5721E;
+  --kb-accent-600: #D18A2A;
+  --kb-accent-700: #E8A74A;
+  --kb-accent-800: #F5C77E;
+  --kb-accent-900: #FBE3B5;
 
   /* 功能色（深色模式微调亮度） */
-  --kb-focus-blue: #60A5FA;
+  --kb-focus-blue: #6FB4E8;
   --kb-amber: #FBBF24;
   --kb-moss-green: #82C9A3;
   --kb-stone-purple: #3A3545;
-  --kb-cyber-cyan: #22D3EE;
+  --kb-cyber-cyan: #4A9BD9;
   --kb-color-error: #F87171;
   --kb-color-warning: #FB923C;
-  --kb-color-success: #4ADE80;
-  --kb-color-info: #60A5FA;
+  --kb-color-success: #4EC985;
+  --kb-color-info: #4A9BD9;
 
   /* 背景色 — 极夜深海 */
-  --kb-bg-primary: #0C1524;
-  --kb-bg-secondary: #12203A;
-  --kb-bg-tertiary: #182A48;
-  --kb-bg-elevated: #12203A;
+  --kb-bg-primary: #0A1620;
+  --kb-bg-secondary: #0F1F2E;
+  --kb-bg-tertiary: #152A3D;
+  --kb-bg-elevated: #0F1F2E;
 
   /* 文字色 */
-  --kb-text-primary: #E0E6F0;
-  --kb-text-secondary: #90A0B8;
-  --kb-text-tertiary: #607088;
-  --kb-text-inverse: #0C1524;
+  --kb-text-primary: #E2EAF2;
+  --kb-text-secondary: #93A7BC;
+  --kb-text-tertiary: #647B90;
+  --kb-text-inverse: #0A1620;
 
   /* 边框 — 深海微光 */
-  --kb-border-default: #223550;
-  --kb-border-strong: #2E4568;
+  --kb-border-default: #1F3348;
+  --kb-border-strong: #29425C;
 
-  /* 阴影（深蓝色阴影 + 品牌蓝色弥散光晕） */
-  --kb-shadow-sm: 0 1px 3px rgba(12, 21, 36, 0.4), 0 0 8px rgba(59, 130, 246, 0.05);
-  --kb-shadow-md: 0 4px 12px rgba(12, 21, 36, 0.5), 0 0 16px rgba(59, 130, 246, 0.08);
-  --kb-shadow-lg: 0 8px 24px rgba(12, 21, 36, 0.6), 0 0 24px rgba(59, 130, 246, 0.12);
+  /* 阴影（深海青黑阴影 + 磷光青绿弥散光晕） */
+  --kb-shadow-sm: 0 1px 3px rgba(10, 22, 32, 0.4), 0 0 8px rgba(64, 171, 146, 0.05);
+  --kb-shadow-md: 0 4px 12px rgba(10, 22, 32, 0.5), 0 0 16px rgba(64, 171, 146, 0.08);
+  --kb-shadow-lg: 0 8px 24px rgba(10, 22, 32, 0.6), 0 0 24px rgba(64, 171, 146, 0.12);
 
-  --kb-shadow-brand: 0 4px 12px rgba(99, 102, 241, 0.25);
-  --kb-shadow-accent: 0 4px 12px rgba(6, 182, 212, 0.25);
-  --kb-shadow-brand-hover: 0 6px 20px rgba(99, 102, 241, 0.35);
-  --kb-shadow-accent-hover: 0 6px 20px rgba(6, 182, 212, 0.35);
+  --kb-shadow-brand: 0 4px 12px rgba(64, 171, 146, 0.28);
+  --kb-shadow-accent: 0 4px 12px rgba(209, 138, 42, 0.25);
+  --kb-shadow-brand-hover: 0 6px 20px rgba(87, 198, 169, 0.35);
+  --kb-shadow-accent-hover: 0 6px 20px rgba(209, 138, 42, 0.35);
 
   /* shadcn/ui 深色兼容 */
   --accent: var(--kb-brand-600);
   --primary: var(--kb-brand-600);
   --ring: var(--kb-brand-400);
+  --primary-foreground: #0A1620;
+
+  /* 潜水/沉浸面板渐变（深色） */
+  --kb-dive-top: rgba(24, 42, 72, 0.9);
+  --kb-dive-mid: rgba(12, 21, 36, 0.85);
+  --kb-dive-bot: rgba(4, 10, 20, 0.96);
+  --kb-dive-bubble: rgba(74, 155, 217, 0.3);
+  --kb-dive-ray: rgba(74, 155, 217, 0.06);
+  --kb-dive-fog: rgba(12, 21, 36, 0.7);
 }
