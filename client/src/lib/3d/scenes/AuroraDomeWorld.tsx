@@ -8,6 +8,11 @@ import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useEffectiveTier } from '@/lib/performance/usePerformanceMode';
+import {
+  patchParticleShader,
+  updateGPUParticleUniforms,
+  addParticleAttributes,
+} from '@/lib/3d/shaders/gpuParticleShaders';
 
 // ─── 天空穹顶着色器 ───────────────────────────────────────
 const domeVertexShader = /* glsl */ `
@@ -190,33 +195,23 @@ function AuroraBorealis() {
   );
 }
 
-// ─── 星尘粒子 ─────────────────────────────────────────────
+// ─── 星尘粒子（GPU 着色器版） ────────────────────────
 /** 星尘粒子最大数量（固定 buffer 上限，tier 切换经 drawRange 控制可见数） */
 const MAX_STARDUST = 1500;
 
-// P1-2 决策记录：StarDust 粒子运动 shader 化（GPU particles）经审计放弃——
-// 边界重置为 Math.random 跳跃式重生（非连续轨迹），shader 内 mod 环绕会
-// 改变表现（跳跃→平滑环绕），确定性 hash 复刻重生位置复杂且验证成本高；
-// 收益（CPU 循环 + buffer 上传）< 0.2ms/帧，性价比不足。保留 CPU 实现。
-
 function StarDust({ count }: { count: number }) {
   const pointsRef = useRef<THREE.Points>(null);
-  const velocitiesRef = useRef<Float32Array | null>(null);
 
-  // P0-8：固定最大 buffer（tier 切换不再 key 重建 + GPU 重新上传，
-  // 可见粒子数经 setDrawRange 控制，与 tier 语义一致）
-  const { positions, colors, velocities } = useMemo(() => {
+  // 固定最大 buffer，tier 切换经 drawRange 控制可见数
+  const { positions, colors } = useMemo(() => {
     const pos = new Float32Array(MAX_STARDUST * 3);
     const col = new Float32Array(MAX_STARDUST * 3);
-    const vel = new Float32Array(MAX_STARDUST * 3);
 
     const colorA = new THREE.Color('#FFFBEB');
     const colorB = new THREE.Color('#F59E0B');
 
     for (let i = 0; i < MAX_STARDUST; i++) {
       const i3 = i * 3;
-
-      // 随机分布在球形区域内
       const radius = 5 + Math.random() * 60;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
@@ -225,91 +220,44 @@ function StarDust({ count }: { count: number }) {
       pos[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
       pos[i3 + 2] = radius * Math.cos(phi);
 
-      // 渐变颜色
       const t = Math.random();
       const color = colorA.clone().lerp(colorB, t);
       col[i3] = color.r;
       col[i3 + 1] = color.g;
       col[i3 + 2] = color.b;
-
-      // 部分粒子径向流动（太阳风效果）
-      const isRadial = Math.random() > 0.6;
-      if (isRadial) {
-        const dir = new THREE.Vector3(pos[i3], pos[i3 + 1], pos[i3 + 2]).normalize();
-        vel[i3] = dir.x * 0.3;
-        vel[i3 + 1] = dir.y * 0.3;
-        vel[i3 + 2] = dir.z * 0.3;
-      } else {
-        vel[i3] = (Math.random() - 0.5) * 0.1;
-        vel[i3 + 1] = (Math.random() - 0.5) * 0.05;
-        vel[i3 + 2] = (Math.random() - 0.5) * 0.1;
-      }
     }
-
-    return { positions: pos, colors: col, velocities: vel };
+    return { positions: pos, colors: col };
   }, []);
 
-  velocitiesRef.current = velocities;
-
-  useFrame((_, delta) => {
-    if (!pointsRef.current || !velocitiesRef.current) return;
-
-    // 防止浏览器节流导致的帧时间尖峰，最大允许 100ms
-    const safeDelta = Math.min(delta, 0.1);
-
-    const posAttr = pointsRef.current.geometry.attributes.position;
-    const posArray = posAttr.array as Float32Array;
-    const vel = velocitiesRef.current;
-
-    // P0-7：距离平方比较（80² = 6400）替代 sqrt——数学等价，省 count 次 sqrt/帧
-    for (let i = 0; i < count; i++) {
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    // velocity: 径向方向（指向原点外）
+    addParticleAttributes(geo, MAX_STARDUST, (i) => {
       const i3 = i * 3;
-      posArray[i3] += vel[i3] * safeDelta;
-      posArray[i3 + 1] += vel[i3 + 1] * safeDelta;
-      posArray[i3 + 2] += vel[i3 + 2] * safeDelta;
+      const dir = new THREE.Vector3(positions[i3], positions[i3 + 1], positions[i3 + 2]).normalize();
+      const isRadial = Math.random() > 0.6;
+      return isRadial
+        ? [dir.x * 0.3, dir.y * 0.3, dir.z * 0.3]
+        : [(Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.05, (Math.random() - 0.5) * 0.1];
+    });
+    return geo;
+  }, [positions, colors]);
 
-      // 超出边界则重置到太阳附近
-      const distSq = posArray[i3] ** 2 + posArray[i3 + 1] ** 2 + posArray[i3 + 2] ** 2;
-      if (distSq > 6400) {
-        const theta = Math.random() * Math.PI * 2;
-        const phi = Math.acos(2 * Math.random() - 1);
-        const r = 3 + Math.random() * 5;
-        posArray[i3] = r * Math.sin(phi) * Math.cos(theta);
-        posArray[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-        posArray[i3 + 2] = r * Math.cos(phi);
-      }
-    }
+  const material = useMemo(() => {
+    const mat = new THREE.PointsMaterial({ size: 0.15, vertexColors: true, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true });
+    patchParticleShader(mat, { motion: 'radial', wrap: false, bounds: { distMax: 80, radiusMin: 3, radiusMax: 8 }, speed: 0.8 });
+    return mat;
+  }, []);
 
-    posAttr.needsUpdate = true;
-    // tier 切换：仅改变可见粒子数，buffer 不重建
+  useFrame(({ clock }) => {
+    if (!pointsRef.current) return;
+    updateGPUParticleUniforms(pointsRef.current.material as THREE.PointsMaterial, clock.getElapsedTime());
     pointsRef.current.geometry.setDrawRange(0, count);
   });
 
-  return (
-    <points ref={pointsRef}>
-      <bufferGeometry>
-        <bufferAttribute
-          attach="attributes-position"
-          args={[positions, 3]}
-          count={MAX_STARDUST}
-        />
-        <bufferAttribute
-          attach="attributes-color"
-          args={[colors, 3]}
-          count={MAX_STARDUST}
-        />
-      </bufferGeometry>
-      <pointsMaterial
-        size={0.15}
-        vertexColors
-        transparent
-        opacity={0.7}
-        blending={THREE.AdditiveBlending}
-        depthWrite={false}
-        sizeAttenuation
-      />
-    </points>
-  );
+  return <points ref={pointsRef} geometry={geometry} material={material} />;
 }
 
 // ─── 云层效果（增强版） ─────────────────────────────────

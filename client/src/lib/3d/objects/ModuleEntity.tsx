@@ -17,6 +17,11 @@ import { Float, Html } from '@react-three/drei';
 import { getModuleSubtitle } from '@/features/onboarding/firstDive/moduleSubtitles';
 import { useEffectiveTier } from '@/lib/performance/usePerformanceMode';
 import {
+  patchParticleShader,
+  updateGPUParticleUniforms,
+  addParticleAttributes,
+} from '@/lib/3d/shaders/gpuParticleShaders';
+import {
   createModuleTexture, createNormalMap, createRoughnessMap,
   createFlashcardTexture, idToSeed,
 } from './proceduralTextures';
@@ -230,9 +235,9 @@ function CoreBreath({ color, isActive, isHovered }: {
   );
 }
 
-// ─── 细节层 4：轨道粒子环（动态旋转） ────────────────
+// ─── 细节层 4：轨道粒子环（GPU 着色器版） ────────────
 // 使用固定最大 buffer（MAX_COUNT=40）+ drawRange 控制可见粒子数，
-// 彻底避免 buffer resize 导致的 WebGL 错误
+// 顶点着色器计算旋转位置，消除 CPU 循环 + buffer 上传
 const MAX_ORBITAL = 40;
 
 function OrbitalRing({ isActive, isHovered, color }: {
@@ -240,9 +245,8 @@ function OrbitalRing({ isActive, isHovered, color }: {
 }) {
   const pointsRef = useRef<THREE.Points>(null);
   const visibleCount = isActive ? 40 : isHovered ? 20 : 0;
-  const angleRef = useRef(0);
 
-  // 固定分配最大 buffer，避免 resize
+  // 固定分配最大 buffer
   const { positions, colors } = useMemo(() => {
     const pos = new Float32Array(MAX_ORBITAL * 3);
     const col = new Float32Array(MAX_ORBITAL * 3);
@@ -262,40 +266,37 @@ function OrbitalRing({ isActive, isHovered, color }: {
     return { positions: pos, colors: col };
   }, [color]);
 
-  useFrame((_, delta) => {
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    // velocity: x=旋转速度倍率
+    addParticleAttributes(geo, MAX_ORBITAL, (i) => [
+      isActive ? 1.5 : 0.6,
+      0, 0,
+    ]);
+    return geo;
+  }, [positions, colors, isActive]);
+
+  const material = useMemo(() => {
+    const mat = new THREE.PointsMaterial({
+      vertexColors: true, size: 0.05, transparent: true,
+      opacity: isActive ? 0.9 : 0.5, blending: THREE.AdditiveBlending,
+      depthWrite: false, sizeAttenuation: true,
+    });
+    patchParticleShader(mat, { motion: 'ring', speed: 0.8 });
+    return mat;
+  }, [isActive]);
+
+  useFrame(({ clock }) => {
     if (!pointsRef.current) return;
-    // drawRange 控制可见粒子数（buffer 大小固定不变）
+    updateGPUParticleUniforms(pointsRef.current.material as THREE.PointsMaterial, clock.getElapsedTime());
     pointsRef.current.geometry.setDrawRange(0, visibleCount);
-    if (visibleCount === 0) return;
-    angleRef.current += Math.min(delta, 0.1) * (isActive ? 1.5 : 0.6);
-    const posAttr = pointsRef.current.geometry.attributes.position as THREE.BufferAttribute;
-    const pos = posAttr.array as Float32Array;
-    for (let i = 0; i < visibleCount; i++) {
-      const a = (i / visibleCount) * Math.PI * 2 + angleRef.current;
-      const radius = 1.4 + (Math.sin(i * 0.5) * 0.08 + 0.08);
-      const tilt = (Math.sin(i * 0.3) * 0.3);
-      pos[i * 3] = Math.cos(a) * radius;
-      pos[i * 3 + 1] = Math.sin(a * 0.7) * 0.3 + tilt;
-      pos[i * 3 + 2] = Math.sin(a) * radius;
-    }
-    posAttr.needsUpdate = true;
   });
 
   if (visibleCount === 0) return null;
 
-  return (
-    <points ref={pointsRef}>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} count={MAX_ORBITAL} />
-        <bufferAttribute attach="attributes-color" args={[colors, 3]} count={MAX_ORBITAL} />
-      </bufferGeometry>
-      <pointsMaterial
-        vertexColors size={0.05} transparent
-        opacity={isActive ? 0.9 : 0.5} blending={THREE.AdditiveBlending}
-        depthWrite={false} sizeAttenuation
-      />
-    </points>
-  );
+  return <points ref={pointsRef} geometry={geometry} material={material} />;
 }
 
 // ─── 细节层 5：地面辉光圆环 ──────────────────────────
