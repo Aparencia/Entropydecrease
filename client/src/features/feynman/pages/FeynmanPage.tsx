@@ -13,7 +13,6 @@ import type { ContextMenuGroup } from '@/components/ui';
 import { Plus, BookOpen, Trash2, MessageCircle, Lightbulb, SearchCheck, Network, Swords, Brain, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useFeynmanStore } from '../store/useFeynmanStore';
-import { useShallow } from 'zustand/react/shallow';
 import { useContextMenu } from '@/lib/contextMenu';
 import { useToast } from '@/components/ui';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
@@ -41,7 +40,17 @@ const listVariants = {
 
 export default function FeynmanPage() {
   const navigate = useNavigate();
-  const { notes, weakPoints, isLoading, loadNotes, loadWeakPointsForNotes, createNote, deleteNote, getStats, toggleWeakPointMastered } = useFeynmanStore(useShallow(s => s));
+  // P1-5 细粒度订阅：整 store 订阅会在任意笔记/薄弱点变化时重渲染整页
+  const notes = useFeynmanStore((s) => s.notes);
+  const weakPoints = useFeynmanStore((s) => s.weakPoints);
+  const isLoading = useFeynmanStore((s) => s.isLoading);
+  // 动作（稳定引用）
+  const loadNotes = useFeynmanStore((s) => s.loadNotes);
+  const loadWeakPointsForNotes = useFeynmanStore((s) => s.loadWeakPointsForNotes);
+  const createNote = useFeynmanStore((s) => s.createNote);
+  const deleteNote = useFeynmanStore((s) => s.deleteNote);
+  const getStats = useFeynmanStore((s) => s.getStats);
+  const toggleWeakPointMastered = useFeynmanStore((s) => s.toggleWeakPointMastered);
   const { toast } = useToast();
 
   const {

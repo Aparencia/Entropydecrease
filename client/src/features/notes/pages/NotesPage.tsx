@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils';
 import { copyText } from '@/lib/utils/clipboard';
 import { useNavigate } from 'react-router-dom';
 import { useNoteStore } from '../store/useNoteStore';
-import { useShallow } from 'zustand/react/shallow';
+import { noteStore } from '@/lib/storage';
 import { useBatchSelection } from '@/hooks/useBatchSelection';
 import { useContextMenu } from '@/lib/contextMenu';
 import type { Note, NoteFolder } from '@/types/models';
@@ -150,12 +150,35 @@ export default function NotesPage() {
   const [origamiMode, setOrigamiMode] = useState(false);
   const navigate = useNavigate();
 
-  const {
-    notes, folders, selectedFolderId, selectedNoteId, searchQuery, selectedTags, selectedTemplate,
-    loadNotes, loadFolders, createNote, createFolder, updateFolder, selectNote, selectFolder,
-    setSearchQuery, getFilteredNotes, createFromTemplate, toggleTag, toggleTemplate, clearTagFilter, getAllTags,
-    deleteNote, deleteNotesBatch, deleteFolder, deleteFolderWithNotes, togglePin, setExpiry,
-  } = useNoteStore(useShallow(s => s));
+  // P1-5 细粒度订阅：整 store 订阅会在任何笔记保存/创建时重建数组并重渲染整页
+  const notes = useNoteStore((s) => s.notes);
+  const folders = useNoteStore((s) => s.folders);
+  const selectedFolderId = useNoteStore((s) => s.selectedFolderId);
+  const selectedNoteId = useNoteStore((s) => s.selectedNoteId);
+  const searchQuery = useNoteStore((s) => s.searchQuery);
+  const selectedTags = useNoteStore((s) => s.selectedTags);
+  const selectedTemplate = useNoteStore((s) => s.selectedTemplate);
+  // 动作（稳定引用）
+  const loadNotes = useNoteStore((s) => s.loadNotes);
+  const loadFolders = useNoteStore((s) => s.loadFolders);
+  const createNote = useNoteStore((s) => s.createNote);
+  const createFolder = useNoteStore((s) => s.createFolder);
+  const updateFolder = useNoteStore((s) => s.updateFolder);
+  const selectNote = useNoteStore((s) => s.selectNote);
+  const selectFolder = useNoteStore((s) => s.selectFolder);
+  const setSearchQuery = useNoteStore((s) => s.setSearchQuery);
+  const getFilteredNotes = useNoteStore((s) => s.getFilteredNotes);
+  const createFromTemplate = useNoteStore((s) => s.createFromTemplate);
+  const toggleTag = useNoteStore((s) => s.toggleTag);
+  const toggleTemplate = useNoteStore((s) => s.toggleTemplate);
+  const clearTagFilter = useNoteStore((s) => s.clearTagFilter);
+  const getAllTags = useNoteStore((s) => s.getAllTags);
+  const deleteNote = useNoteStore((s) => s.deleteNote);
+  const deleteNotesBatch = useNoteStore((s) => s.deleteNotesBatch);
+  const deleteFolder = useNoteStore((s) => s.deleteFolder);
+  const deleteFolderWithNotes = useNoteStore((s) => s.deleteFolderWithNotes);
+  const togglePin = useNoteStore((s) => s.togglePin);
+  const setExpiry = useNoteStore((s) => s.setExpiry);
 
   const { toast } = useToast();
   const { summarize } = useAISummarize();
@@ -281,13 +304,17 @@ export default function NotesPage() {
       setDeleteFolderWithNotesChecked(false);
     }
   }, [deleteFolderTarget, deleteFolder, deleteFolderWithNotes, deleteFolderWithNotesChecked, folderTreeNoteCount, toast]);
+  // P1-1：投影无 content 全文，复制前惰性取回（复制为显式操作，成本可接受）
   const handleDuplicateNote = useCallback(async (note: Note) => {
-    await createNote({ title: note.title + ' (副本)', content: note.content, folderId: note.folderId, tags: note.tags, template: note.template });
+    const full = (await noteStore.getById(note.id))?.content ?? '';
+    await createNote({ title: note.title + ' (副本)', content: full, folderId: note.folderId, tags: note.tags, template: note.template });
     toast({ type: 'success', message: '笔记已复制' });
   }, [createNote, toast]);
-  const handleExportNote = useCallback((note: Note) => {
+  // P1-1：投影无 content 全文，导出前惰性取回
+  const handleExportNote = useCallback(async (note: Note) => {
     // 使用 noteToMarkdown 将 TipTap JSON 转为 Markdown（保留标题层级、列表、代码块等格式）
-    const md = noteToMarkdown(note.content);
+    const full = (await noteStore.getById(note.id))?.content ?? '';
+    const md = noteToMarkdown(full);
     const text = `# ${note.title}\n\n${md}`;
     const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
     const a = document.createElement('a'); a.href = url; a.download = `${note.title || 'note'}-${Date.now()}.md`; a.click();
@@ -378,7 +405,9 @@ export default function NotesPage() {
               break;
             }
       case 'ai-summary': {
-        const text = extractNoteText(noteCtx.content);
+        // P1-1：预览仅 300 字符，AI 摘要需全文（显式操作，惰性取回）
+        const full = (await noteStore.getById(noteCtx.id!))?.content ?? '';
+        const text = extractNoteText(full);
         if (text.length < 10) { toast({ type: 'warning', message: '笔记内容太少，无法生成摘要' }); break; }
         toast({ type: 'info', message: 'AI 正在生成摘要...' });
         try {
@@ -389,7 +418,9 @@ export default function NotesPage() {
         break;
       }
       case 'ai-flashcard': {
-        const text = extractNoteText(noteCtx.content);
+        // P1-1：预览仅 300 字符，AI 闪卡需全文（显式操作，惰性取回）
+        const full = (await noteStore.getById(noteCtx.id!))?.content ?? '';
+        const text = extractNoteText(full);
         if (text.length < 20) { toast({ type: 'warning', message: '笔记内容太少，无法生成闪卡' }); break; }
         toast({ type: 'info', message: 'AI 闪卡生成中...' });
         try {

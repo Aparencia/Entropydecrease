@@ -16,7 +16,6 @@ import { BookOpen, Plus, Pencil, Trash2, PauseCircle, RotateCcw, Layers } from '
 import { cn } from '@/lib/utils';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useFlashcardStore } from '../store/useFlashcardStore';
-import { useShallow } from 'zustand/react/shallow';
 import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
 import { useBatchSelection } from '@/hooks/useBatchSelection';
 import type { Flashcard } from '@/types/models';
@@ -48,10 +47,18 @@ export default function DeckDetailPage() {
   const { deckId } = useParams<{ deckId: string }>();
   const navigate = useNavigate();
 
-  const {
-    decks, cards, isLoading,
-    loadCards, selectDeck, loadDecks, createCard, updateCard, deleteCard, getDeckStats,
-  } = useFlashcardStore(useShallow(s => s));
+  // P1-5 细粒度订阅：整 store 订阅会在任意牌组/卡片变化时重渲染整页
+  const decks = useFlashcardStore((s) => s.decks);
+  const cards = useFlashcardStore((s) => s.cards);
+  const isLoading = useFlashcardStore((s) => s.isLoading);
+  // 动作（稳定引用）
+  const loadCards = useFlashcardStore((s) => s.loadCards);
+  const selectDeck = useFlashcardStore((s) => s.selectDeck);
+  const loadDecks = useFlashcardStore((s) => s.loadDecks);
+  const createCard = useFlashcardStore((s) => s.createCard);
+  const updateCard = useFlashcardStore((s) => s.updateCard);
+  const deleteCard = useFlashcardStore((s) => s.deleteCard);
+  const getDeckStats = useFlashcardStore((s) => s.getDeckStats);
 
   const deck = decks.find((d) => d.id === deckId);
   const { toast } = useToast();

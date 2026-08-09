@@ -33,7 +33,8 @@ const TEMPLATE_COLORS: Record<string, string> = {
 /** 分配笔记到深度区 */
 function assignDepth(note: Note): DepthZone {
   const age = (Date.now() - new Date(note.updatedAt).getTime()) / 86400000;
-  if (note.title === '无标题' && !note.content) return 'surface';
+  // P1-1：投影后无 content，空内容判定改用已维护的 wordCount
+  if (note.title === '无标题' && !(note.wordCount ?? 0)) return 'surface';
   if (age < 1) return 'surface';
   if (age < 7) return 'shallow';
   if (note.template === 'mindmap' || note.template === 'cornell') return 'deep';
@@ -62,7 +63,8 @@ export function ConstellationView({ notes, onNoteClick }: ConstellationViewProps
 
       for (let i = 0; i < zoneNotes.length; i++) {
         const note = zoneNotes[i];
-        const textLen = (note.content || '').length;
+        // P1-1：投影后无 content，用已维护的 wordCount 近似篇幅（原语义）
+        const textLen = note.wordCount ?? 0;
         const size = Math.max(6, Math.min(20, textLen / 50));
         const x = (i + 0.5) / Math.max(zoneNotes.length, 1) * viewW;
         const y = yBase + (Math.random() - 0.5) * zoneHeight * 0.5;

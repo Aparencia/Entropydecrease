@@ -42,6 +42,9 @@ const INCREMENTAL_BATCH_SIZE = 5;
 const MAX_LIVE_TRANSCRIPTS = 200;
 /** 时间线条目上限（FIFO，防止长课堂无界增长） */
 const MAX_TIMELINE_ENTRIES = 500;
+/** P0-6 仍持 audioBase64 的转写失败段上限（FIFO）：单段 ~1.2MB，
+ * ASR 持续失败时长课堂也须有界（30 × 1.2MB ≈ 36MB 峰值） */
+const MAX_FAILED_AUDIO_SEGMENTS = 30;
 
 export interface LiveTranscript {
   id: string;
@@ -279,6 +282,22 @@ export function useClassroomEvents({
               if (asr.markFailure()) {
                 onNotify('error', 'ASR 服务连续失败，语音转写可能不可用，请检查网络或 AI 网关');
               }
+              // P0-6 失败段内存护栏：转写失败的段保留 audioBase64 供回退补转写，
+              // 但长课堂 ASR 持续失败时无界累积——超上限释放最旧失败段（仅剥离
+              // base64 字段，保留段结构供全量分析消费 audioText 占位）
+              setSmartBundle((prev) => {
+                const segs = prev.audioSegments ?? [];
+                const failedIdx: number[] = [];
+                for (let i = 0; i < segs.length; i++) {
+                  if (segs[i].audioBase64) failedIdx.push(i);
+                }
+                if (failedIdx.length <= MAX_FAILED_AUDIO_SEGMENTS) return prev;
+                const drop = new Set(failedIdx.slice(0, failedIdx.length - MAX_FAILED_AUDIO_SEGMENTS));
+                return {
+                  ...prev,
+                  audioSegments: segs.map((s, i) => (drop.has(i) ? { ...s, audioBase64: '' } : s)),
+                };
+              });
             })
             .finally(() => asr.release());
         });

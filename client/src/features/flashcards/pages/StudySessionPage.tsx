@@ -186,16 +186,16 @@ export default function StudySessionPage() {
   const correctRate = completedCount > 0 ? Math.round((correctCount / completedCount) * 100) : 0;
   const progress = total > 0 ? Math.round((completedCount / total) * 100) : 0;
 
-  const intervals = current
-    ? calculateIntervals({
-        easeFactor: current.easeFactor,
-        interval: current.interval,
-        repetitions: current.repetitions,
-      })
-    : null;
-  const intervalValues = intervals
-    ? [intervals.again, intervals.hard, intervals.good, intervals.easy]
-    : [1, 1, 1, 1];
+  // P0-5：calculateIntervals 每次渲染执行 4 次 sm2 计算，memo 化到当前卡变化
+  const intervalValues = useMemo(() => {
+    if (!current) return [1, 1, 1, 1];
+    const intervals = calculateIntervals({
+      easeFactor: current.easeFactor,
+      interval: current.interval,
+      repetitions: current.repetitions,
+    });
+    return [intervals.again, intervals.hard, intervals.good, intervals.easy];
+  }, [current]);
 
   const handleRestart = () => {
     setShowSummary(false);

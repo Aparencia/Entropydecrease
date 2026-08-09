@@ -64,10 +64,12 @@ export function useClassroomAnalysis({
         sessionId: captureSessionIdRef?.current ?? undefined,
       });
       setAnalysisResult(withOralCleanup(result));
-      // 全量分析完成，释放所有 keyframe imageBase64 内存
+      // 全量分析完成，释放所有 keyframe imageBase64 内存；
+      // P0-6：转写失败段的 audioBase64（回退补转写窗口已过）一并剥离
       setSmartBundle((prev) => ({
         ...prev,
         keyframes: (prev.keyframes ?? []).map((kf) => ({ ...kf, imageBase64: '' })),
+        audioSegments: (prev.audioSegments ?? []).map((s) => (s.audioBase64 ? { ...s, audioBase64: '' } : s)),
       }));
     } catch (err) {
       setAnalysisError(classifyAnalysisError(err));
@@ -126,6 +128,12 @@ export function useClassroomAnalysis({
       });
     } finally {
       setIsAnalyzing(false);
+      // P0-6 会话结束释放：合并/本地拼接完成后失败段 audioBase64 不再需要
+      // （回退补转写窗口已过），统一剥离防长课堂无界累积
+      setSmartBundle((prev) => ({
+        ...prev,
+        audioSegments: (prev.audioSegments ?? []).map((s) => (s.audioBase64 ? { ...s, audioBase64: '' } : s)),
+      }));
     }
   }, [language, onWarn, captureSessionIdRef]);
 

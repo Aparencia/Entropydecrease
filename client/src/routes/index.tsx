@@ -9,17 +9,25 @@ import { AuthGuard } from '@/lib/auth/AuthGuard';
 import { prefetchRoute } from '@/utils/scheduler';
 
 // 在应用启动后空闲期预加载核心模块
+// P1-6 prefetch 错峰：7 个高频页面 chunk 每 300ms 拉取一个（而非一次性突发），
+// 避免启动 2s 后的网络/磁盘峰值影响首次交互帧
 if (typeof window !== 'undefined') {
+  const HIGH_FREQUENCY_PAGES = [
+    () => import('@/features/dashboard/pages/DashboardPage'),
+    () => import('@/features/notes/pages/NoteEditPage'),
+    () => import('@/features/pomodoro/pages/PomodoroPage'),
+    // 修复：增加高频页面预加载，减少模块切换时的加载等待与视觉跳变
+    () => import('@/features/notes/pages/NotesPage'),
+    () => import('@/features/flashcards/pages/FlashcardsPage'),
+    () => import('@/features/feynman/pages/FeynmanPage'),
+    () => import('@/pages/SettingsPage'),
+  ];
+  const PREFETCH_STAGGER_MS = 300;
   window.addEventListener('load', () => {
     setTimeout(() => {
-      prefetchRoute(() => import('@/features/dashboard/pages/DashboardPage'));
-      prefetchRoute(() => import('@/features/notes/pages/NoteEditPage'));
-      prefetchRoute(() => import('@/features/pomodoro/pages/PomodoroPage'));
-      // 修复：增加高频页面预加载，减少模块切换时的加载等待与视觉跳变
-      prefetchRoute(() => import('@/features/notes/pages/NotesPage'));
-      prefetchRoute(() => import('@/features/flashcards/pages/FlashcardsPage'));
-      prefetchRoute(() => import('@/features/feynman/pages/FeynmanPage'));
-      prefetchRoute(() => import('@/pages/SettingsPage'));
+      HIGH_FREQUENCY_PAGES.forEach((loader, i) => {
+        setTimeout(() => prefetchRoute(loader), i * PREFETCH_STAGGER_MS);
+      });
     }, 2000); // 启动2秒后开始预加载
   });
 }

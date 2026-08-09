@@ -9,7 +9,6 @@ import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu'
 import { Plus, Layers, Clock, Trash2, Layers3, Upload, BookOpen, Pencil, Share2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useFlashcardStore } from '../store/useFlashcardStore';
-import { useShallow } from 'zustand/react/shallow';
 import { flashcardStore } from '@/lib/storage';
 import { importDeck, importDeckNew, importDeckOverwrite, importDeckSkip, importDeckMerge, exportDeck, downloadDeckFile } from '@/lib/storage/exportImport';
 import ImportPreviewModal from '../components/ImportPreviewModal';
@@ -110,7 +109,14 @@ const emptyVariants = {
 
 export default function FlashcardsPage() {
   const navigate = useNavigate();
-  const { decks, isLoading, loadDecks, createDeck, renameDeck, deleteDeck } = useFlashcardStore(useShallow(s => s));
+  // P1-5 细粒度订阅：整 store 订阅会在任意牌组/卡片变化时重渲染整页
+  const decks = useFlashcardStore((s) => s.decks);
+  const isLoading = useFlashcardStore((s) => s.isLoading);
+  // 动作（稳定引用）
+  const loadDecks = useFlashcardStore((s) => s.loadDecks);
+  const createDeck = useFlashcardStore((s) => s.createDeck);
+  const renameDeck = useFlashcardStore((s) => s.renameDeck);
+  const deleteDeck = useFlashcardStore((s) => s.deleteDeck);
 
   const [allCards, setAllCards] = useState<Flashcard[]>([]);
   const [modalOpen, setModalOpen] = useState(false);

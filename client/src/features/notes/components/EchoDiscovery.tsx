@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Link2, Sparkles, ThumbsUp, ThumbsDown, RefreshCw } from 'lucide-react';
 import { useNoteStore } from '../store/useNoteStore';
 import { recomputeLinks } from '../lib/links/noteLinkStore';
+import { noteStore } from '@/lib/storage';
 
 interface EchoSuggestion {
   id: string;
@@ -45,7 +46,8 @@ export function EchoDiscovery({ isOpen, onClose }: EchoDiscoveryProps) {
     // 使用 setTimeout 避免阻塞 UI
     setTimeout(() => {
       const results: EchoSuggestion[] = [];
-      const noteList = notes.filter((n) => n.content && n.content.length > 50);
+      // P1-1：投影无 content 全文，按 wordCount 预筛候选（原 content.length > 50 语义）
+      const noteList = notes.filter((n) => (n.wordCount ?? 0) > 50);
 
       for (let i = 0; i < noteList.length; i++) {
         for (let j = i + 1; j < noteList.length; j++) {
@@ -103,11 +105,15 @@ export function EchoDiscovery({ isOpen, onClose }: EchoDiscoveryProps) {
   }, [isOpen, scan]);
 
   // 确认关联：建立链接
+  // P1-1：投影无 content，建立链接前惰性取回全文
   const handleConfirm = useCallback(async (suggestion: EchoSuggestion) => {
     try {
       const fromNote = notes.find((n) => n.id === suggestion.fromId);
-      if (fromNote?.content) {
-        await recomputeLinks(suggestion.fromId, fromNote.content);
+      if (fromNote) {
+        const full = await noteStore.getById(fromNote.id);
+        if (full?.content) {
+          await recomputeLinks(suggestion.fromId, full.content);
+        }
       }
       setProcessed((prev) => new Set(prev).add(suggestion.id));
       setSuggestions((prev) => prev.filter((s) => s.id !== suggestion.id));

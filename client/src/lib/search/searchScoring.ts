@@ -41,6 +41,9 @@ export function extractPlainText(content: string): string {
       const extract = (nodes: Array<Record<string, unknown>>): string => {
         const parts: string[] = [];
         for (const node of nodes) {
+          // P0-4：跳过图片节点——其 src 内嵌 base64 不应进入纯文本/搜索索引，
+          // 也避免未来 image 带 caption 子树时被误提取
+          if (node.type === 'image') continue;
           if (node.type === 'text' && typeof node.text === 'string') {
             parts.push(node.text);
           }

@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { noteStore, noteFolderStore } from '@/lib/storage';
+import { db } from '@/lib/storage/database';
+import { cryptoManager } from '@/lib/crypto';
 import { createWithLog, updateWithLog, deleteWithLog } from '@/lib/storage/writeWithLog';
 import { dexieSearchIndexer } from '@/lib/search/dexieSearchIndexer';
 import type { SearchResultItem } from '@/lib/search/types';
@@ -87,6 +89,44 @@ interface NoteState {
 
   // 计算属性
   getFilteredNotes: () => Note[];
+}
+
+/** P0-4 搜索索引防抖窗口（ms）：连续自动保存只更新一次索引，避免每秒全文分词 */
+const SEARCH_INDEX_DEBOUNCE_MS = 5000;
+/** 按笔记 id 挂起的索引更新定时器（updateNote 防抖用） */
+const pendingSearchIndexUpdates = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * P1-1 笔记列表投影查询：content 解密后仅保留截断预览（剥离内嵌 base64 图片串）。
+ * 数百篇图片笔记下内存峰值从数百 MB 降至 KB 级；
+ * 全文按需走 noteStore.getById（解密路径）。
+ */
+/** 列表预览保留长度（字符）：卡片摘要/详情预览足够 */
+const PREVIEW_CHARS = 300;
+/** 内嵌 base64 图片串（预览/纯文本提取不需要图片数据） */
+const BASE64_IMAGE_RE = /data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g;
+
+async function getAllNoteMeta(): Promise<Note[]> {
+  const items = await db.notes.toArray();
+  const metas: Note[] = [];
+  for (const item of items) {
+    const note = item as Note;
+    // content 为密文（SENSITIVE_FIELDS.notes）或明文（加密未初始化/旧数据）：
+    // decryptField 优雅降级返回原文；解密后立即剥离 base64 并截断，全文不常驻
+    let preview = '';
+    if (note.content) {
+      try {
+        // 统一纯文本提取（TipTap/导图；图片节点由 P0-4 跳过），
+        // 双保险再剥离残留 base64 串，截断为卡片预览长度
+        const raw = await cryptoManager.decryptField(note.content);
+        preview = noteContentToPlainText(raw).replace(BASE64_IMAGE_RE, ' [图片] ').slice(0, PREVIEW_CHARS);
+      } catch {
+        preview = '';
+      }
+    }
+    metas.push({ ...note, content: preview });
+  }
+  return metas;
 }
 
 const sortNotes = (notes: Note[]): Note[] => {
@@ -179,7 +219,8 @@ export const useNoteStore = create<NoteState>((set, get) => {
     loadNotes: async () => {
       set({ isLoading: true });
       try {
-        const notes = await noteStore.getAll();
+        // P1-1：投影查询（不含 content 全文），内存与加载耗时双降
+        const notes = await getAllNoteMeta();
         set({ notes: sortNotes(notes), isLoading: false });
       } catch {
         set({ isLoading: false });
@@ -223,25 +264,33 @@ export const useNoteStore = create<NoteState>((set, get) => {
       // 局部更新内存数组并重排（updatedAt 变化需重排），避免全量 loadNotes：
       // 原实现每次自动保存都从 IndexedDB 全量重载所有笔记 + 触发全页重渲染，
       // 笔记上百后打字明显卡顿（P0 性能修复）。
-      const existing = get().notes.find((n) => n.id === id);
-      const merged = existing ? { ...existing, ...updateData } : null;
       set((s) => ({
         notes: sortNotes(s.notes.map((n) => (n.id === id ? { ...n, ...updateData } : n))),
       }));
-      // v0.9.0: 自动更新搜索索引（用内存合并结果，省去额外 getById 往返）
-      try {
-        if (merged) {
-          const ts = updateData.updatedAt instanceof Date
-            ? updateData.updatedAt.getTime()
-            : new Date(updateData.updatedAt as unknown as string).getTime();
-          await dexieSearchIndexer.upsert(id, 'note', merged.title, noteContentToPlainText(merged.content ?? ''), ts);
+      // v0.9.0: 自动更新搜索索引 —— P0-4 防抖化：打字持续时每秒一次自动保存，
+      // 全文 JSON.parse + 分词（含图笔记可达数 MB）是高频成本热点；
+      // 合并为 5s 窗口一次，回调内取库中解密全文保证索引内容不陈旧
+      const pendingTimer = pendingSearchIndexUpdates.get(id);
+      if (pendingTimer) clearTimeout(pendingTimer);
+      pendingSearchIndexUpdates.set(id, setTimeout(async () => {
+        pendingSearchIndexUpdates.delete(id);
+        try {
+          // P1-1：内存对象为投影（无 content），索引需从库取解密全文
+          const full = await noteStore.getById(id);
+          if (full) {
+            const ts = full.updatedAt instanceof Date
+              ? full.updatedAt.getTime()
+              : new Date(full.updatedAt as unknown as string).getTime();
+            await dexieSearchIndexer.upsert(id, 'note', full.title, noteContentToPlainText(full.content ?? ''), ts);
+          }
+        } catch {
+          // 索引更新失败不阻塞笔记更新
         }
-      } catch {
-        // 索引更新失败不阻塞笔记更新
-      }
-      // 阶段二：内容变更时重建出链索引
-      if (changes.content !== undefined && merged) {
-        recomputeLinks(id, merged.content ?? '').catch(() => {});
+      }, SEARCH_INDEX_DEBOUNCE_MS));
+      // 阶段二：内容变更时重建出链索引（投影后内存对象无 content，
+      // 直接使用本次变更的全文，行为与改造前一致）
+      if (changes.content !== undefined) {
+        recomputeLinks(id, changes.content).catch(() => {});
       }
     },
 

@@ -10,6 +10,7 @@ import { useEffect, useCallback, useRef, useMemo, useState } from 'react';
 import { useNavigate, useParams, useBlocker } from 'react-router-dom';
 import { EditorContent } from '@tiptap/react';
 import { useNoteStore } from '../store/useNoteStore';
+import { noteStore } from '@/lib/storage';
 import { CornellLayout } from '../components/CornellLayout';
 import FreeCanvas from '../components/FreeCanvas';
 import { WikiLinkPreview } from '../components/WikiLinkPreview';
@@ -72,14 +73,31 @@ export default function NoteEditPage() {
     },
   });
 
-  // 细粒度 selector：整 store 订阅（useShallow(s => s)）会在任何字段变化时
-  // 重渲染整页，键入场景下与 healthText 叠加放大卡顿
-  const notes = useNoteStore((s) => s.notes);
+  // P0-3 优化：直接按 noteId 订阅目标笔记对象（未变更时引用稳定，Object.is 相等），
+  // 任何其他笔记 autosave 重建 notes 数组不再触发整页重渲染；
+  // 仅本笔记保存时对象重建（必要重渲染）。noteId 无效/未加载时返回 null（引用稳定）。
+  const note = useNoteStore((s) => s.notes.find((n) => n.id === noteId) || null);
+  const allNotes = useNoteStore((s) => s.notes);
   const updateNote = useNoteStore((s) => s.updateNote);
   const selectNote = useNoteStore((s) => s.selectNote);
   const loadNotes = useNoteStore((s) => s.loadNotes);
   const isLoading = useNoteStore((s) => s.isLoading);
-  const note = notes.find((n) => n.id === noteId) || null;
+
+  // P1-1 惰性全文：列表投影后 notes[] 不含 content（图片 base64 内存治理），
+  // 打开笔记时按需从库取解密全文；切换笔记时重新加载
+  const [fullContent, setFullContent] = useState<string | undefined>(note?.content);
+  useEffect(() => {
+    let cancelled = false;
+    if (!noteId) {
+      setFullContent(undefined);
+      return () => { cancelled = true; };
+    }
+    setFullContent(undefined);
+    noteStore.getById(noteId).then((n) => {
+      if (!cancelled) setFullContent(n?.content);
+    }).catch(() => { /* 读取失败保持空内容 */ });
+    return () => { cancelled = true; };
+  }, [noteId]);
 
   const titleRef = useRef<HTMLInputElement>(null);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
@@ -89,9 +107,9 @@ export default function NoteEditPage() {
   const [visionExtracting, setVisionExtracting] = useState(false);
   const { toast } = useToast();
 
-  const { editor, saveStatus, isDirty, debouncedSave, handleImageSelect } = useNoteEditor({
+  const { editor, saveStatus, isDirty, debouncedSave, flushPendingSave, handleImageSelect } = useNoteEditor({
     noteId,
-    rawContent: note?.content,
+    rawContent: fullContent,
     noteKey: note?.id,
     updateNote,
   });
@@ -202,6 +220,15 @@ export default function NoteEditPage() {
     editor.setEditable(!readingMode);
   }, [editor, readingMode]);
 
+  // 窗口失焦时 flush 未保存的编辑
+  useEffect(() => {
+    const handleBlur = () => {
+      flushPendingSave();
+    };
+    window.addEventListener('blur', handleBlur);
+    return () => window.removeEventListener('blur', handleBlur);
+  }, [flushPendingSave]);
+
   // 卸载时兜底恢复可编辑（防 StrictMode 双挂载/路由切换遗留只读态）
   useEffect(() => {
     return () => {
@@ -217,7 +244,7 @@ export default function NoteEditPage() {
   }, [infographicError, toast]);
 
   // === N6 概念冲突检测：内容稳定后自动比对新旧理解 ===
-  const { conflicts, dismiss: dismissConflicts } = useConceptConflict(noteId, healthText, notes);
+  const { conflicts, dismiss: dismissConflicts } = useConceptConflict(noteId, healthText, allNotes);
 
   const ctxMenu = useEditorContextMenu({
     editor,
@@ -281,11 +308,11 @@ export default function NoteEditPage() {
     };
   }, [editor, noteId, anchorAI]);
 
-  // 解析自由画布数据
+  // 解析自由画布数据（全文惰性加载后可得）
   const freeCanvasData = useMemo<FreeCanvasData | null>(() => {
-    if (!note?.content || note?.template !== 'free') return null;
+    if (!fullContent || note?.template !== 'free') return null;
     try {
-      const parsed = JSON.parse(note.content);
+      const parsed = JSON.parse(fullContent);
       if (parsed && parsed.blocks) return {
         blocks: parsed.blocks,
         canvasWidth: parsed.canvasWidth ?? 3000,
@@ -293,7 +320,7 @@ export default function NoteEditPage() {
       };
       return null;
     } catch { return null; }
-  }, [note?.id, note?.content, note?.template]);
+  }, [note?.id, fullContent, note?.template]);
   
   // 自由画布变更回调（稳定引用，避免每次渲染重建）
   const handleFreeCanvasChange = useCallback(
@@ -305,12 +332,12 @@ export default function NoteEditPage() {
 
   // 思维导图数据解析（模板笔记提供合法 JSON；损坏/空时回退默认导图）
   const mindmapData = useMemo<MindmapData>(() => {
-    if (note?.template === 'mindmap' && note.content) {
-      const parsed = parseMindmapData(note.content);
+    if (note?.template === 'mindmap' && fullContent) {
+      const parsed = parseMindmapData(fullContent);
       if (parsed) return parsed;
     }
     return createDefaultMindmap();
-  }, [note?.id, note?.content, note?.template]);
+  }, [note?.id, fullContent, note?.template]);
 
   // 思维导图变更回调（序列化整棵树防抖保存）
   const handleMindmapChange = useCallback(
@@ -434,9 +461,11 @@ export default function NoteEditPage() {
   }, [refreshHealthText]);
 
   // 阶段四：导出当前笔记为 Markdown（导图笔记降级为大纲）
-  const handleExportMarkdown = () => {
+  // P1-1：内存为投影，导出前从库取全文（用户显式操作，成本可接受）
+  const handleExportMarkdown = async () => {
     if (!note) return;
-    const md = noteToMarkdown(note.content);
+    const full = fullContent ?? (await noteStore.getById(note.id))?.content ?? '';
+    const md = noteToMarkdown(full);
     const rawName = (note.title || '未命名笔记').replace(/[\\/:*?"<>|]/g, '_').replace(/^\.+/, '').slice(0, 200).trim() || '未命名笔记';
     const filename = `${rawName}.md`;
     const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
@@ -606,7 +635,7 @@ export default function NoteEditPage() {
           >
             {isCornell ? (
               <CornellLayout
-                content={(() => { try { return JSON.parse(note.content || '{}'); } catch { return {}; } })()}
+                content={(() => { try { return JSON.parse(fullContent || '{}'); } catch { return {}; } })()}
                 onChange={(data) => {
                   if (noteId) debouncedSave(() => JSON.stringify(data));
                 }}
@@ -620,7 +649,7 @@ export default function NoteEditPage() {
                   </div>
                 )}
                 <div ref={editorWrapperRef}>
-                                <PredictionPrompt noteTitle={note?.title || ''} noteContent={note?.content || ''} noteId={noteId || ''} onDismiss={() => {}} />
+                                <PredictionPrompt noteTitle={note?.title || ''} noteContent={fullContent || ''} noteId={noteId || ''} onDismiss={() => {}} />
                                 <EditorContent editor={editor} />
                               </div>
                 {/* 非待办笔记模板时在底部显示统计 */}

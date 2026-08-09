@@ -8,7 +8,6 @@ import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useInspirationStore, type InspirationTags } from '../store/inspirationStore';
-import { useShallow } from 'zustand/react/shallow';
 import { useAITagContent } from '@/lib/ai/useAI';
 import { useBatchSort } from '../hooks/useBatchSort';
 import { useSortPendingReminder } from '../hooks/useSortPendingReminder';
@@ -35,7 +34,10 @@ import {
 // ─────────────────────────────────────────────────────────────
 
 export default function InspirationPage() {
-  const { items, loadAll, addItem } = useInspirationStore(useShallow(s => s));
+  // P1-5 细粒度订阅：整 store 订阅会在任意灵感变化时重渲染整页
+  const items = useInspirationStore((s) => s.items);
+  const loadAll = useInspirationStore((s) => s.loadAll);
+  const addItem = useInspirationStore((s) => s.addItem);
   const { tagContent, loading: aiLoading } = useAITagContent();
   const { toast } = useToast();
   const { progress, total, isProcessing: batchProcessing, batchSort } = useBatchSort();

@@ -197,6 +197,13 @@ export function useClassroomCapture() {
     events.setLiveTranscripts([]);
     setSelectedIds(new Set());
     setAutoAnchors([]);
+    // P0-6 内存护栏：上一轮会话的 smartBundle（关键帧/音频段/时间线，含
+    // 未释放的 base64）与增量分析缓冲必须清空，否则长会话切换无界累积；
+    // pendingKeyframesRef 等 ref 由 finalizeSmartSession 同步收割，此处双保险
+    events.setSmartBundle({});
+    events.pendingKeyframesRef.current = [];
+    events.partialNotesRef.current = [];
+    events.isPartialAnalyzingRef.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- events setter 引用稳定
   }, []);
 

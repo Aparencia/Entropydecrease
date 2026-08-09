@@ -5,6 +5,10 @@
  * @ai-context: 3D 场景对象：ModuleEntity。
  * 宪法第一条接入：glowScale 映射学习数据（掌握度=亮度），域 0.6–1.15。
  * 宪法第四条：三级性能降级嵌入（high/medium/low）。
+ * @ai-context: P1-3 InstancedMesh 审计结论——放弃实例化：各模块几何体
+ * 6 种、程序化纹理/材质参数 per-module 独立、Float 浮动与 Html 标签
+ * 必须挂独立对象，实例化收益（<20% draw call）不足以覆盖改造复杂度
+ * 与 hover/active 独立交互的表现风险。
  */
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';

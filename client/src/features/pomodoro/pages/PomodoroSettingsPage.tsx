@@ -45,7 +45,6 @@ export default function PomodoroSettingsPage() {
   const settings = usePomodoroStore((s) => s.settings);
   const presets = usePomodoroStore((s) => s.presets);
   const activePreset = usePomodoroStore((s) => s.activePreset);
-  const aiRecommendedDuration = usePomodoroStore((s) => s.aiRecommendedDuration);
   const aiReasoning = usePomodoroStore((s) => s.aiReasoning);
   // 动作（稳定引用）
   const updateSettings = usePomodoroStore((s) => s.updateSettings);
