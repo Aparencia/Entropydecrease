@@ -78,7 +78,7 @@ export function PomodoroAudioLayer() {
 
   // 阶段音轨自动切换（体验增强开关，默认关闭）：休息/专注自动换音轨
   useEffect(() => {
-    if (!autoSwitchAudioPhase || !audioPrefs.whiteNoiseEnabled) return;
+    if (!autoSwitchAudioPhase || !whiteNoiseEnabled) return;
     const wantPhase = phase === 'work' ? 'focus' : 'break';
     if (whiteNoiseTrack.phase !== 'both' && whiteNoiseTrack.phase !== wantPhase) {
       const candidates = getTracksForPhase(wantPhase).filter((t) => t.category === 'white_noise');
