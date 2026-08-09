@@ -8,35 +8,27 @@ import AppLayout from '@/components/layout/AppLayout';
 import { AuthGuard } from '@/lib/auth/AuthGuard';
 import { prefetchRoute } from '@/utils/scheduler';
 
-// 应用启动后空闲期预加载所有页面 chunk，消除页面切换时的加载等待
-// 使用 requestIdleCallback 错峰，避免影响首屏交互帧
+// 在应用启动后空闲期预加载核心模块
+// P1-6 prefetch 错峰：7 个高频页面 chunk 每 300ms 拉取一个（而非一次性突发），
+// 避免启动 2s 后的网络/磁盘峰值影响首次交互帧
 if (typeof window !== 'undefined') {
-  const ALL_PAGES = [
+  const HIGH_FREQUENCY_PAGES = [
     () => import('@/features/dashboard/pages/DashboardPage'),
     () => import('@/features/notes/pages/NoteEditPage'),
     () => import('@/features/pomodoro/pages/PomodoroPage'),
+    // 修复：增加高频页面预加载，减少模块切换时的加载等待与视觉跳变
     () => import('@/features/notes/pages/NotesPage'),
     () => import('@/features/flashcards/pages/FlashcardsPage'),
     () => import('@/features/feynman/pages/FeynmanPage'),
     () => import('@/pages/SettingsPage'),
-    () => import('@/features/dashboard/pages/AnalyticsPage'),
-    () => import('@/features/inspiration/pages/InspirationPage'),
-    () => import('@/features/classroom/pages/ClassroomPage'),
-    () => import('@/features/pomodoro/pages/PomodoroStatsPage'),
-    () => import('@/features/pomodoro/pages/PomodoroSettingsPage'),
-    () => import('@/features/notes/pages/NotesGraphPage'),
-    () => import('@/features/flashcards/pages/DeckDetailPage'),
-    () => import('@/features/flashcards/pages/StudySessionPage'),
-    () => import('@/features/flashcards/pages/GenerativeReviewPage'),
-    () => import('@/features/feynman/pages/FeynmanSessionPage'),
-    () => import('@/features/feynman/pages/FeynmanGraphPage'),
-    () => import('@/features/feynman/pages/SocraticSessionPage'),
   ];
-  const idle = window.requestIdleCallback ?? ((cb: () => void) => setTimeout(cb, 1000));
+  const PREFETCH_STAGGER_MS = 300;
   window.addEventListener('load', () => {
-    idle(() => {
-      ALL_PAGES.forEach((loader) => prefetchRoute(loader));
-    });
+    setTimeout(() => {
+      HIGH_FREQUENCY_PAGES.forEach((loader, i) => {
+        setTimeout(() => prefetchRoute(loader), i * PREFETCH_STAGGER_MS);
+      });
+    }, 2000); // 启动2秒后开始预加载
   });
 }
 

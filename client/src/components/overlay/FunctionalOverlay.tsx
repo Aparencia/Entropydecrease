@@ -6,12 +6,10 @@
  * 透明度与交互性（而非卸载），使页面状态跨 Esc/重入周期保留，避免动画重播。
  * 隐藏时设置 inert 防止焦点落入不可见页面（React 18 不支持 inert prop，直接操作 DOM）。
  *
- * 动画策略：页面切换的 opacity/transform 入场出场使用 CSS transition
- * （零 JS 开销，运行在 GPU 合成线程），手势/布局动画保留 Framer Motion。
- *
  * @ai-context: 浮层/弹窗组件：FunctionalOverlay。
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 interface FunctionalOverlayProps {
@@ -27,16 +25,6 @@ interface FunctionalOverlayProps {
 
 export function FunctionalOverlay({ children, visible, className, panelClassName, maskClassName }: FunctionalOverlayProps) {
   const rootRef = useRef<HTMLDivElement>(null);
-  // 延迟 backdrop-blur：动画期间（前 300ms）不加 blur，避免合成层与过渡动画竞争
-  const [showBlur, setShowBlur] = useState(false);
-
-  useEffect(() => {
-    if (visible) {
-      const timer = setTimeout(() => setShowBlur(true), 300);
-      return () => clearTimeout(timer);
-    }
-    setShowBlur(false);
-  }, [visible]);
 
   // 隐藏时设置 inert：阻断指针事件、焦点与辅助技术访问（React 18 无 inert prop）
   useEffect(() => {
@@ -49,59 +37,59 @@ export function FunctionalOverlay({ children, visible, className, panelClassName
     }
   }, [visible]);
 
+  // 已移除 aria-hidden：inert 属性已完整覆盖其语义（阻断辅助技术+焦点），
+  // 同时避免 aria-hidden 同步生效而 inert 异步生效导致的焦点竞态警告
   return (
-    <div
+    <motion.div
       ref={rootRef}
       className={cn(
         "fixed inset-0 z-10 flex items-center justify-center",
         "p-2 sm:p-4 md:p-8",
-        "pb-16 sm:pb-8 md:pb-8",
-        // CSS transition: opacity 300ms ease-out（合成器线程，零 JS 开销）
-        "transition-opacity duration-300 ease-out",
-        visible ? "opacity-100" : "opacity-0",
+        "pb-16 sm:pb-8 md:pb-8", // 移动端底部预留 BottomNav 空间
         className
       )}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: visible ? 1 : 0 }}
+      /* 修复：外层过渡统一为 spring 类型，与内层面板保持一致，避免 ease 与 spring 混用导致动画节奏不协调 */
+      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
       style={{ pointerEvents: visible ? 'auto' : 'none' }}
     >
-      {/* 半透明背景遮罩 — 延迟 backdrop-blur 避免动画期间合成层竞争 */}
+      {/* 半透明背景遮罩 — 隐藏时移除 backdrop-blur，避免 Electron 中 backdrop-filter 合成层遮挡下方 canvas */}
       <div className={cn(
         "absolute inset-0 bg-black/20",
-        "transition-[backdrop-filter] duration-300 ease-out",
-        showBlur && visible && "backdrop-blur-sm",
+        visible && "backdrop-blur-sm",
         maskClassName,
         visible ? "pointer-events-auto" : "pointer-events-none"
       )} />
 
-      {/* 功能面板 — CSS transition 处理 scale/y/opacity 入场出场 */}
-      <div
+      {/* 功能面板 — 隐藏时移除 backdrop-blur，避免 backdrop-filter 合成层遮挡 canvas */}
+      <motion.div
         data-work-area="module-content"
         className={cn(
           "relative z-10 w-full",
           "max-w-5xl",
-          "max-h-[calc(100vh-5rem)] sm:max-h-[85vh]",
+          "max-h-[calc(100vh-5rem)] sm:max-h-[85vh]", // 移动端适配底部导航
           "overflow-y-auto",
-          "rounded-2xl sm:rounded-[24px_12px_20px_16px]",
+          "rounded-2xl sm:rounded-[24px_12px_20px_16px]", // 移动端统一圆角
           "bg-transparent",
-          // CSS transition: 面板从 scale(0.9) + y(30px) 缩放入场
-          "transition-all duration-300 ease-out",
-          visible
-            ? "opacity-100 scale-100 translate-y-0"
-            : "opacity-0 scale-90 translate-y-[30px]",
-          // backdrop-blur 延迟 300ms 后生效，避免与入场动画竞争
-          showBlur && visible && "backdrop-blur-2xl",
+          visible && "backdrop-blur-2xl",
           "border border-white/20 dark:border-white/10",
           "shadow-[0_8px_40px_rgba(0,0,0,0.3)]",
           panelClassName,
           visible ? "pointer-events-auto" : "pointer-events-none",
           "p-3 sm:p-5 md:p-8"
         )}
+        /* 修复：提示浏览器提前创建合成层，避免动画时触发重绘/重排，提升动画流畅度 */
         style={{
           willChange: 'transform, opacity',
           background: 'linear-gradient(180deg, var(--kb-dive-top) 0%, var(--kb-dive-mid) 42%, var(--kb-dive-bot) 100%)',
         }}
+        initial={{ scale: 0.9, y: 30 }}
+        animate={visible ? { scale: 1, y: 0 } : { scale: 0.9, y: 30 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
       >
         {children}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
