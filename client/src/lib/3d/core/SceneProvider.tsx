@@ -19,6 +19,9 @@
  *   需由 LoopResumer 在相位迁移后显式唤醒，否则多次切换后画面永久冻结。
  *
  * @ai-context: 3D 场景核心（R3F）：SceneProvider。
+ *
+ * 注意：当前使用 forceWebGL=true 以同步初始化。R3F 尚不支持异步
+ * WebGPU 渲染器初始化（await renderer.init()），待上游支持后移除该选项。
  */
 import { Canvas, useThree } from '@react-three/fiber';
 import { Suspense, useEffect, useLayoutEffect, useState } from 'react';
@@ -189,6 +192,7 @@ export function SceneProvider({ children, interactive = false }: SceneProviderPr
           antialias: true,
           alpha: true,
           stencil: false,
+          forceWebGL: true,
         })}
         camera={{ fov: 60, near: 0.1, far: 1000, position: [0, 0, 10] }}
         dpr={[1, 2]}

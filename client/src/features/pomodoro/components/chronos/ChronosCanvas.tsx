@@ -10,7 +10,7 @@
  *
  * 降级策略：系统 reduced-motion / 性能 low 档 → degraded（减粒子），动画保留不静态化。
  *
- * @ai-context: Chronos 渲染容器；3D 粒子球 ChronosSphere，WebGPU 渲染后端。
+ * @ai-context: Chronos 渲染容器；3D 粒子球 ChronosSphere，WebGPU 渲染后端（forceWebGL 回退）。
  */
 import { Canvas } from '@react-three/fiber';
 import { useRef, useState, memo } from 'react';
@@ -129,7 +129,7 @@ export const ChronosCanvas = memo(function ChronosCanvas({
     >
       {/* 3D 粒子球（R3F + WebGPU；THREE.Points 高效渲染，canvas 填满容器） */}
       <Canvas
-        gl={(c) => new WebGPURenderer({ canvas: c, antialias: true, alpha: true, stencil: false })}
+        gl={(c) => new WebGPURenderer({ canvas: c, antialias: true, alpha: true, stencil: false, forceWebGL: true })}
         dpr={[1, degraded ? 1 : 1.5]}
         camera={{ fov: 50, near: 0.1, far: 20, position: [0, 0, 4.5] }}
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', background: 'transparent' }}
