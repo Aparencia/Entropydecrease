@@ -19,7 +19,12 @@ const FADE_IN_MS = 1000;
 const FADE_OUT_MS = 1500;
 
 export function PomodoroAudioLayer() {
-  const audioPrefs = useAudioPrefsStore();
+  const whiteNoiseTrackId = useAudioPrefsStore((s) => s.whiteNoiseTrackId);
+  const whiteNoiseVolume = useAudioPrefsStore((s) => s.whiteNoiseVolume);
+  const whiteNoiseEnabled = useAudioPrefsStore((s) => s.whiteNoiseEnabled);
+  const bgmTrackId = useAudioPrefsStore((s) => s.bgmTrackId);
+  const bgmVolume = useAudioPrefsStore((s) => s.bgmVolume);
+  const bgmEnabled = useAudioPrefsStore((s) => s.bgmEnabled);
   // 独立 selector：内联对象 selector 返回不稳定 snapshot，
   // 触发 useSyncExternalStore "getSnapshot should be cached" 无限循环（App 整树崩溃）
   const isRunning = usePomodoroStore((s) => s.isRunning);
@@ -27,49 +32,49 @@ export function PomodoroAudioLayer() {
   const autoSwitchAudioPhase = usePomodoroStore((s) => s.settings.autoSwitchAudioPhase ?? false);
 
   const whiteNoiseTrack = useMemo(
-    () => audioTracks.find((t) => t.id === audioPrefs.whiteNoiseTrackId) ?? audioTracks[0],
-    [audioPrefs.whiteNoiseTrackId],
+    () => audioTracks.find((t) => t.id === whiteNoiseTrackId) ?? audioTracks[0],
+    [whiteNoiseTrackId],
   );
   const whiteNoisePlayer = useAudioPlayer({
-    src: whiteNoiseTrack.src, volume: audioPrefs.whiteNoiseVolume,
+    src: whiteNoiseTrack.src, volume: whiteNoiseVolume,
     loop: true, fadeInMs: FADE_IN_MS, fadeOutMs: FADE_OUT_MS,
   });
 
   const bgmTrack = useMemo(
-    () => audioTracks.find((t) => t.id === audioPrefs.bgmTrackId) ?? audioTracks[audioTracks.length - 1],
-    [audioPrefs.bgmTrackId],
+    () => audioTracks.find((t) => t.id === bgmTrackId) ?? audioTracks[audioTracks.length - 1],
+    [bgmTrackId],
   );
   const bgmPlayer = useAudioPlayer({
-    src: bgmTrack.src, volume: audioPrefs.bgmVolume,
+    src: bgmTrack.src, volume: bgmVolume,
     loop: true, fadeInMs: FADE_IN_MS, fadeOutMs: FADE_OUT_MS,
   });
 
   // 白噪音：仅工作阶段播放（与计时状态解耦于页面生命周期）
   useEffect(() => {
-    if (isRunning && phase === 'work' && audioPrefs.whiteNoiseEnabled) {
+    if (isRunning && phase === 'work' && whiteNoiseEnabled) {
       whiteNoisePlayer.play();
     } else {
       whiteNoisePlayer.pause();
     }
-  }, [isRunning, phase, audioPrefs.whiteNoiseEnabled]); // eslint-disable-line
+  }, [isRunning, phase, whiteNoiseEnabled]); // eslint-disable-line
 
   // BGM：仅工作阶段播放
   useEffect(() => {
-    if (isRunning && phase === 'work' && audioPrefs.bgmEnabled) {
+    if (isRunning && phase === 'work' && bgmEnabled) {
       bgmPlayer.play();
     } else {
       bgmPlayer.pause();
     }
-  }, [isRunning, phase, audioPrefs.bgmEnabled]); // eslint-disable-line
+  }, [isRunning, phase, bgmEnabled]); // eslint-disable-line
 
   // 音量变化实时同步（滑杆在页面层，播放器在本层）
   useEffect(() => {
-    whiteNoisePlayer.setVolume(audioPrefs.whiteNoiseVolume);
-  }, [audioPrefs.whiteNoiseVolume, whiteNoisePlayer]);
+    whiteNoisePlayer.setVolume(whiteNoiseVolume);
+  }, [whiteNoiseVolume, whiteNoisePlayer]);
 
   useEffect(() => {
-    bgmPlayer.setVolume(audioPrefs.bgmVolume);
-  }, [audioPrefs.bgmVolume, bgmPlayer]);
+    bgmPlayer.setVolume(bgmVolume);
+  }, [bgmVolume, bgmPlayer]);
 
   // 阶段音轨自动切换（体验增强开关，默认关闭）：休息/专注自动换音轨
   useEffect(() => {

@@ -69,13 +69,14 @@ export function useDashboardData() {
 
   // ── 留存机制数据准备 ──
   const retentionEnabled = useRetentionSettings((s) => s.enabled);
-  const coralData = useEcosystemStore();
+  const corals = useEcosystemStore((s) => s.corals);
+  const totalDepth = useEcosystemStore((s) => s.totalDepth);
 
   // 基于珊瑚种植日期构建 StreakState（StreakBubble 组件所需）
   const streakState: StreakState | null = useMemo(() => {
-    if (!retentionEnabled || coralData.corals.length === 0) return null;
+    if (!retentionEnabled || corals.length === 0) return null;
     const uniqueDays = new Set(
-      coralData.corals.map((c) => new Date(c.plantedAt).toISOString().split('T')[0]),
+      corals.map((c) => new Date(c.plantedAt).toISOString().split('T')[0]),
     );
     const sorted = [...uniqueDays].sort().reverse();
     // 连续天数 = 从最近日期向前逐日检查，遇到间隔即停止
@@ -98,7 +99,7 @@ export function useDashboardData() {
       restDayPreference: 0,
       retainedPercent: 50,
     };
-  }, [retentionEnabled, coralData.corals]);
+  }, [retentionEnabled, corals]);
 
   const notes = useNoteStore((s) => s.notes);
   const loadNotes = useNoteStore((s) => s.loadNotes);
@@ -147,11 +148,11 @@ export function useDashboardData() {
       feynmanCompleted: feynmanNotes.filter((n) => n.status === 'completed').length,
       totalReviews: flashcardReviews.length,
       longestStreak: streakDays,
-      coralCount: coralData.corals.length,
-      totalDepth: coralData.totalDepth,
+      coralCount: corals.length,
+      totalDepth: totalDepth,
     });
     return { insights, identityTags };
-  }, [analytics, feynmanNotes, flashcardReviews, streakDays, coralData]);
+  }, [analytics, feynmanNotes, flashcardReviews, streakDays, corals, totalDepth]);
 
   // 🧩 五维能力雷达图
   const radarData = analytics?.radar ?? [];
@@ -295,7 +296,7 @@ export function useDashboardData() {
     // 用户与问候
     userName, greetingText,
     // 打卡与留存
-    streakDays, todayCheckIn, checkInLoading, retentionEnabled, coralData, streakState,
+    streakDays, todayCheckIn, checkInLoading, retentionEnabled, streakState,
     // 学习数据与统计
     notes, feynmanNotes, isLoading, pomodoroSessions, allCards, flashcardReviews,
     todayPomodoroCount, noteTotal, dueFlashcardCount, feynmanInProgressCount,

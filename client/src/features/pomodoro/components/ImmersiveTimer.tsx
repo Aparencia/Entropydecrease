@@ -7,7 +7,7 @@
  * @ai-context: 3.8 心流音乐引擎 + 3.13 具身学习休息引导集成于此；
  * 底部操作区已拆至 ImmersiveControls（单文件 ≤300 行规范）。
  */
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { usePomodoroStore } from '../store/usePomodoroStore';
 import { BEAT } from '@/lib/animation/springConfig';
@@ -127,12 +127,51 @@ export default function ImmersiveTimer({
     reset();
   };
 
+  // 空格键暂停/继续（排除输入框聚焦场景）
+  // 使用 ref 持有最新值，避免 effect 每秒因 tick 变化而重建
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+  const isRunningRef = useRef(isRunning);
+  isRunningRef.current = isRunning;
+  const isPausedRef = useRef(isPaused);
+  isPausedRef.current = isPaused;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      if (phaseRef.current !== 'work') return;
+      e.preventDefault();
+      if (isRunningRef.current) pause();
+      else if (isPausedRef.current) resume();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pause, resume]);
+
   // 背景音偏好：外部传入优先（向后兼容），缺省读全局音频偏好 store
-  const storePrefs = useAudioPrefsStore();
-  const effectiveWhiteNoiseEnabled = whiteNoiseEnabled ?? storePrefs.whiteNoiseEnabled;
-  const effectiveWhiteNoiseVolume = whiteNoiseVolume ?? storePrefs.whiteNoiseVolume;
-  const effectiveToggleWhiteNoise = onToggleWhiteNoise ?? storePrefs.toggleWhiteNoise;
-  const effectiveWhiteNoiseVolumeChange = onWhiteNoiseVolume ?? storePrefs.setWhiteNoiseVolume;
+  const storeWhiteNoiseEnabled = useAudioPrefsStore((s) => s.whiteNoiseEnabled);
+  const storeWhiteNoiseVolume = useAudioPrefsStore((s) => s.whiteNoiseVolume);
+  const storeToggleWhiteNoise = useAudioPrefsStore((s) => s.toggleWhiteNoise);
+  const storeSetWhiteNoiseVolume = useAudioPrefsStore((s) => s.setWhiteNoiseVolume);
+  const effectiveWhiteNoiseEnabled = whiteNoiseEnabled ?? storeWhiteNoiseEnabled;
+  const effectiveWhiteNoiseVolume = whiteNoiseVolume ?? storeWhiteNoiseVolume;
+  const effectiveToggleWhiteNoise = onToggleWhiteNoise ?? storeToggleWhiteNoise;
+  const effectiveWhiteNoiseVolumeChange = onWhiteNoiseVolume ?? storeSetWhiteNoiseVolume;
+
+  // 时间显示 5s：阶段开头（remaining === total）触发（覆盖运行起始沿与 store 恢复运行态）。
+  // timer 存 ref：effect 依赖每秒变化的 remainingSeconds，局部变量 timer 会被每秒
+  // 重跑的 effect cleanup 清除（时间永不隐藏）
+  const [showTime, setShowTime] = useState(false);
+  const showTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (totalSeconds > 0 && remainingSeconds === totalSeconds) {
+      setShowTime(true);
+      if (showTimerRef.current) clearTimeout(showTimerRef.current);
+      showTimerRef.current = setTimeout(() => setShowTime(false), 5000);
+    }
+  }, [remainingSeconds, totalSeconds]);
+  useEffect(() => () => { if (showTimerRef.current) clearTimeout(showTimerRef.current); }, []);
 
   // 3.8 心流音乐引擎（工作阶段激活）
   const flowMusic = useFlowMusic(focusScore);
@@ -239,6 +278,7 @@ export default function ImmersiveTimer({
         mood={activePreset?.mood}
         onTap={handleChronosTap}
         onLongPress={handleChronosLongPress}
+        showTime={showTime}
         timeStr={timeStr}
       />
       {/* 状态行（沉浸深色背景专用变体）：仅 work 阶段显示（休息时由活动建议卡占据该区域） */}
@@ -246,7 +286,7 @@ export default function ImmersiveTimer({
         <ChronosStateRow
           input={{ isArmed, isRunning, isPaused, phase }}
           variant="immersive"
-          hint={isRunning ? '点击暂停 · 长按放弃' : '点击继续'}
+          hint={isRunning ? '点击调整一下 · 空格暂停 · 长按放弃' : '点击继续'}
           className="absolute bottom-32 left-0 right-0"
         />
       )}

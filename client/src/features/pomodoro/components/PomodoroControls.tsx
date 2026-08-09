@@ -58,8 +58,9 @@ export function PomodoroControls({ orbitRadius }: PomodoroControlsProps) {
   const enterImmersive = usePomodoroStore((s) => s.enterImmersive);
   // 沉睡态（未激活未运行）：沉浸入口常驻但禁用（先开始专注才能进入沉浸）
   const isAsleep = !isRunning && !isPaused && !isArmed;
-  const audioPrefs = useAudioPrefsStore();
-  const estimated = useEstimatedVolume(audioPrefs.whiteNoiseVolume, audioPrefs.deviceType);
+  const whiteNoiseVolume = useAudioPrefsStore((s) => s.whiteNoiseVolume);
+  const deviceType = useAudioPrefsStore((s) => s.deviceType);
+  const estimated = useEstimatedVolume(whiteNoiseVolume, deviceType);
   const [trackPickerOpen, setTrackPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
@@ -81,12 +82,12 @@ export function PomodoroControls({ orbitRadius }: PomodoroControlsProps) {
   return (
     <div className="pointer-events-none">
       {/* ── 白噪音卫星（弧右下）── */}
-      <div ref={pickerRef} className="pointer-events-auto absolute z-20" style={satPos(SAT.noise, orbitRadius)}>
+      <div ref={pickerRef} className="pointer-events-auto absolute z-10" style={satPos(SAT.noise, orbitRadius)}>
         <Tip text={audioPrefs.whiteNoiseEnabled ? '关闭背景音' : '开启背景音'}>
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={audioPrefs.toggleWhiteNoise}
-          className={satClass('w-9 h-9 rounded-full border border-border/30 backdrop-blur-sm bg-bg-elevated/60')}
+          className={satClass('w-9 h-9 rounded-full border border-border/30 bg-bg-elevated/60 backdrop-blur-sm text-text-tertiary hover:text-text-secondary transition-colors')}
           animate={{ opacity: trackPickerOpen ? 1 : SAT_IDLE_OPACITY }}
           whileHover={{ opacity: 1 }}
         >

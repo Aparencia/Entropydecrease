@@ -12,7 +12,20 @@ import { useAudioPrefsStore } from '@/lib/audio/audioPrefsStore';
 import { SettingRow, Toggle } from '../shared';
 
 export function SoundscapeCard() {
-  const audioPrefs = useAudioPrefsStore();
+  const whiteNoiseEnabled = useAudioPrefsStore((s) => s.whiteNoiseEnabled);
+  const whiteNoiseTrackId = useAudioPrefsStore((s) => s.whiteNoiseTrackId);
+  const whiteNoiseVolume = useAudioPrefsStore((s) => s.whiteNoiseVolume);
+  const bgmEnabled = useAudioPrefsStore((s) => s.bgmEnabled);
+  const bgmTrackId = useAudioPrefsStore((s) => s.bgmTrackId);
+  const bgmVolume = useAudioPrefsStore((s) => s.bgmVolume);
+  const deviceType = useAudioPrefsStore((s) => s.deviceType);
+  const toggleWhiteNoise = useAudioPrefsStore((s) => s.toggleWhiteNoise);
+  const setWhiteNoiseTrack = useAudioPrefsStore((s) => s.setWhiteNoiseTrack);
+  const setWhiteNoiseVolume = useAudioPrefsStore((s) => s.setWhiteNoiseVolume);
+  const toggleBgm = useAudioPrefsStore((s) => s.toggleBgm);
+  const setBgmTrack = useAudioPrefsStore((s) => s.setBgmTrack);
+  const setBgmVolume = useAudioPrefsStore((s) => s.setBgmVolume);
+  const setDeviceType = useAudioPrefsStore((s) => s.setDeviceType);
 
   return (
     <div className="rounded-kb-lg border border-border/40 bg-bg-secondary/60 p-kb-md">
@@ -24,14 +37,14 @@ export function SoundscapeCard() {
       <div className="divide-y divide-border/30">
         <SettingRow label="白噪音" description="专注阶段自动播放白噪音">
           <Toggle
-            checked={audioPrefs.whiteNoiseEnabled}
-            onChange={audioPrefs.toggleWhiteNoise}
+            checked={whiteNoiseEnabled}
+            onChange={toggleWhiteNoise}
           />
         </SettingRow>
         <SettingRow label="白噪音轨道" description="选择水下声景">
           <select
-            value={audioPrefs.whiteNoiseTrackId}
-            onChange={(e) => audioPrefs.setWhiteNoiseTrack(e.target.value)}
+            value={whiteNoiseTrackId}
+            onChange={(e) => setWhiteNoiseTrack(e.target.value)}
             className="bg-bg-tertiary border border-border/50 rounded-kb-md px-2 py-1 text-b2 text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-500/40"
           >
             {audioTracks.filter((t) => t.category === 'white_noise').map((t) => (
@@ -47,22 +60,22 @@ export function SoundscapeCard() {
               min={0}
               max={1}
               step={0.05}
-              value={audioPrefs.whiteNoiseVolume}
-              onChange={(e) => audioPrefs.setWhiteNoiseVolume(parseFloat(e.target.value))}
+              value={whiteNoiseVolume}
+              onChange={(e) => setWhiteNoiseVolume(parseFloat(e.target.value))}
               className="w-24 h-1 accent-brand-500 cursor-pointer"
             />
           </div>
         </SettingRow>
         <SettingRow label="背景音乐" description="专注阶段播放轻音乐">
           <Toggle
-            checked={audioPrefs.bgmEnabled}
-            onChange={audioPrefs.toggleBgm}
+            checked={bgmEnabled}
+            onChange={toggleBgm}
           />
         </SettingRow>
         <SettingRow label="背景音乐轨道" description="选择背景音乐">
           <select
-            value={audioPrefs.bgmTrackId}
-            onChange={(e) => audioPrefs.setBgmTrack(e.target.value)}
+            value={bgmTrackId}
+            onChange={(e) => setBgmTrack(e.target.value)}
             className="bg-bg-tertiary border border-border/50 rounded-kb-md px-2 py-1 text-b2 text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-500/40"
           >
             {audioTracks.filter((t) => t.category === 'bgm').map((t) => (
@@ -78,16 +91,16 @@ export function SoundscapeCard() {
               min={0}
               max={1}
               step={0.05}
-              value={audioPrefs.bgmVolume}
-              onChange={(e) => audioPrefs.setBgmVolume(parseFloat(e.target.value))}
+              value={bgmVolume}
+              onChange={(e) => setBgmVolume(parseFloat(e.target.value))}
               className="w-24 h-1 accent-brand-500 cursor-pointer"
             />
           </div>
         </SettingRow>
         <SettingRow label="音频输出设备" description="选择当前输出设备，音量估算更准确">
           <select
-            value={audioPrefs.deviceType}
-            onChange={(e) => audioPrefs.setDeviceType(e.target.value as AudioDeviceType)}
+            value={deviceType}
+            onChange={(e) => setDeviceType(e.target.value as AudioDeviceType)}
             className="bg-bg-tertiary border border-border/50 rounded-kb-md px-2 py-1 text-b2 text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-500/40"
           >
             {(Object.keys(DEVICE_TYPE_LABELS) as AudioDeviceType[]).map((type) => (
