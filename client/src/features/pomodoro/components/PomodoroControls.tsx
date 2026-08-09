@@ -60,6 +60,11 @@ export function PomodoroControls({ orbitRadius }: PomodoroControlsProps) {
   const isAsleep = !isRunning && !isPaused && !isArmed;
   const whiteNoiseVolume = useAudioPrefsStore((s) => s.whiteNoiseVolume);
   const deviceType = useAudioPrefsStore((s) => s.deviceType);
+  const whiteNoiseEnabled = useAudioPrefsStore((s) => s.whiteNoiseEnabled);
+  const whiteNoiseTrackId = useAudioPrefsStore((s) => s.whiteNoiseTrackId);
+  const toggleWhiteNoise = useAudioPrefsStore((s) => s.toggleWhiteNoise);
+  const setWhiteNoiseTrack = useAudioPrefsStore((s) => s.setWhiteNoiseTrack);
+  const setWhiteNoiseVolume = useAudioPrefsStore((s) => s.setWhiteNoiseVolume);
   const estimated = useEstimatedVolume(whiteNoiseVolume, deviceType);
   const [trackPickerOpen, setTrackPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -83,15 +88,15 @@ export function PomodoroControls({ orbitRadius }: PomodoroControlsProps) {
     <div className="pointer-events-none">
       {/* ── 白噪音卫星（弧右下）── */}
       <div ref={pickerRef} className="pointer-events-auto absolute z-10" style={satPos(SAT.noise, orbitRadius)}>
-        <Tip text={audioPrefs.whiteNoiseEnabled ? '关闭背景音' : '开启背景音'}>
+        <Tip text={whiteNoiseEnabled ? '关闭背景音' : '开启背景音'}>
         <motion.button
           whileTap={{ scale: 0.9 }}
-          onClick={audioPrefs.toggleWhiteNoise}
+          onClick={toggleWhiteNoise}
           className={satClass('w-9 h-9 rounded-full border border-border/30 bg-bg-elevated/60 backdrop-blur-sm text-text-tertiary hover:text-text-secondary transition-colors')}
           animate={{ opacity: trackPickerOpen ? 1 : SAT_IDLE_OPACITY }}
           whileHover={{ opacity: 1 }}
         >
-          {audioPrefs.whiteNoiseEnabled
+          {whiteNoiseEnabled
             ? <Volume2 className="w-4 h-4" strokeWidth={1.5} />
             : <VolumeX className="w-4 h-4" strokeWidth={1.5} />}
         </motion.button>
@@ -110,18 +115,18 @@ export function PomodoroControls({ orbitRadius }: PomodoroControlsProps) {
                 <button
                   key={track.id}
                   onClick={() => {
-                    audioPrefs.setWhiteNoiseTrack(track.id);
-                    if (!audioPrefs.whiteNoiseEnabled) audioPrefs.toggleWhiteNoise();
+                    setWhiteNoiseTrack(track.id);
+                    if (!whiteNoiseEnabled) toggleWhiteNoise();
                   }}
                   className={cn(
                     'w-full flex items-center gap-2 px-3 py-1.5 text-b3 transition-colors',
-                    track.id === audioPrefs.whiteNoiseTrackId
+                    track.id === whiteNoiseTrackId
                       ? 'text-brand-500 font-medium'
                       : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary',
                   )}
                 >
                   <span className="flex-1 text-left">{track.nameZh}</span>
-                  {track.id === audioPrefs.whiteNoiseTrackId && (
+                  {track.id === whiteNoiseTrackId && (
                     <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
                   )}
                 </button>
@@ -129,8 +134,8 @@ export function PomodoroControls({ orbitRadius }: PomodoroControlsProps) {
               <div className="px-3 py-2 border-t border-border/20 flex items-center gap-2">
                 <input
                   type="range" min={0} max={1} step={0.05}
-                  value={audioPrefs.whiteNoiseVolume}
-                  onChange={(e) => audioPrefs.setWhiteNoiseVolume(parseFloat(e.target.value))}
+                  value={whiteNoiseVolume}
+                  onChange={(e) => setWhiteNoiseVolume(parseFloat(e.target.value))}
                   className="w-full h-1 accent-brand-500 cursor-pointer"
                 />
                 <span className="text-[10px] text-text-tertiary/60 tabular-nums shrink-0">
