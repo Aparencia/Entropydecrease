@@ -126,8 +126,13 @@ export function ChronosSphere({ state, mood, progress, degraded = false }: Chron
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pre.staticPos]);
 
-  // 颜色缓存（避免每帧 new Color）
-  const colorCache = useRef({ r: 255, g: 255, b: 255 });
+  // 颜色与状态缓存（避免每帧 new THREE.Color 和重复计算）
+  const colorCache = useRef({
+    r: 255, g: 255, b: 255,
+    pRgb: new THREE.Color(),
+    tRgb: new THREE.Color(),
+    heatColor: new THREE.Color('#F97316'),
+  });
 
   useFrame(({ clock }, delta) => {
     if (!pointsRef.current) return;
@@ -148,19 +153,18 @@ export function ChronosSphere({ state, mood, progress, degraded = false }: Chron
       ? Math.min(1, GATHER_FLOOR + (1 - GATHER_FLOOR) * gatherProgress * 1.2)
       : morph.visibleRatio;
 
-    // 颜色更新
-    const pRgb = new THREE.Color(palette.particle);
-    const tRgb = new THREE.Color(morph.tint);
-    let tr = pRgb.r * 0.7 + tRgb.r * 0.3;
-    let tg = pRgb.g * 0.7 + tRgb.g * 0.3;
-    let tb = pRgb.b * 0.7 + tRgb.b * 0.3;
-    if (heat > 0.02) {
-      const heatColor = new THREE.Color('#F97316');
-      tr = tr + (heatColor.r - tr) * heat;
-      tg = tg + (heatColor.g - tg) * heat;
-      tb = tb + (heatColor.b - tb) * heat;
-    }
+    // 颜色更新（复用缓存 Color 对象，避免每帧 new）
     const cc = colorCache.current;
+    cc.pRgb.set(palette.particle);
+    cc.tRgb.set(morph.tint);
+    let tr = cc.pRgb.r * 0.7 + cc.tRgb.r * 0.3;
+    let tg = cc.pRgb.g * 0.7 + cc.tRgb.g * 0.3;
+    let tb = cc.pRgb.b * 0.7 + cc.tRgb.b * 0.3;
+    if (heat > 0.02) {
+      tr = tr + (cc.heatColor.r - tr) * heat;
+      tg = tg + (cc.heatColor.g - tg) * heat;
+      tb = tb + (cc.heatColor.b - tb) * heat;
+    }
     cc.r += (tr * 255 - cc.r) * k;
     cc.g += (tg * 255 - cc.g) * k;
     cc.b += (tb * 255 - cc.b) * k;
