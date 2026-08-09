@@ -45,6 +45,20 @@ export async function recordSession(
 }
 
 /**
+ * 最近一次番茄会话完成时间（ms）——Chronos 冷启动判定数据源。
+ * 无会话记录返回 null（视为冷启动：需呼吸仪式引导）。
+ */
+export async function loadLastSessionAt(): Promise<number | null> {
+  try {
+    const all = await pomodoroSessionStore.getAll();
+    if (all.length === 0) return null;
+    return all.reduce((max, s) => Math.max(max, new Date(s.completedAt).getTime()), 0);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 播放阶段完成提示音（复用全局声音工具）
  */
 export function playCompletionSound(): void {

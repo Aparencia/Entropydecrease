@@ -1,44 +1,70 @@
 /**
- * 深潜主页 — 普通视图底部控制区（白噪音条 + 主按钮组 + 沉浸入口）
+ * PomodoroControls — 深潜主页控制区（卫星化固定弧形轨道）
  *
- * @ai-context: 从 PomodoroPage 拆分（单文件 ≤300 行规范）。状态直接取自
- * store，唯一外部依赖是 onStart（打开目标设置弹窗开始新番茄）。
+ * 引力场布局：控件围绕生物下缘的固定半圆弧轨道排布，位置由固定角度槽位
+ * 三角函数静态计算（不随悬停漂移），平时低透明度（0.6）常驻可见，悬停浮现至 1。
+ *
+ * 交互收敛（主交互 = 点击时间生物）：
+ * - 主按钮已清除：开始/暂停/继续由生物点击承担（热启动直接迈步、专注态暂停/恢复）
+ * - 四颗卫星：重置 / 跳过 / 沉浸 / 白噪音（弧端小图标下拉）
+ *
+ * @ai-context: 状态取自 store；唯一外部依赖是 orbitRadius（父组件按生物尺寸传入）。
  */
-import { useMemo, useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, RotateCcw, SkipForward, Volume2, VolumeX, Focus, ChevronDown } from 'lucide-react';
+import { RotateCcw, SkipForward, Volume2, VolumeX, Focus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tip } from '@/components/ui/Tip';
-import { SPRING } from '@/lib/animation/springConfig';
 import { usePomodoroStore } from '../store/usePomodoroStore';
-import { useShallow } from 'zustand/react/shallow';
 import { useAudioPrefsStore } from '@/lib/audio/audioPrefsStore';
 import { audioTracks } from '@/lib/audio/audioConfig';
-
 import { useEstimatedVolume } from '../hooks/useEstimatedVolume';
 
 interface PomodoroControlsProps {
-  /** 开始新番茄（打开目标设置弹窗） */
-  onStart: () => void;
+  /** 卫星轨道半径（px）= 生物半径 × 1.45，父组件按生物尺寸计算 */
+  orbitRadius: number;
 }
 
-export function PomodoroControls({ onStart }: PomodoroControlsProps) {
-  const { isRunning, isPaused, pause, resume, reset, skip, enterImmersive } = usePomodoroStore(useShallow(s => s));
+/** 固定角度槽位（度）：弧顶 90° 让位给生物主交互，四卫星对称分布于两侧弧 */
+const SAT = {
+  reset: 135, skip: 45, immersive: 165, noise: 15,
+} as const;
+
+/** 卫星平时透明度（常驻可见，悬停浮现至 1） */
+const SAT_IDLE_OPACITY = 0.6;
+
+/** 角度 → 绝对定位（圆心 = 容器中心，混合 calc 保持响应式） */
+function satPos(angleDeg: number, radius: number): React.CSSProperties {
+  const rad = (angleDeg * Math.PI) / 180;
+  return {
+    left: `calc(50% + ${Math.cos(rad) * radius}px)`,
+    top: `calc(50% + ${Math.sin(rad) * radius}px)`,
+  };
+}
+
+/** 卫星槽位通用样式（固定锚定，不随悬停漂移） */
+function satClass(...classes: string[]): string {
+  return cn('absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center', ...classes);
+}
+
+export function PomodoroControls({ orbitRadius }: PomodoroControlsProps) {
+  // P0-1 细粒度订阅：整 store 订阅会在任何字段变化时重渲染卫星控制区
+  const isRunning = usePomodoroStore((s) => s.isRunning);
+  const isPaused = usePomodoroStore((s) => s.isPaused);
+  const isArmed = usePomodoroStore((s) => s.isArmed);
+  // 动作（稳定引用）
+  const reset = usePomodoroStore((s) => s.reset);
+  const skip = usePomodoroStore((s) => s.skip);
+  const enterImmersive = usePomodoroStore((s) => s.enterImmersive);
+  // 沉睡态（未激活未运行）：沉浸入口常驻但禁用（先开始专注才能进入沉浸）
+  const isAsleep = !isRunning && !isPaused && !isArmed;
   const audioPrefs = useAudioPrefsStore();
   const estimated = useEstimatedVolume(audioPrefs.whiteNoiseVolume, audioPrefs.deviceType);
   const [trackPickerOpen, setTrackPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
   // 专注阶段推荐的音轨（focus + both）
-  const focusTracks = useMemo(
-    () => audioTracks.filter(t => t.phase === 'focus' || t.phase === 'both'),
-    [],
-  );
-
-  const whiteNoiseTrack = useMemo(
-    () => focusTracks.find((t) => t.id === audioPrefs.whiteNoiseTrackId) ?? focusTracks[0],
-    [audioPrefs.whiteNoiseTrackId, focusTracks],
-  );
+  const focusTracks = audioTracks.filter(t => t.phase === 'focus' || t.phase === 'both');
 
   // 点击外部关闭下拉
   useEffect(() => {
@@ -52,179 +78,119 @@ export function PomodoroControls({ onStart }: PomodoroControlsProps) {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [trackPickerOpen]);
 
-  const handleMainButton = () => {
-    if (isRunning) pause();
-    else if (isPaused) resume();
-    else onStart();
-  };
-
-  const mainButtonIcon = isRunning ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />;
-
   return (
-    <>
-      {/* 白噪音控制 */}
-      <motion.div className="relative flex items-center gap-2 mb-[clamp(0.375rem,1.5vh,2rem)] px-4 py-2 bg-bg-elevated/40 backdrop-blur-sm rounded-full border border-border/20"
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-      >
+    <div className="pointer-events-none">
+      {/* ── 白噪音卫星（弧右下）── */}
+      <div ref={pickerRef} className="pointer-events-auto absolute z-20" style={satPos(SAT.noise, orbitRadius)}>
         <Tip text={audioPrefs.whiteNoiseEnabled ? '关闭背景音' : '开启背景音'}>
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={audioPrefs.toggleWhiteNoise}
-          className={cn(
-            'p-1.5 rounded-full transition-all duration-200 shrink-0',
-            audioPrefs.whiteNoiseEnabled ? 'text-brand-500' : 'text-text-tertiary hover:text-text-secondary',
-          )}
+          className={satClass('w-9 h-9 rounded-full border border-border/30 backdrop-blur-sm bg-bg-elevated/60')}
+          animate={{ opacity: trackPickerOpen ? 1 : SAT_IDLE_OPACITY }}
+          whileHover={{ opacity: 1 }}
         >
           {audioPrefs.whiteNoiseEnabled
             ? <Volume2 className="w-4 h-4" strokeWidth={1.5} />
             : <VolumeX className="w-4 h-4" strokeWidth={1.5} />}
         </motion.button>
         </Tip>
-        {/* 音轨选择器：点击弹出下拉菜单 */}
-        <div ref={pickerRef} className="relative">
-          <button
-            onClick={() => setTrackPickerOpen(v => !v)}
-            className="flex items-center gap-1 text-[11px] text-text-tertiary hover:text-text-primary transition-colors shrink-0"
-          >
-            {whiteNoiseTrack.nameZh}
-            <ChevronDown className="w-3 h-3" strokeWidth={1.5} />
-          </button>
-          <AnimatePresence>
-            {trackPickerOpen && (
-              <motion.div
-                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 min-w-[140px] py-1 rounded-kb-lg bg-bg-elevated border border-border/50 shadow-kb-lg backdrop-blur-xl z-50"
-                initial={{ opacity: 0, y: 6, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 6, scale: 0.95 }}
-                transition={{ duration: 0.1 }}
-              >
-                {focusTracks.map((track) => (
-                  <button
-                    key={track.id}
-                    onClick={() => {
-                      audioPrefs.setWhiteNoiseTrack(track.id);
-                      if (!audioPrefs.whiteNoiseEnabled) audioPrefs.toggleWhiteNoise();
-                      setTrackPickerOpen(false);
-                    }}
-                    className={cn(
-                      'w-full flex items-center gap-2 px-3 py-1.5 text-b3 transition-colors',
-                      track.id === audioPrefs.whiteNoiseTrackId
-                        ? 'text-brand-500 font-medium'
-                        : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary',
-                    )}
-                  >
-                    <span className="flex-1 text-left">{track.nameZh}</span>
-                    {track.id === audioPrefs.whiteNoiseTrackId && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-                    )}
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-        <span className="text-[10px] text-text-tertiary/40 select-none shrink-0">
-          {audioPrefs.whiteNoiseEnabled ? 'ON' : 'OFF'}
-        </span>
-        <div className="flex items-center gap-1">
-          <input
-            type="range" min={0} max={1} step={0.05}
-            value={audioPrefs.whiteNoiseVolume}
-            onChange={(e) => audioPrefs.setWhiteNoiseVolume(parseFloat(e.target.value))}
-            className="w-20 h-1 accent-brand-500 cursor-pointer"
-            style={{
-              background: `linear-gradient(to right,
-                transparent 0%, transparent 20%,
-                rgba(74,222,128,0.3) 20%, rgba(74,222,128,0.5) 50%,
-                transparent 50%, transparent 100%
-              )`,
-            }}
-          />
-          {/* 音量百分比 + 推荐指示 */}
-          <Tip text={
-            estimated.recommendation === 'optimal'
-              ? estimated.recommendationText
-              : `${estimated.recommendationText}
-系统音量 ${estimated.systemVolume}% · 软件 ${estimated.softwareVolume}%`
-          } side="top">
-          <div className={cn(
-            'flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] leading-none transition-all',
-            estimated.recommendation === 'optimal'
-              ? 'text-semantic-success bg-semantic-success/10'
-              : estimated.recommendation === 'too_low'
-                ? 'text-text-tertiary/50'
-                : 'text-semantic-warning bg-semantic-warning/10',
-          )}>
-            <span className="font-medium tabular-nums">~{estimated.estimatedDb}dB</span>
-            {estimated.recommendation === 'optimal' && (
-              <span className="text-[8px]">✓</span>
-            )}
-          </div>
-          </Tip>
-        </div>
-      </motion.div>
+        {/* 音轨/音量下拉面板 */}
+        <AnimatePresence>
+          {trackPickerOpen && (
+            <motion.div
+              className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 min-w-[180px] py-2 rounded-kb-lg bg-bg-elevated border border-border/50 shadow-kb-lg backdrop-blur-xl z-50"
+              initial={{ opacity: 0, y: 6, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 6, scale: 0.95 }}
+              transition={{ duration: 0.12 }}
+            >
+              {focusTracks.map((track) => (
+                <button
+                  key={track.id}
+                  onClick={() => {
+                    audioPrefs.setWhiteNoiseTrack(track.id);
+                    if (!audioPrefs.whiteNoiseEnabled) audioPrefs.toggleWhiteNoise();
+                  }}
+                  className={cn(
+                    'w-full flex items-center gap-2 px-3 py-1.5 text-b3 transition-colors',
+                    track.id === audioPrefs.whiteNoiseTrackId
+                      ? 'text-brand-500 font-medium'
+                      : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary',
+                  )}
+                >
+                  <span className="flex-1 text-left">{track.nameZh}</span>
+                  {track.id === audioPrefs.whiteNoiseTrackId && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
+                  )}
+                </button>
+              ))}
+              <div className="px-3 py-2 border-t border-border/20 flex items-center gap-2">
+                <input
+                  type="range" min={0} max={1} step={0.05}
+                  value={audioPrefs.whiteNoiseVolume}
+                  onChange={(e) => audioPrefs.setWhiteNoiseVolume(parseFloat(e.target.value))}
+                  className="w-full h-1 accent-brand-500 cursor-pointer"
+                />
+                <span className="text-[10px] text-text-tertiary/60 tabular-nums shrink-0">
+                  ~{estimated.estimatedDb}dB
+                </span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
-      {/* Controls — 居中大按钮 + 品牌色光晕 */}
-      <motion.div
-        className="flex items-center gap-4 mb-[clamp(0.25rem,1.2vh,2rem)]"
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35, ...SPRING.gentle }}
-      >
-        <Tip text="重置计时器">
+      {/* ── 重置卫星（弧左下）── */}
+      <div className="pointer-events-auto absolute z-10" style={satPos(SAT.reset, orbitRadius)}>
+        <Tip text="重置计时器（回沉睡）">
         <motion.button
           whileTap={{ scale: 0.9, rotate: -180 }}
           onClick={reset}
-          className="w-10 h-10 rounded-full border border-border/30 flex items-center justify-center text-text-tertiary hover:text-text-secondary hover:border-border/50 transition-all duration-200"
+          className={satClass('w-9 h-9 rounded-full border border-border/30 bg-bg-elevated/60 backdrop-blur-sm text-text-tertiary hover:text-text-secondary transition-colors')}
+          animate={{ opacity: SAT_IDLE_OPACITY }}
+          whileHover={{ opacity: 1 }}
         >
           <RotateCcw className="w-4 h-4" strokeWidth={1.5} />
         </motion.button>
         </Tip>
+      </div>
 
-        <motion.button
-          whileHover={{ scale: 1.05, boxShadow: '0 8px 32px color-mix(in srgb, var(--kb-brand-500) 45%, transparent)' }}
-          whileTap={{ scale: 0.97 }}
-          onClick={handleMainButton}
-          className={cn(
-            'w-16 h-16 rounded-full flex items-center justify-center',
-            'bg-brand-500 text-white',
-            'transition-shadow duration-300',
-          )}
-          style={{
-            boxShadow: '0 4px 20px color-mix(in srgb, var(--kb-brand-500) 35%, transparent), 0 0 40px color-mix(in srgb, var(--kb-brand-500) 15%, transparent)',
-          }}
-        >
-          {mainButtonIcon}
-        </motion.button>
-
+      {/* ── 跳过卫星（弧右下）── */}
+      <div className="pointer-events-auto absolute z-10" style={satPos(SAT.skip, orbitRadius)}>
         <Tip text="跳过当前阶段">
         <motion.button
           whileTap={{ scale: 0.9, x: 3 }}
           onClick={skip}
-          className="w-10 h-10 rounded-full border border-border/30 flex items-center justify-center text-text-tertiary hover:text-text-secondary hover:border-border/50 transition-all duration-200"
+          className={satClass('w-9 h-9 rounded-full border border-border/30 bg-bg-elevated/60 backdrop-blur-sm text-text-tertiary hover:text-text-secondary transition-colors')}
+          animate={{ opacity: SAT_IDLE_OPACITY }}
+          whileHover={{ opacity: 1 }}
         >
           <SkipForward className="w-4 h-4" strokeWidth={1.5} />
         </motion.button>
         </Tip>
-      </motion.div>
+      </div>
 
-      {/* 沉浸模式入口 */}
-      {(isRunning || isPaused) && (
+      {/* ── 沉浸卫星（弧更左下，常驻显示；沉睡态禁用，先开始专注才能进入沉浸）── */}
+      <div className="pointer-events-auto absolute z-10" style={satPos(SAT.immersive, orbitRadius)}>
+        <Tip text={isAsleep ? '先开始专注（点击时间生物）' : '进入专注模式'}>
         <motion.button
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.4 }}
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={enterImmersive}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-medium text-text-tertiary hover:text-text-primary hover:bg-bg-secondary/40 transition-all duration-200"
+          whileTap={isAsleep ? undefined : { scale: 0.9 }}
+          onClick={isAsleep ? undefined : enterImmersive}
+          disabled={isAsleep}
+          className={satClass(
+            'w-9 h-9 rounded-full border backdrop-blur-sm transition-colors',
+            isAsleep
+              ? 'border-border/10 bg-bg-elevated/30 text-text-tertiary/30 cursor-not-allowed'
+              : 'border-border/30 bg-bg-elevated/60 text-text-tertiary hover:text-text-primary',
+          )}
+          animate={{ opacity: SAT_IDLE_OPACITY }}
+          whileHover={isAsleep ? undefined : { opacity: 1 }}
         >
           <Focus className="w-4 h-4" strokeWidth={1.5} />
-          进入专注模式
         </motion.button>
-      )}
-    </>
+        </Tip>
+      </div>
+    </div>
   );
 }

@@ -41,6 +41,7 @@ vi.mock('../lib/presetService', () => ({
 }));
 
 import { usePomodoroStore } from './usePomodoroStore';
+import { isColdStart } from './pomodoroStoreTypes';
 import { recordSession, playCompletionSound } from './usePomodoroPersistence';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import type { PomodoroPreset } from '@/types/models';
@@ -76,10 +77,18 @@ const DEFAULT_STATE = {
   phase: 'work' as const,
   isRunning: false,
   isPaused: false,
+  isArmed: false,
+  lastActivityAt: Date.now(),
+  isStepDive: false,
+  stepCompleted: false,
+  ritualSkipped: false,
+  _breathingResumeRemaining: null as number | null,
+  _breathingResumeTotal: null as number | null,
   remainingSeconds: 25 * 60,
   totalSeconds: 25 * 60,
   endAt: null as number | null,
   completedCount: 0,
+  showCompletionOverlay: false,
   mode: 'self_study' as const,
   settings: DEFAULT_SETTINGS,
   presets: [CLASS_PRESET, STUDY_PRESET],
@@ -900,6 +909,150 @@ describe('Pomodoro Store', () => {
       const state = usePomodoroStore.getState();
       expect(state.phase).toBe('short_break');
       expect(state.completedCount).toBe(1);
+    });
+  });
+
+  // ── isArmed — Chronos 激活状态（沉睡↔呼吸）──────────────────────────────
+
+  describe('isArmed — Chronos 激活状态', () => {
+    it('awaken() 应沉睡→呼吸（isArmed=true）且启动 30s 倒计时', () => {
+      usePomodoroStore.getState().awaken();
+      const state = usePomodoroStore.getState();
+      expect(state.isArmed).toBe(true);
+      expect(state.isRunning).toBe(true);
+      expect(state.remainingSeconds).toBe(30);
+    });
+
+    it('reset() 应清除激活标记回沉睡', () => {
+      usePomodoroStore.setState({ isArmed: true });
+      usePomodoroStore.getState().reset();
+      expect(usePomodoroStore.getState().isArmed).toBe(false);
+    });
+
+    it('start() 应进入激活态', () => {
+      usePomodoroStore.getState().start();
+      expect(usePomodoroStore.getState().isArmed).toBe(true);
+    });
+
+    it('skip() 应保持激活态（仍在流中）', () => {
+      usePomodoroStore.setState({ isArmed: true, phase: 'work' });
+      usePomodoroStore.getState().skip();
+      expect(usePomodoroStore.getState().isArmed).toBe(true);
+    });
+  });
+
+  // ── startStepDive — 呼吸态 1 分钟迈步 ──────────────────────────────
+
+  describe('startStepDive — 1 分钟迈步', () => {
+    it('应启动 30 秒会话并进入激活态（保留已有 currentGoal，不做覆盖）', () => {
+      usePomodoroStore.setState({ currentGoal: '用户输入的目标' });
+      usePomodoroStore.getState().startStepDive();
+      const state = usePomodoroStore.getState();
+      expect(state.isRunning).toBe(true);
+      expect(state.remainingSeconds).toBe(30);
+      expect(state.totalSeconds).toBe(30);
+      expect(state.isArmed).toBe(true);
+      expect(state.isMiniDive).toBe(true); // 复用迷你会话记录链路
+      expect(state.currentGoal).toBe('用户输入的目标'); // 目标弹窗输入的内容不被覆盖
+    });
+
+    it('迈步完成应无缝衔接完整专注（不进入休息，按预设时长继续）', () => {
+      usePomodoroStore.setState({ phase: 'work', remainingSeconds: 1, isRunning: true, endAt: Date.now() - 1, isStepDive: true });
+      usePomodoroStore.getState().tick(); // 1 分钟迈步完成
+      const state = usePomodoroStore.getState();
+      expect(state.phase).toBe('work'); // 无缝衔接完整专注
+      expect(state.isRunning).toBe(true); // 强制自动开始
+      expect(state.remainingSeconds).toBe(25 * 60); // 预设 workDuration（自习 25min）
+      expect(state.totalSeconds).toBe(25 * 60);
+      expect(state.stepCompleted).toBe(true);
+      expect(state.isStepDive).toBe(false);
+      expect(state.showCompletionOverlay).toBe(false); // 迈步完成不弹庆祝层（不打断）
+    });
+
+    it('reset 应清除迈步状态与激活标记（回沉睡）', () => {
+      usePomodoroStore.setState({ isArmed: true, stepCompleted: true, isStepDive: true });
+      usePomodoroStore.getState().reset();
+      const state = usePomodoroStore.getState();
+      expect(state.stepCompleted).toBe(false);
+      expect(state.isStepDive).toBe(false);
+      expect(state.isArmed).toBe(false);
+    });
+  });
+
+  // ── startBreathingDive — 专注→呼吸缓解 ──────────────────────────
+
+  describe('startBreathingDive — 专注→呼吸缓解', () => {
+    it('应保存原专注剩余时间并启动 30s 呼吸态', () => {
+      usePomodoroStore.setState({ phase: 'work', remainingSeconds: 1200, totalSeconds: 1500, isRunning: true });
+      usePomodoroStore.getState().startBreathingDive();
+      const state = usePomodoroStore.getState();
+      expect(state.isRunning).toBe(true);
+      expect(state.remainingSeconds).toBe(30);
+      expect(state.totalSeconds).toBe(30);
+      expect(state.isStepDive).toBe(true);
+      expect(state._breathingResumeRemaining).toBe(1200); // 保存原剩余时间
+      expect(state._breathingResumeTotal).toBe(1500);
+    });
+
+    it('呼吸缓解完成应恢复原专注剩余时间且不增加计数', () => {
+      usePomodoroStore.setState({
+        phase: 'work', remainingSeconds: 1, totalSeconds: 30, isRunning: true,
+        endAt: Date.now() - 1, isStepDive: true, completedCount: 2,
+        _breathingResumeRemaining: 1200, _breathingResumeTotal: 1500,
+      });
+      usePomodoroStore.getState().tick(); // 呼吸缓解完成
+      const state = usePomodoroStore.getState();
+      expect(state.phase).toBe('work');
+      expect(state.remainingSeconds).toBe(1200); // 恢复原剩余
+      expect(state.totalSeconds).toBe(1500); // 恢复原总时长（progress 不重置）
+      expect(state.isRunning).toBe(true); // 自动恢复专注
+      expect(state.completedCount).toBe(2); // 不增加计数
+      expect(state._breathingResumeRemaining).toBeNull(); // 清空保存字段
+      expect(state.lastAction).toBe('breathing_resume'); // 不发 phase_complete
+      expect(state.showCompletionOverlay).toBe(false); // 不弹庆祝层
+    });
+
+    it('skipBreathingDive 在呼吸缓解中应恢复原专注', () => {
+      usePomodoroStore.setState({
+        phase: 'work', remainingSeconds: 15, totalSeconds: 30, isRunning: true,
+        isStepDive: true, _breathingResumeRemaining: 900, _breathingResumeTotal: 1500,
+      });
+      usePomodoroStore.getState().skipBreathingDive();
+      const state = usePomodoroStore.getState();
+      expect(state.remainingSeconds).toBe(900); // 恢复原剩余
+      expect(state.totalSeconds).toBe(1500);
+      expect(state.isRunning).toBe(true);
+      expect(state.isStepDive).toBe(false);
+      expect(state._breathingResumeRemaining).toBeNull();
+    });
+
+    it('skipBreathingDive 在迈步中应跳过仪式直接完整专注', () => {
+      usePomodoroStore.setState({
+        phase: 'work', remainingSeconds: 20, totalSeconds: 30, isRunning: true,
+        isStepDive: true, _breathingResumeRemaining: null, _breathingResumeTotal: null,
+      });
+      usePomodoroStore.getState().skipBreathingDive();
+      const state = usePomodoroStore.getState();
+      expect(state.remainingSeconds).toBe(25 * 60); // 直接完整专注（预设 workDuration）
+      expect(state.totalSeconds).toBe(25 * 60);
+      expect(state.isRunning).toBe(true);
+      expect(state.isStepDive).toBe(false);
+    });
+  });
+
+  // ── isColdStart — 冷启动判定（沉睡点击行为分流）────────────────────
+
+  describe('isColdStart — 冷启动判定', () => {
+    it('无活动记录视为冷启动（需呼吸仪式）', () => {
+      expect(isColdStart(null)).toBe(true);
+    });
+
+    it('距上次活动超过 24h 视为冷启动', () => {
+      expect(isColdStart(Date.now() - 25 * 60 * 60 * 1000)).toBe(true);
+    });
+
+    it('距上次活动 1 小时内为热启动（直接迈步）', () => {
+      expect(isColdStart(Date.now() - 60 * 60 * 1000)).toBe(false);
     });
   });
 

@@ -121,11 +121,36 @@ function runPhaseCompletion(
   const interval = getInterval(activePreset, settings);
   const isSilent = activePreset?.silent ?? false;
   const wasRunning = isRunning;
+  const isStepDive = get().isStepDive;
+  const { ritualSkipped } = get();
 
-  const newCount = getNextCount(phase, completedCount, interval);
-  const nextPhase = getNextPhase(phase, completedCount, interval);
-  const duration = getPhaseDuration(nextPhase, activePreset, settings);
+  // 呼吸缓解（专注→呼吸）标记：呼吸态完成后恢复专注，不计数/不落库/不播完成音效
+  const resumeRemaining = get()._breathingResumeRemaining;
+  const resumeTotal = get()._breathingResumeTotal;
+  const isBreathingResume = phase === 'work' && isStepDive && resumeRemaining != null;
+
+  // 跳过呼吸仪式后首次专注不计入番茄计数（ritualSkipped=true 时 completedCount 不增加）；
+  // 呼吸缓解恢复专注同样不增加计数（不是完成的番茄）
+  const newCount = isBreathingResume || ritualSkipped
+    ? completedCount
+    : getNextCount(phase, completedCount, interval);
+  // 仪式计数标记用完即清（首次专注完成后恢复计数）
+  const clearRitualSkipped = ritualSkipped;
+  let nextPhase = getNextPhase(phase, completedCount, interval);
+  let duration = getPhaseDuration(nextPhase, activePreset, settings);
   const isCycleComplete = phase === 'long_break';
+
+  // 1 分钟迈步完成：无缝衔接完整专注（目标已在前置弹窗填写，热身即开始，不进入休息）
+  if (phase === 'work' && isStepDive) {
+    nextPhase = 'work';
+    duration = getPhaseDuration('work', activePreset, settings);
+  }
+
+  // 呼吸缓解恢复：用保存的剩余专注时间恢复
+  if (isBreathingResume) {
+    nextPhase = 'work';
+    duration = resumeRemaining;
+  }
 
   // Determine auto-start behavior
   let shouldAutoStart = false;
@@ -138,18 +163,26 @@ function runPhaseCompletion(
   if (nextPhase !== 'work' && wasRunning) {
     shouldAutoStart = true;
   }
+  // 迈步完成无缝衔接：强制自动进入完整专注
+  if (phase === 'work' && isStepDive) {
+    shouldAutoStart = true;
+  }
 
-  // 记录完成的番茄会话
+  // 记录完成的番茄会话（呼吸缓解恢复专注不算完成，不落库）
   let actualDuration: number | null = null;
-  if (phase === 'work') {
+  if (phase === 'work' && !isBreathingResume) {
     actualDuration = finalizeWorkPhase(get);
   }
-  playPhaseFeedback(phase, isSilent, settings);
+  // 呼吸缓解完成不播放阶段完成音效（避免误报"专注完成"）；其余阶段正常反馈
+  if (!isBreathingResume) {
+    playPhaseFeedback(phase, isSilent, settings);
+  }
 
   set((s) => ({
     phase: nextPhase,
     remainingSeconds: duration,
-    totalSeconds: duration,
+    // 呼吸缓解恢复：totalSeconds 恢复为原专注总时长（progress 不重置）；其余阶段按新阶段时长
+    totalSeconds: isBreathingResume && resumeTotal != null ? resumeTotal : duration,
     completedCount: newCount,
     isRunning: shouldAutoStart,
     isPaused: !shouldAutoStart,
@@ -157,18 +190,26 @@ function runPhaseCompletion(
     endAt: shouldAutoStart ? Date.now() + duration * 1000 : null,
     // 迷你潜水仅限一个工作阶段，阶段切换即恢复常规节律
     isMiniDive: false,
+    // 1 分钟迈步完成：置 stepCompleted（迈步完成后的呼吸态点击 = 完整专注）
+    stepCompleted: phase === 'work' ? get().isStepDive : s.stepCompleted,
+    isStepDive: false,
+    // 跳过仪式标记：首次专注不计入计数，用完即清
+    ritualSkipped: clearRitualSkipped ? false : s.ritualSkipped,
     // 切换到新阶段时清空计时，下一个 start/resume 会重新设置
     sessionStartTime: null,
     totalPausedMs: 0,
     pausedAt: null,
-    // 发出 phase_complete 动作信号
-    lastAction: 'phase_complete',
+    // 发出动作信号：呼吸缓解恢复用 breathing_resume（不触发 phase_complete 副作用：涟漪/关键词缓存）
+    lastAction: isBreathingResume ? 'breathing_resume' : 'phase_complete',
     lastActionCounter: s.lastActionCounter + 1,
     lastCompletedPhase: phase,
     isCycleComplete,
     lastSessionActualDuration: actualDuration,
-    // v0.29: 工作阶段完成时触发庆祝覆盖层
-    showCompletionOverlay: phase === 'work' ? true : s.showCompletionOverlay,
+    // v0.29: 工作阶段完成时触发庆祝覆盖层（1 分钟迈步完成除外——无缝衔接专注，不打断）
+    showCompletionOverlay: phase === 'work' && !isStepDive ? true : s.showCompletionOverlay,
+    // 清空呼吸缓解保存字段
+    _breathingResumeRemaining: null,
+    _breathingResumeTotal: null,
   }));
 }
 

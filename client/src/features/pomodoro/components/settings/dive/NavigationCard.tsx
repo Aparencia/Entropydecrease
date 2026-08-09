@@ -196,25 +196,6 @@ export function NavigationCard({
           </SettingRow>
         </div>
       </div>
-
-      {/* ── Chronos 时间生物（P2）── */}
-      <div className="pt-kb-md border-t border-border/30">
-        <h3 className="text-b2 font-medium text-text-primary mb-kb-sm">时间生物</h3>
-        <div className="divide-y divide-border/30">
-          <SettingRow label="Chronos 形态" description="时间生物可视化（关闭回退经典计时环）">
-            <Toggle
-              checked={localSettings.chronosEnabled ?? true}
-              onChange={() => onToggle('chronosEnabled')}
-            />
-          </SettingRow>
-          <SettingRow label="环境光自适应" description="摄像头采样环境亮度，暗环境自动增强生物光效（隐私优先，缺省关闭）">
-            <Toggle
-              checked={localSettings.ambientAdaptation ?? false}
-              onChange={() => onToggle('ambientAdaptation')}
-            />
-          </SettingRow>
-        </div>
-      </div>
     </div>
   );
 }

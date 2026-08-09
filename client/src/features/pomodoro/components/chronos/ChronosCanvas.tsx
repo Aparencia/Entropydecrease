@@ -1,22 +1,32 @@
 /**
  * ChronosCanvas — 时间生物容器
  *
- * R3F Canvas 包裹 ChronosSphere，按主题自动切换双风格（深潜/极光）。
- * 支持 full（沉浸全屏）与 compact（普通视图表盘尺寸）两种模式。
- * prefersReducedMotion 时回退 2D 静态形态（颜色随阶段变化，无动画）。
+ * R3F Canvas 包裹 ChronosParticleField（粒子主体）+ ChronosCreature（辅助形态）。
+ * compact 尺寸上限提升至 480px（需求 1：普通视图 3D 足够大）。
+ * 中央 overlay 仅保留时间数字（需求 4：提示语移出球体，由父组件状态行承担）。
  *
- * @ai-context: Chronos 时间生物渲染容器，替代 TimerRing / ImmersiveRing 视觉层。
+ * 3D 空间：camera z=5.5 fov=50（视锥半高 ≈2.57），比原 z=5.0 fov=45 增大约 24%，
+ * 粒子场全态（asleep canopy≤2.0, radius=1.8）完整落在视锥内。
+ *
+ * 时间显示：使用 CSS 动画实现呼吸级辉光脉冲（每周期 3s），与 60bpm 心跳同频反射。
+ *
+ * 降级策略：系统 reduced-motion / 性能 low 档 → degraded（减粒子+跳帧+降 dpr），
+ * 但保留粒子形态与动画（永不静态化）；仅 WebGL 不可用时回退 2D 静态。
+ *
+ * @ai-context: Chronos 渲染容器；描述符 particleMorphs，色板 chronosStyles。
  */
-import { useRef } from 'react';
+import { useMemo, useRef, memo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useSceneTheme } from '@/lib/3d/hooks/useSceneTheme';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { usePerformanceModeStore } from '@/lib/performance/usePerformanceMode';
-import { CHRONOS_STYLES, CHRONOS_PHASES, CHRONOS_STATE_LABELS, toChronosPhase, type ChronosPhase } from './chronosStyles';
-import { ChronosSphere } from './ChronosSphere';
+import { toChronosState } from './chronosState';
+import { CHRONOS_PALETTES } from './chronosStyles';
+import type { Mood } from './particleMorphs';
+import { ChronosCreature } from './ChronosCreature';
 import { ChronosParticleField } from './ChronosParticleField';
 
-/** 长按判定阈值（ms），与 ChronosSphere 手势语义一致 */
+/** 长按判定阈值（ms）：长按=中止/放弃（回沉睡） */
 const LONG_PRESS_MS = 800;
 /** 点击判定阈值（ms） */
 const TAP_MAX_MS = 500;
@@ -26,31 +36,93 @@ interface ChronosCanvasProps {
   mode?: 'full' | 'compact';
   phase: 'work' | 'short_break' | 'long_break';
   isRunning: boolean;
+  isPaused: boolean;
+  isArmed: boolean;
   remainingSeconds: number;
-  started: boolean;
-  /** 守护灵分心分数 0-100（可选，P2） */
-  intensity?: number;
-  /** 环境光亮度 0-1（可选，P2 暗环境自发光补偿） */
-  ambientLight?: number;
-  /** 完成绽放触发（P1） */
-  bloom?: boolean;
+  totalSeconds: number;
+  /** 1 分钟迈步进行中（迈步期间显示呼吸态而非专注） */
+  isStepDive?: boolean;
+  /** 预设气质（深度定制粒子外形） */
+  mood?: Mood;
   onTap?: () => void;
-  /** 长按生物回调（进入沉睡） */
   onLongPress?: () => void;
+  /** 右键点击生物（沉浸模式入口，父组件处理） */
+  onContextMenu?: (e: React.MouseEvent) => void;
   /** 中央显示内容（时间字符串） */
   timeStr: string;
 }
 
-/** 2D 静态回退形态（系统级 reduced motion / 极端低配） */
-function ChronosStatic({ phase, timeStr, onTap, onLongPress }: {
-  phase: ChronosPhase;
-  timeStr: string;
-  onTap?: () => void;
-  onLongPress?: () => void;
-}) {
-  const phaseColor = CHRONOS_PHASES[phase].body;
-  const state = CHRONOS_STATE_LABELS[phase];
-  // 静态形态保留 tap/长按交互语义（与 3D 形态一致），保证降级路径下核心交互不失效
+/** WebGL 可用性检测（不可用时回退 2D 静态） */
+function isWebGLAvailable(): boolean {
+  try {
+    const c = document.createElement('canvas');
+    return !!(c.getContext('webgl') || c.getContext('experimental-webgl'));
+  } catch {
+    return false;
+  }
+}
+
+/** 2D 静态兜底（仅 WebGL 不可用）：显式宽高，只显示时间（状态行由父组件渲染） */
+function ChronosStatic({ mode, timeStr }: { mode: 'full' | 'compact'; timeStr: string }) {
+  return (
+    <div
+      className={mode === 'full'
+        ? 'absolute inset-0 flex items-center justify-center'
+        : 'relative flex items-center justify-center w-[clamp(240px,52vmin,480px)] h-[clamp(240px,52vmin,480px)]'}
+      aria-label={timeStr}
+      role="timer"
+    >
+      <div
+        className="rounded-full shrink-0"
+        style={{
+          width: 'min(70%, 320px)',
+          minWidth: '160px',
+          aspectRatio: '1',
+          background: 'radial-gradient(circle at 35% 30%, rgba(34,211,238,0.25) 0%, #0C152433 55%, transparent 75%)',
+          border: '2px solid rgba(34,211,238,0.35)',
+          boxShadow: '0 0 40px rgba(34,211,238,0.2)',
+        }}
+      />
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <span className="font-timer font-light tracking-tight leading-none text-text-primary" style={{ fontSize: mode === 'full' ? 'clamp(3rem, 9vmin, 6rem)' : 'clamp(2rem, 8vmin, 4.5rem)', fontVariantNumeric: 'tabular-nums' }}>
+          {timeStr}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// P0-2 React.memo：TimerFace 因 completedCount/currentGoal 等非 tick 字段
+// 重渲染时，粒子容器跳过 reconcile（timeStr 变化时 props 不等，正常重渲染）
+export const ChronosCanvas = memo(function ChronosCanvas({
+  mode = 'full',
+  phase,
+  isRunning,
+  isPaused,
+  isArmed,
+  remainingSeconds,
+  totalSeconds,
+  isStepDive,
+  mood,
+  onTap,
+  onLongPress,
+  onContextMenu,
+  timeStr,
+}: ChronosCanvasProps) {
+  const theme = useSceneTheme();
+  // 降级（不静态化）：系统 reduced-motion 或性能 low 档 → 减粒子/跳帧/降 dpr
+  const reduced = useReducedMotion();
+  const perfMode = usePerformanceModeStore((s) => s.mode);
+  const degraded = reduced || perfMode === 'low';
+  const webgl = useMemo(() => isWebGLAvailable(), []);
+
+  const chronosState = toChronosState({ isArmed, isRunning, isPaused, phase, isStepDive });
+  const stateColor = CHRONOS_PALETTES[theme][chronosState].glow;
+  const progress = totalSeconds > 0 ? remainingSeconds / totalSeconds : 1;
+
+  // P0-9：秒数变化心跳脉冲改 CSS animation 重启（key={remainingSeconds} 触发），
+  // 不再每秒 2 次 setState（脉冲开/关）造成额外 React 渲染
+  // 容器层统一手势（3D 与静态回退交互一致）
   const pointerDownRef = useRef(0);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFiredRef = useRef(false);
@@ -76,121 +148,85 @@ function ChronosStatic({ phase, timeStr, onTap, onLongPress }: {
     if (longPressFiredRef.current) return;
     if (Date.now() - pointerDownRef.current < TAP_MAX_MS && onTap) onTap();
   };
-  return (
-    <div
-      className="relative flex items-center justify-center w-full h-full cursor-pointer"
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={cancelLongPress}
-      role="button"
-      aria-label={`${state.name} ${timeStr}`}
-    >
-      {/* 静态光环 + 渐变球体 */}
-      <div
-        className="rounded-full"
-        style={{
-          width: 'min(60%, 240px)',
-          aspectRatio: '1',
-          background: `radial-gradient(circle at 35% 30%, ${phaseColor}66 0%, #0C152433 55%, transparent 75%)`,
-          border: `2px solid ${phaseColor}55`,
-          boxShadow: `0 0 40px ${phaseColor}33`,
-        }}
-      />
-      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <span className="font-timer font-light tracking-tight leading-none text-text-primary" style={{ fontSize: 'clamp(2rem, 8vmin, 4.5rem)', fontVariantNumeric: 'tabular-nums' }}>
-          {timeStr}
-        </span>
-        <span className="text-[11px] mt-2 font-medium tracking-[0.15em] uppercase" style={{ color: phaseColor }}>
-          {state.icon} {state.name}
-        </span>
-        <span className="text-[10px] mt-1 text-text-tertiary/60">{state.hint}</span>
-      </div>
-    </div>
-  );
-}
 
-export function ChronosCanvas({
-  mode = 'full',
-  phase,
-  isRunning,
-  remainingSeconds,
-  started,
-  intensity,
-  ambientLight,
-  bloom,
-  onTap,
-  onLongPress,
-  timeStr,
-}: ChronosCanvasProps) {
-  const theme = useSceneTheme();
-  // 系统级 prefers-reduced-motion 判定（非 MotionConfig 上下文）：性能模式低档
-  // 只降帧/降粒子（ChronosSphere 内 useEffectiveTier），不得把 3D 生物静态化
-  const reduced = useReducedMotion();
-  const perfMode = usePerformanceModeStore((s) => s.mode);
-  const style = CHRONOS_STYLES[theme];
-  const chronosPhase = toChronosPhase(phase, isRunning, remainingSeconds, started);
-  // 状态指示：完整状态机（沉睡/呼吸/专注/短休/长休/即将完成），优先于静态 label
-  const state = CHRONOS_STATE_LABELS[chronosPhase];
-  const stateColor = CHRONOS_PHASES[chronosPhase].body;
+  const containerClass = mode === 'full'
+    ? 'absolute inset-0 flex items-center justify-center'
+    : 'relative w-[clamp(240px,52vmin,480px)] h-[clamp(240px,52vmin,480px)] overflow-hidden';
 
-  // 降级：系统减少动效偏好 → 2D 静态形态（保留 tap/长按交互）
-  if (reduced) {
-    return <ChronosStatic phase={chronosPhase} timeStr={timeStr} onTap={onTap} onLongPress={onLongPress} />;
+  // WebGL 不可用 → 2D 静态兜底（唯一静态化路径）
+  if (!webgl) {
+    return <ChronosStatic mode={mode} timeStr={timeStr} />;
   }
 
   return (
     <div
-      className={mode === 'full'
-        ? 'absolute inset-0 flex items-center justify-center pointer-events-none'
-        : 'relative w-[clamp(150px,34vmin,280px)] h-[clamp(150px,34vmin,280px)] pointer-events-none'}
-      aria-label={`${state.name} ${timeStr}`}
+      className={`${containerClass} cursor-pointer`}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={cancelLongPress}
+      onContextMenu={onContextMenu}
       role="timer"
+      aria-label={timeStr}
     >
       <Canvas
-        /* camera z=5.0：视锥半高 ≈2.07，粒子场环带（≤2.2）完整落在视锥内，
-           原 z=4.2 时半高仅 1.74，环境微粒场大部分被视锥裁剪（"无粒子效果"根因之一） */
-        camera={{ position: [0, 0, 5.0], fov: 45 }}
-        // 低档性能：限制渲染分辨率上限为 1x（跳帧/降粒子由 ChronosSphere 内处理）
-        dpr={perfMode === 'low' ? [1, 1] : [1, 1.5]}
+        /* camera z=5.5 fov=50：视锥半高 ≈2.57，比原 z=5.0 fov=45 增大约 24%，
+           asleep 半径 1.8 + 漂移余量 ≈2.0 完整落在视锥内；
+           扩大空间让粒子聚集动画有更大的运动范围 */
+        camera={{ position: [0, 0, 5.5], fov: 50 }}
+        dpr={degraded ? [1, 1] : [1, 1.5]}
         gl={{ antialias: true, alpha: true }}
-        className={mode === 'full' ? '!absolute inset-0' : ''}
-        style={{ pointerEvents: 'auto' }}
+        className="!absolute inset-0"
+        style={{ pointerEvents: 'none' }}
       >
         <ambientLight intensity={0.6} />
-        <pointLight position={[3, 3, 4]} intensity={1.2} />
-        <pointLight position={[-3, -2, -3]} intensity={0.4} color={style.emissiveColor} />
-        <ChronosSphere
-          phase={chronosPhase}
-          style={style}
-          intensity={intensity}
-          ambientLight={ambientLight}
-          bloom={bloom}
-          onTap={onTap}
-          onLongPress={onLongPress}
-        />
-        {/* 环境微粒场：环绕生物的外层生命场（状态联动收拢/散开） */}
+        <pointLight position={[3, 3, 4]} intensity={1.0} color={stateColor} />
+        <pointLight position={[-3, -2, -3]} intensity={0.4} color={stateColor} />
         <ChronosParticleField
-          phase={chronosPhase}
-          style={style}
-          bloom={bloom}
+          state={chronosState}
+          theme={theme}
+          mood={mood}
+          progress={progress}
+          degraded={degraded}
         />
+        <ChronosCreature state={chronosState} theme={theme} />
       </Canvas>
-      {/* 中央状态区：时间 + 状态名 + 交互提示（HTML 层，与 3D 叠加） */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+      {/* 进度条：容器顶部边缘细条（剩余时间比例，图形化时间感知） */}
+      <div className="absolute top-0 left-0 right-0 pointer-events-none" aria-hidden="true">
+        <div className="h-[2px] rounded-full" style={{ width: `${progress * 100}%`, background: stateColor, opacity: 0.45, transition: 'width 1s linear' }} />
+      </div>
+      {/* 中央状态区：仅时间数字（需求 4：状态名/引导语移出球体）。
+          时间与粒子球同源和谐：状态辉光色 + 同色 textShadow，半透明胶囊背景提升可读性
+          辉光脉冲动画：3s 周期呼吸级脉冲，与 60bpm 心跳同频反射
+          秒数心跳脉冲：key 随秒变化重置 chronos-second-pulse 动画（scale 1.05 → 1） */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <span
-          className="font-timer font-light tracking-tight leading-none text-text-primary"
-          style={{ fontSize: mode === 'full' ? 'clamp(3rem, 9vmin, 6rem)' : 'clamp(1.75rem, 7vmin, 3.5rem)', fontVariantNumeric: 'tabular-nums' }}
+          key={remainingSeconds}
+          className="px-3 py-1 rounded-full bg-bg-elevated/40 backdrop-blur-sm border border-border/15 font-timer font-light tracking-tight leading-none chronos-time-glow chronos-second-pulse"
+          style={{
+            fontSize: mode === 'full' ? 'clamp(3rem, 9vmin, 6rem)' : 'clamp(1.75rem, 7vmin, 3.5rem)',
+            fontVariantNumeric: 'tabular-nums',
+            color: stateColor,
+            textShadow: `0 0 18px ${stateColor}55, 0 0 42px ${stateColor}22`,
+            transition: 'color 0.6s ease, text-shadow 0.6s ease',
+          }}
         >
           {timeStr}
         </span>
-        <span
-          className="text-[11px] mt-2 font-medium tracking-[0.15em] uppercase transition-colors duration-500"
-          style={{ color: stateColor }}
-        >
-          {state.icon} {state.name}
-        </span>
-        <span className="text-[10px] mt-1 text-text-tertiary/60">{state.hint}</span>
       </div>
+      {/* 时间辉光脉冲动画 keyframes */}
+      <style>{`
+        @keyframes chronos-glow-pulse {
+          0%, 100% { filter: brightness(1); }
+          50% { filter: brightness(1.15); }
+        }
+        @keyframes chronos-second-pulse {
+          0% { transform: scale(1.05); }
+          100% { transform: scale(1); }
+        }
+        .chronos-second-pulse {
+          animation: chronos-glow-pulse 3s ease-in-out infinite, chronos-second-pulse 300ms ease-out;
+        }
+      `}</style>
     </div>
   );
-}
+});

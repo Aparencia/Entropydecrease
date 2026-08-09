@@ -59,7 +59,12 @@ export interface PomodoroPreset {
   builtin: boolean;          // 内置预设不可删除
   sortOrder: number;         // 排序序号
   createdAt: string;         // ISO 日期字符串
+  /** Chronos 粒子气质（深度定制粒子外形；缺省回退 flow，旧数据向后兼容） */
+  mood?: Mood;
 }
+
+// Chronos 粒子气质（预设绑定，决定时间生物的外形与运动风格）
+export type Mood = 'grid' | 'flow' | 'nebula' | 'flame' | 'crystal' | 'torrent';
 
 // 番茄目标记忆
 export interface PomodoroGoal {

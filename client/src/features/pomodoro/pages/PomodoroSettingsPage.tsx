@@ -14,7 +14,6 @@ import { ArrowLeft, RotateCcw } from 'lucide-react';
 import { useToast } from '@/components/ui';
 import { Tip } from '@/components/ui/Tip';
 import { usePomodoroStore } from '../store/usePomodoroStore';
-import { useShallow } from 'zustand/react/shallow';
 import { useAIDuration } from '@/lib/ai/useAI';
 import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
 import { pomodoroSessionStore } from '@/lib/storage';
@@ -41,7 +40,21 @@ const DEFAULT_SETTINGS = {
 };
 
 export default function PomodoroSettingsPage() {
-  const { settings, updateSettings, initialize, aiRecommendedDuration, aiReasoning, setAIRecommendation, presets, activePreset, createPreset, updatePreset, deletePreset, reorderPresets } = usePomodoroStore(useShallow(s => s));
+  // P0-1 细粒度订阅：设置页为低频页，但整 store 订阅会在计时 tick 等
+  // 任何字段变化时重渲染整页表单，拆分为单字段订阅
+  const settings = usePomodoroStore((s) => s.settings);
+  const presets = usePomodoroStore((s) => s.presets);
+  const activePreset = usePomodoroStore((s) => s.activePreset);
+  const aiRecommendedDuration = usePomodoroStore((s) => s.aiRecommendedDuration);
+  const aiReasoning = usePomodoroStore((s) => s.aiReasoning);
+  // 动作（稳定引用）
+  const updateSettings = usePomodoroStore((s) => s.updateSettings);
+  const initialize = usePomodoroStore((s) => s.initialize);
+  const setAIRecommendation = usePomodoroStore((s) => s.setAIRecommendation);
+  const createPreset = usePomodoroStore((s) => s.createPreset);
+  const updatePreset = usePomodoroStore((s) => s.updatePreset);
+  const deletePreset = usePomodoroStore((s) => s.deletePreset);
+  const reorderPresets = usePomodoroStore((s) => s.reorderPresets);
 
   // Local form state (mirrors store settings)
   const [localSettings, setLocalSettings] = useState({ ...settings });

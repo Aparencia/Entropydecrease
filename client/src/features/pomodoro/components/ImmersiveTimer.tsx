@@ -2,31 +2,22 @@
  * ImmersiveTimer — 「潮汐穹顶」沉浸模式
  *
  * 全屏渐变色场背景（随进度变化），
- * 弧形光带进度条 + 呼吸缩放大字号倒计时（ImmersiveRing），
- * 底部极简 icon-only 操作（ImmersiveControls）。
+ * 中央 Chronos 时间生物（full 模式）+ 底部极简 icon-only 操作（ImmersiveControls）。
  *
  * @ai-context: 3.8 心流音乐引擎 + 3.13 具身学习休息引导集成于此；
- * 中央圆环与底部操作区已拆至 ImmersiveRing / ImmersiveControls
- * （单文件 ≤300 行规范）。
+ * 底部操作区已拆至 ImmersiveControls（单文件 ≤300 行规范）。
  */
 import { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { usePomodoroStore } from '../store/usePomodoroStore';
-import { useShallow } from 'zustand/react/shallow';
-import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { BEAT } from '@/lib/animation/springConfig';
 import { useAudioPrefsStore } from '@/lib/audio/audioPrefsStore';
 import { AnchorReminderOverlay } from './AnchorReminderOverlay';
 import { ChronosCanvas } from './chronos/ChronosCanvas';
-import { ImmersiveRing } from './ImmersiveRing';
+import { ChronosStateRow } from './chronos/ChronosStateRow';
+import { toChronosState } from './chronos/chronosState';
 import { ImmersiveControls } from './ImmersiveControls';
 import { useFlowMusic } from '@/hooks/useFlowMusic';
-
-const PHASE_LABELS: Record<string, string> = {
-  work: '专注中',
-  short_break: '休息中',
-  long_break: '休息中',
-};
 
 interface ImmersiveTimerProps {
   /** 背景音（白噪音）开关状态 */
@@ -43,12 +34,6 @@ interface ImmersiveTimerProps {
   focusScore?: number;
   /** 3.8 心流音乐引擎是否激活 */
   flowMusicEnabled?: boolean;
-  /** 专注完成绽放触发（Chronos 时间生物） */
-  bloom?: boolean;
-  /** 环境光亮度 0-1（P2 暗环境自发光补偿） */
-  ambientLight?: number;
-  /** Chronos 生物形态开关（缺省 true，关闭回退经典环） */
-  chronosEnabled?: boolean;
 }
 
 /** 3.13 具身学习休息活动列表 */
@@ -101,33 +86,42 @@ export default function ImmersiveTimer({
   lastSessionKeywords,
   focusScore = 0,
   flowMusicEnabled = false,
-  bloom = false,
-  ambientLight = 0.5,
-  chronosEnabled = true,
 }: ImmersiveTimerProps) {
-  const prefersReduced = useReducedMotion();
+  // P0-1 细粒度订阅：整 store 订阅（useShallow(s => s)）会在任何字段变化时
+  // 重渲染沉浸层；remainingSeconds 每秒 tick 不可避免，但其余字段独立订阅
+  // 避免 settings/presets 等无关变化波及本层
+  const remainingSeconds = usePomodoroStore((s) => s.remainingSeconds);
+  const totalSeconds = usePomodoroStore((s) => s.totalSeconds);
+  const phase = usePomodoroStore((s) => s.phase);
+  const isRunning = usePomodoroStore((s) => s.isRunning);
+  const isPaused = usePomodoroStore((s) => s.isPaused);
+  const isArmed = usePomodoroStore((s) => s.isArmed);
+  const activePreset = usePomodoroStore((s) => s.activePreset);
+  const isStepDive = usePomodoroStore((s) => s.isStepDive);
+  const currentGoal = usePomodoroStore((s) => s.currentGoal);
+  // 动作（稳定引用）
+  const pause = usePomodoroStore((s) => s.pause);
+  const startBreathingDive = usePomodoroStore((s) => s.startBreathingDive);
+  const skipBreathingDive = usePomodoroStore((s) => s.skipBreathingDive);
+  const resume = usePomodoroStore((s) => s.resume);
+  const reset = usePomodoroStore((s) => s.reset);
+  const skip = usePomodoroStore((s) => s.skip);
 
-  const {
-    remainingSeconds,
-    totalSeconds,
-    phase,
-    isRunning,
-    currentGoal,
-    pause,
-    resume,
-    reset,
-    skip,
-  } = usePomodoroStore(useShallow(s => s));
-
-  // Chronos 点击交互（时间生物 = 核心交互点）：
-  // 专注 → 暂停/继续；休息 → 提前结束休息；长按 → 沉睡
+  // Chronos 点击交互（设计详解状态机）：
+  // 专注 → 呼吸缓解（30s）/继续；呼吸(运行中) → 跳过呼吸直接专注；休息 → 提前结束；长按 → 沉睡
   const handleChronosTap = () => {
-    if (phase === 'work') {
-      if (isRunning) pause();
+    const cs = toChronosState({ isArmed, isRunning, isPaused, phase, isStepDive });
+    if (cs === 'focus') {
+      if (isRunning) startBreathingDive();
       else resume();
-    } else {
+    } else if (cs === 'breathing') {
+      // 呼吸态（迈步/呼吸缓解）运行中 → 跳过呼吸直接进入专注
+      if (isRunning) skipBreathingDive();
+      else resume();
+    } else if (cs === 'short_break' || cs === 'long_break') {
       skip();
     }
+    // asleep 在沉浸模式不应出现（进入沉浸必经运行/暂停），忽略
   };
   const handleChronosLongPress = () => {
     reset();
@@ -155,7 +149,6 @@ export default function ImmersiveTimer({
   const minutes = Math.floor(remainingSeconds / 60);
   const seconds = remainingSeconds % 60;
   const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  const label = PHASE_LABELS[phase] ?? '专注中';
 
   const backgroundGradient = useMemo(
     () => getBackgroundGradient(progressPercent),
@@ -163,18 +156,6 @@ export default function ImmersiveTimer({
   );
 
   const isBreak = phase === 'short_break' || phase === 'long_break';
-
-  // 经典环呼吸动画参数（chronosEnabled=false 时回退）
-  const breatheAnimation = prefersReduced
-    ? {}
-    : {
-        scale: [1, 1.02, 1],
-        transition: {
-          duration: BEAT.x5 / 100,
-          repeat: Infinity,
-          ease: 'easeInOut' as const,
-        },
-      };
 
   // 3.13 休息活动轮换索引
   const [activityIndex, setActivityIndex] = useState(0);
@@ -245,23 +226,29 @@ export default function ImmersiveTimer({
         </motion.div>
       )}
 
-      {/* 中央计时器区域 — Chronos 时间生物（可回退经典环） */}
-      {chronosEnabled ? (
-        <ChronosCanvas
-          mode="full"
-          phase={phase}
-          isRunning={isRunning}
-          remainingSeconds={remainingSeconds}
-          started
-          intensity={focusScore > 0 ? focusScore : 50}
-          ambientLight={ambientLight}
-          bloom={bloom}
-          onTap={handleChronosTap}
-          onLongPress={handleChronosLongPress}
-          timeStr={timeStr}
+      {/* 中央计时器区域 — Chronos 时间生物（唯一形态） */}
+      <ChronosCanvas
+        mode="full"
+        phase={phase}
+        isRunning={isRunning}
+        isPaused={isPaused}
+        isArmed={isArmed}
+        remainingSeconds={remainingSeconds}
+        totalSeconds={totalSeconds}
+        isStepDive={isStepDive}
+        mood={activePreset?.mood}
+        onTap={handleChronosTap}
+        onLongPress={handleChronosLongPress}
+        timeStr={timeStr}
+      />
+      {/* 状态行（沉浸深色背景专用变体）：仅 work 阶段显示（休息时由活动建议卡占据该区域） */}
+      {phase === 'work' && (
+        <ChronosStateRow
+          input={{ isArmed, isRunning, isPaused, phase }}
+          variant="immersive"
+          hint={isRunning ? '点击暂停 · 长按放弃' : '点击继续'}
+          className="absolute bottom-32 left-0 right-0"
         />
-      ) : (
-        <ImmersiveRing progress={progress} timeStr={timeStr} label={label} breatheAnimation={breatheAnimation} />
       )}
 
       {/* T2 记忆锚点提醒浮层 — work 阶段每 12 分钟一句话要点，15 秒自动消失 */}

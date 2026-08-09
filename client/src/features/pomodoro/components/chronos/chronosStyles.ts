@@ -1,170 +1,105 @@
 /**
- * Chronos 时间生物 — 双风格视觉配置
+ * Chronos 时间生物 — 双主题叙事色板与对比策略
  *
- * 依托项目双主题表面语言（深潜 deep-sea / 极光 aurora-dome）深度定制：
- * - deep-sea（深色）：深海有机生物，蓝绿冷光，毛玻璃发光系
- * - aurora-dome（浅色）：极光晶体生命，紫青渐变，平面高光系
+ * 形态语义保留（余烬/心跳/星体/种子/树冠），颜色按双主题差异化，
+ * 且两套主题采用相反的对比策略（需求 2）：
+ * - deep-sea（深色）= 发光突围：粒子高亮，靠"光"从黑暗中浮出
+ * - aurora（浅色）= 深色勾勒：深色阶 + 彩色光晕（白炽在浅背景不可见，必须反转）
  *
- * @ai-context: Chronos 时间生物的视觉参数单一来源，含状态色板与粒子配置。
+ * 粒子形态参数已迁移至 particleMorphs.ts（描述符架构），本文件只承载颜色。
+ *
+ * @ai-context: 视觉参数单一来源；ChronosParticleField / 氛围层共用。
  */
 import type { SceneTheme } from '@/lib/3d/hooks/useSceneTheme';
+import type { ChronosState } from './chronosState';
 
-/** Chronos 生物阶段（映射番茄 phase + 运行态） */
-export type ChronosPhase = 'idle' | 'breathing' | 'work' | 'short_break' | 'long_break' | 'final';
-
-/** 单一风格的完整视觉参数 */
-export interface ChronosStyle {
-  /** 液态金属主体基础色 */
-  baseColor: string;
-  /** 主体自发光色 */
-  emissiveColor: string;
-  /** 微粒主色 */
-  particleColor: string;
-  /** 微粒副色 */
-  particleSecondary: string;
-  /** 呼吸波纹色 */
-  ringColor: string;
-  /** 微粒数量基数 */
-  particleCount: number;
-  /** 液态流动扰动幅度 */
-  noiseAmplitude: number;
-  /** 金属度（0-1） */
-  metalness: number;
-  /** 粗糙度（0-1，越低越镜面） */
-  roughness: number;
-  /** 环境反射强度 */
-  envMapIntensity: number;
-  /** 光子层颜色（球体内部发光光点） */
-  photonColor: string;
-  /** 光子数量 */
-  photonCount: number;
-}
-
-/** 各阶段视觉参数（内部使用，仅服务于 CHRONOS_PHASES） */
-interface ChronosPhasePalette {
-  /** 主体色（lerp 目标） */
+/** 单一状态的叙事色 */
+export interface CreatureStyle {
+  /** 主体色 */
   body: string;
-  /** 自发光强度 0-1 */
-  emissiveIntensity: number;
-  /** 呼吸缩放幅度 0-1 */
-  breatheAmplitude: number;
-  /** 粒子聚拢半径（相对球体半径的倍数，<1 聚拢，>1 散开） */
-  particleRadius: number;
-  /** 旋转速度倍率 */
-  spinSpeed: number;
+  /** 自发光色 */
+  emissive: string;
+  /** 辉光色（点光/氛围层） */
+  glow: string;
+  /** 粒子主色 */
+  particle: string;
+  /** 粒子副色 */
+  particleSecondary: string;
 }
 
-/** 双风格基础配置：非简单换色，而是两种液态金属材质表现
- *  - deep-sea（深色）：深海液态水银——高金属镜面、冷色底、生物发光青绿辉光
- *  - aurora-dome（浅色）：极光亮银——柔和磨砂银、浅色底、紫粉辉光
- */
-export const CHRONOS_STYLES: Record<SceneTheme, ChronosStyle> = {
+/** 双主题 × 五态色板（深色发光突围 / 浅色深色勾勒） */
+export const CHRONOS_PALETTES: Record<SceneTheme, Record<ChronosState, CreatureStyle>> = {
+  // deep-sea（深色）：冷色系高亮粒子，从黑暗中浮出
   'deep-sea': {
-    baseColor: '#12263A',
-    emissiveColor: '#2DD4BF',
-    particleColor: '#5B8A72',
-    particleSecondary: '#2DD4BF',
-    ringColor: '#2DD4BF',
-    particleCount: 1400,
-    noiseAmplitude: 0.12,
-    metalness: 0.95,
-    roughness: 0.08,
-    envMapIntensity: 1.2,
-    photonColor: '#99F6E4',
-    photonCount: 300,
+    // 沉睡：深海暗蓝灰余烬
+    asleep: {
+      body: '#1E3A5F', emissive: '#1E3A5F', glow: '#0F2440',
+      particle: '#3B82F6', particleSecondary: '#1E3A5F',
+    },
+    // 呼吸：青蓝心跳 + 冷色辉光
+    breathing: {
+      body: '#22D3EE', emissive: '#0891B2', glow: '#22D3EE',
+      particle: '#67E8F9', particleSecondary: '#0E7490',
+    },
+    // 专注：冷白星体 + 亮蓝能量流
+    focus: {
+      body: '#E0F2FE', emissive: '#7DD3FC', glow: '#38BDF8',
+      particle: '#BAE6FD', particleSecondary: '#38BDF8',
+    },
+    // 短休：绿松石种子
+    short_break: {
+      body: '#2DD4BF', emissive: '#14B8A6', glow: '#2DD4BF',
+      particle: '#5EEAD4', particleSecondary: '#0F766E',
+    },
+    // 长休：深海绿树影
+    long_break: {
+      body: '#10B981', emissive: '#059669', glow: '#34D399',
+      particle: '#6EE7B7', particleSecondary: '#065F46',
+    },
   },
+  // aurora（浅色）：深色阶 + 彩色光晕，剪影勾勒
   'aurora-dome': {
-    baseColor: '#E8EAF6',
-    emissiveColor: '#4A9BD9',
-    particleColor: '#6FB4E8',
-    particleSecondary: '#9FB8D8',
-    ringColor: '#4A9BD9',
-    particleCount: 1000,
-    noiseAmplitude: 0.08,
-    metalness: 0.82,
-    roughness: 0.28,
-    envMapIntensity: 0.65,
-    photonColor: '#E8B84B',
-    photonCount: 220,
+    // 沉睡：暗紫余烬（浅底深色剪影）
+    asleep: {
+      body: '#4C1D95', emissive: '#4C1D95', glow: '#3B0764',
+      particle: '#7C3AED', particleSecondary: '#4C1D95',
+    },
+    // 呼吸：紫粉心跳
+    breathing: {
+      body: '#C084FC', emissive: '#A855F7', glow: '#C084FC',
+      particle: '#D8B4FE', particleSecondary: '#9333EA',
+    },
+    // 专注：深金星体（浅底高对比，白炽反转）
+    focus: {
+      body: '#92400E', emissive: '#B45309', glow: '#F59E0B',
+      particle: '#D97706', particleSecondary: '#FBBF24',
+    },
+    // 短休：深薄荷种子
+    short_break: {
+      body: '#047857', emissive: '#065F46', glow: '#10B981',
+      particle: '#047857', particleSecondary: '#34D399',
+    },
+    // 长休：紫罗兰树影
+    long_break: {
+      body: '#6D28D9', emissive: '#5B21B6', glow: '#8B5CF6',
+      particle: '#7C3AED', particleSecondary: '#A78BFA',
+    },
   },
 };
 
-/** 各阶段视觉参数（与主题色叠加使用） */
-export const CHRONOS_PHASES: Record<ChronosPhase, ChronosPhasePalette> = {
-  idle: {
-    body: '#94A3B8',
-    emissiveIntensity: 0.12,
-    breatheAmplitude: 0.01,
-    particleRadius: 1.35,
-    spinSpeed: 0.08,
-  },
-  breathing: {
-    body: '#CBD5E1',
-    emissiveIntensity: 0.22,
-    breatheAmplitude: 0.03,
-    particleRadius: 1.2,
-    spinSpeed: 0.12,
-  },
-  work: {
-    body: '#34D399',
-    emissiveIntensity: 0.5,
-    breatheAmplitude: 0.045,
-    particleRadius: 1.0,
-    spinSpeed: 0.2,
-  },
-  short_break: {
-    body: '#2DD4BF',
-    emissiveIntensity: 0.35,
-    breatheAmplitude: 0.06,
-    particleRadius: 1.15,
-    spinSpeed: 0.1,
-  },
-  long_break: {
-    body: '#9FB8D8',
-    emissiveIntensity: 0.4,
-    breatheAmplitude: 0.07,
-    particleRadius: 1.2,
-    spinSpeed: 0.08,
-  },
-  final: {
-    body: '#F59E0B',
-    emissiveIntensity: 0.7,
-    breatheAmplitude: 0.08,
-    particleRadius: 0.95,
-    spinSpeed: 0.3,
-  },
-};
-
-/** 将 phase 映射为 ChronosPhase（含最后 5 分钟暖色渐变） */
-export function toChronosPhase(
-  phase: 'work' | 'short_break' | 'long_break',
-  isRunning: boolean,
-  remainingSeconds: number,
-  started: boolean,
-): ChronosPhase {
-  if (!started) return 'idle';
-  if (!isRunning && phase === 'work') return 'breathing';
-  if (phase === 'work' && remainingSeconds <= 300 && remainingSeconds > 0) return 'final';
-  if (phase === 'short_break') return 'short_break';
-  if (phase === 'long_break') return 'long_break';
-  return 'work';
+/** 对比策略规格（氛围层/粒子基调共用） */
+export interface ContrastSpec {
+  /** 全局粒子基调主色 */
+  particleMain: string;
+  /** 全局粒子基调副色 */
+  particleSecondary: string;
+  /** 发光策略：deep-sea 自发光突围 / aurora 深色勾勒 */
+  glowStrategy: 'emissive' | 'outline';
 }
 
-/** 状态指示元数据：每个 ChronosPhase 的中文名、图标与交互提示 */
-export interface ChronosStateLabel {
-  /** 状态中文名 */
-  name: string;
-  /** 状态图标（emoji） */
-  icon: string;
-  /** 交互提示文案（点击/长按行为） */
-  hint: string;
+/** 双主题对比策略 */
+export function paletteContrast(theme: SceneTheme): ContrastSpec {
+  return theme === 'deep-sea'
+    ? { particleMain: '#E0F2FE', particleSecondary: '#38BDF8', glowStrategy: 'emissive' }
+    : { particleMain: '#4C1D95', particleSecondary: '#C084FC', glowStrategy: 'outline' };
 }
-
-export const CHRONOS_STATE_LABELS: Record<ChronosPhase, ChronosStateLabel> = {
-  idle: { name: '沉睡', icon: '🌙', hint: '点击开始下潜' },
-  breathing: { name: '呼吸', icon: '💨', hint: '点击开始专注' },
-  work: { name: '专注', icon: '🎯', hint: '点击暂停 · 长按沉睡' },
-  short_break: { name: '短休', icon: '☕', hint: '点击提前结束' },
-  long_break: { name: '长休', icon: '🌊', hint: '点击提前结束' },
-  final: { name: '即将完成', icon: '🔥', hint: '坚持住' },
-};

@@ -133,6 +133,7 @@ async function doSeedBuiltinPresets(settings: PomodoroSettings): Promise<Pomodor
     builtin: true,
     sortOrder: 0,
     createdAt: now,
+    mood: 'grid', // 纪律感：经纬网格粒子外形
   };
   const studyPreset: PomodoroPreset = {
     id: crypto.randomUUID(),
@@ -146,6 +147,7 @@ async function doSeedBuiltinPresets(settings: PomodoroSettings): Promise<Pomodor
     builtin: true,
     sortOrder: 1,
     createdAt: now,
+    mood: 'flow', // 自由：流动壳粒子外形
   };
 
   await pomodoroPresetStore.bulkCreate([classPreset, studyPreset]);

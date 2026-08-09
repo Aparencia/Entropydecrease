@@ -1,5 +1,9 @@
 /**
  * @ai-context: pomodoro 功能模块页面：PomodoroPage。
+ * @ai-context: P0-1/P0-2 性能重构——整 store 订阅（useShallow(s => s)）拆为
+ * 细粒度 selector；remainingSeconds 等每秒高频字段随交互状态机整体迁入
+ * TimerFace 子组件，页面主体仅订阅中低频字段，tick 不再重渲染
+ * header/PresetTabs/弹窗/庆祝层子树。
  */
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -7,68 +11,49 @@ import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Clock } from 'lucide-react';
 import { db } from '@/lib/storage';
-import TimerRing from '../components/TimerRing';
-import { ChronosCanvas } from '../components/chronos/ChronosCanvas';
-import { useAmbientLight } from '../hooks/useAmbientLight';
 import GoalInput from '../components/GoalInput';
 import ImmersiveTimer from '../components/ImmersiveTimer';
 import SlideToExit from '../components/SlideToExit';
-import CycleMarkers from '../components/CycleMarkers';
 import PresetEditor from '../components/PresetEditor';
 import PresetTabs from '../components/PresetTabs';
 import { CompletionCelebration } from '../components/CompletionCelebration';
-import { PomodoroControls } from '../components/PomodoroControls';
+import { TimerFace } from '../components/TimerFace';
 import { usePomodoroStore, usePomodoroActionSignal } from '../store/usePomodoroStore';
-import { useShallow } from 'zustand/react/shallow';
 import type { PomodoroPreset } from '@/types/models';
 import { wellbeingEventBus } from '@/lib/wellbeing/wellbeingEventBus';
 import { useEcosystemStore } from '@/features/retention/store/useEcosystemStore';
 import { calculateDepth } from '@/features/retention/lib/coralEngine';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { usePomodoroEffects } from '../hooks/usePomodoroEffects';
-import { SPRING } from '@/lib/animation/springConfig';
 import { MAX_PRESETS } from '../lib/presetService';
 import '../styles/pomodoro-dive.css';
 
 export default function PomodoroPage() {
   const navigate = useNavigate();
-  const {
-    phase, isRunning, isPaused, remainingSeconds, totalSeconds,
-    completedCount, settings, currentGoal, isImmersive,
-    activePreset, presets,
-    start, setPreset, setCurrentGoal,
-    exitImmersive, createPreset, updatePreset, deletePreset,
-    pause, resume, reset, skip,
-    showCompletionOverlay, dismissCompletionOverlay, lastSessionActualDuration,
-  } = usePomodoroStore(useShallow(s => s));
+  // ── P0-1 细粒度订阅：中低频字段（每秒 tick 的 remainingSeconds 等高频
+  // 字段已随交互状态机迁入 TimerFace，本页不订阅）──
+  const isImmersive = usePomodoroStore((s) => s.isImmersive);
+  const settings = usePomodoroStore((s) => s.settings);
+  const activePreset = usePomodoroStore((s) => s.activePreset);
+  const presets = usePomodoroStore((s) => s.presets);
+  const currentGoal = usePomodoroStore((s) => s.currentGoal);
+  const showCompletionOverlay = usePomodoroStore((s) => s.showCompletionOverlay);
+  const lastSessionActualDuration = usePomodoroStore((s) => s.lastSessionActualDuration);
+  // ── 动作（稳定引用）──
+  const setPreset = usePomodoroStore((s) => s.setPreset);
+  const setCurrentGoal = usePomodoroStore((s) => s.setCurrentGoal);
+  const exitImmersive = usePomodoroStore((s) => s.exitImmersive);
+  const createPreset = usePomodoroStore((s) => s.createPreset);
+  const updatePreset = usePomodoroStore((s) => s.updatePreset);
+  const deletePreset = usePomodoroStore((s) => s.deletePreset);
+  const dismissCompletionOverlay = usePomodoroStore((s) => s.dismissCompletionOverlay);
 
   usePomodoroEffects();
-
-  // ── Chronos 点击交互（时间生物 = 核心交互点）──
-  // 沉睡/呼吸 → 开始；专注 → 暂停/继续；休息 → 提前结束休息
-  const handleChronosTap = useCallback(() => {
-    if (isRunning || isPaused) {
-      if (phase === 'work') {
-        if (isRunning) pause();
-        else resume();
-      } else {
-        skip(); // 休息阶段点击提前结束休息
-      }
-    } else {
-      setGoalModalOpen(true); // 沉睡/呼吸 → 打开目标弹窗开始专注
-    }
-  }, [isRunning, isPaused, phase, pause, resume, skip]);
-  // 长按 → 进入沉睡（重置）
-  const handleChronosLongPress = useCallback(() => {
-    reset();
-  }, [reset]);
 
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [rememberGoal, setRememberGoal] = useState(false);
   const [presetEditorOpen, setPresetEditorOpen] = useState(false);
   const [editingPreset, setEditingPreset] = useState<PomodoroPreset | null>(null);
-  
-
 
   // ── 守护灵分心分数（体验增强：心流音乐联动，开关 guardianLinkEnabled）──
   // App 级 useFocusGuardian 在等级变化时经事件总线广播分数，此处只订阅不采集
@@ -89,43 +74,12 @@ export default function PomodoroPage() {
     }
   }, [pomoSignal.lastAction, pomoSignal.lastActionCounter, pomoSignal.lastCompletedPhase, pomoSignal.currentGoal]);
 
-  // ── Chronos 绽放触发：工作阶段完成时短暂置 true（时间生物完成动画）──
-  const [chronosBloom, setChronosBloom] = useState(false);
-  useEffect(() => {
-    if (pomoSignal.lastAction === 'phase_complete' && pomoSignal.lastCompletedPhase === 'work') {
-      setChronosBloom(true);
-      const t = setTimeout(() => setChronosBloom(false), 150);
-      return () => clearTimeout(t);
-    }
-  }, [pomoSignal.lastAction, pomoSignal.lastActionCounter, pomoSignal.lastCompletedPhase]);
-
-  // ── Chronos P2：环境光自适应（缺省关闭，开启时才申请摄像头权限）──
-  const ambientBrightness = useAmbientLight(settings.ambientAdaptation ?? false);
-  const chronosEnabled = settings.chronosEnabled ?? true;
-
   // 庆祝层累计深度：统一读取珊瑚生态真实深度（原实现基于回绕的 completedCount
   // 伪算，每轮长休归零后"累计深度"会倒退）
   const totalDepth = useEcosystemStore((s) => s.totalDepth);
 
   // @ai-context: tick 驱动已上移至全局调度器 pomodoroScheduler.ts（App 启动时注册），
   // 不再由本页面组件级 setInterval 驱动——切离页面后计时仍持续推进
-
-  useEffect(() => {
-    if (isRunning || isPaused) {
-      const m = Math.floor(remainingSeconds / 60);
-      const s = remainingSeconds % 60;
-      const phaseLabel = phase === 'work' ? '专注' : phase === 'short_break' ? '短休' : '长休';
-      document.title = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} - ${phaseLabel} | 深潜`;
-    } else {
-      document.title = '深潜 - 熵减';
-    }
-    // cleanup 与上方 effect 分离：仅卸载时恢复默认标题，
-    // 避免每秒 tick 依赖变化时先 cleanup（置 '熵减'）再重设造成的标题闪烁
-  }, [remainingSeconds, phase, isRunning, isPaused]);
-
-  useEffect(() => {
-    return () => { document.title = '熵减'; };
-  }, []);
 
   // 页面卸载时清掉庆祝层残留：完成瞬间切走页面，下次进入不再弹出旧庆祝层
   useEffect(() => {
@@ -155,14 +109,15 @@ export default function PomodoroPage() {
   const managePresets = useCallback(() => navigate('/pomodoro/settings'), [navigate]);
 
   /**
-   * 提交目标并开始番茄。goal 为空字符串时表示“跳过目标”：
+   * 提交目标并开始番茄。goal 为空字符串时表示"跳过目标"：
    * 仍然启动计时，但不记录目标（currentGoal 置 null，也不写目标记忆库）。
+   * 提交后以 1 分钟迈步启动（呼吸开始计时），迈步完成无缝衔接完整专注。
    */
   const handleGoalSubmit = async (goal: string) => {
     setCurrentGoal(goal || null);
     setGoalModalOpen(false);
-    // store 更新为同步（zustand set 即时生效），start() 无需等待 React state 落盘
-    start();
+    // store 更新为同步（zustand set 即时生效），startStepDive() 无需等待 React state 落盘
+    usePomodoroStore.getState().startStepDive();
     // 不再强制进入沉浸模式：是否沉浸由用户自行选择（普通视图有"进入专注模式"入口）
     if (rememberGoal && goal) {
       try {
@@ -183,13 +138,10 @@ export default function PomodoroPage() {
   const immersiveExit = prefersReduced ? {} : { opacity: 0, scale: 0.95 };
   const immersiveTransition = prefersReduced ? { duration: 0 } : { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] as const };
 
-  // 循环标记数据 — 由活动预设的 longBreakInterval 驱动
-  const cycleTotal = activePreset?.longBreakInterval ?? settings.longBreakInterval;
-
   // 双模式过渡排序：沉浸层（portal）与普通视图分属两个独立 AnimatePresence 实例，
   // mode="wait" 跨实例无效——此前切换时沉浸退场(0.5s)与普通进场(0.3s)同屏叠加
   // 约 0.6s，表现为组件重复的双曝光残帧。此处用视图状态机显式串行化
-  // “新视图必须等旧视图退场动画完成后才进场”：切换期间仅渲染旧视图退场动画，
+  // "新视图必须等旧视图退场动画完成后才进场"：切换期间仅渲染旧视图退场动画，
   // onExitComplete 后再迁至目标视图。全部动画参数保留，仅消除叠加。
   const [view, setView] = useState<'normal' | 'immersive' | 'switching-to-immersive' | 'switching-to-normal'>(
     () => (isImmersive ? 'immersive' : 'normal'),
@@ -245,9 +197,6 @@ export default function PomodoroPage() {
                 lastSessionKeywords={settings.breakReplayEnabled ? lastKeywordsRef.current : undefined}
                 focusScore={settings.guardianLinkEnabled ? focusScore : 0}
                 flowMusicEnabled={settings.flowMusicEnabled}
-                bloom={chronosBloom}
-                ambientLight={ambientBrightness}
-                chronosEnabled={chronosEnabled}
               />
             </motion.div>
           )}
@@ -269,18 +218,30 @@ export default function PomodoroPage() {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.3 }}
         >
-          {/* 深潜氛围背景 */}
-
-          {/* 仪式页头：模块色「潜」印 + 衬线大字（间距随视口高度缩放） */}
-          <header className="relative z-10 flex items-center gap-3 mb-[clamp(0.375rem,1.8vh,2rem)]">
-            <div className="kb-dive-seal shrink-0" aria-hidden="true">潜</div>
+          {/* 页头压缩一行：潜印 + 标题 + 预设提示（省出纵向空间给生物，需求 6） */}
+          <header className="relative z-10 flex items-center gap-2.5 w-full">
+            <div className="kb-dive-seal shrink-0" style={{ width: 38, height: 38, fontSize: '0.95rem' }} aria-hidden="true">潜</div>
             <div>
-              <h1 className="kb-dive-title">深潜</h1>
-              <p className="kb-dive-note mt-1.5">专注即下潜 · 每一分钟都是深度</p>
+              <h1 className="kb-dive-title" style={{ fontSize: 'clamp(1.1rem,2.2vw,1.6rem)' }}>深潜</h1>
+              <p className="kb-dive-note" style={{ fontSize: '0.62rem' }}>专注即下潜 · 每一分钟都是深度</p>
+            </div>
+            <div className="flex-1" />
+            <div className="flex items-center gap-1.5 text-[11px] text-text-secondary">
+              <Clock className="w-3.5 h-3.5" strokeWidth={1.5} />
+              <span>
+                {activePreset
+                  ? activePreset.longBreakInterval === 0
+                    ? `课堂 ${activePreset.workDuration}min · 短休 ${activePreset.shortBreakDuration}min`
+                    : `专注 ${activePreset.workDuration}min · 每 ${activePreset.longBreakInterval} 个长休`
+                  : `专注 ${settings.workDuration}min`}
+              </span>
             </div>
           </header>
 
-          {/* Preset tabs — 横向滚动预设列表（P3-19 memo 化） */}
+          {/* 生物主体区：flex-1 全高让位（高频 tick 隔离在 TimerFace 内） */}
+          <TimerFace />
+
+          {/* PresetTabs 基座轨道：生物下方（预设 = 生物的"能量轨道"） */}
           <PresetTabs
             presets={presets}
             activePresetId={activePreset?.id}
@@ -292,79 +253,6 @@ export default function PomodoroPage() {
             onDuplicatePreset={handleDuplicatePreset}
             onDeletePreset={handleDeletePreset}
           />
-
-          {/* 预设提示 —— 间距随视口缩放，与上方 PresetTabs 保持一致呼吸 */}
-          <motion.div
-            className="mt-[clamp(0.25rem,1vh,1rem)] flex items-center gap-1.5 text-[12px] text-text-secondary"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-          >
-            <Clock className="w-3.5 h-3.5" strokeWidth={1.5} />
-            <span>
-              {activePreset
-                ? activePreset.longBreakInterval === 0
-                  ? `课堂 ${activePreset.workDuration}min · 短休 ${activePreset.shortBreakDuration}min`
-                  : `专注 ${activePreset.workDuration}min · 每 ${activePreset.longBreakInterval} 个番茄长休`
-                : `专注 ${settings.workDuration}min`}
-            </span>
-          </motion.div>
-
-
-
-          {/* 中部表盘区：flex-1 吸收剩余高度，TimerRing 随 vmin 缩放，永不溢出 */}
-          <div className="flex-1 min-h-0 w-full flex flex-col items-center justify-center">
-          {/* Timer Ring */}
-          <motion.div
-            className="relative flex flex-col items-center"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.15, ...SPRING.gentle }}
-          >
-            {currentGoal && (
-              <motion.p
-                className="text-[12px] text-text-tertiary/70 text-center mb-3 truncate max-w-[280px]"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.4 }}
-              >
-                {currentGoal}
-              </motion.p>
-            )}
-            {chronosEnabled ? (
-              <ChronosCanvas
-                mode="compact"
-                phase={phase}
-                isRunning={isRunning}
-                remainingSeconds={remainingSeconds}
-                started={isRunning || isPaused || remainingSeconds < totalSeconds}
-                intensity={settings.guardianLinkEnabled ? focusScore : 50}
-                ambientLight={ambientBrightness}
-                bloom={chronosBloom}
-                onTap={handleChronosTap}
-                onLongPress={handleChronosLongPress}
-                timeStr={`${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(remainingSeconds % 60).padStart(2, '0')}`}
-              />
-            ) : (
-              <TimerRing
-                totalSeconds={totalSeconds}
-                remainingSeconds={remainingSeconds}
-                phase={phase}
-                isRunning={isRunning}
-              />
-            )}
-          </motion.div>
-          </div>
-
-          {/* 循环标记 — 数量随预设变化 */}
-          <CycleMarkers
-            total={cycleTotal}
-            filled={completedCount}
-            className="mb-[clamp(0.25rem,1.2vh,2rem)]"
-          />
-
-          {/* 白噪音 + 主控制 + 沉浸入口（拆至 PomodoroControls） */}
-          <PomodoroControls onStart={() => setGoalModalOpen(true)} />
 
           <GoalInput
             open={goalModalOpen}

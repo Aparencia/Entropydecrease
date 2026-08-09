@@ -24,6 +24,7 @@ export type PomodoroAction =
   | 'tick_5min_warning'
   | 'tick_final'
   | 'phase_complete'
+  | 'breathing_resume'
   | null;
 
 export interface PomodoroSettings {
@@ -47,9 +48,6 @@ export interface PomodoroSettings {
   flowMusicEnabled?: boolean;       // 心流音乐：按专注状态自动调整背景音乐
   guardianLinkEnabled?: boolean;    // 守护灵联动：按分心分数实时调节心流音乐
   autoSwitchAudioPhase?: boolean;   // 阶段音轨自动切换：休息/专注自动换音轨
-  // Chronos 时间生物增强（P2，全部可选缺省关闭）
-  ambientAdaptation?: boolean;      // 环境光自适应：摄像头亮度采样驱动生物自发光
-  chronosEnabled?: boolean;         // Chronos 时间生物形态（缺省 true，关闭回退经典环）
 }
 
 export interface PomodoroState {
@@ -78,6 +76,27 @@ export interface PomodoroState {
   isImmersive: boolean;
   /** 退出沉浸后标记，用于 resume 时自动重入 */
   wasImmersive: boolean;
+  /**
+   * Chronos 激活标记（沉睡↔呼吸区分）：false=沉睡（未激活），true=呼吸（已激活待开始）。
+   * awaken() 置 true（点击激活）；reset() 清 false（长按中止回沉睡）。
+   */
+  isArmed: boolean;
+  /**
+   * 最近一次番茄活动时间戳（ms）。冷启动判定依据：
+   * 距上次活动超过 COLD_START_MS（或从未活动）→ 沉睡点击先进呼吸仪式；
+   * 热启动 → 沉睡点击直接开始 1 分钟迈步。
+   */
+  lastActivityAt: number | null;
+  /** 当前会话是否为 1 分钟迈步（tick 完成时置 stepCompleted） */
+  isStepDive: boolean;
+  /** 1 分钟迈步已完成标记：迈步完成后的呼吸态点击 = 完整专注（目标弹窗） */
+  stepCompleted: boolean;
+  /** 跳过呼吸仪式标记：跳过呼吸态后首次专注不计入番茄计数（completedCount 不增加） */
+  ritualSkipped: boolean;
+  /** 呼吸缓解保存字段：专注→呼吸时保存的剩余专注秒数 */
+  _breathingResumeRemaining: number | null;
+  /** 呼吸缓解保存字段：专注→呼吸时保存的总专注秒数 */
+  _breathingResumeTotal: number | null;
   /** AI 推荐的工作时长（分钟） */
   aiRecommendedDuration?: number;
   /** AI 推荐理由文本 */
@@ -106,10 +125,18 @@ export interface PomodoroState {
   startMiniDive: () => void;
   /** T3: 开始 5 分钟承诺深潜（拖延重启专用，最小承诺降低启动门槛） */
   startCommitDive: () => void;
+  /** 呼吸态 1 分钟迈步（启动心理学：先动起来，迈步完成回呼吸态） */
+  startStepDive: () => void;
+  /** 专注→呼吸缓解：暂停专注进入短暂呼吸态 */
+  startBreathingDive: () => void;
+  /** 跳过当前呼吸态：恢复原专注（呼吸缓解）或直接开始完整专注（迈步） */
+  skipBreathingDive: () => void;
   pause: () => void;
   resume: () => void;
   reset: () => void;
   skip: () => void;
+  /** Chronos 点击激活：沉睡→呼吸（isArmed=true），不启动计时 */
+  awaken: () => void;
   /** 中断当前工作会话（投入 ≥30s 时落库 interrupted 记录，不污染完成统计） */
   abortSession: () => void;
   tick: () => void;
@@ -135,6 +162,8 @@ export interface PomodoroState {
   updatePreset: (id: string, changes: Partial<Omit<PomodoroPreset, 'id' | 'builtin'>>) => Promise<void>;
   deletePreset: (id: string) => Promise<void>;
   reorderPresets: (orderedIds: string[]) => Promise<void>;
+    /** 设置跳过呼吸仪式标记 */
+    setRitualSkipped: (v: boolean) => void;
 }
 
 /** slice 创建函数类型（全 state 可见，实现自身子集） */
@@ -164,6 +193,20 @@ export const MINI_DIVE_SECONDS = 180;
 
 /** T3 5 分钟承诺深潜时长（拖延情绪调节：不要求完美，只要求开始） */
 export const COMMIT_DIVE_SECONDS = 300;
+
+/** 呼吸态 30 秒迈步时长（启动心理学：先动起来，30 秒即到） */
+export const STEP_DIVE_SECONDS = 30;
+
+/** 专注→呼吸缓解：专注暂停时进入的短暂呼吸时长 */
+export const BREATHING_DIVE_SECONDS = 30;
+
+/** 冷启动阈值：距上次番茄活动超过此时长（或从未活动）→ 沉睡点击先进呼吸仪式 */
+export const COLD_START_MS = 24 * 60 * 60 * 1000;
+
+/** 冷启动判定：无活动记录或距上次活动超过阈值 */
+export function isColdStart(lastActivityAt: number | null): boolean {
+  return lastActivityAt == null || Date.now() - lastActivityAt > COLD_START_MS;
+}
 
 /** 获取预设的有效 longBreakInterval（0 = 无长休） */
 export function getInterval(preset: PomodoroPreset | null, settings: PomodoroSettings): number {

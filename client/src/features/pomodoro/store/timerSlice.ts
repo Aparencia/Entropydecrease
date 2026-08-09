@@ -10,11 +10,11 @@
  * lifecycle actions; the heavy tick machine lives in tickSlice. Wall-clock
  * calibration via endAt is preserved verbatim.
  */
-import { loadSettings, recordSession } from './usePomodoroPersistence';
+import { loadSettings, loadLastSessionAt, recordSession } from './usePomodoroPersistence';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { seedBuiltinPresets } from '../lib/presetService';
 import {
-  COMMIT_DIVE_SECONDS, MINI_DIVE_SECONDS, computeActualMs, getPhaseDuration,
+  COMMIT_DIVE_SECONDS, MINI_DIVE_SECONDS, STEP_DIVE_SECONDS, BREATHING_DIVE_SECONDS, computeActualMs, getPhaseDuration,
   getInterval, getNextPhase,
   type Mode, type PomodoroSlice, type PomodoroState,
 } from './pomodoroStoreTypes';
@@ -41,12 +41,14 @@ let initPromise: Promise<void> | null = null;
 export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
   | 'phase' | 'isRunning' | 'isPaused' | 'remainingSeconds' | 'totalSeconds'
   | 'endAt' | 'completedCount' | 'sessionStartTime' | 'pausedAt' | 'totalPausedMs'
-  | 'isMiniDive' | 'isImmersive' | 'wasImmersive' | 'lastAction' | 'lastActionCounter'
+  | 'isMiniDive' | 'isImmersive' | 'wasImmersive' | 'isArmed' | 'lastActivityAt' | 'isStepDive' | 'stepCompleted' | 'ritualSkipped'
+  | '_breathingResumeRemaining' | '_breathingResumeTotal'
+  | 'lastAction' | 'lastActionCounter'
   | 'lastCompletedPhase' | 'isCycleComplete' | 'lastSessionActualDuration'
   | 'showCompletionOverlay' | 'dismissCompletionOverlay' | 'initialize'
-  | 'start' | 'startMiniDive' | 'startCommitDive' | 'pause' | 'resume'
-  | 'reset' | 'skip' | 'abortSession' | 'enterImmersive' | 'exitImmersive'
-  | 'syncDisplayDuration'
+  | 'start' | 'startMiniDive' | 'startCommitDive' | 'startStepDive' | 'startBreathingDive' | 'skipBreathingDive' | 'pause' | 'resume'
+  | 'reset' | 'skip' | 'awaken' | 'abortSession' | 'enterImmersive' | 'exitImmersive'
+  | 'syncDisplayDuration' | 'setRitualSkipped'
 >> = (set, get) => ({
   // ── 计时器状态 ──
   phase: 'work',
@@ -62,6 +64,13 @@ export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
   isMiniDive: false,
   isImmersive: false,
   wasImmersive: false,
+  isArmed: false,
+  lastActivityAt: null,
+  isStepDive: false,
+  stepCompleted: false,
+  ritualSkipped: false,
+  _breathingResumeRemaining: null,
+  _breathingResumeTotal: null,
   lastAction: null,
   lastActionCounter: 0,
   lastCompletedPhase: null,
@@ -84,6 +93,8 @@ export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
       endAt: Date.now() + s.remainingSeconds * 1000,
       lastAction: 'start', lastActionCounter: s.lastActionCounter + 1,
       totalPausedMs: 0, pausedAt: null,
+      isArmed: true, // 开始即进入激活态（呼吸→专注）
+      lastActivityAt: Date.now(),
     }));
     // 静默预设跳过启停音效（BUG-005 语义完整化：silent 覆盖全部番茄钟音效）
     if (!get().activePreset?.silent) soundPlayer.play('pomodoro_start');
@@ -95,9 +106,10 @@ export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
       mode: 'self_study', phase: 'work',
       remainingSeconds: MINI_DIVE_SECONDS, totalSeconds: MINI_DIVE_SECONDS,
       endAt: Date.now() + MINI_DIVE_SECONDS * 1000,
-      isMiniDive: true, isRunning: true, isPaused: false,
+      isMiniDive: true, isRunning: true, isPaused: false, isArmed: true,
       sessionStartTime: Date.now(), currentGoal: '首潜 · 3 分钟体验',
       lastAction: 'start', lastActionCounter: s.lastActionCounter + 1,
+      lastActivityAt: Date.now(),
     }));
     if (!get().activePreset?.silent) soundPlayer.play('pomodoro_start');
   },
@@ -108,11 +120,90 @@ export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
       mode: 'self_study', phase: 'work',
       remainingSeconds: COMMIT_DIVE_SECONDS, totalSeconds: COMMIT_DIVE_SECONDS,
       endAt: Date.now() + COMMIT_DIVE_SECONDS * 1000,
-      isMiniDive: true, isRunning: true, isPaused: false,
+      isMiniDive: true, isRunning: true, isPaused: false, isArmed: true,
       sessionStartTime: Date.now(), currentGoal: '就 5 分钟 · 随时可以停',
       lastAction: 'start', lastActionCounter: s.lastActionCounter + 1,
+      lastActivityAt: Date.now(),
     }));
     if (!get().activePreset?.silent) soundPlayer.play('pomodoro_start');
+  },
+
+  startStepDive: () => {
+    // 呼吸态 1 分钟迈步：先动起来（启动心理学）。复用 isMiniDive 记录链路，
+    // 时长按实际 60s 如实记录；迈步完成置 stepCompleted（tick 完成分支）
+    // 保留已有 currentGoal（目标弹窗已前置填写，此处不覆盖）
+    set((s) => ({
+      mode: 'self_study', phase: 'work',
+      remainingSeconds: STEP_DIVE_SECONDS, totalSeconds: STEP_DIVE_SECONDS,
+      endAt: Date.now() + STEP_DIVE_SECONDS * 1000,
+      isMiniDive: true, isRunning: true, isPaused: false, isArmed: true,
+      sessionStartTime: Date.now(),
+      lastAction: 'start', lastActionCounter: s.lastActionCounter + 1,
+      lastActivityAt: Date.now(),
+      isStepDive: true, stepCompleted: false,
+    }));
+    if (!get().activePreset?.silent) soundPlayer.play('pomodoro_start');
+  },
+
+  /**
+   * 专注→呼吸缓解：专注暂停时进入短暂呼吸态（30s），恢复呼吸后自动恢复专注。
+   * 保存当前 remainingSeconds，呼吸态结束后恢复。
+   */
+  startBreathingDive: () => {
+    const { remainingSeconds, totalSeconds } = get();
+    set((s) => ({
+      mode: 'self_study', phase: 'work',
+      remainingSeconds: BREATHING_DIVE_SECONDS, totalSeconds: BREATHING_DIVE_SECONDS,
+      endAt: Date.now() + BREATHING_DIVE_SECONDS * 1000,
+      isMiniDive: true, isRunning: true, isPaused: false, isArmed: true,
+      sessionStartTime: Date.now(),
+      lastAction: 'start', lastActionCounter: s.lastActionCounter + 1,
+      lastActivityAt: Date.now(),
+      isStepDive: true, stepCompleted: false,
+      // 保存当前专注剩余时间，呼吸态完成后恢复
+      _breathingResumeRemaining: remainingSeconds,
+      _breathingResumeTotal: totalSeconds,
+    }));
+    if (!get().activePreset?.silent) soundPlayer.play('pomodoro_start');
+  },
+
+  /**
+   * 跳过当前呼吸态：
+   * - 呼吸缓解（专注→呼吸）中：恢复保存的原专注剩余时间
+   * - 迈步仪式中：跳过仪式直接进入完整专注
+   */
+  skipBreathingDive: () => {
+    const { _breathingResumeRemaining, _breathingResumeTotal, activePreset, settings } = get();
+    if (_breathingResumeRemaining != null) {
+      // 呼吸缓解：恢复保存的专注剩余时间
+      set((s) => ({
+        phase: 'work',
+        remainingSeconds: _breathingResumeRemaining,
+        totalSeconds: _breathingResumeTotal ?? _breathingResumeRemaining,
+        endAt: Date.now() + _breathingResumeRemaining * 1000,
+        isRunning: true, isPaused: false,
+        isMiniDive: false,
+        isStepDive: false, stepCompleted: false,
+        _breathingResumeRemaining: null,
+        _breathingResumeTotal: null,
+        lastAction: 'breathing_resume', lastActionCounter: s.lastActionCounter + 1,
+      }));
+      return;
+    }
+    // 迈步仪式：跳过仪式直接进入完整专注
+    const duration = getPhaseDuration('work', activePreset, settings);
+    set((s) => ({
+      phase: 'work',
+      remainingSeconds: duration,
+      totalSeconds: duration,
+      endAt: Date.now() + duration * 1000,
+      isRunning: true, isPaused: false,
+      isMiniDive: false,
+      isStepDive: false, stepCompleted: false,
+      _breathingResumeRemaining: null,
+      _breathingResumeTotal: null,
+      lastAction: 'start', lastActionCounter: s.lastActionCounter + 1,
+    }));
   },
 
   pause: () => {
@@ -120,6 +211,7 @@ export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
       isRunning: false, isPaused: true, endAt: null,
       pausedAt: Date.now(),
       lastAction: 'pause', lastActionCounter: s.lastActionCounter + 1,
+      lastActivityAt: Date.now(),
     }));
     if (!get().activePreset?.silent) soundPlayer.play('pomodoro_pause');
   },
@@ -141,6 +233,7 @@ export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
       // 不再自动重入沉浸模式：尊重用户选择，停留在当前视图
       isImmersive: s.isImmersive,
       wasImmersive: false,
+      lastActivityAt: Date.now(),
     }));
     if (!get().activePreset?.silent) soundPlayer.play('pomodoro_start');
   },
@@ -163,6 +256,13 @@ export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
       pausedAt: null,
       // 重置 = 本轮重新开始：周期计数归零（与统计页"完成数"口径一致）
       completedCount: 0,
+      // 长按中止 = 回沉睡：清除激活标记、迈步状态、跳过标记与目标
+      isArmed: false,
+      isStepDive: false,
+      stepCompleted: false,
+      ritualSkipped: false,
+      currentGoal: null,
+      lastActivityAt: Date.now(),
     });
   },
 
@@ -189,7 +289,24 @@ export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
       isMiniDive: false,
       totalPausedMs: 0,
       pausedAt: null,
+      isArmed: phase === 'work', // 工作阶段跳过仍处激活流，休息阶段跳过回沉睡
+      lastActivityAt: Date.now(),
     });
+  },
+
+  /** Chronos 点击激活：沉睡→呼吸（启动 30s 倒计时，唤醒仪式） */
+  awaken: () => {
+    set((s) => ({
+      mode: 'self_study', phase: 'work',
+      remainingSeconds: STEP_DIVE_SECONDS, totalSeconds: STEP_DIVE_SECONDS,
+      endAt: Date.now() + STEP_DIVE_SECONDS * 1000,
+      isMiniDive: true, isRunning: true, isPaused: false, isArmed: true,
+      sessionStartTime: Date.now(),
+      lastAction: 'start', lastActionCounter: s.lastActionCounter + 1,
+      lastActivityAt: Date.now(),
+      isStepDive: true, stepCompleted: false,
+    }));
+    if (!get().activePreset?.silent) soundPlayer.play('pomodoro_start');
   },
 
   /**
@@ -242,6 +359,11 @@ export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
     const duration = getPhaseDuration(phase, activePreset, settings);
     set({ remainingSeconds: duration, totalSeconds: duration });
   },
+
+  /** 设置跳过呼吸仪式标记（跳过呼吸态后首次专注不计入番茄计数） */
+  setRitualSkipped: (v) => {
+    set({ ritualSkipped: v });
+  },
 });
 
 /**
@@ -254,6 +376,9 @@ async function doInitialize(
 ): Promise<void> {
   const saved = await loadSettings();
   const merged = saved ? { ...defaultSettings, ...saved } : defaultSettings;
+
+  // 回填最近会话时间（Chronos 冷启动判定数据源；无记录 = 冷启动）
+  const lastActivityAt = await loadLastSessionAt();
 
   // 种子化预设（首次启动时创建内置预设）
   const presets = await seedBuiltinPresets(merged as Parameters<typeof seedBuiltinPresets>[0]);
@@ -277,6 +402,7 @@ async function doInitialize(
     presets,
     activePreset,
     mode,
+    lastActivityAt,
     remainingSeconds: get().isRunning || get().isPaused ? get().remainingSeconds : duration,
     totalSeconds: get().isRunning || get().isPaused ? get().totalSeconds : duration,
   });
