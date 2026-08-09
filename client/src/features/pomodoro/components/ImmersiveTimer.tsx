@@ -170,8 +170,13 @@ export default function ImmersiveTimer({
       if (showTimerRef.current) clearTimeout(showTimerRef.current);
       showTimerRef.current = setTimeout(() => setShowTime(false), 5000);
     }
+    return () => {
+      if (showTimerRef.current) {
+        clearTimeout(showTimerRef.current);
+        showTimerRef.current = null;
+      }
+    };
   }, [remainingSeconds, totalSeconds]);
-  useEffect(() => () => { if (showTimerRef.current) clearTimeout(showTimerRef.current); }, []);
 
   // 3.8 心流音乐引擎（工作阶段激活）
   const flowMusic = useFlowMusic(focusScore);
