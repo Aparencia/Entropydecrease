@@ -128,36 +128,26 @@ export default function ImmersiveTimer({
   };
 
   // 空格键暂停/继续（排除输入框聚焦场景）
-  // 使用 ref 持有最新值，避免 effect 每秒因 tick 变化而重建
-  const phaseRef = useRef(phase);
-  phaseRef.current = phase;
-  const isRunningRef = useRef(isRunning);
-  isRunningRef.current = isRunning;
-  const isPausedRef = useRef(isPaused);
-  isPausedRef.current = isPaused;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== 'Space') return;
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
-      if (phaseRef.current !== 'work') return;
+      if (phase !== 'work') return;
       e.preventDefault();
-      if (isRunningRef.current) pause();
-      else if (isPausedRef.current) resume();
+      if (isRunning) pause();
+      else if (isPaused) resume();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [pause, resume]);
+  }, [phase, isRunning, isPaused, pause, resume]);
 
   // 背景音偏好：外部传入优先（向后兼容），缺省读全局音频偏好 store
-  const storeWhiteNoiseEnabled = useAudioPrefsStore((s) => s.whiteNoiseEnabled);
-  const storeWhiteNoiseVolume = useAudioPrefsStore((s) => s.whiteNoiseVolume);
-  const storeToggleWhiteNoise = useAudioPrefsStore((s) => s.toggleWhiteNoise);
-  const storeSetWhiteNoiseVolume = useAudioPrefsStore((s) => s.setWhiteNoiseVolume);
-  const effectiveWhiteNoiseEnabled = whiteNoiseEnabled ?? storeWhiteNoiseEnabled;
-  const effectiveWhiteNoiseVolume = whiteNoiseVolume ?? storeWhiteNoiseVolume;
-  const effectiveToggleWhiteNoise = onToggleWhiteNoise ?? storeToggleWhiteNoise;
-  const effectiveWhiteNoiseVolumeChange = onWhiteNoiseVolume ?? storeSetWhiteNoiseVolume;
+  const storePrefs = useAudioPrefsStore();
+  const effectiveWhiteNoiseEnabled = whiteNoiseEnabled ?? storePrefs.whiteNoiseEnabled;
+  const effectiveWhiteNoiseVolume = whiteNoiseVolume ?? storePrefs.whiteNoiseVolume;
+  const effectiveToggleWhiteNoise = onToggleWhiteNoise ?? storePrefs.toggleWhiteNoise;
+  const effectiveWhiteNoiseVolumeChange = onWhiteNoiseVolume ?? storePrefs.setWhiteNoiseVolume;
 
   // 时间显示 5s：阶段开头（remaining === total）触发（覆盖运行起始沿与 store 恢复运行态）。
   // timer 存 ref：effect 依赖每秒变化的 remainingSeconds，局部变量 timer 会被每秒
@@ -170,13 +160,8 @@ export default function ImmersiveTimer({
       if (showTimerRef.current) clearTimeout(showTimerRef.current);
       showTimerRef.current = setTimeout(() => setShowTime(false), 5000);
     }
-    return () => {
-      if (showTimerRef.current) {
-        clearTimeout(showTimerRef.current);
-        showTimerRef.current = null;
-      }
-    };
   }, [remainingSeconds, totalSeconds]);
+  useEffect(() => () => { if (showTimerRef.current) clearTimeout(showTimerRef.current); }, []);
 
   // 3.8 心流音乐引擎（工作阶段激活）
   const flowMusic = useFlowMusic(focusScore);
