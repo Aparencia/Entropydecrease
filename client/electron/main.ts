@@ -48,20 +48,21 @@ import { registerShortcuts, unregisterShortcuts } from './shortcutManager.js';
 import { registerRecordingIpcHandlers } from './recordingStorage.js';
 
 // ================================================================
-// 性能优化：启用 GPU 光栅化与零拷贝
+// 性能优化：启用 GPU 光栅化、零拷贝与 WebGPU
 // ================================================================
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
-app.commandLine.appendSwitch('enable-features', 'WebGLDraftExtensions,SharedArrayBuffer');
+// WebGPU 支持（Three.js WebGPURenderer 自动检测，不可用时回退 WebGL2）
+app.commandLine.appendSwitch('enable-features', 'WebGPU,SharedArrayBuffer');
 
-// Windows: ANGLE + Direct3D 11
+// Windows: ANGLE + Direct3D 11（WebGPU 不可用时作为 WebGL 回退）
 // 注意：值必须是 'd3d11'，曾误写为 'gl' 导致 ANGLE 被锁定 OpenGL 后端，
 // 引发 WEBGL_lose_context 缺失、上下文异常及渲染卡顿
 if (process.platform === 'win32') {
   app.commandLine.appendSwitch('use-angle', 'd3d11');
 }
 
-// macOS: Metal
+// macOS: Metal（WebGPU 原生使用 Metal API）
 if (process.platform === 'darwin') {
   app.commandLine.appendSwitch('enable-metal', '1');
 }

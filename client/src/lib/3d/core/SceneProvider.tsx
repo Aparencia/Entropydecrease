@@ -32,6 +32,7 @@ import { usePerformanceModeStore } from '@/lib/performance/usePerformanceMode';
 import { PERFORMANCE_MODE_CONFIG } from '@/lib/performance/performanceMode';
 import { useSceneTheme } from '../hooks/useSceneTheme';
 import * as THREE from 'three';
+import WebGPURenderer from 'three/src/renderers/webgpu/WebGPURenderer.js';
 
 interface SceneProviderProps {
   children: React.ReactNode;
@@ -183,12 +184,12 @@ export function SceneProvider({ children, interactive = false }: SceneProviderPr
     <div className="fixed inset-0 z-0" style={{ pointerEvents: interactive ? 'auto' : 'none' }}>
       <Canvas
         frameloop={frameloop}
-        gl={{
+        gl={(canvas) => new WebGPURenderer({
+          canvas,
           antialias: true,
           alpha: true,
-          powerPreference: 'high-performance',
           stencil: false,
-        }}
+        })}
         camera={{ fov: 60, near: 0.1, far: 1000, position: [0, 0, 10] }}
         dpr={[1, 2]}
         style={{ background: 'transparent' }}
@@ -202,12 +203,8 @@ export function SceneProvider({ children, interactive = false }: SceneProviderPr
           // gl.shadowMap.type = THREE.PCFSoftShadowMap;
           // 注意：fog 和 background 由 ThemeAwareEnvironment 组件管理（主题感知）
           // GPU 诊断：打印实际渲染器名称，出现 SwiftShader 即说明落入软件渲染（硬件加速失效）
-          const ctx = gl.getContext();
-          const dbgExt = ctx.getExtension('WEBGL_debug_renderer_info');
-          const rendererName = dbgExt
-            ? ctx.getParameter(dbgExt.UNMASKED_RENDERER_WEBGL)
-            : ctx.getParameter(ctx.RENDERER);
-          console.info('[3D] WebGL renderer:', rendererName);
+          const backendName = (gl as any).backend?.constructor?.name ?? 'unknown';
+          console.info('[3D] Renderer backend:', backendName);
         }}
       >
         {/* FPS 自动降档仅在概览态测量（entering 飞行帧率不代表设备能力，docked 无帧率可言） */}

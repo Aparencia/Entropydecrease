@@ -43,12 +43,13 @@ export function MemoryManager() {
   // 定期报告内存使用
   useEffect(() => {
     const interval = setInterval(() => {
-      const info = gl.info;
+      const info = gl.info as any;
+      const programs = info.memory?.programs ?? info.programs?.length ?? 0;
       if (info.memory.geometries > 500 || info.memory.textures > 100) {
         console.warn('[3D Memory]', {
           geometries: info.memory.geometries,
           textures: info.memory.textures,
-          programs: info.programs?.length ?? 0,
+          programs,
         });
       }
 
