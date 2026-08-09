@@ -10,7 +10,6 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Timer, FileText, Layers, Lightbulb } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { SPRING, fadeInUp } from '@/lib/animation/springConfig';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import { DashboardCard } from '../DashboardCard';
@@ -24,16 +23,6 @@ import type { DashboardData } from '../../hooks/useDashboardData';
 const accentText: Record<string, string> = {
   pomodoro: 'text-pomodoro', note: 'text-note',
   flashcard: 'text-flashcard', feynman: 'text-feynman',
-};
-
-const staggerContainer = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.08, delayChildren: 0.1 } },
-};
-
-const heroStatVariant = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: { opacity: 1, y: 0, scale: 1, transition: SPRING.gentle },
 };
 
 const quickActions = [
@@ -76,12 +65,10 @@ export function TodayView({
   ];
 
   return (
-    <div>
+    <div className="stagger-fade-in">
       {/* ════ 今日航线：行动导向主角 ════ */}
       <section className="relative max-w-[1100px] mx-auto px-6 pt-rhythm-md">
-        <motion.div {...fadeInUp}>
-          <PlannerPanel />
-        </motion.div>
+        <PlannerPanel />
       </section>
 
       {/* ════ 今日待办：未完成显性化（蔡格尼克效应） ════ */}
@@ -128,7 +115,7 @@ export function TodayView({
 
       {/* ════ 快捷操作 ════ */}
       <section className="relative max-w-[1100px] mx-auto px-6 mt-rhythm-md">
-        <motion.div className="flex gap-3" variants={staggerContainer}>
+        <div className="flex gap-3">
           {quickActions.map((action) => {
             const Icon = action.icon;
             return (
@@ -142,31 +129,27 @@ export function TodayView({
                   'text-b3 font-medium text-text-secondary hover:text-text-primary',
                   'transition-all duration-beat-x2',
                 )}
-                variants={heroStatVariant}
                 whileHover={{ y: -2 }}
                 whileTap={{ scale: 0.96 }}
-                transition={SPRING.default}
               >
                 <Icon className={cn('w-4 h-4', accentText[action.accent])} strokeWidth={1.5} />
                 {action.label}
               </motion.button>
             );
           })}
-        </motion.div>
+        </div>
       </section>
 
       {/* ════ 今日统计：状态反馈 ════ */}
       <section className="relative max-w-[1100px] mx-auto px-6 mt-rhythm-md">
-        <motion.div className="grid grid-cols-2 lg:grid-cols-4 gap-rhythm-sm" variants={staggerContainer}>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-rhythm-sm">
           {heroStats.map((stat) => {
             const Icon = stat.icon;
             return (
               <motion.div
                 key={stat.label}
-                variants={heroStatVariant}
                 whileHover={{ y: -2, scale: 1.02 }}
                 whileTap={{ scale: 0.97 }}
-                transition={SPRING.default}
               >
                 <DashboardCard
                   accent={stat.accent}
@@ -195,7 +178,7 @@ export function TodayView({
               </motion.div>
             );
           })}
-        </motion.div>
+        </div>
       </section>
 
       {/* 🎯 目标进度（目标梯度效应，紧邻计划区） */}
@@ -212,7 +195,7 @@ export function TodayView({
 
       {/* ════ 知识预览：回到学习现场 ════ */}
       <section className="relative max-w-[1100px] mx-auto px-6 mt-rhythm-lg pb-rhythm-xl">
-        <motion.div className="mb-rhythm-sm" {...fadeInUp}>
+        <div className="mb-rhythm-sm">
           <ModuleRitualHeader
             title="知识预览"
             note="最近的学习足迹"
@@ -220,7 +203,7 @@ export function TodayView({
             sealColor="#40AB92"
             compact
           />
-        </motion.div>
+        </div>
 
         {isLoading ? (
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-rhythm-sm">
@@ -233,18 +216,11 @@ export function TodayView({
             ))}
           </div>
         ) : knowledgeCards.length > 0 ? (
-          <motion.div
-            className="grid grid-cols-2 lg:grid-cols-3 gap-rhythm-sm"
-            variants={staggerContainer}
-            initial="hidden"
-            animate="visible"
-          >
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-rhythm-sm">
             {knowledgeCards.map((card, i) => (
-              <motion.div key={card.id} variants={heroStatVariant}>
-                <KnowledgePreviewCard card={card} index={i} />
-              </motion.div>
+              <KnowledgePreviewCard key={card.id} card={card} index={i} />
             ))}
-          </motion.div>
+          </div>
         ) : (
           <div className="text-center py-rhythm-xl">
             <p className="text-b2 text-text-tertiary">
