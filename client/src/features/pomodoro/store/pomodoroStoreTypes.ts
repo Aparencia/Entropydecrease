@@ -131,6 +131,8 @@ export interface PomodoroState {
   startBreathingDive: () => void;
   /** 跳过当前呼吸态：恢复原专注（呼吸缓解）或直接开始完整专注（迈步） */
   skipBreathingDive: () => void;
+  /** 统一跳过阶段：呼吸态→跳过呼吸进专注，其他→常规 skip */
+  skipStage: () => void;
   pause: () => void;
   resume: () => void;
   reset: () => void;

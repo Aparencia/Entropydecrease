@@ -11,7 +11,7 @@ import { pomodoroPresetStore } from '@/lib/storage';
 import type { PomodoroPreset, PomodoroSettings } from '@/types/models';
 
 /** 预设数量上限（含内置） */
-export const MAX_PRESETS = 6;
+export const MAX_PRESETS = 8;
 
 /**
  * 获取全部预设（按 sortOrder 升序）

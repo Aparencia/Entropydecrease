@@ -4,11 +4,14 @@
  * 引力场布局：控件围绕生物下缘的固定半圆弧轨道排布，位置由固定角度槽位
  * 三角函数静态计算（不随悬停漂移），平时低透明度（0.6）常驻可见，悬停浮现至 1。
  *
+ * 定位根治：轨道半径使用容器尺寸百分比（ORBIT_RATIO），不依赖 px 测量——
+ * 容器尺寸任何变化（视口 vmin 波动等）按钮平滑跟随而非跳变，零测量零跳动。
+ *
  * 交互收敛（主交互 = 点击时间生物）：
  * - 主按钮已清除：开始/暂停/继续由生物点击承担（热启动直接迈步、专注态暂停/恢复）
- * - 四颗卫星：重置 / 跳过 / 沉浸 / 白噪音（弧端小图标下拉）
+ * - 四颗卫星：重置 / 跳过（统一 skipStage）/ 沉浸 / 白噪音（弧端小图标下拉）
  *
- * @ai-context: 状态取自 store；唯一外部依赖是 orbitRadius（父组件按生物尺寸传入）。
+ * @ai-context: 状态取自 store；定位由百分比驱动，无外部尺寸依赖。
  */
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,25 +23,23 @@ import { useAudioPrefsStore } from '@/lib/audio/audioPrefsStore';
 import { audioTracks } from '@/lib/audio/audioConfig';
 import { useEstimatedVolume } from '../hooks/useEstimatedVolume';
 
-interface PomodoroControlsProps {
-  /** 卫星轨道半径（px）= 生物半径 × 1.45，父组件按生物尺寸计算 */
-  orbitRadius: number;
-}
-
 /** 固定角度槽位（度）：弧顶 90° 让位给生物主交互，四卫星对称分布于两侧弧 */
 const SAT = {
   reset: 135, skip: 45, immersive: 165, noise: 15,
 } as const;
 
+/** 轨道半径比例：容器尺寸的 72.5%（= 半宽 × 1.45），百分比定位随容器平滑跟随 */
+const ORBIT_RATIO = 0.725;
+
 /** 卫星平时透明度（常驻可见，悬停浮现至 1） */
 const SAT_IDLE_OPACITY = 0.6;
 
-/** 角度 → 绝对定位（圆心 = 容器中心，混合 calc 保持响应式） */
-function satPos(angleDeg: number, radius: number): React.CSSProperties {
+/** 角度 → 百分比定位（圆心 = 容器中心；百分比相对容器，任何尺寸变化平滑跟随） */
+function satPos(angleDeg: number): React.CSSProperties {
   const rad = (angleDeg * Math.PI) / 180;
   return {
-    left: `calc(50% + ${Math.cos(rad) * radius}px)`,
-    top: `calc(50% + ${Math.sin(rad) * radius}px)`,
+    left: `calc(50% + ${(Math.cos(rad) * ORBIT_RATIO * 100).toFixed(3)}%)`,
+    top: `calc(50% + ${(Math.sin(rad) * ORBIT_RATIO * 100).toFixed(3)}%)`,
   };
 }
 
@@ -47,14 +48,14 @@ function satClass(...classes: string[]): string {
   return cn('absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center', ...classes);
 }
 
-export function PomodoroControls({ orbitRadius }: PomodoroControlsProps) {
+export function PomodoroControls() {
   // P0-1 细粒度订阅：整 store 订阅会在任何字段变化时重渲染卫星控制区
   const isRunning = usePomodoroStore((s) => s.isRunning);
   const isPaused = usePomodoroStore((s) => s.isPaused);
   const isArmed = usePomodoroStore((s) => s.isArmed);
   // 动作（稳定引用）
   const reset = usePomodoroStore((s) => s.reset);
-  const skip = usePomodoroStore((s) => s.skip);
+  const skipStage = usePomodoroStore((s) => s.skipStage);
   const enterImmersive = usePomodoroStore((s) => s.enterImmersive);
   // 沉睡态（未激活未运行）：沉浸入口常驻但禁用（先开始专注才能进入沉浸）
   const isAsleep = !isRunning && !isPaused && !isArmed;
@@ -85,9 +86,9 @@ export function PomodoroControls({ orbitRadius }: PomodoroControlsProps) {
   }, [trackPickerOpen]);
 
   return (
-    <div className="pointer-events-none">
+    <>
       {/* ── 白噪音卫星（弧右下）── */}
-      <div ref={pickerRef} className="pointer-events-auto absolute z-10" style={satPos(SAT.noise, orbitRadius)}>
+      <div ref={pickerRef} className="pointer-events-auto absolute z-10" style={satPos(SAT.noise)}>
         <Tip text={whiteNoiseEnabled ? '关闭背景音' : '开启背景音'}>
         <motion.button
           whileTap={{ scale: 0.9 }}
@@ -148,10 +149,10 @@ export function PomodoroControls({ orbitRadius }: PomodoroControlsProps) {
       </div>
 
       {/* ── 重置卫星（弧左下）── */}
-      <div className="pointer-events-auto absolute z-10" style={satPos(SAT.reset, orbitRadius)}>
+      <div className="pointer-events-auto absolute z-10" style={satPos(SAT.reset)}>
         <Tip text="重置计时器（回沉睡）">
         <motion.button
-          whileTap={{ scale: 0.9, rotate: -180 }}
+          whileTap={{ scale: 0.9 }}
           onClick={reset}
           className={satClass('w-9 h-9 rounded-full border border-border/30 bg-bg-elevated/60 backdrop-blur-sm text-text-tertiary hover:text-text-secondary transition-colors')}
           animate={{ opacity: SAT_IDLE_OPACITY }}
@@ -162,12 +163,12 @@ export function PomodoroControls({ orbitRadius }: PomodoroControlsProps) {
         </Tip>
       </div>
 
-      {/* ── 跳过卫星（弧右下）── */}
-      <div className="pointer-events-auto absolute z-10" style={satPos(SAT.skip, orbitRadius)}>
+      {/* ── 跳过卫星（弧右下）：统一 skipStage（呼吸态→跳过呼吸进专注，其他→常规跳过）── */}
+      <div className="pointer-events-auto absolute z-10" style={satPos(SAT.skip)}>
         <Tip text="跳过当前阶段">
         <motion.button
-          whileTap={{ scale: 0.9, x: 3 }}
-          onClick={skip}
+          whileTap={{ scale: 0.9 }}
+          onClick={skipStage}
           className={satClass('w-9 h-9 rounded-full border border-border/30 bg-bg-elevated/60 backdrop-blur-sm text-text-tertiary hover:text-text-secondary transition-colors')}
           animate={{ opacity: SAT_IDLE_OPACITY }}
           whileHover={{ opacity: 1 }}
@@ -178,7 +179,7 @@ export function PomodoroControls({ orbitRadius }: PomodoroControlsProps) {
       </div>
 
       {/* ── 沉浸卫星（弧更左下，常驻显示；沉睡态禁用，先开始专注才能进入沉浸）── */}
-      <div className="pointer-events-auto absolute z-10" style={satPos(SAT.immersive, orbitRadius)}>
+      <div className="pointer-events-auto absolute z-10" style={satPos(SAT.immersive)}>
         <Tip text={isAsleep ? '先开始专注（点击时间生物）' : '进入专注模式'}>
         <motion.button
           whileTap={isAsleep ? undefined : { scale: 0.9 }}
@@ -197,6 +198,6 @@ export function PomodoroControls({ orbitRadius }: PomodoroControlsProps) {
         </motion.button>
         </Tip>
       </div>
-    </div>
+    </>
   );
 }

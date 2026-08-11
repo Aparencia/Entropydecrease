@@ -46,7 +46,7 @@ export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
   | 'lastAction' | 'lastActionCounter'
   | 'lastCompletedPhase' | 'isCycleComplete' | 'lastSessionActualDuration'
   | 'showCompletionOverlay' | 'dismissCompletionOverlay' | 'initialize'
-  | 'start' | 'startMiniDive' | 'startCommitDive' | 'startStepDive' | 'startBreathingDive' | 'skipBreathingDive' | 'pause' | 'resume'
+  | 'start' | 'startMiniDive' | 'startCommitDive' | 'startStepDive' | 'startBreathingDive' | 'skipBreathingDive' | 'skipStage' | 'pause' | 'resume'
   | 'reset' | 'skip' | 'awaken' | 'abortSession' | 'enterImmersive' | 'exitImmersive'
   | 'syncDisplayDuration' | 'setRitualSkipped'
 >> = (set, get) => ({
@@ -268,15 +268,19 @@ export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
 
   skip: () => {
     const { phase, completedCount, settings, activePreset } = get();
-    // 跳过工作阶段 = 中断：落库中断记录，且不增加完成计数
-    // （原实现计数 +1 导致 CycleMarkers 与统计页"完成深潜"数据打架）
+    // 跳过工作阶段 = 中断：落库中断记录（中断不增加"完成深潜"统计，但计入长休周期计数）
     if (phase === 'work') {
       get().abortSession();
     }
     const interval = getInterval(activePreset, settings);
     const nextPhase = getNextPhase(phase, completedCount, interval);
-    // 仅长休跳过时计数归零（开启新一轮）；工作/短休跳过不改变计数
-    const newCount = phase === 'long_break' ? 0 : completedCount;
+    // 长休跳过归零开启新一轮；工作跳过计入长休周期计数（与 getNextPhase 的 +1 判断一致）；
+    // 短休跳过不改变计数
+    const newCount = phase === 'long_break'
+      ? 0
+      : phase === 'work'
+        ? completedCount + 1
+        : completedCount;
     const duration = getPhaseDuration(nextPhase, activePreset, settings);
     set({
       phase: nextPhase,
@@ -289,9 +293,24 @@ export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
       isMiniDive: false,
       totalPausedMs: 0,
       pausedAt: null,
-      isArmed: phase === 'work', // 工作阶段跳过仍处激活流，休息阶段跳过回沉睡
+      isArmed: true, // 跳过始终返回激活流（呼吸态待启动），不进入沉眠
       lastActivityAt: Date.now(),
     });
+  },
+
+  /**
+   * 统一跳过阶段语义（跳过按钮与左键 Chronos 共用同一套逻辑）：
+   * - 呼吸态（迈步运行中 isStepDive，或待开始 isArmed && !isRunning）→ 跳过呼吸直接进入完整专注
+   * - 专注运行/暂停、休息态 → 常规 skip（进入下一阶段）
+   * 注意：专注运行中 isArmed 也为 true，必须用 isStepDive / !isRunning 区分呼吸态与专注态
+   */
+  skipStage: () => {
+    const { phase, isStepDive, isRunning, isArmed } = get();
+    if (phase === 'work' && (isStepDive || (isArmed && !isRunning))) {
+      get().skipBreathingDive();
+    } else {
+      get().skip();
+    }
   },
 
   /** Chronos 点击激活：沉睡→呼吸（启动 30s 倒计时，唤醒仪式） */

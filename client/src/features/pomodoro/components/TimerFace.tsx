@@ -35,7 +35,7 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-export function TimerFace() {
+export function TimerFace({ onAwaken }: { onAwaken?: () => void } = {}) {
   // ── 高频（每秒变化）：remainingSeconds ──
   const remainingSeconds = usePomodoroStore((s) => s.remainingSeconds);
   const totalSeconds = usePomodoroStore((s) => s.totalSeconds);
@@ -51,14 +51,11 @@ export function TimerFace() {
   const settings = usePomodoroStore((s) => s.settings);
   const lastActivityAt = usePomodoroStore((s) => s.lastActivityAt);
   // ── 动作（稳定引用，变化不触发重渲染）──
-  const setRitualSkipped = usePomodoroStore((s) => s.setRitualSkipped);
-  const start = usePomodoroStore((s) => s.start);
-  const awaken = usePomodoroStore((s) => s.awaken);
   const startStepDive = usePomodoroStore((s) => s.startStepDive);
   const startBreathingDive = usePomodoroStore((s) => s.startBreathingDive);
   const skipBreathingDive = usePomodoroStore((s) => s.skipBreathingDive);
   const resume = usePomodoroStore((s) => s.resume);
-  const skip = usePomodoroStore((s) => s.skip);
+  const pause = usePomodoroStore((s) => s.pause);
   const reset = usePomodoroStore((s) => s.reset);
   const enterImmersive = usePomodoroStore((s) => s.enterImmersive);
 
@@ -66,10 +63,10 @@ export function TimerFace() {
   const coldStart = isColdStart(lastActivityAt);
 
   // ── Chronos 点击交互（时间生物 = 核心交互点）──
-  // 沉睡 → awaken 进呼吸态（启动 30s 迈步倒计时）
+  // 沉睡 → 弹出目标输入（onAwaken）→ 提交后进入呼吸态
   // 呼吸态运行中 → 跳过呼吸直接进入专注（呼吸缓解恢复原专注）
   // 专注运行中 → 进入呼吸缓解（30s 呼吸态，结束后恢复专注）
-  // 暂停 → 继续；休息 → 提前结束
+  // 暂停 → 继续；休息态点击不响应
   const handleChronosTap = useCallback(() => {
     if (isRunning || isPaused) {
       if (phase === 'work') {
@@ -84,18 +81,17 @@ export function TimerFace() {
         } else {
           resume();
         }
-      } else {
-        skip(); // 休息阶段点击提前结束休息
       }
+      // 休息态点击不响应
     } else if (isArmed) {
       // 呼吸态待开始：启动 30s 迈步（呼吸准备环节，迈步完成无缝衔接完整专注）
       startStepDive();
-    } else {
-      // 沉睡：冷启动清计数重新开始，再进入呼吸态
+    } else if (phase === 'work') {
+      // 仅 work 沉睡态可唤醒（休息态空闲点击无响应，避免误入呼吸态）
       if (coldStart) usePomodoroStore.getState().reset();
-      awaken();
+      onAwaken?.();
     }
-  }, [isRunning, isPaused, isArmed, phase, isStepDive, coldStart, startBreathingDive, skipBreathingDive, resume, skip, startStepDive, awaken]);
+  }, [isRunning, isPaused, isArmed, phase, isStepDive, coldStart, startBreathingDive, skipBreathingDive, resume, startStepDive, onAwaken]);
 
   // 右键点击生物：运行/暂停/休息时进入沉浸模式（提示词引导）
   const handleChronosContextMenu = useCallback((e: React.MouseEvent) => {
@@ -129,42 +125,59 @@ export function TimerFace() {
 
   // 氛围随状态呼吸（深/浅差异化）：deep-sea 浓（压暗+状态色微光）、aurora 淡（通透）
   const theme = useSceneTheme();
-  const chronosState = toChronosState({ isArmed, isRunning, isPaused, phase });
+  const chronosState = toChronosState({ isArmed, isRunning, isPaused, phase, isStepDive });
   const ambientColor = CHRONOS_PALETTES[theme][chronosState].glow;
   const ambientIntensity = theme === 'deep-sea' ? 0.5 : 0.12;
 
-  // 状态行引导语（沉眠用默认"点击激活"；呼吸态=已激活待开始；专注→暂停/右键沉浸）
+  // 状态行引导语（沉眠用默认"点击激活"；呼吸态=已激活待开始；专注→调整/空格暂停/右键沉浸）
   const stateHint = chronosState === 'breathing'
     ? (isRunning ? '仪式进行中' : '点击跳过仪式 · 等待自动开始')
     : chronosState === 'focus'
-      ? '点击暂停 · 右键沉浸 · 长按放弃'
+      ? '点击调整一下 · 空格暂停 · 右键沉浸 · 长按放弃'
       : undefined;
 
-  // 呼吸态 1 分钟超时自动进入专注（跳过仪式，不计入计数）
+  // 空格键暂停/继续（排除输入框聚焦场景：目标输入中不拦截）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      if (phase !== 'work') return;
+      e.preventDefault();
+      if (isRunning) pause();
+      else if (isPaused) resume();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [phase, isRunning, isPaused, pause, resume]);
+
+  // 呼吸态待开始超时自动进入专注（skipBreathingDive：正常进入并正常计数，
+  // 不再走 ritualSkipped 路径——呼吸是准备环节，跳过不等于跳过计数）
   useEffect(() => {
     if (chronosState !== 'breathing' || isRunning || isPaused) return;
     const timer = setTimeout(() => {
-      setRitualSkipped(true);
-      start();
+      skipBreathingDive();
     }, 60000);
     return () => clearTimeout(timer);
-  }, [chronosState, isRunning, isPaused, setRitualSkipped, start]);
+  }, [chronosState, isRunning, isPaused, skipBreathingDive]);
 
-  // 卫星轨道半径（px）= 生物容器实际宽度 / 2 × 1.45，使用 Ref + ResizeObserver 确保准确
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [orbitRadius, setOrbitRadius] = useState(180);
+  // 时间显示 5s：阶段开头（remaining === total）触发——覆盖运行起始沿、
+  // 阶段切换、以及页面加载时 store 已恢复运行状态（isRunning 无起始沿）的场景。
+  // timer 存 ref：effect 依赖每秒变化的 remainingSeconds，若 timer 存局部变量会被
+  // 每秒重跑的 effect cleanup 清除（时间永不隐藏）
+  const [showTime, setShowTime] = useState(false);
+  const showTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const update = () => {
-      const w = el.offsetWidth;
-      if (w > 0) setOrbitRadius(w / 2 * 1.45);
-    };
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+    if (totalSeconds > 0 && remainingSeconds === totalSeconds) {
+      setShowTime(true);
+      if (showTimerRef.current) clearTimeout(showTimerRef.current);
+      showTimerRef.current = setTimeout(() => setShowTime(false), 5000);
+    }
+  }, [remainingSeconds, totalSeconds]);
+  useEffect(() => () => { if (showTimerRef.current) clearTimeout(showTimerRef.current); }, []);
+
+  // 卫星控制：百分比定位随容器自动跟随（PomodoroControls 内部 ORBIT_RATIO），
+  // 无需测量 orbitRadius——根治按钮跳动（容器尺寸变化时按钮平滑跟随而非跳变）
 
   // 循环标记数据 — 由活动预设的 longBreakInterval 驱动
   const cycleTotal = activePreset?.longBreakInterval ?? settings.longBreakInterval;
@@ -178,9 +191,11 @@ export function TimerFace() {
         className="absolute inset-0 pointer-events-none transition-[background] duration-1000"
         style={{ background: `radial-gradient(ellipse 70% 55% at 50% 42%, ${hexToRgba(ambientColor, ambientIntensity)} 0%, transparent 70%)` }}
       />
+     {/* 目标文字：absolute 定位不参与布局流（justify-center 垂直居中的内容块高度恒定，
+          根治按钮跳动——currentGoal 出现/消失不再推动粒子球容器位移） */}
       {currentGoal && (
         <motion.p
-          className="text-[12px] text-text-tertiary/70 text-center mb-2 truncate max-w-[280px]"
+          className="absolute left-0 right-0 top-0 z-10 text-[12px] text-text-tertiary/70 text-center truncate max-w-[280px] mx-auto pointer-events-none"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.4 }}
@@ -194,7 +209,9 @@ export function TimerFace() {
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 0.15, ...SPRING.gentle }}
       >
-        <div ref={containerRef} className="relative mx-auto">
+        {/* 卫星定位基准：w-fit 使容器宽度 = 内容宽度（粒子球正方形 clamp），
+            百分比定位中心 = 粒子球中心（按钮随容器自动跟随，零测量零跳动） */}
+        <div className="relative mx-auto w-fit">
           <ChronosCanvas
             mode="compact"
             phase={phase}
@@ -208,30 +225,17 @@ export function TimerFace() {
             onTap={handleChronosTap}
             onLongPress={handleChronosLongPress}
             onContextMenu={handleChronosContextMenu}
+            showTime={showTime}
             timeStr={timeStr}
           />
-          {/* 卫星控制轨道：与生物共享居中上下文，轨道圆心 = 粒子球中心 */}
+          {/* 卫星控制轨道：百分比定位随容器平滑跟随（无测量、零跳动） */}
           <div className="absolute inset-0 pointer-events-none">
-            <PomodoroControls orbitRadius={orbitRadius} />
+            <PomodoroControls />
           </div>
-          {/* 待开始态快捷入口：跳过呼吸仪式直接开始（仅呼吸态=已激活且非暂停时显示） */}
-          {isArmed && !isRunning && !isPaused && phase === 'work' && (
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-[clamp(0.1rem,0.5vh,0.5rem)] z-10">
-              <motion.button
-                onClick={skipBreathingDive}
-                className="px-2.5 py-0.5 rounded-full bg-bg-elevated/70 backdrop-blur-sm border border-border/20 text-[11px] text-text-tertiary/80 hover:text-text-primary hover:border-border/40 transition-colors"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-              >
-                跳过仪式 · 直接开始
-              </motion.button>
-            </div>
-          )}
         </div>
         {/* 状态行：生物下方（提示语不再覆盖球体；hint 随冷/热启动与迈步态动态变化） */}
         <ChronosStateRow
-          input={{ isArmed, isRunning, isPaused, phase }}
+          input={{ isArmed, isRunning, isPaused, phase, isStepDive }}
           hint={stateHint}
           className="mt-[clamp(0.25rem,1vh,0.75rem)]"
         />

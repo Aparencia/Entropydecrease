@@ -30,7 +30,7 @@ vi.mock('./usePomodoroPersistence', () => ({
 
 // Mock 预设服务，避免 IndexedDB 依赖
 vi.mock('../lib/presetService', () => ({
-  MAX_PRESETS: 6,
+  MAX_PRESETS: 8,
   getAllPresets: vi.fn().mockResolvedValue([]),
   getPresetById: vi.fn().mockResolvedValue(undefined),
   createPreset: vi.fn().mockResolvedValue({}),
@@ -359,12 +359,12 @@ describe('Pomodoro Store', () => {
   // ── skip ──────────────────────────────────────────────────
 
   describe('skip', () => {
-    it('should skip work to short_break without incrementing completedCount (skip ≠ 完成，与统计口径一致)', () => {
+    it('skip work 应计入长休周期计数（completedCount +1）且进入短休', () => {
       usePomodoroStore.setState({ phase: 'work', completedCount: 0 });
       usePomodoroStore.getState().skip();
       const state = usePomodoroStore.getState();
       expect(state.phase).toBe('short_break');
-      expect(state.completedCount).toBe(0);
+      expect(state.completedCount).toBe(1); // 跳过也计入长休周期计数
       expect(state.isRunning).toBe(false);
     });
 
@@ -376,12 +376,12 @@ describe('Pomodoro Store', () => {
       expect(state.completedCount).toBe(1); // unchanged
     });
 
-    it('should skip to long_break after 4th work phase (阶段流转但不计数)', () => {
+    it('第 4 次 work 跳过应进入 long_break 且计数 +1（=4）', () => {
       usePomodoroStore.setState({ phase: 'work', completedCount: 3 });
       usePomodoroStore.getState().skip();
       const state = usePomodoroStore.getState();
       expect(state.phase).toBe('long_break');
-      expect(state.completedCount).toBe(3);
+      expect(state.completedCount).toBe(4); // 跳过也计入周期计数
     });
   });
 
@@ -503,7 +503,6 @@ describe('Pomodoro Store', () => {
     });
 
     it('should have correct phase sequence for 8 consecutive pomodoros (2 full cycles)', () => {
-      const interval = DEFAULT_SETTINGS.longBreakInterval; // 4
       const phases: string[] = [];
       usePomodoroStore.setState({ phase: 'work', completedCount: 0, isRunning: true });
 
@@ -590,10 +589,10 @@ describe('Pomodoro Store', () => {
       expect(count).toBeLessThanOrEqual(4);
     });
 
-    it('skip in class mode does NOT increment count (skip ≠ 完成，与统计口径一致)', () => {
+    it('class 模式 skip work 也计入周期计数（+1）', () => {
       usePomodoroStore.setState({ mode: 'class', activePreset: CLASS_PRESET, phase: 'work', completedCount: 4 });
       usePomodoroStore.getState().skip();
-      expect(usePomodoroStore.getState().completedCount).toBe(4);
+      expect(usePomodoroStore.getState().completedCount).toBe(5);
     });
   });
 
@@ -1117,7 +1116,7 @@ describe('Pomodoro Store', () => {
       expect(recordSession).toHaveBeenCalledTimes(1);
     });
 
-    it('skip work 阶段落库中断记录且不计数', () => {
+    it('skip work 阶段落库中断记录且计入周期计数（+1）', () => {
       usePomodoroStore.setState({
         phase: 'work', completedCount: 2,
         sessionStartTime: Date.now() - 5 * 60 * 1000, totalPausedMs: 0,
@@ -1125,7 +1124,7 @@ describe('Pomodoro Store', () => {
       usePomodoroStore.getState().skip();
       const state = usePomodoroStore.getState();
       expect(state.phase).toBe('short_break');
-      expect(state.completedCount).toBe(2);
+      expect(state.completedCount).toBe(3); // 跳过也计入长休周期计数
       expect(recordSession).toHaveBeenCalledTimes(1);
     });
   });

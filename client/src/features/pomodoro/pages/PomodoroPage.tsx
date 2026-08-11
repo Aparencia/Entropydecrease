@@ -48,6 +48,11 @@ export default function PomodoroPage() {
   const deletePreset = usePomodoroStore((s) => s.deletePreset);
   const dismissCompletionOverlay = usePomodoroStore((s) => s.dismissCompletionOverlay);
 
+  // 沉眠点击 Chronos → 弹出目标输入弹窗
+  const handleAwaken = useCallback(() => {
+    setGoalModalOpen(true);
+  }, []);
+
   usePomodoroEffects();
 
   const [goalModalOpen, setGoalModalOpen] = useState(false);
@@ -239,7 +244,7 @@ export default function PomodoroPage() {
           </header>
 
           {/* 生物主体区：flex-1 全高让位（高频 tick 隔离在 TimerFace 内） */}
-          <TimerFace />
+          <TimerFace onAwaken={handleAwaken} />
 
           {/* PresetTabs 基座轨道：生物下方（预设 = 生物的"能量轨道"） */}
           <PresetTabs

@@ -14,7 +14,6 @@ import { X, GraduationCap, BookOpen, PenLine, BookMarked, Brain, Timer, Moon, Co
 import { cn } from '@/lib/utils';
 import { Tip } from '@/components/ui/Tip';
 import { Button, Input } from '@/components/ui';
-import CycleMarkers from './CycleMarkers';
 import { MOOD_LABELS, type Mood } from './chronos/particleMorphs';
 import type { PomodoroPreset } from '@/types/models';
 
@@ -231,11 +230,6 @@ export default function PresetEditor({ open, onClose, onSave, initial }: PresetE
                 <p className="text-c1 text-text-tertiary mt-1">决定时间生物粒子的外形与运动风格（上课/自习内置预设已预置）</p>
               </div>
 
-              {/* 循环标记预览 */}
-              <div className="pt-2 border-t border-border/20">
-                <p className="text-c1 text-text-tertiary mb-2">循环标记预览</p>
-                <CycleMarkers total={interval > 0 ? interval : 4} filled={1} />
-              </div>
             </div>
 
             {/* 操作按钮 */}

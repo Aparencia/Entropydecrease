@@ -70,3 +70,14 @@
   color: var(--kb-text-tertiary);
   opacity: 0.85;
 }
+
+/* ═══════════════════════════════════════════
+   预设胶囊隐藏滚动条（保留滚动能力，去除胶囊底部的多余横条）
+   ═══════════════════════════════════════════ */
+.kb-scrollbar-hide {
+  scrollbar-width: none;        /* Firefox */
+  -ms-overflow-style: none;     /* IE/Edge 旧版 */
+}
+.kb-scrollbar-hide::-webkit-scrollbar {
+  display: none;                /* WebKit/Chromium */
+}
