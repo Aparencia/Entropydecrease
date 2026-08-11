@@ -3,6 +3,32 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.37.0](https://github.com/Aparencia/Entropydecrease/compare/v0.36.0...v0.37.0) (2026-08-11)
+
+### ✨ 新功能
+
+* **website:** add dive feature landing page with playable chronos demo ([b6ad23c](https://github.com/Aparencia/Entropydecrease/commit/b6ad23cf50de946ea47cfa29d395519b37577074))
+* **website:** add feature config types, chronos states and dive content config ([da342c2](https://github.com/Aparencia/Entropydecrease/commit/da342c2d0de1dc9770b1f6685f767ff7967353e6))
+* **website:** add features overview page with module cards ([b79b945](https://github.com/Aparencia/Entropydecrease/commit/b79b945377c665451cbe17d891597924fe712c7d))
+* **website:** add playable chronos canvas demo with six-state machine ([7e63acf](https://github.com/Aparencia/Entropydecrease/commit/7e63acf5b09c52231eb934903cdb8de137cafa09))
+* **website:** add reusable feature page template sections ([35a91aa](https://github.com/Aparencia/Entropydecrease/commit/35a91aa6d2560c7acb504d289e51bf5e8bdf3c9f))
+* **website:** convert brand story page to design philosophy page ([10e9e55](https://github.com/Aparencia/Entropydecrease/commit/10e9e55d35bb27338d0315a1b8c0b6d4b48857ea))
+* **website:** unify module registry and link homepage cards to feature pages ([d3a0a22](https://github.com/Aparencia/Entropydecrease/commit/d3a0a2209e9b6440e73a9324975d3f8f5d772661))
+* **website:** update navbar to design philosophy and features entries ([ef19063](https://github.com/Aparencia/Entropydecrease/commit/ef190633f98d632ec097824dd04a3ba5ab115716))
+
+### 🐛 缺陷修复
+
+* **ci:** update IndexNow URLs to new feature pages ([0467b7e](https://github.com/Aparencia/Entropydecrease/commit/0467b7ece06adb22263a659fc712a74db476e412))
+* **website:** add keyboard support and guard zero-size canvas in chronos demo ([1e6fe93](https://github.com/Aparencia/Entropydecrease/commit/1e6fe934aed079b53bb9d61cb4d374dc49fe68a1))
+* **website:** keep chronos demo free interaction after card selection ([6117c3d](https://github.com/Aparencia/Entropydecrease/commit/6117c3d27cdb59b9b805dc3446e4c609afcde4d1))
+* **website:** move download CTA to first screen and add scroll hint ([e13f7b5](https://github.com/Aparencia/Entropydecrease/commit/e13f7b5343fe057b62696e2cfe34971defc4dade))
+* **website:** route incomplete modules to overview page from homepage ([040b303](https://github.com/Aparencia/Entropydecrease/commit/040b303c58aacf2a9fef7cfa54cb9abd20ccd482))
+
+### ♻️ 重构
+
+* **website:** add key field to feature mechanics items ([82e3c07](https://github.com/Aparencia/Entropydecrease/commit/82e3c076030c8c699be050ef09fb7302b3c57c45))
+* **website:** fix mechanics card semantics and onSelect item signature ([2337f8e](https://github.com/Aparencia/Entropydecrease/commit/2337f8e7c08ab6676abb190e500085b9bae77dea))
+
 ## [0.36.0](https://github.com/Aparencia/Entropydecrease/compare/v0.35.2...v0.36.0) (2026-08-11)
 
 ### ✨ 新功能
