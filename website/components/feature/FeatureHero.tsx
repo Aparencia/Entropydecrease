@@ -31,7 +31,7 @@ export function FeatureHero({ eyebrow, title, subtitle, ctaText, ctaHref = "/dow
       <SectionReveal delay={0.15}>
         <Link
           href={ctaHref}
-          className="inline-block px-10 py-4 rounded-2xl text-white font-medium text-lg transition-all duration-500 hover:scale-[1.05] active:scale-[0.97]"
+          className="inline-block px-10 py-4 rounded-2xl text-white font-medium text-lg transition-all duration-500 hover:scale-[1.05] active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kb-brand"
           style={{
             background: "linear-gradient(135deg, var(--kb-amber), var(--kb-accent-400))",
             boxShadow: "var(--kb-shadow-accent)",

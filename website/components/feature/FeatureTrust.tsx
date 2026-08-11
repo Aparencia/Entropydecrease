@@ -66,7 +66,7 @@ export function FeatureTrust() {
             href="https://github.com/Aparencia/Entropydecrease"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-kb-brand font-medium transition-all duration-400 hover:gap-3.5"
+            className="inline-flex items-center gap-2 text-kb-brand font-medium transition-all duration-400 hover:gap-3.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kb-brand"
           >
             GitHub 仓库 · 开发全程公开 ↗
           </a>
