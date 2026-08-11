@@ -153,10 +153,10 @@ export default function HomePage() {
               免费获取 · 前往下载 →
             </Link>
             <Link
-              href="/story"
+              href="/philosophy"
               className="px-8 py-3.5 rounded-2xl font-medium text-kb-text2 transition-all duration-500 hover:text-kb-text hover:scale-[1.02] glass-panel"
             >
-              进入品牌故事
+              了解设计理念
             </Link>
           </motion.div>
         </div>
@@ -264,13 +264,13 @@ export default function HomePage() {
             <span style={{ color: "var(--kb-amber)" }}>陪你慢慢理清。</span>&rdquo;
           </blockquote>
           <p className="text-kb-text3 text-sm mb-10">
-            —— 熵减 · 品牌故事
+            —— 熵减 · 设计理念
           </p>
           <Link
-            href="/story"
+            href="/philosophy"
             className="inline-flex items-center gap-2 text-kb-brand font-medium transition-all duration-400 hover:gap-3.5"
           >
-            阅读完整品牌故事 <span aria-hidden>→</span>
+            阅读完整设计理念 <span aria-hidden>→</span>
           </Link>
           <div className="feather-divider mt-16" />
         </SectionReveal>
