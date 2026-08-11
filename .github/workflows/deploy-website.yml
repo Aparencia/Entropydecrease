@@ -75,7 +75,9 @@ jobs:
               "urlList": [
                 "https://entropydecrease.com/",
                 "https://entropydecrease.com/download",
-                "https://entropydecrease.com/story",
+                "https://entropydecrease.com/philosophy",
+                "https://entropydecrease.com/features",
+                "https://entropydecrease.com/features/dive",
                 "https://entropydecrease.com/support"
               ]
             }' || echo "IndexNow notify failed (non-blocking)"
