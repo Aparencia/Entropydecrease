@@ -9,17 +9,18 @@
  * 用法:
  *   node scripts/license-gen.mjs           # 生成 1 个 Pro 激活码
  *   node scripts/license-gen.mjs --type LIFE --count 5   # 生成 5 个终身激活码
+ *   node scripts/license-gen.mjs --type PRO --duration 365  # 年卡（时长由池记录决定）
  *   node scripts/license-gen.mjs --type SND1             # 生成 1 个音效包激活码
- *   node scripts/license-gen.mjs --csv                   # 输出 CSV 格式
+ *   node scripts/license-gen.mjs --csv                   # 输出 CSV 格式（含 duration 列）
  */
 
 import crypto from 'node:crypto';
 
 const TYPES = {
-  PRO: { name: 'Pro 订阅', tier: 'pro', duration: '30天' },
-  LIFE: { name: '终身 Pro', tier: 'lifetime', duration: '永久' },
-  SND1: { name: '音效包 Vol.1', tier: 'free', duration: '永久' },
-  THM1: { name: '主题皮肤包', tier: 'free', duration: '永久' },
+  PRO: { name: 'Pro 订阅', tier: 'pro', defaultDuration: 30 },
+  LIFE: { name: '终身 Pro', tier: 'lifetime', defaultDuration: 36500 },
+  SND1: { name: '音效包 Vol.1', tier: 'free', defaultDuration: 36500 },
+  THM1: { name: '主题皮肤包', tier: 'free', defaultDuration: 36500 },
 };
 
 function generateCode(type) {
@@ -35,6 +36,7 @@ function parseArgs() {
   let type = 'PRO';
   let count = 1;
   let csv = false;
+  let duration = null;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--type' && args[i + 1]) {
@@ -44,27 +46,32 @@ function parseArgs() {
     } else if (args[i] === '--count' && args[i + 1]) {
       count = parseInt(args[++i], 10);
       if (count < 1 || count > 100) { console.error('count 范围: 1-100'); process.exit(1); }
+    } else if (args[i] === '--duration' && args[i + 1]) {
+      duration = parseInt(args[++i], 10);
+      if (!Number.isInteger(duration) || duration < 1) { console.error('duration 必须为正整数（天）'); process.exit(1); }
     } else if (args[i] === '--csv') {
       csv = true;
     }
   }
 
-  return { type, count, csv };
+  return { type, count, csv, duration };
 }
 
 function main() {
-  const { type, count, csv } = parseArgs();
+  const { type, count, csv, duration } = parseArgs();
   const typeInfo = TYPES[type];
+  const durationDays = duration ?? typeInfo.defaultDuration;
 
   if (csv) {
-    console.log('code,type,tier,duration,generated_at');
+    console.log('code,type,tier,duration_days,generated_at');
     for (let i = 0; i < count; i++) {
       const code = generateCode(type);
       const now = new Date().toISOString();
-      console.log(`${code},${type},${typeInfo.tier},${typeInfo.duration},${now}`);
+      console.log(`${code},${type},${typeInfo.tier},${durationDays},${now}`);
     }
   } else {
-    console.log(`\n📋 生成 ${count} 个 ${typeInfo.name} 激活码（${typeInfo.duration}）\n`);
+    const durationLabel = durationDays >= 36500 ? '永久' : `${durationDays} 天`;
+    console.log(`\n📋 生成 ${count} 个 ${typeInfo.name} 激活码（${durationLabel}）\n`);
     for (let i = 0; i < count; i++) {
       const code = generateCode(type);
       console.log(`  ${code}`);

@@ -73,6 +73,8 @@ TIMEOUT_CONFIG: dict[str, int] = {
     "podcast": 40,             # AI 播客生成器（多段对话脚本，生成量较大）
     "learning_coach": 40,      # AI 学习教练（周计划+每日任务，生成量较大）
     "infographic": 30,         # 知识信息图生成器（多节+关系）
+    # 付费/内测系统：激活码验证（5s 足够，防暴力枚举限流为主）
+    "license_activate": 5,
 }
 
 # ============================================================
@@ -145,4 +147,6 @@ RATE_LIMITS: dict[str, int] = {
     "podcast": 5,              # AI 播客生成器（生成成本高，严格限频）
     "learning_coach": 5,       # AI 学习教练（每周计划节奏，低频）
     "infographic": 10,         # 知识信息图生成器（生成成本高，严格限频）
+    # 付费/内测系统：激活码验证（防暴力枚举，10 次/天/用户，豁免全局 AI 总量）
+    "license_activate": 10,
 }

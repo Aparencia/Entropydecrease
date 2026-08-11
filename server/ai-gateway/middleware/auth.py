@@ -13,6 +13,7 @@
 从根上消除 HS256/ES256 配置错位导致的全站 401），显式配置则强制白名单。
 
 @ai-context: JWT 认证中间件：校验 Supabase JWT（ES256 经 JWKS，或 HS256/RS256 经密钥），未配置时以占位密钥放行供本地开发。
+@ai-context: tier 注入：解析 JWT user_metadata 中的 beta.tier 与 paid 状态，写入 request.state.beta_tier/paid_tier 供 rate_limit/budget 分级配额；解析失败回落 free（fail-closed）。
 """
 
 import asyncio
@@ -21,6 +22,7 @@ import logging
 import os
 import time
 import warnings
+from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
@@ -28,13 +30,103 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+# ============================================================
+# Tier 解析（纯函数）
+# ============================================================
+
+# 合法 tier 值白名单（与 rate_limit.TIER_LIMITS 键集同步）
+_VALID_TIERS = frozenset({"observer", "active", "core", "pro", "lifetime"})
+
+
+def _is_dev_user(payload: dict, user_id: str) -> bool:
+    """判断用户是否在开发者白名单（DEV_USER_IDS 环境变量）。
+
+    @ai-context: 开发者账号完全豁免平台配额（rate_limit/budget 跳过）并赋予
+    lifetime 最高身份，便于开发自测。匹配方式：Supabase user_id（sub）或邮箱
+    （JWT email claim / user_metadata.email），大小写不敏感；未配置时返回 False。
+
+    Args:
+        payload: 解码后的 JWT payload
+        user_id: 已验证的用户 ID（sub claim）
+
+    Returns:
+        bool: 是否为开发者白名单用户
+    """
+    raw = os.getenv("DEV_USER_IDS", "").strip()
+    if not raw:
+        return False
+    dev_ids = {s.strip().lower() for s in raw.split(",") if s.strip()}
+    if not dev_ids:
+        return False
+    if (user_id or "").lower() in dev_ids:
+        return True
+    # 邮箱匹配（JWT email claim 优先，user_metadata.email 兜底）
+    email = payload.get("email") or ""
+    if not email:
+        meta = payload.get("user_metadata") or {}
+        email = meta.get("email") or ""
+    return str(email).lower() in dev_ids
+
+
+def extract_tiers(payload: dict) -> tuple[Optional[str], Optional[str]]:
+    """从 JWT payload 的 user_metadata 解析 (beta_tier, paid_tier)。
+
+    - beta.tier：内测身份（observer/active/core）
+    - paid.tier + paid.expires_at：付费身份（pro/lifetime），过期视为无付费身份
+    - 非法 tier 值一律忽略（防止伪造 claims 提权）；解析结果由调用方取最高者
+
+    @ai-context: 纯函数，无副作用。tier 只信服务端 JWT claims，客户端 Header 一律忽略。
+
+    Args:
+        payload: 解码后的 JWT payload（含 user_metadata）
+
+    Returns:
+        tuple: (beta_tier, paid_tier)，均为 None 表示无任何身份（回落 free）
+    """
+    if not isinstance(payload, dict):
+        return None, None
+
+    meta = payload.get("user_metadata")
+    if not isinstance(meta, dict):
+        return None, None
+
+    # 内测身份
+    beta_tier: Optional[str] = None
+    beta = meta.get("beta")
+    if isinstance(beta, dict):
+        tier = beta.get("tier")
+        if tier in _VALID_TIERS:
+            beta_tier = tier
+
+    # 付费身份（必须带未过期的 expires_at，lifetime 除外）
+    paid_tier: Optional[str] = None
+    paid = meta.get("paid")
+    if isinstance(paid, dict):
+        tier = paid.get("tier")
+        expires_at = paid.get("expires_at")
+        if tier in _VALID_TIERS and tier in ("pro", "lifetime"):
+            if tier == "lifetime":
+                paid_tier = tier
+            elif expires_at and isinstance(expires_at, str):
+                try:
+                    expires = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                    if expires > datetime.now(timezone.utc):
+                        paid_tier = tier
+                except ValueError:
+                    # 日期格式异常视为无付费身份（fail-closed）
+                    paid_tier = None
+
+    return beta_tier, paid_tier
+
 from config import APP_CONFIG
 from errors import AuthenticationError
 
 logger = logging.getLogger(__name__)
 
 # 不需要认证的路径白名单
-PUBLIC_PATHS = {"/health", "/health/quick", "/health/live"}
+# 注意：license_webhook 是支付平台服务端回调（无用户 token），
+# 防伪依赖 HMAC 签名 + order_id 查询确认（见 payment_adapter），而非 JWT。
+PUBLIC_PATHS = {"/health", "/health/quick", "/health/live", "/api/v1/license/webhook"}
 
 # GW-2#1: 占位符识别——SUPABASE_URL 模板中的示例项目域名与常见示例密钥
 # 被视为"未配置"，避免"已配置"假象导致认证链路断裂后全站 401 且难排查
@@ -392,9 +484,16 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         try:
-            user_id = await self._verify_token(request)
-            # 注入 user_id 到 request.state，供后续路由使用
+            user_id, payload = await self._verify_token(request)
+            # 注入 user_id 与 tier 到 request.state，供路由与限流/预算中间件使用
             request.state.user_id = user_id
+            beta_tier, paid_tier = extract_tiers(payload)
+            request.state.beta_tier = beta_tier
+            request.state.paid_tier = paid_tier
+            # 开发者白名单（DEV_USER_IDS）：完全豁免配额 + lifetime 最高身份
+            if _is_dev_user(payload, user_id):
+                request.state.is_dev = True
+                request.state.paid_tier = "lifetime"
         except AuthenticationError as e:
             return JSONResponse(
                 status_code=e.status_code,
@@ -403,7 +502,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
 
         return await call_next(request)
 
-    async def _verify_token(self, request: Request) -> str:
+    async def _verify_token(self, request: Request) -> tuple[str, dict]:
         """
         从请求头提取并验证 JWT token（HS256 / ES256 / RS256 / Supabase JWT）
 
@@ -412,7 +511,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         - 无 token 时返回 "anonymous"
 
         Returns:
-            str: 验证通过的用户 ID（sub claim）
+            tuple: (验证通过的用户 ID（sub claim）, 完整 payload claims)
 
         Raises:
             AuthenticationError: token 缺失或验证失败
@@ -437,10 +536,10 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
                     # 补齐 base64url padding
                     payload_b64 += '=' * (-len(payload_b64) % 4)
                     payload = json.loads(base64.urlsafe_b64decode(payload_b64))
-                    return payload.get("sub", "dev-user")
+                    return payload.get("sub", "dev-user"), payload
                 except Exception:
-                    return "dev-user"
-            return "anonymous"
+                    return "dev-user", {}
+            return "anonymous", {}
 
         # === 正常 JWT 验证流程 ===
         auth_header = request.headers.get("Authorization")
@@ -511,4 +610,4 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             raise AuthenticationError("token 中缺少用户标识 (sub)")
 
         logger.debug("JWT 验证通过，user_id=%s", user_id)
-        return user_id
+        return user_id, payload

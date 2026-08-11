@@ -26,6 +26,7 @@ from routers.conflict_detect import router as conflict_detect_router
 from routers.concept_precheck import router as concept_precheck_router
 from routers.import_concept import router as import_concept_router
 from routers.license import router as license_router
+from routers.license_webhook import router as license_webhook_router
 from routers.beta import router as beta_router
 from routers.learning_plan import router as learning_plan_router
 from routers.session_qa import router as session_qa_router

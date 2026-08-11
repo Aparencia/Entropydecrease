@@ -158,12 +158,17 @@ PATH_TO_FEATURE: dict[str, str] = {
 
     # 注意：/{feature}/stream（streaming.py）为通配路径，无法精确匹配，
     # 其限流由流式路由内部通过 feature 参数自行处理。
+
+    # ---- 付费/内测系统（license.py） ----
+    # 激活码接口：防暴力枚举，10 次/天/用户（功能级），豁免全局 AI 总量
+    "/api/v1/license/activate": "license_activate",
 }
 
 # 豁免全局每日总量的功能：段级高频调用（如课堂实时转录一节课数百段）
 # 与高频多轮对话（学伴 chat），若计入 daily_total 会很快耗尽全部 AI 配额，
-# 仅受各自功能级上限约束
-GLOBAL_EXEMPT_FEATURES: frozenset[str] = frozenset({"transcribe", "chat"})
+# 仅受各自功能级上限约束。license_activate 亦豁免：激活码验证不属于 AI
+# 调用，不应挤占 AI 配额（免费用户仅 15 次/天全局）。
+GLOBAL_EXEMPT_FEATURES: frozenset[str] = frozenset({"transcribe", "chat", "license_activate"})
 
 # GW-2#9: 启动校验——PATH_TO_FEATURE 登记的 feature 必须同时在
 # TIMEOUT_CONFIG 与 RATE_LIMITS 登记，否则静默兜底（300s 超时/默认 10 次限流）
@@ -202,6 +207,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # 仅对 AI 功能 API 进行频率限制
         feature = PATH_TO_FEATURE.get(request.url.path)
         if not feature:
+            return await call_next(request)
+
+        # 开发者白名单完全豁免（auth.py 注入 is_dev，DEV_USER_IDS 配置）
+        if getattr(request.state, "is_dev", False):
             return await call_next(request)
 
         # 获取 user_id（由 JWT 中间件注入）
