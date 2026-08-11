@@ -14,6 +14,7 @@ import ShortcutSettings from './settings/ShortcutSettings';
 import FlashcardSettings from './settings/FlashcardSettings';
 import AudioCaptureSettings from './settings/AudioCaptureSettings';
 import { BetaProfile } from '@/features/beta/BetaProfile';
+import { AiQuotaCard } from '@/features/beta/AiQuotaCard';
 import { useBetaProfile } from '@/features/beta/hooks/useBetaProfile';
 import { UpgradePrompt } from '@/features/beta/UpgradePrompt';
 import { useTierAccess } from '@/features/beta/hooks/useTierAccess';
@@ -125,6 +126,10 @@ export default function SettingsPage() {
         </SettingsSection>
         <SettingsSection index={1}>
           <BetaProfile />
+          {/* AI 用量卡：服务端权威配额展示（次数/费用双进度） */}
+          <div className="mt-3">
+            <AiQuotaCard />
+          </div>
           {/* 升级引导：非阻断式配额提示（区分内测/免费话术，可关闭） */}
           <div className="mt-3">
             <UpgradePrompt featureName="AI 功能" totalCount={dailyAiCalls} />

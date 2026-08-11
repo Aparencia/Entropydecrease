@@ -6,7 +6,7 @@
  * 所有用户可在此输入激活码升级 Pro。
  */
 import { useState } from 'react';
-import { Shield, Check, Gift, Key, Users, ChevronDown, ChevronUp } from 'lucide-react';
+import { Shield, Gift, Key, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card, Button, Input, useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth/AuthContext';
@@ -17,11 +17,11 @@ import { LicenseActivation } from './LicenseActivation';
 
 export function BetaProfile() {
   const { user } = useAuth();
-  const { toast } = useToast();
   const {
     betaProfile,
     effectiveTier,
     activeLicenses,
+    paidStatus,
   } = useBetaStore();
 
   const [expanded, setExpanded] = useState(false);
@@ -114,6 +114,20 @@ export function BetaProfile() {
       {/* 展开面板 */}
       {expanded && (
         <div className="space-y-4">
+          {/* 付费状态（服务端 user_metadata.paid 快照，跨设备同步） */}
+          {paidStatus && (
+            <div className="flex items-center justify-between p-2 rounded-kb-sm bg-brand-50/50 dark:bg-brand-900/10">
+              <span className="text-b3 font-medium text-brand-500">
+                {paidStatus.tier === 'lifetime' ? '✨ 终身 Pro（服务端确认）' : '✨ Pro 订阅（服务端确认）'}
+              </span>
+              {paidStatus.expiresAt && (
+                <span className="text-c1 text-text-tertiary">
+                  至 {new Date(paidStatus.expiresAt).toLocaleDateString('zh-CN')}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* 权益摘要 */}
           <div className="grid grid-cols-2 gap-2">
             <PerkBadge

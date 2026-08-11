@@ -6,7 +6,7 @@
  */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { UserTier, BetaProfile, License, InviteCode } from '@/types/beta';
+import type { UserTier, BetaProfile, License, InviteCode, PaidStatus } from '@/types/beta';
 import { resolveEffectiveTier, TIER_RANK } from '@/types/beta';
 
 // ============================================================
@@ -16,6 +16,8 @@ import { resolveEffectiveTier, TIER_RANK } from '@/types/beta';
 interface BetaState {
   // 内测身份
   betaProfile: BetaProfile | null;
+  // 付费身份（服务端 user_metadata.paid 快照，跨设备同步订阅状态）
+  paidStatus: PaidStatus | null;
   // 有效激活码列表
   activeLicenses: License[];
   // 我的邀请码
@@ -31,6 +33,8 @@ interface BetaState {
 interface BetaActions {
   /** 设置内测身份 */
   setBetaProfile: (profile: BetaProfile | null) => void;
+  /** 设置付费身份（服务端快照；null = 无付费身份） */
+  setPaidStatus: (status: PaidStatus | null) => void;
   /** 添加激活码 */
   addLicense: (license: License) => void;
   /** 移除过期/失效激活码 */
@@ -57,6 +61,7 @@ type BetaStore = BetaState & BetaActions;
 
 const initialState: BetaState = {
   betaProfile: null,
+  paidStatus: null,
   activeLicenses: [],
   myInviteCodes: [],
   effectiveTier: 'free',
@@ -75,6 +80,11 @@ export const useBetaStore = create<BetaStore>()(
 
       setBetaProfile: (profile) => {
         set({ betaProfile: profile });
+        get().recalcEffectiveTier();
+      },
+
+      setPaidStatus: (status) => {
+        set({ paidStatus: status });
         get().recalcEffectiveTier();
       },
 
@@ -109,14 +119,26 @@ export const useBetaStore = create<BetaStore>()(
       },
 
       recalcEffectiveTier: () => {
-        const { betaProfile, activeLicenses } = get();
+        const { betaProfile, activeLicenses, paidStatus } = get();
         const betaTier = betaProfile?.tier;
-        // 取最高优先级的付费 tier（按 TIER_RANK 排序）
-        const paidTier = activeLicenses
+        // 取最高优先级的付费 tier：本地激活码 + 服务端 paid 快照（跨设备同步）
+        const licenseTier = activeLicenses
           .filter((l) => l.status === 'active')
           .map((l) => l.tier)
           .sort((a, b) => (TIER_RANK[b] ?? 0) - (TIER_RANK[a] ?? 0))[0];
-        const effective = resolveEffectiveTier(betaTier, paidTier);
+        // 服务端 paid 快照过期判定（lifetime 无过期）
+        let paidTier: UserTier | undefined = undefined;
+        if (paidStatus) {
+          if (paidStatus.tier === 'lifetime') {
+            paidTier = 'lifetime';
+          } else if (paidStatus.expiresAt && new Date(paidStatus.expiresAt) > new Date()) {
+            paidTier = paidStatus.tier;
+          }
+        }
+        const effective = resolveEffectiveTier(
+          betaTier,
+          [licenseTier, paidTier].filter(Boolean).sort((a, b) => (TIER_RANK[b as UserTier] ?? 0) - (TIER_RANK[a as UserTier] ?? 0))[0],
+        );
         set({ effectiveTier: effective });
       },
 
@@ -130,6 +152,7 @@ export const useBetaStore = create<BetaStore>()(
       name: 'beta-store',
       partialize: (state) => ({
         betaProfile: state.betaProfile,
+        paidStatus: state.paidStatus,
         activeLicenses: state.activeLicenses,
         myInviteCodes: state.myInviteCodes,
         effectiveTier: state.effectiveTier,

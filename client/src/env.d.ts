@@ -58,6 +58,8 @@ declare global {
       safeStorageDecrypt: (encoded: string) => Promise<string>;
       backupSave: (data: string, defaultName?: string) => Promise<unknown>;
       backupOpen: () => Promise<unknown>;
+      /** 设备指纹（激活码一码多设备绑定；主进程生成，首次调用后恒定） */
+      getMachineId?: () => Promise<string>;
       db: {
         query: <T = unknown>(table: string, method: string, args?: unknown[]) => Promise<T>;
         insert: (table: string, item: unknown) => Promise<string>;

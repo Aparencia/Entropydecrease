@@ -109,6 +109,27 @@ export interface InviteCode {
 }
 
 // ============================================================
+// 付费状态（服务端 user_metadata.paid 快照）
+// ============================================================
+
+/** 付费身份（来自 Supabase user_metadata.paid，登录时快照） */
+export interface PaidStatus {
+  tier: 'pro' | 'lifetime';
+  expiresAt?: string;    // ISO 8601；lifetime 无
+  updatedAt: string;     // ISO 8601
+}
+
+/** 服务端配额与费用使用情况（GET /api/v1/license/quota） */
+export interface QuotaInfo {
+  usedCalls: number;
+  totalCalls: number;
+  usedCost: number;
+  costLimit: number;
+  tier: UserTier;
+  expiresAt?: string;    // 服务端权威到期时间（跨设备同步）
+}
+
+// ============================================================
 // 权益配置
 // ============================================================
 

@@ -4,6 +4,8 @@
  * @ai-context: 用户输入激活码（ENTROPY-{TYPE}-{XXXX}-{XXXX}）升级付费 tier。
  * 本地优先：首次验证需联网，成功后本地缓存 7 天宽限期。
  * 激活码格式：ENTROPY-PRO-XXXX-XXXX（订阅）/ ENTROPY-LIFE-XXXX-XXXX（终身）
+ * @ai-context: machine_id 取主进程设备指纹（electronAPI.getMachineId），
+ * 服务端据此做一码多设备绑定（防分享）；到期前 3 天展示续费提醒。
  */
 import { useState } from 'react';
 import { Key, Check, AlertTriangle, Sparkles, ExternalLink } from 'lucide-react';
@@ -23,6 +25,22 @@ const LICENSE_TYPE_TO_TIER: Record<string, UserTier> = {
   SND1: 'free',    // 音效包不升级 tier
   THM1: 'free',    // 主题包不升级 tier
 };
+
+/** 剩余天数（不足 1 天按 0 处理） */
+function daysRemaining(expiresAt: string): number {
+  return Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86_400_000);
+}
+
+/** 获取设备指纹（Electron 主进程；Web 环境降级为固定占位符） */
+async function getDeviceMachineId(): Promise<string> {
+  try {
+    const mid = await window.electronAPI?.getMachineId?.();
+    if (mid) return mid;
+  } catch {
+    // 主进程不可用（Web 预览等）时降级，服务端按单设备兼容处理
+  }
+  return 'web';
+}
 
 export function LicenseActivation() {
   const { toast } = useToast();
@@ -62,6 +80,9 @@ export function LicenseActivation() {
       // 提取类型（trimmed 已 toUpperCase，type 为大写字符串如 'PRO'/'LIFE'）
       const type = trimmed.split('-')[1];
 
+      // 设备指纹（一码多设备绑定；Web 环境降级 'web'）
+      const machineId = await getDeviceMachineId();
+
       // 调服务端验证激活码
       const token = await getAccessToken();
       const resp = await fetch('/api/v1/license/activate', {
@@ -72,7 +93,7 @@ export function LicenseActivation() {
         },
         body: JSON.stringify({
           code: trimmed,
-          machine_id: 'local',
+          machine_id: machineId,
         }),
       });
 
@@ -84,6 +105,9 @@ export function LicenseActivation() {
       const data = await resp.json();
       const tier = LICENSE_TYPE_TO_TIER[type] ?? 'free';
 
+      // 服务端返回的到期时间优先（池记录 duration_days 为准，客户端不再自行 30 天）
+      const serverExpiresAt = typeof data.expires_at === 'string' ? data.expires_at : undefined;
+
       // 创建本地激活码记录
       const license: License = {
         id: crypto.randomUUID(),
@@ -91,11 +115,9 @@ export function LicenseActivation() {
         type: type.toLowerCase() as LicenseType,
         tier,
         status: 'active',
-        machineId: 'local',
+        machineId,
         activatedAt: new Date().toISOString(),
-        expiresAt: type === 'PRO'  // 使用大写常量比较
-          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-          : data.expires_at || undefined,
+        expiresAt: serverExpiresAt,
         syncedAt: new Date().toISOString(),
       };
 
@@ -121,20 +143,34 @@ export function LicenseActivation() {
     const activeLicense = activeLicenses.find(
       (l) => (l.tier === 'pro' || l.tier === 'lifetime') && l.status === 'active',
     );
+    const expiresAt = activeLicense?.expiresAt;
+    const remainingDays = expiresAt ? daysRemaining(expiresAt) : 0;
+    const isAnnual = !!expiresAt && remainingDays >= 300;  // 年付方案识别（服务端时长为准）
+    const expiringSoon = !!expiresAt && remainingDays > 0 && remainingDays <= 3;
     return (
-      <div className="flex items-center gap-2 p-3 rounded-kb-md bg-semantic-success/5 border border-semantic-success/20">
-        <Sparkles className="w-4 h-4 text-semantic-success flex-shrink-0" strokeWidth={1.5} />
-        <div className="flex-1 min-w-0">
-          <p className="text-b3 font-medium text-semantic-success">
-            {activeLicense?.tier === 'lifetime' ? '终身 Pro 已激活' : 'Pro 已激活'}
-          </p>
-          {activeLicense?.expiresAt && (
-            <p className="text-c1 text-text-tertiary">
-              有效期至 {new Date(activeLicense.expiresAt).toLocaleDateString('zh-CN')}
+      <div className="flex flex-col gap-2 p-3 rounded-kb-md bg-semantic-success/5 border border-semantic-success/20">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-semantic-success flex-shrink-0" strokeWidth={1.5} />
+          <div className="flex-1 min-w-0">
+            <p className="text-b3 font-medium text-semantic-success">
+              {activeLicense?.tier === 'lifetime' ? '终身 Pro 已激活' : `Pro 已激活${isAnnual ? '（年付方案）' : ''}`}
             </p>
-          )}
+            {expiresAt && (
+              <p className="text-c1 text-text-tertiary">
+                有效期至 {new Date(expiresAt).toLocaleDateString('zh-CN')}
+                {activeLicense?.tier !== 'lifetime' && `（剩余 ${remainingDays} 天）`}
+              </p>
+            )}
+          </div>
+          <span className="text-c1 text-semantic-success">已激活</span>
         </div>
-        <span className="text-c1 text-semantic-success">已激活</span>
+        {/* 到期前 3 天温和提醒（非阻断） */}
+        {expiringSoon && (
+          <div className="flex items-center gap-1.5 text-c1 text-semantic-warning">
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={1.5} />
+            订阅将于 {remainingDays} 天后到期，续费保持 Pro 权益
+          </div>
+        )}
       </div>
     );
   }
