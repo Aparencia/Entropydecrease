@@ -58,7 +58,7 @@ export function registerStreamHandler(): void {
 
       // CL-M1: API 路径白名单校验——method 实为路径，直接拼入 URL 可访问
       // 网关任意端点（含 ?/# 注入参数）；仅允许受信任的 AI 功能路径
-      const VALID_STREAM_PATH = /^\/api\/v1\/(ai|multimodal)\/[A-Za-z0-9_\/-]+$/;
+      const VALID_STREAM_PATH = /^\/api\/v1\/(ai|multimodal)\/[A-Za-z0-9_/-]+$/;
       if (
         typeof method !== 'string' ||
         method.includes('?') ||

@@ -50,7 +50,12 @@ export function AuthGuard({ children }: AuthGuardProps) {
     if (location.pathname === '/login' || location.pathname === '/register') return;
 
     navigate('/login', { replace: true });
-  }, [isPlaceholder, loading, isAuthenticated, location.pathname, navigate]);
+  }, [
+	loading,
+	isAuthenticated,
+	location.pathname,
+	navigate
+]);
 
   return <>{children}</>;
 }

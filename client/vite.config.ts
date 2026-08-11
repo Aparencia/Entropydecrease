@@ -48,8 +48,12 @@ function electronBuildConfigPlugin(): Plugin {
   };
 }
 
-export default defineConfig({
-  base: isElectronBuild ? './' : '/',
+export default defineConfig(({ command }) => ({
+  // base 仅在 Electron 构建产物时使用 './'（file:// 协议加载需要）；
+  // dev 模式必须保持 '/'——否则 Vite 预构建依赖 URL 解析异常，
+  // 全部 optimizeDeps 产物持续 504，lazy 页面动态导入失败
+  // （曾因 ELECTRON_BUILD=1 vite --mode test 启动 dev server 触发）
+  base: isElectronBuild && command === 'build' ? './' : '/',
   plugins: [
     react(),
     // Electron 构建时生成 build-config.json，供主进程运行时读取环境变量
@@ -185,4 +189,4 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['electron-updater', 'better-sqlite3', '@automerge/automerge'],
   },
-})
+}))

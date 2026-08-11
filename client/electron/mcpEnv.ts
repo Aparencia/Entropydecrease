@@ -65,7 +65,7 @@ function readWindowsRegistryEnv(): Record<string, string> {
     const output = execSync(
       'powershell -NoProfile -Command "' +
       '$e = [Environment]::GetEnvironmentVariables();' +
-      'foreach ($k in $e.Keys) { Write-Output \"$k=$($e[$k])\" }"',
+      'foreach ($k in $e.Keys) { Write-Output "$k=$($e[$k])" }"',
       {
         encoding: 'utf-8',
         timeout: 10000,
