@@ -59,7 +59,9 @@ function DiveOutcomeMockup() {
 }
 
 export function DivePage() {
-  // null = 自由交互；六态卡片点击时受控切换
+  // demoState 仅由六态卡片显式选择驱动（受控入口）；
+  // 自由点击（点它两下，感受它苏醒）由 ChronosDemo 内部状态机管理，
+  // 不回调写入 demoState，否则首次点击后组件进入受控模式、后续点击被拦截。
   const [demoState, setDemoState] = useState<ChronosState | null>(null);
 
   return (
@@ -71,7 +73,7 @@ export function DivePage() {
         ctaText={DIVE_CONFIG.cta.text}
         demo={
           <div>
-            <ChronosDemo controlledState={demoState} onStateChange={setDemoState} />
+            <ChronosDemo controlledState={demoState} />
             <p className="text-xs text-kb-text3 mt-4">点它两下，感受它苏醒</p>
           </div>
         }
