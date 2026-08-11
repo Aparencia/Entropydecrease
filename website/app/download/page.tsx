@@ -138,6 +138,24 @@ function AppMockup() {
   );
 }
 
+/** 首屏滚动提示：暗示页面内容延续，避免用户误以为页面到此为止 */
+function ScrollHint() {
+  return (
+    <div
+      className="absolute bottom-5 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 text-kb-text3 pointer-events-none"
+      aria-hidden
+    >
+      <span className="text-[10px] tracking-[0.3em] uppercase">向下滚动</span>
+      <span
+        className="w-[18px] h-[30px] rounded-full border flex justify-center pt-1.5"
+        style={{ borderColor: "var(--kb-border-strong)" }}
+      >
+        <span className="w-1 h-1.5 rounded-full scroll-hint-dot" style={{ background: "var(--kb-text3)" }} />
+      </span>
+    </div>
+  );
+}
+
 /* ---------- 页面 ---------- */
 
 export default function DownloadPage() {
@@ -164,7 +182,7 @@ export default function DownloadPage() {
   return (
     <div className="pt-36 pb-8">
       {/* 标题区 */}
-      <header className="text-center px-6 mb-16 relative">
+      <header className="text-center px-6 mb-20 relative">
         <GlowOrb count={10} className="opacity-40" />
         <SectionReveal>
           <p className="text-sm tracking-[0.35em] text-kb-text3 uppercase mb-5">Download</p>
@@ -175,7 +193,15 @@ export default function DownloadPage() {
             免费、开源、本地优先。你的数据只属于你自己。
           </p>
         </SectionReveal>
+        <ScrollHint />
       </header>
+
+      {/* 下载区（服务器直链 + 动态版本 + GitHub 备用源） */}
+      <section className="max-w-3xl mx-auto px-6 mb-16">
+        <SectionReveal>
+          <DownloadCta />
+        </SectionReveal>
+      </section>
 
       {/* 应用截图 Mockup */}
       <section className="max-w-4xl mx-auto px-6 mb-20">
@@ -184,13 +210,6 @@ export default function DownloadPage() {
           <p className="text-center text-xs text-kb-text3 mt-5">
             * 界面预览为风格化示意，实际界面以应用为准
           </p>
-        </SectionReveal>
-      </section>
-
-      {/* 下载区（服务器直链 + 动态版本 + GitHub 备用源） */}
-      <section className="max-w-3xl mx-auto px-6 mb-24">
-        <SectionReveal>
-          <DownloadCta />
         </SectionReveal>
       </section>
 
