@@ -4,7 +4,8 @@
  *
  * @ai-context: 本地优先——页面存于 localStorage（wikiStore），离线完全可用；
  * 多用户合并/多设备同步由现有 CRDT 基座（lib/sync/crdtEngine）承载，本页
- * 是 UI 层：列表 + 编辑器（内容自动保存，版本号随保存递增）。隐私：只展示
+ * 是 UI 层：左右侧边栏可独立折叠（互斥展开）+ 编辑器（内容自动保存，
+ * 2s idle debounce + blur/visibilitychange 即时落盘）。隐私：只展示
  * 贡献者颜色图例，不展示他人编辑内容。永不报错——存储失败静默降级。
  * @ai-context: Local-first wiki UI (list + editor). Pages persist to
  * localStorage; multi-user merge rides the existing CRDT infra. Contributors
@@ -21,6 +22,11 @@ import { createPage, deletePage, loadPages, savePageContent, toggleVote } from '
 import ContributionLegend from '../components/ContributionLegend';
 import WikiQualityBadge from '../components/WikiQualityBadge';
 
+/** 自动保存空闲等待时间（ms）——用户停止输入后等待此时间再保存 */
+const AUTOSAVE_IDLE_MS = 2000;
+/** 保存状态提示自动隐藏时间（ms） */
+const SAVE_STATUS_HIDE_MS = 3000;
+
 export default function WikiPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -36,6 +42,9 @@ export default function WikiPage() {
   const [creating, setCreating] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestPageRef = useRef<WikiPageModel | null>(null);
+  const lastSavedContentRef = useRef<string>('');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 首次加载（从 localStorage 恢复）
   useEffect(() => {
@@ -45,30 +54,89 @@ export default function WikiPage() {
       const first = loaded[0];
       setActiveId(first.id);
       setContent(first.content);
+      lastSavedContentRef.current = first.content;
       latestPageRef.current = first;
     }
   }, []);
 
   const active = pages.find((p) => p.id === activeId) ?? null;
 
+  /** 执行实际保存（含内容变更检测：无变化不保存，不递增版本号） */
   const persistContent = useCallback((page: WikiPageModel, nextContent: string) => {
+    // 内容无变化：跳过保存，不递增版本号
+    if (nextContent === lastSavedContentRef.current) {
+      setSaveStatus('idle');
+      return;
+    }
+    setSaveStatus('saving');
     const saved = savePageContent(page, nextContent, nickname);
+    lastSavedContentRef.current = nextContent;
     latestPageRef.current = saved;
     setPages((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+    setSaveStatus('saved');
+    if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+    saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), SAVE_STATUS_HIDE_MS);
   }, [nickname]);
 
-  // 内容变化 → 300ms 防抖自动保存（本地优先，不打断书写）
+  /** 内容变化 → 2s 空闲防抖自动保存（避免每次键入都写 localStorage）
+   *  参照 Notion/Google Docs 策略：用户停止输入后保存，而非每次键入后保存
+   */
   const handleContentChange = (next: string) => {
     setContent(next);
     const page = latestPageRef.current;
     if (!page) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => persistContent(page, next), 300);
+    saveTimer.current = setTimeout(() => persistContent(page, next), AUTOSAVE_IDLE_MS);
   };
 
+  /** 立即保存未落盘的内容（用于 blur、visibilitychange 等场景） */
+  const flushPendingSave = useCallback(() => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    const page = latestPageRef.current;
+    if (page && content !== lastSavedContentRef.current) {
+      persistContent(page, content);
+    }
+  }, [content, persistContent]);
+
+  // 失焦时立即保存（blur 事件：textarea 失去焦点时触发）
+  const handleBlur = useCallback(() => {
+    flushPendingSave();
+  }, [flushPendingSave]);
+
+  // 页面可见性变化时保存（标签页切换/隐藏时触发）
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        flushPendingSave();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [flushPendingSave]);
+
+  // 卸载时清理定时器并落盘
   useEffect(() => () => {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-  }, []);
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    if (saveStatusTimerRef.current) {
+      clearTimeout(saveStatusTimerRef.current);
+      saveStatusTimerRef.current = null;
+    }
+    // 卸载时如有未保存内容，同步落盘
+    const page = latestPageRef.current;
+    if (page && content !== lastSavedContentRef.current) {
+      try {
+        savePageContent(page, content, nickname);
+      } catch {
+        // 静默降级，不阻塞卸载
+      }
+    }
+  }, [content, nickname]);
 
   const handleCreate = () => {
     if (creating) return;
@@ -78,6 +146,7 @@ export default function WikiPage() {
       setPages((prev) => [page, ...prev]);
       setActiveId(page.id);
       setContent('');
+      lastSavedContentRef.current = '';
       latestPageRef.current = page;
       setTitle('');
     } catch {
@@ -88,16 +157,13 @@ export default function WikiPage() {
   };
 
   const handleSelect = (page: WikiPageModel) => {
-    // 切换前 flush 未保存的编辑（防抖挂起时直接落盘）
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
-      saveTimer.current = null;
-      const current = latestPageRef.current;
-      if (current) persistContent(current, content);
-    }
+    // 切换前 flush 未保存的编辑
+    flushPendingSave();
     setActiveId(page.id);
     setContent(page.content);
+    lastSavedContentRef.current = page.content;
     latestPageRef.current = page;
+    setSaveStatus('idle');
   };
 
   const handleDelete = (page: WikiPageModel) => {
@@ -123,7 +189,19 @@ export default function WikiPage() {
         note="众人共编一部知识之书 —— 合并交给 CRDT，你只管写"
         sealChar="籍"
         sealColor="#7BC4B8"
-        actions={<BookOpen className="w-5 h-5 text-feynman" strokeWidth={1.5} />}
+        actions={
+          <div className="flex items-center gap-2">
+            {saveStatus !== 'idle' && (
+              <span className={cn(
+                'text-c2 transition-all duration-300',
+                saveStatus === 'saving' ? 'text-text-tertiary' : 'text-semantic-success',
+              )}>
+                {saveStatus === 'saving' ? '保存中…' : '已保存'}
+              </span>
+            )}
+            <BookOpen className="w-5 h-5 text-feynman" strokeWidth={1.5} />
+          </div>
+        }
       />
 
       <div className="grid md:grid-cols-[260px_1fr] gap-kb-md items-start">
@@ -211,13 +289,24 @@ export default function WikiPage() {
                 <textarea
                   value={content}
                   onChange={(e) => handleContentChange(e.target.value)}
+                  onBlur={handleBlur}
                   placeholder="支持 Markdown 的页面内容…（自动保存到本地，合并由 CRDT 基座承载）"
                   className="flex-1 min-h-[45vh] w-full resize-y rounded-kb-md border border-border/40 bg-bg-primary px-kb-sm py-2 text-b2 text-text-primary placeholder:text-text-tertiary/50 focus:outline-none focus:border-cyber/50 transition-colors duration-kb-fast font-mono text-[13px] leading-relaxed"
                   aria-label="页面内容编辑器"
                 />
-                <p className="text-c2 text-text-tertiary/70">
-                  内容自动保存（本地优先）· 与他人协同编辑时，版本合并由现有 CRDT 基础设施完成
-                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-c2 text-text-tertiary/70">
+                    内容自动保存（本地优先）· 与他人协同编辑时，版本合并由现有 CRDT 基础设施完成
+                  </p>
+                  {saveStatus !== 'idle' && (
+                    <span className={cn(
+                      'text-c2 transition-all duration-300',
+                      saveStatus === 'saving' ? 'text-text-tertiary' : 'text-semantic-success',
+                    )}>
+                      {saveStatus === 'saving' ? '保存中…' : '已保存'}
+                    </span>
+                  )}
+                </div>
               </>
             )}
           </CardContent>

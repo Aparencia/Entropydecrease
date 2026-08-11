@@ -8,7 +8,7 @@ import {
   Search, X, ArrowRight,
   LayoutDashboard, Timer, FileText, Layers, Lightbulb, BarChart3, Settings,
   FilePlus, FolderPlus, Import, Download, Moon, CheckCircle,
-  Palette, Brain, Database, Info, GraduationCap,
+  Palette, Brain, Database, Info, GraduationCap, ListChecks,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -24,7 +24,7 @@ import { soundPlayer } from '@/lib/audio/SoundPlayer';
 const iconMap: Record<string, LucideIcon> = {
   LayoutDashboard, Timer, FileText, Layers, Lightbulb, BarChart3, Settings,
   FilePlus, FolderPlus, Import, Download, Moon, CheckCircle,
-  Palette, Brain, Database, Info, GraduationCap,
+  Palette, Brain, Database, Info, GraduationCap, ListChecks,
 };
 
 /** 搜索结果实体类型 → 图标名（与 iconMap 对应） */
@@ -67,7 +67,7 @@ const categoryLabels: Record<Command['category'], string> = {
 const NAV_COMMAND_ROUTES: Record<string, string> = {
   'nav-dashboard': '/', 'nav-pomodoro': '/pomodoro', 'nav-notes': '/notes',
   'nav-flashcards': '/flashcards', 'nav-feynman': '/feynman', 'nav-analytics': '/analytics',
-  'nav-classroom': '/classroom', 'nav-settings': '/settings',
+  'nav-classroom': '/classroom', 'nav-sop': '/sop', 'nav-settings': '/settings',
 };
 const categoryColors: Record<Command['category'], string> = {
   navigation: 'bg-accent-500/15 text-accent-500',

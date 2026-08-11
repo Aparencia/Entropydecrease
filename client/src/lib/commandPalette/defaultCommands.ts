@@ -81,6 +81,15 @@ export function registerDefaultCommands(navigate: NavigateFn, toast: ToastFn): v
       execute: () => navigate('/classroom'),
     },
     {
+      id: 'nav-sop',
+      label: '打开标准作业',
+      description: '标准作业流程模板与执行',
+      icon: 'ListChecks',
+      category: 'navigation',
+      shortcut: 'G O',
+      execute: () => navigate('/sop'),
+    },
+    {
       id: 'nav-settings',
       label: '打开设置',
       description: '应用设置与偏好配置',
