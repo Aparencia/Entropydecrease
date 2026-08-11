@@ -105,7 +105,8 @@ export function useEditorDepth({
 
     const onUpdate = () => {
       const text = editor.getText();
-      const historySize = editor.state.history?.prev?.length ?? 0;
+      // history 为 history plugin 的 state（EditorState 类型未声明，运行时可能为 undefined → 0）
+      const historySize = (editor.state as unknown as { history?: { prev?: unknown[] } }).history?.prev?.length ?? 0;
       updateDepth(text, historySize);
     };
     const onSelectionUpdate = () => {

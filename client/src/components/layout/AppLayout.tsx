@@ -27,6 +27,7 @@ import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
 import { FirstDiveGate } from '@/features/onboarding/firstDive/FirstDiveGate';
 import { usePerformanceModeStore } from '@/lib/performance/usePerformanceMode';
 import { PERFORMANCE_MODE_CONFIG } from '@/lib/performance/performanceMode';
+import { cn } from '@/lib/utils';
 
 /**
  * 路由层级映射：子路由 -> 父路由
@@ -207,9 +208,13 @@ export default function AppLayout() {
           /* 萤火海沟自带全屏暗物质场：透明面板让深海背景透出，遮罩用深海底色实现整屏无缝（其他模块保持毛玻璃） */
           panelClassName={currentModule === 'inspiration'
             ? '!bg-transparent !backdrop-blur-none !shadow-none !border-white/5'
-            : isFullHeightRoute
-              ? '!h-full'
-              : undefined}
+            : currentModule === 'notes'
+              ? isFullHeightRoute
+                ? '!p-0 !h-full'
+                : '!p-0'
+              : isFullHeightRoute
+                ? '!h-full'
+                : undefined}
           maskClassName={currentModule === 'inspiration' ? '!bg-[var(--kb-bg-primary)] !backdrop-blur-none' : undefined}
         >
           {/* 路由级过渡：grid 叠放 + 同期交叉淡入淡出。
@@ -217,7 +222,20 @@ export default function AppLayout() {
               reduced-motion / StrictMode(dev) / HMR 等条件下交接会偶发丢失，
               新页永不挂载——即内测反馈"回到主页时主页不显示"的根因。
               交叉淡入淡出下新页立即挂载、旧页淡出后卸载，退出即使延迟也不阻塞内容展示 */}
-          <div className="grid h-full">
+                    {/* grid 视口锚定：面板为 max-h + auto 容器，h-full 链会退化为内容自然高（页面随内容伸缩）；
+              显式锚定后所有 h-full 子页面继承此高度，与 module-content 面板内容区精确一致（无空隙无滚动）。
+              公式 = 面板实际高度 - padding 垂直 - border*2：
+              普通路由面板 sm+ max-h=85vh、小屏 100vh-5rem，padding md p-8=4rem / sm p-5=2.5rem / 小屏 p-3=1.5rem；
+              Notes 面板 !p-0（去内边距、内容贴边）：小屏 calc(100vh-5rem-2px)、sm+ calc(85vh-2px)；
+              full-height 路由面板 !h-full（h-full 链有效）保持 h-full 不动 */}
+          <div className={cn(
+            'grid h-full',
+            !isFullHeightRoute && (
+              currentModule === 'notes'
+                ? 'h-[calc(100vh-5rem-2px)] sm:h-[calc(85vh-2px)]'
+                : 'h-[calc(100vh-6.5rem-2px)] sm:h-[calc(85vh-2.5rem-2px)] md:h-[calc(85vh-4rem-2px)]'
+            ),
+          )}>
             <AnimatePresence>
               <motion.div
                 key={pathname}

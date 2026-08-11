@@ -10,9 +10,9 @@ import { ContextMenu } from '@/components/ui/ContextMenu';
 import type { ContextMenuGroup } from '@/components/ui/ContextMenu';
 import { VirtualList } from '@/components/ui/VirtualList';
 import {
-  Search, Plus, FolderPlus, FileText, PanelLeftClose, PanelLeft, PanelRightClose, Pin,
+  Search, Plus, FolderPlus, FileText, PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, Pin,
   MoreVertical, Trash2, Copy, Download, BookOpen, Sparkles, ListTodo, Share2, Upload, ClipboardCheck,
-  Layers, CheckSquare, Square, FoldVertical,
+  Layers, CheckSquare, Square, FoldVertical, Aperture,
 } from 'lucide-react';
 import { TemplateSelector } from '../components/TemplateSelector';
 import type { NoteTemplate } from '../components/TemplateSelector';
@@ -29,6 +29,11 @@ import { noteStore } from '@/lib/storage';
 import { useBatchSelection } from '@/hooks/useBatchSelection';
 import { useContextMenu } from '@/lib/contextMenu';
 import type { Note, NoteFolder } from '@/types/models';
+import { useThemeStore } from '@/stores/useThemeStore';
+import { AbyssView2D } from '../components/reef/AbyssView2D';
+import { GrottoView3D } from '../components/reef/GrottoView3D';
+import { ReefDiverConsole } from '../components/reef/ReefDiverConsole';
+import type { ReefMorph, ReefNote } from '../components/reef/reefTypes';
 import { useAISummarize, useAIFlashcards } from '@/lib/ai/useAI';
 import { useAIPodcast } from '@/lib/ai/hooks/useAIPodcast';
 import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
@@ -138,9 +143,13 @@ function colorForType(template: string): string {
 export default function NotesPage() {
   // 侧栏三态（左右互斥二选一，可全隐藏）：'left'=文件夹栏 / 'right'=预览栏 / 'none'=中栏全宽
   const [sideMode, setSideMode] = useState<'left' | 'right' | 'none'>('left');
-  // 循环切换：左栏 → 预览栏 → 无侧栏 → 左栏
-  const cycleSideMode = useCallback(() => {
-    setSideMode((m) => (m === 'left' ? 'right' : m === 'right' ? 'none' : 'left'));
+  // 左侧栏独立控制：展开左栏时自动收起右栏（互斥）；已展开则收起为 none
+  const toggleLeftSidebar = useCallback(() => {
+    setSideMode((m) => (m === 'left' ? 'none' : 'left'));
+  }, []);
+  // 右侧栏独立控制：展开右栏时自动收起左栏（互斥）；已展开则收起为 none
+  const toggleRightSidebar = useCallback(() => {
+    setSideMode((m) => (m === 'right' ? 'none' : 'right'));
   }, []);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
@@ -148,7 +157,17 @@ export default function NotesPage() {
   const [showNewFolder, setShowNewFolder] = useState(false);
   // 折纸视图开关：默认关闭，开启后笔记卡片以 OrigamiView 网格展示
   const [origamiMode, setOrigamiMode] = useState(false);
+  // 沉浸 3D 视图开关（双主题双形态：深色=沉降深渊 / 浅色=海底石窟）——默认开启
+  const [view3D, setView3D] = useState(true);
+  const [hoveredId3D, setHoveredId3D] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // 主题 → 3D 形态：深色=abyss（沉降深渊），浅色=grotto（穹顶石窟）
+  const theme = useThemeStore((s) => s.theme);
+  const morph: ReefMorph = theme === 'dark' ? 'abyss' : 'grotto';
+
+  // 形态切换时清空 3D hover 状态（避免旧视图残留 hover 卡片带入新视图）
+  useEffect(() => { setHoveredId3D(null); }, [morph]);
 
   // P1-5 细粒度订阅：整 store 订阅会在任何笔记保存/创建时重建数组并重渲染整页
   const notes = useNoteStore((s) => s.notes);
@@ -212,6 +231,34 @@ export default function NotesPage() {
     () => filteredNotes.find((n) => n.id === selectedNoteId) || null,
     [filteredNotes, selectedNoteId],
   );
+
+  // 3D 视图节点投影（无 content 全文，与 P1-1 惰性加载兼容）
+  const reefNotes = useMemo<ReefNote[]>(() => filteredNotes.map((n) => ({
+    id: n.id!,
+    title: n.title,
+    template: n.template,
+    wordCount: n.wordCount ?? 0,
+    updatedAt: n.updatedAt,
+    folderId: n.folderId,
+    tags: n.tags,
+    pinned: n.pinned,
+  })), [filteredNotes]);
+
+  // 搜索高亮：声呐点亮（标题/标签匹配；空搜索=全亮）
+  const highlightIds = useMemo<ReadonlySet<string> | null>(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return null;
+    const set = new Set<string>();
+    for (const n of filteredNotes) {
+      if (
+        n.title.toLowerCase().includes(q)
+        || n.tags.some((t) => t.toLowerCase().includes(q))
+      ) {
+        set.add(n.id!);
+      }
+    }
+    return set;
+  }, [filteredNotes, searchQuery]);
 
   // 批量管理模式（对齐萤火海沟批量整理交互）
   const batch = useBatchSelection<Note>({ items: filteredNotes });
@@ -448,6 +495,64 @@ export default function NotesPage() {
      * Notes 面板 !p-0 去内边距后，锚定公式收敛到布局层 grid（h-[calc(85vh-2px)] 等两档），页面层回归 h-full。
      * overflow-hidden：左右栏三态互斥后最多两栏（中栏 + 单侧栏），总宽可控，无横向滚动条 */
     <div className="flex h-full overflow-hidden">
+      {/* ── 沉浸 3D 视图（双主题双形态：深色=沉降深渊 / 浅色=穹顶石窟） ── */}
+      {view3D ? (
+        <div className="relative flex-1 min-w-0 h-full">
+          {/* 主题切换时形态淡入淡出（mode="wait"：旧 Canvas 卸载后再挂载新形态，避免双 Canvas 共存） */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={morph}
+              className="absolute inset-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              {morph === 'abyss' ? (
+                <AbyssView2D
+                  notes={reefNotes}
+                  selectedId={selectedNoteId}
+                  hoveredId={hoveredId3D}
+                  highlightIds={highlightIds}
+                  focusFolderId={selectedFolderId}
+                  onHover={setHoveredId3D}
+                  onSelect={(id) => selectNote(id)}
+                  onOpen={(id) => navigate(`/notes/${id}`)}
+                  onExit={() => setView3D(false)}
+                />
+              ) : (
+                <GrottoView3D
+                  notes={reefNotes}
+                  selectedId={selectedNoteId}
+                  hoveredId={hoveredId3D}
+                  highlightIds={highlightIds}
+                  focusFolderId={selectedFolderId}
+                  onHover={setHoveredId3D}
+                  onSelect={(id) => selectNote(id)}
+                  onOpen={(id) => navigate(`/notes/${id}`)}
+                  onExit={() => setView3D(false)}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
+
+          <ReefDiverConsole
+            morph={morph}
+            folders={folders}
+            selectedFolderId={selectedFolderId}
+            onSelectFolder={selectFolder}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onNewNote={() => setTemplateOpen(true)}
+            onClip={() => setClipOpen(true)}
+            onGraph={() => navigate('/notes/graph')}
+            onBatch={() => { setView3D(false); batch.setBatchMode(true); }}
+            onOrigami={() => { setView3D(false); setOrigamiMode(true); }}
+            onExit={() => setView3D(false)}
+          />
+        </div>
+      ) : (
+      <>
       {/* ── 左栏：文件夹（三态互斥：sideMode==='left' 显示，预览栏隐藏） ── */}
       {/* mode="wait" 确保旧侧栏完全收起后再展开新内容，避免动画残帧 */}
       <AnimatePresence mode="wait">
@@ -572,15 +677,19 @@ export default function NotesPage() {
         {/* 工具栏 */}
         <div className="sticky top-0 z-20 flex flex-col gap-2 px-4 py-3 border-b border-border/30 flex-shrink-0 backdrop-blur-md bg-bg-primary/80">
           <div className="flex items-center gap-2">
-            {/* 侧边栏收展按钮，带 tooltip */}
-            {/* 三态侧栏切换：文件夹栏 → 预览栏 → 无侧栏 → 文件夹栏（左右互斥二选一） */}
-            <Tip text={sideMode === 'left' ? '切换到预览栏' : sideMode === 'right' ? '隐藏预览栏' : '显示文件夹栏'}>
+            {/* 左侧边栏控制按钮（文件组）：展开时自动收起右侧预览栏（互斥） */}
+            <Tip text={sideMode === 'left' ? '收起文件夹栏' : '展开文件夹栏'}>
             <motion.button
               whileTap={{ scale: 0.9 }}
-              onClick={cycleSideMode}
-              className="hidden md:flex p-1.5 rounded-full text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/40 transition-all duration-200"
+              onClick={toggleLeftSidebar}
+              className={cn(
+                'hidden md:flex p-1.5 rounded-full transition-all duration-200',
+                sideMode === 'left'
+                  ? 'text-brand-600 bg-brand-50/60'
+                  : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/40',
+              )}
             >
-              {sideMode === 'left' ? <PanelLeftClose className="w-5 h-5" strokeWidth={1.5} /> : sideMode === 'right' ? <PanelRightClose className="w-5 h-5" strokeWidth={1.5} /> : <PanelLeft className="w-5 h-5" strokeWidth={1.5} />}
+              {sideMode === 'left' ? <PanelLeftClose className="w-5 h-5" strokeWidth={1.5} /> : <PanelLeft className="w-5 h-5" strokeWidth={1.5} />}
             </motion.button>
             </Tip>
             {/* 结礁仪式标识（compact）：三栏布局下的模块归属 */}
@@ -592,6 +701,21 @@ export default function NotesPage() {
               className="mr-1"
             />
             <NoteSearchBar />
+            {/* 右侧边栏控制按钮（预览区）：展开时自动收起左侧文件组（互斥） */}
+            <Tip text={sideMode === 'right' ? '收起预览栏' : '展开预览栏'}>
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={toggleRightSidebar}
+              className={cn(
+                'hidden lg:flex p-1.5 rounded-full transition-all duration-200',
+                sideMode === 'right'
+                  ? 'text-brand-600 bg-brand-50/60'
+                  : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/40',
+              )}
+            >
+              {sideMode === 'right' ? <PanelRightClose className="w-5 h-5" strokeWidth={1.5} /> : <PanelRight className="w-5 h-5" strokeWidth={1.5} />}
+            </motion.button>
+            </Tip>
             {/* 笔记图谱按钮，升级原生 title 为 Tip 组件 */}
             <Tip text="笔记图谱">
             <motion.button
@@ -668,6 +792,22 @@ export default function NotesPage() {
               )}
             >
               <FoldVertical className="w-4 h-4" strokeWidth={1.5} />
+            </motion.button>
+            </Tip>
+            {/* 沉浸 3D 视图开关：深色=沉降深渊 / 浅色=穹顶石窟（双形态随主题） */}
+            <Tip text={view3D ? '退出沉浸视图' : '沉浸视图（3D）'}>
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setView3D((v) => !v)}
+              aria-pressed={view3D}
+              className={cn(
+                'p-2 rounded-full transition-all duration-200',
+                view3D
+                  ? 'bg-brand-50 text-brand-600'
+                  : 'text-text-tertiary hover:text-brand-600 hover:bg-brand-50',
+              )}
+            >
+              <Aperture className="w-4 h-4" strokeWidth={1.5} />
             </motion.button>
             </Tip>
             <input
@@ -1043,7 +1183,11 @@ export default function NotesPage() {
         )}
       </AnimatePresence>
 
+      </>
+      )}
+
       {/* 移动端浮动新建笔记按钮，带 tooltip */}
+      {!view3D && (
       <Tip text="新建笔记" side="left">
       <motion.button
         whileHover={{ scale: 1.05 }}
@@ -1054,6 +1198,7 @@ export default function NotesPage() {
         <Plus className="w-6 h-6" strokeWidth={2} />
       </motion.button>
       </Tip>
+      )}
 
       <TemplateSelector open={templateOpen} onClose={() => setTemplateOpen(false)} onSelect={handleTemplateSelect} />
 
