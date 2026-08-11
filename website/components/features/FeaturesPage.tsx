@@ -1,20 +1,12 @@
 // @ai-context
-// 功能总览页主体：六大认知模块卡片墙，深潜已上线可点入详情，其余标注建设中。
-// Features overview: six module cards, dive is live, others under construction.
+// 功能总览页主体：六大认知模块卡片墙，深潜已上线可点入详情，其余标注建设中。数据来自共享模块注册表。
+// Features overview: six module cards, dive is live, others under construction. Data from shared module registry.
 "use client";
 
 import Link from "next/link";
 import { GlowOrb } from "@/components/GlowOrb";
 import { SectionReveal } from "@/components/SectionReveal";
-
-const MODULES = [
-  { name: "深潜", origin: "番茄钟", desc: "切断海面噪音，潜入零干扰的心流深海。", href: "/features/dive", ready: true, color: "var(--kb-focus-blue)" },
-  { name: "结礁", origin: "智能笔记", desc: "将漂浮的碎片，沉淀为坚实的认知暗礁。", href: "/download", ready: false, color: "var(--kb-brand-400)" },
-  { name: "回声定位", origin: "课堂助手", desc: "捕捉深海回声，打捞暗流中的知识暗物质。", href: "/download", ready: false, color: "var(--kb-cyber-cyan)" },
-  { name: "反衰减呼吸", origin: "闪卡复习", desc: "规律吐纳，让记忆在深海高压下依然鲜活。", href: "/download", ready: false, color: "var(--kb-moss-green)" },
-  { name: "浮出水面", origin: "费曼学习法", desc: "向世界呼出你的理解。雾散了，轮廓就清晰了。", href: "/download", ready: false, color: "var(--kb-amber)" },
-  { name: "萤火海沟", origin: "灵感空间", desc: "安放微光，它们终将照亮整片深域。", href: "/download", ready: false, color: "var(--kb-accent-400)" },
-];
+import { MODULES } from "@/lib/features/modules";
 
 export function FeaturesPage() {
   return (
@@ -36,7 +28,7 @@ export function FeaturesPage() {
             <SectionReveal key={m.name} delay={i * 0.08}>
               <Link
                 href={m.href}
-                className="group relative block rounded-3xl p-7 h-full transition-all duration-500 hover:-translate-y-1"
+                className="group relative block rounded-3xl p-7 h-full transition-all duration-500 hover:-translate-y-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kb-brand"
                 style={{
                   background: "var(--kb-bg-elevated)",
                   border: "1px solid var(--kb-glass-border)",
