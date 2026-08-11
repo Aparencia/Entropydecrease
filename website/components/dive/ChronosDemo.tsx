@@ -19,7 +19,6 @@ interface Particle {
   phi: number;
   r: number;
   speed: number;
-  phase: number;
 }
 
 interface ChronosDemoProps {
@@ -44,6 +43,13 @@ export function ChronosDemo({ controlledState = null, onStateChange }: ChronosDe
     onStateChange?.(next);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handleTap();
+    }
+  };
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -53,6 +59,7 @@ export function ChronosDemo({ controlledState = null, onStateChange }: ChronosDe
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const size = Math.min(canvas.clientWidth, canvas.clientHeight);
+    if (size === 0) return; // 容器不可见时跳过初始化
     canvas.width = size * dpr;
     canvas.height = size * dpr;
     ctx.scale(dpr, dpr);
@@ -63,7 +70,6 @@ export function ChronosDemo({ controlledState = null, onStateChange }: ChronosDe
       phi: Math.acos(2 * Math.random() - 1),
       r: 0.55 + Math.random() * 0.45,
       speed: 0.05 + Math.random() * 0.12,
-      phase: Math.random() * Math.PI * 2,
     }));
 
     const cx = size / 2;
@@ -155,7 +161,9 @@ export function ChronosDemo({ controlledState = null, onStateChange }: ChronosDe
     <div
       className="relative w-[clamp(240px,52vmin,420px)] h-[clamp(240px,52vmin,420px)] mx-auto cursor-pointer select-none"
       onClick={handleTap}
+      onKeyDown={handleKeyDown}
       role="button"
+      tabIndex={0}
       aria-label="Chronos 时间生物演示，点击切换形态"
     >
       <canvas ref={canvasRef} className="w-full h-full" />
