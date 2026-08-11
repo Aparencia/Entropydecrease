@@ -27,6 +27,16 @@ const CAPTURE_RATE_SCALE: Record<PerformanceMode, number> = {
 
 let currentMode: PerformanceMode = DEFAULT_MODE;
 
+/** 模式变更监听器（供活跃采集循环等消费方热更新，实现即时生效） */
+type ModeChangeListener = (mode: PerformanceMode) => void;
+const modeListeners = new Set<ModeChangeListener>();
+
+/** 订阅模式变更，返回取消订阅函数 */
+export function onPerformanceModeChange(fn: ModeChangeListener): () => void {
+  modeListeners.add(fn);
+  return () => { modeListeners.delete(fn); };
+}
+
 function configPath(): string {
   return join(app.getPath('userData'), 'performance-mode.json');
 }
@@ -54,6 +64,10 @@ export function setPerformanceMode(mode: unknown): void {
     logger.error('[PerformanceMode] 持久化失败:', err);
   }
   logger.info(`[PerformanceMode] 模式已设置: ${mode}`);
+  // 通知消费方（活跃采集循环按新频率重启，使采集策略即时生效而非等下次启动）
+  modeListeners.forEach((fn) => {
+    try { fn(mode); } catch (err) { logger.error('[PerformanceMode] 监听回调异常:', err); }
+  });
 }
 
 /** 当前模式 */

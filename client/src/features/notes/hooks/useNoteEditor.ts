@@ -4,7 +4,7 @@
  * @ai-context: 从 NoteEditPage 拆出。扩展集合为编辑能力契约（表格/任务
  * 列表/图片/对齐/颜色/高亮）；内容以 TipTap JSON 字符串持久化，
  * 解析失败回退 undefined 让编辑器空开而非崩溃。
- * 自动保存 500ms debounce，保存状态"已保存"2s 后自动隐藏；卸载时清理
+ * 自动保存 2s idle debounce + 内容变更检测 + visibilitychange/blur 即时落盘，
  * 两个定时器与 editor 实例（切换笔记时避免残留监听）。
  */
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
@@ -28,7 +28,14 @@ import { compressImageForNote } from '../lib/imageCompress';
 import type { SaveStatus } from '../components/NoteEditHeader';
 
 const SAVE_STATUS_HIDE_DELAY_MS = 2000;
-const AUTOSAVE_DEBOUNCE_MS = 500;
+/** 小文档防抖窗口（ms）：content 低于大文档阈值时的保存节奏 */
+const AUTOSAVE_DEBOUNCE_SMALL_MS = 1000;
+/** 大文档防抖窗口（ms）：content 超阈值时延长，降低数 MB 大写入频率 */
+const AUTOSAVE_DEBOUNCE_LARGE_MS = 2500;
+/** 大文档判定阈值（字节）：content 长度（含 base64 图片）超过即视为大文档 */
+const LARGE_DOCUMENT_BYTES = 512 * 1024;
+/** idle 调度兜底超时（ms）：requestIdleCallback 持续无空闲时强制执行的时限 */
+const IDLE_TIMEOUT_MS = 3000;
 
 interface UseNoteEditorOptions {
   noteId: string | null;
@@ -41,44 +48,118 @@ interface UseNoteEditorOptions {
 
 export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNoteEditorOptions) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [isDirty, setIsDirty] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedContentRef = useRef<string>('');
+  const editorRef = useRef<ReturnType<typeof useEditor> | null>(null);
 
-  // 解析初始内容（仅在切换笔记时重算）
+  // 解析初始内容（切换笔记或全文惰性加载完成时重算；
+  // P1-1：rawContent 随 getById 到达从 undefined → 全文）
   const initialContent = useMemo(() => {
     if (!rawContent) return undefined;
     try {
       const parsed = JSON.parse(rawContent);
-      if (parsed && parsed.type === 'doc') return parsed;
+      if (parsed && parsed.type === 'doc') {
+        lastSavedContentRef.current = rawContent;
+        return parsed;
+      }
       return undefined;
     } catch {
       return undefined;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在 note.id 变化时重新计算
-  }, [noteKey]);
+  }, [noteKey, rawContent]);
 
   const debouncedSave = useCallback(
     (getContent: () => string) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(async () => {
-        if (noteId) {
-          setSaveStatus('saving');
-          try {
-            // 序列化延迟到防抖回调内执行：避免每次键入都同步 JSON.stringify
-            // 整个文档（含 base64 图片可达数 MB）阻塞主线程，仅保存时序列化一次。
-            await updateNote(noteId, { content: getContent() });
-            soundPlayer.play('note_autosave');
-            setSaveStatus('saved');
-            if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
-            saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), SAVE_STATUS_HIDE_DELAY_MS);
-          } catch {
-            setSaveStatus('failed');
+      setIsDirty(true);
+      // P0-4 写库调度：防抖窗口按已保存内容大小自适应（lastSavedContentRef
+      // 无需序列化即可估算长度），回调经 requestIdleCallback 在空闲帧执行——
+      // 打字交互期间不触发数 MB 的 IndexedDB 写入与 JSON 序列化，
+      // 持续忙碌时由 timeout 兜底保证最终落盘。
+      const debounceMs = lastSavedContentRef.current.length > LARGE_DOCUMENT_BYTES
+        ? AUTOSAVE_DEBOUNCE_LARGE_MS
+        : AUTOSAVE_DEBOUNCE_SMALL_MS;
+      debounceRef.current = setTimeout(() => {
+        const run = async () => {
+          if (noteId) {
+            const contentStr = getContent();
+            // 内容变更检测：无变化则跳过保存
+            if (contentStr === lastSavedContentRef.current) {
+              setIsDirty(false);
+              return;
+            }
+            setSaveStatus('saving');
+            try {
+              // 序列化延迟到防抖回调内执行：避免每次键入都同步 JSON.stringify
+              // 整个文档（含 base64 图片可达数 MB）阻塞主线程，仅保存时序列化一次。
+              await updateNote(noteId, { content: contentStr });
+              lastSavedContentRef.current = contentStr;
+              soundPlayer.play('note_autosave');
+              setSaveStatus('saved');
+              setIsDirty(false);
+              if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+              saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), SAVE_STATUS_HIDE_DELAY_MS);
+            } catch {
+              setSaveStatus('failed');
+              // 保存失败不清除 dirty 标记，下次保存仍会尝试
+            }
           }
+        };
+        if (typeof window.requestIdleCallback === 'function') {
+          window.requestIdleCallback(() => { void run(); }, { timeout: IDLE_TIMEOUT_MS });
+        } else {
+          void run();
         }
-      }, AUTOSAVE_DEBOUNCE_MS);
+      }, debounceMs);
     },
     [noteId, updateNote],
   );
+
+  /** 立即保存未落盘的内容（用于 blur、visibilitychange 等场景） */
+  const flushPendingSave = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    if (noteId && editorRef.current && isDirty) {
+      const contentStr = JSON.stringify(editorRef.current.getJSON());
+      if (contentStr !== lastSavedContentRef.current) {
+        setSaveStatus('saving');
+        // updateNote 签名允许返回 void（同步保存路径），Promise.resolve 统一链式处理
+        Promise.resolve(updateNote(noteId, { content: contentStr })).then(() => {
+          lastSavedContentRef.current = contentStr;
+          setSaveStatus('saved');
+          setIsDirty(false);
+          if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+          saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), SAVE_STATUS_HIDE_DELAY_MS);
+        }).catch(() => {
+          setSaveStatus('failed');
+        });
+      }
+    }
+  }, [noteId, isDirty, updateNote]);
+
+  // 页面可见性变化时保存（标签页切换/隐藏时触发）
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        flushPendingSave();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [flushPendingSave]);
+
+  // 浏览器关闭/刷新时同步保存
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   // 清理 debounce
   useEffect(() => {
@@ -111,21 +192,35 @@ export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNo
     // 需显式声明，否则 index.css 中 .tiptap 前缀的表格/任务列表/图片等样式全部失效。
     editorProps: { attributes: { class: 'tiptap' } },
     onUpdate: ({ editor: e }) => {
+      editorRef.current = e;
       // 传入 getter 而非预序列化字符串：getJSON/stringify 延迟到防抖回调内执行
       debouncedSave(() => JSON.stringify(e.getJSON()));
     },
   });
 
-  // 确保编辑器在组件卸载或笔记切换时正确销毁
-  useEffect(() => {
-    return () => {
-      if (editor) {
-        editor.destroy();
-      }
-    };
-  }, [editor]);
+  // 编辑器生命周期由 @tiptap/react v3 useEditor 托管：其 scheduleDestroy 延迟
+  // 销毁机制可抵御 React 18 StrictMode 双调用（自定义 destroy effect 会在
+  // 双调用 cleanup 阶段同步销毁实例，导致后续 effect 拿到 schema=null 的
+  // 已销毁编辑器而崩溃），卸载时 v3 会在下一 tick 自动销毁。
 
-  /** 图片上传（P2-10：大图压缩降采样后读为 base64 内嵌，小图原样） */
+  // 切换笔记时更新编辑器内容（useEditor 的 content 只在初始化时消费一次）
+  // 使用 emitUpdate:false 避免触发 onUpdate → debouncedSave 误保存
+  // 注意：TipTap v3.27 的 History 命令仅 undo/redo，无 clearHistory（v2 遗留 API），
+  // 调用会抛 "Command not found"——切换后不重置历史栈（setContent 后 undo 行为
+  // 由 v3 托管，跨笔记撤销属可接受边界，避免运行时崩溃）。
+  // P0-3 优化：initialContent 字符串一次化缓存，切换笔记时不再双 JSON.stringify
+  const initialContentStr = useMemo(
+    () => (initialContent ? JSON.stringify(initialContent) : ''),
+    [initialContent],
+  );
+  useEffect(() => {
+    if (!editor || !initialContent) return;
+    // 避免在首次挂载时重复设置（此时编辑器内容已由 content prop 初始化）
+    const currentJson = editor.getJSON();
+    if (JSON.stringify(currentJson) === initialContentStr) return;
+    editor.commands.setContent(initialContent, { emitUpdate: false });
+  }, [editor, noteKey, initialContent, initialContentStr]);
+
   const handleImageSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !editor) return;
@@ -135,5 +230,5 @@ export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNo
     editor.chain().focus().setImage({ src }).run();
   }, [editor]);
 
-  return { editor, saveStatus, debouncedSave, handleImageSelect };
+  return { editor, saveStatus, isDirty, debouncedSave, flushPendingSave, handleImageSelect };
 }

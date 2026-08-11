@@ -23,9 +23,22 @@ export async function enqueueCRDTChange(changeset: CRDTChangeset): Promise<void>
 
 /**
  * 获取待上传的 changesets（按 seq 排序）
+ * SYNC2-L3: 支持按表过滤——原实现仅支持全局 limit，多表启用 CRDT 时
+ * crdtSyncChannel 每表取前 50 条再 filter，靠后表（数据量大）的变更
+ * 可能被全局前 50 条挤掉，形成推送饥饿。
  */
-export async function getPendingCRDTChanges(limit: number = 50): Promise<CRDTChangeRecord[]> {
+export async function getPendingCRDTChanges(
+  limit: number = 50,
+  tableName?: string,
+): Promise<CRDTChangeRecord[]> {
   const { db } = await import('@/lib/storage/database');
+  if (tableName) {
+    return db.crdtChanges
+      .orderBy('seq')
+      .filter(c => c.tableName === tableName)
+      .limit(limit)
+      .toArray();
+  }
   return db.crdtChanges
     .orderBy('seq')
     .limit(limit)

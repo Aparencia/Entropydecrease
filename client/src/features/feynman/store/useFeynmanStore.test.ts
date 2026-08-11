@@ -204,17 +204,17 @@ describe('Feynman Store - Pure Business Logic', () => {
     });
   });
 
-  // ── setExplanation auto-advance ───────────────────────────
+  // ── setExplanation（FRONT2-M1: 不再自动推进，由 advanceStep 统一推进）──
 
   describe('setExplanation', () => {
-    it('should auto-advance from step 1 to step 2', async () => {
+    it('should save explanation without advancing step (advanceStep owns progression)', async () => {
       const note = makeNote({ id: 'n10', currentStep: 1, status: 'not_started' });
       useFeynmanStore.setState({ notes: [note] });
 
       await useFeynmanStore.getState().setExplanation('n10', 'My explanation');
       const updated = useFeynmanStore.getState().notes.find((n) => n.id === 'n10');
-      expect(updated!.currentStep).toBe(2);
-      expect(updated!.status).toBe('in_progress');
+      expect(updated!.currentStep).toBe(1); // 不再自动推进
+      expect(updated!.status).toBe('not_started');
       expect(updated!.explanation).toBe('My explanation');
     });
 

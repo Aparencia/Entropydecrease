@@ -35,6 +35,11 @@ import {
 /** 单次请求超时（ms）——bridge 无响应时拒绝并清理 pending，防请求悬挂 */
 const REQUEST_TIMEOUT_MS = 30_000;
 
+// ELEC2-M1: init 失败后的指数退避重试参数（1s→2s→4s…封顶 30s，最多 8 次）
+const INIT_RETRY_BASE_MS = 1000;
+const INIT_RETRY_MAX_MS = 30_000;
+const INIT_RETRY_MAX_ATTEMPTS = 8;
+
 // ================================================================
 // 管理器
 // ================================================================
@@ -43,6 +48,11 @@ class McpManager {
   private bridge: ChildProcess | null = null;
   private initialized = false;
   private requestCounter = 0;
+  /** ELEC2-M1: init 重试计数与定时器（指数退避，环境故障自愈） */
+  private retryAttempts = 0;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  /** GW-3(X1): 退出标志——shutdown 发起后禁止再调度 init 重试 */
+  private shuttingDown = false;
   /** 待响应的请求回调 */
   private pending = new Map<string, {
     resolve: (value: unknown) => void;
@@ -124,7 +134,37 @@ class McpManager {
     } catch (err) {
       logger.error('[MCP] Manager init failed', err);
       this.killBridge();
+      // ELEC2-M1: 重置 initialized 并指数退避重试——原实现保留 true 导致
+      // MCP 功能本次运行永久静默禁用（bridge 故障/环境变量缺失后无自愈机会）
+      this.initialized = false;
+      // GW-3(X1): shutdown 已发起时不再调度重试——否则退出窗口期（timer
+      // 回调已触发、init 的 sendRequest in-flight）会 fork 孤儿子进程
+      if (this.shuttingDown) {
+        logger.warn('[MCP] Init failed during shutdown, skip retry scheduling');
+        return;
+      }
+      this.scheduleRetryInit();
     }
+  }
+
+  /**
+   * ELEC2-M1: 指数退避重试 init（1s→2s→4s…封顶 30s，最多 8 次）
+   * 环境类故障（PATH 缺失、bridge 编译产物未就绪）通常可自愈
+   */
+  private scheduleRetryInit(): void {
+    if (this.retryTimer) return; // 已有重试计划
+    if (this.retryAttempts >= INIT_RETRY_MAX_ATTEMPTS) {
+      logger.error('[MCP] Init retry attempts exhausted, giving up');
+      return;
+    }
+    const delay = Math.min(INIT_RETRY_BASE_MS * 2 ** this.retryAttempts, INIT_RETRY_MAX_MS);
+    this.retryAttempts += 1;
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      if (this.initialized) return; // 已成功，无需重试
+      logger.info(`[MCP] Retrying init (attempt ${this.retryAttempts}/${INIT_RETRY_MAX_ATTEMPTS})...`);
+      void this.init().catch(() => {});
+    }, delay);
   }
 
   /**
@@ -172,6 +212,17 @@ class McpManager {
    */
   async shutdown(): Promise<void> {
     logger.info('[MCP] Shutting down MCP Manager...');
+
+    // GW-3(X1): 置位退出标志 + 复位重试计数——in-flight init 失败后不再
+    // 调度重试；重试计数复位防止 dev 热重载重启后直接耗尽
+    this.shuttingDown = true;
+    this.retryAttempts = 0;
+
+    // ELEC2-M1: 取消未执行的重试定时器（退出时不再自愈）
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
 
     if (this.bridge) {
       try {

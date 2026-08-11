@@ -4,12 +4,14 @@
  * start and exposes a sync apply-function for transcript display points.
  *
  * @ai-context: 会话启动时按 courseMeta.courseName 一次性加载"课程专属 +
- * 全局"词条（hotwordStore），替换词条转为 ReplaceRule 供展示层单点调用；
- * boost 词条暂存备用（本地 ASR 暂不支持 hotwords，见 local-asr TODO）。
+ * 全局"词条（hotwordStore），替换词条转为 ReplaceRule 供展示层与存储层单点调用；
+ * boost 词条经 IPC 透传给 zipformer ASR 引擎（createStream hotwords），
+ * 实现热词增强的"事前纠正"效果。
  * 模块级单例状态：同一时刻仅一个采集会话，stop 时 clear。
- * @ai-context: EN: replacing acts on display text only — storage keeps the
- * original transcript (audioSegments.audioText) for traceability. Load
- * failures degrade silently to "no vocabulary" (local-first, never blocking).
+ * @ai-context: EN: replacing acts on both display text and stored audioText —
+ * audioSegments.audioText stores the replaced version for downstream consumption;
+ * audioTextRaw preserves the original clean transcript for traceability.
+ * Load failures degrade silently to "no vocabulary" (local-first, never blocking).
  */
 import { hotwordStore } from '@/lib/storage/hotwordStore';
 import { applyReplaceTerms, type ReplaceRule } from '@/lib/capture/hotwordApply';
@@ -61,7 +63,13 @@ export function applySessionReplaces(text: string): string {
   return applyReplaceTerms(text, activeReplaces);
 }
 
-/** 当前会话热词增强词列表（5.3 预留：ASR 引擎支持后经可选 IPC 字段透传） */
+/** 当前会话热词增强词列表（经 IPC 透传给 zipformer ASR 引擎） */
 export function getSessionBoostWords(): string[] {
   return activeBoosts;
+}
+
+/** 获取热词增强字符串（空格分隔，自动截断至 200 字符避免网关/引擎超限） */
+export function getSessionHotwordsString(): string {
+  const joined = activeBoosts.join(' ');
+  return joined.length > 200 ? joined.slice(0, 200) : joined;
 }

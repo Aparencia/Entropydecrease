@@ -2,16 +2,19 @@
  * ClosedBookTest — N2 合书测试模式
  *
  * @ai-context: 编辑器内容被遮罩隐藏后，AI 基于笔记文本生成 3-5 个回忆问题
- * （复用 useAIFeynmanQuestion），用户作答后"合书对照"解除遮罩核对原文。
- * 提取练习（retrieval practice）：主动回忆比被动重读更能巩固记忆。
+ * （复用 useAIFeynmanQuestion），用户作答后"合书对照"提交答案，逐条 diff
+ * 高亮（正确=绿 / 错误=红 / 遗漏=琥珀，纯本地 bigram 相似度，见 diffRecall）。
+ * 提取练习（retrieval practice）：主动回忆 + 即时反馈比被动重读更能巩固记忆。
  * AI 不可用时降级为空白自由回忆区，保证本地可用。
  */
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
-import { EyeOff, Eye, X } from 'lucide-react';
+import { EyeOff, Check, X, RotateCcw } from 'lucide-react';
 import { useAIFeynmanQuestion } from '@/lib/ai/useAI';
 import type { FeynmanQuestionItem } from '@/lib/ai/types';
+import { diffRecallAgainstNote, type DiffSentence } from '../lib/diffRecall';
+import { cn } from '@/lib/utils';
 
 /** 送入 AI 的笔记文本上限（控制 token 消耗） */
 const MAX_TEXT_LEN = 3000;
@@ -22,18 +25,25 @@ interface ClosedBookTestProps {
   noteTitle: string;
   /** 编辑器实时纯文本 */
   noteText: string;
-  /** 合书对照：解除遮罩显示原文 */
-  onReveal: () => void;
   /** 结束合书测试 */
   onClose: () => void;
 }
 
-export function ClosedBookTest({ noteTitle, noteText, onReveal, onClose }: ClosedBookTestProps) {
+/** 三态配色映射 */
+const DIFF_STYLE: Record<DiffSentence['kind'], { icon: React.ReactNode; row: string; label: string }> = {
+  correct: { icon: <Check className="w-3.5 h-3.5" strokeWidth={2} />, row: 'border-emerald-500/30 bg-emerald-500/5', label: '回答到位' },
+  wrong: { icon: <X className="w-3.5 h-3.5" strokeWidth={2} />, row: 'border-red-500/30 bg-red-500/5', label: '回忆偏差' },
+  missing: { icon: <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />, row: 'border-amber-500/30 bg-amber-500/5', label: '原文遗漏' },
+};
+
+export function ClosedBookTest({ noteTitle, noteText, onClose }: ClosedBookTestProps) {
   const { loading, generateQuestions } = useAIFeynmanQuestion();
   const [questions, setQuestions] = useState<FeynmanQuestionItem[]>([]);
   const [fallback, setFallback] = useState(false);
   const [answers, setAnswers] = useState<string[]>([]);
   const [freeRecall, setFreeRecall] = useState('');
+  // N2 提交对照结果：非 null 时展示逐条 diff 高亮
+  const [diff, setDiff] = useState<DiffSentence[] | null>(null);
 
   // 挂载时尝试 AI 出题；失败或内容不足则降级为自由回忆
   useEffect(() => {
@@ -69,6 +79,62 @@ export function ClosedBookTest({ noteTitle, noteText, onReveal, onClose }: Close
     ? freeRecall.trim().length > 0
     : answers.some((a) => a.trim().length > 0);
 
+  /** N2 提交对照：合并全部答案为一段回忆文本，逐条 diff 高亮 */
+  const handleSubmit = () => {
+    const recall = fallback
+      ? freeRecall
+      : answers.map((a) => a.trim()).filter(Boolean).join('。');
+    setDiff(diffRecallAgainstNote(recall, noteText));
+  };
+
+  const handleRetry = () => {
+    setDiff(null);
+    if (!fallback) setAnswers(new Array(questions.length).fill(''));
+    else setFreeRecall('');
+  };
+
+  // N2 对照结果视图：三态逐条高亮 + 原文对应
+  const renderDiff = () => (
+    <div className="flex flex-col gap-2">
+      <p className="text-b2 text-text-primary font-medium">对照结果——逐条核对，记住偏差处</p>
+      <div className="flex flex-col gap-1.5">
+        {diff?.map((d, i) => {
+          const style = DIFF_STYLE[d.kind];
+          return (
+            <div
+              key={i}
+              className={cn('flex items-start gap-2 px-3 py-2 rounded-kb-md border text-b2', style.row)}
+            >
+              <span className={cn('mt-0.5 flex-shrink-0', d.kind === 'correct' && 'text-emerald-500', d.kind === 'wrong' && 'text-red-500')}>
+                {style.icon}
+              </span>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-text-primary leading-relaxed">{d.text}</span>
+                {d.kind === 'correct' && d.matched && d.matched !== d.text && (
+                  <span className="text-c1 text-text-tertiary truncate">↳ 原文：{d.matched}</span>
+                )}
+                {d.kind === 'missing' && (
+                  <span className="text-c1 text-amber-600/80">这条要点没想起来——回看笔记重点补一下</span>
+                )}
+                {d.kind === 'wrong' && (
+                  <span className="text-c1 text-red-500/80">原文中没有对应内容，可能是记串了</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between gap-2 mt-2">
+        <p className="text-c1 text-text-tertiary">绿=回答到位 · 红=回忆偏差 · 琥珀=原文遗漏</p>
+        <div className="flex gap-2 flex-shrink-0">
+          <Button variant="secondary" icon={<RotateCcw className="w-4 h-4" strokeWidth={1.5} />} onClick={handleRetry}>
+            重新作答
+          </Button>
+          <Button onClick={onClose}>完成测试</Button>
+        </div>
+      </div>
+    </div>
+  );
   return (
     <div className="max-w-[640px] mx-auto my-kb-lg p-kb-lg rounded-kb-lg bg-bg-primary/95 backdrop-blur-xl border border-border/40 shadow-[0_8px_32px_rgba(0,0,0,0.08)]">
       {/* 头部 */}
@@ -97,6 +163,11 @@ export function ClosedBookTest({ noteTitle, noteText, onReveal, onClose }: Close
         </div>
       )}
 
+      {/* N2 对照结果：提交后逐条 diff 高亮 */}
+      {diff && renderDiff()}
+
+      {!diff && (
+        <>
       {/* 降级：自由回忆区 */}
       {fallback && !loading && (
         <div className="flex flex-col gap-3">
@@ -138,15 +209,15 @@ export function ClosedBookTest({ noteTitle, noteText, onReveal, onClose }: Close
       {/* 操作区 */}
       <div className="flex items-center justify-between gap-2 mt-5">
         <p className="text-c1 text-text-tertiary">
-          {answered ? '写得不错，对照原文看看？' : '先试着写点什么，哪怕只言片语'}
+          {answered ? '写得不错，提交对照看看？' : '先试着写点什么，哪怕只言片语'}
         </p>
         <div className="flex gap-2 flex-shrink-0">
           <Button variant="secondary" onClick={onClose}>结束测试</Button>
-          <Button icon={<Eye className="w-4 h-4" strokeWidth={1.5} />} onClick={onReveal}>
-            合书对照
-          </Button>
+          <Button onClick={handleSubmit}>合书对照</Button>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

@@ -16,7 +16,7 @@ interface ModuleInfo {
 
 const MODULES: ModuleInfo[] = [
   {
-    color: 'bg-indigo-500',
+    color: 'bg-brand-500',
     name: '仪表盘',
     description: '学习数据的可视化中心，展示学习时长、效率趋势、模块使用分布等关键指标。',
     scenarios: '查看每日/周学习报告，了解学习进度与效率变化。',
@@ -44,18 +44,25 @@ const MODULES: ModuleInfo[] = [
     aiCapability: 'AI 自动从笔记生成记忆卡片，智能调整复习间隔。',
   },
   {
-    color: 'bg-cyan-500',
+    color: 'bg-cyber',
     name: '浮出水面（费曼）',
     description: '费曼学习法实践工具，用自己的话解释概念，发现知识盲区。',
     scenarios: '检验理解深度、考前自测、向他人讲解前准备。',
     aiCapability: 'AI 扮演听众，指出解释中的逻辑漏洞与遗漏。',
   },
   {
-    color: 'bg-purple-500',
+    color: 'bg-accent-500',
     name: '灵感',
     description: '灵感收集与知识关联网络，捕捉学习中的灵感瞬间，建立知识间联系。',
     scenarios: '头脑风暴、跨学科关联、创意记录。',
     aiCapability: 'AI 发现知识点间的隐含关联，推荐相关内容。',
+  },
+  {
+    color: 'bg-lime-500',
+    name: '标准作业（SOP）',
+    description: '标准作业流程：把可复用的学习流程固化为模板，按步骤逐步执行并推进。',
+    scenarios: '固定学习流程（预习-听课-复习）、周复盘仪式、长任务拆解。',
+    aiCapability: 'AI 校验模板步骤完整性（lint），流程可导出/导入分享。',
   },
 ];
 

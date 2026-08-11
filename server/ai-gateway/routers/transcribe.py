@@ -28,10 +28,13 @@ router = APIRouter(prefix="/api/v1/asr", tags=["语音转写"])
 
 class TranscribeRequest(BaseModel):
     """语音转写请求"""
-    audio_base64: str = Field(..., description="PCM/WAV 音频 base64 编码")
-    language: str = Field(default="zh", description="语言代码：zh/en/auto")
-    sample_rate: int = Field(default=16000, description="采样率")
-    channels: int = Field(default=1, description="声道数")
+    # GW-M15: base64 上限 32M 字符（约 24MB 音频）——Qwen3-ASR-Flash 官方
+    # 编码后 ≤10MB，此处放宽以兼容 WAV 高采样率；超大载荷由中间件前缀上限兜底
+    audio_base64: str = Field(..., min_length=1, max_length=32_000_000, description="PCM/WAV 音频 base64 编码")
+    language: str = Field(default="zh", max_length=16, description="语言代码：zh/en/auto")
+    sample_rate: int = Field(default=16000, ge=8000, le=96000, description="采样率")
+    channels: int = Field(default=1, ge=1, le=2, description="声道数")
+    hotwords: str = Field(default="", max_length=500, description="热词增强字符串（空格分隔，透传 ASR 引擎）")
 
 
 class TranscribeSegment(BaseModel):
@@ -46,7 +49,8 @@ class TranscribeResponse(BaseModel):
     text: str = Field(..., description="转写文本")
     segments: list[TranscribeSegment] = Field(default_factory=list, description="时间分段列表")
     language: str = Field(..., description="检测到的语言")
-    confidence: float = Field(..., description="置信度 0-1")
+    # GW-2#11: ASR API 不提供置信度，恒为占位 0.0——前端不应据此做阈值过滤
+    confidence: float = Field(default=0.0, description="置信度占位（ASR API 不提供，恒为 0）")
     model_used: str = Field(..., description="使用的模型名称")
     processing_time_ms: int = Field(..., description="请求耗时（毫秒）")
     warning: str | None = Field(default=None, description="降级提示（fallback 时透传，客户端据此识别失败）")
@@ -85,6 +89,7 @@ async def transcribe_audio(request: Request, body: TranscribeRequest) -> Transcr
             language=body.language,
             sample_rate=body.sample_rate,
             channels=body.channels,
+            hotwords=body.hotwords,
         )
 
     try:

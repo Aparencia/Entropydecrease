@@ -64,13 +64,14 @@ export function FunctionalOverlay({ children, visible, className, panelClassName
 
       {/* 功能面板 — 隐藏时移除 backdrop-blur，避免 backdrop-filter 合成层遮挡 canvas */}
       <motion.div
+        data-work-area="module-content"
         className={cn(
           "relative z-10 w-full",
           "max-w-5xl",
           "max-h-[calc(100vh-5rem)] sm:max-h-[85vh]", // 移动端适配底部导航
           "overflow-y-auto",
           "rounded-2xl sm:rounded-[24px_12px_20px_16px]", // 移动端统一圆角
-          "bg-white/10 dark:bg-black/30",
+          "bg-transparent",
           visible && "backdrop-blur-2xl",
           "border border-white/20 dark:border-white/10",
           "shadow-[0_8px_40px_rgba(0,0,0,0.3)]",
@@ -79,7 +80,10 @@ export function FunctionalOverlay({ children, visible, className, panelClassName
           "p-3 sm:p-5 md:p-8"
         )}
         /* 修复：提示浏览器提前创建合成层，避免动画时触发重绘/重排，提升动画流畅度 */
-        style={{ willChange: 'transform, opacity' }}
+        style={{
+          willChange: 'transform, opacity',
+          background: 'linear-gradient(180deg, var(--kb-dive-top) 0%, var(--kb-dive-mid) 42%, var(--kb-dive-bot) 100%)',
+        }}
         initial={{ scale: 0.9, y: 30 }}
         animate={visible ? { scale: 1, y: 0 } : { scale: 0.9, y: 30 }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}

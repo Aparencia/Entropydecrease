@@ -46,7 +46,10 @@ export const useEcosystemStore = create<EcosystemState>((set, get) => ({
         const sorted = [...corals].sort(
           (a, b) => new Date(b.plantedAt).getTime() - new Date(a.plantedAt).getTime(),
         );
-        const lastDate = new Date(sorted[0].plantedAt).toISOString().split('T')[0];
+        // GW-3: 本地日期口径（与 FRONT2-M3 一致）——原实现 toISOString 取
+        // UTC 日期，UTC+8 用户凌晨种植后白化判定偏差一天
+        const lastPlant = new Date(sorted[0].plantedAt);
+        const lastDate = `${lastPlant.getFullYear()}-${String(lastPlant.getMonth() + 1).padStart(2, '0')}-${String(lastPlant.getDate()).padStart(2, '0')}`;
         const toBleach = checkBleaching(corals, lastDate, new Date());
         if (toBleach.length > 0) {
           for (const id of toBleach) {
@@ -100,8 +103,12 @@ export const useEcosystemStore = create<EcosystemState>((set, get) => ({
         }
       }
 
-      const totalDepth = restored.reduce((sum, c) => sum + c.depth, 0);
-      set({ corals: restored, totalDepth });
+      // FRONT2-M4: 写库完成后重新读库再 set——原实现用旧快照整体覆盖，
+      // 两个会话并发完成（如番茄钟与闪卡同时触发）时后写者覆盖前者的
+      // 珊瑚，store 中珊瑚丢失、totalDepth 少算（DB 有但 UI 态丢）
+      const latest = await db.coralEcosystem.toArray();
+      const totalDepth = latest.reduce((sum, c) => sum + c.depth, 0);
+      set({ corals: latest, totalDepth });
     } catch { /* 静默失败 */ }
   },
 
@@ -113,6 +120,9 @@ export const useEcosystemStore = create<EcosystemState>((set, get) => ({
         await db.coralEcosystem.update(c.id, { health: 'healthy' });
       } catch { /* ignore */ }
     }
-    set({ corals: restored });
+    // GW-3: 与 plantCoral 同口径——写库完成后重读再 set，避免旧快照
+    // 覆盖并发 plantCoral 的最新状态
+    const latest = await db.coralEcosystem.toArray();
+    set({ corals: latest });
   },
 }));

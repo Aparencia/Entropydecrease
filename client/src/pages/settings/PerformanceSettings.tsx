@@ -6,6 +6,8 @@
  * 显示名 静谧/从容/澎湃，默认从容（medium）。
  *
  * @ai-context: 设置页组件：PerformanceSettings。
+ * 生效时机：3D 画质/动画即时生效；后台采集频率在变更瞬间优雅重启活跃
+ * 采集循环即时生效（主进程 onPerformanceModeChange 订阅），不再等下次启动。
  */
 import { motion } from 'framer-motion';
 import { Card } from '@/components/ui';
@@ -136,7 +138,7 @@ export default function PerformanceSettings() {
       </div>
 
       <p className="text-c1 text-text-tertiary">
-        3D 画质与动画即时生效；后台采集频率与进程策略在下次启动后完全生效。
+        3D 画质与动画即时生效；后台采集频率在变更后立即生效（当前采集循环将按新频率重启）。
       </p>
     </Card>
   );

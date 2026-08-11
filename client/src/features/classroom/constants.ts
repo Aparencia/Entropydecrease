@@ -95,7 +95,7 @@ export const STATUS_CONFIG: Record<SessionStatus, { label: string; color: string
 export const LANGUAGE_OPTIONS: { value: CaptureSidebarConfig['language']; label: string }[] = [
   { value: 'zh', label: '中文' },
   { value: 'en', label: 'English' },
-  { value: 'mixed', label: '多语' },
+  { value: 'mixed', label: '中英混说' },
 ];
 
 export const SUBJECT_OPTIONS = [

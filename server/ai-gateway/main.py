@@ -53,6 +53,24 @@ from routers import (
     conflict_detect_router,
     concept_precheck_router,
     import_concept_router,
+    license_router,
+    license_webhook_router,
+    beta_router,
+    learning_plan_router,
+    session_qa_router,
+    debate_router,
+    counterintuitive_router,
+    personify_router,
+    mnemonic_router,
+    podcast_router,
+    learning_coach_router,
+    infographic_router,
+    freshness_router,
+    embodied_router,
+    learning_narrative_router,
+    haiku_router,
+    compile_router,
+    micro_card_router,
 )
 from cache.redis_cache import get_cache
 
@@ -214,13 +232,28 @@ async def ai_error_handler(request: Request, exc: AIError) -> JSONResponse:
         "AIError: %s (status=%d, path=%s)",
         exc.message, exc.status_code, request.url.path,
     )
+    # GW-M6: 不向客户端透传上游错误细节——exc.message/reason 可能含
+    # provider 内部信息、prompt 片段、配额详情，仅返回通用文案与结构化字段
+    safe_detail = {
+        k: v for k, v in exc.detail.items()
+        if k in ("provider", "feature", "limit", "model")
+    }
     return JSONResponse(
         status_code=exc.status_code,
         content={
-            "detail": exc.message,
-            **exc.detail,
+            "detail": _GENERIC_ERROR_MESSAGES.get(exc.status_code, "AI 服务暂时不可用"),
+            **safe_detail,
         },
     )
+
+
+# 上游错误脱敏后的通用错误文案（GW-M6）
+_GENERIC_ERROR_MESSAGES: dict[int, str] = {
+    401: "认证失败，请重新登录",
+    429: "请求过于频繁，请稍后重试",
+    502: "模型服务响应异常，请稍后重试",
+    503: "AI 服务暂时不可用，请稍后重试",
+}
 
 
 # ============================================================
@@ -250,9 +283,27 @@ app.include_router(content_tier_router)          # N5: 内容分层——同样�
 app.include_router(conflict_detect_router)       # N6: 概念冲突检测——同样注册于 streaming_router 之前
 app.include_router(concept_precheck_router)      # E1: 概念预检——同样注册于 streaming_router 之前
 app.include_router(import_concept_router)         # 阶段 A: 知识入籍概念化——同样注册于 streaming_router 之前
+app.include_router(license_router)                # 激活码验证（POST /api/v1/license/activate）
+app.include_router(license_webhook_router)         # 面包多订单通知（POST /api/v1/license/webhook）
+app.include_router(beta_router)                   # 内测邀请 API（POST /api/v1/beta/use-invite）
 app.include_router(streaming_router)             # 流式输出（SSE，全量 AI 功能）
 app.include_router(balance_router)               # API 余额查询
 app.include_router(ritual_recall_router)         # v0.26.0 B1.2: 仪式回顾小问
+app.include_router(learning_plan_router)         # P1: 今日学习计划（个性化学习路径）
+app.include_router(session_qa_router)            # D2: 课堂内容问答（带引用来源）
+app.include_router(debate_router)                # Phase2: AI 辩论对手
+app.include_router(counterintuitive_router)      # Phase2: 反直觉发现器
+app.include_router(personify_router)             # Phase2: 概念拟人化
+app.include_router(mnemonic_router)              # Phase2: 记忆术生成器
+app.include_router(podcast_router)               # Phase2: AI 播客生成器
+app.include_router(learning_coach_router)        # Phase2: AI 学习教练
+app.include_router(infographic_router)           # Phase2: 知识信息图生成器
+app.include_router(freshness_router)             # Phase3: 知识保鲜检测
+app.include_router(embodied_router)              # Phase3: 概念具身化
+app.include_router(learning_narrative_router)    # Phase3: 学习叙事 RPG
+app.include_router(haiku_router)                 # Phase3: 学习俳句
+app.include_router(compile_router)               # Phase4: 知识编译引擎——同样注册于 streaming_router 之前
+app.include_router(micro_card_router)            # Phase4: 微学习卡片流——同样注册于 streaming_router 之前
 
 
 # ============================================================

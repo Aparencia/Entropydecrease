@@ -8,7 +8,7 @@ export interface Command {
   label: string;
   description?: string;
   icon?: string;
-  category: 'navigation' | 'action' | 'settings';
+  category: 'navigation' | 'action' | 'settings' | 'content';
   shortcut?: string;
   execute: () => void | Promise<void>;
 }

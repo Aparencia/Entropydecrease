@@ -58,6 +58,19 @@ export function registerStorageIpcHandlers(): void {
       throw new Error('不允许读取该路径的文件');
     }
 
+    // CL-L1: 禁止直接读取数据库文件（keban.db*）——整库读取是应用内数据泄露面；
+    // 大小限制 50MB，防止大文件读取占用主进程内存与 IPC 带宽
+    const fileName = path.basename(resolvedPath);
+    if (fileName === DB_FILE_NAME || fileName.startsWith(DB_FILE_NAME + '.')) {
+      throw new Error('不允许直接读取数据库文件');
+    }
+    const { stat } = await import('fs/promises');
+    const MAX_READ_SIZE = 50 * 1024 * 1024;
+    const fileStat = await stat(resolvedPath);
+    if (fileStat.size > MAX_READ_SIZE) {
+      throw new Error(`文件超过大小上限（50MB，当前 ${Math.ceil(fileStat.size / 1024 / 1024)}MB）`);
+    }
+
     const buffer = await readFile(resolvedPath);
     return buffer.buffer; // 返回 ArrayBuffer
   });
@@ -168,6 +181,18 @@ export function registerStorageIpcHandlers(): void {
 
     if (result.canceled || !result.filePath) {
       return { success: false, canceled: true, path: null };
+    }
+
+    // CL-L3: 校验备份内容——仅接受 JSON 字符串且大小 ≤100MB，
+    // 防止注入代码借"保存备份"对话框将任意内容覆盖写入文件
+    const MAX_BACKUP_SIZE = 100 * 1024 * 1024;
+    if (typeof data !== 'string' || data.length > MAX_BACKUP_SIZE) {
+      return { success: false, canceled: false, path: null, error: '备份数据无效或超过 100MB 上限' };
+    }
+    try {
+      JSON.parse(data);
+    } catch {
+      return { success: false, canceled: false, path: null, error: '备份数据不是合法 JSON' };
     }
 
     try {

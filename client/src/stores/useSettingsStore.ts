@@ -42,6 +42,8 @@ interface SettingsState {
   aiConfig: AIConfig;
   /** 音效设置（分类控制） */
   soundSettings: SoundSettings;
+  /** CL-L11: 主进程网关地址同步失败信息（null 表示同步成功或未执行） */
+  gatewaySyncError: string | null;
 
   /** 更新 AI 配置（内存态） */
   setAIConfig: (config: AIConfig) => void;
@@ -51,8 +53,8 @@ interface SettingsState {
    */
   updateSoundSettings: (partial: Partial<SoundSettings>) => void;
 
-  /** 保存 AI 配置到 localStorage */
-  saveAIConfigAction: () => void;
+  /** 保存 AI 配置到 localStorage（网关地址同步失败时抛错供 UI 提示） */
+  saveAIConfigAction: () => Promise<void>;
 }
 
 /** 初始化时加载音效设置并同步到 SoundPlayer */
@@ -62,6 +64,7 @@ soundPlayer.updateSettings(initialSoundSettings);
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   aiConfig: getAIConfig(),
   soundSettings: initialSoundSettings,
+  gatewaySyncError: null,
 
   setAIConfig: (config) => set({ aiConfig: config }),
 
@@ -78,13 +81,23 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     persistSoundSettings(next);
   },
 
-  saveAIConfigAction: () => {
+  saveAIConfigAction: async () => {
     const { aiConfig } = get();
     persistAIConfig(aiConfig);
     updateAIGatewayUrl(aiConfig.gatewayUrl);
     // 同步网关地址到 Electron 主进程（主进程无法访问 localStorage）
     if (window.electronAPI) {
-      window.electronAPI.invoke('ai:set-gateway-url', aiConfig.gatewayUrl).catch(() => {});
+      try {
+        await window.electronAPI.invoke('ai:set-gateway-url', aiConfig.gatewayUrl);
+        set({ gatewaySyncError: null });
+      } catch (err) {
+        // CL-L11: 主进程校验失败（URL 格式/域名/HTTPS/端口/路径）必须让用户感知，
+        // 否则 UI 显示"已保存"但实际仍用旧网关地址——AI 功能静默异常且难以定位
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[Settings] 网关地址同步失败:', message);
+        set({ gatewaySyncError: message });
+        throw new Error(`网关地址保存失败：${message}`);
+      }
     }
   },
 }));

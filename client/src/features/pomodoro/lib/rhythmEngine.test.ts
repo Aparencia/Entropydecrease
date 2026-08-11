@@ -1,6 +1,6 @@
 /**
- * Rhythm Engine / Energy Matcher Unit Tests
- * T1 超昼夜节律自适应 + T5 精力-任务匹配
+ * Rhythm Engine Unit Tests
+ * T1 超昼夜节律自适应
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -9,7 +9,6 @@ import {
   recommendRhythmDuration,
   type RhythmSession,
 } from './rhythmEngine';
-import { matchTaskToEnergy } from './energyMatcher';
 
 const NOW = new Date(2026, 7, 3, 9, 0, 0); // 2026-08-03 09:00 本地时间
 
@@ -100,31 +99,3 @@ describe('recommendRhythmDuration', () => {
   });
 });
 
-describe('matchTaskToEnergy', () => {
-  it('should suggest deep work at peak hours', () => {
-    const sessions: RhythmSession[] = [
-      ...Array.from({ length: 6 }, (_, i) => sessionAt(i + 1, 9, true)),
-      ...Array.from({ length: 6 }, (_, i) => sessionAt(i + 1, 14, false)),
-      sessionAt(1, 19, true), sessionAt(2, 19, false),
-    ];
-    const suggestion = matchTaskToEnergy(sessions, NOW);
-    expect(suggestion.route).toBe('/feynman');
-  });
-
-  it('should suggest flashcard review at trough hours', () => {
-    const sessions: RhythmSession[] = [
-      ...Array.from({ length: 6 }, (_, i) => sessionAt(i + 1, 9, true)),
-      ...Array.from({ length: 6 }, (_, i) => sessionAt(i + 1, 14, false)),
-      sessionAt(1, 19, true), sessionAt(2, 19, false),
-    ];
-    const trough = new Date(NOW);
-    trough.setHours(14, 0, 0, 0);
-    const suggestion = matchTaskToEnergy(sessions, trough);
-    expect(suggestion.route).toBe('/flashcards');
-  });
-
-  it('should suggest note organizing when data insufficient', () => {
-    const suggestion = matchTaskToEnergy([], NOW);
-    expect(suggestion.route).toBe('/notes');
-  });
-});

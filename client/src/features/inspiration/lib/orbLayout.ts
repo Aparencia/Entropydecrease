@@ -89,9 +89,9 @@ export const TODO_CLIP_PATH = 'polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75
 /** 性质 → 球体发光色(rgba) @ai-context boxShadow 颜色，复用 constants 配色体系 */
 export function getOrbGlowColor(nature: string): string {
   switch (nature) {
-    case 'concept':     return 'rgba(139, 92, 246, 0.5)';  // accent/purple
+    case 'concept':     return 'rgba(74, 155, 217, 0.5)';  // 磷光蓝
     case 'question':    return 'rgba(234, 88, 12, 0.5)';   // orange
-    case 'inspiration': return 'rgba(147, 51, 234, 0.5)';  // purple
+    case 'inspiration': return 'rgba(232, 184, 75, 0.5)';  // 萤火暖黄
     case 'todo':        return 'rgba(22, 163, 74, 0.5)';   // green
     default:            return 'rgba(148, 163, 184, 0.4)'; // slate
   }

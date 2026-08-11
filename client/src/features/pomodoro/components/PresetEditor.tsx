@@ -14,7 +14,7 @@ import { X, GraduationCap, BookOpen, PenLine, BookMarked, Brain, Timer, Moon, Co
 import { cn } from '@/lib/utils';
 import { Tip } from '@/components/ui/Tip';
 import { Button, Input } from '@/components/ui';
-import CycleMarkers from './CycleMarkers';
+import { MOOD_LABELS, type Mood } from './chronos/particleMorphs';
 import type { PomodoroPreset } from '@/types/models';
 
 /** 可选图标列表 */
@@ -50,6 +50,7 @@ export default function PresetEditor({ open, onClose, onSave, initial }: PresetE
   const [longBreak, setLongBreak] = useState(initial?.longBreakDuration ?? 15);
   const [interval, setInterval_] = useState(initial?.longBreakInterval ?? 4);
   const [silent, setSilent] = useState(initial?.silent ?? false);
+  const [mood, setMood] = useState<Mood>(initial?.mood ?? 'flow');
 
   // 打开时重置表单：本组件随 AnimatePresence 常驻挂载（不随 open 卸载），
   // useState 初值只在首次挂载生效——不复位会残留上一次的标题/参数
@@ -64,6 +65,7 @@ export default function PresetEditor({ open, onClose, onSave, initial }: PresetE
     setLongBreak(initial?.longBreakDuration ?? 15);
     setInterval_(initial?.longBreakInterval ?? 4);
     setSilent(initial?.silent ?? false);
+    setMood(initial?.mood ?? 'flow');
   }, [open, initial]);
 
   const handleSubmit = () => {
@@ -76,6 +78,7 @@ export default function PresetEditor({ open, onClose, onSave, initial }: PresetE
       longBreakDuration: Math.max(1, Math.min(60, longBreak)),
       longBreakInterval: Math.max(0, Math.min(12, interval)),
       silent,
+      mood,
     });
     onClose();
   };
@@ -204,11 +207,29 @@ export default function PresetEditor({ open, onClose, onSave, initial }: PresetE
                 </button>
               </label>
 
-              {/* 循环标记预览 */}
-              <div className="pt-2 border-t border-border/20">
-                <p className="text-c1 text-text-tertiary mb-2">循环标记预览</p>
-                <CycleMarkers total={interval > 0 ? interval : 4} filled={1} />
+              {/* Chronos 粒子气质（深度定制时间生物外形） */}
+              <div>
+                <p className="text-b2 font-medium text-text-primary mb-2">生物气质</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(Object.keys(MOOD_LABELS) as Mood[]).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setMood(m)}
+                      className={cn(
+                        'px-2.5 py-1 rounded-full text-c1 transition-all',
+                        mood === m
+                          ? 'bg-brand-500 text-white shadow-sm'
+                          : 'bg-bg-secondary hover:bg-bg-tertiary text-text-secondary',
+                      )}
+                    >
+                      {MOOD_LABELS[m]}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-c1 text-text-tertiary mt-1">决定时间生物粒子的外形与运动风格（上课/自习内置预设已预置）</p>
               </div>
+
             </div>
 
             {/* 操作按钮 */}

@@ -13,15 +13,16 @@ import { useRef, useCallback } from 'react';
 import { aiClient } from '@/lib/http/apiClient';
 
 /** 最大并发 ASR 请求数 */
-const MAX_CONCURRENT_ASR = 3;
+const MAX_CONCURRENT_ASR = 5;
 /** 等待队列上限，超出丢弃最旧 */
-const MAX_ASR_QUEUE = 10;
+const MAX_ASR_QUEUE = 20;
 
 interface TranscribePayload {
   audio_base64: string;
   language: string;
   sample_rate: number;
   channels: number;
+  hotwords?: string;
 }
 
 /** 转写响应（与后端 TranscribeResponse 对应的关键字段） */
@@ -88,6 +89,7 @@ async function transcribeLocalViaIpc(payload: TranscribePayload): Promise<string
     language: payload.language,
     sampleRate: payload.sample_rate,
     channels: payload.channels,
+    hotwords: payload.hotwords,
   }) as { text: string; language: string; durationMs: number };
   return result.text?.trim() || null;
 }
@@ -97,7 +99,7 @@ async function transcribeLocalViaIpc(payload: TranscribePayload): Promise<string
 // ================================================================
 
 async function transcribeCloud(payload: TranscribePayload): Promise<string | null> {
-  const resp = await aiClient.post<TranscribeResponse>('/api/v1/asr/transcribe', payload, { timeout: 15000 });
+  const resp = await aiClient.post<TranscribeResponse>('/api/v1/asr/transcribe', payload, { timeout: 30000 });
   // fallback 降级响应（含 warning 或 fallback 空文本）按失败处理
   if (resp.warning || (!resp.text?.trim() && resp.model_used === 'fallback')) {
     throw new Error(resp.warning || 'ASR 服务降级，转写结果为空');
@@ -114,14 +116,16 @@ async function transcribeCloud(payload: TranscribePayload): Promise<string | nul
  *
  * 策略：
  * 1. 本地 ASR 可用 → IPC 调用 sherpa-onnx（零成本、离线可用）
- * 2. 本地失败 + fallbackToCloud → 降级到云端网关（15s 超时，重试 1 次）
+ * 2. 本地失败 + fallbackToCloud → 降级到云端网关（30s 超时，重试 1 次）
  * 3. 本地不可用 → 直接走云端
+ *
+ * @param hotwords - 可选热词增强字符串（zipformer-transducer 支持，空格分隔）
  */
-export async function transcribeWithRetry(payload: TranscribePayload, retries = 1): Promise<string | null> {
+export async function transcribeWithRetry(payload: TranscribePayload, retries = 1, hotwords?: string): Promise<string | null> {
   // ── 本地 ASR 优先 ──
   if (_localAsrAvailable) {
     try {
-      const text = await transcribeLocalViaIpc(payload);
+      const text = await transcribeLocalViaIpc({ ...payload, hotwords });
       if (text) return text;
     } catch (localErr) {
       console.warn('[asrTranscriber] 本地 ASR 失败，尝试云端降级:', localErr);

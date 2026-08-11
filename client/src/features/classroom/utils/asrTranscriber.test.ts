@@ -10,8 +10,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useAsrSemaphore } from './asrTranscriber';
 
-/** 并发槽位 3 + 队列上限 10 = 13 次 acquire 不会触发丢弃 */
-const NO_DROP_ACQUIRES = 13;
+/** 并发槽位 5 + 队列上限 20 = 25 次 acquire 不会触发丢弃 */
+const NO_DROP_ACQUIRES = 25;
 
 describe('useAsrSemaphore 队列丢弃可观测', () => {
   beforeEach(() => {
@@ -38,12 +38,12 @@ describe('useAsrSemaphore 队列丢弃可观测', () => {
     });
     expect(onDrop).not.toHaveBeenCalled();
 
-    // 第 14 次 acquire：队列已满 → 丢弃最旧等待者，本次请求入队
+    // 第 26 次 acquire：队列已满 → 丢弃最旧等待者，本次请求入队
     act(() => { result.current.acquire(); });
     expect(onDrop).toHaveBeenCalledTimes(1);
     expect(onDrop).toHaveBeenLastCalledWith(1, 1);
 
-    // 第 15 次：累计与连续计数均递增
+    // 第 27 次：累计与连续计数均递增
     act(() => { result.current.acquire(); });
     expect(onDrop).toHaveBeenCalledTimes(2);
     expect(onDrop).toHaveBeenLastCalledWith(2, 2);

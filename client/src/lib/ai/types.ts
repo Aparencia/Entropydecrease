@@ -19,7 +19,7 @@ import type {
 import type {
   AnchorPoint, BrainstormIdea, ChatMessage, PredictionPrompt,
   RescueContext, ResourceLink, DraftContent,
-  SocraticEvaluateResult, SocraticDeepeningResult,
+  SocraticEvaluateResult, SocraticDeepeningResult, SocraticMirrorResult,
   ErrorPatternResult, QuizGenResult,
   ContentTierResult, ConflictDetectResult,
   ConceptPrecheckResult,
@@ -46,6 +46,8 @@ export interface AIPlugin {
   socraticEvaluate?(topic: string, question: string, answer: string, history: ChatMessage[]): Promise<SocraticEvaluateResult>;
   /** FEAT-022: 苏格拉底深化角度生成 */
   socraticDeepening?(topic: string, dialogueSummary: string, history: ChatMessage[]): Promise<SocraticDeepeningResult>;
+  /** Phase 2: 苏格拉底反问镜（mirror 模式） */
+  socraticMirror?(topic: string, question: string): Promise<SocraticMirrorResult>;
   /** v0.9.0: 基于笔记内容预测可能的问题 */
   predictQuestion?(noteId: string, content: string): Promise<{ predictions: PredictionPrompt[] }>;
   /** v0.9.0: 学习救援，当用户卡住时提供提示与资源 */
@@ -79,6 +81,7 @@ export interface AIPlugin {
   socraticQuestionStream?(conversationId: string, topic: string, history: ChatMessage[]): AsyncIterable<string>;
   socraticEvaluateStream?(topic: string, question: string, answer: string, history: ChatMessage[]): AsyncIterable<string>;
   socraticDeepeningStream?(topic: string, dialogueSummary: string, history: ChatMessage[]): AsyncIterable<string>;
+  socraticMirrorStream?(topic: string, question: string): AsyncIterable<string>;
   predictQuestionStream?(noteId: string, content: string): AsyncIterable<string>;
   rescueStream?(context: RescueContext): AsyncIterable<string>;
   generateDraftStream?(inspirationId: string, type: 'flashcard' | 'feynman' | 'note', content: string): AsyncIterable<string>;
@@ -99,11 +102,19 @@ export type {
 export type {
   AnchorPoint, BrainstormIdea, ChatMessage, PredictionPrompt,
   RescueContext, ResourceLink, DraftContent,
-  SocraticEvaluateResult, SocraticDeepeningResult,
+  SocraticEvaluateResult, SocraticDeepeningResult, SocraticMirrorResult,
   ErrorPatternItem, ErrorPatternResult,
   QuizQuestion, QuizQuestionType, QuizGenResult,
   ContentTierItem, ContentTierResult, ConceptConflict, ConflictDetectResult,
   PrecheckQuestion, ConceptPrecheckResult,
+  // Phase 2 类型
+  DebateType, DebateRound, DebateResult,
+  CounterintuitiveFact,
+  RelationshipType, RelationshipDrama, PersonaData,
+  MnemonicType, MnemonicData,
+  SpeakerRole, PodcastSegment, PodcastData,
+  CoachDayTask, WeeklyCoachPlan,
+  InfographicSection, InfographicRelation, InfographicData,
 } from './ai-domain.types';
 
 export { AIError } from './ai-errors';

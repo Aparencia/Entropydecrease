@@ -56,11 +56,36 @@ export function registerStreamHandler(): void {
       const { requestId, method, payload, authToken } = args;
       const sender = event.sender;
 
+      // CL-M1: API 路径白名单校验——method 实为路径，直接拼入 URL 可访问
+      // 网关任意端点（含 ?/# 注入参数）；仅允许受信任的 AI 功能路径
+      const VALID_STREAM_PATH = /^\/api\/v1\/(ai|multimodal)\/[A-Za-z0-9_/-]+$/;
+      if (
+        typeof method !== 'string' ||
+        method.includes('?') ||
+        method.includes('#') ||
+        !VALID_STREAM_PATH.test(method)
+      ) {
+        logger.warn(`[AI] [stream] 拒绝非法路径: ${method}`);
+        return { ok: false, error: 'Invalid stream path' };
+      }
+
       logger.info(`[AI] [stream] Start: requestId=${requestId}, method=${method}`);
 
       // 为该流式请求创建 AbortController
       const abortController = new AbortController();
       activeStreams.set(requestId, abortController);
+
+      // CL-L9: 发起流式请求的窗口销毁时清理活跃流——否则 for await 继续从
+      // 网关拉取直到流结束/超时（默认 300s），多次开关窗口累积残留流
+      const wc = event.sender;
+      wc.once('destroyed', () => {
+        const controller = activeStreams.get(requestId);
+        if (controller) {
+          controller.abort();
+          activeStreams.delete(requestId);
+          logger.info(`[AI] [stream] Window destroyed, aborted stream: requestId=${requestId}`);
+        }
+      });
 
       // 50ms 节流缓冲
       let chunkBuffer = '';

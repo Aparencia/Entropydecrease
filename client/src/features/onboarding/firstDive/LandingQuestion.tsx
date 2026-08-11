@@ -47,7 +47,7 @@ export function LandingQuestion() {
         transition={{ delay: 0.3, duration: 0.8 }}
       >
         <MicroLight size={18} />
-        <span className="text-[13px] tracking-wide text-cyan-100/50">
+        <span className="text-[13px] tracking-wide text-cyber/50">
           我是微光，这片海的守夜人。
         </span>
       </motion.div>
@@ -78,7 +78,7 @@ export function LandingQuestion() {
             className={cn(
               'w-full text-left px-5 py-4 rounded-2xl transition-all duration-300 group',
               'bg-white/[0.04] border border-white/10 backdrop-blur-sm',
-              'hover:bg-cyan-400/10 hover:border-cyan-400/30 hover:shadow-[0_0_24px_rgba(6,182,212,0.15)]',
+              'hover:bg-cyber/10 hover:border-cyber/30 hover:shadow-[0_0_24px_rgba(74,155,217,0.15)]',
               submitting && 'opacity-50 pointer-events-none',
             )}
             initial={{ opacity: 0, y: 16 }}
@@ -89,7 +89,7 @@ export function LandingQuestion() {
             <span className="block text-[15px] text-white/85 font-medium">
               {opt.label}
             </span>
-            <span className="block mt-1 text-[12px] text-white/30 group-hover:text-cyan-200/50 transition-colors">
+            <span className="block mt-1 text-[12px] text-white/30 group-hover:text-cyber/50 transition-colors">
               {opt.hint}
             </span>
           </motion.button>

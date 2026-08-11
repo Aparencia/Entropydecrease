@@ -16,12 +16,16 @@ from fastapi import FastAPI
 
 from config import AI_PROVIDERS, is_valid_api_key
 from config.key_pool import load_key_pools, get_primary_key
-from providers.circuit_breaker import init_circuit_breakers, get_circuit
+from providers.circuit_breaker import init_circuit_breakers, get_circuit, CircuitState
 
 logger = logging.getLogger(__name__)
 
 # 健康探活间隔（秒）
 _HEALTH_PROBE_INTERVAL = 30
+
+# GW-M2: 单 Provider 探活超时（秒）——探活调用本身走 with_retry_and_timeout
+# 的超时配置（最长 300s×3 次=900s），必须在此处用短超时兜底
+_HEALTH_PROBE_TIMEOUT = 10.0
 
 
 def init_providers(app: FastAPI) -> None:
@@ -117,7 +121,11 @@ def start_health_probe(app: FastAPI) -> asyncio.Task:
                 if name == "fallback":
                     continue
                 try:
-                    result = await provider.health_check()
+                    # GW-M2: 探活独立短超时——with_retry_and_timeout 的
+                    # 超时按功能最大 300s×3 次计算，探活挂起会长期占用任务
+                    result = await asyncio.wait_for(
+                        provider.health_check(), timeout=_HEALTH_PROBE_TIMEOUT
+                    )
                     healthy = result.get("status") == "healthy"
 
                     # 更新指标
@@ -127,11 +135,13 @@ def start_health_probe(app: FastAPI) -> asyncio.Task:
                     except ImportError:
                         pass
 
-                    # 更新熔断器
+                    # 更新熔断器：冷却期（OPEN）内探活成功不触发恢复——
+                    # 恢复必须等冷却结束（state property 转换到 HALF_OPEN）后
                     cb = get_circuit(name)
                     if cb:
                         if healthy:
-                            await cb.on_success()
+                            if cb.state != CircuitState.OPEN:
+                                await cb.on_success()
                         else:
                             await cb.on_failure()
 
@@ -140,6 +150,11 @@ def start_health_probe(app: FastAPI) -> asyncio.Task:
                             "Provider [%s] 探活失败: %s",
                             name, result.get("error", "unknown"),
                         )
+                except asyncio.TimeoutError:
+                    logger.warning("Provider [%s] 探活超时（%.0fs）", name, _HEALTH_PROBE_TIMEOUT)
+                    cb = get_circuit(name)
+                    if cb:
+                        await cb.on_failure()
                 except Exception as e:
                     logger.warning("Provider [%s] 探活异常: %s", name, str(e))
                     cb = get_circuit(name)

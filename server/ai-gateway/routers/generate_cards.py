@@ -79,8 +79,11 @@ async def generate_cards(request: Request, body: CardGenRequest) -> CardGenRespo
     logger.info("闪卡生成请求: user=%s, note_length=%d", user_id, len(body.note))
 
     # 生成 AI 响应缓存键（基于输入笔记 + 选项）
+    # GW-M10: 键前缀 user_id，防止跨用户缓存共享导致隐私内容交叉泄漏
     options_str = str(body.options.model_dump())
-    cache_key = hashlib.sha256((body.note + options_str).encode()).hexdigest()
+    cache_key = hashlib.sha256(
+        (f"{user_id}:{body.note}:{options_str}").encode()
+    ).hexdigest()
 
     # 检查 Redis AI 响应缓存
     cache = get_cache()

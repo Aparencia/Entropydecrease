@@ -1,17 +1,23 @@
 /**
- * @ai-context: pomodoro 功能模块页面：PomodoroStatsPage。
+ * 专注统计页（装配页）
+ *
+ * @ai-context: 数据加载/聚合留在本页，图表与卡片区块已拆至
+ * components/stats/（单文件 ≤300 行规范）。
  */
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Clock, Target, Flame, TrendingUp } from 'lucide-react';
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Card, Skeleton, EmptyState, RichTooltip } from '@/components/ui';
+import { Clock } from 'lucide-react';
+import { Card, Skeleton, EmptyState } from '@/components/ui';
 import { cn } from '@/lib/utils';
-import { pomodoroSessionStore } from '@/lib/storage';
-import type { PomodoroSession } from '@/types/models';
+import { pomodoroSessionStore, pomodoroPresetStore } from '@/lib/storage';
+import type { PomodoroSession, PomodoroPreset } from '@/types/models';
+import { StatsCards, WeeklyTrendChart, HeatmapChart } from '../components/stats/OverviewCharts';
+import { DailyCharts, type ChartRange } from '../components/stats/DailyCharts';
 
 type TimeRange = 'today' | 'week' | 'month';
-type ChartRange = 7 | 14 | 30;
+
+/** 数据窗口：91 天（热力图周期），范围查询替代全表加载 */
+const DATA_WINDOW_DAYS = 91;
 
 const RANGE_LABELS: Record<TimeRange, string> = {
   today: '今日',
@@ -64,18 +70,32 @@ export default function PomodoroStatsPage() {
   const [chartRange, setChartRange] = useState<ChartRange>(7);
   const [sessions, setSessions] = useState<PomodoroSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // 按预设分组筛选（A5：会话已带 presetId，统计页补上分组视图）
+  const [presets, setPresets] = useState<PomodoroPreset[]>([]);
+  const [presetFilter, setPresetFilter] = useState<string>('all');
 
   useEffect(() => {
+    // 范围查询：仅取数据窗口内会话（索引 completedAt），替代全表 getAll
+    const since = new Date(Date.now() - DATA_WINDOW_DAYS * 24 * 60 * 60 * 1000);
     pomodoroSessionStore
-      .getAll()
+      .getTable()
+      .where('completedAt').aboveOrEqual(since)
+      .toArray()
       .then((data) => setSessions(data))
       .finally(() => setIsLoading(false));
+    pomodoroPresetStore.getAll().then(setPresets).catch(() => {});
   }, []);
 
   // Filter sessions by range
   const filteredSessions = useMemo(() => {
     const now = new Date();
     return sessions.filter((s) => {
+      // 预设筛选：'all' 不过滤；'none' = 旧数据无 presetId
+      if (presetFilter === 'none') {
+        if (s.presetId) return false;
+      } else if (presetFilter !== 'all' && s.presetId !== presetFilter) {
+        return false;
+      }
       const d = new Date(s.completedAt);
       if (range === 'today') return isSameDay(d, now);
       if (range === 'week') {
@@ -88,7 +108,7 @@ export default function PomodoroStatsPage() {
       monthAgo.setDate(monthAgo.getDate() - 30);
       return d >= monthAgo;
     });
-  }, [sessions, range]);
+  }, [sessions, range, presetFilter]);
 
   // Stats
   const focusTime = useMemo(
@@ -118,8 +138,6 @@ export default function PomodoroStatsPage() {
     return days;
   }, [sessions]);
 
-  const maxHours = Math.max(...weeklyData.map((d) => d.hours), 0.1);
-
   // 图表数据：按日期聚合番茄数量和专注时长
   const chartData = useMemo(() => {
     const today = new Date();
@@ -133,7 +151,7 @@ export default function PomodoroStatsPage() {
       const totalSec = daySessions.reduce((sum, s) => sum + s.actualDuration, 0);
       days.push({
         date: key,
-        label: `${d.getMonth() + 1}/${d.getDate()}`,
+        label: `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`,
         count: daySessions.length,
         minutes: +(totalSec / 60).toFixed(1),
       });
@@ -175,14 +193,6 @@ export default function PomodoroStatsPage() {
     return weeks;
   }, [sessions]);
 
-  const getIntensityClass = (count: number): string => {
-    if (count === 0) return 'bg-bg-tertiary';
-    if (count <= 2) return 'bg-pomodoro/20';
-    if (count <= 4) return 'bg-pomodoro/40';
-    if (count <= 6) return 'bg-pomodoro/60';
-    return 'bg-pomodoro';
-  };
-
   if (isLoading) {
     return (
       <div className="max-w-2xl mx-auto px-kb-md py-kb-lg">
@@ -204,7 +214,7 @@ export default function PomodoroStatsPage() {
     );
   }
 
-  if (sessions.length === 0) {
+  if (filteredSessions.length === 0) {
     return (
       <div className="max-w-2xl mx-auto px-kb-md py-kb-lg">
         <h1 className="text-h1 font-semibold text-text-primary mb-kb-lg">专注统计</h1>
@@ -232,231 +242,49 @@ export default function PomodoroStatsPage() {
         variants={{ hidden: { opacity: 0, y: -12, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } }}
       >专注统计</motion.h1>
 
-      {/* Time range selector - segmented control */}
+      {/* Time range selector - segmented control + 预设分组筛选 */}
       <motion.div
-        className="flex items-center gap-kb-xs p-1 bg-bg-secondary/80 backdrop-blur-sm rounded-kb-lg border border-border/40 mb-kb-lg w-fit"
+        className="flex flex-wrap items-center gap-kb-sm mb-kb-lg"
         variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.3 } } }}
       >
-        {(['today', 'week', 'month'] as TimeRange[]).map((r) => (
-          <button
-            key={r}
-            onClick={() => setRange(r)}
-            className={cn(
-              'px-4 py-1.5 rounded-kb-md text-b2 font-medium',
-              'transition-all duration-kb-fast ease-kb-default',
-              'hover:scale-[1.02] active:scale-[0.98]',
-              range === r
-                ? 'bg-bg-elevated text-text-primary shadow-kb-sm border border-border/30'
-                : 'text-text-tertiary hover:text-text-secondary',
-            )}
-          >
-            {RANGE_LABELS[r]}
-          </button>
-        ))}
-      </motion.div>
-
-      {/* Overview cards */}
-      <motion.div
-        className="grid grid-cols-3 gap-kb-md mb-kb-lg"
-        variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.08, delayChildren: 0.1 } } }}
-      >
-        <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
-        <Card variant="default" padding="md" className="relative overflow-hidden">
-          <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-            style={{ background: 'linear-gradient(135deg, rgba(91,138,114,0.04) 0%, transparent 60%)' }} />
-          <div className="flex flex-col gap-kb-xs relative z-10">
-            <div className="flex items-center gap-1.5 text-text-tertiary">
-              <Clock className="w-icon-xs h-icon-xs" strokeWidth={1.5} />
-              <span className="text-c1">专注时长</span>
-            </div>
-            <RichTooltip content="今日累计专注时间（分钟）" position="bottom" delay={200}>
-              <span className="text-h1 font-semibold text-text-primary font-timer cursor-help">
-                {focusTime}
-              </span>
-            </RichTooltip>
-          </div>
-        </Card>
-        </motion.div>
-
-        <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
-        <Card variant="default" padding="md" className="relative overflow-hidden">
-          <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-            style={{ background: 'linear-gradient(135deg, rgba(91,138,114,0.04) 0%, transparent 60%)' }} />
-          <div className="flex flex-col gap-kb-xs relative z-10">
-            <div className="flex items-center gap-1.5 text-text-tertiary">
-              <Target className="w-icon-xs h-icon-xs" strokeWidth={1.5} />
-              <span className="text-c1">完成深潜</span>
-            </div>
-            <RichTooltip content="今日完成的深潜数量" position="bottom" delay={200}>
-              <span className="text-h1 font-semibold text-text-primary font-timer cursor-help">
-                {pomodoroCount}
-              </span>
-            </RichTooltip>
-          </div>
-        </Card>
-        </motion.div>
-
-        <motion.div variants={{ hidden: { opacity: 0, y: 16, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
-        <Card variant="default" padding="md" className="relative overflow-hidden">
-          <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-            style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.04) 0%, transparent 60%)' }} />
-          <div className="flex flex-col gap-kb-xs relative z-10">
-            <div className="flex items-center gap-1.5 text-text-tertiary">
-              <Flame className="w-icon-xs h-icon-xs" strokeWidth={1.5} />
-              <span className="text-c1">连续天数</span>
-            </div>
-            <span className="text-h1 font-semibold text-text-primary font-timer">
-              {streak}
-            </span>
-          </div>
-        </Card>
-        </motion.div>
-      </motion.div>
-
-      {/* Bar chart - weekly focus */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 20, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } }}>
-      <Card variant="default" padding="lg" className="mb-kb-lg">
-        <div className="flex items-center gap-2 mb-kb-md">
-          <TrendingUp className="w-icon-sm h-icon-sm text-brand-600" strokeWidth={1.5} />
-          <h2 className="text-h3 font-medium text-text-primary">本周专注趋势</h2>
+        <div className="flex items-center gap-kb-xs p-1 bg-bg-secondary/80 backdrop-blur-sm rounded-kb-lg border border-border/40 w-fit">
+          {(['today', 'week', 'month'] as TimeRange[]).map((r) => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              className={cn(
+                'px-4 py-1.5 rounded-kb-md text-b2 font-medium',
+                'transition-all duration-kb-fast ease-kb-default',
+                'hover:scale-[1.02] active:scale-[0.98]',
+                range === r
+                  ? 'bg-bg-elevated text-text-primary shadow-kb-sm border border-border/30'
+                  : 'text-text-tertiary hover:text-text-secondary',
+              )}
+            >
+              {RANGE_LABELS[r]}
+            </button>
+          ))}
         </div>
 
-        <div className="flex items-end justify-between gap-2 h-32">
-          {weeklyData.map((d, i) => {
-            const heightPct = (d.hours / maxHours) * 100;
-            const isToday = i === weeklyData.length - 1;
-            return (
-              <div key={`${d.day}-${i}`} className="flex flex-col items-center flex-1 gap-1">
-                <span className="text-c2 text-text-tertiary">{d.hours}h</span>
-                <motion.div
-                  className={cn(
-                    'w-full rounded-t-kb-sm transition-colors duration-kb-normal',
-                    isToday
-                      ? 'bg-brand-600'
-                      : 'bg-brand-200/60',
-                  )}
-                  initial={{ height: 0 }}
-                  animate={{ height: `${Math.max(heightPct, 4)}%` }}
-                  transition={{ duration: 0.6, ease: [0.25, 0.1, 0.25, 1] as const, delay: 0.2 + i * 0.06 }}
-                  whileHover={{ scaleX: 1.15, filter: 'brightness(1.15)' }}
-                />
-                <span className="text-c2 text-text-tertiary">{d.day}</span>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
+        {/* 按预设分组（A5）：会话已带 presetId，支持按学习场景查看统计 */}
+        <select
+          value={presetFilter}
+          onChange={(e) => setPresetFilter(e.target.value)}
+          aria-label="按预设筛选"
+          className="bg-bg-secondary/80 border border-border/40 rounded-kb-md px-2.5 py-1.5 text-b2 text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-500/40"
+        >
+          <option value="all">全部预设</option>
+          {presets.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+          <option value="none">未分组（旧数据）</option>
+        </select>
       </motion.div>
 
-      {/* Heatmap - focus intensity */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 20, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } }}>
-      <Card variant="default" padding="lg" className="mb-kb-lg">
-        <h2 className="text-h3 font-medium text-text-primary mb-kb-md">专注热力图</h2>
-
-        <div className="overflow-x-auto">
-          <div className="flex gap-1 min-w-fit">
-            {heatmap.map((week, wi) => (
-              <div key={wi} className="flex flex-col gap-1">
-                {week.map((count, di) => (
-                  <motion.div
-                    key={di}
-                    className={cn(
-                      'w-3 h-3 rounded-[3px] transition-colors duration-kb-fast',
-                      getIntensityClass(count),
-                    )}
-                    whileHover={{ scale: 1.8, borderRadius: '2px' }}
-                    transition={{ duration: 0.15 }}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-kb-xs mt-kb-sm text-c1 text-text-tertiary">
-          <span>少</span>
-          <div className="w-3 h-3 rounded-[3px] bg-bg-tertiary" />
-          <div className="w-3 h-3 rounded-[3px] bg-pomodoro/20" />
-          <div className="w-3 h-3 rounded-[3px] bg-pomodoro/40" />
-          <div className="w-3 h-3 rounded-[3px] bg-pomodoro/60" />
-          <div className="w-3 h-3 rounded-[3px] bg-pomodoro" />
-          <span>多</span>
-        </div>
-      </Card>
-      </motion.div>
-
-      {/* 每日番茄数柱状图 */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 20, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } }}>
-      <Card variant="default" padding="lg" className="mb-kb-lg">
-        <div className="flex items-center justify-between mb-kb-md">
-          <div className="flex items-center gap-2">
-            <Target className="w-icon-sm h-icon-sm text-brand-600" strokeWidth={1.5} />
-            <h2 className="text-h3 font-medium text-text-primary">每日深潜数</h2>
-          </div>
-          <div className="flex items-center gap-1 p-0.5 bg-bg-secondary rounded-kb-md border border-border/30">
-            {([7, 14, 30] as ChartRange[]).map((r) => (
-              <button
-                key={r}
-                onClick={() => setChartRange(r)}
-                className={cn(
-                  'px-2.5 py-1 rounded-kb-sm text-c1 font-medium transition-all duration-kb-fast',
-                  chartRange === r
-                    ? 'bg-bg-elevated text-text-primary shadow-kb-sm'
-                    : 'text-text-tertiary hover:text-text-secondary',
-                )}
-              >
-                {r}天
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <ResponsiveContainer width="100%" height={160}>
-          <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--kb-border, #e5e7eb)" opacity={0.4} />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--kb-text-tertiary, #9ca3af)' }} tickLine={false} />
-            <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--kb-text-tertiary, #9ca3af)' }} tickLine={false} width={28} />
-            <Tooltip
-              contentStyle={{ background: 'var(--kb-bg-elevated, #fff)', border: '1px solid var(--kb-border, #e5e7eb)', borderRadius: 8, fontSize: 12 }}
-              formatter={(value) => [`${value} 个`, '深潜数']}
-              labelFormatter={(label) => `日期: ${label}`}
-            />
-            <Bar dataKey="count" fill="#7C3AED" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </Card>
-      </motion.div>
-
-      {/* 每日专注时长折线图 */}
-      <motion.div variants={{ hidden: { opacity: 0, y: 20, scale: 0.97 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4 } } }}>
-      <Card variant="default" padding="lg">
-        <div className="flex items-center gap-2 mb-kb-md">
-          <Clock className="w-icon-sm h-icon-sm text-brand-600" strokeWidth={1.5} />
-          <h2 className="text-h3 font-medium text-text-primary">专注时长趋势</h2>
-        </div>
-
-        <ResponsiveContainer width="100%" height={160}>
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--kb-border, #e5e7eb)" opacity={0.4} />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--kb-text-tertiary, #9ca3af)' }} tickLine={false} />
-            <YAxis tick={{ fontSize: 11, fill: 'var(--kb-text-tertiary, #9ca3af)' }} tickLine={false} width={36} unit="m" />
-            <Tooltip
-              contentStyle={{ background: 'var(--kb-bg-elevated, #fff)', border: '1px solid var(--kb-border, #e5e7eb)', borderRadius: 8, fontSize: 12 }}
-              formatter={(value) => [`${value} 分钟`, '专注时长']}
-              labelFormatter={(label) => `日期: ${label}`}
-            />
-            <Line
-              type="monotone"
-              dataKey="minutes"
-              stroke="#7C3AED"
-              strokeWidth={2}
-              dot={{ r: 3, fill: '#7C3AED' }}
-              activeDot={{ r: 5, fill: '#7C3AED' }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </Card>
-      </motion.div>
+      <StatsCards focusTime={focusTime} pomodoroCount={pomodoroCount} streak={streak} />
+      <WeeklyTrendChart weeklyData={weeklyData} />
+      <HeatmapChart heatmap={heatmap} />
+      <DailyCharts chartData={chartData} chartRange={chartRange} onChartRangeChange={setChartRange} />
     </motion.div>
   );
 }

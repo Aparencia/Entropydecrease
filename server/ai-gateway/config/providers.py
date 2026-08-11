@@ -12,6 +12,32 @@ import os
 from config.runtime import logger, is_valid_api_key
 
 # ============================================================
+# Tier 分级模型路由
+# ============================================================
+# 按用户 tier 限制可路由的模型 Provider。
+# 与客户端 types/beta.ts 中的 TIER_PERKS 保持同步。
+
+TIER_MODEL_ACCESS: dict[str, set[str]] = {
+    "free":     {"glm"},
+    "observer": {"glm", "qwen"},
+    "active":   {"glm", "qwen", "deepseek"},
+    "core":     {"glm", "qwen", "deepseek", "gemini"},
+    "pro":      {"glm", "qwen", "deepseek"},
+    "lifetime": {"glm", "qwen", "deepseek", "gemini"},
+}
+
+# Tier 优先级
+_TIER_RANK = {"free": 0, "observer": 1, "active": 2, "pro": 3, "core": 4, "lifetime": 5}
+
+
+def get_effective_tier(beta_tier: str | None = None, paid_tier: str | None = None) -> str:
+    """取 beta 身份与付费身份中的最高者"""
+    beta = _TIER_RANK.get(beta_tier or "free", 0)
+    paid = _TIER_RANK.get(paid_tier or "free", 0)
+    effective = max(beta, paid)
+    return {v: k for k, v in _TIER_RANK.items()}.get(effective, "free")
+
+# ============================================================
 # Provider 配置
 # ============================================================
 
@@ -63,6 +89,21 @@ AI_PROVIDERS: dict = {
             "conflict": "deepseek-chat",     # 冲突检测
             "precheck": "deepseek-chat",     # 概念预检
             "import_concept": "deepseek-chat",# 知识入籍
+            "learning_plan": "deepseek-chat", # 今日学习计划（P1）
+            "session_qa": "deepseek-chat",    # 课堂问答（D2）
+            "freshness": "deepseek-chat",     # 知识保鲜检测（Phase3）
+            "embodied": "deepseek-chat",      # 概念具身化（Phase3）
+            "narrative": "deepseek-chat",     # 学习叙事 RPG（Phase3）
+            "haiku": "deepseek-chat",         # 学习俳句（Phase3）
+            "compile": "deepseek-chat",       # 知识编译引擎（Phase4）
+            "micro_card": "deepseek-chat",    # 微学习卡片流（Phase4）
+            "debate": "deepseek-chat",        # AI 辩论对手（Phase2）
+            "counterintuitive": "deepseek-chat", # 反直觉发现器（Phase2）
+            "personify": "deepseek-chat",     # 概念拟人化（Phase2）
+            "mnemonic": "deepseek-chat",      # 记忆术生成器（Phase2）
+            "podcast": "deepseek-chat",       # AI 播客生成器（Phase2）
+            "learning_coach": "deepseek-chat", # AI 学习教练（Phase2）
+            "infographic": "deepseek-chat",   # 知识信息图生成器（Phase2）
         },
     },
     "glm": {
@@ -129,6 +170,34 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
     "concept_precheck": ("deepseek", "precheck"),
     # 阶段 A: 知识入籍概念化（JSON Mode）
     "import_concept": ("deepseek", "import_concept"),
+    # P1: 今日学习计划（JSON Mode）
+    "learning_plan": ("deepseek", "learning_plan"),
+    # D2: 课堂问答（JSON Mode）
+    "session_qa": ("deepseek", "session_qa"),
+    # ============================================================
+    # Phase3: 服务端 AI Chains（JSON Mode）
+    # ============================================================
+    "freshness": ("deepseek", "freshness"),         # G4: 知识保鲜检测
+    "embodied": ("deepseek", "embodied"),           # W6: 概念具身化
+    "learning_narrative": ("deepseek", "narrative"), # 学习叙事 RPG
+    "haiku": ("deepseek", "haiku"),                 # R6: 学习俳句
+    # ============================================================
+    # Phase4: 服务端 AI Chains（JSON Mode）
+    # ============================================================
+    "compile": ("deepseek", "compile"),              # 知识编译引擎（多笔记→5种学习资源）
+    "micro_card": ("deepseek", "micro_card"),        # 微学习卡片流（复杂知识→30秒卡片）
+    # ============================================================
+    # Phase2: 内容生成式 AI Chains（JSON Mode）
+    # 此前遗漏登记——缺失时 MODEL_ROUTING 默认 (fallback, free) 导致
+    # 这些功能永远只调用 FallbackProvider（返回非 JSON 文本），真实模型从未被调用
+    # ============================================================
+    "debate": ("deepseek", "debate"),                # AI 辩论对手（学术/政策/价值/思辨）
+    "counterintuitive": ("deepseek", "counterintuitive"), # 反直觉发现器（每日推送）
+    "personify": ("deepseek", "personify"),          # 概念拟人化（人设卡+关系戏剧）
+    "mnemonic": ("deepseek", "mnemonic"),            # 个性化记忆术生成器（谐音/故事/空间）
+    "podcast": ("deepseek", "podcast"),              # AI 播客生成器（双角色对话）
+    "learning_coach": ("deepseek", "learning_coach"), # AI 学习教练（周计划生成）
+    "infographic": ("deepseek", "infographic"),      # 知识信息图生成器（3 种风格）
     # ============================================================
     # 多模态 / ASR / 视频 — 保持原路由不变
     # ============================================================
@@ -143,20 +212,33 @@ MODEL_ROUTING: dict[str, tuple[str, str]] = {
 # ============================================================
 
 
-def get_provider_for_feature(app, feature: str):
+def get_provider_for_feature(app, feature: str, user_tier: str = "free"):
     """
     根据 MODEL_ROUTING 表获取对应 Provider 实例和模型名称。
 
     如果目标 Provider 未初始化或 API Key 无效，自动回退到 GLM/fallback。
+    按用户 tier 限制可路由的 Provider（tier 不足时降级到免费模型）。
 
     Args:
         app: FastAPI 应用实例（通过 app.state.providers 获取 Provider）
         feature: 功能标识，对应 MODEL_ROUTING 的 key
+        user_tier: 用户有效 tier，默认 "free"
 
     Returns:
         tuple: (provider_instance, model_name)
     """
     provider_key, model_slot = MODEL_ROUTING.get(feature, ("fallback", "free"))
+
+    # 检查用户 tier 是否有权访问该 Provider
+    allowed_providers = TIER_MODEL_ACCESS.get(user_tier, TIER_MODEL_ACCESS["free"])
+    if provider_key not in allowed_providers:
+        logger.info(
+            "Tier [%s] 无权访问 Provider [%s]（feature=%s），降级到免费模型",
+            user_tier, provider_key, feature,
+        )
+        provider_key = "glm"
+        model_slot = "free"
+
     provider = app.state.providers.get(provider_key)
     # 检查 Provider 是否配置了有效 API Key
     if provider and not is_valid_api_key(provider.api_key):

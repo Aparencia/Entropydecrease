@@ -151,10 +151,6 @@ export function AsrSettingsSection() {
       <p className="text-c1 text-text-tertiary -mt-2">
         下载后可完全离线转写语音，零 API 费用。未下载时自动使用云端转写。
       </p>
-
-      {/* 启用开关：enabled 是本地转写与课堂真流式 ASR 的生效闸门。
-          类名必须用默认 spacing 刻度存在的值（h-6/w-11/h-4/w-4）——
-          h-5.5/w-4.5 不在刻度内会静默不生效，开关高度归零只剩文字 */}
       <div className="flex items-center justify-between p-3 rounded-kb-md bg-bg-elevated">
         <div>
           <p className="text-b3 font-medium text-text-primary">启用本地语音识别</p>

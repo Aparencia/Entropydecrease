@@ -25,6 +25,24 @@ from routers.content_tier import router as content_tier_router
 from routers.conflict_detect import router as conflict_detect_router
 from routers.concept_precheck import router as concept_precheck_router
 from routers.import_concept import router as import_concept_router
+from routers.license import router as license_router
+from routers.license_webhook import router as license_webhook_router
+from routers.beta import router as beta_router
+from routers.learning_plan import router as learning_plan_router
+from routers.session_qa import router as session_qa_router
+from routers.debate import router as debate_router
+from routers.counterintuitive import router as counterintuitive_router
+from routers.personify import router as personify_router
+from routers.mnemonic import router as mnemonic_router
+from routers.podcast import router as podcast_router
+from routers.learning_coach import router as learning_coach_router
+from routers.infographic import router as infographic_router
+from routers.freshness import router as freshness_router
+from routers.embodied import router as embodied_router
+from routers.learning_narrative import router as learning_narrative_router
+from routers.haiku import router as haiku_router
+from routers.compile import router as compile_router
+from routers.micro_card import router as micro_card_router
 
 __all__ = [
     "summarize_router",
@@ -52,4 +70,21 @@ __all__ = [
     "conflict_detect_router",
     "concept_precheck_router",
     "import_concept_router",
+    "license_router",
+    "beta_router",
+    "learning_plan_router",
+    "session_qa_router",
+    "debate_router",
+    "counterintuitive_router",
+    "personify_router",
+    "mnemonic_router",
+    "podcast_router",
+    "learning_coach_router",
+    "infographic_router",
+    "freshness_router",
+    "embodied_router",
+    "learning_narrative_router",
+    "haiku_router",
+    "compile_router",
+    "micro_card_router",
 ]

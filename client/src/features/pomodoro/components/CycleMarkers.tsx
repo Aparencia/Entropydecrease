@@ -24,7 +24,16 @@ interface CycleMarkersProps {
 }
 
 export default memo(function CycleMarkers({ total, filled, className }: CycleMarkersProps) {
-  if (total <= 0) return null;
+  // 无长休预设：不渲染标记条，但保留计数文字 0/0
+  if (total <= 0) {
+    return (
+      <div className={cn('flex items-center gap-1.5', className)}>
+        <span className="text-[11px] text-text-tertiary/60 font-mono tabular-nums">
+          {filled}/{total}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className={cn('flex items-center gap-1.5', className)}>
@@ -35,12 +44,15 @@ export default memo(function CycleMarkers({ total, filled, className }: CycleMar
             key={i}
             className={cn(
               'h-2 rounded-full transition-all',
-              `duration-[${BEAT.x2}ms]`,
               isFilled
                 ? 'bg-brand-500 shadow-[0_0_8px_rgba(91,138,114,0.4)]'
                 : 'bg-border/30',
             )}
-            style={{ width: isFilled ? '24px' : '16px' }}
+            /* transitionDuration 内联：Tailwind JIT 无法生成运行时拼接的 duration-[...] 任意值类 */
+            style={{
+              width: isFilled ? '24px' : '16px',
+              transitionDuration: `${BEAT.x2}ms`,
+            }}
             initial={{ scaleX: 0 }}
             animate={{ scaleX: 1 }}
             transition={{ delay: 0.3 + i * 0.05, ...SPRING.bouncy }}

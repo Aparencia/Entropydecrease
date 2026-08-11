@@ -22,6 +22,7 @@ import { RitualStepGoal } from './ritual/RitualStepGoal';
 import { RitualStepIntention } from './ritual/RitualStepIntention';
 import { RitualStepBreathing } from './ritual/RitualStepBreathing';
 import { RitualComplete } from './ritual/RitualComplete';
+import { ClosingCeremony } from './ritual/ClosingCeremony';
 import { RitualSkipMenu } from './ritual/RitualSkipMenu';
 import { RitualFooter } from './ritual/RitualFooter';
 
@@ -59,6 +60,10 @@ export default function StartupRitual(props: Props) {
   const [triggerTime, setTriggerTime] = useState('');
   const [cycleLit, setCycleLit] = useState(false);
   const [done, setDone] = useState(false);
+  // R3 结束仪式分支：RitualComplete 定格后追加 closingCeremony（总结+复习卡闭环）
+  const [closing, setClosing] = useState(false);
+  // 进入结束仪式时冻结仪式用时（不把用户在结束仪式的停留计入 durationMs）
+  const finalDurationMsRef = useRef<number | null>(null);
   const [sound, setSound] = useState(soundOn);
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -86,7 +91,7 @@ export default function StartupRitual(props: Props) {
       goal: goalText.trim() ? ({ text: goalText.trim(), tags: pickedTags } as MicroGoal) : undefined,
       masteryMark: mastery ?? undefined,
       intention,
-      durationMs: machine.getElapsedMs(),
+      durationMs: finalDurationMsRef.current ?? machine.getElapsedMs(),
       planVariant: machine.planVariant,
     };
   }, [goalText, pickedTags, mastery, machine, intentionIf, intentionThen, buildTriggerAt]);
@@ -95,6 +100,18 @@ export default function StartupRitual(props: Props) {
     if (machine.isLast) { setDone(true); return; }
     machine.next();
   }, [machine]);
+
+  /** R3 结束仪式：RitualComplete 定格完成后进入 closing 分支（不直接落库） */
+  const handleCompleteEnter = useCallback(() => {
+    // 冻结仪式用时：不含用户在结束仪式上的停留时间
+    finalDurationMsRef.current = machine.getElapsedMs();
+    setClosing(true);
+  }, [machine]);
+
+  /** 结束仪式收尾：页面层经 onComplete 落库 + 复习卡闭环 */
+  const handleClosingClose = useCallback(() => {
+    onComplete(buildOutcome());
+  }, [onComplete, buildOutcome]);
 
   const handlePickTag = useCallback((tag: QuickTag) => {
     setGoalText(tag.text);
@@ -138,12 +155,23 @@ export default function StartupRitual(props: Props) {
         <BreathingProvider onPhaseChange={onPhaseChange} onCycleComplete={onCycleComplete}>
           <div className="relative px-8 pt-10 pb-8 flex flex-col gap-6">
             {done ? (
-              <RitualComplete
-                goal={buildOutcome().goal}
-                masteryMark={mastery ?? undefined}
-                streakDays={streakDays}
-                onEnter={() => onComplete(buildOutcome())}
-              />
+              closing ? (
+                <ClosingCeremony
+                  goal={buildOutcome().goal}
+                  masteryMark={mastery ?? undefined}
+                  streakDays={streakDays}
+                  durationMs={machine.getElapsedMs()}
+                  onClose={handleClosingClose}
+                  suspenseQuestion={recallQuestion?.question}
+                />
+              ) : (
+                <RitualComplete
+                  goal={buildOutcome().goal}
+                  masteryMark={mastery ?? undefined}
+                  streakDays={streakDays}
+                  onEnter={handleCompleteEnter}
+                />
+              )
             ) : (
               <>
                 {machine.currentStep === 'review' && (

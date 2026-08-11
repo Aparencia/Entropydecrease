@@ -41,7 +41,7 @@ export function AIButton({ tooltip, children, disabled, className, ...props }: A
           }}
           transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
           style={{
-            filter: 'drop-shadow(0 0 12px rgba(147,51,234,0.2))',
+            filter: 'drop-shadow(0 0 12px rgba(74,155,217,0.3))',
           }}
         />
       )}

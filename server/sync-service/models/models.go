@@ -42,14 +42,17 @@ type GlobalSeqNo struct {
 
 // CRDTChange stores CRDT changesets uploaded by clients.
 // Each row is an immutable, append-only change record keyed by a global sequence number.
+// ChangesetHash 为 changeset 的 SHA-256（hex），配合 (user_id, changeset_hash) 唯一
+// 索引实现 CRDT 推送幂等（SYNC-M3）：网络重试的重复 changeset 不再重复落库。
 type CRDTChange struct {
-	ID          uint   `gorm:"primaryKey"`
-	ServerSeqNo int64  `gorm:"uniqueIndex;not null" json:"serverSeqNo"`
-	DeviceID    string `gorm:"index;not null" json:"deviceId"`
-	UserID      string `gorm:"index:idx_crdt_user;not null" json:"userId"`
-	TableName   string `gorm:"index;not null" json:"tableName"`
-	EntityID    string `gorm:"not null" json:"entityId"`
-	Changeset   string `gorm:"type:text;not null" json:"changeset"` // base64-encoded Automerge changes
-	Operation   string `gorm:"not null" json:"operation"`           // create|update|delete
-	CreatedAt   string `gorm:"not null" json:"createdAt"`
+	ID            uint   `gorm:"primaryKey"`
+	ServerSeqNo   int64  `gorm:"uniqueIndex;not null" json:"serverSeqNo"`
+	DeviceID      string `gorm:"index;not null" json:"deviceId"`
+	UserID        string `gorm:"index:idx_crdt_user;uniqueIndex:idx_crdt_user_hash,priority:1;not null" json:"userId"`
+	TableName     string `gorm:"index;not null" json:"tableName"`
+	EntityID      string `gorm:"not null" json:"entityId"`
+	Changeset     string `gorm:"type:text;not null" json:"changeset"` // base64-encoded Automerge changes
+	ChangesetHash string `gorm:"uniqueIndex:idx_crdt_user_hash,priority:2;not null" json:"-"` // sha256(changeset)
+	Operation     string `gorm:"not null" json:"operation"`             // create|update|delete
+	CreatedAt     string `gorm:"not null" json:"createdAt"`
 }

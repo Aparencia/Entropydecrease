@@ -9,7 +9,7 @@
  * @ai-context: 语音段就绪后经信号量限流转写；实时转录列表 FIFO 上限 200 条，
  * 防止长课堂内存无限增长。ASR 连续失败 3 次提示用户。
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { captureEventBus } from '@/lib/capture';
 import type {
@@ -26,18 +26,25 @@ import type {
   CaptureSidebarConfig,
   CourseMeta,
   AudioSegment,
+  TimelineEntry,
 } from '@/lib/capture';
 import { analyzePartial } from '@/lib/ai/sessionAnalyzer';
 import { detectCourseFromFrame } from '@/lib/ai/courseDetector';
 import { remapKeyframeMarkers } from '../utils/tipTapImageUtils';
 import { persistKeyframeImage } from '../utils/keyframePersistence';
 import { transcribeWithRetry, toAsrLanguage, useAsrSemaphore, isLocalAsrReady, setOnAsrFallback } from '../utils/asrTranscriber';
-import { applySessionReplaces } from '../utils/hotwordRuntime';
+import { applySessionReplaces, getSessionHotwordsString } from '../utils/hotwordRuntime';
+import { cleanAsrResult } from '@/lib/capture/asrFilters';
 
 /** 触发一次增量分析所需的关键帧数 */
 const INCREMENTAL_BATCH_SIZE = 5;
 /** 实时转录列表上限（FIFO） */
 const MAX_LIVE_TRANSCRIPTS = 200;
+/** 时间线条目上限（FIFO，防止长课堂无界增长） */
+const MAX_TIMELINE_ENTRIES = 500;
+/** P0-6 仍持 audioBase64 的转写失败段上限（FIFO）：单段 ~1.2MB，
+ * ASR 持续失败时长课堂也须有界（30 × 1.2MB ≈ 36MB 峰值） */
+const MAX_FAILED_AUDIO_SEGMENTS = 30;
 
 export interface LiveTranscript {
   id: string;
@@ -234,30 +241,36 @@ export function useClassroomEvents({
         const slot = asr.acquire();
         if (!slot) return; // 兼容性判空：acquire 实际永不返回 null（丢弃的是最旧等待者）
         slot.then(() => {
+          // 构建热词增强字符串（zipformer 支持空格分隔的热词列表，自动截断防超限）
+          const hotwords = getSessionHotwordsString() || undefined;
           transcribeWithRetry({
             audio_base64: audioData,
             language: toAsrLanguage(language),
             sample_rate: 16000,
             channels: 1,
-          })
+          }, 1, hotwords || undefined)
             .then((text) => {
               asr.markSuccess();
+              // 输出清洗：相邻重复压缩 + 幻觉过滤（本地路径主进程已 clean，此处兑底云端降级）
+              const cleaned = cleanAsrResult(text ?? '');
               // 将转写结果回填到对应的音频段，并剥离 audioBase64 释放内存（单段约 1.2MB，
               // 长课堂数百段否则无界累积——内测 5GB 内存主因）。全量分析回退路径优先用
               // 已转写的 audioText（sessionAnalyzer: seg.audioText ?? transcribe），无需再持有原始音频；
               // 转写失败的段不走此分支，仍保留 audioBase64 供回退补转写。
+              // audioText 存热词替换后文本供下游笔记/问答/闪卡消费；audioTextRaw 存原始清洗后文本保真溯源
+              const replacedText = cleaned ? applySessionReplaces(cleaned) : '';
               setSmartBundle((prev) => ({
                 ...prev,
                 audioSegments: (prev.audioSegments ?? []).map((s) =>
-                  s.id === seg.id ? { ...s, audioText: text, audioBase64: '' } : s,
+                  s.id === seg.id ? { ...s, audioText: replacedText, audioTextRaw: cleaned, audioBase64: '' } : s,
                 ),
               }));
-              if (text) {
+              if (cleaned) {
                 setTranscribedCount((c) => c + 1);
                 // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3 替换词后处理），
-                // 上方 audioSegments.audioText 保留原始转写可回溯
+                // 原始清洗后转写经 audioTextRaw 可回溯
                 setLiveTranscripts((prev) => {
-                  const next = [...prev, { id: seg.id, text: applySessionReplaces(text), timestamp: seg.timestampStart }];
+                  const next = [...prev, { id: seg.id, text: applySessionReplaces(cleaned), timestamp: seg.timestampStart }];
                   return next.length > MAX_LIVE_TRANSCRIPTS
                     ? next.slice(next.length - MAX_LIVE_TRANSCRIPTS)
                     : next;
@@ -269,6 +282,22 @@ export function useClassroomEvents({
               if (asr.markFailure()) {
                 onNotify('error', 'ASR 服务连续失败，语音转写可能不可用，请检查网络或 AI 网关');
               }
+              // P0-6 失败段内存护栏：转写失败的段保留 audioBase64 供回退补转写，
+              // 但长课堂 ASR 持续失败时无界累积——超上限释放最旧失败段（仅剥离
+              // base64 字段，保留段结构供全量分析消费 audioText 占位）
+              setSmartBundle((prev) => {
+                const segs = prev.audioSegments ?? [];
+                const failedIdx: number[] = [];
+                for (let i = 0; i < segs.length; i++) {
+                  if (segs[i].audioBase64) failedIdx.push(i);
+                }
+                if (failedIdx.length <= MAX_FAILED_AUDIO_SEGMENTS) return prev;
+                const drop = new Set(failedIdx.slice(0, failedIdx.length - MAX_FAILED_AUDIO_SEGMENTS));
+                return {
+                  ...prev,
+                  audioSegments: segs.map((s, i) => (drop.has(i) ? { ...s, audioBase64: '' } : s)),
+                };
+              });
             })
             .finally(() => asr.release());
         });
@@ -291,11 +320,12 @@ export function useClassroomEvents({
       if (statusRef.current !== 'capturing') return;
       const data = args[0] as { text: string; timestamp: number };
       setPartialText('');
-      const text = data?.text?.trim();
+      // 双保险：主进程已 clean，此处兜底云端/旧版本主进程的未清洗输出
+      const text = cleanAsrResult(data?.text ?? '');
       if (!text) return;
       const id = crypto.randomUUID();
       const timestamp = data.timestamp || Date.now();
-      // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3），audioSegments 存原始转写
+      // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3）
       setLiveTranscripts((prev) => {
         const next = [...prev, { id, text: applySessionReplaces(text), timestamp }];
         return next.length > MAX_LIVE_TRANSCRIPTS
@@ -303,7 +333,8 @@ export function useClassroomEvents({
           : next;
       });
       setTranscribedCount((c) => c + 1);
-      // 追加到 audioSegments（带 audioText，供课后分析；无需持有原始音频）
+      // 追加到 audioSegments（带替换后 audioText，供课后分析；audioTextRaw 保真溯源）
+      const replacedText = applySessionReplaces(text);
       setSmartBundle((prev) => ({
         ...prev,
         audioSegments: [...(prev.audioSegments ?? []), {
@@ -312,7 +343,8 @@ export function useClassroomEvents({
           timestampEnd: timestamp,
           audioBase64: '',
           energy: 0,
-          audioText: text,
+          audioText: replacedText,
+          audioTextRaw: text,
         }],
       }));
     });
@@ -323,6 +355,39 @@ export function useClassroomEvents({
   useEffect(() => {
     if (status !== 'capturing') setPartialText('');
   }, [status]);
+
+  // Path B：课中重点标记（M2 含自动锚点）——captureManager.pushBookmark 广播，
+  // 统一在此写入 smartBundle.timeline（单一数据流，手动/自动同链路）
+  useEffect(() => {
+    const offBookmark = captureEventBus.on<{
+      sessionId: string;
+      timestamp: number;
+      type: TimelineEntry['type'];
+      label?: string;
+    }>(
+      'smart:bookmark',
+      (data) => {
+        // M8: 校验事件 sessionId 与当前采集会话一致——旧会话/跨会话的迟到事件
+        // 不写入当前时间线（captureSessionIdRef 未建立时无法校验，放行）
+        if (captureSessionIdRef.current && data.sessionId !== captureSessionIdRef.current) return;
+        setSmartBundle((prev) => {
+          const next = [...(prev.timeline ?? []), {
+            timestamp: data.timestamp,
+            type: data.type,
+            label: data.label,
+          }];
+          // M8: 时间线上限 500 条，超出丢弃最旧条目
+          return {
+            ...prev,
+            timeline: next.length > MAX_TIMELINE_ENTRIES
+              ? next.slice(next.length - MAX_TIMELINE_ENTRIES)
+              : next,
+          };
+        });
+      },
+    );
+    return () => { offBookmark(); };
+  }, []);
 
   // Path B：VAD 统计
   useEffect(() => {
@@ -369,10 +434,25 @@ export function useClassroomEvents({
     return off;
   }, [status, captureManager]);
 
+  // P1-2：转写编辑回调——修正直播转录文本，audioText 存修正后文本供下游消费
+  const handleEditTranscript = useCallback((id: string, newText: string) => {
+    setLiveTranscripts((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, editedText: newText } : t)),
+    );
+    // 同步更新 smartBundle 对应 audioSegment：audioText 存修正后文本，audioTextRaw 保真原始
+    setSmartBundle((prev) => ({
+      ...prev,
+      audioSegments: (prev.audioSegments ?? []).map((s) =>
+        s.id === id ? { ...s, audioText: newText, audioTextRaw: s.audioText } : s,
+      ),
+    }));
+  }, []);
+
   return {
     segments, setSegments, stats, setStats, extractionError, setExtractionError,
     smartBundle, setSmartBundle,
     liveTranscripts, setLiveTranscripts,
+    handleEditTranscript,
     partialText,
     vadStats, recordingStatus, setRecordingStatus,
     videoFilePath, setVideoFilePath,

@@ -84,6 +84,35 @@
   -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
 }
 
+/* ── 深海海底光斑（C1 三层深度感底部层：程序化，低透明度漂浮） ── */
+.kb-seafloor-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 420px 260px at 18% 82%, rgba(64, 171, 146, 0.10), transparent 70%),
+    radial-gradient(ellipse 360px 220px at 72% 78%, rgba(20, 184, 166, 0.08), transparent 70%),
+    radial-gradient(ellipse 300px 200px at 88% 60%, rgba(232, 184, 75, 0.07), transparent 70%),
+    radial-gradient(ellipse 260px 180px at 8% 55%, rgba(56, 189, 248, 0.06), transparent 70%);
+  animation: kb-seafloor-drift 26s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes kb-seafloor-drift {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-12px) scale(1.03); }
+}
+
+/* ── 穹顶云层（C1 晨光层次：静态低透明度，映射宪法「今日状态=云层」） ── */
+.kb-dome-clouds {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 520px 180px at 22% 18%, rgba(255, 255, 255, 0.55), transparent 70%),
+    radial-gradient(ellipse 640px 200px at 76% 12%, rgba(214, 225, 245, 0.50), transparent 72%);
+}
+
 /* ── reduced motion 降级 ── */
 @media (prefers-reduced-motion: reduce) {
   .kb-particle {
@@ -95,5 +124,8 @@
   }
   .kb-hero-gradient {
     transition: none;
+  }
+  .kb-seafloor-glow {
+    animation: none;
   }
 }

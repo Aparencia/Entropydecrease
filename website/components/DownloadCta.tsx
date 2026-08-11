@@ -38,17 +38,35 @@ const SYSTEM_REQ = [
 
 export function DownloadCta() {
   const [latest, setLatest] = useState<LatestInfo | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`${DOWNLOAD_BASE}/latest.json`, { signal: controller.signal, cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-      .then((data: LatestInfo) => {
-        if (data?.version && data?.fileName) setLatest(data);
+    // WEB-L1: 5s 超时 + 单次重试——原实现无超时控制，CDN 域名解析挂起时
+    // （DNS 可达 30s+）下载按钮一直显示兑底值，用户无法区分"加载中"与"源站故障"
+    const fetchWithTimeout = (ctrl: AbortController, timeoutMs = 5000) => {
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      const promise = fetch(`${DOWNLOAD_BASE}/latest.json`, { signal: ctrl.signal, cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+        .then((data: LatestInfo) => {
+          if (data?.version && data?.fileName) setLatest(data);
+        });
+      promise.finally(() => clearTimeout(timer));
+      return promise;
+    };
+
+    fetchWithTimeout(controller)
+      .catch(() => {
+        // 源站不可达：单次重试后再放弃（回退 GitHub，不打扰用户）
+        if (controller.signal.aborted) {
+          // 超时中止：新建 controller 重试一次
+          return fetchWithTimeout(new AbortController());
+        }
       })
       .catch(() => {
-        /* 服务器源不可达：保持 GitHub 回退，不打扰用户 */
-      });
+        /* 重试仍失败：保持 GitHub 回退 */
+      })
+      .finally(() => setLoading(false));
     return () => controller.abort();
   }, []);
 
@@ -78,7 +96,9 @@ export function DownloadCta() {
         </span>
         <div className="text-left">
           <h2 className="font-serif text-xl font-bold text-kb-text">熵减 Entropydecrease</h2>
-          <p className="text-xs text-kb-text3">v{version} 正式版 · {date}</p>
+          <p className="text-xs text-kb-text3">
+            {loading ? "正在获取最新版本信息…" : `v${version} 正式版 · ${date}`}
+          </p>
         </div>
       </div>
 

@@ -169,24 +169,37 @@ export function search(query: string, options?: SearchOptions): SearchResult[] {
   }));
 }
 
-/** 批量重建全文索引（事务内先清空再逐表写入） */
-export function rebuildIndex(tables: IndexTableInput[]): void {
+/** 批量重建全文索引（CL-H4: 分批执行 + 每批让出事件循环，避免阻塞主进程） */
+export async function rebuildIndex(tables: IndexTableInput[]): Promise<void> {
   const db = getConnection();
   const insertStmt = db.prepare(
     `INSERT INTO fts_content (id, table_name, title, content) VALUES (?, ?, ?, ?)`,
   );
 
-  const transaction = db.transaction(() => {
-    db.exec(`DELETE FROM fts_content`);
-    for (const t of tables) {
-      for (const row of t.rows) {
-        insertStmt.run(row.id, t.name, row.title ?? '', row.content);
-      }
-    }
-  });
+  // 清空在事务外执行，随后逐批事务插入
+  db.exec(`DELETE FROM fts_content`);
 
-  transaction();
-  logger.info(`[FTS5] Index rebuilt for ${tables.length} table(s)`);
+  // CL-H4: 每批 500 行——better-sqlite3 为同步 API，数万文档的全量重建
+  // （含分词）会长时间占用主进程事件循环；分批执行并在批次间让出
+  const BATCH_SIZE = 500;
+  let processed = 0;
+
+  for (const t of tables) {
+    for (let i = 0; i < t.rows.length; i += BATCH_SIZE) {
+      const batch = t.rows.slice(i, i + BATCH_SIZE);
+      const txn = db.transaction((rows: IndexTableInput['rows']) => {
+        for (const row of rows) {
+          insertStmt.run(row.id, t.name, row.title ?? '', row.content);
+        }
+      });
+      txn(batch);
+      processed += batch.length;
+      // 让出事件循环，保证窗口事件/托盘/其他 IPC 不被长时间阻塞
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+  }
+
+  logger.info(`[FTS5] Index rebuilt for ${tables.length} table(s), ${processed} documents`);
 }
 
 // ================================================================

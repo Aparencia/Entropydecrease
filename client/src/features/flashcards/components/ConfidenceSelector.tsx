@@ -42,7 +42,7 @@ const options: ConfidenceOption[] = [
     color: 'text-blue-500',
     activeBg: 'bg-blue-500/10',
     activeBorder: 'border-blue-400/50',
-    glowColor: 'shadow-[0_0_12px_rgba(59,130,246,0.25)]',
+    glowColor: 'shadow-[0_0_12px_rgba(74,155,217,0.25)]',
     icon: <Minus className="w-4 h-4" strokeWidth={2} />,
   },
   {

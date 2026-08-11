@@ -28,11 +28,9 @@ export const createStepSlice: FeynmanSlice<StepSlice> = (set, get) => ({
 
     const updated: FeynmanNote = { ...note, explanation, updatedAt: new Date() };
 
-    // 如果当前在 step 1，自动推进到 step 2
-    if (note.currentStep === 1) {
-      updated.currentStep = 2;
-      updated.status = 'in_progress';
-    }
+    // FRONT2-M1: 不再在 step1 分支自动推进 currentStep——原实现此处置
+    // currentStep=2，而 useFeynmanSession.handleNext 随后无条件 advanceStep
+    // 再 +1（2→3），跳过 step2 讲解视图；step 推进统一由 advanceStep 完成一次
 
     await updateWithLog(feynmanNoteStore, 'feynmanNotes', noteId, updated);
     set((state) => ({ notes: patchNote(state.notes, updated) }));
@@ -194,18 +192,57 @@ export const createStepSlice: FeynmanSlice<StepSlice> = (set, get) => ({
 
     const { createCard } = useFlashcardStore.getState();
 
-    for (const wp of toConvert) {
-      await createCard({
-        deckId: targetDeckId,
-        front: wp.text,
-        back: note.concept,
-        type: 'basic',
-        sourceNoteId: noteId,
-      });
+    // FRONT2-M7: 先批量创建卡片，全部成功后再统一标记 mastered——
+    // 原实现逐条"建卡+标记"，中途失败后重试会对已建卡的薄弱点重复建卡
+    const createdWpIds: string[] = [];
+    try {
+      for (const wp of toConvert) {
+        await createCard({
+          deckId: targetDeckId,
+          front: wp.text,
+          back: note.concept,
+          type: 'basic',
+          sourceNoteId: noteId,
+        });
+        createdWpIds.push(wp.id!);
+      }
+    } catch (err) {
+      // 部分建卡成功时先把已成功的标记 mastered（避免重试重复建卡），再抛出
+      for (const wpId of createdWpIds) {
+        const wp = toConvert.find((w) => w.id === wpId);
+        if (!wp) continue;
+        try {
+          await updateWithLog(feynmanWeakPointStore, 'feynmanWeakPoints', wpId, { ...wp, mastered: true });
+        } catch {
+          // 标记失败可接受：下次转换最多重复建该张卡
+        }
+      }
+      // GW-3: 同步 store——原实现 catch 后 set() 不执行，store 仍显示未
+      // mastered，重试时 toConvert 从 store 取到已建卡的 wp 再次建卡
+      //（DB 已 mastered 与 UI 态不一致）
+      set((state) => ({
+        weakPoints: {
+          ...state.weakPoints,
+          [noteId]: (state.weakPoints[noteId] ?? []).map((w) =>
+            createdWpIds.includes(w.id!) ? { ...w, mastered: true } : w,
+          ),
+        },
+      }));
+      throw err;
+    }
 
-      // 标记为已掌握
+    // 全部创建成功：统一标记已掌握（逐条容错，失败汇总提示）
+    const failedMarks: string[] = [];
+    for (const wp of toConvert) {
       const updated = { ...wp, mastered: true };
-      await updateWithLog(feynmanWeakPointStore, 'feynmanWeakPoints', wp.id!, updated);
+      try {
+        await updateWithLog(feynmanWeakPointStore, 'feynmanWeakPoints', wp.id!, updated);
+      } catch {
+        failedMarks.push(wp.id!);
+      }
+    }
+    if (failedMarks.length > 0) {
+      throw new Error(`部分薄弱点标记失败（${failedMarks.length} 个），请重试`);
     }
 
     // 更新本地 store 状态

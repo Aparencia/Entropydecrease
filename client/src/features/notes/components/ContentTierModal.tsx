@@ -14,12 +14,15 @@ import { cn } from '@/lib/utils';
 import { copyText } from '@/lib/utils/clipboard';
 import { useAIContentTier } from '@/lib/ai/hooks/useAIContentTier';
 import type { ContentTierItem } from '@/lib/ai/types';
+import { saveCoreTier } from '../lib/contentTierStore';
 
 interface ContentTierModalProps {
   open: boolean;
   onClose: () => void;
   /** 当前笔记的实时纯文本 */
   noteText: string;
+  /** 当前笔记 id（N5 核心层缓存键，供闪卡生成联动） */
+  noteId?: string | null;
 }
 
 const tierMeta = {
@@ -28,7 +31,7 @@ const tierMeta = {
   detail: { label: '参考细节', hint: '可策略性遗忘的旁支信息', accent: 'text-text-tertiary bg-bg-tertiary' },
 } as const;
 
-export function ContentTierModal({ open, onClose, noteText }: ContentTierModalProps) {
+export function ContentTierModal({ open, onClose, noteText, noteId }: ContentTierModalProps) {
   const { tier, loading, error, analyze, reset } = useAIContentTier();
   const [focusCore, setFocusCore] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ core: true, support: true, detail: true });
@@ -38,7 +41,13 @@ export function ContentTierModal({ open, onClose, noteText }: ContentTierModalPr
     if (open) {
       setFocusCore(false);
       setExpanded({ core: true, support: true, detail: true });
-      analyze(noteText);
+      // N5 闭环：分层成功后缓存核心层文本，闪卡生成只取核心层
+      void analyze(noteText).then((tier) => {
+        if (tier?.core?.length && noteId) {
+          const coreText = tier.core.map((item) => item.text).join('\n');
+          saveCoreTier(noteId, coreText);
+        }
+      });
     } else {
       reset();
     }

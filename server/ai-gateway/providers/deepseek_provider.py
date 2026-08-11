@@ -70,7 +70,8 @@ class DeepSeekProvider(AIProvider):
         DeepSeek 支持 prompt 缓存，系统提示复用可降低 token 成本。
         """
         # Key 轮询：将请求分散到多个 Key 以突破单一 Key 的 RPM 限制
-        await self._rotate_api_key()
+        # GW-3: 内部不再轮询——已上移至 with_retry_and_timeout wrapper 统一
+        # 处理，避免与 wrapper 双重轮询（偶数 Key 配置下轮询失效）
         start_time = time.monotonic()
 
         # 构建消息列表
@@ -97,8 +98,14 @@ class DeepSeekProvider(AIProvider):
             # 提取结果
             content = response.choices[0].message.content or ""
             tokens_used = 0
+            input_tokens = 0
+            output_tokens = 0
             if response.usage:
                 tokens_used = response.usage.total_tokens or 0
+                # GW-2#6: 提取真实 input/output 拆分供成本记账（OpenAI 兼容
+                # usage 字段），fallback 链不再对半估算
+                input_tokens = getattr(response.usage, "prompt_tokens", 0) or 0
+                output_tokens = getattr(response.usage, "completion_tokens", 0) or 0
 
             # DeepSeek 缓存命中信息（如果有的话）
             cache_hit_tokens = 0
@@ -119,6 +126,9 @@ class DeepSeekProvider(AIProvider):
                     cache_miss_tokens = prompt_tokens - cache_hit_tokens
                     # DeepSeek 缓存命中按 1/4 价格计费
                     effective_tokens = int(cache_hit_tokens * 0.25) + cache_miss_tokens + completion_tokens
+                    # GW-3(X4): input 记账改用缓存未命中部分（命中部分按 1/4
+                    # 计费）——原实现用原始 prompt_tokens，缓存命中场景成本高估
+                    input_tokens = cache_miss_tokens
                     logger.info(
                         "DeepSeek 缓存命中: hit=%d, miss=%d, 实际计费 token=%d",
                         cache_hit_tokens, cache_miss_tokens, effective_tokens,
@@ -132,6 +142,8 @@ class DeepSeekProvider(AIProvider):
             return {
                 "content": content,
                 "tokens_used": tokens_used,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
                 "effective_tokens": effective_tokens,
                 "cache_hit": cache_hit,
                 "cache_hit_tokens": cache_hit_tokens,
@@ -170,6 +182,7 @@ class DeepSeekProvider(AIProvider):
         sample_rate: int = 16000,
         channels: int = 1,
         model: str = "",
+        hotwords: str = "",
     ) -> dict[str, Any]:
         """DeepSeek 不支持 ASR，始终抛出 NotImplementedError"""
         raise NotImplementedError("DeepSeekProvider 不支持语音转文字，请使用 Qwen 或 GLM Provider")

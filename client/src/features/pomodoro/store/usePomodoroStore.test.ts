@@ -30,7 +30,7 @@ vi.mock('./usePomodoroPersistence', () => ({
 
 // Mock 预设服务，避免 IndexedDB 依赖
 vi.mock('../lib/presetService', () => ({
-  MAX_PRESETS: 6,
+  MAX_PRESETS: 8,
   getAllPresets: vi.fn().mockResolvedValue([]),
   getPresetById: vi.fn().mockResolvedValue(undefined),
   createPreset: vi.fn().mockResolvedValue({}),
@@ -41,7 +41,9 @@ vi.mock('../lib/presetService', () => ({
 }));
 
 import { usePomodoroStore } from './usePomodoroStore';
+import { isColdStart } from './pomodoroStoreTypes';
 import { recordSession, playCompletionSound } from './usePomodoroPersistence';
+import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import type { PomodoroPreset } from '@/types/models';
 
 // 测试用内置预设
@@ -75,10 +77,18 @@ const DEFAULT_STATE = {
   phase: 'work' as const,
   isRunning: false,
   isPaused: false,
+  isArmed: false,
+  lastActivityAt: Date.now(),
+  isStepDive: false,
+  stepCompleted: false,
+  ritualSkipped: false,
+  _breathingResumeRemaining: null as number | null,
+  _breathingResumeTotal: null as number | null,
   remainingSeconds: 25 * 60,
   totalSeconds: 25 * 60,
   endAt: null as number | null,
   completedCount: 0,
+  showCompletionOverlay: false,
   mode: 'self_study' as const,
   settings: DEFAULT_SETTINGS,
   presets: [CLASS_PRESET, STUDY_PRESET],
@@ -349,12 +359,12 @@ describe('Pomodoro Store', () => {
   // ── skip ──────────────────────────────────────────────────
 
   describe('skip', () => {
-    it('should skip to next phase and increment completedCount for work', () => {
+    it('skip work 应计入长休周期计数（completedCount +1）且进入短休', () => {
       usePomodoroStore.setState({ phase: 'work', completedCount: 0 });
       usePomodoroStore.getState().skip();
       const state = usePomodoroStore.getState();
       expect(state.phase).toBe('short_break');
-      expect(state.completedCount).toBe(1);
+      expect(state.completedCount).toBe(1); // 跳过也计入长休周期计数
       expect(state.isRunning).toBe(false);
     });
 
@@ -366,12 +376,12 @@ describe('Pomodoro Store', () => {
       expect(state.completedCount).toBe(1); // unchanged
     });
 
-    it('should skip to long_break after 4th work phase', () => {
+    it('第 4 次 work 跳过应进入 long_break 且计数 +1（=4）', () => {
       usePomodoroStore.setState({ phase: 'work', completedCount: 3 });
       usePomodoroStore.getState().skip();
       const state = usePomodoroStore.getState();
       expect(state.phase).toBe('long_break');
-      expect(state.completedCount).toBe(4);
+      expect(state.completedCount).toBe(4); // 跳过也计入周期计数
     });
   });
 
@@ -443,7 +453,9 @@ describe('Pomodoro Store', () => {
   describe('completedCount reset after long_break', () => {
     /** Helper: fast-forward through one complete phase (tick until remainingSeconds <= 1 then tick once more) */
     const completePhase = () => {
-      usePomodoroStore.setState({ remainingSeconds: 1, isRunning: true });
+      // 快进需同步推进墙钟锚点：endAt 置为已过期，模拟墙钟也已走完
+      // （真实运行中 remaining=1 时墙钟必然同步归零；不同步会触发"锚点未归零等待"）
+      usePomodoroStore.setState({ remainingSeconds: 1, isRunning: true, endAt: Date.now() - 1 });
       usePomodoroStore.getState().tick();
     };
 
@@ -491,7 +503,6 @@ describe('Pomodoro Store', () => {
     });
 
     it('should have correct phase sequence for 8 consecutive pomodoros (2 full cycles)', () => {
-      const interval = DEFAULT_SETTINGS.longBreakInterval; // 4
       const phases: string[] = [];
       usePomodoroStore.setState({ phase: 'work', completedCount: 0, isRunning: true });
 
@@ -526,25 +537,26 @@ describe('Pomodoro Store', () => {
     });
   });
 
-  // ── setMode ───────────────────────────────────────────────
+  // ── 预设切换派生 mode（setMode 兼容层已移除，语义由 setPreset 承载）──
 
-  describe('setMode', () => {
-    it('should switch mode', () => {
-      usePomodoroStore.getState().setMode('class');
+  describe('setPreset mode derivation', () => {
+    it('should derive mode from silent preset when switching preset', () => {
+      usePomodoroStore.setState({ presets: [CLASS_PRESET, STUDY_PRESET], activePreset: STUDY_PRESET });
+      usePomodoroStore.getState().setPreset('preset-class');
       expect(usePomodoroStore.getState().mode).toBe('class');
       expect(usePomodoroStore.getState().activePreset?.id).toBe('preset-class');
     });
 
-    it('should reset completedCount when switching mode', () => {
-      // 上课模式累计了 7 个番茄后切到自习模式，计数应归零
-      usePomodoroStore.setState({ mode: 'class', activePreset: CLASS_PRESET, completedCount: 7 });
-      usePomodoroStore.getState().setMode('self_study');
+    it('should reset completedCount when switching preset', () => {
+      // 上课模式累计了 7 个番茄后切到自习预设，计数应归零
+      usePomodoroStore.setState({ presets: [CLASS_PRESET, STUDY_PRESET], mode: 'class', activePreset: CLASS_PRESET, completedCount: 7 });
+      usePomodoroStore.getState().setPreset('preset-study');
       expect(usePomodoroStore.getState().completedCount).toBe(0);
     });
 
-    it('should NOT reset completedCount when setting the same mode', () => {
-      usePomodoroStore.setState({ mode: 'self_study', activePreset: STUDY_PRESET, completedCount: 2 });
-      usePomodoroStore.getState().setMode('self_study');
+    it('should NOT reset completedCount when setting the same preset', () => {
+      usePomodoroStore.setState({ presets: [CLASS_PRESET, STUDY_PRESET], mode: 'self_study', activePreset: STUDY_PRESET, completedCount: 2 });
+      usePomodoroStore.getState().setPreset('preset-study');
       expect(usePomodoroStore.getState().completedCount).toBe(2);
     });
   });
@@ -577,10 +589,10 @@ describe('Pomodoro Store', () => {
       expect(count).toBeLessThanOrEqual(4);
     });
 
-    it('should wrap count via skip in class mode as well', () => {
+    it('class 模式 skip work 也计入周期计数（+1）', () => {
       usePomodoroStore.setState({ mode: 'class', activePreset: CLASS_PRESET, phase: 'work', completedCount: 4 });
       usePomodoroStore.getState().skip();
-      expect(usePomodoroStore.getState().completedCount).toBe(1);
+      expect(usePomodoroStore.getState().completedCount).toBe(5);
     });
   });
 
@@ -631,7 +643,7 @@ describe('Pomodoro Store', () => {
       expect(state.lastAction).toBe('exit_immersive');
     });
 
-    it('resume 时若 wasImmersive=true 应自动重新进入沉浸', () => {
+    it('resume 不再自动重入沉浸模式（尊重用户对沉浸模式的选择）', () => {
       usePomodoroStore.setState({
         isRunning: false, isPaused: true,
         isImmersive: false, wasImmersive: true,
@@ -640,7 +652,7 @@ describe('Pomodoro Store', () => {
       usePomodoroStore.getState().resume();
       const state = usePomodoroStore.getState();
       expect(state.isRunning).toBe(true);
-      expect(state.isImmersive).toBe(true);
+      expect(state.isImmersive).toBe(false);
       expect(state.wasImmersive).toBe(false);
     });
   });
@@ -769,6 +781,384 @@ describe('Pomodoro Store', () => {
       usePomodoroStore.getState().setPreset('preset-study');
       // completedCount 不变说明没有重新切换
       expect(usePomodoroStore.getState().completedCount).toBe(2);
+    });
+
+    it('运行中切换预设应重置阶段时长与墙钟截止点（落库时长与实际计时一致）', () => {
+      usePomodoroStore.setState({
+        presets: [CLASS_PRESET, STUDY_PRESET],
+        activePreset: STUDY_PRESET,
+        isRunning: true,
+        remainingSeconds: 600, totalSeconds: 1500,
+      });
+      usePomodoroStore.getState().setPreset('preset-class');
+      const state = usePomodoroStore.getState();
+      expect(state.remainingSeconds).toBe(45 * 60);
+      expect(state.totalSeconds).toBe(45 * 60);
+      expect(state.endAt).not.toBeNull();
+      expect(state.completedCount).toBe(0);
+      expect(state.phase).toBe('work');
+    });
+  });
+
+  // ── updatePreset（编辑预设：活动预设计时空闲时同步刷新时长）─────────────────
+
+  describe('updatePreset — 编辑活动预设', () => {
+    it('计时空闲时编辑活动预设应刷新当前阶段时长（表盘立即反映新时长）', async () => {
+      usePomodoroStore.setState({ activePreset: STUDY_PRESET, remainingSeconds: 25 * 60, totalSeconds: 25 * 60 });
+      await usePomodoroStore.getState().updatePreset('preset-study', { workDuration: 30 });
+      const state = usePomodoroStore.getState();
+      expect(state.activePreset?.workDuration).toBe(30);
+      expect(state.remainingSeconds).toBe(30 * 60);
+      expect(state.totalSeconds).toBe(30 * 60);
+    });
+
+    it('编辑非活动预设不应触碰当前计时时长', async () => {
+      usePomodoroStore.setState({ activePreset: STUDY_PRESET, remainingSeconds: 25 * 60, totalSeconds: 25 * 60 });
+      await usePomodoroStore.getState().updatePreset('preset-class', { workDuration: 40 });
+      expect(usePomodoroStore.getState().remainingSeconds).toBe(25 * 60);
+    });
+
+    it('运行/暂停中编辑活动预设不打断计时，阶段完成后才按新时长生效', async () => {
+      usePomodoroStore.setState({
+        activePreset: STUDY_PRESET, isRunning: true,
+        remainingSeconds: 600, totalSeconds: 25 * 60,
+      });
+      await usePomodoroStore.getState().updatePreset('preset-study', { workDuration: 30 });
+      const state = usePomodoroStore.getState();
+      expect(state.remainingSeconds).toBe(600);
+      expect(state.totalSeconds).toBe(25 * 60);
+      expect(state.isRunning).toBe(true);
+    });
+
+    it('编辑 silent 字段应同步派生 mode（class/self_study 兼容层一致）', async () => {
+      usePomodoroStore.setState({ activePreset: STUDY_PRESET });
+      await usePomodoroStore.getState().updatePreset('preset-study', { silent: true });
+      expect(usePomodoroStore.getState().mode).toBe('class');
+    });
+  });
+
+  // ── deletePreset（删除活动预设：空闲开启新周期，运行中不打断）────────────────
+
+  describe('deletePreset — 删除活动预设', () => {
+    it('计时空闲时删除活动预设应回退第一个并重置新周期时长', async () => {
+      usePomodoroStore.setState({
+        presets: [CLASS_PRESET, STUDY_PRESET],
+        activePreset: STUDY_PRESET,
+        phase: 'short_break',
+        remainingSeconds: 5 * 60, totalSeconds: 5 * 60,
+        completedCount: 2,
+      });
+      await usePomodoroStore.getState().deletePreset('preset-study');
+      const state = usePomodoroStore.getState();
+      expect(state.activePreset?.id).toBe('preset-class');
+      expect(state.phase).toBe('work');
+      expect(state.completedCount).toBe(0);
+      // 回退预设 work 时长（45min 上课）同步到表盘
+      expect(state.remainingSeconds).toBe(45 * 60);
+      expect(state.totalSeconds).toBe(45 * 60);
+    });
+
+    it('运行中删除活动预设不应打断当前计时（回退预设仅生效于下一阶段）', async () => {
+      usePomodoroStore.setState({
+        presets: [CLASS_PRESET, STUDY_PRESET],
+        activePreset: STUDY_PRESET,
+        isRunning: true,
+        phase: 'work',
+        remainingSeconds: 600, totalSeconds: 25 * 60,
+        endAt: Date.now() + 600 * 1000,
+        completedCount: 1,
+      });
+      await usePomodoroStore.getState().deletePreset('preset-study');
+      const state = usePomodoroStore.getState();
+      expect(state.activePreset?.id).toBe('preset-class');
+      // 当前阶段不被重置：剩余秒数/阶段/计数/运行状态原样保留
+      expect(state.remainingSeconds).toBe(600);
+      expect(state.phase).toBe('work');
+      expect(state.completedCount).toBe(1);
+      expect(state.isRunning).toBe(true);
+    });
+  });
+
+  // ── tick 墙钟锚点路径（准点完成：锚点未归零不提前完成）─────────────────────
+
+  describe('tick — 墙钟锚点准点完成', () => {
+    it('remaining=1 且墙钟未归零时吸附等待，不提前完成阶段', () => {
+      // 递减模型已到 1，但墙钟还剩约 2s：应吸附到 2 而非直接完成
+      usePomodoroStore.setState({
+        isRunning: true,
+        phase: 'work',
+        remainingSeconds: 1,
+        endAt: Date.now() + 2000,
+      });
+      usePomodoroStore.getState().tick();
+      const state = usePomodoroStore.getState();
+      expect(state.phase).toBe('work');
+      expect(state.remainingSeconds).toBe(2);
+    });
+
+    it('remaining=1 且墙钟已归零时立即完成阶段', () => {
+      usePomodoroStore.setState({
+        isRunning: true,
+        phase: 'work',
+        remainingSeconds: 1,
+        endAt: Date.now() - 100, // 已过期
+        completedCount: 0,
+      });
+      usePomodoroStore.getState().tick();
+      const state = usePomodoroStore.getState();
+      expect(state.phase).toBe('short_break');
+      expect(state.completedCount).toBe(1);
+    });
+  });
+
+  // ── isArmed — Chronos 激活状态（沉睡↔呼吸）──────────────────────────────
+
+  describe('isArmed — Chronos 激活状态', () => {
+    it('awaken() 应沉睡→呼吸（isArmed=true）且启动 30s 倒计时', () => {
+      usePomodoroStore.getState().awaken();
+      const state = usePomodoroStore.getState();
+      expect(state.isArmed).toBe(true);
+      expect(state.isRunning).toBe(true);
+      expect(state.remainingSeconds).toBe(30);
+    });
+
+    it('reset() 应清除激活标记回沉睡', () => {
+      usePomodoroStore.setState({ isArmed: true });
+      usePomodoroStore.getState().reset();
+      expect(usePomodoroStore.getState().isArmed).toBe(false);
+    });
+
+    it('start() 应进入激活态', () => {
+      usePomodoroStore.getState().start();
+      expect(usePomodoroStore.getState().isArmed).toBe(true);
+    });
+
+    it('skip() 应保持激活态（仍在流中）', () => {
+      usePomodoroStore.setState({ isArmed: true, phase: 'work' });
+      usePomodoroStore.getState().skip();
+      expect(usePomodoroStore.getState().isArmed).toBe(true);
+    });
+  });
+
+  // ── startStepDive — 呼吸态 1 分钟迈步 ──────────────────────────────
+
+  describe('startStepDive — 1 分钟迈步', () => {
+    it('应启动 30 秒会话并进入激活态（保留已有 currentGoal，不做覆盖）', () => {
+      usePomodoroStore.setState({ currentGoal: '用户输入的目标' });
+      usePomodoroStore.getState().startStepDive();
+      const state = usePomodoroStore.getState();
+      expect(state.isRunning).toBe(true);
+      expect(state.remainingSeconds).toBe(30);
+      expect(state.totalSeconds).toBe(30);
+      expect(state.isArmed).toBe(true);
+      expect(state.isMiniDive).toBe(true); // 复用迷你会话记录链路
+      expect(state.currentGoal).toBe('用户输入的目标'); // 目标弹窗输入的内容不被覆盖
+    });
+
+    it('迈步完成应无缝衔接完整专注（不进入休息，按预设时长继续）', () => {
+      usePomodoroStore.setState({ phase: 'work', remainingSeconds: 1, isRunning: true, endAt: Date.now() - 1, isStepDive: true });
+      usePomodoroStore.getState().tick(); // 1 分钟迈步完成
+      const state = usePomodoroStore.getState();
+      expect(state.phase).toBe('work'); // 无缝衔接完整专注
+      expect(state.isRunning).toBe(true); // 强制自动开始
+      expect(state.remainingSeconds).toBe(25 * 60); // 预设 workDuration（自习 25min）
+      expect(state.totalSeconds).toBe(25 * 60);
+      expect(state.stepCompleted).toBe(true);
+      expect(state.isStepDive).toBe(false);
+      expect(state.showCompletionOverlay).toBe(false); // 迈步完成不弹庆祝层（不打断）
+    });
+
+    it('reset 应清除迈步状态与激活标记（回沉睡）', () => {
+      usePomodoroStore.setState({ isArmed: true, stepCompleted: true, isStepDive: true });
+      usePomodoroStore.getState().reset();
+      const state = usePomodoroStore.getState();
+      expect(state.stepCompleted).toBe(false);
+      expect(state.isStepDive).toBe(false);
+      expect(state.isArmed).toBe(false);
+    });
+  });
+
+  // ── startBreathingDive — 专注→呼吸缓解 ──────────────────────────
+
+  describe('startBreathingDive — 专注→呼吸缓解', () => {
+    it('应保存原专注剩余时间并启动 30s 呼吸态', () => {
+      usePomodoroStore.setState({ phase: 'work', remainingSeconds: 1200, totalSeconds: 1500, isRunning: true });
+      usePomodoroStore.getState().startBreathingDive();
+      const state = usePomodoroStore.getState();
+      expect(state.isRunning).toBe(true);
+      expect(state.remainingSeconds).toBe(30);
+      expect(state.totalSeconds).toBe(30);
+      expect(state.isStepDive).toBe(true);
+      expect(state._breathingResumeRemaining).toBe(1200); // 保存原剩余时间
+      expect(state._breathingResumeTotal).toBe(1500);
+    });
+
+    it('呼吸缓解完成应恢复原专注剩余时间且不增加计数', () => {
+      usePomodoroStore.setState({
+        phase: 'work', remainingSeconds: 1, totalSeconds: 30, isRunning: true,
+        endAt: Date.now() - 1, isStepDive: true, completedCount: 2,
+        _breathingResumeRemaining: 1200, _breathingResumeTotal: 1500,
+      });
+      usePomodoroStore.getState().tick(); // 呼吸缓解完成
+      const state = usePomodoroStore.getState();
+      expect(state.phase).toBe('work');
+      expect(state.remainingSeconds).toBe(1200); // 恢复原剩余
+      expect(state.totalSeconds).toBe(1500); // 恢复原总时长（progress 不重置）
+      expect(state.isRunning).toBe(true); // 自动恢复专注
+      expect(state.completedCount).toBe(2); // 不增加计数
+      expect(state._breathingResumeRemaining).toBeNull(); // 清空保存字段
+      expect(state.lastAction).toBe('breathing_resume'); // 不发 phase_complete
+      expect(state.showCompletionOverlay).toBe(false); // 不弹庆祝层
+    });
+
+    it('skipBreathingDive 在呼吸缓解中应恢复原专注', () => {
+      usePomodoroStore.setState({
+        phase: 'work', remainingSeconds: 15, totalSeconds: 30, isRunning: true,
+        isStepDive: true, _breathingResumeRemaining: 900, _breathingResumeTotal: 1500,
+      });
+      usePomodoroStore.getState().skipBreathingDive();
+      const state = usePomodoroStore.getState();
+      expect(state.remainingSeconds).toBe(900); // 恢复原剩余
+      expect(state.totalSeconds).toBe(1500);
+      expect(state.isRunning).toBe(true);
+      expect(state.isStepDive).toBe(false);
+      expect(state._breathingResumeRemaining).toBeNull();
+    });
+
+    it('skipBreathingDive 在迈步中应跳过仪式直接完整专注', () => {
+      usePomodoroStore.setState({
+        phase: 'work', remainingSeconds: 20, totalSeconds: 30, isRunning: true,
+        isStepDive: true, _breathingResumeRemaining: null, _breathingResumeTotal: null,
+      });
+      usePomodoroStore.getState().skipBreathingDive();
+      const state = usePomodoroStore.getState();
+      expect(state.remainingSeconds).toBe(25 * 60); // 直接完整专注（预设 workDuration）
+      expect(state.totalSeconds).toBe(25 * 60);
+      expect(state.isRunning).toBe(true);
+      expect(state.isStepDive).toBe(false);
+    });
+  });
+
+  // ── isColdStart — 冷启动判定（沉睡点击行为分流）────────────────────
+
+  describe('isColdStart — 冷启动判定', () => {
+    it('无活动记录视为冷启动（需呼吸仪式）', () => {
+      expect(isColdStart(null)).toBe(true);
+    });
+
+    it('距上次活动超过 24h 视为冷启动', () => {
+      expect(isColdStart(Date.now() - 25 * 60 * 60 * 1000)).toBe(true);
+    });
+
+    it('距上次活动 1 小时内为热启动（直接迈步）', () => {
+      expect(isColdStart(Date.now() - 60 * 60 * 1000)).toBe(false);
+    });
+  });
+
+  // ── 静默预设音效（BUG-005 语义完整化）─────────────────────────
+
+  describe('silent preset 音效', () => {
+    it('静默预设下 start/pause 不播放启停音效', () => {
+      usePomodoroStore.setState({ activePreset: CLASS_PRESET });
+      usePomodoroStore.getState().start();
+      usePomodoroStore.getState().pause();
+      expect(soundPlayer.play).not.toHaveBeenCalled();
+    });
+
+    it('非静默预设下 start 播放启动音效', () => {
+      usePomodoroStore.setState({ activePreset: STUDY_PRESET });
+      usePomodoroStore.getState().start();
+      expect(soundPlayer.play).toHaveBeenCalledWith('pomodoro_start');
+    });
+  });
+
+  // ── abortSession（中断记录）────────────────────────────────────
+
+  describe('abortSession — 中断记录', () => {
+    it('投入 ≥30s 时落库 interrupted 记录（含实际时长与目标）', () => {
+      usePomodoroStore.setState({
+        phase: 'work', isRunning: true,
+        sessionStartTime: Date.now() - 5 * 60 * 1000,
+        totalPausedMs: 0, currentGoal: '背单词',
+        activePreset: STUDY_PRESET,
+      });
+      usePomodoroStore.getState().abortSession();
+      expect(recordSession).toHaveBeenCalledTimes(1);
+      const arg = vi.mocked(recordSession).mock.calls[0][0];
+      expect(arg.interrupted).toBe(true);
+      expect(arg.goal).toBe('背单词');
+      expect(arg.actualDuration).toBe(300);
+      expect(arg.presetId).toBe('preset-study');
+    });
+
+    it('投入 <30s 不落库（视为误触）', () => {
+      usePomodoroStore.setState({
+        phase: 'work', sessionStartTime: Date.now() - 10 * 1000, totalPausedMs: 0,
+      });
+      usePomodoroStore.getState().abortSession();
+      expect(recordSession).not.toHaveBeenCalled();
+    });
+
+    it('休息阶段不落库', () => {
+      usePomodoroStore.setState({ phase: 'short_break', sessionStartTime: Date.now() - 5 * 60 * 1000 });
+      usePomodoroStore.getState().abortSession();
+      expect(recordSession).not.toHaveBeenCalled();
+    });
+
+    it('reset 应清零周期计数并落库中断记录', () => {
+      usePomodoroStore.setState({
+        phase: 'work', isRunning: true, completedCount: 3,
+        sessionStartTime: Date.now() - 5 * 60 * 1000, totalPausedMs: 0,
+      });
+      usePomodoroStore.getState().reset();
+      const state = usePomodoroStore.getState();
+      expect(state.completedCount).toBe(0);
+      expect(recordSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('skip work 阶段落库中断记录且计入周期计数（+1）', () => {
+      usePomodoroStore.setState({
+        phase: 'work', completedCount: 2,
+        sessionStartTime: Date.now() - 5 * 60 * 1000, totalPausedMs: 0,
+      });
+      usePomodoroStore.getState().skip();
+      const state = usePomodoroStore.getState();
+      expect(state.phase).toBe('short_break');
+      expect(state.completedCount).toBe(3); // 跳过也计入长休周期计数
+      expect(recordSession).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── 墙钟校准完成分支（BUG：autoStart 关闭时阶段被吞）────────────
+
+  describe('墙钟校准完成分支', () => {
+    it('校准完成应设置完整阶段时长（修复原实现 remainingSeconds=0 吞掉休息）', () => {
+      usePomodoroStore.setState({
+        isRunning: true, phase: 'short_break', remainingSeconds: 5,
+        endAt: Date.now() - 1000,
+        settings: { ...DEFAULT_SETTINGS, autoStartWork: false, autoStartBreak: true },
+      });
+      usePomodoroStore.getState().tick();
+      const state = usePomodoroStore.getState();
+      expect(state.phase).toBe('work');
+      expect(state.remainingSeconds).toBe(25 * 60);
+      expect(state.isRunning).toBe(false);
+    });
+  });
+
+  // ── updateSettings 输入钳制 ───────────────────────────────────
+
+  describe('updateSettings 输入钳制', () => {
+    it('拒绝 0 分钟时长（防止 0 秒番茄）', () => {
+      usePomodoroStore.setState({ activePreset: null, settings: DEFAULT_SETTINGS });
+      usePomodoroStore.getState().updateSettings({ workDuration: 0 });
+      expect(usePomodoroStore.getState().settings.workDuration).toBe(25);
+    });
+
+    it('长休间隔 0 合法（无长休语义）', () => {
+      usePomodoroStore.setState({ activePreset: null, settings: DEFAULT_SETTINGS });
+      usePomodoroStore.getState().updateSettings({ longBreakInterval: 0 });
+      expect(usePomodoroStore.getState().settings.longBreakInterval).toBe(0);
     });
   });
 });

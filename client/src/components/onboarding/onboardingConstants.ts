@@ -44,7 +44,7 @@ export const STEP_TEXTS = [
   // Step 5: Panorama
   {
     title: '全景总览',
-    description: '这是你的完整学习空间，包含 6 个功能模块。记住它们的位置，随时通过点击或快捷键进入。',
+    description: '这是你的完整学习空间，包含 7 个功能模块。记住它们的位置，随时通过点击或快捷键进入。',
   },
   // Step 6: Shortcuts
   {
@@ -64,12 +64,13 @@ export interface ModuleInfo {
 }
 
 export const MODULE_INFO: ModuleInfo[] = [
-  { id: 'dashboard', name: '首页', number: '①', color: '#6366F1', description: '数据仪表盘，总览学习进度与统计' },
-  { id: 'pomodoro', name: '深潜', number: '②', color: '#F97316', description: '番茄钟专注计时，沉浸式学习' },
-  { id: 'notes', name: '结礁', number: '③', color: '#3B82F6', description: '富文本笔记，知识结构化存储' },
-  { id: 'flashcards', name: '闪卡', number: '④', color: '#10B981', description: '间隔重复记忆卡片' },
-  { id: 'feynman', name: '反衰减呼吸', number: '⑤', color: '#8B5CF6', description: '费曼学习法，以教代学' },
-  { id: 'inspiration', name: '萤火海沟', number: '⑥', color: '#EC4899', description: '灵感收集与AI辅助思考' },
+  { id: 'dashboard', name: '首页', number: '①', color: '#40AB92', description: '数据仪表盘，总览学习进度与统计' },
+  { id: 'pomodoro', name: '深潜', number: '②', color: '#E8833A', description: '番茄钟专注计时，沉浸式学习' },
+  { id: 'notes', name: '结礁', number: '③', color: '#4A9BD9', description: '富文本笔记，知识结构化存储' },
+  { id: 'flashcards', name: '闪卡', number: '④', color: '#43C58B', description: '间隔重复记忆卡片' },
+  { id: 'feynman', name: '反衰减呼吸', number: '⑤', color: '#F0E3C8', description: '费曼学习法，以教代学' },
+  { id: 'inspiration', name: '萤火海沟', number: '⑥', color: '#E8B84B', description: '灵感收集与AI辅助思考' },
+  { id: 'sop', name: '标准作业', number: '⑦', color: '#B5D84E', description: '标准作业流程模板与执行' },
 ];
 
 /* ────────── 快捷键表格 ────────── */

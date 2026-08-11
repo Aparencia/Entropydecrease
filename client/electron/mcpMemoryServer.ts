@@ -218,10 +218,39 @@ async function main(): Promise<void> {
     }
   });
 
-  // 约束 2：stdio only——transport 即 stdin/stdout，无任何网络监听
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error('[keban-memory] learning-memory server ready (stdio, read-only)');
+  // 约束 2：默认 stdio，可选 --port 启用 HTTP SSE 模式（默认关闭，仅本机监听）
+  const portArg = process.argv.indexOf('--port');
+  const httpPort = portArg !== -1 && portArg + 1 < process.argv.length ? parseInt(process.argv[portArg + 1], 10) : 0;
+
+  if (httpPort > 0) {
+    // HTTP SSE 模式：通过 HTTP 服务器暴露 MCP 端点，供外部 MCP 客户端连接
+    const http = await import('http');
+    const { SSEServerTransport } = await import('@modelcontextprotocol/sdk/server/sse.js');
+    let transport: InstanceType<typeof SSEServerTransport> | null = null;
+
+    const httpServer = http.default.createServer(async (req, res) => {
+      if (req.method === 'GET' && req.url === '/sse') {
+        transport = new SSEServerTransport('/messages', res);
+        console.error(`[keban-memory] MCP client connected via SSE`);
+        await server.connect(transport);
+      } else if (req.method === 'POST' && req.url === '/messages' && transport) {
+        await transport.handlePostMessage(req, res);
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+
+    httpServer.listen(httpPort, '127.0.0.1', () => {
+      console.error(`[keban-memory] learning-memory server ready (HTTP SSE on port ${httpPort}, read-only)`);
+      console.error(`[keban-memory] Connect your MCP client to: http://localhost:${httpPort}/sse`);
+    });
+  } else {
+    // 默认 stdio 模式
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error('[keban-memory] learning-memory server ready (stdio, read-only)');
+  }
 }
 
 main().catch((err) => {

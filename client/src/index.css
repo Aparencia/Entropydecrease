@@ -34,11 +34,14 @@ body {
 [data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
 
 /* ── TipTap 编辑器样式 ── */
+/* 阅读模式（自适应排版引擎 3.17）：容器挂载 --ed-* 变量时消费，
+   未挂载（默认态）时回退原值，保持零侵入 */
 .tiptap {
   outline: none;
   min-height: 60vh;
-  font-size: 1rem;
-  line-height: 1.75;
+  font-size: var(--ed-font-size-base, 1rem);
+  line-height: var(--ed-line-height, 1.75);
+  letter-spacing: var(--ed-letter-spacing, 0em);
   color: var(--kb-text-primary);
 }
 
@@ -329,7 +332,7 @@ body {
   --ripple-color: rgba(91, 138, 114, 0.25);
 }
 .kb-ripple-effect[data-ripple-color="cyan"] {
-  --ripple-color: rgba(6, 182, 212, 0.25);
+  --ripple-color: rgba(74, 155, 217, 0.25);
 }
 
 /* AI 结果区 blur→clear 淡入 */
@@ -517,7 +520,7 @@ body {
   .kb-greeting-glow { animation-play-state: paused; }
 }
 [data-theme="dark"] .kb-greeting-glow {
-  background: radial-gradient(ellipse at 30% 50%, rgba(99,102,241,0.1) 0%, transparent 70%);
+  background: radial-gradient(ellipse at 30% 50%, rgba(64,171,146,0.1) 0%, transparent 70%);
 }
 
 /* ── 问候区品牌色流光 ── */
@@ -530,7 +533,7 @@ body {
   position: absolute;
   top: 0; left: 0;
   width: 40%; height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(59,130,246,0.06), transparent);
+  background: linear-gradient(90deg, transparent, rgba(74,155,217,0.06), transparent);
   animation: kb-shimmer-flow 4s ease-in-out infinite;
   pointer-events: none;
 }
@@ -538,7 +541,7 @@ body {
   .kb-greeting-shimmer::after { animation-play-state: paused; }
 }
 [data-theme="dark"] .kb-greeting-shimmer::after {
-  background: linear-gradient(90deg, transparent, rgba(129,140,248,0.08), transparent);
+  background: linear-gradient(90deg, transparent, rgba(111,180,232,0.08), transparent);
 }
 @keyframes kb-shimmer-flow {
   0%   { transform: translateX(-100%); }
@@ -699,7 +702,7 @@ body::before {
   width: 300px;
   height: 300px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(34, 211, 238, 0.08) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(111, 180, 232, 0.08) 0%, transparent 70%);
   animation: kb-caustic-drift 20s ease-in-out infinite;
   pointer-events: none;
 }
@@ -805,9 +808,9 @@ body::before {
   transition: opacity var(--kb-duration-slow, 400ms) ease;
   background:
     /* 中心微光：赛博青径向，模拟深海透光区 */
-    radial-gradient(ellipse at 50% 35%, rgba(6, 182, 212, 0.07) 0%, transparent 55%),
+    radial-gradient(ellipse at 50% 35%, rgba(74, 155, 217, 0.07) 0%, transparent 55%),
     /* 底部暖光：品牌紫径向，模拟海底热泉微弱光 */
-    radial-gradient(ellipse at 30% 85%, rgba(139, 92, 246, 0.05) 0%, transparent 45%),
+    radial-gradient(ellipse at 30% 85%, rgba(232, 184, 75, 0.05) 0%, transparent 45%),
     /* 深度渐变：从深海蓝到墨黑的垂直过渡 */
     linear-gradient(180deg, #080d18 0%, #0a1020 30%, #0d1525 60%, #080c15 100%);
   animation: kb-bg-breathe 25s ease-in-out infinite;
@@ -914,23 +917,6 @@ body::before {
 
 /* ── 深色模式独立设计升级 ── */
 [data-theme="dark"] {
-  /* 品牌色切换：蓝→靛蓝（更深邃神秘） */
-  --kb-brand-500: #6366F1;
-  --kb-brand-600: #4F46E5;
-  --kb-brand-400: #818CF8;
-
-  /* 辅助色切换：琥珀→赛博青（冷暖对比） */
-  --kb-accent-500: #06B6D4;
-  --kb-accent-400: #22D3EE;
-  --kb-accent-600: #0891B2;
-
-  /* 独立阴影系统（黑色投影 + 蓝光弥散双层） */
-  --kb-shadow-sm: 0 1px 3px rgba(12,21,36,0.4), 0 0 8px rgba(99,102,241,0.05);
-  --kb-shadow-md: 0 4px 12px rgba(12,21,36,0.5), 0 0 16px rgba(99,102,241,0.08);
-  --kb-shadow-lg: 0 8px 24px rgba(12,21,36,0.6), 0 0 24px rgba(99,102,241,0.12);
-  --kb-shadow-brand: 0 4px 16px rgba(99,102,241,0.25);
-  --kb-shadow-accent: 0 4px 16px rgba(6,182,212,0.2);
-
   /* 文字优化：深色模式加粗+加行高 */
   --kb-font-weight-body: 500;
   --kb-line-height-body: 2.0;

@@ -13,6 +13,13 @@ import type { AnalyzeResult } from '@/lib/ai/sessionAnalyzer';
 import type { SessionBundle, CaptureSidebarConfig, RecordingStatus } from '@/lib/capture';
 import { classifyAnalysisError } from '../utils/analysisErrors';
 import type { AnalysisErrorInfo } from '../utils/analysisErrors';
+import { oralCleanup } from '@/lib/capture/oralCleanup';
+
+/** 对分析结果做口语书面化后处理（P1-4），返回新 result */
+function withOralCleanup(result: AnalyzeResult): AnalyzeResult {
+  if (!result.content) return result;
+  return { ...result, content: oralCleanup(result.content) };
+}
 
 interface UseClassroomAnalysisOptions {
   language: CaptureSidebarConfig['language'];
@@ -38,13 +45,16 @@ export function useClassroomAnalysis({
 
   /** Path B：全量分析（无增量片段时的回退路径） */
   const handleAnalyze = useCallback(async () => {
-    if (!smartBundle.keyframes || smartBundle.keyframes.length === 0) return;
+    // 守卫：关键帧或音频段任一非空即可分析（audio 模式无关键帧，
+    // analyzeSession 会以首音频段为时间基准并补充转写——此前仅判
+    // keyframes 导致 audio 会话无法全量分析）
+    if (!smartBundle.keyframes?.length && !smartBundle.audioSegments?.length) return;
     setIsAnalyzing(true);
     setAnalysisError(null);
     setAnalysisResult(null);
     try {
       const fullBundle: SessionBundle = {
-        keyframes: smartBundle.keyframes,
+        keyframes: smartBundle.keyframes ?? [],
         audioSegments: smartBundle.audioSegments ?? [],
         timeline: smartBundle.timeline ?? [],
         duration: smartBundle.duration ?? 0,
@@ -53,11 +63,13 @@ export function useClassroomAnalysis({
         language,
         sessionId: captureSessionIdRef?.current ?? undefined,
       });
-      setAnalysisResult(result);
-      // 全量分析完成，释放所有 keyframe imageBase64 内存
+      setAnalysisResult(withOralCleanup(result));
+      // 全量分析完成，释放所有 keyframe imageBase64 内存；
+      // P0-6：转写失败段的 audioBase64（回退补转写窗口已过）一并剥离
       setSmartBundle((prev) => ({
         ...prev,
         keyframes: (prev.keyframes ?? []).map((kf) => ({ ...kf, imageBase64: '' })),
+        audioSegments: (prev.audioSegments ?? []).map((s) => (s.audioBase64 ? { ...s, audioBase64: '' } : s)),
       }));
     } catch (err) {
       setAnalysisError(classifyAnalysisError(err));
@@ -78,7 +90,7 @@ export function useClassroomAnalysis({
         duration: recordingStatus?.duration,
         language,
       });
-      setAnalysisResult(result);
+      setAnalysisResult(withOralCleanup(result));
     } catch (err) {
       setAnalysisError(classifyAnalysisError(err));
     } finally {
@@ -98,14 +110,15 @@ export function useClassroomAnalysis({
         language,
         sessionId: captureSessionIdRef?.current ?? undefined,
       });
-      setAnalysisResult(result);
+      setAnalysisResult(withOralCleanup(result));
     } catch {
       // 降级：本地拼接片段笔记（无需 AI，零网络，避免全量重发）
       // 为每个片段插入分隔标题，避免拼接后内容边界不清
+      const localContent = oralCleanup(partials
+        .map((p, idx) => `## 片段 ${idx + 1}\n\n${p.trim()}`)
+        .join('\n\n---\n\n'));
       setAnalysisResult({
-        content: partials
-          .map((p, idx) => `## 片段 ${idx + 1}\n\n${p.trim()}`)
-          .join('\n\n---\n\n'),
+        content: localContent,
         keyframesAnalyzed: keyframeCount,
         modelUsed: 'local-concat',
       });
@@ -115,6 +128,12 @@ export function useClassroomAnalysis({
       });
     } finally {
       setIsAnalyzing(false);
+      // P0-6 会话结束释放：合并/本地拼接完成后失败段 audioBase64 不再需要
+      // （回退补转写窗口已过），统一剥离防长课堂无界累积
+      setSmartBundle((prev) => ({
+        ...prev,
+        audioSegments: (prev.audioSegments ?? []).map((s) => (s.audioBase64 ? { ...s, audioBase64: '' } : s)),
+      }));
     }
   }, [language, onWarn, captureSessionIdRef]);
 

@@ -71,7 +71,7 @@ const NATURE_SHAPES: Record<string, ConstellationLayoutPoint['shape']> = {
  * @ai-context 蓝=概念，紫=灵感，橙=疑问，绿=待办，与深海生物发光色系对应
  */
 const NATURE_COLORS: Record<string, string> = {
-  concept: 'rgba(59, 130, 246, 0.6)',
+  concept: 'rgba(74, 155, 217, 0.6)',
   question: 'rgba(249, 115, 22, 0.6)',
   inspiration: 'rgba(168, 85, 247, 0.6)',
   todo: 'rgba(34, 197, 94, 0.6)',

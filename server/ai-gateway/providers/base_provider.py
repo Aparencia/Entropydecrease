@@ -8,12 +8,29 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 from typing import Any, AsyncGenerator
 
 from config import TIMEOUT_CONFIG, _FEATURE_CONTEXT
 
 logger = logging.getLogger(__name__)
+
+# GW-H6: Provider SDK 专用线程池——同步 SDK 调用（google-genai 等）经
+# run_in_executor 隔离到独立线程池，避免慢调用堆积耗尽默认线程池
+# （默认池 min(32, cpu+4) 被占满后健康检查等所有 to_thread 调用都会排队）。
+# 线程池大小按可容忍的并发慢调用数设定，超时后线程虽无法强杀，
+# 但不再影响其他组件，属于隔离而非取消策略（Python 线程不可中断）。
+PROVIDER_THREAD_POOL: ThreadPoolExecutor = ThreadPoolExecutor(
+    max_workers=8,
+    thread_name_prefix="ai-provider-sdk",
+)
+
+
+async def run_in_provider_pool(fn, *args, **kwargs):
+    """在 Provider SDK 专用线程池中执行同步阻塞调用。"""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(PROVIDER_THREAD_POOL, lambda: fn(*args, **kwargs))
 
 
 def with_retry_and_timeout(max_retries: int = 2):
@@ -48,6 +65,19 @@ def with_retry_and_timeout(max_retries: int = 2):
                 # 未指定 feature 时取配置最大值，确保不会误杀慢请求
                 timeout = max(TIMEOUT_CONFIG.values()) if TIMEOUT_CONFIG else 30
 
+            # GW-2#13: Key 轮询统一入口——原实现只在各 Provider 的 generate
+            # 方法内手动调用 _rotate_api_key，视觉/流式/ASR/视频路径从不轮换，
+            # 多 Key 配置形同虚设（RPM 压力全压主 Key，主 Key 熔断后无 Key 可换）。
+            # 此处对所有被装饰方法统一轮询；无 KeyPool/单 Key 时内部短路返回。
+            # FallbackProvider 等无装饰器方法不受影响。
+            try:
+                rotate = getattr(self, "_rotate_api_key", None)
+                if rotate is not None:
+                    await rotate()
+            except Exception:
+                # 轮询失败不阻断业务调用（保持原行为）
+                pass
+
             last_error: Exception | None = None
             for attempt in range(max_retries + 1):
                 try:
@@ -65,6 +95,19 @@ def with_retry_and_timeout(max_retries: int = 2):
                     )
                 except Exception as e:
                     last_error = e
+                    # GW-M5: 确定性错误不重试——401（密钥失效）/400（参数错误）/429（限流）/
+                    # 内容审核与格式错误重试不可能成功，只会放大请求
+                    # （fallback 链最多 3 provider × 3 次 = 9 次无效调用）
+                    from errors import (
+                        RateLimitExceededError,
+                        AuthenticationError,
+                        ModelResponseError,
+                    )
+                    if isinstance(e, (RateLimitExceededError, AuthenticationError, ModelResponseError)):
+                        # GW-M4: 上游 429 时标记当前 Key 进入冷却，轮询池跳过它
+                        if isinstance(e, RateLimitExceededError):
+                            _mark_current_key_unavailable(self)
+                        raise
                     logger.warning(
                         "Provider %s error (attempt %d/%d): %s",
                         self.__class__.__name__, attempt + 1, max_retries + 1, str(e)
@@ -78,6 +121,18 @@ def with_retry_and_timeout(max_retries: int = 2):
     return decorator
 
 
+def _mark_current_key_unavailable(provider_obj) -> None:
+    """将当前 Provider 正在使用的 API Key 标记冷却（GW-M4 熔断联动）。"""
+    try:
+        from config.key_pool import get_key_pool
+        pool = get_key_pool(getattr(provider_obj, "provider_name", ""))
+        api_key = getattr(provider_obj, "api_key", None)
+        if pool is not None and api_key:
+            pool.mark_unavailable(api_key)
+    except Exception:
+        pass
+
+
 class AIProvider(ABC):
     """AI 模型 Provider 抽象基类"""
 
@@ -85,6 +140,8 @@ class AIProvider(ABC):
         self.base_url = base_url
         self.api_key = api_key
         self.provider_name = provider_name
+        # GW-M14: Key 轮换锁——防止并发请求读到新旧 Key/客户端混合状态
+        self._rotate_lock = asyncio.Lock()
 
     @abstractmethod
     async def generate(
@@ -276,6 +333,7 @@ class AIProvider(ABC):
         sample_rate: int = 16000,
         channels: int = 1,
         model: str = "",
+        hotwords: str = "",
     ) -> dict[str, Any]:
         """
         语音转文字
@@ -326,16 +384,28 @@ class AIProvider(ABC):
 
         每次调用 generate 前执行，将请求分散到多个 Key 以突破单一 Key 的 RPM 限制。
         若 KeyPool 未配置或无额外 Key，保持当前 Key 不变。
+        GW-M14: 轮换加锁防并发混合状态；旧客户端在替换后关闭释放连接池。
         """
         from config.key_pool import get_key_pool
         pool = get_key_pool(self.provider_name)
         if pool is None or pool.size <= 1:
             return  # 单 Key 或无 KeyPool，无需轮询
-        new_key = await pool.next_key()
-        if new_key and new_key != self.api_key:
-            self.api_key = new_key
-            self._reinit_client()
-            logger.debug("Provider [%s] 已轮换 API Key", self.provider_name)
+        async with self._rotate_lock:
+            new_key = await pool.next_key()
+            if new_key and new_key != self.api_key:
+                old_client = getattr(self, "_client", None)
+                self.api_key = new_key
+                self._reinit_client()
+                # 关闭旧客户端释放连接池（AsyncOpenAI 等提供 aclose）
+                new_client = getattr(self, "_client", None)
+                if old_client is not None and old_client is not new_client:
+                    close_fn = getattr(old_client, "aclose", None)
+                    if callable(close_fn):
+                        try:
+                            await close_fn()
+                        except Exception:
+                            pass
+                logger.debug("Provider [%s] 已轮换 API Key", self.provider_name)
 
     def _reinit_client(self) -> None:
         """重新初始化底层 HTTP 客户端（子类实现）"""

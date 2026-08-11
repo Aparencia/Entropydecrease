@@ -42,7 +42,11 @@ export interface ScreenshotFrameData {
 // ================================================================
 
 const DEFAULT_INTERVAL = 5000;
-const THUMBNAIL_SIZE = { width: 1920, height: 1080 };
+// CL-M4: 缩略图尺寸从 1920×1080 降至 1280×720——extractFrame 内部会 resize 到
+// 1280 宽，原尺寸超采 56% 内存/合成开销且无质量收益；多窗口场景每次采集
+// 的全量位图分配显著下降（Electron getSources 无法按 id 过滤，缩略图
+// 尺寸是每帧成本的主要杠杆）
+const THUMBNAIL_SIZE = { width: 1280, height: 720 };
 
 /** 单调递增时间戳生成器 */
 let lastTimestamp = 0;
@@ -164,6 +168,8 @@ export class ScreenCapture {
 
   /** 解析目标截图源 */
   private async resolveSource(): Promise<DesktopCapturerSource | null> {
+    // CL-M4: 枚举与抓帧统一使用 1280×720 缩略图（extractFrame 目标分辨率），
+    // 避免 1920×1080 超采样；Electron 不支持按源 id 过滤，此处保留全量枚举
     const sources = await desktopCapturer.getSources({
       types: ['window', 'screen'],
       thumbnailSize: THUMBNAIL_SIZE,

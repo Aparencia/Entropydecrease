@@ -10,7 +10,7 @@
  */
 import { create } from 'zustand';
 
-export type ModuleId = 'dashboard' | 'pomodoro' | 'notes' | 'flashcards' | 'feynman' | 'inspiration' | 'classroom';
+export type ModuleId = 'dashboard' | 'pomodoro' | 'notes' | 'flashcards' | 'feynman' | 'inspiration' | 'classroom' | 'constellation' | 'sop';
 
 /** 导航相位：概览态 / 进入中（相机飞行） / 停靠（渲染暂停） */
 export type OrbitalPhase = 'overview' | 'entering' | 'docked';
@@ -43,14 +43,34 @@ interface OrbitalState {
 }
 
 export const MODULE_POSITIONS: ModulePosition[] = [
+  // 中心：首页（全景位注视点）
   { id: 'dashboard', position: [0, 0, 0], route: '/', label: '首页' },
-  { id: 'pomodoro', position: [4, 2, -2], route: '/pomodoro', label: '深潜' },
-  { id: 'notes', position: [-4, 1, -1], route: '/notes', label: '结礁' },
-  { id: 'flashcards', position: [3, -2, -3], route: '/flashcards', label: '闪卡' },
-  { id: 'feynman', position: [-3, -1, -4], route: '/feynman', label: '浮出水面' },
-  { id: 'inspiration', position: [0, 3, -5], route: '/inspiration', label: '萤火海沟' },
-  { id: 'classroom', position: [-2, -3, -2], route: '/classroom', label: '回声定位' },
+  // 内环·行动组（右侧，核心学习动作）
+  { id: 'pomodoro', position: [3.4, 1.3, -1.8], route: '/pomodoro', label: '深潜' },
+  { id: 'flashcards', position: [3.4, -1.3, -1.8], route: '/flashcards', label: '闪卡' },
+  { id: 'feynman', position: [4.4, 0, -3.0], route: '/feynman', label: '浮出水面' },
+  // 中环·产出组（左侧，知识沉淀）
+  { id: 'notes', position: [-3.4, 1.3, -1.8], route: '/notes', label: '结礁' },
+  { id: 'sop', position: [-3.4, -1.3, -1.8], route: '/sop', label: '标准作业' },
+  { id: 'constellation', position: [-4.4, 0, -3.0], route: '/constellation', label: '星座' },
+  // 外环·扩展组（上下，氛围/工具）
+  { id: 'inspiration', position: [0, 2.7, -2.6], route: '/inspiration', label: '萤火海沟' },
+  { id: 'classroom', position: [0, -2.7, -2.6], route: '/classroom', label: '回声定位' },
 ];
+
+/**
+ * 路由 → 模块ID 映射
+ * 与 syncWithRoute 中的映射逻辑一致，供外部（如数字键处理器）使用
+ */
+export function routeToModuleId(pathname: string): ModuleId | null {
+  const module = MODULE_POSITIONS.find(m => {
+    if (m.route === '/') return pathname === '/';
+    return pathname === m.route || pathname.startsWith(m.route + '/');
+  });
+  return module
+    ? module.id
+    : (pathname === '/settings' || pathname === '/analytics') ? 'dashboard' : null;
+}
 
 /** 导航洪泛防护：enterModule 最小调用间隔。
  * Chromium 对客户端导航（pushState/hash）有洪泛保护（crbug.com/1038223），
@@ -97,14 +117,7 @@ export const useOrbitalStore = create<OrbitalState>((set, get) => ({
   setHighlightAll: (v) => set({ highlightAll: v }),
   syncWithRoute: (pathname: string) => {
     const s = get();
-    // 精确匹配或前缀匹配（支持子路由如 /flashcards/:deckId/study）
-    const module = MODULE_POSITIONS.find(m => {
-      if (m.route === '/') return pathname === '/';
-      return pathname === m.route || pathname.startsWith(m.route + '/');
-    });
-    const targetId: ModuleId | null = module
-      ? module.id
-      : (pathname === '/settings' || pathname === '/analytics') ? 'dashboard' : null;
+    const targetId = routeToModuleId(pathname);
 
     if (!targetId) {
       set({ currentModule: null, phase: 'overview', overlayVisible: false, isInModule: false });

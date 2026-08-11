@@ -94,7 +94,7 @@ export function getRarityConfig(rarity: DiscoveryRarity): {
     case 'rare':
       return { label: '稀有', color: 'text-blue-300', glowColor: 'shadow-blue-400/30' };
     case 'epic':
-      return { label: '史诗', color: 'text-violet-300', glowColor: 'shadow-violet-400/40' };
+      return { label: '史诗', color: 'text-cyber', glowColor: 'shadow-cyber/40' };
     case 'legendary':
       return { label: '传说', color: 'text-amber-300', glowColor: 'shadow-amber-400/50' };
   }

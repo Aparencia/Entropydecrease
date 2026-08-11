@@ -12,7 +12,7 @@ export const MAX_TRIGGERS_PER_HOUR = 2;
 /** 连续忽略多少次后当日不再触发 */
 export const MAX_CONSECUTIVE_IGNORES = 3;
 /** 空闲检测阈值（ms） */
-export const IDLE_THRESHOLD_MS = 3 * 60 * 1000;
+export const IDLE_THRESHOLD_MS = 10 * 60 * 1000;
 /** 久别回归阈值（ms）：超过 24h 未打开 */
 export const RETURN_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
@@ -85,10 +85,19 @@ export const WANDER_DURATION_MIN_MS = 6000;
 export const WANDER_DURATION_MAX_MS = 10000;
 /** 拖拽后恢复漫游的延迟（ms） */
 export const WANDER_RESUME_DELAY_MS = 5000;
-/** 漫游活动区域（视口百分比范围） */
+/** 漫游活动区域（视口百分比范围）——空闲时全屏，活跃时由 useWorkAreaBounds 动态计算 */
 export const WANDER_BOUNDS = { xMin: 0.05, xMax: 0.85, yMin: 0.15, yMax: 0.8 };
 /** 水母位置持久化键 */
 export const CREATURE_POS_STORAGE_KEY = 'assistant_creature_pos';
+
+// ── 受惊弹开动画 ──────────────────────────────────────────────
+
+/** 受惊弹开动画时长（ms） */
+export const ESCAPE_DURATION_MS = 600;
+/** 受惊弹开弹簧刚度 */
+export const ESCAPE_SPRING_STIFFNESS = 500;
+/** 受惊弹开弹簧阻尼（低阻尼产生弹性效果） */
+export const ESCAPE_SPRING_DAMPING = 12;
 
 // ── 默认偏好 ──────────────────────────────────────────────────
 

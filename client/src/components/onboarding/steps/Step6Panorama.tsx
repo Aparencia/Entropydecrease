@@ -56,7 +56,7 @@ export function Step6Panorama() {
         {!autoDemo && (
           <button
             onClick={nextStep}
-            className="w-full px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium transition-colors"
+            className="w-full px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-400 text-text-inverse text-sm font-medium transition-colors"
           >
             下一步 →
           </button>

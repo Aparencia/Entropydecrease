@@ -2,32 +2,22 @@
  * ImmersiveTimer — 「潮汐穹顶」沉浸模式
  *
  * 全屏渐变色场背景（随进度变化），
- * 弧形光带进度条 + 呼吸缩放大字号倒计时，
- * 底部极简 icon-only 操作。
+ * 中央 Chronos 时间生物（full 模式）+ 底部极简 icon-only 操作（ImmersiveControls）。
  *
- * @ai-context: 通用组件：ImmersiveTimer。
+ * @ai-context: 3.8 心流音乐引擎 + 3.13 具身学习休息引导集成于此；
+ * 底部操作区已拆至 ImmersiveControls（单文件 ≤300 行规范）。
  */
-import { useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils';
-import { Tip } from '@/components/ui/Tip';
-import { Pause, Play, Square, Volume2, VolumeX } from 'lucide-react';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { usePomodoroStore } from '../store/usePomodoroStore';
-import { useShallow } from 'zustand/react/shallow';
-import { useReducedMotion } from '@/hooks/useReducedMotion';
-import { SPRING, BEAT } from '@/lib/animation/springConfig';
+import { BEAT } from '@/lib/animation/springConfig';
+import { useAudioPrefsStore } from '@/lib/audio/audioPrefsStore';
 import { AnchorReminderOverlay } from './AnchorReminderOverlay';
-
-const SIZE = 280;
-const STROKE_WIDTH = 8;
-const R = (SIZE - STROKE_WIDTH) / 2;
-const CIRCUMFERENCE = 2 * Math.PI * R;
-
-const PHASE_LABELS: Record<string, string> = {
-  work: '专注中',
-  short_break: '休息中',
-  long_break: '休息中',
-};
+import { ChronosCanvas } from './chronos/ChronosCanvas';
+import { ChronosStateRow } from './chronos/ChronosStateRow';
+import { toChronosState } from './chronos/chronosState';
+import { ImmersiveControls } from './ImmersiveControls';
+import { useFlowMusic } from '@/hooks/useFlowMusic';
 
 interface ImmersiveTimerProps {
   /** 背景音（白噪音）开关状态 */
@@ -38,7 +28,23 @@ interface ImmersiveTimerProps {
   onToggleWhiteNoise?: () => void;
   /** 调节背景音音量 */
   onWhiteNoiseVolume?: (vol: number) => void;
+  /** M4 清醒期重放：上次专注会话的关键词列表 */
+  lastSessionKeywords?: string[];
+  /** 3.8 专注守护灵分心分数（0-100），用于心流音乐引擎 */
+  focusScore?: number;
+  /** 3.8 心流音乐引擎是否激活 */
+  flowMusicEnabled?: boolean;
 }
+
+/** 3.13 具身学习休息活动列表 */
+const EMBODIED_ACTIVITIES = [
+  { id: 'stretch', label: '站立拉伸', icon: '🧘' },
+  { id: 'gesture', label: '手势比划概念', icon: '✋' },
+  { id: 'walk-think', label: '空间行走思考', icon: '🚶' },
+];
+
+/** 3.13 休息活动轮换间隔（ms） */
+const ACTIVITY_ROTATE_INTERVAL = 30_000;
 
 /**
  * 根据进度计算背景渐变色场（完全不透明，确保计时器清晰可读）
@@ -77,47 +83,121 @@ export default function ImmersiveTimer({
   whiteNoiseVolume = 0.5,
   onToggleWhiteNoise,
   onWhiteNoiseVolume,
+  lastSessionKeywords,
+  focusScore = 0,
+  flowMusicEnabled = false,
 }: ImmersiveTimerProps) {
-  const prefersReduced = useReducedMotion();
+  // P0-1 细粒度订阅：整 store 订阅（useShallow(s => s)）会在任何字段变化时
+  // 重渲染沉浸层；remainingSeconds 每秒 tick 不可避免，但其余字段独立订阅
+  // 避免 settings/presets 等无关变化波及本层
+  const remainingSeconds = usePomodoroStore((s) => s.remainingSeconds);
+  const totalSeconds = usePomodoroStore((s) => s.totalSeconds);
+  const phase = usePomodoroStore((s) => s.phase);
+  const isRunning = usePomodoroStore((s) => s.isRunning);
+  const isPaused = usePomodoroStore((s) => s.isPaused);
+  const isArmed = usePomodoroStore((s) => s.isArmed);
+  const activePreset = usePomodoroStore((s) => s.activePreset);
+  const isStepDive = usePomodoroStore((s) => s.isStepDive);
+  const currentGoal = usePomodoroStore((s) => s.currentGoal);
+  // 动作（稳定引用）
+  const pause = usePomodoroStore((s) => s.pause);
+  const startBreathingDive = usePomodoroStore((s) => s.startBreathingDive);
+  const skipBreathingDive = usePomodoroStore((s) => s.skipBreathingDive);
+  const resume = usePomodoroStore((s) => s.resume);
+  const reset = usePomodoroStore((s) => s.reset);
+  const skip = usePomodoroStore((s) => s.skip);
 
-  const {
-    remainingSeconds,
-    totalSeconds,
-    phase,
-    isRunning,
-    currentGoal,
-    pause,
-    resume,
-    reset,
-  } = usePomodoroStore(useShallow(s => s));
+  // Chronos 点击交互（设计详解状态机）：
+  // 专注 → 呼吸缓解（30s）/继续；呼吸(运行中) → 跳过呼吸直接专注；休息 → 提前结束；长按 → 沉睡
+  const handleChronosTap = () => {
+    const cs = toChronosState({ isArmed, isRunning, isPaused, phase, isStepDive });
+    if (cs === 'focus') {
+      if (isRunning) startBreathingDive();
+      else resume();
+    } else if (cs === 'breathing') {
+      // 呼吸态（迈步/呼吸缓解）运行中 → 跳过呼吸直接进入专注
+      if (isRunning) skipBreathingDive();
+      else resume();
+    } else if (cs === 'short_break' || cs === 'long_break') {
+      skip();
+    }
+    // asleep 在沉浸模式不应出现（进入沉浸必经运行/暂停），忽略
+  };
+  const handleChronosLongPress = () => {
+    reset();
+  };
+
+  // 空格键暂停/继续（排除输入框聚焦场景）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      if (phase !== 'work') return;
+      e.preventDefault();
+      if (isRunning) pause();
+      else if (isPaused) resume();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [phase, isRunning, isPaused, pause, resume]);
+
+  // 背景音偏好：外部传入优先（向后兼容），缺省读全局音频偏好 store
+  const storePrefs = useAudioPrefsStore();
+  const effectiveWhiteNoiseEnabled = whiteNoiseEnabled ?? storePrefs.whiteNoiseEnabled;
+  const effectiveWhiteNoiseVolume = whiteNoiseVolume ?? storePrefs.whiteNoiseVolume;
+  const effectiveToggleWhiteNoise = onToggleWhiteNoise ?? storePrefs.toggleWhiteNoise;
+  const effectiveWhiteNoiseVolumeChange = onWhiteNoiseVolume ?? storePrefs.setWhiteNoiseVolume;
+
+  // 时间显示 5s：阶段开头（remaining === total）触发（覆盖运行起始沿与 store 恢复运行态）。
+  // timer 存 ref：effect 依赖每秒变化的 remainingSeconds，局部变量 timer 会被每秒
+  // 重跑的 effect cleanup 清除（时间永不隐藏）
+  const [showTime, setShowTime] = useState(false);
+  const showTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (totalSeconds > 0 && remainingSeconds === totalSeconds) {
+      setShowTime(true);
+      if (showTimerRef.current) clearTimeout(showTimerRef.current);
+      showTimerRef.current = setTimeout(() => setShowTime(false), 5000);
+    }
+  }, [remainingSeconds, totalSeconds]);
+  useEffect(() => () => { if (showTimerRef.current) clearTimeout(showTimerRef.current); }, []);
+
+  // 3.8 心流音乐引擎（工作阶段激活）
+  const flowMusic = useFlowMusic(focusScore);
+  useEffect(() => {
+    if (flowMusicEnabled && phase === 'work') {
+      flowMusic.activate();
+    } else {
+      flowMusic.deactivate();
+    }
+  }, [flowMusicEnabled, phase, flowMusic]);
 
   const progress = totalSeconds > 0 ? remainingSeconds / totalSeconds : 1;
   const progressPercent = (1 - progress) * 100;
   const minutes = Math.floor(remainingSeconds / 60);
   const seconds = remainingSeconds % 60;
   const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  const label = PHASE_LABELS[phase] ?? '专注中';
 
   const backgroundGradient = useMemo(
     () => getBackgroundGradient(progressPercent),
     [progressPercent],
   );
 
-  // 弧形光带进度由下方 JSX 的 strokeDashoffset prop + CSS transition（duration-1000）驱动：
-  // remainingSeconds 每秒变化触发重渲染，offset 随之平滑过渡。原 RAF 循环以 60fps
-  // 重复 setAttribute 相同值，纯属冗余，已移除。
+  const isBreak = phase === 'short_break' || phase === 'long_break';
 
-  // 呼吸动画参数 — 匹配 BEAT.x5 (600ms 周期 → 实际用4s完整呼吸)
-  const breatheAnimation = prefersReduced
-    ? {}
-    : {
-        scale: [1, 1.02, 1],
-        transition: {
-          duration: BEAT.x5 / 100, // 6s 完整呼吸周期
-          repeat: Infinity,
-          ease: 'easeInOut' as const,
-        },
-      };
+  // 3.13 休息活动轮换索引
+  const [activityIndex, setActivityIndex] = useState(0);
+  useEffect(() => {
+    if (!isBreak) {
+      setActivityIndex(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setActivityIndex(prev => (prev + 1) % EMBODIED_ACTIVITIES.length);
+    }, ACTIVITY_ROTATE_INTERVAL);
+    return () => clearInterval(interval);
+  }, [isBreak]);
 
   return (
     <div
@@ -133,179 +213,109 @@ export default function ImmersiveTimer({
           className="absolute top-16 left-0 right-0 text-center text-[12px] text-white/30 truncate px-16 font-medium tracking-wide"
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ ...SPRING.gentle, delay: 0.3 }}
+          transition={{ duration: 0.4, ease: 'easeOut', delay: 0.3 }}
         >
           {currentGoal}
         </motion.p>
       )}
 
-      {/* 中央计时器区域 */}
-      <div className="relative flex items-center justify-center">
-        {/* SVG 弧形光带 */}
-        <svg
-          className="w-[65vw] h-[65vw] max-w-[400px] max-h-[400px]"
-          viewBox={`0 0 ${SIZE} ${SIZE}`}
-          overflow="visible"
+      {/* M4 清醒期重放引导：休息时显示上次会话的关键词，渐入渐出 */}
+      {isBreak && lastSessionKeywords && lastSessionKeywords.length > 0 && (
+        <motion.div
+          className="absolute top-28 left-0 right-0 flex flex-col items-center gap-1.5 px-8"
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
         >
-          <defs>
-            {/* 光带渐变：brand-500 → accent-500 */}
-            <linearGradient id="immersive-arc-gradient" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="var(--kb-brand-500, #5B8A72)" />
-              <stop offset="100%" stopColor="var(--kb-accent-500, #C4956A)" />
-            </linearGradient>
-            {/* 发光滤镜 */}
-            <filter id="arc-glow" x="-30%" y="-30%" width="160%" height="160%">
-              <feGaussianBlur stdDeviation="4" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-
-          {/* 底圈 — 极淡参考线 */}
-          <circle
-            cx={SIZE / 2}
-            cy={SIZE / 2}
-            r={R}
-            fill="none"
-            stroke="rgba(255,255,255,0.04)"
-            strokeWidth={STROKE_WIDTH}
-          />
-
-          {/* 弧形光带进度条，strokeDashoffset 变化由 CSS transition 平滑过渡 */}
-          <circle
-            cx={SIZE / 2}
-            cy={SIZE / 2}
-            r={R}
-            fill="none"
-            stroke="url(#immersive-arc-gradient)"
-            strokeWidth={STROKE_WIDTH}
-            strokeLinecap="round"
-            strokeDasharray={CIRCUMFERENCE}
-            strokeDashoffset={CIRCUMFERENCE * (1 - progress)}
-            filter="url(#arc-glow)"
-            className="transition-[stroke-dashoffset] duration-1000 ease-linear"
-            style={{
-              transform: 'rotate(-90deg)',
-              transformOrigin: '50% 50%',
-            }}
-          />
-        </svg>
-
-        {/* 圆环内 — 倒计时数字 + 呼吸缩放 */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <motion.span
-            className="font-timer font-light tracking-tight leading-none text-white/90"
-            style={{
-              fontSize: 'var(--kb-text-timer, clamp(4rem, 10vw, 7rem))',
-              textShadow: '0 0 30px rgba(91,138,114,0.3), 0 0 60px rgba(91,138,114,0.1)',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-            animate={breatheAnimation}
-          >
-            {timeStr}
-          </motion.span>
-          <span
-            className="text-[11px] mt-3 font-medium tracking-[0.15em] uppercase text-white/40"
-          >
-            {label}
+          <span className="text-[10px] text-white/25 tracking-widest uppercase">
+            ˖ 记忆重放 ˖
           </span>
-        </div>
-      </div>
+          <div className="flex flex-wrap justify-center gap-1.5">
+            {lastSessionKeywords.map((kw, i) => (
+              <motion.span
+                key={kw}
+                className="px-2.5 py-0.5 rounded-full text-[11px] font-medium text-white/60 border border-white/10 bg-white/5"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.3 + i * 0.12, duration: 0.4 }}
+              >
+                {kw}
+              </motion.span>
+            ))}
+          </div>
+          <motion.p
+            className="text-[11px] text-white/30 mt-0.5 italic"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8, duration: 0.6 }}
+          >
+            ～ 回想一下刚才学的内容 ～
+          </motion.p>
+        </motion.div>
+      )}
+
+      {/* 中央计时器区域 — Chronos 时间生物（唯一形态） */}
+      <ChronosCanvas
+        mode="full"
+        phase={phase}
+        isRunning={isRunning}
+        isPaused={isPaused}
+        isArmed={isArmed}
+        remainingSeconds={remainingSeconds}
+        totalSeconds={totalSeconds}
+        isStepDive={isStepDive}
+        mood={activePreset?.mood}
+        onTap={handleChronosTap}
+        onLongPress={handleChronosLongPress}
+        showTime={showTime}
+        timeStr={timeStr}
+      />
+      {/* 状态行（沉浸深色背景专用变体）：仅 work 阶段显示（休息时由活动建议卡占据该区域） */}
+      {phase === 'work' && (
+        <ChronosStateRow
+          input={{ isArmed, isRunning, isPaused, phase }}
+          variant="immersive"
+          hint={isRunning ? '点击调整一下 · 空格暂停 · 长按放弃' : '点击继续'}
+          className="absolute bottom-32 left-0 right-0"
+        />
+      )}
 
       {/* T2 记忆锚点提醒浮层 — work 阶段每 12 分钟一句话要点，15 秒自动消失 */}
       <AnchorReminderOverlay />
 
-      {/* 底部操作区 — 极简 icon-only */}
-      <motion.div
-        className="absolute bottom-16 flex items-center gap-6"
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ ...SPRING.gentle, delay: 0.2 }}
-      >
-        {/* 背景音开关 + 音量调节 */}
-        {onToggleWhiteNoise && (
-          <div className="flex items-center gap-2">
-            {/* 沉浸模式背景音开关，带 tooltip */}
-            <Tip text={whiteNoiseEnabled ? '关闭背景音' : '开启背景音'}>
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={onToggleWhiteNoise}
-              aria-label={whiteNoiseEnabled ? '关闭背景音' : '开启背景音'}
-              className={cn(
-                'w-10 h-10 rounded-full flex items-center justify-center',
-                'bg-white/5 border backdrop-blur-sm',
-                'transition-colors duration-200',
-                whiteNoiseEnabled
-                  ? 'border-white/15 text-white/80 hover:text-white'
-                  : 'border-white/8 text-white/35 hover:text-white/60 hover:bg-white/8',
-              )}
-            >
-              {whiteNoiseEnabled
-                ? <Volume2 className="w-4 h-4" strokeWidth={1.5} />
-                : <VolumeX className="w-4 h-4" strokeWidth={1.5} />}
-            </motion.button>
-            </Tip>
-            <AnimatePresence>
-              {whiteNoiseEnabled && onWhiteNoiseVolume && (
-                <motion.input
-                  key="vol-slider"
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={whiteNoiseVolume}
-                  onChange={(e) => onWhiteNoiseVolume(parseFloat(e.target.value))}
-                  aria-label="背景音音量"
-                  className="w-20 h-1 cursor-pointer accent-[#5B8A72]"
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: 80 }}
-                  exit={{ opacity: 0, width: 0 }}
-                  transition={{ duration: 0.25, ease: 'easeOut' }}
-                />
-              )}
-            </AnimatePresence>
+      {/* 3.13 休息阶段具身学习活动建议 — 底部非侵入式卡片 */}
+      {isBreak && (
+        <motion.div
+          className="absolute bottom-36 left-0 right-0 flex justify-center px-8"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 8 }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+        >
+          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/8 backdrop-blur-sm">
+            <span className="text-sm">{EMBODIED_ACTIVITIES[activityIndex].icon}</span>
+            <span className="text-[11px] text-white/50 font-medium tracking-wide">
+              {EMBODIED_ACTIVITIES[activityIndex].label}
+            </span>
+            <span className="text-[9px] text-white/20 ml-1">
+              {activityIndex + 1}/{EMBODIED_ACTIVITIES.length}
+            </span>
           </div>
-        )}
+        </motion.div>
+      )}
 
-        {/* 暂停/继续按钮，带 tooltip */}
-        <Tip text={isRunning ? '暂停' : '继续'}>
-        <motion.button
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={isRunning ? pause : resume}
-          className={cn(
-            'w-12 h-12 rounded-full flex items-center justify-center',
-            'bg-white/8 backdrop-blur-sm border border-white/10',
-            'text-white/60 hover:text-white/90 hover:bg-white/12',
-            'transition-colors duration-200',
-          )}
-        >
-          {isRunning
-            ? <Pause className="w-5 h-5" strokeWidth={1.5} />
-            : <Play className="w-5 h-5 ml-0.5" strokeWidth={1.5} />}
-        </motion.button>
-        </Tip>
-
-        {/* 停止按钮，带 tooltip */}
-        <Tip text="停止">
-        <motion.button
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={reset}
-          className={cn(
-            'w-10 h-10 rounded-full flex items-center justify-center',
-            'bg-white/5 border border-white/8',
-            'text-white/40 hover:text-white/70 hover:bg-white/8',
-            'transition-colors duration-200',
-          )}
-        >
-          <Square className="w-4 h-4" strokeWidth={1.5} />
-        </motion.button>
-        </Tip>
-      </motion.div>
+      {/* 底部操作区 — 极简 icon-only */}
+      <ImmersiveControls
+        whiteNoiseEnabled={effectiveWhiteNoiseEnabled}
+        whiteNoiseVolume={effectiveWhiteNoiseVolume}
+        onToggleWhiteNoise={effectiveToggleWhiteNoise}
+        onWhiteNoiseVolume={effectiveWhiteNoiseVolumeChange}
+        isRunning={isRunning}
+        onPause={pause}
+        onResume={resume}
+        onReset={reset}
+      />
     </div>
   );
 }

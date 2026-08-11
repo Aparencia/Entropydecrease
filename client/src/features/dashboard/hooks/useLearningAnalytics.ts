@@ -27,11 +27,22 @@ export function useLearningAnalytics(days = 30): UseLearningAnalyticsReturn {
   const workerRef = useRef<Worker | null>(null);
   const daysRef = useRef(days);
   daysRef.current = days;
+  const mountedRef = useRef(true);
 
   /** 从各 store 收集数据并发送给 Worker */
   const fetchData = useCallback(async (worker: Worker) => {
     setLoading(true); setError(null);
     try {
+      // 竞态修复：挂载时 notes/feynmanNotes 可能尚未加载完成（loadNotes 异步），
+      // 直接聚合会按空数据计算——学习画像出勤率/持续性恒 0。先确保数据就绪。
+      const noteState = useNoteStore.getState();
+      if (noteState.notes.length === 0 && !noteState.isLoading) {
+        await noteState.loadNotes();
+      }
+      const feynmanState = useFeynmanStore.getState();
+      if (feynmanState.notes.length === 0 && !feynmanState.isLoading) {
+        await feynmanState.loadNotes();
+      }
       const notes = useNoteStore.getState().notes;
       const feynmanNotes = useFeynmanStore.getState().notes;
       const [sessions, flashcards, reviews] = await Promise.all([
@@ -48,16 +59,18 @@ export function useLearningAnalytics(days = 30): UseLearningAnalyticsReturn {
   useEffect(() => {
     const worker = new Worker(new URL('@/workers/analyticsWorker.ts', import.meta.url), { type: 'module' });
     workerRef.current = worker;
+    mountedRef.current = true;
     worker.addEventListener('message', (e: MessageEvent) => {
+      if (!mountedRef.current) return;
       if (e.data.type === 'result') { setData(e.data.data); setLoading(false); }
       else if (e.data.type === 'error') { setError(e.data.message); setLoading(false); }
     });
     fetchData(worker);
-    return () => { worker.terminate(); workerRef.current = null; };
+    return () => { mountedRef.current = false; worker.terminate(); workerRef.current = null; };
   }, [fetchData]);
 
   const refresh = useCallback(() => {
-    if (workerRef.current) fetchData(workerRef.current);
+    if (workerRef.current && mountedRef.current) fetchData(workerRef.current);
   }, [fetchData]);
 
   return { data, loading, error, refresh };

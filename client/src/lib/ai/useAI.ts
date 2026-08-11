@@ -19,22 +19,16 @@ export { useAIFlashcards } from './hooks/useAIFlashcards';
 export { useAIEvaluate } from './hooks/useAIEvaluate';
 export { useAIDuration } from './hooks/useAIDuration';
 export { useAITagContent } from './hooks/useAITagContent';
-export { useVisionExtract } from './hooks/useVisionExtract';
 export { useAIOptimizeCard } from './hooks/useAIOptimizeCard';
 export { useAIFeynmanQuestion } from './hooks/useAIFeynmanQuestion';
 export { useAIFeynmanEvaluateAnswers } from './hooks/useAIFeynmanEvaluateAnswers';
 export { useAISortInspiration } from './hooks/useAISortInspiration';
 
 // ── v0.9.0 新增 Hook ────────────────────────────────────────
-export { useAIAnchorPoint } from './hooks/useAIAnchorPoint';
-export { useAISocratic } from './hooks/useAISocratic';
 export { useAIPredict } from './hooks/useAIPredict';
 export { useAIRescue } from './hooks/useAIRescue';
 
 // ── 工厂与工具 Hook ───────────────────────────────────────
 export { useAIFeature } from './hooks/useAIFeature';
 export { useAIErrorHandler } from './hooks/useAIErrorHandler';
-
-// ── 共享类型（供 UI 组件按需引用） ─────────────────────────
 export type { AIState } from './hooks/types';
-export { INITIAL_STATE } from './hooks/types';

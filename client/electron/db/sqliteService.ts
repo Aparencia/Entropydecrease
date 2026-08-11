@@ -10,6 +10,7 @@
 
 import Database from 'better-sqlite3';
 import { logger } from '../logger.js';
+import { clearColumnCache } from './sqliteRepository.js';
 
 // ================================================================
 // 模块级状态
@@ -47,6 +48,10 @@ export function initialize(dbPath?: string): Database.Database {
 
   try {
     db = new Database(resolvedPath);
+
+    // CL-M6: 新连接建立时使列名白名单缓存失效——重新初始化到新库/新路径
+    // 后 schema 可能不同，旧缓存会把新列过滤掉导致数据静默丢弃
+    clearColumnCache();
 
     // 开启 WAL 模式：提升并发读写性能，减少锁竞争
     db.pragma('journal_mode = WAL');
@@ -102,6 +107,8 @@ export function close(): void {
   } finally {
     db = null;
     currentDbPath = null;
+    // CL-M6: 连接关闭后缓存同步失效（下次 initialize 会重建）
+    clearColumnCache();
   }
 }
 
@@ -138,6 +145,8 @@ export function checkpointAndClose(): void {
     } finally {
       db = null;
       currentDbPath = null;
+      // CL-M6: 连接关闭后缓存同步失效（下次 initialize 会重建）
+      clearColumnCache();
     }
   }
 }

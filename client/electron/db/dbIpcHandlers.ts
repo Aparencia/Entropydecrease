@@ -44,6 +44,20 @@ const ALLOWED_TABLES = new Set([
   'implementation_intentions',
   // imports — 知识入籍记录（v8 迁移新增）
   'imports',
+  // sop_templates — SOP 标准作业流程模板（v9 迁移新增）
+  'sop_templates',
+  // sop_steps — SOP 模板步骤（v9 迁移新增）
+  'sop_steps',
+  // sop_runs — SOP 执行记录（v9 迁移新增）
+  'sop_runs',
+  // inbox_items — 统一收件箱（v9 迁移新增）
+  'inbox_items',
+  // beta_profile — 内测身份本地缓存（v10 新增，临时收入方案）
+  'beta_profile',
+  // licenses — 激活码本地缓存（v10 新增）
+  'licenses',
+  // invite_codes — 邀请码本地缓存（v10 新增）
+  'invite_codes',
 ]);
 
 /** camelCase → snake_case（用于表名映射） */
@@ -83,6 +97,15 @@ const TABLE_NAME_MAP: Record<string, string> = {
   worldSnapshots: 'world_snapshots',
   // v8 新增：知识入籍记录（阶段 A 入口问题）
   imports: 'imports',
+  // v9 新增：SOP 标准作业流程 + 统一收件箱（Wave 0 地基）
+  sopTemplates: 'sop_templates',
+  sopSteps: 'sop_steps',
+  sopRuns: 'sop_runs',
+  inboxItems: 'inbox_items',
+  // v10 新增：内测身份/激活码/邀请码（临时收入方案）
+  betaProfile: 'beta_profile',
+  licenses: 'licenses',
+  inviteCodes: 'invite_codes',
 };
 
 function resolveTable(table: string): string {
@@ -235,11 +258,13 @@ export function registerDbIpcHandlers(): void {
     }
 
     // 降级方案：LIKE 模糊匹配（兼容 FTS5 不可用或结果为空时）
+    // CL-H3: 与 FTS5 路径一致限制 20 行——常见词（"的/了/是"）LIKE 命中海量行，
+    // 无 LIMIT 会同步全表扫描 + 全量结果经 IPC 传输，卡死主进程与渲染层
     const dbConn = getConnection();
     const like = `%${query}%`;
     if (tableName === 'notes') {
       return dbConn.prepare(
-        `SELECT * FROM notes WHERE title LIKE ? OR content LIKE ?`
+        `SELECT * FROM notes WHERE title LIKE ? OR content LIKE ? LIMIT 20`
       ).all(like, like);
     }
     // 通用回退：获取表的 TEXT 列并搜索
@@ -247,7 +272,7 @@ export function registerDbIpcHandlers(): void {
     const textCols = colInfo.filter((c) => c.type === 'TEXT' && c.name !== 'id');
     if (textCols.length === 0) return [];
     const where = textCols.map((c) => `"${c.name}" LIKE ?`).join(' OR ');
-    return dbConn.prepare(`SELECT * FROM "${tableName}" WHERE ${where}`).all(...textCols.map(() => like));
+    return dbConn.prepare(`SELECT * FROM "${tableName}" WHERE ${where} LIMIT 20`).all(...textCols.map(() => like));
   });
 
   /** db:batch — 批量操作：事务执行 */
@@ -257,6 +282,16 @@ export function registerDbIpcHandlers(): void {
   // JSON 字段会经 entityToRow 序列化、boolean 字段正确映射为 INTEGER 0/1
   safeHandle('db:batch', async (_event, params: { operations: Array<{ type: string; table: string; [key: string]: unknown }> }) => {
     const dbConn = getConnection();
+
+    // CL-M5: 批量操作条数上限——超大数组单事务同步执行会长期持有写锁
+    // （所有其他 db:* IPC 排队）并阻塞主进程事件循环
+    const MAX_BATCH_OPS = 1000;
+    if (!Array.isArray(params.operations) || params.operations.length === 0) {
+      throw new Error('[DB] Batch operations must be a non-empty array');
+    }
+    if (params.operations.length > MAX_BATCH_OPS) {
+      throw new Error(`[DB] Batch operations exceed limit (max ${MAX_BATCH_OPS}, got ${params.operations.length})`);
+    }
 
     const txn = dbConn.transaction(() => {
       for (const op of params.operations) {

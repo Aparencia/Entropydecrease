@@ -8,7 +8,6 @@ import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useInspirationStore, type InspirationTags } from '../store/inspirationStore';
-import { useShallow } from 'zustand/react/shallow';
 import { useAITagContent } from '@/lib/ai/useAI';
 import { useBatchSort } from '../hooks/useBatchSort';
 import { useSortPendingReminder } from '../hooks/useSortPendingReminder';
@@ -35,7 +34,10 @@ import {
 // ─────────────────────────────────────────────────────────────
 
 export default function InspirationPage() {
-  const { items, loadAll, addItem } = useInspirationStore(useShallow(s => s));
+  // P1-5 细粒度订阅：整 store 订阅会在任意灵感变化时重渲染整页
+  const items = useInspirationStore((s) => s.items);
+  const loadAll = useInspirationStore((s) => s.loadAll);
+  const addItem = useInspirationStore((s) => s.addItem);
   const { tagContent, loading: aiLoading } = useAITagContent();
   const { toast } = useToast();
   const { progress, total, isProcessing: batchProcessing, batchSort } = useBatchSort();
@@ -174,7 +176,7 @@ export default function InspirationPage() {
           onClick={enter}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-gradient-to-r from-accent-500 to-brand-500 text-text-inverse hover:from-accent-600 hover:to-brand-600 shadow-sm shadow-accent-500/20"
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-gradient-to-r from-cyber to-brand-500 text-text-inverse hover:from-cyber/90 hover:to-brand-600 shadow-sm shadow-cyber/20"
         >
           <Sparkles className="w-3.5 h-3.5" />
           沉浸
@@ -186,7 +188,7 @@ export default function InspirationPage() {
         variants={inputVariants}
         className={cn(
           'relative bg-bg-secondary/40 backdrop-blur-2xl border border-white/12 dark:border-white/6 rounded-[var(--kb-radius-xl)] p-kb-md',
-          'focus-within:border-accent-400/50 focus-within:shadow-[0_0_24px_rgba(6,182,212,0.1)]',
+          'focus-within:border-accent-400/50 focus-within:shadow-[0_0_24px_rgba(74,155,217,0.1)]',
           'transition-all duration-300',
         )}
       >
@@ -278,8 +280,8 @@ export default function InspirationPage() {
                     disabled={selectedIds.size === 0 || batchProcessing}
                     className={cn(
                       'flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium',
-                      'bg-gradient-to-r from-accent-500 to-brand-500 text-text-inverse',
-                      'hover:from-accent-600 hover:to-brand-600 shadow-sm shadow-accent-500/20',
+                      'bg-gradient-to-r from-cyber to-brand-500 text-text-inverse',
+                      'hover:from-cyber/90 hover:to-brand-600 shadow-sm shadow-cyber/20',
                       'disabled:opacity-50 disabled:cursor-not-allowed',
                     )}
                   >
@@ -295,7 +297,7 @@ export default function InspirationPage() {
             {batchProcessing && total > 0 && (
               <div className="w-full h-1.5 rounded-full bg-bg-secondary overflow-hidden mt-1">
                 <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-accent-500 to-brand-500"
+                  className="h-full rounded-full bg-gradient-to-r from-cyber to-brand-500"
                   initial={{ width: 0 }}
                   animate={{ width: `${(progress / total) * 100}%` }}
                   transition={{ duration: 0.3 }}

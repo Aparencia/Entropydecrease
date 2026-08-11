@@ -97,7 +97,7 @@ export function ConceptInternalized({
               {!prefersReduced && particles.map((p) => (
                 <motion.div
                   key={p.id}
-                  className="absolute rounded-full bg-violet-300/60"
+                  className="absolute rounded-full bg-cyber/60"
                   style={{ width: p.size, height: p.size }}
                   initial={{
                     x: Math.cos(p.angle) * p.radius,
@@ -110,19 +110,19 @@ export function ConceptInternalized({
               ))}
               {/* 珍珠核心 / Pearl core */}
               <motion.div
-                className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-400/30 to-fuchsia-300/20 border border-violet-300/30 flex items-center justify-center"
+                className="w-14 h-14 rounded-full bg-gradient-to-br from-cyber/30 to-fuchsia-300/20 border border-cyber/30 flex items-center justify-center"
                 initial={prefersReduced ? {} : { scale: 0 }}
                 animate={prefersReduced ? {} : { scale: 1 }}
                 transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.5 }}
               >
-                <Sparkles className="w-6 h-6 text-violet-200" strokeWidth={1.5} />
+                <Sparkles className="w-6 h-6 text-cyber" strokeWidth={1.5} />
               </motion.div>
             </div>
 
             {/* 概念名称 / Concept name */}
             <div>
               <h2 className="text-lg font-semibold text-white/90">概念已内化</h2>
-              <p className="text-sm text-violet-200/70 mt-1">
+              <p className="text-sm text-cyber/70 mt-1">
                 你用自己的话讲清了「{concept}」
               </p>
             </div>
@@ -185,7 +185,7 @@ export function ConceptInternalized({
               {onViewFlashcards && convertedCount > 0 && (
                 <button
                   onClick={onViewFlashcards}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-medium text-white bg-violet-600/80 hover:bg-violet-500/80 transition-colors"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-medium text-text-inverse bg-cyber/80 hover:bg-cyber/70 transition-colors"
                 >
                   <Layers className="w-3.5 h-3.5" />
                   查看闪卡

@@ -2,9 +2,11 @@
  * ClassroomPage — 课堂助手（回声定位）独立全页模块（装配层）
  * Echo-location full-page module: assembly layer only.
  *
- * 布局：双阶段左栏（配置态/运行态变形，一屏容纳不滚动）+ 右侧独立滚动内容区。
+ * 布局：双阶段左栏（配置态/运行态变形，一屏容纳不滚动）+ 右侧内容区。
  * 配置态左栏：窗口卡片 → 路径/模式 → 设置折叠区 → 底部声呐启动按钮；
- * 运行态左栏：SonarControls 仪表盘；右侧空态为当前配置说明书（IdleGuidePanel）。
+ * 运行态左栏：SonarControls 仪表盘；右侧空态为当前配置说明书（IdleGuidePanel），
+ * 运行/结果态由 SessionContentView 以「内容 / 分析笔记 / 课堂问答」标签页组织
+ * （统一时间线合并事件与转写，一屏内互不挤压）。
  *
  * @ai-context: classroom 功能模块页面。本文件仅做状态绑定与组件编排，业务
  * 逻辑全部在 useClassroomCapture 及其子 hooks 中，选项文案在 constants.ts。
@@ -17,23 +19,19 @@ import { XCircle, Radar, SpellCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useClassroomCapture } from '../hooks/useClassroomCapture';
 import { classifyAnalysisError } from '../utils/analysisErrors';
-import { LiveTranscript } from '../components/LiveTranscript';
 import { NoteInsertDialog } from '../components/NoteInsertDialog';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { ClassroomStatusBanners } from '../components/ClassroomStatusBanners';
-import { SegmentList } from '../components/SegmentList';
 import { WindowSelectCard } from '../components/WindowSelectCard';
 import { PathModeSelector } from '../components/PathModeSelector';
 import { SettingsCollapse } from '../components/SettingsCollapse';
 import { SonarControls } from '../components/SonarControls';
+import { VisionModeSelector } from '../components/VisionModeSelector';
 import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
 import { IdleGuidePanel } from '../components/IdleGuidePanel';
 import { CourseInfoCard } from '../components/CourseInfoCard';
-import { SmartCapturePanel } from '@/features/notes/components/SmartCapturePanel';
-import { AnalysisPreview } from '@/features/notes/components/AnalysisPreview';
-import { VideoRecordPanel } from '@/features/notes/components/VideoRecordPanel';
 import { AsrModelPrompt } from '../components/AsrModelPrompt';
 import { HotwordDialog } from '../components/HotwordDialog';
+import { SessionContentView } from '../components/SessionContentView';
 
 export default function ClassroomPage() {
   const capture = useClassroomCapture();
@@ -63,36 +61,32 @@ export default function ClassroomPage() {
   }, [capture]);
 
   // M 快捷键：课中标记重点
+  const { handleBookmark } = capture;
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'm' || e.key === 'M') {
       // 避免在输入框中触发
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      capture.handleBookmark();
+      handleBookmark();
     }
-  }, [capture.handleBookmark]);
+  }, [handleBookmark]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  const handleInsertSelected = () => {
-    // 全页模式下暂无笔记编辑器目标，复制到剪贴板
-    const texts = capture.segments.filter((s) => capture.selectedIds.has(s.id)).map((s) => s.text).join('\n\n');
-    if (texts) navigator.clipboard.writeText(texts);
-  };
-  const handleInsertAll = () => {
-    const texts = capture.segments.map((s) => s.text).join('\n\n');
-    if (texts) navigator.clipboard.writeText(texts);
-  };
-
   return (
-    <div className="flex h-full min-h-0">
+    /* 高度锚定视口而非 h-full：面板（FunctionalOverlay）是 max-h + overflow 容器，
+       height:auto 下子级百分比高度失效，h-full 链断裂会让页面高度=内容高度、
+       内容超高时面板整体滚动。面板 sm+ 断点 max-h=85vh（含 1px border ×2）+
+       md 断点 p-8 padding（4rem）→ 内容区恰为 calc(85vh-4rem-2px)，锚定后
+       与面板精确贴合（一屏式布局） */
+    <div className="flex h-[calc(85vh-4rem-2px)] min-h-0">
       {/* ── 左侧控制面板：一屏容纳，不滚动 ── */}
       <div className="w-80 flex-shrink-0 border-r border-border/30 flex flex-col overflow-hidden">
         {/* 标题：回声定位仪式标识（compact） */}
-        <div className="flex items-center px-4 py-3.5 border-b border-border/30">
+        <div className="flex items-center px-4 py-2.5 border-b border-border/30">
           <ModuleRitualHeader
             title="回声定位"
             sealChar="回"
@@ -124,7 +118,7 @@ export default function ClassroomPage() {
         ) : (
           /* 配置态：窗口/路径/模式/设置 + 底部启动按钮 */
           <>
-            <div className="flex-1 min-h-0 p-4 space-y-4">
+            <div className="flex-1 min-h-0 p-3 space-y-2.5 overflow-y-auto">
               <WindowSelectCard
                 windows={capture.windows}
                 selected={capture.selectedWindow}
@@ -138,12 +132,14 @@ export default function ClassroomPage() {
                 mode={capture.mode}
                 onModeChange={capture.handleModeChange}
               />
+              {/* P8 视觉提取模式：写入截图 metadata.visionMode，VisionWorker 按模式提取 */}
+              <VisionModeSelector value={capture.visionMode} onChange={capture.setVisionMode} />
               <SettingsCollapse config={capture.config} onChange={capture.handleConfigChange} />
             </div>
-            <div className="p-4 border-t border-border/20">
+            <div className="p-3 border-t border-border/20">
               <button onClick={capture.requestStart} disabled={!capture.canStart}
                 className={cn(
-                  'w-full flex items-center justify-center gap-2 py-3 rounded-kb-lg text-b2 font-semibold transition-all active:scale-[0.98]',
+                  'w-full flex items-center justify-center gap-2 py-2.5 rounded-kb-lg text-b2 font-semibold transition-all active:scale-[0.98]',
                   capture.canStart
                     ? 'bg-brand-600 text-white hover:bg-brand-700 shadow-kb-sm'
                     : 'bg-bg-secondary text-text-tertiary cursor-not-allowed',
@@ -161,13 +157,13 @@ export default function ClassroomPage() {
         )}
       </div>
 
-      {/* ── 右侧内容区：独立滚动 ── */}
-      <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      {/* ── 右侧内容区：一屏内独立滚动（空态/标签页各自滚动） ── */}
+      <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
         {/* 错误提示（P0-1：按错误类渲染差异化文案与操作按钮，取代固定文案） */}
         {capture.extractionError && (() => {
           const errInfo = classifyAnalysisError(capture.extractionError);
           return (
-            <div className="mx-4 mt-3 p-3 rounded-kb-lg bg-semantic-error/5 border border-semantic-error/10">
+            <div className="mx-4 mt-3 p-3 rounded-kb-lg bg-semantic-error/5 border border-semantic-error/10 flex-shrink-0">
               <div className="flex items-start gap-2">
                 <XCircle className="w-4 h-4 mt-0.5 text-semantic-error" strokeWidth={1.5} />
                 <div className="flex-1 min-w-0">
@@ -195,7 +191,7 @@ export default function ClassroomPage() {
         })()}
 
         {showIdleGuide ? (
-          /* 空态：当前配置说明书 + 课程信息卡 */
+          /* 空态：当前配置说明书 + 课程信息卡（独立滚动） */
           <div className="flex-1 overflow-y-auto">
             {/* 本地 ASR 模型下载引导（首次进入时显示，可选增强） */}
             <AsrModelPrompt />
@@ -213,60 +209,8 @@ export default function ClassroomPage() {
             </IdleGuidePanel>
           </div>
         ) : (
-          <>
-            {/* 运行/结果态：按采集路径条件渲染 */}
-            {capture.capturePath === 'fine' && (
-              <SegmentList
-                segments={capture.segments}
-                selectedIds={capture.selectedIds}
-                onToggleSelect={capture.handleToggleSelect}
-                onInsertSelected={handleInsertSelected}
-                onInsertAll={handleInsertAll}
-              />
-            )}
-
-            {capture.capturePath === 'smart' && (
-              <>
-                <SmartCapturePanel bundle={capture.smartBundle} isRecording={capture.status === 'capturing'} />
-                {/* 状态横幅组（增量分析/转写/音频健康/VAD，抽组件控行数） */}
-                <ClassroomStatusBanners
-                  status={capture.status}
-                  partialCount={capture.partialCount}
-                  transcribedCount={capture.transcribedCount}
-                  audioHealth={capture.audioHealth}
-                  vadStats={capture.vadStats}
-                />
-                {/* 实时转录上屏 */}
-                <LiveTranscript
-                  transcripts={capture.liveTranscripts}
-                  partialText={capture.partialText}
-                  isActive={capture.status === 'capturing' && (capture.mode === 'audio' || capture.mode === 'mixed')}
-                  className="mt-auto"
-                />
-              </>
-            )}
-
-            {capture.capturePath === 'full_record' && (
-              <VideoRecordPanel recordingStatus={capture.recordingStatus} isRecording={capture.status === 'capturing'} />
-            )}
-
-            {/* 分析预览（P0-2：local-concat 降级可重试合并；P0-1：错误按类给按钮） */}
-            {(capture.isAnalyzing || capture.analysisResult || capture.analysisError) && (
-              <AnalysisPreview
-                result={capture.analysisResult}
-                isAnalyzing={capture.isAnalyzing}
-                error={capture.analysisError?.message ?? null}
-                onInsert={() => void handleOpenNoteDialog()}
-                onDismiss={capture.handleDismissAnalysis}
-                onRetry={capture.analysisResult?.modelUsed === 'local-concat'
-                  ? capture.handleRetryMerge
-                  : capture.analysisError?.action === 'settings' ? undefined : capture.handleAnalyze}
-                onGoSettings={capture.analysisError && capture.analysisError.action !== 'retry'
-                  ? () => navigate('/settings') : undefined}
-                onGenerateCards={capture.handleGenerateCards}
-              />
-            )}
-          </>
+          /* 运行/结果态：标签页容器（内容/分析笔记/课堂问答） */
+          <SessionContentView capture={capture} onOpenNoteDialog={() => void handleOpenNoteDialog()} />
         )}
 
         {/* 笔记插入弹窗 */}

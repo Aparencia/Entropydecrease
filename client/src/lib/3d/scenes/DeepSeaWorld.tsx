@@ -10,11 +10,19 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useEffectiveTier } from '@/lib/performance/usePerformanceMode';
+import {
+  patchParticleShader,
+  updateGPUParticleUniforms,
+  addParticleAttributes,
+} from '@/lib/3d/shaders/gpuParticleShaders';
 import { ChaosMist } from '../objects/ChaosMist';
 import { OrderRipples } from '../objects/OrderRipples';
 import { TideBreath } from '../objects/TideBreath';
 import { StrataField } from '../objects/StrataField';
 import { ParticleSystem } from '../objects/ParticleSystem';
+import { JellyfishField } from '../objects/JellyfishField';
+import { FishSchool } from '../objects/FishSchool';
+import { LeviathanShadow } from '../objects/LeviathanShadow';
 
 // ─── 深海背景着色器（渐变+深渊光感） ─────────────────
 const abyssVertexShader = `
@@ -69,8 +77,8 @@ const abyssFragmentShader = `
 /** 深海背景穹顶 */
 function AbyssDome() {
   const uniforms = useMemo(() => ({
-    uColorTop: { value: new THREE.Color('#0A1628') },
-    uColorMid: { value: new THREE.Color('#0D1F3C') },
+    uColorTop: { value: new THREE.Color('#0A1620') },
+    uColorMid: { value: new THREE.Color('#0F1F2E') },
     uColorBottom: { value: new THREE.Color('#0A0E1A') },
     uGlowColor: { value: new THREE.Color('#1A5276') },
     uTime: { value: 0 },
@@ -93,23 +101,20 @@ function AbyssDome() {
   );
 }
 
-// ─── 生物发光粒子层 ──────────────────────────────
+// ─── 生物发光粒子层（GPU 着色器版） ────────────────
 function BioluminescentLayer({ count }: { count: number }) {
   const pointsRef = useRef<THREE.Points>(null);
-  const timeRef = useRef(0);
 
   const { positions, colors, sizes } = useMemo(() => {
     const pos = new Float32Array(count * 3);
     const col = new Float32Array(count * 3);
     const sz = new Float32Array(count);
-
     const colors_pool = [
-      new THREE.Color('#00BFFF'),  // 赛博青
-      new THREE.Color('#818CF8'),  // 靛蓝
-      new THREE.Color('#22D3EE'),  // 青
-      new THREE.Color('#6366F1'),  // 品牌
+      new THREE.Color('#4A9BD9'),
+      new THREE.Color('#6FB4E8'),
+      new THREE.Color('#4A9BD9'),
+      new THREE.Color('#57C6A9'),
     ];
-
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
       pos[i3] = (Math.random() - 0.5) * 50;
@@ -122,40 +127,26 @@ function BioluminescentLayer({ count }: { count: number }) {
     return { positions: pos, colors: col, sizes: sz };
   }, [count]);
 
-  useFrame((_, delta) => {
-    if (!pointsRef.current) return;
-    timeRef.current += Math.min(delta, 0.1);
-    const posAttr = pointsRef.current.geometry.attributes.position as THREE.BufferAttribute;
-    const posArray = posAttr.array as Float32Array;
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    addParticleAttributes(geo, count, (i) => [Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5]);
+    return geo;
+  }, [positions, colors, sizes, count]);
 
-    for (let i = 0; i < count; i++) {
-      const i3 = i * 3;
-      // 缓慢浮动
-      posArray[i3] += Math.sin(timeRef.current * 0.3 + i) * 0.002;
-      posArray[i3 + 1] += Math.sin(timeRef.current * 0.2 + i * 0.5) * 0.003;
-      posArray[i3 + 2] += Math.cos(timeRef.current * 0.25 + i * 0.7) * 0.002;
-    }
-    posAttr.needsUpdate = true;
+  const material = useMemo(() => {
+    const mat = new THREE.PointsMaterial({ vertexColors: true, size: 0.08, transparent: true, opacity: 0.6, sizeAttenuation: true, blending: THREE.AdditiveBlending, depthWrite: false });
+    patchParticleShader(mat, { motion: 'drift', speed: 0.6 });
+    return mat;
+  }, []);
+
+  useFrame(({ clock }) => {
+    if (pointsRef.current) updateGPUParticleUniforms(pointsRef.current.material as THREE.PointsMaterial, clock.getElapsedTime());
   });
 
-  return (
-    <points ref={pointsRef} key={`bio-${count}`}>
-      <bufferGeometry key={`bio-geo-${count}`}>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} count={count} />
-        <bufferAttribute attach="attributes-color" args={[colors, 3]} count={count} />
-        <bufferAttribute attach="attributes-size" args={[sizes, 1]} count={count} />
-      </bufferGeometry>
-      <pointsMaterial
-        vertexColors
-        size={0.08}
-        transparent
-        opacity={0.6}
-        sizeAttenuation
-        blending={THREE.AdditiveBlending}
-        depthWrite={false}
-      />
-    </points>
-  );
+  return <points ref={pointsRef} geometry={geometry} material={material} />;
 }
 
 // ─── 焦散光斑（水下光影） ─────────────────────────
@@ -176,8 +167,8 @@ function CausticLight() {
         const y = Math.random() * 256;
         const r = 5 + Math.random() * 20;
         const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-        g.addColorStop(0, 'rgba(6,182,212,0.08)');
-        g.addColorStop(1, 'rgba(6,182,212,0)');
+        g.addColorStop(0, 'rgba(74,155,217,0.08)');
+        g.addColorStop(1, 'rgba(74,155,217,0)');
         ctx.fillStyle = g;
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -213,12 +204,11 @@ function CausticLight() {
 
 // ─── 体积光柱（God rays 简化版） ─────────────────────
 function LightRays() {
-  const meshRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
 
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
-    uColor: { value: new THREE.Color('#00BFFF') },
+    uColor: { value: new THREE.Color('#4A9BD9') },
   }), []);
 
   useFrame((_, delta) => {
@@ -262,49 +252,41 @@ function LightRays() {
   );
 }
 
-// ─── 海底微粒（缓慢沉降的"海洋雪"） ─────────────────
+// ─── 海底微粒（缓慢沉降，GPU 着色器版） ────────────
 function SeafloorSnow({ count }: { count: number }) {
   const pointsRef = useRef<THREE.Points>(null);
 
-  const { positions, sizes, speeds } = useMemo(() => {
+  const { positions, sizes } = useMemo(() => {
     const pos = new Float32Array(count * 3);
     const sz = new Float32Array(count);
-    const spd = new Float32Array(count);
     for (let i = 0; i < count; i++) {
       pos[i * 3] = (Math.random() - 0.5) * 40;
       pos[i * 3 + 1] = Math.random() * 10 - 12;
       pos[i * 3 + 2] = (Math.random() - 0.5) * 40;
       sz[i] = 0.02 + Math.random() * 0.04;
-      spd[i] = 0.002 + Math.random() * 0.005;
     }
-    return { positions: pos, sizes: sz, speeds: spd };
+    return { positions: pos, sizes: sz };
   }, [count]);
 
-  useFrame((_, delta) => {
-    if (!pointsRef.current) return;
-    const safeDelta = Math.min(delta, 0.1);
-    const posAttr = pointsRef.current.geometry.attributes.position as THREE.BufferAttribute;
-    const pos = posAttr.array as Float32Array;
-    for (let i = 0; i < count; i++) {
-      pos[i * 3 + 1] -= speeds[i] * safeDelta;
-      if (pos[i * 3 + 1] < -12) {
-        pos[i * 3 + 1] = 2;
-        pos[i * 3] = (Math.random() - 0.5) * 40;
-        pos[i * 3 + 2] = (Math.random() - 0.5) * 40;
-      }
-    }
-    posAttr.needsUpdate = true;
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    addParticleAttributes(geo, count, (i) => [0, 0.002 + Math.random() * 0.005, 0]);
+    return geo;
+  }, [positions, sizes, count]);
+
+  const material = useMemo(() => {
+    const mat = new THREE.PointsMaterial({ color: '#8FA3C8', size: 0.03, transparent: true, opacity: 0.3, sizeAttenuation: true, depthWrite: false });
+    patchParticleShader(mat, { motion: 'fall', wrap: true, bounds: { yMin: -12, yMax: 2 }, speed: 0.8 });
+    return mat;
+  }, []);
+
+  useFrame(({ clock }) => {
+    if (pointsRef.current) updateGPUParticleUniforms(pointsRef.current.material as THREE.PointsMaterial, clock.getElapsedTime());
   });
 
-  return (
-    <points ref={pointsRef} key={`snow-${count}`}>
-      <bufferGeometry key={`snow-geo-${count}`}>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} count={count} />
-        <bufferAttribute attach="attributes-size" args={[sizes, 1]} count={count} />
-      </bufferGeometry>
-      <pointsMaterial color="#8FA3C8" size={0.03} transparent opacity={0.3} sizeAttenuation depthWrite={false} />
-    </points>
-  );
+  return <points ref={pointsRef} geometry={geometry} material={material} />;
 }
 
 export function DeepSeaWorld() {
@@ -321,9 +303,9 @@ export function DeepSeaWorld() {
 
       {/* 环境光照 */}
       <ambientLight intensity={0.2} color="#1E3A5F" />
-      <pointLight position={[0, 5, 0]} intensity={0.5} color="#00BFFF" distance={50} />
-      <pointLight position={[-5, -3, -5]} intensity={0.2} color="#6366F1" distance={30} />
-      <pointLight position={[5, -2, 5]} intensity={0.15} color="#22D3EE" distance={30} />
+      <pointLight position={[0, 5, 0]} intensity={0.5} color="#4A9BD9" distance={50} />
+      <pointLight position={[-5, -3, -5]} intensity={0.2} color="#57C6A9" distance={30} />
+      <pointLight position={[5, -2, 5]} intensity={0.15} color="#6FB4E8" distance={30} />
       <hemisphereLight color="#1E3A5F" groundColor="#0A0E1A" intensity={0.3} />
 
       {/* 环境粒子 */}
@@ -332,7 +314,7 @@ export function DeepSeaWorld() {
           count={particleCount}
           bounds={{ x: 30, y: [-15, 5], z: 30 }}
           baseColor="#aaddff"
-          secondaryColor="#6366F1"
+          secondaryColor="#57C6A9"
         />
       )}
 
@@ -354,6 +336,11 @@ export function DeepSeaWorld() {
       {/* 叙事层叠加（宪法第十条）：潮汐=熵的呼吸，地层=累计专注的岩芯 */}
       <TideBreath />
       <StrataField />
+
+      {/* 深海生命层（2026-08-07 新增）：鱼群=思绪游弋，水母=灵感浮现，巨影=未知敬畏 */}
+      <FishSchool />
+      <JellyfishField />
+      <LeviathanShadow />
 
       {/* 后处理 — ── 临时诊断：完全禁用 composer，验证实体是否因此可见 ── */}
       {null}

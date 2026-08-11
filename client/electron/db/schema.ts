@@ -5,8 +5,9 @@
  * @ai-context: SQLite 建表 DDL 唯一权威源——新增表需同步 dbIpcHandlers.ALLOWED_TABLES 白名单。
  */
 import type Database from 'better-sqlite3';
+import { logger } from '../logger.js';
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 10;
 
 export const SCHEMA_DDL = /* sql */ `
 CREATE TABLE IF NOT EXISTS pomodoro_sessions (
@@ -27,7 +28,7 @@ CREATE TABLE IF NOT EXISTS notes (
   template TEXT NOT NULL DEFAULT 'free' CHECK (template IN ('outline','cornell','mindmap','free','qa','blank','video')),
   folder_id TEXT, tags TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
   word_count INTEGER NOT NULL DEFAULT 0, pinned INTEGER NOT NULL DEFAULT 0, video_note_type TEXT,
-  source_ref TEXT,
+  source_ref TEXT, expires_at TEXT, mood TEXT,
   FOREIGN KEY (folder_id) REFERENCES note_folders(id) ON DELETE SET NULL
 );
 CREATE TABLE IF NOT EXISTS note_folders (
@@ -203,6 +204,82 @@ CREATE TABLE IF NOT EXISTS imports (
   settled_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_imports_settled_at ON imports(settled_at);
+-- v9：SOP 标准作业流程模板/步骤/执行记录 + 统一收件箱（Wave 0 地基）
+CREATE TABLE IF NOT EXISTS sop_templates (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  icon TEXT NOT NULL DEFAULT '',
+  category TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT 'user' CHECK (source IN ('builtin','user')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sop_steps (
+  id TEXT PRIMARY KEY,
+  template_id TEXT NOT NULL,
+  step_type TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  config TEXT NOT NULL DEFAULT '{}',
+  "order" INTEGER NOT NULL DEFAULT 0,
+  FOREIGN KEY (template_id) REFERENCES sop_templates(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS sop_runs (
+  id TEXT PRIMARY KEY,
+  template_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running','awaiting_module','completed','aborted')),
+  current_step_index INTEGER NOT NULL DEFAULT 0,
+  step_progress TEXT NOT NULL DEFAULT '{}',
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  FOREIGN KEY (template_id) REFERENCES sop_templates(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS inbox_items (
+  id TEXT PRIMARY KEY,
+  source TEXT NOT NULL DEFAULT 'clipboard' CHECK (source IN ('clipboard','inspiration','import')),
+  title TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','settled','archived')),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sop_steps_template_order ON sop_steps(template_id,"order");
+CREATE INDEX IF NOT EXISTS idx_sop_runs_status_started ON sop_runs(status,started_at);
+CREATE INDEX IF NOT EXISTS idx_inbox_items_status_created ON inbox_items(status,created_at DESC);
+-- v10：内测身份/激活码/邀请码表（临时收入方案）
+CREATE TABLE IF NOT EXISTS beta_profile (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  tier TEXT NOT NULL DEFAULT 'observer',
+  cohort INTEGER NOT NULL DEFAULT 1,
+  joined_at TEXT NOT NULL,
+  lifetime_pro INTEGER NOT NULL DEFAULT 0,
+  badges TEXT NOT NULL DEFAULT '[]',
+  perks_config TEXT NOT NULL DEFAULT '{}',
+  synced_at TEXT
+);
+CREATE TABLE IF NOT EXISTS licenses (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  type TEXT NOT NULL,
+  tier TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  machine_id TEXT,
+  activated_at TEXT,
+  expires_at TEXT,
+  synced_at TEXT
+);
+CREATE TABLE IF NOT EXISTS invite_codes (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  issuer_user_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  used_by_user_id TEXT,
+  used_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_beta_profile_user_id ON beta_profile(user_id);
+CREATE INDEX IF NOT EXISTS idx_licenses_code ON licenses(code);
+CREATE INDEX IF NOT EXISTS idx_invite_codes_issuer ON invite_codes(issuer_user_id);
 `;
 
 /** v3 迁移 DDL：CRDT 同步引擎元数据表（条件执行） */
@@ -231,12 +308,12 @@ export function initializeSchema(db: Database.Database): void {
   // v2 迁移：FSRS-5 扩展字段（条件 ALTER TABLE，幂等）
   const currentVersion = db.pragma('user_version', { simple: true }) as number;
   if (currentVersion < 2) {
-    try {
-      db.exec(`ALTER TABLE flashcards ADD COLUMN stability REAL DEFAULT NULL`);
-    } catch { /* 列已存在 */ }
-    try {
-      db.exec(`ALTER TABLE flashcards ADD COLUMN difficulty REAL DEFAULT NULL`);
-    } catch { /* 列已存在 */ }
+    const ok = alterTableAddColumn(db, `ALTER TABLE flashcards ADD COLUMN stability REAL DEFAULT NULL`)
+      && alterTableAddColumn(db, `ALTER TABLE flashcards ADD COLUMN difficulty REAL DEFAULT NULL`);
+    if (!ok) {
+      logger.error('[Schema] v2 迁移失败，不设置 user_version，下次启动重试');
+      return;
+    }
   }
 
   // v3 迁移：CRDT 同步引擎元数据表
@@ -246,12 +323,12 @@ export function initializeSchema(db: Database.Database): void {
 
   // v4 迁移：search_index 表增加 entity_id 和 entity_type 列
   if (currentVersion < 4) {
-    try {
-      db.exec(`ALTER TABLE search_index ADD COLUMN entity_id TEXT`);
-    } catch { /* 列已存在 */ }
-    try {
-      db.exec(`ALTER TABLE search_index ADD COLUMN entity_type TEXT`);
-    } catch { /* 列已存在 */ }
+    const ok = alterTableAddColumn(db, `ALTER TABLE search_index ADD COLUMN entity_id TEXT`)
+      && alterTableAddColumn(db, `ALTER TABLE search_index ADD COLUMN entity_type TEXT`);
+    if (!ok) {
+      logger.error('[Schema] v4 迁移失败，不设置 user_version，下次启动重试');
+      return;
+    }
   }
 
   // v5 迁移：AI 助手会话/消息/触发表（CREATE IF NOT EXISTS 幂等）
@@ -266,13 +343,38 @@ export function initializeSchema(db: Database.Database): void {
   // v8 迁移：知识入籍——imports 表（DDL 已含在 SCHEMA_DDL）；
   // notes/flashcards 增加 source_ref 溯源列（条件 ALTER TABLE，幂等，不破坏存量）
   if (currentVersion < 8) {
-    try {
-      db.exec(`ALTER TABLE notes ADD COLUMN source_ref TEXT`);
-    } catch { /* 列已存在 */ }
-    try {
-      db.exec(`ALTER TABLE flashcards ADD COLUMN source_ref TEXT`);
-    } catch { /* 列已存在 */ }
+    const ok = alterTableAddColumn(db, `ALTER TABLE notes ADD COLUMN source_ref TEXT`)
+      && alterTableAddColumn(db, `ALTER TABLE flashcards ADD COLUMN source_ref TEXT`);
+    if (!ok) {
+      logger.error('[Schema] v8 迁移失败，不设置 user_version，下次启动重试');
+      return;
+    }
   }
 
+  // v9 迁移：SOP 模板/步骤/执行记录 + 统一收件箱（sop_templates/sop_steps/sop_runs/inbox_items）
+  // 表 DDL 已包含在 SCHEMA_DDL 中（CREATE IF NOT EXISTS 幂等），此处无需额外操作
+
+  // v10 迁移：内测身份/激活码/邀请码表（beta_profile/licenses/invite_codes）
+  // 表 DDL 已包含在 SCHEMA_DDL 中（CREATE IF NOT EXISTS 幂等），此处无需额外操作
+
   db.pragma(`user_version = ${SCHEMA_VERSION}`);
+}
+
+/**
+ * CL-L7: 条件 ALTER TABLE ADD COLUMN——"列已存在"（幂等重试）静默视为成功，
+ * 其他错误（SQLITE_BUSY/磁盘/权限）记录日志并返回 false，由调用方决定
+ * 不推进 user_version（保留下次启动重试机会），避免迁移失败被永久掩盖。
+ */
+function alterTableAddColumn(db: Database.Database, sql: string): boolean {
+  try {
+    db.exec(sql);
+    return true;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/duplicate column/i.test(msg)) {
+      return true; // 列已存在：幂等重试的正常情况
+    }
+    logger.error(`[Schema] ALTER TABLE 失败（非 duplicate column）: ${msg}`);
+    return false;
+  }
 }

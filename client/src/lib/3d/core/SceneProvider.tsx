@@ -19,9 +19,12 @@
  *   需由 LoopResumer 在相位迁移后显式唤醒，否则多次切换后画面永久冻结。
  *
  * @ai-context: 3D 场景核心（R3F）：SceneProvider。
+ *
+ * 渲染后端：使用 THREE.WebGLRenderer（R3F 目前不支持异步渲染器初始化，
+ * 待上游支持后切换回 WebGPURenderer）。
  */
 import { Canvas, useThree } from '@react-three/fiber';
-import { Suspense, useEffect, useLayoutEffect } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useState } from 'react';
 import { Preload } from '@react-three/drei';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { QualityController } from './QualityController';
@@ -44,18 +47,24 @@ interface SceneProviderProps {
  * 确保主题切换时雾色和背景色同步更新
  */
 function ThemeAwareEnvironment() {
-  const { scene } = useThree();
+  const { gl, scene, camera } = useThree();
   const theme = useSceneTheme();
 
   useEffect(() => {
     if (theme === 'deep-sea') {
-      scene.fog = new THREE.FogExp2('#0a0a2e', 0.03);
-      scene.background = new THREE.Color('#0a0a2e');
+      scene.fog = new THREE.FogExp2('#0A1620', 0.03);
+      scene.background = new THREE.Color('#0A1620');
     } else {
       scene.fog = new THREE.FogExp2('#e8f4f8', 0.015);
       scene.background = new THREE.Color('#e8f4f8');
     }
-  }, [theme, scene]);
+    // docked 相位 frameloop='never' 下渲染循环已冻结，invalidate() 早退不触发
+    // 重绘——主题切换后 scene 对象虽已更新但画布仍显示旧帧（背景不立即生效）。
+    // 延迟到宏任务手动渲染一帧：确保同批 theme 消费者的 Three 属性更新全部
+    // 提交后再绘制，一次性开销不破坏冻结策略（内测反馈修复）。
+    const timer = setTimeout(() => gl.render(scene, camera), 0);
+    return () => clearTimeout(timer);
+  }, [theme, scene, camera, gl]);
 
   return null;
 }
@@ -92,6 +101,38 @@ function LoopResumer() {
   return null;
 }
 
+/**
+ * 空闲降帧渲染器 — 静谧档 overview 空闲期的 30fps 渲染
+ *
+ * P1-4：low 档无指针/路由活动 10s 后，Canvas 切 frameloop='demand'，
+ * 本组件以 30fps 定时 invalidate 驱动渲染（慢速粒子/极光在 30fps 下视觉等效）；
+ * 交互/相位变化立即恢复 'always'，cleanup 时 invalidate 一次唤醒循环
+ * （R3F frameloop 状态机切回 always 后需显式唤醒，与 LoopResumer 同因）。
+ */
+function IdleFrameThrottle({ active }: { active: boolean }) {
+  const invalidate = useThree((s) => s.invalidate);
+
+  useEffect(() => {
+    if (!active) {
+      invalidate();
+      return;
+    }
+    const id = setInterval(() => invalidate(), 1000 / 30);
+    return () => {
+      clearInterval(id);
+      invalidate();
+    };
+  }, [active, invalidate]);
+
+  return null;
+}
+
+/** 静谧档空闲判定：超过此时长无交互活动视为空闲（ms） */
+const IDLE_DOWNGRADE_MS = 10_000;
+
+/** 计为交互活动的窗口事件（任一触发即恢复 60fps 并重置空闲计时） */
+const IDLE_POKE_EVENTS = ['pointermove', 'pointerdown', 'wheel', 'keydown'] as const;
+
 export function SceneProvider({ children, interactive = false }: SceneProviderProps) {
   const phase = useOrbitalStore((s) => s.phase);
   const currentModule = useOrbitalStore((s) => s.currentModule);
@@ -113,8 +154,33 @@ export function SceneProvider({ children, interactive = false }: SceneProviderPr
     return () => { clearTimeout(timer); clearTimeout(fallback); };
   }, [phase, currentModule, mode]);
 
+  // P1-4 静谧档空闲降帧：overview 相位 + low 档 + 无交互 10s → demand + 30fps
+  const [idleThrottled, setIdleThrottled] = useState(false);
+  useEffect(() => {
+    if (mode !== 'low' || phase !== 'overview') {
+      setIdleThrottled(false);
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const poke = () => {
+      setIdleThrottled(false);
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => setIdleThrottled(true), IDLE_DOWNGRADE_MS);
+    };
+    IDLE_POKE_EVENTS.forEach((e) => window.addEventListener(e, poke, { passive: true }));
+    poke();
+    return () => {
+      IDLE_POKE_EVENTS.forEach((e) => window.removeEventListener(e, poke));
+      if (timer) clearTimeout(timer);
+    };
+  }, [mode, phase]);
+
   // 帧循环策略：docked 完全暂停（避免活动 canvas 使覆盖层 backdrop-blur 缓存失效）
-  const frameloop: 'always' | 'never' = phase === 'docked' ? 'never' : 'always';
+  const frameloop: 'always' | 'never' | 'demand' = phase === 'docked'
+    ? 'never'
+    : idleThrottled
+      ? 'demand'
+      : 'always';
 
   return (
     <div className="fixed inset-0 z-0" style={{ pointerEvents: interactive ? 'auto' : 'none' }}>
@@ -129,11 +195,14 @@ export function SceneProvider({ children, interactive = false }: SceneProviderPr
         camera={{ fov: 60, near: 0.1, far: 1000, position: [0, 0, 10] }}
         dpr={[1, 2]}
         style={{ background: 'transparent' }}
-        onCreated={({ gl, scene }) => {
+        onCreated={({ gl }) => {
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.toneMappingExposure = 1.0;
-          gl.shadowMap.enabled = true;
-          gl.shadowMap.type = THREE.PCFSoftShadowMap;
+          // P1-3 阴影审计结论：全场景无任何 castShadow 物体（grep 零匹配），
+          // 开启 PCFSoftShadowMap 只会每帧空渲染阴影贴图浪费 GPU；
+          // 未来引入投射物时需在此恢复 shadowMap.enabled = true
+          // gl.shadowMap.enabled = true;
+          // gl.shadowMap.type = THREE.PCFSoftShadowMap;
           // 注意：fog 和 background 由 ThemeAwareEnvironment 组件管理（主题感知）
           // GPU 诊断：打印实际渲染器名称，出现 SwiftShader 即说明落入软件渲染（硬件加速失效）
           const ctx = gl.getContext();
@@ -146,6 +215,8 @@ export function SceneProvider({ children, interactive = false }: SceneProviderPr
       >
         {/* FPS 自动降档仅在概览态测量（entering 飞行帧率不代表设备能力，docked 无帧率可言） */}
         {phase === 'overview' && <PerformanceMonitor />}
+        {/* P1-4：静谧档空闲期以 30fps 驱动渲染（demand 模式） */}
+        <IdleFrameThrottle active={idleThrottled && phase === 'overview' && mode === 'low'} />
         <LoopResumer />
         <ThemeAwareEnvironment />
         <QualityController />

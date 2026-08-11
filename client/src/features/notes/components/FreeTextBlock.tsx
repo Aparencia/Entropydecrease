@@ -1,7 +1,7 @@
 /**
  * @ai-context: 通用组件：FreeTextBlock。
  */
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { GripVertical, Trash2, Copy, Pencil } from 'lucide-react';
@@ -168,13 +168,7 @@ export default function FreeTextBlock({
     setBlockContextMenu(null);
   }, [onDuplicate, block.id]);
 
-  // 清理编辑器
-  useEffect(() => {
-    return () => {
-      editor?.destroy();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // 编辑器生命周期由 @tiptap/react v3 useEditor 托管（卸载时自动销毁），无需自定义 destroy。
 
   const blockHeight = typeof block.size.height === 'number' ? block.size.height : undefined;
 
@@ -194,7 +188,11 @@ export default function FreeTextBlock({
           'bg-bg-elevated rounded-kb-md shadow-sm overflow-hidden flex flex-col border',
           isSelected ? 'ring-2 ring-blue-500/40 border-blue-500' : 'border-border/50',
         )}
-        onClick={(e) => onSelect(block.id, e.shiftKey)}
+        onClick={(e) => {
+          onSelect(block.id, e.shiftKey);
+          // 点击块体即聚焦编辑器，避免首次点击无响应（块内 mousedown 不再被画布 blur）
+          if (!isDraggingRef.current) editor?.commands.focus();
+        }}
         onDoubleClick={(e) => e.stopPropagation()}
         onContextMenu={handleContextMenu}
       >

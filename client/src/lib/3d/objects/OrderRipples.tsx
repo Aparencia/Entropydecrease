@@ -19,7 +19,7 @@ import { useWorldEvents, type RippleOrigin } from '@/features/retention/store/us
 /** 波纹生命周期（秒）与同屏上限 / Ripple lifetime and concurrent cap */
 const RIPPLE_LIFE = 2.2;
 const MAX_CONCURRENT = 3;
-const RIPPLE_COLOR = '#22D3EE';
+const RIPPLE_COLOR = '#6FB4E8';
 
 interface RippleInstance {
   id: number;

@@ -71,7 +71,7 @@ class SocraticDeepeningChain:
             except (json.JSONDecodeError, ValueError):
                 pass
 
-        if data is None:
+        if data is None or not isinstance(data, dict):
             logger.warning("无法解析深化角度 JSON，返回降级结果")
             return {"angles": []}
 

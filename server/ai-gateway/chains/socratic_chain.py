@@ -19,7 +19,21 @@ from providers.base_provider import AIProvider
 logger = logging.getLogger(__name__)
 
 # Prompt 模板路径
-PROMPT_TEMPLATE_PATH = Path(__file__).parent.parent / "prompts" / "socratic_v1.txt"
+PROMPT_TEMPLATE_PATH_MAP = {
+    "socratic": Path(__file__).parent.parent / "prompts" / "socratic_v1.txt",
+    "mirror": Path(__file__).parent.parent / "prompts" / "mirror_v1.txt",
+    "student": Path(__file__).parent.parent / "prompts" / "student_v1.txt",
+}
+
+# 各模式系统提示词
+SYSTEM_PROMPT_MAP = {
+    "socratic": "你是苏格拉底式导师，绝不直接给出答案，用问题引导思考。请务必以 JSON 格式输出。",
+    "mirror": "你是一面思考的镜子，绝不直接回答，将问题反射回去。请务必以 JSON 格式输出。",
+    "student": "你是一个不太明白的学生，通过合理错误反映用户盲点。请务必以 JSON 格式输出。",
+}
+
+# 默认 Prompt 模板路径
+PROMPT_TEMPLATE_PATH = PROMPT_TEMPLATE_PATH_MAP["socratic"]
 
 # 最大对话轮次（一问一答为一轮）
 MAX_TURNS = 5
@@ -39,11 +53,18 @@ class SocraticChain:
         self.model = model
         self._prompt_template: str | None = None
 
-    def _load_prompt_template(self) -> str:
-        """加载 prompt 模板文件"""
-        if self._prompt_template is None:
-            self._prompt_template = PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
-        return self._prompt_template
+    def _load_prompt_template(self, mode: str = "socratic") -> str:
+        """加载 prompt 模板文件（按模式选择）"""
+        cache_key = f"_{mode}"
+        cached = getattr(self, cache_key, None)
+        if cached is not None:
+            return cached
+        path = PROMPT_TEMPLATE_PATH_MAP.get(mode, PROMPT_TEMPLATE_PATH_MAP["socratic"])
+        template = path.read_text(encoding="utf-8")
+        setattr(self, cache_key, template)
+        if mode == "socratic":
+            self._prompt_template = template
+        return template
 
     def _preprocess_topic(self, topic: str) -> str:
         """预处理学习主题"""
@@ -88,7 +109,7 @@ class SocraticChain:
 
         return "\n".join(lines) if lines else "无（这是第一轮对话）", turn_count
 
-    def _parse_response(self, content: str) -> dict[str, Any]:
+    def _parse_response(self, content: str, mode: str = "socratic") -> dict[str, Any]:
         """
         容错解析苏格拉底追问 JSON 输出
         """
@@ -117,7 +138,7 @@ class SocraticChain:
             except (json.JSONDecodeError, ValueError):
                 pass
 
-        if data is None:
+        if data is None or not isinstance(data, dict):
             logger.warning("无法解析苏格拉底追问 JSON，返回降级结果")
             return {
                 "question": "你能用自己的话解释一下这个概念吗？",
@@ -126,10 +147,35 @@ class SocraticChain:
                 "depth_level": 1,
             }
 
-        return self._validate_response(data)
+        return self._validate_response(data, mode)
 
-    def _validate_response(self, data: dict[str, Any]) -> dict[str, Any]:
-        """验证并规范化响应字段"""
+    def _validate_response(self, data: dict[str, Any], mode: str = "socratic") -> dict[str, Any]:
+        """验证并规范化响应字段（按模式分支校验，非法/缺失字段用兜底值）"""
+        if mode == "mirror":
+            # 反问镜：不直接回答，将问题以另一种视角反弹回去
+            reflection_question = str(data.get("reflection_question", "")).strip()
+            if not reflection_question:
+                reflection_question = "你为什么会这样想？能展开说说吗？"
+            strategy = str(data.get("strategy_used", "clarify")).strip()
+            if strategy not in ("clarify", "assume", "evidence", "consequence", "perspective"):
+                strategy = "clarify"
+            return {
+                "reflection_question": reflection_question[:500],
+                "strategy_used": strategy,
+            }
+        if mode == "student":
+            # AI 学生：扮演不太懂的学生，故意犯常见错误暴露薄弱点
+            student_response = str(data.get("student_response", "")).strip()
+            if not student_response:
+                student_response = "这个概念我不太明白，你能再讲讲吗？"
+            error_type = str(data.get("error_type", "confusion")).strip()
+            if error_type not in ("confusion", "misconception", "overgeneralization", "omission"):
+                error_type = "confusion"
+            return {
+                "student_response": student_response[:1000],
+                "error_type": error_type,
+            }
+        # socratic 默认模式（原有字段校验不变）
         question = str(data.get("question", "")).strip()
         if not question:
             question = "你能用自己的话解释一下这个概念吗？"
@@ -154,37 +200,44 @@ class SocraticChain:
         self,
         topic: str,
         history: list[dict[str, str]] | None = None,
+        mode: str = "socratic",
     ) -> dict[str, Any]:
         """
-        生成下一个苏格拉底式追问
+        生成下一个苏格拉底式追问（支持多模式）
 
         Args:
             topic:   学习主题
             history: 对话历史列表 [{"role": "learner"|"tutor", "content": "..."}]
+            mode:    模式：socratic（默认追问）/ mirror（反问镜）/ student（AI 学生）
 
         Returns:
-            dict: {question, hint, thinking_direction, depth_level, status, ...}
+            dict: 各模式不同字段，统一包含 turn_count, status, model, tokens_used, latency_ms
         """
+        if mode not in ("socratic", "mirror", "student"):
+            mode = "socratic"
+
         processed_topic = self._preprocess_topic(topic)
         conversation_history = history or []
 
         history_text, turn_count = self._format_history(conversation_history)
 
         logger.info(
-            "SocraticChain.run: topic=%s, history_turns=%d",
-            processed_topic[:50], turn_count,
+            "SocraticChain.run: mode=%s, topic=%s, history_turns=%d",
+            mode, processed_topic[:50], turn_count,
         )
 
-        template = self._load_prompt_template()
+        template = self._load_prompt_template(mode)
         prompt = template.format(
             topic=processed_topic,
             history=history_text,
             history_count=turn_count,
         )
 
+        system_prompt = SYSTEM_PROMPT_MAP.get(mode, SYSTEM_PROMPT_MAP["socratic"])
+
         result = await self.provider.generate(
             prompt=prompt,
-            system_prompt="你是苏格拉底式导师，绝不直接给出答案，用问题引导思考。请务必以 JSON 格式输出。",
+            system_prompt=system_prompt,
             model=self.model,
             temperature=0.7,
             max_tokens=512,
@@ -192,11 +245,19 @@ class SocraticChain:
             _feature="socratic",
         )
 
-        parsed = self._parse_response(result["content"])
-        status = "success" if parsed["question"] != "你能用自己的话解释一下这个概念吗？" else "degraded"
+        parsed = self._parse_response(result["content"], mode)
+
+        # 不同模式的主状态字段不同
+        if mode == "mirror":
+            status = "success" if parsed.get("reflection_question") else "degraded"
+        elif mode == "student":
+            status = "success" if parsed.get("student_response") else "degraded"
+        else:
+            status = "success" if parsed.get("question") and parsed["question"] != "你能用自己的话解释一下这个概念吗？" else "degraded"
 
         return {
             **parsed,
+            "mode": mode,
             "turn_count": turn_count + 1,
             "status": status,
             "model": result["model"],

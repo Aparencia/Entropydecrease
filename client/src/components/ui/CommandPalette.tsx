@@ -8,7 +8,7 @@ import {
   Search, X, ArrowRight,
   LayoutDashboard, Timer, FileText, Layers, Lightbulb, BarChart3, Settings,
   FilePlus, FolderPlus, Import, Download, Moon, CheckCircle,
-  Palette, Brain, Database, Info,
+  Palette, Brain, Database, Info, GraduationCap, ListChecks,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -17,13 +17,41 @@ import { useToast } from '@/components/ui/Toast';
 import { commandRegistry } from '@/lib/commandPalette/registry';
 import { registerDefaultCommands } from '@/lib/commandPalette/defaultCommands';
 import type { Command } from '@/lib/commandPalette/registry';
+import { useNoteStore } from '@/features/notes/store/useNoteStore';
+import type { SearchEntityType } from '@/types/models';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
 const iconMap: Record<string, LucideIcon> = {
   LayoutDashboard, Timer, FileText, Layers, Lightbulb, BarChart3, Settings,
   FilePlus, FolderPlus, Import, Download, Moon, CheckCircle,
-  Palette, Brain, Database, Info,
+  Palette, Brain, Database, Info, GraduationCap, ListChecks,
 };
+
+/** 搜索结果实体类型 → 图标名（与 iconMap 对应） */
+const ENTITY_ICONS: Record<SearchEntityType, string> = {
+  note: 'FileText',
+  flashcard: 'Layers',
+  feynman: 'Brain',
+  inspiration: 'Lightbulb',
+  classroom: 'GraduationCap',
+};
+
+/** 搜索结果实体类型 → 目标路由（note 精确到单篇，其余落模块页） */
+function contentRoute(type: SearchEntityType, entityId: string): string {
+  switch (type) {
+    case 'note': return `/notes/${entityId}`;
+    case 'flashcard': return '/flashcards';
+    case 'feynman': return '/feynman';
+    case 'inspiration': return '/inspiration';
+    case 'classroom': return '/classroom';
+    default: return '/';
+  }
+}
+
+/** 去掉搜索高亮标记后的纯文本片段 */
+function stripMarkup(html: string): string {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
 function CommandIcon({ name, className }: { name?: string; className?: string }) {
   if (!name || !iconMap[name]) return null;
@@ -32,19 +60,20 @@ function CommandIcon({ name, className }: { name?: string; className?: string })
 }
 
 const categoryLabels: Record<Command['category'], string> = {
-  navigation: '导航', action: '操作', settings: '设置',
+  navigation: '导航', action: '操作', settings: '设置', content: '内容',
 };
 
 /** 导航命令 ID → 目标路由（用于判断目标≠当前时播放切换音效） */
 const NAV_COMMAND_ROUTES: Record<string, string> = {
   'nav-dashboard': '/', 'nav-pomodoro': '/pomodoro', 'nav-notes': '/notes',
   'nav-flashcards': '/flashcards', 'nav-feynman': '/feynman', 'nav-analytics': '/analytics',
-  'nav-classroom': '/classroom', 'nav-settings': '/settings',
+  'nav-classroom': '/classroom', 'nav-sop': '/sop', 'nav-settings': '/settings',
 };
 const categoryColors: Record<Command['category'], string> = {
   navigation: 'bg-accent-500/15 text-accent-500',
   action: 'bg-semantic-success/15 text-semantic-success',
   settings: 'bg-accent/15 text-accent-500',
+  content: 'bg-brand-500/15 text-brand-600',
 };
 
 function groupByCategory(commands: Command[]): Array<{ category: Command['category']; items: Command[] }> {
@@ -68,6 +97,8 @@ export default function CommandPalette() {
   const registeredRef = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // 全局内容搜索：复用笔记 store 的 searchNotes（dexie 全局索引，多实体）
+  const searchResults = useNoteStore((s) => s.searchResults);
 
   useEffect(() => {
     if (!registeredRef.current) {
@@ -76,7 +107,36 @@ export default function CommandPalette() {
     }
   }, []);
 
-  const filtered = useMemo(() => commandRegistry.search(query), [query]);
+  // 输入防抖 250ms 后执行全局内容搜索；清空输入时清除结果
+  useEffect(() => {
+    if (!query.trim()) {
+      useNoteStore.getState().searchNotes('');
+      return;
+    }
+    const timer = setTimeout(() => {
+      useNoteStore.getState().searchNotes(query, { limit: 6, fuzzy: true });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // 搜索结果包装为 Command（category=content），与命令列表统一键盘导航/渲染
+  const contentCommands = useMemo<Command[]>(() => {
+    if (!query.trim()) return [];
+    return searchResults.map((r) => ({
+      id: `search-${r.entityType}-${r.entityId}`,
+      label: r.title || '未命名',
+      description: stripMarkup(r.snippet).slice(0, 60),
+      icon: ENTITY_ICONS[r.entityType],
+      category: 'content' as const,
+      execute: () => navigate(contentRoute(r.entityType, r.entityId)),
+    }));
+  }, [query, searchResults, navigate]);
+
+  // 有输入时：内容结果置顶 + 命令匹配结果；无输入时：全部命令（分组展示）
+  const filtered = useMemo(
+    () => (query.trim() ? [...contentCommands, ...commandRegistry.search(query)] : commandRegistry.search(query)),
+    [query, contentCommands],
+  );
   const groups = useMemo(() => (query ? null : groupByCategory(filtered)), [query, filtered]);
   const flatList = filtered;
 
@@ -152,7 +212,7 @@ export default function CommandPalette() {
           <motion.div
             className={cn(
               'bg-bg-elevated/90 backdrop-blur-2xl rounded-[var(--kb-radius-xl)] shadow-2xl',
-              'w-[560px] max-h-[400px] flex flex-col',
+              'w-[560px] max-h-[520px] flex flex-col',
               'border border-border/40',
             )}
             initial={{ opacity: 0, scale: 0.95, y: -20 }}
@@ -171,7 +231,7 @@ export default function CommandPalette() {
                 ref={inputRef}
                 value={query}
                 onChange={(e) => { setQuery(e.target.value); setSelectedIndex(0); }}
-                placeholder="输入命令或搜索功能…"
+                placeholder="搜索内容或输入命令…"
                 size="lg"
                 prefix={<Search className="w-4 h-4" />}
                 suffix={query ? (
@@ -193,7 +253,7 @@ export default function CommandPalette() {
                 <motion.div className="flex flex-col items-center justify-center py-8 gap-2"
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                   <Search className="w-8 h-8 text-text-tertiary" />
-                  <p className="text-b2 text-text-tertiary">未找到匹配命令</p>
+                  <p className="text-b2 text-text-tertiary">未找到匹配内容或命令</p>
                 </motion.div>
               ) : groups ? (
                 groups.map((group) => (

@@ -42,9 +42,14 @@ export class OfflineQueue {
     const deviceId = getDeviceId();
 
     // 在 Dexie 事务内完成"读 max version + 1 + 写入"，避免版本号竞态
+    // SYNC2-L4: 取最大值按 version（单调自增）而非 createdAt——Date 毫秒
+    // 精度下同一毫秒的并发写入会取到错误基线，产生重复版本号
+    // GW-3: version 非索引字段，orderBy 会抛 SchemaError（Dexie 硬性要求）——
+    // 改用 toArray 后内存排序（队列数据量小，性能可接受）
     await db.transaction('rw', db.offlineQueue, async () => {
-      const items = await db.offlineQueue.orderBy('createdAt').reverse().limit(1).toArray();
-      const version = items.length > 0 ? (items[0].version || 0) + 1 : 1;
+      const items = await db.offlineQueue.toArray();
+      items.sort((a, b) => (a.version ?? 0) - (b.version ?? 0));
+      const version = items.length > 0 ? (items[items.length - 1].version || 0) + 1 : 1;
 
       await db.offlineQueue.add({
         id,
@@ -66,7 +71,10 @@ export class OfflineQueue {
    * 获取所有待处理队列项
    */
   async getPendingItems(): Promise<OfflineQueueItem[]> {
-    return db.offlineQueue.orderBy('version').toArray();
+    // GW-3: version 非索引字段，orderBy 抛 SchemaError（Dexie 硬性要求）——
+    // 原实现从未真正工作；改 toArray 后内存排序
+    const items = await db.offlineQueue.toArray();
+    return items.sort((a, b) => (a.version ?? 0) - (b.version ?? 0));
   }
 
   /**
@@ -120,7 +128,9 @@ export class OfflineQueue {
    */
   async getReadyItems(maxRetries: number = 5): Promise<OfflineQueueItem[]> {
     const now = Date.now();
-    const items = await db.offlineQueue.orderBy('version').toArray();
+    // GW-3: 同 getPendingItems——orderBy('version') 抛 SchemaError，改内存排序
+    const items = await db.offlineQueue.toArray();
+    items.sort((a, b) => (a.version ?? 0) - (b.version ?? 0));
     return items.filter(
       item =>
         item.retryCount < maxRetries &&

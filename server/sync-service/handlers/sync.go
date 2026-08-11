@@ -91,8 +91,11 @@ func Push(c *gin.Context) {
 			}
 			entityExists := result.RowsAffected > 0
 
-			// M1: 版本比较在事务锁内执行
-			if entityExists && op.Version < ev.Version {
+			// SYNC-H1: 冲突判定收紧为 client version <= server version。
+			// 原实现仅拒绝 <，两台设备基于同一版本各自编辑会产生相同版本号
+			// 不同内容，后到者静默覆盖先到者（数据丢失且无冲突提示）。
+			// 相同版本的幂等重试由 op.ID 去重处理，不受影响。
+			if entityExists && op.Version <= ev.Version {
 				// Conflict: client is behind server.
 				conflicts = append(conflicts, ConflictInfo{
 					EntityType:    op.EntityType,
@@ -190,11 +193,26 @@ func Push(c *gin.Context) {
 
 	// Broadcast accepted operations to the user's other online devices via WebSocket.
 	// M11: 广播同时携带 ServerSeqNo（Pull 游标）与 Version（实体版本），语义各自独立。
-	if len(accepted) > 0 && len(opSeqNoByID) > 0 {
+	// SYNC-M2: 广播条件从 opSeqNoByID 非空改为 accepted 非空——
+	// 全部操作无 ID（服务端 fallback ID）时变更已落库但不再被广播；
+	// 空 ID 操作同样需要广播（其 ServerSeqNo 为 0，客户端按实体版本收敛）。
+	if len(accepted) > 0 {
+		skippedSet := make(map[string]bool, len(skipped))
+		for _, id := range skipped {
+			skippedSet[id] = true
+		}
+		conflictKeys := make(map[string]bool, len(conflicts))
+		for _, cf := range conflicts {
+			conflictKeys[cf.EntityType+":"+cf.EntityID] = true
+		}
+
 		wsOps := make([]WSOperationPayload, 0, len(accepted))
 		for _, op := range req.Operations {
-			seqNo, ok := opSeqNoByID[op.ID]
-			if !ok {
+			// 跳过被去重跳过或冲突的操作
+			if op.ID != "" && skippedSet[op.ID] {
+				continue
+			}
+			if conflictKeys[op.EntityType+":"+op.EntityID] {
 				continue
 			}
 			wsOps = append(wsOps, WSOperationPayload{
@@ -203,7 +221,7 @@ func Push(c *gin.Context) {
 				Operation:   op.Operation,
 				Data:        op.Payload,
 				Version:     op.Version,
-				ServerSeqNo: seqNo,
+				ServerSeqNo: opSeqNoByID[op.ID], // 空 ID 操作未登记序号时为 0
 				DeviceID:    req.DeviceID,
 			})
 		}

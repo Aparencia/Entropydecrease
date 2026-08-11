@@ -38,3 +38,55 @@ export function extractLinkTargets(content: string): string[] {
   walk(doc);
   return [...targets];
 }
+
+/**
+ * 提取每个 wiki-link 的上下文文本（前后各 N 字符）。
+ * Extract surrounding context text for each wiki-link target.
+ */
+export interface LinkTargetWithContext {
+  id: string;
+  contextText: string;
+}
+
+export function extractLinkContexts(content: string, contextChars = 60): LinkTargetWithContext[] {
+  let doc: unknown;
+  try {
+    doc = JSON.parse(content);
+  } catch {
+    return [];
+  }
+
+  const results: LinkTargetWithContext[] = [];
+  const seen = new Set<string>();
+
+  const walk = (node: unknown, parentText: string): string => {
+    if (!node || typeof node !== 'object') return '';
+    const n = node as { type?: unknown; attrs?: unknown; content?: unknown; text?: string };
+
+    if (n.type === 'wikiLink') {
+      const id = (n.attrs as { id?: unknown } | undefined)?.id;
+      if (typeof id === 'string' && id && !seen.has(id)) {
+        seen.add(id);
+        // 取前后各 N 字符作为上下文
+        const start = Math.max(0, parentText.length - contextChars);
+        const context = parentText.slice(start).trim();
+        if (context) {
+          results.push({ id, contextText: context.slice(0, contextChars * 2) });
+        }
+      }
+      return '';
+    }
+
+    const text = typeof n.text === 'string' ? n.text : '';
+    let accumulated = text;
+    if (Array.isArray(n.content)) {
+      for (const child of n.content) {
+        accumulated += walk(child, accumulated);
+      }
+    }
+    return accumulated;
+  };
+
+  walk(doc, '');
+  return results;
+}

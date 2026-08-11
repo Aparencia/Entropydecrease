@@ -39,6 +39,8 @@ def dedup_paragraphs(text: str, threshold: float = 0.85) -> str:
     @ai-context 保序策略——逐段与所有已保留段落比较，相似度 > threshold
     时丢弃当前段落（保留首次出现的版本），段落原文与顺序均不改动。
     分隔符统一为一个空行（Markdown 语义等价）。
+    GW-L2: 长度预过滤——仅与词集大小相近（±40%）的已保留段落计算 Jaccard，
+    长度悬殊的段落必然低相似度，可显著降低长文去重的 O(n²) 实际开销。
 
     Args:
         text:      待去重的 Markdown 文本
@@ -57,9 +59,13 @@ def dedup_paragraphs(text: str, threshold: float = 0.85) -> str:
 
     for para in paragraphs:
         tokens = _tokenize(para)
-        # 与所有已保留段落比较，命中即丢弃当前段落
+        # 长度预过滤：仅与词集大小相近的已保留段落比较
+        len_lo = int(len(tokens) * 0.6)
+        len_hi = int(len(tokens) * 1.4)
         is_duplicate = any(
-            _jaccard(tokens, prev) > threshold for prev in kept_tokens
+            len(prev) >= len_lo and len(prev) <= len_hi
+            and _jaccard(tokens, prev) > threshold
+            for prev in kept_tokens
         )
         if is_duplicate:
             continue

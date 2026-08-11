@@ -68,8 +68,12 @@ async def summarize(request: Request, body: SummarizeRequest) -> SummarizeRespon
     logger.info("摘要请求: user=%s, text_length=%d", user_id, len(body.text))
 
     # 生成 AI 响应缓存键（基于输入文本 + 选项）
+    # GW-M10: 键前缀 user_id——输入哈希可预测，跨用户共享缓存会
+    # 造成隐私内容交叉泄漏（用户 B 提交相同文本命中用户 A 的结果）
     options_str = str(body.options.model_dump())
-    cache_key = hashlib.sha256((body.text + options_str).encode()).hexdigest()
+    cache_key = hashlib.sha256(
+        (f"{user_id}:{body.text}:{options_str}").encode()
+    ).hexdigest()
 
     # 检查 Redis AI 响应缓存
     cache = get_cache()

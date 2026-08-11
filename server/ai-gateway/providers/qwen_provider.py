@@ -59,7 +59,8 @@ class QwenProvider(AIProvider, QwenVisionMixin):
         使用 openai 兼容 SDK 发起请求，支持 JSON Mode 输出。
         """
         # Key 轮询：将请求分散到多个 Key 以突破单一 Key 的 RPM 限制
-        await self._rotate_api_key()
+        # GW-3: 内部不再轮询——已上移至 with_retry_and_timeout wrapper 统一
+        # 处理，避免与 wrapper 双重轮询（偶数 Key 配置下轮询失效）
         start_time = time.monotonic()
 
         # 构建消息列表（中文系统提示）
@@ -87,8 +88,14 @@ class QwenProvider(AIProvider, QwenVisionMixin):
             # 提取结果
             content = response.choices[0].message.content or ""
             tokens_used = 0
+            input_tokens = 0
+            output_tokens = 0
             if response.usage:
                 tokens_used = response.usage.total_tokens or 0
+                # GW-2#6: 提取真实 input/output 拆分供成本记账（OpenAI 兼容
+                # usage 字段），fallback 链不再对半估算
+                input_tokens = getattr(response.usage, "prompt_tokens", 0) or 0
+                output_tokens = getattr(response.usage, "completion_tokens", 0) or 0
 
             logger.info(
                 "QwenProvider 调用成功: model=%s, tokens=%d, latency=%dms",
@@ -98,6 +105,8 @@ class QwenProvider(AIProvider, QwenVisionMixin):
             return {
                 "content": content,
                 "tokens_used": tokens_used,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
                 "model": model,
                 "latency_ms": latency_ms,
             }
@@ -114,6 +123,7 @@ class QwenProvider(AIProvider, QwenVisionMixin):
         sample_rate: int = 16000,
         channels: int = 1,
         model: str = "qwen3-asr-flash",
+        hotwords: str = "",
     ) -> dict[str, Any]:
         """
         调用阿里云百炼 Qwen3-ASR-Flash 语音转文字
@@ -123,6 +133,7 @@ class QwenProvider(AIProvider, QwenVisionMixin):
         官方调用规范：chat.completions + input_audio 内容块（Base64 Data URL，
         编码后 ≤10MB），语言经 extra_body.asr_options.language 指定，
         language="auto" 时不传该字段由模型自动检测。
+        hotwords 经 asr_options.hotwords 透传（Qwen3-ASR-Flash 支持热词增强）。
         """
         start_time = time.monotonic()
 
@@ -134,6 +145,8 @@ class QwenProvider(AIProvider, QwenVisionMixin):
             asr_options: dict[str, Any] = {"enable_itn": True}
             if language != "auto":
                 asr_options["language"] = language
+            if hotwords:
+                asr_options["hotwords"] = hotwords
 
             response = await self._client.chat.completions.create(
                 model=model,
@@ -163,7 +176,10 @@ class QwenProvider(AIProvider, QwenVisionMixin):
                 "text": text,
                 "segments": [],
                 "language": language,
-                "confidence": 0.9,
+                # GW-M15: DashScope OpenAI 兼容 ASR 响应不提供置信度字段，
+                # 原硬编码 0.9 是编造数据——改为 0.0 明确表示"无置信度数据"，
+                # 客户端不应据此做阈值过滤
+                "confidence": 0.0,
                 "model": model,
                 "latency_ms": latency_ms,
             }

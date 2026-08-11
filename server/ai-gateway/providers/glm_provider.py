@@ -70,13 +70,14 @@ class GLMProvider(AIProvider):
         使用 openai 兼容 SDK 发起请求，glm-4.6v-flash 模型免费。
         """
         # Key 轮询：将请求分散到多个 Key 以突破单一 Key 的 RPM 限制
-        await self._rotate_api_key()
+        # GW-3: 内部不再轮询——已上移至 with_retry_and_timeout wrapper 统一
+        # 处理，避免与 wrapper 双重轮询（偶数 Key 配置下轮询失效）
+        start_time = time.monotonic()
         # GLM 免费 flash 模型输出上限 1024 tokens（与 generate_vision 的 clamp 对齐）：
         # 超限会被 API 参数校验直接拒绝，导致 Qwen 限流降级到 GLM 时
         # fallback 链在最需要兑底的时刻断裂（重试 3 次后集体失效）
         if "flash" in model.lower():
             max_tokens = min(max_tokens, 1024)
-        start_time = time.monotonic()
 
         # 构建消息列表（中文系统提示）
         messages: list[dict[str, str]] = []
@@ -102,8 +103,14 @@ class GLMProvider(AIProvider):
             # 提取结果
             content = response.choices[0].message.content or ""
             tokens_used = 0
+            input_tokens = 0
+            output_tokens = 0
             if response.usage:
                 tokens_used = response.usage.total_tokens or 0
+                # GW-2#6: 提取真实 input/output 拆分供成本记账（OpenAI 兼容
+                # usage 字段），fallback 链不再对半估算
+                input_tokens = getattr(response.usage, "prompt_tokens", 0) or 0
+                output_tokens = getattr(response.usage, "completion_tokens", 0) or 0
 
             logger.info(
                 "GLMProvider 调用成功: model=%s, tokens=%d, latency=%dms",
@@ -113,6 +120,8 @@ class GLMProvider(AIProvider):
             return {
                 "content": content,
                 "tokens_used": tokens_used,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
                 "model": model,
                 "latency_ms": latency_ms,
             }
@@ -129,6 +138,7 @@ class GLMProvider(AIProvider):
         sample_rate: int = 16000,
         channels: int = 1,
         model: str = "glm-asr",
+        hotwords: str = "",
     ) -> dict[str, Any]:
         """
         调用智谱 GLM-ASR 语音转文字
@@ -137,6 +147,7 @@ class GLMProvider(AIProvider):
         经 OpenAI 兼容 SDK 的 audio.transcriptions.create 调用。官方参数仅
         model/file(或 file_base64)/prompt/hotwords/stream，不支持 language，
         故不传；音频限制 wav/mp3、≤25MB、时长 ≤30 秒。
+        hotwords 经 kwargs 透传（GLM-ASR 官方支持）。
         """
         start_time = time.monotonic()
 
@@ -150,6 +161,8 @@ class GLMProvider(AIProvider):
                 "model": model,
                 "file": audio_file,
             }
+            if hotwords:
+                kwargs["hotwords"] = hotwords
 
             response = await self._client.audio.transcriptions.create(**kwargs)
 
@@ -165,7 +178,10 @@ class GLMProvider(AIProvider):
                 "text": text,
                 "segments": [],
                 "language": language,
-                "confidence": 0.9,
+                # GW-2#11: OpenAI 兼容 ASR 响应不提供置信度字段，
+                # 原硬编码 0.9 是编造数据——改为 0.0 明确表示"无置信度数据"，
+                # 客户端不应据此做阈值过滤（与 QwenProvider GW-M15 对齐）
+                "confidence": 0.0,
                 "model": model,
                 "latency_ms": latency_ms,
             }
@@ -249,6 +265,10 @@ class GLMProvider(AIProvider):
                 "tokens_used": tokens_used,
                 "model": model,
                 "latency_ms": latency_ms,
+                # GW-2#4: clamp 后实际生效的 max_tokens，供 chain 侧截断检测使用
+                #（与 generate_vision_multi 保持一致；原实现缺此字段，
+                # full 模式请求 4096 被 clamp 到 1024 后截断不可感知）
+                "max_tokens": max_tokens,
             }
 
         except Exception as e:

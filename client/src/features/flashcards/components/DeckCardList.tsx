@@ -7,7 +7,7 @@
  */
 import { motion } from 'framer-motion';
 import { Card, Tag } from '@/components/ui';
-import { BookOpen, Sparkles, Clock, CheckCircle2, Pencil, Trash2, ExternalLink } from 'lucide-react';
+import { BookOpen, Sparkles, Clock, CheckCircle2, Pencil, Trash2, ExternalLink, CheckSquare, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tip } from '@/components/ui/Tip';
 import type { Flashcard } from '@/types/models';
@@ -70,10 +70,15 @@ export interface DeckCardListProps {
   onEdit: (card: Flashcard) => void;
   onDelete: (cardId: string | null) => void;
   onOpenSourceNote: (noteId: string) => void;
+  /** 批量模式：卡片点击切换选中，隐藏编辑/删除按钮 */
+  batchMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }
 
 export function DeckCardList({
   cards, prefersReduced, onContextMenu, onEdit, onDelete, onOpenSourceNote,
+  batchMode = false, selectedIds, onToggleSelect,
 }: DeckCardListProps) {
   return (
     <motion.div
@@ -95,9 +100,25 @@ export function DeckCardList({
           >
             <Card
               padding="sm"
-              className={cn('flex items-center gap-3', evolutionClass(card))}
-              onContextMenu={(e) => onContextMenu(e, card)}
+              className={cn(
+                'flex items-center gap-3',
+                evolutionClass(card),
+                batchMode && 'cursor-pointer',
+                batchMode && selectedIds?.has(card.id ?? '')
+                  ? 'ring-2 ring-brand-400/50 bg-brand-50/20'
+                  : undefined,
+              )}
+              onContextMenu={batchMode ? undefined : (e) => onContextMenu(e, card)}
+              onClick={batchMode ? () => onToggleSelect?.(card.id ?? '') : undefined}
             >
+              {/* 批量模式勾选指示 */}
+              {batchMode && (
+                <span className="flex-shrink-0">
+                  {selectedIds?.has(card.id ?? '')
+                    ? <CheckSquare className="w-5 h-5 text-brand-500" strokeWidth={1.5} />
+                    : <Square className="w-5 h-5 text-text-tertiary/50" strokeWidth={1.5} />}
+                </span>
+              )}
               <div className="flex-1 min-w-0">
                 <p className="text-b2 font-medium text-text-primary truncate">{card.front}</p>
                 <div className="flex items-center gap-3 mt-1 text-c1 text-text-tertiary">
@@ -109,7 +130,7 @@ export function DeckCardList({
                 </div>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
-                {card.sourceNoteId && (
+                {card.sourceNoteId && !batchMode && (
                   <button
                     onClick={() => onOpenSourceNote(card.sourceNoteId!)}
                     className="inline-flex items-center gap-1 px-2 py-1 rounded-kb-sm text-c1 text-text-tertiary hover:text-brand-600 hover:bg-brand-50 transition-all duration-kb-fast"
@@ -121,6 +142,7 @@ export function DeckCardList({
                   </button>
                 )}
                 {/* 编辑卡片按钮，带 tooltip */}
+                {!batchMode && (
                 <Tip text="编辑卡片">
                 <button
                   onClick={() => onEdit(card)}
@@ -130,7 +152,9 @@ export function DeckCardList({
                   <Pencil className="w-4 h-4" strokeWidth={1.5} />
                 </button>
                 </Tip>
+                )}
                 {/* 删除卡片按钮，带 tooltip */}
+                {!batchMode && (
                 <Tip text="删除卡片">
                 <button
                   onClick={() => onDelete(card.id ?? null)}
@@ -140,6 +164,7 @@ export function DeckCardList({
                   <Trash2 className="w-4 h-4" strokeWidth={1.5} />
                 </button>
                 </Tip>
+                )}
               </div>
             </Card>
           </motion.div>

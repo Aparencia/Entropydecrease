@@ -129,6 +129,7 @@ async def chat_stream(body: ChatStreamRequest, request: Request):
         raise HTTPException(status_code=503, detail="所有 AI 服务暂时不可用，请稍后重试")
 
     async def event_generator() -> AsyncGenerator[str, None]:
+        agen = None
         try:
             agen = gen.__aiter__()
             is_first = True
@@ -167,6 +168,13 @@ async def chat_stream(body: ChatStreamRequest, request: Request):
         except Exception as e:
             logger.error("[chat] Stream error: %s", e, exc_info=True)
             yield _sse_error("AI 服务响应异常，请稍后重试")
+        finally:
+            # GW-H4: 所有退出路径必须关闭上游生成器，释放连接、停止幽灵计费
+            if agen is not None:
+                try:
+                    await agen.aclose()
+                except Exception as close_err:
+                    logger.debug("[chat] 流式生成器关闭失败（可忽略）: %s", close_err)
 
     return StreamingResponse(
         event_generator(),

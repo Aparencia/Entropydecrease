@@ -20,6 +20,12 @@ import (
 func Pull(c *gin.Context) {
 	userID := c.GetString("user_id")
 	deviceID := c.Query("deviceId")
+	// SYNC-L2: deviceId 白名单校验（与 WS 入口一致）——空值会让
+	// device_id != '' 拉回本设备变更造成回环；超长参数增加索引扫描成本
+	if !isValidDeviceID(deviceID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid deviceId: must match [A-Za-z0-9_-]{1,64}"})
+		return
+	}
 	sinceVersionStr := c.DefaultQuery("sinceVersion", "0")
 	sinceVersion, err := strconv.ParseInt(sinceVersionStr, 10, 64)
 	if err != nil {

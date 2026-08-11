@@ -34,6 +34,10 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
   const unsubFinalRef = useRef<(() => void) | null>(null);
   const watchdogRef = useRef<number | null>(null);
   const listeningRef = useRef(false);
+  // FRONT2-M8: stop 进行中标志——stop 的 await IPC 窗口内新 start 会启动新
+  // 采集，随后旧 stop 的 audio_capture_stop 把新采集停掉（静音 watchdog 与
+  // 用户 toggle 并发时必现）。start 等待此标志清除后再继续。
+  const stopPendingRef = useRef(false);
   const onFinalTextRef = useRef(options.onFinalText);
   onFinalTextRef.current = options.onFinalText;
 
@@ -52,15 +56,22 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
   const stop = useCallback(async () => {
     if (!listeningRef.current) return;
     listeningRef.current = false;
+    // FRONT2-M8: 置位 stop 进行中标志，阻止并发 start 启动新采集
+    stopPendingRef.current = true;
     cleanupIpc();
 
     const api = window.electronAPI;
     if (api) {
       try {
         await api.invoke('local_asr_stream_stop');
-        await api.invoke('audio_capture_stop');
+        // 二次校验：stop 等待期间用户已重新 start（listeningRef 已为 true）
+        // 时不再停新采集——原实现无条件 audio_capture_stop 停掉新采集
+        if (!listeningRef.current) {
+          await api.invoke('audio_capture_stop');
+        }
       } catch { /* 静默降级：停止失败不影响对话流 */ }
     }
+    stopPendingRef.current = false;
 
     setListening(false);
     setPartialText('');
@@ -76,6 +87,19 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
   const start = useCallback(async () => {
     const api = window.electronAPI;
     if (!api || listeningRef.current) return;
+    // FRONT2-M8: 序列化 stop/start——stop 进行中时等待其完成（最多 5s），
+    // 否则新采集启动后会被旧 stop 的 audio_capture_stop 停掉
+    if (stopPendingRef.current) {
+      const waitStart = Date.now();
+      while (stopPendingRef.current && Date.now() - waitStart < 5000) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      if (stopPendingRef.current) {
+        // GW-3: 超时静默放弃会让用户点击无响应——给出明确错误提示
+        setError('停止拾音未完成，请稍后重试');
+        return;
+      }
+    }
     setError(null);
 
     try {

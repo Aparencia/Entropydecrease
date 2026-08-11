@@ -24,6 +24,7 @@ import {
   type BehaviorWindow,
 } from '../lib/behaviorMetrics';
 import { createLoadEstimator, updateLoadSmoothed, advanceLoadState, type LoadEstimatorState } from '../lib/cognitiveLoad';
+import { setCurrentLoad } from '../lib/cognitiveLoadStore';
 import { BEHAVIOR_WINDOW_MS, BEHAVIOR_EVAL_INTERVAL_MS } from '../constants';
 import type { EmotionLevel } from '../types';
 
@@ -94,12 +95,14 @@ export function useBehaviorSignals(): void {
       }
       lastEmotionRef.current = level;
 
-      // A5：负荷估算——EMA 平滑 + 迟滞，仅新进入高负荷时发射
+      // A5：负荷估算——EMA 平滑 + 迟滞，仅新进入高负荷时发射；
+      // 同步将平滑值发布到共享存储（1.13 仪表盘小部件订阅）
       const instant = instantLoadScore(metrics);
       const smoothed = updateLoadSmoothed(loadRef.current, instant, hasHistoryRef.current);
       hasHistoryRef.current = true;
       const advanced = advanceLoadState(loadRef.current, smoothed);
       loadRef.current = advanced.state;
+      setCurrentLoad(advanced.state.smoothed);
       if (advanced.justEntered) {
         assistantEventBus.emit('cognitive:overload', { currentHour, loadLevel: smoothed });
       }

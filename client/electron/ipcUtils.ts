@@ -151,26 +151,39 @@ export function safeHandleBatched<T extends any[]>(
   channel: string,
   handler: TypedHandler<T>,
 ): void {
-  let pendingArgs: { event: Electron.IpcMainInvokeEvent; args: T } | null = null;
+  let pending: {
+    event: Electron.IpcMainInvokeEvent;
+    args: T;
+    resolve: (value: unknown) => void;
+    reject: (reason: unknown) => void;
+  } | null = null;
   let scheduled = false;
 
   const batchedHandler: TypedHandler<T> = (event, ...args) => {
-    pendingArgs = { event, args };
-
-    if (!scheduled) {
-      scheduled = true;
-      queueMicrotask(async () => {
-        scheduled = false;
-        if (pendingArgs) {
-          const { event: ev, args: a } = pendingArgs;
-          pendingArgs = null;
-          return handler(ev, ...a);
-        }
-      });
+    // 新调用覆盖旧 pending：旧调用立即结算（合并语义——只有最后一次返回真实结果）
+    if (pending) {
+      pending.resolve(undefined);
     }
 
-    // 返回一个 resolved promise（批量化场景调用方不依赖即时返回值）
-    return Promise.resolve(undefined);
+    return new Promise((resolve, reject) => {
+      pending = { event, args, resolve, reject };
+
+      if (!scheduled) {
+        scheduled = true;
+        queueMicrotask(() => {
+          scheduled = false;
+          const current = pending;
+          pending = null;
+          if (!current) return;
+          // CL-M3: microtask 中 try/catch 包裹——handler 抛错时 reject 给调用方
+          // （invoke 收到 rejection 而非 unhandledRejection 状态漂移）；
+          // 最后一次调用可拿到 handler 的真实返回值
+          Promise.resolve(handler(current.event, ...current.args))
+            .then(current.resolve)
+            .catch(current.reject);
+        });
+      }
+    });
   };
 
   safeHandle(channel, batchedHandler);

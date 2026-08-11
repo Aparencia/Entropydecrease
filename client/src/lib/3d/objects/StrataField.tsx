@@ -45,7 +45,7 @@ export function StrataField() {
             <boxGeometry args={[width, BAND_HEIGHT * 0.92, 3.2]} />
             <meshStandardMaterial
               color={new THREE.Color(0.05 + brightness * 0.2, 0.09 + brightness * 0.3, 0.2 + brightness * 0.5)}
-              emissive={isLatest ? '#22D3EE' : '#12233F'}
+              emissive={isLatest ? '#6FB4E8' : '#12233F'}
               emissiveIntensity={isLatest ? 0.28 : 0.06}
               transparent
               opacity={0.85}

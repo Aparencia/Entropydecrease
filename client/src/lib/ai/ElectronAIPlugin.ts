@@ -7,7 +7,7 @@ import type {
   OptimizeCardResult, FeynmanQuestionResult, FeynmanAnswerEvalResult,
   TagContentResult, SortResult,
   AnchorPoint, BrainstormIdea, ChatMessage,
-  SocraticEvaluateResult, SocraticDeepeningResult,
+  SocraticEvaluateResult, SocraticDeepeningResult, SocraticMirrorResult,
   PredictionPrompt, RescueContext, ResourceLink,
   ErrorPatternResult, QuizGenResult,
   ContentTierResult, ConflictDetectResult,
@@ -27,7 +27,7 @@ import {
 } from './electronLearningFeatures';
 import {
   ipcSocraticBrainstorm, ipcSocraticQuestion,
-  ipcSocraticEvaluate, ipcSocraticDeepening,
+  ipcSocraticEvaluate, ipcSocraticDeepening, ipcSocraticMirror,
 } from './electronSocraticFeatures';
 import { streamIpc } from './electronStreamBridge';
 
@@ -109,6 +109,10 @@ export class ElectronAIPlugin implements AIPlugin {
 
   async socraticDeepening(topic: string, dialogueSummary: string, history: ChatMessage[]): Promise<SocraticDeepeningResult> {
     return ipcSocraticDeepening(this.authToken, topic, dialogueSummary, history);
+  }
+
+  async socraticMirror(topic: string, question: string): Promise<SocraticMirrorResult> {
+    return ipcSocraticMirror(this.authToken, topic, question);
   }
 
   async predictQuestion(noteId: string, content: string): Promise<{ predictions: PredictionPrompt[] }> {

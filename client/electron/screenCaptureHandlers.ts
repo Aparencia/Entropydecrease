@@ -14,7 +14,7 @@ import type { ScreenCaptureOptions, ScreenshotFrameData } from './screenCapture.
 import { safeHandle, getMainWindowId } from './ipcUtils.js';
 import { logger } from './logger.js';
 import { scoreAndFilterWindows } from './windowScorer.js';
-import { getCaptureRateScale } from './performanceMode.js';
+import { getCaptureRateScale, onPerformanceModeChange } from './performanceMode.js';
 
 // ================================================================
 // 模块级状态
@@ -22,6 +22,15 @@ import { getCaptureRateScale } from './performanceMode.js';
 
 /** 当前活跃的截图采集实例 */
 let activeCapture: ScreenCapture | null = null;
+
+/** 活跃采集的原始参数（未缩放 interval），供性能模式变更后按新频率重建实例 */
+let activeOptions: ScreenCaptureOptions | null = null;
+
+/** 活跃采集的帧推送目标窗口（重启实例后保持推送不中断） */
+let activeSenderWin: BrowserWindow | null = null;
+
+/** 性能模式变更订阅的取消函数 */
+let unsubscribeModeChange: (() => void) | null = null;
 
 /** screen_capture_start 防抖：500ms 内多次调用只响应最后一次 */
 let startDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -45,10 +54,45 @@ let lastWindowIds: Set<string> = new Set();
 
 const WINDOW_WATCH_INTERVAL_MS = 3000;
 
+/** 按性能模式缩放采集间隔（静谧档 scale=0.5 → 间隔翻倍、频率减半，降低开销） */
+function applyRateScale(options: ScreenCaptureOptions): ScreenCaptureOptions {
+  const scaled = { ...options };
+  const rateScale = getCaptureRateScale();
+  if (typeof scaled.interval === 'number' && rateScale !== 1) {
+    scaled.interval = Math.min(60000, Math.round(scaled.interval / rateScale));
+  }
+  return scaled;
+}
+
+/** 销毁旧实例并按其参数/推送目标重建采集（start 与性能模式重启共用） */
+function startCaptureWith(senderWin: BrowserWindow | null, options: ScreenCaptureOptions): void {
+  if (activeCapture) {
+    activeCapture.dispose();
+    activeCapture = null;
+  }
+  activeCapture = new ScreenCapture(applyRateScale(options), (frame: ScreenshotFrameData) => {
+    if (senderWin && !senderWin.isDestroyed()) {
+      senderWin.webContents.send('screen_capture_frame', frame);
+    }
+  });
+  activeCapture.start();
+}
+
 /**
  * 注册屏幕截图与窗口监听相关的 IPC handler
  */
 export function registerScreenCaptureHandlers(): void {
+  // 性能模式变更 → 活跃采集按新频率优雅重启（即时生效，替代"等下次启动"）
+  unsubscribeModeChange = onPerformanceModeChange(() => {
+    // 先本地快照再使用，避免回调执行期间 stop 并发置空变量
+    const capture = activeCapture;
+    const opts = activeOptions;
+    const sender = activeSenderWin;
+    if (!capture || !opts) return;
+    logger.info('[IPC] 性能模式变更，采集按新频率重启');
+    startCaptureWith(sender, opts);
+  });
+
   safeHandle(
     'screen_capture_start',
     async (event, options: ScreenCaptureOptions) => {
@@ -93,19 +137,11 @@ export function registerScreenCaptureHandlers(): void {
             safeOptions.interval = 5000;
           }
 
-          // 按性能模式缩放采集间隔（静谧档 scale=0.5 → 间隔翻倍、频率减半，降低开销）
-          const rateScale = getCaptureRateScale();
-          if (typeof safeOptions.interval === 'number' && rateScale !== 1) {
-            safeOptions.interval = Math.min(60000, Math.round(safeOptions.interval / rateScale));
-          }
+          // 记录原始参数与推送目标（供性能模式变更时重启采集）
+          activeOptions = safeOptions;
+          activeSenderWin = senderWin;
 
-          activeCapture = new ScreenCapture(safeOptions, (frame: ScreenshotFrameData) => {
-            if (senderWin && !senderWin.isDestroyed()) {
-              senderWin.webContents.send('screen_capture_frame', frame);
-            }
-          });
-
-          activeCapture.start();
+          startCaptureWith(senderWin, safeOptions);
           logger.info('[IPC] screen_capture_start 已启动（防抖后）');
           resolve({ success: true });
         }, START_DEBOUNCE_MS);
@@ -123,11 +159,21 @@ export function registerScreenCaptureHandlers(): void {
       startDebounceTimer = null;
     }
 
+    // CL-H1: 结算防抖中悬挂的 start Promise——若在 500ms 防抖窗口内调用
+    // stop，debounce 回调永不执行，pendingStartResolve 必须在此显式 settle，
+    // 否则渲染层 invoke('screen_capture_start') 永久挂起（loading 态卡死）
+    if (pendingStartResolve) {
+      pendingStartResolve({ success: false });
+      pendingStartResolve = null;
+    }
+
     if (activeCapture) {
       activeCapture.dispose();
       activeCapture = null;
       logger.info('[IPC] screen_capture_stop 已停止');
     }
+    activeOptions = null;
+    activeSenderWin = null;
     return { success: true };
   });
 
@@ -218,10 +264,20 @@ export function registerScreenCaptureHandlers(): void {
  * 释放屏幕截图相关资源（含防抖定时器与轮询）
  */
 export function disposeScreenCaptureHandlers(): void {
+  // 注销性能模式变更订阅
+  if (unsubscribeModeChange) {
+    unsubscribeModeChange();
+    unsubscribeModeChange = null;
+  }
   // 清理防抖定时器
   if (startDebounceTimer) {
     clearTimeout(startDebounceTimer);
     startDebounceTimer = null;
+  }
+  // CL-H1: 应用退出路径同样需要结算悬挂的 start Promise
+  if (pendingStartResolve) {
+    pendingStartResolve({ success: false });
+    pendingStartResolve = null;
   }
   if (windowWatchTimer) {
     clearInterval(windowWatchTimer);
@@ -232,4 +288,6 @@ export function disposeScreenCaptureHandlers(): void {
     activeCapture.dispose();
     activeCapture = null;
   }
+  activeOptions = null;
+  activeSenderWin = null;
 }

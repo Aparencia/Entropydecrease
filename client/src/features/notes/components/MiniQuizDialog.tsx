@@ -264,6 +264,28 @@ export function MiniQuizDialog({ open, onClose, notes }: MiniQuizDialogProps) {
             <Button onClick={handleClose}>收工</Button>
           ) : (
             <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
+              {/* 批量操作：一键创建全部错题闪卡 */}
+              {records.filter((r) => !r.correct).length > 1 && (
+                <button
+                  disabled={converted.size === records.filter((r) => !r.correct).length}
+                  onClick={() => {
+                    records.forEach((r, i) => {
+                      if (!r.correct && !converted.has(i)) convertToCard(i);
+                    });
+                  }}
+                  className={cn(
+                    'sticky top-0 z-10 flex items-center justify-center gap-1.5 px-3 py-2 rounded-kb-lg text-c1 font-medium mb-1',
+                    converted.size === records.filter((r) => !r.correct).length
+                      ? 'bg-bg-tertiary text-text-tertiary'
+                      : 'bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors',
+                  )}
+                >
+                  <Layers className="w-3.5 h-3.5" strokeWidth={1.5} />
+                  {converted.size === records.filter((r) => !r.correct).length
+                    ? '全部已转闪卡'
+                    : `一键转全部 ${records.filter((r) => !r.correct).length} 道错题为闪卡`}
+                </button>
+              )}
               {records.map((r, i) => r.correct ? null : (
                 <div key={i} className="p-2.5 rounded-kb-md bg-bg-secondary border border-border/30">
                   <p className="text-b2 text-text-primary">{r.question.question}</p>

@@ -83,6 +83,36 @@ func main() {
 		statsAuth.POST("/report", handlers.ReportLearningEvent)
 	}
 
+	// Phase 4 social features (in-memory presence/collaboration, auth required).
+	// 社交功能全部为内存态在场服务，无需 DB；隐私约束见各 handler 注释。
+	// 限流：relay/pair 会推送 WS 消息给目标用户，收紧防骚扰；其余端点默认 30 次/分钟。
+	social := r.Group("/api/v1")
+	social.Use(middleware.AuthMiddleware())
+	{
+		// 4.1 协作深潜（Collaborative Deep Dive）
+		social.POST("/rooms", middleware.RateLimit("rooms", 10), handlers.CreateRoom)
+		social.GET("/rooms", handlers.ListRooms)
+		social.POST("/rooms/:id/join", middleware.RateLimit("rooms/join", 60), handlers.JoinRoom)
+		social.POST("/rooms/:id/leave", middleware.RateLimit("rooms/leave", 60), handlers.LeaveRoom)
+
+		// 4.2 番茄钟协作接力（Pomodoro Relay）
+		social.POST("/relay/pair", middleware.RateLimit("relay/pair", 10), handlers.RelayPairRequest)
+		social.POST("/relay/accept", middleware.RateLimit("relay/accept", 20), handlers.RelayAccept)
+		social.POST("/relay/complete", middleware.RateLimit("relay/complete", 60), handlers.RelayComplete)
+		social.POST("/relay/end", middleware.RateLimit("relay/end", 20), handlers.RelayEnd)
+		social.GET("/relay/stats", handlers.RelayStats)
+
+		// 4.3 学习社交镜像（Social Learning Mirror）——匿名聚合
+		social.POST("/social/pulse", middleware.RateLimit("social/pulse", 60), handlers.SocialPulse)
+		social.GET("/social/pulse", handlers.SocialPulseQuery)
+		social.GET("/social/peers", handlers.SocialPeers)
+
+		// 4.4 虚拟自习室（Virtual Study Room）——座位同步
+		social.POST("/studyroom/:id/seat", middleware.RateLimit("studyroom/seat", 60), handlers.StudyRoomSeat)
+		social.POST("/studyroom/:id/leave-seat", middleware.RateLimit("studyroom/leave-seat", 60), handlers.StudyRoomLeaveSeat)
+		social.GET("/studyroom/:id", handlers.StudyRoomGet)
+	}
+
 	// WebSocket real-time sync channel.
 	// Uses WSAuthMiddleware which reads the JWT from ?token= query parameter
 	// (browsers cannot set custom headers on WebSocket upgrade requests).

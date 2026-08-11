@@ -9,17 +9,25 @@ import { AuthGuard } from '@/lib/auth/AuthGuard';
 import { prefetchRoute } from '@/utils/scheduler';
 
 // 在应用启动后空闲期预加载核心模块
+// P1-6 prefetch 错峰：7 个高频页面 chunk 每 300ms 拉取一个（而非一次性突发），
+// 避免启动 2s 后的网络/磁盘峰值影响首次交互帧
 if (typeof window !== 'undefined') {
+  const HIGH_FREQUENCY_PAGES = [
+    () => import('@/features/dashboard/pages/DashboardPage'),
+    () => import('@/features/notes/pages/NoteEditPage'),
+    () => import('@/features/pomodoro/pages/PomodoroPage'),
+    // 修复：增加高频页面预加载，减少模块切换时的加载等待与视觉跳变
+    () => import('@/features/notes/pages/NotesPage'),
+    () => import('@/features/flashcards/pages/FlashcardsPage'),
+    () => import('@/features/feynman/pages/FeynmanPage'),
+    () => import('@/pages/SettingsPage'),
+  ];
+  const PREFETCH_STAGGER_MS = 300;
   window.addEventListener('load', () => {
     setTimeout(() => {
-      prefetchRoute(() => import('@/features/dashboard/pages/DashboardPage'));
-      prefetchRoute(() => import('@/features/notes/pages/NoteEditPage'));
-      prefetchRoute(() => import('@/features/pomodoro/pages/PomodoroPage'));
-      // 修复：增加高频页面预加载，减少模块切换时的加载等待与视觉跳变
-      prefetchRoute(() => import('@/features/notes/pages/NotesPage'));
-      prefetchRoute(() => import('@/features/flashcards/pages/FlashcardsPage'));
-      prefetchRoute(() => import('@/features/feynman/pages/FeynmanPage'));
-      prefetchRoute(() => import('@/pages/SettingsPage'));
+      HIGH_FREQUENCY_PAGES.forEach((loader, i) => {
+        setTimeout(() => prefetchRoute(loader), i * PREFETCH_STAGGER_MS);
+      });
     }, 2000); // 启动2秒后开始预加载
   });
 }
@@ -46,12 +54,29 @@ const InspirationPage = lazy(() => import('@/features/inspiration/pages/Inspirat
 const ClassroomPage = lazy(() => import('@/features/classroom/pages/ClassroomPage'));
 const OnboardingPage = lazy(() => import('@/pages/OnboardingPage'));
 const SettlingPage = lazy(() => import('@/features/settling/pages/SettlingPage'));
+const SopListPage = lazy(() => import('@/features/sop/pages/SopListPage'));
+const SopEditorPage = lazy(() => import('@/features/sop/pages/SopEditorPage'));
+const SopRunPage = lazy(() => import('@/features/sop/pages/SopRunPage'));
+const InboxPage = lazy(() => import('@/features/inbox/pages/InboxPage'));
+const CertificatePage = lazy(() => import('@/features/dashboard/pages/CertificatePage'));
+const GardenPage = lazy(() => import('@/features/garden/components/GardenPage'));
+const RecipesPage = lazy(() => import('@/features/recipes/pages/RecipesPage'));
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
 const ResetPasswordPage = lazy(() => import('@/pages/ResetPassword'));
 const VerifyEmailPage = lazy(() => import('@/pages/VerifyEmail'));
 const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'));
 const TermsOfService = lazy(() => import('@/pages/TermsOfService'));
+const SoundAnchorPage = lazy(() => import('@/features/soundanchor/pages/SoundAnchorPage'));
+const TimeCapsulePage = lazy(() => import('@/features/timecapsule/pages/TimeCapsulePage'));
+const ConstellationPage = lazy(() => import('@/features/constellation/pages/ConstellationPage'));
+const EinkPage = lazy(() => import('@/features/eink/pages/EinkPage'));
+const SocialDivePage = lazy(() => import('@/features/social/pages/DeepDivePage'));
+const SocialRelayPage = lazy(() => import('@/features/social/pages/RelayPage'));
+const SocialMirrorPage = lazy(() => import('@/features/social/pages/SocialMirrorPage'));
+const StudyRoomPage = lazy(() => import('@/features/social/pages/StudyRoomPage'));
+const WikiPage = lazy(() => import('@/features/wiki/pages/WikiPage'));
+const MicroCardsPage = lazy(() => import('@/features/microcards/pages/MicroCardsPage'));
 
 // 骨架屏加载占位：用 animate-pulse 灰色块替代旋转 spinner，减少模块切换时的视觉跳变
 function PageLoader() {
@@ -103,7 +128,32 @@ const routes: RouteObject[] = [
       { path: '/inspiration', element: <SuspenseWrapper><InspirationPage /></SuspenseWrapper> },
       { path: '/classroom', element: <SuspenseWrapper><ClassroomPage /></SuspenseWrapper> },
       { path: '/settling', element: <SuspenseWrapper><SettlingPage /></SuspenseWrapper> },
+      { path: '/sop', element: <SuspenseWrapper><SopListPage /></SuspenseWrapper> },
+      { path: '/sop/editor/:id?', element: <SuspenseWrapper><SopEditorPage /></SuspenseWrapper> },
+      { path: '/inbox', element: <SuspenseWrapper><InboxPage /></SuspenseWrapper> },
+      { path: '/certificate', element: <SuspenseWrapper><CertificatePage /></SuspenseWrapper> },
+      { path: '/garden', element: <SuspenseWrapper><GardenPage /></SuspenseWrapper> },
+      { path: '/recipes', element: <SuspenseWrapper><RecipesPage /></SuspenseWrapper> },
+      { path: '/soundanchor', element: <SuspenseWrapper><SoundAnchorPage /></SuspenseWrapper> },
+      { path: '/timecapsule', element: <SuspenseWrapper><TimeCapsulePage /></SuspenseWrapper> },
+      { path: '/constellation', element: <SuspenseWrapper><ConstellationPage /></SuspenseWrapper> },
+      { path: '/social/dive', element: <SuspenseWrapper><SocialDivePage /></SuspenseWrapper> },
+      { path: '/social/relay', element: <SuspenseWrapper><SocialRelayPage /></SuspenseWrapper> },
+      { path: '/social/mirror', element: <SuspenseWrapper><SocialMirrorPage /></SuspenseWrapper> },
+      { path: '/social/studyroom', element: <SuspenseWrapper><StudyRoomPage /></SuspenseWrapper> },
+      { path: '/wiki', element: <SuspenseWrapper><WikiPage /></SuspenseWrapper> },
+      { path: '/microcards', element: <SuspenseWrapper><MicroCardsPage /></SuspenseWrapper> },
     ],
+  },
+  {
+    // 电子墨水学习板次窗口：仿 /onboarding 先例挂在 AuthGuard/AppLayout 之外，避免重定向循环
+    path: '/eink',
+    element: <SuspenseWrapper><EinkPage /></SuspenseWrapper>,
+  },
+  {
+    // SOP 全屏沉浸执行器：仿 /onboarding 先例挂在 AuthGuard/AppLayout 之外，绕开 3D canvas
+    path: '/sop/run/:runId',
+    element: <SuspenseWrapper><SopRunPage /></SuspenseWrapper>,
   },
   {
     path: '/onboarding',

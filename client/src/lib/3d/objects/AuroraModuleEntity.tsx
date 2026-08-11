@@ -31,13 +31,15 @@ interface PlanetConfig {
 }
 
 const PLANET_CONFIGS: Record<ModuleId, PlanetConfig> = {
-  dashboard: { radius: 1.0, color: '#FCD34D', emissive: '#F59E0B', label: '首页' },
-  pomodoro: { radius: 0.7, color: '#F97316', emissive: '#EA580C', label: '深潜' },
-  notes: { radius: 0.7, color: '#60A5FA', emissive: '#3B82F6', label: '结礁' },
-  flashcards: { radius: 0.5, color: '#34D399', emissive: '#059669', label: '闪卡' },
-  feynman: { radius: 0.6, color: '#A78BFA', emissive: '#7C3AED', label: '浮出水面' },
-  inspiration: { radius: 0.4, color: '#F472B6', emissive: '#EC4899', label: '萤火海沟' },
-  classroom: { radius: 0.55, color: '#14B8A6', emissive: '#0D9488', label: '回声定位' },
+  dashboard: { radius: 1.0, color: '#40AB92', emissive: '#57C6A9', label: '首页' },
+  pomodoro: { radius: 0.7, color: '#E8833A', emissive: '#F4A05E', label: '深潜' },
+  notes: { radius: 0.7, color: '#4A9BD9', emissive: '#6FB4E8', label: '结礁' },
+  flashcards: { radius: 0.5, color: '#43C58B', emissive: '#63DBA5', label: '闪卡' },
+  feynman: { radius: 0.6, color: '#F0E3C8', emissive: '#F8F0DC', label: '浮出水面' },
+  inspiration: { radius: 0.4, color: '#E8B84B', emissive: '#F2CF7D', label: '萤火海沟' },
+  classroom: { radius: 0.55, color: '#2FB8AC', emissive: '#4ED0C2', label: '回声定位' },
+  constellation: { radius: 0.5, color: '#9FB8D8', emissive: '#C3D6EA', label: '星座' },
+  sop: { radius: 0.45, color: '#B5D84E', emissive: '#CCE672', label: '标准作业' },
 };
 
 /** 轨道位置最大距离约束（兜底），超出则等比缩放回安全范围 */
@@ -191,7 +193,7 @@ export function AuroraModuleEntity({
               position={[0, config.radius + 0.6, 0]}
               style={{ pointerEvents: 'none' }}
             >
-              <div className="rounded-lg bg-slate-900/80 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm whitespace-nowrap border border-indigo-500/30">
+              <div className="rounded-lg bg-slate-900/80 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm whitespace-nowrap border border-brand-400/30">
                 {config.label}
                 {/* 常驻功能副标题：隐喻名旁附直白功能名 */}
                 {subtitle && (

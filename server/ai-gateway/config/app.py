@@ -4,6 +4,9 @@
 @ai-context: 汇聚运行环境、CORS、JWT 与中间件连接串等应用级配置。
 Supabase JWKS 端点从 SUPABASE_URL 推导（标准路径含 /auth/v1 前缀），
 亦可经 SUPABASE_JWKS_URL 显式覆盖。所有值均经环境变量注入，无硬编码密钥。
+@ai-context: GW-2#1——jwt_algorithm 由 SUPABASE_JWT_ALGORITHM 注入，
+空值=自动适配模式（按 token 实际算法 HS256/ES256/RS256 选用密钥材料），
+显式配置则强制该算法；ES256 仅在开启自定义 JWT 时选用。
 """
 
 import os
@@ -25,7 +28,11 @@ APP_CONFIG = {
         if origin.strip()
     ],
     "jwt_secret": os.getenv("SUPABASE_JWT_SECRET", ""),
-    "jwt_algorithm": "ES256",
+    # GW-2#1: 算法由环境变量注入；空值=自动适配模式（按 token 实际算法选择密钥
+    # 材料，从根上消除 HS256/ES256 配置错位导致的全站 401——原硬编码 ES256 使
+    # 默认 HS256 项目全站 401，默认 HS256 又会使自定义 JWT（ES256）项目全站 401）
+    # GW-3: strip().upper() 规范化——小写 hs256/es256 配置也能正确匹配
+    "jwt_algorithm": os.getenv("SUPABASE_JWT_ALGORITHM", "").strip().upper(),
     "supabase_url": _supabase_url,
     "supabase_jwks_url": os.getenv(
         "SUPABASE_JWKS_URL",

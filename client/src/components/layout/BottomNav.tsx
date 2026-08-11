@@ -2,7 +2,7 @@
  * @ai-context: 布局组件：BottomNav。
  */
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, Timer, FileText, Layers, Lightbulb, Sparkles } from 'lucide-react';
+import { Home, Timer, FileText, Layers, Lightbulb, Sparkles, Orbit } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 
@@ -13,6 +13,7 @@ const tabs = [
   { to: '/flashcards', label: '闪卡', icon: Layers },
   { to: '/feynman', label: '费曼', icon: Lightbulb },
   { to: '/inspiration', label: '灵感', icon: Sparkles },
+  { to: '/constellation', label: '星座', icon: Orbit },
 ];
 
 export default function BottomNav() {

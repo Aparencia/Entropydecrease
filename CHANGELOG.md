@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.35.2](https://github.com/Aparencia/Entropydecrease/compare/v0.35.1...v0.35.2) (2026-08-04)
+
+### 🐛 缺陷修复
+
+* **client:** 内测反馈五连修——导航竞态/剪贴板IPC/音频资源路径/番茄钟预设/ASR兼容 ([e54257d](https://github.com/Aparencia/Entropydecrease/commit/e54257d5f776e2d05deb74dddbdf113c7981a41b))
+
 ## [0.35.1](https://github.com/Aparencia/Entropydecrease/compare/v0.35.0...v0.35.1) (2026-08-04)
 
 ### 🐛 缺陷修复

@@ -196,7 +196,27 @@ export interface AudioPreferences {
   bgmEnabled: boolean;
   bgmTrackId: string;
   bgmVolume: number;
+  deviceType: AudioDeviceType;
 }
+
+/** 音频输出设备类型 */
+export type AudioDeviceType = 'headphones' | 'earbuds' | 'speakers' | 'laptop';
+
+/** 设备类型显示名称 */
+export const DEVICE_TYPE_LABELS: Record<AudioDeviceType, string> = {
+  headphones: '头戴式耳机',
+  earbuds: '入耳式耳机',
+  speakers: '桌面音箱',
+  laptop: '笔记本扬声器',
+};
+
+/** 设备类型 dB 偏移量（相对于头戴式耳机的基准） */
+export const DEVICE_TYPE_DB_OFFSET: Record<AudioDeviceType, number> = {
+  headphones: 0,     // 基准：高灵敏度，直接耦合
+  earbuds: 3,        // 入耳式更深，+3dB
+  speakers: -8,      // 距离衰减，-8dB
+  laptop: -15,       // 小扬声器功率有限，-15dB
+};
 
 export const defaultAudioPreferences: AudioPreferences = {
   whiteNoiseEnabled: false,
@@ -205,6 +225,7 @@ export const defaultAudioPreferences: AudioPreferences = {
   bgmEnabled: false,
   bgmTrackId: 'morning-rhythm',
   bgmVolume: 0.3,
+  deviceType: 'headphones',
 };
 
 export function loadAudioPreferences(): AudioPreferences {

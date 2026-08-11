@@ -5,6 +5,8 @@
 package handlers
 
 import (
+	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type resolveRequest struct {
@@ -56,14 +59,26 @@ func Resolve(c *gin.Context) {
 		}
 
 		txErr := models.DB.Transaction(func(tx *gorm.DB) error {
+			// SYNC-M1: 版本校验 + FOR UPDATE 行锁——与 Push 的 M1 防护一致，
+			// 拒绝回退版本（客户端可提交任意小版本号制造数据回退）；
+			// 加锁消除 TOCTOU 竞态（另一设备并发推送时基于过期版本覆盖）
+			var ev models.EntityVersion
+			res := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+				Where("user_id = ? AND entity_type = ? AND entity_id = ?", userID, req.EntityType, req.EntityID).
+				First(&ev)
+			if res.Error != nil && res.Error != gorm.ErrRecordNotFound {
+				return res.Error
+			}
+			if res.RowsAffected > 0 && req.Version <= ev.Version {
+				return errors.New("resolve rejected: client version must be newer than server version")
+			}
+
 			seqNo, err := nextSeqNo(tx)
 			if err != nil {
 				return err
 			}
 
 			// Upsert EntityVersion.
-			var ev models.EntityVersion
-			res := tx.Where("user_id = ? AND entity_type = ? AND entity_id = ?", userID, req.EntityType, req.EntityID).First(&ev)
 			if res.RowsAffected > 0 {
 				if err := tx.Model(&ev).Updates(map[string]interface{}{
 					"version": req.Version,
@@ -98,9 +113,24 @@ func Resolve(c *gin.Context) {
 		})
 
 		if txErr != nil {
+			log.Printf("Resolve failed: %v", txErr)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": txErr.Error()})
 			return
 		}
+
+		// SYNC-M1: 广播解决结果到其他在线设备（原实现不广播，
+		// 其他设备只能等下一次 Pull 才收敛，实时性延迟）
+		BroadcastOperation(userID, req.DeviceID, []WSOperationPayload{
+			{
+				EntityType:  req.EntityType,
+				EntityID:    req.EntityID,
+				Operation:   "update",
+				Data:        req.Data,
+				Version:     req.Version,
+				ServerSeqNo: 0, // Resolve 的广播无明确序号，客户端按实体版本收敛
+				DeviceID:    req.DeviceID,
+			},
+		})
 
 	case "remote":
 		// Server wins: no changes needed; client will pull latest.

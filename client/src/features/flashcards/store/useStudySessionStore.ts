@@ -8,12 +8,14 @@ import {
 } from '@/lib/storage';
 import { Rating } from '@/lib/sm2';
 import { getScheduler } from '@/lib/schedulingFactory';
-import { getMaxNewCardsPerDay, getMaxReviewsPerDay } from '@/lib/schedulingFactory';
+import { suggestDifficultyTier } from '@/lib/scheduler';
+import { getMaxNewCardsPerDay, getMaxReviewsPerDay, getMaxSessionCards } from '@/lib/schedulingFactory';
 import type { Flashcard, FlashcardReview, Confidence, GoldenError } from '@/types/models';
 import { useFlashcardStore } from './useFlashcardStore';
 import { generateId } from '@/lib/utils/uuid';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
 import { useWorldEvents } from '@/features/retention/store/useWorldEvents';
+import { loadReviewMode, saveReviewMode, type ReviewMode } from '../lib/reviewMode';
 
 // ---------------------------------------------------------------------------
 // 常量
@@ -21,10 +23,15 @@ import { useWorldEvents } from '@/features/retention/store/useWorldEvents';
 
 /** 到期卡片不足此数量时，补充新卡 */
 const MIN_DUE_THRESHOLD = 10;
-/** 单次会话最多卡片数 */
-const MAX_SESSION_CARDS = 20;
+/** 单次会话上限：由设置页配置（kb-max-session-cards，默认 20） */
 /** 黄金错误加速复习：下次间隔压缩上限（天） */
 const GOLDEN_ERROR_MAX_INTERVAL_DAYS = 1;
+
+/**
+ * R9 成就检查会话级节流：startSession 重置，每次会话只触发一次检查，
+ * 避免评分高频路径反复全表 count（模块级变量，store 为单例）
+ */
+let achievementCheckedInSession = false;
 
 // ---------------------------------------------------------------------------
 // 类型定义
@@ -52,7 +59,8 @@ interface StudySessionState {
   showStrengthPulse: boolean;
 
   // 会话操作
-  startSession: (deckId: string) => Promise<void>;
+  /** @param limit 可选卡数上限（F3 睡前迷你复习等轻量会话用） */
+  startSession: (deckId: string, limit?: number) => Promise<void>;
   rateCard: (rating: Rating, confidence?: Confidence) => Promise<void>;
   flipCard: () => void;
   endSession: () => void;
@@ -62,6 +70,12 @@ interface StudySessionState {
   clearDeckSession: (deckId: string) => void;
   /** v0.9.0: 获取当前会话及历史 goldenErrors */
   getGoldenErrors: () => GoldenError[];
+  /** CL-H5: 评分处理中标志——防双击/连点导致同一卡片被调度两次 */
+  isRating: boolean;
+
+  // 3.5 多感官复习：当前复习模式（阅读/听力/书写/讲解/情境），持久化到 localStorage
+  reviewMode: ReviewMode;
+  setReviewMode: (mode: ReviewMode) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,12 +127,13 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
     lastStabilityAfter: null,
     lastRating: null,
     showStrengthPulse: false,
+    isRating: false,
+    reviewMode: loadReviewMode(),
 
     // -----------------------------------------------------------------------
     // startSession：加载到期卡片 + 补充新卡（带每日限额）
     // -----------------------------------------------------------------------
-    startSession: async (deckId) => {
-      // 确保牌组卡片已加载到 flashcard store
+    startSession: async (deckId, limit) => {
       const { cards, loadCards } = useFlashcardStore.getState();
       if (cards.length === 0 || useFlashcardStore.getState().selectedDeckId !== deckId) {
         await loadCards(deckId);
@@ -172,23 +187,29 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
       };
 
       // 组装会话卡片列表（受每日限额约束）
+      const maxSessionCards = getMaxSessionCards();
       let sessionCards: Flashcard[];
       if (dueCards.length >= MIN_DUE_THRESHOLD) {
-        // 到期卡充足：只用到期卡（上限 MAX_SESSION_CARDS 和 remainingReviews）
-        const limit = Math.min(MAX_SESSION_CARDS, remainingReviews);
+        // 到期卡充足：只用到期卡（上限 maxSessionCards 和 remainingReviews）
+        const limit = Math.min(maxSessionCards, remainingReviews);
         sessionCards = dedupe(dueCards).slice(0, limit);
       } else {
-        // 到期卡不足：补充新卡，总量不超过 MAX_SESSION_CARDS 和 remainingReviews
+        // 到期卡不足：补充新卡，总量不超过 maxSessionCards 和 remainingReviews
         const dedupedDue = dedupe(dueCards);
         const dueIds = new Set(dedupedDue.map((c) => c.id!));
         const dedupedNew = dedupe(newCards, dueIds);
-        const totalLimit = Math.min(MAX_SESSION_CARDS, remainingReviews);
+        const totalLimit = Math.min(maxSessionCards, remainingReviews);
         const needNew = Math.min(
           totalLimit - dedupedDue.length,
           dedupedNew.length,
           remainingNewCards,
         );
         sessionCards = [...dedupedDue, ...dedupedNew.slice(0, Math.max(0, needNew))];
+      }
+
+      // 可选 limit（F3 睡前迷你复习：仅复习前 5 张，降低入睡前启动门槛）
+      if (limit && limit > 0 && sessionCards.length > limit) {
+        sessionCards = sessionCards.slice(0, limit);
       }
 
       if (sessionCards.length === 0) {
@@ -207,23 +228,34 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         isActive: true,
         cardStartTime: new Date(),
       });
+      // R9: 新会话重置成就检查节流标记
+      achievementCheckedInSession = false;
     },
 
     // -----------------------------------------------------------------------
     // rateCard：评分并推进到下一张
     // -----------------------------------------------------------------------
     rateCard: async (rating, confidence) => {
-      const { sessionCards, currentIndex, cardStartTime, isFlipped, goldenErrors } = get();
+      const { sessionCards, currentIndex, cardStartTime, isFlipped, goldenErrors, isRating } = get();
 
       // 必须已翻面才能评分
       if (!isFlipped) return;
 
-      const card = sessionCards[currentIndex];
-      if (!card || card.id === undefined) return;
+      // CL-H5: 防重入——rateCard 中有 await 落库窗口（isFlipped 尚未重置），
+      // 快速双击/触屏误触会让同一卡片被调度两次（双条复习记录 + 重复调度）
+      if (isRating) return;
+      set({ isRating: true });
 
-      // 宪法第一条：复习行为=秩序波纹。任何评分都是一次对混沌的推退
-      // （包括 Again——唤醒本身即正向，零负向语义），经世界事件总线驱动深海场景
-      useWorldEvents.getState().emitOrderRipple('flashcards');
+      const card = sessionCards[currentIndex];
+      if (!card || card.id === undefined) {
+        set({ isRating: false });
+        return;
+      }
+
+      try {
+        // 宪法第一条：复习行为=秩序波纹。任何评分都是一次对混沌的推退
+        // （包括 Again——唤醒本身即正向，零负向语义），经世界事件总线驱动深海场景
+        useWorldEvents.getState().emitOrderRipple('flashcards');
 
       // v0.9.0: goldenError 判定 — 高自信答错（Again）
       const isWrong = rating === Rating.Again;
@@ -265,6 +297,14 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
         effectiveInterval = compressed.interval;
       }
 
+      // 自适应挑战阶梯：按调度结果（间隔/失误）计算建议档位，惰性写入
+      const nextTier = suggestDifficultyTier({
+        interval: effectiveInterval,
+        repetitions: result.repetitions,
+        lapses: result.lapses,
+        difficulty: result.difficulty,
+      });
+
       // 更新卡片持久化存储（由 useFlashcardStore.updateCard 统一走 writeWithLog）
 
       // 同步更新本地 sessionCards 中的对应卡片
@@ -279,6 +319,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
               dueDate: effectiveDueDate,
               stability: result.stability,
               difficulty: result.difficulty,
+              difficultyTier: nextTier,
               lastReviewDate: updatedAt,
               updatedAt,
             }
@@ -304,18 +345,42 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
       };
       await createWithLog(flashcardReviewStore, 'flashcardReviews', review);
 
+      // R9 百卡复习成就：每次会话仅检查一次（评分高频路径避免反复全表 count）；
+      // 检查失败时复位节流标记，允许本会话稍后重试
+      if (!achievementCheckedInSession) {
+        achievementCheckedInSession = true;
+        import('@/lib/achievements/evaluator').then(({ checkAchievements }) => {
+          return checkAchievements({ type: 'review_completed' });
+        }).then((unlocked) => {
+          unlocked.forEach(a => {
+            window.dispatchEvent(new CustomEvent('achievement-unlocked', { detail: a }));
+          });
+        }).catch(() => {
+          achievementCheckedInSession = false;
+        });
+      }
+
       // 同步 flashcard store 中对应的卡片状态（含操作日志）
       const flashcardState = useFlashcardStore.getState();
-      flashcardState.updateCard(card.id, {
-        easeFactor: result.easeFactor,
-        interval: effectiveInterval,
-        repetitions: result.repetitions,
-        lapses: result.lapses,
-        dueDate: effectiveDueDate,
-        stability: result.stability,
-        difficulty: result.difficulty,
-        lastReviewDate: updatedAt,
-      });
+      try {
+        // ALG-M2: updateCard 为异步写（原未 await 的 rejection 是 unhandled）。
+        // 若此处失败（review 已落库、card 未更新），捕获并继续推进 UI——
+        // 内存态（updatedCards）已是最新，DB 旧值将在下次复习时被覆盖，
+        // 不丢数据；失败仅造成一次性的调度偏差，而非半写卡死或重复调度
+        await flashcardState.updateCard(card.id, {
+          easeFactor: result.easeFactor,
+          interval: effectiveInterval,
+          repetitions: result.repetitions,
+          lapses: result.lapses,
+          dueDate: effectiveDueDate,
+          stability: result.stability,
+          difficulty: result.difficulty,
+          difficultyTier: nextTier,
+          lastReviewDate: updatedAt,
+        });
+      } catch (updateErr) {
+        console.error('[StudySession] 卡片状态更新失败（复习记录已保存）:', updateErr);
+      }
 
       const nextIndex = currentIndex + 1;
       const isLastCard = nextIndex >= sessionCards.length;
@@ -340,6 +405,7 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
           isActive: false,
           isFlipped: false,
           cardStartTime: null,
+          isRating: false,
           // v0.29: 记忆强度追踪
           lastStabilityBefore: card.stability ?? 0,
           lastStabilityAfter: result.stability ?? 0,
@@ -356,12 +422,17 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
           goldenErrors: newGoldenErrors,
           isFlipped: false,
           cardStartTime: new Date(),
+          isRating: false,
           // v0.29: 记忆强度追踪
           lastStabilityBefore: card.stability ?? 0,
           lastStabilityAfter: result.stability ?? 0,
           lastRating: rating,
           showStrengthPulse: true,
         });
+      }
+      } finally {
+        // 异常路径（落库失败）也必须释放锁，避免评分永久不可用
+        set({ isRating: false });
       }
     },
 
@@ -423,6 +494,14 @@ export const useStudySessionStore = create<StudySessionState>((set, get) => {
     // -----------------------------------------------------------------------
     getGoldenErrors: () => {
       return get().goldenErrors;
+    },
+
+    // -----------------------------------------------------------------------
+    // setReviewMode：切换多感官复习模式并持久化
+    // -----------------------------------------------------------------------
+    setReviewMode: (mode) => {
+      set({ reviewMode: mode });
+      saveReviewMode(mode);
     },
   };
 });

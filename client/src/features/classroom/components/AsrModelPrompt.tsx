@@ -108,8 +108,6 @@ export function AsrModelPrompt() {
       <p className="mt-1.5 text-c1 text-text-tertiary">
         下载后可完全离线转写语音，无需联网、零 API 费用。不下载也可正常使用（云端转写）。
       </p>
-
-      <div className="mt-3 space-y-2">
         {models.map((model) => (
           <div key={model.id} className="flex items-center gap-3 p-2.5 rounded-kb-md bg-bg-secondary/50">
             <div className="flex-1 min-w-0">
@@ -143,7 +141,6 @@ export function AsrModelPrompt() {
             )}
           </div>
         ))}
-      </div>
 
       {/* 下载进度条 */}
       {downloading && (

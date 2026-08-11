@@ -15,10 +15,20 @@ export type AchievementEvent =
   | { type: 'flashcard_created' }
   | { type: 'feynman_completed' }
   | { type: 'note_created' }
-  | { type: 'streak_updated'; days: number };
+  | { type: 'streak_updated'; days: number }
+  | { type: 'review_completed' }
+  | { type: 'sop_completed' };
 
 /**
  * 检查成就解锁条件，返回新解锁的成就列表
+ *
+ * 里程碑型成就（pomodoro_100 等）以事件为触发时机、内部查询数据库累计
+ * 计数判定，调用方无需统计总数；sop 数据在 SQLite，sop_first_run 为
+ * 一次性事件型（触发即解锁）。
+ *
+ * 容错设计：计数查询失败视为未达标（safeCount），写入被 &key 唯一索引
+ * 拦截（并发重复解锁）时静默跳过——成就检查是尽力而为，任何单项失败
+ * 都不中断整条检查链，也不影响主流程。
  */
 export async function checkAchievements(
   event: AchievementEvent,
@@ -54,6 +64,49 @@ export async function checkAchievements(
       case 'streak_30':
         shouldUnlock = event.type === 'streak_updated' && event.days >= 30;
         break;
+      case 'pomodoro_100':
+        shouldUnlock = event.type === 'pomodoro_completed'
+          && (await safeCount(database.pomodoroSessions.count())) >= 100;
+        break;
+      case 'reviews_100':
+        shouldUnlock = event.type === 'review_completed'
+          && (await safeCount(database.flashcardReviews.count())) >= 100;
+        break;
+      case 'feynman_10':
+        shouldUnlock = event.type === 'feynman_completed'
+          && (await safeCount(database.feynmanNotes.where('status').equals('completed').count())) >= 10;
+        break;
+      case 'notes_20':
+        shouldUnlock = event.type === 'note_created'
+          && (await safeCount(database.notes.count())) >= 20;
+        break;
+      case 'sop_first_run':
+        shouldUnlock = event.type === 'sop_completed';
+        break;
+      // ── 赛季型成就（R12 扩展）──
+      case 'pomodoro_200':
+        shouldUnlock = event.type === 'pomodoro_completed'
+          && (await safeCount(database.pomodoroSessions.count())) >= 200;
+        break;
+      case 'reviews_500':
+        shouldUnlock = event.type === 'review_completed'
+          && (await safeCount(database.flashcardReviews.count())) >= 500;
+        break;
+      case 'feynman_30':
+        shouldUnlock = event.type === 'feynman_completed'
+          && (await safeCount(database.feynmanNotes.where('status').equals('completed').count())) >= 30;
+        break;
+      case 'notes_50':
+        shouldUnlock = event.type === 'note_created'
+          && (await safeCount(database.notes.count())) >= 50;
+        break;
+      case 'streak_60':
+        shouldUnlock = event.type === 'streak_updated' && event.days >= 60;
+        break;
+      case 'cards_200':
+        shouldUnlock = event.type === 'flashcard_created'
+          && (await safeCount(database.flashcards.count())) >= 200;
+        break;
     }
 
     if (shouldUnlock) {
@@ -65,10 +118,23 @@ export async function checkAchievements(
         icon: def.icon,
         unlockedAt: new Date(),
       };
-      await database.achievements.add(achievement);
-      unlocked.push(achievement);
+      try {
+        await database.achievements.add(achievement);
+        unlocked.push(achievement);
+      } catch {
+        // 并发下 &key 唯一索引拦截重复写入（成就已由并发调用解锁）——静默跳过
+      }
     }
   }
 
   return unlocked;
+}
+
+/** 安全计数：查询失败视为 0（成就检查尽力而为，不因存储异常中断整条检查链） */
+async function safeCount(p: Promise<number>): Promise<number> {
+  try {
+    return await p;
+  } catch {
+    return 0;
+  }
 }

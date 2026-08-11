@@ -6,7 +6,7 @@ import { Card } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
-import { Brain, Zap, BookOpen, RotateCcw } from 'lucide-react';
+import { Brain, Zap, BookOpen, RotateCcw, Repeat } from 'lucide-react';
 import {
   getCurrentAlgorithm,
   setSchedulerAlgorithm,
@@ -14,8 +14,11 @@ import {
   setMaxNewCardsPerDay,
   getMaxReviewsPerDay,
   setMaxReviewsPerDay,
+  getMaxSessionCards,
+  setMaxSessionCards,
   DEFAULT_MAX_NEW_CARDS,
   DEFAULT_MAX_REVIEWS,
+  DEFAULT_MAX_SESSION_CARDS,
 } from '@/lib/schedulingFactory';
 
 /**
@@ -57,6 +60,7 @@ export default function FlashcardSettings() {
   const [algorithm, setAlgorithm] = useState<'sm2' | 'fsrs'>(getCurrentAlgorithm);
   const [maxNewCards, setMaxNewCards] = useState(getMaxNewCardsPerDay);
   const [maxReviews, setMaxReviews] = useState(getMaxReviewsPerDay);
+  const [maxSessionCards, setMaxSessionCardsState] = useState(getMaxSessionCards);
 
   const handleAlgorithmToggle = useCallback((useFSRS: boolean) => {
     const newAlgo = useFSRS ? 'fsrs' : 'sm2';
@@ -80,6 +84,12 @@ export default function FlashcardSettings() {
     setMaxReviewsPerDay(clamped);
   }, []);
 
+  const handleMaxSessionCardsChange = useCallback((value: number) => {
+    const clamped = Math.max(1, Math.min(200, value));
+    setMaxSessionCardsState(clamped);
+    setMaxSessionCards(clamped);
+  }, []);
+
   const handleReset = useCallback(() => {
     setAlgorithm('fsrs');
     setSchedulerAlgorithm('fsrs');
@@ -87,6 +97,8 @@ export default function FlashcardSettings() {
     setMaxNewCardsPerDay(DEFAULT_MAX_NEW_CARDS);
     setMaxReviews(DEFAULT_MAX_REVIEWS);
     setMaxReviewsPerDay(DEFAULT_MAX_REVIEWS);
+    setMaxSessionCardsState(DEFAULT_MAX_SESSION_CARDS);
+    setMaxSessionCards(DEFAULT_MAX_SESSION_CARDS);
     toast({ type: 'success', message: '已恢复默认设置' });
   }, [toast]);
 
@@ -171,6 +183,27 @@ export default function FlashcardSettings() {
           max={1000}
           value={maxReviews}
           onChange={(e) => handleMaxReviewsChange(parseInt(e.target.value, 10) || 1)}
+          className="w-20 h-8 text-center text-b2 font-medium text-text-primary bg-bg-tertiary/50 border border-border/30 rounded-kb-md focus:outline-none focus:border-brand-400 transition-colors"
+        />
+      </div>
+
+      {/* 单次复习上限 */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <Repeat className="w-4 h-4 text-text-tertiary" strokeWidth={1.5} />
+            <span className="text-b2 font-medium text-text-primary">单次复习上限</span>
+          </div>
+          <p className="text-c1 text-text-tertiary mt-0.5 ml-6">
+            每次进入学习会话最多复习的卡片数量（迷你复习等轻量入口除外）
+          </p>
+        </div>
+        <input
+          type="number"
+          min={1}
+          max={200}
+          value={maxSessionCards}
+          onChange={(e) => handleMaxSessionCardsChange(parseInt(e.target.value, 10) || 1)}
           className="w-20 h-8 text-center text-b2 font-medium text-text-primary bg-bg-tertiary/50 border border-border/30 rounded-kb-md focus:outline-none focus:border-brand-400 transition-colors"
         />
       </div>

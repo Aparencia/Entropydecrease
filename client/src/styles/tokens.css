@@ -6,40 +6,40 @@
 
 /* ---- 晨曦浮光（浅色主题，默认） ---- */
 :root {
-  /* 品牌主色 - 蓝色系（专注/平静） */
-  --kb-brand-50: #EFF6FF;
-  --kb-brand-100: #DBEAFE;
-  --kb-brand-200: #BFDBFE;
-  --kb-brand-300: #93C5FD;
-  --kb-brand-400: #60A5FA;
-  --kb-brand-500: #3B82F6;
-  --kb-brand-600: #2563EB;
-  --kb-brand-700: #1D4ED8;
-  --kb-brand-800: #1E40AF;
-  --kb-brand-900: #1E3A8A;
+  /* 品牌主色 - 晨光琥珀金系（专注/温暖） */
+  --kb-brand-50: #FDF3E7;
+  --kb-brand-100: #FAE6CC;
+  --kb-brand-200: #F3CD9E;
+  --kb-brand-300: #E8AD66;
+  --kb-brand-400: #DB8F3C;
+  --kb-brand-500: #C9761F;
+  --kb-brand-600: #B05E12;
+  --kb-brand-700: #9A4F0C;
+  --kb-brand-800: #7E420A;
+  --kb-brand-900: #61330B;
 
-  /* 品牌辅色 - 琥珀/青色系（成就/温暖） */
-  --kb-accent-50: #FFF7ED;
-  --kb-accent-100: #FFEDD5;
-  --kb-accent-200: #FED7AA;
-  --kb-accent-300: #FDBA74;
-  --kb-accent-400: #FB923C;
-  --kb-accent-500: #F59E0B;
-  --kb-accent-600: #D97706;
-  --kb-accent-700: #B45309;
-  --kb-accent-800: #92400E;
-  --kb-accent-900: #78350F;
+  /* 品牌辅色 - 晨空蓝（浅色模式，强调/选中） */
+  --kb-accent-50: #EDF3FA;
+  --kb-accent-100: #DBE8F4;
+  --kb-accent-200: #B7CFE8;
+  --kb-accent-300: #8CB2D8;
+  --kb-accent-400: #6494C4;
+  --kb-accent-500: #4A7DB0;
+  --kb-accent-600: #3B689A;
+  --kb-accent-700: #31577F;
+  --kb-accent-800: #27455F;
+  --kb-accent-900: #1E3448;
 
   /* 功能色 */
-  --kb-focus-blue: #3B82F6;
+  --kb-focus-blue: #4A7DB0;
   --kb-amber: #F59E0B;
   --kb-moss-green: #6BAF8A;
   --kb-stone-purple: #8B8494;
-  --kb-cyber-cyan: #06B6D4;
+  --kb-cyber-cyan: #2B5F9E;
   --kb-color-error: #EF4444;
   --kb-color-warning: #F97316;
-  --kb-color-success: #22C55E;
-  --kb-color-info: #3B82F6;
+  --kb-color-success: #41A96E;
+  --kb-color-info: #2B5F9E;
 
   /* 背景色 — 晨曦浮光调 */
   --kb-bg-primary: #FAF8F5;
@@ -148,10 +148,10 @@
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
 
   /* 品牌阴影 */
-  --kb-shadow-brand: 0 4px 12px rgba(59, 130, 246, 0.2);
-  --kb-shadow-accent: 0 4px 12px rgba(245, 158, 11, 0.2);
-  --kb-shadow-brand-hover: 0 6px 20px rgba(59, 130, 246, 0.3);
-  --kb-shadow-accent-hover: 0 6px 20px rgba(245, 158, 11, 0.3);
+  --kb-shadow-brand: 0 4px 12px rgba(176, 94, 18, 0.18);
+  --kb-shadow-accent: 0 4px 12px rgba(59, 104, 154, 0.18);
+  --kb-shadow-brand-hover: 0 6px 20px rgba(176, 94, 18, 0.26);
+  --kb-shadow-accent-hover: 0 6px 20px rgba(59, 104, 154, 0.26);
 
   /* ---- shadcn/ui 兼容层（映射到 --kb-* 令牌）---- */
   --background: var(--kb-bg-primary);
@@ -174,6 +174,15 @@
   --input: var(--kb-border-default);
   --ring: var(--kb-brand-300);
   --radius: 0.75rem;
+
+  /* 潜水/沉浸面板渐变（全局定义：FunctionalOverlay 面板背景依赖，
+     此前仅在 pomodoro-dive.css 按模块定义，未进番茄模块时变量缺失致面板透明） */
+  --kb-dive-top: rgba(219, 232, 244, 0.55);
+  --kb-dive-mid: rgba(250, 248, 245, 0.35);
+  --kb-dive-bot: rgba(140, 178, 216, 0.5);
+  --kb-dive-bubble: rgba(74, 125, 176, 0.4);
+  --kb-dive-ray: rgba(74, 125, 176, 0.07);
+  --kb-dive-fog: rgba(219, 232, 244, 0.4);
 }
 
 /* ========== 动画 @keyframes ========== */
@@ -252,69 +261,249 @@
 
 /* ---- 极夜深海（深色主题） ---- */
 [data-theme="dark"] {
-  /* 品牌主色 - 深空蓝紫（深色模式） */
-  --kb-brand-50: #1A1B3A;
-  --kb-brand-100: #252755;
-  --kb-brand-200: #353878;
-  --kb-brand-300: #4A4E9E;
-  --kb-brand-400: #6366F1;
-  --kb-brand-500: #818CF8;
-  --kb-brand-600: #6366F1;
-  --kb-brand-700: #5558E0;
-  --kb-brand-800: #4649C8;
-  --kb-brand-900: #373AB0;
+  /* 品牌主色 - 深海萤火磷光青绿（深色模式） */
+  --kb-brand-50: #0C211C;
+  --kb-brand-100: #122E27;
+  --kb-brand-200: #184037;
+  --kb-brand-300: #1F5748;
+  --kb-brand-400: #287160;
+  --kb-brand-500: #328E79;
+  --kb-brand-600: #40AB92;
+  --kb-brand-700: #57C6A9;
+  --kb-brand-800: #7DDCC1;
+  --kb-brand-900: #A9F0DB;
 
-  /* 品牌辅色 - 赛博青（深色模式） */
-  --kb-accent-50: #0A1E28;
-  --kb-accent-100: #0E2E3C;
-  --kb-accent-200: #164E63;
-  --kb-accent-300: #0E7490;
-  --kb-accent-400: #0891B2;
-  --kb-accent-500: #06B6D4;
-  --kb-accent-600: #22D3EE;
-  --kb-accent-700: #67E8F9;
-  --kb-accent-800: #A5F3FC;
-  --kb-accent-900: #CFFAFE;
+  /* 品牌辅色 - 认知琥珀金（深色模式，成就/强调） */
+  --kb-accent-50: #2B1A08;
+  --kb-accent-100: #3A240C;
+  --kb-accent-200: #4E3010;
+  --kb-accent-300: #6B4214;
+  --kb-accent-400: #8F5818;
+  --kb-accent-500: #B5721E;
+  --kb-accent-600: #D18A2A;
+  --kb-accent-700: #E8A74A;
+  --kb-accent-800: #F5C77E;
+  --kb-accent-900: #FBE3B5;
 
   /* 功能色（深色模式微调亮度） */
-  --kb-focus-blue: #60A5FA;
+  --kb-focus-blue: #6FB4E8;
   --kb-amber: #FBBF24;
   --kb-moss-green: #82C9A3;
   --kb-stone-purple: #3A3545;
-  --kb-cyber-cyan: #22D3EE;
+  --kb-cyber-cyan: #4A9BD9;
   --kb-color-error: #F87171;
   --kb-color-warning: #FB923C;
-  --kb-color-success: #4ADE80;
-  --kb-color-info: #60A5FA;
+  --kb-color-success: #4EC985;
+  --kb-color-info: #4A9BD9;
 
   /* 背景色 — 极夜深海 */
-  --kb-bg-primary: #0C1524;
-  --kb-bg-secondary: #12203A;
-  --kb-bg-tertiary: #182A48;
-  --kb-bg-elevated: #12203A;
+  --kb-bg-primary: #0A1620;
+  --kb-bg-secondary: #0F1F2E;
+  --kb-bg-tertiary: #152A3D;
+  --kb-bg-elevated: #0F1F2E;
 
   /* 文字色 */
-  --kb-text-primary: #E0E6F0;
-  --kb-text-secondary: #90A0B8;
-  --kb-text-tertiary: #607088;
-  --kb-text-inverse: #0C1524;
+  --kb-text-primary: #E2EAF2;
+  --kb-text-secondary: #93A7BC;
+  --kb-text-tertiary: #647B90;
+  --kb-text-inverse: #0A1620;
 
   /* 边框 — 深海微光 */
-  --kb-border-default: #223550;
-  --kb-border-strong: #2E4568;
+  --kb-border-default: #1F3348;
+  --kb-border-strong: #29425C;
 
-  /* 阴影（深蓝色阴影 + 品牌蓝色弥散光晕） */
-  --kb-shadow-sm: 0 1px 3px rgba(12, 21, 36, 0.4), 0 0 8px rgba(59, 130, 246, 0.05);
-  --kb-shadow-md: 0 4px 12px rgba(12, 21, 36, 0.5), 0 0 16px rgba(59, 130, 246, 0.08);
-  --kb-shadow-lg: 0 8px 24px rgba(12, 21, 36, 0.6), 0 0 24px rgba(59, 130, 246, 0.12);
+  /* 阴影（深海青黑阴影 + 磷光青绿弥散光晕） */
+  --kb-shadow-sm: 0 1px 3px rgba(10, 22, 32, 0.4), 0 0 8px rgba(64, 171, 146, 0.05);
+  --kb-shadow-md: 0 4px 12px rgba(10, 22, 32, 0.5), 0 0 16px rgba(64, 171, 146, 0.08);
+  --kb-shadow-lg: 0 8px 24px rgba(10, 22, 32, 0.6), 0 0 24px rgba(64, 171, 146, 0.12);
 
-  --kb-shadow-brand: 0 4px 12px rgba(99, 102, 241, 0.25);
-  --kb-shadow-accent: 0 4px 12px rgba(6, 182, 212, 0.25);
-  --kb-shadow-brand-hover: 0 6px 20px rgba(99, 102, 241, 0.35);
-  --kb-shadow-accent-hover: 0 6px 20px rgba(6, 182, 212, 0.35);
+  --kb-shadow-brand: 0 4px 12px rgba(64, 171, 146, 0.28);
+  --kb-shadow-accent: 0 4px 12px rgba(209, 138, 42, 0.25);
+  --kb-shadow-brand-hover: 0 6px 20px rgba(87, 198, 169, 0.35);
+  --kb-shadow-accent-hover: 0 6px 20px rgba(209, 138, 42, 0.35);
 
   /* shadcn/ui 深色兼容 */
   --accent: var(--kb-brand-600);
   --primary: var(--kb-brand-600);
   --ring: var(--kb-brand-400);
+  --primary-foreground: #0A1620;
+
+  /* 潜水/沉浸面板渐变（深色） */
+  --kb-dive-top: rgba(24, 42, 72, 0.9);
+  --kb-dive-mid: rgba(12, 21, 36, 0.85);
+  --kb-dive-bot: rgba(4, 10, 20, 0.96);
+  --kb-dive-bubble: rgba(74, 155, 217, 0.3);
+  --kb-dive-ray: rgba(74, 155, 217, 0.06);
+  --kb-dive-fog: rgba(12, 21, 36, 0.7);
+}
+
+/* ============================================
+   双光源材质（按钮质感） - 环境光 + 自发光 + 微噪点 + 按压点亮
+   ============================================ */
+:root .kb-btn-primary-material,
+:root .kb-btn-ai-material {
+  position: relative;
+  overflow: hidden;
+}
+/* 浅色 · 主按钮：晨光（顶部受光）+ 琥珀自发光 */
+:root .kb-btn-primary-material {
+  background: linear-gradient(180deg, #C97A22 0%, #B05E12 55%, #A3550E 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+    0 2px 6px rgba(154, 79, 12, 0.22);
+  transition:
+    box-shadow 150ms var(--kb-ease-smooth),
+    background 150ms var(--kb-ease-smooth),
+    transform 150ms var(--kb-ease-out);
+}
+:root .kb-btn-primary-material:hover {
+  background: linear-gradient(180deg, #D88A2E 0%, #C06A15 55%, #B05E12 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
+    0 4px 10px rgba(154, 79, 12, 0.28);
+}
+:root .kb-btn-primary-material:active {
+  background: linear-gradient(180deg, #B05E12 0%, #9A4F0C 55%, #8A450A 100%);
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 1px 3px rgba(154, 79, 12, 0.2);
+  transform: scale(0.97);
+}
+/* 浅色 · AI 按钮：磷光蓝 */
+:root .kb-btn-ai-material {
+  background: linear-gradient(180deg, #3B6FA8 0%, #2B5F9E 55%, #24517F 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
+    0 2px 6px rgba(43, 95, 158, 0.22);
+  transition:
+    box-shadow 150ms var(--kb-ease-smooth),
+    background 150ms var(--kb-ease-smooth),
+    transform 150ms var(--kb-ease-out);
+}
+:root .kb-btn-ai-material:hover {
+  background: linear-gradient(180deg, #4A7DB0 0%, #3B6FA8 55%, #2B5F9E 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.08),
+    0 4px 10px rgba(43, 95, 158, 0.28);
+}
+:root .kb-btn-ai-material:active {
+  background: linear-gradient(180deg, #2B5F9E 0%, #24517F 55%, #1E4366 100%);
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 1px 3px rgba(43, 95, 158, 0.2);
+  transform: scale(0.97);
+}
+/* 浅色微噪点（晨光实体表面，更淡） */
+:root .kb-btn-primary-material::after,
+:root .kb-btn-ai-material::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+  opacity: 0.025;
+  transition: opacity 150ms ease;
+}
+:root .kb-btn-primary-material:hover::after,
+:root .kb-btn-ai-material:hover::after {
+  opacity: 0.05;
+}
+
+[data-theme="dark"] .kb-btn-primary-material,
+[data-theme="dark"] .kb-btn-ai-material {
+  position: relative;
+  overflow: hidden;
+}
+/* 深色 · 主按钮：海面光（顶部环境光）+ 磷光自发光（内透） */
+[data-theme="dark"] .kb-btn-primary-material {
+  background: radial-gradient(120% 130% at 50% 0%,
+    #57C6A9 0%, #40AB92 55%, #2F7D6A 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -3px 8px rgba(4, 16, 12, 0.25),
+    0 1px 3px rgba(4, 16, 12, 0.35),
+    0 0 14px rgba(64, 171, 146, 0.22);
+  transition:
+    box-shadow 150ms var(--kb-ease-smooth),
+    background 150ms var(--kb-ease-smooth),
+    transform 150ms var(--kb-ease-out);
+}
+[data-theme="dark"] .kb-btn-primary-material:hover {
+  background: radial-gradient(120% 130% at 50% 0%,
+    #6FDDBF 0%, #57C6A9 55%, #3B9E86 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -3px 8px rgba(4, 16, 12, 0.22),
+    0 1px 3px rgba(4, 16, 12, 0.3),
+    0 0 18px rgba(64, 171, 146, 0.32);
+}
+[data-theme="dark"] .kb-btn-primary-material:active {
+  background: radial-gradient(120% 130% at 50% 0%,
+    #47AB92 0%, #328E79 60%, #256B5C 100%);
+  box-shadow:
+    inset 0 0 14px rgba(255, 255, 255, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 10px rgba(64, 171, 146, 0.25);
+  transform: scale(0.97);
+}
+/* 深色 · AI 按钮：磷光蓝自发光 */
+[data-theme="dark"] .kb-btn-ai-material {
+  background: radial-gradient(120% 130% at 50% 0%,
+    #6FB4E8 0%, #4A9BD9 55%, #3578B5 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -3px 8px rgba(4, 16, 12, 0.22),
+    0 0 14px rgba(74, 155, 217, 0.22);
+  transition:
+    box-shadow 150ms var(--kb-ease-smooth),
+    background 150ms var(--kb-ease-smooth),
+    transform 150ms var(--kb-ease-out);
+}
+[data-theme="dark"] .kb-btn-ai-material:hover {
+  background: radial-gradient(120% 130% at 50% 0%,
+    #8AC6F0 0%, #6FB4E8 55%, #4A9BD9 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -3px 8px rgba(4, 16, 12, 0.2),
+    0 0 18px rgba(74, 155, 217, 0.32);
+}
+[data-theme="dark"] .kb-btn-ai-material:active {
+  background: radial-gradient(120% 130% at 50% 0%,
+    #5FA8DE 0%, #3D7FBB 60%, #2E6598 100%);
+  box-shadow:
+    inset 0 0 14px rgba(255, 255, 255, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 0 10px rgba(74, 155, 217, 0.25);
+  transform: scale(0.97);
+}
+/* 微噪点层：1px 颗粒，肉眼近不可见（feTurbulence data-URI） */
+[data-theme="dark"] .kb-btn-primary-material::after,
+[data-theme="dark"] .kb-btn-ai-material::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+  opacity: 0.03;
+  transition: opacity 150ms ease;
+}
+[data-theme="dark"] .kb-btn-primary-material:hover::after,
+[data-theme="dark"] .kb-btn-ai-material:hover::after {
+  opacity: 0.06;
+}
+/* reduced-motion：动效退化（按压点亮仅保留纯色变化） */
+@media (prefers-reduced-motion: reduce) {
+  .kb-btn-primary-material,
+  .kb-btn-ai-material {
+    transition: none;
+    transform: none !important;
+  }
 }

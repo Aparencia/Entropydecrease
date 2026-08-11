@@ -40,6 +40,10 @@ type WSConnection struct {
 	Send     chan []byte
 	closed   bool
 	mu       sync.Mutex
+
+	// SYNC-H2: sync_request 在飞查询信号槽（容量 2）——客户端可连续发送
+	// 任意数量 sync_request，每个都启动 goroutine 查库会打满数据库连接池
+	syncReqSlots chan struct{}
 }
 
 // close safely marks the connection as closed and closes the underlying socket.
@@ -121,13 +125,35 @@ func (c *WSConnection) readPump() {
 			}
 			// M10: 查库改为异步执行（goroutine），结果经 Send 通道回投，
 			// 避免慢查询阻塞 readPump 导致心跳超时。
-			go c.handleSyncRequest(payload.SinceVersion)
+			// SYNC-H2: 在飞查询超限时丢弃本次请求（客户端轮询会重发），
+			// 防止单连接洪泛打满数据库连接池（上限 50）拖垮全部用户
+			select {
+			case c.syncReqSlots <- struct{}{}:
+				go func() {
+					defer func() { <-c.syncReqSlots }()
+					c.handleSyncRequest(payload.SinceVersion)
+				}()
+			default:
+				log.Printf("[ws] sync_request dropped (in-flight limit reached) user=%s device=%s", c.UserID, c.DeviceID)
+			}
 
 		case "operation":
 			// Client-pushed operation over WebSocket (future enhancement).
 			// For now, acknowledge receipt.
 			ack, _ := json.Marshal(WSMessage{Type: "ack", Payload: msg.Payload})
 			c.send(ack)
+
+		// Phase 4 社交功能消息：协作深潜房间（4.1）
+		case "room:create", "room:join", "room:leave", "room:presence", "room:cheer":
+			handleRoomWSMessage(c, msg)
+
+		// Phase 4 社交功能消息：番茄钟协作接力（4.2）——客户端上报状态转发给搭档
+		case "relay:partner-status":
+			handleRelayWSMessage(c, msg)
+
+		// Phase 4 社交功能消息：虚拟自习室座位状态同步（4.4）
+		case "studyroom:seat-status":
+			handleStudyRoomWSMessage(c, msg)
 		}
 	}
 }

@@ -32,8 +32,8 @@ function getCoralStyle(checked: boolean, isToday: boolean) {
   if (isToday) {
     return {
       bg: 'bg-bg-tertiary/40',
-      glow: 'ring-1 ring-cyan-400/40 ring-offset-1 ring-offset-transparent',
-      text: 'text-cyan-300/80',
+      glow: 'ring-1 ring-cyber/40 ring-offset-1 ring-offset-transparent',
+      text: 'text-cyber/80',
     };
   }
   return {
@@ -51,14 +51,14 @@ export default function CoralReefCalendar({ days, month, year }: Props) {
 
   return (
     <motion.div
-      className="rounded-[var(--kb-radius-lg)] border border-cyan-400/15 bg-bg-elevated/30 backdrop-blur-sm p-3 overflow-hidden"
+      className="rounded-[var(--kb-radius-lg)] border border-cyber/15 bg-bg-elevated/30 backdrop-blur-sm p-3 overflow-hidden"
       whileHover={{ scale: 1.01 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
       aria-label={`${year}年${month + 1}月打卡日历`}
     >
       {/* 标题 */}
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-[10px] font-medium text-cyan-200/70">
+        <h3 className="text-[10px] font-medium text-cyber/70">
           {year}年{month + 1}月 珊瑚礁
         </h3>
         <span className="text-[9px] text-brand-400/60">
@@ -69,7 +69,7 @@ export default function CoralReefCalendar({ days, month, year }: Props) {
       {/* 星期头 */}
       <div className="grid grid-cols-7 gap-0.5 mb-1">
         {weeks.map((w) => (
-          <div key={w} className="text-center text-[7px] text-cyan-300/30 font-medium">{w}</div>
+          <div key={w} className="text-center text-[7px] text-cyber/30 font-medium">{w}</div>
         ))}
       </div>
 

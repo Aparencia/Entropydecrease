@@ -285,6 +285,18 @@ export class CRDTEngine {
     this.docs.clear();
     this.initialized = false;
   }
+
+  /**
+   * 重置单表 CRDT 文档（SYNC2-L5: 本地变更持久化失败后调用）
+   * 从 crdt_docs 最新快照重建该表内存状态，丢弃本次未落盘的变更——
+   * 避免内存 doc 前滚而队列/快照未跟上导致的基线漂移
+   *（下次 applyLocalChange 基于漂移基线生成非法 changeset）。
+   * 该变更最终仍会随下次业务写入重新生成，数据不丢。
+   */
+  async resetTable(tableName: string): Promise<void> {
+    this.docs.delete(tableName);
+    await this.initDoc(tableName);
+  }
 }
 
 // ─── 单例 ────────────────────────────────────────────────────────────────────

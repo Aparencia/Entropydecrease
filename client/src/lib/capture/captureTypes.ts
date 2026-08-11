@@ -159,17 +159,19 @@ export interface AudioSegment {
   timestampEnd: number;
   audioBase64: string;
   energy: number;
-  /** 流式 ASR 转写结果（课堂进行中即时填充，无需课后批量转写） */
+  /** 流式 ASR 转写结果（课堂进行中即时填充，无需课后批量转写）——已应用热词替换的文本，供下游笔记/问答/闪卡消费 */
   audioText?: string | null;
+  /** 原始 ASR 转写文本（热词替换前），保真溯源用 */
+  audioTextRaw?: string | null;
 }
 
 /** @ai-context 全局时间轴条目，串联关键帧和语音段供后续分析回放 */
 export interface TimelineEntry {
   timestamp: number;
-  type: 'keyframe' | 'voice_start' | 'voice_end' | 'silence' | 'bookmark';
+  type: 'keyframe' | 'voice_start' | 'voice_end' | 'silence' | 'bookmark' | 'auto_anchor';
   refId?: string;
   energy?: number;
-  /** bookmark 类型时的用户标注（可选） */
+  /** bookmark/auto_anchor 类型时的标注文本（可选） */
   label?: string;
 }
 

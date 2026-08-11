@@ -68,6 +68,18 @@ const DOWNLOAD_RETRY_DELAYS = [30_000, 60_000, 120_000]; // 30s, 60s, 120s
 let isDownloading = false;
 
 /**
+ * CL-L4: 更新状态机——主进程侧状态校验，防止渲染层在任意时机调用
+ * install（会立即退出应用）或重复触发 download（并发下载）
+ */
+type UpdateState = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error';
+let updateState: UpdateState = 'idle';
+
+function setUpdateState(state: UpdateState): void {
+  updateState = state;
+  logger.info(`[AutoUpdater] State → ${state}`);
+}
+
+/**
  * 设置自动检查开关
  * 由 main.ts 的 IPC handler 调用
  */
@@ -127,11 +139,13 @@ export function initAutoUpdater(mainWindow: BrowserWindow | null): void {
 
   autoUpdater.on('checking-for-update', () => {
     logger.info('[AutoUpdater] Checking for update...');
+    setUpdateState('checking');
     sendToRenderer(mainWindow, 'update-status', { status: 'checking' });
   });
 
   autoUpdater.on('update-available', (info: UpdateInfo) => {
     logger.info(`[AutoUpdater] Update available: v${info.version}`);
+    setUpdateState('available');
     sendToRenderer(mainWindow, 'update-status', {
       status: 'available',
       version: info.version,
@@ -141,10 +155,12 @@ export function initAutoUpdater(mainWindow: BrowserWindow | null): void {
 
   autoUpdater.on('update-not-available', () => {
     logger.info('[AutoUpdater] No update available');
+    setUpdateState('idle');
     sendToRenderer(mainWindow, 'update-status', { status: 'not-available' });
   });
 
   autoUpdater.on('download-progress', (progress: ProgressInfo) => {
+    setUpdateState('downloading');
     sendToRenderer(mainWindow, 'update-status', {
       status: 'downloading',
       percent: Math.round(progress.percent),
@@ -157,6 +173,7 @@ export function initAutoUpdater(mainWindow: BrowserWindow | null): void {
     // 下载成功，重置重试计数
     downloadRetryCount = 0;
     isDownloading = false;
+    setUpdateState('downloaded');
     sendToRenderer(mainWindow, 'update-status', {
       status: 'downloaded',
       version: info.version,
@@ -259,14 +276,25 @@ export function checkForUpdate(): void {
 }
 
 export function downloadUpdate(): void {
+  // CL-L4: 仅 available 态允许下载，防止重复触发并发下载
+  if (updateState !== 'available') {
+    logger.warn(`[AutoUpdater] downloadUpdate ignored (state=${updateState}, expected=available)`);
+    return;
+  }
   isDownloading = true;
   downloadRetryCount = 0;
+  setUpdateState('downloading');
   autoUpdater.downloadUpdate().catch((err) => {
     logger.error('[AutoUpdater] Download failed', err);
   });
 }
 
 export function installUpdate(): void {
+  // CL-L4: 仅 downloaded 态允许安装——quitAndInstall 会立即退出应用并安装
+  if (updateState !== 'downloaded') {
+    logger.warn(`[AutoUpdater] installUpdate ignored (state=${updateState}, expected=downloaded)`);
+    return;
+  }
   autoUpdater.quitAndInstall();
 }
 

@@ -9,7 +9,7 @@
 import { useEffect, useRef } from 'react';
 import { assistantEventBus } from '../lib/eventBus';
 import { PROACTIVE_RULES } from '../lib/proactiveRules';
-import { pickTemplate } from '../lib/messageTemplates';
+import { pickTemplate, maybeCuriosityRewrite } from '../lib/messageTemplates';
 import { getStatsCacheText, refreshStatsCache } from '../lib/progressStats';
 import { useAssistantStore } from '../store/useAssistantStore';
 import { MAX_TRIGGERS_PER_HOUR, MAX_CONSECUTIVE_IGNORES, PROGRESS_NARRATIVE_STORAGE_KEY, PROGRESS_NARRATIVE_DELAY_MS } from '../constants';
@@ -111,12 +111,20 @@ export function useProactiveEngine(): void {
     hourlyCount++;
 
     // ai_generate 策略离线降级为 template；{stats} 用预取的周统计填充，
-    // 缓存未就绪（非 Electron/采集失败）时用通用正向文案兜底
+    // 缓存未就绪（非 Electron/采集失败）时用通用正向文案兜底；
+    // pre-class-prep 额外替换 {course}/{minutes} 课程上下文占位符
     const statsText = getStatsCacheText() ?? FALLBACK_STATS_TEXT;
-    const message = pickTemplate(rule.id).replace('{stats}', statsText);
+    let message = pickTemplate(rule.id).replace('{stats}', statsText);
+    if (rule.id === 'pre-class-prep' && ctx.upcomingClass) {
+      message = message
+        .replace('{course}', ctx.upcomingClass.course)
+        .replace('{minutes}', String(ctx.upcomingClass.startsInMinutes));
+    }
+    // 1.15 好奇心改写：30% 概率把普通通知改写为好奇心驱动版本（奖赏回来）
+    message = maybeCuriosityRewrite(message);
     // progress-narrative 走下方延迟展示分支，其余规则立即展示
     if (rule.id !== 'progress-narrative') {
-      showBubble(message, rule.id);
+      showBubble(message, rule.id, ctx as unknown as Record<string, unknown>);
     }
 
     // A3 微进展叙述：同步记录节奏；气泡延迟展示——app:startup 同批的
@@ -128,7 +136,7 @@ export function useProactiveEngine(): void {
       window.setTimeout(() => {
         const s = useAssistantStore.getState();
         if (s.panelState === 'expanded' || lastDismissedAt > scheduleAt) return;
-        s.showBubble(message, rule.id);
+        s.showBubble(message, rule.id, ctx as unknown as Record<string, unknown>);
         void enhanceNarrative(statsText, rule.id);
       }, PROGRESS_NARRATIVE_DELAY_MS);
     }

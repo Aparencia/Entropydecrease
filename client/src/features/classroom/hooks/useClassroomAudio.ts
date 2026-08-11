@@ -22,7 +22,7 @@
  *   - 麦克风（现场课程场景）：通过 getUserMedia 直接采集麦克风输入
  *   由主进程 audio_capture_do_start IPC 指令中的 microphone 字段分支。
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { AudioChunkData, CaptureMode, SessionStatus, CaptureManager } from '@/lib/capture';
 import { startAudioPipeline } from '@/lib/audioPipeline';
 
@@ -30,6 +30,8 @@ import { startAudioPipeline } from '@/lib/audioPipeline';
 const NEVER_RECEIVED_TIMEOUT_MS = 15000;
 /** 音频中断多久判定为异常 */
 const CHUNK_GAP_TIMEOUT_MS = 10000;
+/** M2: 连续采集多久自动生成一个锚点（15 分钟） */
+const AUTO_ANCHOR_INTERVAL_MS = 15 * 60 * 1000;
 
 interface AudioStartPayload {
   sourceId: string;
@@ -138,6 +140,39 @@ export function useClassroomAudio({ captureManager, status, mode, onNotify }: Us
   // 直接闭包会随渲染变化而过期，故用 ref 桥接。
   const notifyRef = useRef(onNotify);
   notifyRef.current = onNotify;
+
+  // ── M2 录制中自动锚点：15 分钟粒度，ref 跟踪起止与上次锚点时间 ──
+  const autoAnchorStateRef = useRef<{ startedAt: number; lastAnchor: number } | null>(null);
+  /** 父组件（useClassroomCapture）注册的回调：锚点触发时记录到 UI 状态 */
+  const autoAnchorCallbackRef = useRef<(() => void) | null>(null);
+
+  /** 注册/注销自动锚点回调（供组合层把锚点写入 UI 状态） */
+  const setAutoAnchorCallback = useCallback((cb: (() => void) | null) => {
+    autoAnchorCallbackRef.current = cb;
+  }, []);
+
+  // 连续采集每满 15 分钟触发一次自动锚点（暂停/停止重置计时）
+  useEffect(() => {
+    if (status !== 'capturing') {
+      autoAnchorStateRef.current = null;
+      return;
+    }
+    autoAnchorStateRef.current = { startedAt: Date.now(), lastAnchor: Date.now() };
+    // 30 秒粒度检查，避免长定时器漂移；阈值到达时 pushBookmark + 回调
+    const timer = setInterval(() => {
+      const state = autoAnchorStateRef.current;
+      if (!state) return;
+      if (Date.now() - state.lastAnchor >= AUTO_ANCHOR_INTERVAL_MS) {
+        state.lastAnchor = Date.now();
+        // M6: pushBookmark 仅在 smart 路径广播（返回 false 时未写入 timeline），
+        // 回调只在锚点真正落库后触发——避免 fine/full_record 路径假成功
+        if (captureManager.pushBookmark('auto_anchor')) {
+          autoAnchorCallbackRef.current?.();
+        }
+      }
+    }, 30 * 1000);
+    return () => clearInterval(timer);
+  }, [status, captureManager]);
 
   // 监听音频块（带健康跟踪）
   useEffect(() => {
@@ -270,5 +305,5 @@ export function useClassroomAudio({ captureManager, status, mode, onNotify }: Us
     };
   }, []);
 
-  return { audioHealth, audioCleanupRef };
+  return { audioHealth, audioCleanupRef, setAutoAnchorCallback };
 }

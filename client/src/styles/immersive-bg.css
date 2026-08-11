@@ -4,7 +4,7 @@
  * 依赖：需要 tokens.css 中定义的以下 CSS 变量：
  *   --kb-deep-surface              基础遮罩层（浅色半透白 / 深色半透蓝）
  *   --kb-deep-surface-rgb          表面色 RGB 三元组（用于透明度混合）
- *   --kb-deep-border               边框微光线（浅色 rgba(0,0,0,0.15) / 深色 rgba(34,211,238,0.12)）
+ *   --kb-deep-border               边框微光线（浅色 rgba(0,0,0,0.15) / 深色 rgba(111,180,232,0.12)）
  *   --kb-deep-accent-rgb           赛博青 RGB 三元组（用于 rgba() 透明度混合）
  *   --kb-brand-400                 品牌主色（color-mix 紫色发光）
  *   --kb-deep-bg-surface           渐变段 1 起始色

@@ -5,6 +5,8 @@
 package handlers
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"strconv"
 	"strings"
@@ -54,21 +56,45 @@ func CRDTPush(c *gin.Context) {
 	// M7: 整个循环包裹在单个事务内
 	txErr := models.DB.Transaction(func(tx *gorm.DB) error {
 		for _, ch := range req.Changes {
+			// SYNC-M3: changeset 哈希幂等去重——网络重试的重复 changeset
+			// 不再重复分配序号与落库（(user_id, changeset_hash) 唯一索引兜底）
+			if ch.Changeset != "" {
+				hash := sha256.Sum256([]byte(ch.Changeset))
+				hashHex := hex.EncodeToString(hash[:])
+				var dupCount int64
+				if err := tx.Model(&models.CRDTChange{}).
+					Where("user_id = ? AND changeset_hash = ?", userID, hashHex).
+					Count(&dupCount).Error; err != nil {
+					return err
+				}
+				if dupCount > 0 {
+					// 已处理过：视为已接受（幂等），不重复落库
+					accepted = append(accepted, ch.Seq)
+					continue
+				}
+			}
+
 			seqNo, err := nextSeqNo(tx)
 			if err != nil {
 				return err
 			}
 
 			if err := tx.Create(&models.CRDTChange{
-				ServerSeqNo: seqNo,
-				DeviceID:    req.DeviceID,
-				UserID:      userID,
-				TableName:   ch.TableName,
-				EntityID:    ch.EntityID,
-				Changeset:   ch.Changeset,
-				Operation:   ch.Operation,
-				CreatedAt:   ch.CreatedAt,
+				ServerSeqNo:   seqNo,
+				DeviceID:      req.DeviceID,
+				UserID:        userID,
+				TableName:     ch.TableName,
+				EntityID:      ch.EntityID,
+				Changeset:     ch.Changeset,
+				ChangesetHash: hashChangeSet(ch.Changeset),
+				Operation:     ch.Operation,
+				CreatedAt:     ch.CreatedAt,
 			}).Error; err != nil {
+				// 唯一索引兜底：并发重复推送视为已处理
+				if isUniqueViolation(err) && ch.Changeset != "" {
+					accepted = append(accepted, ch.Seq)
+					continue
+				}
 				return err
 			}
 			accepted = append(accepted, ch.Seq)
@@ -88,6 +114,15 @@ func CRDTPush(c *gin.Context) {
 	})
 }
 
+// SYNC-M3: 计算 changeset 的 SHA-256 hex（空串返回空串，不参与幂等）
+func hashChangeSet(changeset string) string {
+	if changeset == "" {
+		return ""
+	}
+	hash := sha256.Sum256([]byte(changeset))
+	return hex.EncodeToString(hash[:])
+}
+
 // ─── CRDT Changeset Pull (GET /api/v1/sync/crdt/changes) ──────────────────────
 
 // CRDTPull returns all CRDT changesets since `since` (exclusive) that were
@@ -96,6 +131,11 @@ func CRDTPush(c *gin.Context) {
 func CRDTPull(c *gin.Context) {
 	userID := c.GetString("user_id")
 	deviceID := c.Query("deviceId")
+	// SYNC-L2: deviceId 白名单校验——空值拉回本设备变更造成回环
+	if !isValidDeviceID(deviceID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid deviceId: must match [A-Za-z0-9_-]{1,64}"})
+		return
+	}
 	sinceStr := c.DefaultQuery("since", "0")
 	since, err := strconv.ParseInt(sinceStr, 10, 64)
 	if err != nil {

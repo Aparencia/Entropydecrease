@@ -10,7 +10,7 @@ import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
   Highlighter, Heading1, Heading2, Heading3, List, ListOrdered,
   Code, Quote, Undo2, Redo2,
-  Table2, ListTodo, ImageIcon, AlignLeft, AlignCenter, AlignRight, AlignJustify, Palette,
+  Table2, ListTodo, ImageIcon, AlignLeft, AlignCenter, AlignRight, AlignJustify, Palette, EyeOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NoteHealthIndicator } from './NoteHealthIndicator';
@@ -51,9 +51,15 @@ export interface EditorToolbarProps {
   onPickImage: () => void;
   /** N3 笔记健康度检测的文本内容（传入时在工具栏末端显示指示器） */
   healthContent?: string;
+  /** 笔记标题（用于健康度关键词覆盖率评估） */
+  healthTitle?: string;
+  /** 笔记标签（用于健康度关键词覆盖率评估） */
+  healthTags?: string[];
+  /** N2 合书测试模式切换回调 */
+  onToggleClosedBook?: () => void;
 }
 
-export function EditorToolbar({ editor, onPickImage, healthContent }: EditorToolbarProps) {
+export function EditorToolbar({ editor, onPickImage, healthContent, healthTitle, healthTags, onToggleClosedBook }: EditorToolbarProps) {
   return (
     <div className="sticky top-0 z-20 mx-auto mt-2 flex items-center gap-1 px-4 py-1.5 rounded-[var(--kb-radius-lg)] border border-border/20 flex-shrink-0 overflow-x-auto max-w-fit bg-bg-elevated/70 backdrop-blur-xl shadow-[0_2px_16px_-4px_rgba(0,0,0,0.06)] opacity-70 hover:opacity-100 transition-opacity duration-300">
       <ToolbarButton icon={Undo2} label="撤销" onClick={() => editor?.chain().focus().undo().run()} />
@@ -182,7 +188,18 @@ export function EditorToolbar({ editor, onPickImage, healthContent }: EditorTool
       {healthContent !== undefined && (
         <>
           <ToolbarDivider />
-          <NoteHealthIndicator content={healthContent} />
+          <NoteHealthIndicator content={healthContent} title={healthTitle} tags={healthTags} />
+        </>
+      )}
+      {/* N2 合书测试按钮：隐藏笔记，凭回忆自测 */}
+      {onToggleClosedBook && (
+        <>
+          <ToolbarDivider />
+          <ToolbarButton
+            icon={EyeOff}
+            label="合书测试"
+            onClick={onToggleClosedBook}
+          />
         </>
       )}
     </div>

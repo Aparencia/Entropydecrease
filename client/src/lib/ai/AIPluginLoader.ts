@@ -13,14 +13,15 @@
 import { LocalDurationRecommender } from './LocalFallback';
 import { AIError } from './ai-errors';
 import { ensureOnline, ensureMinLength } from './aiGuards';
-import { getAIPlugin, getRemotePlugin, getElectronPlugin } from './aiPluginProvider';
+import { getRemotePlugin, getElectronPlugin } from './aiPluginProvider';
 import { offlineAIQueue } from './offlineAIQueue';
+import { isElectron } from '../utils/platform';
 import type { AIPlugin, DurationHistoryData, DurationOptions, DurationResult,
   SummarizeResult, FlashcardResult, EvaluateResult,
   SummarizeOptions, FlashcardOptions, EvaluateOptions,
   VisionExtractResult, TagContentResult, OptimizeCardResult,
   FeynmanQuestionResult, FeynmanAnswerEvalResult, SortResult,
-  AnchorPoint, BrainstormIdea, ChatMessage, SocraticEvaluateResult, SocraticDeepeningResult,
+  AnchorPoint, BrainstormIdea, ChatMessage, SocraticEvaluateResult, SocraticDeepeningResult, SocraticMirrorResult,
   PredictionPrompt, RescueContext, ResourceLink,
   ErrorPatternResult, QuizGenResult,
   ContentTierResult, ConflictDetectResult, ConceptPrecheckResult } from './types';
@@ -38,8 +39,11 @@ class AIPluginLoader {
   /** 获取 Electron AI 插件实例（委托 aiPluginProvider，保留旧 API） */
   async getElectronPlugin() { return getElectronPlugin(); }
 
-  /** 根据运行环境获取 AI 插件实例 */
-  async getAIPlugin(): Promise<AIPlugin> { return getAIPlugin(); }
+  /** 根据运行环境获取 AI 插件实例（内部委托本类两个环境方法，统一调用链） */
+  async getAIPlugin(): Promise<AIPlugin> {
+    if (isElectron()) return await this.getElectronPlugin();
+    return this.getRemotePlugin();
+  }
 
   /**
    * 统一非流式调用包装：守卫 → 取插件 → 能力检查 → 调用
@@ -62,7 +66,7 @@ class AIPluginLoader {
       throw err;
     }
     ensureMinLength(opts.contentCheck, opts.minLength);
-    const plugin = await getAIPlugin();
+    const plugin = await this.getAIPlugin();
     const result = invoke(plugin);
     if (result === undefined) {
       throw new AIError(opts.unsupportedMsg, 'service_unavailable', false);
@@ -79,7 +83,7 @@ class AIPluginLoader {
   ): AsyncGenerator<string, void, unknown> {
     ensureOnline();
     ensureMinLength(opts.contentCheck, opts.minLength);
-    const plugin = await getAIPlugin();
+    const plugin = await this.getAIPlugin();
     const s = getStreamFn(plugin);
     if (!s) {
       throw new AIError(opts.unsupportedMsg, 'service_unavailable', true);
@@ -117,7 +121,7 @@ class AIPluginLoader {
    * 注意：刻意不做离线守卫（Electron 本地视觉可离线使用，历史行为）
    */
   async extractScreenContent(imageBase64: string, language = 'zh'): Promise<VisionExtractResult> {
-    const plugin = await getAIPlugin();
+    const plugin = await this.getAIPlugin();
     if (plugin.extractScreenContent) {
       return plugin.extractScreenContent(imageBase64, language);
     }
@@ -128,7 +132,7 @@ class AIPluginLoader {
   async recommendDuration(historyData: DurationHistoryData, options?: DurationOptions): Promise<DurationResult> {
     ensureOnline();
     try {
-      return await (await getAIPlugin()).recommendDuration(historyData, options);
+      return await (await this.getAIPlugin()).recommendDuration(historyData, options);
     } catch {
       return this.localRecommender.recommend(historyData, options);
     }
@@ -192,6 +196,12 @@ class AIPluginLoader {
   async socraticDeepening(topic: string, dialogueSummary: string, history: ChatMessage[]): Promise<SocraticDeepeningResult> {
     return this.call(p => p.socraticDeepening?.(topic, dialogueSummary, history),
       { contentCheck: topic, unsupportedMsg: '当前 AI 插件不支持苏格拉底深化', minLength: 1 });
+  }
+
+  /** Phase 2: 苏格拉底反问镜（mirror 模式）— topic 类非空即可 */
+  async socraticMirror(topic: string, question: string): Promise<SocraticMirrorResult> {
+    return this.call(p => p.socraticMirror?.(topic, question),
+      { contentCheck: topic, unsupportedMsg: '当前 AI 插件不支持苏格拉底反问镜', minLength: 1 });
   }
 
   /** 学习预测 — 基于笔记预测可能的问题 */
@@ -308,6 +318,12 @@ class AIPluginLoader {
   socraticDeepeningStream(topic: string, dialogueSummary: string, history: ChatMessage[]) {
     return this.stream(p => p.socraticDeepeningStream?.(topic, dialogueSummary, history),
       { contentCheck: topic, unsupportedMsg: '当前插件不支持流式苏格拉底深化', minLength: 1 });
+  }
+
+  /** Phase 2: 流式苏格拉底反问镜 */
+  socraticMirrorStream(topic: string, question: string) {
+    return this.stream(p => p.socraticMirrorStream?.(topic, question),
+      { contentCheck: topic, unsupportedMsg: '当前插件不支持流式苏格拉底反问镜', minLength: 1 });
   }
 
   /** 流式学习预测 */

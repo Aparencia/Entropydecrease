@@ -2,7 +2,9 @@
 熵减 AI 网关 — Provider Fallback 链与调用编排
 
 @ai-context: 主 Provider 失败时按 PROVIDER_FALLBACK_CHAIN 依次降级。整条链
-共享 TIMEOUT_CONFIG*1.5 的总预算，每次切换前扣除已耗时，避免叠加超时。
+共享 TIMEOUT_CONFIG*3.0 的总预算（GW-2#12: 实现为 *3.0——约 3 个备选
+Provider × 每次调用超时上限的兑底语义；注释曾写 *1.5 与实现漂移），
+每次切换前扣除已耗时，避免叠加超时。
 call_with_fallback（dict）/ call_with_fallback_stream（AsyncGenerator）各有
 带用户 Key 的变体：用户 Key 优先，失败再降级服务端链。_resolve_model_name
 在 fallback 到备选 Provider 时按 主slot→功能slot→通用slot→首个模型 逐级回退。
@@ -21,6 +23,31 @@ from cost.tracker import get_cost_tracker
 _FIRST_TOKEN_PROBE_TIMEOUT = 30.0
 
 _FIRST_TOKEN_RETRY_TIMEOUT = 5.0  # 首 token 探测重试的超时预算（秒）
+
+# 高耗时功能（走独立并发上限 ai_heavy_semaphore）
+_HEAVY_CONCURRENCY_FEATURES: frozenset[str] = frozenset(
+    {"video_analyze", "multimodal_analyze"}
+)
+
+
+def _get_concurrency_semaphore(app, feature: str):
+    """获取并发信号量；未初始化（如测试环境）时返回 None 表示不限流。
+
+    @ai-context: Phase3 并发控制——主信号量限制全部 AI 调用，
+    heavy 信号量进一步限制高耗时功能（视频/多模态分析）。
+    """
+    if feature in _HEAVY_CONCURRENCY_FEATURES:
+        return getattr(app.state, "ai_heavy_semaphore", None)
+    return getattr(app.state, "ai_semaphore", None)
+
+
+async def _run_under_semaphore(app, feature: str, coro_factory: Callable[[], Awaitable[Any]]) -> Any:
+    """在信号量保护下执行 AI 调用（信号量缺失时直通）。"""
+    sem = _get_concurrency_semaphore(app, feature)
+    if sem is None:
+        return await coro_factory()
+    async with sem:
+        return await coro_factory()
 
 # ============================================================
 # Provider Fallback 链：主 Provider 失败时依次尝试的备选
@@ -57,6 +84,24 @@ PROVIDER_FALLBACK_CHAIN: dict[str, list[str]] = {
     "conflict_detect":     ["deepseek", "qwen", "fallback"],
     "concept_precheck":    ["deepseek", "qwen", "fallback"],
     "import_concept":      ["deepseek", "qwen", "fallback"],
+    "freshness":          ["deepseek", "qwen", "fallback"],  # Phase3: 知识保鲜检测
+    "embodied":           ["deepseek", "qwen", "fallback"],  # Phase3: 概念具身化
+    "learning_narrative": ["deepseek", "qwen", "fallback"],  # Phase3: 学习叙事 RPG
+    "haiku":              ["deepseek", "qwen", "fallback"],  # Phase3: 学习俳句
+    "compile":            ["deepseek", "qwen", "fallback"],  # Phase4: 知识编译引擎
+    "micro_card":         ["deepseek", "qwen", "fallback"],  # Phase4: 微学习卡片流
+    # ============================================================
+    # Phase2: 内容生成式 AI Chains（JSON Mode）
+    # 此前遗漏登记——缺失时默认 ["fallback"] 导致这些功能只调用
+    # FallbackProvider（返回非 JSON 文本），真实模型从未被调用
+    # ============================================================
+    "debate":             ["deepseek", "qwen", "fallback"],  # AI 辩论对手
+    "counterintuitive":   ["deepseek", "qwen", "fallback"],  # 反直觉发现器
+    "personify":          ["deepseek", "qwen", "fallback"],  # 概念拟人化
+    "mnemonic":           ["deepseek", "qwen", "fallback"],  # 记忆术生成器
+    "podcast":            ["deepseek", "qwen", "fallback"],  # AI 播客生成器
+    "learning_coach":     ["deepseek", "qwen", "fallback"],  # AI 学习教练
+    "infographic":        ["deepseek", "qwen", "fallback"],  # 知识信息图生成器
     # ============================================================
     # 多模态 / ASR / 视频 — 移除 GLM 免费模型
     # vision_extract/multimodal_analyze 支持同 provider 不同模型降级
@@ -109,6 +154,7 @@ async def call_with_fallback(
     app,
     feature: str,
     fn: Callable[..., Awaitable[dict[str, Any]]],
+    user_id: str = "system",
 ) -> tuple[dict[str, Any], str]:
     """
     使用 Provider fallback 链执行 AI 调用（非流式路径）。
@@ -122,6 +168,7 @@ async def call_with_fallback(
         app:     FastAPI 应用实例（通过 app.state.providers 获取 Provider）
         feature: 功能标识，对应 PROVIDER_FALLBACK_CHAIN 的 key
         fn:      异步可调用对象，签名为 async fn(provider, model_name) -> dict
+        user_id: 记账归属用户（预算控制按此维度计数）
 
     Returns:
         tuple: (result_dict, provider_key)
@@ -168,22 +215,41 @@ async def call_with_fallback(
             )
 
             try:
-                _FEATURE_CONTEXT.set(feature)
-                result = await fn(provider, model_name)
+                async def _do_call():
+                    _FEATURE_CONTEXT.set(feature)
+                    try:
+                        return await fn(provider, model_name)
+                    finally:
+                        # GW-L3: 成功路径也重置 context——避免同任务后续
+                        # 无 _feature 的 provider 调用继承上次 feature
+                        _FEATURE_CONTEXT.set("")
+
+                # Phase3: 并发信号量保护（视频/多模态走 heavy 上限）
+                result = await _run_under_semaphore(app, feature, _do_call)
                 # 调用成功：通知熔断器重置失败计数，恢复 Provider 健康状态
                 cb = get_circuit(provider_key)
                 if cb:
                     await cb.on_success()
-                # 记录成本
+                # 记录成本（按真实用户记账，预算中间件按 user_id 维度查询）
                 try:
                     tokens_used = result.get("tokens_used", 0)
                     model_name = result.get("model", model_name)
+                    # GW-2#6: 优先使用 provider 返回的真实 input/output 拆分
+                    #（OpenAI 兼容 usage 均有 prompt/completion tokens）；
+                    # 缺失时按经验比例估算（output 占比 60%）——原对半拆分
+                    # 系统性低估费用（output 单价普遍 2-3 倍于 input），
+                    # 导致超预算用户未被拦截
+                    input_tokens = result.get("input_tokens", 0)
+                    output_tokens = result.get("output_tokens", 0)
+                    if not input_tokens and not output_tokens and tokens_used:
+                        output_tokens = int(tokens_used * 0.6)
+                        input_tokens = tokens_used - output_tokens
                     await get_cost_tracker().record(
-                        user_id="system",
+                        user_id=user_id,
                         feature=feature,
                         model=model_name,
-                        input_tokens=tokens_used // 2 if tokens_used else 0,
-                        output_tokens=tokens_used // 2 if tokens_used else 0,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
                     )
                 except Exception as cost_err:
                     logger.debug("CostTracker 记录失败（可忽略）: %s", cost_err)
@@ -235,7 +301,10 @@ async def call_with_fallback_for_request(
     Raises:
         RuntimeError: 所有 Provider 均不可用
     """
-    result, provider_key = await call_with_fallback(app, feature, fn)
+    # GW-H2: 预算记账必须归属真实用户，预算中间件（BudgetMiddleware）
+    # 按 request.state.user_id 查询日用量，写死 system 会导致限额永不触发
+    user_id = getattr(request.state, "user_id", "system")
+    result, provider_key = await call_with_fallback(app, feature, fn, user_id=user_id)
     return result, provider_key, False
 
 
@@ -313,11 +382,20 @@ async def call_with_fallback_stream(
                     probe_timeout = min(_FIRST_TOKEN_PROBE_TIMEOUT, remaining)
                     first_chunk = await asyncio.wait_for(agen.__anext__(), timeout=probe_timeout)
 
-                    # 首 token 成功：包装生成器，先吐首 token 再吐剩余
-                    async def _wrapped_gen(a=agen, first=first_chunk):
-                        yield first
-                        async for c in a:
-                            yield c
+                    # 首 token 成功：包装生成器，先吐首 token 再吐剩余；
+                    # 并发信号量在生成器整个生命周期内持有，防止流式长连接堆积
+                    sem = _get_concurrency_semaphore(app, feature)
+                    if sem is None:
+                        async def _wrapped_gen(a=agen, first=first_chunk):
+                            yield first
+                            async for c in a:
+                                yield c
+                    else:
+                        async def _wrapped_gen(a=agen, first=first_chunk, s=sem):
+                            async with s:
+                                yield first
+                                async for c in a:
+                                    yield c
 
                     # 通知熔断器成功
                     cb = get_circuit(provider_key)

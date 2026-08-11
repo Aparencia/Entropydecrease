@@ -49,7 +49,7 @@ export function RitualFooter({ totalSteps, stepIndex, isLast, cycleLit, requireC
           'text-white transition-all duration-500 active:scale-95',
           dimmed
             ? 'bg-focus/40 animate-breathe' // 首圈未满：半透明呼吸态（仍可点击）
-            : 'bg-focus hover:bg-focus/90 shadow-[0_0_12px_rgba(59,130,246,0.35)]',
+            : 'bg-focus hover:bg-focus/90 shadow-[0_0_12px_rgba(74,155,217,0.35)]',
         )}
       >
         {isLast ? '开始学习' : '下一步'}

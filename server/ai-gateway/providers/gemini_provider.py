@@ -17,13 +17,18 @@ from typing import Any, AsyncGenerator
 from google import genai
 from google.genai import types
 
-from providers.base_provider import AIProvider, with_retry_and_timeout
+from providers.base_provider import AIProvider, with_retry_and_timeout, run_in_provider_pool
 from errors import ProviderUnavailableError, ModelResponseError, RateLimitExceededError
 
 logger = logging.getLogger(__name__)
 
 # 默认模型名
 _DEFAULT_MODEL = "gemini-2.0-flash"
+
+# GW-H6: SDK 层 HTTP 超时（毫秒）——google-genai 默认无客户端超时，
+# 内部重试可能让单次调用长达数分钟；显式限制后超时错误可被 with_retry_and_timeout
+# 捕获并触发重试/降级，而不是无限挂起线程。
+_SDK_HTTP_TIMEOUT_MS = 120_000
 
 
 def _handle_gemini_error(error: Exception, model: str) -> None:
@@ -45,11 +50,17 @@ class GeminiProvider(AIProvider):
         # Gemini SDK 不需要 base_url，仅用 api_key 初始化
         super().__init__(base_url or "https://generativelanguage.googleapis.com",
                          api_key, provider_name="gemini")
-        self._client = genai.Client(api_key=api_key)
+        self._client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=_SDK_HTTP_TIMEOUT_MS),
+        )
 
     def _reinit_client(self) -> None:
         """重新初始化 Gemini 客户端（Key 轮换后调用）"""
-        self._client = genai.Client(api_key=self.api_key)
+        self._client = genai.Client(
+            api_key=self.api_key,
+            http_options=types.HttpOptions(timeout=_SDK_HTTP_TIMEOUT_MS),
+        )
 
     @with_retry_and_timeout()
     async def generate(
@@ -62,8 +73,8 @@ class GeminiProvider(AIProvider):
         response_format: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """调用 Gemini 生成纯文本内容"""
-        # Key 轮询：将请求分散到多个 Key 以突破单一 Key 的 RPM 限制
-        await self._rotate_api_key()
+        # GW-3: 内部不再轮询——已上移至 with_retry_and_timeout wrapper 统一
+        # 处理，避免与 wrapper 双重轮询（偶数 Key 配置下轮询失效）
         start_time = time.monotonic()
         try:
             config = types.GenerateContentConfig(
@@ -71,7 +82,7 @@ class GeminiProvider(AIProvider):
                 max_output_tokens=max_tokens,
                 system_instruction=system_prompt if system_prompt else None,
             )
-            response = await asyncio.to_thread(
+            response = await run_in_provider_pool(
                 self._client.models.generate_content,
                 model=model,
                 contents=prompt,
@@ -80,11 +91,17 @@ class GeminiProvider(AIProvider):
             latency_ms = int((time.monotonic() - start_time) * 1000)
             content = response.text or ""
             tokens_used = 0
+            input_tokens = 0
+            output_tokens = 0
             if response.usage_metadata:
                 tokens_used = response.usage_metadata.total_token_count or 0
+                # GW-2#6: Gemini usage_metadata 的拆分字段供成本记账
+                input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
             logger.info("GeminiProvider.generate 成功: model=%s, tokens=%d, latency=%dms",
                         model, tokens_used, latency_ms)
             return {"content": content, "tokens_used": tokens_used,
+                    "input_tokens": input_tokens, "output_tokens": output_tokens,
                     "model": model, "latency_ms": latency_ms}
         except Exception as e:
             logger.error("GeminiProvider.generate 失败: %s", str(e))
@@ -119,18 +136,24 @@ class GeminiProvider(AIProvider):
                 max_output_tokens=max_tokens,
                 system_instruction=system_prompt if system_prompt else None,
             )
-            response = await asyncio.to_thread(
+            response = await run_in_provider_pool(
                 self._client.models.generate_content,
                 model=model, contents=contents, config=config,
             )
             latency_ms = int((time.monotonic() - start_time) * 1000)
             content = response.text or ""
             tokens_used = 0
+            input_tokens = 0
+            output_tokens = 0
             if response.usage_metadata:
                 tokens_used = response.usage_metadata.total_token_count or 0
+                # GW-3(X4): 视觉路径同样返回 input/output 拆分供成本记账
+                input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
             logger.info("GeminiProvider.generate_vision 成功: model=%s, tokens=%d, latency=%dms",
                         model, tokens_used, latency_ms)
             return {"content": content, "tokens_used": tokens_used,
+                    "input_tokens": input_tokens, "output_tokens": output_tokens,
                     "model": model, "latency_ms": latency_ms}
         except Exception as e:
             logger.error("GeminiProvider.generate_vision 失败: %s", str(e))
@@ -168,17 +191,26 @@ class GeminiProvider(AIProvider):
                 max_output_tokens=max_tokens,
                 system_instruction=system_prompt if system_prompt else None,
             )
-            response = self._client.models.generate_content(
+            # GW-H5: 原实现直接同步调用阻塞事件循环（多图分析 30-60s 会冻结
+            # 全部请求），改为专用线程池执行，与同文件其他方法保持一致
+            response = await run_in_provider_pool(
+                self._client.models.generate_content,
                 model=model, contents=parts, config=config,
             )
             latency_ms = int((time.monotonic() - start_time) * 1000)
             content = response.text or ""
             tokens_used = 0
+            input_tokens = 0
+            output_tokens = 0
             if response.usage_metadata:
                 tokens_used = response.usage_metadata.total_token_count or 0
+                # GW-3(X4): 多图路径同样返回 input/output 拆分供成本记账
+                input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
             logger.info("GeminiProvider.generate_vision_multi 成功: model=%s, images=%d, tokens=%d, latency=%dms",
                         model, len(images_base64), tokens_used, latency_ms)
             return {"content": content, "tokens_used": tokens_used,
+                    "input_tokens": input_tokens, "output_tokens": output_tokens,
                     "model": model, "latency_ms": latency_ms}
         except Exception as e:
             logger.error("GeminiProvider.generate_vision_multi 失败: %s", str(e))
@@ -214,7 +246,7 @@ class GeminiProvider(AIProvider):
                 )
             elif isinstance(video_input, str) and Path(video_input).is_file():
                 # 文件路径：使用 File API 上传
-                uploaded_file = await asyncio.to_thread(self._client.files.upload, file=video_input)
+                uploaded_file = await run_in_provider_pool(self._client.files.upload, file=video_input)
                 # 轮询等待文件处理完成
                 await _wait_for_file_active(self._client, uploaded_file.name)
                 video_part = types.Part.from_uri(
@@ -234,18 +266,24 @@ class GeminiProvider(AIProvider):
                 max_output_tokens=max_tokens,
                 system_instruction=system_prompt if system_prompt else None,
             )
-            response = await asyncio.to_thread(
+            response = await run_in_provider_pool(
                 self._client.models.generate_content,
                 model=model, contents=contents, config=config,
             )
             latency_ms = int((time.monotonic() - start_time) * 1000)
             content = response.text or ""
             tokens_used = 0
+            input_tokens = 0
+            output_tokens = 0
             if response.usage_metadata:
                 tokens_used = response.usage_metadata.total_token_count or 0
+                # GW-3(X4): 视频路径同样返回 input/output 拆分供成本记账
+                input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                output_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
             logger.info("GeminiProvider.generate_video 成功: model=%s, tokens=%d, latency=%dms",
                         model, tokens_used, latency_ms)
             return {"content": content, "tokens_used": tokens_used,
+                    "input_tokens": input_tokens, "output_tokens": output_tokens,
                     "model": model, "latency_ms": latency_ms}
         except Exception as e:
             logger.error("GeminiProvider.generate_video 失败: %s", str(e))
@@ -254,7 +292,7 @@ class GeminiProvider(AIProvider):
             # 清理上传的临时文件
             if uploaded_file:
                 try:
-                    await asyncio.to_thread(self._client.files.delete, name=uploaded_file.name)
+                    await run_in_provider_pool(self._client.files.delete, name=uploaded_file.name)
                 except Exception:
                     logger.debug("Gemini 临时文件清理失败（可忽略）: %s", uploaded_file.name)
 
@@ -274,13 +312,28 @@ class GeminiProvider(AIProvider):
                 max_output_tokens=max_tokens,
                 system_instruction=system_prompt if system_prompt else None,
             )
-            response = await asyncio.to_thread(
+            response = await run_in_provider_pool(
                 self._client.models.generate_content_stream,
                 model=model,
                 contents=prompt,
                 config=config,
             )
-            for chunk in response:
+
+            # GW-2#5: 同步 SDK 生成器的迭代（含底层阻塞网络 IO）直接在事件循环
+            # 线程执行会卡死整个网关（流式期间全站延迟升高）。改为逐块
+            # 搬进专用线程池，chunk 间让出控制权
+            # GW-3: 用 run_in_provider_pool 而非 asyncio.to_thread（默认线程池）
+            #——专用池隔离慢调用，避免流式并发占满默认池影响其他组件
+            def _next_chunk(iterator):
+                try:
+                    return next(iterator)
+                except StopIteration:
+                    return None
+
+            while True:
+                chunk = await run_in_provider_pool(_next_chunk, response)
+                if chunk is None:
+                    break
                 if chunk.text:
                     yield chunk.text
                 # 让出事件循环控制权
@@ -296,6 +349,7 @@ class GeminiProvider(AIProvider):
         sample_rate: int = 16000,
         channels: int = 1,
         model: str = "",
+        hotwords: str = "",
     ) -> dict[str, Any]:
         """Gemini 不提供独立 ASR，暂不支持"""
         raise NotImplementedError("GeminiProvider 不支持独立语音转文字")
@@ -311,7 +365,7 @@ async def _wait_for_file_active(client: genai.Client, file_name: str, timeout: i
     import time as _time
     deadline = _time.monotonic() + timeout
     while _time.monotonic() < deadline:
-        file_info = await asyncio.to_thread(client.files.get, name=file_name)
+        file_info = await run_in_provider_pool(client.files.get, name=file_name)
         state = getattr(file_info, "state", None)
         # state 可能是枚举值或字符串
         state_str = str(state).upper() if state else "ACTIVE"

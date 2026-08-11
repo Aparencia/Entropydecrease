@@ -14,9 +14,17 @@ from pydantic import BaseModel, Field
 class KeyFrameInput(BaseModel):
     """单帧关键帧输入"""
     timestamp: float = Field(..., description="帧出现的时间戳（秒）")
-    image_base64: str = Field(..., description="PNG/JPEG 图片 base64 编码（不含 data: 前缀）")
+    # GW-H7: base64 字段上限 14M 字符（约 10MB 二进制）——多图请求总量
+    # 由 InputValidationMiddleware 的 /api/v1/multimodal/ 前缀 64MB 上限兜底
+    image_base64: str = Field(
+        ...,
+        min_length=1,
+        max_length=14_000_000,
+        description="PNG/JPEG 图片 base64 编码（不含 data: 前缀，≤10MB）",
+    )
     change_type: str = Field(
         default="scene_change",
+        max_length=32,
         description="画面变化类型：scene_change(场景切换) | ppt_flip(PPT翻页) | handwriting(板书手写)",
     )
 
@@ -27,6 +35,7 @@ class AudioSegmentInput(BaseModel):
     timestamp_end: float = Field(..., description="语音结束时间（秒）")
     audio_text: str | None = Field(
         default=None,
+        max_length=10_000,
         description="语音转写文本（若客户端已完成 ASR 转写则直接传入，省去服务端二次转写）",
     )
 
@@ -41,6 +50,7 @@ class AnalyzeSessionRequest(BaseModel):
     keyframes: list[KeyFrameInput] = Field(..., description="关键帧列表（按时间排序）")
     audio_segments: list[AudioSegmentInput] = Field(
         default_factory=list,
+        max_length=500,
         description="语音片段列表（可选，客户端已转写的文本）",
     )
     output_format: str = Field(default="markdown", description="输出格式：markdown")
@@ -64,9 +74,9 @@ class AnalyzeSessionResponse(BaseModel):
 
 class MergeNotesRequest(BaseModel):
     """片段笔记合并请求"""
-    partials: list[str] = Field(..., description="片段笔记列表（按时间顺序）")
+    partials: list[str] = Field(..., max_length=200, description="片段笔记列表（按时间顺序）")
     duration: float = Field(default=0, description="课程总时长（秒）")
-    language: str = Field(default="zh-CN", description="输出语言")
+    language: str = Field(default="zh-CN", max_length=16, description="输出语言")
 
 
 class MergeNotesResponse(BaseModel):

@@ -1,14 +1,14 @@
 /**
- * WikiLink TipTap 扩展（双向链接的编辑侧）
- * WikiLink TipTap extension (editing side of bidirectional links)
+ * WikiLink TipTap 扩展（双向链接的编辑侧）——AI 语义推荐增强
+ * WikiLink TipTap extension — enhanced with AI semantic matching
  *
  * @ai-context: 阶段二双向链接。基于 Mention.extend（name:'wikiLink'），输入
- * `[[` 触发笔记标题自动补全：suggestion char='['，allow 要求 range 文本以 '[['
- * 开头（即输入了第二个 '['），items 的 query 去掉前导 '[' 后按标题过滤
- * useNoteStore.notes。选中后以 wikiLink 节点（attrs id/label）替换 `[[xxx`，
- * 渲染为可识别 chip。弹窗经 ReactRenderer 手动定位（项目未装 tippy.js）。
- * @ai-context: Mention-based wiki-link; `[[` triggers note-title autocomplete;
- * selected note becomes a wikiLink node (attrs id/label) rendered as a chip.
+ * `[[` 触发笔记标题自动补全。增强：当标题匹配无结果时，按标签匹配、最近编辑
+ * 时间等维度推荐相关笔记。选中后以 wikiLink 节点（attrs id/label）替换 `[[xxx`，
+ * 渲染为可识别 chip。
+ * @ai-context: Mention-based wiki-link; `[[` triggers note-title autocomplete.
+ * Enhanced: falls back to tag matching and recent-edit sorting when no title
+ * match found. Selected note becomes a wikiLink node rendered as a chip.
  */
 import Mention from '@tiptap/extension-mention';
 import { mergeAttributes } from '@tiptap/core';
@@ -88,9 +88,30 @@ export const WikiLink = Mention.extend({
     items: ({ query }): WikiLinkItem[] => {
       const realQuery = query.startsWith('[') ? query.slice(1) : query;
       const q = realQuery.trim().toLowerCase();
-      return useNoteStore.getState().notes
+      const notes = useNoteStore.getState().notes;
+
+      // 优先按标题精确匹配 / prefer exact title match
+      const titleMatches = notes
         .filter((n) => (n.title || '').toLowerCase().includes(q))
         .slice(0, 8)
+        .map((n) => ({ id: n.id, label: n.title }));
+
+      if (titleMatches.length > 0) return titleMatches;
+
+      // 无标题匹配时，按标签匹配 + 最近编辑时间排序
+      // fallback: tag matching + recent edit sorting
+      const tagMatches = notes
+        .filter((n) => n.tags.some((t) => t.toLowerCase().includes(q)))
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .slice(0, 8)
+        .map((n) => ({ id: n.id, label: n.title }));
+
+      if (tagMatches.length > 0) return tagMatches;
+
+      // 终极兜底：返回最近编辑的笔记 / ultimate fallback: recent notes
+      return notes
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .slice(0, 5)
         .map((n) => ({ id: n.id, label: n.title }));
     },
     command: ({ editor, range, props }) => {

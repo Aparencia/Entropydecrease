@@ -25,7 +25,7 @@ export function SettingsCollapse({ config, onChange }: SettingsCollapseProps) {
   const Chevron = open ? ChevronDown : ChevronRight;
 
   return (
-    <div className="pt-3 border-t border-border/20">
+    <div className="pt-2 border-t border-border/20">
       {/* 折叠标题行：收起时展示配置摘要 */}
       <button onClick={() => setOpen((prev) => !prev)}
         className="w-full flex items-center gap-2 text-b3 text-text-tertiary hover:text-text-secondary transition-colors">

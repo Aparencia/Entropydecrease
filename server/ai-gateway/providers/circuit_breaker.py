@@ -102,13 +102,18 @@ class CircuitBreaker:
     async def on_success(self) -> None:
         """调用成功回调"""
         async with self._cond:
-            if self._state == CircuitState.OPEN or self.state == CircuitState.HALF_OPEN:
+            # GW-M1: 仅 HALF_OPEN（冷却期已过）允许恢复 CLOSED——state property
+            # 自动完成 OPEN→HALF_OPEN 转换，冷却期内调用不会绕过冷却期
+            if self.state == CircuitState.HALF_OPEN:
                 logger.info("CircuitBreaker [%s]: HALF_OPEN → CLOSED（恢复正常）", self.provider)
                 self._state = CircuitState.CLOSED
-                self._failure_count = 0
                 self._success_count += 1
                 self._half_open_calls = 0
                 self._cond.notify_all()
+            # CLOSED 状态下成功也重置失败计数（GW-M1）：
+            # 失败计数只增不减会让 5 次分散失败（非连续）也触发熔断，
+            # 与"连续失败"语义不符，正常流量下误熔断
+            self._failure_count = 0
             set_circuit_state(self.provider, 0)
 
     async def on_failure(self) -> None:

@@ -95,9 +95,15 @@ export function sm2(card: SM2CardInput, rating: Rating, options?: SM2Options): S
   const q = toQuality(rating);
   const lapses = card.lapses ?? 0;
 
+  // ALG-M1: easeFactor 缺失/非法防御——历史数据缺字段、迁移列错位等场景下
+  // easeFactor 为 undefined/NaN/0 时，原实现产生 NaN 并无限传播
+  // （NaN interval → Invalid Date 时间戳损坏 → 后续复习全部异常）
+  const rawEF = Number(card.easeFactor);
+  const baseEF = Number.isFinite(rawEF) && rawEF > 0 ? rawEF : 2.5;
+
   // 更新难度因子（EF）
   let newEF =
-    card.easeFactor + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
+    baseEF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
   newEF = Math.max(newEF, 1.3);
 
   let newInterval: number;
@@ -137,6 +143,9 @@ export function sm2(card: SM2CardInput, rating: Rating, options?: SM2Options): S
   newInterval = Math.min(newInterval, 1825);
 
   // Golden error：高自信答错时缩短间隔
+  // ALG-L2: 本参数为历史遗留接口——实际黄金错误加速由 store 层
+  // compressForGoldenError 后处理实现（useStudySessionStore.ts），
+  // 本参数未传入时保持默认不调整；两套机制并存但仅后处理生效
   const multiplier = options?.goldenErrorMultiplier;
   // 下界取 >= 0：传 0 表示尽可能缩短，经 Math.max 收敛到最小间隔 1 天；
   // 上界仍为 < 1，因 1.0 的语义就是不调整

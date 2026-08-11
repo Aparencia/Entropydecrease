@@ -31,7 +31,7 @@ export function OnboardingCard({
       className={`
         backdrop-blur-2xl bg-white/10 dark:bg-black/30
         border border-white/20 ${rounded}
-        ${pulse ? 'ring-2 ring-indigo-400/50 animate-pulse' : ''}
+        ${pulse ? 'ring-2 ring-brand-400/50 animate-pulse' : ''}
         p-6 shadow-2xl
         ${className}
       `}

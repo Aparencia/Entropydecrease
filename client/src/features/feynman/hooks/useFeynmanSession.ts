@@ -12,26 +12,26 @@ import { useParams } from 'react-router-dom';
 import { useToast } from '@/components/ui';
 import { useFeynmanStore } from '../store/useFeynmanStore';
 import { useFlashcardStore } from '@/features/flashcards/store/useFlashcardStore';
-import { useShallow } from 'zustand/react/shallow';
 
 export function useFeynmanSession() {
   const { sessionId } = useParams<{ sessionId: string }>();
 
-  const {
-    currentNoteId, isLoading,
-    loadNote,
-    setExplanation,
-    updateNote,
-    addWeakPoint,
-    removeWeakPoint,
-    toggleWeakPointMastered,
-    setSimplifiedSummary,
-    advanceStep,
-    setSelfRating,
-    completeNote,
-    convertWeakPointsToFlashcards,
-    getCurrentView,
-  } = useFeynmanStore(useShallow(s => s));
+  // P1-5 细粒度订阅：整 store 订阅会在任意笔记/薄弱点变化时重渲染会话页
+  const currentNoteId = useFeynmanStore((s) => s.currentNoteId);
+  const isLoading = useFeynmanStore((s) => s.isLoading);
+  // 动作（稳定引用）
+  const loadNote = useFeynmanStore((s) => s.loadNote);
+  const setExplanation = useFeynmanStore((s) => s.setExplanation);
+  const updateNote = useFeynmanStore((s) => s.updateNote);
+  const addWeakPoint = useFeynmanStore((s) => s.addWeakPoint);
+  const removeWeakPoint = useFeynmanStore((s) => s.removeWeakPoint);
+  const toggleWeakPointMastered = useFeynmanStore((s) => s.toggleWeakPointMastered);
+  const setSimplifiedSummary = useFeynmanStore((s) => s.setSimplifiedSummary);
+  const advanceStep = useFeynmanStore((s) => s.advanceStep);
+  const setSelfRating = useFeynmanStore((s) => s.setSelfRating);
+  const completeNote = useFeynmanStore((s) => s.completeNote);
+  const convertWeakPointsToFlashcards = useFeynmanStore((s) => s.convertWeakPointsToFlashcards);
+  const getCurrentView = useFeynmanStore((s) => s.getCurrentView);
 
   const { toast } = useToast();
 

@@ -126,6 +126,24 @@ async function handleInit(params: Record<string, unknown>): Promise<Record<strin
   return status;
 }
 
+// CL-M7: MCP server 子进程最小环境白名单（仅传运行必需的基础变量）
+const MINIMAL_ENV_KEYS = [
+  'PATH', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'HOME', 'USERPROFILE',
+  'APPDATA', 'LOCALAPPDATA', 'COMSPEC', 'PATHEXT', 'NODE_PATH', 'LANG', 'LC_ALL',
+];
+
+/** 构建传给 MCP server 子进程的最小环境（显式白名单，绝不透传宿主全部环境变量） */
+function buildMinimalEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const key of MINIMAL_ENV_KEYS) {
+    const val = process.env[key];
+    if (typeof val === 'string' && val) {
+      env[key] = val;
+    }
+  }
+  return env;
+}
+
 async function startServer(config: { name: string; command: string; args: string[] }): Promise<void> {
   if (!ClientCtor || !StdioTransportCtor) return;
 
@@ -143,7 +161,9 @@ async function startServer(config: { name: string; command: string; args: string
     const transport = new StdioTransportCtor({
       command: config.command,
       args: config.args,
-      env: process.env as Record<string, string>,
+      // CL-M7: 最小环境白名单——绝不把主进程全部环境变量传给第三方 MCP
+      // server 子进程（供应链污染可读取宿主凭据）；仅传运行必需的基础变量
+      env: buildMinimalEnv(),
       stderr: 'pipe',
     });
 

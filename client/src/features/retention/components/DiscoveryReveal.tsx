@@ -76,7 +76,7 @@ export function DiscoveryReveal() {
 
             {/* 发现标签 / Discovery label */}
             <motion.p
-              className="text-[11px] uppercase tracking-widest text-cyan-300/60 font-medium"
+              className="text-[11px] uppercase tracking-widest text-cyber/60 font-medium"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.6 }}
@@ -88,8 +88,8 @@ export function DiscoveryReveal() {
             <motion.div
               className={cn(
                 'w-20 h-20 rounded-full flex items-center justify-center',
-                'bg-gradient-to-br from-cyan-400/10 to-blue-500/5',
-                'border border-cyan-300/20',
+                'bg-gradient-to-br from-cyber/10 to-blue-500/5',
+                'border border-cyber/20',
               )}
               initial={prefersReduced ? {} : { scale: 0, rotate: -180 }}
               animate={prefersReduced ? {} : { scale: 1, rotate: 0 }}
@@ -116,7 +116,7 @@ export function DiscoveryReveal() {
             </p>
 
             {/* 深度信息 / Depth info */}
-            <p className="text-[11px] text-cyan-300/50">
+            <p className="text-[11px] text-cyber/50">
               发现于 -{Math.round(pendingDepth)}m 深处
             </p>
 
@@ -125,7 +125,7 @@ export function DiscoveryReveal() {
               onClick={collect}
               className={cn(
                 'w-full py-2.5 rounded-xl text-sm font-medium',
-                'bg-cyan-600/60 hover:bg-cyan-500/60 text-white',
+                'bg-cyber/60 hover:bg-cyber/50 text-text-inverse',
                 'transition-colors mt-1',
               )}
               initial={{ opacity: 0 }}

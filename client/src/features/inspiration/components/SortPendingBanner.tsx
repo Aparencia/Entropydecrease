@@ -47,7 +47,7 @@ function SortPendingBanner({ pendingCount, onSortAll, onDismiss }: SortPendingBa
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
             onClick={onSortAll}
-            className="px-3 py-1 rounded-full text-xs font-medium bg-gradient-to-r from-cyan-500/20 to-amber-500/20 border border-cyan-400/30 text-text-secondary hover:text-text-primary transition-colors"
+            className="px-3 py-1 rounded-full text-xs font-medium bg-gradient-to-r from-cyber/20 to-amber/20 border border-cyber/30 text-text-secondary hover:text-text-primary transition-colors"
           >
             开始整理
           </motion.button>

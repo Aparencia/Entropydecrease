@@ -39,6 +39,10 @@ const ALLOWED_CHANNELS = [
   'ai_progress_narrate',
   // 阶段 A：知识入籍概念化（切块文本 → 概念候选）
   'ai_import_concept',
+  // P1：今日学习计划（个性化学习路径）
+  'ai_learning_plan',
+  // D2：课堂内容问答（带引用来源）
+  'ai_session_qa',
   'ai:set-gateway-url',
   // AI 学伴对话 IPC channel
   'ai:chat:send',
@@ -57,6 +61,8 @@ const ALLOWED_CHANNELS = [
   // A2 语音对话：启动前查询是否已有活跃采集（互斥保护，避免误伤课堂采集）
   'audio_capture_status',
   'get-app-version',
+  // 设备指纹（激活码一码多设备绑定；仅主进程生成，渲染进程只读）
+  'machine-id:get',
   // 剪贴板写入（渲染进程 navigator.clipboard 在 Electron 受限上下文下不可靠）
   'clipboard:write-text',
   'dialog:selectDirectory',
@@ -91,6 +97,8 @@ const ALLOWED_CHANNELS = [
   'sync:quit-complete',
   // 文件读取（课堂助手视频分析）
   'fs:read-file',
+  // 系统音量
+  'system:get-volume',
   // Path C 视频录制 IPC channel
   'video_record_start',
   'video_record_stop',
@@ -140,6 +148,13 @@ const ALLOWED_CHANNELS = [
   'sovereignty:import-world',
   // 知识星座 IPC channel（阶段 B：只读图谱聚合）
   'knowledge:get-graph',
+  // E2 费曼录音持久化 IPC channel（{userData}/recordings 读写）
+  'recording:save',
+  'recording:load',
+  'recording:delete',
+  // 3.18 电子墨水学习板次窗口
+  'eink:show-card',
+  'eink:hide',
 ] as const;
 
 /** 允许渲染进程监听的事件 channel 白名单（主进程 → 渲染进程推送） */
@@ -169,6 +184,10 @@ const ALLOWED_EVENT_CHANNELS = [
   // 本地 ASR 真流式转写结果推送（partial 实时 / final 断句）
   'asr_stream_partial',
   'asr_stream_final',
+  // 全局快捷键触发推送（payload: { id, text? }，shortcutManager 驱动）
+  'shortcut:triggered',
+  // 3.18 电子墨水学习板：主进程推送复习卡片到次窗口
+  'eink:card',
 ] as const;
 
 /** 允许渲染进程单向发送的 channel 白名单（渲染进程 → 主进程，fire-and-forget） */
@@ -218,8 +237,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       console.warn(`[preload] 不允许的发送 channel: ${channel}`);
     }
   },
-  /** 监听主进程发出的窗口关闭事件 */
+  /** 监听主进程发出的窗口关闭事件（CL-L6: 统一纳入 ALLOWED_EVENT_CHANNELS 校验） */
   onWindowClosing: (callback: () => void) => {
+    if (!(ALLOWED_EVENT_CHANNELS as readonly string[]).includes('window:closing')) {
+      console.warn('[preload] 不允许的事件 channel: window:closing');
+      return () => {};
+    }
     const handler = () => callback();
     ipcRenderer.on('window:closing', handler);
     return () => ipcRenderer.removeListener('window:closing', handler);
@@ -234,15 +257,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
   windowClose: () => ipcRenderer.invoke('window:close'),
   windowIsMaximized: () => ipcRenderer.invoke('window:isMaximized') as Promise<boolean>,
   onMaximizedChanged: (callback: (isMaximized: boolean) => void) => {
+    if (!(ALLOWED_EVENT_CHANNELS as readonly string[]).includes('window:maximized-changed')) {
+      console.warn('[preload] 不允许的事件 channel: window:maximized-changed');
+      return () => {};
+    }
     const handler = (_event: unknown, isMaximized: boolean) => callback(isMaximized);
     ipcRenderer.on('window:maximized-changed', handler);
     return () => ipcRenderer.removeListener('window:maximized-changed', handler);
   },
-  /** 监听退出前同步事件 */
+  /** 监听退出前同步事件（CL-L6: 统一纳入 ALLOWED_EVENT_CHANNELS 校验） */
   onSyncBeforeQuit: (callback: () => void) => {
+    if (!(ALLOWED_EVENT_CHANNELS as readonly string[]).includes('sync:before-quit')) {
+      console.warn('[preload] 不允许的事件 channel: sync:before-quit');
+      return () => {};
+    }
     const handler = () => callback();
     ipcRenderer.on('sync:before-quit', handler);
     return () => ipcRenderer.removeListener('sync:before-quit', handler);
+  },
+  /** 监听全局快捷键触发（payload: { id, text? }，shortcutManager 驱动） */
+  onShortcutTriggered: (callback: (payload: { id: string; text?: string }) => void) => {
+    if (!(ALLOWED_EVENT_CHANNELS as readonly string[]).includes('shortcut:triggered')) {
+      console.warn('[preload] 不允许的事件 channel: shortcut:triggered');
+      return () => {};
+    }
+    const handler = (_event: unknown, payload: { id: string; text?: string }) => callback(payload);
+    ipcRenderer.on('shortcut:triggered', handler);
+    return () => ipcRenderer.removeListener('shortcut:triggered', handler);
   },
   /** 通知主进程同步已完成 */
   notifySyncComplete: () => {
@@ -251,9 +292,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ---- 自动更新 API ----
   /** 设置是否自动检查更新 */
   setAutoUpdate: (enabled: boolean) => ipcRenderer.invoke('update:set-auto-check', enabled),
+  // FRONT2-M5: safeStorage 系统级加密（密钥材料落盘保护，CryptoManager 消费）
+  safeStorageEncrypt: (plain: string) => ipcRenderer.invoke('crypto:safe-storage-encrypt', plain),
+  safeStorageDecrypt: (encoded: string) => ipcRenderer.invoke('crypto:safe-storage-decrypt', encoded),
   // ---- 阶段 A：知识入籍拖拽 API（Electron 35 移除 File.path，必须经 webUtils 转换） ----
   /** 拖拽文件 → 绝对路径（供 import:parse-pdf 使用） */
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
+  // ---- 设备指纹 API（激活码绑定用） ----
+  /** 获取设备指纹（主进程生成，首次调用后恒定） */
+  getMachineId: () => ipcRenderer.invoke('machine-id:get'),
   // ---- v0.9.0: 备份 API ----
   /** 保存备份文件（显示系统保存对话框） */
   backupSave: (data: string, defaultName?: string) => ipcRenderer.invoke('backup:save', data, defaultName),
@@ -287,6 +334,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('storage:change-path', { newPath }),
     getActivePath: () =>
       ipcRenderer.invoke('storage:get-active-path'),
+  },
+  // ---- E2: 费曼录音持久化 API ----
+  recording: {
+    save: (stem: string, base64: string) =>
+      ipcRenderer.invoke('recording:save', { stem, base64 }),
+    load: (stem: string) =>
+      ipcRenderer.invoke('recording:load', { stem }),
+    delete: (stem: string) =>
+      ipcRenderer.invoke('recording:delete', { stem }),
   },
   // ---- Ollama 本地推理 API ----
   ollama: {

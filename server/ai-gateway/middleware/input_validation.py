@@ -9,6 +9,7 @@
 @ai-context: 输入校验中间件：对请求体做基础合法性与体积防御，拦截明显恶意载荷。
 """
 
+import json
 import logging
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -16,11 +17,16 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger(__name__)
 
-# 需要输入验证的路径前缀
-VALIDATED_PATHS = ("/api/v1/ai/",)
+# 需要输入验证的路径前缀 → 各前缀允许的最大请求体字节数
+# GW-H7: 多模态/ASR/视觉端点原不在校验范围，base64 大载荷可致内存 DoS；
+# 各前缀按业务实际载荷设定独立上限（文本端点 1MB，多模态 64MB，音频/视觉 32MB）
+VALIDATED_PATHS: dict[str, int] = {
+    "/api/v1/ai/": 1 * 1024 * 1024,          # 1MB
+    "/api/v1/multimodal/": 64 * 1024 * 1024,  # 64MB（多图联合分析，100 帧 × ≤10MB 编码）
+    "/api/v1/asr/": 32 * 1024 * 1024,         # 32MB（音频转写）
+    "/api/v1/vision/": 32 * 1024 * 1024,      # 32MB（视觉提取）
+}
 
-# 限制常量
-MAX_CONTENT_LENGTH = 1 * 1024 * 1024  # 1MB
 MAX_TEXT_FIELD_LENGTH = 50000  # 字符
 
 
@@ -29,31 +35,51 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         # 仅对 AI 功能 API 进行输入验证
-        if not request.url.path.startswith(VALIDATED_PATHS):
+        max_content_length = None
+        for prefix, limit in VALIDATED_PATHS.items():
+            if request.url.path.startswith(prefix):
+                max_content_length = limit
+                break
+        if max_content_length is None:
             return await call_next(request)
 
         # 仅检查有请求体的方法
         if request.method in ("POST", "PUT", "PATCH"):
-            # 检查 Content-Length 头
+            # 检查 Content-Length 头（chunked 编码无此头时跳过，由 JSON 解析兜底）
             content_length = request.headers.get("content-length")
             if content_length:
                 try:
-                    if int(content_length) > MAX_CONTENT_LENGTH:
+                    if int(content_length) > max_content_length:
                         return JSONResponse(
-                            status_code=422,
+                            status_code=413,
                             content={
-                                "detail": f"request body exceeds {MAX_CONTENT_LENGTH} bytes (max 1MB)",
+                                "detail": f"request body exceeds {max_content_length} bytes",
                             },
                         )
                 except (ValueError, TypeError):
                     # 畸形 Content-Length 头，忽略该检查（后续 JSON 解析会进一步校验）
                     pass
 
-            # 解析 JSON 请求体并检查文本字段
+            # GW-M8: 流式读取请求体并实时计数——chunked 编码（无 Content-Length 头）
+            # 无法预检，逐块累计超限立即拒绝，防止大载荷全量读入内存
             content_type = request.headers.get("content-type", "")
             if "application/json" in content_type:
                 try:
-                    body = await request.json()
+                    body_bytes = bytearray()
+                    async for chunk in request.stream():
+                        body_bytes.extend(chunk)
+                        if len(body_bytes) > max_content_length:
+                            return JSONResponse(
+                                status_code=413,
+                                content={
+                                    "detail": f"request body exceeds {max_content_length} bytes",
+                                },
+                            )
+                    if not body_bytes:
+                        return await call_next(request)
+                    # 缓存回请求对象，保证下游路由仍能读取 body
+                    request._body = bytes(body_bytes)
+                    body = json.loads(body_bytes)
                     validation_error = self._check_fields(body, "")
                     if validation_error:
                         return JSONResponse(

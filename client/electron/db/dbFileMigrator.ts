@@ -131,6 +131,19 @@ export async function migrateDatabaseFiles(
     const sourceStats = await stat(sourceDb);
     let totalSize = sourceStats.size;
 
+    // CL-M9: 复制前检查目标目录是否已有数据库——copyFile 默认直接覆盖，
+    // 若用户选择已存在 keban.db 的目录（历史存储路径/手动复制残留），
+    // 旧库会被静默替换且无备份，造成不可逆数据丢失
+    const targetDb = path.join(targetDir, 'keban.db');
+    if (await fileExists(targetDb)) {
+      return {
+        success: false,
+        sourcePath: sourceDir,
+        targetPath: targetDir,
+        error: '目标目录已存在数据库文件（keban.db），为防止覆盖旧数据，请选择空目录或将旧库改名后重试',
+      };
+    }
+
     // 计算所有存在的文件大小
     for (const fileName of DB_FILES) {
       const filePath = path.join(sourceDir, fileName);
@@ -227,15 +240,38 @@ export function verifyDatabaseIntegrity(dbPath: string): boolean {
 
 /**
  * 为旧路径数据库创建备份
- * 将 keban.db / keban.db-wal / keban.db-shm 各复制为 .bak（同目录）
+ * 将 keban.db / keban.db-wal / keban.db-shm 各复制为带时间戳的 .bak（同目录）
+ * CL-M9: 备份名固定为 keban.db.bak 会被多次切换路径时互相覆盖，回滚点丢失；
+ * 改为时间戳后缀并仅保留最近 5 份。
  */
 export async function createBackup(dbDir: string): Promise<void> {
+  const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
   for (const fileName of DB_FILES) {
     const sourcePath = path.join(dbDir, fileName);
-    const backupPath = path.join(dbDir, fileName + '.bak');
+    const backupPath = path.join(dbDir, `${fileName}.${timestamp}.bak`);
     if (await fileExists(sourcePath)) {
       await copyFile(sourcePath, backupPath);
-      logger.info(`[DBMigrator] Backup created: ${fileName}.bak`);
+      logger.info(`[DBMigrator] Backup created: ${path.basename(backupPath)}`);
     }
+  }
+  // 清理超出保留份数的旧备份（按文件名时间戳排序，保留最近 5 份）
+  await pruneOldBackups(dbDir);
+}
+
+/** 仅保留最近 5 份 .bak 备份（按时间戳后缀排序） */
+async function pruneOldBackups(dbDir: string): Promise<void> {
+  try {
+    const { readdir } = await import('fs/promises');
+    const entries = await readdir(dbDir);
+    const backupFiles = entries
+      .filter((name) => name.endsWith('.bak'))
+      .sort()
+      .reverse();
+    for (const name of backupFiles.slice(5)) {
+      await rm(path.join(dbDir, name));
+      logger.info(`[DBMigrator] Pruned old backup: ${name}`);
+    }
+  } catch (err) {
+    logger.warn(`[DBMigrator] Failed to prune old backups: ${err instanceof Error ? err.message : String(err)}`);
   }
 }

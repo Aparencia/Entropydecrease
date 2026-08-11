@@ -31,7 +31,7 @@ export interface GoldenErrorPanelProps {
 const PATTERN_META: Record<ErrorPatternItem['type'], { label: string; className: string }> = {
   concept_blind: { label: '概念盲区', className: 'text-red-600 bg-red-50 border-red-200/50' },
   concept_confusion: { label: '概念混淆', className: 'text-orange-600 bg-orange-50 border-orange-200/50' },
-  overconfidence: { label: '过度自信', className: 'text-purple-600 bg-purple-50 border-purple-200/50' },
+  overconfidence: { label: '过度自信', className: 'text-amber-600 bg-amber-50 border-amber-200/50' },
 };
 
 function formatTime(ts: number): string {

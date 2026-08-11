@@ -7,12 +7,13 @@ import { Compass, RotateCw, MousePointerClick, ScrollText } from 'lucide-react';
 import { useOnboardingStore } from '../useOnboardingStore';
 
 const MODULES = [
-  { color: 'bg-indigo-500', name: '仪表盘', desc: '学习概览与数据统计' },
+  { color: 'bg-brand-500', name: '仪表盘', desc: '学习概览与数据统计' },
   { color: 'bg-rose-500', name: '深潜', desc: '番茄钟专注与休息提醒' },
   { color: 'bg-emerald-500', name: '结礁', desc: '学习笔记管理与富文本编辑' },
   { color: 'bg-amber-500', name: '反衰减呼吸', desc: '间隔重复记忆卡片' },
-  { color: 'bg-cyan-500', name: '浮出水面', desc: '费曼学习法输出练习' },
-  { color: 'bg-purple-500', name: '灵感', desc: '灵感收集与知识关联' },
+  { color: 'bg-amber', name: '浮出水面', desc: '费曼学习法输出练习' },
+  { color: 'bg-accent-500', name: '灵感', desc: '灵感收集与知识关联' },
+  { color: 'bg-lime-500', name: '标准作业', desc: 'SOP 流程模板与执行' },
 ];
 
 export function QuickStartTab() {
@@ -32,7 +33,7 @@ export function QuickStartTab() {
       {/* 3D 导航说明 */}
       <section>
         <h3 className="text-lg font-semibold text-white/90 mb-4 flex items-center gap-2">
-          <Compass className="w-5 h-5 text-indigo-400" />
+          <Compass className="w-5 h-5 text-brand-400" />
           3D 导航
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -45,7 +46,7 @@ export function QuickStartTab() {
               key={item.label}
               className="flex items-start gap-3 p-3 rounded-xl bg-white/5 border border-white/10"
             >
-              <item.icon className="w-5 h-5 text-indigo-300 mt-0.5 shrink-0" />
+              <item.icon className="w-5 h-5 text-brand-300 mt-0.5 shrink-0" />
               <div>
                 <p className="text-sm font-medium text-white/80">{item.label}</p>
                 <p className="text-xs text-white/50">{item.desc}</p>
@@ -75,7 +76,7 @@ export function QuickStartTab() {
       <section className="pt-2">
         <button
           onClick={handleReplayGuide}
-          className="px-5 py-2.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-400/30 text-indigo-200 text-sm font-medium transition-colors"
+          className="px-5 py-2.5 rounded-xl bg-brand-500/20 hover:bg-brand-500/30 border border-brand-400/30 text-brand-200 text-sm font-medium transition-colors"
         >
           重新播放引导
         </button>

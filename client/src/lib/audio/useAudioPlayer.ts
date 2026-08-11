@@ -79,6 +79,10 @@ export function useAudioPlayer(options: AudioPlayerOptions) {
   const play = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
+    // FRONT2-M6: 无条件清理进行中的 fadeOut interval——原实现仅 fadeInMs
+    // 分支会 clearFade，无淡入配置时淡出中途重新 play，interval 继续运行
+    //（音量递减到 0 并 pause），新播放被无声打断
+    clearFade();
     audio.play().then(() => {
       setIsPlaying(true);
       if (options.fadeInMs && options.fadeInMs > 0) {

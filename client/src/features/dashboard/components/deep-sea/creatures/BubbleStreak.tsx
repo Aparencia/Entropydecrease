@@ -37,7 +37,7 @@ export default function BubbleStreak({ streakDays, todayChecked, loading }: Prop
 
   return (
     <motion.div
-      className="relative rounded-[var(--kb-radius-lg)] border border-cyan-400/20 bg-bg-elevated/30 backdrop-blur-sm overflow-hidden p-4 h-[140px] group hover:border-cyan-400/40 transition-colors duration-500"
+      className="relative rounded-[var(--kb-radius-lg)] border border-cyber/20 bg-bg-elevated/30 backdrop-blur-sm overflow-hidden p-4 h-[140px] group hover:border-cyber/40 transition-colors duration-500"
       whileHover={{ scale: 1.02 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
       aria-label={`连续打卡 ${streakDays} 天`}
@@ -47,7 +47,7 @@ export default function BubbleStreak({ streakDays, todayChecked, loading }: Prop
         {!prefersReduced && bubbles.map((b) => (
           <motion.div
             key={b.id}
-            className="absolute rounded-full border border-cyan-300/20 bg-cyan-400/10"
+            className="absolute rounded-full border border-cyber/20 bg-cyber/10"
             style={{
               width: b.size,
               height: b.size,
@@ -79,13 +79,13 @@ export default function BubbleStreak({ streakDays, todayChecked, loading }: Prop
             strokeWidth={1.5}
           />
         </motion.div>
-        <span className="text-[28px] font-bold text-cyan-300 tabular-nums">
+        <span className="text-[28px] font-bold text-cyber tabular-nums">
           {streakDays}
         </span>
-        <span className="text-[10px] text-cyan-200/50">天连续打卡</span>
+        <span className="text-[10px] text-cyber/50">天连续打卡</span>
         <div className={`text-[9px] font-medium px-2 py-0.5 rounded-full ${
           todayChecked
-            ? 'bg-cyan-400/15 text-cyan-300'
+            ? 'bg-cyber/15 text-cyber'
             : 'bg-bg-tertiary/30 text-text-tertiary'
         }`}>
           {todayChecked ? '今日已打卡' : '今日未打卡'}
@@ -93,7 +93,7 @@ export default function BubbleStreak({ streakDays, todayChecked, loading }: Prop
       </div>
 
       {/* 有色弥散阴影 */}
-      <div className="absolute inset-0 pointer-events-none rounded-[var(--kb-radius-lg)] shadow-[inset_0_0_30px_rgba(34,211,238,0.03)]" />
+      <div className="absolute inset-0 pointer-events-none rounded-[var(--kb-radius-lg)] shadow-[inset_0_0_30px_rgba(111,180,232,0.03)]" />
     </motion.div>
   );
 }

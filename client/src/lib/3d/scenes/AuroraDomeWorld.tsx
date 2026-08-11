@@ -8,6 +8,11 @@ import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useEffectiveTier } from '@/lib/performance/usePerformanceMode';
+import {
+  patchParticleShader,
+  updateGPUParticleUniforms,
+  addParticleAttributes,
+} from '@/lib/3d/shaders/gpuParticleShaders';
 
 // ─── 天空穹顶着色器 ───────────────────────────────────────
 const domeVertexShader = /* glsl */ `
@@ -41,7 +46,7 @@ const domeFragmentShader = /* glsl */ `
 function SkyDome() {
   const uniforms = useMemo(() => ({
     uColorTop: { value: new THREE.Color('#FCD34D') },
-    uColorMid: { value: new THREE.Color('#60A5FA') },
+    uColorMid: { value: new THREE.Color('#4A7DB0') },
     uColorBottom: { value: new THREE.Color('#F8FAFC') },
   }), []);
 
@@ -114,13 +119,12 @@ function SunSystem() {
 
 // ─── 极光效果 ─────────────────────────────────────────────
 function AuroraBorealis() {
-  const meshRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
 
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
-    uColorA: { value: new THREE.Color('#22D3EE') },
-    uColorB: { value: new THREE.Color('#818CF8') },
+    uColorA: { value: new THREE.Color('#6FB4E8') },
+    uColorB: { value: new THREE.Color('#9FB8D8') },
     uColorC: { value: new THREE.Color('#34D399') },
   }), []);
 
@@ -191,23 +195,23 @@ function AuroraBorealis() {
   );
 }
 
-// ─── 星尘粒子 ─────────────────────────────────────────────
+// ─── 星尘粒子（GPU 着色器版） ────────────────────────
+/** 星尘粒子最大数量（固定 buffer 上限，tier 切换经 drawRange 控制可见数） */
+const MAX_STARDUST = 1500;
+
 function StarDust({ count }: { count: number }) {
   const pointsRef = useRef<THREE.Points>(null);
-  const velocitiesRef = useRef<Float32Array | null>(null);
 
-  const { positions, colors, velocities } = useMemo(() => {
-    const pos = new Float32Array(count * 3);
-    const col = new Float32Array(count * 3);
-    const vel = new Float32Array(count * 3);
+  // 固定最大 buffer，tier 切换经 drawRange 控制可见数
+  const { positions, colors } = useMemo(() => {
+    const pos = new Float32Array(MAX_STARDUST * 3);
+    const col = new Float32Array(MAX_STARDUST * 3);
 
     const colorA = new THREE.Color('#FFFBEB');
     const colorB = new THREE.Color('#F59E0B');
 
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < MAX_STARDUST; i++) {
       const i3 = i * 3;
-
-      // 随机分布在球形区域内
       const radius = 5 + Math.random() * 60;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
@@ -216,90 +220,44 @@ function StarDust({ count }: { count: number }) {
       pos[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
       pos[i3 + 2] = radius * Math.cos(phi);
 
-      // 渐变颜色
       const t = Math.random();
       const color = colorA.clone().lerp(colorB, t);
       col[i3] = color.r;
       col[i3 + 1] = color.g;
       col[i3 + 2] = color.b;
-
-      // 部分粒子径向流动（太阳风效果）
-      const isRadial = Math.random() > 0.6;
-      if (isRadial) {
-        const dir = new THREE.Vector3(pos[i3], pos[i3 + 1], pos[i3 + 2]).normalize();
-        vel[i3] = dir.x * 0.3;
-        vel[i3 + 1] = dir.y * 0.3;
-        vel[i3 + 2] = dir.z * 0.3;
-      } else {
-        vel[i3] = (Math.random() - 0.5) * 0.1;
-        vel[i3 + 1] = (Math.random() - 0.5) * 0.05;
-        vel[i3 + 2] = (Math.random() - 0.5) * 0.1;
-      }
     }
+    return { positions: pos, colors: col };
+  }, []);
 
-    return { positions: pos, colors: col, velocities: vel };
-  }, [count]);
-
-  velocitiesRef.current = velocities;
-
-  useFrame((_, delta) => {
-    if (!pointsRef.current || !velocitiesRef.current) return;
-
-    // 防止浏览器节流导致的帧时间尖峰，最大允许 100ms
-    const safeDelta = Math.min(delta, 0.1);
-
-    const posAttr = pointsRef.current.geometry.attributes.position;
-    const posArray = posAttr.array as Float32Array;
-    const vel = velocitiesRef.current;
-
-    for (let i = 0; i < count; i++) {
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    // velocity: 径向方向（指向原点外）
+    addParticleAttributes(geo, MAX_STARDUST, (i) => {
       const i3 = i * 3;
-      posArray[i3] += vel[i3] * safeDelta;
-      posArray[i3 + 1] += vel[i3 + 1] * safeDelta;
-      posArray[i3 + 2] += vel[i3 + 2] * safeDelta;
+      const dir = new THREE.Vector3(positions[i3], positions[i3 + 1], positions[i3 + 2]).normalize();
+      const isRadial = Math.random() > 0.6;
+      return isRadial
+        ? [dir.x * 0.3, dir.y * 0.3, dir.z * 0.3]
+        : [(Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.05, (Math.random() - 0.5) * 0.1];
+    });
+    return geo;
+  }, [positions, colors]);
 
-      // 超出边界则重置到太阳附近
-      const dist = Math.sqrt(
-        posArray[i3] ** 2 + posArray[i3 + 1] ** 2 + posArray[i3 + 2] ** 2
-      );
-      if (dist > 80) {
-        const theta = Math.random() * Math.PI * 2;
-        const phi = Math.acos(2 * Math.random() - 1);
-        const r = 3 + Math.random() * 5;
-        posArray[i3] = r * Math.sin(phi) * Math.cos(theta);
-        posArray[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-        posArray[i3 + 2] = r * Math.cos(phi);
-      }
-    }
+  const material = useMemo(() => {
+    const mat = new THREE.PointsMaterial({ size: 0.15, vertexColors: true, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true });
+    patchParticleShader(mat, { motion: 'radial', wrap: false, bounds: { distMax: 80, radiusMin: 3, radiusMax: 8 }, speed: 0.8 });
+    return mat;
+  }, []);
 
-    posAttr.needsUpdate = true;
+  useFrame(({ clock }) => {
+    if (!pointsRef.current) return;
+    updateGPUParticleUniforms(pointsRef.current.material as THREE.PointsMaterial, clock.getElapsedTime());
+    pointsRef.current.geometry.setDrawRange(0, count);
   });
 
-  return (
-    <points ref={pointsRef} key={`star-${count}`}>
-      <bufferGeometry key={`star-geo-${count}`}>
-        <bufferAttribute
-          attach="attributes-position"
-          args={[positions, 3]}
-          count={count}
-        />
-        <bufferAttribute
-          attach="attributes-color"
-          args={[colors, 3]}
-          count={count}
-        />
-      </bufferGeometry>
-      <pointsMaterial
-        size={0.15}
-        vertexColors
-        transparent
-        opacity={0.7}
-        blending={THREE.AdditiveBlending}
-        depthWrite={false}
-        sizeAttenuation
-      />
-    </points>
-  );
+  return <points ref={pointsRef} geometry={geometry} material={material} />;
 }
 
 // ─── 云层效果（增强版） ─────────────────────────────────
@@ -307,7 +265,7 @@ function CloudLayer() {
   const cloudsRef = useRef<THREE.Group>(null);
 
   const cloudData = useMemo(() => {
-    return Array.from({ length: 8 }, (_, i) => ({
+    return Array.from({ length: 8 }, () => ({
       position: [
         (Math.random() - 0.5) * 50,
         12 + Math.random() * 25,
@@ -393,7 +351,7 @@ export function AuroraDomeWorld() {
             <mesh position={[0, 12, 25]} rotation={[-0.2, Math.PI * 0.7, 0]}>
               <planeGeometry args={[50, 18, 48, 48]} />
               <shaderMaterial
-                uniforms={{ uTime: { value: 0 }, uColorA: { value: new THREE.Color('#34D399') }, uColorB: { value: new THREE.Color('#FCD34D') }, uColorC: { value: new THREE.Color('#818CF8') } }}
+                uniforms={{ uTime: { value: 0 }, uColorA: { value: new THREE.Color('#34D399') }, uColorB: { value: new THREE.Color('#FCD34D') }, uColorC: { value: new THREE.Color('#9FB8D8') } }}
                 vertexShader={`varying vec2 vUv;varying vec3 vPosition;void main(){vUv=uv;vPosition=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`}
                 fragmentShader={`
                   uniform float uTime;uniform vec3 uColorA;uniform vec3 uColorB;uniform vec3 uColorC;varying vec2 vUv;varying vec3 vPosition;

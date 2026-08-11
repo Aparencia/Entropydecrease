@@ -69,6 +69,9 @@ export function useClassroomCapture() {
   // ── 课中重点标记 ──
   const [bookmarks, setBookmarks] = useState<{ timestamp: number; label?: string }[]>([]);
 
+  // M2: 录制中自动锚点（每 15 分钟触发；label 取当时最近的实时转写）
+  const [autoAnchors, setAutoAnchors] = useState<{ timestamp: number; label?: string }[]>([]);
+
   // 本次会话实际生效的音频源（ADR-001）：由主进程选源后回传，
   // 用于诊断文案分支与 UI 展示，避免对进程环回给出“检查输出设备”类误导提示
   const [audioSourceKind, setAudioSourceKind] = useState<AudioSourceKind | null>(null);
@@ -113,7 +116,12 @@ export function useClassroomCapture() {
   const captureManager = useMemo(
     () => new CaptureManager({
       onFrameWatchdogTimeout: () => frameRestartRef.current?.(),
+      // CL-M10: 连续重启耗尽时提示用户手动处理，避免无限自动重启
+      onFrameWatchdogExhausted: () => {
+        notify('error', '画面采集异常，已停止自动恢复，请重新选择窗口或重启采集');
+      },
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- notify 为稳定引用
     [],
   );
 
@@ -124,6 +132,13 @@ export function useClassroomCapture() {
     };
   }, [captureManager]);
 
+  // P8 视觉提取模式（auto/text/formula/diagram/code/full）：同步到 CaptureManager，
+  // 写入截图消息 metadata 供 VisionWorker 消费（VisionWorker 已支持，此前缺 UI 入口）
+  const [visionMode, setVisionMode] = useState<'auto' | 'text' | 'formula' | 'diagram' | 'code' | 'full'>('auto');
+  useEffect(() => {
+    captureManager.setVisionMode(visionMode);
+  }, [captureManager, visionMode]);
+
   const events = useClassroomEvents({
     captureManager, status, capturePath,
     language: config.language, aiDetectEnabled, setCourseMeta,
@@ -131,9 +146,31 @@ export function useClassroomCapture() {
     streamingAsrActive,
   });
 
-  const { audioHealth, audioCleanupRef } = useClassroomAudio({
+  // 转写/提取段最新值 ref 桥：停止收尾（useSessionControl）在事件回调
+  // 之外读取实时数据，必须绕过闭包读到最新值
+  const liveTranscriptsRef = useRef(events.liveTranscripts);
+  liveTranscriptsRef.current = events.liveTranscripts;
+  const segmentsRef = useRef(events.segments);
+  segmentsRef.current = events.segments;
+
+  const { audioHealth, audioCleanupRef, setAutoAnchorCallback } = useClassroomAudio({
     captureManager, status, mode, onNotify: notify,
   });
+
+  // M2: 自动锚点回调——记录锚点（label 取最新实时转写片段）并通知用户
+  const handleAutoAnchor = useCallback(() => {
+    const latest = events.liveTranscripts[events.liveTranscripts.length - 1];
+    const label = latest?.text ? latest.text.slice(0, 60) : undefined;
+    setAutoAnchors((prev) => [...prev, { timestamp: Date.now(), label }]);
+    notify('info', '已自动标记锚点（连续录制满 15 分钟）');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- events 引用稳定
+  }, [events.liveTranscripts, notify]);
+
+  // 把自动锚点回调注册给 audio hook（触发时记录到 UI 状态）
+  useEffect(() => {
+    setAutoAnchorCallback(handleAutoAnchor);
+    return () => setAutoAnchorCallback(null);
+  }, [setAutoAnchorCallback, handleAutoAnchor]);
 
   // 音频自动恢复：静音诊断（文案按生效源分支）/ 设备变更重启
   useAudioRecovery({
@@ -159,6 +196,14 @@ export function useClassroomCapture() {
     events.setSegments([]);
     events.setLiveTranscripts([]);
     setSelectedIds(new Set());
+    setAutoAnchors([]);
+    // P0-6 内存护栏：上一轮会话的 smartBundle（关键帧/音频段/时间线，含
+    // 未释放的 base64）与增量分析缓冲必须清空，否则长会话切换无界累积；
+    // pendingKeyframesRef 等 ref 由 finalizeSmartSession 同步收割，此处双保险
+    events.setSmartBundle({});
+    events.pendingKeyframesRef.current = [];
+    events.partialNotesRef.current = [];
+    events.isPartialAnalyzingRef.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- events setter 引用稳定
   }, []);
 
@@ -174,6 +219,8 @@ export function useClassroomCapture() {
       pendingKeyframesRef: events.pendingKeyframesRef,
       isPartialAnalyzingRef: events.isPartialAnalyzingRef,
       setPartialCount: events.setPartialCount,
+      liveTranscriptsRef,
+      segmentsRef,
     },
     onAnalyzeVideo: analysis.handleVideoAnalyze,
     onAnalyzeFull: analysis.handleAnalyze,
@@ -217,32 +264,59 @@ export function useClassroomCapture() {
     setConfig((prev) => ({ ...prev, ...patch }));
   }, []);
 
-  // ── 笔记→闪卡一键生成 ──
-  const handleGenerateCards = useCallback(async (content: string) => {
+  // ── 笔记→闪卡一键生成（P2-3：支持全量/仅重点模式） ──
+  const handleGenerateCards = useCallback(async (content: string, mode?: 'full' | 'bookmarks') => {
     if (!window.electronAPI) return;
     try {
-      notify('info', '正在从笔记生成闪卡...');
-      await window.electronAPI.invoke('ai_generate_cards', { content });
+      let cardContent = content;
+      if (mode === 'bookmarks') {
+        const bookmarkTimestamps = (events.smartBundle?.timeline ?? [])
+          .filter((e) => e.type === 'bookmark')
+          .map((e) => e.timestamp);
+        if (bookmarkTimestamps.length > 0) {
+          const bookmarkTexts = bookmarkTimestamps.map((ts) => {
+            const withText = events.liveTranscripts.filter((t) => t.text);
+            if (withText.length === 0) return '';
+            const closest = withText.reduce((best, cur) =>
+              Math.abs(cur.timestamp - ts) < Math.abs(best.timestamp - ts) ? cur : best,
+            );
+            return closest?.text ? `- ${closest.text}` : '';
+          }).filter(Boolean);
+          if (bookmarkTexts.length > 0) {
+            cardContent = `# 课堂重点标记\n\n${bookmarkTexts.join('\n')}`;
+          }
+        }
+        notify('info', `正在从 ${bookmarkTimestamps.length} 个重点标记生成闪卡...`);
+      } else {
+        notify('info', '正在从笔记生成闪卡...');
+      }
+      await window.electronAPI.invoke('ai_generate_cards', { content: cardContent });
       notify('success', '闪卡已生成，可在闪卡模块查看');
     } catch (err) {
       console.error('[useClassroomCapture] 生成闪卡失败:', err);
       notify('error', '闪卡生成失败，请重试');
     }
-  }, [notify]);
+  }, [notify, events.smartBundle, events.liveTranscripts]);
 
   // ── 课中重点标记 ──
+  // M2: 统一走 captureManager.pushBookmark（smart 路径广播 smart:bookmark，
+  // useClassroomEvents 订阅写入 smartBundle.timeline，单一数据流）
+  // events.setSmartBundle 为稳定 setState 引用，解构后显式入依赖（oxlint exhaustive-deps）
+  const { setSmartBundle } = events;
   const handleBookmark = useCallback(() => {
     if (status !== 'capturing') return;
     const now = Date.now();
     setBookmarks((prev) => [...prev, { timestamp: now }]);
-    // 同时插入 smartBundle timeline
-    events.setSmartBundle((prev) => ({
-      ...prev,
-      timeline: [...(prev.timeline ?? []), { timestamp: now, type: 'bookmark' as const }],
-    }));
+    // M7: smart 路径由 smart:bookmark 广播写入 timeline；非 smart 路径（fine/
+    // full_record）广播不存在，本地状态之外兜底直接写 timeline，保留原有持久化
+    if (!captureManager.pushBookmark('bookmark')) {
+      setSmartBundle((prev) => ({
+        ...prev,
+        timeline: [...(prev.timeline ?? []), { timestamp: now, type: 'bookmark' }],
+      }));
+    }
     notify('success', `已标记重点 (${new Date(now).toLocaleTimeString()})`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- events setter 引用稳定
-  }, [status, notify]);
+  }, [status, notify, captureManager, setSmartBundle]);
 
   return {
     // 窗口
@@ -253,6 +327,8 @@ export function useClassroomCapture() {
     setExtractionError: events.setExtractionError,
     // 路径
     capturePath, setCapturePath, smartBundle: events.smartBundle,
+    // P8 视觉提取模式
+    visionMode, setVisionMode,
     // 分析
     isAnalyzing: analysis.isAnalyzing,
     analysisResult: analysis.analysisResult,
@@ -261,6 +337,7 @@ export function useClassroomCapture() {
     transcribedCount: events.transcribedCount,
     // 实时转录
     liveTranscripts: events.liveTranscripts,
+    handleEditTranscript: events.handleEditTranscript,
     // 真流式进行中的 partial 文本 + 激活标志
     partialText: events.partialText,
     streamingAsrActive,
@@ -280,6 +357,8 @@ export function useClassroomCapture() {
     handleRetryMerge: analysis.handleRetryMerge,
     handleDismissAnalysis: analysis.handleDismissAnalysis,
     handleGenerateCards, handleBookmark, bookmarks,
+    // M2 自动锚点（时间线展示）
+    autoAnchors,
     // 笔记持久化
     ...notes,
     // 确认对话框（P0-5：供 ClassroomPage 挂载 ConfirmDialog）

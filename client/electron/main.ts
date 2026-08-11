@@ -17,13 +17,14 @@
  * 应用无法启动，任何修改需完整回归启动/退出/托盘/更新流程。
  */
 
-import { app, BrowserWindow, Menu, session, clipboard } from 'electron';
+import { app, BrowserWindow, Menu, session, clipboard, safeStorage } from 'electron';
 import { safeHandle, setMainWindowId, requireText } from './ipcUtils.js';
+import { getMachineId } from './machineId.js';
 import { logger } from './logger.js';
 import { registerAIHandlers, initAIModule } from './ai/index.js';
 import { loadPersistedGatewayUrl, setRuntimeGatewayUrl, gatewayUrl, isDevMode } from './ai/utils.js';
 import { initAutoUpdater, checkForUpdate, downloadUpdate, installUpdate, destroyAutoUpdater, setAutoCheckEnabled } from './updater.js';
-import { createMainWindow, saveCloseChoice, completeSyncBeforeQuit } from './windowManager.js';
+import { createMainWindow, saveCloseChoice, completeSyncBeforeQuit, showEinkCard, hideEinkWindow } from './windowManager.js';
 import { destroyTray } from './trayManager.js';
 import { registerCaptureHandlers, disposeCaptureHandlers } from './captureHandlers.js';
 import { mcpManager } from './mcpManager.js';
@@ -43,22 +44,25 @@ import { registerKnowledgeIpcHandlers } from './db/knowledgeQueries.js';
 import { registerStorageIpcHandlers } from './storageIpcHandlers.js';
 import { registerKeyframeScheme, registerKeyframeIpcHandlers } from './ipc/keyframeStorage.js';
 import { loadPerformanceMode, registerPerformanceHandlers } from './performanceMode.js';
+import { registerShortcuts, unregisterShortcuts } from './shortcutManager.js';
+import { registerRecordingIpcHandlers } from './recordingStorage.js';
 
 // ================================================================
-// 性能优化：启用 GPU 光栅化与零拷贝
+// 性能优化：启用 GPU 光栅化、零拷贝与 WebGPU
 // ================================================================
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
-app.commandLine.appendSwitch('enable-features', 'WebGLDraftExtensions,SharedArrayBuffer');
+// WebGPU 支持（Three.js WebGPURenderer 自动检测，不可用时回退 WebGL2）
+app.commandLine.appendSwitch('enable-features', 'WebGPU,SharedArrayBuffer');
 
-// Windows: ANGLE + Direct3D 11
+// Windows: ANGLE + Direct3D 11（WebGPU 不可用时作为 WebGL 回退）
 // 注意：值必须是 'd3d11'，曾误写为 'gl' 导致 ANGLE 被锁定 OpenGL 后端，
 // 引发 WEBGL_lose_context 缺失、上下文异常及渲染卡顿
 if (process.platform === 'win32') {
   app.commandLine.appendSwitch('use-angle', 'd3d11');
 }
 
-// macOS: Metal
+// macOS: Metal（WebGPU 原生使用 Metal API）
 if (process.platform === 'darwin') {
   app.commandLine.appendSwitch('enable-metal', '1');
 }
@@ -115,6 +119,20 @@ if (!gotTheLock) {
 
   process.on('uncaughtException', (error) => {
     logger.crash('Uncaught Exception', error);
+    // CL-L10: 主进程在未知异常后处于"带病运行"状态（数据库连接可能损坏、
+    // 事件监听可能缺失）；记录后执行崩溃恢复——checkpoint 落盘 + relaunch
+    try {
+      const { checkpointAndClose } = require('./db/sqliteService.js') as typeof import('./db/sqliteService.js');
+      checkpointAndClose();
+      logger.info('[Main] Database checkpointed during crash recovery');
+    } catch (checkpointErr) {
+      logger.error('[Main] Checkpoint during crash recovery failed', checkpointErr);
+    }
+    // 延迟重启，确保崩溃日志已落盘
+    setTimeout(() => {
+      app.relaunch();
+      app.exit(1);
+    }, 500);
   });
 
   process.on('unhandledRejection', (reason) => {
@@ -169,20 +187,42 @@ if (!gotTheLock) {
     // 期间增量索引写入（indexDocument/removeDocument）自动进入队列，
     // 重建完成后由 setFtsIndexReady(true) 统一 flush，不丢索引
     setTimeout(() => {
-      try {
-        const indexData = collectIndexableData(sqliteDb);
-        rebuildIndex(indexData);
-        logger.info(`[DB] FTS5 index rebuilt: ${indexData.reduce((sum, t) => sum + t.rows.length, 0)} documents indexed`);
-      } catch (err) {
-        logger.warn(`[FTS5] Startup index rebuild failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
-      } finally {
-        setFtsIndexReady(true);
-      }
+      // CL-H4: rebuildIndex 已改为异步分批执行（每批让出事件循环），
+      // 数万文档重建不再阻塞主进程窗口/托盘/IPC
+      (async () => {
+        try {
+          const indexData = collectIndexableData(sqliteDb);
+          await rebuildIndex(indexData);
+          logger.info(`[DB] FTS5 index rebuilt: ${indexData.reduce((sum, t) => sum + t.rows.length, 0)} documents indexed`);
+        } catch (err) {
+          logger.warn(`[FTS5] Startup index rebuild failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+          setFtsIndexReady(true);
+        }
+      })();
     }, 0);
     logger.info('[DB] SQLite initialized and schema ready (FTS5 enabled)');
 
     // v1.0.0: 注册数据迁移 IPC handlers（IndexedDB → SQLite）
     registerMigrationHandlers(safeHandle);
+
+    // FRONT2-M5: 密钥材料安全存储 IPC——safeStorage 为 OS 级加密（Windows
+    // DPAPI/macOS Keychain），渲染进程设备密钥经此加密后才落 localStorage，
+    // 杜绝 XSS 直读明文密钥解密全部数据（CryptoManager 消费）
+    safeHandle('crypto:safe-storage-encrypt', async (_event, plain: unknown) => {
+      const text = requireText(plain, 'plain');
+      if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error('safeStorage 在当前平台不可用');
+      }
+      return safeStorage.encryptString(text).toString('base64');
+    });
+    safeHandle('crypto:safe-storage-decrypt', async (_event, encoded: unknown) => {
+      const b64 = requireText(encoded, 'encoded');
+      if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error('safeStorage 在当前平台不可用');
+      }
+      return safeStorage.decryptString(Buffer.from(b64, 'base64'));
+    });
 
     // 数据访问与存储/备份 IPC（详见 db/dbIpcHandlers.ts、storageIpcHandlers.ts）
     registerDbIpcHandlers();
@@ -221,6 +261,15 @@ if (!gotTheLock) {
       if (parsedUrl.protocol !== 'https:' && parsedUrl.hostname !== 'localhost' && parsedUrl.hostname !== '127.0.0.1') {
         throw new Error('生产环境必须使用 HTTPS');
       }
+      // CL-L2: 端口与路径收紧——同一受信任域名的任意端口/路径都会被 CSP
+      // connect-src 动态放行，同域攻击者可诱导请求到非预期端点；路径后缀
+      // 还会污染后续 ${base}${apiPath} 拼接
+      if (parsedUrl.port !== '') {
+        throw new Error('不允许自定义端口，请使用默认端口');
+      }
+      if (parsedUrl.pathname !== '/' && parsedUrl.pathname !== '') {
+        throw new Error('不允许自定义路径');
+      }
 
       await setRuntimeGatewayUrl(url);
       return { success: true };
@@ -229,6 +278,11 @@ if (!gotTheLock) {
     // 通用 IPC handlers
     safeHandle('get-app-version', async () => {
       return app.getVersion();
+    });
+
+    // 设备指纹（激活码一码多设备绑定；仅主进程持有，渲染进程只读获取）
+    safeHandle('machine-id:get', async () => {
+      return getMachineId();
     });
 
     // 剪贴板写入：渲染进程 navigator.clipboard 在 Electron 非聚焦/受限上下文下
@@ -244,6 +298,13 @@ if (!gotTheLock) {
 
     // SEC-005: 设置主窗口 ID 以启用 IPC sender 验证
     setMainWindowId(mainWindow.webContents.id);
+
+    // G7 全局快捷键框架：注册 SHORTCUT_DEFS 声明的系统级快捷键
+    // （capture-clipboard 等），触发事件经 shortcut:triggered 推送给渲染层
+    registerShortcuts(() => mainWindow);
+
+    // E2 费曼录音持久化 IPC（{userData}/recordings 读写）
+    registerRecordingIpcHandlers();
 
     initAutoUpdater(mainWindow);
 
@@ -284,6 +345,35 @@ if (!gotTheLock) {
         performQuit();
       } else if (action === 'minimize') {
         mainWindow.hide();
+      }
+    });
+
+    // 3.18 电子墨水学习板：推送卡片到墨水屏次窗口 / 隐藏次窗口
+safeHandle('eink:show-card', async (_event, card: unknown) => {
+      showEinkCard(card);
+      return { success: true };
+    });
+
+safeHandle('eink:hide', async () => {
+      hideEinkWindow();
+      return { success: true };
+    });
+
+    // 系统音量（Windows 下通过 PowerShell 获取）
+    safeHandle('system:get-volume', async () => {
+      try {
+        const { execFile } = await import('child_process');
+        const { promisify } = await import('util');
+        const execFileAsync = promisify(execFile);
+        const { stdout } = await execFileAsync('powershell', [
+          '-Command',
+          '(New-Object -ComObject WMPlayer.OCX).settings.volume',
+        ], { timeout: 3000 });
+        const vol = parseInt(stdout.trim(), 10);
+        return { success: true, volume: Number.isNaN(vol) ? 50 : Math.max(0, Math.min(100, vol)) };
+      } catch {
+        // 非 Windows 或 PowerShell 不可用时返回默认值 50
+        return { success: true, volume: 50 };
       }
     });
 
@@ -336,6 +426,8 @@ if (!gotTheLock) {
     destroyAutoUpdater();
     destroyTray();
     closeDb();
+    // G7: 释放全局快捷键（globalShortcut 不随进程自动回收）
+    unregisterShortcuts();
     mainWindow = null;
 
     // 关闭 MCP Bridge 子进程（防止孤儿进程阻塞退出）

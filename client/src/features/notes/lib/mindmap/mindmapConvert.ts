@@ -8,10 +8,12 @@
  * （走 mindmapOps），本模块只负责"树 → 视图数据"的投影。
  * @ai-context: Pure projection from tree to view data. Collapsed subtrees are
  * skipped; dagre (LR rankdir) computes center coords, converted to top-left.
+ * Also provides text-to-mindmap conversion for AI-generated mindmaps.
  */
 import { type Node, type Edge } from '@xyflow/react';
 import dagre from '@dagrejs/dagre';
 import type { MindmapNode } from '@/types/models';
+import { createDefaultMindmap } from './mindmapOps';
 
 /** 节点尺寸（供 dagre 布局与坐标换算） / Node size for layout & coord conversion */
 export const MINDMAP_NODE_WIDTH = 168;
@@ -76,4 +78,60 @@ export function treeToFlow(root: MindmapNode): { nodes: MindmapFlowNode[]; edges
   }
 
   return { nodes, edges };
+}
+
+/**
+ * 将文本大纲解析为思维导图树结构。
+ * Parse text outline into mindmap tree structure.
+ *
+ * 输入格式：每行一个节点，缩进表示层级，支持 Markdown 标题语法。
+ * Input format: one node per line, indentation indicates depth.
+ *
+ * 示例：
+ *   中心主题
+ *     子主题1
+ *       子子主题1
+ *     子主题2
+ */
+export function textToMindmapTree(text: string, rootLabel?: string): MindmapNode {
+  const lines = text.split('\n').filter((l) => l.trim());
+  // 空输入回退默认导图根节点（createDefaultMindmap 返回 MindmapData 包装，取其 root）
+  if (lines.length === 0) return createDefaultMindmap().root;
+
+  // 构建根节点 / build root node
+  const root: MindmapNode = {
+    id: crypto.randomUUID(),
+    text: rootLabel || lines[0].replace(/^#+\s*/, '').trim() || '思维导图',
+    children: [],
+    collapsed: false,
+  };
+
+  // 解析缩进层级 / parse indentation depth
+  const stack: { node: MindmapNode; depth: number }[] = [{ node: root, depth: -1 }];
+
+  for (const line of lines) {
+    const trimmed = line.replace(/^[-*+]\s+/, '').trim();
+    if (!trimmed) continue;
+
+    // 计算缩进深度 / calculate indentation depth
+    const indent = line.search(/\S|$/);
+    const depth = Math.floor(indent / 2);
+
+    const newNode: MindmapNode = {
+      id: crypto.randomUUID(),
+      text: trimmed.replace(/^#+\s*/, '').slice(0, 50),
+      children: [],
+      collapsed: false,
+    };
+
+    // 找到合适的父节点 / find the right parent
+    while (stack.length > 1 && stack[stack.length - 1].depth >= depth) {
+      stack.pop();
+    }
+    const parent = stack[stack.length - 1].node;
+    parent.children.push(newNode);
+    stack.push({ node: newNode, depth });
+  }
+
+  return root;
 }

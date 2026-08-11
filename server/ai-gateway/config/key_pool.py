@@ -60,7 +60,7 @@ class KeyPool:
         """轮询获取下一个可用 Key
 
         Returns:
-            可用的 API Key，全部不可用时返回 None
+            可用的 API Key，全部不可用时返回 None（调用方据此跳过该 Provider）
         """
         if not self._keys:
             return None
@@ -73,12 +73,13 @@ class KeyPool:
                 self._index += 1
                 if self._disabled_until.get(key, 0) <= now:
                     return key
-            # 全部不可用，返回第一个（让上层决定是否重试）
+            # GW-M4: 全部不可用时返回 None 而非冷却中的 Key——
+            # 返回冷却 Key 会让调用方对必失败的 Key 发起请求（429 重试风暴）
             logger.warning(
                 "KeyPool [%s]: 所有 %d 个 Key 均处于冷却期",
                 self.provider, len(self._keys),
             )
-            return self._keys[0]
+            return None
 
     def mark_unavailable(self, key: str, cooldown: int = _KEY_COOLDOWN_SECONDS) -> None:
         """标记 Key 暂时不可用（供应商返回 429/401 时调用）"""

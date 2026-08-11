@@ -7,7 +7,7 @@
  */
 import type {
   BrainstormIdea, ChatMessage,
-  SocraticEvaluateResult, SocraticDeepeningResult,
+  SocraticEvaluateResult, SocraticDeepeningResult, SocraticMirrorResult,
 } from './types';
 import { classifyRawError } from './errorClassifier';
 import { aiClient } from '../http/apiClient';
@@ -117,6 +117,33 @@ export async function httpSocraticDeepening(
 
     return {
       angles: result.angles,
+      status: result.status,
+      model: result.model,
+      tokensUsed: result.tokens_used,
+      latencyMs: result.latency_ms,
+    };
+  } catch (error) {
+    throw classifyRawError(error, 'fetch');
+  }
+}
+
+// ── POST /api/v1/ai/socratic (mirror) ────────────────────────
+export async function httpSocraticMirror(
+  topic: string, question: string,
+): Promise<SocraticMirrorResult> {
+  try {
+    const result = await aiClient.post<{
+      mirror_question: string; reflection_hint: string; perspective_shift?: string;
+      status: string; model: string; tokens_used: number; latency_ms: number;
+    }>(
+      '/api/v1/ai/socratic',
+      { topic, question, mode: 'mirror' },
+    );
+
+    return {
+      mirrorQuestion: result.mirror_question,
+      reflectionHint: result.reflection_hint,
+      perspectiveShift: result.perspective_shift,
       status: result.status,
       model: result.model,
       tokensUsed: result.tokens_used,

@@ -37,9 +37,10 @@ async def issue_virtual_key(user_id: str, provider: str) -> str | None:
     if not cache._client:
         return None
 
-    # 生成虚拟 Key：vkey_<user_hash8>_<random16>
+    # 生成虚拟 Key：vkey_<user_hash8>_<random32>（GW-L5: 128 位随机熵，
+    # 原 64 位对暴力枚举偏弱，配合无速率限制的校验端点时易被爆破）
     user_hash = hashlib.sha256(user_id.encode()).hexdigest()[:8]
-    random_part = secrets.token_hex(8)
+    random_part = secrets.token_hex(16)
     vkey = f"{VKEY_PREFIX}{user_hash}_{random_part}"
 
     # 存储映射：vkey → {user_id, provider, created_at}

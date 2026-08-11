@@ -22,7 +22,7 @@ export function Step1Welcome() {
         <div className="flex gap-3">
           <button
             onClick={nextStep}
-            className="flex-1 px-5 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-medium transition-colors"
+            className="flex-1 px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-text-inverse font-medium transition-colors"
           >
             开始探索
           </button>
@@ -38,7 +38,7 @@ export function Step1Welcome() {
           onClick={toggleAutoDemo}
           className={`mt-3 w-full px-4 py-2 rounded-lg text-sm transition-colors ${
             autoDemo
-              ? 'bg-indigo-500/30 text-indigo-200'
+              ? 'bg-brand-500/30 text-brand-200'
               : 'bg-white/5 text-white/50 hover:text-white/70'
           }`}
         >

@@ -40,7 +40,7 @@ function GlassInspirationCard({ onSubmit, onClose, submitting }: GlassInspiratio
   return (
     <motion.div
       className="relative w-full max-w-sm rounded-[var(--kb-radius-xl)] overflow-hidden"
-      style={{ boxShadow: '0 0 32px rgba(139, 92, 246, 0.15), 0 8px 40px rgba(0,0,0,0.12)' }}
+      style={{ boxShadow: '0 0 32px rgba(232, 184, 75, 0.15), 0 8px 40px rgba(0,0,0,0.12)' }}
       initial={{ opacity: 0, y: 20, scale: 0.92 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -10, scale: 0.95 }}
