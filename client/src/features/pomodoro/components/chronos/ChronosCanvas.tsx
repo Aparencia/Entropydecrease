@@ -81,7 +81,7 @@ export const ChronosCanvas = memo(function ChronosCanvas({
 
   // ── 时间显示隐藏化：父组件传入 showTime（阶段开始 5s），hover 粒子团时显示 ──
   const [hovering, setHovering] = useState(false);
-  const timeVisible = showTime || hovering;
+  const timeVisible = chronosState !== 'asleep' && (showTime || hovering);
 
   // 容器层统一手势
   const pointerDownRef = useRef(0);

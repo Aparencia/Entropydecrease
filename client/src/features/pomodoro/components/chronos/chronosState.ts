@@ -51,7 +51,7 @@ export interface ChronosStateLabel {
 export const CHRONOS_STATE_LABELS: Record<ChronosState, ChronosStateLabel> = {
   asleep: { name: '沉睡', icon: '🌑', hint: '点击激活' },
   breathing: { name: '呼吸', icon: '🌕', hint: '点击开始 1 分钟迈步' },
-  focus: { name: '专注', icon: '🔥', hint: '点击暂停 · 长按放弃' },
+  focus: { name: '专注', icon: '🔥', hint: '点击调整一下 · 空格暂停 · 长按放弃' },
   short_break: { name: '短休', icon: '🌱', hint: '点击提前结束' },
   long_break: { name: '长休', icon: '🌳', hint: '点击提前结束' },
 };

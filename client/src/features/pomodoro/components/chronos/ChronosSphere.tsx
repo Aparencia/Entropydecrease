@@ -40,6 +40,7 @@ interface ChronosSphereProps {
 
 export function ChronosSphere({ state, mood, progress, degraded = false }: ChronosSphereProps) {
   const pointsRef = useRef<THREE.Points>(null);
+  const materialRef = useRef<THREE.PointsMaterial>(null);
   const theme = useSceneTheme();
   const tier = useEffectiveTier();
   const morph = composeMorph(mood, state, theme);
@@ -53,6 +54,9 @@ export function ChronosSphere({ state, mood, progress, degraded = false }: Chron
   const angles = useRef(new Float32Array(MAX_PARTICLES));
   const timeRef = useRef(0);
   const prevPos = useRef(new Float32Array(MAX_PARTICLES * 3));
+  // 专注结束爆发：归零瞬间触发，粒子向外飞散 1.5s（结束仪式感）
+  const burstRef = useRef({ active: false, t: 0 });
+  const prevProgressRef = useRef(progress);
 
   // 基础球面参数 + 静态分布预计算
   const base = useMemo(() => {
@@ -134,7 +138,7 @@ export function ChronosSphere({ state, mood, progress, degraded = false }: Chron
     heatColor: new THREE.Color('#F97316'),
   });
 
-  useFrame(({ clock }, delta) => {
+  useFrame((_frame, delta) => {
     if (!pointsRef.current) return;
 
     // 跳帧
@@ -144,6 +148,25 @@ export function ChronosSphere({ state, mood, progress, degraded = false }: Chron
     const safeDelta = Math.min(delta, 0.1);
     timeRef.current += safeDelta;
     const t = timeRef.current;
+
+    // 专注归零检测：progress 从 >0 跳变到 ≤0 的瞬间触发结束爆发（1.5s 粒子飞散）
+    if (state === 'focus' && prevProgressRef.current > 0 && progress <= 0) {
+      burstRef.current = { active: true, t: 0 };
+    }
+    prevProgressRef.current = progress;
+    const burst = burstRef.current;
+    if (burst.active) {
+      // 跳帧补偿：medium/low 档 useFrame 被 frameSkip 跳帧，累加 ×frameSkip 保持 1.5s 时长
+      burst.t += safeDelta * frameSkip;
+      if (burst.t > 1.5) burst.active = false;
+    }
+    // 爆发强度：起始最大，随时间衰减（easeOut）；辉光脉冲在前 0.25s 内瞬间提亮
+    const burstPow = burst.active ? 1 - Math.min(1, burst.t / 1.5) : 0;
+    const burstSpeed = burstPow * burstPow * 3.2;
+    if (materialRef.current) {
+      const pulse = burst.active && burst.t < 0.25 ? 1 - burst.t / 0.25 : 0;
+      materialRef.current.opacity = Math.min(1, morph.opacity + pulse * 0.5);
+    }
 
     // 状态收敛
     const k = Math.min(safeDelta * 2, 1);
@@ -281,6 +304,15 @@ export function ChronosSphere({ state, mood, progress, degraded = false }: Chron
       prevPos.current[i3] += (px - prevPos.current[i3]) * posK;
       prevPos.current[i3 + 1] += (py - prevPos.current[i3 + 1]) * posK;
       prevPos.current[i3 + 2] += (pz - prevPos.current[i3 + 2]) * posK;
+
+      // 专注结束爆发：粒子沿径向向外飞散（叠加在 prevPos，避免 lerp 拉回）
+      if (burstPow > 0) {
+        const len = Math.sqrt(px * px + py * py + pz * pz) || 1;
+        prevPos.current[i3] += (px / len) * burstSpeed * safeDelta;
+        prevPos.current[i3 + 1] += (py / len) * burstSpeed * safeDelta;
+        prevPos.current[i3 + 2] += (pz / len) * burstSpeed * safeDelta;
+      }
+
       posArray[i3] = prevPos.current[i3];
       posArray[i3 + 1] = prevPos.current[i3 + 1];
       posArray[i3 + 2] = prevPos.current[i3 + 2];
@@ -318,6 +350,7 @@ export function ChronosSphere({ state, mood, progress, degraded = false }: Chron
         />
       </bufferGeometry>
       <pointsMaterial
+        ref={materialRef}
         vertexColors
         transparent
         opacity={morph.opacity}
