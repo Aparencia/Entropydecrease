@@ -27,7 +27,7 @@ export function FeaturesPage() {
           {MODULES.map((m, i) => (
             <SectionReveal key={m.name} delay={i * 0.08}>
               <Link
-                href={m.href}
+                href={m.ready ? m.href : "/download"}
                 className="group relative block rounded-3xl p-7 h-full transition-all duration-500 hover:-translate-y-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kb-brand"
                 style={{
                   background: "var(--kb-bg-elevated)",
