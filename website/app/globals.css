@@ -232,3 +232,13 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--kb-brand-400);
 }
+
+/* 下载页滚动提示（向下滚动指示） */
+@keyframes scroll-hint-dot {
+  0% { transform: translateY(0); opacity: 1; }
+  70% { transform: translateY(10px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 0; }
+}
+.scroll-hint-dot {
+  animation: scroll-hint-dot 1.8s ease-in-out infinite;
+}

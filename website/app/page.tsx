@@ -8,6 +8,7 @@ import { motion } from "framer-motion";
 import { GlowOrb } from "@/components/GlowOrb";
 import { SectionReveal } from "@/components/SectionReveal";
 import { SuperEllipseCard } from "@/components/SuperEllipseCard";
+import { MODULES } from "@/lib/features/modules";
 
 /* ---------- 数据 ---------- */
 
@@ -29,45 +30,6 @@ const PHILOSOPHY = [
     desc: "通过微反馈与生长隐喻，持续喂养内在动机。每一次答对，一圈琥珀色微光从指尖漾开。",
     icon: "❋",
     glow: "card" as const,
-  },
-];
-
-const FEATURES = [
-  {
-    name: "深潜",
-    origin: "番茄钟",
-    desc: "切断海面噪音，潜入零干扰的心流深海。",
-    color: "var(--kb-focus-blue)",
-  },
-  {
-    name: "结礁",
-    origin: "智能笔记",
-    desc: "将漂浮的碎片，沉淀为坚实的认知暗礁。",
-    color: "var(--kb-brand-400)",
-  },
-  {
-    name: "回声定位",
-    origin: "课堂助手",
-    desc: "捕捉深海回声，打捞暗流中的知识暗物质。",
-    color: "var(--kb-cyber-cyan)",
-  },
-  {
-    name: "反衰减呼吸",
-    origin: "闪卡复习",
-    desc: "规律吐纳，让记忆在深海高压下依然鲜活。",
-    color: "var(--kb-moss-green)",
-  },
-  {
-    name: "浮出水面",
-    origin: "费曼学习法",
-    desc: "向世界呼出你的理解。雾散了，轮廓就清晰了。",
-    color: "var(--kb-amber)",
-  },
-  {
-    name: "萤火海沟",
-    origin: "灵感空间",
-    desc: "安放微光，它们终将照亮整片深域。",
-    color: "var(--kb-accent-400)",
   },
 ];
 
@@ -153,10 +115,10 @@ export default function HomePage() {
               免费获取 · 前往下载 →
             </Link>
             <Link
-              href="/story"
+              href="/philosophy"
               className="px-8 py-3.5 rounded-2xl font-medium text-kb-text2 transition-all duration-500 hover:text-kb-text hover:scale-[1.02] glass-panel"
             >
-              进入品牌故事
+              了解设计理念
             </Link>
           </motion.div>
         </div>
@@ -217,11 +179,11 @@ export default function HomePage() {
           </SectionReveal>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {FEATURES.map((feat, i) => (
+            {MODULES.map((feat, i) => (
               <SectionReveal key={feat.name} delay={i * 0.08}>
-                <motion.div
-                  whileHover={{ y: -5, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } }}
-                  className="group relative rounded-3xl p-7 h-full cursor-default"
+                <Link
+                  href={feat.href}
+                  className="group relative block rounded-3xl p-7 h-full cursor-pointer transition-all duration-500 hover:-translate-y-[5px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kb-brand"
                   style={{
                     background: "var(--kb-bg-elevated)",
                     border: "1px solid var(--kb-glass-border)",
@@ -245,7 +207,7 @@ export default function HomePage() {
                     className="absolute bottom-0 left-8 right-8 h-px opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                     style={{ background: `linear-gradient(90deg, transparent, ${feat.color}66, transparent)` }}
                   />
-                </motion.div>
+                </Link>
               </SectionReveal>
             ))}
           </div>
@@ -264,13 +226,13 @@ export default function HomePage() {
             <span style={{ color: "var(--kb-amber)" }}>陪你慢慢理清。</span>&rdquo;
           </blockquote>
           <p className="text-kb-text3 text-sm mb-10">
-            —— 熵减 · 品牌故事
+            —— 熵减 · 设计理念
           </p>
           <Link
-            href="/story"
+            href="/philosophy"
             className="inline-flex items-center gap-2 text-kb-brand font-medium transition-all duration-400 hover:gap-3.5"
           >
-            阅读完整品牌故事 <span aria-hidden>→</span>
+            阅读完整设计理念 <span aria-hidden>→</span>
           </Link>
           <div className="feather-divider mt-16" />
         </SectionReveal>
