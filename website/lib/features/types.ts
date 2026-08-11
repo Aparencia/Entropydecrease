@@ -4,6 +4,8 @@
 // 纯类型文件，无运行时逻辑，不需要 "use client" 指令。
 
 export interface FeatureMechanicsItem {
+  /** 标识字段：用于回查原始数据源（如 ChronosState），避免索引耦合 */
+  key?: string;
   name: string;
   icon: string;
   desc: string;

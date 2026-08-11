@@ -16,7 +16,7 @@ export const DIVE_CONFIG: FeatureConfig = {
   mechanics: {
     title: "它的一生，由你点亮",
     hint: "点击形态，中央的 Chronos 会变成它",
-    items: CHRONOS_STATES.map((s) => ({ name: s.name, icon: s.icon, desc: s.desc })),
+    items: CHRONOS_STATES.map((s) => ({ key: s.key, name: s.name, icon: s.icon, desc: s.desc }))
   },
   scenes: {
     title: "不是 25 分钟，是你的节奏",
