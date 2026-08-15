@@ -21,7 +21,10 @@ try:
     from observability.metrics import set_circuit_state
 except ImportError:
     _circuit_metrics_available = False
-    set_circuit_state = lambda p, s: None
+
+    def set_circuit_state(_provider: str, _state: str) -> None:
+        """metrics 不可用时的 no-op 降级（ruff E731：lambda 赋值改 def）"""
+        return None
 
 
 class CircuitState(str, Enum):
