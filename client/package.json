@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "vite --mode test",
     "build": "tsc -b && vite build",
-    "lint": "oxlint",
+    "lint": "oxlint --deny-warnings",
     "lint:fix": "oxlint --fix",
     "typecheck": "tsc -b --noEmit",
     "typecheck:electron": "tsc -p electron/tsconfig.json --noEmit",

@@ -53,7 +53,9 @@ jobs:
           cache-dependency-path: client/package-lock.json
       - run: cd client && npm ci
       - name: Lint
-        run: cd client && npm run lint
+        # --deny-warnings：2026-08 已清零全部 warning，此后新 warning 视为失败，
+        # 防止 lint 债务回潮（审计 #4）
+        run: cd client && npx oxlint --deny-warnings
       - name: Typecheck (renderer)
         # 渲染进程（React + Vite）的 TypeScript 编译检查
         run: cd client && npm run typecheck
