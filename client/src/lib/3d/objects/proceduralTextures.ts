@@ -5,6 +5,7 @@
  * 纹理只在首次生成时创建，之后通过 useMemo 缓存
  */
 import * as THREE from 'three';
+import { stringHash } from '@/lib/utils/stringHash';
 
 /**
  * 生成主纹理：基底色 + 程序化噪点/能量纹路
@@ -164,12 +165,8 @@ export function createFlashcardTexture(color: string): THREE.CanvasTexture {
 }
 
 /**
- * 从模块 id 生成确定性种子
+ * 从模块 id 生成确定性种子（D12 收敛至 lib/utils/stringHash，保持同算法）
  */
 export function idToSeed(id: string): number {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = ((hash << 5) - hash + id.charCodeAt(i)) | 0;
-  }
-  return Math.abs(hash);
+  return Math.abs(stringHash(id));
 }

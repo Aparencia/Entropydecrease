@@ -22,18 +22,6 @@ import { supabase } from '@/lib/auth/supabaseClient';
 /** 视觉提取模式 */
 type VisionExtractMode = 'auto' | 'text' | 'formula' | 'diagram' | 'code' | 'full';
 
-/** 代码块结构 */
-interface CodeBlock {
-  language: string;
-  code: string;
-}
-
-/** 视觉提取选项 */
-interface VisionExtractOptions {
-  /** 提取模式，默认 'auto' */
-  mode?: VisionExtractMode;
-}
-
 // ================================================================
 // VisionWorker
 // ================================================================

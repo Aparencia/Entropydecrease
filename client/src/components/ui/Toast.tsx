@@ -1,25 +1,12 @@
 /**
  * @ai-context: UI 基础组件（shadcn/radix 封装）：Toast。
  */
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import * as RadixToast from '@radix-ui/react-toast';
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
-
-// Types
-export type ToastType = 'success' | 'error' | 'warning' | 'info';
-
-/**
- * 可选操作按钮（如降级提示的「重新合并」）。
- * @ai-context: Optional inline action button rendered before the close
- * button; clicking it dismisses the toast first, then runs onClick in a
- * try/catch so a throwing callback can never keep the toast on screen.
- */
-export interface ToastAction {
-  label: string;
-  onClick: () => void;
-}
+import { ToastContext, type ToastAction, type ToastType } from './useToast';
 
 interface ToastItem {
   id: number;
@@ -27,27 +14,6 @@ interface ToastItem {
   message: string;
   duration: number;
   action?: ToastAction;
-}
-
-interface ToastContextValue {
-  toast: (options: {
-    type: ToastType;
-    message: string;
-    duration?: number;
-    silent?: boolean;
-    /** 可选操作按钮；含 action 时默认时长延长至 6000ms */
-    action?: ToastAction;
-  }) => void;
-}
-
-// Context
-const ToastContext = createContext<ToastContextValue | null>(null);
-
-// Hook
-export function useToast(): ToastContextValue {
-  const ctx = useContext(ToastContext);
-  if (!ctx) throw new Error('useToast must be used within ToastProvider');
-  return ctx;
 }
 
 // Toast 类型 → 反馈音效映射（info 不播放音效；silent: true 的调用点跳过，避免与专属音效叠加）
@@ -192,3 +158,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 };
 
 ToastProvider.displayName = 'ToastProvider';
+
+// react-refresh: 组件文件只导出组件；useToast/ToastType/ToastAction 已移至 ./useToast，
+// 此处 re-export 保持 '@/components/ui/Toast' 与 '@/components/ui' barrel 导出签名不变
+// oxlint-disable-next-line react/only-export-components
+export { useToast } from './useToast';
+export type { ToastAction, ToastType } from './useToast';
+

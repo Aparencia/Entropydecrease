@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 萤火海沟 — 标签编辑弹出层
  * @ai-context 灵感卡片标签行点击后弹出的编辑面板，支持修改内容性质、认知深度与学科领域
  */
@@ -6,7 +6,6 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect, useRef } from 'react';
 import { useInspirationStore, type InspirationItem } from '../store/inspirationStore';
-import { useShallow } from 'zustand/react/shallow';
 import { cn } from '@/lib/utils';
 import { CONTENT_NATURE_OPTIONS, COGNITIVE_DEPTH_OPTIONS } from '../constants';
 
@@ -16,7 +15,8 @@ interface TagEditPopoverProps {
 }
 
 function TagEditPopover({ item, onClose }: TagEditPopoverProps) {
-  const { updateTags } = useInspirationStore(useShallow(s => s));
+  // P1-5 收尾：action 恒定引用，直接字段级订阅
+  const updateTags = useInspirationStore((s) => s.updateTags);
   const [nature, setNature] = useState(item.tags.content_nature);
   const [depth, setDepth] = useState(item.tags.cognitive_depth);
   const [subject, setSubject] = useState(item.tags.subject);

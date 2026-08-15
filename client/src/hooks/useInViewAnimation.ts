@@ -5,7 +5,7 @@
  * @ai-context 深海生物组件（BubbleStreak、AnglerfishAchievements 等）使用此 hook
  *              配合 Framer Motion 的 animate 属性控制动画播放
  */
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useState, type RefObject } from 'react';
 
 /**
  * 检测元素是否在视口内

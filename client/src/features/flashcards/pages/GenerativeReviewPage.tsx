@@ -3,7 +3,7 @@
  */
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Button, Card, Input, EmptyState } from '@/components/ui';
+import { Button, Card, Input } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';

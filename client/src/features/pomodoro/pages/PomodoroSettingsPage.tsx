@@ -110,7 +110,9 @@ export default function PomodoroSettingsPage() {
     if (key === 'classDuration') {
       const silentPreset = presets.find((p) => p.silent);
       if (silentPreset && silentPreset.workDuration !== clamped) {
-        updatePreset(silentPreset.id, { workDuration: clamped }).catch(() => {});
+        updatePreset(silentPreset.id, { workDuration: clamped }).catch((err) => {
+          console.warn('[PomodoroSettingsPage] sync class preset duration failed', err);
+        });
       }
     }
   };
@@ -197,7 +199,9 @@ export default function PomodoroSettingsPage() {
     setLocalSettings(next);
     updateSettings(next as typeof settings);
     const active = usePomodoroStore.getState().activePreset;
-    if (active) updatePreset(active.id, { workDuration: finalDuration }).catch(() => {});
+    if (active) updatePreset(active.id, { workDuration: finalDuration }).catch((err) => {
+      console.warn('[PomodoroSettingsPage] sync active preset duration failed', err);
+    });
     setAIRecommendation(finalDuration, aiReasoning ?? '');
     toast({ type: 'success', message: `已应用领航建议：${finalDuration} 分钟` });
   };

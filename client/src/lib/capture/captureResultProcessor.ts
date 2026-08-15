@@ -58,7 +58,9 @@ export function processExtractionResult(
     },
   };
 
-  captureStore.addSegment(ctx.sessionId, segment).catch(() => {});
+  captureStore.addSegment(ctx.sessionId, segment).catch((err) => {
+    console.warn('[captureResultProcessor] addSegment failed (captured content may be lost)', err);
+  });
 
   // 将结果送入 CrossFusionEngine 进行交叉融合
   if (result.source === 'vision') {

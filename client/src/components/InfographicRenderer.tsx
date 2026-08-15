@@ -4,7 +4,6 @@
  * @ai-context: 渲染标题、带要点的段落、关系连接节点图。
  * 支持 3 种主题：academic（学术衬线）、tech（技术等宽蓝）、warm（圆润手绘感）。
  */
-import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import type { InfographicData } from '@/lib/ai/types';
 

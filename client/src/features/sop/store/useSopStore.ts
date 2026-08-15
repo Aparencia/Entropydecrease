@@ -115,8 +115,12 @@ export const useSopStore = create<SopState>((set, get) => ({
           unlocked.forEach(a => {
             window.dispatchEvent(new CustomEvent('achievement-unlocked', { detail: a }));
           });
-        }).catch(() => {});
-      }).catch(() => {});
+        }).catch((err) => {
+          console.debug('[useSopStore] checkAchievements failed', err);
+        });
+      }).catch((err) => {
+        console.debug('[useSopStore] lazy load achievements evaluator failed', err);
+      });
     }
   },
 

@@ -21,7 +21,9 @@ export default function GoalMemory({ onSelect }: GoalMemoryProps) {
       .limit(8)
       .toArray()
       .then(setGoals)
-      .catch(() => {});
+      .catch((err) => {
+        console.debug('[GoalMemory] load goals failed', err);
+      });
   }, []);
 
   if (goals.length === 0) return null;

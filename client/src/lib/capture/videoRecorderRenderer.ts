@@ -130,7 +130,9 @@ export class VideoRecorderRenderer {
   /** 销毁控制器，释放资源 */
   dispose(): void {
     if (this.recording) {
-      this.stopRecording().catch(() => {});
+      this.stopRecording().catch((err) => {
+        console.debug('[videoRecorderRenderer] stopRecording failed (dispose)', err);
+      });
     }
   }
 

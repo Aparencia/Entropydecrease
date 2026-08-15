@@ -14,7 +14,7 @@ import { useTierAccess } from '@/features/beta/hooks/useTierAccess';
 import { TIER_PERKS } from '@/types/beta';
 import {
   Monitor, Wifi, Cloud, Check, WifiOff, Signal,
-  Sparkles, RefreshCw, HardDrive, Shield,
+  Shield,
 } from 'lucide-react';
 
 /**
@@ -83,7 +83,7 @@ const modeCards: ModeCardData[] = [
 
 export default function ModeSettings() {
   const { mode } = useModeState();
-  const { isOnline, isWeak, isOffline } = useNetworkStatus();
+  const { isWeak, isOffline } = useNetworkStatus();
   const prefersReduced = useReducedMotion();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();

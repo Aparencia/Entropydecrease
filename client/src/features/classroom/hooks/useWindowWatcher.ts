@@ -55,7 +55,9 @@ export function useWindowWatcher({ courseMeta, setCourseMeta, onNotify }: UseWin
   useEffect(() => {
     if (!window.electronAPI) return;
 
-    window.electronAPI.invoke('screen_watch_windows_start').catch(() => {});
+    window.electronAPI.invoke('screen_watch_windows_start').catch((err) => {
+      console.debug('[useWindowWatcher] start window watch failed', err);
+    });
 
     const unsubscribe = window.electronAPI.on('screen_windows_changed', (...args: unknown[]) => {
       const newWindows = args[1] as WindowInfo[] | undefined;
@@ -92,7 +94,9 @@ export function useWindowWatcher({ courseMeta, setCourseMeta, onNotify }: UseWin
     });
 
     return () => {
-      window.electronAPI?.invoke('screen_watch_windows_stop').catch(() => {});
+      window.electronAPI?.invoke('screen_watch_windows_stop').catch((err) => {
+        console.debug('[useWindowWatcher] stop window watch failed', err);
+      });
       unsubscribe();
     };
   }, [onNotify]);

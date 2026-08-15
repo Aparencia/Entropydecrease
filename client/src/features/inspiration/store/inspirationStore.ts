@@ -108,7 +108,9 @@ export const useInspirationStore = create<InspirationState>((set, get) => ({
       // Silent failure
     });
     // v1.2.0: 删除搜索索引
-    dexieSearchIndexer.remove(id, 'inspiration').catch(() => {});
+    dexieSearchIndexer.remove(id, 'inspiration').catch((err) => {
+      console.debug('[inspirationStore] search index remove failed', id, err);
+    });
   },
 
   updateSortStatus: (id, status, result) => {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '@/components/ui';
 import { Volume2, VolumeX, ChevronDown, Play, Volume1 } from 'lucide-react';
@@ -12,7 +12,6 @@ import {
   type CategorySoundSettings,
 } from '@/lib/audio/audioConfig';
 import { useSettingsStore } from '@/stores/useSettingsStore';
-import { useShallow } from 'zustand/react/shallow';
 
 const CATEGORIES: SoundCategory[] = ['operation', 'achievement', 'ai', 'pomodoro', 'ui', 'feedback'];
 
@@ -195,7 +194,9 @@ function CategorySection({ category, settings, onUpdate, masterMute }: {
  * @ai-context 提供 6 类音效独立开关 + 独立音量滑块 + 全局静音 + 预览播放
  */
 export default function SoundSettings() {
-  const { soundSettings, updateSoundSettings } = useSettingsStore(useShallow(s => s));
+  // P1-5 收尾：整 store 订阅拆字段级（soundSettings 变化才重渲染，action 恒定引用）
+  const soundSettings = useSettingsStore((s) => s.soundSettings);
+  const updateSoundSettings = useSettingsStore((s) => s.updateSoundSettings);
 
   /**
    * 更新单个类别的设置

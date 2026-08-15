@@ -3,7 +3,7 @@
  * Tests for setAICache(), getAICache(), hasAICache(), clearAICache(), getCacheTTL()
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   setAICache,
   getAICache,

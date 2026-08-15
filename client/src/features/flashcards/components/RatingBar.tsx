@@ -13,14 +13,12 @@ import { cn } from '@/lib/utils';
 import { Rating } from '@/lib/sm2';
 import type { Confidence } from '@/types/models';
 import { ConfidenceSelector } from './ConfidenceSelector';
+import { formatInterval } from './formatInterval';
 
-/** 间隔天数转紧凑展示（<1d / 12d / 3mo / 1.5y） */
-export function formatInterval(days: number): string {
-  if (days === 0) return '<1d';
-  if (days < 30) return `${days}d`;
-  if (days < 365) return `${Math.round(days / 30)}mo`;
-  return `${(days / 365).toFixed(1)}y`;
-}
+// react-refresh: 组件文件只导出组件；formatInterval 已移至 ./formatInterval，
+// 此处 re-export 保持导出签名不变
+// oxlint-disable-next-line react/only-export-components
+export { formatInterval } from './formatInterval';
 
 const ratingStyles = [
   { label: 'Again', rating: Rating.Again, color: 'bg-gradient-to-b from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700', glow: 'shadow-[0_4px_16px_rgba(244,63,94,0.35)]' },

@@ -128,7 +128,9 @@ export function useClassroomCapture() {
   // 卸载时停止会话
   useEffect(() => {
     return () => {
-      captureManager.stopSession().catch(() => {});
+      captureManager.stopSession().catch((err) => {
+        console.debug('[useClassroomCapture] stop session failed (unmount)', err);
+      });
     };
   }, [captureManager]);
 

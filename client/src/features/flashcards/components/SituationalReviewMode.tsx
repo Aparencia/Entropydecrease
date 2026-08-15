@@ -8,6 +8,7 @@
 import { useMemo, useState } from 'react';
 import { Sparkles, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui';
+import { stringHash } from '@/lib/utils/stringHash';
 import { extractPlainText } from '../lib/reviewMode';
 import type { Flashcard } from '@/types/models';
 
@@ -41,18 +42,11 @@ const SITUATION_TEMPLATES: Array<{ label: string; build: (topic: string) => stri
   },
 ];
 
-/** 简单字符串哈希：同一卡片稳定命中同一模板 */
-function hashString(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = (h * 31 + s.charCodeAt(i)) | 0;
-  }
-  return Math.abs(h);
-}
+/** 简单字符串哈希：同一卡片稳定命中同一模板（D12 收敛至 lib/utils/stringHash） */
 
 export function SituationalReviewMode({ card, isFlipped, onFlip, onFlipEnd }: SituationalReviewModeProps) {
   const topic = useMemo(() => extractPlainText(card.front) || '这个知识点', [card.front]);
-  const [templateIndex, setTemplateIndex] = useState(() => hashString(card.id) % SITUATION_TEMPLATES.length);
+  const [templateIndex, setTemplateIndex] = useState(() => Math.abs(stringHash(card.id)) % SITUATION_TEMPLATES.length);
 
   const currentTemplate = SITUATION_TEMPLATES[templateIndex];
 

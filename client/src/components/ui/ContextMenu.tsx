@@ -43,7 +43,7 @@ export interface ContextMenuProps<C = unknown> {
 
 /* ── 菜单项渲染（递归处理子菜单）────────────────────── */
 
-function renderItems<C>(
+function renderItems(
   items: ContextMenuItem[],
   onSelect: (key: string) => void,
 ): React.ReactNode {

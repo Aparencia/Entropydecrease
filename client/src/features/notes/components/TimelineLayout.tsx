@@ -7,7 +7,7 @@
  * Supports scale zoom, event expand/collapse, and multi-type content.
  */
 import { useState, useCallback } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronRight, Clock } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface TimelineEvent {

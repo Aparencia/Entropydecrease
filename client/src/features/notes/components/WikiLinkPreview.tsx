@@ -50,7 +50,9 @@ export function WikiLinkPreview({ editorContainerRef }: WikiLinkPreviewProps) {
     setActiveTab('summary');
 
     // 异步查询反向链接数
-    getBacklinks(noteId).then((links) => setBacklinkCount(links.length)).catch(() => {});
+    getBacklinks(noteId).then((links) => setBacklinkCount(links.length)).catch((err) => {
+      console.debug('[WikiLinkPreview] load backlink count failed', err);
+    });
   }, [notes]);
 
   const handleMouseOut = useCallback((e: MouseEvent) => {

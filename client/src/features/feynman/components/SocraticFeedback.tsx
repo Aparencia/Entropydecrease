@@ -11,13 +11,11 @@ import { TrendingUp, AlertCircle, Lightbulb } from 'lucide-react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from 'recharts';
 import { SPRING } from '@/lib/animation/springConfig';
 import type { SocraticRound, DimensionScore } from '../types';
+import { DIMENSION_LABELS } from './dimensionLabels';
 
-export const DIMENSION_LABELS: Record<keyof DimensionScore, string> = {
-  accuracy: '准确度',
-  completeness: '完整度',
-  logic: '逻辑清晰',
-  expression: '表达通俗',
-};
+// react-refresh: 组件文件只导出组件；DIMENSION_LABELS 已移至 ./dimensionLabels，
+// 此处 re-export 保持导出签名不变（展示契约，与网关评估维度对齐）
+export { DIMENSION_LABELS } from './dimensionLabels';
 
 export function DimensionRadar({ dimensions }: { dimensions: DimensionScore }) {
   const data = (Object.keys(DIMENSION_LABELS) as (keyof DimensionScore)[]).map(key => ({

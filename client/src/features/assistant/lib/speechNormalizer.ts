@@ -55,7 +55,17 @@ const RE_TABLE_SEP = /^\s*\|?[\s:|-]+\|?\s*$/gm;
  * emoji 与装饰符号（✅❌⚠️🧠🎧→ 等）。
  * 覆盖：杂项符号/表情/交通/补充符号/箭头/变体选择符/零宽连接符。
  */
-const RE_EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu;
+// emoji 主区（单码点，不含变体选择符——组合序列用下方替代符单独剥离）
+const RE_EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/gu;
+
+/** emoji 修饰符（变体选择符/零宽连接符/键帽组合符）。
+ *  oxlint no-misleading-character-class 对组合字符入字符类误报（此处就是刻意
+ *  要剥离这些组合字符本身，非匹配用户可见文本），抑制。 */
+// oxlint-disable-next-line no-misleading-character-class
+const RE_EMOJI_MODIFIERS = /[\u{FE0F}\u{200D}\u{20E3}]/gu;
+
+/** 区域指示符（国旗等双码序列，U+1F1E6-U+1F1FF 区间） */
+const RE_EMOJI_TAGS = /[\u{E0020}-\u{E007F}]/gu;
 
 /** 常见 HTML 实体解码 */
 const HTML_ENTITIES: Record<string, string> = {
@@ -99,8 +109,11 @@ export function normalizeForSpeech(text: string): string {
   out = out.replace(RE_INLINE_CODE, '$1');
   out = out.replace(RE_TABLE_PIPE, '，');
 
-  // 4. emoji 与装饰符号
-  out = out.replace(RE_EMOJI, '');
+  // 4. emoji 与装饰符号（主区 + 修饰符 + 区域指示符组合序列）
+  out = out
+    .replace(RE_EMOJI, '')
+    .replace(RE_EMOJI_MODIFIERS, '')
+    .replace(RE_EMOJI_TAGS, '');
 
   // 5. HTML 实体解码
   out = out.replace(RE_HTML_ENTITY, (m) => HTML_ENTITIES[m] ?? m);

@@ -12,7 +12,6 @@ import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lightbulb, ArrowRight, AlertTriangle, BookOpen } from 'lucide-react';
 import { aiPluginLoader } from '@/lib/ai/AIPluginLoader';
-import { cn } from '@/lib/utils';
 
 interface LearningGuideData {
   prerequisites: string[];
@@ -27,7 +26,7 @@ interface LearningGuideProps {
   noteId: string;
 }
 
-export function LearningGuide({ noteTitle, noteContent, noteId }: LearningGuideProps) {
+export function LearningGuide({ noteTitle, noteContent, noteId: _noteId }: LearningGuideProps) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<LearningGuideData | null>(null);
   const [expanded, setExpanded] = useState(false);

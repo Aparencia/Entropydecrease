@@ -18,7 +18,6 @@ import {
 } from './behaviorMetrics';
 import {
   STAGNATION_THRESHOLD_MS,
-  DELETE_KEY_RATIO,
   TYPING_DROP_RATIO,
   SWITCH_BURST_COUNT,
 } from '../constants';

@@ -13,6 +13,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { BrainCircuit, Camera, Mic, Volume2, Minus, Anchor, Star, Pencil, Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+// 毫秒时间戳 → MM:SS（相对会话起始时间，D12 收敛至 lib/utils/time）
+import { formatSessionElapsed as formatRelativeTime } from '@/lib/utils/time';
 import type { SessionBundle, TimelineEntry, KeyFrame } from '@/lib/capture';
 
 /** 转写条目（含 P1-2 用户修正文本，存在时优先显示） */
@@ -35,14 +37,6 @@ interface UnifiedTimelineProps {
   isActive: boolean;
   /** P1-2：编辑回调——保存修正文本时调用 */
   onEditTranscript?: (id: string, newText: string) => void;
-}
-
-/** 毫秒时间戳 → MM:SS（相对会话起始时间） */
-function formatRelativeTime(ms: number, startMs: number): string {
-  const elapsed = Math.max(0, Math.floor((ms - startMs) / 1000));
-  const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
-  const ss = String(elapsed % 60).padStart(2, '0');
-  return `${mm}:${ss}`;
 }
 
 /** 事件类型 → 图标/文案/配色 */

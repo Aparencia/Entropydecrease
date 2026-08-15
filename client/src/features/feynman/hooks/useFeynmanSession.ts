@@ -7,7 +7,7 @@
  * @ai-context: 步骤推进前自动保存当前草稿（handleNext 按步骤分支）；
  * 完成时若有未掌握薄弱点会先弹转化确认（handleComplete）。
  */
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useToast } from '@/components/ui';
 import { useFeynmanStore } from '../store/useFeynmanStore';
@@ -67,22 +67,33 @@ export function useFeynmanSession() {
   const view = noteId && currentNoteId === noteId ? getCurrentView() : null;
   const note = view?.note ?? null;
   const summary = view?.summary ?? null;
-  const noteWeakPoints = view?.weakPoints ?? [];
+  // 稳定引用：getCurrentView 每渲染新建视图对象，weakPoints 缺省回退 [] 时每次
+  // 渲染都是新数组，会令依赖它的 useCallback（handleComplete/handleConvertToFlashcards）
+  // 每渲染重建——用 useMemo 锚定到 store 的 weakPoints 引用或共享空数组。
+  const noteWeakPoints = useMemo(() => view?.weakPoints ?? [], [view?.weakPoints]);
 
   // 笔记/总结加载后同步本地草稿
+  // Why: 依赖刻意用原始字段（note?.id/explanation/selfRating）而非整个 note 对象——
+  // note 引用会在薄弱点、步骤推进等无关更新时重建，若依赖 note 会在用户编辑草稿
+  // 期间被这些无关更新重置本地输入（clobber），原始字段依赖保证仅在相关值变化时同步。
   useEffect(() => {
     if (note) {
       setLocalExplanation(note.explanation);
       setRating(note.selfRating ?? 0);
     }
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Why 见 effect 上方注释
   }, [note?.id, note?.explanation, note?.selfRating]);
 
+  // Why: 同上——summary 对象在薄弱点/步骤等无关 store 更新时重建，若依赖 summary
+  // 会在用户编辑总结草稿时被无关更新重置；summary?.id/summary?.summary 原始字段
+  // 依赖保证仅当总结内容真正变化时才回填本地草稿。
   useEffect(() => {
     if (summary) {
       setLocalSummary(summary.summary);
     } else {
       setLocalSummary('');
     }
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Why 见 effect 上方注释
   }, [summary?.id, summary?.summary]);
 
   const currentStep = note?.currentStep ?? 1;

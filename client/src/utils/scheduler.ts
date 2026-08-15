@@ -37,5 +37,7 @@ export async function processInChunks<T, R>(
 
 /** 预加载路由组件（在空闲时段） */
 export function prefetchRoute(importFn: () => Promise<unknown>): void {
-  scheduleIdle(() => importFn().catch(() => {}));
+  scheduleIdle(() => importFn().catch((err) => {
+    console.debug('[scheduler] prefetch route module failed', err);
+  }));
 }

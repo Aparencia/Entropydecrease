@@ -54,7 +54,9 @@ startPomodoroScheduler();
 // 番茄钟持久化初始化：此前 initialize 仅在设置页挂载时触发（PomodoroSettingsPage），
 // 深潜主页启动不加载——用户设置的时长/预设刷新后回退默认值（25 分钟），
 // 且完成的番茄按默认时长落库（学习脉搏数据失真）。App 启动即初始化，幂等安全。
-usePomodoroStore.getState().initialize().catch(() => {});
+usePomodoroStore.getState().initialize().catch((err) => {
+  console.debug('[App] pomodoro store initialize failed', err);
+});
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -121,7 +123,9 @@ function App() {
       // 同步网关地址到主进程（主进程无法访问 localStorage，需显式传递）
       const aiConfig = getAIConfig();
       if (aiConfig.gatewayUrl && window.electronAPI) {
-        window.electronAPI.invoke('ai:set-gateway-url', aiConfig.gatewayUrl).catch(() => {});
+        window.electronAPI.invoke('ai:set-gateway-url', aiConfig.gatewayUrl).catch((err) => {
+          console.debug('[App] set gateway url failed', err);
+        });
       }
       import('./hooks/useAIGatewayHealth').then(({ precheckGatewayHealth }) => {
         precheckGatewayHealth();

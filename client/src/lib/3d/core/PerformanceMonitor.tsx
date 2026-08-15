@@ -14,8 +14,14 @@
  */
 import { useEffect, useState } from 'react';
 import { PerformanceMonitor as DreiPerformanceMonitor } from '@react-three/drei';
-import { create } from 'zustand';
-import { stepTier, type PerformanceTier } from './tierPolicy';
+import { stepTier } from './tierPolicy';
+import { usePerformanceStore } from './performanceStore';
+
+// react-refresh: 组件文件只导出组件；usePerformanceStore 已移至 ./performanceStore，
+// 此处 re-export 保持 '@/lib/3d/core/PerformanceMonitor' 导出签名不变
+// （PerformanceDiagnostics / usePerformanceMode 等直接 import）
+// oxlint-disable-next-line react/only-export-components
+export { usePerformanceStore } from './performanceStore';
 
 /** FPS 下界：持续低于此值触发降级（滞回缓冲区下限） */
 export const FPS_LOWER_BOUND = 25;
@@ -23,20 +29,6 @@ export const FPS_LOWER_BOUND = 25;
 export const FPS_UPPER_BOUND = 50;
 /** 升降震荡（flip-flop）允许次数上限，超过则回落稳定档 */
 const MAX_FLIPFLOPS = 4;
-
-interface PerformanceState {
-  tier: PerformanceTier;
-  fps: number;
-  setTier: (tier: PerformanceTier) => void;
-  setFps: (fps: number) => void;
-}
-
-export const usePerformanceStore = create<PerformanceState>((set) => ({
-  tier: 'high',
-  fps: 60,
-  setTier: (tier) => set({ tier }),
-  setFps: (fps) => set({ fps }),
-}));
 
 export function PerformanceMonitor() {
   // 窗口隐藏时卸载监控：后台期间浏览器节流 rAF，FPS 读数不可信；

@@ -54,6 +54,10 @@ import RollingRecallMode from '../components/RollingRecallMode';
 import { ReadingGuide } from '@/components/ReadingGuide';
 import { useAdaptiveTypography } from '@/hooks/useAdaptiveTypography';
 
+/** 记忆锚点自动触发策略参数（模块级常量，引用稳定，可直接进入依赖数组） */
+const ANCHOR_ACTIVE_THRESHOLD_MS = 12 * 60 * 1000; // 12 分钟活跃编辑阈值
+const ANCHOR_IDLE_TIMEOUT_MS = 30 * 1000; // 30 秒无操作视为暂停
+
 export default function NoteEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -257,8 +261,7 @@ export default function NoteEditPage() {
   // 策略：追踪用户编辑活跃度，每 12 分钟活跃编辑后自动触发 AI 锚点生成。
   // 活跃度基于编辑器 onUpdate 回调——每次编辑重置 30 秒无操作计时器，
   // 累计活跃时间达到阈值后触发并重置计时器。
-  const ANCHOR_ACTIVE_THRESHOLD_MS = 12 * 60 * 1000; // 12 分钟活跃编辑阈值
-  const ANCHOR_IDLE_TIMEOUT_MS = 30 * 1000; // 30 秒无操作视为暂停
+  // 阈值常量已提升为模块级（ANCHOR_ACTIVE_THRESHOLD_MS / ANCHOR_IDLE_TIMEOUT_MS）。
   const anchorAI = useAIAnchorPoint();
   const anchorActiveTimeRef = useRef(0); // 累计活跃编辑时间（毫秒）
   const anchorLastEditRef = useRef(Date.now()); // 上次编辑时间戳
@@ -320,7 +323,7 @@ export default function NoteEditPage() {
       };
       return null;
     } catch { return null; }
-  }, [note?.id, fullContent, note?.template]);
+  }, [fullContent, note?.template]);
   
   // 自由画布变更回调（稳定引用，避免每次渲染重建）
   const handleFreeCanvasChange = useCallback(
@@ -337,7 +340,7 @@ export default function NoteEditPage() {
       if (parsed) return parsed;
     }
     return createDefaultMindmap();
-  }, [note?.id, fullContent, note?.template]);
+  }, [fullContent, note?.template]);
 
   // 思维导图变更回调（序列化整棵树防抖保存）
   const handleMindmapChange = useCallback(

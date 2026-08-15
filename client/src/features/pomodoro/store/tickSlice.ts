@@ -44,16 +44,27 @@ function finalizeWorkPhase(get: () => PomodoroState): number | null {
         unlocked.forEach(a => {
           window.dispatchEvent(new CustomEvent('achievement-unlocked', { detail: a }));
         });
+      }).catch((err) => {
+        // 成就检查失败：本次不触发成就事件（侧效应，debug 级留痕）
+        console.debug('[tickSlice] checkAchievements failed', err);
       });
-    }).catch(() => {});
-  }).catch(() => {});
+    }).catch((err) => {
+      console.debug('[tickSlice] achievements evaluator load failed', err);
+    });
+  }).catch((err) => {
+    console.debug('[tickSlice] session log write failed', err);
+  });
 
   // 宪法第六条世界数据回路：深潜完成=种下珊瑚（沉积地层+1，世界生长）。
   // 动态 import 避免模块循环；plantCoral 内部受留存开关控制，失败静默降级
   import('@/features/retention/store/useEcosystemStore').then(({ useEcosystemStore }) => {
     const minutes = Math.max(1, Math.round((actualDuration ?? plannedSeconds) / 60));
-    useEcosystemStore.getState().plantCoral(minutes, 'pomodoro', `dive-${Date.now()}`).catch(() => {});
-  }).catch(() => {});
+    useEcosystemStore.getState().plantCoral(minutes, 'pomodoro', `dive-${Date.now()}`).catch((err) => {
+      console.debug('[tickSlice] plantCoral failed', err);
+    });
+  }).catch((err) => {
+    console.debug('[tickSlice] ecosystem store load failed', err);
+  });
 
   // 宪法第六条世界数据回路·花园侧：深潜完成=播下一颗种子（专注花园）。
   // 动态 import 避免模块循环；失败静默降级，不影响番茄钟主流程
@@ -63,7 +74,9 @@ function finalizeWorkPhase(get: () => PomodoroState): number | null {
       sourceSessionId: `dive-${Date.now()}`,
       focusMinutes: minutes,
     });
-  }).catch(() => {});
+  }).catch((err) => {
+    console.debug('[tickSlice] garden store load failed', err);
+  });
 
   // @ai-context: 发射 session:end 事件——驱动 AI 学伴主动触发（专注结束关怀）
   assistantEventBus.emit('session:end', {
@@ -75,8 +88,12 @@ function finalizeWorkPhase(get: () => PomodoroState): number | null {
   // 一次完成事件（只含分钟数，无内容）。动态 import + fire-and-forget：
   // 任何失败静默，绝不阻塞番茄钟主流程。
   import('@/features/social/lib/relayNotify').then(({ notifyRelayComplete }) => {
-    notifyRelayComplete((actualDuration ?? plannedSeconds) / 60).catch(() => {});
-  }).catch(() => {});
+    notifyRelayComplete((actualDuration ?? plannedSeconds) / 60).catch((err) => {
+      console.debug('[tickSlice] notifyRelayComplete failed', err);
+    });
+  }).catch((err) => {
+    console.debug('[tickSlice] relayNotify load failed', err);
+  });
 
   return actualDuration;
 }
@@ -99,9 +116,14 @@ function playPhaseFeedback(phase: string, isSilent: boolean, settings: { soundEn
   }
   if (settings.notificationEnabled) {
     if (phase === 'work') {
-      sendNotification('又添了一段暖意', '继续深潜吧 ☕').catch(() => {});
+      sendNotification('又添了一段暖意', '继续深潜吧 ☕').catch((err) => {
+        // 浏览器通知失败（权限/系统限制）：静默，debug 留痕
+        console.debug('[tickSlice] work notification failed', err);
+      });
     } else {
-      sendNotification('休息结束！', '开始下一个番茄 🍅').catch(() => {});
+      sendNotification('休息结束！', '开始下一个番茄 🍅').catch((err) => {
+        console.debug('[tickSlice] break notification failed', err);
+      });
     }
   }
 }

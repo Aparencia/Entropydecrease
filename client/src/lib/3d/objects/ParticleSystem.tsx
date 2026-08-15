@@ -92,6 +92,10 @@ export function ParticleSystem({
     return geo;
   }, [positions, colors, sizes, particleCount]);
 
+  // 解构出 bounds.y 的原始数值，供 material memo 按值比较（bounds 对象每次渲染
+  // 由调用方内联新建，直接依赖 bounds.y 会让 memo 每渲染重建材质）
+  const [yMin, yMax] = bounds.y;
+
   // 创建材质并注入 GPU 粒子着色器
   const material = useMemo(() => {
     const mat = new THREE.PointsMaterial({
@@ -107,13 +111,13 @@ export function ParticleSystem({
     const config: GPUParticleConfig = {
       motion: 'float-up',
       wrap: true,
-      bounds: { yMin: bounds.y[0], yMax: bounds.y[1] },
+      bounds: { yMin, yMax },
       speed,
     };
 
     patchParticleShader(mat, config);
     return mat;
-  }, [bounds.y[0], bounds.y[1], speed]);
+  }, [yMin, yMax, speed]);
 
   // 每帧仅更新 uniform（不再更新 buffer）
   useFrame(({ clock }) => {

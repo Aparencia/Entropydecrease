@@ -5,7 +5,7 @@
  */
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Card, Button, EmptyState } from '@/components/ui';
+import { Card, Button } from '@/components/ui';
 import { AlertTriangle, RotateCcw, Clock, ChevronDown, Sparkles, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useReducedMotion } from '@/hooks/useReducedMotion';

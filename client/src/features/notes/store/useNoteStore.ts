@@ -250,7 +250,10 @@ export const useNoteStore = create<NoteState>((set, get) => {
         // 索引更新失败不阻塞笔记创建
       }
       // 阶段二：重建出链索引（fire-and-forget，失败不阻塞）
-      recomputeLinks(id, content).catch(() => {});
+      recomputeLinks(id, content).catch((err) => {
+        // 出链索引重建失败：搜索/链接跳转可能缺失该笔记的出链（后台任务，debug 级留痕）
+        console.debug('[noteStore] recomputeLinks failed on create', id, err);
+      });
       await get().loadNotes();
       return id;
     },
@@ -290,7 +293,9 @@ export const useNoteStore = create<NoteState>((set, get) => {
       // 阶段二：内容变更时重建出链索引（投影后内存对象无 content，
       // 直接使用本次变更的全文，行为与改造前一致）
       if (changes.content !== undefined) {
-        recomputeLinks(id, changes.content).catch(() => {});
+        recomputeLinks(id, changes.content).catch((err) => {
+          console.debug('[noteStore] recomputeLinks failed on update', id, err);
+        });
       }
     },
 
@@ -299,7 +304,9 @@ export const useNoteStore = create<NoteState>((set, get) => {
       // v0.9.0: 删除搜索索引
       try { await dexieSearchIndexer.remove(id); } catch { /* 忽略 */ }
       // 阶段二：清理链接索引（fire-and-forget）
-      removeLinks(id).catch(() => {});
+      removeLinks(id).catch((err) => {
+        console.debug('[noteStore] removeLinks failed on delete', id, err);
+      });
       const { selectedNoteId } = get();
       if (selectedNoteId === id) {
         set({ selectedNoteId: null });
@@ -313,8 +320,12 @@ export const useNoteStore = create<NoteState>((set, get) => {
       await noteStore.bulkDelete(ids);
       // 并行清理搜索索引与链接索引（fire-and-forget，失败不阻塞）
       await Promise.all([
-        Promise.all(ids.map((id) => dexieSearchIndexer.remove(id).catch(() => {}))),
-        Promise.all(ids.map((id) => removeLinks(id).catch(() => {}))),
+        Promise.all(ids.map((id) => dexieSearchIndexer.remove(id).catch((err) => {
+          console.debug('[noteStore] search index remove failed (batch)', id, err);
+        }))),
+        Promise.all(ids.map((id) => removeLinks(id).catch((err) => {
+          console.debug('[noteStore] removeLinks failed (batch)', id, err);
+        }))),
       ]);
       const { selectedNoteId } = get();
       if (selectedNoteId && ids.includes(selectedNoteId)) {
@@ -391,7 +402,9 @@ export const useNoteStore = create<NoteState>((set, get) => {
       for (const noteId of noteIds) {
         await deleteWithLog(noteStore, 'notes', noteId);
         try { await dexieSearchIndexer.remove(noteId); } catch { /* 忽略 */ }
-        removeLinks(noteId).catch(() => {});
+        removeLinks(noteId).catch((err) => {
+          console.debug('[noteStore] removeLinks failed (folder delete)', noteId, err);
+        });
       }
       // 删除分组树（含根与全部子孙）
       for (const folderId of treeIds) {

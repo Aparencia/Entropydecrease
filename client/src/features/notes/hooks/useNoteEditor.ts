@@ -68,6 +68,10 @@ export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNo
     } catch {
       return undefined;
     }
+    // Why: noteKey 依赖是刻意的——切换笔记时即使 rawContent 字符串相同（如两篇
+    // 笔记内容恰好一致），也需重建 initialContent 让编辑器 setContent 刷新；
+    // 移除 noteKey 会导致内容相同的笔记间切换不重置编辑内容。
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [noteKey, rawContent]);
 
   const debouncedSave = useCallback(

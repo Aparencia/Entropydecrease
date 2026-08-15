@@ -9,7 +9,7 @@
  */
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ChevronDown, Copy, Download, Sparkles, RefreshCw } from 'lucide-react';
+import { X, Copy, Sparkles } from 'lucide-react';
 import { aiPluginLoader } from '@/lib/ai/AIPluginLoader';
 import { useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -64,7 +64,7 @@ export function AISummaryEnhanced({
       setResult(text);
       setHistory((prev) => [...prev, { granularity, text }]);
       toast({ type: 'success', message: `${config.label}摘要生成完成`, silent: true });
-    } catch (err) {
+    } catch {
       toast({ type: 'error', message: '摘要生成失败' });
     } finally {
       setLoading(false);

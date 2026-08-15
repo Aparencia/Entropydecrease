@@ -99,7 +99,9 @@ export const useEcosystemStore = create<EcosystemState>((set, get) => ({
       const restored = restoreBleached([...corals, record]);
       for (const c of restored) {
         if (c.health === 'healthy') {
-          await db.coralEcosystem.update(c.id, { health: 'healthy' }).catch(() => {});
+          await db.coralEcosystem.update(c.id, { health: 'healthy' }).catch((err) => {
+            console.debug('[useEcosystemStore] restore bleached coral failed', c.id, err);
+          });
         }
       }
 

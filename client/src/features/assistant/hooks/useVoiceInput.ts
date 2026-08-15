@@ -183,8 +183,12 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
         listeningRef.current = false;
         cleanupIpc();
         const api = window.electronAPI;
-        api?.invoke('local_asr_stream_stop').catch(() => {});
-        api?.invoke('audio_capture_stop').catch(() => {});
+        api?.invoke('local_asr_stream_stop').catch((err) => {
+          console.debug('[useVoiceInput] stop ASR stream failed', err);
+        });
+        api?.invoke('audio_capture_stop').catch((err) => {
+          console.debug('[useVoiceInput] stop audio capture failed', err);
+        });
       }
     };
   }, [cleanupIpc]);

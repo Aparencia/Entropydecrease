@@ -10,6 +10,12 @@ import { Tag } from '@/components/ui';
 import { BookOpen, AlertTriangle, Trash2, MoreVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FeynmanNote, FeynmanWeakPoint } from '@/types/models';
+import { formatRelativeDate } from './formatRelativeDate';
+
+// react-refresh: 组件文件只导出组件；formatRelativeDate 已移至 ./formatRelativeDate，
+// 此处 re-export 保持导出签名不变
+// oxlint-disable-next-line react/only-export-components
+export { formatRelativeDate } from './formatRelativeDate';
 
 const stepLabels: Record<number, string> = { 1: '选择概念', 2: '讲解中', 3: '标注薄弱', 4: '简化重述' };
 
@@ -18,20 +24,6 @@ const statusConfig: Record<string, { label: string; color: 'default' | 'feynman'
   in_progress: { label: '进行中', color: 'feynman' },
   completed:   { label: '已完成', color: 'brand' },
 };
-
-export function formatRelativeDate(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return '刚刚';
-  if (diffMin < 60) return `${diffMin} 分钟前`;
-  const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `${diffHour} 小时前`;
-  const diffDay = Math.floor(diffHour / 24);
-  if (diffDay < 7) return `${diffDay} 天前`;
-  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
-}
 
 const noteCardVariants = {
   hidden: { opacity: 0, x: -20, scale: 0.97 },

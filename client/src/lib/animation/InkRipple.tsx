@@ -82,11 +82,7 @@ export default function InkRipple() {
   );
 }
 
-/**
- * 便捷触发函数
- */
-export function triggerInkRipple(x?: number, y?: number) {
-  window.dispatchEvent(
-    new CustomEvent('kb:ink-ripple', { detail: { x, y } }),
-  );
-}
+// react-refresh: 组件文件只导出组件；triggerInkRipple 已移至 ./triggerInkRipple，
+// 此处 re-export 保持 '@/lib/animation/InkRipple' 导出签名不变（usePomodoroEffects 直接 import）
+// oxlint-disable-next-line react/only-export-components
+export { triggerInkRipple } from './triggerInkRipple';

@@ -2,7 +2,7 @@
  * @ai-context: 自由画布组件（巨型，待拆分）：手写/绘图白板，供笔记批注与费曼讲解涂鸦。
  */
 import { useCallback, useRef, useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Copy, Eraser, CheckSquare, LayoutGrid, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Copy, Eraser, CheckSquare, Sparkles } from 'lucide-react';
 import FreeTextBlock from './FreeTextBlock';
 import { FreeCanvasOverlays } from './FreeCanvasOverlays';
 import { InkToolbar } from './canvas/InkToolbar';

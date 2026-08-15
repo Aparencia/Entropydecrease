@@ -64,6 +64,10 @@ export function LearningCompanion({
         : '有什么想讨论的内容吗？';
       setMessages([{ role: 'assistant', content: initialText }]);
     }
+    // Why: 刻意不含 messages.length——切换对话模式会 setMessages([]) 清空历史，
+    // 若把 messages.length 加入依赖，模式切换后 effect 会重新注入开场白，
+    // 改变"清空后保持空白"的现有交互语义。
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, selectedText]);
 
   useEffect(() => {

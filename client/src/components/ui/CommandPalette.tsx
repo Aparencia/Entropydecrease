@@ -105,7 +105,7 @@ export default function CommandPalette() {
       registerDefaultCommands(navigate, toast);
       registeredRef.current = true;
     }
-  }, []);
+  }, [navigate, toast]);
 
   // 输入防抖 250ms 后执行全局内容搜索；清空输入时清除结果
   useEffect(() => {

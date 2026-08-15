@@ -346,7 +346,9 @@ export const createTimerSlice: PomodoroSlice<Pick<PomodoroState,
       completedAt: new Date(),
       interrupted: true,
       goal: currentGoal ?? undefined,
-    }).catch(() => {});
+    }).catch((err) => {
+      console.warn('[timerSlice] recordSession failed (aborted session)', err);
+    });
   },
 
   enterImmersive: () => set({ isImmersive: true }),

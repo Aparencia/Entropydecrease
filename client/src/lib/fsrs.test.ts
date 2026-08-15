@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { fsrs, createNewFSRSState, calculateFSRSIntervals, type FSRSCardInput, type FSRSResult } from './fsrs';
+import { fsrs, createNewFSRSState, calculateFSRSIntervals, type FSRSCardInput } from './fsrs';
 import { Rating } from './sm2';
 
 // ── 辅助常量 ────────────────────────────────────────────────────────────────
@@ -373,7 +373,6 @@ describe('FSRS-5 算法', () => {
       };
       const result = fsrs(sm2Card, Rating.Good, NOW);
       // 迁移后 stability 应从 interval 反推：S = interval / (9 * (1/0.9 - 1))
-      const expectedS = 30 / (9 * (1 / 0.9 - 1));
       expect(result.stability).toBeGreaterThan(0);
       // 反推的 S 用于后续计算，result.stability 已经是更新后的值（非初始 S）
       expect(result.repetitions).toBe(6);

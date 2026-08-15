@@ -3,7 +3,7 @@
  */
 import { useState, useCallback } from 'react';
 import { aiClient } from '@/lib/http/apiClient';
-import type { InfographicData, InfographicSection, InfographicRelation } from '../types';
+import type { InfographicData } from '../types';
 
 const FALLBACK_INFOGRAPHIC: InfographicData = {
   title: '知识概览',

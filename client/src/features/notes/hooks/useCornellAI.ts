@@ -7,7 +7,7 @@
  * @ai-context: Analyzes Cornell note content to auto-generate summary and
  * cue questions. Auto-triggers after 30s of inactivity.
  */
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { aiPluginLoader } from '@/lib/ai/AIPluginLoader';
 import { useToast } from '@/components/ui';
 
@@ -31,7 +31,6 @@ export function useCornellAI(): UseCornellAIReturn {
   const [loading, setLoading] = useState(false);
   const [suggestion, setSuggestion] = useState<CornellAISuggestion | null>(null);
   const { toast } = useToast();
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const analyze = useCallback(async (notesText: string) => {
     if (!notesText.trim() || notesText.length < 50) return;

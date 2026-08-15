@@ -9,8 +9,7 @@
  * (editing) → sort (categorized/linked) → review (review cycle) →
  * settle (mastered/archived). Lifecycle drives UI behavior.
  */
-import { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { useMemo } from 'react';
 import { Sprout, TrendingUp, FolderTree, RefreshCw, Archive, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -40,7 +39,7 @@ const STAGE_META: Record<LifecycleStage, { label: string; icon: React.FC<React.S
   settle: { label: '沉淀', icon: Archive, color: 'text-purple-500', desc: '已掌握，归档保存' },
 };
 
-export function NoteLifecycle({ stage, createdAt, updatedAt, wordCount, linkCount, hasClosedBookTest, expiresInDays }: NoteLifecycleProps) {
+export function NoteLifecycle({ stage, createdAt, updatedAt: _updatedAt, wordCount, linkCount, hasClosedBookTest: _hasClosedBookTest, expiresInDays }: NoteLifecycleProps) {
   const meta = STAGE_META[stage];
   const Icon = meta.icon;
 
@@ -51,7 +50,6 @@ export function NoteLifecycle({ stage, createdAt, updatedAt, wordCount, linkCoun
   }, [stage]);
 
   const daysSinceCreate = Math.floor((Date.now() - new Date(createdAt).getTime()) / 86400000);
-  const daysSinceUpdate = Math.floor((Date.now() - new Date(updatedAt).getTime()) / 86400000);
 
   return (
     <div className="p-3 rounded-kb-md border border-border/30 bg-bg-secondary">
@@ -63,7 +61,7 @@ export function NoteLifecycle({ stage, createdAt, updatedAt, wordCount, linkCoun
 
       {/* 生命周期进度条 */}
       <div className="flex items-center gap-1 mb-3">
-        {(Object.entries(STAGE_META) as [LifecycleStage, typeof meta][]).map(([key, m]) => {
+        {(Object.entries(STAGE_META) as [LifecycleStage, typeof meta][]).map(([key]) => {
           const order = ['sprout', 'grow', 'sort', 'review', 'settle'];
           const currentIdx = order.indexOf(stage);
           const keyIdx = order.indexOf(key);

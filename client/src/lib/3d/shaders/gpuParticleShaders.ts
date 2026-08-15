@@ -97,7 +97,7 @@ export function updateGPUParticleUniforms(
  * 生成顶点着色器位移代码
  */
 function generateVertexCode(config: GPUParticleConfig): string {
-  const { motion, wrap, bounds, speed } = config;
+  const { motion, wrap, bounds } = config;
 
   switch (motion) {
     case 'float-up': {

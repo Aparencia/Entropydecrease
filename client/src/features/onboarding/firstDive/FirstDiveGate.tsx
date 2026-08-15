@@ -19,7 +19,9 @@ export function FirstDiveGate() {
   const bootstrap = useFirstDiveStore((s) => s.bootstrap);
 
   useEffect(() => {
-    bootstrap().catch(() => {});
+    bootstrap().catch((err) => {
+      console.debug('[FirstDiveGate] bootstrap failed', err);
+    });
   }, [bootstrap]);
 
   if (!isReady) return null;

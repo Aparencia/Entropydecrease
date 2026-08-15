@@ -10,7 +10,6 @@ import {
   PULSE_RINGS,
   PULSE_STAGGER,
   PULSE_RING_SIZE,
-  PULSE_MAX_SCALE,
 } from '../constants';
 import type { ImmersivePhase, DegradationLevel } from '../types';
 

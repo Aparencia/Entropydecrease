@@ -9,7 +9,7 @@
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Send, MessageSquare, Sparkles, Plus } from 'lucide-react';
+import { X, Send, MessageSquare, Plus } from 'lucide-react';
 import { aiPluginLoader } from '@/lib/ai/AIPluginLoader';
 import { useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -51,7 +51,7 @@ export function AIChatCompanion({
       };
       setMessages([initial]);
     }
-  }, [isOpen, selectedText]);
+  }, [isOpen, selectedText, messages.length]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

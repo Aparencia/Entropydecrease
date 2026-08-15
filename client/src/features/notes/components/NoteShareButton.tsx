@@ -34,7 +34,7 @@ function anonymizeContent(text: string): string {
 }
 
 export function NoteShareButton({
-  noteId,
+  noteId: _noteId,
   noteTitle,
   noteContent,
   tags,
@@ -89,7 +89,7 @@ export function NoteShareButton({
     } finally {
       setSharing(false);
     }
-  }, [noteId, noteTitle, noteContent, tags, mode, toast]);
+  }, [noteTitle, noteContent, tags, mode, toast]);
 
   return (
     <button

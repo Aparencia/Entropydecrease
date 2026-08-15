@@ -135,7 +135,7 @@ export function useClassroomAnalysis({
         audioSegments: (prev.audioSegments ?? []).map((s) => (s.audioBase64 ? { ...s, audioBase64: '' } : s)),
       }));
     }
-  }, [language, onWarn, captureSessionIdRef]);
+  }, [language, onWarn, captureSessionIdRef, setSmartBundle]);
 
   /** 用最近一次 partials 快照重跑合并（local-concat 降级后的重试入口） */
   const handleRetryMerge = useCallback(() => {

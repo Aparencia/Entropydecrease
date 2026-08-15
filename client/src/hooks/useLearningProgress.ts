@@ -123,6 +123,11 @@ export function useLearningProgress(): LearningProgressItem[] {
 
     compute();
     return () => { cancelled = true; };
+    // Why: 刻意用 notes.length 而非 notes——compute 内部会调用 loadNotes() 重建
+    // notes 数组引用（即使数量不变，sortNotes 总返回新数组）；若依赖 notes 会在
+    // 每次 compute 后触发 effect 重跑，形成无限加载循环。此 effect 语义为挂载时
+    // 聚合一次，notes.length 变化时重算，逐项依赖均已稳定。
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [feynmanLoadNotes, feynmanGetStats, loadNotes, notes.length]);
 
   return items;

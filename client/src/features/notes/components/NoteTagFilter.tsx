@@ -1,10 +1,13 @@
 /**
  * @ai-context: 通用组件：NoteTagFilter。
+ * P1-5 修复：原实现 useShallow((s) => s.getAllTags())——selector 内调用返回
+ * 新数组的 action，useShallow 浅比较永远失败，任何 store 变化都触发重渲染；
+ * 改为订阅 notes 原始数组 + useMemo 派生标签（getAllTags 为纯派生函数）。
  */
+import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useShallow } from 'zustand/react/shallow';
 import { useNoteStore } from '../store/useNoteStore';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 
@@ -13,11 +16,20 @@ import { useReducedMotion } from '@/hooks/useReducedMotion';
  * v0.9.0: chip 样式多选标签筛选
  */
 export function NoteTagFilter() {
-  const allTags = useNoteStore(useShallow((s) => s.getAllTags()));
+  const notes = useNoteStore((s) => s.notes);
   const selectedTags = useNoteStore((s) => s.selectedTags);
   const toggleTag = useNoteStore((s) => s.toggleTag);
   const clearTagFilter = useNoteStore((s) => s.clearTagFilter);
   const prefersReduced = useReducedMotion();
+
+  // 标签由 notes 派生（与 store.getAllTags 同算法，保持行为一致）
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    for (const note of notes) {
+      for (const tag of note.tags) tagSet.add(tag);
+    }
+    return Array.from(tagSet).sort();
+  }, [notes]);
 
   if (allTags.length === 0) return null;
 

@@ -10,7 +10,7 @@ import { ContextMenu } from '@/components/ui/ContextMenu';
 import type { ContextMenuGroup } from '@/components/ui/ContextMenu';
 import { VirtualList } from '@/components/ui/VirtualList';
 import {
-  Search, Plus, FolderPlus, FileText, PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, Pin,
+  Plus, FolderPlus, FileText, PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, Pin,
   MoreVertical, Trash2, Copy, Download, BookOpen, Sparkles, ListTodo, Share2, Upload, ClipboardCheck,
   Layers, CheckSquare, Square, FoldVertical, Aperture,
 } from 'lucide-react';
@@ -23,6 +23,8 @@ import { NoteSearchBar } from '../components/NoteSearchBar';
 import { NoteTagFilter } from '../components/NoteTagFilter';
 import { cn } from '@/lib/utils';
 import { copyText } from '@/lib/utils/clipboard';
+import { stringHash } from '@/lib/utils/stringHash';
+import { formatDate } from '@/lib/utils/time';
 import { useNavigate } from 'react-router-dom';
 import { useNoteStore } from '../store/useNoteStore';
 import { noteStore } from '@/lib/storage';
@@ -49,27 +51,13 @@ const templateLabels: Record<NoteTemplate | 'qa' | 'video' | 'todo', string> = {
   outline: '大纲式', cornell: '康奈尔', mindmap: '思维导图', free: '自由笔记', blank: '空白', qa: '问答', video: '视频笔记', todo: '待办',
 };
 
-function formatDate(date: Date): string {
-  const d = new Date(date);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 /** 列表预览用：截断至 120 字符（使用 extractNoteText 提取纯文本）；有搜索词时返回匹配上下文片段 */
 function stripHtml(html: string): string {
   return extractNoteText(html).slice(0, 120);
 }
 
-/** 知识半衰期标记：返回剩余天数（负数=已过期）及色值 */
-function expiryBadge(expiresAt: Date | undefined): { days: number; label: string; color: string } | null {
-  if (!expiresAt) return null;
-  const now = Date.now();
-  const diff = new Date(expiresAt).getTime() - now;
-  const days = Math.round(diff / 86400000);
-  if (days <= 0) return { days, label: '已过期', color: 'text-semantic-error' };
-  if (days <= 7) return { days, label: `${days} 天后过期`, color: 'text-semantic-warning' };
-  if (days <= 30) return { days, label: `${days} 天后过期`, color: 'text-text-tertiary' };
-  return null; // 超过 30 天不显示
-}
+// 知识半衰期标记（D12 收敛至 lib/utils/time.ts expiryBadge）
+import { expiryBadge } from '@/lib/utils/time';
 
 /* ── 动画 variants ── */
 const listVariants = {
@@ -84,17 +72,14 @@ const noteCardVariants = {
   },
 };
 
-/** 为每张卡片生成稳定的随机倾斜角度（基于 id hash） */
+/** 为每张卡片生成稳定的随机倾斜角度（基于 id hash，D12 收敛至 lib/utils/stringHash） */
 function cardTilt(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
-  return ((h % 10) - 5) * 0.1; // ±0.5deg
+  return ((stringHash(id) % 10) - 5) * 0.1; // ±0.5deg
 }
 
-/** 不对称圆角样式（基于 id hash） */
+/** 不对称圆角样式（基于 id hash，D12 收敛至 lib/utils/stringHash） */
 function asymmetricRadius(id: string): string {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+  const h = stringHash(id);
   const base = 12;
   const tl = base + (Math.abs(h % 7));
   const tr = base + (Math.abs((h >> 4) % 6));
@@ -106,11 +91,9 @@ function asymmetricRadius(id: string): string {
 /** 折纸视图五种折叠类型（与 OrigamiView 的 FoldType 枚举对齐） */
 const ORIGAMI_FOLD_TYPES: FoldType[] = ['fold', 'triangle', 'pinwheel', 'box', 'flower'];
 
-/** 为每篇笔记确定性分配折叠类型（基于 id hash 轮转五种折法） */
+/** 为每篇笔记确定性分配折叠类型（基于 id hash 轮转五种折法，D12 收敛） */
 function origamiFoldType(id: string): FoldType {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
-  return ORIGAMI_FOLD_TYPES[Math.abs(h) % ORIGAMI_FOLD_TYPES.length];
+  return ORIGAMI_FOLD_TYPES[Math.abs(stringHash(id)) % ORIGAMI_FOLD_TYPES.length];
 }
 
 /** 笔记内容 → 折纸面板细节（纯文本按行拆分，截断防面板溢出） */
@@ -123,13 +106,6 @@ function origamiDetails(content: string): string[] {
 }
 
 /** 3D鼠标追踪倾斜 — 计算 rotateX/Y */
-function calc3DTilt(e: React.MouseEvent<HTMLDivElement>, el: HTMLDivElement): { rx: number; ry: number } {
-  const rect = el.getBoundingClientRect();
-  const x = (e.clientX - rect.left) / rect.width - 0.5;
-  const y = (e.clientY - rect.top) / rect.height - 0.5;
-  return { rx: -y * 5, ry: x * 5 }; // ±2.5deg max
-}
-
 function colorForType(template: string): string {
   switch (template) {
     case 'cornell': return 'rgb(91,138,114)';   // brand-500
@@ -226,6 +202,9 @@ export default function NotesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 依赖 getFilteredNotes 读取的 store 字段
     [getFilteredNotes, notes, searchQuery, selectedTags, selectedTemplate, selectedFolderId, folders],
   );
+  // Why: notes 依赖是刻意的——getAllTags 内部经 get() 隐式读取 store 的 notes，
+  // linter 看不到该隐式依赖；若按提示移除 notes，标签列表在笔记增删后不再刷新。
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
   const allTags = useMemo(() => getAllTags(), [getAllTags, notes]);
   const selectedNote = useMemo(
     () => filteredNotes.find((n) => n.id === selectedNoteId) || null,
@@ -311,7 +290,7 @@ export default function NotesPage() {
   const handleCreateFolder = async () => {
     if (newFolderName.trim()) { await createFolder(newFolderName.trim()); setNewFolderName(''); setShowNewFolder(false); }
   };
-  const handleSelectNote = (noteId: string) => { selectNote(noteId); navigate(`/notes/${noteId}`); };
+  const handleSelectNote = useCallback((noteId: string) => { selectNote(noteId); navigate(`/notes/${noteId}`); }, [selectNote, navigate]);
   const handleRenameFolder = useCallback(async (id: string, newName: string) => {
     await updateFolder(id, { name: newName });
   }, [updateFolder]);
@@ -487,7 +466,7 @@ export default function NotesPage() {
         break;
       }
     }
-  }, [handleSelectNote, handleTogglePin, handleDuplicateNote, handleExportNote, handleDeleteNote, toast, summarize, aiGenerateCardsStream, generatePodcast, handleSummarizeError, handleFlashcardError]);
+  }, [handleSelectNote, handleTogglePin, handleDuplicateNote, handleExportNote, handleDeleteNote, toast, summarize, aiGenerateCardsStream, generatePodcast, handleSummarizeError, handleFlashcardError, setExpiry]);
 
   return (
     /* 高度由 AppLayout 路由过渡容器（grid）显式锚定继承，与面板内容区精确一致：

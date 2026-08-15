@@ -460,7 +460,9 @@ export class CaptureManager {
   dispose(): void {
     if (this.sessionId) {
       // 异步停止但不等待（dispose 是同步方法）
-      this.stopSession().catch(() => {});
+      this.stopSession().catch((err) => {
+        console.debug('[captureManager] stopSession failed (dispose)', err);
+      });
     }
     if (this.fusionIntervalId !== null) {
       clearInterval(this.fusionIntervalId);

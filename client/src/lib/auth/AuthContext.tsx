@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
+import React, { useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import type { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase, isPlaceholder } from './supabaseClient';
 import { useToast } from '@/components/ui';
 import { cryptoManager } from '@/lib/crypto';
+import { AuthContext } from './useAuth';
 
 interface AuthState {
   user: User | null;
@@ -10,15 +11,6 @@ interface AuthState {
   loading: boolean;
   isAuthenticated: boolean;
 }
-
-interface AuthContextValue extends AuthState {
-  signUp: (email: string, password: string) => Promise<{ error: AuthError | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
-  signOut: () => Promise<void>;
-  getAccessToken: () => Promise<string | null>;
-}
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 /**
  * 全局认证上下文，管理用户会话生命周期
@@ -174,10 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
  * @returns AuthContextValue
  * @throws 在 AuthProvider 外部调用时抛出错误
  */
-export function useAuth(): AuthContextValue {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}
+// react-refresh: 组件文件只导出组件；useAuth 已移至 ./useAuth，
+// 此处 re-export 保持 '@/lib/auth/AuthContext' 导出签名不变（大量下游直接 import）
+// oxlint-disable-next-line react/only-export-components
+export { useAuth } from './useAuth';

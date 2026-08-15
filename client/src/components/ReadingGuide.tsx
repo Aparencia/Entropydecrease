@@ -91,7 +91,7 @@ export function ReadingGuide({
       window.removeEventListener('resize', updatePosition);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [enabled, updatePosition]);
+  }, [enabled, updatePosition, containerSelector]);
 
   // 如果减弱动效，不显示引导线
   if (prefersReduced) return null;

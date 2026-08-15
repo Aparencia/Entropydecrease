@@ -83,7 +83,9 @@ export default function PomodoroStatsPage() {
       .toArray()
       .then((data) => setSessions(data))
       .finally(() => setIsLoading(false));
-    pomodoroPresetStore.getAll().then(setPresets).catch(() => {});
+    pomodoroPresetStore.getAll().then(setPresets).catch((err) => {
+      console.debug('[PomodoroStatsPage] load presets failed', err);
+    });
   }, []);
 
   // Filter sessions by range

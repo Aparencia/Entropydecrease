@@ -3,7 +3,7 @@
  */
 import { useState, useCallback } from 'react';
 import { aiClient } from '@/lib/http/apiClient';
-import type { PersonaData, RelationshipDrama, RelationshipType } from '../types';
+import type { PersonaData, RelationshipType } from '../types';
 
 const FALLBACK_PERSONA: PersonaData = {
   concept: '概念',
