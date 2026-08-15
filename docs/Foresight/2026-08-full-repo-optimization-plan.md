@@ -107,7 +107,7 @@ docs/                          # 工程化 + 个人开发化平衡（按需裁�
 | C2 | Go goroutine panic 防护 | 为 11 处 `go` 启动点（writePump/readPump/cleanupLoop/ws_manager 等）统一包 `defer recover()`，防单连接异常击穿进程 | S | H |
 | C3 | 依赖漏洞升级 | react-router-dom（≤7.18.1，RSC CSRF）、dompurify（≤3.4.12，XSS）升修复版本；其余 9 个传递漏洞随升级收敛 | S | L |
 | C4 | 修复 lint-staged oxlint 不生效 | 根 lint-staged 改用 `oxlint --config client/.oxlintrc.json`（cd client 后再执行）或改用 `npm --prefix client run lint --` 包装；保证 pre-commit 与 CI 规则集一致 | S | L |
-| C5 | tier 配额错配核对 | `"pro": {"daily": 80}` < `"active": {"daily": 120}`，需业务确认后修正 | S | M |
+| C5 | tier 配额错配核对 | ✅ 已核实为**有意设计**：pro(80/2.0) 与 active 相同系设计意图（差异在 rank 判定与付费权益，非配额），与客户端 types/beta.ts 同步；已在 rate_limit.py 加注释说明，数值不改 | S | — |
 | C6 | 误入库产物清理 | ① `client/public/sounds/_backup_original/*.wav`（42 个）git rm + gitignore；② `client/public/audio/*.mp3`（75.6MB）迁移 Git LFS；③ 6 个未跟踪 scratch 文件清理 | S | L |
 | C7 | 安全路径静默放行补日志 | prompt_guard.py:96 / input_validation.py:89 / base_provider.py:77/132 静默 pass 处补 `logger.warning`（安全检测被绕过需可观测） | S | M |
 

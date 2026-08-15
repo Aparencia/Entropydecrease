@@ -33,6 +33,9 @@ TIER_LIMITS: dict[str, dict[str, int | float]] = {
     "observer": {"daily": 50,  "cost": 1.5},
     "active":   {"daily": 80,  "cost": 2.0},
     "core":     {"daily": 120, "cost": 3.0},
+    # pro（订阅档）与 active 配额相同系有意设计：pro 的差异在 rank 判定
+    # （付费身份覆盖 beta 身份，_TIER_RANK pro=3 > active=2）与付费权益，
+    # 不在每日配额；与客户端 types/beta.ts TIER_PERKS 保持同步。
     "pro":      {"daily": 80,  "cost": 2.0},
     "lifetime": {"daily": 120, "cost": 3.0},
 }
