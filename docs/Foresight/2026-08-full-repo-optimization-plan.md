@@ -24,7 +24,7 @@
 | P2 R8（工作区卫生） | ✅ 完成 | MCP 脚本收敛/scratch 清理/死代码清理 |
 | P2 R1（auth.py 拆分） | 🔄 执行中 | 拆 jwt_keys/jwt_verify/auth 三模块（331 pytest 回归网） |
 | P2 R2/R3（巨型文件拆分） | 🔄 执行中 | NotesPage 1299 行拆分中；其余巨型文件后续推进 |
-| P2 R4（rooms/relay 拆分） | 🔄 执行中 | 拆 manager/handlers/ws（Go 测试回归网） |
+| P2 R4（rooms/relay 拆分） | ✅ 完成 | 5 文件（room_manager 248/rooms_handlers 141/rooms_ws 120/relay_manager 222/relay_handlers 144），go build/vet/test 全过 |
 
 ---
 
