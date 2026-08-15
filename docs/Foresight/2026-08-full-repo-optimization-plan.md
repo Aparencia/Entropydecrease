@@ -13,7 +13,7 @@
 
 | 阶段 | 状态 | 说明 |
 |------|------|------|
-| 任务一 D1-D6（docs 整理） | ✅ 全部完成 | 链接修复/索引补齐/过期更新/标准引用/重组/自动化（docs-check.mjs 已接入 lint-staged） |
+| 任务一 D1-D6（docs 整理） | ✅ 全部完成 | 链接修复/索引补齐/过期更新/标准引用/重组/自动化（docs-check.mjs 已接入 lint-staged + CI）；补充：versions/README 新增失效链接类型对照表（区分预期失效/误失效）；ai-coding.md 安全红线与 §4/§5 重叠经审计确认系有意保留（审查视角 vs 生成视角），维持现状 |
 | 任务二（docs-starter-kit） | ✅ 完成 | 根目录 `docs-starter-kit/` 纯净模板树（standards 20 + templates 12 + 各层 README + 启用指南） |
 | P0 C1-C7（安全与正确性） | ✅ 全部完成 | Feynman bug/Go panic 防护/依赖升级/lint-staged 修复/tier 核对/产物清理/安全日志 |
 | P1 D7-D14（开发者体验） | ✅ 全部完成 | 脚本补全/lint 158→0/静默 catch 95 处/环境变量/订阅收敛/工具统一/audit/postcss |
