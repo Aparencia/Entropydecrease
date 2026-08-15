@@ -117,6 +117,10 @@ ADR、头脑风暴、估算、数据库迁移、知识卡片、MVP 画布、复�
 
 已实施完成的文档按日快照归档（`YYYY-MM-DD/`），技术债清单滚动维护（最新归档为唯一权威）。机制见 [archive/README.md](./archive/README.md) 与 [归档模板](./templates/archive-template.md)。
 
+## 🧰 docs-starter-kit/ — 新项目文档骨架
+
+从本项目提炼的**通用化文档模板树**（standards/templates/adr/knowledge/versions/archive + docs-check 脚本），不含项目特有内容，可直接复制到新项目使用。启用指南见 [docs-starter-kit/README.md](../docs-starter-kit/README.md)。
+
 ## 📚 knowledge/ — 知识库
 
 踩坑记录 / 技术方案 / 学习笔记，按 [知识管理规范](./standards/knowledge-management.md) 组织。完整索引见 [knowledge/index.md](./knowledge/index.md)。

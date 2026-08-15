@@ -1,0 +1,20 @@
+# docs-check.mjs 豁免清单
+# 每行一个 glob 模式（匹配相对 docs/ 的路径），命中文件跳过链接/索引/命名检查。
+# 用途：历史快照文档保留原貌（见 versions/README.md"历史文档链接说明"），不纳入门禁。
+# 注意：豁免是例外而非常态，新文档一律不得加入此清单。
+
+# 历史版本文档（docs 重组前撰写，内部链接指向已删除的 phase0~phase6/旧目录，保留原貌）
+versions/v0.3.0.md
+versions/v0.4.0.md
+versions/v0.5.0.md
+versions/v0.6.0.md
+versions/v0.7.0.md
+versions/v0.8.0.md
+versions/v0.9.0.md
+versions/v0.10.0.md
+versions/v0.11.0.md
+# v0.27.0 引用未沉淀的 v1.0.0 规划文档（预期缺失）
+versions/v0.27.0.md
+# v0.23.0 / v0.34.0 合集（内部链接为历史上下文引用）
+versions/v0.23.0/**
+versions/v0.34.0/**
