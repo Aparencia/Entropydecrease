@@ -12,6 +12,7 @@
     "learning:detect": "node scripts/session-detect.mjs",
     "learning:route": "node scripts/session-route.mjs",
     "learning:pipeline": "node scripts/session-detect.mjs && node scripts/session-route.mjs --status",
+    "docs:check": "node scripts/docs-check.mjs",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -30,6 +31,7 @@
   },
   "lint-staged": {
     "client/**/*.{ts,tsx}": "npm --prefix client exec oxlint --",
-    "website/**/*.{ts,tsx}": "npm --prefix website exec eslint -- --config website/eslint.config.mjs"
+    "website/**/*.{ts,tsx}": "npm --prefix website exec eslint -- --config website/eslint.config.mjs",
+    "docs/**/*.md": "node scripts/docs-check.mjs"
   }
 }
