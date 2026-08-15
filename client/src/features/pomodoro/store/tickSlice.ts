@@ -243,7 +243,8 @@ function runPhaseCompletion(
  * 避免墙钟校准跳变时漏报。
  */
 function emitPhaseSignals(
-  get: () => PomodoroState,
+  // 历史签名保留 get（调用处按位置传参），实现只读 set 与阶段参数
+  _get: () => PomodoroState,
   set: (fn: (s: PomodoroState) => Partial<PomodoroState>) => void,
   phase: Phase,
   nextRemaining: number,

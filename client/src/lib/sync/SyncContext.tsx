@@ -5,7 +5,7 @@
  * 订阅 syncEngine 事件流更新状态；networkManager 恢复联网时触发补偿同步。
  * @ai-context: 副作用集中于 effect 内的订阅/退订，Provider 外无全局写入。
  */
-import React, { useEffect, useState, useCallback, type ReactNode } from 'react';
+import { useEffect, useState, useCallback, type ReactNode } from 'react';
 import { syncEngine, type SyncEvent } from './SyncEngine';
 import { useAuth } from '../auth/AuthContext';
 import { networkManager } from './NetworkManager';

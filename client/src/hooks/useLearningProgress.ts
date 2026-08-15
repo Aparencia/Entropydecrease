@@ -73,7 +73,7 @@ export function useLearningProgress(): LearningProgressItem[] {
       try {
         const allCards = await db.flashcards.toArray();
         if (allCards.length > 0) {
-          const reviewedCards = allCards.filter((c: any) => c.repetitions > 0);
+          const reviewedCards = allCards.filter((c) => c.repetitions > 0);
           const flashcardProgress = Math.min(100, Math.round((reviewedCards.length / allCards.length) * 100));
           result.push({ subject: '闪卡复习', progress: flashcardProgress });
         } else {

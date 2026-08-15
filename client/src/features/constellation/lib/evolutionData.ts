@@ -79,7 +79,9 @@ interface ReviewIndex {
 export function deriveEvolutionData(
   graph: KnowledgeGraph,
   reviews: Array<{ cardId: string; reviewedAt: Date | string }> = [],
-  sourceRefs: Map<string, string> = new Map(),
+  // 兼容历史调用签名：本函数不使用 sourceRefs（映射在 buildEvolutionData 中消费），
+  // 下划线前缀避免 noUnusedParameters 报错，保持公共 API 不变
+  _sourceRefs: Map<string, string> = new Map(),
   now: number = Date.now(),
 ): EvolutionData {
   if (graph.coldStart || graph.nodes.length === 0) {

@@ -35,11 +35,9 @@ import { collectIndexableItems } from './searchIndexBuilder';
 const REBUILD_BATCH_SIZE = 100;
 
 export class DexieSearchIndexer implements ISearchEngine {
-  private initialized = false;
-
-  /** 初始化（Dexie 模式下无需额外初始化） */
+  /** 初始化（Dexie 模式下无需额外初始化；无状态） */
   async init(): Promise<void> {
-    this.initialized = true;
+    // no-op：Dexie 表即用即开，无需连接准备
   }
 
   /**

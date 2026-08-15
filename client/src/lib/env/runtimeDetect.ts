@@ -11,7 +11,6 @@
 
 let _isElectron: boolean | null = null;
 let _isPWA: boolean | null = null;
-let _isMobile: boolean | null = null;
 
 /**
  * 是否在 Electron 桌面端运行
