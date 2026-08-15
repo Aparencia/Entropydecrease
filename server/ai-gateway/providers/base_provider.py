@@ -75,8 +75,12 @@ def with_retry_and_timeout(max_retries: int = 2):
                 if rotate is not None:
                     await rotate()
             except Exception:
-                # 轮询失败不阻断业务调用（保持原行为）
-                pass
+                # 轮询失败不阻断业务调用（保持原行为）；
+                # GW-SEC: 补日志留痕，避免 Key 轮换异常完全静默（2026-08 审计 C7）
+                logger.warning(
+                    "Provider %s key rotation failed (business call proceeds)",
+                    self.__class__.__name__,
+                )
 
             last_error: Exception | None = None
             for attempt in range(max_retries + 1):
@@ -130,7 +134,11 @@ def _mark_current_key_unavailable(provider_obj) -> None:
         if pool is not None and api_key:
             pool.mark_unavailable(api_key)
     except Exception:
-        pass
+        # GW-SEC: Key 熔断标记失败时留痕（否则熔断联动失效不可观测，2026-08 审计 C7）
+        logger.warning(
+            "Key unavailable marking failed for provider=%s",
+            getattr(provider_obj, "provider_name", "unknown"),
+        )
 
 
 class AIProvider(ABC):

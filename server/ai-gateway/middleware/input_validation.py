@@ -87,8 +87,13 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
                             content={"detail": validation_error},
                         )
                 except Exception:
-                    # JSON 解析失败交给后续路由处理
-                    pass
+                    # JSON 解析失败交给后续路由处理。
+                    # GW-SEC: 校验路径异常留痕——静默放行会让长度校验被绕过
+                    # 而不可观测（2026-08 审计 C7）。
+                    logger.warning(
+                        "InputValidation 异常已放行（校验路径需人工关注）: path=%s",
+                        request.url.path,
+                    )
 
         return await call_next(request)
 
