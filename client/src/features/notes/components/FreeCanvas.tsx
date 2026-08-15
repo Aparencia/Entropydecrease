@@ -1,15 +1,35 @@
 /**
- * @ai-context: 自由画布组件（巨型，待拆分）：手写/绘图白板，供笔记批注与费曼讲解涂鸦。
+ * 自由画布组件
+ * Free canvas component
+ *
+ * @ai-context: 自由画布（巨型，待拆分 → 2026-08 R3 已拆分）：手写/绘图白板，
+ * 供笔记批注与费曼讲解涂鸦。选择/框选状态机 → hooks/useCanvasSelection；
+ * 文本块 CRUD → hooks/useCanvasBlocks；动作列表 → hooks/useCanvasActions；
+ * 键盘快捷键 → hooks/useCanvasKeyboard；AI 排版工具栏 → components/FreeCanvasToolbar。
+ * 墨迹绘制见 lib/canvas/useInkDrawing，浮层见 components/FreeCanvasOverlays，
+ * 文本块见 components/FreeTextBlock。本文件保留数据归一化、墨迹状态与布局组合。
+ * @ai-context: Free canvas (oversized; split in 2026-08 R3): handwriting/
+ * drawing whiteboard for note annotation and Feynman doodles. Selection/box
+ * state machine → hooks/useCanvasSelection; block CRUD → hooks/useCanvasBlocks;
+ * action lists → hooks/useCanvasActions; keyboard → hooks/useCanvasKeyboard;
+ * AI layout toolbar → components/FreeCanvasToolbar. Ink drawing lives in
+ * lib/canvas/useInkDrawing, overlays in components/FreeCanvasOverlays, blocks
+ * in components/FreeTextBlock. This file keeps data normalization, ink state
+ * and layout composition.
  */
-import { useCallback, useRef, useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Copy, Eraser, CheckSquare, Sparkles } from 'lucide-react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import FreeTextBlock from './FreeTextBlock';
 import { FreeCanvasOverlays } from './FreeCanvasOverlays';
 import { InkToolbar } from './canvas/InkToolbar';
 import { InkLayer } from './canvas/InkLayer';
 import { useInkDrawing, type InkTool } from '../lib/canvas/useInkDrawing';
 import { useCanvasAILayout, type LayoutMode } from '../hooks/useCanvasAILayout';
-import type { FreeCanvasData, FreeCanvasBlock, InkStroke, InkPoint } from '@/types/models';
+import { useCanvasSelection } from '../hooks/useCanvasSelection';
+import { useCanvasBlocks } from '../hooks/useCanvasBlocks';
+import { useCanvasActions } from '../hooks/useCanvasActions';
+import { useCanvasKeyboard } from '../hooks/useCanvasKeyboard';
+import { FreeCanvasToolbar } from './FreeCanvasToolbar';
+import type { FreeCanvasData, InkStroke, InkPoint } from '@/types/models';
 
 interface FreeCanvasProps {
   content: FreeCanvasData | null;
@@ -45,7 +65,6 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
     [onChange],
   );
 
-  const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(new Set());
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [aiLayoutMode, setAiLayoutMode] = useState<LayoutMode | null>(null);
   const { loading: aiLayoutLoading, layout: aiLayout } = useCanvasAILayout();
@@ -88,90 +107,33 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
     onErase: handleErase,
   });
 
-  // 框选状态
-  const [selectionBox, setSelectionBox] = useState<{x1: number; y1: number; x2: number; y2: number} | null>(null);
-  const isSelectingRef = useRef(false);
-  const selectStartRef = useRef({ x: 0, y: 0 });
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const selectionBoxRef = useRef(selectionBox);
-  selectionBoxRef.current = selectionBox;
 
-  // 右键浮动菜单状态
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null);
+  // 选择/框选状态机 + 画布鼠标交互（见 hooks/useCanvasSelection）
+  const {
+    selectedBlockIds, setSelectedBlockIds,
+    selectionBox, contextMenu, setContextMenu,
+    handleSelectBlock, handleBlockReleaseOutside,
+    handleCanvasMouseDown, handleInnerCanvasMouseUp,
+  } = useCanvasSelection({ dataRef, scrollContainerRef });
 
-  // 拖出块取消选中的抑制标志
-  const suppressSelectRef = useRef(false);
+  // 文本块 CRUD（见 hooks/useCanvasBlocks）
+  const {
+    addBlockAtPosition, handleDeleteSelected, handleDuplicateBlock,
+    handleMove, handleContentChange, handleDelete, handleResize,
+  } = useCanvasBlocks({ dataRef, emitChange, selectedBlockIds, setSelectedBlockIds });
 
-  // 组件卸载时清理残留的 document 级事件监听（右键拖拽中卸载）
-  const dragCleanupRef = useRef<(() => void) | null>(null);
-  useEffect(() => {
-    return () => dragCleanupRef.current?.();
-  }, []);
+  // 右键菜单 / 操作面板动作列表（见 hooks/useCanvasActions）
+  const { contextMenuActions, actions } = useCanvasActions({
+    data, dataRef, contextMenu, selectedBlockIds, setSelectedBlockIds,
+    emitChange, addBlockAtPosition, handleDeleteSelected, handleDuplicateBlock,
+  });
 
-  // 选中块回调
-  const handleSelectBlock = useCallback((id: string, addToSelection: boolean = false) => {
-    if (suppressSelectRef.current) {
-      suppressSelectRef.current = false;
-      return;
-    }
-    setSelectedBlockIds(prev => {
-      const next = new Set(addToSelection ? prev : []);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
-
-  // 块释放到外部 → 取消选中
-  const handleBlockReleaseOutside = useCallback(() => {
-    setSelectedBlockIds(new Set());
-    suppressSelectRef.current = true;
-    setTimeout(() => { suppressSelectRef.current = false; }, 100);
-  }, []);
-
-  // 在指定画布坐标添加新块
-  const addBlockAtPosition = useCallback((canvasX: number, canvasY: number) => {
-    const current = dataRef.current;
-    const newBlock: FreeCanvasBlock = {
-      id: crypto.randomUUID(),
-      type: 'text',
-      content: '',
-      position: { x: canvasX - 140, y: canvasY - 20 },
-      size: { width: 280, height: 160 },
-    };
-    emitChange({ ...current, blocks: [...current.blocks, newBlock] });
-  }, [emitChange]);
-
-  // 删除选中块
-  const handleDeleteSelected = useCallback(() => {
-    if (selectedBlockIds.size === 0) return;
-    const current = dataRef.current;
-    emitChange({
-      ...current,
-      blocks: current.blocks.filter(b => !selectedBlockIds.has(b.id)),
-    });
-    setSelectedBlockIds(new Set());
-  }, [selectedBlockIds, emitChange]);
-
-  // 复制块
-  const handleDuplicateBlock = useCallback(
-    (id: string) => {
-      const current = dataRef.current;
-      const source = current.blocks.find(b => b.id === id);
-      if (!source) return;
-      const newBlock = {
-        ...source,
-        id: crypto.randomUUID(),
-        position: { x: source.position.x + 30, y: source.position.y + 30 },
-      };
-      emitChange({ ...current, blocks: [...current.blocks, newBlock] });
-      setSelectedBlockIds(new Set([newBlock.id]));
-    },
-    [emitChange],
-  );
+  // 键盘快捷键（见 hooks/useCanvasKeyboard）
+  useCanvasKeyboard({
+    selectedBlockIds, setSelectedBlockIds, paletteOpen, setPaletteOpen,
+    contextMenu, setContextMenu, handleDeleteSelected, handleDuplicateBlock,
+  });
 
   // 双击空白区域添加文本块
   const handleCanvasDoubleClick = (e: React.MouseEvent) => {
@@ -186,346 +148,13 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
     addBlockAtPosition(canvasX, canvasY);
   };
 
-  // ===== 鼠标事件统一处理 =====
-  const handleCanvasMouseDown = (e: React.MouseEvent) => {
-    // 关闭右键菜单
-    if (contextMenu) setContextMenu(null);
-
-    // ---- 右键：拖拽平移 / 快捷菜单 ----
-    if (e.button === 2) {
-      e.preventDefault();
-      const container = scrollContainerRef.current;
-      if (!container) return;
-
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const startScrollLeft = container.scrollLeft;
-      const startScrollTop = container.scrollTop;
-      let hasMoved = false;
-
-      container.style.cursor = 'grabbing';
-
-      const handleMouseMove = (ev: MouseEvent) => {
-        const dx = ev.clientX - startX;
-        const dy = ev.clientY - startY;
-        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasMoved = true;
-        container.scrollLeft = startScrollLeft - dx;
-        container.scrollTop = startScrollTop - dy;
-      };
-
-      const handleMouseUp = () => {
-        container.style.cursor = '';
-        dragCleanupRef.current = null;
-        // 未拖动 → 显示右键快捷菜单
-        if (!hasMoved) {
-          const rect = container.getBoundingClientRect();
-          setContextMenu({
-            x: e.clientX,
-            y: e.clientY,
-            canvasX: e.clientX - rect.left + startScrollLeft,
-            canvasY: e.clientY - rect.top + startScrollTop,
-          });
-        }
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      dragCleanupRef.current = () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        container.style.cursor = '';
-      };
-      return;
-    }
-
-    // ---- Shift + 左键：框选 ----
-    if (e.button === 0 && e.shiftKey) {
-      e.preventDefault();
-      isSelectingRef.current = true;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const scrollContainer = scrollContainerRef.current;
-      const scrollLeft = scrollContainer?.scrollLeft ?? 0;
-      const scrollTop = scrollContainer?.scrollTop ?? 0;
-      selectStartRef.current = {
-        x: e.clientX - rect.left + scrollLeft,
-        y: e.clientY - rect.top + scrollTop,
-      };
-      setSelectionBox({
-        x1: selectStartRef.current.x,
-        y1: selectStartRef.current.y,
-        x2: selectStartRef.current.x,
-        y2: selectStartRef.current.y,
-      });
-
-      const handleMouseMove = (ev: MouseEvent) => {
-        if (!isSelectingRef.current) return;
-        const x2 = ev.clientX - rect.left + scrollLeft;
-        const y2 = ev.clientY - rect.top + scrollTop;
-        setSelectionBox({ x1: selectStartRef.current.x, y1: selectStartRef.current.y, x2, y2 });
-      };
-
-      const handleMouseUp = () => {
-        isSelectingRef.current = false;
-        const box = selectionBoxRef.current;
-        if (box) {
-          const minX = Math.min(box.x1, box.x2);
-          const maxX = Math.max(box.x1, box.x2);
-          const minY = Math.min(box.y1, box.y2);
-          const maxY = Math.max(box.y1, box.y2);
-
-          const current = dataRef.current;
-          const ids = new Set<string>();
-          for (const block of current.blocks) {
-            const bx = block.position.x;
-            const by = block.position.y;
-            const bw = block.size.width;
-            const bh = typeof block.size.height === 'number' ? block.size.height : 160;
-            if (bx + bw > minX && bx < maxX && by + bh > minY && by < maxY) {
-              ids.add(block.id);
-            }
-          }
-          setSelectedBlockIds(ids);
-        }
-        setSelectionBox(null);
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return;
-    }
-
-    // ---- 普通左键：清除选中（仅空白区域；块内保留编辑器焦点，否则点击文本块无法输入） ----
-    if (e.button === 0 && !e.shiftKey) {
-      const insideBlock = !!(e.target as HTMLElement).closest?.('[data-freeblock]');
-      if (!insideBlock) {
-        setSelectedBlockIds(new Set());
-        (document.activeElement as HTMLElement)?.blur?.();
-        suppressSelectRef.current = true;
-        setTimeout(() => { suppressSelectRef.current = false; }, 100);
-      }
-    }
+  // AI 智能排版：设置模式 → AI 布局 → 落盘 → 复位（失败时保持模式选择态，与既有行为一致）
+  const handleApplyAiLayout = async (mode: LayoutMode) => {
+    setAiLayoutMode(mode);
+    const newBlocks = await aiLayout(data.blocks, mode);
+    emitChange({ ...data, blocks: newBlocks });
+    setAiLayoutMode(null);
   };
-
-  // 内层画布 mouseup：块内按下拖到外部释放 → 取消选中
-  const handleInnerCanvasMouseUp = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    const isInsideBlock = !!target.closest('[data-freeblock]');
-    if (!isInsideBlock && suppressSelectRef.current) {
-      setSelectedBlockIds(new Set());
-      suppressSelectRef.current = false;
-    }
-  };
-
-  // 移动块
-  const handleMove = useCallback(
-    (id: string, x: number, y: number) => {
-      const current = dataRef.current;
-      emitChange({
-        ...current,
-        blocks: current.blocks.map((b) =>
-          b.id === id ? { ...b, position: { x, y } } : b,
-        ),
-      });
-    },
-    [emitChange],
-  );
-
-  // 内容变更
-  const handleContentChange = useCallback(
-    (id: string, blockContent: string) => {
-      const current = dataRef.current;
-      emitChange({
-        ...current,
-        blocks: current.blocks.map((b) =>
-          b.id === id ? { ...b, content: blockContent } : b,
-        ),
-      });
-    },
-    [emitChange],
-  );
-
-  // 删除块
-  const handleDelete = useCallback(
-    (id: string) => {
-      const current = dataRef.current;
-      emitChange({
-        ...current,
-        blocks: current.blocks.filter((b) => b.id !== id),
-      });
-      setSelectedBlockIds(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    },
-    [emitChange],
-  );
-
-  // 调整块大小
-  const handleResize = useCallback(
-    (id: string, width: number, height: number) => {
-      const current = dataRef.current;
-      emitChange({
-        ...current,
-        blocks: current.blocks.map((b) =>
-          b.id === id ? { ...b, size: { width, height } } : b,
-        ),
-      });
-    },
-    [emitChange],
-  );
-
-  // 右键菜单操作列表
-  const contextMenuActions = useMemo(() => [
-    {
-      id: 'add-text',
-      label: '添加新文本',
-      icon: Plus,
-      disabled: false,
-      execute: () => {
-        if (contextMenu) addBlockAtPosition(contextMenu.canvasX, contextMenu.canvasY);
-      },
-    },
-    {
-      id: 'select-all',
-      label: '全选',
-      icon: CheckSquare,
-      disabled: data.blocks.length === 0,
-      execute: () => {
-        setSelectedBlockIds(new Set(data.blocks.map(b => b.id)));
-      },
-    },
-    {
-      id: 'delete-selected',
-      label: '删除选中',
-      icon: Trash2,
-      disabled: selectedBlockIds.size === 0,
-      execute: () => handleDeleteSelected(),
-    },
-    {
-      id: 'duplicate-selected',
-      label: '复制',
-      icon: Copy,
-      disabled: selectedBlockIds.size === 0,
-      execute: () => {
-        const firstId = selectedBlockIds.values().next().value;
-        if (!firstId) return;
-        handleDuplicateBlock(firstId);
-      },
-    },
-    {
-      id: 'clear-canvas',
-      label: '清空画布',
-      icon: Eraser,
-      disabled: data.blocks.length === 0,
-      execute: () => {
-        emitChange({ ...dataRef.current, blocks: [] });
-        setSelectedBlockIds(new Set());
-      },
-    },
-  ], [contextMenu, data.blocks, selectedBlockIds, emitChange, handleDeleteSelected, addBlockAtPosition, handleDuplicateBlock]);
-
-  // 操作面板操作列表
-  const actions = useMemo(() => [
-    {
-      id: 'add-block',
-      label: '添加文本块',
-      icon: Plus,
-      disabled: false,
-      execute: () => {
-        const current = dataRef.current;
-        const centerX = (current.canvasWidth || 3000) / 2 - 140;
-        const centerY = (current.canvasHeight || 3000) / 2 - 80;
-        const newBlock = {
-          id: crypto.randomUUID(),
-          type: 'text' as const,
-          content: '',
-          position: { x: centerX + (Math.random() - 0.5) * 60, y: centerY + (Math.random() - 0.5) * 60 },
-          size: { width: 280, height: 160 },
-        };
-        emitChange({ ...current, blocks: [...current.blocks, newBlock] });
-      },
-    },
-    {
-      id: 'delete-block',
-      label: '删除选中块',
-      icon: Trash2,
-      disabled: selectedBlockIds.size === 0,
-      execute: () => handleDeleteSelected(),
-    },
-    {
-      id: 'duplicate-block',
-      label: '复制选中块',
-      icon: Copy,
-      disabled: selectedBlockIds.size === 0,
-      execute: () => {
-        const firstId = selectedBlockIds.values().next().value;
-        if (!firstId) return;
-        handleDuplicateBlock(firstId);
-      },
-    },
-    {
-      id: 'clear-canvas',
-      label: '清空画布',
-      icon: Eraser,
-      disabled: data.blocks.length === 0,
-      execute: () => {
-        emitChange({ ...dataRef.current, blocks: [] });
-        setSelectedBlockIds(new Set());
-      },
-    },
-  ], [selectedBlockIds, data.blocks.length, emitChange, handleDeleteSelected, handleDuplicateBlock]);
-
-  // 键盘快捷键
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const isInEditor = document.activeElement?.closest('.ProseMirror') ||
-                         document.activeElement?.closest('[contenteditable]') ||
-                         document.activeElement?.tagName === 'INPUT' ||
-                         document.activeElement?.tagName === 'TEXTAREA';
-
-      // Shift+A 切换面板（仅非编辑器聚焦时）
-      if (e.shiftKey && (e.key === 'A' || e.key === 'a') && !isInEditor) {
-        e.preventDefault();
-        setPaletteOpen(prev => !prev);
-        return;
-      }
-
-      // Ctrl+D 复制选中块（仅非编辑器聚焦时）
-      if (e.ctrlKey && (e.key === 'd' || e.key === 'D') && !isInEditor && selectedBlockIds.size > 0) {
-        e.preventDefault();
-        const firstId = selectedBlockIds.values().next().value;
-        if (!firstId) return;
-        handleDuplicateBlock(firstId);
-        return;
-      }
-
-      // Delete/Backspace 删除选中块（仅非编辑器聚焦时）
-      if ((e.key === 'Delete' || e.key === 'Backspace') && !isInEditor && selectedBlockIds.size > 0) {
-        e.preventDefault();
-        handleDeleteSelected();
-        return;
-      }
-
-      // Escape 取消选中 / 关闭面板 / 关闭右键菜单
-      if (e.key === 'Escape') {
-        if (contextMenu) {
-          setContextMenu(null);
-        } else if (paletteOpen) {
-          setPaletteOpen(false);
-        } else {
-          setSelectedBlockIds(new Set());
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedBlockIds, handleDeleteSelected, paletteOpen, handleDuplicateBlock, contextMenu]);
 
   // 挂载后自动滚动到画布中心
   useEffect(() => {
@@ -616,47 +245,14 @@ export default function FreeCanvas({ content, onChange }: FreeCanvasProps) {
         onClosePalette={() => setPaletteOpen(false)}
       />
 
-      {/* AI 智能排版按钮 */}
-      {data.blocks.length > 1 && (
-        <div className="absolute bottom-20 left-4 z-10 flex gap-1">
-          {aiLayoutMode ? (
-            <div className="flex items-center gap-1 px-2 py-1.5 rounded-kb-md bg-bg-elevated/90 backdrop-blur-sm border border-border/30 shadow-kb-sm">
-              <span className="text-c1 text-text-tertiary mr-1">AI 排版</span>
-              {(['tree', 'timeline', 'cluster'] as LayoutMode[]).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={async () => {
-                    setAiLayoutMode(mode);
-                    const newBlocks = await aiLayout(data.blocks, mode);
-                    emitChange({ ...data, blocks: newBlocks });
-                    setAiLayoutMode(null);
-                  }}
-                  disabled={aiLayoutLoading}
-                  className="px-2 py-0.5 rounded-kb-sm text-c1 font-medium bg-brand-50 text-brand-700 hover:bg-brand-100 disabled:opacity-50 transition-colors"
-                >
-                  {mode === 'tree' ? '树形' : mode === 'timeline' ? '时间线' : '聚类'}
-                </button>
-              ))}
-              <button
-                onClick={() => setAiLayoutMode(null)}
-                className="px-1.5 py-0.5 rounded-kb-sm text-c1 text-text-tertiary hover:text-text-primary transition-colors"
-              >
-                取消
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setAiLayoutMode('tree')}
-              disabled={aiLayoutLoading}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-kb-md bg-bg-elevated/90 backdrop-blur-sm border border-border/30 shadow-kb-sm text-c1 text-text-tertiary hover:text-brand-600 hover:border-brand-300 transition-colors disabled:opacity-50"
-              title="AI 智能排版"
-            >
-              <Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />
-              {aiLayoutLoading ? '排版中...' : 'AI 整理'}
-            </button>
-          )}
-        </div>
-      )}
+      {/* AI 智能排版工具栏（见 components/FreeCanvasToolbar） */}
+      <FreeCanvasToolbar
+        blockCount={data.blocks.length}
+        aiLayoutLoading={aiLayoutLoading}
+        aiLayoutMode={aiLayoutMode}
+        onModeChange={setAiLayoutMode}
+        onApplyLayout={handleApplyAiLayout}
+      />
 
       {/* 阶段三：墨迹工具栏 / ink toolbar */}
       <InkToolbar
