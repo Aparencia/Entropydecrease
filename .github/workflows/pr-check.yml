@@ -10,6 +10,7 @@ jobs:
   # ===========================================================================
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # dorny/paths-filter 需要读取 PR 变更文件列表；Dependabot PR 的只读 token
     # 默认不含该权限，显式声明后 Dependabot PR 的路径检测才能正常工作
     permissions:
@@ -49,6 +50,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.client == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -86,6 +88,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.sync-service == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: server/sync-service
@@ -110,6 +113,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.ai-gateway == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: server/ai-gateway
@@ -136,6 +140,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.website == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: website
@@ -161,6 +166,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

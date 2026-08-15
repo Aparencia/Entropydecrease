@@ -10,8 +10,31 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
+      # 部署前门禁（2026-08 审计 #11）：server 变更直接部署前先跑完整测试，
+      # 防止未验证代码上线（pr-check 只在 PR 流程生效，main 直推会绕过）
+      - name: Gate - AI Gateway tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run AI Gateway tests
+        run: |
+          cd server/ai-gateway
+          pip install -r requirements.txt
+          pip install ruff pytest pytest-asyncio httpx
+          ruff check .
+          pytest tests/ -q
+      - name: Gate - Sync service tests
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: Run Sync service tests
+        run: |
+          cd server/sync-service
+          go build ./... && go vet ./... && go test ./... -count=1
 
       # 上传 server/ 源码到服务器（服务器非 git 仓库，代码由 CI 同步）
       # 注意：rm 必须为 false —— 服务器上的 .env.production 为真实生产密钥，

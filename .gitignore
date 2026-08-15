@@ -3,6 +3,8 @@ node_modules/
 vendor/
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
 
 # Build
 dist/
@@ -47,8 +49,9 @@ Thumbs.db
 !client/.env.production
 
 # Brainstorm scratch (personal notes)
-brainstorm*.md
-ui_brainstorm.md
+# 注意：锚定根目录（/brainstorm*.md），避免误吞 docs/templates/brainstorm-template.md
+/brainstorm*.md
+/ui_brainstorm.md
 
 # Logs
 *.log
@@ -61,6 +64,12 @@ coverage/
 # Scripts temp
 scripts/.mp3tmp/
 scripts/sounds_backup_original/
+# 软著源码文档生成输出（generate_source_code_doc.ps1）
+docs/softcopy-materials/
+
+# 临时截图/审计 scratch（勿提交）
+tmp-*.png
+missing_ai_context.txt
 
 # 音效源文件备份（42 个 wav，零代码引用，勿再提交）
 client/public/sounds/_backup_original/
