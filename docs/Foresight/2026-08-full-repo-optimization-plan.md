@@ -108,7 +108,7 @@ docs/                          # 工程化 + 个人开发化平衡（按需裁�
 | C3 | 依赖漏洞升级 | react-router-dom（≤7.18.1，RSC CSRF）、dompurify（≤3.4.12，XSS）升修复版本；其余 9 个传递漏洞随升级收敛 | S | L |
 | C4 | 修复 lint-staged oxlint 不生效 | 根 lint-staged 改用 `oxlint --config client/.oxlintrc.json`（cd client 后再执行）或改用 `npm --prefix client run lint --` 包装；保证 pre-commit 与 CI 规则集一致 | S | L |
 | C5 | tier 配额错配核对 | ✅ 已核实为**有意设计**：pro(80/2.0) 与 active 相同系设计意图（差异在 rank 判定与付费权益，非配额），与客户端 types/beta.ts 同步；已在 rate_limit.py 加注释说明，数值不改 | S | — |
-| C6 | 误入库产物清理 | ① `client/public/sounds/_backup_original/*.wav`（42 个）git rm + gitignore；② `client/public/audio/*.mp3`（75.6MB）迁移 Git LFS；③ 6 个未跟踪 scratch 文件清理 | S | L |
+| C6 | 误入库产物清理 | ① 42 个备份 wav（零引用）已 git rm + gitignore ✅；② mp3 音景（75.6MB）LFS 迁移**暂缓**：`git lfs migrate` 需访问 GitHub 远程（当前网络不可达），且提交指针而无远程对象会损坏 CI 产物——保持 blob 存储（历史已含），待网络可用时执行 `git lfs migrate import --include="client/public/audio/*.mp3"` + pr-check.yml 加 `lfs: true`；③ 6 个未跟踪 scratch 文件已清理 ✅ | S | — |
 | C7 | 安全路径静默放行补日志 | prompt_guard.py:96 / input_validation.py:89 / base_provider.py:77/132 静默 pass 处补 `logger.warning`（安全检测被绕过需可观测） | S | M |
 
 ## 五、P1：开发者体验（首要目标）
@@ -121,7 +121,7 @@ docs/                          # 工程化 + 个人开发化平衡（按需裁�
 | D10 | 环境变量一致性 | ① .env.example（根 + server）补 12 个缺失变量（PAYMENT_* ×7、SUPABASE_SERVICE_KEY、BUDGET_* ×2、GATEWAY_ALLOW_DEV_AUTH、OTEL_EXPORTER_OTLP_ENDPOINT）；② docker-compose.prod.yml 转发 PAYMENT_*；③ 根/server 模板 JWT_SECRET 说法矛盾修复 | S | L |
 | D11 | store 订阅收尾 | 5 处整 store `useShallow(s => s)`（SoundSettings/TagEditPopover/InspirationCard/AISortPanel/useNoteAI）拆字段级；NoteTagFilter selector 内调用 action 反模式修复（订阅 notes + useMemo 派生） | S | L |
 | D12 | 工具函数收敛 | ① `lib/utils/time.ts`：formatDate/formatDuration/formatRelativeTime/formatTimeAgo/formatTime/stripHtml（12+ 处统一，注意 UnifiedTimeline vs SmartCapturePanel 已分叉行为）；② `lib/utils/stringHash.ts`：3 实现收敛；③ ID 生成统一到 uuid.ts（包装 crypto.randomUUID，40+ 处调用点） | S | L |
-| D13 | 依赖治理 | ① npm audit 可用化：CI/文档改用官方 registry 跑 audit；② 27 个 dependabot 分支分批合并（electron 35→43、better-sqlite3 11→13 大版本单独验证） | M | M |
+| D13 | 依赖治理 | ① npm audit 可用化：✅ CI 已加 `npm audit --registry=https://registry.npmjs.org --audit-level=high`（pr-check.yml），标准文档已注明镜像限制；② 28 个 dependabot 分支**需人工分批合并**（涉及 electron 35→43、better-sqlite3 等大版本，逐批验证构建；本次不自动执行） | M | M |
 | D14 | 测试噪音清理 | postcss.config.js 声明 `"type": "module"`；tiptap underline 重复注册修复；act() 警告清理；覆盖率快照入库或 CI 上传 | S | L |
 
 ## 六、P2：结构性重构（激进，分批）
@@ -132,7 +132,7 @@ docs/                          # 工程化 + 个人开发化平衡（按需裁�
 | R2 | NotesPage 1320 行拆分 | NoteCard.tsx（L558-1121）+ noteCardFx.ts（视觉工具 L88-140）+ DeleteFolderDialog/ClipImportDialog + formatDate/stripHtml 移 lib | M | M |
 | R3 | 其余巨型文件拆分 | NoteEditPage（锚点 hook/导出 lib/模板子组件）、FreeCanvas（选择状态机/工具栏）、FlashcardsPage（导入流程/统计徽章）、useNoteStore（模板/排序/搜索分离）、OnboardingPage（5 Step 组件）、captureManager（frame/audio/watchdog） | M×6 | M |
 | R4 | sync-service 拆分 | rooms.go 519 行（room_manager/rooms_handlers/rooms_ws）、relay.go 380 行（relay_manager/relay_handlers）；rooms_test.go 355 行作回归网 | M | M |
-| R5 | server 卫生 | ① requirements.txt 版本锁定（`==`）；② go.mod 与 CI go 版本统一；③ dead proto 清理（server/shared/proto 零引用，go_package 指向 github.com/keban/...）；④ conftest.py 补 @ai-context | S | L |
+| R5 | server 卫生 | ① requirements.txt 版本锁定 ✅（实测版本 == 锁定，google-genai 未安装保持 >=）；② go.mod(1.25) 与 CI(1.24) 统一 ✅（CI 升至 1.25）；③ dead proto 清理 ✅（3 个 .proto 零引用已删，go_package 指向已废弃的 github.com/keban/...）；④ conftest.py 补 @ai-context（待办） | S | L |
 | R6 | flashcards 补测试 | 33 文件零测试的核心功能：store（useFlashcardStore/useStudySessionStore）+ 会话数学纯函数（SM2/FSRS/间隔）优先 | M | M |
 | R7 | 门禁收紧 | oxlint 扩展规则（no-explicit-any/no-unused-vars/exhaustive-deps/no-unused-imports）；tsconfig 开启 noUnusedLocals/noUnusedParameters；覆盖率阈值与现状对齐决策（降阈或补测） | S | L |
 | R8 | 工作区卫生 | 根目录 scratch 文件清理；MCP 脚本（modelcontextprotocol/fs/seq/memory）从 package.json 移出或标注；git 死分支清理（origin/master 落后 350） | S | L |
