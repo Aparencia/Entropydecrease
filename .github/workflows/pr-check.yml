@@ -20,6 +20,7 @@ jobs:
       sync-service: ${{ steps.filter.outputs.sync-service }}
       ai-gateway: ${{ steps.filter.outputs.ai-gateway }}
       website: ${{ steps.filter.outputs.website }}
+      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -36,6 +37,10 @@ jobs:
               - 'server/shared/**'
             website:
               - 'website/**'
+            docs:
+              - 'docs/**'
+              - 'scripts/docs-check.mjs'
+              - '.docscheckignore'
 
   # ===========================================================================
   # Client —— React + Vite + Electron 前端
@@ -148,3 +153,19 @@ jobs:
         run: npx tsc --noEmit
       - name: Build
         run: npm run build
+
+  # ===========================================================================
+  # Docs —— 文档体系一致性检查（链接/索引/命名）
+  # ===========================================================================
+  docs:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Docs check
+        # 相对链接完整性 + 索引覆盖 + 命名规范（历史快照豁免见 docs/.docscheckignore）
+        run: node scripts/docs-check.mjs
