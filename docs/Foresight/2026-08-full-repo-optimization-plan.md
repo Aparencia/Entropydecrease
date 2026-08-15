@@ -22,7 +22,7 @@
 | P2 R7（门禁收紧） | ✅ 完成 | oxlint 扩展规则 + noUnusedLocals 开启 + 生产 any 清零 + --deny-warnings |
 | P2 R6（flashcards 测试） | ✅ 完成 | goldenErrorQueries/recoveryPack 纯函数 8 用例 |
 | P2 R8（工作区卫生） | ✅ 完成 | MCP 脚本收敛/scratch 清理/死代码清理 |
-| P2 R1（auth.py 拆分） | 🔄 执行中 | 拆 jwt_keys/jwt_verify/auth 三模块（331 pytest 回归网） |
+| P2 R1（auth.py 拆分） | ✅ 完成 | 613 → auth 157 / jwt_keys 310 / jwt_verify 125，331 pytest（含 21 e2e auth）全过，ruff 全过，re-export 与启动检查时机保持 |
 | P2 R2/R3（巨型文件拆分） | 🔄 执行中 | NotesPage 1299 行拆分中；其余巨型文件后续推进 |
 | P2 R4（rooms/relay 拆分） | ✅ 完成 | 5 文件（room_manager 248/rooms_handlers 141/rooms_ws 120/relay_manager 222/relay_handlers 144），go build/vet/test 全过 |
 
