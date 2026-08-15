@@ -61,3 +61,6 @@ coverage/
 # Scripts temp
 scripts/.mp3tmp/
 scripts/sounds_backup_original/
+
+# 音效源文件备份（42 个 wav，零代码引用，勿再提交）
+client/public/sounds/_backup_original/
