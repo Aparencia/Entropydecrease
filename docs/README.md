@@ -1,6 +1,6 @@
 # 熵减 (Entropydecrease) 项目文档
 
-> 文档总导航。目录结构：开发规范 / 产品设计 / 前瞻构想 / 架构决策 / 版本规划 / 模板 / 知识库，共 7 个区块。
+> 文档总导航。目录结构：开发规范 / 产品设计 / 前瞻构想 / 架构决策 / 版本规划 / 模板 / 知识库 / 归档，共 8 个区块（另有 `superpowers/` 为 AI 工作流产物，`archive/` 为已实施文档快照）。
 
 ## 📐 standards/ — 开发规范
 
@@ -52,6 +52,10 @@
 | [beta-tier-management.md](./product/beta-tier-management.md) | 内测用户分层管理方案（三层标准、升降级、各层运营动作） |
 | [beta-exclusive-system.md](./product/beta-exclusive-system.md) | 内测人员专属系统设计方案（身份权益体系） |
 | [client-feature-checklist.md](./product/client-feature-checklist.md) | 客户端功能清单与验收标准（v0.35.2 基线） |
+| [payment-system-spec.md](./product/payment-system-spec.md) | 付费系统规格说明（面包多验真 + tier 分级限额） |
+| [pomodoro-promotion-plan.md](./product/pomodoro-promotion-plan.md) | 深潜（番茄钟）宣传推广方案 v1.0 |
+| [temporary-revenue-implementation.md](./product/temporary-revenue-implementation.md) | 临时收入方案实施设计（已过时，仅历史参考） |
+| [design-system.md](./product/design-system.md) | 设计系统速查（浓缩宪法+执行规范+令牌，供设计工具引用） |
 
 ## 🔭 Foresight/ — 前瞻构想
 
@@ -67,6 +71,10 @@
 | [ai-gateway-optimization-plan.md](./Foresight/ai-gateway-optimization-plan.md) | AI 网关与调用机制优化方案 |
 | [innovation-features-catalog.md](./Foresight/innovation-features-catalog.md) | 产品创新功能全景目录 |
 | [sop-custom-design.md](./Foresight/sop-custom-design.md) | 用户自定义 SOP 设计考虑 |
+| [classroom-assistant-competitive-analysis.md](./Foresight/classroom-assistant-competitive-analysis.md) | 课堂助手竞品分析 |
+| [classroom-assistant-optimization-roadmap.md](./Foresight/classroom-assistant-optimization-roadmap.md) | 课堂助手优化路线图 |
+| [innovation-roadmap.md](./Foresight/innovation-roadmap.md) | 创新功能实施路线图（排期依据） |
+| [2026-08-full-repo-optimization-plan.md](./Foresight/2026-08-full-repo-optimization-plan.md) | 全仓优化计划（全面体检版，2026-08） |
 
 ### 头脑风暴
 
@@ -77,6 +85,7 @@
 | [focus-guardian-nurture-brainstorm.md](./Foresight/focus-guardian-nurture-brainstorm.md) | 深潜守护与养成系统头脑风暴 |
 | [pomodoro-customization-brainstorm.md](./Foresight/pomodoro-customization-brainstorm.md) | 番茄钟（深潜）自定义功能头脑风暴 |
 | [sop-module-brainstorm.md](./Foresight/sop-module-brainstorm.md) | SOP（标准作业程序）功能模块头脑风暴 |
+| [wiki-layout-brainstorm.md](./Foresight/wiki-layout-brainstorm.md) | Wiki 布局头脑风暴（已澄清并部分实施） |
 
 ## 🗺️ adr/ — 架构决策记录
 
@@ -102,7 +111,11 @@
 
 ## 📋 templates/ — 文档模板
 
-ADR、头脑风暴、估算、数据库迁移、知识卡片、MVP 画布、复盘、PRD、发布清单、Sprint 回顾、第三方评估共 11 个模板，直接见 [templates/](./templates/) 目录。
+ADR、头脑风暴、估算、数据库迁移、知识卡片、MVP 画布、复盘、PRD、发布清单、Sprint 回顾、第三方评估、归档共 12 个模板，直接见 [templates/](./templates/) 目录。
+
+## 🗄️ archive/ — 文档归档
+
+已实施完成的文档按日快照归档（`YYYY-MM-DD/`），技术债清单滚动维护（最新归档为唯一权威）。机制见 [archive/README.md](./archive/README.md) 与 [归档模板](./templates/archive-template.md)。
 
 ## 📚 knowledge/ — 知识库
 

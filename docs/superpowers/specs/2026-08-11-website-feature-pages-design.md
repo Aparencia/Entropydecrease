@@ -2,7 +2,7 @@
 
 > **日期**：2026-08-11
 > **状态**：已获用户确认（设计定稿 v1）
-> **关联**：[深潜番茄钟宣传推广方案](../product/pomodoro-promotion-plan.md) · [品牌故事](../product/brand-story.md) · [痛点图谱](../product/pain-points.md) · [AI时代生存定位](../product/ai-era-survival-positioning.md)
+> **关联**：[深潜番茄钟宣传推广方案](../../product/pomodoro-promotion-plan.md) · [品牌故事](../../product/brand-story.md) · [痛点图谱](../../product/pain-points.md) · [AI时代生存定位](../../product/ai-era-survival-positioning.md)
 
 ---
 
