@@ -1,33 +1,35 @@
 /**
  * @ai-context: inspiration 功能模块页面：InspirationPage。
+ * @ai-context: 从本页拆出的子组件——QuickInput（快速输入）、BatchControls（批量整理
+ * 控件）、SubjectFilter（学科筛选）、InspirationOrbList（球群列表）、
+ * ImmersiveTagPills（沉浸式标签药丸）、EmptyState（空状态）；本页保留状态编排与
+ * 页面级动画容器，交互与行为与拆分前一致。
  */
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Send, X, Wand2, Layers } from 'lucide-react';
-import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
+import { Sparkles } from 'lucide-react';
 import { useToast } from '@/components/ui';
-import { cn } from '@/lib/utils';
 import { useInspirationStore, type InspirationTags } from '../store/inspirationStore';
 import { useAITagContent } from '@/lib/ai/useAI';
 import { useBatchSort } from '../hooks/useBatchSort';
 import { useSortPendingReminder } from '../hooks/useSortPendingReminder';
 import { useImmersiveState } from '../hooks/useImmersiveState';
 import FilterBar from '../components/FilterBar';
-import InspirationCard from '../components/InspirationCard';
 import ImmersiveCanvas from '../components/ImmersiveCanvas';
 import GlassInspirationCard from '../components/GlassInspirationCard';
 import SortPendingBanner from '../components/SortPendingBanner';
 import OrderWellBackground from '../components/OrderWellBackground';
 import RitualHeader from '../components/RitualHeader';
 import FallingEmber, { type EmberEvent } from '../components/FallingEmber';
+import QuickInput from '../components/QuickInput';
+import BatchControls from '../components/BatchControls';
+import SubjectFilter from '../components/SubjectFilter';
+import InspirationOrbList from '../components/InspirationOrbList';
+import ImmersiveTagPills from '../components/ImmersiveTagPills';
+import EmptyState from '../components/EmptyState';
 import { useDeviceCapability } from '@/hooks/useDeviceCapability';
-import { CONTENT_NATURE_OPTIONS, COGNITIVE_DEPTH_OPTIONS, NATURE_MAP } from '../constants';
-import { groupInspirationsByNature } from '../lib/orbLayout';
+import { pageVariants, filterVariants } from '../constants';
 import type { FilterState } from '../types';
-import {
-  pageVariants, inputVariants, filterVariants,
-  listVariants,
-} from '../constants';
 
 // ─────────────────────────────────────────────────────────────
 // Main Page
@@ -188,47 +190,15 @@ export default function InspirationPage() {
       </RitualHeader>
 
       {/* ── Quick input area — 磨砂玻璃 + focus 光效 ── */}
-      <motion.div
-        variants={inputVariants}
-        className={cn(
-          'relative bg-bg-secondary/40 backdrop-blur-2xl border border-white/12 dark:border-white/6 rounded-[var(--kb-radius-xl)] p-kb-md',
-          'focus-within:border-accent-400/50 focus-within:shadow-[0_0_24px_rgba(74,155,217,0.1)]',
-          'transition-all duration-300',
-        )}
-      >
-        {/* top accent line */}
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent-400/30 to-transparent" />
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="随手记录萤火海沟、疑问、想法..."
-          rows={3}
-          className="w-full resize-none text-b2 text-text-primary placeholder:text-text-tertiary bg-transparent focus:outline-none"
-        />
-        <div className="flex items-center justify-between mt-2">
-          <span className="text-c1 text-text-tertiary">Ctrl+Enter 提交</span>
-          <motion.button
-            whileHover={{ scale: 1.03, outline: '2px solid rgba(91,138,114,0.3)' }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleSubmit}
-            disabled={!input.trim() || submitting}
-            className={cn(
-              'flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium',
-              'bg-brand-600 text-text-inverse shadow-md shadow-brand-500/15',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-              'transition-colors duration-200',
-            )}
-          >
-            {submitting || aiLoading ? (
-              <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />打标中...</>
-            ) : (
-              <><Send className="w-3.5 h-3.5" />记录</>
-            )}
-          </motion.button>
-        </div>
-      </motion.div>
+      <QuickInput
+        value={input}
+        onChange={setInput}
+        onSubmit={handleSubmit}
+        submitting={submitting}
+        aiLoading={aiLoading}
+        textareaRef={textareaRef}
+        onKeyDown={handleKeyDown}
+      />
 
       {/* ── Filter bar ── */}
       <AnimatePresence>
@@ -242,97 +212,25 @@ export default function InspirationPage() {
             <AnimatePresence>
               {showReminder && <SortPendingBanner pendingCount={pendingCount} onSortAll={handleSortAll} onDismiss={dismissReminder} />}
             </AnimatePresence>
-            {/* ── 批量模式入口 ── */}
-            <div className="flex items-center justify-between mt-1">
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setBatchMode(v => !v)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors',
-                  batchMode
-                    ? 'bg-accent-500/10 border-accent-400/40 text-accent-600 dark:text-accent-400'
-                    : 'bg-bg-secondary border-border/40 text-text-tertiary hover:text-text-secondary',
-                )}
-              >
-                <Layers className="w-3.5 h-3.5" />
-                {batchMode ? '退出批量' : '批量整理'}
-              </motion.button>
-              {batchMode && selectedIds.size > 0 && (
-                <span className="text-c1 text-text-tertiary">已选中 {selectedIds.size} 条</span>
-              )}
-            </div>
-            {/* ── 批量操作条 ── */}
-            <AnimatePresence>
-              {batchMode && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="flex items-center gap-2 flex-wrap pt-1"
-                >
-                  <motion.button whileTap={{ scale: 0.95 }} onClick={selectAll}
-                    className="px-2 py-0.5 rounded-full text-xs font-medium text-text-secondary bg-bg-secondary border border-border/40 hover:text-text-primary transition-colors">
-                    全选
-                  </motion.button>
-                  <motion.button whileTap={{ scale: 0.95 }} onClick={deselectAll}
-                    className="px-2 py-0.5 rounded-full text-xs font-medium text-text-tertiary bg-bg-secondary border border-border/40 hover:text-text-secondary transition-colors">
-                    取消全选
-                  </motion.button>
-                  <motion.button
-                    whileTap={{ scale: 0.95 }}
-                    onClick={handleBatchSort}
-                    disabled={selectedIds.size === 0 || batchProcessing}
-                    className={cn(
-                      'flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium',
-                      'bg-gradient-to-r from-cyber to-brand-500 text-text-inverse',
-                      'hover:from-cyber/90 hover:to-brand-600 shadow-sm shadow-cyber/20',
-                      'disabled:opacity-50 disabled:cursor-not-allowed',
-                    )}
-                  >
-                    {batchProcessing ? (<><AIThinkingIndicator size={3} gap={2} />分析中...</>) : (<><Wand2 className="w-3 h-3" />一键分析</>)}
-                  </motion.button>
-                  {batchProcessing && (
-                    <span className="text-c1 text-text-tertiary">正在分析 {progress}/{total}...</span>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-            {/* ── 批量进度条 ── */}
-            {batchProcessing && total > 0 && (
-              <div className="w-full h-1.5 rounded-full bg-bg-secondary overflow-hidden mt-1">
-                <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-cyber to-brand-500"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${(progress / total) * 100}%` }}
-                  transition={{ duration: 0.3 }}
-                />
-              </div>
-            )}
+            {/* ── 批量模式入口 + 操作条 + 进度条 ── */}
+            <BatchControls
+              batchMode={batchMode}
+              onToggleBatchMode={() => setBatchMode(v => !v)}
+              selectedCount={selectedIds.size}
+              onSelectAll={selectAll}
+              onDeselectAll={deselectAll}
+              onBatchSort={handleBatchSort}
+              batchProcessing={batchProcessing}
+              progress={progress}
+              total={total}
+            />
             {subjects.length > 0 && (
-              <motion.div
-                className="flex items-center gap-2 flex-wrap mt-2"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-              >
-                <span className="text-c1 text-text-tertiary min-w-[4em]">学科:</span>
-                {subjects.map(s => (
-                  <motion.button key={s} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                    onClick={() => setFilters(f => ({ ...f, subject: f.subject === s ? null : s }))}
-                    className={cn('px-2 py-0.5 rounded-full text-xs font-medium border transition-colors',
-                      filters.subject === s
-                        ? 'text-brand-700 bg-brand-100 border-brand-300 dark:text-brand-300 dark:bg-brand-900/20 dark:border-brand-700'
-                        : 'text-text-tertiary bg-bg-secondary border-border/40 hover:text-text-secondary')}>
-                    {s}
-                  </motion.button>
-                ))}
-                {filters.subject && (
-                  <motion.button whileTap={{ scale: 0.9 }}
-                    onClick={() => setFilters(f => ({ ...f, subject: null }))}
-                    className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs text-text-tertiary hover:text-semantic-error transition-colors">
-                    <X className="w-3 h-3" /> 清除
-                  </motion.button>
-                )}
-              </motion.div>
+              <SubjectFilter
+                subjects={subjects}
+                activeSubject={filters.subject}
+                onToggleSubject={(s) => setFilters(f => ({ ...f, subject: f.subject === s ? null : s }))}
+                onClearSubject={() => setFilters(f => ({ ...f, subject: null }))}
+              />
             )}
           </motion.div>
         )}
@@ -340,53 +238,17 @@ export default function InspirationPage() {
 
       {/* ── Inspiration orb groups ── */}
       {filteredItems.length > 0 ? (
-        <motion.div className="space-y-6 relative z-10" variants={listVariants}>
-          <AnimatePresence mode="popLayout">
-            {Object.entries(groupInspirationsByNature(filteredItems)).map(([nature, groupItems]) => (
-              <div key={nature}>
-                {/* 分组分隔线 + 类别名 */}
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="h-px bg-border/20 flex-1" />
-                  <span className="text-xs text-text-tertiary opacity-30">
-                    {NATURE_MAP[nature]?.label ?? nature}
-                  </span>
-                  <div className="h-px bg-border/20 flex-1" />
-                </div>
-                {/* 球群容器 */}
-                <div className="flex flex-wrap gap-4 justify-center">
-                  {groupItems.map(item => (
-                    <InspirationCard
-                      key={item.id}
-                      item={item}
-                      batchMode={batchMode}
-                      selected={selectedIds.has(item.id)}
-                      onToggleSelect={() => toggleSelect(item.id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </AnimatePresence>
-        </motion.div>
-      ) : items.length > 0 ? (
-        <motion.div className="text-center py-12 relative z-10"
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-          <p className="text-b2 text-text-tertiary">没有匹配的萤火海沟记录</p>
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-            onClick={() => setFilters({ content_nature: null, cognitive_depth: null, subject: null })}
-            className="mt-2 text-sm text-brand-600 hover:underline">
-            清除筛选
-          </motion.button>
-        </motion.div>
+        <InspirationOrbList
+          items={filteredItems}
+          batchMode={batchMode}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+        />
       ) : (
-        <motion.div className="relative z-10"
-          initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5 }}>
-          {/* 冷启动仪式空状态：海沟尚暗，等待第一只萤火 */}
-          <div className="kb-ritual-empty py-kb-xl">
-            <p className="kb-ritual-empty-title">海沟尚暗</p>
-            <p className="kb-ritual-empty-note">等待第一只萤火</p>
-          </div>
-        </motion.div>
+        <EmptyState
+          hasActiveFilter={items.length > 0}
+          onClearFilters={() => setFilters({ content_nature: null, cognitive_depth: null, subject: null })}
+        />
       )}
 
       {/* ── 沉浸式视图入口 ── */}
@@ -404,42 +266,12 @@ export default function InspirationPage() {
         onExit={exit}
       >
         {/* 标签选择药丸组 — 卡片上方 */}
-        <div className="w-full max-w-md space-y-1.5 mb-2">
-          <div className="flex items-center gap-1.5">
-            <span className="text-c1 text-text-tertiary shrink-0">性质:</span>
-            <div className="flex flex-wrap gap-1">
-              {CONTENT_NATURE_OPTIONS.map(opt => (
-                <button key={opt.value}
-                  onClick={() => setSelectedNature(opt.value)}
-                  className={cn(
-                    'rounded-full text-xs font-medium px-2.5 py-0.5 cursor-pointer transition-colors border',
-                    selectedNature === opt.value
-                      ? cn(opt.color, opt.bg, 'ring-1 ring-brand-300')
-                      : 'text-text-tertiary bg-bg-secondary/50 border-border/30 hover:text-text-secondary',
-                  )}>
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-c1 text-text-tertiary shrink-0">深度:</span>
-            <div className="flex flex-wrap gap-1">
-              {COGNITIVE_DEPTH_OPTIONS.map(opt => (
-                <button key={opt.value}
-                  onClick={() => setSelectedDepth(opt.value)}
-                  className={cn(
-                    'rounded-full text-xs font-medium px-2.5 py-0.5 cursor-pointer transition-colors border',
-                    selectedDepth === opt.value
-                      ? cn(opt.color, opt.bg, 'ring-1 ring-brand-300')
-                      : 'text-text-tertiary bg-bg-secondary/50 border-border/30 hover:text-text-secondary',
-                  )}>
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+        <ImmersiveTagPills
+          selectedNature={selectedNature}
+          onNatureChange={setSelectedNature}
+          selectedDepth={selectedDepth}
+          onDepthChange={setSelectedDepth}
+        />
 
         <GlassInspirationCard
           onSubmit={handleImmersiveSubmit}
