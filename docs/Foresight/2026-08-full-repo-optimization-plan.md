@@ -9,6 +9,25 @@
 
 ---
 
+## 执行状态总览（2026-08 更新）
+
+| 阶段 | 状态 | 说明 |
+|------|------|------|
+| 任务一 D1-D6（docs 整理） | ✅ 全部完成 | 链接修复/索引补齐/过期更新/标准引用/重组/自动化（docs-check.mjs 已接入 lint-staged） |
+| 任务二（docs-starter-kit） | ✅ 完成 | 根目录 `docs-starter-kit/` 纯净模板树（standards 20 + templates 12 + 各层 README + 启用指南） |
+| P0 C1-C7（安全与正确性） | ✅ 全部完成 | Feynman bug/Go panic 防护/依赖升级/lint-staged 修复/tier 核对/产物清理/安全日志 |
+| P1 D7-D14（开发者体验） | ✅ 全部完成 | 脚本补全/lint 158→0/静默 catch 95 处/环境变量/订阅收敛/工具统一/audit/postcss |
+| P2 覆盖率 | ✅ 达标 | lines 60.1%（≥60）/ funcs 50.7%（≥50）/ branches 53.4%（≥50），新增 18 测试文件 + flashcards 8 用例 |
+| P2 R5（server 卫生） | ✅ 完成 | requirements 锁定/go 版本统一/dead proto 删除/conftest @ai-context |
+| P2 R7（门禁收紧） | ✅ 完成 | oxlint 扩展规则 + noUnusedLocals 开启 + 生产 any 清零 + --deny-warnings |
+| P2 R6（flashcards 测试） | ✅ 完成 | goldenErrorQueries/recoveryPack 纯函数 8 用例 |
+| P2 R8（工作区卫生） | ✅ 完成 | MCP 脚本收敛/scratch 清理/死代码清理 |
+| P2 R1（auth.py 拆分） | 🔄 执行中 | 拆 jwt_keys/jwt_verify/auth 三模块（331 pytest 回归网） |
+| P2 R2/R3（巨型文件拆分） | 🔄 执行中 | NotesPage 1299 行拆分中；其余巨型文件后续推进 |
+| P2 R4（rooms/relay 拆分） | 🔄 执行中 | 拆 manager/handlers/ws（Go 测试回归网） |
+
+---
+
 ## 一、体检结论总览
 
 ### 1.1 好消息（代码纪律优于预期）
