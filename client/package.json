@@ -24,10 +24,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "postinstall": "electron-rebuild -f -w better-sqlite3",
-    "modelcontextprotocol": "mcp-server-sdk",
-    "fs": "mcp-server-filesystem",
-    "seq": "mcp-server-sequential-thinking",
-    "memory": "mcp-server-memory"
+    "mcp": "node scripts/mcp.mjs"
   },
   "dependencies": {
     "@automerge/automerge": "^3.3.2",
