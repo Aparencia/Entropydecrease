@@ -38,6 +38,8 @@ for (const step of steps) {
   const r = spawnSync(step.cmd, step.args, {
     cwd: join(ROOT, step.cwd),
     stdio: 'pipe',
+    // 命令与参数均为本文件内静态定义（无用户输入），shell 仅用于
+    // Windows 解析 .cmd 包装（npm/go/python），不存在注入面
     shell: process.platform === 'win32',
   });
   if (r.status === 0) {
