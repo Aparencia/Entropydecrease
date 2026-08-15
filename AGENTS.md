@@ -51,8 +51,11 @@
 
 ```bash
 # 客户端（在 client/ 目录下执行）
-npm run lint          # Oxlint 代码检查
+npm run lint          # Oxlint 代码检查（--deny-warnings：warning 即失败）
+npm run typecheck     # 渲染进程 TypeScript 编译检查
+npm run typecheck:electron  # Electron 主进程 TypeScript 编译检查
 npm run test          # Vitest 单元测试
+npm run check         # 聚合门禁：lint + typecheck ×2 + test
 npm run build         # tsc -b && vite build（TypeScript 编译 + Vite 打包）
 
 # Electron 桌面端构建
@@ -70,6 +73,7 @@ go build ./... && go vet ./... && go test ./...
 npm run build         # next build（静态导出）
 
 # 仓库级
+npm run docs:check    # 文档一致性检查（链接/索引/命名，历史快照豁免见 docs/.docscheckignore）
 npm run release:dry   # semantic-release 干跑验证（需 git 仓库）
 ```
 
