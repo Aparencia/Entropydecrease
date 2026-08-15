@@ -73,7 +73,7 @@ type RoomManager struct {
 var roomManager = &RoomManager{rooms: make(map[string]*Room)}
 
 func init() {
-	go roomManager.cleanupLoop()
+	go goSafe(roomManager.cleanupLoop)
 }
 
 // 错误哨兵

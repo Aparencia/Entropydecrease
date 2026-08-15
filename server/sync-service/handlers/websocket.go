@@ -170,8 +170,8 @@ func HandleWebSocketWithGin(c *gin.Context, userID string, deviceID string) {
 		return
 	}
 
-	go wsConn.writePump()
-	go wsConn.readPump()
+	go goSafe(wsConn.writePump)
+	go goSafe(wsConn.readPump)
 }
 
 // BroadcastOperation notifies all other online devices of a user about new operations.

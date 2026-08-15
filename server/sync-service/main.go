@@ -138,11 +138,11 @@ func main() {
 		Handler: r,
 	}
 
-	go func() {
+	go middleware.GoSafe(func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatal("Failed to start server", zap.Error(err))
 		}
-	}()
+	})
 
 	<-ctx.Done()
 	logger.Info("shutdown signal received, closing WebSocket connections")

@@ -56,7 +56,7 @@ const (
 )
 
 func init() {
-	go relayManager.cleanupLoop()
+	go goSafe(relayManager.cleanupLoop)
 }
 
 // cleanupLoop 周期回收过期配对（waiting 超 TTL / running 超最长存活）。
