@@ -35,11 +35,14 @@
 
 ### 剩余增量项（非阻塞，可后续推进）
 
+> 更新（2026-08 全仓体检核实）：P1-5 页面级 selector 已全部拆细（PomodoroPage/NotesPage/StudySessionPage/InspirationPage/useSocraticFlow/FeynmanPage 均为字段级订阅）；P2-14 存量迁移已实现（database.ts v20 upgrade 遍历 windowCaptures 内嵌 segments 物理搬迁至独立表）；P2-10 blob 迁移仍未做（维持可选）。剩余真增量项如下：
+
 | 项 | 说明 |
 |----|------|
-| P1-5 其余页面 | 番茄钟已 memo 化（P3-19）；闪卡/笔记/灵感页面的 `useShallow(s => s)` 整 store 订阅已用浅比较缓解，进一步拆细粒度 selector 需逐组件分析字段使用，增量推进 |
-| P2-10 blob 迁移（可选） | 本轮已落地压缩+懒加载的安全子集；完整的 base64→blob 引用迁移（影响同步/搜索/渲染 + 数据迁移）仍为高风险可选项，视后续存储压力再评估 |
-| P2-14 存量迁移（可选） | 本轮采用加法式（新表 + 旧数据回退，无迁移）；如需将旧会话内嵌 segments 物理搬迁至独立表以彻底瘦身，可后续加 v20 upgrade 迁移 |
+| P1-5 残余 5 处 | SoundSettings/TagEditPopover/InspirationCard/AISortPanel/useNoteAI 仍为整 store `useShallow(s => s)`（小组件），可增量拆字段 |
+| P1-5 反模式 1 处 | NoteTagFilter selector 内调用返回新数组的 action（getAllTags），浅比较永远失败，需改订阅 notes + useMemo 派生 |
+| P2-10 blob 迁移（可选） | 已落地压缩+懒加载的安全子集；完整的 base64→blob 引用迁移（影响同步/搜索/渲染 + 数据迁移）仍为高风险可选项，视后续存储压力再评估 |
+| P2-14 存量迁移 | ✅ 已实现（database.ts v20 upgrade），本项关闭 |
 
 ---
 

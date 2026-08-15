@@ -3,6 +3,7 @@
 > 调研日期：2026-08-01
 > 范围：server/ai-gateway/ + client AI 调用链路
 > 目标：识别风险、对标业界、制定可落地的优化路线图
+> 现状数字（2026-08 体检更新）：routers 46 个、chains 45 个、客户端 handlers 26 个（本文正文数字为调研时点快照）
 
 ---
 
@@ -353,44 +354,46 @@ ai_provider_health = Gauge("ai_provider_health", "Provider health status", ["pro
 
 ## 五、实施路线图
 
+> **实施状态更新（2026-08 全仓体检核实）**：Phase 1-2 全部落地；Phase 3 大部分落地（语义缓存 L2 未做）；Phase 4 仅 OTel 落地。逐项状态见下表 ✅/⚠️/❌。另：routers 已增至 46 个、chains 45 个（本文档正文数字为调研时点快照）。
+
 ### Phase 1：安全加固 + 熔断（2 周）🔴
 
-| 任务 | 优先级 | 工作量 | 影响面 |
-|------|--------|--------|--------|
-| 生产环境 JWT 降级模式改为拒绝启动 | P0 | 0.5d | auth.py |
-| Prompt 注入基础防护（正则模式） | P0 | 1d | 新增 middleware |
-| Provider 熔断器实现 | P0 | 2d | providers/ + fallback.py |
-| 流式 fallback 超时保护 | P0 | 0.5d | fallback.py |
-| 后台健康探活任务 | P1 | 1d | provider_bootstrap.py |
+| 任务 | 优先级 | 工作量 | 影响面 | 状态 |
+|------|--------|--------|--------|------|
+| 生产环境 JWT 降级模式改为拒绝启动 | P0 | 0.5d | auth.py | ✅ 已落地（auth.py:183-190 生产缺密钥 raise RuntimeError + GATEWAY_ALLOW_DEV_AUTH 开关） |
+| Prompt 注入基础防护（正则模式） | P0 | 1d | 新增 middleware | ✅ 已落地（middleware/prompt_guard.py，main.py:197 注册） |
+| Provider 熔断器实现 | P0 | 2d | providers/ + fallback.py | ✅ 已落地（providers/circuit_breaker.py） |
+| 流式 fallback 超时保护 | P0 | 0.5d | fallback.py | ✅ 已落地（总预算 + 首 token 探测 + tests/test_stream_fallback_timeout.py） |
+| 后台健康探活任务 | P1 | 1d | provider_bootstrap.py | ✅ 已落地（30s 探活循环，metrics 联动） |
 
 ### Phase 2：成本追踪 + 预算控制（2 周）🟡
 
-| 任务 | 优先级 | 工作量 | 影响面 |
-|------|--------|--------|--------|
-| Token 成本追踪模块 | P0 | 3d | 新增 cost/ |
-| 预算硬限制 + 告警 | P0 | 2d | middleware + cost/ |
-| Prometheus 指标采集 | P1 | 2d | 新增 observability/ |
-| 成本报表面板 | P1 | 2d | Grafana 配置 |
+| 任务 | 优先级 | 工作量 | 影响面 | 状态 |
+|------|--------|--------|--------|------|
+| Token 成本追踪模块 | P0 | 3d | 新增 cost/ | ✅ 已落地（cost/tracker.py，PRICE_TABLE + Redis 管道计数） |
+| 预算硬限制 + 告警 | P0 | 2d | middleware + cost/ | ✅ 已落地（cost/budget.py，超限 429 + tier 分级） |
+| Prometheus 指标采集 | P1 | 2d | 新增 observability/ | ✅ 已落地（observability/metrics.py，prometheus_client 可选降级） |
+| 成本报表面板 | P1 | 2d | Grafana 配置 | ❌ 未做（Grafana 面板未配置） |
 
 ### Phase 3：性能优化 + 缓存升级（3 周）🟢
 
-| 任务 | 优先级 | 工作量 | 影响面 |
-|------|--------|--------|--------|
-| 语义缓存（L2）实现 | P1 | 4d | cache/ |
-| Provider 连接池化 | P1 | 1d | providers/ |
-| 请求并发控制（Semaphore） | P1 | 1d | main.py |
-| 模型级联策略 | P2 | 3d | config/ + chains/ |
-| 响应压缩中间件 | P2 | 0.5d | main.py |
+| 任务 | 优先级 | 工作量 | 影响面 | 状态 |
+|------|--------|--------|--------|------|
+| 语义缓存（L2）实现 | P1 | 4d | cache/ | ❌ 未落地（cache/ 仍为精确 prompt hash L1） |
+| Provider 连接池化 | P1 | 1d | providers/ | ✅ 已落地（httpx 连接池 + Key 池化 config/key_pool.py） |
+| 请求并发控制（Semaphore） | P1 | 1d | main.py | ✅ 已落地（main.py:94-99 双信号量 20/3） |
+| 模型级联策略 | P2 | 3d | config/ + chains/ | ✅ 已落地（TIER_MODEL_ACCESS + feature 分组 fallback 链） |
+| 响应压缩中间件 | P2 | 0.5d | main.py | ✅ 已落地（GZipMiddleware minimum_size=500） |
 
 ### Phase 4：可观测性 + 未来扩展（3 周）🔵
 
-| 任务 | 优先级 | 工作量 | 影响面 |
-|------|--------|--------|--------|
-| OpenTelemetry 全链路追踪 | P2 | 3d | 全局 |
-| 生产流量 → 评估数据集管道 | P2 | 4d | 新增 eval/ |
-| 虚拟 Key 签发系统 | P2 | 3d | middleware/ |
-| Agent 范式支持预研 | P3 | 5d | 架构设计 |
-| 向量数据库集成预研 | P3 | 3d | 架构设计 |
+| 任务 | 优先级 | 工作量 | 影响面 | 状态 |
+|------|--------|--------|--------|------|
+| OpenTelemetry 全链路追踪 | P2 | 3d | 全局 | ✅ 已落地（observability/tracing.py，OTEL 可选 no-op 降级） |
+| 生产流量 → 评估数据集管道 | P2 | 4d | 新增 eval/ | ❌ 未实施 |
+| 虚拟 Key 签发系统 | P2 | 3d | middleware/ | ⚠️ 半落地（middleware/virtual_key.py 预实现，路由层未接入） |
+| Agent 范式支持预研 | P3 | 5d | 架构设计 | ❌ 未实施（保持规划状态） |
+| 向量数据库集成预研 | P3 | 3d | 架构设计 | ❌ 未实施（保持规划状态） |
 
 ---
 

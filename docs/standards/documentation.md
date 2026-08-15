@@ -176,10 +176,10 @@
 | 输出物 | 格式 | 存放位置 |
 |--------|------|---------|
 | README | Markdown | 项目/模块根目录 |
-| 架构文档 | Markdown + 图 | docs/architecture/ |
-| API 文档 | OpenAPI / Markdown | docs/api/ |
+| 架构文档 | Markdown + 图 | 按需创建 docs/architecture/（或并入 Foresight/） |
+| API 文档 | OpenAPI / Markdown | 按需创建 docs/api/（或并入对应服务文档） |
 | CHANGELOG | Markdown | 项目根目录 |
-| 操作手册 | Markdown | docs/operations/ |
+| 操作手册 | Markdown | 按需创建 docs/operations/（或并入 server-ops 规范） |
 
 ## 常见误区
 

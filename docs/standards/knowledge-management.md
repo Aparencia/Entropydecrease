@@ -150,7 +150,7 @@ knowledge/
 |--------|------|---------|
 | 知识卡片 | Markdown | knowledge/ 目录 |
 | 索引/标签 | Markdown | knowledge/index.md |
-| FAQ | Markdown | docs/faq.md |
+| FAQ | Markdown | 官网 FAQ（website/app/faq/）或按需创建 docs/faq.md |
 
 ## 常见误区
 

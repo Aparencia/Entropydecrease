@@ -60,7 +60,7 @@ npm run electron:build
 
 # 服务端 AI 网关（在 server/ai-gateway/ 目录下）
 pip install -r requirements.txt
-python -m pytest tests/ -q   # 单元测试（133 基线）
+python -m pytest tests/ -q   # 单元测试（331 基线）
 python main.py               # 启动 FastAPI 开发服务器
 
 # 同步服务（在 server/sync-service/ 目录下）
