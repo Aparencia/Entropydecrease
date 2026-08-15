@@ -92,7 +92,8 @@
 
 **定期审计：**
 ```bash
-# Node.js
+# Node.js —— 注意：镜像 registry（如 npmmirror）不支持 advisories API，
+# 必须显式指定官方源：npm audit --registry=https://registry.npmjs.org
 npm audit
 npm audit fix
 

@@ -67,6 +67,10 @@ jobs:
         run: cd client && npm run test -- --run --coverage
       - name: Build
         run: cd client && npm run build
+      - name: Audit (client)
+        # 供应链漏洞扫描：默认 registry 为 npmmirror 不支持 advisories API，
+        # 显式指定官方 registry（见 migration-spec §15.5）
+        run: cd client && npm audit --registry=https://registry.npmjs.org --audit-level=high
 
   # ===========================================================================
   # Server / sync-service —— Go + Gin 同步服务
