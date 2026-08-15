@@ -18,7 +18,7 @@
 | P0 C1-C7（安全与正确性） | ✅ 全部完成 | Feynman bug/Go panic 防护/依赖升级/lint-staged 修复/tier 核对/产物清理/安全日志 |
 | P1 D7-D14（开发者体验） | ✅ 全部完成 | 脚本补全/lint 158→0/静默 catch 95 处/环境变量/订阅收敛/工具统一/audit/postcss |
 | P2 覆盖率 | ✅ 达标 | lines 60.1%（≥60）/ funcs 50.7%（≥50）/ branches 53.4%（≥50），新增 18 测试文件 + flashcards 8 用例 |
-| P2 R5（server 卫生） | ✅ 完成 | requirements 锁定/go 版本统一/dead proto 删除/conftest @ai-context |
+| P2 R5（server 卫生） | ✅ 完成 | requirements 锁定/go 版本统一/dead proto 删除/conftest @ai-context/_TIER_RANK 单源化/nginx 双层限流复核（纵深设计加注释） |
 | P2 R7（门禁收紧） | ✅ 完成 | oxlint 扩展规则 + noUnusedLocals 开启 + 生产 any 清零 + --deny-warnings |
 | P2 R6（flashcards 测试） | ✅ 完成 | goldenErrorQueries/recoveryPack 纯函数 8 用例 |
 | P2 R8（工作区卫生） | ✅ 完成 | MCP 脚本收敛/scratch 清理/死代码清理 |
