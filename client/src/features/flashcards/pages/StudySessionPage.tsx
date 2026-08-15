@@ -2,42 +2,42 @@
  * 闪卡学习会话页
  *
  * @ai-context: 2026-07 拆分后的组合层。卡片交互时序（翻转门控/退出动画/
- * 拖拽评分）见 useCardInteraction，卡片舞台/评分区/两个弹窗为独立组件。
+ * 拖拽评分）见 useCardInteraction，选择器见 useStudySessionSelectors，右键
+ * 菜单见 useSessionContextMenu，卡片主体区见 SessionCardStage，弹窗组合见
+ * SessionModals，间隔建议见 lib/intervalSuggest。
+ * @ai-context: Assembly layer after the 2026-07 split. Interaction timing
+ * lives in useCardInteraction; selectors in useStudySessionSelectors; the
+ * context menu in useSessionContextMenu; the card body in SessionCardStage;
+ * the modal group in SessionModals; interval hints in lib/intervalSuggest.
  * @ai-context: SM2 流程——进入即 startSession 装载到期卡；评分后 store 计算
  * 下次间隔并推进 currentIndex；会话结束（isActive 转 false 且已完成>0）弹出
  * 统计。右键菜单提供搁置（dueDate 推后一年）/标记困难（easeFactor -0.2，
  * 下限 1.3）/AI 优化。
  */
-import { useEffect, useCallback, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, EmptyState, useToast } from '@/components/ui';
 import ModuleRitualHeader from '@/components/ui/ModuleRitualHeader';
-import { ContextMenu, type ContextMenuGroup } from '@/components/ui/ContextMenu';
-import { X, BookOpen, PauseCircle, AlertTriangle, Sparkles, Tablet, Gauge } from 'lucide-react';
+import { ContextMenu } from '@/components/ui/ContextMenu';
+import { X, BookOpen } from 'lucide-react';
 import { useStudySessionStore } from '../store/useStudySessionStore';
-import { useFlashcardStore } from '../store/useFlashcardStore';
 import { useContextMenu } from '@/lib/contextMenu/useContextMenu';
-import { calculateIntervals } from '@/lib/sm2';
 import type { DifficultyTier } from '@/lib/scheduler';
-import DifficultyLadder from '../components/DifficultyLadder';
 import type { Flashcard } from '@/types/models';
 import { useAIOptimizeCard } from '@/lib/ai/useAI';
 import { useAIMnemonic } from '@/lib/ai/hooks/useAIMnemonic';
-import { Modal } from '@/components/ui/Modal';
-import MnemonicBadge from '../components/MnemonicBadge';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
-import { CardStage, SessionCompleteView } from '../components/CardStage';
 import { SessionHeader } from '../components/SessionHeader';
 import { RatingBar } from '../components/RatingBar';
 import { MemoryStrengthPulse } from '../components/MemoryStrengthPulse';
-import { OptimizeSuggestionModal, SessionSummaryModal } from '../components/StudySessionModals';
-import { useCardInteraction } from '../hooks/useCardInteraction';
 import { ModeSelector } from '../components/ModeSelector';
-import { AudioReviewMode } from '../components/AudioReviewMode';
-import { WritingReviewMode } from '../components/WritingReviewMode';
-import { SpeakingReviewMode } from '../components/SpeakingReviewMode';
-import { SituationalReviewMode } from '../components/SituationalReviewMode';
-import { extractPlainText, type ReviewMode } from '../lib/reviewMode';
+import { SessionCardStage } from '../components/SessionCardStage';
+import { SessionModals } from '../components/SessionModals';
+import { useCardInteraction } from '../hooks/useCardInteraction';
+import { useSessionContextMenu } from '../hooks/useSessionContextMenu';
+import { useStudySessionSelectors } from '../hooks/useStudySessionSelectors';
+import { suggestIntervalValues } from '../lib/intervalSuggest';
+import type { ReviewMode } from '../lib/reviewMode';
 import { ttsController } from '@/features/assistant/lib/ttsController';
 
 export default function StudySessionPage() {
@@ -47,30 +47,15 @@ export default function StudySessionPage() {
   const searchParams = new URLSearchParams(window.location.hash.split('?')[1] ?? '');
   const miniLimit = Number(searchParams.get('mini') ?? 0) || undefined;
 
-  // M15: 细粒度订阅——整 store 订阅（useShallow(s => s)）会在任何字段变化时重渲染
-  // 重型子组件（卡片舞台/录音等），改为每个用到的字段单独订阅
-  const sessionCards = useStudySessionStore((s) => s.sessionCards);
-  const currentIndex = useStudySessionStore((s) => s.currentIndex);
-  const isFlipped = useStudySessionStore((s) => s.isFlipped);
-  const completedCount = useStudySessionStore((s) => s.completedCount);
-  const correctCount = useStudySessionStore((s) => s.correctCount);
-  const isActive = useStudySessionStore((s) => s.isActive);
-  const goldenErrors = useStudySessionStore((s) => s.goldenErrors);
-  const startSession = useStudySessionStore((s) => s.startSession);
-  const rateCard = useStudySessionStore((s) => s.rateCard);
-  const flipCard = useStudySessionStore((s) => s.flipCard);
-  const endSession = useStudySessionStore((s) => s.endSession);
-  const relearn = useStudySessionStore((s) => s.relearn);
-  const lastStabilityBefore = useStudySessionStore((s) => s.lastStabilityBefore);
-  const lastStabilityAfter = useStudySessionStore((s) => s.lastStabilityAfter);
-  const lastRating = useStudySessionStore((s) => s.lastRating);
-  const showStrengthPulse = useStudySessionStore((s) => s.showStrengthPulse);
-  const reviewMode = useStudySessionStore((s) => s.reviewMode);
-  const setReviewMode = useStudySessionStore((s) => s.setReviewMode);
+  // M15: 细粒度订阅——每个字段单独订阅（见 useStudySessionSelectors），
+  // 避免整 store 订阅导致重型子组件（卡片舞台/录音等）被无关字段重渲染
+  const {
+    sessionCards, currentIndex, isFlipped, completedCount, correctCount, isActive, goldenErrors,
+    startSession, rateCard, flipCard, endSession, relearn,
+    lastStabilityBefore, lastStabilityAfter, lastRating, showStrengthPulse,
+    reviewMode, setReviewMode, selectDeck, loadCards, updateCard,
+  } = useStudySessionSelectors();
 
-  const selectDeck = useFlashcardStore((s) => s.selectDeck);
-  const loadCards = useFlashcardStore((s) => s.loadCards);
-  const updateCard = useFlashcardStore((s) => s.updateCard);
   const { toast } = useToast();
   const {
     optimize: aiOptimize,
@@ -92,30 +77,6 @@ export default function StudySessionPage() {
   const current = sessionCards[currentIndex];
   const isComplete = !isActive && completedCount > 0;
 
-  // 右键菜单分组（组件内动态生成：无当前卡时禁用难度阶梯入口）
-  const sessionMenuGroups = useMemo<ContextMenuGroup[]>(() => [
-    {
-      label: '学习操作',
-      items: [
-        { key: 'suspend', label: '搁置当前卡', icon: <PauseCircle className="w-4 h-4" strokeWidth={1.5} /> },
-        { key: 'mark-hard', label: '标记困难', icon: <AlertTriangle className="w-4 h-4" strokeWidth={1.5} /> },
-      ],
-    },
-    {
-      label: 'AI 操作',
-      items: [
-        { key: 'ai-optimize', label: 'AI 优化卡片内容', icon: <Sparkles className="w-4 h-4" strokeWidth={1.5} /> },
-        { key: 'ai-mnemonic', label: '✨ 记忆术提示', icon: <Sparkles className="w-4 h-4" strokeWidth={1.5} /> },
-        // 自适应挑战阶梯：展示当前卡档位（间隔信号驱动），无当前卡时禁用
-        { key: 'difficulty-ladder', label: '🎯 难度阶梯', icon: <Gauge className="w-4 h-4" strokeWidth={1.5} />, disabled: !current },
-      ],
-    },
-  ], [current]);
-
-  const ci = useCardInteraction({
-    current, currentIndex, isFlipped, prefersReduced, rateCard, relearn,
-  });
-
   // 右键菜单
   const {
     isOpen: ctxOpen,
@@ -125,43 +86,19 @@ export default function StudySessionPage() {
     close: ctxClose,
   } = useContextMenu<Flashcard>();
 
-  const handleSessionSelect = useCallback(async (itemKey: string, card: Flashcard) => {
-    switch (itemKey) {
-      case 'suspend': {
-        const farFuture = new Date();
-        farFuture.setFullYear(farFuture.getFullYear() + 1);
-        updateCard(card.id, { dueDate: farFuture });
-        toast({ type: 'success', message: '卡片已搁置，请继续学习其他卡片' });
-        break;
-      }
-      case 'mark-hard': {
-        const newEaseFactor = Math.max(1.3, card.easeFactor - 0.2);
-        updateCard(card.id, { lapses: card.lapses + 1, easeFactor: newEaseFactor });
-        toast({ type: 'success', message: '已标记为困难卡片，后续会更频繁复习' });
-        break;
-      }
-      case 'ai-optimize': {
-        await aiOptimize(card.front, card.back);
-        setShowOptimizeModal(true);
-        break;
-      }
-      case 'ai-mnemonic': {
-        // P2 记忆术：生成谐音/故事/空间联想提示（懒加载，失败 toast 降级）
-        try {
-          await generateMnemonic(card.front, card.back);
-          setShowMnemonicModal(true);
-        } catch {
-          toast({ type: 'warning', message: '记忆术生成失败，请稍后重试' });
-        }
-        break;
-      }
-      case 'difficulty-ladder': {
-        // 自适应挑战阶梯：展示当前卡档位（纯本地展示，无需 AI 调用）
-        setShowDifficultyModal(true);
-        break;
-      }
-    }
-  }, [updateCard, toast, aiOptimize, generateMnemonic]);
+  const sessionMenu = useSessionContextMenu({
+    current,
+    updateCard,
+    aiOptimize,
+    generateMnemonic,
+    onOptimizeModal: () => setShowOptimizeModal(true),
+    onMnemonicModal: () => setShowMnemonicModal(true),
+    onDifficultyModal: () => setShowDifficultyModal(true),
+  });
+
+  const ci = useCardInteraction({
+    current, currentIndex, isFlipped, prefersReduced, rateCard, relearn,
+  });
 
   /** 难度阶梯升阶：把建议档位写入当前卡（复习流后续按此档位驱动） */
   const handleDifficultyPromote = (tier: DifficultyTier) => {
@@ -187,15 +124,7 @@ export default function StudySessionPage() {
   const progress = total > 0 ? Math.round((completedCount / total) * 100) : 0;
 
   // P0-5：calculateIntervals 每次渲染执行 4 次 sm2 计算，memo 化到当前卡变化
-  const intervalValues = useMemo(() => {
-    if (!current) return [1, 1, 1, 1];
-    const intervals = calculateIntervals({
-      easeFactor: current.easeFactor,
-      interval: current.interval,
-      repetitions: current.repetitions,
-    });
-    return [intervals.again, intervals.hard, intervals.good, intervals.easy];
-  }, [current]);
+  const intervalValues = useMemo(() => suggestIntervalValues(current), [current]);
 
   const handleRestart = () => {
     setShowSummary(false);
@@ -231,24 +160,6 @@ export default function StudySessionPage() {
     ttsController.stop();
     if (isFlipped) flipCard();
     setReviewMode(mode);
-  };
-
-  // 3.18 电子墨水学习板：次窗口展示当前卡片（仅在 Electron 环境可用）
-  const handleEinkShow = () => {
-    if (!current) return;
-    const api = window.electronAPI;
-    if (!api) {
-      toast({ type: 'warning', message: '墨水屏复习仅在桌面应用（Electron）中可用' });
-      return;
-    }
-    // M15: 非 Electron 或窗口创建失败时优雅降级（toast 提示），避免 unhandled rejection
-    api.invoke('eink:show-card', {
-      id: current.id,
-      front: extractPlainText(current.front),
-      back: extractPlainText(current.back),
-    }).catch(() => {
-      toast({ type: 'warning', message: '墨水屏窗口打开失败，请在桌面应用中重试' });
-    });
   };
 
   // 无可学习卡片
@@ -295,101 +206,33 @@ export default function StudySessionPage() {
       <ModeSelector mode={reviewMode} onChange={handleModeChange} />
 
       {/* 卡片主体 */}
-      <div
-        className="relative flex-1 flex items-center justify-center px-kb-md overflow-hidden"
-        onContextMenu={(e) => { if (current) ctxHandleMenu(e, current); }}
-      >
-        {/* 3.18 墨水屏复习：Electron 次窗口展示当前卡片 */}
-        {!isComplete && current && (
-          <button
-            type="button"
-            onClick={handleEinkShow}
-            className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2.5 py-1.5 rounded-kb-full text-xs text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary border border-border-subtle bg-bg-elevated/70 transition-colors"
-            title="在墨水屏窗口复习当前卡片"
-          >
-            <Tablet className="w-4 h-4" strokeWidth={1.5} />
-            墨水屏复习
-          </button>
-        )}
-        {!isComplete && current ? (
-          reviewMode === 'reading' ? (
-            <CardStage
-              card={current}
-              isFlipped={isFlipped}
-              entering={ci.entering}
-              exiting={ci.exiting}
-              exitDir={ci.exitDir}
-              cardGlow={ci.cardGlow}
-              prefersReduced={prefersReduced}
-              dragX={ci.dragX}
-              dragActive={ci.dragActive}
-              dragOverlayRed={ci.dragOverlayRed}
-              dragOverlayGreen={ci.dragOverlayGreen}
-              optimizeLoading={optimizeLoading}
-              onFlip={flipCard}
-              onFlipEnd={() => ci.setFlipDone(true)}
-              onDragStart={ci.handleDragStart}
-              onDrag={ci.handleDrag}
-              onDragEnd={ci.handleDragEnd}
-              onOpenSourceNote={(noteId) => navigate(`/notes/${noteId}`)}
-              onOptimize={handleOptimizeClick}
-            />
-          ) : reviewMode === 'listening' ? (
-            <div key={current.id} className="w-full animate-fade-in-up">
-              <AudioReviewMode
-                card={current}
-                isFlipped={isFlipped}
-                onFlip={flipCard}
-                onFlipEnd={() => ci.setFlipDone(true)}
-              />
-            </div>
-          ) : reviewMode === 'writing' ? (
-            <div key={current.id} className="w-full animate-fade-in-up">
-              <WritingReviewMode
-                card={current}
-                isFlipped={isFlipped}
-                onFlip={flipCard}
-                onFlipEnd={() => ci.setFlipDone(true)}
-              />
-            </div>
-          ) : reviewMode === 'speaking' ? (
-            <div key={current.id} className="w-full animate-fade-in-up">
-              <SpeakingReviewMode
-                card={current}
-                isFlipped={isFlipped}
-                onFlip={flipCard}
-                onFlipEnd={() => ci.setFlipDone(true)}
-              />
-            </div>
-          ) : (
-            <div key={current.id} className="w-full animate-fade-in-up">
-              <SituationalReviewMode
-                card={current}
-                isFlipped={isFlipped}
-                onFlip={flipCard}
-                onFlipEnd={() => ci.setFlipDone(true)}
-              />
-            </div>
-          )
-        ) : (
-          <SessionCompleteView
-            completedCount={completedCount}
-            sessionMastered={ci.sessionMastered}
-            goldenErrors={goldenErrors}
-            onRestart={handleRestart}
-            onFinish={handleFinish}
-            onRelearn={() => relearn()}
-          />
-        )}
-      </div>
+      <SessionCardStage
+        current={current}
+        isFlipped={isFlipped}
+        reviewMode={reviewMode}
+        isComplete={isComplete}
+        completedCount={completedCount}
+        sessionMastered={ci.sessionMastered}
+        goldenErrors={goldenErrors}
+        prefersReduced={prefersReduced}
+        optimizeLoading={optimizeLoading}
+        ci={ci}
+        onFlip={flipCard}
+        onOptimize={handleOptimizeClick}
+        onRestart={handleRestart}
+        onFinish={handleFinish}
+        onRelearn={() => relearn()}
+        onOpenSourceNote={(noteId) => navigate(`/notes/${noteId}`)}
+        onContextMenu={ctxHandleMenu}
+      />
 
       {/* 右键菜单 */}
       {ctxOpen && ctxCard && (
         <ContextMenu
-          groups={sessionMenuGroups}
+          groups={sessionMenu.groups}
           position={ctxPos}
           context={ctxCard}
-          onSelect={handleSessionSelect}
+          onSelect={sessionMenu.handleSelect}
           onClose={ctxClose}
         />
       )}
@@ -423,68 +266,31 @@ export default function StudySessionPage() {
         />
       )}
 
-      {showOptimizeModal && (
-        <OptimizeSuggestionModal
-          data={optimizeData}
-          loading={optimizeLoading}
-          error={optimizeError}
-          onAdopt={handleAdoptSuggestion}
-          onDismiss={() => setShowOptimizeModal(false)}
-        />
-      )}
-
-      {/* P2 记忆术提示弹层：谐音/故事/空间联想（懒加载生成） */}
-      <Modal
-        open={showMnemonicModal}
-        onClose={() => setShowMnemonicModal(false)}
-        title="✨ 记忆术提示"
-        description="通过联想让记忆更牢固"
-        size="sm"
-      >
-        {mnemonicLoading && (
-          <div className="py-6 text-center text-c1 text-text-tertiary animate-pulse">
-            正在构思记忆术…
-          </div>
-        )}
-        {mnemonicError && !mnemonicLoading && (
-          <p className="py-6 text-center text-c1 text-text-tertiary">记忆术生成失败，请稍后重试</p>
-        )}
-        {mnemonicData && !mnemonicLoading && <MnemonicBadge mnemonic={mnemonicData} />}
-      </Modal>
-
-      {/* 自适应挑战阶梯弹窗：展示当前卡档位（间隔信号驱动），升阶写入 difficultyTier */}
-      <Modal
-        open={showDifficultyModal}
-        onClose={() => setShowDifficultyModal(false)}
-        title="🎯 难度阶梯"
-        description="自适应挑战：讲给小孩 → 创新应用，按间隔信号逐级升阶"
-        size="sm"
-      >
-        {current ? (
-          <DifficultyLadder
-            card={{
-              interval: current.interval,
-              repetitions: current.repetitions,
-              lapses: current.lapses,
-              difficultyTier: current.difficultyTier,
-            }}
-            onPromote={handleDifficultyPromote}
-          />
-        ) : (
-          <p className="py-6 text-center text-c1 text-text-tertiary">当前没有可展示的卡片</p>
-        )}
-      </Modal>
-
-      {showSummary && (
-        <SessionSummaryModal
-          completedCount={completedCount}
-          total={total}
-          correctRate={correctRate}
-          sessionMastered={ci.sessionMastered}
-          onRestart={handleRestart}
-          onFinish={handleFinish}
-        />
-      )}
+      {/* 弹窗组合：AI 优化 / 记忆术 / 难度阶梯 / 完成统计 */}
+      <SessionModals
+        showOptimizeModal={showOptimizeModal}
+        optimizeData={optimizeData}
+        optimizeLoading={optimizeLoading}
+        optimizeError={optimizeError}
+        showMnemonicModal={showMnemonicModal}
+        mnemonicLoading={mnemonicLoading}
+        mnemonicError={mnemonicError}
+        mnemonicData={mnemonicData}
+        showDifficultyModal={showDifficultyModal}
+        current={current}
+        showSummary={showSummary}
+        completedCount={completedCount}
+        total={total}
+        correctRate={correctRate}
+        sessionMastered={ci.sessionMastered}
+        onAdoptSuggestion={handleAdoptSuggestion}
+        onDismissOptimize={() => setShowOptimizeModal(false)}
+        onCloseMnemonic={() => setShowMnemonicModal(false)}
+        onPromoteTier={handleDifficultyPromote}
+        onCloseDifficulty={() => setShowDifficultyModal(false)}
+        onRestart={handleRestart}
+        onFinish={handleFinish}
+      />
     </div>
   );
 }
