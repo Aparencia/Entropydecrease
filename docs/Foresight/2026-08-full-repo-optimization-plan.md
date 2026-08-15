@@ -23,7 +23,7 @@
 | P2 R6（flashcards 测试） | ✅ 完成 | goldenErrorQueries/recoveryPack 纯函数 8 用例 |
 | P2 R8（工作区卫生） | ✅ 完成 | MCP 脚本收敛/scratch 清理/死代码清理 |
 | P2 R1（auth.py 拆分） | ✅ 完成 | 613 → auth 157 / jwt_keys 310 / jwt_verify 125，331 pytest（含 21 e2e auth）全过，ruff 全过，re-export 与启动检查时机保持 |
-| P2 R2/R3（巨型文件拆分） | 🔄 R2 完成，R3 执行中 | NotesPage 1299→293 行（22 新文件）✅；R3 批：NoteEditPage 879/FreeCanvas 672/useNoteStore 611/FlashcardsPage 630/StudySessionPage 476/useStudySessionStore 507/OnboardingPage 577/ProfileSettings 443/captureManager 558/InspirationPage 463 拆分中（5 路并行） |
+| P2 R2/R3（巨型文件拆分） | ✅ 全部完成 | NotesPage 1299→293（22 文件）；NoteEditPage 879→274（17 文件）；FreeCanvas 672→268（5 文件）；useNoteStore 611→79（组合式 slice）；FlashcardsPage 630→276；StudySessionPage 490→296；useStudySessionStore 507→284；OnboardingPage 577→94；ProfileSettings 443→234；captureManager 558→261（5 管线）；InspirationPage 463→288 —— 共 61 个新文件，全部 ≤300 行；补 sessionMath 13 用例保覆盖率达标 |
 | P2 R4（rooms/relay 拆分） | ✅ 完成 | 5 文件（room_manager 248/rooms_handlers 141/rooms_ws 120/relay_manager 222/relay_handlers 144），go build/vet/test 全过 |
 
 ---
