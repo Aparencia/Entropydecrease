@@ -270,9 +270,9 @@ export class DexieSearchIndexer implements ISearchEngine {
     await processBatch();
   }
 
-  /** 释放资源（Dexie 模式下无需额外清理） */
+  /** 释放资源（Dexie 模式下无需额外清理；与 init 对称的 no-op） */
   dispose(): void {
-    this.initialized = false;
+    // no-op：无连接/索引句柄需要释放
   }
 }
 
