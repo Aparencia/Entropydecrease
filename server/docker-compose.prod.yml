@@ -119,6 +119,8 @@ services:
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-}
+      # 开发者白名单（邮箱或 user_id，逗号分隔）：完全豁免配额/费用限制并赋予 lifetime 身份
+      DEV_USER_IDS: ${DEV_USER_IDS:-}
       # 预算控制（每日 token/费用上限，0=不限制）
       BUDGET_DAILY_TOKEN_LIMIT: ${BUDGET_DAILY_TOKEN_LIMIT:-0}
       BUDGET_DAILY_COST_LIMIT: ${BUDGET_DAILY_COST_LIMIT:-0}
