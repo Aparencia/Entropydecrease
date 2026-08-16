@@ -18,27 +18,47 @@ export function useClipImport() {
   const [clipLoading, setClipLoading] = useState(false);
 
   const handleClipUrl = useCallback(async () => {
-    if (!clipUrl.trim() || !window.electronAPI?.invoke) return;
+    if (!clipUrl.trim()) return;
     setClipLoading(true);
     try {
-      const result = await window.electronAPI.invoke('import:fetch-url', { url: clipUrl.trim() }) as { success: boolean; content?: { title: string; text: string }; error?: string };
-      if (result.success && result.content) {
-        const { title, text } = result.content;
-        await createNote({ title: title.slice(0, 100), content: text, template: 'blank', folderId: selectedFolderId ?? undefined });
-        toast({ type: 'success', message: `网页已剪藏为笔记：${title.slice(0, 30)}`, silent: true });
-        setClipUrl('');
+      let title = '';
+      let text = '';
+      if (window.electronAPI?.invoke) {
+        // Electron：主进程 fetch（无 CORS 限制）+ 解析
+        const result = await window.electronAPI.invoke('import:fetch-url', { url: clipUrl.trim() }) as { success: boolean; content?: { title: string; text: string }; error?: string };
+        if (!result.success || !result.content) {
+          toast({ type: 'warning', message: result.error || '剪藏失败，请手动粘贴内容' });
+          return;
+        }
+        title = result.content.title;
+        text = result.content.text;
       } else {
-        toast({ type: 'warning', message: result.error || '剪藏失败，请手动粘贴内容' });
+        // PWA/浏览器：直接 fetch + DOMParser 提取标题与正文（受 CORS 限制，
+        // 目标站点不允许跨域时抛出并降级为手动粘贴提示）
+        const resp = await fetch(clipUrl.trim(), { signal: AbortSignal.timeout(10000) });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const html = await resp.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        title = doc.title || new URL(clipUrl.trim()).hostname;
+        text = doc.body?.innerText?.trim() ?? '';
+        if (!text) throw new Error('empty page');
       }
+      await createNote({ title: title.slice(0, 100) || '未命名剪藏', content: text, template: 'blank', folderId: selectedFolderId ?? undefined });
+      toast({ type: 'success', message: `网页已剪藏为笔记：${title.slice(0, 30)}`, silent: true });
+      setClipUrl('');
     } catch {
-      toast({ type: 'error', message: '剪藏失败，请检查网络或手动粘贴' });
+      toast({ type: 'warning', message: '剪藏失败：该网站不允许直接抓取，请手动复制内容' });
     } finally {
       setClipLoading(false);
     }
   }, [clipUrl, createNote, selectedFolderId, toast]);
 
   const handleClipPdf = useCallback(async () => {
-    if (!window.electronAPI?.invoke) return;
+    if (!window.electronAPI?.invoke) {
+      // PWA/浏览器：明确降级提示（浏览器无内置 PDF 文本解析，MVP 阶段引导桌面端导入）
+      toast({ type: 'warning', message: '移动端暂不支持 PDF 直接导入，请用桌面端导入或复制文本' });
+      return;
+    }
     setClipLoading(true);
     try {
       const result = await window.electronAPI.invoke('import:parse-pdf') as { success: boolean; content?: { title: string; text: string }; canceled?: boolean; error?: string };
