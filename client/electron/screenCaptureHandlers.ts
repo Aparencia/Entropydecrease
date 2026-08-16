@@ -14,6 +14,7 @@ import type { ScreenCaptureOptions, ScreenshotFrameData } from './screenCapture.
 import { safeHandle, getMainWindowId } from './ipcUtils.js';
 import { logger } from './logger.js';
 import { scoreAndFilterWindows } from './windowScorer.js';
+import type { WindowSignalInput } from './windowRules.js';
 import { getCaptureRateScale, onPerformanceModeChange } from './performanceMode.js';
 
 // ================================================================
@@ -62,6 +63,16 @@ function applyRateScale(options: ScreenCaptureOptions): ScreenCaptureOptions {
     scaled.interval = Math.min(60000, Math.round(scaled.interval / rateScale));
   }
   return scaled;
+}
+
+/**
+ * 构建 source id → 评分信号的映射。
+ * @ai-context: 阶段一为空映射（纯标题评分）；阶段二接入 native 窗口枚举后填充
+ * 进程名/几何/前台信号。信号源缺失时返回空 Map，评分自动降级。
+ */
+function buildSignalMap(sources: Electron.DesktopCapturerSource[]): Map<string, WindowSignalInput> {
+  void sources;
+  return new Map();
 }
 
 /** 销毁旧实例并按其参数/推送目标重建采集（start 与性能模式重启共用） */
@@ -193,8 +204,8 @@ export function registerScreenCaptureHandlers(): void {
         };
       });
 
-      // 智能评分、过滤与排序
-      return scoreAndFilterWindows(rawWindows);
+      // 智能评分、过滤与排序（阶段一：空信号映射，纯标题评分）
+      return scoreAndFilterWindows(rawWindows, { signalsBySourceId: buildSignalMap(sources) });
     } catch (err) {
       logger.error('[IPC] screen_list_windows failed:', err);
       return [];
@@ -230,7 +241,7 @@ export function registerScreenCaptureHandlers(): void {
             return { id: src.id, title: src.name, thumbnail: thumb.toDataURL() };
           });
 
-          const scored = scoreAndFilterWindows(rawWindows);
+          const scored = scoreAndFilterWindows(rawWindows, { signalsBySourceId: buildSignalMap(sources) });
 
           // 推送到渲染进程
           const mainWindowId = getMainWindowId();
