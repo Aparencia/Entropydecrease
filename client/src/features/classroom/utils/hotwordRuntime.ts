@@ -90,3 +90,15 @@ export function addDynamicBoosts(terms: string[]): void {
   if (cleaned.length === 0) return;
   activeBoosts = [...new Set([...activeBoosts, ...cleaned])].slice(0, 30);
 }
+
+/**
+ * P1-3：会话内立即生效的替换词条（用户修正回写）。
+ * 与持久化词库（hotwordStore）区分：仅当前会话生效（后续转写应用），
+ * 持久化由调用方写 hotwordStore；去重防止重复追加。
+ */
+export function addSessionReplace(term: string, target: string): void {
+  const t = term.trim();
+  if (!t || t.length > 20) return;
+  if (activeReplaces.some((r) => r.term === t && (r.target ?? '') === target)) return;
+  activeReplaces = [...activeReplaces, { term: t, target: target ?? '' }];
+}

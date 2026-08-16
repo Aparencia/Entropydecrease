@@ -60,8 +60,8 @@ export default function ClassroomPage() {
     setShowNoteDialog(true);
   }, [capture]);
 
-  // M 快捷键：课中标记重点
-  const { handleBookmark } = capture;
+  // M 快捷键：课中标记重点；C 快捷键：手动补截当前画面（P1-8）
+  const { handleBookmark, handleManualCapture } = capture;
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'm' || e.key === 'M') {
       // 避免在输入框中触发
@@ -69,7 +69,13 @@ export default function ClassroomPage() {
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       handleBookmark();
     }
-  }, [handleBookmark]);
+    if (e.key === 'c' || e.key === 'C') {
+      // 避免在输入框中触发（快捷键截图同样跳过编辑态）
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      handleManualCapture();
+    }
+  }, [handleBookmark, handleManualCapture]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);

@@ -33,9 +33,11 @@ import { detectCourseFromFrame } from '@/lib/ai/courseDetector';
 import { remapKeyframeMarkers } from '../utils/tipTapImageUtils';
 import { persistKeyframeImage } from '../utils/keyframePersistence';
 import { transcribeWithRetry, toAsrLanguage, useAsrSemaphore, isLocalAsrReady, setOnAsrFallback } from '../utils/asrTranscriber';
-import { applySessionReplaces, getSessionHotwordsString, addDynamicBoosts } from '../utils/hotwordRuntime';
+import { applySessionReplaces, getSessionHotwordsString, addDynamicBoosts, addSessionReplace } from '../utils/hotwordRuntime';
 import { cleanAsrResult, dedupeAcrossFinals, estimateAsrConfidence } from '@/lib/capture/asrFilters';
 import { classifyContent, hasCommandCue, type ContentKind } from '@/lib/capture/contentClassifier';
+import { hotwordStore } from '@/lib/storage/hotwordStore';
+import { extractCorrection } from '../utils/transcriptCorrection';
 
 /** 触发一次增量分析所需的关键帧数 */
 const INCREMENTAL_BATCH_SIZE = 5;
@@ -67,6 +69,8 @@ interface UseClassroomEventsOptions {
   streamingAsrActive: boolean;
   /** P1-6：目标窗口标题（内容类型分类的标题信号） */
   windowTitle?: string;
+  /** P1-3：当前课程名（修正回写词库的 courseId 绑定） */
+  courseName?: string;
 }
 
 /** P1-6 分类尝试上限（转写样本仍无信号则停止，unknown 不再重试） */
@@ -75,10 +79,12 @@ const MAX_CLASSIFY_ATTEMPTS = 5;
 const FORCE_CAPTURE_MIN_INTERVAL_MS = 1000;
 /** P1-6 分类转写样本上限（字符，FIFO 追加防无界） */
 const MAX_CLASSIFY_SAMPLE_CHARS = 500;
+/** P1-8 漏捕检测延迟：指令句后该时长内无新关键帧 → 提示（ms） */
+const MISSED_CAPTURE_CHECK_MS = 3000;
 
 export function useClassroomEvents({
   captureManager, status, capturePath, language, aiDetectEnabled, setCourseMeta, onNotify,
-  streamingAsrActive, windowTitle,
+  streamingAsrActive, windowTitle, courseName,
 }: UseClassroomEventsOptions) {
   const [segments, setSegments] = useState<ExtractedSegment[]>([]);
   const [stats, setStats] = useState({ frames: 0, extracted: 0 });
@@ -105,6 +111,8 @@ export function useClassroomEvents({
   const transcriptSampleRef = useRef('');
   /** P1-7 指令补帧节流时间戳 */
   const lastForceCaptureAtRef = useRef(0);
+  /** P1-8 最近一次关键帧时间戳（漏捕检测依据：指令后无新帧即提示） */
+  const latestKeyframeTsRef = useRef(0);
   /** @ai-context 会话时间基准（epoch ms）：记录首帧 timestamp，供 analyzePartial 换算相对秒数 */
   const sessionStartMsRef = useRef<number | null>(null);
   /** 采集会话 ID（smart:keyframe 事件携带），供笔记持久化关联与关键帧图片清理 */
@@ -148,13 +156,20 @@ export function useClassroomEvents({
         console.info(`[useClassroomCapture] 内容类型识别: ${result.kind}（${result.source}）`);
       }
     }
-    // 指令句补帧（技能场景操作瞬间捕捉）
+    // 指令句补帧（技能场景操作瞬间捕捉）+ 漏捕检测
     if (hasCommandCue(text)) {
       const now = Date.now();
       if (now - lastForceCaptureAtRef.current >= FORCE_CAPTURE_MIN_INTERVAL_MS) {
         lastForceCaptureAtRef.current = now;
         captureManager.requestForceCapture();
       }
+      // P1-8 漏捕检测：指令后 3s 无新关键帧 → 提示手动补截
+      const commandAt = now;
+      window.setTimeout(() => {
+        if (latestKeyframeTsRef.current < commandAt) {
+          toast({ type: 'warning', silent: true, message: '这一步的画面可能没捕捉到，可按 C 键手动截图' });
+        }
+      }, MISSED_CAPTURE_CHECK_MS);
     }
   };
 
@@ -176,7 +191,7 @@ export function useClassroomEvents({
   useEffect(() => {
     const offCompleted = captureEventBus.on<{
       sessionId: string | null;
-      result: { text: string; confidence: number; source: 'vision' | 'audio' | 'ui_automation' };
+      result: { text: string; confidence: number; source: 'vision' | 'audio' | 'ui_automation'; structured?: Record<string, unknown> };
       segment: { id: string; timestamp: Date };
       extractedCount: number;
     }>('extraction:completed', (data) => {
@@ -190,6 +205,20 @@ export function useClassroomEvents({
       setSegments((prev) => [...prev, uiSegment]);
       setStats((prev) => ({ ...prev, extracted: data.extractedCount }));
       setExtractionError(null);
+
+      // P1-2 动态热词闭环：视觉提取的概念术语注入会话热词（弱 boost，
+      // 不持久化）；流式运行中同步更新主进程会话热词（下一断句生效）
+      if (data.result.source === 'vision') {
+        const concepts = data.result.structured?.concepts;
+        if (Array.isArray(concepts)) {
+          const terms = concepts.filter((c): c is string => typeof c === 'string');
+          if (terms.length > 0) {
+            addDynamicBoosts(terms);
+            window.electronAPI?.local_asr_stream_set_hotwords({ hotwords: getSessionHotwordsString() })
+              .catch(() => { /* 静默 */ });
+          }
+        }
+      }
     });
 
     const offError = captureEventBus.on<{ message: string }>(
@@ -209,6 +238,8 @@ export function useClassroomEvents({
         if (sessionStartMsRef.current === null) {
           sessionStartMsRef.current = data.keyframe.timestamp;
         }
+        // P1-8：更新最近关键帧时间戳（漏捕检测依据）
+        latestKeyframeTsRef.current = data.keyframe.timestamp;
         captureSessionIdRef.current = data.sessionId;
         setSmartBundle((prev) => ({
           ...prev,
@@ -512,7 +543,8 @@ export function useClassroomEvents({
     return off;
   }, [status, captureManager]);
 
-  // P1-2：转写编辑回调——修正直播转录文本，audioText 存修正后文本供下游消费
+  // P1-2：转写编辑回调——修正直播转录文本，audioText 存修正后文本供下游消费；
+  // P1-3：修正差异自动回写本地词库（replace 词条，课程维度绑定，下次识别生效）
   const handleEditTranscript = useCallback((id: string, newText: string) => {
     setLiveTranscripts((prev) =>
       prev.map((t) => (t.id === id ? { ...t, editedText: newText } : t)),
@@ -524,7 +556,32 @@ export function useClassroomEvents({
         s.id === id ? { ...s, audioText: newText, audioTextRaw: s.audioText } : s,
       ),
     }));
-  }, []);
+
+    // ── P1-3 修正回写（讯飞「用户修正回写」/飞书「改字同步」闭环）──
+    const original = liveTranscripts.find((t) => t.id === id)?.text ?? '';
+    const correction = extractCorrection(original, newText);
+    if (correction) {
+      // 会话内立即生效（后续转写应用替换）
+      addSessionReplace(correction.term, correction.target);
+      // 持久化词库（去重后写入；失败静默，不影响编辑结果）
+      hotwordStore.listForCourse(courseName).then((entries) => {
+        const exists = entries.some(
+          (e) => e.kind === 'replace' && e.term === correction.term && (e.target ?? '') === correction.target,
+        );
+        if (!exists) {
+          return hotwordStore.add({
+            term: correction.term,
+            target: correction.target,
+            kind: 'replace',
+            courseId: courseName,
+            enabled: true,
+          });
+        }
+        return null;
+      }).catch(() => { /* 词库写入失败静默 */ });
+      toast({ type: 'info', silent: true, message: `已记住修正：「${correction.term}」→「${correction.target}」` });
+    }
+  }, [liveTranscripts, courseName, toast]);
 
   return {
     segments, setSegments, stats, setStats, extractionError, setExtractionError,

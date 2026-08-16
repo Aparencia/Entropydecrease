@@ -147,6 +147,7 @@ export function useClassroomCapture() {
     onNotify: notify,
     streamingAsrActive,
     windowTitle: selectedWindow?.title,
+    courseName: courseMeta.courseName,
   });
 
   // 转写/提取段最新值 ref 桥：停止收尾（useSessionControl）在事件回调
@@ -321,6 +322,13 @@ export function useClassroomCapture() {
     notify('success', `已标记重点 (${new Date(now).toLocaleTimeString()})`);
   }, [status, notify, captureManager, setSmartBundle]);
 
+  // ── P1-8 手动补截：快捷键触发强制补帧（复用 P1-7 机制，下一帧跳过变化检测门槛）──
+  const handleManualCapture = useCallback(() => {
+    if (status !== 'capturing') return;
+    captureManager.requestForceCapture();
+    notify('info', '已手动捕捉当前画面');
+  }, [status, notify, captureManager]);
+
   return {
     // 窗口
     ...windowWatcher,
@@ -362,6 +370,8 @@ export function useClassroomCapture() {
     handleRetryMerge: analysis.handleRetryMerge,
     handleDismissAnalysis: analysis.handleDismissAnalysis,
     handleGenerateCards, handleBookmark, bookmarks,
+    // P1-8 手动补截（漏捕检测提示的补救操作）
+    handleManualCapture,
     // M2 自动锚点（时间线展示）
     autoAnchors,
     // 笔记持久化
