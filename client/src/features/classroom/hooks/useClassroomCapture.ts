@@ -351,6 +351,7 @@ export function useClassroomCapture() {
     // 实时转录
     liveTranscripts: events.liveTranscripts,
     handleEditTranscript: events.handleEditTranscript,
+    handleCycleSpeaker: events.handleCycleSpeaker,
     // 真流式进行中的 partial 文本 + 激活标志
     partialText: events.partialText,
     streamingAsrActive,

@@ -163,6 +163,8 @@ export interface AudioSegment {
   audioText?: string | null;
   /** 原始 ASR 转写文本（热词替换前），保真溯源用 */
   audioTextRaw?: string | null;
+  /** P1-4：手动标注的说话人（飞书式重新识别；未标注为 undefined） */
+  speaker?: string;
 }
 
 /** @ai-context 全局时间轴条目，串联关键帧和语音段供后续分析回放 */

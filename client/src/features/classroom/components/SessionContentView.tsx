@@ -103,6 +103,7 @@ export function SessionContentView({ capture, onOpenNoteDialog }: SessionContent
                 partialText={capture.partialText}
                 isActive={capture.status === 'capturing' && (capture.mode === 'audio' || capture.mode === 'mixed')}
                 onEditTranscript={capture.handleEditTranscript}
+                onCycleSpeaker={capture.handleCycleSpeaker}
               />
             </>
           )}

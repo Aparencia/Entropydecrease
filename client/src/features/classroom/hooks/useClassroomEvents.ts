@@ -55,6 +55,8 @@ export interface LiveTranscript {
   timestamp: number;
   /** P0-3：转写置信度（估算口径，<0.55 时 UI 弱化标记；缺失视为 1） */
   confidence?: number;
+  /** P1-4：手动标注的说话人（飞书式重新识别） */
+  speaker?: string;
 }
 
 interface UseClassroomEventsOptions {
@@ -583,11 +585,33 @@ export function useClassroomEvents({
     }
   }, [liveTranscripts, courseName, toast]);
 
+  // P1-4：说话人循环标注（飞书式手动重新识别：无 → 说话人A → 说话人B → 无）
+  const handleCycleSpeaker = useCallback((id: string) => {
+    const NEXT: Array<string | undefined> = [undefined, '说话人A', '说话人B'];
+    setLiveTranscripts((prev) =>
+      prev.map((t) => {
+        if (t.id !== id) return t;
+        const cur = NEXT.indexOf(t.speaker);
+        return { ...t, speaker: NEXT[(cur + 1) % NEXT.length] };
+      }),
+    );
+    // 同步 smartBundle audioSegments（课后分析消费说话人标签）
+    setSmartBundle((prev) => ({
+      ...prev,
+      audioSegments: (prev.audioSegments ?? []).map((s) => {
+        if (s.id !== id) return s;
+        const cur = NEXT.indexOf(s.speaker);
+        return { ...s, speaker: NEXT[(cur + 1) % NEXT.length] };
+      }),
+    }));
+  }, []);
+
   return {
     segments, setSegments, stats, setStats, extractionError, setExtractionError,
     smartBundle, setSmartBundle,
     liveTranscripts, setLiveTranscripts,
     handleEditTranscript,
+    handleCycleSpeaker,
     partialText,
     vadStats, recordingStatus, setRecordingStatus,
     videoFilePath, setVideoFilePath,

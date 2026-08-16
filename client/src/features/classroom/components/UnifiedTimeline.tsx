@@ -26,6 +26,8 @@ export interface TranscriptEntry {
   editedText?: string;
   /** P0-3：转写置信度（估算口径，<0.55 时 UI 弱化标记） */
   confidence?: number;
+  /** P1-4：手动标注的说话人（飞书式重新识别；无/说话人A/说话人B） */
+  speaker?: string;
 }
 
 interface UnifiedTimelineProps {
@@ -39,6 +41,8 @@ interface UnifiedTimelineProps {
   isActive: boolean;
   /** P1-2：编辑回调——保存修正文本时调用 */
   onEditTranscript?: (id: string, newText: string) => void;
+  /** P1-4：说话人循环标注回调（无 → 说话人A → 说话人B → 无） */
+  onCycleSpeaker?: (id: string) => void;
 }
 
 /** 事件类型 → 图标/文案/配色 */
@@ -71,7 +75,7 @@ type Row =
   | { kind: 'text'; ts: number; text: TranscriptEntry }
   | { kind: 'anchor'; ts: number; label?: string };
 
-export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], partialText, isActive, onEditTranscript }: UnifiedTimelineProps) {
+export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], partialText, isActive, onEditTranscript, onCycleSpeaker }: UnifiedTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastCountRef = useRef(0);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -193,6 +197,21 @@ export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], par
         <div key={t.id} className="flex gap-2 p-2 rounded-kb-sm transition-colors hover:bg-bg-tertiary/30 group">
           <span className="text-[10px] text-text-tertiary flex-shrink-0 mt-0.5 tabular-nums">{time}</span>
           <Mic className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-emerald-500/70" strokeWidth={1.5} />
+          {/* P1-4 说话人标注（飞书式手动重新识别；课后点击循环标注） */}
+          {!isActive && onCycleSpeaker && (
+            <button
+              onClick={() => onCycleSpeaker(t.id)}
+              className={cn(
+                'flex-shrink-0 px-1.5 py-0.5 mt-0.5 rounded-kb-sm text-[10px] font-medium border transition-all',
+                t.speaker
+                  ? 'border-cyber/40 text-cyber bg-cyber/5'
+                  : 'border-border/30 text-text-quaternary opacity-0 group-hover:opacity-100 hover:text-cyber hover:border-cyber/40',
+              )}
+              title={t.speaker ? `说话人: ${t.speaker}（点击切换）` : '标注说话人'}
+            >
+              {t.speaker ? t.speaker : '标人'}
+            </button>
+          )}
           <span className={cn('flex-1 text-[12px] leading-relaxed min-w-0', idx === rows.length - 1 ? 'text-text-primary font-medium' : 'text-text-secondary', isLowConfidence && 'opacity-60')}>
             {displayText}
             {isLowConfidence && (
