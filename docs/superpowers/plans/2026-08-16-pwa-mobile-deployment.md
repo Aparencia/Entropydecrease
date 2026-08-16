@@ -9,10 +9,17 @@
 
 | # | 项 | 操作 | 依据 |
 |---|----|------|------|
-| D1 | **CORS 生产白名单** | 在 `server/.env` 设置 `CORS_ORIGINS`，加入 PWA 域名（如 `https://app.entropydecrease.com`）；`APP_ENV=production` 时网关为严格模式，仅允许列表内源 | `server/ai-gateway/main.py:202`、`config/app.py:22` |
-| D2 | **API 绝对地址** | 构建 PWA 前确保 `.env.production` 的 `VITE_API_BASE_URL`（sync-service）与 `VITE_AI_GATEWAY_URL`（ai-gateway）为**绝对 HTTPS 地址**（浏览器跨域 fetch 需要） | `client/vite.config.ts`、`lib/http/apiClient.ts` |
-| D3 | **HTTPS** | PWA 必须 HTTPS 托管（Service Worker 注册 + `getUserMedia` 麦克风均为 secure context 要求）；`http://` 仅 localhost 例外 | 浏览器平台约束 |
-| D4 | **构建** | `cd client && vite build`（非 ELECTRON_BUILD）产出含 `sw.js`/`manifest.webmanifest` 的 PWA 产物，部署到静态托管 | T0.1 已验证 |
+| D1 | **CORS** | PWA 部署于 `entropydecrease.com/pwa/`（与 API 同源）→ **CORS 自动满足**，无需额外白名单；若未来独立子域再配置 `CORS_ORIGINS` | `main.py:202`、`config/app.py:22` |
+| D2 | **API 绝对地址** | `.env.production` 的 `VITE_API_BASE_URL`/`VITE_AI_GATEWAY_URL` 为绝对 HTTPS 地址（当前 `https://entropydecrease.com`，同源） | `lib/http/apiClient.ts` |
+| D3 | **HTTPS** | PWA 必须 HTTPS 托管（SW 注册 + `getUserMedia` 需 secure context）；`entropydecrease.com` 已有证书 ✅ | 浏览器平台约束 |
+| D4 | **构建** | CI 由 `mobile-release.yml` 执行：`VITE_PWA_BASE=/pwa npx vite build`（子路径 base + manifest start_url/scope 已支持） | `client/vite.config.ts` |
+| D5 | **服务器一次性配置** | 应用仓库内配置：`docker compose -f server/docker-compose.prod.yml up -d`（应用 `/opt/Entropydecrease/pwa` 挂载 + nginx `location /pwa/`）；确认 `https://entropydecrease.com/pwa/` 返回 200 | `server/nginx/nginx.conf`、`server/docker-compose.prod.yml` |
+
+## 1.1 发版工作流（CI/CD，已实现）
+
+- **`.github/workflows/mobile-release.yml`**（新增）：监听 `v*` tag → lint/test 门禁 → `VITE_PWA_BASE=/pwa npx vite build` → 校验 manifest/sw.js → scp 上传 ECS `/opt/Entropydecrease/pwa`（rm 干净替换）→ docker restart nginx → 写 version.txt → curl 验证
+- 与 `release.yml`（Electron 桌面）**共用 v* tag**：semantic-release 打 `v0.x.y` 时双端并行发版，版本天然同步、互不干扰
+- PR 验证复用 `pr-check.yml`（client job 已含 vite build 产出 PWA）；手动补发用 workflow_dispatch
 
 ## 2. 真机验证清单（M4 Task12 Step2，需 iOS Safari + Android Chrome 真机）
 
