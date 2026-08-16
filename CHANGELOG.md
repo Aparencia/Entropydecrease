@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.39.0](https://github.com/Aparencia/Entropydecrease/compare/v0.38.0...v0.39.0) (2026-08-16)
+
+### ✨ 新功能
+
+* **pwa:** 移动端下载 A+B（iOS 安装引导 + Android TWA APK 构建/官网下载入口） ([6d7fe72](https://github.com/Aparencia/Entropydecrease/commit/6d7fe72e6ba56dc3c323a037fba28cf36b83bd54))
+
 ## [0.38.0](https://github.com/Aparencia/Entropydecrease/compare/v0.37.0...v0.38.0) (2026-08-16)
 
 ### ✨ 新功能
