@@ -19,6 +19,8 @@ import { useClassroomCapture } from '../hooks/useClassroomCapture';
 import { SegmentList } from './SegmentList';
 import { UnifiedTimeline } from './UnifiedTimeline';
 import { ClassroomStatusBanners } from './ClassroomStatusBanners';
+import { RecognitionStatsBar } from './RecognitionStatsBar';
+import { isLocalAsrReady } from '../utils/asrTranscriber';
 import { AnalysisPreview } from '@/features/notes/components/AnalysisPreview';
 import { VideoRecordPanel } from '@/features/notes/components/VideoRecordPanel';
 import SessionQAPanel from './SessionQAPanel';
@@ -83,6 +85,15 @@ export function SessionContentView({ capture, onOpenNoteDialog }: SessionContent
                 transcribedCount={capture.transcribedCount}
                 audioHealth={capture.audioHealth}
                 vadStats={capture.vadStats}
+              />
+              {/* P0-7 识别统计条：引擎徽标 / 帧数 / 句数 / VAD 语音状态 */}
+              <RecognitionStatsBar
+                status={capture.status}
+                keyframeCount={capture.smartBundle?.keyframes?.length ?? 0}
+                transcribedCount={capture.transcribedCount}
+                vadStats={capture.vadStats}
+                streamingAsrActive={capture.streamingAsrActive}
+                localAsrReady={isLocalAsrReady()}
               />
               {/* M2 自动锚点以时间线行展示（autoAnchors 独立数据源） */}
               <UnifiedTimeline
