@@ -71,6 +71,8 @@ interface UseClassroomEventsOptions {
   streamingAsrActive: boolean;
   /** P1-6：目标窗口标题（内容类型分类的标题信号） */
   windowTitle?: string;
+  /** P1-6：目标窗口进程名（内容类型分类的进程信号，Windows） */
+  windowProcessName?: string;
   /** P1-3：当前课程名（修正回写词库的 courseId 绑定） */
   courseName?: string;
 }
@@ -86,7 +88,7 @@ const MISSED_CAPTURE_CHECK_MS = 3000;
 
 export function useClassroomEvents({
   captureManager, status, capturePath, language, aiDetectEnabled, setCourseMeta, onNotify,
-  streamingAsrActive, windowTitle, courseName,
+  streamingAsrActive, windowTitle, windowProcessName, courseName,
 }: UseClassroomEventsOptions) {
   const [segments, setSegments] = useState<ExtractedSegment[]>([]);
   const [stats, setStats] = useState({ frames: 0, extracted: 0 });
@@ -153,7 +155,7 @@ export function useClassroomEvents({
     // 内容分类：未确定时尝试
     if (contentKind === 'unknown' && classifyAttemptsRef.current < MAX_CLASSIFY_ATTEMPTS) {
       classifyAttemptsRef.current++;
-      const result = classifyContent(windowTitle ?? '', transcriptSampleRef.current);
+      const result = classifyContent(windowTitle ?? '', transcriptSampleRef.current, windowProcessName);
       if (result.kind !== 'unknown') {
         setContentKind(result.kind);
         captureManager.applyContentKind(result.kind);

@@ -147,6 +147,7 @@ export function useClassroomCapture() {
     onNotify: notify,
     streamingAsrActive,
     windowTitle: selectedWindow?.title,
+    windowProcessName: selectedWindow?.processName,
     courseName: courseMeta.courseName,
   });
 
