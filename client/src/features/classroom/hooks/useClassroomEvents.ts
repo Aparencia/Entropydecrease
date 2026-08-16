@@ -115,6 +115,8 @@ export function useClassroomEvents({
   const lastForceCaptureAtRef = useRef(0);
   /** P1-8 最近一次关键帧时间戳（漏捕检测依据：指令后无新帧即提示） */
   const latestKeyframeTsRef = useRef(0);
+  /** P1-8 漏捕检测定时器集合（组件卸载时清理，避免卸载后 toast 泄漏） */
+  const missedCaptureTimersRef = useRef<number[]>([]);
   /** @ai-context 会话时间基准（epoch ms）：记录首帧 timestamp，供 analyzePartial 换算相对秒数 */
   const sessionStartMsRef = useRef<number | null>(null);
   /** 采集会话 ID（smart:keyframe 事件携带），供笔记持久化关联与关键帧图片清理 */
@@ -165,13 +167,19 @@ export function useClassroomEvents({
         lastForceCaptureAtRef.current = now;
         captureManager.requestForceCapture();
       }
-      // P1-8 漏捕检测：指令后 3s 无新关键帧 → 提示手动补截
+      // P1-8 漏捕检测：指令后 3s 无新关键帧 → 提示手动补截（定时器登记，卸载清理）
       const commandAt = now;
-      window.setTimeout(() => {
+      const timer = window.setTimeout(() => {
         if (latestKeyframeTsRef.current < commandAt) {
           toast({ type: 'warning', silent: true, message: '这一步的画面可能没捕捉到，可按 C 键手动截图' });
         }
       }, MISSED_CAPTURE_CHECK_MS);
+      missedCaptureTimersRef.current.push(timer);
+      // 上限保护：定时器集合仅保留最近 20 个（已触发的清出）
+      if (missedCaptureTimersRef.current.length > 20) {
+        const expired = missedCaptureTimersRef.current.splice(0, missedCaptureTimersRef.current.length - 20);
+        expired.forEach((t) => window.clearTimeout(t));
+      }
     }
   };
 
@@ -180,6 +188,14 @@ export function useClassroomEvents({
     setOnAsrFallback(() => toast({ type: 'warning', silent: true, message: '本地 ASR 不可用，已降级为云端转写' }));
     return () => setOnAsrFallback(null);
   }, [toast]);
+
+  // P1-8 卸载清理：漏捕检测定时器（防卸载后 toast 泄漏）
+  useEffect(() => {
+    return () => {
+      for (const t of missedCaptureTimersRef.current) window.clearTimeout(t);
+      missedCaptureTimersRef.current = [];
+    };
+  }, []);
 
   // 会话结束回到 idle 时重置时间基准（暂停/恢复不重置，避免相对时间戳跳变）
   useEffect(() => {

@@ -13,6 +13,37 @@
  * 造成推理滞后累积，合并策略保证概率新鲜度与 IPC 负载有界。
  */
 
+// ================================================================
+// Silero 精判参数（P0-2；VADMarker 消费）
+// ================================================================
+
+/** RMS 超阈但 Silero 概率低于此值 → 候选噪声（连续 2 块确认后抑制） */
+export const SILERO_NOISE_MAX_PROB = 0.12;
+/** 静音复核：该时间窗内 Silero 平均概率高于此值 → 视为语音仍在（推迟分段） */
+export const SILERO_SPEECH_MIN_PROB = 0.5;
+/** 静音复核时间窗（ms） */
+export const SILERO_RECHECK_WINDOW_MS = 400;
+/** 静音复核推迟上限（ms）：超限强制分段，防止 Silero 误判长噪声为语音导致段无限拉长 */
+export const SILERO_MAX_SILENCE_EXTENSION_MS = 3000;
+
+/** Silero 三态分类结果 */
+export type SileroClass = 'noise' | 'speech' | 'unknown';
+
+/**
+ * Silero 三态分类（P0-2，VADMarker 委托的纯函数）：
+ * - 'noise'：最近概率与窗口均值都明确低于阈值（键盘/空调/音乐等持续噪声）
+ * - 'speech'：概率明确高于噪声阈值（真实语音）
+ * - 'unknown'：概率源不可用或暂无结果（不干预，走纯 RMS 路径）
+ */
+export function classifySileroProb(
+  latest: number | null,
+  recent: number | null,
+): SileroClass {
+  if (latest === null || recent === null) return 'unknown';
+  if (latest < SILERO_NOISE_MAX_PROB && recent < SILERO_NOISE_MAX_PROB) return 'noise';
+  return 'speech';
+}
+
 /** Silero 概率源接口（可注入 mock 供单测） */
 export interface SileroProbSource {
   /** 最近一次推理得到的语音概率（0-1）；尚无结果或不可用时为 null */

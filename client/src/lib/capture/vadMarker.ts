@@ -1,35 +1,25 @@
 /**
  * VAD 音频标记器 — Path B 语音段检测与分段
  *
- * @ai-context
- * Path B 通过 RMS 能量检测将连续语音切段，
- * 每段完成后立即触发 onSegmentReady 回调，支持流式 ASR 转写。
- * @ai-context: 校准仅对 microphone 源生效；loopback（网课系统环回）为数字
- * 信号无环境底噪，构造时直接标记已校准并使用预设阈值，不进入校准期
- * （避免 UI 出现无意义的“正在校准音频阈值”提示）。
- *
- * @ai-context: 背景噪声校准为现场课程麦克风输入场景设计——麦克风存在真实
- * 环境底噪（空调/键盘/人声嘴杂），以 sourceType: 'microphone' 构造时
- * 启用前 N 块自适应校准。后续可考虑将校准结果持久化供下次会话作为初始
- * 阈值，避免每次启动等待采样期。
+ * @ai-context: RMS 能量检测将连续语音切段，每段完成后触发 onSegmentReady
+ * 回调供流式 ASR 转写。校准仅对 microphone 源生效（前 N 块自适应阈值）；
+ * loopback（网课系统环回）为数字信号无环境底噪，构造即已校准用预设阈值。
+ * P0-2 起叠加 Silero 精判：噪声抑制（暂存-确认两段式）+ 静音复核（低能量
+ * 语音尾推迟分段，上限保护），概率源不可用时回退纯 RMS。
+ * English: RMS-based speech segmentation for Path B; microphone sources get
+ * adaptive calibration, loopback uses preset thresholds. Silero refinement
+ * (P0-2) adds noise suppression and silence re-check with RMS fallback.
  */
 
 import type { AudioChunkData, AudioSegment, TimelineEntry } from './captureTypes';
 import { encodeWavBase64 } from './wavEncoder';
-import type { SileroProbSource } from './sileroVad';
-
-// ================================================================
-// Silero 精判参数（P0-2）
-// ================================================================
-
-/** RMS 超阈但 Silero 概率低于此值 → 候选噪声（连续 2 块确认后抑制） */
-const SILERO_NOISE_MAX_PROB = 0.12;
-/** 静音复核：该时间窗内 Silero 平均概率高于此值 → 视为语音仍在（推迟分段） */
-const SILERO_SPEECH_MIN_PROB = 0.5;
-/** 静音复核时间窗（ms） */
-const SILERO_RECHECK_WINDOW_MS = 400;
-/** 静音复核推迟上限（ms）：超限强制分段，防止 Silero 误判长噪声为语音导致段无限拉长 */
-const SILERO_MAX_SILENCE_EXTENSION_MS = 3000;
+import {
+  classifySileroProb,
+  SILERO_RECHECK_WINDOW_MS,
+  SILERO_SPEECH_MIN_PROB,
+  SILERO_MAX_SILENCE_EXTENSION_MS,
+  type SileroProbSource,
+} from './sileroVad';
 
 // ================================================================
 // 配置类型
@@ -42,15 +32,9 @@ export interface VADMarkerConfig {
   silenceDurationMs: number;
   /** 最短语音时长（ms），低于则丢弃，默认 300 */
   minSpeechDurationMs: number;
-  /**
-   * 最长语音段时长（ms），达到即强制分段，默认 28000——
-   * 保证段长兼容 GLM-ASR 备选（≤30s 硬限制），也避免长段拉高转写延迟
-   */
+  /** 最长语音段时长（ms），达到即强制分段，默认 28000（兼容 GLM-ASR ≤30s 硬限制） */
   maxSpeechDurationMs: number;
-  /**
-   * 音频源类型：loopback（系统环回，网课默认）跳过背景噪声校准；
-   * microphone（现场课程麦克风）启用前 N 块自适应校准
-   */
+  /** 音频源类型：loopback 跳过背景噪声校准；microphone 启用前 N 块自适应校准 */
   sourceType: 'loopback' | 'microphone';
 }
 
@@ -280,18 +264,15 @@ export class VADMarker {
   }
 
   /**
-   * Silero 三态分类（P0-2）：
-   * - 'noise'：最近概率与窗口均值都明确低于阈值（键盘/空调/音乐等持续噪声）
-   * - 'speech'：概率明确高于噪声阈值（真实语音）
-   * - 'unknown'：概率源不可用或暂无结果（不干预，走纯 RMS 路径）
+   * Silero 三态分类（P0-2，纯函数委托见 sileroVad.classifySileroProb）：
+   * 'noise'=持续噪声 / 'speech'=真实语音 / 'unknown'=概率源不可用（不干预）
    */
   private classifySilero(): 'noise' | 'speech' | 'unknown' {
     if (!this.silero) return 'unknown';
-    const latest = this.silero.latestProb();
-    const recent = this.silero.recentProb(SILERO_RECHECK_WINDOW_MS);
-    if (latest === null || recent === null) return 'unknown';
-    if (latest < SILERO_NOISE_MAX_PROB && recent < SILERO_NOISE_MAX_PROB) return 'noise';
-    return 'speech';
+    return classifySileroProb(
+      this.silero.latestProb(),
+      this.silero.recentProb(SILERO_RECHECK_WINDOW_MS),
+    );
   }
 
   // ================================================================

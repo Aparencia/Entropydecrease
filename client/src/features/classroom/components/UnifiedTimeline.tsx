@@ -1,13 +1,11 @@
 /**
  * UnifiedTimeline — smart 路径统一内容时间线
  * 时间轴事件（关键帧/语音/书签/自动锚点）与实时转写文本按时间戳合并为
- * 一条内容流，替代原先"时间轴面板 + 独立转录列表"的分离展示（内测反馈
- * 体验割裂：事件与文本需上下对照两个列表）。
+ * 一条内容流，替代原先"时间轴面板 + 独立转录列表"的分离展示。
  *
- * @ai-context: 转写行保留课后内联编辑（搬自 LiveTranscript 的编辑交互）；
- * 新条目/实时 partial 到达自动滚到底部；仅 smart 路径使用，不替代
- * notes 模块共享的 SmartCapturePanel。
- * @ai-context: Unified timeline merging timeline events and live transcript
+ * @ai-context: 转写行保留课后内联编辑与说话人标注；新条目/实时 partial
+ * 到达自动滚到底部；仅 smart 路径使用。
+ * @ai-context EN: Unified timeline merging timeline events and transcript
  * rows sorted by timestamp; edits stay available after the session ends.
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -16,6 +14,7 @@ import { cn } from '@/lib/utils';
 // 毫秒时间戳 → MM:SS（相对会话起始时间，D12 收敛至 lib/utils/time）
 import { formatSessionElapsed as formatRelativeTime } from '@/lib/utils/time';
 import type { SessionBundle, TimelineEntry, KeyFrame } from '@/lib/capture';
+import { RecentKeyframesStrip } from './RecentKeyframesStrip';
 
 /** 转写条目（含 P1-2 用户修正文本，存在时优先显示） */
 export interface TranscriptEntry {
@@ -86,11 +85,6 @@ export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], par
   const keyframes = bundle.keyframes ?? [];
   const audioSegments = bundle.audioSegments ?? [];
   const sessionStartMs = timeline[0]?.timestamp ?? Date.now();
-
-  // P1-9 实时截图流：最近 6 帧仍有 imageBase64 的关键帧（增序展示）
-  const recentThumbs = (bundle.keyframes ?? [])
-    .filter((kf) => kf.imageBase64)
-    .slice(-6);
 
   // 事件 + 锚点 + 转写按时间戳合并排序
   const rows: Row[] = [
@@ -305,21 +299,8 @@ export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], par
         )}
       </div>
 
-      {/* P1-9 实时截图流：最近 6 帧缩略横条（识别过程可见性，imageBase64 已被分析清空的帧跳过） */}
-      {recentThumbs.length > 0 && (
-        <div className="flex items-center gap-1.5 px-3 py-1.5 border-t border-border/20 bg-bg-secondary/30 overflow-x-auto flex-shrink-0">
-          <Camera className="w-3 h-3 text-text-quaternary flex-shrink-0" strokeWidth={1.5} />
-          {recentThumbs.map((kf) => (
-            <img
-              key={kf.id}
-              src={`data:image/jpeg;base64,${kf.imageBase64}`}
-              alt={`关键帧 ${new Date(kf.timestamp).toLocaleTimeString()}`}
-              title={new Date(kf.timestamp).toLocaleTimeString()}
-              className="w-16 h-9 rounded-kb-xs object-cover border border-border/30 flex-shrink-0"
-            />
-          ))}
-        </div>
-      )}
+      {/* P1-9 实时截图流：最近 6 帧缩略横条（识别过程可见性） */}
+      <RecentKeyframesStrip keyframes={keyframes} />
 
       {/* 底部统计栏 */}
       <div className={cn(
