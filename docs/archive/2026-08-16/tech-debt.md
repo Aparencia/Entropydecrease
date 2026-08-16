@@ -11,6 +11,7 @@
 | TD-002 | useClassroomEvents.ts（593 行）/ useClassroomCapture.ts（355 行）/ modelManager.ts（323 行）超 300 行规范（本次修改前既有问题）；建议下个迭代把场景处理/修正回写/说话人标注拆子 hook | 腐化 | P3 | 2026-08-16 | open |
 | TD-003 | P2-1/2/3 本地 OCR 推理管线骨架态：模型文件未随仓库分发需环境联调；公式引擎与版面解析未接入（依赖 P2-1）；P2-6 输入事件触发需安全评审后实施（降级契约完整、零回归） | 环境变化 | P2 | 2026-08-16 | open |
 | TD-004 | P2-5 VLM 分类：规则版已上线达标（≥80%），VLM 版待本地 VLM/网关视觉端点就绪后替换（接入路径已文档化） | 环境变化 | P3 | 2026-08-16 | open |
+| TD-008 | IPC_CHANNELS.WINDOW_MEMORY_RECORD/CLEAR 在 channels.ts 定义，但 screenCaptureHandlers.ts 使用原始字符串而非引用常量，重命名不同步风险 | 无意 | P3 | 2026-08-16 | open |
 
 ## 今日已偿
 

@@ -14,15 +14,18 @@
 - PWA 移动端 MVP（实施完成 ✅，T0–M4 代码落地 + 门禁全绿）：
   - 实施计划：2026-08-16-pwa-mobile.md（T0 前置验证 → M1 基建+番茄钟 → M2 笔记+同步 → M3 课堂助手 → M4 联调发布，全部完成）
   - 设计文档：2026-08-16-pwa-mobile-design.md（v4 定稿，音频源决策：录屏导入为主 + 麦克风应急）
+- **视频窗口识别优化（实施完成 ✅，14 commits，全量门禁 1377 tests 通过）：**
+  - 设计文档：2026-08-16-window-recognition-optimization-design.md（双向评分+记忆自动选中+联动闭环）
+  - 实施计划：2026-08-16-window-recognition-optimization.md（全 15 任务四阶段执行完毕）
 
 ## 技术债摘要
 
 - 继承（carried）：TD-001 WebGPU 渲染后端回退（P3，有意）
-- 新增（open）：TD-002 课堂 hook 超行规范（P3）/ TD-003 本地 OCR 推理管线骨架态（P2）/ TD-004 VLM 分类待替换（P3）
+- 新增（open）：TD-002 课堂 hook 超行规范（P3）/ TD-003 本地 OCR 推理管线骨架态（P2）/ TD-004 VLM 分类待替换（P3）/ TD-008 window_memory IPC 常量未引用（P3，代码风格）
 - 当日已偿：TD-005 尾段丢失+暂停未接 / TD-006 视频上传 401/429 / TD-007 剪藏截断（提交 4dbb92e）
 - 详见 tech-debt.md
 
 ## 备注
 
-- 不归档：窗口识别优化设计/计划（实施进行中）；PWA 发布清单（pwa-mobile-deployment.md）保留活跃——含待执行的真机验证（V1–V8）与部署前置（D1–D4）
+- **不归档**：PWA 发布清单（pwa-mobile-deployment.md）保留活跃——含待执行的真机验证（V1–V8）与部署前置（D1–D4）
 - 归档文档内部断链已修正（plan↔spec 相对链接、review/BASELINE 路径引用）
