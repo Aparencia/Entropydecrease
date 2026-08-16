@@ -76,3 +76,6 @@ client/public/sounds/_backup_original/
 
 # Android 签名密钥（严禁提交）
 android/keystore/
+
+# TWA 签名密钥（bubblewrap 生成，严禁提交）
+android/twa/*.keystore

@@ -146,15 +146,11 @@ jobs:
   # 生成 TWA 工程并构建签名 APK，上传 GitHub Release + 服务器下载目录
   # （官网「下载 Android APK」直链 = entropydecrease.com/downloads/entropydecrease.apk）。
   #
-  # ⚠️ 首次设置（一次性，需 Android/Java 环境，完成后 CI 全自动）：
-  #   1. 生成 keystore：keytool -genkey -v -keystore entropydecrease.keystore
-  #      -alias entropydecrease -keyalg RSA -keysize 2048 -validity 10000
-  #   2. 生成 TWA 工程（读 android/twa-manifest.json 配置）：
-  #      npx @bubblewrap/cli init --manifest
-  #      https://entropydecrease.com/pwa/manifest.webmanifest --directory android/twa
-  #      并把生成的 android/twa/ 提交到仓库（CI 只做非交互 update + build）
-  #   3. GitHub Secrets：ANDROID_KEYSTORE_BASE64（keystore base64）、
-  #      ANDROID_KEYSTORE_PASS（keystore 密码）、ANDROID_KEY_PASS（key 密码）
+  # ⚠️ 首次设置（2026-08-16 已完成：bubblewrap init 生成 android/twa/ + keystore）：
+  #   keystore = android/twa/android.keystore（alias=android，packageId=com.entropydecrease.twa）
+  #   1. 将 android/twa/android.keystore 转 base64 存入 Secret ANDROID_KEYSTORE_BASE64
+  #   2. Secret ANDROID_KEYSTORE_PASS / ANDROID_KEY_PASS = keystore 密码（init 时 keytool 输入值）
+  #   CI 只做非交互 update + build；android/twa/ 提交仓库（*.keystore 已 gitignore）
   # ---------------------------------------------------------------------------
   build-apk:
     needs: deploy
@@ -196,7 +192,7 @@ jobs:
           bubblewrap build \
             --keystorePath /tmp/entropydecrease.keystore \
             --keystorePass "$KEYSTORE_PASS" \
-            --keyAlias entropydecrease \
+            --keyAlias android \
             --keyPass "$KEY_PASS"
       - name: Verify APK artifact
         run: test -f android/twa/app-release-signed.apk && echo "APK OK"
@@ -212,3 +208,14 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: android/twa/app-release-signed.apk
           target: /opt/Entropydecrease/downloads
+          strip_components: 2
+      - name: Rename APK to canonical name
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            mv -f /opt/Entropydecrease/downloads/app-release-signed.apk \
+                  /opt/Entropydecrease/downloads/entropydecrease.apk
+            ls -la /opt/Entropydecrease/downloads/entropydecrease.apk
