@@ -60,11 +60,12 @@ export default defineConfig(({ command }) => ({
     ...(isElectronBuild ? [electronBuildConfigPlugin()] : []),
     ...(isElectronBuild ? [] : [VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'offline.html'],
+      includeAssets: ['favicon.svg', 'offline.html'],
       manifest: {
         name: '熵减 - 学习伴侣',
         short_name: '熵减',
         description: '智能学习管理工具 - 笔记、闪卡、费曼学习法、番茄钟',
+        lang: 'zh-CN',
         theme_color: '#3b82f6',
         background_color: '#111827',
         display: 'standalone',
