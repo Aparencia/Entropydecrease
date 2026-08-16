@@ -63,9 +63,11 @@ export function processExtractionResult(
   });
 
   // 将结果送入 CrossFusionEngine 进行交叉融合
+  // P2-4 采集期对齐：融合时间戳用采集时刻（capturedAt），非处理完成时刻
+  const alignedAt = result.capturedAt ?? Date.now();
   if (result.source === 'vision') {
     crossFusion.addVisionResult(
-      Date.now(),
+      alignedAt,
       result.text,
       result.confidence,
       result.structured,
@@ -75,7 +77,7 @@ export function processExtractionResult(
       | Array<{ start: number; end: number; text: string }>
       | undefined;
     crossFusion.addAudioResult(
-      Date.now(),
+      alignedAt,
       result.text,
       result.confidence,
       segments,

@@ -139,6 +139,8 @@ export class VisionWorker implements PipelineWorker {
       source: 'vision',
       model: ipcResult.modelUsed,
       processingTimeMs: ipcResult.processingTimeMs,
+      // P2-4：采集时刻时间戳（截图时刻，非提取完成时刻）——时间轴对齐依据
+      capturedAt: screenshotData.timestamp ?? Date.now(),
       structured: {
         formulas: ipcResult.formulas,
         diagrams: ipcResult.diagrams,

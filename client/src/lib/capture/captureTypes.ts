@@ -29,6 +29,8 @@ export interface ScreenshotData {
   height: number;
   hasChanged: boolean;         // 变化检测结果
   changeScore?: number;        // 变化分数 (0-1)
+  /** P2-4 采集时刻时间戳（主进程截图时刻；缺失时回退处理时刻） */
+  timestamp?: number;
 }
 
 // 音频块数据
@@ -54,6 +56,8 @@ export interface ExtractionResult {
   model?: string;              // 使用的模型名称
   processingTimeMs: number;
   structured?: Record<string, unknown>;  // 结构化数据（如 LaTeX 公式、图表描述）
+  /** P2-4 采集时刻时间戳（截图/音频的采集时刻，非处理完成时刻）——时间轴对齐依据 */
+  capturedAt?: number;
 }
 
 // Worker 处理器接口
