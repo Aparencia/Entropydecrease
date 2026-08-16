@@ -21,5 +21,6 @@
     "../src/lib/storage/interfaces.ts",
     "../src/types/models.ts",
     "../src/lib/capture/audioSourceStrategy.ts"
-  ]
+  ],
+  "exclude": ["**/*.test.ts", "**/*.spec.ts"]
 }
