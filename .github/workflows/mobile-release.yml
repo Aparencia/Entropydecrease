@@ -62,6 +62,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # secrets 不可用于 if 条件（同 release.yml），先注入 job 级 env 再在 step 用 env.* 引用
+    env:
+      DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL }}
+      HAS_ALIYUN_AK: ${{ secrets.ALIYUN_ACCESS_KEY_ID != '' }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -106,6 +110,36 @@ jobs:
             sleep 5
             curl -sf https://entropydecrease.com/pwa/ | grep -q "熵减" || exit 1
             echo "PWA deployed: ${{ github.ref_name }}"
+
+      # ---------------------------------------------------------------
+      # CDN 预热：PWA 入口与元数据（manifest/sw.js）预热，移动端首开
+      # 免回源等待（入口文件虽小，CDN 冷缓存回源仍受源站出网带宽限制）。
+      # 与 release.yml 安装包预热共用同一套阿里云凭证；未配置时跳过。
+      # ---------------------------------------------------------------
+      - name: Prefetch CDN cache (PWA)
+        if: env.DOWNLOAD_BASE_URL != '' && env.HAS_ALIYUN_AK == 'true'
+        continue-on-error: true
+        env:
+          AK_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+          AK_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+        run: |
+          set -eo pipefail
+          if [ ! -x /tmp/aliyun ]; then
+            curl -sL https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz -o /tmp/aliyun.tgz
+            tar -xzf /tmp/aliyun.tgz -C /tmp
+          fi
+          /tmp/aliyun configure set --profile cdnci --mode AK --region cn-hangzhou \
+            --access-key-id "$AK_ID" --access-key-secret "$AK_SECRET"
+
+          OBJECTS="https://entropydecrease.com/pwa/"$'\n'"https://entropydecrease.com/pwa/manifest.webmanifest"$'\n'"https://entropydecrease.com/pwa/sw.js"
+          echo "Prefetching:"
+          echo "$OBJECTS"
+
+          /tmp/aliyun cdn PushObjectCache \
+            --profile cdnci \
+            --ObjectPath "$OBJECTS" \
+            --Area domestic
+          echo "PWA CDN prefetch done"
 
   # ---------------------------------------------------------------------------
   # Android APK（B 方案：TWA 打包）：bubblewrap 基于已部署的 PWA manifest
