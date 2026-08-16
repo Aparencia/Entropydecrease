@@ -41,5 +41,5 @@
 ## 附：相关文件
 
 - 市场调研：`docs/Foresight/asr-market-2025-2026.md`（§2 中英混说）
-- 评估基线：`client/scripts/asr-eval/`、`docs/asr-eval-baseline/BASELINE-2026-08-16.md`
+- 评估基线：`client/scripts/asr-eval/`、`docs/archive/2026-08-16/BASELINE-2026-08-16.md`
 - 引擎配置：`client/electron/ai/local-asr/config.ts`、`modelManager.ts`

@@ -35,6 +35,9 @@
 |------|------|------|
 | 2026-08-01 | [熵减性能深度分析与优化路线图](./solutions/2026-08-performance-analysis-optimization-roadmap.md) | #性能分析 #内存泄漏 #重渲染 #3D性能 #基准测试 |
 | 2026-07-31 | [安装包分发加速：CDN 接入方案与下载源可切换设计](./solutions/2026-07-installer-cdn-distribution.md) | #CDN #阿里云 #安装包分发 #下载加速 |
+| 2026-08-16 | [课堂助手识别六项审查报告](../archive/2026-08-16/2026-08-classroom-recognition-review.md) `[ ] 已归档` | #代码审查 #课堂助手 #OCR #ASR |
+| 2026-08-16 | [本地 OCR 集成（PP-OCRv5 骨架与联调验证）](../archive/2026-08-16/2026-08-local-ocr-integration.md) `[ ] 已归档` | #OCR #PP-OCRv5 #ONNX #课堂助手 |
+| 2026-08-16 | [中英混说 spike 结论](../archive/2026-08-16/2026-08-mixed-language-spike.md) `[ ] 已归档` | #ASR #中英混说 #spike |
 
 ## 📖 analysis/ — 机制分析
 

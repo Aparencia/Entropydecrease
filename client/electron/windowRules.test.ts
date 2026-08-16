@@ -32,6 +32,11 @@ describe('scoreWindow — 双向计分', () => {
     const r = scoreWindow({ title: '琅琊榜 第12集', processName: 'chrome.exe' });
     expect(r.score).toBeLessThanOrEqual(20);
   });
+  it('影视客户端进程 -30 + 标题 -40 → 沉底（设计文档 §3.2 示例）', () => {
+    const r = scoreWindow({ title: '琅琊榜 第12集', processName: 'iqiyi.exe' });
+    expect(r.score).toBeLessThanOrEqual(-50);
+    expect(r.filtered).toBe(false);
+  });
   it('攻略正信号强过娱乐负分：游戏攻略可进推荐', () => {
     const r = scoreWindow({ title: '只狼全 Boss 打法教学', processName: 'steam.exe' });
     expect(r.score).toBeGreaterThanOrEqual(30); // +60 -30

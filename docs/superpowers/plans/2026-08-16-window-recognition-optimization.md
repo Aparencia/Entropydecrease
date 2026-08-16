@@ -248,7 +248,7 @@ const ENTERTAINMENT_TITLE_RE = /第\s*\d+\s*集|剧场版|预告片|\bmv\b|演�
 /** 进程白名单（+50：会议/视频站客户端） */
 const PROCESS_HIGH_WHITELIST = new Set([
   'wemeet.exe', 'dingtalk.exe', 'zoom.exe', 'teams.exe', 'webex.exe',
-  'bilibili.exe', 'bililive.exe', 'youku.exe', 'iqiyi.exe',
+  'bilibili.exe', 'bililive.exe',
 ]);
 
 /** 进程白名单（+25：浏览器/播放器） */
@@ -262,6 +262,7 @@ const PROCESS_ENTERTAINMENT = new Set([
   'steam.exe', 'wegame.exe', 'leagueclient.exe', 'league of legends.exe',
   'gta5.exe', 'dota2.exe', 'csgo.exe', 'valorant.exe', 'genshinimpact.exe',
   'douyu.exe', 'huya.exe', 'netflix.exe', 'mangotv.exe',
+  'youku.exe', 'iqiyi.exe',
 ]);
 
 /** 系统窗口进程黑名单（硬过滤） */

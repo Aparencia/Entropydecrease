@@ -29,4 +29,4 @@ LOCAL_ASR_MODEL_DIR=... node scripts/asr-eval/eval.mjs --local
 
 ## 语料
 
-见 `corpus/README.md`（清单入库、音频与转写不入库）。基线报告见 `docs/asr-eval-baseline/`。
+见 `corpus/README.md`（清单入库、音频与转写不入库）。基线报告产出后归档至 `docs/archive/`（机制见 docs/archive/README.md）；历史基线：`docs/archive/2026-08-16/BASELINE-2026-08-16.md`。

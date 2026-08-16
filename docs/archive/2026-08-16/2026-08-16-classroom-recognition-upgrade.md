@@ -4,7 +4,7 @@
 > - ✅ P0（7/7）：评估基线 / Silero VAD / 置信度 / 离线ASR重复修复 / CPU优化 / 准确率即时提升 / 统计面板
 > - ✅ P1（9/9）：两遍重打分 / 动态热词闭环 / 修正回写 / 说话人手动重识别 / 中英混说spike / 内容分类 / 指令补帧 / 漏捕检测+手动补截 / 实时截图流
 > - ✅ P2（8/8 按交付口径）：本地OCR骨架（推理管线待模型环境联调，见集成文档）/ 公式引擎与版面（集成文档化）/ 采集期时间轴对齐 / VLM分类（规则版达标+接入路径文档化）/ 区域监测（安全评审路径文档化）/ 步骤化笔记 / 步骤复习联动
-> - ✅ 六项审查：见 `docs/knowledge/solutions/2026-08-classroom-recognition-review.md`（6 项发现已修复，3 项遗留观察备案）
+> - ✅ 六项审查：见 `docs/archive/2026-08-16/2026-08-classroom-recognition-review.md`（6 项发现已修复，3 项遗留观察备案）
 > - 实施偏差记录：P0-4「剩余样本续喂」经分析不成立（端点命中块为静音块），实际修复为端点规则调优+重建流+跨final去重；P1-5 spike 结论为「本地双语模型混说已具备，缺口是基线验证」
 >
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -15,7 +15,7 @@
 
 **Tech Stack:** Electron + React 18 + TypeScript、sherpa-onnx-node（既有）、silero-vad（ONNX）、rapidocr（ONNX）、sherpa-onnx 公式/重打分模型；Python FastAPI 网关（字段透传）。验证命令：`npm run lint` + `npm run test` + `npm run build`（client/）、`python -m pytest tests/ -q`（ai-gateway/）。
 
-**Spec:** [2026-08-16-classroom-recognition-upgrade-design.md](../specs/2026-08-16-classroom-recognition-upgrade-design.md)
+**Spec:** [2026-08-16-classroom-recognition-upgrade-design.md](./2026-08-16-classroom-recognition-upgrade-design.md)
 
 **Maturity Audit:** [classroom-recognition-maturity-audit.md](../../Foresight/classroom-recognition-maturity-audit.md)
 
