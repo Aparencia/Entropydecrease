@@ -12,5 +12,5 @@ python-jose[cryptography]==3.5.0
 httpx==0.28.1
 python-dotenv==1.2.2
 python-json-logger==3.3.0
-google-genai>=1.0.0
+google-genai>=2.18.0
 python-multipart==0.0.32
