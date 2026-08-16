@@ -14,7 +14,7 @@ jobs:
     steps:
       # lfs: true 必需：beian.png / sponsor-qr.png 等由 Git LFS 托管（.gitattributes:
       # *.png filter=lfs），不拉取则为 131 字节指针文件，线上为坏图
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true
 

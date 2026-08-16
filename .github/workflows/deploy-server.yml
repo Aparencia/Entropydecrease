@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 部署前门禁（2026-08 审计 #11）：server 变更直接部署前先跑完整测试，
       # 防止未验证代码上线（pr-check 只在 PR 流程生效，main 直推会绕过）

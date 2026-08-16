@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -53,7 +53,7 @@ jobs:
       # *.png filter=lfs），不拉取则仅为 131 字节指针文件，
       # electron-builder 图标转换（PNG→ICO）解码失败，
       # 报 ERR_ELECTRON_BUILDER_CANNOT_EXECUTE。
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - uses: actions/setup-node@v4
