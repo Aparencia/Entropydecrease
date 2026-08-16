@@ -110,7 +110,7 @@ export interface CourseMeta {
   courseName?: string;      // 课程名称
   subject?: string;         // 学科（math/physics/cs/english/other）
   customTerms?: string[];   // 自定义术语列表
-  detectedBy?: 'manual' | 'window_title' | 'ai';  // 来源标识
+  detectedBy?: 'manual' | 'window_title' | 'ai' | 'memory';  // 来源标识
 }
 
 // 可捕获窗口信息（screen_list_windows 返回）
@@ -120,6 +120,12 @@ export interface WindowInfo {
   thumbnail?: string;          // base64 缩略图
   score?: number;              // 推荐分数（关键词匹配）
   matched?: string;            // 命中的关键词（用于显示推荐理由）
+  processName?: string;        // 进程可执行文件名（native 可用时）
+  confidence?: 'low' | 'medium' | 'high'; // 评分置信度
+  reasons?: string[];          // 命中理由（双向评分）
+  learningScore?: number;      // 未被娱乐负分主导的学习分
+  memoryCourseName?: string;   // 记忆命中的课程名（可回填）
+  isForeground?: boolean;      // 是否前台窗口
 }
 
 // 提取片段（UI 展示用）
