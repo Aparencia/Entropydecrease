@@ -1,0 +1,38 @@
+{
+  "packageId": "com.entropydecrease.app",
+  "host": "entropydecrease.com",
+  "name": "熵减",
+  "launcherName": "熵减",
+  "display": "standalone",
+  "themeColor": "#3B82F6",
+  "navigationColor": "#111827",
+  "backgroundColor": "#111827",
+  "enableNotifications": true,
+  "startUrl": "/pwa/",
+  "iconUrl": "https://entropydecrease.com/pwa/pwa-512x512.png",
+  "maskableIconUrl": "https://entropydecrease.com/pwa/pwa-512x512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "/tmp/entropydecrease.keystore",
+    "alias": "entropydecrease"
+  },
+  "appVersionName": "0.37.0",
+  "appVersionCode": 37,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://entropydecrease.com/pwa/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://entropydecrease.com/pwa/",
+  "minSdkVersion": 21,
+  "orientation": "portrait",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": []
+}

@@ -203,7 +203,7 @@ export default function DownloadPage() {
         </SectionReveal>
       </section>
 
-      {/* 移动端 PWA：手机浏览器打开 /pwa/ 添加到主屏幕，即开即用 */}
+      {/* 移动端：Android APK 下载 + iOS 主屏幕引导 */}
       <section className="max-w-3xl mx-auto px-6 mb-16">
         <SectionReveal>
           <div
@@ -211,23 +211,39 @@ export default function DownloadPage() {
             style={{ background: "var(--kb-bg-elevated)", border: "1px solid var(--kb-glass-border)" }}
           >
             <p className="text-sm tracking-[0.3em] text-kb-text3 uppercase mb-3">Mobile</p>
-            <h2 className="font-serif text-2xl sm:text-3xl font-bold text-kb-text mb-3">移动端 · 即开即用</h2>
-            <p className="text-kb-text2 text-sm max-w-md mx-auto mb-6 leading-relaxed">
-              用手机浏览器打开移动端版，即可添加到主屏幕，像 App 一样使用番茄钟、笔记与课堂助手。
-              支持 iOS Safari 与 Android Chrome。
-            </p>
-            <a
-              href="https://entropydecrease.com/pwa/"
-              className="inline-block px-10 py-3.5 rounded-2xl text-white font-medium transition-all duration-500 hover:scale-[1.04] active:scale-[0.97]"
-              style={{
-                background: "linear-gradient(135deg, var(--kb-cyber-cyan), var(--kb-accent-400))",
-                boxShadow: "var(--kb-shadow-accent)",
-              }}
-            >
-              打开移动端版 ↗
-            </a>
-            <p className="text-xs text-kb-text3 mt-5 leading-relaxed">
-              iOS：Safari 打开 → 分享 → 添加到主屏幕　|　Android：Chrome 菜单 → 添加到主屏幕
+            <h2 className="font-serif text-2xl sm:text-3xl font-bold text-kb-text mb-6">移动端 · 下载与安装</h2>
+
+            <div className="grid sm:grid-cols-2 gap-6 text-left max-w-2xl mx-auto">
+              {/* Android：APK 下载 / PWA 安装 */}
+              <div className="rounded-xl p-5" style={{ background: "var(--kb-bg-tertiary)" }}>
+                <h3 className="font-medium text-kb-text mb-2">Android</h3>
+                <p className="text-xs text-kb-text3 mb-4 leading-relaxed">
+                  下载 APK 安装包直接安装；或 Chrome 打开移动端版，点「安装应用」同样可装
+                </p>
+                <a
+                  href="https://entropydecrease.com/downloads/entropydecrease.apk"
+                  className="inline-block w-full text-center px-6 py-3 rounded-xl text-white font-medium transition-all duration-500 hover:scale-[1.02]"
+                  style={{ background: "linear-gradient(135deg, var(--kb-moss-green), var(--kb-accent-400))" }}
+                >
+                  ⬇ 下载 Android APK
+                </a>
+              </div>
+              {/* iOS：添加到主屏幕引导 */}
+              <div className="rounded-xl p-5" style={{ background: "var(--kb-bg-tertiary)" }}>
+                <h3 className="font-medium text-kb-text mb-2">iOS</h3>
+                <p className="text-xs text-kb-text3 mb-3 leading-relaxed">
+                  Safari 打开移动端版，添加到主屏幕，像 App 一样使用
+                </p>
+                <ol className="text-xs text-kb-text2 space-y-1.5 list-decimal list-inside">
+                  <li>Safari 打开 <span className="font-mono">entropydecrease.com/pwa/</span></li>
+                  <li>点「分享」→「添加到主屏幕」</li>
+                  <li>从桌面图标启动</li>
+                </ol>
+              </div>
+            </div>
+
+            <p className="text-xs text-kb-text3 mt-6">
+              桌面端下载 Windows 版见上方 · App Store / Play 商店上架规划中
             </p>
           </div>
         </SectionReveal>
