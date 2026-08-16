@@ -237,7 +237,8 @@ export function useClassroomCapture() {
 
   /** P0-4 软阻断启动入口：checking 禁用；down 时确认后 localOnly 启动 */
   const requestStart = useCallback(async () => {
-    if (!selectedWindow || gatewayHealth.status === 'checking') return;
+    // PWA 下无窗口选择，仅检查网关健康；Electron 下需先选窗口
+    if ((window.electronAPI && !selectedWindow) || gatewayHealth.status === 'checking') return;
     if (gatewayHealth.status === 'down' && !isLocalAsrReady()) {
       const ok = await askConfirm({
         title: 'AI 网关不可用',
@@ -385,6 +386,6 @@ export function useClassroomCapture() {
     gatewayStatus: gatewayHealth.status,
     requestStart,
     // 派生
-    canStart: !!selectedWindow && gatewayHealth.status !== 'checking',
+    canStart: (!window.electronAPI || !!selectedWindow) && gatewayHealth.status !== 'checking',
   };
 }
