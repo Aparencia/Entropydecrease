@@ -100,7 +100,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "@vitest/coverage-v8": "^4.1.10",
     "autoprefixer": "^10.5.2",
-    "concurrently": "^10.0.3",
+    "concurrently": "^10.0.4",
     "cross-env": "^10.1.0",
     "electron": "^35.7.5",
     "electron-builder": "^25.1.8",
