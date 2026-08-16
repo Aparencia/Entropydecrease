@@ -101,5 +101,45 @@ export function useWindowWatcher({ courseMeta, setCourseMeta, onNotify }: UseWin
     };
   }, [onNotify]);
 
+  // 自动选中评估（三规则）：仅在未选中窗口时评估，避免覆盖用户选择与重复 toast
+  useEffect(() => {
+    if (selectedWindow || windows.length === 0) return;
+    const top = windows[0];
+    if (!top) return;
+
+    // 唯一视频类候选：learningScore >= 60 的窗口仅此一个
+    const uniqueCandidates = windows.filter((w) => (w.learningScore ?? 0) >= 60);
+    const isUnique = uniqueCandidates.length === 1 && uniqueCandidates[0].id === top.id;
+
+    const rule1 = top.confidence === 'high';
+    const rule2 =
+      !!top.isForeground &&
+      (top.score ?? 0) >= 60 &&
+      (!!top.memoryCourseName || isUnique);
+    const rule3 =
+      top.confidence === 'medium' &&
+      !!top.memoryCourseName &&
+      isUnique;
+
+    if (!(rule1 || rule2 || rule3)) return;
+
+    setSelectedWindow(top);
+    onNotify('success', `已自动选择：${top.title}`);
+
+    // 记录记忆（自动选中同样累加 useCount——用户接受默认即正反馈）
+    if (top.processName) {
+      window.electronAPI?.invoke('window_memory_record', {
+        processName: top.processName,
+        title: top.title,
+        courseName: courseMeta.courseName,
+      }).catch(() => {});
+    }
+
+    // 记忆课程名回填（优先级最高；无记忆时由 AI 首帧/正则兜底）
+    if (top.memoryCourseName && !courseMeta.courseName) {
+      setCourseMeta((prev) => ({ ...prev, courseName: top.memoryCourseName, detectedBy: 'memory' }));
+    }
+  }, [windows, selectedWindow, courseMeta.courseName, onNotify, setCourseMeta]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return { windows, windowsLoading, selectedWindow, setSelectedWindow, refreshWindows };
 }
