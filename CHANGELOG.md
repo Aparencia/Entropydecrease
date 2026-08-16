@@ -3,6 +3,13 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.40.0](https://github.com/Aparencia/Entropydecrease/compare/v0.39.0...v0.40.0) (2026-08-16)
+
+### ✨ 新功能
+
+* **android:** TWA 工程生成（com.entropydecrease.twa）+ CI 签名 alias/APK 重命名对齐 ([8e2f68c](https://github.com/Aparencia/Entropydecrease/commit/8e2f68c10ed88460076c3d99cf4e7dbe108e860e))
+* **pwa:** 官网 iOS 跳转链接 + PWA 部署 CDN 预热 ([002b992](https://github.com/Aparencia/Entropydecrease/commit/002b9923dbafa44bf4b536a9fdec7953ccdee3b6))
+
 ## [0.39.0](https://github.com/Aparencia/Entropydecrease/compare/v0.38.0...v0.39.0) (2026-08-16)
 
 ### ✨ 新功能
