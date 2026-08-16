@@ -72,10 +72,10 @@ export function AsrSettingsSection() {
     refreshEnabled();
   }, [isElectron, refreshModels, refreshEnabled]);
 
-  /** 切换启用状态：至少一个模型就绪才允许开启（否则开关无效） */
+  /** 切换启用状态：流式主模型就绪才允许开启（rescore 仅重打分，不能单独转写） */
   const handleToggle = useCallback(async () => {
     if (!window.electronAPI) return;
-    const anyReady = models.some((m) => m.ready);
+    const anyReady = models.some((m) => m.engine === 'streaming' && m.ready);
     if (!enabled && !anyReady) {
       toast({ type: 'info', message: '请先下载至少一个识别模型再启用本地语音识别' });
       return;
@@ -111,7 +111,7 @@ export function AsrSettingsSection() {
     return off;
   }, [refreshModels, toast]);
 
-  const anyModelReady = models.some((m) => m.ready);
+  const anyModelReady = models.some((m) => m.engine === 'streaming' && m.ready);
 
   const handleDownload = useCallback(async (engine: string) => {
     if (!window.electronAPI || downloading) return;

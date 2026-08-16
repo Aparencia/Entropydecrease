@@ -26,6 +26,11 @@ import {
   estimateAsrConfidence,
 } from '../../../src/lib/capture/asrFilters.js';
 import {
+  rescoreWithSenseVoice,
+  pickRescored,
+  resetRescoreCache,
+} from './sensevoiceRescore.js';
+import {
   getLocalAsrConfig,
   getModelDir,
   isModelReady,
@@ -195,9 +200,10 @@ export function isStreamingAsrAvailable(): boolean {
   return isModelReady();
 }
 
-/** 重置可用性缓存（模型下载完成后调用） */
+/** 重置可用性缓存（模型下载/删除后调用；联动清理重打分缓存） */
 export function resetAvailabilityCache(): void {
   _onlineRecognizer = null;
+  resetRescoreCache();
 }
 
 /**
@@ -240,15 +246,27 @@ export async function transcribeStreaming(
     }
 
     const rawText = recognizer.getResult(stream).text ?? '';
+    // P1-1 两遍重打分：SenseVoice 整句复核（模型未下载/失败时静默跳过，
+    // 保留流式原结果；一致性校验通过才替换，见 pickRescored）
+    let finalRaw = rawText;
+    let rescored = false;
+    const rescoreResult = rescoreWithSenseVoice(pcmData);
+    if (rescoreResult?.text) {
+      const picked = pickRescored(rawText, rescoreResult.text);
+      if (picked.rescored) {
+        finalRaw = picked.text;
+        rescored = true;
+      }
+    }
     // 输出后处理：相邻重复压缩 + 幻觉过滤
-    // P1-1 两遍重打分接入点：此处为本地按段转写最终文本出口，
-    // SenseVoice 重打分将在此处对 text 做句末复核（高置信度者胜出）
-    const text = cleanAsrResult(rawText);
-    // P0-3：置信度估算（清洗前后长度比代理信号，供 UI 低置信度标记）
-    const confidence = estimateAsrConfidence(rawText, text);
+    const text = cleanAsrResult(finalRaw);
+    // P0-3：置信度估算（清洗前后长度比代理信号；重打分通过视为高置信）
+    const confidence = rescored
+      ? Math.max(estimateAsrConfidence(finalRaw, text), 0.85)
+      : estimateAsrConfidence(finalRaw, text);
     const durationMs = Date.now() - startTime;
 
-    logger.debug(`[LocalASR] Zipformer transcribe: ${text.length} chars, ${durationMs}ms`);
+    logger.debug(`[LocalASR] Zipformer transcribe: ${text.length} chars, ${durationMs}ms${rescored ? ' (rescored)' : ''}`);
     return { text, confidence, engine: 'zipformer', durationMs };
   } finally {
     stream.free?.();
