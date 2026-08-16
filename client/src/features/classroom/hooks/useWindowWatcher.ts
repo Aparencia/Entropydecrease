@@ -13,7 +13,7 @@ import type { WindowInfo, CourseMeta } from '@/lib/capture';
 const WINDOW_MISSING_THRESHOLD = 10;
 
 /** 常见课程名关键词（规则模式兜底提取） */
-const COURSE_KEYWORDS = /((?:高等数学|线性代数|概率论|大学物理|数据结构|操作系统|编译原理|离散数学|复变函数|英语|高数|大物|C语言|Python|Java|机器学习|深度学习|人工智能|计算机网络|数据库)[^\s|]*)/;
+const COURSE_KEYWORDS = /((?:高等数学|线性代数|概率论|大学物理|数据结构|操作系统|编译原理|离散数学|复变函数|英语|高数|大物|C语言|Python|Java|机器学习|深度学习|人工智能|计算机网络|数据库|入门|进阶|实战|从零|攻略|教程)[^\s|]*)/;
 
 interface UseWindowWatcherOptions {
   courseMeta: CourseMeta;

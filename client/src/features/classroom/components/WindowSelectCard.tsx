@@ -41,8 +41,8 @@ function WindowRow({ win, isSelected, onClick }: { win: WindowInfo; isSelected: 
       )}
       <div className="flex-1 min-w-0">
         <span className="text-b3 leading-tight line-clamp-1 block">{win.title}</span>
-        {win.matched && (
-          <span className="text-[10px] text-brand-500 leading-tight">匹配：{win.matched}</span>
+        {win.reasons?.[0] && (
+          <span className="text-[10px] text-brand-500 leading-tight">推荐：{win.reasons[0]}</span>
         )}
       </div>
       {(win.score ?? 0) >= 100 && (
@@ -114,6 +114,9 @@ export function WindowSelectCard({ windows, selected, onSelect, onRefresh, loadi
               <span className="text-b3 leading-tight line-clamp-1 block">{selected.title}</span>
               {selected.matched && (
                 <span className="text-[10px] text-brand-500 leading-tight">匹配：{selected.matched}</span>
+              )}
+              {selected.confidence === 'high' && (
+                <span className="text-[10px] font-medium text-brand-600 flex-shrink-0">自动识别</span>
               )}
             </div>
             <span className="text-[11px] text-brand-600 flex-shrink-0">更换</span>

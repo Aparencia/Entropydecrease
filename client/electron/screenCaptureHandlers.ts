@@ -54,8 +54,8 @@ let captureSessionToken = 0;
 /** 窗口监听轮询定时器 */
 let windowWatchTimer: ReturnType<typeof setInterval> | null = null;
 
-/** 上一次窗口列表的 id 集合（用于 diff 检测变化） */
-let lastWindowIds: Set<string> = new Set();
+/** 上一次窗口列表的 id|name 键集合（用于 diff 检测变化，标题变化也触发） */
+let lastWindowKeys: Set<string> = new Set();
 
 const WINDOW_WATCH_INTERVAL_MS = 3000;
 
@@ -292,15 +292,15 @@ export function registerScreenCaptureHandlers(): void {
           thumbnailSize: { width: 240, height: 135 },
         });
 
-        const currentIds = new Set(sources.map((s) => s.id));
+        const currentKeys = new Set(sources.map((s) => `${s.id}|${s.name}`));
 
-        // 检测是否有变化（新增或关闭窗口）
+        // 检测是否有变化（新增/关闭窗口，或窗口标题变化）
         const hasChanged =
-          currentIds.size !== lastWindowIds.size ||
-          [...currentIds].some((id) => !lastWindowIds.has(id));
+          currentKeys.size !== lastWindowKeys.size ||
+          [...currentKeys].some((k) => !lastWindowKeys.has(k));
 
         if (hasChanged) {
-          lastWindowIds = currentIds;
+          lastWindowKeys = currentKeys;
 
           const rawWindows = sources.map((src) => {
             const thumb = src.thumbnail.isEmpty() ? src.thumbnail : src.thumbnail.resize({ width: 120 });
@@ -340,7 +340,7 @@ export function registerScreenCaptureHandlers(): void {
     if (windowWatchTimer) {
       clearInterval(windowWatchTimer);
       windowWatchTimer = null;
-      lastWindowIds = new Set();
+      lastWindowKeys = new Set();
       logger.info('[IPC] 窗口监听已停止');
     }
     return { success: true };
@@ -385,7 +385,7 @@ export function disposeScreenCaptureHandlers(): void {
   if (windowWatchTimer) {
     clearInterval(windowWatchTimer);
     windowWatchTimer = null;
-    lastWindowIds = new Set();
+    lastWindowKeys = new Set();
   }
   if (activeCapture) {
     activeCapture.dispose();

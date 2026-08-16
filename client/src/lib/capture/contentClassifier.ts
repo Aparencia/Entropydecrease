@@ -32,6 +32,10 @@ const CRAFT_TITLE_RE =
 const LECTURE_TITLE_RE =
   /讲座|演讲|发布会|报告|论坛|会议|访谈|大师课|公开课/i;
 
+/** 软件技能进程名单（标题无特征词时，进程名兜底判定；Windows） */
+const SOFTWARE_PROCESS_RE =
+  /photoshop|premiere|afterfx|illustrator|lightroom|剪映|obs64|blender|figma|sketch|unity|unreal|code\.exe|pycharm|intellij|webstorm|notepad\+\+|wps\.exe/i;
+
 // ================================================================
 // 转写术语证据规则
 // ================================================================
@@ -59,13 +63,15 @@ const COURSE_CUES = [
 // ================================================================
 
 /** 窗口标题单独分类（无转写信号时） */
-export function classifyByTitle(title: string): ContentKind {
+export function classifyByTitle(title: string, processName?: string): ContentKind {
   const t = (title ?? '').trim();
   if (!t) return 'unknown';
   // 讲座/会议类优先（"AI 开发者大会"含"开发"字样但属讲座场景，需先于软件判定）
   if (LECTURE_TITLE_RE.test(t)) return 'lecture';
   if (SOFTWARE_TITLE_RE.test(t)) return 'software_skill';
   if (CRAFT_TITLE_RE.test(t)) return 'craft_skill';
+  // 进程名兜底：软件技能进程在标题无特征词时判为软件技能
+  if (processName && SOFTWARE_PROCESS_RE.test(processName)) return 'software_skill';
   // 标题含"教程/课程/课堂/教学"默认按知识授课（视频站标题高频形态）
   if (/教程|课程|课堂|教学|网课/i.test(t)) return 'course';
   return 'unknown';
@@ -100,8 +106,12 @@ export interface ClassificationResult {
  * 综合分类：标题优先，无标题信号时用转写证据。
  * 标题信号覆盖转写（窗口标题是用户主动选择的上下文，可信度更高）。
  */
-export function classifyContent(windowTitle: string, transcriptText: string): ClassificationResult {
-  const byTitle = classifyByTitle(windowTitle);
+export function classifyContent(
+  windowTitle: string,
+  transcriptText: string,
+  processName?: string,
+): ClassificationResult {
+  const byTitle = classifyByTitle(windowTitle, processName);
   if (byTitle !== 'unknown') return { kind: byTitle, source: 'title' };
   const byTranscript = classifyByTranscript(transcriptText);
   if (byTranscript !== 'unknown') return { kind: byTranscript, source: 'transcript' };

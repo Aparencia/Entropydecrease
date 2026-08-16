@@ -43,6 +43,21 @@ describe('classifyByTitle — 窗口标题规则', () => {
   });
 });
 
+describe('classifyByTitle — 进程名信号', () => {
+  it('进程名命中软件名单 → software_skill（标题无特征词）', () => {
+    expect(classifyByTitle('随便看看', 'photoshop.exe')).toBe('software_skill');
+    expect(classifyByTitle('随便看看', 'obs64.exe')).toBe('software_skill');
+    expect(classifyByTitle('随便看看', 'code.exe')).toBe('software_skill');
+  });
+  it('游戏/直播进程不误判，交给标题判定', () => {
+    expect(classifyByTitle('随便看看', 'steam.exe')).toBe('unknown');
+    expect(classifyByTitle('只狼全 Boss 打法教学', 'steam.exe')).not.toBe('unknown');
+  });
+  it('非软件进程保持原行为', () => {
+    expect(classifyByTitle('高等数学全程课程', 'chrome.exe')).toBe('course');
+  });
+});
+
 describe('classifyByTranscript — 转写证据投票', () => {
   it('软件操作指令词显著 → software_skill', () => {
     expect(classifyByTranscript('我们点击图层面板，把这个参数调整一下，快捷键是 Ctrl+J')).toBe('software_skill');
