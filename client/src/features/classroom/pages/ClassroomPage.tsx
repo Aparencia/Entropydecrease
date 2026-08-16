@@ -22,6 +22,7 @@ import { classifyAnalysisError } from '../utils/analysisErrors';
 import { NoteInsertDialog } from '../components/NoteInsertDialog';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { WindowSelectCard } from '../components/WindowSelectCard';
+import { VideoImportPanel } from '../components/VideoImportPanel';
 import { PathModeSelector } from '../components/PathModeSelector';
 import { SettingsCollapse } from '../components/SettingsCollapse';
 import { SonarControls } from '../components/SonarControls';
@@ -125,21 +126,28 @@ export default function ClassroomPage() {
           /* 配置态：窗口/路径/模式/设置 + 底部启动按钮 */
           <>
             <div className="flex-1 min-h-0 p-3 space-y-2.5 overflow-y-auto">
-              <WindowSelectCard
-                windows={capture.windows}
-                selected={capture.selectedWindow}
-                onSelect={capture.setSelectedWindow}
-                onRefresh={capture.refreshWindows}
-                loading={capture.windowsLoading}
-              />
-              <PathModeSelector
-                capturePath={capture.capturePath}
-                onPathChange={capture.setCapturePath}
-                mode={capture.mode}
-                onModeChange={capture.handleModeChange}
-              />
-              {/* P8 视觉提取模式：写入截图 metadata.visionMode，VisionWorker 按模式提取 */}
-              <VisionModeSelector value={capture.visionMode} onChange={capture.setVisionMode} />
+              {window.electronAPI ? (
+                <>
+                  <WindowSelectCard
+                    windows={capture.windows}
+                    selected={capture.selectedWindow}
+                    onSelect={capture.setSelectedWindow}
+                    onRefresh={capture.refreshWindows}
+                    loading={capture.windowsLoading}
+                  />
+                  <PathModeSelector
+                    capturePath={capture.capturePath}
+                    onPathChange={capture.setCapturePath}
+                    mode={capture.mode}
+                    onModeChange={capture.handleModeChange}
+                  />
+                  {/* P8 视觉提取模式：写入截图 metadata.visionMode，VisionWorker 按模式提取 */}
+                  <VisionModeSelector value={capture.visionMode} onChange={capture.setVisionMode} />
+                </>
+              ) : (
+                /* PWA：视频导入 + 抖音链接引导（录屏/网课/抖音视频 → AI 笔记） */
+                <VideoImportPanel />
+              )}
               <SettingsCollapse config={capture.config} onChange={capture.handleConfigChange} />
             </div>
             <div className="p-3 border-t border-border/20">
@@ -151,7 +159,9 @@ export default function ClassroomPage() {
                     : 'bg-bg-secondary text-text-tertiary cursor-not-allowed',
                 )}>
                 <Radar className="w-5 h-5" strokeWidth={1.5} />
-                {capture.gatewayStatus === 'checking' ? '检查网关中…' : '开始回声定位'}
+                {capture.gatewayStatus === 'checking'
+                  ? '检查网关中…'
+                  : window.electronAPI ? '开始回声定位' : '开始录音转写'}
               </button>
               {!capture.canStart && (
                 <p className="mt-1.5 text-center text-[11px] text-text-tertiary">
