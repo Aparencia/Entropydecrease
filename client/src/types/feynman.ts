@@ -38,6 +38,10 @@ export interface FeynmanWeakPoint {
   text: string;
   position: { start: number; end: number };
   mastered: boolean;
+  /** 是否已转为闪卡（v0.36+）。converted 与 mastered 语义分离：
+   *  mastered 可被用户手动标记或转换时自动标记，converted 仅由
+   *  convertWeakPointsToFlashcards 置位。旧数据无此字段，视为未转换。 */
+  converted?: boolean;
   createdAt: Date;
 }
 

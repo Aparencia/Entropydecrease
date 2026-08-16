@@ -9,7 +9,6 @@
  * note status (draft/sorted/reviewed), feynman status (not created/created/
  * mastered), flashcard status (generated/reviewed/mastered).
  */
-import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, FileText, GraduationCap, Layers, TrendingUp, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -26,16 +25,6 @@ interface LearningFlowProps {
 }
 
 type FlowStage = 'draft' | 'sorted' | 'reviewed' | 'feynman_created' | 'feynman_mastered' | 'flashcard_created' | 'flashcard_reviewed';
-
-const STAGE_CONFIG: Record<FlowStage, { label: string; icon: React.FC<React.SVGProps<SVGSVGElement> & { strokeWidth?: number | string }>; depth: string; color: string }> = {
-  draft: { label: '草稿', icon: FileText, depth: '海面', color: 'text-sky-400' },
-  sorted: { label: '已整理', icon: Layers, depth: '浅海', color: 'text-blue-400' },
-  reviewed: { label: '已复习', icon: TrendingUp, depth: '中层', color: 'text-indigo-400' },
-  feynman_created: { label: '已创建费曼', icon: GraduationCap, depth: '深海', color: 'text-violet-400' },
-  feynman_mastered: { label: '费曼已掌握', icon: GraduationCap, depth: '海沟', color: 'text-purple-400' },
-  flashcard_created: { label: '已生成闪卡', icon: Layers, depth: '深海', color: 'text-violet-400' },
-  flashcard_reviewed: { label: '闪卡已复习', icon: TrendingUp, depth: '海沟', color: 'text-purple-400' },
-};
 
 export function LearningFlow({
   noteId,

@@ -30,6 +30,15 @@ interface TranscribeResponse {
   text: string;
   model_used?: string;
   warning?: string | null;
+  /** P0-3：网关估算置信度（质量门控弱化标记信号，非统计置信度） */
+  confidence?: number;
+}
+
+/** 统一转写结果：文本 + 置信度（P0-3 质量门控） */
+export interface TranscribeOutcome {
+  text: string;
+  /** 0-1 置信度（估算口径，见网关 transcribe_chain 与本地 estimateAsrConfidence） */
+  confidence: number;
 }
 
 // ================================================================
@@ -82,7 +91,7 @@ export function isLocalAsrReady(): boolean {
 // 本地 ASR 转写（IPC 调用主进程 sherpa-onnx）
 // ================================================================
 
-async function transcribeLocalViaIpc(payload: TranscribePayload): Promise<string | null> {
+async function transcribeLocalViaIpc(payload: TranscribePayload): Promise<TranscribeOutcome | null> {
   if (!window.electronAPI) throw new Error('electronAPI 不可用');
   const result = await window.electronAPI.invoke('local_asr_transcribe', {
     audioBase64: payload.audio_base64,
@@ -90,21 +99,25 @@ async function transcribeLocalViaIpc(payload: TranscribePayload): Promise<string
     sampleRate: payload.sample_rate,
     channels: payload.channels,
     hotwords: payload.hotwords,
-  }) as { text: string; language: string; durationMs: number };
-  return result.text?.trim() || null;
+  }) as { text: string; language: string; confidence?: number; durationMs: number };
+  const text = result.text?.trim() ?? '';
+  if (!text) return null;
+  return { text, confidence: typeof result.confidence === 'number' ? result.confidence : 1 };
 }
 
 // ================================================================
 // 云端 ASR 转写（原有逻辑）
 // ================================================================
 
-async function transcribeCloud(payload: TranscribePayload): Promise<string | null> {
+async function transcribeCloud(payload: TranscribePayload): Promise<TranscribeOutcome | null> {
   const resp = await aiClient.post<TranscribeResponse>('/api/v1/asr/transcribe', payload, { timeout: 30000 });
   // fallback 降级响应（含 warning 或 fallback 空文本）按失败处理
   if (resp.warning || (!resp.text?.trim() && resp.model_used === 'fallback')) {
     throw new Error(resp.warning || 'ASR 服务降级，转写结果为空');
   }
-  return resp.text?.trim() || null;
+  const text = resp.text?.trim() ?? '';
+  if (!text) return null;
+  return { text, confidence: typeof resp.confidence === 'number' ? resp.confidence : 1 };
 }
 
 // ================================================================
@@ -121,12 +134,12 @@ async function transcribeCloud(payload: TranscribePayload): Promise<string | nul
  *
  * @param hotwords - 可选热词增强字符串（zipformer-transducer 支持，空格分隔）
  */
-export async function transcribeWithRetry(payload: TranscribePayload, retries = 1, hotwords?: string): Promise<string | null> {
+export async function transcribeWithRetry(payload: TranscribePayload, retries = 1, hotwords?: string): Promise<TranscribeOutcome | null> {
   // ── 本地 ASR 优先 ──
   if (_localAsrAvailable) {
     try {
-      const text = await transcribeLocalViaIpc({ ...payload, hotwords });
-      if (text) return text;
+      const outcome = await transcribeLocalViaIpc({ ...payload, hotwords });
+      if (outcome) return outcome;
     } catch (localErr) {
       console.warn('[asrTranscriber] 本地 ASR 失败，尝试云端降级:', localErr);
       if (!_localAsrFallbackToCloud) throw localErr;

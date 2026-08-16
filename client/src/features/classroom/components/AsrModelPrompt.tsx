@@ -64,7 +64,9 @@ export function AsrModelPrompt() {
         window.electronAPI.invoke('local_asr_get_models').then((result: unknown) => {
           const d = result as { models: AsrModelInfo[] };
           if (d?.models) setModels(d.models);
-        }).catch(() => {});
+        }).catch((err) => {
+          console.debug('[AsrModelPrompt] refresh ASR models failed', err);
+        });
       }
     });
     return off;

@@ -58,9 +58,28 @@ export class SmartSampler {
   private lastCaptureTime = 0;
   /** 上一已捕获关键帧的感知哈希，用于帧间内容去重 */
   private lastFrameHash: bigint | null = null;
+  /**
+   * P1-7 强制补帧标志：指令句命中后置真，下一帧跳过变化检测门槛
+   * 直接进入捕获判定（感知哈希去重仍生效，防止静止画面重复捕获）。
+   * 注意：与 forceNextCapture() 方法区分（字段名不能与方法同名，实例
+   * 字段会覆盖原型方法导致调用失败）。
+   */
+  private forceCapturePending = false;
 
   constructor(config?: Partial<SmartSamplerConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  /**
+   * P1-6 运行中调整采样参数（内容分类驱动：技能类收紧采样间隔与变化阈值）
+   */
+  setConfig(partial: Partial<SmartSamplerConfig>): void {
+    Object.assign(this.config, partial);
+  }
+
+  /** P1-7 请求一次强制补帧（下次 processFrame 无视变化检测门槛） */
+  forceNextCapture(): void {
+    this.forceCapturePending = true;
   }
 
   /**
@@ -71,11 +90,14 @@ export class SmartSampler {
     const now = Date.now();
     const elapsed = now - this.lastCaptureTime;
 
-    // 判断是否满足捕获条件：画面显著变化 或 定时间隔兜底
+    // 判断是否满足捕获条件：画面显著变化 或 定时间隔兜底 或 指令强制补帧
     const hasSignificantChange =
       frameData.hasChanged &&
       (frameData.changeScore ?? 1) >= this.config.changeThreshold;
     const periodicTrigger = elapsed >= this.config.periodicIntervalMs;
+    const forcedCapture = this.forceCapturePending;
+    // 消费强制标志（本次判定后无论是否捕获都复位，防连续帧全部强制）
+    this.forceCapturePending = false;
 
     // debug 日志：每次关键帧检测结果
     console.debug(
@@ -86,16 +108,17 @@ export class SmartSampler {
       `significantChange=${hasSignificantChange}`,
       `elapsed=${elapsed}ms`,
       `periodicTrigger=${periodicTrigger}`,
+      `forced=${forcedCapture}`,
     );
 
-    if (!hasSignificantChange && !periodicTrigger) {
+    if (!hasSignificantChange && !periodicTrigger && !forcedCapture) {
       console.debug('[SmartSampler] 跳过帧：未满足捕获条件');
       return null;
     }
 
     console.debug(
       '[SmartSampler] 捕获关键帧',
-      periodicTrigger && !hasSignificantChange ? '(兜底触发)' : '(变化触发)',
+      forcedCapture && !hasSignificantChange && !periodicTrigger ? '(指令补帧)' : periodicTrigger && !hasSignificantChange ? '(兜底触发)' : '(变化触发)',
     );
 
     const changeType: KeyFrame['changeType'] = this.classifyChange(
@@ -164,6 +187,7 @@ export class SmartSampler {
     this.keyframes = [];
     this.lastCaptureTime = 0;
     this.lastFrameHash = null;
+    this.forceCapturePending = false;
   }
 
   /**

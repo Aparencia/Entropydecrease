@@ -60,6 +60,12 @@ export function SettingsCollapse({ config, onChange }: SettingsCollapseProps) {
                 </button>
               ))}
             </div>
+            {/* P1-5：混说说明（本地双语模型直接支持；云端走语言检测） */}
+            {config.language === 'mixed' && (
+              <p className="text-c1 text-text-tertiary mt-1">
+                中英混说：本地双语模型直接支持；云端转写走语言检测
+              </p>
+            )}
           </div>
         </div>
       )}

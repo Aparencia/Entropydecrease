@@ -180,4 +180,42 @@ describe('SmartSampler 感知哈希去重', () => {
     expect(f2).not.toBeNull();
     expect(sampler.getKeyframes()).toHaveLength(1);
   });
+
+  it('P1-7 强制补帧：静止画面（无变化/未到兜底间隔）也能捕获', async () => {
+    const nowSpy = vi.spyOn(Date, 'now');
+    const sampler = new SmartSampler();
+    nowSpy.mockReturnValue(1_000_000);
+    await sampler.processFrame(makeFrame(1, 0.5));
+    expect(sampler.getKeyframes()).toHaveLength(1);
+
+    // 静止画面 + 强制补帧 → 捕获新帧（变化检测门槛被跳过）
+    nowSpy.mockReturnValue(1_000_100);
+    sampler.forceNextCapture();
+    const f2 = await sampler.processFrame(makeFrame(2, 0, false));
+    expect(f2).not.toBeNull();
+    expect(sampler.getKeyframes()).toHaveLength(2);
+
+    // 强制标志一次性消费：后续静止帧恢复跳过
+    const f3 = await sampler.processFrame(makeFrame(1, 0, false));
+    expect(f3).toBeNull();
+    expect(sampler.getKeyframes()).toHaveLength(2);
+  });
+
+  it('P1-6 setConfig：运行中调整采样参数（技能类收紧变化阈值）', async () => {
+    const nowSpy = vi.spyOn(Date, 'now');
+    const sampler = new SmartSampler();
+    nowSpy.mockReturnValue(1_000_000);
+    await sampler.processFrame(makeFrame(1, 0.5));
+
+    // 默认阈值 0.12：0.1 变化不捕获
+    nowSpy.mockReturnValue(1_000_100);
+    expect(await sampler.processFrame(makeFrame(2, 0.1))).toBeNull();
+
+    // 技能类参数：阈值 0.05 → 0.1 变化捕获
+    sampler.setConfig({ changeThreshold: 0.05 });
+    nowSpy.mockReturnValue(1_000_200);
+    const f2 = await sampler.processFrame(makeFrame(3, 0.1));
+    expect(f2).not.toBeNull();
+    expect(sampler.getKeyframes()).toHaveLength(2);
+  });
 });

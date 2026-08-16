@@ -76,16 +76,25 @@ export default function FeynmanPage() {
     return result;
   }, [weakPoints, notes]);
 
+  // Why: 挂载加载 effect——loadNotes() 每次都会重建 notes 数组引用，若把 notes
+  // 加入依赖会在加载后触发 effect 重跑 → 再次 loadNotes → 无限循环。.then 闭包里
+  // 的 notes 是初始快照（首次为空），笔记就绪后的薄弱点加载由下方 notes.length
+  // effect 负责，此处保持只触发一次。
   useEffect(() => {
     loadNotes().then(() => {
       const ids = notes.map((n) => n.id!).filter(Boolean);
       if (ids.length > 0) loadWeakPointsForNotes(ids);
     });
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Why 见 effect 上方注释
   }, [loadNotes, loadWeakPointsForNotes]);
 
+  // Why: 刻意用 notes.length 而非 notes——loadNotes 等操作会重建 notes 数组引用
+  // （数量不变），若依赖 notes 则在每次笔记编辑/重排后都重载全部薄弱点；当前
+  // 语义限定在列表数量变化时重载，避免无谓的批量 DB 查询。
   useEffect(() => {
     const ids = notes.map((n) => n.id!).filter(Boolean);
     if (ids.length > 0) loadWeakPointsForNotes(ids);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Why 见 effect 上方注释
   }, [notes.length, loadWeakPointsForNotes]);
 
   const handleCreate = useCallback(async () => {

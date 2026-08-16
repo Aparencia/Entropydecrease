@@ -10,7 +10,7 @@
  */
 
 import { flashcardDeckStore, flashcardStore, pomodoroSessionStore } from '@/lib/storage';
-import type { PlanItem, LearningPlan, PlanModule, PlanSource } from '../types';
+import type { PlanItem, LearningPlan, PlanModule } from '../types';
 
 const KEY_PREFIX = 'kb-learning-plan:';
 

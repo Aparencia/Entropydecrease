@@ -56,7 +56,9 @@ function NotesGraphInner() {
     let cancelled = false;
     getAllLinks()
       .then((ls) => { if (!cancelled) setLinks(ls.map((l) => ({ fromId: l.fromId, toId: l.toId }))); })
-      .catch(() => {});
+      .catch((err) => {
+        console.debug('[NotesGraphPage] load graph links failed', err);
+      });
     return () => { cancelled = true; };
   }, [notes]);
 

@@ -20,6 +20,13 @@ export interface NativeWindowInfo {
   title: string;
   processName: string;
   rootProcessName: string;
+  /** 窗口矩形（像素，native 扩展字段） */
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  /** 置顶窗口 */
+  alwaysOnTop: boolean;
 }
 
 /** 原生模块流式回调的负载：音频块或错误 */
@@ -35,6 +42,8 @@ export interface NativeStreamPayload {
 export interface ProcessAudioNative {
   listAudioWindows(): NativeWindowInfo[];
   resolveRootPid(pid: number): number;
+  /** 当前前台窗口 hwnd 字符串；无前台窗口返回空串 */
+  getForegroundHwnd(): string;
   isProcessLoopbackSupported(): boolean;
   startCapture(
     options: { pid: number; sampleRate: number; channels: number; chunkDurationMs: number },

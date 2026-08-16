@@ -129,10 +129,10 @@ func (c *WSConnection) readPump() {
 			// 防止单连接洪泛打满数据库连接池（上限 50）拖垮全部用户
 			select {
 			case c.syncReqSlots <- struct{}{}:
-				go func() {
+				go goSafe(func() {
 					defer func() { <-c.syncReqSlots }()
 					c.handleSyncRequest(payload.SinceVersion)
-				}()
+				})
 			default:
 				log.Printf("[ws] sync_request dropped (in-flight limit reached) user=%s device=%s", c.UserID, c.DeviceID)
 			}

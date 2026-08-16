@@ -29,7 +29,9 @@ export const usePerformanceModeStore = create<PerformanceModeState>((set) => ({
   setMode: (m) => {
     writePerformanceMode(m);
     // 通知主进程（采集频率缩放等）；非 Electron 环境静默忽略
-    window.electronAPI?.invoke('performance:set-mode', m)?.catch(() => {});
+    window.electronAPI?.invoke('performance:set-mode', m)?.catch((err) => {
+      console.debug('[usePerformanceMode] notify main process of mode failed', err);
+    });
     set({ mode: m });
   },
 }));

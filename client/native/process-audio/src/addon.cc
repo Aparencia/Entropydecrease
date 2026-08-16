@@ -39,6 +39,11 @@ Napi::Value ListAudioWindows(const Napi::CallbackInfo& info) {
     obj.Set("title", ToNapiString(env, w.title));
     obj.Set("processName", ToNapiString(env, w.process_name));
     obj.Set("rootProcessName", ToNapiString(env, w.root_process_name));
+    obj.Set("left", Napi::Number::New(env, w.left));
+    obj.Set("top", Napi::Number::New(env, w.top));
+    obj.Set("width", Napi::Number::New(env, w.width));
+    obj.Set("height", Napi::Number::New(env, w.height));
+    obj.Set("alwaysOnTop", Napi::Boolean::New(env, w.always_on_top));
     arr.Set(i, obj);
   }
   return arr;
@@ -114,6 +119,13 @@ Napi::Value CaptureToWav(const Napi::CallbackInfo& info) {
 /** isProcessLoopbackSupported(): 能力探测（真实尝试激活一次） */
 Napi::Value IsSupported(const Napi::CallbackInfo& info) {
   return Napi::Boolean::New(info.Env(), process_audio::IsProcessLoopbackSupported());
+}
+
+/** getForegroundHwnd(): 返回当前前台窗口 hwnd 字符串；无则返回空串 */
+Napi::Value GetForegroundHwnd(const Napi::CallbackInfo& info) {
+  const uint64_t hwnd = process_audio::GetForegroundWindowHwnd();
+  if (hwnd == 0) return Napi::String::New(info.Env(), "");
+  return Napi::String::New(info.Env(), std::to_string(hwnd));
 }
 
 // ================================================================
@@ -239,6 +251,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("captureToWav", Napi::Function::New(env, CaptureToWav));
   exports.Set("isProcessLoopbackSupported",
               Napi::Function::New(env, IsSupported));
+  exports.Set("getForegroundHwnd", Napi::Function::New(env, GetForegroundHwnd));
   exports.Set("startCapture", Napi::Function::New(env, StartCapture));
   exports.Set("stopCapture", Napi::Function::New(env, StopCapture));
   return exports;

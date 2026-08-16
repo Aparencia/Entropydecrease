@@ -49,7 +49,7 @@ export function ContextRecovery({ onContextLost }: { onContextLost?: () => void 
         console.log('[WebGL] Context restored');
         // 强制重新编译所有着色器
         try {
-          const info = (gl as any).info;
+          const info = (gl as unknown as { info?: { programs?: Array<{ destroy?: () => void }> } }).info;
           if (info?.programs) {
             // WebGLRenderer 旧 info 结构：info.programs 为数组
             (info.programs as Array<{ destroy?: () => void }>)?.forEach((program) => {

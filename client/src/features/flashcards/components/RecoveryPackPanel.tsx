@@ -31,7 +31,9 @@ export default function RecoveryPackPanel() {
     let cancelled = false;
     loadRecoveryPack()
       .then((p) => { if (!cancelled) setPack(p); })
-      .catch(() => {});
+      .catch((err) => {
+        console.debug('[RecoveryPackPanel] load recovery pack failed', err);
+      });
     return () => { cancelled = true; };
   }, [dismissed]);
 

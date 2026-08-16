@@ -214,6 +214,18 @@ async def get_quota(
     tier = get_effective_tier(beta_tier, paid_tier)
     limits = get_tier_limits(beta_tier, paid_tier)
 
+    # 开发者白名单（DEV_USER_IDS）：实际完全豁免限流/费用，
+    # 展示层用 -1 表示无限配额（客户端渲染为 ∞，避免误导性显示 120 次/天）
+    if getattr(request.state, "is_dev", False):
+        return QuotaResponse(
+            used_calls=used_calls,
+            total_calls=-1,
+            used_cost=round(usage.get("yuan", 0.0), 4),
+            cost_limit=-1,
+            tier="lifetime",
+            expires_at=None,
+        )
+
     # 服务端权威到期时间（用户全部绑定记录中的最高值）
     expires_at = None
     rows = await supabase_adapter.list_licenses_by_user(user_id)

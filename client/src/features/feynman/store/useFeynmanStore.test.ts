@@ -19,7 +19,7 @@ vi.mock('@/lib/crypto', () => ({
 }));
 
 // Mock writeWithLog to avoid OfflineQueue → database import chain
-vi.mock('@/lib/storage/writeWithLog', async (importOriginal) => {
+vi.mock('@/lib/storage/writeWithLog', async () => {
   const { logOperation } = await import('@/lib/storage/operationLog') as any;
   const { generateId } = await import('@/lib/utils/uuid') as any;
   return {

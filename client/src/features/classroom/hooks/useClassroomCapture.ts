@@ -128,7 +128,9 @@ export function useClassroomCapture() {
   // 卸载时停止会话
   useEffect(() => {
     return () => {
-      captureManager.stopSession().catch(() => {});
+      captureManager.stopSession().catch((err) => {
+        console.debug('[useClassroomCapture] stop session failed (unmount)', err);
+      });
     };
   }, [captureManager]);
 
@@ -144,6 +146,9 @@ export function useClassroomCapture() {
     language: config.language, aiDetectEnabled, setCourseMeta,
     onNotify: notify,
     streamingAsrActive,
+    windowTitle: selectedWindow?.title,
+    windowProcessName: selectedWindow?.processName,
+    courseName: courseMeta.courseName,
   });
 
   // 转写/提取段最新值 ref 桥：停止收尾（useSessionControl）在事件回调
@@ -233,7 +238,8 @@ export function useClassroomCapture() {
 
   /** P0-4 软阻断启动入口：checking 禁用；down 时确认后 localOnly 启动 */
   const requestStart = useCallback(async () => {
-    if (!selectedWindow || gatewayHealth.status === 'checking') return;
+    // PWA 下无窗口选择，仅检查网关健康；Electron 下需先选窗口
+    if ((window.electronAPI && !selectedWindow) || gatewayHealth.status === 'checking') return;
     if (gatewayHealth.status === 'down' && !isLocalAsrReady()) {
       const ok = await askConfirm({
         title: 'AI 网关不可用',
@@ -318,6 +324,13 @@ export function useClassroomCapture() {
     notify('success', `已标记重点 (${new Date(now).toLocaleTimeString()})`);
   }, [status, notify, captureManager, setSmartBundle]);
 
+  // ── P1-8 手动补截：快捷键触发强制补帧（复用 P1-7 机制，下一帧跳过变化检测门槛）──
+  const handleManualCapture = useCallback(() => {
+    if (status !== 'capturing') return;
+    captureManager.requestForceCapture();
+    notify('info', '已手动捕捉当前画面');
+  }, [status, notify, captureManager]);
+
   return {
     // 窗口
     ...windowWatcher,
@@ -335,9 +348,12 @@ export function useClassroomCapture() {
     analysisError: analysis.analysisError,
     partialCount: events.partialCount,
     transcribedCount: events.transcribedCount,
+    // P1-6 内容类型（课程/软件技能/手法技巧/讲座）
+    contentKind: events.contentKind,
     // 实时转录
     liveTranscripts: events.liveTranscripts,
     handleEditTranscript: events.handleEditTranscript,
+    handleCycleSpeaker: events.handleCycleSpeaker,
     // 真流式进行中的 partial 文本 + 激活标志
     partialText: events.partialText,
     streamingAsrActive,
@@ -357,6 +373,8 @@ export function useClassroomCapture() {
     handleRetryMerge: analysis.handleRetryMerge,
     handleDismissAnalysis: analysis.handleDismissAnalysis,
     handleGenerateCards, handleBookmark, bookmarks,
+    // P1-8 手动补截（漏捕检测提示的补救操作）
+    handleManualCapture,
     // M2 自动锚点（时间线展示）
     autoAnchors,
     // 笔记持久化
@@ -369,6 +387,6 @@ export function useClassroomCapture() {
     gatewayStatus: gatewayHealth.status,
     requestStart,
     // 派生
-    canStart: !!selectedWindow && gatewayHealth.status !== 'checking',
+    canStart: (!window.electronAPI || !!selectedWindow) && gatewayHealth.status !== 'checking',
   };
 }

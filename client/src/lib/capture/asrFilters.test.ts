@@ -10,6 +10,7 @@ import {
   isLikelyHallucination,
   collapseAdjacentDuplicates,
   cleanAsrResult,
+  dedupeAcrossFinals,
   SILENCE_RMS_THRESHOLD,
 } from './asrFilters';
 
@@ -79,10 +80,20 @@ describe('collapseAdjacentDuplicates', () => {
     expect(collapseAdjacentDuplicates('这个知识点知识点很重要')).toBe('这个知识点很重要');
   });
 
-  it('标点分隔的重复不压缩（真实语言确认语："对，对""好，好"）', () => {
+  it('标点分隔的单字确认语不压缩（真实语言："对，对""好，好"）', () => {
     expect(collapseAdjacentDuplicates('对，对，你说得对')).toBe('对，对，你说得对');
     expect(collapseAdjacentDuplicates('好，好，我知道了')).toBe('好，好，我知道了');
-    expect(collapseAdjacentDuplicates('就是，就是，那这样吧')).toBe('就是，就是，那这样吧');
+  });
+
+  it('形态 3（P0-4）：跨单个标点的两字词重复压缩（"就是，就是"→"就是"）', () => {
+    expect(collapseAdjacentDuplicates('就是，就是')).toBe('就是');
+    expect(collapseAdjacentDuplicates('就是，就是，那这样吧')).toBe('就是，那这样吧');
+    expect(collapseAdjacentDuplicates('矩阵，矩阵的特征值')).toBe('矩阵的特征值');
+  });
+
+  it('形态 3 白名单：两字确认语不压缩（"是的，是的"是真实确认强调）', () => {
+    expect(collapseAdjacentDuplicates('是的，是的')).toBe('是的，是的');
+    expect(collapseAdjacentDuplicates('好的，好的')).toBe('好的，好的');
   });
 
   it('正常文本不受影响', () => {
@@ -123,5 +134,31 @@ describe('cleanAsrResult', () => {
 
   it('正常文本原样保留', () => {
     expect(cleanAsrResult('软腭和咽部肌肉松弛导致气流受阻')).toBe('软腭和咽部肌肉松弛导致气流受阻');
+  });
+});
+
+describe('dedupeAcrossFinals（P0-4 跨 final 重叠去重）', () => {
+  it('完全一致的重复推送丢弃', () => {
+    expect(dedupeAcrossFinals('今天讲矩阵', '今天讲矩阵')).toBe('');
+  });
+
+  it('后缀-前缀重叠截断（端点误断句："…矩阵"+"矩阵的特征值…"）', () => {
+    expect(dedupeAcrossFinals('今天讲矩阵', '矩阵的特征值很重要')).toBe('的特征值很重要');
+    expect(dedupeAcrossFinals('特征值', '特征值和特征向量')).toBe('和特征向量');
+  });
+
+  it('单字重叠（长度 1）不截断——避免误伤正常连接', () => {
+    expect(dedupeAcrossFinals('我们开始', '始解这个问题')).toBe('始解这个问题');
+  });
+
+  it('截断后与前句高度相似视为整体重复丢弃', () => {
+    expect(dedupeAcrossFinals('矩阵的特征值', '矩阵的特征值矩阵的特征值')).toBe('');
+    expect(dedupeAcrossFinals('线性代数很重要', '线性代数很重要线性代数很重要')).toBe('');
+  });
+
+  it('无重叠时原样返回', () => {
+    expect(dedupeAcrossFinals('今天讲矩阵', '接下来看特征值')).toBe('接下来看特征值');
+    expect(dedupeAcrossFinals('', '新句子')).toBe('新句子');
+    expect(dedupeAcrossFinals('前句', '')).toBe('');
   });
 });

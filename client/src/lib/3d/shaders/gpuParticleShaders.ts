@@ -77,7 +77,8 @@ export function patchParticleShader(
   };
 
   // 保存引用以便在 useFrame 中更新 uniform
-  (material as any).__gpuParticleUniforms = uniforms;
+  // （自定义属性挂载：three 未公开该扩展点，用受约束的接口声明替代 any）
+  (material as unknown as { __gpuParticleUniforms: Record<string, THREE.IUniform> }).__gpuParticleUniforms = uniforms;
 }
 
 /**
@@ -87,7 +88,7 @@ export function updateGPUParticleUniforms(
   material: THREE.PointsMaterial,
   time: number,
 ): void {
-  const uniforms = (material as any).__gpuParticleUniforms as Record<string, THREE.IUniform> | undefined;
+  const uniforms = (material as unknown as { __gpuParticleUniforms?: Record<string, THREE.IUniform> }).__gpuParticleUniforms;
   if (uniforms) {
     uniforms.uTime.value = time;
   }
@@ -97,7 +98,7 @@ export function updateGPUParticleUniforms(
  * 生成顶点着色器位移代码
  */
 function generateVertexCode(config: GPUParticleConfig): string {
-  const { motion, wrap, bounds, speed } = config;
+  const { motion, wrap, bounds } = config;
 
   switch (motion) {
     case 'float-up': {

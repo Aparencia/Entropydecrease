@@ -4,16 +4,15 @@
  * @ai-context: 数字养生守门人 L3 弹出——显示休息活动建议（拉伸/远眺/呼吸/散步），
  * 15 秒自动消失，framber-motion 淡入淡出。
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import type { RestActivity } from './restActivities';
 
-interface RestActivity {
-  id: string;
-  label: string;
-  emoji: string;
-  duration: number;
-}
+// react-refresh: 组件文件只导出组件；getDefaultRestActivities 已移至 ./restActivities，
+// 此处 re-export 保持 '@/components/DigitalWellbeingOverlay' 导出签名不变
+// oxlint-disable-next-line react/only-export-components
+export { getDefaultRestActivities } from './restActivities';
 
 interface DigitalWellbeingOverlayProps {
   show: boolean;
@@ -107,14 +106,4 @@ export function DigitalWellbeingOverlay({ show, restActivities, isLocked, onDism
       )}
     </AnimatePresence>
   );
-}
-
-// 纯函数版本：获取默认休息活动列表
-export function getDefaultRestActivities(): RestActivity[] {
-  return [
-    { id: 'stretch', label: '站立拉伸', emoji: '🧘', duration: 120 },
-    { id: 'look-far', label: '远眺 20 秒', emoji: '🌳', duration: 20 },
-    { id: 'breathe', label: '深呼吸 4-7-8', emoji: '🌬️', duration: 60 },
-    { id: 'walk', label: '散步 5 分钟', emoji: '🚶', duration: 300 },
-  ];
 }

@@ -1,19 +1,20 @@
 /**
  * UnifiedTimeline — smart 路径统一内容时间线
  * 时间轴事件（关键帧/语音/书签/自动锚点）与实时转写文本按时间戳合并为
- * 一条内容流，替代原先"时间轴面板 + 独立转录列表"的分离展示（内测反馈
- * 体验割裂：事件与文本需上下对照两个列表）。
+ * 一条内容流，替代原先"时间轴面板 + 独立转录列表"的分离展示。
  *
- * @ai-context: 转写行保留课后内联编辑（搬自 LiveTranscript 的编辑交互）；
- * 新条目/实时 partial 到达自动滚到底部；仅 smart 路径使用，不替代
- * notes 模块共享的 SmartCapturePanel。
- * @ai-context: Unified timeline merging timeline events and live transcript
+ * @ai-context: 转写行保留课后内联编辑与说话人标注；新条目/实时 partial
+ * 到达自动滚到底部；仅 smart 路径使用。
+ * @ai-context EN: Unified timeline merging timeline events and transcript
  * rows sorted by timestamp; edits stay available after the session ends.
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { BrainCircuit, Camera, Mic, Volume2, Minus, Anchor, Star, Pencil, Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+// 毫秒时间戳 → MM:SS（相对会话起始时间，D12 收敛至 lib/utils/time）
+import { formatSessionElapsed as formatRelativeTime } from '@/lib/utils/time';
 import type { SessionBundle, TimelineEntry, KeyFrame } from '@/lib/capture';
+import { RecentKeyframesStrip } from './RecentKeyframesStrip';
 
 /** 转写条目（含 P1-2 用户修正文本，存在时优先显示） */
 export interface TranscriptEntry {
@@ -22,6 +23,10 @@ export interface TranscriptEntry {
   timestamp: number;
   /** P1-2：用户修正后的文本（存在时优先显示） */
   editedText?: string;
+  /** P0-3：转写置信度（估算口径，<0.55 时 UI 弱化标记） */
+  confidence?: number;
+  /** P1-4：手动标注的说话人（飞书式重新识别；无/说话人A/说话人B） */
+  speaker?: string;
 }
 
 interface UnifiedTimelineProps {
@@ -35,14 +40,8 @@ interface UnifiedTimelineProps {
   isActive: boolean;
   /** P1-2：编辑回调——保存修正文本时调用 */
   onEditTranscript?: (id: string, newText: string) => void;
-}
-
-/** 毫秒时间戳 → MM:SS（相对会话起始时间） */
-function formatRelativeTime(ms: number, startMs: number): string {
-  const elapsed = Math.max(0, Math.floor((ms - startMs) / 1000));
-  const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
-  const ss = String(elapsed % 60).padStart(2, '0');
-  return `${mm}:${ss}`;
+  /** P1-4：说话人循环标注回调（无 → 说话人A → 说话人B → 无） */
+  onCycleSpeaker?: (id: string) => void;
 }
 
 /** 事件类型 → 图标/文案/配色 */
@@ -75,7 +74,7 @@ type Row =
   | { kind: 'text'; ts: number; text: TranscriptEntry }
   | { kind: 'anchor'; ts: number; label?: string };
 
-export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], partialText, isActive, onEditTranscript }: UnifiedTimelineProps) {
+export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], partialText, isActive, onEditTranscript, onCycleSpeaker }: UnifiedTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastCountRef = useRef(0);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -162,6 +161,9 @@ export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], par
       const isEditing = editingId === t.id;
       const displayText = t.editedText ?? t.text;
       const isEdited = !!t.editedText;
+      // P0-3 低置信度标记：置信度 <0.55 的转写弱化显示并加角标（估算口径，
+      // 非统计置信度；未携带置信度的旧数据视为 1）
+      const isLowConfidence = typeof t.confidence === 'number' && t.confidence < 0.55;
       const time = new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
       if (isEditing) {
@@ -189,8 +191,26 @@ export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], par
         <div key={t.id} className="flex gap-2 p-2 rounded-kb-sm transition-colors hover:bg-bg-tertiary/30 group">
           <span className="text-[10px] text-text-tertiary flex-shrink-0 mt-0.5 tabular-nums">{time}</span>
           <Mic className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-emerald-500/70" strokeWidth={1.5} />
-          <span className={cn('flex-1 text-[12px] leading-relaxed min-w-0', idx === rows.length - 1 ? 'text-text-primary font-medium' : 'text-text-secondary')}>
+          {/* P1-4 说话人标注（飞书式手动重新识别；课后点击循环标注） */}
+          {!isActive && onCycleSpeaker && (
+            <button
+              onClick={() => onCycleSpeaker(t.id)}
+              className={cn(
+                'flex-shrink-0 px-1.5 py-0.5 mt-0.5 rounded-kb-sm text-[10px] font-medium border transition-all',
+                t.speaker
+                  ? 'border-cyber/40 text-cyber bg-cyber/5'
+                  : 'border-border/30 text-text-quaternary opacity-0 group-hover:opacity-100 hover:text-cyber hover:border-cyber/40',
+              )}
+              title={t.speaker ? `说话人: ${t.speaker}（点击切换）` : '标注说话人'}
+            >
+              {t.speaker ? t.speaker : '标人'}
+            </button>
+          )}
+          <span className={cn('flex-1 text-[12px] leading-relaxed min-w-0', idx === rows.length - 1 ? 'text-text-primary font-medium' : 'text-text-secondary', isLowConfidence && 'opacity-60')}>
             {displayText}
+            {isLowConfidence && (
+              <span className="ml-1.5 text-[10px] text-text-quaternary font-medium" title={`置信度 ${(t.confidence ?? 0).toFixed(2)}，识别可能不准确`}>低置信</span>
+            )}
             {isEdited && (
               <span className="ml-1.5 text-[10px] text-amber-500 font-medium" title={`原始: ${t.text}`}>已修正</span>
             )}
@@ -278,6 +298,9 @@ export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], par
           </div>
         )}
       </div>
+
+      {/* P1-9 实时截图流：最近 6 帧缩略横条（识别过程可见性） */}
+      <RecentKeyframesStrip keyframes={keyframes} />
 
       {/* 底部统计栏 */}
       <div className={cn(

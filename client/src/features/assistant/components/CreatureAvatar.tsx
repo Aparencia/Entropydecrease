@@ -197,7 +197,9 @@ export function CreatureAvatar({ onClick, onBubbleClick, onBubbleDismiss }: Prop
         // stop() 会 reject finished——拖拽/二次逃逸打断时静默吞掉，避免 unhandled rejection
         wanderAnimRef.current?.finished.then(() => {
           if (!isDraggingRef.current) scheduleWander();
-        }).catch(() => {});
+        }).catch((err) => {
+          console.debug('[CreatureAvatar] wander animation rejected (interrupted)', err);
+        });
       }
     }
   }, [userActive, posX, posY, isInWorkArea, getRandomTargetOutside, scheduleWander]);

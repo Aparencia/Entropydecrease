@@ -106,6 +106,16 @@ BOOL CALLBACK EnumProc(HWND hwnd, LPARAM lparam) {
   info.title = title;
   info.process_name = GetProcessImageName(pid);
   info.root_process_name = GetProcessImageName(info.root_pid);
+
+  RECT rect = {0, 0, 0, 0};
+  if (GetWindowRect(hwnd, &rect) != 0) {
+    info.left = rect.left;
+    info.top = rect.top;
+    info.width = rect.right - rect.left;
+    info.height = rect.bottom - rect.top;
+  }
+  info.always_on_top = (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+
   ctx->out->push_back(std::move(info));
   return TRUE;
 }
@@ -123,6 +133,12 @@ std::vector<WindowInfo> ListAudioWindows() {
 uint32_t ResolveRootPidForPid(uint32_t pid) {
   auto parents = BuildParentMap();
   return ResolveRootPid(static_cast<DWORD>(pid), parents);
+}
+
+uint64_t GetForegroundWindowHwnd() {
+  HWND hwnd = ::GetForegroundWindow();
+  if (hwnd == nullptr) return 0;
+  return reinterpret_cast<uint64_t>(hwnd);
 }
 
 }  // namespace process_audio

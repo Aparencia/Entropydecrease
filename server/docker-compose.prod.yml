@@ -114,8 +114,28 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       REDIS_URL: redis://:${REDIS_PASSWORD:-entropy-decrease_redis_prod}@redis:6379/1
       SYNC_SERVICE_URL: http://sync-service:8080
+      # JWT 验证密钥：网关校验请求方身份（与 sync-service 同一套签发/验证密钥）
+      JWT_SECRET: ${JWT_SECRET}
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
       SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-}
+      # 开发者白名单（邮箱或 user_id，逗号分隔）：完全豁免配额/费用限制并赋予 lifetime 身份
+      DEV_USER_IDS: ${DEV_USER_IDS:-}
+      # 预算控制（每日 token/费用上限，0=不限制）
+      BUDGET_DAILY_TOKEN_LIMIT: ${BUDGET_DAILY_TOKEN_LIMIT:-0}
+      BUDGET_DAILY_COST_LIMIT: ${BUDGET_DAILY_COST_LIMIT:-0}
+      # 付费系统（面包多，可选）
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-}
+      PAYMENT_API_KEY: ${PAYMENT_API_KEY:-}
+      PAYMENT_API_SECRET: ${PAYMENT_API_SECRET:-}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
+      PAYMENT_API_BASE_URL: ${PAYMENT_API_BASE_URL:-}
+      PAYMENT_TIMEOUT_MS: ${PAYMENT_TIMEOUT_MS:-5000}
+      PAYMENT_RETRY_COUNT: ${PAYMENT_RETRY_COUNT:-3}
+      # 生产环境禁止开发降级模式（缺密钥时必须拒绝启动而非放行）
+      GATEWAY_ALLOW_DEV_AUTH: "false"
+      # OpenTelemetry 导出（可选）
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
     depends_on:
       redis:
@@ -150,6 +170,8 @@ services:
       - /opt/Entropydecrease/website:/usr/share/nginx/html:ro
       # 安装包下载目录：独立于 website（其部署会 rm 清空目录），由 release.yml 同步
       - /opt/Entropydecrease/downloads:/usr/share/nginx/downloads:ro
+      # PWA 移动端目录：由 mobile-release.yml 同步至 /opt/Entropydecrease/pwa
+      - /opt/Entropydecrease/pwa:/usr/share/nginx/pwa:ro
     depends_on:
       - ai-gateway
       - sync-service

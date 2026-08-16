@@ -24,6 +24,7 @@ from config.providers import (  # noqa: F401
     ALIYUN_ACCESS_KEY_SECRET,
     AI_PROVIDERS,
     MODEL_ROUTING,
+    _TIER_RANK,  # 单源 tier 优先级（rate_limit 等消费方从此导入，避免重复定义）
     get_provider_for_feature,
 )
 from config.fallback import (  # noqa: F401
@@ -46,6 +47,7 @@ __all__ = [
     "ALIYUN_ACCESS_KEY_SECRET",
     "AI_PROVIDERS",
     "MODEL_ROUTING",
+    "_TIER_RANK",
     "get_provider_for_feature",
     "PROVIDER_FALLBACK_CHAIN",
     "_resolve_model_name",

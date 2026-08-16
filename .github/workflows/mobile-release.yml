@@ -1,0 +1,100 @@
+name: Release PWA (Mobile)
+
+# 由 semantic-release 创建的 v* tag 触发：构建 PWA 移动端产物并部署到
+# ECS 服务器（https://entropydecrease.com/pwa/）。与 release.yml（Electron
+# 桌面端）共用同一 v* tag——双端同版本发布、互不干扰；PR 质量验证复用
+# pr-check.yml（client job 已含 vite build 产出 PWA）。
+on:
+  push:
+    tags: ['v*']
+  # 兜底触发：semantic-release 以内置 GITHUB_TOKEN 推 tag 时 GitHub 防递归
+  # 机制不派发 push 事件（同 release.yml 注释），Release 发布事件补跑
+  release:
+    types: [published]
+  # 手动兜底：在 UI 选择对应 tag 运行，用于补发历史版本
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 同一 tag 的多个触发源串行执行，避免重复部署竞争
+concurrency:
+  group: release-pwa-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # lfs: true 必需：pwa-192x192.png 等由 Git LFS 托管，不拉取则为指针文件
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+      - run: cd client && npm ci
+      - run: cd client && npm run lint
+      - run: cd client && npm run test -- --run
+      # PWA 构建（子路径 /pwa/ 部署）：.env.production 已入库（git 跟踪），
+      # 生产环境变量自动注入；VITE_PWA_BASE 控制构建 base 与 manifest
+      # start_url/scope（vite.config.ts），保证子路径安装入口正确
+      - name: Build PWA (base=/pwa/)
+        env:
+          VITE_PWA_BASE: /pwa
+        run: cd client && npx vite build
+      - name: Verify PWA artifacts
+        run: |
+          cd client
+          test -f dist/index.html && echo "index.html OK"
+          test -f dist/manifest.webmanifest && echo "manifest.webmanifest OK"
+          test -f dist/sw.js && echo "sw.js OK"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pwa-dist
+          path: client/dist/
+          retention-days: 14
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pwa-dist
+          path: pwa-dist
+      - name: Ensure PWA directory on server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: mkdir -p /opt/Entropydecrease/pwa
+      - name: Upload PWA to server (clean replace)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: pwa-dist/*
+          target: /opt/Entropydecrease/pwa
+          strip_components: 1
+          rm: true
+      # scp rm:true 重建目录导致 bind mount 失效，须重启 nginx 容器恢复
+      # （同 deploy-website.yml 模式）；顺带写入版本标记 + 验证部署
+      - name: Restart Nginx, write version and verify
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "${{ github.ref_name }}" > /opt/Entropydecrease/pwa/version.txt
+            docker restart entropy-decrease-nginx
+            sleep 5
+            curl -sf https://entropydecrease.com/pwa/ | grep -q "熵减" || exit 1
+            echo "PWA deployed: ${{ github.ref_name }}"

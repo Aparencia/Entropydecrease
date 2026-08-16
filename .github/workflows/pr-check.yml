@@ -10,6 +10,7 @@ jobs:
   # ===========================================================================
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # dorny/paths-filter 需要读取 PR 变更文件列表；Dependabot PR 的只读 token
     # 默认不含该权限，显式声明后 Dependabot PR 的路径检测才能正常工作
     permissions:
@@ -20,6 +21,7 @@ jobs:
       sync-service: ${{ steps.filter.outputs.sync-service }}
       ai-gateway: ${{ steps.filter.outputs.ai-gateway }}
       website: ${{ steps.filter.outputs.website }}
+      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -36,6 +38,10 @@ jobs:
               - 'server/shared/**'
             website:
               - 'website/**'
+            docs:
+              - 'docs/**'
+              - 'scripts/docs-check.mjs'
+              - '.docscheckignore'
 
   # ===========================================================================
   # Client —— React + Vite + Electron 前端
@@ -44,6 +50,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.client == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -53,20 +60,26 @@ jobs:
           cache-dependency-path: client/package-lock.json
       - run: cd client && npm ci
       - name: Lint
-        run: cd client && npm run lint
+        # --deny-warnings：2026-08 已清零全部 warning，此后新 warning 视为失败，
+        # 防止 lint 债务回潮（审计 #4）
+        run: cd client && npx oxlint --deny-warnings
       - name: Typecheck (renderer)
         # 渲染进程（React + Vite）的 TypeScript 编译检查
-        run: cd client && npx tsc --noEmit
+        run: cd client && npm run typecheck
       # Electron 主进程使用独立的 tsconfig（CommonJS / Node 目标），
       # 与渲染进程的 Vite+DOM 配置不同，需单独检查以捕获主进程类型错误
       - name: Typecheck (Electron main process)
-        run: cd client && npx tsc -p electron/tsconfig.json --noEmit
+        run: cd client && npm run typecheck:electron
       - name: Test (with coverage)
         # 启用覆盖率收集，与 vitest.config.ts 中配置的阈值配合，
         # 确保新增代码的测试覆盖不低于设定门槛
         run: cd client && npm run test -- --run --coverage
       - name: Build
         run: cd client && npm run build
+      - name: Audit (client)
+        # 供应链漏洞扫描：默认 registry 为 npmmirror 不支持 advisories API，
+        # 显式指定官方 registry（见 migration-spec §15.5）
+        run: cd client && npm audit --registry=https://registry.npmjs.org --audit-level=high
 
   # ===========================================================================
   # Server / sync-service —— Go + Gin 同步服务
@@ -75,6 +88,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.sync-service == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: server/sync-service
@@ -82,8 +96,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          # Go 1.25 尚未发布，使用当前最新稳定版 1.24（截至 2026 年 8 月）
-          go-version: '1.24'
+          # 与 go.mod 的 go 1.25 指令一致（此前注释"1.25 尚未发布"已过时）
+          go-version: '1.25'
           cache-dependency-path: server/sync-service/go.sum
       - name: Lint (go vet)
         run: go vet ./...
@@ -99,6 +113,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.ai-gateway == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: server/ai-gateway
@@ -125,6 +140,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.website == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: website
@@ -142,3 +158,20 @@ jobs:
         run: npx tsc --noEmit
       - name: Build
         run: npm run build
+
+  # ===========================================================================
+  # Docs —— 文档体系一致性检查（链接/索引/命名）
+  # ===========================================================================
+  docs:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Docs check
+        # 相对链接完整性 + 索引覆盖 + 命名规范（历史快照豁免见 docs/.docscheckignore）
+        run: node scripts/docs-check.mjs

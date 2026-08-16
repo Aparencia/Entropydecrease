@@ -21,8 +21,10 @@ interface DiscoveryState {
   /** 历史发现总数 / Total historical discoveries */
   totalCount: number;
 
-  /** 尝试触发发现（里程碑后调用） / Try to trigger (called after milestone) */
-  tryTrigger: (sourceType: 'pomodoro' | 'flashcard' | 'feynman', depth: number) => void;
+  /** 尝试触发发现（里程碑后调用）。
+   *  sourceType 为预留参数：当前实现不区分触发来源，未来按来源差异化
+   *  调整发现概率时启用（下划线标注避免 noUnusedParameters 报错）。 */
+  tryTrigger: (_sourceType: 'pomodoro' | 'flashcard' | 'feynman', depth: number) => void;
   /** 确认收入生态缸 / Confirm collecting to ecosystem */
   collect: () => Promise<void>;
   /** 忽略（关闭弹窗） / Dismiss (close popup) */
@@ -36,7 +38,7 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
   pendingDepth: 0,
   totalCount: 0,
 
-  tryTrigger: (sourceType, depth) => {
+  tryTrigger: (_sourceType, depth) => {
     // 检查留存设置开关 / Check retention settings toggle
     const settings = useRetentionSettings.getState();
     if (!settings.enabled || !settings.discoveries) return;

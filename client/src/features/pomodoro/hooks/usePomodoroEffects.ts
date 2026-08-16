@@ -32,7 +32,9 @@ export function usePomodoroEffects(): void {
       'Notification' in window &&
       Notification.permission === 'default'
     ) {
-      Notification.requestPermission().catch(() => {});
+      Notification.requestPermission().catch((err) => {
+        console.debug('[usePomodoroEffects] request notification permission failed', err);
+      });
     }
     // 仅在 mount 时执行一次
     // eslint-disable-next-line react-hooks/exhaustive-deps

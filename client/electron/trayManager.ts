@@ -18,19 +18,9 @@ import { logger } from './logger.js';
 /** 系统托盘实例 */
 let tray: Tray | null = null;
 
-/** 应用是否正在退出（由外部 setter 控制） */
-let isQuittingRef: { value: boolean } = { value: false };
-
 // ================================================================
 // 公共 API
 // ================================================================
-
-/**
- * 设置 isQuitting 标志的引用，与 main.ts 共享状态
- */
-export function setQuittingRef(ref: { value: boolean }): void {
-  isQuittingRef = ref;
-}
 
 /**
  * 创建系统托盘图标及右键菜单

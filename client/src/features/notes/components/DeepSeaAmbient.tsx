@@ -85,7 +85,7 @@ export function DeepSeaAmbient({ enabled = true, intensity = 0.3 }: DeepSeaAmbie
           const y = canvas.height * 0.3 + i * 80
             + Math.sin(x * 0.005 + time + i * 2) * 20
             + Math.sin(x * 0.01 + time * 0.7) * 10;
-          x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
       }

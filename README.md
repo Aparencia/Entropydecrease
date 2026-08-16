@@ -3,7 +3,7 @@
   <p align="center"><strong>你的 AI 智能学习伙伴 — 让每一分钟学习都高效有价值</strong></p>
   <p align="center">
     <img src="https://img.shields.io/badge/status-beta-green.svg" alt="Status" />
-    <img src="https://img.shields.io/badge/version-v0.22.0-blue.svg" alt="Version" />
+    <img src="https://img.shields.io/badge/version-v0.35.2-blue.svg" alt="Version" />
     <img src="https://img.shields.io/badge/license-BUSL--1.1-blue.svg" alt="License" />
   </p>
 </p>
@@ -189,7 +189,7 @@ Entropydecrease/
 ├── server/              # 后端服务（AI 网关 + 数据同步）
 │   ├── ai-gateway/      #    Python AI 增强网关（视觉提取、语音转写、灵感整理）
 │   └── sync-service/    #    Go 数据同步服务
-├── docs/                # 项目文档（phase0 ~ phase6 + 版本迭代文档）
+├── docs/                # 项目文档（standards/templates/adr/knowledge/versions 等）
 ├── scripts/             # 脚本工具
 ├── .env.example         # 环境变量模板
 └── README.md
@@ -218,6 +218,7 @@ Entropydecrease/
 | **v0.9.0** | ✅ 已完成 | 笔记搜索优化 + 标签筛选 + 闪卡堆叠组件 + 多项 BUG 修复 |
 | **v0.10.0** | ✅ 已完成 | 主页氛围化问候 + 深海认知景深层 + 弹性翻页交互 + 启动缓冲带 + 动效优化 |
 | **v0.10.1** | ✅ 已完成 | 主页导航动效修复 + 弹性翻页时序优化 |
+| **v0.11.0 ~ v0.35.2** | ✅ 已完成 | 连续迭代：品牌迁移（课伴→熵减）、学习启动仪式、课堂助手、深潜世界（3D 视觉宪法）、MCP 学习记忆、流式 ASR/TTS、知识星座等，详见 [CHANGELOG.md](./CHANGELOG.md) 与 [docs/versions/](./docs/versions/) |
 | **正式上线** | 🎯 规划中 | 生产就绪版 |
 
 ### 🔮 未来方向

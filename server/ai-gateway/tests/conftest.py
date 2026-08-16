@@ -2,6 +2,10 @@
 熵减 AI 网关 — pytest 公共夹具
 
 提供测试用的 FastAPI app、TestClient、mock Provider 等。
+
+@ai-context: 测试夹具层——统一提供 MockProvider/FailingProvider 与精简 TestClient
+（不挂 JWT/限流中间件），保证全部测试离线隔离（2026-08 审计确认 0 处真实网络调用）。
+测试隔离策略：一切外部依赖（Redis/供应商 API）均以 mock 替代。
 """
 
 import sys

@@ -123,7 +123,7 @@ export function useAIRescue() {
       setState({ data: parsed, loading: false, error: null, isFallback: false, needsConfig: false });
       setIsStreaming(false);
       return parsed;
-    } catch (error: unknown) {
+    } catch {
       if (cancelRef.current || streamIdRef.current !== streamId) return null;
       // 流式失败 → 降级非流式（非流式内部自行处理错误态与降级链）
       setIsStreaming(false);

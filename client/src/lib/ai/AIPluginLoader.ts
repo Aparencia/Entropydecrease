@@ -60,7 +60,9 @@ class AIPluginLoader {
     } catch (err) {
       if (opts.offline && err instanceof AIError && err.code === 'offline') {
         // 离线入队（不阻塞、不报错，联网后自动重放；测试环境无 indexedDB 时静默失败）
-        offlineAIQueue.enqueue(opts.offline.feature, opts.offline.endpoint, opts.offline.payload).catch(() => {});
+        offlineAIQueue.enqueue(opts.offline.feature, opts.offline.endpoint, opts.offline.payload).catch((err) => {
+          console.debug('[AIPluginLoader] offline queue enqueue failed', err);
+        });
         throw new AIError('当前处于离线状态，请求已加入队列，联网后自动完成', 'offline', false);
       }
       throw err;

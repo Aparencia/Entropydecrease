@@ -58,6 +58,7 @@ SMTP_PASS=
 **规则：**
 - `.env.example` 提交到 Git（只有键和说明，无真实值）
 - `.env` / `.env.local` / `.env.production` 绝不提交（在 .gitignore 中）
+- **唯一例外**：`client/.env.production`（内容全部为公开值——Supabase publishable anon key + 公网 URL，本就随安装包分发；CI 打包依赖它注入渲染进程 VITE_ 变量）。该文件必须满足"零敏感值"审计：只允许 publishable/anon 级凭据与公网地址，任何 service_role/私钥/密码一律禁止放入
 - 每个变量有注释说明用途
 - 敏感值留空或写占位符
 

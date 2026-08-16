@@ -203,6 +203,36 @@ export default function DownloadPage() {
         </SectionReveal>
       </section>
 
+      {/* 移动端 PWA：手机浏览器打开 /pwa/ 添加到主屏幕，即开即用 */}
+      <section className="max-w-3xl mx-auto px-6 mb-16">
+        <SectionReveal>
+          <div
+            className="rounded-2xl p-8 text-center transition-shadow duration-500 hover:shadow-kb-card"
+            style={{ background: "var(--kb-bg-elevated)", border: "1px solid var(--kb-glass-border)" }}
+          >
+            <p className="text-sm tracking-[0.3em] text-kb-text3 uppercase mb-3">Mobile</p>
+            <h2 className="font-serif text-2xl sm:text-3xl font-bold text-kb-text mb-3">移动端 · 即开即用</h2>
+            <p className="text-kb-text2 text-sm max-w-md mx-auto mb-6 leading-relaxed">
+              用手机浏览器打开移动端版，即可添加到主屏幕，像 App 一样使用番茄钟、笔记与课堂助手。
+              支持 iOS Safari 与 Android Chrome。
+            </p>
+            <a
+              href="https://entropydecrease.com/pwa/"
+              className="inline-block px-10 py-3.5 rounded-2xl text-white font-medium transition-all duration-500 hover:scale-[1.04] active:scale-[0.97]"
+              style={{
+                background: "linear-gradient(135deg, var(--kb-cyber-cyan), var(--kb-accent-400))",
+                boxShadow: "var(--kb-shadow-accent)",
+              }}
+            >
+              打开移动端版 ↗
+            </a>
+            <p className="text-xs text-kb-text3 mt-5 leading-relaxed">
+              iOS：Safari 打开 → 分享 → 添加到主屏幕　|　Android：Chrome 菜单 → 添加到主屏幕
+            </p>
+          </div>
+        </SectionReveal>
+      </section>
+
       {/* 应用截图 Mockup */}
       <section className="max-w-4xl mx-auto px-6 mb-20">
         <SectionReveal>

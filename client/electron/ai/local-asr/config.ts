@@ -64,6 +64,12 @@ export const MODEL_FILES = {
   tokens: 'tokens.txt',
 } as const;
 
+/** P1-1 SenseVoice 重打分模型关键文件名（int8 量化包） */
+export const RESCORE_MODEL_FILES = {
+  model: 'model.int8.onnx',
+  tokens: 'tokens.txt',
+} as const;
+
 /**
  * 模型定义（供设置页展示 + modelManager 下载）
  *
@@ -91,6 +97,21 @@ export const ASR_MODELS = {
     /** hf-mirror.com 国内镜像（逐文件下载，无需解压） */
     mirrorBaseUrl: 'https://hf-mirror.com/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main',
   },
+  /**
+   * P1-1 两遍重打分模型：SenseVoice-Small（非流式，整句上下文识别）。
+   * 流式 Zipformer 负责实时出字，句末由 SenseVoice 对整句音频重打分
+   * （整句注意力上下文精度优于流式解码），两结果一致性校验后择优。
+   */
+  rescore: {
+    id: 'rescore-sensevoice',
+    label: 'SenseVoice 重打分（句末整句复核，提升中文准确率）',
+    description: '句末对整句音频二次识别，与流式结果一致性校验后择优，适合追求准确率的课堂场景',
+    size: '~230MB',
+    dirName: 'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17',
+    files: [RESCORE_MODEL_FILES.model, RESCORE_MODEL_FILES.tokens],
+    downloadUrl: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2',
+    mirrorBaseUrl: 'https://hf-mirror.com/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17/resolve/main',
+  },
 } as const;
 
 // ================================================================
@@ -117,6 +138,11 @@ export function getModelsDir(): string {
 export function getModelDir(): string {
   const modelDef = ASR_MODELS.streaming;
   return path.join(getModelsDir(), modelDef.dirName);
+}
+
+/** P1-1：获取重打分模型目录完整路径 */
+export function getRescoreModelDir(): string {
+  return path.join(getModelsDir(), ASR_MODELS.rescore.dirName);
 }
 
 /**
@@ -191,4 +217,12 @@ export function isModelReady(): boolean {
   const modelDef = ASR_MODELS.streaming;
   // 检查关键文件是否存在
   return modelDef.files.every(f => existsSync(path.join(modelDir, f)));
+}
+
+/**
+ * P1-1：检查重打分模型是否已下载就绪
+ */
+export function isRescoreModelReady(): boolean {
+  const modelDir = getRescoreModelDir();
+  return ASR_MODELS.rescore.files.every(f => existsSync(path.join(modelDir, f)));
 }

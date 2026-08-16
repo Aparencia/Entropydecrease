@@ -1,12 +1,16 @@
-fastapi>=0.115.0
-uvicorn[standard]>=0.30.0
-gunicorn>=22.0.0
-openai>=1.50.0
-pydantic>=2.0.0
-redis>=5.0.0
-python-jose[cryptography]>=3.3.0
-httpx>=0.27.0
-python-dotenv>=1.0.0
-python-json-logger>=2.0.0,<4.0.0
+# AI 网关 Python 依赖
+# 版本锁定策略（2026-08 R5）：以下版本为当前环境实测通过（pytest 331 全绿）的
+# 锁定版本，保证可复现安装；google-genai 因本环境未安装未锁定，保持下限约束。
+# 升级依赖后须同步更新本文件并跑全量 pytest。
+fastapi==0.139.0
+uvicorn[standard]==0.49.0
+gunicorn==26.0.0
+openai==2.44.0
+pydantic==2.13.4
+redis==8.0.1
+python-jose[cryptography]==3.5.0
+httpx==0.28.1
+python-dotenv==1.2.2
+python-json-logger==3.3.0
 google-genai>=1.0.0
-python-multipart>=0.0.7
+python-multipart==0.0.32

@@ -143,6 +143,10 @@ async def extract_vision(request: Request, body: VisionExtractRequest) -> Vision
     aux_fields = [formulas, diagrams, key_points, code_blocks, concepts]
     aux_filled = sum(1 for v in aux_fields if v) / len(aux_fields)
     confidence = round(filled_text * 0.5 + aux_filled * 0.5, 2)
+    # P0-3：疑似截断（max_tokens clamp 导致结构化字段缺失）时置信度减半，
+    # 作为渲染进程低置信度弱化标记的质量门控信号
+    if result.get("truncated"):
+        confidence = round(confidence * 0.5, 2)
 
     # 实际使用的模式
     effective_mode = result.get("mode", body.mode or "auto")

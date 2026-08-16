@@ -132,7 +132,7 @@ function BioluminescentLayer({ count }: { count: number }) {
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-    addParticleAttributes(geo, count, (i) => [Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5]);
+    addParticleAttributes(geo, count, () => [Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5]);
     return geo;
   }, [positions, colors, sizes, count]);
 
@@ -272,7 +272,7 @@ function SeafloorSnow({ count }: { count: number }) {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-    addParticleAttributes(geo, count, (i) => [0, 0.002 + Math.random() * 0.005, 0]);
+    addParticleAttributes(geo, count, () => [0, 0.002 + Math.random() * 0.005, 0]);
     return geo;
   }, [positions, sizes, count]);
 

@@ -97,7 +97,17 @@ declare global {
       audio_capture_start: (options: { microphone: boolean; chunkDurationMs?: number; sampleRate?: number; channels?: number }) => Promise<{ success: boolean; error?: string }>;
       local_asr_stream_start: (options: { sampleRate?: number }) => Promise<{ success: boolean; error?: string }>;
       local_asr_stream_stop: () => Promise<{ success: boolean }>;
+      /** P0-6: 会话热词动态更新（课程识别成功后调用，下一断句生效） */
+      local_asr_stream_set_hotwords: (args: { hotwords?: string }) => Promise<{ success: boolean }>;
       audio_capture_stop: () => Promise<{ success: boolean }>;
+      /** P0-2: 本地 Silero VAD 推理（主进程 onnxruntime，16kHz Float32 PCM 块） */
+      vad_silero_process: (args: { samples: ArrayBuffer; sampleRate?: number; reset?: boolean }) => Promise<{ probability: number | null; available: boolean }>;
+      /** P2-1: 本地 OCR 识别（PP-OCRv5；模型未就绪时 available=false） */
+      local_ocr_recognize: (args: { imageBase64: string }) => Promise<{ available: boolean; lines: Array<{ text: string; box: [number, number, number, number]; confidence: number }> | null }>;
+      /** P2-1: 下载本地 OCR 模型（ModelScope 官方源，进度经 local_ocr_download_progress 推送） */
+      local_ocr_download_model: () => Promise<{ success: boolean; error?: string }>;
+      /** P2-1: 本地 OCR 模型状态（就绪/下载中/进度） */
+      local_ocr_status: () => Promise<{ ready: boolean; downloading: boolean; progress: number }>;
       // ── A3 微进展叙述（新增） ──
       ai_progress_narrate: (args: { statsText: string; authToken?: string }) => Promise<{
         narrative: string;
@@ -108,6 +118,8 @@ declare global {
         requestId?: string;
         source?: string;
       }>;
+      /** AI 配额耗尽（429）：主进程代理路径推送（gatewayHttp/gatewayStream） */
+      onAIQuotaExhausted?: (callback: (detail: string) => void) => () => void;
     };
   }
 }

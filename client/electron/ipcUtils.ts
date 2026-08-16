@@ -51,8 +51,7 @@ export function getMainWindowId(): number | null {
  * 支持类型安全的 handler 签名：
  * 允许 handler 声明具体参数类型，内部通过断言适配 ipcMain.handle 的 unknown[] 签名。
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type TypedHandler<T extends any[]> = (
+type TypedHandler<T extends unknown[]> = (
   event: Electron.IpcMainInvokeEvent,
   ...args: T
 ) => Promise<unknown>;
@@ -73,7 +72,7 @@ type TypedHandler<T extends any[]> = (
  * @param handler - 处理函数
  * @ai-context main.ts 中所有 safeHandle 调用均经过此函数
  */
-export function safeHandle<T extends any[]>(
+export function safeHandle<T extends unknown[]>(
   channel: string,
   handler: TypedHandler<T>,
 ): void {
@@ -147,7 +146,7 @@ export function requireArray<T = unknown>(value: unknown, field: string): T[] {
  * @param handler - 实际处理函数（仅处理最后一次请求的参数）
  * @ai-context 用于高频 IPC 场景（如滚动位置同步、窗口状态更新）
  */
-export function safeHandleBatched<T extends any[]>(
+export function safeHandleBatched<T extends unknown[]>(
   channel: string,
   handler: TypedHandler<T>,
 ): void {

@@ -22,6 +22,14 @@ struct WindowInfo {
   std::wstring title;
   std::wstring process_name;
   std::wstring root_process_name;
+
+  /** 窗口矩形（像素，GetWindowRect） */
+  int32_t left = 0;
+  int32_t top = 0;
+  int32_t width = 0;
+  int32_t height = 0;
+  /** 置顶窗口（WS_EX_TOPMOST） */
+  bool always_on_top = false;
 };
 
 /** 枚举所有可见且有标题的顶层窗口 */
@@ -29,6 +37,9 @@ std::vector<WindowInfo> ListAudioWindows();
 
 /** 单独解析某个 PID 的应用根进程 */
 uint32_t ResolveRootPidForPid(uint32_t pid);
+
+/** 取当前前台窗口 HWND；无前台窗口时返回 0 */
+uint64_t GetForegroundWindowHwnd();
 
 }  // namespace process_audio
 

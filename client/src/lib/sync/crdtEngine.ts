@@ -11,7 +11,6 @@
 import * as automerge from '@automerge/automerge';
 import {
   CRDT_ENABLED_TABLES,
-  SYNC_MODE_FLAG,
   type CRDTDocState,
   type CRDTTableDoc,
   type CRDTChangeset,

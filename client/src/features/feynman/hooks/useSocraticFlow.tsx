@@ -40,11 +40,19 @@ const ANGLE_ICON_MAP: Record<string, React.ReactNode> = {
   history: <Landmark className="w-icon-sm h-icon-sm" strokeWidth={1.5} />,
   debate: <Flame className="w-icon-sm h-icon-sm" strokeWidth={1.5} />,
 };
+// 模块级 JSX 元素常量池（非渲染列表，按 index 取用后作为属性传递，无需 key）。
+// oxlint react/jsx-key 对非渲染数组误报，逐行抑制。
+// oxlint-disable-next-line react/jsx-key
 const FALLBACK_ICONS = [
+  // oxlint-disable-next-line react/jsx-key
   <Lightbulb className="w-icon-sm h-icon-sm" strokeWidth={1.5} />,
+  // oxlint-disable-next-line react/jsx-key
   <Search className="w-icon-sm h-icon-sm" strokeWidth={1.5} />,
+  // oxlint-disable-next-line react/jsx-key
   <Puzzle className="w-icon-sm h-icon-sm" strokeWidth={1.5} />,
+  // oxlint-disable-next-line react/jsx-key
   <BookOpen className="w-icon-sm h-icon-sm" strokeWidth={1.5} />,
+  // oxlint-disable-next-line react/jsx-key
   <Target className="w-icon-sm h-icon-sm" strokeWidth={1.5} />,
 ];
 const FALLBACK_COLORS = [

@@ -7,7 +7,7 @@
  * @ai-context: 定时截图采集器：desktopCapturer 抓帧、间隔可配（100ms-60s 边界校验）。
  */
 
-import { desktopCapturer, DesktopCapturerSource, BrowserWindow } from 'electron';
+import { desktopCapturer, DesktopCapturerSource } from 'electron';
 import { logger } from './logger';
 
 // ================================================================

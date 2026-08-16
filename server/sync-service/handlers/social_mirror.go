@@ -90,7 +90,7 @@ var socialMirrorManager = &SocialMirrorManager{
 }
 
 func init() {
-	go socialMirrorManager.cleanupLoop()
+	go goSafe(socialMirrorManager.cleanupLoop)
 }
 
 // ---------- SocialMirrorManager 核心方法 ----------

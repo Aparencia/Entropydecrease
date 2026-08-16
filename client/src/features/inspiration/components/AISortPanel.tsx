@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 萤火海沟 — AI 分拣建议面板
  * @ai-context 灵感卡片内联展开的 AI 归类建议列表，支持手动覆盖分类与一键转化
  */
@@ -8,7 +8,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, ChevronDown, Check, Pencil, ArrowRight, ListTodo } from 'lucide-react';
 import { useInspirationStore } from '../store/inspirationStore';
 import { useNoteStore } from '@/features/notes/store/useNoteStore';
-import { useShallow } from 'zustand/react/shallow';
 import { useToast } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { SortSuggestion } from '@/lib/ai/types';
@@ -17,8 +16,10 @@ import type { AISortPanelProps } from '../types';
 
 function AISortPanel({ suggestions, item, onClose }: AISortPanelProps) {
   const { toast } = useToast();
-  const { confirmSort, updateSortStatus } = useInspirationStore(useShallow(s => s));
-  const { createTodoNote } = useNoteStore(useShallow(s => s));
+  // P1-5 收尾：action 恒定引用，直接字段级订阅
+  const confirmSort = useInspirationStore((s) => s.confirmSort);
+  const updateSortStatus = useInspirationStore((s) => s.updateSortStatus);
+  const createTodoNote = useNoteStore((s) => s.createTodoNote);
   const [localSuggestions, setLocalSuggestions] = useState<SortSuggestion[]>(suggestions);
   const [openDropdownIdx, setOpenDropdownIdx] = useState<number | null>(null);
   const [overriddenSet, setOverriddenSet] = useState<Set<number>>(new Set());

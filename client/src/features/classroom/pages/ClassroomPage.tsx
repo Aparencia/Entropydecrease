@@ -22,6 +22,7 @@ import { classifyAnalysisError } from '../utils/analysisErrors';
 import { NoteInsertDialog } from '../components/NoteInsertDialog';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { WindowSelectCard } from '../components/WindowSelectCard';
+import { VideoImportPanel } from '../components/VideoImportPanel';
 import { PathModeSelector } from '../components/PathModeSelector';
 import { SettingsCollapse } from '../components/SettingsCollapse';
 import { SonarControls } from '../components/SonarControls';
@@ -60,8 +61,8 @@ export default function ClassroomPage() {
     setShowNoteDialog(true);
   }, [capture]);
 
-  // M 快捷键：课中标记重点
-  const { handleBookmark } = capture;
+  // M 快捷键：课中标记重点；C 快捷键：手动补截当前画面（P1-8）
+  const { handleBookmark, handleManualCapture } = capture;
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'm' || e.key === 'M') {
       // 避免在输入框中触发
@@ -69,7 +70,13 @@ export default function ClassroomPage() {
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       handleBookmark();
     }
-  }, [handleBookmark]);
+    if (e.key === 'c' || e.key === 'C') {
+      // 避免在输入框中触发（快捷键截图同样跳过编辑态）
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      handleManualCapture();
+    }
+  }, [handleBookmark, handleManualCapture]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -82,9 +89,9 @@ export default function ClassroomPage() {
        内容超高时面板整体滚动。面板 sm+ 断点 max-h=85vh（含 1px border ×2）+
        md 断点 p-8 padding（4rem）→ 内容区恰为 calc(85vh-4rem-2px)，锚定后
        与面板精确贴合（一屏式布局） */
-    <div className="flex h-[calc(85vh-4rem-2px)] min-h-0">
-      {/* ── 左侧控制面板：一屏容纳，不滚动 ── */}
-      <div className="w-80 flex-shrink-0 border-r border-border/30 flex flex-col overflow-hidden">
+    <div className="flex flex-col md:flex-row h-[calc(100vh-6.5rem-2px)] md:h-[calc(85vh-4rem-2px)] min-h-0">
+      {/* ── 左侧控制面板：桌面一屏容纳不滚动，移动端限高可滚动 ── */}
+      <div className="w-full md:w-80 md:flex-shrink-0 max-h-[50vh] md:max-h-none border-b md:border-b-0 md:border-r border-border/30 flex flex-col overflow-hidden">
         {/* 标题：回声定位仪式标识（compact） */}
         <div className="flex items-center px-4 py-2.5 border-b border-border/30">
           <ModuleRitualHeader
@@ -119,21 +126,28 @@ export default function ClassroomPage() {
           /* 配置态：窗口/路径/模式/设置 + 底部启动按钮 */
           <>
             <div className="flex-1 min-h-0 p-3 space-y-2.5 overflow-y-auto">
-              <WindowSelectCard
-                windows={capture.windows}
-                selected={capture.selectedWindow}
-                onSelect={capture.setSelectedWindow}
-                onRefresh={capture.refreshWindows}
-                loading={capture.windowsLoading}
-              />
-              <PathModeSelector
-                capturePath={capture.capturePath}
-                onPathChange={capture.setCapturePath}
-                mode={capture.mode}
-                onModeChange={capture.handleModeChange}
-              />
-              {/* P8 视觉提取模式：写入截图 metadata.visionMode，VisionWorker 按模式提取 */}
-              <VisionModeSelector value={capture.visionMode} onChange={capture.setVisionMode} />
+              {window.electronAPI ? (
+                <>
+                  <WindowSelectCard
+                    windows={capture.windows}
+                    selected={capture.selectedWindow}
+                    onSelect={capture.setSelectedWindow}
+                    onRefresh={capture.refreshWindows}
+                    loading={capture.windowsLoading}
+                  />
+                  <PathModeSelector
+                    capturePath={capture.capturePath}
+                    onPathChange={capture.setCapturePath}
+                    mode={capture.mode}
+                    onModeChange={capture.handleModeChange}
+                  />
+                  {/* P8 视觉提取模式：写入截图 metadata.visionMode，VisionWorker 按模式提取 */}
+                  <VisionModeSelector value={capture.visionMode} onChange={capture.setVisionMode} />
+                </>
+              ) : (
+                /* PWA：视频导入 + 抖音链接引导（录屏/网课/抖音视频 → AI 笔记） */
+                <VideoImportPanel />
+              )}
               <SettingsCollapse config={capture.config} onChange={capture.handleConfigChange} />
             </div>
             <div className="p-3 border-t border-border/20">
@@ -145,7 +159,9 @@ export default function ClassroomPage() {
                     : 'bg-bg-secondary text-text-tertiary cursor-not-allowed',
                 )}>
                 <Radar className="w-5 h-5" strokeWidth={1.5} />
-                {capture.gatewayStatus === 'checking' ? '检查网关中…' : '开始回声定位'}
+                {capture.gatewayStatus === 'checking'
+                  ? '检查网关中…'
+                  : window.electronAPI ? '开始回声定位' : '开始录音转写'}
               </button>
               {!capture.canStart && (
                 <p className="mt-1.5 text-center text-[11px] text-text-tertiary">

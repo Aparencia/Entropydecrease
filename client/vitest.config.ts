@@ -8,7 +8,7 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
+    include: ['src/**/*.test.{ts,tsx}', 'electron/**/*.test.ts'],
     // 覆盖率策略：初始门槛较低，随测试体系完善逐步提高。
     // 增量覆盖率不低于 60%，避免新代码完全无测试覆盖。
     coverage: {

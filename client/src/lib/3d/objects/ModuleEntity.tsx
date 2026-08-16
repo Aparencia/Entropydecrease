@@ -271,7 +271,7 @@ function OrbitalRing({ isActive, isHovered, color }: {
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     // velocity: x=旋转速度倍率
-    addParticleAttributes(geo, MAX_ORBITAL, (i) => [
+    addParticleAttributes(geo, MAX_ORBITAL, () => [
       isActive ? 1.5 : 0.6,
       0, 0,
     ]);

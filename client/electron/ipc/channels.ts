@@ -39,6 +39,9 @@ export const IPC_CHANNELS = {
   SCREEN_WATCH_WINDOWS_START: 'screen_watch_windows_start',
   SCREEN_WATCH_WINDOWS_STOP: 'screen_watch_windows_stop',
   SCREEN_WINDOWS_CHANGED: 'screen_windows_changed',
+  // 窗口选择记忆
+  WINDOW_MEMORY_RECORD: 'window_memory_record',
+  WINDOW_MEMORY_CLEAR: 'window_memory_clear',
   SCREEN_CAPTURE_START: 'screen_capture_start',
   SCREEN_CAPTURE_STOP: 'screen_capture_stop',
   SCREEN_CAPTURE_FRAME: 'screen_capture_frame',
@@ -48,6 +51,14 @@ export const IPC_CHANNELS = {
   AUDIO_CAPTURE_CHUNK: 'audio_capture_chunk',
   AUDIO_CAPTURE_DO_START: 'audio_capture_do_start',
   AUDIO_CAPTURE_DO_STOP: 'audio_capture_do_stop',
+
+  // 本地 Silero VAD（主进程 onnxruntime 推理，P0-2）
+  VAD_SILERO_PROCESS: 'vad_silero_process',
+
+  // 本地 OCR（PP-OCRv5 onnxruntime 推理，P2-1）
+  LOCAL_OCR_RECOGNIZE: 'local_ocr_recognize',
+  LOCAL_OCR_DOWNLOAD_MODEL: 'local_ocr_download_model',
+  LOCAL_OCR_STATUS: 'local_ocr_status',
 
   // Path C 视频录制
   VIDEO_RECORD_START: 'video_record_start',

@@ -169,13 +169,17 @@ export function FeynmanRecorder({ explanation, onExplanationChange, noteId, conc
       captureStarted = true;
       const asrStart = await api.invoke('local_asr_stream_start', { sampleRate: 16000 }) as { success: boolean };
       if (!asrStart?.success) {
-        await api.invoke('audio_capture_stop').catch(() => {});
+        await api.invoke('audio_capture_stop').catch((err) => {
+          console.debug('[FeynmanRecorder] capture stop after ASR start failure', err);
+        });
         setError('语音识别启动失败，请重试');
         return;
       }
     } catch {
       // 异常若发生在本组件已启动采集之后，必须回收麦克风，避免残留占用阻塞其他音频功能
-      if (captureStarted) api.invoke('audio_capture_stop').catch(() => {});
+      if (captureStarted) api.invoke('audio_capture_stop').catch((err) => {
+        console.debug('[FeynmanRecorder] cleanup capture stop failed', err);
+      });
       setError('录音启动失败，请重试');
       return;
     } finally {
@@ -224,8 +228,12 @@ export function FeynmanRecorder({ explanation, onExplanationChange, noteId, conc
         startingRef.current = false;
         cleanupIpc();
         const api = window.electronAPI;
-        api?.invoke('local_asr_stream_stop').catch(() => {});
-        api?.invoke('audio_capture_stop').catch(() => {});
+        api?.invoke('local_asr_stream_stop').catch((err) => {
+          console.debug('[FeynmanRecorder] ASR stop on unmount failed', err);
+        });
+        api?.invoke('audio_capture_stop').catch((err) => {
+          console.debug('[FeynmanRecorder] capture stop on unmount failed', err);
+        });
       }
     };
   }, [cleanupIpc]);
@@ -279,7 +287,9 @@ export function FeynmanRecorder({ explanation, onExplanationChange, noteId, conc
                 savePromiseRef.current = null;
                 if (stem) {
                   void Promise.resolve(pending).catch(() => {}).then(() => {
-                    window.electronAPI?.recording.delete(stem).catch(() => {});
+                    window.electronAPI?.recording.delete(stem).catch((err) => {
+                      console.debug('[FeynmanRecorder] recording delete failed', stem, err);
+                    });
                   });
                 }
                 updatePlaybackUrl(null);

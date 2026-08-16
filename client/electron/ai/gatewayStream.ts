@@ -9,6 +9,7 @@
 import { randomUUID } from 'crypto';
 import { logger } from '../logger.js';
 import { gatewayUrl } from './gatewayConfig.js';
+import { notifyQuotaExhaustedToRenderer } from './gatewayHttp.js';
 
 /**
  * 流式 POST 请求：解析 SSE data: 行，逐 chunk yield 文本
@@ -73,6 +74,8 @@ export async function* postJsonStream<TReq>(
   if (!resp.ok) {
     const detail = await resp.text().catch(() => 'unknown error');
     logger.error(`[AI] ✖ Stream HTTP ${resp.status} ${url} [req-id: ${requestId ?? clientRequestId}]: ${detail.slice(0, 200)}`);
+    // 配额类 429：通知渲染进程展示配额耗尽提示（不改变既有抛错行为）
+    if (resp.status === 429) notifyQuotaExhaustedToRenderer(detail);
     throw new Error(`Stream HTTP ${resp.status}: ${detail}`);
   }
 

@@ -13,7 +13,7 @@ import type { WindowInfo, CourseMeta } from '@/lib/capture';
 const WINDOW_MISSING_THRESHOLD = 10;
 
 /** 常见课程名关键词（规则模式兜底提取） */
-const COURSE_KEYWORDS = /((?:高等数学|线性代数|概率论|大学物理|数据结构|操作系统|编译原理|离散数学|复变函数|英语|高数|大物|C语言|Python|Java|机器学习|深度学习|人工智能|计算机网络|数据库)[^\s|]*)/;
+const COURSE_KEYWORDS = /((?:高等数学|线性代数|概率论|大学物理|数据结构|操作系统|编译原理|离散数学|复变函数|英语|高数|大物|C语言|Python|Java|机器学习|深度学习|人工智能|计算机网络|数据库|入门|进阶|实战|从零|攻略|教程)[^\s|]*)/;
 
 interface UseWindowWatcherOptions {
   courseMeta: CourseMeta;
@@ -55,7 +55,9 @@ export function useWindowWatcher({ courseMeta, setCourseMeta, onNotify }: UseWin
   useEffect(() => {
     if (!window.electronAPI) return;
 
-    window.electronAPI.invoke('screen_watch_windows_start').catch(() => {});
+    window.electronAPI.invoke('screen_watch_windows_start').catch((err) => {
+      console.debug('[useWindowWatcher] start window watch failed', err);
+    });
 
     const unsubscribe = window.electronAPI.on('screen_windows_changed', (...args: unknown[]) => {
       const newWindows = args[1] as WindowInfo[] | undefined;
@@ -92,10 +94,52 @@ export function useWindowWatcher({ courseMeta, setCourseMeta, onNotify }: UseWin
     });
 
     return () => {
-      window.electronAPI?.invoke('screen_watch_windows_stop').catch(() => {});
+      window.electronAPI?.invoke('screen_watch_windows_stop').catch((err) => {
+        console.debug('[useWindowWatcher] stop window watch failed', err);
+      });
       unsubscribe();
     };
   }, [onNotify]);
+
+  // 自动选中评估（三规则）：仅在未选中窗口时评估，避免覆盖用户选择与重复 toast
+  useEffect(() => {
+    if (selectedWindow || windows.length === 0) return;
+    const top = windows[0];
+    if (!top) return;
+
+    // 唯一视频类候选：learningScore >= 60 的窗口仅此一个
+    const uniqueCandidates = windows.filter((w) => (w.learningScore ?? 0) >= 60);
+    const isUnique = uniqueCandidates.length === 1 && uniqueCandidates[0].id === top.id;
+
+    const rule1 = top.confidence === 'high';
+    const rule2 =
+      !!top.isForeground &&
+      (top.score ?? 0) >= 60 &&
+      (!!top.memoryCourseName || isUnique);
+    const rule3 =
+      top.confidence === 'medium' &&
+      !!top.memoryCourseName &&
+      isUnique;
+
+    if (!(rule1 || rule2 || rule3)) return;
+
+    setSelectedWindow(top);
+    onNotify('success', `已自动选择：${top.title}`);
+
+    // 记录记忆（自动选中同样累加 useCount——用户接受默认即正反馈）
+    if (top.processName) {
+      window.electronAPI?.invoke('window_memory_record', {
+        processName: top.processName,
+        title: top.title,
+        courseName: courseMeta.courseName,
+      }).catch(() => {});
+    }
+
+    // 记忆课程名回填（优先级最高；无记忆时由 AI 首帧/正则兜底）
+    if (top.memoryCourseName && !courseMeta.courseName) {
+      setCourseMeta((prev) => ({ ...prev, courseName: top.memoryCourseName, detectedBy: 'memory' }));
+    }
+  }, [windows, selectedWindow, courseMeta.courseName, onNotify, setCourseMeta]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { windows, windowsLoading, selectedWindow, setSelectedWindow, refreshWindows };
 }

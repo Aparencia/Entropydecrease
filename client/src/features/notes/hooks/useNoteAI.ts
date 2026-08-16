@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 笔记 AI 摘要与闪卡衍生 hook
  *
  * @ai-context: 从 NoteEditPage 拆出。承载摘要生成后的全部后续操作：
@@ -8,7 +8,6 @@
  */
 import { useState, useCallback } from 'react';
 import type { Editor } from '@tiptap/react';
-import { useShallow } from 'zustand/react/shallow';
 import { useFlashcardStore } from '@/features/flashcards/store/useFlashcardStore';
 import { useAISummarize, useAIFlashcards } from '@/lib/ai/useAI';
 import { useAIErrorHandler } from '@/lib/ai/hooks/useAIErrorHandler';
@@ -39,7 +38,10 @@ export function useNoteAI(editor: Editor | null, noteId: string | null) {
   const handleSummarizeError = useAIErrorHandler('AI 摘要生成失败');
   const handleFlashcardError = useAIErrorHandler('AI 闪卡生成失败');
 
-  const { loadDecks, createDeck, createCard } = useFlashcardStore(useShallow(s => s));
+  // P1-5 收尾：action 恒定引用，直接字段级订阅
+  const loadDecks = useFlashcardStore((s) => s.loadDecks);
+  const createDeck = useFlashcardStore((s) => s.createDeck);
+  const createCard = useFlashcardStore((s) => s.createCard);
 
   /** 获取目标牌组：优先使用已有牌组，否则自动创建默认牌组 */
   const ensureDefaultDeck = useCallback(async (): Promise<string> => {

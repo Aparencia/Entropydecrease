@@ -1,21 +1,25 @@
 /**
  * VAD 音频标记器 — Path B 语音段检测与分段
  *
- * @ai-context
- * Path B 通过 RMS 能量检测将连续语音切段，
- * 每段完成后立即触发 onSegmentReady 回调，支持流式 ASR 转写。
- * @ai-context: 校准仅对 microphone 源生效；loopback（网课系统环回）为数字
- * 信号无环境底噪，构造时直接标记已校准并使用预设阈值，不进入校准期
- * （避免 UI 出现无意义的“正在校准音频阈值”提示）。
- *
- * @ai-context: 背景噪声校准为现场课程麦克风输入场景设计——麦克风存在真实
- * 环境底噪（空调/键盘/人声嘴杂），以 sourceType: 'microphone' 构造时
- * 启用前 N 块自适应校准。后续可考虑将校准结果持久化供下次会话作为初始
- * 阈值，避免每次启动等待采样期。
+ * @ai-context: RMS 能量检测将连续语音切段，每段完成后触发 onSegmentReady
+ * 回调供流式 ASR 转写。校准仅对 microphone 源生效（前 N 块自适应阈值）；
+ * loopback（网课系统环回）为数字信号无环境底噪，构造即已校准用预设阈值。
+ * P0-2 起叠加 Silero 精判：噪声抑制（暂存-确认两段式）+ 静音复核（低能量
+ * 语音尾推迟分段，上限保护），概率源不可用时回退纯 RMS。
+ * English: RMS-based speech segmentation for Path B; microphone sources get
+ * adaptive calibration, loopback uses preset thresholds. Silero refinement
+ * (P0-2) adds noise suppression and silence re-check with RMS fallback.
  */
 
 import type { AudioChunkData, AudioSegment, TimelineEntry } from './captureTypes';
 import { encodeWavBase64 } from './wavEncoder';
+import {
+  classifySileroProb,
+  SILERO_RECHECK_WINDOW_MS,
+  SILERO_SPEECH_MIN_PROB,
+  SILERO_MAX_SILENCE_EXTENSION_MS,
+  type SileroProbSource,
+} from './sileroVad';
 
 // ================================================================
 // 配置类型
@@ -28,15 +32,9 @@ export interface VADMarkerConfig {
   silenceDurationMs: number;
   /** 最短语音时长（ms），低于则丢弃，默认 300 */
   minSpeechDurationMs: number;
-  /**
-   * 最长语音段时长（ms），达到即强制分段，默认 28000——
-   * 保证段长兼容 GLM-ASR 备选（≤30s 硬限制），也避免长段拉高转写延迟
-   */
+  /** 最长语音段时长（ms），达到即强制分段，默认 28000（兼容 GLM-ASR ≤30s 硬限制） */
   maxSpeechDurationMs: number;
-  /**
-   * 音频源类型：loopback（系统环回，网课默认）跳过背景噪声校准；
-   * microphone（现场课程麦克风）启用前 N 块自适应校准
-   */
+  /** 音频源类型：loopback 跳过背景噪声校准；microphone 启用前 N 块自适应校准 */
   sourceType: 'loopback' | 'microphone';
 }
 
@@ -100,8 +98,19 @@ export class VADMarker {
   private readonly CALIBRATION_CHUNKS = 10;
   private processedChunks = 0;
 
-  constructor(config?: Partial<VADMarkerConfig>) {
+  // ── Silero 精判状态（P0-2：噪声抑制 + 静音复核；概率源可选注入）──
+  private readonly silero: SileroProbSource | null;
+  /**
+   * 噪声候选暂存：RMS 超阈但 Silero 判低概率的块先暂存（最多 2 块），
+   * 后续确认真实语音时补入 speechBuffer（语音开头不丢），确认为噪声时丢弃。
+   */
+  private pendingSpeechSamples: Float32Array[] = [];
+  /** 当前语音段内静音复核累计推迟时长（超上限强制分段） */
+  private silenceExtensionTotal = 0;
+
+  constructor(config?: Partial<VADMarkerConfig>, silero?: SileroProbSource) {
     this.config = { ...DEFAULT_VAD_MARKER_CONFIG, ...config };
+    this.silero = silero ?? null;
     // 网课模式（loopback）：数字环回无环境底噪，跳过校准直接用预设阈值，
     // UI 不再出现"正在校准音频阈值"提示
     if (this.config.sourceType === 'loopback') {
@@ -146,13 +155,32 @@ export class VADMarker {
     const hasVoice = rmsEnergy >= this.config.energyThreshold;
 
     if (hasVoice) {
+      // ── Silero 噪声抑制（P0-2）：RMS 超阈但 Silero 判低概率 → 疑似噪声，
+      // 样本先暂存（语音开头不丢），连续 2 块低概率确认噪声后丢弃；
+      // 概率源不可用（null）时跳过——纯 RMS 现状行为 ──
       if (!this.isSpeaking) {
-        // 语音段开始
+        const sileroClass = this.classifySilero();
+        if (sileroClass === 'noise') {
+          this.pendingSpeechSamples.push(new Float32Array(samples));
+          if (this.pendingSpeechSamples.length >= 2) {
+            // 连续 2 块低概率 → 确认持续噪声，丢弃暂存
+            this.pendingSpeechSamples = [];
+          }
+          this.timeline.push({ timestamp: now, type: 'silence', energy: rmsEnergy });
+          return;
+        }
+        // 语音段开始（含 Silero 判 speech 与 unknown 两类：unknown 不干预）
         this.isSpeaking = true;
         this.speechStartTime = now;
         this.speechBuffer = [];
+        // 噪声候选暂存的样本补入段首（确认真实语音，开头不丢）
+        if (this.pendingSpeechSamples.length > 0) {
+          this.speechBuffer.push(...this.pendingSpeechSamples);
+          this.pendingSpeechSamples = [];
+        }
         this.energyAccumulator = 0;
         this.energySampleCount = 0;
+        this.silenceExtensionTotal = 0;
         this.timeline.push({ timestamp: now, type: 'voice_start' });
       }
       this.lastVoiceTime = now;
@@ -171,8 +199,22 @@ export class VADMarker {
       // 静音期间仍然暂存样本，保证过渡段音频连续性
       this.speechBuffer.push(new Float32Array(samples));
 
-      if (silenceElapsed >= this.config.silenceDurationMs) {
+      // ── Silero 静音复核（P0-2）：RMS 判静音但 Silero 判定语音仍在
+      // （低能量语音尾/轻声讲解）→ 推迟分段，保护段边界完整；推迟总量
+      // 超上限后强制分段，防止 Silero 误判长噪声为语音导致段无限拉长 ──
+      const sileroRecent = this.silero?.recentProb(SILERO_RECHECK_WINDOW_MS) ?? null;
+      const canExtend = this.silenceExtensionTotal < SILERO_MAX_SILENCE_EXTENSION_MS;
+      if (
+        silenceElapsed >= this.config.silenceDurationMs
+        && sileroRecent !== null
+        && sileroRecent > SILERO_SPEECH_MIN_PROB
+        && canExtend
+      ) {
+        this.silenceExtensionTotal += silenceElapsed;
+        this.lastVoiceTime = now;
+      } else if (silenceElapsed >= this.config.silenceDurationMs) {
         this.finalizeSpeechSegment(now);
+        this.silenceExtensionTotal = 0;
       }
     }
 
@@ -215,6 +257,22 @@ export class VADMarker {
     // loopback 无需校准，复位后仍保持已校准状态
     this.calibrated = this.config.sourceType === 'loopback';
     this.processedChunks = 0;
+    this.pendingSpeechSamples = [];
+    this.silenceExtensionTotal = 0;
+    // Silero 流状态归零（新会话）
+    this.silero?.reset();
+  }
+
+  /**
+   * Silero 三态分类（P0-2，纯函数委托见 sileroVad.classifySileroProb）：
+   * 'noise'=持续噪声 / 'speech'=真实语音 / 'unknown'=概率源不可用（不干预）
+   */
+  private classifySilero(): 'noise' | 'speech' | 'unknown' {
+    if (!this.silero) return 'unknown';
+    return classifySileroProb(
+      this.silero.latestProb(),
+      this.silero.recentProb(SILERO_RECHECK_WINDOW_MS),
+    );
   }
 
   // ================================================================

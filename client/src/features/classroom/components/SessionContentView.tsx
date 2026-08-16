@@ -12,13 +12,16 @@
  * live timeline state survives tab switches. Notes tab previews the
  * AI-processed result before inserting into a note.
  */
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useClassroomCapture } from '../hooks/useClassroomCapture';
 import { SegmentList } from './SegmentList';
 import { UnifiedTimeline } from './UnifiedTimeline';
 import { ClassroomStatusBanners } from './ClassroomStatusBanners';
+import { RecognitionStatsBar } from './RecognitionStatsBar';
+import { StepFlowView } from './StepFlowView';
+import { isLocalAsrReady } from '../utils/asrTranscriber';
 import { AnalysisPreview } from '@/features/notes/components/AnalysisPreview';
 import { VideoRecordPanel } from '@/features/notes/components/VideoRecordPanel';
 import SessionQAPanel from './SessionQAPanel';
@@ -42,6 +45,18 @@ const TAB_LABELS: Record<TabId, string> = {
 export function SessionContentView({ capture, onOpenNoteDialog }: SessionContentViewProps) {
   const [tab, setTab] = useState<TabId>('content');
   const navigate = useNavigate();
+  /** P2-7：内容视图子模式（技能类会话可用步骤卡片流） */
+  const [viewMode, setViewMode] = useState<'timeline' | 'steps'>('timeline');
+  const isSkillKind = capture.contentKind === 'software_skill' || capture.contentKind === 'craft_skill';
+
+  // 首次检测到技能类内容时自动切到步骤视图（会话中途检测，仅切换一次）
+  const skillDetectedRef = useRef(false);
+  useEffect(() => {
+    if (isSkillKind && !skillDetectedRef.current) {
+      skillDetectedRef.current = true;
+      setViewMode('steps');
+    }
+  }, [isSkillKind]);
 
   // 问答上下文：拼接各路径转写文本（fine 段 + smart 实时转录）
   const qaTranscript = capture.capturePath === 'fine'
@@ -84,15 +99,48 @@ export function SessionContentView({ capture, onOpenNoteDialog }: SessionContent
                 audioHealth={capture.audioHealth}
                 vadStats={capture.vadStats}
               />
-              {/* M2 自动锚点以时间线行展示（autoAnchors 独立数据源） */}
-              <UnifiedTimeline
-                bundle={capture.smartBundle}
-                liveTranscripts={capture.liveTranscripts}
-                autoAnchors={capture.autoAnchors}
-                partialText={capture.partialText}
-                isActive={capture.status === 'capturing' && (capture.mode === 'audio' || capture.mode === 'mixed')}
-                onEditTranscript={capture.handleEditTranscript}
+              {/* P0-7 识别统计条：引擎徽标 / 帧数 / 句数 / VAD 语音状态 */}
+              <RecognitionStatsBar
+                status={capture.status}
+                keyframeCount={capture.smartBundle?.keyframes?.length ?? 0}
+                transcribedCount={capture.transcribedCount}
+                vadStats={capture.vadStats}
+                streamingAsrActive={capture.streamingAsrActive}
+                localAsrReady={isLocalAsrReady()}
               />
+              {/* P2-7 技能类会话：时间线 / 步骤卡片流切换 */}
+              {isSkillKind && (
+                <div className="mx-4 mt-2 flex gap-1">
+                  {(['timeline', 'steps'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => setViewMode(mode)}
+                      className={cn(
+                        'px-2.5 py-1 rounded-kb-sm text-[11px] font-medium transition-all',
+                        viewMode === mode
+                          ? 'bg-brand-50 text-brand-600 ring-1 ring-brand-200/50'
+                          : 'text-text-tertiary hover:bg-bg-tertiary',
+                      )}
+                    >
+                      {mode === 'timeline' ? '时间线' : '步骤卡片'}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* M2 自动锚点以时间线行展示（autoAnchors 独立数据源） */}
+              {viewMode === 'steps' && isSkillKind ? (
+                <StepFlowView bundle={capture.smartBundle} />
+              ) : (
+                <UnifiedTimeline
+                  bundle={capture.smartBundle}
+                  liveTranscripts={capture.liveTranscripts}
+                  autoAnchors={capture.autoAnchors}
+                  partialText={capture.partialText}
+                  isActive={capture.status === 'capturing' && (capture.mode === 'audio' || capture.mode === 'mixed')}
+                  onEditTranscript={capture.handleEditTranscript}
+                  onCycleSpeaker={capture.handleCycleSpeaker}
+                />
+              )}
             </>
           )}
 

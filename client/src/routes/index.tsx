@@ -1,6 +1,10 @@
 /**
  * @ai-context: 路由配置：index。
  */
+// oxlint-disable react/only-export-components
+// Why: 路由聚合文件——集中 lazy 定义全部页面组件并统一导出 router（非组件），
+// Fast Refresh 不适用于路由表；组件与非组件导出混存是本文件的预期形态，
+// 拆分页面到独立文件反而破坏「单文件聚合路由」的设计，故文件级豁免。
 import { lazy, Suspense } from 'react';
 import { createHashRouter } from 'react-router-dom';
 import type { RouteObject } from 'react-router-dom';

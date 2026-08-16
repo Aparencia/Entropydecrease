@@ -63,7 +63,7 @@ export function VideoRecordPanel({ recordingStatus, isRecording }: VideoRecordPa
     if (recordingStatus) {
       setLocalElapsed(recordingStatus.duration);
     }
-  }, [recordingStatus?.duration]);
+  }, [recordingStatus]);
 
   const handlePauseResume = useCallback(async () => {
     if (!window.electronAPI) return;

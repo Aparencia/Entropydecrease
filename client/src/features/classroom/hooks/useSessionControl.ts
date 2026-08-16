@@ -14,6 +14,7 @@ import { analyzePartial } from '@/lib/ai/sessionAnalyzer';
 import { refreshLocalAsrStatus } from '../utils/asrTranscriber';
 import { loadSessionHotwords, clearSessionHotwords, getSessionHotwordsString } from '../utils/hotwordRuntime';
 import { getAudioSourcePreference } from '@/lib/capture/audioSourcePreference';
+import { webCaptureAdapter } from '../capture/WebCaptureAdapter';
 import type { AudioSourceKind } from '@/lib/capture/audioSourceStrategy';
 import type {
   CaptureManager,
@@ -89,7 +90,22 @@ export function useSessionControl({
     // localOnly（P0-4 软阻断确认后传入）：网关探针已前移删除，此参数仅承载
     // "用户已知网关不可用、仅本地采集"语义，启动时序不受影响
     void opts;
-    if (!selectedWindow || !window.electronAPI) return;
+    // PWA/浏览器：麦克风应急通道（无窗口、无 Electron 采集能力）
+    if (!window.electronAPI) {
+      try {
+        setStatus('capturing');
+        session.resetForStart();
+        refreshLocalAsrStatus().catch(() => { /* PWA 下返回 false，自动走云端 */ });
+        void loadSessionHotwords(courseMeta.courseName);
+        await webCaptureAdapter.start(crypto.randomUUID());
+        soundPlayer.play('capture_start');
+      } catch (err) {
+        setStatus('error');
+        console.error('[useClassroomCapture] Web start failed:', err);
+      }
+      return;
+    }
+    if (!selectedWindow) return;
     try {
       setStatus('capturing');
       session.resetForStart();
@@ -197,6 +213,17 @@ export function useSessionControl({
   }, [selectedWindow, setStatus, session, capturePath, captureManager, config, mode, courseMeta, onAudioSourceResolved, setStreamingAsrActive]);
 
   const handlePause = useCallback(() => {
+    // PWA：暂停/恢复麦克风采集（Electron 走 captureManager 会话暂停）
+    if (!window.electronAPI) {
+      if (status === 'capturing') {
+        setStatus('paused');
+        webCaptureAdapter.pause();
+      } else if (status === 'paused') {
+        setStatus('capturing');
+        webCaptureAdapter.resume();
+      }
+      return;
+    }
     if (status === 'capturing') {
       setStatus('paused');
       captureManager.pauseSession();
@@ -276,7 +303,20 @@ export function useSessionControl({
   }, [session, askConfirm, onMergePartials]);
 
   const handleStop = useCallback(async () => {
-    if (!window.electronAPI) return;
+    // PWA/浏览器：停止麦克风采集 + 收尾（audio 模式以转写文本为笔记素材）
+    if (!window.electronAPI) {
+      try {
+        clearSessionHotwords();
+        webCaptureAdapter.stop();
+        soundPlayer.play('capture_stop');
+        setStatus('idle');
+        await finalizeSmartSession();
+      } catch (err) {
+        setStatus('error');
+        console.error('[useClassroomCapture] Web stop failed:', err);
+      }
+      return;
+    }
     try {
       // 最先清除重启回调，防止 watchdog 在停止过程中触发
       frameRestartRef.current = null;

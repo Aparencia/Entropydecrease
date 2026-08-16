@@ -9,6 +9,9 @@
  * @ai-context: 三条 CapturePath 互斥：fine 走 Pipeline/Worker 逐帧提取；
  * smart 走 SmartCaptureController；full_record 仅计帧（录制由主进程
  * VideoRecorder 负责）。startSession 会先隐式 stopSession。
+ * @ai-context: 会话可变状态集中在 CaptureRuntime（captureRuntime.ts）——
+ * 帧管线/音频管线/生命周期分别委托 framePipeline.ts / audioPipeline.ts /
+ * sessionLifecycle.ts，帧看门狗在 sessionWatchdog.ts；均为纯逻辑拆分，行为不变。
  */
 
 import { Pipeline } from './pipeline';
@@ -16,19 +19,19 @@ import { CrossFusionEngine } from './crossFusion';
 import { RouteDispatcher } from '@/lib/ai/routeDispatcher';
 import type { RouteDispatcherConfig, RouteDecision } from '@/lib/ai/routeDispatcher';
 import { VisionWorker } from '@/lib/ai/visionWorker';
-import { ASRWorker } from '@/lib/ai/asrWorker';
 import { SmartCaptureController } from './smartCaptureController';
-import { processExtractionResult, processExtractionError } from './captureResultProcessor';
+import { FrameWatchdog } from './sessionWatchdog';
 import { captureEventBus } from './eventBus';
-import { captureStore } from '@/lib/storage/captureStore';
+import * as framePipeline from './framePipeline';
+import * as audioPipeline from './audioPipeline';
+import * as sessionLifecycle from './sessionLifecycle';
+import type { CaptureRuntime, VisionMode } from './captureRuntime';
 import type {
-  CapturePath,
   CaptureSessionConfig,
-  ExtractionResult,
-  PipelineMessage,
   ScreenshotData,
   AudioChunkData,
-  VideoRecording,
+  ExtractionResult,
+  PipelineMessage,
 } from './captureTypes';
 
 // ================================================================
@@ -36,46 +39,20 @@ import type {
 // ================================================================
 
 export class CaptureManager {
-  private pipeline: Pipeline;
-  private dispatcher: RouteDispatcher;
-  private crossFusion: CrossFusionEngine;
+  /** 会话可变状态（唯一状态源，模块间共享契约） */
+  private rt: CaptureRuntime;
   private visionWorker: VisionWorker;
-  private asrWorker: ASRWorker | null = null;
-  private sessionId: string | null = null;
-  private sessionConfig: CaptureSessionConfig | null = null;
-  private frameCount = 0;
-  private extractedCount = 0;
-  private lastDecision: RouteDecision | null = null;
-  private fusionIntervalId: ReturnType<typeof setInterval> | null = null;
-  private isPaused = false;
-
-  /** @ai-context Path B 智能模式状态隔离：smart 模式下不走 pipeline */
-  private capturePath: CapturePath = 'fine';
-  private smartController = new SmartCaptureController();
-
-  /** @ai-context Path C 全程录制：记录录制开始时间用于计算 duration */
-  private fullRecordStartTime = 0;
-
-  /** P8 视觉提取模式（VisionWorker 消费 message.metadata.visionMode；undefined=auto） */
-  private visionMode: 'auto' | 'text' | 'formula' | 'diagram' | 'code' | 'full' | undefined;
+  /** 帧超时触发时的回调（通常为重启截图采集的函数） */
+  private readonly onFrameWatchdogTimeout: (() => void) | null;
+  /** CL-M10: 连续重启达到上限时的回调（提示用户手动处理） */
+  private readonly onFrameWatchdogExhausted: (() => void) | null;
 
   /**
    * 设置视觉提取模式（公式/图表/代码等），写入截图消息 metadata 供 VisionWorker 消费
    */
-  setVisionMode(mode: 'auto' | 'text' | 'formula' | 'diagram' | 'code' | 'full'): void {
-    this.visionMode = mode;
+  setVisionMode(mode: VisionMode): void {
+    this.rt.visionMode = mode;
   }
-
-  // ---- 帧超时保底重启 ----
-  private frameWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly frameWatchdogTimeoutMs: number;
-  private onFrameWatchdogTimeout: (() => void) | null = null;
-  /** CL-M10: 帧超时连续重启计数（收到有效帧清零） */
-  private frameRestartAttempts = 0;
-  /** CL-M10: 连续重启上限——超过后停止自动恢复并通知 UI（防止幽灵采集循环） */
-  private readonly MAX_FRAME_RESTARTS = 3;
-  /** CL-M10: 重启次数耗尽回调（通知 UI 提示用户手动处理） */
-  private onFrameWatchdogExhausted: (() => void) | null = null;
 
   constructor(options?: {
     apiBaseUrl?: string;
@@ -89,22 +66,21 @@ export class CaptureManager {
   }) {
     // apiBaseUrl 保留供未来直接使用，当前 VisionWorker 通过 aiClient 全局配置
     void options?.apiBaseUrl;
-    this.frameWatchdogTimeoutMs = options?.frameWatchdogTimeoutMs ?? 3000;
     this.onFrameWatchdogTimeout = options?.onFrameWatchdogTimeout ?? null;
     this.onFrameWatchdogExhausted = options?.onFrameWatchdogExhausted ?? null;
 
-    this.crossFusion = new CrossFusionEngine(
+    const crossFusion = new CrossFusionEngine(
       (segment) => {
         captureEventBus.emit('fusion:segment_complete', {
-          sessionId: this.sessionId,
+          sessionId: this.rt.sessionId,
           segment,
         });
       },
     );
 
-    this.dispatcher = new RouteDispatcher(options?.routeConfig);
+    const dispatcher = new RouteDispatcher(options?.routeConfig);
     this.visionWorker = new VisionWorker();
-    this.pipeline = new Pipeline({
+    const pipeline = new Pipeline({
       maxQueueSize: 50,
       batchSize: 1,
       processingTimeout: 60_000, // 视觉提取可能需要较长时间
@@ -113,99 +89,48 @@ export class CaptureManager {
     });
 
     // 视觉 Worker 始终注册（最通用的路径）
-    this.pipeline.registerWorker(this.visionWorker);
-    this.dispatcher.registerWorker(this.visionWorker);
+    pipeline.registerWorker(this.visionWorker);
+    dispatcher.registerWorker(this.visionWorker);
+
+    const frameWatchdog = new FrameWatchdog({
+      timeoutMs: options?.frameWatchdogTimeoutMs ?? 3000,
+      // CL-M10: 连续重启上限——超过后停止自动恢复并通知 UI（防止幽灵采集循环）
+      maxRestarts: 3,
+      isActive: () => this.rt.sessionId !== null && this.onFrameWatchdogTimeout !== null,
+      onTimeout: () => this.onFrameWatchdogTimeout?.(),
+      onExhausted: () => this.onFrameWatchdogExhausted?.(),
+    });
+
+    this.rt = {
+      sessionId: null,
+      sessionConfig: null,
+      frameCount: 0,
+      extractedCount: 0,
+      capturePath: 'fine',
+      isPaused: false,
+      lastDecision: null,
+      visionMode: undefined,
+      fullRecordStartTime: 0,
+      fusionIntervalId: null,
+      asrWorker: null,
+      pipeline,
+      dispatcher,
+      crossFusion,
+      smartController: new SmartCaptureController(),
+      frameWatchdog,
+    };
   }
 
   // ================================================================
   // 公共 API
   // ================================================================
 
-  /** 创建持久化会话并重置计数（三路径共用） */
-  private async initSessionRecord(
-    config: CaptureSessionConfig,
-    mode: 'vision' | 'both',
-  ): Promise<string> {
-    const session = await captureStore.createSession({
-      targetWindow: config.windowTitle,
-      mode,
-      status: 'active',
-      segments: [],
-    });
-    this.sessionId = session.id;
-    this.sessionConfig = config;
-    this.frameCount = 0;
-    this.extractedCount = 0;
-    return session.id;
-  }
-
   /**
    * 开始采集会话
    * 创建持久化会话记录，通过 RouteDispatcher 决策启用哪些 Worker，并初始化流水线状态
    */
   async startSession(config: CaptureSessionConfig): Promise<string> {
-    if (this.sessionId) {
-      await this.stopSession();
-    }
-
-    this.capturePath = config.path ?? 'fine';
-
-    // Path B 智能模式：跳过 Pipeline/Worker，用轻量采样器 + 流式 ASR 替代
-    if (this.capturePath === 'smart') {
-      const id = await this.initSessionRecord(config, 'vision');
-      this.smartController.start(id, config.microphone);
-
-      captureEventBus.emit('session:started', { sessionId: id, config, path: 'smart' });
-      return id;
-    }
-
-    // Path C 全程录制：录制由 Electron 主进程 VideoRecorder 管理，此处仅协调状态
-    if (this.capturePath === 'full_record') {
-      const id = await this.initSessionRecord(config, 'vision');
-      this.fullRecordStartTime = Date.now();
-
-      captureEventBus.emit('session:started', { sessionId: id, config, path: 'full_record' });
-      return id;
-    }
-
-    // Path A（fine）原有逐帧流水线模式
-    this.lastDecision = this.dispatcher.decide({
-      hasWindowAccess: !!config.windowId,
-      hasAudioSource: config.audioEnabled,
-      uiAutomationAvailable: false, // Electron 环境下后续检测
-    });
-
-    // 根据决策动态注册 ASR Worker（传入用户配置的语言）
-    if (this.lastDecision.audioEnabled && !this.asrWorker) {
-      this.asrWorker = new ASRWorker(config.language || 'zh');
-      this.pipeline.registerWorker(this.asrWorker);
-      this.dispatcher.registerWorker(this.asrWorker);
-    } else if (!this.lastDecision.audioEnabled && this.asrWorker) {
-      this.pipeline.unregisterWorker('asr-worker');
-      this.dispatcher.unregisterWorker('asr-worker');
-      this.asrWorker = null;
-    }
-
-    // 创建持久化会话
-    const id = await this.initSessionRecord(config, this.lastDecision.audioEnabled ? 'both' : 'vision');
-
-    captureEventBus.emit('session:started', {
-      sessionId: id,
-      config,
-      routeDecision: this.lastDecision,
-    });
-
-    // 定期触发融合（每 3 秒）
-    this.fusionIntervalId = setInterval(() => {
-      if (this.sessionId) {
-        this.crossFusion.fuseByTimeWindow();
-      }
-    }, 3000);
-
-    // 启动帧超时保底检测
-    this.resetFrameWatchdog();
-
-    return id;
+    return sessionLifecycle.startSession(this.rt, config);
   }
 
   /**
@@ -213,96 +138,7 @@ export class CaptureManager {
    * 清空流水线队列，重置调度器，更新会话状态
    */
   async stopSession(): Promise<void> {
-    if (!this.sessionId) return;
-
-    // 最先停止帧超时保底计时器，防止在后续 await 期间触发重启
-    this.stopFrameWatchdog();
-
-    // Path C 全程录制：构建 VideoRecording 并广播 record:video_ready
-    if (this.capturePath === 'full_record') {
-      const duration = Date.now() - this.fullRecordStartTime;
-
-      await captureStore.updateSession(this.sessionId, {
-        status: 'completed',
-        endedAt: new Date(),
-      });
-
-      // 视频文件信息由主进程 VideoRecorder 在 stopRecording 后返回，
-      // 此处先发事件，外部监听者可通过 IPC 查询最终文件路径
-      const videoRecording: VideoRecording = {
-        filePath: '', // 由调用方在 IPC stop 回调中填充
-        duration,
-        fileSizeBytes: 0, // 由调用方在 IPC stop 回调中填充
-        format: 'webm',
-        hasAudio: false,
-      };
-
-      captureEventBus.emit('record:video_ready', {
-        sessionId: this.sessionId,
-        videoRecording,
-      });
-
-      this.emitStoppedAndReset();
-      this.fullRecordStartTime = 0;
-      return;
-    }
-
-    // Path B 智能模式：组装 SessionBundle 并广播
-    if (this.capturePath === 'smart') {
-      const bundle = this.smartController.assembleBundle();
-
-      await captureStore.updateSession(this.sessionId, {
-        status: 'completed',
-        endedAt: new Date(),
-      });
-
-      captureEventBus.emit('smart:bundle_ready', {
-        sessionId: this.sessionId,
-        bundle,
-      });
-
-      this.smartController.stop();
-      this.emitStoppedAndReset();
-      return;
-    }
-
-    // Path A（fine）原有流水线清理
-    this.pipeline.clear();
-    this.dispatcher.reset();
-    this.crossFusion.reset();
-    this.lastDecision = null;
-    this.isPaused = false;
-
-    if (this.fusionIntervalId !== null) {
-      clearInterval(this.fusionIntervalId);
-      this.fusionIntervalId = null;
-    }
-
-    await captureStore.updateSession(this.sessionId, {
-      status: 'completed',
-      endedAt: new Date(),
-    });
-
-    captureEventBus.emit('session:stopped', {
-      sessionId: this.sessionId,
-      frameCount: this.frameCount,
-      extractedCount: this.extractedCount,
-    });
-
-    this.sessionId = null;
-    this.sessionConfig = null;
-  }
-
-  /** 广播 session:stopped 并重置公共会话状态（smart/full_record 共用） */
-  private emitStoppedAndReset(): void {
-    captureEventBus.emit('session:stopped', {
-      sessionId: this.sessionId,
-      frameCount: this.frameCount,
-      extractedCount: this.extractedCount,
-    });
-    this.sessionId = null;
-    this.sessionConfig = null;
-    this.capturePath = 'fine';
+    await sessionLifecycle.stopSession(this.rt);
   }
 
   /**
@@ -312,9 +148,9 @@ export class CaptureManager {
    * @returns 是否实际广播（true=smart 路径已写入 timeline；false=非 smart 路径）
    */
   pushBookmark(type: 'bookmark' | 'auto_anchor' = 'bookmark', label?: string): boolean {
-    if (!this.sessionId || this.capturePath !== 'smart') return false;
+    if (!this.rt.sessionId || this.rt.capturePath !== 'smart') return false;
     captureEventBus.emit('smart:bookmark', {
-      sessionId: this.sessionId,
+      sessionId: this.rt.sessionId,
       timestamp: Date.now(),
       type,
       label,
@@ -326,97 +162,39 @@ export class CaptureManager {
    * 推送截图帧到流水线
    */
   pushFrame(frameData: ScreenshotData): void {
-    if (!this.sessionId || this.isPaused) return;
-
-    // @ai-context Path C 全程录制：帧数据由 MediaRecorder 直接采集，无需处理
-    if (this.capturePath === 'full_record') {
-      this.frameCount++;
-      return;
-    }
-
-    // Path B 智能模式：通过 SmartSampler 筛选关键帧
-    if (this.capturePath === 'smart') {
-      this.frameCount++;
-      this.smartController.pushFrame(this.sessionId, frameData);
-      return;
-    }
-
-    // Path A（fine）原有逐帧推送：检查路由决策是否启用视觉通道
-    if (this.lastDecision && !this.lastDecision.visionEnabled) {
-      return;
-    }
-
-    const message = this.pipeline.createMessage<ScreenshotData>(
-      'screenshot',
-      this.sessionId,
-      frameData,
-    );
-    // P8 视觉提取模式注入：VisionWorker 读取 metadata.visionMode 选择提取策略
-    if (this.visionMode && this.visionMode !== 'auto') {
-      message.metadata = { ...message.metadata, visionMode: this.visionMode };
-    }
-
-    const accepted = this.pipeline.push(message);
-    if (accepted) {
-      this.frameCount++;
-      // 每收到一帧，重置保底计时器
-      this.resetFrameWatchdog();
-      captureEventBus.emit('frame:pushed', {
-        sessionId: this.sessionId,
-        messageId: message.id,
-        frameCount: this.frameCount,
-      });
-    }
+    framePipeline.pushFrame(this.rt, frameData);
   }
 
   /**
    * 推送音频块到流水线
    */
   pushAudioChunk(audioData: AudioChunkData): void {
-    // TEMP DIAGNOSTIC（ASR 静默排查）：音频块进入路由的分叉点
-    console.info(
-      `[ASR-DIAG] pushAudioChunk: path=${this.capturePath}, hasSession=${!!this.sessionId}, paused=${this.isPaused}`,
-    );
-    if (!this.sessionId || this.isPaused) return;
+    audioPipeline.pushAudioChunk(this.rt, audioData);
+  }
 
-    // @ai-context Path C 全程录制：音频由 MediaRecorder 直接采集，无需处理
-    if (this.capturePath === 'full_record') return;
+  /**
+   * P1-6 应用内容分类结果（smart 路径采样参数联动；非 smart 路径忽略）
+   */
+  applyContentKind(kind: import('./contentClassifier').ContentKind): void {
+    this.rt.smartController.applyContentKind(kind);
+  }
 
-    // Path B 智能模式：VADMarker 检测语音段，流式触发 ASR 转写
-    if (this.capturePath === 'smart') {
-      this.smartController.pushAudioChunk(audioData);
-      return;
-    }
-
-    // Path A（fine）：检查路由决策是否启用音频通道
-    if (this.lastDecision && !this.lastDecision.audioEnabled) {
-      return;
-    }
-
-    // VAD 检测：通过 CrossFusionEngine 判断是否有语音活动
-    const voiceActive = this.crossFusion.detectVoiceActivity(audioData.audioBuffer);
-    if (voiceActive) {
-      this.crossFusion.requestVisionCapture();
-    }
-
-    const message = this.pipeline.createMessage<AudioChunkData>(
-      'audio_chunk',
-      this.sessionId,
-      audioData,
-    );
-
-    this.pipeline.push(message);
+  /**
+   * P1-7 请求一次强制补帧（指令句命中后调用；smart 路径生效）
+   */
+  requestForceCapture(): void {
+    this.rt.smartController.requestForceCapture();
   }
 
   /**
    * 暂停采集（停止接收新数据，但保持会话状态）
    */
   pauseSession(): void {
-    if (!this.sessionId || this.isPaused) return;
-    this.isPaused = true;
+    if (!this.rt.sessionId || this.rt.isPaused) return;
+    this.rt.isPaused = true;
     // smart 和 full_record 模式下 pipeline 无待清数据
-    if (this.capturePath === 'fine') {
-      this.pipeline.clear();
+    if (this.rt.capturePath === 'fine') {
+      this.rt.pipeline.clear();
     }
   }
 
@@ -424,8 +202,8 @@ export class CaptureManager {
    * 恢复采集
    */
   resumeSession(): void {
-    if (!this.sessionId || !this.isPaused) return;
-    this.isPaused = false;
+    if (!this.rt.sessionId || !this.rt.isPaused) return;
+    this.rt.isPaused = false;
   }
 
   /**
@@ -439,11 +217,11 @@ export class CaptureManager {
     routeDecision: RouteDecision | null;
   } {
     return {
-      sessionId: this.sessionId,
-      pipeline: this.pipeline.getStatus(),
-      frameCount: this.frameCount,
-      extractedCount: this.extractedCount,
-      routeDecision: this.lastDecision,
+      sessionId: this.rt.sessionId,
+      pipeline: this.rt.pipeline.getStatus(),
+      frameCount: this.rt.frameCount,
+      extractedCount: this.rt.extractedCount,
+      routeDecision: this.rt.lastDecision,
     };
   }
 
@@ -451,29 +229,31 @@ export class CaptureManager {
    * 获取 RouteDispatcher 实例（供外部高级用法）
    */
   getDispatcher(): RouteDispatcher {
-    return this.dispatcher;
+    return this.rt.dispatcher;
   }
 
   /**
    * 销毁管理器，释放所有资源
    */
   dispose(): void {
-    if (this.sessionId) {
+    if (this.rt.sessionId) {
       // 异步停止但不等待（dispose 是同步方法）
-      this.stopSession().catch(() => {});
+      this.stopSession().catch((err) => {
+        console.debug('[captureManager] stopSession failed (dispose)', err);
+      });
     }
-    if (this.fusionIntervalId !== null) {
-      clearInterval(this.fusionIntervalId);
-      this.fusionIntervalId = null;
+    if (this.rt.fusionIntervalId !== null) {
+      clearInterval(this.rt.fusionIntervalId);
+      this.rt.fusionIntervalId = null;
     }
     this.stopFrameWatchdog();
-    this.pipeline.dispose();
-    this.dispatcher.dispose();
-    this.crossFusion.reset();
-    this.asrWorker = null;
-    this.smartController.stop();
-    this.capturePath = 'fine';
-    this.fullRecordStartTime = 0;
+    this.rt.pipeline.dispose();
+    this.rt.dispatcher.dispose();
+    this.rt.crossFusion.reset();
+    this.rt.asrWorker = null;
+    this.rt.smartController.stop();
+    this.rt.capturePath = 'fine';
+    this.rt.fullRecordStartTime = 0;
     captureEventBus.off('session:started');
     captureEventBus.off('session:stopped');
     captureEventBus.off('frame:pushed');
@@ -485,34 +265,19 @@ export class CaptureManager {
   }
 
   // ================================================================
-  // 私有方法（流水线回调 → 委托 captureResultProcessor）
+  // 私有方法（流水线回调 → 委托 framePipeline）
   // ================================================================
 
   private handleResult(result: ExtractionResult, message: PipelineMessage): void {
-    if (!this.sessionId) return;
-    this.extractedCount++;
-    processExtractionResult(
-      this.dispatcher,
-      this.crossFusion,
-      {
-        sessionId: this.sessionId,
-        sessionConfig: this.sessionConfig,
-        extractedCount: this.extractedCount,
-      },
-      result,
-      message,
-    );
+    framePipeline.handleResult(this.rt, result, message);
   }
 
   private handleError(error: Error, message: PipelineMessage): void {
-    const newDecision = processExtractionError(this.dispatcher, this.sessionId, error, message);
-    if (newDecision) {
-      this.lastDecision = newDecision;
-    }
+    framePipeline.handleError(this.rt, error, message);
   }
 
   // ================================================================
-  // 帧超时保底重启
+  // 帧超时保底重启（委托 sessionWatchdog）
   // ================================================================
 
   /**
@@ -520,37 +285,11 @@ export class CaptureManager {
    * 如果连续 frameWatchdogTimeoutMs 未收到帧，触发 onFrameWatchdogTimeout
    */
   resetFrameWatchdog(): void {
-    if (this.frameWatchdogTimer !== null) {
-      clearTimeout(this.frameWatchdogTimer);
-    }
-    if (!this.sessionId || !this.onFrameWatchdogTimeout) return;
-    // CL-M10: 收到有效帧即清零重启计数（根因恢复后允许重新计数）
-    this.frameRestartAttempts = 0;
-    this.frameWatchdogTimer = setTimeout(() => {
-      this.frameWatchdogTimer = null;
-      // CL-M10: 连续重启达到上限后停止自动恢复——若根因未恢复（窗口销毁/
-      // 采集异常），原实现每 ~3.2s 无限重启（幽灵采集 + 日志刷屏 + 与用户
-      // 手动停止竞争导致"停止后自动复活"）
-      if (this.frameRestartAttempts >= this.MAX_FRAME_RESTARTS) {
-        console.warn(
-          `[CaptureManager] 帧超时连续重启 ${this.MAX_FRAME_RESTARTS} 次仍未恢复，停止自动重启`,
-        );
-        this.stopFrameWatchdog();
-        this.onFrameWatchdogExhausted?.();
-        return;
-      }
-      this.frameRestartAttempts += 1;
-      // eslint-disable-next-line no-console -- 保底重启警告
-      console.warn(`[CaptureManager] 帧超时 ${this.frameWatchdogTimeoutMs}ms，触发保底重启 (${this.frameRestartAttempts}/${this.MAX_FRAME_RESTARTS})`);
-      this.onFrameWatchdogTimeout?.();
-    }, this.frameWatchdogTimeoutMs);
+    this.rt.frameWatchdog.reset();
   }
 
   /** 停止帧超时计时器 */
   private stopFrameWatchdog(): void {
-    if (this.frameWatchdogTimer !== null) {
-      clearTimeout(this.frameWatchdogTimer);
-      this.frameWatchdogTimer = null;
-    }
+    this.rt.frameWatchdog.stop();
   }
 }

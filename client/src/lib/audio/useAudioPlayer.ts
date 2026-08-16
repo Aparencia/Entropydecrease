@@ -90,7 +90,9 @@ export function useAudioPlayer(options: AudioPlayerOptions) {
       } else {
         audio.volume = options.volume;
       }
-    }).catch(() => {});
+    }).catch((err) => {
+      console.debug('[useAudioPlayer] play failed', err);
+    });
   }, [options.volume, options.fadeInMs, fadeIn]);
 
   const pause = useCallback(() => {

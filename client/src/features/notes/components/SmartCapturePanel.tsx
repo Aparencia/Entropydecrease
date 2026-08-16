@@ -8,6 +8,8 @@
 import { useEffect, useRef } from 'react';
 import { Camera, Mic, Volume2, Minus, BrainCircuit } from 'lucide-react';
 import { cn } from '@/lib/utils';
+// MM:SS 会话定位（D12 收敛至 lib/utils/time，与 UnifiedTimeline 共用）
+import { formatSessionElapsed as formatRelativeTime } from '@/lib/utils/time';
 import type {
   SessionBundle,
   TimelineEntry,
@@ -26,14 +28,6 @@ interface SmartCapturePanelProps {
 // ================================================================
 // 辅助函数
 // ================================================================
-
-/** 将毫秒时间戳格式化为 MM:SS（相对会话起始时间） */
-function formatRelativeTime(ms: number, startMs: number): string {
-  const elapsed = Math.max(0, Math.floor((ms - startMs) / 1000));
-  const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
-  const ss = String(elapsed % 60).padStart(2, '0');
-  return `${mm}:${ss}`;
-}
 
 /** 根据 timeline entry type 选择图标和颜色 */
 function getEntryMeta(type: TimelineEntry['type']): {

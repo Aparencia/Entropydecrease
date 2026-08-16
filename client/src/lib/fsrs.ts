@@ -56,9 +56,6 @@ const D0 = [4.3, 3.3, 2.6, 1.0];
 /** 目标保留率 */
 const REQUESTED_RETENTION = 0.9;
 
-/** 衰减因子 */
-const DECAY = -0.5;
-
 /**
  * FSRS-5 的 19 个核心参数 w[0]-w[18]
  * ALG-H1: 结构对齐 fsrs-rs v5（w[0..3]=初始稳定性、w[4..5]=难度初始化、

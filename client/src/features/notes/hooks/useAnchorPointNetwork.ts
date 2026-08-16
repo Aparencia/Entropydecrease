@@ -40,8 +40,8 @@ export function useAnchorPointNetwork(anchorPoints: AnchorNode[]): UseAnchorPoin
       for (let j = i + 1; j < anchorPoints.length; j++) {
         const a = anchorPoints[i];
         const b = anchorPoints[j];
-        const aWords = new Set(a.concept.split(/[\s,，、\/\\\-_]+/).filter(Boolean));
-        const bWords = new Set(b.concept.split(/[\s,，、\/\\\-_]+/).filter(Boolean));
+        const aWords = new Set(a.concept.split(/[\s,，、/\\\-_]+/).filter(Boolean));
+        const bWords = new Set(b.concept.split(/[\s,，、/\\\-_]+/).filter(Boolean));
 
         // 计算概念重叠度
         let overlap = 0;

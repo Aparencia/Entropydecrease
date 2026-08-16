@@ -71,11 +71,11 @@ func (m *WSManager) unregister(c *WSConnection) {
 		}
 	}
 	// M3: 断开时从在线设备集合移除
-	go func() {
+	go goSafe(func() {
 		if err := cache.SetDeviceOffline(context.Background(), c.UserID, c.DeviceID); err != nil {
 			log.Printf("[ws] SetDeviceOffline failed user=%s device=%s: %v", c.UserID, c.DeviceID, err)
 		}
-	}()
+	})
 }
 
 // broadcastToUser sends a message to all online devices of a user, optionally excluding one device.
@@ -94,7 +94,7 @@ func (m *WSManager) broadcastToUser(userID string, excludeDeviceID string, messa
 		if !conn.send(message) {
 			// Buffer full or closed → close connection to protect the server.
 			log.Printf("[ws] buffer overflow, closing user=%s device=%s", userID, deviceID)
-			go conn.close()
+			go goSafe(conn.close)
 		}
 	}
 }
@@ -113,7 +113,7 @@ func (m *WSManager) sendToUser(userID string, message []byte) {
 		if !conn.send(message) {
 			// Buffer full or closed → close connection to protect the server.
 			log.Printf("[ws] buffer overflow, closing user=%s", userID)
-			go conn.close()
+			go goSafe(conn.close)
 		}
 	}
 }

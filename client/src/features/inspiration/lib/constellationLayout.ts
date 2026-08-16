@@ -188,8 +188,9 @@ function isInCenterExclusion(
  * @ai-context 为中心创作区留出视觉空间，光点被推到左右两侧
  */
 function redistributeFromCenter(
-  x: number,
-  y: number,
+  // 历史签名保留 x/y（调用处按位置传参），实现只用 seed 与 exclusion 重算横向位置
+  _x: number,
+  _y: number,
   seed: number,
   exclusion: NonNullable<LayoutOptions['centerExclusion']>,
 ): number {

@@ -50,7 +50,9 @@ export const createSettingsSlice: PomodoroSlice<Pick<PomodoroState, 'mode' | 'se
       endAt: isRunning ? Date.now() + duration * 1000 : null,
     });
     // 持久化 activePresetId
-    saveSettings({ ...settings, activePresetId: presetId }).catch(() => {});
+    saveSettings({ ...settings, activePresetId: presetId }).catch((err) => {
+      console.warn('[settingsSlice] saveSettings (activePresetId) failed', err);
+    });
   },
 
   setCurrentGoal: (goal) => set({ currentGoal: goal }),
@@ -84,6 +86,8 @@ export const createSettingsSlice: PomodoroSlice<Pick<PomodoroState, 'mode' | 'se
     get().syncDisplayDuration();
 
     // 持久化设置
-    saveSettings(merged).catch(() => {});
+    saveSettings(merged).catch((err) => {
+      console.warn('[settingsSlice] saveSettings failed', err);
+    });
   },
 });

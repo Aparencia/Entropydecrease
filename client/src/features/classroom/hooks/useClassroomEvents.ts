@@ -33,8 +33,11 @@ import { detectCourseFromFrame } from '@/lib/ai/courseDetector';
 import { remapKeyframeMarkers } from '../utils/tipTapImageUtils';
 import { persistKeyframeImage } from '../utils/keyframePersistence';
 import { transcribeWithRetry, toAsrLanguage, useAsrSemaphore, isLocalAsrReady, setOnAsrFallback } from '../utils/asrTranscriber';
-import { applySessionReplaces, getSessionHotwordsString } from '../utils/hotwordRuntime';
-import { cleanAsrResult } from '@/lib/capture/asrFilters';
+import { applySessionReplaces, getSessionHotwordsString, addDynamicBoosts, addSessionReplace } from '../utils/hotwordRuntime';
+import { cleanAsrResult, dedupeAcrossFinals, estimateAsrConfidence } from '@/lib/capture/asrFilters';
+import { classifyContent, hasCommandCue, type ContentKind } from '@/lib/capture/contentClassifier';
+import { hotwordStore } from '@/lib/storage/hotwordStore';
+import { extractCorrection } from '../utils/transcriptCorrection';
 
 /** 触发一次增量分析所需的关键帧数 */
 const INCREMENTAL_BATCH_SIZE = 5;
@@ -50,6 +53,10 @@ export interface LiveTranscript {
   id: string;
   text: string;
   timestamp: number;
+  /** P0-3：转写置信度（估算口径，<0.55 时 UI 弱化标记；缺失视为 1） */
+  confidence?: number;
+  /** P1-4：手动标注的说话人（飞书式重新识别） */
+  speaker?: string;
 }
 
 interface UseClassroomEventsOptions {
@@ -62,11 +69,26 @@ interface UseClassroomEventsOptions {
   onNotify: (type: 'error', message: string) => void;
   /** 真流式 ASR 是否激活（激活时跳过按段转写，改用流式 partial/final） */
   streamingAsrActive: boolean;
+  /** P1-6：目标窗口标题（内容类型分类的标题信号） */
+  windowTitle?: string;
+  /** P1-6：目标窗口进程名（内容类型分类的进程信号，Windows） */
+  windowProcessName?: string;
+  /** P1-3：当前课程名（修正回写词库的 courseId 绑定） */
+  courseName?: string;
 }
+
+/** P1-6 分类尝试上限（转写样本仍无信号则停止，unknown 不再重试） */
+const MAX_CLASSIFY_ATTEMPTS = 5;
+/** P1-7 指令补帧节流：最小间隔（ms），防连续指令句触发补帧风暴 */
+const FORCE_CAPTURE_MIN_INTERVAL_MS = 1000;
+/** P1-6 分类转写样本上限（字符，FIFO 追加防无界） */
+const MAX_CLASSIFY_SAMPLE_CHARS = 500;
+/** P1-8 漏捕检测延迟：指令句后该时长内无新关键帧 → 提示（ms） */
+const MISSED_CAPTURE_CHECK_MS = 3000;
 
 export function useClassroomEvents({
   captureManager, status, capturePath, language, aiDetectEnabled, setCourseMeta, onNotify,
-  streamingAsrActive,
+  streamingAsrActive, windowTitle, windowProcessName, courseName,
 }: UseClassroomEventsOptions) {
   const [segments, setSegments] = useState<ExtractedSegment[]>([]);
   const [stats, setStats] = useState({ frames: 0, extracted: 0 });
@@ -80,11 +102,23 @@ export function useClassroomEvents({
   const [videoFilePath, setVideoFilePath] = useState<string | null>(null);
   const [partialCount, setPartialCount] = useState(0);
   const [transcribedCount, setTranscribedCount] = useState(0);
+  /** P1-6 内容类型（课程/软件技能/手法技巧/讲座；驱动采样参数与产物形态） */
+  const [contentKind, setContentKind] = useState<ContentKind>('unknown');
 
   const partialNotesRef = useRef<string[]>([]);
   const pendingKeyframesRef = useRef<KeyFrame[]>([]);
   const isPartialAnalyzingRef = useRef(false);
   const courseDetectedRef = useRef(false);
+  /** P1-6 分类尝试计数（超上限后停止，unknown 不再重试） */
+  const classifyAttemptsRef = useRef(0);
+  /** P1-6 转写样本累积（FIFO 截断） */
+  const transcriptSampleRef = useRef('');
+  /** P1-7 指令补帧节流时间戳 */
+  const lastForceCaptureAtRef = useRef(0);
+  /** P1-8 最近一次关键帧时间戳（漏捕检测依据：指令后无新帧即提示） */
+  const latestKeyframeTsRef = useRef(0);
+  /** P1-8 漏捕检测定时器集合（组件卸载时清理，避免卸载后 toast 泄漏） */
+  const missedCaptureTimersRef = useRef<number[]>([]);
   /** @ai-context 会话时间基准（epoch ms）：记录首帧 timestamp，供 analyzePartial 换算相对秒数 */
   const sessionStartMsRef = useRef<number | null>(null);
   /** 采集会话 ID（smart:keyframe 事件携带），供笔记持久化关联与关键帧图片清理 */
@@ -94,6 +128,8 @@ export function useClassroomEvents({
   /** 真流式激活标志的 ref 桥接：供按段转写订阅器读取（避免重订阅） */
   const streamingAsrActiveRef = useRef(streamingAsrActive);
   streamingAsrActiveRef.current = streamingAsrActive;
+  /** P0-4 跨 final 去重：上一 final 清洗后文本（端点误断句时前句尾=后句头） */
+  const lastFinalTextRef = useRef('');
   /** 会话状态 ref 桥接：流式 partial/final 仅在 capturing 时上屏（暂停时不更新） */
   const statusRef = useRef(status);
   statusRef.current = status;
@@ -106,11 +142,62 @@ export function useClassroomEvents({
     },
   });
 
+  /**
+   * P1-6/P1-7 转写文本场景消费（ref 桥接，事件回调经此调用避免 effect 重订阅）：
+   * ① 累积分类样本并触发内容分类（最多 5 次尝试，标题信号 > 转写证据）
+   * ② 指令句检测命中 → 请求强制补帧（1s 节流，防补帧风暴）
+   */
+  const sceneProcessorRef = useRef<(text: string) => void>(() => {});
+  sceneProcessorRef.current = (text: string) => {
+    if (!text) return;
+    // 样本累积（FIFO 截断，防长课无界增长）
+    transcriptSampleRef.current = (transcriptSampleRef.current + text).slice(-MAX_CLASSIFY_SAMPLE_CHARS);
+    // 内容分类：未确定时尝试
+    if (contentKind === 'unknown' && classifyAttemptsRef.current < MAX_CLASSIFY_ATTEMPTS) {
+      classifyAttemptsRef.current++;
+      const result = classifyContent(windowTitle ?? '', transcriptSampleRef.current, windowProcessName);
+      if (result.kind !== 'unknown') {
+        setContentKind(result.kind);
+        captureManager.applyContentKind(result.kind);
+        console.info(`[useClassroomCapture] 内容类型识别: ${result.kind}（${result.source}）`);
+      }
+    }
+    // 指令句补帧（技能场景操作瞬间捕捉）+ 漏捕检测
+    if (hasCommandCue(text)) {
+      const now = Date.now();
+      if (now - lastForceCaptureAtRef.current >= FORCE_CAPTURE_MIN_INTERVAL_MS) {
+        lastForceCaptureAtRef.current = now;
+        captureManager.requestForceCapture();
+      }
+      // P1-8 漏捕检测：指令后 3s 无新关键帧 → 提示手动补截（定时器登记，卸载清理）
+      const commandAt = now;
+      const timer = window.setTimeout(() => {
+        if (latestKeyframeTsRef.current < commandAt) {
+          toast({ type: 'warning', silent: true, message: '这一步的画面可能没捕捉到，可按 C 键手动截图' });
+        }
+      }, MISSED_CAPTURE_CHECK_MS);
+      missedCaptureTimersRef.current.push(timer);
+      // 上限保护：定时器集合仅保留最近 20 个（已触发的清出）
+      if (missedCaptureTimersRef.current.length > 20) {
+        const expired = missedCaptureTimersRef.current.splice(0, missedCaptureTimersRef.current.length - 20);
+        expired.forEach((t) => window.clearTimeout(t));
+      }
+    }
+  };
+
   // ASR 本地→云端降级可见性：注册 toast 回调（会话级节流在 asrTranscriber 内部）
   useEffect(() => {
     setOnAsrFallback(() => toast({ type: 'warning', silent: true, message: '本地 ASR 不可用，已降级为云端转写' }));
     return () => setOnAsrFallback(null);
   }, [toast]);
+
+  // P1-8 卸载清理：漏捕检测定时器（防卸载后 toast 泄漏）
+  useEffect(() => {
+    return () => {
+      for (const t of missedCaptureTimersRef.current) window.clearTimeout(t);
+      missedCaptureTimersRef.current = [];
+    };
+  }, []);
 
   // 会话结束回到 idle 时重置时间基准（暂停/恢复不重置，避免相对时间戳跳变）
   useEffect(() => {
@@ -124,7 +211,7 @@ export function useClassroomEvents({
   useEffect(() => {
     const offCompleted = captureEventBus.on<{
       sessionId: string | null;
-      result: { text: string; confidence: number; source: 'vision' | 'audio' | 'ui_automation' };
+      result: { text: string; confidence: number; source: 'vision' | 'audio' | 'ui_automation'; structured?: Record<string, unknown> };
       segment: { id: string; timestamp: Date };
       extractedCount: number;
     }>('extraction:completed', (data) => {
@@ -138,6 +225,20 @@ export function useClassroomEvents({
       setSegments((prev) => [...prev, uiSegment]);
       setStats((prev) => ({ ...prev, extracted: data.extractedCount }));
       setExtractionError(null);
+
+      // P1-2 动态热词闭环：视觉提取的概念术语注入会话热词（弱 boost，
+      // 不持久化）；流式运行中同步更新主进程会话热词（下一断句生效）
+      if (data.result.source === 'vision') {
+        const concepts = data.result.structured?.concepts;
+        if (Array.isArray(concepts)) {
+          const terms = concepts.filter((c): c is string => typeof c === 'string');
+          if (terms.length > 0) {
+            addDynamicBoosts(terms);
+            window.electronAPI?.local_asr_stream_set_hotwords({ hotwords: getSessionHotwordsString() })
+              .catch(() => { /* 静默 */ });
+          }
+        }
+      }
     });
 
     const offError = captureEventBus.on<{ message: string }>(
@@ -157,6 +258,8 @@ export function useClassroomEvents({
         if (sessionStartMsRef.current === null) {
           sessionStartMsRef.current = data.keyframe.timestamp;
         }
+        // P1-8：更新最近关键帧时间戳（漏捕检测依据）
+        latestKeyframeTsRef.current = data.keyframe.timestamp;
         captureSessionIdRef.current = data.sessionId;
         setSmartBundle((prev) => ({
           ...prev,
@@ -173,6 +276,15 @@ export function useClassroomEvents({
             .then((detected) => {
               if (detected) {
                 setCourseMeta((prev) => ({ ...prev, ...detected, detectedBy: 'ai' }));
+                // P0-6 准确率即时提升：识别出的术语注入动态热词
+                // （课程名/学科/建议术语），并通知主进程流式 ASR 更新
+                // 会话热词（下一断句重建流生效，无需重启、不丢当前句）
+                if (detected.customTerms?.length) {
+                  addDynamicBoosts(detected.customTerms);
+                  const hotwords = getSessionHotwordsString();
+                  window.electronAPI?.local_asr_stream_set_hotwords({ hotwords })
+                    .catch(() => { /* 静默：热词更新失败不阻断识别 */ });
+                }
               }
             })
             .catch(() => { /* 静默降级到规则模式 */ });
@@ -249,10 +361,14 @@ export function useClassroomEvents({
             sample_rate: 16000,
             channels: 1,
           }, 1, hotwords || undefined)
-            .then((text) => {
+            .then((outcome) => {
               asr.markSuccess();
               // 输出清洗：相邻重复压缩 + 幻觉过滤（本地路径主进程已 clean，此处兑底云端降级）
-              const cleaned = cleanAsrResult(text ?? '');
+              const cleaned = cleanAsrResult(outcome?.text ?? '');
+              // P0-3：清洗后文本变化时重估置信度（网关估算基于未清洗文本）
+              const confidence = cleaned && outcome
+                ? (cleaned === outcome.text ? outcome.confidence : estimateAsrConfidence(outcome.text, cleaned))
+                : 0;
               // 将转写结果回填到对应的音频段，并剥离 audioBase64 释放内存（单段约 1.2MB，
               // 长课堂数百段否则无界累积——内测 5GB 内存主因）。全量分析回退路径优先用
               // 已转写的 audioText（sessionAnalyzer: seg.audioText ?? transcribe），无需再持有原始音频；
@@ -267,10 +383,12 @@ export function useClassroomEvents({
               }));
               if (cleaned) {
                 setTranscribedCount((c) => c + 1);
+                // P1-6/P1-7：转写文本场景消费（内容分类 + 指令句补帧）
+                sceneProcessorRef.current(cleaned);
                 // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3 替换词后处理），
                 // 原始清洗后转写经 audioTextRaw 可回溯
                 setLiveTranscripts((prev) => {
-                  const next = [...prev, { id: seg.id, text: applySessionReplaces(cleaned), timestamp: seg.timestampStart }];
+                  const next = [...prev, { id: seg.id, text: applySessionReplaces(cleaned), timestamp: seg.timestampStart, confidence }];
                   return next.length > MAX_LIVE_TRANSCRIPTS
                     ? next.slice(next.length - MAX_LIVE_TRANSCRIPTS)
                     : next;
@@ -318,16 +436,27 @@ export function useClassroomEvents({
     });
     const offFinal = window.electronAPI.on('asr_stream_final', (...args: unknown[]) => {
       if (statusRef.current !== 'capturing') return;
-      const data = args[0] as { text: string; timestamp: number };
+      const data = args[0] as { text: string; timestamp: number; confidence?: number };
       setPartialText('');
       // 双保险：主进程已 clean，此处兜底云端/旧版本主进程的未清洗输出
-      const text = cleanAsrResult(data?.text ?? '');
+      const cleaned = cleanAsrResult(data?.text ?? '');
+      if (!cleaned) return;
+      // P0-4 跨 final 重叠去重：端点误断句时前句尾词重复出现在后句开头
+      // （"今天讲矩阵"+"矩阵的特征值"），去重截断后句重叠前缀
+      const text = dedupeAcrossFinals(lastFinalTextRef.current, cleaned);
+      lastFinalTextRef.current = text || lastFinalTextRef.current;
       if (!text) return;
+      // P0-3：置信度透传（主进程估算；本地再清洗后文本变化时重估）
+      const confidence = cleaned === data.text
+        ? (typeof data.confidence === 'number' ? data.confidence : 1)
+        : estimateAsrConfidence(data.text ?? '', cleaned);
       const id = crypto.randomUUID();
       const timestamp = data.timestamp || Date.now();
+      // P1-6/P1-7：转写文本场景消费（内容分类 + 指令句补帧）
+      sceneProcessorRef.current(text);
       // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3）
       setLiveTranscripts((prev) => {
-        const next = [...prev, { id, text: applySessionReplaces(text), timestamp }];
+        const next = [...prev, { id, text: applySessionReplaces(text), timestamp, confidence }];
         return next.length > MAX_LIVE_TRANSCRIPTS
           ? next.slice(next.length - MAX_LIVE_TRANSCRIPTS)
           : next;
@@ -434,7 +563,8 @@ export function useClassroomEvents({
     return off;
   }, [status, captureManager]);
 
-  // P1-2：转写编辑回调——修正直播转录文本，audioText 存修正后文本供下游消费
+  // P1-2：转写编辑回调——修正直播转录文本，audioText 存修正后文本供下游消费；
+  // P1-3：修正差异自动回写本地词库（replace 词条，课程维度绑定，下次识别生效）
   const handleEditTranscript = useCallback((id: string, newText: string) => {
     setLiveTranscripts((prev) =>
       prev.map((t) => (t.id === id ? { ...t, editedText: newText } : t)),
@@ -446,6 +576,52 @@ export function useClassroomEvents({
         s.id === id ? { ...s, audioText: newText, audioTextRaw: s.audioText } : s,
       ),
     }));
+
+    // ── P1-3 修正回写（讯飞「用户修正回写」/飞书「改字同步」闭环）──
+    const original = liveTranscripts.find((t) => t.id === id)?.text ?? '';
+    const correction = extractCorrection(original, newText);
+    if (correction) {
+      // 会话内立即生效（后续转写应用替换）
+      addSessionReplace(correction.term, correction.target);
+      // 持久化词库（去重后写入；失败静默，不影响编辑结果）
+      hotwordStore.listForCourse(courseName).then((entries) => {
+        const exists = entries.some(
+          (e) => e.kind === 'replace' && e.term === correction.term && (e.target ?? '') === correction.target,
+        );
+        if (!exists) {
+          return hotwordStore.add({
+            term: correction.term,
+            target: correction.target,
+            kind: 'replace',
+            courseId: courseName,
+            enabled: true,
+          });
+        }
+        return null;
+      }).catch(() => { /* 词库写入失败静默 */ });
+      toast({ type: 'info', silent: true, message: `已记住修正：「${correction.term}」→「${correction.target}」` });
+    }
+  }, [liveTranscripts, courseName, toast]);
+
+  // P1-4：说话人循环标注（飞书式手动重新识别：无 → 说话人A → 说话人B → 无）
+  const handleCycleSpeaker = useCallback((id: string) => {
+    const NEXT: Array<string | undefined> = [undefined, '说话人A', '说话人B'];
+    setLiveTranscripts((prev) =>
+      prev.map((t) => {
+        if (t.id !== id) return t;
+        const cur = NEXT.indexOf(t.speaker);
+        return { ...t, speaker: NEXT[(cur + 1) % NEXT.length] };
+      }),
+    );
+    // 同步 smartBundle audioSegments（课后分析消费说话人标签）
+    setSmartBundle((prev) => ({
+      ...prev,
+      audioSegments: (prev.audioSegments ?? []).map((s) => {
+        if (s.id !== id) return s;
+        const cur = NEXT.indexOf(s.speaker);
+        return { ...s, speaker: NEXT[(cur + 1) % NEXT.length] };
+      }),
+    }));
   }, []);
 
   return {
@@ -453,10 +629,12 @@ export function useClassroomEvents({
     smartBundle, setSmartBundle,
     liveTranscripts, setLiveTranscripts,
     handleEditTranscript,
+    handleCycleSpeaker,
     partialText,
     vadStats, recordingStatus, setRecordingStatus,
     videoFilePath, setVideoFilePath,
     partialCount, setPartialCount, transcribedCount,
+    contentKind,
     partialNotesRef, pendingKeyframesRef, isPartialAnalyzingRef,
     captureSessionIdRef,
   };

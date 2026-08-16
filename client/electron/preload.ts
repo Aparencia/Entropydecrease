@@ -53,6 +53,8 @@ const ALLOWED_CHANNELS = [
   'screen_list_windows',
   'screen_watch_windows_start',
   'screen_watch_windows_stop',
+  'window_memory_record',
+  'window_memory_clear',
   'screen_capture_start',
   'screen_capture_stop',
   'audio_list_sources',
@@ -132,6 +134,14 @@ const ALLOWED_CHANNELS = [
   'local_asr_stream_available',
   'local_asr_stream_start',
   'local_asr_stream_stop',
+  // 本地 ASR 流式会话热词动态更新（P0-6）
+  'local_asr_stream_set_hotwords',
+  // 本地 Silero VAD（主进程 onnxruntime 推理，P0-2）
+  'vad_silero_process',
+  // 本地 OCR（PP-OCRv5 onnxruntime 推理，P2-1）
+  'local_ocr_recognize',
+  'local_ocr_download_model',
+  'local_ocr_status',
   // MCP 学习记忆服务器应用内授权开关
   'memory_server:get_consent',
   'memory_server:set_consent',
@@ -184,10 +194,14 @@ const ALLOWED_EVENT_CHANNELS = [
   // 本地 ASR 真流式转写结果推送（partial 实时 / final 断句）
   'asr_stream_partial',
   'asr_stream_final',
+  // 本地 OCR 模型下载进度推送（P2-1）
+  'local_ocr_download_progress',
   // 全局快捷键触发推送（payload: { id, text? }，shortcutManager 驱动）
   'shortcut:triggered',
   // 3.18 电子墨水学习板：主进程推送复习卡片到次窗口
   'eink:card',
+  // AI 配额耗尽（429）：主进程代理路径推送，渲染进程弹非阻断提示 + 刷新配额
+  'ai:quota-exhausted',
 ] as const;
 
 /** 允许渲染进程单向发送的 channel 白名单（渲染进程 → 主进程，fire-and-forget） */
@@ -359,5 +373,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('ollama:pull-progress', handler);
       return () => ipcRenderer.removeListener('ollama:pull-progress', handler);
     },
+  },
+  // ---- AI 配额耗尽（429）：主进程代理路径推送 ----
+  onAIQuotaExhausted: (callback: (detail: string) => void) => {
+    if (!(ALLOWED_EVENT_CHANNELS as readonly string[]).includes('ai:quota-exhausted')) {
+      console.warn('[preload] 不允许的事件 channel: ai:quota-exhausted');
+      return () => {};
+    }
+    const handler = (_event: unknown, detail: string) => callback(detail);
+    ipcRenderer.on('ai:quota-exhausted', handler);
+    return () => ipcRenderer.removeListener('ai:quota-exhausted', handler);
   },
 });

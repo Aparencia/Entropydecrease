@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 萤火海沟 — 灵感萤火球（Orb）组件
  * @ai-context 半透明磨砂玻璃风格，不同标签色调区分。
  * 新灵感以「弹入+发光」方式出现，悬浮时上浮+光泽增强。
@@ -9,7 +9,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useRef, useCallback } from 'react';
 import { Trash2, Wand2, X, Check } from 'lucide-react';
 import { useInspirationStore } from '../store/inspirationStore';
-import { useShallow } from 'zustand/react/shallow';
 import { useToast } from '@/components/ui';
 import { AIThinkingIndicator } from '@/components/ui/AIThinkingIndicator';
 import { useAISortInspiration } from '@/lib/ai/useAI';
@@ -122,7 +121,8 @@ interface OrbExpandedProps {
 }
 
 function OrbExpanded({ item, onClose }: OrbExpandedProps) {
-  const { deleteItem } = useInspirationStore(useShallow(s => s));
+  // P1-5 收尾：action 恒定引用，直接字段级订阅
+  const deleteItem = useInspirationStore((s) => s.deleteItem);
   const [editOpen, setEditOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [sortSuggestions, setSortSuggestions] = useState<SortSuggestion[]>([]);

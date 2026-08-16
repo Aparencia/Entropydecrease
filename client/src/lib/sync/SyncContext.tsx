@@ -5,26 +5,12 @@
  * 订阅 syncEngine 事件流更新状态；networkManager 恢复联网时触发补偿同步。
  * @ai-context: 副作用集中于 effect 内的订阅/退订，Provider 外无全局写入。
  */
-import React, { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
-import { syncEngine, type SyncResult, type SyncEvent } from './SyncEngine';
+import { useEffect, useState, useCallback, type ReactNode } from 'react';
+import { syncEngine, type SyncEvent } from './SyncEngine';
 import { useAuth } from '../auth/AuthContext';
 import { networkManager } from './NetworkManager';
 import { modeManager } from '../mode/ModeManager';
-
-interface SyncState {
-  isSyncing: boolean;
-  lastSyncAt: Date | null;
-  lastResult: SyncResult | null;
-  pendingCount: number;
-  conflictCount: number;
-}
-
-interface SyncContextValue extends SyncState {
-  sync: () => Promise<SyncResult>;
-  isOnline: boolean;
-}
-
-const SyncContext = createContext<SyncContextValue | undefined>(undefined);
+import { SyncContext, type SyncState } from './useSync';
 
 export function SyncProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -105,10 +91,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useSync(): SyncContextValue {
-  const context = useContext(SyncContext);
-  if (!context) {
-    throw new Error('useSync must be used within a SyncProvider');
-  }
-  return context;
-}
+// react-refresh: 组件文件只导出组件；useSync 已移至 ./useSync，
+// 此处 re-export 保持 '@/lib/sync/SyncContext' 导出签名不变（AppLayout 等直接 import）
+// oxlint-disable-next-line react/only-export-components
+export { useSync } from './useSync';

@@ -19,7 +19,6 @@ import type {
   CaptureSidebarConfig,
   SessionStatus,
   CapturePath,
-  SessionBundle,
 } from '@/lib/capture';
 import { useCaptureEvents } from './useCaptureEvents';
 import { useRendererAudioPipeline } from './useRendererAudioPipeline';
@@ -92,7 +91,9 @@ export function useCaptureSession() {
   // 导致 remount 后 pipeline 无 Worker 可用。仅停止会话即可。
   useEffect(() => {
     return () => {
-      captureManager.stopSession().catch(() => {});
+      captureManager.stopSession().catch((err) => {
+        console.debug('[useCaptureSession] stop session failed (unmount)', err);
+      });
     };
   }, [captureManager]);
 

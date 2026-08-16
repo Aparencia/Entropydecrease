@@ -212,7 +212,7 @@ export const createStepSlice: FeynmanSlice<StepSlice> = (set, get) => ({
         const wp = toConvert.find((w) => w.id === wpId);
         if (!wp) continue;
         try {
-          await updateWithLog(feynmanWeakPointStore, 'feynmanWeakPoints', wpId, { ...wp, mastered: true });
+          await updateWithLog(feynmanWeakPointStore, 'feynmanWeakPoints', wpId, { ...wp, mastered: true, converted: true });
         } catch {
           // 标记失败可接受：下次转换最多重复建该张卡
         }
@@ -224,7 +224,7 @@ export const createStepSlice: FeynmanSlice<StepSlice> = (set, get) => ({
         weakPoints: {
           ...state.weakPoints,
           [noteId]: (state.weakPoints[noteId] ?? []).map((w) =>
-            createdWpIds.includes(w.id!) ? { ...w, mastered: true } : w,
+            createdWpIds.includes(w.id!) ? { ...w, mastered: true, converted: true } : w,
           ),
         },
       }));
@@ -234,7 +234,7 @@ export const createStepSlice: FeynmanSlice<StepSlice> = (set, get) => ({
     // 全部创建成功：统一标记已掌握（逐条容错，失败汇总提示）
     const failedMarks: string[] = [];
     for (const wp of toConvert) {
-      const updated = { ...wp, mastered: true };
+      const updated = { ...wp, mastered: true, converted: true };
       try {
         await updateWithLog(feynmanWeakPointStore, 'feynmanWeakPoints', wp.id!, updated);
       } catch {
@@ -250,7 +250,7 @@ export const createStepSlice: FeynmanSlice<StepSlice> = (set, get) => ({
       weakPoints: {
         ...state.weakPoints,
         [noteId]: (state.weakPoints[noteId] ?? []).map((w) =>
-          weakPointIds.includes(w.id!) ? { ...w, mastered: true } : w,
+          weakPointIds.includes(w.id!) ? { ...w, mastered: true, converted: true } : w,
         ),
       },
     }));

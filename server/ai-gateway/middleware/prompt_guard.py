@@ -94,8 +94,14 @@ class PromptGuardMiddleware(BaseHTTPMiddleware):
                         },
                     )
         except Exception:
-            # JSON 解析失败或其他异常，交给后续中间件处理
-            pass
+            # JSON 解析失败或其他异常，交给后续中间件处理。
+            # GW-SEC: 安全检测路径的异常必须留痕——静默放行会让注入检测被绕过
+            # 而不可观测（2026-08 审计 C7）。
+            user_id = getattr(request.state, "user_id", "unknown")
+            logger.warning(
+                "PromptGuard 检测异常已放行（安全路径需人工关注）: user=%s, path=%s",
+                user_id, request.url.path,
+            )
 
         return await call_next(request)
 

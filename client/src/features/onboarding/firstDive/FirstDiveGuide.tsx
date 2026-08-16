@@ -36,8 +36,8 @@ export function FirstDiveGuide() {
 
   // ── 进度轮询：仅 diving 阶段挂载 ──
   useEffect(() => {
-    const timer = setInterval(() => { checkProgress().catch(() => {}); }, PROGRESS_POLL_MS);
-    const onFocus = () => { checkProgress().catch(() => {}); };
+    const timer = setInterval(() => { checkProgress().catch((err) => { console.debug('[FirstDiveGuide] checkProgress poll failed', err); }); }, PROGRESS_POLL_MS);
+    const onFocus = () => { checkProgress().catch((err) => { console.debug('[FirstDiveGuide] checkProgress on focus failed', err); }); };
     window.addEventListener('focus', onFocus);
     return () => { clearInterval(timer); window.removeEventListener('focus', onFocus); };
   }, [checkProgress]);

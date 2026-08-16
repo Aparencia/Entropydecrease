@@ -61,7 +61,9 @@ export function BacklinksPanel({ noteId }: { noteId: string }) {
         }
         setBacklinks([...seen.values()]);
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.debug('[BacklinksPanel] load backlinks failed', err);
+      });
     return () => { cancelled = true; };
   }, [noteId, notes]);
 

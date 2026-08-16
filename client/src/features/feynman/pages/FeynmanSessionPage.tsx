@@ -90,7 +90,9 @@ export default function FeynmanSessionPage() {
   }, [isCompleted]);
 
   const masteredCount = noteWeakPoints.filter((wp) => wp.mastered).length;
-  const convertedCount = noteWeakPoints.filter((wp) => wp.mastered).length;
+  // v0.36 修复：原实现与 masteredCount 同谓词恒等（复制粘贴 bug），
+  // 已转换薄弱点按 converted 字段统计（见 types/feynman.ts FeynmanWeakPoint.converted）
+  const convertedCount = noteWeakPoints.filter((wp) => wp.converted).length;
 
   if (isLoading) {
     return <FeynmanLoadingSkeleton />;

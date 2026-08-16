@@ -9,7 +9,6 @@ scripts/license-admin.mjs reconcile 人工对账兜底。
 而非频率限制防伪造）；原始 payload 落日志供排查。
 """
 
-import asyncio
 import logging
 from collections import deque
 from typing import Any

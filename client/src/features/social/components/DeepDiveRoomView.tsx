@@ -39,7 +39,7 @@ const STATUS_LABELS: Record<PresenceStatus, string> = {
   away: '暂离',
 };
 
-export default function DeepDiveRoomView({ roomId, state, onLeave }: DeepDiveRoomViewProps) {
+export default function DeepDiveRoomView({ roomId: _roomId, state, onLeave }: DeepDiveRoomViewProps) {
   const { room, cheerFor } = state;
   const { user } = useAuth();
   const pomodoro = usePomodoroStore(useShallow((s) => ({

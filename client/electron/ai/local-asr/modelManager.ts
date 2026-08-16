@@ -17,16 +17,26 @@ import { Transform } from 'stream';
 import * as path from 'path';
 import { BrowserWindow } from 'electron';
 import { logger } from '../../logger.js';
-import { getModelsDir, getModelDir, isModelReady, ASR_MODELS } from './config.js';
+import {
+  getModelsDir,
+  getModelDir,
+  getRescoreModelDir,
+  isModelReady,
+  isRescoreModelReady,
+  ASR_MODELS,
+} from './config.js';
 import { resetAvailabilityCache } from './SherpaAsrService.js';
+import { resetRescoreCache } from './sensevoiceRescore.js';
 
 /** 所有出站 HTTP 请求统一携带 UA，避免 CDN 返回 403 */
 const HTTP_HEADERS = { 'User-Agent': 'EntropyDecrease-Desktop/1.0 (Electron)' };
 
-/** 已废弃的旧模型目录名（Paraformer、SenseVoice），不再被使用，应清理 */
+/**
+ * 已废弃的旧模型目录名（仅 Paraformer 双语模型——SenseVoice 已于
+ * P1-1 重新启用为重打分模型，不再清理；误清会导致重打分不可用）
+ */
 const OBSOLETE_MODEL_DIRS = [
   'sherpa-onnx-streaming-paraformer-bilingual-zh-en',
-  'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17',
 ];
 
 // ================================================================
@@ -47,14 +57,25 @@ export function getDownloadStatus(): { downloading: string | null; progress: num
 
 /** 获取模型状态列表 */
 export function getModelsStatus(): Array<{ engine: string; id: string; label: string; description: string; size: string; ready: boolean }> {
-  return [{
-    engine: 'streaming',
-    id: ASR_MODELS.streaming.id,
-    label: ASR_MODELS.streaming.label,
-    description: ASR_MODELS.streaming.description,
-    size: ASR_MODELS.streaming.size,
-    ready: isModelReady(),
-  }];
+  return [
+    {
+      engine: 'streaming',
+      id: ASR_MODELS.streaming.id,
+      label: ASR_MODELS.streaming.label,
+      description: ASR_MODELS.streaming.description,
+      size: ASR_MODELS.streaming.size,
+      ready: isModelReady(),
+    },
+    // P1-1：SenseVoice 重打分模型（可选增强，未下载不影响流式转写）
+    {
+      engine: 'rescore',
+      id: ASR_MODELS.rescore.id,
+      label: ASR_MODELS.rescore.label,
+      description: ASR_MODELS.rescore.description,
+      size: ASR_MODELS.rescore.size,
+      ready: isRescoreModelReady(),
+    },
+  ];
 }
 
 /**
@@ -96,14 +117,15 @@ export async function downloadModel(engine: string): Promise<string> {
     throw new Error(`已有模型正在下载中（${_downloading}），请等待完成`);
   }
 
-  // 当前仅支持 streaming 引擎，参数验证确保前端误传时能给出明确错误
-  if (engine !== 'streaming') {
-    throw new Error(`不支持的引擎: ${engine}（当前仅支持 streaming）`);
+  // P1-1：支持 streaming（流式主引擎）与 rescore（SenseVoice 重打分）
+  if (engine !== 'streaming' && engine !== 'rescore') {
+    throw new Error(`不支持的引擎: ${engine}（支持 streaming / rescore）`);
   }
 
-  const modelDef = ASR_MODELS.streaming;
+  const modelDef = ASR_MODELS[engine];
   const modelsDir = getModelsDir();
-  const targetDir = getModelDir();
+  const targetDir = engine === 'streaming' ? getModelDir() : getRescoreModelDir();
+  const modelReady = engine === 'streaming' ? isModelReady : isRescoreModelReady;
 
   await mkdir(modelsDir, { recursive: true });
 
@@ -132,7 +154,7 @@ export async function downloadModel(engine: string): Promise<string> {
 
     // ── 策略 2 + 3：逐文件下载（hf-mirror → huggingface 直连） ──
     if (ghError) {
-      if (!isModelReady()) {
+      if (!modelReady()) {
         const bases = [
           modelDef.mirrorBaseUrl,                                        // hf-mirror.com
           modelDef.mirrorBaseUrl.replace('hf-mirror.com', 'huggingface.co'), // 直连兜底
@@ -140,7 +162,7 @@ export async function downloadModel(engine: string): Promise<string> {
         let lastErr: unknown = ghError;
         for (const base of bases) {
           try {
-            await downloadFromMirror(engine, base, targetDir);
+            await downloadFromMirror(engine, base, targetDir, modelDef);
             lastErr = null;
             break;
           } catch (mirrorErr) {
@@ -154,11 +176,12 @@ export async function downloadModel(engine: string): Promise<string> {
 
     // 校验关键文件
     broadcastProgress(engine, 95);
-    if (!isModelReady()) {
+    if (!modelReady()) {
       throw new Error(`模型下载后校验失败：缺少关键文件（${modelDef.files.join(', ')}）`);
     }
 
     resetAvailabilityCache();
+    resetRescoreCache();
     logger.info(`[LocalASR] ${engine} model ready at: ${targetDir}`);
     broadcastProgress(engine, 100);
     // 新模型下载完成后清理旧模型
@@ -173,11 +196,22 @@ export async function downloadModel(engine: string): Promise<string> {
   }
 }
 
+/** 模型定义最小结构（streaming / rescore 通用） */
+interface ModelDef {
+  files: readonly string[];
+  downloadUrl: string;
+  mirrorBaseUrl: string;
+}
+
 /**
  * 从指定 baseUrl 逐文件下载模型（无需解压）
  */
-async function downloadFromMirror(engine: string, baseUrl: string, targetDir: string): Promise<void> {
-  const modelDef = ASR_MODELS.streaming;
+async function downloadFromMirror(
+  engine: string,
+  baseUrl: string,
+  targetDir: string,
+  modelDef: ModelDef,
+): Promise<void> {
   await mkdir(targetDir, { recursive: true });
 
   logger.info(`[LocalASR] Downloading ${modelDef.files.length} files from: ${baseUrl}`);
@@ -197,14 +231,15 @@ async function downloadFromMirror(engine: string, baseUrl: string, targetDir: st
 }
 
 /**
- * 删除模型
+ * 删除模型（P1-1：支持 streaming / rescore 双引擎）
  */
-export async function deleteModel(_engine: string): Promise<void> {
-  const modelDir = getModelDir();
+export async function deleteModel(engine: string): Promise<void> {
+  const modelDir = engine === 'rescore' ? getRescoreModelDir() : getModelDir();
   if (existsSync(modelDir)) {
     rmSync(modelDir, { recursive: true, force: true });
     resetAvailabilityCache();
-    logger.info(`[LocalASR] streaming model deleted: ${modelDir}`);
+    resetRescoreCache();
+    logger.info(`[LocalASR] ${engine} model deleted: ${modelDir}`);
   }
 }
 

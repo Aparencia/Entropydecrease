@@ -6,6 +6,9 @@
 
 | 日期 | 标题 | 标签 |
 |------|------|------|
+| 2026-08-07 | [笔记页「Failed to fetch dynamically imported module」：ELECTRON_BUILD 使 dev server 预构建依赖持续 504](./bugs/2026-08-vite-outdated-optimize-dep-dynamic-import-fail.md) | #Vite #optimizeDeps #ELECTRON_BUILD #动态导入 #base路径 #electron:dev |
+| 2026-08-07 | [笔记页左/上「黑条」：FunctionalOverlay 面板渐变背景依赖的 CSS 变量未全局定义](./bugs/2026-08-dive-css-vars-missing-panel-transparent.md) | #CSS变量 #按需加载 #FunctionalOverlay #面板背景 #主题变量 |
+| 2026-08-04 | [内测反馈五连修：页面切换不渲染、MCP 复制失败、构建后无音频、预设管理缺陷、番茄钟一屏适配](./bugs/2026-08-beta-feedback-five-fixes.md) | #3D导航 #竞态 #Electron #剪贴板 #file协议 #资源路径 #预设CRUD #响应式 |
 | 2026-08-04 | [课堂真流式 ASR 永不激活：设置页缺失"启用本地语音识别"开关，enabled 恒为 false](./bugs/2026-08-streaming-asr-enable-toggle-missing.md) | #ASR #真流式 #设置页 #IPC死代码 #功能闸门 |
 | 2026-08-04 | [课堂助手生产包报「无法获取音频，启动失败」：file:// 下 AudioWorklet 模块加载失败且无降级](./bugs/2026-08-classroom-asr-file-protocol-worklet-load-failure.md) | #ASR #AudioWorklet #file协议 #降级兜底 #课堂助手 |
 | 2026-08-04 | [深色模式 3D 场景不渲染：双 EffectComposer 以 renderPriority=1 互相抢占渲染权](./bugs/2026-08-dark-mode-dual-effectcomposer-render-takeover.md) | #R3F #EffectComposer #后处理 #renderPriority #深色模式 #3D渲染 |
@@ -32,6 +35,15 @@
 |------|------|------|
 | 2026-08-01 | [熵减性能深度分析与优化路线图](./solutions/2026-08-performance-analysis-optimization-roadmap.md) | #性能分析 #内存泄漏 #重渲染 #3D性能 #基准测试 |
 | 2026-07-31 | [安装包分发加速：CDN 接入方案与下载源可切换设计](./solutions/2026-07-installer-cdn-distribution.md) | #CDN #阿里云 #安装包分发 #下载加速 |
+| 2026-08-16 | [课堂助手识别六项审查报告](../archive/2026-08-16/2026-08-classroom-recognition-review.md) `[ ] 已归档` | #代码审查 #课堂助手 #OCR #ASR |
+| 2026-08-16 | [本地 OCR 集成（PP-OCRv5 骨架与联调验证）](../archive/2026-08-16/2026-08-local-ocr-integration.md) `[ ] 已归档` | #OCR #PP-OCRv5 #ONNX #课堂助手 |
+| 2026-08-16 | [中英混说 spike 结论](../archive/2026-08-16/2026-08-mixed-language-spike.md) `[ ] 已归档` | #ASR #中英混说 #spike |
+
+## 📖 analysis/ — 机制分析
+
+| 日期 | 标题 | 标签 |
+|------|------|------|
+| 2026-08-01 | [熵减功能模块科学机制分析](./learning-mechanisms-analysis.md) | #学习科学 #心理学机制 #脑科学 #机制缺口 |
 
 ## 🧠 learnings/ — 学习笔记
 

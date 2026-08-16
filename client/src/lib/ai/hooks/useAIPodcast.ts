@@ -3,7 +3,7 @@
  */
 import { useState, useCallback } from 'react';
 import { aiClient } from '@/lib/http/apiClient';
-import type { PodcastData, PodcastSegment, SpeakerRole } from '../types';
+import type { PodcastData, SpeakerRole } from '../types';
 
 const FALLBACK_PODCAST: PodcastData = {
   title: '知识小酌',

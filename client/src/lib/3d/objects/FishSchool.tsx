@@ -45,7 +45,7 @@ export function FishSchool() {
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     // velocity: x=角速度, y=轨道半径, z=高度
-    addParticleAttributes(geo, MAX_FISH, (i) => [
+    addParticleAttributes(geo, MAX_FISH, () => [
       0.05 + Math.random() * 0.08,  // 角速度
       6 + Math.random() * 4,        // 轨道半径 6~10
       Math.random() * 2,            // 高度 0~2

@@ -29,6 +29,8 @@ export interface ScreenshotData {
   height: number;
   hasChanged: boolean;         // 变化检测结果
   changeScore?: number;        // 变化分数 (0-1)
+  /** P2-4 采集时刻时间戳（主进程截图时刻；缺失时回退处理时刻） */
+  timestamp?: number;
 }
 
 // 音频块数据
@@ -54,6 +56,8 @@ export interface ExtractionResult {
   model?: string;              // 使用的模型名称
   processingTimeMs: number;
   structured?: Record<string, unknown>;  // 结构化数据（如 LaTeX 公式、图表描述）
+  /** P2-4 采集时刻时间戳（截图/音频的采集时刻，非处理完成时刻）——时间轴对齐依据 */
+  capturedAt?: number;
 }
 
 // Worker 处理器接口
@@ -106,7 +110,7 @@ export interface CourseMeta {
   courseName?: string;      // 课程名称
   subject?: string;         // 学科（math/physics/cs/english/other）
   customTerms?: string[];   // 自定义术语列表
-  detectedBy?: 'manual' | 'window_title' | 'ai';  // 来源标识
+  detectedBy?: 'manual' | 'window_title' | 'ai' | 'memory';  // 来源标识
 }
 
 // 可捕获窗口信息（screen_list_windows 返回）
@@ -116,6 +120,12 @@ export interface WindowInfo {
   thumbnail?: string;          // base64 缩略图
   score?: number;              // 推荐分数（关键词匹配）
   matched?: string;            // 命中的关键词（用于显示推荐理由）
+  processName?: string;        // 进程可执行文件名（native 可用时）
+  confidence?: 'low' | 'medium' | 'high'; // 评分置信度
+  reasons?: string[];          // 命中理由（双向评分）
+  learningScore?: number;      // 未被娱乐负分主导的学习分
+  memoryCourseName?: string;   // 记忆命中的课程名（可回填）
+  isForeground?: boolean;      // 是否前台窗口
 }
 
 // 提取片段（UI 展示用）
@@ -163,6 +173,8 @@ export interface AudioSegment {
   audioText?: string | null;
   /** 原始 ASR 转写文本（热词替换前），保真溯源用 */
   audioTextRaw?: string | null;
+  /** P1-4：手动标注的说话人（飞书式重新识别；未标注为 undefined） */
+  speaker?: string;
 }
 
 /** @ai-context 全局时间轴条目，串联关键帧和语音段供后续分析回放 */

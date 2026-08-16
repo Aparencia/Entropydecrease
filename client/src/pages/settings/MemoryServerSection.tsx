@@ -71,7 +71,9 @@ export function MemoryServerSection() {
     window.electronAPI
       .invoke('memory_server:get_consent')
       .then((v) => setEnabled(v === true))
-      .catch(() => {})
+      .catch((err) => {
+        console.debug('[MemoryServerSection] load memory server consent failed', err);
+      })
       .finally(() => setLoaded(true));
   }, []);
 

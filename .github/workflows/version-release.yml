@@ -23,6 +23,7 @@ jobs:
   release:
     name: Semantic Release
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     # 发布提交自身携带 [skip ci] 已可被 GitHub 拦截，此处再加一层双保险，防止回环触发
     if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
     steps:
@@ -42,7 +43,8 @@ jobs:
           node-version: 20
 
       - name: Install release tooling
-        run: npm install --no-audit --no-fund
+        # npm ci：基于 lockfile 可复现安装（2026-08 审计 #12）
+        run: npm ci --no-audit --no-fund
 
       - name: Semantic Release
         env:

@@ -87,7 +87,7 @@ export function useAIFlashcards() {
       setState({ data: result, loading: false, error: null, isFallback: false, needsConfig: false });
       setIsStreaming(false);
       return result;
-    } catch (error: unknown) {
+    } catch {
       if (cancelRef.current || streamIdRef.current !== streamId) return;
       // 流式失败 → 降级非流式（非流式内部自行处理错误态）
       setIsStreaming(false);

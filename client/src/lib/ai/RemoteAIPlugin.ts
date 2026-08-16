@@ -37,12 +37,10 @@ import {
  * AIPlugin 门面与流式 postStream 调用，公共 API 与拆分前一致。
  */
 export class RemoteAIPlugin implements AIPlugin {
-  /** 保留字段：历史构造签名兼容（超时实际由 aiClient 统一控制） */
-  private timeout: number;
-
-  constructor(timeout: number = 60000) {
-    this.timeout = timeout;
-  }
+  constructor(
+    // 历史构造签名兼容：超时实际由 aiClient 统一控制，不再消费该参数
+    _timeout: number = 60000,
+  ) {}
 
   // ── 非流式功能（委托域模块） ─────────────────────────
 

@@ -73,3 +73,32 @@ export function getSessionHotwordsString(): string {
   const joined = activeBoosts.join(' ');
   return joined.length > 200 ? joined.slice(0, 200) : joined;
 }
+
+/**
+ * P0-6：动态注入课程热词（AI 课程识别成功后调用）。
+ * 与用户静态词表（hotwordStore）区分：动态词不持久化、会话结束清空；
+ * 去重 + 上限保护（30 条），防止 AI 识别返回超长术语表撑爆 200 字符热词串。
+ */
+export function addDynamicBoosts(terms: string[]): void {
+  const cleaned = [
+    ...new Set(
+      (terms ?? [])
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0 && t.length <= 20),
+    ),
+  ];
+  if (cleaned.length === 0) return;
+  activeBoosts = [...new Set([...activeBoosts, ...cleaned])].slice(0, 30);
+}
+
+/**
+ * P1-3：会话内立即生效的替换词条（用户修正回写）。
+ * 与持久化词库（hotwordStore）区分：仅当前会话生效（后续转写应用），
+ * 持久化由调用方写 hotwordStore；去重防止重复追加。
+ */
+export function addSessionReplace(term: string, target: string): void {
+  const t = term.trim();
+  if (!t || t.length > 20) return;
+  if (activeReplaces.some((r) => r.term === t && (r.target ?? '') === target)) return;
+  activeReplaces = [...activeReplaces, { term: t, target: target ?? '' }];
+}

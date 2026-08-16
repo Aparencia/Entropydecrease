@@ -20,7 +20,6 @@ import type {
 } from '@/lib/capture/captureTypes';
 import {
   DEFAULT_ROUTE_CONFIG,
-  type RouteStrategy,
   type RouteDecision,
   type RouteDispatcherConfig,
   type RouteSource,
@@ -181,7 +180,7 @@ export class RouteDispatcher {
    * 处理路由失败，决定降级策略。
    * 返回新的路由决策供上层使用。
    */
-  handleFailure(route: RouteSource, error: Error): RouteDecision {
+  handleFailure(route: RouteSource, _error: Error): RouteDecision {
     this.failureCounts[route]++;
 
     // 基于当前决策重新计算，失败的通道会被自动关闭

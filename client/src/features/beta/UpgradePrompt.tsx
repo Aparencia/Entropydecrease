@@ -28,7 +28,7 @@ export function UpgradePrompt({
   featureName,
   dismissible = true,
 }: UpgradePromptProps) {
-  const { effectiveTier, betaProfile } = useBetaStore();
+  const { betaProfile } = useBetaStore();
   const [dismissed, setDismissed] = useState(false);
 
   if (dismissed) return null;

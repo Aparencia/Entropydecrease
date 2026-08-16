@@ -10,12 +10,20 @@
  */
 import { SmartSampler } from './smartSampler';
 import { VADMarker } from './vadMarker';
+import { createSileroVad, type SileroProbSource } from './sileroVad';
+import {
+  SKILL_SAMPLER_CONFIG,
+  COURSE_SAMPLER_CONFIG,
+  type ContentKind,
+} from './contentClassifier';
 import { captureEventBus } from './eventBus';
 import type { ScreenshotData, AudioChunkData, SessionBundle } from './captureTypes';
 
 export class SmartCaptureController {
   private smartSampler: SmartSampler | null = null;
   private vadMarker: VADMarker | null = null;
+  /** Silero 概率源（P0-2）：主进程推理可用时注入 VADMarker 精判；不可用为 null（纯 RMS） */
+  private silero: SileroProbSource | null = null;
   private vadStatsIntervalId: ReturnType<typeof setInterval> | null = null;
   private smartStartTime = 0;
 
@@ -34,12 +42,18 @@ export class SmartCaptureController {
   start(sessionId: string, microphone?: boolean): void {
     this.smartStartTime = Date.now();
     this.smartSampler = new SmartSampler();
+    // Silero 概率源（P0-2）：主进程 onnxruntime 推理，加载失败/无 Electron
+    // 环境时返回 null，VADMarker 回退纯 RMS（优雅降级不阻塞采集）
+    this.silero = createSileroVad();
     // 根据采集源选择 VAD 模式：
     // - 麦克风（现场课程）：启用自适应校准，前 N 块采样背景噪声自动调整阈值
     // - 系统环回（网课）：数字信号无环境底噪，使用预设阈值跳过校准
-    this.vadMarker = new VADMarker({
-      sourceType: microphone ? 'microphone' : 'loopback',
-    });
+    this.vadMarker = new VADMarker(
+      {
+        sourceType: microphone ? 'microphone' : 'loopback',
+      },
+      this.silero ?? undefined,
+    );
 
     // 流式 ASR：语音段完成后立即发射事件，由上层 Hook 触发转写
     this.vadMarker.onSegmentReady = (segment) => {
@@ -70,9 +84,30 @@ export class SmartCaptureController {
     }).catch(() => { /* 压缩失败静默跳过，不阻断采集流 */ });
   }
 
-  /** 推送音频块：VADMarker 检测语音段，流式触发 ASR 转写 */
+  /** 推送音频块：VADMarker 检测语音段，流式触发 ASR 转写；同时喂 Silero 概率源 */
   pushAudioChunk(audioData: AudioChunkData): void {
-    this.vadMarker?.processChunk(audioData);
+    if (!this.vadMarker) return;
+    this.vadMarker.processChunk(audioData);
+    // Silero 喂入：与 RMS 判定同一 PCM 块（异步推理，不阻塞 VADMarker 同步状态机）
+    this.silero?.push(new Float32Array(audioData.audioBuffer));
+  }
+
+  /**
+   * P1-6 应用内容分类结果：技能类（软件/手法）收紧采样参数捕捉操作瞬间；
+   * 授课/讲座维持默认（静态 PPT 翻页节奏）；unknown 不改变当前参数。
+   */
+  applyContentKind(kind: ContentKind): void {
+    if (!this.smartSampler) return;
+    if (kind === 'software_skill' || kind === 'craft_skill') {
+      this.smartSampler.setConfig(SKILL_SAMPLER_CONFIG);
+    } else if (kind === 'course' || kind === 'lecture') {
+      this.smartSampler.setConfig(COURSE_SAMPLER_CONFIG);
+    }
+  }
+
+  /** P1-7 请求一次强制补帧（指令句命中后调用，下一帧跳过变化检测门槛） */
+  requestForceCapture(): void {
+    this.smartSampler?.forceNextCapture();
   }
 
   /**
@@ -87,12 +122,14 @@ export class SmartCaptureController {
     return { keyframes, audioSegments, timeline, duration };
   }
 
-  /** 停止并清理全部 smart 状态（含统计定时器） */
+  /** 停止并清理全部 smart 状态（含统计定时器与 Silero 概率源） */
   stop(): void {
     this.smartSampler?.reset();
     this.vadMarker?.reset();
+    this.silero?.dispose();
     this.smartSampler = null;
     this.vadMarker = null;
+    this.silero = null;
     if (this.vadStatsIntervalId !== null) {
       clearInterval(this.vadStatsIntervalId);
       this.vadStatsIntervalId = null;
