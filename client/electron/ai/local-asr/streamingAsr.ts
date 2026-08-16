@@ -12,7 +12,7 @@
 
 import type { BrowserWindow } from 'electron';
 import { logger } from '../../logger.js';
-import { cleanAsrResult, computeRms, SILENCE_RMS_THRESHOLD } from '../../../src/lib/capture/asrFilters.js';
+import { cleanAsrResult, computeRms, estimateAsrConfidence, SILENCE_RMS_THRESHOLD } from '../../../src/lib/capture/asrFilters.js';
 import { getOnlineRecognizer, feedWaveform, type OnlineStream } from './SherpaAsrService.js';
 
 /** partial 推送节流：两次 partial 推送的最小间隔（ms） */
@@ -148,14 +148,16 @@ export function feedStreamingAsr(audioBuffer: ArrayBuffer, sampleRate?: number):
     // 端点检测：断句 → 推送 final 并以最新热词重建流（P0-6 热词生效点）
     if (recognizer.isEndpoint(_stream)) {
       // 输出后处理：相邻重复压缩 + 幻觉过滤（静音段重复输出防护）
-      const finalText = cleanAsrResult(recognizer.getResult(_stream).text ?? '');
+      const rawText = recognizer.getResult(_stream).text ?? '';
+      const finalText = cleanAsrResult(rawText);
+      const confidence = estimateAsrConfidence(rawText, finalText);
       _lastFinalText = finalText;
       // 重建流：以会话最新热词 createStream（热词变化无需重启即可生效）
       _stream = recognizer.createStream(_latestHotwords);
       _lastPartialText = '';
       _lastPartialEmitAt = 0;
       if (finalText) {
-        emit('asr_stream_final', { text: finalText, timestamp: Date.now() });
+        emit('asr_stream_final', { text: finalText, confidence, timestamp: Date.now() });
       }
       return;
     }
@@ -190,13 +192,13 @@ export function stopStreamingAsr(): void {
       // flush 尾句：仅在窗口存活且流内已有可交付文本时推送
       if (_win && !_win.isDestroyed()) {
         const recognizer = getOnlineRecognizer();
-        const tailText = recognizer
-          ? cleanAsrResult(recognizer.getResult(_stream).text ?? '')
-          : '';
+        const rawTail = recognizer ? recognizer.getResult(_stream).text ?? '' : '';
+        const tailText = rawTail ? cleanAsrResult(rawTail) : '';
         // P0-4 flush 去重：尾句与最近一次 final 完全一致时不再推送
         // （端点已推送过该句，flush 重复上屏是停止瞬间重复的兜底场景）
         if (tailText && tailText !== _lastFinalText) {
-          emit('asr_stream_final', { text: tailText, timestamp: Date.now() });
+          const confidence = estimateAsrConfidence(rawTail, tailText);
+          emit('asr_stream_final', { text: tailText, confidence, timestamp: Date.now() });
         }
       }
       // 新版（1.13+）流对象无 free 方法（句柄由 GC 回收），可选调用

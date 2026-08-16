@@ -21,7 +21,10 @@
 import * as path from 'path';
 import * as os from 'os';
 import { logger } from '../../logger.js';
-import { cleanAsrResult } from '../../../src/lib/capture/asrFilters.js';
+import {
+  cleanAsrResult,
+  estimateAsrConfidence,
+} from '../../../src/lib/capture/asrFilters.js';
 import {
   getLocalAsrConfig,
   getModelDir,
@@ -210,7 +213,7 @@ export function resetAvailabilityCache(): void {
 export async function transcribeStreaming(
   pcmData: Float32Array,
   hotwords?: string,
-): Promise<{ text: string; engine: 'zipformer'; durationMs: number }> {
+): Promise<{ text: string; confidence: number; engine: 'zipformer'; durationMs: number }> {
   const startTime = Date.now();
 
   const recognizer = getOnlineRecognizer();
@@ -236,15 +239,17 @@ export async function transcribeStreaming(
       recognizer.decode(stream);
     }
 
-    const result = recognizer.getResult(stream);
+    const rawText = recognizer.getResult(stream).text ?? '';
     // 输出后处理：相邻重复压缩 + 幻觉过滤
     // P1-1 两遍重打分接入点：此处为本地按段转写最终文本出口，
     // SenseVoice 重打分将在此处对 text 做句末复核（高置信度者胜出）
-    const text = cleanAsrResult(result.text ?? '');
+    const text = cleanAsrResult(rawText);
+    // P0-3：置信度估算（清洗前后长度比代理信号，供 UI 低置信度标记）
+    const confidence = estimateAsrConfidence(rawText, text);
     const durationMs = Date.now() - startTime;
 
     logger.debug(`[LocalASR] Zipformer transcribe: ${text.length} chars, ${durationMs}ms`);
-    return { text, engine: 'zipformer', durationMs };
+    return { text, confidence, engine: 'zipformer', durationMs };
   } finally {
     stream.free?.();
   }
@@ -259,7 +264,7 @@ export async function transcribeStreaming(
 export async function transcribeLocal(
   audioBase64: string,
   options?: { language?: string; sampleRate?: number; channels?: number; hotwords?: string },
-): Promise<{ text: string; language: string; durationMs: number }> {
+): Promise<{ text: string; language: string; confidence: number; durationMs: number }> {
   const config = getLocalAsrConfig();
   const language = options?.language ?? config.language;
 
@@ -275,5 +280,5 @@ export async function transcribeLocal(
   const pcmData = new Float32Array(rawBytes.buffer, rawBytes.byteOffset, rawBytes.byteLength / 4);
 
   const result = await transcribeStreaming(pcmData, options?.hotwords);
-  return { text: result.text, language, durationMs: result.durationMs };
+  return { text: result.text, language, confidence: result.confidence, durationMs: result.durationMs };
 }

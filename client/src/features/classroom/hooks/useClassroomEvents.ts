@@ -34,7 +34,7 @@ import { remapKeyframeMarkers } from '../utils/tipTapImageUtils';
 import { persistKeyframeImage } from '../utils/keyframePersistence';
 import { transcribeWithRetry, toAsrLanguage, useAsrSemaphore, isLocalAsrReady, setOnAsrFallback } from '../utils/asrTranscriber';
 import { applySessionReplaces, getSessionHotwordsString, addDynamicBoosts } from '../utils/hotwordRuntime';
-import { cleanAsrResult, dedupeAcrossFinals } from '@/lib/capture/asrFilters';
+import { cleanAsrResult, dedupeAcrossFinals, estimateAsrConfidence } from '@/lib/capture/asrFilters';
 
 /** 触发一次增量分析所需的关键帧数 */
 const INCREMENTAL_BATCH_SIZE = 5;
@@ -50,6 +50,8 @@ export interface LiveTranscript {
   id: string;
   text: string;
   timestamp: number;
+  /** P0-3：转写置信度（估算口径，<0.55 时 UI 弱化标记；缺失视为 1） */
+  confidence?: number;
 }
 
 interface UseClassroomEventsOptions {
@@ -260,10 +262,14 @@ export function useClassroomEvents({
             sample_rate: 16000,
             channels: 1,
           }, 1, hotwords || undefined)
-            .then((text) => {
+            .then((outcome) => {
               asr.markSuccess();
               // 输出清洗：相邻重复压缩 + 幻觉过滤（本地路径主进程已 clean，此处兑底云端降级）
-              const cleaned = cleanAsrResult(text ?? '');
+              const cleaned = cleanAsrResult(outcome?.text ?? '');
+              // P0-3：清洗后文本变化时重估置信度（网关估算基于未清洗文本）
+              const confidence = cleaned && outcome
+                ? (cleaned === outcome.text ? outcome.confidence : estimateAsrConfidence(outcome.text, cleaned))
+                : 0;
               // 将转写结果回填到对应的音频段，并剥离 audioBase64 释放内存（单段约 1.2MB，
               // 长课堂数百段否则无界累积——内测 5GB 内存主因）。全量分析回退路径优先用
               // 已转写的 audioText（sessionAnalyzer: seg.audioText ?? transcribe），无需再持有原始音频；
@@ -281,7 +287,7 @@ export function useClassroomEvents({
                 // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3 替换词后处理），
                 // 原始清洗后转写经 audioTextRaw 可回溯
                 setLiveTranscripts((prev) => {
-                  const next = [...prev, { id: seg.id, text: applySessionReplaces(cleaned), timestamp: seg.timestampStart }];
+                  const next = [...prev, { id: seg.id, text: applySessionReplaces(cleaned), timestamp: seg.timestampStart, confidence }];
                   return next.length > MAX_LIVE_TRANSCRIPTS
                     ? next.slice(next.length - MAX_LIVE_TRANSCRIPTS)
                     : next;
@@ -329,7 +335,7 @@ export function useClassroomEvents({
     });
     const offFinal = window.electronAPI.on('asr_stream_final', (...args: unknown[]) => {
       if (statusRef.current !== 'capturing') return;
-      const data = args[0] as { text: string; timestamp: number };
+      const data = args[0] as { text: string; timestamp: number; confidence?: number };
       setPartialText('');
       // 双保险：主进程已 clean，此处兜底云端/旧版本主进程的未清洗输出
       const cleaned = cleanAsrResult(data?.text ?? '');
@@ -339,11 +345,15 @@ export function useClassroomEvents({
       const text = dedupeAcrossFinals(lastFinalTextRef.current, cleaned);
       lastFinalTextRef.current = text || lastFinalTextRef.current;
       if (!text) return;
+      // P0-3：置信度透传（主进程估算；本地再清洗后文本变化时重估）
+      const confidence = cleaned === data.text
+        ? (typeof data.confidence === 'number' ? data.confidence : 1)
+        : estimateAsrConfidence(data.text ?? '', cleaned);
       const id = crypto.randomUUID();
       const timestamp = data.timestamp || Date.now();
       // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3）
       setLiveTranscripts((prev) => {
-        const next = [...prev, { id, text: applySessionReplaces(text), timestamp }];
+        const next = [...prev, { id, text: applySessionReplaces(text), timestamp, confidence }];
         return next.length > MAX_LIVE_TRANSCRIPTS
           ? next.slice(next.length - MAX_LIVE_TRANSCRIPTS)
           : next;

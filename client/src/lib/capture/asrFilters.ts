@@ -186,3 +186,24 @@ function similarityOf(a: string, b: string): number {
   const union = setA.size + setB.size - intersection;
   return union > 0 ? intersection / union : 0;
 }
+
+// ================================================================
+// 转写置信度估算（P0-3 质量门控）
+// ================================================================
+
+/**
+ * 估算转写置信度：sherpa zipformer 与云端 ASR API 均不返回统计置信度，
+ * 用「清洗前后文本长度比」作代理信号——幻觉过滤/重复压缩会显著缩短文本，
+ * 压缩损失越大说明原始输出越不可靠。
+ * 口径：cleaned 为空 → 0；ratio = cleaned/raw；confidence = 0.35 + 0.65*ratio
+ * （ratio=1 → 1.0；ratio=0.7 → 0.8；ratio=0.5 → 0.68）。
+ * 语义：供 UI 低置信度弱化标记，非统计置信度（与网关 transcribe 估算口径一致）。
+ */
+export function estimateAsrConfidence(rawText: string, cleanedText: string): number {
+  const raw = (rawText ?? '').trim();
+  const cleaned = (cleanedText ?? '').trim();
+  if (!raw || !cleaned) return 0;
+  if (raw === cleaned) return 1;
+  const ratio = cleaned.length / raw.length;
+  return Math.round((0.35 + 0.65 * Math.max(0, Math.min(1, ratio))) * 100) / 100;
+}

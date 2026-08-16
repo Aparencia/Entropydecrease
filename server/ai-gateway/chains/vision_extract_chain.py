@@ -281,11 +281,15 @@ class VisionExtractChain:
         # GW-2#4: 显式截断检测——GLM 等 provider 可能把 max_tokens clamp 到
         # 低于请求值（full 模式请求 4096 被 clamp 到 1024），输出在接近上限时
         # 大概率被截断。原实现静默返回残缺 JSON（结构化字段丢失）且照常缓存，
-        # 用户无感知；此处记录 truncated 告警供排查与降级重试决策
+        # 用户无感知；此处记录 truncated 告警供排查与降级重试决策。
+        # P0-3：truncated 标志随结果返回，路由层据此将置信度减半（低置信度
+        # 段落 UI 弱化标记的质量门控信号）
         content = result["content"]
         actual_max_tokens = result.get("max_tokens")
+        truncated = False
         if actual_max_tokens and len(content) > actual_max_tokens * 3:
             # 1 token ≈ 3 字符的保守估算（中文 1 token ≈ 1-2 字符，英文 ≈ 4）
+            truncated = True
             logger.warning(
                 "视觉提取疑似截断: mode=%s, model=%s, content=%d 字符, "
                 "max_tokens=%d（provider clamp 后），结构化字段可能缺失",
@@ -303,4 +307,5 @@ class VisionExtractChain:
             "model": result.get("model", self.model),
             "latency_ms": result.get("latency_ms", 0),
             "mode": effective_mode,
+            "truncated": truncated,
         }

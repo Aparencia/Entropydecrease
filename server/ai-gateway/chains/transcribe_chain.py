@@ -97,8 +97,21 @@ class TranscribeChain:
         # 后处理
         result = self._postprocess_result(result)
         result.setdefault("language", language)
-        # GW-2#11: ASR API 不返回置信度，0.0 为占位常量而非测量值
-        result.setdefault("confidence", 0.0)
+        # GW-2#11 + P0-3：ASR API 不返回置信度，此处输出估算值供渲染进程
+        # 质量门控（低置信度段落 UI 弱化标记），非统计置信度。估算口径：
+        # 文本非空基线 0.7，按长度渐近 0.95；fallback/空文本为 0。
+        result["confidence"] = self._estimate_confidence(
+            result.get("text", ""), result.get("model", self.model),
+        )
         result.setdefault("model", self.model)
 
         return result
+
+    @staticmethod
+    def _estimate_confidence(text: str, model: str) -> float:
+        """估算转写置信度（P0-3，语义见 run 内注释）"""
+        if not text.strip():
+            return 0.0
+        if model == "fallback":
+            return 0.3
+        return round(min(0.95, 0.7 + min(len(text), 80) / 200), 2)

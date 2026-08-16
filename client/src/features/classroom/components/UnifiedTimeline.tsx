@@ -24,6 +24,8 @@ export interface TranscriptEntry {
   timestamp: number;
   /** P1-2：用户修正后的文本（存在时优先显示） */
   editedText?: string;
+  /** P0-3：转写置信度（估算口径，<0.55 时 UI 弱化标记） */
+  confidence?: number;
 }
 
 interface UnifiedTimelineProps {
@@ -156,6 +158,9 @@ export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], par
       const isEditing = editingId === t.id;
       const displayText = t.editedText ?? t.text;
       const isEdited = !!t.editedText;
+      // P0-3 低置信度标记：置信度 <0.55 的转写弱化显示并加角标（估算口径，
+      // 非统计置信度；未携带置信度的旧数据视为 1）
+      const isLowConfidence = typeof t.confidence === 'number' && t.confidence < 0.55;
       const time = new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
       if (isEditing) {
@@ -183,8 +188,11 @@ export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], par
         <div key={t.id} className="flex gap-2 p-2 rounded-kb-sm transition-colors hover:bg-bg-tertiary/30 group">
           <span className="text-[10px] text-text-tertiary flex-shrink-0 mt-0.5 tabular-nums">{time}</span>
           <Mic className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-emerald-500/70" strokeWidth={1.5} />
-          <span className={cn('flex-1 text-[12px] leading-relaxed min-w-0', idx === rows.length - 1 ? 'text-text-primary font-medium' : 'text-text-secondary')}>
+          <span className={cn('flex-1 text-[12px] leading-relaxed min-w-0', idx === rows.length - 1 ? 'text-text-primary font-medium' : 'text-text-secondary', isLowConfidence && 'opacity-60')}>
             {displayText}
+            {isLowConfidence && (
+              <span className="ml-1.5 text-[10px] text-text-quaternary font-medium" title={`置信度 ${(t.confidence ?? 0).toFixed(2)}，识别可能不准确`}>低置信</span>
+            )}
             {isEdited && (
               <span className="ml-1.5 text-[10px] text-amber-500 font-medium" title={`原始: ${t.text}`}>已修正</span>
             )}
