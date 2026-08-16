@@ -6,6 +6,11 @@ import { writeFileSync, mkdirSync } from 'fs'
 
 // 检测 Electron 桌面端构建模式
 const isElectronBuild = !!process.env.ELECTRON_BUILD;
+// PWA 部署子路径（CI 注入 VITE_PWA_BASE=/pwa；本地默认根路径 '/'）。
+// 同时控制构建 base 与 manifest start_url/scope，保证子路径部署（/pwa/）时
+// 资源路径与安装入口均指向正确位置
+const pwaBase = (process.env.VITE_PWA_BASE || '').replace(/\/+$/, '');
+const pwaBasePath = pwaBase ? `${pwaBase}/` : '/';
 
 /**
  * Vite 插件：Electron 构建时将主进程需要的 VITE_* 环境变量写入 build-config.json
@@ -53,7 +58,7 @@ export default defineConfig(({ command }) => ({
   // dev 模式必须保持 '/'——否则 Vite 预构建依赖 URL 解析异常，
   // 全部 optimizeDeps 产物持续 504，lazy 页面动态导入失败
   // （曾因 ELECTRON_BUILD=1 vite --mode test 启动 dev server 触发）
-  base: isElectronBuild && command === 'build' ? './' : '/',
+  base: isElectronBuild && command === 'build' ? './' : pwaBasePath,
   plugins: [
     react(),
     // Electron 构建时生成 build-config.json，供主进程运行时读取环境变量
@@ -70,8 +75,8 @@ export default defineConfig(({ command }) => ({
         background_color: '#111827',
         display: 'standalone',
         orientation: 'portrait-primary',
-        scope: '/',
-        start_url: '/',
+        scope: pwaBasePath,
+        start_url: pwaBasePath,
         icons: [
           {
             src: 'pwa-192x192.png',
