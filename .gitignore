@@ -73,3 +73,6 @@ missing_ai_context.txt
 
 # 音效源文件备份（42 个 wav，零代码引用，勿再提交）
 client/public/sounds/_backup_original/
+
+# Android ǩ����Կ���Ͻ��ύ��
+android/keystore/
