@@ -85,7 +85,10 @@ jobs:
           strip_components: 1
           rm: true
       # scp rm:true 重建目录导致 bind mount 失效，须重启 nginx 容器恢复
-      # （同 deploy-website.yml 模式）；顺带写入版本标记 + 验证部署
+      # （同 deploy-website.yml 模式）；顺带写入版本标记 + 验证部署。
+      # 自愈兜底：nginx 容器因故未运行（如服务器手动 compose 漏传
+      # --env-file .env.production 致上游解析失败）时，用正确 env-file 重建，
+      # 避免 restart 报错且全站持续不可用（2026-08-16 生产事故教训）
       - name: Restart Nginx, write version and verify
         uses: appleboy/ssh-action@v1
         with:
@@ -94,7 +97,12 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             echo "${{ github.ref_name }}" > /opt/Entropydecrease/pwa/version.txt
-            docker restart entropy-decrease-nginx
+            if docker ps -a --format '{{.Names}}' | grep -q '^entropy-decrease-nginx$'; then
+              docker restart entropy-decrease-nginx
+            else
+              cd /opt/Entropydecrease/server
+              docker compose -f docker-compose.prod.yml --env-file .env.production up -d nginx
+            fi
             sleep 5
             curl -sf https://entropydecrease.com/pwa/ | grep -q "熵减" || exit 1
             echo "PWA deployed: ${{ github.ref_name }}"
