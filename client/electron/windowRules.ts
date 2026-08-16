@@ -50,7 +50,7 @@ export interface WindowScoreResult {
 
 /** 置信度分级阈值 */
 export const HIGH_CONFIDENCE_MIN = 130;
-export const MEDIUM_CONFIDENCE_MIN = 25;
+export const MEDIUM_CONFIDENCE_MIN = 70;
 
 /** 标题高优先级词（原 windowScorer 迁移，+40/词可叠加） */
 const HIGH_PRIORITY_WORDS = [

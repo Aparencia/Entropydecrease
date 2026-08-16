@@ -61,7 +61,7 @@ describe('scoreWindow — 系统信号', () => {
 describe('scoreWindow — 置信度分级', () => {
   it('score>=130 为 high，>=70 为 medium，否则 low', () => {
     expect(scoreWindow({ title: '腾讯会议 - 网课课堂', processName: 'wemeet.exe', isForeground: true }).confidence).toBe('high');
-    expect(scoreWindow({ title: '随便看看', processName: 'chrome.exe' }).confidence).toBe('medium');
+    expect(scoreWindow({ title: '随便看看', processName: 'chrome.exe' }).confidence).toBe('low');
     expect(scoreWindow({ title: '随便看看' }).confidence).toBe('low');
     // 边界常量存在且顺序正确
     expect(HIGH_CONFIDENCE_MIN).toBeGreaterThan(MEDIUM_CONFIDENCE_MIN);
