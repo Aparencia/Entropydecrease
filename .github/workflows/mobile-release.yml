@@ -62,6 +62,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # secrets 不可用于 if 条件（同 release.yml），先注入 job 级 env 再在 step 用 env.* 引用
+    env:
+      DOWNLOAD_BASE_URL: ${{ secrets.DOWNLOAD_BASE_URL }}
+      HAS_ALIYUN_AK: ${{ secrets.ALIYUN_ACCESS_KEY_ID != '' }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -85,7 +89,10 @@ jobs:
           strip_components: 1
           rm: true
       # scp rm:true 重建目录导致 bind mount 失效，须重启 nginx 容器恢复
-      # （同 deploy-website.yml 模式）；顺带写入版本标记 + 验证部署
+      # （同 deploy-website.yml 模式）；顺带写入版本标记 + 验证部署。
+      # 自愈兜底：nginx 容器因故未运行（如服务器手动 compose 漏传
+      # --env-file .env.production 致上游解析失败）时，用正确 env-file 重建，
+      # 避免 restart 报错且全站持续不可用（2026-08-16 生产事故教训）
       - name: Restart Nginx, write version and verify
         uses: appleboy/ssh-action@v1
         with:
@@ -94,25 +101,56 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             echo "${{ github.ref_name }}" > /opt/Entropydecrease/pwa/version.txt
-            docker restart entropy-decrease-nginx
+            if docker ps -a --format '{{.Names}}' | grep -q '^entropy-decrease-nginx$'; then
+              docker restart entropy-decrease-nginx
+            else
+              cd /opt/Entropydecrease/server
+              docker compose -f docker-compose.prod.yml --env-file .env.production up -d nginx
+            fi
             sleep 5
             curl -sf https://entropydecrease.com/pwa/ | grep -q "熵减" || exit 1
             echo "PWA deployed: ${{ github.ref_name }}"
+
+      # ---------------------------------------------------------------
+      # CDN 预热：PWA 入口与元数据（manifest/sw.js）预热，移动端首开
+      # 免回源等待（入口文件虽小，CDN 冷缓存回源仍受源站出网带宽限制）。
+      # 与 release.yml 安装包预热共用同一套阿里云凭证；未配置时跳过。
+      # ---------------------------------------------------------------
+      - name: Prefetch CDN cache (PWA)
+        if: env.DOWNLOAD_BASE_URL != '' && env.HAS_ALIYUN_AK == 'true'
+        continue-on-error: true
+        env:
+          AK_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+          AK_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+        run: |
+          set -eo pipefail
+          if [ ! -x /tmp/aliyun ]; then
+            curl -sL https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz -o /tmp/aliyun.tgz
+            tar -xzf /tmp/aliyun.tgz -C /tmp
+          fi
+          /tmp/aliyun configure set --profile cdnci --mode AK --region cn-hangzhou \
+            --access-key-id "$AK_ID" --access-key-secret "$AK_SECRET"
+
+          OBJECTS="https://entropydecrease.com/pwa/"$'\n'"https://entropydecrease.com/pwa/manifest.webmanifest"$'\n'"https://entropydecrease.com/pwa/sw.js"
+          echo "Prefetching:"
+          echo "$OBJECTS"
+
+          /tmp/aliyun cdn PushObjectCache \
+            --profile cdnci \
+            --ObjectPath "$OBJECTS" \
+            --Area domestic
+          echo "PWA CDN prefetch done"
 
   # ---------------------------------------------------------------------------
   # Android APK（B 方案：TWA 打包）：bubblewrap 基于已部署的 PWA manifest
   # 生成 TWA 工程并构建签名 APK，上传 GitHub Release + 服务器下载目录
   # （官网「下载 Android APK」直链 = entropydecrease.com/downloads/entropydecrease.apk）。
   #
-  # ⚠️ 首次设置（一次性，需 Android/Java 环境，完成后 CI 全自动）：
-  #   1. 生成 keystore：keytool -genkey -v -keystore entropydecrease.keystore
-  #      -alias entropydecrease -keyalg RSA -keysize 2048 -validity 10000
-  #   2. 生成 TWA 工程（读 android/twa-manifest.json 配置）：
-  #      npx @bubblewrap/cli init --manifest
-  #      https://entropydecrease.com/pwa/manifest.webmanifest --directory android/twa
-  #      并把生成的 android/twa/ 提交到仓库（CI 只做非交互 update + build）
-  #   3. GitHub Secrets：ANDROID_KEYSTORE_BASE64（keystore base64）、
-  #      ANDROID_KEYSTORE_PASS（keystore 密码）、ANDROID_KEY_PASS（key 密码）
+  # ⚠️ 首次设置（2026-08-16 已完成：bubblewrap init 生成 android/twa/ + keystore）：
+  #   keystore = android/twa/android.keystore（alias=android，packageId=com.entropydecrease.twa）
+  #   1. 将 android/twa/android.keystore 转 base64 存入 Secret ANDROID_KEYSTORE_BASE64
+  #   2. Secret ANDROID_KEYSTORE_PASS / ANDROID_KEY_PASS = keystore 密码（init 时 keytool 输入值）
+  #   CI 只做非交互 update + build；android/twa/ 提交仓库（*.keystore 已 gitignore）
   # ---------------------------------------------------------------------------
   build-apk:
     needs: deploy
@@ -154,7 +192,7 @@ jobs:
           bubblewrap build \
             --keystorePath /tmp/entropydecrease.keystore \
             --keystorePass "$KEYSTORE_PASS" \
-            --keyAlias entropydecrease \
+            --keyAlias android \
             --keyPass "$KEY_PASS"
       - name: Verify APK artifact
         run: test -f android/twa/app-release-signed.apk && echo "APK OK"
@@ -170,3 +208,14 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: android/twa/app-release-signed.apk
           target: /opt/Entropydecrease/downloads
+          strip_components: 2
+      - name: Rename APK to canonical name
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            mv -f /opt/Entropydecrease/downloads/app-release-signed.apk \
+                  /opt/Entropydecrease/downloads/entropydecrease.apk
+            ls -la /opt/Entropydecrease/downloads/entropydecrease.apk

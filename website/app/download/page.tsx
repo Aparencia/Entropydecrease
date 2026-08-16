@@ -228,16 +228,20 @@ export default function DownloadPage() {
                   ⬇ 下载 Android APK
                 </a>
               </div>
-              {/* iOS：添加到主屏幕引导 */}
+              {/* iOS：跳转移动端版 + 添加到主屏幕引导 */}
               <div className="rounded-xl p-5" style={{ background: "var(--kb-bg-tertiary)" }}>
                 <h3 className="font-medium text-kb-text mb-2">iOS</h3>
-                <p className="text-xs text-kb-text3 mb-3 leading-relaxed">
-                  Safari 打开移动端版，添加到主屏幕，像 App 一样使用
-                </p>
+                <a
+                  href="https://entropydecrease.com/pwa/"
+                  className="inline-block w-full text-center px-6 py-3 rounded-xl text-white font-medium transition-all duration-500 hover:scale-[1.02] mb-3"
+                  style={{ background: "linear-gradient(135deg, var(--kb-cyber-cyan), var(--kb-accent-400))" }}
+                >
+                  打开移动端版 ↗
+                </a>
                 <ol className="text-xs text-kb-text2 space-y-1.5 list-decimal list-inside">
-                  <li>Safari 打开 <span className="font-mono">entropydecrease.com/pwa/</span></li>
+                  <li>Safari 中打开移动端版</li>
                   <li>点「分享」→「添加到主屏幕」</li>
-                  <li>从桌面图标启动</li>
+                  <li>从桌面图标启动，像 App 一样使用</li>
                 </ol>
               </div>
             </div>

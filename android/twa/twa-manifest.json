@@ -1,11 +1,15 @@
 {
-  "packageId": "com.entropydecrease.app",
+  "packageId": "com.entropydecrease.twa",
   "host": "entropydecrease.com",
-  "name": "熵减",
+  "name": "熵减 - 学习伴侣",
   "launcherName": "熵减",
   "display": "standalone",
   "themeColor": "#3B82F6",
-  "navigationColor": "#111827",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
   "backgroundColor": "#111827",
   "enableNotifications": true,
   "startUrl": "/pwa/",
@@ -13,11 +17,11 @@
   "maskableIconUrl": "https://entropydecrease.com/pwa/pwa-512x512.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
-    "path": "/tmp/entropydecrease.keystore",
-    "alias": "entropydecrease"
+    "path": "D:\\Program own\\aicode\\work space\\Entropydecrease\\android\\twa\\android.keystore",
+    "alias": "android"
   },
-  "appVersionName": "0.37.0",
-  "appVersionCode": 37,
+  "appVersionName": "1",
+  "appVersionCode": 1,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://entropydecrease.com/pwa/manifest.webmanifest",
@@ -31,8 +35,13 @@
   "isMetaQuest": false,
   "fullScopeUrl": "https://entropydecrease.com/pwa/",
   "minSdkVersion": 21,
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
   "fingerprints": [],
   "additionalTrustedOrigins": [],
-  "retainedBundles": []
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1"
 }
