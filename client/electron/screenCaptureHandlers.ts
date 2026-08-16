@@ -8,7 +8,7 @@
  * @ai-context: 帧数据经 sender 窗口 webContents.send 推回（非广播），
  * 窗口销毁时静默丢帧。
  */
-import { BrowserWindow, desktopCapturer } from 'electron';
+import { BrowserWindow, desktopCapturer, screen } from 'electron';
 import { ScreenCapture } from './screenCapture.js';
 import type { ScreenCaptureOptions, ScreenshotFrameData } from './screenCapture.js';
 import { safeHandle, getMainWindowId } from './ipcUtils.js';
@@ -16,6 +16,9 @@ import { logger } from './logger.js';
 import { scoreAndFilterWindows } from './windowScorer.js';
 import type { WindowSignalInput } from './windowRules.js';
 import { getCaptureRateScale, onPerformanceModeChange } from './performanceMode.js';
+import { loadProcessAudioNative } from './audio/processAudioNative.js';
+import { parseHwndFromSourceId, buildNativeIndex, resolveGeometrySignals } from './windowSignals.js';
+import type { NativeWindowSignal } from './windowSignals.js';
 
 // ================================================================
 // 模块级状态
@@ -67,12 +70,63 @@ function applyRateScale(options: ScreenCaptureOptions): ScreenCaptureOptions {
 
 /**
  * 构建 source id → 评分信号的映射。
- * @ai-context: 阶段一为空映射（纯标题评分）；阶段二接入 native 窗口枚举后填充
- * 进程名/几何/前台信号。信号源缺失时返回空 Map，评分自动降级。
+ * @ai-context: native 缺失时返回空 Map，评分自动降级为纯标题（与旧版行为一致）。
+ * 前台窗口判定：native.getForegroundHwnd() 命中当前 source 的 HWND。
  */
 function buildSignalMap(sources: Electron.DesktopCapturerSource[]): Map<string, WindowSignalInput> {
-  void sources;
-  return new Map();
+  const signals = new Map<string, WindowSignalInput>();
+  const native = loadProcessAudioNative();
+  if (!native) return signals;
+
+  let nativeWindows: NativeWindowSignal[];
+  try {
+    nativeWindows = native.listAudioWindows().map((w) => ({
+      hwnd: String(w.hwnd),
+      processName: w.processName,
+      width: w.width,
+      height: w.height,
+      alwaysOnTop: w.alwaysOnTop,
+    }));
+  } catch (err) {
+    logger.warn(`[IPC] native listAudioWindows 失败，降级纯标题评分: ${err instanceof Error ? err.message : String(err)}`);
+    return signals;
+  }
+
+  const index = buildNativeIndex(nativeWindows);
+
+  // 显示器总面积（像素²；无显示器时置 0，面积占比信号自动跳过）
+  let displayArea = 0;
+  try {
+    const bounds = screen.getPrimaryDisplay().bounds;
+    displayArea = bounds.width * bounds.height;
+  } catch {
+    displayArea = 0;
+  }
+
+  // 前台窗口 hwnd（失败时为空串 → 无窗口命中前台）
+  let foregroundHwnd = '';
+  try {
+    foregroundHwnd = native.getForegroundHwnd();
+  } catch {
+    foregroundHwnd = '';
+  }
+
+  for (const src of sources) {
+    const hwnd = parseHwndFromSourceId(src.id);
+    if (!hwnd) continue;
+    const nativeWin = index.get(hwnd);
+    if (!nativeWin) continue;
+    const geo = resolveGeometrySignals(nativeWin, displayArea);
+    signals.set(src.id, {
+      title: src.name,
+      processName: nativeWin.processName,
+      aspectRatio: geo.aspectRatio,
+      areaRatio: geo.areaRatio,
+      alwaysOnTop: geo.alwaysOnTop,
+      isForeground: hwnd === foregroundHwnd,
+    });
+  }
+  return signals;
 }
 
 /** 销毁旧实例并按其参数/推送目标重建采集（start 与性能模式重启共用） */
