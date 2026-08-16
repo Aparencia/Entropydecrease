@@ -62,11 +62,16 @@ export function isLikelyHallucination(text: string): boolean {
 /** 纯中文连续字符（重复单元必须是纯词——"对，对"这类"词+标点"单元是真实语言确认语，不压缩） */
 const PURE_CJK_RE = /^[\u4e00-\u9fff]+$/;
 
+/** 两字确认语白名单：跨标点重复压缩时的误杀保护（"是的，是的"是真实确认强调） */
+const CONFIRM_WORDS = new Set(['是的', '对的', '好的', '没错', '可以', '行吧', '哦哦']);
+
 /**
  * 压缩相邻重复片段——流式 ASR 静音段重复输出的高频形态
  *
  * 形态 1（整句幂等重复）："就是就是" → "就是"，"就是这样就是这样" → "就是这样"
  * 形态 2（句中相邻重复）："我就是就是这样的" → "我就是这样的"
+ * 形态 3（跨单个标点重复，P0-4）："就是，就是" → "就是"（端点误断句时
+ * 句尾词带标点重复的形态；两字确认语白名单不压缩）
  *
  * 保守策略：仅压缩完全相邻、无标点分隔的重复（"对，对"这类标点分隔的
  * 真实语言重叠不压缩）；句中单字重复不压缩（"人人""天天"是真实语言）。
@@ -104,7 +109,23 @@ export function collapseAdjacentDuplicates(text: string): string {
       if (changed) break;
     }
   }
-  return result;
+
+  // 形态 3（P0-4）：跨单个中文标点的相邻重复——"就是，就是"→"就是"；
+  // 仅压缩长度 2-10 且含 ≥2 种字符的纯中文词（单字符灌水如"嗯嗯，嗯嗯"
+  // 不压缩，留给幻觉过滤整段丢弃），确认语白名单不压缩。
+  // 最多 3 轮（"A，A，A" 压缩一轮后残余 "A，A" 需再压一轮）
+  let crossPunct = result;
+  for (let pass = 0; pass < 3; pass++) {
+    const before = crossPunct;
+    crossPunct = crossPunct.replace(
+      /([\u4e00-\u9fff]{2,10})[，,、]\1/g,
+      (match, word: string) => (
+        CONFIRM_WORDS.has(word) || new Set(word).size < 2 ? match : word
+      ),
+    );
+    if (crossPunct === before) break;
+  }
+  return crossPunct;
 }
 
 /**
@@ -118,4 +139,50 @@ export function cleanAsrResult(text: string): string {
   if (!trimmed) return '';
   const deduped = collapseAdjacentDuplicates(trimmed);
   return isLikelyHallucination(deduped) ? '' : deduped;
+}
+
+// ================================================================
+// 跨 final 重叠去重（P0-4）
+// ================================================================
+
+/**
+ * 跨 final 重叠去重：端点误断句时前句尾词会重复出现在后句开头
+ * （"今天讲矩阵" + "矩阵的特征值"）。处理后句：
+ * 1. 完全一致 → 重复推送（流式复位残留），丢弃返回空串
+ * 2. 后缀-前缀重叠 ≥2 字 → 截断后句的重叠前缀
+ * 3. 截断后与前句高度相似（Jaccard>0.9）→ 视为整体重复，丢弃
+ *
+ * @param prev 上一 final 文本（已清洗）
+ * @param next 当前 final 文本（已清洗）
+ * @returns 去重后的 next（可能为空串）
+ */
+export function dedupeAcrossFinals(prev: string, next: string): string {
+  if (!prev || !next) return next;
+  if (prev === next) return '';
+
+  // 后缀-前缀重叠：最长公共重叠（上限 8 字，防长文本 O(n²) 扫描）
+  const maxOverlap = Math.min(prev.length, next.length, 8);
+  for (let len = maxOverlap; len >= 2; len--) {
+    if (prev.slice(-len) === next.slice(0, len)) {
+      const trimmed = next.slice(len).trim();
+      if (!trimmed) return '';
+      // 高度相似兜底：截断后仍与前句几乎相同 → 整体重复
+      if (similarityOf(prev, trimmed) > 0.9) return '';
+      return trimmed;
+    }
+  }
+  return next;
+}
+
+/** Jaccard 字符集相似度（本地实现，避免引入 fusionTextUtils 的循环依赖风险） */
+function similarityOf(a: string, b: string): number {
+  if (!a || !b) return 0;
+  const setA = new Set(a);
+  const setB = new Set(b);
+  let intersection = 0;
+  for (const ch of setA) {
+    if (setB.has(ch)) intersection++;
+  }
+  const union = setA.size + setB.size - intersection;
+  return union > 0 ? intersection / union : 0;
 }

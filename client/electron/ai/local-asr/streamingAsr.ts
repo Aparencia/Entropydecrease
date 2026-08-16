@@ -12,11 +12,17 @@
 
 import type { BrowserWindow } from 'electron';
 import { logger } from '../../logger.js';
-import { cleanAsrResult } from '../../../src/lib/capture/asrFilters.js';
+import { cleanAsrResult, computeRms, SILENCE_RMS_THRESHOLD } from '../../../src/lib/capture/asrFilters.js';
 import { getOnlineRecognizer, feedWaveform, type OnlineStream } from './SherpaAsrService.js';
 
 /** partial 推送节流：两次 partial 推送的最小间隔（ms） */
 const PARTIAL_EMIT_INTERVAL_MS = 150;
+/**
+ * P0-5 CPU 优化：静音块隔块喂入——静音期模型反复 decode 无新内容却持续
+ * 消耗 CPU，每隔 1 个静音块喂 1 次（端点检测延迟最多增加一个采集块粒度，
+ * 可接受）；非静音块全部喂入保证识别实时性。
+ */
+const SILENT_FEED_SKIP_COUNT = 1;
 
 // ================================================================
 // 单例状态
@@ -28,6 +34,16 @@ let _sampleRate = 16000;
 /** 当前已识别文本（用于变化检测，reset 后清空） */
 let _lastPartialText = '';
 let _lastPartialEmitAt = 0;
+/**
+ * 会话级最新热词（P0-6）：渲染进程课程识别成功后经
+ * local_asr_stream_set_hotwords 更新；每个端点断句后以最新热词重建流
+ * （createStream(hotwords)），无需重启即可让新词条生效。
+ */
+let _latestHotwords: string | undefined;
+/** 最近一次推送的 final 文本（停止 flush 时与尾句去重） */
+let _lastFinalText = '';
+/** 静音块跳过计数（隔块喂入，P0-5） */
+let _silentSkipCounter = 0;
 
 /** 流式 ASR 是否激活 */
 export function isStreamingActive(): boolean {
@@ -66,11 +82,14 @@ export function startStreamingAsr(
 
   try {
     // 透传热词增强字符串（zipformer-transducer 支持 createStream(hotwords)）
+    _latestHotwords = hotwords;
     _stream = recognizer.createStream(hotwords);
     _win = win;
     _sampleRate = sampleRate;
     _lastPartialText = '';
     _lastPartialEmitAt = 0;
+    _lastFinalText = '';
+    _silentSkipCounter = 0;
     logger.info(`[StreamingASR] 已启动 (sampleRate=${sampleRate}${hotwords ? `, hotwords=${hotwords}` : ''})`);
     return { success: true, sampleRate };
   } catch (err) {
@@ -78,6 +97,15 @@ export function startStreamingAsr(
     _stream = null;
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+/**
+ * 更新会话热词（P0-6）：渲染进程课程识别成功后调用。
+ * 不立即重启流（会丢当前句），在下一个端点断句时以最新热词重建流生效。
+ */
+export function updateStreamingHotwords(hotwords: string | undefined): void {
+  _latestHotwords = hotwords;
+  logger.info(`[StreamingASR] 热词已更新，将在下一断句生效${hotwords ? ` (${hotwords.length} chars)` : ''}`);
 }
 
 /**
@@ -100,6 +128,16 @@ export function feedStreamingAsr(audioBuffer: ArrayBuffer, sampleRate?: number):
   if (samples.length === 0) return;
   const rate = sampleRate ?? _sampleRate;
 
+  // P0-5 静音隔块喂入：静音块每隔 1 块喂 1 次（端点检测延迟 +1 块粒度），
+  // 降低静音期（课堂大部分时间）无效 decode 的 CPU 占用
+  if (computeRms(audioBuffer) < SILENCE_RMS_THRESHOLD) {
+    _silentSkipCounter++;
+    if (_silentSkipCounter <= SILENT_FEED_SKIP_COUNT) return;
+    _silentSkipCounter = 0;
+  } else {
+    _silentSkipCounter = 0;
+  }
+
   try {
     // 统一适配层：新旧版 sherpa-onnx-node 的 acceptWaveform 签名不同
     feedWaveform(_stream, rate, samples);
@@ -107,11 +145,13 @@ export function feedStreamingAsr(audioBuffer: ArrayBuffer, sampleRate?: number):
       recognizer.decode(_stream);
     }
 
-    // 端点检测：断句 → 推送 final 并 reset
+    // 端点检测：断句 → 推送 final 并以最新热词重建流（P0-6 热词生效点）
     if (recognizer.isEndpoint(_stream)) {
       // 输出后处理：相邻重复压缩 + 幻觉过滤（静音段重复输出防护）
       const finalText = cleanAsrResult(recognizer.getResult(_stream).text ?? '');
-      recognizer.reset(_stream);
+      _lastFinalText = finalText;
+      // 重建流：以会话最新热词 createStream（热词变化无需重启即可生效）
+      _stream = recognizer.createStream(_latestHotwords);
       _lastPartialText = '';
       _lastPartialEmitAt = 0;
       if (finalText) {
@@ -153,7 +193,9 @@ export function stopStreamingAsr(): void {
         const tailText = recognizer
           ? cleanAsrResult(recognizer.getResult(_stream).text ?? '')
           : '';
-        if (tailText) {
+        // P0-4 flush 去重：尾句与最近一次 final 完全一致时不再推送
+        // （端点已推送过该句，flush 重复上屏是停止瞬间重复的兜底场景）
+        if (tailText && tailText !== _lastFinalText) {
           emit('asr_stream_final', { text: tailText, timestamp: Date.now() });
         }
       }
@@ -167,5 +209,7 @@ export function stopStreamingAsr(): void {
   _win = null;
   _lastPartialText = '';
   _lastPartialEmitAt = 0;
+  _lastFinalText = '';
+  _silentSkipCounter = 0;
   logger.info('[StreamingASR] 已停止');
 }

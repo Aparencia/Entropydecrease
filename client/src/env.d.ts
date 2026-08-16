@@ -97,6 +97,8 @@ declare global {
       audio_capture_start: (options: { microphone: boolean; chunkDurationMs?: number; sampleRate?: number; channels?: number }) => Promise<{ success: boolean; error?: string }>;
       local_asr_stream_start: (options: { sampleRate?: number }) => Promise<{ success: boolean; error?: string }>;
       local_asr_stream_stop: () => Promise<{ success: boolean }>;
+      /** P0-6: 会话热词动态更新（课程识别成功后调用，下一断句生效） */
+      local_asr_stream_set_hotwords: (args: { hotwords?: string }) => Promise<{ success: boolean }>;
       audio_capture_stop: () => Promise<{ success: boolean }>;
       /** P0-2: 本地 Silero VAD 推理（主进程 onnxruntime，16kHz Float32 PCM 块） */
       vad_silero_process: (args: { samples: ArrayBuffer; sampleRate?: number; reset?: boolean }) => Promise<{ probability: number | null; available: boolean }>;

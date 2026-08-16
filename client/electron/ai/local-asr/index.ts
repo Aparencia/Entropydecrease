@@ -29,6 +29,7 @@ import {
 import {
   startStreamingAsr,
   stopStreamingAsr,
+  updateStreamingHotwords,
 } from './streamingAsr.js';
 import {
   downloadModel,
@@ -107,6 +108,16 @@ export function registerLocalAsrHandlers(): void {
     stopStreamingAsr();
     return { success: true };
   });
+
+  // P0-6：会话热词动态更新——课程识别成功后渲染进程调用，
+  // 下一个端点断句时以最新热词重建流（无需重启、不丢当前句）
+  safeHandle(
+    'local_asr_stream_set_hotwords',
+    async (_event, args: { hotwords?: string }) => {
+      updateStreamingHotwords(args?.hotwords);
+      return { success: true };
+    },
+  );
 
   // ── 模型管理 ──
   safeHandle('local_asr_get_models', async () => {

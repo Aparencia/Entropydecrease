@@ -33,8 +33,8 @@ import { detectCourseFromFrame } from '@/lib/ai/courseDetector';
 import { remapKeyframeMarkers } from '../utils/tipTapImageUtils';
 import { persistKeyframeImage } from '../utils/keyframePersistence';
 import { transcribeWithRetry, toAsrLanguage, useAsrSemaphore, isLocalAsrReady, setOnAsrFallback } from '../utils/asrTranscriber';
-import { applySessionReplaces, getSessionHotwordsString } from '../utils/hotwordRuntime';
-import { cleanAsrResult } from '@/lib/capture/asrFilters';
+import { applySessionReplaces, getSessionHotwordsString, addDynamicBoosts } from '../utils/hotwordRuntime';
+import { cleanAsrResult, dedupeAcrossFinals } from '@/lib/capture/asrFilters';
 
 /** 触发一次增量分析所需的关键帧数 */
 const INCREMENTAL_BATCH_SIZE = 5;
@@ -94,6 +94,8 @@ export function useClassroomEvents({
   /** 真流式激活标志的 ref 桥接：供按段转写订阅器读取（避免重订阅） */
   const streamingAsrActiveRef = useRef(streamingAsrActive);
   streamingAsrActiveRef.current = streamingAsrActive;
+  /** P0-4 跨 final 去重：上一 final 清洗后文本（端点误断句时前句尾=后句头） */
+  const lastFinalTextRef = useRef('');
   /** 会话状态 ref 桥接：流式 partial/final 仅在 capturing 时上屏（暂停时不更新） */
   const statusRef = useRef(status);
   statusRef.current = status;
@@ -173,6 +175,15 @@ export function useClassroomEvents({
             .then((detected) => {
               if (detected) {
                 setCourseMeta((prev) => ({ ...prev, ...detected, detectedBy: 'ai' }));
+                // P0-6 准确率即时提升：识别出的术语注入动态热词
+                // （课程名/学科/建议术语），并通知主进程流式 ASR 更新
+                // 会话热词（下一断句重建流生效，无需重启、不丢当前句）
+                if (detected.customTerms?.length) {
+                  addDynamicBoosts(detected.customTerms);
+                  const hotwords = getSessionHotwordsString();
+                  window.electronAPI?.local_asr_stream_set_hotwords({ hotwords })
+                    .catch(() => { /* 静默：热词更新失败不阻断识别 */ });
+                }
               }
             })
             .catch(() => { /* 静默降级到规则模式 */ });
@@ -321,7 +332,12 @@ export function useClassroomEvents({
       const data = args[0] as { text: string; timestamp: number };
       setPartialText('');
       // 双保险：主进程已 clean，此处兜底云端/旧版本主进程的未清洗输出
-      const text = cleanAsrResult(data?.text ?? '');
+      const cleaned = cleanAsrResult(data?.text ?? '');
+      if (!cleaned) return;
+      // P0-4 跨 final 重叠去重：端点误断句时前句尾词重复出现在后句开头
+      // （"今天讲矩阵"+"矩阵的特征值"），去重截断后句重叠前缀
+      const text = dedupeAcrossFinals(lastFinalTextRef.current, cleaned);
+      lastFinalTextRef.current = text || lastFinalTextRef.current;
       if (!text) return;
       const id = crypto.randomUUID();
       const timestamp = data.timestamp || Date.now();

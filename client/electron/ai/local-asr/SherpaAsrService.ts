@@ -126,9 +126,10 @@ export function getOnlineRecognizer(): OnlineRecognizer | null {
   const modelDir = getModelDir();
   const config = getLocalAsrConfig();
   const cpuCount = Math.max(1, os.cpus().length);
-  const rawThreads = config.threads > 0 ? config.threads : Math.max(1, cpuCount - 1);
-  // 线程数上限：不超过 CPU 核心数（防止用户配置过大值导致 CPU 过载）
-  const threads = Math.min(rawThreads, cpuCount);
+  // P0-5 CPU 优化：默认 min(4, cpuCount)（zipformer 小模型线程扩展性差，
+  // 占满 CPU-1 线程是内测「离线 ASR CPU 100%」主因），用户配置硬上限 8
+  const rawThreads = config.threads > 0 ? config.threads : Math.min(4, cpuCount);
+  const threads = Math.min(rawThreads, 8);
 
   try {
     _onlineRecognizer = instantiateOnline(sherpa, {
@@ -151,10 +152,11 @@ export function getOnlineRecognizer(): OnlineRecognizer | null {
       enableEndpoint: true,
       endpointConfig: {
         rule1: { minTrailingSilence: 2.4 },
-        // rule2 必须配 minUtteranceLength：仅给 minTrailingSilence 时默认 0，
-        // 等于"1.2s 停顿即断句"——中文口语停顿频繁，短句被切碎会导致
-        // 相邻句边界词重复观感。8s 覆盖绝大多数短句，兼顾实时性
-        rule2: { minTrailingSilence: 1.2, minUtteranceLength: 8 },
+        // P0-4 重复修复：rule2 静音 1.2s→2.0s、minUtteranceLength 8→10——
+        // 中文口语句内停顿普遍 1-2s，1.2s 阈值误断句会把同一句切成两段、
+        // 段首重复段尾（内测「识别偶发重复」主要来源）；2.0s 覆盖绝大多数
+        // 句内停顿，minUtteranceLength=10 保证短句不被切碎
+        rule2: { minTrailingSilence: 2.0, minUtteranceLength: 10 },
         rule3: { minUtteranceLength: 20 },
       },
     });
@@ -236,6 +238,8 @@ export async function transcribeStreaming(
 
     const result = recognizer.getResult(stream);
     // 输出后处理：相邻重复压缩 + 幻觉过滤
+    // P1-1 两遍重打分接入点：此处为本地按段转写最终文本出口，
+    // SenseVoice 重打分将在此处对 text 做句末复核（高置信度者胜出）
     const text = cleanAsrResult(result.text ?? '');
     const durationMs = Date.now() - startTime;
 
@@ -259,9 +263,11 @@ export async function transcribeLocal(
   const config = getLocalAsrConfig();
   const language = options?.language ?? config.language;
 
-  // 防御性校验：非 16kHz 采样率会严重降低识别质量
+  // P0-5 前置阻断：非 16kHz 采样率会严重降低识别质量（模型按 16k 训练），
+  // 此前仅 warn 放行——内测「离线 ASR 识别不准确」的隐性来源之一。
+  // 此处直接拒绝，渲染进程在采集启动前亦有前置校验（asrTranscriber）
   if (options?.sampleRate && options.sampleRate !== 16000) {
-    logger.warn(`[LocalASR] 非预期采样率: ${options.sampleRate}Hz，本地 ASR 要求 16kHz 单声道 Float32 PCM`);
+    throw new Error(`本地 ASR 要求 16kHz 单声道 Float32 PCM，收到 ${options.sampleRate}Hz`);
   }
 
   // base64 → Float32Array
