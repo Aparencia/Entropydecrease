@@ -18,7 +18,8 @@
 ## 技术债摘要
 
 - 继承（carried）：TD-001 WebGPU 渲染后端回退（P3，有意）
-- 新增（open）：TD-002 课堂 hook 超行规范（P3）/ TD-003 本地 OCR 推理管线骨架态（P2）/ TD-004 VLM 分类待替换（P3）/ TD-005 WebCaptureAdapter 尾段丢失+暂停未接（P2）/ TD-006 视频上传未复用 401/429 处理（P3）/ TD-007 剪藏 innerText 无截断（P3）
+- 新增（open）：TD-002 课堂 hook 超行规范（P3）/ TD-003 本地 OCR 推理管线骨架态（P2）/ TD-004 VLM 分类待替换（P3）
+- 当日已偿：TD-005 尾段丢失+暂停未接 / TD-006 视频上传 401/429 / TD-007 剪藏截断（提交 4dbb92e）
 - 详见 tech-debt.md
 
 ## 备注
