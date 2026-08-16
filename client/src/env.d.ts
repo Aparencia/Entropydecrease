@@ -98,6 +98,8 @@ declare global {
       local_asr_stream_start: (options: { sampleRate?: number }) => Promise<{ success: boolean; error?: string }>;
       local_asr_stream_stop: () => Promise<{ success: boolean }>;
       audio_capture_stop: () => Promise<{ success: boolean }>;
+      /** P0-2: 本地 Silero VAD 推理（主进程 onnxruntime，16kHz Float32 PCM 块） */
+      vad_silero_process: (args: { samples: ArrayBuffer; sampleRate?: number; reset?: boolean }) => Promise<{ probability: number | null; available: boolean }>;
       // ── A3 微进展叙述（新增） ──
       ai_progress_narrate: (args: { statsText: string; authToken?: string }) => Promise<{
         narrative: string;

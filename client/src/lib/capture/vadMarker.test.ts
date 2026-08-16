@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { VADMarker } from './vadMarker';
+import type { SileroProbSource } from './sileroVad';
 import type { AudioChunkData } from './captureTypes';
 
 /** 构造指定幅值的音频块（16kHz 单声道 100ms） */
@@ -158,5 +159,136 @@ describe('VADMarker — loopback 语音分段', () => {
     // Assert
     expect(onReady).toHaveBeenCalledTimes(2);
     expect(marker.getSegments()).toHaveLength(2);
+  });
+});
+
+describe('VADMarker — Silero 精判（P0-2：噪声抑制 + 静音复核）', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  /** 构造注入式 Silero 概率源 mock（固定概率） */
+  function makeSilero(prob: number | null): SileroProbSource {
+    return {
+      latestProb: () => prob,
+      recentProb: () => prob,
+      push: vi.fn(),
+      reset: vi.fn(),
+      dispose: vi.fn(),
+    };
+  }
+
+  it('持续噪声被抑制：RMS 超阈 + Silero 连续低概率不产生语音段', () => {
+    // Arrange：键盘/音乐类噪声——RMS 0.1 远超阈值但 Silero 概率恒低
+    const silero = makeSilero(0.05);
+    const marker = new VADMarker({ sourceType: 'loopback' }, silero);
+    const onReady = vi.fn();
+    marker.onSegmentReady = onReady;
+    // Act：5 块连续"噪声"
+    for (let i = 0; i < 5; i++) {
+      marker.processChunk(makeChunk(0.1));
+      vi.advanceTimersByTime(500);
+    }
+    // Assert：无语音段、无分段回调、无语音时间戳
+    expect(marker.getSegments()).toHaveLength(0);
+    expect(onReady).not.toHaveBeenCalled();
+    expect(marker.getStats().lastVoiceTimestamp).toBe(0);
+  });
+
+  it('语音起始块概率滞后（低）时语音不丢失：概率恢复后正常成段', () => {
+    // Arrange：块 1 的概率是上一静音块的推理结果（滞后一拍，低值）
+    let prob = 0.05;
+    const silero: SileroProbSource = {
+      latestProb: () => prob,
+      recentProb: () => prob,
+      push: vi.fn(),
+      reset: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const marker = new VADMarker({ sourceType: 'loopback' }, silero);
+    const onReady = vi.fn();
+    marker.onSegmentReady = onReady;
+    // Act：块 1 低概率（暂存）→ 概率恢复（块 2 进入语音）→ 静音结束段
+    marker.processChunk(makeChunk(0.1));
+    vi.advanceTimersByTime(500);
+    prob = 0.9;
+    marker.processChunk(makeChunk(0.1));
+    vi.advanceTimersByTime(500);
+    prob = 0.05;
+    vi.advanceTimersByTime(900);
+    marker.processChunk(makeChunk(0));
+    // Assert：成段且回调携带音频（块 1 暂存样本已补入段首）
+    expect(onReady).toHaveBeenCalledTimes(1);
+    expect(marker.getSegments()).toHaveLength(1);
+    expect(marker.getStats().lastVoiceTimestamp).toBeGreaterThan(0);
+  });
+
+  it('静音复核：RMS 判静音但 Silero 判语音仍在 → 推迟分段', () => {
+    // Arrange：低能量语音尾——RMS 低于阈值但 Silero 概率高
+    let prob = 0.9;
+    const silero: SileroProbSource = {
+      latestProb: () => prob,
+      recentProb: () => prob,
+      push: vi.fn(),
+      reset: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const marker = new VADMarker({ sourceType: 'loopback' }, silero);
+    const onReady = vi.fn();
+    marker.onSegmentReady = onReady;
+    // Act：语音 500ms → 静音 900ms（Silero 仍高 → 推迟）→ 概率转低 → 分段
+    marker.processChunk(makeChunk(0.1));
+    vi.advanceTimersByTime(500);
+    marker.processChunk(makeChunk(0));
+    vi.advanceTimersByTime(900);
+    expect(onReady).not.toHaveBeenCalled();
+    prob = 0.05;
+    marker.processChunk(makeChunk(0));
+    vi.advanceTimersByTime(900);
+    // Assert
+    expect(onReady).toHaveBeenCalledTimes(1);
+    expect(marker.getSegments()).toHaveLength(1);
+  });
+
+  it('静音复核推迟超上限（3000ms）后强制分段', () => {
+    // Arrange：Silero 持续高概率（误判长噪声为语音）→ 推迟有上限
+    const silero = makeSilero(0.9);
+    const marker = new VADMarker({ sourceType: 'loopback', maxSpeechDurationMs: 60000 }, silero);
+    const onReady = vi.fn();
+    marker.onSegmentReady = onReady;
+    // Act：语音 1 块后连续静音块，Silero 恒高 → 累计推迟超 3000ms 强制分段
+    marker.processChunk(makeChunk(0.1));
+    for (let i = 0; i < 20; i++) {
+      vi.advanceTimersByTime(500);
+      marker.processChunk(makeChunk(0));
+    }
+    // Assert
+    expect(onReady).toHaveBeenCalledTimes(1);
+    expect(marker.getSegments()).toHaveLength(1);
+  });
+
+  it('Silero 概率不可用（null）时不干预，纯 RMS 现状行为', () => {
+    // Arrange
+    const silero = makeSilero(null);
+    const marker = new VADMarker({ sourceType: 'loopback' }, silero);
+    const onReady = vi.fn();
+    marker.onSegmentReady = onReady;
+    // Act：正常语音 → 静音分段（与无 Silero 行为一致）
+    marker.processChunk(makeChunk(0.1));
+    vi.advanceTimersByTime(500);
+    marker.processChunk(makeChunk(0.1));
+    vi.advanceTimersByTime(900);
+    marker.processChunk(makeChunk(0));
+    // Assert
+    expect(onReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('reset 时同步重置 Silero 流状态', () => {
+    // Arrange
+    const silero = makeSilero(null);
+    const marker = new VADMarker({ sourceType: 'loopback' }, silero);
+    // Act
+    marker.reset();
+    // Assert
+    expect(silero.reset).toHaveBeenCalledTimes(1);
   });
 });

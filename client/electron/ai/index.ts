@@ -15,6 +15,7 @@ import { registerChatHandlers } from './handlers/chatHandler.js';
 import { registerTtsHandlers } from './handlers/ttsHandler.js';
 import { registerLocalAsrHandlers } from './local-asr/index.js';
 import { loadLocalAsrConfig } from './local-asr/config.js';
+import { registerVadHandlers } from './vad/sileroVadService.js';
 
 // 导入所有 AI 功能模块
 import { feature as summarizeFeature } from './handlers/summarizeHandler.js';
@@ -97,6 +98,9 @@ export function registerAIHandlers(): void {
 
   // 注册本地 ASR（sherpa-onnx）IPC handler
   registerLocalAsrHandlers();
+
+  // 注册本地 Silero VAD IPC handler（P0-2，主进程 onnxruntime 推理）
+  registerVadHandlers();
 
   // 注册流式输出 IPC handler
   registerStreamHandler();

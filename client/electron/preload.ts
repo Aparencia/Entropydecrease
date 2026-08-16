@@ -132,6 +132,8 @@ const ALLOWED_CHANNELS = [
   'local_asr_stream_available',
   'local_asr_stream_start',
   'local_asr_stream_stop',
+  // 本地 Silero VAD（主进程 onnxruntime 推理，P0-2）
+  'vad_silero_process',
   // MCP 学习记忆服务器应用内授权开关
   'memory_server:get_consent',
   'memory_server:set_consent',
