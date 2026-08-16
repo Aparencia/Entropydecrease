@@ -53,6 +53,8 @@ const ALLOWED_CHANNELS = [
   'screen_list_windows',
   'screen_watch_windows_start',
   'screen_watch_windows_stop',
+  'window_memory_record',
+  'window_memory_clear',
   'screen_capture_start',
   'screen_capture_stop',
   'audio_list_sources',

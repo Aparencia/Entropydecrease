@@ -19,6 +19,7 @@ import { getCaptureRateScale, onPerformanceModeChange } from './performanceMode.
 import { loadProcessAudioNative } from './audio/processAudioNative.js';
 import { parseHwndFromSourceId, buildNativeIndex, resolveGeometrySignals } from './windowSignals.js';
 import type { NativeWindowSignal } from './windowSignals.js';
+import { recordChoice, clearMemory, lookupMemory, computeMemoryBoost } from './windowHistory.js';
 
 // ================================================================
 // 模块级状态
@@ -259,7 +260,18 @@ export function registerScreenCaptureHandlers(): void {
       });
 
       // 智能评分、过滤与排序（阶段一：空信号映射，纯标题评分）
-      return scoreAndFilterWindows(rawWindows, { signalsBySourceId: buildSignalMap(sources) });
+      const scored = scoreAndFilterWindows(rawWindows, {
+        signalsBySourceId: buildSignalMap(sources),
+        memoryLookup: (processName: string, title: string) => {
+          const entry = lookupMemory(processName, title);
+          if (!entry) return null;
+          return {
+            courseName: entry.courseName,
+            boost: computeMemoryBoost(entry, Date.now()),
+          };
+        },
+      });
+      return scored;
     } catch (err) {
       logger.error('[IPC] screen_list_windows failed:', err);
       return [];
@@ -295,7 +307,17 @@ export function registerScreenCaptureHandlers(): void {
             return { id: src.id, title: src.name, thumbnail: thumb.toDataURL() };
           });
 
-          const scored = scoreAndFilterWindows(rawWindows, { signalsBySourceId: buildSignalMap(sources) });
+          const scored = scoreAndFilterWindows(rawWindows, {
+            signalsBySourceId: buildSignalMap(sources),
+            memoryLookup: (processName: string, title: string) => {
+              const entry = lookupMemory(processName, title);
+              if (!entry) return null;
+              return {
+                courseName: entry.courseName,
+                boost: computeMemoryBoost(entry, Date.now()),
+              };
+            },
+          });
 
           // 推送到渲染进程
           const mainWindowId = getMainWindowId();
@@ -321,6 +343,22 @@ export function registerScreenCaptureHandlers(): void {
       lastWindowIds = new Set();
       logger.info('[IPC] 窗口监听已停止');
     }
+    return { success: true };
+  });
+
+  safeHandle('window_memory_record', async (_event, payload: { processName?: string; title?: string; courseName?: string }) => {
+    const processName = typeof payload?.processName === 'string' ? payload.processName : '';
+    const title = typeof payload?.title === 'string' ? payload.title : '';
+    if (!processName || !title) {
+      return { success: false };
+    }
+    const courseName = typeof payload?.courseName === 'string' ? payload.courseName : undefined;
+    recordChoice(processName, title, courseName);
+    return { success: true };
+  });
+
+  safeHandle('window_memory_clear', async () => {
+    clearMemory();
     return { success: true };
   });
 }
