@@ -10,6 +10,7 @@
  * source 字段（'local'|'remote'）供渲染层展示推理来源，勿删。
  */
 import { randomUUID } from 'crypto';
+import { BrowserWindow } from 'electron';
 import { logger } from '../logger.js';
 import { gatewayUrl } from './gatewayConfig.js';
 import { isLocalInferenceEnabled } from './ollama/config.js';
@@ -32,6 +33,19 @@ function logNetworkHint(errDetail: string): void {
   } else if (/ETIMEDOUT/i.test(errDetail)) {
     logger.error('[AI] Hint: Connection timed out — check network connectivity and firewall rules');
   }
+}
+
+/**
+ * 429 配额耗尽 → 推送渲染进程（主进程代理路径的统一感知点）。
+ *
+ * 仅配额类 429 触发（文案含「已达上限」）；上游服务商 429 为临时故障不打扰用户。
+ * 渲染进程 QuotaNotice 组件监听 ai:quota-exhausted 事件弹非阻断提示并刷新配额。
+ * gatewayStream 复用本函数（唯一语义点，避免两处漂移）。
+ */
+export function notifyQuotaExhaustedToRenderer(detail: string): void {
+  if (!/已达上限/.test(detail)) return;
+  const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
+  win?.webContents.send('ai:quota-exhausted', detail);
 }
 
 /**
@@ -95,6 +109,8 @@ async function executePost<TRes>(
     // 截取响应体前 500 字符防止日志爆炸
     const detailPreview = detail.length > 500 ? `${detail.slice(0, 500)}...(+${detail.length - 500} chars)` : detail;
     logger.error(`[AI] ✖ HTTP ${resp.status} ${url} (${elapsed}ms) [req-id: ${requestId ?? clientRequestId}]: ${detailPreview}`);
+    // 配额类 429：通知渲染进程展示配额耗尽提示（不改变既有抛错行为）
+    if (resp.status === 429) notifyQuotaExhaustedToRenderer(detail);
     throw new Error(`HTTP ${resp.status}: ${detail}`);
   }
 

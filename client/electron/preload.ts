@@ -198,6 +198,8 @@ const ALLOWED_EVENT_CHANNELS = [
   'shortcut:triggered',
   // 3.18 电子墨水学习板：主进程推送复习卡片到次窗口
   'eink:card',
+  // AI 配额耗尽（429）：主进程代理路径推送，渲染进程弹非阻断提示 + 刷新配额
+  'ai:quota-exhausted',
 ] as const;
 
 /** 允许渲染进程单向发送的 channel 白名单（渲染进程 → 主进程，fire-and-forget） */
@@ -369,5 +371,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('ollama:pull-progress', handler);
       return () => ipcRenderer.removeListener('ollama:pull-progress', handler);
     },
+  },
+  // ---- AI 配额耗尽（429）：主进程代理路径推送 ----
+  onAIQuotaExhausted: (callback: (detail: string) => void) => {
+    if (!(ALLOWED_EVENT_CHANNELS as readonly string[]).includes('ai:quota-exhausted')) {
+      console.warn('[preload] 不允许的事件 channel: ai:quota-exhausted');
+      return () => {};
+    }
+    const handler = (_event: unknown, detail: string) => callback(detail);
+    ipcRenderer.on('ai:quota-exhausted', handler);
+    return () => ipcRenderer.removeListener('ai:quota-exhausted', handler);
   },
 });
