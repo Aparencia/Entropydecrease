@@ -213,6 +213,17 @@ export function useSessionControl({
   }, [selectedWindow, setStatus, session, capturePath, captureManager, config, mode, courseMeta, onAudioSourceResolved, setStreamingAsrActive]);
 
   const handlePause = useCallback(() => {
+    // PWA：暂停/恢复麦克风采集（Electron 走 captureManager 会话暂停）
+    if (!window.electronAPI) {
+      if (status === 'capturing') {
+        setStatus('paused');
+        webCaptureAdapter.pause();
+      } else if (status === 'paused') {
+        setStatus('capturing');
+        webCaptureAdapter.resume();
+      }
+      return;
+    }
     if (status === 'capturing') {
       setStatus('paused');
       captureManager.pauseSession();

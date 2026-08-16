@@ -54,7 +54,10 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
 
     const headers = new Headers(customHeaders as HeadersInit);
     if (token) headers.set('Authorization', `Bearer ${token}`);
-    headers.set('Content-Type', 'application/json');
+    // multipart（FormData body）不设 Content-Type，由浏览器自动生成 boundary；
+    // 其余请求统一 JSON
+    const isFormData = typeof FormData !== 'undefined' && rest.body instanceof FormData;
+    if (!isFormData) headers.set('Content-Type', 'application/json');
 
     // 生成请求追踪 ID，便于 ai-gateway 端链路追踪
     const requestId = crypto.randomUUID();
@@ -127,8 +130,15 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
 
   return {
     get: <T = unknown>(url: string) => request<T>(url, { method: 'GET' }),
-    post: <T = unknown>(url: string, body?: unknown, options?: RequestOptions) =>
-      request<T>(url, { method: 'POST', body: JSON.stringify(body), ...options }),
+    post: <T = unknown>(url: string, body?: unknown, options?: RequestOptions) => {
+      // FormData body 直接透传（multipart 上传），其余 JSON 序列化
+      const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+      return request<T>(url, {
+        method: 'POST',
+        body: isFormData ? body : JSON.stringify(body),
+        ...options,
+      });
+    },
     put: <T = unknown>(url: string, body?: unknown) =>
       request<T>(url, { method: 'PUT', body: JSON.stringify(body) }),
     delete: <T = unknown>(url: string) => request<T>(url, { method: 'DELETE' }),

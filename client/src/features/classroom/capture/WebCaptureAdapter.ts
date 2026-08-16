@@ -28,7 +28,6 @@ export class WebCaptureAdapter {
   private stream: MediaStream | null = null;
   private recorder: MediaRecorder | null = null;
   private audioCtx: AudioContext | null = null;
-  private sessionId: string | null = null;
   private segmentStartAt = 0;
 
   /** 是否正在录制 */
@@ -41,7 +40,6 @@ export class WebCaptureAdapter {
    * @param sessionId - 会话 ID（emit 音频段时透传，供下游校验会话一致性）
    */
   async start(sessionId: string): Promise<void> {
-    this.sessionId = sessionId;
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
     });
@@ -50,8 +48,9 @@ export class WebCaptureAdapter {
     const mimeType = pickSupportedMimeType();
     this.recorder = new MediaRecorder(this.stream, mimeType ? { mimeType } : undefined);
     this.segmentStartAt = Date.now();
+    const sid = sessionId;
     this.recorder.ondataavailable = (ev) => {
-      if (ev.data.size > 0) void this.handleChunk(ev.data);
+      if (ev.data.size > 0) void this.handleChunk(ev.data, sid);
     };
     this.recorder.start(SEGMENT_MS);
   }
@@ -64,13 +63,24 @@ export class WebCaptureAdapter {
     this.recorder = null;
     this.stream = null;
     this.audioCtx = null;
-    this.sessionId = null;
   }
 
-  /** 解码单个分段 → 重采样 → 编码 → 广播音频段（失败静默，不影响采集） */
-  private async handleChunk(blob: Blob): Promise<void> {
-    const sid = this.sessionId;
-    if (!sid || !this.audioCtx) return;
+  /** 暂停录制（flush 当前分段后暂停，恢复后继续下一分段） */
+  pause(): void {
+    try { this.recorder?.pause(); } catch { /* 已停止 */ }
+  }
+
+  /** 恢复录制 */
+  resume(): void {
+    try { this.recorder?.resume(); } catch { /* 已停止 */ }
+  }
+
+  /** 解码单个分段 → 重采样 → 编码 → 广播音频段（失败静默，不影响采集）
+   * @ai-context: sessionId 由 ondataavailable 闭包捕获传入——stop() 清空
+   * 实例字段不影响已在队列中的尾段（修复停止时 <5s 尾段丢失，TD-005）。
+   */
+  private async handleChunk(blob: Blob, sessionId: string): Promise<void> {
+    if (!sessionId || !this.audioCtx) return;
     try {
       const arrayBuffer = await blob.arrayBuffer();
       const audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
@@ -85,7 +95,7 @@ export class WebCaptureAdapter {
         energy: computeRms(pcm),
       };
       this.segmentStartAt = Date.now();
-      captureEventBus.emit('smart:audio_segment_ready', { sessionId: sid, segment });
+      captureEventBus.emit('smart:audio_segment_ready', { sessionId, segment });
     } catch (err) {
       console.warn('[WebCaptureAdapter] 分段解码失败（已跳过该段）:', err);
     }

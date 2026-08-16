@@ -9,6 +9,9 @@ import { useCallback, useState } from 'react';
 import { useToast } from '@/components/ui';
 import { useNoteStore } from '../store/useNoteStore';
 
+/** 浏览器剪藏正文截断上限（字符）：防超大网页 innerText 数 MB 入内存/IndexedDB（TD-007） */
+const MAX_CLIP_TEXT_CHARS = 100_000;
+
 export function useClipImport() {
   const createNote = useNoteStore((s) => s.createNote);
   const selectedFolderId = useNoteStore((s) => s.selectedFolderId);
@@ -40,7 +43,7 @@ export function useClipImport() {
         const html = await resp.text();
         const doc = new DOMParser().parseFromString(html, 'text/html');
         title = doc.title || new URL(clipUrl.trim()).hostname;
-        text = doc.body?.innerText?.trim() ?? '';
+        text = (doc.body?.innerText ?? '').trim().slice(0, MAX_CLIP_TEXT_CHARS);
         if (!text) throw new Error('empty page');
       }
       await createNote({ title: title.slice(0, 100) || '未命名剪藏', content: text, template: 'blank', folderId: selectedFolderId ?? undefined });

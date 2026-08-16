@@ -13,8 +13,7 @@
  * IPC ai_video_analyze path; this function only serves PWA/browser File upload.
  * Includes Douyin link detection to guide "save to album then import" (plan A).
  */
-import { supabase } from '@/lib/auth/supabaseClient';
-import { requireGatewayUrl } from '@/lib/ai/config';
+import { aiClient } from '@/lib/http/apiClient';
 import { classroomNoteStore } from '@/lib/storage/classroomNoteStore';
 import type { AnalyzeResult } from '@/lib/ai/sessionAnalyzer';
 
@@ -40,61 +39,39 @@ export async function analyzeVideoFile(
   file: File,
   options?: { duration?: number; language?: string },
 ): Promise<AnalyzeResult> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
-  const baseUrl = requireGatewayUrl();
-
   const formData = new FormData();
   formData.append('video_file', file, file.name);
   if (options?.duration !== undefined) formData.append('duration', String(options.duration));
   if (options?.language) formData.append('language', options.language);
 
-  const headers = new Headers();
-  if (token) headers.set('Authorization', `Bearer ${token}`);
-  headers.set('X-Request-ID', crypto.randomUUID());
-  // 不显式设置 Content-Type：由浏览器为 FormData 自动生成 multipart boundary
+  // 复用 aiClient.post：自动注入 Authorization + 401 刷新 + 429 配额提示（TD-006）
+  const data = await aiClient.post<{
+    content: string;
+    keyframes_analyzed: number;
+    model_used: string;
+  }>('/api/v1/multimodal/analyze-video', formData, { timeout: 300000 });
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 300000); // 与网关 300s 超时对齐
+  const analyzeResult: AnalyzeResult = {
+    content: data.content,
+    keyframesAnalyzed: data.keyframes_analyzed,
+    modelUsed: data.model_used,
+    source: 'remote',
+  };
 
+  // 自动持久化（Dexie，PWA/Electron 通用）
   try {
-    const resp = await fetch(`${baseUrl}/api/v1/multimodal/analyze-video`, {
-      method: 'POST',
-      headers,
-      body: formData,
-      signal: controller.signal,
+    await classroomNoteStore.create({
+      sessionId: crypto.randomUUID(),
+      title: `视频笔记 ${new Date().toLocaleString('zh-CN')}`,
+      content: analyzeResult.content,
+      keyframesAnalyzed: analyzeResult.keyframesAnalyzed,
+      modelUsed: analyzeResult.modelUsed,
+      sourceType: 'video',
+      duration: options?.duration ?? 0,
     });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json() as {
-      content: string;
-      keyframes_analyzed: number;
-      model_used: string;
-    };
-
-    const analyzeResult: AnalyzeResult = {
-      content: data.content,
-      keyframesAnalyzed: data.keyframes_analyzed,
-      modelUsed: data.model_used,
-      source: 'remote',
-    };
-
-    // 自动持久化（Dexie，PWA/Electron 通用）
-    try {
-      await classroomNoteStore.create({
-        sessionId: crypto.randomUUID(),
-        title: `视频笔记 ${new Date().toLocaleString('zh-CN')}`,
-        content: analyzeResult.content,
-        keyframesAnalyzed: analyzeResult.keyframesAnalyzed,
-        modelUsed: analyzeResult.modelUsed,
-        sourceType: 'video',
-        duration: options?.duration ?? 0,
-      });
-    } catch (e) {
-      console.warn('[uploadVideoAnalysis] 视频笔记持久化失败:', e);
-    }
-
-    return analyzeResult;
-  } finally {
-    clearTimeout(timeoutId);
+  } catch (e) {
+    console.warn('[uploadVideoAnalysis] 视频笔记持久化失败:', e);
   }
+
+  return analyzeResult;
 }
