@@ -11,6 +11,11 @@
 import { SmartSampler } from './smartSampler';
 import { VADMarker } from './vadMarker';
 import { createSileroVad, type SileroProbSource } from './sileroVad';
+import {
+  SKILL_SAMPLER_CONFIG,
+  COURSE_SAMPLER_CONFIG,
+  type ContentKind,
+} from './contentClassifier';
 import { captureEventBus } from './eventBus';
 import type { ScreenshotData, AudioChunkData, SessionBundle } from './captureTypes';
 
@@ -85,6 +90,24 @@ export class SmartCaptureController {
     this.vadMarker.processChunk(audioData);
     // Silero 喂入：与 RMS 判定同一 PCM 块（异步推理，不阻塞 VADMarker 同步状态机）
     this.silero?.push(new Float32Array(audioData.audioBuffer));
+  }
+
+  /**
+   * P1-6 应用内容分类结果：技能类（软件/手法）收紧采样参数捕捉操作瞬间；
+   * 授课/讲座维持默认（静态 PPT 翻页节奏）；unknown 不改变当前参数。
+   */
+  applyContentKind(kind: ContentKind): void {
+    if (!this.smartSampler) return;
+    if (kind === 'software_skill' || kind === 'craft_skill') {
+      this.smartSampler.setConfig(SKILL_SAMPLER_CONFIG);
+    } else if (kind === 'course' || kind === 'lecture') {
+      this.smartSampler.setConfig(COURSE_SAMPLER_CONFIG);
+    }
+  }
+
+  /** P1-7 请求一次强制补帧（指令句命中后调用，下一帧跳过变化检测门槛） */
+  requestForceCapture(): void {
+    this.smartSampler?.forceNextCapture();
   }
 
   /**

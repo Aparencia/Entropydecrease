@@ -173,6 +173,20 @@ export class CaptureManager {
   }
 
   /**
+   * P1-6 应用内容分类结果（smart 路径采样参数联动；非 smart 路径忽略）
+   */
+  applyContentKind(kind: import('./contentClassifier').ContentKind): void {
+    this.rt.smartController.applyContentKind(kind);
+  }
+
+  /**
+   * P1-7 请求一次强制补帧（指令句命中后调用；smart 路径生效）
+   */
+  requestForceCapture(): void {
+    this.rt.smartController.requestForceCapture();
+  }
+
+  /**
    * 暂停采集（停止接收新数据，但保持会话状态）
    */
   pauseSession(): void {

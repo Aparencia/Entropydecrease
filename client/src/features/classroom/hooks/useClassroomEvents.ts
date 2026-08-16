@@ -35,6 +35,7 @@ import { persistKeyframeImage } from '../utils/keyframePersistence';
 import { transcribeWithRetry, toAsrLanguage, useAsrSemaphore, isLocalAsrReady, setOnAsrFallback } from '../utils/asrTranscriber';
 import { applySessionReplaces, getSessionHotwordsString, addDynamicBoosts } from '../utils/hotwordRuntime';
 import { cleanAsrResult, dedupeAcrossFinals, estimateAsrConfidence } from '@/lib/capture/asrFilters';
+import { classifyContent, hasCommandCue, type ContentKind } from '@/lib/capture/contentClassifier';
 
 /** 触发一次增量分析所需的关键帧数 */
 const INCREMENTAL_BATCH_SIZE = 5;
@@ -64,11 +65,20 @@ interface UseClassroomEventsOptions {
   onNotify: (type: 'error', message: string) => void;
   /** 真流式 ASR 是否激活（激活时跳过按段转写，改用流式 partial/final） */
   streamingAsrActive: boolean;
+  /** P1-6：目标窗口标题（内容类型分类的标题信号） */
+  windowTitle?: string;
 }
+
+/** P1-6 分类尝试上限（转写样本仍无信号则停止，unknown 不再重试） */
+const MAX_CLASSIFY_ATTEMPTS = 5;
+/** P1-7 指令补帧节流：最小间隔（ms），防连续指令句触发补帧风暴 */
+const FORCE_CAPTURE_MIN_INTERVAL_MS = 1000;
+/** P1-6 分类转写样本上限（字符，FIFO 追加防无界） */
+const MAX_CLASSIFY_SAMPLE_CHARS = 500;
 
 export function useClassroomEvents({
   captureManager, status, capturePath, language, aiDetectEnabled, setCourseMeta, onNotify,
-  streamingAsrActive,
+  streamingAsrActive, windowTitle,
 }: UseClassroomEventsOptions) {
   const [segments, setSegments] = useState<ExtractedSegment[]>([]);
   const [stats, setStats] = useState({ frames: 0, extracted: 0 });
@@ -82,11 +92,19 @@ export function useClassroomEvents({
   const [videoFilePath, setVideoFilePath] = useState<string | null>(null);
   const [partialCount, setPartialCount] = useState(0);
   const [transcribedCount, setTranscribedCount] = useState(0);
+  /** P1-6 内容类型（课程/软件技能/手法技巧/讲座；驱动采样参数与产物形态） */
+  const [contentKind, setContentKind] = useState<ContentKind>('unknown');
 
   const partialNotesRef = useRef<string[]>([]);
   const pendingKeyframesRef = useRef<KeyFrame[]>([]);
   const isPartialAnalyzingRef = useRef(false);
   const courseDetectedRef = useRef(false);
+  /** P1-6 分类尝试计数（超上限后停止，unknown 不再重试） */
+  const classifyAttemptsRef = useRef(0);
+  /** P1-6 转写样本累积（FIFO 截断） */
+  const transcriptSampleRef = useRef('');
+  /** P1-7 指令补帧节流时间戳 */
+  const lastForceCaptureAtRef = useRef(0);
   /** @ai-context 会话时间基准（epoch ms）：记录首帧 timestamp，供 analyzePartial 换算相对秒数 */
   const sessionStartMsRef = useRef<number | null>(null);
   /** 采集会话 ID（smart:keyframe 事件携带），供笔记持久化关联与关键帧图片清理 */
@@ -109,6 +127,36 @@ export function useClassroomEvents({
       toast({ type: 'warning', silent: true, message: `网络繁忙，ASR 转写队列已丢弃 ${total} 段音频${hint}` });
     },
   });
+
+  /**
+   * P1-6/P1-7 转写文本场景消费（ref 桥接，事件回调经此调用避免 effect 重订阅）：
+   * ① 累积分类样本并触发内容分类（最多 5 次尝试，标题信号 > 转写证据）
+   * ② 指令句检测命中 → 请求强制补帧（1s 节流，防补帧风暴）
+   */
+  const sceneProcessorRef = useRef<(text: string) => void>(() => {});
+  sceneProcessorRef.current = (text: string) => {
+    if (!text) return;
+    // 样本累积（FIFO 截断，防长课无界增长）
+    transcriptSampleRef.current = (transcriptSampleRef.current + text).slice(-MAX_CLASSIFY_SAMPLE_CHARS);
+    // 内容分类：未确定时尝试
+    if (contentKind === 'unknown' && classifyAttemptsRef.current < MAX_CLASSIFY_ATTEMPTS) {
+      classifyAttemptsRef.current++;
+      const result = classifyContent(windowTitle ?? '', transcriptSampleRef.current);
+      if (result.kind !== 'unknown') {
+        setContentKind(result.kind);
+        captureManager.applyContentKind(result.kind);
+        console.info(`[useClassroomCapture] 内容类型识别: ${result.kind}（${result.source}）`);
+      }
+    }
+    // 指令句补帧（技能场景操作瞬间捕捉）
+    if (hasCommandCue(text)) {
+      const now = Date.now();
+      if (now - lastForceCaptureAtRef.current >= FORCE_CAPTURE_MIN_INTERVAL_MS) {
+        lastForceCaptureAtRef.current = now;
+        captureManager.requestForceCapture();
+      }
+    }
+  };
 
   // ASR 本地→云端降级可见性：注册 toast 回调（会话级节流在 asrTranscriber 内部）
   useEffect(() => {
@@ -284,6 +332,8 @@ export function useClassroomEvents({
               }));
               if (cleaned) {
                 setTranscribedCount((c) => c + 1);
+                // P1-6/P1-7：转写文本场景消费（内容分类 + 指令句补帧）
+                sceneProcessorRef.current(cleaned);
                 // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3 替换词后处理），
                 // 原始清洗后转写经 audioTextRaw 可回溯
                 setLiveTranscripts((prev) => {
@@ -351,6 +401,8 @@ export function useClassroomEvents({
         : estimateAsrConfidence(data.text ?? '', cleaned);
       const id = crypto.randomUUID();
       const timestamp = data.timestamp || Date.now();
+      // P1-6/P1-7：转写文本场景消费（内容分类 + 指令句补帧）
+      sceneProcessorRef.current(text);
       // 实时转录上屏（FIFO 上限控制）；展示替换后文本（P1-3）
       setLiveTranscripts((prev) => {
         const next = [...prev, { id, text: applySessionReplaces(text), timestamp, confidence }];
@@ -483,6 +535,7 @@ export function useClassroomEvents({
     vadStats, recordingStatus, setRecordingStatus,
     videoFilePath, setVideoFilePath,
     partialCount, setPartialCount, transcribedCount,
+    contentKind,
     partialNotesRef, pendingKeyframesRef, isPartialAnalyzingRef,
     captureSessionIdRef,
   };

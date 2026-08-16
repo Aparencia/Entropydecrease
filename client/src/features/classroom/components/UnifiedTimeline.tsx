@@ -83,6 +83,11 @@ export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], par
   const audioSegments = bundle.audioSegments ?? [];
   const sessionStartMs = timeline[0]?.timestamp ?? Date.now();
 
+  // P1-9 实时截图流：最近 6 帧仍有 imageBase64 的关键帧（增序展示）
+  const recentThumbs = (bundle.keyframes ?? [])
+    .filter((kf) => kf.imageBase64)
+    .slice(-6);
+
   // 事件 + 锚点 + 转写按时间戳合并排序
   const rows: Row[] = [
     ...timeline.map((entry) => ({ kind: 'event' as const, ts: entry.timestamp, entry })),
@@ -280,6 +285,22 @@ export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], par
           </div>
         )}
       </div>
+
+      {/* P1-9 实时截图流：最近 6 帧缩略横条（识别过程可见性，imageBase64 已被分析清空的帧跳过） */}
+      {recentThumbs.length > 0 && (
+        <div className="flex items-center gap-1.5 px-3 py-1.5 border-t border-border/20 bg-bg-secondary/30 overflow-x-auto flex-shrink-0">
+          <Camera className="w-3 h-3 text-text-quaternary flex-shrink-0" strokeWidth={1.5} />
+          {recentThumbs.map((kf) => (
+            <img
+              key={kf.id}
+              src={`data:image/jpeg;base64,${kf.imageBase64}`}
+              alt={`关键帧 ${new Date(kf.timestamp).toLocaleTimeString()}`}
+              title={new Date(kf.timestamp).toLocaleTimeString()}
+              className="w-16 h-9 rounded-kb-xs object-cover border border-border/30 flex-shrink-0"
+            />
+          ))}
+        </div>
+      )}
 
       {/* 底部统计栏 */}
       <div className={cn(

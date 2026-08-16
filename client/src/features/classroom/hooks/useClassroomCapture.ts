@@ -146,6 +146,7 @@ export function useClassroomCapture() {
     language: config.language, aiDetectEnabled, setCourseMeta,
     onNotify: notify,
     streamingAsrActive,
+    windowTitle: selectedWindow?.title,
   });
 
   // 转写/提取段最新值 ref 桥：停止收尾（useSessionControl）在事件回调
@@ -337,6 +338,8 @@ export function useClassroomCapture() {
     analysisError: analysis.analysisError,
     partialCount: events.partialCount,
     transcribedCount: events.transcribedCount,
+    // P1-6 内容类型（课程/软件技能/手法技巧/讲座）
+    contentKind: events.contentKind,
     // 实时转录
     liveTranscripts: events.liveTranscripts,
     handleEditTranscript: events.handleEditTranscript,
