@@ -1,24 +1,30 @@
 # 本地识别引擎集成指南（P2-1 OCR / P2-2 公式 / P2-3 版面 / P2-5 VLM 分类 / P2-6 区域监测）
 
 > 日期：2026-08-16
-> 状态：**代码骨架已就绪，推理管线待装有模型的环境联调验证**（模型文件未随仓库分发）
+> 状态：**P2-1 本地 OCR 已完整实现并联调验证**（识别「熵减学习助手」「本地OCR测试2026」置信度 >0.99）；P2-2/3/5/6 为集成指南
 > 原则：所有本地引擎均为可选增强——模型缺失/推理失败时自动降级云端 VLM（现状路径），零回归风险
 
 ---
 
-## 一、P2-1 本地 OCR（PP-OCRv5 / RapidOCR ONNX）
+## 一、P2-1 本地 OCR（PP-OCRv5 / RapidOCR ONNX）✅ 已完成
 
-### 已落地
+### 交付内容
 
-- `client/electron/ai/local-ocr/ocrService.ts`：模型就绪检测（userData/ocr-models/ 目录约定）、IPC `local_ocr_recognize`、`recognizeLocal` 骨架（det/rec 推理管线标注 TODO(P2-1-联调)）
+- `client/electron/ai/local-ocr/ocrService.ts`：模型下载管理（ModelScope 官方源，det 4.6MB + rec 15.9MB + dict 25.6KB，进度广播）+ 会话懒加载 + nativeImage 解码 + 完整识别管线；IPC `local_ocr_recognize` / `local_ocr_download_model` / `local_ocr_status`
+- `client/electron/ai/local-ocr/ocrPipeline.ts`：PP-OCRv5 后处理纯函数（DB 二值化 0.3 → 2×2 膨胀 → 8 邻域连通域 → AABB 框 + box score 0.5 → CTC greedy 解码），12 例单测
 - `client/src/lib/ai/visionWorker.ts`：本地 OCR 优先分支（available+lines 时返回文本草稿，失败静默降级云端 VLM）
-- IPC 登记：`channels.ts` LOCAL_OCR_RECOGNIZE + preload 白名单 + env.d.ts 类型
+- 模型自动下载：设置页/课堂模块调用 `local_ocr_download_model`，下载至 `userData/ocr-models/`，无需手动放置
 
-### 待联调（验证清单）
+### 联调验证记录（2026-08-16）
 
-1. 模型获取：RapidOCR 官方 ONNX 发行版（GitHub RapidAI/RapidOCR → 模型仓库 `ch_PP-OCRv5_det_infer.onnx` / `ch_PP-OCRv5_rec_infer.onnx` / `ppocr_keys_v1.txt`），放置到 `userData/ocr-models/`
-2. 推理管线：nativeImage 解码 PNG → det 预处理（等比缩放到 32 倍数、归一化）→ det 推理 → DB/框后处理（PP-OCRv5 det 输出格式以官方推理代码为准）→ 框排序裁剪 → rec 预处理（48 高等比宽）→ rec 推理 → CTC 字典解码（ppocr_keys_v1.txt）
-3. 验收：离线 fine 路径可用率 100%（模型就绪后）；OCR 文本 CER 对比云端 VLM（P0-1 基线脚本）
+- 测试图：900×240 白底黑字「熵减学习助手 / 本地OCR测试2026」（Microsoft YaHei 42pt）
+- 结果：两行全部正确识别，置信度 0.993 / 0.995
+- 关键实现决策：① det 输出为全分辨率概率图（无下采样），与 PP-OCRv4 的 H/4 不同；② 字典为模型专用 `ppocrv5_dict.txt`（18383 行，blank 前插 + 空格尾插 = 18385 通道），旧版 `ppocr_keys_v1.txt` 不兼容；③ AABB + 框外扩 padding（横 5%+4px/纵 15%+4px）替代 minAreaRect+unclip 简化，实测不损失首尾字
+
+### 验收对照
+
+- 离线 fine 路径可用率：模型就绪后 100%（本地 OCR 优先）
+- OCR 文本 CER 对比云端 VLM：见 P0-1 基线脚本（--file 模式可对比预置识别文本）
 
 ---
 

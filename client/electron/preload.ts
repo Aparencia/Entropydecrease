@@ -138,6 +138,8 @@ const ALLOWED_CHANNELS = [
   'vad_silero_process',
   // 本地 OCR（PP-OCRv5 onnxruntime 推理，P2-1）
   'local_ocr_recognize',
+  'local_ocr_download_model',
+  'local_ocr_status',
   // MCP 学习记忆服务器应用内授权开关
   'memory_server:get_consent',
   'memory_server:set_consent',
@@ -190,6 +192,8 @@ const ALLOWED_EVENT_CHANNELS = [
   // 本地 ASR 真流式转写结果推送（partial 实时 / final 断句）
   'asr_stream_partial',
   'asr_stream_final',
+  // 本地 OCR 模型下载进度推送（P2-1）
+  'local_ocr_download_progress',
   // 全局快捷键触发推送（payload: { id, text? }，shortcutManager 驱动）
   'shortcut:triggered',
   // 3.18 电子墨水学习板：主进程推送复习卡片到次窗口

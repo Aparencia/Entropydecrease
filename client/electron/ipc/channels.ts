@@ -54,6 +54,8 @@ export const IPC_CHANNELS = {
 
   // 本地 OCR（PP-OCRv5 onnxruntime 推理，P2-1）
   LOCAL_OCR_RECOGNIZE: 'local_ocr_recognize',
+  LOCAL_OCR_DOWNLOAD_MODEL: 'local_ocr_download_model',
+  LOCAL_OCR_STATUS: 'local_ocr_status',
 
   // Path C 视频录制
   VIDEO_RECORD_START: 'video_record_start',

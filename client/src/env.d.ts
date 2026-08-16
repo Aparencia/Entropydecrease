@@ -104,6 +104,10 @@ declare global {
       vad_silero_process: (args: { samples: ArrayBuffer; sampleRate?: number; reset?: boolean }) => Promise<{ probability: number | null; available: boolean }>;
       /** P2-1: 本地 OCR 识别（PP-OCRv5；模型未就绪时 available=false） */
       local_ocr_recognize: (args: { imageBase64: string }) => Promise<{ available: boolean; lines: Array<{ text: string; box: [number, number, number, number]; confidence: number }> | null }>;
+      /** P2-1: 下载本地 OCR 模型（ModelScope 官方源，进度经 local_ocr_download_progress 推送） */
+      local_ocr_download_model: () => Promise<{ success: boolean; error?: string }>;
+      /** P2-1: 本地 OCR 模型状态（就绪/下载中/进度） */
+      local_ocr_status: () => Promise<{ ready: boolean; downloading: boolean; progress: number }>;
       // ── A3 微进展叙述（新增） ──
       ai_progress_narrate: (args: { statsText: string; authToken?: string }) => Promise<{
         narrative: string;
