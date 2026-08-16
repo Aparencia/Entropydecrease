@@ -136,6 +136,8 @@ const ALLOWED_CHANNELS = [
   'local_asr_stream_set_hotwords',
   // 本地 Silero VAD（主进程 onnxruntime 推理，P0-2）
   'vad_silero_process',
+  // 本地 OCR（PP-OCRv5 onnxruntime 推理，P2-1）
+  'local_ocr_recognize',
   // MCP 学习记忆服务器应用内授权开关
   'memory_server:get_consent',
   'memory_server:set_consent',

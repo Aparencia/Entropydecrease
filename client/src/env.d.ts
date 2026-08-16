@@ -102,6 +102,8 @@ declare global {
       audio_capture_stop: () => Promise<{ success: boolean }>;
       /** P0-2: 本地 Silero VAD 推理（主进程 onnxruntime，16kHz Float32 PCM 块） */
       vad_silero_process: (args: { samples: ArrayBuffer; sampleRate?: number; reset?: boolean }) => Promise<{ probability: number | null; available: boolean }>;
+      /** P2-1: 本地 OCR 识别（PP-OCRv5；模型未就绪时 available=false） */
+      local_ocr_recognize: (args: { imageBase64: string }) => Promise<{ available: boolean; lines: Array<{ text: string; box: [number, number, number, number]; confidence: number }> | null }>;
       // ── A3 微进展叙述（新增） ──
       ai_progress_narrate: (args: { statsText: string; authToken?: string }) => Promise<{
         narrative: string;

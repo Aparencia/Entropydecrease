@@ -52,6 +52,9 @@ export const IPC_CHANNELS = {
   // 本地 Silero VAD（主进程 onnxruntime 推理，P0-2）
   VAD_SILERO_PROCESS: 'vad_silero_process',
 
+  // 本地 OCR（PP-OCRv5 onnxruntime 推理，P2-1）
+  LOCAL_OCR_RECOGNIZE: 'local_ocr_recognize',
+
   // Path C 视频录制
   VIDEO_RECORD_START: 'video_record_start',
   VIDEO_RECORD_STOP: 'video_record_stop',

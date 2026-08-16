@@ -73,6 +73,31 @@ export class VisionWorker implements PipelineWorker {
     // 将 ArrayBuffer 转为 base64
     const base64 = arrayBufferToBase64(screenshotData.imageBuffer);
 
+    // P2-1：本地 OCR 优先（PP-OCRv5，离线可用；模型未就绪/失败 → 云端 VLM 现状路径）。
+    // 本地路径产出纯文本草稿（formulas/concepts 由 P2-2 公式引擎与 P2-4 VLM
+    // 增强补齐），当前为骨架降级契约：recognizeLocal 未联调前恒返回 null
+    if (window.electronAPI) {
+      try {
+        const ocr = await window.electronAPI.local_ocr_recognize({ imageBase64: base64 });
+        if (ocr?.available && ocr.lines?.length) {
+          return {
+            text: ocr.lines.map((l) => l.text).join('\n'),
+            confidence: 0.9,
+            source: 'vision',
+            model: 'local-ocr-ppocrv5',
+            processingTimeMs: 0,
+            capturedAt: screenshotData.timestamp ?? Date.now(),
+            structured: {
+              formulas: [], diagrams: [], keyPoints: [],
+              codeBlocks: [], concepts: [], mode: 'local-ocr',
+            },
+          };
+        }
+      } catch {
+        /* 本地 OCR 失败静默降级云端 */
+      }
+    }
+
     // 从 metadata 中获取提取模式，或使用默认值
     const mode = (message.metadata?.visionMode as VisionExtractMode) ?? this.defaultMode;
 
