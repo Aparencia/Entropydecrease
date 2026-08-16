@@ -89,9 +89,9 @@ export default function ClassroomPage() {
        内容超高时面板整体滚动。面板 sm+ 断点 max-h=85vh（含 1px border ×2）+
        md 断点 p-8 padding（4rem）→ 内容区恰为 calc(85vh-4rem-2px)，锚定后
        与面板精确贴合（一屏式布局） */
-    <div className="flex h-[calc(85vh-4rem-2px)] min-h-0">
-      {/* ── 左侧控制面板：一屏容纳，不滚动 ── */}
-      <div className="w-80 flex-shrink-0 border-r border-border/30 flex flex-col overflow-hidden">
+    <div className="flex flex-col md:flex-row h-[calc(100vh-6.5rem-2px)] md:h-[calc(85vh-4rem-2px)] min-h-0">
+      {/* ── 左侧控制面板：桌面一屏容纳不滚动，移动端限高可滚动 ── */}
+      <div className="w-full md:w-80 md:flex-shrink-0 max-h-[50vh] md:max-h-none border-b md:border-b-0 md:border-r border-border/30 flex flex-col overflow-hidden">
         {/* 标题：回声定位仪式标识（compact） */}
         <div className="flex items-center px-4 py-2.5 border-b border-border/30">
           <ModuleRitualHeader
