@@ -47,7 +47,7 @@ const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         q: "支持哪些平台？",
-        a: "目前支持 Windows 和 macOS 双平台。我们优先覆盖桌面端，因为深度学习场景更适合在大屏幕上完成。移动端适配已在规划中。",
+        a: "桌面端支持 Windows 和 macOS；移动端支持 PWA 即开即用——用手机浏览器打开 entropydecrease.com/pwa/，添加到主屏幕即可像 App 一样使用（iOS Safari / Android Chrome）。桌面端优先覆盖，因为深度学习场景更适合在大屏幕上完成。",
       },
     ],
   },
