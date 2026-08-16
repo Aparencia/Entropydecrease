@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Minus, Square, Maximize2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { QuotaBadge } from './QuotaBadge';
 
 /**
  * 自定义标题栏组件属性
@@ -71,8 +72,9 @@ export function CustomTitlebar({ className }: CustomTitlebarProps) {
       {/* 中间弹性占位 — 双击最大化 */}
       <div className="flex-1" onDoubleClick={handleMaximize} />
 
-      {/* 右侧：窗口控制按钮（禁止拖拽） */}
-      <div className="no-drag flex h-full">
+      {/* 右侧：AI 配额胶囊（全页面常驻入口）+ 窗口控制按钮（禁止拖拽） */}
+      <div className="no-drag flex h-full items-center">
+        <QuotaBadge />
         <button
           onClick={handleMinimize}
           className="w-11 h-9 flex items-center justify-center text-text-tertiary hover:text-brand-500 hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200 active:scale-90"

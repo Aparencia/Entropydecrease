@@ -28,6 +28,8 @@ import { FirstDiveGate } from '@/features/onboarding/firstDive/FirstDiveGate';
 import { usePerformanceModeStore } from '@/lib/performance/usePerformanceMode';
 import { PERFORMANCE_MODE_CONFIG } from '@/lib/performance/performanceMode';
 import { cn } from '@/lib/utils';
+// AI 配额耗尽全局提示（监听 429 双路径：渲染直连 CustomEvent + 主进程代理 IPC）
+import { QuotaNotice } from '@/features/beta/QuotaNotice';
 
 /**
  * 路由层级映射：子路由 -> 父路由
@@ -288,6 +290,7 @@ export default function AppLayout() {
       <BottomNav />
 
       {/* 全局组件 */}
+      <QuotaNotice />
       <FirstDiveGate />
       <OnboardingOverlay />
       <ModuleTourToast moduleId={currentModule} />

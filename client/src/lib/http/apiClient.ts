@@ -25,6 +25,17 @@ function refreshSessionShared() {
   return sharedRefresh;
 }
 
+/**
+ * 429 配额耗尽 → 全局事件（渲染进程直连网关路径的统一感知点）。
+ *
+ * 仅配额类 429 触发（服务端文案含「已达上限」）；上游服务商 429 为
+ * 临时故障不应打扰用户。QuotaNotice 组件监听本事件弹非阻断提示并刷新配额。
+ */
+function notifyQuotaExhausted(detail: string) {
+  if (!/已达上限/.test(detail)) return;
+  window.dispatchEvent(new CustomEvent('kb:ai-quota-exhausted', { detail }));
+}
+
 function createClient(baseUrlOrGetter: string | (() => string)) {
   const resolveUrl = typeof baseUrlOrGetter === 'function' ? baseUrlOrGetter : () => baseUrlOrGetter;
 
@@ -85,12 +96,24 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
 
         // 重试仍失败：会话有效但服务端因其他原因拒绝（权限 / 额度 / 网关 JWT 校验抖动等），
         // 不属于登录过期，不再派发 session-expired，交由调用方按普通错误处理
+        if (retryResponse.status === 429) {
+          const detail = await retryResponse.text().catch(() => '');
+          notifyQuotaExhausted(detail);
+          throw new Error(`HTTP 429${detail ? `: ${detail}` : ''}`);
+        }
         if (!retryResponse.ok) {
           throw new Error(`HTTP ${retryResponse.status}`);
         }
         const retryGwReqId = retryResponse.headers.get('ai-gateway-request-id');
         if (retryGwReqId) console.debug(`[ai-gateway] request-id: ${retryGwReqId}`);
         return retryResponse.json() as Promise<T>;
+      }
+
+      // 429 配额耗尽：读取响应体判断（避免把上游服务商限流误报为用户配额耗尽）
+      if (response.status === 429) {
+        const detail = await response.text().catch(() => '');
+        notifyQuotaExhausted(detail);
+        throw new Error(`HTTP 429${detail ? `: ${detail}` : ''}`);
       }
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -165,6 +188,12 @@ function createClient(baseUrlOrGetter: string | (() => string)) {
           body: JSON.stringify(body),
           signal: controller.signal,
         });
+      }
+
+      if (response.status === 429) {
+        const detail = await response.text().catch(() => '');
+        notifyQuotaExhausted(detail);
+        throw new Error(`HTTP 429${detail ? `: ${detail}` : ''}`);
       }
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);

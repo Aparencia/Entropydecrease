@@ -118,6 +118,8 @@ declare global {
         requestId?: string;
         source?: string;
       }>;
+      /** AI 配额耗尽（429）：主进程代理路径推送（gatewayHttp/gatewayStream） */
+      onAIQuotaExhausted?: (callback: (detail: string) => void) => () => void;
     };
   }
 }
