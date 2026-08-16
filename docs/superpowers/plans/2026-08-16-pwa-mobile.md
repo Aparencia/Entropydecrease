@@ -3,9 +3,9 @@
 > **For agentic workers:** 按任务顺序逐 Task 实施，Step 使用 checkbox（`- [ ]`）跟踪。
 > **Spec:** `docs/superpowers/specs/2026-08-16-pwa-mobile-design.md`（v2 已定稿）
 
-**Goal:** 在现有代码库上增加第二条运行时——PWA（iOS Safari / Android Chrome），首批交付：番茄钟、空白笔记、课堂助手（麦克风录音转写 + 视频转笔记）、桌面↔移动账号同步。移动端本轮只保证**布局可用 + 功能完整**，不含 UI 视觉美化（Spec §1.3）。
+**Goal:** 在现有代码库上增加第二条运行时——PWA（iOS Safari / Android Chrome），首批交付：番茄钟、空白笔记、课堂助手（**系统录屏导入转写为主力（含系统音频）** + 麦克风实时转写应急 + 视频/抖音视频转笔记）、桌面↔移动账号同步。移动端本轮只保证**布局可用 + 功能完整**，不含 UI 视觉美化（Spec §1.3）。
 
-**Architecture:** 复用现有双模式基座（`storageFactory` PWA/Dexie 分支、ASR 云端降级链、墙钟校准计时）；新增 `WebCaptureAdapter`（getUserMedia + MediaRecorder + 云端分段 ASR）与视频导入链路（复用网关 `/api/v1/multimodal/analyze-video`）；同步复用 sync-service + OfflineQueue + Automerge。
+**Architecture:** 复用现有双模式基座（`storageFactory` PWA/Dexie 分支、ASR 云端降级链、墙钟校准计时）；新增 `WebCaptureAdapter`（麦克风应急通道，Spec §3.2 音频源决策）与视频导入链路（主力通道，复用网关 `/api/v1/multimodal/analyze-video`）；同步复用 sync-service + OfflineQueue + Automerge。
 
 **Tech Stack:** React 18 + Vite（VitePWA 已配置）、TypeScript、Dexie/IndexedDB、TipTap、Zustand、Web Notification API、supabase-js、Go sync-service（浏览器 WebSocket 直连）。Phase 1.5 可选项：sherpa-onnx-web（WASM + onnxruntime-web）。
 
@@ -106,16 +106,19 @@
 
 ## M3: 课堂助手（第 2–6 周，~3–4 周；与 M2 并行）
 
-### Task 9: WebCaptureAdapter（1.5–2 周，核心件）
+### Task 9: WebCaptureAdapter（麦克风应急通道，1–1.5 周）
 
 **Files:** 新增 `client/src/features/classroom/capture/WebCaptureAdapter.ts`、`client/src/lib/audio/`（浏览器侧）
+
+> 音频源决策（Spec §3.2 v4）：PWA 无法实时监听系统扬声器；**主力通道 = 系统录屏导入**（Task 10 链路，系统音频随录屏文件落盘），本任务只做麦克风应急通道。
 
 - [ ] **Step 1:** getUserMedia 麦克风采集（16kHz 单声道：AudioWorklet/ScriptProcessor 降采样，复用 asrFilters 处理链）
 - [ ] **Step 2:** MediaRecorder 分段（5–15s）+ 每段转码为云端 ASR 所需格式
 - [ ] **Step 3:** `CaptureAdapter` 接口定义（含现有 Electron 路径能力枚举：captureType/windowless 模式），`useSessionControl`/`useClassroomEvents` 加环境分支
 - [ ] **Step 4:** 移动端隐藏窗口选择/屏幕采集/系统音频 UI（`WindowSelectCard`/Vision 入口等按环境条件渲染）
-- [ ] **Step 5:** 会话中断恢复：标签切后台录音停止→前台恢复续录（复用/对齐 useAudioRecovery 语义）
-- [ ] **验收**：手机麦克风录音→分段→云端转写（transcribeWithRetry 现成链路）文本回流；后台切换不崩溃、可恢复
+- [ ] **Step 5:** 课堂主界面音频源选择：麦克风（实时应急）/ 系统录屏导入（主力，引导至 Task 10 导入入口）
+- [ ] **Step 6:** 会话中断恢复：标签切后台录音停止→前台恢复续录（复用/对齐 useAudioRecovery 语义）
+- [ ] **验收**：手机麦克风录音→分段→云端转写（transcribeWithRetry 现成链路）文本回流；录屏导入入口可达；后台切换不崩溃、可恢复
 
 ### Task 10: 视频转笔记（含抖音链接引导，1–1.5 天）
 
@@ -180,7 +183,7 @@ T0（阻塞前置）
 Phase 1.5：Task 14 依赖 Task 9（采集链路）与 M1
 ```
 
-关键路径：T0 → M1 → M2（Task 6 编辑器为最大单项）→ M4 ≈ **9–13 周（单人）**；M3 与 M2 并行后总窗口不变；2 人并行时 M2/M3 各归一人，**5–7 周**。
+关键路径：T0 → M1 → M2（Task 6 编辑器为最大单项）→ M4 ≈ **9–12 周（单人）**；M3 与 M2 并行后总窗口不变；2 人并行时 M2/M3 各归一人，**5–7 周**。
 
 ## 工作量汇总（与 Spec §4 对齐）
 
@@ -189,6 +192,6 @@ Phase 1.5：Task 14 依赖 Task 9（采集链路）与 M1
 | T0 | 前置验证 | 0.5–1 天 |
 | M1 | Task 1–4（基建+番茄钟） | 1 周 |
 | M2 | Task 5–8（笔记+同步） | 3–4 周 |
-| M3 | Task 9–11（课堂助手） | 3–4 周（与 M2 并行） |
+| M3 | Task 9–11（课堂助手：录屏导入为主 + 麦克风应急） | 2.5–3.5 周（与 M2 并行） |
 | M4 | Task 12–13（联调发布） | 1–1.5 周 |
 | Phase 1.5 | Task 14（WASM 流式，可选） | +1.5–2.5 周 |
