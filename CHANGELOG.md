@@ -3,6 +3,16 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.42.0](https://github.com/Aparencia/Entropydecrease/compare/v0.41.0...v0.42.0) (2026-08-17)
+
+### ✨ 新功能
+
+* **ai-gateway:** webhook 支付确认后自动绑定用户（支付→激活闭环） ([6a1d8b8](https://github.com/Aparencia/Entropydecrease/commit/6a1d8b863c44117144eb844328c99c28d6a1cb56))
+
+### 🐛 缺陷修复
+
+* **ci:** build-apk checkout 启用 Git LFS——TWA 资源 PNG 为 LFS 文件，未拉取致 AAPT2 编译失败 ([30bcb90](https://github.com/Aparencia/Entropydecrease/commit/30bcb90ddda7b1b0e5fb3ef3543ed6f153505895))
+
 ## [0.41.0](https://github.com/Aparencia/Entropydecrease/compare/v0.40.1...v0.41.0) (2026-08-17)
 
 ### ✨ 新功能
