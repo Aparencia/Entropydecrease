@@ -142,15 +142,16 @@ jobs:
           echo "PWA CDN prefetch done"
 
   # ---------------------------------------------------------------------------
-  # Android APK（B 方案：TWA 打包）：bubblewrap 基于已部署的 PWA manifest
-  # 生成 TWA 工程并构建签名 APK，上传 GitHub Release + 服务器下载目录
+  # Android APK（B 方案：TWA 打包）：基于已入库的 android/twa 工程构建签名 APK，
+  # 上传 GitHub Release + 服务器下载目录
   # （官网「下载 Android APK」直链 = entropydecrease.com/downloads/entropydecrease.apk）。
   #
   # ⚠️ 首次设置（2026-08-16 已完成：bubblewrap init 生成 android/twa/ + keystore）：
   #   keystore = android/twa/android.keystore（alias=android，packageId=com.entropydecrease.twa）
   #   1. 将 android/twa/android.keystore 转 base64 存入 Secret ANDROID_KEYSTORE_BASE64
   #   2. Secret ANDROID_KEYSTORE_PASS / ANDROID_KEY_PASS = keystore 密码（init 时 keytool 输入值）
-  #   CI 只做非交互 update + build；android/twa/ 提交仓库（*.keystore 已 gitignore）
+  #   CI 直接 build（密码经 BUBBLEWRAP_* 环境变量传入，CLI 无密码参数）；
+  #   android/twa/ 提交仓库（*.keystore 已 gitignore）
   # ---------------------------------------------------------------------------
   build-apk:
     needs: deploy
@@ -173,30 +174,52 @@ jobs:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           if [ -z "$KEYSTORE_B64" ]; then
-            echo "::error::ANDROID_KEYSTORE_BASE64 未配置（见 job 注释首次设置），跳过 APK 构建"
-            exit 0
+            echo "::error::ANDROID_KEYSTORE_BASE64 未配置（见 job 注释首次设置），APK 构建无法继续"
+            exit 1
           fi
           echo "$KEYSTORE_B64" | base64 -d > /tmp/entropydecrease.keystore
-      - name: Update TWA project to latest PWA
+      # bubblewrap 每次命令都会加载 ~/.bubblewrap/config.json；CI 全新 runner
+      # 无此文件时 jdkPath/androidSdkPath 为空，会弹交互安装提示导致非交互环境
+      # exit 130（v0.38~v0.40 发版 build-apk 连续失败根因）。预置配置指向
+      # setup-java/setup-android 提供的路径，消除交互。
+      - name: Configure bubblewrap (jdk/sdk paths)
         run: |
-          cd android
-          bubblewrap update \
-            --manifest https://entropydecrease.com/pwa/manifest.webmanifest \
-            --directory twa
+          mkdir -p ~/.bubblewrap
+          cat > ~/.bubblewrap/config.json <<EOF
+          {"jdkPath":"$JAVA_HOME","androidSdkPath":"$ANDROID_HOME"}
+          EOF
+          # bubblewrap 校验 SDK 根目录需存在 tools/ 或 bin/（新式 cmdline-tools
+          # 布局没有），缺则建空占位目录通过校验
+          if [ ! -d "$ANDROID_HOME/tools" ] && [ ! -d "$ANDROID_HOME/bin" ]; then
+            mkdir -p "$ANDROID_HOME/bin"
+          fi
+          # 缺 build-tools 36.1.0 时预装：bubblewrap 自动安装只找 tools/bin 或 bin
+          # 下的 sdkmanager（新式布局找不到），故显式用 cmdline-tools 的 sdkmanager
+          if [ ! -d "$ANDROID_HOME/build-tools/36.1.0" ]; then
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+            [ -f "$SDKMANAGER" ] || SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n1)
+            if [ -n "$SDKMANAGER" ]; then
+              yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "build-tools;36.1.0"
+            fi
+          fi
+      # TWA 工程已随仓库生成（8e2f68c），twa-manifest.json 与 manifest-checksum.txt
+      # 一致，build 的变更检测不会触发交互；无需 update（其 --manifest 参数指向
+      # 本地 twa-manifest.json 而非 web manifest URL）。版本号由仓库文件维护。
       - name: Build signed APK
         env:
-          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
-          KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
+          # bubblewrap build 的密码仅从这两个环境变量读取（CLI 无密码参数）
+          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASS }}
         run: |
           cd android/twa
           bubblewrap build \
-            --keystorePath /tmp/entropydecrease.keystore \
-            --keystorePass "$KEYSTORE_PASS" \
-            --keyAlias android \
-            --keyPass "$KEY_PASS"
+            --signingKeyPath /tmp/entropydecrease.keystore \
+            --signingKeyAlias android
       - name: Verify APK artifact
         run: test -f android/twa/app-release-signed.apk && echo "APK OK"
       - name: Upload APK to GitHub Release
+        # 仅 tag 触发时存在对应 release；workflow_dispatch 补跑时跳过
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: android/twa/app-release-signed.apk
