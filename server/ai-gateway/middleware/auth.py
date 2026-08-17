@@ -123,7 +123,8 @@ def extract_tiers(payload: dict) -> tuple[Optional[str], Optional[str]]:
 # 不需要认证的路径白名单
 # 注意：license_webhook 是支付平台服务端回调（无用户 token），
 # 防伪依赖 HMAC 签名 + order_id 查询确认（见 payment_adapter），而非 JWT。
-PUBLIC_PATHS = {"/health", "/health/quick", "/health/live", "/api/v1/license/webhook"}
+# license/plans 是公开套餐目录，供前端 PlanCompareModal 无需登录拉取。
+PUBLIC_PATHS = {"/health", "/health/quick", "/health/live", "/api/v1/license/webhook", "/api/v1/license/plans"}
 
 
 async def verify_token(request: Request) -> str:

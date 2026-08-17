@@ -60,6 +60,58 @@ class StatusResponse(BaseModel):
     licenses: list[dict] = []
 
 
+class Plan(BaseModel):
+    id: str
+    name: str
+    price: float
+    period: str  # "month" | "year" | "lifetime"
+    duration_days: int
+    daily_quota: int
+    featured: bool = False
+    badge: str | None = None
+    models: list[str] = []
+    multimodal: bool = False
+    early_access: int = 0
+    sync_devices: int = 1
+    savings: str | None = None
+
+
+class PlanListResponse(BaseModel):
+    plans: list[Plan]
+
+
+# ============================================================
+# 套餐目录（PlanCompareModal 数据源）
+# ============================================================
+# @ai-context: 公开套餐目录，供前端 PlanCompareModal 拉取并渲染价格/周期/
+# 配额对比；无需登录（auth.PUBLIC_PATHS 白名单）。
+
+PLANS: list[Plan] = [
+    Plan(
+        id="pro_monthly", name="Pro 月卡", price=12.0, period="month",
+        duration_days=30, daily_quota=80, featured=False,
+        models=["基础模型", "DeepSeek"], multimodal=False, early_access=0, sync_devices=2,
+    ),
+    Plan(
+        id="pro_yearly", name="Pro 年卡", price=99.0, period="year",
+        duration_days=365, daily_quota=80, featured=True, badge="最受欢迎",
+        models=["基础模型", "DeepSeek"], multimodal=False, early_access=0, sync_devices=2,
+        savings="省 ¥45",
+    ),
+    Plan(
+        id="lifetime", name="终身 Pro", price=199.0, period="lifetime",
+        duration_days=36500, daily_quota=120, featured=False, badge="终身早鸟价",
+        models=["全部模型"], multimodal=True, early_access=5, sync_devices=3,
+    ),
+]
+
+
+@router.get("/plans", response_model=PlanListResponse)
+async def get_plans():
+    """返回当前可购买套餐列表（公开接口，无需登录）。"""
+    return PlanListResponse(plans=PLANS)
+
+
 # ============================================================
 # 激活码验证逻辑
 # ============================================================
