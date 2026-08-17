@@ -3,6 +3,17 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.41.0](https://github.com/Aparencia/Entropydecrease/compare/v0.40.1...v0.41.0) (2026-08-17)
+
+### ✨ 新功能
+
+* **ai-gateway:** 新增套餐列表 API GET /api/v1/license/plans ([e7b47cf](https://github.com/Aparencia/Entropydecrease/commit/e7b47cf63ea208129af28df89e45c180242f9e7a))
+
+### 🐛 缺陷修复
+
+* **ai-gateway:** 修复 BUDGET_DAILY_TOKEN_LIMIT 默认 0 导致全站 429 ([ed72bf0](https://github.com/Aparencia/Entropydecrease/commit/ed72bf08f5b6fa982b2993aefad8767457bb3864))
+* **android:** gradlew 添加可执行位——CI bubblewrap build 权限拒绝根因 ([9a66ee4](https://github.com/Aparencia/Entropydecrease/commit/9a66ee467e9b2074a15d0f6ae8166430442cb65b))
+
 ## [0.40.1](https://github.com/Aparencia/Entropydecrease/compare/v0.40.0...v0.40.1) (2026-08-17)
 
 ### 🐛 缺陷修复
