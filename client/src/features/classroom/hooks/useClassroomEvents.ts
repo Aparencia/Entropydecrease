@@ -57,6 +57,8 @@ export interface LiveTranscript {
   confidence?: number;
   /** P1-4：手动标注的说话人（飞书式重新识别） */
   speaker?: string;
+  /** P1-2：用户修正后的文本（存在时优先显示与消费） */
+  editedText?: string;
 }
 
 interface UseClassroomEventsOptions {
@@ -570,10 +572,11 @@ export function useClassroomEvents({
       prev.map((t) => (t.id === id ? { ...t, editedText: newText } : t)),
     );
     // 同步更新 smartBundle 对应 audioSegment：audioText 存修正后文本，audioTextRaw 保真原始
+    // （仅首次修正写入原始文本，二次修正保留首次快照，防止覆盖丢失 ASR 原文）
     setSmartBundle((prev) => ({
       ...prev,
       audioSegments: (prev.audioSegments ?? []).map((s) =>
-        s.id === id ? { ...s, audioText: newText, audioTextRaw: s.audioText } : s,
+        s.id === id ? { ...s, audioText: newText, audioTextRaw: s.audioTextRaw ?? s.audioText } : s,
       ),
     }));
 

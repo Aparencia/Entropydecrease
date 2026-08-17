@@ -51,17 +51,30 @@ export default function ClassroomPage() {
   const showIdleGuide = !isRunning && !hasSessionData
     && !capture.isAnalyzing && !capture.analysisResult && !capture.analysisError;
 
-  // ── 笔记插入弹窗状态 ──
-  const [showNoteDialog, setShowNoteDialog] = useState(false);
+  // ── 笔记插入弹窗状态：content 与 analysisResult 解耦（支持转写原文批量插入）──
+  // dismissOnDone：来源为 AI 分析结果时插入后收起分析预览；原文插入不触发
+  const [noteDialog, setNoteDialog] = useState<{ content: string; rawContent?: string; dismissOnDone: boolean } | null>(null);
   const [sessionSeq, setSessionSeq] = useState(1);
   // ── 热词/替换词表弹窗状态（P1-3） ──
   const [showHotwordDialog, setShowHotwordDialog] = useState(false);
 
-  /** 点击"插入笔记"时打开弹窗，并计算当天采集序号 */
-  const handleOpenNoteDialog = useCallback(async () => {
+  /**
+   * 打开"插入笔记"弹窗并计算当天采集序号；无参默认用 AI 分析结果，传参为转写原文。
+   * 原始转写版（rawContent）按采集路径拼接：smart → liveTranscripts、fine → segments，
+   * 均带 [HH:MM:SS] 时间戳、修正后文本优先（供弹窗内"AI 整理版 / 原始转写"切换）。
+   */
+  const handleOpenNoteDialog = useCallback(async (content?: string) => {
     const seq = await capture.getSessionSeq();
     setSessionSeq(seq);
-    setShowNoteDialog(true);
+    const fmtTime = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const rawTranscript = capture.capturePath === 'fine'
+      ? capture.segments.map((s) => `[${fmtTime(s.timestamp)}] ${s.text}`).join('\n\n')
+      : capture.liveTranscripts.map((t) => `[${fmtTime(t.timestamp)}] ${t.editedText ?? t.text}`).join('\n\n');
+    if (content !== undefined) {
+      setNoteDialog({ content, rawContent: rawTranscript || undefined, dismissOnDone: false });
+    } else if (capture.analysisResult) {
+      setNoteDialog({ content: capture.analysisResult.content, rawContent: rawTranscript || undefined, dismissOnDone: true });
+    }
   }, [capture]);
 
   // M 快捷键：课中标记重点；C 快捷键：手动补截当前画面（P1-8）
@@ -237,20 +250,22 @@ export default function ClassroomPage() {
           <SessionContentView capture={capture} onOpenNoteDialog={() => void handleOpenNoteDialog()} />
         )}
 
-        {/* 笔记插入弹窗 */}
-        {showNoteDialog && capture.analysisResult && (
+        {/* 笔记插入弹窗（分析结果 / 转写原文批量插入共用） */}
+        {noteDialog && (
           <NoteInsertDialog
-            content={capture.analysisResult.content}
+            content={noteDialog.content}
+            rawContent={noteDialog.rawContent}
             courseName={capture.courseMeta.courseName ?? ''}
             sessionSeq={sessionSeq}
             fetchCourseNotes={capture.fetchCourseNotes}
             appendToNote={capture.appendToNote}
             createCourseNote={capture.createCourseNote}
             onDone={() => {
-              setShowNoteDialog(false);
-              capture.handleDismissAnalysis();
+              setNoteDialog(null);
+              // 仅 AI 分析结果来源插入后收起分析预览（原文插入不触碰预览态）
+              if (noteDialog.dismissOnDone) capture.handleDismissAnalysis();
             }}
-            onClose={() => setShowNoteDialog(false)}
+            onClose={() => setNoteDialog(null)}
           />
         )}
         {/* 应用内确认对话框（P0-5：替代 window.confirm） */}

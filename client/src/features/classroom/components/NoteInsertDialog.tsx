@@ -22,8 +22,10 @@ export interface CourseNoteItem {
 }
 
 interface NoteInsertDialogProps {
-  /** 待插入的笔记内容（Markdown） */
+  /** 待插入的笔记内容（Markdown）——AI 整理版（默认） */
   content: string;
+  /** 原始转写版本（Markdown，带时间戳）；提供时显示"AI 整理 / 原始转写"切换开关 */
+  rawContent?: string;
   /** 课程名称（用于查询已有笔记和生成标题） */
   courseName: string;
   /** 当天同课程的采集序号 */
@@ -46,6 +48,7 @@ interface NoteInsertDialogProps {
 
 export function NoteInsertDialog({
   content,
+  rawContent,
   courseName,
   sessionSeq,
   fetchCourseNotes,
@@ -59,6 +62,12 @@ export function NoteInsertDialog({
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** P0 批量插入方案 B：AI 整理版 / 原始转写版切换（rawContent 提供时可用） */
+  const [useRaw, setUseRaw] = useState(false);
+
+  // 当前生效版本：原始转写版存在且被选中时优先，否则 AI 整理版
+  const activeContent = useRaw && rawContent ? rawContent : content;
+  const hasRawToggle = !!rawContent && rawContent !== content;
 
   const today = new Date().toLocaleDateString('zh-CN');
   const sessionLabel = `${today} 第${sessionSeq}次采集`;
@@ -86,7 +95,7 @@ export function NoteInsertDialog({
     if (!selectedNoteId || busy) return;
     setBusy(true);
     try {
-      await appendToNote(selectedNoteId, content, sessionLabel);
+      await appendToNote(selectedNoteId, activeContent, sessionLabel);
       const note = existingNotes.find((n) => n.id === selectedNoteId);
       onDone(`已追加到「${note?.title ?? '笔记'}」`);
     } catch (err) {
@@ -95,14 +104,14 @@ export function NoteInsertDialog({
     } finally {
       setBusy(false);
     }
-  }, [selectedNoteId, busy, appendToNote, content, sessionLabel, existingNotes, onDone]);
+  }, [selectedNoteId, busy, appendToNote, activeContent, sessionLabel, existingNotes, onDone]);
 
   // 创建新笔记
   const handleCreate = useCallback(async () => {
     if (busy) return;
     setBusy(true);
     try {
-      const fullContent = `## ${sessionLabel}\n\n${content}`;
+      const fullContent = `## ${sessionLabel}\n\n${activeContent}`;
       await createCourseNote(newNoteTitle, fullContent);
       onDone(`已创建笔记「${newNoteTitle}」`);
     } catch (err) {
@@ -111,13 +120,13 @@ export function NoteInsertDialog({
     } finally {
       setBusy(false);
     }
-  }, [busy, content, sessionLabel, newNoteTitle, createCourseNote, onDone]);
+  }, [busy, activeContent, sessionLabel, newNoteTitle, createCourseNote, onDone]);
 
   // 复制到剪贴板
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(content);
+    await navigator.clipboard.writeText(activeContent);
     onDone('已复制到剪贴板');
-  }, [content, onDone]);
+  }, [activeContent, onDone]);
 
   const selectedNote = existingNotes.find((n) => n.id === selectedNoteId);
 
@@ -137,10 +146,30 @@ export function NoteInsertDialog({
         </div>
 
         <div className="px-5 py-4 space-y-4">
+          {/* 版本切换：AI 整理版 / 原始转写版（P0 批量插入方案 B） */}
+          {hasRawToggle && (
+            <div className="flex items-center gap-1 p-1 rounded-kb-md bg-bg-secondary/70 border border-border/20 w-fit">
+              <button
+                onClick={() => setUseRaw(false)}
+                className={cn('px-2.5 py-1 rounded-kb-sm text-[11px] font-medium transition-all',
+                  !useRaw ? 'bg-bg-elevated text-brand-600 shadow-kb-xs' : 'text-text-tertiary hover:text-text-secondary')}
+              >
+                AI 整理版
+              </button>
+              <button
+                onClick={() => setUseRaw(true)}
+                className={cn('px-2.5 py-1 rounded-kb-sm text-[11px] font-medium transition-all',
+                  useRaw ? 'bg-bg-elevated text-brand-600 shadow-kb-xs' : 'text-text-tertiary hover:text-text-secondary')}
+              >
+                原始转写
+              </button>
+            </div>
+          )}
+
           {/* 内容预览摘要 */}
           <div className="px-3 py-2.5 rounded-kb-md bg-bg-secondary/60 border border-border/20 max-h-24 overflow-y-auto">
             <p className="text-b3 text-text-tertiary leading-relaxed line-clamp-3">
-              {content.slice(0, 200)}{content.length > 200 ? '...' : ''}
+              {activeContent.slice(0, 200)}{activeContent.length > 200 ? '...' : ''}
             </p>
           </div>
 

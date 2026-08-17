@@ -9,7 +9,7 @@
  * rows sorted by timestamp; edits stay available after the session ends.
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { BrainCircuit, Camera, Mic, Volume2, Minus, Anchor, Star, Pencil, Check, X } from 'lucide-react';
+import { BrainCircuit, Camera, Mic, Volume2, Minus, Anchor, Star, Pencil, Check, X, Circle, CheckCircle2, FilePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 // 毫秒时间戳 → MM:SS（相对会话起始时间，D12 收敛至 lib/utils/time）
 import { formatSessionElapsed as formatRelativeTime } from '@/lib/utils/time';
@@ -42,6 +42,8 @@ interface UnifiedTimelineProps {
   onEditTranscript?: (id: string, newText: string) => void;
   /** P1-4：说话人循环标注回调（无 → 说话人A → 说话人B → 无） */
   onCycleSpeaker?: (id: string) => void;
+  /** 批量插入笔记回调：勾选转写行后拼接 Markdown（带 [HH:MM:SS] 时间戳）上抛 */
+  onInsertToNote?: (markdown: string) => void;
 }
 
 /** 事件类型 → 图标/文案/配色 */
@@ -74,12 +76,14 @@ type Row =
   | { kind: 'text'; ts: number; text: TranscriptEntry }
   | { kind: 'anchor'; ts: number; label?: string };
 
-export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], partialText, isActive, onEditTranscript, onCycleSpeaker }: UnifiedTimelineProps) {
+export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], partialText, isActive, onEditTranscript, onCycleSpeaker, onInsertToNote }: UnifiedTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastCountRef = useRef(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  /** 批量插入：勾选中的转写行 id 集合（课后可用，采集中禁用） */
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const timeline = bundle.timeline ?? [];
   const keyframes = bundle.keyframes ?? [];
@@ -135,6 +139,48 @@ export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], par
     setEditText('');
   }, []);
 
+  // ── 批量插入：勾选 / 拼接 Markdown / 上抛 ──
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  // 列表变化（FIFO 截断/会话切换）时剔除失效勾选 id，防止计数失实与按钮静默失效
+  useEffect(() => {
+    if (selectedIds.size === 0) return;
+    const valid = new Set(liveTranscripts.map((t) => t.id));
+    setSelectedIds((prev) => {
+      const next = new Set([...prev].filter((id) => valid.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [liveTranscripts, selectedIds.size]);
+
+  /** 勾选转写行 → 带 [HH:MM:SS] 时间戳的 Markdown（修正后文本优先） */
+  const buildSelectedMarkdown = useCallback((): string => {
+    return liveTranscripts
+      .filter((t) => selectedIds.has(t.id))
+      .map((t) => {
+        const time = new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        return `[${time}] ${t.editedText ?? t.text}`;
+      })
+      .join('\n\n');
+  }, [liveTranscripts, selectedIds]);
+
+  const insertSelectedToNote = useCallback(() => {
+    if (selectedIds.size === 0 || !onInsertToNote) return;
+    const markdown = buildSelectedMarkdown();
+    if (markdown) {
+      onInsertToNote(markdown);
+      // 插入成功后清空勾选，防止重复点击重复插入相同内容
+      setSelectedIds(new Set());
+    }
+  }, [selectedIds.size, onInsertToNote, buildSelectedMarkdown]);
+
+  const canSelect = !isActive && !!onInsertToNote;
+
   const estimatedMinutes = Math.ceil((keyframes.length * 2 + audioSegments.length * 1.5) / 60);
 
   const renderRow = (row: Row, idx: number) => {
@@ -188,7 +234,22 @@ export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], par
       }
 
       return (
-        <div key={t.id} className="flex gap-2 p-2 rounded-kb-sm transition-colors hover:bg-bg-tertiary/30 group">
+        <div key={t.id} className={cn('flex gap-2 p-2 rounded-kb-sm transition-colors group',
+          selectedIds.has(t.id) ? 'bg-brand-50/40' : 'hover:bg-bg-tertiary/30')}>
+          {canSelect && (
+            <button
+              onClick={() => toggleSelect(t.id)}
+              className={cn('flex-shrink-0 mt-0.5 p-0.5 rounded-kb-sm transition-all',
+                selectedIds.has(t.id)
+                  ? 'text-brand-500'
+                  : 'text-text-quaternary opacity-0 group-hover:opacity-100 hover:text-brand-500')}
+              title={selectedIds.has(t.id) ? '取消勾选' : '勾选后插入笔记'}
+            >
+              {selectedIds.has(t.id)
+                ? <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={1.5} />
+                : <Circle className="w-3.5 h-3.5" strokeWidth={1.5} />}
+            </button>
+          )}
           <span className="text-[10px] text-text-tertiary flex-shrink-0 mt-0.5 tabular-nums">{time}</span>
           <Mic className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-emerald-500/70" strokeWidth={1.5} />
           {/* P1-4 说话人标注（飞书式手动重新识别；课后点击循环标注） */}
@@ -301,6 +362,32 @@ export function UnifiedTimeline({ bundle, liveTranscripts, autoAnchors = [], par
 
       {/* P1-9 实时截图流：最近 6 帧缩略横条（识别过程可见性） */}
       <RecentKeyframesStrip keyframes={keyframes} />
+
+      {/* 批量插入操作栏：课后勾选转写行 → 拼接 Markdown 插入笔记 */}
+      {canSelect && (
+        <div className="px-3 py-1.5 border-t border-border/20 flex items-center justify-between bg-bg-secondary/40">
+          <span className="text-[10px] text-text-tertiary">
+            {selectedIds.size > 0 ? (
+              <>已勾选 <strong className="text-brand-600">{selectedIds.size}</strong> 句转写</>
+            ) : (
+              '勾选转写行后可批量插入笔记（修正后文本优先）'
+            )}
+          </span>
+          <button
+            onClick={insertSelectedToNote}
+            disabled={selectedIds.size === 0}
+            className={cn(
+              'inline-flex items-center gap-1 px-2.5 py-1 rounded-kb-sm text-[11px] font-medium transition-all active:scale-95',
+              selectedIds.size > 0
+                ? 'bg-brand-600 text-white hover:bg-brand-700 shadow-kb-sm'
+                : 'bg-bg-tertiary/40 text-text-tertiary cursor-not-allowed',
+            )}
+          >
+            <FilePlus className="w-3.5 h-3.5" strokeWidth={1.5} />
+            插入笔记
+          </button>
+        </div>
+      )}
 
       {/* 底部统计栏 */}
       <div className={cn(

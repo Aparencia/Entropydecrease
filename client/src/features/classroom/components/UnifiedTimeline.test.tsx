@@ -3,8 +3,8 @@
  * @ai-context: 验证时间轴事件与实时转写按时间戳合并排序的正确性，
  * 以及空态/实时行渲染。纯 jsdom 渲染，不依赖 Electron。
  */
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { UnifiedTimeline } from './UnifiedTimeline';
 
 const baseBundle = {
@@ -88,5 +88,101 @@ describe('UnifiedTimeline 合并排序', () => {
       />,
     );
     expect(screen.getByText('正在识别这句…')).toBeTruthy();
+  });
+});
+
+describe('UnifiedTimeline 批量插入', () => {
+  const transcripts = [
+    { id: 't1', text: '原始转写一', timestamp: 6000 },
+    { id: 't2', text: '原始转写二', editedText: '修正后的转写二', timestamp: 12000 },
+  ];
+
+  it('课后（非采集中）展示勾选框与插入笔记操作栏', () => {
+    render(
+      <UnifiedTimeline bundle={baseBundle} liveTranscripts={transcripts} isActive={false} onInsertToNote={() => {}} />,
+    );
+    // 操作栏提示与按钮可见
+    expect(screen.getByText(/勾选转写行后可批量插入笔记/)).toBeTruthy();
+    expect(screen.getByText('插入笔记')).toBeTruthy();
+  });
+
+  it('采集中不展示勾选与插入操作栏（避免干扰实时显示）', () => {
+    render(
+      <UnifiedTimeline bundle={baseBundle} liveTranscripts={transcripts} isActive onInsertToNote={() => {}} />,
+    );
+    expect(screen.queryByText('插入笔记')).toBeNull();
+  });
+
+  it('未提供 onInsertToNote 时不展示插入操作栏', () => {
+    render(<UnifiedTimeline bundle={baseBundle} liveTranscripts={transcripts} isActive={false} />);
+    expect(screen.queryByText('插入笔记')).toBeNull();
+  });
+
+  it('勾选转写行后插入：拼接带 [HH:MM:SS] 时间戳的 Markdown，修正后文本优先', () => {
+    const onInsert = vi.fn();
+    render(
+      <UnifiedTimeline bundle={baseBundle} liveTranscripts={transcripts} isActive={false} onInsertToNote={onInsert} />,
+    );
+
+    // 勾选两行（行首圆形勾选按钮，title 提示）
+    const checkboxes = screen.getAllByTitle('勾选后插入笔记');
+    expect(checkboxes.length).toBe(2);
+    fireEvent.click(checkboxes[0]);
+    fireEvent.click(checkboxes[1]);
+    // 操作栏计数（"已勾选 <strong>N</strong> 句转写"：getByText 只拼直接文本子节点，
+    // strong 内数字被丢弃，故直接断言操作栏 DOM 文本）
+    const bar = document.querySelector('[class*="border-t"]');
+    expect(bar?.textContent).toContain('已勾选');
+    expect(bar?.textContent).toContain('2');
+    expect(bar?.textContent).toContain('句转写');
+
+    fireEvent.click(screen.getByText('插入笔记'));
+    expect(onInsert).toHaveBeenCalledTimes(1);
+
+    const markdown = onInsert.mock.calls[0][0] as string;
+    // 每行带 [HH:MM:SS] 时间戳前缀，修正后文本优先（t2 用 editedText）
+    expect(markdown).toMatch(/^\[\d{2}:\d{2}:\d{2}\] 原始转写一$/m);
+    expect(markdown).toMatch(/\[\d{2}:\d{2}:\d{2}\] 修正后的转写二$/m);
+    expect(markdown).not.toContain('原始转写二');
+  });
+
+  it('未勾选任何行时插入按钮禁用', () => {
+    const onInsert = vi.fn();
+    render(
+      <UnifiedTimeline bundle={baseBundle} liveTranscripts={transcripts} isActive={false} onInsertToNote={onInsert} />,
+    );
+    const btn = screen.getByText('插入笔记') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+  });
+
+  it('插入成功后清空勾选（防重复点击重复插入）', () => {
+    const onInsert = vi.fn();
+    render(
+      <UnifiedTimeline bundle={baseBundle} liveTranscripts={transcripts} isActive={false} onInsertToNote={onInsert} />,
+    );
+    fireEvent.click(screen.getAllByTitle('勾选后插入笔记')[0]);
+    fireEvent.click(screen.getByText('插入笔记'));
+    expect(onInsert).toHaveBeenCalledTimes(1);
+    // 勾选已清空：操作栏回到提示态，按钮重新禁用
+    expect(screen.getByText(/勾选转写行后可批量插入笔记/)).toBeTruthy();
+    expect((screen.getByText('插入笔记') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('liveTranscripts 截断（FIFO）后失效勾选被清理，计数随之修正', () => {
+    const { rerender } = render(
+      <UnifiedTimeline bundle={baseBundle} liveTranscripts={transcripts} isActive={false} onInsertToNote={() => {}} />,
+    );
+    const boxes = screen.getAllByTitle('勾选后插入笔记');
+    fireEvent.click(boxes[0]);
+    fireEvent.click(boxes[1]);
+    const bar1 = document.querySelector('[class*="border-t"]');
+    expect(bar1?.textContent).toContain('2');
+
+    // FIFO 截断：t2 被移除 → 失效勾选自动清理，计数降至 1
+    rerender(
+      <UnifiedTimeline bundle={baseBundle} liveTranscripts={[transcripts[0]]} isActive={false} onInsertToNote={() => {}} />,
+    );
+    const bar2 = document.querySelector('[class*="border-t"]');
+    expect(bar2?.textContent).toContain('1');
   });
 });

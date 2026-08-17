@@ -32,8 +32,8 @@ type TabId = 'content' | 'notes' | 'qa';
 
 interface SessionContentViewProps {
   capture: ReturnType<typeof useClassroomCapture>;
-  /** 打开"插入笔记"弹窗（由页面层持有状态） */
-  onOpenNoteDialog: () => void;
+  /** 打开"插入笔记"弹窗（由页面层持有状态）；可选 content 覆盖默认 AI 分析结果 */
+  onOpenNoteDialog: (content?: string) => void;
 }
 
 const TAB_LABELS: Record<TabId, string> = {
@@ -58,10 +58,11 @@ export function SessionContentView({ capture, onOpenNoteDialog }: SessionContent
     }
   }, [isSkillKind]);
 
-  // 问答上下文：拼接各路径转写文本（fine 段 + smart 实时转录）
+  // 问答上下文：拼接各路径转写文本（fine 段 + smart 实时转录；
+  // smart 优先取用户修正后文本（editedText），保证修正流入问答上下文）
   const qaTranscript = capture.capturePath === 'fine'
     ? capture.segments.map((s) => s.text).join('\n')
-    : capture.liveTranscripts.map((t) => t.text).join('\n');
+    : capture.liveTranscripts.map((t) => t.editedText ?? t.text).join('\n');
 
   const notesTabVisible = capture.isAnalyzing || !!capture.analysisResult || !!capture.analysisError;
   const qaTabVisible = qaTranscript.trim().length > 0;
@@ -139,6 +140,7 @@ export function SessionContentView({ capture, onOpenNoteDialog }: SessionContent
                   isActive={capture.status === 'capturing' && (capture.mode === 'audio' || capture.mode === 'mixed')}
                   onEditTranscript={capture.handleEditTranscript}
                   onCycleSpeaker={capture.handleCycleSpeaker}
+                  onInsertToNote={(markdown) => onOpenNoteDialog(markdown)}
                 />
               )}
             </>
@@ -149,14 +151,8 @@ export function SessionContentView({ capture, onOpenNoteDialog }: SessionContent
               segments={capture.segments}
               selectedIds={capture.selectedIds}
               onToggleSelect={capture.handleToggleSelect}
-              onInsertSelected={() => {
-                const texts = capture.segments.filter((s) => capture.selectedIds.has(s.id)).map((s) => s.text).join('\n\n');
-                if (texts) navigator.clipboard.writeText(texts);
-              }}
-              onInsertAll={() => {
-                const texts = capture.segments.map((s) => s.text).join('\n\n');
-                if (texts) navigator.clipboard.writeText(texts);
-              }}
+              onInsertSelected={(markdown) => onOpenNoteDialog(markdown)}
+              onInsertAll={(markdown) => onOpenNoteDialog(markdown)}
             />
           )}
 

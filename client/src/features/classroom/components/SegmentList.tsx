@@ -16,8 +16,9 @@ interface SegmentListProps {
   segments: ExtractedSegment[];
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
-  onInsertSelected: () => void;
-  onInsertAll: () => void;
+  /** 插入选中：父级拼 Markdown 后回调（打开笔记插入弹窗） */
+  onInsertSelected: (markdown: string) => void;
+  onInsertAll: (markdown: string) => void;
 }
 
 export function SegmentList({ segments, selectedIds, onToggleSelect, onInsertSelected, onInsertAll }: SegmentListProps) {
@@ -26,17 +27,32 @@ export function SegmentList({ segments, selectedIds, onToggleSelect, onInsertSel
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [segments.length]);
 
+  /** 拼接选中/全部片段为 Markdown（带 [HH:MM:SS] 时间戳） */
+  const buildMarkdown = (list: ExtractedSegment[]): string =>
+    list
+      .map((s) => {
+        const time = new Date(s.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        return `[${time}] ${s.text}`;
+      })
+      .join('\n\n');
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/20">
         <span className="text-b2 font-medium text-text-secondary">提取结果 ({segments.length})</span>
         <div className="flex items-center gap-2">
-          <button onClick={onInsertSelected} disabled={selectedIds.size === 0}
+          <button onClick={() => {
+            const md = buildMarkdown(segments.filter((s) => selectedIds.has(s.id)));
+            if (md) onInsertSelected(md);
+          }} disabled={selectedIds.size === 0}
             className={cn('inline-flex items-center gap-1 px-2.5 py-1.5 rounded-kb-sm text-b3 font-medium transition-all',
               selectedIds.size > 0 ? 'bg-brand-50 text-brand-600 hover:bg-brand-100' : 'text-text-tertiary cursor-not-allowed')}>
             <Plus className="w-3.5 h-3.5" strokeWidth={2} /> 插入选中
           </button>
-          <button onClick={onInsertAll} disabled={segments.length === 0}
+          <button onClick={() => {
+            const md = buildMarkdown(segments);
+            if (md) onInsertAll(md);
+          }} disabled={segments.length === 0}
             className={cn('inline-flex items-center gap-1 px-2.5 py-1.5 rounded-kb-sm text-b3 font-medium transition-all',
               segments.length > 0 ? 'bg-bg-secondary text-text-secondary hover:bg-bg-tertiary' : 'text-text-tertiary cursor-not-allowed')}>
             <ListPlus className="w-3.5 h-3.5" strokeWidth={2} /> 全部插入
