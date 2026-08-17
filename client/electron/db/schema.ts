@@ -7,7 +7,7 @@
 import type Database from 'better-sqlite3';
 import { logger } from '../logger.js';
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 export const SCHEMA_DDL = /* sql */ `
 CREATE TABLE IF NOT EXISTS pomodoro_sessions (
@@ -266,7 +266,8 @@ CREATE TABLE IF NOT EXISTS licenses (
   machine_id TEXT,
   activated_at TEXT,
   expires_at TEXT,
-  synced_at TEXT
+  synced_at TEXT,
+  quota_balance INTEGER
 );
 CREATE TABLE IF NOT EXISTS invite_codes (
   id TEXT PRIMARY KEY,
@@ -356,6 +357,12 @@ export function initializeSchema(db: Database.Database): void {
 
   // v10 迁移：内测身份/激活码/邀请码表（beta_profile/licenses/invite_codes）
   // 表 DDL 已包含在 SCHEMA_DDL 中（CREATE IF NOT EXISTS 幂等），此处无需额外操作
+
+  // v11 迁移：licenses 表新增 quota_balance（AI 额度包剩余次数；存量库条件 ALTER）
+  if (!alterTableAddColumn(db, 'ALTER TABLE licenses ADD COLUMN quota_balance INTEGER')) {
+    logger.error('[Schema] v11 迁移失败，不设置 user_version，下次启动重试');
+    return;
+  }
 
   db.pragma(`user_version = ${SCHEMA_VERSION}`);
 }

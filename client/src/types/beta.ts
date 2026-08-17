@@ -71,8 +71,11 @@ export interface BetaProfile {
 // 激活码（licenses）
 // ============================================================
 
-/** 激活码类型 */
-export type LicenseType = 'pro' | 'lifetime' | 'snd1' | 'thm1';
+/** 激活码类型（会员时长 + AI 额度包 + 兼容旧内容包） */
+export type LicenseType =
+  | 'pro' | 'lifetime' | 'snd1' | 'thm1'
+  | 'mem1' | 'mem7' | 'mem30' | 'mem90' | 'years'
+  | 'ai50' | 'ai200' | 'ai500' | 'aiinf';
 
 /** 激活码状态 */
 export type LicenseStatus = 'active' | 'expired' | 'revoked';
@@ -88,6 +91,8 @@ export interface License {
   activatedAt?: string;    // ISO 8601
   expiresAt?: string;      // ISO 8601
   syncedAt?: string;       // ISO 8601
+  /** AI 额度包剩余次数（-1=不限量；非额度包为空） */
+  quotaBalance?: number;
 }
 
 // ============================================================
@@ -127,6 +132,8 @@ export interface QuotaInfo {
   costLimit: number;
   tier: UserTier;
   expiresAt?: string;    // 服务端权威到期时间（跨设备同步）
+  /** AI 额度包剩余次数（无额度包 0；AIINF 无限 -1） */
+  quotaBalance?: number;
 }
 
 // ============================================================

@@ -45,6 +45,8 @@ class ActivateResponse(BaseModel):
     expires_at: str | None = None
     content_unlocks: list[str] = []
     message: str = ""
+    # AI 额度包充值次数（AIINF=-1 不限量；非额度包为 None）
+    quota_balance: int | None = None
 
 
 class QuotaResponse(BaseModel):
@@ -307,6 +309,7 @@ async def activate_license(
         expires_at=expires_at,
         content_unlocks=_LICENSE_CONTENT_UNLOCKS.get(license_type, []),
         message="激活成功",
+        quota_balance=quota_balance,
     )
 
 

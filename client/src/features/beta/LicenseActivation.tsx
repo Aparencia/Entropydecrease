@@ -15,15 +15,24 @@ import { useBetaStore } from '@/features/beta/betaStore';
 import { type License, type LicenseType, type UserTier } from '@/types/beta';
 import { useAuth } from '@/lib/auth/AuthContext';
 
-/** 激活码格式校验正则 */
-const LICENSE_PATTERN = /^ENTROPY-(PRO|LIFE|SND1|THM1)-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
+/** 激活码格式校验正则（会员时长 MEM 系列/YEARS/LIFE + AI 额度包 + 兼容旧 PRO/SND1/THM1） */
+const LICENSE_PATTERN = /^ENTROPY-(MEM1|MEM7|MEM30|MEM90|YEARS|LIFE|AI50|AI200|AI500|AIINF|PRO|SND1|THM1)-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
 
-/** 激活码类型 → tier 映射 */
+/** 激活码类型 → tier 映射（额度包/内容包不升级 tier） */
 const LICENSE_TYPE_TO_TIER: Record<string, UserTier> = {
-  PRO: 'pro',
+  MEM1: 'pro',
+  MEM7: 'pro',
+  MEM30: 'pro',
+  MEM90: 'pro',
+  YEARS: 'pro',
   LIFE: 'lifetime',
+  PRO: 'pro',
   SND1: 'free',    // 音效包不升级 tier
   THM1: 'free',    // 主题包不升级 tier
+  AI50: 'free',    // AI 额度包不升级 tier（充值次数）
+  AI200: 'free',
+  AI500: 'free',
+  AIINF: 'free',
 };
 
 /** 剩余天数（不足 1 天按 0 处理） */
@@ -107,6 +116,8 @@ export function LicenseActivation() {
 
       // 服务端返回的到期时间优先（池记录 duration_days 为准，客户端不再自行 30 天）
       const serverExpiresAt = typeof data.expires_at === 'string' ? data.expires_at : undefined;
+      // AI 额度包充值次数（服务端权威；AIINF=-1 不限量）
+      const quotaBalance = typeof data.quota_balance === 'number' ? data.quota_balance : undefined;
 
       // 创建本地激活码记录
       const license: License = {
@@ -119,16 +130,26 @@ export function LicenseActivation() {
         activatedAt: new Date().toISOString(),
         expiresAt: serverExpiresAt,
         syncedAt: new Date().toISOString(),
+        quotaBalance,
       };
 
       addLicense(license);
+      // 话术：额度包/内容包/会员分型提示
+      const isQuotaPack = type.startsWith('AI');
+      const quotaText = quotaBalance === -1
+        ? '不限量额度已充值！'
+        : typeof quotaBalance === 'number'
+          ? `${quotaBalance} 次 AI 额度已到账！`
+          : '';
       toast({
         type: 'success',
         message: tier === 'lifetime'
           ? '🎉 终身 Pro 已激活！感谢你的支持！'
           : tier === 'pro'
             ? '✨ Pro 订阅已激活！畅享高级 AI 体验'
-            : '内容包已激活，可在对应模块使用',
+            : isQuotaPack
+              ? `✅ ${quotaText || 'AI 额度包已激活'}`
+              : '内容包已激活，可在对应模块使用',
       });
       setCode('');
     } catch {
