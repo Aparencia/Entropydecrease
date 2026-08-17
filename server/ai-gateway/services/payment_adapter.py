@@ -193,3 +193,31 @@ async def verify_and_mark_sold(order_id: str, code: str | None = None) -> tuple[
 
     logger.info("订单已确认并标记 sold: order=%s, code=%s", order_id, sold_code[:12] + "...")
     return True, "ok"
+
+
+# ============================================================
+# 买家信息提取（Webhook 自动绑定闭环）
+# ============================================================
+
+
+def extract_buyer_info(payload: dict) -> dict:
+    """从 webhook payload 提取用户标识信息。
+
+    面包多卡密模式的自定义参数通过回调参数回传（from_user / buyer_email）。
+    缺失时返回空 dict，调用方回落手动激活码模式。
+
+    @ai-context: 用户标识不参与签名验真（平台回调原样透传），因此自动绑定
+    仅作为体验增强：绑定失败不阻塞订单确认，回落手动激活码流程兜底。
+
+    Args:
+        payload: 解析后的 webhook 请求体
+
+    Returns:
+        dict: {"user_id": str, "email": str}，均为空串表示无用户标识
+    """
+    from_user = payload.get("from_user") or ""
+    email = payload.get("buyer_email") or payload.get("email") or ""
+    return {
+        "user_id": from_user,
+        "email": email,
+    }

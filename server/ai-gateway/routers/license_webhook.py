@@ -2,9 +2,12 @@
 熵减 AI 网关 — 面包多订单通知 Webhook
 
 @ai-context: 接收支付平台订单通知：快速应答 200 → 异步验真（HMAC 签名 +
-order_id 查询确认双保险）→ 标记激活码 sold。重复通知幂等（状态更新幂等）。
+order_id 查询确认双保险）→ 标记激活码 sold → 若回调携带用户标识
+(from_user/buyer_email) 自动完成 sold → bound 绑定 + 更新 paid metadata，
+实现「支付→自动激活」闭环。重复通知幂等（状态更新幂等，已 bound 不再重复绑）。
 验真失败/平台不可用时入队 pending（内存队列 + 日志告警），由
-scripts/license-admin.mjs reconcile 人工对账兜底。
+scripts/license-admin.mjs reconcile 人工对账兜底。自动绑定失败不阻塞订单
+确认（仅记日志），用户可回落手动输入激活码流程。
 @ai-context: 本端点不要求用户登录（平台服务端回调），不注册限流（依赖验真
 而非频率限制防伪造）；原始 payload 落日志供排查。
 """
@@ -60,14 +63,36 @@ async def _handle_webhook(payload: dict[str, Any], signature: str | None = None)
     # 查询确认（主闸）：凭 order_id 主动查询订单真实状态
     ok, reason = await payment_adapter.verify_and_mark_sold(order_id, code)
 
-    if ok:
-        return {"code": 200, "message": "ok"}
-    if sig_ok and reason.startswith("订单未支付"):
-        # 签名有效但订单未支付：正常拒绝，不入队（不是系统故障）
-        return {"code": 200, "message": reason}
-    # 查询失败/平台不可用/验真失败：入队待对账，先应答 200 避免重试风暴
-    _enqueue_pending(order_id, reason)
-    return {"code": 200, "message": "accepted"}
+    if not ok:
+        if sig_ok and reason.startswith("订单未支付"):
+            # 签名有效但订单未支付：正常拒绝，不入队（不是系统故障）
+            return {"code": 200, "message": reason}
+        # 查询失败/平台不可用/验真失败：入队待对账，先应答 200 避免重试风暴
+        _enqueue_pending(order_id, reason)
+        return {"code": 200, "message": "accepted"}
+
+    # ✅ 订单确认 sold 成功后，尝试自动绑定用户（支付→激活闭环）
+    buyer = payment_adapter.extract_buyer_info(payload)
+    if buyer.get("user_id"):
+        from services.supabase_adapter import auto_bind_license
+
+        bound_ok = await auto_bind_license(code, buyer["user_id"])
+        if bound_ok:
+            logger.info("Webhook 自动绑定成功: code=%s, user=%s", (code or "")[:12] + "...", buyer["user_id"])
+        else:
+            logger.warning("Webhook 自动绑定失败（状态非 sold 或绑定失败）: code=%s", (code or "")[:12] + "...")
+    elif buyer.get("email"):
+        # 通过邮箱查询 user_id 后尝试自动绑定
+        from services.supabase_adapter import auto_bind_license, get_user_by_email
+
+        user = await get_user_by_email(buyer["email"])
+        user_id = (user or {}).get("id") or (user or {}).get("user_id")
+        if user_id:
+            bound_ok = await auto_bind_license(code, user_id)
+            if bound_ok:
+                logger.info("Webhook 通过 email 自动绑定成功: code=%s, user=%s", code[:12] + "...", user_id)
+
+    return {"code": 200, "message": "ok"}
 
 
 @router.post("/webhook")

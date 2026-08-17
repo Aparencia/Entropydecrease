@@ -7,6 +7,7 @@
 - 幂等：重复通知仍 200（不重复入队不报错）
 - 降级：查询失败 → 入队 pending，响应 200
 - 订单未支付（签名有效时）→ 正常拒绝不入队
+- 自动绑定：携带 from_user → sold → bound + paid metadata；无用户标识 → 仅 sold
 """
 
 import hashlib
@@ -145,3 +146,77 @@ class TestWebhookFlow:
 
         result = await _handle_webhook({})
         assert result["code"] == 400
+
+
+class TestAutoBind:
+    """webhook 自动绑定用户（支付→激活闭环）"""
+
+    @pytest.mark.asyncio
+    async def test_webhook_with_from_user_auto_binds(self):
+        """携带 from_user 的 webhook 自动完成 sold → bound + paid metadata"""
+        from routers.license_webhook import _handle_webhook
+        from services import payment_adapter, supabase_adapter
+
+        _seed_pool()
+        payment_adapter._seed_mock_order("MB-2001", "ENTROPY-PRO-AAAA-BBBB", status="paid")
+
+        result = await _handle_webhook({
+            "order_id": "MB-2001",
+            "code": "ENTROPY-PRO-AAAA-BBBB",
+            "from_user": "user-123",
+        })
+        assert result["code"] == 200
+        assert result["message"] == "ok"
+
+        # 自动绑定：sold → bound
+        row = supabase_adapter._mock_pool["ENTROPY-PRO-AAAA-BBBB"]
+        assert row["status"] == "bound"
+        assert row["bound_user_id"] == "user-123"
+        assert row["machine_id"] == "auto-webhook"
+
+        # paid metadata 已更新（mock 模式直接存 paid dict：tier/expires_at/updated_at）
+        meta = supabase_adapter._mock_metadata.get("user-123")
+        assert meta is not None
+        assert meta["tier"] == "pro"
+        assert meta["expires_at"] is not None
+
+    @pytest.mark.asyncio
+    async def test_webhook_without_from_user_no_bind(self):
+        """无用户标识的 webhook 仅标记 sold，不自动绑定（兼容手动激活码）"""
+        from routers.license_webhook import _handle_webhook
+        from services import payment_adapter, supabase_adapter
+
+        _seed_pool()
+        payment_adapter._seed_mock_order("MB-2002", "ENTROPY-PRO-AAAA-BBBB", status="paid")
+
+        result = await _handle_webhook({
+            "order_id": "MB-2002",
+            "code": "ENTROPY-PRO-AAAA-BBBB",
+        })
+        assert result["code"] == 200
+
+        # 仅 sold，未绑定（mock 记录中 bound_user_id/machine_id 保持 None）
+        row = supabase_adapter._mock_pool["ENTROPY-PRO-AAAA-BBBB"]
+        assert row["status"] == "sold"
+        assert row["bound_user_id"] is None
+        assert row["machine_id"] is None
+
+    @pytest.mark.asyncio
+    async def test_webhook_with_unknown_email_no_bind(self):
+        """携带 email 但未匹配到用户 → 跳过绑定不崩溃（回落手动激活）"""
+        from routers.license_webhook import _handle_webhook
+        from services import payment_adapter, supabase_adapter
+
+        _seed_pool()
+        payment_adapter._seed_mock_order("MB-2003", "ENTROPY-PRO-AAAA-BBBB", status="paid")
+
+        result = await _handle_webhook({
+            "order_id": "MB-2003",
+            "code": "ENTROPY-PRO-AAAA-BBBB",
+            "buyer_email": "buyer@example.com",
+        })
+        assert result["code"] == 200
+
+        row = supabase_adapter._mock_pool["ENTROPY-PRO-AAAA-BBBB"]
+        assert row["status"] == "sold"
+        assert row["bound_user_id"] is None
