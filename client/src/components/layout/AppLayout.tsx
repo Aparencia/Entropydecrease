@@ -18,6 +18,7 @@ import { SpatialNav } from '@/lib/3d/navigation/SpatialNav';
 import { MobileNavGrid } from '@/lib/3d/scenes/MobileNavGrid';
 import { FunctionalOverlay } from '@/components/overlay/FunctionalOverlay';
 import { useOrbitalStore, routeToModuleId } from '@/lib/3d/navigation/OrbitalStore';
+import { resolveHotkeyRoute, resolveHotkeyLabel } from '@/lib/navigation/hotkeys';
 import { OnboardingOverlay } from '@/components/onboarding/OnboardingOverlay';
 import { ModuleTourToast } from '@/components/onboarding/ModuleTourToast';
 import { HelpCenter } from '@/components/onboarding/HelpCenter';
@@ -82,6 +83,9 @@ export default function AppLayout() {
   const syncWithRoute = useOrbitalStore((s) => s.syncWithRoute);
   const openHelp = useOnboardingStore((s) => s.openHelp);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
+  /** 数字键快捷导航视觉反馈：按下的模块标签（500ms 后清除，浮层提示） */
+  const [hotkeyFlash, setHotkeyFlash] = useState<string | null>(null);
+  const hotkeyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { sync } = useSync();
   const { shouldDegrade3D } = useRuntimeEnv();
   // 性能模式：静谧(low)档全局减弱 Framer Motion 动画（transform/layout 动画直接到位）
@@ -157,21 +161,21 @@ export default function AppLayout() {
         }
       }
 
-      // 数字键 0-7 快捷导航（需无修饰键）
+      // 数字键 0-9 快捷导航（需无修饰键）
+      // 映射表见 lib/navigation/hotkeys.ts（0 设置/1 首页/2 课堂/3 笔记/4 番茄钟/5 费曼/6 闪卡/7 灵感/8 星座/9 充值）
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-        const moduleKeys: Record<string, string> = {
-          '1': '/', '2': '/pomodoro', '3': '/notes',
-          '4': '/flashcards', '5': '/feynman', '6': '/inspiration',
-          '7': '/classroom', '8': '/constellation', '0': '/settings',
-        };
-        if (moduleKeys[e.key]) {
-          const route = moduleKeys[e.key];
+        const route = resolveHotkeyRoute(e.key);
+        if (route) {
           // 显式调用 enterModule：同路由 navigate 无效时仍能触发相位迁移（修复 Esc 后重复按键无响应）
-          // 使用 routeToModuleId 统一映射：对非 MODULE_POSITIONS 成员（如 /settings）
+          // 使用 routeToModuleId 统一映射：对非 MODULE_POSITIONS 成员（如 /settings、/upgrade）
           // 也能正确调用 enterModule，避免 navigate 同路由无变化时相位无法恢复
           const modId = routeToModuleId(route);
           if (modId) enterModule(modId);
           navigate(route);
+          // 视觉反馈：500ms 浮层提示（导航高亮的轻量替代，3D 场景相位迁移即主反馈）
+          if (hotkeyTimerRef.current) clearTimeout(hotkeyTimerRef.current);
+          setHotkeyFlash(resolveHotkeyLabel(e.key));
+          hotkeyTimerRef.current = setTimeout(() => setHotkeyFlash(null), 500);
         }
       }
 
@@ -182,7 +186,10 @@ export default function AppLayout() {
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (hotkeyTimerRef.current) clearTimeout(hotkeyTimerRef.current);
+    };
   }, [isInModule, enterModule, exitModule, navigate, openHelp]);
 
   return (
@@ -265,7 +272,7 @@ export default function AppLayout() {
               animate={{ opacity: 1, y: 0 }}
               className="px-6 py-3 rounded-full bg-black/30 backdrop-blur-xl border border-white/10 text-white/70 text-sm"
             >
-              点击3D物体进入模块 · 按 Esc 返回仪表盘 · 数字键 0-7 快捷跳转
+              点击3D物体进入模块 · 按 Esc 返回仪表盘 · 数字键 0-9 快捷跳转
             </motion.div>
           </div>
           {/* 浮动返回仪表盘按钮，带 tooltip（仅桌面端） */}
@@ -288,6 +295,21 @@ export default function AppLayout() {
 
       {/* 移动端底部标签栏 — 置于功能覆盖层之上，避免被 3D 场景或模块遮罩覆盖 */}
       <BottomNav />
+
+      {/* 数字键导航视觉反馈浮层（500ms 自动消失） */}
+      <AnimatePresence>
+        {hotkeyFlash && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.15 }}
+            className="fixed top-14 left-1/2 -translate-x-1/2 z-[60] px-4 py-1.5 rounded-kb-full bg-black/60 backdrop-blur-xl border border-white/10 text-white/90 text-b3 pointer-events-none"
+          >
+            已跳转 → {hotkeyFlash}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 全局组件 */}
       <QuotaNotice />
