@@ -54,7 +54,6 @@ from routers import (
     concept_precheck_router,
     import_concept_router,
     license_router,
-    license_webhook_router,
     beta_router,
     learning_plan_router,
     session_qa_router,
@@ -284,7 +283,6 @@ app.include_router(conflict_detect_router)       # N6: 概念冲突检测——�
 app.include_router(concept_precheck_router)      # E1: 概念预检——同样注册于 streaming_router 之前
 app.include_router(import_concept_router)         # 阶段 A: 知识入籍概念化——同样注册于 streaming_router 之前
 app.include_router(license_router)                # 激活码验证（POST /api/v1/license/activate）
-app.include_router(license_webhook_router)         # 面包多订单通知（POST /api/v1/license/webhook）
 app.include_router(beta_router)                   # 内测邀请 API（POST /api/v1/beta/use-invite）
 app.include_router(streaming_router)             # 流式输出（SSE，全量 AI 功能）
 app.include_router(balance_router)               # API 余额查询

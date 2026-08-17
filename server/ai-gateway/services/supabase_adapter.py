@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 # PostgREST 请求头模板（service key 绕过 RLS，仅服务端持有）
-_TIMEOUT = float(os.getenv("PAYMENT_TIMEOUT_MS", "5000")) / 1000.0
+_TIMEOUT = float(os.getenv("SUPABASE_TIMEOUT_MS", "5000")) / 1000.0
 
 
 def _config() -> tuple[str, str]:
@@ -152,8 +152,9 @@ async def bind_license(
     user_id: str,
     machine_id: str,
     expires_at: str,
+    quota_balance: int | None = None,
 ) -> bool:
-    """激活绑定：sold → bound，回填用户/设备/到期时间。"""
+    """激活绑定：sold → bound，回填用户/设备/到期时间；额度包回填 quota_balance。"""
     if _is_mock_mode():
         row = _mock_pool.get(code)
         if not row:
@@ -163,20 +164,67 @@ async def bind_license(
         row["machine_id"] = machine_id
         row["expires_at"] = expires_at
         row["activated_at"] = datetime.now(timezone.utc).isoformat()
+        if quota_balance is not None:
+            row["quota_balance"] = quota_balance
         return True
 
     now = datetime.now(timezone.utc).isoformat()
-    patch = {
+    patch: dict[str, Any] = {
         "status": "bound",
         "bound_user_id": user_id,
         "machine_id": machine_id,
         "expires_at": expires_at,
         "activated_at": now,
     }
+    if quota_balance is not None:
+        patch["quota_balance"] = quota_balance
     data = await _http_request(
         "PATCH",
         f"{_config()[0]}/rest/v1/licenses?code=eq.{code}",
         json_body=patch,
+    )
+    return bool(data)
+
+
+async def list_quota_licenses_by_user(user_id: str) -> list[dict[str, Any]]:
+    """查询用户全部额度包激活记录（type 由调用方过滤，此处返回含 quota_balance 的完整行）。"""
+    if _is_mock_mode():
+        return [
+            r for r in _mock_pool.values()
+            if r.get("bound_user_id") == user_id and r.get("quota_balance") is not None
+        ]
+
+    data = await _http_request(
+        "GET",
+        f"{_config()[0]}/rest/v1/licenses?bound_user_id=eq.{user_id}&quota_balance=not.is.null&select=*",
+    )
+    if not data:
+        return []
+    if isinstance(data, list):
+        return data
+    return [data]
+
+
+async def decrement_quota_balance(code: str, count: int) -> bool:
+    """条件扣减额度包余额（读-扣-写 + gt.0 条件防并发超扣）；AIINF(-1) 不扣。"""
+    if _is_mock_mode():
+        row = _mock_pool.get(code)
+        if not row or row.get("quota_balance", 0) <= 0:
+            return False
+        row["quota_balance"] = int(row["quota_balance"]) - count
+        return True
+
+    # 读-扣-写：先取当前余额，再带条件更新（quota_balance=gt.0 保证并发下不会扣成负数）
+    row = await get_license_by_code(code)
+    if not row:
+        return False
+    current = int(row.get("quota_balance", 0) or 0)
+    if current <= 0:
+        return False
+    data = await _http_request(
+        "PATCH",
+        f"{_config()[0]}/rest/v1/licenses?code=eq.{code}&quota_balance=gt.0",
+        json_body={"quota_balance": current - count},
     )
     return bool(data)
 

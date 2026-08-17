@@ -54,6 +54,18 @@ class QuotaResponse(BaseModel):
     cost_limit: float = 0.0
     tier: str = "free"
     expires_at: str | None = None
+    # AI 额度包剩余次数（无额度包时为 0；AIINF 无限额度为 -1）
+    quota_balance: int = 0
+
+
+class ConsumeRequest(BaseModel):
+    count: int = Field(1, ge=1, le=100, description="本次调用消耗次数（默认 1）")
+
+
+class ConsumeResponse(BaseModel):
+    success: bool
+    remaining: int = 0
+    message: str = ""
 
 
 class StatusResponse(BaseModel):
@@ -81,27 +93,67 @@ class PlanListResponse(BaseModel):
 
 
 # ============================================================
-# 套餐目录（PlanCompareModal 数据源）
+# 套餐目录（充值页数据源）
 # ============================================================
-# @ai-context: 公开套餐目录，供前端 PlanCompareModal 拉取并渲染价格/周期/
-# 配额对比；无需登录（auth.PUBLIC_PATHS 白名单）。
+# @ai-context: 公开套餐目录，供前端充值页拉取并渲染价格/周期/配额对比；
+# 无需登录（auth.PUBLIC_PATHS 白名单）。会员时长 6 档 + AI 额度包 4 档。
+# @ai-context: 额度包纯次数充值（不升级 tier）；会员含 AI 额度+模型档位+同步发布。
 
 PLANS: list[Plan] = [
+    # ── 会员时长（升级 tier）──
     Plan(
-        id="pro_monthly", name="Pro 月卡", price=12.0, period="month",
-        duration_days=30, daily_quota=80, featured=False,
+        id="mem_1d", name="Pro 体验日卡", price=1.0, period="day",
+        duration_days=1, daily_quota=80, featured=False,
         models=["基础模型", "DeepSeek"], multimodal=False, early_access=0, sync_devices=2,
     ),
     Plan(
-        id="pro_yearly", name="Pro 年卡", price=99.0, period="year",
-        duration_days=365, daily_quota=80, featured=True, badge="最受欢迎",
+        id="mem_7d", name="Pro 周卡", price=6.0, period="week",
+        duration_days=7, daily_quota=80, featured=False,
+        models=["基础模型", "DeepSeek"], multimodal=False, early_access=0, sync_devices=2,
+    ),
+    Plan(
+        id="mem_1m", name="Pro 月卡", price=12.0, period="month",
+        duration_days=30, daily_quota=80, featured=True, badge="最受欢迎",
+        models=["基础模型", "DeepSeek"], multimodal=False, early_access=0, sync_devices=2,
+    ),
+    Plan(
+        id="mem_3m", name="Pro 季卡", price=30.0, period="quarter",
+        duration_days=90, daily_quota=80, featured=False,
+        models=["基础模型", "DeepSeek"], multimodal=False, early_access=0, sync_devices=2,
+        savings="省 ¥6",
+    ),
+    Plan(
+        id="mem_1y", name="Pro 年卡", price=99.0, period="year",
+        duration_days=365, daily_quota=80, featured=False, badge="年度早鸟价",
         models=["基础模型", "DeepSeek"], multimodal=False, early_access=0, sync_devices=2,
         savings="省 ¥45",
     ),
     Plan(
-        id="lifetime", name="终身 Pro", price=199.0, period="lifetime",
+        id="mem_life", name="终身 Pro", price=199.0, period="lifetime",
         duration_days=36500, daily_quota=120, featured=False, badge="终身早鸟价",
         models=["全部模型"], multimodal=True, early_access=5, sync_devices=3,
+    ),
+    # ── AI 额度包（纯次数，不升级 tier）──
+    Plan(
+        id="ai_50", name="AI 额度包 50 次", price=5.0, period="quota",
+        duration_days=0, daily_quota=0, featured=False,
+        models=[], multimodal=False, early_access=0, sync_devices=1,
+    ),
+    Plan(
+        id="ai_200", name="AI 额度包 200 次", price=16.0, period="quota",
+        duration_days=0, daily_quota=0, featured=True, badge="超值",
+        models=[], multimodal=False, early_access=0, sync_devices=1,
+    ),
+    Plan(
+        id="ai_500", name="AI 额度包 500 次", price=35.0, period="quota",
+        duration_days=0, daily_quota=0, featured=False,
+        models=[], multimodal=False, early_access=0, sync_devices=1,
+        savings="省 ¥9",
+    ),
+    Plan(
+        id="ai_inf", name="AI 额度包 不限量", price=99.0, period="quota",
+        duration_days=0, daily_quota=0, featured=False,
+        models=[], multimodal=False, early_access=0, sync_devices=1,
     ),
 ]
 
@@ -117,12 +169,21 @@ async def get_plans():
 # ============================================================
 
 # 激活码格式：ENTROPY-{TYPE}-{XXXX}-{XXXX}
-_LICENSE_PATTERN = r"^ENTROPY-(PRO|LIFE|SND1|THM1)-[A-Z0-9]{4}-[A-Z0-9]{4}$"
+# @ai-context 类型前缀（新旧并存）：
+#   会员时长：MEM1(1天)/MEM7(7天)/MEM30(1月)/MEM90(3月)/YEARS(1年)/LIFE(终身)
+#   AI 额度包：AI50/AI200/AI500/AIINF(不限)
+#   兼容旧码：PRO(月卡)/LIFE(终身)/SND1(音效包)/THM1(主题包)
+_LICENSE_PATTERN = r"^ENTROPY-(MEM1|MEM7|MEM30|MEM90|YEARS|LIFE|AI50|AI200|AI500|AIINF|PRO|SND1|THM1)-[A-Z0-9]{4}-[A-Z0-9]{4}$"
 
-# 类型 → tier 映射（内容包不升级 tier）
+# 类型 → tier 映射（内容包/额度包不升级 tier）
 _LICENSE_TYPE_TIER = {
-    "PRO": "pro",
+    "MEM1": "pro",
+    "MEM7": "pro",
+    "MEM30": "pro",
+    "MEM90": "pro",
+    "YEARS": "pro",
     "LIFE": "lifetime",
+    "PRO": "pro",
     "SND1": "free",  # 音效包不升级 tier
     "THM1": "free",  # 主题包不升级 tier
 }
@@ -131,9 +192,18 @@ _LICENSE_TYPE_TIER = {
 _LICENSE_CONTENT_UNLOCKS = {
     "SND1": ["soundscape-v1"],
     "THM1": ["theme-pack"],
-    "PRO": [],
-    "LIFE": [],
 }
+
+# AI 额度包 → 充值次数（AIINF=-1 表示不限量，consume 不扣减）
+_LICENSE_QUOTA_BALANCE = {
+    "AI50": 50,
+    "AI200": 200,
+    "AI500": 500,
+    "AIINF": -1,
+}
+
+# 额度包类型集合（consume 扣减时只认这些）
+_QUOTA_TYPES = set(_LICENSE_QUOTA_BALANCE.keys())
 
 
 def validate_license_format(code: str) -> tuple[str, str] | None:
@@ -201,16 +271,19 @@ async def activate_license(
             message="该激活码此前已激活，有效期不变",
         )
 
-    # 4b. 计算到期时间（同类型订阅续费叠加）
+    # 4b. 计算到期时间（同类型订阅续费叠加；额度包无到期概念）
     duration_days = int(row.get("duration_days", 30))
     expires_at = compute_expires_at(
         _latest_expiry(user_rows, row.get("type")),
         duration_days,
     ).isoformat()
 
+    # 4c. 额度包：携带充值次数（AIINF=-1 不限量），不参与到期计算
+    quota_balance = _LICENSE_QUOTA_BALANCE.get(license_type)
+
     # 5. 绑定 + 写付费身份
     bound = await supabase_adapter.bind_license(
-        req.code, user_id, req.machine_id, expires_at,
+        req.code, user_id, req.machine_id, expires_at, quota_balance=quota_balance,
     )
     if not bound:
         raise HTTPException(status_code=503, detail="激活服务暂不可用，请稍后重试")
@@ -223,8 +296,8 @@ async def activate_license(
         await supabase_adapter.update_paid_metadata(user_id, paid)
 
     logger.info(
-        "激活码验证成功: user=%s, code=%s, type=%s, tier=%s, expires=%s",
-        user_id, req.code[:12] + "...", license_type, tier, expires_at,
+        "激活码验证成功: user=%s, code=%s, type=%s, tier=%s, expires=%s, quota=%s",
+        user_id, req.code[:12] + "...", license_type, tier, expires_at, quota_balance,
     )
 
     return ActivateResponse(
@@ -285,6 +358,18 @@ async def get_quota(
     if candidates:
         expires_at = max(candidates)
 
+    # AI 额度包总余额（无额度包 0；AIINF 无限 -1，与开发者 total_calls=-1 语义一致）
+    quota_balance = 0
+    quota_rows = await supabase_adapter.list_quota_licenses_by_user(user_id)
+    for r in quota_rows:
+        if r.get("type", "").upper() not in _QUOTA_TYPES or r.get("status") != "bound":
+            continue
+        balance = int(r.get("quota_balance", 0) or 0)
+        if balance == -1:
+            quota_balance = -1
+            break
+        quota_balance += max(0, balance)
+
     return QuotaResponse(
         used_calls=used_calls,
         total_calls=int(limits.get("daily", 0)),
@@ -292,7 +377,51 @@ async def get_quota(
         cost_limit=float(limits.get("cost", 0.0)),
         tier=tier,
         expires_at=expires_at,
+        quota_balance=quota_balance,
     )
+
+
+@router.post("/consume", response_model=ConsumeResponse)
+async def consume_quota(
+    req: ConsumeRequest,
+    user_id: str = Depends(verify_token),
+):
+    """
+    扣减 AI 额度包余额（每次 AI 调用成功后由客户端调用）。
+
+    规则：AIINF(-1) 不限量不扣减；有余额的额度包按余额降序扣减；
+    余额不足返回 success=False（调用方降级提示，不拦截 AI 主流程）。
+    """
+    quota_rows = [
+        r for r in await supabase_adapter.list_quota_licenses_by_user(user_id)
+        if r.get("type", "").upper() in _QUOTA_TYPES and r.get("status") == "bound"
+    ]
+    if not quota_rows:
+        return ConsumeResponse(success=False, remaining=0, message="无可用额度包")
+
+    # 不限量额度包：不扣减直接返回
+    if any(int(r.get("quota_balance", 0) or 0) == -1 for r in quota_rows):
+        return ConsumeResponse(success=True, remaining=-1, message="不限量额度")
+
+    # 按余额降序扣减（优先消耗余额最大的包）
+    for r in sorted(
+        quota_rows,
+        key=lambda x: int(x.get("quota_balance", 0) or 0),
+        reverse=True,
+    ):
+        balance = int(r.get("quota_balance", 0) or 0)
+        if balance <= 0:
+            continue
+        ok = await supabase_adapter.decrement_quota_balance(r["code"], req.count)
+        if ok:
+            # 重算剩余（被扣包用扣减前快照，防 mock 池对象引用被原地修改导致双扣）
+            remaining = 0
+            for q in quota_rows:
+                bal = balance - req.count if q["code"] == r["code"] else int(q.get("quota_balance", 0) or 0)
+                remaining += max(0, bal)
+            return ConsumeResponse(success=True, remaining=remaining, message="扣减成功")
+
+    return ConsumeResponse(success=False, remaining=0, message="额度包余额不足")
 
 
 @router.get("/status", response_model=StatusResponse)
