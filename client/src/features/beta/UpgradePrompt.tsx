@@ -6,6 +6,7 @@
  * 遵循"损失厌恶"定价策略——先提示"今天已用完"而非"请付费"。
  */
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Sparkles, ChevronRight, X } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,8 @@ export function UpgradePrompt({
 }: UpgradePromptProps) {
   const { betaProfile } = useBetaStore();
   const [dismissed, setDismissed] = useState(false);
+  // 升级入口：跳转独立充值页（替代此前设置页内滚动锚点，锚点 id 缺失导致静默失效）
+  const navigate = useNavigate();
 
   if (dismissed) return null;
 
@@ -101,15 +104,11 @@ export function UpgradePrompt({
           {/* 按钮 */}
           {!isBeta && (
             <div className="flex items-center gap-2 pt-1">
-              {/* 升级 Pro 按钮 */}
+              {/* 升级 Pro 按钮：跳转独立充值页 */}
               <Button
                 variant="primary"
                 size="sm"
-                onClick={() => {
-                  // 滚动到设置页的激活码区域
-                  const el = document.getElementById('license-activation-section');
-                  el?.scrollIntoView({ behavior: 'smooth' });
-                }}
+                onClick={() => navigate('/upgrade')}
                 icon={<Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />}
               >
                 升级 Pro

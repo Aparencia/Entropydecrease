@@ -7,7 +7,7 @@
  * （服务端返回 total_calls=-1）显示 ∞ 品牌色。数据源为 useQuotaStore
  * 全局配额状态（30s 去抖拉取，429 事件强制刷新）。
  * @ai-context: Persistent AI quota pill in the titlebar — threshold-tinted
- * (amber ≥80%, red exhausted), navigates to settings on click.
+ * (amber ≥80%, red exhausted), navigates to the upgrade page on click.
  */
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -42,7 +42,7 @@ export function QuotaBadge() {
 
   return (
     <button
-      onClick={() => navigate('/settings')}
+      onClick={() => navigate('/upgrade')}
       className={cn(
         'no-drag flex items-center gap-1.5 h-6 px-2.5 mr-1 rounded-kb-full text-c1 font-medium',
         'border transition-colors',
@@ -53,7 +53,7 @@ export function QuotaBadge() {
             : 'border-border-default/60 bg-bg-elevated/60 text-text-secondary hover:text-brand-500 hover:border-brand-500/40',
       )}
       aria-label="AI 配额"
-      title="今日 AI 配额，点击查看详情"
+      title="今日 AI 配额，点击查看/升级"
     >
       <Sparkles className="w-3 h-3" strokeWidth={1.5} />
       <span>{isUnlimited ? 'AI ∞' : exhausted ? 'AI 已用完' : `AI ${remaining} 次`}</span>

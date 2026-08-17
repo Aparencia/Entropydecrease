@@ -53,8 +53,8 @@ function findParentRoute(pathname: string): string | null {
     { pattern: /^\/socratic$/, parent: '/feynman' },
     // SOP 子页面
     { pattern: /^\/sop\/editor/, parent: '/sop' },
-    // 非模块页面（settings/analytics/settling/inbox/certificate -> 仪表盘）
-    { pattern: /^\/(settings|analytics|settling|inbox|certificate)$/, parent: '/' },
+    // 非模块页面（settings/analytics/settling/inbox/certificate/upgrade -> 仪表盘）
+    { pattern: /^\/(settings|analytics|settling|inbox|certificate|upgrade)$/, parent: '/' },
   ];
 
   for (const { pattern, parent } of patterns) {
