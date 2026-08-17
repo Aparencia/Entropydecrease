@@ -1,0 +1,23 @@
+{
+  "name": "entropy-decrease-mobile",
+  "productName": "熵减",
+  "version": "0.41.0",
+  "private": true,
+  "description": "熵减 - Android/iOS Capacitor 壳（包装 client/ Web 构建产物，移动端入口）",
+  "scripts": {
+    "build:web": "cd ../client && cross-env VITE_CAPACITOR=1 npm run build",
+    "sync": "npm run build:web && npx cap sync android",
+    "apk": "npm run sync && cd android && gradlew.bat assembleDebug",
+    "dev": "npx cap run android",
+    "doctor": "npx cap doctor"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
+    "cross-env": "^10.1.0",
+    "typescript": "^5.5.0"
+  }
+}

@@ -6,6 +6,9 @@ import { writeFileSync, mkdirSync } from 'fs'
 
 // 检测 Electron 桌面端构建模式
 const isElectronBuild = !!process.env.ELECTRON_BUILD;
+// 检测 Capacitor 移动端构建模式（Android/iOS 壳包装 Web 产物，
+// 与 PWA 模式互斥：禁用 Service Worker、独立输出目录）
+const isCapacitorBuild = !!process.env.VITE_CAPACITOR;
 // PWA 部署子路径（CI 注入 VITE_PWA_BASE=/pwa；本地默认根路径 '/'）。
 // 同时控制构建 base 与 manifest start_url/scope，保证子路径部署（/pwa/）时
 // 资源路径与安装入口均指向正确位置
@@ -53,17 +56,33 @@ function electronBuildConfigPlugin(): Plugin {
   };
 }
 
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command }) => {
+  // Capacitor 构建：与 Electron 模式相同的防呆校验，防止产出「云服务尚未配置」
+  // 的静默残废安装包（Supabase 认证 / AI 网关对移动端同样必需）
+  if (isCapacitorBuild) {
+    const env = loadEnv('production', process.cwd(), '');
+    const required = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'VITE_API_BASE_URL', 'VITE_AI_GATEWAY_URL'];
+    const missing = required.filter((key) => !env[key] || env[key].includes('your-'));
+    if (missing.length > 0) {
+      throw new Error(
+        `[capacitor-build] 缺少必需环境变量: ${missing.join(', ')}，请检查 client/.env.production 是否存在且完整`,
+      );
+    }
+  }
+  return {
+  // Capacitor 壳以 https://localhost 服务 Web 产物，base 固定 '/'；
   // base 仅在 Electron 构建产物时使用 './'（file:// 协议加载需要）；
   // dev 模式必须保持 '/'——否则 Vite 预构建依赖 URL 解析异常，
   // 全部 optimizeDeps 产物持续 504，lazy 页面动态导入失败
   // （曾因 ELECTRON_BUILD=1 vite --mode test 启动 dev server 触发）
-  base: isElectronBuild && command === 'build' ? './' : pwaBasePath,
+  base: isCapacitorBuild ? '/' : (isElectronBuild && command === 'build' ? './' : pwaBasePath),
   plugins: [
     react(),
     // Electron 构建时生成 build-config.json，供主进程运行时读取环境变量
     ...(isElectronBuild ? [electronBuildConfigPlugin()] : []),
-    ...(isElectronBuild ? [] : [VitePWA({
+    // Capacitor 构建禁用 PWA 插件（WebView 内 Service Worker 会缓存旧包、
+    // 干扰原生更新），Electron/PWA 两条既有路径不受影响
+    ...(!isElectronBuild && !isCapacitorBuild ? [VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'offline.html'],
       manifest: {
@@ -158,7 +177,7 @@ export default defineConfig(({ command }) => ({
       devOptions: {
         enabled: false,
       },
-    })]),
+    })] : []),
   ],
   server: {
     port: 5173,
@@ -173,6 +192,9 @@ export default defineConfig(({ command }) => ({
     },
   },
   build: {
+    // Capacitor 构建独立输出目录（dist-capacitor），与 PWA dist 隔离，
+    // 避免 Service Worker 产物与原生壳互相污染
+    outDir: isCapacitorBuild ? 'dist-capacitor' : 'dist',
     rollupOptions: {
       output: {
         // Vite 8 使用 rolldown 作为打包引擎，其 manualChunks 仅支持函数形式，
@@ -195,4 +217,5 @@ export default defineConfig(({ command }) => ({
   optimizeDeps: {
     exclude: ['electron-updater', 'better-sqlite3', '@automerge/automerge'],
   },
-}))
+  };
+})

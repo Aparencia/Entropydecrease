@@ -1,0 +1,21 @@
+# Node
+node_modules/
+
+# Capacitor 原生工程构建产物
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/capacitor-cordova-android-plugins/build/
+android/capacitor-cordova-android-plugins/cordova-android/
+android/capacitor-cordova-android-plugins/gradle/
+
+# Web 构建产物（由 client 生成，不入库）
+dist/
+
+# 签名密钥（严禁提交）
+*.jks
+*.keystore
+key.properties

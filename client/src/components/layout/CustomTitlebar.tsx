@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Minus, Square, Maximize2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { QuotaBadge } from './QuotaBadge';
+import { isCapacitor } from '@/lib/platform/platform';
 
 /**
  * 自定义标题栏组件属性
@@ -49,6 +50,10 @@ export function CustomTitlebar({ className }: CustomTitlebarProps) {
   const handleClose = useCallback(() => {
     window.electronAPI?.windowClose();
   }, []);
+
+  // 移动端 Capacitor 壳无窗口控制：整个标题栏不渲染（系统状态栏接管），
+  // 桌面端与 Web/PWA 路径保持不变
+  if (isCapacitor()) return null;
 
   return (
     <div

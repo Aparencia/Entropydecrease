@@ -23,6 +23,7 @@ import { NoteInsertDialog } from '../components/NoteInsertDialog';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { WindowSelectCard } from '../components/WindowSelectCard';
 import { VideoImportPanel } from '../components/VideoImportPanel';
+import { MobileAssistantPanel } from '../components/MobileAssistantPanel';
 import { PathModeSelector } from '../components/PathModeSelector';
 import { SettingsCollapse } from '../components/SettingsCollapse';
 import { SonarControls } from '../components/SonarControls';
@@ -33,6 +34,8 @@ import { CourseInfoCard } from '../components/CourseInfoCard';
 import { AsrModelPrompt } from '../components/AsrModelPrompt';
 import { HotwordDialog } from '../components/HotwordDialog';
 import { SessionContentView } from '../components/SessionContentView';
+// 移动端门控：Capacitor 壳内使用原生视频知识笔记面板
+import { isCapacitor } from '@/lib/platform/platform';
 
 export default function ClassroomPage() {
   const capture = useClassroomCapture();
@@ -144,12 +147,16 @@ export default function ClassroomPage() {
                   {/* P8 视觉提取模式：写入截图 metadata.visionMode，VisionWorker 按模式提取 */}
                   <VisionModeSelector value={capture.visionMode} onChange={capture.setVisionMode} />
                 </>
+              ) : isCapacitor() ? (
+                /* Capacitor 壳：移动端原生视频知识笔记面板（导入/录屏/本地 ASR） */
+                <MobileAssistantPanel />
               ) : (
                 /* PWA：视频导入 + 抖音链接引导（录屏/网课/抖音视频 → AI 笔记） */
                 <VideoImportPanel />
               )}
-              <SettingsCollapse config={capture.config} onChange={capture.handleConfigChange} />
+              {!isCapacitor() && <SettingsCollapse config={capture.config} onChange={capture.handleConfigChange} />}
             </div>
+            {!isCapacitor() && (
             <div className="p-3 border-t border-border/20">
               <button onClick={capture.requestStart} disabled={!capture.canStart}
                 className={cn(
@@ -169,6 +176,7 @@ export default function ClassroomPage() {
                 </p>
               )}
             </div>
+            )}
           </>
         )}
       </div>

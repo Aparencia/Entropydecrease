@@ -18,6 +18,8 @@ import { AiQuotaCard } from '@/features/beta/AiQuotaCard';
 import { useBetaProfile } from '@/features/beta/hooks/useBetaProfile';
 import { UpgradePrompt } from '@/features/beta/UpgradePrompt';
 import { useTierAccess } from '@/features/beta/hooks/useTierAccess';
+// 移动端门控：隐藏桌面专属设置项（音频采集/性能诊断/快捷键均为桌面能力）
+import { isMobileNonDesktop } from '@/lib/platform/platform';
 
 // 延迟组：有网络/IPC/DB 操作的重组件
 const AIProviderSettings = lazy(() => import('./settings/AIProviderSettings'));
@@ -102,6 +104,8 @@ export default function SettingsPage() {
   useBetaProfile();
   // AI 配额信息（UpgradePrompt 展示 tier 权益与升级入口）
   const { dailyAiCalls } = useTierAccess();
+  // 移动端隐藏桌面专属设置区块（音频采集/性能诊断/快捷键）
+  const hideDesktopSettings = isMobileNonDesktop();
 
   return (
     <motion.div
@@ -140,9 +144,11 @@ export default function SettingsPage() {
         </SettingsSection>
         <SettingsSection index={3}>
           <PerformanceSettings />
-          <div className="mt-3">
-            <PerformanceDiagnostics />
-          </div>
+          {!hideDesktopSettings && (
+            <div className="mt-3">
+              <PerformanceDiagnostics />
+            </div>
+          )}
         </SettingsSection>
         <SettingsSection index={4}>
           <SoundSettings />
@@ -150,15 +156,19 @@ export default function SettingsPage() {
         <SettingsSection index={5}>
           <ModeSettings />
         </SettingsSection>
-        <SettingsSection index={6}>
-          <ShortcutSettings />
-        </SettingsSection>
+        {!hideDesktopSettings && (
+          <SettingsSection index={6}>
+            <ShortcutSettings />
+          </SettingsSection>
+        )}
         <SettingsSection index={7}>
           <FlashcardSettings />
         </SettingsSection>
-        <SettingsSection index={8}>
-          <AudioCaptureSettings />
-        </SettingsSection>
+        {!hideDesktopSettings && (
+          <SettingsSection index={8}>
+            <AudioCaptureSettings />
+          </SettingsSection>
+        )}
         <Suspense fallback={<SettingsSectionSkeleton />}>
           <SettingsSection index={9}>
             <AIProviderSettings />

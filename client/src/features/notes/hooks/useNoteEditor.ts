@@ -24,7 +24,7 @@ import { Color } from '@tiptap/extension-color';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { WikiLink } from '../components/editor/WikiLink';
 import { soundPlayer } from '@/lib/audio/SoundPlayer';
-import { compressImageForNote } from '../lib/imageCompress';
+import { insertImageFile } from '../lib/insertImage';
 import type { SaveStatus } from '../components/NoteEditHeader';
 
 const SAVE_STATUS_HIDE_DELAY_MS = 2000;
@@ -230,9 +230,17 @@ export function useNoteEditor({ noteId, rawContent, noteKey, updateNote }: UseNo
     if (!file || !editor) return;
     // 先清空 input 以便重复选择同一文件
     e.target.value = '';
-    const src = await compressImageForNote(file);
-    editor.chain().focus().setImage({ src }).run();
+    await insertImageFile(editor, file);
   }, [editor]);
 
-  return { editor, saveStatus, isDirty, debouncedSave, flushPendingSave, handleImageSelect };
+  /** 由外部 File 直接插入（Capacitor 相机/相册选取路径） */
+  const insertImageFromFile = useCallback(
+    (file: File) => {
+      if (!editor) return;
+      return insertImageFile(editor, file);
+    },
+    [editor],
+  );
+
+  return { editor, saveStatus, isDirty, debouncedSave, flushPendingSave, handleImageSelect, insertImageFromFile };
 }

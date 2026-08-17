@@ -16,6 +16,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# Capacitor 壳 Web 构建产物（VITE_CAPACITOR=1 输出，与 PWA dist 隔离）
+dist-capacitor/
 # Electron 主进程编译产物目录（electron-builder 打包输出，不提交到仓库）
 dist-electron/
 *.local

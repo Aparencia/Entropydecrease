@@ -13,7 +13,7 @@
  * 三种模板分支渲染：free=自由画布、cornell=康奈尔布局、其余=TipTap 正文
  * （todo 模板把统计置顶，其余置底）；工具栏仅在 free/cornell 外显示。
  */
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useNoteStore } from '../store/useNoteStore';
 import FreeCanvas from '../components/FreeCanvas';
@@ -44,6 +44,9 @@ import { NoteEditDialogs } from '../components/NoteEditDialogs';
 import { NoteEditBlockerDialog } from '../components/NoteEditBlockerDialog';
 import { NoteEditFallback } from '../components/NoteEditFallback';
 import { Volume2 } from 'lucide-react';
+// 移动端 Capacitor：相机/相册插图走原生选取，桌面/浏览器走隐藏 file input
+import { isCapacitor } from '@/lib/platform/platform';
+import { pickImage, readDataFile } from '@/lib/capacitor';
 
 export default function NoteEditPage() {
   const { id } = useParams<{ id: string }>();
@@ -72,7 +75,26 @@ export default function NoteEditPage() {
   const editorWrapperRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  const { editor, saveStatus, isDirty, debouncedSave, flushPendingSave, handleImageSelect } = useNoteEditor({ noteId, rawContent: fullContent, noteKey: note?.id, updateNote });
+  const { editor, saveStatus, isDirty, debouncedSave, flushPendingSave, handleImageSelect, insertImageFromFile } = useNoteEditor({ noteId, rawContent: fullContent, noteKey: note?.id, updateNote });
+
+  /**
+   * 图片选择入口：Capacitor 壳内走原生相机/相册（系统 Prompt），
+   * 桌面/浏览器维持隐藏 file input（PWA 也可用系统文件选择器）
+   */
+  const handlePickImage = useCallback(async () => {
+    if (isCapacitor()) {
+      try {
+        const picked = await pickImage('prompt');
+        if (!picked) return;
+        const file = await readDataFile(picked.fileName, 'image/jpeg');
+        await insertImageFromFile(file);
+      } catch (err) {
+        console.warn('[NoteEditPage] Capacitor 插图失败', err);
+      }
+      return;
+    }
+    imageInputRef.current?.click();
+  }, [insertImageFromFile]);
 
   // P4 截图视觉提取（隐藏 input ref / 提取中标记 / 变更处理器见 hooks/useVisionExtract）
   const { visionInputRef, visionExtracting, handleVisionExtract } = useVisionExtract(editor);
@@ -185,7 +207,7 @@ export default function NoteEditPage() {
 
       {/* 工具栏（康奈尔/自由画布/思维导图模式隐藏） */}
       {!isCornell && !isFree && !isMindmap && (
-        <EditorToolbar editor={editor} onPickImage={() => imageInputRef.current?.click()} healthContent={healthText} healthTitle={note?.title} healthTags={note?.tags} onToggleClosedBook={handleOpenClosedBook} />
+        <EditorToolbar editor={editor} onPickImage={handlePickImage} healthContent={healthText} healthTitle={note?.title} healthTags={note?.tags} onToggleClosedBook={handleOpenClosedBook} />
       )}
 
       {/* P4 AI 提取图片文字 / 信息图 / 滚书背诵 / 阅读模式 入口（独立于图片插入流程） */}
