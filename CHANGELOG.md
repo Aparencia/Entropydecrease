@@ -3,6 +3,12 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.40.1](https://github.com/Aparencia/Entropydecrease/compare/v0.40.0...v0.40.1) (2026-08-17)
+
+### 🐛 缺陷修复
+
+* **ci:** bubblewrap 构建链路三处交互/参数修复——APK 下载 404 根因 ([18c9d09](https://github.com/Aparencia/Entropydecrease/commit/18c9d097af35349365760a70fbe39b319ca7f94b))
+
 ## [0.40.0](https://github.com/Aparencia/Entropydecrease/compare/v0.39.0...v0.40.0) (2026-08-16)
 
 ### ✨ 新功能
