@@ -145,16 +145,58 @@ export async function analyzeSession(
  * 小批次关键帧增量分析，返回 Markdown 片段笔记
  * 复用现有 ai_session_analyze IPC（小批次走单 chunk 路径，本身就快）
  * @param sessionStartMs 会话开始的 epoch 毫秒，用于换算课程内相对秒数
+ * @ai-context P1-5 页级切分：批内 slide_change 帧作为新页起点逐页独立分析，
+ * 摘要粒度从"不确定的 5 帧块"细化为"确定的一页笔记"；纯板书批（无翻页）
+ * 保持单次调用不变。页内 [图:N] 在返回前重映射为批内编号，外部
+ * remapKeyframeMarkers 再映射为全局编号（精确图对齐，无需时间就近兜底）。
  */
 export async function analyzePartial(
   keyframes: KeyFrame[],
   sessionStartMs: number,
   options?: { language?: string },
 ): Promise<string> {
+  // P1-5 页级切分：slide_change 帧开启新页（页首帧即新页起始）
+  const pages: KeyFrame[][] = [];
+  let current: KeyFrame[] = [];
+  for (const kf of keyframes) {
+    if (kf.changeType === 'slide_change' && current.length > 0) {
+      pages.push(current);
+      current = [];
+    }
+    current.push(kf);
+  }
+  if (current.length > 0) pages.push(current);
+
+  // 纯板书批（无翻页）：保持单次调用，行为与拆分前一致
+  if (pages.length === 1) {
+    return analyzePage(pages[0], 0, sessionStartMs, options);
+  }
+
+  // 多页批：逐页独立分析，页内编号重映射为批内编号后拼接
+  const parts: string[] = [];
+  let batchOffset = 0;
+  for (const page of pages) {
+    const md = await analyzePage(page, batchOffset, sessionStartMs, options);
+    if (md.trim()) parts.push(md.trim());
+    batchOffset += page.length;
+  }
+  return parts.join('\n\n');
+}
+
+/**
+ * 单页组分析：调用网关 partial 分析，页内 [图:N] → 批内编号 [图:offset+N]
+ * @param pageOffsetInBatch 页组首帧在整批中的 0-based 偏移
+ */
+async function analyzePage(
+  page: KeyFrame[],
+  pageOffsetInBatch: number,
+  sessionStartMs: number,
+  options?: { language?: string },
+): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
 
   // @ai-context 时间戳以会话开始时刻为基准换算为相对秒数（relative seconds）
-  const kfPayload = keyframes.map((kf) => ({
+  const kfPayload = page.map((kf) => ({
     timestamp: Math.max(0, (kf.timestamp - sessionStartMs) / 1000),
     imageBase64: kf.imageBase64,
     changeType: kf.changeType,
@@ -163,15 +205,27 @@ export async function analyzePartial(
   const result = await window.electronAPI!.invoke('ai_session_analyze', {
     keyframes: kfPayload,
     audioSegments: [],
-    duration: keyframes.length > 0
-      ? (keyframes[keyframes.length - 1].timestamp - keyframes[0].timestamp) / 1000
+    duration: page.length > 0
+      ? (page[page.length - 1].timestamp - page[0].timestamp) / 1000
       : 0,
     mode: 'partial',
     language: options?.language,
     authToken: session?.access_token,
   }) as { content: string };
 
-  return result.content;
+  // 页内局部编号 → 批内编号（外部 remapKeyframeMarkers 继续映射到全局）
+  return remapLocalToBatch(result.content, pageOffsetInBatch, page.length);
+}
+
+/** 页内 [图:N]（1-based）→ 批内编号 [图:offset+N]；越界编号（模型幻觉）移除 */
+// 兼容半角/全角冒号（与 tipTapImageUtils 的 MARKER_RE 对齐，模型可能输出全角）
+const LOCAL_MARKER_RE = /\[图[:：](\d+)\]/g;
+function remapLocalToBatch(markdown: string, offsetInBatch: number, pageSize: number): string {
+  return markdown.replace(LOCAL_MARKER_RE, (_m, n: string) => {
+    const local = parseInt(n, 10);
+    if (local < 1 || local > pageSize) return '';
+    return `[图:${offsetInBatch + local}]`;
+  });
 }
 
 // ================================================================

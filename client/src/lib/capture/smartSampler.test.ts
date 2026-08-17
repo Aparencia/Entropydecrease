@@ -218,4 +218,63 @@ describe('SmartSampler 感知哈希去重', () => {
     expect(f2).not.toBeNull();
     expect(sampler.getKeyframes()).toHaveLength(2);
   });
+
+  it('方案 C 双通道独立去重：幻灯片帧与板书帧互不干扰', async () => {
+    const sampler = new SmartSampler();
+    // slide 帧（score 0.7）入 slide 池
+    const f1 = await sampler.processFrame(makeFrame(1, 0.7));
+    expect(f1?.changeType).toBe('slide_change');
+
+    // 相同内容的 scene 帧：board 池为空 → 不受 slide 池影响，正常捕获
+    const f2 = await sampler.processFrame(makeFrame(1, 0.5));
+    expect(f2).not.toBeNull();
+    expect(f2!.changeType).toBe('scene_change');
+    expect(sampler.getKeyframes()).toHaveLength(2);
+
+    // 再次 slide 帧：slide 池命中（距离 0 ≤ 8）→ 跳过
+    const f3 = await sampler.processFrame(makeFrame(1, 0.7));
+    expect(f3).toBeNull();
+    expect(sampler.getKeyframes()).toHaveLength(2);
+  });
+
+  it('方案 C 幻灯片帧放宽阈值：距离 3 ≤ 8 判重跳过（同页动画容忍）', async () => {
+    const sampler = new SmartSampler();
+    await sampler.processFrame(makeFrame(1, 0.7));
+    // seed3 与 seed1 距离 3：slide 阈值 8 判重（旧实现阈值 5 也判重，此处验证通道路由）
+    const f2 = await sampler.processFrame(makeFrame(3, 0.7));
+    expect(f2).toBeNull();
+    expect(sampler.getKeyframes()).toHaveLength(1);
+  });
+
+  it('方案 C 哈希池收集全部通道帧：距最旧帧近但距新帧远时不误判', async () => {
+    const nowSpy = vi.spyOn(Date, 'now');
+    const sampler = new SmartSampler();
+    nowSpy.mockReturnValue(1_000_000);
+    // 帧 1（seed1）入 board 池
+    await sampler.processFrame(makeFrame(1, 0.5));
+    // 帧 2（seed2，距离 64）入池
+    nowSpy.mockReturnValue(1_000_100);
+    await sampler.processFrame(makeFrame(2, 0.5));
+    // 帧 3（seed1 变体 seed3，距离 seed1=3、seed2=61）：与池中任一帧距离 3 > 阈值 2？
+    // scene 帧阈值 5：3 ≤ 5 → 判重跳过（若仅对比上一帧 seed2 则距离 61 会被误采）
+    nowSpy.mockReturnValue(1_000_200);
+    const f3 = await sampler.processFrame(makeFrame(3, 0.5));
+    expect(f3).toBeNull();
+    expect(sampler.getKeyframes()).toHaveLength(2);
+  });
+
+  it('方案 C 跨池去重：静态 PPT 页 15s 兜底（periodic）不再重复捕获', async () => {
+    const nowSpy = vi.spyOn(Date, 'now');
+    const sampler = new SmartSampler();
+    nowSpy.mockReturnValue(1_000_000);
+    // slide 帧（score 0.7）入 slide 池
+    const f1 = await sampler.processFrame(makeFrame(1, 0.7));
+    expect(f1?.changeType).toBe('slide_change');
+
+    // 16s 后同内容静止帧：periodic 兜底触发，跨池命中 slide 池 → 跳过（双池回归护栏）
+    nowSpy.mockReturnValue(1_016_000);
+    const f2 = await sampler.processFrame(makeFrame(1, 0, false));
+    expect(f2).toBeNull();
+    expect(sampler.getKeyframes()).toHaveLength(1);
+  });
 });

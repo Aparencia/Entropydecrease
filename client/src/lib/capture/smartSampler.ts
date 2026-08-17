@@ -12,7 +12,7 @@
  */
 
 import type { ScreenshotData, KeyFrame } from './captureTypes';
-import { computeFrameHash, hammingDistance, isSimilar } from './frameHash';
+import { computeFrameHash, hammingDistance } from './frameHash';
 
 // ================================================================
 // 配置类型
@@ -36,10 +36,14 @@ const DEFAULT_CONFIG: SmartSamplerConfig = {
   maxWidth: 1280,
 };
 
-/** 感知哈希去重阈值：与上一关键帧汉明距离 ≤ 5（64 位）视为重复帧，跳过 */
+/** 感知哈希去重阈值：与所属通道哈希池任一帧汉明距离 ≤ 阈值视为重复帧，跳过 */
 const HASH_DUP_THRESHOLD = 5;
 /** 渐进板书帧（变化触发且 0 < score < 0.3）收紧阈值：距离 ≤ 2 才跳过，避免漏采渐进内容 */
 const WRITING_HASH_DUP_THRESHOLD = 2;
+/** PPT 幻灯片帧（score ≥ 0.6）放宽阈值：距离 ≤ 8 判重，容忍同页动画/光标差异（同页多帧不再重复捕获） */
+const SLIDE_HASH_DUP_THRESHOLD = 8;
+/** 哈希池容量上限：各通道保留最近 N 帧哈希（FIFO），防止长课堂无界增长 */
+const MAX_HASH_POOL_SIZE = 50;
 /**
  * 内存上限：仅最近 N 个关键帧保留 imageBase64，更早的剥离为空串。
  * 单帧 base64 可达数百 KB，长时间采集（1h 约 240 帧）若无界持有会
@@ -56,8 +60,13 @@ export class SmartSampler {
   private readonly config: SmartSamplerConfig;
   private keyframes: KeyFrame[] = [];
   private lastCaptureTime = 0;
-  /** 上一已捕获关键帧的感知哈希，用于帧间内容去重 */
-  private lastFrameHash: bigint | null = null;
+  /**
+   * 方案 C 双通道哈希池：slide 帧（score ≥ 0.6）与板书/场景帧分池去重，
+   * 互不干扰——PPT 动画不再误触发板书通道，板书渐进内容也不被 PPT 帧吞掉。
+   * 各池 FIFO 保留最近 MAX_HASH_POOL_SIZE 帧哈希（对比旧实现的"仅上一帧"）。
+   */
+  private slideHashPool: bigint[] = [];
+  private boardHashPool: bigint[] = [];
   /**
    * P1-7 强制补帧标志：指令句命中后置真，下一帧跳过变化检测门槛
    * 直接进入捕获判定（感知哈希去重仍生效，防止静止画面重复捕获）。
@@ -131,18 +140,32 @@ export class SmartSampler {
       new Blob([frameData.imageBuffer], { type: 'image/png' }),
     );
 
-    // 感知哈希去重：与上一已捕获关键帧比较，定时兜底触发同样走此去重
+    // 感知哈希去重：与所属通道（slide/board）哈希池中所有帧比较，任一距离 ≤ 阈值视为重复
     const hash = await computeFrameHash(bitmap);
-    if (hash !== null && this.lastFrameHash !== null) {
-      // 渐进板书帧收紧跳过阈值，避免漏采渐进内容
+    if (hash !== null) {
+      const isSlideFrame = changeType === 'slide_change';
+      const pool = isSlideFrame ? this.slideHashPool : this.boardHashPool;
+      // 兜底触发帧（periodic）不信任单一通道：静态 PPT 页 15s 兜底时被分类为
+      // periodic（score≈0），若只比对 board 池会重复捕获同一页（双池回归）——两池都查
+      const candidates = changeType === 'periodic'
+        ? [...this.boardHashPool, ...this.slideHashPool]
+        : pool;
+      // 渐进板书帧收紧跳过阈值，避免漏采渐进内容；幻灯片帧放宽阈值容忍同页动画
       const isWritingChange = hasSignificantChange && changeType === 'writing';
-      const dupThreshold = isWritingChange
-        ? WRITING_HASH_DUP_THRESHOLD
-        : HASH_DUP_THRESHOLD;
-      if (isSimilar(hash, this.lastFrameHash, dupThreshold)) {
+      const dupThreshold = isSlideFrame
+        ? SLIDE_HASH_DUP_THRESHOLD
+        : isWritingChange
+          ? WRITING_HASH_DUP_THRESHOLD
+          : HASH_DUP_THRESHOLD;
+      let minDistance = Infinity;
+      for (const h of candidates) {
+        const d = hammingDistance(hash, h);
+        if (d < minDistance) minDistance = d;
+      }
+      if (minDistance <= dupThreshold) {
         console.debug(
           '[SmartSampler] 跳过帧：感知哈希重复',
-          `distance=${hammingDistance(hash, this.lastFrameHash)}`,
+          `distance=${minDistance}`,
           `dupThreshold=${dupThreshold}`,
           `writing=${isWritingChange}`,
         );
@@ -153,7 +176,7 @@ export class SmartSampler {
       }
       console.debug(
         '[SmartSampler] 感知哈希判定为新内容',
-        `distance=${hammingDistance(hash, this.lastFrameHash)}`,
+        `distance=${minDistance}`,
       );
     }
 
@@ -169,7 +192,14 @@ export class SmartSampler {
 
     this.keyframes.push(keyframe);
     this.lastCaptureTime = now;
-    if (hash !== null) this.lastFrameHash = hash;
+    // 捕获成功 → 哈希入所属通道池（FIFO 上限裁剪，防长课堂无界增长）
+    if (hash !== null) {
+      const pool = changeType === 'slide_change' ? this.slideHashPool : this.boardHashPool;
+      pool.push(hash);
+      if (pool.length > MAX_HASH_POOL_SIZE) {
+        pool.splice(0, pool.length - MAX_HASH_POOL_SIZE);
+      }
+    }
 
     // 内存上限：剥离过早关键帧的 base64（已落盘），避免长时间采集内存无界增长
     this.trimOldKeyframeImages();
@@ -186,7 +216,8 @@ export class SmartSampler {
   reset(): void {
     this.keyframes = [];
     this.lastCaptureTime = 0;
-    this.lastFrameHash = null;
+    this.slideHashPool = [];
+    this.boardHashPool = [];
     this.forceCapturePending = false;
   }
 
