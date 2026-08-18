@@ -26,7 +26,15 @@ export default defineConfig(async () => ({
       : undefined,
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      ignored: [
+        "**/src-tauri/**",
+        // 4. 编辑器/AI 工具原子保存的临时路径——chokidar 在 Windows 上对
+        //    正在被 rename/删除的临时文件执行 watch 会抛 EBUSY 直接崩掉 dev
+        //    server（如 .ClassroomPage.tsx.<pid>.<uuid>.tmpdir/xxx.tmp、
+        //    ClassroomPage.tsx.<hash>.tmp）；此类路径永不产生源码变更
+        /(^|[\\/])\..*\.tmp(dir)?([\\/].*)?$/,
+        /\.tmp$/,
+      ],
     },
   },
 }));
