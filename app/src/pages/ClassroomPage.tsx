@@ -13,6 +13,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { WindowSelectCard } from "../components/WindowSelectCard";
 import VideoImportPanel from "../components/VideoImportPanel";
+import LiveActivityPanel from "../components/LiveActivityPanel";
 import type { Note, WindowInfo, StreamingModelStatus, LiveSessionStatus, DownloadProgress, DownloadStatus } from "../types";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
@@ -27,6 +28,10 @@ export default function ClassroomPage() {
   // ── 实时捕获（v0.2.0）──
   const [liveActive, setLiveActive] = useState(false);
   const [liveSessionId, setLiveSessionId] = useState<number | null>(null);
+  // 停止过渡期（点停止 → stopped 事件到达前，右侧面板保持显示）
+  const [stopping, setStopping] = useState(false);
+  // 后台融合期（session:fusing 期间，右侧面板显示"融合中"）
+  const [fusionActive, setFusionActive] = useState(false);
   const [modelStatus, setModelStatus] = useState<StreamingModelStatus | null>(null);
   const [modelDownloading, setModelDownloading] = useState(false);
   const [modelProgress, setModelProgress] = useState<DownloadProgress | null>(null);
@@ -72,12 +77,24 @@ export default function ClassroomPage() {
         if (e.payload === "recording") {
           // 后端确认录制中：保持/恢复活动态（invoke resolve 可能更早到达）
           setLiveActive(true);
+          setStopping(false);
         } else {
           // stopped / failed：会话已结束
           setLiveActive(false);
           setLiveSessionId(null);
           setPartialText("");
+          setStopping(false);
         }
+      }),
+      // 后台融合事件（REQ-031）：面板显示"融合中"，完成后提示并回退
+      listen<number>("session:fusing", () => setFusionActive(true)),
+      listen<number>("session:fused", () => {
+        setFusionActive(false);
+        setStatus("融合完成，可到「会话」页查看融合时间轴");
+      }),
+      listen<string>("session:fusion-failed", (e) => {
+        setFusionActive(false);
+        setStatus(`融合失败（原始段保留）: ${e.payload}`);
       }),
       // 模型自动下载进度（ADR-003）
       listen<DownloadProgress>("model:download-progress", (e) => setModelProgress(e.payload)),
@@ -175,13 +192,16 @@ export default function ClassroomPage() {
 
   /** 停止实时捕获 */
   const stopLive = async () => {
+    // 停止过渡期：面板保持显示（live:status stopped 到达后由监听清除）
+    setStopping(true);
     try {
       const id = await invoke<number | null>("stop_live_session");
       setLiveActive(false);
       setLiveSessionId(null);
       setPartialText("");
-      setStatus(id ? `已停止会话 #${id}，可到「会话」页查看时间轴` : "无活动会话");
+      setStatus(id ? `已停止会话 #${id}，融合完成后可到「会话」页查看` : "无活动会话");
     } catch (e) {
+      setStopping(false);
       setLiveError(`停止失败: ${e}`);
     }
   };
@@ -363,9 +383,12 @@ export default function ClassroomPage() {
         </div>
       </div>
 
-      {/* ── 右栏：内容区（空态说明书 / 结果态笔记预览） ── */}
+      {/* ── 右栏：内容区（实时活动面板 / 笔记预览 / 空态说明书） ── */}
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        {lastNote ? (
+        {liveActive || stopping || fusionActive ? (
+          /* 活动态：实时转写流 + 画面要点流 + 状态机（简要：仅最近几条） */
+          <LiveActivityPanel />
+        ) : lastNote ? (
           /* 结果态：最近生成的笔记预览 */
           <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>

@@ -39,6 +39,14 @@ const MAX_OCR_WIDTH: u32 = 960;
 /// 强制识别一次，保证"屏幕在变但无 OCR"场景至少周期性产出（用户反馈 4/5 会话无 OCR 排查项）。
 const FORCE_OCR_INTERVAL_SECS: u64 = 15;
 
+/// 实时画面要点事件载荷（前端实时画面流，简要单行卡片）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OcrEvent {
+    pub timestamp_ms: u64,
+    pub text: String,
+}
+
 /// 屏幕采样线程入口（TD-026 修复：OCR 从会话线程移出，音频消费不再被阻塞）。
 ///
 /// @ai-context: ScreenCaptureSampler 持 COM 对象（非 Send），在本线程内创建与使用，
@@ -188,7 +196,7 @@ fn process_frame(
                     &frame, &blocks, voter, last_frame_text, last_preview, db, app, session_id, subtitle_segments,
                 );
             } else {
-                handle_full_frame(&frame, &blocks, db, session_id, last_full_texts);
+                handle_full_frame(&frame, &blocks, db, app, session_id, last_full_texts);
             }
         }
         Err(e) => eprintln!("[ScreenWorker] OCR 识别失败（下帧重试）: {}", e),
@@ -278,14 +286,16 @@ fn persist_voted_subtitle(
     let _ = app.emit("live:subtitle", text);
 }
 
-/// 全帧：画面要点落 OCR 块（低置信度过滤 + 帧间文本去重）。
+/// 全帧：画面要点落 OCR 块（低置信度过滤 + 帧间文本去重 + 实时事件推送）。
 ///
 /// @ai-context: 去重（与导入链路 same_texts 同口径）：强制 OCR 兜底会使静止画面
 ///              每 15s 重复识别——文本集合与上次完全一致时跳过落库，防要点列表刷屏。
+/// @ai-context: 落库成功即 emit live:ocr（前端实时画面流，简要单行卡片）。
 fn handle_full_frame(
     frame: &CapturedFrame,
     blocks: &[crate::types::OcrBlock],
     db: &Db,
+    app: &tauri::AppHandle,
     session_id: i64,
     last_texts: &mut Vec<String>,
 ) {
@@ -306,6 +316,10 @@ fn handle_full_frame(
                 score: block.score,
                 region: "full".to_string(),
             });
+            let _ = app.emit(
+                "live:ocr",
+                OcrEvent { timestamp_ms: frame.timestamp_ms, text: block.text.clone() },
+            );
         }
     }
     *last_texts = texts;

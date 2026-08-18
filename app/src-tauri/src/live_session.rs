@@ -290,6 +290,8 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
                             let start_ms = sentence_start_ms
                                 .take()
                                 .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
+                            // 语音定稿事件（前端实时转写流展示/计数，简要单行卡片）
+                            let _ = params.app.emit("live:asr-final", text.clone());
                             let _ = db.add_segment(&NewSessionSegment {
                                 session_id,
                                 start_ms,
@@ -318,6 +320,8 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
         let start_ms = sentence_start_ms
             .take()
             .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
+        // 尾句同样推前端（实时转写流保持完整）
+        let _ = params.app.emit("live:asr-final", text.clone());
         let _ = db.add_segment(&NewSessionSegment {
             session_id,
             start_ms,

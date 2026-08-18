@@ -132,3 +132,9 @@ export interface ImportProgress {
   done: number;
   total: number;
 }
+
+/** 实时画面要点事件载荷（Rust OcrEvent，camelCase 契约；live:ocr 事件） */
+export interface OcrEvent {
+  timestampMs: number;
+  text: string;
+}
