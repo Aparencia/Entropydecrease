@@ -45,6 +45,24 @@ fn subtitle_is_authoritative_over_asr() {
 }
 
 #[test]
+fn asr_sentence_across_multiple_subtitles_is_split_not_duplicated() {
+    // Arrange：一个 ASR 句跨 3 个字幕段 → 2 个空隙；旧实现整句复制到每个空隙（TD-024）
+    let subs = [
+        sub(0, 2000, "字幕一"),
+        sub(3000, 5000, "字幕二"),
+        sub(6000, 8000, "字幕三"),
+    ];
+    let asrs = [asr(1000, 7000, "一二三四五六七八")];
+    // Act
+    let out = merge_transcript(&subs, &asrs, GAP);
+    // Assert：补缝 2 段，文本按空隙时长比例切分，拼接等于原句（无整句重复）
+    let gaps_out: Vec<&FusedSegment> = out.iter().filter(|s| s.source == FusedSource::Asr).collect();
+    assert_eq!(gaps_out.len(), 2);
+    let joined: String = gaps_out.iter().map(|s| s.text.as_str()).collect();
+    assert_eq!(joined, "一二三四五六七八");
+}
+
+#[test]
 fn asr_fills_gap_between_subtitles() {
     // Arrange：字幕 0-2s 与 5-7s，中间 3s 空隙 ≥ gap → ASR 补缝
     let subs = [sub(0, 2000, "字幕一"), sub(5000, 7000, "字幕二")];
