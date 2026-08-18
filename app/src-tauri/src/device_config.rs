@@ -99,10 +99,13 @@ impl OcrDeviceConfig {
 /// @ai-context: best_device 来自 device_probe::select_best（Windows DXGI 枚举，
 ///              NVIDIA 候选），无候选传 None——本函数不感知具体适配器，保持全平台可测。
 /// @ai-context: CUDA EP 的 device_id 与 DXGI 枚举序不一致（ADR-009 风险项），
-///              当前固定 0；有候选即用首块 CUDA 设备。
+///              当前固定 0；多 NVIDIA 卡（nvidia_count>1）时 Auto 保守落 CPU——
+///              DXGI 选出的"最佳卡"序号无法映射到 CUDA 序号，宁可不赌（ForceGpu
+///              仍强制 device_id=0，用户显式承担）。
 pub fn decide(
     mode: OcrDeviceMode,
     best_device: Option<usize>,
+    nvidia_count: usize,
     bench: Option<BenchResult>,
 ) -> OcrBackend {
     match mode {
@@ -116,6 +119,10 @@ pub fn decide(
         }
         OcrDeviceMode::Auto => {
             let Some(_) = best_device else { return OcrBackend::Cpu };
+            // 多卡保守：DXGI 序号 ≠ CUDA 序号（ADR-009 风险），映射实现前不自动赌卡
+            if nvidia_count > 1 {
+                return OcrBackend::Cpu;
+            }
             // 校准兜底：GPU 优势 <10%（gpu_ms > cpu_ms × 0.9）→ CPU（防抖动）
             if let Some(b) = bench {
                 if b.gpu_ms > b.cpu_ms * GPU_ADVANTAGE_MIN_RATIO {
@@ -137,33 +144,49 @@ mod tests {
 
     #[test]
     fn force_cpu_ignores_device_and_bench() {
-        assert_eq!(decide(OcrDeviceMode::ForceCpu, Some(1), None), OcrBackend::Cpu);
-        assert_eq!(decide(OcrDeviceMode::ForceCpu, Some(1), Some(bench(5.0))), OcrBackend::Cpu);
+        assert_eq!(decide(OcrDeviceMode::ForceCpu, Some(1), 1, None), OcrBackend::Cpu);
+        assert_eq!(decide(OcrDeviceMode::ForceCpu, Some(1), 1, Some(bench(5.0))), OcrBackend::Cpu);
     }
 
     #[test]
     fn force_gpu_without_candidate_falls_back_cpu() {
-        assert_eq!(decide(OcrDeviceMode::ForceGpu, None, None), OcrBackend::Cpu);
+        assert_eq!(decide(OcrDeviceMode::ForceGpu, None, 0, None), OcrBackend::Cpu);
     }
 
     #[test]
     fn force_gpu_with_candidate_selects_cuda() {
         assert_eq!(
-            decide(OcrDeviceMode::ForceGpu, Some(2), None),
+            decide(OcrDeviceMode::ForceGpu, Some(2), 2, None),
             OcrBackend::Cuda { device_id: 0 }
         );
     }
 
     #[test]
     fn auto_without_candidate_is_cpu() {
-        assert_eq!(decide(OcrDeviceMode::Auto, None, None), OcrBackend::Cpu);
-        assert_eq!(decide(OcrDeviceMode::Auto, None, Some(bench(5.0))), OcrBackend::Cpu);
+        assert_eq!(decide(OcrDeviceMode::Auto, None, 0, None), OcrBackend::Cpu);
+        assert_eq!(decide(OcrDeviceMode::Auto, None, 0, Some(bench(5.0))), OcrBackend::Cpu);
     }
 
     #[test]
     fn auto_with_candidate_and_no_bench_is_cuda() {
         assert_eq!(
-            decide(OcrDeviceMode::Auto, Some(0), None),
+            decide(OcrDeviceMode::Auto, Some(0), 1, None),
+            OcrBackend::Cuda { device_id: 0 }
+        );
+    }
+
+    #[test]
+    fn auto_multi_gpu_is_conservative_cpu() {
+        // 多 NVIDIA 卡：DXGI 序号 ≠ CUDA 序号（ADR-009 风险），Auto 不赌卡 → CPU
+        assert_eq!(decide(OcrDeviceMode::Auto, Some(1), 2, None), OcrBackend::Cpu);
+        assert_eq!(decide(OcrDeviceMode::Auto, Some(1), 2, Some(bench(5.0))), OcrBackend::Cpu);
+    }
+
+    #[test]
+    fn force_gpu_ignores_multi_gpu_conservatism() {
+        // ForceGpu 用户显式强制 → 多卡也走 device_id=0
+        assert_eq!(
+            decide(OcrDeviceMode::ForceGpu, Some(1), 2, None),
             OcrBackend::Cuda { device_id: 0 }
         );
     }
@@ -171,14 +194,14 @@ mod tests {
     #[test]
     fn auto_gpu_advantage_under_ten_percent_uses_cpu() {
         // gpu 95ms > cpu 100ms×0.9=90ms → 无 10% 优势 → CPU（防抖动）
-        assert_eq!(decide(OcrDeviceMode::Auto, Some(0), Some(bench(95.0))), OcrBackend::Cpu);
+        assert_eq!(decide(OcrDeviceMode::Auto, Some(0), 1, Some(bench(95.0))), OcrBackend::Cpu);
     }
 
     #[test]
     fn auto_gpu_advantage_over_ten_percent_uses_cuda() {
         // gpu 80ms ≤ 90ms → 有优势 → Cuda
         assert_eq!(
-            decide(OcrDeviceMode::Auto, Some(0), Some(bench(80.0))),
+            decide(OcrDeviceMode::Auto, Some(0), 1, Some(bench(80.0))),
             OcrBackend::Cuda { device_id: 0 }
         );
     }

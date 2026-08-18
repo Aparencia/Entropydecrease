@@ -4,6 +4,12 @@
 //!              实际生效后端与回退原因（引擎 worker 回写）、校准基准。
 //! @ai-context: 变更下次引擎启动生效（不做热重启，避免中断进行中会话）——
 //!              "重新检测"只持久化基准，decide 在下次启动重算（UI 提示生效时机）。
+//! @ai-context: 修复（v0.4.0 发布审查）：①模式入参改 OcrDeviceMode 枚举（PascalCase
+//!              serde，消除前后端字符串契约漂移）；②配置改内存态 Arc<Mutex> 单点
+//!              read-modify-write（消除校准线程与 set_mode 的 TOCTOU 文件竞争）；
+//!              ③校准标记改 RAII guard（panic 路径不再卡死）。
+
+use std::sync::{Arc, Mutex};
 
 use tauri::State;
 
@@ -24,23 +30,19 @@ const BENCH_HEIGHT: u32 = 360;
 #[tauri::command]
 pub fn ocr_device_status(state: State<'_, AppState>) -> OcrDeviceStatus {
     let mut status = state.engines.ocr_device_status();
-    let config = OcrDeviceConfig::load(&state.ocr_device_config_path);
+    let config = state.ocr_device_config.lock().map(|c| c.clone()).unwrap_or_default();
     status.mode = config.mode;
     status.bench = config.bench;
     status
 }
 
-/// 设置 OCR 设备模式（auto/force_gpu/force_cpu）；持久化，下次引擎启动生效。
+/// 设置 OCR 设备模式（Auto/ForceGpu/ForceCpu，serde PascalCase）；持久化，下次引擎启动生效。
+///
+/// @ai-context: 入参为 OcrDeviceMode 枚举：非法值在 IPC 反序列化层即被拒绝
+///              （TD-044 修复——原 String 白名单与前端 PascalCase 契约不匹配）。
 #[tauri::command]
-pub fn ocr_device_set_mode(state: State<'_, AppState>, mode: String) -> Result<OcrDeviceStatus, String> {
-    // 入参校验（安全红线：所有 command 必须校验入参）
-    let mode = match mode.as_str() {
-        "auto" => OcrDeviceMode::Auto,
-        "force_gpu" => OcrDeviceMode::ForceGpu,
-        "force_cpu" => OcrDeviceMode::ForceCpu,
-        other => return Err(format!("无效模式: {}（可选 auto/force_gpu/force_cpu）", other)),
-    };
-    let mut config = OcrDeviceConfig::load(&state.ocr_device_config_path);
+pub fn ocr_device_set_mode(state: State<'_, AppState>, mode: OcrDeviceMode) -> Result<OcrDeviceStatus, String> {
+    let mut config = state.ocr_device_config.lock().map_err(|_| "设备配置锁中毒".to_string())?;
     config.mode = mode;
     config.save(&state.ocr_device_config_path).map_err(|e| e.to_string())?;
     let mut status = state.engines.ocr_device_status();
@@ -55,41 +57,49 @@ pub fn ocr_device_set_mode(state: State<'_, AppState>, mode: String) -> Result<O
 ///              校准中重复调用返回错误；GPU 分支在 feature/运行时不可用时跳过并注明。
 /// @ai-context: 首次校准可能触发 ModelScope 模型下载（引擎构建），耗时较长——
 ///              后台线程执行，前端轮询 ocr_device_status 的 calibrating/bench。
+/// @ai-context: 校准标记为 RAII guard——线程 panic 也不会卡死"校准中"状态。
 #[tauri::command]
 pub async fn ocr_device_recalibrate(state: State<'_, AppState>) -> Result<OcrDeviceStatus, String> {
-    if !state.engines.ocr_try_begin_calibrate() {
+    let Some(_guard) = state.engines.ocr_try_begin_calibrate_guard() else {
         return Err("校准进行中，请稍候".to_string());
-    }
-    let engines = state.engines.clone();
+    };
+    let config = state.ocr_device_config.clone();
     let config_path = state.ocr_device_config_path.clone();
     let ocr_models = state.ocr_models.clone();
     let ocr_params = state.ocr_params.clone();
+    // guard 移入线程：校准全程持有（drop 时释放标记）
     std::thread::spawn(move || {
-        let result = calibrate(&ocr_models, &ocr_params, &config_path);
-        engines.ocr_end_calibrate();
+        let result = calibrate(&ocr_models, &ocr_params, &config, &config_path);
         match result {
             Ok(note) => eprintln!("[Ocr] 校准完成: {}", note),
             Err(note) => eprintln!("[Ocr] 校准未完成: {}", note),
         }
+        drop(_guard);
     });
     Ok(state.engines.ocr_device_status())
 }
 
 /// 校准实现（后台线程执行；GPU 分支按 feature/运行时可用性门控）。
+///
+/// @ai-context: 配置经共享 Arc 锁内 read-modify-write（TOCTOU 修复——
+///              与 set_mode 串行化，后写方基于最新快照）；持久化路径独立传入。
 fn calibrate(
     models: &OcrModels,
     params: &OcrParams,
+    config: &Arc<Mutex<OcrDeviceConfig>>,
     config_path: &std::path::Path,
 ) -> Result<String, String> {
     // 1) 硬件门槛（ADR-009 ①层）：无 GPU 候选 → 清空基准并注明（不阻断）
     #[cfg(target_os = "windows")]
-    let best_device = crate::device_probe::select_best(&crate::device_probe::probe_adapters());
+    let adapters = crate::device_probe::probe_adapters();
     #[cfg(not(target_os = "windows"))]
-    let best_device = None;
-    let Some(device_id) = best_device else {
-        let mut config = OcrDeviceConfig::load(config_path);
-        config.bench = None;
-        config.save(config_path).map_err(|e| e.to_string())?;
+    let adapters = Vec::new();
+    let best_device = crate::device_probe::select_best(&adapters);
+    let nvidia_count = crate::device_probe::nvidia_candidate_count(&adapters);
+    let Some(_device_id) = best_device else {
+        let mut c = config.lock().map_err(|_| "设备配置锁中毒".to_string())?;
+        c.bench = None;
+        c.save(config_path).map_err(|e| e.to_string())?;
         return Err("无 GPU 候选，无法校准（本机将使用 CPU）".to_string());
     };
 
@@ -103,25 +113,27 @@ fn calibrate(
     // 4) GPU 3 帧中位数——CUDA 引擎构建失败（feature 关闭/运行时无 CUDA 支持）时
     //    load 已回退 CPU：基准变为 CPU vs CPU，无意义 → 中止并注明
     let gpu_engine = OcrEngine::load(models, params, OcrBackend::Cuda { device_id: 0 }).map_err(|e| {
-        let mut config = OcrDeviceConfig::load(config_path);
-        config.bench = None;
-        let _ = config.save(config_path);
+        // 闭包返回 String（非 Result），锁错误降级为"清空基准失败"日志
+        if let Ok(mut c) = config.lock() {
+            c.bench = None;
+            let _ = c.save(config_path);
+        }
         format!("GPU 引擎构建失败: {}", e)
     })?;
     if let Some(reason) = &gpu_engine.fallback_reason {
-        let mut config = OcrDeviceConfig::load(config_path);
-        config.bench = None;
-        config.save(config_path).map_err(|e| e.to_string())?;
+        let mut c = config.lock().map_err(|_| "设备配置锁中毒".to_string())?;
+        c.bench = None;
+        c.save(config_path).map_err(|e| e.to_string())?;
         return Err(format!("GPU 校准不可用: {}", reason));
     }
     let gpu_ms = median_ocr_latency(&gpu_engine, &image);
 
     // 5) 持久化基准 + 按当前模式预演决策（下次启动生效）
     let bench = BenchResult { cpu_ms, gpu_ms };
-    let mut config = OcrDeviceConfig::load(config_path);
-    config.bench = Some(bench);
-    config.save(config_path).map_err(|e| e.to_string())?;
-    let recommended = decide(config.mode, Some(device_id), Some(bench));
+    let mut c = config.lock().map_err(|_| "设备配置锁中毒".to_string())?;
+    c.bench = Some(bench);
+    c.save(config_path).map_err(|e| e.to_string())?;
+    let recommended = decide(c.mode, best_device, nvidia_count, Some(bench));
     Ok(format!(
         "CPU {:.1}ms / GPU {:.1}ms → 推荐 {:?}（下次引擎启动生效）",
         cpu_ms, gpu_ms, recommended

@@ -50,14 +50,22 @@ pub fn health_status(state: State<'_, AppState>) -> HealthSnapshot {
         disk_free_bytes(std::path::Path::new(&data_dir))
     };
     let (asr_alive, ocr_alive) = state.engines.liveness();
+    // 模型完整性：流式四件套 + 离线 SenseVoice（审查修复——此前仅查流式，
+    // sensevoice 缺失要到首次识别失败才能暴露；OCR 模型经 ModelScope 缓存路径不稳定，留日志侧）
     let missing = {
         let m = &state.streaming_models;
-        missing_model_files(&[
+        let mut list = missing_model_files(&[
             ("streaming encoder", std::path::Path::new(&m.encoder)),
             ("streaming decoder", std::path::Path::new(&m.decoder)),
             ("streaming joiner", std::path::Path::new(&m.joiner)),
             ("streaming tokens", std::path::Path::new(&m.tokens)),
-        ])
+        ]);
+        let sense_dir = state.model_dir.join("asr/sensevoice");
+        list.extend(missing_model_files(&[
+            ("sensevoice model", &sense_dir.join("model.int8.onnx")),
+            ("sensevoice tokens", &sense_dir.join("tokens.txt")),
+        ]));
+        list
     };
     HealthSnapshot {
         disk_free_gb: free.map(|b| b as f64 / 1024.0 / 1024.0 / 1024.0),

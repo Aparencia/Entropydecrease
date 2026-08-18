@@ -170,9 +170,16 @@ impl EnginePool {
         s
     }
 
-    /// 占用/释放校准标记（成功占用返回 true）。
-    pub fn ocr_try_begin_calibrate(&self) -> bool {
-        !self.ocr_calibrating.swap(true, Ordering::SeqCst)
+    /// 申请校准标记并返回 RAII guard（drop 时自动释放；申请失败返回 None）。
+    ///
+    /// @ai-context: 修复（v0.4.0 发布审查）：原手动 ocr_end_calibrate 在校准线程
+    ///              panic 时标记卡死（前端永久"校准中"），guard 保证成功/失败/
+    ///              panic 三条退出路径都释放。
+    pub fn ocr_try_begin_calibrate_guard(&self) -> Option<CalibrateGuard> {
+        if self.ocr_calibrating.swap(true, Ordering::SeqCst) {
+            return None;
+        }
+        Some(CalibrateGuard { flag: self.ocr_calibrating.clone() })
     }
 
     /// M7/REQ-042：巡检读数（线程心跳 + 失败计数 + 缓存命中率）。
@@ -186,10 +193,6 @@ impl EnginePool {
 
     pub fn ocr_cache_counts(&self) -> (u64, u64) {
         (self.ocr_cache_hits.load(Ordering::Relaxed), self.ocr_cache_misses.load(Ordering::Relaxed))
-    }
-
-    pub fn ocr_end_calibrate(&self) {
-        self.ocr_calibrating.store(false, Ordering::SeqCst);
     }
 
     /// 转写音频（阻塞等待 ASR 线程返回）。
@@ -248,6 +251,36 @@ fn correct_blocks(blocks: Vec<OcrBlock>, pairs: Option<&[crate::vocab::ReplacePa
         .collect()
 }
 
+/// 读取当前替换词表（TD-048 修复：请求循环内重读，运行期变更即时生效；
+/// 锁中毒回退 None——与热词读取同口径）。
+fn current_replacements(vocab: &Option<Arc<Mutex<VocabStore>>>) -> Option<Vec<crate::vocab::ReplacePair>> {
+    vocab
+        .as_ref()
+        .and_then(|v| v.lock().ok())
+        .map(|v| v.replacements.clone())
+}
+
+/// 校准标记 RAII guard（drop 时释放；防 panic 路径卡死校准标记）。
+pub struct CalibrateGuard {
+    flag: Arc<AtomicBool>,
+}
+
+impl Drop for CalibrateGuard {
+    fn drop(&mut self) {
+        self.flag.store(false, Ordering::SeqCst);
+    }
+}
+
+/// 引擎心跳守卫（TD-045 修复）：worker 线程无论正常退出还是 panic，
+/// 只要本守卫被 drop，心跳即置 false——health_status 才能真实反映线程存活。
+struct AliveGuard(Arc<AtomicBool>);
+
+impl Drop for AliveGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Relaxed);
+    }
+}
+
 /// ASR 线程主循环：启动即加载模型，随后顺序处理请求（引擎天然串行，无需加锁）。
 fn asr_worker_loop(
     rx: Receiver<AsrRequest>,
@@ -255,6 +288,7 @@ fn asr_worker_loop(
     alive: Arc<AtomicBool>,
     failures: Arc<AtomicU64>,
 ) {
+    let _alive_guard = AliveGuard(alive.clone());
     let mut asr = AsrEngine::load(&asr_models);
     for req in rx {
         alive.store(true, Ordering::Relaxed);
@@ -331,41 +365,54 @@ fn ocr_worker_loop(
     }
     // M4/REQ-039 E5：OCR 结果 LRU 缓存（A→B→A 帧往返零推理；worker 独占）
     let mut ocr_cache = crate::ocr_cache::OcrCache::new();
-    // M5/REQ-040：替换词纠错（识别结果按共享词表修正，缓存存修正后结果）
-    let vocab_pairs: Option<Vec<crate::vocab::ReplacePair>> =
-        vocab.as_ref().and_then(|v| v.lock().ok()).map(|v| v.replacements.clone());
+    // M5/REQ-040：替换词纠错——缓存只存**原始识别结果**，纠错在返回路径统一应用：
+    // ①运行期新增替换词即时生效（TD-048 修复，与热词同模式）；②词表变更后
+    // 缓存命中仍得到新纠错（无陈旧纠错结果残留）
     for req in rx {
         alive.store(true, Ordering::Relaxed);
         let (result, reply) = match req {
             OcrRequest::Recognize { path, reply } => {
                 let result = match ocr.as_mut() {
-                    Ok(engine) => engine.recognize(&path).map(|blocks| correct_blocks(blocks, vocab_pairs.as_deref())),
+                    Ok(engine) => {
+                        let pairs = current_replacements(&vocab);
+                        engine
+                            .recognize(&path)
+                            .map(|blocks| correct_blocks(blocks, pairs.as_deref()))
+                    }
                     Err(_) => Err(AppError::Ocr("OCR 引擎加载失败（请检查模型下载/网络）".to_string())),
                 };
                 (result, reply)
             }
             OcrRequest::RecognizeImage { image, reply } => {
-                // E5：区域感知哈希（8×8 aHash）→ 命中直接返回缓存（零推理）
-                let key = crate::ocr_cache::average_hash(&image);
-                let result = match ocr_cache.get(key) {
-                    Some(blocks) => {
-                        cache_hits.fetch_add(1, Ordering::Relaxed);
-                        Ok(blocks)
-                    }
-                    None => {
-                        cache_misses.fetch_add(1, Ordering::Relaxed);
-                        match ocr.as_mut() {
-                            Ok(engine) => match engine.recognize_image(image) {
-                                Ok(blocks) => {
-                                    let corrected = correct_blocks(blocks, vocab_pairs.as_deref());
-                                    ocr_cache.put(key, corrected.clone());
-                                    Ok(corrected)
+                let result: Result<Vec<OcrBlock>> = match ocr.as_mut() {
+                    Ok(engine) => {
+                        // E5：区域感知哈希（8×8 aHash）→ 命中直接返回缓存（零推理）
+                        let key = crate::ocr_cache::average_hash(&image);
+                        let raw = match ocr_cache.get(key) {
+                            Some(blocks) => {
+                                cache_hits.fetch_add(1, Ordering::Relaxed);
+                                Ok(blocks)
+                            }
+                            None => {
+                                cache_misses.fetch_add(1, Ordering::Relaxed);
+                                match engine.recognize_image(image) {
+                                    Ok(blocks) => {
+                                        // 只缓存原始结果（纠错在返回路径统一应用，
+                                        // 词表变更后命中缓存仍得新纠错——TD-048）
+                                        ocr_cache.put(key, blocks.clone());
+                                        Ok(blocks)
+                                    }
+                                    Err(e) => Err(e),
                                 }
-                                Err(e) => Err(e),
-                            },
-                            Err(_) => Err(AppError::Ocr("OCR 引擎加载失败（请检查模型下载/网络）".to_string())),
-                        }
+                            }
+                        };
+                        // TD-048：每次请求读取最新替换词（运行期新增即时生效）
+                        raw.map(|blocks| {
+                            let pairs = current_replacements(&vocab);
+                            correct_blocks(blocks, pairs.as_deref())
+                        })
                     }
+                    Err(_) => Err(AppError::Ocr("OCR 引擎加载失败（请检查模型下载/网络）".to_string())),
                 };
                 (result, reply)
             }

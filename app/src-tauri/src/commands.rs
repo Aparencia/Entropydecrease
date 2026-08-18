@@ -72,6 +72,11 @@ pub struct AppState {
     pub vocab: std::sync::Arc<std::sync::Mutex<crate::vocab::VocabStore>>,
     /// M5：词表 JSON 路径（应用数据目录）
     pub vocab_path: std::path::PathBuf,
+    /// ADR-009（TD-044 同批修复）：OCR 设备配置内存态单点（校准/set_mode 锁内
+    /// read-modify-write，消除 TOCTOU 文件竞争）；持久化见 ocr_device_config_path
+    pub ocr_device_config: std::sync::Arc<std::sync::Mutex<crate::device_config::OcrDeviceConfig>>,
+    /// 模型根目录（健康巡检补全 sensevoice 模型完整性检查用）
+    pub model_dir: std::path::PathBuf,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。

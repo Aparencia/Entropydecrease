@@ -81,6 +81,14 @@ pub fn select_best(adapters: &[AdapterInfo]) -> Option<usize> {
         .map(|a| a.index)
 }
 
+/// NVIDIA 候选数量（多卡保守决策用：DXGI 序号 ≠ CUDA 序号，>1 时 Auto 落 CPU）。
+pub fn nvidia_candidate_count(adapters: &[AdapterInfo]) -> usize {
+    adapters
+        .iter()
+        .filter(|a| !a.is_software && a.vendor_id == NVIDIA_VENDOR_ID && a.dedicated_vram >= MIN_CANDIDATE_VRAM)
+        .count()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -138,5 +146,19 @@ mod tests {
     fn exactly_floor_is_candidate() {
         let list = vec![adapter(0, NVIDIA_VENDOR_ID, 1 << 30, false)];
         assert_eq!(select_best(&list), Some(0));
+    }
+
+    #[test]
+    fn candidate_count_filters_nvidia_only() {
+        // 2 块 NVIDIA + AMD + 软件渲染 NVIDIA → 计数 2
+        let list = vec![
+            adapter(0, NVIDIA_VENDOR_ID, 8 << 30, false),
+            adapter(1, AMD, 24 << 30, false),
+            adapter(2, NVIDIA_VENDOR_ID, 4 << 30, false),
+            adapter(3, NVIDIA_VENDOR_ID, 32 << 30, true),
+        ];
+        assert_eq!(nvidia_candidate_count(&list), 2);
+        assert_eq!(nvidia_candidate_count(&[]), 0);
+        assert_eq!(nvidia_candidate_count(&[adapter(0, AMD, 8 << 30, false)]), 0);
     }
 }

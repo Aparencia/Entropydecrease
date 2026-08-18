@@ -209,24 +209,38 @@ pub fn run() {
             // ADR-009（v0.4.0 M1）：OCR 推理后端启动期决策——
             // 三层检测：DXGI 硬件门槛（select_best）→ decide 折叠模式/校准 → ORT 原生回退（引擎内）
             let ocr_device_config_path = data_dir.join("ocr_device.json");
-            let ocr_device_config = OcrDeviceConfig::load(&ocr_device_config_path);
+            // TD-044 同批修复：配置内存态单点（命令层锁内 read-modify-write，防 TOCTOU）
+            let ocr_device_config = std::sync::Arc::new(std::sync::Mutex::new(
+                OcrDeviceConfig::load(&ocr_device_config_path),
+            ));
             #[cfg(target_os = "windows")]
-            let best_device = crate::device_probe::select_best(&crate::device_probe::probe_adapters());
+            let adapters = crate::device_probe::probe_adapters();
             #[cfg(not(target_os = "windows"))]
-            let best_device = None;
-            let ocr_backend = decide(ocr_device_config.mode, best_device, ocr_device_config.bench);
+            let adapters = Vec::new();
+            let best_device = crate::device_probe::select_best(&adapters);
+            let nvidia_count = crate::device_probe::nvidia_candidate_count(&adapters);
+            let ocr_cfg_snapshot = ocr_device_config
+                .lock()
+                .map(|c| c.clone())
+                .unwrap_or_default();
+            let ocr_backend = decide(
+                ocr_cfg_snapshot.mode,
+                best_device,
+                nvidia_count,
+                ocr_cfg_snapshot.bench,
+            );
             eprintln!(
                 "[Engine] OCR 设备决策: 模式 {:?} → 后端 {:?}{}",
-                ocr_device_config.mode,
+                ocr_cfg_snapshot.mode,
                 ocr_backend,
                 best_device
-                    .map(|id| format!("（候选设备 index={}）", id))
-                    .unwrap_or_default()
+                    .map(|id| format!("（候选设备 index={}，NVIDIA 候选数 {}）", id, nvidia_count))
+                    .unwrap_or_else(|| format!("（无候选，NVIDIA 候选数 {}）", nvidia_count))
             );
             let ocr_device_status = std::sync::Arc::new(std::sync::Mutex::new(OcrDeviceStatus::new(
-                ocr_device_config.mode,
+                ocr_cfg_snapshot.mode,
                 ocr_backend,
-                ocr_device_config.bench,
+                ocr_cfg_snapshot.bench,
             )));
             let ocr_models = ocr_models();
             let ocr_params = OcrParams::default();
@@ -255,10 +269,12 @@ pub fn run() {
                 model_downloader: ModelDownloader::new(),
                 app: app.handle().clone(),
                 ocr_device_config_path,
+                ocr_device_config,
                 ocr_models,
                 ocr_params,
                 vocab,
                 vocab_path,
+                model_dir,
             });
             Ok(())
         })
