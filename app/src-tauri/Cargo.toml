@@ -51,5 +51,7 @@ windows = { version = "0.61", features = [
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
     "Win32_Graphics_Gdi",
+    # v0.3.0（ADR-008）：MultiByteToWideChar CP936 用于外挂字幕 GBK 解码
+    "Win32_Globalization",
 ] }
 
