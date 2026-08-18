@@ -235,6 +235,8 @@ fn ocr_worker_loop(
             }
         }
     }
+    // M4/REQ-039 E5：OCR 结果 LRU 缓存（A→B→A 帧往返零推理；worker 独占）
+    let mut ocr_cache = crate::ocr_cache::OcrCache::new();
     for req in rx {
         let (result, reply) = match req {
             OcrRequest::Recognize { path, reply } => {
@@ -245,13 +247,30 @@ fn ocr_worker_loop(
                 (result, reply)
             }
             OcrRequest::RecognizeImage { image, reply } => {
-                let result = match ocr.as_mut() {
-                    Ok(engine) => engine.recognize_image(image),
-                    Err(_) => Err(AppError::Ocr("OCR 引擎加载失败（请检查模型下载/网络）".to_string())),
+                // E5：区域感知哈希（8×8 aHash）→ 命中直接返回缓存（零推理）
+                let key = crate::ocr_cache::average_hash(&image);
+                let result = match ocr_cache.get(key) {
+                    Some(blocks) => Ok(blocks),
+                    None => match ocr.as_mut() {
+                        Ok(engine) => match engine.recognize_image(image) {
+                            Ok(blocks) => {
+                                ocr_cache.put(key, blocks.clone());
+                                Ok(blocks)
+                            }
+                            Err(e) => Err(e),
+                        },
+                        Err(_) => Err(AppError::Ocr("OCR 引擎加载失败（请检查模型下载/网络）".to_string())),
+                    },
                 };
                 (result, reply)
             }
         };
         let _ = reply.send(result);
     }
+    // 退出时打印缓存统计（M7 诊断面板数据源；开发期日志）
+    let (hits, misses) = ocr_cache.stats();
+    eprintln!("[Engine] OCR 缓存退出统计: 命中 {} 未命中 {}（命中率 {:.0}%）", hits, misses, {
+        let total = hits + misses;
+        if total == 0 { 0.0 } else { hits as f64 * 100.0 / total as f64 }
+    });
 }

@@ -105,9 +105,9 @@ fn dual_rate_scheduler_prioritizes_subtitle() {
     // Arrange：字幕区每 1 tick，全帧每 3 tick（语音活跃期）
     let mut scheduler = DualRateScheduler::new(1, 3);
     // Act & Assert：每 tick 都采字幕区（高频覆盖低频）
-    assert_eq!(scheduler.next_region(true), SampleRegion::Subtitle);
-    assert_eq!(scheduler.next_region(true), SampleRegion::Subtitle);
-    assert_eq!(scheduler.next_region(true), SampleRegion::Subtitle);
+    assert_eq!(scheduler.next_region(true, false), SampleRegion::Subtitle);
+    assert_eq!(scheduler.next_region(true, false), SampleRegion::Subtitle);
+    assert_eq!(scheduler.next_region(true, false), SampleRegion::Subtitle);
 }
 
 #[test]
@@ -115,12 +115,12 @@ fn dual_rate_scheduler_skips_and_full() {
     // Arrange：字幕区每 5 tick，全帧每 3 tick（语音活跃期）
     let mut scheduler = DualRateScheduler::new(5, 3);
     // Act & Assert：t1/t2 跳过，t3 全帧
-    assert_eq!(scheduler.next_region(true), SampleRegion::Skip);
-    assert_eq!(scheduler.next_region(true), SampleRegion::Skip);
-    assert_eq!(scheduler.next_region(true), SampleRegion::Full);
-    assert_eq!(scheduler.next_region(true), SampleRegion::Skip);
+    assert_eq!(scheduler.next_region(true, false), SampleRegion::Skip);
+    assert_eq!(scheduler.next_region(true, false), SampleRegion::Skip);
+    assert_eq!(scheduler.next_region(true, false), SampleRegion::Full);
+    assert_eq!(scheduler.next_region(true, false), SampleRegion::Skip);
     // t5：字幕区 tick 命中，字幕区优先
-    assert_eq!(scheduler.next_region(true), SampleRegion::Subtitle);
+    assert_eq!(scheduler.next_region(true, false), SampleRegion::Subtitle);
 }
 
 #[test]
@@ -129,22 +129,75 @@ fn silent_period_boosts_full_frame_sampling() {
     let mut scheduler = DualRateScheduler::new(2, 5);
     // Act：静音期（speech_active=false）→ 字幕区降频（4 tick）、全帧提频（2 tick）
     // Assert：t2/t6 全帧，t4 字幕区，其余跳过
-    assert_eq!(scheduler.next_region(false), SampleRegion::Skip); // t1
-    assert_eq!(scheduler.next_region(false), SampleRegion::Full); // t2
-    assert_eq!(scheduler.next_region(false), SampleRegion::Skip); // t3
-    assert_eq!(scheduler.next_region(false), SampleRegion::Subtitle); // t4
-    assert_eq!(scheduler.next_region(false), SampleRegion::Skip); // t5
-    assert_eq!(scheduler.next_region(false), SampleRegion::Full); // t6
+    assert_eq!(scheduler.next_region(false, false), SampleRegion::Skip); // t1
+    assert_eq!(scheduler.next_region(false, false), SampleRegion::Full); // t2
+    assert_eq!(scheduler.next_region(false, false), SampleRegion::Skip); // t3
+    assert_eq!(scheduler.next_region(false, false), SampleRegion::Subtitle); // t4
+    assert_eq!(scheduler.next_region(false, false), SampleRegion::Skip); // t5
+    assert_eq!(scheduler.next_region(false, false), SampleRegion::Full); // t6
 }
 
 #[test]
 fn speech_restores_subtitle_priority() {
     // Arrange：同一调度器先静音后语音
     let mut scheduler = DualRateScheduler::new(2, 5);
-    scheduler.next_region(false);
+    scheduler.next_region(false, false);
     // Act：恢复语音 → 回到原节奏（t2 字幕）
-    assert_eq!(scheduler.next_region(true), SampleRegion::Subtitle);
+    assert_eq!(scheduler.next_region(true, false), SampleRegion::Subtitle);
 }
+
+#[test]
+fn degraded_cuts_full_frame_rate_but_keeps_subtitle() {
+    // M4/REQ-039 P8：降级档全帧降频（5→10 tick），字幕区不变。
+    // 用 (3,5) 避免字幕 tick 与全帧 tick 重叠（重叠时字幕区优先，无法观察降频）
+    let mut scheduler = DualRateScheduler::new(3, 5);
+    assert_eq!(scheduler.next_region(true, true), SampleRegion::Skip); // t1
+    assert_eq!(scheduler.next_region(true, true), SampleRegion::Skip); // t2
+    assert_eq!(scheduler.next_region(true, true), SampleRegion::Subtitle); // t3
+    assert_eq!(scheduler.next_region(true, true), SampleRegion::Skip); // t4
+    assert_eq!(scheduler.next_region(true, true), SampleRegion::Skip); // t5（原全帧点被压）
+    assert_eq!(scheduler.next_region(true, true), SampleRegion::Subtitle); // t6
+    assert_eq!(scheduler.next_region(true, true), SampleRegion::Skip); // t7
+    assert_eq!(scheduler.next_region(true, true), SampleRegion::Skip); // t8
+    assert_eq!(scheduler.next_region(true, true), SampleRegion::Subtitle); // t9
+    assert_eq!(scheduler.next_region(true, true), SampleRegion::Full); // t10 降级档全帧
+}
+
+#[test]
+fn degraded_applies_to_silent_period_too() {
+    // M4：静音期降级也不破 0.1fps 封顶（静音全帧 2 tick → 降级 10 tick）
+    let mut scheduler = DualRateScheduler::new(2, 5);
+    // 静音期字幕 4 tick；全帧 2 tick → 降级 10 tick
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Skip); // t1
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Skip); // t2（原全帧点被压）
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Skip); // t3
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Subtitle); // t4 字幕保留
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Skip); // t5
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Skip); // t6
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Skip); // t7
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Subtitle); // t8
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Skip); // t9
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Full); // t10
+}
+
+#[test]
+fn silent_and_degraded_knobs_are_configurable() {
+    // M4：VAD 旋钮与降级档参数化
+    let mut scheduler = DualRateScheduler::new(2, 5)
+        .with_silent(3, 2)
+        .with_degraded_full(4);
+    // 静音期：字幕 3 tick、全帧 2 tick
+    assert_eq!(scheduler.next_region(false, false), SampleRegion::Skip); // t1
+    assert_eq!(scheduler.next_region(false, false), SampleRegion::Full); // t2
+    assert_eq!(scheduler.next_region(false, false), SampleRegion::Subtitle); // t3
+    // 降级：全帧 4 tick（t4/t8 全帧；字幕 3 tick 不变）
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Full); // t4
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Skip); // t5
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Subtitle); // t6
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Skip); // t7
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Full); // t8
+}
+
 
 #[test]
 fn downscale_reduces_dimensions_and_preserves_aspect() {

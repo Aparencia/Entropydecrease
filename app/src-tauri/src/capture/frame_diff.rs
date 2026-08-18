@@ -136,7 +136,7 @@ pub enum SampleRegion {
     Full,
 }
 
-/// 双速率采样调度器（ADR-002/ADR-005；v0.3.0 P3 简化版：语音活跃度自适应）。
+/// 双速率采样调度器（ADR-002/ADR-005；v0.3.0 P3 语音活跃度自适应；v0.4.0 M4 预算制）。
 ///
 /// @ai-context: 字幕区 1-2 fps、全帧 0.2-0.5 fps：以 tick（一次采集周期）为粒度，
 ///              字幕区每 subtitle_every tick 采一次，全帧每 full_every tick 采一次；
@@ -144,6 +144,10 @@ pub enum SampleRegion {
 /// @ai-context: P3（头脑风暴）简化版：语音活跃期维持字幕区为主（原参数）；
 ///              静音期（老师停顿展示幻灯片/板书）降低字幕区频率、提升全帧频率——
 ///              静音时字幕区基本静止（低价值），画面要点价值上升。
+/// @ai-context: M4（REQ-039）预算语义——字幕区 ≤1/(subtitle_every×tick)、
+///              全帧 ≤1/(full_every×tick) 封顶；VAD 旋钮参数化（with_silent）；
+///              高负载降级档（degraded）只压全帧（full_every×2 → 0.1fps 封顶），
+///              保 ASR/字幕主链路（P8：关闭次要功能=全帧降频）。
 #[derive(Debug)]
 pub struct DualRateScheduler {
     subtitle_every: u32,
@@ -152,6 +156,8 @@ pub struct DualRateScheduler {
     silent_subtitle_every: u32,
     /// 静音期全帧间隔（tick）
     silent_full_every: u32,
+    /// M4：高负载降级档全帧间隔（tick；默认 full_every×2 = 0.1fps 封顶）
+    degraded_full_every: u32,
     tick: u32,
 }
 
@@ -159,23 +165,44 @@ impl DualRateScheduler {
     /// 创建调度器。subtitle_every/full_every 为语音活跃期 tick 间隔（至少 1）；
     /// 静音期参数固定为字幕区 4 tick / 全帧 2 tick（P3 简化版）。
     pub fn new(subtitle_every: u32, full_every: u32) -> Self {
+        let full_every = full_every.max(1);
         Self {
             subtitle_every: subtitle_every.max(1),
-            full_every: full_every.max(1),
+            full_every,
             silent_subtitle_every: 4,
             silent_full_every: 2,
+            degraded_full_every: full_every * 2,
             tick: 0,
         }
     }
 
-    /// 推进一个 tick 并返回本次采样区域（speech_active=语音活跃度）。
-    pub fn next_region(&mut self, speech_active: bool) -> SampleRegion {
+    /// M4：VAD 旋钮参数化——静音期档位（默认 (4,2) 由 new 设定；可配）。
+    /// 参数化入口暂由测试覆盖，后续可配置 UI 接入（登记豁免 dead_code）。
+    #[allow(dead_code)]
+    pub fn with_silent(mut self, subtitle_every: u32, full_every: u32) -> Self {
+        self.silent_subtitle_every = subtitle_every.max(1);
+        self.silent_full_every = full_every.max(1);
+        self
+    }
+
+    /// M4：高负载降级档全帧间隔（默认 full_every×2 = 0.1fps 封顶；可配）。
+    /// 参数化入口暂由测试覆盖，后续可配置 UI 接入（登记豁免 dead_code）。
+    #[allow(dead_code)]
+    pub fn with_degraded_full(mut self, every: u32) -> Self {
+        self.degraded_full_every = every.max(1);
+        self
+    }
+
+    /// 推进一个 tick 并返回本次采样区域（speech_active=语音活跃度；degraded=高负载降级）。
+    pub fn next_region(&mut self, speech_active: bool, degraded: bool) -> SampleRegion {
         self.tick = self.tick.wrapping_add(1);
         let (sub_every, full_every) = if speech_active {
             (self.subtitle_every, self.full_every)
         } else {
             (self.silent_subtitle_every, self.silent_full_every)
         };
+        // M4：降级档覆盖全帧间隔（静音期也不破 0.1fps 封顶）
+        let full_every = if degraded { self.degraded_full_every } else { full_every };
         if self.tick.is_multiple_of(sub_every) {
             SampleRegion::Subtitle
         } else if self.tick.is_multiple_of(full_every) {

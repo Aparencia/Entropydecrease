@@ -122,12 +122,29 @@ pub fn run_screen_worker(
     let mut stats = ScreenStats::default();
     // M2/REQ-037：动态字幕区域跟踪（播放区域检测 + ROI 锁定/重扫；尺寸首帧自适应）
     let mut roi_tracker = crate::region_tracker::RoiTracker::new(0, 0);
+    // M4/REQ-039 P8：高负载自动降级（CPU 占用采样 → 全帧降频，保 ASR 主链路）
+    let mut load_monitor = crate::load_monitor::LoadMonitor::new();
+    let mut last_load_check_at = Instant::now();
+    let mut degraded = false;
 
     while !stop.load(Ordering::SeqCst) {
+        // M4：每 2s 采样 CPU 负载（降级标志变化打印——静默失败可见化）
+        if last_load_check_at.elapsed() >= Duration::from_secs(2) {
+            last_load_check_at = Instant::now();
+            let new_degraded = load_monitor.tick();
+            if new_degraded != degraded {
+                degraded = new_degraded;
+                if degraded {
+                    eprintln!("[ScreenWorker] 负载高，采样降级（全帧 0.1fps 封顶，REQ-039 P8）");
+                } else {
+                    eprintln!("[ScreenWorker] 负载恢复，采样档位还原");
+                }
+            }
+        }
         if last_sample_at.elapsed().as_millis() as u64 >= SAMPLE_TICK_MS {
             last_sample_at = Instant::now();
-            // B3（P3 简化版）：语音活跃度驱动自适应采样——静音期全帧提频
-            let region = scheduler.next_region(speech_active.load(Ordering::Relaxed));
+            // B3（P3 简化版）+ M4：语音活跃度 + 负载档驱动自适应采样
+            let region = scheduler.next_region(speech_active.load(Ordering::Relaxed), degraded);
             if region != SampleRegion::Skip {
                 let diff = match region {
                     SampleRegion::Subtitle => &mut subtitle_diff,

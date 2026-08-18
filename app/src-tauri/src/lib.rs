@@ -32,8 +32,10 @@ mod import_frame;
 mod live_session;
 #[cfg(target_os = "windows")]
 mod live_session_frame;
+mod load_monitor;
 mod model_downloader;
 mod ocr;
+mod ocr_cache;
 mod playback_region;
 mod region_tracker;
 mod streaming_asr;
