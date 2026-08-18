@@ -53,3 +53,73 @@ export interface NewNote {
   content: string;
   source: string;
 }
+
+// ────────────────────────────────────────────────────────────
+// 会话领域类型（v0.2.0，REQ-010，与 Rust serde 契约对齐）
+// ────────────────────────────────────────────────────────────
+
+/** 会话记录（Rust Session，snake_case 契约） */
+export interface Session {
+  id: number;
+  title: string;
+  source_window: string | null;
+  started_at: number;
+  ended_at: number | null;
+  status: string; // recording | finished | failed
+}
+
+/** 会话转写段（asr | subtitle | fused） */
+export interface SessionSegment {
+  id: number;
+  session_id: number;
+  start_ms: number;
+  end_ms: number;
+  text: string;
+  source: string;
+  confidence: number | null;
+}
+
+/** 会话 OCR 块（subtitle | full） */
+export interface SessionOcrBlock {
+  id: number;
+  session_id: number;
+  timestamp_ms: number;
+  text: string;
+  score: number;
+  region: string;
+}
+
+/** 会话详情（会话 + 转写段 + OCR 块） */
+export interface SessionDetail {
+  session: Session;
+  segments: SessionSegment[];
+  ocr_blocks: SessionOcrBlock[];
+}
+
+/** 流式 ASR 模型就绪状态 */
+export interface StreamingModelStatus {
+  ready: boolean;
+  missing: string[];
+}
+
+/** 模型下载状态（camelCase 契约） */
+export interface DownloadStatus {
+  state: string; // idle | downloading | done | failed
+  currentFile: string | null;
+  downloadedBytes: number;
+  totalBytes: number;
+  error: string | null;
+}
+
+/** 模型下载进度事件载荷 */
+export interface DownloadProgress {
+  file: string;
+  downloadedBytes: number;
+  totalBytes: number;
+}
+
+/** 实时会话状态（camelCase 契约） */
+export interface LiveSessionStatus {
+  active: boolean;
+  sessionId: number | null;
+}

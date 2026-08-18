@@ -1,5 +1,5 @@
 /**
- * App — 应用导航壳：课堂助手 / 笔记 两个独立页面。
+ * App — 应用导航壳：课堂助手 / 会话 / 笔记 三个独立页面。
  *
  * @ai-context: 顶部标签导航 + 页面条件渲染（MVP 不引入路由库，保持轻量）；
  *              页面组件各自管理状态，切换不共享可变状态。
@@ -7,11 +7,13 @@
 import { useState } from "react";
 import ClassroomPage from "./pages/ClassroomPage";
 import NotesPage from "./pages/NotesPage";
+import SessionsPage from "./pages/SessionsPage";
 
-type Page = "classroom" | "notes";
+type Page = "classroom" | "sessions" | "notes";
 
 const NAV_ITEMS: { key: Page; label: string }[] = [
   { key: "classroom", label: "📡 课堂助手" },
+  { key: "sessions", label: "🗂 会话" },
   { key: "notes", label: "📝 笔记" },
 ];
 
@@ -55,7 +57,11 @@ function App() {
       </nav>
 
       {/* 页面区 */}
-      <main style={{ flex: 1, minHeight: 0 }}>{page === "classroom" ? <ClassroomPage /> : <NotesPage />}</main>
+      <main style={{ flex: 1, minHeight: 0 }}>
+        {page === "classroom" && <ClassroomPage />}
+        {page === "sessions" && <SessionsPage />}
+        {page === "notes" && <NotesPage />}
+      </main>
     </div>
   );
 }
