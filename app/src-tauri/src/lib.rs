@@ -8,6 +8,7 @@ mod ai_guardrails;
 mod ai_judge;
 mod ai_mock;
 mod ai_protocol;
+mod ai_text_filter;
 mod asr;
 mod asr_health;
 mod analysis;
@@ -65,6 +66,7 @@ mod live_session_frame;
 mod live_keyframes;
 mod load_monitor;
 mod model_downloader;
+mod note_filter;
 mod ocr;
 mod ocr_cache;
 mod playback_region;
@@ -79,12 +81,15 @@ mod subtitle;
 mod subtitle_detect;
 mod subtitle_ocr;
 mod speaker_change;
+mod symbol_normalize;
 mod table_reconstruct;
 mod types;
+mod ui_junk;
 mod verbal_normalize;
 mod video_profile;
 mod video_profile_data;
 mod vocab;
+mod watermark_filter;
 mod windows;
 
 // 临时诊断模块（定位实时链路无 OCR 根因；诊断后删除）
@@ -294,6 +299,11 @@ pub fn run() {
             let ai_guardrails = std::sync::Arc::new(std::sync::Mutex::new(
                 crate::ai_guardrails::AiGuardrails::default(),
             ));
+            // v0.6.0 M1（REQ-083/060）：可校准配置——ui_junk.json 黑名单与
+            // symbol_map.json 映射表（缺失走内置默认；损坏回退默认，不阻断启动）
+            let ui_junk = crate::ui_junk::UiJunkList::load(&data_dir.join("ui_junk.json"));
+            let symbol_normalize =
+                crate::symbol_normalize::SymbolNormalizeConfig::load(&data_dir.join("symbol_map.json"));
             // v0.5.0 模型版（REQ-047/049/050）：结构模型下载器（按需下载，独立状态机）
             let structure_downloader = crate::structure_models::StructureModelDownloader::new();
             // v0.5.0 模型版（REQ-050）：结构档位配置（公式档位持久化，审查 H3 修复）
@@ -332,6 +342,9 @@ pub fn run() {
                 ai_guardrails,
                 structure_downloader,
                 structure_tier_path,
+                // v0.6.0 M1：可校准配置（UI 垃圾黑名单 / 口语符号映射表）
+                ui_junk,
+                symbol_normalize,
             });
             Ok(())
         })
@@ -372,6 +385,8 @@ pub fn run() {
             commands_session::add_session_segment,
             commands_session::add_session_ocr_block,
             commands_session::session_to_note,
+            // 笔记预览（REQ-081，v0.6.0 M1：过滤后只读预览——单一管线双出口）
+            commands_session::preview_session_note,
             // 流式 ASR 模型状态（REQ-009，ADR-003）
             commands_streaming::asr_streaming_model_status,
             // 模型自动下载（ADR-003 模型分发）
@@ -423,6 +438,9 @@ pub fn run() {
             commands_ai::scan_ai_candidates,
             commands_ai::ai_enhance_mock,
             commands_ai::ai_enhance_status,
+            // 笔记 AI 复核（REQ-085，v0.6.0 M1：边界段三态判定——授权默认关）
+            commands_ai::review_text_filter,
+            commands_ai::text_filter_status,
             // 结构模型与课后精修（REQ-047/049/050 模型版：下载/状态/精修）
             commands_refine::structure_model_download,
             commands_refine::structure_model_status,
