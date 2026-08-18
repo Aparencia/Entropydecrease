@@ -105,3 +105,90 @@ fn asr_max_zero_means_asr_absent() {
     // Assert：板书术语入选且 asr_count=0
     assert!(candidates.iter().any(|c| c.term == "板书术语" && c.asr_count == 0));
 }
+
+// ────────────────────────────────────────────────────────────
+// REQ-061 精化：TF-IDF / 缩略词召回 / 水印词排除
+// ────────────────────────────────────────────────────────────
+
+#[test]
+fn tfidf_down_weights_common_terms() {
+    // Arrange：两术语 OCR 次数相同（各 3 次），但"公式"文档频率 100（通用词）
+    let ocr_texts = vec!["拉普拉斯算子 公式", "拉普拉斯变换 公式", "拉普拉斯定理 公式"];
+    let asr_texts: Vec<&str> = vec![];
+    let mut df = std::collections::HashMap::new();
+    df.insert("公式".to_string(), 100);
+    df.insert("拉普拉斯".to_string(), 1);
+    let opts = GlossaryOptions { df: Some(df), total_docs: 100, ..Default::default() };
+    // Act：同 OCR 次数下比较精化分
+    let candidates = glossary_candidates_opt(&ocr_texts, &asr_texts, 3, 0, &opts);
+    // Assert：稀有词分 > 通用词分（idf 生效）
+    let rare = candidates.iter().find(|c| c.term == "拉普拉斯").unwrap();
+    let common = candidates.iter().find(|c| c.term == "公式").unwrap();
+    assert!(rare.score > common.score, "稀有词应高于通用词（{} vs {}）", rare.score, common.score);
+    // Assert：无 df 时 score = ocr_count（零回归）
+    let legacy = glossary_candidates(&ocr_texts, &asr_texts, 3, 0);
+    assert!(legacy.iter().all(|c| (c.score - c.ocr_count as f32).abs() < 1e-6));
+}
+
+#[test]
+fn acronyms_recalled_below_normal_threshold() {
+    // Arrange：缩略词 SGD/CNN 出现 3 次；普通词"优化"仅 1 次
+    let ocr_texts = vec!["SGD CNN 随机梯度", "SGD CNN 梯度下降", "SGD CNN 优化"];
+    let asr_texts: Vec<&str> = vec![];
+    // Act：ocr_min=3 普通门槛下缩略词低阈值召回（acronym_min_ocr=2）
+    let candidates = glossary_candidates_opt(&ocr_texts, &asr_texts, 3, 1, &GlossaryOptions::default());
+    // Assert：SGD/CNN 入选且不重复（普通路径跳过缩略词）
+    assert!(candidates.iter().any(|c| c.term == "SGD" && c.ocr_count == 3));
+    assert!(candidates.iter().any(|c| c.term == "CNN"));
+    assert_eq!(candidates.iter().filter(|c| c.term == "SGD").count(), 1);
+}
+
+#[test]
+fn alnum_mixed_acronyms_recalled() {
+    // Arrange：字母数字混合缩略词（ResNet50/B2B/3D）
+    let ocr_texts = vec!["ResNet50 B2B 3D 模型", "ResNet50 B2B 3D 训练", "ResNet50 B2B 3D 推理"];
+    let asr_texts: Vec<&str> = vec![];
+    // Act
+    let candidates = glossary_candidates_opt(&ocr_texts, &asr_texts, 3, 1, &GlossaryOptions::default());
+    // Assert：混合缩略词全部召回（含 2 字符 "3D"）
+    assert!(candidates.iter().any(|c| c.term == "ResNet50"));
+    assert!(candidates.iter().any(|c| c.term == "B2B"));
+    assert!(candidates.iter().any(|c| c.term == "3D"));
+}
+
+#[test]
+fn watermark_terms_excluded() {
+    // Arrange：角标水印词高频（REQ-059 输出）；正文术语同频
+    let ocr_texts = vec!["学习资料 熵减算法", "学习资料 熵减理论", "学习资料 熵减应用"];
+    let asr_texts: Vec<&str> = vec![];
+    let opts = GlossaryOptions { watermark_exclude: vec!["学习资料".to_string()], ..Default::default() };
+    // Act
+    let candidates = glossary_candidates_opt(&ocr_texts, &asr_texts, 2, 0, &opts);
+    // Assert：水印词不进候选；正文术语保留
+    assert!(!candidates.iter().any(|c| c.term == "学习资料"));
+    assert!(candidates.iter().any(|c| c.term == "熵减"));
+}
+
+#[test]
+fn mixed_case_words_not_treated_as_acronyms() {
+    // Arrange：混合大小写普通词（Gradient）——走常规阈值与计分
+    let ocr_texts = vec!["Gradient Descent", "Gradient Boost", "Gradient Clipping"];
+    let asr_texts: Vec<&str> = vec![];
+    // Act：ocr_min=3 恰好过普通阈值
+    let candidates = glossary_candidates_opt(&ocr_texts, &asr_texts, 3, 1, &GlossaryOptions::default());
+    // Assert：普通候选 score = ocr_count（非缩略词路径）
+    let c = candidates.iter().find(|c| c.term == "Gradient").unwrap();
+    assert_eq!(c.ocr_count, 3);
+    assert_eq!(c.score, 3.0);
+}
+
+#[test]
+fn acronym_asr_high_freq_excluded() {
+    // Arrange：缩略词在语音中也高频（讲者反复读 SGD）→ 不应作为术语候选
+    let ocr_texts = vec!["SGD 优化器", "SGD 学习率", "SGD 动量"];
+    let asr_texts = vec!["SGD", "SGD", "SGD", "SGD"];
+    // Act：acronym_max_asr=1，实际 4 次 → 排除
+    let candidates = glossary_candidates_opt(&ocr_texts, &asr_texts, 2, 1, &GlossaryOptions::default());
+    // Assert
+    assert!(!candidates.iter().any(|c| c.term == "SGD"));
+}
