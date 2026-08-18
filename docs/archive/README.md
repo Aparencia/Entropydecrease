@@ -62,3 +62,4 @@ docs/archive/
 | 2026-08-18（十轮） | v0.4.0 发布（21 提交，版本 0.4.0 + CHANGELOG）+ 新增代码六维审查：机制整合版 v2 归档；审查确认 critical×1/high×5/medium×5（登记 TD-044~055 open）+ low 观察 12 项；TD-033 已偿核对（2a88b25） | TD-040（carried deliberate）+ TD-044~055（open 12 笔），共 13 笔 |
 | 2026-08-18（十一轮） | 审查问题全量修复：TD-044~055 全部 closed（模式契约/心跳/ROI 缩放/静音尺度/词表即时/PPTX 安全/调度独立计数等 12 项 + low 12 项）；245 单测全绿 + 前端构建通过 | TD-040（P2，deliberate carried），共 1 笔 |
 | 2026-08-19 | 结构模型版落地（版面/表格/公式模型 + 按需下载 + 课后精修）+ 新增代码审查：H1-H3/M1/M2/M4/L1/L3 全部即修（c5eae08 + 65c950a）；brainstorming-video-types.md 归档（[ ] 已归档，六轮头脑风暴全部实施完成）；brainstorming-classroom-assistant-gaps.md 归档（[ ] 已归档，四维缺口评估 50 项，§9 裁决 22 项进 v0.6.0 → REQ-059~080 已排期）；累计已偿 53 笔 | TD-040（P2，deliberate carried），共 1 笔 |
+| 2026-08-19（二轮） | v0.6.0 M1 提取纯度交付（REQ-059/060/061/082/083/084/085，8 提交）+ 新增代码审查：R1-R4 全部即修（463dbf4）；market-stack-asr-notes-research.md 归档（[ ] 已归档，技术栈裁决完成，选型固化 AGENTS.md §2）；累计已偿 57 笔 | TD-040（P2，deliberate carried），共 1 笔 |

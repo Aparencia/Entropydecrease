@@ -154,7 +154,7 @@
   - 本地数据库：SQLite（Rust 侧 rusqlite / sqlx）
 - 第三方依赖：AI 能力可选（云端网关）；本地优先为架构属性
 - 部署环境：桌面应用（Windows 10/11 为主）
-- 市场依据：详见 [Foresight/market-stack-asr-notes-research.md](../Foresight/market-stack-asr-notes-research.md)
+- 市场依据：详见 [Foresight/market-stack-asr-notes-research.md（[ ] 已归档）](../archive/2026-08-19/market-stack-asr-notes-research.md)
 
 ## 7. 里程碑与排期
 

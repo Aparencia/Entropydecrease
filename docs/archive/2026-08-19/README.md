@@ -31,3 +31,29 @@
 
 - 归档采用 `git mv`（保留历史链）；活跃区引用已更新（Foresight README 索引改指归档路径 + v0.6.0 规划链接同步）
 - 下个归档日需先整理本清单（当前仅 TD-040 carried）
+
+---
+
+## 二轮归档（同日，v0.6.0 M1 提取纯度交付 + 新增代码审查 + 市场调研归档）
+
+> v0.6.0 M1（REQ-059/060/061/082/083/084/085）代码交付完成（8 个提交 cecf9f6..9fa8931）+
+> 新增代码审查（七维检查）产出 4 项问题全部即修（提交 463dbf4）+
+> 市场技术栈调研文档归档（技术栈 2026-08 已裁决，使命终结）。
+
+### 归档清单（二轮）
+
+| 源路径 | 归档路径 | 状态 |
+|--------|---------|------|
+| docs/Foresight/market-stack-asr-notes-research.md | docs/archive/2026-08-19/market-stack-asr-notes-research.md | [ ] 已归档（市场技术栈/ASR/笔记生成调研：2026-08 支撑 Tauri 技术栈裁决，选型已固化于 AGENTS.md §2 与 product/README.md，调研使命生命终态；活跃区链接已改指归档路径） |
+
+- **未归档**：brainstorming-no-cloud-ai-extraction-limit.md（V1.0 规划持续引用）、brainstorming-classroom-assistant-mechanisms.md + fed-guide（后续头脑风暴输入）、versions/、standards/、product/ 内容（持续活跃，多轮先例）
+
+### 技术债摘要（二轮滚动）
+
+- **未偿 1 笔**：TD-040（P2，deliberate carried——M1 代码未涉模型分发/捆绑，二次核对维持观察）
+- **今日追加已偿 4 笔**（M1 新增代码审查即修，提交 463dbf4）：
+  - R1 AI merge 目标丢失错拼无关段（medium）——保守恢复原段 + 回归测试
+  - R2 复核命令未拦截 recording 会话（medium）——与 preview 口径一致
+  - R3 复核缓存键不含上下文（low）——键纳入全送审内容
+  - R4 符号规则逐段重复排序（low）——排序移至构造期
+- 累计已偿：53 + 4 = 57 笔

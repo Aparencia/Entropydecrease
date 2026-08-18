@@ -19,7 +19,7 @@
 - **MVP 核心**：课堂助手（屏幕+音频捕获 → ASR 转写 → AI 结构化笔记）+ 笔记 + 闪卡间隔重复（知识持久化）
 - **MVP 成功标准**：视频知识提取与持久化达到市场级（对标通义听悟/讯飞听见）
 - **架构原则**：本地优先，数据不出本机，AI 为增强层
-- **技术栈（已裁决）**：Tauri 2 + React + TS + Rust；本地 ASR（sherpa-onnx crate）；笔记生成用云端多模态（不用 Ollama）；依据见 [Foresight/market-stack-asr-notes-research.md](../Foresight/market-stack-asr-notes-research.md)
+- **技术栈（已裁决）**：Tauri 2 + React + TS + Rust；本地 ASR（sherpa-onnx crate）；笔记生成用云端多模态（不用 Ollama）；依据见 [Foresight/market-stack-asr-notes-research.md（[ ] 已归档）](../archive/2026-08-19/market-stack-asr-notes-research.md)
 
 ## 文档演进顺序（Lean Product）
 

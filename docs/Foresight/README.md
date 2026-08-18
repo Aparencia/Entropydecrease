@@ -13,7 +13,7 @@
 
 | 文档 | 何时需要 |
 |------|---------|
-| [market-stack-asr-notes-research.md](./market-stack-asr-notes-research.md) | 市场技术栈/ASR 策略/笔记生成策略调研（2026-08，支持 Tauri 技术决策） |
+| [market-stack-asr-notes-research.md（[ ] 已归档）](../archive/2026-08-19/market-stack-asr-notes-research.md) | 市场技术栈/ASR 策略/笔记生成策略调研（2026-08，支持 Tauri 技术决策；2026-08-19 技术栈裁决完成归档） |
 | [brainstorming-no-cloud-ai-extraction-limit.md](./brainstorming-no-cloud-ai-extraction-limit.md) | 无云端 AI 的内容提取极限头脑风暴（2026-08-18：能力分层 + 挖掘方向 + 性能预算制） |
 | [brainstorming-classroom-assistant-mechanisms.md](./brainstorming-classroom-assistant-mechanisms.md) | 课堂助手机制摘要：系统快照 + 已实现/已排期/已否决清单 + A–G 机制候选 + ROI 排序（供其他 AI 模型头脑风暴输入） |
 | [brainstorming-classroom-assistant-mechanisms-fed-guide.md](./brainstorming-classroom-assistant-mechanisms-fed-guide.md) | 机制摘要投喂指南：文档结构与使用方法说明（配套 mechanisms 文档） |

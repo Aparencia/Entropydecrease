@@ -17,7 +17,7 @@
 - **MVP 核心**：课堂助手（屏幕+音频捕获 → 本地 ASR 转写 → 本地 OCR → 内容本地拼接 → 笔记）+ 间隔重复闪卡（知识持久化）
 - **MVP 成功标准**：视频知识提取与持久化达到市场级（对标通义听悟/讯飞听见）
 - 产品依据：`docs/product/`（痛点图谱/MVP 画布/PRD/需求池）
-- 技术决策依据：`docs/Foresight/market-stack-asr-notes-research.md`
+- 技术决策依据：`docs/archive/2026-08-19/market-stack-asr-notes-research.md`（[ ] 已归档，2026-08-19 裁决完成）
 
 ## 2. 技术栈（2026-08 已裁决，改动需 ADR）
 
