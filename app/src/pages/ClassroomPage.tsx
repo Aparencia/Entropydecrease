@@ -65,10 +65,19 @@ export default function ClassroomPage() {
       listen<string>("live:asr-partial", (e) => setPartialText(e.payload)),
       listen<string>("live:subtitle", (e) => setLastSubtitle(e.payload)),
       listen<string>("live:error", (e) => setLiveError(e.payload)),
-      listen<string>("live:status", () => {
-        setLiveActive(false);
-        setLiveSessionId(null);
-        setPartialText("");
+      // 修复（v0.3.0 审查反馈）：必须区分 payload——Rust 侧在 ASR 模型加载成功后
+      // 才 emit "recording"（比 invoke resolve 晚 1-3s），旧实现无条件清态导致
+      // 按钮变回"开始采集"而后端会话仍在跑，再点开始被拒绝
+      listen<string>("live:status", (e) => {
+        if (e.payload === "recording") {
+          // 后端确认录制中：保持/恢复活动态（invoke resolve 可能更早到达）
+          setLiveActive(true);
+        } else {
+          // stopped / failed：会话已结束
+          setLiveActive(false);
+          setLiveSessionId(null);
+          setPartialText("");
+        }
       }),
       // 模型自动下载进度（ADR-003）
       listen<DownloadProgress>("model:download-progress", (e) => setModelProgress(e.payload)),
@@ -147,7 +156,20 @@ export default function ClassroomPage() {
       setLiveSessionId(id);
       setStatus(`实时捕获已开始（会话 #${id}）`);
     } catch (e) {
-      setLiveError(`启动失败: ${e}`);
+      // 防御性恢复（修复反馈）：UI 与后端状态不同步（事件丢失/竞态）时，
+      // 查询真实状态恢复按钮语义，避免"假空闲"下重复点击被后端拒绝
+      if (String(e).includes("已有进行中的实时会话")) {
+        try {
+          const s = await invoke<LiveSessionStatus>("live_session_status");
+          setLiveActive(s.active);
+          setLiveSessionId(s.sessionId);
+          setLiveError(s.active ? "检测到采集仍在进行，已恢复状态；如需重启请先停止" : "状态已恢复");
+        } catch {
+          setLiveError(`启动失败: ${e}`);
+        }
+      } else {
+        setLiveError(`启动失败: ${e}`);
+      }
     }
   };
 
