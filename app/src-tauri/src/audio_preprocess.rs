@@ -8,6 +8,10 @@
 //!              动态静音能量阈值（防轻声讲课被 VAD 截断）。
 //! @ai-context: RNNoise 降噪为 v0.5 评估项（无成熟 rust 绑定 + 净收益未知），
 //!              本版不引入；AGC/阈值链已覆盖其大部分收益场景。
+//! @ai-context: 配置入口决策（审查澄清）：预处理链默认关，enabled 开关当前仅在
+//!              单测路径使用——生产启用需先完成微基准（CER 对比）定默认值，
+//!              届时在 live_session 创建处接入配置（v0.5 配置 UI 一并落地）；
+//!              本模块 API 已就绪（AudioPreprocessConfig），无需改结构。
 
 use crate::capture::resample::compute_rms;
 
@@ -86,8 +90,14 @@ impl AudioPreprocessor {
                 speech_threshold: base_threshold,
             };
         }
-        // ① AGC：目标 RMS 增益（峰值钳制回退）
-        let gain = agc_gain(samples, self.config.target_rms);
+        // ① AGC：目标 RMS 增益（峰值钳制回退）。
+        // TD-051 修复：target_rms<=0 表示"不启用 AGC，仅阈值链"（与文档契约一致）——
+        // 此时 gain=1 直通；否则 target_rms/rms=0 会把整路乘 0 静音
+        let gain = if self.config.target_rms > 0.0 {
+            agc_gain(samples, self.config.target_rms)
+        } else {
+            1.0
+        };
         let mut out: Vec<f32> = samples.iter().map(|s| s * gain).collect();
         if out.iter().any(|s| s.abs() > PEAK_LIMIT) {
             // 削波风险：回退到不越限的增益（RMS 目标让位峰值安全）
@@ -258,5 +268,14 @@ mod tests {
         let out = p.process(&[], 0.005);
         assert!(out.samples.is_empty());
         assert!(!out.clipped);
+    }
+
+    #[test]
+    fn zero_target_rms_disables_agc_but_keeps_threshold_chain() {
+        // TD-051：target_rms=0 契约 = 不启用 AGC 仅阈值链——样本必须直通而非乘 0
+        let mut p = AudioPreprocessor::new(AudioPreprocessConfig { enabled: true, target_rms: 0.0 });
+        let samples = sine(0.1, 1600, 440.0);
+        let out = p.process(&samples, 0.005);
+        assert_eq!(out.samples, samples, "target_rms=0 时 AGC 应直通，不得静音整路");
     }
 }

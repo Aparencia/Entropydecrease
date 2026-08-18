@@ -254,7 +254,12 @@ fn process_frame(
     // M2/REQ-037：字幕区裁剪由 ROI 决策替代固定底部 1/4（播放区域内动态锁定）；
     // 扫描期/重扫期走全帧（ROI 未锁定时 bbox 密度聚簇需全帧 det）
     let mut crop_origin: Option<(u32, u32)> = None;
+    // TD-046 修复：OCR 输入经 downscale（≤960px）后 bbox 处于缩小坐标系——
+    // 记录 downscale 前尺寸，回喂 RoiTracker 时按缩放比反算回帧坐标系
+    let mut ocr_input_scale = (1.0f32, 1.0f32);
     if is_subtitle {
+        let pre_scale_w = frame.width;
+        let pre_scale_h = frame.height;
         match roi_tracker.decide() {
             crate::region_tracker::RoiDecision::UseRoi(roi) => {
                 // ROI 钳制到帧内（窗口移动瞬间 ROI 可能越界——防御）
@@ -279,6 +284,13 @@ fn process_frame(
         if frame.bgraw.is_empty() {
             return;
         }
+        // TD-046：bbox 换算比例 = downscale 前后尺寸比（宽/高各自独立）
+        if pre_scale_w > 0 && pre_scale_h > 0 {
+            ocr_input_scale = (
+                pre_scale_w as f32 / frame.width as f32,
+                pre_scale_h as f32 / frame.height as f32,
+            );
+        }
     }
 
     // TD-025：BGRA8 帧 → 内存 RgbImage 直送 OCR（不再写磁盘临时 BMP，杜绝崩溃残留）
@@ -289,10 +301,11 @@ fn process_frame(
             // 成功识别即刷新 OCR 时刻（无论是否产出文本——防漏检兜底周期基准）
             *last_ocr_at = Instant::now();
             if is_subtitle {
-                // M2/REQ-037：bbox 回喂 ROI 跟踪器（锁定/失效判定；裁剪图坐标系+原点换算）
+                // M2/REQ-037：bbox 回喂 ROI 跟踪器（锁定/失效判定；
+                // 裁剪图坐标系 + 原点平移 + TD-046 缩放比反算）
                 let boxes: Vec<crate::types::TextBox> =
                     blocks.iter().filter_map(|b| b.bbox).collect();
-                roi_tracker.feed_ocr(&boxes, crop_origin);
+                roi_tracker.feed_ocr(&boxes, crop_origin, ocr_input_scale);
                 handle_subtitle_frame(
                     &frame, &blocks, voter, last_frame_text, last_preview, db, app, session_id, subtitle_segments,
                 );

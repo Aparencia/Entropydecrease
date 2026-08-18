@@ -33,11 +33,18 @@ pub fn mixdown_to_mono(input: &[f32], channels: u16) -> Vec<f32> {
 /// @ai-context: 立体声环回按声道 RMS 选能量最大声道（语音所在声道），
 ///              替代平均合并——单声道混入杂音时另一声道更干净；
 ///              单声道/空输入直通（与 mixdown_to_mono 行为一致）。
+/// @ai-context: 边界防御（审查修复）：声道数超过样本数（无法组成完整帧）时
+///              无法分帧选优 → 整段直通（不丢弃输入）；非整帧尾部样本
+///              按帧粒度丢弃（WASAPI 交付完整交错帧，实际不触发）。
 pub fn mixdown_prefer_cleanest(input: &[f32], channels: u16) -> Vec<f32> {
     if channels <= 1 || input.is_empty() {
         return input.to_vec();
     }
     let frames = input.len() / channels as usize;
+    if frames == 0 {
+        // 声道数 > 样本数：无法组成完整帧，直通保数据（不静默丢弃）
+        return input.to_vec();
+    }
     // 每声道 RMS
     let mut best = 0usize;
     let mut best_rms = -1.0f32;
@@ -213,6 +220,12 @@ mod tests {
         // 单声道直通
         assert_eq!(mixdown_prefer_cleanest(&[0.1, 0.2], 1), vec![0.1, 0.2]);
         assert!(mixdown_prefer_cleanest(&[], 2).is_empty());
+    }
+
+    #[test]
+    fn prefer_cleanest_channels_gt_samples_passthrough() {
+        // 审查修复：声道数超过样本数（无法组成完整帧）→ 直通保数据
+        assert_eq!(mixdown_prefer_cleanest(&[0.1, 0.2, 0.3], 4), vec![0.1, 0.2, 0.3]);
     }
 
     #[test]

@@ -128,13 +128,15 @@ fn silent_period_boosts_full_frame_sampling() {
     // Arrange：语音活跃期字幕每 2 tick、全帧每 5 tick
     let mut scheduler = DualRateScheduler::new(2, 5);
     // Act：静音期（speech_active=false）→ 字幕区降频（4 tick）、全帧提频（2 tick）
-    // Assert：t2/t6 全帧，t4 字幕区，其余跳过
+    // 独立计数语义（审查修复）：全帧点不被字幕 tick 遮蔽——t2/t5/t7 全帧，t4/t8 字幕
     assert_eq!(scheduler.next_region(false, false), SampleRegion::Skip); // t1
     assert_eq!(scheduler.next_region(false, false), SampleRegion::Full); // t2
     assert_eq!(scheduler.next_region(false, false), SampleRegion::Skip); // t3
     assert_eq!(scheduler.next_region(false, false), SampleRegion::Subtitle); // t4
-    assert_eq!(scheduler.next_region(false, false), SampleRegion::Skip); // t5
-    assert_eq!(scheduler.next_region(false, false), SampleRegion::Full); // t6
+    assert_eq!(scheduler.next_region(false, false), SampleRegion::Full); // t5
+    assert_eq!(scheduler.next_region(false, false), SampleRegion::Skip); // t6
+    assert_eq!(scheduler.next_region(false, false), SampleRegion::Full); // t7
+    assert_eq!(scheduler.next_region(false, false), SampleRegion::Subtitle); // t8
 }
 
 #[test]
@@ -182,7 +184,7 @@ fn degraded_applies_to_silent_period_too() {
 
 #[test]
 fn silent_and_degraded_knobs_are_configurable() {
-    // M4：VAD 旋钮与降级档参数化
+    // M4：VAD 旋钮与降级档参数化（独立计数语义：t4 起全帧间隔 4 tick）
     let mut scheduler = DualRateScheduler::new(2, 5)
         .with_silent(3, 2)
         .with_degraded_full(4);
@@ -190,12 +192,29 @@ fn silent_and_degraded_knobs_are_configurable() {
     assert_eq!(scheduler.next_region(false, false), SampleRegion::Skip); // t1
     assert_eq!(scheduler.next_region(false, false), SampleRegion::Full); // t2
     assert_eq!(scheduler.next_region(false, false), SampleRegion::Subtitle); // t3
-    // 降级：全帧 4 tick（t4/t8 全帧；字幕 3 tick 不变）
-    assert_eq!(scheduler.next_region(false, true), SampleRegion::Full); // t4
+    // 降级：全帧 4 tick（t7 触发——t2 清零后 full_tick 累计）
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Skip); // t4
     assert_eq!(scheduler.next_region(false, true), SampleRegion::Skip); // t5
     assert_eq!(scheduler.next_region(false, true), SampleRegion::Subtitle); // t6
-    assert_eq!(scheduler.next_region(false, true), SampleRegion::Skip); // t7
-    assert_eq!(scheduler.next_region(false, true), SampleRegion::Full); // t8
+    assert_eq!(scheduler.next_region(false, true), SampleRegion::Full); // t7
+}
+
+#[test]
+fn degraded_full_frame_not_shadowed_by_subtitle() {
+    // 审查修复：原取模实现下 degraded 档（full=10, sub=2）全帧被字幕 tick 整除
+    // 永久遮蔽（永不触发）；独立计数后在字幕空档补采（t11 触发，间隔 11 ≥ 10 不破封顶）
+    let mut scheduler = DualRateScheduler::new(2, 5);
+    let mut full_seen = false;
+    for i in 1..=20 {
+        let region = scheduler.next_region(true, true);
+        if i == 11 {
+            assert_eq!(region, SampleRegion::Full, "t11 应在字幕空档补采全帧");
+        }
+        if region == SampleRegion::Full {
+            full_seen = true;
+        }
+    }
+    assert!(full_seen, "degraded 档 20 tick 内全帧必须可触发（不得被字幕遮蔽）");
 }
 
 

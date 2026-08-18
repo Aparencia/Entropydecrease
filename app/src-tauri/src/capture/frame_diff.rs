@@ -158,7 +158,11 @@ pub struct DualRateScheduler {
     silent_full_every: u32,
     /// M4：高负载降级档全帧间隔（tick；默认 full_every×2 = 0.1fps 封顶）
     degraded_full_every: u32,
-    tick: u32,
+    /// 距上次字幕采样的 tick 数（独立计数：全帧点不被字幕 tick 整除遮蔽，
+    /// 审查修复——原取模实现下 degraded 档（如 full=10 且 sub=2）全帧永不触发）
+    subtitle_tick: u32,
+    /// 距上次全帧采样的 tick 数
+    full_tick: u32,
 }
 
 impl DualRateScheduler {
@@ -172,7 +176,8 @@ impl DualRateScheduler {
             silent_subtitle_every: 4,
             silent_full_every: 2,
             degraded_full_every: full_every * 2,
-            tick: 0,
+            subtitle_tick: 0,
+            full_tick: 0,
         }
     }
 
@@ -194,8 +199,12 @@ impl DualRateScheduler {
     }
 
     /// 推进一个 tick 并返回本次采样区域（speech_active=语音活跃度；degraded=高负载降级）。
+    ///
+    /// @ai-context: 字幕区与全帧各自独立计数（审查修复）：重叠 tick 优先字幕区
+    ///              （高频覆盖低频），全帧计数保持——在下一个字幕空档补采，
+    ///              保证全帧采样不被字幕 tick 整除永久遮蔽（degraded 档 0.1fps
+    ///              仍可触发，符合"降频而非清零"意图）。
     pub fn next_region(&mut self, speech_active: bool, degraded: bool) -> SampleRegion {
-        self.tick = self.tick.wrapping_add(1);
         let (sub_every, full_every) = if speech_active {
             (self.subtitle_every, self.full_every)
         } else {
@@ -203,9 +212,13 @@ impl DualRateScheduler {
         };
         // M4：降级档覆盖全帧间隔（静音期也不破 0.1fps 封顶）
         let full_every = if degraded { self.degraded_full_every } else { full_every };
-        if self.tick.is_multiple_of(sub_every) {
+        self.subtitle_tick = self.subtitle_tick.wrapping_add(1);
+        self.full_tick = self.full_tick.wrapping_add(1);
+        if self.subtitle_tick >= sub_every {
+            self.subtitle_tick = 0;
             SampleRegion::Subtitle
-        } else if self.tick.is_multiple_of(full_every) {
+        } else if self.full_tick >= full_every {
+            self.full_tick = 0;
             SampleRegion::Full
         } else {
             SampleRegion::Skip

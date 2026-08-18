@@ -81,12 +81,16 @@ impl RoiTracker {
     }
 
     /// 窗口尺寸自适应（窗口移动/缩放后先验坐标跟随；尺寸变化时强制重扫）。
+    ///
+    /// @ai-context: 同时清空 video_rect（TD-046 同批修复）——播放区域为帧坐标，
+    ///              尺寸变化后旧矩形立即失效（否则最长 5s 节流期内 ROI 错位）。
     pub fn resize(&mut self, w: u32, h: u32) {
         if self.frame_w == w && self.frame_h == h {
             return;
         }
         self.frame_w = w;
         self.frame_h = h;
+        self.video_rect = None;
         self.reset_scan();
     }
 
@@ -114,14 +118,18 @@ impl RoiTracker {
     ///              锁定失败 → 先验（区域规则回退，ADR-005 路径）。
     /// @ai-context: 锁定期：ROI 内无文本连续计数，超阈值 → 重扫。
     ///              OCR 失败帧不调用（失败≠无文本，不计数）。
-    pub fn feed_ocr(&mut self, blocks: &[TextBox], crop_origin: Option<(u32, u32)>) {
-        // 裁剪图坐标系 → 帧坐标系
+    /// @ai-context: scale=（宽/高缩放比，OCR 输入图尺寸相对裁剪前帧）——TD-046 修复：
+    ///              OCR 输入经 downscale_bgra（≤960px）后 bbox 处于缩小坐标系，
+    ///              必须按缩放比反算回帧坐标系再参与聚簇/判定，否则 >960px 屏幕
+    ///              ROI 错位（字幕裁半/空转）。
+    pub fn feed_ocr(&mut self, blocks: &[TextBox], crop_origin: Option<(u32, u32)>, scale: (f32, f32)) {
+        let (sx, sy) = scale;
+        let (ox, oy) = crop_origin.unwrap_or((0, 0));
         let frame_boxes: Vec<TextBox> = blocks
             .iter()
             .filter_map(|b| {
-                let (ox, oy) = crop_origin.unwrap_or((0, 0));
-                let (x, y) = (b.x + ox as f32, b.y + oy as f32);
-                (x >= 0.0 && y >= 0.0).then_some(TextBox { x, y, w: b.w, h: b.h })
+                let (x, y) = (b.x * sx + ox as f32, b.y * sy + oy as f32);
+                (x >= 0.0 && y >= 0.0).then_some(TextBox { x, y, w: b.w * sx, h: b.h * sy })
             })
             .collect();
 
@@ -275,7 +283,7 @@ mod tests {
         let mut t = RoiTracker::new(640, 360);
         assert_eq!(t.decide(), RoiDecision::FullFrame);
         for _ in 0..LOCK_SCAN_FRAMES {
-            t.feed_ocr(&[box_at(100.0, 260.0, 300.0, 20.0)], None);
+            t.feed_ocr(&[box_at(100.0, 260.0, 300.0, 20.0)], None, (1.0, 1.0));
         }
         assert_eq!(t.decide(), RoiDecision::UseRoi(t.locked_roi().unwrap()));
         assert!(t.locked_roi().unwrap().top >= 255);
@@ -285,7 +293,7 @@ mod tests {
     fn tracker_falls_back_to_prior_without_bboxes() {
         let mut t = RoiTracker::new(640, 360);
         for _ in 0..LOCK_SCAN_FRAMES {
-            t.feed_ocr(&[], None);
+            t.feed_ocr(&[], None, (1.0, 1.0));
         }
         let roi = t.locked_roi().unwrap();
         assert_eq!((roi.left, roi.top, roi.right, roi.bottom), (0, 270, 640, 360));
@@ -295,12 +303,12 @@ mod tests {
     fn tracker_rescans_after_continuous_empty() {
         let mut t = RoiTracker::new(640, 360);
         for _ in 0..LOCK_SCAN_FRAMES {
-            t.feed_ocr(&[box_at(100.0, 260.0, 300.0, 20.0)], None);
+            t.feed_ocr(&[box_at(100.0, 260.0, 300.0, 20.0)], None, (1.0, 1.0));
         }
         assert!(t.locked_roi().is_some());
         // ROI 内无文本连续空帧（bbox 在 ROI 外）→ 重扫
         for _ in 0..ROI_EMPTY_THRESHOLD {
-            t.feed_ocr(&[box_at(10.0, 10.0, 50.0, 20.0)], None);
+            t.feed_ocr(&[box_at(10.0, 10.0, 50.0, 20.0)], None, (1.0, 1.0));
         }
         assert_eq!(t.decide(), RoiDecision::FullFrame);
         assert!(t.locked_roi().is_none());
@@ -310,15 +318,15 @@ mod tests {
     fn tracker_text_resets_empty_counter() {
         let mut t = RoiTracker::new(640, 360);
         for _ in 0..LOCK_SCAN_FRAMES {
-            t.feed_ocr(&[box_at(100.0, 260.0, 300.0, 20.0)], None);
+            t.feed_ocr(&[box_at(100.0, 260.0, 300.0, 20.0)], None, (1.0, 1.0));
         }
         // 4 帧空 + 1 帧有文本 → 不触发重扫
         for _ in 0..4 {
-            t.feed_ocr(&[], None);
+            t.feed_ocr(&[], None, (1.0, 1.0));
         }
-        t.feed_ocr(&[box_at(100.0, 260.0, 300.0, 20.0)], None);
+        t.feed_ocr(&[box_at(100.0, 260.0, 300.0, 20.0)], None, (1.0, 1.0));
         for _ in 0..4 {
-            t.feed_ocr(&[], None);
+            t.feed_ocr(&[], None, (1.0, 1.0));
         }
         assert!(t.locked_roi().is_some());
     }
@@ -328,22 +336,41 @@ mod tests {
         let mut t = RoiTracker::new(640, 360);
         // 模拟：先锁定（全帧 bbox 在底部）
         for _ in 0..LOCK_SCAN_FRAMES {
-            t.feed_ocr(&[box_at(100.0, 260.0, 300.0, 20.0)], None);
+            t.feed_ocr(&[box_at(100.0, 260.0, 300.0, 20.0)], None, (1.0, 1.0));
         }
         // 锁定后 ROI 裁剪：裁剪图内的 bbox（如 y=5，ROI top=270 → 帧坐标 275）
         let roi = t.locked_roi().unwrap();
         for _ in 0..ROI_EMPTY_THRESHOLD - 1 {
-            t.feed_ocr(&[box_at(5.0, 5.0, 100.0, 10.0)], Some((roi.left as u32, roi.top as u32)));
+            t.feed_ocr(&[box_at(5.0, 5.0, 100.0, 10.0)], Some((roi.left as u32, roi.top as u32)), (1.0, 1.0));
         }
         // 裁剪图 bbox 中心 55,10 + 原点 (0,270) → 帧坐标 (55, 280) 在 ROI 内 → 不重扫
         assert!(t.locked_roi().is_some());
     }
 
     #[test]
+    fn downscaled_bboxes_are_rescaled_to_frame_coords() {
+        // TD-046：OCR 输入经 2x downscale（1920→960）后，bbox 需反算回帧坐标系
+        let mut t = RoiTracker::new(1920, 540);
+        // 扫描期：缩小坐标系 bbox（x=50..850, y=380..410）→ 帧坐标 x=100..1700, y=760..820
+        for _ in 0..LOCK_SCAN_FRAMES {
+            t.feed_ocr(&[box_at(50.0, 380.0, 800.0, 30.0)], None, (2.0, 2.0));
+        }
+        let roi = t.locked_roi().unwrap();
+        // 锁定 ROI 应为帧坐标（底部带 top=540-135=405；x 覆盖 100..1700）
+        assert!(roi.left <= 100, "缩小坐标未反算（left={}）", roi.left);
+        assert!(roi.right >= 1700, "缩小坐标未反算（right={}）", roi.right);
+        // 锁定期：ROI 裁剪 + 2x 缩放图内 bbox（y=8 → 帧坐标 405+16=421，仍在 ROI 内）→ 不重扫
+        for _ in 0..ROI_EMPTY_THRESHOLD - 1 {
+            t.feed_ocr(&[box_at(10.0, 8.0, 400.0, 6.0)], Some((roi.left as u32, roi.top as u32)), (2.0, 2.0));
+        }
+        assert!(t.locked_roi().is_some(), "缩放后 bbox 应换算回 ROI 内，不得误触发重扫");
+    }
+
+    #[test]
     fn playback_region_change_triggers_rescan() {
         let mut t = RoiTracker::new(640, 360);
         for _ in 0..LOCK_SCAN_FRAMES {
-            t.feed_ocr(&[box_at(100.0, 260.0, 300.0, 20.0)], None);
+            t.feed_ocr(&[box_at(100.0, 260.0, 300.0, 20.0)], None, (1.0, 1.0));
         }
         assert!(t.locked_roi().is_some());
         // 黑边帧（上下各 60px）→ video_rect 出现 → 重扫

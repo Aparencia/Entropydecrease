@@ -33,6 +33,10 @@ use crate::types::{NewSessionSegment, TranscriptSegment};
 
 /// 会话线程节拍（音频 channel 超时轮询间隔，ms）。
 const TICK_MS: u64 = 500;
+
+/// 音频块时长（秒）——audio_loopback 以 200ms 切块（16000/5），
+/// AsrHealthMonitor 的时间步长必须与之对齐（TD-050 修复）。
+const AUDIO_BLOCK_SECS: f64 = 0.2;
 /// ASR 段 start_ms 兜底近似（句首时刻缺失时：end - 2000ms）。
 const SENTENCE_FALLBACK_MS: u64 = 2000;
 /// 音频块时长（ms）——与 audio_loopback 的 200ms 定长块对齐（TD-041 句尾校正用）。
@@ -299,7 +303,10 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
                     clipping_logged = true;
                     eprintln!("[LiveSession] 检测到音频削波（输入电平过高，建议降低系统音量）");
                 }
-                let silent = compute_rms(&processed.samples) < processed.speech_threshold;
+                // TD-047 修复：静音判定用 **AGC 前原始样本** 与动态阈值比较——
+                // speech_threshold 基于原始噪声底估计，二者必须同尺度；
+                // 否则 AGC 放大后环境噪声被误判为语音（VAD/句切分失效）
+                let silent = compute_rms(&chunk.samples) < processed.speech_threshold;
                 // B3：语音活跃度共享（屏幕 worker 自适应采样依据）
                 speech_active.store(!silent, Ordering::Relaxed);
                 // A2：句起时刻 = Final 后首个非静音块（真实句首，替代 end-2000ms 近似）；
@@ -312,13 +319,21 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
                 }
                 let mut events = asr_engine.feed(&processed.samples, silent);
                 // M7/REQ-042 F5：有语音无产出持续 → 降级链提示（F3 静默失败可见化）
-                let tier = asr_health.observe(!silent, !events.is_empty(), TICK_MS as f64 / 1000.0);
+                // TD-050 修复：dt 取音频块时长 0.2s（TICK_MS=500 是轮询超时，非块时长）
+                let tier = asr_health.observe(!silent, !events.is_empty(), AUDIO_BLOCK_SECS);
                 if tier != asr_tier_emitted {
+                    let prev = asr_tier_emitted;
                     asr_tier_emitted = tier;
-                    let reason = crate::asr_health::tier_reason(tier);
-                    if !reason.is_empty() {
-                        eprintln!("[LiveSession] ASR 降级: {}", reason);
-                        let _ = params.app.emit("live:asr-degraded", reason.to_string());
+                    if tier == crate::asr_health::AsrTier::Streaming && prev != crate::asr_health::AsrTier::Streaming {
+                        // 恢复可见化：降级提示在前端不再残留（审查 low 项修复）
+                        eprintln!("[LiveSession] ASR 已恢复主链路");
+                        let _ = params.app.emit("live:asr-recovered", ());
+                    } else {
+                        let reason = crate::asr_health::tier_reason(tier);
+                        if !reason.is_empty() {
+                            eprintln!("[LiveSession] ASR 降级: {}", reason);
+                            let _ = params.app.emit("live:asr-degraded", reason.to_string());
+                        }
                     }
                 }
                 for event in events.drain(..) {
