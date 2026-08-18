@@ -72,7 +72,18 @@ impl Db {
                 -- v0.5.0 M4（REQ-048）：来源版面区域类型（kebab-case；NULL=整帧直跑）
                 region_kind TEXT
             );
-            CREATE INDEX IF NOT EXISTS idx_ocr_blocks_session ON session_ocr_blocks(session_id, timestamp_ms);",
+            CREATE INDEX IF NOT EXISTS idx_ocr_blocks_session ON session_ocr_blocks(session_id, timestamp_ms);
+            -- v0.5.0 M7（REQ-052）：会话产物块（会话 1:1 产物，块有序；payload JSON）
+            CREATE TABLE IF NOT EXISTS artifact_blocks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL,
+                refs_json TEXT NOT NULL DEFAULT '{}',
+                payload_json TEXT NOT NULL,
+                block_order INTEGER NOT NULL,
+                source TEXT NOT NULL DEFAULT 'local'
+            );
+            CREATE INDEX IF NOT EXISTS idx_artifact_session ON artifact_blocks(session_id, block_order);",
         )?;
         // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）
         ensure_column(&conn, "sessions", "profile", "ALTER TABLE sessions ADD COLUMN profile TEXT")?;

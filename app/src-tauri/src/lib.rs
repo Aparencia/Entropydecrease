@@ -7,6 +7,8 @@
 mod asr;
 mod asr_health;
 mod analysis;
+mod artifact;
+mod artifact_templates;
 mod audio_preprocess;
 mod capture;
 mod chapter_detect;
@@ -15,6 +17,7 @@ mod commands;
 #[cfg(target_os = "windows")]
 mod commands_live;
 mod commands_analysis;
+mod commands_artifacts;
 mod commands_device;
 mod commands_diag;
 mod commands_images;
@@ -25,6 +28,7 @@ mod commands_vocab;
 mod commands_video;
 mod concat;
 mod db;
+mod db_artifacts;
 mod db_sessions;
 mod db_sessions_rows;
 mod device_config;
@@ -385,6 +389,10 @@ pub fn run() {
             commands_images::delete_session_images_all,
             commands_images::save_user_screenshot,
             commands_images::session_images_base_url,
+            // 会话产物（REQ-052/053，v0.5.0 M7：模板构建/读取/落笔记）
+            commands_artifacts::build_session_artifact,
+            commands_artifacts::get_session_artifact,
+            commands_artifacts::artifact_to_note,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

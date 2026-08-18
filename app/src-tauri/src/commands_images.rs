@@ -53,6 +53,37 @@ pub fn session_images_base_url(state: State<'_, AppState>, session_id: i64) -> R
     Ok(session_image_dir(&state, session_id).to_string_lossy().into_owned())
 }
 
+/// 关键帧候选（M7 产物模板输入）：从会话图片库取已归档图片时间戳
+/// 构造 KeyFrameCandidate（用户截图/自动归档均计入；得分占位 1.0）。
+///
+/// @ai-context: M6 停止时投票结果以事件推送（session:keyframes），未持久化；
+///              产物构建时从图片库重建候选（时间戳 = 文件名），供模板消费。
+pub fn keyframes_from_store(
+    state: &AppState,
+    session_id: i64,
+) -> Result<Vec<crate::frame_cluster::KeyFrameCandidate>, String> {
+    let dir = session_image_dir(state, session_id);
+    if !dir.join("full").is_dir() {
+        return Ok(Vec::new());
+    }
+    let store = SessionImageStore::new(dir).map_err(|e| e.to_string())?;
+    let mut frames = Vec::new();
+    for rel in store.list_images() {
+        // full/<ts>.webp → ts
+        if let Some(name) = rel.strip_prefix("full/").and_then(|n| n.strip_suffix(".webp")) {
+            if let Ok(ts) = name.parse::<u64>() {
+                frames.push(crate::frame_cluster::KeyFrameCandidate {
+                    timestamp_ms: ts,
+                    score: 1.0,
+                    reasons: vec!["归档".to_string()],
+                    user_marked: false,
+                });
+            }
+        }
+    }
+    Ok(frames)
+}
+
 /// 列出会话图片（参考图集/缩略图走廊数据源；按时间戳升序）。
 #[tauri::command]
 pub fn list_session_images(

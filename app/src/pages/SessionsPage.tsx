@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import ArtifactView from "../components/ArtifactView";
 import ImageGallery from "../components/ImageGallery";
 import type { Session, SessionDetail, Note } from "../types";
 
@@ -40,6 +41,8 @@ export default function SessionsPage() {
   const [fusingId, setFusingId] = useState<number | null>(null);
   // 当前打开详情的会话 id（事件监听用 ref——避免闭包捕获旧值/更新器内副作用）
   const openIdRef = useRef<number | null>(null);
+  // v0.5.0 M7（REQ-052）：详情页视图切换（原料视图 / 产物视图）
+  const [viewMode, setViewMode] = useState<"raw" | "artifact">("raw");
 
   const openDetail = useCallback(async (id: number) => {
     openIdRef.current = id;
@@ -188,6 +191,34 @@ export default function SessionsPage() {
             </div>
             {status && <p style={{ fontSize: 12, color: "#2563eb", marginBottom: 8 }}>{status}</p>}
 
+            {/* v0.5.0 M7（REQ-052）：原料视图 / 产物视图切换 */}
+            <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+              {(
+                [
+                  ["raw", "原料视图"],
+                  ["artifact", "产物视图"],
+                ] as const
+              ).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  style={{
+                    ...btn,
+                    borderRadius: 6,
+                    border: viewMode === mode ? "1px solid #0d9488" : "1px solid #e5e7eb",
+                    background: viewMode === mode ? "#ccfbf1" : "#fff",
+                    color: viewMode === mode ? "#0f766e" : "#374151",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {viewMode === "artifact" ? (
+              <ArtifactView sessionId={detail.session.id} />
+            ) : (
+              <>
             {/* 转写时间轴（字幕为主，语音/融合弱化） */}
             <h3 style={{ fontSize: 13, margin: "12px 0 6px" }}>转写时间轴</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -236,6 +267,8 @@ export default function SessionsPage() {
             {/* 参考图集（v0.5.0 M6：REQ-051 三层图结构——画廊 + 缩略图走廊） */}
             <h3 style={{ fontSize: 13, margin: "16px 0 6px" }}>参考图集</h3>
             <ImageGallery sessionId={detail.session.id} />
+              </>
+            )}
           </>
         )}
       </div>
