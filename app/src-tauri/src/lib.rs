@@ -6,12 +6,15 @@
 
 mod asr;
 mod asr_health;
+mod analysis;
 mod audio_preprocess;
 mod capture;
+mod chapter_detect;
 mod commands;
 // 实时会话链路依赖 Windows 捕获 API（WASAPI/DXGI/COM），非 Windows 平台不编译（TD-027 修复）
 #[cfg(target_os = "windows")]
 mod commands_live;
+mod commands_analysis;
 mod commands_device;
 mod commands_diag;
 mod commands_import;
@@ -31,7 +34,9 @@ mod engine;
 mod error;
 mod ffmpeg;
 mod fusion;
+mod glossary;
 mod health_check;
+mod highlight_detect;
 mod import;
 mod import_frame;
 #[cfg(target_os = "windows")]
@@ -48,7 +53,9 @@ mod streaming_asr;
 mod subtitle;
 mod subtitle_detect;
 mod subtitle_ocr;
+mod speaker_change;
 mod types;
+mod verbal_normalize;
 mod video_profile;
 mod video_profile_data;
 mod vocab;
@@ -357,6 +364,8 @@ pub fn run() {
             commands_video::remember_video_profile,
             commands_video::video_profile_memory,
             commands_video::video_profile_by_kind,
+            // 会话结构化分析（REQ-044/045/046，v0.5.0 M2：章节/重点/术语/讲者）
+            commands_analysis::analyze_session_command,
             // 健康巡检与诊断（REQ-042，M7：F2/F3/G2）
             commands_diag::health_status,
             commands_diag::diag_snapshot
