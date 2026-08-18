@@ -141,7 +141,7 @@ pub fn run_screen_worker(
         // 诊断：每 15s 打印采样统计（会话无 OCR 时定位失败阶段；静默失败可见化）
         if stats
             .last_log_at
-            .map_or(true, |t| t.elapsed() >= Duration::from_secs(15))
+            .is_none_or(|t| t.elapsed() >= Duration::from_secs(15))
         {
             stats.last_log_at = Some(Instant::now());
             eprintln!(
