@@ -39,6 +39,11 @@ impl AsrEngine {
             use_itn: true,
         };
         config.model_config.tokens = Some(models.tokens.clone());
+        // REQ-054（v0.5.0 M9 B8）：token 时间戳——sherpa-onnx 1.13 底层 C API 支持
+        // enable_token_timestamps，但 Rust 包装 OfflineRecognizerConfig 未暴露该字段
+        // （2026-08 核对 1.13.5 源码）；词级时间戳协议/提取函数已就位（extract_word_
+        // timestamps），启用点 = 升级 sherpa-onnx 或 FFI 直连时设置（V1.0），
+        // 当前返回 None（不影响段级时间轴）。
 
         let recognizer = OfflineRecognizer::create(&config)
             .ok_or_else(|| AppError::Asr("创建识别器失败（请检查 ASR 模型文件与配置）".to_string()))?;
@@ -49,6 +54,8 @@ impl AsrEngine {
     ///
     /// @ai-context: SenseVoice 离线整段识别不产出逐句时间戳，返回单段 [0, duration]；
     ///              逐句时间戳为后续流式阶段（v0.2.0）能力。
+    /// @ai-context: REQ-054（B8）：token timestamps 开启时产出词级时间戳
+    ///              （相对片段起点；None=模型不支持）。
     pub fn transcribe(&self, wav_path: &str) -> Result<TranscriptSegment> {
         let wave = Wave::read(wav_path)
             .ok_or_else(|| AppError::Asr(format!("读取音频失败（文件不存在或非 WAV 格式）: {}", wav_path)))?;
@@ -66,6 +73,7 @@ impl AsrEngine {
             start_ms: 0,
             end_ms: duration_ms,
             text: result.text.trim().to_string(),
+            word_timestamps: extract_word_timestamps(&result),
         })
     }
 
@@ -89,8 +97,33 @@ impl AsrEngine {
             start_ms: 0,
             end_ms: duration_ms,
             text: result.text.trim().to_string(),
+            word_timestamps: extract_word_timestamps(&result),
         })
     }
+}
+
+/// 提取词级时间戳（REQ-054 B8；纯函数）。
+///
+/// @ai-context: sherpa-onnx token timestamps 为 token 级（秒，相对输入起点）：
+///              按 token 累积为词起始毫秒；tokens/timestamps 任一缺失 → None。
+fn extract_word_timestamps(
+    result: &sherpa_onnx::OfflineRecognizerResult,
+) -> Option<Vec<crate::types::WordTimestamp>> {
+    let timestamps = result.timestamps.as_ref()?;
+    let mut words = Vec::new();
+    let mut acc_ms = 0.0f32;
+    for (i, token) in result.tokens.iter().enumerate() {
+        if token.trim().is_empty() {
+            continue;
+        }
+        let ts = timestamps.get(i).copied().unwrap_or(acc_ms);
+        acc_ms = ts;
+        words.push(crate::types::WordTimestamp {
+            word: token.trim().to_string(),
+            start_ms: (ts * 1000.0).round().max(0.0) as u64,
+        });
+    }
+    if words.is_empty() { None } else { Some(words) }
 }
 
 /// 校验模型文件存在，缺失时给出可操作的错误（引导用户下载）。
@@ -116,4 +149,66 @@ fn estimate_duration_ms(sample_rate: i32, num_samples: usize) -> u64 {
         return 0;
     }
     (num_samples as u64 * 1000) / sample_rate as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 构造识别结果（token + 时间戳对齐）。
+    fn result(tokens: Vec<&str>, timestamps: Option<Vec<f32>>) -> sherpa_onnx::OfflineRecognizerResult {
+        sherpa_onnx::OfflineRecognizerResult {
+            text: tokens.join(""),
+            tokens: tokens.into_iter().map(String::from).collect(),
+            timestamps,
+            durations: None,
+        }
+    }
+
+    #[test]
+    fn word_timestamps_extracted_from_tokens() {
+        // Arrange：token 级时间戳（秒）
+        let r = result(
+            vec!["你", "好", "世", "界"],
+            Some(vec![0.0, 0.2, 0.5, 0.8]),
+        );
+        // Act
+        let words = extract_word_timestamps(&r).expect("words");
+        // Assert：词起始毫秒 = 秒 × 1000
+        assert_eq!(words.len(), 4);
+        assert_eq!(words[0], crate::types::WordTimestamp { word: "你".into(), start_ms: 0 });
+        assert_eq!(words[1], crate::types::WordTimestamp { word: "好".into(), start_ms: 200 });
+        assert_eq!(words[3], crate::types::WordTimestamp { word: "界".into(), start_ms: 800 });
+    }
+
+    #[test]
+    fn word_timestamps_none_when_missing() {
+        // Arrange：timestamps 缺失（Rust 包装未开启 token timestamps 时）
+        let r = result(vec!["你", "好"], None);
+        // Act/Assert：None（协议降级：段级时间轴不受影响）
+        assert!(extract_word_timestamps(&r).is_none());
+    }
+
+    #[test]
+    fn word_timestamps_skips_blank_tokens() {
+        // Arrange：含空白 token（分词边界）
+        let r = result(
+            vec!["你", " ", "好"],
+            Some(vec![0.0, 0.1, 0.2]),
+        );
+        // Act
+        let words = extract_word_timestamps(&r).expect("words");
+        // Assert：空白 token 跳过，仅 2 词
+        assert_eq!(words.len(), 2);
+        assert_eq!(words[0].word, "你");
+        assert_eq!(words[1].word, "好");
+    }
+
+    #[test]
+    fn word_timestamps_empty_tokens_none() {
+        // Arrange：全部空白 token
+        let r = result(vec![" ", " "], Some(vec![0.0, 0.1]));
+        // Act/Assert：空词表 → None
+        assert!(extract_word_timestamps(&r).is_none());
+    }
 }

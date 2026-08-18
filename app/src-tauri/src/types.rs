@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 /// 单条 ASR 转写片段。
 ///
 /// @ai-context: start_ms/end_ms 为相对会话起点的毫秒时间戳，用于与 OCR 关键帧对齐拼接。
+/// @ai-context: v0.5.0 M9（REQ-054 B8）：word_timestamps 为词级时间戳
+///              （[词, 起始毫秒] 对，相对片段起点；SenseVoice 开启 token timestamps 时产出）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TranscriptSegment {
     /// 起始毫秒时间戳
@@ -17,6 +19,16 @@ pub struct TranscriptSegment {
     pub end_ms: u64,
     /// 识别出的文本
     pub text: String,
+    /// 词级时间戳（B8；None=未开启/旧数据）
+    pub word_timestamps: Option<Vec<WordTimestamp>>,
+}
+
+/// 词级时间戳（B8：产物双向定位 + AI 补缝判定器基础）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WordTimestamp {
+    pub word: String,
+    /// 相对片段起点的起始毫秒
+    pub start_ms: u64,
 }
 
 /// 文本块边界框（像素坐标，相对 OCR 输入图；M2/REQ-037 起由 det 结果填充）。

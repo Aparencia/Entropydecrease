@@ -20,6 +20,8 @@ export interface TranscriptSegment {
   start_ms: number;
   end_ms: number;
   text: string;
+  /** 词级时间戳（v0.5.0 REQ-054 B8；null=未开启/旧数据） */
+  word_timestamps: { word: string; start_ms: number }[] | null;
 }
 
 /** OCR 画面文本块 */

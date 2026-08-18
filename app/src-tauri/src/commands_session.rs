@@ -159,7 +159,13 @@ pub async fn session_to_note(
         .list_segments(id)
         .map_err(|e| e.to_string())?
         .into_iter()
-        .map(|s| TranscriptSegment { start_ms: s.start_ms, end_ms: s.end_ms, text: s.text })
+        .map(|s| TranscriptSegment {
+            start_ms: s.start_ms,
+            end_ms: s.end_ms,
+            text: s.text,
+            // 词级时间戳：会话段表未落词级（B8 由离线/精修路径产出）
+            word_timestamps: None,
+        })
         .collect();
     let ocr_blocks: Vec<OcrBlock> = state
         .db

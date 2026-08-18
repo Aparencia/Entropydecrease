@@ -11,7 +11,7 @@ fn sub(start_ms: u64, end_ms: u64, text: &str) -> SubtitleSegment {
 }
 
 fn asr(start_ms: u64, end_ms: u64, text: &str) -> TranscriptSegment {
-    TranscriptSegment { start_ms, end_ms, text: text.to_string() }
+    TranscriptSegment { start_ms, end_ms, text: text.to_string(), word_timestamps: None }
 }
 
 const GAP: u64 = 1000;

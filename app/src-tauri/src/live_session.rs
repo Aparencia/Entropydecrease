@@ -396,7 +396,13 @@ fn run_session(
                                 source: "asr".to_string(),
                                 confidence: Some(0.9),
                             });
-                            asr_segments.push(TranscriptSegment { start_ms, end_ms, text });
+                            asr_segments.push(TranscriptSegment {
+                                start_ms,
+                                end_ms,
+                                text,
+                                // 流式链路词级时间戳：B8 由离线/精修路径产出（None）
+                                word_timestamps: None,
+                            });
                         }
                         StreamingAsrEvent::Partial { text } => {
                             let _ = params.app.emit("live:asr-partial", text);
@@ -429,7 +435,13 @@ fn run_session(
             source: "asr".to_string(),
             confidence: Some(0.8),
         });
-        asr_segments.push(TranscriptSegment { start_ms, end_ms, text });
+        asr_segments.push(TranscriptSegment {
+            start_ms,
+            end_ms,
+            text,
+            // 流式链路词级时间戳：B8 由离线/精修路径产出（None）
+            word_timestamps: None,
+        });
     }
     audio.stop();
 
