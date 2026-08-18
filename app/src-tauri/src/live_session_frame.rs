@@ -34,6 +34,10 @@ const SAMPLE_TICK_MS: u64 = 1000;
 const WORKER_POLL_MS: u64 = 50;
 /// OCR 输入最大宽度（P4：字幕裁剪区缩至该宽度再送 OCR，推理成本近平方下降）。
 const MAX_OCR_WIDTH: u32 = 960;
+/// 强制 OCR 间隔（s）——diff 采样漏检兜底：变化检测（8 块 × 60 字节采样 hash）
+/// 对局部/平滑变化可能漏检（采样点错过变化像素），此时距上次 OCR 超过该间隔
+/// 强制识别一次，保证"屏幕在变但无 OCR"场景至少周期性产出（用户反馈 4/5 会话无 OCR 排查项）。
+const FORCE_OCR_INTERVAL_SECS: u64 = 15;
 
 /// 屏幕采样线程入口（TD-026 修复：OCR 从会话线程移出，音频消费不再被阻塞）。
 ///
@@ -75,6 +79,9 @@ pub fn run_screen_worker(
     let mut last_sample_at = Instant::now();
     // 捕获失败日志节流状态（屏幕链路失效时每帧报错会刷屏，5s 一次）
     let mut last_capture_error: Option<Instant> = None;
+    // 上次 OCR 时刻（强制 OCR 兜底）与全帧文本去重（强制 OCR 下静止画面不重复落库）
+    let mut last_ocr_at = Instant::now();
+    let mut last_full_texts: Vec<String> = Vec::new();
 
     while !stop.load(Ordering::SeqCst) {
         if last_sample_at.elapsed().as_millis() as u64 >= SAMPLE_TICK_MS {
@@ -89,7 +96,7 @@ pub fn run_screen_worker(
                 process_frame(
                     screen.as_mut(), diff, &mut voter, &mut last_frame_text, &mut last_preview,
                     &db, &engines, &app, session_id, region, &subtitle_segments, epoch,
-                    &mut last_capture_error,
+                    &mut last_capture_error, &mut last_ocr_at, &mut last_full_texts,
                 );
             }
         }
@@ -121,6 +128,8 @@ fn process_frame(
     subtitle_segments: &Mutex<Vec<SubtitleSegment>>,
     epoch: Instant,
     last_capture_error: &mut Option<Instant>,
+    last_ocr_at: &mut Instant,
+    last_full_texts: &mut Vec<String>,
 ) {
     let Some(sampler) = screen else { return };
     // 字幕区只认底部 1/4：先全帧捕获再裁剪（简化双速率，字幕区帧成本可控）
@@ -150,7 +159,11 @@ fn process_frame(
     };
     // A1：帧时间戳统一为会话纪元（与音频/flush 同基准，ADR-008）
     frame.timestamp_ms = epoch.elapsed().as_millis() as u64;
-    if !diff.has_changed(&frame.bgraw) {
+    // 强制 OCR 兜底（diff 采样漏检防御）：变化检测 hash 对局部/平滑变化可能漏检
+    // （采样点错过变化像素）——距上次 OCR 超过 FORCE_OCR_INTERVAL 时无条件放行，
+    // 保证"屏幕在变但无 OCR"场景至少周期性产出（用户反馈 4/5 会话无 OCR 排查项）
+    let force_ocr = last_ocr_at.elapsed() >= Duration::from_secs(FORCE_OCR_INTERVAL_SECS);
+    if !diff.has_changed(&frame.bgraw) && !force_ocr {
         return;
     }
     let is_subtitle = region == SampleRegion::Subtitle;
@@ -168,12 +181,14 @@ fn process_frame(
     let Some(rgb) = bgra_to_rgb_image(&frame.bgraw, frame.width, frame.height) else { return };
     match engines.recognize_image(rgb) {
         Ok(blocks) => {
+            // 成功识别即刷新 OCR 时刻（无论是否产出文本——防漏检兜底周期基准）
+            *last_ocr_at = Instant::now();
             if is_subtitle {
                 handle_subtitle_frame(
                     &frame, &blocks, voter, last_frame_text, last_preview, db, app, session_id, subtitle_segments,
                 );
             } else {
-                handle_full_frame(&frame, &blocks, db, session_id);
+                handle_full_frame(&frame, &blocks, db, session_id, last_full_texts);
             }
         }
         Err(e) => eprintln!("[ScreenWorker] OCR 识别失败（下帧重试）: {}", e),
@@ -263,13 +278,25 @@ fn persist_voted_subtitle(
     let _ = app.emit("live:subtitle", text);
 }
 
-/// 全帧：画面要点落 OCR 块（低置信度过滤）。
+/// 全帧：画面要点落 OCR 块（低置信度过滤 + 帧间文本去重）。
+///
+/// @ai-context: 去重（与导入链路 same_texts 同口径）：强制 OCR 兜底会使静止画面
+///              每 15s 重复识别——文本集合与上次完全一致时跳过落库，防要点列表刷屏。
 fn handle_full_frame(
     frame: &CapturedFrame,
     blocks: &[crate::types::OcrBlock],
     db: &Db,
     session_id: i64,
+    last_texts: &mut Vec<String>,
 ) {
+    let texts: Vec<String> = blocks
+        .iter()
+        .filter(|b| b.score >= 0.5 && !b.text.trim().is_empty())
+        .map(|b| b.text.clone())
+        .collect();
+    if crate::import_frame::same_texts(&texts, last_texts) {
+        return;
+    }
     for block in blocks {
         if block.score >= 0.5 && !block.text.trim().is_empty() {
             let _ = db.add_ocr_block(&NewSessionOcrBlock {
@@ -281,6 +308,7 @@ fn handle_full_frame(
             });
         }
     }
+    *last_texts = texts;
 }
 
 /// 融合并重写会话段：单事务原子替换（删除原段 + 插入融合时间轴，ADR-005 §3）。
