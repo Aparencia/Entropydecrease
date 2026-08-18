@@ -101,6 +101,27 @@ fn budget_limited_to_max() {
 }
 
 #[test]
+fn reopened_store_restores_budget_from_disk() {
+    // Arrange：存 3 张后关闭 store（模拟命令层每次 new——原实现 saved 重置为 0，
+    // 预算从此失效：save_user_screenshot 可无限存图超上限）
+    let dir = tempfile::tempdir().unwrap();
+    {
+        let mut store = SessionImageStore::new(dir.path().to_path_buf()).unwrap();
+        store.save_frame(100, &solid_frame(32, 32, 1, 1, 1), 32, 32).unwrap();
+        store.save_crop(200, &solid_frame(32, 32, 2, 2, 2), 32, 32).unwrap();
+        store.save_frame(300, &solid_frame(32, 32, 3, 3, 3), 32, 32).unwrap();
+    }
+    // Act：重新打开（新实例，saved 应恢复为 3——full 2 + crop 1）
+    let mut store = SessionImageStore::new(dir.path().to_path_buf()).unwrap();
+    // Assert：预算按磁盘已有图片扣减，而非归零
+    assert_eq!(store.remaining_budget(), BUDGET_MAX_IMAGES - 3);
+    for i in 0..(BUDGET_MAX_IMAGES - 3) as u64 {
+        store.save_frame(1000 + i, &solid_frame(32, 32, 4, 4, 4), 32, 32).unwrap();
+    }
+    assert!(store.save_frame(99999, &solid_frame(32, 32, 4, 4, 4), 32, 32).is_err(), "恢复预算后仍应封顶");
+}
+
+#[test]
 fn list_images_sorted_by_timestamp() {
     // Arrange：乱序保存
     let dir = tempfile::tempdir().unwrap();

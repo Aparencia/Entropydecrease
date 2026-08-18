@@ -28,11 +28,16 @@ pub struct SessionImageStore {
 
 impl SessionImageStore {
     /// 创建会话图片库（目录不存在则创建）。
+    ///
+    /// @ai-context: 修复：saved 从磁盘已有图片数恢复（原实现恒为 0）——
+    ///              save_user_screenshot 等命令每次调用都 new 一个 store，
+    ///              预算检查因此从未对命令路径生效（可无限存图超上限）。
     pub fn new(session_dir: PathBuf) -> Result<Self> {
         std::fs::create_dir_all(session_dir.join("full"))?;
         std::fs::create_dir_all(session_dir.join("thumb"))?;
         std::fs::create_dir_all(session_dir.join("crop"))?;
-        Ok(Self { session_dir, saved: 0 })
+        let saved = count_webp(&session_dir.join("full")) + count_webp(&session_dir.join("crop"));
+        Ok(Self { session_dir, saved })
     }
 
     /// 剩余预算（0 = 已达上限；full/thumb 与 crop 共用预算，防总盘占用失控）。
@@ -128,6 +133,18 @@ impl SessionImageStore {
         paths.sort();
         paths
     }
+}
+
+/// 统计目录内 WebP 文件数（预算恢复用；目录不存在/读失败按 0 计）。
+fn count_webp(dir: &Path) -> usize {
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().extension().is_some_and(|x| x == "webp"))
+                .count()
+        })
+        .unwrap_or(0)
 }
 
 /// BGRA8 → RGB（纯函数；尺寸/长度不匹配返回 None）。
