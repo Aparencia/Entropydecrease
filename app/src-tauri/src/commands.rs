@@ -9,17 +9,29 @@ use tauri::State;
 use crate::concat;
 use crate::db::Db;
 use crate::engine::EnginePool;
+use crate::live_session::LiveSessionManager;
+use crate::model_downloader::ModelDownloader;
+use crate::streaming_asr::StreamingAsrModels;
 use crate::types::{NewNote, Note, NoteDraft, OcrBlock, TranscriptSegment};
 use crate::windows::{self, CaptureWindow};
 
-/// 应用共享状态：数据库 + 常驻引擎池。
+/// 应用共享状态：数据库 + 常驻引擎池 + 流式模型路径 + 实时会话管理器 + 模型下载器。
 ///
 /// @ai-context: Db 为 Arc 包裹（Clone 廉价）；EnginePool 内部仅 channel sender（Clone 廉价），
-///              二者都可安全移入 spawn_blocking 闭包。
+///              二者都可安全移入 spawn_blocking 闭包；streaming_models 仅路径（只读）；
+///              app 供实时会话事件推送（Tauri Emitter）；live_session/model_downloader 为内部可变状态。
 #[derive(Clone)]
 pub struct AppState {
     pub db: Db,
     pub engines: EnginePool,
+    /// 流式 ASR 模型路径（ADR-003：models/streaming-zipformer/ 四件套）
+    pub streaming_models: StreamingAsrModels,
+    /// 实时会话管理器（M7 编排）
+    pub live_session: LiveSessionManager,
+    /// 流式模型自动下载器（ADR-003 模型分发）
+    pub model_downloader: ModelDownloader,
+    /// 应用句柄（事件推送 live:* / model:*）
+    pub app: tauri::AppHandle,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。
@@ -27,7 +39,7 @@ pub struct AppState {
 /// @ai-context: 枚举为系统调用（数百窗口 + 逐个查进程名），走 spawn_blocking 避免卡 UI。
 #[tauri::command]
 pub async fn list_windows() -> Result<Vec<CaptureWindow>, String> {
-    tauri::async_runtime::spawn_blocking(|| windows::list_capture_windows())
+    tauri::async_runtime::spawn_blocking(windows::list_capture_windows)
         .await
         .map_err(|e| format!("任务调度失败: {}", e))
 }

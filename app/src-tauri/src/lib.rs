@@ -5,12 +5,24 @@
 //! @ai-context: AppState 在 setup 时初始化：SQLite 数据库 + 常驻引擎池（后台加载 ASR/OCR 模型）。
 
 mod asr;
+mod capture;
 mod commands;
+mod commands_live;
+mod commands_session;
+mod commands_streaming;
 mod concat;
 mod db;
+mod db_sessions;
+mod db_sessions_rows;
 mod engine;
 mod error;
+mod fusion;
+mod live_session;
+mod live_session_frame;
+mod model_downloader;
 mod ocr;
+mod streaming_asr;
+mod subtitle_ocr;
 mod types;
 mod windows;
 
@@ -20,7 +32,10 @@ use tauri::Manager;
 
 use crate::asr::AsrModels;
 use crate::engine::EnginePool;
+use crate::live_session::LiveSessionManager;
+use crate::model_downloader::ModelDownloader;
 use crate::ocr::{OcrModels, OcrParams};
+use crate::streaming_asr::StreamingAsrModels;
 use commands::AppState;
 use db::Db;
 
@@ -32,6 +47,21 @@ fn asr_models(model_dir: &Path) -> AsrModels {
     AsrModels {
         model: model_dir.join("asr/sensevoice/model.int8.onnx").to_string_lossy().into_owned(),
         tokens: model_dir.join("asr/sensevoice/tokens.txt").to_string_lossy().into_owned(),
+    }
+}
+
+/// 构造流式 ASR 模型路径（ADR-003：models/streaming-zipformer/ 四件套）。
+///
+/// @ai-context: 2026-08 升级为 2025-06-30 新版中文 zipformer（fp16）——替代 2023-02-20
+///              旧双语包（性能与准确性显著提升，用户决策）；文件名与官方仓库
+///              csukuangfj/sherpa-onnx-streaming-zipformer-zh-fp16-2025-06-30 一致。
+fn streaming_asr_models(model_dir: &Path) -> StreamingAsrModels {
+    let dir = model_dir.join("streaming-zipformer");
+    StreamingAsrModels {
+        encoder: dir.join("encoder.fp16.onnx").to_string_lossy().into_owned(),
+        decoder: dir.join("decoder.fp16.onnx").to_string_lossy().into_owned(),
+        joiner: dir.join("joiner.fp16.onnx").to_string_lossy().into_owned(),
+        tokens: dir.join("tokens.txt").to_string_lossy().into_owned(),
     }
 }
 
@@ -102,11 +132,22 @@ pub fn run() {
             let db = Db::open(&db_path.to_string_lossy())
                 .map_err(|e| format!("初始化数据库失败: {}", e))?;
 
+            // 崩溃恢复：上次异常退出残留的 recording 会话标记为 failed（ADR-004）
+            let _ = db.mark_interrupted_sessions();
+
             // 常驻引擎池（后台线程加载模型，不阻塞启动）
             let engines = EnginePool::start(asr_models(&model_dir), ocr_models(), OcrParams::default())
                 .map_err(|e| format!("启动引擎池失败: {}", e))?;
 
-            app.manage(AppState { db, engines });
+            let streaming_models = streaming_asr_models(&model_dir);
+            app.manage(AppState {
+                db,
+                engines,
+                streaming_models,
+                live_session: LiveSessionManager::new(),
+                model_downloader: ModelDownloader::new(),
+                app: app.handle().clone(),
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -121,7 +162,25 @@ pub fn run() {
             commands::get_note,
             commands::update_note,
             commands::delete_note,
-            commands::search_notes
+            commands::search_notes,
+            // 会话管理（REQ-010，ADR-004）
+            commands_session::create_session,
+            commands_session::finish_session,
+            commands_session::list_sessions,
+            commands_session::get_session_detail,
+            commands_session::delete_session,
+            commands_session::add_session_segment,
+            commands_session::add_session_ocr_block,
+            commands_session::session_to_note,
+            // 流式 ASR 模型状态（REQ-009，ADR-003）
+            commands_streaming::asr_streaming_model_status,
+            // 模型自动下载（ADR-003 模型分发）
+            commands_streaming::download_streaming_model,
+            commands_streaming::model_download_status,
+            // 实时会话（M7：REQ-007~012 编排）
+            commands_live::start_live_session,
+            commands_live::stop_live_session,
+            commands_live::live_session_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
