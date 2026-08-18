@@ -2,7 +2,9 @@
 //!
 //! @ai-context: 由 frame_diff.rs 以 #[cfg(test)] #[path] 引入，保持实现文件 ≤300 行。
 
-use crate::capture::frame_diff::{bottom_quarter_rect, DualRateScheduler, FrameDiffDetector, Rect, SampleRegion};
+use crate::capture::frame_diff::{
+    bottom_quarter_rect, downscale_bgra, DualRateScheduler, FrameDiffDetector, Rect, SampleRegion,
+};
 
 fn frame_with_value(value: u8) -> Vec<u8> {
     vec![value; 64 * 64 * 4] // 64x64 BGRA
@@ -100,25 +102,87 @@ fn rect_intersect_disjoint_is_none() {
 
 #[test]
 fn dual_rate_scheduler_prioritizes_subtitle() {
-    // Arrange：字幕区每 1 tick，全帧每 3 tick
+    // Arrange：字幕区每 1 tick，全帧每 3 tick（语音活跃期）
     let mut scheduler = DualRateScheduler::new(1, 3);
     // Act & Assert：每 tick 都采字幕区（高频覆盖低频）
-    assert_eq!(scheduler.next_region(), SampleRegion::Subtitle);
-    assert_eq!(scheduler.next_region(), SampleRegion::Subtitle);
-    assert_eq!(scheduler.next_region(), SampleRegion::Subtitle);
+    assert_eq!(scheduler.next_region(true), SampleRegion::Subtitle);
+    assert_eq!(scheduler.next_region(true), SampleRegion::Subtitle);
+    assert_eq!(scheduler.next_region(true), SampleRegion::Subtitle);
 }
 
 #[test]
 fn dual_rate_scheduler_skips_and_full() {
-    // Arrange：字幕区每 5 tick，全帧每 3 tick
+    // Arrange：字幕区每 5 tick，全帧每 3 tick（语音活跃期）
     let mut scheduler = DualRateScheduler::new(5, 3);
     // Act & Assert：t1/t2 跳过，t3 全帧
-    assert_eq!(scheduler.next_region(), SampleRegion::Skip);
-    assert_eq!(scheduler.next_region(), SampleRegion::Skip);
-    assert_eq!(scheduler.next_region(), SampleRegion::Full);
-    assert_eq!(scheduler.next_region(), SampleRegion::Skip);
+    assert_eq!(scheduler.next_region(true), SampleRegion::Skip);
+    assert_eq!(scheduler.next_region(true), SampleRegion::Skip);
+    assert_eq!(scheduler.next_region(true), SampleRegion::Full);
+    assert_eq!(scheduler.next_region(true), SampleRegion::Skip);
     // t5：字幕区 tick 命中，字幕区优先
-    assert_eq!(scheduler.next_region(), SampleRegion::Subtitle);
+    assert_eq!(scheduler.next_region(true), SampleRegion::Subtitle);
+}
+
+#[test]
+fn silent_period_boosts_full_frame_sampling() {
+    // Arrange：语音活跃期字幕每 2 tick、全帧每 5 tick
+    let mut scheduler = DualRateScheduler::new(2, 5);
+    // Act：静音期（speech_active=false）→ 字幕区降频（4 tick）、全帧提频（2 tick）
+    // Assert：t2/t6 全帧，t4 字幕区，其余跳过
+    assert_eq!(scheduler.next_region(false), SampleRegion::Skip); // t1
+    assert_eq!(scheduler.next_region(false), SampleRegion::Full); // t2
+    assert_eq!(scheduler.next_region(false), SampleRegion::Skip); // t3
+    assert_eq!(scheduler.next_region(false), SampleRegion::Subtitle); // t4
+    assert_eq!(scheduler.next_region(false), SampleRegion::Skip); // t5
+    assert_eq!(scheduler.next_region(false), SampleRegion::Full); // t6
+}
+
+#[test]
+fn speech_restores_subtitle_priority() {
+    // Arrange：同一调度器先静音后语音
+    let mut scheduler = DualRateScheduler::new(2, 5);
+    scheduler.next_region(false);
+    // Act：恢复语音 → 回到原节奏（t2 字幕）
+    assert_eq!(scheduler.next_region(true), SampleRegion::Subtitle);
+}
+
+#[test]
+fn downscale_reduces_dimensions_and_preserves_aspect() {
+    // Arrange：1920x270 字幕裁剪帧（全宽）
+    let mut w = 1920u32;
+    let mut h = 270u32;
+    let mut frame: Vec<u8> = (0..(w * h * 4) as usize).map(|i| (i % 251) as u8).collect();
+    // Act：缩至最大宽 960
+    downscale_bgra(&mut frame, &mut w, &mut h, 960);
+    // Assert：宽 960、高按比例 135、像素数匹配
+    assert_eq!(w, 960);
+    assert_eq!(h, 135);
+    assert_eq!(frame.len(), (960 * 135 * 4) as usize);
+}
+
+#[test]
+fn downscale_skips_small_frames() {
+    // Arrange：宽已 ≤ 最大宽
+    let mut w = 800u32;
+    let mut h = 200u32;
+    let mut frame: Vec<u8> = vec![0u8; (w * h * 4) as usize];
+    // Act
+    downscale_bgra(&mut frame, &mut w, &mut h, 960);
+    // Assert：原样不动
+    assert_eq!(w, 800);
+    assert_eq!(h, 200);
+    assert_eq!(frame.len(), 800 * 200 * 4);
+}
+
+#[test]
+fn downscale_rejects_zero_max_width() {
+    // Arrange
+    let mut w = 1920u32;
+    let mut h = 270u32;
+    let mut frame: Vec<u8> = vec![0u8; (w * h * 4) as usize];
+    // Act & Assert：max_width=0 不处理（防除零）
+    downscale_bgra(&mut frame, &mut w, &mut h, 0);
+    assert_eq!(w, 1920);
 }
 
 #[test]

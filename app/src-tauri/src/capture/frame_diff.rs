@@ -136,34 +136,49 @@ pub enum SampleRegion {
     Full,
 }
 
-/// 双速率采样调度器（ADR-002/ADR-005）。
+/// 双速率采样调度器（ADR-002/ADR-005；v0.3.0 P3 简化版：语音活跃度自适应）。
 ///
 /// @ai-context: 字幕区 1-2 fps、全帧 0.2-0.5 fps：以 tick（一次采集周期）为粒度，
 ///              字幕区每 subtitle_every tick 采一次，全帧每 full_every tick 采一次；
 ///              两者重叠时优先字幕区（高频覆盖低频）。
+/// @ai-context: P3（头脑风暴）简化版：语音活跃期维持字幕区为主（原参数）；
+///              静音期（老师停顿展示幻灯片/板书）降低字幕区频率、提升全帧频率——
+///              静音时字幕区基本静止（低价值），画面要点价值上升。
 #[derive(Debug)]
 pub struct DualRateScheduler {
     subtitle_every: u32,
     full_every: u32,
+    /// 静音期字幕区间隔（tick）
+    silent_subtitle_every: u32,
+    /// 静音期全帧间隔（tick）
+    silent_full_every: u32,
     tick: u32,
 }
 
 impl DualRateScheduler {
-    /// 创建调度器。subtitle_every/full_every 为 tick 间隔（至少 1）。
+    /// 创建调度器。subtitle_every/full_every 为语音活跃期 tick 间隔（至少 1）；
+    /// 静音期参数固定为字幕区 4 tick / 全帧 2 tick（P3 简化版）。
     pub fn new(subtitle_every: u32, full_every: u32) -> Self {
         Self {
             subtitle_every: subtitle_every.max(1),
             full_every: full_every.max(1),
+            silent_subtitle_every: 4,
+            silent_full_every: 2,
             tick: 0,
         }
     }
 
-    /// 推进一个 tick 并返回本次采样区域。
-    pub fn next_region(&mut self) -> SampleRegion {
+    /// 推进一个 tick 并返回本次采样区域（speech_active=语音活跃度）。
+    pub fn next_region(&mut self, speech_active: bool) -> SampleRegion {
         self.tick = self.tick.wrapping_add(1);
-        if self.tick.is_multiple_of(self.subtitle_every) {
+        let (sub_every, full_every) = if speech_active {
+            (self.subtitle_every, self.full_every)
+        } else {
+            (self.silent_subtitle_every, self.silent_full_every)
+        };
+        if self.tick.is_multiple_of(sub_every) {
             SampleRegion::Subtitle
-        } else if self.tick.is_multiple_of(self.full_every) {
+        } else if self.tick.is_multiple_of(full_every) {
             SampleRegion::Full
         } else {
             SampleRegion::Skip
@@ -212,6 +227,37 @@ pub fn crop_frame(frame: &mut Vec<u8>, width: &mut u32, height: &mut u32, crop: 
     }
     *width = cw as u32;
     *height = ch as u32;
+    *frame = out;
+}
+
+/// 最近邻缩小 BGRA8 帧到指定最大宽度（保持宽高比；P4：OCR 输入缩小）。
+///
+/// @ai-context: OCR 推理成本随像素数近似平方增长（头脑风暴 P4）——字幕区裁剪帧
+///              全宽（如 1920px）送 OCR 昂贵；缩至 ~960px 宽成本降约 4 倍，
+///              字幕文字大、缩小后识别质量无损。宽高比经整数比例换算（y*dst/src）。
+pub fn downscale_bgra(frame: &mut Vec<u8>, width: &mut u32, height: &mut u32, max_width: u32) {
+    if max_width == 0 || *width <= max_width || *height == 0 {
+        return;
+    }
+    let src_w = *width as usize;
+    let src_h = *height as usize;
+    if frame.len() < src_w * src_h * 4 {
+        return;
+    }
+    let dst_w = max_width as usize;
+    let dst_h = ((*height as u64 * max_width as u64) / *width as u64).max(1) as usize;
+    let mut out = Vec::with_capacity(dst_w * dst_h * 4);
+    for y in 0..dst_h {
+        let src_y = (y * src_h) / dst_h;
+        let src_row = src_y * src_w * 4;
+        for x in 0..dst_w {
+            let src_x = (x * src_w) / dst_w;
+            let i = src_row + src_x * 4;
+            out.extend_from_slice(&frame[i..i + 4]);
+        }
+    }
+    *width = dst_w as u32;
+    *height = dst_h as u32;
     *frame = out;
 }
 
