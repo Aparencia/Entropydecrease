@@ -1,18 +1,25 @@
-# 技术债清单（权威：2026-08-18 第三轮，二次审查后滚动）
+# 技术债清单（权威：2026-08-18 第四轮，v0.3.0 构建审查后滚动）
 
 > 本清单为当前唯一权威债务清单，归档日滚动更新；旧归档清单仅历史追溯。
 > 来源：重构区 v0.2.0 二次代码审查产出（2026-08-18 第三轮，CodeReview 子代理 + P0/P1 修复）。
 > 四轮（同日）：技术债专项处理，19 笔未偿全部偿还（再分析验证 + 修复，待 commit）；
 > 同日追加 TD-032（sherpa-onnx 空热词流崩溃）已偿。
 > 当日追加（REQ-033 审查产出）：TD-033 登记 open（见下）。
+> 当日追加（v0.3.0 构建审查产出，2026-08-18 第五轮）：TD-034/035/036 审查发现即修复（提交 8d0ff95）；
+> TD-037~041 登记 open（见下）。
 
 ## 未偿债务
 
 | ID | 摘要 | 备注 |
 |----|------|------|
 | TD-033 | 窗口跨显示器移动后 DXGI duplication 不更新（仍复制旧显示器桌面），窗口裁剪为空画面，最长 30s 空窗等周期重建（ADR-007 审查发现，2026-08-18） | 修复方向：DxgiState 保存输出 DesktopCoordinates，窗口中心越界时立即触发重建（P2 排期） |
+| TD-037 | 导入关键帧 OCR 全帧未缩小（P4 仅实时字幕区生效），单帧 1-3s（v0.3.0 审查，2026-08-18） | 60 帧封顶下导入耗时 ~3 分钟；修复方向：导入帧缩小或抽帧更稀（P3） |
+| TD-038 | 外挂字幕文件无大小上限，fs::read 全量读入（v0.3.0 审查，2026-08-18） | 修复方向：>50MB 拒绝或流式解析（P3） |
+| TD-039 | 字幕投票器同组判定用固定编辑距离 ≤2，长文本跨帧错字累积易误判新组致段分裂（v0.3.0 审查，2026-08-18） | 修复方向：按文本长度比例阈值（P3） |
+| TD-040 | tauri.conf.json bundle.resources 未含 ffmpeg——生产安装包无捆绑 ffmpeg，resource_dir 注入为空（v0.3.0 审查，2026-08-18） | 与 ADR-008 风险项关联；捆绑体积决策后加 `ffmpeg/**/*`（P2） |
+| TD-041 | ASR 段 end_ms 仍滞后 1.2-2.4s（端点尾静音规则固有；start 已由句起跟踪精确化，v0.3.0 审查，2026-08-18） | 修复方向：端点时刻 − 尾静音阈值校正 end（P3，v0.4.0） |
 
-## 今日已偿（二轮 8 笔 + 三轮 11 笔 + 四轮 20 笔）
+## 今日已偿（二轮 8 笔 + 三轮 11 笔 + 四轮 20 笔 + 五轮 3 笔）
 
 | ID | 摘要 | 偿还方式 |
 |----|------|----------|
@@ -55,6 +62,9 @@
 | TD-027 | live_session 系模块无 cfg(windows) 门控，非 Windows 编译失败 | lib.rs/commands.rs 补 #[cfg(target_os="windows")]（四轮，待 commit） |
 | TD-028 | run_capture 线程内 CoInitializeEx 无配对 CoUninitialize | ComInitGuard drop 自动配对（四轮，待 commit） |
 | TD-032 | create_stream_with_hotwords("") 无条件创建 ContextGraph，greedy_search 解码器触发 "This interface is for OnlineTransducerModifiedBeamSearchDecoder" 断言 abort（exit 0xffffffff） | 无热词改用 create_stream()，有热词才走 with_hotwords（new_stream 分支，四轮，待 commit） |
+| TD-034 | run_captured 先轮询退出再读 stdout——子进程输出超管道缓冲（64KB）写阻塞永不退出，被超时误杀（v0.3.0 审查 P0） | spawn 后立即由读取线程排空管道 + cmd 大输出回归测试（五轮，提交 8d0ff95） |
+| TD-035 | 融合线程 spawn 失败时 fusing 标记永久残留（累积泄漏）+ UI 恒显"融合中"（v0.3.0 审查 P1） | spawn Err 分支补 end + session:fusion-failed 事件（五轮，提交 8d0ff95） |
+| TD-036 | 生产 ffmpeg 捆绑路径未注入——dev() 的 CARGO_MANIFEST_DIR 在发布构建指向构建机路径（v0.3.0 审查 P2） | commands_import 改 with_dirs 注入 resource_dir/ffmpeg（五轮，提交 8d0ff95） |
 
 ## 登记规则
 

@@ -10,7 +10,7 @@
 
 ## 背景
 
-v0.3.0 需要打开"视频文件导入"第二入口（REQ-015：ffmpeg 提取音轨 + 关键帧）与字幕优先转写（REQ-016/017/018：外挂/内嵌字幕探测，命中则免 ASR 零成本 100% 准确）。同时 [课堂采集链路技术审查](./Foresight/classroom-capture-technical-review.md) 发现 3 个真实缺陷（时间戳三基准不一致、ASR 句起时间戳近似、引擎池串行阻塞）与 3 个可即取优化（头脑风暴 T2 多帧投票 / P4 OCR 输入缩小 / P3 语音画面互斥调度简化版）。
+v0.3.0 需要打开"视频文件导入"第二入口（REQ-015：ffmpeg 提取音轨 + 关键帧）与字幕优先转写（REQ-016/017/018：外挂/内嵌字幕探测，命中则免 ASR 零成本 100% 准确）。同时 [课堂采集链路技术审查（[ ] 已归档）](../archive/2026-08-18/classroom-capture-technical-review.md) 发现 3 个真实缺陷（时间戳三基准不一致、ASR 句起时间戳近似、引擎池串行阻塞）与 3 个可即取优化（头脑风暴 T2 多帧投票 / P4 OCR 输入缩小 / P3 语音画面互斥调度简化版）。
 
 约束：
 
@@ -117,6 +117,6 @@ v0.3.0 需要打开"视频文件导入"第二入口（REQ-015：ffmpeg 提取音
 
 ## 参考
 
-- [课堂采集链路技术审查](./Foresight/classroom-capture-technical-review.md)
+- [课堂采集链路技术审查（[ ] 已归档）](../archive/2026-08-18/classroom-capture-technical-review.md)
 - [头脑风暴：无云端 AI 的内容提取极限](./Foresight/brainstorming-no-cloud-ai-extraction-limit.md)（T2/P3/P4）
 - [v0.3.0 版本计划](../versions/v0.3.0.md)
