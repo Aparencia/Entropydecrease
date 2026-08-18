@@ -99,7 +99,7 @@ pub fn apply_replacements(text: &str, pairs: &[ReplacePair]) -> String {
         return text.to_string();
     }
     let mut sorted = pairs.to_vec();
-    sorted.sort_by(|a, b| b.from.chars().count().cmp(&a.from.chars().count()));
+    sorted.sort_by_key(|p| std::cmp::Reverse(p.from.chars().count()));
     let mut out = text.to_string();
     for p in sorted {
         if !p.from.is_empty() {
