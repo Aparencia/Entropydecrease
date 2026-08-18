@@ -8,8 +8,9 @@
 | 源路径 | 归档路径 | 状态 |
 |--------|---------|------|
 | docs/Foresight/brainstorming-video-types.md | docs/archive/2026-08-19/brainstorming-video-types.md | [ ] 已归档（六轮头脑风暴已全部落地——五类视频档案 REQ-043/044/045/046/047/048/049/050/051/052/055 均已实施；结论进入 v0.5.0 规划并实施完成，生命周期终结） |
+| docs/Foresight/brainstorming-classroom-assistant-gaps.md | docs/archive/2026-08-19/brainstorming-classroom-assistant-gaps.md | [ ] 已归档（四维缺口评估 50 项：§9 裁决 22 项已排期 v0.6.0（REQ-059~080，登记于需求池与 v0.6.0 规划）；未选与远期项保留于归档副本待议，决策生命周期终结） |
 
-- **未归档**：ADR-010（补缝式 AI 决策，当前生效——V1.0 云端实装继续引用）；brainstorming-no-cloud-ai-extraction-limit.md（V1.0 规划持续引用）；brainstorming-classroom-assistant-mechanisms.md（v0.5.0 机制编号 E9/B6/C1 等仍在引用）；versions/、standards/、product/ 内容（持续活跃）
+- **未归档**：ADR-010（补缝式 AI 决策，当前生效——V1.0 云端实装继续引用）；brainstorming-no-cloud-ai-extraction-limit.md（V1.0 规划持续引用）；brainstorming-classroom-assistant-mechanisms.md + fed-guide（v0.5.0/v0.6.0 机制编号 E9/B6/C1/Q1/AL4 等仍在引用，供后续头脑风暴输入）；versions/、standards/、product/ 内容（持续活跃）
 
 ## 技术债摘要（滚动自 2026-08-18 清单）
 
@@ -24,8 +25,9 @@
   - M4 精修 N 次全量回填（medium）——单次 replace_artifact
   - L1/L3 前端进度/豁免清单（low）——progress 监听 + 豁免补登
 - 累计已偿：昨日 45 笔 + 今日 8 笔 = 53 笔
+- **归档日追加**（缺口评估文档归档）：纯文档变更，无新增技术债；TD-040 维持 carried（唯一权威清单见 tech-debt.md）
 
 ## 备注
 
-- 归档采用 `git mv`（保留历史链）；活跃区引用已更新（见版本文档链接修改）
+- 归档采用 `git mv`（保留历史链）；活跃区引用已更新（Foresight README 索引改指归档路径 + v0.6.0 规划链接同步）
 - 下个归档日需先整理本清单（当前仅 TD-040 carried）
