@@ -5,6 +5,7 @@
 //! @ai-context: AppState 在 setup 时初始化：SQLite 数据库 + 常驻引擎池（后台加载 ASR/OCR 模型）。
 
 mod asr;
+mod asr_health;
 mod audio_preprocess;
 mod capture;
 mod commands;
@@ -12,6 +13,7 @@ mod commands;
 #[cfg(target_os = "windows")]
 mod commands_live;
 mod commands_device;
+mod commands_diag;
 mod commands_import;
 mod commands_session;
 mod commands_streaming;
@@ -28,6 +30,7 @@ mod engine;
 mod error;
 mod ffmpeg;
 mod fusion;
+mod health_check;
 mod import;
 mod import_frame;
 #[cfg(target_os = "windows")]
@@ -321,7 +324,10 @@ pub fn run() {
             commands_vocab::vocab_add_replacement,
             commands_vocab::vocab_remove_replacement,
             commands_vocab::vocab_extract_courseware,
-            commands_vocab::vocab_suggest_from_ocr
+            commands_vocab::vocab_suggest_from_ocr,
+            // 健康巡检与诊断（REQ-042，M7：F2/F3/G2）
+            commands_diag::health_status,
+            commands_diag::diag_snapshot
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

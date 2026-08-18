@@ -16,6 +16,7 @@ import VideoImportPanel from "../components/VideoImportPanel";
 import LiveActivityPanel from "../components/LiveActivityPanel";
 import { OcrDeviceSetting } from "../components/OcrDeviceSetting";
 import { VocabManager } from "../components/VocabManager";
+import { SystemStatusBadge } from "../components/SystemStatusBadge";
 import type { Note, WindowInfo, StreamingModelStatus, LiveSessionStatus, DownloadProgress, DownloadStatus } from "../types";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
@@ -39,6 +40,8 @@ export default function ClassroomPage() {
   const [modelProgress, setModelProgress] = useState<DownloadProgress | null>(null);
   const [modelError, setModelError] = useState("");
   const [liveError, setLiveError] = useState("");
+  // M7/REQ-042 F5：ASR 降级提示（流式引擎静默失效可见化）
+  const [asrDegraded, setAsrDegraded] = useState<string | null>(null);
 
   // ── 素材与结果（文件流水线，v0.1.0）──
   const [audioPath, setAudioPath] = useState<string | null>(null);
@@ -68,6 +71,8 @@ export default function ClassroomPage() {
   useEffect(() => {
     const unlisteners: Promise<() => void>[] = [
       listen<string>("live:error", (e) => setLiveError(e.payload)),
+      // M7/REQ-042 F5：ASR 降级提示（静默失败可见化；会话停止时清除）
+      listen<string>("live:asr-degraded", (e) => setAsrDegraded(e.payload)),
       // 修复（v0.3.0 审查反馈）：必须区分 payload——Rust 侧在 ASR 模型加载成功后
       // 才 emit "recording"（比 invoke resolve 晚 1-3s），旧实现无条件清态导致
       // 按钮变回"开始采集"而后端会话仍在跑，再点开始被拒绝
@@ -81,6 +86,7 @@ export default function ClassroomPage() {
           setLiveActive(false);
           setLiveSessionId(null);
           setStopping(false);
+          setAsrDegraded(null);
         }
       }),
       // 后台融合事件（REQ-031）：面板显示"融合中"，完成后提示并回退
@@ -253,10 +259,20 @@ export default function ClassroomPage() {
           flexDirection: "column",
         }}
       >
-        <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", fontWeight: 600 }}>
-          📡 课堂助手
-          {processing && <span style={{ marginLeft: 8, color: "#dc2626" }}>●</span>}
+        <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span>
+            📡 课堂助手
+            {processing && <span style={{ marginLeft: 8, color: "#dc2626" }}>●</span>}
+          </span>
+          {/* M7/REQ-042 F2/G2：健康徽标 + 诊断面板（开发期可见） */}
+          <SystemStatusBadge />
         </div>
+
+        {asrDegraded && (
+          <div style={{ padding: "6px 14px", background: "#fef2f2", borderBottom: "1px solid #fecaca", fontSize: 11, color: "#b91c1c" }}>
+            ⚠ {asrDegraded}
+          </div>
+        )}
 
         <div style={{ flex: 1, minHeight: 0, padding: 12, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
           {/* 目标窗口/进程选择（v0.2.0 实时捕获上下文） */}

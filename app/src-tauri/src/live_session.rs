@@ -204,6 +204,9 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
     // 开启后 AGC + 削波检测 + 动态静音阈值，防轻声讲课被 VAD 截断）
     let mut audio_pre = crate::audio_preprocess::AudioPreprocessor::default();
     let mut clipping_logged = false;
+    // M7/REQ-042 F5：ASR 健康监测（静默语音 → 降级提示；恢复自动回落）
+    let mut asr_health = crate::asr_health::AsrHealthMonitor::new();
+    let mut asr_tier_emitted = crate::asr_health::AsrTier::Streaming;
 
     // 1) 流式 ASR（SenseVoice 重打分接离线引擎池；M5 热词经共享词表注入）
     let mut asr_engine = match StreamingAsrEngine::load(
@@ -307,7 +310,18 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
                     }
                     last_speech_ms = Some(chunk.timestamp_ms);
                 }
-                for event in asr_engine.feed(&processed.samples, silent) {
+                let mut events = asr_engine.feed(&processed.samples, silent);
+                // M7/REQ-042 F5：有语音无产出持续 → 降级链提示（F3 静默失败可见化）
+                let tier = asr_health.observe(!silent, !events.is_empty(), TICK_MS as f64 / 1000.0);
+                if tier != asr_tier_emitted {
+                    asr_tier_emitted = tier;
+                    let reason = crate::asr_health::tier_reason(tier);
+                    if !reason.is_empty() {
+                        eprintln!("[LiveSession] ASR 降级: {}", reason);
+                        let _ = params.app.emit("live:asr-degraded", reason.to_string());
+                    }
+                }
+                for event in events.drain(..) {
                     match event {
                         StreamingAsrEvent::Final { text } => {
                             let end_ms = sentence_end_ms(last_speech_ms, chunk.timestamp_ms);

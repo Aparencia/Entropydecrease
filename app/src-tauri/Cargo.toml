@@ -65,5 +65,7 @@ windows = { version = "0.61", features = [
     # v0.4.0（ADR-009）：AddDllDirectory/SetDefaultDllDirectories 把 CUDA 运行时
     # 目录加入 DLL 搜索路径（onnxruntime.dll 依赖 cudart/cublas/cudnn 等，不复制进 target）
     "Win32_System_LibraryLoader",
+    # v0.4.0（REQ-042 M7）：GetDiskFreeSpaceExW 磁盘健康巡检（写满崩溃是最常见隐性故障）
+    "Win32_Storage_FileSystem",
 ] }
 
