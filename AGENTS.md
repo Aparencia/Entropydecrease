@@ -108,7 +108,8 @@ npm run build        # 前端构建
 
 - `src-tauri/tauri.conf.json` — 应用配置/权限边界
 - `src-tauri/src/lib.rs` / `main.rs` — Tauri command 注册（IPC 安全边界）
-- 涉及音频/屏幕捕获的系统调用模块 — 权限与隐私敏感
+- `src-tauri/src/windows.rs` — 窗口/进程枚举（系统句柄与进程查询，TD-002 补登）
+- `src-tauri/src/live_session*.rs`、`src-tauri/src/capture/` — 音频/屏幕捕获系统调用模块（权限与隐私敏感）
 - SQLite schema / 迁移 — 数据兼容
 - `.github/workflows/`（如有）— CI/CD
 - `docs-starter-kit/product/`、`adr/` — 产品与架构决策
