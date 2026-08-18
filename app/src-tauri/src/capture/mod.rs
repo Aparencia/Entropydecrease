@@ -7,7 +7,6 @@
 
 #[cfg(target_os = "windows")]
 pub mod audio_loopback;
-pub mod bmp;
 #[cfg(target_os = "windows")]
 pub mod dxgi_capture;
 pub mod frame_diff;

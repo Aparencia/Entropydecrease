@@ -5,9 +5,10 @@
 //!              （ADR-005）→ 实时落库（ADR-004）；停止时 flush 尾句、
 //!              双源融合（fusion.rs）并重写会话段、标记 finished。
 //! @ai-context: 音频捕获线程与会话线程用 channel 桥接（引擎非 Send 不可跨线程）；
-//!              屏幕采样与音频处理在会话线程内分时（recv_timeout 500ms 节拍）。
-//! @ai-context: 时间戳统一以会话线程启动为基准（音频/屏幕捕获均在会话线程内
-//!              启动，起点误差 <1s——ADR-005 风险缓解的近似统一）。
+//!              屏幕采样在独立线程运行（TD-026 修复，run_screen_worker）——
+//!              OCR 推理不阻塞会话线程的音频消费；字幕段经 Arc<Mutex> 共享回传。
+//! @ai-context: 时间戳近似统一：音频/屏幕捕获均在会话线程启动后创建各自的墙钟基准，
+//!              三者起点误差 <1s（ADR-005 风险缓解的近似统一）。
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -17,16 +18,14 @@ use std::time::{Duration, Instant};
 
 use tauri::Emitter;
 
-use crate::capture::frame_diff::{DualRateScheduler, FrameDiffDetector, SampleRegion};
 use crate::capture::resample::compute_rms;
-use crate::capture::{AudioChunk, AudioLoopbackCapture, ScreenCaptureSampler};
+use crate::capture::{AudioChunk, AudioLoopbackCapture};
 use crate::db::Db;
 use crate::engine::EnginePool;
 use crate::error::{AppError, Result};
 use crate::fusion::SubtitleSegment;
-use crate::live_session_frame::process_frame;
+use crate::live_session_frame::run_screen_worker;
 use crate::streaming_asr::{StreamingAsrEngine, StreamingAsrEvent, StreamingAsrModels, SILENCE_RMS_THRESHOLD};
-use crate::subtitle_ocr::SubtitleTracker;
 use crate::types::{NewSessionSegment, TranscriptSegment};
 
 /// 会话线程节拍（音频 channel 超时轮询间隔，ms）。
@@ -163,25 +162,36 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
         }
     };
 
-    // 3) 屏幕采样（失败不阻断音频链路）
-    // @ai-context: 字幕区变化阈值=1（单行字幕翻页只落 1 块，审查 M6 修复），
-    //              全帧=2（过滤鼠标微动）——两个 detector 按区域切换。
-    let mut screen = ScreenCaptureSampler::new(params.hwnd.map(crate::windows::hwnd_from_i64)).ok();
-    if let Some(s) = screen.as_ref() {
-        eprintln!("[LiveSession] 屏幕捕获后端: {}", s.backend_name());
-    }
-    let mut scheduler = DualRateScheduler::new(2, 5);
-    let mut subtitle_diff = FrameDiffDetector::with_min_changed_blocks(1);
-    let mut full_diff = FrameDiffDetector::new();
-    let mut tracker = SubtitleTracker::new();
-    let mut last_frame_text: Option<String> = None;
-
-    // 融合缓存（停止时使用）
-    let mut subtitle_segments: Vec<SubtitleSegment> = Vec::new();
+    // 3) 屏幕采样线程（TD-026 修复：OCR 推理移出会话线程，音频消费不再被阻塞；
+    //    失败不阻断音频链路——screen worker 内部容错）
+    // @ai-context: 采样器（COM 非 Send）在线程内创建；字幕段经共享缓存回传（停止后读取）。
     let mut asr_segments: Vec<TranscriptSegment> = Vec::new();
-
-    // 采样节流：与音频到达解耦，固定 1s 一拍（审查 M5 修复）
-    let mut last_sample_at = Instant::now();
+    let subtitle_segments: Arc<Mutex<Vec<SubtitleSegment>>> = Arc::new(Mutex::new(Vec::new()));
+    let worker_segments = subtitle_segments.clone();
+    let worker_stop = stop.clone();
+    // worker 需独立持有 Db/AppHandle（主循环仍要使用，先 clone 再 move 进闭包）
+    let worker_db = db.clone();
+    let worker_app = params.app.clone();
+    let screen_worker = match std::thread::Builder::new()
+        .name("entropy-screen-worker".into())
+        .spawn(move || {
+            run_screen_worker(
+                worker_stop,
+                params.hwnd,
+                worker_db,
+                engines.clone(),
+                worker_app,
+                session_id,
+                worker_segments,
+            )
+        }) {
+        Ok(h) => Some(h),
+        Err(e) => {
+            // 屏幕采样线程启动失败不阻断音频链路，但必须可观测（审查：不得静默失效）
+            eprintln!("[LiveSession] 启动屏幕采样线程失败（字幕/画面识别不可用）: {}", e);
+            None
+        }
+    };
 
     while !stop.load(Ordering::SeqCst) {
         // ── 音频块 → 流式 ASR ──
@@ -212,22 +222,6 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => break, // 捕获线程退出
         }
-
-        // ── 屏幕采样（双速率调度，ADR-002；1s 节流与音频解耦）──
-        if last_sample_at.elapsed().as_millis() >= 1000 {
-            last_sample_at = Instant::now();
-            let region = scheduler.next_region();
-            if region != SampleRegion::Skip {
-                let diff = match region {
-                    SampleRegion::Subtitle => &mut subtitle_diff,
-                    _ => &mut full_diff,
-                };
-                process_frame(
-                    screen.as_mut(), diff, &mut tracker, &mut last_frame_text,
-                    &db, &engines, &params.app, session_id, region, &mut subtitle_segments,
-                );
-            }
-        }
     }
 
     // 4) 停止：flush ASR 尾句（时间戳用会话时钟）
@@ -246,10 +240,22 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
     }
     audio.stop();
 
-    // 5) 融合并重写会话段（ADR-005 §3：融合结果落库；失败保留原段）
+    // 5) 等待采样线程退出（有界 5s，超时 detach），再读取字幕段用于融合
+    if let Some(worker) = screen_worker {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !worker.is_finished() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        if !worker.is_finished() {
+            eprintln!("[LiveSession] 屏幕采样线程 5s 内未退出，已 detach");
+        }
+    }
+    let subtitle_segments = subtitle_segments.lock().expect("subtitle segments lock poisoned").clone();
+
+    // 6) 融合并重写会话段（ADR-005 §3：融合结果落库；失败保留原段）
     let _ = crate::live_session_frame::rewrite_with_fusion(&db, session_id, &subtitle_segments, &asr_segments);
 
-    // 6) 结束会话
+    // 7) 结束会话
     let _ = db.finish_session(session_id);
     let _ = params.app.emit("live:status", "stopped");
 }

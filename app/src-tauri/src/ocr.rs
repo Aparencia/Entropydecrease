@@ -77,7 +77,14 @@ impl OcrEngine {
     pub fn recognize(&self, img_path: &str) -> Result<Vec<OcrBlock>> {
         let image = load_image(Path::new(img_path))
             .map_err(|e| AppError::Ocr(format!("读取图片失败: {}", e)))?;
+        self.recognize_image(image)
+    }
 
+    /// 识别内存图像（TD-025 修复：实时链路不再写磁盘临时 BMP）。
+    ///
+    /// @ai-context: oar-ocr 的 predict 直接接收 image::RgbImage（内存输入），
+    ///              屏幕捕获帧（BGRA8）转 RGB 后直接送入，消除磁盘 IO 与崩溃残留。
+    pub fn recognize_image(&self, image: image::RgbImage) -> Result<Vec<OcrBlock>> {
         let results = self
             .inner
             .predict(vec![image])

@@ -30,6 +30,11 @@ enum EngineRequest {
         path: String,
         reply: Sender<Result<Vec<OcrBlock>>>,
     },
+    /// 内存图像 OCR（TD-025：实时链路免磁盘临时文件；image::RgbImage 为纯数据，可跨线程）
+    RecognizeImage {
+        image: image::RgbImage,
+        reply: Sender<Result<Vec<OcrBlock>>>,
+    },
 }
 
 /// 引擎池句柄（Clone 仅复制请求 channel，开销极低）。
@@ -79,6 +84,15 @@ impl EnginePool {
             .map_err(|_| AppError::Ocr("引擎线程已退出".to_string()))?;
         rx.recv().map_err(|_| AppError::Ocr("引擎线程未返回结果".to_string()))?
     }
+
+    /// 识别内存图像（TD-025：实时链路免磁盘临时文件，阻塞等待引擎线程返回）。
+    pub fn recognize_image(&self, image: image::RgbImage) -> Result<Vec<OcrBlock>> {
+        let (reply, rx) = mpsc::channel();
+        self.tx
+            .send(EngineRequest::RecognizeImage { image, reply })
+            .map_err(|_| AppError::Ocr("引擎线程已退出".to_string()))?;
+        rx.recv().map_err(|_| AppError::Ocr("引擎线程未返回结果".to_string()))?
+    }
 }
 
 /// 引擎线程主循环：启动即加载模型，随后顺序处理请求（引擎天然串行，无需加锁）。
@@ -112,6 +126,13 @@ fn worker_loop(
             EngineRequest::Recognize { path, reply } => {
                 let result = match ocr.as_mut() {
                     Ok(engine) => engine.recognize(&path),
+                    Err(_) => Err(AppError::Ocr("OCR 引擎加载失败（请检查模型下载/网络）".to_string())),
+                };
+                let _ = reply.send(result);
+            }
+            EngineRequest::RecognizeImage { image, reply } => {
+                let result = match ocr.as_mut() {
+                    Ok(engine) => engine.recognize_image(image),
                     Err(_) => Err(AppError::Ocr("OCR 引擎加载失败（请检查模型下载/网络）".to_string())),
                 };
                 let _ = reply.send(result);
