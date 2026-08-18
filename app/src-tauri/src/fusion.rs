@@ -71,8 +71,10 @@ pub fn merge_transcript(
         }
         let mut cursor = asr.start_ms;
         let end = asr.end_ms;
-        // 满足 gap 阈值的空隙列表（含尾部），统一在最后按比例切分文本
-        let mut gaps: Vec<(u64, u64)> = Vec::new();
+        // 本句的全部输出窗口（空隙补缝 + 重叠保留），统一在最后按时长占比切分文本——
+        // 修复：旧实现空隙补缝与重叠保留各输出整句，字幕边界落在句内时同句相邻重复
+        // （会话 8/11 实测：同一句连排 2~3 遍）；窗口合并后整句只分配一次
+        let mut windows: Vec<(u64, u64, FusedSource)> = Vec::new();
         for sub in &subs {
             if cursor >= end {
                 break;
@@ -89,7 +91,7 @@ pub fn merge_transcript(
                 // 字幕前的空隙 → 补缝（满足 gap 阈值才保留）
                 let (s, e) = (cursor, sub.start_ms.min(end));
                 if e - s >= gap {
-                    gaps.push((s, e));
+                    windows.push((s, e, FusedSource::Asr));
                 }
                 cursor = e;
             }
@@ -98,43 +100,44 @@ pub fn merge_transcript(
                 let overlap_end = sub.end_ms.min(end);
                 let distance = levenshtein(text, sub.text.trim());
                 if distance > 2 && overlap_end > cursor {
-                    result.push(FusedSegment {
-                        start_ms: cursor,
-                        end_ms: overlap_end,
-                        text: text.to_string(),
-                        source: FusedSource::Fused,
-                    });
+                    windows.push((cursor, overlap_end, FusedSource::Fused));
                 }
                 cursor = overlap_end;
             }
         }
         // 3) 尾部空隙（ASR 结束于最后字幕之后）——补缝
         if cursor < end && end - cursor >= gap {
-            gaps.push((cursor, end));
+            windows.push((cursor, end, FusedSource::Asr));
         }
-        // TD-024：ASR 句跨多字幕段时整句不得在多个补缝段复制——
-        // 文本按各空隙时长占比切分（近似时间对齐），最后一个空隙吃下全部剩余字符
-        push_gap_segments(&mut result, &gaps, text);
+        // 4) 按时间窗占比切分整句文本（TD-024 演进：空隙+重叠保留共用同一份文本配额）
+        push_window_segments(&mut result, &windows, text);
     }
 
-    // 4) 按时间轴排序输出
+    // 5) 按时间轴排序输出
     result.sort_by_key(|s| (s.start_ms, s.end_ms));
     result
 }
 
-/// 按空隙时长比例切分 ASR 文本并产出补缝段（TD-024 修复）。
+/// 按时间窗时长占比切分 ASR 文本并产出各窗口段。
 ///
-/// @ai-context: 一个 ASR 句跨越多个字幕段时会产生多个空隙，旧实现把整句复制到每个空隙
-///              导致融合结果文本重复；现按各空隙时长占比分配字符数（整除余数归末段）。
-fn push_gap_segments(result: &mut Vec<FusedSegment>, gaps: &[(u64, u64)], text: &str) {
-    let total: u64 = gaps.iter().map(|(s, e)| e - s).sum();
+/// @ai-context: 一个 ASR 句可能跨多个字幕段，产出多个"输出窗口"（空隙补缝 +
+///              重叠保留）；旧实现把整句复制到每个窗口导致融合结果文本重复
+///              （TD-024 只解决了空隙间复制，空隙与重叠保留间仍重复——
+///              会话 8/11 实测同一句连排 2~3 遍）。现统一按各窗口时长占比
+///              分配字符数（整除余数归末段），整句只分配一次。
+fn push_window_segments(
+    result: &mut Vec<FusedSegment>,
+    windows: &[(u64, u64, FusedSource)],
+    text: &str,
+) {
+    let total: u64 = windows.iter().map(|(s, e, _)| e - s).sum();
     if total == 0 {
         return;
     }
     let chars: Vec<char> = text.chars().collect();
     let mut pos = 0usize;
-    let last = gaps.len() - 1;
-    for (i, (s, e)) in gaps.iter().enumerate() {
+    let last = windows.len() - 1;
+    for (i, (s, e, src)) in windows.iter().enumerate() {
         let take = if i == last {
             chars.len().saturating_sub(pos) // 末段吃掉全部剩余（防整除截断丢字）
         } else {
@@ -148,7 +151,7 @@ fn push_gap_segments(result: &mut Vec<FusedSegment>, gaps: &[(u64, u64)], text: 
                 start_ms: *s,
                 end_ms: *e,
                 text: piece,
-                source: FusedSource::Asr,
+                source: *src,
             });
         }
     }

@@ -46,7 +46,8 @@ fn subtitle_is_authoritative_over_asr() {
 
 #[test]
 fn asr_sentence_across_multiple_subtitles_is_split_not_duplicated() {
-    // Arrange：一个 ASR 句跨 3 个字幕段 → 2 个空隙；旧实现整句复制到每个空隙（TD-024）
+    // Arrange：一个 ASR 句跨 3 个字幕段 → 2 个空隙 + 3 段重叠保留；
+    // 旧实现整句复制到每个空隙（TD-024）且空隙与重叠保留各输出整句（会话 8/11 实测重复）
     let subs = [
         sub(0, 2000, "字幕一"),
         sub(3000, 5000, "字幕二"),
@@ -55,11 +56,34 @@ fn asr_sentence_across_multiple_subtitles_is_split_not_duplicated() {
     let asrs = [asr(1000, 7000, "一二三四五六七八")];
     // Act
     let out = merge_transcript(&subs, &asrs, GAP);
-    // Assert：补缝 2 段，文本按空隙时长比例切分，拼接等于原句（无整句重复）
+    // Assert：补缝 2 段；全部非字幕段按时间窗占比切分，拼接等于原句（无整句重复）
     let gaps_out: Vec<&FusedSegment> = out.iter().filter(|s| s.source == FusedSource::Asr).collect();
     assert_eq!(gaps_out.len(), 2);
-    let joined: String = gaps_out.iter().map(|s| s.text.as_str()).collect();
+    let non_subs: Vec<&FusedSegment> = out.iter().filter(|s| s.source != FusedSource::Subtitle).collect();
+    let joined: String = non_subs.iter().map(|s| s.text.as_str()).collect();
     assert_eq!(joined, "一二三四五六七八");
+    // 时间窗互不重叠（相邻不复制）
+    for w in non_subs.windows(2) {
+        assert!(w[0].end_ms <= w[1].start_ms, "窗口重叠: {}-{} 与 {}-{}", w[0].start_ms, w[0].end_ms, w[1].start_ms, w[1].end_ms);
+    }
+}
+
+#[test]
+fn asr_sentence_straddling_subtitle_boundary_not_duplicated() {
+    // Arrange：字幕从 ASR 句中间开始（字幕 OCR 抓错区域时的真实形态）——
+    // 旧实现：句首空隙补缝整句 + 重叠保留整句 → 同一句相邻出现两次（会话 8/11 实测）
+    let subs = [sub(5000, 9000, "这是字幕内容")];
+    let asrs = [asr(2000, 7000, "一二三四五六七八九十")];
+    // Act
+    let out = merge_transcript(&subs, &asrs, GAP);
+    // Assert：空隙补缝 [2000-5000] + 重叠保留 [5000-7000]，文本按占比切分，拼接 = 原句
+    let non_subs: Vec<&FusedSegment> = out.iter().filter(|s| s.source != FusedSource::Subtitle).collect();
+    assert_eq!(non_subs.len(), 2);
+    let joined: String = non_subs.iter().map(|s| s.text.as_str()).collect();
+    assert_eq!(joined, "一二三四五六七八九十");
+    // 时间窗衔接不重叠、不重复文本
+    assert_eq!(non_subs[0].end_ms, non_subs[1].start_ms);
+    assert_ne!(non_subs[0].text, non_subs[1].text);
 }
 
 #[test]
