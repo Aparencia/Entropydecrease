@@ -1,0 +1,13 @@
+# Cargo 构建环境配置
+#
+# @ai-context: sherpa-onnx-sys 默认从 GitHub Releases 下载预编译库，但当前网络环境存在
+#              TLS 拦截（rustls 报 UnknownIssuer，PowerShell 走 Windows 证书库则正常）。
+#              因此预先用 PowerShell 下载好预编译包放入 sherpa-archive/，此处通过相对路径
+#              注入，让 cargo 构建时跳过在线下载。
+# @ai-context: 预编译包下载命令（一次性，模型/库更新时重跑）：
+#   Invoke-WebRequest -Uri "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.5/sherpa-onnx-v1.13.5-win-x64-static-MT-Release-lib.tar.bz2" -OutFile "sherpa-archive\sherpa-onnx-v1.13.5-win-x64-static-MT-Release-lib.tar.bz2"
+[env]
+SHERPA_ONNX_ARCHIVE_DIR = { value = "sherpa-archive", relative = true }
+# oar-ocr 底层同样使用 pyke ort：cdn.pyke.io 被墙，改用已下载的本地 ONNX Runtime（跳过在线下载）。
+# 下载命令：Invoke-WebRequest -Uri "https://github.com/microsoft/onnxruntime/releases/download/v1.28.0/onnxruntime-win-x64-1.28.0.zip" -OutFile ort\onnxruntime-cpu.zip 后解压。
+ORT_LIB_LOCATION = { value = "ort/onnxruntime-win-x64-1.28.0/lib", relative = true }
