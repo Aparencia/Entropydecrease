@@ -9,7 +9,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import type { OcrEvent } from "../types";
+import type { AsrFinalEvent, OcrEvent, SubtitleEvent } from "../types";
 
 /** 定稿转写行（字幕或语音） */
 interface TranscriptLine {
@@ -75,32 +75,35 @@ export default function LiveActivityPanel() {
       listen<string>("live:asr-partial", (e) => {
         setPartial(e.payload);
       }),
-      listen<string>("live:asr-final", (e) => {
-        const now = Date.now();
-        if (startedAtRef.current === null) startedAtRef.current = now;
+      listen<AsrFinalEvent>("live:asr-final", (e) => {
         setPartial("");
         setTranscripts((prev) => {
-          const next = [...prev, { id: nextId(), time: now - (startedAtRef.current ?? now), source: "asr" as const, text: e.payload }];
+          // TD-043：时间戳取后端会话纪元（与时间轴一致）
+          const next = [
+            ...prev,
+            { id: nextId(), time: e.payload.timestampMs, source: "asr" as const, text: e.payload.text },
+          ];
           return next.length > MAX_KEPT ? next.slice(next.length - MAX_KEPT) : next;
         });
         countsRef.current.asr += 1;
         setCounts({ ...countsRef.current });
       }),
-      listen<string>("live:subtitle", (e) => {
-        const now = Date.now();
-        if (startedAtRef.current === null) startedAtRef.current = now;
+      listen<SubtitleEvent>("live:subtitle", (e) => {
         setTranscripts((prev) => {
-          const next = [...prev, { id: nextId(), time: now - (startedAtRef.current ?? now), source: "subtitle" as const, text: e.payload }];
+          // TD-043：时间戳取后端会话纪元（start_ms = 字幕首样本时刻）
+          const next = [
+            ...prev,
+            { id: nextId(), time: e.payload.timestampMs, source: "subtitle" as const, text: e.payload.text },
+          ];
           return next.length > MAX_KEPT ? next.slice(next.length - MAX_KEPT) : next;
         });
         countsRef.current.subtitle += 1;
         setCounts({ ...countsRef.current });
       }),
       listen<OcrEvent>("live:ocr", (e) => {
-        const now = Date.now();
-        if (startedAtRef.current === null) startedAtRef.current = now;
         setOcrLines((prev) => {
-          const next = [...prev, { id: nextId(), time: now - (startedAtRef.current ?? now), text: e.payload.text }];
+          // TD-043：时间戳取后端会话纪元
+          const next = [...prev, { id: nextId(), time: e.payload.timestampMs, text: e.payload.text }];
           return next.length > MAX_KEPT ? next.slice(next.length - MAX_KEPT) : next;
         });
         countsRef.current.ocr += 1;

@@ -47,6 +47,14 @@ pub struct OcrEvent {
     pub text: String,
 }
 
+/// 字幕事件载荷（TD-043：携带后端会话纪元时间戳，前端显示与时间轴一致）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleEvent {
+    pub timestamp_ms: u64,
+    pub text: String,
+}
+
 /// 屏幕采样线程入口（TD-026 修复：OCR 从会话线程移出，音频消费不再被阻塞）。
 ///
 /// @ai-context: ScreenCaptureSampler 持 COM 对象（非 Send），在本线程内创建与使用，
@@ -245,11 +253,15 @@ fn handle_subtitle_frame(
     if let Some(voted) = voter.observe(&text, frame.timestamp_ms) {
         persist_voted_subtitle(db, app, session_id, subtitle_segments, voted);
     }
-    // UI 即时预览：新组首帧原文立刻推送（定稿文本在切换时再推，纠正可见）
+    // UI 即时预览：新组首帧原文立刻推送（定稿文本在切换时再推，纠正可见；
+    // TD-043：预览事件同样携带后端时间戳）
     if let Some(preview) = voter.preview() {
         if *last_preview != preview {
             *last_preview = preview.to_string();
-            let _ = app.emit("live:subtitle", preview.to_string());
+            let _ = app.emit(
+                "live:subtitle",
+                SubtitleEvent { timestamp_ms: frame.timestamp_ms, text: preview.to_string() },
+            );
         }
     }
 }
@@ -279,11 +291,13 @@ fn persist_voted_subtitle(
         confidence: None,
     });
     // 跨线程共享缓存（TD-026：采样线程写、停止后融合线程读）
+    let start_ms = voted.start_ms;
     subtitle_segments
         .lock()
         .expect("subtitle segments lock poisoned")
         .push(voted.into_segment());
-    let _ = app.emit("live:subtitle", text);
+    // TD-043：字幕事件携带后端会话纪元时间戳（start_ms = 首样本时刻）
+    let _ = app.emit("live:subtitle", SubtitleEvent { timestamp_ms: start_ms, text });
 }
 
 /// 全帧：画面要点落 OCR 块（低置信度过滤 + 帧间文本去重 + 实时事件推送）。

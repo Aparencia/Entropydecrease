@@ -36,8 +36,6 @@ export default function ClassroomPage() {
   const [modelDownloading, setModelDownloading] = useState(false);
   const [modelProgress, setModelProgress] = useState<DownloadProgress | null>(null);
   const [modelError, setModelError] = useState("");
-  const [partialText, setPartialText] = useState("");
-  const [lastSubtitle, setLastSubtitle] = useState("");
   const [liveError, setLiveError] = useState("");
 
   // ── 素材与结果（文件流水线，v0.1.0）──
@@ -64,11 +62,9 @@ export default function ClassroomPage() {
     void refreshWindows();
   }, [refreshWindows]);
 
-  // 实时会话事件监听（v0.2.0）
+  // 实时会话事件监听（v0.2.0；字幕/语音实时内容由右侧 LiveActivityPanel 自监听展示）
   useEffect(() => {
     const unlisteners: Promise<() => void>[] = [
-      listen<string>("live:asr-partial", (e) => setPartialText(e.payload)),
-      listen<string>("live:subtitle", (e) => setLastSubtitle(e.payload)),
       listen<string>("live:error", (e) => setLiveError(e.payload)),
       // 修复（v0.3.0 审查反馈）：必须区分 payload——Rust 侧在 ASR 模型加载成功后
       // 才 emit "recording"（比 invoke resolve 晚 1-3s），旧实现无条件清态导致
@@ -82,7 +78,6 @@ export default function ClassroomPage() {
           // stopped / failed：会话已结束
           setLiveActive(false);
           setLiveSessionId(null);
-          setPartialText("");
           setStopping(false);
         }
       }),
@@ -117,6 +112,14 @@ export default function ClassroomPage() {
       unlisteners.forEach((p) => void p.then((fn) => fn()));
     };
   }, []);
+
+  // TD-042：停止过渡态超时兜底——live:status stopped 事件异常丢失时，
+  // 10s 后自动清除过渡态（防右侧面板常驻"已停止"）
+  useEffect(() => {
+    if (!stopping) return;
+    const timer = setTimeout(() => setStopping(false), 10_000);
+    return () => clearTimeout(timer);
+  }, [stopping]);
 
   // 启动时检查流式模型状态 + 活动会话恢复 + 下载状态恢复
   // TD-016：invoke 失败不再静默——展示错误并允许重试（此前按钮永久禁用且无提示）
@@ -160,8 +163,6 @@ export default function ClassroomPage() {
   /** 开始实时捕获（REQ-007~012）：窗口可选（未选=全屏） */
   const startLive = async () => {
     setLiveError("");
-    setPartialText("");
-    setLastSubtitle("");
     try {
       const title = selectedWindow ? selectedWindow.title.slice(0, 60) : "实时课堂";
       const id = await invoke<number>("start_live_session", {
@@ -198,7 +199,6 @@ export default function ClassroomPage() {
       const id = await invoke<number | null>("stop_live_session");
       setLiveActive(false);
       setLiveSessionId(null);
-      setPartialText("");
       setStatus(id ? `已停止会话 #${id}，融合完成后可到「会话」页查看` : "无活动会话");
     } catch (e) {
       setStopping(false);
@@ -315,10 +315,9 @@ export default function ClassroomPage() {
               </div>
             )}
             {liveActive && (
-              <div style={{ fontSize: 11, color: "#374151", marginBottom: 6 }}>
-                {lastSubtitle && <div style={{ color: "#0d9488" }}>字幕：{lastSubtitle}</div>}
-                {partialText && <div style={{ color: "#6b7280" }}>语音：{partialText}</div>}
-              </div>
+              // 实时内容（字幕/语音/画面）统一由右侧 LiveActivityPanel 展示，
+              // 左栏保持精简（状态徽标）——审查观察项修复
+              <div style={{ fontSize: 11, color: "#0d9488", marginBottom: 6 }}>● 正在采集（实时内容见右侧面板）</div>
             )}
             {liveError && <p style={{ fontSize: 11, color: "#dc2626", margin: "0 0 6px" }}>{liveError}</p>}
             <button

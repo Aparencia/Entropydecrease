@@ -47,6 +47,14 @@ fn sentence_end_ms(last_speech_ms: Option<u64>, fallback_ms: u64) -> u64 {
     last_speech_ms.map(|t| t + AUDIO_BLOCK_MS).unwrap_or(fallback_ms)
 }
 
+/// 语音定稿事件载荷（TD-043：携带后端会话纪元时间戳，前端显示与时间轴一致）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AsrFinalEvent {
+    pub timestamp_ms: u64,
+    pub text: String,
+}
+
 /// 会话融合状态跟踪（REQ-031：内存标记，ADR-008 决策——不迁移 sessions 表；
 /// V1.0 ADR-006 派生表落地时自然取代）。
 #[derive(Clone, Default)]
@@ -290,8 +298,11 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
                             let start_ms = sentence_start_ms
                                 .take()
                                 .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
-                            // 语音定稿事件（前端实时转写流展示/计数，简要单行卡片）
-                            let _ = params.app.emit("live:asr-final", text.clone());
+                            // 语音定稿事件（TD-043：携带后端会话纪元时间戳；前端实时转写流展示/计数）
+                            let _ = params.app.emit(
+                                "live:asr-final",
+                                AsrFinalEvent { timestamp_ms: start_ms, text: text.clone() },
+                            );
                             let _ = db.add_segment(&NewSessionSegment {
                                 session_id,
                                 start_ms,
@@ -320,8 +331,11 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
         let start_ms = sentence_start_ms
             .take()
             .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
-        // 尾句同样推前端（实时转写流保持完整）
-        let _ = params.app.emit("live:asr-final", text.clone());
+        // 尾句同样推前端（TD-043 时间戳载荷，实时转写流保持完整）
+        let _ = params.app.emit(
+            "live:asr-final",
+            AsrFinalEvent { timestamp_ms: start_ms, text: text.clone() },
+        );
         let _ = db.add_segment(&NewSessionSegment {
             session_id,
             start_ms,

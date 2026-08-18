@@ -138,3 +138,15 @@ export interface OcrEvent {
   timestampMs: number;
   text: string;
 }
+
+/** 语音定稿事件载荷（Rust AsrFinalEvent，camelCase 契约；live:asr-final 事件，TD-043） */
+export interface AsrFinalEvent {
+  timestampMs: number;
+  text: string;
+}
+
+/** 字幕事件载荷（Rust SubtitleEvent，camelCase 契约；live:subtitle 事件，TD-043） */
+export interface SubtitleEvent {
+  timestampMs: number;
+  text: string;
+}
