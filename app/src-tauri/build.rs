@@ -24,9 +24,16 @@ fn copy_onnxruntime_dll() {
         return;
     }
     println!("cargo:rerun-if-changed={}", dll.display());
-    // OUT_DIR = <target>/<profile>/build/<crate>-<hash>/out → 第 3 级祖先目录即 <target>/<profile>
+    // OUT_DIR = <target>/<profile>/build/<crate>-<hash>/out → 找名为 "build" 的祖先目录，其父目录即 <target>/<profile>
+    // @ai-context: TD-006 修复——原 nth(3) 依赖 Cargo 内部目录层级（Cargo 改版会静默失效），
+    //              改用目录名定位，层级变化仍可解析。
     if let Ok(out_dir) = std::env::var("OUT_DIR") {
-        if let Some(profile_dir) = std::path::Path::new(&out_dir).ancestors().nth(3) {
+        let out_path = std::path::Path::new(&out_dir);
+        let profile_dir = out_path
+            .ancestors()
+            .find(|p| p.file_name().is_some_and(|n| n == "build"))
+            .and_then(|b| b.parent());
+        if let Some(profile_dir) = profile_dir {
             let dest = profile_dir.join("onnxruntime.dll");
             if let Err(e) = std::fs::copy(&dll, &dest) {
                 println!("cargo:warning=复制 onnxruntime.dll 失败: {e}");

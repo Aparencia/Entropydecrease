@@ -7,6 +7,8 @@
 mod asr;
 mod capture;
 mod commands;
+// 实时会话链路依赖 Windows 捕获 API（WASAPI/DXGI/COM），非 Windows 平台不编译（TD-027 修复）
+#[cfg(target_os = "windows")]
 mod commands_live;
 mod commands_session;
 mod commands_streaming;
@@ -17,7 +19,9 @@ mod db_sessions_rows;
 mod engine;
 mod error;
 mod fusion;
+#[cfg(target_os = "windows")]
 mod live_session;
+#[cfg(target_os = "windows")]
 mod live_session_frame;
 mod model_downloader;
 mod ocr;
@@ -32,6 +36,7 @@ use tauri::Manager;
 
 use crate::asr::AsrModels;
 use crate::engine::EnginePool;
+#[cfg(target_os = "windows")]
 use crate::live_session::LiveSessionManager;
 use crate::model_downloader::ModelDownloader;
 use crate::ocr::{OcrModels, OcrParams};
@@ -144,6 +149,7 @@ pub fn run() {
                 db,
                 engines,
                 streaming_models,
+                #[cfg(target_os = "windows")]
                 live_session: LiveSessionManager::new(),
                 model_downloader: ModelDownloader::new(),
                 app: app.handle().clone(),
@@ -177,9 +183,12 @@ pub fn run() {
             // 模型自动下载（ADR-003 模型分发）
             commands_streaming::download_streaming_model,
             commands_streaming::model_download_status,
-            // 实时会话（M7：REQ-007~012 编排）
+            // 实时会话（M7：REQ-007~012 编排；Windows-only）
+            #[cfg(target_os = "windows")]
             commands_live::start_live_session,
+            #[cfg(target_os = "windows")]
             commands_live::stop_live_session,
+            #[cfg(target_os = "windows")]
             commands_live::live_session_status
         ])
         .run(tauri::generate_context!())
