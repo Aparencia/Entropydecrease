@@ -39,7 +39,9 @@ pub fn build_note_draft(
 /// 把转写段按"字符数 + 时间跨度"双阈值切成可读段落。
 ///
 /// @ai-context: 空文本段被跳过；按 start_ms 排序后再累积，保证输出稳定。
-fn split_transcript_paragraphs(segments: &[TranscriptSegment]) -> Vec<String> {
+/// @ai-context: pub(crate)（v0.6.0 M1）：note_filter 复用同一段落切分——
+///              预览与转笔记走单一管线（REQ-082），段落口径保持一致。
+pub(crate) fn split_transcript_paragraphs(segments: &[TranscriptSegment]) -> Vec<String> {
     let mut sorted: Vec<&TranscriptSegment> =
         segments.iter().filter(|s| !s.text.trim().is_empty()).collect();
     sorted.sort_by_key(|s| s.start_ms);
@@ -100,13 +102,13 @@ fn dedupe_ocr_points(ocr_blocks: &[OcrBlock]) -> Vec<String> {
 }
 
 /// 毫秒时间戳格式化为 MM:SS。
-fn format_timestamp(ms: u64) -> String {
+pub(crate) fn format_timestamp(ms: u64) -> String {
     let total_seconds = ms / 1000;
     format!("{:02}:{:02}", total_seconds / 60, total_seconds % 60)
 }
 
 /// 组装 Markdown 全文。
-fn assemble_markdown(title: &str, paragraphs: &[String], ocr_points: &[String]) -> String {
+pub(crate) fn assemble_markdown(title: &str, paragraphs: &[String], ocr_points: &[String]) -> String {
     let mut md = String::new();
     md.push_str(&format!("# {}\n", title));
 
