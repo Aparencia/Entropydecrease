@@ -9,11 +9,11 @@
 
 ```bash
 # 1. 复制骨架到你的项目
-cp -r docs-starter-kit/* <你的项目>/docs/
-cp docs-starter-kit/.docscheckignore <你的项目>/docs/
+cp -r docs/* <你的项目>/docs/
+cp docs/.docscheckignore <你的项目>/docs/
 
 # 2. 复制文档检查脚本（可选，推荐）
-cp docs-starter-kit/scripts/docs-check.mjs <你的项目>/scripts/
+cp docs/scripts/docs-check.mjs <你的项目>/scripts/
 
 # 3. 初始化
 #    - 编辑 docs/README.md 顶部：项目名 + 一句话描述

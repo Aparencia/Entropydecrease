@@ -1,6 +1,6 @@
 # AGENTS.md — 熵减重构区（Entropydecrease Rebuild）代理上下文
 
-> 本文件是 AI 编程代理在本工作区的**最高执行指令**。所有代码生成、重构、文档、提交行为必须遵循本文件。规范细则见 `docs-starter-kit/standards/`。
+> 本文件是 AI 编程代理在本工作区的**最高执行指令**。所有代码生成、重构、文档、提交行为必须遵循本文件。规范细则见 `docs/standards/`。
 
 ## 0. 工作区铁律（最高优先级，违反即失败）
 
@@ -16,8 +16,8 @@
 - **核心理念**：本地优先 + 数据不出本机 + AI 为增强层
 - **MVP 核心**：课堂助手（屏幕+音频捕获 → 本地 ASR 转写 → 本地 OCR → 内容本地拼接 → 笔记）+ 间隔重复闪卡（知识持久化）
 - **MVP 成功标准**：视频知识提取与持久化达到市场级（对标通义听悟/讯飞听见）
-- 产品依据：`docs-starter-kit/product/`（痛点图谱/MVP 画布/PRD/需求池）
-- 技术决策依据：`docs-starter-kit/Foresight/market-stack-asr-notes-research.md`
+- 产品依据：`docs/product/`（痛点图谱/MVP 画布/PRD/需求池）
+- 技术决策依据：`docs/Foresight/market-stack-asr-notes-research.md`
 
 ## 2. 技术栈（2026-08 已裁决，改动需 ADR）
 
@@ -66,8 +66,8 @@
 ## 6. 文档规范（源自 standards/documentation.md）
 
 - 文档与代码在同一提交中更新；架构变更须同步文档 + 写 ADR
-- 产品文档在 `docs-starter-kit/product/`，前瞻/调研在 `docs-starter-kit/Foresight/`，决策在 `docs-starter-kit/adr/`
-- 新文档从 `docs-starter-kit/templates/` 复制模板；文档变更尽量过 `docs-check`
+- 产品文档在 `docs/product/`，前瞻/调研在 `docs/Foresight/`，决策在 `docs/adr/`
+- 新文档从 `docs/templates/` 复制模板；文档变更尽量过 `docs-check`
 - 注释解释 Why；不写日志式注释（"2026-08-18 张三改"）
 
 ## 7. 测试规范（源自 standards/testing.md）
@@ -112,7 +112,7 @@ npm run build        # 前端构建
 - `src-tauri/src/live_session*.rs`、`src-tauri/src/capture/` — 音频/屏幕捕获系统调用模块（权限与隐私敏感）
 - SQLite schema / 迁移 — 数据兼容
 - `.github/workflows/`（如有）— CI/CD
-- `docs-starter-kit/product/`、`adr/` — 产品与架构决策
+- `docs/product/`、`adr/` — 产品与架构决策
 
 ## 11. 约定
 
@@ -120,4 +120,4 @@ npm run build        # 前端构建
 - AI 功能必须支持离线降级（本地优先原则）
 - 单文件 ≤300 行；源码文件含 `@ai-context` 业务背景注释
 - 重构/拆分遵循自底向上（原子→业务→系统），公共 API 保持兼容
-- 任何技术栈/架构级变更先写 ADR（`docs-starter-kit/adr/`）再动手
+- 任何技术栈/架构级变更先写 ADR（`docs/adr/`）再动手
