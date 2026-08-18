@@ -8,6 +8,8 @@
 #[cfg(target_os = "windows")]
 pub mod audio_loopback;
 #[cfg(target_os = "windows")]
+mod dxgi_state;
+#[cfg(target_os = "windows")]
 pub mod dxgi_capture;
 pub mod frame_diff;
 #[cfg(target_os = "windows")]
