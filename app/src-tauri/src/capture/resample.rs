@@ -30,7 +30,8 @@ pub fn mixdown_to_mono(input: &[f32], channels: u16) -> Vec<f32> {
 /// @ai-context: 线性插值对语音信号足够（ASR 对相位不敏感），实现 O(n) 且无依赖；
 ///              比率相等时直通复制。目标速率必须 >0。
 pub fn resample_linear(input: &[f32], src_rate: u32, dst_rate: u32) -> Vec<f32> {
-    if input.is_empty() || dst_rate == 0 {
+    // src_rate=0 → ratio=0 → out_len 溢出 panic（审查 TD-009 二次确认：先防 dst_rate 后仍漏 src_rate）
+    if input.is_empty() || src_rate == 0 || dst_rate == 0 {
         return Vec::new();
     }
     if src_rate == dst_rate {
@@ -186,6 +187,14 @@ mod tests {
     }
 
     #[test]
+    fn resample_zero_src_rate_returns_empty() {
+        // Arrange & Act：src_rate=0 曾导致 ratio=0 → out_len 溢出 panic（TD-009）
+        let out = resample_linear(&[0.1, 0.2, 0.3], 0, 16_000);
+        // Assert
+        assert!(out.is_empty());
+    }
+
+    #[test]
     fn chunk_accumulator_cuts_exact_targets() {
         // Arrange：目标 4 样本
         let mut acc = ChunkAccumulator::new(4);
@@ -202,7 +211,7 @@ mod tests {
     fn chunk_accumulator_default_target_is_200ms() {
         // Arrange & Act
         let acc = ChunkAccumulator::new(0);
-        let mut acc2 = ChunkAccumulator::new(TARGET_SAMPLE_RATE as usize / 5);
+        let acc2 = ChunkAccumulator::new(TARGET_SAMPLE_RATE as usize / 5);
         // Assert：默认与显式 200ms 目标一致（3200 样本 @16kHz）
         assert_eq!(acc.target_samples, acc2.target_samples);
         assert_eq!(acc.target_samples, 3200);
