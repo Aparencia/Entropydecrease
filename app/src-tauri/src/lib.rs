@@ -59,6 +59,8 @@ mod layout_cache;
 mod live_session;
 #[cfg(target_os = "windows")]
 mod live_session_frame;
+#[cfg(target_os = "windows")]
+mod live_keyframes;
 mod load_monitor;
 mod model_downloader;
 mod ocr;

@@ -477,7 +477,7 @@ fn run_session(
             }
             let subtitle_segments =
                 subtitle_segments.lock().expect("subtitle segments lock poisoned").clone();
-            let result = crate::live_session_frame::rewrite_with_fusion(
+            let result = crate::live_keyframes::rewrite_with_fusion(
                 &fusion_db,
                 session_id,
                 &subtitle_segments,

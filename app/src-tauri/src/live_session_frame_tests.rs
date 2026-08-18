@@ -2,8 +2,10 @@
 //!
 //! @ai-context: 由 live_session_frame.rs 以 #[cfg(test)] #[path] 引入，
 //!              保持实现文件 ≤300 行（AGENTS.md §3）。
+//! @ai-context: bgra_to_rgb_image 已随 M4 编排函数移入 region_ocr.rs
+//!              （保持本文件内联测试的引用更新）。
 
-use super::bgra_to_rgb_image;
+use crate::region_ocr::bgra_to_rgb_image;
 
 #[test]
 fn bgra_converts_to_rgb_in_memory() {

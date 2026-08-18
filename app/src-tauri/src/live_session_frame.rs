@@ -1,10 +1,10 @@
-//! 实时会话帧处理（live_session.rs 的拆分子模块，保持主文件 ≤300 行）。
+//! 实时会话帧处理（live_session.rs 的拆分子模块，保持主文件 ≤600 行）。
 //!
 //! @ai-context: 屏幕帧 → 变化检测 → 字幕区裁剪 + OCR 输入缩小（P4）→ 内存 OCR
 //!              （TD-025，免磁盘临时 BMP）→ 滚动检测/多帧投票（T2）→ 落库 + 内存缓存；
 //!              全帧画面要点去重落库。
-//! @ai-context: 停止时的融合重写（rewrite_with_fusion）也归本模块——v0.3.0（REQ-031）
-//!              增加无字幕短路：subtitles 为空时融合 = ASR 原样拷贝，直接跳过。
+//! @ai-context: 关键帧归档/投票与融合重写已拆至 live_keyframes.rs（v0.5.0 M9 拆分，
+//!              本文件回归 501 行）；分区域 OCR 编排在 region_ocr.rs（M4）。
 //! @ai-context: 屏幕采样在独立线程运行（run_screen_worker，TD-026 修复）——
 //!              OCR 推理不再阻塞会话线程的音频消费；语音活跃度（B3）驱动自适应采样。
 //! @ai-context: 时间戳统一（ADR-008 A1）：帧时间戳在捕获后覆写为会话纪元 elapsed，
@@ -23,10 +23,9 @@ use crate::capture::frame_diff::{
 use crate::capture::ScreenCaptureSampler;
 use crate::db::Db;
 use crate::engine::EnginePool;
-use crate::error::Result;
-use crate::fusion::{merge_transcript, FusedSource, SubtitleSegment};
+use crate::fusion::SubtitleSegment;
 use crate::subtitle_ocr::{is_scrolling, SubtitleVoter, VotedSubtitle};
-use crate::types::{NewSessionOcrBlock, NewSessionSegment, TranscriptSegment};
+use crate::types::{NewSessionOcrBlock, NewSessionSegment};
 
 /// 采样节拍（ms）：与音频消费解耦，固定 1s 一拍（审查 M5 修复）。
 const SAMPLE_TICK_MS: u64 = 1000;
@@ -38,14 +37,6 @@ const MAX_OCR_WIDTH: u32 = 960;
 /// 对局部/平滑变化可能漏检（采样点错过变化像素），此时距上次 OCR 超过该间隔
 /// 强制识别一次，保证"屏幕在变但无 OCR"场景至少周期性产出（用户反馈 4/5 会话无 OCR 排查项）。
 const FORCE_OCR_INTERVAL_SECS: u64 = 15;
-
-/// 实时画面要点事件载荷（前端实时画面流，简要单行卡片）。
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OcrEvent {
-    pub timestamp_ms: u64,
-    pub text: String,
-}
 
 /// 字幕事件载荷（TD-043：携带后端会话纪元时间戳，前端显示与时间轴一致）。
 #[derive(Debug, Clone, serde::Serialize)]
@@ -216,22 +207,7 @@ pub fn run_screen_worker(
         persist_voted_subtitle(&db, &app, session_id, &subtitle_segments, voted);
     }
     // M6/REQ-051：关键帧投票（课后精修：多信号筛选 → 关键图候选；产物层 M7 消费）
-    if !frame_samples.is_empty() {
-        let votes = crate::frame_cluster::vote_key_frames(&frame_samples, &[]);
-        let top: Vec<crate::frame_cluster::KeyFrameCandidate> = votes
-            .iter()
-            .take(5)
-            .cloned()
-            .collect();
-        if !top.is_empty() {
-            let summary: Vec<String> = top
-                .iter()
-                .map(|c| format!("{}ms({})", c.timestamp_ms, c.reasons.join("+")))
-                .collect();
-            eprintln!("[ScreenWorker] 会话 {} 关键图候选: {}", session_id, summary.join(", "));
-            let _ = app.emit("session:keyframes", top);
-        }
-    }
+    crate::live_keyframes::vote_and_emit_keyframes(&frame_samples, &app, session_id);
     // 显式释放采样器（COM/DXGI 资源）——worker 退出即释放 duplication，
     // 防多会话快速连测时泄漏累积触发 DXGI 并发上限（4/5 会话无 OCR 排查项）
     drop(screen);
@@ -392,41 +368,23 @@ fn process_frame(
     }
 
     // TD-025：BGRA8 帧 → 内存 RgbImage 直送 OCR（不再写磁盘临时 BMP，杜绝崩溃残留）
-    let Some(rgb) = bgra_to_rgb_image(&frame.bgraw, frame.width, frame.height) else { return };
+    let Some(rgb) = crate::region_ocr::bgra_to_rgb_image(&frame.bgraw, frame.width, frame.height) else { return };
     // M6/REQ-051：OCR 输入图 aHash（关键帧样本去重/聚类输入）
     let ocr_input_hash = crate::ocr_cache::average_hash(&rgb);
     // M4/REQ-048：全帧分支优先分区域 OCR（版面区域 → 区域裁剪 → 识别 → 坐标还原）；
     // 无区域（空白帧/分析失败）回退整帧直跑（现状行为，回退链）
     if !is_subtitle && !layout_regions.is_empty() {
-        match region_ocr_blocks(&frame, engines, &layout_regions, stats) {
-            Ok(blocks) => {
-                stats.ocr_ok += 1;
-                *last_ocr_at = Instant::now();
-                handle_full_frame(
-                    &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
-                    last_archived_text, last_archived_at, image_store, ocr_input_hash,
-                );
-            }
-            Err(e) => {
-                // 区域编排失败 → 回退整帧直跑（低置信区域已标记 unknown，不丢内容）
-                stats.ocr_err += 1;
-                eprintln!("[ScreenWorker] 分区域 OCR 失败，回退整帧: {}", e);
-                match engines.recognize_image(rgb) {
-                    Ok(blocks) => {
-                        stats.ocr_ok += 1;
-                        *last_ocr_at = Instant::now();
-                        handle_full_frame(
-                            &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
-                            last_archived_text, last_archived_at, image_store, ocr_input_hash,
-                        );
-                    }
-                    Err(e2) => {
-                        stats.ocr_err += 1;
-                        eprintln!("[ScreenWorker] OCR 识别失败（下帧重试）: {}", e2)
-                    }
-                }
-            }
-        }
+        // 区域编排：区域级失败不阻断整体（标记 unknown），无整体失败路径——
+        // 编排函数返回 (合并块, 失败区域数)；调用方计入 stats 后直用结果
+        let (blocks, failed_regions) =
+            crate::region_ocr::region_ocr_blocks(&frame, engines, &layout_regions);
+        stats.ocr_err += failed_regions as u64;
+        stats.ocr_ok += 1;
+        *last_ocr_at = Instant::now();
+        crate::live_keyframes::handle_full_frame(
+            &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
+            last_archived_text, last_archived_at, image_store, ocr_input_hash,
+        );
     } else {
         match engines.recognize_image(rgb) {
             Ok(blocks) => {
@@ -443,7 +401,7 @@ fn process_frame(
                         &frame, &blocks, voter, last_frame_text, last_preview, db, app, session_id, subtitle_segments,
                     );
                 } else {
-                    handle_full_frame(
+                    crate::live_keyframes::handle_full_frame(
                         &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
                         last_archived_text, last_archived_at, image_store, ocr_input_hash,
                     );
@@ -455,87 +413,6 @@ fn process_frame(
             }
         }
     }
-}
-
-/// 分区域 OCR（REQ-048 编排器）：区域调度（权重+封顶）→ 逐区域裁剪 →
-/// 区域级预处理（放大）→ 识别 → 坐标还原 + region_kind 标注 → 合并。
-///
-/// @ai-context: 区域识别失败不阻断整体（该区域标记 unknown，低置信 → 图片归档候选）；
-///              坐标还原（map_to_frame）为纯函数单测覆盖（region_ocr_tests）。
-/// @ai-context: 每帧最多 MAX_REGIONS_PER_FRAME 区（防多区域调用失控）。
-fn region_ocr_blocks(
-    frame: &CapturedFrame,
-    engines: &EnginePool,
-    regions: &[crate::layout_analyzer::LayoutRegion],
-    stats: &mut ScreenStats,
-) -> crate::error::Result<Vec<crate::types::OcrBlock>> {
-    let scheduled = crate::region_ocr::schedule_regions(regions);
-    let mut merged: Vec<crate::types::OcrBlock> = Vec::new();
-    for region in scheduled {
-        let Some(spec) = crate::region_ocr::crop_spec(region, frame.width, frame.height) else {
-            continue;
-        };
-        // 内存裁剪（含边距）→ 区域级预处理（表格/公式放大）
-        let Some((mut crop, mut cw, mut ch)) =
-            crate::region_ocr::crop_region_bgra(&frame.bgraw, frame.width, frame.height, &spec)
-        else {
-            continue;
-        };
-        if let Some((up, uw, uh)) = crate::region_ocr::upscale_bgra(&crop, cw, ch, spec.scale) {
-            crop = up;
-            cw = uw;
-            ch = uh;
-        }
-        let Some(rgb) = bgra_to_rgb_image(&crop, cw, ch) else { continue };
-        match engines.recognize_image(rgb) {
-            Ok(blocks) => {
-                for mut b in blocks {
-                    // 坐标还原：裁剪图坐标 → 原帧坐标（bbox 相对 OCR 输入图）
-                    if let Some(bbox) = b.bbox {
-                        let origin = crate::capture::frame_diff::Rect {
-                            left: region.x as i32,
-                            top: region.y as i32,
-                            right: (region.x + region.w) as i32,
-                            bottom: (region.y + region.h) as i32,
-                        };
-                        let mapped = crate::region_ocr::map_to_frame(
-                            crate::region_ocr::FrameCoord { x: bbox.x as i32, y: bbox.y as i32 },
-                            &origin,
-                            spec.scale,
-                        );
-                        b.bbox = Some(crate::types::TextBox {
-                            x: mapped.x as f32,
-                            y: mapped.y as f32,
-                            w: bbox.w / spec.scale,
-                            h: bbox.h / spec.scale,
-                        });
-                    }
-                    // 区域类型标注（M4：产物/补缝判定器消费）
-                    b.region_kind = Some(region.kind.as_str().to_string());
-                    merged.push(b);
-                }
-            }
-            Err(e) => {
-                // 区域级失败：标记 unknown 不阻断整体（诚实降级）
-                stats.ocr_err += 1;
-                eprintln!("[ScreenWorker] 区域 {:?} 识别失败（标记 unknown）: {}", region.kind, e);
-            }
-        }
-    }
-    Ok(merged)
-}
-
-/// BGRA8 像素 → image::RgbImage（纯函数；尺寸与像素长度不匹配返回 None）。
-fn bgra_to_rgb_image(bgraw: &[u8], width: u32, height: u32) -> Option<image::RgbImage> {
-    let pixel_len = width as usize * height as usize * 4;
-    if width == 0 || height == 0 || bgraw.len() != pixel_len {
-        return None;
-    }
-    let mut rgb = Vec::with_capacity(pixel_len / 4 * 3);
-    for px in bgraw.chunks_exact(4) {
-        rgb.extend_from_slice(&[px[2], px[1], px[0]]);
-    }
-    image::RgbImage::from_raw(width, height, rgb)
 }
 
 /// 字幕区帧：文本拼接 → 滚动检测 → 多帧投票（T2）→ 切换时定稿落库。
@@ -616,122 +493,6 @@ fn persist_voted_subtitle(
     let _ = app.emit("live:subtitle", SubtitleEvent { timestamp_ms: start_ms, text });
 }
 
-/// 全帧：画面要点落 OCR 块（低置信度过滤 + 帧间文本去重 + 实时事件推送）。
-///
-/// @ai-context: 去重（与导入链路 same_texts 同口径）：强制 OCR 兜底会使静止画面
-///              每 15s 重复识别——文本集合与上次完全一致时跳过落库，防要点列表刷屏。
-/// @ai-context: 落库成功即 emit live:ocr（前端实时画面流，简要单行卡片）。
-/// @ai-context: M6/REQ-051：关键帧样本收集（停止时投票）+ 新画面文本归档存图
-///              （三层图结构参考图集数据源；预算上限由 image_store 控制）。
-#[allow(clippy::too_many_arguments)]
-fn handle_full_frame(
-    frame: &CapturedFrame,
-    blocks: &[crate::types::OcrBlock],
-    db: &Db,
-    app: &tauri::AppHandle,
-    session_id: i64,
-    last_texts: &mut Vec<String>,
-    frame_samples: &mut Vec<crate::frame_cluster::FrameSample>,
-    last_archived_text: &mut Option<String>,
-    last_archived_at: &mut Option<Instant>,
-    image_store: Option<&mut crate::image_store::SessionImageStore>,
-    ocr_input_hash: u64,
-) {
-    let texts: Vec<String> = blocks
-        .iter()
-        .filter(|b| b.score >= 0.5 && !b.text.trim().is_empty())
-        .map(|b| b.text.clone())
-        .collect();
-    // M6：关键帧样本收集（全帧分支每次 OCR 成功记录；停止时投票器消费）
-    if !texts.is_empty() {
-        frame_samples.push(crate::frame_cluster::FrameSample {
-            timestamp_ms: frame.timestamp_ms,
-            ahash: ocr_input_hash,
-            ocr_text: Some(texts.join(" ")),
-            change_magnitude: 0.0,
-        });
-    }
-    // M6：新画面文本 → 归档存图（参考图集；同文本不重复归档 + 2s 防抖）
-    let joined = texts.join(" ");
-    let is_new_text = last_archived_text.as_deref() != Some(joined.as_str());
-    let interval_ok = last_archived_at.is_none_or(|t| t.elapsed() >= Duration::from_secs(2));
-    if is_new_text && interval_ok {
-        if let Some(store) = image_store {
-            if let Err(e) = store.save_frame(
-                frame.timestamp_ms,
-                &frame.bgraw,
-                frame.width,
-                frame.height,
-            ) {
-                // 归档失败不阻断 OCR 主链路（预算满/IO 错误静默降级，日志可观测）
-                eprintln!("[ScreenWorker] 关键帧归档失败: {}", e);
-            }
-        }
-        *last_archived_text = Some(joined);
-        *last_archived_at = Some(Instant::now());
-    }
-    if crate::import_frame::same_texts(&texts, last_texts) {
-        return;
-    }
-    for block in blocks {
-        if block.score >= 0.5 && !block.text.trim().is_empty() {
-            let _ = db.add_ocr_block(&NewSessionOcrBlock {
-                session_id,
-                timestamp_ms: frame.timestamp_ms,
-                text: block.text.clone(),
-                score: block.score,
-                region: "full".to_string(),
-                // M4/REQ-048：整帧直跑路径无区域标注（None=兼容旧数据口径）
-                region_kind: None,
-            });
-            let _ = app.emit(
-                "live:ocr",
-                OcrEvent { timestamp_ms: frame.timestamp_ms, text: block.text.clone() },
-            );
-        }
-    }
-    *last_texts = texts;
-}
-
-/// 融合并重写会话段：单事务原子替换（删除原段 + 插入融合时间轴，ADR-005 §3）。
-///
-/// @ai-context: 原子性由 db.replace_segments 保证（审查 M1 修复）——
-///              失败整体回滚，原段不丢失。
-/// @ai-context: REQ-031 无字幕短路：subtitles 为空时融合四规则全部退化为无操作
-///              （融合输出 = ASR 原样拷贝）——直接跳过，省去无意义的全量重写。
-pub fn rewrite_with_fusion(
-    db: &Db,
-    session_id: i64,
-    subtitles: &[SubtitleSegment],
-    asr_segments: &[TranscriptSegment],
-) -> Result<()> {
-    if subtitles.is_empty() {
-        eprintln!("[Fusion] 会话 {} 无字幕段，短路跳过融合（ASR 段原样保留）", session_id);
-        return Ok(());
-    }
-    let fused = merge_transcript(subtitles, asr_segments, 0);
-    if fused.is_empty() {
-        return Ok(());
-    }
-    let items: Vec<NewSessionSegment> = fused
-        .iter()
-        .map(|s| NewSessionSegment {
-            session_id,
-            start_ms: s.start_ms,
-            end_ms: s.end_ms,
-            text: s.text.clone(),
-            source: match s.source {
-                FusedSource::Subtitle => "subtitle",
-                FusedSource::Asr => "asr",
-                FusedSource::Fused => "fused",
-            }
-            .to_string(),
-            confidence: None,
-        })
-        .collect();
-    db.replace_segments(session_id, &items)?;
-    Ok(())
-}
 
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。
 #[cfg(test)]
