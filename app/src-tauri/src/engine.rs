@@ -17,6 +17,7 @@ use crate::device_config::{OcrBackend, OcrDeviceStatus};
 use crate::error::{AppError, Result};
 use crate::ocr::{OcrEngine, OcrModels, OcrParams};
 use crate::types::{OcrBlock, TranscriptSegment};
+use crate::vocab::{apply_replacements, VocabStore};
 
 /// ASR 引擎请求（reply channel 回传结果）。
 enum AsrRequest {
@@ -67,6 +68,7 @@ impl EnginePool {
         ocr_params: OcrParams,
         backend: OcrBackend,
         ocr_device_status: Arc<Mutex<OcrDeviceStatus>>,
+        vocab: Option<Arc<Mutex<VocabStore>>>,
     ) -> Result<Self> {
         let (asr_tx, asr_rx) = mpsc::channel();
         let (ocr_tx, ocr_rx) = mpsc::channel();
@@ -75,9 +77,12 @@ impl EnginePool {
             .spawn(move || asr_worker_loop(asr_rx, asr_models))
             .map_err(|e| AppError::Io(format!("启动 ASR 引擎线程失败: {}", e)))?;
         let status_for_worker = ocr_device_status.clone();
+        let vocab_for_worker = vocab.clone();
         thread::Builder::new()
             .name("entropy-ocr-engine".into())
-            .spawn(move || ocr_worker_loop(ocr_rx, ocr_models, ocr_params, backend, status_for_worker))
+            .spawn(move || {
+                ocr_worker_loop(ocr_rx, ocr_models, ocr_params, backend, status_for_worker, vocab_for_worker)
+            })
             .map_err(|e| AppError::Io(format!("启动 OCR 引擎线程失败: {}", e)))?;
         Ok(Self {
             asr_tx,
@@ -171,6 +176,21 @@ impl EnginePool {
     }
 }
 
+/// M5/REQ-040：替换词纠错（纯函数；空表原样返回）。
+fn correct_blocks(blocks: Vec<OcrBlock>, pairs: Option<&[crate::vocab::ReplacePair]>) -> Vec<OcrBlock> {
+    let Some(pairs) = pairs else { return blocks };
+    if pairs.is_empty() {
+        return blocks;
+    }
+    blocks
+        .into_iter()
+        .map(|mut b| {
+            b.text = apply_replacements(&b.text, pairs);
+            b
+        })
+        .collect()
+}
+
 /// ASR 线程主循环：启动即加载模型，随后顺序处理请求（引擎天然串行，无需加锁）。
 fn asr_worker_loop(rx: Receiver<AsrRequest>, asr_models: AsrModels) {
     let mut asr = AsrEngine::load(&asr_models);
@@ -206,6 +226,7 @@ fn ocr_worker_loop(
     ocr_params: OcrParams,
     backend: OcrBackend,
     device_status: Arc<Mutex<OcrDeviceStatus>>,
+    vocab: Option<Arc<Mutex<VocabStore>>>,
 ) {
     // @ai-context: OCR 首次构建可能触发 ModelScope 模型下载，耗时较长但在后台线程不影响 UI。
     let mut ocr = OcrEngine::load(&ocr_models, &ocr_params, backend);
@@ -237,11 +258,14 @@ fn ocr_worker_loop(
     }
     // M4/REQ-039 E5：OCR 结果 LRU 缓存（A→B→A 帧往返零推理；worker 独占）
     let mut ocr_cache = crate::ocr_cache::OcrCache::new();
+    // M5/REQ-040：替换词纠错（识别结果按共享词表修正，缓存存修正后结果）
+    let vocab_pairs: Option<Vec<crate::vocab::ReplacePair>> =
+        vocab.as_ref().and_then(|v| v.lock().ok()).map(|v| v.replacements.clone());
     for req in rx {
         let (result, reply) = match req {
             OcrRequest::Recognize { path, reply } => {
                 let result = match ocr.as_mut() {
-                    Ok(engine) => engine.recognize(&path),
+                    Ok(engine) => engine.recognize(&path).map(|blocks| correct_blocks(blocks, vocab_pairs.as_deref())),
                     Err(_) => Err(AppError::Ocr("OCR 引擎加载失败（请检查模型下载/网络）".to_string())),
                 };
                 (result, reply)
@@ -254,8 +278,9 @@ fn ocr_worker_loop(
                     None => match ocr.as_mut() {
                         Ok(engine) => match engine.recognize_image(image) {
                             Ok(blocks) => {
-                                ocr_cache.put(key, blocks.clone());
-                                Ok(blocks)
+                                let corrected = correct_blocks(blocks, vocab_pairs.as_deref());
+                                ocr_cache.put(key, corrected.clone());
+                                Ok(corrected)
                             }
                             Err(e) => Err(e),
                         },

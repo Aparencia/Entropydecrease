@@ -93,8 +93,8 @@ fn load_and_feed_streaming_zipformer_integration() {
         joiner: p("joiner.fp16.onnx"),
         tokens: p("tokens.txt"),
     };
-    // Act：加载（第一代 zipformer，自动推断——修复前此处崩溃）
-    let mut engine = StreamingAsrEngine::load(&models, None).expect("流式模型加载成功");
+    // Act：加载（第一代 zipformer，自动推断——修复前此处崩溃；M5 词表参数传 None）
+    let mut engine = StreamingAsrEngine::load(&models, None, None).expect("流式模型加载成功");
     // 喂入合成音频（1s 随机噪声 = 非静音，走完整 decode 路径）
     let samples: Vec<f32> = (0..16000).map(|i| ((i % 997) as f32 / 997.0 - 0.5) * 0.2).collect();
     let events = engine.feed(&samples, false);

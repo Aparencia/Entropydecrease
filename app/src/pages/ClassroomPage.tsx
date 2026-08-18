@@ -15,6 +15,7 @@ import { WindowSelectCard } from "../components/WindowSelectCard";
 import VideoImportPanel from "../components/VideoImportPanel";
 import LiveActivityPanel from "../components/LiveActivityPanel";
 import { OcrDeviceSetting } from "../components/OcrDeviceSetting";
+import { VocabManager } from "../components/VocabManager";
 import type { Note, WindowInfo, StreamingModelStatus, LiveSessionStatus, DownloadProgress, DownloadStatus } from "../types";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
@@ -348,6 +349,11 @@ export default function ClassroomPage() {
           {/* OCR 推理设备（v0.4.0 M1：REQ-036，ADR-009：CUDA 卸载/回退可观测/重新检测） */}
           <div style={panel}>
             <OcrDeviceSetting />
+          </div>
+
+          {/* 词表管理（v0.4.0 M5：REQ-040：热词/替换词闭环 + 课件预热） */}
+          <div style={panel}>
+            <VocabManager />
           </div>
 
           {/* 素材输入（v0.1.0：文件流水线） */}

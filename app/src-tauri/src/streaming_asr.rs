@@ -9,6 +9,7 @@
 //! @ai-context: 可选 SenseVoice 整句重打分（rescorer）：端点断句后把句音频送
 //!              离线引擎复核，一致性校验通过才替换（质量兜底，ADR-003 §5）。
 
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use sherpa_onnx::{OnlineRecognizer, OnlineRecognizerConfig, OnlineStream};
@@ -16,6 +17,7 @@ use sherpa_onnx::{OnlineRecognizer, OnlineRecognizerConfig, OnlineStream};
 use crate::engine::EnginePool;
 use crate::error::{AppError, Result};
 use crate::types::TranscriptSegment;
+use crate::vocab::VocabStore;
 
 /// 流式模型四件套路径（目录约定：models/streaming-zipformer/，ADR-003）。
 #[derive(Debug, Clone)]
@@ -47,8 +49,8 @@ pub struct StreamingAsrEngine {
     recognizer: OnlineRecognizer,
     stream: OnlineStream,
     sample_rate: i32,
-    /// 端点断句后重建流时的热词（当前为空，热词表为后续阶段）
-    hotwords: Option<String>,
+    /// M5/REQ-040：共享词表（热词注入源；None=无词表支持）
+    vocab: Option<Arc<Mutex<VocabStore>>>,
     last_partial_text: String,
     last_partial_emit_at: Option<Instant>,
     last_final_text: String,
@@ -61,7 +63,11 @@ pub struct StreamingAsrEngine {
 
 impl StreamingAsrEngine {
     /// 加载流式模型创建引擎（重操作，仅启动时执行一次）。
-    pub fn load(models: &StreamingAsrModels, rescorer: Option<EnginePool>) -> Result<Self> {
+    pub fn load(
+        models: &StreamingAsrModels,
+        rescorer: Option<EnginePool>,
+        vocab: Option<Arc<Mutex<VocabStore>>>,
+    ) -> Result<Self> {
         ensure_model_files(models)?;
         let mut config = OnlineRecognizerConfig::default();
         config.feat_config.sample_rate = 16000;
@@ -88,7 +94,7 @@ impl StreamingAsrEngine {
             recognizer,
             stream,
             sample_rate: 16000,
-            hotwords: None,
+            vocab,
             last_partial_text: String::new(),
             last_partial_emit_at: None,
             last_final_text: String::new(),
@@ -184,8 +190,15 @@ impl StreamingAsrEngine {
     ///              ContextGraph（sherpa-onnx online-recognizer-transducer-impl.h），
     ///              greedy_search 解码器未覆写带 OnlineStream 的 Decode 接口，
     ///              解码时触发断言 abort（exit 0xffffffff）；无热词必须用 create_stream。
+    /// @ai-context: M5/REQ-040——热词每次重建流时从共享词表读取：词表变更在下一个
+    ///              端点断句自动生效（无需中断会话；锁中毒防御回退无热词）。
     fn new_stream(&self) -> OnlineStream {
-        match self.hotwords.as_deref() {
+        let hotwords = self
+            .vocab
+            .as_ref()
+            .and_then(|v| v.lock().ok())
+            .and_then(|v| v.hotwords_string());
+        match hotwords.as_deref() {
             Some(h) if !h.trim().is_empty() => {
                 self.recognizer.create_stream_with_hotwords(h)
             }

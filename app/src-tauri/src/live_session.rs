@@ -88,6 +88,8 @@ pub struct LiveSessionParams {
     pub streaming_models: StreamingAsrModels,
     /// 融合状态跟踪（与 LiveSessionManager 共享同一实例）
     pub fusion: FusionTracker,
+    /// M5/REQ-040：共享词表（热词注入流式识别）
+    pub vocab: std::sync::Arc<std::sync::Mutex<crate::vocab::VocabStore>>,
     /// 前端事件推送（live:asr-partial / live:subtitle / live:error / live:status / session:*）
     pub app: tauri::AppHandle,
 }
@@ -199,8 +201,12 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
     let mut sentence_start_ms: Option<u64> = None;
     let mut last_speech_ms: Option<u64> = None;
 
-    // 1) 流式 ASR（SenseVoice 重打分接离线引擎池）
-    let mut asr_engine = match StreamingAsrEngine::load(&params.streaming_models, Some(engines.clone())) {
+    // 1) 流式 ASR（SenseVoice 重打分接离线引擎池；M5 热词经共享词表注入）
+    let mut asr_engine = match StreamingAsrEngine::load(
+        &params.streaming_models,
+        Some(engines.clone()),
+        Some(params.vocab.clone()),
+    ) {
         Ok(e) => e,
         Err(e) => {
             emit_error(&params.app, &format!("流式 ASR 引擎加载失败: {}", e));

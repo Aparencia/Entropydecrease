@@ -39,6 +39,8 @@ oar-ocr = { version = "0.9", features = ["auto-download"] }
 image = "0.25"
 # 模型自动下载（ADR-003 模型分发；rustls TLS，hf-mirror 国内镜像）
 ureq = { version = "2", features = ["tls"] }
+# 课件预热（REQ-040 M5）：PPTX = zip + slide XML 文本层提取（最小版；PDF 留 v0.5）
+zip = "2"
 
 [dev-dependencies]
 tempfile = "3"

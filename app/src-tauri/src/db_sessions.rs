@@ -260,6 +260,24 @@ impl Db {
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
     }
 
+    /// 最近 N 个会话的 OCR 文本（M5/REQ-040 OCR→ASR 闭环建议源）。
+    ///
+    /// @ai-context: 取最近 N 个会话（started_at 倒序）的全部 ocr_blocks 文本，
+    ///              供词表建议（高频词提名）；空结果返回空列表。
+    pub fn recent_ocr_texts(&self, sessions: i64) -> Result<Vec<String>> {
+        let conn = self.conn.lock().expect("db lock poisoned");
+        let mut stmt = conn.prepare(
+            "SELECT b.text FROM session_ocr_blocks b
+             JOIN sessions s ON s.id = b.session_id
+             WHERE s.id IN (
+                 SELECT id FROM sessions ORDER BY started_at DESC, id DESC LIMIT ?1
+             )
+             ORDER BY b.timestamp_ms ASC",
+        )?;
+        let rows = stmt.query_map(params![sessions], |row| row.get::<_, String>(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+    }
+
     /// 崩溃恢复：把所有 status=recording 的残留会话标记为 failed。
     ///
     /// @ai-context: 应用启动时调用（ADR-004 风险缓解）——上次异常退出留下的

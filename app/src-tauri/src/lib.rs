@@ -14,6 +14,7 @@ mod commands_device;
 mod commands_import;
 mod commands_session;
 mod commands_streaming;
+mod commands_vocab;
 mod concat;
 mod db;
 mod db_sessions;
@@ -43,6 +44,7 @@ mod subtitle;
 mod subtitle_detect;
 mod subtitle_ocr;
 mod types;
+mod vocab;
 mod windows;
 
 // 临时诊断模块（定位实时链路无 OCR 根因；诊断后删除）
@@ -224,12 +226,18 @@ pub fn run() {
             )));
             let ocr_models = ocr_models();
             let ocr_params = OcrParams::default();
+            // M5/REQ-040：共享词表（热词注入 ASR 流、替换词纠错 OCR；JSON 持久化）
+            let vocab_path = data_dir.join("vocab.json");
+            let vocab = std::sync::Arc::new(std::sync::Mutex::new(crate::vocab::VocabStore::load(
+                &vocab_path,
+            )));
             let engines = EnginePool::start(
                 asr_models(&model_dir),
                 ocr_models.clone(),
                 ocr_params.clone(),
                 ocr_backend,
                 ocr_device_status,
+                Some(vocab.clone()),
             )
             .map_err(|e| format!("启动引擎池失败: {}", e))?;
 
@@ -245,6 +253,8 @@ pub fn run() {
                 ocr_device_config_path,
                 ocr_models,
                 ocr_params,
+                vocab,
+                vocab_path,
             });
             Ok(())
         })
@@ -302,7 +312,15 @@ pub fn run() {
             // OCR 设备状态（REQ-036，ADR-009：GPU 卸载决策/回退可观测）
             commands_device::ocr_device_status,
             commands_device::ocr_device_set_mode,
-            commands_device::ocr_device_recalibrate
+            commands_device::ocr_device_recalibrate,
+            // 词表管理（REQ-040，M5：热词/替换词闭环 + 课件预热）
+            commands_vocab::vocab_get,
+            commands_vocab::vocab_add_hotwords,
+            commands_vocab::vocab_remove_hotword,
+            commands_vocab::vocab_add_replacement,
+            commands_vocab::vocab_remove_replacement,
+            commands_vocab::vocab_extract_courseware,
+            commands_vocab::vocab_suggest_from_ocr
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -68,6 +68,10 @@ pub struct AppState {
     pub ocr_models: crate::ocr::OcrModels,
     /// OCR 检测参数（ADR-009 校准"重新检测"用；与引擎池启动同源）
     pub ocr_params: crate::ocr::OcrParams,
+    /// M5/REQ-040：共享词表（热词注入 ASR、替换词纠错 OCR）
+    pub vocab: std::sync::Arc<std::sync::Mutex<crate::vocab::VocabStore>>,
+    /// M5：词表 JSON 路径（应用数据目录）
+    pub vocab_path: std::path::PathBuf,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。

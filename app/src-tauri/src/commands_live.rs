@@ -51,6 +51,7 @@ pub async fn start_live_session(
         engines: state.engines.clone(),
         streaming_models: state.streaming_models.clone(),
         fusion: state.live_session.fusion(),
+        vocab: state.vocab.clone(),
         app: state.app.clone(),
     };
     state.live_session.start(params).map_err(|e| e.to_string())
