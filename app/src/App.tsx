@@ -56,11 +56,18 @@ function App() {
         ))}
       </nav>
 
-      {/* 页面区 */}
-      <main style={{ flex: 1, minHeight: 0 }}>
-        {page === "classroom" && <ClassroomPage />}
-        {page === "sessions" && <SessionsPage />}
-        {page === "notes" && <NotesPage />}
+      {/* 页面区（TD-004：保留挂载 + display 切换——页面切换不重挂载，
+          避免 ClassroomPage 每次进入重复窗口枚举 100-500ms 停顿；状态与事件监听保留） */}
+      <main style={{ flex: 1, minHeight: 0, display: "flex" }}>
+        <div style={{ flex: 1, display: page === "classroom" ? "block" : "none", overflow: "hidden" }}>
+          <ClassroomPage />
+        </div>
+        <div style={{ flex: 1, display: page === "sessions" ? "block" : "none", overflow: "hidden" }}>
+          <SessionsPage />
+        </div>
+        <div style={{ flex: 1, display: page === "notes" ? "block" : "none", overflow: "hidden" }}>
+          <NotesPage />
+        </div>
       </main>
     </div>
   );

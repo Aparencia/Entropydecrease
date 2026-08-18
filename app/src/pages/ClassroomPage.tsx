@@ -74,7 +74,10 @@ export default function ClassroomPage() {
       listen<boolean>("model:download-done", () => {
         setModelDownloading(false);
         setModelProgress(null);
-        void invoke<StreamingModelStatus>("asr_streaming_model_status").then(setModelStatus);
+        // 审查补充：状态复查失败不能产生 unhandled rejection（与 TD-016 同口径）
+        void invoke<StreamingModelStatus>("asr_streaming_model_status")
+          .then(setModelStatus)
+          .catch((e) => setModelError(`模型状态复查失败: ${e}`));
       }),
       // 下载失败：重置"下载中"态并展示错误（审查 M4 修复）
       listen<string>("model:download-failed", (e) => {
@@ -89,8 +92,11 @@ export default function ClassroomPage() {
   }, []);
 
   // 启动时检查流式模型状态 + 活动会话恢复 + 下载状态恢复
+  // TD-016：invoke 失败不再静默——展示错误并允许重试（此前按钮永久禁用且无提示）
   useEffect(() => {
-    void invoke<StreamingModelStatus>("asr_streaming_model_status").then(setModelStatus);
+    void invoke<StreamingModelStatus>("asr_streaming_model_status")
+      .then(setModelStatus)
+      .catch((e) => setModelError(`模型状态查询失败: ${e}`));
     void invoke<LiveSessionStatus>("live_session_status").then((s) => {
       setLiveActive(s.active);
       setLiveSessionId(s.sessionId);
@@ -100,6 +106,17 @@ export default function ClassroomPage() {
       if (d.state === "failed" && d.error) setModelError(d.error);
     });
   }, []);
+
+  /** 重试模型状态检查（TD-016：查询失败后手动恢复按钮可用性） */
+  const retryModelStatus = async () => {
+    setModelError("");
+    try {
+      const s = await invoke<StreamingModelStatus>("asr_streaming_model_status");
+      setModelStatus(s);
+    } catch (e) {
+      setModelError(`模型状态查询失败: ${e}`);
+    }
+  };
 
   /** 一键下载流式 ASR 模型（应用内自动配置） */
   const downloadModel = async () => {
@@ -212,31 +229,46 @@ export default function ClassroomPage() {
             <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>
               实时捕获{liveActive && <span style={{ color: "#dc2626" }}> ● 录制中</span>}
             </div>
-            {!liveActive && modelStatus && !modelStatus.ready && (
+            {!liveActive && !modelStatus?.ready && (
               <div>
-                <p style={{ fontSize: 11, color: "#b45309", margin: "0 0 6px" }}>
-                  流式 ASR 模型未就绪（缺 {modelStatus.missing.join(", ")}）
-                </p>
-                {modelDownloading ? (
-                  <div style={{ fontSize: 11, color: "#374151", marginBottom: 6 }}>
-                    <div>⏳ 正在下载模型（~650MB）…</div>
-                    {modelProgress && (
-                      <div>
-                        {modelProgress.file}：
-                        {((modelProgress.downloadedBytes / 1024 / 1024) | 0)}MB /{" "}
-                        {((modelProgress.totalBytes / 1024 / 1024) | 0)}MB
-                      </div>
-                    )}
-                  </div>
+                {modelStatus ? (
+                  <p style={{ fontSize: 11, color: "#b45309", margin: "0 0 6px" }}>
+                    流式 ASR 模型未就绪（缺 {modelStatus.missing.join(", ")}）
+                  </p>
                 ) : (
+                  <p style={{ fontSize: 11, color: "#dc2626", margin: "0 0 6px" }}>
+                    {modelError || "模型状态检查中…"}
+                  </p>
+                )}
+                {modelStatus &&
+                  (modelDownloading ? (
+                    <div style={{ fontSize: 11, color: "#374151", marginBottom: 6 }}>
+                      <div>⏳ 正在下载模型（~650MB）…</div>
+                      {modelProgress && (
+                        <div>
+                          {modelProgress.file}：
+                          {((modelProgress.downloadedBytes / 1024 / 1024) | 0)}MB /{" "}
+                          {((modelProgress.totalBytes / 1024 / 1024) | 0)}MB
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => void downloadModel()}
+                      style={{ ...btn, width: "100%", padding: "8px 0", fontWeight: 600, background: "#0d9488", color: "#fff", border: "none", borderRadius: 6, marginBottom: 6 }}
+                    >
+                      ⬇ 一键下载并配置模型
+                    </button>
+                  ))}
+                {modelError && <p style={{ fontSize: 11, color: "#dc2626", margin: "0 0 6px" }}>{modelError}</p>}
+                {!modelStatus && (
                   <button
-                    onClick={() => void downloadModel()}
-                    style={{ ...btn, width: "100%", padding: "8px 0", fontWeight: 600, background: "#0d9488", color: "#fff", border: "none", borderRadius: 6, marginBottom: 6 }}
+                    onClick={() => void retryModelStatus()}
+                    style={{ ...btn, width: "100%", padding: "6px 0", border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff" }}
                   >
-                    ⬇ 一键下载并配置模型
+                    ⟳ 重试检查
                   </button>
                 )}
-                {modelError && <p style={{ fontSize: 11, color: "#dc2626", margin: "0 0 6px" }}>{modelError}</p>}
               </div>
             )}
             {liveActive && (
