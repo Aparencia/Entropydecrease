@@ -91,3 +91,20 @@
 - 已偿 0 笔（本次为审查轮）；累计已偿 44 笔（含 TD-033，提交 2a88b25；TD-042/043 八轮已偿 7af0da8）
 - 新增未偿 12 笔：TD-044（P0，OCR 模式契约）/ TD-045~049（P1×5，心跳/ROI 坐标/静音判定/词表快照/PPTX 解压炸弹）/ TD-050~054（P2×5，dt 步长/AGC 契约/引用比较/updater 副作用/面板定位）/ TD-055（P3，行数豁免登记）
 - 未偿合计 13 笔：TD-040（carried deliberate）+ TD-044~055（open 12 笔，详见本夹 tech-debt.md）
+
+## 十一轮归档（同日，审查问题全量修复）
+
+> 上轮审查问题清单（critical×1 / high×5 / medium×5 / low×12）**全部修复**并补测试：
+> 门禁全绿（245 单测 +2 忽略 / clippy 干净 / 前端构建通过）；TD-044~055 全部 closed（详见本夹 tech-debt.md）。
+
+### 修复摘要（十一轮）
+
+- **TD-044**（P0）：模式入参改 `OcrDeviceMode` 枚举 + 配置内存态单点（TOCTOU 同批修复）+ 多 NVIDIA 卡 Auto 保守落 CPU（decide 增 nvidia_count 参数）
+- **TD-045~049**（P1×5）：心跳 AliveGuard（Drop 置 false）；feed_ocr 缩放比反算 + resize 清 video_rect；静音判定改 AGC 前原始样本；词表请求循环重读 + 缓存存原始结果；PPTX 声明尺寸预检 + take 限流 + 文本总预算（补 4 单测）
+- **TD-050~054**（P2×5）：dt=0.2s；target_rms≤0 跳过 AGC（契约回归测试）；backendKey 规范化比较；partialRef 镜像移出 updater 副作用；徽标容器 relative 锚定
+- **low 项**：校准 RAII guard、live:asr-recovered 恢复事件、调度器独立计数（degraded 全帧不再被字幕遮蔽）、mixdown 尾部直通防御、recent_ocr_texts SQL 修正 + 单测、extract_courseware/suggest 改 async+spawn_blocking、suggest 按会话去重、apply_replacements 链式语义声明 + 测试、LoadMonitor 单核当量注释、健康巡检补 sensevoice 模型、SystemStatusBadge 空 catch 修复 + 过期标记、ps1 超时重试、行数豁免补登 5 项（TD-055）
+
+### 技术债摘要（十一轮滚动）
+
+- 已偿 12 笔（TD-044~055）；累计已偿 56 笔
+- 未偿 1 笔：TD-040（carried deliberate，P2）

@@ -13,24 +13,13 @@
 > 第八轮（同日）：TD-042/043 已修复（提交 7af0da8，见下）。
 > 第九轮（v0.4.0 M0）：TD-033 已修复（提交 2a88b25，见下）。
 > 第十轮（v0.4.0 发布 + 新增代码审查）：TD-044~055 登记 open（见下，审查发现未即修；critical×1/high×5/medium×5/low×1）。
+> 第十一轮（审查问题全量修复）：TD-044~055 全部偿还（提交见下，审查闭环）。
 
 ## 未偿债务
 
 | ID | 摘要 | 备注 |
 |----|------|------|
 | TD-040 | tauri.conf.json bundle.resources 未含 ffmpeg——生产安装包无捆绑 ffmpeg（v0.3.0 审查，2026-08-18） | carried（deliberate 有意不修）：resources glob 对缺失目录构建失败；捆绑 ffmpeg（~80MB）与安装包体积权衡留待体积策略；开发期由 download-ffmpeg.ps1 + PATH 覆盖（ADR-008 风险项，保持观察） |
-| TD-044 | OCR 设备模式前后端契约不匹配：前端传 PascalCase（"Auto"/"ForceGpu"/"ForceCpu"）而后端白名单匹配 snake_case（"auto"/…），模式设置恒报"无效模式"，v0.4.0 M1 核心 UI 不可用（v0.4.0 发布审查，2026-08-18） | open（P0）；修复：后端入参改 `OcrDeviceMode` 枚举（serde PascalCase 天然校验）或前端调用前映射小写 |
-| TD-045 | 引擎线程心跳恒 true：asr_alive/ocr_alive 无任何 store(false)（含 worker panic/提前退出路径），health_status 恒报存活，"线程静默死亡可见"失效（v0.4.0 发布审查） | open（P1）；修复：Drop guard/循环退出置 false，或改"最后心跳时间戳+超时"判定 |
-| TD-046 | ROI 坐标系与 downscale 不一致：字幕帧缩至 ≤960px 后 OCR bbox 未按缩放比反算回帧坐标系，RoiTracker 误用缩小坐标（>960px 宽屏幕 ROI 错位，字幕裁半/空转） | open（P1）；修复：feed_ocr 传入缩放因子（src/dst），或补坐标系一致性集成测试 |
-| TD-047 | 静音判定用 AGC 后样本 vs 原始噪声底阈值：预处理开启后环境噪声被放大误判语音（VAD/句切分失效），与 REQ-041 目标相悖 | open（P1）；修复：静音判定用 AGC 前原始样本，或噪声底/阈值同尺度估计 |
-| TD-048 | OCR worker 替换词快照不刷新：vocab_pairs 启动时一次性克隆，运行期新增替换词不生效（与前端"替换词即时生效"文案矛盾） | open（P1）；修复：请求循环内重读共享词表（与热词同模式），词表变更时清 OCR 缓存 |
-| TD-049 | PPTX 条目声明尺寸预分配：`Vec::with_capacity(entry.size())` 用攻击者可控的声明未压缩大小（解压炸弹内存 DoS），单页 10MB 上限在完整解压后才检查 | open（P1）；修复：先校验 entry.size() 超限即跳过 + `take(上限+1)` 限流读取 + 输出文本总预算 |
-| TD-050 | AsrHealthMonitor dt 与音频块时长不符：observe 传 TICK_MS(500ms) 而块为 200ms，静默异常累积 2.5× 提前降级（5s 阈值实际 2s 触发，误导告警） | open（P2）；修复：dt 改块时长 0.2s |
-| TD-051 | audio_preprocess target_rms=0 契约违背：文档称"0=不启用 AGC 仅阈值链"，实现 gain=0/rms=0 整路乘 0 静音 | open（P2）；修复：target_rms≤0 时跳过 AGC（gain=1 直通） |
-| TD-052 | OcrDeviceSetting requested/actual 引用比较：Cuda 对象 JSON 反序列化后 `!==` 恒真，GPU 正常场景误显"（请求 GPU）" | open（P2）；修复：规范化 key（"Cpu" / "Cuda#N"）比较 |
-| TD-053 | LiveActivityPanel 在 setState updater 内执行副作用（settleAsrLine）：React StrictMode 双调用致计数虚高/ID 跳号，违反 updater 纯函数约定 | open（P2）；修复：ref 镜像 partial + effect 沉淀，副作用移出 updater |
-| TD-054 | SystemStatusBadge 诊断面板 absolute 定位无 relative 祖先：包含块退化为视口，面板错位至窗口右上角 | open（P2）；修复：徽标容器加 position:relative 锚定 |
-| TD-055 | 行数豁免登记缺失/过期：engine.rs(~384)/lib.rs(~334)/vocab.rs(386)/db_sessions.rs(301) 超 300 未登记；ClassroomPage 登记 ~440 实际 465 | open（P3）；修复：line-limit-exemptions.md 补登/更新 + 拆分计划 |
 
 ## 今日已偿（二轮 8 笔 + 三轮 11 笔 + 四轮 20 笔 + 五轮 3 笔 + 六轮 4 笔 + 八轮 2 笔）
 
@@ -85,6 +74,18 @@
 | TD-042 | 停止过渡态 stopping 无超时兜底——stopped 事件异常丢失时面板常驻 | ClassroomPage 10s 超时自动清除过渡态（八轮，提交 7af0da8） |
 | TD-043 | 实时面板时间戳用前端 Date.now() 估算，与后端纪元偏差 | 事件载荷携带后端时间戳（AsrFinalEvent/SubtitleEvent/OcrEvent，八轮，提交 7af0da8） |
 | TD-033 | 窗口跨显示器移动后 DXGI duplication 不更新（仍复制旧显示器桌面），窗口裁剪为空画面，最长 30s 空窗等周期重建（ADR-007 审查发现，2026-08-18） | DxgiState 拆分至 dxgi_state.rs 并保存输出 DesktopCoordinates；窗口中心越界立即弃用 DXGI + 2s 快速重建节流（替换 30s 周期等待）；新增 point_in_output 纯函数单测 6 例（九轮/v0.4.0 M0，提交 2a88b25） |
+| TD-044 | OCR 设备模式前后端契约不匹配：前端传 PascalCase 而后端白名单匹配 snake_case，模式设置恒报"无效模式"（v0.4.0 发布审查，P0） | 入参改 `OcrDeviceMode` 枚举（serde PascalCase 天然校验，删除手工白名单）；同时配置改内存态 Arc<Mutex> 单点（消除校准/set_mode TOCTOU）（十一轮，提交 f151fb2） |
+| TD-045 | 引擎线程心跳恒 true：asr_alive/ocr_alive 无 store(false)（含 panic 路径），health_status 恒报存活 | AliveGuard（Drop 置 false）包裹 worker 循环，正常退出与 panic 均释放（十一轮，提交 f151fb2） |
+| TD-046 | ROI 坐标系与 downscale 不一致：OCR bbox 未按缩放比反算帧坐标（>960px 屏幕 ROI 错位） | feed_ocr 增加 scale 参数（宽/高独立缩放比反算 + 原点平移）；resize 同步清 video_rect；新增 2x 缩放换算单测（十一轮，提交 9d86e79） |
+| TD-047 | 静音判定用 AGC 后样本 vs 原始噪声底阈值（预处理开启后 VAD 失效） | 静音判定改 AGC 前原始样本（与 speech_threshold 同尺度）（十一轮，提交 9d86e79） |
+| TD-048 | OCR worker 替换词快照不刷新：运行期新增替换词不生效 | 请求循环内重读共享词表；缓存改存原始结果（纠错统一在返回路径应用，词表变更后命中缓存仍得新纠错）（十一轮，提交 a3f3dcf） |
+| TD-049 | PPTX 条目声明尺寸预分配（解压炸弹内存 DoS） | entry.size() 超限预检跳过 + take() 限流读取 + 提取文本总预算；补 4 个 pptx 单测（十一轮，提交 a3f3dcf） |
+| TD-050 | AsrHealthMonitor dt=0.5s 与音频块 0.2s 不符（2.5× 提前降级） | dt 改 AUDIO_BLOCK_SECS=0.2（十一轮，提交 9d86e79） |
+| TD-051 | audio_preprocess target_rms=0 契约违背（文档称关 AGC 实际乘 0 静音） | target_rms≤0 时跳过 AGC（gain=1 直通）+ 契约回归测试（十一轮，提交 9d86e79） |
+| TD-052 | OcrDeviceSetting requested/actual 引用比较（Cuda 对象恒不等误显回退） | backendKey 规范化比较（"Cpu"/"Cuda#N"）（十一轮，提交 598b866） |
+| TD-053 | LiveActivityPanel setState updater 内副作用（StrictMode 双调用计数虚高） | partialRef 镜像 + applyPartial 统一入口，副作用移出 updater（十一轮，提交 598b866） |
+| TD-054 | SystemStatusBadge 面板 absolute 无 relative 祖先（错位至视口右上角） | 徽标容器 position:relative 锚定（十一轮，提交 598b866） |
+| TD-055 | 行数豁免登记缺失/过期（engine/lib/vocab/db_sessions 未登记；ClassroomPage 过期） | line-limit-exemptions.md 补登 5 项 + ClassroomPage 更新至 ~467（十一轮，line-limit-exemptions.md 已补登 5 项，随 docs(tech-debt) 十一轮提交） |
 
 ## 登记规则
 

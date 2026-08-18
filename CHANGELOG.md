@@ -18,6 +18,15 @@
 ### 修复
 
 - TD-033：窗口跨显示器移动后 DXGI duplication 不更新（最长 30s 空窗）——DxgiState 保存输出 DesktopCoordinates，窗口中心越界立即重建（2s 快速节流）；DxgiState 拆分至 `dxgi_state.rs`
+- **审查闭环修复（2026-08-18 发布审查问题全量）**：
+  - OCR 设备模式前后端契约不匹配（模式设置不可用，P0）→ 入参改枚举 + 配置内存态单点 + 多 NVIDIA 卡 Auto 保守落 CPU
+  - 引擎线程心跳恒 true → AliveGuard（Drop 置 false，panic 路径也释放）
+  - ROI 坐标系与 downscale 不一致（>960px 屏幕字幕裁半）→ bbox 按缩放比反算 + resize 清播放区域
+  - 静音判定 AGC 前后尺度不一致 → 改原始样本判定；AsrHealthMonitor dt 步长 0.5→0.2s
+  - OCR 替换词运行期不生效 → 请求循环重读 + 缓存存原始结果
+  - PPTX 解压炸弹（声明尺寸预分配）→ 预检 + 限流读取 + 文本总预算
+  - 调度器 degraded 档全帧被字幕 tick 遮蔽 → 独立计数
+  - 其余：校准标记 RAII、降级恢复事件、AGC target_rms=0 契约、前端引用比较/updater 副作用/面板定位、词表建议按会话去重、课件提取 async 化、健康巡检补 sensevoice、ps1 超时重试等
 
 ### 变更
 
