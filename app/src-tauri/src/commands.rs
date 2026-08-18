@@ -3,17 +3,46 @@
 //! @ai-context: 本层只做参数提取、调用业务模块、错误映射，严禁编写业务计算逻辑（AGENTS.md §6）。
 //! @ai-context: 阻塞操作（ASR/OCR 推理经引擎池、DB 读写）统一走 spawn_blocking，避免卡住 UI 事件循环。
 //! @ai-context: 错误统一映射为 String 返回前端（Tauri command 要求错误可序列化）。
+//! @ai-context: 入参校验（TD-005 修复口径）：旧 command 补齐——title 归一化、id>0、
+//!              关键词/正文截断、列表数量有界，与 commands_session 同口径。
 
 use tauri::State;
 
 use crate::concat;
 use crate::db::Db;
 use crate::engine::EnginePool;
+#[cfg(target_os = "windows")]
 use crate::live_session::LiveSessionManager;
 use crate::model_downloader::ModelDownloader;
 use crate::streaming_asr::StreamingAsrModels;
 use crate::types::{NewNote, Note, NoteDraft, OcrBlock, TranscriptSegment};
 use crate::windows::{self, CaptureWindow};
+
+/// 标题最大长度（防超长字符串污染 UI 与索引；与 commands_session 同口径）。
+pub(crate) const TITLE_MAX_CHARS: usize = 100;
+/// 笔记正文最大长度（防超大 payload 拖垮 IPC/DB）。
+const CONTENT_MAX_CHARS: usize = 200_000;
+/// 搜索关键词最大长度。
+const KEYWORD_MAX_CHARS: usize = 100;
+/// 一键流水线最大图片数。
+const MAX_IMAGES: usize = 20;
+/// 拼接输入段/块数量上限（防恶意超大列表拖垮拼接）。
+const MAX_INPUT_ITEMS: usize = 5000;
+
+/// 校验并归一化标题：空串回退默认名，超长截断（TD-005 统一口径，commands_session 复用）。
+pub(crate) fn normalize_title(raw: String, fallback: &str) -> String {
+    let trimmed = raw.trim().to_string();
+    if trimmed.is_empty() {
+        fallback.to_string()
+    } else {
+        trimmed.chars().take(TITLE_MAX_CHARS).collect()
+    }
+}
+
+/// 截断字符串到上限字符数（防御性编程）。
+fn truncate_chars(s: String, max: usize) -> String {
+    s.chars().take(max).collect()
+}
 
 /// 应用共享状态：数据库 + 常驻引擎池 + 流式模型路径 + 实时会话管理器 + 模型下载器。
 ///
@@ -26,7 +55,8 @@ pub struct AppState {
     pub engines: EnginePool,
     /// 流式 ASR 模型路径（ADR-003：models/streaming-zipformer/ 四件套）
     pub streaming_models: StreamingAsrModels,
-    /// 实时会话管理器（M7 编排）
+    /// 实时会话管理器（M7 编排；Windows-only，TD-027 修复）
+    #[cfg(target_os = "windows")]
     pub live_session: LiveSessionManager,
     /// 流式模型自动下载器（ADR-003 模型分发）
     pub model_downloader: ModelDownloader,
@@ -47,6 +77,9 @@ pub async fn list_windows() -> Result<Vec<CaptureWindow>, String> {
 /// 本地 ASR：转写一个 WAV 文件（REQ-001）。
 #[tauri::command]
 pub async fn transcribe_audio(state: State<'_, AppState>, path: String) -> Result<TranscriptSegment, String> {
+    if path.trim().is_empty() {
+        return Err("音频路径为空".to_string());
+    }
     let engines = state.engines.clone();
     tauri::async_runtime::spawn_blocking(move || engines.transcribe(&path))
         .await
@@ -57,6 +90,9 @@ pub async fn transcribe_audio(state: State<'_, AppState>, path: String) -> Resul
 /// 本地 OCR：识别一张图片（REQ-002）。
 #[tauri::command]
 pub async fn recognize_image(state: State<'_, AppState>, path: String) -> Result<Vec<OcrBlock>, String> {
+    if path.trim().is_empty() {
+        return Err("图片路径为空".to_string());
+    }
     let engines = state.engines.clone();
     tauri::async_runtime::spawn_blocking(move || engines.recognize(&path))
         .await
@@ -71,6 +107,10 @@ pub async fn build_draft(
     segments: Vec<TranscriptSegment>,
     ocr_blocks: Vec<OcrBlock>,
 ) -> Result<NoteDraft, String> {
+    if segments.len() > MAX_INPUT_ITEMS || ocr_blocks.len() > MAX_INPUT_ITEMS {
+        return Err(format!("拼接输入数量超限（上限 {}）", MAX_INPUT_ITEMS));
+    }
+    let title = normalize_title(title, "未命名笔记");
     tauri::async_runtime::spawn_blocking(move || concat::build_note_draft(&title, &segments, &ocr_blocks))
         .await
         .map_err(|e| format!("任务调度失败: {}", e))
@@ -80,8 +120,8 @@ pub async fn build_draft(
 #[tauri::command]
 pub async fn save_draft_as_note(state: State<'_, AppState>, draft: NoteDraft) -> Result<Note, String> {
     let new = NewNote {
-        title: draft.title.clone(),
-        content: draft.markdown.clone(),
+        title: normalize_title(draft.title, "未命名笔记"),
+        content: truncate_chars(draft.markdown, CONTENT_MAX_CHARS),
         source: "classroom".to_string(),
     };
     state.db.create_note(&new).map_err(|e| e.to_string())
@@ -103,6 +143,13 @@ pub async fn process_to_note(
     audio_path: Option<String>,
     image_paths: Vec<String>,
 ) -> Result<Note, String> {
+    if image_paths.len() > MAX_IMAGES {
+        return Err(format!("图片数量超限（上限 {}）", MAX_IMAGES));
+    }
+    if audio_path.as_ref().is_some_and(|p| p.trim().is_empty()) {
+        return Err("音频路径为空".to_string());
+    }
+    let title = normalize_title(title, "未命名笔记");
     let engines = state.engines.clone();
     let db = state.db.clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -111,15 +158,25 @@ pub async fn process_to_note(
         if let Some(path) = audio_path {
             segments.push(engines.transcribe(&path).map_err(|e| e.to_string())?);
         }
-        // 2) 多图 OCR（单图失败跳过，不阻断流水线）
+        // 2) 多图 OCR（单图失败跳过不阻断，但记录警告——TD-001 修复：不再静默吞错）
         let mut ocr_blocks = Vec::new();
+        let mut skipped: Vec<String> = Vec::new();
         for path in image_paths {
-            if let Ok(blocks) = engines.recognize(&path) {
-                ocr_blocks.extend(blocks);
+            match engines.recognize(&path) {
+                Ok(blocks) => ocr_blocks.extend(blocks),
+                Err(e) => skipped.push(format!("{}: {}", path, e)),
             }
         }
-        // 3) 本地拼接成初稿
-        let draft = concat::build_note_draft(&title, &segments, &ocr_blocks);
+        // 3) 本地拼接成初稿（失败图片以警告段落追加，用户打开笔记即可感知）
+        let mut draft = concat::build_note_draft(&title, &segments, &ocr_blocks);
+        if !skipped.is_empty() {
+            eprintln!("[process_to_note] {} 张图片 OCR 失败: {}", skipped.len(), skipped.join("; "));
+            draft.markdown.push_str(&format!(
+                "\n\n> ⚠ {} 张图片识别失败已跳过：\n> {}",
+                skipped.len(),
+                skipped.join("\n> ")
+            ));
+        }
         // 4) 落库为笔记（来源 classroom）
         db.create_note(&NewNote {
             title: draft.title.clone(),
@@ -135,6 +192,11 @@ pub async fn process_to_note(
 /// 手动新建笔记（REQ-004）。
 #[tauri::command]
 pub async fn create_note(state: State<'_, AppState>, new: NewNote) -> Result<Note, String> {
+    let new = NewNote {
+        title: normalize_title(new.title, "未命名笔记"),
+        content: truncate_chars(new.content, CONTENT_MAX_CHARS),
+        source: if new.source == "classroom" { "classroom" } else { "manual" }.to_string(),
+    };
     state.db.create_note(&new).map_err(|e| e.to_string())
 }
 
@@ -147,10 +209,13 @@ pub async fn list_notes(state: State<'_, AppState>) -> Result<Vec<Note>, String>
 /// 读取单条笔记（REQ-004）。
 #[tauri::command]
 pub async fn get_note(state: State<'_, AppState>, id: i64) -> Result<Option<Note>, String> {
+    if id <= 0 {
+        return Err("无效的笔记 id".to_string());
+    }
     state.db.get_note(id).map_err(|e| e.to_string())
 }
 
-/// 更新笔记（REQ-004）。
+/// 更新笔记（REQ-004；标题/正文截断防超大 payload——TD-005）。
 #[tauri::command]
 pub async fn update_note(
     state: State<'_, AppState>,
@@ -158,17 +223,33 @@ pub async fn update_note(
     title: String,
     content: String,
 ) -> Result<bool, String> {
-    state.db.update_note(id, &title, &content).map_err(|e| e.to_string())
+    if id <= 0 {
+        return Err("无效的笔记 id".to_string());
+    }
+    state
+        .db
+        .update_note(
+            id,
+            &truncate_chars(title, TITLE_MAX_CHARS),
+            &truncate_chars(content, CONTENT_MAX_CHARS),
+        )
+        .map_err(|e| e.to_string())
 }
 
 /// 删除笔记（REQ-004）。
 #[tauri::command]
 pub async fn delete_note(state: State<'_, AppState>, id: i64) -> Result<bool, String> {
+    if id <= 0 {
+        return Err("无效的笔记 id".to_string());
+    }
     state.db.delete_note(id).map_err(|e| e.to_string())
 }
 
-/// 搜索笔记（REQ-004）。
+/// 搜索笔记（REQ-004；关键词截断——TD-005）。
 #[tauri::command]
 pub async fn search_notes(state: State<'_, AppState>, keyword: String) -> Result<Vec<Note>, String> {
-    state.db.search_notes(&keyword).map_err(|e| e.to_string())
+    state
+        .db
+        .search_notes(&truncate_chars(keyword, KEYWORD_MAX_CHARS))
+        .map_err(|e| e.to_string())
 }

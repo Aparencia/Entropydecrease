@@ -6,7 +6,7 @@
 
 use tauri::State;
 
-use crate::commands::AppState;
+use crate::commands::{normalize_title, AppState, TITLE_MAX_CHARS};
 use crate::concat;
 use crate::db_sessions::SESSION_STATUS_RECORDING;
 use crate::types::{
@@ -14,20 +14,8 @@ use crate::types::{
     SessionDetail, TranscriptSegment,
 };
 
-/// 标题最大长度（防御性编程：防超长字符串污染 UI 与索引）。
-const TITLE_MAX_CHARS: usize = 100;
 /// 会话列表单页上限。
 const LIST_LIMIT_MAX: u64 = 200;
-
-/// 校验并归一化会话标题：空串回退默认名，超长截断。
-fn normalize_title(raw: String, fallback: &str) -> String {
-    let trimmed = raw.trim().to_string();
-    if trimmed.is_empty() {
-        fallback.to_string()
-    } else {
-        trimmed.chars().take(TITLE_MAX_CHARS).collect()
-    }
-}
 
 /// 新建会话（REQ-010）。
 #[tauri::command]
