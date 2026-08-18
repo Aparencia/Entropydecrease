@@ -31,6 +31,16 @@ fn copy_onnxruntime_dll() {
             if let Err(e) = std::fs::copy(&dll, &dest) {
                 println!("cargo:warning=复制 onnxruntime.dll 失败: {e}");
             }
+            // 集成测试 exe 在 <target>/<profile>/deps/ 下运行（DLL 搜索不含上级目录），
+            // 不同步复制会导致测试进程加载系统旧版 onnxruntime（如 1.17.1）触发
+            // "requested API version [27] not available + STATUS_ACCESS_VIOLATION"。
+            let deps_dir = profile_dir.join("deps");
+            if deps_dir.is_dir() {
+                let dest_deps = deps_dir.join("onnxruntime.dll");
+                if let Err(e) = std::fs::copy(&dll, &dest_deps) {
+                    println!("cargo:warning=复制 onnxruntime.dll 到 deps 失败: {e}");
+                }
+            }
         }
     }
 }
