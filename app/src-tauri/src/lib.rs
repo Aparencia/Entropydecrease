@@ -34,6 +34,8 @@ mod live_session;
 mod live_session_frame;
 mod model_downloader;
 mod ocr;
+mod playback_region;
+mod region_tracker;
 mod streaming_asr;
 mod subtitle;
 mod subtitle_detect;

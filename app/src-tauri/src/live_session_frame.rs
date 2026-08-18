@@ -18,7 +18,7 @@ use tauri::Emitter;
 
 use crate::capture::dxgi_capture::CapturedFrame;
 use crate::capture::frame_diff::{
-    bottom_quarter_rect, crop_frame, downscale_bgra, DualRateScheduler, FrameDiffDetector, SampleRegion,
+    crop_frame, downscale_bgra, DualRateScheduler, FrameDiffDetector, SampleRegion,
 };
 use crate::capture::ScreenCaptureSampler;
 use crate::db::Db;
@@ -120,6 +120,8 @@ pub fn run_screen_worker(
     let mut last_ocr_at = Instant::now();
     let mut last_full_texts: Vec<String> = Vec::new();
     let mut stats = ScreenStats::default();
+    // M2/REQ-037：动态字幕区域跟踪（播放区域检测 + ROI 锁定/重扫；尺寸首帧自适应）
+    let mut roi_tracker = crate::region_tracker::RoiTracker::new(0, 0);
 
     while !stop.load(Ordering::SeqCst) {
         if last_sample_at.elapsed().as_millis() as u64 >= SAMPLE_TICK_MS {
@@ -135,6 +137,7 @@ pub fn run_screen_worker(
                     screen.as_mut(), diff, &mut voter, &mut last_frame_text, &mut last_preview,
                     &db, &engines, &app, session_id, region, &subtitle_segments, epoch,
                     &mut last_capture_error, &mut last_ocr_at, &mut last_full_texts, &mut stats,
+                    &mut roi_tracker,
                 );
             }
         }
@@ -180,9 +183,10 @@ fn process_frame(
     last_ocr_at: &mut Instant,
     last_full_texts: &mut Vec<String>,
     stats: &mut ScreenStats,
+    roi_tracker: &mut crate::region_tracker::RoiTracker,
 ) {
     let Some(sampler) = screen else { return };
-    // 字幕区只认底部 1/4：先全帧捕获再裁剪（简化双速率，字幕区帧成本可控）
+    // 字幕区裁剪决策由 M2/REQ-037 RoiTracker 给出（播放区域 + ROI；首帧扫描期全帧）
     let capture_result = sampler.capture(None);
     // ADR-007：目标窗口关闭等捕获事件无论捕获结果如何都要转发——
     // 窗口关闭瞬间若 GDI 捕获也失败，事件不得被吞掉（审查发现）
@@ -215,6 +219,9 @@ fn process_frame(
         return;
     };
     stats.sampled += 1;
+    // M2/REQ-037：播放区域周期重扫（5s 节流）与窗口尺寸自适应（须在全帧数据上执行）
+    roi_tracker.resize(frame.width, frame.height);
+    roi_tracker.refresh_playback_region(&frame.bgraw, frame.width, frame.height);
     // A1：帧时间戳统一为会话纪元（与音频/flush 同基准，ADR-008）
     frame.timestamp_ms = epoch.elapsed().as_millis() as u64;
     // 强制 OCR 兜底（diff 采样漏检防御）：变化检测 hash 对局部/平滑变化可能漏检
@@ -227,10 +234,30 @@ fn process_frame(
     }
     stats.diff_pass += 1;
     let is_subtitle = region == SampleRegion::Subtitle;
+    // M2/REQ-037：字幕区裁剪由 ROI 决策替代固定底部 1/4（播放区域内动态锁定）；
+    // 扫描期/重扫期走全帧（ROI 未锁定时 bbox 密度聚簇需全帧 det）
+    let mut crop_origin: Option<(u32, u32)> = None;
     if is_subtitle {
-        let Some(q) = bottom_quarter_rect(frame.width, frame.height) else { return };
-        crop_frame(&mut frame.bgraw, &mut frame.width, &mut frame.height, Some(&q));
-        // P4：OCR 输入缩小——字幕区宽超上限时最近邻缩小（文字大，质量无损）
+        match roi_tracker.decide() {
+            crate::region_tracker::RoiDecision::UseRoi(roi) => {
+                // ROI 钳制到帧内（窗口移动瞬间 ROI 可能越界——防御）
+                let w = frame.width as i32;
+                let h = frame.height as i32;
+                let q = crate::capture::frame_diff::Rect {
+                    left: roi.left.clamp(0, w),
+                    top: roi.top.clamp(0, h),
+                    right: roi.right.clamp(0, w),
+                    bottom: roi.bottom.clamp(0, h),
+                };
+                if q.width() == 0 || q.height() == 0 {
+                    return;
+                }
+                crop_origin = Some((q.left as u32, q.top as u32));
+                crop_frame(&mut frame.bgraw, &mut frame.width, &mut frame.height, Some(&q));
+            }
+            crate::region_tracker::RoiDecision::FullFrame => {}
+        }
+        // P4：OCR 输入缩小——宽超上限时最近邻缩小（文字大，质量无损；扫描帧同样受益）
         downscale_bgra(&mut frame.bgraw, &mut frame.width, &mut frame.height, MAX_OCR_WIDTH);
         if frame.bgraw.is_empty() {
             return;
@@ -245,6 +272,10 @@ fn process_frame(
             // 成功识别即刷新 OCR 时刻（无论是否产出文本——防漏检兜底周期基准）
             *last_ocr_at = Instant::now();
             if is_subtitle {
+                // M2/REQ-037：bbox 回喂 ROI 跟踪器（锁定/失效判定；裁剪图坐标系+原点换算）
+                let boxes: Vec<crate::types::TextBox> =
+                    blocks.iter().filter_map(|b| b.bbox).collect();
+                roi_tracker.feed_ocr(&boxes, crop_origin);
                 handle_subtitle_frame(
                     &frame, &blocks, voter, last_frame_text, last_preview, db, app, session_id, subtitle_segments,
                 );

@@ -162,7 +162,12 @@ pub async fn session_to_note(
         .list_ocr_blocks(id)
         .map_err(|e| e.to_string())?
         .into_iter()
-        .map(|b| OcrBlock { timestamp_ms: Some(b.timestamp_ms), text: b.text, score: b.score })
+        .map(|b| OcrBlock {
+            timestamp_ms: Some(b.timestamp_ms),
+            text: b.text,
+            score: b.score,
+            bbox: None,
+        })
         .collect();
 
     let fallback = format!("{}（会话）", session.title);

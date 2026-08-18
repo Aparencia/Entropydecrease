@@ -187,6 +187,10 @@ impl DualRateScheduler {
 }
 
 /// 字幕区启发式：帧底部 1/4 高度区域（ADR-005）。
+///
+/// @ai-context: v0.4.0 M2（REQ-037）后实时链路改用 region_tracker 动态 ROI，
+///              本函数保留供测试与回退参考（M2 先验语义同源）。
+#[allow(dead_code)]
 pub fn bottom_quarter_rect(frame_width: u32, frame_height: u32) -> Option<Rect> {
     if frame_width == 0 || frame_height == 0 {
         return None;

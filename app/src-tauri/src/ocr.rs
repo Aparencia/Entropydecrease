@@ -122,6 +122,19 @@ impl OcrEngine {
                             timestamp_ms: None,
                             text: text.trim().to_string(),
                             score,
+                            // M2/REQ-037：det 结果暴露 bbox（oar-ocr 0.9.1 已确认），
+                            // 供 region_tracker 做动态字幕区域锁定
+                            bbox: {
+                                let bb = &region.bounding_box;
+                                let (x, y) = (bb.x_min(), bb.y_min());
+                                let (x2, y2) = (bb.x_max(), bb.y_max());
+                                (x2 > x && y2 > y).then_some(crate::types::TextBox {
+                                    x,
+                                    y,
+                                    w: x2 - x,
+                                    h: y2 - y,
+                                })
+                            },
                         })
                     })
                     .filter(|b| !b.text.is_empty())

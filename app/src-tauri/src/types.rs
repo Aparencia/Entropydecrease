@@ -19,6 +19,18 @@ pub struct TranscriptSegment {
     pub text: String,
 }
 
+/// 文本块边界框（像素坐标，相对 OCR 输入图；M2/REQ-037 起由 det 结果填充）。
+///
+/// @ai-context: 供动态字幕区域（region_tracker）做 bbox 密度聚簇/ROI 锁定；
+///              旧数据无 bbox（None），下游必须容忍缺省。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct TextBox {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+}
+
 /// 单个 OCR 识别出的画面文本块（来自一张关键帧）。
 ///
 /// @ai-context: timestamp_ms 为该关键帧相对会话起点的时间戳；离线文件模式下可为 None。
@@ -30,6 +42,8 @@ pub struct OcrBlock {
     pub text: String,
     /// 识别置信度 0.0-1.0
     pub score: f32,
+    /// 检测框（像素坐标，相对 OCR 输入图；无 bbox 时为 None）
+    pub bbox: Option<TextBox>,
 }
 
 /// 本地拼接产出的笔记初稿。
