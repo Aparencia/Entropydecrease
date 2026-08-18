@@ -121,11 +121,12 @@ fn build_engine(models: &StructureModels, backend: OcrBackend) -> Result<OARStru
     if models.formula_ready() {
         let formula_model = models.formula.clone().unwrap();
         let tokenizer = models.formula_tokenizer.clone().unwrap();
-        // 模型类型：文件名含 unimernet → unimernet，否则 pp_formulanet
+        // 审查 H3 修复：模型类型由档位契约映射（structure_tier::FormulaTier::model_type），
+        // 文件名含 unimernet 仅为装配路径推断兜底（与档位文件一致）
         let model_type = if formula_model.contains("unimernet") {
-            "unimernet".to_string()
+            crate::structure_tier::FormulaTier::UniMERNet.model_type().to_string()
         } else {
-            "pp_formulanet".to_string()
+            crate::structure_tier::FormulaTier::PFormulaNet.model_type().to_string()
         };
         builder = builder
             .with_formula_recognition(formula_model, tokenizer, model_type)

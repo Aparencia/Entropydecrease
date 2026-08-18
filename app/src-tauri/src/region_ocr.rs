@@ -149,10 +149,11 @@ pub fn region_ocr_blocks(
             ch = uh;
         }
         // v0.5.0 模型版：table/formula 区域裁剪图归档（课后精修输入；
+        // crop/ 命名空间与关键帧 full/ 隔离（审查 H2 修复：同帧双写不再互相覆盖）；
         // 归档失败不阻断 OCR——静默降级日志可观测）
         if matches!(region.kind, RegionKind::Table | RegionKind::Formula) {
             if let Some(store) = image_store.as_mut() {
-                if let Err(e) = store.save_frame(frame.timestamp_ms, &crop, cw, ch) {
+                if let Err(e) = store.save_crop(frame.timestamp_ms, &crop, cw, ch) {
                     eprintln!("[RegionOcr] 区域裁剪图归档失败（精修将跳过该区域）: {}", e);
                 }
             }

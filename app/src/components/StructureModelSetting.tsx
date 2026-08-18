@@ -41,6 +41,8 @@ export default function StructureModelSetting() {
   const [statuses, setStatuses] = useState<ModelStatus[]>([]);
   const [highAccuracy, setHighAccuracy] = useState(false);
   const [confirmHigh, setConfirmHigh] = useState(false);
+  // 审查 L1/H3 修复：回显当前持久化档位（切换后不刷新会误导）
+  const [activeTier, setActiveTier] = useState<string>("pp-formulanet");
 
   const refresh = useCallback(async () => {
     try {
@@ -53,10 +55,31 @@ export default function StructureModelSetting() {
 
   useEffect(() => {
     void refresh();
-    // 下载事件实时刷新
+    // 审查 H3 修复：回显持久化档位（structure_formula_tier 命令）
+    void invoke<string>("structure_formula_tier")
+      .then((t) => setActiveTier(t))
+      .catch(() => setActiveTier("pp-formulanet"));
+    // 下载事件实时刷新（审查 L1 修复：监听进度事件，大模型下载可见字节进度）
     const unlisteners: Promise<() => void>[] = [
       listen<string>("structure-model:download-done", () => void refresh()),
       listen<string>("structure-model:download-failed", () => void refresh()),
+      listen<{ file: string; downloadedBytes: number; totalBytes: number }>(
+        "structure-model:download-progress",
+        (e) => {
+          setStatuses((prev) =>
+            prev.map((s) =>
+              s.state === "downloading"
+                ? {
+                    ...s,
+                    downloadedBytes: e.payload.downloadedBytes,
+                    totalBytes: e.payload.totalBytes || s.totalBytes,
+                    currentFile: e.payload.file,
+                  }
+                : s,
+            ),
+          );
+        },
+      ),
     ];
     return () => {
       unlisteners.forEach((p) => void p.then((fn) => fn()));
@@ -126,10 +149,16 @@ export default function StructureModelSetting() {
           <input
             type="checkbox"
             checked={highAccuracy}
-            onChange={(e) => setHighAccuracy(e.target.checked)}
+            onChange={(e) => {
+              setHighAccuracy(e.target.checked);
+              setConfirmHigh(false);
+            }}
           />
           高精度档（UniMERNet 1.84GB，中文效果最佳）
         </label>
+        {activeTier === "uni-mer-net" && (
+          <span style={{ fontSize: 10, color: "#0d9488" }}>已启用（装配路径已切换）</span>
+        )}
         {confirmHigh && (
           <span style={{ fontSize: 11, color: "#b45309" }}>
             大模型下载（1.84GB），确认后点"下载"公式

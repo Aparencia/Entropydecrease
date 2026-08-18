@@ -156,7 +156,11 @@ impl StructureModelDownloader {
             .spawn(move || {
                 download_group(kind, files, dir, app, statuses, running_set);
             })
-            .map_err(|e| AppError::Io(format!("启动结构模型下载线程失败: {}", e)))?;
+            .map_err(|e| {
+                // 审查 M2 修复：spawn 失败必须清理 running 标记（否则该类永久"下载中"）
+                self.running.lock().expect("structure dl running lock").remove(&kind);
+                AppError::Io(format!("启动结构模型下载线程失败: {}", e))
+            })?;
         self.threads.lock().expect("structure dl threads lock").insert(kind, handle);
         Ok(files.len())
     }
@@ -266,6 +270,9 @@ fn download_group(
 }
 
 /// 下载单个文件（流式，每 1MB 推送进度；30 分钟超时防挂起）。
+///
+/// @ai-context: 审查 M1 修复：读取 Content-Length 并在结束时比对——
+///              1.84GB 大文件截断/中断不得静默成功（残缺文件会被装配）。
 fn download_one(
     url: &str,
     part: &std::path::Path,
@@ -278,6 +285,10 @@ fn download_one(
         .timeout(std::time::Duration::from_secs(30 * 60))
         .build();
     let resp = agent.get(url).call().map_err(|e| format!("请求失败: {}", e))?;
+    let total = resp
+        .header("Content-Length")
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(0);
     let mut reader = resp.into_reader();
     let mut out = std::fs::File::create(part).map_err(|e| format!("创建临时文件失败: {}", e))?;
     let mut buf = [0u8; 64 * 1024];
@@ -297,15 +308,20 @@ fn download_one(
                 crate::model_downloader::DownloadProgress {
                     file: file.to_string(),
                     downloaded_bytes: downloaded,
-                    total_bytes: 0,
+                    total_bytes: total,
                 },
             );
             if let Ok(mut st) = statuses.lock() {
                 if let Some(s) = st.get_mut(kind) {
                     s.downloaded_bytes = downloaded;
+                    s.total_bytes = total;
                 }
             }
         }
+    }
+    // 审查 M1：Content-Length 已知且不符 → 截断（不静默成功）
+    if total > 0 && downloaded != total {
+        return Err(format!("大小不符（期望 {}，实得 {}）", total, downloaded));
     }
     Ok(())
 }

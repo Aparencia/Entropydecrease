@@ -28,6 +28,48 @@ fn save_frame_writes_full_and_thumb() {
 }
 
 #[test]
+fn save_crop_isolated_from_full_frames() {
+    // Arrange（审查 H2 回归验证：裁剪图与关键帧同时间戳不互相覆盖）
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = SessionImageStore::new(dir.path().to_path_buf()).unwrap();
+    // Act：同时间戳先存关键帧（整帧）再存裁剪图（区域）
+    store.save_frame(1000, &solid_frame(640, 360, 10, 20, 30), 640, 360).unwrap();
+    let crop_rel = store.save_crop(1000, &solid_frame(200, 100, 200, 100, 50), 200, 100).unwrap();
+    // Assert：命名空间隔离（crop/ 与 full/ 独立文件，互不覆盖）
+    assert_eq!(crop_rel, "crop/1000.webp");
+    assert!(dir.path().join("full/1000.webp").exists());
+    assert!(dir.path().join("crop/1000.webp").exists());
+    // 内容可区分（裁剪图为红色系，整帧为蓝系）
+    let full = image::open(dir.path().join("full/1000.webp")).unwrap().to_rgb8();
+    let crop = image::open(dir.path().join("crop/1000.webp")).unwrap().to_rgb8();
+    assert_eq!(full.dimensions(), (640, 360));
+    assert_eq!(crop.dimensions(), (200, 100));
+    // 列表分离
+    assert_eq!(store.list_images(), vec!["full/1000.webp".to_string()]);
+    assert_eq!(store.list_crops(), vec!["crop/1000.webp".to_string()]);
+}
+
+#[test]
+fn save_crop_shares_budget_with_frames() {
+    // Arrange：裁剪图与关键帧共用预算（防总盘占用失控）
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = SessionImageStore::new(dir.path().to_path_buf()).unwrap();
+    // Act：交替存满预算
+    for i in 0..BUDGET_MAX_IMAGES {
+        let ts = i as u64 * 100;
+        let rel = if i % 2 == 0 {
+            store.save_frame(ts, &solid_frame(32, 32, 1, 1, 1), 32, 32).unwrap()
+        } else {
+            store.save_crop(ts, &solid_frame(32, 32, 2, 2, 2), 32, 32).unwrap()
+        };
+        assert!(rel.starts_with(if i % 2 == 0 { "full/" } else { "crop/" }));
+    }
+    // Assert：超预算两者都拒绝
+    assert!(store.save_frame(9999, &solid_frame(32, 32, 1, 1, 1), 32, 32).is_err());
+    assert!(store.save_crop(9999, &solid_frame(32, 32, 2, 2, 2), 32, 32).is_err());
+}
+
+#[test]
 fn save_frame_large_image_creates_smaller_thumb() {
     // Arrange：1920×1080 帧（缩略图应缩小）
     let dir = tempfile::tempdir().unwrap();

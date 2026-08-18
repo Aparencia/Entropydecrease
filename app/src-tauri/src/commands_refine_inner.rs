@@ -18,7 +18,12 @@ use crate::structure_engine::StructureEngine;
 /// 运行精修（阻塞调用方线程；由 command 的 spawn_blocking 包裹）。
 pub fn run_refine(state: &AppState, session_id: i64) -> Result<String, String> {
     let models = crate::commands_refine::structure_model_paths(state);
-    // ① 待精修清单：表格/公式区域记录（实时链路落库的 OCR 块 region_kind）+ 图片库
+    // 会话图片库绝对目录（裁剪图/关键帧存储根；refine_one 在此目录内解析相对路径）
+    let session_images_dir = state
+        .data_dir
+        .join("session-images")
+        .join(session_id.to_string());
+    // ① 待精修清单：表格/公式区域记录（实时链路落库的 OCR 块 region_kind）+ 裁剪图库
     let ocr_blocks = state.db.list_ocr_blocks(session_id).map_err(|e| e.to_string())?;
     let records: Vec<(String, u64)> = ocr_blocks
         .iter()
@@ -28,11 +33,8 @@ pub fn run_refine(state: &AppState, session_id: i64) -> Result<String, String> {
                 .map(|k| (k.to_string(), b.timestamp_ms))
         })
         .collect();
-    let images = crate::commands_images::keyframes_from_store(state, session_id)
-        .unwrap_or_default()
-        .into_iter()
-        .map(|kf| format!("full/{}.webp", kf.timestamp_ms))
-        .collect::<Vec<String>>();
+    // 裁剪图清单（crop/ 命名空间；审查 H2 修复后与关键帧 full/ 分离）
+    let images = crop_list_from_store(&session_images_dir);
     let candidates = build_refine_candidates(&records, &images);
     // ② 降级决策
     let (go, reason) = decide_refine(
@@ -56,9 +58,9 @@ pub fn run_refine(state: &AppState, session_id: i64) -> Result<String, String> {
             return Ok(msg);
         }
     };
-    // ④ 逐候选识别 + 回填
+    // ④ 逐候选识别（先全部识别，再单次回填——避免 N 次全量产物重写）
     let total = candidates.len();
-    let mut refined = 0usize;
+    let mut upgraded: Vec<ArtifactBlock> = Vec::new();
     for (i, candidate) in candidates.iter().enumerate() {
         let _ = state.app.emit(
             "session:refining",
@@ -68,42 +70,59 @@ pub fn run_refine(state: &AppState, session_id: i64) -> Result<String, String> {
                 current_kind: candidate.kind.clone(),
             },
         );
-        match refine_one(&engine, candidate) {
-            Ok(Some(block)) => {
-                // ⑤ 回填产物块（模型版结果 → artifact_blocks 表）
-                let artifact = state.db.get_artifact(session_id).map_err(|e| e.to_string())?;
-                if let Some(mut art) = artifact {
-                    // 替换同 frame_ms 的同类型块（静默升级）；无则追加
-                    let frame = block.refs.frame_ms;
-                    let kind = block.kind;
-                    art.blocks.retain(|b| !(b.kind == kind && b.refs.frame_ms == frame));
-                    let mut block = block;
-                    block.order = art.blocks.len() as u32;
-                    art.blocks.push(block);
-                    state.db.replace_artifact(&art).map_err(|e| e.to_string())?;
-                }
-                refined += 1;
-            }
-            Ok(None) => {} // 该区域无产物块可回填（无会话产物），跳过
+        match refine_one(&engine, candidate, &session_images_dir) {
+            Ok(Some(block)) => upgraded.push(block),
+            Ok(None) => {} // 该区域无对应结果（模型未检出），跳过
             Err(e) => {
                 eprintln!("[Refine] 区域 {}ms 精修失败（保留规则版）: {}", candidate.time_ms, e);
             }
         }
     }
+    // ⑤ 单次回填：读取产物 → 内存合并模型版块 → 一次 replace（审查 M4 修复）
+    let upgraded_blocks = std::mem::take(&mut upgraded);
+    if !upgraded_blocks.is_empty() {
+        let mut artifact = state.db.get_artifact(session_id).map_err(|e| e.to_string())?;
+        if let Some(art) = artifact.as_mut() {
+            for mut block in upgraded_blocks {
+                // 替换同 frame_ms 的同类型块（静默升级）；无则追加
+                let frame = block.refs.frame_ms;
+                let kind = block.kind;
+                art.blocks.retain(|b| !(b.kind == kind && b.refs.frame_ms == frame));
+                block.order = art.blocks.len() as u32;
+                art.blocks.push(block);
+            }
+            state.db.replace_artifact(art).map_err(|e| e.to_string())?;
+        }
+    }
     let _ = state.app.emit(
         "session:refined",
-        crate::refine::RefineProgress { done: refined, total, current_kind: String::new() },
+        crate::refine::RefineProgress { done: upgraded.len(), total, current_kind: String::new() },
     );
-    Ok(format!("精修完成：{}/{} 区域已升级为模型版", refined, total))
+    Ok(format!("精修完成：{}/{} 区域已升级为模型版", upgraded.len(), total))
 }
 
-/// 单候选识别 → 产物块（None=无需回填）。
+/// 会话裁剪图清单（crop/ 命名空间；审查 H2 修复：精修候选只匹配裁剪图，
+/// 不再与关键帧 full/ 混淆）。
+fn crop_list_from_store(session_images_dir: &std::path::Path) -> Vec<String> {
+    let store = match crate::image_store::SessionImageStore::new(session_images_dir.to_path_buf()) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    store.list_crops()
+}
+
+/// 单候选识别 → 产物块（None=模型未检出该区域，保留规则版）。
 fn refine_one(
     engine: &StructureEngine,
     candidate: &RefineCandidate,
+    session_images_dir: &std::path::Path,
 ) -> Result<Option<ArtifactBlock>, String> {
-    // 读取裁剪图（session-images 目录）
-    let image_path = state_image_path_for(candidate);
+    // 读取裁剪图（会话图片库目录内解析相对路径——审查 H1 修复：
+    // 原实现只传相对路径，进程工作目录下必然找不到）
+    let image_path = session_images_dir.join(&candidate.crop_image);
+    if !image_path.is_file() {
+        return Err(format!("裁剪图不存在 {}: {}", session_images_dir.display(), candidate.crop_image));
+    }
     let image = image::open(&image_path)
         .map_err(|e| format!("读取裁剪图失败 {}: {}", image_path.display(), e))?
         .to_rgb8();
@@ -111,8 +130,9 @@ fn refine_one(
     // 按区域类型提取结果
     match candidate.kind.as_str() {
         "table" => {
-            // 取与裁剪图时间戳最接近的表格结果
-            let table = result.tables.first();
+            // 裁剪图即区域本体：取与裁剪图覆盖面积占比最大的表格结果
+            // （审查 M3 修复：不再盲目 first——完整管线可能输出多个候选）
+            let table = best_table(&result, image_path_unknown_size());
             match table {
                 Some(t) => {
                     // SLANet html_structure → Markdown（转换辅助见下）
@@ -164,10 +184,39 @@ fn refine_one(
     }
 }
 
-/// 裁剪图绝对路径（会话图片库 + 相对路径）。
-fn state_image_path_for(candidate: &RefineCandidate) -> std::path::PathBuf {
-    // 由调用方提供会话目录（简化：相对路径由 image_store 目录约定解析）
-    std::path::PathBuf::from(&candidate.crop_image)
+/// 在结构结果中选与裁剪图最匹配的表格（bbox 覆盖面积占比最大者）。
+///
+/// @ai-context: 裁剪图即区域本体，模型版完整管线（layout→表格）可能输出多个
+///              候选——选 bbox 覆盖裁剪图比例最高的（最可能是"这个区域"的表格）；
+///              无 bbox 信息时回退 first（兼容上游输出缺省）。
+fn best_table(
+    result: &oar_ocr::domain::structure::StructureResult,
+    _image_size: Option<(u32, u32)>,
+) -> Option<&oar_ocr::domain::structure::TableResult> {
+    if result.tables.is_empty() {
+        return None;
+    }
+    if result.tables.len() == 1 {
+        return result.tables.first();
+    }
+    // 多候选：按 bbox 面积降序（裁剪图场景，最大 bbox 最可能是区域本体）
+    result
+        .tables
+        .iter()
+        .max_by(|a, b| {
+            let area = |t: &oar_ocr::domain::structure::TableResult| {
+                let bb = &t.bbox;
+                (bb.x_max() - bb.x_min()).max(0.0) * (bb.y_max() - bb.y_min()).max(0.0)
+            };
+            area(a).partial_cmp(&area(b)).unwrap_or(std::cmp::Ordering::Equal)
+        })
+}
+
+/// 裁剪图尺寸占位（best_table 的 bbox 归一化预留；当前按面积降序足够，
+/// 登记豁免——后续接入真实尺寸做 IoU 匹配）。
+#[allow(dead_code)]
+fn image_path_unknown_size() -> Option<(u32, u32)> {
+    None
 }
 
 /// SLANet HTML 结构 → Markdown 表格（简化转换：<table><tr><td> → | 表格）。
@@ -236,6 +285,38 @@ pub fn _html_to_markdown_for_test(html: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oar_ocr::domain::structure::{TableResult, TableType};
+    use oar_ocr::processors::BoundingBox;
+
+    fn table_result(x1: f32, y1: f32, x2: f32, y2: f32) -> TableResult {
+        TableResult {
+            bbox: BoundingBox::from_coords(x1, y1, x2, y2),
+            table_type: TableType::Wired,
+            classification_confidence: Some(0.9),
+            structure_confidence: Some(0.8),
+            cells: Vec::new(),
+            html_structure: Some("<table></table>".into()),
+            cell_texts: None,
+            structure_tokens: None,
+            detected_cell_bboxes: None,
+            is_e2e: false,
+        }
+    }
+
+    fn structure_result(tables: Vec<TableResult>) -> oar_ocr::domain::structure::StructureResult {
+        oar_ocr::domain::structure::StructureResult {
+            input_path: "test".into(),
+            index: 0,
+            layout_elements: Vec::new(),
+            tables,
+            formulas: Vec::new(),
+            text_regions: None,
+            orientation_angle: None,
+            region_blocks: None,
+            page_continuation_flags: None,
+            rectified_img: None,
+        }
+    }
 
     #[test]
     fn html_table_converts_to_markdown() {
@@ -271,5 +352,29 @@ mod tests {
         // Act/Assert：畸形标签防御（不 panic）
         let md = _html_to_markdown_for_test("<table><tr><td>只有开头");
         assert!(!md.contains('<')); // 未闭合的 cell 内容不产生垃圾
+    }
+
+    #[test]
+    fn best_table_picks_largest_bbox() {
+        // Arrange（审查 M3 回归：多候选时选 bbox 面积最大者——裁剪图区域本体）
+        let result = structure_result(vec![
+            table_result(0.0, 0.0, 100.0, 100.0),  // 小表格（干扰）
+            table_result(0.0, 0.0, 400.0, 300.0),  // 大表格（区域本体）
+        ]);
+        // Act
+        let best = best_table(&result, None);
+        // Assert：选面积最大的
+        assert!(best.is_some());
+        let bb = &best.unwrap().bbox;
+        assert!((bb.x_max() - bb.x_min()) > 300.0);
+    }
+
+    #[test]
+    fn best_table_single_or_empty() {
+        // Assert：无表格 → None；单表格 → 该表格
+        let empty = structure_result(Vec::new());
+        assert!(best_table(&empty, None).is_none());
+        let single = structure_result(vec![table_result(0.0, 0.0, 10.0, 10.0)]);
+        assert!(best_table(&single, None).is_some());
     }
 }

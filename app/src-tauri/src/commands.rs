@@ -90,6 +90,9 @@ pub struct AppState {
     pub ai_guardrails: std::sync::Arc<std::sync::Mutex<crate::ai_guardrails::AiGuardrails>>,
     /// v0.5.0 模型版（REQ-047/049/050）：结构模型下载器（版面/表格/公式按需下载）
     pub structure_downloader: crate::structure_models::StructureModelDownloader,
+    /// v0.5.0 模型版（REQ-050）：结构档位配置路径（公式 PP-FormulaNet/UniMERNet；
+    /// 审查 H3 修复：装配路径按档位解析）
+    pub structure_tier_path: std::path::PathBuf,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。

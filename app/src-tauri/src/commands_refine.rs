@@ -17,15 +17,20 @@ pub fn structure_models_dir(state: &AppState) -> std::path::PathBuf {
 }
 
 /// 结构模型装配路径集合（普通函数：供命令与精修编排共用）。
+///
+/// @ai-context: 审查 H3 修复：公式路径按持久化档位（structure_tier.json）解析——
+///              用户切换 UniMERNet 高精度档并下载后装配路径正确跟随。
 pub fn structure_model_paths(state: &AppState) -> crate::structure_engine::StructureModels {
     let dir = structure_models_dir(state);
+    let tier = crate::structure_tier::StructureTierConfig::load(&state.structure_tier_path)
+        .formula_tier;
     crate::structure_engine::StructureModels {
         layout: dir.join("pp-doclayout-l.onnx").to_string_lossy().into_owned(),
         table: Some(dir.join("slanet_plus_v2.onnx").to_string_lossy().into_owned()),
         table_cls: Some(dir.join("pp-lcnet_x1_0_table_cls.onnx").to_string_lossy().into_owned()),
         table_dict: Some(dir.join("table_structure_dict_ch.txt").to_string_lossy().into_owned()),
-        formula: Some(dir.join("pp-formulanet-s.onnx").to_string_lossy().into_owned()),
-        formula_tokenizer: Some(dir.join("pp-formulanet-tokenizer.json").to_string_lossy().into_owned()),
+        formula: Some(dir.join(tier.model_file()).to_string_lossy().into_owned()),
+        formula_tokenizer: Some(dir.join(tier.tokenizer_file()).to_string_lossy().into_owned()),
     }
 }
 
@@ -41,10 +46,27 @@ pub async fn structure_model_download(
 ) -> Result<usize, String> {
     let kind = parse_kind(&kind);
     let dir = structure_models_dir(&state);
+    // 审查 H3 修复：公式下载时按档位持久化（装配路径随档位切换）
+    if kind == StructureModelKind::Formula {
+        let tier = if high_accuracy_formula.unwrap_or(false) {
+            crate::structure_tier::FormulaTier::UniMERNet
+        } else {
+            crate::structure_tier::FormulaTier::PFormulaNet
+        };
+        let cfg = crate::structure_tier::StructureTierConfig { formula_tier: tier };
+        cfg.save(&state.structure_tier_path)
+            .map_err(|e| format!("保存公式档位失败: {}", e))?;
+    }
     state
         .structure_downloader
         .start(kind, dir, high_accuracy_formula.unwrap_or(false), state.app.clone())
         .map_err(|e| e.to_string())
+}
+
+/// 查询当前公式档位（前端设置面板展示/切换；审查 H3 修复）。
+#[tauri::command]
+pub fn structure_formula_tier(state: State<'_, AppState>) -> crate::structure_tier::FormulaTier {
+    crate::structure_tier::StructureTierConfig::load(&state.structure_tier_path).formula_tier
 }
 
 /// 查询三类结构模型状态（未下载/下载中/就绪/失败）。

@@ -31,12 +31,55 @@ impl SessionImageStore {
     pub fn new(session_dir: PathBuf) -> Result<Self> {
         std::fs::create_dir_all(session_dir.join("full"))?;
         std::fs::create_dir_all(session_dir.join("thumb"))?;
+        std::fs::create_dir_all(session_dir.join("crop"))?;
         Ok(Self { session_dir, saved: 0 })
     }
 
-    /// 剩余预算（0 = 已达上限）。
+    /// 剩余预算（0 = 已达上限；full/thumb 与 crop 共用预算，防总盘占用失控）。
     pub fn remaining_budget(&self) -> usize {
         BUDGET_MAX_IMAGES.saturating_sub(self.saved)
+    }
+
+    /// 保存区域裁剪图（v0.5.0 模型版：表格/公式区域裁剪，课后精修输入）。
+    ///
+    /// @ai-context: 存 `crop/<ts>.webp` 命名空间——与 `full/` 关键帧隔离，
+    ///              防同帧双写覆盖（审查 H2 修复：原实现与 handle_full_frame
+    ///              同时间戳写 full/ 互相覆盖）；无缩略图（精修需原图细节）。
+    pub fn save_crop(
+        &mut self,
+        timestamp_ms: u64,
+        bgraw: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<String> {
+        if self.remaining_budget() == 0 {
+            return Err(crate::error::AppError::Io(format!(
+                "会话图片预算已达上限（{} 张）",
+                BUDGET_MAX_IMAGES
+            )));
+        }
+        let name = format!("{}.webp", timestamp_ms);
+        let rgb = bgra_to_rgb(bgraw, width, height)
+            .ok_or_else(|| crate::error::AppError::Io("裁剪图数据无效".to_string()))?;
+        let crop_path = self.session_dir.join("crop").join(&name);
+        encode_webp(&rgb, &crop_path)?;
+        self.saved += 1;
+        Ok(format!("crop/{}", name))
+    }
+
+    /// 已存裁剪图相对路径列表（crop/xxx.webp，按文件名=时间戳升序）。
+    pub fn list_crops(&self) -> Vec<String> {
+        let mut paths: Vec<String> = std::fs::read_dir(self.session_dir.join("crop"))
+            .map(|entries| {
+                entries
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.path().extension().is_some_and(|x| x == "webp"))
+                    .map(|e| format!("crop/{}", e.file_name().to_string_lossy()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        paths.sort();
+        paths
     }
 
     /// 保存图片（原图 + 缩略图两级）：返回相对路径（full/xxx.webp）。

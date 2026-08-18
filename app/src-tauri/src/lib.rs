@@ -74,6 +74,7 @@ mod region_tracker;
 mod streaming_asr;
 mod structure_engine;
 mod structure_models;
+mod structure_tier;
 mod subtitle;
 mod subtitle_detect;
 mod subtitle_ocr;
@@ -295,6 +296,8 @@ pub fn run() {
             ));
             // v0.5.0 模型版（REQ-047/049/050）：结构模型下载器（按需下载，独立状态机）
             let structure_downloader = crate::structure_models::StructureModelDownloader::new();
+            // v0.5.0 模型版（REQ-050）：结构档位配置（公式档位持久化，审查 H3 修复）
+            let structure_tier_path = data_dir.join("structure_tier.json");
             // 结构模型装配目录（models/structure；下载器/引擎共用）
             let _ = std::fs::create_dir_all(model_dir.join("structure"));
             let engines = EnginePool::start(
@@ -328,6 +331,7 @@ pub fn run() {
                 data_dir,
                 ai_guardrails,
                 structure_downloader,
+                structure_tier_path,
             });
             Ok(())
         })
@@ -423,6 +427,7 @@ pub fn run() {
             commands_refine::structure_model_download,
             commands_refine::structure_model_status,
             commands_refine::structure_models_dir_cmd,
+            commands_refine::structure_formula_tier,
             commands_refine::refine_session,
         ])
         .run(tauri::generate_context!())
