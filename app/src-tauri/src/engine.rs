@@ -20,6 +20,12 @@ enum EngineRequest {
         path: String,
         reply: Sender<Result<TranscriptSegment>>,
     },
+    /// 流式端点句的 SenseVoice 整句重打分（ADR-003 §5）
+    TranscribePcm {
+        samples: Vec<f32>,
+        sample_rate: i32,
+        reply: Sender<Result<TranscriptSegment>>,
+    },
     Recognize {
         path: String,
         reply: Sender<Result<Vec<OcrBlock>>>,
@@ -52,6 +58,19 @@ impl EnginePool {
         rx.recv().map_err(|_| AppError::Asr("引擎线程未返回结果".to_string()))?
     }
 
+    /// 转写 PCM 内存样本（SenseVoice 重打分，阻塞等待引擎线程返回）。
+    pub fn transcribe_pcm(&self, samples: &[f32], sample_rate: i32) -> Result<TranscriptSegment> {
+        let (reply, rx) = mpsc::channel();
+        self.tx
+            .send(EngineRequest::TranscribePcm {
+                samples: samples.to_vec(),
+                sample_rate,
+                reply,
+            })
+            .map_err(|_| AppError::Asr("引擎线程已退出".to_string()))?;
+        rx.recv().map_err(|_| AppError::Asr("引擎线程未返回结果".to_string()))?
+    }
+
     /// 识别图片（阻塞等待引擎线程返回）。
     pub fn recognize(&self, path: &str) -> Result<Vec<OcrBlock>> {
         let (reply, rx) = mpsc::channel();
@@ -79,6 +98,13 @@ fn worker_loop(
             EngineRequest::Transcribe { path, reply } => {
                 let result = match asr.as_mut() {
                     Ok(engine) => engine.transcribe(&path),
+                    Err(_) => Err(AppError::Asr("ASR 引擎加载失败（请检查模型文件是否就绪）".to_string())),
+                };
+                let _ = reply.send(result);
+            }
+            EngineRequest::TranscribePcm { samples, sample_rate, reply } => {
+                let result = match asr.as_mut() {
+                    Ok(engine) => engine.transcribe_pcm(&samples, sample_rate),
                     Err(_) => Err(AppError::Asr("ASR 引擎加载失败（请检查模型文件是否就绪）".to_string())),
                 };
                 let _ = reply.send(result);

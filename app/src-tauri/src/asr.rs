@@ -68,6 +68,29 @@ impl AsrEngine {
             text: result.text.trim().to_string(),
         })
     }
+
+    /// 转写 PCM 内存样本（16kHz 单声道 f32）——流式端点句的 SenseVoice 整句重打分（ADR-003 §5）。
+    ///
+    /// @ai-context: 与 transcribe 共用同一识别器（离线引擎天然串行），
+    ///              由 EnginePool 的 TranscribePcm 请求路由（engine.rs）。
+    pub fn transcribe_pcm(&self, samples: &[f32], sample_rate: i32) -> Result<TranscriptSegment> {
+        if samples.is_empty() {
+            return Err(AppError::Asr("空音频无法转写".to_string()));
+        }
+        let stream = self.recognizer.create_stream();
+        stream.accept_waveform(sample_rate, samples);
+        self.recognizer.decode(&stream);
+
+        let result = stream
+            .get_result()
+            .ok_or_else(|| AppError::Asr("获取转写结果为空".to_string()))?;
+        let duration_ms = estimate_duration_ms(sample_rate, samples.len());
+        Ok(TranscriptSegment {
+            start_ms: 0,
+            end_ms: duration_ms,
+            text: result.text.trim().to_string(),
+        })
+    }
 }
 
 /// 校验模型文件存在，缺失时给出可操作的错误（引导用户下载）。
