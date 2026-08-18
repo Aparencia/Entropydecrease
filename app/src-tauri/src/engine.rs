@@ -143,6 +143,12 @@ fn asr_worker_loop(rx: Receiver<AsrRequest>, asr_models: AsrModels) {
 fn ocr_worker_loop(rx: Receiver<OcrRequest>, ocr_models: OcrModels, ocr_params: OcrParams) {
     // @ai-context: OCR 首次构建可能触发 ModelScope 模型下载，耗时较长但在后台线程不影响 UI。
     let mut ocr = OcrEngine::load(&ocr_models, &ocr_params);
+    // @ai-context: 加载失败此前静默（仅首次识别时报错），排查"会话无 OCR"无法定位——
+    //              启动即打印结果，加载失败可观测（与 ASR 引擎同口径）。
+    match &ocr {
+        Ok(_) => eprintln!("[Engine] OCR 引擎加载成功（{}）", ocr_models.det),
+        Err(e) => eprintln!("[Engine] OCR 引擎加载失败: {}", e),
+    }
     for req in rx {
         let (result, reply) = match req {
             OcrRequest::Recognize { path, reply } => {

@@ -55,6 +55,27 @@ pub struct SubtitleEvent {
     pub text: String,
 }
 
+/// 屏幕采样统计（诊断：会话无 OCR 时定位失败阶段，定期打印使静默失败可见化）。
+#[derive(Default)]
+struct ScreenStats {
+    /// capture 成功返回帧次数
+    sampled: u64,
+    /// capture 返回 None（DXGI 超时=桌面无变化）次数
+    no_change: u64,
+    /// capture 返回 Err 次数
+    capture_err: u64,
+    /// 变化检测通过、进入 OCR 次数
+    diff_pass: u64,
+    /// 变化检测未通过、跳过 OCR 次数
+    diff_skip: u64,
+    /// OCR 成功次数
+    ocr_ok: u64,
+    /// OCR 失败次数
+    ocr_err: u64,
+    /// 上次打印统计时刻（15s 节流）
+    last_log_at: Option<Instant>,
+}
+
 /// 屏幕采样线程入口（TD-026 修复：OCR 从会话线程移出，音频消费不再被阻塞）。
 ///
 /// @ai-context: ScreenCaptureSampler 持 COM 对象（非 Send），在本线程内创建与使用，
@@ -98,6 +119,7 @@ pub fn run_screen_worker(
     // 上次 OCR 时刻（强制 OCR 兜底）与全帧文本去重（强制 OCR 下静止画面不重复落库）
     let mut last_ocr_at = Instant::now();
     let mut last_full_texts: Vec<String> = Vec::new();
+    let mut stats = ScreenStats::default();
 
     while !stop.load(Ordering::SeqCst) {
         if last_sample_at.elapsed().as_millis() as u64 >= SAMPLE_TICK_MS {
@@ -112,9 +134,20 @@ pub fn run_screen_worker(
                 process_frame(
                     screen.as_mut(), diff, &mut voter, &mut last_frame_text, &mut last_preview,
                     &db, &engines, &app, session_id, region, &subtitle_segments, epoch,
-                    &mut last_capture_error, &mut last_ocr_at, &mut last_full_texts,
+                    &mut last_capture_error, &mut last_ocr_at, &mut last_full_texts, &mut stats,
                 );
             }
+        }
+        // 诊断：每 15s 打印采样统计（会话无 OCR 时定位失败阶段；静默失败可见化）
+        if stats
+            .last_log_at
+            .map_or(true, |t| t.elapsed() >= Duration::from_secs(15))
+        {
+            stats.last_log_at = Some(Instant::now());
+            eprintln!(
+                "[ScreenWorker] 采样统计: sampled={} no_change={} capture_err={} diff_pass={} diff_skip={} ocr_ok={} ocr_err={}",
+                stats.sampled, stats.no_change, stats.capture_err, stats.diff_pass, stats.diff_skip, stats.ocr_ok, stats.ocr_err
+            );
         }
         std::thread::sleep(Duration::from_millis(WORKER_POLL_MS));
     }
@@ -146,6 +179,7 @@ fn process_frame(
     last_capture_error: &mut Option<Instant>,
     last_ocr_at: &mut Instant,
     last_full_texts: &mut Vec<String>,
+    stats: &mut ScreenStats,
 ) {
     let Some(sampler) = screen else { return };
     // 字幕区只认底部 1/4：先全帧捕获再裁剪（简化双速率，字幕区帧成本可控）
@@ -159,20 +193,28 @@ fn process_frame(
         None => {}
     }
     let Ok(Some(mut frame)) = capture_result else {
-        // 捕获失败（DXGI/GDI 均失效）——曾静默返回导致"会话无 OCR"无法定位；
-        // 日志节流 5s（降级期间每帧失败会刷屏）
-        if let Err(e) = capture_result {
-            let now = Instant::now();
-            let should_log = last_capture_error
-                .map(|t| now.duration_since(t) >= Duration::from_secs(5))
-                .unwrap_or(true);
-            if should_log {
-                *last_capture_error = Some(now);
-                eprintln!("[ScreenWorker] 屏幕捕获失败（日志节流 5s）: {}", e);
+        match capture_result {
+            // 捕获失败（DXGI/GDI 均失效）——曾静默返回导致"会话无 OCR"无法定位；
+            // 日志节流 5s（降级期间每帧失败会刷屏）
+            Err(e) => {
+                stats.capture_err += 1;
+                let now = Instant::now();
+                let should_log = last_capture_error
+                    .map(|t| now.duration_since(t) >= Duration::from_secs(5))
+                    .unwrap_or(true);
+                if should_log {
+                    *last_capture_error = Some(now);
+                    eprintln!("[ScreenWorker] 屏幕捕获失败（日志节流 5s）: {}", e);
+                }
             }
+            // DXGI 超时（桌面无变化）——正常分支，非错误
+            Ok(None) => stats.no_change += 1,
+            // let-else 已保证不会走到这里（Ok(Some(_)) 被解构），但 match 需穷尽
+            Ok(Some(_)) => unreachable!("let-else 已解构 Ok(Some)"),
         }
         return;
     };
+    stats.sampled += 1;
     // A1：帧时间戳统一为会话纪元（与音频/flush 同基准，ADR-008）
     frame.timestamp_ms = epoch.elapsed().as_millis() as u64;
     // 强制 OCR 兜底（diff 采样漏检防御）：变化检测 hash 对局部/平滑变化可能漏检
@@ -180,8 +222,10 @@ fn process_frame(
     // 保证"屏幕在变但无 OCR"场景至少周期性产出（用户反馈 4/5 会话无 OCR 排查项）
     let force_ocr = last_ocr_at.elapsed() >= Duration::from_secs(FORCE_OCR_INTERVAL_SECS);
     if !diff.has_changed(&frame.bgraw) && !force_ocr {
+        stats.diff_skip += 1;
         return;
     }
+    stats.diff_pass += 1;
     let is_subtitle = region == SampleRegion::Subtitle;
     if is_subtitle {
         let Some(q) = bottom_quarter_rect(frame.width, frame.height) else { return };
@@ -197,6 +241,7 @@ fn process_frame(
     let Some(rgb) = bgra_to_rgb_image(&frame.bgraw, frame.width, frame.height) else { return };
     match engines.recognize_image(rgb) {
         Ok(blocks) => {
+            stats.ocr_ok += 1;
             // 成功识别即刷新 OCR 时刻（无论是否产出文本——防漏检兜底周期基准）
             *last_ocr_at = Instant::now();
             if is_subtitle {
@@ -207,7 +252,10 @@ fn process_frame(
                 handle_full_frame(&frame, &blocks, db, app, session_id, last_full_texts);
             }
         }
-        Err(e) => eprintln!("[ScreenWorker] OCR 识别失败（下帧重试）: {}", e),
+        Err(e) => {
+            stats.ocr_err += 1;
+            eprintln!("[ScreenWorker] OCR 识别失败（下帧重试）: {}", e)
+        }
     }
 }
 

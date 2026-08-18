@@ -36,6 +36,11 @@ mod subtitle_ocr;
 mod types;
 mod windows;
 
+// 临时诊断模块（定位实时链路无 OCR 根因；诊断后删除）
+#[cfg(all(test, target_os = "windows"))]
+#[path = "live_pipeline_diag.rs"]
+mod live_pipeline_diag;
+
 use std::path::Path;
 
 use tauri::{Emitter, Manager, WindowEvent};
