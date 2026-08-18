@@ -10,12 +10,16 @@
 //!              降级为无讲者标注形态）；embedding 提取接入留 V1.0（模型分发 G4）。
 
 use crate::chapter_detect::{detect_chapters, ChapterBoundary, ChapterSignal, DEFAULT_MIN_VOTES};
-use crate::glossary::{glossary_candidates, GlossaryCandidate};
+use crate::glossary::{
+    glossary_candidates_opt, GlossaryCandidate, GlossaryOptions,
+};
 use crate::highlight_detect::{detect_highlights, HighlightCandidate, OcrBlockInput, SegmentInput};
 use crate::speaker_change::{detect_speaker_changes, SpeakerChangeEvent};
+use crate::symbol_normalize::{normalize as normalize_symbols, SymbolNormalizeConfig};
 use crate::types::SessionDetail;
 use crate::verbal_normalize::{normalize, NormalizeConfig, NormalizeStrength};
 use crate::video_profile::ProfileKind;
+use crate::watermark_filter::{detect_watermarks, WatermarkConfig, WatermarkInput};
 
 /// 分析窗口时长（ms）：章节话题聚合粒度（30s 窗口对网课话题粒度合理）。
 const WINDOW_MS: u64 = 30_000;
@@ -47,14 +51,27 @@ pub struct SessionAnalysis {
     pub normalized_segments: Vec<NormalizedSegment>,
 }
 
-/// 会话结构化分析（纯函数）：SessionDetail → 各机制输出聚合。
+/// 会话结构化分析（纯函数，向后兼容入口）：SessionDetail → 各机制输出聚合。
 ///
-/// @ai-context: 章节检测输入为 30s 聚合窗口（文本话题 + 近似信号）；
-///              重点标注输入为段文本 + OCR 块（volume=None 不参与骤变）；
-///              术语表输入为 OCR 文本 × ASR 文本（去重后计数）。
+/// @ai-context: 等价于 analyze_session_opt(..., &SymbolNormalizeConfig::default())
+///              ——v0.5.0 行为零回归（符号映射内置默认）。
+pub fn analyze_session(detail: &SessionDetail, profile: ProfileKind) -> SessionAnalysis {
+    analyze_session_opt(detail, profile, &SymbolNormalizeConfig::default())
+}
+
+/// 会话结构化分析（精化版，REQ-060/061 接入）：
+/// 章节检测输入为 30s 聚合窗口（文本话题 + 近似信号）；
+/// 重点标注输入为段文本 + OCR 块（volume=None 不参与骤变）；
+/// 术语表输入为 OCR 文本 × ASR 文本——水印词排除（REQ-059 输出）+ TF-IDF
+/// 文档频率加权（REQ-061；文档 = 单条 OCR 块，会话内代理，机制支持跨会话）；
+/// 书面化加工版段 = 语气词/重复/标点（B5）+ 口语符号规范化（REQ-060）。
 /// @ai-context: 按档案后处理规则集开关门控（REQ-043：章节检测=网课、
 ///              术语表=网课、说话人=访谈/会议；重点标注=口播/网课/实操全开）。
-pub fn analyze_session(detail: &SessionDetail, profile: ProfileKind) -> SessionAnalysis {
+pub fn analyze_session_opt(
+    detail: &SessionDetail,
+    profile: ProfileKind,
+    symbol_cfg: &SymbolNormalizeConfig,
+) -> SessionAnalysis {
     let rules = crate::video_profile::profile_by_kind(profile).postprocess_rules;
     let segments = &detail.segments;
     let ocr_blocks = &detail.ocr_blocks;
@@ -82,7 +99,7 @@ pub fn analyze_session(detail: &SessionDetail, profile: ProfileKind) -> SessionA
         Vec::new()
     };
 
-    // ── 术语表（C3）：OCR 高频 × ASR 低频（网课档案开关）──
+    // ── 术语表（C3 精化，REQ-061）：OCR 高频 × ASR 低频交叉（网课档案开关）──
     let glossary = if rules.glossary {
         let ocr_texts: Vec<&str> = ocr_blocks.iter().map(|b| b.text.as_str()).collect();
         let asr_texts: Vec<&str> = segments
@@ -90,7 +107,35 @@ pub fn analyze_session(detail: &SessionDetail, profile: ProfileKind) -> SessionA
             .filter(|s| s.source == "asr" || s.source == "fused")
             .map(|s| s.text.as_str())
             .collect();
-        glossary_candidates(&ocr_texts, &asr_texts, 3, 2)
+        // 水印词排除（REQ-059：区域稳定性+文本不变性 → 角标台标不进术语统计）
+        let watermark_inputs: Vec<WatermarkInput> = ocr_blocks
+            .iter()
+            .filter(|b| b.region == "full")
+            .map(|b| WatermarkInput {
+                text: b.text.clone(),
+                timestamp_ms: b.timestamp_ms,
+                region_key: None,
+            })
+            .collect();
+        let watermarks = detect_watermarks(&watermark_inputs, &WatermarkConfig::default());
+        // TF-IDF 文档频率（文档 = 单条 OCR 块；会话内代理——降通用词）
+        let total_docs = ocr_blocks.len().max(1);
+        let mut df: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        for b in ocr_blocks {
+            let mut seen = std::collections::HashSet::new();
+            for token in crate::glossary::tokens_of(&b.text) {
+                if seen.insert(token.clone()) {
+                    *df.entry(token).or_insert(0) += 1;
+                }
+            }
+        }
+        let opts = GlossaryOptions {
+            watermark_exclude: watermarks.texts,
+            df: Some(df),
+            total_docs,
+            ..Default::default()
+        };
+        glossary_candidates_opt(&ocr_texts, &asr_texts, 3, 2, &opts)
     } else {
         Vec::new()
     };
@@ -102,7 +147,7 @@ pub fn analyze_session(detail: &SessionDetail, profile: ProfileKind) -> SessionA
         Vec::new()
     };
 
-    // ── 口语书面化（B5）：加工版段（口播/网课档案开关；Light 档保守保真）──
+    // ── 口语书面化（B5 + REQ-060）：加工版段（口播/网课档案开关；Light 档保守保真）──
     let normalized_segments = if rules.verbal_normalize {
         let cfg = NormalizeConfig { strength: NormalizeStrength::Light };
         segments
@@ -111,7 +156,8 @@ pub fn analyze_session(detail: &SessionDetail, profile: ProfileKind) -> SessionA
             .map(|s| NormalizedSegment {
                 segment_id: s.id,
                 start_ms: s.start_ms,
-                text: normalize(&s.text, &cfg),
+                // B5 语气词/重复/标点 → REQ-060 口语符号规范化（产物层只读加工版）
+                text: normalize_symbols(&normalize(&s.text, &cfg), symbol_cfg),
             })
             .collect()
     } else {

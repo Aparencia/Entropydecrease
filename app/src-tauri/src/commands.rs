@@ -93,6 +93,12 @@ pub struct AppState {
     /// v0.5.0 模型版（REQ-050）：结构档位配置路径（公式 PP-FormulaNet/UniMERNet；
     /// 审查 H3 修复：装配路径按档位解析）
     pub structure_tier_path: std::path::PathBuf,
+    /// v0.6.0 M1（REQ-083）：UI 垃圾黑名单（内置默认 + ui_junk.json 校准合并；
+    /// 字幕源头过滤 + note_filter 出口兜底同表）
+    pub ui_junk: crate::ui_junk::UiJunkList,
+    /// v0.6.0 M1（REQ-060）：口语符号映射表（内置默认 + symbol_map.json 校准合并；
+    /// 产物层书面化管线消费）
+    pub symbol_normalize: crate::symbol_normalize::SymbolNormalizeConfig,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。

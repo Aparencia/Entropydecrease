@@ -8,7 +8,7 @@
 
 use tauri::State;
 
-use crate::analysis::{analyze_session, SessionAnalysis};
+use crate::analysis::{analyze_session_opt, SessionAnalysis};
 use crate::commands::AppState;
 use crate::video_profile::ProfileKind;
 
@@ -38,5 +38,6 @@ pub async fn analyze_session_command(
         .or_else(|| session.profile.as_deref().map(ProfileKind::parse))
         .unwrap_or(ProfileKind::Lecture);
     let detail = crate::types::SessionDetail { session, segments, ocr_blocks };
-    Ok(analyze_session(&detail, kind))
+    // REQ-060：口语符号映射表（AppState 加载；JSON 校准生效）
+    Ok(analyze_session_opt(&detail, kind, &state.symbol_normalize))
 }
