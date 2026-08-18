@@ -185,7 +185,7 @@ pub fn run_screen_worker(
                     &mut last_capture_error, &mut last_ocr_at, &mut last_full_texts, &mut stats,
                     &mut roi_tracker, &mut layout_cache, &mut frame_samples,
                     &mut last_archived_text, &mut last_archived_at, &latest_frame,
-                    image_store.as_mut(),
+                    &mut image_store,
                 );
             }
         }
@@ -243,8 +243,8 @@ fn process_frame(
     last_archived_at: &mut Option<Instant>,
     // M6/REQ-051：最新帧共享缓存（用户截图命令读取）
     latest_frame: &std::sync::Arc<std::sync::Mutex<Option<LatestCapturedFrame>>>,
-    // M6/REQ-051：会话图片存储（None=未启用归档）
-    image_store: Option<&mut crate::image_store::SessionImageStore>,
+    // M6/REQ-051：会话图片存储（None=未启用归档；mut 供区域裁剪图归档）
+    image_store: &mut Option<crate::image_store::SessionImageStore>,
 ) {
     let Some(sampler) = screen else { return };
     // 字幕区裁剪决策由 M2/REQ-037 RoiTracker 给出（播放区域 + ROI；首帧扫描期全帧）
@@ -377,7 +377,7 @@ fn process_frame(
         // 区域编排：区域级失败不阻断整体（标记 unknown），无整体失败路径——
         // 编排函数返回 (合并块, 失败区域数)；调用方计入 stats 后直用结果
         let (blocks, failed_regions) =
-            crate::region_ocr::region_ocr_blocks(&frame, engines, &layout_regions);
+            crate::region_ocr::region_ocr_blocks(&frame, engines, &layout_regions, image_store);
         stats.ocr_err += failed_regions as u64;
         stats.ocr_ok += 1;
         *last_ocr_at = Instant::now();

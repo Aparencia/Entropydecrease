@@ -122,10 +122,13 @@ pub struct RegionOcrResult {
 /// @ai-context: 每帧最多 MAX_REGIONS_PER_FRAME 区（防多区域调用失控）。
 /// @ai-context: 本函数由 live_session_frame 的全帧分支调用（M4 编排接入）；
 ///              返回 (合并块, 失败区域数)——失败计数由调用方并入 ScreenStats。
+/// @ai-context: v0.5.0 模型版（REQ-049/050）：table/formula 区域的裁剪图
+///              同步归档到会话图片库（课后精修输入；模型未启用时零成本跳过）。
 pub fn region_ocr_blocks(
     frame: &crate::capture::dxgi_capture::CapturedFrame,
     engines: &crate::engine::EnginePool,
     regions: &[LayoutRegion],
+    image_store: &mut Option<crate::image_store::SessionImageStore>,
 ) -> (Vec<crate::types::OcrBlock>, u32) {
     let scheduled = schedule_regions(regions);
     let mut merged: Vec<crate::types::OcrBlock> = Vec::new();
@@ -144,6 +147,15 @@ pub fn region_ocr_blocks(
             crop = up;
             cw = uw;
             ch = uh;
+        }
+        // v0.5.0 模型版：table/formula 区域裁剪图归档（课后精修输入；
+        // 归档失败不阻断 OCR——静默降级日志可观测）
+        if matches!(region.kind, RegionKind::Table | RegionKind::Formula) {
+            if let Some(store) = image_store.as_mut() {
+                if let Err(e) = store.save_frame(frame.timestamp_ms, &crop, cw, ch) {
+                    eprintln!("[RegionOcr] 区域裁剪图归档失败（精修将跳过该区域）: {}", e);
+                }
+            }
         }
         let Some(rgb) = bgra_to_rgb_image(&crop, cw, ch) else { continue };
         match engines.recognize_image(rgb) {

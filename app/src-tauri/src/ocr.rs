@@ -172,6 +172,30 @@ fn build_engine(models: &OcrModels, params: &OcrParams, backend: OcrBackend) -> 
 ///              并记录原因）；feature 启用后由 ort 会话构建失败兜底
 ///              （无 NVIDIA 驱动/运行时为 CPU 版时 CUDA EP 注册失败）。
 fn ort_config_for(backend: OcrBackend) -> Result<Option<OrtSessionConfig>> {
+    ort_config_for_impl(backend)
+}
+
+/// 结构引擎（版面/表格/公式）的 ORT 会话配置（v0.5.0 模型版）。
+///
+/// @ai-context: 与 OCR 同款 EP 注入（跟随 OCR backend 决策，用户确认的策略）：
+///              CUDA 优先 + CPU 兜底 + intra_threads + 图优化 All；
+///              结构模型体积大（pp-doclayout-l 129MB / PP-FormulaNet 231MB），
+///              CUDA 时设 gpu_mem_limit 上限防显存失控。
+pub fn ort_config_for_structure(backend: OcrBackend) -> Result<Option<OrtSessionConfig>> {
+    let mut cfg = ort_config_for_impl(backend)?;
+    // 结构引擎显存上限（4GB）：GPU 会话与 OCR 会话共存时防 OOM
+    if let Some(OrtExecutionProvider::CUDA { gpu_mem_limit, .. }) = cfg
+        .as_mut()
+        .and_then(|c| c.execution_providers.as_mut())
+        .and_then(|eps| eps.first_mut())
+    {
+        *gpu_mem_limit = Some(4 * 1024 * 1024 * 1024);
+    }
+    Ok(cfg)
+}
+
+/// EP/线程/图优化统一注入（OCR 与结构引擎共用）。
+fn ort_config_for_impl(backend: OcrBackend) -> Result<Option<OrtSessionConfig>> {
     match backend {
         OcrBackend::Cpu => Ok(Some(
             OrtSessionConfig::new()

@@ -34,7 +34,7 @@ pub fn handle_full_frame(
     frame_samples: &mut Vec<crate::frame_cluster::FrameSample>,
     last_archived_text: &mut Option<String>,
     last_archived_at: &mut Option<Instant>,
-    image_store: Option<&mut crate::image_store::SessionImageStore>,
+    image_store: &mut Option<crate::image_store::SessionImageStore>,
     ocr_input_hash: u64,
 ) {
     let texts: Vec<String> = blocks
@@ -56,7 +56,7 @@ pub fn handle_full_frame(
     let is_new_text = last_archived_text.as_deref() != Some(joined.as_str());
     let interval_ok = last_archived_at.is_none_or(|t| t.elapsed() >= Duration::from_secs(2));
     if is_new_text && interval_ok {
-        if let Some(store) = image_store {
+        if let Some(store) = image_store.as_mut() {
             if let Err(e) = store.save_frame(
                 frame.timestamp_ms,
                 &frame.bgraw,

@@ -27,6 +27,8 @@ mod commands_device;
 mod commands_diag;
 mod commands_images;
 mod commands_import;
+mod commands_refine;
+mod commands_refine_inner;
 mod commands_session;
 mod commands_streaming;
 mod commands_vocab;
@@ -66,9 +68,12 @@ mod model_downloader;
 mod ocr;
 mod ocr_cache;
 mod playback_region;
+mod refine;
 mod region_ocr;
 mod region_tracker;
 mod streaming_asr;
+mod structure_engine;
+mod structure_models;
 mod subtitle;
 mod subtitle_detect;
 mod subtitle_ocr;
@@ -288,6 +293,10 @@ pub fn run() {
             let ai_guardrails = std::sync::Arc::new(std::sync::Mutex::new(
                 crate::ai_guardrails::AiGuardrails::default(),
             ));
+            // v0.5.0 模型版（REQ-047/049/050）：结构模型下载器（按需下载，独立状态机）
+            let structure_downloader = crate::structure_models::StructureModelDownloader::new();
+            // 结构模型装配目录（models/structure；下载器/引擎共用）
+            let _ = std::fs::create_dir_all(model_dir.join("structure"));
             let engines = EnginePool::start(
                 asr_models(&model_dir),
                 ocr_models.clone(),
@@ -318,6 +327,7 @@ pub fn run() {
                 profile_memory,
                 data_dir,
                 ai_guardrails,
+                structure_downloader,
             });
             Ok(())
         })
@@ -409,6 +419,11 @@ pub fn run() {
             commands_ai::scan_ai_candidates,
             commands_ai::ai_enhance_mock,
             commands_ai::ai_enhance_status,
+            // 结构模型与课后精修（REQ-047/049/050 模型版：下载/状态/精修）
+            commands_refine::structure_model_download,
+            commands_refine::structure_model_status,
+            commands_refine::structure_models_dir_cmd,
+            commands_refine::refine_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
