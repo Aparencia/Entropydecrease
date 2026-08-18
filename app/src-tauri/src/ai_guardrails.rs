@@ -58,6 +58,17 @@ fn current_day() -> i64 {
         .unwrap_or(0)
 }
 
+/// 文本 hash（REQ-085：同文本段不重复送审/计费；非加密用途——去重足够）。
+///
+/// @ai-context: 缓存键 = 待送审段文本序列的 hash；同批文本再次触发复核时
+///              命中 AiHashCache 零上传（不重复计费）。
+pub fn text_hash(text: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut h);
+    h.finish()
+}
+
 /// 同图 hash 缓存（不重复上传/计费）：裁剪图 hash → 已获取的 AI 响应。
 ///
 /// @ai-context: 判定器同图多次失败（静止画面多帧）→ 命中缓存零重复上传；
