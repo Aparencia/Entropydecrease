@@ -144,7 +144,11 @@ pub fn run() {
                 .map_err(|e| format!("初始化数据库失败: {}", e))?;
 
             // 崩溃恢复：上次异常退出残留的 recording 会话标记为 failed（ADR-004）
-            let _ = db.mark_interrupted_sessions();
+            // 日志可观测：用户反馈会话"异常中断"时据此判断是否来自重启打断
+            let interrupted = db.mark_interrupted_sessions()?;
+            if interrupted > 0 {
+                eprintln!("[Db] 启动恢复：{} 个中断会话标记为 failed", interrupted);
+            }
 
             // 常驻引擎池（后台线程加载模型，不阻塞启动）
             let engines = EnginePool::start(asr_models(&model_dir), ocr_models(), OcrParams::default())

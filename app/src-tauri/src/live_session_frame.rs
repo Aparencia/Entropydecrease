@@ -73,6 +73,8 @@ pub fn run_screen_worker(
     let mut last_frame_text: Option<String> = None;
     let mut last_preview = String::new();
     let mut last_sample_at = Instant::now();
+    // 捕获失败日志节流状态（屏幕链路失效时每帧报错会刷屏，5s 一次）
+    let mut last_capture_error: Option<Instant> = None;
 
     while !stop.load(Ordering::SeqCst) {
         if last_sample_at.elapsed().as_millis() as u64 >= SAMPLE_TICK_MS {
@@ -87,6 +89,7 @@ pub fn run_screen_worker(
                 process_frame(
                     screen.as_mut(), diff, &mut voter, &mut last_frame_text, &mut last_preview,
                     &db, &engines, &app, session_id, region, &subtitle_segments, epoch,
+                    &mut last_capture_error,
                 );
             }
         }
@@ -96,6 +99,10 @@ pub fn run_screen_worker(
     if let Some(voted) = voter.flush(epoch.elapsed().as_millis() as u64) {
         persist_voted_subtitle(&db, &app, session_id, &subtitle_segments, voted);
     }
+    // 显式释放采样器（COM/DXGI 资源）——worker 退出即释放 duplication，
+    // 防多会话快速连测时泄漏累积触发 DXGI 并发上限（4/5 会话无 OCR 排查项）
+    drop(screen);
+    eprintln!("[ScreenWorker] 屏幕采样线程退出（会话 {}）", session_id);
 }
 
 /// 处理一帧屏幕采样（字幕区/全帧 OCR）。
@@ -113,6 +120,7 @@ fn process_frame(
     region: SampleRegion,
     subtitle_segments: &Mutex<Vec<SubtitleSegment>>,
     epoch: Instant,
+    last_capture_error: &mut Option<Instant>,
 ) {
     let Some(sampler) = screen else { return };
     // 字幕区只认底部 1/4：先全帧捕获再裁剪（简化双速率，字幕区帧成本可控）
@@ -125,7 +133,21 @@ fn process_frame(
         }
         None => {}
     }
-    let Ok(Some(mut frame)) = capture_result else { return };
+    let Ok(Some(mut frame)) = capture_result else {
+        // 捕获失败（DXGI/GDI 均失效）——曾静默返回导致"会话无 OCR"无法定位；
+        // 日志节流 5s（降级期间每帧失败会刷屏）
+        if let Err(e) = capture_result {
+            let now = Instant::now();
+            let should_log = last_capture_error
+                .map(|t| now.duration_since(t) >= Duration::from_secs(5))
+                .unwrap_or(true);
+            if should_log {
+                *last_capture_error = Some(now);
+                eprintln!("[ScreenWorker] 屏幕捕获失败（日志节流 5s）: {}", e);
+            }
+        }
+        return;
+    };
     // A1：帧时间戳统一为会话纪元（与音频/flush 同基准，ADR-008）
     frame.timestamp_ms = epoch.elapsed().as_millis() as u64;
     if !diff.has_changed(&frame.bgraw) {

@@ -81,7 +81,15 @@ impl ScreenCaptureSampler {
             }
             None => Rect { left: 0, top: 0, right: 0, bottom: 0 },
         };
-        let dxgi = DxgiState::create(hwnd).ok();
+        let dxgi = match DxgiState::create(hwnd) {
+            Ok(state) => Some(state),
+            Err(e) => {
+                // 创建失败降级 GDI——必须可观测（用户反馈 4/5 会话无 OCR 排查：
+                // DXGI 并发上限/远程桌面/驱动异常时此处曾静默，无法定位）
+                eprintln!("[ScreenCapture] DXGI 初始化失败，降级 GDI: {}", e);
+                None
+            }
+        };
         Ok(Self {
             dxgi,
             window_rect,
