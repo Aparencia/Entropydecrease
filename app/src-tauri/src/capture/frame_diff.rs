@@ -1,0 +1,221 @@
+//! 帧变化检测与采样调度纯函数（REQ-008，ADR-002）。
+//!
+//! @ai-context: 移植原项目 screenCapture.ts 的分块采样 hash 算法（生产验证过）：
+//!              8 块 × 60 字节采样，≥2 块变化才判定为变化（过滤 1px 鼠标微动），
+//!              无论是否判定均更新基准 hash（防亚阈值变化累积）。
+//! @ai-context: 本模块不依赖 windows 类型（纯逻辑可单测）；矩形用自有结构。
+
+/// 简单矩形（屏幕/帧坐标，与 windows RECT 同布局但不依赖系统 crate）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rect {
+    pub left: i32,
+    pub top: i32,
+    pub right: i32,
+    pub bottom: i32,
+}
+
+impl Rect {
+    pub fn width(&self) -> u32 {
+        (self.right - self.left).max(0) as u32
+    }
+    pub fn height(&self) -> u32 {
+        (self.bottom - self.top).max(0) as u32
+    }
+    /// 与另一矩形求交；不相交返回 None。
+    pub fn intersect(&self, other: &Rect) -> Option<Rect> {
+        let left = self.left.max(other.left);
+        let top = self.top.max(other.top);
+        let right = self.right.min(other.right);
+        let bottom = self.bottom.min(other.bottom);
+        if right <= left || bottom <= top {
+            None
+        } else {
+            Some(Rect { left, top, right, bottom })
+        }
+    }
+}
+
+/// 分块采样 hash 变化检测器（有状态：保存上一帧基准 hash）。
+#[derive(Debug)]
+pub struct FrameDiffDetector {
+    block_count: usize,
+    samples_per_block: usize,
+    min_changed_blocks: usize,
+    last_block_hashes: Vec<String>,
+}
+
+impl Default for FrameDiffDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl FrameDiffDetector {
+    /// 默认参数：8 块 × 60 字节采样，≥2 块变化判定（与原项目一致，适合全帧）。
+    pub fn new() -> Self {
+        Self::with_min_changed_blocks(2)
+    }
+
+    /// 指定最小变化块数：字幕区裁剪帧用 1（单行字幕翻页可能只落 1 块内，审查 M6 修复），
+    /// 全帧用 2（过滤鼠标微动）。
+    pub fn with_min_changed_blocks(min_changed_blocks: usize) -> Self {
+        Self {
+            block_count: 8,
+            samples_per_block: 60,
+            min_changed_blocks: min_changed_blocks.max(1),
+            last_block_hashes: Vec::new(),
+        }
+    }
+
+    /// 判定帧是否变化（相比上一帧），并更新基准。
+    ///
+    /// @ai-context: 首帧（无基准）视为变化；帧长变化视为变化。
+    pub fn has_changed(&mut self, frame: &[u8]) -> bool {
+        if frame.is_empty() {
+            return false;
+        }
+        let hashes = block_hashes(frame, self.block_count, self.samples_per_block);
+        let changed = if hashes.len() == self.last_block_hashes.len() {
+            hashes
+                .iter()
+                .zip(self.last_block_hashes.iter())
+                .filter(|(a, b)| a != b)
+                .take(self.min_changed_blocks)
+                .count()
+                >= self.min_changed_blocks
+        } else {
+            // 块数不一致（首帧或尺寸变化），视为变化
+            true
+        };
+        // 无论是否变化均更新基准（防亚阈值累积，与原项目一致）
+        self.last_block_hashes = hashes;
+        changed
+    }
+
+    /// 重置基准（窗口切换/尺寸变化时调用，下一帧必判变化；
+    /// 当前实时链路未调用——窗口切换预留，登记豁免）。
+    #[allow(dead_code)]
+    pub fn reset(&mut self) {
+        self.last_block_hashes.clear();
+    }
+}
+
+/// 计算帧的分块采样 hash：每块取固定步长样本拼成字符串。
+fn block_hashes(frame: &[u8], block_count: usize, samples_per_block: usize) -> Vec<String> {
+    let size = frame.len();
+    let mut hashes = Vec::with_capacity(block_count);
+    for b in 0..block_count {
+        let block_start = (size * b) / block_count;
+        let block_end = (size * (b + 1)) / block_count;
+        let block_size = block_end - block_start;
+        if block_size == 0 {
+            hashes.push(String::new());
+            continue;
+        }
+        let step = (block_size / samples_per_block).max(1);
+        let mut hash = String::with_capacity(block_size / step + 8);
+        hash.push_str(&block_size.to_string());
+        let mut i = block_start;
+        while i < block_end {
+            hash.push_str(&frame[i].to_string());
+            i += step;
+        }
+        hashes.push(hash);
+    }
+    hashes
+}
+
+/// 采样区域（双速率调度输出）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SampleRegion {
+    /// 本次跳过（未到任何间隔）
+    Skip,
+    /// 字幕区高频采样
+    Subtitle,
+    /// 全帧低频采样
+    Full,
+}
+
+/// 双速率采样调度器（ADR-002/ADR-005）。
+///
+/// @ai-context: 字幕区 1-2 fps、全帧 0.2-0.5 fps：以 tick（一次采集周期）为粒度，
+///              字幕区每 subtitle_every tick 采一次，全帧每 full_every tick 采一次；
+///              两者重叠时优先字幕区（高频覆盖低频）。
+#[derive(Debug)]
+pub struct DualRateScheduler {
+    subtitle_every: u32,
+    full_every: u32,
+    tick: u32,
+}
+
+impl DualRateScheduler {
+    /// 创建调度器。subtitle_every/full_every 为 tick 间隔（至少 1）。
+    pub fn new(subtitle_every: u32, full_every: u32) -> Self {
+        Self {
+            subtitle_every: subtitle_every.max(1),
+            full_every: full_every.max(1),
+            tick: 0,
+        }
+    }
+
+    /// 推进一个 tick 并返回本次采样区域。
+    pub fn next_region(&mut self) -> SampleRegion {
+        self.tick = self.tick.wrapping_add(1);
+        if self.tick.is_multiple_of(self.subtitle_every) {
+            SampleRegion::Subtitle
+        } else if self.tick.is_multiple_of(self.full_every) {
+            SampleRegion::Full
+        } else {
+            SampleRegion::Skip
+        }
+    }
+}
+
+/// 字幕区启发式：帧底部 1/4 高度区域（ADR-005）。
+pub fn bottom_quarter_rect(frame_width: u32, frame_height: u32) -> Option<Rect> {
+    if frame_width == 0 || frame_height == 0 {
+        return None;
+    }
+    let quarter = (frame_height / 4).max(1);
+    Some(Rect {
+        left: 0,
+        top: (frame_height - quarter) as i32,
+        right: frame_width as i32,
+        bottom: frame_height as i32,
+    })
+}
+
+/// 按裁剪区域裁剪 BGRA8 帧（区域相对帧左上角）；None 时不裁剪。
+///
+/// @ai-context: 纯函数（帧数据操作），供 DXGI/GDI 捕获层复用（ADR-002）。
+///              区域越界部分自动裁掉；裁剪后区域为空则清空帧。
+pub fn crop_frame(frame: &mut Vec<u8>, width: &mut u32, height: &mut u32, crop: Option<&Rect>) {
+    let Some(crop) = crop else { return };
+    let fw = *width as i32;
+    let fh = *height as i32;
+    let clipped = Rect { left: 0, top: 0, right: fw, bottom: fh }
+        .intersect(crop)
+        .unwrap_or(Rect { left: 0, top: 0, right: 0, bottom: 0 });
+    let cw = clipped.width() as usize;
+    let ch = clipped.height() as usize;
+    if cw == 0 || ch == 0 || frame.len() < (fw as usize) * (fh as usize) * 4 {
+        *width = 0;
+        *height = 0;
+        frame.clear();
+        return;
+    }
+    let mut out = Vec::with_capacity(cw * ch * 4);
+    for y in 0..ch {
+        let src_row = (clipped.top as usize + y) * fw as usize * 4;
+        let start = src_row + clipped.left as usize * 4;
+        out.extend_from_slice(&frame[start..start + cw * 4]);
+    }
+    *width = cw as u32;
+    *height = ch as u32;
+    *frame = out;
+}
+
+/// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。
+#[cfg(test)]
+#[path = "frame_diff_tests.rs"]
+mod tests;

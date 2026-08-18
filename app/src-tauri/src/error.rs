@@ -29,5 +29,13 @@ impl From<std::io::Error> for AppError {
     }
 }
 
+/// Windows API 错误（WASAPI/DXGI 捕获层，ADR-001/ADR-002）。
+#[cfg(target_os = "windows")]
+impl From<windows::core::Error> for AppError {
+    fn from(e: windows::core::Error) -> Self {
+        AppError::Io(e.to_string())
+    }
+}
+
 /// 应用统一 Result 别名。
 pub type Result<T> = std::result::Result<T, AppError>;

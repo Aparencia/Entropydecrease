@@ -7,6 +7,14 @@
 
 use serde::Serialize;
 
+/// 把窗口 id（i64，前端传输）转换为 HWND（Windows-only）。
+///
+/// @ai-context: list_windows 返回的 id 即窗口句柄转 i64；实时捕获时按此定向。
+#[cfg(target_os = "windows")]
+pub fn hwnd_from_i64(id: i64) -> windows::Win32::Foundation::HWND {
+    windows::Win32::Foundation::HWND(id as *mut core::ffi::c_void)
+}
+
 /// 可捕获窗口信息（返回前端）。
 ///
 /// @ai-context: id 为窗口句柄（HWND 转 i64），后续屏幕捕获按句柄定向。
