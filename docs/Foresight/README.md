@@ -17,7 +17,7 @@
 | [brainstorming-no-cloud-ai-extraction-limit.md](./brainstorming-no-cloud-ai-extraction-limit.md) | 无云端 AI 的内容提取极限头脑风暴（2026-08-18：能力分层 + 挖掘方向 + 性能预算制） |
 | [brainstorming-classroom-assistant-mechanisms.md](./brainstorming-classroom-assistant-mechanisms.md) | 课堂助手机制摘要：系统快照 + 已实现/已排期/已否决清单 + A–G 机制候选 + ROI 排序（供其他 AI 模型头脑风暴输入） |
 | [brainstorming-classroom-assistant-mechanisms-fed-guide.md](./brainstorming-classroom-assistant-mechanisms-fed-guide.md) | 机制摘要投喂指南：文档结构与使用方法说明（配套 mechanisms 文档） |
-| [brainstorming-classroom-assistant-gaps.md](./brainstorming-classroom-assistant-gaps.md) | 课堂助手缺口评估：提取 / 性能 / 算法 / 体验 四维头脑风暴（2026-08：50 项机制评估 + v0.6.0 候选组合建议） |
+| [brainstorming-classroom-assistant-gaps.md](./brainstorming-classroom-assistant-gaps.md) | 课堂助手缺口评估：提取 / 性能 / 算法 / 体验 四维头脑风暴（2026-08：50 项机制评估；§9 裁决 22 项进 v0.6.0，未选与远期项待议） |
 | [brainstorming-video-types.md（[ ] 已归档）](../archive/2026-08-19/brainstorming-video-types.md) | 视频类型 × 提取优化 × 图片配套 × 结构预处理 × 产物形态 × 补缝式 AI 头脑风暴（2026-08-18：六轮，已采纳进 v0.5.0；2026-08-19 归档） |
 | [classroom-capture-technical-review.md（[ ] 已归档）](../archive/2026-08-18/classroom-capture-technical-review.md) | 课堂采集链路技术审查（2026-08-18：四链要点核查 + 缺陷与更佳方案 + 头脑风暴项筛选；A 档七项已实施，2026-08-18 归档） |
 | roadmap.md | 有阶段性路线图时 |
