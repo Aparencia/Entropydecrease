@@ -19,6 +19,8 @@ import { VocabManager } from "../components/VocabManager";
 import { SystemStatusBadge } from "../components/SystemStatusBadge";
 // v0.5.0 M1（REQ-043）：视频类型档案混合检测（检测为：网课（可改））
 import ProfileDetector from "../components/ProfileDetector";
+// v0.5.0 模型版：结构模型设置（版面/表格/公式按需下载）
+import StructureModelSetting from "../components/StructureModelSetting";
 import type { Note, WindowInfo, StreamingModelStatus, LiveSessionStatus, DownloadProgress, DownloadStatus, ProfileKind } from "../types";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
@@ -398,6 +400,11 @@ export default function ClassroomPage() {
           {/* 词表管理（v0.4.0 M5：REQ-040：热词/替换词闭环 + 课件预热） */}
           <div style={panel}>
             <VocabManager />
+          </div>
+
+          {/* 结构分析模型（v0.5.0 模型版：版面/表格/公式按需下载，未下载自动规则版） */}
+          <div style={panel}>
+            <StructureModelSetting />
           </div>
 
           {/* 素材输入（v0.1.0：文件流水线） */}
