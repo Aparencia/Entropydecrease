@@ -94,6 +94,8 @@ pub struct NewNote {
 ///
 /// @ai-context: 会话是实时捕获链路（v0.2.0）的主产物，独立于笔记存在；
 ///              status 取 recording | finished | failed（崩溃恢复时标记）。
+/// @ai-context: v0.5.0 M1（REQ-043）：profile 记录会话生效的视频类型档案
+///              （kebab-case 标识；旧数据为 None=默认档案）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Session {
     pub id: i64,
@@ -107,6 +109,8 @@ pub struct Session {
     pub ended_at: Option<i64>,
     /// recording | finished | failed
     pub status: String,
+    /// 视频类型档案标识（kebab-case；None=未指定，走默认档案）
+    pub profile: Option<String>,
 }
 
 /// 新建会话入参。
@@ -114,6 +118,8 @@ pub struct Session {
 pub struct NewSession {
     pub title: String,
     pub source_window: Option<String>,
+    /// 视频类型档案标识（REQ-043；None=默认档案不阻断）
+    pub profile: Option<String>,
 }
 
 /// 会话转写段（ASR final 段 / 字幕段 / 融合段统一落库）。

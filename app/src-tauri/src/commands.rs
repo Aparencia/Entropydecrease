@@ -16,6 +16,7 @@ use crate::live_session::LiveSessionManager;
 use crate::model_downloader::ModelDownloader;
 use crate::streaming_asr::StreamingAsrModels;
 use crate::types::{NewNote, Note, NoteDraft, OcrBlock, TranscriptSegment};
+use crate::video_profile::ProfileMemory;
 use crate::windows::{self, CaptureWindow};
 
 /// 标题最大长度（防超长字符串污染 UI 与索引；与 commands_session 同口径）。
@@ -77,6 +78,11 @@ pub struct AppState {
     pub ocr_device_config: std::sync::Arc<std::sync::Mutex<crate::device_config::OcrDeviceConfig>>,
     /// 模型根目录（健康巡检补全 sensevoice 模型完整性检查用）
     pub model_dir: std::path::PathBuf,
+    /// v0.5.0 M1（REQ-043）：档案记忆偏好 JSON 路径（应用数据目录）
+    pub profile_memory_path: std::path::PathBuf,
+    /// v0.5.0 M1（REQ-043）：档案记忆内存态单点（锁内 read-modify-write，
+    /// 与词表同模式防 TOCTOU 文件竞争；持久化见 profile_memory_path）
+    pub profile_memory: std::sync::Arc<std::sync::Mutex<ProfileMemory>>,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。

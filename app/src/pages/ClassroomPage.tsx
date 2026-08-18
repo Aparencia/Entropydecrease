@@ -17,7 +17,9 @@ import LiveActivityPanel from "../components/LiveActivityPanel";
 import { OcrDeviceSetting } from "../components/OcrDeviceSetting";
 import { VocabManager } from "../components/VocabManager";
 import { SystemStatusBadge } from "../components/SystemStatusBadge";
-import type { Note, WindowInfo, StreamingModelStatus, LiveSessionStatus, DownloadProgress, DownloadStatus } from "../types";
+// v0.5.0 M1（REQ-043）：视频类型档案混合检测（检测为：网课（可改））
+import ProfileDetector from "../components/ProfileDetector";
+import type { Note, WindowInfo, StreamingModelStatus, LiveSessionStatus, DownloadProgress, DownloadStatus, ProfileKind } from "../types";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
 const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
@@ -170,7 +172,10 @@ export default function ClassroomPage() {
     }
   };
 
-  /** 开始实时捕获（REQ-007~012）：窗口可选（未选=全屏） */
+  // ── 视频类型档案（v0.5.0 M1，REQ-043：混合检测用户确认结果）──
+  const [profileKind, setProfileKind] = useState<ProfileKind>("lecture");
+
+  /** 开始实时捕获（REQ-007~012）：窗口可选（未选=全屏）；携带档案（REQ-043） */
   const startLive = async () => {
     setLiveError("");
     try {
@@ -179,6 +184,7 @@ export default function ClassroomPage() {
         title,
         sourceWindow: selectedWindow?.title ?? null,
         windowId: selectedWindow?.id ?? null,
+        profile: profileKind,
       });
       setLiveActive(true);
       setLiveSessionId(id);
@@ -285,6 +291,12 @@ export default function ClassroomPage() {
             onRefresh={refreshWindows}
             loading={windowsLoading}
             disabled={processing}
+          />
+
+          {/* 视频类型档案（v0.5.0 M1：REQ-043 混合检测——自动候选 + 用户确认 + 记忆偏好） */}
+          <ProfileDetector
+            windowTitle={selectedWindow?.title ?? null}
+            onProfileChange={setProfileKind}
           />
 
           {/* 实时捕获（v0.2.0：WASAPI + DXGI + 流式 ASR + 字幕 OCR） */}

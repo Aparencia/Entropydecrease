@@ -177,3 +177,75 @@ export interface OcrDeviceStatus {
   calibrating: boolean;
 }
 
+// ────────────────────────────────────────────────────────────
+// 视频类型档案领域类型（v0.5.0 M1，REQ-043，与 Rust serde 契约对齐）
+// ────────────────────────────────────────────────────────────
+
+/** 五类档案标识（Rust ProfileKind，kebab-case 序列化） */
+export type ProfileKind = "lecture" | "hands-on" | "talking-head" | "interview" | "meeting";
+
+/** 检测信号配置（Rust DetectSignals） */
+export interface DetectSignals {
+  title_keywords: string[];
+  url_keywords: string[];
+  frame_switch_range: [number, number] | null;
+  prefers_subtitle: boolean;
+  min_duration_min: number | null;
+}
+
+/** 采样预算（Rust SamplingBudget；tick=1s 采样周期） */
+export interface SamplingBudget {
+  subtitle_every: number;
+  full_every: number;
+  silent_subtitle_every: number;
+  silent_full_every: number;
+}
+
+/** 信号权重（Rust SignalWeights） */
+export interface SignalWeights {
+  subtitle_priority: boolean;
+  ocr_weight: number;
+  asr_weight: number;
+}
+
+/** 后处理规则集开关（Rust PostprocessRules） */
+export interface PostprocessRules {
+  chapter_detect: boolean;
+  step_cards: boolean;
+  verbal_normalize: boolean;
+  highlight: boolean;
+  speaker_detect: boolean;
+  glossary: boolean;
+}
+
+/** 产物模板标识（Rust ArtifactTemplate） */
+export type ArtifactTemplate =
+  | "lecture-notes"
+  | "step-cards"
+  | "summary"
+  | "dialogue-notes"
+  | "meeting-notes";
+
+/** 视频类型档案（Rust VideoProfile；snake_case 契约） */
+export interface VideoProfile {
+  kind: ProfileKind;
+  detect_signals: DetectSignals;
+  sampling_budget: SamplingBudget;
+  signal_weights: SignalWeights;
+  postprocess_rules: PostprocessRules;
+  artifact_template: ArtifactTemplate;
+}
+
+/** 检测候选（Rust ProfileCandidate） */
+export interface ProfileCandidate {
+  kind: ProfileKind;
+  score: number;
+}
+
+/** 混合检测结果（Rust DetectResult） */
+export interface DetectResult {
+  candidates: ProfileCandidate[];
+  needs_confirmation: boolean;
+  memory_hit: ProfileKind | null;
+}
+

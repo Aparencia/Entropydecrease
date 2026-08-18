@@ -94,6 +94,8 @@ pub fn run_screen_worker(
     app: tauri::AppHandle,
     session_id: i64,
     subtitle_segments: Arc<Mutex<Vec<SubtitleSegment>>>,
+    // v0.5.0 M1（REQ-043）：视频类型档案（None=默认档案，采样档零回归）
+    profile: Option<crate::video_profile::ProfileKind>,
 ) {
     let mut screen = match ScreenCaptureSampler::new(hwnd.map(crate::windows::hwnd_from_i64)) {
         Ok(s) => {
@@ -106,8 +108,24 @@ pub fn run_screen_worker(
             None
         }
     };
+    // REQ-043：档案驱动采样预算——按档案查表（默认档案 = Lecture 现状档，零回归）；
+    // 实操档案全帧高频（操作画面价值高），口播/访谈/会议全帧极低频（画面几乎无信息）
+    let budget = profile
+        .map(crate::video_profile::profile_by_kind)
+        .map(|p| p.sampling_budget)
+        .unwrap_or(crate::video_profile::SamplingBudget {
+            subtitle_every: 2,
+            full_every: 5,
+            silent_subtitle_every: 4,
+            silent_full_every: 2,
+        });
     // 字幕区变化阈值=1（单行字幕翻页只落 1 块，审查 M6 修复），全帧=2（过滤鼠标微动）
-    let mut scheduler = DualRateScheduler::new(2, 5);
+    let mut scheduler = DualRateScheduler::from_budget(
+        budget.subtitle_every,
+        budget.full_every,
+        budget.silent_subtitle_every,
+        budget.silent_full_every,
+    );
     let mut subtitle_diff = FrameDiffDetector::with_min_changed_blocks(1);
     let mut full_diff = FrameDiffDetector::new();
     let mut voter = SubtitleVoter::new();

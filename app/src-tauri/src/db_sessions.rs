@@ -27,8 +27,8 @@ impl Db {
         let now = unix_seconds();
         let conn = self.conn.lock().expect("db lock poisoned");
         conn.execute(
-            "INSERT INTO sessions (title, source_window, started_at, status) VALUES (?1, ?2, ?3, ?4)",
-            params![new.title, new.source_window, now, SESSION_STATUS_RECORDING],
+            "INSERT INTO sessions (title, source_window, started_at, status, profile) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![new.title, new.source_window, now, SESSION_STATUS_RECORDING, new.profile],
         )?;
         Ok(Session {
             id: conn.last_insert_rowid(),
@@ -37,6 +37,7 @@ impl Db {
             started_at: now,
             ended_at: None,
             status: SESSION_STATUS_RECORDING.to_string(),
+            profile: new.profile.clone(),
         })
     }
 
@@ -58,7 +59,7 @@ impl Db {
     pub fn list_sessions(&self, keyword: Option<&str>, limit: u64, offset: u64) -> Result<Vec<Session>> {
         let conn = self.conn.lock().expect("db lock poisoned");
         let mut sql = String::from(
-            "SELECT id, title, source_window, started_at, ended_at, status FROM sessions",
+            "SELECT id, title, source_window, started_at, ended_at, status, profile FROM sessions",
         );
         let mut args: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         if let Some(kw) = keyword {
@@ -84,7 +85,7 @@ impl Db {
     pub fn get_session(&self, id: i64) -> Result<Option<Session>> {
         let conn = self.conn.lock().expect("db lock poisoned");
         let mut stmt = conn.prepare(
-            "SELECT id, title, source_window, started_at, ended_at, status FROM sessions WHERE id = ?1",
+            "SELECT id, title, source_window, started_at, ended_at, status, profile FROM sessions WHERE id = ?1",
         )?;
         let mut rows = stmt.query_map(params![id], row_to_session)?;
         match rows.next() {

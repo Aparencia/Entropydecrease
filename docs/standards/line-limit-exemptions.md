@@ -13,5 +13,6 @@
 | app/src-tauri/src/vocab.rs | ~373 | 词表域（存储/纠错/候选提取/n-gram 分词）内聚；分词纯逻辑与存储同域便于单测 | 若再增长：collect_tokens/split_runs 拆至 vocab_tokens.rs |
 | app/src-tauri/src/db_sessions.rs | ~303 | 会话仓储（会话/段/OCR 块/建议查询）；SQL 与行映射内聚 | 若再增长：recent_ocr_texts 等建议查询拆至 db_sessions_queries.rs |
 | app/src/pages/ClassroomPage.tsx | ~467 | 装配层页面：左栏配置区（窗口选择/实时捕获/文件素材/视频导入/OCR 设备/词表）+ 右栏内容切换（活动面板/笔记预览/说明书） | v0.4.x 将左栏实时捕获面板拆出 LiveCaptureCard（状态与事件监听下沉） |
+| app/src-tauri/src/video_profile.rs | ~325 | v0.5.0 M1（REQ-043）：档案域（类型/检测投票/记忆偏好/JSON IO）内聚；档案常量数据已拆至 video_profile_data.rs | 若再增长：检测投票与记忆偏好拆至 video_profile_detect.rs |
 
 > 已拆分：dxgi_capture.rs（原 ~333 行）于 v0.4.0 M0（TD-033，提交 2a88b25）将 DxgiState 拆至 dxgi_state.rs——现 dxgi_capture.rs ~176 行、dxgi_state.rs ~219 行，均回归 ≤300 行，无需登记。

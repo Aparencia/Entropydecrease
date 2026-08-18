@@ -52,6 +52,10 @@ impl Default for FrameDiffDetector {
 
 impl FrameDiffDetector {
     /// 默认参数：8 块 × 60 字节采样，≥2 块变化判定（与原项目一致，适合全帧）。
+    ///
+    /// @ai-context: v0.5.0 M1 起生产路径改走 from_budget（档案驱动采样），
+    ///              new 保留为默认档构造入口（测试与外部调用用，登记豁免 dead_code）。
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::with_min_changed_blocks(2)
     }
@@ -168,6 +172,10 @@ pub struct DualRateScheduler {
 impl DualRateScheduler {
     /// 创建调度器。subtitle_every/full_every 为语音活跃期 tick 间隔（至少 1）；
     /// 静音期参数固定为字幕区 4 tick / 全帧 2 tick（P3 简化版）。
+    ///
+    /// @ai-context: v0.5.0 M1 起生产路径改走 from_budget（档案驱动采样），
+    ///              new 保留为默认档构造入口（测试与外部调用用，登记豁免 dead_code）。
+    #[allow(dead_code)]
     pub fn new(subtitle_every: u32, full_every: u32) -> Self {
         let full_every = full_every.max(1);
         Self {
@@ -188,6 +196,28 @@ impl DualRateScheduler {
         self.silent_subtitle_every = subtitle_every.max(1);
         self.silent_full_every = full_every.max(1);
         self
+    }
+
+    /// v0.5.0 M1（REQ-043）：按档案采样预算全参数构造（语音期/静音期档位一次给定）。
+    ///
+    /// @ai-context: 口播/访谈/会议档案全帧极低频（full_every 大），实操档案全帧高频
+    ///              （关键帧差异化采样）；degraded 档仍取 full_every×2（降级不归零）。
+    pub fn from_budget(
+        subtitle_every: u32,
+        full_every: u32,
+        silent_subtitle_every: u32,
+        silent_full_every: u32,
+    ) -> Self {
+        let full_every = full_every.max(1);
+        Self {
+            subtitle_every: subtitle_every.max(1),
+            full_every,
+            silent_subtitle_every: silent_subtitle_every.max(1),
+            silent_full_every: silent_full_every.max(1),
+            degraded_full_every: full_every * 2,
+            subtitle_tick: 0,
+            full_tick: 0,
+        }
     }
 
     /// M4：高负载降级档全帧间隔（默认 full_every×2 = 0.1fps 封顶；可配）。

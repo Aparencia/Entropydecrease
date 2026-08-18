@@ -17,16 +17,18 @@ use crate::types::{
 /// 会话列表单页上限。
 const LIST_LIMIT_MAX: u64 = 200;
 
-/// 新建会话（REQ-010）。
+/// 新建会话（REQ-010；v0.5.0 M1/REQ-043：可指定视频类型档案）。
 #[tauri::command]
 pub async fn create_session(
     state: State<'_, AppState>,
     title: String,
     source_window: Option<String>,
+    profile: Option<String>,
 ) -> Result<Session, String> {
     let new = NewSession {
         title: normalize_title(title, "未命名会话"),
         source_window: source_window.map(|s| s.chars().take(TITLE_MAX_CHARS).collect()),
+        profile: profile.map(|p| p.chars().take(30).collect()),
     };
     state.db.create_session(&new).map_err(|e| e.to_string())
 }

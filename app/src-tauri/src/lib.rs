@@ -18,6 +18,7 @@ mod commands_import;
 mod commands_session;
 mod commands_streaming;
 mod commands_vocab;
+mod commands_video;
 mod concat;
 mod db;
 mod db_sessions;
@@ -48,6 +49,8 @@ mod subtitle;
 mod subtitle_detect;
 mod subtitle_ocr;
 mod types;
+mod video_profile;
+mod video_profile_data;
 mod vocab;
 mod windows;
 
@@ -249,6 +252,11 @@ pub fn run() {
             let vocab = std::sync::Arc::new(std::sync::Mutex::new(crate::vocab::VocabStore::load(
                 &vocab_path,
             )));
+            // v0.5.0 M1（REQ-043）：档案记忆偏好（混合检测的用户确认记忆；JSON 持久化）
+            let profile_memory_path = data_dir.join("video_profile_memory.json");
+            let profile_memory = std::sync::Arc::new(std::sync::Mutex::new(
+                crate::video_profile::ProfileMemory::load(&profile_memory_path),
+            ));
             let engines = EnginePool::start(
                 asr_models(&model_dir),
                 ocr_models.clone(),
@@ -275,6 +283,8 @@ pub fn run() {
                 vocab,
                 vocab_path,
                 model_dir,
+                profile_memory_path,
+                profile_memory,
             });
             Ok(())
         })
@@ -341,6 +351,12 @@ pub fn run() {
             commands_vocab::vocab_remove_replacement,
             commands_vocab::vocab_extract_courseware,
             commands_vocab::vocab_suggest_from_ocr,
+            // 视频类型档案（REQ-043，v0.5.0 M1：混合检测 + 记忆偏好 + 档案导出）
+            commands_video::video_profiles,
+            commands_video::detect_video_profile,
+            commands_video::remember_video_profile,
+            commands_video::video_profile_memory,
+            commands_video::video_profile_by_kind,
             // 健康巡检与诊断（REQ-042，M7：F2/F3/G2）
             commands_diag::health_status,
             commands_diag::diag_snapshot

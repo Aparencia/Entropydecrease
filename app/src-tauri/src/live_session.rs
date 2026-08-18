@@ -94,6 +94,8 @@ pub struct LiveSessionParams {
     pub fusion: FusionTracker,
     /// M5/REQ-040：共享词表（热词注入流式识别）
     pub vocab: std::sync::Arc<std::sync::Mutex<crate::vocab::VocabStore>>,
+    /// v0.5.0 M1（REQ-043）：视频类型档案（None=默认档案，采样按 Lecture 现状档零回归）
+    pub profile: Option<crate::video_profile::ProfileKind>,
     /// 前端事件推送（live:asr-partial / live:subtitle / live:error / live:status / session:*）
     pub app: tauri::AppHandle,
 }
@@ -144,6 +146,8 @@ impl LiveSessionManager {
             .create_session(&crate::types::NewSession {
                 title: params.title.clone(),
                 source_window: params.source_window.clone(),
+                // REQ-043：档案标识落库（None=默认档案）
+                profile: params.profile.map(|k| k.as_str().to_string()),
             })
             .map_err(|e| AppError::Db(e.to_string()))?
             .id;
@@ -283,6 +287,7 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
                 worker_app,
                 session_id,
                 worker_segments,
+                params.profile,
             )
         }) {
         Ok(h) => Some(h),

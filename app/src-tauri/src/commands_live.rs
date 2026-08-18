@@ -23,12 +23,14 @@ pub struct LiveSessionStatus {
 /// @param title - 会话标题（空串回退窗口名/默认名）
 /// @param sourceWindow - 目标窗口标题（笔记命名与检索）
 /// @param windowId - 目标窗口句柄（i64，None=全屏）
+/// @param profile - 视频类型档案标识（REQ-043，kebab-case；None=自动检测结果）
 #[tauri::command]
 pub async fn start_live_session(
     state: State<'_, AppState>,
     title: String,
     source_window: Option<String>,
     window_id: Option<i64>,
+    profile: Option<String>,
 ) -> Result<i64, String> {
     // 防御性校验：标题归一化（与 create_session 同口径）
     let trimmed = title.trim().to_string();
@@ -52,6 +54,8 @@ pub async fn start_live_session(
         streaming_models: state.streaming_models.clone(),
         fusion: state.live_session.fusion(),
         vocab: state.vocab.clone(),
+        // REQ-043：档案标识（非法值回退 Lecture 默认档案，不阻断）
+        profile: profile.map(|p| crate::video_profile::ProfileKind::parse(&p)),
         app: state.app.clone(),
     };
     state.live_session.start(params).map_err(|e| e.to_string())

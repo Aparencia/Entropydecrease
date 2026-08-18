@@ -17,6 +17,7 @@ pub fn row_to_session(row: &Row<'_>) -> rusqlite::Result<Session> {
         started_at: row.get(3)?,
         ended_at: row.get(4)?,
         status: row.get(5)?,
+        profile: row.get(6)?,
     })
 }
 

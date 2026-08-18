@@ -13,7 +13,7 @@ fn mem_db() -> Db {
 }
 
 fn new_session(title: &str) -> NewSession {
-    NewSession { title: title.into(), source_window: Some("网课窗口".into()) }
+    NewSession { title: title.into(), source_window: Some("网课窗口".into()), profile: None }
 }
 
 fn segment(session_id: i64, start_ms: u64, end_ms: u64, text: &str) -> NewSessionSegment {
@@ -63,7 +63,7 @@ fn list_sessions_orders_by_started_desc_and_filters_keyword() {
     let db = mem_db();
     let a = db.create_session(&new_session("物理课")).unwrap();
     let b = db.create_session(&new_session("数学课")).unwrap();
-    let c = db.create_session(&NewSession { title: "随笔".into(), source_window: None }).unwrap();
+    let c = db.create_session(&NewSession { title: "随笔".into(), source_window: None, profile: None }).unwrap();
     // Act
     let all = db.list_sessions(None, 10, 0).expect("list all");
     let matched = db.list_sessions(Some("物理"), 10, 0).expect("list by keyword");
@@ -83,7 +83,7 @@ fn list_sessions_paginates() {
     // Arrange
     let db = mem_db();
     for i in 0..5 {
-        db.create_session(&NewSession { title: format!("课{}", i), source_window: None }).unwrap();
+        db.create_session(&NewSession { title: format!("课{}", i), source_window: None, profile: None }).unwrap();
     }
     // Act
     let page1 = db.list_sessions(None, 2, 0).unwrap();

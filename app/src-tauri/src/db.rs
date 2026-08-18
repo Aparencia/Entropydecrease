@@ -46,7 +46,9 @@ impl Db {
                 source_window TEXT,
                 started_at INTEGER NOT NULL,
                 ended_at INTEGER,
-                status TEXT NOT NULL DEFAULT 'recording'
+                status TEXT NOT NULL DEFAULT 'recording',
+                -- v0.5.0 M1（REQ-043）：视频类型档案标识（kebab-case；NULL=默认档案）
+                profile TEXT
             );
             -- 会话转写段（ASR final / 字幕 / 融合统一落库）
             CREATE TABLE IF NOT EXISTS session_segments (
@@ -70,6 +72,8 @@ impl Db {
             );
             CREATE INDEX IF NOT EXISTS idx_ocr_blocks_session ON session_ocr_blocks(session_id, timestamp_ms);",
         )?;
+        // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）
+        ensure_column(&conn, "sessions", "profile", "ALTER TABLE sessions ADD COLUMN profile TEXT")?;
         Ok(Self { conn: Arc::new(Mutex::new(conn)) })
     }
 
@@ -159,6 +163,24 @@ fn row_to_note(row: &rusqlite::Row<'_>) -> rusqlite::Result<Note> {
         created_at: row.get(4)?,
         updated_at: row.get(5)?,
     })
+}
+
+/// 幂等列迁移：表已含该列则跳过，否则执行 add_sql（兼容旧库升级）。
+///
+/// @ai-context: CREATE TABLE IF NOT EXISTS 只对新库生效——既有数据库缺列时必须
+///              ALTER 补齐（v0.5.0 M1：sessions.profile）；列存在性经 PRAGMA
+///              table_info 检查，重复启动幂等。
+fn ensure_column(conn: &Connection, table: &str, column: &str, add_sql: &str) -> Result<()> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({})", table))?;
+    let exists = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .iter()
+        .any(|name| name == column);
+    if !exists {
+        conn.execute_batch(add_sql)?;
+    }
+    Ok(())
 }
 
 /// 当前 Unix 秒。
