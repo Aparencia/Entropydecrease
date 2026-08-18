@@ -83,6 +83,8 @@ pub struct AppState {
     /// v0.5.0 M1（REQ-043）：档案记忆内存态单点（锁内 read-modify-write，
     /// 与词表同模式防 TOCTOU 文件竞争；持久化见 profile_memory_path）
     pub profile_memory: std::sync::Arc<std::sync::Mutex<ProfileMemory>>,
+    /// v0.5.0 M6（REQ-051）：应用数据目录（会话图片存储基目录）
+    pub data_dir: std::path::PathBuf,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。

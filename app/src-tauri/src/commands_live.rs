@@ -56,6 +56,8 @@ pub async fn start_live_session(
         vocab: state.vocab.clone(),
         // REQ-043：档案标识（非法值回退 Lecture 默认档案，不阻断）
         profile: profile.map(|p| crate::video_profile::ProfileKind::parse(&p)),
+        // REQ-051：图片存储基目录（会话图片归档）
+        data_dir: state.data_dir.clone(),
         app: state.app.clone(),
     };
     state.live_session.start(params).map_err(|e| e.to_string())

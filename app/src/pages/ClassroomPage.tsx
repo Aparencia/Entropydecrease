@@ -133,6 +133,20 @@ export default function ClassroomPage() {
     return () => clearTimeout(timer);
   }, [stopping]);
 
+  // v0.5.0 M6（REQ-051）：用户截图快捷键 Ctrl+Shift+S（最高权重关键图信号）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === "S" || e.key === "s")) {
+        e.preventDefault();
+        void invoke<string>("save_user_screenshot")
+          .then(() => setStatus("📷 截图已保存（关键图候选置顶）"))
+          .catch((err) => setLiveError(`截图失败: ${err}`));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // 启动时检查流式模型状态 + 活动会话恢复 + 下载状态恢复
   // TD-016：invoke 失败不再静默——展示错误并允许重试（此前按钮永久禁用且无提示）
   useEffect(() => {

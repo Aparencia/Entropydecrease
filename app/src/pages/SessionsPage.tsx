@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import ImageGallery from "../components/ImageGallery";
 import type { Session, SessionDetail, Note } from "../types";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
@@ -231,6 +232,10 @@ export default function SessionsPage() {
                 </div>
               ))}
             </div>
+
+            {/* 参考图集（v0.5.0 M6：REQ-051 三层图结构——画廊 + 缩略图走廊） */}
+            <h3 style={{ fontSize: 13, margin: "16px 0 6px" }}>参考图集</h3>
+            <ImageGallery sessionId={detail.session.id} />
           </>
         )}
       </div>

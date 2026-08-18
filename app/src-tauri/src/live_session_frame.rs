@@ -76,6 +76,15 @@ struct ScreenStats {
     last_log_at: Option<Instant>,
 }
 
+/// 最新捕获帧快照（REQ-051 M6：用户截图命令读取；纯数据跨线程共享）。
+#[derive(Clone)]
+pub struct LatestCapturedFrame {
+    pub timestamp_ms: u64,
+    pub bgraw: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
 /// 屏幕采样线程入口（TD-026 修复：OCR 从会话线程移出，音频消费不再被阻塞）。
 ///
 /// @ai-context: ScreenCaptureSampler 持 COM 对象（非 Send），在本线程内创建与使用，
@@ -96,6 +105,10 @@ pub fn run_screen_worker(
     subtitle_segments: Arc<Mutex<Vec<SubtitleSegment>>>,
     // v0.5.0 M1（REQ-043）：视频类型档案（None=默认档案，采样档零回归）
     profile: Option<crate::video_profile::ProfileKind>,
+    // v0.5.0 M6（REQ-051）：会话图片存储（关键帧归档；None=未启用）
+    mut image_store: Option<crate::image_store::SessionImageStore>,
+    // v0.5.0 M6（REQ-051）：最新帧共享缓存（用户截图命令读取）
+    latest_frame: std::sync::Arc<std::sync::Mutex<Option<LatestCapturedFrame>>>,
 ) {
     let mut screen = match ScreenCaptureSampler::new(hwnd.map(crate::windows::hwnd_from_i64)) {
         Ok(s) => {
@@ -142,6 +155,11 @@ pub fn run_screen_worker(
     let mut roi_tracker = crate::region_tracker::RoiTracker::new(0, 0);
     // M3/REQ-047：版面缓存（事件帧触发——同版面复用分区，变化才重分析）
     let mut layout_cache = crate::layout_cache::LayoutCache::new();
+    // M6/REQ-051：关键帧样本缓冲（全帧分支收集，停止时投票产出关键图候选）
+    let mut frame_samples: Vec<crate::frame_cluster::FrameSample> = Vec::new();
+    // M6/REQ-051：关键帧归档状态（新文本 + 间隔触发存图）
+    let mut last_archived_text: Option<String> = None;
+    let mut last_archived_at: Option<Instant> = None;
     // M4/REQ-039 P8：高负载自动降级（CPU 占用采样 → 全帧降频，保 ASR 主链路）
     let mut load_monitor = crate::load_monitor::LoadMonitor::new();
     let mut last_load_check_at = Instant::now();
@@ -174,7 +192,9 @@ pub fn run_screen_worker(
                     screen.as_mut(), diff, &mut voter, &mut last_frame_text, &mut last_preview,
                     &db, &engines, &app, session_id, region, &subtitle_segments, epoch,
                     &mut last_capture_error, &mut last_ocr_at, &mut last_full_texts, &mut stats,
-                    &mut roi_tracker, &mut layout_cache,
+                    &mut roi_tracker, &mut layout_cache, &mut frame_samples,
+                    &mut last_archived_text, &mut last_archived_at, &latest_frame,
+                    image_store.as_mut(),
                 );
             }
         }
@@ -194,6 +214,23 @@ pub fn run_screen_worker(
     // 停止：冲刷未定稿的最后一组字幕（否则末句字幕丢失，T2 语义要求）
     if let Some(voted) = voter.flush(epoch.elapsed().as_millis() as u64) {
         persist_voted_subtitle(&db, &app, session_id, &subtitle_segments, voted);
+    }
+    // M6/REQ-051：关键帧投票（课后精修：多信号筛选 → 关键图候选；产物层 M7 消费）
+    if !frame_samples.is_empty() {
+        let votes = crate::frame_cluster::vote_key_frames(&frame_samples, &[]);
+        let top: Vec<crate::frame_cluster::KeyFrameCandidate> = votes
+            .iter()
+            .take(5)
+            .cloned()
+            .collect();
+        if !top.is_empty() {
+            let summary: Vec<String> = top
+                .iter()
+                .map(|c| format!("{}ms({})", c.timestamp_ms, c.reasons.join("+")))
+                .collect();
+            eprintln!("[ScreenWorker] 会话 {} 关键图候选: {}", session_id, summary.join(", "));
+            let _ = app.emit("session:keyframes", top);
+        }
     }
     // 显式释放采样器（COM/DXGI 资源）——worker 退出即释放 duplication，
     // 防多会话快速连测时泄漏累积触发 DXGI 并发上限（4/5 会话无 OCR 排查项）
@@ -223,6 +260,15 @@ fn process_frame(
     roi_tracker: &mut crate::region_tracker::RoiTracker,
     // M3/REQ-047：版面缓存（事件帧触发——同版面复用，变化才重分析）
     layout_cache: &mut crate::layout_cache::LayoutCache,
+    // M6/REQ-051：关键帧样本缓冲（全帧分支收集，停止时投票）
+    frame_samples: &mut Vec<crate::frame_cluster::FrameSample>,
+    // M6/REQ-051：关键帧归档状态（新文本 + 间隔触发存图）
+    last_archived_text: &mut Option<String>,
+    last_archived_at: &mut Option<Instant>,
+    // M6/REQ-051：最新帧共享缓存（用户截图命令读取）
+    latest_frame: &std::sync::Arc<std::sync::Mutex<Option<LatestCapturedFrame>>>,
+    // M6/REQ-051：会话图片存储（None=未启用归档）
+    image_store: Option<&mut crate::image_store::SessionImageStore>,
 ) {
     let Some(sampler) = screen else { return };
     // 字幕区裁剪决策由 M2/REQ-037 RoiTracker 给出（播放区域 + ROI；首帧扫描期全帧）
@@ -258,6 +304,17 @@ fn process_frame(
         return;
     };
     stats.sampled += 1;
+    // M6/REQ-051：更新最新帧共享缓存（用户截图命令读取；全帧分支保留原帧）
+    if region != SampleRegion::Subtitle {
+        if let Ok(mut guard) = latest_frame.lock() {
+            *guard = Some(LatestCapturedFrame {
+                timestamp_ms: frame.timestamp_ms,
+                bgraw: frame.bgraw.clone(),
+                width: frame.width,
+                height: frame.height,
+            });
+        }
+    }
     // M2/REQ-037：播放区域周期重扫（5s 节流）与窗口尺寸自适应（须在全帧数据上执行）
     roi_tracker.resize(frame.width, frame.height);
     roi_tracker.refresh_playback_region(&frame.bgraw, frame.width, frame.height);
@@ -336,6 +393,8 @@ fn process_frame(
 
     // TD-025：BGRA8 帧 → 内存 RgbImage 直送 OCR（不再写磁盘临时 BMP，杜绝崩溃残留）
     let Some(rgb) = bgra_to_rgb_image(&frame.bgraw, frame.width, frame.height) else { return };
+    // M6/REQ-051：OCR 输入图 aHash（关键帧样本去重/聚类输入）
+    let ocr_input_hash = crate::ocr_cache::average_hash(&rgb);
     // M4/REQ-048：全帧分支优先分区域 OCR（版面区域 → 区域裁剪 → 识别 → 坐标还原）；
     // 无区域（空白帧/分析失败）回退整帧直跑（现状行为，回退链）
     if !is_subtitle && !layout_regions.is_empty() {
@@ -343,7 +402,10 @@ fn process_frame(
             Ok(blocks) => {
                 stats.ocr_ok += 1;
                 *last_ocr_at = Instant::now();
-                handle_full_frame(&frame, &blocks, db, app, session_id, last_full_texts);
+                handle_full_frame(
+                    &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
+                    last_archived_text, last_archived_at, image_store, ocr_input_hash,
+                );
             }
             Err(e) => {
                 // 区域编排失败 → 回退整帧直跑（低置信区域已标记 unknown，不丢内容）
@@ -353,7 +415,10 @@ fn process_frame(
                     Ok(blocks) => {
                         stats.ocr_ok += 1;
                         *last_ocr_at = Instant::now();
-                        handle_full_frame(&frame, &blocks, db, app, session_id, last_full_texts);
+                        handle_full_frame(
+                            &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
+                            last_archived_text, last_archived_at, image_store, ocr_input_hash,
+                        );
                     }
                     Err(e2) => {
                         stats.ocr_err += 1;
@@ -378,7 +443,10 @@ fn process_frame(
                         &frame, &blocks, voter, last_frame_text, last_preview, db, app, session_id, subtitle_segments,
                     );
                 } else {
-                    handle_full_frame(&frame, &blocks, db, app, session_id, last_full_texts);
+                    handle_full_frame(
+                        &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
+                        last_archived_text, last_archived_at, image_store, ocr_input_hash,
+                    );
                 }
             }
             Err(e) => {
@@ -553,6 +621,9 @@ fn persist_voted_subtitle(
 /// @ai-context: 去重（与导入链路 same_texts 同口径）：强制 OCR 兜底会使静止画面
 ///              每 15s 重复识别——文本集合与上次完全一致时跳过落库，防要点列表刷屏。
 /// @ai-context: 落库成功即 emit live:ocr（前端实时画面流，简要单行卡片）。
+/// @ai-context: M6/REQ-051：关键帧样本收集（停止时投票）+ 新画面文本归档存图
+///              （三层图结构参考图集数据源；预算上限由 image_store 控制）。
+#[allow(clippy::too_many_arguments)]
 fn handle_full_frame(
     frame: &CapturedFrame,
     blocks: &[crate::types::OcrBlock],
@@ -560,12 +631,45 @@ fn handle_full_frame(
     app: &tauri::AppHandle,
     session_id: i64,
     last_texts: &mut Vec<String>,
+    frame_samples: &mut Vec<crate::frame_cluster::FrameSample>,
+    last_archived_text: &mut Option<String>,
+    last_archived_at: &mut Option<Instant>,
+    image_store: Option<&mut crate::image_store::SessionImageStore>,
+    ocr_input_hash: u64,
 ) {
     let texts: Vec<String> = blocks
         .iter()
         .filter(|b| b.score >= 0.5 && !b.text.trim().is_empty())
         .map(|b| b.text.clone())
         .collect();
+    // M6：关键帧样本收集（全帧分支每次 OCR 成功记录；停止时投票器消费）
+    if !texts.is_empty() {
+        frame_samples.push(crate::frame_cluster::FrameSample {
+            timestamp_ms: frame.timestamp_ms,
+            ahash: ocr_input_hash,
+            ocr_text: Some(texts.join(" ")),
+            change_magnitude: 0.0,
+        });
+    }
+    // M6：新画面文本 → 归档存图（参考图集；同文本不重复归档 + 2s 防抖）
+    let joined = texts.join(" ");
+    let is_new_text = last_archived_text.as_deref() != Some(joined.as_str());
+    let interval_ok = last_archived_at.is_none_or(|t| t.elapsed() >= Duration::from_secs(2));
+    if is_new_text && interval_ok {
+        if let Some(store) = image_store {
+            if let Err(e) = store.save_frame(
+                frame.timestamp_ms,
+                &frame.bgraw,
+                frame.width,
+                frame.height,
+            ) {
+                // 归档失败不阻断 OCR 主链路（预算满/IO 错误静默降级，日志可观测）
+                eprintln!("[ScreenWorker] 关键帧归档失败: {}", e);
+            }
+        }
+        *last_archived_text = Some(joined);
+        *last_archived_at = Some(Instant::now());
+    }
     if crate::import_frame::same_texts(&texts, last_texts) {
         return;
     }

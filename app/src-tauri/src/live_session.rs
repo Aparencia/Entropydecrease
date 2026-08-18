@@ -96,6 +96,8 @@ pub struct LiveSessionParams {
     pub vocab: std::sync::Arc<std::sync::Mutex<crate::vocab::VocabStore>>,
     /// v0.5.0 M1（REQ-043）：视频类型档案（None=默认档案，采样按 Lecture 现状档零回归）
     pub profile: Option<crate::video_profile::ProfileKind>,
+    /// v0.5.0 M6（REQ-051）：应用数据目录（会话图片存储基目录）
+    pub data_dir: std::path::PathBuf,
     /// 前端事件推送（live:asr-partial / live:subtitle / live:error / live:status / session:*）
     pub app: tauri::AppHandle,
 }
@@ -111,6 +113,8 @@ struct ActiveSession {
 pub struct LiveSessionManager {
     active: Arc<Mutex<Option<ActiveSession>>>,
     fusion: FusionTracker,
+    /// M6/REQ-051：最新帧共享缓存（用户截图命令读取；会话进行中由屏幕 worker 写入）
+    latest_frame: Arc<Mutex<Option<crate::live_session_frame::LatestCapturedFrame>>>,
 }
 
 impl Default for LiveSessionManager {
@@ -121,18 +125,31 @@ impl Default for LiveSessionManager {
 
 impl Clone for LiveSessionManager {
     fn clone(&self) -> Self {
-        Self { active: self.active.clone(), fusion: self.fusion.clone() }
+        Self {
+            active: self.active.clone(),
+            fusion: self.fusion.clone(),
+            latest_frame: self.latest_frame.clone(),
+        }
     }
 }
 
 impl LiveSessionManager {
     pub fn new() -> Self {
-        Self { active: Arc::new(Mutex::new(None)), fusion: FusionTracker::default() }
+        Self {
+            active: Arc::new(Mutex::new(None)),
+            fusion: FusionTracker::default(),
+            latest_frame: Arc::new(Mutex::new(None)),
+        }
     }
 
     /// 融合状态跟踪句柄（command 层组装 LiveSessionParams 时获取）。
     pub fn fusion(&self) -> FusionTracker {
         self.fusion.clone()
+    }
+
+    /// 最新捕获帧快照（用户截图命令读取；无活动会话/未捕获到帧为 None）。
+    pub fn latest_frame(&self) -> Option<crate::live_session_frame::LatestCapturedFrame> {
+        self.latest_frame.lock().ok().and_then(|g| g.clone())
     }
 
     /// 启动实时会话：建会话 + 起编排线程，返回会话 id。
@@ -154,9 +171,11 @@ impl LiveSessionManager {
 
         let stop_flag = Arc::new(AtomicBool::new(false));
         let flag = stop_flag.clone();
+        // M6/REQ-051：最新帧共享缓存由 manager 持有（截图命令读取）
+        let latest_frame = self.latest_frame.clone();
         let thread = std::thread::Builder::new()
             .name("entropy-live-session".into())
-            .spawn(move || run_session(flag, params, session_id))
+            .spawn(move || run_session(flag, params, session_id, latest_frame))
             .map_err(|e| AppError::Io(format!("启动会话线程失败: {}", e)))?;
         *guard = Some(ActiveSession { stop_flag, thread, session_id });
         Ok(session_id)
@@ -200,7 +219,13 @@ impl LiveSessionManager {
 }
 
 /// 会话线程主循环。
-fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64) {
+fn run_session(
+    stop: Arc<AtomicBool>,
+    params: LiveSessionParams,
+    session_id: i64,
+    // M6/REQ-051：最新帧共享缓存（屏幕 worker 写入，manager 持同一实例）
+    latest_frame: Arc<Mutex<Option<crate::live_session_frame::LatestCapturedFrame>>>,
+) {
     let db = params.db.clone();
     let engines = params.engines.clone();
     // A1：会话纪元——音频/屏幕/flush 三处时间戳的唯一基准（ADR-008）
@@ -274,6 +299,14 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
     // worker 需独立持有 Db/AppHandle（主循环仍要使用，先 clone 再 move 进闭包）
     let worker_db = db.clone();
     let worker_app = params.app.clone();
+    // M6/REQ-051：会话图片存储（关键帧归档；创建失败不阻断屏幕链路）
+    let image_store = crate::image_store::SessionImageStore::new(
+        params.data_dir.join("session-images").join(session_id.to_string()),
+    )
+    .map_err(|e| eprintln!("[LiveSession] 会话图片库初始化失败（图集不可用）: {}", e))
+    .ok();
+    // M6/REQ-051：最新帧共享缓存（用户截图命令读取）
+    let worker_latest = latest_frame.clone();
     let screen_worker = match std::thread::Builder::new()
         .name("entropy-screen-worker".into())
         .spawn(move || {
@@ -288,6 +321,8 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
                 session_id,
                 worker_segments,
                 params.profile,
+                image_store,
+                worker_latest,
             )
         }) {
         Ok(h) => Some(h),

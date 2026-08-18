@@ -17,6 +17,7 @@ mod commands_live;
 mod commands_analysis;
 mod commands_device;
 mod commands_diag;
+mod commands_images;
 mod commands_import;
 mod commands_session;
 mod commands_streaming;
@@ -34,11 +35,13 @@ mod engine;
 mod error;
 mod ffmpeg;
 mod formula_reconstruct;
+mod frame_cluster;
 mod frame_features;
 mod fusion;
 mod glossary;
 mod health_check;
 mod highlight_detect;
+mod image_store;
 mod import;
 mod import_frame;
 mod layout_analyzer;
@@ -298,6 +301,7 @@ pub fn run() {
                 model_dir,
                 profile_memory_path,
                 profile_memory,
+                data_dir,
             });
             Ok(())
         })
@@ -374,7 +378,13 @@ pub fn run() {
             commands_analysis::analyze_session_command,
             // 健康巡检与诊断（REQ-042，M7：F2/F3/G2）
             commands_diag::health_status,
-            commands_diag::diag_snapshot
+            commands_diag::diag_snapshot,
+            // 会话图片配套（REQ-051，v0.5.0 M6：图集/走廊/删除）
+            commands_images::list_session_images,
+            commands_images::delete_session_image,
+            commands_images::delete_session_images_all,
+            commands_images::save_user_screenshot,
+            commands_images::session_images_base_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
