@@ -80,6 +80,12 @@ impl SubtitleVoter {
                 None
             }
             Some((first, _)) => {
+                // M3/REQ-038 快速通道：同文本帧精确 hash 短路——跳过字符级
+                // levenshtein 计算（静止字幕每帧重复，此分支是热路径）
+                if trimmed == first {
+                    self.samples.push((trimmed.to_string(), now_ms));
+                    return None;
+                }
                 if levenshtein(trimmed, first) <= sample_join_limit(first) {
                     self.samples.push((trimmed.to_string(), now_ms));
                     None

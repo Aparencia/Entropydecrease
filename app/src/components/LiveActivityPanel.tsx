@@ -19,6 +19,16 @@ interface TranscriptLine {
   text: string;
 }
 
+/**
+ * 识别中行（M3/REQ-038 流式先行 + 静默修正）：
+ * committed=false = partial 上屏（灰色斜体"识别中"）；
+ * committed=true = SenseVoice 重打分定稿（原位转黑，无闪烁无跳动）。
+ */
+interface PartialLine {
+  text: string;
+  committed: boolean;
+}
+
 /** 画面要点行 */
 interface OcrLine {
   id: number;
@@ -45,7 +55,7 @@ export default function LiveActivityPanel() {
   // 状态机（简要徽标文本）
   const [phase, setPhase] = useState<string>("正在初始化…");
   const [transcripts, setTranscripts] = useState<TranscriptLine[]>([]);
-  const [partial, setPartial] = useState("");
+  const [partial, setPartial] = useState<PartialLine | null>(null);
   const [ocrLines, setOcrLines] = useState<OcrLine[]>([]);
   // 累计计数（列表截断后仍保留）
   const countsRef = useRef({ subtitle: 0, asr: 0, ocr: 0 });
@@ -60,6 +70,19 @@ export default function LiveActivityPanel() {
   }, []);
 
   useEffect(() => {
+    // M3/REQ-038 沉淀：已定稿（committed）的识别中行并入定稿列表（计数+时间戳）。
+    // 定义在 effect 内以闭包捕获最新 state 更新函数；settle 只做追加不读旧列表。
+    const settleAsrLine = (text: string, time: number) => {
+      setTranscripts((prev) => {
+        const next = [...prev, { id: nextId(), time, source: "asr" as const, text }];
+        return next.length > MAX_KEPT ? next.slice(next.length - MAX_KEPT) : next;
+      });
+      countsRef.current.asr += 1;
+      setCounts({ ...countsRef.current });
+    };
+    // 最近一次 final 的时间戳（committed 行沉淀时使用；TD-043 后端纪元）
+    let lastFinalTime = 0;
+
     const unlisteners: Promise<() => void>[] = [
       // 状态机：live:status 的 recording 由 ClassroomPage 判定显示时机，此处只映射文案
       listen<string>("live:status", (e) => {
@@ -67,26 +90,38 @@ export default function LiveActivityPanel() {
           setPhase("● 采集中");
           startedAtRef.current = startedAtRef.current ?? Date.now();
         } else if (e.payload === "stopped") {
+          // 停止：把已定稿未沉淀的行并入列表（防末句丢失，T2 语义）
+          setPartial((prev) => {
+            if (prev?.committed && prev.text.trim()) {
+              settleAsrLine(prev.text, lastFinalTime);
+            }
+            return null;
+          });
           setPhase("⏹ 已停止");
         } else if (e.payload === "failed") {
           setPhase("⚠ 采集异常");
         }
       }),
       listen<string>("live:asr-partial", (e) => {
-        setPartial(e.payload);
+        // 新 partial 到来：若上一行已定稿未沉淀 → 先沉淀再显示新识别行
+        setPartial((prev) => {
+          if (prev?.committed && prev.text.trim()) {
+            settleAsrLine(prev.text, lastFinalTime);
+          }
+          return { text: e.payload, committed: false };
+        });
       }),
       listen<AsrFinalEvent>("live:asr-final", (e) => {
-        setPartial("");
-        setTranscripts((prev) => {
-          // TD-043：时间戳取后端会话纪元（与时间轴一致）
-          const next = [
-            ...prev,
-            { id: nextId(), time: e.payload.timestampMs, source: "asr" as const, text: e.payload.text },
-          ];
-          return next.length > MAX_KEPT ? next.slice(next.length - MAX_KEPT) : next;
+        lastFinalTime = e.payload.timestampMs;
+        // M3/REQ-038 静默修正：partial 行原位灰→黑（无闪烁无跳动）；
+        // 无 partial（快速断句）时直接沉淀为定稿行
+        setPartial((prev) => {
+          if (prev && prev.text.trim()) {
+            return { text: e.payload.text, committed: true };
+          }
+          settleAsrLine(e.payload.text, e.payload.timestampMs);
+          return null;
         });
-        countsRef.current.asr += 1;
-        setCounts({ ...countsRef.current });
       }),
       listen<SubtitleEvent>("live:subtitle", (e) => {
         setTranscripts((prev) => {
@@ -204,10 +239,29 @@ export default function LiveActivityPanel() {
               </p>
             )}
             {partial && (
-              <div style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "baseline",
+                  fontSize: 13,
+                  color: partial.committed ? "#374151" : "#9ca3af",
+                  fontStyle: partial.committed ? "normal" : "italic",
+                }}
+              >
                 <span style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{fmtTime(elapsedMs)}</span>
-                <span style={{ width: 8, height: 8, borderRadius: 4, flexShrink: 0, alignSelf: "center", background: "#d1d5db" }} />
-                <span>{partial}…</span>
+                <span
+                  title={partial.committed ? "已定稿" : "识别中"}
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    flexShrink: 0,
+                    alignSelf: "center",
+                    background: partial.committed ? "#9ca3af" : "#d1d5db",
+                  }}
+                />
+                <span>{partial.text}{partial.committed ? "" : "…"}</span>
               </div>
             )}
           </div>

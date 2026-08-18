@@ -50,6 +50,20 @@ fn vote_empty_input_returns_empty() {
 // ── 投票器（有状态）──────────────────────────────────
 
 #[test]
+fn identical_text_hash_shortcut_accumulates_samples() {
+    // M3/REQ-038：同文本帧走精确 hash 短路（跳过 levenshtein）——行为等价：
+    // 累积样本、不产出、切换时定稿
+    let mut voter = SubtitleVoter::new();
+    assert_eq!(voter.observe("同一句话", 0), None);
+    // 10 帧完全相同文本（含前后空格差异——trim 后命中短路）
+    for i in 1..=10 {
+        assert_eq!(voter.observe(" 同一句话 ", i * 100), None);
+    }
+    let finalized = voter.observe("切换", 2000).expect("finalized");
+    assert_eq!(finalized, voted(0, 2000, "同一句话"));
+}
+
+#[test]
 fn same_subtitle_accumulates_and_finalizes_on_change() {
     // Arrange
     let mut voter = SubtitleVoter::new();
