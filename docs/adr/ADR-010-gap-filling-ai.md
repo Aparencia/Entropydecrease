@@ -88,6 +88,6 @@
 
 ## 参考
 
-- [头脑风暴：视频类型 × 提取优化（轮 6）](../Foresight/brainstorming-video-types.md)
+- [头脑风暴：视频类型 × 提取优化（轮 6，[ ] 已归档）](../archive/2026-08-19/brainstorming-video-types.md)
 - [头脑风暴：无云端 AI 的内容提取极限](../Foresight/brainstorming-no-cloud-ai-extraction-limit.md)
 - [v0.5.0 版本计划](../versions/v0.5.0.md)（M8 补缝前置 / 七、远期规划）

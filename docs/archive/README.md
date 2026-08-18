@@ -61,3 +61,4 @@ docs/archive/
 | 2026-08-18（八轮） | v0.3.0 全部 REQ 代码交付 + 实时活动面板（REQ-035）；审查闭环：TD-034~039/041~043 全部偿还（8d0ff95/1c95c32/7af0da8）；TD-040 deliberate 有意不修；累计已偿 44 笔 | TD-033（P2，carried）+ TD-040（P2，deliberate carried），共 2 笔 |
 | 2026-08-18（十轮） | v0.4.0 发布（21 提交，版本 0.4.0 + CHANGELOG）+ 新增代码六维审查：机制整合版 v2 归档；审查确认 critical×1/high×5/medium×5（登记 TD-044~055 open）+ low 观察 12 项；TD-033 已偿核对（2a88b25） | TD-040（carried deliberate）+ TD-044~055（open 12 笔），共 13 笔 |
 | 2026-08-18（十一轮） | 审查问题全量修复：TD-044~055 全部 closed（模式契约/心跳/ROI 缩放/静音尺度/词表即时/PPTX 安全/调度独立计数等 12 项 + low 12 项）；245 单测全绿 + 前端构建通过 | TD-040（P2，deliberate carried），共 1 笔 |
+| 2026-08-19 | 结构模型版落地（版面/表格/公式模型 + 按需下载 + 课后精修）+ 新增代码审查：H1-H3/M1/M2/M4/L1/L3 全部即修（c5eae08 + 65c950a）；brainstorming-video-types.md 归档（[ ] 已归档，六轮头脑风暴全部实施完成）；累计已偿 53 笔 | TD-040（P2，deliberate carried），共 1 笔 |
