@@ -120,9 +120,10 @@ impl Db {
         })
     }
 
-    /// 批量追加转写段（单事务，100 段/批控制写入频率——ADR-004 §4）。
+    /// 批量追加转写段（单事务全量插入——TD-013 修正：注释曾写"100 段/批"，与实际单事务全量不符）。
     ///
-    /// @ai-context: 供 M7 实时捕获链路使用（当前阶段尚无调用方，登记豁免 dead_code）。
+    /// @ai-context: 供 M7 实时捕获链路使用（当前阶段尚无调用方，登记豁免 dead_code）；
+    ///              批次大小由调用方控制，本函数不自动分片。
     #[allow(dead_code)]
     pub fn add_segments_batch(&self, items: &[NewSessionSegment]) -> Result<usize> {
         if items.is_empty() {
