@@ -5,7 +5,11 @@
 
 | 编号 | 标题 | 状态 | 日期 |
 |------|------|------|------|
-| ADR-001 | （示例：你的第一个决策） | 提议 | YYYY-MM-DD |
+| ADR-001 | [WASAPI 端点环回音频捕获方案](./ADR-001-wasapi-loopback-capture.md) | 已接受 | 2026-08-18 |
+| ADR-002 | [DXGI 屏幕捕获与关键帧变化检测方案](./ADR-002-dxgi-screen-capture.md) | 已接受 | 2026-08-18 |
+| ADR-003 | [流式 ASR 引擎与模型分发方案](./ADR-003-streaming-asr-architecture.md) | 已接受 | 2026-08-18 |
+| ADR-004 | [会话管理数据模型方案](./ADR-004-session-data-model.md) | 已接受 | 2026-08-18 |
+| ADR-005 | [字幕 OCR 与双源转写融合方案](./ADR-005-subtitle-ocr-fusion.md) | 已接受 | 2026-08-18 |
 
 ## 编号规则
 
