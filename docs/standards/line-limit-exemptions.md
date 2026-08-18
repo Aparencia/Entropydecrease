@@ -18,5 +18,6 @@
 | app/src-tauri/src/artifact_templates.rs | ~329 | v0.5.0 M7（REQ-052）：五档案模板函数（讲义/步骤卡/摘要/对话纪要/会议纪要）内聚于同一模板域，各模板共享原料注入签名 | 若再增长：会议/访谈模板拆至 artifact_templates_meeting.rs |
 | app/src-tauri/src/db.rs | ~306 | v0.5.0 M9 增长：notes + sessions 三表 schema + ensure_column 幂等迁移（v0.5.0 M1/M4 两列迁移）+ 行映射；SQL 与迁移内聚 | 若再增长：ensure_column 迁移拆至 db_migrations.rs |
 | app/src-tauri/src/live_session_frame.rs | ~500 | v0.5.0 M9 硬拆后：屏幕 worker 编排（采样调度/ROI/版面缓存/分区域 OCR 接入）内聚；关键帧与融合重写已拆至 live_keyframes.rs，分区域 OCR 在 region_ocr.rs | 若再增长：process_frame 帧处理拆至 live_frame_process.rs |
+| app/src-tauri/src/commands_refine_inner.rs | ~320 | v0.5.0 模型版：课后精修编排（清单构建/降级决策/引擎懒加载/逐候选识别/产物回填/HTML→MD 转换）内聚于精修执行域 | 若再增长：html_to_markdown 拆至 html_table_md.rs |
 
 > 已拆分：dxgi_capture.rs（原 ~333 行）于 v0.4.0 M0（TD-033，提交 2a88b25）将 DxgiState 拆至 dxgi_state.rs——现 dxgi_capture.rs ~176 行、dxgi_state.rs ~219 行，均回归 ≤300 行，无需登记。
