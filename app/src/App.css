@@ -114,3 +114,10 @@ button {
     background-color: #0f0f0f69;
   }
 }
+
+/* v0.5.0 M5/REQ-053：低置信样式（黄色虚线下划线）*/
+.ed-low-confidence {
+  border-bottom: 2px dashed #eab308;
+  background: #fefce8;
+}
+
