@@ -118,5 +118,5 @@ v0.3.0 需要打开"视频文件导入"第二入口（REQ-015：ffmpeg 提取音
 ## 参考
 
 - [课堂采集链路技术审查（[ ] 已归档）](../archive/2026-08-18/classroom-capture-technical-review.md)
-- [头脑风暴：无云端 AI 的内容提取极限](./Foresight/brainstorming-no-cloud-ai-extraction-limit.md)（T2/P3/P4）
+- [头脑风暴：无云端 AI 的内容提取极限](../Foresight/brainstorming-no-cloud-ai-extraction-limit.md)（T2/P3/P4）
 - [v0.3.0 版本计划](../versions/v0.3.0.md)

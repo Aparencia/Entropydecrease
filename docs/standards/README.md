@@ -8,6 +8,7 @@
 |------|------|:---:|:---:|
 | [git-workflow.md](./git-workflow.md) | Git 分支/提交规范（Conventional Commits） | ✅ 必用 | ✅ 必用 |
 | [ai-coding.md](./ai-coding.md) | AI 协作方式 + 代码生成七维度硬性标准 | ✅ 必用 | ✅ 必用 |
+| [line-limit-exemptions.md](./line-limit-exemptions.md) | 行数豁免登记（>300 行文件清单，配合 ai-coding） | ✅ | ✅ |
 | [documentation.md](./documentation.md) | 文档编写规范（含归档机制） | ✅ 必用 | ✅ 必用 |
 | [testing.md](./testing.md) | 测试策略与规范 | ✅ 必用 | ✅ 必用 |
 | [code-review.md](./code-review.md) | 代码审查流程 | ⬜ 可选 | ✅ |
