@@ -113,6 +113,8 @@ fn recognize_region(
                 text: block.text,
                 score: block.score,
                 region: region.to_string(),
+                // 导入链路整帧直跑（无版面分析），区域标注留空（兼容旧数据口径）
+                region_kind: None,
             }) {
                 eprintln!("[Import] OCR 块落库失败: {}", e);
             }

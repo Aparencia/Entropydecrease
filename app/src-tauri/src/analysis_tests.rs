@@ -37,6 +37,7 @@ fn detail(segments: Vec<(&str, u64, u64)>, ocr: Vec<(&str, u64)>) -> SessionDeta
             text: text.into(),
             score: 0.9,
             region: "full".into(),
+            region_kind: None,
         })
         .collect();
     SessionDetail { session, segments, ocr_blocks }
@@ -137,8 +138,8 @@ fn build_chapter_signals_detects_frame_switch_approximation() {
         SessionSegment { id: 1, session_id: 1, start_ms: 40000, end_ms: 41000, text: "第二章内容".into(), source: "asr".into(), confidence: None },
     ];
     let ocr = vec![
-        SessionOcrBlock { id: 0, session_id: 1, timestamp_ms: 100, text: "PPT-第一章".into(), score: 0.9, region: "full".into() },
-        SessionOcrBlock { id: 1, session_id: 1, timestamp_ms: 40100, text: "PPT-第二章".into(), score: 0.9, region: "full".into() },
+        SessionOcrBlock { id: 0, session_id: 1, timestamp_ms: 100, text: "PPT-第一章".into(), score: 0.9, region: "full".into(), region_kind: None },
+        SessionOcrBlock { id: 1, session_id: 1, timestamp_ms: 40100, text: "PPT-第二章".into(), score: 0.9, region: "full".into(), region_kind: None },
     ];
     // Act
     let signals = build_chapter_signals(&segments, &ocr);

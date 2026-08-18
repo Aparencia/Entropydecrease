@@ -51,6 +51,7 @@ mod model_downloader;
 mod ocr;
 mod ocr_cache;
 mod playback_region;
+mod region_ocr;
 mod region_tracker;
 mod streaming_asr;
 mod subtitle;

@@ -68,12 +68,21 @@ impl Db {
                 timestamp_ms INTEGER NOT NULL,
                 text TEXT NOT NULL,
                 score REAL NOT NULL,
-                region TEXT NOT NULL DEFAULT 'full'
+                region TEXT NOT NULL DEFAULT 'full',
+                -- v0.5.0 M4（REQ-048）：来源版面区域类型（kebab-case；NULL=整帧直跑）
+                region_kind TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_ocr_blocks_session ON session_ocr_blocks(session_id, timestamp_ms);",
         )?;
         // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）
         ensure_column(&conn, "sessions", "profile", "ALTER TABLE sessions ADD COLUMN profile TEXT")?;
+        // v0.5.0 M4（REQ-048）：旧库迁移——ocr_blocks 表补 region_kind 列
+        ensure_column(
+            &conn,
+            "session_ocr_blocks",
+            "region_kind",
+            "ALTER TABLE session_ocr_blocks ADD COLUMN region_kind TEXT",
+        )?;
         Ok(Self { conn: Arc::new(Mutex::new(conn)) })
     }
 

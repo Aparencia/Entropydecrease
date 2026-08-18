@@ -135,6 +135,8 @@ impl OcrEngine {
                                     h: y2 - y,
                                 })
                             },
+                            // M4/REQ-048：区域类型由编排层回填（引擎层未知）
+                            region_kind: None,
                         })
                     })
                     .filter(|b| !b.text.is_empty())

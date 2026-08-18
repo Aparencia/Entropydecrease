@@ -126,6 +126,8 @@ pub async fn add_session_ocr_block(
         text: text.chars().take(10_000).collect(),
         score: score.clamp(0.0, 1.0),
         region: if region == "subtitle" { "subtitle" } else { "full" }.to_string(),
+        // 外部追加无版面上下文，区域标注留空
+        region_kind: None,
     };
     state.db.add_ocr_block(&new).map(|b| b.id).map_err(|e| e.to_string())
 }
@@ -169,6 +171,7 @@ pub async fn session_to_note(
             text: b.text,
             score: b.score,
             bbox: None,
+            region_kind: b.region_kind,
         })
         .collect();
 

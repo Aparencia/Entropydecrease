@@ -139,7 +139,7 @@ mod tests {
     use super::*;
 
     fn block(text: &str) -> OcrBlock {
-        OcrBlock { timestamp_ms: None, text: text.to_string(), score: 0.9, bbox: None }
+        OcrBlock { timestamp_ms: None, text: text.to_string(), score: 0.9, bbox: None, region_kind: None }
     }
 
     /// 左右分屏（左=left 灰、右=right 灰）——空间不对称内容

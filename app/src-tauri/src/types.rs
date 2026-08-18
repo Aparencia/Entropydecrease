@@ -34,6 +34,8 @@ pub struct TextBox {
 /// 单个 OCR 识别出的画面文本块（来自一张关键帧）。
 ///
 /// @ai-context: timestamp_ms 为该关键帧相对会话起点的时间戳；离线文件模式下可为 None。
+/// @ai-context: v0.5.0 M4（REQ-048）：region_kind 标注该块来源版面区域类型
+///              （text/table/formula/code/unknown；整帧直跑为 None——兼容旧数据）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OcrBlock {
     /// 关联关键帧的时间戳（毫秒），离线导入时可能缺失
@@ -44,6 +46,8 @@ pub struct OcrBlock {
     pub score: f32,
     /// 检测框（像素坐标，相对 OCR 输入图；无 bbox 时为 None）
     pub bbox: Option<TextBox>,
+    /// 来源版面区域类型（kebab-case；None=整帧直跑/旧数据）
+    pub region_kind: Option<String>,
 }
 
 /// 本地拼接产出的笔记初稿。
@@ -153,6 +157,8 @@ pub struct NewSessionSegment {
 /// 会话 OCR 块（关键帧画面文字 / 字幕区文字）。
 ///
 /// @ai-context: region 取 subtitle | full（ADR-005：字幕区高频采样 vs 全帧低频采样）。
+/// @ai-context: v0.5.0 M4（REQ-048）：region_kind 为分区域 OCR 的版面类型标注
+///              （text/table/formula/code/unknown；旧数据/整帧直跑为 None）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SessionOcrBlock {
     pub id: i64,
@@ -164,6 +170,8 @@ pub struct SessionOcrBlock {
     pub score: f32,
     /// subtitle | full
     pub region: String,
+    /// 来源版面区域类型（kebab-case；None=整帧直跑/旧数据）
+    pub region_kind: Option<String>,
 }
 
 /// 新增会话 OCR 块入参。
@@ -174,6 +182,8 @@ pub struct NewSessionOcrBlock {
     pub text: String,
     pub score: f32,
     pub region: String,
+    /// 来源版面区域类型（kebab-case；None=整帧直跑）
+    pub region_kind: Option<String>,
 }
 
 /// 会话详情（详情页一次取全：会话 + 转写段 + OCR 块）。

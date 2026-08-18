@@ -134,7 +134,7 @@ mod tests {
         TranscriptSegment { start_ms: start, end_ms: end, text: text.to_string() }
     }
     fn ocr(ts: Option<u64>, text: &str, score: f32) -> OcrBlock {
-        OcrBlock { timestamp_ms: ts, text: text.to_string(), score, bbox: None }
+        OcrBlock { timestamp_ms: ts, text: text.to_string(), score, bbox: None, region_kind: None }
     }
 
     #[test]

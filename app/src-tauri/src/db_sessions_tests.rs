@@ -106,6 +106,7 @@ fn delete_session_cascades_children() {
         text: "板书".into(),
         score: 0.9,
         region: "full".into(),
+        region_kind: None,
     })
     .unwrap();
     // Act
@@ -130,6 +131,7 @@ fn recent_ocr_texts_returns_latest_sessions_only() {
             text: text.into(),
             score: 0.9,
             region: "full".into(),
+            region_kind: None,
         })
         .unwrap();
     }

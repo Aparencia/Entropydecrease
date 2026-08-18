@@ -165,9 +165,9 @@ impl Db {
     pub fn add_ocr_block(&self, new: &NewSessionOcrBlock) -> Result<SessionOcrBlock> {
         let conn = self.conn.lock().expect("db lock poisoned");
         conn.execute(
-            "INSERT INTO session_ocr_blocks (session_id, timestamp_ms, text, score, region)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![new.session_id, new.timestamp_ms, new.text, new.score, new.region],
+            "INSERT INTO session_ocr_blocks (session_id, timestamp_ms, text, score, region, region_kind)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![new.session_id, new.timestamp_ms, new.text, new.score, new.region, new.region_kind],
         )?;
         Ok(SessionOcrBlock {
             id: conn.last_insert_rowid(),
@@ -176,6 +176,7 @@ impl Db {
             text: new.text.clone(),
             score: new.score,
             region: new.region.clone(),
+            region_kind: new.region_kind.clone(),
         })
     }
 
@@ -254,7 +255,7 @@ impl Db {
     pub fn list_ocr_blocks(&self, session_id: i64) -> Result<Vec<SessionOcrBlock>> {
         let conn = self.conn.lock().expect("db lock poisoned");
         let mut stmt = conn.prepare(
-            "SELECT id, session_id, timestamp_ms, text, score, region
+            "SELECT id, session_id, timestamp_ms, text, score, region, region_kind
              FROM session_ocr_blocks WHERE session_id = ?1 ORDER BY timestamp_ms ASC",
         )?;
         let rows = stmt.query_map(params![session_id], row_to_ocr_block)?;

@@ -315,48 +315,146 @@ fn process_frame(
         }
     }
 
-    // M3/REQ-047：版面分析（事件帧触发）——全帧分支在 OCR 前做区域分类，
-    // 结果经缓存复用（同版面零重分析）；诊断日志可观测区域构成（静默失败可见化）
+    // M3/REQ-047 + M4/REQ-048：版面分析（事件帧触发）——全帧分支做区域分类，
+    // 结果经缓存复用（同版面零重分析）；区域存在时走分区域 OCR（M4）
+    let mut layout_regions: Vec<crate::layout_analyzer::LayoutRegion> = Vec::new();
     if !is_subtitle {
         if let Some(grid) = crate::frame_features::grid_from_bgra(&frame.bgraw, frame.width, frame.height) {
             let (regions, reused) =
                 crate::layout_cache::analyze_or_reuse(layout_cache, &grid, frame.timestamp_ms);
             if !reused && !regions.is_empty() {
-                // 新版面：分类构成（开发期日志；M4 起区域列表驱动分区域 OCR）
+                // 新版面：分类构成（开发期日志；区域列表驱动分区域 OCR）
                 let summary: Vec<String> = regions
                     .iter()
                     .map(|r| format!("{:?}@{}x{}+{}+{}", r.kind, r.w, r.h, r.x, r.y))
                     .collect();
                 eprintln!("[Layout] 会话 {} 版面区域: {}", session_id, summary.join(", "));
             }
+            layout_regions = regions;
         }
     }
 
     // TD-025：BGRA8 帧 → 内存 RgbImage 直送 OCR（不再写磁盘临时 BMP，杜绝崩溃残留）
     let Some(rgb) = bgra_to_rgb_image(&frame.bgraw, frame.width, frame.height) else { return };
-    match engines.recognize_image(rgb) {
-        Ok(blocks) => {
-            stats.ocr_ok += 1;
-            // 成功识别即刷新 OCR 时刻（无论是否产出文本——防漏检兜底周期基准）
-            *last_ocr_at = Instant::now();
-            if is_subtitle {
-                // M2/REQ-037：bbox 回喂 ROI 跟踪器（锁定/失效判定；
-                // 裁剪图坐标系 + 原点平移 + TD-046 缩放比反算）
-                let boxes: Vec<crate::types::TextBox> =
-                    blocks.iter().filter_map(|b| b.bbox).collect();
-                roi_tracker.feed_ocr(&boxes, crop_origin, ocr_input_scale);
-                handle_subtitle_frame(
-                    &frame, &blocks, voter, last_frame_text, last_preview, db, app, session_id, subtitle_segments,
-                );
-            } else {
+    // M4/REQ-048：全帧分支优先分区域 OCR（版面区域 → 区域裁剪 → 识别 → 坐标还原）；
+    // 无区域（空白帧/分析失败）回退整帧直跑（现状行为，回退链）
+    if !is_subtitle && !layout_regions.is_empty() {
+        match region_ocr_blocks(&frame, engines, &layout_regions, stats) {
+            Ok(blocks) => {
+                stats.ocr_ok += 1;
+                *last_ocr_at = Instant::now();
                 handle_full_frame(&frame, &blocks, db, app, session_id, last_full_texts);
             }
+            Err(e) => {
+                // 区域编排失败 → 回退整帧直跑（低置信区域已标记 unknown，不丢内容）
+                stats.ocr_err += 1;
+                eprintln!("[ScreenWorker] 分区域 OCR 失败，回退整帧: {}", e);
+                match engines.recognize_image(rgb) {
+                    Ok(blocks) => {
+                        stats.ocr_ok += 1;
+                        *last_ocr_at = Instant::now();
+                        handle_full_frame(&frame, &blocks, db, app, session_id, last_full_texts);
+                    }
+                    Err(e2) => {
+                        stats.ocr_err += 1;
+                        eprintln!("[ScreenWorker] OCR 识别失败（下帧重试）: {}", e2)
+                    }
+                }
+            }
         }
-        Err(e) => {
-            stats.ocr_err += 1;
-            eprintln!("[ScreenWorker] OCR 识别失败（下帧重试）: {}", e)
+    } else {
+        match engines.recognize_image(rgb) {
+            Ok(blocks) => {
+                stats.ocr_ok += 1;
+                // 成功识别即刷新 OCR 时刻（无论是否产出文本——防漏检兜底周期基准）
+                *last_ocr_at = Instant::now();
+                if is_subtitle {
+                    // M2/REQ-037：bbox 回喂 ROI 跟踪器（锁定/失效判定；
+                    // 裁剪图坐标系 + 原点平移 + TD-046 缩放比反算）
+                    let boxes: Vec<crate::types::TextBox> =
+                        blocks.iter().filter_map(|b| b.bbox).collect();
+                    roi_tracker.feed_ocr(&boxes, crop_origin, ocr_input_scale);
+                    handle_subtitle_frame(
+                        &frame, &blocks, voter, last_frame_text, last_preview, db, app, session_id, subtitle_segments,
+                    );
+                } else {
+                    handle_full_frame(&frame, &blocks, db, app, session_id, last_full_texts);
+                }
+            }
+            Err(e) => {
+                stats.ocr_err += 1;
+                eprintln!("[ScreenWorker] OCR 识别失败（下帧重试）: {}", e)
+            }
         }
     }
+}
+
+/// 分区域 OCR（REQ-048 编排器）：区域调度（权重+封顶）→ 逐区域裁剪 →
+/// 区域级预处理（放大）→ 识别 → 坐标还原 + region_kind 标注 → 合并。
+///
+/// @ai-context: 区域识别失败不阻断整体（该区域标记 unknown，低置信 → 图片归档候选）；
+///              坐标还原（map_to_frame）为纯函数单测覆盖（region_ocr_tests）。
+/// @ai-context: 每帧最多 MAX_REGIONS_PER_FRAME 区（防多区域调用失控）。
+fn region_ocr_blocks(
+    frame: &CapturedFrame,
+    engines: &EnginePool,
+    regions: &[crate::layout_analyzer::LayoutRegion],
+    stats: &mut ScreenStats,
+) -> crate::error::Result<Vec<crate::types::OcrBlock>> {
+    let scheduled = crate::region_ocr::schedule_regions(regions);
+    let mut merged: Vec<crate::types::OcrBlock> = Vec::new();
+    for region in scheduled {
+        let Some(spec) = crate::region_ocr::crop_spec(region, frame.width, frame.height) else {
+            continue;
+        };
+        // 内存裁剪（含边距）→ 区域级预处理（表格/公式放大）
+        let Some((mut crop, mut cw, mut ch)) =
+            crate::region_ocr::crop_region_bgra(&frame.bgraw, frame.width, frame.height, &spec)
+        else {
+            continue;
+        };
+        if let Some((up, uw, uh)) = crate::region_ocr::upscale_bgra(&crop, cw, ch, spec.scale) {
+            crop = up;
+            cw = uw;
+            ch = uh;
+        }
+        let Some(rgb) = bgra_to_rgb_image(&crop, cw, ch) else { continue };
+        match engines.recognize_image(rgb) {
+            Ok(blocks) => {
+                for mut b in blocks {
+                    // 坐标还原：裁剪图坐标 → 原帧坐标（bbox 相对 OCR 输入图）
+                    if let Some(bbox) = b.bbox {
+                        let origin = crate::capture::frame_diff::Rect {
+                            left: region.x as i32,
+                            top: region.y as i32,
+                            right: (region.x + region.w) as i32,
+                            bottom: (region.y + region.h) as i32,
+                        };
+                        let mapped = crate::region_ocr::map_to_frame(
+                            crate::region_ocr::FrameCoord { x: bbox.x as i32, y: bbox.y as i32 },
+                            &origin,
+                            spec.scale,
+                        );
+                        b.bbox = Some(crate::types::TextBox {
+                            x: mapped.x as f32,
+                            y: mapped.y as f32,
+                            w: bbox.w / spec.scale,
+                            h: bbox.h / spec.scale,
+                        });
+                    }
+                    // 区域类型标注（M4：产物/补缝判定器消费）
+                    b.region_kind = Some(region.kind.as_str().to_string());
+                    merged.push(b);
+                }
+            }
+            Err(e) => {
+                // 区域级失败：标记 unknown 不阻断整体（诚实降级）
+                stats.ocr_err += 1;
+                eprintln!("[ScreenWorker] 区域 {:?} 识别失败（标记 unknown）: {}", region.kind, e);
+            }
+        }
+    }
+    Ok(merged)
 }
 
 /// BGRA8 像素 → image::RgbImage（纯函数；尺寸与像素长度不匹配返回 None）。
@@ -429,6 +527,8 @@ fn persist_voted_subtitle(
         text: text.clone(),
         score: 0.9,
         region: "subtitle".to_string(),
+        // 字幕区独立 ROI 管线，不属版面区域（M3 设计：字幕区不进版面分析）
+        region_kind: None,
     });
     let _ = db.add_segment(&NewSessionSegment {
         session_id,
@@ -477,6 +577,8 @@ fn handle_full_frame(
                 text: block.text.clone(),
                 score: block.score,
                 region: "full".to_string(),
+                // M4/REQ-048：整帧直跑路径无区域标注（None=兼容旧数据口径）
+                region_kind: None,
             });
             let _ = app.emit(
                 "live:ocr",

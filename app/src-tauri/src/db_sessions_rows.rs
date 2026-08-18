@@ -43,6 +43,7 @@ pub fn row_to_ocr_block(row: &Row<'_>) -> rusqlite::Result<SessionOcrBlock> {
         text: row.get(3)?,
         score: row.get(4)?,
         region: row.get(5)?,
+        region_kind: row.get(6)?,
     })
 }
 
