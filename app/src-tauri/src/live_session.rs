@@ -200,6 +200,10 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
     // 句起时间戳（A2）：Final 后首个非静音块时刻；句尾（TD-041）：最后语音块
     let mut sentence_start_ms: Option<u64> = None;
     let mut last_speech_ms: Option<u64> = None;
+    // M6/REQ-041 A1：音频预处理链（默认关——微基准 CER 对比后定默认；
+    // 开启后 AGC + 削波检测 + 动态静音阈值，防轻声讲课被 VAD 截断）
+    let mut audio_pre = crate::audio_preprocess::AudioPreprocessor::default();
+    let mut clipping_logged = false;
 
     // 1) 流式 ASR（SenseVoice 重打分接离线引擎池；M5 热词经共享词表注入）
     let mut asr_engine = match StreamingAsrEngine::load(
@@ -286,7 +290,13 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
         // ── 音频块 → 流式 ASR ──
         match rx.recv_timeout(Duration::from_millis(TICK_MS)) {
             Ok(chunk) => {
-                let silent = compute_rms(&chunk.samples) < SILENCE_RMS_THRESHOLD;
+                // M6/REQ-041 A1：预处理（默认直通零开销；开启后 AGC/削波/动态阈值）
+                let processed = audio_pre.process(&chunk.samples, SILENCE_RMS_THRESHOLD);
+                if processed.clipped && !clipping_logged {
+                    clipping_logged = true;
+                    eprintln!("[LiveSession] 检测到音频削波（输入电平过高，建议降低系统音量）");
+                }
+                let silent = compute_rms(&processed.samples) < processed.speech_threshold;
                 // B3：语音活跃度共享（屏幕 worker 自适应采样依据）
                 speech_active.store(!silent, Ordering::Relaxed);
                 // A2：句起时刻 = Final 后首个非静音块（真实句首，替代 end-2000ms 近似）；
@@ -297,7 +307,7 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
                     }
                     last_speech_ms = Some(chunk.timestamp_ms);
                 }
-                for event in asr_engine.feed(&chunk.samples, silent) {
+                for event in asr_engine.feed(&processed.samples, silent) {
                     match event {
                         StreamingAsrEvent::Final { text } => {
                             let end_ms = sentence_end_ms(last_speech_ms, chunk.timestamp_ms);

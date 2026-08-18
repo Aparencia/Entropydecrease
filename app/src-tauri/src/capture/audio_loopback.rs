@@ -264,7 +264,9 @@ where
                 let byte_len = (frames as usize) * (bits as usize / 8) * (channels as usize);
                 let bytes = std::slice::from_raw_parts(data, byte_len);
                 if let Some(samples) = super::resample::pcm_bytes_to_f32(bytes, bits, is_float) {
-                    let mono = super::resample::mixdown_to_mono(&samples, channels);
+                    // M6/REQ-041 A2：立体声按声道 RMS 选优（杂音声道不混入）；
+                    // 单声道与合并路径由 mixdown_prefer_cleanest 内部分派
+                    let mono = super::resample::mixdown_prefer_cleanest(&samples, channels);
                     let resampled = super::resample::resample_linear(&mono, src_rate, TARGET_SAMPLE_RATE);
                     for chunk in accumulator.push(&resampled) {
                         debug_assert_eq!(chunk.len(), block_samples);

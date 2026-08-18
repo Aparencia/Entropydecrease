@@ -11,6 +11,9 @@ pub const TARGET_SAMPLE_RATE: u32 = 16_000;
 /// 多声道交错样本混为单声道（取均值）。
 ///
 /// @ai-context: 输入为 interleaved（[L,R,L,R,...]），channels=0 视为单声道直通。
+/// @ai-context: M6（REQ-041 A2）后实时链路改用 mixdown_prefer_cleanest（声道选优），
+///              本函数保留供测试与参考（平均合并语义）。
+#[allow(dead_code)]
 pub fn mixdown_to_mono(input: &[f32], channels: u16) -> Vec<f32> {
     if channels <= 1 || input.is_empty() {
         return input.to_vec();
@@ -23,6 +26,38 @@ pub fn mixdown_to_mono(input: &[f32], channels: u16) -> Vec<f32> {
         mono.push(sum / channels as f32);
     }
     mono
+}
+
+/// 声道选优混音（REQ-041 / v0.4.0 M6：A2 声道策略）。
+///
+/// @ai-context: 立体声环回按声道 RMS 选能量最大声道（语音所在声道），
+///              替代平均合并——单声道混入杂音时另一声道更干净；
+///              单声道/空输入直通（与 mixdown_to_mono 行为一致）。
+pub fn mixdown_prefer_cleanest(input: &[f32], channels: u16) -> Vec<f32> {
+    if channels <= 1 || input.is_empty() {
+        return input.to_vec();
+    }
+    let frames = input.len() / channels as usize;
+    // 每声道 RMS
+    let mut best = 0usize;
+    let mut best_rms = -1.0f32;
+    for ch in 0..channels as usize {
+        let mut sum_sq = 0.0f64;
+        for frame in 0..frames {
+            let v = input[frame * channels as usize + ch] as f64;
+            sum_sq += v * v;
+        }
+        let rms = (sum_sq / frames as f64).sqrt() as f32;
+        if rms > best_rms {
+            best_rms = rms;
+            best = ch;
+        }
+    }
+    let mut out = Vec::with_capacity(frames);
+    for frame in 0..frames {
+        out.push(input[frame * channels as usize + best]);
+    }
+    out
 }
 
 /// 线性插值重采样（src_rate → dst_rate）。
@@ -155,6 +190,29 @@ mod tests {
     fn mixdown_empty_is_empty() {
         // Act & Assert
         assert!(mixdown_to_mono(&[], 2).is_empty());
+    }
+
+    #[test]
+    fn prefer_cleanest_picks_louder_channel() {
+        // M6/REQ-041 A2：L 声道干净语音（±0.5），R 声道混入小声噪声（±0.05）→ 选 L
+        let mut input = Vec::new();
+        for i in 0..200 {
+            let l = 0.5 * ((i as f32) * 0.1).sin();
+            let r = 0.05 * ((i as f32 * 3.7).sin());
+            input.push(l);
+            input.push(r);
+        }
+        let mono = mixdown_prefer_cleanest(&input, 2);
+        // 输出应等于 L 声道序列
+        let expected: Vec<f32> = input.iter().step_by(2).copied().collect();
+        assert_eq!(mono, expected);
+    }
+
+    #[test]
+    fn prefer_cleanest_mono_passthrough() {
+        // 单声道直通
+        assert_eq!(mixdown_prefer_cleanest(&[0.1, 0.2], 1), vec![0.1, 0.2]);
+        assert!(mixdown_prefer_cleanest(&[], 2).is_empty());
     }
 
     #[test]
