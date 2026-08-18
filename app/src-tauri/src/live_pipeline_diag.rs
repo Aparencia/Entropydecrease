@@ -40,6 +40,8 @@ fn run(hwnd: Option<i64>, label: &str) {
             dict: "ppocrv6_tiny_dict.txt".into(),
         },
         &OcrParams::default(),
+        // ADR-009：诊断链路固定 CPU（探测 CUDA 环境非本模块职责）
+        crate::device_config::OcrBackend::Cpu,
     ) {
         Ok(o) => Some(o),
         Err(e) => {

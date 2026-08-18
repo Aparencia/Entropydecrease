@@ -7,10 +7,13 @@
 //!              阻塞实时 OCR。拆双线程后两路并行，各线程只加载自己的模型（内存不翻倍）。
 //! @ai-context: 外部经 EnginePool（内部仅两个 channel sender，可廉价 Clone）同步发请求等结果。
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 use crate::asr::{AsrEngine, AsrModels};
+use crate::device_config::{OcrBackend, OcrDeviceStatus};
 use crate::error::{AppError, Result};
 use crate::ocr::{OcrEngine, OcrModels, OcrParams};
 use crate::types::{OcrBlock, TranscriptSegment};
@@ -47,22 +50,41 @@ enum OcrRequest {
 pub struct EnginePool {
     asr_tx: Sender<AsrRequest>,
     ocr_tx: Sender<OcrRequest>,
+    /// ADR-009：OCR 设备运行时状态（worker 更新生效后端/回退原因；命令层只读）
+    ocr_device_status: Arc<Mutex<OcrDeviceStatus>>,
+    /// ADR-009：校准进行中标记（防并发重复校准）
+    ocr_calibrating: Arc<AtomicBool>,
 }
 
 impl EnginePool {
     /// 启动 ASR/OCR 两个专用线程（各自立即加载模型，互不阻塞）。
-    pub fn start(asr_models: AsrModels, ocr_models: OcrModels, ocr_params: OcrParams) -> Result<Self> {
+    ///
+    /// @ai-context: ADR-009——backend 为启动期决策结果（lib.rs 完成 探测→decide）；
+    ///              状态 Arc 与命令层共享，worker 加载完成后回写 actual/fallback_reason。
+    pub fn start(
+        asr_models: AsrModels,
+        ocr_models: OcrModels,
+        ocr_params: OcrParams,
+        backend: OcrBackend,
+        ocr_device_status: Arc<Mutex<OcrDeviceStatus>>,
+    ) -> Result<Self> {
         let (asr_tx, asr_rx) = mpsc::channel();
         let (ocr_tx, ocr_rx) = mpsc::channel();
         thread::Builder::new()
             .name("entropy-asr-engine".into())
             .spawn(move || asr_worker_loop(asr_rx, asr_models))
             .map_err(|e| AppError::Io(format!("启动 ASR 引擎线程失败: {}", e)))?;
+        let status_for_worker = ocr_device_status.clone();
         thread::Builder::new()
             .name("entropy-ocr-engine".into())
-            .spawn(move || ocr_worker_loop(ocr_rx, ocr_models, ocr_params))
+            .spawn(move || ocr_worker_loop(ocr_rx, ocr_models, ocr_params, backend, status_for_worker))
             .map_err(|e| AppError::Io(format!("启动 OCR 引擎线程失败: {}", e)))?;
-        Ok(Self { asr_tx, ocr_tx })
+        Ok(Self {
+            asr_tx,
+            ocr_tx,
+            ocr_device_status,
+            ocr_calibrating: Arc::new(AtomicBool::new(false)),
+        })
     }
 
     /// 测试用空池（任何请求立即失败；仅用于不触引擎的路径单测）。
@@ -70,7 +92,42 @@ impl EnginePool {
     pub fn dummy() -> Self {
         let (asr_tx, _) = mpsc::channel::<AsrRequest>();
         let (ocr_tx, _) = mpsc::channel::<OcrRequest>();
-        Self { asr_tx, ocr_tx }
+        Self {
+            asr_tx,
+            ocr_tx,
+            ocr_device_status: Arc::new(Mutex::new(OcrDeviceStatus::new(
+                crate::device_config::OcrDeviceMode::Auto,
+                OcrBackend::Cpu,
+                None,
+            ))),
+            ocr_calibrating: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    /// OCR 设备当前状态（命令层读；worker 写；校准标记实时合并）。
+    pub fn ocr_device_status(&self) -> OcrDeviceStatus {
+        let mut s = self
+            .ocr_device_status
+            .lock()
+            .map(|s| s.clone())
+            .unwrap_or_else(|_| {
+                OcrDeviceStatus::new(
+                    crate::device_config::OcrDeviceMode::Auto,
+                    OcrBackend::Cpu,
+                    None,
+                )
+            });
+        s.calibrating = self.ocr_calibrating.load(Ordering::SeqCst);
+        s
+    }
+
+    /// 占用/释放校准标记（成功占用返回 true）。
+    pub fn ocr_try_begin_calibrate(&self) -> bool {
+        !self.ocr_calibrating.swap(true, Ordering::SeqCst)
+    }
+
+    pub fn ocr_end_calibrate(&self) {
+        self.ocr_calibrating.store(false, Ordering::SeqCst);
     }
 
     /// 转写音频（阻塞等待 ASR 线程返回）。
@@ -140,14 +197,43 @@ fn asr_worker_loop(rx: Receiver<AsrRequest>, asr_models: AsrModels) {
 }
 
 /// OCR 线程主循环：启动即加载模型，随后顺序处理请求。
-fn ocr_worker_loop(rx: Receiver<OcrRequest>, ocr_models: OcrModels, ocr_params: OcrParams) {
+///
+/// @ai-context: ADR-009——加载成功后把实际后端/回退原因回写共享状态（命令层可查）；
+///              加载失败同样回写（actual 保持请求值、fallback_reason 记录失败）。
+fn ocr_worker_loop(
+    rx: Receiver<OcrRequest>,
+    ocr_models: OcrModels,
+    ocr_params: OcrParams,
+    backend: OcrBackend,
+    device_status: Arc<Mutex<OcrDeviceStatus>>,
+) {
     // @ai-context: OCR 首次构建可能触发 ModelScope 模型下载，耗时较长但在后台线程不影响 UI。
-    let mut ocr = OcrEngine::load(&ocr_models, &ocr_params);
+    let mut ocr = OcrEngine::load(&ocr_models, &ocr_params, backend);
     // @ai-context: 加载失败此前静默（仅首次识别时报错），排查"会话无 OCR"无法定位——
     //              启动即打印结果，加载失败可观测（与 ASR 引擎同口径）。
     match &ocr {
-        Ok(_) => eprintln!("[Engine] OCR 引擎加载成功（{}）", ocr_models.det),
-        Err(e) => eprintln!("[Engine] OCR 引擎加载失败: {}", e),
+        Ok(engine) => {
+            eprintln!(
+                "[Engine] OCR 引擎加载成功（{}，后端 {:?}{}）",
+                ocr_models.det,
+                engine.backend,
+                engine
+                    .fallback_reason
+                    .as_ref()
+                    .map(|r| format!("，回退原因: {}", r))
+                    .unwrap_or_default()
+            );
+            if let Ok(mut s) = device_status.lock() {
+                s.actual = engine.backend;
+                s.fallback_reason = engine.fallback_reason.clone();
+            }
+        }
+        Err(e) => {
+            eprintln!("[Engine] OCR 引擎加载失败: {}", e);
+            if let Ok(mut s) = device_status.lock() {
+                s.fallback_reason = Some(format!("OCR 引擎加载失败: {}", e));
+            }
+        }
     }
     for req in rx {
         let (result, reply) = match req {

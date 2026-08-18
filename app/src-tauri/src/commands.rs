@@ -62,6 +62,12 @@ pub struct AppState {
     pub model_downloader: ModelDownloader,
     /// 应用句柄（事件推送 live:* / model:*）
     pub app: tauri::AppHandle,
+    /// OCR 设备配置文件路径（ADR-009：模式/校准持久化，应用数据目录）
+    pub ocr_device_config_path: std::path::PathBuf,
+    /// OCR 模型标识（ADR-009 校准"重新检测"用；与引擎池启动同源）
+    pub ocr_models: crate::ocr::OcrModels,
+    /// OCR 检测参数（ADR-009 校准"重新检测"用；与引擎池启动同源）
+    pub ocr_params: crate::ocr::OcrParams,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。

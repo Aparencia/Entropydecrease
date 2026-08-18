@@ -14,6 +14,13 @@ edition = "2021"
 name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+# ADR-009（v0.4.0 M1）：OCR CUDA EP 编译开关（默认开）——ORT 1.28 官方 gpu_cuda12
+# 运行时存在（download-ort-cuda.ps1 分发）；feature 关闭时 CUDA 请求显式失败并
+# 回退 CPU（record fallback_reason），保证 CPU-only 环境零 CUDA 依赖。
+default = ["ocr-cuda"]
+ocr-cuda = ["oar-ocr/cuda"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -53,5 +60,8 @@ windows = { version = "0.61", features = [
     "Win32_Graphics_Gdi",
     # v0.3.0（ADR-008）：MultiByteToWideChar CP936 用于外挂字幕 GBK 解码
     "Win32_Globalization",
+    # v0.4.0（ADR-009）：AddDllDirectory/SetDefaultDllDirectories 把 CUDA 运行时
+    # 目录加入 DLL 搜索路径（onnxruntime.dll 依赖 cudart/cublas/cudnn 等，不复制进 target）
+    "Win32_System_LibraryLoader",
 ] }
 

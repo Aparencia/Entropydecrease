@@ -14,6 +14,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { WindowSelectCard } from "../components/WindowSelectCard";
 import VideoImportPanel from "../components/VideoImportPanel";
 import LiveActivityPanel from "../components/LiveActivityPanel";
+import { OcrDeviceSetting } from "../components/OcrDeviceSetting";
 import type { Note, WindowInfo, StreamingModelStatus, LiveSessionStatus, DownloadProgress, DownloadStatus } from "../types";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
@@ -343,6 +344,11 @@ export default function ClassroomPage() {
 
           {/* 视频文件导入（v0.3.0：REQ-015 第二入口，字幕优先 + ASR fallback） */}
           <VideoImportPanel />
+
+          {/* OCR 推理设备（v0.4.0 M1：REQ-036，ADR-009：CUDA 卸载/回退可观测/重新检测） */}
+          <div style={panel}>
+            <OcrDeviceSetting />
+          </div>
 
           {/* 素材输入（v0.1.0：文件流水线） */}
           <div style={panel}>

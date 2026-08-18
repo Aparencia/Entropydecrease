@@ -150,3 +150,30 @@ export interface SubtitleEvent {
   timestampMs: number;
   text: string;
 }
+
+// ────────────────────────────────────────────────────────────
+// OCR 设备领域类型（v0.4.0 M1，ADR-009，与 Rust serde 契约对齐）
+// ────────────────────────────────────────────────────────────
+
+/** OCR 设备模式（Rust OcrDeviceMode） */
+export type OcrDeviceMode = "Auto" | "ForceGpu" | "ForceCpu";
+
+/** OCR 推理后端（Rust OcrBackend：Cpu | Cuda{device_id}） */
+export type OcrBackend = "Cpu" | { Cuda: { device_id: number } };
+
+/** 校准基准（Rust BenchResult） */
+export interface BenchResult {
+  cpu_ms: number;
+  gpu_ms: number;
+}
+
+/** OCR 设备运行时状态（Rust OcrDeviceStatus，snake_case 契约） */
+export interface OcrDeviceStatus {
+  mode: OcrDeviceMode;
+  requested: OcrBackend;
+  actual: OcrBackend;
+  fallback_reason: string | null;
+  bench: BenchResult | null;
+  calibrating: boolean;
+}
+

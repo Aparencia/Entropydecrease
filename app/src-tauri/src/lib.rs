@@ -10,6 +10,7 @@ mod commands;
 // 实时会话链路依赖 Windows 捕获 API（WASAPI/DXGI/COM），非 Windows 平台不编译（TD-027 修复）
 #[cfg(target_os = "windows")]
 mod commands_live;
+mod commands_device;
 mod commands_import;
 mod commands_session;
 mod commands_streaming;
@@ -17,6 +18,10 @@ mod concat;
 mod db;
 mod db_sessions;
 mod db_sessions_rows;
+mod device_config;
+// GPU 适配器探测依赖 DXGI（Windows）；决策纯逻辑在 device_config（全平台）
+#[cfg(target_os = "windows")]
+mod device_probe;
 mod engine;
 mod error;
 mod ffmpeg;
@@ -46,6 +51,7 @@ use std::path::Path;
 use tauri::{Emitter, Manager, WindowEvent};
 
 use crate::asr::AsrModels;
+use crate::device_config::{decide, OcrDeviceConfig, OcrDeviceStatus};
 use crate::engine::EnginePool;
 #[cfg(target_os = "windows")]
 use crate::live_session::LiveSessionManager;
@@ -122,12 +128,46 @@ fn copy_dir_skip_existing(src: &Path, dst: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// 把 ORT 运行时目录加入 DLL 搜索路径（ADR-009：CUDA 运行时含 cudart/cublas/cudnn
+/// 等数十个 DLL，不复制进 target；AddDllDirectory 让 onnxruntime.dll 按需找到它们）。
+///
+/// @ai-context: 必须在引擎线程首次加载 onnxruntime.dll 之前调用（setup 最早期）；
+///              失败仅告警——CPU-only 运行时无需额外 DLL，不阻断启动。
+/// @ai-context: SetDefaultDllDirectories(DEFAULT_DIRS) 是 AddDllDirectory 生效的前提；
+///              搜索序 = 应用目录（build.rs 已复制 onnxruntime.dll，压过 system32 旧版）
+///              + 系统目录 + 本目录。
+fn ensure_ort_runtime_search_dir() {
+    let Ok(lib_dir) = std::env::var("ORT_LIB_LOCATION") else { return };
+    let path = Path::new(&lib_dir);
+    if !path.join("onnxruntime.dll").exists() {
+        return;
+    }
+    unsafe {
+        // 注意：本 crate 存在本地 `mod windows`（窗口枚举模块），
+        // 外部 windows crate 必须以 ::windows:: 全路径引用（遮蔽问题）
+        use ::windows::Win32::System::LibraryLoader::{
+            AddDllDirectory, SetDefaultDllDirectories, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
+        };
+        let _ = SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+        let wide = ::windows::core::HSTRING::from(path.to_string_lossy().as_ref());
+        // AddDllDirectory 返回句柄（null=失败，windows 0.61 无 Result 包装）
+        if AddDllDirectory(::windows::core::PCWSTR(wide.as_ptr())).is_null() {
+            eprintln!(
+                "[Setup] AddDllDirectory 失败: {}（CUDA 运行时 DLL 可能无法加载）",
+                path.display()
+            );
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            // ADR-009：引擎线程加载 ORT 之前注入运行时目录（CUDA 多 DLL 依赖）
+            ensure_ort_runtime_search_dir();
             let data_dir = app
                 .path()
                 .app_data_dir()
@@ -156,8 +196,38 @@ pub fn run() {
             }
 
             // 常驻引擎池（后台线程加载模型，不阻塞启动）
-            let engines = EnginePool::start(asr_models(&model_dir), ocr_models(), OcrParams::default())
-                .map_err(|e| format!("启动引擎池失败: {}", e))?;
+            // ADR-009（v0.4.0 M1）：OCR 推理后端启动期决策——
+            // 三层检测：DXGI 硬件门槛（select_best）→ decide 折叠模式/校准 → ORT 原生回退（引擎内）
+            let ocr_device_config_path = data_dir.join("ocr_device.json");
+            let ocr_device_config = OcrDeviceConfig::load(&ocr_device_config_path);
+            #[cfg(target_os = "windows")]
+            let best_device = crate::device_probe::select_best(&crate::device_probe::probe_adapters());
+            #[cfg(not(target_os = "windows"))]
+            let best_device = None;
+            let ocr_backend = decide(ocr_device_config.mode, best_device, ocr_device_config.bench);
+            eprintln!(
+                "[Engine] OCR 设备决策: 模式 {:?} → 后端 {:?}{}",
+                ocr_device_config.mode,
+                ocr_backend,
+                best_device
+                    .map(|id| format!("（候选设备 index={}）", id))
+                    .unwrap_or_default()
+            );
+            let ocr_device_status = std::sync::Arc::new(std::sync::Mutex::new(OcrDeviceStatus::new(
+                ocr_device_config.mode,
+                ocr_backend,
+                ocr_device_config.bench,
+            )));
+            let ocr_models = ocr_models();
+            let ocr_params = OcrParams::default();
+            let engines = EnginePool::start(
+                asr_models(&model_dir),
+                ocr_models.clone(),
+                ocr_params.clone(),
+                ocr_backend,
+                ocr_device_status,
+            )
+            .map_err(|e| format!("启动引擎池失败: {}", e))?;
 
             let streaming_models = streaming_asr_models(&model_dir);
             app.manage(AppState {
@@ -168,6 +238,9 @@ pub fn run() {
                 live_session: LiveSessionManager::new(),
                 model_downloader: ModelDownloader::new(),
                 app: app.handle().clone(),
+                ocr_device_config_path,
+                ocr_models,
+                ocr_params,
             });
             Ok(())
         })
@@ -221,7 +294,11 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             commands_live::live_session_status,
             // 视频文件导入（REQ-015，ADR-008：字幕优先 + ASR fallback + 关键帧 OCR）
-            commands_import::import_video
+            commands_import::import_video,
+            // OCR 设备状态（REQ-036，ADR-009：GPU 卸载决策/回退可观测）
+            commands_device::ocr_device_status,
+            commands_device::ocr_device_set_mode,
+            commands_device::ocr_device_recalibrate
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

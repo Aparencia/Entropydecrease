@@ -9,5 +9,8 @@
 [env]
 SHERPA_ONNX_ARCHIVE_DIR = { value = "sherpa-archive", relative = true }
 # oar-ocr 底层同样使用 pyke ort：cdn.pyke.io 被墙，改用已下载的本地 ONNX Runtime（跳过在线下载）。
-# 下载命令：Invoke-WebRequest -Uri "https://github.com/microsoft/onnxruntime/releases/download/v1.28.0/onnxruntime-win-x64-1.28.0.zip" -OutFile ort\onnxruntime-cpu.zip 后解压。
-ORT_LIB_LOCATION = { value = "ort/onnxruntime-win-x64-1.28.0/lib", relative = true }
+# ADR-009（v0.4.0 M1）：CUDA EP——ORT 1.28 官方 gpu_cuda12 包（含 CUDA 插件与运行时，
+# 一套运行时双后端：CPU EP 仍在其中）。下载命令（app/download-ort-cuda.ps1）：
+#   powershell -ExecutionPolicy Bypass -File app/download-ort-cuda.ps1
+# 回退到 CPU-only：改回 "ort/onnxruntime-win-x64-1.28.0/lib" 并关 cargo feature ocr-cuda。
+ORT_LIB_LOCATION = { value = "ort/onnxruntime-win-x64-gpu_cuda12-1.28.0/lib", relative = true }
