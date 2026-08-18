@@ -56,3 +56,38 @@
 ### 技术债摘要（七轮滚动）
 
 - 累计已偿 42 笔；未偿 4 笔：TD-033（carried，P2）/ TD-040（carried deliberate，P2）/ TD-042（stopping 超时兜底，P3）/ TD-043（前端时间戳估算偏差，P3）
+
+## 十轮归档（同日，v0.4.0 发布 + 新增代码审查）
+
+> v0.4.0（M0–M8）全部实施完成并发布（21 提交推送 rebuild，bbfd28d..7f7eaf0；版本 0.4.0 + CHANGELOG）；
+> 新增代码六维审查（4 组并行，引擎/设备层、实时链路、命令/词表层、前端/规范）产出问题清单：
+> 核实确认 critical×1 / high×5 / medium×5 / low×10+；即修 0 笔（本次任务仅审查输出），全部登记/记录见下。
+
+### 归档清单（十轮）
+
+| 源路径 | 归档路径 | 状态 |
+|--------|---------|------|
+| docs/Foresight/brainstorming-classroom-assistant-mechanisms-merged.md | docs/archive/2026-08-18/brainstorming-classroom-assistant-mechanisms-merged.md | [ ] 已归档（机制整合版 v2：v0.4.0 采纳增量 REQ-036~042 已全部实施，规划使命生命终态；活跃区链接已改指归档路径） |
+
+- 未归档：brainstorming-classroom-assistant-mechanisms.md / -fed-guide.md（面向后续版本头脑风暴的活跃前瞻，同 no-cloud-ai 先例保留）；ADR-009（当前生效 ADR）；versions/v0.4.0.md（versions/ 内容不归档）
+
+### 审查纪要（low 级观察，未编号，随下一轮审查合并处理）
+
+- mixdown_prefer_cleanest 非整帧尾部样本静默丢弃（WASAPI 实际不触发）
+- recent_ocr_texts ORDER BY 跨会话相对时间戳语义误导 + 冗余 JOIN（无功能影响）
+- extract_pptx_text 无单测（合法/超大/非法路径/超页夹具缺失）
+- db_sessions.rs use 声明置于文件底部（风格）
+- apply_replacements 顺序替换可链式（A→B→C 级联），语义未声明
+- suggest_from_ocr_texts 按 OCR 块计数而非会话数（固定字幕可刷提名，需用户确认取舍）
+- LoadMonitor 注释"占用率>80%"实为单核当量语义（多核下 0.8 过早触发）
+- 多 NVIDIA 卡：select_best 序号与 CUDA device_id=0 不一致（ADR-009 已知风险，留 NVML）
+- 健康巡检模型清单仅流式 ASR 四件套（缺 sensevoice/OCR 模型）
+- SystemStatusBadge refresh 空 catch（违反安全红线"空 catch 块"，下轮即修）
+- download-ort-cuda.ps1 单镜像无 -TimeoutSec/重试（AGENTS.md §3.4）
+- 里程碑 feat 与 docs(v0.4.0) 状态流转分提交（AGENTS.md §6"文档与代码同提交"口径歧义）
+
+### 技术债摘要（十轮滚动）
+
+- 已偿 0 笔（本次为审查轮）；累计已偿 44 笔（含 TD-033，提交 2a88b25；TD-042/043 八轮已偿 7af0da8）
+- 新增未偿 12 笔：TD-044（P0，OCR 模式契约）/ TD-045~049（P1×5，心跳/ROI 坐标/静音判定/词表快照/PPTX 解压炸弹）/ TD-050~054（P2×5，dt 步长/AGC 契约/引用比较/updater 副作用/面板定位）/ TD-055（P3，行数豁免登记）
+- 未偿合计 13 笔：TD-040（carried deliberate）+ TD-044~055（open 12 笔，详见本夹 tech-debt.md）
