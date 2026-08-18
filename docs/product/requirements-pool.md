@@ -71,7 +71,7 @@
 | REQ-052 | 产物体系：Artifact 块模型+五档案模板+产物视图+落笔记 | P1 | 已实施（M7） | v0.5.0 | 轮 5 落地；块引用原料不复制；沿用 NoteDraft→Note 通道 |
 | REQ-053 | 渲染器升级：LaTeX/表格/代码/图集块渲染 | P1 | 已实施（M5 前置） | v0.5.0 | KaTeX 本地化（无 CDN）；低置信/AI 占位样式（图集组件随 M6/M7 落地） |
 | REQ-054 | 词级时间戳（B8）+ 置信度落库（B3） | P1 | 已排期 | v0.5.0 | 产物双向定位 + AI 补缝判定器基础；离线/精修路径 |
-| REQ-055 | 补缝式 AI 前置：判定器+ai_candidate 块+协议 schema+mock+护栏骨架 | P1 | 已排期 | v0.5.0 | 轮 6 + [ADR-010](../adr/ADR-010-gap-filling-ai.md)；协议先行，云端实装 V1.0（REQ-056） |
+| REQ-055 | 补缝式 AI 前置：判定器+ai_candidate 块+协议 schema+mock+护栏骨架 | P1 | 已实施（M8） | v0.5.0 | 轮 6 + [ADR-010](../adr/ADR-010-gap-filling-ai.md)；协议先行，云端实装 V1.0（REQ-056） |
 
 ### V1.0 · 体验增强（远期）
 

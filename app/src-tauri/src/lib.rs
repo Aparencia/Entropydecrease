@@ -4,6 +4,10 @@
 //!              不含业务逻辑；业务自底向上分布：types → concat/db → asr/ocr → engine → commands。
 //! @ai-context: AppState 在 setup 时初始化：SQLite 数据库 + 常驻引擎池（后台加载 ASR/OCR 模型）。
 
+mod ai_guardrails;
+mod ai_judge;
+mod ai_mock;
+mod ai_protocol;
 mod asr;
 mod asr_health;
 mod analysis;
@@ -16,6 +20,7 @@ mod commands;
 // 实时会话链路依赖 Windows 捕获 API（WASAPI/DXGI/COM），非 Windows 平台不编译（TD-027 修复）
 #[cfg(target_os = "windows")]
 mod commands_live;
+mod commands_ai;
 mod commands_analysis;
 mod commands_artifacts;
 mod commands_device;
@@ -277,6 +282,10 @@ pub fn run() {
             let profile_memory = std::sync::Arc::new(std::sync::Mutex::new(
                 crate::video_profile::ProfileMemory::load(&profile_memory_path),
             ));
+            // v0.5.0 M8（REQ-055）：补缝式 AI 护栏骨架（配额/缓存/审计；云端 V1.0 生效）
+            let ai_guardrails = std::sync::Arc::new(std::sync::Mutex::new(
+                crate::ai_guardrails::AiGuardrails::default(),
+            ));
             let engines = EnginePool::start(
                 asr_models(&model_dir),
                 ocr_models.clone(),
@@ -306,6 +315,7 @@ pub fn run() {
                 profile_memory_path,
                 profile_memory,
                 data_dir,
+                ai_guardrails,
             });
             Ok(())
         })
@@ -393,6 +403,10 @@ pub fn run() {
             commands_artifacts::build_session_artifact,
             commands_artifacts::get_session_artifact,
             commands_artifacts::artifact_to_note,
+            // 补缝式 AI 前置（REQ-055，v0.5.0 M8：判定器/协议/mock/护栏骨架）
+            commands_ai::scan_ai_candidates,
+            commands_ai::ai_enhance_mock,
+            commands_ai::ai_enhance_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -85,6 +85,9 @@ pub struct AppState {
     pub profile_memory: std::sync::Arc<std::sync::Mutex<ProfileMemory>>,
     /// v0.5.0 M6（REQ-051）：应用数据目录（会话图片存储基目录）
     pub data_dir: std::path::PathBuf,
+    /// v0.5.0 M8（REQ-055）：补缝式 AI 护栏状态（每日配额 + 同图 hash 缓存；
+    /// 云端 V1.0 实装后生效，骨架就位）
+    pub ai_guardrails: std::sync::Arc<std::sync::Mutex<crate::ai_guardrails::AiGuardrails>>,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。

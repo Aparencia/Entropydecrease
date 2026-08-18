@@ -19,6 +19,15 @@ export default function ArtifactView({ sessionId }: { sessionId: number }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  // v0.5.0 M8（REQ-055）：云端 AI 状态（V1.0 未开放 → 按钮占位）
+  const [aiStatus, setAiStatus] = useState<{ available: boolean; version: string; message: string } | null>(null);
+
+  // 云端 AI 状态（补缝式：V1.0 开放前占位展示）
+  useEffect(() => {
+    void invoke<{ available: boolean; version: string; message: string }>("ai_enhance_status")
+      .then(setAiStatus)
+      .catch(() => setAiStatus(null));
+  }, []);
 
   // 图片读取基地址（与图集共用通道）
   useEffect(() => {
@@ -122,6 +131,14 @@ export default function ArtifactView({ sessionId }: { sessionId: number }) {
         </button>
         <button style={{ ...btn, background: "#0d9488", color: "#fff", border: "none", borderRadius: 6 }} onClick={() => void blockToNote()}>
           📝 一键落笔记
+        </button>
+        {/* v0.5.0 M8（REQ-055）：AI 增强占位（云端 V1.0 开放） */}
+        <button
+          style={{ ...btn, border: "1px dashed #f59e0b", color: "#b45309", background: "#fffbeb", borderRadius: 6 }}
+          title={aiStatus?.message ?? ""}
+          onClick={() => setError(aiStatus?.message ?? "补缝式 AI 云端实装排期 V1.0")}
+        >
+          ✨ AI 增强（{aiStatus?.version ?? "V1.0"} 开放）
         </button>
         {error && <span style={{ fontSize: 11, color: "#dc2626" }}>{error}</span>}
       </div>
