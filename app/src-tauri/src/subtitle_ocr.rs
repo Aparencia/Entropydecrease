@@ -14,8 +14,16 @@
 use crate::fusion::SubtitleSegment;
 use crate::streaming_asr::levenshtein;
 
-/// 样本归属判定：与组首样本编辑距离 ≤2 视为同一字幕（与 ADR-005 重叠校对口径一致）。
-const SAMPLE_JOIN_MAX_DISTANCE: usize = 2;
+/// 同组归属判定（TD-039）：编辑距离 ≤ max(2, 首样本长度 15%)——短文本保持
+/// 严格（防"第一点/第二点"类相似新字幕被误并），长文本按比例放宽（跨帧多字符
+/// 错读累积不再误判新字幕导致段分裂）。
+const SAMPLE_JOIN_RATIO: f32 = 0.15;
+
+/// 同组编辑距离上限（纯函数）：长度比例与固定下限取大。
+fn sample_join_limit(first_text: &str) -> usize {
+    let ratio = (first_text.chars().count() as f32 * SAMPLE_JOIN_RATIO).ceil() as usize;
+    ratio.max(2)
+}
 
 /// 一条已定稿字幕（投票校正后的文本 + 真实时间轴）。
 #[derive(Debug, Clone, PartialEq)]
@@ -72,7 +80,7 @@ impl SubtitleVoter {
                 None
             }
             Some((first, _)) => {
-                if levenshtein(trimmed, first) <= SAMPLE_JOIN_MAX_DISTANCE {
+                if levenshtein(trimmed, first) <= sample_join_limit(first) {
                     self.samples.push((trimmed.to_string(), now_ms));
                     None
                 } else {

@@ -238,3 +238,12 @@ fn parse_subtitle_file_rejects_unknown_extension() {
     // Assert
     assert!(result.is_err());
 }
+
+#[test]
+fn subtitle_file_size_limit_guards_memory() {
+    use crate::subtitle::check_subtitle_file_size;
+    // Act & Assert：恰好 50MB 通过；超过拒绝（TD-038）
+    assert!(check_subtitle_file_size(50 * 1024 * 1024).is_ok());
+    assert!(check_subtitle_file_size(50 * 1024 * 1024 + 1).is_err());
+    assert!(check_subtitle_file_size(0).is_ok());
+}

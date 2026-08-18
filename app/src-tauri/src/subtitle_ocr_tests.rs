@@ -2,7 +2,7 @@
 //!
 //! @ai-context: 由 subtitle_ocr.rs 以 #[cfg(test)] #[path] 引入。
 
-use crate::subtitle_ocr::{is_scrolling, vote_text, SubtitleVoter, VotedSubtitle};
+use crate::subtitle_ocr::{is_scrolling, sample_join_limit, vote_text, SubtitleVoter, VotedSubtitle};
 
 fn voted(start_ms: u64, end_ms: u64, text: &str) -> VotedSubtitle {
     VotedSubtitle { start_ms, end_ms, text: text.to_string() }
@@ -113,6 +113,28 @@ fn trim_normalizes_ocr_noise() {
     let finalized = voter.observe("  下一句  ", 500).expect("finalized");
     // Assert：trim 后归属同组
     assert_eq!(finalized, voted(0, 500, "字幕"));
+}
+
+// ── TD-039：比例阈值（长文本多字符错读）────────────────
+
+#[test]
+fn join_limit_scales_with_length() {
+    // Act & Assert：短文本保持下限 2；长文本按 15% 放宽（15 字 × 15% = 2.25 → 3）
+    assert_eq!(sample_join_limit("熵减"), 2);
+    assert_eq!(sample_join_limit("今天我们要学习牛顿三大运动定律"), 3);
+}
+
+#[test]
+fn long_text_multi_char_errors_stay_in_group() {
+    // Arrange：15 字样本（上限 3）——3 处错字超旧固定阈值 2
+    let mut voter = SubtitleVoter::new();
+    voter.observe("今天我们要学习牛顿三大运动定律", 0);
+    // Act：3 处错字（顿→吨、运→东、律→津）→ 比例阈值下仍同组累积
+    assert_eq!(voter.observe("今天我们要学习牛吨三大运东定津", 1000), None);
+    // 切换时定稿投票结果（多数帧为原文本）
+    let finalized = voter.observe("下一段内容", 2000).expect("finalized");
+    // Assert：投票输出原文本（2 票 vs 1 票）
+    assert_eq!(finalized, voted(0, 2000, "今天我们要学习牛顿三大运动定律"));
 }
 
 // ── 滚动字幕检测（保持）──────────────────────────────

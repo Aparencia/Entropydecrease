@@ -17,7 +17,7 @@ use crate::engine::EnginePool;
 use crate::error::{AppError, Result};
 use crate::ffmpeg::{self, FfmpegResolver};
 use crate::subtitle_detect;
-use crate::types::{NewSession, NewSessionOcrBlock, NewSessionSegment};
+use crate::types::{NewSession, NewSessionSegment};
 
 /// 分窗转写窗口（ms）——时间轴粒度与进度粒度。
 pub const CHUNK_WINDOW_MS: u64 = 30_000;
@@ -229,22 +229,17 @@ fn ocr_keyframes<F: Fn(&ImportProgress)>(
         progress(&ImportProgress { stage: "ocr".into(), message: "无关键帧产出".into(), done: 1, total: 1 });
         return;
     }
+    // TD-037：区域裁剪 → 识别 → 信息整合——中部（full）+ 底部（subtitle）两路，
+    // 各区域帧间文本去重（静态画面不重复落库）
+    let mut last_full: Vec<String> = Vec::new();
+    let mut last_subtitle: Vec<String> = Vec::new();
     for (i, path) in files.iter().enumerate() {
-        match engines.recognize(&path.to_string_lossy()) {
-            Ok(blocks) => {
-                for block in blocks {
-                    if block.score >= 0.5 && !block.text.trim().is_empty() {
-                        let _ = db.add_ocr_block(&NewSessionOcrBlock {
-                            session_id,
-                            timestamp_ms: (i as u64) * FRAME_INTERVAL_MS,
-                            text: block.text,
-                            score: block.score,
-                            region: "full".to_string(),
-                        });
-                    }
-                }
-            }
-            Err(e) => eprintln!("[Import] 关键帧 OCR 失败（跳过）: {}", e),
+        let timestamp_ms = (i as u64) * FRAME_INTERVAL_MS;
+        match image::open(path).map(|d| d.into_rgb8()) {
+            Ok(img) => crate::import_frame::ocr_keyframe(
+                db, engines, session_id, timestamp_ms, &img, &mut last_full, &mut last_subtitle,
+            ),
+            Err(e) => eprintln!("[Import] 关键帧解码失败（跳过）: {}", e),
         }
         progress(&ImportProgress {
             stage: "ocr".into(),

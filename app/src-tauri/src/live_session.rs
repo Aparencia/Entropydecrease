@@ -35,6 +35,17 @@ use crate::types::{NewSessionSegment, TranscriptSegment};
 const TICK_MS: u64 = 500;
 /// ASR 段 start_ms 兜底近似（句首时刻缺失时：end - 2000ms）。
 const SENTENCE_FALLBACK_MS: u64 = 2000;
+/// 音频块时长（ms）——与 audio_loopback 的 200ms 定长块对齐（TD-041 句尾校正用）。
+const AUDIO_BLOCK_MS: u64 = 200;
+
+/// 句尾时刻（TD-041）：最后语音块起点 + 块时长，逼近真实句尾。
+///
+/// @ai-context: 端点判定基于尾静音（rule1 2.4s / rule2 1.2s），Final 事件晚于实际
+///              句尾 1.2-2.4s——此前 end_ms 系统性拉大融合重叠区（重叠归属字幕，
+///              规则 3 消化但 ASR 补缝位置被挤压）；无语音记录时回退当前时刻。
+fn sentence_end_ms(last_speech_ms: Option<u64>, fallback_ms: u64) -> u64 {
+    last_speech_ms.map(|t| t + AUDIO_BLOCK_MS).unwrap_or(fallback_ms)
+}
 
 /// 会话融合状态跟踪（REQ-031：内存标记，ADR-008 决策——不迁移 sessions 表；
 /// V1.0 ADR-006 派生表落地时自然取代）。
@@ -176,8 +187,9 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
     let engines = params.engines.clone();
     // A1：会话纪元——音频/屏幕/flush 三处时间戳的唯一基准（ADR-008）
     let epoch = Instant::now();
-    // 句起时间戳（A2）：Final 后首个非静音块时刻
+    // 句起时间戳（A2）：Final 后首个非静音块时刻；句尾（TD-041）：最后语音块
     let mut sentence_start_ms: Option<u64> = None;
+    let mut last_speech_ms: Option<u64> = None;
 
     // 1) 流式 ASR（SenseVoice 重打分接离线引擎池）
     let mut asr_engine = match StreamingAsrEngine::load(&params.streaming_models, Some(engines.clone())) {
@@ -263,14 +275,18 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
                 let silent = compute_rms(&chunk.samples) < SILENCE_RMS_THRESHOLD;
                 // B3：语音活跃度共享（屏幕 worker 自适应采样依据）
                 speech_active.store(!silent, Ordering::Relaxed);
-                // A2：句起时刻 = Final 后首个非静音块（真实句首，替代 end-2000ms 近似）
-                if !silent && sentence_start_ms.is_none() {
-                    sentence_start_ms = Some(chunk.timestamp_ms);
+                // A2：句起时刻 = Final 后首个非静音块（真实句首，替代 end-2000ms 近似）；
+                // TD-041：句尾 = 最后语音块 + 块时长（端点判定滞后 1.2-2.4s 的校正）
+                if !silent {
+                    if sentence_start_ms.is_none() {
+                        sentence_start_ms = Some(chunk.timestamp_ms);
+                    }
+                    last_speech_ms = Some(chunk.timestamp_ms);
                 }
                 for event in asr_engine.feed(&chunk.samples, silent) {
                     match event {
                         StreamingAsrEvent::Final { text } => {
-                            let end_ms = chunk.timestamp_ms;
+                            let end_ms = sentence_end_ms(last_speech_ms, chunk.timestamp_ms);
                             let start_ms = sentence_start_ms
                                 .take()
                                 .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
@@ -295,9 +311,10 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
         }
     }
 
-    // 4) 停止：flush ASR 尾句（时间戳用会话纪元）
+    // 4) 停止：flush ASR 尾句（时间戳用会话纪元；句尾校正同 TD-041）
     if let Some(StreamingAsrEvent::Final { text }) = asr_engine.flush() {
-        let end_ms = epoch.elapsed().as_millis() as u64;
+        let now_ms = epoch.elapsed().as_millis() as u64;
+        let end_ms = sentence_end_ms(last_speech_ms, now_ms);
         let start_ms = sentence_start_ms
             .take()
             .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));

@@ -3,7 +3,7 @@
 //! @ai-context: 由 live_session.rs 以 #[cfg(test)] #[path] 引入；
 //!              覆盖 REQ-031 融合状态标记流转（ADR-008 内存方案）。
 
-use super::FusionTracker;
+use super::{sentence_end_ms, FusionTracker};
 
 #[test]
 fn fusion_tracker_begin_end_flow() {
@@ -52,4 +52,18 @@ fn fusion_tracker_end_unknown_id_is_noop() {
     let tracker = FusionTracker::default();
     tracker.end(999);
     assert!(!tracker.is_fusing(999));
+}
+
+// ── TD-041：句尾校正（端点判定滞后 1.2-2.4s）────────────────
+
+#[test]
+fn sentence_end_uses_last_speech_block_tail() {
+    // Arrange & Act：最后语音块起点 1000ms → 句尾 = 1000 + 200（块尾）
+    assert_eq!(sentence_end_ms(Some(1000), 99_999), 1200);
+}
+
+#[test]
+fn sentence_end_falls_back_without_speech() {
+    // Act & Assert：无语音记录（异常路径）→ 回退当前块时刻，不 panic
+    assert_eq!(sentence_end_ms(None, 5000), 5000);
 }

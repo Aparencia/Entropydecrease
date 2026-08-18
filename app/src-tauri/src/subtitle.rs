@@ -15,6 +15,8 @@ use crate::fusion::SubtitleSegment;
 
 /// 缺失结束时间时的默认字幕时长（ms；VTT 无 end 的 cue 用）。
 const SUBTITLE_DEFAULT_MS: u64 = 2000;
+/// 外挂字幕文件大小上限（TD-038：防异常大文件全量读入内存拖垮进程）。
+const MAX_SUBTITLE_FILE_SIZE: u64 = 50 * 1024 * 1024;
 
 /// 字幕文件格式。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,13 +38,27 @@ impl SubtitleFormat {
     }
 }
 
-/// 读取并解析外挂字幕文件（编码探测 + 格式解析一站式入口）。
+/// 读取并解析外挂字幕文件（编码探测 + 格式解析一站式入口；TD-038 大小上限）。
 pub fn parse_subtitle_file(path: &Path) -> Result<Vec<SubtitleSegment>> {
     let format = SubtitleFormat::from_extension(path)
         .ok_or_else(|| AppError::Io(format!("不支持的字幕扩展名: {}", path.display())))?;
+    let metadata = std::fs::metadata(path)?;
+    check_subtitle_file_size(metadata.len())?;
     let bytes = std::fs::read(path)?;
     let text = decode_subtitle_bytes(&bytes);
     Ok(parse_subtitle(&text, format))
+}
+
+/// 字幕文件大小校验（纯函数可单测）：超过 50MB 拒绝，避免全量读入内存。
+pub(crate) fn check_subtitle_file_size(size: u64) -> Result<()> {
+    if size > MAX_SUBTITLE_FILE_SIZE {
+        return Err(AppError::Io(format!(
+            "字幕文件过大（{}MB > 上限 {}MB），请检查是否选错文件",
+            size / (1024 * 1024),
+            MAX_SUBTITLE_FILE_SIZE / (1024 * 1024)
+        )));
+    }
+    Ok(())
 }
 
 /// 解码字幕字节为 UTF-8 文本：UTF-8 严格 → GBK(CP936) 回退 → lossy 兜底。

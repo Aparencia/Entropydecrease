@@ -22,6 +22,7 @@ mod error;
 mod ffmpeg;
 mod fusion;
 mod import;
+mod import_frame;
 #[cfg(target_os = "windows")]
 mod live_session;
 #[cfg(target_os = "windows")]
