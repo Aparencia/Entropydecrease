@@ -6,9 +6,12 @@
 # will have schema files for capabilities auto-completion
 /gen/schemas
 
-# ±¾µØÏÂÔØµÄ´óÎÄ¼şÒÀÀµ£¨²»Èë¿â£¬¼û .cargo/config.toml ËµÃ÷£©
+# æœ¬åœ°ä¸‹è½½çš„å¤§æ–‡ä»¶ä¾èµ–ï¼ˆä¸å…¥åº“ï¼Œè§ .cargo/config.toml è¯´æ˜ï¼‰
 /sherpa-archive/
 /ort/
 
-# Ä£ĞÍÎÄ¼ş£¨´óÎÄ¼ş£¬²»Èë¿â£»ÏÂÔØ/À¦°óËµÃ÷¼û AGENTS.md£©
+# æ¨¡å‹æ–‡ä»¶ï¼ˆå¤§æ–‡ä»¶ï¼Œä¸å…¥åº“ï¼›ä¸‹è½½/æ†ç»‘è¯´æ˜è§ AGENTS.mdï¼‰
 /models/
+
+# ffmpeg æ†ç»‘äºŒè¿›åˆ¶ï¼ˆv0.3.0ï¼ŒADR-008ï¼›scripts/download-ffmpeg.ps1 ä¸‹è½½ï¼‰
+/ffmpeg/

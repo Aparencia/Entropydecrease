@@ -10,6 +10,7 @@ mod commands;
 // 实时会话链路依赖 Windows 捕获 API（WASAPI/DXGI/COM），非 Windows 平台不编译（TD-027 修复）
 #[cfg(target_os = "windows")]
 mod commands_live;
+mod commands_import;
 mod commands_session;
 mod commands_streaming;
 mod concat;
@@ -18,7 +19,9 @@ mod db_sessions;
 mod db_sessions_rows;
 mod engine;
 mod error;
+mod ffmpeg;
 mod fusion;
+mod import;
 #[cfg(target_os = "windows")]
 mod live_session;
 #[cfg(target_os = "windows")]
@@ -26,13 +29,15 @@ mod live_session_frame;
 mod model_downloader;
 mod ocr;
 mod streaming_asr;
+mod subtitle;
+mod subtitle_detect;
 mod subtitle_ocr;
 mod types;
 mod windows;
 
 use std::path::Path;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager, WindowEvent};
 
 use crate::asr::AsrModels;
 use crate::engine::EnginePool;
@@ -156,6 +161,21 @@ pub fn run() {
             });
             Ok(())
         })
+        // ADR-007：采集进行时拦截窗口关闭——prevent_close + 通知前端弹确认框；
+        // 用户确认后前端先 stop_live_session 再 close（届时无活动会话，放行）
+        .on_window_event(|window, event| {
+            // 非 Windows 平台不编译实时链路，消除未使用变量警告
+            #[cfg(not(target_os = "windows"))]
+            let _ = (window, event);
+            #[cfg(target_os = "windows")]
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let state = window.state::<AppState>();
+                if state.live_session.active_session_id().is_some() {
+                    api.prevent_close();
+                    let _ = window.emit("app:close-requested", ());
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::list_windows,
             commands::transcribe_audio,
@@ -189,7 +209,9 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             commands_live::stop_live_session,
             #[cfg(target_os = "windows")]
-            commands_live::live_session_status
+            commands_live::live_session_status,
+            // 视频文件导入（REQ-015，ADR-008：字幕优先 + ASR fallback + 关键帧 OCR）
+            commands_import::import_video
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

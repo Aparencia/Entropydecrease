@@ -12,6 +12,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { WindowSelectCard } from "../components/WindowSelectCard";
+import VideoImportPanel from "../components/VideoImportPanel";
 import type { Note, WindowInfo, StreamingModelStatus, LiveSessionStatus, DownloadProgress, DownloadStatus } from "../types";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
@@ -298,6 +299,9 @@ export default function ClassroomPage() {
               <p style={{ fontSize: 11, color: "#6b7280", margin: "6px 0 0" }}>会话 #{liveSessionId}（可到「会话」页查看）</p>
             )}
           </div>
+
+          {/* 视频文件导入（v0.3.0：REQ-015 第二入口，字幕优先 + ASR fallback） */}
+          <VideoImportPanel />
 
           {/* 素材输入（v0.1.0：文件流水线） */}
           <div style={panel}>

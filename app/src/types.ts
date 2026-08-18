@@ -123,3 +123,12 @@ export interface LiveSessionStatus {
   active: boolean;
   sessionId: number | null;
 }
+
+/** 视频导入进度（Rust ImportProgress，camelCase 契约） */
+export interface ImportProgress {
+  /** 阶段：subtitle | audio | asr | ocr | done */
+  stage: string;
+  message: string;
+  done: number;
+  total: number;
+}
