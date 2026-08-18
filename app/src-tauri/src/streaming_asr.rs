@@ -133,7 +133,7 @@ impl StreamingAsrEngine {
                 self.last_final_text = final_text.clone();
                 events.push(StreamingAsrEvent::Final { text: final_text });
             }
-            self.stream = self.recognizer.create_stream_with_hotwords(self.hotwords.as_deref().unwrap_or(""));
+            self.stream = self.new_stream();
             self.last_partial_text.clear();
             self.last_partial_emit_at = None;
             self.sentence_pcm.clear();
@@ -170,12 +170,27 @@ impl StreamingAsrEngine {
     /// 当前每次会话新建引擎实例未调用——复用预留，登记豁免）。
     #[allow(dead_code)]
     pub fn reset(&mut self) {
-        self.stream = self.recognizer.create_stream_with_hotwords(self.hotwords.as_deref().unwrap_or(""));
+        self.stream = self.new_stream();
         self.last_partial_text.clear();
         self.last_partial_emit_at = None;
         self.last_final_text.clear();
         self.silent_skip_counter = 0;
         self.sentence_pcm.clear();
+    }
+
+    /// 创建新流：有热词才走 create_stream_with_hotwords。
+    ///
+    /// @ai-context: TD-032 修复——create_stream_with_hotwords 即使传入空串也会无条件创建
+    ///              ContextGraph（sherpa-onnx online-recognizer-transducer-impl.h），
+    ///              greedy_search 解码器未覆写带 OnlineStream 的 Decode 接口，
+    ///              解码时触发断言 abort（exit 0xffffffff）；无热词必须用 create_stream。
+    fn new_stream(&self) -> OnlineStream {
+        match self.hotwords.as_deref() {
+            Some(h) if !h.trim().is_empty() => {
+                self.recognizer.create_stream_with_hotwords(h)
+            }
+            _ => self.recognizer.create_stream(),
+        }
     }
 
     /// SenseVoice 整句重打分：一致性校验通过才替换（ADR-003 §5）。
