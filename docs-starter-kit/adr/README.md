@@ -10,6 +10,9 @@
 | ADR-003 | [流式 ASR 引擎与模型分发方案](./ADR-003-streaming-asr-architecture.md) | 已接受 | 2026-08-18 |
 | ADR-004 | [会话管理数据模型方案](./ADR-004-session-data-model.md) | 已接受 | 2026-08-18 |
 | ADR-005 | [字幕 OCR 与双源转写融合方案](./ADR-005-subtitle-ocr-fusion.md) | 已接受 | 2026-08-18 |
+| ADR-006 | [会话段派生视图：原始段与融合轴分离](./ADR-006-session-segments-derived-view.md) | 提议 | 2026-08-18 |
+| ADR-007 | [采集会话生命周期与窗口解耦（持续不间断运行）](./ADR-007-live-session-lifecycle.md) | 已接受 | 2026-08-18 |
+| ADR-008 | [文件导入与字幕优先转写方案（含采集链路质量优化）](./ADR-008-file-import-subtitle-priority.md) | 已接受 | 2026-08-18 |
 
 ## 编号规则
 
