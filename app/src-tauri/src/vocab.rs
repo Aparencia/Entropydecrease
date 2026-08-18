@@ -94,6 +94,9 @@ impl VocabStore {
 ///
 /// @ai-context: 长词优先（先替换长 from，防"主者"命中"王者"的子串先被替换）；
 ///              无匹配/空表原样返回。
+/// @ai-context: 语义声明（审查澄清）：**顺序替换、可链式**——存在 A→B 与 B→C
+///              两对时输入 A 会依次命中得 A→C；这是有意取舍（实现简单、词表
+///              通常不含链式对），使用方不应依赖非链式假设。
 pub fn apply_replacements(text: &str, pairs: &[ReplacePair]) -> String {
     if pairs.is_empty() {
         return text.to_string();
@@ -147,20 +150,24 @@ pub fn extract_candidates(text: &str, max: usize) -> Vec<String> {
     list.into_iter().take(max).map(|(_, _, t)| t).collect()
 }
 
-/// OCR 文本流 → 高频词建议（纯函数）：候选 + 出现次数 ≥ min_count（字典序）。
-pub fn suggest_from_ocr_texts(texts: &[&str], min_count: usize) -> Vec<String> {
-    let mut freq: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-    for text in texts {
-        // 每行文本内部去重（同一行重复出现的 gram 只计一次——防止长行刷频）
+/// OCR 文本流 → 高频词建议（纯函数）：按 **(会话, token)** 去重计数
+/// （同一会话多块同文只计 1 次——固定字幕/水印不刷提名），出现会话数 ≥ min_count。
+///
+/// @ai-context: 输入为 (session_id, text) 对（recent_ocr_texts 产出）；
+///              审查修复：原按 OCR 块计数会被单会话重复文字刷频提名。
+pub fn suggest_from_ocr_texts(texts: &[(i64, &str)], min_count: usize) -> Vec<String> {
+    let mut freq: std::collections::HashMap<String, std::collections::HashSet<i64>> =
+        std::collections::HashMap::new();
+    for (session, text) in texts {
         let mut line: std::collections::HashSet<String> = std::collections::HashSet::new();
         collect_tokens(text, &mut line);
         for t in line {
-            *freq.entry(t).or_insert(0) += 1;
+            freq.entry(t).or_default().insert(*session);
         }
     }
     let mut list: Vec<String> = freq
         .into_iter()
-        .filter(|(_, n)| *n >= min_count)
+        .filter(|(_, sessions)| sessions.len() >= min_count)
         .map(|(t, _)| t)
         .collect();
     list.sort();
@@ -284,6 +291,13 @@ mod tests {
     }
 
     #[test]
+    fn apply_replacement_chain_is_documented_behavior() {
+        // 语义声明固化：顺序替换可链式（A→B 再 B→C 得 A→C）
+        let pairs = vec![pair("A", "B"), pair("B", "C")];
+        assert_eq!(apply_replacements("XA", &pairs), "XC");
+    }
+
+    #[test]
     fn store_roundtrip_preserves_fields() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("vocab.json");
@@ -356,17 +370,33 @@ mod tests {
 
     #[test]
     fn suggest_from_ocr_texts_requires_min_count() {
-        let texts = ["术语甲出现", "术语甲又出现", "术语甲第三次", "只出现一次的词", "一次一次"];
-        let suggestions = suggest_from_ocr_texts(&texts, 3);
-        // "出现" 3 次（每行去重后）、"术语" 3 次、"术语甲" 3 次 → 均 ≥3
-        assert!(suggestions.contains(&"出现".to_string()));
-        assert!(suggestions.contains(&"术语".to_string()));
+        // 会话去重语义：同一会话多块同文只计 1 次
+        let texts: Vec<(i64, &str)> = vec![
+            (1, "术语甲出现"),
+            (1, "术语甲又出现"), // 同会话重复 → 术语甲 在会话 1 只计 1
+            (1, "术语甲第三次"),
+            (2, "只出现一次的词"),
+            (2, "一次一次"),
+            (3, "术语甲出现"),
+        ];
+        // min_count=2：术语甲 出现在会话 1 与 3 → 2 个会话 ✓
+        let suggestions = suggest_from_ocr_texts(&texts, 2);
         assert!(suggestions.contains(&"术语甲".to_string()));
-        // 只出现 1 次的 gram（如"甲出"）不入选
-        assert!(!suggestions.contains(&"甲出".to_string()));
-        // min_count=2 时"一次"（2 次：第 4/5 行）也进入
-        let s2 = suggest_from_ocr_texts(&texts, 2);
-        assert!(s2.contains(&"一次".to_string()));
+        // "出现" 仅会话 1/3（会话 2 也有出现？"只出现一次的词"含"出现"）→ 会话 1/2/3 = 3 ✓
+        assert!(suggestions.contains(&"出现".to_string()));
+        // min_count=3：术语甲 只跨 2 会话 → 不入选
+        let s3 = suggest_from_ocr_texts(&texts, 3);
+        assert!(!s3.contains(&"术语甲".to_string()));
+        // 单会话刷频不提名：同会话 5 块同文，min_count=2 时仍不算
+        let single: Vec<(i64, &str)> = vec![
+            (9, "固定字幕文字"),
+            (9, "固定字幕文字"),
+            (9, "固定字幕文字"),
+            (9, "固定字幕文字"),
+            (9, "固定字幕文字"),
+        ];
+        let s = suggest_from_ocr_texts(&single, 2);
+        assert!(!s.contains(&"固定".to_string()), "单会话重复不得刷提名");
     }
 
     #[test]

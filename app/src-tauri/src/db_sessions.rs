@@ -262,19 +262,21 @@ impl Db {
 
     /// 最近 N 个会话的 OCR 文本（M5/REQ-040 OCR→ASR 闭环建议源）。
     ///
-    /// @ai-context: 取最近 N 个会话（started_at 倒序）的全部 ocr_blocks 文本，
-    ///              供词表建议（高频词提名）；空结果返回空列表。
-    pub fn recent_ocr_texts(&self, sessions: i64) -> Result<Vec<String>> {
+    /// @ai-context: 返回 (session_id, text) 对——建议侧按会话去重计数
+    ///              （同一会话多块同文不刷提名，审查修复）；
+    ///              排序按会话倒序 + 会话内时间升序（绝对时间语义明确）。
+    pub fn recent_ocr_texts(&self, sessions: i64) -> Result<Vec<(i64, String)>> {
         let conn = self.conn.lock().expect("db lock poisoned");
         let mut stmt = conn.prepare(
-            "SELECT b.text FROM session_ocr_blocks b
-             JOIN sessions s ON s.id = b.session_id
-             WHERE s.id IN (
+            "SELECT b.session_id, b.text FROM session_ocr_blocks b
+             WHERE b.session_id IN (
                  SELECT id FROM sessions ORDER BY started_at DESC, id DESC LIMIT ?1
              )
-             ORDER BY b.timestamp_ms ASC",
+             ORDER BY b.session_id DESC, b.timestamp_ms ASC",
         )?;
-        let rows = stmt.query_map(params![sessions], |row| row.get::<_, String>(0))?;
+        let rows = stmt.query_map(params![sessions], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?;
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
     }
 

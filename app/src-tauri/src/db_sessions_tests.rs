@@ -118,6 +118,36 @@ fn delete_session_cascades_children() {
 }
 
 #[test]
+fn recent_ocr_texts_returns_latest_sessions_only() {
+    // 审查修复核对：recent_ocr_texts 只取最近 N 会话、按 (session, text) 返回、会话倒序
+    let db = mem_db();
+    let s1 = db.create_session(&new_session("旧")).unwrap();
+    let s2 = db.create_session(&new_session("新")).unwrap();
+    for (sid, ts, text) in [(s1.id, 100, "旧会话文字"), (s2.id, 100, "新会话文字"), (s2.id, 200, "新会话第二行")] {
+        db.add_ocr_block(&NewSessionOcrBlock {
+            session_id: sid,
+            timestamp_ms: ts,
+            text: text.into(),
+            score: 0.9,
+            region: "full".into(),
+        })
+        .unwrap();
+    }
+    // Act：最近 1 个会话
+    let rows = db.recent_ocr_texts(1).unwrap();
+    // Assert：只含 s2 的两行，且 session_id 正确
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|(sid, _)| *sid == s2.id));
+    assert!(rows.iter().any(|(_, t)| t == "新会话文字"));
+    assert!(rows.iter().any(|(_, t)| t == "新会话第二行"));
+    // 最近 2 个会话 → 全部 3 行
+    assert_eq!(db.recent_ocr_texts(2).unwrap().len(), 3);
+    // 空库 → 空列表
+    let db2 = mem_db();
+    assert!(db2.recent_ocr_texts(3).unwrap().is_empty());
+}
+
+#[test]
 fn add_segments_batch_commits_all() {
     // Arrange
     let db = mem_db();
