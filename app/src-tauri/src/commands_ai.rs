@@ -190,6 +190,11 @@ pub async fn review_text_filter(
             .get_session(session_id)
             .map_err(|e| e.to_string())?
             .ok_or_else(|| format!("会话不存在: {}", session_id))?;
+        // 审查修复（2026-08-19）：与 preview_session_note 口径一致——
+        // recording 会话数据不完整，AI 复核结果无意义且浪费配额
+        if session.status == crate::db_sessions::SESSION_STATUS_RECORDING {
+            return Err("进行中的会话不能 AI 复核，请先结束会话".to_string());
+        }
         let segments = db.list_segments(session_id).map_err(|e| e.to_string())?;
         let ocr_blocks = db.list_ocr_blocks(session_id).map_err(|e| e.to_string())?;
         // ① 纯规则过滤（与 preview_session_note 同一管线）
@@ -233,10 +238,20 @@ pub async fn review_text_filter(
                     .collect(),
             };
             let ids: Vec<i64> = chunk.iter().map(|b| b.segment_id).collect();
-            // 缓存键：段文本序列 hash（同批同文本零重复送审/计费）
+            // 缓存键：段文本序列 + 上下文（prev/next/hint）——merge 方向判定
+            // 依赖上下文，键必须覆盖全送审内容（同批同上下文才零重复送审）
             let key_text = chunk
                 .iter()
-                .map(|b| format!("{}:{}", b.segment_id, b.text))
+                .map(|b| {
+                    format!(
+                        "{}:{}/prev={}/next={}/hint={}",
+                        b.segment_id,
+                        b.text,
+                        b.prev.as_deref().unwrap_or(""),
+                        b.next.as_deref().unwrap_or(""),
+                        b.kind.hint()
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join("|");
             let key = crate::ai_guardrails::text_hash(&key_text);

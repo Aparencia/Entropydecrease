@@ -439,7 +439,13 @@ pub fn apply_ai_decisions(
                 if let Some(tp) = target_pos {
                     let target_id = kept[tp].id;
                     let seg = kept.remove(pos);
-                    let tpos = kept.iter().position(|s| s.id == target_id).unwrap_or(0);
+                    // 审查修复（2026-08-19）：target 可能已被前序判定删除——
+                    // 旧实现 unwrap_or(0) 会把本段错拼到 index 0 的无关段
+                    let Some(tpos) = kept.iter().position(|s| s.id == target_id) else {
+                        // 保守恢复原段（不删不并——不损坏数据）
+                        kept.insert(pos, seg);
+                        continue;
+                    };
                     let joined = if tp < pos {
                         format!("{}{}", kept[tpos].text.trim(), seg.text.trim())
                     } else {

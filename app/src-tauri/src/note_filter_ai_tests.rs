@@ -196,3 +196,40 @@ fn ai_keep_leaves_unchanged() {
     assert_eq!(result.kept.len(), 2);
     assert_eq!(result.stats.ai_delete, 0);
 }
+
+#[test]
+fn ai_merge_with_deleted_target_recovers_segment() {
+    // Arrange：审查回归——前序判定已删除 merge 目标段，后续 merge 判定
+    // 不得把文本错拼到无关段（旧实现 unwrap_or(0) 损坏数据）
+    let segments = vec![asr(1, 0, 1000, "第一句"), asr(2, 1000, 2000, "第二句"), asr(3, 2000, 3000, "第三句")];
+    let result = filter_note("测试", &segments, &[], &junk());
+    let decisions = vec![
+        // 先删 target（段 1）……
+        TextFilterDecision {
+            segment_id: 1,
+            action: TextFilterAction::Delete,
+            confidence: 0.9,
+            reason: "寒暄".into(),
+            merge_with: None,
+        },
+        // ……段 3 merge prev 指向已不存在的段 2 的前邻？不——段 3 merge prev =
+        // 段 2，段 2 仍在。构造真正丢失场景：段 2 merge prev（段 1 已被删）
+        TextFilterDecision {
+            segment_id: 2,
+            action: TextFilterAction::Merge,
+            confidence: 0.8,
+            reason: "截断".into(),
+            merge_with: Some("prev".into()),
+        },
+    ];
+    // Act
+    let result = apply_ai_decisions(result, &decisions);
+    // Assert：段 2 的 merge 目标（段 1）已被删 → 保守恢复（不删不并）；
+    // kept 保留 2 段且文本不被拼错
+    assert_eq!(result.kept.len(), 2);
+    assert!(result.kept.iter().any(|s| s.text == "第二句"), "段 2 应原样保留");
+    assert!(result.kept.iter().any(|s| s.text == "第三句"));
+    assert!(!result.kept.iter().any(|s| s.text.contains("第二句第三句")), "不得错拼到无关段");
+    assert!(result.merged.is_empty(), "目标丢失时不得登记合并");
+    assert_eq!(result.stats.ai_delete, 1, "仅段 1 删除生效");
+}

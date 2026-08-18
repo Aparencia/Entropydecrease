@@ -107,11 +107,19 @@ fn default_rules() -> Vec<SymbolRule> {
 
 impl Default for SymbolNormalizeConfig {
     fn default() -> Self {
-        Self { rules: default_rules() }
+        Self { rules: default_rules() }.ensure_sorted()
     }
 }
 
 impl SymbolNormalizeConfig {
+    /// 规则按 spoken 长度降序（长规则优先——"大于等于"先于"大于"，防止
+    /// 部分替换吞掉长规则）。审查修复（2026-08-19）：排序移至构造期一次，
+    /// normalize 是逐段热路径（大会话数千段），不再每段重复排序。
+    fn ensure_sorted(mut self) -> Self {
+        self.rules.sort_by_key(|r| std::cmp::Reverse(r.spoken.chars().count()));
+        self
+    }
+
     /// 从 JSON 构建（与内置默认合并，按 (kind, spoken) 去重）。
     pub fn from_json(json: &str) -> Result<Self, String> {
         let parsed: SymbolNormalizeConfig =
@@ -122,7 +130,7 @@ impl SymbolNormalizeConfig {
                 rules.push(r);
             }
         }
-        Ok(Self { rules })
+        Ok(Self { rules }.ensure_sorted())
     }
 
     /// 从数据目录 JSON 加载（文件缺失/损坏 → 内置默认，不阻断启动）。
@@ -139,16 +147,14 @@ impl SymbolNormalizeConfig {
 
 /// 口语文本 → 书面符号文本（纯规则）。
 ///
-/// @ai-context: 流程：① 字面规则（长 spoken 优先——"大于等于"先于"大于"，
-///              避免部分替换吞掉长规则）；② 中文数字发音解析（含小数）。
+/// @ai-context: 流程：① 字面规则（构造期已按长 spoken 优先排序）；
+///              ② 中文数字发音解析（含小数）。
 pub fn normalize(text: &str, cfg: &SymbolNormalizeConfig) -> String {
     if text.trim().is_empty() {
         return String::new();
     }
-    let mut rules: Vec<&SymbolRule> = cfg.rules.iter().collect();
-    rules.sort_by_key(|r| std::cmp::Reverse(r.spoken.chars().count()));
     let mut out = text.to_string();
-    for rule in rules {
+    for rule in &cfg.rules {
         out = apply_rule(&out, rule);
     }
     replace_number_runs(&out)
