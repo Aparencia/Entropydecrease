@@ -62,6 +62,9 @@ export default function LiveActivityPanel() {
   const [counts, setCounts] = useState({ subtitle: 0, asr: 0, ocr: 0 });
   const startedAtRef = useRef<number | null>(null);
   const [, setTick] = useState(0);
+  // TD-053 修复：partial 以 ref 镜像（事件回调读最新值），沉淀副作用移出 setState updater
+  const partialRef = useRef<PartialLine | null>(null);
+  const lastFinalTimeRef = useRef(0);
 
   // 时长计时（1s tick，仅展示）
   useEffect(() => {
@@ -71,7 +74,7 @@ export default function LiveActivityPanel() {
 
   useEffect(() => {
     // M3/REQ-038 沉淀：已定稿（committed）的识别中行并入定稿列表（计数+时间戳）。
-    // 定义在 effect 内以闭包捕获最新 state 更新函数；settle 只做追加不读旧列表。
+    // 纯追加（不读旧列表、无副作用），StrictMode 双调用安全（幂等由调用方保证只调一次）
     const settleAsrLine = (text: string, time: number) => {
       setTranscripts((prev) => {
         const next = [...prev, { id: nextId(), time, source: "asr" as const, text }];
@@ -80,8 +83,12 @@ export default function LiveActivityPanel() {
       countsRef.current.asr += 1;
       setCounts({ ...countsRef.current });
     };
-    // 最近一次 final 的时间戳（committed 行沉淀时使用；TD-043 后端纪元）
-    let lastFinalTime = 0;
+    // 事件回调统一入口：更新 partial 状态并同步 ref 镜像（TD-053：副作用在回调，
+    // 不在 updater——StrictMode 双调用不再导致计数双加/ID 跳号）
+    const applyPartial = (next: PartialLine | null) => {
+      partialRef.current = next;
+      setPartial(next);
+    };
 
     const unlisteners: Promise<() => void>[] = [
       // 状态机：live:status 的 recording 由 ClassroomPage 判定显示时机，此处只映射文案
@@ -91,12 +98,11 @@ export default function LiveActivityPanel() {
           startedAtRef.current = startedAtRef.current ?? Date.now();
         } else if (e.payload === "stopped") {
           // 停止：把已定稿未沉淀的行并入列表（防末句丢失，T2 语义）
-          setPartial((prev) => {
-            if (prev?.committed && prev.text.trim()) {
-              settleAsrLine(prev.text, lastFinalTime);
-            }
-            return null;
-          });
+          const prev = partialRef.current;
+          if (prev?.committed && prev.text.trim()) {
+            settleAsrLine(prev.text, lastFinalTimeRef.current);
+          }
+          applyPartial(null);
           setPhase("⏹ 已停止");
         } else if (e.payload === "failed") {
           setPhase("⚠ 采集异常");
@@ -104,24 +110,23 @@ export default function LiveActivityPanel() {
       }),
       listen<string>("live:asr-partial", (e) => {
         // 新 partial 到来：若上一行已定稿未沉淀 → 先沉淀再显示新识别行
-        setPartial((prev) => {
-          if (prev?.committed && prev.text.trim()) {
-            settleAsrLine(prev.text, lastFinalTime);
-          }
-          return { text: e.payload, committed: false };
-        });
+        const prev = partialRef.current;
+        if (prev?.committed && prev.text.trim()) {
+          settleAsrLine(prev.text, lastFinalTimeRef.current);
+        }
+        applyPartial({ text: e.payload, committed: false });
       }),
       listen<AsrFinalEvent>("live:asr-final", (e) => {
-        lastFinalTime = e.payload.timestampMs;
+        lastFinalTimeRef.current = e.payload.timestampMs;
         // M3/REQ-038 静默修正：partial 行原位灰→黑（无闪烁无跳动）；
         // 无 partial（快速断句）时直接沉淀为定稿行
-        setPartial((prev) => {
-          if (prev && prev.text.trim()) {
-            return { text: e.payload.text, committed: true };
-          }
+        const prev = partialRef.current;
+        if (prev && prev.text.trim()) {
+          applyPartial({ text: e.payload.text, committed: true });
+        } else {
           settleAsrLine(e.payload.text, e.payload.timestampMs);
-          return null;
-        });
+          applyPartial(null);
+        }
       }),
       listen<SubtitleEvent>("live:subtitle", (e) => {
         setTranscripts((prev) => {

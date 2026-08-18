@@ -39,13 +39,18 @@ export function SystemStatusBadge() {
   const [health, setHealth] = useState<HealthSnapshot | null>(null);
   const [diag, setDiag] = useState<DiagSnapshot | null>(null);
   const [open, setOpen] = useState(false);
+  // 状态获取失败标记（审查修复：不再空 catch 吞错——面板标注数据可能过期）
+  const [stale, setStale] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
       setHealth(await invoke<HealthSnapshot>("health_status"));
       setDiag(await invoke<DiagSnapshot>("diag_snapshot"));
-    } catch {
-      // 状态获取失败不打扰用户（徽标保持上次值）
+      setStale(false);
+    } catch (e) {
+      // 审查修复：失败可观测（空 catch 违反安全红线）——标记过期而非静默
+      console.warn("[SystemStatusBadge] 状态获取失败:", e);
+      setStale(true);
     }
   }, []);
 
@@ -59,7 +64,7 @@ export function SystemStatusBadge() {
   const engineDown = health && (health.asr_alive === false || health.ocr_alive === false);
 
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11 }}>
+    <span style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11 }}>
       <span
         title={warn ? "存在健康告警（磁盘/模型/引擎），点击查看" : "系统健康"}
         onClick={() => setOpen((o) => !o)}
@@ -70,9 +75,10 @@ export function SystemStatusBadge() {
       {open && (
         <span
           style={{
+            // 审查修复：包含块 = 徽标容器（relative），面板锚定徽标下方而非视口右上角
             position: "absolute",
-            right: 12,
-            top: 44,
+            right: 0,
+            top: 22,
             zIndex: 20,
             background: "#fff",
             border: "1px solid #e5e7eb",
@@ -85,7 +91,10 @@ export function SystemStatusBadge() {
             width: 260,
           }}
         >
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>系统状态（每 15s 刷新）</div>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>
+            系统状态（每 15s 刷新）
+            {stale && <span style={{ color: "#b45309" }}>（⚠ 获取失败，数据可能过期）</span>}
+          </div>
           <div>
             磁盘剩余：
             {health?.disk_free_gb != null ? `${health.disk_free_gb.toFixed(1)} GB` : "未知"}

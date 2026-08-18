@@ -33,23 +33,29 @@ if (Test-Path (Join-Path $dest "lib\onnxruntime.dll")) {
 New-Item -ItemType Directory -Force -Path $ortDir | Out-Null
 
 $downloaded = $false
+$attempts = 3
 foreach ($url in $urls) {
-    try {
-        Write-Host "[download-ort-cuda] downloading: $url"
-        $resp = Invoke-WebRequest -Uri $url -OutFile $part -UseBasicParsing -PassThru
-        $expected = $resp.Headers.'Content-Length'
-        $actual = (Get-Item -LiteralPath $part).Length
-        if ($expected -and [long]$expected -ne $actual) {
-            throw "size mismatch: expected $expected got $actual"
+    for ($a = 1; $a -le $attempts; $a++) {
+        try {
+            Write-Host "[download-ort-cuda] downloading ($a/$attempts): $url"
+            # TimeoutSec 防网络挂起；.part 原子写：成功后 rename，失败清理
+            $resp = Invoke-WebRequest -Uri $url -OutFile $part -UseBasicParsing -PassThru -TimeoutSec 120
+            $expected = $resp.Headers.'Content-Length'
+            $actual = (Get-Item -LiteralPath $part).Length
+            if ($expected -and [long]$expected -ne $actual) {
+                throw "size mismatch: expected $expected got $actual"
+            }
+            if (Test-Path $zip) { Remove-Item $zip -Force }
+            Move-Item -LiteralPath $part -Destination $zip
+            $downloaded = $true
+            break
+        } catch {
+            Write-Host "[download-ort-cuda] download failed: $_"
+            if (Test-Path $part) { Remove-Item $part -Force }
+            Start-Sleep -Seconds (2 * $a)
         }
-        if (Test-Path $zip) { Remove-Item $zip -Force }
-        Move-Item -LiteralPath $part -Destination $zip
-        $downloaded = $true
-        break
-    } catch {
-        Write-Host "[download-ort-cuda] download failed: $_"
-        if (Test-Path $part) { Remove-Item $part -Force }
     }
+    if ($downloaded) { break }
 }
 if (-not $downloaded) { throw "all mirrors failed" }
 

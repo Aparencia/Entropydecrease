@@ -73,6 +73,8 @@ export default function ClassroomPage() {
       listen<string>("live:error", (e) => setLiveError(e.payload)),
       // M7/REQ-042 F5：ASR 降级提示（静默失败可见化；会话停止时清除）
       listen<string>("live:asr-degraded", (e) => setAsrDegraded(e.payload)),
+      // 降级恢复（审查修复）：清除降级横幅，避免残留误导
+      listen("live:asr-recovered", () => setAsrDegraded(null)),
       // 修复（v0.3.0 审查反馈）：必须区分 payload——Rust 侧在 ASR 模型加载成功后
       // 才 emit "recording"（比 invoke resolve 晚 1-3s），旧实现无条件清态导致
       // 按钮变回"开始采集"而后端会话仍在跑，再点开始被拒绝

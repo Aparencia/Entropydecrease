@@ -28,6 +28,15 @@ function backendLabel(backend: OcrDeviceStatus["actual"]): string {
   return String(backend);
 }
 
+/** 规范化比较键（审查修复：Cuda 对象 JSON 反序列化后引用不相等，不能用 !== 判回退） */
+function backendKey(backend: OcrDeviceStatus["actual"]): string {
+  if (backend === "Cpu") return "Cpu";
+  if (typeof backend === "object" && backend !== null && "Cuda" in backend) {
+    return `Cuda#${backend.Cuda.device_id}`;
+  }
+  return String(backend);
+}
+
 export function OcrDeviceSetting() {
   const [status, setStatus] = useState<OcrDeviceStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -133,7 +142,7 @@ export function OcrDeviceSetting() {
             <b style={{ color: backendLabel(status.actual) === "CPU" ? "#6b7280" : "#0d9488" }}>
               {backendLabel(status.actual)}
             </b>
-            {status.requested !== status.actual && (
+            {backendKey(status.requested) !== backendKey(status.actual) && (
               <span style={{ color: "#9ca3af" }}>（请求 {backendLabel(status.requested)}）</span>
             )}
           </div>
