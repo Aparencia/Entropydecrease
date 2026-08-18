@@ -33,11 +33,27 @@ pub struct CapturedFrame {
     pub timestamp_ms: u64,
 }
 
-/// 屏幕捕获采样器（DXGI 主路径 + GDI 降级）。
+/// 捕获过程事件（ADR-007：采样器内部检测、上层转发前端）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CaptureEvent {
+    /// 目标窗口已关闭（GetWindowRect 失败）→ 已回退全屏捕获
+    WindowLost,
+}
+
+/// DXGI 重建节流间隔（GDI 降级期间周期性尝试切回主路径，ADR-007）。
+const DXGI_RECREATE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// 屏幕捕获采样器（DXGI 主路径 + GDI 降级 + 周期重建自愈）。
 pub struct ScreenCaptureSampler {
     dxgi: Option<DxgiState>,
     window_rect: Rect,
     started: std::time::Instant,
+    /// 目标窗口句柄（重建 DXGI 与刷新窗口矩形用；None=全屏）
+    hwnd: Option<HWND>,
+    /// 上次 DXGI 重建尝试时刻（GDI 期间节流）
+    last_recreate: std::time::Instant,
+    /// 待上报事件（worker 每次捕获后取走）
+    pending_event: Option<CaptureEvent>,
 }
 
 /// DXGI 状态（设备 + 上下文 + duplication + staging 纹理）。
@@ -66,7 +82,49 @@ impl ScreenCaptureSampler {
             None => Rect { left: 0, top: 0, right: 0, bottom: 0 },
         };
         let dxgi = DxgiState::create(hwnd).ok();
-        Ok(Self { dxgi, window_rect, started: std::time::Instant::now() })
+        Ok(Self {
+            dxgi,
+            window_rect,
+            started: std::time::Instant::now(),
+            hwnd,
+            last_recreate: std::time::Instant::now(),
+            pending_event: None,
+        })
+    }
+
+    /// 取走待上报事件（worker 每次捕获后调用；无事件返回 None）。
+    pub fn take_event(&mut self) -> Option<CaptureEvent> {
+        self.pending_event.take()
+    }
+
+    /// 刷新目标窗口矩形（ADR-007）：窗口移动/缩放/分辨率变化后裁剪跟随；
+    /// GetWindowRect 失败 = 窗口已关闭 → 回退全屏并记录 WindowLost 事件。
+    fn refresh_window_rect(&mut self) {
+        let Some(hwnd) = self.hwnd else { return };
+        let mut rect: RECT = unsafe { std::mem::zeroed() };
+        if unsafe { GetWindowRect(hwnd, &mut rect) }.is_ok() {
+            self.window_rect = Rect { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+        } else if self.window_rect.width() > 0 {
+            // 窗口已关闭：回退全屏（一次性事件，防重复通知）
+            eprintln!("[ScreenCapture] 目标窗口已关闭，回退全屏捕获");
+            self.window_rect = Rect { left: 0, top: 0, right: 0, bottom: 0 };
+            self.pending_event = Some(CaptureEvent::WindowLost);
+        }
+    }
+
+    /// GDI 降级期间周期性尝试重建 DXGI 主路径（ADR-007：锁屏/远程桌面恢复后自动切回）。
+    fn maybe_recreate_dxgi(&mut self) {
+        if self.dxgi.is_some() {
+            return;
+        }
+        if self.last_recreate.elapsed() < DXGI_RECREATE_INTERVAL {
+            return;
+        }
+        self.last_recreate = std::time::Instant::now();
+        if let Ok(state) = DxgiState::create(self.hwnd) {
+            eprintln!("[ScreenCapture] DXGI 主路径已恢复");
+            self.dxgi = Some(state);
+        }
     }
 
     /// 捕获一帧（可选裁剪区域，相对桌面帧坐标）。
@@ -75,6 +133,8 @@ impl ScreenCaptureSampler {
     /// @ai-context: 先按目标窗口矩形裁剪（ADR-002 承诺，审查 M3 修复），再叠加区域裁剪；
     ///              字幕区裁剪（bottom_quarter）基于窗口尺寸由上层重新计算。
     pub fn capture(&mut self, crop: Option<&Rect>) -> crate::error::Result<Option<CapturedFrame>> {
+        // ADR-007：每次捕获前刷新窗口矩形（移动/缩放/关闭自适应）
+        self.refresh_window_rect();
         let elapsed_ms = self.started.elapsed().as_millis() as u64;
         if let Some(state) = self.dxgi.as_mut() {
             match state.capture_frame(elapsed_ms) {
@@ -92,10 +152,13 @@ impl ScreenCaptureSampler {
                     // DXGI 失效（远程桌面/锁屏/设备丢失）→ 降级 GDI（ADR-002）
                     eprintln!("[ScreenCapture] DXGI 失效，降级 GDI: {}", e);
                     self.dxgi = None;
+                    self.last_recreate = std::time::Instant::now();
                     self.capture_gdi(crop, elapsed_ms)
                 }
             }
         } else {
+            // GDI 期间周期尝试重建 DXGI 主路径（ADR-007 自愈）
+            self.maybe_recreate_dxgi();
             self.capture_gdi(crop, elapsed_ms)
         }
     }

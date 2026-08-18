@@ -3,8 +3,16 @@
  *
  * @ai-context: 顶部标签导航 + 页面条件渲染（MVP 不引入路由库，保持轻量）；
  *              页面组件各自管理状态，切换不共享可变状态。
+ * @ai-context: ADR-007（REQ-033）：本层为全局采集生命周期宿主——
+ *              ① 导航栏常驻采集状态徽标（页面切换/最小化后仍可感知采集在跑）
+ *              ② 监听 app:close-requested（Rust 侧拦截了关闭）→ 确认框 →
+ *                 确认后 stop_live_session 再 close，取消则采集继续。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
+import { confirm } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import ClassroomPage from "./pages/ClassroomPage";
 import NotesPage from "./pages/NotesPage";
 import SessionsPage from "./pages/SessionsPage";
@@ -19,6 +27,57 @@ const NAV_ITEMS: { key: Page; label: string }[] = [
 
 function App() {
   const [page, setPage] = useState<Page>("classroom");
+  // 全局采集状态（ADR-007：与页面解耦，徽标常驻导航栏）
+  const [capturing, setCapturing] = useState(false);
+  const [recovering, setRecovering] = useState(false);
+
+  useEffect(() => {
+    let disposed = false;
+    const unlisteners: (() => void)[] = [];
+    // 监听器注册为异步（listen 返回 Promise<UnlistenFn>）；组件卸载时统一解绑
+    (async () => {
+      // 采集主状态：recording=采集中；stopped/failed=结束（live_session 事件）
+      unlisteners.push(
+        await listen<string>("live:status", (e) => {
+          if (disposed) return;
+          setCapturing(e.payload === "recording");
+          if (e.payload !== "recording") setRecovering(false);
+        }),
+      );
+      // 音频自动重连中（ADR-007）：会话未死，UI 提示恢复态
+      unlisteners.push(
+        await listen("live:recovering", () => {
+          if (disposed) return;
+          setCapturing(true);
+          setRecovering(true);
+        }),
+      );
+      unlisteners.push(
+        await listen("live:recovered", () => {
+          if (!disposed) setRecovering(false);
+        }),
+      );
+      // Rust 侧 CloseRequested 拦截（采集进行中）→ 用户确认后才停止并退出
+      unlisteners.push(
+        await listen("app:close-requested", async () => {
+          const ok = await confirm("当前正在进行采集，确定要停止并退出吗？", {
+            title: "熵减",
+            kind: "warning",
+          });
+          if (ok) {
+            // 停止采集（失败也继续尝试关闭——无活动会话时 CloseRequested 直接放行；
+            // 若会话仍存活则再次拦截弹框，用户可二次决定）
+            await invoke("stop_live_session").catch(() => {});
+            await getCurrentWindow().close();
+          }
+        }),
+      );
+    })();
+    return () => {
+      disposed = true;
+      unlisteners.forEach((u) => u());
+    };
+  }, []);
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", fontFamily: "system-ui, sans-serif" }}>
@@ -54,6 +113,23 @@ function App() {
             {item.label}
           </button>
         ))}
+        {/* 全局采集徽标（ADR-007）：切页/最小化后仍可见采集状态 */}
+        {capturing && (
+          <span
+            style={{
+              marginLeft: "auto",
+              fontSize: 12,
+              fontWeight: 600,
+              color: recovering ? "#b45309" : "#0d9488",
+              background: recovering ? "#fffbeb" : "#f0fdfa",
+              border: `1px solid ${recovering ? "#f59e0b" : "#14b8a6"}`,
+              borderRadius: 12,
+              padding: "3px 10px",
+            }}
+          >
+            {recovering ? "⚠️ 采集恢复中" : "🎙 采集中"}
+          </span>
+        )}
       </nav>
 
       {/* 页面区（TD-004：保留挂载 + display 切换——页面切换不重挂载，
