@@ -4,7 +4,7 @@
 //!              长任务（ffmpeg 提取 + 分窗 ASR + 关键帧 OCR）走 spawn_blocking，
 //!              进度经 import:progress 事件推送前端（不阻塞 UI 事件循环）。
 
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
 
 use crate::commands::AppState;
 use crate::ffmpeg::FfmpegResolver;
@@ -35,7 +35,14 @@ pub async fn import_video(state: State<'_, AppState>, path: String) -> Result<i6
     let db = state.db.clone();
     let engines = state.engines.clone();
     let app = state.app.clone();
-    let resolver = FfmpegResolver::dev();
+    // 审查 P2 修复（TD-036）：ffmpeg 探测注入生产捆绑路径（resource_dir/ffmpeg，
+    // 安装包随 bundle.resources 携带；开发期捆绑目录 = crate 下 ffmpeg/）。
+    // 解析顺序仍为：ENTROPY_FFMPEG_DIR → 注入目录 → PATH（ffmpeg.rs）。
+    let mut resolver_dirs = vec![std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ffmpeg")];
+    if let Ok(res) = app.path().resource_dir() {
+        resolver_dirs.push(res.join("ffmpeg"));
+    }
+    let resolver = FfmpegResolver::with_dirs(resolver_dirs);
     tauri::async_runtime::spawn_blocking(move || {
         run_video_import(&db, &engines, &resolver, &trimmed, |p: &ImportProgress| {
             let _ = app.emit("import:progress", p);

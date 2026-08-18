@@ -8,6 +8,7 @@
 //!              子进程有界等待（超时 kill，防 ffmpeg 卡死挂起导入线程）。
 //! @ai-context: 本模块只做"定位 + 命令 + 执行"，管线编排在 import.rs。
 
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -39,12 +40,13 @@ pub struct FfmpegResolver {
 
 impl FfmpegResolver {
     /// 开发期解析器：捆绑目录 = crate 目录下 ffmpeg/（src-tauri/ffmpeg/）。
+    /// 生产注入见 commands_import（resource_dir 组合）；本函数供测试与开发环境使用。
+    #[allow(dead_code)]
     pub fn dev() -> Self {
         Self { extra_dirs: vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ffmpeg")] }
     }
 
-    /// 自定义候选目录（生产捆绑路径注入；当前仅供测试隔离，登记豁免 dead_code）。
-    #[allow(dead_code)]
+    /// 自定义候选目录（生产注入 resource_dir/ffmpeg 等；测试亦用于 PATH 隔离）。
     pub fn with_dirs(dirs: Vec<PathBuf>) -> Self {
         Self { extra_dirs: dirs }
     }
@@ -166,7 +168,15 @@ pub fn extract_subtitle_args(input: &Path) -> Vec<String> {
 // ── 子进程执行（有界等待）────────────────────────────
 
 /// 执行命令并捕获 stdout（stderr 丢弃）；超时 kill 返回错误。
+///
+/// @ai-context: 审查 P0 修复（TD-034）：stdout 必须在 spawn 后立即交给读取线程——
+///              子进程写满管道缓冲（Windows 默认 4-64KB）会阻塞在 write 上，
+///              若主线程先轮询退出状态，大输出子进程永不退出 → 被超时误杀
+///              （长视频内嵌字幕解出可达数百 KB，必触发）。
 pub fn run_captured(program: &Path, args: &[String], timeout: Duration) -> Result<Vec<u8>> {
+    use std::io::Read;
+    use std::sync::mpsc;
+
     let mut child = Command::new(program)
         .args(args)
         .stdout(Stdio::piped())
@@ -174,19 +184,26 @@ pub fn run_captured(program: &Path, args: &[String], timeout: Duration) -> Resul
         .spawn()
         .map_err(|e| AppError::Io(format!("启动 {} 失败: {}", program.display(), e)))?;
 
+    // 读取线程：子进程存活期间持续排空管道（防阻塞），退出后收 EOF
+    let (out_tx, out_rx) = mpsc::channel();
+    if let Some(stdout) = child.stdout.take() {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let result = Read::read_to_end(&mut BufReader::new(stdout), &mut buf).map(|_| buf);
+            let _ = out_tx.send(result);
+        });
+    }
+
     // 有界等待：轮询退出状态，超时强杀（防 ffmpeg 卡死）
     let deadline = Instant::now() + timeout;
     loop {
         if let Some(status) = child.try_wait().map_err(|e| AppError::Io(format!("等待子进程失败: {}", e)))? {
             if status.success() {
-                let mut out = Vec::new();
-                use std::io::Read;
-                child
-                    .stdout
-                    .take()
-                    .ok_or_else(|| AppError::Io("读取子进程输出失败".to_string()))?
-                    .read_to_end(&mut out)?;
-                return Ok(out);
+                // 子进程已退出 → 管道 EOF，读取线程应立即完成（1s 兜底）
+                return out_rx
+                    .recv_timeout(Duration::from_secs(1))
+                    .map_err(|_| AppError::Io("读取子进程输出超时".to_string()))?
+                    .map_err(|e| AppError::Io(format!("读取子进程输出失败: {}", e)));
             }
             return Err(AppError::Io(format!(
                 "{} 退出码 {:?}（args: {}）",
@@ -281,5 +298,16 @@ mod tests {
         assert_eq!(exe_name("ffmpeg"), "ffmpeg.exe");
         #[cfg(not(target_os = "windows"))]
         assert_eq!(exe_name("ffmpeg"), "ffmpeg");
+    }
+
+    /// TD-034 回归：子进程输出超过管道缓冲（64KB）时不得被超时误杀。
+    /// cmd 生成 ~1.2MB 输出（50000 行 × 24 字符），3s 内必须正常返回。
+    #[test]
+    fn run_captured_handles_large_output() {
+        // Arrange & Act：大输出子进程（cmd 内建循环，无外部依赖）
+        let args = vec!["/C".to_string(), "for /L %i in (1,1,50000) do @echo xxxxxxxxxxxxxxxxxxxxxxxx".to_string()];
+        let out = run_captured(Path::new("cmd.exe"), &args, Duration::from_secs(10)).expect("large output");
+        // Assert：输出完整接收（>1MB），未触发超时误杀
+        assert!(out.len() > 1_000_000, "输出应完整接收，实际 {} 字节", out.len());
     }
 }

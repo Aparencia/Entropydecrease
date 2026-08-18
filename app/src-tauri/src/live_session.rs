@@ -326,7 +326,10 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
     let fusion_tracker = params.fusion.clone();
     fusion_tracker.begin(session_id);
     let _ = params.app.emit("session:fusing", session_id);
-    let _ = std::thread::Builder::new()
+    // 审查 P1 修复（TD-035）：spawn 失败必须清理 fusing 标记并告知前端，
+    // 否则标记永久残留（累积泄漏）且 UI 一直显示"融合中"
+    let thread_tracker = fusion_tracker.clone();
+    let spawn_result = std::thread::Builder::new()
         .name("entropy-fusion".into())
         .spawn(move || {
             // 等待采样线程退出（有界 5s，超时 detach），再读取字幕段用于融合——
@@ -348,7 +351,7 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
                 &subtitle_segments,
                 &asr_segments,
             );
-            fusion_tracker.end(session_id);
+            thread_tracker.end(session_id);
             match result {
                 Ok(()) => {
                     let _ = fusion_app.emit("session:fused", session_id);
@@ -359,6 +362,11 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
                 }
             }
         });
+    if let Err(e) = spawn_result {
+        // spawn 失败：清理标记 + 推送失败事件（原始段仍在库中，不丢数据）
+        fusion_tracker.end(session_id);
+        let _ = params.app.emit("session:fusion-failed", format!("融合线程启动失败（原始段已保留）: {}", e));
+    }
 }
 
 /// 推送错误事件（并重置前端录制态——审查 M3 修复：失败不能假"录制中"）。
