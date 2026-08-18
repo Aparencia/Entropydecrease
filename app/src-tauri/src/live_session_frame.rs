@@ -140,6 +140,8 @@ pub fn run_screen_worker(
     let mut stats = ScreenStats::default();
     // M2/REQ-037：动态字幕区域跟踪（播放区域检测 + ROI 锁定/重扫；尺寸首帧自适应）
     let mut roi_tracker = crate::region_tracker::RoiTracker::new(0, 0);
+    // M3/REQ-047：版面缓存（事件帧触发——同版面复用分区，变化才重分析）
+    let mut layout_cache = crate::layout_cache::LayoutCache::new();
     // M4/REQ-039 P8：高负载自动降级（CPU 占用采样 → 全帧降频，保 ASR 主链路）
     let mut load_monitor = crate::load_monitor::LoadMonitor::new();
     let mut last_load_check_at = Instant::now();
@@ -172,7 +174,7 @@ pub fn run_screen_worker(
                     screen.as_mut(), diff, &mut voter, &mut last_frame_text, &mut last_preview,
                     &db, &engines, &app, session_id, region, &subtitle_segments, epoch,
                     &mut last_capture_error, &mut last_ocr_at, &mut last_full_texts, &mut stats,
-                    &mut roi_tracker,
+                    &mut roi_tracker, &mut layout_cache,
                 );
             }
         }
@@ -219,6 +221,8 @@ fn process_frame(
     last_full_texts: &mut Vec<String>,
     stats: &mut ScreenStats,
     roi_tracker: &mut crate::region_tracker::RoiTracker,
+    // M3/REQ-047：版面缓存（事件帧触发——同版面复用，变化才重分析）
+    layout_cache: &mut crate::layout_cache::LayoutCache,
 ) {
     let Some(sampler) = screen else { return };
     // 字幕区裁剪决策由 M2/REQ-037 RoiTracker 给出（播放区域 + ROI；首帧扫描期全帧）
@@ -308,6 +312,23 @@ fn process_frame(
                 pre_scale_w as f32 / frame.width as f32,
                 pre_scale_h as f32 / frame.height as f32,
             );
+        }
+    }
+
+    // M3/REQ-047：版面分析（事件帧触发）——全帧分支在 OCR 前做区域分类，
+    // 结果经缓存复用（同版面零重分析）；诊断日志可观测区域构成（静默失败可见化）
+    if !is_subtitle {
+        if let Some(grid) = crate::frame_features::grid_from_bgra(&frame.bgraw, frame.width, frame.height) {
+            let (regions, reused) =
+                crate::layout_cache::analyze_or_reuse(layout_cache, &grid, frame.timestamp_ms);
+            if !reused && !regions.is_empty() {
+                // 新版面：分类构成（开发期日志；M4 起区域列表驱动分区域 OCR）
+                let summary: Vec<String> = regions
+                    .iter()
+                    .map(|r| format!("{:?}@{}x{}+{}+{}", r.kind, r.w, r.h, r.x, r.y))
+                    .collect();
+                eprintln!("[Layout] 会话 {} 版面区域: {}", session_id, summary.join(", "));
+            }
         }
     }
 

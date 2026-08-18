@@ -33,12 +33,15 @@ mod device_probe;
 mod engine;
 mod error;
 mod ffmpeg;
+mod frame_features;
 mod fusion;
 mod glossary;
 mod health_check;
 mod highlight_detect;
 mod import;
 mod import_frame;
+mod layout_analyzer;
+mod layout_cache;
 #[cfg(target_os = "windows")]
 mod live_session;
 #[cfg(target_os = "windows")]
