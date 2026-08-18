@@ -100,6 +100,8 @@ pub struct LiveSessionParams {
     pub data_dir: std::path::PathBuf,
     /// 前端事件推送（live:asr-partial / live:subtitle / live:error / live:status / session:*）
     pub app: tauri::AppHandle,
+    /// v0.6.0 M1（REQ-083）：UI 垃圾黑名单（字幕源头过滤）
+    pub ui_junk: crate::ui_junk::UiJunkList,
 }
 
 /// 活动会话记录。
@@ -323,6 +325,8 @@ fn run_session(
                 params.profile,
                 image_store,
                 worker_latest,
+                // REQ-083：UI 垃圾黑名单（Clone 廉价——Vec 条目）
+                params.ui_junk.clone(),
             )
         }) {
         Ok(h) => Some(h),

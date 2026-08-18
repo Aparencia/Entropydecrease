@@ -182,6 +182,28 @@ pub fn list_capture_windows() -> Vec<CaptureWindow> {
     Vec::new()
 }
 
+/// 当前前台窗口句柄（i64，与 CaptureWindow.id 同编码）。
+///
+/// @ai-context: REQ-084（v0.6.0 M1）：字幕 ROI 窗口切换检测——屏幕 worker
+///              每秒对比前台窗口与录制目标窗口，不一致 → RoiTracker 强制重扫。
+/// @ai-context: 失败（无前台窗口）返回 None，调用方静默跳过（误触发阈值校准）。
+#[cfg(windows)]
+pub fn foreground_hwnd() -> Option<i64> {
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    let hwnd = unsafe { GetForegroundWindow() };
+    if hwnd.0.is_null() {
+        None
+    } else {
+        Some(hwnd.0 as i64)
+    }
+}
+
+/// 非 Windows 平台占位（REQ-084 依赖前台窗口 API，仅 Windows 生效）。
+#[cfg(not(windows))]
+pub fn foreground_hwnd() -> Option<i64> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -54,6 +54,8 @@ pub struct RoiTracker {
     empty_frames: u32,
     /// 距上次播放区域重扫时刻
     last_playback_scan_at: std::time::Instant,
+    /// REQ-084：前台窗口与录制目标不一致（其他窗口内容不得当字幕）
+    foreground_foreign: bool,
     frame_w: u32,
     frame_h: u32,
 }
@@ -67,9 +69,29 @@ impl RoiTracker {
             scan_frames: 0,
             empty_frames: 0,
             last_playback_scan_at: std::time::Instant::now(),
+            foreground_foreign: false,
             frame_w,
             frame_h,
         }
+    }
+
+    /// REQ-084：前台窗口切换通知（foreign=true = 前台不是录制目标窗口）。
+    ///
+    /// @ai-context: 切换发生的上升沿（false→true）→ 强制重扫 ROI（旧 ROI 锁定
+    ///              的是目标窗口底部字幕带，其他窗口内容不得复用）；切换期间
+    ///              feed_ocr 冻结（见 feed_ocr），返回目标窗口后重新扫描。
+    /// @ai-context: 误触发阈值：前台探测失败时调用方不调用本方法（静默跳过）。
+    pub fn on_foreground_switch(&mut self, foreign: bool) {
+        if foreign && !self.foreground_foreign {
+            eprintln!("[RoiTracker] 前台窗口切换（与录制目标不一致），强制重扫 ROI");
+            self.reset_scan();
+        }
+        self.foreground_foreign = foreign;
+    }
+
+    /// 当前是否处于"前台非目标窗口"状态（字幕处理门控查询）。
+    pub fn foreground_foreign(&self) -> bool {
+        self.foreground_foreign
     }
 
     /// OCR 前每帧调用：返回本帧裁剪决策。
@@ -123,6 +145,12 @@ impl RoiTracker {
     ///              必须按缩放比反算回帧坐标系再参与聚簇/判定，否则 >960px 屏幕
     ///              ROI 错位（字幕裁半/空转）。
     pub fn feed_ocr(&mut self, blocks: &[TextBox], crop_origin: Option<(u32, u32)>, scale: (f32, f32)) {
+        // REQ-084：前台非目标窗口期间冻结跟踪——其他窗口内容既不得参与
+        // ROI 锁定/重扫判定，也不得延长空帧计数（防"新窗口恰好有文本"
+        // 导致 ROI 继续抓错；返回目标窗口后重新扫描）
+        if self.foreground_foreign {
+            return;
+        }
         let (sx, sy) = scale;
         let (ox, oy) = crop_origin.unwrap_or((0, 0));
         let frame_boxes: Vec<TextBox> = blocks
@@ -385,5 +413,54 @@ mod tests {
         t.last_playback_scan_at = std::time::Instant::now() - std::time::Duration::from_secs(10);
         t.refresh_playback_region(&buf, 640, 360);
         assert_eq!(t.decide(), RoiDecision::FullFrame, "播放区域出现应强制重扫");
+    }
+
+    #[test]
+    fn foreground_switch_forces_rescan_and_freezes_tracking() {
+        // Arrange：先锁定 ROI
+        let mut t = RoiTracker::new(640, 360);
+        for _ in 0..LOCK_SCAN_FRAMES {
+            t.feed_ocr(&[box_at(100.0, 260.0, 300.0, 20.0)], None, (1.0, 1.0));
+        }
+        assert!(t.locked_roi().is_some());
+        // Act：前台切换到其他窗口（上升沿）
+        t.on_foreground_switch(true);
+        // Assert：立即重扫（ROI 释放）；冻结期间 feed_ocr 不累积样本
+        assert_eq!(t.decide(), RoiDecision::FullFrame);
+        for _ in 0..LOCK_SCAN_FRAMES {
+            t.feed_ocr(&[box_at(10.0, 10.0, 50.0, 20.0)], None, (1.0, 1.0));
+        }
+        assert!(t.locked_roi().is_none(), "冻结期不得用其他窗口内容锁定 ROI");
+        assert_eq!(t.decide(), RoiDecision::FullFrame);
+        // 冻结期空帧计数不增长：切换期 ROI 文本不再延长空帧计数（防误重扫）
+        assert_eq!(t.empty_frames, 0);
+    }
+
+    #[test]
+    fn foreground_return_resumes_scanning() {
+        // Arrange：切换出去后返回目标窗口
+        let mut t = RoiTracker::new(640, 360);
+        t.on_foreground_switch(true);
+        // Act：返回目标窗口 → 解冻，正常重扫可锁定
+        t.on_foreground_switch(false);
+        for _ in 0..LOCK_SCAN_FRAMES {
+            t.feed_ocr(&[box_at(100.0, 260.0, 300.0, 20.0)], None, (1.0, 1.0));
+        }
+        // Assert：重新锁定目标窗口底部字幕带
+        assert!(t.locked_roi().is_some());
+        assert!(!t.foreground_foreign());
+    }
+
+    #[test]
+    fn repeated_foreign_signal_no_rescan_spam() {
+        // Arrange：持续 foreign（每帧上报同一状态）——只在上升沿重扫
+        let mut t = RoiTracker::new(640, 360);
+        t.on_foreground_switch(true);
+        // Act：重复 same-state 调用
+        t.on_foreground_switch(true);
+        t.on_foreground_switch(true);
+        // Assert：无 panic 且状态稳定（无空帧计数增长）
+        assert!(t.foreground_foreign());
+        assert_eq!(t.empty_frames, 0);
     }
 }

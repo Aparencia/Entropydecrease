@@ -63,6 +63,8 @@ struct ScreenStats {
     ocr_ok: u64,
     /// OCR 失败次数
     ocr_err: u64,
+    /// REQ-083：UI 垃圾字幕被源头过滤次数（可观测：误拦排查依据）
+    junk_filtered: u64,
     /// 上次打印统计时刻（15s 节流）
     last_log_at: Option<Instant>,
 }
@@ -100,6 +102,8 @@ pub fn run_screen_worker(
     mut image_store: Option<crate::image_store::SessionImageStore>,
     // v0.5.0 M6（REQ-051）：最新帧共享缓存（用户截图命令读取）
     latest_frame: std::sync::Arc<std::sync::Mutex<Option<LatestCapturedFrame>>>,
+    // v0.6.0 M1（REQ-083）：UI 垃圾黑名单（字幕源头过滤——文本特征命中不进投票器）
+    ui_junk: crate::ui_junk::UiJunkList,
 ) {
     let mut screen = match ScreenCaptureSampler::new(hwnd.map(crate::windows::hwnd_from_i64)) {
         Ok(s) => {
@@ -172,6 +176,14 @@ pub fn run_screen_worker(
         }
         if last_sample_at.elapsed().as_millis() as u64 >= SAMPLE_TICK_MS {
             last_sample_at = Instant::now();
+            // REQ-084：前台窗口切换检测（每秒一次）——前台与录制目标不一致 →
+            // ROI 强制重扫 + 字幕处理冻结（防其他窗口底部内容被当字幕）；
+            // 无目标窗口（全屏捕获）或探测失败 → 静默跳过（误触发阈值校准）
+            let foreign = match (hwnd, crate::windows::foreground_hwnd()) {
+                (Some(target), Some(fg)) => fg != target,
+                _ => false,
+            };
+            roi_tracker.on_foreground_switch(foreign);
             // B3（P3 简化版）+ M4：语音活跃度 + 负载档驱动自适应采样
             let region = scheduler.next_region(speech_active.load(Ordering::Relaxed), degraded);
             if region != SampleRegion::Skip {
@@ -185,7 +197,7 @@ pub fn run_screen_worker(
                     &mut last_capture_error, &mut last_ocr_at, &mut last_full_texts, &mut stats,
                     &mut roi_tracker, &mut layout_cache, &mut frame_samples,
                     &mut last_archived_text, &mut last_archived_at, &latest_frame,
-                    &mut image_store,
+                    &mut image_store, &ui_junk,
                 );
             }
         }
@@ -196,8 +208,8 @@ pub fn run_screen_worker(
         {
             stats.last_log_at = Some(Instant::now());
             eprintln!(
-                "[ScreenWorker] 采样统计: sampled={} no_change={} capture_err={} diff_pass={} diff_skip={} ocr_ok={} ocr_err={}",
-                stats.sampled, stats.no_change, stats.capture_err, stats.diff_pass, stats.diff_skip, stats.ocr_ok, stats.ocr_err
+                "[ScreenWorker] 采样统计: sampled={} no_change={} capture_err={} diff_pass={} diff_skip={} ocr_ok={} ocr_err={} junk_filtered={}",
+                stats.sampled, stats.no_change, stats.capture_err, stats.diff_pass, stats.diff_skip, stats.ocr_ok, stats.ocr_err, stats.junk_filtered
             );
         }
         std::thread::sleep(Duration::from_millis(WORKER_POLL_MS));
@@ -245,6 +257,8 @@ fn process_frame(
     latest_frame: &std::sync::Arc<std::sync::Mutex<Option<LatestCapturedFrame>>>,
     // M6/REQ-051：会话图片存储（None=未启用归档；mut 供区域裁剪图归档）
     image_store: &mut Option<crate::image_store::SessionImageStore>,
+    // v0.6.0 M1（REQ-083）：UI 垃圾黑名单（字幕源头过滤）
+    ui_junk: &crate::ui_junk::UiJunkList,
 ) {
     let Some(sampler) = screen else { return };
     // 字幕区裁剪决策由 M2/REQ-037 RoiTracker 给出（播放区域 + ROI；首帧扫描期全帧）
@@ -393,13 +407,18 @@ fn process_frame(
                 *last_ocr_at = Instant::now();
                 if is_subtitle {
                     // M2/REQ-037：bbox 回喂 ROI 跟踪器（锁定/失效判定；
-                    // 裁剪图坐标系 + 原点平移 + TD-046 缩放比反算）
+                    // 裁剪图坐标系 + 原点平移 + TD-046 缩放比反算；
+                    // REQ-084：前台非目标窗口期间 feed_ocr 内部冻结）
                     let boxes: Vec<crate::types::TextBox> =
                         blocks.iter().filter_map(|b| b.bbox).collect();
                     roi_tracker.feed_ocr(&boxes, crop_origin, ocr_input_scale);
-                    handle_subtitle_frame(
-                        &frame, &blocks, voter, last_frame_text, last_preview, db, app, session_id, subtitle_segments,
-                    );
+                    // REQ-084：前台切换期间其他窗口内容不得进字幕投票器
+                    if !roi_tracker.foreground_foreign() {
+                        handle_subtitle_frame(
+                            &frame, &blocks, voter, last_frame_text, last_preview, db, app,
+                            session_id, subtitle_segments, ui_junk, stats,
+                        );
+                    }
                 } else {
                     crate::live_keyframes::handle_full_frame(
                         &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
@@ -415,9 +434,11 @@ fn process_frame(
     }
 }
 
-/// 字幕区帧：文本拼接 → 滚动检测 → 多帧投票（T2）→ 切换时定稿落库。
+/// 字幕区帧：文本拼接 → UI 垃圾源头过滤 → 滚动检测 → 多帧投票（T2）→ 切换时定稿落库。
 ///
 /// @ai-context: 参数多源于编排上下文传递（DB/事件/状态/投票器），聚合会破坏内聚，登记豁免。
+/// @ai-context: REQ-083：is_ui_junk 命中 → 整帧丢弃——不进投票器/不落 OCR 块/
+///              不落段/不推事件（源头治本；note_filter 兜底同表）。
 #[allow(clippy::too_many_arguments)]
 fn handle_subtitle_frame(
     frame: &CapturedFrame,
@@ -429,9 +450,16 @@ fn handle_subtitle_frame(
     app: &tauri::AppHandle,
     session_id: i64,
     subtitle_segments: &Mutex<Vec<SubtitleSegment>>,
+    ui_junk: &crate::ui_junk::UiJunkList,
+    stats: &mut ScreenStats,
 ) {
     let text = blocks.iter().map(|b| b.text.as_str()).collect::<Vec<_>>().join("");
     if text.trim().is_empty() {
+        return;
+    }
+    // REQ-083：UI 垃圾特征（水印/播放器/编辑器/应用 UI）→ 源头过滤
+    if ui_junk.is_junk(&text) {
+        stats.junk_filtered += 1;
         return;
     }
     // 滚动字幕（股票/歌词）丢弃——投票分组对逐帧漂移文本失效

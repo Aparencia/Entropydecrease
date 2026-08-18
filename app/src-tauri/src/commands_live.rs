@@ -59,6 +59,8 @@ pub async fn start_live_session(
         // REQ-051：图片存储基目录（会话图片归档）
         data_dir: state.data_dir.clone(),
         app: state.app.clone(),
+        // REQ-083：UI 垃圾黑名单（字幕源头过滤）
+        ui_junk: state.ui_junk.clone(),
     };
     state.live_session.start(params).map_err(|e| e.to_string())
 }
