@@ -105,7 +105,7 @@ pub fn list_capture_windows() -> Vec<CaptureWindow> {
         PROCESS_QUERY_LIMITED_INFORMATION,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
+        EnumWindows, GetShellWindow, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
     };
 
     /// 由 PID 查询进程名（不含扩展名）；权限不足或进程退出时返回空串。
@@ -136,6 +136,10 @@ pub fn list_capture_windows() -> Vec<CaptureWindow> {
     /// EnumWindows 回调：收集可见且有标题的窗口原始信息。
     unsafe extern "system" fn enum_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
         let out = &mut *(lparam.0 as *mut Vec<(i64, String, u32)>);
+        // TD-007：过滤 shell/桌面窗口（Program Manager 等系统噪声，非可捕获目标）
+        if hwnd == GetShellWindow() {
+            return BOOL(1);
+        }
         if IsWindowVisible(hwnd).as_bool() {
             let mut buf = [0u16; 512];
             let len = GetWindowTextW(hwnd, &mut buf);
@@ -143,7 +147,9 @@ pub fn list_capture_windows() -> Vec<CaptureWindow> {
                 let title = String::from_utf16_lossy(&buf[..len as usize]);
                 let mut pid = 0u32;
                 GetWindowThreadProcessId(hwnd, Some(&mut pid));
-                out.push((hwnd.0 as i64, title, pid));
+                if pid > 0 {
+                    out.push((hwnd.0 as i64, title, pid));
+                }
             }
         }
         BOOL(1) // 继续枚举
