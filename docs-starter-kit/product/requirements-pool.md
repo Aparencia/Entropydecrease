@@ -21,12 +21,12 @@
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
 |----|------|--------|------|---------|------|
-| REQ-007 | 系统音频捕获：WASAPI 端点环回（Rust） | P1 | 待评估 | v0.2.0 | 新开发点，需 spike |
-| REQ-008 | 屏幕/窗口捕获：关键帧采样 + 变化检测 | P1 | 待评估 | v0.2.0 | 变化检测 + 去重 |
-| REQ-009 | 流式 ASR：Zipformer + Silero VAD 实时转写 | P1 | 待评估 | v0.2.0 | 接系统音频流 |
-| REQ-010 | 会话管理：列表/详情/检索 | P1 | 待评估 | v0.2.0 | 每次学习 = 一个会话 |
-| REQ-011 | 实时字幕 OCR：字幕区识别（底部区域启发式）+ 时间窗去重 | P1 | 待评估 | v0.2.0 | 字幕是画面图像，OCR 管线天然具备；双速率采样（字幕区高频） |
-| REQ-012 | 双源转写融合：有字幕→字幕 OCR 流为主体，ASR 补全/校对 | P1 | 待评估 | v0.2.0 | 字幕场景转写准确率近 100%，摆脱 ASR CER 天花板 |
+| REQ-007 | 系统音频捕获：WASAPI 端点环回（Rust） | P1 | 已排期 | v0.2.0 | [ADR-001](../adr/ADR-001-wasapi-loopback-capture.md)；windows-rs 手写 |
+| REQ-008 | 屏幕/窗口捕获：关键帧采样 + 变化检测 | P1 | 已排期 | v0.2.0 | [ADR-002](../adr/ADR-002-dxgi-screen-capture.md)；DXGI + GDI 降级 |
+| REQ-009 | 流式 ASR：Zipformer + Silero VAD 实时转写 | P1 | 已排期 | v0.2.0 | [ADR-003](../adr/ADR-003-streaming-asr-architecture.md)；hf-mirror 模型分发 |
+| REQ-010 | 会话管理：列表/详情/检索 | P1 | 已排期 | v0.2.0 | [ADR-004](../adr/ADR-004-session-data-model.md)；sessions 三表 |
+| REQ-011 | 实时字幕 OCR：字幕区识别（底部区域启发式）+ 时间窗去重 | P1 | 已排期 | v0.2.0 | [ADR-005](../adr/ADR-005-subtitle-ocr-fusion.md)；双速率采样 |
+| REQ-012 | 双源转写融合：有字幕→字幕 OCR 流为主体，ASR 补全/校对 | P1 | 已排期 | v0.2.0 | [ADR-005](../adr/ADR-005-subtitle-ocr-fusion.md)；纯规则融合 |
 
 ### v0.3.0 · 文件导入 + 字幕检测 + 知识持久化（第三阶段）
 
