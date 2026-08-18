@@ -76,7 +76,7 @@ fn decide_refine_no_candidates_skips() {
 
 #[test]
 fn decide_refine_layout_missing_blocks() {
-    // Arrange：候选存在但版面模型缺失
+    // Arrange：候选存在但版面模型缺失（管线必选组件）
     let candidates = vec![RefineCandidate {
         kind: "table".into(),
         crop_image: "full/1.webp".into(),
@@ -84,9 +84,10 @@ fn decide_refine_layout_missing_blocks() {
     }];
     // Act
     let (go, reason) = decide_refine(false, true, true, &candidates);
-    // Assert：不可用
+    // Assert：不可用（OARStructure layout 必选，提示明确下载路径）
     assert!(!go);
-    assert!(reason.contains("版面模型未就绪"));
+    assert!(reason.contains("版面模型未下载"));
+    assert!(reason.contains("设置面板"));
 }
 
 #[test]

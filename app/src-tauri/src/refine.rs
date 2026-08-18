@@ -77,6 +77,8 @@ pub fn build_refine_candidates(
 /// 精修降级决策（纯函数）：模型就绪 + 有待精修清单 → 是否启动精修。
 ///
 /// @ai-context: 返回 (是否精修, 原因)：模型缺失/无候选 → 跳过并提示前端。
+/// @ai-context: OARStructure 管线 layout 检测为必选组件（上游结构）——精修任何
+///              候选都依赖版面模型加载；表格/公式模型按候选类型另需就绪。
 pub fn decide_refine(
     layout_ready: bool,
     table_ready: bool,
@@ -86,18 +88,19 @@ pub fn decide_refine(
     if candidates.is_empty() {
         return (false, "会话无表格/公式区域（无需精修）".to_string());
     }
-    // 至少一类相关模型就绪才精修（表格候选需 table_ready，公式候选需 formula_ready）
+    if !layout_ready {
+        return (false, "版面模型未下载（精修管线依赖），请到设置面板下载后重试".to_string());
+    }
+    // 候选类型对应模型就绪才精修（表格候选需 table_ready，公式候选需 formula_ready）
     let has_table = candidates.iter().any(|c| c.kind == "table");
     let has_formula = candidates.iter().any(|c| c.kind == "formula");
     let table_ok = !has_table || table_ready;
     let formula_ok = !has_formula || formula_ready;
-    if layout_ready && (table_ok && formula_ok) {
+    if table_ok && formula_ok {
         (true, String::new())
-    } else if !table_ok || !formula_ok {
+    } else {
         let missing = if !table_ok { "表格" } else { "公式" };
         (false, format!("{}模型未下载，精修跳过（规则版产物保留，可到设置下载后重试）", missing))
-    } else {
-        (false, "版面模型未就绪，精修不可用".to_string())
     }
 }
 
