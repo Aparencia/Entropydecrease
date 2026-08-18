@@ -11,6 +11,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 use windows::core::GUID;
 use windows::Win32::Media::Audio::{
@@ -52,17 +53,22 @@ pub struct AudioLoopbackCapture {
 impl AudioLoopbackCapture {
     /// 启动捕获。on_chunk 在捕获线程内被调用（消费者需自行做轻量处理或转发）。
     ///
-    /// @ai-context: 返回 Err 表示端点不可用（无渲染设备）或格式不支持，
-    ///              调用方应给出可操作提示（引导检查系统声音设置）。
-    pub fn start<F>(on_chunk: F) -> crate::error::Result<Self>
+    /// @ai-context: ADR-007：设备不可用不再返回 Err——捕获线程内部自动重连
+    ///              （指数退避，0.5s→10s 封顶），会话不因设备插拔/切换死亡；
+    ///              on_recovery(true)=进入恢复，false=恢复成功（驱动前端状态徽标）。
+    /// @ai-context: ADR-008（A1 时间戳统一）：epoch 由会话编排层注入（run_session
+    ///              起点创建）——音频/屏幕/flush 三处共享同一纪元，消除 ASR 模型
+    ///              加载秒级延迟造成的时间轴偏移；重连不重置基准（时间戳连续）。
+    pub fn start<F, G>(epoch: std::time::Instant, on_chunk: F, on_recovery: G) -> crate::error::Result<Self>
     where
         F: Fn(AudioChunk) + Send + 'static,
+        G: Fn(bool) + Send + 'static,
     {
         let stop_flag = Arc::new(AtomicBool::new(false));
         let flag = stop_flag.clone();
         let handle = thread::Builder::new()
             .name("entropy-wasapi-loopback".into())
-            .spawn(move || capture_loop(flag, on_chunk))
+            .spawn(move || capture_loop(epoch, flag, on_chunk, on_recovery))
             .map_err(|e| crate::error::AppError::Io(format!("启动捕获线程失败: {}", e)))?;
         Ok(Self { stop_flag, handle: Some(handle) })
     }
@@ -84,18 +90,54 @@ impl Drop for AudioLoopbackCapture {
     }
 }
 
-/// 捕获主循环：COM 初始化 → 打开环回端点 → 取包 → 归一化 → 切块投递。
+/// 捕获主循环：重试包裹（ADR-007）——失败自动重连，不因设备插拔/切换退出。
 ///
-/// @ai-context: 静默（无播放）时 GetNextPacketSize 返回 0，sleep 10ms 轮询；
-///              帧数据转换失败（格式不支持）记录一次后退出，不静默吞错。
-fn capture_loop<F>(stop_flag: Arc<AtomicBool>, on_chunk: F)
+/// @ai-context: 时间戳基准（epoch）由会话编排层注入且在此循环外使用（重连不重置）；
+///              恢复状态只在进入/退出恢复时通知一次（防重连风暴刷屏）；日志只在退避
+///              升级时打印（cap 后静默）。
+fn capture_loop<F, G>(epoch: std::time::Instant, stop_flag: Arc<AtomicBool>, on_chunk: F, on_recovery: G)
 where
     F: Fn(AudioChunk) + Send,
+    G: Fn(bool) + Send,
 {
-    match run_capture(&stop_flag, &on_chunk) {
-        Ok(()) => {}
-        Err(e) => eprintln!("[AudioLoopback] 捕获终止: {}", e),
+    let mut attempt = 0u32;
+    let mut recovering = false;
+    loop {
+        if stop_flag.load(Ordering::SeqCst) {
+            return;
+        }
+        match run_capture(&stop_flag, &on_chunk, &epoch, &mut recovering, &on_recovery) {
+            Ok(()) => return, // stop_flag 置位后的正常退出
+            Err(e) => {
+                if stop_flag.load(Ordering::SeqCst) {
+                    return;
+                }
+                let delay = reconnect_delay(attempt);
+                // 日志节流：退避升级才打印（cap 后延迟不变 → 静默，防刷屏）
+                if attempt == 0 || delay != reconnect_delay(attempt.saturating_sub(1)) {
+                    eprintln!("[AudioLoopback] 捕获失败，{:.1}s 后重连: {}", delay.as_secs_f64(), e);
+                }
+                if !recovering {
+                    recovering = true;
+                    on_recovery(true);
+                }
+                // 可中断的退避等待：分段检查 stop_flag——否则 stop() 的 join 会
+                // 卡满整个退避时长（最长 10s），阻塞会话停止流程（审查发现）
+                let deadline = std::time::Instant::now() + delay;
+                while !stop_flag.load(Ordering::SeqCst) && std::time::Instant::now() < deadline {
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                attempt += 1;
+            }
+        }
     }
+}
+
+/// 重连退避延迟（指数 0.5s→10s 封顶；ADR-007 防重连风暴）。
+///
+/// @ai-context: 纯函数可单测：attempt=0.. 依次 0.5/1/2/4/8/10s，5 次后封顶。
+fn reconnect_delay(attempt: u32) -> Duration {
+    Duration::from_secs_f64((0.5 * 2f64.powi(attempt.min(5) as i32)).min(10.0))
 }
 
 /// COM 初始化 guard：drop 时自动 CoUninitialize（TD-028 修复——CoInitializeEx 无配对调用会泄漏线程 COM 状态）。
@@ -107,9 +149,16 @@ impl Drop for ComInitGuard {
     }
 }
 
-fn run_capture<F>(stop_flag: &AtomicBool, on_chunk: &F) -> crate::error::Result<()>
+fn run_capture<F, G>(
+    stop_flag: &AtomicBool,
+    on_chunk: &F,
+    epoch: &std::time::Instant,
+    recovering: &mut bool,
+    on_recovery: &G,
+) -> crate::error::Result<()>
 where
     F: Fn(AudioChunk) + Send,
+    G: Fn(bool) + Send,
 {
     unsafe {
         // COM 必须在线程内初始化（ADR-001 风险缓解）；HRESULT 需 ok() 转 Result
@@ -119,13 +168,20 @@ where
     }
     // 初始化成功后所有退出路径（含 Err 提前返回）都必须配对 CoUninitialize
     let _com = ComInitGuard;
-    run_capture_inner(stop_flag, on_chunk)
+    run_capture_inner(stop_flag, on_chunk, epoch, recovering, on_recovery)
 }
 
 /// 捕获主循环体（run_capture 的拆分：COM guard 与函数体分离，保证配对）。
-fn run_capture_inner<F>(stop_flag: &AtomicBool, on_chunk: &F) -> crate::error::Result<()>
+fn run_capture_inner<F, G>(
+    stop_flag: &AtomicBool,
+    on_chunk: &F,
+    epoch: &std::time::Instant,
+    recovering: &mut bool,
+    on_recovery: &G,
+) -> crate::error::Result<()>
 where
     F: Fn(AudioChunk) + Send,
+    G: Fn(bool) + Send,
 {
     unsafe {
         let enumerator: IMMDeviceEnumerator = CoCreateInstance(&CLSID_MM_DEVICE_ENUMERATOR, None, CLSCTX_ALL)
@@ -177,10 +233,16 @@ where
             .Start()
             .map_err(|e| crate::error::AppError::Io(format!("启动捕获失败: {}", e)))?;
 
+        // 重连成功后通知退出恢复态（ADR-007：前端徽标恢复）
+        if *recovering {
+            *recovering = false;
+            on_recovery(false);
+        }
+
         // 归一化管线：字节 → f32 → 混单声道 → 重采样 16k → 200ms 切块
-        // @ai-context: 时间戳用墙钟（会话起点 elapsed）而非有效音频计数——
-        //              静默期时间轴也推进，保证与屏幕帧时间戳同基准（审查 S2 修复）。
-        let started = std::time::Instant::now();
+        // @ai-context: 时间戳用会话纪元（epoch 由编排层注入，ADR-008 A1：音频/屏幕/
+        //              flush 三处同基准）而非有效音频计数——静默期时间轴也推进，
+        //              重连不重置基准（ADR-007）。
         let mut accumulator = ChunkAccumulator::new(0);
         let block_samples = (TARGET_SAMPLE_RATE as usize) / 5;
         let mut format_error_logged = false;
@@ -209,7 +271,7 @@ where
                         on_chunk(AudioChunk {
                             samples: chunk,
                             sample_rate: TARGET_SAMPLE_RATE,
-                            timestamp_ms: started.elapsed().as_millis() as u64,
+                            timestamp_ms: epoch.elapsed().as_millis() as u64,
                         });
                     }
                 } else if !format_error_logged {
@@ -222,5 +284,36 @@ where
 
         let _ = audio_client.Stop();
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn reconnect_delay_grows_exponentially() {
+        // Arrange & Act & Assert：0.5 → 1 → 2 → 4 → 8s 递增
+        let d0 = reconnect_delay(0);
+        let d1 = reconnect_delay(1);
+        let d2 = reconnect_delay(2);
+        let d3 = reconnect_delay(3);
+        let d4 = reconnect_delay(4);
+        assert!(d0 < d1 && d1 < d2 && d2 < d3 && d3 < d4);
+        assert_eq!(d0, Duration::from_millis(500));
+        assert_eq!(d4, Duration::from_millis(8000));
+    }
+
+    #[test]
+    fn reconnect_delay_caps_at_10s() {
+        // Arrange & Act：attempt≥5 后封顶 10s，不再增长（防重连风暴）
+        let d5 = reconnect_delay(5);
+        let d6 = reconnect_delay(6);
+        let d100 = reconnect_delay(100);
+        // Assert
+        assert_eq!(d5, Duration::from_secs(10));
+        assert_eq!(d6, d5);
+        assert_eq!(d100, d5);
     }
 }

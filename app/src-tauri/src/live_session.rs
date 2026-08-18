@@ -1,15 +1,18 @@
-//! 实时会话编排（v0.2.0 汇总：REQ-007~012 的运行时组合层）。
+//! 实时会话编排（v0.2.0 汇总：REQ-007~012 的运行时组合层；v0.3.0 REQ-031/034 增强）。
 //!
 //! @ai-context: 一次"开始实时捕获"启动一个会话线程，线程内串联：
 //!              WASAPI 环回（ADR-001）→ 流式 ASR（ADR-003）→ 字幕区 OCR
-//!              （ADR-005）→ 实时落库（ADR-004）；停止时 flush 尾句、
-//!              双源融合（fusion.rs）并重写会话段、标记 finished。
-//! @ai-context: 音频捕获线程与会话线程用 channel 桥接（引擎非 Send 不可跨线程）；
-//!              屏幕采样在独立线程运行（TD-026 修复，run_screen_worker）——
-//!              OCR 推理不阻塞会话线程的音频消费；字幕段经 Arc<Mutex> 共享回传。
-//! @ai-context: 时间戳近似统一：音频/屏幕捕获均在会话线程启动后创建各自的墙钟基准，
-//!              三者起点误差 <1s（ADR-005 风险缓解的近似统一）。
+//!              （ADR-005）→ 实时落库（ADR-004）；停止时 finish+emit 秒回，
+//!              融合移入后台线程（REQ-031，无字幕短路），完成后 session:fused。
+//! @ai-context: 时间戳统一（ADR-008 A1）：会话纪元 epoch 在 run_session 起点创建，
+//!              注入音频捕获/屏幕 worker/flush 三处——消除 ASR 模型加载秒级延迟
+//!              造成的音频时间轴整体偏移（技术审查 A1）。
+//! @ai-context: 句起时间戳（ADR-008 A2）：编排层跟踪 Final 后首个非静音块时刻，
+//!              替代 end-2000ms 固定句长近似，融合 gap 判断更准。
+//! @ai-context: 语音活跃度（B3）：会话线程按 RMS 写共享标志，屏幕 worker 依此
+//!              自适应采样（静音期全帧提频捕捉板书/幻灯片）。
 
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
@@ -30,6 +33,30 @@ use crate::types::{NewSessionSegment, TranscriptSegment};
 
 /// 会话线程节拍（音频 channel 超时轮询间隔，ms）。
 const TICK_MS: u64 = 500;
+/// ASR 段 start_ms 兜底近似（句首时刻缺失时：end - 2000ms）。
+const SENTENCE_FALLBACK_MS: u64 = 2000;
+
+/// 会话融合状态跟踪（REQ-031：内存标记，ADR-008 决策——不迁移 sessions 表；
+/// V1.0 ADR-006 派生表落地时自然取代）。
+#[derive(Clone, Default)]
+pub struct FusionTracker {
+    fusing: Arc<Mutex<HashSet<i64>>>,
+}
+
+impl FusionTracker {
+    pub fn begin(&self, id: i64) {
+        self.fusing.lock().expect("fusion lock poisoned").insert(id);
+    }
+    pub fn end(&self, id: i64) {
+        self.fusing.lock().expect("fusion lock poisoned").remove(&id);
+    }
+    /// 会话是否正在后台融合（前端据此展示"融合中"；当前由事件驱动，
+    /// 查询入口保留供后续轮询/恢复场景，登记豁免 dead_code）。
+    #[allow(dead_code)]
+    pub fn is_fusing(&self, id: i64) -> bool {
+        self.fusing.lock().expect("fusion lock poisoned").contains(&id)
+    }
+}
 
 /// 实时会话启动参数（由 command 层组装）。
 pub struct LiveSessionParams {
@@ -40,7 +67,9 @@ pub struct LiveSessionParams {
     pub db: Db,
     pub engines: EnginePool,
     pub streaming_models: StreamingAsrModels,
-    /// 前端事件推送（live:asr-partial / live:subtitle / live:error / live:status）
+    /// 融合状态跟踪（与 LiveSessionManager 共享同一实例）
+    pub fusion: FusionTracker,
+    /// 前端事件推送（live:asr-partial / live:subtitle / live:error / live:status / session:*）
     pub app: tauri::AppHandle,
 }
 
@@ -54,6 +83,7 @@ struct ActiveSession {
 /// 实时会话管理器（AppState 持有，同一时刻最多一个活动会话）。
 pub struct LiveSessionManager {
     active: Arc<Mutex<Option<ActiveSession>>>,
+    fusion: FusionTracker,
 }
 
 impl Default for LiveSessionManager {
@@ -64,13 +94,18 @@ impl Default for LiveSessionManager {
 
 impl Clone for LiveSessionManager {
     fn clone(&self) -> Self {
-        Self { active: self.active.clone() }
+        Self { active: self.active.clone(), fusion: self.fusion.clone() }
     }
 }
 
 impl LiveSessionManager {
     pub fn new() -> Self {
-        Self { active: Arc::new(Mutex::new(None)) }
+        Self { active: Arc::new(Mutex::new(None)), fusion: FusionTracker::default() }
+    }
+
+    /// 融合状态跟踪句柄（command 层组装 LiveSessionParams 时获取）。
+    pub fn fusion(&self) -> FusionTracker {
+        self.fusion.clone()
     }
 
     /// 启动实时会话：建会话 + 起编排线程，返回会话 id。
@@ -102,6 +137,8 @@ impl LiveSessionManager {
     ///
     /// @ai-context: 有界等待 5s（审查 M7 修复）：超时后 detach（线程最终自行退出），
     ///              不阻塞 Tauri IPC；调用方（command）用 spawn_blocking 包裹。
+    /// @ai-context: REQ-031：融合已移入后台线程，会话线程在 finish+emit 后即退出——
+    ///              停止响应不随段数恶化（融合重算不再阻塞停止）。
     pub fn stop_active(&self) -> Result<Option<i64>> {
         let mut guard = self.active.lock().expect("live session lock poisoned");
         let Some(active) = guard.take() else { return Ok(None) };
@@ -137,7 +174,10 @@ impl LiveSessionManager {
 fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64) {
     let db = params.db.clone();
     let engines = params.engines.clone();
-    let session_clock = Instant::now();
+    // A1：会话纪元——音频/屏幕/flush 三处时间戳的唯一基准（ADR-008）
+    let epoch = Instant::now();
+    // 句起时间戳（A2）：Final 后首个非静音块时刻
+    let mut sentence_start_ms: Option<u64> = None;
 
     // 1) 流式 ASR（SenseVoice 重打分接离线引擎池）
     let mut asr_engine = match StreamingAsrEngine::load(&params.streaming_models, Some(engines.clone())) {
@@ -148,15 +188,33 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
             return;
         }
     };
+    // ADR-007：会话启动成功（引擎就绪）→ 广播录制态（前端全局采集徽标依赖此事件；
+    // 音频/屏幕后续故障走自动恢复不再终止会话）
+    let _ = params.app.emit("live:status", "recording");
 
     // 2) 音频捕获：捕获线程 → channel → 会话线程（引擎非 Send）
+    // @ai-context: ADR-007：start 不再因设备缺失返回 Err——捕获线程内部自动重连
+    //              （指数退避），会话不因设备插拔/切换死亡；恢复事件推送前端。
     let (tx, rx) = mpsc::channel::<AudioChunk>();
-    let mut audio = match AudioLoopbackCapture::start(move |chunk| {
-        let _ = tx.send(chunk);
-    }) {
+    let recovery_app = params.app.clone();
+    let mut audio = match AudioLoopbackCapture::start(
+        epoch,
+        move |chunk| {
+            let _ = tx.send(chunk);
+        },
+        move |recovering| {
+            if recovering {
+                // 进入恢复：可观测（前端徽标 + 错误提示），会话继续运行
+                let _ = recovery_app.emit("live:error", "系统音频捕获中断，正在自动恢复…");
+                let _ = recovery_app.emit("live:recovering", "audio");
+            } else {
+                let _ = recovery_app.emit("live:recovered", "audio");
+            }
+        },
+    ) {
         Ok(a) => a,
         Err(e) => {
-            emit_error(&params.app, &format!("系统音频捕获失败（请检查声音设备）: {}", e));
+            emit_error(&params.app, &format!("系统音频捕获启动失败: {}", e));
             let _ = db.mark_session_failed(session_id);
             return;
         }
@@ -164,11 +222,14 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
 
     // 3) 屏幕采样线程（TD-026 修复：OCR 推理移出会话线程，音频消费不再被阻塞；
     //    失败不阻断音频链路——screen worker 内部容错）
-    // @ai-context: 采样器（COM 非 Send）在线程内创建；字幕段经共享缓存回传（停止后读取）。
+    // @ai-context: 采样器（COM 非 Send）在线程内创建；字幕段经共享缓存回传
+    //              （停止后由融合线程读取）；B3：语音活跃度共享标志驱动自适应采样。
     let mut asr_segments: Vec<TranscriptSegment> = Vec::new();
     let subtitle_segments: Arc<Mutex<Vec<SubtitleSegment>>> = Arc::new(Mutex::new(Vec::new()));
     let worker_segments = subtitle_segments.clone();
     let worker_stop = stop.clone();
+    let speech_active = Arc::new(AtomicBool::new(false));
+    let worker_speech = speech_active.clone();
     // worker 需独立持有 Db/AppHandle（主循环仍要使用，先 clone 再 move 进闭包）
     let worker_db = db.clone();
     let worker_app = params.app.clone();
@@ -178,6 +239,8 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
             run_screen_worker(
                 worker_stop,
                 params.hwnd,
+                epoch,
+                worker_speech,
                 worker_db,
                 engines.clone(),
                 worker_app,
@@ -198,11 +261,19 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
         match rx.recv_timeout(Duration::from_millis(TICK_MS)) {
             Ok(chunk) => {
                 let silent = compute_rms(&chunk.samples) < SILENCE_RMS_THRESHOLD;
+                // B3：语音活跃度共享（屏幕 worker 自适应采样依据）
+                speech_active.store(!silent, Ordering::Relaxed);
+                // A2：句起时刻 = Final 后首个非静音块（真实句首，替代 end-2000ms 近似）
+                if !silent && sentence_start_ms.is_none() {
+                    sentence_start_ms = Some(chunk.timestamp_ms);
+                }
                 for event in asr_engine.feed(&chunk.samples, silent) {
                     match event {
                         StreamingAsrEvent::Final { text } => {
                             let end_ms = chunk.timestamp_ms;
-                            let start_ms = end_ms.saturating_sub(2000); // 句长近似
+                            let start_ms = sentence_start_ms
+                                .take()
+                                .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
                             let _ = db.add_segment(&NewSessionSegment {
                                 session_id,
                                 start_ms,
@@ -224,10 +295,12 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
         }
     }
 
-    // 4) 停止：flush ASR 尾句（时间戳用会话时钟）
+    // 4) 停止：flush ASR 尾句（时间戳用会话纪元）
     if let Some(StreamingAsrEvent::Final { text }) = asr_engine.flush() {
-        let end_ms = session_clock.elapsed().as_millis() as u64;
-        let start_ms = end_ms.saturating_sub(2000);
+        let end_ms = epoch.elapsed().as_millis() as u64;
+        let start_ms = sentence_start_ms
+            .take()
+            .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
         let _ = db.add_segment(&NewSessionSegment {
             session_id,
             start_ms,
@@ -240,24 +313,52 @@ fn run_session(stop: Arc<AtomicBool>, params: LiveSessionParams, session_id: i64
     }
     audio.stop();
 
-    // 5) 等待采样线程退出（有界 5s，超时 detach），再读取字幕段用于融合
-    if let Some(worker) = screen_worker {
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while !worker.is_finished() && Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(100));
-        }
-        if !worker.is_finished() {
-            eprintln!("[LiveSession] 屏幕采样线程 5s 内未退出，已 detach");
-        }
-    }
-    let subtitle_segments = subtitle_segments.lock().expect("subtitle segments lock poisoned").clone();
-
-    // 6) 融合并重写会话段（ADR-005 §3：融合结果落库；失败保留原段）
-    let _ = crate::live_session_frame::rewrite_with_fusion(&db, session_id, &subtitle_segments, &asr_segments);
-
-    // 7) 结束会话
+    // 5) REQ-031：finish + emit 秒回（毫秒级），融合移入后台线程——
+    //    停止响应不再随段数恶化（大会话融合重算不再阻塞停止按钮）
     let _ = db.finish_session(session_id);
     let _ = params.app.emit("live:status", "stopped");
+
+    // 6) 后台融合线程：join 采样线程（有界）→ 读取字幕段 → 无字幕短路 → 融合 → 事件
+    // @ai-context: Db/AppHandle 均为 Arc 可跨线程；字幕/ASR 段所有权随闭包转移；
+    //              失败保留原段（replace_segments 单事务回滚保证）。
+    let fusion_db = db.clone();
+    let fusion_app = params.app.clone();
+    let fusion_tracker = params.fusion.clone();
+    fusion_tracker.begin(session_id);
+    let _ = params.app.emit("session:fusing", session_id);
+    let _ = std::thread::Builder::new()
+        .name("entropy-fusion".into())
+        .spawn(move || {
+            // 等待采样线程退出（有界 5s，超时 detach），再读取字幕段用于融合——
+            // worker 退出前的 voter.flush 保证末句字幕已定稿入缓存
+            if let Some(worker) = screen_worker {
+                let deadline = Instant::now() + Duration::from_secs(5);
+                while !worker.is_finished() && Instant::now() < deadline {
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                if !worker.is_finished() {
+                    eprintln!("[LiveSession] 屏幕采样线程 5s 内未退出，已 detach");
+                }
+            }
+            let subtitle_segments =
+                subtitle_segments.lock().expect("subtitle segments lock poisoned").clone();
+            let result = crate::live_session_frame::rewrite_with_fusion(
+                &fusion_db,
+                session_id,
+                &subtitle_segments,
+                &asr_segments,
+            );
+            fusion_tracker.end(session_id);
+            match result {
+                Ok(()) => {
+                    let _ = fusion_app.emit("session:fused", session_id);
+                }
+                Err(e) => {
+                    // 融合失败保留原段，前端提示（详情页仍可读原始轴）
+                    let _ = fusion_app.emit("session:fusion-failed", format!("融合失败（原始段已保留）: {}", e));
+                }
+            }
+        });
 }
 
 /// 推送错误事件（并重置前端录制态——审查 M3 修复：失败不能假"录制中"）。
@@ -265,3 +366,8 @@ fn emit_error(app: &tauri::AppHandle, message: &str) {
     let _ = app.emit("live:error", message.to_string());
     let _ = app.emit("live:status", "failed");
 }
+
+/// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。
+#[cfg(test)]
+#[path = "live_session_tests.rs"]
+mod tests;

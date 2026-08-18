@@ -1,11 +1,15 @@
 /**
- * SessionsPage — 会话列表与详情（REQ-010）。
+ * SessionsPage — 会话列表与详情（REQ-010；v0.3.0 REQ-031 融合事件）。
  *
  * @ai-context: 左侧列表（关键词检索 + 状态标记），右侧详情（转写时间轴 + 画面要点）；
  *              会话可一键转笔记（复用后端 session_to_note）与删除。
+ * @ai-context: REQ-031（融合停止异步化）：停止后详情页短暂显示原始轴（数据有效），
+ *              session:fusing 显示"融合中"标记，session:fused 到达后自动刷新为融合轴；
+ *              session:fusion-failed 提示错误（原始段保留，不丢数据）。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { Session, SessionDetail, Note } from "../types";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
@@ -31,6 +35,39 @@ export default function SessionsPage() {
   const [keyword, setKeyword] = useState("");
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [status, setStatus] = useState("");
+  // REQ-031：正在后台融合的会话 id（详情页显示"融合中"）
+  const [fusingId, setFusingId] = useState<number | null>(null);
+  // 当前打开详情的会话 id（事件监听用 ref——避免闭包捕获旧值/更新器内副作用）
+  const openIdRef = useRef<number | null>(null);
+
+  const openDetail = useCallback(async (id: number) => {
+    openIdRef.current = id;
+    try {
+      const d = await invoke<SessionDetail>("get_session_detail", { id });
+      setDetail(d);
+    } catch (e) {
+      setStatus(`加载详情失败: ${e}`);
+    }
+  }, []);
+
+  // 融合事件（REQ-031 异步化）：fusing 标记 → fused 到达后刷新详情为融合轴
+  useEffect(() => {
+    const unlisteners: Promise<() => void>[] = [
+      listen<number>("session:fusing", (e) => setFusingId(e.payload)),
+      listen<number>("session:fused", (e) => {
+        setFusingId((cur) => (cur === e.payload ? null : cur));
+        // 详情正开着该会话 → 刷新为融合轴（字幕权威 + ASR 补缝）
+        if (openIdRef.current === e.payload) void openDetail(e.payload);
+      }),
+      listen<string>("session:fusion-failed", (e) => {
+        setFusingId(null);
+        setStatus(e.payload);
+      }),
+    ];
+    return () => {
+      unlisteners.forEach((p) => void p.then((fn) => fn()));
+    };
+  }, [openDetail]);
 
   const refresh = useCallback(async (kw: string) => {
     try {
@@ -44,15 +81,6 @@ export default function SessionsPage() {
   useEffect(() => {
     void refresh("");
   }, [refresh]);
-
-  const openDetail = async (id: number) => {
-    try {
-      const d = await invoke<SessionDetail>("get_session_detail", { id });
-      setDetail(d);
-    } catch (e) {
-      setStatus(`加载详情失败: ${e}`);
-    }
-  };
 
   const search = () => void refresh(keyword);
 
@@ -68,7 +96,10 @@ export default function SessionsPage() {
   const remove = async (id: number) => {
     try {
       await invoke<boolean>("delete_session", { id });
-      if (detail?.session.id === id) setDetail(null);
+      if (detail?.session.id === id) {
+        setDetail(null);
+        openIdRef.current = null;
+      }
       void refresh(keyword);
     } catch (e) {
       setStatus(`删除失败: ${e}`);
@@ -131,6 +162,22 @@ export default function SessionsPage() {
               <span style={{ fontSize: 11, color: "#6b7280" }}>
                 {STATUS_LABEL[detail.session.status]} · {detail.segments.length} 段转写 · {detail.ocr_blocks.length} 块画面
               </span>
+              {/* REQ-031：融合后台执行中——当前显示原始轴（数据有效），完成事件到达后自动刷新 */}
+              {fusingId === detail.session.id && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#b45309",
+                    background: "#fffbeb",
+                    border: "1px solid #f59e0b",
+                    borderRadius: 10,
+                    padding: "2px 8px",
+                  }}
+                >
+                  ⏳ 融合中（字幕/语音轴将自动升级）
+                </span>
+              )}
               <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
                 <button style={{ ...btn, background: "#0d9488", color: "#fff", border: "none", borderRadius: 6 }} onClick={() => void toNote(detail.session.id)}>
                   📝 转为笔记
