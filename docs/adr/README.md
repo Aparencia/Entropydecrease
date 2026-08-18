@@ -13,6 +13,8 @@
 | ADR-006 | [会话段派生视图：原始段与融合轴分离](./ADR-006-session-segments-derived-view.md) | 提议 | 2026-08-18 |
 | ADR-007 | [采集会话生命周期与窗口解耦（持续不间断运行）](./ADR-007-live-session-lifecycle.md) | 已接受 | 2026-08-18 |
 | ADR-008 | [文件导入与字幕优先转写方案（含采集链路质量优化）](./ADR-008-file-import-subtitle-priority.md) | 已接受 | 2026-08-18 |
+| ADR-009 | [OCR 推理 GPU 卸载（CUDA EP + 三层检测 + 回退链）](./ADR-009-ocr-gpu-offload.md) | 已接受 | 2026-08 |
+| ADR-010 | [补缝式 AI（Gap-filling AI）：本地失败块定向云端增强](./ADR-010-gap-filling-ai.md) | 已接受 | 2026-08-18 |
 
 ## 编号规则
 
