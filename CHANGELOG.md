@@ -12,6 +12,7 @@
 - **规则版版面分析（REQ-047，M3）**：区域分类 text/table/formula/code/image/unknown（表格线全局检测 + 行带投影 + 公式中线/代码对齐启发式）；版面缓存（指纹 + LRU + TTL，事件帧触发复用）；区域价值采样权重表；实时链路全帧分支接入
 - **分区域 OCR 编排（REQ-048，M4）**：区域裁剪（边距 12px + 表格 2x/公式代码 1.5x 放大）→ 识别 → 坐标还原纯函数（缩放/负偏移边界单测）→ region_kind 标注合并；每帧 ≤4 区封顶；失败回退整帧直跑；session_ocr_blocks.region_kind 列迁移
 - **表格/公式专项（REQ-049/050/053，M5）**：表格线检测重建 Markdown（含转义/置信度/诚实降级）；公式上下标重建 LaTeX（x²→x^2、H₂O→H_2O、\frac{}）；模型版（SLANet/UniMERNet）双轨留 V1.0；KaTeX 本地化（无 CDN）+ Markdown 表格渲染 + 低置信/AI 占位样式
+- **结构模型版落地（REQ-047/049/050 模型版）**：oar-ocr 0.9.1 内置 OARStructure 全套结构管线（重大发现——layout/表格/公式模型托管于 ModelScope 注册表，算子兼容由上游保证）；按需下载器（版面 pp-doclayout-l 129MB / 表格 slanet_plus_v2 8MB / 公式 PP-FormulaNet-s 231MB，UniMERNet 1.84GB 高精度档可切换）；跟随 OCR backend（CUDA EP + CPU 回退 + gpu_mem_limit）；方案 A 增强版课后精修（实时链路存裁剪图 → 课后懒加载模型批处理 → 产物静默升级）；设置面板三模型状态 + ArtifactView"课后精修"按钮
 - **图片配套（REQ-051，M6）**：帧聚类（感知哈希）+ 多信号筛选投票（新文字/变化/停留/用户截图最高权重）；三层图存储（full+thumb WebP lossless、去重、50 张预算上限）；Ctrl+Shift+S 用户截图；图集画廊（懒加载 + 删除 + 路径穿越防御）
 - **产物体系（REQ-052/053，M7）**：ArtifactBlock 块模型（16 类型 + refs 引用原料不复制 + source 标记）+ 五档案模板（讲义/步骤卡/摘要/对话纪要/会议纪要含触发词）；artifact_blocks 表（可重算覆盖）；产物视图（原料/产物切换 + KaTeX/表格/图集渲染 + 一键落笔记）
 - **补缝式 AI 前置（REQ-055，M8）**：判定器（unknown 区/重建失败/低置信三入口 + 最小上下文可关）；请求/响应协议 schema 强校验（越界/缺失/悬空边拒绝）；mock 适配器（全类型合法响应验证链路）；护栏骨架（每日配额/同图缓存/审计缓冲/来源标记）；"AI 增强（V1.0 开放）"占位
