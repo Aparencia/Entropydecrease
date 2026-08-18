@@ -71,3 +71,95 @@ pub struct NewNote {
     pub content: String,
     pub source: String,
 }
+
+// ────────────────────────────────────────────────────────────
+// 会话领域类型（REQ-010，ADR-004）
+// ────────────────────────────────────────────────────────────
+
+/// 会话记录（每次学习 = 一个会话）。
+///
+/// @ai-context: 会话是实时捕获链路（v0.2.0）的主产物，独立于笔记存在；
+///              status 取 recording | finished | failed（崩溃恢复时标记）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Session {
+    pub id: i64,
+    /// 会话标题（默认取目标窗口标题）
+    pub title: String,
+    /// 目标窗口标题（文件导入会话为 None）
+    pub source_window: Option<String>,
+    /// 开始时间（Unix 秒）
+    pub started_at: i64,
+    /// 结束时间（Unix 秒，进行中为 None）
+    pub ended_at: Option<i64>,
+    /// recording | finished | failed
+    pub status: String,
+}
+
+/// 新建会话入参。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NewSession {
+    pub title: String,
+    pub source_window: Option<String>,
+}
+
+/// 会话转写段（ASR final 段 / 字幕段 / 融合段统一落库）。
+///
+/// @ai-context: source 取 asr | subtitle | fused（ADR-004/ADR-005），
+///              confidence 为可选置信度（ASR 有、字幕可空）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SessionSegment {
+    pub id: i64,
+    pub session_id: i64,
+    /// 相对会话起点的毫秒时间戳（时间轴对齐基准）
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub text: String,
+    /// asr | subtitle | fused
+    pub source: String,
+    pub confidence: Option<f32>,
+}
+
+/// 新增会话转写段入参。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NewSessionSegment {
+    pub session_id: i64,
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub text: String,
+    pub source: String,
+    pub confidence: Option<f32>,
+}
+
+/// 会话 OCR 块（关键帧画面文字 / 字幕区文字）。
+///
+/// @ai-context: region 取 subtitle | full（ADR-005：字幕区高频采样 vs 全帧低频采样）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SessionOcrBlock {
+    pub id: i64,
+    pub session_id: i64,
+    /// 关键帧相对会话起点的毫秒时间戳
+    pub timestamp_ms: u64,
+    pub text: String,
+    /// 识别置信度 0.0-1.0
+    pub score: f32,
+    /// subtitle | full
+    pub region: String,
+}
+
+/// 新增会话 OCR 块入参。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NewSessionOcrBlock {
+    pub session_id: i64,
+    pub timestamp_ms: u64,
+    pub text: String,
+    pub score: f32,
+    pub region: String,
+}
+
+/// 会话详情（详情页一次取全：会话 + 转写段 + OCR 块）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SessionDetail {
+    pub session: Session,
+    pub segments: Vec<SessionSegment>,
+    pub ocr_blocks: Vec<SessionOcrBlock>,
+}

@@ -15,15 +15,20 @@ use crate::types::{NewNote, Note};
 /// 笔记数据仓库（线程安全，可廉价克隆——Arc 共享连接）。
 #[derive(Clone)]
 pub struct Db {
-    conn: Arc<Mutex<Connection>>,
+    /// 连接由 Mutex 包裹：Connection 非 Sync，跨 command 共享需串行化。
+    /// @ai-context: pub(crate) 供 db_sessions.rs 跨模块 impl（同一 crate 内部共享）。
+    pub(crate) conn: Arc<Mutex<Connection>>,
 }
 
 impl Db {
     /// 打开（或创建）数据库并初始化 schema。
     ///
     /// @ai-context: path 传 ":memory:" 可用于测试隔离（不触碰真实文件）。
+    /// @ai-context: PRAGMA foreign_keys=ON 必须每个连接开启（rusqlite 默认关闭）；
+    ///              删除会话时靠外键级联清理子表（ADR-004）。
     pub fn open(path: &str) -> Result<Self> {
         let conn = Connection::open(path)?;
+        conn.pragma_update(None, "foreign_keys", true)?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS notes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +38,37 @@ impl Db {
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at DESC);",
+            CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at DESC);
+            -- 会话主表（ADR-004：每次学习 = 一个会话）
+            CREATE TABLE IF NOT EXISTS sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                source_window TEXT,
+                started_at INTEGER NOT NULL,
+                ended_at INTEGER,
+                status TEXT NOT NULL DEFAULT 'recording'
+            );
+            -- 会话转写段（ASR final / 字幕 / 融合统一落库）
+            CREATE TABLE IF NOT EXISTS session_segments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                start_ms INTEGER NOT NULL,
+                end_ms INTEGER NOT NULL,
+                text TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'asr',
+                confidence REAL
+            );
+            CREATE INDEX IF NOT EXISTS idx_segments_session ON session_segments(session_id, start_ms);
+            -- 会话 OCR 块（字幕区 / 全帧）
+            CREATE TABLE IF NOT EXISTS session_ocr_blocks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                timestamp_ms INTEGER NOT NULL,
+                text TEXT NOT NULL,
+                score REAL NOT NULL,
+                region TEXT NOT NULL DEFAULT 'full'
+            );
+            CREATE INDEX IF NOT EXISTS idx_ocr_blocks_session ON session_ocr_blocks(session_id, timestamp_ms);",
         )?;
         Ok(Self { conn: Arc::new(Mutex::new(conn)) })
     }
@@ -132,7 +167,8 @@ fn unix_seconds() -> i64 {
 }
 
 /// 转义 LIKE 通配符，防止用户输入的 %/_ 被当作通配符。
-fn escape_like(s: &str) -> String {
+/// @ai-context: pub(crate) 供 db_sessions.rs 复用（审查 L7：消除重复实现）。
+pub(crate) fn escape_like(s: &str) -> String {
     s.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
 }
 
