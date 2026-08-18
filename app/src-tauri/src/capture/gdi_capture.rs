@@ -10,7 +10,9 @@ use windows::Win32::Graphics::Gdi::{
     BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
     ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HGDIOBJ, ROP_CODE,
 };
-use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+};
 
 use super::dxgi_capture::CapturedFrame;
 use super::frame_diff::Rect;
@@ -60,6 +62,16 @@ pub fn gdi_capture(target: Option<&Rect>, timestamp_ms: u64) -> crate::error::Re
             ROP_CODE(0x00CC0020), // SRCCOPY
         );
 
+        // TD-014：BitBlt 失败直接清理返回——不再继续 GetDIBits（读取未定义内容）；
+        //          清理顺序：先恢复旧对象再 DeleteObject（对象仍选入 DC 时删除会失败）
+        if result.is_err() {
+            let _ = SelectObject(mem_dc, _old);
+            let _ = DeleteObject(HGDIOBJ(bitmap.0 as *mut _));
+            let _ = DeleteDC(mem_dc);
+            let _ = ReleaseDC(None, screen_dc);
+            return Err(crate::error::AppError::Io("GDI BitBlt 失败".into()));
+        }
+
         // 4) GetDIBits 读回 BGRA 像素
         let mut bmi = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
@@ -84,24 +96,28 @@ pub fn gdi_capture(target: Option<&Rect>, timestamp_ms: u64) -> crate::error::Re
             DIB_RGB_COLORS,
         );
 
-        // 5) 清理（成对释放，防泄漏）
+        // 5) 清理（恢复旧对象 → 成对释放，防泄漏）
+        let _ = SelectObject(mem_dc, _old);
         let _ = DeleteObject(HGDIOBJ(bitmap.0 as *mut _));
         let _ = DeleteDC(mem_dc);
         let _ = ReleaseDC(None, screen_dc);
 
-        if result.is_err() || got == 0 {
-            return Err(crate::error::AppError::Io("GDI BitBlt/GetDIBits 失败".into()));
+        if got == 0 {
+            return Err(crate::error::AppError::Io("GDI GetDIBits 失败".into()));
         }
         Ok(CapturedFrame { width, height, bgraw, timestamp_ms })
     }
 }
 
 /// 虚拟屏幕边界（多显示器合并区域）。
+/// @ai-context: TD-011 修复——SM_CXSCREEN 仅主屏，副屏窗口内容会错误；
+///              改用 SM_X/Y/CX/CYVIRTUALSCREEN 覆盖全部显示器。
 fn get_system_metrics_screen() -> RECT {
-    // 简化：主屏（0,0,宽,高）；多显示器场景由 DXGI 主路径覆盖
     unsafe {
-        let width = GetSystemMetrics(SM_CXSCREEN);
-        let height = GetSystemMetrics(SM_CYSCREEN);
-        RECT { left: 0, top: 0, right: width, bottom: height }
+        let left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        let top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        let width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        let height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        RECT { left, top, right: left + width, bottom: top + height }
     }
 }

@@ -216,7 +216,11 @@ impl DxgiState {
                         std::mem::zeroed();
                     self.context
                         .Map(&self.staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))
-                        .map_err(|e| crate::error::AppError::Io(format!("Map 失败: {}", e)))?;
+                        .map_err(|e| {
+                            // TD-010：Map 失败必须释放帧，否则 duplication 帧悬挂（未释放的帧不会被新帧替换）
+                            let _ = self.duplication.ReleaseFrame();
+                            crate::error::AppError::Io(format!("Map 失败: {}", e))
+                        })?;
 
                     let width = self.output_width as usize;
                     let height = self.output_height as usize;

@@ -18,7 +18,7 @@ use windows::Win32::Media::Audio::{
     AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK,
 };
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CoTaskMemFree, CLSCTX_ALL, COINIT_MULTITHREADED,
+    CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED,
 };
 
 use super::resample::{ChunkAccumulator, TARGET_SAMPLE_RATE};
@@ -98,6 +98,15 @@ where
     }
 }
 
+/// COM 初始化 guard：drop 时自动 CoUninitialize（TD-028 修复——CoInitializeEx 无配对调用会泄漏线程 COM 状态）。
+struct ComInitGuard;
+
+impl Drop for ComInitGuard {
+    fn drop(&mut self) {
+        unsafe { CoUninitialize() }
+    }
+}
+
 fn run_capture<F>(stop_flag: &AtomicBool, on_chunk: &F) -> crate::error::Result<()>
 where
     F: Fn(AudioChunk) + Send,
@@ -107,7 +116,18 @@ where
         CoInitializeEx(None, COINIT_MULTITHREADED)
             .ok()
             .map_err(|e| crate::error::AppError::Io(format!("COM 初始化失败: {}", e)))?;
+    }
+    // 初始化成功后所有退出路径（含 Err 提前返回）都必须配对 CoUninitialize
+    let _com = ComInitGuard;
+    run_capture_inner(stop_flag, on_chunk)
+}
 
+/// 捕获主循环体（run_capture 的拆分：COM guard 与函数体分离，保证配对）。
+fn run_capture_inner<F>(stop_flag: &AtomicBool, on_chunk: &F) -> crate::error::Result<()>
+where
+    F: Fn(AudioChunk) + Send,
+{
+    unsafe {
         let enumerator: IMMDeviceEnumerator = CoCreateInstance(&CLSID_MM_DEVICE_ENUMERATOR, None, CLSCTX_ALL)
             .map_err(|e| crate::error::AppError::Io(format!("创建设备枚举器失败: {}", e)))?;
         let device: IMMDevice = enumerator
