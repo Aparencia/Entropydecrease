@@ -11,12 +11,12 @@
 > 第七轮（同日，实时活动面板/OCR 修复审查）：规范问题当场修复（ClassroomPage 行数豁免更新、
 > REQ-035 需求追溯登记）；新增 TD-042/043 登记 open（见下）。
 > 第八轮（同日）：TD-042/043 已修复（提交 7af0da8，见下）。
+> 第九轮（v0.4.0 M0）：TD-033 已修复（提交 2a88b25，见下）。
 
 ## 未偿债务
 
 | ID | 摘要 | 备注 |
 |----|------|------|
-| TD-033 | 窗口跨显示器移动后 DXGI duplication 不更新（仍复制旧显示器桌面），窗口裁剪为空画面，最长 30s 空窗等周期重建（ADR-007 审查发现，2026-08-18） | carried（第八轮核对，未偿）；修复方向：DxgiState 保存输出 DesktopCoordinates，窗口中心越界时立即触发重建（P2 排期） |
 | TD-040 | tauri.conf.json bundle.resources 未含 ffmpeg——生产安装包无捆绑 ffmpeg（v0.3.0 审查，2026-08-18） | carried（deliberate 有意不修）：resources glob 对缺失目录构建失败；捆绑 ffmpeg（~80MB）与安装包体积权衡留待体积策略；开发期由 download-ffmpeg.ps1 + PATH 覆盖（ADR-008 风险项，保持观察） |
 
 ## 今日已偿（二轮 8 笔 + 三轮 11 笔 + 四轮 20 笔 + 五轮 3 笔 + 六轮 4 笔 + 八轮 2 笔）
@@ -71,6 +71,7 @@
 | TD-041 | ASR 段 end_ms 滞后 1.2-2.4s（端点尾静音规则） | 句尾 = 最后语音块 + 200ms 块尾（sentence_end_ms，六轮，提交 1c95c32） |
 | TD-042 | 停止过渡态 stopping 无超时兜底——stopped 事件异常丢失时面板常驻 | ClassroomPage 10s 超时自动清除过渡态（八轮，提交 7af0da8） |
 | TD-043 | 实时面板时间戳用前端 Date.now() 估算，与后端纪元偏差 | 事件载荷携带后端时间戳（AsrFinalEvent/SubtitleEvent/OcrEvent，八轮，提交 7af0da8） |
+| TD-033 | 窗口跨显示器移动后 DXGI duplication 不更新（仍复制旧显示器桌面），窗口裁剪为空画面，最长 30s 空窗等周期重建（ADR-007 审查发现，2026-08-18） | DxgiState 拆分至 dxgi_state.rs 并保存输出 DesktopCoordinates；窗口中心越界立即弃用 DXGI + 2s 快速重建节流（替换 30s 周期等待）；新增 point_in_output 纯函数单测 6 例（九轮/v0.4.0 M0，提交 2a88b25） |
 
 ## 登记规则
 
