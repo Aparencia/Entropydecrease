@@ -2,8 +2,11 @@
 //!
 //! @ai-context: 由 live_session.rs 以 #[cfg(test)] #[path] 引入；
 //!              覆盖 REQ-031 融合状态标记流转（ADR-008 内存方案）。
+//! @ai-context: v0.7.0 M0 X-O5 拆分后：FusionTracker 在 live_session_fusion.rs，
+//!              sentence_end_ms 在 live_session_persist.rs（测试引用同步迁移）。
 
-use super::{sentence_end_ms, FusionTracker};
+use crate::live_session_fusion::FusionTracker;
+use crate::live_session_persist::sentence_end_ms;
 
 #[test]
 fn fusion_tracker_begin_end_flow() {

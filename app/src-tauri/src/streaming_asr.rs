@@ -12,6 +12,8 @@
 //!              重打分（停止时尾句与端点同质量兜底）。
 //! @ai-context: 引擎不跨线程移动（FFI 类型非 Send）——由实时编排线程独占持有；
 //!              时间戳由编排层按会话时钟标注，本模块只产出文本事件。
+//! @ai-context: v0.7.0 M0 X-O5 行数拆分：端点处理链路拆至子模块
+//!              streaming_endpoint.rs（handle_endpoint/punctuate/喂入决策/模型校验）。
 
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -24,6 +26,10 @@ use crate::engine::EnginePool;
 use crate::error::{AppError, Result};
 use crate::types::TranscriptSegment;
 use crate::vocab::VocabStore;
+
+// v0.7.0 M0：端点处理子模块（见 streaming_endpoint.rs 模块头注释）
+#[path = "streaming_endpoint.rs"]
+mod endpoint;
 
 /// 流式模型四件套路径（目录约定：models/streaming-zipformer/，ADR-003）。
 #[derive(Debug, Clone)]
@@ -59,14 +65,8 @@ pub enum StreamingAsrEvent {
 
 /// partial 推送最小间隔（ms）——防 IPC 风暴（原项目参数）。
 const PARTIAL_EMIT_INTERVAL_MS: u64 = 150;
-/// 静音块隔块喂入：静音期每隔 N 块喂 1 块（CPU 优化，原项目 P0-5 参数）。
-const SILENT_FEED_SKIP_COUNT: u32 = 1;
 /// 静音判定 RMS 阈值（16kHz 单声道 f32）。
 pub const SILENCE_RMS_THRESHOLD: f32 = 0.005;
-/// VAD hangover（ADR-012 F1-3）：语音结束后 N 块内静音不跳过（句尾弱音保护）。
-const HANGOVER_BLOCKS: u32 = 3;
-/// 尾静音端点判别阈值（块）：连续静音 ≥ 1.2s（与 rule2 对齐）视为尾静音端点。
-const SILENCE_TERMINATED_BLOCKS: u32 = 6;
 
 /// SenseVoice 重打分超时（ms，2026-08-19 取优整合）：实测推理 ~0.6s/8s 句
 /// （无竞争），3s 余量覆盖 CPU 竞争/引擎卡顿；超时降级保留流式结果。
@@ -106,7 +106,7 @@ impl StreamingAsrEngine {
         vocab: Option<Arc<Mutex<VocabStore>>>,
         punctuation_model: Option<String>,
     ) -> Result<Self> {
-        ensure_model_files(models)?;
+        endpoint::ensure_model_files(models)?;
         let mut recognizer_config = OnlineRecognizerConfig::default();
         recognizer_config.feat_config.sample_rate = 16000;
         recognizer_config.feat_config.feature_dim = 80;
@@ -169,7 +169,7 @@ impl StreamingAsrEngine {
 
         // 静音隔块喂入（原项目 P0-5）+ hangover 句尾保护（ADR-012 F1-3）
         let (should_feed, new_skip, new_blocks) =
-            silence_feed_decision(is_silent, self.silent_blocks_since_speech, self.silent_skip_counter);
+            endpoint::silence_feed_decision(is_silent, self.silent_blocks_since_speech, self.silent_skip_counter);
         self.silent_skip_counter = new_skip;
         self.silent_blocks_since_speech = new_blocks;
         if !should_feed {
@@ -181,27 +181,9 @@ impl StreamingAsrEngine {
             self.recognizer.decode(&self.stream);
         }
 
-        let mut events = Vec::new();
-        // 端点断句：final + 重建流
+        // 端点断句：final + 重建流（v0.7.0 M0 拆至 endpoint::handle_endpoint）
         if self.recognizer.is_endpoint(&self.stream) {
-            let raw = self.recognizer.get_result(&self.stream).map(|r| r.text).unwrap_or_default();
-            // ADR-012 F1-1：尾静音端点（连续静音 ≥1.2s）才允许前缀扩展接受
-            let silence_terminated = self.silent_blocks_since_speech >= SILENCE_TERMINATED_BLOCKS;
-            let final_text = self.maybe_rescore(&raw, silence_terminated);
-            let final_text = clean_asr_result(&final_text);
-            if !final_text.is_empty() && final_text != self.last_final_text {
-                self.last_final_text = final_text.clone();
-                // ADR-012 F4-1：非尾静音端点（rule3/短停顿硬切）→ 标记可合并
-                events.push(StreamingAsrEvent::Final {
-                    text: final_text,
-                    merge_with_next: !silence_terminated,
-                });
-            }
-            self.stream = self.new_stream();
-            self.last_partial_text.clear();
-            self.last_partial_emit_at = None;
-            self.sentence_pcm.clear();
-            return events;
+            return self.handle_endpoint();
         }
 
         // partial：节流 + 文本变化才推送（净化后比较——预览与定稿一致）
@@ -213,6 +195,7 @@ impl StreamingAsrEngine {
             Some(at) => now.duration_since(at).as_millis() as u64 >= PARTIAL_EMIT_INTERVAL_MS,
             None => true,
         };
+        let mut events = Vec::new();
         if !partial_text.is_empty() && partial_text != self.last_partial_text && throttled {
             self.last_partial_text = partial_text.clone();
             self.last_partial_emit_at = Some(now);
@@ -277,14 +260,14 @@ impl StreamingAsrEngine {
     ///              尾静音端点）；② 短句放宽（≤4 字距离 ≤1）；③ 原 40% 门限。
     ///              重打分失败/引擎不可用/一致性不满足时保留 Zipformer 结果，
     ///              并对该结果补语义标点（ADR-012 F4-2，punctuator 缺失则原样）。
-    fn maybe_rescore(&mut self, zipformer_text: &str, silence_terminated: bool) -> String {
+    fn maybe_rescore(&mut self, zipformer_text: &str, _silence_terminated: bool) -> String {
         // 字段级借用分离：闭包只捕获 punctuator 引用（不捕获 &self），
         // 与下方 sentence_pcm 的可变借用不冲突
         let punctuator = &self.punctuator;
         let fallback = || {
             let text = zipformer_text.trim().to_string();
             // F4-2：仅未被 SenseVoice 替换的文本补标点（替换文本自带 use_itn 标点）
-            punctuate(punctuator, &text)
+            endpoint::punctuate(punctuator, &text)
         };
         let Some(rescorer) = self.rescorer.as_ref() else {
             return fallback();
@@ -310,63 +293,6 @@ impl StreamingAsrEngine {
             _ => fallback(),
         }
     }
-}
-
-/// 标点恢复（ADR-012 F4-2，自由函数——避免闭包捕获 &self 与 sentence_pcm
-/// 可变借用冲突）：重打分未通过的 final 补语义标点。
-///
-/// @ai-context: 推理 ~10-30ms/句（int8 CPU）——端点路径一次，实时性无影响；
-///              punctuator 缺失或推理失败 → 原样返回（零开销降级）。
-fn punctuate(punctuator: &Option<OfflinePunctuation>, text: &str) -> String {
-    match punctuator {
-        Some(p) => p.add_punctuation(text).unwrap_or_else(|| text.to_string()),
-        None => text.to_string(),
-    }
-}
-
-/// 静音块喂入决策（纯函数，ADR-012 F1-3；引擎 feed 内部调用，可单测）。
-///
-/// @ai-context: 返回 (是否喂入解码器, 新静音跳过计数, 新连续静音块数)。
-///              hangover 内（语音后 ≤3 块）静音照常喂入——句尾弱音保护；
-///              hangover 外恢复隔块喂入（CPU 优化）。
-fn silence_feed_decision(
-    is_silent: bool,
-    silent_blocks_since_speech: u32,
-    silent_skip_counter: u32,
-) -> (bool, u32, u32) {
-    if !is_silent {
-        return (true, 0, 0);
-    }
-    let blocks = silent_blocks_since_speech + 1;
-    if blocks <= HANGOVER_BLOCKS {
-        // hangover：句尾保护，正常喂入（skip 计数保持不变）
-        return (true, silent_skip_counter, blocks);
-    }
-    let skip = silent_skip_counter + 1;
-    if skip <= SILENT_FEED_SKIP_COUNT {
-        // 隔块喂入：本块跳过（解码器不喂）
-        return (false, skip, blocks);
-    }
-    // 隔块喂入：本块喂入，计数复位
-    (true, 0, blocks)
-}
-
-/// 校验流式模型四件套存在（缺失时给出可操作引导）。
-fn ensure_model_files(models: &StreamingAsrModels) -> Result<()> {
-    for (name, path) in [
-        ("encoder", &models.encoder),
-        ("decoder", &models.decoder),
-        ("joiner", &models.joiner),
-        ("tokens", &models.tokens),
-    ] {
-        if !std::path::Path::new(path).exists() {
-            return Err(AppError::ModelNotReady(format!(
-                "缺少流式 ASR 模型文件: {} ({})——请运行下载脚本或手动放置到 models/streaming-zipformer/",
-                name, path
-            )));
-        }
-    }
-    Ok(())
 }
 
 // 兼容 re-export：编辑距离（asr_rescore.rs 实现；dtw_align/subtitle_ocr/fusion 引用此路径）。

@@ -69,6 +69,13 @@ mod layout_analyzer;
 mod layout_cache;
 #[cfg(target_os = "windows")]
 mod live_session;
+// v0.7.0 M0 X-O5：live_session.rs 798 行超限硬拆——音频主循环/定稿落库/融合线程
+#[cfg(target_os = "windows")]
+mod live_session_loop;
+#[cfg(target_os = "windows")]
+mod live_session_persist;
+#[cfg(target_os = "windows")]
+mod live_session_fusion;
 // ADR-011 拆分：帧处理（网格差异触发/字幕 OCR/面板抑制）独立模块
 #[cfg(target_os = "windows")]
 mod live_frame_process;

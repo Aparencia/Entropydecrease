@@ -5,8 +5,10 @@
 //!              净化（clean_asr_result）测试在 asr_clean.rs，跨 final 去重测试在
 //!              asr_dedupe.rs——本文件只保留引擎状态机纯函数与集成测试。
 
+// v0.7.0 M0：silence_feed_decision 随端点处理域拆至子模块 endpoint
+use super::endpoint::silence_feed_decision;
 use crate::streaming_asr::{
-    silence_feed_decision, StreamingAsrConfig, StreamingAsrEngine, StreamingAsrEvent, StreamingAsrModels,
+    StreamingAsrConfig, StreamingAsrEngine, StreamingAsrEvent, StreamingAsrModels,
 };
 
 // ── hangover 静音喂入决策（ADR-012 F1-3）──
