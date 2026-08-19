@@ -95,6 +95,8 @@ pub(crate) fn persist_final(
 ///              单调不重叠，融合对齐可接受）。
 /// @ai-context: REQ-098（v0.7.0 M1）：切分出的子句置信度 None——合并文本跨
 ///              多个 Final，单句置信度无法归因（诚实表达未知，不硬编码假值）。
+/// @ai-context: 参数 8 个为编排上下文传递（与 persist_final 同模式，登记豁免）。
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn digest_merged(
     app: &tauri::AppHandle,
     db: &Db,
@@ -122,6 +124,12 @@ pub(crate) fn digest_merged(
     }
 }
 
+/// 挂起合并段（ADR-012 F4-1）：起点/终点/文本/已合并次数/置信度/音量。
+///
+/// @ai-context: 元组过长（6 元）拆 type alias——REQ-098/103 追加置信度/音量后
+///              从 4 元增长，clippy type_complexity 提示。
+pub(crate) type PendingMerge = (u64, u64, String, u32, Option<f32>, Option<f32>);
+
 /// Final 事件处理上下文（run_audio_loop 拆出——编排状态与落库域解耦）。
 pub(crate) struct FinalEventCtx<'a> {
     pub app: &'a tauri::AppHandle,
@@ -135,7 +143,7 @@ pub(crate) struct FinalEventCtx<'a> {
     /// 跨 final 去重（ADR-012 F3-2）
     pub last_final_clean: &'a mut Option<String>,
     /// rule3 硬切段挂起合并（ADR-012 F4-1；末两位=挂起段置信度/音量，REQ-098/103）
-    pub pending_merge: &'a mut Option<(u64, u64, String, u32, Option<f32>, Option<f32>)>,
+    pub pending_merge: &'a mut Option<PendingMerge>,
 }
 
 /// Final 事件处理：跨 final 去重 → 挂起合并（链式）→ 句子切分落库。

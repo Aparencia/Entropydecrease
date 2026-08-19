@@ -10,17 +10,10 @@
 use serde::{Deserialize, Serialize};
 
 /// 持久化配置（JSON，应用数据目录）。
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub struct AudioPreprocConfig {
     /// 预处理链总开关（AGC + 削波检测 + 动态静音阈值）
     pub enabled: bool,
-}
-
-impl Default for AudioPreprocConfig {
-    fn default() -> Self {
-        // REQ-041 裁决：默认关（微基准定默认——REQ-101 数据支撑后由用户开关）
-        Self { enabled: false }
-    }
 }
 
 impl AudioPreprocConfig {

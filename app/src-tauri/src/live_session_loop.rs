@@ -84,7 +84,7 @@ pub(crate) fn run_audio_loop(
     let mut last_speech_ms: Option<u64> = None;
     let mut last_final_clean: Option<String> = None;
     // 末两位=挂起段置信度/音量（REQ-098/103：合并兜底落库时透传）
-    let mut pending_merge: Option<(u64, u64, String, u32, Option<f32>, Option<f32>)> = None;
+    let mut pending_merge: Option<crate::live_session_persist::PendingMerge> = None;
     let mut clipping_logged = false;
     // REQ-103：段内 RMS 聚合（语音块累计，Final 落库时取均值 → volume 列）
     let mut sentence_rms_sum: f32 = 0.0;

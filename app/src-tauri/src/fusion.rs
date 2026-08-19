@@ -74,6 +74,11 @@ const SIM_MATCH_THRESHOLD: f32 = 0.8;
 /// 双源低置信阈值：双源均 < 该值 → 输出低置信核对段（B3 标记）。
 const LOW_CONFIDENCE: f32 = 0.6;
 
+/// 输出窗口（REQ-062/103 后 5 元）：起点/终点/来源/置信度/音量。
+///
+/// @ai-context: 元组过长拆 type alias——REQ-103 追加 volume 后 clippy 提示。
+type OutputWindow = (u64, u64, FusedSource, Option<f32>, Option<f32>);
+
 /// 双源融合主入口（纯函数，输入顺序无关，内部排序；默认配置）。
 pub fn merge_transcript(
     subtitles: &[SubtitleSegment],
@@ -118,7 +123,7 @@ pub fn merge_transcript_with(
         // 本句的全部输出窗口（空隙补缝 + 重叠保留），统一在最后按时长占比切分文本——
         // 修复：旧实现空隙补缝与重叠保留各输出整句，字幕边界落在句内时同句相邻重复
         // （会话 8/11 实测：同一句连排 2~3 遍）；窗口合并后整句只分配一次
-        let mut windows: Vec<(u64, u64, FusedSource, Option<f32>, Option<f32>)> = Vec::new();
+        let mut windows: Vec<OutputWindow> = Vec::new();
         for sub in &subs {
             if cursor >= end {
                 break;
@@ -234,7 +239,7 @@ fn decide_overlap(
 #[allow(clippy::type_complexity)]
 fn push_window_segments(
     result: &mut Vec<FusedSegment>,
-    windows: &[(u64, u64, FusedSource, Option<f32>, Option<f32>)],
+    windows: &[OutputWindow],
     text: &str,
 ) {
     let total: u64 = windows.iter().map(|(s, e, _, _, _)| e - s).sum();
