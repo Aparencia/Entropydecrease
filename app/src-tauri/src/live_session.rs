@@ -47,6 +47,16 @@ const SENTENCE_FALLBACK_MS: u64 = 2000;
 /// 音频块时长（ms）——与 audio_loopback 的 200ms 定长块对齐（TD-041 句尾校正用）。
 const AUDIO_BLOCK_MS: u64 = 200;
 
+/// 链式合并上限（ADR-012 F4-1，2026-08-19 用户实测回归修复）：
+/// 挂起段最多连续合并 2 次（3 段合一——覆盖 13.wav 取证"同一句被切三刀"模式）。
+///
+/// @ai-context: 连续语音（句间停顿 <600ms）时 sherpa 端点只由 rule3（8s）触发，
+///              merge_with_next 恒 true——无上限的链式合并会把整个会话的语音
+///              合并成一段（挂起期间不推送不落库，停止时 flush 一次性整段兜底，
+///              实测"实时只显示一行/全部语音集中一段"）；达到上限强制落库并推送
+///              （内容不丢，实时转写流恢复逐段沉淀）。
+const MAX_MERGE_CHAIN: u32 = 2;
+
 /// 句尾时刻（TD-041）：最后语音块起点 + 块时长，逼近真实句尾。
 ///
 /// @ai-context: 端点判定基于尾静音（rule1 2.4s / rule2 1.2s），Final 事件晚于实际
@@ -298,8 +308,9 @@ fn run_session(
     let mut asr_tier_emitted = crate::asr_health::AsrTier::Streaming;
     // ADR-012 F3-2：跨 final 重叠去重状态（上一 Final 净化文本；空=无前句）
     let mut last_final_clean: Option<String> = None;
-    // ADR-012 F4-1：rule3 硬切段挂起（start_ms, end_ms, text）——等下一 Final 尝试合并
-    let mut pending_merge: Option<(u64, u64, String)> = None;
+    // ADR-012 F4-1：rule3 硬切段挂起（start_ms, end_ms, text, 已合并次数）——
+    // 等下一 Final 尝试语义合并；合并次数达 MAX_MERGE_CHAIN 强制落库（防整段合一）
+    let mut pending_merge: Option<(u64, u64, String, u32)> = None;
 
     // 1) 流式 ASR（SenseVoice 重打分接离线引擎池；M5 热词经共享词表注入）
     // ADR-012 F3-1：rule3 最长句 env 可覆盖（默认 8s——5s 过短致句中硬切）
@@ -493,15 +504,20 @@ fn run_session(
                             // 新挂起段无条件覆盖旧挂起段，连续 rule3 切段（13.wav
                             // 取证模式）时中间段全部丢失（不落库不推送）
                             if merge_with_next {
-                                // 已有挂起段：先尝试链式合并（同一句话被切多刀）
-                                if let Some((p_start, p_end, p_text)) = pending_merge.take() {
+                                // 已有挂起段：先尝试链式合并（同一句话被切多刀）。
+                                // 2026-08-19 用户实测回归修复：合并次数达上限后不再
+                                // 合并——连续语音（停顿 <600ms）下 rule3 每 8s 硬切，
+                                // 无上限链式合并会把整个会话合成一段（不推送不落库）
+                                if let Some((p_start, p_end, p_text, merges)) = pending_merge.take() {
                                     let gap = start_ms.saturating_sub(p_end);
-                                    if let Some(merged) = merge_segments(&p_text, &text, gap) {
-                                        last_final_clean = Some(merged.clone());
-                                        pending_merge = Some((p_start, end_ms, merged));
-                                        continue;
+                                    if merges < MAX_MERGE_CHAIN {
+                                        if let Some(merged) = merge_segments(&p_text, &text, gap) {
+                                            last_final_clean = Some(merged.clone());
+                                            pending_merge = Some((p_start, end_ms, merged, merges + 1));
+                                            continue;
+                                        }
                                     }
-                                    // 合并失败（gap 超限等）：兜底落库旧挂起段
+                                    // 合并失败（gap 超限）或已达链式上限：兜底落库旧挂起段
                                     persist_final(
                                         &params.app,
                                         &db,
@@ -513,11 +529,11 @@ fn run_session(
                                         0.9,
                                     );
                                 }
-                                pending_merge = Some((start_ms, end_ms, text));
+                                pending_merge = Some((start_ms, end_ms, text, 0));
                                 continue;
                             }
                             // 先消化挂起段：gap 内合并为完整句；否则兜底独立落库
-                            if let Some((p_start, p_end, p_text)) = pending_merge.take() {
+                            if let Some((p_start, p_end, p_text, _merges)) = pending_merge.take() {
                                 let gap = start_ms.saturating_sub(p_end);
                                 if let Some(merged) = merge_segments(&p_text, &text, gap) {
                                     last_final_clean = Some(merged.clone());
@@ -569,7 +585,7 @@ fn run_session(
 
     // 4) 停止：先兜底落库挂起段（F4-1——停止时无下一段可合并），再 flush 尾句
     //    （时间戳用会话纪元；句尾校正同 TD-041；跨 final 去重同主循环）
-    if let Some((p_start, p_end, p_text)) = pending_merge.take() {
+    if let Some((p_start, p_end, p_text, _merges)) = pending_merge.take() {
         persist_final(
             &params.app,
             &db,
