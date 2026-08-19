@@ -348,6 +348,18 @@ pub async fn search_session_segments(
     Ok(hits)
 }
 
+/// 图内文字检索（REQ-133 IMG-1 / v0.7.0 M3）：关键词 → 命中 OCR 块 + 图路径。
+///
+/// @ai-context: 搜"PPT 上的词"命中图（与段搜索并存：段搜转写、本命令搜画面）；
+///              内存过滤（OCR 块量级可控，与段搜索同口径）。
+#[tauri::command]
+pub async fn search_ocr_blocks(
+    state: State<'_, AppState>,
+    keyword: String,
+) -> Result<Vec<crate::db_ocr_search::OcrBlockHit>, String> {
+    crate::db_ocr_search::search_command(&state.db, &keyword).map_err(|e| e.to_string())
+}
+
 /// 片段上下文（纯函数）：命中位置前后各 12 字符（省略号标注截断）。
 ///
 /// @ai-context: 审查修复（2026-08-19）：`text[..pos]` 直接字节切片在

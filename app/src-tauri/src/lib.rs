@@ -59,6 +59,8 @@ mod db_artifacts;
 // v0.7.0 M1.5（REQ-108）：会话信号事件数据层（统一信号事件表读写）
 mod db_session_events;
 mod db_sessions;
+// v0.7.0 M3（REQ-133）：图内文字检索（OCR 块视图）
+mod db_ocr_search;
 mod db_sessions_rows;
 mod device_config;
 // v0.6.0 M2（REQ-063）：DTW 时序对齐（spike 机制先行，真机校准待 M4 落盘）
@@ -81,6 +83,10 @@ mod glossary;
 mod health_check;
 mod highlight_detect;
 mod idle_governor;
+// v0.7.0 M3（REQ-088）：关键图图注生成（本地规则，影子层）
+mod image_caption;
+// v0.7.0 M3（REQ-134）：图片内容裁剪/去白边（纯函数）
+mod image_crop;
 mod image_store;
 // v0.7.0 M1.5（REQ-110）：图像流存储层（时间轴帧序列——图像优先档）
 mod image_stream_store;
@@ -112,6 +118,8 @@ mod load_monitor;
 // v0.7.0 M1（REQ-106，TRUST-4）：诊断日志脱敏（OCR 文本/会话标题等敏感内容过滤）
 mod log_redact;
 mod model_downloader;
+// v0.7.0 M3（REQ-131）：模型版本管理与磁盘占用（可查可回退）
+mod model_registry;
 mod note_filter;
 mod novelty;
 mod ocr;
@@ -473,6 +481,8 @@ pub fn run() {
             commands_session::session_outline,
             commands_session::list_session_courses,
             commands_session::search_session_segments,
+            // 图内文字检索（REQ-133，v0.7.0 M3：OCR 块视图——搜 PPT 上的词命中图）
+            commands_session::search_ocr_blocks,
             // 流式 ASR 模型状态（REQ-009，ADR-003）
             commands_streaming::asr_streaming_model_status,
             // 模型自动下载（ADR-003 模型分发）
@@ -512,6 +522,8 @@ pub fn run() {
             commands_diag::diag_snapshot,
             // REQ-115（v0.7.0 M2）：VAD 阈值诊断（口径对照可查）
             commands_diag::vad_threshold_diag,
+            // 模型磁盘占用/版本（REQ-131，v0.7.0 M3）
+            commands_diag::model_disk_overview,
             // 会话图片配套（REQ-051，v0.5.0 M6：图集/走廊/删除）
             commands_images::list_session_images,
             commands_images::delete_session_image,

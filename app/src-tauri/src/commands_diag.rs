@@ -105,3 +105,12 @@ pub fn vad_threshold_diag(state: State<'_, AppState>) -> crate::vad_threshold_sl
         base: crate::streaming_asr::SILENCE_RMS_THRESHOLD,
     }
 }
+
+/// 模型磁盘占用总览（REQ-131 P13 / v0.7.0 M3）：models 目录各子目录占用 + 版本。
+///
+/// @ai-context: 磁盘占用面板数据源（版本可查——.model-version 标记；
+///              回退动作由下载器执行，本命令只读清单）。
+#[tauri::command]
+pub fn model_disk_overview(state: State<'_, AppState>) -> crate::model_registry::ModelDiskOverview {
+    crate::model_registry::build_disk_overview(&state.model_dir)
+}
