@@ -227,6 +227,19 @@ pub async fn session_quality_report(
     Ok(crate::quality_report::build_quality_report(&segments, &ocr_blocks))
 }
 
+/// 会话大纲（REQ-077）：OCR 全帧块 → 大纲条目（产物视图侧边导航，点击跳转）。
+#[tauri::command]
+pub async fn session_outline(
+    state: State<'_, AppState>,
+    id: i64,
+) -> Result<Vec<crate::outline::OutlineEntry>, String> {
+    if id <= 0 {
+        return Err("无效的会话 id".to_string());
+    }
+    let ocr_blocks = state.db.list_ocr_blocks(id).map_err(|e| e.to_string())?;
+    Ok(crate::outline::detect_outline(&ocr_blocks, &crate::outline::OutlineConfig::default()))
+}
+
 /// 课程分组（REQ-078）：课程键 = 标题章节前缀（"第3章"等）；无前缀 → 标题本身。
 ///
 /// @ai-context: 纯函数（派生方案——sessions 表不加 course 列，零迁移）；

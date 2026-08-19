@@ -397,8 +397,9 @@ pub fn run() {
             commands_session::session_to_note,
             // 笔记预览（REQ-081，v0.6.0 M1：过滤后只读预览——单一管线双出口）
             commands_session::preview_session_note,
-            // 会话体验（REQ-076/078/079，v0.6.0 M6：质量报告/课程分组/段搜索）
+            // 会话体验（REQ-076/077/078/079，v0.6.0 M6：质量报告/大纲/课程分组/段搜索）
             commands_session::session_quality_report,
+            commands_session::session_outline,
             commands_session::list_session_courses,
             commands_session::search_session_segments,
             // 流式 ASR 模型状态（REQ-009，ADR-003）
