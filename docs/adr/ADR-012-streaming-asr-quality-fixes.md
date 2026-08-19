@@ -2,7 +2,7 @@
 
 ## 状态
 
-已接受（2026-08-19；实施完成：F1-1/F1-2/F1-3/F2-1/F2-2/F2-3/F3-1/F3-2 全部落地，单测 691 通过 + 真实模型集成测试通过；真机验收（3 节课 CER 对比）待执行）
+已接受（2026-08-19；实施完成：F1-1/F1-2/F1-3/F2-1/F2-2/F2-3/F3-1/F3-2 全部落地，单测 691 通过 + 真实模型集成测试通过；**追加修订 F4-1/F4-2（2026-08-19）已实施完成**：语义级合并（699 单测）+ 标点恢复（真实模型验证通过，模型 75.5MB int8）；真机验收（3 节课 CER 对比）待执行）
 
 ## 日期
 
@@ -64,6 +64,36 @@
 
 12.wav 证实低电平场景存在且流式质量崩坏。本期实现 `AudioPreprocessConfig` 的 env 开关接入（`ENTROPY_AUDIO_PREPROC=1` 启用 AGC + 动态阈值链，已有模块 `audio_preprocess.rs` 只缺生产接入点），默认仍关——默认值决策留给 REQ-041 微基准（CER 对比），不背决策流程。设计文档记录 12.wav 证据与建议。
 
+## 追加修订（2026-08-19，五轮审查后：云端 ASR 断句方案对照吸收）
+
+对照云端 ASR 断句优化方案（语义断句/标点恢复/LLM 后处理）后的本地实现取舍：
+LLM 实时断句/第三方字幕工具/Whisper 方案/RNNoise-AEC/领域微调——与本地优先架构冲突或已有等价物，不采纳；
+采纳两项缺口：
+
+### F4-1：语义级合并（修 rule3 硬切"不该断时断了"）
+
+rule3 强制端点把完整句切成两段（文本不丢但切碎）——ADR-012 方案 C 候选的轻量版，不引入字符级对齐：
+
+1. **引擎层标记**：`StreamingAsrEvent::Final` 增加 `merge_with_next: bool`——端点时 `silent_blocks_since_speech < 6`（非尾静音端点 = rule3/短停顿硬切）为 true；尾静音端点（rule1/rule2）为 false。纯标记，不改现有推送语义。
+2. **编排层延迟合并**（`live_session.rs`）：`merge_with_next=true` 的 Final **挂起**（不落库不推送）；下一 Final 到来时计算句间间隔 `gap = next.start_ms - prev.end_ms`：
+   - `gap ≤ 600ms`（硬切特征：无尾静音停顿；正常句间 ≥1.2s 尾静音 → gap ≥1.2s，判别干净）→ `merge_segments` 合并为一段落库（start=挂起段起点，end=新段终点），一次推送
+   - `gap > 600ms` → 挂起段与新段分别正常落库（保守不合并）
+   - 会话停止时挂起段兜底落库
+3. **合并拼接纯函数** `merge_segments(prev, next, gap_ms)`（新模块 `asr_merge.rs`）：尾首重叠 ≥2 字先跳过（防句间误并的重复）；prev 去尾部标点 + next 去头部标点拼接（硬切在句中，去标点后衔接自然；丢标点由课后精修/标点恢复补回）。`gap > 600ms` 直接 None（不合并）。
+4. **UI 策略**：合并后一次推送（挂起段不闪屏），partial 实时显示不受影响。
+
+误合并风险（语速快、句间停 <600ms 的两句拼一句）：内容完整、观感略差，课后精修可再切分——可接受，由 gap 门限 + 仅 rule3 段参与控制。
+
+### F4-2：标点恢复模型（重打分未通过时补语义标点）
+
+重打分通过的 final 已有 SenseVoice 标点；**未通过的 final 无标点**（现有 `restore_punctuation` 只补句号）——观感与断句可读性缺口：
+
+1. **模型**：sherpa-onnx `OfflinePunctuation`（Rust API 已确认，1.13.5 crate 内置）——`sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12` int8 版（~50-100MB），目录约定 `models/punctuation/model.int8.onnx`。
+2. **分发**：沿用 ADR-003 模式——新增 `scripts/download-punctuation.mjs`（hf-mirror 国内镜像 + .part 原子写 + Content-Length 校验）。
+3. **接入**：`StreamingAsrEngine` 持有 `punctuator: Option<OfflinePunctuation>`（模型缺失 → None 零开销降级，不阻断 ASR）；`maybe_rescore` 中**未被 SenseVoice 替换**的 final 文本在 clean 后调用 `add_punctuation` 补标点（仅 final，partial 不补——防实时闪烁）。引擎线程持有（OfflinePunctuation 为 Send+Sync，文档确认线程安全）。
+4. **推理开销**：~10-30ms/句（int8 CPU），端点路径可忽略；懒加载（创建失败即 None）。
+5. **与课后精修互补**：实时链路只补标点（轻量）；全文校正/再切分仍走课后 Qwen-VL 精修。
+
 ## 备选方案
 
 ### 方案 A：仅调参不补丁（先零补丁路线）
@@ -101,6 +131,8 @@
 - [x] 回归：静音期 CPU（隔块喂入在 hangover 外仍生效——silence_feed_decision 单测覆盖）、partial 节流行为不变（代码路径未动）
 - [ ] 真机验收：3 节课对比，句尾丢字率下降 ≥80%，短句错误率下降，无新增重复段
 - [x] 取证工具 `asr_forensic` 保留（开发期诊断，不入产品包）
+- [x] F4-1 语义级合并：merge_segments 纯函数单测 8 项（gap 门限/重叠跳过/标点去留/空输入）、引擎 merge_with_next 标记（rule3 vs 尾静音判别）、编排挂起-合并-兜底路径（persist_final 三出口一致落库）
+- [x] F4-2 标点恢复：punctuator 缺失降级（None 零开销）、add_punctuation 仅未替换 final、下载脚本（hf-mirror int8 镜像 + .part 原子写 + 版本标记）、真实模型集成测试（中文"…分享，一个呢…介绍。"标点补全正确）
 
 ## 相关决策
 
