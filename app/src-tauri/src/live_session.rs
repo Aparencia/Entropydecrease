@@ -47,6 +47,10 @@ const SENTENCE_FALLBACK_MS: u64 = 2000;
 /// 音频块时长（ms）——与 audio_loopback 的 200ms 定长块对齐（TD-041 句尾校正用）。
 const AUDIO_BLOCK_MS: u64 = 200;
 
+/// 停止后 drain 宽限（s，2026-08-19 取优整合）：停止瞬间积压的音频块继续
+/// 喂入处理（内容不丢）；宽限到期强制退出（停止响应不被无限积压拖死）。
+const DRAIN_GRACE_SECS: u64 = 8;
+
 /// 链式合并兜底上限（ADR-012 F4-1，merge-then-split 方案）。
 ///
 /// @ai-context: 正常路径由"合并后句子切分"消化（合并文本内完整句即时落库
@@ -455,7 +459,16 @@ fn run_session(
         }
     };
 
-    while !stop.load(Ordering::SeqCst) {
+    // 2026-08-19 取优整合：停止后 drain——停止瞬间 channel 中已送达未处理的音频块
+    // 继续喂入（内容不丢；"停止时积压丢弃"兜底，会话 22 类缺失防御）。drain 有界
+    // （宽限 8s，停止响应与内容完整性权衡）；队列空（Timeout）即退出。
+    let drain_deadline = Instant::now() + Duration::from_secs(DRAIN_GRACE_SECS);
+    let mut draining = false;
+    loop {
+        if draining && Instant::now() >= drain_deadline {
+            eprintln!("[LiveSession] 停止宽限 {}s 到期，剩余积压音频丢弃（可观测）", DRAIN_GRACE_SECS);
+            break;
+        }
         // ── 音频块 → 流式 ASR ──
         match rx.recv_timeout(Duration::from_millis(TICK_MS)) {
             Ok(chunk) => {
@@ -495,7 +508,14 @@ fn run_session(
                 let mut events = asr_engine.feed(&processed.samples, silent);
                 // M7/REQ-042 F5：有语音无产出持续 → 降级链提示（F3 静默失败可见化）
                 // TD-050 修复：dt 取音频块时长 0.2s（TICK_MS=500 是轮询超时，非块时长）
-                let tier = asr_health.observe(!silent, !events.is_empty(), AUDIO_BLOCK_SECS);
+                // 2026-08-19 取优整合：语音活跃度用**固定阈值**判定（不随 VAD 自适应
+                // 失真）——VAD 阈值误判（会话 12/22 类）时降级提示仍能触发，静默
+                // 失败可见性不失效
+                let tier = asr_health.observe(
+                    raw_rms >= SILENCE_RMS_THRESHOLD,
+                    !events.is_empty(),
+                    AUDIO_BLOCK_SECS,
+                );
                 if tier != asr_tier_emitted {
                     let prev = asr_tier_emitted;
                     asr_tier_emitted = tier;
@@ -641,7 +661,15 @@ fn run_session(
                     }
                 }
             }
-            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Timeout) => {
+                // 停止信号置位：进入 drain（继续处理积压块）；积压清空后退出
+                if draining {
+                    break;
+                }
+                if stop.load(Ordering::SeqCst) {
+                    draining = true;
+                }
+            }
             Err(RecvTimeoutError::Disconnected) => break, // 捕获线程退出
         }
     }

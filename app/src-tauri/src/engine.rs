@@ -217,6 +217,31 @@ impl EnginePool {
         rx.recv().map_err(|_| AppError::Asr("ASR 引擎线程未返回结果".to_string()))?
     }
 
+    /// 转写 PCM 内存样本（**有界等待**——超时返回 Err，调用方走降级）。
+    ///
+    /// @ai-context: 2026-08-19 取优整合：流式链路 maybe_rescore 的同步等待改为
+    ///              有界——推理环境异常（CPU 竞争/引擎卡顿）时 ASR 主循环不得
+    ///              被无限阻塞（阻塞 → 音频块积压 → 停止时积压丢弃 = 内容缺失，
+    ///              会话 22 类问题兜底）；超时后结果丢弃（worker 侧 send 失败
+    ///              自然忽略，无泄漏）。
+    pub fn transcribe_pcm_timeout(
+        &self,
+        samples: &[f32],
+        sample_rate: i32,
+        timeout: std::time::Duration,
+    ) -> Result<TranscriptSegment> {
+        let (reply, rx) = mpsc::channel();
+        self.asr_tx
+            .send(AsrRequest::TranscribePcm {
+                samples: samples.to_vec(),
+                sample_rate,
+                reply,
+            })
+            .map_err(|_| AppError::Asr("ASR 引擎线程已退出".to_string()))?;
+        rx.recv_timeout(timeout)
+            .map_err(|_| AppError::Asr("SenseVoice 重打分超时（降级保留流式结果）".to_string()))?
+    }
+
     /// 识别图片（阻塞等待 OCR 线程返回）。
     pub fn recognize(&self, path: &str) -> Result<Vec<OcrBlock>> {
         let (reply, rx) = mpsc::channel();

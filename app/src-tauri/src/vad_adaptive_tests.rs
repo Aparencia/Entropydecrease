@@ -40,9 +40,24 @@ fn loud_environment_raises_threshold() {
     for _ in 0..200 {
         vad.next_threshold(0.02, BASE);
     }
-    // Assert：阈值 ≈ 0.06（0.02×3）——高于固定阈值（防噪声被当语音）
+    // Assert：阈值 0.02×3=0.06 → 被 THRESHOLD_CEIL=0.05 钳制（2026-08-19 取优
+    // 整合：上限防 P10 失真爬到语音量级）——仍高于固定阈值（防噪声被当语音）
     let t = vad.current_threshold();
-    assert!(t > 0.03 && t < 0.08, "高噪声阈值应高于固定阈值，实得 {}", t);
+    assert!(t > 0.03 && t <= THRESHOLD_CEIL, "高噪声阈值应高于固定阈值且不超上限，实得 {}", t);
+}
+
+#[test]
+fn threshold_capped_when_noise_floor_skewed_by_speech() {
+    // 2026-08-19 取优整合回归（会话 22 类）：全程高能量语音（RMS 0.2，无真静音）
+    // 时 P10 噪声底被语音污染抬升——旧实现阈值可爬到 0.6（语音级）→ 全部判
+    // 静音 → 隔块喂入 + 内容缺失；上限 0.05 保证语音不被误判静音（宁多喂不少喂）
+    let mut vad = AdaptiveVad::new(AdaptiveVadConfig::default());
+    for _ in 0..300 {
+        vad.next_threshold(0.2, BASE);
+    }
+    let t = vad.current_threshold();
+    assert!(t <= THRESHOLD_CEIL, "阈值不得超上限（实得 {}）", t);
+    assert!(0.2 > t, "语音 RMS 必须高于阈值（不误判静音）");
 }
 
 #[test]

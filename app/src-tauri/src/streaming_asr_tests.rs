@@ -5,7 +5,9 @@
 //!              净化（clean_asr_result）测试在 asr_clean.rs，跨 final 去重测试在
 //!              asr_dedupe.rs——本文件只保留引擎状态机纯函数与集成测试。
 
-use crate::streaming_asr::{silence_feed_decision, StreamingAsrConfig, StreamingAsrEngine, StreamingAsrModels};
+use crate::streaming_asr::{
+    silence_feed_decision, StreamingAsrConfig, StreamingAsrEngine, StreamingAsrEvent, StreamingAsrModels,
+};
 
 // ── hangover 静音喂入决策（ADR-012 F1-3）──
 
@@ -127,4 +129,158 @@ fn punctuation_model_integration() {
     );
     println!("标点补全输出: {}", out);
     println!("标点模型验证通过（模型: {}", model);
+}
+
+/// 集成复现：会话音频喂入复现（会话 22 内容缺失根因定位，2026-08-19）。
+///
+/// @ai-context: 精确复现 run_session 主循环的喂入决策（AdaptiveVad 自适应阈值 +
+///              静音隔块喂入 + 端点/final 产出），验证"音频全程有语音但 21.9s 后
+///              无 Final 产出"的机制。用法：
+///              ENTROPY_REPLAY_WAV=<22.wav 路径> cargo test --lib replay_session -- --ignored --nocapture
+#[test]
+#[ignore = "集成复现：需要真实流式模型 + 会话音频（ENTROPY_REPLAY_WAV）"]
+fn replay_session_audio_vad_and_engine() {
+    use crate::capture::resample::compute_rms;
+    use crate::vad_adaptive::{AdaptiveVad, AdaptiveVadConfig};
+
+    let wav = std::env::var("ENTROPY_REPLAY_WAV").expect("ENTROPY_REPLAY_WAV 环境变量");
+    let appdata = std::env::var("APPDATA").expect("APPDATA 环境变量");
+    let models_dir = std::env::var("ENTROPY_MODELS_DIR")
+        .unwrap_or_else(|_| format!("{}\\com.entropydecrease.app\\models", appdata));
+    let m = |name: &str| format!("{}\\streaming-zipformer\\{}", models_dir, name);
+
+    // 读 WAV（44 字节头 PCM16 16k 单声道，防御性解析）
+    let bytes = std::fs::read(&wav).expect("读取 wav");
+    assert!(&bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WAVE", "非法 wav 头");
+    let data = &bytes[44..];
+    let samples: Vec<f32> = data
+        .chunks_exact(2)
+        .map(|c| i16::from_le_bytes([c[0], c[1]]) as f32 / 32767.0)
+        .collect();
+
+    let models = StreamingAsrModels {
+        encoder: m("encoder.fp16.onnx"),
+        decoder: m("decoder.fp16.onnx"),
+        joiner: m("joiner.fp16.onnx"),
+        tokens: m("tokens.txt"),
+    };
+    let punct = format!("{}\\punctuation\\model.int8.onnx", models_dir);
+    let mut engine = StreamingAsrEngine::load(&models, &StreamingAsrConfig::default(), None, None, Some(punct))
+        .expect("流式引擎加载成功");
+
+    let mut vad = AdaptiveVad::new(AdaptiveVadConfig { enabled: true });
+    const BLOCK: usize = 16_000 / 5; // 200ms
+    let mut silent_total = 0usize;
+    let mut finals = 0usize;
+    let mut blocks = 0usize;
+    let mut last_log_sec = 0usize;
+    let mut silent_in_sec = 0usize;
+    for (i, chunk) in samples.chunks(BLOCK).enumerate() {
+        let sec = i / 5;
+        let raw_rms = compute_rms(chunk);
+        let threshold = vad.next_threshold(raw_rms, 0.005);
+        let silent = raw_rms < threshold;
+        if silent {
+            silent_total += 1;
+            silent_in_sec += 1;
+        }
+        let events = engine.feed(chunk, silent);
+        for e in events {
+            match e {
+                StreamingAsrEvent::Final { text, merge_with_next } => {
+                    finals += 1;
+                    let t = i as f64 * 0.2;
+                    println!(
+                        "  [Final #{:02} t={:6.1}s merge={}] {}",
+                        finals,
+                        t,
+                        merge_with_next,
+                        &text.chars().take(40).collect::<String>()
+                    );
+                }
+                StreamingAsrEvent::Partial { .. } => {}
+            }
+        }
+        if sec != last_log_sec {
+            println!(
+                "  t={:4}s rms={:6.4} thr={:6.4} silent_this_sec={}/5 (累计静音 {}/{})",
+                sec,
+                raw_rms,
+                threshold,
+                silent_in_sec,
+                silent_total,
+                i
+            );
+            silent_in_sec = 0;
+            last_log_sec = sec;
+        }
+        blocks = i;
+    }
+    if let Some(StreamingAsrEvent::Final { text, .. }) = engine.flush() {
+        println!("  [flush t={:.1}s] {}", blocks as f64 * 0.2, &text.chars().take(40).collect::<String>());
+    }
+    println!("复现结束：{} 块，静音判定 {}/{}（{:.0}%），Final 产出 {} 个", blocks + 1, silent_total, blocks + 1, silent_total as f64 * 100.0 / (blocks + 1) as f64, finals);
+}
+
+/// 集成复现：SenseVoice 逐窗口推理耗时（会话 22 积压假设验证，2026-08-19）。
+///
+/// @ai-context: 产品 maybe_rescore 每端点**同步阻塞**等待 transcribe_pcm——
+///              若每 8s 段的 SenseVoice 推理耗时接近/超过语音周期，主循环
+///              处理速率 < 音频产生速率 → channel 无界积压 → 停止时积压块
+///              被 `while !stop` 退出直接丢弃（会话 22 实测 ~33s 语音缺失）。
+#[test]
+#[ignore = "集成复现：需要真实 SenseVoice 模型（ENTROPY_REPLAY_WAV）"]
+fn sensevoice_inference_latency_per_window() {
+    use std::time::Instant;
+    let wav = std::env::var("ENTROPY_REPLAY_WAV").expect("ENTROPY_REPLAY_WAV 环境变量");
+    let appdata = std::env::var("APPDATA").expect("APPDATA 环境变量");
+    let models_dir = std::env::var("ENTROPY_MODELS_DIR")
+        .unwrap_or_else(|_| format!("{}\\com.entropydecrease.app\\models", appdata));
+    let model = format!("{}\\asr\\sensevoice\\model.int8.onnx", models_dir);
+    let tokens = format!("{}\\asr\\sensevoice\\tokens.txt", models_dir);
+
+    let mut config = sherpa_onnx::OfflineRecognizerConfig::default();
+    config.model_config.sense_voice = sherpa_onnx::OfflineSenseVoiceModelConfig {
+        model: Some(model),
+        language: Some("auto".into()),
+        use_itn: true,
+    };
+    config.model_config.tokens = Some(tokens);
+    let rec = sherpa_onnx::OfflineRecognizer::create(&config).expect("SenseVoice 加载成功");
+
+    let bytes = std::fs::read(&wav).expect("读取 wav");
+    let data = &bytes[44..];
+    let samples: Vec<f32> = data
+        .chunks_exact(2)
+        .map(|c| i16::from_le_bytes([c[0], c[1]]) as f32 / 32767.0)
+        .collect();
+
+    // 以 8s（rule3 段）为窗口滑窗转写并计时（步长 8s，与端点周期对齐）
+    const WIN: usize = 16_000 * 8;
+    let mut total = 0.0;
+    for (i, w) in samples.chunks(WIN).enumerate() {
+        let t0 = Instant::now();
+        let stream = rec.create_stream();
+        stream.accept_waveform(16_000, w);
+        rec.decode(&stream);
+        let text = stream.get_result().map(|r| r.text).unwrap_or_default();
+        let dt = t0.elapsed().as_secs_f32();
+        total += dt;
+        println!(
+            "  窗口#{:02} {:.1}-{:.1}s 推理 {:.2}s | {}",
+            i,
+            i as f32 * 8.0,
+            (i + 1) as f32 * 8.0,
+            dt,
+            &text.chars().take(30).collect::<String>()
+        );
+    }
+    let n = samples.len().div_ceil(WIN);
+    println!(
+        "SenseVoice 平均推理 {:.2}s/8s窗口（实时比 {:.2}x）——{} 个窗口合计 {:.2}s",
+        total / n as f32,
+        total / (samples.len() as f32 / 16_000.0),
+        n,
+        total
+    );
 }

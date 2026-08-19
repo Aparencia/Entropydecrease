@@ -21,6 +21,11 @@ const NOISE_PERCENTILE: f32 = 0.10;
 const THRESHOLD_MULTIPLIER: f32 = 3.0;
 /// 阈值下限（绝对兜底：低于该值视为无信号环境，防除零/过低误切）。
 const THRESHOLD_FLOOR: f32 = 0.0015;
+/// 阈值绝对上限（2026-08-19 取优整合）：P10 噪声底在"语音占比高/能量均匀"的
+/// 音频上失真（如高音量系统环回，P10 也被抬到语音级）→ 阈值可爬到语音级 →
+/// 全部判静音 → 隔块喂入 + 内容缺失/碎片（会话 12/22 类问题）；上限 10×base
+/// 保证正常语音（RMS 通常 >0.05）不被误判静音——宁多喂不少喂，内容完整性优先。
+const THRESHOLD_CEIL: f32 = 0.05;
 /// 每块阈值最大相对变化（平滑限幅：20%/块，防瞬时跳变）。
 const MAX_STEP_RATIO: f32 = 0.2;
 /// 预热块数（10s——历史不足时不自适应：首块语音不得误建噪声底）。
@@ -76,7 +81,8 @@ impl AdaptiveVad {
             return base;
         }
         let noise_floor = percentile(&self.history, NOISE_PERCENTILE);
-        let target = (noise_floor * THRESHOLD_MULTIPLIER).max(THRESHOLD_FLOOR);
+        let target =
+            (noise_floor * THRESHOLD_MULTIPLIER).clamp(THRESHOLD_FLOOR, THRESHOLD_CEIL);
         // 平滑限幅：从当前阈值向目标收敛（每块最多 ±20%）
         let step = (target - base).abs() * MAX_STEP_RATIO;
         self.current = if target >= base { base + step } else { base - step };

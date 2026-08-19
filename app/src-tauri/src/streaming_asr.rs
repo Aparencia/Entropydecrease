@@ -68,6 +68,10 @@ const HANGOVER_BLOCKS: u32 = 3;
 /// 尾静音端点判别阈值（块）：连续静音 ≥ 1.2s（与 rule2 对齐）视为尾静音端点。
 const SILENCE_TERMINATED_BLOCKS: u32 = 6;
 
+/// SenseVoice 重打分超时（ms，2026-08-19 取优整合）：实测推理 ~0.6s/8s 句
+/// （无竞争），3s 余量覆盖 CPU 竞争/引擎卡顿；超时降级保留流式结果。
+const RESCORE_TIMEOUT_MS: u64 = 3000;
+
 /// 流式 ASR 引擎（有状态，独占线程使用）。
 pub struct StreamingAsrEngine {
     recognizer: OnlineRecognizer,
@@ -289,10 +293,19 @@ impl StreamingAsrEngine {
             return fallback();
         }
         let pcm = std::mem::take(&mut self.sentence_pcm);
-        match rescorer.transcribe_pcm(&pcm, self.sample_rate) {
+        // 2026-08-19 取优整合：重打分**有界等待**（3s）——推理环境异常时主循环
+        // 不被无限阻塞（阻塞 → 音频积压 → 停止时积压丢弃 = 内容缺失，会话 22
+        // 类问题兜底）；超时走 fallback（Zipformer 结果 + 标点恢复）
+        match rescorer.transcribe_pcm_timeout(
+            &pcm,
+            self.sample_rate,
+            std::time::Duration::from_millis(RESCORE_TIMEOUT_MS),
+        ) {
             Ok(TranscriptSegment { text, .. }) if !text.trim().is_empty() => {
-                pick_rescored_with(zipformer_text, &text, silence_terminated)
-                    .unwrap_or_else(fallback)
+                // 2026-08-19 取优整合：扩展接受对所有端点启用（含 rule3 硬切段）——
+                // 补回硬切段尾字（13.wav 取证 4/16 段真实尾字丢失）；跨段重复由
+                // F3-2 去重 + F4-1 合并重叠跳过防护
+                pick_rescored_with(zipformer_text, &text, true).unwrap_or_else(fallback)
             }
             _ => fallback(),
         }

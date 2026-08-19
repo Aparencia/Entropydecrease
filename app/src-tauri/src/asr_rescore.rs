@@ -25,13 +25,15 @@ const ORIGINAL_DIST_RATIO: f32 = 0.4;
 
 /// 重打分决策（完整版）。
 ///
-/// @ai-context: silence_terminated=端点由尾静音触发（非 rule3 硬切）——仅此时
-///              允许前缀扩展接受（rule3 切分后下一段会重新识别扩展文本，修复
-///              会造成重复；尾静音端点后是真空，扩展修复安全）。
+/// @ai-context: allow_extension=允许前缀扩展接受——2026-08-19 取优整合：**所有端点
+///              启用**（原仅尾静音端点）——rule3 硬切段的尾字丢失（13.wav 取证
+///              4/16 段尾字真实丢失）同样需要 SenseVoice 补回；扩展造成的跨段重复
+///              由 F3-2 跨 final 去重（asr_dedupe）+ F4-1 合并尾首重叠跳过
+///              （asr_merge）承担，扩展上限（max(8, 流式长度)）防幻觉续写。
 pub fn pick_rescored_with(
     zipformer_text: &str,
     sensevoice_text: &str,
-    silence_terminated: bool,
+    allow_extension: bool,
 ) -> Option<String> {
     let zip: Vec<char> = strip_punct(zipformer_text);
     let sense: Vec<char> = strip_punct(sensevoice_text);
@@ -39,7 +41,7 @@ pub fn pick_rescored_with(
         return None;
     }
     // ① 前缀扩展接受：流式 = SenseVoice 前缀 → 尾字被链路丢弃，补回 SenseVoice
-    if silence_terminated
+    if allow_extension
         && zip.len() < sense.len()
         && is_prefix(&zip, &sense)
         && sense.len() - zip.len() <= EXTENSION_CAP_BASE.max(zip.len())
@@ -114,9 +116,12 @@ mod tests {
     }
 
     #[test]
-    fn prefix_extension_skipped_when_not_silence_terminated() {
-        // Arrange：rule3 硬切端点（非尾静音）——修复会造成与下一段重复
+    fn prefix_extension_skipped_when_disabled() {
+        // Arrange：allow_extension=false（策略禁用）——保留流式结果
         // Act/Assert：拒绝扩展（保留流式结果），原 40% 门限也不通过
+        // @ai-context: 2026-08-19 取优整合后生产路径恒传 true（rule3 段也补尾字，
+        //              跨段重复由 F3-2 去重 + F4-1 合并重叠跳过防护）；本用例
+        //              验证策略开关本身有效（未来收紧时可回退）
         assert_eq!(pick_rescored_with("那今天晚上我", "那今天晚上我会用三个阶段来做分享", false), None);
     }
 
