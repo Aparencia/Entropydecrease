@@ -126,6 +126,8 @@ export interface DownloadProgress {
 export interface LiveSessionStatus {
   active: boolean;
   sessionId: number | null;
+  /** 引擎预热是否已就绪（P3："开始即录"提示） */
+  prepared: boolean;
 }
 
 /** 视频导入进度（Rust ImportProgress，camelCase 契约） */

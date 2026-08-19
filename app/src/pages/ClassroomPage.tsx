@@ -6,14 +6,14 @@
  * @ai-context: v0.2.0 新增实时捕获链路（REQ-007~012）：选择窗口 → 开始 → 后台
  *              捕获音频+屏幕+流式转写+字幕 OCR；事件 live:asr-partial / live:subtitle /
  *              live:error / live:status 实时回显；停止后可到「会话」页查看时间轴。
+ * @ai-context: 2026-08 审查硬拆（>600 硬上限）：右栏内容区拆至 ClassroomRightPane，
+ *              文件素材输入与提取拆至 MaterialInputPanel——本文件回归装配层职责。
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
 import { WindowSelectCard } from "../components/WindowSelectCard";
 import VideoImportPanel from "../components/VideoImportPanel";
-import LiveActivityPanel from "../components/LiveActivityPanel";
 import { OcrDeviceSetting } from "../components/OcrDeviceSetting";
 // v0.7.0 M1（REQ-101）：音频预处理链开关（CER 微基准定默认后的用户通道）
 import { AudioPreprocSetting } from "../components/AudioPreprocSetting";
@@ -23,14 +23,18 @@ import AudioLevelMeter from "../components/AudioLevelMeter";
 import ReadyCheckCard from "../components/ReadyCheckCard";
 import { VocabManager } from "../components/VocabManager";
 import { SystemStatusBadge } from "../components/SystemStatusBadge";
-// v0.5.0 M1（REQ-043）：视频类型档案混合检测（检测为：网课（可改））
-import ProfileDetector from "../components/ProfileDetector";
 // v0.5.0 模型版：结构模型设置（版面/表格/公式按需下载）
 import StructureModelSetting from "../components/StructureModelSetting";
+// 2026-08 审查硬拆：右栏内容区 / 文件素材输入与提取
+import ClassroomRightPane from "../components/ClassroomRightPane";
+import MaterialInputPanel from "../components/MaterialInputPanel";
 import type { Note, WindowInfo, StreamingModelStatus, LiveSessionStatus, DownloadProgress, DownloadStatus, ProfileKind } from "../types";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
 const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
+
+/** P3：引擎预热状态（与 Rust PrepareStatus 的 camelCase 契约一致） */
+type PrepareState = "idle" | "loading" | "ready" | "failed";
 
 export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (sessionId: number) => void }) {
   // ── 窗口/进程选择 ──
@@ -56,11 +60,11 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   const [liveError, setLiveError] = useState("");
   // M7/REQ-042 F5：ASR 降级提示（流式引擎静默失效可见化）
   const [asrDegraded, setAsrDegraded] = useState<string | null>(null);
+  // P3：引擎预热状态（选窗口阶段后台加载；与 Rust PrepareStatus 契约一致）
+  const [prepareState, setPrepareState] = useState<PrepareState>("idle");
 
   // ── 素材与结果（文件流水线，v0.1.0）──
-  const [audioPath, setAudioPath] = useState<string | null>(null);
-  const [imagePaths, setImagePaths] = useState<string[]>([]);
-  const [processing, setProcessing] = useState(false);
+  // 素材路径/处理中状态已下沉 MaterialInputPanel（审查硬拆）；父级仅保留产物与提示
   const [lastNote, setLastNote] = useState<Note | null>(null);
   const [status, setStatus] = useState("");
 
@@ -80,6 +84,22 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   useEffect(() => {
     void refreshWindows();
   }, [refreshWindows]);
+
+  // P3：预热引擎——进课堂助手页（=开始选窗口）即后台加载，点"开始"毫秒级
+  // 启动；幂等（后端已有预备则返回当前状态）；失败回 idle（start 有内联兜底）
+  const warmUp = useCallback(() => {
+    void invoke<string>("prepare_live_session")
+      .then((s) => setPrepareState(s as PrepareState))
+      .catch(() => setPrepareState("idle"));
+  }, []);
+
+  useEffect(() => {
+    warmUp();
+    // 离开页面释放预热引擎（内存 ~数百 MB；后端另有 15min TTL 兜底）
+    return () => {
+      void invoke("release_live_prepare").catch(() => {});
+    };
+  }, [warmUp]);
 
   // 实时会话事件监听（v0.2.0；字幕/语音实时内容由右侧 LiveActivityPanel 自监听展示）
   useEffect(() => {
@@ -119,6 +139,8 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
       }),
       listen<string>("session:fusion-failed", (e) => {
         setFusionActive(false);
+        // 审查修复：融合失败不得残留"✅ 融合完成"直达卡片（fusing 已预置 id）
+        setFusedSessionId(null);
         setStatus(`融合失败（原始段保留）: ${e.payload}`);
       }),
       // 2026-08 A1：暂停/恢复事件（硬暂停状态驱动按钮组与徽标）
@@ -133,6 +155,8 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
         void invoke<StreamingModelStatus>("asr_streaming_model_status")
           .then(setModelStatus)
           .catch((e) => setModelError(`模型状态复查失败: ${e}`));
+        // P3：模型就绪后立即预热（下载完成即可开始即录，无需重进页面）
+        warmUp();
       }),
       // 下载失败：重置"下载中"态并展示错误（审查 M4 修复）
       listen<string>("model:download-failed", (e) => {
@@ -253,6 +277,8 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
       setLiveSessionId(null);
       setLivePaused(false);
       setStatus(id ? `已停止会话 #${id}，融合完成后可到「会话」页查看` : "无活动会话");
+      // P3：停止后重新预热（页面仍在，下一次开始同样秒启）
+      warmUp();
     } catch (e) {
       setStopping(false);
       setLiveError(`停止失败: ${e}`);
@@ -282,38 +308,7 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
     }
   };
 
-  const pickAudio = async () => {
-    const p = await open({ filters: [{ name: "音频", extensions: ["wav"] }] });
-    if (typeof p === "string") setAudioPath(p);
-  };
-  const pickImages = async () => {
-    const ps = await open({ multiple: true, filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "bmp"] }] });
-    if (Array.isArray(ps)) setImagePaths(ps as string[]);
-  };
-
-  /** 一键流水线：转写 + OCR + 拼接 → 笔记（标题取选定窗口标题，无窗口时默认名） */
-  const runExtract = async () => {
-    setProcessing(true);
-    setStatus("流水线处理中（转写 + OCR + 拼接 + 落库）…");
-    try {
-      const title = selectedWindow ? selectedWindow.title.slice(0, 60) : "课堂记录";
-      const note = await invoke<Note>("process_to_note", {
-        title,
-        audioPath,
-        imagePaths,
-      });
-      setLastNote(note);
-      setStatus(`完成，已保存笔记 #${note.id}`);
-      setAudioPath(null);
-      setImagePaths([]);
-    } catch (e) {
-      setStatus(`流水线失败: ${e}`);
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const hasMaterial = !!audioPath || imagePaths.length > 0;
+  /** 素材流水线（v0.1.0）：选素材/提取逻辑已下沉 MaterialInputPanel（审查硬拆） */
 
   return (
     <div style={{ display: "flex", height: "calc(100vh - 56px)", minHeight: 0 }}>
@@ -328,10 +323,7 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
         }}
       >
         <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span>
-            📡 课堂助手
-            {processing && <span style={{ marginLeft: 8, color: "#dc2626" }}>●</span>}
-          </span>
+          <span>📡 课堂助手</span>
           {/* M7/REQ-042 F2/G2：健康徽标 + 诊断面板（开发期可见） */}
           <SystemStatusBadge />
         </div>
@@ -353,7 +345,6 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
             onSelect={setSelectedWindow}
             onRefresh={refreshWindows}
             loading={windowsLoading}
-            disabled={processing}
           />
 
           {/* 实时捕获（v0.2.0：WASAPI + DXGI + 流式 ASR + 字幕 OCR） */}
@@ -469,22 +460,35 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
                 </button>
               </div>
             ) : (
-              <button
-                onClick={startLive}
-                disabled={!modelStatus?.ready}
-                style={{
-                  ...btn,
-                  width: "100%",
-                  padding: "8px 0",
-                  fontWeight: 600,
-                  background: modelStatus?.ready ? "#0d9488" : "#e5e7eb",
-                  color: modelStatus?.ready ? "#fff" : "#9ca3af",
-                  border: "none",
-                  borderRadius: 6,
-                }}
-              >
-                ▶ 开始实时捕获
-              </button>
+              <>
+                {/* P3：引擎预热状态提示（就绪后点"开始"即录） */}
+                {prepareState === "loading" && (
+                  <p style={{ fontSize: 11, color: "#6b7280", margin: "6px 0 0" }}>
+                    ⏳ 引擎预热中…（就绪后开始即录）
+                  </p>
+                )}
+                {prepareState === "ready" && (
+                  <p style={{ fontSize: 11, color: "#0d9488", margin: "6px 0 0" }}>
+                    ✓ 引擎已就绪，开始即录
+                  </p>
+                )}
+                <button
+                  onClick={startLive}
+                  disabled={!modelStatus?.ready}
+                  style={{
+                    ...btn,
+                    width: "100%",
+                    padding: "8px 0",
+                    fontWeight: 600,
+                    background: modelStatus?.ready ? "#0d9488" : "#e5e7eb",
+                    color: modelStatus?.ready ? "#fff" : "#9ca3af",
+                    border: "none",
+                    borderRadius: 6,
+                  }}
+                >
+                  ▶ 开始实时捕获
+                </button>
+              </>
             )}
             {liveSessionId && (
               <p style={{ fontSize: 11, color: "#6b7280", margin: "6px 0 0" }}>会话 #{liveSessionId}（可到「会话」页查看）</p>
@@ -514,128 +518,31 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
             <StructureModelSetting />
           </div>
 
-          {/* 素材输入（v0.1.0：文件流水线） */}
-          <div style={panel}>
-            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>学习素材（文件）</div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              <button style={btn} onClick={pickAudio} disabled={processing}>选音频 WAV</button>
-              <button style={btn} onClick={pickImages} disabled={processing}>选图片（多选）</button>
-            </div>
-            {audioPath && <p style={{ fontSize: 11, color: "#374151", marginTop: 6, wordBreak: "break-all" }}>🎵 {audioPath}</p>}
-            {imagePaths.length > 0 && <p style={{ fontSize: 11, color: "#374151", marginTop: 4 }}>🖼 已选 {imagePaths.length} 张图片</p>}
-          </div>
+          {/* 素材输入 + 提取按钮（v0.1.0 文件流水线；审查硬拆——MaterialInputPanel） */}
+          <MaterialInputPanel
+            windowTitle={selectedWindow?.title ?? null}
+            onNote={setLastNote}
+            onStatus={setStatus}
+          />
 
           {status && <p style={{ fontSize: 12, color: "#2563eb" }}>{status}</p>}
-        </div>
-
-        {/* 底部启动按钮（参考原项目"开始回声定位"位置） */}
-        <div style={{ padding: 12, borderTop: "1px solid #e5e7eb" }}>
-          <button
-            onClick={runExtract}
-            disabled={!hasMaterial || processing}
-            style={{
-              ...btn,
-              width: "100%",
-              padding: "10px 0",
-              fontWeight: 600,
-              background: hasMaterial && !processing ? "#0d9488" : "#e5e7eb",
-              color: hasMaterial && !processing ? "#fff" : "#9ca3af",
-              border: "none",
-              borderRadius: 8,
-            }}
-          >
-            {processing ? "处理中…" : "🚀 提取为笔记"}
-          </button>
-          {!hasMaterial && (
-            <p style={{ marginTop: 6, textAlign: "center", fontSize: 11, color: "#9ca3af" }}>请先选择音频或图片素材</p>
-          )}
         </div>
       </div>
 
       {/* ── 右栏：内容区（档案配置 + 实时活动面板 / 笔记预览 / 空态说明书） ── */}
-      {/* 2026-08 用户需求：视频类型档案移至右侧（配置态顶部）；实时态仍由 LiveActivityPanel 独占 */}
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        {liveActive || stopping || fusionActive ? (
-          /* 活动态：实时转写流 + 最近画面条 + 画面要点流 + 状态机（简要：仅最近几条） */
-          <LiveActivityPanel sessionId={liveSessionId} />
-        ) : (
-          <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-            {/* 2026-08 A4：融合完成直达卡片（停止后右侧顶部；一键跳会话页定位） */}
-            {fusedSessionId && (
-              <div style={{ padding: "12px 16px 0", maxWidth: 640 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid #99f6e4", background: "#f0fdfa", borderRadius: 8, padding: "8px 12px" }}>
-                  <span style={{ fontSize: 12, color: "#0f766e" }}>✅ 融合完成（会话 #{fusedSessionId}）</span>
-                  <button
-                    onClick={() => onOpenSessions?.(fusedSessionId)}
-                    style={{ ...btn, marginLeft: "auto", background: "#0d9488", color: "#fff", border: "none", borderRadius: 6 }}
-                  >
-                    查看时间轴 →
-                  </button>
-                  <button
-                    onClick={() => setFusedSessionId(null)}
-                    style={{ ...btn, border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff" }}
-                    title="关闭提示"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-            )}
-            {/* 视频类型档案（v0.5.0 M1：REQ-043 混合检测——自动候选 + 用户确认 + 记忆偏好；
-                右侧配置区：选定窗口后出现，未选窗口自动隐藏） */}
-            <div style={{ padding: "12px 16px 0", maxWidth: 640 }}>
-              <ProfileDetector
-                windowTitle={selectedWindow?.title ?? null}
-                onProfileChange={setProfileKind}
-              />
-            </div>
-            {lastNote ? (
-              /* 结果态：最近生成的笔记预览 */
-              <div style={{ padding: 16 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <h2 style={{ margin: 0, fontSize: 16 }}>{lastNote.title}</h2>
-                  <span style={{ fontSize: 11, color: "#6b7280" }}>
-                    #{lastNote.id} · {lastNote.source} · {new Date(lastNote.updated_at * 1000).toLocaleString()}
-                  </span>
-                </div>
-                <pre
-                  style={{
-                    background: "#f9fafb",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 8,
-                    padding: 14,
-                    whiteSpace: "pre-wrap",
-                    fontSize: 13,
-                    lineHeight: 1.7,
-                  }}
-                >
-                  {lastNote.content}
-                </pre>
-                <p style={{ fontSize: 12, color: "#6b7280" }}>已保存至笔记，可在「笔记」页继续编辑与检索。</p>
-              </div>
-            ) : (
-              /* 空态：当前配置说明书（参考原项目 IdleGuidePanel） */
-              <div style={{ padding: "16px 24px 24px", maxWidth: 640 }}>
-                <h2 style={{ fontSize: 18 }}>使用说明</h2>
-                <ol style={{ fontSize: 13, lineHeight: 2, color: "#374151" }}>
-                  <li><strong>选择目标窗口/进程</strong>：自动推荐疑似网课/视频窗口（B站/播放器/浏览器），也可展开全部手动选择——将作为笔记标题与实时捕获目标；无法采集的窗口（最小化/悬浮层）与站点首页（如 B站首页）已自动过滤</li>
-                  <li><strong>实时捕获</strong>：系统声音 + 屏幕字幕 + 流式转写（Zipformer）边看边记，右侧实时显示转写与画面图片，停止后到「会话」页查看时间轴并可一键转笔记</li>
-                  <li><strong>添加学习素材</strong>：音频文件（WAV，本地 SenseVoice 转写）与图片（本地 PP-OCRv6 识别）</li>
-                  <li><strong>一键提取</strong>：转写 + OCR → 本地拼接为 Markdown 笔记 → 自动保存</li>
-                </ol>
-                <div style={{ ...panel, marginTop: 16, fontSize: 12, color: "#6b7280", lineHeight: 1.9 }}>
-                  <div><strong>当前配置</strong></div>
-                  <div>目标窗口：{selectedWindow ? `${selectedWindow.title}（${selectedWindow.processName || "未知进程"}）` : "未选择（实时捕获将抓全屏）"}</div>
-                  <div>流式转写：sherpa-onnx Zipformer（实时字幕，需模型就绪）</div>
-                  <div>转写引擎：sherpa-onnx SenseVoice（本地，已就绪）</div>
-                  <div>OCR 引擎：oar-ocr PP-OCRv6（本地，首次使用自动下载模型）</div>
-                  <div>数据主权：全部本地处理，内容不出本机</div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      {/* 2026-08 审查硬拆：右栏内容区整体下沉 ClassroomRightPane */}
+      <ClassroomRightPane
+        liveActive={liveActive}
+        stopping={stopping}
+        fusionActive={fusionActive}
+        liveSessionId={liveSessionId}
+        lastNote={lastNote}
+        selectedWindow={selectedWindow}
+        fusedSessionId={fusedSessionId}
+        onOpenSessions={onOpenSessions}
+        onDismissFused={() => setFusedSessionId(null)}
+        onProfileChange={setProfileKind}
+      />
     </div>
   );
 }
