@@ -169,6 +169,8 @@ capture 帧（全窗）进入 process_frame
 9. 带外触发节流：outside_band 上升沿强制全帧；2s 冷却内不重复
 10. 面板活跃期丢弃：面板事件期间 handle_subtitle_frame 输入 → 不产出段、panel_filtered 计数增长
 
+> **实施说明（2026-08-19）**：8/9/10 的**逻辑内核**已由 grid_diff_tests 覆盖（任意位置判变/带外判定/面板状态机与门控判定），但 process_frame 编排层因依赖 COM 采样器（ScreenCaptureSampler 非 Send、线程内创建）无法在单测中实例化，编排接线由 M4 真机验收覆盖（§7 验收标准 1-3 直接对应 8/9/10 的端到端语义）。
+
 ### 真机验收（对照 §7）
 
 ## 6. 实施拆分
@@ -212,5 +214,6 @@ capture 帧（全窗）进入 process_frame
 3. **触发状态打包 `TriggerState`**（live_session_frame.rs）：full_grid/roi_grid/panel/last_ocr_at/last_full_ocr_at 一个结构传入 process_frame，避免参数膨胀。
 4. **面板丢弃位置**：OCR 成功后、`handle_subtitle_frame` 调用前门控（`panel.is_active()` → `stats.panel_filtered += 1` 并跳过）——与 ROI 回喂（`feed_ocr`）解耦，面板期间 ROI 跟踪不冻结（控制栏消失后字幕立即恢复）。
 5. **FORCE_OCR 15s 保留**：两条路径共用 `last_ocr_at`（任一路径 OCR 成功刷新）；全帧 OCR 成功额外刷新 `last_full_ocr_at`（带外触发冷却基准）。
-6. **带外强制全帧对 `latest_frame` 缓存的影响**：字幕 tick 被带外强制为全帧时按原始 region 决定缓存（保持"字幕 tick 不覆盖截图缓存"原语义）。
+6. **带外强制全帧对 `latest_frame` 缓存的影响**：缓存判断使用**最终 region**（审查修复 2026-08-19）——带外强制全帧时本 tick 为全帧数据，必须缓存（原按原始 region 判断导致截图命令读到旧帧）。
 7. **面板"消失提前结束"删除**：原设计的"区域连续无变化 0.5s 提前结束"与静止面板（控制栏悬停后停住、不再产生变化格）冲突——会放过静止 UI。活跃期改为纯滑动窗口（确认后 3s，区域内再变化重置，无变化则自然到期）；3s 后的残留 UI 文本由 ui_junk 词表 + 投票器兜底（详见 §3.4）。
+8. **活跃期重置不校验 bbox 重叠**（审查说明 2026-08-19）：活跃期内任何大面积变化（含翻页/场景切换）都重置窗口——翻页瞬间字幕本就在变，多丢弃 ≤3s 可接受；校验重叠会引入"面板区域漂移"复杂状态，收益低。

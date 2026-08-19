@@ -30,7 +30,7 @@
 4. **UI 面板抑制**：变化格集合按 4-邻接连通聚类 → 面积 ≥ 阈值（≥8% 帧面积）→ 面板出现/消失事件；事件期间进入字幕链路的 OCR 文本**源头丢弃**（不进投票器，独立计数 `ui_panel_filtered`）。
 5. **保留语义不变**：`DualRateScheduler` 调度、FORCE_OCR 15s 兜底、idle_governor 的"画面变化"信号（由全帧网格 diff 通过计数驱动，语义等价）、RoiTracker 锁定/重扫、SubtitleVoter 投票、ui_junk/watermark_filter 过滤链。
 
-详细设计见 [设计规格](../Foresight/2026-08-19-ocr-trigger-redesign.md)。
+详细设计见 [设计规格](../archive/2026-08-19/2026-08-19-ocr-trigger-redesign.md)（[ ] 已归档）。
 
 ## 备选方案
 
@@ -86,5 +86,5 @@
 
 ## 参考
 
-- [设计规格（REQ-086/REQ-087）](../Foresight/2026-08-19-ocr-trigger-redesign.md)
+- [设计规格（REQ-086/REQ-087）](../archive/2026-08-19/2026-08-19-ocr-trigger-redesign.md)（[ ] 已归档）
 - [需求池 REQ-086/REQ-087](../product/requirements-pool.md)

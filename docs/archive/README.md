@@ -64,3 +64,4 @@ docs/archive/
 | 2026-08-19 | 结构模型版落地（版面/表格/公式模型 + 按需下载 + 课后精修）+ 新增代码审查：H1-H3/M1/M2/M4/L1/L3 全部即修（c5eae08 + 65c950a）；brainstorming-video-types.md 归档（[ ] 已归档，六轮头脑风暴全部实施完成）；brainstorming-classroom-assistant-gaps.md 归档（[ ] 已归档，四维缺口评估 50 项，§9 裁决 22 项进 v0.6.0 → REQ-059~080 已排期）；累计已偿 53 笔 | TD-040（P2，deliberate carried），共 1 笔 |
 | 2026-08-19（二轮） | v0.6.0 M1 提取纯度交付（REQ-059/060/061/082/083/084/085，8 提交）+ 新增代码审查：R1-R4 全部即修（463dbf4）；market-stack-asr-notes-research.md 归档（[ ] 已归档，技术栈裁决完成，选型固化 AGENTS.md §2）；累计已偿 57 笔 | TD-040（P2，deliberate carried），共 1 笔 |
 | 2026-08-19（三轮） | v0.6.0 M2-M6 交付（REQ-062~085，~20 提交，开发完成待 M7 真机验收）+ 新增代码审查：R5-R10 全部即修（8582083，含预览 XSS 转义/融合置信度回归/落库一致性/去重 FIFO）；累计已偿 63 笔 | TD-040（P2，deliberate carried），共 1 笔 |
+| 2026-08-19（四轮） | ADR-011 实施交付（REQ-086/087 网格差异触发 + 面板抑制，提交 9b034f1）+ 新增代码审查：R11/R12 即修（8aab331，latest_frame 缓存/文档状态同步）；ocr-trigger-redesign 设计规格归档（[ ] 已归档，M1-M3 实施完成待 M4 真机验收）；累计已偿 65 笔 | TD-040（P2，deliberate carried），共 1 笔 |
