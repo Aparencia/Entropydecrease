@@ -107,6 +107,54 @@ impl TriggerState {
     }
 }
 
+/// 暂停模式仅取帧（P2 自动暂停：视频暂停 → 捕获自动暂停时，worker 保持
+/// 低频取帧刷新 latest_frame——播放器恢复检测的信号源，不刷新则无法发现
+/// 恢复播放；零分析：不做 diff/OCR/落库，成本与静默轮询同级）。
+///
+/// @ai-context: 事件转发保持（窗口关闭等信号不因暂停丢失）；失败节流日志
+///              5s（暂停期 1s 一拍，全量打印会刷屏）；取帧成功即覆盖共享
+///              缓存（时间戳用补偿后纪元——调用方注入）。
+pub fn capture_latest_only(
+    screen: Option<&mut ScreenCaptureSampler>,
+    app: &tauri::AppHandle,
+    epoch: Instant,
+    latest_frame: &std::sync::Arc<std::sync::Mutex<Option<LatestCapturedFrame>>>,
+    last_capture_error: &mut Option<Instant>,
+) {
+    let Some(sampler) = screen else { return };
+    // ADR-007：目标窗口关闭等捕获事件无论捕获结果如何都要转发（同 process_frame）
+    match sampler.take_event() {
+        Some(crate::capture::dxgi_capture::CaptureEvent::WindowLost) => {
+            let _ = app.emit("live:window-lost", ());
+        }
+        None => {}
+    }
+    match sampler.capture(None) {
+        Ok(Some(frame)) => {
+            if let Ok(mut guard) = latest_frame.lock() {
+                *guard = Some(LatestCapturedFrame {
+                    timestamp_ms: epoch.elapsed().as_millis() as u64,
+                    bgraw: frame.bgraw,
+                    width: frame.width,
+                    height: frame.height,
+                });
+            }
+        }
+        // DXGI 超时（桌面无变化）——暂停期常态，非错误
+        Ok(None) => {}
+        Err(e) => {
+            let now = Instant::now();
+            let should_log = last_capture_error
+                .map(|t| now.duration_since(t) >= Duration::from_secs(5))
+                .unwrap_or(true);
+            if should_log {
+                *last_capture_error = Some(now);
+                eprintln!("[ScreenWorker] 暂停期取帧失败（日志节流 5s）: {}", e);
+            }
+        }
+    }
+}
+
 /// 处理一帧屏幕采样（字幕区/全帧 OCR）。
 ///
 /// @ai-context: ADR-011 两级判变：①全帧网格差异（每 tick，与路径无关）——

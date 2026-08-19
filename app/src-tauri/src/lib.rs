@@ -115,6 +115,9 @@ mod live_session_fusion;
 mod live_frame_process;
 #[cfg(target_os = "windows")]
 mod live_session_frame;
+// P3：引擎预热（预备线程——选窗口阶段后台加载，start 交接）
+#[cfg(target_os = "windows")]
+mod live_session_prepare;
 #[cfg(target_os = "windows")]
 mod live_keyframes;
 mod load_monitor;
@@ -505,6 +508,11 @@ pub fn run() {
             commands_live::pause_live_session,
             #[cfg(target_os = "windows")]
             commands_live::resume_live_session,
+            // P3：引擎预热（选窗口阶段后台加载，开始即录）/ 释放
+            #[cfg(target_os = "windows")]
+            commands_live::prepare_live_session,
+            #[cfg(target_os = "windows")]
+            commands_live::release_live_prepare,
             // 视频文件导入（REQ-015，ADR-008：字幕优先 + ASR fallback + 关键帧 OCR）
             commands_import::import_video,
             // OCR 设备状态（REQ-036，ADR-009：GPU 卸载决策/回退可观测）

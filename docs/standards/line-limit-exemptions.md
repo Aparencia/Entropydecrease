@@ -6,7 +6,7 @@
 | 文件 | 行数 | 豁免理由 | 拆分计划 |
 |------|------|---------|---------|
 | app/src-tauri/src/capture/audio_loopback.rs | ~430 | ADR-007 重连机制（重试循环/退避/恢复回调）内聚于捕获线程实现，拆出需跨函数传递 COM 生命周期参数，内聚性优先；2026-08 A1 硬暂停（端点 Stop/Start + 暂停时长补偿 + 残留缓冲清空）再增 | 若再增长：将 run_capture_inner 拆至 audio_loopback_session.rs |
-| app/src-tauri/src/live_frame_process.rs | ~445 | v0.6.0 ADR-011 拆分（live_session_frame.rs >600 行硬拆产物）：帧处理域（网格差异触发/两级判变/带外事件驱动/UI 面板抑制/字幕落库）内聚；process_frame 上下文参数 20+，跨函数传递聚合会破坏内聚；六轮审查再增（区域空产出回退整帧 + has_useful_blocks 判定）至 ~491 | 若再增长：handle_subtitle_frame 与 persist_voted_subtitle 拆至 live_subtitle_persist.rs |
+| app/src-tauri/src/live_frame_process.rs | ~487 | v0.6.0 ADR-011 拆分（live_session_frame.rs >600 行硬拆产物）：帧处理域（网格差异触发/两级判变/带外事件驱动/UI 面板抑制/字幕落库）内聚；process_frame 上下文参数 20+，跨函数传递聚合会破坏内聚；六轮审查再增（区域空产出回退整帧 + has_useful_blocks 判定）；P2 暂停期仅取帧（capture_latest_only——恢复检测信号源）再增 | 若再增长：handle_subtitle_frame 与 persist_voted_subtitle 拆至 live_subtitle_persist.rs |
 | app/src-tauri/src/engine.rs | ~439 | 引擎池装配（双 worker 编排 + ADR-009 设备状态 + M5 词表纠错 + M7 心跳/失败/缓存计数）；上下文参数与共享状态注入点多，拆出需跨模块传 10+ 参数 | 若再增长：worker 循环与请求处理拆至 engine_worker.rs |
 | app/src-tauri/src/lib.rs | ~562 | Tauri 装配层（setup 初始化 + 决策链路 + 21+ command 注册）；全部为声明与装配，拆分会破坏注册可读性 | 若再增长：setup 初始化块拆至 app_setup.rs |
 | app/src-tauri/src/vocab.rs | ~373 | 词表域（存储/纠错/候选提取/n-gram 分词）内聚；分词纯逻辑与存储同域便于单测 | 若再增长：collect_tokens/split_runs 拆至 vocab_tokens.rs |
@@ -26,6 +26,9 @@
 | app/src-tauri/src/fusion_tests.rs | ~392 | 融合测试域（ADR-005 四规则 + REQ-062 概率加权 + REQ-103 音量透传 + REQ-111 切分对齐）单模块 #[path] 挂载；测试文件沿用单模块模式未拆 | 若再增长：REQ-111 切分对齐组拆至 fusion_split_tests.rs |
 | app/src-tauri/src/analysis.rs | ~344 | v0.5.0 M2 起结构化分析编排域（章节/重点/术语/讲者 + v0.7.0 M1.5 事件消费 + M2 step_boundaries/practice_segments/player_actions 三字段 + 审查修复按类型判定）；各机制输出聚合内聚于单一分析函数 | 若再增长：build_chapter_signals 事件版拆至 analysis_signals.rs |
 | app/src-tauri/src/live_session_loop.rs | ~360 | v0.7.0 M0 拆分产物（音频编排循环）：主循环 + 长静音/音量骤变/VAD 段事件写入（审查补接线）+ drain/停止 flush；LiveLoopCtx 聚合上下文；2026-08 A1 暂停边沿（断句隔离/事件/落库）+ P1 停止 drain 重构再增 | 若再增长：事件写入块拆至 live_session_events.rs |
+| app/src-tauri/src/live_session.rs | ~512 | 会话装配骨架（引擎+捕获+worker 启动）+ 管理器（start/stop/pause/prepare 生命周期）；2026-08 A1 暂停 + P2 会话复位 + P3 引擎预热交接（start 移交/回退内联）再增 | 若再增长：管理器与预备交接拆至 live_session_manager.rs |
+| app/src-tauri/src/live_session_persist.rs | ~337 | 定稿落库域（persist_final/digest_merged/handle_final_event）+ P2 flush_tail_and_persist（停止/暂停共用尾句落库）内聚 | 若再增长：flush_tail_and_persist 与 digest_merged 拆至 live_session_persist_tail.rs |
+| app/src-tauri/src/live_session_frame.rs | ~321 | 屏幕采样线程编排（自适应采样/空闲降频/前台监控/播放器检测）；2026-08 A1 暂停冻结 + P2 自动暂停轻量轮询（仅取帧+恢复检测）再增 | 若再增长：暂停轻量轮询拆至 live_session_pause_poll.rs |
 | app/src-tauri/src/analysis_tests.rs | ~339 | 分析编排测试域（档案门控矩阵 + REQ-108 事件消费 + M2 三字段）单模块 #[path] 挂载 | 若再增长：事件消费组拆至 analysis_events_tests.rs |
 | app/src-tauri/src/video_profile_tests.rs | ~338 | 档案测试域（12 档案断言矩阵 + 检测投票 + JSON 校准）单模块 #[path] 挂载 | 若再增长：档案矩阵拆至 video_profile_data_tests.rs |
 | app/src-tauri/src/artifact_templates_tests.rs | ~336 | 产物模板测试域（五档案模板 + v0.7.0 M2 代码块/步骤卡扩展）单模块 #[path] 挂载 | 若再增长：代码块/步骤卡组拆至 artifact_code_tests.rs |

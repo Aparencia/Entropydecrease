@@ -25,6 +25,7 @@ use crate::error::{AppError, Result};
 use crate::fusion::SubtitleSegment;
 use crate::live_session_fusion::{spawn_fusion, FusionTracker};
 use crate::live_session_loop::{run_audio_loop, LiveLoopCtx};
+use crate::live_session_prepare::{PreparedSession, PrepareEnv, PrepareMsg, PrepareStatus, StartHandoff};
 use crate::streaming_asr::{StreamingAsrConfig, StreamingAsrEngine, StreamingAsrModels};
 
 /// 实时电平事件载荷（2026-08 A2：VU 表数据源；live:audio-level 事件）。
@@ -80,6 +81,8 @@ pub struct LiveSessionManager {
     latest_frame: Arc<Mutex<Option<crate::live_session_frame::LatestCapturedFrame>>>,
     /// 2026-08 A1：会话暂停共享状态（硬暂停——命令层置位，捕获/屏幕/主循环消费）
     pause: crate::capture::audio_loopback::SessionPause,
+    /// P3：预备会话（引擎预热——选窗口阶段后台加载；start 交接复用）
+    prepared: Arc<Mutex<Option<PreparedSession>>>,
 }
 
 impl Default for LiveSessionManager {
@@ -95,6 +98,7 @@ impl Clone for LiveSessionManager {
             fusion: self.fusion.clone(),
             latest_frame: self.latest_frame.clone(),
             pause: self.pause.clone(),
+            prepared: self.prepared.clone(),
         }
     }
 }
@@ -106,6 +110,7 @@ impl LiveSessionManager {
             fusion: FusionTracker::default(),
             latest_frame: Arc::new(Mutex::new(None)),
             pause: Default::default(),
+            prepared: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -149,6 +154,11 @@ impl LiveSessionManager {
     }
 
     /// 启动实时会话：建会话 + 起编排线程，返回会话 id。
+    ///
+    /// @ai-context: P3：优先交接预热线程（引擎已加载——开始毫秒级）；无预备/
+    ///              未就绪/交接失败回退内联加载（现状路径），start 永不因
+    ///              预热缺席而失败；预热加载中走有界等待 ≤5s（不双开引擎，
+    ///              防内存翻倍）。
     pub fn start(&self, params: LiveSessionParams) -> Result<i64> {
         let mut guard = self.active.lock().expect("live session lock poisoned");
         if guard.is_some() {
@@ -169,14 +179,153 @@ impl LiveSessionManager {
         let flag = stop_flag.clone();
         // M6/REQ-051：最新帧共享缓存由 manager 持有（截图命令读取）
         let latest_frame = self.latest_frame.clone();
-        // 2026-08 A1：暂停共享状态随会话线程进入（捕获/屏幕/主循环共享）
+        // 2026-08 A1：会话暂停共享状态——按会话复位（P2 补漏：标志/补偿时长
+        // 跨会话残留会让新会话起始即暂停、时间戳偏移）
+        self.pause.reset();
         let pause = self.pause.clone();
+
+        // P3：尝试交接预备线程
+        if let Some(p) = self.prepared.lock().expect("prepared lock poisoned").take() {
+            match wait_prepared_ready(&p, std::time::Duration::from_secs(5)) {
+                Ok(()) => {
+                    let handoff = StartHandoff {
+                        params,
+                        session_id,
+                        stop: flag.clone(),
+                        latest_frame: latest_frame.clone(),
+                        pause: pause.clone(),
+                    };
+                    match p.tx.send(PrepareMsg::Start(Box::new(handoff))) {
+                        Ok(()) => {
+                            // 交接成功：预备线程就地转为会话线程（引擎不跨线程）
+                            *guard =
+                                Some(ActiveSession { stop_flag, thread: p.thread, session_id });
+                            return Ok(session_id);
+                        }
+                        Err(mpsc::SendError(PrepareMsg::Start(h))) => {
+                            // 极小竞态（预备线程恰好退出）：取回参数回退内联加载
+                            eprintln!("[LiveSession] 预备线程已退出，回退内联加载");
+                            let thread = std::thread::Builder::new()
+                                .name("entropy-live-session".into())
+                                .spawn(move || {
+                                    run_session(h.stop, h.params, h.session_id, h.latest_frame, h.pause)
+                                })
+                                .map_err(|e| AppError::Io(format!("启动会话线程失败: {}", e)))?;
+                            *guard = Some(ActiveSession { stop_flag, thread, session_id });
+                            return Ok(session_id);
+                        }
+                        Err(_) => {
+                            // 理论不可达（本路径只发 Start；防御：不得静默吞错）。
+                            // 注：create_session 已执行——此路径会留一条空会话记录
+                            // （与内联 spawn 失败同级别的既有边界，概率极低）
+                            return Err(AppError::Io(
+                                "预热交接失败（预备线程异常退出），请重试".to_string(),
+                            ));
+                        }
+                    }
+                }
+                Err(reason) => {
+                    // 加载失败/等待超时：取消预备线程（防双引擎内存翻倍），回退内联
+                    let _ = p.tx.send(PrepareMsg::Cancel);
+                    let cancel_deadline =
+                        std::time::Instant::now() + std::time::Duration::from_millis(1000);
+                    while !p.thread.is_finished() && std::time::Instant::now() < cancel_deadline {
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                    }
+                    if !p.thread.is_finished() {
+                        eprintln!("[LiveSession] 预备线程取消超时，已 detach");
+                    }
+                    eprintln!("[LiveSession] 预热{}，回退内联加载", reason);
+                }
+            }
+        }
+
+        // 回退：内联加载（现状路径——模型加载在会话线程内完成）
         let thread = std::thread::Builder::new()
             .name("entropy-live-session".into())
             .spawn(move || run_session(flag, params, session_id, latest_frame, pause))
             .map_err(|e| AppError::Io(format!("启动会话线程失败: {}", e)))?;
         *guard = Some(ActiveSession { stop_flag, thread, session_id });
         Ok(session_id)
+    }
+
+    /// 预热流式 ASR 引擎（P3）：起预备线程加载引擎后 park 等待 Start/Cancel。
+    ///
+    /// @ai-context: 幂等（已有预备返回当前状态）；活动会话中返回 Idle 不预热
+    ///              （避免白占内存）；模型文件缺失由命令层预检拦截，本层不重复。
+    pub fn prepare(&self, env: PrepareEnv) -> PrepareStatus {
+        // 活动会话中不预热（内存价值为零）
+        if self.active.lock().expect("live session lock poisoned").is_some() {
+            return PrepareStatus::Idle;
+        }
+        let mut prep = self.prepared.lock().expect("prepared lock poisoned");
+        // 清理线程已退出的残留条目（取消/加载失败后）并上报终态；
+        // 线程已退出 = 无可用预备——仅 Failed 值得上报（原因），
+        // Ready 是 stale（release 超时 detach 后线程收到 Cancel 退出）
+        if let Some(p) = prep.as_ref() {
+            if p.thread.is_finished() {
+                let st = p.status();
+                *prep = None;
+                return match st {
+                    PrepareStatus::Failed(_) => st,
+                    _ => PrepareStatus::Idle,
+                };
+            }
+            return p.status();
+        }
+        let (tx, rx) = mpsc::channel();
+        let status: Arc<Mutex<PrepareStatus>> = Arc::new(Mutex::new(PrepareStatus::Loading));
+        let worker_status = status.clone();
+        match std::thread::Builder::new()
+            .name("entropy-live-prepare".into())
+            .spawn(move || {
+                crate::live_session_prepare::run_prepared(rx, env, worker_status)
+            }) {
+            Ok(thread) => {
+                *prep = Some(PreparedSession { tx, thread, status: status.clone() });
+                PrepareStatus::Loading
+            }
+            Err(e) => {
+                // spawn 失败必须可观测（审查：不得静默失效）
+                eprintln!("[LiveSession] 预热线程启动失败: {}", e);
+                PrepareStatus::Failed(format!("预热线程启动失败: {}", e))
+            }
+        }
+    }
+
+    /// 释放预热引擎（P3：离开课堂助手页时调用；有界 join ≤1s）。
+    pub fn release_prepare(&self) -> Result<()> {
+        let p = self.prepared.lock().expect("prepared lock poisoned").take();
+        let Some(p) = p else { return Ok(()) };
+        let _ = p.tx.send(PrepareMsg::Cancel);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1000);
+        while !p.thread.is_finished() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        if !p.thread.is_finished() {
+            // 卡在引擎加载中（不可中断）：detach——加载完即退出释放，可观测
+            eprintln!("[LiveSession] 预热线程 1s 内未退出，已 detach");
+        }
+        Ok(())
+    }
+
+    /// 当前预热状态（live_session_status 的 prepared 字段数据源）。
+    pub fn prepare_status(&self) -> PrepareStatus {
+        let mut prep = self.prepared.lock().expect("prepared lock poisoned");
+        match prep.as_ref() {
+            Some(p) if p.thread.is_finished() => {
+                // 线程已退出（取消/加载失败残留）：清理并上报终态；
+                // 与 prepare() 同口径——Ready 为 stale（线程已死=无预备）
+                let st = p.status();
+                *prep = None;
+                match st {
+                    PrepareStatus::Failed(_) => st,
+                    _ => PrepareStatus::Idle,
+                }
+            }
+            Some(p) => p.status(),
+            None => PrepareStatus::Idle,
+        }
     }
 
     /// 停止活动会话（有界等待线程退出，返回其会话 id）。
@@ -216,6 +365,27 @@ impl LiveSessionManager {
     }
 }
 
+/// 有界等待预备线程就绪（P3）：Ready→Ok；Failed/超时→Err（原因）。
+/// 注：调用方（start）持有 active 锁期间最长阻塞 5s——pause/resume/status
+/// 等命令短暂排队（同刻通常只有单个用户操作，可接受；观察项记录）。
+/// 返回类型用 std::result::Result——模块内 Result 别名是 AppError。
+fn wait_prepared_ready(p: &PreparedSession, timeout: std::time::Duration) -> std::result::Result<(), String> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match p.status() {
+            PrepareStatus::Ready => return Ok(()),
+            PrepareStatus::Failed(e) => return Err(format!("引擎加载失败: {}", e)),
+            PrepareStatus::Idle => return Err("预备线程已退出".to_string()),
+            PrepareStatus::Loading => {
+                if std::time::Instant::now() >= deadline {
+                    return Err("等待超时".to_string());
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        }
+    }
+}
+
 /// 会话线程：装配捕获/引擎/worker → 主循环（live_session_loop）→ 后台融合。
 fn run_session(
     stop: Arc<AtomicBool>,
@@ -238,7 +408,7 @@ fn run_session(
         .and_then(|v| v.parse::<f32>().ok())
         .unwrap_or(8.0);
     let asr_config = StreamingAsrConfig { rule3_min_utterance_secs: rule3_secs };
-    let mut asr_engine = match StreamingAsrEngine::load(
+    let asr_engine = match StreamingAsrEngine::load(
         &params.streaming_models,
         &asr_config,
         Some(engines.clone()),
@@ -252,6 +422,30 @@ fn run_session(
             return;
         }
     };
+    run_session_after_engine(asr_engine, stop, params, session_id, latest_frame, pause, epoch);
+}
+
+/// 会话装配后半段（引擎就绪后）：音频捕获 → 屏幕 worker → 主循环 → 后台融合。
+///
+/// @ai-context: P3：run_session（内联加载）与预备线程（预热交接）共用——
+///              引擎就绪后路径唯一，防两处装配漂移；epoch 由调用方注入
+///              （内联路径=run_session 起点，交接路径=Start 移交后创建，
+///              模型已加载无 A1 秒级偏移）。
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn run_session_after_engine(
+    mut asr_engine: StreamingAsrEngine,
+    stop: Arc<AtomicBool>,
+    params: LiveSessionParams,
+    session_id: i64,
+    // M6/REQ-051：最新帧共享缓存（屏幕 worker 写入，manager 持同一实例）
+    latest_frame: Arc<Mutex<Option<crate::live_session_frame::LatestCapturedFrame>>>,
+    // 2026-08 A1：会话暂停共享状态（manager 持同一实例；捕获线程维护补偿时长）
+    pause: crate::capture::audio_loopback::SessionPause,
+    // A1：会话纪元——音频/屏幕/flush 三处时间戳的唯一基准（ADR-008）
+    epoch: Instant,
+) {
+    let db = params.db.clone();
+    let engines = params.engines.clone();
     // ADR-007：会话启动成功（引擎就绪）→ 广播录制态（前端全局采集徽标依赖此事件；
     // 音频/屏幕后续故障走自动恢复不再终止会话）
     let _ = params.app.emit("live:status", "recording");

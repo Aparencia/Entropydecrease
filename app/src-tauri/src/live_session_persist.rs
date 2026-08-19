@@ -8,6 +8,7 @@
 use tauri::Emitter;
 
 use crate::db::Db;
+use crate::streaming_asr::{StreamingAsrEngine, StreamingAsrEvent};
 use crate::types::{NewSessionSegment, TranscriptSegment};
 
 /// ASR 段 start_ms 兜底近似（句首时刻缺失时：end - 2000ms）。
@@ -322,4 +323,82 @@ pub(crate) fn handle_final_event(
     );
     // 正常段已落库 → 更新上一段 end（停顿基准）
     *ctx.last_segment_end = Some(end_ms);
+}
+
+/// 停止/暂停时的尾句 flush 落库（P2：暂停上升沿与停止路径共用，行为一致）。
+///
+/// @ai-context: 先兜底落库挂起段（F4-1——中断时无下一段可合并，半句不丢），
+///              再 flush 尾句（F1-2 重打分兜底；时间戳用调用方注入的
+///              now_ms——暂停/停止时须为补偿后会话时刻，与音频/屏幕同口径；
+///              句尾校正同 TD-041；跨 final 去重同主循环；置信度/音量
+///              REQ-098/103：挂起段透传、flush 尾句用重打分一致性+段 RMS）。
+/// @ai-context: 两处语义一致（句被"中断"）——单一实现防漂移；返回是否
+///              落库了内容（当前调用方未消费——保留供诊断/单测断言，
+///              不引入 must_use 以免无谓告警）。
+/// @ai-context: 参数为编排上下文传递（与 persist_final 同模式，登记豁免）。
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn flush_tail_and_persist(
+    ctx: FinalEventCtx<'_>,
+    asr_engine: &mut StreamingAsrEngine,
+    now_ms: u64,
+    sentence_rms_sum: &mut f32,
+    sentence_rms_count: &mut u32,
+) -> bool {
+    let mut any = false;
+    // 先兜底落库挂起段（F4-1：中断时无下一段可合并——半句不丢）
+    if let Some((p_start, p_end, p_text, _merges, p_conf, p_vol)) = ctx.pending_merge.take() {
+        persist_final(
+            ctx.app,
+            ctx.db,
+            ctx.session_id,
+            ctx.asr_segments,
+            p_start,
+            p_end,
+            p_text,
+            p_conf,
+            p_vol,
+            // 中断兜底落库：段前停顿无基准（None——诚实未知）
+            None,
+        );
+        any = true;
+    }
+    // flush 尾句（ADR-012 F1-2 重打分兜底；REQ-118 跨 final 去重）
+    if let Some(StreamingAsrEvent::Final { text, confidence, .. }) = asr_engine.flush() {
+        let text = match ctx.last_final_clean.as_ref() {
+            Some(prev) => crate::asr_dedupe::dedupe_across_finals_normalized(prev, &text),
+            None => text,
+        };
+        if !text.is_empty() {
+            let end_ms = sentence_end_ms(*ctx.last_speech_ms, now_ms);
+            let start_ms = ctx
+                .sentence_start_ms
+                .take()
+                .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
+            let volume = if *sentence_rms_count > 0 {
+                Some(*sentence_rms_sum / *sentence_rms_count as f32)
+            } else {
+                None
+            };
+            // REQ-109：尾句段前停顿 = 与上一落库段的 gap
+            let pause_ms = ctx.last_segment_end.map(|pe| start_ms.saturating_sub(pe));
+            persist_final(
+                ctx.app,
+                ctx.db,
+                ctx.session_id,
+                ctx.asr_segments,
+                start_ms,
+                end_ms,
+                text,
+                confidence,
+                volume,
+                pause_ms,
+            );
+            // 尾句已落库 → 更新上一段 end（暂停恢复后下一句的停顿基准正确）
+            *ctx.last_segment_end = Some(end_ms);
+            any = true;
+        }
+    }
+    *sentence_rms_sum = 0.0;
+    *sentence_rms_count = 0;
+    any
 }

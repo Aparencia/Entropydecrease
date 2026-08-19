@@ -23,6 +23,8 @@ use crate::live_session::LiveSessionParams;
 pub struct LiveSessionStatus {
     pub active: bool,
     pub session_id: Option<i64>,
+    /// P3：引擎预热是否已就绪（前端"开始即录"提示）
+    pub prepared: bool,
 }
 
 /// 启动实时捕获会话（REQ-007~012 汇总入口）。
@@ -83,18 +85,71 @@ pub async fn start_live_session(
 /// 停止实时捕获会话；返回被停止的会话 id（None=无活动会话）。
 #[tauri::command]
 pub async fn stop_live_session(state: State<'_, AppState>) -> Result<Option<i64>, String> {
-    let stopped = state.live_session.stop_active().map_err(|e| e.to_string())?;
+    // 停止含 5s 有界等待——异步 command 不得直接阻塞运行时线程（审查要求；
+    // LiveSessionManager 为 Clone+Send，可安全移入 spawn_blocking）
+    let manager = state.live_session.clone();
+    let stopped = tauri::async_runtime::spawn_blocking(move || manager.stop_active())
+        .await
+        .map_err(|e| format!("停止任务失败: {}", e))?
+        .map_err(|e| e.to_string())?;
     stop_clipboard_monitor(&state);
     Ok(stopped)
 }
 
-/// 查询实时会话状态（活动会话 id）。
+/// 查询实时会话状态（活动会话 id + 预热就绪标记）。
 #[tauri::command]
 pub fn live_session_status(state: State<'_, AppState>) -> LiveSessionStatus {
     LiveSessionStatus {
         active: state.live_session.active_session_id().is_some(),
         session_id: state.live_session.active_session_id(),
+        prepared: matches!(
+            state.live_session.prepare_status(),
+            crate::live_session_prepare::PrepareStatus::Ready
+        ),
     }
+}
+
+/// 预热流式 ASR 引擎（P3）：选窗口阶段后台加载，点"开始"即录。
+///
+/// @ai-context: 返回 PrepareStatus（loading/ready/failed/idle）供前端提示；
+///              幂等；模型文件缺失预检快速返回 Failed（不白起线程）；
+///              页面卸载时由 release_live_prepare 释放（15min TTL 兜底）。
+#[tauri::command]
+pub fn prepare_live_session(
+    state: State<'_, AppState>,
+) -> Result<crate::live_session_prepare::PrepareStatus, String> {
+    // 防御性预检：四件套任一缺失 → 预热必失败，快速返回不白起线程
+    let m = &state.streaming_models;
+    let missing: Vec<&str> = [
+        (&m.encoder, "encoder"),
+        (&m.decoder, "decoder"),
+        (&m.joiner, "joiner"),
+        (&m.tokens, "tokens"),
+    ]
+    .iter()
+    .filter(|(p, _)| !std::path::Path::new(p).exists())
+    .map(|(_, name)| *name)
+    .collect();
+    if !missing.is_empty() {
+        return Ok(crate::live_session_prepare::PrepareStatus::Failed(format!(
+            "模型缺失: {}",
+            missing.join(", ")
+        )));
+    }
+    let env = crate::live_session_prepare::PrepareEnv {
+        streaming_models: state.streaming_models.clone(),
+        engines: state.engines.clone(),
+        vocab: state.vocab.clone(),
+        // ADR-012 F4-2：标点恢复模型路径（与 start 同口径）
+        punctuation_model: crate::punctuation_model(&state.model_dir),
+    };
+    Ok(state.live_session.prepare(env))
+}
+
+/// 释放预热引擎（P3：离开课堂助手页时调用；有界 join ≤1s，超时 detach）。
+#[tauri::command]
+pub fn release_live_prepare(state: State<'_, AppState>) -> Result<(), String> {
+    state.live_session.release_prepare().map_err(|e| e.to_string())
 }
 
 /// 暂停实时会话（2026-08 A1 硬暂停：完全停采，时间轴冻结）。

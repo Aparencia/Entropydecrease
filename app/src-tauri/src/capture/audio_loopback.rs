@@ -66,6 +66,16 @@ pub struct SessionPause {
     pub total_paused_ms: Arc<std::sync::atomic::AtomicU64>,
 }
 
+impl SessionPause {
+    /// 按会话复位（P2 补漏：标志/补偿时长不得跨会话残留——上次会话若在
+    /// 暂停中停止，paused 残留会让新会话起始即暂停；补偿时长残留会让
+    /// 新会话时间戳整体偏移）。
+    pub fn reset(&self) {
+        self.paused.store(false, Ordering::SeqCst);
+        self.total_paused_ms.store(0, Ordering::SeqCst);
+    }
+}
+
 impl AudioLoopbackCapture {
     /// 启动捕获。on_chunk 在捕获线程内被调用（消费者需自行做轻量处理或转发）。
     ///
@@ -312,6 +322,25 @@ where
                                     t.elapsed().as_millis() as u64,
                                     Ordering::SeqCst,
                                 );
+                                // 清空残留缓冲（2026-08 审查修复）：Stop 前缓冲内
+                                // 的数据在恢复后已无意义——不清空会以补偿后时间戳
+                                // 混入暂停前的音频（内容错位）；循环读到空为止
+                                loop {
+                                    let pending = capture_client.GetNextPacketSize()?;
+                                    if pending == 0 {
+                                        break;
+                                    }
+                                    let mut _d: *mut u8 = std::ptr::null_mut();
+                                    let mut _f: u32 = 0;
+                                    let mut _fl: u32 = 0;
+                                    capture_client
+                                        .GetBuffer(&mut _d, &mut _f, &mut _fl, None, None)?;
+                                    capture_client.ReleaseBuffer(_f)?;
+                                }
+                                // TD-H 补漏（十五轮审查）：应用层切块累加器同样存在
+                                // 暂停前未凑满 200ms 的残留样本——不清空会以补偿后
+                                // 时间戳混入恢复后首个 chunk（内容错位）；重建清零
+                                accumulator = ChunkAccumulator::new(0);
                                 eprintln!("[AudioLoopback] 会话恢复（端点已重启，暂停 {}ms）", t.elapsed().as_millis());
                             }
                             Err(e) => {

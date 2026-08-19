@@ -17,7 +17,9 @@ use crate::capture::ScreenCaptureSampler;
 use crate::db::Db;
 use crate::engine::EnginePool;
 use crate::fusion::SubtitleSegment;
-use crate::live_frame_process::{persist_voted_subtitle, process_frame, ScreenStats, TriggerState};
+use crate::live_frame_process::{
+    capture_latest_only, persist_voted_subtitle, process_frame, ScreenStats, TriggerState,
+};
 use crate::subtitle_ocr::SubtitleVoter;
 
 /// 采样节拍（ms）：与音频消费解耦，固定 1s 一拍（审查 M5 修复）。
@@ -135,14 +137,66 @@ pub fn run_screen_worker(
     // 2026-08 A1：暂停边沿跟踪（暂停期画面链整体冻结：采样/前台监控/播放器
     // 检测全部跳过——"会话时间"在暂停期间不前进）
     let mut worker_paused = pause.paused.load(Ordering::SeqCst);
+    // P2 自动暂停：本次暂停是否由本 worker 的视频检测置位（置位时保持轻量
+    // 轮询找恢复信号；手动暂停保持 A1 全冻结，二者互斥由标志来源区分）
+    let mut auto_paused = false;
 
     while !stop.load(Ordering::SeqCst) {
-        // ── 暂停检查（2026-08 A1 硬暂停）──
+        // ── 暂停检查（2026-08 A1 硬暂停；P2 自动暂停扩展）──
         let paused_now = pause.paused.load(Ordering::SeqCst);
         if paused_now {
             if !worker_paused {
                 worker_paused = true;
-                eprintln!("[ScreenWorker] 会话暂停，画面链冻结");
+                eprintln!(
+                    "[ScreenWorker] 会话暂停，画面链{}",
+                    if auto_paused { "进入轻量轮询（等视频恢复）" } else { "冻结" }
+                );
+            }
+            if auto_paused {
+                // P2 自动暂停：轻量轮询——仅取帧刷新 latest_frame + 播放检测。
+                // 检测读的就是 latest_frame，不刷新则永远看到暂停帧 → 无法发现
+                // 恢复；1s 一拍仅取帧（零分析），5s 一拍检测（沿用 REQ-125 节流）
+                let comp_epoch = epoch
+                    + Duration::from_millis(pause.total_paused_ms.load(Ordering::SeqCst));
+                if last_sample_at.elapsed().as_millis() as u64 >= SAMPLE_TICK_MS {
+                    last_sample_at = Instant::now();
+                    capture_latest_only(
+                        screen.as_mut(),
+                        &app,
+                        comp_epoch,
+                        &latest_frame,
+                        &mut last_capture_error,
+                    );
+                    if last_player_check_at.elapsed() >= Duration::from_secs(5) {
+                        last_player_check_at = Instant::now();
+                        let check_now_ms = comp_epoch.elapsed().as_millis() as u64;
+                        if let Some(f) = latest_frame.lock().ok().and_then(|g| g.clone()) {
+                            if let Some(img) =
+                                crate::region_ocr::bgra_to_rgb_image(&f.bgraw, f.width, f.height)
+                            {
+                                let still_paused =
+                                    crate::player_behavior::detect_player_action(&img).is_some();
+                                if !still_paused {
+                                    // 恢复播放：落 Play 事件（REQ-125 语义一致）+
+                                    // 清自动暂停（音频/捕获线程沿边沿自动恢复）
+                                    crate::player_behavior::record_action(
+                                        &crate::player_behavior::PlayerAction {
+                                            kind: crate::player_behavior::PlayerActionKind::Play,
+                                            value: None,
+                                        },
+                                        check_now_ms,
+                                        session_id,
+                                        &db,
+                                    );
+                                    pause.paused.store(false, Ordering::SeqCst);
+                                    auto_paused = false;
+                                    last_player_paused = false;
+                                    eprintln!("[ScreenWorker] 视频恢复播放，自动解除暂停");
+                                }
+                            }
+                        }
+                    }
+                }
             }
             std::thread::sleep(Duration::from_millis(WORKER_POLL_MS));
             continue;
@@ -243,6 +297,14 @@ pub fn run_screen_worker(
                             // 首次检测：仅记录基线状态，不写事件（防假 Pause）
                             player_state_initialized = true;
                             last_player_paused = paused;
+                            // P2：基线即暂停（会话开始时视频已暂停）→ 自动暂停。
+                            // 不写假 Pause 事件（MEDIUM-9），但置共享标志——
+                            // 音频/捕获线程沿边沿同步暂停
+                            if paused && !pause.paused.load(Ordering::SeqCst) {
+                                pause.paused.store(true, Ordering::SeqCst);
+                                auto_paused = true;
+                                eprintln!("[ScreenWorker] 视频处于暂停态，会话自动暂停");
+                            }
                         } else if paused != last_player_paused {
                             last_player_paused = paused;
                             let action = if paused {
@@ -262,6 +324,19 @@ pub fn run_screen_worker(
                                 session_id,
                                 &db,
                             );
+                            if paused {
+                                // P2：检测到视频暂停 → 自动暂停捕获（共享标志；
+                                // 下一轮循环进入轻量轮询，恢复检测不中断）
+                                pause.paused.store(true, Ordering::SeqCst);
+                                auto_paused = true;
+                                eprintln!("[ScreenWorker] 检测到视频暂停，自动暂停捕获");
+                            }
+                        } else if paused && !pause.paused.load(Ordering::SeqCst) {
+                            // P2 兜底：手动恢复后视频仍暂停 → 重新自动暂停
+                            // （语义：捕获跟随视频状态，用户手动继续不覆盖）
+                            pause.paused.store(true, Ordering::SeqCst);
+                            auto_paused = true;
+                            eprintln!("[ScreenWorker] 视频处于暂停态，重新自动暂停");
                         }
                     }
                 }

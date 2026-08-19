@@ -18,7 +18,7 @@ use tauri::Emitter;
 use crate::capture::resample::compute_rms;
 use crate::capture::AudioChunk;
 use crate::db::Db;
-use crate::live_session_persist::{handle_final_event, persist_final, sentence_end_ms, FinalEventCtx};
+use crate::live_session_persist::{flush_tail_and_persist, handle_final_event, FinalEventCtx};
 use crate::streaming_asr::{StreamingAsrEngine, StreamingAsrEvent, SILENCE_RMS_THRESHOLD};
 use crate::types::TranscriptSegment;
 
@@ -126,10 +126,28 @@ pub(crate) fn run_audio_loop(
             let now_ms = ctx.epoch.elapsed().as_millis() as u64
                 - ctx.pause.total_paused_ms.load(Ordering::SeqCst);
             if paused_now {
-                // 进入暂停：喂静音块强制 ASR 断句——暂停前后的语音不得连句
-                // （暂停期内容不出现在时间轴，但挂起句必须先落库）
-                let silence = vec![0f32; 1600]; // 100ms @16k 静音
-                let _ = ctx.asr_engine.feed(&silence, true);
+                // 进入暂停（P2 增强：替代"喂 100ms 静音"方案——静音块不足以触发
+                // sherpa 端点规则（rule1 需 2.4s 尾静音），句无法断开；flush 尾句
+                // 落库 + reset 重建流才能保证暂停前后的语音不连句，恢复后干净开始）
+                flush_tail_and_persist(
+                    FinalEventCtx {
+                        app: ctx.app,
+                        db: ctx.db,
+                        session_id: ctx.session_id,
+                        asr_segments: ctx.asr_segments,
+                        sentence_start_ms: &mut sentence_start_ms,
+                        last_speech_ms: &mut last_speech_ms,
+                        last_final_clean: &mut last_final_clean,
+                        pending_merge: &mut pending_merge,
+                        last_segment_end: &mut last_segment_end,
+                    },
+                    ctx.asr_engine,
+                    now_ms,
+                    &mut sentence_rms_sum,
+                    &mut sentence_rms_count,
+                );
+                // 重建流（reset 预留给复用场景：清句音频/状态，热词重读）
+                ctx.asr_engine.reset();
                 let _ = ctx.db.add_event(&crate::session_events::NewSessionEvent::simple(
                     ctx.session_id,
                     crate::session_events::EventKind::Pause,
@@ -319,69 +337,44 @@ pub(crate) fn run_audio_loop(
                 }
             }
             Err(RecvTimeoutError::Timeout) => {
-                // 停止信号置位：进入 drain（继续处理积压块）；积压清空后退出
+                // 停止信号置位：先立即停捕获线程（channel 断开），再 drain 残留块
+                // （P1 修复：原实现捕获线程要等循环结束才停，drain 期持续喂块使
+                // 队列永不空 → 停止被拖满 8s 宽限，stop_active 5s 等待必然超时
+                // detach；先断源后 drain 通常 <1s 即退出，宽限仅作理论兜底）
                 if draining {
                     break;
                 }
                 if ctx.stop.load(Ordering::SeqCst) {
                     draining = true;
+                    audio.stop();
                 }
             }
             Err(RecvTimeoutError::Disconnected) => break, // 捕获线程退出
         }
     }
 
-    // 停止：先兜底落库挂起段（F4-1——停止时无下一段可合并），再 flush 尾句
-    //    （时间戳用会话纪元；句尾校正同 TD-041；跨 final 去重同主循环；
-    //     置信度/音量 REQ-098/103：挂起段透传、flush 尾句用重打分一致性+段 RMS）
-    if let Some((p_start, p_end, p_text, _merges, p_conf, p_vol)) = pending_merge.take() {
-        persist_final(
-            ctx.app,
-            ctx.db,
-            ctx.session_id,
-            ctx.asr_segments,
-            p_start,
-            p_end,
-            p_text,
-            p_conf,
-            p_vol,
-            // 停止兜底落库：段前停顿无基准（None——诚实未知）
-            None,
-        );
-    }
-    if let Some(StreamingAsrEvent::Final { text, confidence, .. }) = ctx.asr_engine.flush() {
-        let text = match &last_final_clean {
-            // REQ-118（v0.7.0 M2）：归一化+短语级 Jaccard 升级版
-            Some(prev) => crate::asr_dedupe::dedupe_across_finals_normalized(prev, &text),
-            None => text,
-        };
-        if !text.is_empty() {
-            let now_ms = ctx.epoch.elapsed().as_millis() as u64;
-            let end_ms = sentence_end_ms(last_speech_ms, now_ms);
-            let start_ms = sentence_start_ms
-                .take()
-                .unwrap_or_else(|| end_ms.saturating_sub(crate::live_session_persist::SENTENCE_FALLBACK_MS));
-            let volume = if sentence_rms_count > 0 {
-                Some(sentence_rms_sum / sentence_rms_count as f32)
-            } else {
-                None
-            };
-            // REQ-109：flush 尾句段前停顿 = 与上一落库段的 gap
-            let pause_ms = last_segment_end.map(|pe| start_ms.saturating_sub(pe));
-            persist_final(
-                ctx.app,
-                ctx.db,
-                ctx.session_id,
-                ctx.asr_segments,
-                start_ms,
-                end_ms,
-                text,
-                confidence,
-                volume,
-                pause_ms,
-            );
-        }
-    }
+    // 停止：兜底落库挂起段 + flush 尾句——与暂停边沿共用 flush_tail_and_persist
+    // （句被中断语义一致）；时间戳补偿累计暂停时长（暂停中停止也正确：
+    // 暂停边沿已 flush 过，此处通常无新内容）
+    let stop_now_ms = ctx.epoch.elapsed().as_millis() as u64
+        - ctx.pause.total_paused_ms.load(Ordering::SeqCst);
+    flush_tail_and_persist(
+        FinalEventCtx {
+            app: ctx.app,
+            db: ctx.db,
+            session_id: ctx.session_id,
+            asr_segments: ctx.asr_segments,
+            sentence_start_ms: &mut sentence_start_ms,
+            last_speech_ms: &mut last_speech_ms,
+            last_final_clean: &mut last_final_clean,
+            pending_merge: &mut pending_merge,
+            last_segment_end: &mut last_segment_end,
+        },
+        ctx.asr_engine,
+        stop_now_ms,
+        &mut sentence_rms_sum,
+        &mut sentence_rms_count,
+    );
     audio.stop();
 
     // M4/REQ-068（S4）：结束会话——回填 WAV 长度 + 触发清理
