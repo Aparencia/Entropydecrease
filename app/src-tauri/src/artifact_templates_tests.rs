@@ -44,7 +44,7 @@ fn detail(segments: Vec<(&str, u64, u64)>, ocr: Vec<(&str, u64)>) -> SessionDeta
             region_kind: None,
         })
         .collect();
-    SessionDetail { session, segments, ocr_blocks }
+    SessionDetail { session, segments, ocr_blocks, events: Vec::new() }
 }
 
 fn keyframes() -> Vec<KeyFrameCandidate> {

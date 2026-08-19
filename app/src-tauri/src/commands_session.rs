@@ -61,7 +61,7 @@ pub async fn list_sessions(
         .map_err(|e| e.to_string())
 }
 
-/// 会话详情：会话 + 转写段 + OCR 块（时间轴对齐，一次取全）。
+/// 会话详情：会话 + 转写段 + OCR 块 + 信号事件（时间轴对齐，一次取全）。
 #[tauri::command]
 pub async fn get_session_detail(state: State<'_, AppState>, id: i64) -> Result<SessionDetail, String> {
     if id <= 0 {
@@ -74,7 +74,9 @@ pub async fn get_session_detail(state: State<'_, AppState>, id: i64) -> Result<S
         .ok_or_else(|| format!("会话不存在: {}", id))?;
     let segments = state.db.list_segments(id).map_err(|e| e.to_string())?;
     let ocr_blocks = state.db.list_ocr_blocks(id).map_err(|e| e.to_string())?;
-    Ok(SessionDetail { session, segments, ocr_blocks })
+    // REQ-108（v0.7.0 M1.5）：信号事件随详情取全（章节检测真实信号消费）
+    let events = state.db.list_events(id).map_err(|e| e.to_string())?;
+    Ok(SessionDetail { session, segments, ocr_blocks, events })
 }
 
 /// 删除会话（级联清理转写段与 OCR 块）。

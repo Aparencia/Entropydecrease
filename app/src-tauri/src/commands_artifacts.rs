@@ -32,6 +32,8 @@ pub async fn build_session_artifact(
         .ok_or_else(|| format!("会话不存在: {}", session_id))?;
     let segments = state.db.list_segments(session_id).map_err(|e| e.to_string())?;
     let ocr_blocks = state.db.list_ocr_blocks(session_id).map_err(|e| e.to_string())?;
+    // REQ-108（v0.7.0 M1.5）：信号事件随详情读取（产物模板消费备数据）
+    let events = state.db.list_events(session_id).map_err(|e| e.to_string())?;
     // 档案优先级：调用方覆盖 > 会话落库 > Lecture 默认
     let kind = profile
         .map(|p| ProfileKind::parse(&p))
@@ -39,7 +41,7 @@ pub async fn build_session_artifact(
         .unwrap_or(ProfileKind::Lecture);
     // 关键图候选（M6 投票输出；当前从图片库取时间戳近似——产物不阻断）
     let keyframes = crate::commands_images::keyframes_from_store(&state, session_id).unwrap_or_default();
-    let detail = crate::types::SessionDetail { session, segments, ocr_blocks };
+    let detail = crate::types::SessionDetail { session, segments, ocr_blocks, events };
     let artifact = build_artifact(kind, &detail, &keyframes);
     state
         .db

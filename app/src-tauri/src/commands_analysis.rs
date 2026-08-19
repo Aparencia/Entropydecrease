@@ -32,12 +32,14 @@ pub async fn analyze_session_command(
         .ok_or_else(|| format!("会话不存在: {}", id))?;
     let segments = state.db.list_segments(id).map_err(|e| e.to_string())?;
     let ocr_blocks = state.db.list_ocr_blocks(id).map_err(|e| e.to_string())?;
+    // REQ-108（v0.7.0 M1.5）：信号事件随分析读取（章节检测真实信号消费）
+    let events = state.db.list_events(id).map_err(|e| e.to_string())?;
     // 档案优先级：调用方覆盖 > 会话落库 > Lecture 默认（默认档案不阻断）
     let kind = profile
         .map(|p| ProfileKind::parse(&p))
         .or_else(|| session.profile.as_deref().map(ProfileKind::parse))
         .unwrap_or(ProfileKind::Lecture);
-    let detail = crate::types::SessionDetail { session, segments, ocr_blocks };
+    let detail = crate::types::SessionDetail { session, segments, ocr_blocks, events };
     // REQ-060：口语符号映射表（AppState 加载；JSON 校准生效）
     Ok(analyze_session_opt(&detail, kind, &state.symbol_normalize))
 }

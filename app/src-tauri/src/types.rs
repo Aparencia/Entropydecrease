@@ -216,10 +216,14 @@ pub struct NewSessionOcrBlock {
     pub region_kind: Option<String>,
 }
 
-/// 会话详情（详情页一次取全：会话 + 转写段 + OCR 块）。
+/// 会话详情（详情页一次取全：会话 + 转写段 + OCR 块 + 信号事件）。
+/// @ai-context: v0.7.0 M1.5（REQ-108）：events 为会话信号事件（帧切换/长静音等；
+///              旧会话/未接线链路为空——消费端回退近似信号）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SessionDetail {
     pub session: Session,
     pub segments: Vec<SessionSegment>,
     pub ocr_blocks: Vec<SessionOcrBlock>,
+    #[serde(default)]
+    pub events: Vec<crate::session_events::SessionEvent>,
 }

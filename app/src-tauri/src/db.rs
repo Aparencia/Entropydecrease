@@ -83,7 +83,18 @@ impl Db {
                 block_order INTEGER NOT NULL,
                 source TEXT NOT NULL DEFAULT 'local'
             );
-            CREATE INDEX IF NOT EXISTS idx_artifact_session ON artifact_blocks(session_id, block_order);",
+            CREATE INDEX IF NOT EXISTS idx_artifact_session ON artifact_blocks(session_id, block_order);
+            -- v0.7.0 M1.5（REQ-108）：会话信号事件表（统一落库——章节检测/实践段标记/周报备数据；
+            -- 设计见 docs/archive/2026-08-19/2026-08-19-session-events-table-design.md）
+            CREATE TABLE IF NOT EXISTS session_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL,
+                timestamp_ms INTEGER NOT NULL,
+                payload_json TEXT NOT NULL DEFAULT '{}'
+            );
+            CREATE INDEX IF NOT EXISTS idx_events_session ON session_events(session_id, timestamp_ms);
+            CREATE INDEX IF NOT EXISTS idx_events_kind ON session_events(session_id, kind);",
         )?;
         // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）
         ensure_column(&conn, "sessions", "profile", "ALTER TABLE sessions ADD COLUMN profile TEXT")?;

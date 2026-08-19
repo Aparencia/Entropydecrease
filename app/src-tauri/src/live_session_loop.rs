@@ -30,6 +30,11 @@ const AUDIO_BLOCK_SECS: f64 = 0.2;
 /// 停止后 drain 宽限（s，2026-08-19 取优整合）：停止瞬间积压的音频块继续
 /// 喂入处理（内容不丢）；宽限到期强制退出（停止响应不被无限积压拖死）。
 const DRAIN_GRACE_SECS: u64 = 8;
+/// 长静音事件触发块数（REQ-108：3s ÷ 0.2s/块 = 15 块——与 analysis
+/// LONG_SILENCE_GAP_MS=3000 同口径，章节检测真实信号源）。
+const LONG_SILENCE_EVENT_BLOCKS: u32 = 15;
+/// 音频块时长（ms，REQ-108 长静音事件载荷计算用——与 AUDIO_BLOCK_SECS 同源）。
+const AUDIO_BLOCK_MS: u64 = 200;
 
 /// 主循环共享上下文（run_session 装配，run_audio_loop 消费）。
 ///
@@ -89,6 +94,8 @@ pub(crate) fn run_audio_loop(
     // REQ-103：段内 RMS 聚合（语音块累计，Final 落库时取均值 → volume 列）
     let mut sentence_rms_sum: f32 = 0.0;
     let mut sentence_rms_count: u32 = 0;
+    // REQ-108：连续静音块计数（长静音事件触发判定）
+    let mut silent_blocks: u32 = 0;
 
     // 2026-08-19 取优整合：停止后 drain——停止瞬间 channel 中已送达未处理的音频块
     // 继续喂入（内容不丢；"停止时积压丢弃"兜底，会话 22 类缺失防御）。drain 有界
@@ -128,6 +135,24 @@ pub(crate) fn run_audio_loop(
                 let silent = raw_rms < vad_threshold;
                 // B3：语音活跃度共享（屏幕 worker 自适应采样依据）
                 ctx.speech_active.store(!silent, Ordering::Relaxed);
+                // REQ-108（v0.7.0 M1.5）：长静音事件——连续静音 ≥3s 落库
+                // （章节检测真实信号；与 analysis LONG_SILENCE_GAP_MS 同口径）
+                if silent {
+                    silent_blocks += 1;
+                    if silent_blocks == LONG_SILENCE_EVENT_BLOCKS {
+                        let _ = ctx.db.add_event(&crate::session_events::NewSessionEvent {
+                            session_id: ctx.session_id,
+                            kind: crate::session_events::EventKind::LongSilence,
+                            timestamp_ms: chunk.timestamp_ms,
+                            // 持续时长（块数 × 200ms）供消费端过滤
+                            payload: serde_json::json!({
+                                "duration_ms": silent_blocks as u64 * AUDIO_BLOCK_MS,
+                            }),
+                        });
+                    }
+                } else {
+                    silent_blocks = 0;
+                }
                 // A2：句起时刻 = Final 后首个非静音块（真实句首，替代 end-2000ms 近似）；
                 // TD-041：句尾 = 最后语音块 + 块时长（端点判定滞后 1.2-2.4s 的校正）
                 // REQ-103：语音块 RMS 计入段聚合（音量骤变信号输入）

@@ -54,6 +54,8 @@ mod commands_video;
 mod concat;
 mod db;
 mod db_artifacts;
+// v0.7.0 M1.5（REQ-108）：会话信号事件数据层（统一信号事件表读写）
+mod db_session_events;
 mod db_sessions;
 mod db_sessions_rows;
 mod device_config;
@@ -117,6 +119,8 @@ mod subtitle;
 mod subtitle_detect;
 mod subtitle_ocr;
 mod speaker_change;
+// v0.7.0 M1.5（REQ-108）：统一信号事件域（类型/分级/容量守卫；数据层在 db_session_events）
+mod session_events;
 mod symbol_normalize;
 mod table_reconstruct;
 mod types;

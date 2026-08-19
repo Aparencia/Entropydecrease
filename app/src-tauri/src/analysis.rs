@@ -80,8 +80,15 @@ pub fn analyze_session_opt(
     let ocr_blocks = &detail.ocr_blocks;
 
     // ── 章节检测（C1）：30s 窗口聚合（网课档案开关）──
+    // REQ-108（v0.7.0 M1.5）：优先消费 session_events 真实信号（帧切换/长静音），
+    // 无事件数据的旧会话回退 OCR/gap 近似（build_chapter_signals，零回归）
     let chapters = if rules.chapter_detect {
-        detect_chapters(&build_chapter_signals(segments, ocr_blocks), DEFAULT_MIN_VOTES)
+        let events = detail.events.clone();
+        if events.is_empty() {
+            detect_chapters(&build_chapter_signals(segments, ocr_blocks), DEFAULT_MIN_VOTES)
+        } else {
+            detect_chapters(&build_chapter_signals_with_events(segments, &events), DEFAULT_MIN_VOTES)
+        }
     } else {
         Vec::new()
     };
@@ -260,6 +267,75 @@ fn build_chapter_signals(
         signals.push(ChapterSignal { time_ms: start, frame_switched, long_silence, text });
     }
     signals
+}
+
+/// 聚合章节检测信号（事件版，REQ-108 / v0.7.0 M1.5）：
+/// 消费 session_events 真实信号（frame_switch/long_silence）替代 OCR/gap 近似。
+///
+/// @ai-context: 30s 窗口聚合——窗口内存在真实帧切换事件 → frame_switched；
+///              存在真实长静音事件 → long_silence；文本信号仍来自段（话题重合度）。
+///              POST-D3 修复：实时链路的真实事件不再丢失（此前 OCR 近似
+///              依赖"新文字出现"——播放器时间码/UI 变化不产生新文字，漏检）。
+fn build_chapter_signals_with_events(
+    segments: &[crate::types::SessionSegment],
+    events: &[crate::session_events::SessionEvent],
+) -> Vec<ChapterSignal> {
+    if segments.is_empty() {
+        return Vec::new();
+    }
+    // 按 30s 窗口聚合：文本 + 帧切换标志 + 长静音标志
+    let mut windows: Vec<(u64, String, bool, bool)> = Vec::new();
+    let mut window_start = segments[0].start_ms / WINDOW_MS * WINDOW_MS;
+    let mut text = String::new();
+    let mut frame_switched = false;
+    let mut long_silence = false;
+    let mut seg_iter = segments.iter().peekable();
+    let mut ev_iter = events.iter().peekable();
+    loop {
+        let next_ms = match (seg_iter.peek(), ev_iter.peek()) {
+            (Some(s), Some(e)) => s.start_ms.min(e.timestamp_ms),
+            (Some(s), None) => s.start_ms,
+            (None, Some(e)) => e.timestamp_ms,
+            (None, None) => break,
+        };
+        if next_ms >= window_start + WINDOW_MS {
+            if !text.is_empty() {
+                windows.push((window_start, std::mem::take(&mut text), frame_switched, long_silence));
+                frame_switched = false;
+                long_silence = false;
+            }
+            window_start = next_ms / WINDOW_MS * WINDOW_MS;
+        }
+        let take_seg = match (seg_iter.peek(), ev_iter.peek()) {
+            (Some(s), Some(e)) => s.start_ms <= e.timestamp_ms,
+            (Some(_), None) => true,
+            (None, Some(_)) => false,
+            (None, None) => false,
+        };
+        if take_seg {
+            let s = seg_iter.next().unwrap();
+            if !text.is_empty() {
+                text.push('\n');
+            }
+            text.push_str(&s.text);
+        } else {
+            let e = ev_iter.next().unwrap();
+            match e.kind {
+                crate::session_events::EventKind::FrameSwitch => frame_switched = true,
+                crate::session_events::EventKind::LongSilence => long_silence = true,
+                _ => {}
+            }
+        }
+    }
+    if !text.is_empty() {
+        windows.push((window_start, text, frame_switched, long_silence));
+    }
+    windows
+        .into_iter()
+        .map(|(start, text, frame_switched, long_silence)| {
+            ChapterSignal { time_ms: start, frame_switched, long_silence, text }
+        })
+        .collect()
 }
 
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。

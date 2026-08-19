@@ -41,7 +41,17 @@ fn detail(segments: Vec<(&str, u64, u64)>, ocr: Vec<(&str, u64)>) -> SessionDeta
             region_kind: None,
         })
         .collect();
-    SessionDetail { session, segments, ocr_blocks }
+    SessionDetail { session, segments, ocr_blocks, events: Vec::new() }
+}
+
+/// 构造带事件的会话详情（REQ-108：真实信号消费测试）。
+fn detail_with_events(
+    segments: Vec<(&str, u64, u64)>,
+    events: Vec<crate::session_events::SessionEvent>,
+) -> SessionDetail {
+    let mut d = detail(segments, Vec::new());
+    d.events = events;
+    d
 }
 
 #[test]
@@ -160,4 +170,60 @@ fn build_chapter_signals_long_silence_approximation() {
     let signals = build_chapter_signals(&segments, &[]);
     // Assert：长静音近似命中
     assert!(signals.iter().any(|s| s.long_silence), "gap≥3s 应标记长静音");
+}
+
+// ── REQ-108（v0.7.0 M1.5）：事件消费真实信号 ──
+
+#[test]
+fn chapter_signals_from_real_events() {
+    // Arrange：真实帧切换 + 长静音事件（替代 OCR/gap 近似）
+    let segments = vec![
+        SessionSegment { id: 0, session_id: 1, start_ms: 0, end_ms: 1000, text: "第一章内容".into(), source: "asr".into(), volume: None, confidence: None },
+        SessionSegment { id: 1, session_id: 1, start_ms: 40000, end_ms: 41000, text: "第二章内容".into(), source: "asr".into(), volume: None, confidence: None },
+    ];
+    let events = vec![
+        crate::session_events::SessionEvent {
+            id: 1, session_id: 1, kind: crate::session_events::EventKind::FrameSwitch,
+            timestamp_ms: 35000, payload: serde_json::json!({}),
+        },
+        crate::session_events::SessionEvent {
+            id: 2, session_id: 1, kind: crate::session_events::EventKind::LongSilence,
+            timestamp_ms: 20000, payload: serde_json::json!({"duration_ms": 4000}),
+        },
+    ];
+    // Act：事件版信号（无 OCR 输入也命中——真实信号不依赖画面文字）
+    let signals = build_chapter_signals_with_events(&segments, &events);
+    // Assert：两窗口均有真实信号（帧切换在第二窗口、长静音在窗口 0-30s）
+    assert!(signals.len() >= 2, "应产出 ≥2 窗口");
+    assert!(signals.iter().any(|s| s.frame_switched), "真实帧切换事件应标记画面切换");
+    assert!(signals.iter().any(|s| s.long_silence), "真实长静音事件应标记长静音");
+}
+
+#[test]
+fn chapter_analysis_prefers_events_over_approximation() {
+    // Arrange：带事件的会话（章节检测走事件路径）
+    let d = detail_with_events(
+        vec![("第一章内容", 0, 1000), ("第二章内容", 40000, 41000)],
+        vec![crate::session_events::SessionEvent {
+            id: 1, session_id: 1, kind: crate::session_events::EventKind::FrameSwitch,
+            timestamp_ms: 35000, payload: serde_json::json!({}),
+        }],
+    );
+    // Act：网课档案分析（事件路径）
+    let analysis = analyze_session(&d, ProfileKind::Lecture);
+    // Assert：章节边界产出（帧切换事件 → 双信号中的画面信号）
+    assert!(!analysis.chapters.is_empty(), "事件信号应驱动章节检测");
+}
+
+#[test]
+fn chapter_analysis_falls_back_without_events() {
+    // Arrange：无事件的旧会话（零回归——近似路径）
+    let d = detail(
+        vec![("第一章内容", 0, 1000), ("第二章内容", 40000, 41000)],
+        vec![("PPT-第一章", 100), ("PPT-第二章", 40100)],
+    );
+    // Act
+    let analysis = analyze_session(&d, ProfileKind::Lecture);
+    // Assert：近似路径仍工作（章节检测不因无事件而失效）
+    assert!(!analysis.chapters.is_empty(), "无事件时近似信号路径应保持");
 }

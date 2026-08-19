@@ -86,6 +86,8 @@ pub struct TriggerState {
     pub panel: PanelDetector,
     pub last_ocr_at: Instant,
     pub last_full_ocr_at: Instant,
+    /// REQ-108（v0.7.0 M1.5）：上一 tick 全帧变化状态（帧切换事件上升沿判定）
+    pub prev_full_changed: bool,
 }
 
 impl TriggerState {
@@ -96,6 +98,7 @@ impl TriggerState {
             panel: PanelDetector::default(),
             last_ocr_at: Instant::now(),
             last_full_ocr_at: Instant::now(),
+            prev_full_changed: false,
         }
     }
 }
@@ -189,6 +192,16 @@ pub fn process_frame(
     } else {
         stats.diff_skip += 1;
     }
+    // REQ-108（v0.7.0 M1.5）：帧切换事件——无变化 → 有变化的上升沿写入
+    // （章节检测真实信号；持续变化期不重复写，防写放大——事件表容量守卫兜底）
+    if full_changed && !trigger.prev_full_changed {
+        let _ = db.add_event(&crate::session_events::NewSessionEvent::simple(
+            session_id,
+            crate::session_events::EventKind::FrameSwitch,
+            frame.timestamp_ms,
+        ));
+    }
+    trigger.prev_full_changed = full_changed;
     // REQ-087：UI 面板事件（变化格连通聚类；与 OCR 路径无关，
     // 活跃期内字幕文本源头丢弃——见 handle_subtitle_frame 门控）
     trigger.panel.feed(
