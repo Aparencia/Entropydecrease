@@ -14,6 +14,7 @@ use crate::glossary::{
     glossary_candidates_opt, GlossaryCandidate, GlossaryOptions,
 };
 use crate::highlight_detect::{detect_highlights, HighlightCandidate, OcrBlockInput, SegmentInput};
+use crate::practice_detect::{detect_practice_points, PracticeDetectConfig, PracticePoint};
 use crate::speaker_change::{detect_speaker_changes, SpeakerChangeEvent};
 use crate::symbol_normalize::{normalize as normalize_symbols, SymbolNormalizeConfig};
 use crate::types::SessionDetail;
@@ -47,6 +48,8 @@ pub struct SessionAnalysis {
     pub glossary: Vec<GlossaryCandidate>,
     /// 说话人切换事件（访谈/会议；无 embedding 数据时空——降级形态）
     pub speaker_changes: Vec<SpeakerChangeEvent>,
+    /// 练习段（M4/REQ-070：长静音×画面静止同窗——实操档案产物模板消费）
+    pub practice_points: Vec<PracticePoint>,
     /// 书面化加工版段（口播/网课档案；原文保留在原料层——可逆）
     pub normalized_segments: Vec<NormalizedSegment>,
 }
@@ -147,6 +150,10 @@ pub fn analyze_session_opt(
         Vec::new()
     };
 
+    // ── 练习段（M4/REQ-070）：长静音×画面静止同窗（全档案计算——
+    //    产物模板按档案消费：实操 StepCard 之间插练习点标记）──
+    let practice_points = detect_practice_points(segments, ocr_blocks, &PracticeDetectConfig::default());
+
     // ── 口语书面化（B5 + REQ-060）：加工版段（口播/网课档案开关；Light 档保守保真）──
     let normalized_segments = if rules.verbal_normalize {
         let cfg = NormalizeConfig { strength: NormalizeStrength::Light };
@@ -164,7 +171,14 @@ pub fn analyze_session_opt(
         Vec::new()
     };
 
-    SessionAnalysis { chapters, highlights, glossary, speaker_changes, normalized_segments }
+    SessionAnalysis {
+        chapters,
+        highlights,
+        glossary,
+        speaker_changes,
+        practice_points,
+        normalized_segments,
+    }
 }
 
 /// 聚合章节检测信号（纯函数）：段 → 30s 窗口，OCR 新文字=画面切换近似，gap=长静音近似。
