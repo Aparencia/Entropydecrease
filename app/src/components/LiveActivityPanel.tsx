@@ -151,6 +151,9 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
         countsRef.current.ocr += 1;
         setCounts({ ...countsRef.current });
       }),
+      // 2026-08 A1：暂停/恢复状态机（硬暂停——时间轴冻结，面板显示暂停态）
+      listen("live:paused", () => setPhase("⏸ 已暂停（时间轴冻结）")),
+      listen("live:resumed", () => setPhase("● 采集中")),
       listen<number>("session:fusing", () => setPhase("⏳ 融合中…")),
       listen<number>("session:fused", () => setPhase("✅ 融合完成")),
       listen<string>("session:fusion-failed", (e) => setPhase(`⚠ 融合失败（原始段保留）: ${e.payload}`)),
@@ -161,7 +164,7 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
   }, []);
 
   const elapsedMs = startedAtRef.current ? Date.now() - startedAtRef.current : 0;
-  const phaseColor = phase.startsWith("●") ? "#dc2626" : phase.startsWith("⏳") ? "#b45309" : phase.startsWith("⚠") ? "#dc2626" : "#374151";
+  const phaseColor = phase.startsWith("●") ? "#dc2626" : phase.startsWith("⏸") ? "#b45309" : phase.startsWith("⏳") ? "#b45309" : phase.startsWith("⚠") ? "#dc2626" : "#374151";
   // 简要显示：只渲染最近几条（总数在状态行）
   const shownTranscripts = transcripts.slice(-SHOW_TRANSCRIPT_LINES);
   const shownOcr = ocrLines.slice(-SHOW_OCR_LINES);
@@ -219,7 +222,7 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
         {tab === "transcript" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
             {/* 2026-08 用户需求：实时图片数据（最近画面条；独立区域，图片更新不引起转写行跳动） */}
-            <LiveImageStrip sessionId={sessionId} />
+            <LiveImageStrip sessionId={sessionId ?? null} />
             {shownTranscripts.length === 0 && !partial && (
               <p style={{ fontSize: 12, color: "#9ca3af" }}>等待识别…（说话或屏幕出现字幕时显示）</p>
             )}

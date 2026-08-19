@@ -27,9 +27,13 @@ const NAV_ITEMS: { key: Page; label: string }[] = [
 
 function App() {
   const [page, setPage] = useState<Page>("classroom");
+  // 2026-08 A4：跨页直达目标会话（课堂助手融合完成 → 会话页自动打开详情）
+  const [focusSessionId, setFocusSessionId] = useState<number | null>(null);
   // 全局采集状态（ADR-007：与页面解耦，徽标常驻导航栏）
   const [capturing, setCapturing] = useState(false);
   const [recovering, setRecovering] = useState(false);
+  // 2026-08 A1：会话暂停（live:paused/resumed 事件；徽标区分暂停态）
+  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     let disposed = false;
@@ -41,7 +45,21 @@ function App() {
         await listen<string>("live:status", (e) => {
           if (disposed) return;
           setCapturing(e.payload === "recording");
-          if (e.payload !== "recording") setRecovering(false);
+          if (e.payload !== "recording") {
+            setRecovering(false);
+            setPaused(false);
+          }
+        }),
+      );
+      // 2026-08 A1：暂停/恢复（全局徽标显示"⏸ 已暂停"）
+      unlisteners.push(
+        await listen("live:paused", () => {
+          if (!disposed) setPaused(true);
+        }),
+      );
+      unlisteners.push(
+        await listen("live:resumed", () => {
+          if (!disposed) setPaused(false);
         }),
       );
       // 音频自动重连中（ADR-007）：会话未死，UI 提示恢复态
@@ -113,21 +131,21 @@ function App() {
             {item.label}
           </button>
         ))}
-        {/* 全局采集徽标（ADR-007）：切页/最小化后仍可见采集状态 */}
+        {/* 全局采集徽标（ADR-007）：切页/最小化后仍可见采集状态；2026-08 A1 暂停态 */}
         {capturing && (
           <span
             style={{
               marginLeft: "auto",
               fontSize: 12,
               fontWeight: 600,
-              color: recovering ? "#b45309" : "#0d9488",
-              background: recovering ? "#fffbeb" : "#f0fdfa",
-              border: `1px solid ${recovering ? "#f59e0b" : "#14b8a6"}`,
+              color: paused ? "#b45309" : recovering ? "#b45309" : "#0d9488",
+              background: paused ? "#fffbeb" : recovering ? "#fffbeb" : "#f0fdfa",
+              border: `1px solid ${paused ? "#f59e0b" : recovering ? "#f59e0b" : "#14b8a6"}`,
               borderRadius: 12,
               padding: "3px 10px",
             }}
           >
-            {recovering ? "⚠️ 采集恢复中" : "🎙 采集中"}
+            {paused ? "⏸ 已暂停" : recovering ? "⚠️ 采集恢复中" : "🎙 采集中"}
           </span>
         )}
       </nav>
@@ -136,10 +154,16 @@ function App() {
           避免 ClassroomPage 每次进入重复窗口枚举 100-500ms 停顿；状态与事件监听保留） */}
       <main style={{ flex: 1, minHeight: 0, display: "flex" }}>
         <div style={{ flex: 1, display: page === "classroom" ? "block" : "none", overflow: "hidden" }}>
-          <ClassroomPage />
+          {/* 2026-08 A4：融合完成直达会话（onOpenSessions 跳转 + focusSessionId 定位） */}
+          <ClassroomPage
+            onOpenSessions={(id) => {
+              setFocusSessionId(id);
+              setPage("sessions");
+            }}
+          />
         </div>
         <div style={{ flex: 1, display: page === "sessions" ? "block" : "none", overflow: "hidden" }}>
-          <SessionsPage />
+          <SessionsPage focusSessionId={focusSessionId} />
         </div>
         <div style={{ flex: 1, display: page === "notes" ? "block" : "none", overflow: "hidden" }}>
           <NotesPage />

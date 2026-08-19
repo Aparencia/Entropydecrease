@@ -17,6 +17,10 @@ import LiveActivityPanel from "../components/LiveActivityPanel";
 import { OcrDeviceSetting } from "../components/OcrDeviceSetting";
 // v0.7.0 M1（REQ-101）：音频预处理链开关（CER 微基准定默认后的用户通道）
 import { AudioPreprocSetting } from "../components/AudioPreprocSetting";
+// 2026-08 A2：实时音频电平条（VU 表——试听自检实时化）
+import AudioLevelMeter from "../components/AudioLevelMeter";
+// 2026-08 C1：引擎与模型就绪清单（开始前准备流——聚合现有只读命令）
+import ReadyCheckCard from "../components/ReadyCheckCard";
 import { VocabManager } from "../components/VocabManager";
 import { SystemStatusBadge } from "../components/SystemStatusBadge";
 // v0.5.0 M1（REQ-043）：视频类型档案混合检测（检测为：网课（可改））
@@ -28,7 +32,7 @@ import type { Note, WindowInfo, StreamingModelStatus, LiveSessionStatus, Downloa
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
 const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
 
-export default function ClassroomPage() {
+export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (sessionId: number) => void }) {
   // ── 窗口/进程选择 ──
   const [windows, setWindows] = useState<WindowInfo[]>([]);
   const [selectedWindow, setSelectedWindow] = useState<WindowInfo | null>(null);
@@ -37,10 +41,14 @@ export default function ClassroomPage() {
   // ── 实时捕获（v0.2.0）──
   const [liveActive, setLiveActive] = useState(false);
   const [liveSessionId, setLiveSessionId] = useState<number | null>(null);
+  // 2026-08 A1：会话暂停（硬暂停——完全停采；由 live:paused/resumed 事件驱动）
+  const [livePaused, setLivePaused] = useState(false);
   // 停止过渡期（点停止 → stopped 事件到达前，右侧面板保持显示）
   const [stopping, setStopping] = useState(false);
   // 后台融合期（session:fusing 期间，右侧面板显示"融合中"）
   const [fusionActive, setFusionActive] = useState(false);
+  // 2026-08 A4：最近融合完成的会话 id（右侧"查看时间轴"直达卡片；切换窗口/新会话时清除）
+  const [fusedSessionId, setFusedSessionId] = useState<number | null>(null);
   const [modelStatus, setModelStatus] = useState<StreamingModelStatus | null>(null);
   const [modelDownloading, setModelDownloading] = useState(false);
   const [modelProgress, setModelProgress] = useState<DownloadProgress | null>(null);
@@ -95,18 +103,27 @@ export default function ClassroomPage() {
           setLiveSessionId(null);
           setStopping(false);
           setAsrDegraded(null);
+          setLivePaused(false);
         }
       }),
       // 后台融合事件（REQ-031）：面板显示"融合中"，完成后提示并回退
-      listen<number>("session:fusing", () => setFusionActive(true)),
-      listen<number>("session:fused", () => {
+      // 2026-08 A4：记录融合完成会话 id（右侧"查看时间轴"直达卡片）
+      listen<number>("session:fusing", (e) => {
+        setFusionActive(true);
+        setFusedSessionId(e.payload);
+      }),
+      listen<number>("session:fused", (e) => {
         setFusionActive(false);
+        setFusedSessionId(e.payload);
         setStatus("融合完成，可到「会话」页查看融合时间轴");
       }),
       listen<string>("session:fusion-failed", (e) => {
         setFusionActive(false);
         setStatus(`融合失败（原始段保留）: ${e.payload}`);
       }),
+      // 2026-08 A1：暂停/恢复事件（硬暂停状态驱动按钮组与徽标）
+      listen("live:paused", () => setLivePaused(true)),
+      listen("live:resumed", () => setLivePaused(false)),
       // 模型自动下载进度（ADR-003）
       listen<DownloadProgress>("model:download-progress", (e) => setModelProgress(e.payload)),
       listen<boolean>("model:download-done", () => {
@@ -206,6 +223,7 @@ export default function ClassroomPage() {
       });
       setLiveActive(true);
       setLiveSessionId(id);
+      setFusedSessionId(null); // 新会话开始：清除旧融合直达卡片
       setStatus(`实时捕获已开始（会话 #${id}）`);
     } catch (e) {
       // 防御性恢复（修复反馈）：UI 与后端状态不同步（事件丢失/竞态）时，
@@ -233,10 +251,34 @@ export default function ClassroomPage() {
       const id = await invoke<number | null>("stop_live_session");
       setLiveActive(false);
       setLiveSessionId(null);
+      setLivePaused(false);
       setStatus(id ? `已停止会话 #${id}，融合完成后可到「会话」页查看` : "无活动会话");
     } catch (e) {
       setStopping(false);
       setLiveError(`停止失败: ${e}`);
+    }
+  };
+
+  /** 暂停实时捕获（2026-08 A1 硬暂停：完全停采，时间轴冻结） */
+  const pauseLive = async () => {
+    setLiveError("");
+    try {
+      await invoke("pause_live_session");
+      // live:paused 事件到达前先置位（事件延迟 <500ms，防按钮闪烁）
+      setLivePaused(true);
+    } catch (e) {
+      setLiveError(`暂停失败: ${e}`);
+    }
+  };
+
+  /** 恢复实时捕获 */
+  const resumeLive = async () => {
+    setLiveError("");
+    try {
+      await invoke("resume_live_session");
+      setLivePaused(false);
+    } catch (e) {
+      setLiveError(`恢复失败: ${e}`);
     }
   };
 
@@ -301,6 +343,9 @@ export default function ClassroomPage() {
         )}
 
         <div style={{ flex: 1, minHeight: 0, padding: 12, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* 2026-08 C1：引擎与模型就绪清单（开始前准备流——缺什么一目了然） */}
+          <ReadyCheckCard />
+
           {/* 目标窗口/进程选择（v0.2.0 实时捕获上下文） */}
           <WindowSelectCard
             windows={windows}
@@ -361,25 +406,86 @@ export default function ClassroomPage() {
             {liveActive && (
               // 实时内容（字幕/语音/画面）统一由右侧 LiveActivityPanel 展示，
               // 左栏保持精简（状态徽标）——审查观察项修复
-              <div style={{ fontSize: 11, color: "#0d9488", marginBottom: 6 }}>● 正在采集（实时内容见右侧面板）</div>
+              <div style={{ fontSize: 11, color: livePaused ? "#b45309" : "#0d9488", marginBottom: 6 }}>
+                {livePaused ? "⏸ 已暂停（时间轴冻结，恢复后继续）" : "● 正在采集（实时内容见右侧面板）"}
+              </div>
             )}
+            {/* 2026-08 A2：音频电平条（仅采集中显示；暂停时电平静止） */}
+            {liveActive && !livePaused && <AudioLevelMeter />}
             {liveError && <p style={{ fontSize: 11, color: "#dc2626", margin: "0 0 6px" }}>{liveError}</p>}
-            <button
-              onClick={liveActive ? stopLive : startLive}
-              disabled={!modelStatus?.ready && !liveActive}
-              style={{
-                ...btn,
-                width: "100%",
-                padding: "8px 0",
-                fontWeight: 600,
-                background: liveActive ? "#dc2626" : modelStatus?.ready ? "#0d9488" : "#e5e7eb",
-                color: liveActive || modelStatus?.ready ? "#fff" : "#9ca3af",
-                border: "none",
-                borderRadius: 6,
-              }}
-            >
-              {liveActive ? "⏹ 停止捕获" : "▶ 开始实时捕获"}
-            </button>
+            {liveActive ? (
+              /* 采集中按钮组（2026-08 A1：暂停/继续 + 标记此刻 + 停止） */
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  onClick={livePaused ? resumeLive : pauseLive}
+                  style={{
+                    ...btn,
+                    flex: 1,
+                    padding: "8px 0",
+                    fontWeight: 600,
+                    background: livePaused ? "#0d9488" : "#f59e0b",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 6,
+                  }}
+                >
+                  {livePaused ? "▶ 继续捕获" : "⏸ 暂停"}
+                </button>
+                {/* 2026-08 A3：手动标记此刻（最高权重关键图信号；Ctrl+Shift+S 同效） */}
+                <button
+                  onClick={() => {
+                    void invoke<string>("save_user_screenshot")
+                      .then(() => setStatus("⭐ 已标记此刻画面（关键图候选置顶）"))
+                      .catch((err) => setLiveError(`标记失败: ${err}`));
+                  }}
+                  title="快捷键 Ctrl+Shift+S"
+                  style={{
+                    ...btn,
+                    flex: 1,
+                    padding: "8px 0",
+                    fontWeight: 600,
+                    background: "#fff",
+                    color: "#0d9488",
+                    border: "1px solid #99f6e4",
+                    borderRadius: 6,
+                  }}
+                >
+                  ⭐ 标记此刻
+                </button>
+                <button
+                  onClick={stopLive}
+                  style={{
+                    ...btn,
+                    flex: 1,
+                    padding: "8px 0",
+                    fontWeight: 600,
+                    background: "#dc2626",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 6,
+                  }}
+                >
+                  ⏹ 停止
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={startLive}
+                disabled={!modelStatus?.ready}
+                style={{
+                  ...btn,
+                  width: "100%",
+                  padding: "8px 0",
+                  fontWeight: 600,
+                  background: modelStatus?.ready ? "#0d9488" : "#e5e7eb",
+                  color: modelStatus?.ready ? "#fff" : "#9ca3af",
+                  border: "none",
+                  borderRadius: 6,
+                }}
+              >
+                ▶ 开始实时捕获
+              </button>
+            )}
             {liveSessionId && (
               <p style={{ fontSize: 11, color: "#6b7280", margin: "6px 0 0" }}>会话 #{liveSessionId}（可到「会话」页查看）</p>
             )}
@@ -454,6 +560,27 @@ export default function ClassroomPage() {
           <LiveActivityPanel sessionId={liveSessionId} />
         ) : (
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+            {/* 2026-08 A4：融合完成直达卡片（停止后右侧顶部；一键跳会话页定位） */}
+            {fusedSessionId && (
+              <div style={{ padding: "12px 16px 0", maxWidth: 640 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid #99f6e4", background: "#f0fdfa", borderRadius: 8, padding: "8px 12px" }}>
+                  <span style={{ fontSize: 12, color: "#0f766e" }}>✅ 融合完成（会话 #{fusedSessionId}）</span>
+                  <button
+                    onClick={() => onOpenSessions?.(fusedSessionId)}
+                    style={{ ...btn, marginLeft: "auto", background: "#0d9488", color: "#fff", border: "none", borderRadius: 6 }}
+                  >
+                    查看时间轴 →
+                  </button>
+                  <button
+                    onClick={() => setFusedSessionId(null)}
+                    style={{ ...btn, border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff" }}
+                    title="关闭提示"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            )}
             {/* 视频类型档案（v0.5.0 M1：REQ-043 混合检测——自动候选 + 用户确认 + 记忆偏好；
                 右侧配置区：选定窗口后出现，未选窗口自动隐藏） */}
             <div style={{ padding: "12px 16px 0", maxWidth: 640 }}>

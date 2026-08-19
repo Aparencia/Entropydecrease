@@ -36,7 +36,7 @@ function fmtMs(ms: number): string {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export default function SessionsPage() {
+export default function SessionsPage({ focusSessionId }: { focusSessionId?: number | null }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [groups, setGroups] = useState<CourseGroup[] | null>(null); // REQ-078：课程分组模式
   const [grouped, setGrouped] = useState(false);
@@ -109,6 +109,11 @@ export default function SessionsPage() {
   useEffect(() => {
     void refresh("");
   }, [refresh]);
+
+  // 2026-08 A4：跨页直达——课堂助手融合完成跳转后自动打开目标会话详情
+  useEffect(() => {
+    if (focusSessionId) void openDetail(focusSessionId);
+  }, [focusSessionId, openDetail]);
 
   const search = () => void refresh(keyword);
 
