@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::Row;
 
-use crate::types::{Session, SessionOcrBlock, SessionSegment};
+use crate::types::{Session, SessionListItem, SessionOcrBlock, SessionSegment};
 
 /// 把 rusqlite 行映射为 Session。
 pub fn row_to_session(row: &Row<'_>) -> rusqlite::Result<Session> {
@@ -18,6 +18,32 @@ pub fn row_to_session(row: &Row<'_>) -> rusqlite::Result<Session> {
         ended_at: row.get(4)?,
         status: row.get(5)?,
         profile: row.get(6)?,
+    })
+}
+
+/// 把 rusqlite 行映射为 SessionListItem（v0.7.1 列表标记，10 列）。
+///
+/// @ai-context: 列序与 list_sessions SQL 对齐：前 7 列 = sessions 原列，
+///              8 = has_content（EXISTS 子查询）、9 = note_id、10 = note_title。
+pub fn row_to_session_list_item(row: &Row<'_>) -> rusqlite::Result<SessionListItem> {
+    let session = Session {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        source_window: row.get(2)?,
+        started_at: row.get(3)?,
+        ended_at: row.get(4)?,
+        status: row.get(5)?,
+        profile: row.get(6)?,
+    };
+    let has_content = row.get::<_, i64>(7)? != 0;
+    let note_id: Option<i64> = row.get(8)?;
+    let note_title: Option<String> = row.get(9)?;
+    Ok(SessionListItem {
+        session,
+        has_note: note_id.is_some(),
+        note_id,
+        note_title,
+        has_content,
     })
 }
 

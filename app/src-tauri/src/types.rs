@@ -91,6 +91,8 @@ pub struct NoteDraft {
 /// 数据库中的笔记记录。
 ///
 /// @ai-context: 对应 SQLite notes 表；source 记录来源（manual=手动 / classroom=课堂助手联动）。
+/// @ai-context: v0.7.1（会话体验批次）：session_id 为来源会话关联（可空——手动笔记/旧数据无关联；
+///              删除会话时 SET NULL 保笔记，见 db.rs 迁移）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Note {
     pub id: i64,
@@ -98,6 +100,9 @@ pub struct Note {
     pub content: String,
     /// 来源：manual | classroom
     pub source: String,
+    /// 来源会话 id（v0.7.1；None=手动笔记/未关联/旧数据）
+    #[serde(default)]
+    pub session_id: Option<i64>,
     /// 创建时间（Unix 秒）
     pub created_at: i64,
     /// 更新时间（Unix 秒）
@@ -110,6 +115,9 @@ pub struct NewNote {
     pub title: String,
     pub content: String,
     pub source: String,
+    /// 来源会话 id（v0.7.1；None=手动笔记；前端 create_note 可不传——serde default）
+    #[serde(default)]
+    pub session_id: Option<i64>,
 }
 
 // ────────────────────────────────────────────────────────────
@@ -246,4 +254,47 @@ pub struct SessionDetail {
     pub ocr_blocks: Vec<SessionOcrBlock>,
     #[serde(default)]
     pub events: Vec<crate::session_events::SessionEvent>,
+}
+
+/// 会话列表条目（v0.7.1 会话体验批次：转化状态标记）。
+///
+/// @ai-context: 包装既有 Session 而非加字段——不动既有契约，隔离风险；
+///              has_note/has_content 为列表筛选与"待转化"判定的数据源。
+/// @ai-context: 前端按 camelCase 消费（与 CourseGroup/SegmentHit 同口径）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionListItem {
+    pub session: Session,
+    /// 已关联笔记（find_note_by_session 非空）
+    pub has_note: bool,
+    /// 最新关联笔记 id
+    pub note_id: Option<i64>,
+    /// 最新关联笔记标题
+    pub note_title: Option<String>,
+    /// 有转写段或 OCR 块（空会话不进入"待转化"）
+    pub has_content: bool,
+}
+
+/// 批量转笔记成功项（v0.7.1）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConvertedNote {
+    pub session_id: i64,
+    pub note_id: i64,
+}
+
+/// 批量转笔记跳过项（v0.7.1：部分成功语义，原因显式回传不静默）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkippedNote {
+    pub session_id: i64,
+    pub reason: String,
+}
+
+/// 批量转笔记结果（v0.7.1：单条失败不阻塞其他）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchNoteResult {
+    pub converted: Vec<ConvertedNote>,
+    pub skipped: Vec<SkippedNote>,
 }

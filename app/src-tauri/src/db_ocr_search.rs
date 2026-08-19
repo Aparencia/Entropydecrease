@@ -38,7 +38,8 @@ pub fn search_ocr_blocks(db: &Db, keyword: &str, limit: usize) -> Result<Vec<Ocr
     }
     let limit = limit.clamp(1, 100);
     let mut hits = Vec::new();
-    for session in db.list_sessions(None, 500, 0)? {
+    for item in db.list_sessions(None, 500, 0)? {
+        let session = &item.session;
         for block in db.list_ocr_blocks(session.id)? {
             if block.region != "full" {
                 continue; // 字幕区不参与图内检索（与段搜索分工）

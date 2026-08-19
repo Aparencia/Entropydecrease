@@ -94,6 +94,8 @@ pub async fn artifact_to_note(
             title: title.chars().take(100).collect(),
             content: markdown.chars().take(200_000).collect(),
             source: "classroom".to_string(),
+            // v0.7.1：产物→笔记同样建立会话关联（列表 has_note 标记口径统一）
+            session_id: Some(session_id),
         })
         .map_err(|e| e.to_string())
 }

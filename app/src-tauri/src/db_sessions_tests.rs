@@ -74,11 +74,11 @@ fn list_sessions_orders_by_started_desc_and_filters_keyword() {
     let by_window = db.list_sessions(Some("网课窗口"), 10, 0).expect("list by window");
     // Assert：同秒创建时按 id 倒序（新会话在前）；关键词/窗口名可命中
     assert_eq!(all.len(), 3);
-    assert_eq!(all[0].id, c.id);
-    assert_eq!(all[1].id, b.id);
-    assert_eq!(all[2].id, a.id);
+    assert_eq!(all[0].session.id, c.id);
+    assert_eq!(all[1].session.id, b.id);
+    assert_eq!(all[2].session.id, a.id);
     assert_eq!(matched.len(), 1);
-    assert_eq!(matched[0].title, "物理课");
+    assert_eq!(matched[0].session.title, "物理课");
     assert_eq!(by_window.len(), 2);
 }
 
@@ -95,7 +95,38 @@ fn list_sessions_paginates() {
     // Assert
     assert_eq!(page1.len(), 2);
     assert_eq!(page2.len(), 2);
-    assert_ne!(page1[0].id, page2[0].id);
+    assert_ne!(page1[0].session.id, page2[0].session.id);
+}
+
+/// v0.7.1：列表标记四象限——有内容无笔记 / 无内容无笔记 / 有内容有笔记 / 无内容有笔记（不可能态防御）。
+#[test]
+fn list_sessions_marks_content_and_note() {
+    // Arrange
+    let db = mem_db();
+    let empty = db.create_session(&new_session("空会话")).unwrap();
+    let with_content = db.create_session(&new_session("有内容")).unwrap();
+    db.add_segment(&segment(with_content.id, 0, 1000, "讲了点东西")).unwrap();
+    let with_note = db.create_session(&new_session("有笔记")).unwrap();
+    db.add_segment(&segment(with_note.id, 0, 1000, "内容")).unwrap();
+    db.create_note(&NewNote {
+        title: "转换笔记".into(),
+        content: "x".into(),
+        source: "classroom".into(),
+        session_id: Some(with_note.id),
+    })
+    .unwrap();
+    // Act
+    let items = db.list_sessions(None, 10, 0).unwrap();
+    let item = |id: i64| items.iter().find(|i| i.session.id == id).unwrap();
+    // Assert：has_content / has_note / note_id / note_title 各象限正确
+    let e = item(empty.id);
+    assert!(!e.has_content && !e.has_note);
+    let c = item(with_content.id);
+    assert!(c.has_content && !c.has_note && c.note_id.is_none());
+    let n = item(with_note.id);
+    assert!(n.has_content && n.has_note);
+    assert_eq!(n.note_id, Some(db.find_note_by_session(with_note.id).unwrap().unwrap().id));
+    assert_eq!(n.note_title.as_deref(), Some("转换笔记"));
 }
 
 #[test]
@@ -196,6 +227,7 @@ fn session_notes_tables_coexist() {
         title: "旧笔记".into(),
         content: "v0.1.0 数据".into(),
         source: "manual".into(),
+        session_id: None,
     });
     // Assert
     assert!(note.is_ok());

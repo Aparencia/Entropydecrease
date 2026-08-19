@@ -169,6 +169,7 @@ pub async fn save_draft_as_note(state: State<'_, AppState>, draft: NoteDraft) ->
         title: normalize_title(draft.title, "未命名笔记"),
         content: truncate_chars(draft.markdown, CONTENT_MAX_CHARS),
         source: "classroom".to_string(),
+        session_id: None,
     };
     state.db.create_note(&new).map_err(|e| e.to_string())
 }
@@ -233,6 +234,7 @@ pub async fn process_to_note(
             title: draft.title.clone(),
             content: draft.markdown.clone(),
             source: "classroom".to_string(),
+            session_id: None,
         })
         .map_err(|e| e.to_string())
     })
@@ -247,6 +249,8 @@ pub async fn create_note(state: State<'_, AppState>, new: NewNote) -> Result<Not
         title: normalize_title(new.title, "未命名笔记"),
         content: truncate_chars(new.content, CONTENT_MAX_CHARS),
         source: if new.source == "classroom" { "classroom" } else { "manual" }.to_string(),
+        // 手动新建笔记无来源会话（session_id 仅由会话→笔记链路写入）
+        session_id: None,
     };
     state.db.create_note(&new).map_err(|e| e.to_string())
 }

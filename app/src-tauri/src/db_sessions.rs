@@ -10,10 +10,11 @@
 use rusqlite::{params};
 
 use crate::db::Db;
-use crate::db_sessions_rows::{row_to_ocr_block, row_to_segment, row_to_session, unix_seconds};
+use crate::db_sessions_rows::{row_to_ocr_block, row_to_segment, row_to_session, row_to_session_list_item, unix_seconds};
 use crate::error::Result;
 use crate::types::{
-    NewSession, NewSessionOcrBlock, NewSessionSegment, Session, SessionOcrBlock, SessionSegment,
+    NewSession, NewSessionOcrBlock, NewSessionSegment, Session, SessionListItem,
+    SessionOcrBlock, SessionSegment,
 };
 
 /// 会话状态常量（与 schema 注释保持一致，禁止魔法字符串散落）。
@@ -52,32 +53,51 @@ impl Db {
         Ok(affected > 0)
     }
 
-    /// 按关键词（标题/窗口名，可空）+ 分页列出会话（新→旧）。
+    /// 按关键词（标题/窗口名，可空）+ 分页列出会话（新→旧），带转化状态标记。
     ///
     /// @ai-context: keyword 经 LIKE ESCAPE 转义防注入（与 search_notes 同口径）；
     ///              占位符用顺序 ? 而非编号 ?1（keyword 缺失时编号会错位）。
-    pub fn list_sessions(&self, keyword: Option<&str>, limit: u64, offset: u64) -> Result<Vec<Session>> {
+    /// @ai-context: v0.7.1：has_content（有段/有 OCR）与最新关联笔记（id/标题）子查询
+    ///              一并取回——列表筛选与"待转化"判定零额外往返；量级 ≤200 条可忽略。
+    pub fn list_sessions(
+        &self,
+        keyword: Option<&str>,
+        limit: u64,
+        offset: u64,
+    ) -> Result<Vec<SessionListItem>> {
         let conn = self.conn.lock().expect("db lock poisoned");
         let mut sql = String::from(
-            "SELECT id, title, source_window, started_at, ended_at, status, profile FROM sessions",
+            "SELECT s.id, s.title, s.source_window, s.started_at, s.ended_at, s.status, s.profile,
+                    (EXISTS(SELECT 1 FROM session_segments ss WHERE ss.session_id = s.id)
+                     OR EXISTS(SELECT 1 FROM session_ocr_blocks so WHERE so.session_id = s.id)) AS has_content,
+                    (SELECT n.id FROM notes n WHERE n.session_id = s.id
+                     ORDER BY n.created_at DESC, n.id DESC LIMIT 1) AS note_id,
+                    (SELECT n.title FROM notes n WHERE n.session_id = s.id
+                     ORDER BY n.created_at DESC, n.id DESC LIMIT 1) AS note_title
+             FROM sessions s",
         );
         let mut args: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         if let Some(kw) = keyword {
             if !kw.trim().is_empty() {
                 let escaped = escape_like(kw);
-                sql.push_str(" WHERE title LIKE ? ESCAPE '\\' OR source_window LIKE ? ESCAPE '\\'");
+                sql.push_str(
+                    " WHERE s.title LIKE ? ESCAPE '\\' OR s.source_window LIKE ? ESCAPE '\\'",
+                );
                 // 同一关键词绑定到两个 LIKE 占位符（各一次）
                 let pattern = format!("%{}%", escaped);
                 args.push(Box::new(pattern.clone()));
                 args.push(Box::new(pattern));
             }
         }
-        sql.push_str(" ORDER BY started_at DESC, id DESC LIMIT ? OFFSET ?");
+        sql.push_str(" ORDER BY s.started_at DESC, s.id DESC LIMIT ? OFFSET ?");
         args.push(Box::new(limit));
         args.push(Box::new(offset));
 
         let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt.query_map(rusqlite::params_from_iter(args.iter().map(|b| b.as_ref())), row_to_session)?;
+        let rows = stmt.query_map(
+            rusqlite::params_from_iter(args.iter().map(|b| b.as_ref())),
+            row_to_session_list_item,
+        )?;
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
     }
 

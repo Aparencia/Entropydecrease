@@ -133,6 +133,17 @@ impl Db {
             "speaker",
             "ALTER TABLE session_segments ADD COLUMN speaker TEXT",
         )?;
+        // v0.7.1（会话体验批次）：notes 表补 session_id 列——会话↔笔记关联
+        // （删除会话 ON DELETE SET NULL：笔记是用户资产，只断关联不删笔记；
+        //   旧数据 NULL=未关联，不猜不填——历史 classroom 笔记无法追溯归属）
+        ensure_column(
+            &conn,
+            "notes",
+            "session_id",
+            "ALTER TABLE notes ADD COLUMN session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL",
+        )?;
+        // 关联查询索引（列表 has_note 子查询 + 笔记页来源跳转共用）
+        conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_notes_session ON notes(session_id)")?;
         Ok(Self { conn: Arc::new(Mutex::new(conn)) })
     }
 
@@ -141,8 +152,8 @@ impl Db {
         let now = unix_seconds();
         let conn = self.conn.lock().expect("db lock poisoned");
         conn.execute(
-            "INSERT INTO notes (title, content, source, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)",
-            params![new.title, new.content, new.source, now],
+            "INSERT INTO notes (title, content, source, session_id, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+            params![new.title, new.content, new.source, new.session_id, now],
         )?;
         let id = conn.last_insert_rowid();
         Ok(Note {
@@ -150,6 +161,7 @@ impl Db {
             title: new.title.clone(),
             content: new.content.clone(),
             source: new.source.clone(),
+            session_id: new.session_id,
             created_at: now,
             updated_at: now,
         })
@@ -158,7 +170,7 @@ impl Db {
     /// 按 id 读取单条笔记；不存在返回 None。
     pub fn get_note(&self, id: i64) -> Result<Option<Note>> {
         let conn = self.conn.lock().expect("db lock poisoned");
-        let mut stmt = conn.prepare("SELECT id, title, content, source, created_at, updated_at FROM notes WHERE id = ?1")?;
+        let mut stmt = conn.prepare("SELECT id, title, content, source, session_id, created_at, updated_at FROM notes WHERE id = ?1")?;
         let mut rows = stmt.query_map(params![id], row_to_note)?;
         match rows.next() {
             Some(Ok(note)) => Ok(Some(note)),
@@ -171,7 +183,7 @@ impl Db {
     pub fn list_notes(&self) -> Result<Vec<Note>> {
         let conn = self.conn.lock().expect("db lock poisoned");
         let mut stmt = conn.prepare(
-            "SELECT id, title, content, source, created_at, updated_at FROM notes ORDER BY updated_at DESC",
+            "SELECT id, title, content, source, session_id, created_at, updated_at FROM notes ORDER BY updated_at DESC",
         )?;
         let rows = stmt.query_map([], row_to_note)?;
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
@@ -203,12 +215,30 @@ impl Db {
         let escaped = escape_like(keyword);
         let pattern = format!("%{}%", escaped);
         let mut stmt = conn.prepare(
-            "SELECT id, title, content, source, created_at, updated_at FROM notes
+            "SELECT id, title, content, source, session_id, created_at, updated_at FROM notes
              WHERE title LIKE ?1 ESCAPE '\\' OR content LIKE ?1 ESCAPE '\\'
              ORDER BY updated_at DESC",
         )?;
         let rows = stmt.query_map(params![pattern], row_to_note)?;
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+    }
+
+    /// 按会话取最新关联笔记（v0.7.1：列表 has_note 标记与"查看笔记"跳转的数据源）。
+    ///
+    /// @ai-context: 一个会话可多次转换（详情页有意重新生成）——取 created_at 最新；
+    ///              同秒冲突按 id 倒序兜底（id 单调递增，后者更新）。
+    pub fn find_note_by_session(&self, session_id: i64) -> Result<Option<Note>> {
+        let conn = self.conn.lock().expect("db lock poisoned");
+        let mut stmt = conn.prepare(
+            "SELECT id, title, content, source, session_id, created_at, updated_at FROM notes
+             WHERE session_id = ?1 ORDER BY created_at DESC, id DESC LIMIT 1",
+        )?;
+        let mut rows = stmt.query_map(params![session_id], row_to_note)?;
+        match rows.next() {
+            Some(Ok(note)) => Ok(Some(note)),
+            Some(Err(e)) => Err(e.into()),
+            None => Ok(None),
+        }
     }
 }
 
@@ -219,8 +249,9 @@ fn row_to_note(row: &rusqlite::Row<'_>) -> rusqlite::Result<Note> {
         title: row.get(1)?,
         content: row.get(2)?,
         source: row.get(3)?,
-        created_at: row.get(4)?,
-        updated_at: row.get(5)?,
+        session_id: row.get(4)?,
+        created_at: row.get(5)?,
+        updated_at: row.get(6)?,
     })
 }
 
@@ -267,7 +298,7 @@ mod tests {
     fn create_and_get_note_roundtrip() {
         // Arrange
         let db = mem_db();
-        let new = NewNote { title: "物理".into(), content: "# 牛顿\nF=ma".into(), source: "manual".into() };
+        let new = NewNote { title: "物理".into(), content: "# 牛顿\nF=ma".into(), source: "manual".into(), session_id: None };
         // Act
         let created = db.create_note(&new).expect("create");
         let fetched = db.get_note(created.id).expect("get").expect("exists");
@@ -281,8 +312,8 @@ mod tests {
     fn list_orders_by_updated_desc() {
         // Arrange
         let db = mem_db();
-        db.create_note(&NewNote { title: "A".into(), content: "a".into(), source: "manual".into() }).unwrap();
-        db.create_note(&NewNote { title: "B".into(), content: "b".into(), source: "manual".into() }).unwrap();
+        db.create_note(&NewNote { title: "A".into(), content: "a".into(), source: "manual".into(), session_id: None }).unwrap();
+        db.create_note(&NewNote { title: "B".into(), content: "b".into(), source: "manual".into(), session_id: None }).unwrap();
         // Act
         let notes = db.list_notes().expect("list");
         // Assert
@@ -293,7 +324,7 @@ mod tests {
     fn update_note_changes_content() {
         // Arrange
         let db = mem_db();
-        let created = db.create_note(&NewNote { title: "旧".into(), content: "旧内容".into(), source: "manual".into() }).unwrap();
+        let created = db.create_note(&NewNote { title: "旧".into(), content: "旧内容".into(), source: "manual".into(), session_id: None }).unwrap();
         // Act
         let ok = db.update_note(created.id, "新标题", "新内容").expect("update");
         let fetched = db.get_note(created.id).unwrap().unwrap();
@@ -307,7 +338,7 @@ mod tests {
     fn delete_note_removes_row() {
         // Arrange
         let db = mem_db();
-        let created = db.create_note(&NewNote { title: "待删".into(), content: "x".into(), source: "manual".into() }).unwrap();
+        let created = db.create_note(&NewNote { title: "待删".into(), content: "x".into(), source: "manual".into(), session_id: None }).unwrap();
         // Act
         let ok = db.delete_note(created.id).expect("delete");
         let fetched = db.get_note(created.id).expect("get");
@@ -320,8 +351,8 @@ mod tests {
     fn search_matches_title_and_content() {
         // Arrange
         let db = mem_db();
-        db.create_note(&NewNote { title: "化学课".into(), content: "讲分子".into(), source: "classroom".into() }).unwrap();
-        db.create_note(&NewNote { title: "随笔".into(), content: "含熵减概念".into(), source: "manual".into() }).unwrap();
+        db.create_note(&NewNote { title: "化学课".into(), content: "讲分子".into(), source: "classroom".into(), session_id: None }).unwrap();
+        db.create_note(&NewNote { title: "随笔".into(), content: "含熵减概念".into(), source: "manual".into(), session_id: None }).unwrap();
         // Act
         let by_title = db.search_notes("化学").expect("search");
         let by_content = db.search_notes("熵减").expect("search");
@@ -335,11 +366,106 @@ mod tests {
     fn search_escapes_wildcards() {
         // Arrange：用户输入含 % 应作为字面量
         let db = mem_db();
-        db.create_note(&NewNote { title: "50%off".into(), content: "促销".into(), source: "manual".into() }).unwrap();
-        db.create_note(&NewNote { title: "normal".into(), content: "普通".into(), source: "manual".into() }).unwrap();
+        db.create_note(&NewNote { title: "50%off".into(), content: "促销".into(), source: "manual".into(), session_id: None }).unwrap();
+        db.create_note(&NewNote { title: "normal".into(), content: "普通".into(), source: "manual".into(), session_id: None }).unwrap();
         // Act：搜索字面 "%"
         let result = db.search_notes("%off").expect("search");
         // Assert：只命中含字面 %off 的，不应命中所有
         assert_eq!(result.len(), 1);
+    }
+
+    // ── v0.7.1 会话↔笔记关联（迁移 / SET NULL / find_note_by_session）──
+
+    /// 旧库（无 session_id 列）打开后列补齐，旧笔记 session_id=NULL（诚实不猜）。
+    #[test]
+    fn migration_adds_session_id_to_notes() {
+        // Arrange：手工造旧 schema 库（notes 无 session_id 列，含一条旧数据）
+        let path = std::env::temp_dir().join(format!("entropy_mig_notes_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        {
+            let conn = rusqlite::Connection::open(&path).expect("open old db");
+            conn.execute_batch(
+                "CREATE TABLE notes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    source TEXT NOT NULL DEFAULT 'manual',
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                INSERT INTO notes (title, content, source, created_at, updated_at)
+                    VALUES ('旧笔记', 'v0.6.0 数据', 'classroom', 1, 1);",
+            )
+            .expect("create old schema");
+        }
+        // Act：以新代码打开旧库（触发 ensure_column 迁移）
+        let db = Db::open(path.to_str().unwrap()).expect("open migrated db");
+        let old = db.list_notes().expect("list").pop().expect("old note");
+        // Assert：列补齐、旧数据读回、session_id 诚实为 None
+        assert_eq!(old.title, "旧笔记");
+        assert_eq!(old.session_id, None);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// 删除会话 → 笔记保留、关联断开（ON DELETE SET NULL 生效）。
+    #[test]
+    fn delete_session_keeps_note_and_breaks_link() {
+        // Arrange
+        let db = mem_db();
+        let session = db.create_session(&crate::types::NewSession {
+            title: "待删会话".into(),
+            source_window: None,
+            profile: None,
+        }).expect("create session");
+        let note = db.create_note(&NewNote {
+            title: "关联笔记".into(),
+            content: "内容".into(),
+            source: "classroom".into(),
+            session_id: Some(session.id),
+        }).expect("create note");
+        // Act：删除会话
+        let deleted = db.delete_session(session.id).expect("delete session");
+        let fetched = db.get_note(note.id).expect("get note").expect("note kept");
+        // Assert：会话删除成功、笔记仍在、关联已断开
+        assert!(deleted);
+        assert_eq!(fetched.session_id, None);
+        assert!(db.get_session(session.id).unwrap().is_none());
+    }
+
+    /// find_note_by_session：无关联 / 单条 / 多次转换取最新。
+    #[test]
+    fn find_note_by_session_picks_latest() {
+        // Arrange：两条会话笔记（先旧后新）+ 一条手动笔记
+        let db = mem_db();
+        let session = db.create_session(&crate::types::NewSession {
+            title: "会话".into(),
+            source_window: None,
+            profile: None,
+        }).expect("create session");
+        let older = db.create_note(&NewNote {
+            title: "第一版".into(),
+            content: "v1".into(),
+            source: "classroom".into(),
+            session_id: Some(session.id),
+        }).expect("create older");
+        let newer = db.create_note(&NewNote {
+            title: "第二版".into(),
+            content: "v2".into(),
+            source: "classroom".into(),
+            session_id: Some(session.id),
+        }).expect("create newer");
+        db.create_note(&NewNote {
+            title: "手动".into(),
+            content: "m".into(),
+            source: "manual".into(),
+            session_id: None,
+        }).expect("create manual");
+        // Act
+        let found = db.find_note_by_session(session.id).expect("find");
+        let none = db.find_note_by_session(999).expect("find none");
+        // Assert：取最新（第二版）；无关会话返回 None；手动笔记不干扰
+        assert_eq!(found.as_ref().unwrap().id, newer.id);
+        assert_ne!(found.as_ref().unwrap().id, older.id);
+        assert!(none.is_none());
     }
 }

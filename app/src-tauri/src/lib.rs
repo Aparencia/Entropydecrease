@@ -482,6 +482,8 @@ pub fn run() {
             commands_session::add_session_segment,
             commands_session::add_session_ocr_block,
             commands_session::session_to_note,
+            // 批量转笔记（v0.7.1 会话体验：列表勾选批量转化）
+            commands_session::batch_session_to_note,
             // 笔记预览（REQ-081，v0.6.0 M1：过滤后只读预览——单一管线双出口）
             commands_session::preview_session_note,
             // 会话体验（REQ-076/077/078/079，v0.6.0 M6：质量报告/大纲/课程分组/段搜索）
