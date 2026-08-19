@@ -57,7 +57,6 @@ pub struct CleanupSummary {
 
 /// 会话音频写入器（有状态：目标文件 + 已写样本数）。
 pub struct SessionAudioWriter {
-    path: PathBuf,
     file: Option<std::fs::File>,
     samples_written: u64,
 }
@@ -77,7 +76,7 @@ impl SessionAudioWriter {
         if write_header(&mut file, 0).is_err() {
             return None;
         }
-        Some(Self { path, file: Some(file), samples_written: 0 })
+        Some(Self { file: Some(file), samples_written: 0 })
     }
 
     /// 追加一块样本（f32 → PCM16；失败静默降级——落盘不阻断主链路）。
@@ -108,11 +107,6 @@ impl SessionAudioWriter {
         let _ = file.seek(std::io::SeekFrom::Start(40));
         let _ = file.write_all(&(data_len as u32).to_le_bytes());
         let _ = file.sync_all();
-    }
-
-    /// 会话音频文件路径（供状态命令/元数据；None=未启用/创建失败）。
-    pub fn path(&self) -> Option<&Path> {
-        self.file.is_some().then_some(self.path.as_path())
     }
 }
 

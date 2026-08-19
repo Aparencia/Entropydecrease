@@ -12,7 +12,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { NoteFilterResult, TextFilterReview, TextFilterStatus } from "../types";
+import type { NoteFilterResult, TextFilterDecision, TextFilterReview, TextFilterStatus } from "../types";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 
@@ -24,16 +24,29 @@ const REASON_LABEL: Record<string, string> = {
   "ai-delete": "AI 判删",
 };
 
-/** 轻量 Markdown 渲染（标题/段落/列表——笔记正文结构有限，避免引渲染库） */
+/** HTML 转义（审查修复 2026-08-19：OCR/ASR 文本来自视频字幕，恶意字幕可含
+ *  `<script>`/`<img onerror>` 等 HTML——dangerouslySetInnerHTML 渲染前必须
+ *  转义，防存储型 XSS） */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** 轻量 Markdown 渲染（标题/段落/列表——笔记正文结构有限，避免引渲染库；
+ *  所有文本经 escapeHtml 转义——本地内容仍按不可信输入处理） */
 function renderMarkdown(md: string): string {
   return md
     .split("\n")
     .map((line) => {
-      if (line.startsWith("# ")) return `<h2 style="font-size:15px;margin:10px 0 4px">${line.slice(2)}</h2>`;
-      if (line.startsWith("## ")) return `<h3 style="font-size:13px;margin:8px 0 4px;color:#0f766e">${line.slice(3)}</h3>`;
-      if (line.startsWith("- ")) return `<div style="font-size:12px;color:#4b5563">• ${line.slice(2)}</div>`;
+      if (line.startsWith("# ")) return `<h2 style="font-size:15px;margin:10px 0 4px">${escapeHtml(line.slice(2))}</h2>`;
+      if (line.startsWith("## ")) return `<h3 style="font-size:13px;margin:8px 0 4px;color:#0f766e">${escapeHtml(line.slice(3))}</h3>`;
+      if (line.startsWith("- ")) return `<div style="font-size:12px;color:#4b5563">• ${escapeHtml(line.slice(2))}</div>`;
       if (line.trim() === "") return "";
-      return `<p style="font-size:13px;color:#374151;margin:4px 0">${line}</p>`;
+      return `<p style="font-size:13px;color:#374151;margin:4px 0">${escapeHtml(line)}</p>`;
     })
     .join("");
 }
@@ -45,6 +58,8 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiMeta, setAiMeta] = useState<TextFilterReview["ai"] | null>(null);
   const [aiStatus, setAiStatus] = useState<TextFilterStatus | null>(null);
+  // 审查修复（2026-08-19）：AI 判定列表——落库回传保证预览/落库一致
+  const [aiDecisions, setAiDecisions] = useState<TextFilterDecision[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -60,12 +75,12 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
     void invoke<TextFilterStatus>("text_filter_status").then(setAiStatus).catch(() => undefined);
   }, [load]);
 
-  /** 一键落库（复用 session_to_note；AI 判定结果回传保持预览一致） */
+  /** 一键落库（复用 session_to_note；AI 判定结果回传保持预览一致——REQ-081） */
   const saveToNote = async () => {
     try {
       const note = await invoke<{ id: number }>("session_to_note", {
         id: sessionId,
-        aiDecisions: null,
+        aiDecisions: aiDecisions.length > 0 ? aiDecisions : null,
       });
       setStatus(`已转为笔记 #${note.id}`);
     } catch (e) {
@@ -94,6 +109,7 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
       });
       setPreview(review.result);
       setAiMeta(review.ai);
+      setAiDecisions(review.decisions);
       const meta = review.ai;
       setStatus(
         meta.error

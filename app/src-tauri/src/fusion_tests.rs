@@ -307,9 +307,11 @@ fn probability_weighted_matches_hard_rule_without_confidence() {
     let asrs = [asr(500, 3500, "完全不同的说法")];
     // Act
     let out = merge_transcript(&subs, &asrs, GAP);
-    // Assert：与 v0.5.0 行为一致（mismatched_overlap_keeps_asr_for_review 同场景）
+    // Assert：与 v0.5.0 行为一致（mismatched_overlap_keeps_asr_for_review 同场景）；
+    // 审查修复：核对段置信度 None（未知≠低置信——防 note_filter 误删）
     assert_eq!(out.len(), 2);
     assert_eq!(out[1].source, FusedSource::Fused);
+    assert_eq!(out[1].confidence, None, "无显式置信度不得标记 0.5");
 }
 
 #[test]

@@ -137,10 +137,12 @@ pub fn merge_transcript_with(
             // 重叠校对：REQ-062 概率加权决策
             if cursor < end && cursor < sub.end_ms {
                 let overlap_end = sub.end_ms.min(end);
-                let decision = decide_overlap(sub, asr, text, config);
-                if let Some(conf) = decision {
-                    // 保留核对段（低置信标记 / ASR 更可信）
-                    windows.push((cursor, overlap_end, FusedSource::Fused, Some(conf)));
+                match decide_overlap(sub, asr, text, config) {
+                    OverlapDecision::SubtitleWins => {}
+                    // 保留核对段（低置信标记 / ASR 更可信 / 硬规则兜底）
+                    OverlapDecision::KeepReview(conf) => {
+                        windows.push((cursor, overlap_end, FusedSource::Fused, conf));
+                    }
                 }
                 cursor = overlap_end;
             }
@@ -158,18 +160,27 @@ pub fn merge_transcript_with(
     result
 }
 
-/// 重叠校对决策（纯函数）：返回保留核对段时的置信度（None=字幕胜出/丢弃 ASR）。
+/// 重叠校对决策。
+enum OverlapDecision {
+    /// 字幕胜出（丢弃 ASR 重叠）
+    SubtitleWins,
+    /// 保留核对段（置信度：Some=标记 / None=未知——不触发低置信过滤）
+    KeepReview(Option<f32>),
+}
+
+/// 重叠校对决策（纯函数）：返回保留核对段时的置信度（SubtitleWins=丢弃 ASR）。
 ///
-/// @ai-context: 决策链：① sim ≥ 阈值（≈旧 ≤2 规则）→ 字幕胜（None）；
+/// @ai-context: 决策链：① sim ≥ 阈值（≈旧 ≤2 规则）→ 字幕胜；
 ///              ② 双源显式置信度且加权开启——双低 → 低置信核对段；
 ///              P(字幕) ≥ P(ASR) → 字幕胜；否则 ASR 核对段（confidence=ASR 置信度）；
-///              ③ 置信度缺失 → 旧硬规则兜底（距离>2 → 核对段，confidence=None）。
+///              ③ 置信度缺失 → 旧硬规则兜底（距离>2 → 核对段，confidence=None——
+///              审查修复：未知≠低置信，防 note_filter 低置信规则误删核对段）。
 fn decide_overlap(
     sub: &SubtitleSegment,
     asr_seg: &TranscriptSegment,
     asr_text: &str,
     config: &FusionConfig,
-) -> Option<f32> {
+) -> OverlapDecision {
     let sub_text = sub.text.trim();
     let distance = levenshtein(asr_text, sub_text);
     let max_len = asr_text.chars().count().max(sub_text.chars().count());
@@ -180,7 +191,7 @@ fn decide_overlap(
     };
     // ① 高相似（≈编辑距离 ≤2 旧规则）：字幕权威胜出
     if sim >= SIM_MATCH_THRESHOLD {
-        return None;
+        return OverlapDecision::SubtitleWins;
     }
     // ② 概率加权（双源显式置信度）
     if config.probability_weighted {
@@ -189,22 +200,22 @@ fn decide_overlap(
             let conf_a = conf_a.clamp(0.0, 1.0);
             // 双源低置信 → 低置信核对段（B3 标记，人工可复核）
             if conf_s < LOW_CONFIDENCE && conf_a < LOW_CONFIDENCE {
-                return Some(conf_s.min(conf_a));
+                return OverlapDecision::KeepReview(Some(conf_s.min(conf_a)));
             }
             // 概率比较：字幕权威性随相似度增强；ASR 需高相似度支撑
             let p_sub = conf_s * (0.6 + 0.4 * sim);
             let p_asr = conf_a * (0.4 + 0.6 * sim);
             if p_sub >= p_asr {
-                return None; // 字幕胜出
+                return OverlapDecision::SubtitleWins; // 字幕胜出
             }
-            return Some(conf_a); // ASR 更可信 → 保留核对段
+            return OverlapDecision::KeepReview(Some(conf_a)); // ASR 更可信 → 保留核对段
         }
     }
-    // ③ 兜底：旧硬规则（距离>2 → 保留核对段）
+    // ③ 兜底：旧硬规则（距离>2 → 保留核对段，置信度原样透传——None=未知）
     if distance > 2 {
-        Some(asr_seg.confidence.unwrap_or(0.5))
+        OverlapDecision::KeepReview(asr_seg.confidence)
     } else {
-        None
+        OverlapDecision::SubtitleWins
     }
 }
 

@@ -412,10 +412,20 @@ export interface AiReviewMeta {
   model: string;
 }
 
-/** AI 复核结果（Rust TextFilterReview；camelCase 契约） */
+/** AI 三态判定（Rust TextFilterDecision；REQ-085，kebab-case action） */
+export interface TextFilterDecision {
+  segment_id: number;
+  action: "keep" | "delete" | "merge";
+  confidence: number;
+  reason: string;
+  merge_with: string | null;
+}
+
+/** AI 复核结果（Rust TextFilterReview；camelCase 契约——decisions 供落库回传） */
 export interface TextFilterReview {
   result: NoteFilterResult;
   ai: AiReviewMeta;
+  decisions: TextFilterDecision[];
 }
 
 /** 文本复核状态（Rust TextFilterStatus；camelCase 契约） */

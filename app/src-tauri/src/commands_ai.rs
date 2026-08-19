@@ -16,7 +16,8 @@ use crate::ai_guardrails::AiAuditEntry;
 use crate::ai_judge::{judge_candidates, to_request, AiCandidate, AiJudgeConfig};
 use crate::ai_mock::AiMockAdapter;
 use crate::ai_protocol::{
-    AiEnhanceResponse, TextFilterRequest, TextFilterResponse, TextFilterSegment,
+    AiEnhanceResponse, TextFilterDecision, TextFilterRequest, TextFilterResponse,
+    TextFilterSegment,
 };
 use crate::ai_text_filter::{AiTextFilterAdapter, AiTextFilterConfig};
 use crate::commands::AppState;
@@ -142,12 +143,17 @@ pub struct AiReviewMeta {
     pub model: String,
 }
 
-/// 复核结果（过滤结果 + AI 元信息）。
+/// 复核结果（过滤结果 + AI 元信息 + 判定列表）。
+///
+/// @ai-context: decisions（审查修复 2026-08-19）：AI 三态判定列表——前端
+///              落库时回传（session_to_note 的 ai_decisions），保证预览与
+///              落库输出一致（REQ-081"一键落库与转笔记输出一致"）。
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextFilterReview {
     pub result: NoteFilterResult,
     pub ai: AiReviewMeta,
+    pub decisions: Vec<TextFilterDecision>,
 }
 
 /// 文本复核状态（前端按钮/徽标用）。
@@ -213,13 +219,15 @@ pub async fn review_text_filter(
         };
         // ③ 门控：全局开关 + 用户授权 + 有候选（三者缺一 → 纯规则输出）
         if !cfg.enabled || !authorized || boundary.is_empty() {
-            return Ok(TextFilterReview { result, ai: meta });
+            return Ok(TextFilterReview { result, ai: meta, decisions: Vec::new() });
         }
         let adapter = AiTextFilterAdapter::new(cfg.clone());
         let mock_adapter = AiMockAdapter;
         let mut quota_hit = false;
         let mut error: Option<String> = None;
         let mut sent = 0usize;
+        // 全量判定收集（落库回传用——预览/落库一致性）
+        let mut decisions_all: Vec<TextFilterDecision> = Vec::new();
         // ④ 分批送审（批量上限 30 段/请求）
         for chunk in boundary.chunks(cfg.batch_size) {
             if quota_hit || error.is_some() {
@@ -264,6 +272,7 @@ pub async fn review_text_filter(
             if let Some(raw) = cached {
                 match serde_json::from_str::<TextFilterResponse>(&raw) {
                     Ok(resp) if resp.validate(&ids).is_ok() => {
+                        decisions_all.extend(resp.decisions.clone());
                         result = apply_ai_decisions(result, &resp.decisions);
                         continue;
                     }
@@ -313,12 +322,13 @@ pub async fn review_text_filter(
                 });
             }
             sent += chunk.len();
+            decisions_all.extend(response.decisions.clone());
             result = apply_ai_decisions(result, &response.decisions);
         }
         meta.sent = sent;
         meta.quota_hit = quota_hit;
         meta.error = error;
-        Ok(TextFilterReview { result, ai: meta })
+        Ok(TextFilterReview { result, ai: meta, decisions: decisions_all })
     })
     .await
     .map_err(|e| format!("任务调度失败: {}", e))?

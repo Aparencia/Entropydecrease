@@ -24,10 +24,15 @@ pub struct SessionImageStore {
     session_dir: PathBuf,
     /// 已存图片数（预算检查）
     saved: usize,
-    /// REQ-067（v0.6.0 M3）：最近保存帧双指纹 + 相对路径——
-    /// 图片去重与帧聚类共用 same_image（双稳定才判同图）
-    last_fingerprint: Option<(u64, u64, String)>,
+    /// REQ-067（v0.6.0 M3）：最近保存帧双指纹 + 相对路径（去重缓冲）——
+    /// 图片去重与帧聚类共用 same_image；审查修复（2026-08-19）：
+    /// 单张指纹在 PPT 往返（A→B→A）场景失效（B 覆盖指纹后 A 再存）——
+    /// 改最近 8 张 FIFO（往返窗口内去重），仍不占预算
+    recent_fingerprints: std::collections::VecDeque<(u64, u64, String)>,
 }
+
+/// 去重指纹缓冲容量（往返窗口：PPT 翻页往返通常 ≤8 帧）。
+const DEDUPE_BUFFER: usize = 8;
 
 impl SessionImageStore {
     /// 创建会话图片库（目录不存在则创建）。
@@ -40,7 +45,7 @@ impl SessionImageStore {
         std::fs::create_dir_all(session_dir.join("thumb"))?;
         std::fs::create_dir_all(session_dir.join("crop"))?;
         let saved = count_webp(&session_dir.join("full")) + count_webp(&session_dir.join("crop"));
-        Ok(Self { session_dir, saved, last_fingerprint: None })
+        Ok(Self { session_dir, saved, recent_fingerprints: std::collections::VecDeque::new() })
     }
 
     /// 剩余预算（0 = 已达上限；full/thumb 与 crop 共用预算，防总盘占用失控）。
@@ -106,10 +111,10 @@ impl SessionImageStore {
     ) -> Result<String> {
         let rgb = bgra_to_rgb(bgraw, width, height)
             .ok_or_else(|| crate::error::AppError::Io("帧数据无效".to_string()))?;
-        // 双指纹去重（先于预算检查——重复帧不消耗预算）
+        // 双指纹去重（先于预算检查——重复帧不消耗预算；FIFO 缓冲覆盖往返窗口）
         let ah = crate::ocr_cache::average_hash(&rgb);
         let dh = crate::ocr_cache::difference_hash(&rgb);
-        if let Some((la, ld, path)) = &self.last_fingerprint {
+        for (la, ld, path) in &self.recent_fingerprints {
             if crate::frame_cluster::same_image(*la, *ld, ah, dh, 6, 8) {
                 return Ok(path.clone());
             }
@@ -130,7 +135,10 @@ impl SessionImageStore {
             encode_webp(&thumb, &thumb_path)?;
         }
         self.saved += 1;
-        self.last_fingerprint = Some((ah, dh, format!("full/{}", name)));
+        self.recent_fingerprints.push_back((ah, dh, format!("full/{}", name)));
+        if self.recent_fingerprints.len() > DEDUPE_BUFFER {
+            self.recent_fingerprints.pop_front();
+        }
         Ok(format!("full/{}", name))
     }
 

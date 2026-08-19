@@ -340,6 +340,10 @@ pub async fn search_session_segments(
 }
 
 /// 片段上下文（纯函数）：命中位置前后各 12 字符（省略号标注截断）。
+///
+/// @ai-context: 审查修复（2026-08-19）：`text[..pos]` 直接字节切片在
+///              to_lowercase 长度变化字符（如 U+0130）下可能落在字符中间
+///              panic——改用 get(..pos)（非边界时回退整串，不 panic）。
 fn snippet_around(text: &str, kw_lower: &str) -> String {
     const WINDOW: usize = 12;
     let lower = text.to_lowercase();
@@ -347,7 +351,7 @@ fn snippet_around(text: &str, kw_lower: &str) -> String {
         return text.chars().take(2 * WINDOW + kw_lower.chars().count()).collect();
     };
     let chars: Vec<char> = text.chars().collect();
-    let byte_pos = text[..pos].chars().count(); // 命中起点（字符序）
+    let byte_pos = text.get(..pos).map(|p| p.chars().count()).unwrap_or(0); // 命中起点（字符序）
     let start = byte_pos.saturating_sub(WINDOW);
     let end = (byte_pos + kw_lower.chars().count() + WINDOW).min(chars.len());
     let mut snippet: String = chars[start..end].iter().collect();
