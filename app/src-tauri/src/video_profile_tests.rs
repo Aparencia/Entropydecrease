@@ -24,20 +24,22 @@ fn profile_json_roundtrip_preserves_all_fields() {
 }
 
 #[test]
-fn builtin_has_five_profiles_with_distinct_kinds() {
+fn builtin_has_all_profiles_with_distinct_kinds() {
     // Arrange/Act
     let profiles = builtin_profiles();
-    // Assert：五档案、标识互异、默认值健全
-    assert_eq!(profiles.len(), 5);
+    // Assert：十二档案（五基线 + v0.7.0 七新档案）、标识互异、默认值健全
+    assert_eq!(profiles.len(), 12);
     let mut kinds: Vec<ProfileKind> = profiles.iter().map(|p| p.kind).collect();
     kinds.sort_by_key(|k| format!("{:?}", k));
     kinds.dedup();
-    assert_eq!(kinds.len(), 5, "五档案标识必须互异");
+    assert_eq!(kinds.len(), 12, "十二档案标识必须互异");
     for p in &profiles {
         assert!(p.sampling_budget.subtitle_every >= 1, "{:?} 字幕区间隔 >=1", p.kind);
         assert!(p.sampling_budget.full_every >= 1, "{:?} 全帧间隔 >=1", p.kind);
         assert!((0.0..=1.0).contains(&p.signal_weights.ocr_weight));
         assert!((0.0..=1.0).contains(&p.signal_weights.asr_weight));
+        // REQ-130：disable_ocr/disable_asr 必须显式声明（serde 缺省 false 仅兼容旧 JSON）
+        assert!(!p.disable_asr, "{:?} 本版无档案声明禁用 ASR", p.kind);
     }
 }
 
@@ -52,17 +54,29 @@ fn profile_by_kind_returns_matching_and_defaults() {
 
 #[test]
 fn profile_kind_parse_and_label() {
-    // Act：前端 kebab-case 解析
+    // Act：前端 kebab-case 解析（五基线 + v0.7.0 七新档案）
     assert_eq!(ProfileKind::parse("hands-on"), ProfileKind::HandsOn);
     assert_eq!(ProfileKind::parse("talking-head"), ProfileKind::TalkingHead);
     assert_eq!(ProfileKind::parse("interview"), ProfileKind::Interview);
     assert_eq!(ProfileKind::parse("meeting"), ProfileKind::Meeting);
+    assert_eq!(ProfileKind::parse("podcast"), ProfileKind::Podcast);
+    assert_eq!(ProfileKind::parse("live"), ProfileKind::Live);
+    assert_eq!(ProfileKind::parse("whiteboard"), ProfileKind::Whiteboard);
+    assert_eq!(ProfileKind::parse("game-tutorial"), ProfileKind::GameTutorial);
+    assert_eq!(ProfileKind::parse("exercise"), ProfileKind::Exercise);
+    assert_eq!(ProfileKind::parse("follow-along"), ProfileKind::FollowAlong);
+    assert_eq!(ProfileKind::parse("coding"), ProfileKind::Coding);
     // Assert：非法值回退 Lecture（默认档案不阻断）
     assert_eq!(ProfileKind::parse("unknown"), ProfileKind::Lecture);
     assert_eq!(ProfileKind::parse(""), ProfileKind::Lecture);
-    // 展示名非空
-    for k in [ProfileKind::Lecture, ProfileKind::HandsOn, ProfileKind::TalkingHead, ProfileKind::Interview, ProfileKind::Meeting] {
-        assert!(!k.label().is_empty());
+    // 展示名非空（全部十二档案）
+    for k in [
+        ProfileKind::Lecture, ProfileKind::HandsOn, ProfileKind::TalkingHead,
+        ProfileKind::Interview, ProfileKind::Meeting, ProfileKind::Podcast,
+        ProfileKind::Live, ProfileKind::Whiteboard, ProfileKind::GameTutorial,
+        ProfileKind::Exercise, ProfileKind::FollowAlong, ProfileKind::Coding,
+    ] {
+        assert!(!k.label().is_empty(), "{:?} 展示名非空", k);
     }
 }
 
@@ -125,11 +139,13 @@ fn detect_no_signal_returns_default_lecture_needs_confirmation() {
 
 #[test]
 fn detect_strong_signal_no_confirmation_needed() {
-    // Arrange：网课标题 2 个关键词命中（"课程"+"教程"=4 分）> 阈值
-    let s = ObservedSignals { title: Some("Python 教程课程".into()), ..signals() };
+    // Arrange：网课标题 3 个关键词命中（"课程"+"网课"+"教学"=6 分）> 阈值
+    // 注：v0.7.0 新增编程档案后 "Python 教程课程" 与 Coding 冲突（Python+教程）
+    //     是真实歧义（编程课 vs 网课）——此处改用无歧义强网课信号
+    let s = ObservedSignals { title: Some("高等数学 微积分课程 网课教学".into()), ..signals() };
     // Act
     let result = vote_detect(&s);
-    // Assert：高分不打扰用户（静默生效可改）
+    // Assert：高分且无冲突不打扰用户（静默生效可改）
     assert_eq!(result.candidates[0].kind, ProfileKind::Lecture);
     assert!(!result.needs_confirmation);
 }
@@ -276,4 +292,82 @@ fn artifact_template_maps_to_profile() {
     assert_eq!(hands.artifact_template, ArtifactTemplate::StepCards);
     assert_eq!(meeting.artifact_template, ArtifactTemplate::MeetingNotes);
     assert_eq!(talking.artifact_template, ArtifactTemplate::Summary);
+}
+
+// ── v0.7.0 M2：七新档案注册断言 ──
+
+#[test]
+fn podcast_profile_is_asr_only() {
+    // Arrange/Act：播客/有声书档案（REQ-122 T8）
+    let p = profile_by_kind(ProfileKind::Podcast);
+    // Assert：ASR-only 快速路径——全帧几乎不采样、OCR 权重 0、ASR 全投
+    assert!(p.detect_signals.title_keywords.iter().any(|k| k == "播客"), "关键词含播客");
+    assert!(p.detect_signals.title_keywords.iter().any(|k| k == "有声书"), "关键词含有声书");
+    assert_eq!(p.sampling_budget.full_every, 999, "播客全帧几乎不采样");
+    assert_eq!(p.sampling_budget.silent_full_every, 999, "播客静音期全帧也不采样");
+    assert!((p.signal_weights.ocr_weight - 0.0).abs() < 1e-6, "播客 OCR 权重为 0（纯语音）");
+    assert!((p.signal_weights.asr_weight - 1.0).abs() < 1e-6, "播客 ASR 全投");
+    assert_eq!(p.artifact_template, ArtifactTemplate::Summary, "播客摘要文复用口播模板");
+    assert_eq!(p.storage_tier, StoreTier::TextFirst, "播客文本优先档");
+}
+
+#[test]
+fn disable_ocr_flags_follow_profile() {
+    // Arrange/Act：REQ-130 P4 无图短路声明
+    let podcast = profile_by_kind(ProfileKind::Podcast);
+    let live = profile_by_kind(ProfileKind::Live);
+    let lecture = profile_by_kind(ProfileKind::Lecture);
+    // Assert：播客/直播 disable_ocr=true（纯语音/无 OCR 裁决）；网课 false（零回归）
+    assert!(podcast.disable_ocr, "播客跳过画面链（P4 内存收益）");
+    assert!(live.disable_ocr, "直播不做 OCR（裁决）");
+    assert!(!lecture.disable_ocr, "网课保留画面链");
+}
+
+#[test]
+fn image_stream_profiles_registered() {
+    // Arrange/Act：REQ-124 图像流档案组 + REQ-123 跟练
+    let whiteboard = profile_by_kind(ProfileKind::Whiteboard);
+    let game = profile_by_kind(ProfileKind::GameTutorial);
+    let exercise = profile_by_kind(ProfileKind::Exercise);
+    let follow = profile_by_kind(ProfileKind::FollowAlong);
+    let coding = profile_by_kind(ProfileKind::Coding);
+    // Assert：图像优先档（REQ-110 时间轴图像流消费）；画面高频采样
+    for p in [&whiteboard, &game, &exercise, &follow, &coding] {
+        assert_eq!(p.storage_tier, StoreTier::ImageFirst, "{:?} 图像优先档", p.kind);
+        assert!(!p.disable_ocr, "{:?} 图像流档案保留画面链", p.kind);
+        assert!(p.sampling_budget.full_every <= 3, "{:?} 全帧高频", p.kind);
+    }
+    // 白板/跟练画面就是主体：全帧每拍采样（full_every=1）
+    assert_eq!(whiteboard.sampling_budget.full_every, 1, "白板画面=主体，全帧每拍");
+    assert_eq!(follow.sampling_budget.full_every, 1, "跟练画面=主体，全帧每拍");
+    // 关键预算：白板静音期仍高频；游戏/题目 ASR 全投
+    assert_eq!(whiteboard.sampling_budget.silent_full_every, 1);
+    assert!((game.signal_weights.asr_weight - 1.0).abs() < 1e-6);
+    assert!((exercise.signal_weights.asr_weight - 1.0).abs() < 1e-6);
+}
+
+#[test]
+fn coding_profile_registered_with_glossary() {
+    // Arrange/Act：REQ-121 编程实战
+    let coding = profile_by_kind(ProfileKind::Coding);
+    // Assert：OCR+ASR 双通道 + 术语表开（变量/函数名进热词通道）
+    assert!(coding.detect_signals.title_keywords.iter().any(|k| k == "编程"));
+    assert!((coding.signal_weights.ocr_weight - 1.0).abs() < 1e-6);
+    assert!(coding.postprocess_rules.glossary, "编程档案开术语表");
+    assert!(coding.postprocess_rules.step_cards, "编程档案开步骤卡（M5 代码 diff 步骤卡）");
+    assert_eq!(coding.artifact_template, ArtifactTemplate::LectureNotes);
+}
+
+#[test]
+fn detect_new_profiles_by_title_keywords() {
+    // Arrange：新档案标题信号
+    let podcast = ObservedSignals { title: Some("睡前听书播客".into()), ..signals() };
+    let follow = ObservedSignals { title: Some("瑜伽跟练".into()), ..signals() };
+    let coding = ObservedSignals { title: Some("Python 编程实战教程".into()), ..signals() };
+    let live = ObservedSignals { title: Some("游戏直播开播".into()), ..signals() };
+    // Act/Assert：各新档案凭标题关键词夺冠
+    assert_eq!(vote_detect(&podcast).candidates[0].kind, ProfileKind::Podcast);
+    assert_eq!(vote_detect(&follow).candidates[0].kind, ProfileKind::FollowAlong);
+    assert_eq!(vote_detect(&coding).candidates[0].kind, ProfileKind::Coding);
+    assert_eq!(vote_detect(&live).candidates[0].kind, ProfileKind::Live);
 }

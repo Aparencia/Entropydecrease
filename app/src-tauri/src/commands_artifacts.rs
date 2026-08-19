@@ -125,7 +125,7 @@ fn render_block(b: &ArtifactBlock) -> String {
         },
         (ArtifactKind::Table, BlockPayload::Table(t)) => t.markdown.clone(),
         (ArtifactKind::Formula, BlockPayload::Formula(f)) => format!("$${}$$", f.latex),
-        (ArtifactKind::CodeBlock, BlockPayload::Code { code, language }) => {
+        (ArtifactKind::CodeBlock, BlockPayload::Code { code, language, .. }) => {
             let lang = language.clone().unwrap_or_default();
             format!("```{}\n{}\n```", lang, code)
         }

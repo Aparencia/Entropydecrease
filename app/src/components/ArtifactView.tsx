@@ -157,7 +157,8 @@ export default function ArtifactView({ sessionId }: { sessionId: number }) {
       case "step-card":
         return (
           <div key={key} style={{ margin: "8px 0", border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, display: "flex", gap: 10 }}>
-            {baseUrl && <img src={convertFileSrc(`${baseUrl}/${b.payload.image}`)} alt="" style={{ width: 140, height: 90, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} loading="lazy" />}
+            {/* REQ-123：跟练步骤图卡本版有卡无图（image 空串；配图在 M3 REQ-088 图注后完善） */}
+            {baseUrl && b.payload.image && <img src={convertFileSrc(`${baseUrl}/${b.payload.image}`)} alt="" style={{ width: 140, height: 90, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} loading="lazy" />}
             <div style={{ fontSize: 13 }}>{b.payload.description}</div>
           </div>
         );

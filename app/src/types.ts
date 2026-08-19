@@ -183,8 +183,20 @@ export interface OcrDeviceStatus {
 // 视频类型档案领域类型（v0.5.0 M1，REQ-043，与 Rust serde 契约对齐）
 // ────────────────────────────────────────────────────────────
 
-/** 五类档案标识（Rust ProfileKind，kebab-case 序列化） */
-export type ProfileKind = "lecture" | "hands-on" | "talking-head" | "interview" | "meeting";
+/** 十二类档案标识（Rust ProfileKind，kebab-case 序列化；v0.7.0 M2 扩至十二） */
+export type ProfileKind =
+  | "lecture"
+  | "hands-on"
+  | "talking-head"
+  | "interview"
+  | "meeting"
+  | "podcast"
+  | "live"
+  | "whiteboard"
+  | "game-tutorial"
+  | "exercise"
+  | "follow-along"
+  | "coding";
 
 /** 检测信号配置（Rust DetectSignals） */
 export interface DetectSignals {
@@ -228,6 +240,9 @@ export type ArtifactTemplate =
   | "dialogue-notes"
   | "meeting-notes";
 
+/** 档案级图片存储策略档位（Rust StoreTier，kebab-case；REQ-110） */
+export type StoreTier = "text-first" | "balanced" | "image-first";
+
 /** 视频类型档案（Rust VideoProfile；snake_case 契约） */
 export interface VideoProfile {
   kind: ProfileKind;
@@ -236,6 +251,11 @@ export interface VideoProfile {
   signal_weights: SignalWeights;
   postprocess_rules: PostprocessRules;
   artifact_template: ArtifactTemplate;
+  storage_tier: StoreTier;
+  /** REQ-130：档案声明禁用 OCR 画面链（播客/直播=true） */
+  disable_ocr: boolean;
+  /** REQ-130：档案声明禁用 ASR 链（本版无档案声明 true，机制预留） */
+  disable_asr: boolean;
 }
 
 /** 检测候选（Rust ProfileCandidate） */
@@ -299,6 +319,12 @@ export interface BlockPayload {
   answer?: string;
   code?: string;
   language?: string | null;
+  /** REQ-123：步骤图卡标签（跟练档案步骤边界） */
+  label?: string;
+  /** REQ-123：步骤图卡理由（cue/practice/demo 等信号来源） */
+  reason?: string;
+  /** REQ-121：代码块展示段起始时间（ms） */
+  time_ms?: number;
 }
 
 /** 块来源（Rust BlockSource） */

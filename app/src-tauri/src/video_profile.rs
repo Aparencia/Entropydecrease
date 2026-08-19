@@ -1,7 +1,9 @@
-//! 视频类型档案（REQ-043 / v0.5.0 M1，头脑风暴轮 1/2 采纳 E9）。
+//! 视频类型档案（REQ-043 / v0.5.0 M1，头脑风暴轮 1/2 采纳 E9；v0.7.0 M2 扩展）。
 //!
 //! @ai-context: 档案 = 纯配置（"一次调优多处受益"）：所有管线从"全局参数"改为
-//!              "按档案查询参数"。五档案：结构化教学/步骤实操/口播知识/访谈播客/会议汇报。
+//!              "按档案查询参数"。十二档案：五基线（结构化教学/步骤实操/口播知识/
+//!              访谈播客/会议汇报）+ v0.7.0 七新档案（播客有声书/直播/白板/游戏教程/
+//!              题目讲解/跟练/编程实战——类型轴裁决 T1/T2/T3/T4/T8/T9/T11）。
 //! @ai-context: 本模块只含纯逻辑（档案常量 + JSON 序列化 + 检测投票 + 记忆偏好），
 //!              不依赖 windows/DB/引擎——可全量单测；档案 JSON 可导出校准（可校准）。
 //! @ai-context: 混合检测（方案 C）：自动信号投票出候选 → 置信度低才问用户 →
@@ -9,7 +11,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 五类档案标识（全栈统一业务术语）。
+/// 十二类档案标识（全栈统一业务术语）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProfileKind {
@@ -23,6 +25,20 @@ pub enum ProfileKind {
     Interview,
     /// 会议/汇报（周会/评审/培训）
     Meeting,
+    /// v0.7.0 REQ-122（T8）：播客/有声书——ASR-only 快速路径（无画面链）
+    Podcast,
+    /// v0.7.0 REQ-124（T1）：直播——ASR+图像流，不做 OCR/弹幕（裁决）
+    Live,
+    /// v0.7.0 REQ-124（T2）：白板/板书课——时间轴图像流（书写过程即内容）
+    Whiteboard,
+    /// v0.7.0 REQ-124（T9）：游戏教程/软件演示——ASR+图像流
+    GameTutorial,
+    /// v0.7.0 REQ-124（T11）：题目讲解（考研/考证真题）——ASR+图像流
+    Exercise,
+    /// v0.7.0 REQ-123（T4）：跟练型（健身/舞蹈/乐器示范）——图像流首个档案
+    FollowAlong,
+    /// v0.7.0 REQ-121（T3）：编程实战——OCR+ASR 双通道（示例代码提取）
+    Coding,
 }
 
 impl ProfileKind {
@@ -35,6 +51,13 @@ impl ProfileKind {
             ProfileKind::TalkingHead => "口播",
             ProfileKind::Interview => "访谈",
             ProfileKind::Meeting => "会议",
+            ProfileKind::Podcast => "播客/有声书",
+            ProfileKind::Live => "直播",
+            ProfileKind::Whiteboard => "白板",
+            ProfileKind::GameTutorial => "游戏教程",
+            ProfileKind::Exercise => "题目讲解",
+            ProfileKind::FollowAlong => "跟练",
+            ProfileKind::Coding => "编程实战",
         }
     }
 
@@ -45,6 +68,13 @@ impl ProfileKind {
             "talking-head" => ProfileKind::TalkingHead,
             "interview" => ProfileKind::Interview,
             "meeting" => ProfileKind::Meeting,
+            "podcast" => ProfileKind::Podcast,
+            "live" => ProfileKind::Live,
+            "whiteboard" => ProfileKind::Whiteboard,
+            "game-tutorial" => ProfileKind::GameTutorial,
+            "exercise" => ProfileKind::Exercise,
+            "follow-along" => ProfileKind::FollowAlong,
+            "coding" => ProfileKind::Coding,
             _ => ProfileKind::Lecture,
         }
     }
@@ -57,6 +87,13 @@ impl ProfileKind {
             ProfileKind::TalkingHead => "talking-head",
             ProfileKind::Interview => "interview",
             ProfileKind::Meeting => "meeting",
+            ProfileKind::Podcast => "podcast",
+            ProfileKind::Live => "live",
+            ProfileKind::Whiteboard => "whiteboard",
+            ProfileKind::GameTutorial => "game-tutorial",
+            ProfileKind::Exercise => "exercise",
+            ProfileKind::FollowAlong => "follow-along",
+            ProfileKind::Coding => "coding",
         }
     }
 }
@@ -162,6 +199,15 @@ pub struct VideoProfile {
     /// REQ-110：图片存储策略档位（默认 TextFirst——旧库/缺省零回归）
     #[serde(default)]
     pub storage_tier: StoreTier,
+    /// REQ-130（v0.7.0 M3）：P4 无图短路——档案声明禁用 OCR 画面链
+    /// （屏幕捕获/OCR/字幕采样整体跳过；引擎池全局共享不销毁，只跳过采样端）。
+    /// 播客/直播声明 true（纯语音/无 OCR 裁决）；旧 JSON 缺省 false（零回归）。
+    #[serde(default)]
+    pub disable_ocr: bool,
+    /// REQ-130：P4 无音短路——档案声明禁用 ASR 链（本版无档案声明 true，
+    /// 机制预留；引擎池同样只跳过消费端）。旧 JSON 缺省 false（零回归）。
+    #[serde(default)]
+    pub disable_asr: bool,
 }
 
 /// 五档案内置常量（默认值；JSON 导出后可人工校准覆盖）。

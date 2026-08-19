@@ -129,7 +129,7 @@ fn hands_on_template_produces_step_cards() {
     assert!(!steps.is_empty(), "实操档案应产出步骤卡");
     for s in steps {
         match &s.payload {
-            BlockPayload::Step { image, description, start_ms, end_ms } => {
+            BlockPayload::Step { image, description, start_ms, end_ms, .. } => {
                 assert!(image.ends_with(".webp"));
                 assert!(!description.is_empty());
                 assert!(end_ms >= start_ms);
@@ -238,14 +238,127 @@ fn empty_session_produces_minimal_artifact() {
         ProfileKind::TalkingHead,
         ProfileKind::Interview,
         ProfileKind::Meeting,
+        ProfileKind::Podcast,
+        ProfileKind::Live,
+        ProfileKind::Whiteboard,
+        ProfileKind::GameTutorial,
+        ProfileKind::Exercise,
+        ProfileKind::FollowAlong,
+        ProfileKind::Coding,
     ] {
         let artifact = build_artifact(kind, &d, &[]);
-        // Assert：Lecture 产标题块（讲义式有标题）；其余空产物——均不崩溃
-        if kind == ProfileKind::Lecture {
-            assert_eq!(artifact.blocks.len(), 1, "讲义式空会话应只有标题块");
+        // Assert：讲义式模板（网课/白板/题目/编程）产标题块；其余空产物——均不崩溃
+        let title_only = matches!(
+            kind,
+            ProfileKind::Lecture
+                | ProfileKind::Whiteboard
+                | ProfileKind::Exercise
+                | ProfileKind::Coding
+        );
+        if title_only {
+            assert_eq!(artifact.blocks.len(), 1, "{:?} 讲义式空会话应只有标题块", kind);
             assert_eq!(artifact.blocks[0].kind, ArtifactKind::Summary);
         } else {
             assert!(artifact.blocks.is_empty(), "{:?} 空会话应无产物块", kind);
         }
     }
+}
+
+// ── v0.7.0 M2：REQ-121 代码块 / REQ-123 步骤图卡 ──
+
+#[test]
+fn coding_template_produces_code_blocks_from_code_frames() {
+    // Arrange：相邻 code 帧（跨帧共享边界行 + 真实代码内重复行）
+    let d = detail(vec![], vec![]);
+    let analysis = analyze_session(&d, ProfileKind::Coding);
+    let frames = vec![
+        CodeFrame { timestamp_ms: 1000, text: "def add(a, b):\n    return a + b".into() },
+        CodeFrame { timestamp_ms: 3000, text: "    return a + b\nprint(add(1, 2))".into() },
+    ];
+    // Act
+    let blocks = code_blocks(&d, &analysis, &frames);
+    // Assert：单代码块（同一展示段）；跨帧相邻重复行去重；时间范围=首末帧
+    assert_eq!(blocks.len(), 1, "相邻帧应合并为一个代码块");
+    let b = &blocks[0];
+    assert_eq!(b.kind, ArtifactKind::CodeBlock);
+    assert_eq!(b.refs.frame_ms, Some(1000));
+    match &b.payload {
+        BlockPayload::Code { code, language, time_ms, end_ms } => {
+            assert_eq!(code, "def add(a, b):\n    return a + b\nprint(add(1, 2))");
+            assert_eq!(language.as_deref(), Some("python"));
+            assert_eq!(*time_ms, Some(1000));
+            assert_eq!(*end_ms, Some(3000));
+        }
+        _ => panic!("代码块载荷应为 Code"),
+    }
+}
+
+#[test]
+fn code_blocks_split_runs_by_time_gap() {
+    // Arrange：两个展示段（gap 15s > 10s 切段阈值）
+    let d = detail(vec![], vec![]);
+    let analysis = analyze_session(&d, ProfileKind::Coding);
+    let frames = vec![
+        CodeFrame { timestamp_ms: 1000, text: "let x = 1;".into() },
+        CodeFrame { timestamp_ms: 16000, text: "let y = 2;".into() },
+    ];
+    // Act
+    let blocks = code_blocks(&d, &analysis, &frames);
+    // Assert：两代码块（各含时间范围）
+    assert_eq!(blocks.len(), 2);
+    assert_eq!(blocks[0].refs.frame_ms, Some(1000));
+    assert_eq!(blocks[1].refs.frame_ms, Some(16000));
+}
+
+#[test]
+fn code_blocks_empty_frames_honest_degradation() {
+    // Arrange：无 code 帧
+    let d = detail(vec![], vec![]);
+    let analysis = analyze_session(&d, ProfileKind::Coding);
+    // Act/Assert：空产物（诚实降级——不产空代码块）
+    assert!(code_blocks(&d, &analysis, &[]).is_empty());
+}
+
+#[test]
+fn coding_build_artifact_skips_code_when_no_code_frames() {
+    // Arrange：无 code 区 OCR 块（普通网课式会话）
+    let d = detail(vec![("变量定义", 0, 5000)], vec![("标题", 1000)]);
+    // Act：编程档案构建
+    let artifact = build_artifact(ProfileKind::Coding, &d, &[]);
+    // Assert：无 CodeBlock 块（诚实降级），讲义段落仍产出
+    assert!(!artifact.blocks.iter().any(|b| b.kind == ArtifactKind::CodeBlock));
+    assert!(artifact.blocks.iter().any(|b| b.kind == ArtifactKind::Paragraph));
+}
+
+#[test]
+fn follow_along_template_produces_step_cards_from_boundaries() {
+    // Arrange：跟练会话——口令段（步骤边界信号）
+    let d = detail(
+        vec![
+            ("第一组动作开始", 0, 3000),
+            ("第二组跟上节奏", 10000, 13000),
+        ],
+        vec![],
+    );
+    // Act：跟练档案构建
+    let artifact = build_artifact(ProfileKind::FollowAlong, &d, &[]);
+    // Assert：步骤图卡——每个边界一个 StepCard（refs.frame_ms=time_ms；
+    //         本版有卡无图 image 空串；label/reason 填充）
+    let steps: Vec<&ArtifactBlock> = artifact.blocks.iter().filter(|b| b.kind == ArtifactKind::StepCard).collect();
+    assert!(!steps.is_empty(), "跟练档案应产出步骤图卡");
+    for s in &steps {
+        match &s.payload {
+            BlockPayload::Step { image, description, start_ms, end_ms, label, reason } => {
+                assert!(image.is_empty(), "本版有卡无图（M3 图注后配图）");
+                assert!(!description.is_empty());
+                assert_eq!(start_ms, end_ms, "边界点时间范围");
+                assert!(label.is_some(), "步骤边界应带标签");
+                assert!(reason.is_some(), "步骤边界应带理由");
+            }
+            _ => panic!("步骤图卡载荷应为 Step"),
+        }
+        assert!(s.refs.frame_ms.is_some(), "步骤图卡应引用边界时刻");
+    }
+    // 口令边界 → 标签=口令原文
+    assert!(steps.iter().any(|s| matches!(&s.payload, BlockPayload::Step { label: Some(l), .. } if l == "第一组")));
 }

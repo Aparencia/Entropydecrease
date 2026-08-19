@@ -15,9 +15,29 @@ const KIND_LABELS: Record<ProfileKind, string> = {
   "talking-head": "口播",
   interview: "访谈",
   meeting: "会议",
+  podcast: "播客/有声书",
+  live: "直播",
+  whiteboard: "白板",
+  "game-tutorial": "游戏教程",
+  exercise: "题目讲解",
+  "follow-along": "跟练",
+  coding: "编程实战",
 };
 
-const ALL_KINDS: ProfileKind[] = ["lecture", "hands-on", "talking-head", "interview", "meeting"];
+const ALL_KINDS: ProfileKind[] = [
+  "lecture",
+  "hands-on",
+  "talking-head",
+  "interview",
+  "meeting",
+  "podcast",
+  "live",
+  "whiteboard",
+  "game-tutorial",
+  "exercise",
+  "follow-along",
+  "coding",
+];
 
 export default function ProfileDetector({
   windowTitle,

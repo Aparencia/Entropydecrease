@@ -80,11 +80,27 @@ pub enum BlockPayload {
     /// TermAnchor：术语 + 可选释义
     Term { term: String, definition: Option<String> },
     /// StepCard：帧图 + 说明 + 时间范围
-    Step { image: String, description: String, start_ms: u64, end_ms: u64 },
+    Step {
+        image: String,
+        description: String,
+        start_ms: u64,
+        end_ms: u64,
+        /// REQ-123（v0.7.0 M2）：步骤标签（跟练档案步骤边界；None=旧数据）
+        label: Option<String>,
+        /// REQ-123：步骤边界理由（cue/practice/demo 等信号来源；None=旧数据）
+        reason: Option<String>,
+    },
     /// QAPair：问 + 答
     QA { question: String, answer: String },
-    /// CodeBlock：代码 + 可选语言
-    Code { code: String, language: Option<String> },
+    /// CodeBlock：代码 + 可选语言 + 展示段时间范围（REQ-121）
+    Code {
+        code: String,
+        language: Option<String>,
+        /// REQ-121：代码展示段起始时间（ms；None=旧数据）
+        time_ms: Option<u64>,
+        /// REQ-121：代码展示段结束时间（ms；None=旧数据）
+        end_ms: Option<u64>,
+    },
 }
 
 /// 块来源标记（永远可辨认：AI 增强块必须带此标记）。

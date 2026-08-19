@@ -41,6 +41,8 @@ fn block_json_roundtrip_preserves_all_fields() {
                 description: "第一步".into(),
                 start_ms: 1000,
                 end_ms: 5000,
+                label: None,
+                reason: None,
             },
         ),
         ArtifactBlock::new(
@@ -51,7 +53,12 @@ fn block_json_roundtrip_preserves_all_fields() {
         ArtifactBlock::new(
             ArtifactKind::CodeBlock,
             7,
-            BlockPayload::Code { code: "let x = 1;".into(), language: Some("rust".into()) },
+            BlockPayload::Code {
+                code: "let x = 1;".into(),
+                language: Some("rust".into()),
+                time_ms: Some(1000),
+                end_ms: Some(3000),
+            },
         ),
     ];
     // Act：逐个 roundtrip
