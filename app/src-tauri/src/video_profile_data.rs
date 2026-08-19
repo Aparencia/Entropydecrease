@@ -8,7 +8,7 @@
 
 use crate::video_profile::{
     ArtifactTemplate, DetectSignals, PostprocessRules, ProfileKind, SamplingBudget, SignalWeights,
-    VideoProfile,
+    StoreTier, VideoProfile,
 };
 
 /// 五档案内置常量（默认值；JSON 导出后可人工校准覆盖）。
@@ -29,6 +29,8 @@ pub fn builtin_profiles() -> Vec<VideoProfile> {
             signal_weights: SignalWeights { subtitle_priority: true, ocr_weight: 1.0, asr_weight: 0.5 },
             postprocess_rules: PostprocessRules { chapter_detect: true, step_cards: false, verbal_normalize: true, highlight: true, speaker_detect: false, glossary: true },
             artifact_template: ArtifactTemplate::LectureNotes,
+            // REQ-110：网课画面价值中（板书要点）——文本优先档零回归
+            storage_tier: StoreTier::TextFirst,
         },
         VideoProfile {
             kind: ProfileKind::HandsOn,
@@ -45,6 +47,8 @@ pub fn builtin_profiles() -> Vec<VideoProfile> {
             signal_weights: SignalWeights { subtitle_priority: false, ocr_weight: 0.9, asr_weight: 0.8 },
             postprocess_rules: PostprocessRules { chapter_detect: false, step_cards: true, verbal_normalize: false, highlight: true, speaker_detect: false, glossary: false },
             artifact_template: ArtifactTemplate::StepCards,
+            // REQ-110：实操画面价值高（操作步骤）——均衡档
+            storage_tier: StoreTier::Balanced,
         },
         VideoProfile {
             kind: ProfileKind::TalkingHead,
@@ -60,6 +64,8 @@ pub fn builtin_profiles() -> Vec<VideoProfile> {
             signal_weights: SignalWeights { subtitle_priority: false, ocr_weight: 0.1, asr_weight: 1.0 },
             postprocess_rules: PostprocessRules { chapter_detect: false, step_cards: false, verbal_normalize: true, highlight: true, speaker_detect: false, glossary: false },
             artifact_template: ArtifactTemplate::Summary,
+            // REQ-110：口播画面几乎无信息——文本优先档
+            storage_tier: StoreTier::TextFirst,
         },
         VideoProfile {
             kind: ProfileKind::Interview,
@@ -74,6 +80,8 @@ pub fn builtin_profiles() -> Vec<VideoProfile> {
             signal_weights: SignalWeights { subtitle_priority: false, ocr_weight: 0.1, asr_weight: 1.0 },
             postprocess_rules: PostprocessRules { chapter_detect: false, step_cards: false, verbal_normalize: false, highlight: true, speaker_detect: true, glossary: false },
             artifact_template: ArtifactTemplate::DialogueNotes,
+            // REQ-110：访谈画面价值低——文本优先档
+            storage_tier: StoreTier::TextFirst,
         },
         VideoProfile {
             kind: ProfileKind::Meeting,
@@ -88,6 +96,8 @@ pub fn builtin_profiles() -> Vec<VideoProfile> {
             signal_weights: SignalWeights { subtitle_priority: false, ocr_weight: 0.3, asr_weight: 1.0 },
             postprocess_rules: PostprocessRules { chapter_detect: false, step_cards: false, verbal_normalize: false, highlight: true, speaker_detect: true, glossary: false },
             artifact_template: ArtifactTemplate::MeetingNotes,
+            // REQ-110：会议画面价值低（投屏纪要除外）——文本优先档
+            storage_tier: StoreTier::TextFirst,
         },
     ]
 }

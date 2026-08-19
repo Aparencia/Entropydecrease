@@ -229,11 +229,11 @@ fn save_clipboard_image(
         return; // 数据尺寸不匹配（防御，arboard 不应产出）
     };
     // 预算刷新：剩余 0 时从磁盘重建计数（屏幕 worker 并行存图使内存计数过时）
-    if image_store.as_ref().is_some_and(|s| s.remaining_budget() == 0) {
+    if image_store.as_ref().is_some_and(|s| s.remaining_budget() == Some(0)) {
         *image_store = crate::image_store::SessionImageStore::new(image_dir.to_path_buf()).ok();
     }
     let Some(store) = image_store.as_mut() else { return };
-    if store.remaining_budget() == 0 {
+    if store.remaining_budget() == Some(0) {
         return; // 预算耗尽 → 丢弃（REQ-132：预算生效）
     }
     let mut ts = now_ms;

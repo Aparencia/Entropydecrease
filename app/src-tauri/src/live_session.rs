@@ -248,8 +248,15 @@ fn run_session(
     let worker_db = db.clone();
     let worker_app = params.app.clone();
     // M6/REQ-051：会话图片存储（关键帧归档；创建失败不阻断屏幕链路）
-    let image_store = crate::image_store::SessionImageStore::new(
+    // REQ-110：预算档位按档案 storage_tier 注入（TextFirst=50 现状零回归）
+    let store_tier = params
+        .profile
+        .map(crate::video_profile::profile_by_kind)
+        .map(|p| p.storage_tier)
+        .unwrap_or(crate::video_profile::StoreTier::TextFirst);
+    let image_store = crate::image_store::SessionImageStore::with_tier(
         params.data_dir.join("session-images").join(session_id.to_string()),
+        store_tier,
     )
     .map_err(|e| eprintln!("[LiveSession] 会话图片库初始化失败（图集不可用）: {}", e))
     .ok();

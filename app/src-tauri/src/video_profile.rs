@@ -133,6 +133,23 @@ pub enum ArtifactTemplate {
     MeetingNotes,
 }
 
+/// 档案级图片存储策略档位（REQ-110 M-存储 / v0.7.0 M1.5）。
+///
+/// @ai-context: 图集预算与图像流存储的分档——文本优先（网课/口播：画面价值低，
+///              50 张预算+低帧采样）；均衡（实操：150 张）；图像优先（跟练/白板/
+///              游戏/题目讲解，M2 档案组）：不截断 + 时间轴帧序列（图像流存储层）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum StoreTier {
+    /// 文本优先：图集 50 张预算（现状行为，零回归）
+    #[default]
+    TextFirst,
+    /// 均衡：图集 150 张预算
+    Balanced,
+    /// 图像优先：图集不截断 + 时间轴帧序列存储（图像流）
+    ImageFirst,
+}
+
 /// 视频类型档案（纯配置，JSON 可序列化校准）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VideoProfile {
@@ -142,6 +159,9 @@ pub struct VideoProfile {
     pub signal_weights: SignalWeights,
     pub postprocess_rules: PostprocessRules,
     pub artifact_template: ArtifactTemplate,
+    /// REQ-110：图片存储策略档位（默认 TextFirst——旧库/缺省零回归）
+    #[serde(default)]
+    pub storage_tier: StoreTier,
 }
 
 /// 五档案内置常量（默认值；JSON 导出后可人工校准覆盖）。

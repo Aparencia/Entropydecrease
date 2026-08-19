@@ -6,13 +6,18 @@
 //! @ai-context: 纯逻辑为主 + 磁盘 IO（路径可注入，测试用 tempfile）；WebP 编码
 //!              由 image crate 支持（WebPEncoder lossless）。
 //! @ai-context: 数据主权：图片只存本地会话目录，绝不上云。
+//! @ai-context: REQ-110（v0.7.0 M1.5）：预算档位参数化——TextFirst=50 张
+//!              （现状零回归）/ Balanced=150 / ImageFirst=不截断（图像流存储
+//!              层在 image_stream_store.rs，时间轴帧序列不占图集预算）。
 
 use std::path::{Path, PathBuf};
 
 use crate::error::Result;
 
-/// 每会话图片预算上限（默认 50 张，规划 M6）。
+/// 每会话图片预算上限（默认 50 张，规划 M6；TextFirst 档）。
 pub const BUDGET_MAX_IMAGES: usize = 50;
+/// 均衡档预算（REQ-110：实操等画面价值中——150 张）。
+pub const BUDGET_BALANCED_IMAGES: usize = 150;
 /// 缩略图最大宽度（走廊/画廊用；保持宽高比）。
 const THUMB_MAX_WIDTH: u32 = 320;
 /// 缩略图最大高度。
@@ -24,6 +29,8 @@ pub struct SessionImageStore {
     session_dir: PathBuf,
     /// 已存图片数（预算检查）
     saved: usize,
+    /// 预算上限（REQ-110：按档案存储档位注入；None=不截断——图像优先档）
+    budget: Option<usize>,
     /// REQ-067（v0.6.0 M3）：最近保存帧双指纹 + 相对路径（去重缓冲）——
     /// 图片去重与帧聚类共用 same_image；审查修复（2026-08-19）：
     /// 单张指纹在 PPT 往返（A→B→A）场景失效（B 覆盖指纹后 A 再存）——
@@ -35,22 +42,36 @@ pub struct SessionImageStore {
 const DEDUPE_BUFFER: usize = 8;
 
 impl SessionImageStore {
-    /// 创建会话图片库（目录不存在则创建）。
-    ///
-    /// @ai-context: 修复：saved 从磁盘已有图片数恢复（原实现恒为 0）——
-    ///              save_user_screenshot 等命令每次调用都 new 一个 store，
-    ///              预算检查因此从未对命令路径生效（可无限存图超上限）。
+    /// 创建会话图片库（目录不存在则创建；TextFirst 档——现状行为零回归）。
     pub fn new(session_dir: PathBuf) -> Result<Self> {
+        Self::with_budget(session_dir, Some(BUDGET_MAX_IMAGES))
+    }
+
+    /// 按存储档位创建（REQ-110）：TextFirst=50 / Balanced=150 / ImageFirst=不截断。
+    ///
+    /// @ai-context: ImageFirst 档图集不截断（图像流时间轴帧序列是主存储，
+    ///              图集仍是关键帧入口——预算保护转移到 stream 层分级标记）。
+    pub fn with_tier(session_dir: PathBuf, tier: crate::video_profile::StoreTier) -> Result<Self> {
+        let budget = match tier {
+            crate::video_profile::StoreTier::TextFirst => Some(BUDGET_MAX_IMAGES),
+            crate::video_profile::StoreTier::Balanced => Some(BUDGET_BALANCED_IMAGES),
+            crate::video_profile::StoreTier::ImageFirst => None,
+        };
+        Self::with_budget(session_dir, budget)
+    }
+
+    /// 显式预算创建（测试/命令层注入）。
+    pub fn with_budget(session_dir: PathBuf, budget: Option<usize>) -> Result<Self> {
         std::fs::create_dir_all(session_dir.join("full"))?;
         std::fs::create_dir_all(session_dir.join("thumb"))?;
         std::fs::create_dir_all(session_dir.join("crop"))?;
         let saved = count_webp(&session_dir.join("full")) + count_webp(&session_dir.join("crop"));
-        Ok(Self { session_dir, saved, recent_fingerprints: std::collections::VecDeque::new() })
+        Ok(Self { session_dir, saved, budget, recent_fingerprints: std::collections::VecDeque::new() })
     }
 
-    /// 剩余预算（0 = 已达上限；full/thumb 与 crop 共用预算，防总盘占用失控）。
-    pub fn remaining_budget(&self) -> usize {
-        BUDGET_MAX_IMAGES.saturating_sub(self.saved)
+    /// 剩余预算（None=不截断——图像优先档；0 = 已达上限；full/thumb 与 crop 共用预算）。
+    pub fn remaining_budget(&self) -> Option<usize> {
+        self.budget.map(|b| b.saturating_sub(self.saved))
     }
 
     /// 双指纹去重命中（纯读）：与最近保存图双稳定同图 → 返回已有相对路径。
@@ -101,10 +122,10 @@ impl SessionImageStore {
         if let Some(existing) = self.dedupe_hit(ah, dh, "crop/") {
             return Ok(existing);
         }
-        if self.remaining_budget() == 0 {
+        if self.remaining_budget() == Some(0) {
             return Err(crate::error::AppError::Io(format!(
                 "会话图片预算已达上限（{} 张）",
-                BUDGET_MAX_IMAGES
+                self.budget.unwrap_or(BUDGET_MAX_IMAGES)
             )));
         }
         let name = format!("{}.webp", timestamp_ms);
@@ -152,10 +173,10 @@ impl SessionImageStore {
         if let Some(existing) = self.dedupe_hit(ah, dh, "full/") {
             return Ok(existing);
         }
-        if self.remaining_budget() == 0 {
+        if self.remaining_budget() == Some(0) {
             return Err(crate::error::AppError::Io(format!(
                 "会话图片预算已达上限（{} 张）",
-                BUDGET_MAX_IMAGES
+                self.budget.unwrap_or(BUDGET_MAX_IMAGES)
             )));
         }
         let name = format!("{}.webp", timestamp_ms);
@@ -198,6 +219,18 @@ fn count_webp(dir: &Path) -> usize {
                 .count()
         })
         .unwrap_or(0)
+}
+
+/// 公共包装：BGRA8 → RGB（图像流存储层复用；纯函数）。
+pub fn bgra_to_rgb_public(bgraw: &[u8], width: u32, height: u32) -> Option<image::RgbImage> {
+    bgra_to_rgb(bgraw, width, height)
+}
+
+/// 公共包装：BGRA8 编码 WebP lossless（图像流存储层复用；纯 IO）。
+pub fn encode_webp_public(bgraw: &[u8], width: u32, height: u32, path: &Path) -> Result<()> {
+    let rgb = bgra_to_rgb(bgraw, width, height)
+        .ok_or_else(|| crate::error::AppError::Io("帧数据无效".to_string()))?;
+    encode_webp(&rgb, path)
 }
 
 /// BGRA8 → RGB（纯函数；尺寸/长度不匹配返回 None）。

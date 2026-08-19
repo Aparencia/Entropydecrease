@@ -76,6 +76,8 @@ mod health_check;
 mod highlight_detect;
 mod idle_governor;
 mod image_store;
+// v0.7.0 M1.5（REQ-110）：图像流存储层（时间轴帧序列——图像优先档）
+mod image_stream_store;
 mod import;
 mod import_frame;
 mod layout_analyzer;

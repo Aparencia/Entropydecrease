@@ -138,7 +138,7 @@ fn budget_limited_to_max() {
     // Assert：第 51 张超预算报错
     let err = store.save_frame(9999, &seeded_frame(32, 32, 999), 32, 32);
     assert!(err.is_err(), "超预算应拒绝保存");
-    assert_eq!(store.remaining_budget(), 0);
+    assert_eq!(store.remaining_budget(), Some(0));
 }
 
 #[test]
@@ -155,7 +155,7 @@ fn reopened_store_restores_budget_from_disk() {
     // Act：重新打开（新实例，saved 应恢复为 3——full 2 + crop 1）
     let mut store = SessionImageStore::new(dir.path().to_path_buf()).unwrap();
     // Assert：预算按磁盘已有图片扣减，而非归零
-    assert_eq!(store.remaining_budget(), BUDGET_MAX_IMAGES - 3);
+    assert_eq!(store.remaining_budget(), Some(BUDGET_MAX_IMAGES - 3));
     for i in 0..(BUDGET_MAX_IMAGES - 3) as u64 {
         store
             .save_frame(1000 + i, &seeded_frame(32, 32, (i + 10) as u32), 32, 32)
@@ -191,7 +191,7 @@ fn duplicate_frame_deduped_by_dual_fingerprint() {
     assert_eq!(first, "full/1000.webp");
     assert_eq!(second, "full/1000.webp", "重复帧应返回首次保存路径");
     assert!(!dir.path().join("full/2000.webp").exists(), "重复帧不得落盘");
-    assert_eq!(store.remaining_budget(), BUDGET_MAX_IMAGES - 1);
+    assert_eq!(store.remaining_budget(), Some(BUDGET_MAX_IMAGES - 1));
     // 不同内容 → 正常保存（去重不误伤）
     let other = store.save_frame(3000, &seeded_frame(64, 64, 8), 64, 64).unwrap();
     assert_eq!(other, "full/3000.webp");
@@ -212,7 +212,7 @@ fn duplicate_crop_deduped_by_dual_fingerprint() {
     assert_eq!(first, "crop/1000.webp");
     assert_eq!(second, "crop/1000.webp", "重复裁剪图应返回首次保存路径");
     assert!(!dir.path().join("crop/2000.webp").exists(), "重复裁剪图不得落盘");
-    assert_eq!(store.remaining_budget(), BUDGET_MAX_IMAGES - 1);
+    assert_eq!(store.remaining_budget(), Some(BUDGET_MAX_IMAGES - 1));
     // 不同内容 → 正常保存（去重不误伤）
     let other = store.save_crop(3000, &seeded_frame(66, 45, 12), 66, 45).unwrap();
     assert_eq!(other, "crop/3000.webp");
