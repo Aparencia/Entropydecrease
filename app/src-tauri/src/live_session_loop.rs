@@ -99,6 +99,11 @@ pub(crate) fn run_audio_loop(
     let mut pending_merge: Option<crate::live_session_persist::PendingMerge> = None;
     // REQ-109：上一落库段 end（段前停顿计算基准）
     let mut last_segment_end: Option<u64> = None;
+    // REQ-154（v0.7.2 S-1/S-2）：说话人停顿习惯统计（段前停顿历史 → 动态合并
+    // 阈值）与上一段语速（骤变判定基准）
+    let mut pause_history: std::collections::VecDeque<u64> =
+        std::collections::VecDeque::with_capacity(16);
+    let mut last_speech_rate: Option<f32> = None;
     let mut clipping_logged = false;
     // REQ-103：段内 RMS 聚合（语音块累计，Final 落库时取均值 → volume 列）
     let mut sentence_rms_sum: f32 = 0.0;
@@ -129,6 +134,10 @@ pub(crate) fn run_audio_loop(
                 // 进入暂停（P2 增强：替代"喂 100ms 静音"方案——静音块不足以触发
                 // sherpa 端点规则（rule1 需 2.4s 尾静音），句无法断开；flush 尾句
                 // 落库 + reset 重建流才能保证暂停前后的语音不连句，恢复后干净开始）
+                // REQ-154（v0.7.2 S-1）：动态合并阈值先算（借用释放后再构造 ctx）
+                let merge_gap_ms = crate::asr_merge::adaptive_merge_gap(
+                    pause_history.iter().copied(),
+                );
                 flush_tail_and_persist(
                     FinalEventCtx {
                         app: ctx.app,
@@ -140,6 +149,10 @@ pub(crate) fn run_audio_loop(
                         last_final_clean: &mut last_final_clean,
                         pending_merge: &mut pending_merge,
                         last_segment_end: &mut last_segment_end,
+                        // REQ-154（v0.7.2 S-1/S-2）：停顿历史/动态阈值/语速基准
+                        pause_history: &mut pause_history,
+                        merge_gap_ms,
+                        last_speech_rate: &mut last_speech_rate,
                     },
                     ctx.asr_engine,
                     now_ms,
@@ -278,6 +291,10 @@ pub(crate) fn run_audio_loop(
                 for event in events.drain(..) {
                     match event {
                         StreamingAsrEvent::Final { text, merge_with_next, confidence } => {
+                            // REQ-154（v0.7.2 S-1）：动态合并阈值先算（借用释放后再构造 ctx）
+                            let merge_gap_ms = crate::asr_merge::adaptive_merge_gap(
+                                pause_history.iter().copied(),
+                            );
                             // REQ-103：段内平均音量（语音块 RMS 均值；无语音块 → None）
                             let volume = if sentence_rms_count > 0 {
                                 Some(sentence_rms_sum / sentence_rms_count as f32)
@@ -322,6 +339,10 @@ pub(crate) fn run_audio_loop(
                                     last_final_clean: &mut last_final_clean,
                                     pending_merge: &mut pending_merge,
                                     last_segment_end: &mut last_segment_end,
+                                    // REQ-154（v0.7.2 S-1/S-2）：停顿历史/动态阈值/语速基准
+                                    pause_history: &mut pause_history,
+                                    merge_gap_ms,
+                                    last_speech_rate: &mut last_speech_rate,
                                 },
                                 text,
                                 merge_with_next,
@@ -358,6 +379,8 @@ pub(crate) fn run_audio_loop(
     // 暂停边沿已 flush 过，此处通常无新内容）
     let stop_now_ms = ctx.epoch.elapsed().as_millis() as u64
         - ctx.pause.total_paused_ms.load(Ordering::SeqCst);
+    // REQ-154（v0.7.2 S-1）：动态合并阈值先算（借用释放后再构造 ctx）
+    let merge_gap_ms = crate::asr_merge::adaptive_merge_gap(pause_history.iter().copied());
     flush_tail_and_persist(
         FinalEventCtx {
             app: ctx.app,
@@ -369,6 +392,10 @@ pub(crate) fn run_audio_loop(
             last_final_clean: &mut last_final_clean,
             pending_merge: &mut pending_merge,
             last_segment_end: &mut last_segment_end,
+            // REQ-154（v0.7.2 S-1/S-2）：停顿历史/动态阈值/语速基准
+            pause_history: &mut pause_history,
+            merge_gap_ms,
+            last_speech_rate: &mut last_speech_rate,
         },
         ctx.asr_engine,
         stop_now_ms,

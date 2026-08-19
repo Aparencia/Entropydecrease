@@ -22,6 +22,10 @@ const AUDIO_BLOCK_MS: u64 = 200;
 ///              （重打分与标点恢复均未给出句号）——防挂起文本无限增长。
 const MAX_MERGE_CHAIN: u32 = 4;
 
+/// 段前停顿历史容量（REQ-154 S-1：说话人停顿习惯统计窗口——最近 16 段
+/// ≈ 2-4 分钟讲话，足够反映习惯且对语速变化响应及时）。
+const PAUSE_HISTORY_MAX: usize = 16;
+
 /// 句尾时刻（TD-041）：最后语音块起点 + 块时长，逼近真实句尾。
 ///
 /// @ai-context: 端点判定基于尾静音（rule1 2.4s / rule2 1.2s），Final 事件晚于实际
@@ -49,6 +53,8 @@ pub(crate) struct AsrFinalEvent {
 ///              传入；None=未知/非 ASR 源）。
 /// @ai-context: 参数多为编排上下文传递（app/db/session_id/segments/时间戳/文本/
 ///              置信度），聚合会破坏内聚——登记 clippy 豁免（与 engine.rs 同模式）。
+/// @ai-context: REQ-154（v0.7.2 S-2）：last_speech_rate=上一段语速（骤变判定基准，
+///              调用方持状态跨段传递；None=尚无基准——首段不判定）。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn persist_final(
     app: &tauri::AppHandle,
@@ -61,6 +67,7 @@ pub(crate) fn persist_final(
     confidence: Option<f32>,
     volume: Option<f32>,
     pause_ms: Option<u64>,
+    last_speech_rate: &mut Option<f32>,
 ) {
     // REQ-109：段内语速 = 字符数 / 段时长（字/秒；防除零——时长 0 时 None）
     let duration_secs = end_ms.saturating_sub(start_ms) as f32 / 1000.0;
@@ -69,6 +76,23 @@ pub(crate) fn persist_final(
     } else {
         None
     };
+    // REQ-154（v0.7.2 S-2）：语速骤变事件——段间语速骤降 ≥40% = 强调/变速
+    // （讲慢 = 重点；与 VolumeSurge 音量骤变姊妹信号，重点标注备数据；与
+    // is_speech_rate_drop 纯函数同口径，落库仅记录不阻断）
+    if let (Some(cur), Some(prev)) = (speech_rate, *last_speech_rate) {
+        if crate::asr_merge::is_speech_rate_drop(prev, cur) {
+            let ratio = ((prev - cur) / prev * 100.0).round() / 100.0;
+            let _ = db.add_event(&crate::session_events::NewSessionEvent {
+                session_id,
+                kind: crate::session_events::EventKind::SpeechRateDrop,
+                timestamp_ms: start_ms,
+                payload: serde_json::json!({ "ratio": ratio }),
+            });
+        }
+    }
+    if let Some(r) = speech_rate {
+        *last_speech_rate = Some(r);
+    }
     let _ = app.emit(
         "live:asr-final",
         AsrFinalEvent { timestamp_ms: start_ms, text: text.clone() },
@@ -109,6 +133,8 @@ pub(crate) fn persist_final(
 /// @ai-context: REQ-098（v0.7.0 M1）：切分出的子句置信度 None——合并文本跨
 ///              多个 Final，单句置信度无法归因（诚实表达未知，不硬编码假值）。
 /// @ai-context: 参数 8 个为编排上下文传递（与 persist_final 同模式，登记豁免）。
+/// @ai-context: REQ-154（v0.7.2 S-2）：last_speech_rate 透传给 persist_final
+///              （切分子句同样参与骤变判定——段粒度语速）。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn digest_merged(
     app: &tauri::AppHandle,
@@ -119,6 +145,7 @@ pub(crate) fn digest_merged(
     end_ms: u64,
     text: &str,
     volume: Option<f32>,
+    last_speech_rate: &mut Option<f32>,
 ) -> Option<(String, u64)> {
     let (complete, rest) = crate::asr_merge::split_sentences(text);
     let mut counts: Vec<usize> = complete.iter().map(|s| s.chars().count()).collect();
@@ -126,7 +153,19 @@ pub(crate) fn digest_merged(
     let spans = crate::asr_merge::split_timestamps(start_ms, end_ms, &counts);
     for (i, s) in complete.iter().enumerate() {
         let (s_ms, e_ms) = spans[i];
-        persist_final(app, db, session_id, asr_segments, s_ms, e_ms, s.clone(), None, volume, None);
+        persist_final(
+            app,
+            db,
+            session_id,
+            asr_segments,
+            s_ms,
+            e_ms,
+            s.clone(),
+            None,
+            volume,
+            None,
+            last_speech_rate,
+        );
     }
     if rest.trim().is_empty() {
         None
@@ -159,6 +198,14 @@ pub(crate) struct FinalEventCtx<'a> {
     pub pending_merge: &'a mut Option<PendingMerge>,
     /// 上一落库段 end（REQ-109：段前停顿 = start - prev_end）
     pub last_segment_end: &'a mut Option<u64>,
+    /// REQ-154（v0.7.2 S-1）：段前停顿历史（说话人停顿习惯统计窗口；
+    /// 容量 PAUSE_HISTORY_MAX，FIFO）
+    pub pause_history: &'a mut std::collections::VecDeque<u64>,
+    /// REQ-154（v0.7.2 S-1）：动态合并阈值（adaptive_merge_gap 产出，
+    /// 本次 Final 处理生效；机关枪说话人收紧防挂起失控，慢速说话人放宽防切碎）
+    pub merge_gap_ms: u64,
+    /// REQ-154（v0.7.2 S-2）：上一段语速（骤变判定基准，跨段状态）
+    pub last_speech_rate: &'a mut Option<f32>,
 }
 
 /// Final 事件处理：跨 final 去重 → 挂起合并（链式）→ 句子切分落库。
@@ -172,7 +219,7 @@ pub(crate) struct FinalEventCtx<'a> {
 ///              段透传事件置信度。
 /// @ai-context: now_ms=当前音频块时刻（句尾校正回退基准）。
 pub(crate) fn handle_final_event(
-    ctx: FinalEventCtx<'_>,
+    mut ctx: FinalEventCtx<'_>,
     text: String,
     merge_with_next: bool,
     confidence: Option<f32>,
@@ -197,6 +244,14 @@ pub(crate) fn handle_final_event(
         .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
     // REQ-109：段前停顿 = 与上一落库段 end 的 gap（首段 None）
     let pause_ms = ctx.last_segment_end.map(|pe| start_ms.saturating_sub(pe));
+    // REQ-154（v0.7.2 S-1）：段前停顿入统计窗口（说话人停顿习惯；
+    // FIFO 容量上限——最新习惯优先）
+    if let Some(p) = pause_ms {
+        ctx.pause_history.push_back(p);
+        if ctx.pause_history.len() > PAUSE_HISTORY_MAX {
+            ctx.pause_history.pop_front();
+        }
+    }
     // ADR-012 F4-1：rule3/短停顿硬切段挂起——等下一 Final
     // 判定语义合并（gap ≤600ms 才合并）；不立即推送/落库
     // TD-2026-08-19 修复：连续硬切必须**链式合并**——此前
@@ -211,9 +266,13 @@ pub(crate) fn handle_final_event(
             let gap = start_ms.saturating_sub(p_end);
             if merges < MAX_MERGE_CHAIN {
                 // REQ-119（v0.7.0 M2）：拼接边界空格（中英混排不粘连）
-                if let Some(merged) =
-                    crate::asr_merge::merge_segments_with_spacing(&p_text, &text, gap)
-                {
+                // REQ-154（v0.7.2 S-1）：合并阈值随说话人停顿习惯自适应
+                if let Some(merged) = crate::asr_merge::merge_segments_with_spacing_adaptive(
+                    &p_text,
+                    &text,
+                    gap,
+                    ctx.merge_gap_ms,
+                ) {
                     *ctx.last_final_clean = Some(merged.clone());
                     match digest_merged(
                         ctx.app,
@@ -224,6 +283,7 @@ pub(crate) fn handle_final_event(
                         end_ms,
                         &merged,
                         p_vol,
+                        &mut ctx.last_speech_rate,
                     ) {
                         Some((rest, rest_start)) => {
                             // 残余半句继续挂起（链式延续；切分后置信度/音量无法归因 → None）
@@ -249,6 +309,7 @@ pub(crate) fn handle_final_event(
                 p_conf,
                 p_vol,
                 None,
+                &mut ctx.last_speech_rate,
             );
         }
         // 新挂起段：保留本事件置信度/音量（后续合并/兜底落库时透传）
@@ -259,7 +320,13 @@ pub(crate) fn handle_final_event(
     if let Some((p_start, p_end, p_text, _merges, p_conf, p_vol)) = ctx.pending_merge.take() {
         let gap = start_ms.saturating_sub(p_end);
         // REQ-119：拼接边界空格（中英混排不粘连）
-        if let Some(merged) = crate::asr_merge::merge_segments_with_spacing(&p_text, &text, gap) {
+        // REQ-154（v0.7.2 S-1）：合并阈值随说话人停顿习惯自适应
+        if let Some(merged) = crate::asr_merge::merge_segments_with_spacing_adaptive(
+            &p_text,
+            &text,
+            gap,
+            ctx.merge_gap_ms,
+        ) {
             *ctx.last_final_clean = Some(merged.clone());
             // 合并文本同样按句子切分落库（可能含多句）；
             // 残余是当前句尾部（其后为真实停顿，不再挂起
@@ -273,6 +340,7 @@ pub(crate) fn handle_final_event(
                 end_ms,
                 &merged,
                 p_vol,
+                &mut ctx.last_speech_rate,
             ) {
                 // 合并切分后的残余置信度/音量/停顿无法归因 → None（诚实）
                 persist_final(
@@ -286,6 +354,7 @@ pub(crate) fn handle_final_event(
                     None,
                     None,
                     None,
+                    &mut ctx.last_speech_rate,
                 );
             }
             // 合并段整体已落库 → 更新上一段 end（停顿基准）
@@ -303,6 +372,7 @@ pub(crate) fn handle_final_event(
             p_conf,
             p_vol,
             None,
+            &mut ctx.last_speech_rate,
         );
         // 挂起段兜底落库 → 更新上一段 end
         *ctx.last_segment_end = Some(p_end);
@@ -320,6 +390,7 @@ pub(crate) fn handle_final_event(
         confidence,
         volume,
         pause_ms,
+        &mut ctx.last_speech_rate,
     );
     // 正常段已落库 → 更新上一段 end（停顿基准）
     *ctx.last_segment_end = Some(end_ms);
@@ -338,7 +409,7 @@ pub(crate) fn handle_final_event(
 /// @ai-context: 参数为编排上下文传递（与 persist_final 同模式，登记豁免）。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn flush_tail_and_persist(
-    ctx: FinalEventCtx<'_>,
+    mut ctx: FinalEventCtx<'_>,
     asr_engine: &mut StreamingAsrEngine,
     now_ms: u64,
     sentence_rms_sum: &mut f32,
@@ -359,6 +430,7 @@ pub(crate) fn flush_tail_and_persist(
             p_vol,
             // 中断兜底落库：段前停顿无基准（None——诚实未知）
             None,
+            &mut ctx.last_speech_rate,
         );
         any = true;
     }
@@ -392,6 +464,7 @@ pub(crate) fn flush_tail_and_persist(
                 confidence,
                 volume,
                 pause_ms,
+                &mut ctx.last_speech_rate,
             );
             // 尾句已落库 → 更新上一段 end（暂停恢复后下一句的停顿基准正确）
             *ctx.last_segment_end = Some(end_ms);

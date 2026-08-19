@@ -32,11 +32,14 @@ pub enum EventKind {
     Pause,
     /// 会话恢复（2026-08 A1；与 Pause 成对）
     Resume,
+    /// v0.7.2（REQ-154 S-2）：语速骤变（段间语速骤降 ≥40% = 强调/变速；
+    /// 与 VolumeSurge 音量骤变姊妹信号，重点标注备数据）
+    SpeechRateDrop,
 }
 
 impl EventKind {
     /// 全部类型（新增类型在此登记——schema 为 TEXT 无枚举约束，登记表做消费端白名单）。
-    pub const ALL: [EventKind; 9] = [
+    pub const ALL: [EventKind; 10] = [
         EventKind::FrameSwitch,
         EventKind::LongSilence,
         EventKind::VolumeSurge,
@@ -46,6 +49,7 @@ impl EventKind {
         EventKind::PlayerBehavior,
         EventKind::Pause,
         EventKind::Resume,
+        EventKind::SpeechRateDrop,
     ];
 
     /// kebab-case 落库名（serde 默认 PascalCase，DB 层用显式映射防契约漂移）。
@@ -60,6 +64,7 @@ impl EventKind {
             EventKind::PlayerBehavior => "player_behavior",
             EventKind::Pause => "pause",
             EventKind::Resume => "resume",
+            EventKind::SpeechRateDrop => "speech_rate_drop",
         }
     }
 
@@ -123,7 +128,8 @@ pub fn event_tier(kind: EventKind) -> EventTier {
         | EventKind::ForegroundSwitch
         | EventKind::PlayerBehavior
         | EventKind::Pause
-        | EventKind::Resume => EventTier::Low,
+        | EventKind::Resume
+        | EventKind::SpeechRateDrop => EventTier::Low,
     }
 }
 

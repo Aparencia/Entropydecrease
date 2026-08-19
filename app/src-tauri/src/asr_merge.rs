@@ -11,8 +11,36 @@
 
 use crate::asr_rescore::strip_punct;
 
-/// 合并时间门限（ms）：句间间隔 ≤ 该值视为硬切连续句（正常句间 ≥1.2s 尾静音）。
-const MERGE_GAP_MS: u64 = 600;
+/// 合并时间门限（默认，ms）：句间间隔 ≤ 该值视为硬切连续句（正常句间 ≥1.2s 尾静音）。
+pub const MERGE_GAP_MS: u64 = 600;
+
+/// 自适应合并阈值下界（ms，v0.7.2 REQ-154 S-1）。
+const ADAPTIVE_GAP_MIN: u64 = 300;
+/// 自适应合并阈值上界（ms，v0.7.2 REQ-154 S-1）。
+const ADAPTIVE_GAP_MAX: u64 = 900;
+
+/// 自适应合并阈值（S-1，REQ-154）：中位数段前停顿 × 0.5，clamp [300, 900]ms。
+///
+/// @ai-context: 说话人停顿习惯直接决定硬切段 gap 分布：机关枪（停顿 ~300ms）→
+///              300ms（收紧：少合并 → 8s 段独立落库，防无句号链式挂起失控——
+///              TD-2026-08-19-B 场景）；正常（~1.5s）→ 750ms（略放宽：把
+///              600-750ms 的硬切也合并回完整句）；慢速（~2.5s+）→ 900ms（放宽，
+///              减少切碎）。纯函数可单测；空历史 → 默认 600ms（零回归）。
+pub fn adaptive_merge_gap(pause_history: impl Iterator<Item = u64>) -> u64 {
+    let mut sorted: Vec<u64> = pause_history.collect();
+    if sorted.is_empty() {
+        return MERGE_GAP_MS;
+    }
+    sorted.sort_unstable();
+    let median = sorted[sorted.len() / 2];
+    ((median as f64 * 0.5).round() as u64).clamp(ADAPTIVE_GAP_MIN, ADAPTIVE_GAP_MAX)
+}
+
+/// 语速骤变判定（S-2，REQ-154）：当前语速较上一段**骤降 ≥40%** 视为强调/变速
+/// （讲慢 = 重点；与 volume_surge 音量骤变姊妹信号，重点标注备数据）。
+pub fn is_speech_rate_drop(prev: f32, cur: f32) -> bool {
+    prev > 0.0 && (prev - cur) / prev >= 0.4
+}
 
 /// 参与跳过的最小尾首重叠（字，≥2 防单字巧合）。
 const MIN_OVERLAP_CHARS: usize = 2;
@@ -25,7 +53,18 @@ const BOUNDARY_PUNCT: &str = "。！？，、；：…,.!?;:";
 /// @ai-context: 返回合并后的完整文本；gap 超门限或输入为空 → None（不合并）。
 ///              尾首重叠 ≥2 字先跳过（next 头部与前段尾部重复的词去掉）。
 pub fn merge_segments(prev: &str, next: &str, gap_ms: u64) -> Option<String> {
-    if gap_ms > MERGE_GAP_MS {
+    merge_segments_with_gap(prev, next, gap_ms, MERGE_GAP_MS)
+}
+
+/// 语义级合并（参数化阈值版，REQ-154 S-1）：调用方注入动态合并阈值
+/// （adaptive_merge_gap 产出）；其余语义与 merge_segments 一致。
+pub fn merge_segments_with_gap(
+    prev: &str,
+    next: &str,
+    gap_ms: u64,
+    merge_gap_ms: u64,
+) -> Option<String> {
+    if gap_ms > merge_gap_ms {
         return None;
     }
     let p: Vec<char> = strip_punct(prev);
@@ -102,7 +141,26 @@ fn spacing_for(prev_tail: char, next_head: char) -> Option<&'static str> {
 ///              原 merge_segments 保留（兼容既有调用点），新调用点用本函数。
 pub fn merge_segments_with_spacing(prev: &str, next: &str, gap_ms: u64) -> Option<String> {
     let merged = merge_segments(prev, next, gap_ms)?;
-    let prev_tail = prev.trim_end_matches(|c: char| c.is_whitespace() || BOUNDARY_PUNCT.contains(c)).chars().last();
+    apply_spacing(prev, next, &merged)
+}
+
+/// 语义级合并（REQ-119 + REQ-154 S-1 自适应阈值版）：调用方注入动态合并阈值。
+pub fn merge_segments_with_spacing_adaptive(
+    prev: &str,
+    next: &str,
+    gap_ms: u64,
+    merge_gap_ms: u64,
+) -> Option<String> {
+    let merged = merge_segments_with_gap(prev, next, gap_ms, merge_gap_ms)?;
+    apply_spacing(prev, next, &merged)
+}
+
+/// 拼接边界空格（抽出共用逻辑）：prev 尾字符与 next 首字符语言不同 → 插空格。
+fn apply_spacing(prev: &str, next: &str, merged: &str) -> Option<String> {
+    let prev_tail = prev
+        .trim_end_matches(|c: char| c.is_whitespace() || BOUNDARY_PUNCT.contains(c))
+        .chars()
+        .last();
     let next_head = next
         .chars()
         .find(|c| !(c.is_whitespace() || BOUNDARY_PUNCT.contains(*c)));
@@ -116,9 +174,9 @@ pub fn merge_segments_with_spacing(prev: &str, next: &str, gap_ms: u64) -> Optio
                     .trim_start_matches(|c: char| c.is_whitespace() || BOUNDARY_PUNCT.contains(c));
                 Some(format!("{}{}{}", prev_trim, space, next_trim))
             }
-            None => Some(merged),
+            None => Some(merged.to_string()),
         },
-        _ => Some(merged),
+        _ => Some(merged.to_string()),
     }
 }
 
@@ -254,6 +312,65 @@ mod tests {
         // 模拟：挂起段与下一段间隔 1.2s（正常句间）——不合并
         let a = merge_segments("第一段内容", "第二段内容", 1200);
         assert_eq!(a, None);
+    }
+
+    // ── REQ-154（v0.7.2 S-1）：自适应合并阈值 ──
+
+    #[test]
+    fn adaptive_gap_empty_history_uses_default() {
+        assert_eq!(adaptive_merge_gap(std::iter::empty()), MERGE_GAP_MS);
+    }
+
+    #[test]
+    fn adaptive_gap_machine_gun_speaker_tightens() {
+        // 机关枪（停顿 ~300ms）→ 300ms（clamp 下界：少合并防挂起失控）
+        assert_eq!(adaptive_merge_gap([300, 300, 300, 300].into_iter()), 300);
+        assert_eq!(adaptive_merge_gap([200, 250, 300, 400].into_iter()), 300);
+    }
+
+    #[test]
+    fn adaptive_gap_normal_speaker_relaxes() {
+        // 正常（中位数 ~1500ms）→ 750ms（把 600-750ms 硬切也合并回）
+        assert_eq!(adaptive_merge_gap([1200, 1500, 1500, 2000].into_iter()), 750);
+    }
+
+    #[test]
+    fn adaptive_gap_slow_speaker_capped() {
+        // 慢速（中位数 ~2500ms）→ 1250 → clamp 上界 900ms
+        assert_eq!(adaptive_merge_gap([2000, 2500, 3000, 4000].into_iter()), 900);
+    }
+
+    #[test]
+    fn adaptive_gap_threshold_injected_merge() {
+        // 动态阈值注入：gap 750 在默认 600 下不合并，在自适应 750 下合并
+        assert_eq!(merge_segments_with_gap("第一段", "第二段", 700, 600), None);
+        assert_eq!(
+            merge_segments_with_gap("第一段", "第二段", 700, 750),
+            Some("第一段第二段".to_string())
+        );
+        // 含空格拼接（adaptive 版与 with_spacing 语义一致）
+        assert_eq!(
+            merge_segments_with_spacing_adaptive("我们讲Python", "中的异常处理", 700, 750),
+            Some("我们讲Python 中的异常处理".to_string())
+        );
+    }
+
+    // ── REQ-154（v0.7.2 S-2）：语速骤变判定 ──
+
+    #[test]
+    fn rate_drop_detected_over_40_percent() {
+        // 5 → 2.5 字/秒：骤降 50% → 强调/变速
+        assert!(is_speech_rate_drop(5.0, 2.5));
+        // 5 → 3.1：降 38% < 40% → 不算骤变
+        assert!(!is_speech_rate_drop(5.0, 3.1));
+    }
+
+    #[test]
+    fn rate_drop_edge_cases() {
+        // 无前值（0）/增速/持平 → 不判定
+        assert!(!is_speech_rate_drop(0.0, 1.0));
+        assert!(!is_speech_rate_drop(3.0, 4.0));
+        assert!(!is_speech_rate_drop(3.0, 3.0));
     }
 
     #[test]
