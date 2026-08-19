@@ -2,6 +2,8 @@
 //!
 //! @ai-context: 会话线程主循环：音频块 → 预处理 → VAD 门控 → 流式 ASR → 事件
 //!              分发（Final 去重/挂起合并/句子切分落库）→ drain/停止 flush。
+//!              Final 事件处理域在 live_session_persist.rs（handle_final_event），
+//!              本文件只保留编排骨架与音频预处理/VAD 门控。
 //!              时间戳统一（ADR-008 A1）：会话纪元 epoch 在 run_session 起点
 //!              创建，注入音频捕获/屏幕 worker/flush 三处——消除 ASR 模型加载
 //!              秒级延迟造成的音频时间轴整体偏移（技术审查 A1）。
@@ -13,14 +15,10 @@ use std::time::{Duration, Instant};
 
 use tauri::Emitter;
 
-use crate::asr_dedupe::dedupe_across_finals;
-use crate::asr_merge::merge_segments;
 use crate::capture::resample::compute_rms;
 use crate::capture::AudioChunk;
 use crate::db::Db;
-use crate::live_session_persist::{
-    digest_merged, persist_final, sentence_end_ms, SENTENCE_FALLBACK_MS,
-};
+use crate::live_session_persist::{handle_final_event, persist_final, sentence_end_ms, FinalEventCtx};
 use crate::streaming_asr::{StreamingAsrEngine, StreamingAsrEvent, SILENCE_RMS_THRESHOLD};
 use crate::types::TranscriptSegment;
 
@@ -32,12 +30,6 @@ const AUDIO_BLOCK_SECS: f64 = 0.2;
 /// 停止后 drain 宽限（s，2026-08-19 取优整合）：停止瞬间积压的音频块继续
 /// 喂入处理（内容不丢）；宽限到期强制退出（停止响应不被无限积压拖死）。
 const DRAIN_GRACE_SECS: u64 = 8;
-/// 链式合并兜底上限（ADR-012 F4-1，merge-then-split 方案）。
-///
-/// @ai-context: 正常路径由"合并后句子切分"消化（合并文本内完整句即时落库
-///              推送，残余继续挂起），上限仅兜底模型长期无句号的极端场景
-///              （重打分与标点恢复均未给出句号）——防挂起文本无限增长。
-const MAX_MERGE_CHAIN: u32 = 4;
 
 /// 主循环共享上下文（run_session 装配，run_audio_loop 消费）。
 ///
@@ -167,129 +159,21 @@ pub(crate) fn run_audio_loop(
                 for event in events.drain(..) {
                     match event {
                         StreamingAsrEvent::Final { text, merge_with_next } => {
-                            // ADR-012 F3-2：跨 final 重叠去重（rule3 硬切/端点误断句
-                            // 的句尾词重复防护）；整体重复 → 跳过推送与落库
-                            let text = match &last_final_clean {
-                                Some(prev) => dedupe_across_finals(prev, &text),
-                                None => text,
-                            };
-                            if text.is_empty() {
-                                continue;
-                            }
-                            last_final_clean = Some(text.clone());
-                            let end_ms = sentence_end_ms(last_speech_ms, chunk.timestamp_ms);
-                            let start_ms = sentence_start_ms
-                                .take()
-                                .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
-                            // ADR-012 F4-1：rule3/短停顿硬切段挂起——等下一 Final
-                            // 判定语义合并（gap ≤600ms 才合并）；不立即推送/落库
-                            // TD-2026-08-19 修复：连续硬切必须**链式合并**——此前
-                            // 新挂起段无条件覆盖旧挂起段，连续 rule3 切段（13.wav
-                            // 取证模式）时中间段全部丢失（不落库不推送）
-                            if merge_with_next {
-                                // 已有挂起段：先尝试链式合并（同一句话被切多刀）。
-                                // merge-then-split（F4-1 增强）：合并后立即按句号
-                                // 切分——完整句即时落库推送（实时流按句子沉淀），
-                                // 无句号的残余继续挂起（半句不丢、不提前切断）
-                                if let Some((p_start, p_end, p_text, merges)) = pending_merge.take() {
-                                    let gap = start_ms.saturating_sub(p_end);
-                                    if merges < MAX_MERGE_CHAIN {
-                                        if let Some(merged) = merge_segments(&p_text, &text, gap) {
-                                            last_final_clean = Some(merged.clone());
-                                            match digest_merged(
-                                                ctx.app,
-                                                ctx.db,
-                                                ctx.session_id,
-                                                ctx.asr_segments,
-                                                p_start,
-                                                end_ms,
-                                                &merged,
-                                            ) {
-                                                Some((rest, rest_start)) => {
-                                                    // 残余半句继续挂起（链式延续）
-                                                    pending_merge = Some((
-                                                        rest_start,
-                                                        end_ms,
-                                                        rest,
-                                                        merges + 1,
-                                                    ));
-                                                }
-                                                None => {
-                                                    // 整段以句号结尾全部切出：挂起清空
-                                                }
-                                            }
-                                            continue;
-                                        }
-                                    }
-                                    // 合并失败（gap 超限）或已达兜底上限：落库旧挂起段
-                                    persist_final(
-                                        ctx.app,
-                                        ctx.db,
-                                        ctx.session_id,
-                                        ctx.asr_segments,
-                                        p_start,
-                                        p_end,
-                                        p_text,
-                                        0.9,
-                                    );
-                                }
-                                pending_merge = Some((start_ms, end_ms, text, 0));
-                                continue;
-                            }
-                            // 先消化挂起段：gap 内合并为完整句；否则兜底独立落库
-                            if let Some((p_start, p_end, p_text, _merges)) = pending_merge.take() {
-                                let gap = start_ms.saturating_sub(p_end);
-                                if let Some(merged) = merge_segments(&p_text, &text, gap) {
-                                    last_final_clean = Some(merged.clone());
-                                    // 合并文本同样按句子切分落库（可能含多句）；
-                                    // 残余是当前句尾部（其后为真实停顿，不再挂起
-                                    // 合并）——残余直接落库为最后一段，内容不丢
-                                    match digest_merged(
-                                        ctx.app,
-                                        ctx.db,
-                                        ctx.session_id,
-                                        ctx.asr_segments,
-                                        p_start,
-                                        end_ms,
-                                        &merged,
-                                    ) {
-                                        Some((rest, rest_start)) => {
-                                            persist_final(
-                                                ctx.app,
-                                                ctx.db,
-                                                ctx.session_id,
-                                                ctx.asr_segments,
-                                                rest_start,
-                                                end_ms,
-                                                rest,
-                                                0.9,
-                                            );
-                                        }
-                                        None => {}
-                                    }
-                                    continue;
-                                }
-                                persist_final(
-                                    ctx.app,
-                                    ctx.db,
-                                    ctx.session_id,
-                                    ctx.asr_segments,
-                                    p_start,
-                                    p_end,
-                                    p_text,
-                                    0.9,
-                                );
-                            }
-                            // 正常段：定稿推送 + 落库（TD-043 时间戳载荷）
-                            persist_final(
-                                ctx.app,
-                                ctx.db,
-                                ctx.session_id,
-                                ctx.asr_segments,
-                                start_ms,
-                                end_ms,
+                            // 定稿落库/挂起合并/句子切分（live_session_persist.rs）
+                            handle_final_event(
+                                FinalEventCtx {
+                                    app: ctx.app,
+                                    db: ctx.db,
+                                    session_id: ctx.session_id,
+                                    asr_segments: ctx.asr_segments,
+                                    sentence_start_ms: &mut sentence_start_ms,
+                                    last_speech_ms: &mut last_speech_ms,
+                                    last_final_clean: &mut last_final_clean,
+                                    pending_merge: &mut pending_merge,
+                                },
                                 text,
-                                0.9,
+                                merge_with_next,
+                                chunk.timestamp_ms,
                             );
                         }
                         StreamingAsrEvent::Partial { text } => {
@@ -327,7 +211,7 @@ pub(crate) fn run_audio_loop(
     }
     if let Some(StreamingAsrEvent::Final { text, .. }) = ctx.asr_engine.flush() {
         let text = match &last_final_clean {
-            Some(prev) => dedupe_across_finals(prev, &text),
+            Some(prev) => crate::asr_dedupe::dedupe_across_finals(prev, &text),
             None => text,
         };
         if !text.is_empty() {
@@ -335,7 +219,7 @@ pub(crate) fn run_audio_loop(
             let end_ms = sentence_end_ms(last_speech_ms, now_ms);
             let start_ms = sentence_start_ms
                 .take()
-                .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
+                .unwrap_or_else(|| end_ms.saturating_sub(crate::live_session_persist::SENTENCE_FALLBACK_MS));
             persist_final(
                 ctx.app,
                 ctx.db,
