@@ -21,6 +21,7 @@
 | [brainstorming-video-types.md（[ ] 已归档）](../archive/2026-08-19/brainstorming-video-types.md) | 视频类型 × 提取优化 × 图片配套 × 结构预处理 × 产物形态 × 补缝式 AI 头脑风暴（2026-08-18：六轮，已采纳进 v0.5.0；2026-08-19 归档） |
 | [2026-08-19-ocr-trigger-redesign.md（[ ] 已归档）](../archive/2026-08-19/2026-08-19-ocr-trigger-redesign.md) | OCR 触发重做与 UI 面板抑制设计规格（2026-08-19：ADR-011/REQ-086/087 已实施 M1-M3，659 单测全绿，M4 真机验收待执行；2026-08-19 归档） |
 | [classroom-capture-technical-review.md（[ ] 已归档）](../archive/2026-08-18/classroom-capture-technical-review.md) | 课堂采集链路技术审查（2026-08-18：四链要点核查 + 缺陷与更佳方案 + 头脑风暴项筛选；A 档七项已实施，2026-08-18 归档） |
+| [analysis-classroom-assistant-pipeline-deep-optimization.md](./analysis-classroom-assistant-pipeline-deep-optimization.md) | 课堂助手三阶段管线深度优化空间（2026-08-19：预处理/核心/后处理逐环节代码级缺陷定位 + 深度优化空间 30 项，与深化方向 84 项互补不重复） |
 | roadmap.md | 有阶段性路线图时 |
 | brainstorming-*.md | 功能创意发散时 |
 | competitive-analysis.md | 竞品调研时 |
