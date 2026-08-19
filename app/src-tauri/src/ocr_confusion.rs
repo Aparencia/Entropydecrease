@@ -1,4 +1,8 @@
 //! OCR 错误模式校准表（REQ-120 PIPE-3 / v0.7.0 M2）。
+
+// 机制先行（v0.7.0 登记）：本模块供后续接线（图像流采集/替换词通道/口令校准），
+// 当前无生产调用方——dead_code 豁免（V1.0/后续里程碑接线时移除）。
+#![allow(dead_code)]
 //!
 //! @ai-context: OCR 常见误识字符对（0/O、1/l/I、8/B、5/S 等）数据驱动画像——
 //!              落库混淆对统计 → 自动生成替换词表（供 REQ-040 替换词通道补充）
@@ -7,7 +11,6 @@
 //!              收集单字符替换对；本模块提供画像聚合与替换表生成的纯逻辑，
 //!              采集端（OCR 块 vs 段文本交叉）在 M2 接线层。
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 /// 单字符混淆计数。
@@ -76,7 +79,7 @@ impl ConfusionProfile {
     /// 高频混淆对（按计数降序，取 top N）。
     pub fn top_pairs(&self, n: usize) -> Vec<&ConfusionCount> {
         let mut sorted: Vec<&ConfusionCount> = self.pairs.iter().collect();
-        sorted.sort_by(|a, b| b.count.cmp(&a.count));
+        sorted.sort_by_key(|p| std::cmp::Reverse(p.count));
         sorted.truncate(n);
         sorted
     }

@@ -5,6 +5,8 @@
 //!              编排层在每次 Final 定稿时用上一 Final 文本调用本模块。
 //! @ai-context: 纯函数可单测；最长公共重叠上限 8 字（防长文本 O(n²) 扫描）。
 
+#![allow(dead_code)]
+
 /// 最长公共重叠扫描上限（字）。
 const MAX_OVERLAP_CHARS: usize = 8;
 

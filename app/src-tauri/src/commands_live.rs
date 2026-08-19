@@ -70,6 +70,8 @@ pub async fn start_live_session(
         app: state.app.clone(),
         // REQ-083：UI 垃圾黑名单（字幕源头过滤）
         ui_junk: state.ui_junk.clone(),
+        // REQ-115：VAD 阈值共享槽（会话线程发布，诊断面板可查）
+        vad_slot: state.vad_slot.clone(),
     };
     // REQ-104/132：剪贴板监听时间戳基准——与实时会话纪元同域（图片文件名不冲突）
     let epoch = Instant::now();

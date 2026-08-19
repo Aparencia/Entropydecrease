@@ -67,6 +67,9 @@ pub fn same_texts(a: &[String], b: &[String]) -> bool {
 ///              （与实时链路 OCR 块同口径，画面要点为增强内容）。
 /// @ai-context: REQ-117（v0.7.0 M2，PRE-O6）：落库前过 is_ui_junk 源头过滤
 ///              ——导入/实时双入口口径统一（播放器时间码/水印不进画面要点）。
+/// @ai-context: 参数为管线上下文传递（DB/引擎/会话/时间戳/图像/去重状态/黑名单），
+///              登记 clippy 豁免（与 persist_final 同模式）。
+#[allow(clippy::too_many_arguments)]
 pub fn ocr_keyframe(
     db: &Db,
     engines: &EnginePool,
@@ -88,6 +91,7 @@ pub fn ocr_keyframe(
 }
 
 /// 单区域识别 + 帧间去重 + 落库。
+#[allow(clippy::too_many_arguments)]
 fn recognize_region(
     db: &Db,
     engines: &EnginePool,

@@ -222,11 +222,16 @@ fn count_webp(dir: &Path) -> usize {
 }
 
 /// 公共包装：BGRA8 → RGB（图像流存储层复用；纯函数）。
+/// @ai-context: 图像流存储层（image_stream_store.rs）调用但该层当前未接线
+///              （M2 档案组刚注册）——登记豁免 dead_code（接线时移除）。
+#[allow(dead_code)]
 pub fn bgra_to_rgb_public(bgraw: &[u8], width: u32, height: u32) -> Option<image::RgbImage> {
     bgra_to_rgb(bgraw, width, height)
 }
 
 /// 公共包装：BGRA8 编码 WebP lossless（图像流存储层复用；纯 IO）。
+/// @ai-context: 同 bgra_to_rgb_public——登记豁免 dead_code（接线时移除）。
+#[allow(dead_code)]
 pub fn encode_webp_public(bgraw: &[u8], width: u32, height: u32, path: &Path) -> Result<()> {
     let rgb = bgra_to_rgb(bgraw, width, height)
         .ok_or_else(|| crate::error::AppError::Io("帧数据无效".to_string()))?;

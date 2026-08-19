@@ -36,6 +36,9 @@ pub struct ImportProgress {
 }
 
 /// 按固定窗口切分时间轴（纯函数；空时长返回空）。
+/// @ai-context: REQ-113 后生产链路用 plan_chunks_with_overlap；本入口保留
+///              兼容（测试/外部引用），登记豁免 dead_code。
+#[allow(dead_code)]
 pub fn plan_chunks(duration_ms: u64, window_ms: u64) -> Vec<(u64, u64)> {
     plan_chunks_with_overlap(duration_ms, window_ms, 0)
 }
@@ -114,6 +117,9 @@ pub fn run_video_import<F: Fn(&ImportProgress)>(
 }
 
 /// 管线主体（与清理/失败标记分离，保证清理必然执行）。
+/// @ai-context: 参数为管线上下文传递（db/engines/resolver/路径/会话/黑名单），
+///              聚合会破坏内聚——登记 clippy 豁免（与 persist_final 同模式）。
+#[allow(clippy::too_many_arguments)]
 fn run_import_inner<F: Fn(&ImportProgress)>(
     db: &Db,
     engines: &EnginePool,
@@ -195,6 +201,9 @@ fn write_subtitle_segments(db: &Db, session_id: i64, segments: &[crate::fusion::
 }
 
 /// 关键帧提取 + OCR（失败跳过不阻断；帧号按固定间隔换算时间戳）。
+/// @ai-context: 参数为管线上下文传递（引擎/DB/解析器/路径/会话/黑名单），
+///              登记 clippy 豁免（与 persist_final 同模式）。
+#[allow(clippy::too_many_arguments)]
 fn ocr_keyframes<F: Fn(&ImportProgress)>(
     engines: &EnginePool,
     db: &Db,

@@ -22,6 +22,8 @@ mod audio_event_filter;
 mod audio_preprocess;
 // v0.7.0 M1（REQ-101）：音频预处理链持久化配置（CER 微基准定默认后的用户开关）
 mod audio_preproc_config;
+// v0.7.0 M2（REQ-126）：分应用音频路由探针（WASAPI 会话级 API 面 spike）
+mod audio_route_probe;
 mod audio_store;
 // v0.7.0 M1（REQ-107，TRUST-1）：数据备份/恢复（SQLite+图+音频 zip 打包/解压）
 mod backup;
@@ -67,9 +69,13 @@ mod device_probe;
 mod engine;
 mod error;
 mod ffmpeg;
+// v0.7.0 M2（REQ-123）：跟练档案步骤边界检测（口令/练习段/示范跟练交替三信号）
+mod follow_along_detect;
 mod formula_reconstruct;
 mod frame_cluster;
 mod frame_features;
+// v0.7.0 M2（REQ-128）：前台时间线（前台切换事件落库 + 实践段标记）
+mod foreground_timeline;
 mod fusion;
 mod glossary;
 mod health_check;
@@ -79,7 +85,11 @@ mod image_store;
 // v0.7.0 M1.5（REQ-110）：图像流存储层（时间轴帧序列——图像优先档）
 mod image_stream_store;
 mod import;
+// v0.7.0 M2（REQ-127）：抢话/打断检测（代理信号版——不依赖讲者识别）
+mod interruption_detect;
 mod import_frame;
+// v0.7.0 M2（REQ-113）：导入音轨转写（import.rs 拆出——重叠窗合并转写）
+mod import_transcribe;
 mod layout_analyzer;
 mod layout_cache;
 #[cfg(target_os = "windows")]
@@ -105,9 +115,13 @@ mod model_downloader;
 mod note_filter;
 mod novelty;
 mod ocr;
+// v0.7.0 M2（REQ-120）：OCR 错误模式校准表（混淆画像 → 替换词候选）
+mod ocr_confusion;
 mod ocr_cache;
 mod outline;
 mod playback_region;
+// v0.7.0 M2（REQ-125）：播放器行为信号（暂停检测 + M17 倍速缩放采样）
+mod player_behavior;
 mod practice_detect;
 mod quality_report;
 mod refine;
@@ -128,6 +142,8 @@ mod table_reconstruct;
 mod types;
 mod ui_junk;
 mod vad_adaptive;
+// v0.7.0 M2（REQ-115）：VAD 阈值共享槽（会话线程发布、诊断面板读取）
+mod vad_threshold_slot;
 mod verbal_normalize;
 mod video_profile;
 mod video_profile_data;
@@ -378,6 +394,8 @@ pub fn run() {
             let clipboard = std::sync::Arc::new(crate::clipboard_signal::ClipboardSignalStore::new());
             let clipboard_monitor =
                 std::sync::Arc::new(std::sync::Mutex::new(None::<crate::clipboard_signal::ClipboardMonitorHandle>));
+            // v0.7.0 M2（REQ-115）：VAD 阈值共享槽（会话线程发布、诊断面板读取）
+            let vad_slot = std::sync::Arc::new(crate::vad_threshold_slot::VadThresholdSlot::default());
             app.manage(AppState {
                 db,
                 engines,
@@ -406,6 +424,8 @@ pub fn run() {
                 // start_live_session 启动监听 / stop_live_session 置位停止）
                 clipboard,
                 clipboard_monitor,
+                // v0.7.0 M2（REQ-115）：VAD 阈值共享槽
+                vad_slot,
             });
             Ok(())
         })
@@ -490,6 +510,8 @@ pub fn run() {
             // 健康巡检与诊断（REQ-042，M7：F2/F3/G2）
             commands_diag::health_status,
             commands_diag::diag_snapshot,
+            // REQ-115（v0.7.0 M2）：VAD 阈值诊断（口径对照可查）
+            commands_diag::vad_threshold_diag,
             // 会话图片配套（REQ-051，v0.5.0 M6：图集/走廊/删除）
             commands_images::list_session_images,
             commands_images::delete_session_image,

@@ -25,7 +25,7 @@ pub fn resample_antialias(input: &[f32], src_rate: u32, dst_rate: u32) -> Vec<f3
     }
     // 整数降采样快速路径：低通后按比例抽取
     let factor = (src_rate / dst_rate) as usize;
-    if factor >= 2 && src_rate % dst_rate == 0 {
+    if factor >= 2 && src_rate.is_multiple_of(dst_rate) {
         let filtered = fir_lowpass(input, factor);
         filtered.iter().step_by(factor).copied().collect()
     } else {
@@ -68,7 +68,7 @@ fn fir_lowpass_cutoff(input: &[f32], cutoff: f64) -> Vec<f32> {
     }
     // 卷积（边界零填充——语音块边缘瞬态可接受）
     let mut out = vec![0.0f32; input.len()];
-    for (i, &sample) in input.iter().enumerate() {
+    for (i, _) in input.iter().enumerate() {
         let mut acc = 0.0f64;
         for (j, &k) in kernel.iter().enumerate() {
             let idx = i as i64 + j as i64 - half_len as i64;

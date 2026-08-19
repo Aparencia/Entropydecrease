@@ -106,6 +106,8 @@ pub struct AppState {
     /// 与实时会话一一对应，同一时刻最多一个）
     pub clipboard_monitor:
         std::sync::Arc<std::sync::Mutex<Option<crate::clipboard_signal::ClipboardMonitorHandle>>>,
+    /// v0.7.0 M2（REQ-115）：VAD 阈值共享槽（会话线程发布当前阈值，诊断面板可查）
+    pub vad_slot: std::sync::Arc<crate::vad_threshold_slot::VadThresholdSlot>,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。

@@ -105,8 +105,7 @@ pub fn merge_segments_with_spacing(prev: &str, next: &str, gap_ms: u64) -> Optio
     let prev_tail = prev.trim_end_matches(|c: char| c.is_whitespace() || BOUNDARY_PUNCT.contains(c)).chars().last();
     let next_head = next
         .chars()
-        .skip_while(|c| c.is_whitespace() || BOUNDARY_PUNCT.contains(*c))
-        .next();
+        .find(|c| !(c.is_whitespace() || BOUNDARY_PUNCT.contains(*c)));
     match (prev_tail, next_head) {
         (Some(p), Some(n)) => match spacing_for(p, n) {
             Some(space) => {
@@ -383,10 +382,11 @@ mod tests {
 
     #[test]
     fn punctuation_boundary_no_space() {
-        // 标点边界天然分隔 → 不插空格
+        // 标点边界：merge 本身剥除边界标点（"。"被剥），语言判定看剥后字符——
+        // "完"（CJK）+"P"（拉丁）→ 仍需空格（标点不阻断混排空格规则）
         assert_eq!(
             merge_segments_with_spacing("今天讲完了。", "Python的内容", 0),
-            Some("今天讲完了。Python的内容".to_string())
+            Some("今天讲完了 Python的内容".to_string())
         );
     }
 
