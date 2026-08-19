@@ -1,74 +1,67 @@
-//! 流式 ASR 纯函数单测（AAA 模式；不依赖真实模型文件——引擎相关为集成测试标注）。
+//! 流式 ASR 引擎测试（AAA 模式；纯函数不依赖真实模型——引擎相关为集成测试标注）。
 //!
 //! @ai-context: 由 streaming_asr.rs 以 #[cfg(test)] #[path] 引入。
+//! @ai-context: 重打分决策（pick_rescored/levenshtein）测试在 asr_rescore.rs，
+//!              净化（clean_asr_result）测试在 asr_clean.rs，跨 final 去重测试在
+//!              asr_dedupe.rs——本文件只保留引擎状态机纯函数与集成测试。
 
-use crate::streaming_asr::{levenshtein, pick_rescored, StreamingAsrEngine, StreamingAsrModels};
+use crate::streaming_asr::{silence_feed_decision, StreamingAsrConfig, StreamingAsrEngine, StreamingAsrModels};
+
+// ── hangover 静音喂入决策（ADR-012 F1-3）──
 
 #[test]
-fn levenshtein_identical_is_zero() {
-    // Act & Assert
-    assert_eq!(levenshtein("今天讲熵减", "今天讲熵减"), 0);
+fn non_silent_always_fed_and_resets_counters() {
+    // 非静音块：喂入 + 双计数复位
+    assert_eq!(silence_feed_decision(false, 5, 1), (true, 0, 0));
 }
 
 #[test]
-fn levenshtein_insertion_counts_one() {
-    // Act & Assert：插入 1 字
-    assert_eq!(levenshtein("熵减", "熵减概念"), 2);
+fn hangover_blocks_fed_without_skip() {
+    // 语音结束后 3 块内：静音也喂入（句尾弱音保护），skip 计数不变
+    assert_eq!(silence_feed_decision(true, 0, 0), (true, 0, 1));
+    assert_eq!(silence_feed_decision(true, 1, 0), (true, 0, 2));
+    assert_eq!(silence_feed_decision(true, 2, 0), (true, 0, 3));
 }
 
 #[test]
-fn levenshtein_substitution_counts_one() {
-    // Act & Assert：替换 1 字
-    assert_eq!(levenshtein("物理", "无理"), 1);
+fn after_hangover_alternate_blocks_skipped() {
+    // hangover 后（第 4 块起）：隔块喂入——奇数块跳过、偶数块喂入
+    let (feed1, skip1, blocks1) = silence_feed_decision(true, 3, 0);
+    assert_eq!((feed1, skip1), (false, 1)); // 第 4 块：跳过
+    let (feed2, skip2, blocks2) = silence_feed_decision(true, blocks1, skip1);
+    assert_eq!((feed2, skip2), (true, 0)); // 第 5 块：喂入
+    let (feed3, skip3, _) = silence_feed_decision(true, blocks2, skip2);
+    assert_eq!((feed3, skip3), (false, 1)); // 第 6 块：跳过
 }
 
 #[test]
-fn levenshtein_empty_strings() {
-    // Act & Assert
-    assert_eq!(levenshtein("", ""), 0);
-    assert_eq!(levenshtein("abc", ""), 3);
-    assert_eq!(levenshtein("", "abc"), 3);
+fn hangover_resets_after_speech() {
+    // 长静音后出现语音 → 计数全部复位，后续静音重新走 hangover
+    let (_, _, blocks) = silence_feed_decision(true, 100, 1); // 长静音（跳过中）
+    assert_eq!(blocks, 101);
+    let (feed, skip, blocks) = silence_feed_decision(false, blocks, 1);
+    assert_eq!((feed, skip, blocks), (true, 0, 0));
+    // 新语音段结束 → 再次 hangover 保护
+    assert_eq!(silence_feed_decision(true, 0, 0), (true, 0, 1));
 }
 
 #[test]
-fn rescored_takes_sensevoice_when_close() {
-    // Arrange：编辑距离 1（≤40% 阈值），SenseVoice 应胜出
-    let zip = "熵减的概念";
-    let sense = "熵减的概念";
-    // Act
-    let picked = pick_rescored(zip, sense);
-    // Assert
-    assert_eq!(picked.as_deref(), Some("熵减的概念"));
+fn silence_blocks_counter_counts_all_silent_blocks() {
+    // 连续静音块数持续累计（不受隔块跳过影响）——尾静音端点判别依据
+    let mut blocks = 0;
+    for _ in 0..10 {
+        let (_, _, b) = silence_feed_decision(true, blocks, 0);
+        blocks = b;
+    }
+    assert_eq!(blocks, 10);
 }
 
-#[test]
-fn rescored_keeps_zipformer_when_far() {
-    // Arrange：语义差异大（编辑距离超阈值）→ 保留 Zipformer
-    let zip = "今天讲牛顿定律";
-    let sense = "明天考试加油";
-    // Act
-    let picked = pick_rescored(zip, sense);
-    // Assert
-    assert_eq!(picked, None);
-}
+// ── rule3 配置（ADR-012 F3-1）──
 
 #[test]
-fn rescored_handles_empty_inputs() {
-    // Act & Assert：任一为空 → None
-    assert_eq!(pick_rescored("", "有内容"), None);
-    assert_eq!(pick_rescored("有内容", ""), None);
-    assert_eq!(pick_rescored("", ""), None);
-}
-
-#[test]
-fn rescored_trim_normalizes_whitespace() {
-    // Arrange：首尾空白不应影响一致性判断
-    let zip = "  熵减  ";
-    let sense = "熵减";
-    // Act
-    let picked = pick_rescored(zip, sense);
-    // Assert
-    assert_eq!(picked.as_deref(), Some("熵减"));
+fn default_rule3_is_8_seconds() {
+    // 默认 8s（5s 过短致句中硬切，取证 ADR-012）
+    assert_eq!(StreamingAsrConfig::default().rule3_min_utterance_secs, 8.0);
 }
 
 /// 集成测试：用本机真实 Zipformer 模型验证加载与喂入不崩溃。
@@ -93,8 +86,9 @@ fn load_and_feed_streaming_zipformer_integration() {
         joiner: p("joiner.fp16.onnx"),
         tokens: p("tokens.txt"),
     };
-    // Act：加载（第一代 zipformer，自动推断——修复前此处崩溃；M5 词表参数传 None）
-    let mut engine = StreamingAsrEngine::load(&models, None, None).expect("流式模型加载成功");
+    // Act：加载（ADR-012：显式传 config；M5 词表参数传 None）
+    let mut engine = StreamingAsrEngine::load(&models, &StreamingAsrConfig::default(), None, None)
+        .expect("流式模型加载成功");
     // 喂入合成音频（1s 随机噪声 = 非静音，走完整 decode 路径）
     let samples: Vec<f32> = (0..16000).map(|i| ((i % 997) as f32 / 997.0 - 0.5) * 0.2).collect();
     let events = engine.feed(&samples, false);

@@ -21,6 +21,7 @@ use std::time::{Duration, Instant};
 
 use tauri::Emitter;
 
+use crate::asr_dedupe::dedupe_across_finals;
 use crate::capture::resample::compute_rms;
 use crate::capture::{AudioChunk, AudioLoopbackCapture};
 use crate::db::Db;
@@ -28,7 +29,10 @@ use crate::engine::EnginePool;
 use crate::error::{AppError, Result};
 use crate::fusion::SubtitleSegment;
 use crate::live_session_frame::run_screen_worker;
-use crate::streaming_asr::{StreamingAsrEngine, StreamingAsrEvent, StreamingAsrModels, SILENCE_RMS_THRESHOLD};
+use crate::streaming_asr::{
+    StreamingAsrConfig, StreamingAsrEngine, StreamingAsrEvent, StreamingAsrModels,
+    SILENCE_RMS_THRESHOLD,
+};
 use crate::types::{NewSessionSegment, TranscriptSegment};
 
 /// 会话线程节拍（音频 channel 超时轮询间隔，ms）。
@@ -237,15 +241,31 @@ fn run_session(
     let mut last_speech_ms: Option<u64> = None;
     // M6/REQ-041 A1：音频预处理链（默认关——微基准 CER 对比后定默认；
     // 开启后 AGC + 削波检测 + 动态静音阈值，防轻声讲课被 VAD 截断）
-    let mut audio_pre = crate::audio_preprocess::AudioPreprocessor::default();
+    // ADR-012 F2-3：env ENTROPY_AUDIO_PREPROC=1 先行实测（12.wav 低电平取证）
+    let preproc_enabled = std::env::var("ENTROPY_AUDIO_PREPROC").map(|v| v == "1").unwrap_or(false);
+    let mut audio_pre = crate::audio_preprocess::AudioPreprocessor::new(
+        crate::audio_preprocess::AudioPreprocessConfig {
+            enabled: preproc_enabled,
+            ..Default::default()
+        },
+    );
     let mut clipping_logged = false;
     // M7/REQ-042 F5：ASR 健康监测（静默语音 → 降级提示；恢复自动回落）
     let mut asr_health = crate::asr_health::AsrHealthMonitor::new();
     let mut asr_tier_emitted = crate::asr_health::AsrTier::Streaming;
+    // ADR-012 F3-2：跨 final 重叠去重状态（上一 Final 净化文本；空=无前句）
+    let mut last_final_clean: Option<String> = None;
 
     // 1) 流式 ASR（SenseVoice 重打分接离线引擎池；M5 热词经共享词表注入）
+    // ADR-012 F3-1：rule3 最长句 env 可覆盖（默认 8s——5s 过短致句中硬切）
+    let rule3_secs = std::env::var("ENTROPY_ASR_RULE3_SECS")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(8.0);
+    let asr_config = StreamingAsrConfig { rule3_min_utterance_secs: rule3_secs };
     let mut asr_engine = match StreamingAsrEngine::load(
         &params.streaming_models,
+        &asr_config,
         Some(engines.clone()),
         Some(params.vocab.clone()),
     ) {
@@ -407,6 +427,16 @@ fn run_session(
                 for event in events.drain(..) {
                     match event {
                         StreamingAsrEvent::Final { text } => {
+                            // ADR-012 F3-2：跨 final 重叠去重（rule3 硬切/端点误断句
+                            // 的句尾词重复防护）；整体重复 → 跳过推送与落库
+                            let text = match &last_final_clean {
+                                Some(prev) => dedupe_across_finals(prev, &text),
+                                None => text,
+                            };
+                            if text.is_empty() {
+                                continue;
+                            }
+                            last_final_clean = Some(text.clone());
                             let end_ms = sentence_end_ms(last_speech_ms, chunk.timestamp_ms);
                             let start_ms = sentence_start_ms
                                 .take()
@@ -445,35 +475,42 @@ fn run_session(
         }
     }
 
-    // 4) 停止：flush ASR 尾句（时间戳用会话纪元；句尾校正同 TD-041）
+    // 4) 停止：flush ASR 尾句（时间戳用会话纪元；句尾校正同 TD-041；
+    //    跨 final 去重同主循环——ADR-012 F3-2）
     if let Some(StreamingAsrEvent::Final { text }) = asr_engine.flush() {
-        let now_ms = epoch.elapsed().as_millis() as u64;
-        let end_ms = sentence_end_ms(last_speech_ms, now_ms);
-        let start_ms = sentence_start_ms
-            .take()
-            .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
-        // 尾句同样推前端（TD-043 时间戳载荷，实时转写流保持完整）
-        let _ = params.app.emit(
-            "live:asr-final",
-            AsrFinalEvent { timestamp_ms: start_ms, text: text.clone() },
-        );
-        let _ = db.add_segment(&NewSessionSegment {
-            session_id,
-            start_ms,
-            end_ms,
-            text: text.clone(),
-            source: "asr".to_string(),
-            confidence: Some(0.8),
-        });
-        asr_segments.push(TranscriptSegment {
-            start_ms,
-            end_ms,
-            text,
-            // 流式链路词级时间戳：B8 由离线/精修路径产出（None）
-            word_timestamps: None,
-            // REQ-062：融合概率加权输入（与落库 confidence 同源；尾句置信度略低）
-            confidence: Some(0.8),
-        });
+        let text = match &last_final_clean {
+            Some(prev) => dedupe_across_finals(prev, &text),
+            None => text,
+        };
+        if !text.is_empty() {
+            let now_ms = epoch.elapsed().as_millis() as u64;
+            let end_ms = sentence_end_ms(last_speech_ms, now_ms);
+            let start_ms = sentence_start_ms
+                .take()
+                .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
+            // 尾句同样推前端（TD-043 时间戳载荷，实时转写流保持完整）
+            let _ = params.app.emit(
+                "live:asr-final",
+                AsrFinalEvent { timestamp_ms: start_ms, text: text.clone() },
+            );
+            let _ = db.add_segment(&NewSessionSegment {
+                session_id,
+                start_ms,
+                end_ms,
+                text: text.clone(),
+                source: "asr".to_string(),
+                confidence: Some(0.8),
+            });
+            asr_segments.push(TranscriptSegment {
+                start_ms,
+                end_ms,
+                text,
+                // 流式链路词级时间戳：B8 由离线/精修路径产出（None）
+                word_timestamps: None,
+                // REQ-062：融合概率加权输入（与落库 confidence 同源；尾句置信度略低）
+                confidence: Some(0.8),
+            });
+        }
     }
     audio.stop();
 
