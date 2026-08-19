@@ -336,3 +336,30 @@
 | 归档日期 | 内容摘要 | 未偿债务 |
 |----------|---------|----------|
 | 2026-08-19（十一轮） | 图像信息复用头脑风暴存档（价值谱系/类型权重/复用矩阵三轮，REQ-088~097 已登记需求池待评估，提交 8771350）；累计已偿 77 笔 | TD-040（P2，deliberate carried），共 1 笔 |
+
+---
+
+## 十二轮归档（同日，深化需求裁决表 + 三阶段管线优化 裁决完成归档）
+
+> 六轴规划讨论完成：需求裁决表（143 条目）逐轴裁决 → v0.7.0 范围确定（REQ-088/098~134 已登记需求池，37 项）；管线优化 30 项中 PRE/CORE/POST/X-O 主项流转 v0.7.0（REQ-098~120），其余保留归档副本待议。两文档使命终结归档。
+
+### 归档清单（十二轮）
+
+| 源路径 | 归档路径 | 状态 |
+|--------|---------|------|
+| docs/Foresight/requirements-decision-table-classroom-assistant-deepening.md | docs/archive/2026-08-19/requirements-decision-table-classroom-assistant-deepening.md | [ ] 已归档（深化需求裁决表：三源合并 143 条目——深化 84 × 图像 10 × 管线 27 + 查漏 20；六轴逐项裁决（✅73/⏸56/❌11/🔒3）+ 二轮架构探讨（存储层丰富化 §7.0 / 档案级图像优先 §6.3 → M-存储 里程碑）+ 三通道模型（ASR/OCR/图像流）；v0.7.0 登记 REQ-088/098~134；未裁决与远期项保留归档副本待议） |
+| docs/Foresight/analysis-classroom-assistant-pipeline-deep-optimization.md | docs/archive/2026-08-19/analysis-classroom-assistant-pipeline-deep-optimization.md | [ ] 已归档（三阶段管线深度优化：预处理/核心/后处理逐环节代码级缺陷定位 23 项 + 深度优化空间 30 项；2026-08-19 裁决——PRE/CORE/POST/X-O 主项流转 v0.7.0 REQ-098~120，远期项保留待议） |
+
+- **未归档**：多轮先例保留项（no-cloud-ai / mechanisms + fed-guide / versions/ / standards/ / product/）维持活跃
+
+### 技术债摘要（十二轮滚动）
+
+- **未偿 1 笔**：TD-040（P2，deliberate carried——纯文档变更，十二次核对维持观察）
+- 累计已偿：77 笔（今日累计 32 笔，纯文档变更不新增债务）
+- **无新增编号债务**：规划/归档纯文档产出，不产生技术债
+
+## 归档索引（docs/archive/README.md 汇总行追加）
+
+| 归档日期 | 内容摘要 | 未偿债务 |
+|----------|---------|----------|
+| 2026-08-19（十二轮） | 深化需求裁决表 + 三阶段管线优化 归档（六轴裁决完成：v0.7.0 登记 REQ-088/098~134 共 37 项，v0.7.0 规划文档建立；未裁决项保留归档副本待议）；累计已偿 77 笔 | TD-040（P2，deliberate carried），共 1 笔 |

@@ -1,8 +1,8 @@
 # 课堂助手三阶段管线深度优化空间（预处理 / 核心处理 / 后处理）
 
-**状态**: 前瞻构想（未排期，2026-08-19 代码级分析产出，待用户裁决流转需求池）
+**状态**: [ ] 已归档（2026-08-19 裁决完成：PRE/CORE/POST/X-O 优化项流转 v0.7.0（REQ-098~120 已排期）；未选与远期项保留于归档副本待议）
 **用途**: 面向"提取质量与信任"主线（v0.6.0 主题）的**管线级**深度优化空间——非新功能发散（那属于深化方向 84 项），而是对既有三阶段实现（预处理→核心→后处理）逐环节做**实现层**优化。
-**关联**: [深化方向 84 项（[ ] 已归档）](../archive/2026-08-19/brainstorming-classroom-assistant-deepening.md) · [缺口评估（[ ] 已归档）](../archive/2026-08-19/brainstorming-classroom-assistant-gaps.md) · [机制清单（[ ] 已归档）](../archive/2026-08-18/brainstorming-classroom-assistant-mechanisms-merged.md) · [v0.6.0 规划](../versions/v0.6.0.md) · [技术债清单](../archive/2026-08-19/tech-debt.md) · [需求池](../product/requirements-pool.md)
+**关联**: [深化方向 84 项（[ ] 已归档）](./brainstorming-classroom-assistant-deepening.md) · [缺口评估（[ ] 已归档）](./brainstorming-classroom-assistant-gaps.md) · [机制清单（[ ] 已归档）](../2026-08-18/brainstorming-classroom-assistant-mechanisms-merged.md) · [v0.7.0 规划](../../versions/v0.7.0.md) · [技术债清单](./tech-debt.md) · [需求池](../../product/requirements-pool.md)
 
 ---
 
