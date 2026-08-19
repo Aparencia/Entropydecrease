@@ -17,6 +17,7 @@ fn seg(id: i64, start: u64, text: &str, conf: Option<f32>) -> SessionSegment {
         text: text.to_string(),
         source: "asr".to_string(),
         confidence: conf,
+            volume: None,
     }
 }
 

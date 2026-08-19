@@ -107,6 +107,8 @@ pub async fn add_session_segment(
         text: text.chars().take(10_000).collect(),
         source: normalize_source(&source),
         confidence,
+        // REQ-103：手工追加段无音量数据（None=未知）
+        volume: None,
     };
     state.db.add_segment(&new).map(|s| s.id).map_err(|e| e.to_string())
 }
