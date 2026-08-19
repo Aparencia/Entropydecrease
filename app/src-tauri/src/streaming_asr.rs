@@ -310,7 +310,6 @@ fn ensure_model_files(models: &StreamingAsrModels) -> Result<()> {
     Ok(())
 }
 
-// 兼容 re-export：重打分决策纯函数（asr_rescore.rs 实现，外部引用保持路径不变）。
 // 兼容 re-export：编辑距离（asr_rescore.rs 实现；dtw_align/subtitle_ocr/fusion 引用此路径）。
 pub use crate::asr_rescore::levenshtein;
 

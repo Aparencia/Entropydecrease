@@ -17,8 +17,7 @@ use sherpa_onnx::{
 
 /// 静音判定阈值（与 streaming_asr.rs SILENCE_RMS_THRESHOLD 同值，供对照）。
 const SILENCE_RMS: f32 = 0.005;
-/// 块时长（ms）与样本数（16kHz × 200ms，与音频链路块对齐）。
-const BLOCK_MS: usize = 200;
+/// 块样本数（16kHz × 200ms，与音频链路块对齐）。
 const BLOCK_SAMPLES: usize = 16_000 / 5;
 /// 窗口复核时向后多取的音频（ms）——覆盖端点判定滞后与句尾弱音。
 const TAIL_MARGIN_MS: i64 = 1200;
