@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 /// @ai-context: start_ms/end_ms 为相对会话起点的毫秒时间戳，用于与 OCR 关键帧对齐拼接。
 /// @ai-context: v0.5.0 M9（REQ-054 B8）：word_timestamps 为词级时间戳
 ///              （[词, 起始毫秒] 对，相对片段起点；SenseVoice 开启 token timestamps 时产出）。
+/// @ai-context: v0.6.0 M2（REQ-062）：confidence 为 ASR 段置信度（概率加权融合输入；
+///              None=未知/旧数据——融合层回退硬规则兜底）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TranscriptSegment {
     /// 起始毫秒时间戳
@@ -21,6 +23,9 @@ pub struct TranscriptSegment {
     pub text: String,
     /// 词级时间戳（B8；None=未开启/旧数据）
     pub word_timestamps: Option<Vec<WordTimestamp>>,
+    /// ASR 段置信度 0.0-1.0（REQ-062 概率加权融合；None=未知）
+    #[serde(default)]
+    pub confidence: Option<f32>,
 }
 
 /// 词级时间戳（B8：产物双向定位 + AI 补缝判定器基础）。

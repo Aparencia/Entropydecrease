@@ -9,7 +9,7 @@ use crate::subtitle::{
 };
 
 fn seg(start_ms: u64, end_ms: u64, text: &str) -> crate::fusion::SubtitleSegment {
-    crate::fusion::SubtitleSegment { start_ms, end_ms, text: text.to_string() }
+    crate::fusion::SubtitleSegment { start_ms, end_ms, text: text.to_string(), confidence: None }
 }
 
 // ── SRT ──────────────────────────────────────────────

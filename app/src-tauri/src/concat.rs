@@ -133,7 +133,13 @@ mod tests {
     use super::*;
 
     fn seg(start: u64, end: u64, text: &str) -> TranscriptSegment {
-        TranscriptSegment { start_ms: start, end_ms: end, text: text.to_string(), word_timestamps: None }
+        TranscriptSegment {
+            start_ms: start,
+            end_ms: end,
+            text: text.to_string(),
+            word_timestamps: None,
+            confidence: None,
+        }
     }
     fn ocr(ts: Option<u64>, text: &str, score: f32) -> OcrBlock {
         OcrBlock { timestamp_ms: ts, text: text.to_string(), score, bbox: None, region_kind: None }

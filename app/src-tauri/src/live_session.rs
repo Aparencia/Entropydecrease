@@ -406,6 +406,8 @@ fn run_session(
                                 text,
                                 // 流式链路词级时间戳：B8 由离线/精修路径产出（None）
                                 word_timestamps: None,
+                                // REQ-062：融合概率加权输入（与落库 confidence 同源）
+                                confidence: Some(0.9),
                             });
                         }
                         StreamingAsrEvent::Partial { text } => {
@@ -445,6 +447,8 @@ fn run_session(
             text,
             // 流式链路词级时间戳：B8 由离线/精修路径产出（None）
             word_timestamps: None,
+            // REQ-062：融合概率加权输入（与落库 confidence 同源；尾句置信度略低）
+            confidence: Some(0.8),
         });
     }
     audio.stop();

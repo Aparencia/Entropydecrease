@@ -145,7 +145,13 @@ fn parse_srt(text: &str) -> Vec<SubtitleSegment> {
         if body.is_empty() {
             continue;
         }
-        segments.push(SubtitleSegment { start_ms, end_ms, text: body.to_string() });
+        segments.push(SubtitleSegment {
+            start_ms,
+            end_ms,
+            text: body.to_string(),
+            // 外挂字幕（文件导入）无投票置信度（None=融合回退硬规则）
+            confidence: None,
+        });
     }
     segments
 }
@@ -228,7 +234,13 @@ fn parse_ass(text: &str) -> Vec<SubtitleSegment> {
         if text.is_empty() {
             continue;
         }
-        segments.push(SubtitleSegment { start_ms, end_ms, text: text.to_string() });
+        segments.push(SubtitleSegment {
+            start_ms,
+            end_ms,
+            text: text.to_string(),
+            // 外挂字幕（文件导入）无投票置信度（None=融合回退硬规则）
+            confidence: None,
+        });
     }
     segments
 }
@@ -239,7 +251,13 @@ fn push_cue(segments: &mut Vec<SubtitleSegment>, start_ms: u64, end_ms: u64, tex
     if body.is_empty() {
         return;
     }
-    segments.push(SubtitleSegment { start_ms, end_ms, text: body });
+    segments.push(SubtitleSegment {
+        start_ms,
+        end_ms,
+        text: body,
+        // 外挂字幕（文件导入）无投票置信度（None=融合回退硬规则）
+        confidence: None,
+    });
 }
 
 /// 按空行分块（归一化 \r\n 与多空行；返回拥有所有权的块，避免引用临时值）。

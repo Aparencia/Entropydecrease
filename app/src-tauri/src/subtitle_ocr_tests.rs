@@ -2,10 +2,13 @@
 //!
 //! @ai-context: 由 subtitle_ocr.rs 以 #[cfg(test)] #[path] 引入。
 
-use crate::subtitle_ocr::{is_scrolling, sample_join_limit, vote_text, SubtitleVoter, VotedSubtitle};
+use crate::subtitle_ocr::{
+    is_scrolling, sample_join_limit, vote_text, vote_text_with_confidence, SubtitleVoter,
+    VotedSubtitle,
+};
 
 fn voted(start_ms: u64, end_ms: u64, text: &str) -> VotedSubtitle {
-    VotedSubtitle { start_ms, end_ms, text: text.to_string() }
+    VotedSubtitle { start_ms, end_ms, text: text.to_string(), confidence: Some(1.0) }
 }
 
 // ── 投票（T2）────────────────────────────────────────
@@ -47,6 +50,56 @@ fn vote_empty_input_returns_empty() {
     assert_eq!(vote_text(&["", ""]), "");
 }
 
+// ── 投票置信度（REQ-062）────────────────────────────
+
+#[test]
+fn vote_confidence_high_when_samples_agree() {
+    // Arrange：3 帧完全一致 → 每位多数比例 1.0
+    let samples = ["你好世界", "你好世界", "你好世界"];
+    // Act
+    let (text, confidence) = vote_text_with_confidence(&samples);
+    // Assert
+    assert_eq!(text, "你好世界");
+    assert!((confidence - 1.0).abs() < 1e-6, "全一致置信度应 1.0，实得 {}", confidence);
+}
+
+#[test]
+fn vote_confidence_drops_with_disagreement() {
+    // Arrange：2 帧正确 + 1 帧错字 → 错字位多数比例 2/3 ≈ 0.667
+    let samples = ["你好世界", "你好世畀", "你好世界"];
+    // Act
+    let (text, confidence) = vote_text_with_confidence(&samples);
+    // Assert：文本被纠正但置信度 < 1（证据不完美）
+    assert_eq!(text, "你好世界");
+    assert!(confidence < 1.0 && confidence > 0.6, "多数比例应在 (0.5,1)，实得 {}", confidence);
+}
+
+#[test]
+fn vote_confidence_tie_uses_half() {
+    // Arrange：平票位（首样本仲裁）→ 该位置信度 0.5
+    let samples = ["颜色", "色彩"];
+    // Act
+    let (text, confidence) = vote_text_with_confidence(&samples);
+    // Assert：文本首样本胜出；置信度 0.5（证据不足）
+    assert_eq!(text, "颜色");
+    assert!((confidence - 0.5).abs() < 1e-6, "仲裁位置信度应 0.5，实得 {}", confidence);
+}
+
+#[test]
+fn voted_subtitle_carries_confidence_into_fusion_segment() {
+    // Arrange：投票器累积 3 帧一致样本 → 定稿
+    let mut voter = SubtitleVoter::new();
+    voter.observe("同一句话", 0);
+    voter.observe("同一句话", 1000);
+    // Act：切换触发定稿（"这是完全不同的下一句" 编辑距离 >2 → 新组）
+    let finalized = voter.observe("这是完全不同的下一句", 2000).expect("finalized");
+    // Assert：VotedSubtitle 置信度 1.0 且 into_segment 传递到融合层
+    assert_eq!(finalized.confidence, Some(1.0));
+    let seg = finalized.into_segment();
+    assert_eq!(seg.confidence, Some(1.0));
+    assert_eq!(seg.text, "同一句话");
+}
+
 // ── 投票器（有状态）──────────────────────────────────
 
 #[test]
@@ -73,8 +126,12 @@ fn same_subtitle_accumulates_and_finalizes_on_change() {
     assert_eq!(voter.observe("这是一段字幕", 2000), None);
     // 字幕切换 → 定稿上一组（投票校正 + 真实时间轴）
     let finalized = voter.observe("下一个要点", 3000).expect("finalized");
-    // Assert
-    assert_eq!(finalized, voted(0, 3000, "这是一段字幕"));
+    // Assert：文本投票校正；时间轴正确；置信度为多数比例（错字位 2/3）
+    assert_eq!(finalized.start_ms, 0);
+    assert_eq!(finalized.end_ms, 3000);
+    assert_eq!(finalized.text, "这是一段字幕");
+    let conf = finalized.confidence.expect("confidence");
+    assert!(conf < 1.0 && conf > 0.5, "错字位置信度应在 (0.5,1)，实得 {}", conf);
     // 新组已开启
     assert_eq!(voter.preview(), Some("下一个要点"));
 }
@@ -147,8 +204,12 @@ fn long_text_multi_char_errors_stay_in_group() {
     assert_eq!(voter.observe("今天我们要学习牛吨三大运东定津", 1000), None);
     // 切换时定稿投票结果（多数帧为原文本）
     let finalized = voter.observe("下一段内容", 2000).expect("finalized");
-    // Assert：投票输出原文本（2 票 vs 1 票）
-    assert_eq!(finalized, voted(0, 2000, "今天我们要学习牛顿三大运动定律"));
+    // Assert：投票输出原文本（2 票 vs 1 票）；置信度 = 多数比例
+    assert_eq!(finalized.start_ms, 0);
+    assert_eq!(finalized.end_ms, 2000);
+    assert_eq!(finalized.text, "今天我们要学习牛顿三大运动定律");
+    let conf = finalized.confidence.expect("confidence");
+    assert!(conf < 1.0 && conf > 0.5, "错字位置信度应在 (0.5,1)，实得 {}", conf);
 }
 
 // ── 滚动字幕检测（保持）──────────────────────────────

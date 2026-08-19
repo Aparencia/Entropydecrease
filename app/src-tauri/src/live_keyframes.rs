@@ -159,7 +159,9 @@ pub fn rewrite_with_fusion(
                 FusedSource::Fused => "fused",
             }
             .to_string(),
-            confidence: None,
+            // REQ-062（v0.6.0 M2）：融合后置信度回填（字幕投票置信度/ASR 置信度/
+            // 低置信核对标记——B3 落库通道；None=旧路径无置信度）
+            confidence: s.confidence,
         })
         .collect();
     db.replace_segments(session_id, &items)?;

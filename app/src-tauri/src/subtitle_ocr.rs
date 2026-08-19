@@ -31,12 +31,19 @@ pub struct VotedSubtitle {
     pub start_ms: u64,
     pub end_ms: u64,
     pub text: String,
+    /// v0.6.0 M2（REQ-062）：投票置信度（多数位占比均值；供概率加权融合）
+    pub confidence: Option<f32>,
 }
 
 impl VotedSubtitle {
     /// 转成融合层字幕段（同一契约，直接进入融合/直出）。
     pub fn into_segment(self) -> SubtitleSegment {
-        SubtitleSegment { start_ms: self.start_ms, end_ms: self.end_ms, text: self.text }
+        SubtitleSegment {
+            start_ms: self.start_ms,
+            end_ms: self.end_ms,
+            text: self.text,
+            confidence: self.confidence,
+        }
     }
 }
 
@@ -111,11 +118,12 @@ impl SubtitleVoter {
         voted
     }
 
-    /// 定稿当前组：投票文本 + start=首样本时刻、end=传入时刻。
+    /// 定稿当前组：投票文本 + 投票置信度 + start=首样本时刻、end=传入时刻。
     fn finalize_inner(&self, end_ms: u64) -> Option<VotedSubtitle> {
         let (_, first_ts) = self.samples.first()?;
         let texts: Vec<&str> = self.samples.iter().map(|(t, _)| t.as_str()).collect();
-        Some(VotedSubtitle { start_ms: *first_ts, end_ms, text: vote_text(&texts) })
+        let (text, confidence) = vote_text_with_confidence(&texts);
+        Some(VotedSubtitle { start_ms: *first_ts, end_ms, text, confidence: Some(confidence) })
     }
 }
 
@@ -126,13 +134,23 @@ impl SubtitleVoter {
 ///              （如 2 帧中 1 帧误带句号 → 不输出句号）；首样本仲裁让平票
 ///              稳定收敛到最初观察（最接近字幕真实内容）。
 pub fn vote_text(samples: &[&str]) -> String {
+    vote_text_with_confidence(samples).0
+}
+
+/// 投票文本 + 置信度（REQ-062）：多数位占比均值。
+///
+/// @ai-context: 每位多数票比例 ∈ (0.5, 1.0]（全样本一致 → 1.0）；无多数票的
+///              首样本仲裁位按 0.5 计（证据不足，置信度打折）；空样本 → 空文本。
+pub fn vote_text_with_confidence(samples: &[&str]) -> (String, f32) {
     let Some(max_len) = samples.iter().map(|s| s.chars().count()).max() else {
-        return String::new();
+        return (String::new(), 0.0);
     };
     let n = samples.len();
     let chars: Vec<Vec<char>> = samples.iter().map(|s| s.chars().collect()).collect();
     let first = &chars[0];
     let mut out = String::with_capacity(max_len);
+    let mut conf_sum = 0.0f32;
+    let mut conf_count = 0usize;
     for i in 0..max_len {
         // 统计第 i 位各字符票数（缺失位样本不投票）
         let mut counts: Vec<(char, usize)> = Vec::new();
@@ -147,11 +165,22 @@ pub fn vote_text(samples: &[&str]) -> String {
         // 多数（票数 ×2 > 样本数）→ 输出；否则首样本该位仲裁；再否则截断
         let majority = counts.iter().find(|(_, cnt)| *cnt * 2 > n).map(|(c, _)| *c);
         match majority.or_else(|| first.get(i).copied()) {
-            Some(c) => out.push(c),
+            Some(c) => {
+                out.push(c);
+                // 置信度：多数位比例（仲裁位无多数 → 0.5 证据不足）
+                let ratio = majority
+                    .map(|_| {
+                        counts.iter().find(|(ch, _)| *ch == c).map(|(_, cnt)| *cnt).unwrap_or(0) as f32 / n as f32
+                    })
+                    .unwrap_or(0.5);
+                conf_sum += ratio;
+                conf_count += 1;
+            }
             None => break,
         }
     }
-    out
+    let confidence = if conf_count == 0 { 0.0 } else { conf_sum / conf_count as f32 };
+    (out, confidence)
 }
 
 /// 滚动字幕检测：连续两帧文本不同但共享高比例公共子序列 → 判定滚动（丢弃）。

@@ -74,6 +74,8 @@ impl AsrEngine {
             end_ms: duration_ms,
             text: result.text.trim().to_string(),
             word_timestamps: extract_word_timestamps(&result),
+            // 离线整句置信度：sherpa-onnx 未暴露（None=未知，融合回退硬规则）
+            confidence: None,
         })
     }
 
@@ -98,6 +100,8 @@ impl AsrEngine {
             end_ms: duration_ms,
             text: result.text.trim().to_string(),
             word_timestamps: extract_word_timestamps(&result),
+            // 重打分置信度：sherpa-onnx 未暴露（None=未知，融合回退硬规则）
+            confidence: None,
         })
     }
 }
