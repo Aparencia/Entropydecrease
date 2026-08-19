@@ -97,6 +97,22 @@ pub fn live_session_status(state: State<'_, AppState>) -> LiveSessionStatus {
     }
 }
 
+/// 暂停实时会话（2026-08 A1 硬暂停：完全停采，时间轴冻结）。
+///
+/// @ai-context: 只置共享标志——实际暂停由捕获线程边沿检测执行（WASAPI 端点
+///              Stop + 暂停时长累计），会话线程发出 live:paused 事件与落库；
+///              无活动会话/已暂停 → 明确报错（幂等拒绝）。
+#[tauri::command]
+pub fn pause_live_session(state: State<'_, AppState>) -> Result<(), String> {
+    state.live_session.pause().map_err(|e| e.to_string())
+}
+
+/// 恢复暂停的实时会话（2026-08 A1；未暂停 → 明确报错）。
+#[tauri::command]
+pub fn resume_live_session(state: State<'_, AppState>) -> Result<(), String> {
+    state.live_session.resume().map_err(|e| e.to_string())
+}
+
 /// 启动剪贴板监听（REQ-104/132）：start_live_session 成功后调用。
 ///
 /// @ai-context: 语义 = 新会话开始 → 清空旧会话信号（信号只反映最近一次会话的

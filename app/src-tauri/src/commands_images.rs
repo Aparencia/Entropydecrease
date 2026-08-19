@@ -7,6 +7,8 @@
 //!              拒绝路径穿越（../ 等）——Tauri IPC 文件系统访问边界。
 
 use tauri::State;
+// 2026-08 A3：save_user_screenshot 补 live:image-saved 事件（Emitter trait）
+use tauri::Emitter;
 
 use crate::commands::AppState;
 use crate::image_store::SessionImageStore;
@@ -24,6 +26,8 @@ fn session_image_dir(state: &AppState, session_id: i64) -> std::path::PathBuf {
 /// @ai-context: 从实时会话的最新帧缓存取当前帧 → 存图（full+thumb）；
 ///              用户自己觉得重要的时刻 → 关键图投票最高权重（D1 回路输入）。
 /// @ai-context: 无活动会话/无帧 → Err（前端提示）。
+/// @ai-context: 2026-08 A3：成功后 emit live:image-saved——修复"最近画面"条
+///              不刷新的闭环缺口（前端手动标记按钮即时可见新图）。
 #[tauri::command]
 pub fn save_user_screenshot(state: State<'_, AppState>) -> Result<String, String> {
     let frame = state
@@ -36,9 +40,11 @@ pub fn save_user_screenshot(state: State<'_, AppState>) -> Result<String, String
         .ok_or_else(|| "无活动会话".to_string())?;
     let mut store = SessionImageStore::new(session_image_dir(&state, session_id))
         .map_err(|e| e.to_string())?;
-    store
+    let rel = store
         .save_frame(frame.timestamp_ms, &frame.bgraw, frame.width, frame.height)
-        .map_err(|e| format!("保存截图失败: {}", e))
+        .map_err(|e| format!("保存截图失败: {}", e))?;
+    let _ = state.app.emit("live:image-saved", rel.clone());
+    Ok(rel)
 }
 
 /// 会话图片目录完整路径（前端 convertFileSrc 读取图集用）。

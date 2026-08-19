@@ -27,6 +27,17 @@ use crate::live_session_fusion::{spawn_fusion, FusionTracker};
 use crate::live_session_loop::{run_audio_loop, LiveLoopCtx};
 use crate::streaming_asr::{StreamingAsrConfig, StreamingAsrEngine, StreamingAsrModels};
 
+/// 实时电平事件载荷（2026-08 A2：VU 表数据源；live:audio-level 事件）。
+///
+/// @ai-context: rms 为 0-1 归一化原始 RMS（前端按显示需求映射 dB/分段）；
+///              clipping 复用预处理链削波检测——电平条削波段标红。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioLevelEvent {
+    pub rms: f32,
+    pub clipping: bool,
+}
+
 /// 实时会话启动参数（由 command 层组装）。
 pub struct LiveSessionParams {
     pub title: String,
@@ -67,6 +78,8 @@ pub struct LiveSessionManager {
     fusion: FusionTracker,
     /// M6/REQ-051：最新帧共享缓存（用户截图命令读取；会话进行中由屏幕 worker 写入）
     latest_frame: Arc<Mutex<Option<crate::live_session_frame::LatestCapturedFrame>>>,
+    /// 2026-08 A1：会话暂停共享状态（硬暂停——命令层置位，捕获/屏幕/主循环消费）
+    pause: crate::capture::audio_loopback::SessionPause,
 }
 
 impl Default for LiveSessionManager {
@@ -81,6 +94,7 @@ impl Clone for LiveSessionManager {
             active: self.active.clone(),
             fusion: self.fusion.clone(),
             latest_frame: self.latest_frame.clone(),
+            pause: self.pause.clone(),
         }
     }
 }
@@ -91,6 +105,7 @@ impl LiveSessionManager {
             active: Arc::new(Mutex::new(None)),
             fusion: FusionTracker::default(),
             latest_frame: Arc::new(Mutex::new(None)),
+            pause: Default::default(),
         }
     }
 
@@ -102,6 +117,35 @@ impl LiveSessionManager {
     /// 最新捕获帧快照（用户截图命令读取；无活动会话/未捕获到帧为 None）。
     pub fn latest_frame(&self) -> Option<crate::live_session_frame::LatestCapturedFrame> {
         self.latest_frame.lock().ok().and_then(|g| g.clone())
+    }
+
+    /// 暂停活动会话（2026-08 A1 硬暂停：完全停采）。
+    ///
+    /// @ai-context: 只置共享标志——实际暂停由捕获线程边沿检测执行
+    ///              （WASAPI 端点 Stop）并累计补偿时长；事件/落库由会话
+    ///              线程边沿检测发出（保证与真实暂停时序一致）。
+    /// @ai-context: 无活动会话/已暂停 → 明确报错（幂等拒绝）。
+    pub fn pause(&self) -> Result<()> {
+        let guard = self.active.lock().expect("live session lock poisoned");
+        if guard.is_none() {
+            return Err(AppError::Io("无活动实时会话".to_string()));
+        }
+        if self.pause.paused.swap(true, Ordering::SeqCst) {
+            return Err(AppError::Io("会话已处于暂停".to_string()));
+        }
+        Ok(())
+    }
+
+    /// 恢复暂停的会话（2026-08 A1；未暂停 → 明确报错）。
+    pub fn resume(&self) -> Result<()> {
+        let guard = self.active.lock().expect("live session lock poisoned");
+        if guard.is_none() {
+            return Err(AppError::Io("无活动实时会话".to_string()));
+        }
+        if !self.pause.paused.swap(false, Ordering::SeqCst) {
+            return Err(AppError::Io("会话未处于暂停".to_string()));
+        }
+        Ok(())
     }
 
     /// 启动实时会话：建会话 + 起编排线程，返回会话 id。
@@ -125,9 +169,11 @@ impl LiveSessionManager {
         let flag = stop_flag.clone();
         // M6/REQ-051：最新帧共享缓存由 manager 持有（截图命令读取）
         let latest_frame = self.latest_frame.clone();
+        // 2026-08 A1：暂停共享状态随会话线程进入（捕获/屏幕/主循环共享）
+        let pause = self.pause.clone();
         let thread = std::thread::Builder::new()
             .name("entropy-live-session".into())
-            .spawn(move || run_session(flag, params, session_id, latest_frame))
+            .spawn(move || run_session(flag, params, session_id, latest_frame, pause))
             .map_err(|e| AppError::Io(format!("启动会话线程失败: {}", e)))?;
         *guard = Some(ActiveSession { stop_flag, thread, session_id });
         Ok(session_id)
@@ -177,6 +223,8 @@ fn run_session(
     session_id: i64,
     // M6/REQ-051：最新帧共享缓存（屏幕 worker 写入，manager 持同一实例）
     latest_frame: Arc<Mutex<Option<crate::live_session_frame::LatestCapturedFrame>>>,
+    // 2026-08 A1：会话暂停共享状态（manager 持同一实例；捕获线程维护补偿时长）
+    pause: crate::capture::audio_loopback::SessionPause,
 ) {
     let db = params.db.clone();
     let engines = params.engines.clone();
@@ -213,6 +261,7 @@ fn run_session(
     //              （指数退避），会话不因设备插拔/切换死亡；恢复事件推送前端。
     let (tx, rx) = mpsc::channel::<AudioChunk>();
     let recovery_app = params.app.clone();
+    let audio_pause = pause.clone();
     let audio = match AudioLoopbackCapture::start(
         epoch,
         move |chunk| {
@@ -227,6 +276,8 @@ fn run_session(
                 let _ = recovery_app.emit("live:recovered", "audio");
             }
         },
+        // 2026-08 A1：暂停共享状态（捕获线程执行端点 Stop/Start + 时间戳补偿）
+        Some(audio_pause),
     ) {
         Ok(a) => a,
         Err(e) => {
@@ -284,6 +335,8 @@ fn run_session(
         // 随画面链启停——播客/直播档案画面链短路时前台信号同样不采集，语义一致）
         // 注：无需 mut——变异发生在 worker 内（run_screen_worker 参数自带 mut）
         let foreground_monitor = crate::foreground_timeline::ForegroundMonitor::new(params.hwnd);
+        // 2026-08 A1：屏幕 worker 共享暂停状态（暂停跳过采样；恢复后时间戳补偿）
+        let worker_pause = pause.clone();
         match std::thread::Builder::new()
             .name("entropy-screen-worker".into())
             .spawn(move || {
@@ -304,6 +357,8 @@ fn run_session(
                     params.ui_junk.clone(),
                     // M16/REQ-128：前台时间线监控（worker 内 2s 轮询 observe）
                     foreground_monitor,
+                    // 2026-08 A1：暂停共享状态
+                    worker_pause,
                 )
             }) {
             Ok(h) => Some(h),
@@ -331,6 +386,8 @@ fn run_session(
         asr_engine: &mut asr_engine,
         audio_writer: &mut audio_writer,
         vad_slot: Some(params.vad_slot.as_ref()),
+        // 2026-08 A1：暂停共享状态（主循环做边沿断句/事件/落库）
+        pause: &pause,
     };
     run_audio_loop(rx, audio, loop_ctx, &params.data_dir);
 

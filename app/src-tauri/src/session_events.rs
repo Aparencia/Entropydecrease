@@ -28,11 +28,15 @@ pub enum EventKind {
     ForegroundSwitch,
     /// 播放器行为（REQ-125；难点信号）
     PlayerBehavior,
+    /// 会话暂停（2026-08 A1 硬暂停；时间轴可见暂停区间）
+    Pause,
+    /// 会话恢复（2026-08 A1；与 Pause 成对）
+    Resume,
 }
 
 impl EventKind {
     /// 全部类型（新增类型在此登记——schema 为 TEXT 无枚举约束，登记表做消费端白名单）。
-    pub const ALL: [EventKind; 7] = [
+    pub const ALL: [EventKind; 9] = [
         EventKind::FrameSwitch,
         EventKind::LongSilence,
         EventKind::VolumeSurge,
@@ -40,6 +44,8 @@ impl EventKind {
         EventKind::Clipboard,
         EventKind::ForegroundSwitch,
         EventKind::PlayerBehavior,
+        EventKind::Pause,
+        EventKind::Resume,
     ];
 
     /// kebab-case 落库名（serde 默认 PascalCase，DB 层用显式映射防契约漂移）。
@@ -52,6 +58,8 @@ impl EventKind {
             EventKind::Clipboard => "clipboard",
             EventKind::ForegroundSwitch => "foreground_switch",
             EventKind::PlayerBehavior => "player_behavior",
+            EventKind::Pause => "pause",
+            EventKind::Resume => "resume",
         }
     }
 
@@ -111,7 +119,11 @@ pub fn event_tier(kind: EventKind) -> EventTier {
     match kind {
         EventKind::FrameSwitch | EventKind::LongSilence | EventKind::VolumeSurge => EventTier::High,
         EventKind::VadSegment => EventTier::Medium,
-        EventKind::Clipboard | EventKind::ForegroundSwitch | EventKind::PlayerBehavior => EventTier::Low,
+        EventKind::Clipboard
+        | EventKind::ForegroundSwitch
+        | EventKind::PlayerBehavior
+        | EventKind::Pause
+        | EventKind::Resume => EventTier::Low,
     }
 }
 

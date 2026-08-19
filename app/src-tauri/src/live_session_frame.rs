@@ -65,6 +65,8 @@ pub fn run_screen_worker(
     ui_junk: crate::ui_junk::UiJunkList,
     // v0.7.0 M2（REQ-128）：前台时间线监控（2s 轮询 observe → ForegroundSwitch 落库）
     mut foreground_monitor: crate::foreground_timeline::ForegroundMonitor,
+    // 2026-08 A1：会话暂停共享状态（暂停跳过采样；恢复后时间戳补偿暂停时长）
+    pause: crate::capture::audio_loopback::SessionPause,
 ) {
     let mut screen = match ScreenCaptureSampler::new(hwnd.map(crate::windows::hwnd_from_i64)) {
         Ok(s) => {
@@ -130,8 +132,33 @@ pub fn run_screen_worker(
     let mut last_player_check_at = Instant::now();
     let mut last_player_paused = false;
     let mut player_state_initialized = false;
+    // 2026-08 A1：暂停边沿跟踪（暂停期画面链整体冻结：采样/前台监控/播放器
+    // 检测全部跳过——"会话时间"在暂停期间不前进）
+    let mut worker_paused = pause.paused.load(Ordering::SeqCst);
 
     while !stop.load(Ordering::SeqCst) {
+        // ── 暂停检查（2026-08 A1 硬暂停）──
+        let paused_now = pause.paused.load(Ordering::SeqCst);
+        if paused_now {
+            if !worker_paused {
+                worker_paused = true;
+                eprintln!("[ScreenWorker] 会话暂停，画面链冻结");
+            }
+            std::thread::sleep(Duration::from_millis(WORKER_POLL_MS));
+            continue;
+        }
+        if worker_paused {
+            // 恢复：短暂等待捕获线程更新累计补偿时长（10ms 粒度），
+            // 防恢复首帧时间戳读到旧补偿值（含暂停时长偏差）
+            worker_paused = false;
+            std::thread::sleep(Duration::from_millis(100));
+            eprintln!("[ScreenWorker] 会话恢复，画面链继续");
+        }
+        // 时间戳补偿（2026-08 A1）：会话时间 = epoch - 累计暂停时长；
+        // process_frame 内部以 epoch 为基准生成帧时间戳——每次构造补偿后的
+        // 纪元传入（暂停期间不采样，补偿值在恢复后恒定）
+        let comp_epoch = epoch
+            + Duration::from_millis(pause.total_paused_ms.load(Ordering::SeqCst));
         // M4：每 2s 采样 CPU 负载（降级标志变化打印——静默失败可见化）
         if last_load_check_at.elapsed() >= Duration::from_secs(2) {
             last_load_check_at = Instant::now();
@@ -160,7 +187,7 @@ pub fn run_screen_worker(
             // M5/REQ-073：空闲降频状态机——画面变化信号 = diff 通过计数增长
             // （process_frame 内更新，同线程可见）；idle 时跳过采样（引擎
             // 阻塞空闲零 CPU）；空闲期低频探针（5s 一次全帧）检测无声恢复
-            let now_ms = epoch.elapsed().as_millis() as u64;
+            let now_ms = comp_epoch.elapsed().as_millis() as u64;
             // M16/REQ-128：前台时间线监控（独立 2s 轮询——不改 region_tracker 行为；
             // 变化 → ForegroundSwitch 事件落库；观测失败 None → 静默跳过）
             if now_ms.saturating_sub(last_fg_poll_ms) >= 2_000 {
@@ -188,7 +215,7 @@ pub fn run_screen_worker(
             if (region != SampleRegion::Skip && !idle) || probe {
                 process_frame(
                     screen.as_mut(), &mut trigger, &mut voter, &mut last_frame_text, &mut last_preview,
-                    &db, &engines, &app, session_id, region, &subtitle_segments, epoch,
+                    &db, &engines, &app, session_id, region, &subtitle_segments, comp_epoch,
                     &mut last_capture_error, &mut last_full_texts, &mut stats,
                     &mut roi_tracker, &mut layout_cache, &mut frame_samples,
                     &mut last_archived_text, &mut last_archived_at, &latest_frame,
@@ -205,7 +232,7 @@ pub fn run_screen_worker(
             //    首轮 paused=true ≠ 初始 false 会写非转换假 Pause）
             if last_player_check_at.elapsed() >= Duration::from_secs(5) {
                 last_player_check_at = Instant::now();
-                let check_now_ms = epoch.elapsed().as_millis() as u64;
+                let check_now_ms = comp_epoch.elapsed().as_millis() as u64;
                 if let Some(f) = latest_frame.lock().ok().and_then(|g| g.clone()) {
                     if let Some(img) =
                         crate::region_ocr::bgra_to_rgb_image(&f.bgraw, f.width, f.height)
@@ -254,7 +281,10 @@ pub fn run_screen_worker(
         std::thread::sleep(Duration::from_millis(WORKER_POLL_MS));
     }
     // 停止：冲刷未定稿的最后一组字幕（否则末句字幕丢失，T2 语义要求）
-    if let Some(voted) = voter.flush(epoch.elapsed().as_millis() as u64) {
+    // 2026-08 A1：flush 时间戳同样补偿暂停时长（会话时间基准）
+    let flush_epoch = epoch
+        + Duration::from_millis(pause.total_paused_ms.load(Ordering::SeqCst));
+    if let Some(voted) = voter.flush(flush_epoch.elapsed().as_millis() as u64) {
         persist_voted_subtitle(&db, &app, session_id, &subtitle_segments, voted);
     }
     // M6/REQ-051：关键帧投票（课后精修：多信号筛选 → 关键图候选；产物层 M7 消费）

@@ -55,6 +55,8 @@ pub(crate) struct LiveLoopCtx<'a> {
     pub audio_writer: &'a mut Option<crate::audio_store::SessionAudioWriter>,
     /// REQ-115：VAD 阈值共享槽（诊断可查；None=无槽注入——测试路径）
     pub vad_slot: Option<&'a crate::vad_threshold_slot::VadThresholdSlot>,
+    /// 2026-08 A1：会话暂停共享状态（边沿检测：断句隔离 + 事件 + 落库）
+    pub pause: &'a crate::capture::audio_loopback::SessionPause,
 }
 
 /// 音频主循环：消费捕获块 → 预处理/VAD → ASR feed → 事件分发；停止时 drain + flush。
@@ -111,7 +113,41 @@ pub(crate) fn run_audio_loop(
     // （宽限 8s，停止响应与内容完整性权衡）；队列空（Timeout）即退出。
     let drain_deadline = Instant::now() + Duration::from_secs(DRAIN_GRACE_SECS);
     let mut draining = false;
+    // 2026-08 A1：暂停边沿跟踪（false→true 断句隔离；暂停期捕获线程停采，
+    // channel 空 → recv_timeout 空转，无需显式消费处理）
+    let mut loop_paused = ctx.pause.paused.load(Ordering::SeqCst);
     loop {
+        // ── 暂停边沿（2026-08 A1）──
+        // @ai-context: 时间戳 = 会话时间（epoch - 已补偿暂停时长）——暂停开始
+        //              时补偿尚未累计（正确，时间轴冻结点）；恢复时补偿已更新
+        //              （时间戳回到冻结点附近，时间轴无缝衔接）。
+        let paused_now = ctx.pause.paused.load(Ordering::SeqCst);
+        if paused_now != loop_paused {
+            let now_ms = ctx.epoch.elapsed().as_millis() as u64
+                - ctx.pause.total_paused_ms.load(Ordering::SeqCst);
+            if paused_now {
+                // 进入暂停：喂静音块强制 ASR 断句——暂停前后的语音不得连句
+                // （暂停期内容不出现在时间轴，但挂起句必须先落库）
+                let silence = vec![0f32; 1600]; // 100ms @16k 静音
+                let _ = ctx.asr_engine.feed(&silence, true);
+                let _ = ctx.db.add_event(&crate::session_events::NewSessionEvent::simple(
+                    ctx.session_id,
+                    crate::session_events::EventKind::Pause,
+                    now_ms,
+                ));
+                let _ = ctx.app.emit("live:paused", ());
+                eprintln!("[LiveSession] 会话 {} 暂停 @{}ms", ctx.session_id, now_ms);
+            } else {
+                let _ = ctx.db.add_event(&crate::session_events::NewSessionEvent::simple(
+                    ctx.session_id,
+                    crate::session_events::EventKind::Resume,
+                    now_ms,
+                ));
+                let _ = ctx.app.emit("live:resumed", ());
+                eprintln!("[LiveSession] 会话 {} 恢复 @{}ms", ctx.session_id, now_ms);
+            }
+            loop_paused = paused_now;
+        }
         if draining && Instant::now() >= drain_deadline {
             eprintln!("[LiveSession] 停止宽限 {}s 到期，剩余积压音频丢弃（可观测）", DRAIN_GRACE_SECS);
             break;
@@ -136,6 +172,15 @@ pub(crate) fn run_audio_loop(
                 // M4/REQ-069（AL1）：阈值自适应——AGC 开启时用预处理链动态阈值
                 // （不重复自适应）；否则会话内能量统计自适应（跟随噪声底）
                 let raw_rms = compute_rms(&chunk.samples);
+                // 2026-08 A2：实时电平事件（VU 表）——每音频块（200ms）推送一次，
+                // 采集中"听到课程声音吗"当场可见（试听自检实时化，C2 收敛设计）
+                let _ = ctx.app.emit(
+                    "live:audio-level",
+                    crate::live_session::AudioLevelEvent {
+                        rms: raw_rms,
+                        clipping: processed.clipped,
+                    },
+                );
                 let vad_threshold = if audio_pre.config.enabled {
                     processed.speech_threshold
                 } else {

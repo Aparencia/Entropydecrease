@@ -500,6 +500,11 @@ pub fn run() {
             commands_live::stop_live_session,
             #[cfg(target_os = "windows")]
             commands_live::live_session_status,
+            // 2026-08 A1：会话暂停/继续（硬暂停——完全停采，时间轴冻结）
+            #[cfg(target_os = "windows")]
+            commands_live::pause_live_session,
+            #[cfg(target_os = "windows")]
+            commands_live::resume_live_session,
             // 视频文件导入（REQ-015，ADR-008：字幕优先 + ASR fallback + 关键帧 OCR）
             commands_import::import_video,
             // OCR 设备状态（REQ-036，ADR-009：GPU 卸载决策/回退可观测）

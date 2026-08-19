@@ -50,6 +50,22 @@ pub struct AudioLoopbackCapture {
     handle: Option<JoinHandle<()>>,
 }
 
+/// 会话暂停共享状态（2026-08 A1 硬暂停：完全停采）。
+///
+/// @ai-context: paused 由命令层置位（pause_live_session/resume_live_session）；
+///              捕获线程是 total_paused_ms 的**唯一维护者**（暂停开始/结束时
+///              更新），屏幕 worker/其他消费方只读作时间戳补偿——多写者会
+///              重复累计，单一写者是防错约束。
+/// @ai-context: 暂停 = WASAPI 端点 Stop（对象不释放，恢复 Start 即可，无重连
+///              风险）——暂停期系统声音照常播放但不采集，恢复后时间轴补偿
+///              暂停时长，无跳跃、无内容混入。
+#[derive(Debug, Clone, Default)]
+pub struct SessionPause {
+    pub paused: Arc<AtomicBool>,
+    /// 累计暂停毫秒（原子 u64；捕获线程维护，消费方读作时间戳补偿）
+    pub total_paused_ms: Arc<std::sync::atomic::AtomicU64>,
+}
+
 impl AudioLoopbackCapture {
     /// 启动捕获。on_chunk 在捕获线程内被调用（消费者需自行做轻量处理或转发）。
     ///
@@ -59,7 +75,14 @@ impl AudioLoopbackCapture {
     /// @ai-context: ADR-008（A1 时间戳统一）：epoch 由会话编排层注入（run_session
     ///              起点创建）——音频/屏幕/flush 三处共享同一纪元，消除 ASR 模型
     ///              加载秒级延迟造成的时间轴偏移；重连不重置基准（时间戳连续）。
-    pub fn start<F, G>(epoch: std::time::Instant, on_chunk: F, on_recovery: G) -> crate::error::Result<Self>
+    /// @ai-context: pause（2026-08 A1）：会话暂停共享状态（None=不支持暂停——
+    ///              测试/旧调用路径零回归）。
+    pub fn start<F, G>(
+        epoch: std::time::Instant,
+        on_chunk: F,
+        on_recovery: G,
+        pause: Option<SessionPause>,
+    ) -> crate::error::Result<Self>
     where
         F: Fn(AudioChunk) + Send + 'static,
         G: Fn(bool) + Send + 'static,
@@ -68,7 +91,7 @@ impl AudioLoopbackCapture {
         let flag = stop_flag.clone();
         let handle = thread::Builder::new()
             .name("entropy-wasapi-loopback".into())
-            .spawn(move || capture_loop(epoch, flag, on_chunk, on_recovery))
+            .spawn(move || capture_loop(epoch, flag, on_chunk, on_recovery, pause))
             .map_err(|e| crate::error::AppError::Io(format!("启动捕获线程失败: {}", e)))?;
         Ok(Self { stop_flag, handle: Some(handle) })
     }
@@ -95,8 +118,13 @@ impl Drop for AudioLoopbackCapture {
 /// @ai-context: 时间戳基准（epoch）由会话编排层注入且在此循环外使用（重连不重置）；
 ///              恢复状态只在进入/退出恢复时通知一次（防重连风暴刷屏）；日志只在退避
 ///              升级时打印（cap 后静默）。
-fn capture_loop<F, G>(epoch: std::time::Instant, stop_flag: Arc<AtomicBool>, on_chunk: F, on_recovery: G)
-where
+fn capture_loop<F, G>(
+    epoch: std::time::Instant,
+    stop_flag: Arc<AtomicBool>,
+    on_chunk: F,
+    on_recovery: G,
+    pause: Option<SessionPause>,
+) where
     F: Fn(AudioChunk) + Send,
     G: Fn(bool) + Send,
 {
@@ -106,7 +134,7 @@ where
         if stop_flag.load(Ordering::SeqCst) {
             return;
         }
-        match run_capture(&stop_flag, &on_chunk, &epoch, &mut recovering, &on_recovery) {
+        match run_capture(&stop_flag, &on_chunk, &epoch, &mut recovering, &on_recovery, &pause) {
             Ok(()) => return, // stop_flag 置位后的正常退出
             Err(e) => {
                 if stop_flag.load(Ordering::SeqCst) {
@@ -155,6 +183,7 @@ fn run_capture<F, G>(
     epoch: &std::time::Instant,
     recovering: &mut bool,
     on_recovery: &G,
+    pause: &Option<SessionPause>,
 ) -> crate::error::Result<()>
 where
     F: Fn(AudioChunk) + Send,
@@ -168,7 +197,7 @@ where
     }
     // 初始化成功后所有退出路径（含 Err 提前返回）都必须配对 CoUninitialize
     let _com = ComInitGuard;
-    run_capture_inner(stop_flag, on_chunk, epoch, recovering, on_recovery)
+    run_capture_inner(stop_flag, on_chunk, epoch, recovering, on_recovery, pause)
 }
 
 /// 捕获主循环体（run_capture 的拆分：COM guard 与函数体分离，保证配对）。
@@ -178,6 +207,7 @@ fn run_capture_inner<F, G>(
     epoch: &std::time::Instant,
     recovering: &mut bool,
     on_recovery: &G,
+    pause: &Option<SessionPause>,
 ) -> crate::error::Result<()>
 where
     F: Fn(AudioChunk) + Send,
@@ -243,11 +273,66 @@ where
         // @ai-context: 时间戳用会话纪元（epoch 由编排层注入，ADR-008 A1：音频/屏幕/
         //              flush 三处同基准）而非有效音频计数——静默期时间轴也推进，
         //              重连不重置基准（ADR-007）。
+        // @ai-context: 2026-08 A1 硬暂停：暂停期 Stop 端点（系统声音照常播放但不
+        //              采集），恢复 Start；暂停时长累计进 total_paused_ms，时间戳
+        //              补偿后无跳跃——暂停期间的"会话时间"不前进（时间轴冻结）。
         let mut accumulator = ChunkAccumulator::new(0);
         let block_samples = (TARGET_SAMPLE_RATE as usize) / 5;
         let mut format_error_logged = false;
+        // 暂停边沿状态（本线程内维护；paused 由命令层置位）
+        let mut capture_paused = false;
+        let mut paused_at: Option<std::time::Instant> = None;
 
         while !stop_flag.load(Ordering::SeqCst) {
+            // ── 暂停边沿处理（2026-08 A1）──
+            if let Some(p) = pause {
+                let paused_now = p.paused.load(Ordering::SeqCst);
+                if paused_now != capture_paused {
+                    if paused_now {
+                        // 进入暂停：Stop 端点（对象不释放，恢复 Start 即可）
+                        match audio_client.Stop() {
+                            Ok(()) => {
+                                paused_at = Some(std::time::Instant::now());
+                                eprintln!("[AudioLoopback] 会话暂停（端点已停止）");
+                            }
+                            Err(e) => {
+                                // 暂停失败：返回 Err 交重连机制重建端点——
+                                // 否则缓冲积压暂停期音频，恢复后内容混入
+                                return Err(crate::error::AppError::Io(format!(
+                                    "暂停端点失败（重连接管）: {}",
+                                    e
+                                )));
+                            }
+                        }
+                    } else if let Some(t) = paused_at.take() {
+                        // 退出暂停：Start 端点并累计暂停时长（时间戳补偿基准）
+                        match audio_client.Start() {
+                            Ok(()) => {
+                                p.total_paused_ms.fetch_add(
+                                    t.elapsed().as_millis() as u64,
+                                    Ordering::SeqCst,
+                                );
+                                eprintln!("[AudioLoopback] 会话恢复（端点已重启，暂停 {}ms）", t.elapsed().as_millis());
+                            }
+                            Err(e) => {
+                                // 恢复失败：返回 Err 交外层重连机制（ADR-007 指数
+                                // 退避重建端点）——不静默：否则会话音频永久静默
+                                return Err(crate::error::AppError::Io(format!(
+                                    "恢复端点失败（重连接管）: {}",
+                                    e
+                                )));
+                            }
+                        }
+                    }
+                    capture_paused = paused_now;
+                }
+                if capture_paused {
+                    // 暂停期空转（10ms 粒度检查停止/恢复）
+                    std::thread::sleep(Duration::from_millis(10));
+                    continue;
+                }
+            }
+
             let packet_size: u32 = capture_client.GetNextPacketSize()?;
             if packet_size == 0 {
                 // 静默窗：轮询防空转（ADR-001 风险缓解）
@@ -271,12 +356,18 @@ where
                     // 降采样先低通再抽取（线性插值会把 8-24kHz 噪声混入语音带）
                     let resampled =
                         super::resample_antialias::resample_antialias(&mono, src_rate, TARGET_SAMPLE_RATE);
+                    // 时间戳补偿（2026-08 A1）：减去累计暂停时长——暂停期间
+                    // 会话时间冻结，恢复后时间轴无跳跃
+                    let paused_ms = pause
+                        .as_ref()
+                        .map(|p| p.total_paused_ms.load(Ordering::SeqCst))
+                        .unwrap_or(0);
                     for chunk in accumulator.push(&resampled) {
                         debug_assert_eq!(chunk.len(), block_samples);
                         on_chunk(AudioChunk {
                             samples: chunk,
                             sample_rate: TARGET_SAMPLE_RATE,
-                            timestamp_ms: epoch.elapsed().as_millis() as u64,
+                            timestamp_ms: epoch.elapsed().as_millis() as u64 - paused_ms,
                         });
                     }
                 } else if !format_error_logged {
