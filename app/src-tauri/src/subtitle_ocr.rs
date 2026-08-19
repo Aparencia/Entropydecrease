@@ -25,6 +25,10 @@ fn sample_join_limit(first_text: &str) -> usize {
     ratio.max(2)
 }
 
+/// REQ-065 帧间 tracking：组内最大时间跨度（ms）——同一字幕行的多帧应时间
+/// 连续；跨度超阈值强制定稿（隔时重复帧/翻页瞬间错帧不混入投票）。
+const GROUP_MAX_SPAN_MS: u64 = 8_000;
+
 /// 一条已定稿字幕（投票校正后的文本 + 真实时间轴）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct VotedSubtitle {
@@ -50,8 +54,8 @@ impl VotedSubtitle {
 /// 字幕投票器（有状态：累积当前字幕组的样本）。
 #[derive(Debug, Default)]
 pub struct SubtitleVoter {
-    /// 当前组的样本（text, 帧时刻）
-    samples: Vec<(String, u64)>,
+    /// 当前组的样本（text, 帧时刻, 帧权重——REQ-065 清晰度×score 加权）
+    samples: Vec<(String, u64, f32)>,
 }
 
 impl SubtitleVoter {
@@ -67,41 +71,56 @@ impl SubtitleVoter {
 
     /// 当前组首样本文本（UI 即时预览；None=无活动组）。
     pub fn preview(&self) -> Option<&str> {
-        self.samples.first().map(|(t, _)| t.as_str())
+        self.samples.first().map(|(t, _, _)| t.as_str())
     }
 
-    /// 观察一帧 OCR 结果：
+    /// 观察一帧 OCR 结果（等权版本：权重 1.0——REQ-065 兼容入口）。
+    pub fn observe(&mut self, text: &str, now_ms: u64) -> Option<VotedSubtitle> {
+        self.observe_weighted(text, now_ms, 1.0)
+    }
+
+    /// 观察一帧 OCR 结果（REQ-065 加权版）：
     /// - 空文本忽略（不改变状态）
-    /// - 与组首样本编辑距离 ≤2 → 追加样本（投票原料）
+    /// - 与组首样本编辑距离 ≤ 上限 → 追加样本（投票原料；权重=清晰度×score）
+    /// - 与首样本时间跨度超 GROUP_MAX_SPAN_MS → 强制定稿（帧间 tracking：
+    ///   同一字幕行的多帧应时间连续，隔时重复帧不混入投票——翻页瞬间错帧防护）
     /// - 否则 → 定稿上一组（投票输出 + 真实时间轴）并开启新组
     ///
     /// 返回定稿的上组字幕（None = 仍在累积）。
-    pub fn observe(&mut self, text: &str, now_ms: u64) -> Option<VotedSubtitle> {
+    pub fn observe_weighted(&mut self, text: &str, now_ms: u64, weight: f32) -> Option<VotedSubtitle> {
         let trimmed = text.trim();
         if trimmed.is_empty() {
             return None;
         }
+        let weight = weight.clamp(0.0, 1.0);
         match self.samples.first() {
             None => {
-                self.samples.push((trimmed.to_string(), now_ms));
+                self.samples.push((trimmed.to_string(), now_ms, weight));
                 None
             }
-            Some((first, _)) => {
+            Some((first, first_ts, _)) => {
+                // REQ-065 帧间 tracking：时间不连续（跨度超阈值）→ 定稿旧组
+                if now_ms.saturating_sub(*first_ts) > GROUP_MAX_SPAN_MS {
+                    let finalized = self.finalize_inner(now_ms);
+                    self.samples.clear();
+                    self.samples.push((trimmed.to_string(), now_ms, weight));
+                    return finalized;
+                }
                 // M3/REQ-038 快速通道：同文本帧精确 hash 短路——跳过字符级
                 // levenshtein 计算（静止字幕每帧重复，此分支是热路径）
                 if trimmed == first {
-                    self.samples.push((trimmed.to_string(), now_ms));
+                    self.samples.push((trimmed.to_string(), now_ms, weight));
                     return None;
                 }
                 if levenshtein(trimmed, first) <= sample_join_limit(first) {
-                    self.samples.push((trimmed.to_string(), now_ms));
+                    self.samples.push((trimmed.to_string(), now_ms, weight));
                     None
                 } else {
                     // 字幕切换：先定稿旧组（投票输出），清空后开启新组——
                     // 不清空会导致 preview/投票混入旧组样本（测试发现）
                     let finalized = self.finalize_inner(now_ms);
                     self.samples.clear();
-                    self.samples.push((trimmed.to_string(), now_ms));
+                    self.samples.push((trimmed.to_string(), now_ms, weight));
                     finalized
                 }
             }
@@ -118,62 +137,77 @@ impl SubtitleVoter {
         voted
     }
 
-    /// 定稿当前组：投票文本 + 投票置信度 + start=首样本时刻、end=传入时刻。
+    /// 定稿当前组：加权投票文本 + 置信度 + start=首样本时刻、end=传入时刻。
     fn finalize_inner(&self, end_ms: u64) -> Option<VotedSubtitle> {
-        let (_, first_ts) = self.samples.first()?;
-        let texts: Vec<&str> = self.samples.iter().map(|(t, _)| t.as_str()).collect();
-        let (text, confidence) = vote_text_with_confidence(&texts);
+        let (_, first_ts, _) = self.samples.first()?;
+        let weighted: Vec<(&str, f32)> =
+            self.samples.iter().map(|(t, _, w)| (t.as_str(), *w)).collect();
+        let (text, confidence) = vote_text_weighted(&weighted);
         Some(VotedSubtitle { start_ms: *first_ts, end_ms, text, confidence: Some(confidence) })
     }
 }
 
-/// 字符级多数投票（纯函数）：逐位取**超过半数样本**的字符；无多数时用首样本该位
+/// 字符级多数投票（纯函数，等权）：逐位取**超过半数样本**的字符；无多数时用首样本该位
 /// 字符仲裁（首见优先）；首样本也无该位则截断（多数帧缺失 → 尾部不延伸）。
 ///
 /// @ai-context: "超过半数"规则防止少数帧的噪音字符在其独有位"默认胜出"
 ///              （如 2 帧中 1 帧误带句号 → 不输出句号）；首样本仲裁让平票
 ///              稳定收敛到最初观察（最接近字幕真实内容）。
 pub fn vote_text(samples: &[&str]) -> String {
-    vote_text_with_confidence(samples).0
+    let weighted: Vec<(&str, f32)> = samples.iter().map(|s| (*s, 1.0)).collect();
+    vote_text_weighted(&weighted).0
 }
 
-/// 投票文本 + 置信度（REQ-062）：多数位占比均值。
-///
-/// @ai-context: 每位多数票比例 ∈ (0.5, 1.0]（全样本一致 → 1.0）；无多数票的
-///              首样本仲裁位按 0.5 计（证据不足，置信度打折）；空样本 → 空文本。
+/// 投票文本 + 置信度（REQ-062，等权入口）：多数位占比均值。
 pub fn vote_text_with_confidence(samples: &[&str]) -> (String, f32) {
-    let Some(max_len) = samples.iter().map(|s| s.chars().count()).max() else {
+    let weighted: Vec<(&str, f32)> = samples.iter().map(|s| (*s, 1.0)).collect();
+    vote_text_weighted(&weighted)
+}
+
+/// 加权投票（REQ-065，纯函数）：清晰度×score 票权制字符多数投票。
+///
+/// @ai-context: 每位字符的**票权** = 该位样本权重之和；胜出 = 票权 > 总权/2
+///              （全 1.0 权重时退化为"票数超过半数"——v0.5.0 行为零回归）；
+///              无多数票的仲裁位按 0.5 计（证据不足，置信度打折）；
+///              权重 clamp 到 [0,1]（score 越界防御；0 权重帧不参与胜出）。
+pub fn vote_text_weighted(samples: &[(&str, f32)]) -> (String, f32) {
+    let Some(max_len) = samples.iter().map(|(s, _)| s.chars().count()).max() else {
         return (String::new(), 0.0);
     };
-    let n = samples.len();
-    let chars: Vec<Vec<char>> = samples.iter().map(|s| s.chars().collect()).collect();
+    let total_weight: f32 = samples.iter().map(|(_, w)| w.clamp(0.0, 1.0)).sum();
+    let chars: Vec<Vec<char>> = samples.iter().map(|(s, _)| s.chars().collect()).collect();
     let first = &chars[0];
     let mut out = String::with_capacity(max_len);
     let mut conf_sum = 0.0f32;
     let mut conf_count = 0usize;
     for i in 0..max_len {
-        // 统计第 i 位各字符票数（缺失位样本不投票）
-        let mut counts: Vec<(char, usize)> = Vec::new();
-        for sample in &chars {
+        // 统计第 i 位各字符票权（缺失位样本不投票）
+        let mut counts: Vec<(char, f32)> = Vec::new();
+        for (idx, sample) in chars.iter().enumerate() {
             if let Some(c) = sample.get(i) {
+                let w = samples[idx].1.clamp(0.0, 1.0);
                 match counts.iter_mut().find(|(ch, _)| ch == c) {
-                    Some((_, cnt)) => *cnt += 1,
-                    None => counts.push((*c, 1)),
+                    Some((_, cw)) => *cw += w,
+                    None => counts.push((*c, w)),
                 }
             }
         }
-        // 多数（票数 ×2 > 样本数）→ 输出；否则首样本该位仲裁；再否则截断
-        let majority = counts.iter().find(|(_, cnt)| *cnt * 2 > n).map(|(c, _)| *c);
+        // 多数（票权 ×2 > 总权）→ 输出；否则首样本该位仲裁；再否则截断
+        let majority = counts.iter().find(|(_, w)| *w * 2.0 > total_weight).map(|(c, _)| *c);
         match majority.or_else(|| first.get(i).copied()) {
             Some(c) => {
                 out.push(c);
-                // 置信度：多数位比例（仲裁位无多数 → 0.5 证据不足）
+                // 置信度：胜出位票权占比（仲裁位无多数 → 0.5 证据不足）
                 let ratio = majority
                     .map(|_| {
-                        counts.iter().find(|(ch, _)| *ch == c).map(|(_, cnt)| *cnt).unwrap_or(0) as f32 / n as f32
+                        counts
+                            .iter()
+                            .find(|(ch, _)| *ch == c)
+                            .map(|(_, w)| *w / total_weight.max(1e-6))
+                            .unwrap_or(0.0)
                     })
                     .unwrap_or(0.5);
-                conf_sum += ratio;
+                conf_sum += ratio.clamp(0.0, 1.0);
                 conf_count += 1;
             }
             None => break,
