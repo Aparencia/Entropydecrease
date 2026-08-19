@@ -77,8 +77,8 @@ pub(crate) fn run_audio_loop(
     let mut event_filter = crate::audio_event_filter::AudioEventFilter::default();
     // M6/REQ-041 A1 + REQ-101（v0.7.0 M1）：音频预处理链开关——配置文件
     // （audio-preproc.json，设置面板 UI 开关）> env ENTROPY_AUDIO_PREPROC
-    // （开发期快速实测）> 默认关。开启后 AGC + 削波检测 + 动态静音阈值
-    // （防轻声讲课被 VAD 截断；12.wav 低电平取证 ADR-012 F2-3）
+    // （开发期快速实测）> 默认开（2026-08 用户决策：防轻声讲课被 VAD 截断；
+    // 12.wav 低电平取证 ADR-012 F2-3）。开启后 AGC + 削波检测 + 动态静音阈值
     let preproc_cfg = crate::audio_preproc_config::AudioPreprocConfig::load(&data_dir.join("audio-preproc.json"));
     let mut audio_pre = crate::audio_preprocess::AudioPreprocessor::new(
         crate::audio_preprocess::AudioPreprocessConfig {
