@@ -507,6 +507,8 @@ pub fn build_artifact(
     let analysis = analyze_session(detail, profile);
     let blocks = match profile {
         ProfileKind::Lecture => lecture_blocks(detail, &analysis, keyframes),
+        // v0.7.1：未知档案无专属模板——回退网课讲义（与 profile_by_kind 默认档同口径）
+        ProfileKind::Unknown => lecture_blocks(detail, &analysis, keyframes),
         ProfileKind::HandsOn => hands_on_blocks(detail, keyframes, &analysis),
         ProfileKind::TalkingHead => talking_head_blocks(detail, &analysis),
         ProfileKind::Interview => interview_blocks(detail, &analysis),

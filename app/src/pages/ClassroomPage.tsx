@@ -232,7 +232,8 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   };
 
   // ── 视频类型档案（v0.5.0 M1，REQ-043：混合检测用户确认结果）──
-  const [profileKind, setProfileKind] = useState<ProfileKind>("lecture");
+  // v0.7.1：初始「未知」——未检测/无法自动识别时如实标注（参数走默认档零回归）
+  const [profileKind, setProfileKind] = useState<ProfileKind>("unknown");
 
   /** 开始实时捕获（REQ-007~012）：窗口可选（未选=全屏）；携带档案（REQ-043） */
   const startLive = async () => {

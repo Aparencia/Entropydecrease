@@ -245,15 +245,17 @@ fn empty_session_produces_minimal_artifact() {
         ProfileKind::Exercise,
         ProfileKind::FollowAlong,
         ProfileKind::Coding,
+        ProfileKind::Unknown,
     ] {
         let artifact = build_artifact(kind, &d, &[]);
-        // Assert：讲义式模板（网课/白板/题目/编程）产标题块；其余空产物——均不崩溃
+        // Assert：讲义式模板（网课/白板/题目/编程/未知）产标题块；其余空产物——均不崩溃
         let title_only = matches!(
             kind,
             ProfileKind::Lecture
                 | ProfileKind::Whiteboard
                 | ProfileKind::Exercise
                 | ProfileKind::Coding
+                | ProfileKind::Unknown
         );
         if title_only {
             assert_eq!(artifact.blocks.len(), 1, "{:?} 讲义式空会话应只有标题块", kind);

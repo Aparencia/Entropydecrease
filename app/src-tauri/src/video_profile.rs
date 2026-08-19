@@ -11,7 +11,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 十二类档案标识（全栈统一业务术语）。
+/// 十二类档案标识（全栈统一业务术语；v0.7.1 起含 Unknown 共十三值）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProfileKind {
@@ -39,6 +39,9 @@ pub enum ProfileKind {
     FollowAlong,
     /// v0.7.0 REQ-121（T3）：编程实战——OCR+ASR 双通道（示例代码提取）
     Coding,
+    /// v0.7.1 用户需求：未知——自动检测无法识别时如实标注（不假装猜中）；
+    /// 无内置档案配置，管线参数回退默认（Lecture）档（零回归），产物模板同网课讲义。
+    Unknown,
 }
 
 impl ProfileKind {
@@ -58,12 +61,14 @@ impl ProfileKind {
             ProfileKind::Exercise => "题目讲解",
             ProfileKind::FollowAlong => "跟练",
             ProfileKind::Coding => "编程实战",
+            ProfileKind::Unknown => "未知",
         }
     }
 
     /// 解析前端传入的档案标识（kebab-case）；非法值回退 Lecture（默认档案不阻断）。
     pub fn parse(s: &str) -> ProfileKind {
         match s {
+            "unknown" => ProfileKind::Unknown,
             "hands-on" => ProfileKind::HandsOn,
             "talking-head" => ProfileKind::TalkingHead,
             "interview" => ProfileKind::Interview,
@@ -94,6 +99,7 @@ impl ProfileKind {
             ProfileKind::Exercise => "exercise",
             ProfileKind::FollowAlong => "follow-along",
             ProfileKind::Coding => "coding",
+            ProfileKind::Unknown => "unknown",
         }
     }
 }
@@ -213,7 +219,7 @@ pub struct VideoProfile {
 /// 五档案内置常量（默认值；JSON 导出后可人工校准覆盖）。
 pub use crate::video_profile_data::builtin_profiles;
 
-/// 按档案标识查内置档案（未知标识回退 Lecture——默认档案不阻断）。
+/// 按档案标识查内置档案（Unknown/未知标识回退 Lecture——默认档案不阻断）。
 pub fn profile_by_kind(kind: ProfileKind) -> VideoProfile {
     let mut profiles = builtin_profiles();
     let idx = profiles.iter().position(|p| p.kind == kind).unwrap_or(0);
@@ -246,7 +252,7 @@ pub struct ProfileCandidate {
 /// 检测结果。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DetectResult {
-    /// 候选档案（降序；全部 0 分时为默认 Lecture 单候选）
+    /// 候选档案（降序；全部 0 分时为 Unknown 单候选——诚实未知，不猜默认）
     pub candidates: Vec<ProfileCandidate>,
     /// 是否需用户确认（信号冲突/得分不足——置信度低才问，高则静默生效可改）
     pub needs_confirmation: bool,
@@ -273,9 +279,10 @@ pub fn vote_detect(signals: &ObservedSignals) -> DetectResult {
         .collect();
     let max = scored.iter().map(|(_, s)| *s).fold(0.0f32, f32::max);
     if max <= 0.0 {
-        // 无任何信号命中：默认 Lecture 且需确认（不静默假设）
+        // 无任何信号命中：Unknown 单候选 + 需确认（诚实未知，不假装猜中网课；
+        // v0.7.1 用户需求：无法自动识别时选中"未知"）
         return DetectResult {
-            candidates: vec![ProfileCandidate { kind: ProfileKind::Lecture, score: 1.0 }],
+            candidates: vec![ProfileCandidate { kind: ProfileKind::Unknown, score: 1.0 }],
             needs_confirmation: true,
             memory_hit: None,
         };

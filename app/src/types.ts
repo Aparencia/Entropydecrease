@@ -190,7 +190,7 @@ export interface OcrDeviceStatus {
 // 视频类型档案领域类型（v0.5.0 M1，REQ-043，与 Rust serde 契约对齐）
 // ────────────────────────────────────────────────────────────
 
-/** 十二类档案标识（Rust ProfileKind，kebab-case 序列化；v0.7.0 M2 扩至十二） */
+/** 十三类档案标识（Rust ProfileKind，kebab-case 序列化；v0.7.1 增 Unknown） */
 export type ProfileKind =
   | "lecture"
   | "hands-on"
@@ -203,7 +203,9 @@ export type ProfileKind =
   | "game-tutorial"
   | "exercise"
   | "follow-along"
-  | "coding";
+  | "coding"
+  /** v0.7.1：未知——自动检测无法识别时的如实标注（管线参数回退默认档） */
+  | "unknown";
 
 /** 检测信号配置（Rust DetectSignals） */
 export interface DetectSignals {

@@ -22,6 +22,7 @@ const KIND_LABELS: Record<ProfileKind, string> = {
   exercise: "题目讲解",
   "follow-along": "跟练",
   coding: "编程实战",
+  unknown: "未知",
 };
 
 const ALL_KINDS: ProfileKind[] = [
@@ -37,6 +38,8 @@ const ALL_KINDS: ProfileKind[] = [
   "exercise",
   "follow-along",
   "coding",
+  // v0.7.1：未知选项（自动检测无法识别时选中；无内置档案配置，参数走默认档）
+  "unknown",
 ];
 
 export default function ProfileDetector({
@@ -78,6 +81,12 @@ export default function ProfileDetector({
           const top = r.candidates[0]?.kind ?? "lecture";
           setSelected(top);
           onProfileChange?.(top);
+        } else if (r.candidates[0]?.kind === "unknown") {
+          // v0.7.1 例外（用户需求）：无法自动识别（零信号命中 → 候选=未知）时
+          // 选中「未知」并生效——"未知"不是猜测的档案而是诚实标注，其参数=
+          // 默认档（Lecture 配置零回归），自动选中无误导风险；用户仍可改选
+          setSelected("unknown");
+          onProfileChange?.("unknown");
         }
       })
       .catch((e) => {
@@ -118,7 +127,7 @@ export default function ProfileDetector({
 
   return (
     <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>
-      <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>视频类型档案（12 类，v0.7.0）</div>
+      <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>视频类型档案（13 类，v0.7.1）</div>
       {detecting ? (
         <div style={{ fontSize: 11, color: "#9ca3af" }}>检测中…</div>
       ) : (
@@ -155,14 +164,20 @@ export default function ProfileDetector({
               候选：{result.candidates.map((c) => `${KIND_LABELS[c.kind]}(${(c.score * 100) | 0}%)`).join(" / ")}
             </div>
           )}
-          {profiles.length > 0 && (
+          {selected === "unknown" ? (
             <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 4 }}>
-              {profiles.find((p) => p.kind === selected)?.artifact_template ?? ""} 模板 · 采样档位{" "}
-              {(() => {
-                const b = profiles.find((p) => p.kind === selected)?.sampling_budget;
-                return b ? `${b.subtitle_every}s/字幕 · ${b.full_every}s/全帧` : "";
-              })()}
+              未知：管线参数用默认档（网课采样，零回归）· 产物模板同网课讲义
             </div>
+          ) : (
+            profiles.length > 0 && (
+              <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 4 }}>
+                {profiles.find((p) => p.kind === selected)?.artifact_template ?? ""} 模板 · 采样档位{" "}
+                {(() => {
+                  const b = profiles.find((p) => p.kind === selected)?.sampling_budget;
+                  return b ? `${b.subtitle_every}s/字幕 · ${b.full_every}s/全帧` : "";
+                })()}
+              </div>
+            )
           )}
           {error && <div style={{ fontSize: 11, color: "#dc2626", marginTop: 4 }}>{error}</div>}
         </div>

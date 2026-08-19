@@ -45,9 +45,12 @@ fn builtin_has_all_profiles_with_distinct_kinds() {
 
 #[test]
 fn profile_by_kind_returns_matching_and_defaults() {
-    // Act：查各档案 + 非法标识回退
+    // Act：查各档案 + 未知标识回退
     assert_eq!(profile_by_kind(ProfileKind::Meeting).kind, ProfileKind::Meeting);
     assert_eq!(profile_by_kind(ProfileKind::HandsOn).artifact_template, ArtifactTemplate::StepCards);
+    // Assert：Unknown 无内置档案 → 回退 Lecture 默认配置（管线不阻断、零回归）
+    assert_eq!(profile_by_kind(ProfileKind::Unknown).kind, ProfileKind::Lecture);
+    assert_eq!(profile_by_kind(ProfileKind::Unknown).artifact_template, ArtifactTemplate::LectureNotes);
     // Assert：未知标识回退 Lecture（默认档案不阻断）
     assert_eq!(profile_by_kind(ProfileKind::Lecture).kind, ProfileKind::Lecture);
 }
@@ -66,18 +69,23 @@ fn profile_kind_parse_and_label() {
     assert_eq!(ProfileKind::parse("exercise"), ProfileKind::Exercise);
     assert_eq!(ProfileKind::parse("follow-along"), ProfileKind::FollowAlong);
     assert_eq!(ProfileKind::parse("coding"), ProfileKind::Coding);
+    // v0.7.1：未知标识（前端「未知」选项）解析为 Unknown
+    assert_eq!(ProfileKind::parse("unknown"), ProfileKind::Unknown);
     // Assert：非法值回退 Lecture（默认档案不阻断）
-    assert_eq!(ProfileKind::parse("unknown"), ProfileKind::Lecture);
     assert_eq!(ProfileKind::parse(""), ProfileKind::Lecture);
-    // 展示名非空（全部十二档案）
+    assert_eq!(ProfileKind::parse("no-such-kind"), ProfileKind::Lecture);
+    // 展示名非空（全部十三档案）
     for k in [
         ProfileKind::Lecture, ProfileKind::HandsOn, ProfileKind::TalkingHead,
         ProfileKind::Interview, ProfileKind::Meeting, ProfileKind::Podcast,
         ProfileKind::Live, ProfileKind::Whiteboard, ProfileKind::GameTutorial,
         ProfileKind::Exercise, ProfileKind::FollowAlong, ProfileKind::Coding,
+        ProfileKind::Unknown,
     ] {
         assert!(!k.label().is_empty(), "{:?} 展示名非空", k);
     }
+    // Unknown 的标识串往返一致（会话 profile 列落库/读取同口径）
+    assert_eq!(ProfileKind::parse(ProfileKind::Unknown.as_str()), ProfileKind::Unknown);
 }
 
 #[test]
@@ -126,14 +134,14 @@ fn detect_hands_on_by_high_frame_switch() {
 }
 
 #[test]
-fn detect_no_signal_returns_default_lecture_needs_confirmation() {
+fn detect_no_signal_returns_unknown_needs_confirmation() {
     // Arrange：全空信号
     let s = signals();
     // Act
     let result = vote_detect(&s);
-    // Assert：默认 Lecture 单候选 + 必须确认（不静默假设）
+    // Assert：v0.7.1 无法自动识别 → Unknown 单候选 + 必须确认（诚实未知，不猜默认）
     assert_eq!(result.candidates.len(), 1);
-    assert_eq!(result.candidates[0].kind, ProfileKind::Lecture);
+    assert_eq!(result.candidates[0].kind, ProfileKind::Unknown);
     assert!(result.needs_confirmation);
 }
 
