@@ -7,7 +7,7 @@
  * @ai-context: 12 段条 + 对数映射（RMS 0.01≈-40dB 起步，语音典型 0.05-0.3
  *              落中段）；削波整条标红提示。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 
 /** 电平段数 */
@@ -30,6 +30,8 @@ function segmentsFor(rms: number): number {
 export default function AudioLevelMeter() {
   const [segments, setSegments] = useState(0);
   const [clipping, setClipping] = useState(false);
+  // 审查修复：削波复位定时器句柄——组件卸载（暂停/停止）时清理，防卸载后 setState
+  const clipTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const unlisten = listen<AudioLevelPayload>("live:audio-level", (e) => {
@@ -37,11 +39,19 @@ export default function AudioLevelMeter() {
       if (e.payload.clipping) {
         setClipping(true);
         // 削波标志保持一段时间（后端每块推送，削波中断后红条不瞬闪）
-        window.setTimeout(() => setClipping(false), CLIP_HOLD_MS);
+        if (clipTimerRef.current !== null) window.clearTimeout(clipTimerRef.current);
+        clipTimerRef.current = window.setTimeout(() => {
+          setClipping(false);
+          clipTimerRef.current = null;
+        }, CLIP_HOLD_MS);
       }
     });
     return () => {
       void unlisten.then((fn) => fn());
+      if (clipTimerRef.current !== null) {
+        window.clearTimeout(clipTimerRef.current);
+        clipTimerRef.current = null;
+      }
     };
   }, []);
 

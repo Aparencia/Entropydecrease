@@ -9,13 +9,15 @@
  *              （会话恢复/事件丢失场景）。缩略图用 thumb/ 路径（320px 级），
  *              点击放大查看 full/ 原图。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 /** 横条最多展示张数（最新 N 张，旧的到「会话」页图集查看） */
 const MAX_SHOWN = 12;
+/** 事件触发刷新节流（ms）：live:ocr 每帧多块高频触发，目录读也须合并——防 IPC 风暴 */
+const REFRESH_THROTTLE_MS = 500;
 
 /** 解析缩略图相对路径（full/xxx.webp → thumb/xxx.webp）；解析失败回退原路径 */
 function thumbOf(rel: string): string {
@@ -60,18 +62,28 @@ export default function LiveImageStrip({ sessionId }: { sessionId: number | null
     }
   }, [sessionId]);
 
+  // 事件刷新节流（审查修复）：live:ocr 一帧多块高频到达——目录读也须合并，
+  // 500ms 窗口内只执行一次；初始/手动刷新不受限
+  const lastEventRefreshRef = useRef(0);
+  const refreshThrottled = useCallback(() => {
+    const now = Date.now();
+    if (now - lastEventRefreshRef.current < REFRESH_THROTTLE_MS) return;
+    lastEventRefreshRef.current = now;
+    void refresh();
+  }, [refresh]);
+
   // 初次加载 + 归档事件即时刷新（live:image-saved 为主，live:ocr 兜底）
   useEffect(() => {
     if (!sessionId) return;
     void refresh();
     const unlisteners: Promise<() => void>[] = [
-      listen<string>("live:image-saved", () => void refresh()),
-      listen("live:ocr", () => void refresh()),
+      listen<string>("live:image-saved", () => refreshThrottled()),
+      listen("live:ocr", () => refreshThrottled()),
     ];
     return () => {
       unlisteners.forEach((p) => void p.then((fn) => fn()));
     };
-  }, [refresh, sessionId]);
+  }, [refresh, refreshThrottled, sessionId]);
 
   if (!sessionId) return null;
   const shown = images.slice(-MAX_SHOWN).reverse(); // 最新在前
