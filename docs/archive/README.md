@@ -63,3 +63,4 @@ docs/archive/
 | 2026-08-18（十一轮） | 审查问题全量修复：TD-044~055 全部 closed（模式契约/心跳/ROI 缩放/静音尺度/词表即时/PPTX 安全/调度独立计数等 12 项 + low 12 项）；245 单测全绿 + 前端构建通过 | TD-040（P2，deliberate carried），共 1 笔 |
 | 2026-08-19 | 结构模型版落地（版面/表格/公式模型 + 按需下载 + 课后精修）+ 新增代码审查：H1-H3/M1/M2/M4/L1/L3 全部即修（c5eae08 + 65c950a）；brainstorming-video-types.md 归档（[ ] 已归档，六轮头脑风暴全部实施完成）；brainstorming-classroom-assistant-gaps.md 归档（[ ] 已归档，四维缺口评估 50 项，§9 裁决 22 项进 v0.6.0 → REQ-059~080 已排期）；累计已偿 53 笔 | TD-040（P2，deliberate carried），共 1 笔 |
 | 2026-08-19（二轮） | v0.6.0 M1 提取纯度交付（REQ-059/060/061/082/083/084/085，8 提交）+ 新增代码审查：R1-R4 全部即修（463dbf4）；market-stack-asr-notes-research.md 归档（[ ] 已归档，技术栈裁决完成，选型固化 AGENTS.md §2）；累计已偿 57 笔 | TD-040（P2，deliberate carried），共 1 笔 |
+| 2026-08-19（三轮） | v0.6.0 M2-M6 交付（REQ-062~085，~20 提交，开发完成待 M7 真机验收）+ 新增代码审查：R5-R10 全部即修（8582083，含预览 XSS 转义/融合置信度回归/落库一致性/去重 FIFO）；累计已偿 63 笔 | TD-040（P2，deliberate carried），共 1 笔 |

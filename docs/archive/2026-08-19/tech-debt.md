@@ -1,15 +1,15 @@
-# 技术债清单（权威：2026-08-19，M1 新增代码审查后二次滚动）
+# 技术债清单（权威：2026-08-19，M2-M6 新增代码审查后三次滚动）
 
 > 本清单为当前唯一权威债务清单，归档日滚动更新；旧归档清单仅历史追溯。
-> 来源：本日首轮清单滚动——TD-040 维持 carried（deliberate 有意不修）。
-> 二次滚动（M1 提取纯度新增代码审查，REQ-059/060/061/082/083/084/085）：
-> 发现 4 项问题全部当日修复（提交 463dbf4，见下）。
+> 来源：本日二轮清单滚动——TD-040 维持 carried（deliberate 有意不修）。
+> 三次滚动（v0.6.0 M2-M6 交付 + 新增代码审查，REQ-062~085）：
+> 发现 6 项问题全部当日修复（提交 8582083，见下）。
 
 ## 未偿债务
 
 | ID | 摘要 | 备注 |
 |----|------|------|
-| TD-040 | tauri.conf.json bundle.resources 未含 ffmpeg——生产安装包无捆绑 ffmpeg（v0.3.0 审查，2026-08-18） | carried（deliberate 有意不修）：resources glob 对缺失目录构建失败；捆绑 ffmpeg（~80MB）与安装包体积权衡留待体积策略；开发期由 download-ffmpeg.ps1 + PATH 覆盖（ADR-008 风险项，保持观察）。二次核对（2026-08-19）：M1 提取纯度代码未涉模型分发/捆绑，维持 carried |
+| TD-040 | tauri.conf.json bundle.resources 未含 ffmpeg——生产安装包无捆绑 ffmpeg（v0.3.0 审查，2026-08-18） | carried（deliberate 有意不修）：resources glob 对缺失目录构建失败；捆绑 ffmpeg（~80MB）与安装包体积权衡留待体积策略；开发期由 download-ffmpeg.ps1 + PATH 覆盖（ADR-008 风险项，保持观察）。三次核对（2026-08-19）：M2-M6 代码未涉模型分发/捆绑，维持 carried |
 
 ## 今日已偿（审查发现即修复，全部可经代码核验）
 
@@ -27,6 +27,12 @@
 | （审查 R2） | `review_text_filter` 未拦截 recording 会话——数据不完整时 AI 复核浪费配额且结果无意义（medium） | 复核命令与 preview 口径一致：recording 会话拒绝（提交 463dbf4） |
 | （审查 R3） | AI 复核缓存键不含上下文（prev/next/hint）——merge 方向判定跨上下文误复用旧判定（low） | 缓存键纳入全送审内容（段文本+上下文+类别提示）（提交 463dbf4） |
 | （审查 R4） | `symbol_normalize::normalize` 逐段重复排序规则表（大会话数千段 × 70 条规则）（low） | 规则排序移至配置构造期一次（default/from_json 均排序），normalize 直接遍历（提交 463dbf4） |
+| （审查 R5） | 笔记预览 `dangerouslySetInnerHTML` 渲染未转义——恶意字幕（`<script>/<img onerror>`）注入 HTML，存储型 XSS（high） | `renderMarkdown` 全文本 `escapeHtml` 转义后再包标签（提交 8582083） |
+| （审查 R6） | 融合兜底分支把无置信度核对段标记为 0.5——被 note_filter 低置信规则（<0.6）误删，v0.5.0 行为回归（内容丢失）（medium） | `decide_overlap` 重构为 `OverlapDecision` 枚举（SubtitleWins/KeepReview），兜底透传 None（未知≠低置信）+ 回归断言（提交 8582083） |
+| （审查 R7） | 预览 AI 复核后一键落库 `aiDecisions: null`——落库不含 AI 判定，预览/落库输出不一致（REQ-081 验收破坏）（medium） | `TextFilterReview` 新增 `decisions` 字段（缓存命中+正常送审全量收集），前端保存并回传 `session_to_note`（提交 8582083） |
+| （审查 R8） | 图片去重 `last_fingerprint` 仅最近一张——PPT 往返（A→B→A）场景重复存图耗预算（medium-low） | 改最近 8 张 FIFO 指纹缓冲（往返窗口内去重），仍不占预算（提交 8582083） |
+| （审查 R9） | `snippet_around` 的 `text[..pos]` 字节切片——`to_lowercase` 长度变化字符（U+0130 类）下可能非字符边界 panic（low） | `text.get(..pos)` 安全取前缀（非边界回退整串不 panic）（提交 8582083） |
+| （审查 R10） | `audio_store` `SessionAudioWriter::path()` 无调用方（low） | 删除方法 + 未读 `path` 字段（提交 8582083） |
 
 ## 登记规则
 
