@@ -31,6 +31,22 @@
 | （审查 M1-b） | 事件表三类事件无写入方——VolumeSurge/VadSegment/Clipboard 设计文档承诺写入未实现（REQ-108 范围缺失）（medium） | loop 补 VadSegment（Final 顺带）+ VolumeSurge（段差≥0.3，与 highlight 同口径）；clipboard monitor 传入 Db 写 Clipboard 事件（30 字预览）；修复提交 952386b |
 | （审查 M6） | 章节检测 `events.is_empty()` 全量判定——只有非章节类事件时会话丢弃 OCR/gap 近似且事件路径稀疏（medium） | 改为按类型判定（仅 FrameSwitch/LongSilence 存在时走事件路径）；修复提交 952386b |
 | （审查 M2-b） | 事件容量守卫非事务——INSERT 失败时 DELETE 已提交，最旧事件丢失（medium） | add_event 包单事务（删最旧+插入原子）；修复提交 952386b |
+| （审查 L3） | step_boundaries 缺 #[serde(default)]——与同批 practice_segments/player_actions 不一致（旧 JSON 反序列化兼容风险）（low） | 补 serde(default) 保持一致；修复提交 10e36fe |
+| （审查 L4） | 豁免登记行数过期（artifact_templates ~529→501/analysis ~376→344/video_profile ~315→394）（low） | line-limit-exemptions.md 行数刷新；修复提交 10e36fe |
+| （审查 L5） | 陈旧注释——video_profile.rs"保持 ≤300 行"（实际 394 已豁免）、ProfileDetector"v0.5.0"标签（v0.7.0 十二档案）（low） | 注释更新；修复提交 10e36fe |
+| （审查 L7） | 有卡无图步骤卡导出 Markdown 空图引用 `![步骤]()`——笔记坏图（low） | image 空时输出纯文本步骤行；修复提交 10e36fe |
+| （审查 L8） | code_blocks `_detail/_analysis` 死参无说明（low） | 注释注明保留理由（统一模板签名）；修复提交 10e36fe |
+
+## 观察项（登记不立债，保持追踪）
+
+| ID | 摘要 | 处置 |
+|----|------|------|
+| （审查 L1） | disable_asr 无消费点（机制预留） | 已注释（video_profile.rs "机制预留；引擎池只跳过消费端"）；接线计划随 REQ-130 后续档案 |
+| （审查 L2） | 导入链路 disable_ocr 门控不可达——import_video 不接收 profile，播客类档案经文件导入仍跑 OCR | 代码注释已说明"前端传 profile 后自动生效"；前端 VideoImportPanel 补 profile 参数留待后续迭代 |
+| （审查 L6） | 新旧档案检测关键词重叠（HandsOn"跟练/实战/教程"与 FollowAlong/Coding/GameTutorial 重叠；Interview"播客"与 Podcast 重叠） | 当前靠 CONFLICT_GAP 兜底（低置信需确认）；关键词去重/权重调优留待真机样本校准（REQ-043 记忆偏好闭环兜底） |
+| （审查 L9） | merge_lines 滚动代码窗口行重复（帧 1-20 行/帧 5-25 行时中间重复） | 已知启发式局限（静态代码帧为主）；行集合重叠率切段留待代码档案真机验证 |
+| （审查 L10） | 候选列表恒 12 项（含 0 分项噪音） | 前端展示 filter score>0 留待 UI 迭代（当前 0 分项 score=0 不误导——显示"0%"） |
+| （审查 L11） | 前端 types.ts SessionDetail 缺 events/region_kind 字段（serde 契约漂移，M1.5 起） | 前端当前不消费 events 字段（详情页未显示信号事件），类型补齐随前端迭代 |
 
 ## 登记规则
 
