@@ -272,10 +272,21 @@ const CONFLICT_GAP: f32 = 1.0;
 /// @ai-context: 记忆偏好由调用方（command 层）先查 ProfileMemory，命中直接生效；
 ///              本函数只负责信号投票（决策矩阵可注入 fake 信号单测）。
 pub fn vote_detect(signals: &ObservedSignals) -> DetectResult {
+    // v0.7.2（REQ-152）：标题先剥系列名再投票——同一系列的 P1/P5 标题不同导致
+    // 投票漂移（真实短板）；剥离后各集投票一致（"零基础化妆 P3" 与 "P5" 同键）。
+    // 未识别出系列（普通标题）→ 原样投票（零回归）；仅换投票标题，不加分不扣分。
+    let mut s = signals.clone();
+    if let Some(info) = signals
+        .title
+        .as_deref()
+        .and_then(crate::series_detect::extract_series)
+    {
+        s.title = Some(info.series);
+    }
     let profiles = builtin_profiles();
     let mut scored: Vec<(ProfileKind, f32)> = profiles
         .iter()
-        .map(|p| (p.kind, score_profile(p, signals)))
+        .map(|p| (p.kind, score_profile(p, &s)))
         .collect();
     let max = scored.iter().map(|(_, s)| *s).fold(0.0f32, f32::max);
     if max <= 0.0 {
@@ -340,6 +351,10 @@ fn score_profile(profile: &VideoProfile, signals: &ObservedSignals) -> f32 {
 pub struct MemoryEntry {
     pub keyword: String,
     pub kind: ProfileKind,
+    /// v0.7.2（REQ-152）：系列键标记——键是剥离序号后的系列名（true），
+    /// 同系列各集共享记忆；旧 JSON 缺省 false（零回归）。
+    #[serde(default)]
+    pub is_series: bool,
 }
 
 /// 记忆偏好库（JSON 持久化；同 vocab 模式：路径可注入，测试用 tempfile）。
@@ -368,10 +383,23 @@ impl ProfileMemory {
     /// 按窗口标题查询记忆偏好：标题包含某条 keyword 即命中（同窗口标题下次直接生效）。
     ///
     /// @ai-context: 最长关键词优先（"网课-数学" 应命中更长更具体的条目）。
+    /// @ai-context: v0.7.2（REQ-152）：先试**系列键**——标题可识别系列（P/集/EP 等）
+    ///              时用系列名匹配，P1 确认过的档案 P5 直接生效（修复标题序号
+    ///              变化导致的记忆失配）；系列未命中回退完整标题 contains（现状）。
     pub fn lookup(&self, title: &str) -> Option<ProfileKind> {
+        if let Some(info) = crate::series_detect::extract_series(title) {
+            if let Some(kind) = self.lookup_best(&info.series) {
+                return Some(kind);
+            }
+        }
+        self.lookup_best(title)
+    }
+
+    /// 最长关键词优先匹配（纯函数）。
+    fn lookup_best(&self, key: &str) -> Option<ProfileKind> {
         let mut best: Option<(usize, ProfileKind)> = None;
         for e in &self.entries {
-            if title.contains(&e.keyword) && !e.keyword.is_empty() {
+            if key.contains(&e.keyword) && !e.keyword.is_empty() {
                 let len = e.keyword.chars().count();
                 if best.as_ref().is_none_or(|(bl, _)| len > *bl) {
                     best = Some((len, e.kind));
@@ -382,15 +410,23 @@ impl ProfileMemory {
     }
 
     /// 记录用户确认（关键词已存在则覆盖档案；新增追加）。
+    ///
+    /// @ai-context: v0.7.2（REQ-152）：标题可识别系列 → 存**系列键**（is_series=true，
+    ///              同系列各集共享）；否则存完整标题（现状行为零回归）。
     pub fn remember(&mut self, keyword: &str, kind: ProfileKind) {
         let keyword = keyword.trim().to_string();
         if keyword.is_empty() {
             return;
         }
-        if let Some(e) = self.entries.iter_mut().find(|e| e.keyword == keyword) {
+        let (key, is_series) = match crate::series_detect::extract_series(&keyword) {
+            Some(info) => (info.series, true),
+            None => (keyword, false),
+        };
+        if let Some(e) = self.entries.iter_mut().find(|e| e.keyword == key) {
             e.kind = kind;
+            e.is_series = is_series;
         } else {
-            self.entries.push(MemoryEntry { keyword, kind });
+            self.entries.push(MemoryEntry { keyword: key, kind, is_series });
         }
     }
 }

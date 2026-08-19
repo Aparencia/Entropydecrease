@@ -335,7 +335,13 @@ pub async fn session_outline(
 ///
 /// @ai-context: 纯函数（派生方案——sessions 表不加 course 列，零迁移）；
 ///              前端按此分组折叠；用户标记覆盖（前端本地）留 UI 层。
+/// @ai-context: v0.7.2（REQ-152）：合集检测优先——P/第X集/EP/括号/数字后缀式标题
+///              归组到**系列名**（B站合集 P1/P2/P3 自动同组）；"第X章/节/讲"式
+///              保持原语义（每章一组，现状零回归）。
 pub fn course_of(title: &str) -> String {
+    if let Some(info) = crate::series_detect::extract_series(title) {
+        return info.series;
+    }
     let t = title.trim();
     let chars: Vec<char> = t.chars().collect();
     let mut i = 0;

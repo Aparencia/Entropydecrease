@@ -229,6 +229,79 @@ fn memory_remember_overwrites_existing() {
     assert_eq!(memory.lookup("软件教程"), Some(ProfileKind::HandsOn));
 }
 
+// ── v0.7.2（REQ-152）：系列（合集）检测联动 ──
+
+#[test]
+fn detect_series_episodes_vote_consistently() {
+    // Arrange：同一系列不同集号（标题不同——P1/P5；系列名无档案关键词）
+    let p1 = ObservedSignals { title: Some("零基础化妆 P1".into()), ..signals() };
+    let p5 = ObservedSignals { title: Some("零基础化妆 P5".into()), ..signals() };
+    // Act
+    let r1 = vote_detect(&p1);
+    let r5 = vote_detect(&p5);
+    // Assert：剥离系列名后投票一致（跨集不漂移）；系列名无关键词 → 诚实 Unknown
+    assert_eq!(r1.candidates, r5.candidates);
+    assert_eq!(r1.candidates[0].kind, ProfileKind::Unknown);
+}
+
+#[test]
+fn detect_series_vote_uses_series_name() {
+    // Arrange：系列名含课程关键词（"课程"×2 分）——各集都应命中 Lecture
+    let p1 = ObservedSignals { title: Some("高等数学课程 P1".into()), ..signals() };
+    let p7 = ObservedSignals { title: Some("高等数学课程 P7".into()), ..signals() };
+    // Act/Assert：两集候选一致且首位 Lecture
+    let r1 = vote_detect(&p1);
+    let r7 = vote_detect(&p7);
+    assert_eq!(r1.candidates, r7.candidates);
+    assert_eq!(r1.candidates[0].kind, ProfileKind::Lecture);
+}
+
+#[test]
+fn memory_series_key_cross_episode_hits() {
+    // Arrange：P3 确认实操 → 存系列键
+    let mut memory = ProfileMemory::default();
+    memory.remember("零基础化妆教程 P3", ProfileKind::HandsOn);
+    // Assert：键已剥离序号为系列名 + is_series 标记
+    assert_eq!(memory.entries.len(), 1);
+    assert_eq!(memory.entries[0].keyword, "零基础化妆教程");
+    assert!(memory.entries[0].is_series);
+    // Act：P5 与带平台后缀的 P1 查询
+    // Assert：同系列跨集直接命中（选一次整系列生效）
+    assert_eq!(memory.lookup("零基础化妆教程 P5"), Some(ProfileKind::HandsOn));
+    assert_eq!(
+        memory.lookup("零基础化妆教程 P1_哔哩哔哩_bilibili"),
+        Some(ProfileKind::HandsOn)
+    );
+    // 非系列标题不误命中（"入门篇" 含系列名为子串属 contains 语义——用无关标题断言）
+    assert_eq!(memory.lookup("化妆技巧分享"), None);
+    assert_eq!(memory.lookup("产品周会-评审"), None);
+}
+
+#[test]
+fn memory_series_key_old_json_compat() {
+    // Arrange：旧格式 JSON（无 is_series 字段）
+    let raw = r#"{"entries":[{"keyword":"网课","kind":"lecture"}]}"#;
+    // Act：解析
+    let memory: ProfileMemory = serde_json::from_str(raw).unwrap();
+    // Assert：is_series 缺省 false（零回归）；lookup 仍可用
+    assert_eq!(memory.entries.len(), 1);
+    assert!(!memory.entries[0].is_series);
+    assert_eq!(memory.lookup("网课-数学"), Some(ProfileKind::Lecture));
+}
+
+#[test]
+fn memory_series_roundtrip_preserves_flag() {
+    // Arrange
+    let mut memory = ProfileMemory::default();
+    memory.remember("零基础化妆教程 P3", ProfileKind::HandsOn);
+    // Act：序列化 → 反序列化
+    let raw = serde_json::to_string(&memory).unwrap();
+    let back: ProfileMemory = serde_json::from_str(&raw).unwrap();
+    // Assert：系列键与标记无损
+    assert_eq!(back, memory);
+    assert_eq!(back.lookup("零基础化妆教程 P9"), Some(ProfileKind::HandsOn));
+}
+
 #[test]
 fn memory_json_roundtrip_and_corrupt_fallback() {
     // Arrange：写库 → 读回
