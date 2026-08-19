@@ -71,6 +71,17 @@ pub fn files_for(kind: StructureModelKind, high_accuracy_formula: bool) -> &'sta
     }
 }
 
+/// 某类模型的磁盘就绪判定（纯函数）：清单内文件全部存在且非空 → 已就绪。
+///
+/// @ai-context: 修复（2026-08 用户反馈）：状态面板只读内存态——下载器状态表
+///              每次启动为空，已下载完成的模型被误报"未下载"（点下载又秒完成）。
+///              本函数按装配目录 + 公式档位做磁盘存在性检查，命令层合并进状态。
+pub fn disk_done(kind: StructureModelKind, dir: &std::path::Path, high_accuracy_formula: bool) -> bool {
+    files_for(kind, high_accuracy_formula)
+        .iter()
+        .all(|f| dir.join(f.name).metadata().is_ok_and(|m| m.len() > 0))
+}
+
 /// 单类模型下载状态。
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]

@@ -84,3 +84,45 @@ fn downloader_statuses_track_kinds() {
     assert_eq!(s.state, "downloading");
     assert_eq!(s.current_file.as_deref(), Some("slanet_plus_v2.onnx"));
 }
+
+// ── disk_done：磁盘就绪判定（2026-08 修复：启动误报"未下载"）──
+
+#[test]
+fn disk_done_true_when_all_files_present() {
+    // Arrange：临时目录写入版面模型单文件
+    let dir = std::env::temp_dir().join(format!("entropy-struct-done-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("pp-doclayout-l.onnx"), vec![1u8; 16]).unwrap();
+    // Act & Assert：文件齐全且非空 → 就绪
+    assert!(disk_done(StructureModelKind::Layout, &dir, false));
+    // 表格三件套缺一 → 未就绪（防残缺文件被装配）
+    assert!(!disk_done(StructureModelKind::Table, &dir, false));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn disk_done_false_when_missing_or_empty() {
+    // Arrange：目录不存在
+    let missing = std::env::temp_dir().join(format!("entropy-struct-missing-{}", std::process::id()));
+    // Act & Assert：缺目录/缺文件 → 未就绪
+    assert!(!disk_done(StructureModelKind::Layout, &missing, false));
+    // 空文件（0 字节）不得视为就绪（下载中断残留）
+    let dir = std::env::temp_dir().join(format!("entropy-struct-empty-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("pp-doclayout-l.onnx"), b"").unwrap();
+    assert!(!disk_done(StructureModelKind::Layout, &dir, false));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn disk_done_formula_respects_tier() {
+    // Arrange：目录含 PP-FormulaNet 两件套
+    let dir = std::env::temp_dir().join(format!("entropy-struct-tier-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("pp-formulanet-s.onnx"), vec![1u8; 8]).unwrap();
+    std::fs::write(dir.join("pp-formulanet-tokenizer.json"), vec![1u8; 8]).unwrap();
+    // Act & Assert：默认档就绪；高精度档（查 UniMERNet 文件）未就绪
+    assert!(disk_done(StructureModelKind::Formula, &dir, false));
+    assert!(!disk_done(StructureModelKind::Formula, &dir, true));
+    let _ = std::fs::remove_dir_all(&dir);
+}

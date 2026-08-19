@@ -4,6 +4,9 @@
  * @ai-context: 按需启用：三类模型独立下载/独立状态（未下载/下载中/就绪/失败）；
  *              公式默认 PP-FormulaNet-s（231MB），可切换 UniMERNet 高精度档
  *              （1.84GB，显式确认）；模型未下载时对应能力自动降级规则版。
+ * @ai-context: 2026-08 用户需求：清单整理——状态徽标化 + 行内体积/进度 +
+ *              公式档位独立小节；状态修复（后端结构模型状态现按磁盘存在性
+ *              兜底，启动不再误报"未下载"）。
  * @ai-context: 课后精修入口：会话停止后自动触发（方案 A 增强版），本面板仅管理
  *              模型资产与档位。
  */
@@ -28,14 +31,15 @@ const KIND_LABEL: Record<ModelKind, string> = {
   formula: "公式识别（PP-FormulaNet-s 231MB）",
 };
 
-const STATE_LABEL: Record<string, string> = {
-  idle: "未下载",
-  downloading: "下载中…",
-  done: "已就绪",
-  failed: "下载失败",
+/** 状态徽标（底色/文字色/前缀）——清单整理：徽标化取代平铺文字 */
+const STATE_BADGE: Record<string, { bg: string; fg: string; text: string }> = {
+  idle: { bg: "#f3f4f6", fg: "#6b7280", text: "未下载" },
+  downloading: { bg: "#eff6ff", fg: "#2563eb", text: "下载中…" },
+  done: { bg: "#f0fdfa", fg: "#0d9488", text: "✓ 已就绪" },
+  failed: { bg: "#fef2f2", fg: "#dc2626", text: "下载失败" },
 };
 
-const btn: React.CSSProperties = { padding: "4px 10px", cursor: "pointer", fontSize: 12 };
+const btn: React.CSSProperties = { padding: "3px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6, border: "1px solid #e5e7eb", background: "#fff" };
 
 export default function StructureModelSetting() {
   const [statuses, setStatuses] = useState<ModelStatus[]>([]);
@@ -107,63 +111,70 @@ export default function StructureModelSetting() {
   const statusOf = (kind: ModelKind) => statuses.find((s) => s.kind === kind);
 
   return (
-    <div>
+    <div style={{ fontSize: 12, color: "#374151" }}>
       <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>
-        结构分析模型（v0.5.0 模型版——按需下载，未下载自动用规则版）
+        结构分析模型（按需下载，未下载自动用规则版）
       </div>
       {(["layout", "table", "formula"] as ModelKind[]).map((kind) => {
         const st = statusOf(kind);
         const state = st?.state ?? "idle";
+        const badge = STATE_BADGE[state] ?? STATE_BADGE.idle;
+        const downloading = state === "downloading";
         return (
-          <div key={kind} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <span style={{ fontSize: 11, width: 210, color: "#374151" }}>{KIND_LABEL[kind]}</span>
+          <div key={kind} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, width: 200, color: "#374151" }}>{KIND_LABEL[kind]}</span>
+            {/* 状态徽标 */}
             <span
               style={{
-                fontSize: 11,
-                color: state === "done" ? "#0d9488" : state === "failed" ? "#dc2626" : "#6b7280",
-                width: 60,
+                fontSize: 11, padding: "1px 8px", borderRadius: 10,
+                background: badge.bg, color: badge.fg, flexShrink: 0,
               }}
             >
-              {STATE_LABEL[state] ?? state}
+              {badge.text}
             </span>
-            {st?.currentFile && (
-              <span style={{ fontSize: 10, color: "#9ca3af" }}>
-                {st.currentFile} {st.totalBytes > 0 ? `${(st.downloadedBytes / 1048576) | 0}MB/${(st.totalBytes / 1048576) | 0}MB` : ""}
+            {/* 下载进度（下载中显示当前文件 + 字节进度） */}
+            {downloading && st?.currentFile && (
+              <span style={{ fontSize: 10, color: "#9ca3af", flexShrink: 0 }}>
+                {st.currentFile}{" "}
+                {st.totalBytes > 0 ? `${(st.downloadedBytes / 1048576) | 0}MB/${(st.totalBytes / 1048576) | 0}MB` : "…"}
               </span>
             )}
-            {state !== "done" && state !== "downloading" && (
-              <button style={btn} onClick={() => void download(kind)}>
+            {state === "failed" && st?.error && (
+              <span style={{ fontSize: 10, color: "#dc2626" }} title={st.error}>⚠ {st.error.slice(0, 40)}</span>
+            )}
+            {/* 操作：下载/重试；已就绪或下载中不显示 */}
+            {state !== "done" && !downloading && (
+              <button style={{ ...btn, marginLeft: "auto" }} onClick={() => void download(kind)}>
                 {state === "failed" ? "重试" : "下载"}
               </button>
-            )}
-            {state === "failed" && st?.error && (
-              <span style={{ fontSize: 10, color: "#dc2626" }} title={st.error}>⚠</span>
             )}
           </div>
         );
       })}
-      {/* 公式档位切换（默认 PP-FormulaNet-s；高精度 UniMERNet 需确认） */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-        <span style={{ fontSize: 11, color: "#6b7280" }}>公式档位：</span>
-        <label style={{ fontSize: 11, color: "#374151", display: "flex", alignItems: "center", gap: 4 }}>
-          <input
-            type="checkbox"
-            checked={highAccuracy}
-            onChange={(e) => {
-              setHighAccuracy(e.target.checked);
-              setConfirmHigh(false);
-            }}
-          />
-          高精度档（UniMERNet 1.84GB，中文效果最佳）
-        </label>
-        {activeTier === "uni-mer-net" && (
-          <span style={{ fontSize: 10, color: "#0d9488" }}>已启用（装配路径已切换）</span>
-        )}
-        {confirmHigh && (
-          <span style={{ fontSize: 11, color: "#b45309" }}>
-            大模型下载（1.84GB），确认后点"下载"公式
-          </span>
-        )}
+      {/* 公式档位切换（独立小节：默认 PP-FormulaNet-s；高精度 UniMERNet 需确认） */}
+      <div style={{ borderTop: "1px dashed #e5e7eb", marginTop: 8, paddingTop: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: "#6b7280" }}>公式档位：</span>
+          <label style={{ fontSize: 11, color: "#374151", display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={highAccuracy}
+              onChange={(e) => {
+                setHighAccuracy(e.target.checked);
+                setConfirmHigh(false);
+              }}
+            />
+            高精度档（UniMERNet 1.84GB，中文效果最佳）
+          </label>
+          {activeTier === "uni-mer-net" && (
+            <span style={{ fontSize: 10, color: "#0d9488" }}>已启用（装配路径已切换）</span>
+          )}
+          {confirmHigh && (
+            <span style={{ fontSize: 11, color: "#b45309" }}>
+              大模型下载（1.84GB），确认后点上方"下载"公式
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

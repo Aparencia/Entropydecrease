@@ -70,9 +70,28 @@ pub fn structure_formula_tier(state: State<'_, AppState>) -> crate::structure_ti
 }
 
 /// 查询三类结构模型状态（未下载/下载中/就绪/失败）。
+///
+/// @ai-context: 修复（2026-08 用户反馈）：内存态与磁盘态合并——下载器状态表
+///              每次启动为空（纯内存），已下载完成的模型会被误报"未下载"；
+///              idle（无下载记录）时以磁盘存在性检查兜底，downloading/failed
+///              保持内存态优先（下载中/失败必须如实展示）。
 #[tauri::command]
 pub fn structure_model_status(state: State<'_, AppState>) -> Vec<crate::structure_models::StructureDownloadStatus> {
-    state.structure_downloader.all_statuses()
+    let dir = structure_models_dir(&state);
+    let tier = crate::structure_tier::StructureTierConfig::load(&state.structure_tier_path).formula_tier;
+    let mut list = state.structure_downloader.all_statuses();
+    for st in list.iter_mut() {
+        if st.state == "idle" {
+            let high = match st.kind {
+                StructureModelKind::Formula => tier == crate::structure_tier::FormulaTier::UniMERNet,
+                _ => false,
+            };
+            if crate::structure_models::disk_done(st.kind, &dir, high) {
+                st.state = "done".into();
+            }
+        }
+    }
+    list
 }
 
 /// 查询结构模型装配目录（前端展示用；不暴露内部模型路径细节）。
