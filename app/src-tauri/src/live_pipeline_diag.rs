@@ -91,7 +91,11 @@ fn live_pipeline_diag() {
         .or_else(|| wins.iter().find(|w| w.process_name == "哔哩哔哩" && !w.title.contains("干杯")))
         .cloned();
     if let Some(w) = target {
-        eprintln!("[diag] 目标窗口: id={} title={:?}", w.id, w.title);
+        eprintln!(
+            "[diag] 目标窗口: id={} title={:?}",
+            w.id,
+            crate::log_redact::redact_line(&w.title)
+        );
         run(Some(w.id), &w.title);
     } else {
         eprintln!("[diag] 未找到《复盘》窗口");

@@ -51,6 +51,9 @@ impl Default for AudioEventFilterConfig {
 ///
 /// @ai-context: JSON 可校准时项目惯例（ui_junk.rs 黑名单同款）；
 ///              数据目录 audio_event_filter.json 可由用户/部署校准三阈值。
+/// 生产链路暂用默认配置，本函数为校准 API（单测覆盖）——登记豁免 dead_code
+/// （对齐 vad_adaptive::current_threshold 惯例）。
+#[allow(dead_code)]
 pub fn load_pattern_config(json: &str) -> AudioEventFilterConfig {
     match serde_json::from_str(json) {
         Ok(cfg) => cfg,
@@ -69,6 +72,9 @@ pub fn load_pattern_config(json: &str) -> AudioEventFilterConfig {
 ///              - 音调：每 20ms 窗口过零率，窗口间标准差 < 平均值 30% 判稳定
 ///                （纯音 ZCR≈2f/fs 恒定；语音有声/无声交替 ZCR 波动大）
 /// @ai-context: 纯函数无副作用；空输入/采样率 0 → false（防御性，不 panic）。
+/// 核心纯函数（测试/校准 API）；生产走 observe（内部复用带配置判定）——
+/// 登记豁免 dead_code。
+#[allow(dead_code)]
 pub fn is_fixed_tone_pattern(samples: &[f32], sample_rate: u32) -> bool {
     is_fixed_tone_with_config(samples, sample_rate, &AudioEventFilterConfig::default())
 }
@@ -157,7 +163,8 @@ pub struct AudioEventFilter {
     config: AudioEventFilterConfig,
     /// 连续静音块计数（block_is_silent=true 递增；非静音块归零）。
     recent_silent_blocks: u32,
-    /// 累计 suppress 块数（诊断/测试观测）。
+    /// 累计 suppress 块数（诊断/测试观测；生产暂未消费）——登记豁免 dead_code。
+    #[allow(dead_code)]
     pub suppressed_count: u64,
 }
 
@@ -174,6 +181,8 @@ impl Default for AudioEventFilter {
 
 impl AudioEventFilter {
     /// 用可校准配置构造（load_pattern_config 产出——JSON 校准入口）。
+    /// 生产链路用 Default（默认阈值），本构造为校准 API——登记豁免 dead_code。
+    #[allow(dead_code)]
     pub fn with_config(config: AudioEventFilterConfig) -> Self {
         Self { config, ..Self::default() }
     }
