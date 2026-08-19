@@ -64,6 +64,9 @@ pub struct EnginePool {
     /// M7/REQ-042 G2：OCR 缓存命中/未命中计数（诊断面板命中率）
     ocr_cache_hits: Arc<AtomicU64>,
     ocr_cache_misses: Arc<AtomicU64>,
+    /// REQ-100（v0.7.0 M1）：SenseVoice 重打分有界等待超时计数——
+    /// 质量报告 rescore_timeouts 数据源（重打分降级事件，不再是恒 0）
+    rescore_timeouts: Arc<AtomicU64>,
 }
 
 impl EnginePool {
@@ -87,6 +90,7 @@ impl EnginePool {
         let ocr_failures = Arc::new(AtomicU64::new(0));
         let ocr_cache_hits = Arc::new(AtomicU64::new(0));
         let ocr_cache_misses = Arc::new(AtomicU64::new(0));
+        let rescore_timeouts = Arc::new(AtomicU64::new(0));
         let asr_alive_w = asr_alive.clone();
         let asr_fail_w = asr_failures.clone();
         thread::Builder::new()
@@ -127,6 +131,7 @@ impl EnginePool {
             ocr_failures,
             ocr_cache_hits,
             ocr_cache_misses,
+            rescore_timeouts,
         })
     }
 
@@ -135,6 +140,20 @@ impl EnginePool {
     pub fn dummy() -> Self {
         let (asr_tx, _) = mpsc::channel::<AsrRequest>();
         let (ocr_tx, _) = mpsc::channel::<OcrRequest>();
+        Self::assemble(asr_tx, ocr_tx)
+    }
+
+    /// 测试用：注入自建 ASR 通道（receiver 由调用方持活——
+    /// send 成功、recv 超时路径可测；见 transcribe_pcm_timeout 超时计数单测）。
+    #[cfg(test)]
+    pub fn with_asr_channel(asr_tx: Sender<AsrRequest>) -> Self {
+        let (ocr_tx, _) = mpsc::channel::<OcrRequest>();
+        Self::assemble(asr_tx, ocr_tx)
+    }
+
+    /// 测试装配：计数/状态 Arc 全部归零或默认（start 与测试构造共用，避免重复）。
+    #[cfg(test)]
+    fn assemble(asr_tx: Sender<AsrRequest>, ocr_tx: Sender<OcrRequest>) -> Self {
         Self {
             asr_tx,
             ocr_tx,
@@ -150,6 +169,7 @@ impl EnginePool {
             ocr_failures: Arc::new(AtomicU64::new(0)),
             ocr_cache_hits: Arc::new(AtomicU64::new(0)),
             ocr_cache_misses: Arc::new(AtomicU64::new(0)),
+            rescore_timeouts: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -193,6 +213,11 @@ impl EnginePool {
 
     pub fn ocr_cache_counts(&self) -> (u64, u64) {
         (self.ocr_cache_hits.load(Ordering::Relaxed), self.ocr_cache_misses.load(Ordering::Relaxed))
+    }
+
+    /// REQ-100（v0.7.0 M1）：SenseVoice 重打分超时计数（质量报告 rescore_timeouts 数据源）。
+    pub fn rescore_timeout_count(&self) -> u64 {
+        self.rescore_timeouts.load(Ordering::Relaxed)
     }
 
     /// 转写音频（阻塞等待 ASR 线程返回）。
@@ -239,7 +264,13 @@ impl EnginePool {
             })
             .map_err(|_| AppError::Asr("ASR 引擎线程已退出".to_string()))?;
         rx.recv_timeout(timeout)
-            .map_err(|_| AppError::Asr("SenseVoice 重打分超时（降级保留流式结果）".to_string()))?
+            .map_err(|_| {
+                // REQ-100（v0.7.0 M1）：有界等待超时/通道断开 = 重打分未在期限内返回，
+                // 调用方走降级（保留 Zipformer 流式结果）——计数该降级事件，
+                // 质量报告 rescore_timeouts 由此变真实（此前恒 0）。
+                self.rescore_timeouts.fetch_add(1, Ordering::Relaxed);
+                AppError::Asr("SenseVoice 重打分超时（降级保留流式结果）".to_string())
+            })?
     }
 
     /// 识别图片（阻塞等待 OCR 线程返回）。
@@ -453,4 +484,22 @@ fn ocr_worker_loop(
         let total = hits + misses;
         if total == 0 { 0.0 } else { hits as f64 * 100.0 / total as f64 }
     });
+}
+
+/// 单测（AAA 模式；只测有界等待超时计数——重打分降级事件不再是恒 0）。
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transcribe_pcm_timeout_counts_timeout_on_bounded_wait() {
+        // Arrange：持活 receiver 的通道——send 成功、recv 必超时（无 worker 应答）
+        let (asr_tx, _asr_rx) = mpsc::channel::<AsrRequest>();
+        let pool = EnginePool::with_asr_channel(asr_tx);
+        // Act：有界等待 10ms → 超时 Err
+        let result = pool.transcribe_pcm_timeout(&[0.0_f32], 16_000, std::time::Duration::from_millis(10));
+        // Assert：Err 且超时计数 +1（正常应答路径不计数）
+        assert!(result.is_err());
+        assert_eq!(pool.rescore_timeout_count(), 1);
+    }
 }

@@ -23,6 +23,26 @@ const SHORT_SENTENCE_MAX_DIST: usize = 1;
 /// 原规则门限：编辑距离 ≤ 较短文本的 40% 接受。
 const ORIGINAL_DIST_RATIO: f32 = 0.4;
 
+/// 重打分一致性置信度（REQ-098 CORE-O1，v0.7.0 M1）。
+///
+/// @ai-context: 置信度体系真实化——ASR 段置信度不再硬编码 0.9，改用 SenseVoice
+///              重打分与 Zipformer 流式文本的**一致性相似度**作代理：相似度高
+///              = 两路独立识别互相印证 = 可信；相似度低 = 两路分歧 = 低置信。
+///              公式：1 - dist / max(len(zip), len(sense))（strip_punct 后按字符），
+///              与 pick_rescored_with 的距离口径一致（决策与置信度同源不打架）。
+/// @ai-context: 返回 None 表示**无法产出置信度**（输入为空）——调用方落 None
+///              （诚实表达未知，不再用假 0.9 掩盖）。
+pub fn consistency_confidence(zipformer_text: &str, sensevoice_text: &str) -> Option<f32> {
+    let zip: Vec<char> = strip_punct(zipformer_text);
+    let sense: Vec<char> = strip_punct(sensevoice_text);
+    if zip.is_empty() || sense.is_empty() {
+        return None;
+    }
+    let distance = levenshtein_chars(&zip, &sense);
+    let max_len = zip.len().max(sense.len()) as f32;
+    Some(1.0 - distance as f32 / max_len)
+}
+
 /// 重打分决策（完整版）。
 ///
 /// @ai-context: allow_extension=允许前缀扩展接受——2026-08-19 取优整合：**所有端点
@@ -213,5 +233,41 @@ mod tests {
     fn strip_punct_removes_chinese_and_ascii() {
         assert_eq!(strip_punct("你好，世界！Hello, world!"), vec!['你', '好', '世', '界', 'H', 'e', 'l', 'l', 'o', 'w', 'o', 'r', 'l', 'd']);
         assert_eq!(strip_punct("  空白  "), vec!['空', '白']);
+    }
+
+    // ── REQ-098 一致性置信度（v0.7.0 M1）──
+
+    #[test]
+    fn consistency_identical_texts_full_confidence() {
+        // 双源完全一致（去标点后）→ 置信度 1.0
+        assert_eq!(consistency_confidence("熵减的概念", "熵减的概念").unwrap(), 1.0);
+    }
+
+    #[test]
+    fn consistency_small_diff_high_confidence() {
+        // 1 字差异 / 6 字 → 1 - 1/6 ≈ 0.833
+        let c = consistency_confidence("今天讲熵减", "今天讲熵减了").unwrap();
+        assert!((c - 0.8333).abs() < 0.01, "got {}", c);
+    }
+
+    #[test]
+    fn consistency_far_texts_low_confidence() {
+        // 语义完全无关 → 低置信（距离接近 max_len）
+        let c = consistency_confidence("今天讲牛顿定律", "明天考试加油").unwrap();
+        assert!(c < 0.5, "got {}", c);
+    }
+
+    #[test]
+    fn consistency_empty_inputs_is_none() {
+        // 空输入无法产出置信度 → None（诚实未知，不硬编码假值）
+        assert_eq!(consistency_confidence("", "有内容"), None);
+        assert_eq!(consistency_confidence("有内容", ""), None);
+        assert_eq!(consistency_confidence("", ""), None);
+    }
+
+    #[test]
+    fn consistency_punctuation_ignored() {
+        // 标点差异不计入距离（与决策层 strip_punct 同口径）
+        assert_eq!(consistency_confidence("熵减。", "熵减").unwrap(), 1.0);
     }
 }

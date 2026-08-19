@@ -178,7 +178,10 @@ fn transcribe_audio<F: Fn(&ImportProgress)>(
                     end_ms: *end_ms,
                     text: seg.text,
                     source: "asr".to_string(),
-                    confidence: Some(0.9),
+                    // REQ-098（v0.7.0 M1）：导入路径单遍 SenseVoice，无重打分
+                    // 对比（Zipformer vs SenseVoice）——无法产出代理置信度，
+                    // 诚实落 None（不再硬编码假 0.9）
+                    confidence: None,
                 })?;
             }
         }

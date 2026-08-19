@@ -224,7 +224,9 @@ pub async fn session_quality_report(
     }
     let segments = state.db.list_segments(id).map_err(|e| e.to_string())?;
     let ocr_blocks = state.db.list_ocr_blocks(id).map_err(|e| e.to_string())?;
-    Ok(crate::quality_report::build_quality_report(&segments, &ocr_blocks))
+    // REQ-100（v0.7.0 M1）：接入 engine 诊断计数（失败 AtomicU64 + 重打分超时），
+    // 指标从"恒 ≈0"变真实（纯函数 build_quality_report_from_counts 见 quality_report.rs）
+    Ok(crate::quality_report::build_quality_report_with_engine(&segments, &ocr_blocks, &state.engines))
 }
 
 /// 会话大纲（REQ-077）：OCR 全帧块 → 大纲条目（产物视图侧边导航，点击跳转）。

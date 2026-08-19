@@ -24,6 +24,8 @@ impl StreamingAsrEngine {
     /// @ai-context: 尾静音端点（连续静音 ≥1.2s）才允许前缀扩展接受；非尾静音端点
     ///              （rule3/短停顿硬切）标记 merge_with_next 供编排层语义合并。
     ///              流重建（new_stream）会重读共享词表——热词变更在端点自动生效。
+    /// @ai-context: REQ-098（v0.7.0 M1）：Final 携带重打分一致性置信度
+    ///              （maybe_rescore 产出；None=无法产出——诚实未知）。
     pub(super) fn handle_endpoint(&mut self) -> Vec<StreamingAsrEvent> {
         let raw = self
             .recognizer
@@ -32,7 +34,7 @@ impl StreamingAsrEngine {
             .unwrap_or_default();
         // ADR-012 F1-1：尾静音端点（连续静音 ≥1.2s）才允许前缀扩展接受
         let silence_terminated = self.silent_blocks_since_speech >= SILENCE_TERMINATED_BLOCKS;
-        let final_text = self.maybe_rescore(&raw, silence_terminated);
+        let (final_text, confidence) = self.maybe_rescore(&raw, silence_terminated);
         let final_text = crate::asr_clean::clean_asr_result(&final_text);
         let mut events = Vec::new();
         if !final_text.is_empty() && final_text != self.last_final_text {
@@ -41,6 +43,7 @@ impl StreamingAsrEngine {
             events.push(StreamingAsrEvent::Final {
                 text: final_text,
                 merge_with_next: !silence_terminated,
+                confidence,
             });
         }
         self.stream = self.new_stream();

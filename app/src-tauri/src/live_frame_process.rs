@@ -481,7 +481,9 @@ pub fn persist_voted_subtitle(
         end_ms: voted.end_ms,
         text: text.clone(),
         source: "subtitle".to_string(),
-        confidence: None,
+        // REQ-098 CORE-D4（v0.7.0 M1）：字幕投票置信度落库（此前恒 None——
+        // 投票器已产出 confidence 但落库丢弃，融合/质量报告消费不到真数据）
+        confidence: voted.confidence,
     });
     // 跨线程共享缓存（TD-026：采样线程写、停止后融合线程读）
     let start_ms = voted.start_ms;

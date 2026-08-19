@@ -189,7 +189,7 @@ fn replay_session_audio_vad_and_engine() {
         let events = engine.feed(chunk, silent);
         for e in events {
             match e {
-                StreamingAsrEvent::Final { text, merge_with_next } => {
+                StreamingAsrEvent::Final { text, merge_with_next, .. } => {
                     finals += 1;
                     let t = i as f64 * 0.2;
                     println!(

@@ -42,6 +42,8 @@ pub(crate) struct AsrFinalEvent {
 ///
 /// @ai-context: 事件、session_segments、asr_segments（融合输入）三处一致落库，
 ///              避免 F4-1 挂起/合并引入的多出口不一致（与 R7 预览落库一致性同构）。
+/// @ai-context: REQ-098（v0.7.0 M1）：confidence 为重打分一致性置信度（Option——
+///              None=无法产出，诚实表达未知；不再硬编码 0.9/0.8 假数据）。
 /// @ai-context: 参数多为编排上下文传递（app/db/session_id/segments/时间戳/文本/
 ///              置信度），聚合会破坏内聚——登记 clippy 豁免（与 engine.rs 同模式）。
 #[allow(clippy::too_many_arguments)]
@@ -53,7 +55,7 @@ pub(crate) fn persist_final(
     start_ms: u64,
     end_ms: u64,
     text: String,
-    confidence: f32,
+    confidence: Option<f32>,
 ) {
     let _ = app.emit(
         "live:asr-final",
@@ -65,7 +67,7 @@ pub(crate) fn persist_final(
         end_ms,
         text: text.clone(),
         source: "asr".to_string(),
-        confidence: Some(confidence),
+        confidence,
     });
     asr_segments.push(TranscriptSegment {
         start_ms,
@@ -74,7 +76,7 @@ pub(crate) fn persist_final(
         // 流式链路词级时间戳：B8 由离线/精修路径产出（None）
         word_timestamps: None,
         // REQ-062：融合概率加权输入（与落库 confidence 同源）
-        confidence: Some(confidence),
+        confidence,
     });
 }
 
@@ -85,6 +87,8 @@ pub(crate) fn persist_final(
 ///              尾部残余返回给调用方（硬切上下文继续挂起，正常句上下文落库）。
 ///              时间戳按字符比例近似（流式链路无词级时间戳，语速均匀假设；
 ///              单调不重叠，融合对齐可接受）。
+/// @ai-context: REQ-098（v0.7.0 M1）：切分出的子句置信度 None——合并文本跨
+///              多个 Final，单句置信度无法归因（诚实表达未知，不硬编码假值）。
 pub(crate) fn digest_merged(
     app: &tauri::AppHandle,
     db: &Db,
@@ -100,7 +104,7 @@ pub(crate) fn digest_merged(
     let spans = crate::asr_merge::split_timestamps(start_ms, end_ms, &counts);
     for (i, s) in complete.iter().enumerate() {
         let (s_ms, e_ms) = spans[i];
-        persist_final(app, db, session_id, asr_segments, s_ms, e_ms, s.clone(), 0.9);
+        persist_final(app, db, session_id, asr_segments, s_ms, e_ms, s.clone(), None);
     }
     if rest.trim().is_empty() {
         None
@@ -123,8 +127,8 @@ pub(crate) struct FinalEventCtx<'a> {
     pub last_speech_ms: &'a mut Option<u64>,
     /// 跨 final 去重（ADR-012 F3-2）
     pub last_final_clean: &'a mut Option<String>,
-    /// rule3 硬切段挂起合并（ADR-012 F4-1）
-    pub pending_merge: &'a mut Option<(u64, u64, String, u32)>,
+    /// rule3 硬切段挂起合并（ADR-012 F4-1；末位=挂起段置信度，REQ-098）
+    pub pending_merge: &'a mut Option<(u64, u64, String, u32, Option<f32>)>,
 }
 
 /// Final 事件处理：跨 final 去重 → 挂起合并（链式）→ 句子切分落库。
@@ -133,11 +137,15 @@ pub(crate) struct FinalEventCtx<'a> {
 ///              重复防护）；F4-1 merge-then-split：硬切段挂起与下一 Final 语义
 ///              合并（gap ≤600ms），合并后按句号切分即时落库，无句号残余继续
 ///              挂起（半句不丢、不提前切断）；MAX_MERGE_CHAIN 防整段合一。
+/// @ai-context: REQ-098（v0.7.0 M1）：confidence 为重打分一致性置信度——
+///              合并切分出的子句无法归因单句置信度 → None（诚实）；未合并
+///              段透传事件置信度。
 /// @ai-context: now_ms=当前音频块时刻（句尾校正回退基准）。
 pub(crate) fn handle_final_event(
     ctx: FinalEventCtx<'_>,
     text: String,
     merge_with_next: bool,
+    confidence: Option<f32>,
     now_ms: u64,
 ) {
     // ADR-012 F3-2：跨 final 重叠去重（rule3 硬切/端点误断句
@@ -165,7 +173,7 @@ pub(crate) fn handle_final_event(
         // merge-then-split（F4-1 增强）：合并后立即按句号
         // 切分——完整句即时落库推送（实时流按句子沉淀），
         // 无句号的残余继续挂起（半句不丢、不提前切断）
-        if let Some((p_start, p_end, p_text, merges)) = ctx.pending_merge.take() {
+        if let Some((p_start, p_end, p_text, merges, p_conf)) = ctx.pending_merge.take() {
             let gap = start_ms.saturating_sub(p_end);
             if merges < MAX_MERGE_CHAIN {
                 if let Some(merged) = crate::asr_merge::merge_segments(&p_text, &text, gap) {
@@ -180,8 +188,8 @@ pub(crate) fn handle_final_event(
                         &merged,
                     ) {
                         Some((rest, rest_start)) => {
-                            // 残余半句继续挂起（链式延续）
-                            *ctx.pending_merge = Some((rest_start, end_ms, rest, merges + 1));
+                            // 残余半句继续挂起（链式延续；切分后置信度无法归因 → None）
+                            *ctx.pending_merge = Some((rest_start, end_ms, rest, merges + 1, None));
                         }
                         None => {
                             // 整段以句号结尾全部切出：挂起清空
@@ -190,7 +198,7 @@ pub(crate) fn handle_final_event(
                     return;
                 }
             }
-            // 合并失败（gap 超限）或已达兜底上限：落库旧挂起段
+            // 合并失败（gap 超限）或已达兜底上限：落库旧挂起段（置信度保留）
             persist_final(
                 ctx.app,
                 ctx.db,
@@ -199,14 +207,15 @@ pub(crate) fn handle_final_event(
                 p_start,
                 p_end,
                 p_text,
-                0.9,
+                p_conf,
             );
         }
-        *ctx.pending_merge = Some((start_ms, end_ms, text, 0));
+        // 新挂起段：保留本事件置信度（后续合并/兜底落库时透传）
+        *ctx.pending_merge = Some((start_ms, end_ms, text, 0, confidence));
         return;
     }
     // 先消化挂起段：gap 内合并为完整句；否则兜底独立落库
-    if let Some((p_start, p_end, p_text, _merges)) = ctx.pending_merge.take() {
+    if let Some((p_start, p_end, p_text, _merges, p_conf)) = ctx.pending_merge.take() {
         let gap = start_ms.saturating_sub(p_end);
         if let Some(merged) = crate::asr_merge::merge_segments(&p_text, &text, gap) {
             *ctx.last_final_clean = Some(merged.clone());
@@ -222,6 +231,7 @@ pub(crate) fn handle_final_event(
                 end_ms,
                 &merged,
             ) {
+                // 合并切分后的残余置信度无法归因 → None（诚实）
                 persist_final(
                     ctx.app,
                     ctx.db,
@@ -230,7 +240,7 @@ pub(crate) fn handle_final_event(
                     rest_start,
                     end_ms,
                     rest,
-                    0.9,
+                    None,
                 );
             }
             return;
@@ -243,10 +253,10 @@ pub(crate) fn handle_final_event(
             p_start,
             p_end,
             p_text,
-            0.9,
+            p_conf,
         );
     }
-    // 正常段：定稿推送 + 落库（TD-043 时间戳载荷）
+    // 正常段：定稿推送 + 落库（TD-043 时间戳载荷；REQ-098 透传事件置信度）
     persist_final(
         ctx.app,
         ctx.db,
@@ -255,6 +265,6 @@ pub(crate) fn handle_final_event(
         start_ms,
         end_ms,
         text,
-        0.9,
+        confidence,
     );
 }

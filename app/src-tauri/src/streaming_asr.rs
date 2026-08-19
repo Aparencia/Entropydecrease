@@ -60,7 +60,8 @@ pub enum StreamingAsrEvent {
     Partial { text: String },
     /// 端点断句定稿文本；merge_with_next=true 表示 rule3/短停顿硬切段——
     /// 编排层应延迟与下一段尝试语义级合并（ADR-012 F4-1）
-    Final { text: String, merge_with_next: bool },
+    /// confidence=重打分一致性置信度（REQ-098 CORE-O1；None=无法产出——诚实未知）
+    Final { text: String, merge_with_next: bool, confidence: Option<f32> },
 }
 
 /// partial 推送最小间隔（ms）——防 IPC 风暴（原项目参数）。
@@ -208,15 +209,16 @@ impl StreamingAsrEngine {
     ///
     /// @ai-context: ADR-012 F1-2：flush 补 SenseVoice 重打分——停止时尾句与端点
     ///              路径同质量兜底（此前直接取流内文本，无兜底）。
+    /// @ai-context: REQ-098：flush 尾句置信度同端点路径（重打分一致性；None=诚实）。
     pub fn flush(&mut self) -> Option<StreamingAsrEvent> {
         let raw = self.recognizer.get_result(&self.stream).map(|r| r.text).unwrap_or_default();
-        let tail = self.maybe_rescore(&raw, true);
+        let (tail, confidence) = self.maybe_rescore(&raw, true);
         let tail = clean_asr_result(&tail);
         if tail.is_empty() || tail == self.last_final_text {
             return None;
         }
         self.last_final_text = tail.clone();
-        Some(StreamingAsrEvent::Final { text: tail, merge_with_next: false })
+        Some(StreamingAsrEvent::Final { text: tail, merge_with_next: false, confidence })
     }
 
     /// 重置（新会话开始时调用，清空流状态与句音频；
@@ -260,14 +262,17 @@ impl StreamingAsrEngine {
     ///              尾静音端点）；② 短句放宽（≤4 字距离 ≤1）；③ 原 40% 门限。
     ///              重打分失败/引擎不可用/一致性不满足时保留 Zipformer 结果，
     ///              并对该结果补语义标点（ADR-012 F4-2，punctuator 缺失则原样）。
-    fn maybe_rescore(&mut self, zipformer_text: &str, _silence_terminated: bool) -> String {
+    /// @ai-context: REQ-098（v0.7.0 M1）：返回 (文本, 置信度)——置信度=重打分
+    ///              一致性相似度（双源互相印证）；重打分未产出/超时/不满足一致性
+    ///              → None（诚实表达未知，不硬编码假置信度）。
+    fn maybe_rescore(&mut self, zipformer_text: &str, _silence_terminated: bool) -> (String, Option<f32>) {
         // 字段级借用分离：闭包只捕获 punctuator 引用（不捕获 &self），
         // 与下方 sentence_pcm 的可变借用不冲突
         let punctuator = &self.punctuator;
         let fallback = || {
             let text = zipformer_text.trim().to_string();
             // F4-2：仅未被 SenseVoice 替换的文本补标点（替换文本自带 use_itn 标点）
-            endpoint::punctuate(punctuator, &text)
+            (endpoint::punctuate(punctuator, &text), None)
         };
         let Some(rescorer) = self.rescorer.as_ref() else {
             return fallback();
@@ -288,7 +293,14 @@ impl StreamingAsrEngine {
                 // 2026-08-19 取优整合：扩展接受对所有端点启用（含 rule3 硬切段）——
                 // 补回硬切段尾字（13.wav 取证 4/16 段真实尾字丢失）；跨段重复由
                 // F3-2 去重 + F4-1 合并重叠跳过防护
-                pick_rescored_with(zipformer_text, &text, true).unwrap_or_else(fallback)
+                if let Some(replaced) = pick_rescored_with(zipformer_text, &text, true) {
+                    // REQ-098：一致性相似度作为代理置信度（决策与置信度同源）
+                    let confidence =
+                        crate::asr_rescore::consistency_confidence(zipformer_text, &text);
+                    (replaced, confidence)
+                } else {
+                    fallback()
+                }
             }
             _ => fallback(),
         }

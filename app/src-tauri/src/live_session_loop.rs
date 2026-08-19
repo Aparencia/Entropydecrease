@@ -79,7 +79,8 @@ pub(crate) fn run_audio_loop(
     let mut sentence_start_ms: Option<u64> = None;
     let mut last_speech_ms: Option<u64> = None;
     let mut last_final_clean: Option<String> = None;
-    let mut pending_merge: Option<(u64, u64, String, u32)> = None;
+    // 末位=挂起段置信度（REQ-098：合并兜底落库时透传）
+    let mut pending_merge: Option<(u64, u64, String, u32, Option<f32>)> = None;
     let mut clipping_logged = false;
 
     // 2026-08-19 取优整合：停止后 drain——停止瞬间 channel 中已送达未处理的音频块
@@ -158,7 +159,7 @@ pub(crate) fn run_audio_loop(
                 }
                 for event in events.drain(..) {
                     match event {
-                        StreamingAsrEvent::Final { text, merge_with_next } => {
+                        StreamingAsrEvent::Final { text, merge_with_next, confidence } => {
                             // 定稿落库/挂起合并/句子切分（live_session_persist.rs）
                             handle_final_event(
                                 FinalEventCtx {
@@ -173,6 +174,7 @@ pub(crate) fn run_audio_loop(
                                 },
                                 text,
                                 merge_with_next,
+                                confidence,
                                 chunk.timestamp_ms,
                             );
                         }
@@ -196,8 +198,9 @@ pub(crate) fn run_audio_loop(
     }
 
     // 停止：先兜底落库挂起段（F4-1——停止时无下一段可合并），再 flush 尾句
-    //    （时间戳用会话纪元；句尾校正同 TD-041；跨 final 去重同主循环）
-    if let Some((p_start, p_end, p_text, _merges)) = pending_merge.take() {
+    //    （时间戳用会话纪元；句尾校正同 TD-041；跨 final 去重同主循环；
+    //     置信度 REQ-098：挂起段透传、flush 尾句用重打分一致性）
+    if let Some((p_start, p_end, p_text, _merges, p_conf)) = pending_merge.take() {
         persist_final(
             ctx.app,
             ctx.db,
@@ -206,10 +209,10 @@ pub(crate) fn run_audio_loop(
             p_start,
             p_end,
             p_text,
-            0.8,
+            p_conf,
         );
     }
-    if let Some(StreamingAsrEvent::Final { text, .. }) = ctx.asr_engine.flush() {
+    if let Some(StreamingAsrEvent::Final { text, confidence, .. }) = ctx.asr_engine.flush() {
         let text = match &last_final_clean {
             Some(prev) => crate::asr_dedupe::dedupe_across_finals(prev, &text),
             None => text,
@@ -228,7 +231,7 @@ pub(crate) fn run_audio_loop(
                 start_ms,
                 end_ms,
                 text,
-                0.8,
+                confidence,
             );
         }
     }
