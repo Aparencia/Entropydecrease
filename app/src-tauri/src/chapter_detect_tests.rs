@@ -158,3 +158,108 @@ fn min_votes_one_detects_single_signal() {
     assert_eq!(boundaries.len(), 1);
     assert_eq!(boundaries[0].time_ms, 8000);
 }
+
+// ────────────────────────────────────────────────────────────
+// REQ-064（v0.6.0 M2）：时序状态机平滑（合成会话状态序列）
+// ────────────────────────────────────────────────────────────
+
+fn strict_config() -> ChapterDetectConfig {
+    ChapterDetectConfig {
+        confirm_requires_repeat: true,
+        candidate_window_ms: 30_000,
+        min_chapter_ms: 60_000,
+    }
+}
+
+#[test]
+fn strict_config_requires_repeat_to_confirm() {
+    // Arrange：严格档——单窗口命中只是候选，需窗口内再次命中才确认
+    let signals = vec![
+        sig(0, false, false, "第一章内容"),
+        sig(10_000, true, true, "第二章内容"),
+        sig(20_000, true, true, "第二章内容继续"),
+    ];
+    // Act
+    let boundaries = detect_chapters_with(&signals, 2, &strict_config());
+    // Assert：候选 10s 后 20s 再命中 → 确认在 10s（首次命中窗口）
+    assert_eq!(boundaries.len(), 1);
+    assert_eq!(boundaries[0].time_ms, 10_000);
+}
+
+#[test]
+fn strict_config_candidate_expires_without_repeat() {
+    // Arrange：严格档——单窗口命中后无重复 → 候选过期不产边界
+    let signals = vec![
+        sig(0, false, false, "第一章内容"),
+        sig(10_000, true, true, "第二章内容"),
+        sig(50_000, false, false, "第二章内容继续"), // 超过候选窗口（30s）
+    ];
+    // Act
+    let boundaries = detect_chapters_with(&signals, 2, &strict_config());
+    // Assert：候选 10s 在 40s 前未再命中 → 过期；无边界
+    assert!(boundaries.is_empty(), "候选过期不得产出边界");
+}
+
+#[test]
+fn strict_config_expired_then_new_candidate_confirms() {
+    // Arrange：严格档——候选过期后，新的独立命中窗口重新候选并确认
+    let signals = vec![
+        sig(0, false, false, "第一章内容"),
+        sig(10_000, true, true, "第二章内容"), // 候选（无重复 → 过期）
+        sig(50_000, false, false, "第二章继续"), // 候选过期
+        sig(80_000, true, true, "第三章内容"), // 新候选
+        sig(90_000, true, true, "第三章内容继续"), // 窗口内再命中 → 确认
+    ];
+    // Act
+    let boundaries = detect_chapters_with(&signals, 2, &strict_config());
+    // Assert：仅 80s 边界（10s 候选已过期不产出）
+    assert_eq!(boundaries.len(), 1);
+    assert_eq!(boundaries[0].time_ms, 80_000);
+}
+
+#[test]
+fn min_chapter_suppresses_rapid_boundaries() {
+    // Arrange：最短章节时长 60s 先验——两次命中间隔 20s < 60s → 抑制第二次
+    let signals = vec![
+        sig(0, false, false, "第一章内容"),
+        sig(10_000, true, true, "第二章内容"),
+        sig(30_000, true, true, "第三章内容"), // 距确认 20s < 60s → 抑制
+    ];
+    // Act
+    let boundaries = detect_chapters_with(&signals, 2, &strict_config());
+    // Assert：仅第一个边界（10s）；30s 命中在抑制期内被忽略
+    assert_eq!(boundaries.len(), 1);
+    assert_eq!(boundaries[0].time_ms, 10_000);
+}
+
+#[test]
+fn default_config_single_window_confirm_legacy() {
+    // Arrange：默认档（confirm_requires_repeat=false）——单窗口命中即确认
+    // （v0.5.0 行为回归护栏：与 detect_chapters 等价）
+    let signals = vec![
+        sig(0, false, false, "第一章内容"),
+        sig(10_000, true, true, "第二章内容"),
+        sig(20_000, false, false, "第二章内容继续"),
+    ];
+    // Act：默认配置与旧入口结果一致
+    let with_cfg = detect_chapters_with(&signals, 2, &ChapterDetectConfig::default());
+    let legacy = detect_chapters(&signals, 2);
+    // Assert：等价（零回归）
+    assert_eq!(with_cfg, legacy);
+    assert_eq!(with_cfg.len(), 1);
+    assert_eq!(with_cfg[0].time_ms, 10_000);
+}
+
+#[test]
+fn topic_drop_reports_real_magnitude() {
+    // Arrange：话题骤变 + 画面切换（topic_drop 应有真实幅度而非 0 占位）
+    let signals = vec![
+        sig(0, false, false, "机器学习中的梯度下降算法原理讲解"),
+        sig(10_000, true, false, "今天会议决定下周发布新版本大家分工如下"),
+    ];
+    // Act
+    let boundaries = detect_chapters_with(&signals, 2, &ChapterDetectConfig::default());
+    // Assert：边界存在且 topic_drop > 0（REQ-064 回填真实下降幅度）
+    assert_eq!(boundaries.len(), 1);
+    assert!(boundaries[0].topic_drop > 0.0, "topic_drop 应回填真实幅度，实得 {}", boundaries[0].topic_drop);
+}
