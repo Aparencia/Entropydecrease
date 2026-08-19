@@ -86,7 +86,9 @@ export default function LiveImageStrip({ sessionId }: { sessionId: number | null
   }, [refresh, refreshThrottled, sessionId]);
 
   if (!sessionId) return null;
-  const shown = images.slice(-MAX_SHOWN).reverse(); // 最新在前
+  // 2026-08 用户需求：最近画面按时间先后排列——后端 list_session_images
+  // 已按文件名（=时间戳）升序返回，此处不再 reverse（前→后 = 旧→新，新图追加在末尾）
+  const shown = images.slice(-MAX_SHOWN);
 
   return (
     <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, marginBottom: 8, background: "#fff" }}>
