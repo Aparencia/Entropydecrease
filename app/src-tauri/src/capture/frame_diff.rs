@@ -1,8 +1,9 @@
-//! 帧变化检测与采样调度纯函数（REQ-008，ADR-002）。
+//! 帧处理工具与采样调度纯函数（REQ-008，ADR-002；v0.3.0 P3；v0.4.0 M4）。
 //!
-//! @ai-context: 移植原项目 screenCapture.ts 的分块采样 hash 算法（生产验证过）：
-//!              8 块 × 60 字节采样，≥2 块变化才判定为变化（过滤 1px 鼠标微动），
-//!              无论是否判定均更新基准 hash（防亚阈值变化累积）。
+//! @ai-context: 保留矩形/裁剪/缩放/双速率调度；变化检测已移至 grid_diff.rs
+//!              （ADR-011：网格差异统计替代分块采样 hash——旧 8 块 × 60 字节
+//!              采样在 1920 宽下采样列混叠为 {0,480,960,1440}，静止画面局部
+//!              文字变化会漏检，见 ADR-011 背景）。
 //! @ai-context: 本模块不依赖 windows 类型（纯逻辑可单测）；矩形用自有结构。
 
 /// 简单矩形（屏幕/帧坐标，与 windows RECT 同布局但不依赖系统 crate）。
@@ -33,100 +34,6 @@ impl Rect {
             Some(Rect { left, top, right, bottom })
         }
     }
-}
-
-/// 分块采样 hash 变化检测器（有状态：保存上一帧基准 hash）。
-#[derive(Debug)]
-pub struct FrameDiffDetector {
-    block_count: usize,
-    samples_per_block: usize,
-    min_changed_blocks: usize,
-    last_block_hashes: Vec<String>,
-}
-
-impl Default for FrameDiffDetector {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl FrameDiffDetector {
-    /// 默认参数：8 块 × 60 字节采样，≥2 块变化判定（与原项目一致，适合全帧）。
-    ///
-    /// @ai-context: v0.5.0 M1 起生产路径改走 from_budget（档案驱动采样），
-    ///              new 保留为默认档构造入口（测试与外部调用用，登记豁免 dead_code）。
-    #[allow(dead_code)]
-    pub fn new() -> Self {
-        Self::with_min_changed_blocks(2)
-    }
-
-    /// 指定最小变化块数：字幕区裁剪帧用 1（单行字幕翻页可能只落 1 块内，审查 M6 修复），
-    /// 全帧用 2（过滤鼠标微动）。
-    pub fn with_min_changed_blocks(min_changed_blocks: usize) -> Self {
-        Self {
-            block_count: 8,
-            samples_per_block: 60,
-            min_changed_blocks: min_changed_blocks.max(1),
-            last_block_hashes: Vec::new(),
-        }
-    }
-
-    /// 判定帧是否变化（相比上一帧），并更新基准。
-    ///
-    /// @ai-context: 首帧（无基准）视为变化；帧长变化视为变化。
-    pub fn has_changed(&mut self, frame: &[u8]) -> bool {
-        if frame.is_empty() {
-            return false;
-        }
-        let hashes = block_hashes(frame, self.block_count, self.samples_per_block);
-        let changed = if hashes.len() == self.last_block_hashes.len() {
-            hashes
-                .iter()
-                .zip(self.last_block_hashes.iter())
-                .filter(|(a, b)| a != b)
-                .take(self.min_changed_blocks)
-                .count()
-                >= self.min_changed_blocks
-        } else {
-            // 块数不一致（首帧或尺寸变化），视为变化
-            true
-        };
-        // 无论是否变化均更新基准（防亚阈值累积，与原项目一致）
-        self.last_block_hashes = hashes;
-        changed
-    }
-
-    /// 重置基准（窗口切换/尺寸变化时调用，下一帧必判变化；
-    /// 当前实时链路未调用——窗口切换预留，登记豁免）。
-    #[allow(dead_code)]
-    pub fn reset(&mut self) {
-        self.last_block_hashes.clear();
-    }
-}
-
-/// 计算帧的分块采样 hash：每块取固定步长样本拼成字符串。
-fn block_hashes(frame: &[u8], block_count: usize, samples_per_block: usize) -> Vec<String> {
-    let size = frame.len();
-    let mut hashes = Vec::with_capacity(block_count);
-    for b in 0..block_count {
-        let block_start = (size * b) / block_count;
-        let block_end = (size * (b + 1)) / block_count;
-        let block_size = block_end - block_start;
-        if block_size == 0 {
-            hashes.push(String::new());
-            continue;
-        }
-        let step = (block_size / samples_per_block).max(1);
-        let mut hash = String::with_capacity(block_size / step + 8);
-        hash.push_str(&block_size.to_string());
-        let mut i = block_start;
-        while i < block_end {
-            hash.push_str(&frame[i].to_string());
-            i += step;
-        }
-        hashes.push(hash);
-    }
-    hashes
 }
 
 /// 采样区域（双速率调度输出）。

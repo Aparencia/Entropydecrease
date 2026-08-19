@@ -122,10 +122,10 @@ capture 帧（全窗）进入 process_frame
 ```
 变化格集合 → 4-邻接连通聚类 → 聚类面积 ≥ 帧面积 8%（PANEL_MIN_AREA_RATIO）→ 面板候选
 连续 2 tick 同一区域出现候选 → 面板出现事件（上升沿）
-面板活跃期 = 滑动窗口（出现后 3s，区域内再变化则重置；消失后 0.5s 提前结束）
+面板活跃期 = 滑动窗口（确认后 3s，区域内再变化则重置；无变化则窗口自然到期）
 ```
 
-- 活跃期 = **滑动窗口**：面板出现后 3s（`PANEL_HOLD_MS`）内有效；期间每次在面板区域再次检测到变化，重置 3s 窗口；面板消失（区域连续无变化）后 0.5s 提前结束
+- 活跃期 = **滑动窗口**：确认后 3s（`PANEL_HOLD_MS`）内有效；期间每次在面板区域再次检测到变化，重置 3s 窗口；无变化时窗口自然到期（**不提前结束**——静止面板是控制栏悬停常态，提前结束会放过它；3s 后残留 UI 文本由 ui_junk 词表 + 投票器兜底，实施微调 2026-08-19）
 - 活跃期内 `handle_subtitle_frame` 的文本 → 不进投票器、不落段、不推事件（源头丢弃，`stats.panel_filtered += 1`，诊断可见）
 - 全帧路径不受面板抑制（页面内容本身可能是有用画面；控制栏/弹窗内容由 layout/ui_junk/watermark_filter 既有链兜底）
 - 误判防护：滚动字幕/弹幕是窄带持续变化（聚类窄长、面积小），不达大面积阈值 → 不误判；面板抑制时间窗短，且原料层不动（ADR-006），可复查
@@ -202,3 +202,15 @@ capture 帧（全窗）进入 process_frame
 
 - 悬停门控（GetCursorPos）与"视频区内老师用鼠标标注"的误判权衡——后续项
 - 变化热力图滑动窗口 → "视频活动区"聚类（播放区域锁定的下一步）——后续项
+
+## 10. 实施微调记录（2026-08-19 落地，ADR-011 M1-M3）
+
+实现与设计的差异（保持一致性的登记）：
+
+1. **`GridDiff` 不含 `outside_band` 字段**：带外判定改为纯函数 `is_outside_band(bounds, band, changed_ratio, large_change_ratio)`，字幕带由调用方传入（`RoiTracker::subtitle_band()`，即 `prior_roi` 语义）——grid_diff 模块不感知字幕带概念，更内聚。
+2. **`diff_pass`/`diff_skip` 统计口径更新**：由全帧网格差异驱动（diff_pass = 画面变化 tick 数、diff_skip = 画面静止 tick 数）——idle_governor 依赖 diff_pass 增长作"画面变化"信号，必须与 OCR 路径解耦，否则静止画面下 OCR 跳过会误触发空闲降频。
+3. **触发状态打包 `TriggerState`**（live_session_frame.rs）：full_grid/roi_grid/panel/last_ocr_at/last_full_ocr_at 一个结构传入 process_frame，避免参数膨胀。
+4. **面板丢弃位置**：OCR 成功后、`handle_subtitle_frame` 调用前门控（`panel.is_active()` → `stats.panel_filtered += 1` 并跳过）——与 ROI 回喂（`feed_ocr`）解耦，面板期间 ROI 跟踪不冻结（控制栏消失后字幕立即恢复）。
+5. **FORCE_OCR 15s 保留**：两条路径共用 `last_ocr_at`（任一路径 OCR 成功刷新）；全帧 OCR 成功额外刷新 `last_full_ocr_at`（带外触发冷却基准）。
+6. **带外强制全帧对 `latest_frame` 缓存的影响**：字幕 tick 被带外强制为全帧时按原始 region 决定缓存（保持"字幕 tick 不覆盖截图缓存"原语义）。
+7. **面板"消失提前结束"删除**：原设计的"区域连续无变化 0.5s 提前结束"与静止面板（控制栏悬停后停住、不再产生变化格）冲突——会放过静止 UI。活跃期改为纯滑动窗口（确认后 3s，区域内再变化重置，无变化则自然到期）；3s 后的残留 UI 文本由 ui_junk 词表 + 投票器兜底（详见 §3.4）。

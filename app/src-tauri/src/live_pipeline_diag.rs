@@ -3,7 +3,7 @@
 //! 运行：cargo test live_pipeline_diag -- --nocapture --ignored
 //! 诊断后删除本文件。
 
-use crate::capture::frame_diff::FrameDiffDetector;
+use crate::capture::grid_diff::{GridDiffDetector, GRID_COLS, GRID_ROWS};
 use crate::capture::ScreenCaptureSampler;
 use crate::ocr::{OcrEngine, OcrModels, OcrParams};
 use crate::windows::{hwnd_from_i64, list_capture_windows};
@@ -32,7 +32,7 @@ fn run(hwnd: Option<i64>, label: &str) {
             return;
         }
     };
-    let mut diff = FrameDiffDetector::new();
+    let mut diff = GridDiffDetector::new(GRID_COLS, GRID_ROWS);
     let ocr = match OcrEngine::load(
         &OcrModels {
             det: "pp-ocrv6_tiny_det.onnx".into(),
@@ -55,7 +55,7 @@ fn run(hwnd: Option<i64>, label: &str) {
         std::thread::sleep(std::time::Duration::from_millis(1000));
         match sampler.capture(None) {
             Ok(Some(frame)) => {
-                let changed = diff.has_changed(&frame.bgraw);
+                let changed = !diff.diff(&frame.bgraw, frame.width, frame.height).changed_cells.is_empty();
                 eprintln!("[diag][{label}] 第{i}次: 捕获 {}x{}，变化={changed}", frame.width, frame.height);
                 if changed && ocr_count < 2 {
                     ocr_count += 1;

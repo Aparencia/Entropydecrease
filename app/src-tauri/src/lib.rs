@@ -65,6 +65,9 @@ mod layout_analyzer;
 mod layout_cache;
 #[cfg(target_os = "windows")]
 mod live_session;
+// ADR-011 拆分：帧处理（网格差异触发/字幕 OCR/面板抑制）独立模块
+#[cfg(target_os = "windows")]
+mod live_frame_process;
 #[cfg(target_os = "windows")]
 mod live_session_frame;
 #[cfg(target_os = "windows")]

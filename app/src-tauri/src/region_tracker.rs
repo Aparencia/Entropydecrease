@@ -198,6 +198,12 @@ impl RoiTracker {
         self.roi
     }
 
+    /// 字幕带（ADR-011 带外判定基准）：播放区域底部 25% 带，
+    /// 无播放区域退化为窗口底部 25% 带（prior_roi 语义）。
+    pub fn subtitle_band(&self) -> Rect {
+        prior_roi(self.video_rect, self.frame_w, self.frame_h)
+    }
+
     fn reset_scan(&mut self) {
         self.roi = None;
         self.lock_samples.clear();

@@ -14,6 +14,8 @@ pub mod dxgi_capture;
 pub mod frame_diff;
 #[cfg(target_os = "windows")]
 pub mod gdi_capture;
+// ADR-011：网格差异变化检测（替代 frame_diff 的分块采样 hash）
+pub mod grid_diff;
 pub mod resample;
 
 #[cfg(target_os = "windows")]
