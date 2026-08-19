@@ -15,6 +15,8 @@ import { WindowSelectCard } from "../components/WindowSelectCard";
 import VideoImportPanel from "../components/VideoImportPanel";
 import LiveActivityPanel from "../components/LiveActivityPanel";
 import { OcrDeviceSetting } from "../components/OcrDeviceSetting";
+// v0.7.0 M1（REQ-101）：音频预处理链开关（CER 微基准定默认后的用户通道）
+import { AudioPreprocSetting } from "../components/AudioPreprocSetting";
 import { VocabManager } from "../components/VocabManager";
 import { SystemStatusBadge } from "../components/SystemStatusBadge";
 // v0.5.0 M1（REQ-043）：视频类型档案混合检测（检测为：网课（可改））
@@ -395,6 +397,11 @@ export default function ClassroomPage() {
           {/* OCR 推理设备（v0.4.0 M1：REQ-036，ADR-009：CUDA 卸载/回退可观测/重新检测） */}
           <div style={panel}>
             <OcrDeviceSetting />
+          </div>
+
+          {/* 音频预处理链（v0.7.0 M1：REQ-101——CER 微基准定默认后的用户开关） */}
+          <div style={panel}>
+            <AudioPreprocSetting />
           </div>
 
           {/* 词表管理（v0.4.0 M5：REQ-040：热词/替换词闭环 + 课件预热） */}

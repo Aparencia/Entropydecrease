@@ -5,10 +5,43 @@
 //!              session_audio_status（文件数/总字节/预算/保留期——展示用）、
 //!              session_audio_cleanup（手动触发清理——超保留期/超预算删最旧）。
 
+//! @ai-context: REQ-101（v0.7.0 M1）：audio_preproc 开/关命令——CER 微基准
+//!              （bin/cer_bench.rs）定默认值后的用户开关通道；配置 JSON 持久化
+//!              应用数据目录（AudioPreprocConfig，原子写），下次实时会话生效。
+
 use tauri::State;
 
+use crate::audio_preproc_config::AudioPreprocConfig;
 use crate::audio_store::{audio_dir_stats, cleanup, AudioStoreConfig};
 use crate::commands::AppState;
+
+/// 音频预处理配置状态（前端开关载荷）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioPreprocStatus {
+    /// 持久化配置开关
+    pub enabled: bool,
+    /// 生效开关（env ENTROPY_AUDIO_PREPROC 覆盖配置文件时不同）
+    pub effective: bool,
+}
+
+/// 查询音频预处理链配置（REQ-101）。
+#[tauri::command]
+pub fn audio_preproc_status(state: State<'_, AppState>) -> AudioPreprocStatus {
+    let cfg = AudioPreprocConfig::load(&state.data_dir.join("audio-preproc.json"));
+    AudioPreprocStatus { enabled: cfg.enabled, effective: cfg.effective() }
+}
+
+/// 设置音频预处理链开关（REQ-101；持久化，下次实时会话生效）。
+#[tauri::command]
+pub fn audio_preproc_set(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<AudioPreprocStatus, String> {
+    let cfg = AudioPreprocConfig { enabled };
+    cfg.save(&state.data_dir.join("audio-preproc.json")).map_err(|e| e.to_string())?;
+    Ok(AudioPreprocStatus { enabled: cfg.enabled, effective: cfg.effective() })
+}
 
 /// 会话音频状态载荷（前端展示）。
 #[derive(Debug, Clone, serde::Serialize)]
