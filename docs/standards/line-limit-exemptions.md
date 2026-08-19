@@ -10,18 +10,19 @@
 | app/src-tauri/src/engine.rs | ~439 | 引擎池装配（双 worker 编排 + ADR-009 设备状态 + M5 词表纠错 + M7 心跳/失败/缓存计数）；上下文参数与共享状态注入点多，拆出需跨模块传 10+ 参数 | 若再增长：worker 循环与请求处理拆至 engine_worker.rs |
 | app/src-tauri/src/lib.rs | ~562 | Tauri 装配层（setup 初始化 + 决策链路 + 21+ command 注册）；全部为声明与装配，拆分会破坏注册可读性 | 若再增长：setup 初始化块拆至 app_setup.rs |
 | app/src-tauri/src/vocab.rs | ~373 | 词表域（存储/纠错/候选提取/n-gram 分词）内聚；分词纯逻辑与存储同域便于单测 | 若再增长：collect_tokens/split_runs 拆至 vocab_tokens.rs |
-| app/src-tauri/src/db_sessions.rs | ~309 | 会话仓储（会话/段/OCR 块/建议查询）；SQL 与行映射内聚 | 若再增长：recent_ocr_texts 等建议查询拆至 db_sessions_queries.rs |
+| app/src-tauri/src/db_sessions.rs | ~330 | 会话仓储（会话/段/OCR 块/建议查询）；SQL 与行映射内聚；v0.7.1 列表标记子查询 | 若再增长：recent_ocr_texts 等建议查询拆至 db_sessions_queries.rs |
 | app/src/pages/ClassroomPage.tsx | ~548 | 装配层页面：左栏配置区（就绪清单/窗口选择/实时捕获/视频导入/OCR 设备/词表/素材）+ 右栏内容区；2026-08 审查硬拆（>600 违规）已拆出 ClassroomRightPane（右栏）与 MaterialInputPanel（素材+提取）回归 548 | 若再增长：将实时捕获卡片拆出 LiveCaptureCard（状态与事件监听下沉） |
 | app/src-tauri/src/video_profile.rs | ~394 | v0.5.0 M1（REQ-043）：档案域（类型/检测投票/记忆偏好/JSON IO）内聚；档案常量数据已拆至 video_profile_data.rs | 若再增长：检测投票与记忆偏好拆至 video_profile_detect.rs |
 | app/src-tauri/src/layout_analyzer.rs | ~475 | v0.5.0 M3（REQ-047）：规则版版面分析（行/列投影 + 表格线检测 + 区域分类启发式）内聚于同一分类管线；六轮审查再增（公式启发加固 + 低信息纯色方差滤除）至 ~475 | 若再增长：区域分类启发式拆至 layout_classify.rs |
 | app/src-tauri/src/artifact_templates.rs | ~501 | v0.5.0 M7（REQ-052）：五档案模板函数（讲义/步骤卡/摘要/对话纪要/会议纪要）内聚于同一模板域，各模板共享原料注入签名 | 若再增长：会议/访谈模板拆至 artifact_templates_meeting.rs |
-| app/src-tauri/src/db.rs | ~345 | v0.5.0 M9 增长：notes + sessions 三表 schema + ensure_column 幂等迁移（v0.5.0 M1/M4 两列迁移 + v0.7.0 M1 REQ-103 volume 列）+ 行映射；SQL 与迁移内聚 | 若再增长：ensure_column 迁移拆至 db_migrations.rs |
+| app/src-tauri/src/db.rs | ~470 | v0.5.0 M9 增长：notes + sessions 三表 schema + ensure_column 幂等迁移（v0.5.0 M1/M4 两列迁移 + v0.7.0 M1 REQ-103 volume 列 + v0.7.1 notes.session_id 列）+ 行映射；SQL 与迁移内聚 | 若再增长：ensure_column 迁移拆至 db_migrations.rs |
 | app/src-tauri/src/region_tracker.rs | ~422 | v0.4.0 M2（REQ-037）起：ROI 跟踪状态机（播放区域检测/锁定聚簇/重扫/前台切换冻结）+ 纯函数单测内联；与 RoiTracker 状态强耦合 | 若再增长：lock_roi/prior_roi 纯函数拆至 region_lock.rs |
 | app/src-tauri/src/commands_refine_inner.rs | ~301 | v0.5.0 模型版：课后精修编排（清单构建/降级决策/引擎懒加载/逐候选识别/产物回填/HTML→MD 转换）内聚于精修执行域 | 若再增长：html_to_markdown 拆至 html_table_md.rs |
 | app/src-tauri/src/structure_models.rs | ~320 | v0.5.0 模型版：模型清单/独立状态机下载器（进度事件/.part 原子写/按需启用三分类）+ 2026-08 磁盘就绪判定（disk_done）内聚 | 若再增长：download_one 拆至 structure_download.rs |
 | app/src-tauri/src/symbol_normalize.rs | ~370 | v0.6.0 M1（REQ-060）：口语符号映射域（映射表/上下文守卫/中文数字解析）内聚；数字解析与守卫共享字符判定 | 若再增长：parse_chinese_number/replace_number_runs 拆至 symbol_numbers.rs |
-| app/src/pages/SessionsPage.tsx | ~390 | v0.6.0 M6 增长：会话列表（课程分组/段搜索）+ 详情（三视图/质量卡片/大纲侧栏/降级横幅）装配层内聚 | 若再增长：列表与详情拆至 SessionListPanel.tsx / SessionDetailPanel.tsx |
-| app/src-tauri/src/commands_session.rs | ~350 | v0.6.0 M6 增长：会话命令域（CRUD/笔记预览单一管线/质量报告/课程分组/段搜索）内聚于会话生命周期域 | 若再增长：course/search 拆至 commands_session_extra.rs |
+| app/src/pages/SessionsPage.tsx | ~250 | v0.7.1 硬拆落地（原 ~390 登记）：编排层（列表/详情状态 + 事件刷新 + 转化删除操作）回归 ≤300 行 | 无需拆分（已 ≤300） |
+| app/src/components/SessionListPanel.tsx | ~411 | v0.7.1 拆分产物：列表域 UI（双模式搜索/筛选排序/课程分组折叠/批量操作栏/内联转化）内聚——筛选/排序/选择为面板本地状态 | 若再增长：批量操作栏与列表项拆至 SessionListRow.tsx |
+| app/src-tauri/src/commands_session.rs | ~420 | v0.6.0 M6 增长 + v0.7.1：会话命令域（CRUD/单一管线/质量报告/课程分组/段搜索/批量转笔记）内聚于会话生命周期域；批量测试独立文件 | 若再增长：course/search 拆至 commands_session_extra.rs |
 | app/src-tauri/src/note_filter.rs | ~390 | v0.6.0 M1（REQ-082/085）：笔记过滤域（过滤链 + 边界段分类 + AI 判定应用 + 画面要点净化）内聚于单一管线（双出口一致性由构造保证） | 若再增长：boundary_candidates/apply_ai_decisions 拆至 note_filter_ai.rs |
 | app/src-tauri/src/fusion_tests.rs | ~392 | 融合测试域（ADR-005 四规则 + REQ-062 概率加权 + REQ-103 音量透传 + REQ-111 切分对齐）单模块 #[path] 挂载；测试文件沿用单模块模式未拆 | 若再增长：REQ-111 切分对齐组拆至 fusion_split_tests.rs |
 | app/src-tauri/src/analysis.rs | ~344 | v0.5.0 M2 起结构化分析编排域（章节/重点/术语/讲者 + v0.7.0 M1.5 事件消费 + M2 step_boundaries/practice_segments/player_actions 三字段 + 审查修复按类型判定）；各机制输出聚合内聚于单一分析函数 | 若再增长：build_chapter_signals 事件版拆至 analysis_signals.rs |

@@ -3,6 +3,27 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [SemVer](https://semver.org/lang/zh-CN/)。
 各版本的深度版本文档见 [docs/versions/](docs/versions/)。
 
+## [0.7.1] - 2026-08（开发中）
+
+### 新增
+
+- **会话体验小版本（REQ-135~137，2026-08-19 头脑风暴）**：
+  - 会话↔笔记双向关联：`notes.session_id` 列迁移（删除会话 `SET NULL` 只断关联不删笔记——笔记是用户资产；旧数据诚实 NULL 不猜不填）；`list_sessions` 返回 `SessionListItem`（has_note/note_id/note_title/has_content 子查询标记）；`artifact_to_note` 同步写关联（口径统一）
+  - 批量转笔记 `batch_session_to_note`：≤50 条、部分成功语义（单条失败不阻塞、跳过原因显式回传）、重复 id 去重、跳过已转防重复；`convert_to_note` 核心提取——单条与批量共用同一过滤管线（REQ-081/082 原则延续）
+  - 会话页管理台重构：列表状态徽标（录制中/待转/已转笔记/异常）+ 状态/转化筛选 + 排序（新→旧/旧→新/时长）+ 批量操作栏（批量转笔记/批量删除，确认框说明笔记保留）+ 行内一键「转笔记」（4 步→1 步，转完就地变「查看笔记 →」）+ 双模式搜索整合（标题本地即时过滤/转写内容段搜索）
+  - 会话↔笔记双向互跳：会话「查看笔记 →」直达笔记页并定位；笔记行「来源会话 →」跳回会话详情（复用 A4 focusSessionId 模式）
+  - 状态实时性根治：`active` prop（切页刷新）+ `live:status`/`session:fused` 事件驱动刷新——display:none 挂载不刷新导致的"采集中"残留消除；新完成会话顶部提示条（📬 N 个已完成采集）；操作反馈升级为自绘 toast（3s 自动消失）；空态引导 + 无结果"清除筛选" + 加载态
+  - 详情面板拆出 `SessionDetailPanel`（豁免清单拆分计划落地），质量报告/大纲/视图模式下沉为面板内部状态
+
+### 测试
+
+- 单测 945 个（+13）：notes 迁移补列与旧数据 NULL / list_sessions 四象限标记 / 删会话 SET NULL 保笔记 / find_note_by_session 取最新 / 批量转 6 用例（全成功/跳过录制中与重复/已转跳过/不存在/超限/部分失败不阻塞）
+
+### 变更
+
+- `list_sessions` 返回类型改为 `SessionListItem`（前端同步新契约；`db_ocr_search`/`search_session_segments` 内部适配包装结构）
+- 会话删除语义明确：转写/OCR/图集级联删除不变，关联笔记保留（SET NULL）
+
 ## [0.7.0] - 2026-08（开发中）
 
 ### 新增

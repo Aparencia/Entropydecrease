@@ -16,6 +16,9 @@
 | ADR-009 | [OCR 推理 GPU 卸载（CUDA EP + 三层检测 + 回退链）](./ADR-009-ocr-gpu-offload.md) | 已接受 | 2026-08 |
 | ADR-010 | [补缝式 AI（Gap-filling AI）：本地失败块定向云端增强](./ADR-010-gap-filling-ai.md) | 已接受 | 2026-08-18 |
 | ADR-011 | [网格差异 OCR 触发重做（含 UI 面板抑制）](./ADR-011-grid-diff-ocr-trigger.md) | 提议 | 2026-08-19 |
+| ADR-012 | [流式 ASR 质量修复批次（对齐/合并/重打分）](./ADR-012-streaming-asr-quality-fixes.md) | 已接受 | 2026-08-19 |
+| ADR-013 | [实时会话引擎预热与播放暂停驱动](./ADR-013-live-session-preload-and-playback-pause.md) | 已接受 | 2026-08-19 |
+| ADR-014 | [会话↔笔记关联与批量转化（notes.session_id 列 + SessionListItem 标记）](./ADR-014-session-note-association.md) | 已接受 | 2026-08-19 |
 
 ## 编号规则
 
