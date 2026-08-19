@@ -40,6 +40,8 @@ mod db_artifacts;
 mod db_sessions;
 mod db_sessions_rows;
 mod device_config;
+// v0.6.0 M2（REQ-063）：DTW 时序对齐（spike 机制先行，真机校准待 M4 落盘）
+mod dtw_align;
 // GPU 适配器探测依赖 DXGI（Windows）；决策纯逻辑在 device_config（全平台）
 #[cfg(target_os = "windows")]
 mod device_probe;
