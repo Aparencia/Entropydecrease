@@ -339,6 +339,9 @@ const CODE_RUN_GAP_MS: u64 = 10_000;
 ///
 /// @ai-context: code_frames 为空时返回空（诚实降级——不产空代码块）；
 ///              语言启发式探测（关键字签名），未知留 None 不猜测。
+/// @ai-context: 审查 L8：_detail/_analysis 参数保留——与模板族统一签名
+///              （build_artifact 分发按模板函数签名路由，未来代码块
+///              需要会话上下文时免改签名；下划线前缀注明有意未用）。
 pub fn code_blocks(
     _detail: &SessionDetail,
     _analysis: &SessionAnalysis,

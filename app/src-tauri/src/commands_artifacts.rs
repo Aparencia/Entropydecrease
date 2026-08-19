@@ -135,7 +135,13 @@ fn render_block(b: &ArtifactBlock) -> String {
             format!("![关键帧]({})", p)
         }
         (ArtifactKind::StepCard, BlockPayload::Step { image, description, .. }) => {
-            format!("![步骤]({})\n{}", image, description)
+            // 审查 L7 修复：image 为空（跟练"有卡无图"降级）时输出纯文本步骤行
+            // ——不产生 `![步骤]()` 坏图引用（笔记导出可读）
+            if image.is_empty() {
+                description.clone()
+            } else {
+                format!("![步骤]({})\n{}", image, description)
+            }
         }
         (ArtifactKind::QAPair, BlockPayload::QA { question, answer }) => {
             format!("**Q：{}**\nA：{}", question, answer)

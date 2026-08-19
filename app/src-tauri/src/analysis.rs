@@ -52,7 +52,10 @@ pub struct SessionAnalysis {
     /// 练习段（M4/REQ-070：长静音×画面静止同窗——实操档案产物模板消费）
     pub practice_points: Vec<PracticePoint>,
     /// 步骤边界（REQ-123：跟练档案三信号——口令/练习段/示范跟练交替；
-    /// 仅 FollowAlong 档案计算，其余空向量兜底——与 speaker_changes 同模式）
+    /// 仅 FollowAlong 档案计算，其余空向量兜底——与 speaker_changes 同模式；
+    /// serde(default) 与同批 practice_segments/player_actions 一致——
+    /// 审查 L3 修复：旧 JSON 反序列化兼容）
+    #[serde(default)]
     pub step_boundaries: Vec<StepBoundary>,
     /// 实践段（REQ-128 M16：前台切换序列推导——视频↔编辑器交替；全档案计算，
     /// 纯规则无 AI；无事件 → 空向量兜底）

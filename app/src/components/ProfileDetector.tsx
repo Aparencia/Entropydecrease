@@ -118,7 +118,7 @@ export default function ProfileDetector({
 
   return (
     <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>
-      <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>视频类型档案（v0.5.0）</div>
+      <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>视频类型档案（12 类，v0.7.0）</div>
       {detecting ? (
         <div style={{ fontSize: 11, color: "#9ca3af" }}>检测中…</div>
       ) : (
