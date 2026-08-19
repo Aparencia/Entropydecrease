@@ -29,6 +29,8 @@ function App() {
   const [page, setPage] = useState<Page>("classroom");
   // 2026-08 A4：跨页直达目标会话（课堂助手融合完成 → 会话页自动打开详情）
   const [focusSessionId, setFocusSessionId] = useState<number | null>(null);
+  // v0.7.1：跨页直达目标笔记（会话页"查看笔记" → 笔记页自动选中并滚动可见）
+  const [focusNoteId, setFocusNoteId] = useState<number | null>(null);
   // 全局采集状态（ADR-007：与页面解耦，徽标常驻导航栏）
   const [capturing, setCapturing] = useState(false);
   const [recovering, setRecovering] = useState(false);
@@ -163,10 +165,25 @@ function App() {
           />
         </div>
         <div style={{ flex: 1, display: page === "sessions" ? "block" : "none", overflow: "hidden" }}>
-          <SessionsPage focusSessionId={focusSessionId} />
+          {/* v0.7.1：active 驱动列表刷新（display:none 挂载不刷新根治）+ 查看笔记跨页直达 */}
+          <SessionsPage
+            focusSessionId={focusSessionId}
+            active={page === "sessions"}
+            onOpenNote={(id) => {
+              setFocusNoteId(id);
+              setPage("notes");
+            }}
+          />
         </div>
         <div style={{ flex: 1, display: page === "notes" ? "block" : "none", overflow: "hidden" }}>
-          <NotesPage />
+          {/* v0.7.1：focusNoteId 定位 + 来源会话反向跳转（与课堂助手 onOpenSessions 同模式） */}
+          <NotesPage
+            focusNoteId={focusNoteId}
+            onOpenSessions={(id) => {
+              setFocusSessionId(id);
+              setPage("sessions");
+            }}
+          />
         </div>
       </main>
     </div>

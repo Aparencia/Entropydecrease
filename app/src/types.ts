@@ -47,6 +47,8 @@ export interface Note {
   title: string;
   content: string;
   source: string;
+  /** v0.7.1：来源会话 id（null=手动笔记/未关联/旧数据） */
+  session_id?: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -56,6 +58,7 @@ export interface NewNote {
   title: string;
   content: string;
   source: string;
+  session_id?: number | null;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -416,10 +419,41 @@ export interface OutlineEntry {
   text: string;
 }
 
-/** 课程分组（Rust CourseGroup；REQ-078，camelCase 契约） */
+/** 课程分组（Rust CourseGroup；REQ-078，camelCase 契约；v0.7.1 组内携带转化标记） */
 export interface CourseGroup {
   course: string;
-  sessions: Session[];
+  sessions: SessionListItem[];
+}
+
+/** 会话列表条目（v0.7.1：转化状态标记，camelCase 契约） */
+export interface SessionListItem {
+  session: Session;
+  /** 已关联笔记 */
+  hasNote: boolean;
+  /** 最新关联笔记 id */
+  noteId: number | null;
+  /** 最新关联笔记标题 */
+  noteTitle: string | null;
+  /** 有转写段或 OCR 块（空会话不进入"待转化"） */
+  hasContent: boolean;
+}
+
+/** 批量转笔记成功项 */
+export interface ConvertedNote {
+  sessionId: number;
+  noteId: number;
+}
+
+/** 批量转笔记跳过项（部分成功语义，原因显式回传） */
+export interface SkippedNote {
+  sessionId: number;
+  reason: string;
+}
+
+/** 批量转笔记结果（v0.7.1） */
+export interface BatchNoteResult {
+  converted: ConvertedNote[];
+  skipped: SkippedNote[];
 }
 
 /** 段搜索命中（Rust SegmentHit；REQ-079，camelCase 契约） */

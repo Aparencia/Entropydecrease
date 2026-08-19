@@ -2,13 +2,22 @@
  * NotesPage — 笔记独立页面（列表 + 详情双列布局）。
  *
  * @ai-context: 左栏搜索与笔记列表（来源标记 manual/classroom），右栏选中笔记详情与删除。
+ * @ai-context: v0.7.1（会话体验）：focusNoteId 跨页直达（会话页"查看笔记 →"自动选中并滚动）；
+ *              session_id 非空的笔记行显示「来源会话 →」反向跳转（会话↔笔记双向闭环）。
  * @ai-context: 第一阶段为纯文本/Markdown 源码预览；正式编辑器（TipTap 等）为后续阶段。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Note } from "../types";
 
-export default function NotesPage() {
+interface Props {
+  /** 跨页直达目标笔记 id（App 层注入；变化时自动选中） */
+  focusNoteId?: number | null;
+  /** 笔记 → 来源会话反向跳转（App 层切页 + focusSessionId） */
+  onOpenSessions?: (sessionId: number) => void;
+}
+
+export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [keyword, setKeyword] = useState("");
   const [selected, setSelected] = useState<Note | null>(null);
@@ -33,6 +42,35 @@ export default function NotesPage() {
     const timer = setTimeout(() => void load(keyword), 300);
     return () => clearTimeout(timer);
   }, [keyword, load]);
+
+  // v0.7.1：跨页直达——会话页"查看笔记"跳转后自动选中并滚动可见
+  // （忽略当前搜索词保证目标可见：显式导航优先于既有过滤上下文）
+  useEffect(() => {
+    if (focusNoteId == null) return;
+    let disposed = false;
+    (async () => {
+      setKeyword("");
+      const seq = ++seqRef.current;
+      try {
+        const list = await invoke<Note[]>("list_notes");
+        if (disposed || seqRef.current !== seq) return;
+        setNotes(list);
+        const target = list.find((n) => n.id === focusNoteId);
+        if (target) {
+          setSelected(target);
+          // 等待列表渲染后滚动行到可视区（与会话页段定位同模式）
+          setTimeout(() => {
+            document.getElementById(`note-row-${target.id}`)?.scrollIntoView({ block: "center" });
+          }, 50);
+        }
+      } catch (e) {
+        if (!disposed) setStatus(`加载失败: ${e}`);
+      }
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, [focusNoteId]);
 
   const runDelete = async (id: number) => {
     try {
@@ -61,15 +99,12 @@ export default function NotesPage() {
         <div style={{ flex: 1, overflowY: "auto" }}>
           {notes.length === 0 && <p style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", marginTop: 24 }}>暂无笔记</p>}
           {notes.map((n) => (
-            <button
+            <div
               key={n.id}
+              id={`note-row-${n.id}`}
               onClick={() => setSelected(n)}
               style={{
-                display: "block",
-                width: "100%",
-                textAlign: "left",
                 padding: "10px 14px",
-                border: "none",
                 borderBottom: "1px solid #f3f4f6",
                 cursor: "pointer",
                 background: selected?.id === n.id ? "#f0fdfa" : "transparent",
@@ -78,10 +113,23 @@ export default function NotesPage() {
               <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {n.title}
               </div>
-              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
-                {n.source === "classroom" ? "📡 课堂助手" : "✍ 手动"} · {new Date(n.updated_at * 1000).toLocaleString()}
+              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
+                <span>{n.source === "classroom" ? "📡 课堂助手" : "✍ 手动"} · {new Date(n.updated_at * 1000).toLocaleString()}</span>
+                {/* v0.7.1：会话↔笔记反向跳转（来源会话存在时显示） */}
+                {n.session_id != null && (
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenSessions?.(n.session_id as number);
+                    }}
+                    style={{ fontSize: 11, color: "#0f766e", cursor: "pointer", fontWeight: 600 }}
+                    title="跳转到来源会话"
+                  >
+                    来源会话 →
+                  </span>
+                )}
               </div>
-            </button>
+            </div>
           ))}
         </div>
         {status && <p style={{ padding: 8, fontSize: 12, color: "#dc2626" }}>{status}</p>}
