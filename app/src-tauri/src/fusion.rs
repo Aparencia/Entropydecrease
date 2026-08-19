@@ -49,6 +49,9 @@ pub struct FusedSegment {
     pub source: FusedSource,
     /// 融合后段置信度（B3 落库通道；None=未知）
     pub confidence: Option<f32>,
+    /// REQ-103（v0.7.0 M1）：源段平均音量透传（ASR 源段有、字幕源段 None——
+    /// 音量骤变信号仅对 ASR 内容有意义）
+    pub volume: Option<f32>,
 }
 
 /// 融合配置（REQ-062：概率加权开关——关闭即 v0.5.0 硬规则行为）。
@@ -99,6 +102,8 @@ pub fn merge_transcript_with(
             text: s.text.clone(),
             source: FusedSource::Subtitle,
             confidence: s.confidence,
+            // REQ-103：字幕源段无音量（None=未知）
+            volume: None,
         });
     }
 
@@ -113,7 +118,7 @@ pub fn merge_transcript_with(
         // 本句的全部输出窗口（空隙补缝 + 重叠保留），统一在最后按时长占比切分文本——
         // 修复：旧实现空隙补缝与重叠保留各输出整句，字幕边界落在句内时同句相邻重复
         // （会话 8/11 实测：同一句连排 2~3 遍）；窗口合并后整句只分配一次
-        let mut windows: Vec<(u64, u64, FusedSource, Option<f32>)> = Vec::new();
+        let mut windows: Vec<(u64, u64, FusedSource, Option<f32>, Option<f32>)> = Vec::new();
         for sub in &subs {
             if cursor >= end {
                 break;
@@ -130,7 +135,7 @@ pub fn merge_transcript_with(
                 // 字幕前的空隙 → 补缝（满足 gap 阈值才保留）
                 let (s, e) = (cursor, sub.start_ms.min(end));
                 if e - s >= gap {
-                    windows.push((s, e, FusedSource::Asr, asr.confidence));
+                    windows.push((s, e, FusedSource::Asr, asr.confidence, asr.volume));
                 }
                 cursor = e;
             }
@@ -141,7 +146,7 @@ pub fn merge_transcript_with(
                     OverlapDecision::SubtitleWins => {}
                     // 保留核对段（低置信标记 / ASR 更可信 / 硬规则兜底）
                     OverlapDecision::KeepReview(conf) => {
-                        windows.push((cursor, overlap_end, FusedSource::Fused, conf));
+                        windows.push((cursor, overlap_end, FusedSource::Fused, conf, asr.volume));
                     }
                 }
                 cursor = overlap_end;
@@ -149,7 +154,7 @@ pub fn merge_transcript_with(
         }
         // 3) 尾部空隙（ASR 结束于最后字幕之后）——补缝
         if cursor < end && end - cursor >= gap {
-            windows.push((cursor, end, FusedSource::Asr, asr.confidence));
+            windows.push((cursor, end, FusedSource::Asr, asr.confidence, asr.volume));
         }
         // 4) 按时间窗占比切分整句文本（TD-024 演进：空隙+重叠保留共用同一份文本配额）
         push_window_segments(&mut result, &windows, text);
@@ -229,17 +234,17 @@ fn decide_overlap(
 #[allow(clippy::type_complexity)]
 fn push_window_segments(
     result: &mut Vec<FusedSegment>,
-    windows: &[(u64, u64, FusedSource, Option<f32>)],
+    windows: &[(u64, u64, FusedSource, Option<f32>, Option<f32>)],
     text: &str,
 ) {
-    let total: u64 = windows.iter().map(|(s, e, _, _)| e - s).sum();
+    let total: u64 = windows.iter().map(|(s, e, _, _, _)| e - s).sum();
     if total == 0 {
         return;
     }
     let chars: Vec<char> = text.chars().collect();
     let mut pos = 0usize;
     let last = windows.len() - 1;
-    for (i, (s, e, src, conf)) in windows.iter().enumerate() {
+    for (i, (s, e, src, conf, vol)) in windows.iter().enumerate() {
         let take = if i == last {
             chars.len().saturating_sub(pos) // 末段吃掉全部剩余（防整除截断丢字）
         } else {
@@ -255,6 +260,8 @@ fn push_window_segments(
                 text: piece,
                 source: *src,
                 confidence: *conf,
+                // REQ-103：音量随源段透传（ASR 源有值；字幕源 None）
+                volume: *vol,
             });
         }
     }

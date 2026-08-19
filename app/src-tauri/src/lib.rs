@@ -18,10 +18,19 @@ mod asr_rescore;
 mod analysis;
 mod artifact;
 mod artifact_templates;
+mod audio_event_filter;
 mod audio_preprocess;
+// v0.7.0 M1（REQ-101）：音频预处理链持久化配置（CER 微基准定默认后的用户开关）
+mod audio_preproc_config;
 mod audio_store;
+// v0.7.0 M1（REQ-107，TRUST-1）：数据备份/恢复（SQLite+图+音频 zip 打包/解压）
+mod backup;
 mod capture;
+// v0.7.0 M1（REQ-101）：CER 计算（预处理链默认值定标的微基准依据）
+mod cer;
 mod chapter_detect;
+// v0.7.0 M1（REQ-104/132）：剪贴板信号（文本信号 + 图片直贴；内存态，arboard 轮询）
+mod clipboard_signal;
 mod commands;
 // 实时会话链路依赖 Windows 捕获 API（WASAPI/DXGI/COM），非 Windows 平台不编译（TD-027 修复）
 #[cfg(target_os = "windows")]
@@ -30,6 +39,8 @@ mod commands_ai;
 mod commands_analysis;
 mod commands_artifacts;
 mod commands_audio;
+// v0.7.0 M1（REQ-107，TRUST-1）：备份/恢复 command（数据目录 zip 打包/解压）
+mod commands_backup;
 mod commands_device;
 mod commands_diag;
 mod commands_images;
@@ -84,6 +95,8 @@ mod live_session_frame;
 #[cfg(target_os = "windows")]
 mod live_keyframes;
 mod load_monitor;
+// v0.7.0 M1（REQ-106，TRUST-4）：诊断日志脱敏（OCR 文本/会话标题等敏感内容过滤）
+mod log_redact;
 mod model_downloader;
 mod note_filter;
 mod novelty;
@@ -354,6 +367,11 @@ pub fn run() {
             .map_err(|e| format!("启动引擎池失败: {}", e))?;
 
             let streaming_models = streaming_asr_models(&model_dir);
+            // v0.7.0 M1（REQ-104/132）：剪贴板信号内存态存储 + 监听句柄占位
+            // （start_live_session 成功后启动监听线程，stop 时置位停止）
+            let clipboard = std::sync::Arc::new(crate::clipboard_signal::ClipboardSignalStore::new());
+            let clipboard_monitor =
+                std::sync::Arc::new(std::sync::Mutex::new(None::<crate::clipboard_signal::ClipboardMonitorHandle>));
             app.manage(AppState {
                 db,
                 engines,
@@ -378,6 +396,10 @@ pub fn run() {
                 // v0.6.0 M1：可校准配置（UI 垃圾黑名单 / 口语符号映射表）
                 ui_junk,
                 symbol_normalize,
+                // v0.7.0 M1（REQ-104/132）：剪贴板信号（内存态存储 + 监听句柄占位；
+                // start_live_session 启动监听 / stop_live_session 置位停止）
+                clipboard,
+                clipboard_monitor,
             });
             Ok(())
         })
@@ -471,6 +493,12 @@ pub fn run() {
             // 会话音频落盘（REQ-068，v0.6.0 M4：状态/清理——M6 清理 UI 消费）
             commands_audio::session_audio_status,
             commands_audio::session_audio_cleanup,
+            // 音频预处理链（REQ-101，v0.7.0 M1：CER 微基准定默认后的用户开关）
+            commands_audio::audio_preproc_status,
+            commands_audio::audio_preproc_set,
+            // 数据备份/恢复（REQ-107，v0.7.0 M1：TRUST-1——备份/恢复入口）
+            commands_backup::backup_create,
+            commands_backup::backup_restore,
             // 会话产物（REQ-052/053，v0.5.0 M7：模板构建/读取/落笔记）
             commands_artifacts::build_session_artifact,
             commands_artifacts::get_session_artifact,

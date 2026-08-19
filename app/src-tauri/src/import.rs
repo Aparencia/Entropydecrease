@@ -134,6 +134,8 @@ fn write_subtitle_segments(db: &Db, session_id: i64, segments: &[crate::fusion::
             text: s.text.clone(),
             source: "subtitle".to_string(),
             confidence: None,
+            // REQ-103：导入路径无音量数据（None=未知）
+            volume: None,
         })?;
     }
     Ok(())
@@ -182,6 +184,8 @@ fn transcribe_audio<F: Fn(&ImportProgress)>(
                     // 对比（Zipformer vs SenseVoice）——无法产出代理置信度，
                     // 诚实落 None（不再硬编码假 0.9）
                     confidence: None,
+                    // REQ-103：导入路径无段级音量（None=未知）
+                    volume: None,
                 })?;
             }
         }

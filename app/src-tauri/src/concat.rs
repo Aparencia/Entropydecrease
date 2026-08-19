@@ -139,6 +139,7 @@ mod tests {
             text: text.to_string(),
             word_timestamps: None,
             confidence: None,
+            volume: None,
         }
     }
     fn ocr(ts: Option<u64>, text: &str, score: f32) -> OcrBlock {

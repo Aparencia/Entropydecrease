@@ -470,7 +470,9 @@ pub fn persist_voted_subtitle(
         session_id,
         timestamp_ms: voted.start_ms,
         text: text.clone(),
-        score: 0.9,
+        // REQ-098 CORE-D4（v0.7.0 M1）：OCR 块 score 用字幕投票置信度
+        // （此前硬编码 0.9——质量报告/低分统计消费假数据）
+        score: voted.confidence.unwrap_or(0.9),
         region: "subtitle".to_string(),
         // 字幕区独立 ROI 管线，不属版面区域（M3 设计：字幕区不进版面分析）
         region_kind: None,
@@ -484,6 +486,8 @@ pub fn persist_voted_subtitle(
         // REQ-098 CORE-D4（v0.7.0 M1）：字幕投票置信度落库（此前恒 None——
         // 投票器已产出 confidence 但落库丢弃，融合/质量报告消费不到真数据）
         confidence: voted.confidence,
+        // REQ-103：字幕段无音量数据（None=未知）
+        volume: None,
     });
     // 跨线程共享缓存（TD-026：采样线程写、停止后融合线程读）
     let start_ms = voted.start_ms;

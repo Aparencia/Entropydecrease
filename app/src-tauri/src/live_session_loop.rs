@@ -62,13 +62,17 @@ pub(crate) fn run_audio_loop(
 ) {
     let mut asr_health = crate::asr_health::AsrHealthMonitor::new();
     let mut asr_tier_emitted = crate::asr_health::AsrTier::Streaming;
-    // M6/REQ-041 A1：音频预处理链（默认关——微基准 CER 对比后定默认；
-    // 开启后 AGC + 削波检测 + 动态静音阈值，防轻声讲课被 VAD 截断）
-    // ADR-012 F2-3：env ENTROPY_AUDIO_PREPROC=1 先行实测（12.wav 低电平取证）
-    let preproc_enabled = std::env::var("ENTROPY_AUDIO_PREPROC").map(|v| v == "1").unwrap_or(false);
+    // M14/REQ-105：音频事件过滤——通知音/系统音固定音模式检测 → VAD 静音门控
+    // 联动（M10/REQ-126 分应用音频路由实装后本机制降为兜底，防路由未覆盖提示音）
+    let mut event_filter = crate::audio_event_filter::AudioEventFilter::default();
+    // M6/REQ-041 A1 + REQ-101（v0.7.0 M1）：音频预处理链开关——配置文件
+    // （audio-preproc.json，设置面板 UI 开关）> env ENTROPY_AUDIO_PREPROC
+    // （开发期快速实测）> 默认关。开启后 AGC + 削波检测 + 动态静音阈值
+    // （防轻声讲课被 VAD 截断；12.wav 低电平取证 ADR-012 F2-3）
+    let preproc_cfg = crate::audio_preproc_config::AudioPreprocConfig::load(&data_dir.join("audio-preproc.json"));
     let mut audio_pre = crate::audio_preprocess::AudioPreprocessor::new(
         crate::audio_preprocess::AudioPreprocessConfig {
-            enabled: preproc_enabled,
+            enabled: preproc_cfg.effective(),
             ..Default::default()
         },
     );
@@ -79,9 +83,12 @@ pub(crate) fn run_audio_loop(
     let mut sentence_start_ms: Option<u64> = None;
     let mut last_speech_ms: Option<u64> = None;
     let mut last_final_clean: Option<String> = None;
-    // 末位=挂起段置信度（REQ-098：合并兜底落库时透传）
-    let mut pending_merge: Option<(u64, u64, String, u32, Option<f32>)> = None;
+    // 末两位=挂起段置信度/音量（REQ-098/103：合并兜底落库时透传）
+    let mut pending_merge: Option<(u64, u64, String, u32, Option<f32>, Option<f32>)> = None;
     let mut clipping_logged = false;
+    // REQ-103：段内 RMS 聚合（语音块累计，Final 落库时取均值 → volume 列）
+    let mut sentence_rms_sum: f32 = 0.0;
+    let mut sentence_rms_count: u32 = 0;
 
     // 2026-08-19 取优整合：停止后 drain——停止瞬间 channel 中已送达未处理的音频块
     // 继续喂入（内容不丢；"停止时积压丢弃"兜底，会话 22 类缺失防御）。drain 有界
@@ -123,13 +130,21 @@ pub(crate) fn run_audio_loop(
                 ctx.speech_active.store(!silent, Ordering::Relaxed);
                 // A2：句起时刻 = Final 后首个非静音块（真实句首，替代 end-2000ms 近似）；
                 // TD-041：句尾 = 最后语音块 + 块时长（端点判定滞后 1.2-2.4s 的校正）
+                // REQ-103：语音块 RMS 计入段聚合（音量骤变信号输入）
                 if !silent {
                     if sentence_start_ms.is_none() {
                         sentence_start_ms = Some(chunk.timestamp_ms);
                     }
                     last_speech_ms = Some(chunk.timestamp_ms);
+                    sentence_rms_sum += raw_rms;
+                    sentence_rms_count += 1;
                 }
-                let mut events = ctx.asr_engine.feed(&processed.samples, silent);
+                // M14/REQ-105：固定音命中且前置静音 → 本块按静音喂入（不进 ASR）。
+                // feed(is_silent=true) 时静音块被引擎隔块喂入——不产生语音、
+                // 不影响句音频累积（静音不参与端点判定），语义正确
+                let decision = event_filter.observe(&processed.samples, 16000, silent);
+                let feed_silent = silent || decision.should_suppress;
+                let mut events = ctx.asr_engine.feed(&processed.samples, feed_silent);
                 // M7/REQ-042 F5：有语音无产出持续 → 降级链提示（F3 静默失败可见化）
                 // TD-050 修复：dt 取音频块时长 0.2s（TICK_MS=500 是轮询超时，非块时长）
                 // 2026-08-19 取优整合：语音活跃度用**固定阈值**判定（不随 VAD 自适应
@@ -160,6 +175,14 @@ pub(crate) fn run_audio_loop(
                 for event in events.drain(..) {
                     match event {
                         StreamingAsrEvent::Final { text, merge_with_next, confidence } => {
+                            // REQ-103：段内平均音量（语音块 RMS 均值；无语音块 → None）
+                            let volume = if sentence_rms_count > 0 {
+                                Some(sentence_rms_sum / sentence_rms_count as f32)
+                            } else {
+                                None
+                            };
+                            sentence_rms_sum = 0.0;
+                            sentence_rms_count = 0;
                             // 定稿落库/挂起合并/句子切分（live_session_persist.rs）
                             handle_final_event(
                                 FinalEventCtx {
@@ -175,6 +198,7 @@ pub(crate) fn run_audio_loop(
                                 text,
                                 merge_with_next,
                                 confidence,
+                                volume,
                                 chunk.timestamp_ms,
                             );
                         }
@@ -199,8 +223,8 @@ pub(crate) fn run_audio_loop(
 
     // 停止：先兜底落库挂起段（F4-1——停止时无下一段可合并），再 flush 尾句
     //    （时间戳用会话纪元；句尾校正同 TD-041；跨 final 去重同主循环；
-    //     置信度 REQ-098：挂起段透传、flush 尾句用重打分一致性）
-    if let Some((p_start, p_end, p_text, _merges, p_conf)) = pending_merge.take() {
+    //     置信度/音量 REQ-098/103：挂起段透传、flush 尾句用重打分一致性+段 RMS）
+    if let Some((p_start, p_end, p_text, _merges, p_conf, p_vol)) = pending_merge.take() {
         persist_final(
             ctx.app,
             ctx.db,
@@ -210,6 +234,7 @@ pub(crate) fn run_audio_loop(
             p_end,
             p_text,
             p_conf,
+            p_vol,
         );
     }
     if let Some(StreamingAsrEvent::Final { text, confidence, .. }) = ctx.asr_engine.flush() {
@@ -223,6 +248,11 @@ pub(crate) fn run_audio_loop(
             let start_ms = sentence_start_ms
                 .take()
                 .unwrap_or_else(|| end_ms.saturating_sub(crate::live_session_persist::SENTENCE_FALLBACK_MS));
+            let volume = if sentence_rms_count > 0 {
+                Some(sentence_rms_sum / sentence_rms_count as f32)
+            } else {
+                None
+            };
             persist_final(
                 ctx.app,
                 ctx.db,
@@ -232,6 +262,7 @@ pub(crate) fn run_audio_loop(
                 end_ms,
                 text,
                 confidence,
+                volume,
             );
         }
     }

@@ -9,6 +9,13 @@
 //! @ai-context: A3 spike 结论（2026-08）：sherpa-onnx 1.13 暴露 SpeakerEmbeddingExtractor
 //!              （create/compute_embedding），弱化版路径成立；模型分发留 V1.0
 //!              （G4 按需下载），本版判定器先行 + 降级形态兜底。
+//! @ai-context: REQ-099/102（v0.7.0 M1）悬空治理决策：**机制先行（保持）**——
+//!              analysis.rs 已移除恒空调用（诚实降级为显式空列表），本模块
+//!              保留供 V1.0 模型分发波接线（SpeakerEmbeddingExtractor 就位即
+//!              恢复调用）；dead_code 豁免登记（V1.0 接线时移除）。
+
+// 机制先行（REQ-099 决策）：V1.0 模型分发波接线前保持纯逻辑可用性
+#![allow(dead_code)]
 
 /// 讲者切换判定：余弦相似度低于该阈值视为换人（0.75 ≈ 常见 speaker 模型经验值）。
 const SPEAKER_CHANGE_COSINE_THRESHOLD: f32 = 0.75;

@@ -241,6 +241,8 @@ pub fn rewrite_with_fusion(
             // REQ-062（v0.6.0 M2）：融合后置信度回填（字幕投票置信度/ASR 置信度/
             // 低置信核对标记——B3 落库通道；None=旧路径无置信度）
             confidence: s.confidence,
+            // REQ-103（v0.7.0 M1）：段音量随融合透传（ASR 源有值；字幕源 None）
+            volume: s.volume,
         })
         .collect();
     db.replace_segments(session_id, &items)?;

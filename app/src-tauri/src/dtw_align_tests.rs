@@ -17,6 +17,7 @@ fn asr(start_ms: u64, end_ms: u64, text: &str) -> TranscriptSegment {
         text: text.to_string(),
         word_timestamps: None,
         confidence: None,
+            volume: None,
     }
 }
 

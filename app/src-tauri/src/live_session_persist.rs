@@ -44,6 +44,8 @@ pub(crate) struct AsrFinalEvent {
 ///              避免 F4-1 挂起/合并引入的多出口不一致（与 R7 预览落库一致性同构）。
 /// @ai-context: REQ-098（v0.7.0 M1）：confidence 为重打分一致性置信度（Option——
 ///              None=无法产出，诚实表达未知；不再硬编码 0.9/0.8 假数据）。
+/// @ai-context: REQ-103（v0.7.0 M1）：volume=段内平均音量（实时链路按段聚合 RMS
+///              传入；None=未知/非 ASR 源）。
 /// @ai-context: 参数多为编排上下文传递（app/db/session_id/segments/时间戳/文本/
 ///              置信度），聚合会破坏内聚——登记 clippy 豁免（与 engine.rs 同模式）。
 #[allow(clippy::too_many_arguments)]
@@ -56,6 +58,7 @@ pub(crate) fn persist_final(
     end_ms: u64,
     text: String,
     confidence: Option<f32>,
+    volume: Option<f32>,
 ) {
     let _ = app.emit(
         "live:asr-final",
@@ -68,6 +71,7 @@ pub(crate) fn persist_final(
         text: text.clone(),
         source: "asr".to_string(),
         confidence,
+        volume,
     });
     asr_segments.push(TranscriptSegment {
         start_ms,
@@ -77,6 +81,8 @@ pub(crate) fn persist_final(
         word_timestamps: None,
         // REQ-062：融合概率加权输入（与落库 confidence 同源）
         confidence,
+        // REQ-103：段音量（融合透传；音量骤变信号输入）
+        volume,
     });
 }
 
@@ -97,6 +103,7 @@ pub(crate) fn digest_merged(
     start_ms: u64,
     end_ms: u64,
     text: &str,
+    volume: Option<f32>,
 ) -> Option<(String, u64)> {
     let (complete, rest) = crate::asr_merge::split_sentences(text);
     let mut counts: Vec<usize> = complete.iter().map(|s| s.chars().count()).collect();
@@ -104,7 +111,7 @@ pub(crate) fn digest_merged(
     let spans = crate::asr_merge::split_timestamps(start_ms, end_ms, &counts);
     for (i, s) in complete.iter().enumerate() {
         let (s_ms, e_ms) = spans[i];
-        persist_final(app, db, session_id, asr_segments, s_ms, e_ms, s.clone(), None);
+        persist_final(app, db, session_id, asr_segments, s_ms, e_ms, s.clone(), None, volume);
     }
     if rest.trim().is_empty() {
         None
@@ -127,8 +134,8 @@ pub(crate) struct FinalEventCtx<'a> {
     pub last_speech_ms: &'a mut Option<u64>,
     /// 跨 final 去重（ADR-012 F3-2）
     pub last_final_clean: &'a mut Option<String>,
-    /// rule3 硬切段挂起合并（ADR-012 F4-1；末位=挂起段置信度，REQ-098）
-    pub pending_merge: &'a mut Option<(u64, u64, String, u32, Option<f32>)>,
+    /// rule3 硬切段挂起合并（ADR-012 F4-1；末两位=挂起段置信度/音量，REQ-098/103）
+    pub pending_merge: &'a mut Option<(u64, u64, String, u32, Option<f32>, Option<f32>)>,
 }
 
 /// Final 事件处理：跨 final 去重 → 挂起合并（链式）→ 句子切分落库。
@@ -146,6 +153,7 @@ pub(crate) fn handle_final_event(
     text: String,
     merge_with_next: bool,
     confidence: Option<f32>,
+    volume: Option<f32>,
     now_ms: u64,
 ) {
     // ADR-012 F3-2：跨 final 重叠去重（rule3 硬切/端点误断句
@@ -173,7 +181,7 @@ pub(crate) fn handle_final_event(
         // merge-then-split（F4-1 增强）：合并后立即按句号
         // 切分——完整句即时落库推送（实时流按句子沉淀），
         // 无句号的残余继续挂起（半句不丢、不提前切断）
-        if let Some((p_start, p_end, p_text, merges, p_conf)) = ctx.pending_merge.take() {
+        if let Some((p_start, p_end, p_text, merges, p_conf, p_vol)) = ctx.pending_merge.take() {
             let gap = start_ms.saturating_sub(p_end);
             if merges < MAX_MERGE_CHAIN {
                 if let Some(merged) = crate::asr_merge::merge_segments(&p_text, &text, gap) {
@@ -186,10 +194,12 @@ pub(crate) fn handle_final_event(
                         p_start,
                         end_ms,
                         &merged,
+                        p_vol,
                     ) {
                         Some((rest, rest_start)) => {
-                            // 残余半句继续挂起（链式延续；切分后置信度无法归因 → None）
-                            *ctx.pending_merge = Some((rest_start, end_ms, rest, merges + 1, None));
+                            // 残余半句继续挂起（链式延续；切分后置信度/音量无法归因 → None）
+                            *ctx.pending_merge =
+                                Some((rest_start, end_ms, rest, merges + 1, None, None));
                         }
                         None => {
                             // 整段以句号结尾全部切出：挂起清空
@@ -198,7 +208,7 @@ pub(crate) fn handle_final_event(
                     return;
                 }
             }
-            // 合并失败（gap 超限）或已达兜底上限：落库旧挂起段（置信度保留）
+            // 合并失败（gap 超限）或已达兜底上限：落库旧挂起段（置信度/音量保留）
             persist_final(
                 ctx.app,
                 ctx.db,
@@ -208,14 +218,15 @@ pub(crate) fn handle_final_event(
                 p_end,
                 p_text,
                 p_conf,
+                p_vol,
             );
         }
-        // 新挂起段：保留本事件置信度（后续合并/兜底落库时透传）
-        *ctx.pending_merge = Some((start_ms, end_ms, text, 0, confidence));
+        // 新挂起段：保留本事件置信度/音量（后续合并/兜底落库时透传）
+        *ctx.pending_merge = Some((start_ms, end_ms, text, 0, confidence, volume));
         return;
     }
     // 先消化挂起段：gap 内合并为完整句；否则兜底独立落库
-    if let Some((p_start, p_end, p_text, _merges, p_conf)) = ctx.pending_merge.take() {
+    if let Some((p_start, p_end, p_text, _merges, p_conf, p_vol)) = ctx.pending_merge.take() {
         let gap = start_ms.saturating_sub(p_end);
         if let Some(merged) = crate::asr_merge::merge_segments(&p_text, &text, gap) {
             *ctx.last_final_clean = Some(merged.clone());
@@ -230,8 +241,9 @@ pub(crate) fn handle_final_event(
                 p_start,
                 end_ms,
                 &merged,
+                p_vol,
             ) {
-                // 合并切分后的残余置信度无法归因 → None（诚实）
+                // 合并切分后的残余置信度/音量无法归因 → None（诚实）
                 persist_final(
                     ctx.app,
                     ctx.db,
@@ -240,6 +252,7 @@ pub(crate) fn handle_final_event(
                     rest_start,
                     end_ms,
                     rest,
+                    None,
                     None,
                 );
             }
@@ -254,9 +267,10 @@ pub(crate) fn handle_final_event(
             p_end,
             p_text,
             p_conf,
+            p_vol,
         );
     }
-    // 正常段：定稿推送 + 落库（TD-043 时间戳载荷；REQ-098 透传事件置信度）
+    // 正常段：定稿推送 + 落库（TD-043 时间戳载荷；REQ-098 透传事件置信度/音量）
     persist_final(
         ctx.app,
         ctx.db,
@@ -266,5 +280,6 @@ pub(crate) fn handle_final_event(
         end_ms,
         text,
         confidence,
+        volume,
     );
 }

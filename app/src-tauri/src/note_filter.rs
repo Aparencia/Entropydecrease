@@ -232,8 +232,9 @@ fn rebuild_markdown(title: &str, kept: &[SessionSegment], ocr_points: &[String])
             end_ms: s.end_ms,
             text: s.text.clone(),
             word_timestamps: None,
-            // 段落切分不消费置信度（None 占位）
+            // 段落切分不消费置信度/音量（None 占位）
             confidence: None,
+            volume: None,
         })
         .collect();
     let paragraphs = crate::concat::split_transcript_paragraphs(&transcript);

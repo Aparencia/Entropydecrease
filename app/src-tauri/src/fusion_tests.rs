@@ -21,6 +21,7 @@ fn asr(start_ms: u64, end_ms: u64, text: &str) -> TranscriptSegment {
         text: text.to_string(),
         word_timestamps: None,
         confidence: None,
+            volume: None,
     }
 }
 
@@ -31,6 +32,7 @@ fn asr_conf(start_ms: u64, end_ms: u64, text: &str, confidence: f32) -> Transcri
         text: text.to_string(),
         word_timestamps: None,
         confidence: Some(confidence),
+            volume: None,
     }
 }
 

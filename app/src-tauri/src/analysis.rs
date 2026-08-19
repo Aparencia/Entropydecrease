@@ -15,7 +15,7 @@ use crate::glossary::{
 };
 use crate::highlight_detect::{detect_highlights, HighlightCandidate, OcrBlockInput, SegmentInput};
 use crate::practice_detect::{detect_practice_points, PracticeDetectConfig, PracticePoint};
-use crate::speaker_change::{detect_speaker_changes, SpeakerChangeEvent};
+use crate::speaker_change::SpeakerChangeEvent;
 use crate::symbol_normalize::{normalize as normalize_symbols, SymbolNormalizeConfig};
 use crate::types::SessionDetail;
 use crate::verbal_normalize::{normalize, NormalizeConfig, NormalizeStrength};
@@ -87,10 +87,12 @@ pub fn analyze_session_opt(
     };
 
     // ── 重点标注（C2）：段 + OCR 块（口播/网课/实操档案开关）──
+    // REQ-103（v0.7.0 M1）：SegmentInput.volume 由落库 volume 列提供
+    // （实时链路段 RMS 聚合；旧数据 None=未知，不参与骤变信号）
     let highlights = if rules.highlight {
         let seg_inputs: Vec<SegmentInput> = segments
             .iter()
-            .map(|s| SegmentInput { start_ms: s.start_ms, text: s.text.clone(), volume: None })
+            .map(|s| SegmentInput { start_ms: s.start_ms, text: s.text.clone(), volume: s.volume })
             .collect();
         let ocr_inputs: Vec<OcrBlockInput> = ocr_blocks
             .iter()
@@ -143,12 +145,12 @@ pub fn analyze_session_opt(
         Vec::new()
     };
 
-    // ── 说话人切换（A3）：无 embedding → 空（访谈/会议降级为无讲者标注形态）──
-    let speaker_changes = if rules.speaker_detect {
-        detect_speaker_changes(&[])
-    } else {
-        Vec::new()
-    };
+    // ── 说话人切换（A3，REQ-102 诚实降级 v0.7.0 M1）──
+    // 无 embedding 数据（模型分发留 V1.0，G4）→ 恒空。
+    // 此前调用 detect_speaker_changes(&[]) 恒返回空 = 空转死代码（REQ-099
+    // POST-D1 悬空治理决策：移除空转，显式空列表 + 不可用注释——期望落差消除，
+    // 接线随 V1.0 模型分发波）；speaker_detect 规则开关保留（档案声明，未来接线）。
+    let speaker_changes: Vec<SpeakerChangeEvent> = Vec::new();
 
     // ── 练习段（M4/REQ-070）：长静音×画面静止同窗（全档案计算——
     //    产物模板按档案消费：实操 StepCard 之间插练习点标记）──

@@ -94,6 +94,14 @@ impl Db {
             "region_kind",
             "ALTER TABLE session_ocr_blocks ADD COLUMN region_kind TEXT",
         )?;
+        // v0.7.0 M1（REQ-103）：旧库迁移——segments 表补 volume 列
+        // （段内平均音量，重点标注音量骤变信号输入；旧数据 None=未知）
+        ensure_column(
+            &conn,
+            "session_segments",
+            "volume",
+            "ALTER TABLE session_segments ADD COLUMN volume REAL",
+        )?;
         Ok(Self { conn: Arc::new(Mutex::new(conn)) })
     }
 

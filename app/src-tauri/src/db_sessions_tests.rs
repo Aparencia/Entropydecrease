@@ -24,6 +24,7 @@ fn segment(session_id: i64, start_ms: u64, end_ms: u64, text: &str) -> NewSessio
         text: text.into(),
         source: "asr".into(),
         confidence: Some(0.9),
+            volume: None,
     }
 }
 

@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 ///              （[词, 起始毫秒] 对，相对片段起点；SenseVoice 开启 token timestamps 时产出）。
 /// @ai-context: v0.6.0 M2（REQ-062）：confidence 为 ASR 段置信度（概率加权融合输入；
 ///              None=未知/旧数据——融合层回退硬规则兜底）。
+/// @ai-context: v0.7.0 M1（REQ-103）：volume 为段内平均音量（实时链路聚合 RMS；
+///              融合透传到落库段——音量骤变信号输入；None=未知）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TranscriptSegment {
     /// 起始毫秒时间戳
@@ -26,6 +28,9 @@ pub struct TranscriptSegment {
     /// ASR 段置信度 0.0-1.0（REQ-062 概率加权融合；None=未知）
     #[serde(default)]
     pub confidence: Option<f32>,
+    /// REQ-103：段内平均音量（None=未知）
+    #[serde(default)]
+    pub volume: Option<f32>,
 }
 
 /// 词级时间戳（B8：产物双向定位 + AI 补缝判定器基础）。
@@ -147,6 +152,8 @@ pub struct NewSession {
 ///
 /// @ai-context: source 取 asr | subtitle | fused（ADR-004/ADR-005），
 ///              confidence 为可选置信度（ASR 有、字幕可空）。
+/// @ai-context: v0.7.0 M1（REQ-103）：volume 为段内平均音量（0.0-1.0 RMS 近似；
+///              重点标注音量骤变信号输入；None=旧数据/未知）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SessionSegment {
     pub id: i64,
@@ -158,6 +165,9 @@ pub struct SessionSegment {
     /// asr | subtitle | fused
     pub source: String,
     pub confidence: Option<f32>,
+    /// REQ-103：段内平均音量（None=未知/旧数据）
+    #[serde(default)]
+    pub volume: Option<f32>,
 }
 
 /// 新增会话转写段入参。
@@ -169,6 +179,9 @@ pub struct NewSessionSegment {
     pub text: String,
     pub source: String,
     pub confidence: Option<f32>,
+    /// REQ-103：段内平均音量（None=未知）
+    #[serde(default)]
+    pub volume: Option<f32>,
 }
 
 /// 会话 OCR 块（关键帧画面文字 / 字幕区文字）。

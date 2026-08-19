@@ -26,6 +26,7 @@ fn detail(segments: Vec<(&str, u64, u64)>, ocr: Vec<(&str, u64)>) -> SessionDeta
             text: text.into(),
             source: "asr".into(),
             confidence: Some(0.9),
+            volume: None,
         })
         .collect();
     let ocr_blocks = ocr
@@ -134,8 +135,8 @@ fn hands_on_profile_no_chapters() {
 fn build_chapter_signals_detects_frame_switch_approximation() {
     // Arrange：两窗口 OCR 文本不同（新文字 = 画面切换近似），每窗口均有段文本
     let segments = vec![
-        SessionSegment { id: 0, session_id: 1, start_ms: 0, end_ms: 1000, text: "第一章内容".into(), source: "asr".into(), confidence: None },
-        SessionSegment { id: 1, session_id: 1, start_ms: 40000, end_ms: 41000, text: "第二章内容".into(), source: "asr".into(), confidence: None },
+        SessionSegment { id: 0, session_id: 1, start_ms: 0, end_ms: 1000, text: "第一章内容".into(), source: "asr".into(), volume: None, confidence: None },
+        SessionSegment { id: 1, session_id: 1, start_ms: 40000, end_ms: 41000, text: "第二章内容".into(), source: "asr".into(), volume: None, confidence: None },
     ];
     let ocr = vec![
         SessionOcrBlock { id: 0, session_id: 1, timestamp_ms: 100, text: "PPT-第一章".into(), score: 0.9, region: "full".into(), region_kind: None },
@@ -152,8 +153,8 @@ fn build_chapter_signals_detects_frame_switch_approximation() {
 fn build_chapter_signals_long_silence_approximation() {
     // Arrange：段间 gap 4s（> 3s 阈值）
     let segments = vec![
-        SessionSegment { id: 0, session_id: 1, start_ms: 0, end_ms: 1000, text: "第一句".into(), source: "asr".into(), confidence: None },
-        SessionSegment { id: 1, session_id: 1, start_ms: 5000, end_ms: 6000, text: "第二句".into(), source: "asr".into(), confidence: None },
+        SessionSegment { id: 0, session_id: 1, start_ms: 0, end_ms: 1000, text: "第一句".into(), source: "asr".into(), volume: None, confidence: None },
+        SessionSegment { id: 1, session_id: 1, start_ms: 5000, end_ms: 6000, text: "第二句".into(), source: "asr".into(), volume: None, confidence: None },
     ];
     // Act
     let signals = build_chapter_signals(&segments, &[]);

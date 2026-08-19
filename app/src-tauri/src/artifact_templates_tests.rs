@@ -28,6 +28,7 @@ fn detail(segments: Vec<(&str, u64, u64)>, ocr: Vec<(&str, u64)>) -> SessionDeta
             text: text.into(),
             source: "asr".into(),
             confidence: Some(0.9),
+            volume: None,
         })
         .collect();
     let ocr_blocks = ocr

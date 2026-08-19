@@ -25,6 +25,7 @@ fn segment(start: u64, end: u64, text: &str) -> SessionSegment {
         text: text.into(),
         source: "asr".into(),
         confidence: Some(0.9),
+            volume: None,
     }
 }
 

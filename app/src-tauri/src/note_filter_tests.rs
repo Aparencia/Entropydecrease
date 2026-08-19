@@ -18,6 +18,7 @@ fn seg(id: i64, start: u64, end: u64, text: &str, source: &str, conf: Option<f32
         text: text.to_string(),
         source: source.to_string(),
         confidence: conf,
+            volume: None,
     }
 }
 
