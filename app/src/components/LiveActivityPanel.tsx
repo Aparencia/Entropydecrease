@@ -2,8 +2,11 @@
  * LiveActivityPanel — 实时活动面板（采集期间右侧核心反馈，简要设计）。
  *
  * @ai-context: 用户要求"转写流要简要"——设计原则：单行紧凑卡片、色点区分来源
- *              （字幕=绿、语音=灰、画面=蓝）、无冗余装饰；partial 仅显示当前行；
- *              列表超限截断（计数保留）；新内容自动跟随滚动。
+ *              （字幕=绿、语音=灰、画面=蓝）、无冗余装饰；列表超限截断（计数保留）；
+ *              新内容自动跟随滚动。
+ * @ai-context: 2026-08 用户需求：ASR 流式返回显示**所有未沉淀行**（识别中 partial +
+ *              已定稿待沉淀 committed），不再折叠为单行——连续定稿（快速短句）
+ *              时各行并存不被覆盖丢失；新句首个 partial 到达时统一沉淀。
  * @ai-context: 状态机：初始化（模型加载）→ 采集中 → 停止中 → 融合中 → 完成/失败，
  *              由 live:status / session:fusing/fused/failed 事件推导，父组件控制显隐。
  */
@@ -22,11 +25,15 @@ interface TranscriptLine {
 }
 
 /**
- * 识别中行（M3/REQ-038 流式先行 + 静默修正）：
- * committed=false = partial 上屏（灰色斜体"识别中"）；
- * committed=true = SenseVoice 重打分定稿（原位转黑，无闪烁无跳动）。
+ * 识别中行（M3/REQ-038 流式先行 + 静默修正；2026-08 扩展为多行挂起）：
+ * committed=false = partial 上屏（灰色斜体"识别中"，同句流式更新原位替换）；
+ * committed=true = SenseVoice 重打分定稿（原位转黑，待新句开始统一沉淀入列表）。
+ * id=句子序：同句 partial→final 复用同一 id（保证 React key 稳定不跳动）。
  */
-interface PartialLine {
+interface PendingLine {
+  id: number;
+  /** 定稿时刻（会话纪元 ms；未定稿阶段 0——展示用实时时钟） */
+  time: number;
   text: string;
   committed: boolean;
 }
@@ -43,9 +50,14 @@ const SHOW_TRANSCRIPT_LINES = 6;
 const SHOW_OCR_LINES = 4;
 /** 内存保留上限（计数独立累加，截断只影响可显示的历史） */
 const MAX_KEPT = 100;
+/** 未沉淀行显示上限（防御极端连续定稿；超限先沉淀已定稿行） */
+const MAX_PENDING_LINES = 8;
 
 let seq = 0;
 const nextId = () => ++seq;
+/** 句子序（未沉淀行 id；跨会话单调递增即可，不重置） */
+let pendingSeq = 0;
+const nextPendingId = () => ++pendingSeq;
 
 function fmtTime(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -57,16 +69,16 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
   // 状态机（简要徽标文本）
   const [phase, setPhase] = useState<string>("正在初始化…");
   const [transcripts, setTranscripts] = useState<TranscriptLine[]>([]);
-  const [partial, setPartial] = useState<PartialLine | null>(null);
+  // 未沉淀行列表（识别中 partial + 已定稿待沉淀 committed；2026-08 多行挂起）
+  const [partials, setPartials] = useState<PendingLine[]>([]);
   const [ocrLines, setOcrLines] = useState<OcrLine[]>([]);
   // 累计计数（列表截断后仍保留）
   const countsRef = useRef({ subtitle: 0, asr: 0, ocr: 0 });
   const [counts, setCounts] = useState({ subtitle: 0, asr: 0, ocr: 0 });
   const startedAtRef = useRef<number | null>(null);
   const [, setTick] = useState(0);
-  // TD-053 修复：partial 以 ref 镜像（事件回调读最新值），沉淀副作用移出 setState updater
-  const partialRef = useRef<PartialLine | null>(null);
-  const lastFinalTimeRef = useRef(0);
+  // TD-053 修复：partials 以 ref 镜像（事件回调读最新值），沉淀副作用移出 setState updater
+  const partialsRef = useRef<PendingLine[]>([]);
 
   // 时长计时（1s tick，仅展示）
   useEffect(() => {
@@ -85,11 +97,25 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
       countsRef.current.asr += 1;
       setCounts({ ...countsRef.current });
     };
-    // 事件回调统一入口：更新 partial 状态并同步 ref 镜像（TD-053：副作用在回调，
+    // 事件回调统一入口：更新未沉淀行列表并同步 ref 镜像（TD-053：副作用在回调，
     // 不在 updater——StrictMode 双调用不再导致计数双加/ID 跳号）
-    const applyPartial = (next: PartialLine | null) => {
-      partialRef.current = next;
-      setPartial(next);
+    const applyPartials = (next: PendingLine[]) => {
+      let list = next;
+      // 防御极端连续定稿：超上限先沉淀已定稿行（剩余通常 ≤1 条识别中行）
+      if (list.length > MAX_PENDING_LINES) {
+        list = settleCommitted(list);
+      }
+      partialsRef.current = list;
+      setPartials(list);
+    };
+    /** 沉淀全部已定稿行入转写列表（按各自定稿时刻），返回剩余未定稿行 */
+    const settleCommitted = (list: PendingLine[]): PendingLine[] => {
+      for (const line of list) {
+        if (line.committed && line.text.trim()) {
+          settleAsrLine(line.text, line.time);
+        }
+      }
+      return list.filter((l) => !l.committed);
     };
 
     const unlisteners: Promise<() => void>[] = [
@@ -99,35 +125,46 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
           setPhase("● 采集中");
           startedAtRef.current = startedAtRef.current ?? Date.now();
         } else if (e.payload === "stopped") {
-          // 停止：把已定稿未沉淀的行并入列表（防末句丢失，T2 语义）
-          const prev = partialRef.current;
-          if (prev?.committed && prev.text.trim()) {
-            settleAsrLine(prev.text, lastFinalTimeRef.current);
-          }
-          applyPartial(null);
+          // 停止：全部已定稿行沉淀入列表（防末句丢失，T2 语义）；识别中残余清空
+          applyPartials(settleCommitted(partialsRef.current));
           setPhase("⏹ 已停止");
         } else if (e.payload === "failed") {
           setPhase("⚠ 采集异常");
         }
       }),
       listen<string>("live:asr-partial", (e) => {
-        // 新 partial 到来：若上一行已定稿未沉淀 → 先沉淀再显示新识别行
-        const prev = partialRef.current;
-        if (prev?.committed && prev.text.trim()) {
-          settleAsrLine(prev.text, lastFinalTimeRef.current);
+        // 流式更新分两种：同句（末行未定稿 → 原位替换文本）；新句（末行已定稿或
+        // 无行 → 先沉淀全部已定稿行，再开新行）。后端单流保证：final 之后的
+        // partial 必属新句（端点已重建流）——无需显式句 id 协议
+        const list = partialsRef.current;
+        const last = list[list.length - 1];
+        if (last && !last.committed) {
+          applyPartials([...list.slice(0, -1), { ...last, text: e.payload }]);
+        } else {
+          applyPartials([
+            ...settleCommitted(list),
+            { id: nextPendingId(), time: 0, text: e.payload, committed: false },
+          ]);
         }
-        applyPartial({ text: e.payload, committed: false });
       }),
       listen<AsrFinalEvent>("live:asr-final", (e) => {
-        lastFinalTimeRef.current = e.payload.timestampMs;
         // M3/REQ-038 静默修正：partial 行原位灰→黑（无闪烁无跳动）；
-        // 无 partial（快速断句）时直接沉淀为定稿行
-        const prev = partialRef.current;
-        if (prev && prev.text.trim()) {
-          applyPartial({ text: e.payload.text, committed: true });
+        // 无 partial（快速断句）时直接沉淀为定稿行；
+        // 连续定稿（上一行已定稿未沉淀）→ 新行追加——修复原实现互相覆盖丢失
+        const list = partialsRef.current;
+        const last = list[list.length - 1];
+        if (last && !last.committed) {
+          applyPartials([
+            ...list.slice(0, -1),
+            { ...last, text: e.payload.text, time: e.payload.timestampMs, committed: true },
+          ]);
+        } else if (last) {
+          applyPartials([
+            ...list,
+            { id: nextPendingId(), time: e.payload.timestampMs, text: e.payload.text, committed: true },
+          ]);
         } else {
           settleAsrLine(e.payload.text, e.payload.timestampMs);
-          applyPartial(null);
         }
       }),
       listen<SubtitleEvent>("live:subtitle", (e) => {
@@ -223,7 +260,7 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
             {/* 2026-08 用户需求：实时图片数据（最近画面条；独立区域，图片更新不引起转写行跳动） */}
             <LiveImageStrip sessionId={sessionId ?? null} />
-            {shownTranscripts.length === 0 && !partial && (
+            {shownTranscripts.length === 0 && partials.length === 0 && (
               <p style={{ fontSize: 12, color: "#9ca3af" }}>等待识别…（说话或屏幕出现字幕时显示）</p>
             )}
             {shownTranscripts.map((t) => (
@@ -250,32 +287,37 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
                 ⋯ 共 {totalTranscript} 段，仅显示最近 {SHOW_TRANSCRIPT_LINES} 条（会话页可看全部）
               </p>
             )}
-            {partial && (
+            {/* 2026-08 用户需求：ASR 未沉淀行全部展示（识别中灰斜 + 已定稿待沉淀黑），
+                连续定稿各行并存；新句首个 partial 到达时统一沉淀入上方列表 */}
+            {partials.map((p) => (
               <div
+                key={p.id}
                 style={{
                   display: "flex",
                   gap: 8,
                   alignItems: "baseline",
                   fontSize: 13,
-                  color: partial.committed ? "#374151" : "#9ca3af",
-                  fontStyle: partial.committed ? "normal" : "italic",
+                  color: p.committed ? "#374151" : "#9ca3af",
+                  fontStyle: p.committed ? "normal" : "italic",
                 }}
               >
-                <span style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{fmtTime(elapsedMs)}</span>
+                <span style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                  {p.committed ? fmtTime(p.time) : fmtTime(elapsedMs)}
+                </span>
                 <span
-                  title={partial.committed ? "已定稿" : "识别中"}
+                  title={p.committed ? "已定稿待沉淀" : "识别中"}
                   style={{
                     width: 8,
                     height: 8,
                     borderRadius: 4,
                     flexShrink: 0,
                     alignSelf: "center",
-                    background: partial.committed ? "#9ca3af" : "#d1d5db",
+                    background: p.committed ? "#9ca3af" : "#d1d5db",
                   }}
                 />
-                <span>{partial.text}{partial.committed ? "" : "…"}</span>
+                <span>{p.text}{p.committed ? "" : "…"}</span>
               </div>
-            )}
+            ))}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
