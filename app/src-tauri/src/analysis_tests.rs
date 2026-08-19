@@ -122,6 +122,13 @@ fn empty_session_safe() {
         ProfileKind::TalkingHead,
         ProfileKind::Interview,
         ProfileKind::Meeting,
+        ProfileKind::Podcast,
+        ProfileKind::Live,
+        ProfileKind::Whiteboard,
+        ProfileKind::GameTutorial,
+        ProfileKind::Exercise,
+        ProfileKind::FollowAlong,
+        ProfileKind::Coding,
     ] {
         let analysis = analyze_session(&d, kind);
         // Assert：全空
@@ -129,6 +136,7 @@ fn empty_session_safe() {
         assert!(analysis.highlights.is_empty());
         assert!(analysis.glossary.is_empty());
         assert!(analysis.speaker_changes.is_empty());
+        assert!(analysis.step_boundaries.is_empty());
         assert!(analysis.normalized_segments.is_empty());
     }
 }
@@ -247,4 +255,114 @@ fn chapter_analysis_falls_back_without_events() {
     let analysis = analyze_session(&d, ProfileKind::Lecture);
     // Assert：近似路径仍工作（章节检测不因无事件而失效）
     assert!(!analysis.chapters.is_empty(), "无事件时近似信号路径应保持");
+}
+
+// ── REQ-123（v0.7.0 M2）：跟练档案步骤边界 ──
+
+#[test]
+fn follow_along_profile_computes_step_boundaries() {
+    // Arrange：跟练会话——口令段（步骤切分主信号）
+    let d = detail(
+        vec![
+            ("第一组动作开始", 0, 3000),
+            ("第二组跟上节奏", 10000, 13000),
+            ("休息一下", 30000, 32000),
+        ],
+        vec![],
+    );
+    // Act：跟练档案（步骤边界 gate 开）
+    let analysis = analyze_session(&d, ProfileKind::FollowAlong);
+    // Assert：口令边界标记正确（cue 理由 + 口令原文标签）
+    assert!(!analysis.step_boundaries.is_empty(), "跟练档案应产出步骤边界");
+    assert!(analysis.step_boundaries.iter().any(|b| b.reason == "cue" && b.label.as_deref() == Some("第一组")));
+    assert!(analysis.step_boundaries.iter().any(|b| b.reason == "cue" && b.label.as_deref() == Some("第二组")));
+    assert!(analysis.step_boundaries.iter().any(|b| b.reason == "cue" && b.label.as_deref().unwrap_or_default().contains("休息")));
+}
+
+#[test]
+fn step_boundaries_gated_by_follow_along_profile() {
+    // Arrange：同一段样本（口令段）
+    let d = detail(vec![("第二组开始", 10000, 13000)], vec![]);
+    // Act：跟练 vs 网课档案
+    let follow = analyze_session(&d, ProfileKind::FollowAlong);
+    let lecture = analyze_session(&d, ProfileKind::Lecture);
+    // Assert：跟练档案计算；其余档案空向量兜底（与 speaker_changes 同模式）
+    assert!(!follow.step_boundaries.is_empty());
+    assert!(lecture.step_boundaries.is_empty(), "非跟练档案不计算步骤边界");
+}
+
+// ── REQ-128（v0.7.0 M2）：实践段消费（前台切换事件 → practice_segments）──
+
+/// 构造信号事件（测试夹具）。
+fn ev(
+    kind: crate::session_events::EventKind,
+    timestamp_ms: u64,
+    payload: serde_json::Value,
+) -> crate::session_events::SessionEvent {
+    crate::session_events::SessionEvent { id: 0, session_id: 1, kind, timestamp_ms, payload }
+}
+
+#[test]
+fn practice_segments_consumed_from_events() {
+    // Arrange：前台切换序列（目标 100 → 编辑器 200 → 回 100）
+    let d = detail_with_events(
+        vec![("讲解", 0, 2000)],
+        vec![
+            ev(crate::session_events::EventKind::ForegroundSwitch, 1000, serde_json::json!({"hwnd": 100})),
+            ev(crate::session_events::EventKind::ForegroundSwitch, 5000, serde_json::json!({"hwnd": 200})),
+            ev(crate::session_events::EventKind::ForegroundSwitch, 9000, serde_json::json!({"hwnd": 100})),
+        ],
+    );
+    // Act：网课档案（全档案计算——实践段不按档案门控）
+    let analysis = analyze_session(&d, ProfileKind::Lecture);
+    // Assert：一个实践段（5000 离开视频 → 9000 回来），tool 诚实 "other"
+    assert_eq!(analysis.practice_segments.len(), 1);
+    assert_eq!(analysis.practice_segments[0].start_ms, 5000);
+    assert_eq!(analysis.practice_segments[0].end_ms, 9000);
+    assert_eq!(analysis.practice_segments[0].tool, "other");
+}
+
+#[test]
+fn practice_segments_empty_without_events() {
+    // Arrange：无事件会话
+    let d = detail(vec![("讲解", 0, 5000)], vec![]);
+    // Act
+    let analysis = analyze_session(&d, ProfileKind::Lecture);
+    // Assert：空向量兜底（不崩溃、不误判）
+    assert!(analysis.practice_segments.is_empty());
+}
+
+// ── REQ-125（v0.7.0 M2）：播放器行为消费（PlayerBehavior 事件 → player_actions）──
+
+#[test]
+fn player_actions_consumed_from_events() {
+    // Arrange：暂停 → 恢复 → 倍速 事件序列
+    let d = detail_with_events(
+        vec![("讲解", 0, 2000)],
+        vec![
+            ev(crate::session_events::EventKind::PlayerBehavior, 3000, serde_json::json!({"action": "pause", "value": null})),
+            ev(crate::session_events::EventKind::PlayerBehavior, 8000, serde_json::json!({"action": "play", "value": null})),
+            ev(crate::session_events::EventKind::PlayerBehavior, 12000, serde_json::json!({"action": "speed", "value": 1.5})),
+        ],
+    );
+    // Act
+    let analysis = analyze_session(&d, ProfileKind::Lecture);
+    // Assert：三条行为事件映射完整（action/value/时间）
+    assert_eq!(analysis.player_actions.len(), 3);
+    assert_eq!(analysis.player_actions[0].action, "pause");
+    assert_eq!(analysis.player_actions[0].time_ms, 3000);
+    assert_eq!(analysis.player_actions[0].value, None);
+    assert_eq!(analysis.player_actions[1].action, "play");
+    assert_eq!(analysis.player_actions[2].action, "speed");
+    assert_eq!(analysis.player_actions[2].value, Some(1.5));
+}
+
+#[test]
+fn player_actions_empty_without_events() {
+    // Arrange：无事件会话
+    let d = detail(vec![("讲解", 0, 5000)], vec![]);
+    // Act
+    let analysis = analyze_session(&d, ProfileKind::Lecture);
+    // Assert：空向量兜底
+    assert!(analysis.player_actions.is_empty());
 }

@@ -50,6 +50,8 @@ pub struct LiveSessionParams {
     pub app: tauri::AppHandle,
     /// v0.6.0 M1（REQ-083）：UI 垃圾黑名单（字幕源头过滤）
     pub ui_junk: crate::ui_junk::UiJunkList,
+    /// v0.7.0 M2（REQ-115）：VAD 阈值共享槽（会话线程发布当前阈值，诊断可查）
+    pub vad_slot: std::sync::Arc<crate::vad_threshold_slot::VadThresholdSlot>,
 }
 
 /// 活动会话记录。
@@ -238,62 +240,83 @@ fn run_session(
     //    失败不阻断音频链路——screen worker 内部容错）
     // @ai-context: 采样器（COM 非 Send）在线程内创建；字幕段经共享缓存回传
     //              （停止后由融合线程读取）；B3：语音活跃度共享标志驱动自适应采样。
-    let mut asr_segments: Vec<crate::types::TranscriptSegment> = Vec::new();
-    let subtitle_segments: Arc<Mutex<Vec<SubtitleSegment>>> = Arc::new(Mutex::new(Vec::new()));
-    let worker_segments = subtitle_segments.clone();
-    let worker_stop = stop.clone();
-    let speech_active = Arc::new(AtomicBool::new(false));
-    let worker_speech = speech_active.clone();
-    // worker 需独立持有 Db/AppHandle（主循环仍要使用，先 clone 再 move 进闭包）
-    let worker_db = db.clone();
-    let worker_app = params.app.clone();
-    // M6/REQ-051：会话图片存储（关键帧归档；创建失败不阻断屏幕链路）
-    // REQ-110：预算档位按档案 storage_tier 注入（TextFirst=50 现状零回归）
-    let store_tier = params
+    // @ai-context: REQ-130（v0.7.0 M3）：P4 无图短路——档案声明 disable_ocr 时
+    //              跳过屏幕 worker（屏幕捕获/OCR/字幕采样整体不跑）。引擎池是
+    //              全局共享的不能按会话销毁——短路点设在**采样端**：subtitle_segments
+    //              保持空，融合线程对空字幕短路（既有路径），内存收益来自不建捕获/OCR 链。
+    let ocr_enabled = !params
         .profile
         .map(crate::video_profile::profile_by_kind)
-        .map(|p| p.storage_tier)
-        .unwrap_or(crate::video_profile::StoreTier::TextFirst);
-    let image_store = crate::image_store::SessionImageStore::with_tier(
-        params.data_dir.join("session-images").join(session_id.to_string()),
-        store_tier,
-    )
-    .map_err(|e| eprintln!("[LiveSession] 会话图片库初始化失败（图集不可用）: {}", e))
-    .ok();
+        .map(|p| p.disable_ocr)
+        .unwrap_or(false);
+    let mut asr_segments: Vec<crate::types::TranscriptSegment> = Vec::new();
+    let subtitle_segments: Arc<Mutex<Vec<SubtitleSegment>>> = Arc::new(Mutex::new(Vec::new()));
+    let speech_active = Arc::new(AtomicBool::new(false));
     // M4/REQ-068（S4）：实时链路音频落盘（WAV PCM16；创建失败降级不阻断）
     let mut audio_writer = crate::audio_store::SessionAudioWriter::create(
         &params.data_dir.join("session-audio"),
         session_id,
         &crate::audio_store::AudioStoreConfig::default(),
     );
-    // M6/REQ-051：最新帧共享缓存（用户截图命令读取）
-    let worker_latest = latest_frame.clone();
-    let screen_worker = match std::thread::Builder::new()
-        .name("entropy-screen-worker".into())
-        .spawn(move || {
-            crate::live_session_frame::run_screen_worker(
-                worker_stop,
-                params.hwnd,
-                epoch,
-                worker_speech,
-                worker_db,
-                engines.clone(),
-                worker_app,
-                session_id,
-                worker_segments,
-                params.profile,
-                image_store,
-                worker_latest,
-                // REQ-083：UI 垃圾黑名单（Clone 廉价——Vec 条目）
-                params.ui_junk.clone(),
-            )
-        }) {
-        Ok(h) => Some(h),
-        Err(e) => {
-            // 屏幕采样线程启动失败不阻断音频链路，但必须可观测（审查：不得静默失效）
-            eprintln!("[LiveSession] 启动屏幕采样线程失败（字幕/画面识别不可用）: {}", e);
-            None
+    let screen_worker: Option<JoinHandle<()>> = if ocr_enabled {
+        // worker 需独立持有 Db/AppHandle（主循环仍要使用，先 clone 再 move 进闭包）
+        let worker_segments = subtitle_segments.clone();
+        let worker_stop = stop.clone();
+        let worker_speech = speech_active.clone();
+        let worker_db = db.clone();
+        let worker_app = params.app.clone();
+        // M6/REQ-051：会话图片存储（关键帧归档；创建失败不阻断屏幕链路）
+        // REQ-110：预算档位按档案 storage_tier 注入（TextFirst=50 现状零回归）
+        let store_tier = params
+            .profile
+            .map(crate::video_profile::profile_by_kind)
+            .map(|p| p.storage_tier)
+            .unwrap_or(crate::video_profile::StoreTier::TextFirst);
+        let image_store = crate::image_store::SessionImageStore::with_tier(
+            params.data_dir.join("session-images").join(session_id.to_string()),
+            store_tier,
+        )
+        .map_err(|e| eprintln!("[LiveSession] 会话图片库初始化失败（图集不可用）: {}", e))
+        .ok();
+        // M6/REQ-051：最新帧共享缓存（用户截图命令读取）
+        let worker_latest = latest_frame.clone();
+        // M16/REQ-128：前台时间线监控（worker 内 2s 轮询 observe → 事件落库；
+        // 随画面链启停——播客/直播档案画面链短路时前台信号同样不采集，语义一致）
+        // 注：无需 mut——变异发生在 worker 内（run_screen_worker 参数自带 mut）
+        let foreground_monitor = crate::foreground_timeline::ForegroundMonitor::new(params.hwnd);
+        match std::thread::Builder::new()
+            .name("entropy-screen-worker".into())
+            .spawn(move || {
+                crate::live_session_frame::run_screen_worker(
+                    worker_stop,
+                    params.hwnd,
+                    epoch,
+                    worker_speech,
+                    worker_db,
+                    engines.clone(),
+                    worker_app,
+                    session_id,
+                    worker_segments,
+                    params.profile,
+                    image_store,
+                    worker_latest,
+                    // REQ-083：UI 垃圾黑名单（Clone 廉价——Vec 条目）
+                    params.ui_junk.clone(),
+                    // M16/REQ-128：前台时间线监控（worker 内 2s 轮询 observe）
+                    foreground_monitor,
+                )
+            }) {
+            Ok(h) => Some(h),
+            Err(e) => {
+                // 屏幕采样线程启动失败不阻断音频链路，但必须可观测（审查：不得静默失效）
+                eprintln!("[LiveSession] 启动屏幕采样线程失败（字幕/画面识别不可用）: {}", e);
+                None
+            }
         }
+    } else {
+        // 播客/直播档案：跳过画面链（P4 短路——内存收益 + 零 OCR 干扰）
+        eprintln!("[LiveSession] 档案禁用画面链（disable_ocr），跳过屏幕采样（播客/直播类）");
+        None
     };
 
     // 4) 音频主循环（live_session_loop.rs）：消费/预处理/VAD/ASR/事件 + 停止 drain
@@ -307,6 +330,7 @@ fn run_session(
         speech_active,
         asr_engine: &mut asr_engine,
         audio_writer: &mut audio_writer,
+        vad_slot: Some(params.vad_slot.as_ref()),
     };
     run_audio_loop(rx, audio, loop_ctx, &params.data_dir);
 

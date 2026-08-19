@@ -93,3 +93,15 @@ pub fn diag_snapshot(state: State<'_, AppState>) -> DiagSnapshot {
         ocr_fallback_reason: status.fallback_reason,
     }
 }
+
+/// VAD 阈值诊断（REQ-115 PRE-O4 / v0.7.0 M2）：当前自适应阈值 + 基础阈值对照。
+///
+/// @ai-context: 降级提示（固定阈值判定）与切段判定（自适应阈值）口径对照——
+///              诊断可查阈值（验收点）；无活动会话时 current=上次会话残留值。
+#[tauri::command]
+pub fn vad_threshold_diag(state: State<'_, AppState>) -> crate::vad_threshold_slot::VadThresholdView {
+    crate::vad_threshold_slot::VadThresholdView {
+        current: state.vad_slot.read(),
+        base: crate::streaming_asr::SILENCE_RMS_THRESHOLD,
+    }
+}

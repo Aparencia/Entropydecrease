@@ -63,6 +63,8 @@ pub fn run_screen_worker(
     latest_frame: std::sync::Arc<std::sync::Mutex<Option<LatestCapturedFrame>>>,
     // v0.6.0 M1（REQ-083）：UI 垃圾黑名单（字幕源头过滤——文本特征命中不进投票器）
     ui_junk: crate::ui_junk::UiJunkList,
+    // v0.7.0 M2（REQ-128）：前台时间线监控（2s 轮询 observe → ForegroundSwitch 落库）
+    mut foreground_monitor: crate::foreground_timeline::ForegroundMonitor,
 ) {
     let mut screen = match ScreenCaptureSampler::new(hwnd.map(crate::windows::hwnd_from_i64)) {
         Ok(s) => {
@@ -121,6 +123,11 @@ pub fn run_screen_worker(
     let mut idle_governor = crate::idle_governor::IdleGovernor::new(Default::default());
     let mut last_diff_pass: u64 = 0;
     let mut last_probe_ms: u64 = 0;
+    // M16/REQ-128：前台时间线轮询节流（2s 一次；epoch 纪元 ms 时刻）
+    let mut last_fg_poll_ms: u64 = 0;
+    // M1/REQ-125：播放器行为检测节流（5s 一次；从最新帧缓存取帧）+ 暂停状态机
+    let mut last_player_check_at = Instant::now();
+    let mut last_player_paused = false;
 
     while !stop.load(Ordering::SeqCst) {
         // M4：每 2s 采样 CPU 负载（降级标志变化打印——静默失败可见化）
@@ -152,6 +159,17 @@ pub fn run_screen_worker(
             // （process_frame 内更新，同线程可见）；idle 时跳过采样（引擎
             // 阻塞空闲零 CPU）；空闲期低频探针（5s 一次全帧）检测无声恢复
             let now_ms = epoch.elapsed().as_millis() as u64;
+            // M16/REQ-128：前台时间线监控（独立 2s 轮询——不改 region_tracker 行为；
+            // 变化 → ForegroundSwitch 事件落库；观测失败 None → 静默跳过）
+            if now_ms.saturating_sub(last_fg_poll_ms) >= 2_000 {
+                last_fg_poll_ms = now_ms;
+                foreground_monitor.observe(
+                    crate::windows::foreground_hwnd(),
+                    now_ms,
+                    session_id,
+                    &db,
+                );
+            }
             let changed = stats.diff_pass > last_diff_pass;
             last_diff_pass = stats.diff_pass;
             let _ = idle_governor.observe(
@@ -174,6 +192,40 @@ pub fn run_screen_worker(
                     &mut last_archived_text, &mut last_archived_at, &latest_frame,
                     &mut image_store, &ui_junk,
                 );
+            }
+            // M1/REQ-125：播放器行为检测（5s 节流——非每帧；从最新帧缓存取帧做
+            // 暂停图标检测；Pause→无图标 状态机推导 Play 事件；无帧/转换失败 →
+            // 状态保持（诚实：无证据不推断））
+            if last_player_check_at.elapsed() >= Duration::from_secs(5) {
+                last_player_check_at = Instant::now();
+                if let Some(f) = latest_frame.lock().ok().and_then(|g| g.clone()) {
+                    if let Some(img) =
+                        crate::region_ocr::bgra_to_rgb_image(&f.bgraw, f.width, f.height)
+                    {
+                        let paused =
+                            crate::player_behavior::detect_player_action(&img).is_some();
+                        if paused != last_player_paused {
+                            last_player_paused = paused;
+                            let action = if paused {
+                                crate::player_behavior::PlayerAction {
+                                    kind: crate::player_behavior::PlayerActionKind::Pause,
+                                    value: None,
+                                }
+                            } else {
+                                crate::player_behavior::PlayerAction {
+                                    kind: crate::player_behavior::PlayerActionKind::Play,
+                                    value: None,
+                                }
+                            };
+                            crate::player_behavior::record_action(
+                                &action,
+                                now_ms,
+                                session_id,
+                                &db,
+                            );
+                        }
+                    }
+                }
             }
         }
         // 诊断：每 15s 打印采样统计（会话无 OCR 时定位失败阶段；静默失败可见化）

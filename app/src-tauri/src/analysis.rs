@@ -10,6 +10,7 @@
 //!              降级为无讲者标注形态）；embedding 提取接入留 V1.0（模型分发 G4）。
 
 use crate::chapter_detect::{detect_chapters, ChapterBoundary, ChapterSignal, DEFAULT_MIN_VOTES};
+use crate::follow_along_detect::{detect_step_boundaries, StepBoundary};
 use crate::glossary::{
     glossary_candidates_opt, GlossaryCandidate, GlossaryOptions,
 };
@@ -50,6 +51,17 @@ pub struct SessionAnalysis {
     pub speaker_changes: Vec<SpeakerChangeEvent>,
     /// 练习段（M4/REQ-070：长静音×画面静止同窗——实操档案产物模板消费）
     pub practice_points: Vec<PracticePoint>,
+    /// 步骤边界（REQ-123：跟练档案三信号——口令/练习段/示范跟练交替；
+    /// 仅 FollowAlong 档案计算，其余空向量兜底——与 speaker_changes 同模式）
+    pub step_boundaries: Vec<StepBoundary>,
+    /// 实践段（REQ-128 M16：前台切换序列推导——视频↔编辑器交替；全档案计算，
+    /// 纯规则无 AI；无事件 → 空向量兜底）
+    #[serde(default)]
+    pub practice_segments: Vec<crate::foreground_timeline::PracticeSegment>,
+    /// 播放器行为事件（REQ-125 M1：PlayerBehavior 事件表映射——暂停/恢复/倍速；
+    /// 全档案计算；无事件 → 空向量兜底）
+    #[serde(default)]
+    pub player_actions: Vec<crate::player_behavior::PlayerActionEvent>,
     /// 书面化加工版段（口播/网课档案；原文保留在原料层——可逆）
     pub normalized_segments: Vec<NormalizedSegment>,
 }
@@ -163,6 +175,23 @@ pub fn analyze_session_opt(
     //    产物模板按档案消费：实操 StepCard 之间插练习点标记）──
     let practice_points = detect_practice_points(segments, ocr_blocks, &PracticeDetectConfig::default());
 
+    // ── 步骤边界（REQ-123 / v0.7.0 M2）：跟练档案三信号（口令/练习段/
+    //    示范跟练交替）——仅 FollowAlong 档案计算，其余空向量兜底
+    //    （与 speaker_changes 同模式：档案声明 gate，产物模板按档案消费）──
+    let step_boundaries = if profile == ProfileKind::FollowAlong {
+        detect_step_boundaries(segments, ocr_blocks)
+    } else {
+        Vec::new()
+    };
+
+    // ── 实践段（M16/REQ-128）：前台切换序列纯规则推导（全档案计算——
+    //    视频↔编辑器交替；实操/跟练档案产物模板消费；无事件 → 空向量兜底）──
+    let practice_segments = crate::foreground_timeline::practice_segments(&detail.events);
+
+    // ── 播放器行为（M1/REQ-125）：PlayerBehavior 事件表映射（全档案计算——
+    //    难点信号消费；无事件 → 空向量兜底）──
+    let player_actions = crate::player_behavior::player_actions_from_events(&detail.events);
+
     // ── 口语书面化（B5 + REQ-060）：加工版段（口播/网课档案开关；Light 档保守保真）──
     let normalized_segments = if rules.verbal_normalize {
         let cfg = NormalizeConfig { strength: NormalizeStrength::Light };
@@ -186,6 +215,9 @@ pub fn analyze_session_opt(
         glossary,
         speaker_changes,
         practice_points,
+        step_boundaries,
+        practice_segments,
+        player_actions,
         normalized_segments,
     }
 }

@@ -180,8 +180,9 @@ pub(crate) fn handle_final_event(
 ) {
     // ADR-012 F3-2：跨 final 重叠去重（rule3 硬切/端点误断句
     // 的句尾词重复防护）；整体重复 → 跳过推送与落库
+    // REQ-118（v0.7.0 M2）：归一化+短语级 Jaccard 升级版（标点差异/虚词鲁棒）
     let text = match ctx.last_final_clean.as_ref() {
-        Some(prev) => crate::asr_dedupe::dedupe_across_finals(prev, &text),
+        Some(prev) => crate::asr_dedupe::dedupe_across_finals_normalized(prev, &text),
         None => text,
     };
     if text.is_empty() {
@@ -208,7 +209,10 @@ pub(crate) fn handle_final_event(
         if let Some((p_start, p_end, p_text, merges, p_conf, p_vol)) = ctx.pending_merge.take() {
             let gap = start_ms.saturating_sub(p_end);
             if merges < MAX_MERGE_CHAIN {
-                if let Some(merged) = crate::asr_merge::merge_segments(&p_text, &text, gap) {
+                // REQ-119（v0.7.0 M2）：拼接边界空格（中英混排不粘连）
+                if let Some(merged) =
+                    crate::asr_merge::merge_segments_with_spacing(&p_text, &text, gap)
+                {
                     *ctx.last_final_clean = Some(merged.clone());
                     match digest_merged(
                         ctx.app,
@@ -253,7 +257,8 @@ pub(crate) fn handle_final_event(
     // 先消化挂起段：gap 内合并为完整句；否则兜底独立落库
     if let Some((p_start, p_end, p_text, _merges, p_conf, p_vol)) = ctx.pending_merge.take() {
         let gap = start_ms.saturating_sub(p_end);
-        if let Some(merged) = crate::asr_merge::merge_segments(&p_text, &text, gap) {
+        // REQ-119：拼接边界空格（中英混排不粘连）
+        if let Some(merged) = crate::asr_merge::merge_segments_with_spacing(&p_text, &text, gap) {
             *ctx.last_final_clean = Some(merged.clone());
             // 合并文本同样按句子切分落库（可能含多句）；
             // 残余是当前句尾部（其后为真实停顿，不再挂起

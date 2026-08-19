@@ -50,6 +50,8 @@ pub(crate) struct LiveLoopCtx<'a> {
     pub speech_active: Arc<AtomicBool>,
     pub asr_engine: &'a mut StreamingAsrEngine,
     pub audio_writer: &'a mut Option<crate::audio_store::SessionAudioWriter>,
+    /// REQ-115：VAD 阈值共享槽（诊断可查；None=无槽注入——测试路径）
+    pub vad_slot: Option<&'a crate::vad_threshold_slot::VadThresholdSlot>,
 }
 
 /// 音频主循环：消费捕获块 → 预处理/VAD → ASR feed → 事件分发；停止时 drain + flush。
@@ -134,6 +136,11 @@ pub(crate) fn run_audio_loop(
                 } else {
                     adaptive_vad.next_threshold(raw_rms, SILENCE_RMS_THRESHOLD)
                 };
+                // REQ-115（v0.7.0 M2，PRE-O4）：当前阈值发布到共享槽——
+                // 诊断面板可查（降级提示与切段判定口径对照）
+                if let Some(slot) = ctx.vad_slot {
+                    slot.publish(vad_threshold);
+                }
                 let silent = raw_rms < vad_threshold;
                 // B3：语音活跃度共享（屏幕 worker 自适应采样依据）
                 ctx.speech_active.store(!silent, Ordering::Relaxed);
@@ -269,7 +276,8 @@ pub(crate) fn run_audio_loop(
     }
     if let Some(StreamingAsrEvent::Final { text, confidence, .. }) = ctx.asr_engine.flush() {
         let text = match &last_final_clean {
-            Some(prev) => crate::asr_dedupe::dedupe_across_finals(prev, &text),
+            // REQ-118（v0.7.0 M2）：归一化+短语级 Jaccard 升级版
+            Some(prev) => crate::asr_dedupe::dedupe_across_finals_normalized(prev, &text),
             None => text,
         };
         if !text.is_empty() {
