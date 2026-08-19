@@ -79,14 +79,16 @@ pub fn handle_full_frame(
         let interval_ok = last_archived_at.is_none_or(|t| t.elapsed() >= Duration::from_secs(2));
         if is_new_text && interval_ok {
             if let Some(store) = image_store.as_mut() {
-                if let Err(e) = store.save_frame(
-                    frame.timestamp_ms,
-                    &frame.bgraw,
-                    frame.width,
-                    frame.height,
-                ) {
-                    // 归档失败不阻断 OCR 主链路（预算满/IO 错误静默降级，日志可观测）
-                    eprintln!("[ScreenWorker] 关键帧归档失败: {}", e);
+                match store.save_frame(frame.timestamp_ms, &frame.bgraw, frame.width, frame.height) {
+                    Ok(rel) => {
+                        // 2026-08 用户需求：实时图片数据显示——归档成功即推送
+                        // （前端转写面板"最近画面"条据此即时刷新，无需轮询）
+                        let _ = app.emit("live:image-saved", rel);
+                    }
+                    Err(e) => {
+                        // 归档失败不阻断 OCR 主链路（预算满/IO 错误静默降级，日志可观测）
+                        eprintln!("[ScreenWorker] 关键帧归档失败: {}", e);
+                    }
                 }
             }
             *last_archived_text = Some(joined);

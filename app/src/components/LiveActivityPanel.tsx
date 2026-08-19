@@ -9,6 +9,8 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+// 2026-08 用户需求：实时转写中显示图片数据（转写 Tab 顶部"最近画面"条，独立区域不跳动）
+import LiveImageStrip from "./LiveImageStrip";
 import type { AsrFinalEvent, OcrEvent, SubtitleEvent } from "../types";
 
 /** 定稿转写行（字幕或语音） */
@@ -50,7 +52,7 @@ function fmtTime(ms: number): string {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export default function LiveActivityPanel() {
+export default function LiveActivityPanel({ sessionId }: { sessionId?: number | null }) {
   const [tab, setTab] = useState<"transcript" | "ocr">("transcript");
   // 状态机（简要徽标文本）
   const [phase, setPhase] = useState<string>("正在初始化…");
@@ -216,6 +218,8 @@ export default function LiveActivityPanel() {
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 14px 14px" }}>
         {tab === "transcript" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            {/* 2026-08 用户需求：实时图片数据（最近画面条；独立区域，图片更新不引起转写行跳动） */}
+            <LiveImageStrip sessionId={sessionId} />
             {shownTranscripts.length === 0 && !partial && (
               <p style={{ fontSize: 12, color: "#9ca3af" }}>等待识别…（说话或屏幕出现字幕时显示）</p>
             )}
