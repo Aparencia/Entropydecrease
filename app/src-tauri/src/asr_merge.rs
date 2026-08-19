@@ -66,6 +66,66 @@ pub fn merge_segments(prev: &str, next: &str, gap_ms: u64) -> Option<String> {
     }
 }
 
+/// 句末标点集合（切分边界：中文句号/问号/感叹号/省略号 + ASCII 等价物）。
+const SENTENCE_END_PUNCT: &str = "。！？…!?.";
+
+/// 合并文本按句末标点切分（纯函数）：完整句列表 + 尾部残余。
+///
+/// @ai-context: 切分边界 = 合并文本**内部**的句号——段内标点来自 SenseVoice/
+///              F4-2 对完整 8s 音频的预测（真实句间停顿，可信）；段边界猜测
+///              标点已在 merge_segments 剥除（截断处标点不可信）。因此切出的
+///              完整句 ≈ 真实句子，残余（无句号尾部）= 半句，继续挂起合并。
+/// @ai-context: 连续句末标点（"结束。。"）归同一句；切分不丢弃任何字符；
+///              空/纯标点输入安全（不崩溃，不丢字符原则）。
+pub fn split_sentences(text: &str) -> (Vec<String>, String) {
+    if text.trim().is_empty() {
+        return (Vec::new(), String::new());
+    }
+    let mut complete = Vec::new();
+    let mut buf = String::new();
+    let mut prev_end = false;
+    for c in text.chars() {
+        let is_end = SENTENCE_END_PUNCT.contains(c);
+        if prev_end && !is_end {
+            // 前一字符是句末标点且当前不是 → 此前累积的是一句
+            complete.push(std::mem::take(&mut buf));
+        }
+        buf.push(c);
+        prev_end = is_end;
+    }
+    if prev_end {
+        complete.push(buf);
+        (complete, String::new())
+    } else {
+        (complete, buf)
+    }
+}
+
+/// 子句时间戳近似分配（纯函数）：按字符占比切分区间 [start, end]。
+///
+/// @ai-context: 流式链路无词级时间戳（B8 由离线/精修路径产出），合并段切分后
+///              各句时间戳按字符比例近似（语速均匀假设）；单调不重叠。
+///              char_counts 含残余（残余区间 = 尾部未分配部分——残余起点
+///              连续衔接最后完整句终点）。退化输入（总字符 0 / 零区间）
+///              全部落回整段区间，不崩溃。
+pub fn split_timestamps(start_ms: u64, end_ms: u64, char_counts: &[usize]) -> Vec<(u64, u64)> {
+    let total: usize = char_counts.iter().sum();
+    if total == 0 || end_ms <= start_ms {
+        return char_counts.iter().map(|_| (start_ms, end_ms)).collect();
+    }
+    let dur = end_ms - start_ms;
+    let mut acc = 0usize;
+    char_counts
+        .iter()
+        .map(|&n| {
+            let s = start_ms + (acc as u64 * dur) / total as u64;
+            acc += n;
+            let e = start_ms + (acc as u64 * dur) / total as u64;
+            (s, e.max(s))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,5 +203,95 @@ mod tests {
     #[test]
     fn whitespace_boundaries_handled() {
         assert_eq!(merge_segments("那今天晚上我。 ", "  会用三个阶段。", 0), Some("那今天晚上我会用三个阶段。".to_string()));
+    }
+
+    // ── 合并后句子切分（F4-1 增强：merge-then-split）──
+
+    #[test]
+    fn merged_multi_sentence_text_split_into_sentences() {
+        // 用户场景回归：连续语音（停顿 <600ms）下多个 rule3 段合并后含多句，
+        // 按段内真实句号切分为句子——取代"固定次数一刀切"的整段落库
+        let merged = merge_segments(
+            "那今天晚上我",
+            "会用三个阶段来做分享。一个呢就是关于复盘模型的一个简单的介绍。",
+            0,
+        )
+        .expect("合并成功");
+        let (complete, rest) = split_sentences(&merged);
+        assert_eq!(
+            complete,
+            vec![
+                "那今天晚上我会用三个阶段来做分享。".to_string(),
+                "一个呢就是关于复盘模型的一个简单的介绍。".to_string(),
+            ]
+        );
+        assert_eq!(rest, "", "整段以句号结尾 → 无残余");
+    }
+
+    #[test]
+    fn trailing_incomplete_part_becomes_rest() {
+        // 合并文本尾部无句号（半句）→ 完整句切出，残余继续挂起合并
+        let (complete, rest) = split_sentences("第一句。第二句还在讲");
+        assert_eq!(complete, vec!["第一句。".to_string()]);
+        assert_eq!(rest, "第二句还在讲");
+    }
+
+    #[test]
+    fn no_sentence_end_punct_all_rest() {
+        // 全程无句号（模型未给句号）→ 无完整句，整段为残余
+        let (complete, rest) = split_sentences("那今天晚上我会用三个阶段来做分享");
+        assert!(complete.is_empty());
+        assert_eq!(rest, "那今天晚上我会用三个阶段来做分享");
+    }
+
+    #[test]
+    fn chained_merge_then_split_reassembles_full_sentence() {
+        // 13.wav"同句三刀" + 切分：A+B+C 合并成完整句组后按句号切回两句
+        let ab = merge_segments("那今天晚上我", "会用三个阶段来做分享。", 0).expect("A+B");
+        // AB 尾部"分享。"是 B 段真实句号（段内标点可信）——切分直接消化为完整句
+        let (complete, rest) = split_sentences(&ab);
+        assert_eq!(complete, vec!["那今天晚上我会用三个阶段来做分享。".to_string()]);
+        assert_eq!(rest, "");
+        // 无句号的中间态（A+B 均为半句）→ 整段残余，继续挂起
+        let ab2 = merge_segments("那今天晚上我", "会用三个阶段来做分享", 0).expect("A+B 半句");
+        let (c2, r2) = split_sentences(&ab2);
+        assert!(c2.is_empty());
+        assert_eq!(r2, "那今天晚上我会用三个阶段来做分享");
+    }
+
+    #[test]
+    fn consecutive_end_punct_kept_in_same_sentence() {
+        // "结束。。"连续标点归同一句（不把第二个句号留给残余）
+        let (complete, rest) = split_sentences("结束。。继续讲");
+        assert_eq!(complete, vec!["结束。。".to_string()]);
+        assert_eq!(rest, "继续讲");
+    }
+
+    #[test]
+    fn split_empty_and_punct_only_safe() {
+        assert_eq!(split_sentences(""), (Vec::<String>::new(), String::new()));
+        assert_eq!(split_sentences("   "), (Vec::<String>::new(), String::new()));
+        // 纯标点输入不崩溃、不丢字符（上游 merge 已过滤纯标点，防御性保障）
+        let (c, r) = split_sentences("。");
+        assert_eq!(c, vec!["。".to_string()]);
+        assert!(r.is_empty());
+    }
+
+    #[test]
+    fn split_timestamps_proportional_and_monotonic() {
+        // 三句字符 3:3:4，区间 [0, 1000] → 按占比 300/300/400
+        let spans = split_timestamps(0, 1000, &[3, 3, 4]);
+        assert_eq!(spans, vec![(0, 300), (300, 600), (600, 1000)]);
+        // 单调不重叠（含残余的连续分配）
+        let spans2 = split_timestamps(100, 300, &[5, 5]);
+        assert_eq!(spans2, vec![(100, 200), (200, 300)]);
+    }
+
+    #[test]
+    fn split_timestamps_degenerate_safe() {
+        // 总字符 0 / 零区间 → 全部落回整段，不崩溃
+        assert_eq!(split_timestamps(0, 1000, &[0, 0]), vec![(0, 1000), (0, 1000)]);
+        assert_eq!(split_timestamps(500, 500, &[3, 4]), vec![(500, 500), (500, 500)]);
+        assert!(split_timestamps(0, 1000, &[]).is_empty());
     }
 }

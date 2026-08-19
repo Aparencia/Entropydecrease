@@ -47,15 +47,12 @@ const SENTENCE_FALLBACK_MS: u64 = 2000;
 /// 音频块时长（ms）——与 audio_loopback 的 200ms 定长块对齐（TD-041 句尾校正用）。
 const AUDIO_BLOCK_MS: u64 = 200;
 
-/// 链式合并上限（ADR-012 F4-1，2026-08-19 用户实测回归修复）：
-/// 挂起段最多连续合并 2 次（3 段合一——覆盖 13.wav 取证"同一句被切三刀"模式）。
+/// 链式合并兜底上限（ADR-012 F4-1，merge-then-split 方案）。
 ///
-/// @ai-context: 连续语音（句间停顿 <600ms）时 sherpa 端点只由 rule3（8s）触发，
-///              merge_with_next 恒 true——无上限的链式合并会把整个会话的语音
-///              合并成一段（挂起期间不推送不落库，停止时 flush 一次性整段兜底，
-///              实测"实时只显示一行/全部语音集中一段"）；达到上限强制落库并推送
-///              （内容不丢，实时转写流恢复逐段沉淀）。
-const MAX_MERGE_CHAIN: u32 = 2;
+/// @ai-context: 正常路径由"合并后句子切分"消化（合并文本内完整句即时落库
+///              推送，残余继续挂起），上限仅兜底模型长期无句号的极端场景
+///              （重打分与标点恢复均未给出句号）——防挂起文本无限增长。
+const MAX_MERGE_CHAIN: u32 = 4;
 
 /// 句尾时刻（TD-041）：最后语音块起点 + 块时长，逼近真实句尾。
 ///
@@ -112,6 +109,39 @@ fn persist_final(
         // REQ-062：融合概率加权输入（与落库 confidence 同源）
         confidence: Some(confidence),
     });
+}
+
+/// 合并文本消化：句子切分 + 比例时间戳落库推送；返回残余（含其起点）。
+///
+/// @ai-context: F4-1 增强（merge-then-split）：合并文本按段内真实句号切分——
+///              完整句逐句落库推送（句子级粒度，边界不切碎句子）；无句号的
+///              尾部残余返回给调用方（硬切上下文继续挂起，正常句上下文落库）。
+///              时间戳按字符比例近似（流式链路无词级时间戳，语速均匀假设；
+///              单调不重叠，融合对齐可接受）。
+fn digest_merged(
+    app: &tauri::AppHandle,
+    db: &Db,
+    session_id: i64,
+    asr_segments: &mut Vec<TranscriptSegment>,
+    start_ms: u64,
+    end_ms: u64,
+    text: &str,
+) -> Option<(String, u64)> {
+    let (complete, rest) = crate::asr_merge::split_sentences(text);
+    let mut counts: Vec<usize> = complete.iter().map(|s| s.chars().count()).collect();
+    counts.push(rest.chars().count());
+    let spans = crate::asr_merge::split_timestamps(start_ms, end_ms, &counts);
+    for (i, s) in complete.iter().enumerate() {
+        let (s_ms, e_ms) = spans[i];
+        persist_final(app, db, session_id, asr_segments, s_ms, e_ms, s.clone(), 0.9);
+    }
+    if rest.trim().is_empty() {
+        None
+    } else {
+        // 残余起点 = 完整句之后的占比位置（时间戳连续衔接）
+        let rest_start = spans.last().map(|(s, _)| *s).unwrap_or(start_ms);
+        Some((rest, rest_start))
+    }
 }
 
 /// 会话融合状态跟踪（REQ-031：内存标记，ADR-008 决策——不迁移 sessions 表；
@@ -505,19 +535,36 @@ fn run_session(
                             // 取证模式）时中间段全部丢失（不落库不推送）
                             if merge_with_next {
                                 // 已有挂起段：先尝试链式合并（同一句话被切多刀）。
-                                // 2026-08-19 用户实测回归修复：合并次数达上限后不再
-                                // 合并——连续语音（停顿 <600ms）下 rule3 每 8s 硬切，
-                                // 无上限链式合并会把整个会话合成一段（不推送不落库）
+                                // merge-then-split（F4-1 增强）：合并后立即按句号
+                                // 切分——完整句即时落库推送（实时流按句子沉淀），
+                                // 无句号的残余继续挂起（半句不丢、不提前切断）
                                 if let Some((p_start, p_end, p_text, merges)) = pending_merge.take() {
                                     let gap = start_ms.saturating_sub(p_end);
                                     if merges < MAX_MERGE_CHAIN {
                                         if let Some(merged) = merge_segments(&p_text, &text, gap) {
                                             last_final_clean = Some(merged.clone());
-                                            pending_merge = Some((p_start, end_ms, merged, merges + 1));
+                                            match digest_merged(
+                                                &params.app,
+                                                &db,
+                                                session_id,
+                                                &mut asr_segments,
+                                                p_start,
+                                                end_ms,
+                                                &merged,
+                                            ) {
+                                                Some((rest, rest_start)) => {
+                                                    // 残余半句继续挂起（链式延续）
+                                                    pending_merge =
+                                                        Some((rest_start, end_ms, rest, merges + 1));
+                                                }
+                                                None => {
+                                                    // 整段以句号结尾全部切出：挂起清空
+                                                }
+                                            }
                                             continue;
                                         }
                                     }
-                                    // 合并失败（gap 超限）或已达链式上限：兜底落库旧挂起段
+                                    // 合并失败（gap 超限）或已达兜底上限：落库旧挂起段
                                     persist_final(
                                         &params.app,
                                         &db,
@@ -537,16 +584,32 @@ fn run_session(
                                 let gap = start_ms.saturating_sub(p_end);
                                 if let Some(merged) = merge_segments(&p_text, &text, gap) {
                                     last_final_clean = Some(merged.clone());
-                                    persist_final(
+                                    // 合并文本同样按句子切分落库（可能含多句）；
+                                    // 残余是当前句尾部（其后为真实停顿，不再挂起
+                                    // 合并）——残余直接落库为最后一段，内容不丢
+                                    match digest_merged(
                                         &params.app,
                                         &db,
                                         session_id,
                                         &mut asr_segments,
                                         p_start,
                                         end_ms,
-                                        merged,
-                                        0.9,
-                                    );
+                                        &merged,
+                                    ) {
+                                        Some((rest, rest_start)) => {
+                                            persist_final(
+                                                &params.app,
+                                                &db,
+                                                session_id,
+                                                &mut asr_segments,
+                                                rest_start,
+                                                end_ms,
+                                                rest,
+                                                0.9,
+                                            );
+                                        }
+                                        None => {}
+                                    }
                                     continue;
                                 }
                                 persist_final(

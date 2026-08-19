@@ -5,7 +5,7 @@
 
 | 文件 | 行数 | 豁免理由 | 拆分计划 |
 |------|------|---------|---------|
-| app/src-tauri/src/live_session.rs | ~691 | v0.3.0 后：FusionTracker + 会话编排循环 + 后台融合线程 + 句起/句尾跟踪四职责内聚于会话生命周期模块；拆出需跨函数传递 stop/epoch/speech_active/db/app 上下文；ADR-012 接入（跨 final 去重/AGC env/rule3 config/F4-1 挂起合并编排/persist_final 三出口统一）再增 ~90 行——**已超 600 硬拆红线（六轮审查登记 2026-08-19：承诺"下轮增长必须拆分"未兑现，拆分必须随 v0.6.0 M7 落地）** | 融合线程任务拆至 live_session_fusion.rs，编排循环拆至 live_session_loop.rs（拆分计划沿用 ADR-012 审查登记；六轮审查再次登记，M7 强制落地） |
+| app/src-tauri/src/live_session.rs | ~770 | v0.3.0 后：FusionTracker + 会话编排循环 + 后台融合线程 + 句起/句尾跟踪四职责内聚于会话生命周期模块；拆出需跨函数传递 stop/epoch/speech_active/db/app 上下文；ADR-012 接入（跨 final 去重/AGC env/rule3 config/F4-1 挂起合并编排/persist_final 三出口统一/digest_merged 句子切分消化）再增 ~180 行——**已超 600 硬拆红线（六轮审查登记 2026-08-19，拆分必须随 v0.6.0 M7 落地；七轮 merge-then-split 再增 ~80 行，拆分压力加大）** | 融合线程任务拆至 live_session_fusion.rs，编排循环拆至 live_session_loop.rs（拆分计划沿用 ADR-012 审查登记；六轮/七轮审查两次登记，M7 强制落地） |
 | app/src-tauri/src/streaming_asr.rs | ~365 | v0.6.0 ADR-012 增长（288→365）：hangover 决策 + 尾静音端点判别 + rule3 可配置 + 输出净化接入 + F4-1 merge_with_next 标记 + F4-2 标点恢复接入，引擎状态机内聚；纯函数已拆至 asr_rescore/asr_clean/asr_dedupe | 若再增长：端点处理块（is_endpoint → final 产出）拆至 streaming_endpoint.rs |
 | app/src-tauri/src/capture/audio_loopback.rs | ~320 | ADR-007 重连机制（重试循环/退避/恢复回调）内聚于捕获线程实现，拆出需跨函数传递 COM 生命周期参数，内聚性优先 | 若再增长：将 run_capture_inner 拆至 audio_loopback_session.rs |
 | app/src-tauri/src/live_frame_process.rs | ~491 | v0.6.0 ADR-011 拆分（live_session_frame.rs >600 行硬拆产物）：帧处理域（网格差异触发/两级判变/带外事件驱动/UI 面板抑制/字幕落库）内聚；process_frame 上下文参数 20+，跨函数传递聚合会破坏内聚；六轮审查再增（区域空产出回退整帧 + has_useful_blocks 判定）至 ~491 | 若再增长：handle_subtitle_frame 与 persist_voted_subtitle 拆至 live_subtitle_persist.rs |
