@@ -90,6 +90,8 @@ pub(crate) fn run_audio_loop(
     let mut last_final_clean: Option<String> = None;
     // 末两位=挂起段置信度/音量（REQ-098/103：合并兜底落库时透传）
     let mut pending_merge: Option<crate::live_session_persist::PendingMerge> = None;
+    // REQ-109：上一落库段 end（段前停顿计算基准）
+    let mut last_segment_end: Option<u64> = None;
     let mut clipping_logged = false;
     // REQ-103：段内 RMS 聚合（语音块累计，Final 落库时取均值 → volume 列）
     let mut sentence_rms_sum: f32 = 0.0;
@@ -219,6 +221,7 @@ pub(crate) fn run_audio_loop(
                                     last_speech_ms: &mut last_speech_ms,
                                     last_final_clean: &mut last_final_clean,
                                     pending_merge: &mut pending_merge,
+                                    last_segment_end: &mut last_segment_end,
                                 },
                                 text,
                                 merge_with_next,
@@ -260,6 +263,8 @@ pub(crate) fn run_audio_loop(
             p_text,
             p_conf,
             p_vol,
+            // 停止兜底落库：段前停顿无基准（None——诚实未知）
+            None,
         );
     }
     if let Some(StreamingAsrEvent::Final { text, confidence, .. }) = ctx.asr_engine.flush() {
@@ -278,6 +283,8 @@ pub(crate) fn run_audio_loop(
             } else {
                 None
             };
+            // REQ-109：flush 尾句段前停顿 = 与上一落库段的 gap
+            let pause_ms = last_segment_end.map(|pe| start_ms.saturating_sub(pe));
             persist_final(
                 ctx.app,
                 ctx.db,
@@ -288,6 +295,7 @@ pub(crate) fn run_audio_loop(
                 text,
                 confidence,
                 volume,
+                pause_ms,
             );
         }
     }

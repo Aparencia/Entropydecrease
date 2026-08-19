@@ -154,6 +154,8 @@ pub struct NewSession {
 ///              confidence 为可选置信度（ASR 有、字幕可空）。
 /// @ai-context: v0.7.0 M1（REQ-103）：volume 为段内平均音量（0.0-1.0 RMS 近似；
 ///              重点标注音量骤变信号输入；None=旧数据/未知）。
+/// @ai-context: v0.7.0 M1.5（REQ-109）：speech_rate=段内语速（字/秒）、
+///              pause_ms=段前停顿（与上一段 gap）、speaker=影子列（V1.0 讲者接线）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SessionSegment {
     pub id: i64,
@@ -168,6 +170,15 @@ pub struct SessionSegment {
     /// REQ-103：段内平均音量（None=未知/旧数据）
     #[serde(default)]
     pub volume: Option<f32>,
+    /// REQ-109：段内语速（字/秒；None=未知/旧数据）
+    #[serde(default)]
+    pub speech_rate: Option<f32>,
+    /// REQ-109：段前停顿（与上一段 end 的 gap，ms；None=未知/旧数据）
+    #[serde(default)]
+    pub pause_ms: Option<u64>,
+    /// REQ-109：speaker 影子列（V1.0 讲者识别接线；None=未接线）
+    #[serde(default)]
+    pub speaker: Option<String>,
 }
 
 /// 新增会话转写段入参。
@@ -182,6 +193,15 @@ pub struct NewSessionSegment {
     /// REQ-103：段内平均音量（None=未知）
     #[serde(default)]
     pub volume: Option<f32>,
+    /// REQ-109：段内语速（字/秒；None=未知）
+    #[serde(default)]
+    pub speech_rate: Option<f32>,
+    /// REQ-109：段前停顿（ms；None=未知）
+    #[serde(default)]
+    pub pause_ms: Option<u64>,
+    /// REQ-109：speaker 影子列（V1.0；None=未接线）
+    #[serde(default)]
+    pub speaker: Option<String>,
 }
 
 /// 会话 OCR 块（关键帧画面文字 / 字幕区文字）。

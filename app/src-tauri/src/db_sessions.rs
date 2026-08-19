@@ -106,9 +106,9 @@ impl Db {
     pub fn add_segment(&self, new: &NewSessionSegment) -> Result<SessionSegment> {
         let conn = self.conn.lock().expect("db lock poisoned");
         conn.execute(
-            "INSERT INTO session_segments (session_id, start_ms, end_ms, text, source, confidence, volume)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![new.session_id, new.start_ms, new.end_ms, new.text, new.source, new.confidence, new.volume],
+            "INSERT INTO session_segments (session_id, start_ms, end_ms, text, source, confidence, volume, speech_rate, pause_ms, speaker)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![new.session_id, new.start_ms, new.end_ms, new.text, new.source, new.confidence, new.volume, new.speech_rate, new.pause_ms, new.speaker],
         )?;
         Ok(SessionSegment {
             id: conn.last_insert_rowid(),
@@ -119,6 +119,9 @@ impl Db {
             source: new.source.clone(),
             confidence: new.confidence,
             volume: new.volume,
+            speech_rate: new.speech_rate,
+            pause_ms: new.pause_ms,
+            speaker: new.speaker.clone(),
         })
     }
 
@@ -137,12 +140,12 @@ impl Db {
             let mut inserted = 0;
             {
                 let mut stmt = conn.prepare(
-                    "INSERT INTO session_segments (session_id, start_ms, end_ms, text, source, confidence, volume)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    "INSERT INTO session_segments (session_id, start_ms, end_ms, text, source, confidence, volume, speech_rate, pause_ms, speaker)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 )?;
                 for item in items {
                     stmt.execute(params![
-                        item.session_id, item.start_ms, item.end_ms, item.text, item.source, item.confidence, item.volume
+                        item.session_id, item.start_ms, item.end_ms, item.text, item.source, item.confidence, item.volume, item.speech_rate, item.pause_ms, item.speaker
                     ])?;
                     inserted += 1;
                 }
@@ -185,7 +188,7 @@ impl Db {
     pub fn list_segments(&self, session_id: i64) -> Result<Vec<SessionSegment>> {
         let conn = self.conn.lock().expect("db lock poisoned");
         let mut stmt = conn.prepare(
-            "SELECT id, session_id, start_ms, end_ms, text, source, confidence, volume
+            "SELECT id, session_id, start_ms, end_ms, text, source, confidence, volume, speech_rate, pause_ms, speaker
              FROM session_segments WHERE session_id = ?1 ORDER BY start_ms ASC",
         )?;
         let rows = stmt.query_map(params![session_id], row_to_segment)?;
@@ -217,12 +220,12 @@ impl Db {
             let mut inserted = 0;
             if !items.is_empty() {
                 let mut stmt = conn.prepare(
-                    "INSERT INTO session_segments (session_id, start_ms, end_ms, text, source, confidence, volume)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    "INSERT INTO session_segments (session_id, start_ms, end_ms, text, source, confidence, volume, speech_rate, pause_ms, speaker)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 )?;
                 for item in items {
                     stmt.execute(params![
-                        item.session_id, item.start_ms, item.end_ms, item.text, item.source, item.confidence, item.volume
+                        item.session_id, item.start_ms, item.end_ms, item.text, item.source, item.confidence, item.volume, item.speech_rate, item.pause_ms, item.speaker
                     ])?;
                     inserted += 1;
                 }

@@ -59,7 +59,15 @@ pub(crate) fn persist_final(
     text: String,
     confidence: Option<f32>,
     volume: Option<f32>,
+    pause_ms: Option<u64>,
 ) {
+    // REQ-109：段内语速 = 字符数 / 段时长（字/秒；防除零——时长 0 时 None）
+    let duration_secs = end_ms.saturating_sub(start_ms) as f32 / 1000.0;
+    let speech_rate = if duration_secs > 0.0 {
+        Some(text.chars().count() as f32 / duration_secs)
+    } else {
+        None
+    };
     let _ = app.emit(
         "live:asr-final",
         AsrFinalEvent { timestamp_ms: start_ms, text: text.clone() },
@@ -72,6 +80,10 @@ pub(crate) fn persist_final(
         source: "asr".to_string(),
         confidence,
         volume,
+        speech_rate,
+        pause_ms,
+        // REQ-109：speaker 影子列（V1.0 讲者接线前恒 None）
+        speaker: None,
     });
     asr_segments.push(TranscriptSegment {
         start_ms,
@@ -113,7 +125,7 @@ pub(crate) fn digest_merged(
     let spans = crate::asr_merge::split_timestamps(start_ms, end_ms, &counts);
     for (i, s) in complete.iter().enumerate() {
         let (s_ms, e_ms) = spans[i];
-        persist_final(app, db, session_id, asr_segments, s_ms, e_ms, s.clone(), None, volume);
+        persist_final(app, db, session_id, asr_segments, s_ms, e_ms, s.clone(), None, volume, None);
     }
     if rest.trim().is_empty() {
         None
@@ -144,6 +156,8 @@ pub(crate) struct FinalEventCtx<'a> {
     pub last_final_clean: &'a mut Option<String>,
     /// rule3 硬切段挂起合并（ADR-012 F4-1；末两位=挂起段置信度/音量，REQ-098/103）
     pub pending_merge: &'a mut Option<PendingMerge>,
+    /// 上一落库段 end（REQ-109：段前停顿 = start - prev_end）
+    pub last_segment_end: &'a mut Option<u64>,
 }
 
 /// Final 事件处理：跨 final 去重 → 挂起合并（链式）→ 句子切分落库。
@@ -179,6 +193,8 @@ pub(crate) fn handle_final_event(
         .sentence_start_ms
         .take()
         .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
+    // REQ-109：段前停顿 = 与上一落库段 end 的 gap（首段 None）
+    let pause_ms = ctx.last_segment_end.map(|pe| start_ms.saturating_sub(pe));
     // ADR-012 F4-1：rule3/短停顿硬切段挂起——等下一 Final
     // 判定语义合并（gap ≤600ms 才合并）；不立即推送/落库
     // TD-2026-08-19 修复：连续硬切必须**链式合并**——此前
@@ -227,6 +243,7 @@ pub(crate) fn handle_final_event(
                 p_text,
                 p_conf,
                 p_vol,
+                None,
             );
         }
         // 新挂起段：保留本事件置信度/音量（后续合并/兜底落库时透传）
@@ -251,7 +268,7 @@ pub(crate) fn handle_final_event(
                 &merged,
                 p_vol,
             ) {
-                // 合并切分后的残余置信度/音量无法归因 → None（诚实）
+                // 合并切分后的残余置信度/音量/停顿无法归因 → None（诚实）
                 persist_final(
                     ctx.app,
                     ctx.db,
@@ -262,8 +279,11 @@ pub(crate) fn handle_final_event(
                     rest,
                     None,
                     None,
+                    None,
                 );
             }
+            // 合并段整体已落库 → 更新上一段 end（停顿基准）
+            *ctx.last_segment_end = Some(end_ms);
             return;
         }
         persist_final(
@@ -276,9 +296,13 @@ pub(crate) fn handle_final_event(
             p_text,
             p_conf,
             p_vol,
+            None,
         );
+        // 挂起段兜底落库 → 更新上一段 end
+        *ctx.last_segment_end = Some(p_end);
     }
-    // 正常段：定稿推送 + 落库（TD-043 时间戳载荷；REQ-098 透传事件置信度/音量）
+    // 正常段：定稿推送 + 落库（TD-043 时间戳载荷；REQ-098 透传事件置信度/音量；
+    // REQ-109 透传段前停顿）
     persist_final(
         ctx.app,
         ctx.db,
@@ -289,5 +313,8 @@ pub(crate) fn handle_final_event(
         text,
         confidence,
         volume,
+        pause_ms,
     );
+    // 正常段已落库 → 更新上一段 end（停顿基准）
+    *ctx.last_segment_end = Some(end_ms);
 }

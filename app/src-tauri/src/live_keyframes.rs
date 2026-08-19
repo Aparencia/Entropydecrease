@@ -243,6 +243,9 @@ pub fn rewrite_with_fusion(
             confidence: s.confidence,
             // REQ-103（v0.7.0 M1）：段音量随融合透传（ASR 源有值；字幕源 None）
             volume: s.volume,
+            speech_rate: None,
+            pause_ms: None,
+            speaker: None,
         })
         .collect();
     db.replace_segments(session_id, &items)?;

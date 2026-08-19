@@ -113,6 +113,26 @@ impl Db {
             "volume",
             "ALTER TABLE session_segments ADD COLUMN volume REAL",
         )?;
+        // v0.7.0 M1.5（REQ-109）：段级元数据列——语速/段前停顿/speaker 影子列
+        // （K1 掌握度建模（V1.0）输入：语速=字/秒、停顿=与上段 gap、speaker=V1.0 讲者接线）
+        ensure_column(
+            &conn,
+            "session_segments",
+            "speech_rate",
+            "ALTER TABLE session_segments ADD COLUMN speech_rate REAL",
+        )?;
+        ensure_column(
+            &conn,
+            "session_segments",
+            "pause_ms",
+            "ALTER TABLE session_segments ADD COLUMN pause_ms INTEGER",
+        )?;
+        ensure_column(
+            &conn,
+            "session_segments",
+            "speaker",
+            "ALTER TABLE session_segments ADD COLUMN speaker TEXT",
+        )?;
         Ok(Self { conn: Arc::new(Mutex::new(conn)) })
     }
 

@@ -136,6 +136,9 @@ fn write_subtitle_segments(db: &Db, session_id: i64, segments: &[crate::fusion::
             confidence: None,
             // REQ-103：导入路径无音量数据（None=未知）
             volume: None,
+        speech_rate: None,
+        pause_ms: None,
+        speaker: None,
         })?;
     }
     Ok(())
@@ -186,6 +189,9 @@ fn transcribe_audio<F: Fn(&ImportProgress)>(
                     confidence: None,
                     // REQ-103：导入路径无段级音量（None=未知）
                     volume: None,
+        speech_rate: None,
+        pause_ms: None,
+        speaker: None,
                 })?;
             }
         }

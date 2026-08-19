@@ -501,6 +501,9 @@ pub fn persist_voted_subtitle(
         confidence: voted.confidence,
         // REQ-103：字幕段无音量数据（None=未知）
         volume: None,
+        speech_rate: None,
+        pause_ms: None,
+        speaker: None,
     });
     // 跨线程共享缓存（TD-026：采样线程写、停止后融合线程读）
     let start_ms = voted.start_ms;

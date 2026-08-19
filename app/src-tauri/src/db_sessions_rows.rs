@@ -33,6 +33,10 @@ pub fn row_to_segment(row: &Row<'_>) -> rusqlite::Result<SessionSegment> {
         confidence: row.get(6)?,
         // REQ-103：段内平均音量（旧库无列时迁移补 NULL → None）
         volume: row.get(7)?,
+        // REQ-109：语速/停顿/speaker 影子列（旧库迁移补 NULL → None）
+        speech_rate: row.get(8)?,
+        pause_ms: row.get::<_, Option<i64>>(9)?.map(|v| v as u64),
+        speaker: row.get(10)?,
     })
 }
 
