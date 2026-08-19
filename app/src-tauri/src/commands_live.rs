@@ -3,6 +3,13 @@
 //! @ai-context: 本层只做参数校验与转发：start 组装 LiveSessionParams 交给
 //!              LiveSessionManager（会话线程内部完成捕获/ASR/OCR/融合），
 //!              stop 等待线程退出并返回会话 id（前端据此刷新详情）。
+//! @ai-context: v0.7.0 M1（REQ-104/132）：start 成功后顺带启动剪贴板监听
+//!              （文本信号 + 图片直贴，见 clipboard_signal.rs），stop 时置位
+//!              停止——监听与实时会话一一对应，同一时刻最多一个。
+
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Instant;
 
 use serde::Serialize;
 use tauri::State;
@@ -64,13 +71,19 @@ pub async fn start_live_session(
         // REQ-083：UI 垃圾黑名单（字幕源头过滤）
         ui_junk: state.ui_junk.clone(),
     };
-    state.live_session.start(params).map_err(|e| e.to_string())
+    // REQ-104/132：剪贴板监听时间戳基准——与实时会话纪元同域（图片文件名不冲突）
+    let epoch = Instant::now();
+    let session_id = state.live_session.start(params).map_err(|e| e.to_string())?;
+    start_clipboard_monitor(&state, session_id, epoch);
+    Ok(session_id)
 }
 
 /// 停止实时捕获会话；返回被停止的会话 id（None=无活动会话）。
 #[tauri::command]
 pub async fn stop_live_session(state: State<'_, AppState>) -> Result<Option<i64>, String> {
-    state.live_session.stop_active().map_err(|e| e.to_string())
+    let stopped = state.live_session.stop_active().map_err(|e| e.to_string())?;
+    stop_clipboard_monitor(&state);
+    Ok(stopped)
 }
 
 /// 查询实时会话状态（活动会话 id）。
@@ -79,5 +92,37 @@ pub fn live_session_status(state: State<'_, AppState>) -> LiveSessionStatus {
     LiveSessionStatus {
         active: state.live_session.active_session_id().is_some(),
         session_id: state.live_session.active_session_id(),
+    }
+}
+
+/// 启动剪贴板监听（REQ-104/132）：start_live_session 成功后调用。
+///
+/// @ai-context: 语义 = 新会话开始 → 清空旧会话信号（信号只反映最近一次会话的
+///              课中复制）→ 起轮询线程（句柄存入 AppState，stop 时置位停止）。
+fn start_clipboard_monitor(state: &AppState, session_id: i64, epoch: Instant) {
+    stop_clipboard_monitor(state); // 防御：清理异常路径残留监听
+    state.clipboard.clear();
+    let stop = Arc::new(AtomicBool::new(false));
+    let thread = crate::clipboard_signal::spawn_clipboard_monitor(
+        state.app.clone(),
+        session_id,
+        epoch,
+        stop.clone(),
+        state.clipboard.clone(),
+        state.data_dir.join("session-images").join(session_id.to_string()),
+    );
+    *state.clipboard_monitor.lock().expect("剪贴板监听锁中毒") =
+        Some(crate::clipboard_signal::ClipboardMonitorHandle { stop, thread });
+}
+
+/// 停止剪贴板监听（stop 置位；线程分片休眠在一个轮询周期内自行退出）。
+///
+/// @ai-context: 不 join 线程（JoinHandle drop 即 detach）——避免 stop 命令
+///              阻塞在监听线程收尾上（会话线程停止已有 5s 有界等待，监听叠加会拖慢响应）。
+fn stop_clipboard_monitor(state: &AppState) {
+    if let Ok(mut guard) = state.clipboard_monitor.lock() {
+        if let Some(handle) = guard.take() {
+            handle.stop.store(true, Ordering::SeqCst);
+        }
     }
 }

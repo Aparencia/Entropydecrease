@@ -47,6 +47,9 @@ image = "0.25"
 ureq = { version = "2", features = ["tls", "json"] }
 # 课件预热（REQ-040 M5）：PPTX = zip + slide XML 文本层提取（最小版；PDF 留 v0.5）
 zip = "2"
+# v0.7.0 M1（REQ-104/132）：剪贴板轮询监听（文本信号 + 图片直贴）；
+# arboard 3.x 在 Windows 用 clipboard-win 实现，无额外系统依赖
+arboard = "3"
 
 [dev-dependencies]
 tempfile = "3"

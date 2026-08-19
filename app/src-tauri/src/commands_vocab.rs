@@ -29,6 +29,9 @@ const OCR_SUGGEST_MIN_COUNT: usize = 3;
 /// OCR 建议来源会话数上限（最近 N 个会话的 ocr_blocks）。
 const OCR_SUGGEST_SESSIONS: i64 = 3;
 
+/// 剪贴板信号候选上限（REQ-104：并入建议列表；复制即高置信，置前展示）。
+const CLIPBOARD_CANDIDATES_MAX: usize = 20;
+
 /// 词表全量（前端管理 UI 数据源）。
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct VocabState {
@@ -122,19 +125,31 @@ fn extract_courseware_impl(path: &str) -> Result<Vec<String>, String> {
     Ok(extract_candidates(&text, COURSEWARE_MAX_CANDIDATES))
 }
 
-/// 最近会话 OCR 文本 → 高频词建议（用户确认后 vocab_add_hotwords 加入闭环）。
+/// 最近会话 OCR 文本 → 高频词建议 + 剪贴板信号候选（用户确认后 vocab_add_hotwords 加入闭环）。
 ///
 /// @ai-context: async + spawn_blocking（同 extract_courseware 口径）；
 ///              按会话去重计数（审查修复：固定字幕/水印不刷提名）。
+/// @ai-context: REQ-104 并入剪贴板信号文本——课中复制是用户主动行为（复制即标记），
+///              置信度高于被动 OCR：候选无需 min_count 门槛且排在 OCR 建议前
+///              （权重更高）；候选仅为"提名人"，加入仍需用户确认。
 #[tauri::command]
 pub async fn vocab_suggest_from_ocr(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let db = state.db.clone();
+    let clipboard = state.clipboard.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let rows = db
             .recent_ocr_texts(OCR_SUGGEST_SESSIONS)
             .map_err(|e| format!("读取 OCR 记录失败: {}", e))?;
         let refs: Vec<(i64, &str)> = rows.iter().map(|(s, t)| (*s, t.as_str())).collect();
-        Ok(suggest_from_ocr_texts(&refs, OCR_SUGGEST_MIN_COUNT))
+        let suggestions = suggest_from_ocr_texts(&refs, OCR_SUGGEST_MIN_COUNT);
+        // REQ-104：剪贴板信号候选置前（权重更高）；与 OCR 建议去重（保留剪贴板版）
+        let mut clipboard_cands = extract_candidates(
+            &clipboard.all_signal_texts().join("\n"),
+            CLIPBOARD_CANDIDATES_MAX,
+        );
+        clipboard_cands.retain(|c| !suggestions.contains(c));
+        clipboard_cands.extend(suggestions);
+        Ok(clipboard_cands)
     })
     .await
     .map_err(|e| format!("任务调度失败: {}", e))?

@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 const btn: React.CSSProperties = { padding: "4px 10px", cursor: "pointer", fontSize: 12 };
 
@@ -33,6 +34,14 @@ export default function ImageGallery({ sessionId }: { sessionId: number }) {
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  // REQ-132：剪贴板图片直贴事件（后端落库后 emit）→ 自动刷新图集（粘贴即见）
+  useEffect(() => {
+    const unlisten = listen<string>("session:clipboard-image", () => void refresh());
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
   }, [refresh]);
 
   /** 删除图片（D1 回路：用户删改反哺筛选；V1.0 校准阈值参数） */

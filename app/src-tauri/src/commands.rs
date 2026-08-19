@@ -99,6 +99,13 @@ pub struct AppState {
     /// v0.6.0 M1（REQ-060）：口语符号映射表（内置默认 + symbol_map.json 校准合并；
     /// 产物层书面化管线消费）
     pub symbol_normalize: crate::symbol_normalize::SymbolNormalizeConfig,
+    /// v0.7.0 M1（REQ-104/132）：剪贴板信号存储（内存态；课中复制=高置信信号，
+    /// 只存前 30 字符预览——隐私红线：原始剪贴板内容不持久化）
+    pub clipboard: std::sync::Arc<crate::clipboard_signal::ClipboardSignalStore>,
+    /// v0.7.0 M1（REQ-104/132）：剪贴板监听线程句柄（start 启动 / stop 置位停止；
+    /// 与实时会话一一对应，同一时刻最多一个）
+    pub clipboard_monitor:
+        std::sync::Arc<std::sync::Mutex<Option<crate::clipboard_signal::ClipboardMonitorHandle>>>,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。
@@ -207,7 +214,12 @@ pub async fn process_to_note(
         // 3) 本地拼接成初稿（失败图片以警告段落追加，用户打开笔记即可感知）
         let mut draft = concat::build_note_draft(&title, &segments, &ocr_blocks);
         if !skipped.is_empty() {
-            eprintln!("[process_to_note] {} 张图片 OCR 失败: {}", skipped.len(), skipped.join("; "));
+            // REQ-106（TRUST-4）：失败图片路径可能含 CJK 用户目录/URL——日志出口统一脱敏
+            eprintln!(
+                "[process_to_note] {} 张图片 OCR 失败: {}",
+                skipped.len(),
+                crate::log_redact::redact_line(&skipped.join("; "))
+            );
             draft.markdown.push_str(&format!(
                 "\n\n> ⚠ {} 张图片识别失败已跳过：\n> {}",
                 skipped.len(),
