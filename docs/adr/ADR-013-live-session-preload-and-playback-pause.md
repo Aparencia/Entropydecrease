@@ -86,5 +86,5 @@
 
 ## 参考
 
-- `docs/superpowers/specs/2026-08-19-classroom-live-optimizations-design.md`（本批设计规格）
+- `docs/archive/2026-08-19/2026-08-19-classroom-live-optimizations-design.md`（本批设计规格，[ ] 已归档 2026-08-19）
 - `docs/standards/line-limit-exemptions.md`（相关文件行数登记）
