@@ -436,3 +436,43 @@
 | 归档日期 | 内容摘要 | 未偿债务 |
 |----------|---------|---------|
 | 2026-08-19（十五轮） | 课堂助手三项优化合入（停止即时/播放暂停驱动/引擎预热，6103832+4e9ccf6+1742468，936 单测全绿）+ 新增代码七维审查：R1-R3 + TD-H 补漏即修；H/I/L 核验 closed；设计规格归档（[ ] 已归档）；累计已偿 96 笔 | TD-040（carried）+ TD-2026-08-19-D~G（open 4 笔），共 5 笔 |
+
+---
+
+## 十六轮归档（同日，v0.7.1 会话体验批次 + 新增代码七维审查 + 设计文档归档）
+
+> v0.7.1 会话体验批次（管理控制台 + 转化流水线）全链路交付：
+> 头脑风暴（会话页 UX）→ 设计（L1 数据层 + L2 列表层，用户批准）→
+> 实施（3 原子提交 0867749/d2de787/ec41b06，946 单测全绿 + clippy 干净 +
+> 前端构建通过 + docs-check 通过）→ 新增代码七维审查（本次，范围 =
+> 新增代码及其直接关联调用）→ 审查即修 4 项 + 设计文档归档。
+
+### 归档清单（十六轮）
+
+| 源路径 | 归档路径 | 状态 |
+|--------|---------|------|
+| docs/superpowers/specs/2026-08-19-sessions-ux-efficiency-design.md | docs/archive/2026-08-19/2026-08-19-sessions-ux-efficiency-design.md | [ ] 已归档（会话页交互与效率增强设计：L1 数据层 notes.session_id 关联 + SessionListItem 标记 + 批量转笔记，L2 列表层管理台——REQ-135~137 全部实施完成（946 单测全绿 + 前端构建通过），生命周期终结；活跃区引用已更新——需求池/ADR-014/v0.7.1 版本文档改指归档路径） |
+
+- **未归档**：ADR-014（当前生效决策，docs/adr/ 保留）；v0.7.1.md（开发完成待真机验收，活跃）；versions/、standards/、product/ 维持活跃
+
+### 技术债摘要（十六轮滚动）
+
+- **未偿 5 笔（十五轮清单逐条核对，全部 carried）**：
+  - TD-040（P2，deliberate carried，ffmpeg 捆绑权衡维持）
+  - TD-2026-08-19-D（image_stream_store 未接线——本批未涉及，维持 carried）
+  - TD-2026-08-19-E（前端未接入 search_ocr_blocks/model_disk_overview——本批重构 SessionsPage 搜索框仍未接入两命令，维持 carried；接入点"SessionsPage 搜索框"仍在）
+  - TD-2026-08-19-F（detect_pause_icon 误报，维持 carried）
+  - TD-2026-08-19-G（db_ocr_search 500 截断——本批仅适配 SessionListItem 包装，行为未变，维持 carried）
+- **今日已偿 0 笔**（无昨日待核验项；本次审查即修 4 项计入"审查即修"不立债）
+- **审查即修 4 项**（提交见十六轮归档提交）：
+  - R1 高：SessionsPage.refresh 无请求竞态防护（TD-003 模式缺失）——live:status 与 session:fused 并发触发刷新，慢响应可能覆盖新结果 + justFinished 重复计数——加 refreshSeqRef 序号守卫
+  - R2 中：段搜索（hits）视图下批量操作栏仍显示——可对隐藏列表会话执行批量删除/转换（误操作面）——hits 视图隐藏批量栏
+  - R3 中：toggleGrouped 加载失败后 grouped 状态未回滚——"分组中"按钮与未分组列表不一致——catch 中 setGrouped(false)
+  - R4 低：toast 定时器卸载未清理（卸载后 setState 面）——useEffect cleanup
+- **新登记观察项 4 条（不立债）**：openDetail 快速切换会话无竞态防护（既有行为搬移，建议后续 TD-003 化）；段搜索命中跳详情滚第一段而非命中段（L3 已排后续批次）；NotesPage focusNoteId 与防抖 load 双请求（无害冗余）；fmtMs ≥1h 格式在 70px 时间轴列可能溢出（细微 UI）
+
+## 归档索引（docs/archive/README.md 汇总行追加）
+
+| 归档日期 | 内容摘要 | 未偿债务 |
+|----------|---------|---------|
+| 2026-08-19（十六轮） | v0.7.1 会话体验批次交付（REQ-135~137，0867749/d2de787/ec41b06，946 单测全绿）+ 新增代码七维审查：R1-R4 即修（refresh 竞态/批量栏隐藏/分组回滚/toast 清理）；设计文档归档（[ ] 已归档）；累计已偿 96 笔 | TD-040（carried）+ TD-2026-08-19-D~G（carried 4 笔），共 5 笔 |

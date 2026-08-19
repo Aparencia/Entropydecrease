@@ -76,6 +76,6 @@
 
 ## 关联
 
-- 设计文档：[sessions-ux-efficiency-design](../superpowers/specs/2026-08-19-sessions-ux-efficiency-design.md)
+- 设计文档：[sessions-ux-efficiency-design（[ ] 已归档）](../archive/2026-08-19/2026-08-19-sessions-ux-efficiency-design.md)
 - 数据模型起点：[ADR-004](./ADR-004-session-data-model.md)（sessions 三表）；[ADR-006](./ADR-006-session-segments-derived-view.md)（原料/派生分离原则——本决策不改原料层）
 - 验收：v0.7.1 版本文档（[versions/v0.7.1](../versions/v0.7.1.md)）

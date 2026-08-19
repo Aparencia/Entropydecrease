@@ -1,29 +1,27 @@
-# 技术债清单（权威：2026-08-19，十五轮滚动——课堂助手三项优化合入 + 新增代码七维审查后）
+# 技术债清单（权威：2026-08-19，十六轮滚动——v0.7.1 会话体验批次 + 新增代码七维审查后）
 
 > 本清单为当前唯一权威债务清单，归档日滚动更新；旧归档清单仅历史追溯。
-> 来源：十四轮清单滚动（A/C 批已合入 89a1b9e~eb315d3；H/I/L 修复待本批合入核验；并行会话 P1-P3 工作区开发中）+ 课堂助手三项优化合入（提交 6103832 + 4e9ccf6 + 1742468）+ 新增代码七维审查（2026-08-19，审查即修 4 项 + TD-H 补漏）。
-> 十五轮滚动（核验与审查）：H/I/L 三项核验 closed（见下）；审查即修 3 项（R1 serde 契约/R2 stale Ready/R3 注释口径）+ TD-H 补漏（切块累加器清空）；新登记观察项 3 条（不立债）。
+> 来源：十五轮清单滚动 + v0.7.1 会话体验批次合入（提交 0867749 + d2de787 + ec41b06，946 单测全绿）+ 新增代码七维审查（2026-08-19，审查即修 4 项，见"今日已偿"）。
+> 十六轮滚动（核验与审查）：十五轮未偿 5 笔逐条核对全部维持 carried（TD-E/G 有本批关联核验：SessionsPage 重构未接入两命令 / db_ocr_search 仅适配包装行为未变）；审查即修 4 项（R1 refresh 竞态/R2 批量栏隐藏/R3 分组回滚/R4 toast 清理）；新登记观察项 4 条（不立债）。
 
 ## 未偿债务
 
 | ID | 摘要 | 备注 |
 |----|------|------|
-| TD-040 | tauri.conf.json bundle.resources 未含 ffmpeg——生产安装包无捆绑 ffmpeg（v0.3.0 审查，2026-08-18） | carried（deliberate 有意不修）：resources glob 对缺失目录构建失败；捆绑 ffmpeg（≥80MB）与安装包体积权衡留待体积策略；开发期用 download-ffmpeg.ps1 + PATH 覆盖（ADR-008 风险项，保持观察）。多次核对（2026-08-19）：v0.7.0 全量代码未涉模型分发/捆绑，保持 carried |
-| TD-2026-08-19-D | image_stream_store 已交付未接线（REQ-110 图像流存储层/REQ-123 步骤图卡配图/REQ-088 图注影子层）：ImageStreamStore 零生产调用 | carried：接线点明确（live_frame_process 帧归档处创建 + record，analysis 产物模板消费 step_frames），待 M3 平台图像后续迭代接线；接线前先修内部缺陷（深度审查 M4） |
-| TD-2026-08-19-E | 前端未接入：search_ocr_blocks（REQ-133 图内检索入口）与 model_disk_overview（REQ-131 磁盘占用面板）命令已注册但无 UI 调用 | carried：待前端迭代接入（SessionsPage 搜索框可复用） |
-| TD-2026-08-19-F | detect_pause_icon 颜色统计对"暗底+中央亮内容"（深色幻灯片白字/投影幕布）可能误报暂停——与"保守不产假信号"声明矛盾 | carried：需形状约束（中央连通亮块/双竖杠）或结合画面变化（diff_pass）；真机播放器样本校准计划保留（REQ-125 验收后失败则降级条款）；P2 自动暂停已依赖该检测（十五轮核验：误报仅致短暂自动暂停，检测恢复节流 5s 自愈，风险已评估可接受） |
-| TD-2026-08-19-G | db_ocr_search 只搜最近 500 会话静默截断 + image_path_for 恒返回固定路径不校验存在性 | carried：全库扫描量级控制（500 会话上限可接受，注释注明）；图路径由前端加载降级（诚实） |
+| TD-040 | tauri.conf.json bundle.resources 未含 ffmpeg——生产安装包无捆绑 ffmpeg（v0.3.0 审查，2026-08-18） | carried（deliberate 有意不修）：resources glob 对缺失目录构建失败；捆绑 ffmpeg（≥80MB）与安装包体积权衡留待体积策略；开发期用 download-ffmpeg.ps1 + PATH 覆盖（ADR-008 风险项，保持观察）。多次核对（2026-08-19 十六轮）：v0.7.1 未涉模型分发/捆绑，保持 carried |
+| TD-2026-08-19-D | image_stream_store 已交付未接线（REQ-110 图像流存储层/REQ-123 步骤图卡配图/REQ-088 图注影子层）：ImageStreamStore 零生产调用 | carried：接线点明确（live_frame_process 帧归档处创建 + record，analysis 产物模板消费 step_frames），待 M3 平台图像后续迭代接线；接线前先修内部缺陷（深度审查 M4）；十六轮核验：本批未涉及，维持 |
+| TD-2026-08-19-E | 前端未接入：search_ocr_blocks（REQ-133 图内检索入口）与 model_disk_overview（REQ-131 磁盘占用面板）命令已注册但无 UI 调用 | carried：待前端迭代接入（SessionsPage 搜索框可复用）；十六轮核验：本批重构 SessionsPage 搜索框（双模式整合）仍未接入两命令，接入点保留，维持 |
+| TD-2026-08-19-F | detect_pause_icon 颜色统计对"暗底+中央亮内容"（深色幻灯片白字/投影幕布）可能误报暂停——与"保守不产假信号"声明矛盾 | carried：需形状约束（中央连通亮块/双竖杠）或结合画面变化（diff_pass）；真机播放器样本校准计划保留（REQ-125 验收后失败则降级条款）；十六轮核验：本批未涉及，维持 |
+| TD-2026-08-19-G | db_ocr_search 只搜最近 500 会话静默截断 + image_path_for 恒返回固定路径不校验存在性 | carried：全库扫描量级控制（500 会话上限可接受，注释注明）；图路径由前端加载降级（诚实）；十六轮核验：本批仅适配 SessionListItem 包装结构（行为未变），维持 |
 
 ## 今日已偿（核验 + 审查即修，可经代码验证）
 
 | ID | 摘要 | 偿还方式 |
 |----|------|----------|
-| TD-2026-08-19-H | WASAPI 暂停恢复残留缓冲未清空——恢复后以补偿时间戳混入暂停前音频（内容错位） | 端点缓冲排空（A/C 批已合入 89a1b9e）+ 十五轮补漏：应用层切块累加器清空（audio_loopback.rs 恢复边沿重建 ChunkAccumulator，提交 6103832）；closed |
-| TD-2026-08-19-I | session:fusion-failed 后残留"✅ 融合完成"直达卡片（fusing 已预置 id）——失败误报完成 | ClassroomPage fusion-failed 监听清除 fusedSessionId（提交 4e9ccf6）；closed |
-| TD-2026-08-19-L | ClassroomPage.tsx 641 行 >600 硬上限（2026-08 A/C 批增长） | 硬拆完成（ClassroomRightPane 右栏 + MaterialInputPanel 素材/提取，回归 548 行登记豁免，提交 4e9ccf6）；closed |
-| （审查·R1） | PrepareStatus IPC 序列化契约不一致——derive 对 Failed(String) 产出 `{"failed": ...}` 对象、unit 变体产出字符串；前端 `as` 断言掩盖，运行时预热状态提示静默失效（high 面） | 手写 Serialize 输出纯字符串 tag（失败原因经日志，不进 IPC）；提交 6103832 |
-| （审查·R2） | prepare_status/prepare 对线程已退出但 status=Ready 的残留返回 stale Ready——前端短暂显示"已就绪"实为无预备 | 线程已死统一返回 Idle（Failed 保留原因）；提交 6103832 |
-| （审查·R3） | flush_tail_and_persist 返回值 any 注释声称"调用方据此判断状态清理"但无消费点 | 注释修正（保留供诊断/单测断言，不引入 must_use）；提交 6103832 |
+| （审查·R1） | SessionsPage.refresh 无请求竞态防护（TD-003 模式缺失）——live:status 与 session:fused 并发触发刷新，慢响应可能覆盖新结果 + justFinished 重复计数 | 加 refreshSeqRef 序号守卫：过期响应直接丢弃（setItems/计数/loading 均受守卫）；提交见十六轮归档 |
+| （审查·R2） | 段搜索（hits）视图下批量操作栏仍显示——可对隐藏列表会话执行批量删除/转换（误操作面） | hits 视图隐藏批量操作栏（SessionListPanel）；提交见十六轮归档 |
+| （审查·R3） | toggleGrouped 加载失败后 grouped 状态未回滚——"分组中"按钮与未分组列表状态不一致 | catch 中 setGrouped(false) 回滚；提交见十六轮归档 |
+| （审查·R4） | toast 定时器卸载未清理（组件卸载后 setState 面） | useEffect cleanup 清除定时器；提交见十六轮归档 |
 
 ## 观察项（登记不立偿，保持跟踪）
 
@@ -46,3 +44,7 @@
 | （观察·十五轮-1） | start() 等待预备就绪期间持有 active 锁最长 5s——pause/resume/status 等命令短暂排队 | 同刻通常只有单个用户操作，可接受；代码注释已注明；若后续出现并发操作需求再改释放重取 |
 | （观察·十五轮-2） | start() 交接防御分支（理论不可达：仅 Cancel 竞态）会留下空会话记录 | 与内联 spawn 失败同级既有边界，概率极低；代码注释已注明 |
 | （观察·十五轮-3） | pause 下降沿 now_ms 竞态（A1 既有）：恢复事件时间戳可能少算本次暂停时长（捕获线程 fetch_add 与主循环检测先后） | 捕获线程 10ms 轮询 vs 主循环 500ms 轮询——实际几乎不触发；真机验证暂停边界时间戳 |
+| （观察·十六轮-1） | openDetail 快速切换会话无请求竞态防护（既有行为随重构搬移）——两个 get_session_detail 并发时后返回者覆盖先返回者，详情可能显示非最后点击的会话 | 与 refresh 同属 TD-003 面，本批已修 refresh；openDetail 序号化建议随后续详情页迭代（L3 批次）一并处理 |
+| （观察·十六轮-2） | 段搜索命中点击跳详情滚动到第一段而非命中段（L3 已知遗留，原代码同行为） | 已排后续批次（sessions-ux-efficiency-design §9 边界声明 L3 不做项） |
+| （观察·十六轮-3） | NotesPage focusNoteId effect 与 keyword 防抖 load 双请求（显式导航清空关键词触发防抖重载 + 自身全量加载） | seqRef 已防结果竞态；冗余请求量级极小（一次 list_notes），可接受；后续可合并为单一加载路径 |
+| （观察·十六轮-4） | fmtMs ≥1 小时输出 h:mm:ss（7 字符）在原料视图 70px 固定时间列可能略微溢出 | 细微 UI 影响；时间轴列宽随详情页迭代（L3）统一调整 |

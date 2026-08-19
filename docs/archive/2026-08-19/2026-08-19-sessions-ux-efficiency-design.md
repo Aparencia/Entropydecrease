@@ -159,7 +159,7 @@ pub struct SessionListItem {
 
 ## 8. 文档与规范动作
 
-- 本设计文档（`docs/superpowers/specs/2026-08-19-sessions-ux-efficiency-design.md`）。
+- 本设计文档（`docs/archive/2026-08-19/2026-08-19-sessions-ux-efficiency-design.md`，[ ] 已归档）。
 - **ADR**：notes↔sessions 关联数据模型（AGENTS §10 硬性要求）。
 - 需求池登记：新增 REQ 条目（转化状态可视化 + 批量转化 + 双向关联），目标版本 **v0.7.1**。
 - 版本沉淀：`docs/versions/v0.7.1.md`（小版本发版文档）。

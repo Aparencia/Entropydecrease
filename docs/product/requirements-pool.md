@@ -155,7 +155,7 @@
 ### v0.7.1 · 会话体验小版本（2026-08-19 头脑风暴：会话页交互与效率增强）
 
 > 2026-08-19 头脑风暴（用户：会话库是"视频→笔记"生产流水线）：管理控制台 + 转化流水线（A+B 合并）；
-> 设计文档 [sessions-ux-efficiency-design](../superpowers/specs/2026-08-19-sessions-ux-efficiency-design.md)；
+> 设计文档 [sessions-ux-efficiency-design（[ ] 已归档）](../archive/2026-08-19/2026-08-19-sessions-ux-efficiency-design.md)；
 > 数据模型变更 [ADR-014](../adr/ADR-014-session-note-association.md)。
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
