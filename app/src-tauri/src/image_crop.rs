@@ -65,8 +65,9 @@ fn col_is_white(raw: &[u8], width: usize, height: usize, x: usize, threshold: u8
 /// 检测白边裁剪框（纯函数）：从四边向内容收缩。
 ///
 /// @ai-context: 白边带必须连续（遇到非白行/列即停——中间有内容则不裁）；
-///              扫描 1/8 间距的行/列采样（性能：720p 帧全扫 207 万像素/边
-///              太慢，1/8 采样足够定位白边带边界）。
+///              行/列判定为全扫（行内全宽/列内全高）——审查更正（2026-08-19）：
+///              原注释"1/8 间距采样"与实现不符；全扫成本由提前终止兜底
+///              （白边带遇内容即停；全白图最坏 O(w×h) 由小图/纯色提前返回豁免）。
 /// @ai-context: 返回 None=无需裁剪（无足够白边——原图直通）。
 pub fn detect_crop_box(rgb: &image::RgbImage) -> Option<CropBox> {
     let (w, h) = rgb.dimensions();
