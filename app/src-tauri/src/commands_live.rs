@@ -52,6 +52,8 @@ pub async fn start_live_session(
         db: state.db.clone(),
         engines: state.engines.clone(),
         streaming_models: state.streaming_models.clone(),
+        // ADR-012 F4-2：标点恢复模型路径（路径约定 lib.rs punctuation_model）
+        punctuation_model: crate::punctuation_model(&state.model_dir),
         fusion: state.live_session.fusion(),
         vocab: state.vocab.clone(),
         // REQ-043：档案标识（非法值回退 Lecture 默认档案，不阻断）
