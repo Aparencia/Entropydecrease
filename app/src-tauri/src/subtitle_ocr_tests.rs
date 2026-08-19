@@ -3,8 +3,8 @@
 //! @ai-context: 由 subtitle_ocr.rs 以 #[cfg(test)] #[path] 引入。
 
 use crate::subtitle_ocr::{
-    is_scrolling, sample_join_limit, vote_text, vote_text_with_confidence, SubtitleVoter,
-    VotedSubtitle,
+    is_scrolling, sample_join_limit, vote_text, vote_text_with_confidence, ScrollingConfirmer,
+    SubtitleVoter, VotedSubtitle,
 };
 
 fn voted(start_ms: u64, end_ms: u64, text: &str) -> VotedSubtitle {
@@ -247,4 +247,53 @@ fn empty_input_is_not_scrolling() {
     // Act & Assert
     assert!(!is_scrolling("", "内容", 0.6));
     assert!(!is_scrolling("内容", "", 0.6));
+}
+
+// ── REQ-112（v0.7.0 M2，CORE-O5）：滚动确认机制 ──
+
+#[test]
+fn scrolling_needs_confirmation_frames() {
+    // Arrange：单帧疑似滚动（快速切换字幕的典型场景）
+    let mut confirmer = ScrollingConfirmer::default();
+    // Act：第一帧疑似 → 未确认（不误杀）
+    assert!(!confirmer.observe(true));
+    // 第二帧仍疑似 → 确认（真滚动持续变化）
+    assert!(confirmer.observe(true));
+}
+
+#[test]
+fn non_scrolling_frame_resets_confirmer() {
+    // Arrange
+    let mut confirmer = ScrollingConfirmer::default();
+    confirmer.observe(true); // 第一帧疑似
+    // Act：第二帧正常（快速切换字幕已稳定）→ 重置，不误杀
+    assert!(!confirmer.observe(false));
+    // 之后即使再疑似也需重新累计 2 帧
+    assert!(!confirmer.observe(true));
+    assert!(confirmer.observe(true));
+}
+
+#[test]
+fn confirmed_state_is_sticky_until_reset() {
+    // Arrange：确认后持续丢弃（滚动期间每帧调用）
+    let mut confirmer = ScrollingConfirmer::default();
+    confirmer.observe(true);
+    confirmer.observe(true);
+    // Act & Assert：确认状态粘滞（不再需要重新计数）
+    assert!(confirmer.observe(true));
+    assert!(confirmer.is_confirmed());
+    // 非滚动帧到来 → 恢复
+    assert!(!confirmer.observe(false));
+    assert!(!confirmer.is_confirmed());
+}
+
+#[test]
+fn rapid_switch_subtitle_not_killed() {
+    // Arrange：快速切换的正常字幕——帧 1 疑似（LCS 高重合）、帧 2 内容稳定
+    let mut confirmer = ScrollingConfirmer::default();
+    // Act：模拟"疑似 → 正常"序列（快速切换字幕的典型 2 帧模式）
+    assert!(!confirmer.observe(true));
+    assert!(!confirmer.observe(false));
+    // Assert：从未确认 → 字幕不被丢弃
+    assert!(!confirmer.is_confirmed());
 }

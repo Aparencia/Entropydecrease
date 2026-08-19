@@ -246,6 +246,44 @@ pub fn is_scrolling(current: &str, previous: &str, min_ratio: f32) -> bool {
     lcs as f32 / shorter as f32 >= min_ratio
 }
 
+/// 滚动字幕确认器（REQ-112 CORE-O5 / v0.7.0 M2）：
+/// "连续 N 帧滚动才判"——单帧疑似滚动不丢弃，确认后才生效。
+///
+/// @ai-context: 修复：快速切换的正常字幕（如弹幕/翻页字幕）单帧 LCS 高重合
+///              会被误杀（每帧不同但共享高比例公共子序列）。确认机制：
+///              连续 CONFIRM_FRAMES 帧判定滚动 → confirmed（丢弃）；
+///              任一帧非滚动 → 计数清零（恢复）。
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ScrollingConfirmer {
+    /// 连续疑似滚动帧数
+    suspect_frames: u32,
+}
+
+/// 确认所需连续帧数（2 帧：快速切换字幕的典型停留 1-3 帧，2 帧可分辨
+/// 真滚动（持续变化）与单次切换（下一帧即稳定））。
+const CONFIRM_FRAMES: u32 = 2;
+
+impl ScrollingConfirmer {
+    /// 观察一帧：返回是否已确认滚动（确认后调用方应丢弃该帧）。
+    ///
+    /// @ai-context: 确认是**粘滞**的（返回 true 后持续 true 直到非滚动帧
+    ///              ——滚动期间每帧都调用，不重复计数）；非滚动帧重置计数。
+    pub fn observe(&mut self, is_scrolling_frame: bool) -> bool {
+        if !is_scrolling_frame {
+            self.suspect_frames = 0;
+            return false;
+        }
+        self.suspect_frames += 1;
+        self.suspect_frames >= CONFIRM_FRAMES
+    }
+
+    /// 当前是否处于已确认滚动状态（纯读；登记豁免——测试/诊断用）。
+    #[allow(dead_code)]
+    pub fn is_confirmed(&self) -> bool {
+        self.suspect_frames >= CONFIRM_FRAMES
+    }
+}
+
 /// 最长公共子序列长度（DP，纯函数）。
 fn lcs_len(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();

@@ -17,6 +17,8 @@ pub mod gdi_capture;
 // ADR-011：网格差异变化检测（替代 frame_diff 的分块采样 hash）
 pub mod grid_diff;
 pub mod resample;
+// REQ-114（v0.7.0 M2）：抗混叠重采样（降采样先低通——resample.rs 行数保护）
+pub mod resample_antialias;
 
 #[cfg(target_os = "windows")]
 pub use audio_loopback::{AudioChunk, AudioLoopbackCapture};

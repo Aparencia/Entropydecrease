@@ -37,15 +37,39 @@ pub struct ImportProgress {
 
 /// 按固定窗口切分时间轴（纯函数；空时长返回空）。
 pub fn plan_chunks(duration_ms: u64, window_ms: u64) -> Vec<(u64, u64)> {
+    plan_chunks_with_overlap(duration_ms, window_ms, 0)
+}
+
+/// 分窗转写窗口（ms）——时间轴粒度与进度粒度。
+///
+/// @ai-context: REQ-113（v0.7.0 M2，CORE-O6）：窗间 2s 重叠——窗边句
+///              （跨窗截断的句子）在相邻窗重复转写，下游按 merge_segments
+///              合并去重（导入转写无窗边切句）。
+pub const CHUNK_OVERLAP_MS: u64 = 2_000;
+
+/// 带重叠的窗口切分（纯函数，REQ-113）：window_ms 窗 + overlap_ms 重叠。
+///
+/// @ai-context: 每窗 [start, start+window)，下一窗从 start+window-overlap 开始
+///              （重叠覆盖窗边句）；首窗从 0、末窗到 duration（不越界）；
+///              退化输入（空时长/窗 0）返回空。
+pub fn plan_chunks_with_overlap(
+    duration_ms: u64,
+    window_ms: u64,
+    overlap_ms: u64,
+) -> Vec<(u64, u64)> {
     if duration_ms == 0 || window_ms == 0 {
         return Vec::new();
     }
+    let step = window_ms.saturating_sub(overlap_ms).max(1);
     let mut chunks = Vec::new();
     let mut start = 0u64;
     while start < duration_ms {
         let end = (start + window_ms).min(duration_ms);
         chunks.push((start, end));
-        start = end;
+        if end >= duration_ms {
+            break;
+        }
+        start += step;
     }
     chunks
 }
@@ -56,6 +80,8 @@ pub fn run_video_import<F: Fn(&ImportProgress)>(
     engines: &EnginePool,
     resolver: &FfmpegResolver,
     video_path: &str,
+    // REQ-117：UI 垃圾黑名单（导入画面要点源头过滤——与实时链路同口径）
+    ui_junk: &crate::ui_junk::UiJunkList,
     progress: F,
 ) -> Result<i64> {
     let video = Path::new(video_path);
@@ -78,7 +104,7 @@ pub fn run_video_import<F: Fn(&ImportProgress)>(
     let work_dir = std::env::temp_dir().join(format!("entropy-import-{}", session_id));
     let _ = std::fs::create_dir_all(&work_dir);
 
-    let result = run_import_inner(db, engines, resolver, video, session_id, &work_dir, &progress);
+    let result = run_import_inner(db, engines, resolver, video, session_id, &work_dir, ui_junk, &progress);
     // 清理中间文件（无论成败）；失败标记会话 failed（与实时链路同口径）
     let _ = std::fs::remove_dir_all(&work_dir);
     result.inspect_err(|_| {
@@ -95,6 +121,7 @@ fn run_import_inner<F: Fn(&ImportProgress)>(
     video: &Path,
     session_id: i64,
     work_dir: &Path,
+    ui_junk: &crate::ui_junk::UiJunkList,
     progress: &F,
 ) -> Result<()> {
     // 1) 字幕决策（L1 零依赖；L2 需 ffmpeg）
@@ -112,11 +139,34 @@ fn run_import_inner<F: Fn(&ImportProgress)>(
             total: 1,
         });
     } else {
-        transcribe_audio(db, engines, resolver, video, session_id, work_dir, progress)?;
+        crate::import_transcribe::transcribe_audio(db, engines, resolver, video, session_id, work_dir, progress)?;
     }
 
     // 3) 关键帧 OCR（画面要点，独立于转写路径；ffmpeg 缺失跳过不阻断）
-    ocr_keyframes(engines, db, resolver, video, session_id, work_dir, progress);
+    // REQ-130（v0.7.0 M3）：P4 无图短路——会话档案 disable_ocr 时跳过画面识别。
+    // 导入路径当前 profile=None（默认档案，OCR 不跳过——零回归）；播客类档案
+    // 接入导入链路（前端传 profile）后自动生效（ASR-only 快速路径）。
+    let ocr_enabled = db
+        .get_session(session_id)
+        .ok()
+        .flatten()
+        .and_then(|s| s.profile)
+        .map(|p| {
+            let kind = crate::video_profile::ProfileKind::parse(&p);
+            !crate::video_profile::profile_by_kind(kind).disable_ocr
+        })
+        .unwrap_or(true);
+    if ocr_enabled {
+        // REQ-117：导入画面要点过 UI 垃圾黑名单（与实时链路同口径）
+        ocr_keyframes(engines, db, resolver, video, session_id, work_dir, ui_junk, progress);
+    } else {
+        progress(&ImportProgress {
+            stage: "ocr".into(),
+            message: "档案禁用画面识别（disable_ocr），跳过关键帧 OCR".into(),
+            done: 1,
+            total: 1,
+        });
+    }
 
     // 4) 完成
     db.finish_session(session_id)?;
@@ -144,67 +194,6 @@ fn write_subtitle_segments(db: &Db, session_id: i64, segments: &[crate::fusion::
     Ok(())
 }
 
-/// 音轨提取 + 分窗转写（无字幕 fallback 路径）。
-fn transcribe_audio<F: Fn(&ImportProgress)>(
-    db: &Db,
-    engines: &EnginePool,
-    resolver: &FfmpegResolver,
-    video: &Path,
-    session_id: i64,
-    work_dir: &Path,
-    progress: &F,
-) -> Result<()> {
-    // ffmpeg 缺失：音轨提取与关键帧都不可用，报可操作错误（引导下载）
-    let paths = resolver.resolve()?;
-    let wav_path = work_dir.join("audio.wav");
-    progress(&ImportProgress { stage: "audio".into(), message: "提取音轨…".into(), done: 0, total: 1 });
-    ffmpeg::run_quiet(&paths.ffmpeg, &ffmpeg::extract_audio_args(video, &wav_path), ffmpeg::default_timeout())?;
-    progress(&ImportProgress { stage: "audio".into(), message: "音轨提取完成".into(), done: 1, total: 1 });
-
-    // 读入 PCM（sherpa Wave 契约：16kHz 单声道 f32）
-    let wave = sherpa_onnx::Wave::read(&wav_path.to_string_lossy())
-        .ok_or_else(|| AppError::Asr("读取提取的音轨失败".to_string()))?;
-    let sample_rate = wave.sample_rate();
-    let duration_ms = (wave.samples().len() as u64 * 1000) / sample_rate as u64;
-    let chunks = plan_chunks(duration_ms, CHUNK_WINDOW_MS);
-    if chunks.is_empty() {
-        return Err(AppError::Asr("音轨为空，无法转写".to_string()));
-    }
-    let total = chunks.len() as u32;
-    for (i, (start_ms, end_ms)) in chunks.iter().enumerate() {
-        let from = (*start_ms * sample_rate as u64 / 1000) as usize;
-        let to = ((*end_ms * sample_rate as u64 / 1000) as usize).min(wave.samples().len());
-        // 静音/无效窗转写失败只告警不阻断（空窗无内容）
-        if let Ok(seg) = engines.transcribe_pcm(&wave.samples()[from..to], sample_rate) {
-            if !seg.text.trim().is_empty() {
-                db.add_segment(&NewSessionSegment {
-                    session_id,
-                    start_ms: *start_ms,
-                    end_ms: *end_ms,
-                    text: seg.text,
-                    source: "asr".to_string(),
-                    // REQ-098（v0.7.0 M1）：导入路径单遍 SenseVoice，无重打分
-                    // 对比（Zipformer vs SenseVoice）——无法产出代理置信度，
-                    // 诚实落 None（不再硬编码假 0.9）
-                    confidence: None,
-                    // REQ-103：导入路径无段级音量（None=未知）
-                    volume: None,
-        speech_rate: None,
-        pause_ms: None,
-        speaker: None,
-                })?;
-            }
-        }
-        progress(&ImportProgress {
-            stage: "asr".into(),
-            message: format!("转写中 {}/{}", i + 1, total),
-            done: (i + 1) as u32,
-            total,
-        });
-    }
-    Ok(())
-}
-
 /// 关键帧提取 + OCR（失败跳过不阻断；帧号按固定间隔换算时间戳）。
 fn ocr_keyframes<F: Fn(&ImportProgress)>(
     engines: &EnginePool,
@@ -213,6 +202,7 @@ fn ocr_keyframes<F: Fn(&ImportProgress)>(
     video: &Path,
     session_id: i64,
     work_dir: &Path,
+    ui_junk: &crate::ui_junk::UiJunkList,
     progress: &F,
 ) {
     let Ok(paths) = resolver.resolve() else {
@@ -252,7 +242,7 @@ fn ocr_keyframes<F: Fn(&ImportProgress)>(
         let timestamp_ms = (i as u64) * FRAME_INTERVAL_MS;
         match image::open(path).map(|d| d.into_rgb8()) {
             Ok(img) => crate::import_frame::ocr_keyframe(
-                db, engines, session_id, timestamp_ms, &img, &mut last_full, &mut last_subtitle,
+                db, engines, session_id, timestamp_ms, &img, &mut last_full, &mut last_subtitle, ui_junk,
             ),
             Err(e) => eprintln!("[Import] 关键帧解码失败（跳过）: {}", e),
         }
@@ -291,12 +281,51 @@ mod tests {
         assert_eq!(plan_chunks(10_000, 30_000), vec![(0, 10_000)]);
     }
 
+    // ── REQ-113（v0.7.0 M2，CORE-O6）：重叠窗口 ──
+
+    #[test]
+    fn overlap_windows_cover_duration_with_overlap() {
+        // Arrange：95s 音频，30s 窗 + 2s 重叠
+        let chunks = plan_chunks_with_overlap(95_000, 30_000, 2_000);
+        // Assert：窗间重叠 2s（下一窗起点 = 上一窗起点 + 28s），末窗不越界
+        assert_eq!(chunks, vec![(0, 30_000), (28_000, 58_000), (56_000, 86_000), (84_000, 95_000)]);
+        // 重叠区覆盖：每窗起点 < 上一窗终点（窗边句在相邻窗都有音频）
+        for w in chunks.windows(2) {
+            assert!(w[1].0 < w[0].1, "相邻窗必须重叠: {:?}", w);
+        }
+    }
+
+    #[test]
+    fn overlap_zero_matches_plain() {
+        // 零重叠 = 原 plan_chunks 行为（兼容零回归）
+        assert_eq!(
+            plan_chunks_with_overlap(95_000, 30_000, 0),
+            plan_chunks(95_000, 30_000)
+        );
+    }
+
+    #[test]
+    fn overlap_window_edge_cases() {
+        // 重叠 ≥ 窗宽 → step 至少 1ms（防死循环）
+        let chunks = plan_chunks_with_overlap(10_000, 5_000, 6_000);
+        assert!(!chunks.is_empty(), "重叠超窗宽不得产生空计划");
+        // 短于窗 → 单窗（不因重叠产生多窗）
+        assert_eq!(plan_chunks_with_overlap(3_000, 30_000, 2_000), vec![(0, 3_000)]);
+    }
+
     #[test]
     fn import_rejects_missing_file() {
         // Arrange & Act：不存在的文件 → 可操作错误（不建会话）
         let db = crate::db::Db::open(":memory:").expect("mem db");
         let resolver = FfmpegResolver::dev();
-        let result = run_video_import(&db, &crate::engine::EnginePool::dummy(), &resolver, "不存在.mp4", |_| {});
+        let result = run_video_import(
+            &db,
+            &crate::engine::EnginePool::dummy(),
+            &resolver,
+            "不存在.mp4",
+            &crate::ui_junk::UiJunkList::defaults(),
+            |_| {},
+        );
         // Assert
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("不存在"));

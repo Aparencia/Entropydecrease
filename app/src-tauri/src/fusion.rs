@@ -256,6 +256,9 @@ fn push_window_segments(
             ((chars.len() as u64) * (e - s) / total) as usize
         };
         let take = take.min(chars.len().saturating_sub(pos));
+        // REQ-111（v0.7.0 M2，CORE-O3）：切分点回退最近标点/空格——
+        // 防"今天讲矩"+"阵的特征值"式词破碎（时长占比切分落在词中间）
+        let take = if i == last { take } else { adjust_split_boundary(&chars, pos, take) };
         if take > 0 {
             let piece: String = chars[pos..pos + take].iter().collect();
             pos += take;
@@ -269,6 +272,31 @@ fn push_window_segments(
                 volume: *vol,
             });
         }
+    }
+}
+
+/// 切分边界对齐（纯函数，REQ-111 CORE-O3）：从目标切分点向左回退到最近标点/空格。
+///
+/// @ai-context: 时长占比切分可能落在词中间（"矩阵"被切成"矩"+"阵"）；
+///              回退到最近标点/空格（中文句读/英文空白）避免词破碎。
+///              回退窗口上限 10 字符（过长回退会压缩前段过短——均衡取舍）；
+///              无标点可回退 → 原切分点（保时长占比语义）。
+const SPLIT_BACKOFF_MAX: usize = 10;
+
+fn adjust_split_boundary(chars: &[char], pos: usize, take: usize) -> usize {
+    if pos + take >= chars.len() || take == 0 {
+        return take;
+    }
+    // 目标切分点（新段首字符）
+    let boundary = pos + take;
+    let backoff = (1..=SPLIT_BACKOFF_MAX.min(boundary - pos)).find(|&k| {
+        let c = chars[boundary - k];
+        c.is_whitespace() || "，。！？；：、,.!?;:'\"“”‘’（）()…—《》【】[]".contains(c)
+    });
+    match backoff {
+        // 回退后至少留 1 字符给前段（防前段空）
+        Some(k) if take > k => take - k,
+        _ => take,
     }
 }
 

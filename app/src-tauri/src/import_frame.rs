@@ -65,6 +65,8 @@ pub fn same_texts(a: &[String], b: &[String]) -> bool {
 ///
 /// @ai-context: 识别失败静默跳过（下帧重试语义）；落库失败记录告警不阻断
 ///              （与实时链路 OCR 块同口径，画面要点为增强内容）。
+/// @ai-context: REQ-117（v0.7.0 M2，PRE-O6）：落库前过 is_ui_junk 源头过滤
+///              ——导入/实时双入口口径统一（播放器时间码/水印不进画面要点）。
 pub fn ocr_keyframe(
     db: &Db,
     engines: &EnginePool,
@@ -73,14 +75,15 @@ pub fn ocr_keyframe(
     image: &image::RgbImage,
     last_full: &mut Vec<String>,
     last_subtitle: &mut Vec<String>,
+    ui_junk: &crate::ui_junk::UiJunkList,
 ) {
     // 中部区域 → 画面要点（region=full，避开字幕带干扰）
     if let Some(mid) = crop_and_scale(image, MIDDLE_TOP_RATIO, MIDDLE_BOTTOM_RATIO, OCR_MAX_WIDTH) {
-        recognize_region(db, engines, session_id, timestamp_ms, mid, "full", last_full);
+        recognize_region(db, engines, session_id, timestamp_ms, mid, "full", last_full, ui_junk);
     }
     // 底部区域 → 烧录字幕（region=subtitle，与实时链路语义一致）
     if let Some(bot) = crop_and_scale(image, BOTTOM_TOP_RATIO, 1.0, OCR_MAX_WIDTH) {
-        recognize_region(db, engines, session_id, timestamp_ms, bot, "subtitle", last_subtitle);
+        recognize_region(db, engines, session_id, timestamp_ms, bot, "subtitle", last_subtitle, ui_junk);
     }
 }
 
@@ -93,6 +96,7 @@ fn recognize_region(
     region_img: image::RgbImage,
     region: &str,
     last_texts: &mut Vec<String>,
+    ui_junk: &crate::ui_junk::UiJunkList,
 ) {
     let Ok(blocks) = engines.recognize_image(region_img) else {
         return; // 识别失败：下帧重试（不阻断管线）
@@ -100,13 +104,20 @@ fn recognize_region(
     let texts: Vec<String> = blocks
         .iter()
         .filter(|b| b.score >= MIN_SCORE && !b.text.trim().is_empty())
+        // REQ-117：UI 垃圾（播放器时间码/水印）不入帧间去重集合——
+        // 与实时链路源头过滤同口径（双入口统一）
+        .filter(|b| !ui_junk.is_junk(&b.text))
         .map(|b| b.text.clone())
         .collect();
     if same_texts(&texts, last_texts) {
         return; // 静态画面：与上帧完全一致，不重复落库
     }
     for block in blocks {
-        if block.score >= MIN_SCORE && !block.text.trim().is_empty() {
+        if block.score >= MIN_SCORE
+            && !block.text.trim().is_empty()
+            // REQ-117：UI 垃圾源头过滤（播放器时间码不再污染导入画面要点）
+            && !ui_junk.is_junk(&block.text)
+        {
             if let Err(e) = db.add_ocr_block(&NewSessionOcrBlock {
                 session_id,
                 timestamp_ms,

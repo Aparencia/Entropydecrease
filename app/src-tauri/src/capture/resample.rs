@@ -71,6 +71,8 @@ pub fn mixdown_prefer_cleanest(input: &[f32], channels: u16) -> Vec<f32> {
 ///
 /// @ai-context: 线性插值对语音信号足够（ASR 对相位不敏感），实现 O(n) 且无依赖；
 ///              比率相等时直通复制。目标速率必须 >0。
+/// @ai-context: REQ-114（v0.7.0 M2，PRE-O2）：降采样场景请用
+///              resample_antialias（本函数不抗混叠——混叠污染消除见独立模块）。
 pub fn resample_linear(input: &[f32], src_rate: u32, dst_rate: u32) -> Vec<f32> {
     // src_rate=0 → ratio=0 → out_len 溢出 panic（审查 TD-009 二次确认：先防 dst_rate 后仍漏 src_rate）
     if input.is_empty() || src_rate == 0 || dst_rate == 0 {
@@ -142,10 +144,12 @@ pub fn compute_rms(samples: &[f32]) -> f32 {
     (sum / samples.len() as f64).sqrt() as f32
 }
 
-/// 把设备原生 PCM 字节流转换为 f32 样本（支持 16-bit 整数与 32-bit 浮点）。
+/// 把设备原生 PCM 字节流转换为 f32 样本（支持 16/24-bit 整数与 32-bit 浮点）。
 ///
 /// @ai-context: WASAPI 常见格式为 WAVE_FORMAT_PCM(16bit) 与 IEEE_FLOAT(32bit)；
-///              24-bit 与 8-bit 极罕见，返回 None 提示不支持（防御性编程）。
+///              REQ-116（v0.7.0 M2，PRE-O5）：24-bit 左对齐解包（罕见设备
+///              不再静默丢段——WAVEFORMATEXTENSIBLE 的 wValidBits 常见 24）；
+///              8-bit 仍返回 None（WASAPI 渲染端点不产出 8-bit，防御性拒绝）。
 pub fn pcm_bytes_to_f32(
     bytes: &[u8],
     bits_per_sample: u16,
@@ -157,6 +161,16 @@ pub fn pcm_bytes_to_f32(
             for chunk in bytes.chunks_exact(2) {
                 let v = i16::from_le_bytes([chunk[0], chunk[1]]);
                 out.push(v as f32 / 32768.0);
+            }
+            Some(out)
+        }
+        (24, false) => {
+            let mut out = Vec::with_capacity(bytes.len() / 3);
+            for chunk in bytes.chunks_exact(3) {
+                // 左对齐解包：24bit 低字节在前（小端），符号扩展转 i32
+                let u = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], 0]);
+                let v = (u << 8) as i32 >> 8; // 算术右移 = 符号扩展（左对齐）
+                out.push(v as f32 / 8388608.0); // 2^23
             }
             Some(out)
         }
@@ -319,7 +333,49 @@ mod tests {
 
     #[test]
     fn unsupported_format_returns_none() {
-        // Act & Assert：24-bit 不支持
-        assert!(pcm_bytes_to_f32(&[0u8; 3], 24, false).is_none());
+        // Act & Assert：8-bit 不支持（WASAPI 渲染端点不产出，防御性拒绝）
+        assert!(pcm_bytes_to_f32(&[0u8; 1], 8, false).is_none());
+        assert!(pcm_bytes_to_f32(&[0u8; 3], 24, true).is_none(), "24bit float 非法组合");
+    }
+
+    // ── REQ-116（v0.7.0 M2，PRE-O5）：24-bit 左对齐解包 ──
+
+    #[test]
+    fn pcm24_left_aligned_max_positive() {
+        // Arrange：0x7FFFFF（24bit 最大正数，左对齐）→ ~1.0
+        let bytes = [0xFF, 0xFF, 0x7F];
+        // Act
+        let out = pcm_bytes_to_f32(&bytes, 24, false).expect("24bit pcm");
+        // Assert：8388607/8388608 ≈ 1.0
+        assert!((out[0] - 1.0).abs() < 1e-4, "got {}", out[0]);
+    }
+
+    #[test]
+    fn pcm24_left_aligned_max_negative() {
+        // Arrange：0x800000（24bit 最小负数）→ -1.0
+        let bytes = [0x00, 0x00, 0x80];
+        // Act
+        let out = pcm_bytes_to_f32(&bytes, 24, false).expect("24bit pcm");
+        // Assert：-8388608/8388608 = -1.0
+        assert_eq!(out[0], -1.0);
+    }
+
+    #[test]
+    fn pcm24_zero_and_midpoint() {
+        // 零 → 0.0
+        assert_eq!(pcm_bytes_to_f32(&[0, 0, 0], 24, false).unwrap()[0], 0.0);
+        // 半幅正（0x400000 = 2^22）→ 0.5
+        let half = pcm_bytes_to_f32(&[0x00, 0x00, 0x40], 24, false).unwrap()[0];
+        assert!((half - 0.5).abs() < 1e-4, "got {}", half);
+    }
+
+    #[test]
+    fn pcm24_multi_sample_interleaved() {
+        // 多样本：正负交替
+        let bytes = [0xFF, 0xFF, 0x7F, 0x00, 0x00, 0x80];
+        let out = pcm_bytes_to_f32(&bytes, 24, false).expect("24bit pcm");
+        assert_eq!(out.len(), 2);
+        assert!((out[0] - 1.0).abs() < 1e-4);
+        assert_eq!(out[1], -1.0);
     }
 }

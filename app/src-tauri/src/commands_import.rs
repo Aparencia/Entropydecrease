@@ -35,6 +35,8 @@ pub async fn import_video(state: State<'_, AppState>, path: String) -> Result<i6
     let db = state.db.clone();
     let engines = state.engines.clone();
     let app = state.app.clone();
+    // REQ-117（v0.7.0 M2）：UI 垃圾黑名单（导入画面要点源头过滤——双入口同口径）
+    let ui_junk = state.ui_junk.clone();
     // 审查 P2 修复（TD-036）：ffmpeg 探测注入生产捆绑路径（resource_dir/ffmpeg，
     // 安装包随 bundle.resources 携带；开发期捆绑目录 = crate 下 ffmpeg/）。
     // 解析顺序仍为：ENTROPY_FFMPEG_DIR → 注入目录 → PATH（ffmpeg.rs）。
@@ -44,7 +46,7 @@ pub async fn import_video(state: State<'_, AppState>, path: String) -> Result<i6
     }
     let resolver = FfmpegResolver::with_dirs(resolver_dirs);
     tauri::async_runtime::spawn_blocking(move || {
-        run_video_import(&db, &engines, &resolver, &trimmed, |p: &ImportProgress| {
+        run_video_import(&db, &engines, &resolver, &trimmed, &ui_junk, |p: &ImportProgress| {
             let _ = app.emit("import:progress", p);
         })
     })

@@ -267,7 +267,10 @@ where
                     // M6/REQ-041 A2：立体声按声道 RMS 选优（杂音声道不混入）；
                     // 单声道与合并路径由 mixdown_prefer_cleanest 内部分派
                     let mono = super::resample::mixdown_prefer_cleanest(&samples, channels);
-                    let resampled = super::resample::resample_linear(&mono, src_rate, TARGET_SAMPLE_RATE);
+                    // REQ-114（v0.7.0 M2，PRE-O2）：抗混叠重采样——48k→16k
+                    // 降采样先低通再抽取（线性插值会把 8-24kHz 噪声混入语音带）
+                    let resampled =
+                        super::resample_antialias::resample_antialias(&mono, src_rate, TARGET_SAMPLE_RATE);
                     for chunk in accumulator.push(&resampled) {
                         debug_assert_eq!(chunk.len(), block_samples);
                         on_chunk(AudioChunk {

@@ -329,3 +329,64 @@ fn weighted_borderline_prefers_subtitle() {
     assert_eq!(out.len(), 1);
     assert_eq!(out[0].source, FusedSource::Subtitle);
 }
+
+// ── REQ-111（v0.7.0 M2，CORE-O3）：切分边界对齐 ──
+
+#[test]
+fn split_boundary_aligns_to_punctuation() {
+    // Arrange：文本含句号——目标切分点落在词中间（占比切分）
+    let chars: Vec<char> = "今天讲矩阵的特征值。然后讲向量".chars().collect();
+    let pos = 0usize;
+    // 目标 take=5 切在"矩"与"阵"之间？构造：take=5 → "今天讲矩"
+    // 回退应到最近标点（无——前 5 字内无标点）→ 保持原切分（无标点可回退）
+    let take = super::adjust_split_boundary(&chars, pos, 5);
+    assert_eq!(take, 5, "无标点可回退时保持原切分");
+    // 目标 take=12 → 边界落在"讲"前（chars[12]），最近标点=句号（chars[9]）→ 回退 3
+    let take = super::adjust_split_boundary(&chars, pos, 12);
+    assert_eq!(take, 9, "应回退到句号边界，防词破碎");
+}
+
+#[test]
+fn split_boundary_backs_off_to_comma() {
+    // Arrange：目标切分点落在逗号后（词中间）→ 回退到逗号
+    let chars: Vec<char> = "第一段内容，第二段内容".chars().collect();
+    let pos = 0usize;
+    // 目标 take=7 → 边界在"二"（chars[7]），逗号在 chars[5] → 回退 2 → take=5
+    let take = super::adjust_split_boundary(&chars, pos, 7);
+    assert_eq!(take, 5, "应回退到逗号边界，防词破碎");
+    // 目标 take=8 → 边界 chars[8]="段"，最近标点仍逗号 → 回退 3 → take=5
+    let take = super::adjust_split_boundary(&chars, pos, 8);
+    assert_eq!(take, 5);
+}
+
+#[test]
+fn split_boundary_respects_english_spaces() {
+    // Arrange：英文词间空格——切分点落在词中间 → 回退到空格
+    let chars: Vec<char> = "hello world test".chars().collect();
+    let pos = 0usize;
+    // 目标 take=8 → 边界 chars[8]='r'（"world"中），空格在 chars[5] → 回退 3 → take=5
+    let take = super::adjust_split_boundary(&chars, pos, 8);
+    assert_eq!(take, 5, "英文切分应回退到空格");
+}
+
+#[test]
+fn split_boundary_backoff_capped() {
+    // Arrange：超长无标点段（>10 字符无标点）→ 回退上限保护（不无限回退）
+    let chars: Vec<char> = "一二三四五六七八九十甲乙丙丁戊己庚辛".chars().collect();
+    let pos = 0usize;
+    // take=9，回退窗口 10 内无标点 → 保持原切分
+    let take = super::adjust_split_boundary(&chars, pos, 9);
+    assert_eq!(take, 9, "回退上限内无标点则保持原切分");
+}
+
+#[test]
+fn split_boundary_keeps_previous_segment_nonempty() {
+    // Arrange：回退会清空前段（take=1 且边界前是标点）→ 不回退
+    let chars: Vec<char> = "内容，后文".chars().collect();
+    // take=3 → 边界 chars[3]='后'，逗号 chars[2] → 回退 1 → take=2（前段"内容"非空）
+    let take = super::adjust_split_boundary(&chars, 0, 3);
+    assert_eq!(take, 2, "应回退到逗号（前段仍非空）");
+    // take=1 → 回退会清空前段 → 保持原切分
+    let take = super::adjust_split_boundary(&chars, 0, 1);
+    assert_eq!(take, 1, "回退清空前段时保持原切分（take>k 保护）");
+}

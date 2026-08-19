@@ -88,6 +88,9 @@ pub struct TriggerState {
     pub last_full_ocr_at: Instant,
     /// REQ-108（v0.7.0 M1.5）：上一 tick 全帧变化状态（帧切换事件上升沿判定）
     pub prev_full_changed: bool,
+    /// REQ-112（v0.7.0 M2，CORE-O5）：滚动字幕确认器（连续 N 帧滚动才判——
+    /// 快速切换正常字幕不误杀）
+    pub scrolling: crate::subtitle_ocr::ScrollingConfirmer,
 }
 
 impl TriggerState {
@@ -99,6 +102,7 @@ impl TriggerState {
             last_ocr_at: Instant::now(),
             last_full_ocr_at: Instant::now(),
             prev_full_changed: false,
+            scrolling: crate::subtitle_ocr::ScrollingConfirmer::default(),
         }
     }
 }
@@ -393,7 +397,8 @@ pub fn process_frame(
                             stats.panel_filtered += 1;
                         } else {
                             handle_subtitle_frame(
-                                &frame, &blocks, voter, last_frame_text, last_preview, db, app,
+                                &frame, &blocks, voter, &mut trigger.scrolling,
+                                last_frame_text, last_preview, db, app,
                                 session_id, subtitle_segments, ui_junk, stats,
                             );
                         }
@@ -426,6 +431,7 @@ fn handle_subtitle_frame(
     frame: &CapturedFrame,
     blocks: &[crate::types::OcrBlock],
     voter: &mut SubtitleVoter,
+    scrolling: &mut crate::subtitle_ocr::ScrollingConfirmer,
     last_frame_text: &mut Option<String>,
     last_preview: &mut String,
     db: &Db,
@@ -445,8 +451,10 @@ fn handle_subtitle_frame(
         return;
     }
     // 滚动字幕（股票/歌词）丢弃——投票分组对逐帧漂移文本失效
+    // REQ-112（v0.7.0 M2，CORE-O5）：确认机制——单帧疑似不丢弃，
+    // 连续 N 帧滚动才判（快速切换正常字幕不误杀）
     let prev = last_frame_text.clone().unwrap_or_default();
-    if is_scrolling(&text, &prev, 0.6) {
+    if scrolling.observe(is_scrolling(&text, &prev, 0.6)) {
         return;
     }
     *last_frame_text = Some(text.clone());

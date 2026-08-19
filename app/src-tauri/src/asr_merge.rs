@@ -66,6 +66,63 @@ pub fn merge_segments(prev: &str, next: &str, gap_ms: u64) -> Option<String> {
     }
 }
 
+/// 语言判定（REQ-119 POST-O8：中英混排拼接边界空格）。
+///
+/// @ai-context: ASCII 字母/数字=拉丁（英文/数字/代码），CJK=中文——
+///              相邻段语言不同且都非标点 → 插入空格（"Python中"→"Python 中"）。
+fn is_latin(c: char) -> bool {
+    c.is_ascii_alphanumeric()
+}
+
+fn is_cjk(c: char) -> bool {
+    matches!(c, '\u{3400}'..='\u{4DBF}' | '\u{4E00}'..='\u{9FFF}')
+}
+
+/// 拼接边界空格（纯函数）：prev 尾字符与 next 首字符语言不同 → 插空格。
+///
+/// @ai-context: 仅处理**非标点**相邻（标点边界天然分隔）；"Python"+"中" → 空格；
+///              "中"+"文"（同语言）→ 不插；"，"+"中文"（标点）→ 不插。
+///              返回 None=无需插空格（原样拼接）。
+fn spacing_for(prev_tail: char, next_head: char) -> Option<&'static str> {
+    let p_latin = is_latin(prev_tail);
+    let p_cjk = is_cjk(prev_tail);
+    let n_latin = is_latin(next_head);
+    let n_cjk = is_cjk(next_head);
+    if (p_latin && n_cjk) || (p_cjk && n_latin) {
+        Some(" ")
+    } else {
+        None
+    }
+}
+
+/// 语义级合并（REQ-119 增强版）：同 merge_segments + 拼接边界空格。
+///
+/// @ai-context: REQ-119（v0.7.0 M2，POST-O8）：AI merge 拼接按相邻语言插空格——
+///              中英混排不粘连（"Python中"→"Python 中"）；纯函数可单测。
+///              原 merge_segments 保留（兼容既有调用点），新调用点用本函数。
+pub fn merge_segments_with_spacing(prev: &str, next: &str, gap_ms: u64) -> Option<String> {
+    let merged = merge_segments(prev, next, gap_ms)?;
+    let prev_tail = prev.trim_end_matches(|c: char| c.is_whitespace() || BOUNDARY_PUNCT.contains(c)).chars().last();
+    let next_head = next
+        .chars()
+        .skip_while(|c| c.is_whitespace() || BOUNDARY_PUNCT.contains(*c))
+        .next();
+    match (prev_tail, next_head) {
+        (Some(p), Some(n)) => match spacing_for(p, n) {
+            Some(space) => {
+                // 重建：prev_trim + 空格 + next_trim（与 merge_segments 相同修剪口径）
+                let prev_trim = prev
+                    .trim_end_matches(|c: char| c.is_whitespace() || BOUNDARY_PUNCT.contains(c));
+                let next_trim = next
+                    .trim_start_matches(|c: char| c.is_whitespace() || BOUNDARY_PUNCT.contains(c));
+                Some(format!("{}{}{}", prev_trim, space, next_trim))
+            }
+            None => Some(merged),
+        },
+        _ => Some(merged),
+    }
+}
+
 /// 句末标点集合（切分边界：中文句号/问号/感叹号/省略号 + ASCII 等价物）。
 const SENTENCE_END_PUNCT: &str = "。！？…!?.";
 
@@ -293,5 +350,58 @@ mod tests {
         assert_eq!(split_timestamps(0, 1000, &[0, 0]), vec![(0, 1000), (0, 1000)]);
         assert_eq!(split_timestamps(500, 500, &[3, 4]), vec![(500, 500), (500, 500)]);
         assert!(split_timestamps(0, 1000, &[]).is_empty());
+    }
+
+    // ── REQ-119（v0.7.0 M2，POST-O8）：拼接边界空格 ──
+
+    #[test]
+    fn latin_cjk_boundary_gets_space() {
+        // "Python"+"中" → "Python 中"（中英混排不粘连）
+        assert_eq!(
+            merge_segments_with_spacing("我们讲Python", "中的异常处理", 0),
+            Some("我们讲Python 中的异常处理".to_string())
+        );
+    }
+
+    #[test]
+    fn cjk_latin_boundary_gets_space() {
+        // "中"+"Python" → 空格
+        assert_eq!(
+            merge_segments_with_spacing("先讲中文", "Python再讲英文", 0),
+            Some("先讲中文 Python再讲英文".to_string())
+        );
+    }
+
+    #[test]
+    fn same_language_no_space() {
+        // 中+中 → 不插空格（原拼接行为）
+        assert_eq!(
+            merge_segments_with_spacing("那今天晚上我", "会用三个阶段来做分享。", 0),
+            Some("那今天晚上我会用三个阶段来做分享。".to_string())
+        );
+    }
+
+    #[test]
+    fn punctuation_boundary_no_space() {
+        // 标点边界天然分隔 → 不插空格
+        assert_eq!(
+            merge_segments_with_spacing("今天讲完了。", "Python的内容", 0),
+            Some("今天讲完了。Python的内容".to_string())
+        );
+    }
+
+    #[test]
+    fn digit_cjk_boundary_gets_space() {
+        // 数字+中文 → 空格（"第1"+"章"场景——数字属拉丁类）
+        assert_eq!(
+            merge_segments_with_spacing("这是第1", "章内容", 0),
+            Some("这是第1 章内容".to_string())
+        );
+    }
+
+    #[test]
+    fn spacing_gap_threshold_still_applies() {
+        // 空格逻辑不影响 gap 门限（超限仍不合并）
+        assert_eq!(merge_segments_with_spacing("Python", "中", 700), None);
     }
 }
