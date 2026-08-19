@@ -4,6 +4,10 @@ version = "0.4.0"
 description = "熵减 - 视频知识提取与持久化（本地优先）"
 authors = ["Aparencia"]
 edition = "2021"
+# 多 bin 歧义修复（2026-08-19）：src/bin/asr_forensic.rs 诊断工具引入第二个
+# bin 后 cargo run 无法确定默认目标——声明主程序为默认，诊断工具用
+# `cargo run --bin asr_forensic -- <wav...>` 显式调用。
+default-run = "entropydecrease"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
