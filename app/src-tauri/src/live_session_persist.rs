@@ -213,7 +213,7 @@ pub(crate) fn handle_final_event(
             // 合并文本同样按句子切分落库（可能含多句）；
             // 残余是当前句尾部（其后为真实停顿，不再挂起
             // 合并）——残余直接落库为最后一段，内容不丢
-            match digest_merged(
+            if let Some((rest, rest_start)) = digest_merged(
                 ctx.app,
                 ctx.db,
                 ctx.session_id,
@@ -222,19 +222,16 @@ pub(crate) fn handle_final_event(
                 end_ms,
                 &merged,
             ) {
-                Some((rest, rest_start)) => {
-                    persist_final(
-                        ctx.app,
-                        ctx.db,
-                        ctx.session_id,
-                        ctx.asr_segments,
-                        rest_start,
-                        end_ms,
-                        rest,
-                        0.9,
-                    );
-                }
-                None => {}
+                persist_final(
+                    ctx.app,
+                    ctx.db,
+                    ctx.session_id,
+                    ctx.asr_segments,
+                    rest_start,
+                    end_ms,
+                    rest,
+                    0.9,
+                );
             }
             return;
         }
