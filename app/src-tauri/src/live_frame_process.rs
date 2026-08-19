@@ -173,17 +173,6 @@ pub fn process_frame(
         return;
     };
     stats.sampled += 1;
-    // M6/REQ-051：更新最新帧共享缓存（用户截图命令读取；全帧分支保留原帧）
-    if region != SampleRegion::Subtitle {
-        if let Ok(mut guard) = latest_frame.lock() {
-            *guard = Some(LatestCapturedFrame {
-                timestamp_ms: frame.timestamp_ms,
-                bgraw: frame.bgraw.clone(),
-                width: frame.width,
-                height: frame.height,
-            });
-        }
-    }
     // M2/REQ-037：播放区域周期重扫（5s 节流）与窗口尺寸自适应（须在全帧数据上执行）
     roi_tracker.resize(frame.width, frame.height);
     roi_tracker.refresh_playback_region(&frame.bgraw, frame.width, frame.height);
@@ -225,6 +214,19 @@ pub fn process_frame(
     // 时至少周期性放行，用户反馈 4/5 会话无 OCR 排查项）
     let force_ocr = trigger.last_ocr_at.elapsed() >= Duration::from_secs(FORCE_OCR_INTERVAL_SECS);
     let is_subtitle = region == SampleRegion::Subtitle;
+    // M6/REQ-051：更新最新帧共享缓存（用户截图命令读取；全帧分支保留原帧）。
+    // 用最终 region 判定（审查修复 2026-08-19）：带外强制全帧时本 tick 是全帧数据，
+    // 若按原始 region 跳过缓存，截图命令会读到旧帧；此位置 frame 尚未裁剪，缓存必为全帧
+    if region != SampleRegion::Subtitle {
+        if let Ok(mut guard) = latest_frame.lock() {
+            *guard = Some(LatestCapturedFrame {
+                timestamp_ms: frame.timestamp_ms,
+                bgraw: frame.bgraw.clone(),
+                width: frame.width,
+                height: frame.height,
+            });
+        }
+    }
     // M2/REQ-037：字幕区裁剪由 ROI 决策替代固定底部 1/4（播放区域内动态锁定）；
     // 扫描期/重扫期走全帧（ROI 未锁定时 bbox 密度聚簇需全帧 det）
     let mut crop_origin: Option<(u32, u32)> = None;

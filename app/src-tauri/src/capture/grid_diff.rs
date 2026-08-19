@@ -200,7 +200,10 @@ impl PanelDetector {
             self.candidate_ticks = if overlaps { self.candidate_ticks + 1 } else { 1 };
             self.region_bbox = Some(bbox);
             if self.active || self.candidate_ticks >= PANEL_CONFIRM_TICKS {
-                // 已活跃（再变化 → 重置窗口）或本次达到确认阈值 → 进入/保持活跃
+                // 已活跃（再变化 → 重置窗口）或本次达到确认阈值 → 进入/保持活跃。
+                // 审查说明 2026-08-19：活跃期重置不校验 bbox 重叠——翻页/场景切换
+                // 等任意大面积变化都会重置窗口（翻页瞬间字幕本就在变，多丢弃 ≤3s
+                // 可接受；校验重叠会引入面板区域漂移的复杂状态，收益低）
                 self.active = true;
                 self.active_until_ms = now_ms.saturating_add(PANEL_HOLD_MS);
             }
