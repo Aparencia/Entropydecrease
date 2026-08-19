@@ -57,6 +57,7 @@ mod fusion;
 mod glossary;
 mod health_check;
 mod highlight_detect;
+mod idle_governor;
 mod image_store;
 mod import;
 mod import_frame;

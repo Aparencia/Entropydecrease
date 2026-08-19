@@ -37,6 +37,9 @@ const MAX_OCR_WIDTH: u32 = 960;
 /// 对局部/平滑变化可能漏检（采样点错过变化像素），此时距上次 OCR 超过该间隔
 /// 强制识别一次，保证"屏幕在变但无 OCR"场景至少周期性产出（用户反馈 4/5 会话无 OCR 排查项）。
 const FORCE_OCR_INTERVAL_SECS: u64 = 15;
+/// 空闲探针间隔（ms）：REQ-073 空闲降频期间低频全帧采样——无声视频恢复
+/// 播放（画面变化）靠探针检测唤醒（5s 一次，成本可忽略）。
+const IDLE_PROBE_INTERVAL_MS: u64 = 5_000;
 
 /// 字幕事件载荷（TD-043：携带后端会话纪元时间戳，前端显示与时间轴一致）。
 #[derive(Debug, Clone, serde::Serialize)]
@@ -159,6 +162,11 @@ pub fn run_screen_worker(
     let mut load_monitor = crate::load_monitor::LoadMonitor::new();
     let mut last_load_check_at = Instant::now();
     let mut degraded = false;
+    // M5/REQ-073（PF6）：空闲降频——静音+画面无变化持续 → 跳过采样
+    // （引擎自然空闲）；空闲期低频探针（5s 一次全帧）检测画面恢复
+    let mut idle_governor = crate::idle_governor::IdleGovernor::new(Default::default());
+    let mut last_diff_pass: u64 = 0;
+    let mut last_probe_ms: u64 = 0;
 
     while !stop.load(Ordering::SeqCst) {
         // M4：每 2s 采样 CPU 负载（降级标志变化打印——静默失败可见化）
@@ -185,8 +193,25 @@ pub fn run_screen_worker(
             };
             roi_tracker.on_foreground_switch(foreign);
             // B3（P3 简化版）+ M4：语音活跃度 + 负载档驱动自适应采样
-            let region = scheduler.next_region(speech_active.load(Ordering::Relaxed), degraded);
-            if region != SampleRegion::Skip {
+            let mut region = scheduler.next_region(speech_active.load(Ordering::Relaxed), degraded);
+            // M5/REQ-073：空闲降频状态机——画面变化信号 = diff 通过计数增长
+            // （process_frame 内更新，同线程可见）；idle 时跳过采样（引擎
+            // 阻塞空闲零 CPU）；空闲期低频探针（5s 一次全帧）检测无声恢复
+            let now_ms = epoch.elapsed().as_millis() as u64;
+            let changed = stats.diff_pass > last_diff_pass;
+            last_diff_pass = stats.diff_pass;
+            let _ = idle_governor.observe(
+                speech_active.load(Ordering::Relaxed),
+                changed,
+                now_ms,
+            );
+            let idle = idle_governor.is_idle();
+            let probe = idle && now_ms.saturating_sub(last_probe_ms) >= IDLE_PROBE_INTERVAL_MS;
+            if probe {
+                last_probe_ms = now_ms;
+                region = SampleRegion::Full;
+            }
+            if (region != SampleRegion::Skip && !idle) || probe {
                 let diff = match region {
                     SampleRegion::Subtitle => &mut subtitle_diff,
                     _ => &mut full_diff,
