@@ -1,0 +1,82 @@
+//! 帧新颖度采样单测（REQ-066 / v0.6.0 M3）。
+//!
+//! @ai-context: AAA 模式；覆盖重叠率矩阵（全新/完全冗余/部分重叠）、
+//!              阈值边界、空输入、预算语义（冗余帧不更新基准的纯函数前提）。
+
+use super::*;
+
+fn t(text: &str) -> String {
+    text.to_string()
+}
+
+#[test]
+fn brand_new_content_scores_zero() {
+    // Arrange：最近文本为空（首帧）或完全不同
+    let recent: Vec<String> = Vec::new();
+    // Act & Assert：空基准 → 0（首帧不误判冗余）
+    assert_eq!(novelty_score(&[t("全新的幻灯片内容")], &recent), 0.0);
+    let recent = vec![t("第一章 变量定义")];
+    assert_eq!(novelty_score(&[t("第二章 函数调用")], &recent), 0.0);
+}
+
+#[test]
+fn identical_content_scores_one() {
+    // Arrange：完全一致 → 1（精确重复，最高冗余）
+    let new = vec![t("神经网络的反向传播算法详解")];
+    let recent = vec![t("神经网络的反向传播算法详解")];
+    // Act
+    let score = novelty_score(&new, &recent);
+    // Assert
+    assert!((score - 1.0).abs() < 1e-6, "完全重复应 1.0，实得 {}", score);
+    assert!(is_redundant(score, REDUNDANT_THRESHOLD));
+}
+
+#[test]
+fn slight_change_scores_high_and_redundant() {
+    // Arrange：画面微变（结尾追加"注意"二字）——内容高度重叠 → 冗余
+    let recent = vec![t("卷积神经网络由输入层隐藏层输出层组成")];
+    let new = vec![t("卷积神经网络由输入层隐藏层输出层组成。注意")];
+    // Act
+    let score = novelty_score(&new, &recent);
+    // Assert：高重叠（≥0.85）→ 冗余帧跳过
+    assert!(score >= REDUNDANT_THRESHOLD, "微变应判冗余，实得 {}", score);
+    assert!(is_redundant(score, REDUNDANT_THRESHOLD));
+}
+
+#[test]
+fn meaningful_change_not_redundant() {
+    // Arrange：话题切换（内容大部分不同）→ 非冗余，预算花在新内容上
+    let recent = vec![t("第一章 机器学习基础概念介绍")];
+    let new = vec![t("第四章 深度学习实战项目部署")];
+    // Act
+    let score = novelty_score(&new, &recent);
+    // Assert
+    assert!(score < REDUNDANT_THRESHOLD, "话题切换不应判冗余，实得 {}", score);
+    assert!(!is_redundant(score, REDUNDANT_THRESHOLD));
+}
+
+#[test]
+fn threshold_boundary() {
+    // Act & Assert：恰等于阈值 → 冗余（≥ 语义）；阈值以下 → 非冗余
+    assert!(is_redundant(0.85, 0.85));
+    assert!(!is_redundant(0.849, 0.85));
+    assert!(is_redundant(0.0, 0.0));
+}
+
+#[test]
+fn multi_text_union_compared() {
+    // Arrange：多文本并集比较（一帧多个 OCR 块）
+    let new = vec![t("标题一"), t("正文内容甲")];
+    let recent = vec![t("标题一"), t("正文内容乙")];
+    // Act：并集含 标题一/正文/内容 等 token——重叠约一半
+    let score = novelty_score(&new, &recent);
+    // Assert：部分重叠（0 < score < 0.85）——不判冗余（新正文内容值得采样）
+    assert!(score > 0.0 && score < REDUNDANT_THRESHOLD, "部分重叠应非冗余，实得 {}", score);
+}
+
+#[test]
+fn empty_texts_safe() {
+    // Act & Assert：空文本安全（token 空 → 0）
+    assert_eq!(novelty_score(&[], &[t("内容")]), 0.0);
+    assert_eq!(novelty_score(&[t("")], &[t("内容")]), 0.0);
+}

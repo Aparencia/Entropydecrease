@@ -69,6 +69,7 @@ mod live_keyframes;
 mod load_monitor;
 mod model_downloader;
 mod note_filter;
+mod novelty;
 mod ocr;
 mod ocr_cache;
 mod playback_region;
