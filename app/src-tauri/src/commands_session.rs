@@ -208,3 +208,141 @@ fn normalize_source(source: &str) -> String {
         _ => "asr".to_string(),
     }
 }
+
+// ────────────────────────────────────────────────────────────
+// M6 会话体验（REQ-076/078/079）
+// ────────────────────────────────────────────────────────────
+
+/// 会话质量报告（REQ-076）：可信度总览 + 低置信列表（点击定位原料）。
+#[tauri::command]
+pub async fn session_quality_report(
+    state: State<'_, AppState>,
+    id: i64,
+) -> Result<crate::quality_report::QualityReport, String> {
+    if id <= 0 {
+        return Err("无效的会话 id".to_string());
+    }
+    let segments = state.db.list_segments(id).map_err(|e| e.to_string())?;
+    let ocr_blocks = state.db.list_ocr_blocks(id).map_err(|e| e.to_string())?;
+    Ok(crate::quality_report::build_quality_report(&segments, &ocr_blocks))
+}
+
+/// 课程分组（REQ-078）：课程键 = 标题章节前缀（"第3章"等）；无前缀 → 标题本身。
+///
+/// @ai-context: 纯函数（派生方案——sessions 表不加 course 列，零迁移）；
+///              前端按此分组折叠；用户标记覆盖（前端本地）留 UI 层。
+pub fn course_of(title: &str) -> String {
+    let t = title.trim();
+    let chars: Vec<char> = t.chars().collect();
+    let mut i = 0;
+    while i + 1 < chars.len() {
+        if chars[i] == '第' {
+            let mut j = i + 1;
+            while j < chars.len() && (chars[j].is_ascii_digit() || is_cjk_num(chars[j])) {
+                j += 1;
+            }
+            // "第X章/节/讲/课/部分" → 前缀即课程键
+            if j > i + 1 && j < chars.len() && "章节讲课部分".contains(chars[j]) {
+                return chars[..=j].iter().collect();
+            }
+        }
+        i += 1;
+    }
+    t.to_string()
+}
+
+/// 中文数字判定（课程前缀匹配用）。
+fn is_cjk_num(c: char) -> bool {
+    "零〇一二三四五六七八九十百".contains(c)
+}
+
+/// 课程分组（会话列表按课程键分组，组内新→旧）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CourseGroup {
+    pub course: String,
+    pub sessions: Vec<Session>,
+}
+
+/// 会话列表按课程分组（REQ-078：长列表可折叠）。
+#[tauri::command]
+pub async fn list_session_courses(state: State<'_, AppState>) -> Result<Vec<CourseGroup>, String> {
+    let sessions = state
+        .db
+        .list_sessions(None, LIST_LIMIT_MAX, 0)
+        .map_err(|e| e.to_string())?;
+    let mut groups: std::collections::BTreeMap<String, Vec<Session>> = std::collections::BTreeMap::new();
+    for s in sessions {
+        groups.entry(course_of(&s.title)).or_default().push(s);
+    }
+    Ok(groups
+        .into_iter()
+        .map(|(course, sessions)| CourseGroup { course, sessions })
+        .collect())
+}
+
+/// 段搜索命中（REQ-079：片段上下文 + 定位原料）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SegmentHit {
+    pub session_id: i64,
+    pub session_title: String,
+    pub segment_id: i64,
+    pub start_ms: u64,
+    /// 命中位置前后上下文片段（前端高亮渲染）
+    pub snippet: String,
+}
+
+/// 会话段搜索（REQ-079）：关键词 → 命中段 + 片段上下文（一键跳详情定位）。
+///
+/// @ai-context: 内存过滤（会话段量级可控，避免为搜索建索引）；大小写不敏感
+///              （ASCII）；结果有界（200 条防超大 payload）。
+#[tauri::command]
+pub async fn search_session_segments(
+    state: State<'_, AppState>,
+    keyword: String,
+) -> Result<Vec<SegmentHit>, String> {
+    let kw = keyword.trim().to_lowercase();
+    if kw.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut hits = Vec::new();
+    for session in state.db.list_sessions(None, LIST_LIMIT_MAX, 0).map_err(|e| e.to_string())? {
+        for s in state.db.list_segments(session.id).map_err(|e| e.to_string())? {
+            if s.text.to_lowercase().contains(&kw) {
+                hits.push(SegmentHit {
+                    session_id: session.id,
+                    session_title: session.title.clone(),
+                    segment_id: s.id,
+                    start_ms: s.start_ms,
+                    snippet: snippet_around(&s.text, &kw),
+                });
+                if hits.len() >= 200 {
+                    return Ok(hits);
+                }
+            }
+        }
+    }
+    Ok(hits)
+}
+
+/// 片段上下文（纯函数）：命中位置前后各 12 字符（省略号标注截断）。
+fn snippet_around(text: &str, kw_lower: &str) -> String {
+    const WINDOW: usize = 12;
+    let lower = text.to_lowercase();
+    let Some(pos) = lower.find(kw_lower) else {
+        return text.chars().take(2 * WINDOW + kw_lower.chars().count()).collect();
+    };
+    let chars: Vec<char> = text.chars().collect();
+    let byte_pos = text[..pos].chars().count(); // 命中起点（字符序）
+    let start = byte_pos.saturating_sub(WINDOW);
+    let end = (byte_pos + kw_lower.chars().count() + WINDOW).min(chars.len());
+    let mut snippet: String = chars[start..end].iter().collect();
+    if start > 0 {
+        snippet.insert(0, '…');
+    }
+    if end < chars.len() {
+        snippet.push('…');
+    }
+    snippet
+}
