@@ -76,5 +76,8 @@ windows = { version = "0.61", features = [
     "Win32_System_LibraryLoader",
     # v0.4.0（REQ-042 M7）：GetDiskFreeSpaceExW 磁盘健康巡检（写满崩溃是最常见隐性故障）
     "Win32_Storage_FileSystem",
+    # v0.7.0（2026-08 用户需求）：DwmGetWindowAttribute(DWMWA_CLOAKED) 过滤
+    # cloaked 窗口（UWP/Edge 悬浮层被 DWM 隐藏但 IsWindowVisible 误报）
+    "Win32_Graphics_Dwm",
 ] }
 

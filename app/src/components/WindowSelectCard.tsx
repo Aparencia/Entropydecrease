@@ -42,10 +42,21 @@ function WindowRow({ win, isSelected, onClick }: { win: WindowInfo; isSelected: 
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{win.title}</div>
+        <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {win.title}
+          {/* 2026-08：站点首页标记（无视频内容落地页，不进入推荐但可手动选） */}
+          {win.isHomepage && (
+            <span
+              style={{ marginLeft: 6, fontSize: 10, color: "#9ca3af", background: "#f3f4f6", borderRadius: 4, padding: "0 4px" }}
+              title="站点首页（无视频内容），可手动选择兜底"
+            >
+              🏠 首页
+            </span>
+          )}
+        </div>
         <div style={{ fontSize: 11, color: "#6b7280" }}>
           进程: {win.processName || "未知"} (PID {win.pid})
-          {win.reasons[0] && <span style={{ color: "#0d9488" }}> · 推荐: {win.reasons[0]}</span>}
+          {win.score > 0 && win.reasons[0] && <span style={{ color: "#0d9488" }}> · 推荐: {win.reasons[0]}</span>}
         </div>
       </div>
       {win.score >= 100 && <span title="高置信推荐">★</span>}

@@ -33,6 +33,9 @@ pub struct CaptureWindow {
     pub score: u32,
     /// 命中原因（如 "B站视频" / "Chrome 浏览器"）
     pub reasons: Vec<String>,
+    /// 站点首页标记（2026-08 用户需求：B站首页等无视频内容落地页，
+    /// 前端显示"首页"标签且不进入推荐；仍可手动选择兜底）
+    pub is_homepage: bool,
 }
 
 /// 标题关键词评分表：(关键词, 权重, 原因)。
@@ -96,16 +99,23 @@ pub fn score_window(title: &str, process_name: &str) -> (u32, Vec<String>) {
 /// 枚举当前可捕获的顶层窗口（含进程信息与评分），按评分降序。
 ///
 /// @ai-context: 过滤不可见窗口、空标题窗口与自身进程窗口；进程名查询失败时保留窗口（进程名空）。
+/// @ai-context: 2026-08 用户需求（过滤增强）：再过滤"无法用于采集"的窗口——
+///              最小化（GetWindowRect 返回 -32000 坐标，裁剪无内容）/零尺寸/
+///              cloaked（UWP/Edge 悬浮层，DWM 不绘制）/工具窗口（WS_EX_TOOLWINDOW
+///              且非 APPWINDOW，工具栏/悬浮窗）；站点首页（B站/YouTube 落地页，
+///              无视频内容）降权移出推荐（仍可手动选择兜底）。
 #[cfg(windows)]
 pub fn list_capture_windows() -> Vec<CaptureWindow> {
     use windows::core::{BOOL, PWSTR};
-    use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM};
+    use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, RECT};
     use windows::Win32::System::Threading::{
         OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT,
         PROCESS_QUERY_LIMITED_INFORMATION,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetShellWindow, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
+        EnumWindows, GetShellWindow, GetWindowLongPtrW, GetWindowRect, GetWindowTextW,
+        GetWindowThreadProcessId, IsIconic, IsWindowVisible, GWL_EXSTYLE, WS_EX_APPWINDOW,
+        WS_EX_TOOLWINDOW,
     };
 
     /// 由 PID 查询进程名（不含扩展名）；权限不足或进程退出时返回空串。
@@ -133,14 +143,42 @@ pub fn list_capture_windows() -> Vec<CaptureWindow> {
             .unwrap_or_default()
     }
 
-    /// EnumWindows 回调：收集可见且有标题的窗口原始信息。
+    /// 窗口是否可采集（系统级判定，2026-08 过滤增强）：
+    /// 最小化 / cloaked（DWM 不绘制）/ 工具窗口（非 APPWINDOW 的 TOOLWINDOW）。
+    unsafe fn is_capturable(hwnd: HWND) -> bool {
+        if IsIconic(hwnd).as_bool() {
+            return false;
+        }
+        // DWMWA_CLOAKED=14：UWP/Edge 等被 DWM 隐藏但 IsWindowVisible 误报的窗口
+        let mut cloaked: u32 = 0;
+        if ::windows::Win32::Graphics::Dwm::DwmGetWindowAttribute(
+            hwnd,
+            ::windows::Win32::Graphics::Dwm::DWMWA_CLOAKED,
+            &mut cloaked as *mut u32 as *mut core::ffi::c_void,
+            std::mem::size_of::<u32>() as u32,
+        )
+        .is_ok()
+            && cloaked != 0
+        {
+            return false;
+        }
+        let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        let tool = (ex as u32 & WS_EX_TOOLWINDOW.0) != 0;
+        let app = (ex as u32 & WS_EX_APPWINDOW.0) != 0;
+        if tool && !app {
+            return false; // 工具栏/悬浮窗：不可作为采集目标
+        }
+        true
+    }
+
+    /// EnumWindows 回调：收集可见、有标题、可采集的窗口原始信息。
     unsafe extern "system" fn enum_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
         let out = &mut *(lparam.0 as *mut Vec<(i64, String, u32)>);
         // TD-007：过滤 shell/桌面窗口（Program Manager 等系统噪声，非可捕获目标）
         if hwnd == GetShellWindow() {
             return BOOL(1);
         }
-        if IsWindowVisible(hwnd).as_bool() {
+        if IsWindowVisible(hwnd).as_bool() && is_capturable(hwnd) {
             let mut buf = [0u16; 512];
             let len = GetWindowTextW(hwnd, &mut buf);
             if len > 0 {
@@ -165,10 +203,20 @@ pub fn list_capture_windows() -> Vec<CaptureWindow> {
     let mut windows: Vec<CaptureWindow> = raw
         .into_iter()
         .filter(|(_, _, pid)| *pid != self_pid)
+        // 零尺寸窗口（可见但无内容可裁剪）过滤：坐标非法/零宽高均不可采集
+        .filter(|(id, _, _)| {
+            let mut rect = RECT::default();
+            let ok = unsafe { GetWindowRect(HWND(*id as *mut core::ffi::c_void), &mut rect) };
+            ok.is_ok() && crate::window_filter::has_capturable_size(rect.right - rect.left, rect.bottom - rect.top)
+        })
         .map(|(id, title, pid)| {
             let process_name = unsafe { process_name_of(pid) };
             let (score, reasons) = score_window(&title, &process_name);
-            CaptureWindow { id, title, process_name, pid, score, reasons }
+            let is_homepage = crate::window_filter::is_site_homepage(&title);
+            // 站点首页降权：移出推荐（评分清零 + 原因标注），仍保留可手动选择
+            let (score, reasons) =
+                crate::window_filter::demote_homepage(score, reasons, &title);
+            CaptureWindow { id, title, process_name, pid, score, reasons, is_homepage }
         })
         .collect();
     // 推荐窗口（高分）在前，同级按标题稳定排序

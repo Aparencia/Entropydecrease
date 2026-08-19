@@ -160,6 +160,8 @@ mod video_profile;
 mod video_profile_data;
 mod vocab;
 mod watermark_filter;
+// v0.7.0 窗口过滤增强：站点首页判定/可捕获性纯逻辑（2026-08 用户需求）
+mod window_filter;
 mod windows;
 
 // 临时诊断模块（定位实时链路无 OCR 根因；诊断后删除）

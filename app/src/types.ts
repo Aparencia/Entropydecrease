@@ -13,6 +13,8 @@ export interface WindowInfo {
   pid: number;
   score: number;
   reasons: string[];
+  /** 站点首页标记（2026-08：B站首页等无视频内容落地页，不进入推荐） */
+  isHomepage: boolean;
 }
 
 /** ASR 转写片段 */
