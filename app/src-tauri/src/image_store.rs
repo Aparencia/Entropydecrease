@@ -57,10 +57,17 @@ impl SessionImageStore {
     ///
     /// @ai-context: REQ-067 same_image 双稳定判定（与帧聚类共用）——
     ///              旋转/缩放/静止重复图不重复存/不占预算。
-    fn dedupe_hit(&self, ah: u64, dh: u64) -> Option<String> {
+    /// @ai-context: namespace 限定（"crop/" 或 "full/"）——六轮审查修复：
+    ///              同一 FIFO 但匹配仅限同命名空间，防跨命名空间误判
+    ///              （裁剪图与整帧内容相近时 save_crop 返回 full/ 路径且不落盘，
+    ///              save_user_screenshot 返回路径直接暴露前端，必须正确）。
+    fn dedupe_hit(&self, ah: u64, dh: u64, namespace: &str) -> Option<String> {
         self.recent_fingerprints
             .iter()
-            .find(|(la, ld, _)| crate::frame_cluster::same_image(*la, *ld, ah, dh, 6, 8))
+            .find(|(la, ld, path)| {
+                path.starts_with(namespace)
+                    && crate::frame_cluster::same_image(*la, *ld, ah, dh, 6, 8)
+            })
             .map(|(_, _, path)| path.clone())
     }
 
@@ -91,7 +98,7 @@ impl SessionImageStore {
             .ok_or_else(|| crate::error::AppError::Io("裁剪图数据无效".to_string()))?;
         let ah = crate::ocr_cache::average_hash(&rgb);
         let dh = crate::ocr_cache::difference_hash(&rgb);
-        if let Some(existing) = self.dedupe_hit(ah, dh) {
+        if let Some(existing) = self.dedupe_hit(ah, dh, "crop/") {
             return Ok(existing);
         }
         if self.remaining_budget() == 0 {
@@ -142,7 +149,7 @@ impl SessionImageStore {
         // 双指纹去重（先于预算检查——重复帧不消耗预算；FIFO 缓冲覆盖往返窗口）
         let ah = crate::ocr_cache::average_hash(&rgb);
         let dh = crate::ocr_cache::difference_hash(&rgb);
-        if let Some(existing) = self.dedupe_hit(ah, dh) {
+        if let Some(existing) = self.dedupe_hit(ah, dh, "full/") {
             return Ok(existing);
         }
         if self.remaining_budget() == 0 {

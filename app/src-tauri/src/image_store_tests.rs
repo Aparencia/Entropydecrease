@@ -67,6 +67,28 @@ fn save_crop_isolated_from_full_frames() {
 }
 
 #[test]
+fn crop_and_full_same_content_isolated_by_namespace() {
+    // Arrange（六轮审查修复回归：去重按命名空间隔离——旧实现同一 FIFO 无差别
+    // 命中，裁剪图与整帧内容相同时 save_crop 返回 full/ 路径且不落盘；
+    // save_user_screenshot 的返回路径直接暴露前端，必须正确）
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = SessionImageStore::new(dir.path().to_path_buf()).unwrap();
+    let img = seeded_frame(64, 64, 7);
+    // Act：完全相同内容先后存 full 与 crop
+    let full = store.save_frame(1000, &img, 64, 64).unwrap();
+    let crop = store.save_crop(2000, &img, 64, 64).unwrap();
+    // Assert：命名空间隔离——两个文件都落盘、路径各自正确
+    assert_eq!(full, "full/1000.webp");
+    assert_eq!(crop, "crop/2000.webp");
+    assert!(dir.path().join("full/1000.webp").exists());
+    assert!(dir.path().join("crop/2000.webp").exists());
+    // 同命名空间内重复仍去重（不落盘、返回首次路径）
+    let dup = store.save_crop(3000, &img, 64, 64).unwrap();
+    assert_eq!(dup, "crop/2000.webp");
+    assert!(!dir.path().join("crop/3000.webp").exists());
+}
+
+#[test]
 fn save_crop_shares_budget_with_frames() {
     // Arrange：裁剪图与关键帧共用预算（防总盘占用失控）
     let dir = tempfile::tempdir().unwrap();

@@ -323,8 +323,11 @@ pub fn process_frame(
     if !is_subtitle && !layout_regions.is_empty() {
         let (blocks, failed_regions) =
             crate::region_ocr::region_ocr_blocks(&frame, engines, &layout_regions, image_store);
-        if !blocks.is_empty() {
-            // 区域路径有产出：正常分支（失败区域数计入统计，不阻断整体）
+        // 六轮审查修复：回退判定以**过滤后有无可用块**为准（score ≥0.5 + 非空 +
+        // 非 UI 垃圾）——原实现看原始块是否为空：区域 OCR 产出任意低分/垃圾块
+        // （播放器时间码/画面误检）时整帧兜底被跳过，真实画面文字仍可能无出口
+        if crate::live_keyframes::has_useful_blocks(&blocks, ui_junk) {
+            // 区域路径有可用产出：正常分支（失败区域数计入统计，不阻断整体）
             stats.ocr_err += failed_regions as u64;
             stats.ocr_ok += 1;
             // OCR 成功即刷新兜底基准（无论是否产出文本）
@@ -336,8 +339,8 @@ pub fn process_frame(
                 ocr_input_dhash, ui_junk,
             );
         } else {
-            // 区域路径无产出 → 整帧 OCR 兜底（结构性回退链：误判/空白区域
-            // 不得阻断全帧识别——真实画面文字必须仍有出口）
+            // 区域路径无可用产出（误判/空白区域/垃圾块）→ 整帧 OCR 兜底
+            // （结构性回退链：误判/空白区域不得阻断全帧识别——真实画面文字必须仍有出口）
             match engines.recognize_image(rgb) {
                 Ok(blocks) => {
                     stats.ocr_err += failed_regions as u64;

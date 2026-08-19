@@ -154,9 +154,9 @@ fn malformed_grid_returns_empty() {
 #[test]
 fn region_sampling_weights_table_highest() {
     // Act
-    let (table_w, table_skip) = region_sampling_weight(RegionKind::Table);
-    let (text_w, text_skip) = region_sampling_weight(RegionKind::Text);
-    let (img_w, img_skip) = region_sampling_weight(RegionKind::Image);
+    let (table_w, _table_skip) = region_sampling_weight(RegionKind::Table);
+    let (text_w, _text_skip) = region_sampling_weight(RegionKind::Text);
+    let (_img_w, img_skip) = region_sampling_weight(RegionKind::Image);
     let (unknown_w, unknown_skip) = region_sampling_weight(RegionKind::Unknown);
     // Assert：table > text；image 跳过；unknown 低权重不跳过
     assert!(table_w > text_w);

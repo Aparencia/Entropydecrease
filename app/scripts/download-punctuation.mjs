@@ -10,6 +10,7 @@
  * @ai-context: 文件必须与 lib.rs punctuation_model() 的路径约定完全匹配。
  *
  * 用法：node scripts/download-punctuation.mjs
+ * 要求：Node.js ≥ 18（fetch + AbortSignal.timeout）
  */
 
 import { mkdir, writeFile, rename, stat, readFile, readdir, unlink } from "node:fs/promises";
@@ -113,9 +114,18 @@ async function main() {
   for (const name of MODEL_FILES) {
     await downloadFile(name, TARGET_DIR, [MIRROR_BASE, OFFICIAL_BASE]);
   }
-  // 官方 fp32 文件名兜底（主源完全不可用时）
+  // 官方 fp32 文件名兜底（主源完全不可用时）：下载后必须重命名回 model.int8.onnx——
+  // 六轮审查修复：lib.rs punctuation_model() 只认该文件名，旧实现兜底下载
+  // "成功"但运行时永远加载不到（静默降级 + 脚本误报全部完成）
   if (MODEL_FILES.every((n) => !fileExists(path.join(TARGET_DIR, n)))) {
     await downloadFile("model.onnx", TARGET_DIR, [OFFICIAL_BASE]);
+    if (await fileExists(path.join(TARGET_DIR, "model.onnx"))) {
+      await rename(
+        path.join(TARGET_DIR, "model.onnx"),
+        path.join(TARGET_DIR, "model.int8.onnx"),
+      );
+      console.log("[完成] 官方 fp32 兜底已重命名为 model.int8.onnx（运行时路径约定）");
+    }
   }
   await writeFile(versionFile, MODEL_VERSION, "utf8");
   console.log("全部完成。缺失文件请手动放置后重启应用。");

@@ -47,10 +47,8 @@ pub fn handle_full_frame(
     ui_junk: &crate::ui_junk::UiJunkList,
 ) {
     // REQ-083：UI 垃圾块源头过滤（播放器时间码/控制条/水印——与字幕路径同口径）
-    let kept: Vec<&crate::types::OcrBlock> = blocks
-        .iter()
-        .filter(|b| b.score >= 0.5 && !b.text.trim().is_empty() && !ui_junk.is_junk(&b.text))
-        .collect();
+    let kept: Vec<&crate::types::OcrBlock> =
+        blocks.iter().filter(|b| is_useful_block(b, ui_junk)).collect();
     let texts: Vec<String> = kept.iter().map(|b| b.text.clone()).collect();
     // REQ-066（v0.6.0 M3）：帧新颖度——与最近已见文本高重叠 → 冗余帧：
     // 不落库/不归档/不收集样本（预算花在新内容上；与变化检测两级串联：
@@ -114,6 +112,64 @@ pub fn handle_full_frame(
         );
     }
     *last_texts = texts;
+}
+
+/// 块是否有用（纯函数）：score ≥ 0.5 + 非空文本 + 非 UI 垃圾。
+///
+/// @ai-context: 与字幕路径（REQ-083）同口径的"可消费块"判定。六轮审查修复：
+///              区域路径"空产出回退整帧"曾以**原始块为空**判定——区域 OCR
+///              产出任意低分/垃圾块（播放器时间码/视频画面误检）时整帧兜底被
+///              跳过，误判区域场景仍可能饿死真实画面文字；回退应以"过滤后
+///              无可用块"为准，本函数供 live_frame_process 复用。
+pub fn is_useful_block(block: &crate::types::OcrBlock, ui_junk: &crate::ui_junk::UiJunkList) -> bool {
+    block.score >= 0.5 && !block.text.trim().is_empty() && !ui_junk.is_junk(&block.text)
+}
+
+/// 是否存在可用块（纯函数；区域路径整帧回退判定入口）。
+pub fn has_useful_blocks(
+    blocks: &[crate::types::OcrBlock],
+    ui_junk: &crate::ui_junk::UiJunkList,
+) -> bool {
+    blocks.iter().any(|b| is_useful_block(b, ui_junk))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 构造 OCR 块（测试辅助）。
+    fn block(text: &str, score: f32) -> crate::types::OcrBlock {
+        crate::types::OcrBlock {
+            timestamp_ms: None,
+            text: text.to_string(),
+            score,
+            bbox: None,
+            region_kind: None,
+        }
+    }
+
+    #[test]
+    fn useful_block_requires_score_text_and_non_junk() {
+        // Arrange：默认黑名单（时间码特征开启）
+        let junk = crate::ui_junk::UiJunkList::defaults();
+        // Act/Assert：合格块可用；各维度不满足均不可用
+        assert!(is_useful_block(&block("今天讲熵减", 0.9), &junk));
+        assert!(!is_useful_block(&block("今天讲熵减", 0.4), &junk), "低分块不可用");
+        assert!(!is_useful_block(&block("", 0.9), &junk), "空文本不可用");
+        assert!(!is_useful_block(&block("   ", 0.9), &junk), "空白不可用");
+        assert!(!is_useful_block(&block("14:25", 0.9), &junk), "播放器时间码不可用");
+    }
+
+    #[test]
+    fn has_useful_blocks_any_match() {
+        let junk = crate::ui_junk::UiJunkList::defaults();
+        // 全部垃圾/低分 → false；混入一个可用块 → true
+        let all_junk = vec![block("暂停", 0.9), block("14:25", 0.95)];
+        assert!(!has_useful_blocks(&all_junk, &junk), "全垃圾块不得判定为有产出");
+        let mixed = vec![block("14:25", 0.95), block("真实内容", 0.8)];
+        assert!(has_useful_blocks(&mixed, &junk), "存在可用块应判定为有产出");
+        assert!(!has_useful_blocks(&[], &junk));
+    }
 }
 
 /// 实时画面要点事件载荷（前端实时画面流，简要单行卡片）。
