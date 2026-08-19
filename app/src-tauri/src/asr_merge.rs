@@ -120,6 +120,27 @@ mod tests {
     }
 
     #[test]
+    fn chained_merges_join_multi_cut_sentence() {
+        // 回归测试（TD-2026-08-19）：连续 rule3 硬切（同一句话被切三刀）——
+        // 链式合并 A+B → AB，AB+C → ABC，最终成完整句。
+        // @ai-context: 挂起段恒为硬切段——其尾部句号是 SenseVoice 在音频截断处
+        //              的模型猜测（不可信），合并时剥离（"分享。"→"分享"）；
+        //              句号恢复由课后精修/F4-2 标点路径补回（ADR-012 局限记录）。
+        let a = merge_segments("那今天晚上我", "会用三个阶段来做分享。", 0).expect("A+B");
+        assert_eq!(a, "那今天晚上我会用三个阶段来做分享。");
+        let b = merge_segments(&a, "一个呢就是关于复盘模型的一个简单的介绍。", 0).expect("AB+C");
+        assert_eq!(b, "那今天晚上我会用三个阶段来做分享一个呢就是关于复盘模型的一个简单的介绍。");
+    }
+
+    #[test]
+    fn chained_merge_failure_falls_back_to_independent() {
+        // 链式合并失败（gap 超限）→ 挂起段独立落库语义（返回 None）
+        // 模拟：挂起段与下一段间隔 1.2s（正常句间）——不合并
+        let a = merge_segments("第一段内容", "第二段内容", 1200);
+        assert_eq!(a, None);
+    }
+
+    #[test]
     fn whitespace_boundaries_handled() {
         assert_eq!(merge_segments("那今天晚上我。 ", "  会用三个阶段。", 0), Some("那今天晚上我会用三个阶段。".to_string()));
     }

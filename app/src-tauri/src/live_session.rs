@@ -489,7 +489,30 @@ fn run_session(
                                 .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
                             // ADR-012 F4-1：rule3/短停顿硬切段挂起——等下一 Final
                             // 判定语义合并（gap ≤600ms 才合并）；不立即推送/落库
+                            // TD-2026-08-19 修复：连续硬切必须**链式合并**——此前
+                            // 新挂起段无条件覆盖旧挂起段，连续 rule3 切段（13.wav
+                            // 取证模式）时中间段全部丢失（不落库不推送）
                             if merge_with_next {
+                                // 已有挂起段：先尝试链式合并（同一句话被切多刀）
+                                if let Some((p_start, p_end, p_text)) = pending_merge.take() {
+                                    let gap = start_ms.saturating_sub(p_end);
+                                    if let Some(merged) = merge_segments(&p_text, &text, gap) {
+                                        last_final_clean = Some(merged.clone());
+                                        pending_merge = Some((p_start, end_ms, merged));
+                                        continue;
+                                    }
+                                    // 合并失败（gap 超限等）：兜底落库旧挂起段
+                                    persist_final(
+                                        &params.app,
+                                        &db,
+                                        session_id,
+                                        &mut asr_segments,
+                                        p_start,
+                                        p_end,
+                                        p_text,
+                                        0.9,
+                                    );
+                                }
                                 pending_merge = Some((start_ms, end_ms, text));
                                 continue;
                             }
