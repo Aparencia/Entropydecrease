@@ -13,34 +13,52 @@ use crate::session_events::{EventKind, NewSessionEvent, SessionEvent};
 
 impl Db {
     /// 追加一条信号事件（实时链路写入）。
+    ///
+    /// @ai-context: 容量守卫与插入包在同一事务（审查修复：原实现"删最旧"与
+    ///              "插入"分属两个 autocommit 语句——INSERT 失败时 DELETE 已
+    ///              提交，最旧事件丢失且新事件未入；事务化后任一步失败整体
+    ///              回滚，数据不丢）。Mutex 锁已保证并发串行（无竞态）。
     pub fn add_event(&self, new: &NewSessionEvent) -> Result<SessionEvent> {
         let conn = self.conn.lock().expect("db lock poisoned");
-        // 容量守卫：超预算先删最旧（同一事务，防写放大无限增长）
-        if crate::session_events::over_budget(self.count_events_locked(&conn, new.session_id)?) {
+        conn.execute("BEGIN TRANSACTION", [])?;
+        let result = (|| -> Result<SessionEvent> {
+            // 容量守卫：超预算先删最旧（同一事务，防写放大无限增长）
+            if crate::session_events::over_budget(self.count_events_locked(&conn, new.session_id)?) {
+                conn.execute(
+                    "DELETE FROM session_events WHERE id IN (
+                         SELECT id FROM session_events WHERE session_id = ?1 ORDER BY timestamp_ms ASC LIMIT 1
+                     )",
+                    params![new.session_id],
+                )?;
+            }
             conn.execute(
-                "DELETE FROM session_events WHERE id IN (
-                     SELECT id FROM session_events WHERE session_id = ?1 ORDER BY timestamp_ms ASC LIMIT 1
-                 )",
-                params![new.session_id],
+                "INSERT INTO session_events (session_id, kind, timestamp_ms, payload_json)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![
+                    new.session_id,
+                    new.kind.as_str(),
+                    new.timestamp_ms as i64,
+                    new.payload.to_string(),
+                ],
             )?;
+            Ok(SessionEvent {
+                id: conn.last_insert_rowid(),
+                session_id: new.session_id,
+                kind: new.kind,
+                timestamp_ms: new.timestamp_ms,
+                payload: new.payload.clone(),
+            })
+        })();
+        match result {
+            Ok(e) => {
+                conn.execute("COMMIT", [])?;
+                Ok(e)
+            }
+            Err(e) => {
+                let _ = conn.execute("ROLLBACK", []);
+                Err(e)
+            }
         }
-        conn.execute(
-            "INSERT INTO session_events (session_id, kind, timestamp_ms, payload_json)
-             VALUES (?1, ?2, ?3, ?4)",
-            params![
-                new.session_id,
-                new.kind.as_str(),
-                new.timestamp_ms as i64,
-                new.payload.to_string(),
-            ],
-        )?;
-        Ok(SessionEvent {
-            id: conn.last_insert_rowid(),
-            session_id: new.session_id,
-            kind: new.kind,
-            timestamp_ms: new.timestamp_ms,
-            payload: new.payload.clone(),
-        })
     }
 
     /// 列出会话全部信号事件（按时间轴升序；消费端过滤类型）。

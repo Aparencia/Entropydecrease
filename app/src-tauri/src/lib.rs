@@ -19,7 +19,9 @@ mod analysis;
 mod artifact;
 mod artifact_templates;
 mod audio_event_filter;
-mod audio_preprocess;
+// pub：bin/cer_bench.rs（REQ-101 CER 微基准工具）引用 AudioPreprocessor
+// （审查 H1 修复：私有模块使 bin 无法编译，完整 cargo test 失败）
+pub mod audio_preprocess;
 // v0.7.0 M1（REQ-101）：音频预处理链持久化配置（CER 微基准定默认后的用户开关）
 mod audio_preproc_config;
 // v0.7.0 M2（REQ-126）：分应用音频路由探针（WASAPI 会话级 API 面 spike）
@@ -29,7 +31,8 @@ mod audio_store;
 mod backup;
 mod capture;
 // v0.7.0 M1（REQ-101）：CER 计算（预处理链默认值定标的微基准依据）
-mod cer;
+// pub：bin/cer_bench.rs 引用（审查 H1 修复，同 audio_preprocess）
+pub mod cer;
 mod chapter_detect;
 // v0.7.0 M1（REQ-104/132）：剪贴板信号（文本信号 + 图片直贴；内存态，arboard 轮询）
 mod clipboard_signal;

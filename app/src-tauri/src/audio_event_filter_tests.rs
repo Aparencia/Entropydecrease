@@ -68,6 +68,49 @@ fn notification_tone_after_silence_suppressed() {
     assert_eq!(filter.suppressed_count, 1);
 }
 
+// ── 审查 H4 修复（v0.7.0 新增代码审查）：跨块通知音延续抑制 ──
+
+#[test]
+fn multi_block_tone_suppressed_across_blocks() {
+    // Arrange：0.8s 通知音 = 4 块（200ms/块）——跨块延续场景
+    let sr: u32 = 16_000;
+    let silent_block = vec![0.0f32; (sr / 5) as usize];
+    let mut filter = AudioEventFilter::default();
+    filter.observe(&silent_block, sr, true);
+    filter.observe(&silent_block, sr, true);
+    // Act：同一音的 4 个 200ms 块依次喂入（每块单独检测）
+    let mut suppressed_blocks = 0;
+    for _ in 0..4 {
+        let block = synth_tone(sr, 880.0, 0.2, 0.3);
+        let d = filter.observe(&block, sr, false);
+        if d.should_suppress {
+            suppressed_blocks += 1;
+        }
+    }
+    // Assert：全部 4 块都抑制（H4 修复前仅首块抑制、延续块泄漏进 ASR）
+    assert_eq!(suppressed_blocks, 4, "跨块通知音应全部抑制");
+}
+
+#[test]
+fn suppressing_resets_on_speech_block() {
+    // Arrange：通知音抑制后出现语音块 → 抑制态复位（不误杀后续语音）
+    let sr: u32 = 16_000;
+    let silent_block = vec![0.0f32; (sr / 5) as usize];
+    let mut filter = AudioEventFilter::default();
+    filter.observe(&silent_block, sr, true);
+    filter.observe(&silent_block, sr, true);
+    let tone = synth_tone(sr, 880.0, 0.2, 0.3);
+    assert!(filter.observe(&tone, sr, false).should_suppress);
+    // Act：语音块（噪声调制，非固定音）
+    let speech_block = synth_speech(sr, 0.2, 0.3);
+    let d = filter.observe(&speech_block, sr, false);
+    // Assert：语音块不被抑制（非固定音）+ 抑制态复位
+    assert!(!d.should_suppress);
+    // 后续再出现通知音需重新满足前置静音（不因旧抑制态误判）
+    let d2 = filter.observe(&tone, sr, false);
+    assert!(!d2.should_suppress, "语音后通知音应重新判定（前置静音不足）");
+}
+
 #[test]
 fn continuous_speech_not_fixed_tone() {
     // Arrange：噪声调制 2s（模拟连续语音）

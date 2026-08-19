@@ -161,8 +161,10 @@ pub struct AudioEventDecision {
 pub struct AudioEventFilter {
     pub enabled: bool,
     config: AudioEventFilterConfig,
-    /// 连续静音块计数（block_is_silent=true 递增；非静音块归零）。
+    /// 连续静音块计数（block_is_silent=true 递增；非静音非固定音块归零）。
     recent_silent_blocks: u32,
+    /// 固定音抑制粘滞态（H4 修复：通知音延续块保持抑制——语音块复位）。
+    suppressing: bool,
     /// 累计 suppress 块数（诊断/测试观测；生产暂未消费）——登记豁免 dead_code。
     #[allow(dead_code)]
     pub suppressed_count: u64,
@@ -174,6 +176,7 @@ impl Default for AudioEventFilter {
             enabled: true,
             config: AudioEventFilterConfig::default(),
             recent_silent_blocks: 0,
+            suppressing: false,
             suppressed_count: 0,
         }
     }
@@ -193,6 +196,12 @@ impl AudioEventFilter {
     ///              非静音块先判固定音，再查前置静音 ≥2 块。命中 →
     ///              should_suppress（调用方将本块按静音喂入 ASR）；
     ///              suppressed_count 累计命中块数。
+    /// @ai-context: 审查 H4 修复（v0.7.0 新增代码审查）：通知音典型 0.3-0.8s
+    ///              = 2-4 块（200ms/块）。原实现每块归零前置静音计数——首块
+    ///              命中后计数=0，延续块（同一音的后续块）不再满足"前置静音
+    ///              ≥2" → 不 suppress → 通知音大部分时长仍进 ASR。修复：
+    ///              固定音延续块（非静音 + is_fixed）保持抑制态（抑制状态
+    ///              粘滞直到非固定音块/静音块出现——语音块自然归零）。
     pub fn observe(
         &mut self,
         samples: &[f32],
@@ -205,8 +214,20 @@ impl AudioEventFilter {
         }
         let is_fixed =
             self.enabled && is_fixed_tone_with_config(samples, sample_rate, &self.config);
-        let should_suppress = is_fixed && self.recent_silent_blocks >= PRECEDING_SILENT_BLOCKS;
-        self.recent_silent_blocks = 0;
+        // H4：固定音延续块保持抑制（抑制粘滞直到语音/静音块复位）
+        let should_suppress =
+            if is_fixed {
+                self.recent_silent_blocks >= PRECEDING_SILENT_BLOCKS || self.suppressing
+            } else {
+                false
+            };
+        // 语音块（非固定音）复位抑制态与前置静音计数；固定音延续不归零
+        if is_fixed {
+            self.suppressing = should_suppress;
+        } else {
+            self.suppressing = false;
+            self.recent_silent_blocks = 0;
+        }
         if should_suppress {
             self.suppressed_count += 1;
         }

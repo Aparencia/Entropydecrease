@@ -93,13 +93,22 @@ pub fn analyze_session_opt(
 
     // ── 章节检测（C1）：30s 窗口聚合（网课档案开关）──
     // REQ-108（v0.7.0 M1.5）：优先消费 session_events 真实信号（帧切换/长静音），
-    // 无事件数据的旧会话回退 OCR/gap 近似（build_chapter_signals，零回归）
+    // 无**章节类**事件的旧会话回退 OCR/gap 近似（build_chapter_signals，零回归）。
+    // 审查修复（v0.7.0 新增代码审查）：原判定 `events.is_empty()` 全量——
+    // 会话只有 Clipboard/前台等非章节事件时事件路径输入严重稀疏（frame_switch/
+    // long_silence 恒 false）且丢弃 OCR/gap 近似信号；改为按类型判定。
     let chapters = if rules.chapter_detect {
-        let events = detail.events.clone();
-        if events.is_empty() {
-            detect_chapters(&build_chapter_signals(segments, ocr_blocks), DEFAULT_MIN_VOTES)
+        let has_chapter_events = detail.events.iter().any(|e| {
+            matches!(
+                e.kind,
+                crate::session_events::EventKind::FrameSwitch
+                    | crate::session_events::EventKind::LongSilence
+            )
+        });
+        if has_chapter_events {
+            detect_chapters(&build_chapter_signals_with_events(segments, &detail.events), DEFAULT_MIN_VOTES)
         } else {
-            detect_chapters(&build_chapter_signals_with_events(segments, &events), DEFAULT_MIN_VOTES)
+            detect_chapters(&build_chapter_signals(segments, ocr_blocks), DEFAULT_MIN_VOTES)
         }
     } else {
         Vec::new()
@@ -186,7 +195,11 @@ pub fn analyze_session_opt(
 
     // ── 实践段（M16/REQ-128）：前台切换序列纯规则推导（全档案计算——
     //    视频↔编辑器交替；实操/跟练档案产物模板消费；无事件 → 空向量兜底）──
-    let practice_segments = crate::foreground_timeline::practice_segments(&detail.events);
+    // 未闭合段 end 用会话结束时刻（审查 H1 修复：监控器"变化才写"下
+    // 未闭合序列的最后事件=离开时刻，零长过滤会整段丢失实践）
+    let session_end_ms = segments.last().map(|s| s.end_ms);
+    let practice_segments =
+        crate::foreground_timeline::practice_segments(&detail.events, session_end_ms);
 
     // ── 播放器行为（M1/REQ-125）：PlayerBehavior 事件表映射（全档案计算——
     //    难点信号消费；无事件 → 空向量兜底）──

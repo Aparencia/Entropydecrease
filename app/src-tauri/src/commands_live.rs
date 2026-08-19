@@ -112,6 +112,8 @@ fn start_clipboard_monitor(state: &AppState, session_id: i64, epoch: Instant) {
         stop.clone(),
         state.clipboard.clone(),
         state.data_dir.join("session-images").join(session_id.to_string()),
+        // REQ-108 补接线（审查发现）：Clipboard 事件落库（设计文档承诺）
+        state.db.clone(),
     );
     *state.clipboard_monitor.lock().expect("剪贴板监听锁中毒") =
         Some(crate::clipboard_signal::ClipboardMonitorHandle { stop, thread });

@@ -152,6 +152,8 @@ pub struct ClipboardMonitorHandle {
 /// @param stop - 停止标志（stop_live_session 置位；线程分片休眠及时退出）
 /// @param store - 共享信号存储（跨命令消费）
 /// @param image_dir - 会话图片目录（data_dir/session-images/<id>；REQ-132 直贴落库）
+/// @param db - 会话 DB（REQ-108 事件表写入——审查补接线：Clipboard 事件
+///             设计文档承诺"record_copy 顺带写"，原实现仅存内存信号）
 pub fn spawn_clipboard_monitor(
     app: tauri::AppHandle,
     session_id: i64,
@@ -159,10 +161,11 @@ pub fn spawn_clipboard_monitor(
     stop: Arc<AtomicBool>,
     store: Arc<ClipboardSignalStore>,
     image_dir: std::path::PathBuf,
+    db: crate::db::Db,
 ) -> JoinHandle<()> {
     std::thread::Builder::new()
         .name("entropy-clipboard-monitor".into())
-        .spawn(move || monitor_loop(app, session_id, epoch, stop, store, image_dir))
+        .spawn(move || monitor_loop(app, session_id, epoch, stop, store, image_dir, db))
         .expect("启动剪贴板监听线程失败")
 }
 
@@ -174,6 +177,7 @@ fn monitor_loop(
     stop: Arc<AtomicBool>,
     store: Arc<ClipboardSignalStore>,
     image_dir: std::path::PathBuf,
+    db: crate::db::Db,
 ) {
     let mut last_text_hash: Option<u64> = None;
     let mut last_image_hash: Option<u64> = None;
@@ -190,13 +194,23 @@ fn monitor_loop(
                 continue;
             }
         };
-        // 1) 文本信号（REQ-104）：变化且非空 → record_copy
+        // 1) 文本信号（REQ-104）：变化且非空 → record_copy + 事件表（REQ-108）
         if let Ok(text) = clipboard.get_text() {
             if !text.trim().is_empty() {
                 let h = content_hash(text.as_bytes());
                 if last_text_hash != Some(h) {
                     last_text_hash = Some(h);
                     store.record_copy(session_id, &text, now_ms);
+                    // REQ-108 补接线（审查发现）：Clipboard 事件落库——
+                    // 只存 30 字预览（隐私红线，与 record_copy 同口径）
+                    let _ = db.add_event(&crate::session_events::NewSessionEvent {
+                        session_id,
+                        kind: crate::session_events::EventKind::Clipboard,
+                        timestamp_ms: now_ms,
+                        payload: serde_json::json!({
+                            "preview": preview(&text),
+                        }),
+                    });
                 }
             }
         }

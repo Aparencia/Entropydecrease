@@ -119,30 +119,51 @@ pub fn restore_backup(archive: &Path, data_dir: &Path) -> Result<usize> {
     }
 
     // 防误删：现有 db 改名 .pre-restore
+    // @ai-context: 审查 H2 修复（v0.7.0 新增代码审查）：改名失败（Windows 上
+    //              活连接共享冲突）→ 明确报错引导"关闭应用后恢复"；改名成功
+    //              后解压失败 → 回滚改名（恢复原库，防半恢复状态数据不可用）。
     let db_path = data_dir.join(DB_FILE_NAME);
-    if db_path.exists() {
-        std::fs::rename(&db_path, data_dir.join(format!("{}{}", DB_FILE_NAME, PRE_RESTORE_SUFFIX)))?;
-    }
+    let pre_restore_path = data_dir.join(format!("{}{}", DB_FILE_NAME, PRE_RESTORE_SUFFIX));
+    let renamed_db = if db_path.exists() {
+        match std::fs::rename(&db_path, &pre_restore_path) {
+            Ok(()) => true,
+            Err(e) => {
+                return Err(AppError::Io(format!(
+                    "数据库文件被占用，无法恢复（请关闭应用后重试——当前数据库连接仍在使用中）: {}",
+                    e
+                )));
+            }
+        }
+    } else {
+        false
+    };
 
     // 第二遍：解压（条目已在第一遍校验，此处仅做防御性二次检查）
     let mut restored = 0usize;
-    for i in 0..zip.len() {
-        let mut entry = zip
-            .by_index(i)
-            .map_err(|e| AppError::Io(format!("读取备份条目失败: {}", e)))?;
-        if entry.is_dir() {
-            continue; // zip 不存空目录；父目录在写文件时按需创建
+    let result = (|| -> Result<usize> {
+        for i in 0..zip.len() {
+            let mut entry = zip
+                .by_index(i)
+                .map_err(|e| AppError::Io(format!("读取备份条目失败: {}", e)))?;
+            if entry.is_dir() {
+                continue; // zip 不存空目录；父目录在写文件时按需创建
+            }
+            let dest = safe_dest(data_dir, entry.name())
+                .ok_or_else(|| AppError::Io("备份条目路径不安全，已中止恢复".to_string()))?;
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let mut out = std::fs::File::create(&dest)?;
+            std::io::copy(&mut entry, &mut out)?;
+            restored += 1;
         }
-        let dest = safe_dest(data_dir, entry.name())
-            .ok_or_else(|| AppError::Io("备份条目路径不安全，已中止恢复".to_string()))?;
-        if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let mut out = std::fs::File::create(&dest)?;
-        std::io::copy(&mut entry, &mut out)?;
-        restored += 1;
+        Ok(restored)
+    })();
+    // 解压失败 → 回滚：恢复原 db（防半恢复状态：新库不完整 + 旧库被改名）
+    if result.is_err() && renamed_db {
+        let _ = std::fs::rename(&pre_restore_path, &db_path);
     }
-    Ok(restored)
+    result
 }
 
 /// 校验 zip 条目名并得到安全目标路径（路径穿越防护核心）。

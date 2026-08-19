@@ -35,6 +35,9 @@ const DRAIN_GRACE_SECS: u64 = 8;
 const LONG_SILENCE_EVENT_BLOCKS: u32 = 15;
 /// 音频块时长（ms，REQ-108 长静音事件载荷计算用——与 AUDIO_BLOCK_SECS 同源）。
 const AUDIO_BLOCK_MS: u64 = 200;
+/// 音量骤变事件阈值（REQ-108：段间 volume 差 ≥ 该值写 VolumeSurge 事件——
+/// 与 highlight_detect VOLUME_SURGE_DELTA=0.3 同口径，重点标注冗余备源）。
+const VOLUME_SURGE_EVENT_DELTA: f32 = 0.3;
 
 /// 主循环共享上下文（run_session 装配，run_audio_loop 消费）。
 ///
@@ -98,6 +101,8 @@ pub(crate) fn run_audio_loop(
     // REQ-103：段内 RMS 聚合（语音块累计，Final 落库时取均值 → volume 列）
     let mut sentence_rms_sum: f32 = 0.0;
     let mut sentence_rms_count: u32 = 0;
+    // REQ-108：上一段 volume（VolumeSurge 骤变事件判定基准）
+    let mut last_segment_volume: Option<f32> = None;
     // REQ-108：连续静音块计数（长静音事件触发判定）
     let mut silent_blocks: u32 = 0;
 
@@ -215,6 +220,30 @@ pub(crate) fn run_audio_loop(
                             } else {
                                 None
                             };
+                            // REQ-108 补接线（审查发现：VolumeSurge/VadSegment 事件
+                            // 设计文档承诺写入但未实现——现补齐）：
+                            // VAD 段事件（段落级，供讲者/语速统计备数据）
+                            let _ = ctx.db.add_event(&crate::session_events::NewSessionEvent {
+                                session_id: ctx.session_id,
+                                kind: crate::session_events::EventKind::VadSegment,
+                                timestamp_ms: chunk.timestamp_ms,
+                                payload: serde_json::json!({}),
+                            });
+                            // 音量骤变事件（与本段 volume 关联；骤变阈值 0.3 与
+                            // highlight_detect VOLUME_SURGE_DELTA 同口径）
+                            if let (Some(v), Some(pv)) = (volume, last_segment_volume) {
+                                if (v - pv).abs() >= VOLUME_SURGE_EVENT_DELTA {
+                                    let _ = ctx.db.add_event(
+                                        &crate::session_events::NewSessionEvent {
+                                            session_id: ctx.session_id,
+                                            kind: crate::session_events::EventKind::VolumeSurge,
+                                            timestamp_ms: chunk.timestamp_ms,
+                                            payload: serde_json::json!({ "delta": (v - pv).abs() }),
+                                        },
+                                    );
+                                }
+                            }
+                            last_segment_volume = volume;
                             sentence_rms_sum = 0.0;
                             sentence_rms_count = 0;
                             // 定稿落库/挂起合并/句子切分（live_session_persist.rs）

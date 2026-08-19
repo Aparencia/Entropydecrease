@@ -80,8 +80,8 @@ fn main() {
                 continue;
             }
             // 截取窗口（防御边界：起点含前导 margin，终点含尾随 margin）
-            let start_s = (s.start_ms as i64 - HEAD_MARGIN_MS).max(0) as usize;
-            let end_s = ((s.end_ms as i64 + TAIL_MARGIN_MS) * 16) as usize;
+            let start_s = (s.start_ms - HEAD_MARGIN_MS).max(0) as usize;
+            let end_s = ((s.end_ms + TAIL_MARGIN_MS) * 16) as usize;
             let end_s = end_s.min(samples.len());
             if start_s >= end_s {
                 continue;

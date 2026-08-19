@@ -59,6 +59,11 @@ impl ForegroundMonitor {
     ///
     /// @ai-context: 首观测（last_hwnd=None→Some）即落库——提供会话起点基线事件
     ///              （practice_segments 依赖"首事件 hwnd = 录制目标"）。
+    /// @ai-context: 审查 H2 修复：首观测若 target_hwnd 已知，**先落 target 基线事件
+    ///              再落当前观测**——录制启动瞬间应用窗口在前台（用户刚点"开始"），
+    ///              首事件=应用窗口会使 practice_segments 目标反相（观看时间被标为
+    ///              实践）；显式 target 基线消除该偏差。target 未知（全屏捕获）时
+    ///              维持原行为（首观测=当前前台，诚实近似）。
     /// @ai-context: 副作用：DB 写入失败仅 eprintln（前台信号不阻断屏幕链路）；
     ///              容量守卫由 db.add_event 内部处理（FIFO 删最旧）。
     pub fn observe(&mut self, current_hwnd: Option<i64>, now_ms: u64, session_id: i64, db: &Db) {
@@ -67,18 +72,32 @@ impl ForegroundMonitor {
         if changed {
             if let Some(hwnd) = current_hwnd {
                 if self.last_recorded_hwnd != Some(hwnd) {
-                    self.last_recorded_hwnd = Some(hwnd);
-                    let event = NewSessionEvent {
-                        session_id,
-                        kind: EventKind::ForegroundSwitch,
-                        timestamp_ms: now_ms,
-                        payload: serde_json::json!({ "hwnd": hwnd }),
-                    };
-                    if let Err(e) = db.add_event(&event) {
-                        eprintln!("[ForegroundMonitor] 前台事件落库失败: {}", e);
+                    // H2：首观测（无已记录基线）且 target 已知 → 先落 target 基线
+                    if self.last_recorded_hwnd.is_none() {
+                        if let Some(t) = self.target_hwnd {
+                            if t != hwnd {
+                                self.record(session_id, now_ms, t, db);
+                                self.last_recorded_hwnd = Some(t);
+                            }
+                        }
                     }
+                    self.last_recorded_hwnd = Some(hwnd);
+                    self.record(session_id, now_ms, hwnd, db);
                 }
             }
+        }
+    }
+
+    /// 落库一条前台事件（内部辅助：失败仅告警不阻断）。
+    fn record(&self, session_id: i64, now_ms: u64, hwnd: i64, db: &Db) {
+        let event = NewSessionEvent {
+            session_id,
+            kind: EventKind::ForegroundSwitch,
+            timestamp_ms: now_ms,
+            payload: serde_json::json!({ "hwnd": hwnd }),
+        };
+        if let Err(e) = db.add_event(&event) {
+            eprintln!("[ForegroundMonitor] 前台事件落库失败: {}", e);
         }
     }
 }
@@ -89,12 +108,18 @@ impl ForegroundMonitor {
 ///              ——用户启动录制时视频窗口在前台；假设偏差时实践段整体偏移，
 ///              由真机样本校准）。转换规则：目标→其他 = 实践段开始；
 ///              其他→目标 = 实践段结束；tool 无窗口信息 → 恒 "other"（诚实标注）。
-/// @ai-context: 未闭合段（事件序列结束时仍在实践）end 取最后观测时刻——
-///              诚实标注"会话结束时仍在实践"，不丢数据。
+/// @ai-context: 未闭合段（事件序列结束时仍在实践）end 取 **会话结束时刻**
+///              （session_end_ms 注入——审查 H1 修复：原实现 end=最后观测时刻，
+///              监控器"变化才写"使未闭合序列恒为 [T,O]（最后事件=离开时刻）
+///              → 零长被过滤 → 整段实践丢失；session_end_ms=None 时回退
+///              最后观测时刻（兼容旧调用，不丢数据语义降级为近似）。
 /// @ai-context: 边界：空事件/单事件/全同 hwnd → 空向量（无交替不产生实践段）；
 ///              载荷缺 hwnd 的事件跳过（防御脏数据）；输入须按时间升序
 ///              （落库查询 ORDER BY timestamp_ms 保证）。
-pub fn practice_segments(events: &[SessionEvent]) -> Vec<PracticeSegment> {
+pub fn practice_segments(
+    events: &[SessionEvent],
+    session_end_ms: Option<u64>,
+) -> Vec<PracticeSegment> {
     // ① 提取有效 (hwnd, timestamp) 序列（仅 ForegroundSwitch；载荷缺 hwnd 跳过）
     let pairs: Vec<(i64, u64)> = events
         .iter()
@@ -137,10 +162,12 @@ pub fn practice_segments(events: &[SessionEvent]) -> Vec<PracticeSegment> {
             }
         }
     }
-    // ③ 未闭合段：end = 最后观测时刻（会话结束时仍在实践，诚实标注不丢数据）
+    // ③ 未闭合段：end = 会话结束时刻（H1 修复：监控器"变化才写"下最后事件
+    // = 离开时刻，零长会被 ④ 丢弃 → 整段实践丢失；注入会话时长兜底）
     if let Some(o) = open {
         let last_t = pairs.last().map(|(_, t)| *t).unwrap_or(o.start_ms);
-        segments.push(PracticeSegment { start_ms: o.start_ms, end_ms: last_t, tool: o.tool });
+        let end = session_end_ms.filter(|e| *e > o.start_ms).unwrap_or(last_t);
+        segments.push(PracticeSegment { start_ms: o.start_ms, end_ms: end, tool: o.tool });
     }
     // ④ 零长段（离开即结束/会话即止）无信息量，丢弃
     segments.into_iter().filter(|s| s.end_ms > s.start_ms).collect()

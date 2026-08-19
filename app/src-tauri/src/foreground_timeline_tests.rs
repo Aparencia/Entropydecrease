@@ -98,21 +98,21 @@ fn monitor_stores_target_hwnd() {
 #[test]
 fn practice_segments_empty_events() {
     // Arrange & Act：无事件 → 空向量（边界）
-    assert!(practice_segments(&[]).is_empty());
+    assert!(practice_segments(&[], None).is_empty());
 }
 
 #[test]
 fn practice_segments_single_event() {
     // Arrange & Act：仅基线（无交替）→ 空
     let events = vec![fg_event(1000, 100)];
-    assert!(practice_segments(&events).is_empty());
+    assert!(practice_segments(&events, None).is_empty());
 }
 
 #[test]
 fn practice_segments_all_same_hwnd() {
     // Arrange & Act：全同窗口（无交替）→ 空
     let events = vec![fg_event(1000, 100), fg_event(5000, 100), fg_event(9000, 100)];
-    assert!(practice_segments(&events).is_empty());
+    assert!(practice_segments(&events, None).is_empty());
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn practice_segments_one_round() {
     // Arrange：目标 100 → 200 → 回 100（一轮交替）
     let events = vec![fg_event(1000, 100), fg_event(5000, 200), fg_event(9000, 100)];
     // Act
-    let segs = practice_segments(&events);
+    let segs = practice_segments(&events, None);
     // Assert：一个实践段（5000 离开视频 → 9000 回来），tool 诚实 "other"
     assert_eq!(segs.len(), 1);
     assert_eq!(segs[0].start_ms, 5000);
@@ -139,7 +139,7 @@ fn practice_segments_multiple_rounds() {
         fg_event(12000, 100),
     ];
     // Act
-    let segs = practice_segments(&events);
+    let segs = practice_segments(&events, None);
     // Assert：两段（3000-6000、9000-12000）
     assert_eq!(segs.len(), 2);
     assert_eq!((segs[0].start_ms, segs[0].end_ms), (3000, 6000));
@@ -151,7 +151,7 @@ fn practice_segments_unclosed_at_session_end() {
     // Arrange：离开视频后未回来（会话结束时仍在实践）
     let events = vec![fg_event(0, 100), fg_event(3000, 200), fg_event(6000, 200)];
     // Act
-    let segs = practice_segments(&events);
+    let segs = practice_segments(&events, None);
     // Assert：未闭合段 end = 最后观测时刻（诚实标注，不丢数据）
     assert_eq!(segs.len(), 1);
     assert_eq!((segs[0].start_ms, segs[0].end_ms), (3000, 6000));
@@ -180,7 +180,7 @@ fn practice_segments_filters_kind_and_bad_payload() {
         fg_event(13000, 100),
     ];
     // Act：仅有效 (hwnd) 前台事件参与（目标 = 首个有效事件 100）
-    let segs = practice_segments(&events);
+    let segs = practice_segments(&events, None);
     // Assert：一个实践段（9000 离开 100 → 13000 回来）
     assert_eq!(segs.len(), 1);
     assert_eq!((segs[0].start_ms, segs[0].end_ms), (9000, 13000));
@@ -191,7 +191,37 @@ fn practice_segments_zero_length_dropped() {
     // Arrange：离开视频后会话即结束（仅一次转换 → 零长段）
     let events = vec![fg_event(0, 100), fg_event(3000, 200)];
     // Act
-    let segs = practice_segments(&events);
+    let segs = practice_segments(&events, None);
     // Assert：零长段（start==end==3000）无信息量，丢弃
+    assert!(segs.is_empty());
+}
+
+// ── 审查 H1 修复（v0.7.0 新增代码审查）：未闭合段用会话结束时刻 ──
+
+#[test]
+fn practice_segments_unclosed_uses_session_end() {
+    // Arrange：用户 5s 切走直到会话结束（监控器"变化才写"→ 序列在离开时刻终止）
+    let events = vec![fg_event(0, 100), fg_event(5000, 200)];
+    // Act：注入会话结束时刻 60000（2h 会话尾）
+    let segs = practice_segments(&events, Some(60_000));
+    // Assert：未闭合实践段 [5000, 60000] 保留（此前零长被丢弃 = 整段实践丢失）
+    assert_eq!(segs.len(), 1);
+    assert_eq!((segs[0].start_ms, segs[0].end_ms), (5000, 60_000));
+}
+
+#[test]
+fn practice_segments_unclosed_without_session_end_falls_back() {
+    // Arrange：同上但无会话结束时刻（兼容旧调用）
+    let events = vec![fg_event(0, 100), fg_event(5000, 200)];
+    // Act & Assert：回退最后观测时刻 → 零长丢弃（近似语义，不崩溃）
+    assert!(practice_segments(&events, None).is_empty());
+}
+
+#[test]
+fn practice_segments_session_end_before_start_ignored() {
+    // Arrange：会话结束时刻早于实践开始（脏数据防御）
+    let events = vec![fg_event(0, 100), fg_event(5000, 200)];
+    // Act：session_end < start → 回退最后观测（不产生 end < start 的段）
+    let segs = practice_segments(&events, Some(3000));
     assert!(segs.is_empty());
 }
