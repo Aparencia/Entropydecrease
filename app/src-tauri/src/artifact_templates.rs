@@ -420,21 +420,35 @@ fn merge_lines(run: &[&CodeFrame]) -> String {
 }
 
 /// 代码语言启发式（纯函数；仅前 12 行签名探测，未知返回 None——不猜测）。
+/// @ai-context: 审查 M1 修复（v0.7.0 新增代码审查）：原实现 `import ` 排在
+///              python 分支首位——Java/JS/TS 的 `import`（模块导入语法）被
+///              全部误判为 python。修复：按语言特异签名判定（python 用
+///              `def `/`print(`；JS/TS 的 `import ... from` 归 javascript；
+///              java 的 `import ...;` 分号结尾归 java——判定顺序改为
+///              先特异后通用）。
 fn detect_language(code: &str) -> Option<String> {
     let head: Vec<&str> = code.lines().take(12).collect();
     let head = head.join("\n");
-    if head.contains("def ") || head.contains("import ") || head.contains("print(") {
-        Some("python".into())
-    } else if head.contains("pub fn ") || head.contains("fn ") || head.contains("let mut ")
+    if head.contains("pub fn ") || head.contains("fn ") || head.contains("let mut ")
         || head.contains("impl ")
     {
         Some("rust".into())
-    } else if head.contains("public static") || (head.contains("class ") && head.contains("void ")) {
-        Some("java".into())
-    } else if head.contains("function ") || head.contains("const ") || head.contains("=>")
-        || head.contains("console.")
+    } else if head.contains("def ") || head.contains("print(") {
+        // python 特异签名（`import` 不判——多语言共有）
+        Some("python".into())
+    } else if head.contains("public static") || head.contains("public class")
+        || (head.contains("class ") && head.contains("void "))
     {
+        Some("java".into())
+    } else if head.contains("import ") && head.contains(" from ")
+        || head.contains("function ") || head.contains("const ") || head.contains("=>")
+        || head.contains("console.") || head.contains("interface ")
+    {
+        // JS/TS：`import ... from`（ESM）或函数/箭头/接口签名
         Some("javascript".into())
+    } else if head.contains("import ") && head.contains(';') {
+        // Java/Go 风格 import（分号结尾）——java 已在上面捕获，此处兜底
+        Some("java".into())
     } else {
         None
     }
@@ -506,13 +520,21 @@ pub fn build_artifact(
         // 自然返回空——诚实降级，不产空代码块）
         ProfileKind::Coding => {
             let mut blocks = lecture_blocks(detail, &analysis, keyframes);
+            // 审查 M4 修复（v0.7.0 新增代码审查）：code_blocks 内部 order 从 0
+            // 起始，extend 后与 lecture_blocks 的 order 冲突（DB 按 block_order
+            // 排序读取 → 重复 order 顺序不确定）——此处偏移到 lecture 块数之后。
+            let offset = blocks.len() as u32;
             let code_frames: Vec<CodeFrame> = detail
                 .ocr_blocks
                 .iter()
                 .filter(|b| b.region_kind.as_deref() == Some("code"))
                 .map(|b| CodeFrame { timestamp_ms: b.timestamp_ms, text: b.text.clone() })
                 .collect();
-            blocks.extend(code_blocks(detail, &analysis, &code_frames));
+            let mut code_blocks_out = code_blocks(detail, &analysis, &code_frames);
+            for b in &mut code_blocks_out {
+                b.order += offset;
+            }
+            blocks.extend(code_blocks_out);
             blocks
         }
     };

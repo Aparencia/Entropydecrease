@@ -133,7 +133,8 @@ pub fn builtin_profiles() -> Vec<VideoProfile> {
             disable_ocr: true,
             disable_asr: false,
         },
-        // REQ-124（T1）直播：ASR+图像流，无 OCR/弹幕（裁决）——disable_ocr=true
+        // REQ-124（T1）直播：ASR 为主 + 画面低频（裁决：无 OCR/弹幕——
+        // disable_ocr=true 跳过画面链；图像流存储层接线后直播画面走 stream）
         VideoProfile {
             kind: ProfileKind::Live,
             detect_signals: DetectSignals {

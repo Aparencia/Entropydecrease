@@ -24,7 +24,8 @@
 | app/src-tauri/src/commands_session.rs | ~350 | v0.6.0 M6 增长：会话命令域（CRUD/笔记预览单一管线/质量报告/课程分组/段搜索）内聚于会话生命周期域 | 若再增长：course/search 拆至 commands_session_extra.rs |
 | app/src-tauri/src/note_filter.rs | ~390 | v0.6.0 M1（REQ-082/085）：笔记过滤域（过滤链 + 边界段分类 + AI 判定应用 + 画面要点净化）内聚于单一管线（双出口一致性由构造保证） | 若再增长：boundary_candidates/apply_ai_decisions 拆至 note_filter_ai.rs |
 | app/src-tauri/src/fusion_tests.rs | ~392 | 融合测试域（ADR-005 四规则 + REQ-062 概率加权 + REQ-103 音量透传 + REQ-111 切分对齐）单模块 #[path] 挂载；测试文件沿用单模块模式未拆 | 若再增长：REQ-111 切分对齐组拆至 fusion_split_tests.rs |
-| app/src-tauri/src/analysis.rs | ~334 | v0.5.0 M2 起结构化分析编排域（章节/重点/术语/讲者 + v0.7.0 M1.5 事件消费 + M2 step_boundaries/practice_segments/player_actions 三字段）；各机制输出聚合内聚于单一分析函数 | 若再增长：build_chapter_signals 事件版拆至 analysis_signals.rs |
+| app/src-tauri/src/analysis.rs | ~343 | v0.5.0 M2 起结构化分析编排域（章节/重点/术语/讲者 + v0.7.0 M1.5 事件消费 + M2 step_boundaries/practice_segments/player_actions 三字段 + 审查修复按类型判定）；各机制输出聚合内聚于单一分析函数 | 若再增长：build_chapter_signals 事件版拆至 analysis_signals.rs |
+| app/src-tauri/src/live_session_loop.rs | ~313 | v0.7.0 M0 拆分产物（音频编排循环）：主循环 + 长静音/音量骤变/VAD 段事件写入（审查补接线）+ drain/停止 flush；LiveLoopCtx 聚合上下文 | 若再增长：事件写入块拆至 live_session_events.rs |
 | app/src-tauri/src/analysis_tests.rs | ~339 | 分析编排测试域（档案门控矩阵 + REQ-108 事件消费 + M2 三字段）单模块 #[path] 挂载 | 若再增长：事件消费组拆至 analysis_events_tests.rs |
 | app/src-tauri/src/video_profile_tests.rs | ~338 | 档案测试域（12 档案断言矩阵 + 检测投票 + JSON 校准）单模块 #[path] 挂载 | 若再增长：档案矩阵拆至 video_profile_data_tests.rs |
 | app/src-tauri/src/artifact_templates_tests.rs | ~336 | 产物模板测试域（五档案模板 + v0.7.0 M2 代码块/步骤卡扩展）单模块 #[path] 挂载 | 若再增长：代码块/步骤卡组拆至 artifact_code_tests.rs |

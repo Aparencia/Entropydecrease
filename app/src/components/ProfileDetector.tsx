@@ -70,10 +70,15 @@ export default function ProfileDetector({
       .then((r) => {
         if (cancelled) return;
         setResult(r);
-        // 最高分候选预选（记忆命中/高分时即为最终档案）
-        const top = r.candidates[0]?.kind ?? "lecture";
-        setSelected(top);
-        onProfileChange?.(top);
+        // 审查 M5 修复（v0.7.0 新增代码审查）：needs_confirmation=true（低置信/
+        // 多候选）时**不自动预选**——原实现直接取 candidates[0] 并 onProfileChange，
+        // 用户尚未确认档案已生效（"检测→确认闭环"被绕过）；仅高置信（无需确认）
+        // 或记忆命中时自动生效。展示候选由用户确认后生效。
+        if (!r.needs_confirmation) {
+          const top = r.candidates[0]?.kind ?? "lecture";
+          setSelected(top);
+          onProfileChange?.(top);
+        }
       })
       .catch((e) => {
         if (!cancelled) setError(`档案检测失败: ${e}`);

@@ -176,12 +176,18 @@ pub fn detect_step_boundaries_opt(
 }
 
 /// 近邻边界合并（纯函数）：窗口内保留高优先级边界（标签更具体者胜）。
+///
+/// @ai-context: 审查 M3 修复（v0.7.0 新增代码审查）：原实现 `priority(&b) >
+///              priority(last)` 严格大于——同优先级（如两个口令 cue=3）时
+///              后到边界被静默丢弃（快节奏跟练"第一组→第二组"间隔 <3s
+///              时第二张步骤卡丢失）。修复：同优先级保留后者（`>=`——时间
+///              更晚的口令是"最新指令"，语义更正确）。
 fn merge_nearby(boundaries: Vec<StepBoundary>, window_ms: u64) -> Vec<StepBoundary> {
     let mut out: Vec<StepBoundary> = Vec::new();
     for b in boundaries {
         if let Some(last) = out.last_mut() {
             if b.time_ms.saturating_sub(last.time_ms) <= window_ms {
-                if priority(&b) > priority(last) {
+                if priority(&b) >= priority(last) {
                     *last = b;
                 }
                 continue;
