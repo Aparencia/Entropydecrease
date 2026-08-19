@@ -16,7 +16,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use sherpa_onnx::{OnlineRecognizer, OnlineRecognizerConfig, OnlineStream};
+use sherpa_onnx::{OfflinePunctuation, OfflinePunctuationConfig, OnlineRecognizer, OnlineRecognizerConfig, OnlineStream};
 
 use crate::asr_clean::clean_asr_result;
 use crate::asr_rescore::pick_rescored_with;
@@ -52,8 +52,9 @@ impl Default for StreamingAsrConfig {
 pub enum StreamingAsrEvent {
     /// 实时候选文本（节流推送）
     Partial { text: String },
-    /// 端点断句定稿文本
-    Final { text: String },
+    /// 端点断句定稿文本；merge_with_next=true 表示 rule3/短停顿硬切段——
+    /// 编排层应延迟与下一段尝试语义级合并（ADR-012 F4-1）
+    Final { text: String, merge_with_next: bool },
 }
 
 /// partial 推送最小间隔（ms）——防 IPC 风暴（原项目参数）。
@@ -84,15 +85,22 @@ pub struct StreamingAsrEngine {
     sentence_pcm: Vec<f32>,
     /// 可选 SenseVoice 整句重打分器（离线引擎池）
     rescorer: Option<EnginePool>,
+    /// 可选标点恢复器（ADR-012 F4-2：重打分未通过的 final 补语义标点；
+    /// 模型缺失 → None 零开销降级，不阻断 ASR）
+    punctuator: Option<OfflinePunctuation>,
 }
 
 impl StreamingAsrEngine {
     /// 加载流式模型创建引擎（重操作，仅启动时执行一次）。
+    ///
+    /// @ai-context: punctuation_model=标点恢复模型路径（ADR-012 F4-2）；路径缺失
+    ///              或加载失败 → None 降级（无标点，现状行为）。
     pub fn load(
         models: &StreamingAsrModels,
         config: &StreamingAsrConfig,
         rescorer: Option<EnginePool>,
         vocab: Option<Arc<Mutex<VocabStore>>>,
+        punctuation_model: Option<String>,
     ) -> Result<Self> {
         ensure_model_files(models)?;
         let mut recognizer_config = OnlineRecognizerConfig::default();
@@ -116,6 +124,18 @@ impl StreamingAsrEngine {
         let recognizer = OnlineRecognizer::create(&recognizer_config)
             .ok_or_else(|| AppError::Asr("创建流式识别器失败（请检查模型文件与配置）".to_string()))?;
         let stream = recognizer.create_stream();
+        // ADR-012 F4-2：标点恢复器懒加载——模型缺失/创建失败 → None（零开销降级）
+        let punctuator = punctuation_model
+            .filter(|p| std::path::Path::new(p).exists())
+            .and_then(|p| {
+                let mut punct_config = OfflinePunctuationConfig::default();
+                punct_config.model.ct_transformer = Some(p);
+                let created = OfflinePunctuation::create(&punct_config);
+                if created.is_none() {
+                    eprintln!("[StreamingAsr] 标点恢复模型加载失败（无标点降级）");
+                }
+                created
+            });
         Ok(Self {
             recognizer,
             stream,
@@ -128,6 +148,7 @@ impl StreamingAsrEngine {
             silent_blocks_since_speech: 0,
             sentence_pcm: Vec::new(),
             rescorer,
+            punctuator,
         })
     }
 
@@ -166,7 +187,11 @@ impl StreamingAsrEngine {
             let final_text = clean_asr_result(&final_text);
             if !final_text.is_empty() && final_text != self.last_final_text {
                 self.last_final_text = final_text.clone();
-                events.push(StreamingAsrEvent::Final { text: final_text });
+                // ADR-012 F4-1：非尾静音端点（rule3/短停顿硬切）→ 标记可合并
+                events.push(StreamingAsrEvent::Final {
+                    text: final_text,
+                    merge_with_next: !silence_terminated,
+                });
             }
             self.stream = self.new_stream();
             self.last_partial_text.clear();
@@ -204,7 +229,7 @@ impl StreamingAsrEngine {
             return None;
         }
         self.last_final_text = tail.clone();
-        Some(StreamingAsrEvent::Final { text: tail })
+        Some(StreamingAsrEvent::Final { text: tail, merge_with_next: false })
     }
 
     /// 重置（新会话开始时调用，清空流状态与句音频；
@@ -246,22 +271,43 @@ impl StreamingAsrEngine {
     ///
     /// @ai-context: 决策规则见 asr_rescore.rs——① 前缀扩展接受（截断修复，仅
     ///              尾静音端点）；② 短句放宽（≤4 字距离 ≤1）；③ 原 40% 门限。
-    ///              重打分失败/引擎不可用/一致性不满足时保留 Zipformer 结果。
+    ///              重打分失败/引擎不可用/一致性不满足时保留 Zipformer 结果，
+    ///              并对该结果补语义标点（ADR-012 F4-2，punctuator 缺失则原样）。
     fn maybe_rescore(&mut self, zipformer_text: &str, silence_terminated: bool) -> String {
+        // 字段级借用分离：闭包只捕获 punctuator 引用（不捕获 &self），
+        // 与下方 sentence_pcm 的可变借用不冲突
+        let punctuator = &self.punctuator;
+        let fallback = || {
+            let text = zipformer_text.trim().to_string();
+            // F4-2：仅未被 SenseVoice 替换的文本补标点（替换文本自带 use_itn 标点）
+            punctuate(punctuator, &text)
+        };
         let Some(rescorer) = self.rescorer.as_ref() else {
-            return zipformer_text.trim().to_string();
+            return fallback();
         };
         if self.sentence_pcm.is_empty() {
-            return zipformer_text.trim().to_string();
+            return fallback();
         }
         let pcm = std::mem::take(&mut self.sentence_pcm);
         match rescorer.transcribe_pcm(&pcm, self.sample_rate) {
             Ok(TranscriptSegment { text, .. }) if !text.trim().is_empty() => {
                 pick_rescored_with(zipformer_text, &text, silence_terminated)
-                    .unwrap_or_else(|| zipformer_text.trim().to_string())
+                    .unwrap_or_else(fallback)
             }
-            _ => zipformer_text.trim().to_string(),
+            _ => fallback(),
         }
+    }
+}
+
+/// 标点恢复（ADR-012 F4-2，自由函数——避免闭包捕获 &self 与 sentence_pcm
+/// 可变借用冲突）：重打分未通过的 final 补语义标点。
+///
+/// @ai-context: 推理 ~10-30ms/句（int8 CPU）——端点路径一次，实时性无影响；
+///              punctuator 缺失或推理失败 → 原样返回（零开销降级）。
+fn punctuate(punctuator: &Option<OfflinePunctuation>, text: &str) -> String {
+    match punctuator {
+        Some(p) => p.add_punctuation(text).unwrap_or_else(|| text.to_string()),
+        None => text.to_string(),
     }
 }
 

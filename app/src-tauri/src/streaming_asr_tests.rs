@@ -86,9 +86,10 @@ fn load_and_feed_streaming_zipformer_integration() {
         joiner: p("joiner.fp16.onnx"),
         tokens: p("tokens.txt"),
     };
-    // Act：加载（ADR-012：显式传 config；M5 词表参数传 None）
-    let mut engine = StreamingAsrEngine::load(&models, &StreamingAsrConfig::default(), None, None)
-        .expect("流式模型加载成功");
+    // Act：加载（ADR-012：显式传 config；M5 词表参数传 None；F4-2 标点模型传 None）
+    let mut engine =
+        StreamingAsrEngine::load(&models, &StreamingAsrConfig::default(), None, None, None)
+            .expect("流式模型加载成功");
     // 喂入合成音频（1s 随机噪声 = 非静音，走完整 decode 路径）
     let samples: Vec<f32> = (0..16000).map(|i| ((i % 997) as f32 / 997.0 - 0.5) * 0.2).collect();
     let events = engine.feed(&samples, false);
@@ -96,4 +97,34 @@ fn load_and_feed_streaming_zipformer_integration() {
     let _ = engine.flush();
     let _ = events;
     println!("流式引擎加载与喂入通过（模型目录: {}", base);
+}
+
+/// 集成测试：标点恢复模型加载与中文标点补全（ADR-012 F4-2）。
+///
+/// @ai-context: 模型目录取 ENTROPY_PUNCT_MODEL_DIR 环境变量，默认
+///              %APPDATA%\com.entropydecrease.app\models\punctuation\model.int8.onnx；
+///              引擎缺失该模型时零开销降级（无标点），本测试验证有模型路径的效果。
+#[test]
+#[ignore = "集成测试：需要真实标点模型文件"]
+fn punctuation_model_integration() {
+    // Arrange：模型路径（环境变量优先，回退 AppData 默认）
+    let model = std::env::var("ENTROPY_PUNCT_MODEL_DIR").unwrap_or_else(|_| {
+        let appdata = std::env::var("APPDATA").expect("APPDATA 环境变量");
+        format!("{}\\com.entropydecrease.app\\models\\punctuation\\model.int8.onnx", appdata)
+    });
+    // Act：创建标点恢复器（F4-2 引擎内同配置）
+    let mut config = sherpa_onnx::OfflinePunctuationConfig::default();
+    config.model.ct_transformer = Some(model.clone());
+    let punct = sherpa_onnx::OfflinePunctuation::create(&config).expect("标点模型加载成功");
+    // Assert：中文无标点文本补全标点（模型输出应含句号/逗号）
+    let out = punct
+        .add_punctuation("那今天晚上我会用三个阶段来做分享一个呢就是关于复盘模型的一个简单的介绍")
+        .expect("标点补全成功");
+    assert!(
+        out.contains('。') || out.contains('，') || out.contains('！') || out.contains('？'),
+        "输出应含标点: {}",
+        out
+    );
+    println!("标点补全输出: {}", out);
+    println!("标点模型验证通过（模型: {}", model);
 }

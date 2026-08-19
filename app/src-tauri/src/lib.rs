@@ -13,6 +13,7 @@ mod asr;
 mod asr_clean;
 mod asr_dedupe;
 mod asr_health;
+mod asr_merge;
 mod asr_rescore;
 mod analysis;
 mod artifact;
@@ -152,6 +153,15 @@ fn streaming_asr_models(model_dir: &Path) -> StreamingAsrModels {
         joiner: dir.join("joiner.fp16.onnx").to_string_lossy().into_owned(),
         tokens: dir.join("tokens.txt").to_string_lossy().into_owned(),
     }
+}
+
+/// 构造标点恢复模型路径（ADR-012 F4-2：models/punctuation/；缺失 → None 降级）。
+///
+/// @ai-context: 与 download-punctuation.mjs 的目录约定一致；模型缺失时引擎
+///              零开销降级（无标点，现状行为），不阻断 ASR。
+fn punctuation_model(model_dir: &Path) -> Option<String> {
+    let p = model_dir.join("punctuation/model.int8.onnx");
+    p.exists().then(|| p.to_string_lossy().into_owned())
 }
 
 /// 构造 OCR 模型标识（oar-ocr 注册名，首次使用从 ModelScope 国内源自动下载缓存）。

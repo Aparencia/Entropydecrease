@@ -22,6 +22,7 @@ use std::time::{Duration, Instant};
 use tauri::Emitter;
 
 use crate::asr_dedupe::dedupe_across_finals;
+use crate::asr_merge::merge_segments;
 use crate::capture::resample::compute_rms;
 use crate::capture::{AudioChunk, AudioLoopbackCapture};
 use crate::db::Db;
@@ -63,6 +64,43 @@ pub struct AsrFinalEvent {
     pub text: String,
 }
 
+/// 定稿段推送 + 落库（正常段/挂起段兜底/合并段共用——ADR-012 F4-1）。
+///
+/// @ai-context: 事件、session_segments、asr_segments（融合输入）三处一致落库，
+///              避免 F4-1 挂起/合并引入的多出口不一致（与 R7 预览落库一致性同构）。
+fn persist_final(
+    app: &tauri::AppHandle,
+    db: &Db,
+    session_id: i64,
+    asr_segments: &mut Vec<TranscriptSegment>,
+    start_ms: u64,
+    end_ms: u64,
+    text: String,
+    confidence: f32,
+) {
+    let _ = app.emit(
+        "live:asr-final",
+        AsrFinalEvent { timestamp_ms: start_ms, text: text.clone() },
+    );
+    let _ = db.add_segment(&NewSessionSegment {
+        session_id,
+        start_ms,
+        end_ms,
+        text: text.clone(),
+        source: "asr".to_string(),
+        confidence: Some(confidence),
+    });
+    asr_segments.push(TranscriptSegment {
+        start_ms,
+        end_ms,
+        text,
+        // 流式链路词级时间戳：B8 由离线/精修路径产出（None）
+        word_timestamps: None,
+        // REQ-062：融合概率加权输入（与落库 confidence 同源）
+        confidence: Some(confidence),
+    });
+}
+
 /// 会话融合状态跟踪（REQ-031：内存标记，ADR-008 决策——不迁移 sessions 表；
 /// V1.0 ADR-006 派生表落地时自然取代）。
 #[derive(Clone, Default)]
@@ -94,6 +132,8 @@ pub struct LiveSessionParams {
     pub db: Db,
     pub engines: EnginePool,
     pub streaming_models: StreamingAsrModels,
+    /// ADR-012 F4-2：标点恢复模型路径（None=无标点降级，不阻断 ASR）
+    pub punctuation_model: Option<String>,
     /// 融合状态跟踪（与 LiveSessionManager 共享同一实例）
     pub fusion: FusionTracker,
     /// M5/REQ-040：共享词表（热词注入流式识别）
@@ -255,6 +295,8 @@ fn run_session(
     let mut asr_tier_emitted = crate::asr_health::AsrTier::Streaming;
     // ADR-012 F3-2：跨 final 重叠去重状态（上一 Final 净化文本；空=无前句）
     let mut last_final_clean: Option<String> = None;
+    // ADR-012 F4-1：rule3 硬切段挂起（start_ms, end_ms, text）——等下一 Final 尝试合并
+    let mut pending_merge: Option<(u64, u64, String)> = None;
 
     // 1) 流式 ASR（SenseVoice 重打分接离线引擎池；M5 热词经共享词表注入）
     // ADR-012 F3-1：rule3 最长句 env 可覆盖（默认 8s——5s 过短致句中硬切）
@@ -268,6 +310,7 @@ fn run_session(
         &asr_config,
         Some(engines.clone()),
         Some(params.vocab.clone()),
+        params.punctuation_model.clone(),
     ) {
         Ok(e) => e,
         Err(e) => {
@@ -426,7 +469,7 @@ fn run_session(
                 }
                 for event in events.drain(..) {
                     match event {
-                        StreamingAsrEvent::Final { text } => {
+                        StreamingAsrEvent::Final { text, merge_with_next } => {
                             // ADR-012 F3-2：跨 final 重叠去重（rule3 硬切/端点误断句
                             // 的句尾词重复防护）；整体重复 → 跳过推送与落库
                             let text = match &last_final_clean {
@@ -441,28 +484,51 @@ fn run_session(
                             let start_ms = sentence_start_ms
                                 .take()
                                 .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
-                            // 语音定稿事件（TD-043：携带后端会话纪元时间戳；前端实时转写流展示/计数）
-                            let _ = params.app.emit(
-                                "live:asr-final",
-                                AsrFinalEvent { timestamp_ms: start_ms, text: text.clone() },
-                            );
-                            let _ = db.add_segment(&NewSessionSegment {
+                            // ADR-012 F4-1：rule3/短停顿硬切段挂起——等下一 Final
+                            // 判定语义合并（gap ≤600ms 才合并）；不立即推送/落库
+                            if merge_with_next {
+                                pending_merge = Some((start_ms, end_ms, text));
+                                continue;
+                            }
+                            // 先消化挂起段：gap 内合并为完整句；否则兜底独立落库
+                            if let Some((p_start, p_end, p_text)) = pending_merge.take() {
+                                let gap = start_ms.saturating_sub(p_end);
+                                if let Some(merged) = merge_segments(&p_text, &text, gap) {
+                                    last_final_clean = Some(merged.clone());
+                                    persist_final(
+                                        &params.app,
+                                        &db,
+                                        session_id,
+                                        &mut asr_segments,
+                                        p_start,
+                                        end_ms,
+                                        merged,
+                                        0.9,
+                                    );
+                                    continue;
+                                }
+                                persist_final(
+                                    &params.app,
+                                    &db,
+                                    session_id,
+                                    &mut asr_segments,
+                                    p_start,
+                                    p_end,
+                                    p_text,
+                                    0.9,
+                                );
+                            }
+                            // 正常段：定稿推送 + 落库（TD-043 时间戳载荷）
+                            persist_final(
+                                &params.app,
+                                &db,
                                 session_id,
-                                start_ms,
-                                end_ms,
-                                text: text.clone(),
-                                source: "asr".to_string(),
-                                confidence: Some(0.9),
-                            });
-                            asr_segments.push(TranscriptSegment {
+                                &mut asr_segments,
                                 start_ms,
                                 end_ms,
                                 text,
-                                // 流式链路词级时间戳：B8 由离线/精修路径产出（None）
-                                word_timestamps: None,
-                                // REQ-062：融合概率加权输入（与落库 confidence 同源）
-                                confidence: Some(0.9),
-                            });
+                                0.9,
+                            );
                         }
                         StreamingAsrEvent::Partial { text } => {
                             let _ = params.app.emit("live:asr-partial", text);
@@ -475,9 +541,21 @@ fn run_session(
         }
     }
 
-    // 4) 停止：flush ASR 尾句（时间戳用会话纪元；句尾校正同 TD-041；
-    //    跨 final 去重同主循环——ADR-012 F3-2）
-    if let Some(StreamingAsrEvent::Final { text }) = asr_engine.flush() {
+    // 4) 停止：先兜底落库挂起段（F4-1——停止时无下一段可合并），再 flush 尾句
+    //    （时间戳用会话纪元；句尾校正同 TD-041；跨 final 去重同主循环）
+    if let Some((p_start, p_end, p_text)) = pending_merge.take() {
+        persist_final(
+            &params.app,
+            &db,
+            session_id,
+            &mut asr_segments,
+            p_start,
+            p_end,
+            p_text,
+            0.8,
+        );
+    }
+    if let Some(StreamingAsrEvent::Final { text, .. }) = asr_engine.flush() {
         let text = match &last_final_clean {
             Some(prev) => dedupe_across_finals(prev, &text),
             None => text,
@@ -488,28 +566,16 @@ fn run_session(
             let start_ms = sentence_start_ms
                 .take()
                 .unwrap_or_else(|| end_ms.saturating_sub(SENTENCE_FALLBACK_MS));
-            // 尾句同样推前端（TD-043 时间戳载荷，实时转写流保持完整）
-            let _ = params.app.emit(
-                "live:asr-final",
-                AsrFinalEvent { timestamp_ms: start_ms, text: text.clone() },
-            );
-            let _ = db.add_segment(&NewSessionSegment {
+            persist_final(
+                &params.app,
+                &db,
                 session_id,
-                start_ms,
-                end_ms,
-                text: text.clone(),
-                source: "asr".to_string(),
-                confidence: Some(0.8),
-            });
-            asr_segments.push(TranscriptSegment {
+                &mut asr_segments,
                 start_ms,
                 end_ms,
                 text,
-                // 流式链路词级时间戳：B8 由离线/精修路径产出（None）
-                word_timestamps: None,
-                // REQ-062：融合概率加权输入（与落库 confidence 同源；尾句置信度略低）
-                confidence: Some(0.8),
-            });
+                0.8,
+            );
         }
     }
     audio.stop();
