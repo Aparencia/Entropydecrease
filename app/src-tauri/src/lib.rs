@@ -15,6 +15,7 @@ mod analysis;
 mod artifact;
 mod artifact_templates;
 mod audio_preprocess;
+mod audio_store;
 mod capture;
 mod chapter_detect;
 mod commands;
@@ -24,6 +25,7 @@ mod commands_live;
 mod commands_ai;
 mod commands_analysis;
 mod commands_artifacts;
+mod commands_audio;
 mod commands_device;
 mod commands_diag;
 mod commands_images;
@@ -73,6 +75,7 @@ mod novelty;
 mod ocr;
 mod ocr_cache;
 mod playback_region;
+mod practice_detect;
 mod refine;
 mod region_ocr;
 mod region_tracker;
@@ -88,6 +91,7 @@ mod symbol_normalize;
 mod table_reconstruct;
 mod types;
 mod ui_junk;
+mod vad_adaptive;
 mod verbal_normalize;
 mod video_profile;
 mod video_profile_data;
@@ -433,6 +437,9 @@ pub fn run() {
             commands_images::delete_session_images_all,
             commands_images::save_user_screenshot,
             commands_images::session_images_base_url,
+            // 会话音频落盘（REQ-068，v0.6.0 M4：状态/清理——M6 清理 UI 消费）
+            commands_audio::session_audio_status,
+            commands_audio::session_audio_cleanup,
             // 会话产物（REQ-052/053，v0.5.0 M7：模板构建/读取/落笔记）
             commands_artifacts::build_session_artifact,
             commands_artifacts::get_session_artifact,

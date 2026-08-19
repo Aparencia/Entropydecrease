@@ -307,6 +307,17 @@ fn run_session(
     )
     .map_err(|e| eprintln!("[LiveSession] 会话图片库初始化失败（图集不可用）: {}", e))
     .ok();
+    // M4/REQ-068（S4）：实时链路音频落盘（WAV PCM16；创建失败降级不阻断）
+    let mut audio_writer = crate::audio_store::SessionAudioWriter::create(
+        &params.data_dir.join("session-audio"),
+        session_id,
+        &crate::audio_store::AudioStoreConfig::default(),
+    );
+    // M4/REQ-069（AL1）：VAD 阈值自适应（VAD_ADAPTIVE=0 可关——"可关"开关）
+    let vad_enabled = std::env::var("VAD_ADAPTIVE").map(|v| v != "0").unwrap_or(true);
+    let mut adaptive_vad = crate::vad_adaptive::AdaptiveVad::new(crate::vad_adaptive::AdaptiveVadConfig {
+        enabled: vad_enabled,
+    });
     // M6/REQ-051：最新帧共享缓存（用户截图命令读取）
     let worker_latest = latest_frame.clone();
     let screen_worker = match std::thread::Builder::new()
@@ -341,6 +352,11 @@ fn run_session(
         // ── 音频块 → 流式 ASR ──
         match rx.recv_timeout(Duration::from_millis(TICK_MS)) {
             Ok(chunk) => {
+                // M4/REQ-068（S4）：原始样本落盘（预处理前——V4 两遍解码/
+                // AL3 漂移实测需原始音频；写盘失败内部降级不阻断）
+                if let Some(w) = audio_writer.as_mut() {
+                    w.write_chunk(&chunk.samples);
+                }
                 // M6/REQ-041 A1：预处理（默认直通零开销；开启后 AGC/削波/动态阈值）
                 let processed = audio_pre.process(&chunk.samples, SILENCE_RMS_THRESHOLD);
                 if processed.clipped && !clipping_logged {
@@ -350,7 +366,15 @@ fn run_session(
                 // TD-047 修复：静音判定用 **AGC 前原始样本** 与动态阈值比较——
                 // speech_threshold 基于原始噪声底估计，二者必须同尺度；
                 // 否则 AGC 放大后环境噪声被误判为语音（VAD/句切分失效）
-                let silent = compute_rms(&chunk.samples) < processed.speech_threshold;
+                // M4/REQ-069（AL1）：阈值自适应——AGC 开启时用预处理链动态阈值
+                // （不重复自适应）；否则会话内能量统计自适应（跟随噪声底）
+                let raw_rms = compute_rms(&chunk.samples);
+                let vad_threshold = if audio_pre.config.enabled {
+                    processed.speech_threshold
+                } else {
+                    adaptive_vad.next_threshold(raw_rms, SILENCE_RMS_THRESHOLD)
+                };
+                let silent = raw_rms < vad_threshold;
                 // B3：语音活跃度共享（屏幕 worker 自适应采样依据）
                 speech_active.store(!silent, Ordering::Relaxed);
                 // A2：句起时刻 = Final 后首个非静音块（真实句首，替代 end-2000ms 近似）；
@@ -452,6 +476,23 @@ fn run_session(
         });
     }
     audio.stop();
+
+    // M4/REQ-068（S4）：结束会话——回填 WAV 长度 + 触发清理
+    // （保留期 30 天 + 磁盘预算上限，删最旧；预算清理在会话结束时执行）
+    if let Some(w) = audio_writer.as_mut() {
+        w.finalize();
+        let summary = crate::audio_store::cleanup(
+            &params.data_dir.join("session-audio"),
+            crate::audio_store::DEFAULT_RETENTION_DAYS,
+            crate::audio_store::DEFAULT_DISK_BUDGET_BYTES,
+        );
+        if summary.deleted > 0 {
+            eprintln!(
+                "[AudioStore] 会话 {} 结束清理：删除 {} 个文件，释放 {} 字节",
+                session_id, summary.deleted, summary.freed_bytes
+            );
+        }
+    }
 
     // 5) REQ-031：finish + emit 秒回（毫秒级），融合移入后台线程——
     //    停止响应不再随段数恶化（大会话融合重算不再阻塞停止按钮）
