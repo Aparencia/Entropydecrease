@@ -110,5 +110,5 @@
 
 ## 参考
 
-- 取证报告：`forensic-report-13.txt`（13.wav 离线复核与 RMS 统计）
+- 取证报告：[2026-08-19-asr-forensic-report-13.md](../archive/2026-08-19/2026-08-19-asr-forensic-report-13.md)（13.wav 离线复核与 RMS 统计）、[2026-08-19-asr-forensic-report-12-13.md](../archive/2026-08-19/2026-08-19-asr-forensic-report-12-13.md）（[ ] 已归档）
 - 诊断工具：`src/bin/asr_forensic.rs`

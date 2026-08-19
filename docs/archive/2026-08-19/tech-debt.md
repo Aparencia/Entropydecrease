@@ -1,22 +1,24 @@
-# 技术债清单（权威：2026-08-19，四轮滚动——ADR-011 实施 + 新增代码审查后）
+# 技术债清单（权威：2026-08-19，五轮滚动——ADR-012 实施 + 新增代码审查后）
 
 > 本清单为当前唯一权威债务清单，归档日滚动更新；旧归档清单仅历史追溯。
-> 来源：三轮清单滚动——TD-040 维持 carried（deliberate 有意不修）。
-> 四轮滚动（ADR-011 实施交付 + 新增代码审查，REQ-086/087）：
-> 发现 2 项问题全部当日修复（提交 8aab331，见下）。
+> 来源：四轮清单滚动——TD-040 维持 carried（deliberate 有意不修）。
+> 五轮滚动（ADR-012 流式 ASR 质量修复实施交付 + 新增代码审查）：
+> 发现 4 项问题全部当日修复（提交 e41f6cc，见下）。
 
 ## 未偿债务
 
 | ID | 摘要 | 备注 |
 |----|------|------|
-| TD-040 | tauri.conf.json bundle.resources 未含 ffmpeg——生产安装包无捆绑 ffmpeg（v0.3.0 审查，2026-08-18） | carried（deliberate 有意不修）：resources glob 对缺失目录构建失败；捆绑 ffmpeg（~80MB）与安装包体积权衡留待体积策略；开发期由 download-ffmpeg.ps1 + PATH 覆盖（ADR-008 风险项，保持观察）。四次核对（2026-08-19）：ADR-011 代码未涉模型分发/捆绑，维持 carried |
+| TD-040 | tauri.conf.json bundle.resources 未含 ffmpeg——生产安装包无捆绑 ffmpeg（v0.3.0 审查，2026-08-18） | carried（deliberate 有意不修）：resources glob 对缺失目录构建失败；捆绑 ffmpeg（~80MB）与安装包体积权衡留待体积策略；开发期由 download-ffmpeg.ps1 + PATH 覆盖（ADR-008 风险项，保持观察）。五次核对（2026-08-19）：ADR-012 代码未涉模型分发/捆绑，维持 carried |
 
 ## 今日已偿（审查发现即修复，全部可经代码核验）
 
 | ID | 摘要 | 偿还方式 |
 |----|------|----------|
-| （审查 R11） | `latest_frame` 缓存按原始 region 判定——带外强制全帧（force_full）时本 tick 实为全帧数据却跳过缓存，截图命令读到旧帧（medium-low） | 缓存判断移至最终 region 决定之后（force_full 时缓存全帧）；审查修复提交 8aab331 |
-| （审查 R12） | 文档状态同步遗漏——需求池 REQ-086/087 仍"已排期"、v0.6.0.md 未标注 ADR-011 实施、规格 §5 承诺的集成测试 8/9/10 未落地（low） | 需求池转"已实施"；v0.6.0 状态行补充 REQ-086/087；规格 §5 注明编排层依赖 COM 采样器无法单测、逻辑内核已由 grid_diff_tests 覆盖、端到端语义由 M4 真机验收覆盖；审查修复提交 8aab331 |
+| （审查 L1） | streaming_asr.rs 残留重复注释（re-export 行上方旧注释未删净）（low） | 删除残留注释；审查修复提交 e41f6cc |
+| （审查 L2） | asr_forensic.rs `BLOCK_MS` 常量未使用（clippy dead_code）（low） | 删除未用常量；审查修复提交 e41f6cc |
+| （审查 L3） | streaming_asr.rs 320 行超 300 行上限未登记豁免（ADR-012 增长 288→320）（low） | line-limit-exemptions.md 补登记（豁免理由 + 拆分计划）；审查修复提交 e41f6cc |
+| （审查 L4） | live_session.rs 豁免登记行数过期（登记 ~351，实际 600，近 600 硬拆红线）（medium-low） | 豁免登记更新至 ~600 + 拆分计划明确化（live_session_fusion.rs / live_session_loop.rs）；审查修复提交 e41f6cc |
 
 ## 登记规则
 
