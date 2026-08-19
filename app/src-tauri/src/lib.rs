@@ -151,6 +151,8 @@ mod subtitle_ocr;
 mod speaker_change;
 // v0.7.2（REQ-152）：视频系列（合集）检测——标题序列号提取/平台后缀剥离（纯逻辑）
 mod series_detect;
+// v0.7.2（REQ-151）：会话信息聚合——采集信息面板数据源（平台/时长/合集/字幕）
+mod session_info;
 // v0.7.0 M1.5（REQ-108）：统一信号事件域（类型/分级/容量守卫；数据层在 db_session_events）
 mod session_events;
 mod symbol_normalize;

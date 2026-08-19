@@ -198,6 +198,12 @@ impl RoiTracker {
         self.roi
     }
 
+    /// 当前播放区域（帧坐标系；v0.7.2 REQ-151：会话信息面板的播放器文本
+    /// 探测裁剪源；未检测到播放区域 → None，调用方退化为全帧/跳过）。
+    pub fn playback_rect(&self) -> Option<Rect> {
+        self.video_rect
+    }
+
     /// 字幕带（ADR-011 带外判定基准）：播放区域底部 25% 带，
     /// 无播放区域退化为窗口底部 25% 带（prior_roi 语义）。
     pub fn subtitle_band(&self) -> Rect {

@@ -12,6 +12,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use tauri::Emitter;
+
 use crate::capture::frame_diff::{DualRateScheduler, SampleRegion};
 use crate::capture::ScreenCaptureSampler;
 use crate::db::Db;
@@ -69,6 +71,8 @@ pub fn run_screen_worker(
     mut foreground_monitor: crate::foreground_timeline::ForegroundMonitor,
     // 2026-08 A1：会话暂停共享状态（暂停跳过采样；恢复后时间戳补偿暂停时长）
     pause: crate::capture::audio_loopback::SessionPause,
+    // v0.7.2（REQ-151）：会话信息聚合（播放器 OCR 文本 → 平台/时长/合集信息面板）
+    session_info: crate::session_info::SessionInfoCollector,
 ) {
     let mut screen = match ScreenCaptureSampler::new(hwnd.map(crate::windows::hwnd_from_i64)) {
         Ok(s) => {
@@ -134,6 +138,9 @@ pub fn run_screen_worker(
     let mut last_player_check_at = Instant::now();
     let mut last_player_paused = false;
     let mut player_state_initialized = false;
+    // v0.7.2（REQ-151）：播放器信息探测节流（10s 一次——播放器区域 OCR 成本
+    // ~100-300ms，秒级粒度足够；信息变化才 emit）
+    let mut last_info_probe_at = Instant::now();
     // 2026-08 A1：暂停边沿跟踪（暂停期画面链整体冻结：采样/前台监控/播放器
     // 检测全部跳过——"会话时间"在暂停期间不前进）
     let mut worker_paused = pause.paused.load(Ordering::SeqCst);
@@ -337,6 +344,68 @@ pub fn run_screen_worker(
                             pause.paused.store(true, Ordering::SeqCst);
                             auto_paused = true;
                             eprintln!("[ScreenWorker] 视频处于暂停态，重新自动暂停");
+                        }
+                    }
+                }
+            }
+            // v0.7.2（REQ-151）：播放器信息探测（10s 节流）——播放器区域 OCR
+            // 文本（时间对 `12:34 / 1:23:45`、分P `P3/12`）→ 会话信息更新 →
+            // 值变化才 emit live:session-info（防 IPC 风暴）；无播放区域/OCR
+            // 失败 → 静默跳过（诚实：不猜不填；下轮再试）
+            if last_info_probe_at.elapsed() >= Duration::from_secs(10) {
+                last_info_probe_at = Instant::now();
+                let mut probe =
+                    latest_frame.lock().ok().and_then(|g| g.clone()).unwrap_or(LatestCapturedFrame {
+                        timestamp_ms: 0,
+                        bgraw: Vec::new(),
+                        width: 0,
+                        height: 0,
+                    });
+                if !probe.bgraw.is_empty() {
+                    if let Some(rect) = roi_tracker.playback_rect() {
+                        let w = probe.width as i32;
+                        let h = probe.height as i32;
+                        let q = crate::capture::frame_diff::Rect {
+                            left: rect.left.clamp(0, w),
+                            top: rect.top.clamp(0, h),
+                            right: rect.right.clamp(0, w),
+                            bottom: rect.bottom.clamp(0, h),
+                        };
+                        if q.width() > 0 && q.height() > 0 {
+                            crate::capture::frame_diff::crop_frame(
+                                &mut probe.bgraw,
+                                &mut probe.width,
+                                &mut probe.height,
+                                Some(&q),
+                            );
+                        }
+                    }
+                    if !probe.bgraw.is_empty() {
+                        // P4：OCR 输入缩小（播放器 UI 文字大，质量无损）
+                        crate::capture::frame_diff::downscale_bgra(
+                            &mut probe.bgraw,
+                            &mut probe.width,
+                            &mut probe.height,
+                            960,
+                        );
+                        if let Some(img) = crate::region_ocr::bgra_to_rgb_image(
+                            &probe.bgraw,
+                            probe.width,
+                            probe.height,
+                        ) {
+                            if let Ok(blocks) = engines.recognize_image(img) {
+                                let text = blocks
+                                    .iter()
+                                    .map(|b| b.text.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join(" ");
+                                if session_info.observe_player_text(&text) {
+                                    let _ = app.emit(
+                                        "live:session-info",
+                                        session_info.snapshot(),
+                                    );
+                                }
+                            }
                         }
                     }
                 }

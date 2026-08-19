@@ -45,6 +45,8 @@ pub struct StartHandoff {
     pub latest_frame: Arc<Mutex<Option<crate::live_session_frame::LatestCapturedFrame>>>,
     /// 会话暂停共享状态（A1：manager 持同一实例，捕获线程维护补偿时长）
     pub pause: crate::capture::audio_loopback::SessionPause,
+    /// v0.7.2（REQ-151）：会话信息聚合（屏幕 worker 播放器 OCR 写入）
+    pub session_info: crate::session_info::SessionInfoCollector,
 }
 
 /// 预备线程消息（Start 载荷装箱——消息只发一次，避免大枚举变体常驻栈上）。
@@ -135,6 +137,7 @@ pub fn run_prepared(rx: mpsc::Receiver<PrepareMsg>, env: PrepareEnv, status: Arc
                     stop,
                     latest_frame,
                     pause,
+                    session_info,
                 } = *handoff;
                 // 会话纪元在交接后创建（模型已加载——无 A1 秒级偏移）
                 let epoch = Instant::now();
@@ -146,6 +149,7 @@ pub fn run_prepared(rx: mpsc::Receiver<PrepareMsg>, env: PrepareEnv, status: Arc
                     latest_frame,
                     pause,
                     epoch,
+                    session_info,
                 );
                 return;
             }

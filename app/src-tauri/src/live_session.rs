@@ -83,6 +83,8 @@ pub struct LiveSessionManager {
     pause: crate::capture::audio_loopback::SessionPause,
     /// P3：预备会话（引擎预热——选窗口阶段后台加载；start 交接复用）
     prepared: Arc<Mutex<Option<PreparedSession>>>,
+    /// v0.7.2（REQ-151）：会话信息聚合（面板数据源——屏幕 worker 写入，事件/命令读取）
+    session_info: crate::session_info::SessionInfoCollector,
 }
 
 impl Default for LiveSessionManager {
@@ -99,6 +101,7 @@ impl Clone for LiveSessionManager {
             latest_frame: self.latest_frame.clone(),
             pause: self.pause.clone(),
             prepared: self.prepared.clone(),
+            session_info: self.session_info.clone(),
         }
     }
 }
@@ -111,6 +114,7 @@ impl LiveSessionManager {
             latest_frame: Arc::new(Mutex::new(None)),
             pause: Default::default(),
             prepared: Arc::new(Mutex::new(None)),
+            session_info: crate::session_info::SessionInfoCollector::new(),
         }
     }
 
@@ -183,6 +187,10 @@ impl LiveSessionManager {
         // 跨会话残留会让新会话起始即暂停、时间戳偏移）
         self.pause.reset();
         let pause = self.pause.clone();
+        // v0.7.2（REQ-151）：从窗口标题初始化会话信息（平台/系列/集号——
+        // 标题信号零成本；时长/分P 由屏幕 worker 播放器 OCR 增量补充）
+        self.session_info
+            .init_from_title(params.source_window.as_deref().unwrap_or(&params.title));
 
         // P3：尝试交接预备线程
         if let Some(p) = self.prepared.lock().expect("prepared lock poisoned").take() {
@@ -194,6 +202,7 @@ impl LiveSessionManager {
                         stop: flag.clone(),
                         latest_frame: latest_frame.clone(),
                         pause: pause.clone(),
+                        session_info: self.session_info.clone(),
                     };
                     match p.tx.send(PrepareMsg::Start(Box::new(handoff))) {
                         Ok(()) => {
@@ -208,7 +217,7 @@ impl LiveSessionManager {
                             let thread = std::thread::Builder::new()
                                 .name("entropy-live-session".into())
                                 .spawn(move || {
-                                    run_session(h.stop, h.params, h.session_id, h.latest_frame, h.pause)
+                                    run_session(h.stop, h.params, h.session_id, h.latest_frame, h.pause, h.session_info)
                                 })
                                 .map_err(|e| AppError::Io(format!("启动会话线程失败: {}", e)))?;
                             *guard = Some(ActiveSession { stop_flag, thread, session_id });
@@ -241,9 +250,13 @@ impl LiveSessionManager {
         }
 
         // 回退：内联加载（现状路径——模型加载在会话线程内完成）
+        // 会话信息聚合器先 clone（move 闭包不得借用 &self）
+        let inline_session_info = self.session_info.clone();
         let thread = std::thread::Builder::new()
             .name("entropy-live-session".into())
-            .spawn(move || run_session(flag, params, session_id, latest_frame, pause))
+            .spawn(move || {
+                run_session(flag, params, session_id, latest_frame, pause, inline_session_info)
+            })
             .map_err(|e| AppError::Io(format!("启动会话线程失败: {}", e)))?;
         *guard = Some(ActiveSession { stop_flag, thread, session_id });
         Ok(session_id)
@@ -395,6 +408,8 @@ fn run_session(
     latest_frame: Arc<Mutex<Option<crate::live_session_frame::LatestCapturedFrame>>>,
     // 2026-08 A1：会话暂停共享状态（manager 持同一实例；捕获线程维护补偿时长）
     pause: crate::capture::audio_loopback::SessionPause,
+    // v0.7.2（REQ-151）：会话信息聚合（屏幕 worker 播放器 OCR 写入）
+    session_info: crate::session_info::SessionInfoCollector,
 ) {
     let db = params.db.clone();
     let engines = params.engines.clone();
@@ -422,7 +437,16 @@ fn run_session(
             return;
         }
     };
-    run_session_after_engine(asr_engine, stop, params, session_id, latest_frame, pause, epoch);
+    run_session_after_engine(
+        asr_engine,
+        stop,
+        params,
+        session_id,
+        latest_frame,
+        pause,
+        epoch,
+        session_info,
+    );
 }
 
 /// 会话装配后半段（引擎就绪后）：音频捕获 → 屏幕 worker → 主循环 → 后台融合。
@@ -443,12 +467,16 @@ pub(crate) fn run_session_after_engine(
     pause: crate::capture::audio_loopback::SessionPause,
     // A1：会话纪元——音频/屏幕/flush 三处时间戳的唯一基准（ADR-008）
     epoch: Instant,
+    // v0.7.2（REQ-151）：会话信息聚合（屏幕 worker 播放器 OCR 写入）
+    session_info: crate::session_info::SessionInfoCollector,
 ) {
     let db = params.db.clone();
     let engines = params.engines.clone();
     // ADR-007：会话启动成功（引擎就绪）→ 广播录制态（前端全局采集徽标依赖此事件；
     // 音频/屏幕后续故障走自动恢复不再终止会话）
     let _ = params.app.emit("live:status", "recording");
+    // v0.7.2（REQ-151）：标题信息就绪即推送（平台/系列/集号；时长待播放器 OCR）
+    let _ = params.app.emit("live:session-info", session_info.snapshot());
 
     // 2) 音频捕获：捕获线程 → channel → 会话线程（引擎非 Send）
     // @ai-context: ADR-007：start 不再因设备缺失返回 Err——捕获线程内部自动重连
@@ -531,6 +559,8 @@ pub(crate) fn run_session_after_engine(
         let foreground_monitor = crate::foreground_timeline::ForegroundMonitor::new(params.hwnd);
         // 2026-08 A1：屏幕 worker 共享暂停状态（暂停跳过采样；恢复后时间戳补偿）
         let worker_pause = pause.clone();
+        // v0.7.2（REQ-151）：会话信息聚合（worker 播放器 OCR 写入）
+        let worker_session_info = session_info.clone();
         match std::thread::Builder::new()
             .name("entropy-screen-worker".into())
             .spawn(move || {
@@ -553,6 +583,8 @@ pub(crate) fn run_session_after_engine(
                     foreground_monitor,
                     // 2026-08 A1：暂停共享状态
                     worker_pause,
+                    // v0.7.2（REQ-151）：会话信息聚合（播放器 OCR 写入）
+                    worker_session_info,
                 )
             }) {
             Ok(h) => Some(h),

@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 // 2026-08 用户需求：实时转写中显示图片数据（转写 Tab 顶部"最近画面"条，独立区域不跳动）
 import LiveImageStrip from "./LiveImageStrip";
-import type { AsrFinalEvent, OcrEvent, SubtitleEvent } from "../types";
+import type { AsrFinalEvent, OcrEvent, SessionInfo, SubtitleEvent } from "../types";
 
 /** 定稿转写行（字幕或语音） */
 interface TranscriptLine {
@@ -65,6 +65,16 @@ function fmtTime(ms: number): string {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
+/** 时长展示（秒 → h:mm:ss / m:ss；v0.7.2 信息面板用） */
+function fmtDur(secs: number): string {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  return h > 0
+    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+    : `${m}:${String(s).padStart(2, "0")}`;
+}
+
 /**
  * 中文句读切分（识别中行展示用，2026-08 用户需求：识别中的灰斜体内容全部显示）。
  *
@@ -103,6 +113,13 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
   const [, setTick] = useState(0);
   // TD-053 修复：partials 以 ref 镜像（事件回调读最新值），沉淀副作用移出 setState updater
   const partialsRef = useRef<PendingLine[]>([]);
+  // v0.7.2（REQ-151）：采集信息面板（平台/时长/合集——live:session-info 事件）
+  const [info, setInfo] = useState<SessionInfo | null>(null);
+
+  // 会话切换：清空旧会话信息（新会话标题信息由后端事件推送）
+  useEffect(() => {
+    setInfo(null);
+  }, [sessionId]);
 
   // 时长计时（1s tick，仅展示）
   useEffect(() => {
@@ -215,6 +232,8 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
       // 2026-08 A1：暂停/恢复状态机（硬暂停——时间轴冻结，面板显示暂停态）
       listen("live:paused", () => setPhase("⏸ 已暂停（时间轴冻结）")),
       listen("live:resumed", () => setPhase("● 采集中")),
+      // v0.7.2（REQ-151）：采集信息（平台/时长/合集——标题信号 + 播放器 OCR）
+      listen<SessionInfo>("live:session-info", (e) => setInfo(e.payload)),
       listen<number>("session:fusing", () => setPhase("⏳ 融合中…")),
       listen<number>("session:fused", () => setPhase("✅ 融合完成")),
       listen<string>("session:fusion-failed", (e) => setPhase(`⚠ 融合失败（原始段保留）: ${e.payload}`)),
@@ -251,6 +270,43 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
         <span style={{ color: "#6b7280" }}>语音 {counts.asr}</span>
         <span style={{ color: "#2563eb" }}>画面 {counts.ocr}</span>
       </div>
+
+      {/* v0.7.2（REQ-151）：采集信息条（平台/时长/合集/字幕——信息透明化；
+          数据源：标题信号 + 播放器 OCR + 字幕检测计数；全空时不占位） */}
+      {info &&
+        (info.platform ||
+          info.durationSecs != null ||
+          info.series ||
+          info.episode ||
+          counts.subtitle > 0) && (
+          <div
+            style={{
+              display: "flex",
+              gap: 12,
+              flexWrap: "wrap",
+              padding: "6px 14px",
+              borderBottom: "1px solid #e5e7eb",
+              fontSize: 11,
+              color: "#6b7280",
+              alignItems: "center",
+            }}
+          >
+            {info.platform && <span>🎬 {info.platform}</span>}
+            {info.durationSecs != null && (
+              <span title="播放器画面识别（OCR）">⏱ 时长 {fmtDur(info.durationSecs)}</span>
+            )}
+            {info.series && (
+              <span title="合集（标题序列号识别）">
+                📚 {info.series}
+                {info.episode != null ? ` 第${info.episode}集` : ""}
+                {info.totalEpisodes != null ? ` / 共${info.totalEpisodes}集` : ""}
+              </span>
+            )}
+            <span title={counts.subtitle > 0 ? "实时字幕检测命中" : "尚未检测到内嵌/滚动字幕"}>
+              {counts.subtitle > 0 ? "💬 字幕：检测到（内嵌/滚动）" : "💬 字幕：未检测到"}
+            </span>
+          </div>
+        )}
 
       {/* Tab 切换（简要两栏） */}
       <div style={{ display: "flex", gap: 4, padding: "8px 14px 0", flexShrink: 0 }}>

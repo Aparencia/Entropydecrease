@@ -148,6 +148,20 @@ export interface OcrEvent {
   text: string;
 }
 
+/** 会话信息（Rust SessionInfo，camelCase 契约；live:session-info 事件，v0.7.2 REQ-151） */
+export interface SessionInfo {
+  /** 播放平台（哔哩哔哩/YouTube/腾讯视频…；本地窗口/未知 → null） */
+  platform: string | null;
+  /** 视频总时长（秒；播放器 OCR 识别；未识别 → null） */
+  durationSecs: number | null;
+  /** 系列名（合集；标题序列号提取） */
+  series: string | null;
+  /** 当前集号（合集） */
+  episode: number | null;
+  /** 总集数（合集） */
+  totalEpisodes: number | null;
+}
+
 /** 语音定稿事件载荷（Rust AsrFinalEvent，camelCase 契约；live:asr-final 事件，TD-043） */
 export interface AsrFinalEvent {
   timestampMs: number;
