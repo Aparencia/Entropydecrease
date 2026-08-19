@@ -321,3 +321,109 @@ export interface SessionArtifact {
   blocks: ArtifactBlock[];
 }
 
+// ────────────────────────────────────────────────────────────
+// v0.6.0 M6 会话体验领域类型（与 Rust serde 契约对齐）
+// ────────────────────────────────────────────────────────────
+
+/** 被过滤条目（Rust FilteredItem，kebab-case reason） */
+export interface FilteredItem {
+  segment_id: number;
+  reason: "ui-junk" | "duplicate" | "fragment" | "low-confidence" | "ai-delete";
+  text: string;
+  start_ms: number;
+}
+
+/** 过滤统计（Rust FilterStats） */
+export interface FilterStats {
+  ui_junk: number;
+  duplicates: number;
+  fragments: number;
+  low_confidence: number;
+  ai_delete: number;
+}
+
+/** 合并条目（Rust MergedItem） */
+export interface MergedItem {
+  segment_id: number;
+  into_segment_id: number;
+  text: string;
+  start_ms: number;
+}
+
+/** 笔记过滤结果（Rust NoteFilterResult；REQ-081 预览载荷） */
+export interface NoteFilterResult {
+  title: string;
+  markdown: string;
+  kept: SessionSegment[];
+  ocr_points: string[];
+  stats: FilterStats;
+  filtered: FilteredItem[];
+  merged: MergedItem[];
+}
+
+/** 低置信段（Rust LowConfidenceItem） */
+export interface LowConfidenceItem {
+  segment_id: number;
+  start_ms: number;
+  text: string;
+  confidence: number;
+}
+
+/** 会话质量报告（Rust QualityReport；REQ-076） */
+export interface QualityReport {
+  total_segments: number;
+  total_ocr_blocks: number;
+  low_confidence_count: number;
+  low_confidence_segments: LowConfidenceItem[];
+  low_score_ocr_count: number;
+  unknown_region_count: number;
+  ai_candidate_count: number;
+}
+
+/** 大纲条目（Rust OutlineEntry；REQ-077） */
+export interface OutlineEntry {
+  time_ms: number;
+  text: string;
+}
+
+/** 课程分组（Rust CourseGroup；REQ-078，camelCase 契约） */
+export interface CourseGroup {
+  course: string;
+  sessions: Session[];
+}
+
+/** 段搜索命中（Rust SegmentHit；REQ-079，camelCase 契约） */
+export interface SegmentHit {
+  session_id: number;
+  session_title: string;
+  segment_id: number;
+  start_ms: number;
+  snippet: string;
+}
+
+/** AI 复核元信息（Rust AiReviewMeta；REQ-085，camelCase 契约） */
+export interface AiReviewMeta {
+  enabled: boolean;
+  authorized: boolean;
+  sent: number;
+  candidates: number;
+  quota_hit: boolean;
+  error: string | null;
+  model: string;
+}
+
+/** AI 复核结果（Rust TextFilterReview；camelCase 契约） */
+export interface TextFilterReview {
+  result: NoteFilterResult;
+  ai: AiReviewMeta;
+}
+
+/** 文本复核状态（Rust TextFilterStatus；camelCase 契约） */
+export interface TextFilterStatus {
+  enabled: boolean;
+  model: string;
+  batchSize: number;
+  quotaRemaining: number;
+  mock: boolean;
+}
+
