@@ -53,11 +53,33 @@ impl SessionImageStore {
         BUDGET_MAX_IMAGES.saturating_sub(self.saved)
     }
 
+    /// 双指纹去重命中（纯读）：与最近保存图双稳定同图 → 返回已有相对路径。
+    ///
+    /// @ai-context: REQ-067 same_image 双稳定判定（与帧聚类共用）——
+    ///              旋转/缩放/静止重复图不重复存/不占预算。
+    fn dedupe_hit(&self, ah: u64, dh: u64) -> Option<String> {
+        self.recent_fingerprints
+            .iter()
+            .find(|(la, ld, _)| crate::frame_cluster::same_image(*la, *ld, ah, dh, 6, 8))
+            .map(|(_, _, path)| path.clone())
+    }
+
+    /// 记录指纹（FIFO 缓冲；容量 DEDUPE_BUFFER——覆盖 PPT 往返窗口）。
+    fn remember(&mut self, ah: u64, dh: u64, path: String) {
+        self.recent_fingerprints.push_back((ah, dh, path));
+        if self.recent_fingerprints.len() > DEDUPE_BUFFER {
+            self.recent_fingerprints.pop_front();
+        }
+    }
+
     /// 保存区域裁剪图（v0.5.0 模型版：表格/公式区域裁剪，课后精修输入）。
     ///
     /// @ai-context: 存 `crop/<ts>.webp` 命名空间——与 `full/` 关键帧隔离，
     ///              防同帧双写覆盖（审查 H2 修复：原实现与 handle_full_frame
     ///              同时间戳写 full/ 互相覆盖）；无缩略图（精修需原图细节）。
+    /// @ai-context: 修复：双指纹去重与 save_frame 同口径——旧实现无去重，
+    ///              视频进度条等静态误判区域每 tick 重复存图（会话 15 实测
+    ///              49 张全同垃圾 crop，耗尽与 full 共享的 50 张预算）。
     pub fn save_crop(
         &mut self,
         timestamp_ms: u64,
@@ -65,6 +87,13 @@ impl SessionImageStore {
         width: u32,
         height: u32,
     ) -> Result<String> {
+        let rgb = bgra_to_rgb(bgraw, width, height)
+            .ok_or_else(|| crate::error::AppError::Io("裁剪图数据无效".to_string()))?;
+        let ah = crate::ocr_cache::average_hash(&rgb);
+        let dh = crate::ocr_cache::difference_hash(&rgb);
+        if let Some(existing) = self.dedupe_hit(ah, dh) {
+            return Ok(existing);
+        }
         if self.remaining_budget() == 0 {
             return Err(crate::error::AppError::Io(format!(
                 "会话图片预算已达上限（{} 张）",
@@ -72,11 +101,10 @@ impl SessionImageStore {
             )));
         }
         let name = format!("{}.webp", timestamp_ms);
-        let rgb = bgra_to_rgb(bgraw, width, height)
-            .ok_or_else(|| crate::error::AppError::Io("裁剪图数据无效".to_string()))?;
         let crop_path = self.session_dir.join("crop").join(&name);
         encode_webp(&rgb, &crop_path)?;
         self.saved += 1;
+        self.remember(ah, dh, format!("crop/{}", name));
         Ok(format!("crop/{}", name))
     }
 
@@ -114,10 +142,8 @@ impl SessionImageStore {
         // 双指纹去重（先于预算检查——重复帧不消耗预算；FIFO 缓冲覆盖往返窗口）
         let ah = crate::ocr_cache::average_hash(&rgb);
         let dh = crate::ocr_cache::difference_hash(&rgb);
-        for (la, ld, path) in &self.recent_fingerprints {
-            if crate::frame_cluster::same_image(*la, *ld, ah, dh, 6, 8) {
-                return Ok(path.clone());
-            }
+        if let Some(existing) = self.dedupe_hit(ah, dh) {
+            return Ok(existing);
         }
         if self.remaining_budget() == 0 {
             return Err(crate::error::AppError::Io(format!(
@@ -135,10 +161,7 @@ impl SessionImageStore {
             encode_webp(&thumb, &thumb_path)?;
         }
         self.saved += 1;
-        self.recent_fingerprints.push_back((ah, dh, format!("full/{}", name)));
-        if self.recent_fingerprints.len() > DEDUPE_BUFFER {
-            self.recent_fingerprints.pop_front();
-        }
+        self.remember(ah, dh, format!("full/{}", name));
         Ok(format!("full/{}", name))
     }
 

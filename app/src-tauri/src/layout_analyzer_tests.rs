@@ -195,3 +195,74 @@ fn regions_bbox_within_grid() {
         assert!(r.w >= 1 && r.h >= 1);
     }
 }
+
+/// 视频窗口：底部黑边粗带 + 贴底进度条（会话 14/15 实测误判形态）。
+fn video_bottom_chrome_grid(cols: u32, rows: u32) -> FrameGrid {
+    let mut g = blank(cols, rows);
+    // 视频内容区（rows 5..11：左右两段稀疏墨迹）
+    for y in 5..12 {
+        paint_ink(&mut g, 3, y, 9, y);
+        paint_ink(&mut g, cols - 10, y, cols - 4, y);
+    }
+    // 进度条（row 12：满宽长条）
+    paint_ink(&mut g, 0, 12, cols - 1, 12);
+    // 底部黑边（rows 14..17：粗满宽带）
+    for y in 14..rows {
+        paint_ink(&mut g, 0, y, cols - 1, y);
+    }
+    g
+}
+
+#[test]
+fn video_progress_bar_and_black_edge_not_formula() {
+    // Arrange：视频窗口底部（进度条 + 黑边，会话 14/15 实测被判 Formula）
+    let grid = video_bottom_chrome_grid(32, 18);
+    // Act
+    let regions = analyze_layout(&grid);
+    // Assert：不得判 Formula/Table（结构区域会触发裁剪图归档 + 区域路径独占
+    // 整帧 OCR；会话 14/15 即因此 0 OCR 块）
+    assert!(
+        regions.iter().all(|r| r.kind != RegionKind::Formula && r.kind != RegionKind::Table),
+        "视频底部进度条/黑边被判结构区域: {:?}",
+        regions
+    );
+}
+
+#[test]
+fn pure_black_letterbox_not_text() {
+    // Arrange：整帧纯黑（视频暂停黑屏/黑边形态——墨迹 100% 但无文字）
+    let mut g = blank(32, 18);
+    for y in 0..18 {
+        paint_ink(&mut g, 0, y, 31, y);
+    }
+    // Act
+    let regions = analyze_layout(&g);
+    // Assert：纯黑不得判 Text（低信息区域 → Image 跳过，不送 OCR）
+    assert!(
+        regions.iter().all(|r| r.kind == RegionKind::Image),
+        "纯黑帧被判非 Image: {:?}",
+        regions
+    );
+}
+
+#[test]
+fn dark_slide_with_bright_text_kept_as_text() {
+    // Arrange：深色底（值 30）+ 亮色文字行（值 240）——视频课程常见形态
+    let mut g = blank(32, 18);
+    for c in g.cells.iter_mut() {
+        *c = 30;
+    }
+    for y in 3..5 {
+        for x in 3..29 {
+            g.cells[(y * g.cols + x) as usize] = 240;
+        }
+    }
+    // Act
+    let regions = analyze_layout(&g);
+    // Assert：亮字区域仍判 Text（纯色滤除不得误杀深底亮字）
+    assert!(
+        regions.iter().any(|r| r.kind == RegionKind::Text),
+        "深底亮字未被识别为文本: {:?}",
+        regions
+    );
+}

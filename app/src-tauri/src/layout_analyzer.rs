@@ -65,6 +65,12 @@ const TABLE_LINE_INK: f32 = 0.6;
 const LINE_ISOLATED_MAX: f32 = 0.3;
 /// 表格最少横线+竖线数。
 const TABLE_LINE_MIN: u32 = 2;
+/// 低信息纯色判定：区域亮度方差下限（灰度 0-255；< 该值视为无文字信息）。
+///
+/// @ai-context: 文字区域深字浅底/浅字深底交错，方差显著 >1000；纯色黑边/渐变底
+///              ≈0。修复：视频 letterbox 黑边墨迹密度 100% 曾被判强置信 Text，
+///              区域路径独占整帧 OCR 后真实画面文字永不被识别（会话 14/15 实测）。
+const VARIANCE_MIN: f32 = 400.0;
 /// 置信度：纯规则启发式按信号强度赋值。
 const CONFIDENCE_STRONG: f32 = 0.9;
 const CONFIDENCE_MEDIUM: f32 = 0.7;
@@ -288,6 +294,12 @@ fn classify_region(grid: &FrameGrid, x0: u32, y0: u32, x1: u32, y1: u32) -> (Reg
     if density < 0.06 && w * h >= (grid.cols * grid.rows) / 6 {
         return (RegionKind::Image, CONFIDENCE_MEDIUM);
     }
+    // 低信息纯色区域（视频黑边/纯色底/模糊画面）→ Image（调度跳过，不送 OCR）。
+    // 修复：黑边墨迹密度 100% 曾被判强置信 Text，区域路径独占整帧 OCR 后
+    // 真实画面文字永不被识别（会话 14/15 实测 0 OCR 块）
+    if region_variance(grid, x0, y0, x1, y1) < VARIANCE_MIN {
+        return (RegionKind::Image, CONFIDENCE_WEAK);
+    }
     // 公式：中线长条（分数线）——最长行墨迹宽 ≥60% 区域宽，且上下行明显更短
     if is_formula_region(grid, x0, y0, x1, y1) {
         return (RegionKind::Formula, CONFIDENCE_MEDIUM);
@@ -312,6 +324,13 @@ fn classify_region(grid: &FrameGrid, x0: u32, y0: u32, x1: u32, y1: u32) -> (Reg
 ///              上下行均宽 2 倍），误判代价低（产物层低置信标记）。
 /// @ai-context: 行宽取"最长连续墨迹段"而非首尾差——分子左右两段符号
 ///              （如 "a²+b²"）若按首尾差会被误算为全宽长条。
+/// @ai-context: 播放器进度条/黑边防误判（修复：会话 14/15 实测——进度条+黑边
+///              长条结构满足旧公式启发 → Formula 区域，裁剪图垃圾泛滥 +
+///              整帧 OCR 被区域路径劫持，全程 0 OCR 块）。结构性差异：
+///              ① 分数线是**细线**（连续满宽行 ≤3），黑边/色块是粗带；
+///              ② 分数线**不贴区域首/末行**（上下必有分子/分母），进度条贴
+///                 区域边缘（内容只在一侧）；
+///              ③ 长条上下两侧都须有内容（分子/分母符号）。
 fn is_formula_region(grid: &FrameGrid, x0: u32, y0: u32, x1: u32, y1: u32) -> bool {
     if y1 <= y0 + 1 {
         return false;
@@ -324,13 +343,67 @@ fn is_formula_region(grid: &FrameGrid, x0: u32, y0: u32, x1: u32, y1: u32) -> bo
     if max_w == 0 || (max_w as f32) / ((x1 - x0 + 1) as f32) < 0.6 {
         return false;
     }
-    // 上下行平均宽（去除最长行自身与空行）
+    let region_h = widths.len();
+    let max_rows: Vec<usize> = widths
+        .iter()
+        .enumerate()
+        .filter(|(_, &w)| w == max_w)
+        .map(|(i, _)| i)
+        .collect();
+    // ① 满宽长条必须薄：连续满宽行跨度 ≤3（分数线 1-2 行；黑边/色块为粗带）
+    let mut thickest = 1u32;
+    let mut cur = 1u32;
+    for pair in max_rows.windows(2) {
+        if pair[1] == pair[0] + 1 {
+            cur += 1;
+            thickest = thickest.max(cur);
+        } else {
+            cur = 1;
+        }
+    }
+    if thickest > 3 {
+        return false;
+    }
+    let first = *max_rows.first().unwrap_or(&0);
+    let last = *max_rows.last().unwrap_or(&0);
+    // ② 长条不得贴区域首/末行（分数线上下必有内容；进度条/下划线贴边缘）
+    if first == 0 || last == region_h - 1 {
+        return false;
+    }
+    // ③ 上下两侧都须有内容（分子/分母符号；黑边下方无内容）
+    let has_above = widths[..first].iter().any(|&w| w > 0);
+    let has_below = widths[last + 1..].iter().any(|&w| w > 0);
+    if !has_above || !has_below {
+        return false;
+    }
+    // 上下行平均宽（去除长条自身与空行）不足长条一半
     let neighbors: Vec<u32> = widths.iter().filter(|&&w| w > 0 && w < max_w).copied().collect();
     if neighbors.is_empty() {
         return false;
     }
     let avg = neighbors.iter().sum::<u32>() as f32 / neighbors.len() as f32;
     avg < max_w as f32 / 2.0
+}
+
+/// 区域亮度方差（纯函数）：值分布离散度——文字区高低亮度交错方差大；
+/// 纯色黑边/白底方差≈0（墨迹密度高但无文字，不得判 Text）。
+fn region_variance(grid: &FrameGrid, x0: u32, y0: u32, x1: u32, y1: u32) -> f32 {
+    let mut sum = 0i64;
+    let mut sumsq = 0i64;
+    let mut n = 0i64;
+    for y in y0..=y1 {
+        for x in x0..=x1 {
+            let v = grid.cells[(y * grid.cols + x) as usize] as i64;
+            sum += v;
+            sumsq += v * v;
+            n += 1;
+        }
+    }
+    if n == 0 {
+        return 0.0;
+    }
+    let mean = sum as f64 / n as f64;
+    (sumsq as f64 / n as f64 - mean * mean).max(0.0) as f32
 }
 
 /// 行内最长连续墨迹段宽（纯函数；无墨迹返回 0）。

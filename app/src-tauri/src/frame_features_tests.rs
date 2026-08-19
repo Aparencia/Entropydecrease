@@ -83,3 +83,74 @@ fn grid_feeds_layout_analysis() {
     // Assert：空白帧无区域（端到端链路不变量）
     assert!(regions.is_empty());
 }
+
+/// 构造区域（测试辅助）。
+fn region(x: u32, y: u32, w: u32, h: u32) -> crate::layout_analyzer::LayoutRegion {
+    crate::layout_analyzer::LayoutRegion {
+        kind: crate::layout_analyzer::RegionKind::Text,
+        x,
+        y,
+        w,
+        h,
+        confidence: 0.9,
+        is_structural: false,
+    }
+}
+
+#[test]
+fn regions_to_frame_scales_grid_to_pixels() {
+    // Arrange：32×18 网格 + 960×1032 帧（与会话 14/15 实测尺寸一致）
+    let regions = vec![region(12, 12, 20, 6), region(0, 0, 32, 18)];
+    // Act
+    let out = regions_to_frame(&regions, 32, 18, 960, 1032);
+    // Assert：网格格 → 像素（x*960/32；w*960/32）
+    //         实测 66×45 公式区 = 网格 12..31×12..17 → 像素 360..960×688..1032
+    assert_eq!(out[0].x, 360);
+    assert_eq!(out[0].y, 688);
+    assert_eq!(out[0].w, 600);
+    assert_eq!(out[0].h, 344);
+    // 全帧区域 → 全帧像素（不越界）
+    assert_eq!(out[1].x, 0);
+    assert_eq!(out[1].y, 0);
+    assert_eq!(out[1].w, 960);
+    assert_eq!(out[1].h, 1032);
+}
+
+#[test]
+fn regions_to_frame_kind_and_flags_preserved() {
+    // Arrange：表格区域（结构性标记需保留——产物层消费）
+    let mut r = region(4, 2, 8, 3);
+    r.kind = crate::layout_analyzer::RegionKind::Table;
+    r.is_structural = true;
+    // Act
+    let out = regions_to_frame(&[r], 32, 18, 640, 360);
+    // Assert：仅坐标换算，类型/置信度/结构标记不变
+    assert_eq!(out[0].kind, crate::layout_analyzer::RegionKind::Table);
+    assert!(out[0].is_structural);
+    assert_eq!(out[0].confidence, 0.9);
+    assert_eq!(out[0].x, 80);
+    assert_eq!(out[0].w, 160);
+}
+
+#[test]
+fn regions_to_frame_degenerate_safe() {
+    // Arrange：非法尺寸 / 空输入
+    let r = vec![region(1, 1, 2, 2)];
+    // Act/Assert：零尺寸直通不崩溃；空输入返回空
+    assert_eq!(regions_to_frame(&r, 0, 18, 960, 1032), r);
+    assert_eq!(regions_to_frame(&r, 32, 0, 960, 1032), r);
+    assert_eq!(regions_to_frame(&r, 32, 18, 0, 1032), r);
+    assert!(regions_to_frame(&[], 32, 18, 960, 1032).is_empty());
+}
+
+#[test]
+fn regions_to_frame_no_overflow_on_large_frame() {
+    // Arrange：极端帧尺寸（u32 溢出防御——u64 中间计算）
+    let r = vec![region(31, 17, 1, 1)];
+    // Act
+    let out = regions_to_frame(&r, 32, 18, u32::MAX, u32::MAX);
+    // Assert：结果仍在 u32 内且按比例缩放（x*W 若用 u32 相乘会溢出回绕）
+    assert_eq!(out[0].x, (31u64 * u32::MAX as u64 / 32) as u32);
+    assert_eq!(out[0].w, (u32::MAX as u64 / 32) as u32);
+    assert_eq!(out[0].h, (u32::MAX as u64 / 18) as u32);
+}

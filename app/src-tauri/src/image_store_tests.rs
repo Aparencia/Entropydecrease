@@ -45,12 +45,13 @@ fn save_frame_writes_full_and_thumb() {
 
 #[test]
 fn save_crop_isolated_from_full_frames() {
-    // Arrange（审查 H2 回归验证：裁剪图与关键帧同时间戳不互相覆盖）
+    // Arrange（审查 H2 回归验证：裁剪图与关键帧同时间戳不互相覆盖；
+    // 用 seeded 帧——纯色帧是双指纹退化输入，跨命名空间会误判同图）
     let dir = tempfile::tempdir().unwrap();
     let mut store = SessionImageStore::new(dir.path().to_path_buf()).unwrap();
     // Act：同时间戳先存关键帧（整帧）再存裁剪图（区域）
-    store.save_frame(1000, &solid_frame(640, 360, 10, 20, 30), 640, 360).unwrap();
-    let crop_rel = store.save_crop(1000, &solid_frame(200, 100, 200, 100, 50), 200, 100).unwrap();
+    store.save_frame(1000, &seeded_frame(640, 360, 1), 640, 360).unwrap();
+    let crop_rel = store.save_crop(1000, &seeded_frame(200, 100, 2), 200, 100).unwrap();
     // Assert：命名空间隔离（crop/ 与 full/ 独立文件，互不覆盖）
     assert_eq!(crop_rel, "crop/1000.webp");
     assert!(dir.path().join("full/1000.webp").exists());
@@ -173,6 +174,27 @@ fn duplicate_frame_deduped_by_dual_fingerprint() {
     let other = store.save_frame(3000, &seeded_frame(64, 64, 8), 64, 64).unwrap();
     assert_eq!(other, "full/3000.webp");
     assert_eq!(store.list_images().len(), 2);
+}
+
+#[test]
+fn duplicate_crop_deduped_by_dual_fingerprint() {
+    // Arrange：修复回归——裁剪图原无去重，视频进度条等静态误判区域每 tick
+    // 重复存图（会话 15 实测 49 张全同垃圾 crop 耗尽 50 张预算）
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = SessionImageStore::new(dir.path().to_path_buf()).unwrap();
+    let crop = seeded_frame(66, 45, 11);
+    // Act：相同内容两次保存（不同时间戳）
+    let first = store.save_crop(1000, &crop, 66, 45).unwrap();
+    let second = store.save_crop(2000, &crop, 66, 45).unwrap();
+    // Assert：第二次去重命中（返回首次路径）；磁盘只存 1 张；预算只扣 1
+    assert_eq!(first, "crop/1000.webp");
+    assert_eq!(second, "crop/1000.webp", "重复裁剪图应返回首次保存路径");
+    assert!(!dir.path().join("crop/2000.webp").exists(), "重复裁剪图不得落盘");
+    assert_eq!(store.remaining_budget(), BUDGET_MAX_IMAGES - 1);
+    // 不同内容 → 正常保存（去重不误伤）
+    let other = store.save_crop(3000, &seeded_frame(66, 45, 12), 66, 45).unwrap();
+    assert_eq!(other, "crop/3000.webp");
+    assert_eq!(store.list_crops().len(), 2);
 }
 
 #[test]

@@ -40,6 +40,37 @@ pub fn grid_from_bgra(bgraw: &[u8], width: u32, height: u32) -> Option<FrameGrid
     Some(FrameGrid { cols, rows, cells })
 }
 
+/// 版面区域：网格坐标 → 帧像素坐标（纯函数；编排层在 analyze_or_reuse 后调用）。
+///
+/// @ai-context: analyze_layout 输出网格坐标（0..cols-1 × 0..rows-1），而
+///              crop_spec/map_to_frame 按帧像素消费——换算必须在此集中。
+///              修复：此前两套坐标系混用（网格坐标被当像素裁剪），即使区域
+///              分类正确也会裁错位置（44×30 角落小片），OCR 必然读不出内容。
+/// @ai-context: 与 grid_from_bgra 采样同口径（(gx*width)/cols 整除，u64 防溢出）；
+///              空入参/非法尺寸安全直通。
+pub fn regions_to_frame(
+    regions: &[crate::layout_analyzer::LayoutRegion],
+    cols: u32,
+    rows: u32,
+    frame_w: u32,
+    frame_h: u32,
+) -> Vec<crate::layout_analyzer::LayoutRegion> {
+    if cols == 0 || rows == 0 || frame_w == 0 || frame_h == 0 {
+        return regions.to_vec();
+    }
+    regions
+        .iter()
+        .map(|r| {
+            let mut out = r.clone();
+            out.x = ((r.x as u64 * frame_w as u64) / cols as u64) as u32;
+            out.y = ((r.y as u64 * frame_h as u64) / rows as u64) as u32;
+            out.w = ((r.w as u64 * frame_w as u64) / cols as u64).max(1) as u32;
+            out.h = ((r.h as u64 * frame_h as u64) / rows as u64).max(1) as u32;
+            out
+        })
+        .collect()
+}
+
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。
 #[cfg(test)]
 #[path = "frame_features_tests.rs"]

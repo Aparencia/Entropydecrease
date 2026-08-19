@@ -297,7 +297,16 @@ pub fn process_frame(
                     .collect();
                 eprintln!("[Layout] 会话 {} 版面区域: {}", session_id, summary.join(", "));
             }
-            layout_regions = regions;
+            // 网格坐标 → 帧像素坐标（crop_spec/map_to_frame 按像素消费；修复：
+            // 此前网格坐标被当像素裁剪，区域错位漏识别——layout_analyzer 与
+            // region_ocr 注释互相声称对方换算，实际谁都没做）
+            layout_regions = crate::frame_features::regions_to_frame(
+                &regions,
+                grid.cols,
+                grid.rows,
+                frame.width,
+                frame.height,
+            );
         }
     }
 
@@ -308,21 +317,45 @@ pub fn process_frame(
     // M3/REQ-067：dHash 双指纹（与 aHash 组合——帧聚类任一显著变化即新簇）
     let ocr_input_dhash = crate::ocr_cache::difference_hash(&rgb);
     // M4/REQ-048：全帧分支优先分区域 OCR（版面区域 → 区域裁剪 → 识别 → 坐标还原）；
-    // 无区域（空白帧/分析失败）回退整帧直跑（现状行为，回退链）
+    // 区域路径空产出（误判区域/空白区域/识别失败）→ 回退整帧直跑（修复：
+    // 此前区域一旦存在即独占整帧路径，OCR 只跑在小裁剪块上——视频画面误判
+    // 区域时全程 0 OCR 块，参考图集只剩首帧占坑图，会话 14/15 实测）
     if !is_subtitle && !layout_regions.is_empty() {
-        // 区域编排：区域级失败不阻断整体（标记 unknown），无整体失败路径——
-        // 编排函数返回 (合并块, 失败区域数)；调用方计入 stats 后直用结果
         let (blocks, failed_regions) =
             crate::region_ocr::region_ocr_blocks(&frame, engines, &layout_regions, image_store);
-        stats.ocr_err += failed_regions as u64;
-        stats.ocr_ok += 1;
-        // OCR 成功即刷新兜底基准（无论是否产出文本）
-        trigger.last_ocr_at = Instant::now();
-        trigger.last_full_ocr_at = Instant::now();
-        crate::live_keyframes::handle_full_frame(
-            &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
-            last_archived_text, last_archived_at, image_store, ocr_input_hash, ocr_input_dhash,
-        );
+        if !blocks.is_empty() {
+            // 区域路径有产出：正常分支（失败区域数计入统计，不阻断整体）
+            stats.ocr_err += failed_regions as u64;
+            stats.ocr_ok += 1;
+            // OCR 成功即刷新兜底基准（无论是否产出文本）
+            trigger.last_ocr_at = Instant::now();
+            trigger.last_full_ocr_at = Instant::now();
+            crate::live_keyframes::handle_full_frame(
+                &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
+                last_archived_text, last_archived_at, image_store, ocr_input_hash,
+                ocr_input_dhash, ui_junk,
+            );
+        } else {
+            // 区域路径无产出 → 整帧 OCR 兜底（结构性回退链：误判/空白区域
+            // 不得阻断全帧识别——真实画面文字必须仍有出口）
+            match engines.recognize_image(rgb) {
+                Ok(blocks) => {
+                    stats.ocr_err += failed_regions as u64;
+                    stats.ocr_ok += 1;
+                    trigger.last_ocr_at = Instant::now();
+                    trigger.last_full_ocr_at = Instant::now();
+                    crate::live_keyframes::handle_full_frame(
+                        &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
+                        last_archived_text, last_archived_at, image_store, ocr_input_hash,
+                        ocr_input_dhash, ui_junk,
+                    );
+                }
+                Err(e) => {
+                    stats.ocr_err += 1 + failed_regions as u64;
+                    eprintln!("[ScreenWorker] 整帧 OCR 兜底失败（区域 OCR 亦无产出）: {}", e);
+                }
+            }
+        }
     } else {
         match engines.recognize_image(rgb) {
             Ok(blocks) => {
@@ -355,7 +388,7 @@ pub fn process_frame(
                     crate::live_keyframes::handle_full_frame(
                         &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
                         last_archived_text, last_archived_at, image_store, ocr_input_hash,
-                        ocr_input_dhash,
+                        ocr_input_dhash, ui_junk,
                     );
                 }
             }

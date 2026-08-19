@@ -23,6 +23,11 @@ use crate::types::{NewSessionOcrBlock, NewSessionSegment, TranscriptSegment};
 /// @ai-context: 落库成功即 emit live:ocr（前端实时画面流，简要单行卡片）。
 /// @ai-context: M6/REQ-051：关键帧样本收集（停止时投票）+ 新画面文本归档存图
 ///              （三层图结构参考图集数据源；预算上限由 image_store 控制）。
+/// @ai-context: 修复①：UI 垃圾（播放器时间码/控制条/水印）源头过滤——与字幕路径
+///              （REQ-083）同口径，不进文本集/不落库/不归档（播放器区域被版面
+///              误判时，OCR 产出时间码会每 2s 刷屏归档）。
+/// @ai-context: 修复②：空文本帧不归档——旧实现首帧无条件归档占坑（
+///              last_archived_text=None 恒真），误判会话参考图集只剩一张开头图。
 #[allow(clippy::too_many_arguments)]
 pub fn handle_full_frame(
     frame: &CapturedFrame,
@@ -38,12 +43,15 @@ pub fn handle_full_frame(
     ocr_input_hash: u64,
     // M3/REQ-067：dHash 双指纹（与 aHash 组合——聚类任一显著变化即新簇）
     ocr_input_dhash: u64,
+    // REQ-083 同口径：UI 垃圾黑名单（播放器时间码/控制条源头过滤）
+    ui_junk: &crate::ui_junk::UiJunkList,
 ) {
-    let texts: Vec<String> = blocks
+    // REQ-083：UI 垃圾块源头过滤（播放器时间码/控制条/水印——与字幕路径同口径）
+    let kept: Vec<&crate::types::OcrBlock> = blocks
         .iter()
-        .filter(|b| b.score >= 0.5 && !b.text.trim().is_empty())
-        .map(|b| b.text.clone())
+        .filter(|b| b.score >= 0.5 && !b.text.trim().is_empty() && !ui_junk.is_junk(&b.text))
         .collect();
+    let texts: Vec<String> = kept.iter().map(|b| b.text.clone()).collect();
     // REQ-066（v0.6.0 M3）：帧新颖度——与最近已见文本高重叠 → 冗余帧：
     // 不落库/不归档/不收集样本（预算花在新内容上；与变化检测两级串联：
     // 变化检测滤"无变化"帧，新颖度滤"微变但内容冗余"帧）。
@@ -64,44 +72,46 @@ pub fn handle_full_frame(
             change_magnitude: 0.0,
         });
     }
-    // M6：新画面文本 → 归档存图（参考图集；同文本不重复归档 + 2s 防抖）
-    let joined = texts.join(" ");
-    let is_new_text = last_archived_text.as_deref() != Some(joined.as_str());
-    let interval_ok = last_archived_at.is_none_or(|t| t.elapsed() >= Duration::from_secs(2));
-    if is_new_text && interval_ok {
-        if let Some(store) = image_store.as_mut() {
-            if let Err(e) = store.save_frame(
-                frame.timestamp_ms,
-                &frame.bgraw,
-                frame.width,
-                frame.height,
-            ) {
-                // 归档失败不阻断 OCR 主链路（预算满/IO 错误静默降级，日志可观测）
-                eprintln!("[ScreenWorker] 关键帧归档失败: {}", e);
+    // M6：新画面文本 → 归档存图（参考图集；同文本不重复归档 + 2s 防抖）。
+    // 修复：空文本帧不归档——旧实现首帧无条件归档占坑（last_archived_text=None
+    // 恒真，哪怕文本为空），误判会话参考图集只剩一张开头占坑图
+    if !texts.is_empty() {
+        let joined = texts.join(" ");
+        let is_new_text = last_archived_text.as_deref() != Some(joined.as_str());
+        let interval_ok = last_archived_at.is_none_or(|t| t.elapsed() >= Duration::from_secs(2));
+        if is_new_text && interval_ok {
+            if let Some(store) = image_store.as_mut() {
+                if let Err(e) = store.save_frame(
+                    frame.timestamp_ms,
+                    &frame.bgraw,
+                    frame.width,
+                    frame.height,
+                ) {
+                    // 归档失败不阻断 OCR 主链路（预算满/IO 错误静默降级，日志可观测）
+                    eprintln!("[ScreenWorker] 关键帧归档失败: {}", e);
+                }
             }
+            *last_archived_text = Some(joined);
+            *last_archived_at = Some(Instant::now());
         }
-        *last_archived_text = Some(joined);
-        *last_archived_at = Some(Instant::now());
     }
     if crate::import_frame::same_texts(&texts, last_texts) {
         return;
     }
-    for block in blocks {
-        if block.score >= 0.5 && !block.text.trim().is_empty() {
-            let _ = db.add_ocr_block(&NewSessionOcrBlock {
-                session_id,
-                timestamp_ms: frame.timestamp_ms,
-                text: block.text.clone(),
-                score: block.score,
-                region: "full".to_string(),
-                // M4/REQ-048：整帧直跑路径无区域标注（None=兼容旧数据口径）
-                region_kind: None,
-            });
-            let _ = app.emit(
-                "live:ocr",
-                OcrEvent { timestamp_ms: frame.timestamp_ms, text: block.text.clone() },
-            );
-        }
+    for block in kept {
+        let _ = db.add_ocr_block(&NewSessionOcrBlock {
+            session_id,
+            timestamp_ms: frame.timestamp_ms,
+            text: block.text.clone(),
+            score: block.score,
+            region: "full".to_string(),
+            // M4/REQ-048：整帧直跑路径无区域标注（None=兼容旧数据口径）
+            region_kind: None,
+        });
+        let _ = app.emit(
+            "live:ocr",
+            OcrEvent { timestamp_ms: frame.timestamp_ms, text: block.text.clone() },
+        );
     }
     *last_texts = texts;
 }
