@@ -11,7 +11,7 @@
 //! @ai-context: WAV 头 44 字节（RIFF/WAVE/fmt/data），长度字段 finalize 回填
 //!              （防崩溃残留半成品：头部长度 0 可识别，清理/回听可跳过）。
 
-use std::io::{Seek, SeekFrom, Write};
+use std::io::{Seek, Write};
 use std::path::{Path, PathBuf};
 
 /// 默认保留期（天）。

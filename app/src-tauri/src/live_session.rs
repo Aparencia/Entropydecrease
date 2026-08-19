@@ -68,6 +68,9 @@ pub struct AsrFinalEvent {
 ///
 /// @ai-context: 事件、session_segments、asr_segments（融合输入）三处一致落库，
 ///              避免 F4-1 挂起/合并引入的多出口不一致（与 R7 预览落库一致性同构）。
+/// @ai-context: 参数多为编排上下文传递（app/db/session_id/segments/时间戳/文本/
+///              置信度），聚合会破坏内聚——登记 clippy 豁免（与 engine.rs 同模式）。
+#[allow(clippy::too_many_arguments)]
 fn persist_final(
     app: &tauri::AppHandle,
     db: &Db,

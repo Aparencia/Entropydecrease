@@ -10,6 +10,11 @@
 //!              当前不接入生产融合链路（无实测收益不改变行为）。
 //! @ai-context: 纯函数无 IO；局限：标准 DTW 首尾强制对齐（字幕延迟出现时
 //!              首段对应失真），漂移估计用中位数抗离群。
+//!
+//! #![allow(dead_code)]：**spike 预留**（REQ-063 M4 真机校准落盘后接入生产链路；
+//! 当前无 lib 调用者，仅合成样本测试验证正确率——M4 前不删除，见模块头注释）。
+
+#![allow(dead_code)]
 
 use crate::fusion::SubtitleSegment;
 use crate::streaming_asr::levenshtein;

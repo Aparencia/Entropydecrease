@@ -83,7 +83,8 @@ impl AdaptiveVad {
         self.current.max(THRESHOLD_FLOOR)
     }
 
-    /// 当前阈值（诊断/测试）。
+    /// 当前阈值（诊断/测试 API；编排层走 next_threshold——登记豁免 dead_code）。
+    #[allow(dead_code)]
     pub fn current_threshold(&self) -> f32 {
         self.current
     }

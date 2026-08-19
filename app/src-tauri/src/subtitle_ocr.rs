@@ -75,6 +75,10 @@ impl SubtitleVoter {
     }
 
     /// 观察一帧 OCR 结果（等权版本：权重 1.0——REQ-065 兼容入口）。
+    ///
+    /// @ai-context: 实时链路走 observe_weighted（REQ-065 加权）；等权入口保留
+    ///              供测试覆盖投票状态机语义与外部语义引用（登记豁免 dead_code）。
+    #[allow(dead_code)]
     pub fn observe(&mut self, text: &str, now_ms: u64) -> Option<VotedSubtitle> {
         self.observe_weighted(text, now_ms, 1.0)
     }
@@ -153,12 +157,18 @@ impl SubtitleVoter {
 /// @ai-context: "超过半数"规则防止少数帧的噪音字符在其独有位"默认胜出"
 ///              （如 2 帧中 1 帧误带句号 → 不输出句号）；首样本仲裁让平票
 ///              稳定收敛到最初观察（最接近字幕真实内容）。
+/// @ai-context: 等权入口——实时链路走 vote_text_weighted/observe_weighted
+///              （REQ-065 加权），本函数为测试/外部语义引用保留（登记豁免）。
+#[allow(dead_code)]
 pub fn vote_text(samples: &[&str]) -> String {
     let weighted: Vec<(&str, f32)> = samples.iter().map(|s| (*s, 1.0)).collect();
     vote_text_weighted(&weighted).0
 }
 
 /// 投票文本 + 置信度（REQ-062，等权入口）：多数位占比均值。
+///
+/// @ai-context: 同 vote_text——等权入口保留（测试引用），实时链路走加权版。
+#[allow(dead_code)]
 pub fn vote_text_with_confidence(samples: &[&str]) -> (String, f32) {
     let weighted: Vec<(&str, f32)> = samples.iter().map(|s| (*s, 1.0)).collect();
     vote_text_weighted(&weighted)

@@ -121,7 +121,8 @@ impl IdleGovernor {
         self.state
     }
 
-    /// 当前状态。
+    /// 当前状态（诊断/测试 API；编排层走 is_idle——登记豁免 dead_code）。
+    #[allow(dead_code)]
     pub fn state(&self) -> IdleState {
         self.state
     }
@@ -131,7 +132,8 @@ impl IdleGovernor {
         self.state == IdleState::Idle
     }
 
-    /// 进入 Idle 的时刻（探针调度用；Active 时为 0）。
+    /// 进入 Idle 的时刻（探针调度用；Active 时为 0；诊断/测试 API——登记豁免）。
+    #[allow(dead_code)]
     pub fn idle_since_ms(&self) -> u64 {
         if self.is_idle() { self.since_ms } else { 0 }
     }
