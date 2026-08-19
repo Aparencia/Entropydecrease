@@ -14,6 +14,8 @@ pub struct FrameSample {
     pub timestamp_ms: u64,
     /// 感知哈希（aHash；帧聚类去重/归簇依据）
     pub ahash: u64,
+    /// v0.6.0 M3（REQ-067）：差异哈希（dHash）——与 aHash 构成双指纹
+    pub dhash: u64,
     /// 本帧 OCR 文本（无画面文字为 None）
     pub ocr_text: Option<String>,
     /// 画面变化幅度 0.0-1.0（相对上一帧；无则 0）
@@ -55,29 +57,52 @@ const HOLD_MIN_MS: u64 = 10_000;
 const CHANGE_THRESHOLD: f32 = 0.3;
 /// 感知哈希汉明距离 ≤ 该值视为同簇（8×8 aHash 相似阈值）。
 const CLUSTER_HAMMING_MAX: u32 = 6;
+/// 差异哈希汉明距离 ≤ 该值视为同簇（8×8 dHash；纹理/边缘相似阈值）。
+const CLUSTER_DHASH_MAX: u32 = 8;
 
-/// 帧聚类（纯函数）：按感知哈希相似度归簇。
+/// 双指纹同图判定（REQ-067，纯函数）：aHash 与 dHash **双稳定**才视为同图。
 ///
-/// @ai-context: 顺序扫描帧样本：与当前簇首哈希汉明距离 ≤ CLUSTER_HAMMING_MAX →
-///              归入当前簇（更新时间范围）；否则开新簇。输出簇首帧时间戳 + 范围。
+/// @ai-context: 帧聚类与图片去重共用本函数——任一指纹显著变化即"新图"
+///              （防 aHash 对亮度不敏感导致的不同内容误并；dHash 对边缘
+///              敏感，缩放/旋转仍稳定——双指纹互补）。
+/// @ai-context: aHash 阈值 ≤6（原 CLUSTER_HAMMING_MAX 语义不变）；
+///              dHash 阈值默认 8（64 位中 ≤8 位差异——纹理近似容差）。
+pub fn same_image(
+    ahash_a: u64,
+    dhash_a: u64,
+    ahash_b: u64,
+    dhash_b: u64,
+    ahash_max: u32,
+    dhash_max: u32,
+) -> bool {
+    hamming(ahash_a, ahash_b) <= ahash_max && hamming(dhash_a, dhash_b) <= dhash_max
+}
+
+/// 帧聚类（纯函数）：按双指纹相似度归簇（REQ-067：任一显著变化即新簇）。
+///
+/// @ai-context: 顺序扫描帧样本：与当前簇首双指纹**双稳定**（same_image）→
+///              归入当前簇（更新时间范围）；否则开新簇（任一指纹显著变化）。
+///              输出簇首帧时间戳 + 范围。
 pub fn cluster_frames(samples: &[FrameSample]) -> Vec<FrameCluster> {
     let mut clusters: Vec<FrameCluster> = Vec::new();
-    let mut current: Option<(u64, u64, u64, u32)> = None; // (hash, first_ms, last_ms, count)
+    let mut current: Option<(u64, u64, u64, u64, u32)> = None; // (ahash, dhash, first_ms, last_ms, count)
     for s in samples {
         match current {
-            Some((hash, first, _, count)) if hamming(s.ahash, hash) <= CLUSTER_HAMMING_MAX => {
-                current = Some((hash, first, s.timestamp_ms, count + 1));
+            Some((ah, dh, first, _, count))
+                if same_image(s.ahash, s.dhash, ah, dh, CLUSTER_HAMMING_MAX, CLUSTER_DHASH_MAX) =>
+            {
+                current = Some((ah, dh, first, s.timestamp_ms, count + 1));
             }
-            Some((_, first, last, count)) => {
+            Some((_, _, first, last, count)) => {
                 clusters.push(FrameCluster { first_ms: first, last_ms: last, frame_count: count });
-                current = Some((s.ahash, s.timestamp_ms, s.timestamp_ms, 1));
+                current = Some((s.ahash, s.dhash, s.timestamp_ms, s.timestamp_ms, 1));
             }
             None => {
-                current = Some((s.ahash, s.timestamp_ms, s.timestamp_ms, 1));
+                current = Some((s.ahash, s.dhash, s.timestamp_ms, s.timestamp_ms, 1));
             }
         }
     }
-    if let Some((_, first, last, count)) = current {
+    if let Some((_, _, first, last, count)) = current {
         clusters.push(FrameCluster { first_ms: first, last_ms: last, frame_count: count });
     }
     clusters

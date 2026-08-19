@@ -4,11 +4,13 @@
 
 use super::*;
 
-/// 构造帧样本辅助。
+/// 构造帧样本辅助（REQ-067：dhash 双指纹；默认与 ahash 同值——测试多数
+/// 场景只关心 aHash 差异，双指纹场景单独构造）。
 fn sample(ms: u64, hash: u64, text: Option<&str>, change: f32) -> FrameSample {
     FrameSample {
         timestamp_ms: ms,
         ahash: hash,
+        dhash: hash,
         ocr_text: text.map(String::from),
         change_magnitude: change,
     }
@@ -20,6 +22,63 @@ fn hamming_distance_basic() {
     assert_eq!(hamming(0b1010, 0b1010), 0);
     assert_eq!(hamming(0b0000, 0b1111), 4);
     assert_eq!(hamming(u64::MAX, 0), 64);
+}
+
+// ────────────────────────────────────────────────────────────
+// REQ-067（v0.6.0 M3）：双指纹判定（aHash+dHash 双稳定才同图）
+// ────────────────────────────────────────────────────────────
+
+#[test]
+fn same_image_requires_both_fingerprints_stable() {
+    // Act & Assert：双稳定 → 同图
+    assert!(same_image(0x0F0F, 0x00FF, 0x0F0F, 0x00FF, 6, 8));
+    // aHash 相近但 dHash 显著不同 → 新图（纹理差异）
+    assert!(!same_image(0x0F0F, 0x0000, 0x0F0F, 0xFFFF, 6, 8));
+    // dHash 相近但 aHash 显著不同 → 新图（内容差异）
+    assert!(!same_image(0x0000, 0x00FF, 0xFFFF, 0x00FF, 6, 8));
+    // 阈值边界：aHash 差恰 6 ✓；差 7 ✗（0b0111_1111 vs 0 = 7 bits）
+    assert!(same_image(0b0000_0111, 0x00, 0b0000_0000, 0x00, 6, 8));
+    assert!(!same_image(0b0111_1111, 0x00, 0b0000_0000, 0x00, 6, 8));
+}
+
+#[test]
+fn cluster_requires_dual_fingerprint_stability() {
+    // Arrange：aHash 相同（双帧同区域均值）但 dHash 显著不同（纹理突变）——
+    // 旧实现会误并（仅 aHash）；REQ-067 任一显著变化即新簇
+    let samples = vec![
+        FrameSample {
+            timestamp_ms: 0,
+            ahash: 0xAAAA,
+            dhash: 0x0000,
+            ocr_text: None,
+            change_magnitude: 0.0,
+        },
+        FrameSample {
+            timestamp_ms: 1000,
+            ahash: 0xAAAA,
+            dhash: 0xFFFF,
+            ocr_text: None,
+            change_magnitude: 0.0,
+        },
+    ];
+    // Act
+    let clusters = cluster_frames(&samples);
+    // Assert：2 簇（dHash 显著变化即新簇）
+    assert_eq!(clusters.len(), 2);
+}
+
+#[test]
+fn cluster_dual_stable_merges() {
+    // Arrange：双指纹均稳定（微差 ≤ 阈值）
+    let samples = vec![
+        FrameSample { timestamp_ms: 0, ahash: 0b0000_0001, dhash: 0b0000_0001, ocr_text: None, change_magnitude: 0.0 },
+        FrameSample { timestamp_ms: 1000, ahash: 0b0000_0011, dhash: 0b0000_0000, ocr_text: None, change_magnitude: 0.0 },
+    ];
+    // Act
+    let clusters = cluster_frames(&samples);
+    // Assert：1 簇（aHash 差 2 ≤ 6 且 dHash 差 1 ≤ 8——双稳定合并）
+    assert_eq!(clusters.len(), 1);
+    assert_eq!(clusters[0].frame_count, 2);
 }
 
 #[test]

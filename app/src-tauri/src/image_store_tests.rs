@@ -14,6 +14,22 @@ fn solid_frame(w: u32, h: u32, r: u8, g: u8, b: u8) -> Vec<u8> {
     raw
 }
 
+/// 构造固定种子噪声 BGRA 帧（REQ-067 起 save_frame 双指纹去重——纯色/两色
+/// 帧是 aHash/dHash 的退化输入：亮度平移/相对明暗不变 → 指纹相同会被误判
+/// 同图；噪声帧空间结构丰富，不同 seed 指纹必然不同，同 seed 完全复现）。
+fn seeded_frame(w: u32, h: u32, seed: u32) -> Vec<u8> {
+    let mut state = seed.wrapping_mul(0x9E37_79B9).wrapping_add(1);
+    let mut raw = Vec::with_capacity((w * h * 4) as usize);
+    for _ in 0..(w * h) {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        let v = (state >> 24) as u8;
+        raw.extend_from_slice(&[v, v, v, 255]);
+    }
+    raw
+}
+
 #[test]
 fn save_frame_writes_full_and_thumb() {
     // Arrange
@@ -54,19 +70,19 @@ fn save_crop_shares_budget_with_frames() {
     // Arrange：裁剪图与关键帧共用预算（防总盘占用失控）
     let dir = tempfile::tempdir().unwrap();
     let mut store = SessionImageStore::new(dir.path().to_path_buf()).unwrap();
-    // Act：交替存满预算
+    // Act：交替存满预算（分区帧——双指纹去重下不同内容仍各存）
     for i in 0..BUDGET_MAX_IMAGES {
         let ts = i as u64 * 100;
         let rel = if i % 2 == 0 {
-            store.save_frame(ts, &solid_frame(32, 32, 1, 1, 1), 32, 32).unwrap()
+            store.save_frame(ts, &seeded_frame(32, 32, i as u32 + 1), 32, 32).unwrap()
         } else {
-            store.save_crop(ts, &solid_frame(32, 32, 2, 2, 2), 32, 32).unwrap()
+            store.save_crop(ts, &seeded_frame(32, 32, (i + 100) as u32), 32, 32).unwrap()
         };
         assert!(rel.starts_with(if i % 2 == 0 { "full/" } else { "crop/" }));
     }
     // Assert：超预算两者都拒绝
-    assert!(store.save_frame(9999, &solid_frame(32, 32, 1, 1, 1), 32, 32).is_err());
-    assert!(store.save_crop(9999, &solid_frame(32, 32, 2, 2, 2), 32, 32).is_err());
+    assert!(store.save_frame(9999, &seeded_frame(32, 32, 999), 32, 32).is_err());
+    assert!(store.save_crop(9999, &seeded_frame(32, 32, 1999), 32, 32).is_err());
 }
 
 #[test]
@@ -90,12 +106,14 @@ fn budget_limited_to_max() {
     // Arrange：预算上限 50
     let dir = tempfile::tempdir().unwrap();
     let mut store = SessionImageStore::new(dir.path().to_path_buf()).unwrap();
-    // Act：保存 50 张（预算内）
+    // Act：保存 50 张（预算内；分区帧内容各异——双指纹去重不误并）
     for i in 0..BUDGET_MAX_IMAGES as u64 {
-        store.save_frame(i * 100, &solid_frame(32, 32, 10, 20, 30), 32, 32).unwrap();
+        store
+            .save_frame(i * 100, &seeded_frame(32, 32, i as u32 + 1), 32, 32)
+            .unwrap();
     }
     // Assert：第 51 张超预算报错
-    let err = store.save_frame(9999, &solid_frame(32, 32, 10, 20, 30), 32, 32);
+    let err = store.save_frame(9999, &seeded_frame(32, 32, 999), 32, 32);
     assert!(err.is_err(), "超预算应拒绝保存");
     assert_eq!(store.remaining_budget(), 0);
 }
@@ -107,32 +125,54 @@ fn reopened_store_restores_budget_from_disk() {
     let dir = tempfile::tempdir().unwrap();
     {
         let mut store = SessionImageStore::new(dir.path().to_path_buf()).unwrap();
-        store.save_frame(100, &solid_frame(32, 32, 1, 1, 1), 32, 32).unwrap();
-        store.save_crop(200, &solid_frame(32, 32, 2, 2, 2), 32, 32).unwrap();
-        store.save_frame(300, &solid_frame(32, 32, 3, 3, 3), 32, 32).unwrap();
+        store.save_frame(100, &seeded_frame(32, 32, 1), 32, 32).unwrap();
+        store.save_crop(200, &seeded_frame(32, 32, 2), 32, 32).unwrap();
+        store.save_frame(300, &seeded_frame(32, 32, 3), 32, 32).unwrap();
     }
     // Act：重新打开（新实例，saved 应恢复为 3——full 2 + crop 1）
     let mut store = SessionImageStore::new(dir.path().to_path_buf()).unwrap();
     // Assert：预算按磁盘已有图片扣减，而非归零
     assert_eq!(store.remaining_budget(), BUDGET_MAX_IMAGES - 3);
     for i in 0..(BUDGET_MAX_IMAGES - 3) as u64 {
-        store.save_frame(1000 + i, &solid_frame(32, 32, 4, 4, 4), 32, 32).unwrap();
+        store
+            .save_frame(1000 + i, &seeded_frame(32, 32, (i + 10) as u32), 32, 32)
+            .unwrap();
     }
-    assert!(store.save_frame(99999, &solid_frame(32, 32, 4, 4, 4), 32, 32).is_err(), "恢复预算后仍应封顶");
+    assert!(store.save_frame(99999, &seeded_frame(32, 32, 9999), 32, 32).is_err(), "恢复预算后仍应封顶");
 }
 
 #[test]
 fn list_images_sorted_by_timestamp() {
-    // Arrange：乱序保存
+    // Arrange：乱序保存（分区帧内容各异——双指纹去重不误并）
     let dir = tempfile::tempdir().unwrap();
     let mut store = SessionImageStore::new(dir.path().to_path_buf()).unwrap();
-    store.save_frame(3000, &solid_frame(32, 32, 1, 1, 1), 32, 32).unwrap();
-    store.save_frame(1000, &solid_frame(32, 32, 2, 2, 2), 32, 32).unwrap();
-    store.save_frame(2000, &solid_frame(32, 32, 3, 3, 3), 32, 32).unwrap();
+    store.save_frame(3000, &seeded_frame(32, 32, 1), 32, 32).unwrap();
+    store.save_frame(1000, &seeded_frame(32, 32, 2), 32, 32).unwrap();
+    store.save_frame(2000, &seeded_frame(32, 32, 3), 32, 32).unwrap();
     // Act
     let list = store.list_images();
     // Assert：按文件名（时间戳）升序
     assert_eq!(list, vec!["full/1000.webp", "full/2000.webp", "full/3000.webp"]);
+}
+
+#[test]
+fn duplicate_frame_deduped_by_dual_fingerprint() {
+    // Arrange：REQ-067 去重语义——连续保存相同内容帧 → 第二次返回首次路径且不重复存
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = SessionImageStore::new(dir.path().to_path_buf()).unwrap();
+    let frame = seeded_frame(64, 64, 7);
+    // Act：相同内容两次保存（不同时间戳）
+    let first = store.save_frame(1000, &frame, 64, 64).unwrap();
+    let second = store.save_frame(2000, &frame, 64, 64).unwrap();
+    // Assert：第二次去重命中（返回首次路径）；磁盘只存 1 张；预算只扣 1
+    assert_eq!(first, "full/1000.webp");
+    assert_eq!(second, "full/1000.webp", "重复帧应返回首次保存路径");
+    assert!(!dir.path().join("full/2000.webp").exists(), "重复帧不得落盘");
+    assert_eq!(store.remaining_budget(), BUDGET_MAX_IMAGES - 1);
+    // 不同内容 → 正常保存（去重不误伤）
+    let other = store.save_frame(3000, &seeded_frame(64, 64, 8), 64, 64).unwrap();
+    assert_eq!(other, "full/3000.webp");
+    assert_eq!(store.list_images().len(), 2);
 }
 
 #[test]

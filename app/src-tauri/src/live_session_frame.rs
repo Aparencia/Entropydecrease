@@ -385,6 +385,8 @@ fn process_frame(
     let Some(rgb) = crate::region_ocr::bgra_to_rgb_image(&frame.bgraw, frame.width, frame.height) else { return };
     // M6/REQ-051：OCR 输入图 aHash（关键帧样本去重/聚类输入）
     let ocr_input_hash = crate::ocr_cache::average_hash(&rgb);
+    // M3/REQ-067：dHash 双指纹（与 aHash 组合——帧聚类任一显著变化即新簇）
+    let ocr_input_dhash = crate::ocr_cache::difference_hash(&rgb);
     // M4/REQ-048：全帧分支优先分区域 OCR（版面区域 → 区域裁剪 → 识别 → 坐标还原）；
     // 无区域（空白帧/分析失败）回退整帧直跑（现状行为，回退链）
     if !is_subtitle && !layout_regions.is_empty() {
@@ -397,7 +399,7 @@ fn process_frame(
         *last_ocr_at = Instant::now();
         crate::live_keyframes::handle_full_frame(
             &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
-            last_archived_text, last_archived_at, image_store, ocr_input_hash,
+            last_archived_text, last_archived_at, image_store, ocr_input_hash, ocr_input_dhash,
         );
     } else {
         match engines.recognize_image(rgb) {
@@ -423,6 +425,7 @@ fn process_frame(
                     crate::live_keyframes::handle_full_frame(
                         &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
                         last_archived_text, last_archived_at, image_store, ocr_input_hash,
+                        ocr_input_dhash,
                     );
                 }
             }
@@ -468,8 +471,11 @@ fn handle_subtitle_frame(
         return;
     }
     *last_frame_text = Some(text.clone());
+    // REQ-065：加权投票——帧权重 = 字幕区块平均 score（清晰度×score 启发式；
+    // score 未暴露时恒 1.0 → 退化为等权，零回归）
+    let weight = blocks.iter().map(|b| b.score).sum::<f32>() / (blocks.len() as f32).max(1.0);
     // 多帧投票：同字幕帧累积为样本；字幕切换时定稿上一组（投票纠错 + 真实时间轴）
-    if let Some(voted) = voter.observe(&text, frame.timestamp_ms) {
+    if let Some(voted) = voter.observe_weighted(&text, frame.timestamp_ms, weight) {
         persist_voted_subtitle(db, app, session_id, subtitle_segments, voted);
     }
     // UI 即时预览：新组首帧原文立刻推送（定稿文本在切换时再推，纠正可见；

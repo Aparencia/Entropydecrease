@@ -36,17 +36,30 @@ pub fn handle_full_frame(
     last_archived_at: &mut Option<Instant>,
     image_store: &mut Option<crate::image_store::SessionImageStore>,
     ocr_input_hash: u64,
+    // M3/REQ-067：dHash 双指纹（与 aHash 组合——聚类任一显著变化即新簇）
+    ocr_input_dhash: u64,
 ) {
     let texts: Vec<String> = blocks
         .iter()
         .filter(|b| b.score >= 0.5 && !b.text.trim().is_empty())
         .map(|b| b.text.clone())
         .collect();
+    // REQ-066（v0.6.0 M3）：帧新颖度——与最近已见文本高重叠 → 冗余帧：
+    // 不落库/不归档/不收集样本（预算花在新内容上；与变化检测两级串联：
+    // 变化检测滤"无变化"帧，新颖度滤"微变但内容冗余"帧）。
+    // 冗余帧不更新 last_texts 基准（保持"最后有意义内容"——防基准污染）。
+    if !texts.is_empty() && !last_texts.is_empty() {
+        let score = crate::novelty::novelty_score(&texts, last_texts);
+        if crate::novelty::is_redundant(score, crate::novelty::REDUNDANT_THRESHOLD) {
+            return;
+        }
+    }
     // M6：关键帧样本收集（全帧分支每次 OCR 成功记录；停止时投票器消费）
     if !texts.is_empty() {
         frame_samples.push(crate::frame_cluster::FrameSample {
             timestamp_ms: frame.timestamp_ms,
             ahash: ocr_input_hash,
+            dhash: ocr_input_dhash,
             ocr_text: Some(texts.join(" ")),
             change_magnitude: 0.0,
         });

@@ -24,6 +24,9 @@ pub struct SessionImageStore {
     session_dir: PathBuf,
     /// 已存图片数（预算检查）
     saved: usize,
+    /// REQ-067（v0.6.0 M3）：最近保存帧双指纹 + 相对路径——
+    /// 图片去重与帧聚类共用 same_image（双稳定才判同图）
+    last_fingerprint: Option<(u64, u64, String)>,
 }
 
 impl SessionImageStore {
@@ -37,7 +40,7 @@ impl SessionImageStore {
         std::fs::create_dir_all(session_dir.join("thumb"))?;
         std::fs::create_dir_all(session_dir.join("crop"))?;
         let saved = count_webp(&session_dir.join("full")) + count_webp(&session_dir.join("crop"));
-        Ok(Self { session_dir, saved })
+        Ok(Self { session_dir, saved, last_fingerprint: None })
     }
 
     /// 剩余预算（0 = 已达上限；full/thumb 与 crop 共用预算，防总盘占用失控）。
@@ -91,6 +94,9 @@ impl SessionImageStore {
     ///
     /// @ai-context: 编码失败/超预算 → Err（调用方决定降级）；文件名 = 时间戳毫秒
     ///              （时间轴对齐：产物块按 frame_id 引用）。
+    /// @ai-context: REQ-067 去重：与最近保存帧双指纹**双稳定**（same_image——
+    ///              与帧聚类共用同一判定函数）→ 视为同图直接返回已有路径，
+    ///              不重复存图/不占预算（旋转/缩放/静止重复帧去重）。
     pub fn save_frame(
         &mut self,
         timestamp_ms: u64,
@@ -98,6 +104,16 @@ impl SessionImageStore {
         width: u32,
         height: u32,
     ) -> Result<String> {
+        let rgb = bgra_to_rgb(bgraw, width, height)
+            .ok_or_else(|| crate::error::AppError::Io("帧数据无效".to_string()))?;
+        // 双指纹去重（先于预算检查——重复帧不消耗预算）
+        let ah = crate::ocr_cache::average_hash(&rgb);
+        let dh = crate::ocr_cache::difference_hash(&rgb);
+        if let Some((la, ld, path)) = &self.last_fingerprint {
+            if crate::frame_cluster::same_image(*la, *ld, ah, dh, 6, 8) {
+                return Ok(path.clone());
+            }
+        }
         if self.remaining_budget() == 0 {
             return Err(crate::error::AppError::Io(format!(
                 "会话图片预算已达上限（{} 张）",
@@ -106,8 +122,6 @@ impl SessionImageStore {
         }
         let name = format!("{}.webp", timestamp_ms);
         // 原图（WebP lossless）
-        let rgb = bgra_to_rgb(bgraw, width, height)
-            .ok_or_else(|| crate::error::AppError::Io("帧数据无效".to_string()))?;
         let full_path = self.session_dir.join("full").join(&name);
         encode_webp(&rgb, &full_path)?;
         // 缩略图（保持宽高比缩小后编码）
@@ -116,6 +130,7 @@ impl SessionImageStore {
             encode_webp(&thumb, &thumb_path)?;
         }
         self.saved += 1;
+        self.last_fingerprint = Some((ah, dh, format!("full/{}", name)));
         Ok(format!("full/{}", name))
     }
 

@@ -134,6 +134,70 @@ pub fn average_hash(image: &image::RgbImage) -> u64 {
     hash
 }
 
+/// 8×8 差异哈希（对 OCR 输入图；纯函数；REQ-067 双指纹之一）。
+///
+/// @ai-context: 与 average_hash 同源灰度化（简化 Rec.601），但编码**相邻格
+///              亮度差**的符号——对边缘/纹理敏感、对整体亮度平移鲁棒；
+///              与 aHash（区域均值 vs 整体均值）互补：aHash 双稳定 + dHash
+///              双稳定才判定同图（见 frame_cluster::same_image）。
+/// @ai-context: 每格采样 4×4 点平均（比 aHash 16×16 粗——dHash 只关心
+///              相对关系，粗采样足够且更省）；成本与 aHash 同量级。
+pub fn difference_hash(image: &image::RgbImage) -> u64 {
+    const CELLS: u32 = 8;
+    let (w, h) = image.dimensions();
+    if w == 0 || h == 0 {
+        return 0;
+    }
+    let raw = image.as_raw();
+    let mut cells = [0u64; 64];
+    for cy in 0..CELLS {
+        let y0 = cy * h / CELLS;
+        let y1 = (cy + 1) * h / CELLS;
+        let sy = ((y1 - y0) / 4).max(1);
+        for cx in 0..CELLS {
+            let x0 = cx * w / CELLS;
+            let x1 = (cx + 1) * w / CELLS;
+            let sx = ((x1 - x0) / 4).max(1);
+            let mut sum = 0u64;
+            let mut n = 0u64;
+            let mut y = y0;
+            while y < y1 {
+                let row = y as usize * w as usize * 3;
+                let mut x = x0;
+                while x < x1 {
+                    let i = row + x as usize * 3;
+                    sum += (raw[i] as u64 * 299 + raw[i + 1] as u64 * 587 + raw[i + 2] as u64 * 114) / 1000;
+                    n += 1;
+                    x += sx;
+                }
+                y += sy;
+            }
+            cells[(cy * CELLS + cx) as usize] = sum.checked_div(n).unwrap_or(0);
+        }
+    }
+    // 位编码：行内右邻比较（8×7=56 位）+ 首列下邻比较（7 位）= 63 位有效；
+    // 第 64 位恒 0——双指纹汉明距离比较中该位双方恒等，不影响判定
+    let mut hash = 0u64;
+    let mut idx = 0usize;
+    for cy in 0..CELLS {
+        for cx in 0..(CELLS - 1) {
+            let i = (cy * CELLS + cx) as usize;
+            if cells[i + 1] > cells[i] {
+                hash |= 1 << idx;
+            }
+            idx += 1;
+        }
+    }
+    for cy in 0..(CELLS - 1) {
+        let i = (cy * CELLS) as usize;
+        if cells[i + CELLS as usize] > cells[i] {
+            hash |= 1 << idx;
+        }
+        idx += 1;
+    }
+    hash
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,6 +287,55 @@ mod tests {
     #[test]
     fn average_hash_empty_image_is_zero() {
         assert_eq!(average_hash(&image::RgbImage::new(0, 0)), 0);
+    }
+
+    // ── REQ-067（v0.6.0 M3）：dHash 差异哈希 ──
+
+    #[test]
+    fn difference_hash_stable_for_same_image() {
+        let a = hsplit_image(960, 540, 30, 200);
+        let b = hsplit_image(960, 540, 30, 200);
+        assert_eq!(difference_hash(&a), difference_hash(&b));
+    }
+
+    #[test]
+    fn difference_hash_differs_for_different_content() {
+        // 左右分屏 vs 上下分屏：相邻格亮度关系必然不同
+        let a = hsplit_image(960, 540, 30, 200);
+        let b = vsplit_image(960, 540, 30, 200);
+        assert_ne!(difference_hash(&a), difference_hash(&b));
+    }
+
+    #[test]
+    fn difference_hash_robust_to_brightness_shift() {
+        // 亮度平移：相邻格相对关系不变 → 哈希稳定（与 aHash 同鲁棒性）
+        let a = hsplit_image(960, 540, 30, 200);
+        let b = hsplit_image(960, 540, 40, 210);
+        assert_eq!(difference_hash(&a), difference_hash(&b));
+    }
+
+    #[test]
+    fn difference_hash_scale_invariant_golden() {
+        // 旋转/缩放去重 golden（REQ-067 验收）：同一内容不同分辨率 →
+        // 双指纹判定仍为同图（same_image 双稳定）
+        let a = hsplit_image(960, 540, 30, 200);
+        let small = hsplit_image(480, 270, 30, 200);
+        let (ha, da) = (average_hash(&a), difference_hash(&a));
+        let (hs, ds) = (average_hash(&small), difference_hash(&small));
+        // 缩放下指纹应高度接近（汉明距离小）
+        assert!(crate::frame_cluster::hamming(ha, hs) <= 12, "缩放后 aHash 应接近");
+        assert!(crate::frame_cluster::hamming(da, ds) <= 12, "缩放后 dHash 应接近");
+        // 双指纹判定同图（阈值放宽到缩放容差）
+        assert!(crate::frame_cluster::same_image(ha, da, hs, ds, 12, 12));
+        // 不同内容不应误判同图
+        let other = vsplit_image(960, 540, 30, 200);
+        let (ho, do_) = (average_hash(&other), difference_hash(&other));
+        assert!(!crate::frame_cluster::same_image(ha, da, ho, do_, 12, 12));
+    }
+
+    #[test]
+    fn difference_hash_empty_image_is_zero() {
+        assert_eq!(difference_hash(&image::RgbImage::new(0, 0)), 0);
     }
 
     #[test]
