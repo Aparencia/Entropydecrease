@@ -142,9 +142,10 @@ pub(crate) fn run_audio_loop(
                     adaptive_vad.next_threshold(raw_rms, SILENCE_RMS_THRESHOLD)
                 };
                 // REQ-115（v0.7.0 M2，PRE-O4）：当前阈值发布到共享槽——
-                // 诊断面板可查（降级提示与切段判定口径对照）
+                // 诊断面板可查（降级提示与切段判定口径对照；MEDIUM-8 修复：
+                // 附来源会话 id 供诊断区分实时/残留）
                 if let Some(slot) = ctx.vad_slot {
-                    slot.publish(vad_threshold);
+                    slot.publish(ctx.session_id, vad_threshold);
                 }
                 let silent = raw_rms < vad_threshold;
                 // B3：语音活跃度共享（屏幕 worker 自适应采样依据）

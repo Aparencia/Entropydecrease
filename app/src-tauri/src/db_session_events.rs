@@ -4,6 +4,10 @@
 //!              impl——db_sessions.rs 行数保护，AGENTS.md §3）。
 //! @ai-context: 容量守卫：写入前查现有计数，超预算删除最旧（FIFO 语义防写放大；
 //!              上限 2000 条/会话，见 session_events::over_budget）。
+//! @ai-context: 审查 MEDIUM-5 修复：守卫分级删除——优先删高频噪声事件
+//!              （帧切换/长静音/音量骤变，可重建信号），保护低频基线事件
+//!              （前台切换——practice_segments 对齐锚点；长会话早期基线被
+//!              FIFO 误删会导致实践段目标窗口错位）。
 
 use rusqlite::params;
 
@@ -18,18 +22,35 @@ impl Db {
     ///              "插入"分属两个 autocommit 语句——INSERT 失败时 DELETE 已
     ///              提交，最旧事件丢失且新事件未入；事务化后任一步失败整体
     ///              回滚，数据不丢）。Mutex 锁已保证并发串行（无竞态）。
+    /// @ai-context: 审查 MEDIUM-5 修复：守卫删除分级——先删最旧高频噪声事件
+    ///              （帧切换/长静音/音量骤变），无高频可删才回退删最旧整体；
+    ///              前台切换基线（低频、practice_segments 对齐锚点）不被
+    ///              高频写放大误删（2h 会话 ≈ 数百条高频，远未触发守卫）。
     pub fn add_event(&self, new: &NewSessionEvent) -> Result<SessionEvent> {
         let conn = self.conn.lock().expect("db lock poisoned");
         conn.execute("BEGIN TRANSACTION", [])?;
         let result = (|| -> Result<SessionEvent> {
             // 容量守卫：超预算先删最旧（同一事务，防写放大无限增长）
             if crate::session_events::over_budget(self.count_events_locked(&conn, new.session_id)?) {
-                conn.execute(
+                // 优先删高频噪声事件（可重建信号；基线/行为事件保留）
+                let deleted = conn.execute(
                     "DELETE FROM session_events WHERE id IN (
-                         SELECT id FROM session_events WHERE session_id = ?1 ORDER BY timestamp_ms ASC LIMIT 1
+                         SELECT id FROM session_events
+                         WHERE session_id = ?1
+                           AND kind IN ('frame_switch', 'long_silence', 'volume_surge')
+                         ORDER BY timestamp_ms ASC LIMIT 1
                      )",
                     params![new.session_id],
                 )?;
+                if deleted == 0 {
+                    // 无高频可删（异常会话全为基线/行为事件）→ 回退删最旧整体
+                    conn.execute(
+                        "DELETE FROM session_events WHERE id IN (
+                             SELECT id FROM session_events WHERE session_id = ?1 ORDER BY timestamp_ms ASC LIMIT 1
+                         )",
+                        params![new.session_id],
+                    )?;
+                }
             }
             conn.execute(
                 "INSERT INTO session_events (session_id, kind, timestamp_ms, payload_json)

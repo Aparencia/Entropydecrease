@@ -78,3 +78,28 @@ fn empty_session_lists_empty() {
     // Act & Assert：空列表不报错
     assert!(db.list_events(sid).unwrap().is_empty());
 }
+
+#[test]
+fn capacity_guard_preserves_baseline_event() {
+    // 审查 MEDIUM-5：守卫分级删除——优先删高频噪声事件，保护前台切换基线
+    // Arrange：预算满（1 基线 + 1999 帧切换）
+    let (db, sid) = mem_db_with_session();
+    db.add_event(&NewSessionEvent::simple(sid, EventKind::ForegroundSwitch, 0)).unwrap();
+    for i in 1..2000 {
+        db.add_event(&NewSessionEvent::simple(sid, EventKind::FrameSwitch, i as u64 * 100)).unwrap();
+    }
+    // Act：超预算再写入 → 触发容量守卫（删 1 + 插 1）
+    db.add_event(&NewSessionEvent::simple(sid, EventKind::FrameSwitch, 999_999)).unwrap();
+    let events = db.list_events(sid).unwrap();
+    // Assert：仍 2000 条；基线保留；最旧高频帧切换被删；新事件写入
+    assert_eq!(events.len(), 2000);
+    assert!(
+        events.iter().any(|e| e.kind == EventKind::ForegroundSwitch && e.timestamp_ms == 0),
+        "前台切换基线（practice_segments 锚点）不应被守卫误删"
+    );
+    assert!(events.iter().any(|e| e.timestamp_ms == 999_999), "新事件应写入");
+    assert!(
+        !events.iter().any(|e| e.kind == EventKind::FrameSwitch && e.timestamp_ms == 100),
+        "最旧高频帧切换应被优先删除"
+    );
+}

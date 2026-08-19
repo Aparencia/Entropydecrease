@@ -135,8 +135,17 @@ mod tests {
     /// @ai-context: 本测试即 REQ-126 首阶段验证的执行——Windows 有声卡的
     ///              正常机器应返回 ≥ 0（会话数，含系统会话）；-1 意味着
     ///              API 面不可用/环境无音频，需记录结论走 REQ-105 兜底。
+    /// @ai-context: 审查 MEDIUM-7 修复：原测试无门控，CI/无音频设备环境
+    ///              （count=-1）必失败——违反测试隔离；改 #[ignore] +
+    ///              env 门控（ENTROPY_WASAPI_PROBE=1 才执行）——真机验证
+    ///              手动触发，CI 默认跳过。
     #[test]
+    #[ignore = "需真实音频设备（手动验证：ENTROPY_WASAPI_PROBE=1 cargo test --lib -- --ignored）"]
     fn probe_counts_sessions_on_default_endpoint() {
+        if std::env::var("ENTROPY_WASAPI_PROBE").map(|v| v != "1").unwrap_or(true) {
+            eprintln!("跳过（未设置 ENTROPY_WASAPI_PROBE=1）");
+            return;
+        }
         // Arrange & Act：真实 WASAPI 会话级枚举
         let count = probe_session_count();
         // Assert：会话数非负（链路可用）；失败 -1 时测试失败以暴露结论

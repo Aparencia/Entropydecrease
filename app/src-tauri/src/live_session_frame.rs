@@ -126,8 +126,10 @@ pub fn run_screen_worker(
     // M16/REQ-128：前台时间线轮询节流（2s 一次；epoch 纪元 ms 时刻）
     let mut last_fg_poll_ms: u64 = 0;
     // M1/REQ-125：播放器行为检测节流（5s 一次；从最新帧缓存取帧）+ 暂停状态机
+    // 审查修复：player_state_initialized 标记首次检测（只初始化基线不写事件）
     let mut last_player_check_at = Instant::now();
     let mut last_player_paused = false;
+    let mut player_state_initialized = false;
 
     while !stop.load(Ordering::SeqCst) {
         // M4：每 2s 采样 CPU 负载（降级标志变化打印——静默失败可见化）
@@ -196,15 +198,25 @@ pub fn run_screen_worker(
             // M1/REQ-125：播放器行为检测（5s 节流——非每帧；从最新帧缓存取帧做
             // 暂停图标检测；Pause→无图标 状态机推导 Play 事件；无帧/转换失败 →
             // 状态保持（诚实：无证据不推断））
+            // 审查修复（v0.7.0 新增代码审查）：
+            // ① MEDIUM-6：now_ms 在此处现取（原用采样块开头的旧时刻——OCR 耗时
+            //    + 5s 周期叠加使暂停事件时戳滞后 5-10s）；
+            // ② MEDIUM-9：首次检测只初始化状态不写事件（录制开始前已暂停的视频
+            //    首轮 paused=true ≠ 初始 false 会写非转换假 Pause）
             if last_player_check_at.elapsed() >= Duration::from_secs(5) {
                 last_player_check_at = Instant::now();
+                let check_now_ms = epoch.elapsed().as_millis() as u64;
                 if let Some(f) = latest_frame.lock().ok().and_then(|g| g.clone()) {
                     if let Some(img) =
                         crate::region_ocr::bgra_to_rgb_image(&f.bgraw, f.width, f.height)
                     {
                         let paused =
                             crate::player_behavior::detect_player_action(&img).is_some();
-                        if paused != last_player_paused {
+                        if !player_state_initialized {
+                            // 首次检测：仅记录基线状态，不写事件（防假 Pause）
+                            player_state_initialized = true;
+                            last_player_paused = paused;
+                        } else if paused != last_player_paused {
                             last_player_paused = paused;
                             let action = if paused {
                                 crate::player_behavior::PlayerAction {
@@ -219,7 +231,7 @@ pub fn run_screen_worker(
                             };
                             crate::player_behavior::record_action(
                                 &action,
-                                now_ms,
+                                check_now_ms,
                                 session_id,
                                 &db,
                             );
