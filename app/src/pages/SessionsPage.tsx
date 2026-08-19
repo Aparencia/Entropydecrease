@@ -46,6 +46,9 @@ export default function SessionsPage({ focusSessionId, active, onOpenNote }: Pro
   const openIdRef = useRef<number | null>(null);
   const prevFinishedRef = useRef<Set<number>>(new Set()); // 上次快照的已完成 id 集
   const toastTimerRef = useRef<number | null>(null);
+  // TD-003 模式：请求序号防竞态——live:status 与 session:fused 可并发触发刷新，
+  // 慢响应返回时不覆盖新结果（旧快照短暂回显 + justFinished 重复计数）
+  const refreshSeqRef = useRef(0);
 
   const showToast = useCallback((msg: string, kind: Toast["kind"]) => {
     setToast({ msg, kind });
@@ -53,11 +56,21 @@ export default function SessionsPage({ focusSessionId, active, onOpenNote }: Pro
     toastTimerRef.current = window.setTimeout(() => setToast(null), 3000);
   }, []);
 
+  // toast 定时器卸载清理（防卸载后 setState）
+  useEffect(
+    () => () => {
+      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    },
+    [],
+  );
+
   /** 拉取会话列表（含转化标记）；对比快照计算"新完成"计数（事件刷新后提示）。 */
   const refresh = useCallback(async () => {
+    const seq = ++refreshSeqRef.current;
     try {
       setLoading(true);
       const list = await invoke<SessionListItem[]>("list_sessions", { limit: 200 });
+      if (seq !== refreshSeqRef.current) return; // 竞态防护：过期响应直接丢弃
       setItems(list);
       const finishedNow = new Set(
         list.filter((i) => i.session.status === "finished").map((i) => i.session.id),
@@ -68,9 +81,9 @@ export default function SessionsPage({ focusSessionId, active, onOpenNote }: Pro
       }
       prevFinishedRef.current = finishedNow;
     } catch (e) {
-      showToast(`会话列表加载失败: ${e}`, "err");
+      if (seq === refreshSeqRef.current) showToast(`会话列表加载失败: ${e}`, "err");
     } finally {
-      setLoading(false);
+      if (seq === refreshSeqRef.current) setLoading(false);
     }
   }, [showToast]);
 
@@ -138,6 +151,7 @@ export default function SessionsPage({ focusSessionId, active, onOpenNote }: Pro
       try {
         setGroups(await invoke<CourseGroup[]>("list_session_courses"));
       } catch (e) {
+        setGrouped(false); // 失败回滚——避免"分组中"按钮与未分组列表状态不一致
         showToast(`课程分组加载失败: ${e}`, "err");
       }
     }

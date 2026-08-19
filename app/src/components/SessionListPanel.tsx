@@ -400,8 +400,8 @@ export default function SessionListPanel({
         )}
       </div>
 
-      {/* 批量操作栏（勾选后出现） */}
-      {selected.size > 0 && (
+      {/* 批量操作栏（勾选后出现；段搜索命中视图隐藏——避免对不可见列表误操作） */}
+      {!hits && selected.size > 0 && (
         <div style={{ borderTop: "1px solid #e5e7eb", padding: 8, display: "flex", gap: 6, alignItems: "center", background: "#fff" }}>
           <span style={{ fontSize: 12, color: "#374151" }}>已选 {selected.size} 个</span>
           <button
