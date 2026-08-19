@@ -4,9 +4,10 @@
  * @ai-context: 用户要求"转写流要简要"——设计原则：单行紧凑卡片、色点区分来源
  *              （字幕=绿、语音=灰、画面=蓝）、无冗余装饰；列表超限截断（计数保留）；
  *              新内容自动跟随滚动。
- * @ai-context: 2026-08 用户需求：ASR 流式返回显示**所有未沉淀行**（识别中 partial +
- *              已定稿待沉淀 committed），不再折叠为单行——连续定稿（快速短句）
- *              时各行并存不被覆盖丢失；新句首个 partial 到达时统一沉淀。
+ * @ai-context: 2026-08 用户需求：ASR 流式返回显示**所有未沉淀行**——识别中的
+ *              partial 按句读切分为多行灰斜体全部显示（不再一行越滚越长）；
+ *              已定稿待沉淀 committed 行黑色并存（连续定稿不互相覆盖丢失）；
+ *              新句首个 partial 到达时统一沉淀入列表。
  * @ai-context: 状态机：初始化（模型加载）→ 采集中 → 停止中 → 融合中 → 完成/失败，
  *              由 live:status / session:fusing/fused/failed 事件推导，父组件控制显隐。
  */
@@ -62,6 +63,29 @@ const nextPendingId = () => ++pendingSeq;
 function fmtTime(ms: number): string {
   const s = Math.floor(ms / 1000);
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/**
+ * 中文句读切分（识别中行展示用，2026-08 用户需求：识别中的灰斜体内容全部显示）。
+ *
+ * @ai-context: 流式 partial 是整句候选且可能含多个句子（zipformer 中文模型输出
+ *              带句读；asr_clean 的跨标点重复/纯标点幻觉处理即依赖此事实）——
+ *              现状整句挤在一行灰斜里越滚越长；按句读切分后每句一行，全部可见。
+ *              句读保留在句尾；无句读尾段为"残余"（调用方加 … 表示仍在识别）。
+ *              不切英文句点（Mr./U.S. 缩写防误切）与逗号（句内成分不拆行）。
+ */
+function splitBySentence(text: string): string[] {
+  const parts: string[] = [];
+  let buf = "";
+  for (const ch of text) {
+    buf += ch;
+    if ("。！？!?…".includes(ch)) {
+      parts.push(buf);
+      buf = "";
+    }
+  }
+  if (buf.trim().length > 0) parts.push(buf);
+  return parts;
 }
 
 export default function LiveActivityPanel({ sessionId }: { sessionId?: number | null }) {
@@ -287,37 +311,73 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
                 ⋯ 共 {totalTranscript} 段，仅显示最近 {SHOW_TRANSCRIPT_LINES} 条（会话页可看全部）
               </p>
             )}
-            {/* 2026-08 用户需求：ASR 未沉淀行全部展示（识别中灰斜 + 已定稿待沉淀黑），
-                连续定稿各行并存；新句首个 partial 到达时统一沉淀入上方列表 */}
-            {partials.map((p) => (
-              <div
-                key={p.id}
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  alignItems: "baseline",
-                  fontSize: 13,
-                  color: p.committed ? "#374151" : "#9ca3af",
-                  fontStyle: p.committed ? "normal" : "italic",
-                }}
-              >
-                <span style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-                  {p.committed ? fmtTime(p.time) : fmtTime(elapsedMs)}
-                </span>
-                <span
-                  title={p.committed ? "已定稿待沉淀" : "识别中"}
+            {/* 2026-08 用户需求：ASR 未沉淀行全部展示——识别中（灰斜）按句读拆多行
+                全部显示；已定稿待沉淀（黑）一行；连续定稿各行并存；新句首个
+                partial 到达时统一沉淀入上方列表 */}
+            {partials.map((p) => {
+              if (p.committed) {
+                return (
+                  <div
+                    key={p.id}
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "baseline",
+                      fontSize: 13,
+                      color: "#374151",
+                    }}
+                  >
+                    <span style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                      {fmtTime(p.time)}
+                    </span>
+                    <span
+                      title="已定稿待沉淀"
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 4,
+                        flexShrink: 0,
+                        alignSelf: "center",
+                        background: "#9ca3af",
+                      }}
+                    />
+                    <span>{p.text}</span>
+                  </div>
+                );
+              }
+              // 识别中：整句候选按句读切分多行灰斜体——"识别中的内容全部显示"；
+              // 首行带时间，后续行对齐留空；残余段（无句读尾段）加 … 
+              const segs = splitBySentence(p.text);
+              return segs.map((seg, i) => (
+                <div
+                  key={`${p.id}-${i}`}
                   style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: 4,
-                    flexShrink: 0,
-                    alignSelf: "center",
-                    background: p.committed ? "#9ca3af" : "#d1d5db",
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "baseline",
+                    fontSize: 13,
+                    color: "#9ca3af",
+                    fontStyle: "italic",
                   }}
-                />
-                <span>{p.text}{p.committed ? "" : "…"}</span>
-              </div>
-            ))}
+                >
+                  <span style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                    {i === 0 ? fmtTime(elapsedMs) : ""}
+                  </span>
+                  <span
+                    title="识别中"
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 4,
+                      flexShrink: 0,
+                      alignSelf: "center",
+                      background: "#d1d5db",
+                    }}
+                  />
+                  <span>{seg}{i === segs.length - 1 ? "…" : ""}</span>
+                </div>
+              ));
+            })}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
