@@ -5,8 +5,6 @@
 
 | 文件 | 行数 | 豁免理由 | 拆分计划 |
 |------|------|---------|---------|
-| app/src-tauri/src/live_session.rs | ~798 | v0.3.0 后：FusionTracker + 会话编排循环 + 后台融合线程 + 句起/句尾跟踪四职责内聚于会话生命周期模块；拆出需跨函数传递 stop/epoch/speech_active/db/app 上下文；ADR-012 接入（跨 final 去重/AGC env/rule3 config/F4-1 挂起合并编排/persist_final 三出口统一/digest_merged 句子切分消化/停止 drain）再增 ~200 行——**已超 600 硬拆红线（六轮审查登记，拆分必须随 v0.6.0 M7 落地；七/八轮再增，拆分压力持续加大）** | 融合线程任务拆至 live_session_fusion.rs，编排循环拆至 live_session_loop.rs（拆分计划沿用 ADR-012 审查登记；六/七/八轮多次登记，M7 强制落地） |
-| app/src-tauri/src/streaming_asr.rs | ~378 | v0.6.0 ADR-012 增长（288→378）：hangover 决策 + 尾静音端点判别 + rule3 可配置 + 输出净化接入 + F4-1 merge_with_next 标记 + F4-2 标点恢复接入 + 重打分超时（RESCORE_TIMEOUT_MS），引擎状态机内聚；纯函数已拆至 asr_rescore/asr_clean/asr_dedupe | 若再增长：端点处理块（is_endpoint → final 产出）拆至 streaming_endpoint.rs |
 | app/src-tauri/src/capture/audio_loopback.rs | ~320 | ADR-007 重连机制（重试循环/退避/恢复回调）内聚于捕获线程实现，拆出需跨函数传递 COM 生命周期参数，内聚性优先 | 若再增长：将 run_capture_inner 拆至 audio_loopback_session.rs |
 | app/src-tauri/src/live_frame_process.rs | ~491 | v0.6.0 ADR-011 拆分（live_session_frame.rs >600 行硬拆产物）：帧处理域（网格差异触发/两级判变/带外事件驱动/UI 面板抑制/字幕落库）内聚；process_frame 上下文参数 20+，跨函数传递聚合会破坏内聚；六轮审查再增（区域空产出回退整帧 + has_useful_blocks 判定）至 ~491 | 若再增长：handle_subtitle_frame 与 persist_voted_subtitle 拆至 live_subtitle_persist.rs |
 | app/src-tauri/src/engine.rs | ~382 | 引擎池装配（双 worker 编排 + ADR-009 设备状态 + M5 词表纠错 + M7 心跳/失败/缓存计数）；上下文参数与共享状态注入点多，拆出需跨模块传 10+ 参数 | 若再增长：worker 循环与请求处理拆至 engine_worker.rs |
@@ -28,3 +26,5 @@
 
 > 已拆分：dxgi_capture.rs（原 ~333 行）于 v0.4.0 M0（TD-033，提交 2a88b25）将 DxgiState 拆至 dxgi_state.rs——现 dxgi_capture.rs ~176 行、dxgi_state.rs ~219 行，均回归 ≤300 行，无需登记。
 > 已拆分：live_session_frame.rs（原 ~500 行登记）于 v0.6.0 ADR-011（REQ-086/087）按拆分计划将 process_frame 帧处理拆至 live_frame_process.rs——现 live_session_frame.rs ~175 行回归 ≤300 行，登记移除。
+> 已拆分：live_session.rs（原 ~798 行，v0.7.0 M0 X-O5 强制落地）按登记计划拆至 live_session_fusion.rs（融合线程）/live_session_loop.rs（音频编排循环），并补充 live_session_persist.rs（定稿落库/Final 事件处理）——现 live_session.rs ~284 行、live_session_loop.rs ~228 行、live_session_persist.rs ~224 行、live_session_fusion.rs ~95 行，均回归 ≤300 行，登记移除。
+> 已拆分：streaming_asr.rs（原 ~378 行，v0.7.0 M0 X-O5 强制落地）按登记计划将端点处理块拆至 streaming_endpoint.rs（子模块）——现 streaming_asr.rs ~248 行、streaming_endpoint.rs ~95 行，均回归 ≤300 行，登记移除。
