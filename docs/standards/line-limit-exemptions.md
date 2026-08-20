@@ -38,7 +38,9 @@
 | app/src-tauri/src/structure_note_tests.rs | ~415 | v0.7.6（REQ-177~181）：结构渲染层单测域（章节插入位置/命名窗口/词汇表排序上限锚点/零回归护栏/JSON 往返）单模块 #[path] 挂载；审查清理死代码 helpers 并补 max_terms=0 语义测试 | 若再增长：词汇表组拆至 structure_note_glossary_tests.rs |
 | app/src-tauri/src/note_filter_golden_tests.rs | ~390 | v0.7.5（REQ-172）：黄金语料回归域（会话31/29 实证 + v0.7.6 REQ-181 结构渲染 2 例 + 审查补测"配置开无数据逐字节一致"）单模块 #[path] 挂载 | 若再增长：结构渲染组拆至 note_filter_golden_structure_tests.rs |
 | app/src-tauri/src/commands_ai.rs | ~337 | v0.5.0 起 AI 复核命令域（边界批量复核/配额/缓存/审计 + v0.7.6 审查修复补结构渲染接线）；与 note_filter_ai（纯逻辑）分层 | 若再增长：批量复核循环拆至 commands_ai_review.rs |
-| app/src-tauri/src/commands_ai_refine.rs | ~352 | v0.8.0 M2（REQ-141/145 + REQ-143 基础版）+ F2（2026-08-21）：AI 精修命令域（成本预估/异步任务编排/状态/结果/采纳落库/任务历史 + 任务注册表容量守卫 + 配额/去重门控）——命令注册与注册表上下文内聚；任务执行已按登记计划拆至 ai_refine_task.rs | 若再增长：配额/去重门控拆至 commands_ai_refine_gate.rs |
+| app/src-tauri/src/commands_ai_refine.rs | ~393 | v0.8.0 M2（REQ-141/145 + REQ-143 基础版）+ F1/F2/F3（2026-08-21）：AI 精修命令域（成本预估/异步任务编排/状态/结果/采纳落库/任务历史/配额去重门控/成本硬拦截 + 任务注册表容量守卫）——命令注册与注册表上下文内聚；任务执行已拆至 ai_refine_task.rs | 若再增长：门控/拦截拆至 commands_ai_refine_gate.rs |
+| app/src-tauri/src/commands_ai_enrich.rs | ~388 | v0.8.0 M3（REQ-142）+ F1/F2/F3（2026-08-21）：知识补充命令域（九子项校验/预估/异步任务/采纳/撤销 + 配额去重门控 + 成本硬拦截 + 任务落库）——与精修共用任务注册表上下文，命令域内聚 | 若再增长：门控/拦截拆至 commands_ai_enrich_gate.rs |
+| app/src-tauri/src/ai_refine_task.rs | ~358 | v0.8.0 F2-B4（2026-08-21）拆分产物：精修任务执行域（任务编排/并发切片 worker 池/单片重试/部分成功/审计/落库）——并发编排与状态流转内聚，拆分会破坏 worker 池与进度上报的耦合 | 若再增长：refine_slices_concurrent 拆至 ai_refine_task_workers.rs |
 | app/src-tauri/src/video_profile_tests.rs | ~338 | 档案测试域（12 档案断言矩阵 + 检测投票 + JSON 校准）单模块 #[path] 挂载 | 若再增长：档案矩阵拆至 video_profile_data_tests.rs |
 | app/src-tauri/src/artifact_templates_tests.rs | ~336 | 产物模板测试域（五档案模板 + v0.7.0 M2 代码块/步骤卡扩展）单模块 #[path] 挂载 | 若再增长：代码块/步骤卡组拆至 artifact_code_tests.rs |
 | app/src-tauri/src/asr_merge.rs | ~351 | v0.5.0 ADR-012 F4-1 语义合并域 + v0.7.0 M2 REQ-119 混排空格（spacing_for/merge_segments_with_spacing）；合并决策与切分共用标点常量 | 若再增长：split_sentences/split_timestamps 拆至 asr_merge_split.rs |
