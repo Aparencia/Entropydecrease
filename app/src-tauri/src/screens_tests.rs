@@ -4,7 +4,7 @@
 
 use std::fs;
 
-use crate::screens::build_screens;
+use crate::screens::{build_screens, refine_screen_structures};
 use crate::types::{SessionOcrBlock, TextBox};
 
 /// 测试辅助：构造会话 OCR 块（region=full，可带 bbox/screen_id/region_kind）。
@@ -143,6 +143,70 @@ fn build_screens_empty_and_no_full_blocks() {
     // Act/Assert
     assert!(build_screens(&[], Some(&dir)).is_empty());
     assert!(build_screens(&subtitle_only, Some(&dir)).is_empty());
+}
+
+#[test]
+fn refine_structures_from_artifact() {
+    // Arrange：屏内 table/formula 结构块 + 课后精修产物（frame_ms 在屏区间内）
+    use crate::artifact::{ArtifactBlock, ArtifactKind, BlockPayload, BlockRefs, BlockSource, SessionArtifact};
+    use crate::table_reconstruct::TableBlock;
+    let dir = tmp_images_dir("refine", &[]);
+    let blocks = vec![
+        blk(1, 2_000, "表格标题", Some(1), Some((100.0, 100.0, 300.0, 40.0)), None),
+        blk(2, 2_000, "| A | B |", Some(1), Some((100.0, 200.0, 300.0, 60.0)), Some("table")),
+        blk(3, 2_000, "x^2+1", Some(1), Some((100.0, 300.0, 200.0, 40.0)), Some("formula")),
+    ];
+    let mut screens = build_screens(&blocks, Some(&dir));
+    let artifact = SessionArtifact {
+        session_id: 1,
+        profile: String::new(),
+        blocks: vec![
+            ArtifactBlock {
+                id: 1,
+                kind: ArtifactKind::Table,
+                refs: BlockRefs { segment_id: None, ocr_block_id: None, frame_ms: Some(2_000) },
+                payload: BlockPayload::Table(TableBlock {
+                    markdown: "| A | B |\n|---|---|\n| 1 | 2 |".to_string(),
+                    structure_confidence: 0.9,
+                    cell_refs: Vec::new(),
+                }),
+                order: 0,
+                source: BlockSource::Local,
+            },
+            ArtifactBlock {
+                id: 2,
+                kind: ArtifactKind::Formula,
+                refs: BlockRefs { segment_id: None, ocr_block_id: None, frame_ms: Some(2_000) },
+                payload: BlockPayload::Formula(crate::formula_reconstruct::FormulaBlock {
+                    latex: "x^2+1".to_string(),
+                    source_text: "x2+1".to_string(),
+                    confidence: 0.8,
+                }),
+                order: 1,
+                source: BlockSource::Local,
+            },
+        ],
+    };
+    // Act
+    refine_screen_structures(&mut screens, Some(&artifact));
+    // Assert：表格/公式 rendered 填充
+    let s = &screens[0];
+    let table = s.structure.iter().find(|st| st.kind == "table").unwrap();
+    assert_eq!(table.rendered.as_deref(), Some("| A | B |\n|---|---|\n| 1 | 2 |"));
+    let formula = s.structure.iter().find(|st| st.kind == "formula").unwrap();
+    assert_eq!(formula.rendered.as_deref(), Some("$$x^2+1$$"));
+}
+
+#[test]
+fn refine_structures_none_without_artifact() {
+    // Arrange：无产物 + 屏结构块
+    let dir = tmp_images_dir("refine-none", &[]);
+    let blocks = vec![blk(1, 2_000, "| A |", Some(1), Some((100.0, 200.0, 300.0, 60.0)), Some("table"))];
+    let mut screens = build_screens(&blocks, Some(&dir));
+    // Act：None 产物 → 无操作（rendered 保持 None）
+    refine_screen_structures(&mut screens, None);
+    // Assert
+    assert_eq!(screens[0].structure[0].rendered, None);
 }
 
 #[test]

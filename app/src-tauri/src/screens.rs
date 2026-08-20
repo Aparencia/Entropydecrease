@@ -174,6 +174,50 @@ fn screen_from_cluster(
     }
 }
 
+/// 屏结构产物匹配（纯函数）：课后精修产物 → 屏 structure.rendered 填充。
+///
+/// @ai-context: 消费 artifact_blocks（kind=Table/Formula，REQ-049/050 精修产物）——
+///              屏卡内结构块渲染 Markdown 表格/LaTeX；匹配 = 产物 refs.frame_ms
+///              落在屏区间内（区域裁剪时刻即屏成员时刻）；未命中 → 保留原始
+///              OCR 文本（徽标降级）；产物缺失 → 无操作（不阻断，M5 接线）。
+pub fn refine_screen_structures(
+    screens: &mut [SessionScreen],
+    artifact: Option<&crate::artifact::SessionArtifact>,
+) {
+    let Some(art) = artifact else { return };
+    for s in screens.iter_mut() {
+        for st in s.structure.iter_mut() {
+            if st.rendered.is_some() {
+                continue;
+            }
+            let want = match st.kind.as_str() {
+                "table" => crate::artifact::ArtifactKind::Table,
+                "formula" => crate::artifact::ArtifactKind::Formula,
+                _ => continue, // code 区域无精修产物（原生文本展示）
+            };
+            let rendered = art
+                .blocks
+                .iter()
+                .find(|b| {
+                    b.kind == want
+                        && b.refs.frame_ms.is_some_and(|f| {
+                            f >= s.first_seen_ms && f <= s.last_seen_ms
+                        })
+                })
+                .and_then(|b| match &b.payload {
+                    crate::artifact::BlockPayload::Table(t) => Some(t.markdown.clone()),
+                    crate::artifact::BlockPayload::Formula(f) => {
+                        Some(format!("$${}$$", f.latex))
+                    }
+                    _ => None,
+                });
+            if let Some(r) = rendered {
+                st.rendered = Some(r);
+            }
+        }
+    }
+}
+
 /// 匹配归档 full 图（纯 IO）：取时间戳 ≤ 屏首见时刻的最近图；无则取最早图。
 ///
 /// @ai-context: 归档图按时间戳命名（full/{ts}.webp，image_store 约定）；屏首帧

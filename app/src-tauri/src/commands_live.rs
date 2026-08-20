@@ -93,7 +93,37 @@ pub async fn stop_live_session(state: State<'_, AppState>) -> Result<Option<i64>
         .map_err(|e| format!("停止任务失败: {}", e))?
         .map_err(|e| e.to_string())?;
     stop_clipboard_monitor(&state);
+    // v0.7.3（REQ-159）：停止后自动结构精修（表格/公式区域；模型未就绪/
+    // 无结构区域 → 内部降级跳过——run_refine 已有完整降级链）
+    if let Some(sid) = stopped {
+        trigger_auto_refine(&state, sid);
+    }
     Ok(stopped)
+}
+
+/// 停止后自动结构精修触发（v0.7.3 REQ-159）。
+///
+/// @ai-context: 前置检查：会话存在 region_kind=table/formula 的 OCR 块才触发
+///              （无结构区域不白跑）；模型就绪检查交给 run_refine 内部
+///              decide_refine（未下载 → session:refine-skipped 事件，诚实降级）。
+fn trigger_auto_refine(state: &AppState, session_id: i64) {
+    let has_structure = state
+        .db
+        .list_ocr_blocks(session_id)
+        .map(|blocks| {
+            blocks.iter().any(|b| {
+                matches!(b.region_kind.as_deref(), Some("table" | "formula"))
+            })
+        })
+        .unwrap_or(false);
+    if !has_structure {
+        return;
+    }
+    eprintln!("[Refine] 会话 {} 停止：检测到表格/公式区域，自动触发结构精修", session_id);
+    let state: AppState = (*state).clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _ = crate::commands_refine_inner::run_refine(&state, session_id);
+    });
 }
 
 /// 查询实时会话状态（活动会话 id + 预热就绪标记）。
