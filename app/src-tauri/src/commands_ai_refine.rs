@@ -271,7 +271,13 @@ fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
             set_task(&st, task_id, AiTaskState::Succeeded);
         }
         Err(reason) => {
-            eprintln!("[refine-task] task={} failed kind={}", task_id, reason.kind());
+            // 打印具体 message——区分"未配置密钥"vs"密钥无效(401/403)"（真机排查）
+            eprintln!(
+                "[refine-task] task={} failed kind={} msg={}",
+                task_id,
+                reason.kind(),
+                reason.message()
+            );
             set_task(&st, task_id, AiTaskState::Failed { reason });
         }
     }
@@ -333,7 +339,22 @@ fn run_refine_task_inner(
         .lock()
         .map_err(|e| AiTaskFailure::Other(e.to_string()))?
         .clone();
-    let client = AiClient::from_settings(&settings, st.ai_credentials.load_key().ok().flatten());
+    let env_key = std::env::var("SILICONFLOW_API_KEY").ok().filter(|k| !k.is_empty());
+    let stored_key = st.ai_credentials.load_key().ok().flatten();
+    // 密钥来源诊断（脱敏：只打长度+前 6 字符；真机 unauthorized 排查 2026-08-21）
+    eprintln!(
+        "[refine-task] task={} key: env={} stored={}",
+        task_id,
+        env_key
+            .as_ref()
+            .map(|k| format!("{}:{}..", k.len(), &k[..6.min(k.len())]))
+            .unwrap_or_else(|| "无".to_string()),
+        stored_key
+            .as_ref()
+            .map(|k| format!("{}:{}..", k.len(), &k[..6.min(k.len())]))
+            .unwrap_or_else(|| "无".to_string()),
+    );
+    let client = AiClient::from_settings(&settings, stored_key);
     let adapter = AiNoteRefineAdapter::new(client.clone());
     let mock_adapter = AiMockAdapter;
     let mut refined = String::new();
