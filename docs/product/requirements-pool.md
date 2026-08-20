@@ -239,6 +239,19 @@
 | REQ-175 | 前端全局采集徽标拉取兜底：App.tsx 监听 session:fusing + 停止 invoke 成功后 live_session_status 确认 | P1 | 已排期 | v0.7.5 | 徽标不再单一依赖 live:status 事件；停止后 ≤2s 清除 |
 | REQ-176 | DB 残留 recording 会话兜底标记：list_sessions 发现 recording 但 manager 无活动线程 → 自动标 failed | P1 | 已排期 | v0.7.5 | 复用 mark_interrupted_sessions 语义；无需重启翻案；进行中会话不误标 |
 
+### v0.7.6 · 笔记纯本地结构渲染层（章节入笔记 + 术语表入笔记）
+
+> v0.7.5 裁决缓做的"结构组织"六项中纯本地可行的两项（章节/TOC、术语表）落地；摘要/结论、语义切段归 v0.8.0 AI 精修（REQ-141），时间对齐内联/要点标记后续批次。
+> 设计：[v0.7.6 版本文档](../versions/v0.7.6.md)。
+
+| ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
+|----|------|--------|------|---------|------|
+| REQ-177 | 章节入笔记：章节边界 → `## 章节 N [MM:SS]` 标题层级；章节名取窗口内 outline 标题（OCR 大字块/屏标题），无命中占位 | P1 | 已排期 | v0.7.6 | 复用 REQ-044/064 章节检测 + REQ-077 outline 标题检测，缺的只是"接进笔记"；边界段内不切段（诚实粗粒度） |
+| REQ-178 | 术语表入笔记：glossary 候选 → 笔记尾部 `## 词汇表` 块（画面×N/语音×M + [MM:SS] 锚点）；自动候选直入（可手动删，不做确认 UI）；上限 20 防噪音 | P1 | 已排期 | v0.7.6 | 复用 REQ-046/061 glossary；与 v0.8.0 知识补充（REQ-142）语义区分：本项=会话内已有术语，非模型外部知识 |
+| REQ-179 | 结构渲染配置化：NoteStructureConfig（chapter_headings/glossary_block/glossary_max_terms）JSON 可校准 | P2 | 已排期 | v0.7.6 | purify_config.json 先例；全关 = v0.7.5 输出逐字节一致（零回归护栏） |
+| REQ-180 | 结构元数据：StructureStats 并入 purify_stats + RULE_VERSION 递增 note-rules-0.7.6 | P2 | 已排期 | v0.7.6 | REQ-171 机制延续；旧笔记 NULL 诚实降级 |
+| REQ-181 | 黄金语料回归扩展：会话31 夹具 → 期望带结构笔记断言（TDD） | P1 | 已排期 | v0.7.6 | REQ-172 机制扩展；预览/落库双出口逐字节一致 |
+
 ### V1.0 · 体验增强（远期）
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
