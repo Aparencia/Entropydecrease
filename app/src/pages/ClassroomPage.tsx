@@ -32,6 +32,8 @@ import { SystemStatusBadge } from "../components/SystemStatusBadge";
 // 2026-08-20 用户需求：模型管理面板（原结构分析模型改名，覆盖全部模型）
 import ModelManagementPanel from "../components/ModelManagementPanel";
 import AiServicePanel from "../components/AiServicePanel";
+// v0.8.0 F2（2026-08-21）：AI 任务中心面板（历史/恢复/采纳复核）
+import AiTaskPanel from "../components/AiTaskPanel";
 // 2026-08 审查硬拆：右栏内容区 / 文件素材输入与提取
 import ClassroomRightPane from "../components/ClassroomRightPane";
 import MaterialInputPanel from "../components/MaterialInputPanel";
@@ -546,6 +548,10 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
               存储）/余额查询/授权默认关+审计可见化 */}
           <div style={panel}>
             <AiServicePanel />
+            {/* v0.8.0 F2（2026-08-21）：AI 任务中心——历史持久化/重启恢复/采纳复核 */}
+            <div style={{ marginTop: 8 }}>
+              <AiTaskPanel />
+            </div>
           </div>
 
           {/* 词表管理（v0.4.0 M5：REQ-040：热词/替换词闭环 + 课件预热） */}

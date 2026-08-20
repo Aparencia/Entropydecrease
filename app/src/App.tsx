@@ -17,6 +17,7 @@ import ClassroomPage from "./pages/ClassroomPage";
 import NotesPage from "./pages/NotesPage";
 import SessionsPage from "./pages/SessionsPage";
 import AppErrorBoundary from "./components/AppErrorBoundary";
+import type { AiTaskState } from "./types";
 
 type Page = "classroom" | "sessions" | "notes";
 
@@ -37,12 +38,31 @@ function App() {
   const [recovering, setRecovering] = useState(false);
   // 2026-08 A1：会话暂停（live:paused/resumed 事件；徽标区分暂停态）
   const [paused, setPaused] = useState(false);
+  // v0.8.0 F2（2026-08-21）：AI 任务完成通知——全局监听 ai:task-update，
+  // 跨页面可见（REQ-145"完成通知"落地；内联卡片之外的第二通道）
+  const [aiToast, setAiToast] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
 
   useEffect(() => {
     let disposed = false;
     const unlisteners: (() => void)[] = [];
     // 监听器注册为异步（listen 返回 Promise<UnlistenFn>）；组件卸载时统一解绑
     (async () => {
+      // v0.8.0 F2：AI 任务完成通知（状态终态 → 全局 toast，3.5s 自动消失）
+      unlisteners.push(
+        await listen<[number, AiTaskState]>("ai:task-update", (e) => {
+          if (disposed) return;
+          const st = e.payload[1];
+          if (st === "Succeeded") {
+            setAiToast({ text: "✨ AI 任务已完成——可到内联卡片或「AI 任务中心」查看结果并采纳", kind: "ok" });
+          } else if (typeof st === "object" && st !== null && "Failed" in st) {
+            const reason = st.Failed.reason;
+            const [kind, msg] = Object.entries(reason)[0] ?? ["other", "未知错误"];
+            setAiToast({ text: `❌ AI 任务失败（${kind}）：${msg}`, kind: "err" });
+          }
+          // toast 自动消失（重新计时——连续任务只显示最新）
+          setTimeout(() => { if (!disposed) setAiToast(null); }, 3500);
+        }),
+      );
       // 采集主状态：recording=采集中；stopped/failed=结束（live_session 事件）
       unlisteners.push(
         await listen<string>("live:status", (e) => {
@@ -163,6 +183,27 @@ function App() {
             }}
           >
             {paused ? "⏸ 已暂停" : recovering ? "⚠️ 采集恢复中" : "🎙 采集中"}
+          </span>
+        )}
+        {/* v0.8.0 F2：AI 任务完成通知（全局 toast——跨页面可见） */}
+        {aiToast && (
+          <span
+            style={{
+              marginLeft: capturing ? 8 : "auto",
+              fontSize: 12,
+              fontWeight: 500,
+              color: aiToast.kind === "ok" ? "#047857" : "#b91c1c",
+              background: aiToast.kind === "ok" ? "#ecfdf5" : "#fef2f2",
+              border: `1px solid ${aiToast.kind === "ok" ? "#a7f3d0" : "#fecaca"}`,
+              borderRadius: 12,
+              padding: "3px 10px",
+              maxWidth: 420,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {aiToast.text}
           </span>
         )}
       </nav>

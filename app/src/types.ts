@@ -682,6 +682,27 @@ export interface AiAuditEntry {
   result: string;
 }
 
+/** AI 任务记录（F2 任务中心；Rust db_ai_tasks::AiTaskRecord；camelCase 契约） */
+export interface AiTaskRecord {
+  taskId: number;
+  /** refine | enrich */
+  opType: string;
+  /** 精修=会话 id、补充=笔记 id */
+  refId: number;
+  /** pending|running|succeeded|failed */
+  state: string;
+  resultJson: string | null;
+  costYuan: number | null;
+  elapsedMs: number | null;
+  model: string | null;
+  error: string | null;
+  slices: number | null;
+  createdAt: number;
+  finishedAt: number | null;
+  /** 是否已采纳落库（防重启后重复采纳） */
+  adopted: boolean;
+}
+
 // ────────────────────────────────────────────────────────────
 // AI 精修类型（v0.8.0 M2，REQ-141/145；Rust serde 契约）
 // ────────────────────────────────────────────────────────────
