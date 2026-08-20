@@ -12,6 +12,7 @@
  *              由 live:status / session:fusing/fused/failed 事件推导，父组件控制显隐。
  */
 import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 // 2026-08 用户需求：实时转写中显示图片数据（转写 Tab 顶部"最近画面"条，独立区域不跳动）
 import LiveImageStrip from "./LiveImageStrip";
@@ -122,9 +123,15 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
   // v0.7.2（REQ-151）：采集信息面板（平台/时长/合集——live:session-info 事件）
   const [info, setInfo] = useState<SessionInfo | null>(null);
 
-  // 会话切换：清空旧会话信息（新会话标题信息由后端事件推送）
+  // 会话切换：清空旧会话信息 + 拉取兜底（live:session-info 事件在引擎就绪时
+  // 发出，可能早于本面板挂载/监听注册——invoke 拉取保证信息条始终可见；
+  // 拉取失败静默：无活动会话等场景语义正确）
   useEffect(() => {
     setInfo(null);
+    if (!sessionId) return;
+    void invoke<SessionInfo>("live_session_info")
+      .then(setInfo)
+      .catch(() => undefined);
   }, [sessionId]);
 
   // 时长计时（1s tick，仅展示）

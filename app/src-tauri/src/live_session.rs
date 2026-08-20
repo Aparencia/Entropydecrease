@@ -128,6 +128,12 @@ impl LiveSessionManager {
         self.latest_frame.lock().ok().and_then(|g| g.clone())
     }
 
+    /// 当前会话信息快照（REQ-151：前端挂载兜底拉取——live:session-info 事件
+    /// 在引擎就绪时发出，可能早于面板挂载/监听注册，拉取保证信息条始终可见）。
+    pub fn session_info(&self) -> crate::session_info::SessionInfo {
+        self.session_info.snapshot()
+    }
+
     /// 暂停活动会话（2026-08 A1 硬暂停：完全停采）。
     ///
     /// @ai-context: 只置共享标志——实际暂停由捕获线程边沿检测执行

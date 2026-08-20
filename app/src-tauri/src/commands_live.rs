@@ -109,6 +109,17 @@ pub fn live_session_status(state: State<'_, AppState>) -> LiveSessionStatus {
     }
 }
 
+/// 当前会话信息（REQ-151，v0.7.2：采集信息面板拉取兜底）。
+///
+/// @ai-context: live:session-info 事件在引擎就绪时发出——面板（liveActive 后
+///              挂载）可能晚于事件注册监听，事件丢失 → 信息条不可见；本命令
+///              提供挂载时拉取（事件驱动增量 + 拉取兜底双通道，修复不可见）。
+/// @ai-context: 无活动会话 → 返回默认空信息（前端不显示信息条，语义正确）。
+#[tauri::command]
+pub fn live_session_info(state: State<'_, AppState>) -> crate::session_info::SessionInfo {
+    state.live_session.session_info()
+}
+
 /// 预热流式 ASR 引擎（P3）：选窗口阶段后台加载，点"开始"即录。
 ///
 /// @ai-context: 返回 PrepareStatus（loading/ready/failed/idle）供前端提示；

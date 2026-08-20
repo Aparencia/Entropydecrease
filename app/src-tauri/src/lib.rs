@@ -512,6 +512,10 @@ pub fn run() {
             commands_live::stop_live_session,
             #[cfg(target_os = "windows")]
             commands_live::live_session_status,
+            // v0.7.2（REQ-151）：采集信息面板拉取兜底（live:session-info 事件
+            // 可能早于面板挂载——挂载时 invoke 拉取 + 事件增量双通道）
+            #[cfg(target_os = "windows")]
+            commands_live::live_session_info,
             // 2026-08 A1：会话暂停/继续（硬暂停——完全停采，时间轴冻结）
             #[cfg(target_os = "windows")]
             commands_live::pause_live_session,
