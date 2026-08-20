@@ -34,6 +34,9 @@ pub struct AiTextFilterConfig {
     pub timeout_secs: u64,
     /// 重试次数（429/5xx/传输错误；指数退避）
     pub max_retries: u32,
+    /// 输出 token 上限（2026-08-21 真机排查：缺省时 DeepSeek 8192 硬切
+    /// JSON 截断——与共享 client 同默认；AI_TEXT_FILTER_MAX_TOKENS 覆盖）
+    pub max_tokens: u32,
     /// 批量上限（段/请求；超量分批）
     pub batch_size: usize,
     pub prompt: TextFilterPrompt,
@@ -117,6 +120,10 @@ impl AiTextFilterConfig {
             enabled,
             timeout_secs: env_parse("AI_TEXT_FILTER_TIMEOUT_SECS", 60),
             max_retries: env_parse("AI_TEXT_FILTER_RETRIES", 2) as u32,
+            max_tokens: env_parse(
+                "AI_TEXT_FILTER_MAX_TOKENS",
+                crate::ai_client::DEFAULT_MAX_TOKENS as u64,
+            ) as u32,
             batch_size: (env_parse("AI_TEXT_FILTER_BATCH", 30) as usize).clamp(1, 100),
             prompt: TextFilterPrompt::bundled(),
         }
@@ -158,6 +165,9 @@ impl AiTextFilterAdapter {
             model: self.config.model.clone(),
             timeout_secs: self.config.timeout_secs,
             max_retries: self.config.max_retries,
+            // 2026-08-21 真机排查：显式输出上限（缺省时 DeepSeek 8192 token
+            // 硬切 JSON 截断）——与共享 client 同默认，env 可覆盖
+            max_tokens: self.config.max_tokens,
         });
         let raw = client
             .chat_text(&system, &user)

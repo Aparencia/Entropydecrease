@@ -14,6 +14,7 @@ fn config() -> AiTextFilterConfig {
         enabled: true,
         timeout_secs: 30,
         max_retries: 2,
+        max_tokens: 20000,
         batch_size: 30,
         prompt: TextFilterPrompt::bundled(),
     }
@@ -60,7 +61,7 @@ fn payload_has_zero_temperature_and_json_mode() {
     let cfg = config();
     let system = build_system_prompt(&cfg.prompt);
     let user = serde_json::to_string(&request().segments).unwrap();
-    let payload = crate::ai_client::build_chat_payload(&cfg.model, &system, &user);
+    let payload = crate::ai_client::build_chat_payload(&cfg.model, &system, &user, 20000);
     // Assert
     assert_eq!(payload["temperature"], 0);
     assert_eq!(payload["response_format"]["type"], "json_object");
@@ -78,7 +79,7 @@ fn non_r1_model_no_think_absent() {
     // Arrange：非推理模型（Qwen3-30B 付费档）
     let model = "Qwen/Qwen3-30B-A3B-Instruct-2507".to_string();
     // Act
-    let payload = crate::ai_client::build_chat_payload(&model, "sys", "usr");
+    let payload = crate::ai_client::build_chat_payload(&model, "sys", "usr", 20000);
     // Assert：不注入 no_think（未知参数可能被严格端点拒绝）
     assert!(payload.get("no_think").is_none());
 }

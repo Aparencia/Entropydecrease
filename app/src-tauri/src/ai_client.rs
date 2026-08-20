@@ -8,16 +8,30 @@
 //! @ai-context: 既有 ai_text_filter.rs（REQ-085 文本复核）与 M2/M3 新增的
 //!              ai_note_refine.rs/ai_enrich.rs 共用本 client；审计/配额/缓存
 //!              挂钩由 command 层完成（现有模式：锁内 read-modify-write，
-//!              网络调用不持全局锁——防 60s 超时阻塞其他 AI 命令）。
+//!              网络调用不持全局锁——防 300s 超时阻塞其他 AI 命令）。
 //! @ai-context: 网络路径不单测（与 model_downloader 同口径）；payload 构建/
 //!              响应提取/JSON 解析为纯函数可单测。
 
 use crate::ai_settings::AiSettings;
 
 /// 单请求超时默认（秒；env SILICONFLOW_TIMEOUT_SECS 可覆盖）。
-pub const DEFAULT_TIMEOUT_SECS: u64 = 60;
+///
+/// @ai-context: 300s——2026-08-21 真机排查：DeepSeek 长输出实测 20k token
+///              需 ~110s，60s 默认会把长生成切断（响应体截断 → JSON 解析
+///              EOF → 精修 invalid 失败），按 5 倍余量上调。
+pub const DEFAULT_TIMEOUT_SECS: u64 = 300;
 /// 重试次数默认（429/5xx/传输错误；env SILICONFLOW_RETRIES 可覆盖）。
 pub const DEFAULT_MAX_RETRIES: u32 = 2;
+/// 输出 token 上限默认（env SILICONFLOW_MAX_TOKENS 可覆盖）。
+///
+/// @ai-context: 20000——2026-08-21 真机排查：DeepSeek 官方不传 max_tokens 时
+///              默认 8192 token 硬切（finish_reason=length，JSON 截断 →
+///              Parse EOF）；精修单片 ≤8000 字输入 → 结构化输出最坏
+///              ~15k token，20000 给足余量。其他提供商若拒绝超限值，
+///              用 env 调小（OpenAI 兼容 clamp/报错行为不一）。
+pub const DEFAULT_MAX_TOKENS: u32 = 20000;
+/// max_tokens env 覆盖键。
+const MAX_TOKENS_ENV: &str = "SILICONFLOW_MAX_TOKENS";
 
 /// 共享 client 配置（resolve 聚合：环境变量 > 设置 > 内置默认）。
 #[derive(Debug, Clone, PartialEq)]
@@ -27,6 +41,7 @@ pub struct AiClientConfig {
     pub model: String,
     pub timeout_secs: u64,
     pub max_retries: u32,
+    pub max_tokens: u32,
 }
 
 /// 归一化 AI 错误（REQ-145 失败原因四类 + 服务端/解析补充）。
@@ -87,6 +102,7 @@ impl AiClient {
             model,
             timeout_secs: env_parse("SILICONFLOW_TIMEOUT_SECS", DEFAULT_TIMEOUT_SECS),
             max_retries: env_parse("SILICONFLOW_RETRIES", DEFAULT_MAX_RETRIES as u64) as u32,
+            max_tokens: env_parse(MAX_TOKENS_ENV, DEFAULT_MAX_TOKENS as u64) as u32,
         })
     }
 
@@ -103,7 +119,7 @@ impl AiClient {
         if self.config.api_key.trim().is_empty() {
             return Err(AiClientError::Auth("未配置 API 密钥（设置页保存或配置环境变量）".to_string()));
         }
-        let payload = build_chat_payload(&self.config.model, system, user);
+        let payload = build_chat_payload(&self.config.model, system, user, self.config.max_tokens);
         let url = chat_completions_url(&self.config.base_url);
         let agent = ureq::AgentBuilder::new()
             .timeout(std::time::Duration::from_secs(self.config.timeout_secs.max(5)))
@@ -193,11 +209,15 @@ pub fn chat_completions_url(base_url: &str) -> String {
     format!("{}/chat/completions", base_url.trim_end_matches('/'))
 }
 
-/// 构建 chat/completions payload（纯函数可单测；temperature=0 + json_object）。
+/// 构建 chat/completions payload（纯函数可单测；temperature=0 + json_object +
+/// max_tokens 显式上限）。
 ///
 /// @ai-context: R1 系推理模型带 no_think=true 关闭思考标签（保 JSON 输出
 ///              稳定——2026-08 实测选型注意点，与 ai_text_filter 同款）。
-pub fn build_chat_payload(model: &str, system: &str, user: &str) -> serde_json::Value {
+/// @ai-context: max_tokens 显式传值（2026-08-21 真机排查）：DeepSeek 官方
+///              缺省 8192 token 硬切 → JSON 截断；调用方经 AiClientConfig
+///              注入（env SILICONFLOW_MAX_TOKENS 可覆盖）。
+pub fn build_chat_payload(model: &str, system: &str, user: &str, max_tokens: u32) -> serde_json::Value {
     let mut body = serde_json::json!({
         "model": model,
         "messages": [
@@ -205,6 +225,7 @@ pub fn build_chat_payload(model: &str, system: &str, user: &str) -> serde_json::
             {"role": "user", "content": user}
         ],
         "temperature": 0,
+        "max_tokens": max_tokens,
         "response_format": {"type": "json_object"}
     });
     if model.to_lowercase().contains("r1") {

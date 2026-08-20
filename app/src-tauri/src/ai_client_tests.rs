@@ -30,22 +30,23 @@ fn chat_url_preserves_v1_segment() {
 
 #[test]
 fn payload_has_expected_shape() {
-    // temperature=0 + json_object + system/user 消息
-    let p = build_chat_payload("acme/model", "sys", "usr");
+    // temperature=0 + json_object + max_tokens 显式上限 + system/user 消息
+    let p = build_chat_payload("acme/model", "sys", "usr", 20000);
     assert_eq!(p["model"], "acme/model");
     assert_eq!(p["messages"][0]["role"], "system");
     assert_eq!(p["messages"][0]["content"], "sys");
     assert_eq!(p["messages"][1]["content"], "usr");
     assert_eq!(p["temperature"], 0);
+    assert_eq!(p["max_tokens"], 20000);
     assert_eq!(p["response_format"]["type"], "json_object");
 }
 
 #[test]
 fn payload_r1_disables_think() {
     // R1 系推理模型带 no_think=true（保 JSON 稳定）；非 R1 不带
-    let r1 = build_chat_payload("deepseek-ai/DeepSeek-R1-0528-Qwen3-8B", "s", "u");
+    let r1 = build_chat_payload("deepseek-ai/DeepSeek-R1-0528-Qwen3-8B", "s", "u", 20000);
     assert_eq!(r1["no_think"], true);
-    let other = build_chat_payload("qwen/qwen3", "s", "u");
+    let other = build_chat_payload("qwen/qwen3", "s", "u", 20000);
     assert!(other.get("no_think").is_none());
 }
 
@@ -81,14 +82,42 @@ fn parse_json_object_invalid_is_parse_error() {
 
 #[test]
 fn from_settings_resolves_defaults() {
-    // 无 env/凭据 → 设置值；密钥为空
+    // Arrange：清除相关环境变量（防宿主机泄漏——本机 User 级已设 DeepSeek
+    // 配置；沿用 ai_text_filter_tests 的 save/remove/restore 模式，末尾还原）
+    let keys = [
+        "SILICONFLOW_API_KEY",
+        "SILICONFLOW_BASE_URL",
+        "SILICONFLOW_MODEL",
+        "SILICONFLOW_TIMEOUT_SECS",
+        "SILICONFLOW_RETRIES",
+        "SILICONFLOW_MAX_TOKENS",
+    ];
+    let saved: Vec<(String, Option<String>)> =
+        keys.iter().map(|k| (k.to_string(), std::env::var(k).ok())).collect();
+    for k in &keys {
+        std::env::remove_var(k);
+    }
+    // Act：无 env/凭据 → 设置值；密钥为空
     let s = AiSettings::default();
     let c = AiClient::from_settings(&s, None).config;
+    // Assert：2026-08-21 真机排查后默认值——长生成超时 300s + 输出上限 20000 token
     assert_eq!(c.base_url, s.base_url);
     assert_eq!(c.model, s.model);
     assert!(c.api_key.is_empty());
-    assert_eq!(c.timeout_secs, 60);
+    assert_eq!(c.timeout_secs, 300);
     assert_eq!(c.max_retries, 2);
+    assert_eq!(c.max_tokens, 20000);
+    // env 覆盖 max_tokens（顺序执行，无并行竞争）
+    std::env::set_var("SILICONFLOW_MAX_TOKENS", "4096");
+    let c2 = AiClient::from_settings(&AiSettings::default(), None).config;
+    assert_eq!(c2.max_tokens, 4096);
+    // 清理（还原宿主环境，防污染其他测试）
+    for (k, v) in saved {
+        match v {
+            Some(val) => std::env::set_var(k, val),
+            None => std::env::remove_var(k),
+        }
+    }
 }
 
 #[test]
@@ -108,6 +137,7 @@ fn chat_json_without_key_is_auth_error() {
         model: "m".to_string(),
         timeout_secs: 5,
         max_retries: 0,
+        max_tokens: 20000,
     });
     match client.chat_json("sys", "usr") {
         Err(AiClientError::Auth(_)) => {}
