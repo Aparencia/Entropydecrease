@@ -201,7 +201,7 @@
 ### v0.7.3 · 画面要点屏卡体系（2026-08-20 头脑风暴裁决）
 
 > 用户反馈"画面要点（OCR）提取的内容零碎（时间整理和识别内容）"；会话29 实证（175 块 OCR / 12 时间戳重复 / 平台 UI+其他窗口污染 / 无 bbox 落库）。
-> 设计规格 [头脑风暴 OCR 屏卡体系](../archive/2026-08-20/brainstorming-ocr-screen-cards.md) · 架构决策 [ADR-015](../adr/ADR-015-screen-cards-ocr.md) · [v0.7.3 版本文档](../versions/v0.7.3.md)。
+> 设计规格 [头脑风暴 OCR 屏卡体系（[ ] 已归档）](../archive/2026-08-20/brainstorming-ocr-screen-cards.md) · 架构决策 [ADR-015](../adr/ADR-015-screen-cards-ocr.md) · [v0.7.3 版本文档](../versions/v0.7.3.md)。
 > 裁决：路线 A+B+D（采集治理+屏ID+屏级合并+bbox 落库+行合并/版面角色+结构识别接线）；笔记形态=屏段落+配图；AI 精修留给 v0.8.0。
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |

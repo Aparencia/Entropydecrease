@@ -3,7 +3,7 @@
 ## 状态
 
 已接受（2026-08-20 用户头脑风暴裁决：路线 A+B+D，屏段落+配图；规格见
-[archive/2026-08-20/brainstorming-ocr-screen-cards.md](../archive/2026-08-20/brainstorming-ocr-screen-cards.md)）
+[archive/2026-08-20/brainstorming-ocr-screen-cards.md（[ ] 已归档）](../archive/2026-08-20/brainstorming-ocr-screen-cards.md)）
 
 ## 日期
 
