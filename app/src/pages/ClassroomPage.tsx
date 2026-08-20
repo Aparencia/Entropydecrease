@@ -31,6 +31,7 @@ import { VocabManager } from "../components/VocabManager";
 import { SystemStatusBadge } from "../components/SystemStatusBadge";
 // 2026-08-20 用户需求：模型管理面板（原结构分析模型改名，覆盖全部模型）
 import ModelManagementPanel from "../components/ModelManagementPanel";
+import AiServicePanel from "../components/AiServicePanel";
 // 2026-08 审查硬拆：右栏内容区 / 文件素材输入与提取
 import ClassroomRightPane from "../components/ClassroomRightPane";
 import MaterialInputPanel from "../components/MaterialInputPanel";
@@ -539,6 +540,12 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
           {/* TD-2026-08-20-G 清偿：数据备份/恢复（REQ-107 TRUST-1 能力可达化） */}
           <div style={panel}>
             <BackupPanel />
+          </div>
+
+          {/* v0.8.0 M1（REQ-138/139/140）：AI 服务使能层——密钥管理（DPAPI 安全
+              存储）/余额查询/授权默认关+审计可见化 */}
+          <div style={panel}>
+            <AiServicePanel />
           </div>
 
           {/* 词表管理（v0.4.0 M5：REQ-040：热词/替换词闭环 + 课件预热） */}

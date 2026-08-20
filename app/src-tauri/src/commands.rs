@@ -116,6 +116,15 @@ pub struct AppState {
         std::sync::Arc<std::sync::Mutex<Option<crate::clipboard_signal::ClipboardMonitorHandle>>>,
     /// v0.7.0 M2（REQ-115）：VAD 阈值共享槽（会话线程发布当前阈值，诊断面板可查）
     pub vad_slot: std::sync::Arc<crate::vad_threshold_slot::VadThresholdSlot>,
+    /// v0.8.0 M1（REQ-138/140）：AI 全局设置（enabled/authorized/端点/模型/阈值；
+    /// 锁内 read-modify-write，持久化见 ai_settings_path——密钥不在此，
+    /// 走 ai_credentials 凭据库，明文红线）
+    pub ai_settings: std::sync::Arc<std::sync::Mutex<crate::ai_settings::AiSettings>>,
+    /// v0.8.0 M1（REQ-138）：AI 设置文件路径（应用数据目录 ai_settings.json）
+    pub ai_settings_path: std::path::PathBuf,
+    /// v0.8.0 M1（REQ-138）：AI 密钥凭据存储（Windows DPAPI 加密文件；
+    /// 密钥不落 SQLite/明文文件——安全红线）
+    pub ai_credentials: std::sync::Arc<dyn crate::ai_credentials::CredentialStore>,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。

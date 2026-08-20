@@ -141,76 +141,29 @@ impl AiTextFilterAdapter {
 
     /// 批量三态判定（阻塞调用——command 层 spawn_blocking 包裹）。
     ///
-    /// @ai-context: 重试仅针对 429/5xx/传输错误（幂等读操作）；响应先结构解析
-    ///              再返回（request_ids 级强校验由 command 层做——本层无 ids 上下文）。
+    /// @ai-context: 重试/超时/错误归一（401/402/403/429/5xx/传输）走共享
+    ///              AiClient（v0.8.0 M1 REQ-138 抽取——ai_text_filter 与
+    ///              ai_note_refine/ai_enrich 共用同一 client 模板）；响应先
+    ///              结构解析再返回（request_ids 级强校验由 command 层做——
+    ///              本层无 ids 上下文）。
     pub fn review(&self, request: &TextFilterRequest) -> Result<TextFilterResponse, String> {
         if request.segments.is_empty() {
             return Ok(TextFilterResponse { decisions: Vec::new() });
         }
-        let payload = build_chat_payload(&self.config, request);
-        let url = format!("{}/chat/completions", self.config.base_url.trim_end_matches('/'));
-        let agent = ureq::AgentBuilder::new()
-            .timeout(std::time::Duration::from_secs(self.config.timeout_secs.max(5)))
-            .build();
-        let mut last_err = "未发起请求".to_string();
-        for attempt in 0..=self.config.max_retries {
-            if attempt > 0 {
-                // 指数退避（500ms × 2^attempt；上限 8s）
-                let backoff = (500u64 << attempt.min(4)).min(8000);
-                std::thread::sleep(std::time::Duration::from_millis(backoff));
-            }
-            let resp = agent
-                .post(&url)
-                .set("Content-Type", "application/json")
-                .set("Authorization", &format!("Bearer {}", self.config.api_key))
-                .send_json(payload.clone());
-            match resp {
-                Ok(resp) => {
-                    let body = resp
-                        .into_string()
-                        .map_err(|e| format!("读取响应失败: {}", e))?;
-                    let content = extract_content(&body)?;
-                    return parse_response(&content);
-                }
-                Err(ureq::Error::Status(code, _)) if code == 429 || code >= 500 => {
-                    last_err = format!("服务端错误 HTTP {}", code);
-                    if attempt == self.config.max_retries {
-                        break;
-                    }
-                }
-                Err(ureq::Error::Status(code, _)) => {
-                    return Err(format!("请求被拒绝 HTTP {}（不重试——4xx 非瞬态）", code));
-                }
-                Err(e) => {
-                    last_err = format!("传输错误: {}", e);
-                    if attempt == self.config.max_retries {
-                        break;
-                    }
-                }
-            }
-        }
-        Err(format!("重试 {} 次后仍失败: {}", self.config.max_retries, last_err))
+        let system = build_system_prompt(&self.config.prompt);
+        let user = serde_json::to_string(&request.segments).unwrap_or_else(|_| "[]".to_string());
+        let client = crate::ai_client::AiClient::new(crate::ai_client::AiClientConfig {
+            base_url: self.config.base_url.clone(),
+            api_key: self.config.api_key.clone(),
+            model: self.config.model.clone(),
+            timeout_secs: self.config.timeout_secs,
+            max_retries: self.config.max_retries,
+        });
+        let raw = client
+            .chat_text(&system, &user)
+            .map_err(|e| format!("AI 复核失败（回退纯规则）: {}", e))?;
+        parse_response(&raw)
     }
-}
-
-/// 构建 chat completions 请求体（纯函数可单测）。
-pub fn build_chat_payload(config: &AiTextFilterConfig, request: &TextFilterRequest) -> serde_json::Value {
-    let system = build_system_prompt(&config.prompt);
-    let user = serde_json::to_string(&request.segments).unwrap_or_else(|_| "[]".to_string());
-    let mut body = serde_json::json!({
-        "model": config.model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user}
-        ],
-        "temperature": 0,
-        "response_format": {"type": "json_object"}
-    });
-    // R1 系推理模型：关闭思考标签（保 JSON 输出稳定，2026-08 实测选型注意点）
-    if config.model.to_lowercase().contains("r1") {
-        body["no_think"] = serde_json::json!(true);
-    }
-    body
 }
 
 /// 组装 system 提示词（模板 system + 规则 + few-shot + 输出约束）。
@@ -226,17 +179,10 @@ pub fn build_system_prompt(prompt: &TextFilterPrompt) -> String {
     s
 }
 
-/// 从 chat completions 响应体提取 assistant 文本（纯函数）。
-fn extract_content(body: &str) -> Result<String, String> {
-    let v: serde_json::Value =
-        serde_json::from_str(body).map_err(|e| format!("响应 JSON 解析失败: {}", e))?;
-    v["choices"][0]["message"]["content"]
-        .as_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| "响应缺少 choices[0].message.content".to_string())
-}
-
 /// 解析模型输出 → 结构化判定（剥代码块围栏；强校验在 command 层带 ids 做）。
+///
+/// @ai-context: chat/completions 传输/提取走共享 AiClient::chat_text
+///              （REQ-138 抽取），本函数只做 TextFilterResponse 类型级解析。
 pub fn parse_response(raw: &str) -> Result<TextFilterResponse, String> {
     let trimmed = raw.trim();
     // 剥 ```json ... ``` / ``` ... ``` 围栏（推理模型偶发包裹）

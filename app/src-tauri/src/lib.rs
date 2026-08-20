@@ -9,6 +9,13 @@ mod ai_judge;
 mod ai_mock;
 mod ai_protocol;
 mod ai_text_filter;
+// v0.8.0 M1（REQ-138/139/140）：AI 使能层——全局设置（授权红线默认关）/
+// 密钥凭据存储（DPAPI）/余额查询/共享 AI client（ai_text_filter 与 M2/M3
+// ai_note_refine/ai_enrich 共用）
+mod ai_balance;
+mod ai_client;
+mod ai_credentials;
+mod ai_settings;
 mod asr;
 mod asr_clean;
 mod asr_dedupe;
@@ -41,6 +48,8 @@ mod commands;
 #[cfg(target_os = "windows")]
 mod commands_live;
 mod commands_ai;
+// v0.8.0 M1（REQ-138/139/140）：AI 使能层命令——密钥管理/余额/授权/审计
+mod commands_ai_settings;
 mod commands_analysis;
 mod commands_artifacts;
 mod commands_audio;
@@ -373,6 +382,18 @@ pub fn run() {
             // 笔记 AI 复核（REQ-085，v0.6.0 M1：边界段三态判定——授权默认关）
             commands_ai::review_text_filter,
             commands_ai::text_filter_status,
+            // v0.8.0 M1 AI 使能层（REQ-138/139/140：密钥管理/余额查询/
+            // 授权默认关+审计可见化——共享 ai_client 由 M2/M3 消费）
+            commands_ai_settings::ai_get_settings,
+            commands_ai_settings::ai_save_key,
+            commands_ai_settings::ai_clear_key,
+            commands_ai_settings::ai_update_settings,
+            commands_ai_settings::ai_set_authorized,
+            commands_ai_settings::ai_set_enabled,
+            commands_ai_settings::ai_test_connection,
+            commands_ai_settings::ai_get_balance,
+            commands_ai_settings::ai_audit_list,
+            commands_ai_settings::ai_audit_clear,
             // 结构模型与课后精修（REQ-047/049/050 模型版：下载/状态/精修）
             commands_refine::structure_model_download,
             commands_refine::structure_model_status,

@@ -140,6 +140,15 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
     // v0.7.0 M2（REQ-115）：VAD 阈值共享槽（会话线程发布、诊断面板读取）
     let vad_slot =
         std::sync::Arc::new(crate::vad_threshold_slot::VadThresholdSlot::default());
+    // v0.8.0 M1（REQ-138/140）：AI 使能层装配——
+    // ① 全局设置（enabled/authorized 默认关——授权红线；JSON 持久化，
+    //    缺失/损坏回退内置默认不阻断启动）；② 密钥凭据存储（Windows DPAPI
+    //    加密文件 ai_credentials.bin——明文红线，密钥不落 SQLite/明文）
+    let ai_settings_path = data_dir.join("ai_settings.json");
+    let ai_settings = std::sync::Arc::new(std::sync::Mutex::new(
+        crate::ai_settings::AiSettings::load(&ai_settings_path),
+    ));
+    let ai_credentials = crate::ai_credentials::platform_store(&data_dir.join("ai_credentials.bin"));
     app.manage(AppState {
         db,
         engines,
@@ -175,6 +184,10 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         clipboard_monitor,
         // v0.7.0 M2（REQ-115）：VAD 阈值共享槽
         vad_slot,
+        // v0.8.0 M1（REQ-138/140）：AI 全局设置 + 密钥凭据存储
+        ai_settings,
+        ai_settings_path,
+        ai_credentials,
     });
     Ok(())
 }

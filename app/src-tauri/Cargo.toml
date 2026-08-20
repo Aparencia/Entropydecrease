@@ -79,5 +79,10 @@ windows = { version = "0.61", features = [
     # v0.7.0（2026-08 用户需求）：DwmGetWindowAttribute(DWMWA_CLOAKED) 过滤
     # cloaked 窗口（UWP/Edge 悬浮层被 DWM 隐藏但 IsWindowVisible 误报）
     "Win32_Graphics_Dwm",
+    # v0.8.0 M1（REQ-138）：AI 密钥安全存储——DPAPI CryptProtectData/
+    # CryptUnprotectData（Windows Credential 保护；明文红线：密钥不落 SQLite/
+    # 明文文件）。keyring spike 因本机 TLS 拦截（crates.io 新依赖下载失败）
+    # 跳过，直接走规划裁决的 DPAPI fallback 路径（ADR-016）
+    "Win32_Security_Cryptography",
 ] }
 

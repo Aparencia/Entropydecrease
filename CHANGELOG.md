@@ -3,6 +3,20 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [SemVer](https://semver.org/lang/zh-CN/)。
 各版本的深度版本文档见 [docs/versions/](docs/versions/)。
 
+## [0.8.0] - 2026-08（AI 接入，M1 开发中）
+
+### 新增（M1 AI 使能层，REQ-138/139/140）
+
+- **AI 服务设置面板**（课堂助手左栏）：全局开关（授权红线默认关）+ 端点/模型可配 + 一键测试连接 + 余额卡片（total/grants/topped_up 分项 + 刷新 + 低余额提醒）+ 审计列表（可清空）
+- **密钥管理（REQ-138）**：密钥掩码输入/保存/清除——Windows DPAPI 加密存储到 `ai_credentials.bin`（明文红线：不落 SQLite/明文文件；ADR-016：keyring spike 因本机 TLS 拦截跳过，走规划 DPAPI fallback）；环境变量 `SILICONFLOW_API_KEY` 保留为开发路径（优先级 env > 凭据库）；前端永不回传密钥（视图只有 has_key/key_source）
+- **余额查询（REQ-139）**：`ai_balance.rs`——GET /v1/user/balance + 解析容错（字段缺失按 0 尽力而为）+ 低余额阈值可配（默认 ¥1）；`ai_test_connection` 复用余额接口做一键连通性验证（错误密钥明确报错）
+- **授权与审计（REQ-140）**：`ai_settings.rs` 持久化（enabled/authorized 默认关——授权红线）；开启开关时内联授权确认卡（上传说明：仅文本+最小上下文，音视频/图像永不出本机）；审计列表消费 REQ-085 `AiAuditEntry` 缓冲
+- **共享 AI client（REQ-138）**：`ai_client.rs` 抽取——base_url/api_key/model 配置聚合（env > 设置 > 默认）+ 超时/指数退避重试 + 错误归一六类（Auth/Network/Balance/Quota/Server/Parse，REQ-145 失败原因映射基础）；`ai_text_filter.rs` 重构复用（既有测试保持全绿）
+
+### 测试
+
+- 单测 +20（ai_settings 默认关/partial JSON/损坏回退/roundtrip/双门控边界 · ai_credentials 内存桩 roundtrip/清除/空密钥拒绝 · ai_balance 解析容错/低余额边界 · ai_client payload/no_think/剥围栏/解析错误/无密钥 Auth 错误）；全量 `cargo test --lib` 1204 通过
+
 ## [0.7.2] - 2026-08（开发中）
 
 ### 新增

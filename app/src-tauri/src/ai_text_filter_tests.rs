@@ -56,8 +56,11 @@ fn system_prompt_includes_rules_and_few_shot() {
 
 #[test]
 fn payload_has_zero_temperature_and_json_mode() {
-    // Act
-    let payload = build_chat_payload(&config(), &request());
+    // Act：共享 AiClient 构建 payload（REQ-138 抽取后本模块复用）
+    let cfg = config();
+    let system = build_system_prompt(&cfg.prompt);
+    let user = serde_json::to_string(&request().segments).unwrap();
+    let payload = crate::ai_client::build_chat_payload(&cfg.model, &system, &user);
     // Assert
     assert_eq!(payload["temperature"], 0);
     assert_eq!(payload["response_format"]["type"], "json_object");
@@ -65,18 +68,17 @@ fn payload_has_zero_temperature_and_json_mode() {
     // R1 系 → no_think 开启（2026-08 选型注意点：关闭思考标签保 JSON 稳定）
     assert_eq!(payload["no_think"], true);
     // 用户消息含段文本与上下文
-    let user = payload["messages"][1]["content"].as_str().unwrap();
-    assert!(user.contains("所以这个公式"));
-    assert!(user.contains("我们来看"));
+    let user_msg = payload["messages"][1]["content"].as_str().unwrap();
+    assert!(user_msg.contains("所以这个公式"));
+    assert!(user_msg.contains("我们来看"));
 }
 
 #[test]
 fn non_r1_model_no_think_absent() {
     // Arrange：非推理模型（Qwen3-30B 付费档）
-    let mut c = config();
-    c.model = "Qwen/Qwen3-30B-A3B-Instruct-2507".into();
+    let model = "Qwen/Qwen3-30B-A3B-Instruct-2507".to_string();
     // Act
-    let payload = build_chat_payload(&c, &request());
+    let payload = crate::ai_client::build_chat_payload(&model, "sys", "usr");
     // Assert：不注入 no_think（未知参数可能被严格端点拒绝）
     assert!(payload.get("no_think").is_none());
 }
@@ -115,15 +117,15 @@ fn parse_response_rejects_invalid() {
 
 #[test]
 fn extract_content_from_response_body() {
-    // Arrange
+    // Arrange（共享 AiClient 的响应提取——REQ-138 抽取后同一函数）
     let body = r#"{"choices":[{"message":{"content":"{\"decisions\":[]}"}}]}"#;
     // Act
-    let content = extract_content(body).unwrap();
+    let content = crate::ai_client::extract_content(body).unwrap();
     // Assert
     assert_eq!(content, r#"{"decisions":[]}"#);
     // 缺 content → Err
-    assert!(extract_content(r#"{"choices":[{"message":{}}]}"#).is_err());
-    assert!(extract_content("not json").is_err());
+    assert!(crate::ai_client::extract_content(r#"{"choices":[{"message":{}}]}"#).is_err());
+    assert!(crate::ai_client::extract_content("not json").is_err());
 }
 
 #[test]

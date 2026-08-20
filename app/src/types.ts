@@ -634,3 +634,51 @@ export interface TextFilterStatus {
   mock: boolean;
 }
 
+// ────────────────────────────────────────────────────────────
+// AI 使能层类型（v0.8.0 M1，REQ-138/139/140；Rust camelCase 契约）
+// ────────────────────────────────────────────────────────────
+
+/** AI 设置视图（Rust AiSettingsView；camelCase——密钥只报存在性，不回传明文） */
+export interface AiSettingsView {
+  enabled: boolean;
+  authorized: boolean;
+  baseUrl: string;
+  model: string;
+  lowBalanceThreshold: number;
+  rememberCostChoice: boolean;
+  hasKey: boolean;
+  /** credential（凭据库）| env（环境变量）| none */
+  keySource: string;
+}
+
+/** AI 设置保存入参（Rust AiSettings；camelCase——不含 hasKey/keySource） */
+export interface AiSettingsInput {
+  enabled: boolean;
+  authorized: boolean;
+  baseUrl: string;
+  model: string;
+  lowBalanceThreshold: number;
+  rememberCostChoice: boolean;
+}
+
+/** 余额快照（Rust AiBalance；camelCase——total/grants/topped_up 分项） */
+export interface AiBalance {
+  totalBalance: number;
+  grantsBalance: number;
+  toppedUpBalance: number;
+  currency: string;
+}
+
+/** 余额视图（Rust BalanceView；camelCase——含低余额提醒文案） */
+export interface BalanceView {
+  balance: AiBalance;
+  lowBalanceWarning: string | null;
+}
+
+/** 审计条目（Rust AiAuditEntry；snake_case 契约——上传摘要不含原文） */
+export interface AiAuditEntry {
+  at_unix: number;
+  upload_summary: string;
+  result: string;
+}
+
