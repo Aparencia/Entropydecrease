@@ -78,11 +78,20 @@ pub(crate) fn apply_note_structure(
         .as_deref()
         .map(ProfileKind::parse)
         .unwrap_or(ProfileKind::Lecture);
+    // TD-2026-08-20-C：list_events 失败不再静默——事件缺失时章节检测回退
+    // OCR/gap 近似（诚实降级语义不变），但留日志线索（purify_config 同模式）
+    let events = match db.list_events(session.id) {
+        Ok(ev) => ev,
+        Err(e) => {
+            eprintln!("[notes] list_events 失败（章节检测回退 OCR/gap 近似）: {e}");
+            Vec::new()
+        }
+    };
     let detail = SessionDetail {
         session: session.clone(),
         segments: segments.to_vec(),
         ocr_blocks: ocr_blocks.to_vec(),
-        events: db.list_events(session.id).unwrap_or_default(),
+        events,
         screens: Vec::new(),
     };
     let analysis = analyze_session_opt(&detail, kind, &env.symbol);
