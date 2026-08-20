@@ -9,7 +9,7 @@ use crate::glossary::GlossaryCandidate;
 use crate::note_filter::{FilterStats, NoteFilterResult};
 use crate::outline::OutlineEntry;
 use crate::purify_config::PurifyConfig;
-use crate::structure_note::{render_note_structure, NoteStructureConfig};
+use crate::structure_note::{render_note_structure, word_boundary_contains, NoteStructureConfig};
 use crate::types::SessionSegment;
 
 /// 构造会话段（净化后保留段形态）。
@@ -412,4 +412,53 @@ fn structure_config_roundtrips_json() {
     assert_eq!(parsed.structure.glossary_max_terms, 5);
     assert!(parsed.structure.chapter_headings);
     assert!(parsed.structure.glossary_block);
+}
+
+// TD-2026-08-20-B：词边界 + 大小写折叠（词边界匹配直接单测 + 经 first_occurrence_ms 集成）
+
+#[test]
+fn word_boundary_rejects_short_term_inside_longer_word() {
+    // Arrange/Act/Assert：短术语 "AI" 不得锚到 "AIR"/"said" 等子串
+    assert!(!word_boundary_contains("AIR 飞行指南", "ai"));
+    assert!(!word_boundary_contains("saidthings", "said")); // 折叠后仍在词内 → 拒绝
+    assert!(word_boundary_contains("AI 时代来了", "ai"));
+    assert!(word_boundary_contains("he said it", "said"));
+}
+
+#[test]
+fn word_boundary_case_insensitive() {
+    // Act/Assert：大小写折叠——"OCR" 命中 "ocr 引擎"
+    assert!(word_boundary_contains("OCR 引擎已加载", "ocr"));
+    assert!(word_boundary_contains("OCR 引擎已加载", "OCR"));
+    assert!(!word_boundary_contains("SOCRATES 哲学", "ocr")); // 折叠后仍在词内 → 拒绝
+}
+
+#[test]
+fn word_boundary_chinese_substring_unaffected() {
+    // Act/Assert：汉字前后不设边界（中文无词边界概念）——"项目" 命中 "项目管理"
+    assert!(word_boundary_contains("项目管理很关键", "项目"));
+    assert!(word_boundary_contains("敏捷开发", "开发"));
+}
+
+#[test]
+fn word_boundary_empty_term_and_edge_positions() {
+    // Act/Assert：空术语防御性命中；串首/串尾边界成立
+    assert!(word_boundary_contains("任意文本", ""));
+    assert!(word_boundary_contains("AI起步", "ai"));
+    assert!(word_boundary_contains("起步AI", "ai"));
+}
+
+#[test]
+fn first_occurrence_anchor_respects_word_boundary() {
+    // Arrange：段文本含 "AI 提效"（应命中）与 "AIR 质量"（不应命中）
+    let kept = vec![
+        seg(1, 1_000, 2_000, "本章讲 AIR 质量模型"),
+        seg(2, 3_000, 4_000, "AI 提效的三个方法"),
+    ];
+
+    // Act：锚点应为第二段
+    let anchor = super::first_occurrence_ms(&kept, "AI");
+
+    // Assert
+    assert_eq!(anchor, Some(3_000));
 }

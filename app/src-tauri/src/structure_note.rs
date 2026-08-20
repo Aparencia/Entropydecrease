@@ -179,10 +179,45 @@ fn chapter_name(
 }
 
 /// 术语在 kept 段中首次出现时刻（纯函数；无命中 → None——不带锚点不丢行）。
+///
+/// @ai-context: TD-2026-08-20-B：大小写折叠 + 词边界匹配——短术语（如 "AI"）
+///              不再锚到 "AIR"/"said" 等无关子串；中文子串语义不受影响
+///              （边界只约束 ASCII 字母数字，汉字前后不设限——中文无词边界）。
 fn first_occurrence_ms(kept: &[crate::types::SessionSegment], term: &str) -> Option<u64> {
+    let term_lower = term.to_lowercase();
     kept.iter()
-        .find(|s| s.text.contains(term))
+        .find(|s| word_boundary_contains(&s.text, &term_lower))
         .map(|s| s.start_ms)
+}
+
+/// 词边界包含（纯函数）：term 在 text 中出现（大小写不敏感），且命中位置
+/// 前后均非 ASCII 字母数字。
+///
+/// @ai-context: 只检查单字节（UTF-8 多字节字符的高位字节恒非 ASCII 字母数字，
+///              汉字/标点天然通过）；find 偏移恒为合法字符边界，无切片 panic。
+/// @ai-context: 内部自行大小写折叠（调用方不须预 lower——TD-B 审查后健壮化）。
+fn word_boundary_contains(text: &str, term: &str) -> bool {
+    if term.is_empty() {
+        return true;
+    }
+    let term_lower = term.to_lowercase();
+    let lower = text.to_lowercase();
+    let bytes = lower.as_bytes();
+    let mut start = 0;
+    while let Some(rel) = lower[start..].find(&term_lower) {
+        let pos = start + rel;
+        let before_ok = pos == 0 || !bytes[pos - 1].is_ascii_alphanumeric();
+        let after = pos + term_lower.len();
+        let after_ok = after >= bytes.len() || !bytes[after].is_ascii_alphanumeric();
+        if before_ok && after_ok {
+            return true;
+        }
+        start = pos + 1;
+        if start >= bytes.len() {
+            break;
+        }
+    }
+    false
 }
 
 #[cfg(test)]
