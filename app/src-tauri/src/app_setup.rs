@@ -114,6 +114,8 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         crate::ocr_correction::OcrCorrectionTable::load(&data_dir.join("ocr_correction.json"));
     // v0.5.0 模型版（REQ-047/049/050）：结构模型下载器（按需下载，独立状态机）
     let structure_downloader = crate::structure_models::StructureModelDownloader::new();
+    // TD-2026-08-20-D 清偿（G1）：说话人模型下载器（wespeaker 应用内一键下载）
+    let speaker_downloader = crate::speaker_download::SpeakerModelDownloader::new();
     // v0.5.0 模型版（REQ-050）：结构档位配置（公式档位持久化，审查 H3 修复）
     let structure_tier_path = data_dir.join("structure_tier.json");
     // 结构模型装配目录（models/structure；下载器/引擎共用）
@@ -158,6 +160,7 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         data_dir,
         ai_guardrails,
         structure_downloader,
+        speaker_downloader,
         structure_tier_path,
         // v0.6.0 M1：可校准配置（UI 垃圾黑名单 / 口语符号映射表）
         ui_junk,

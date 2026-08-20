@@ -177,6 +177,8 @@ mod screen_tracker;
 mod session_info;
 // v0.7.2（REQ-153）：说话人 embedding 引擎（弱化版讲者分离离线分析）
 mod speaker_engine;
+// TD-2026-08-20-D 清偿（G1）：说话人模型下载器（wespeaker 应用内一键下载）
+mod speaker_download;
 mod commands_speaker;
 // v0.7.0 M1.5（REQ-108）：统一信号事件域（类型/分级/容量守卫；数据层在 db_session_events）
 mod session_events;
@@ -330,6 +332,9 @@ pub fn run() {
             commands_analysis::analyze_session_command,
             // 说话人分离（REQ-153，v0.7.2：弱化版讲者切换离线分析——幂等懒加载）
             commands_speaker::analyze_session_speakers,
+            // TD-2026-08-20-D 清偿（G1）：说话人模型应用内下载 + 状态
+            commands_speaker::download_speaker_model,
+            commands_speaker::speaker_model_download_status,
             // 健康巡检与诊断（REQ-042，M7：F2/F3/G2）
             commands_diag::health_status,
             commands_diag::diag_snapshot,

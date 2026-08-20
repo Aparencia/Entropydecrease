@@ -135,3 +135,28 @@ fn analyze_speakers_impl(
             .collect(),
     })
 }
+
+/// 说话人模型应用内一键下载（TD-2026-08-20-D 清偿 / G1）。
+///
+/// @ai-context: 对照 structure_model_download——下载器后台线程 + 进度事件
+///              speaker-model:download-progress/done/failed；模型已存在 → done
+///              短路；下载中重复调用 → 明确错误。目标 models/speaker-embedding/。
+#[tauri::command]
+pub fn download_speaker_model(state: State<'_, AppState>) -> Result<(), String> {
+    let dir = state.model_dir.join(crate::speaker_engine::SPEAKER_MODEL_REL)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| state.model_dir.join("speaker-embedding"));
+    state
+        .speaker_downloader
+        .start(dir, state.app.clone())
+        .map_err(|e| e.to_string())
+}
+
+/// 说话人模型下载状态（前端进度展示）。
+#[tauri::command]
+pub fn speaker_model_download_status(
+    state: State<'_, AppState>,
+) -> crate::speaker_download::SpeakerDownloadStatus {
+    state.speaker_downloader.status()
+}

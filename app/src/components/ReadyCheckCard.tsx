@@ -58,6 +58,9 @@ export default function ReadyCheckCard() {
       ]);
       const missingStreaming = health.missing_models.filter((m) => m.startsWith("streaming"));
       const missingSense = health.missing_models.filter((m) => m.startsWith("sensevoice"));
+      // TD-2026-08-20-E/F 清偿：就绪清单补说话人/标点模型两项（此前缺失无提示）
+      const missingSpeaker = health.missing_models.filter((m) => m.startsWith("speaker"));
+      const missingPunct = health.missing_models.filter((m) => m.startsWith("punctuation"));
       const structureMissing = structures.filter((s) => s.state !== "done").length;
       const list: ReadyItem[] = [
         {
@@ -69,6 +72,16 @@ export default function ReadyCheckCard() {
           label: "离线转写（SenseVoice）",
           ok: missingSense.length === 0,
           detail: missingSense.length > 0 ? `缺 ${missingSense.join("、")}` : undefined,
+        },
+        {
+          label: "说话人模型（讲者切换）",
+          ok: missingSpeaker.length === 0,
+          detail: missingSpeaker.length > 0 ? "未下载（会话详情页可下载；访谈/会议场景）" : undefined,
+        },
+        {
+          label: "标点恢复模型",
+          ok: missingPunct.length === 0,
+          detail: missingPunct.length > 0 ? "未下载（无标点降级，不影响转写）" : undefined,
         },
         {
           label: `OCR 引擎（${ocrBackendLabel(ocr.actual)}）`,

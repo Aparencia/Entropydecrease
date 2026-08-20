@@ -52,6 +52,8 @@ pub fn health_status(state: State<'_, AppState>) -> HealthSnapshot {
     let (asr_alive, ocr_alive) = state.engines.liveness();
     // 模型完整性：流式四件套 + 离线 SenseVoice（审查修复——此前仅查流式，
     // sensevoice 缺失要到首次识别失败才能暴露；OCR 模型经 ModelScope 缓存路径不稳定，留日志侧）
+    // TD-2026-08-20-E/F 清偿：增查说话人（wespeaker）与标点恢复模型——
+    // 此前就绪清单（ReadyCheckCard）不含这两项，缺失要到会话页才暴露
     let missing = {
         let m = &state.streaming_models;
         let mut list = missing_model_files(&[
@@ -65,6 +67,16 @@ pub fn health_status(state: State<'_, AppState>) -> HealthSnapshot {
             ("sensevoice model", &sense_dir.join("model.int8.onnx")),
             ("sensevoice tokens", &sense_dir.join("tokens.txt")),
         ]));
+        // speaker-embedding/model.onnx（speaker_engine.rs 路径约定；缺失=讲者分离未启用）
+        list.extend(missing_model_files(&[(
+            "speaker model",
+            &state.model_dir.join(crate::speaker_engine::SPEAKER_MODEL_REL),
+        )]));
+        // punctuation/model.int8.onnx（lib.rs punctuation_model 路径约定；缺失=无标点降级）
+        list.extend(missing_model_files(&[(
+            "punctuation model",
+            &state.model_dir.join("punctuation/model.int8.onnx"),
+        )]));
         list
     };
     HealthSnapshot {

@@ -17,6 +17,8 @@ import VideoImportPanel from "../components/VideoImportPanel";
 import { OcrDeviceSetting } from "../components/OcrDeviceSetting";
 // TD-2026-08-19-E 清偿：模型磁盘占用面板（REQ-131 命令前端接入）
 import ModelDiskPanel from "../components/ModelDiskPanel";
+// TD-2026-08-20-H 清偿：音频落盘状态与清理入口
+import AudioStoragePanel from "../components/AudioStoragePanel";
 // v0.7.0 M1（REQ-101）：音频预处理链开关（CER 微基准定默认后的用户通道）
 import { AudioPreprocSetting } from "../components/AudioPreprocSetting";
 // 2026-08 A2：实时音频电平条（VU 表——试听自检实时化）
@@ -62,6 +64,8 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   const [liveError, setLiveError] = useState("");
   // M7/REQ-042 F5：ASR 降级提示（流式引擎静默失效可见化）
   const [asrDegraded, setAsrDegraded] = useState<string | null>(null);
+  // TD-2026-08-20-I 清偿：目标窗口丢失横幅（采集中画面源不可见提示）
+  const [windowLost, setWindowLost] = useState(false);
   // P3：引擎预热状态（选窗口阶段后台加载；与 Rust PrepareStatus 契约一致）
   const [prepareState, setPrepareState] = useState<PrepareState>("idle");
 
@@ -111,6 +115,9 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
       listen<string>("live:asr-degraded", (e) => setAsrDegraded(e.payload)),
       // 降级恢复（审查修复）：清除降级横幅，避免残留误导
       listen("live:asr-recovered", () => setAsrDegraded(null)),
+      // TD-2026-08-20-I 清偿：目标窗口丢失提示（采集中画面源不可见的唯一信号；
+      // 会话停止时清除）
+      listen("live:window-lost", () => setWindowLost(true)),
       // 修复（v0.3.0 审查反馈）：必须区分 payload——Rust 侧在 ASR 模型加载成功后
       // 才 emit "recording"（比 invoke resolve 晚 1-3s），旧实现无条件清态导致
       // 按钮变回"开始采集"而后端会话仍在跑，再点开始被拒绝
@@ -125,6 +132,7 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
           setLiveSessionId(null);
           setStopping(false);
           setAsrDegraded(null);
+          setWindowLost(false);
           setLivePaused(false);
         }
       }),
@@ -337,6 +345,19 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
           </div>
         )}
 
+        {/* TD-2026-08-20-I 清偿：目标窗口丢失横幅（画面采集中断提示；恢复/停止后清除） */}
+        {windowLost && (
+          <div style={{ padding: "6px 14px", background: "#fffbeb", borderBottom: "1px solid #fcd34d", fontSize: 11, color: "#b45309", display: "flex", alignItems: "center", gap: 8 }}>
+            ⚠ 目标窗口已关闭或不可见——画面采集中断（音频继续；请恢复窗口或重新选择）
+            <button
+              onClick={() => setWindowLost(false)}
+              style={{ marginLeft: "auto", border: "none", background: "none", color: "#b45309", cursor: "pointer", fontSize: 11, fontWeight: 600 }}
+            >
+              知道了
+            </button>
+          </div>
+        )}
+
         <div style={{ flex: 1, minHeight: 0, padding: 12, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
           {/* 2026-08 C1：引擎与模型就绪清单（开始前准备流——缺什么一目了然） */}
           <ReadyCheckCard />
@@ -509,6 +530,8 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
           {/* 音频预处理链（v0.7.0 M1：REQ-101——CER 微基准定默认后的用户开关） */}
           <div style={panel}>
             <AudioPreprocSetting />
+            {/* TD-2026-08-20-H 清偿：音频落盘状态与清理入口（REQ-068 承诺兑现） */}
+            <AudioStoragePanel />
           </div>
 
           {/* 词表管理（v0.4.0 M5：REQ-040：热词/替换词闭环 + 课件预热） */}
