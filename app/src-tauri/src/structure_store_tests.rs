@@ -36,10 +36,11 @@ fn save_auto_writes_struct_and_thumb() {
     let mut store = StructureImageStore::new(dir.path().to_path_buf()).unwrap();
 
     // Act
-    let rel = store.save_auto(5_000, &seeded_frame(200, 100, 1), 200, 100).unwrap();
+    let out = store.save_auto(5_000, &seeded_frame(200, 100, 1), 200, 100).unwrap();
 
-    // Assert：相对路径 + 原图与缩略图均存在
-    assert_eq!(rel, "struct/5000.webp");
+    // Assert：相对路径 + 原图与缩略图均存在 + 新入库标记
+    assert_eq!(out.rel, "struct/5000.webp");
+    assert!(out.is_new);
     assert!(dir.path().join("struct/5000.webp").exists());
     assert!(dir.path().join("struct/thumb/5000.webp").exists());
     assert_eq!(store.remaining_budget(), STRUCT_BUDGET_AUTO - 1);
@@ -53,12 +54,30 @@ fn save_auto_dedupes_same_image() {
     store.save_auto(1_000, &seeded_frame(200, 100, 7), 200, 100).unwrap();
 
     // Act：同图再存（时间戳不同）
-    let rel = store.save_auto(2_000, &seeded_frame(200, 100, 7), 200, 100).unwrap();
+    let out = store.save_auto(2_000, &seeded_frame(200, 100, 7), 200, 100).unwrap();
 
-    // Assert：返回已有路径，不新增文件、不占预算
-    assert_eq!(rel, "struct/1000.webp");
+    // Assert：返回已有路径 + 非新入库标记（调用方不插记录）；不新增文件不占预算
+    assert_eq!(out.rel, "struct/1000.webp");
+    assert!(!out.is_new);
     assert!(!dir.path().join("struct/2000.webp").exists());
     assert_eq!(store.remaining_budget(), STRUCT_BUDGET_AUTO - 1);
+}
+
+#[test]
+fn save_auto_dedupes_across_store_instances() {
+    // Arrange：实例 A 入库（模拟批量任务首跑）
+    let dir = tempfile::tempdir().unwrap();
+    {
+        let mut a = StructureImageStore::new(dir.path().to_path_buf()).unwrap();
+        a.save_auto(1_000, &seeded_frame(200, 100, 9), 200, 100).unwrap();
+    }
+    // Act：实例 B（模拟重跑——内存 FIFO 不跨调用，必须从磁盘重建指纹）
+    let mut b = StructureImageStore::new(dir.path().to_path_buf()).unwrap();
+    let out = b.save_auto(2_000, &seeded_frame(200, 100, 9), 200, 100).unwrap();
+
+    // Assert：跨实例同图命中（重跑幂等的关键路径）
+    assert_eq!(out.rel, "struct/1000.webp");
+    assert!(!out.is_new);
 }
 
 #[test]
@@ -116,10 +135,10 @@ fn delete_removes_full_and_thumb() {
     // Arrange
     let dir = tempfile::tempdir().unwrap();
     let mut store = StructureImageStore::new(dir.path().to_path_buf()).unwrap();
-    let rel = store.save_auto(6_000, &seeded_frame(200, 100, 1), 200, 100).unwrap();
+    let out = store.save_auto(6_000, &seeded_frame(200, 100, 1), 200, 100).unwrap();
 
     // Act
-    store.delete_image(&rel).unwrap();
+    store.delete_image(&out.rel).unwrap();
 
     // Assert：两文件均删除
     assert!(!dir.path().join("struct/6000.webp").exists());

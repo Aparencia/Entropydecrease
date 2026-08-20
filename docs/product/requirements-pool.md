@@ -260,7 +260,7 @@
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
 |----|------|--------|------|---------|------|
-| REQ-182 | 结构图自动捕获：批量任务（停止后触发+图库可重跑）——屏内多帧选优（pick_sharpest 边缘能量）→ 版面分析复用 → table/formula/code 直收 + Image 过 diagram_likeness（边缘密度+面积占比+灰度方差加权）→ 白边裁剪入库 | P1 | 已排期 | v0.7.7 | 每屏采样 ≤8 帧 bound 解码成本；text/unknown 跳过（unknown 归 V1.0 AI 补缝）；重跑幂等（same_image 去重） |
+| REQ-182 | 结构图自动捕获：批量任务（停止后触发+图库可重跑）——屏内多帧选优（pick_sharpest 边缘能量）→ 版面分析复用 → table/formula/code 直收 + Image/Text 过 diagram_likeness（长直线主信号+墨迹密度+面积占比+形状约束，防标题误收）→ 白边裁剪入库 | P1 | 已排期 | v0.7.7 | 每屏采样 ≤8 帧 bound 解码成本；实现校准：真实流程图页密度高被判 Text——Text 同过图结构判定；unknown 跳过（归 V1.0 AI 补缝）；重跑幂等（same_image 去重） |
 | REQ-183 | 结构图持久化：session_structure_images 新表（kind/bbox/screen_id/source_ts/source）+ struct/ 命名空间（与 crop/ 精修中间产物语义分离）+ 缩略图 + 独立预算（auto 80/会话常量，manual 不限）+ same_image 去重 | P1 | 已排期 | v0.7.7 | ensure_table 幂等迁移；RegionKind 不动（kind 字符串枚举）；screen_id 留笔记消费锚点 |
 | REQ-184 | 手动结构图截取：屏卡全帧图框选（BoxSelectOverlay 拖框 + 确认浮层防误触）→ capture_structure_manual（归一化坐标/越界钳制/<32×32 拒绝/原样裁剪不白边） | P1 | 已排期 | v0.7.7 | 无 image_ref 屏禁用+提示；手动不设预算上限（用户主动行为） |
 | REQ-185 | 会话内结构图库：ImageGallery 扩展 StructureImageSection（kind/source 徽标+时间+屏号+删除+重新捕获按钮+空态） | P1 | 已排期 | v0.7.7 | list_session_structure_images / delete_structure_image / capture_session_structures 三命令 |

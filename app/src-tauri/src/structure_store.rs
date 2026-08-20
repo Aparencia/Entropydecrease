@@ -17,8 +17,9 @@ use crate::error::Result;
 
 /// 自动捕获预算（每会话；手动不设限）。
 pub const STRUCT_BUDGET_AUTO: usize = 80;
-/// 去重指纹缓冲容量（同 image_store DEDUPE_BUFFER 口径——覆盖往返窗口）。
-const DEDUPE_BUFFER: usize = 8;
+/// 去重指纹缓冲容量（≥ 预算上限——批量重跑从已有 struct/ 重建指纹后 FIFO
+/// 不因 pop_front 丢失历史；80 预算 + 手动余量）。
+const DEDUPE_BUFFER: usize = 96;
 
 /// 结构图存储（有状态：会话目录 + 已存计数 + 去重缓冲）。
 #[derive(Debug, Clone)]
@@ -28,7 +29,8 @@ pub struct StructureImageStore {
     saved: usize,
     /// 自动桶预算上限（手动路径不检查）
     budget: usize,
-    /// 最近保存指纹（auto 去重 FIFO；manual 不参与——每次框选都是新意图）
+    /// 去重指纹（auto 路径；启动时从已有 struct/ 重建——批量任务每次新建
+    /// 实例，FIFO 必须跨调用持久；manual 不参与——每次框选都是新意图）
     recent_fingerprints: VecDeque<(u64, u64, String)>,
 }
 
@@ -43,7 +45,8 @@ impl StructureImageStore {
         std::fs::create_dir_all(session_dir.join("struct"))?;
         std::fs::create_dir_all(session_dir.join("struct").join("thumb"))?;
         let saved = count_webp(&session_dir.join("struct"));
-        Ok(Self { session_dir, saved, budget, recent_fingerprints: VecDeque::new() })
+        let recent_fingerprints = rebuild_fingerprints(&session_dir.join("struct"));
+        Ok(Self { session_dir, saved, budget, recent_fingerprints })
     }
 
     /// 自动桶剩余预算。
@@ -53,21 +56,22 @@ impl StructureImageStore {
 
     /// 自动捕获入库：预算检查 + 双指纹去重 → struct/ + thumb/。
     ///
-    /// @ai-context: 与 image_store::save_frame 同模式（去重先于预算——重复图
-    ///              不消耗预算）；预算耗尽 → Err（调用方停止本会话自动捕获）。
+    /// @ai-context: 返回 (相对路径, 是否新入库)——去重命中（is_new=false）时
+    ///              调用方**不得**再插记录（同图只留一份，批量重跑幂等）。
+    ///              去重先于预算（重复图不消耗预算）；预算耗尽 → Err。
     pub fn save_auto(
         &mut self,
         now_ms: u64,
         bgraw: &[u8],
         width: u32,
         height: u32,
-    ) -> Result<String> {
+    ) -> Result<SaveOutcome> {
         let rgb = crate::image_store::bgra_to_rgb(bgraw, width, height)
             .ok_or_else(|| crate::error::AppError::Io("结构图数据无效".to_string()))?;
         let ah = crate::ocr_cache::average_hash(&rgb);
         let dh = crate::ocr_cache::difference_hash(&rgb);
         if let Some(existing) = self.dedupe_hit(ah, dh) {
-            return Ok(existing);
+            return Ok(SaveOutcome { rel: existing, is_new: false });
         }
         if self.remaining_budget() == 0 {
             return Err(crate::error::AppError::Io(format!(
@@ -83,7 +87,7 @@ impl StructureImageStore {
         if self.recent_fingerprints.len() > DEDUPE_BUFFER {
             self.recent_fingerprints.pop_front();
         }
-        Ok(rel)
+        Ok(SaveOutcome { rel, is_new: true })
     }
 
     /// 手动截取入库：不设预算、不去重（用户每次框选都是新意图）。
@@ -161,6 +165,13 @@ impl StructureImageStore {
     }
 }
 
+/// 保存结果（自动路径；is_new=false = 去重命中已有图——调用方跳过插记录）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct SaveOutcome {
+    pub rel: String,
+    pub is_new: bool,
+}
+
 /// 统计 struct/ 目录内 WebP 文件数（预算恢复；目录缺失按 0 计）。
 fn count_webp(dir: &Path) -> usize {
     std::fs::read_dir(dir)
@@ -171,6 +182,29 @@ fn count_webp(dir: &Path) -> usize {
                 .count()
         })
         .unwrap_or(0)
+}
+
+/// 从已有 struct/ 文件重建去重指纹（批量任务每次新建实例——内存 FIFO 不
+/// 跨调用持久，重跑幂等必须从磁盘重建；解码失败文件跳过不阻断）。
+fn rebuild_fingerprints(struct_dir: &Path) -> VecDeque<(u64, u64, String)> {
+    let mut recent = VecDeque::new();
+    let Ok(entries) = std::fs::read_dir(struct_dir) else {
+        return recent;
+    };
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.extension().is_some_and(|x| x == "webp") {
+            let Ok(img) = image::open(&p) else { continue };
+            let rgb = img.to_rgb8();
+            let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            recent.push_back((
+                crate::ocr_cache::average_hash(&rgb),
+                crate::ocr_cache::difference_hash(&rgb),
+                format!("struct/{}", name),
+            ));
+        }
+    }
+    recent
 }
 
 #[cfg(test)]

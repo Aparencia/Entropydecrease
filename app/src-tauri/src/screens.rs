@@ -203,7 +203,9 @@ pub fn attach_images(screens: &mut [SessionScreen], images_dir: &Path) {
 }
 
 /// 归档 full 图时间戳列表（纯 IO，一次扫描）。
-fn list_full_image_timestamps(images_dir: &Path) -> Vec<u64> {
+/// @ai-context: pub(crate)（v0.7.7 REQ-182）：structure_capture 批量捕获复用
+///              （屏时间窗帧候选——同一目录扫描约定，避免重复实现）。
+pub(crate) fn list_full_image_timestamps(images_dir: &Path) -> Vec<u64> {
     let entries = std::fs::read_dir(images_dir.join("full")).ok();
     let mut ts: Vec<u64> = entries
         .into_iter()

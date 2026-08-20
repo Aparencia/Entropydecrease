@@ -156,6 +156,8 @@ mod structure_models;
 mod structure_note;
 // v0.7.7（REQ-182）：结构图检测纯函数——diagram_likeness/pick_sharpest/区域过滤
 mod structure_detect;
+// v0.7.7（REQ-182）：结构图批量捕获管线——屏→选优帧→版面→过滤→裁剪→入库
+mod structure_capture;
 // v0.7.7（REQ-183）：结构图存储——struct/ 命名空间 + 独立预算 + 去重
 mod structure_store;
 mod structure_tier;

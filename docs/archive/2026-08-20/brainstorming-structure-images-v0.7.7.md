@@ -79,17 +79,21 @@ capture_session_structures(session_id):
     ③ grid_from_bgra（复用）→ analyze_layout（复用）
     ④ 区域过滤：
        - table/formula/code → 直接候选（is_structural）
-       - image → diagram_likeness(region_grid) ≥ 阈值 → 候选
-       - text / unknown → 跳过（text 走 OCR 线性文本；unknown 归 V1.0 AI 补缝）
+       - image / text → diagram_likeness(region_grid) ≥ 阈值 → 候选
+         （实现校准：真实流程图页密度高，被 classify_region 判为 Text 而非
+           Image——Text 同样过图结构判定；长直线+形状约束天然拒纯文字/标题）
+       - unknown → 跳过（归 V1.0 AI 补缝）
     ⑤ 白边裁剪（image_crop 复用）→ WebP → struct/ + thumb/
     ⑥ same_image 去重 → 预算检查 → 入库
 ```
 
 **`diagram_likeness(region_grid) -> f32`**（新纯函数，阈值 0.5 起步真机调参）：
-- 边缘密度：框线/箭头结构多（复用边缘网格概念，frame_features 产出）
-- 面积占比：区域面积 / 屏面积 ≥ 阈值（照片贴图与结构图粗分）
-- 灰度方差：非纯色（防纯色装饰块误收）
-- 三特征加权综合；合成网格单测（流程图样/照片样/纯色样/阈值边界）
+- 长直线：最长连续墨迹段占比（max_run）+ 含长段行/列数（框数信号）——照片与纯文字均无框线，是主信号
+- 墨迹密度：结构图线条+文字密度中等；超上限衰减防照片纹理拉分
+- 面积占比：区域面积 / 屏面积（大区域才值得持久化，小图标/水印不收）
+- **形状约束：区域高 <3 格或宽 <6 格直接 0 分**（标题细条/单行词条拒绝——实现校准，防长标题误收）
+- 硬门槛：灰度方差过低（纯色块/渐变装饰）直接 0 分
+- 三特征加权综合；合成网格单测（流程图样/照片样/纯色样/文字样/标题样/阈值边界）
 
 ### 4.3 手动捕获（屏卡框选）
 
