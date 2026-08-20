@@ -240,5 +240,4 @@ fn grid_from_rgb_degenerate_sizes() {
     assert_eq!(grid.rows, 1);
     let luma = (10u32 * 299 + 20 * 587 + 30 * 114) / 1000;
     assert_eq!(grid.cells[0], luma as u8);
-    let _: FrameGrid = grid;
 }

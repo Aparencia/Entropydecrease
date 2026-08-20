@@ -84,6 +84,12 @@ pub fn capture_session_structures(
         );
         // ⑥ 逐区域裁剪 → 存储 → 记录
         for r in frame_regions {
+            // 预算前置检查（save_auto 内部同检查——前置拦截避免单区域编码/IO
+            // 错误被误判为预算耗尽而终止整个会话：审查修复）
+            if store.remaining_budget() == 0 {
+                summary.budget_exhausted = true;
+                return Ok(summary);
+            }
             let Some(crop) = crop_region(frame, &r) else { continue };
             let bgra = rgb_to_bgra(&crop);
             seq += 1;
@@ -109,10 +115,9 @@ pub fn capture_session_structures(
                     )?;
                     summary.captured += 1;
                 }
-                // 预算耗尽：终止本会话后续捕获（已捕获保留）
-                Err(_) => {
-                    summary.budget_exhausted = true;
-                    return Ok(summary);
+                // 单区域失败（编码/IO）不阻断后续区域——仅留日志（预算已前置）
+                Err(e) => {
+                    eprintln!("[Structures] 结构图入库失败（跳过该区域）: {e}");
                 }
             }
         }
@@ -187,7 +192,9 @@ fn crop_region(frame: &image::RgbImage, r: &LayoutRegion) -> Option<image::RgbIm
 }
 
 /// RGB → BGRA（结构图存储契约；纯函数）。
-fn rgb_to_bgra(rgb: &image::RgbImage) -> Vec<u8> {
+/// @ai-context: pub(crate)（审查修复）：commands_structures 手动捕获复用——
+///              消除两处重复实现。
+pub(crate) fn rgb_to_bgra(rgb: &image::RgbImage) -> Vec<u8> {
     let mut out = Vec::with_capacity((rgb.width() * rgb.height() * 4) as usize);
     for p in rgb.pixels() {
         out.extend_from_slice(&[p[2], p[1], p[0], 255]);

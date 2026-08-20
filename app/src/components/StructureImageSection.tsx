@@ -30,6 +30,8 @@ export default function StructureImageSection({ sessionId, baseUrl }: { sessionI
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // 审查修复：非错误反馈（重跑无新增等）与错误分离显示（错误红色/信息灰色）
+  const [info, setInfo] = useState("");
   const [preview, setPreview] = useState<StructureImageRecord | null>(null);
 
   const refresh = useCallback(async () => {
@@ -68,12 +70,13 @@ export default function StructureImageSection({ sessionId, baseUrl }: { sessionI
   const recapture = async () => {
     setBusy(true);
     setError("");
+    setInfo("");
     try {
       const summary = await invoke<{ captured: number; screensScanned: number; budgetExhausted: boolean }>(
         "capture_session_structures",
         { sessionId },
       );
-      if (summary.captured === 0) setError("重新捕获完成：无新增结构图（已去重或本会话无结构区域）");
+      if (summary.captured === 0) setInfo("重新捕获完成：无新增结构图（已去重或本会话无结构区域）");
     } catch (e) {
       setError(`重新捕获失败: ${e}`);
     } finally {
@@ -92,6 +95,7 @@ export default function StructureImageSection({ sessionId, baseUrl }: { sessionI
           {loading ? "加载中…" : "刷新"}
         </button>
         {error && <span style={{ fontSize: 11, color: "#dc2626" }}>{error}</span>}
+        {!error && info && <span style={{ fontSize: 11, color: "#6b7280" }}>{info}</span>}
       </div>
       {images.length === 0 && !loading && (
         <div style={{ fontSize: 11, color: "#9ca3af" }}>

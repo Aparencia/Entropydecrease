@@ -53,11 +53,13 @@ pub async fn capture_session_structures(
 /// @ai-context: 入参归一化 0-1（前端框选与图同坐标系）；像素换算按 image_ref
 ///              解码帧的宽高；越界钳制；<32×32 拒绝（误触防护）；原样裁剪
 ///              （不做白边——用户意图优先）；手动不设预算上限。
+/// @ai-context: 审查修复：屏定位改用 first_seen_ms（屏号对旧数据聚类屏不唯一
+///              ——多聚类屏 screen_id 均为 NULL，按屏号匹配会错屏）。
 #[tauri::command]
 pub async fn capture_structure_manual(
     state: State<'_, AppState>,
     session_id: i64,
-    screen_id: Option<i64>,
+    first_seen_ms: u64,
     x: f32,
     y: f32,
     w: f32,
@@ -72,7 +74,7 @@ pub async fn capture_structure_manual(
     }
     let state: AppState = (*state).clone();
     tauri::async_runtime::spawn_blocking(move || {
-        manual_capture_inner(&state, session_id, screen_id, x, y, w, h)
+        manual_capture_inner(&state, session_id, first_seen_ms, x, y, w, h)
     })
     .await
     .map_err(|e| format!("任务调度失败: {}", e))?
@@ -82,19 +84,20 @@ pub async fn capture_structure_manual(
 fn manual_capture_inner(
     state: &AppState,
     session_id: i64,
-    screen_id: Option<i64>,
+    first_seen_ms: u64,
     x: f32,
     y: f32,
     w: f32,
     h: f32,
 ) -> std::result::Result<StructureImageRecord, String> {
-    // ① 定位屏卡 image_ref（复用屏卡体系；无图 → 明确错误，前端禁用按钮）
+    // ① 定位屏卡 image_ref（复用屏卡体系；按 first_seen 精确定位——聚类屏
+    //    屏号不唯一；无图 → 明确错误，前端禁用按钮）
     let blocks = state.db.list_ocr_blocks(session_id).map_err(|e| e.to_string())?;
     let images_dir = session_images_dir(&state.data_dir, session_id);
     let screens = crate::screens::build_screens(&blocks, Some(&images_dir));
     let screen = screens
         .iter()
-        .find(|s| s.screen_id == screen_id)
+        .find(|s| s.first_seen_ms == first_seen_ms)
         .ok_or_else(|| "未找到对应屏卡".to_string())?;
     let image_ref = screen
         .image_ref
@@ -110,7 +113,7 @@ fn manual_capture_inner(
     let (cx, cy) = (px(x, fw), px(y, fh));
     let (cw, ch) = (px(w, fw).min(fw - cx), px(h, fh).min(fh - cy));
     if cw < 32 || ch < 32 {
-        return Err("框选区域过小（≥32×32 像素）".to_string());
+        return Err("框选区域无效（过小或超出画面边缘）".to_string());
     }
     let crop = image::imageops::crop_imm(&frame, cx, cy, cw, ch).to_image();
     // ④ 手动入库（不设预算/不去重）+ 记录
@@ -121,7 +124,7 @@ fn manual_capture_inner(
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
     let rel = store
-        .save_manual(now, &rgb_to_bgra(&crop), crop.width(), crop.height())
+        .save_manual(now, &crate::structure_capture::rgb_to_bgra(&crop), crop.width(), crop.height())
         .map_err(|e| e.to_string())?;
     let rec = StructureImageRecord {
         id: 0,
@@ -141,16 +144,6 @@ fn manual_capture_inner(
     Ok(saved)
 }
 
-/// RGB → BGRA（结构图存储契约；与 structure_capture 内部同实现——命令层
-/// 独立小函数，避免跨模块依赖私有工具）。
-fn rgb_to_bgra(rgb: &image::RgbImage) -> Vec<u8> {
-    let mut out = Vec::with_capacity((rgb.width() * rgb.height() * 4) as usize);
-    for p in rgb.pixels() {
-        out.extend_from_slice(&[p[2], p[1], p[0], 255]);
-    }
-    out
-}
-
 /// 会话结构图列表（图库数据源；按入库时间升序）。
 #[tauri::command]
 pub fn list_session_structure_images(
@@ -163,7 +156,8 @@ pub fn list_session_structure_images(
     crate::db_structures::list_structure_images(&state.db, session_id).map_err(|e| e.to_string())
 }
 
-/// 删除结构图（记录驱动：删记录 + 删文件；文件仅被本表引用可安全删）。
+/// 删除结构图（记录驱动：先删文件后删记录——文件删除失败时记录保留可重试，
+/// 避免记录已删而文件残留的不一致；审查修复）。
 #[tauri::command]
 pub fn delete_structure_image(
     state: State<'_, AppState>,
@@ -172,13 +166,15 @@ pub fn delete_structure_image(
     if id <= 0 {
         return Err("无效的记录 id".to_string());
     }
-    let rec = crate::db_structures::delete_structure_image(&state.db, id)
+    let rec = crate::db_structures::get_structure_image(&state.db, id)
         .map_err(|e| e.to_string())?;
     if let Some(r) = rec {
         let images_dir = session_images_dir(&state.data_dir, r.session_id);
         let store = crate::structure_store::StructureImageStore::new(images_dir)
             .map_err(|e| e.to_string())?;
         store.delete_image(&r.crop_path).map_err(|e| e.to_string())?;
+        crate::db_structures::delete_structure_image(&state.db, id)
+            .map_err(|e| e.to_string())?;
     }
     let _ = state.app.emit("session:structures-updated", ());
     Ok(true)

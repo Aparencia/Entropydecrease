@@ -12,7 +12,8 @@ import { invoke } from "@tauri-apps/api/core";
 interface Props {
   src: string;
   sessionId: number;
-  screenId: number | null;
+  /** 屏定位键（first_seen_ms——旧数据聚类屏号不唯一，审查修复） */
+  firstSeenMs: number;
   /** 保存成功回调（父层 toast + 图库自动刷新走事件） */
   onDone: () => void;
   onCancel: () => void;
@@ -25,9 +26,10 @@ interface Box {
   h: number;
 }
 
-export default function BoxSelectOverlay({ src, sessionId, screenId, onDone, onCancel }: Props) {
+export default function BoxSelectOverlay({ src, sessionId, firstSeenMs, onDone, onCancel }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [moved, setMoved] = useState(false); // 审查修复：区分"拖拽"与"单击"（防误触全屏）
   const [box, setBox] = useState<Box | null>(null);
   const [confirm, setConfirm] = useState<Box | null>(null);
   const [saving, setSaving] = useState(false);
@@ -50,6 +52,7 @@ export default function BoxSelectOverlay({ src, sessionId, screenId, onDone, onC
     if (!p) return;
     setBox(p);
     setDragging(true);
+    setMoved(false);
     setConfirm(null);
     setError("");
   };
@@ -58,6 +61,7 @@ export default function BoxSelectOverlay({ src, sessionId, screenId, onDone, onC
     if (!dragging || !box) return;
     const p = norm(e.clientX, e.clientY);
     if (!p) return;
+    setMoved(true);
     setBox({
       x: Math.min(box.x, p.x),
       y: Math.min(box.y, p.y),
@@ -69,6 +73,11 @@ export default function BoxSelectOverlay({ src, sessionId, screenId, onDone, onC
   const onMouseUp = () => {
     if (!dragging || !box) return;
     setDragging(false);
+    // 单击未拖动（初始占位 w=h=1）→ 视为误触忽略（审查修复：此前会确认全屏框）
+    if (!moved) {
+      setBox(null);
+      return;
+    }
     // 过小框（<6% 宽高）视为误触：忽略本次拖拽
     if (box.w < 0.06 || box.h < 0.06) {
       setBox(null);
@@ -84,7 +93,7 @@ export default function BoxSelectOverlay({ src, sessionId, screenId, onDone, onC
     try {
       await invoke("capture_structure_manual", {
         sessionId,
-        screenId,
+        firstSeenMs,
         x: confirm.x,
         y: confirm.y,
         w: confirm.w,
@@ -131,7 +140,13 @@ export default function BoxSelectOverlay({ src, sessionId, screenId, onDone, onC
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
-      onMouseLeave={() => dragging && setDragging(false)}
+      onMouseLeave={() => {
+        // 审查修复：拖出框外时清理拖拽状态与残留框（防虚线框残留）
+        if (dragging) {
+          setDragging(false);
+          setBox(null);
+        }
+      }}
       style={{
         position: "absolute",
         inset: 0,

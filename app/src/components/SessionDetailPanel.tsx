@@ -322,7 +322,7 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
                         <BoxSelectOverlay
                           src={convertFileSrc(`${baseUrl}/${s.image_ref}`)}
                           sessionId={sessionId}
-                          screenId={s.screen_id}
+                          firstSeenMs={s.first_seen_ms}
                           onDone={() => {
                             setSelectingScreen(null);
                             setToastMsg("✓ 已保存为结构图（见图集「结构图」区段）");

@@ -87,18 +87,25 @@ pub fn list_structure_images(db: &Db, session_id: i64) -> Result<Vec<StructureIm
     Ok(rows)
 }
 
+/// 按 id 查询记录（纯读；不存在 → Ok(None)）。
+/// @ai-context: 审查修复（删除顺序调整）：命令层先取记录删文件、再删记录——
+///              文件删除失败时记录保留可重试（避免记录已删文件残留的不一致）。
+pub fn get_structure_image(db: &Db, id: i64) -> Result<Option<StructureImageRecord>> {
+    let conn = db.conn.lock().unwrap();
+    conn.query_row(
+        "SELECT id, session_id, screen_id, kind, bbox, source_ts_ms, crop_path, source, created_at
+         FROM session_structure_images WHERE id = ?1",
+        params![id],
+        row_to_record,
+    )
+    .optional()
+    .map_err(Into::into)
+}
 /// 删除记录（返回被删记录——命令层据此删文件；不存在 → Ok(None)）。
 pub fn delete_structure_image(db: &Db, id: i64) -> Result<Option<StructureImageRecord>> {
-    let conn = db.conn.lock().unwrap();
-    let existing = conn
-        .query_row(
-            "SELECT id, session_id, screen_id, kind, bbox, source_ts_ms, crop_path, source, created_at
-             FROM session_structure_images WHERE id = ?1",
-            params![id],
-            row_to_record,
-        )
-        .optional()?;
+    let existing = get_structure_image(db, id)?;
     if existing.is_some() {
+        let conn = db.conn.lock().unwrap();
         conn.execute("DELETE FROM session_structure_images WHERE id = ?1", params![id])?;
     }
     Ok(existing)
