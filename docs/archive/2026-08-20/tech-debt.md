@@ -26,14 +26,14 @@
 | （审查 M2） | 零回归护栏盲区：默认配置 + 无章节/无术语（口播档案最常见路径）无逐字节断言——仅 contains 断言 | 黄金测试 session31_structure_empty_data_is_byte_identical（真实管线产物 + 默认配置空结构 → 逐字节一致）；提交 84c867f |
 | （审查 L1） | structure_note_tests.rs 死代码 helpers（env/_screen_placeholder/_payload_placeholder——"下游接线将使用"理由已过期，接线已落地仍未被用） | 删除三个 allow(dead_code) helpers + imports 清理；提交 84c867f |
 | （审查 L2） | 行数豁免登记过期：commands_session ~494（实际 611）、note_filter ~423（实际 ~560）、缺 structure_note_tests/golden_tests/commands_ai 登记 | 登记同步：commands_session ~357 + commands_session_note ~240 新增 + note_filter ~560 + structure_note_tests ~415 + note_filter_golden_tests ~390 + commands_ai ~337；提交 fb40c1e |
+| （TD-B） | 术语锚点 first_occurrence_ms 大小写敏感子串匹配——短术语（如 "AI"）可能锚到无关段或漏锚 | word_boundary_contains 词边界 + 内部大小写折叠（汉字前后不设限）；5 个新单测；提交 1b24168 |
+| （TD-C） | apply_note_structure 中 db.list_events 错误静默吞掉——事件缺失时章节检测回退 OCR/gap 近似（诚实降级），但无日志线索 | match + eprintln（purify_config 同模式），降级行为不变；提交 f8be4d3 |
 
 ## 今日新登记 open（审查观察，暂不修）
 
 | ID | 摘要 | 处置 |
 |----|------|------|
 | TD-2026-08-20-A | preview_session_note/convert_to_note 为 async 命令但主体同步执行，v0.7.6 起叠加 analyze_session_opt 全量分析（章节/术语/重点/练习/书面化）——千段长会话阻塞 IPC 线程；review_text_filter 已有 spawn_blocking 先例 | open（低）：当前会话量级可接受；长会话性能专项时按 review_text_filter 模式改造（数据装载/过滤/分析迁 spawn_blocking） |
-| TD-2026-08-20-B | 术语锚点 first_occurrence_ms 大小写敏感子串匹配——短术语（如 "AI"）可能锚到无关段或漏锚 | open（低）：术语候选多为长词（OCR 高频交叉），误锚概率低；后续可改词边界/大小写折叠匹配 |
-| TD-2026-08-20-C | apply_note_structure 中 db.list_events 错误静默吞掉（unwrap_or_default）——事件缺失时章节检测回退 OCR/gap 近似（诚实降级），但无日志线索 | open（低）：补 eprintln 日志（与 purify_config 加载失败同模式），不改变降级行为 |
 
 ## 观察项（登记不立债，保持跟踪）
 
