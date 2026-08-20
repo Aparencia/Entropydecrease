@@ -19,6 +19,8 @@ import { OcrDeviceSetting } from "../components/OcrDeviceSetting";
 import ModelDiskPanel from "../components/ModelDiskPanel";
 // TD-2026-08-20-H 清偿：音频落盘状态与清理入口
 import AudioStoragePanel from "../components/AudioStoragePanel";
+// TD-2026-08-20-G 清偿：数据备份/恢复（REQ-107 TRUST-1）
+import BackupPanel from "../components/BackupPanel";
 // v0.7.0 M1（REQ-101）：音频预处理链开关（CER 微基准定默认后的用户通道）
 import { AudioPreprocSetting } from "../components/AudioPreprocSetting";
 // 2026-08 A2：实时音频电平条（VU 表——试听自检实时化）
@@ -532,6 +534,11 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
             <AudioPreprocSetting />
             {/* TD-2026-08-20-H 清偿：音频落盘状态与清理入口（REQ-068 承诺兑现） */}
             <AudioStoragePanel />
+          </div>
+
+          {/* TD-2026-08-20-G 清偿：数据备份/恢复（REQ-107 TRUST-1 能力可达化） */}
+          <div style={panel}>
+            <BackupPanel />
           </div>
 
           {/* 词表管理（v0.4.0 M5：REQ-040：热词/替换词闭环 + 课件预热） */}
