@@ -161,6 +161,9 @@ pub(crate) fn run_audio_loop(
                 );
                 // 重建流（reset 预留给复用场景：清句音频/状态，热词重读）
                 ctx.asr_engine.reset();
+                // REQ-154（v0.7.2 S-2）：暂停边沿重置语速基准——恢复后首段与
+                // 暂停前比较会跨暂停区间误判语速骤变（暂停时长不计入段间）
+                last_speech_rate = None;
                 let _ = ctx.db.add_event(&crate::session_events::NewSessionEvent::simple(
                     ctx.session_id,
                     crate::session_events::EventKind::Pause,

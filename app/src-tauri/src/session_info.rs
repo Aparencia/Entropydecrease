@@ -42,32 +42,9 @@ pub struct SessionInfo {
     pub total_episodes: Option<u32>,
 }
 
-/// 平台识别（纯函数）：窗口标题后缀 → 平台显示名；未知 → None。
-///
-/// @ai-context: 与 series_detect::normalize_title 同后缀表（保持一致——剥离的
-///              后缀即平台证据）；浏览器窗口无平台后缀时诚实 None（不猜）。
-pub fn detect_platform(title: &str) -> Option<&'static str> {
-    let t = title.trim();
-    if t.ends_with("_哔哩哔哩_bilibili") {
-        Some("哔哩哔哩")
-    } else if t.ends_with(" - YouTube") {
-        Some("YouTube")
-    } else if t.ends_with(" - 腾讯视频") {
-        Some("腾讯视频")
-    } else if t.ends_with("_爱奇艺") {
-        Some("爱奇艺")
-    } else if t.ends_with(" - 优酷") {
-        Some("优酷")
-    } else if t.ends_with(" - 芒果TV") {
-        Some("芒果TV")
-    } else if t.ends_with(" - 西瓜视频") {
-        Some("西瓜视频")
-    } else if t.ends_with(" - 抖音") {
-        Some("抖音")
-    } else {
-        None
-    }
-}
+/// 平台识别（纯函数）：复用 series_detect 单一来源（标题后缀表统一维护，
+/// 剥离的后缀即平台证据——两处维护会漂移）。
+pub use crate::series_detect::detect_platform;
 
 /// 时间文本解析（`mm:ss` 或 `hh:mm:ss` → 秒；非时间形态 None）。
 ///

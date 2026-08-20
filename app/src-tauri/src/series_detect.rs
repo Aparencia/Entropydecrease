@@ -19,17 +19,27 @@ pub struct SeriesInfo {
     pub episode: Option<u32>,
 }
 
-/// 平台后缀剥离表（窗口标题常见形态；命中剥离，未命中原样返回）。
-const PLATFORM_SUFFIXES: &[&str] = &[
-    "_哔哩哔哩_bilibili",
-    " - YouTube",
-    " - 腾讯视频",
-    "_爱奇艺",
-    " - 优酷",
-    " - 芒果TV",
-    " - 西瓜视频",
-    " - 抖音",
+/// 平台后缀表（单一来源：normalize_title 剥离与 session_info 平台识别共用——
+/// 剥离的后缀即平台证据，两处维护会漂移）。
+const PLATFORM_SUFFIXES: &[(&str, &str)] = &[
+    ("_哔哩哔哩_bilibili", "哔哩哔哩"),
+    (" - YouTube", "YouTube"),
+    (" - 腾讯视频", "腾讯视频"),
+    ("_爱奇艺", "爱奇艺"),
+    (" - 优酷", "优酷"),
+    (" - 芒果TV", "芒果TV"),
+    (" - 西瓜视频", "西瓜视频"),
+    (" - 抖音", "抖音"),
 ];
+
+/// 平台识别（REQ-151：窗口标题后缀 → 平台显示名；未知 → None）。
+pub fn detect_platform(title: &str) -> Option<&'static str> {
+    let t = title.trim();
+    PLATFORM_SUFFIXES
+        .iter()
+        .find(|(suffix, _)| t.ends_with(suffix))
+        .map(|(_, name)| *name)
+}
 
 /// 模式 2 集号后缀（中文"第X"式；**不含"章节讲课部分"**——course_of 的
 /// "第X章"分组语义保留现状零回归，series 检测只管集/话/期/回）。
@@ -38,7 +48,7 @@ const EPISODE_UNITS: &str = "集话期回";
 /// 标题预处理：剥离平台后缀（窗口标题污染源，必须先剥离再识别系列）。
 pub fn normalize_title(title: &str) -> String {
     let t = title.trim();
-    for suffix in PLATFORM_SUFFIXES {
+    for (suffix, _) in PLATFORM_SUFFIXES {
         if let Some(rest) = t.strip_suffix(suffix) {
             let rest = rest.trim();
             if !rest.is_empty() {

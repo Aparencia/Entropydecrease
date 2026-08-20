@@ -83,6 +83,7 @@ function fmtDur(secs: number): string {
  *              现状整句挤在一行灰斜里越滚越长；按句读切分后每句一行，全部可见。
  *              句读保留在句尾；无句读尾段为"残余"（调用方加 … 表示仍在识别）。
  *              不切英文句点（Mr./U.S. 缩写防误切）与逗号（句内成分不拆行）。
+ *              连续句读（"结束。。"）切出的纯标点段过滤（防垃圾行）。
  */
 function splitBySentence(text: string): string[] {
   const parts: string[] = [];
@@ -90,12 +91,17 @@ function splitBySentence(text: string): string[] {
   for (const ch of text) {
     buf += ch;
     if ("。！？!?…".includes(ch)) {
-      parts.push(buf);
+      if (hasText(buf)) parts.push(buf);
       buf = "";
     }
   }
-  if (buf.trim().length > 0) parts.push(buf);
+  if (hasText(buf)) parts.push(buf);
   return parts;
+}
+
+/** 段是否含实质内容（过滤纯标点/空白段——连续句读切出的垃圾段不展示） */
+function hasText(seg: string): boolean {
+  return seg.trim().length > 0 && !/^[。！？!?…\s]+$/.test(seg);
 }
 
 export default function LiveActivityPanel({ sessionId }: { sessionId?: number | null }) {

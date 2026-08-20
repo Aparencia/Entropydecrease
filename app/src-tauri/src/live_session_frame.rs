@@ -203,6 +203,12 @@ pub fn run_screen_worker(
                             }
                         }
                     }
+                    // v0.7.2（REQ-151）：暂停态也探测播放器信息（时间文本仍在画面）——
+                    // 会话开始时视频已暂停的场景，时长/集号识别不因此缺席
+                    if last_info_probe_at.elapsed() >= Duration::from_secs(10) {
+                        last_info_probe_at = Instant::now();
+                        probe_player_info(&app, &engines, &session_info, &roi_tracker, &latest_frame);
+                    }
                 }
             }
             std::thread::sleep(Duration::from_millis(WORKER_POLL_MS));
@@ -354,61 +360,7 @@ pub fn run_screen_worker(
             // 失败 → 静默跳过（诚实：不猜不填；下轮再试）
             if last_info_probe_at.elapsed() >= Duration::from_secs(10) {
                 last_info_probe_at = Instant::now();
-                let mut probe =
-                    latest_frame.lock().ok().and_then(|g| g.clone()).unwrap_or(LatestCapturedFrame {
-                        timestamp_ms: 0,
-                        bgraw: Vec::new(),
-                        width: 0,
-                        height: 0,
-                    });
-                if !probe.bgraw.is_empty() {
-                    if let Some(rect) = roi_tracker.playback_rect() {
-                        let w = probe.width as i32;
-                        let h = probe.height as i32;
-                        let q = crate::capture::frame_diff::Rect {
-                            left: rect.left.clamp(0, w),
-                            top: rect.top.clamp(0, h),
-                            right: rect.right.clamp(0, w),
-                            bottom: rect.bottom.clamp(0, h),
-                        };
-                        if q.width() > 0 && q.height() > 0 {
-                            crate::capture::frame_diff::crop_frame(
-                                &mut probe.bgraw,
-                                &mut probe.width,
-                                &mut probe.height,
-                                Some(&q),
-                            );
-                        }
-                    }
-                    if !probe.bgraw.is_empty() {
-                        // P4：OCR 输入缩小（播放器 UI 文字大，质量无损）
-                        crate::capture::frame_diff::downscale_bgra(
-                            &mut probe.bgraw,
-                            &mut probe.width,
-                            &mut probe.height,
-                            960,
-                        );
-                        if let Some(img) = crate::region_ocr::bgra_to_rgb_image(
-                            &probe.bgraw,
-                            probe.width,
-                            probe.height,
-                        ) {
-                            if let Ok(blocks) = engines.recognize_image(img) {
-                                let text = blocks
-                                    .iter()
-                                    .map(|b| b.text.as_str())
-                                    .collect::<Vec<_>>()
-                                    .join(" ");
-                                if session_info.observe_player_text(&text) {
-                                    let _ = app.emit(
-                                        "live:session-info",
-                                        session_info.snapshot(),
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
+                probe_player_info(&app, &engines, &session_info, &roi_tracker, &latest_frame);
             }
         }
         // 诊断：每 15s 打印采样统计（会话无 OCR 时定位失败阶段；静默失败可见化）
@@ -437,6 +389,62 @@ pub fn run_screen_worker(
     // 防多会话快速连测时泄漏累积触发 DXGI 并发上限（4/5 会话无 OCR 排查项）
     drop(screen);
     eprintln!("[ScreenWorker] 屏幕采样线程退出（会话 {}）", session_id);
+}
+
+/// 播放器信息探测（REQ-151，v0.7.2）：播放器区域 OCR 文本（时间对/分P）→
+/// 会话信息更新 → 值变化才 emit live:session-info（防 IPC 风暴）。
+///
+/// @ai-context: 主采样循环与自动暂停轻量轮询共用——暂停时播放器时间文本仍
+///              在画面，时长/集号识别不因暂停缺席（10s 节流由调用方控制）；
+///              无播放区域/OCR 失败 → 静默跳过（诚实：不猜不填，下轮再试）。
+fn probe_player_info(
+    app: &tauri::AppHandle,
+    engines: &crate::engine::EnginePool,
+    session_info: &crate::session_info::SessionInfoCollector,
+    roi_tracker: &crate::region_tracker::RoiTracker,
+    latest_frame: &Arc<Mutex<Option<LatestCapturedFrame>>>,
+) {
+    let mut probe = latest_frame
+        .lock()
+        .ok()
+        .and_then(|g| g.clone())
+        .unwrap_or(LatestCapturedFrame { timestamp_ms: 0, bgraw: Vec::new(), width: 0, height: 0 });
+    if probe.bgraw.is_empty() {
+        return;
+    }
+    if let Some(rect) = roi_tracker.playback_rect() {
+        let w = probe.width as i32;
+        let h = probe.height as i32;
+        let q = crate::capture::frame_diff::Rect {
+            left: rect.left.clamp(0, w),
+            top: rect.top.clamp(0, h),
+            right: rect.right.clamp(0, w),
+            bottom: rect.bottom.clamp(0, h),
+        };
+        if q.width() > 0 && q.height() > 0 {
+            crate::capture::frame_diff::crop_frame(
+                &mut probe.bgraw,
+                &mut probe.width,
+                &mut probe.height,
+                Some(&q),
+            );
+        }
+    }
+    if probe.bgraw.is_empty() {
+        return;
+    }
+    // P4：OCR 输入缩小（播放器 UI 文字大，质量无损）
+    crate::capture::frame_diff::downscale_bgra(&mut probe.bgraw, &mut probe.width, &mut probe.height, 960);
+    let Some(img) =
+        crate::region_ocr::bgra_to_rgb_image(&probe.bgraw, probe.width, probe.height)
+    else {
+        return;
+    };
+    let Ok(blocks) = engines.recognize_image(img) else { return };
+    let text = blocks.iter().map(|b| b.text.as_str()).collect::<Vec<_>>().join(" ");
+    if session_info.observe_player_text(&text) {
+        let _ = app.emit("live:session-info", session_info.snapshot());
+    }
 }
 
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。

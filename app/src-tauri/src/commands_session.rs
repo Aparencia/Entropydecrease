@@ -348,7 +348,10 @@ pub fn course_of(title: &str) -> String {
     while i + 1 < chars.len() {
         if chars[i] == '第' {
             let mut j = i + 1;
-            while j < chars.len() && (chars[j].is_ascii_digit() || is_cjk_num(chars[j])) {
+            // 中文数字判定复用 series_detect（单一来源，防两处漂移）
+            while j < chars.len()
+                && (chars[j].is_ascii_digit() || crate::series_detect::is_cjk_num_char(chars[j]))
+            {
                 j += 1;
             }
             // "第X章/节/讲/课/部分" → 前缀即课程键
@@ -359,11 +362,6 @@ pub fn course_of(title: &str) -> String {
         i += 1;
     }
     t.to_string()
-}
-
-/// 中文数字判定（课程前缀匹配用）。
-fn is_cjk_num(c: char) -> bool {
-    "零〇一二三四五六七八九十百".contains(c)
 }
 
 /// 课程分组（会话列表按课程键分组，组内新→旧；v0.7.1：组内携带转化状态标记）。

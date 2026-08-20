@@ -37,17 +37,35 @@ pub struct SpeakerAnalysisResult {
 }
 
 /// 会话讲者切换分析（弱化版说话人分离；幂等懒加载）。
+///
+/// @ai-context: 异步命令 + spawn_blocking——分析含模型加载（~1s）+ 逐段
+///              embedding（百段 <2s，千段长会话可能 10s+），不得占用异步
+///              运行时线程（审查 B11：同步命令在长会话上阻塞 IPC 吞吐）。
 #[tauri::command]
-pub fn analyze_session_speakers(
+pub async fn analyze_session_speakers(
     state: State<'_, AppState>,
     session_id: i64,
 ) -> Result<SpeakerAnalysisResult, String> {
     if session_id <= 0 {
         return Err("无效的会话 id".to_string());
     }
+    let db = state.db.clone();
+    let model_dir = state.model_dir.clone();
+    let data_dir = state.data_dir.clone();
+    tauri::async_runtime::spawn_blocking(move || analyze_speakers_impl(db, model_dir, data_dir, session_id))
+        .await
+        .map_err(|e| format!("讲者分析任务失败: {}", e))?
+}
+
+/// 分析实现（阻塞线程内执行；与命令层解耦便于独立演进）。
+fn analyze_speakers_impl(
+    db: crate::db::Db,
+    model_dir: std::path::PathBuf,
+    data_dir: std::path::PathBuf,
+    session_id: i64,
+) -> Result<SpeakerAnalysisResult, String> {
     // 1) 幂等：已有分析结果（SpeakerChange 事件）→ 直接返回
-    let existing = state
-        .db
+    let existing = db
         .list_events_by_kind(session_id, EventKind::SpeakerChange)
         .map_err(|e| e.to_string())?;
     if !existing.is_empty() {
@@ -68,17 +86,14 @@ pub fn analyze_session_speakers(
         });
     }
     // 2) 模型缺失 → 未启用（前端提示——诚实降级，不阻断）
-    let Some(model_path) = speaker_engine::speaker_model_path(&state.model_dir) else {
+    let Some(model_path) = speaker_engine::speaker_model_path(&model_dir) else {
         return Ok(SpeakerAnalysisResult { enabled: false, changes: Vec::new() });
     };
     // 3) 音频 + 段边界（端点断句产出 = 语音段）
-    let wav_path = state
-        .data_dir
-        .join("session-audio")
-        .join(format!("{}.wav", session_id));
+    let wav_path = data_dir.join("session-audio").join(format!("{}.wav", session_id));
     let wave = sherpa_onnx::Wave::read(&wav_path.to_string_lossy())
         .ok_or_else(|| "会话音频缺失（实时捕获未落盘或已清理）".to_string())?;
-    let segments = state.db.list_segments(session_id).map_err(|e| e.to_string())?;
+    let segments = db.list_segments(session_id).map_err(|e| e.to_string())?;
     if segments.is_empty() {
         return Ok(SpeakerAnalysisResult { enabled: true, changes: Vec::new() });
     }
@@ -105,7 +120,7 @@ pub fn analyze_session_speakers(
     // 5) 相邻余弦判定（纯函数）→ 落库 → 返回
     let changes = detect_speaker_changes(&speech);
     for c in &changes {
-        let _ = state.db.add_event(&NewSessionEvent {
+        let _ = db.add_event(&NewSessionEvent {
             session_id,
             kind: EventKind::SpeakerChange,
             timestamp_ms: c.time_ms,
