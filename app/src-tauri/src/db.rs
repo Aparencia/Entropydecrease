@@ -178,7 +178,10 @@ impl Db {
         // v0.8.0 M4（REQ-144）：笔记版本快照链 + AI 成本记录（幂等建表）
         crate::db_notes_versions::init(&conn)?;
         crate::db_ai_usage::init(&conn)?;
-        Ok(Self { conn: Arc::new(Mutex::new(conn)) })
+        // v0.8.0 F2（2026-08-21）：AI 任务中心持久化（任务记录/恢复/保留）
+        let db = Self { conn: Arc::new(Mutex::new(conn)) };
+        db.init_ai_tasks()?;
+        Ok(db)
     }
 
     /// 新建笔记，返回含 id 与时间戳的完整记录。

@@ -211,13 +211,15 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
   };
 
   /** ③ 采纳落库（REQ-141：diff 预览后用户采纳 → 新笔记；v0.8.0 M4 版本化
-   * 写路径——result 回传：规则基线=首快照 + 精修版=新版本 + 成本落库） */
+   * 写路径——result 回传：规则基线=首快照 + 精修版=新版本 + 成本落库。
+   * F2：taskId 回传标记采纳（防重启后从任务中心重复采纳）） */
   const apply = async () => {
     if (!result) return;
     setMsg("");
     const note = await invoke<{ id: number }>("ai_refine_apply", {
       sessionId,
       result,
+      taskId: taskIdRef.current,
     }).catch((e) => {
       setMsg(`落库失败：${e}`);
       return null;

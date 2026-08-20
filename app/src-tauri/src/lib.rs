@@ -35,6 +35,8 @@ mod commands_ai_enrich;
 mod note_version;
 mod db_notes_versions;
 mod db_ai_usage;
+// v0.8.0 F2（2026-08-21）：AI 任务中心持久化——任务记录/结果恢复/保留策略
+mod db_ai_tasks;
 mod commands_notes_version;
 mod asr;
 mod asr_clean;
@@ -423,6 +425,8 @@ pub fn run() {
             commands_ai_refine::ai_refine_status,
             commands_ai_refine::ai_refine_result,
             commands_ai_refine::ai_refine_apply,
+            // v0.8.0 F2（2026-08-21）：任务中心——历史列表（面板数据源）
+            commands_ai_refine::ai_task_history,
             // v0.8.0 M3（REQ-142）：知识补充——预估/任务/结果/采纳/撤销
             commands_ai_enrich::ai_enrich_estimate,
             commands_ai_enrich::ai_enrich_start,

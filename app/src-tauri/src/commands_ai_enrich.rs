@@ -122,6 +122,22 @@ pub async fn ai_enrich_start(
         tasks.insert(task_id, AiTaskEntry { state: AiTaskState::Pending, result: None });
         trim_tasks(&mut tasks);
     }
+    // F2 任务中心（2026-08-21）：任务记录落库（写库失败不阻断 AI 调用）
+    let _ = st.db.insert_ai_task(&crate::db_ai_tasks::AiTaskRecord {
+        task_id,
+        op_type: "enrich".to_string(),
+        ref_id: note_id,
+        state: "pending".to_string(),
+        result_json: None,
+        cost_yuan: None,
+        elapsed_ms: None,
+        model: None,
+        error: None,
+        slices: None,
+        created_at: crate::db_sessions_rows::unix_seconds(),
+        finished_at: None,
+        adopted: false,
+    });
     let st2 = st.clone();
     tauri::async_runtime::spawn_blocking(move || run_enrich_task(st2, task_id, note_id, kinds, mock));
     Ok(AiTaskHandle { task_id, state: AiTaskState::Pending })
@@ -143,11 +159,14 @@ pub fn ai_enrich_result(state: State<'_, AppState>, task_id: u64) -> Result<AiEn
 
 /// 采纳落库（v0.8.0 M4 版本化写路径：新版本 ai-enrich + 成本 meta +
 /// note_ai_usage 落库——"重新生成"从覆盖变为新版本）。
+/// @ai-context: F2（2026-08-21）：task_id 可选——传入时标记任务已采纳
+///              （防重启后从任务中心重复采纳）。
 #[tauri::command]
 pub fn ai_enrich_apply(
     state: State<'_, AppState>,
     note_id: i64,
     result: AiEnrichResult,
+    task_id: Option<u64>,
 ) -> Result<Note, String> {
     // 存在性校验（versioned_save 内部也会校验——提前失败给明确错误）
     get_note(state.inner(), note_id)?;
@@ -184,6 +203,11 @@ pub fn ai_enrich_apply(
             },
         )
         .map_err(|e| e.to_string())?;
+    // F2 任务中心：标记采纳 + 成本回填（task_id 可选；防重启后重复采纳）
+    if let Some(tid) = task_id {
+        let _ = state.db.mark_ai_task_adopted(tid);
+        let _ = state.db.update_ai_task_cost(tid, cost);
+    }
     get_note(state.inner(), note_id)
 }
 
@@ -213,6 +237,7 @@ pub fn ai_enrich_revert(
 
 /// 后台补充任务：读笔记 → 切片 → 逐片批量补充（mock/云端）→ 合并 → 混合落位。
 fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnrichKind>, mock: bool) {
+    let started = std::time::Instant::now();
     let outcome: Result<AiEnrichResult, AiTaskFailure> = (|| {
         let note = st
             .db
@@ -277,6 +302,7 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
             model: client.config.model,
         })
     })();
+    let elapsed_ms = started.elapsed().as_millis() as i64;
     match outcome {
         Ok(result) => {
             {
@@ -288,10 +314,26 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
             set_task(&st, task_id, AiTaskState::Succeeded);
             // F1 修复（2026-08-21）：补充调用上审计（REQ-140 轨迹可见化）
             push_enrich_audit(&st, note_id, "ok", Some(&result.model));
+            // F2 任务中心：终态落库（写库失败不阻断——H2 设计）
+            let result_json = serde_json::to_string(&result).ok();
+            let _ = st.db.finish_ai_task(
+                task_id,
+                "succeeded",
+                result_json.as_deref(),
+                None,
+                elapsed_ms,
+            );
         }
         Err(reason) => {
-            set_task(&st, task_id, AiTaskState::Failed { reason });
+            set_task(&st, task_id, AiTaskState::Failed { reason: reason.clone() });
             push_enrich_audit(&st, note_id, "error", None);
+            let _ = st.db.finish_ai_task(
+                task_id,
+                "failed",
+                None,
+                Some(&format!("{}: {}", reason.kind(), reason.message())),
+                elapsed_ms,
+            );
         }
     }
 }

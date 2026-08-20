@@ -222,6 +222,7 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
     const note = await invoke<{ id: number }>("ai_enrich_apply", {
       noteId,
       result,
+      taskId: taskIdRef.current,
     }).catch((e) => {
       setMsg(`采纳失败：${e}`);
       return null;

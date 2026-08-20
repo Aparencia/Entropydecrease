@@ -162,6 +162,23 @@ pub async fn ai_refine_start(
         tasks.insert(task_id, AiTaskEntry { state: AiTaskState::Pending, result: None });
         trim_tasks(&mut tasks);
     }
+    // F2 任务中心（2026-08-21）：任务记录落库（pending 起步；终态在
+    // run_refine_task 回写——写库失败不阻断 AI 调用，H2 设计）
+    let _ = st.db.insert_ai_task(&crate::db_ai_tasks::AiTaskRecord {
+        task_id,
+        op_type: "refine".to_string(),
+        ref_id: session_id,
+        state: "pending".to_string(),
+        result_json: None,
+        cost_yuan: None,
+        elapsed_ms: None,
+        model: None,
+        error: None,
+        slices: None,
+        created_at: crate::db_sessions_rows::unix_seconds(),
+        finished_at: None,
+        adopted: false,
+    });
     let st2 = st.clone();
     tauri::async_runtime::spawn_blocking(move || run_refine_task(st2, task_id, session_id, mock));
     Ok(AiTaskHandle { task_id, state: AiTaskState::Pending })
@@ -195,14 +212,33 @@ pub fn ai_refine_result(state: State<'_, AppState>, task_id: u64) -> Result<AiRe
     }
 }
 
+/// 任务历史（F2 任务中心：前端面板数据源——按类型列最近任务）。
+#[tauri::command]
+pub fn ai_task_history(
+    state: State<'_, AppState>,
+    op_type: String,
+    limit: Option<usize>,
+) -> Result<Vec<crate::db_ai_tasks::AiTaskRecord>, String> {
+    if op_type != "refine" && op_type != "enrich" {
+        return Err("无效的任务类型（refine|enrich）".to_string());
+    }
+    state
+        .db
+        .list_ai_tasks(&op_type, limit.unwrap_or(50).min(200))
+        .map_err(|e| e.to_string())
+}
+
 /// 采纳落库（REQ-141：diff 预览后用户采纳；v0.8.0 M4 版本化写路径——
 /// ① 以规则基线建笔记（首快照）→ ② 精修版 = 新版本（ai-refine，含成本
 /// meta）→ ③ 成本落库 note_ai_usage）。
+/// @ai-context: F2（2026-08-21）：task_id 可选——传入时标记任务已采纳
+///              （防重启后从任务中心重复采纳产生重复笔记）。
 #[tauri::command]
 pub fn ai_refine_apply(
     state: State<'_, AppState>,
     session_id: i64,
     result: AiRefineResult,
+    task_id: Option<u64>,
 ) -> Result<Note, String> {
     if session_id <= 0 {
         return Err("无效的会话 id".to_string());
@@ -259,6 +295,12 @@ pub fn ai_refine_apply(
             },
         )
         .map_err(|e| e.to_string())?;
+    // F2 任务中心：标记采纳 + 成本回填（task_id 可选——旧前端调用不传则跳过；
+    // 防重启后从任务中心重复采纳产生重复笔记）
+    if let Some(tid) = task_id {
+        let _ = state.db.mark_ai_task_adopted(tid);
+        let _ = state.db.update_ai_task_cost(tid, cost);
+    }
     state
         .db
         .get_note(note.id)
@@ -279,6 +321,7 @@ pub fn ai_refine_apply(
 fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
     // 诊断日志（2026-08-21 真机"排队中"排查）：tauri dev 终端可见各阶段进度
     eprintln!("[refine-task] task={} start session={} mock={}", task_id, session_id, mock);
+    let started = std::time::Instant::now();
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         run_refine_task_inner(&st, task_id, session_id, mock)
     }))
@@ -287,6 +330,7 @@ fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
             "精修任务内部错误（panic）——请重试；若复现请反馈".to_string(),
         ))
     });
+    let elapsed_ms = started.elapsed().as_millis() as i64;
     match outcome {
         Ok(result) => {
             eprintln!(
@@ -305,6 +349,15 @@ fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
             // F1 修复（2026-08-21）：精修调用上审计——REQ-140 轨迹可见化
             // （此前只有余额/测试连接/复核有记录，精修补充零审计）
             push_refine_audit(&st, session_id, "ok", Some(&result.model));
+            // F2 任务中心：终态落库（写库失败不阻断——H2 设计）
+            let result_json = serde_json::to_string(&result).ok();
+            let _ = st.db.finish_ai_task(
+                task_id,
+                "succeeded",
+                result_json.as_deref(),
+                None,
+                elapsed_ms,
+            );
         }
         Err(reason) => {
             // 打印具体 message——区分"未配置密钥"vs"密钥无效(401/403)"（真机排查）
@@ -314,8 +367,15 @@ fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
                 reason.kind(),
                 reason.message()
             );
-            set_task(&st, task_id, AiTaskState::Failed { reason });
+            set_task(&st, task_id, AiTaskState::Failed { reason: reason.clone() });
             push_refine_audit(&st, session_id, "error", None);
+            let _ = st.db.finish_ai_task(
+                task_id,
+                "failed",
+                None,
+                Some(&format!("{}: {}", reason.kind(), reason.message())),
+                elapsed_ms,
+            );
         }
     }
 }
