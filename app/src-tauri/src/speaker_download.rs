@@ -17,9 +17,14 @@ use tauri::Emitter;
 use crate::error::{AppError, Result};
 
 /// 下载镜像源（与 scripts/download-speaker-model.ps1 同源；多源回退防单点失效）。
+///
+/// 上游文件名为 wespeaker_zh_cnceleb_resnet34.onnx（wespeaker 中文 CN-Celeb 模型，
+/// 约 26.5MB；曾误用不存在的 wespeaker-zh.onnx 导致双镜像 404）：
+/// 1) GitHub release（sherpa-onnx 官方分发，speaker-recongition-models 为官方 tag 名）
+/// 2) HuggingFace 镜像（csukuangfj/speaker-embedding-models，注意非 sherpa-onnx-speaker-embedding）
 const MIRRORS: &[&str] = &[
-    "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker-zh.onnx",
-    "https://hf-mirror.com/csukuangfj/sherpa-onnx-speaker-embedding/resolve/main/wespeaker-zh.onnx",
+    "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_zh_cnceleb_resnet34.onnx",
+    "https://hf-mirror.com/csukuangfj/speaker-embedding-models/resolve/main/wespeaker_zh_cnceleb_resnet34.onnx",
 ];
 /// 下载超时（30 分钟；同 structure_models 口径）。
 const DOWNLOAD_TIMEOUT_SECS: u64 = 30 * 60;
@@ -191,7 +196,7 @@ fn download_one(
             let _ = app.emit(
                 "speaker-model:download-progress",
                 crate::model_downloader::DownloadProgress {
-                    file: "wespeaker-zh.onnx".to_string(),
+                    file: "wespeaker_zh_cnceleb_resnet34.onnx".to_string(),
                     downloaded_bytes: downloaded,
                     total_bytes: total,
                 },

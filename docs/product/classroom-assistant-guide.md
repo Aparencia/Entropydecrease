@@ -52,7 +52,7 @@
 
 访谈、会议等多人视频的**讲者切换标记**——只标注"这里换人了"，不识别身份。
 
-- **启用方式（可选增强）**：运行 `app/scripts/download-speaker-model.ps1` 下载模型（wespeaker-zh，约 20-70MB，Apache-2.0 许可），重启应用
+- **启用方式（可选增强）**：运行 `app/scripts/download-speaker-model.ps1` 下载模型（wespeaker 中文模型 wespeaker_zh_cnceleb_resnet34，约 26.5MB，Apache-2.0 许可），重启应用
 - **使用场景**：访谈/会议档案的会话详情页会显示「👥 讲者切换 N 处」及时间点（按置信度排序标注）
 - **效果预期与局限（请务必了解）**：
   - **本地方案效果有限**：无云端说话人分离（如 pyannote 级服务）的精度——本地 wespeaker 音色向量 + 余弦阈值是"可用级"而非"准确级"：

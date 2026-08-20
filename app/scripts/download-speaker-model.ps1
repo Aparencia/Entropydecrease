@@ -1,4 +1,4 @@
-# 下载说话人 embedding 模型（wespeaker，v0.7.2 REQ-153 弱化版讲者分离依赖）
+﻿# 下载说话人 embedding 模型（wespeaker，v0.7.2 REQ-153 弱化版讲者分离依赖）
 #
 # @ai-context: sherpa-onnx SpeakerEmbeddingExtractor 使用 wespeaker 转换模型
 #              （Apache-2.0 许可）——单文件 ONNX，约 20-70MB。下载到
@@ -8,7 +8,8 @@
 #              TLS 拦截环境走 Windows 证书库（与 ffmpeg 下载同模式）。
 # @ai-context: 用法：powershell -ExecutionPolicy Bypass -File scripts/download-speaker-model.ps1
 #
-# 源：sherpa-onnx 模型仓库（wespeaker-zh：中文音色 embedding，sherpa-onnx 转换版）
+# 源：sherpa-onnx 模型仓库（wespeaker_zh_cnceleb_resnet34：中文音色 embedding，
+#      sherpa-onnx 转换版，约 26.5MB；曾误用不存在的 wespeaker-zh.onnx 导致 404）
 $ErrorActionPreference = "Stop"
 
 $targetDir = Join-Path $PSScriptRoot "..\src-tauri\models\speaker-embedding"
@@ -16,11 +17,11 @@ $targetDir = [System.IO.Path]::GetFullPath($targetDir)
 $targetFile = Join-Path $targetDir "model.onnx"
 
 # 镜像源（多源回退防单点失效；模型经 sherpa-onnx 官方仓库分发）
-# 1) GitHub release（k2-fsa/sherpa-onnx 模型清单中的 wespeaker-zh 包）
-# 2) HuggingFace 镜像（k2-fsa 组织仓库）
+# 1) GitHub release（k2-fsa/sherpa-onnx 模型清单中的 wespeaker_zh_cnceleb_resnet34 包）
+# 2) HuggingFace 镜像（csukuangfj/speaker-embedding-models 仓库）
 $mirrors = @(
-    "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker-zh.onnx",
-    "https://hf-mirror.com/csukuangfj/sherpa-onnx-speaker-embedding/resolve/main/wespeaker-zh.onnx"
+    "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_zh_cnceleb_resnet34.onnx",
+    "https://hf-mirror.com/csukuangfj/speaker-embedding-models/resolve/main/wespeaker_zh_cnceleb_resnet34.onnx"
 )
 
 if (Test-Path $targetFile) {
