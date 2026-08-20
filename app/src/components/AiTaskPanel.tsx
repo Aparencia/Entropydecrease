@@ -12,7 +12,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AiTaskRecord } from "../types";
+import type { AiEnrichResult, AiRefineResult, AiTaskRecord } from "../types";
 
 const btn: React.CSSProperties = { padding: "3px 8px", fontSize: 11, borderRadius: 5, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" };
 
@@ -62,47 +62,58 @@ export default function AiTaskPanel() {
     void load();
   }, [load]);
 
-  /** 查看成功任务结果（取回注册表/恢复结果——重启后仍可查） */
+  /** 查看成功任务结果（取回注册表/恢复结果——重启后仍可查；
+   *  强类型契约：精修/补充结果分别用 AiRefineResult/AiEnrichResult） */
   const viewResult = async (t: AiTaskRecord) => {
     setMsg("");
     try {
-      const r = t.opType === "refine"
-        ? await invoke<any>("ai_refine_result", { taskId: t.taskId })
-        : await invoke<any>("ai_enrich_result", { taskId: t.taskId });
-      setSelected(t);
-      setSummary(
-        t.opType === "refine"
-          ? [
-              { label: "标题", value: r.title },
-              { label: "新增行", value: String(r.addedLines) },
-              { label: "删除行", value: String(r.removedLines) },
-              { label: "切片", value: String(r.slices) },
-              { label: "模型", value: r.model },
-            ]
-          : [
-              { label: "块数", value: String(r.blocks) },
-              { label: "深度", value: String(r.depthBlocks) },
-              { label: "广度", value: String(r.breadthBlocks) },
-              { label: "切片", value: String(r.slices) },
-              { label: "模型", value: r.model },
-            ],
-      );
+      if (t.opType === "refine") {
+        const r = await invoke<AiRefineResult>("ai_refine_result", { taskId: t.taskId });
+        setSelected(t);
+        setSummary([
+          { label: "标题", value: r.title },
+          { label: "新增行", value: String(r.addedLines) },
+          { label: "删除行", value: String(r.removedLines) },
+          { label: "切片", value: String(r.slices) },
+          { label: "失败片", value: String(r.failedSlices) },
+          { label: "模型", value: r.model },
+        ]);
+      } else {
+        const r = await invoke<AiEnrichResult>("ai_enrich_result", { taskId: t.taskId });
+        setSelected(t);
+        setSummary([
+          { label: "块数", value: String(r.blocks) },
+          { label: "深度", value: String(r.depthBlocks) },
+          { label: "广度", value: String(r.breadthBlocks) },
+          { label: "切片", value: String(r.slices) },
+          { label: "模型", value: r.model },
+        ]);
+      }
     } catch (e) {
       setMsg(`取回结果失败：${e}`);
     }
   };
 
-  /** 采纳落库（带 taskId 标记采纳——防重复采纳） */
+  /** 采纳落库（带 taskId 标记采纳——防重复采纳；已采纳任务拒绝再采纳） */
   const adopt = async () => {
     if (!selected) return;
+    if (selected.adopted) {
+      setMsg("该任务已采纳落库——请勿重复采纳（可到笔记页查看）");
+      return;
+    }
     setMsg("");
     try {
-      const r = selected.opType === "refine"
-        ? await invoke<any>("ai_refine_result", { taskId: selected.taskId })
-        : await invoke<any>("ai_enrich_result", { taskId: selected.taskId });
       const note = selected.opType === "refine"
-        ? await invoke<{ id: number }>("ai_refine_apply", { sessionId: selected.refId, result: r, taskId: selected.taskId })
-        : await invoke<{ id: number }>("ai_enrich_apply", { noteId: selected.refId, result: r, taskId: selected.taskId });
+        ? await invoke<{ id: number }>("ai_refine_apply", {
+            sessionId: selected.refId,
+            result: await invoke<AiRefineResult>("ai_refine_result", { taskId: selected.taskId }),
+            taskId: selected.taskId,
+          })
+        : await invoke<{ id: number }>("ai_enrich_apply", {
+            noteId: selected.refId,
+            result: await invoke<AiEnrichResult>("ai_enrich_result", { taskId: selected.taskId }),
+            taskId: selected.taskId,
+          });
       setMsg(`已落库为笔记 #${note.id}（可到笔记页查看版本时间线）`);
       setSelected(null);
       setSummary(null);
@@ -143,8 +154,11 @@ export default function AiTaskPanel() {
                 {t.costYuan != null && (
                   <span style={{ color: "#b45309", width: 52, textAlign: "right" }}>¥{t.costYuan.toFixed(4)}</span>
                 )}
-                {t.state === "succeeded" && (
+                {t.state === "succeeded" && !t.adopted && (
                   <button style={btn} onClick={() => void viewResult(t)}>查看</button>
+                )}
+                {t.state === "succeeded" && t.adopted && (
+                  <span style={{ color: "#0d9488", fontSize: 11 }}>✅ 已采纳</span>
                 )}
                 {t.state === "failed" && t.error && (
                   <span style={{ color: "#b91c1c", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.error}>

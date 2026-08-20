@@ -176,6 +176,8 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
                     crate::commands_ai_refine::AiTaskEntry {
                         state: crate::ai_task::AiTaskState::Succeeded,
                         result,
+                        // 目标 id（精修=ref_id 即会话 id；补充=笔记 id——去重粒度）
+                        target_id: rec.ref_id,
                     },
                 );
                 max_id = max_id.max(rec.task_id);

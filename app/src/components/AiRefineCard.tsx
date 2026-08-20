@@ -255,6 +255,11 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
         {phase === "done" && (
           <span style={{ fontSize: 11, color: "#0d9488" }}>
             新增 {result?.addedLines} 行 · 删除 {result?.removedLines} 行 · 切片 {result?.slices}
+            {result && result.failedSlices > 0 && (
+              <span style={{ color: "#b45309", marginLeft: 6 }}>
+                ⚠️ 部分成功（{result.failedSlices}/{result.slices} 片失败——已保留规则版内容）
+              </span>
+            )}
           </span>
         )}
       </div>

@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use crate::ai_cost::{
     estimate_cost, estimate_for_content, estimate_for_content_model, estimate_tokens,
-    price_for_model, price_per_1m, DEFAULT_PRICE_PER_1M,
+    price_for_model, price_per_1m, usage_cost_for_model, DEFAULT_PRICE_PER_1M,
 };
 
 /// env 操作互斥（防并行测试互相覆盖 SILICONFLOW_PRICE_PER_1M_TOKENS）。
@@ -111,5 +111,22 @@ fn estimate_for_content_model_respects_mapping() {
         let unknown = estimate_for_content_model(1000, "some/model");
         assert!(!unknown.price_known, "未知模型必须标记警告");
         assert_eq!(unknown.est_cost_yuan, 0.0);
+    });
+}
+
+/// 审查修复（2026-08-21）：落库成本按模型感知单价（与预估同口径——
+/// 免费档 ¥0；未知模型 ¥0；env 覆盖生效）。
+#[test]
+fn usage_cost_for_model_uses_model_price() {
+    with_env_locked(|| {
+        std::env::remove_var("SILICONFLOW_PRICE_PER_1M_TOKENS");
+        // 免费档模型 → 0
+        assert_eq!(usage_cost_for_model(1000, 500, "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B"), 0.0);
+        // 未知模型 → 0（单价未登记，保守不记成本）
+        assert_eq!(usage_cost_for_model(1000, 500, "unknown/model"), 0.0);
+        // env 覆盖整体生效（开发路径）
+        std::env::set_var("SILICONFLOW_PRICE_PER_1M_TOKENS", "10");
+        let cost = usage_cost_for_model(1000, 500, "unknown/model");
+        assert!((cost - 0.015).abs() < 1e-9, "1500 token × ¥10/1M = ¥0.015，实得 {}", cost);
     });
 }

@@ -88,7 +88,9 @@ pub fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) 
             // F1 修复（2026-08-21）：精修调用上审计——REQ-140 轨迹可见化
             // （此前只有余额/测试连接/复核有记录，精修补充零审计）
             push_refine_audit(&st, session_id, "ok", Some(&result.model));
-            // F2 任务中心：终态落库（写库失败不阻断——H2 设计）
+            // F2 任务中心：终态落库（写库失败不阻断——H2 设计）+ 保留策略
+            // 裁剪（审查修复：trim 原只在启动时跑，运行期终态任务会累积——
+            // 每次终态后清理超限旧终态，防表膨胀）
             let result_json = serde_json::to_string(&result).ok();
             let _ = st.db.finish_ai_task(
                 task_id,
@@ -97,6 +99,7 @@ pub fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) 
                 None,
                 elapsed_ms,
             );
+            let _ = st.db.trim_ai_tasks();
         }
         Err(reason) => {
             // 打印具体 message——区分"未配置密钥"vs"密钥无效(401/403)"（真机排查）
@@ -115,6 +118,7 @@ pub fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) 
                 Some(&format!("{}: {}", reason.kind(), reason.message())),
                 elapsed_ms,
             );
+            let _ = st.db.trim_ai_tasks();
         }
     }
 }

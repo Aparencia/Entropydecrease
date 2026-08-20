@@ -736,6 +736,8 @@ export interface AiRefineResult {
   addedLines: number;
   removedLines: number;
   slices: number;
+  /** F2-B4：失败片数（>0 = 部分成功——重试后仍失败保留已成功片） */
+  failedSlices: number;
   model: string;
 }
 

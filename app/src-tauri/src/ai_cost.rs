@@ -120,8 +120,16 @@ pub fn estimate_for_content(chars: usize) -> CostEstimate {
 
 /// 成本记录费用（纯函数：输入+输出 token × 当前单价——与预估同口径，
 /// M4 落库 note_ai_usage 用）。
+#[allow(dead_code)] // 兼容 API：测试 + 旧调用方（新代码走 _model 版）
 pub fn usage_cost(tokens_in: usize, tokens_out: usize) -> f64 {
     estimate_cost(tokens_in.saturating_add(tokens_out), price_per_1m())
+}
+
+/// 成本记录费用（模型感知——审查修复 2026-08-21：落库成本必须与预估同
+/// 口径（模型映射单价），否则付费模型预估 ¥X 但落库记 ¥0，成本报表失真）。
+pub fn usage_cost_for_model(tokens_in: usize, tokens_out: usize, model: &str) -> f64 {
+    let (price, _) = price_for_model(model);
+    estimate_cost(tokens_in.saturating_add(tokens_out), price)
 }
 
 /// 未知模型警告文案（确认弹窗拼接用）。

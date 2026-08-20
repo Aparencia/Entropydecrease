@@ -36,6 +36,9 @@ const TASKS_CAP: usize = 100;
 pub struct AiTaskEntry {
     pub state: AiTaskState,
     pub result: Option<serde_json::Value>,
+    /// 任务目标（去重粒度：精修=session_id、补充=note_id——审查修复
+    /// 2026-08-21：原实现按全表 any 检查，会话 A 精修中时会话 B 也被拒）
+    pub target_id: i64,
 }
 
 /// 精修成功载荷（前端 diff 预览 + 采纳落库数据源）。
@@ -118,28 +121,36 @@ pub async fn ai_refine_start(
             return Err("未配置 API 密钥（设置页保存密钥或配置环境变量 SILICONFLOW_API_KEY）".to_string());
         }
     }
-    // ②b F1 修复（2026-08-21）：任务去重——同一会话存在进行中任务时拒绝
-    // 重复启动（防双击/重进/多窗口重复扣费；终态任务不阻塞重试）
+    // ②b F1 修复（2026-08-21）+ 审查修复（2026-08-21）：任务去重——按
+    // **目标会话**粒度检查进行中任务（防双击/重进/多窗口对同一会话重复
+    // 扣费；不同会话的任务互不阻塞——原实现全表 any 会误伤其他会话）
     {
         let tasks = st.ai_tasks.lock().map_err(|e| format!("任务注册表锁中毒: {}", e))?;
         let active = tasks.values().any(|t| {
-            matches!(t.state, AiTaskState::Pending | AiTaskState::Running { .. })
+            t.target_id == session_id
+                && matches!(t.state, AiTaskState::Pending | AiTaskState::Running { .. })
         });
         if active {
             return Err("该会话已有进行中的 AI 任务——请等待完成或到任务中心查看进度（防重复扣费）".to_string());
         }
     }
-    // ②c F1 修复（2026-08-21）：每日配额接入——按预估片数消耗（启动前
-    // 拦截而非失败后引导；耗尽 → 明确提示明日再试，REQ-145 配额出口）
+    // ②c F1/F3-D 修复（2026-08-21）：成本硬拦截 + 每日配额接入。
+    // 顺序铁律（审查修复）：先余额拦截（失败不消耗配额），后消耗配额——
+    // 否则余额不足被拒时配额已扣（浪费每日额度）。
     if !mock {
         let segments = st.db.list_segments(session_id).map_err(|e| e.to_string())?;
         let ocr = st.db.list_ocr_blocks(session_id).map_err(|e| e.to_string())?;
         let chars = segments.iter().map(|s| s.text.chars().count()).sum::<usize>()
             + ocr.iter().map(|b| b.text.chars().count()).sum::<usize>();
-        // 片数估算（与 ai_task::slice_note 同口径的保守上界：字符数 / 单片上限 + 1）
-        let slices = chars.saturating_add(crate::ai_task::SLICE_MAX_CHARS - 1)
-            / crate::ai_task::SLICE_MAX_CHARS
-            + 1;
+        // 成本硬拦截（免费档 ¥0 预估 → 余额 0 也放行；查询失败宽容放行）
+        ensure_balance_for(&st, chars, &settings.model)?;
+        // 片数估算（与 ai_task::slice_note 同口径的保守上界：向上取整，
+        // 空内容 0 片不消耗配额——审查修复：原公式 +1 导致空会话也扣 1）
+        let slices = if chars == 0 {
+            0
+        } else {
+            chars.saturating_add(crate::ai_task::SLICE_MAX_CHARS - 1) / crate::ai_task::SLICE_MAX_CHARS
+        };
         let now = crate::db_sessions_rows::unix_seconds();
         let mut guards = st.ai_guardrails.lock().map_err(|e| format!("护栏状态锁中毒: {}", e))?;
         for _ in 0..slices {
@@ -148,16 +159,12 @@ pub async fn ai_refine_start(
             }
         }
         drop(guards);
-        // ②d F3-D 修复（2026-08-21）：成本硬拦截——启动前校验余额
-        // （余额 < 预估×安全系数 → 拒绝启动 + 三出口引导；不产生"跑完
-        // 才 402 失败"的浪费；免费档 ¥0 预估 → 余额 0 也放行）
-        ensure_balance_for(&st, chars, &settings.model)?;
     }
     // ③ 注册任务 + 后台执行（spawn_blocking——网络/分析不阻塞异步运行时）
     let task_id = st.ai_task_seq.fetch_add(1, Ordering::Relaxed);
     {
         let mut tasks = st.ai_tasks.lock().map_err(|e| format!("任务注册表锁中毒: {}", e))?;
-        tasks.insert(task_id, AiTaskEntry { state: AiTaskState::Pending, result: None });
+        tasks.insert(task_id, AiTaskEntry { state: AiTaskState::Pending, result: None, target_id: session_id });
         trim_tasks(&mut tasks);
     }
     // F2 任务中心（2026-08-21）：任务记录落库（pending 起步；终态在
@@ -259,9 +266,12 @@ pub fn ai_refine_apply(
     };
     let note = state.db.create_note(&new).map_err(|e| e.to_string())?;
     // ② 精修版落库（新版本 ai-refine + 成本 meta）
-    let cost = crate::ai_cost::usage_cost(
+    // 审查修复（2026-08-21）：落库成本用模型感知单价（与预估同口径——
+    // 付费模型预估 ¥X 不再记 ¥0）
+    let cost = crate::ai_cost::usage_cost_for_model(
         result.base_markdown.chars().count(),
         result.refined_markdown.chars().count(),
+        &result.model,
     );
     let meta = crate::note_version::VersionMeta {
         cost_yuan: Some(cost),
@@ -294,8 +304,13 @@ pub fn ai_refine_apply(
         )
         .map_err(|e| e.to_string())?;
     // F2 任务中心：标记采纳 + 成本回填（task_id 可选——旧前端调用不传则跳过；
-    // 防重启后从任务中心重复采纳产生重复笔记）
+    // 防重启后从任务中心重复采纳产生重复笔记）。
+    // 审查修复（2026-08-21）：服务端前置校验已采纳状态——防异常/重复调用
+    // 绕过前端 UI 直接重复建笔记（前端禁用 + 服务端兜底双保险）。
     if let Some(tid) = task_id {
+        if state.db.is_ai_task_adopted(tid) {
+            return Err("该任务结果已采纳落库——请勿重复采纳（可到笔记页查看）".to_string());
+        }
         let _ = state.db.mark_ai_task_adopted(tid);
         let _ = state.db.update_ai_task_cost(tid, cost);
     }

@@ -120,3 +120,16 @@ fn cost_backfill_updates_record() {
     let list = db.list_ai_tasks("refine", 10).unwrap();
     assert_eq!(list[0].cost_yuan, Some(0.5));
 }
+
+#[test]
+fn adopted_query_true_after_mark_false_otherwise() {
+    let db = open_mem();
+    db.insert_ai_task(&rec(8, "refine", 4, "succeeded")).unwrap();
+    // 未采纳 → false
+    assert!(!db.is_ai_task_adopted(8));
+    // 标记后 → true
+    db.mark_ai_task_adopted(8).unwrap();
+    assert!(db.is_ai_task_adopted(8));
+    // 不存在的任务 → false（防御方向保守——旧任务无记录放行）
+    assert!(!db.is_ai_task_adopted(999));
+}

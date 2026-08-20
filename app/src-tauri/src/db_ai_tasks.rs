@@ -125,6 +125,22 @@ impl Db {
         Ok(())
     }
 
+    /// 查询任务是否已采纳（apply 前置校验——服务端防重复采纳兜底；
+    /// 任务不存在/查询失败视为未采纳——旧任务无记录时放行，防御方向保守）。
+    pub fn is_ai_task_adopted(&self, task_id: u64) -> bool {
+        let conn = match self.conn.lock() {
+            Ok(c) => c,
+            Err(e) => e.into_inner(),
+        };
+        conn.query_row(
+            "SELECT adopted FROM ai_tasks WHERE task_id=?1",
+            params![task_id as i64],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|v| v != 0)
+        .unwrap_or(false)
+    }
+
     /// 回填成本（apply 落库成本后；task_id 由前端回传——result 携带）。
     pub fn update_ai_task_cost(&self, task_id: u64, cost_yuan: f64) -> Result<()> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());

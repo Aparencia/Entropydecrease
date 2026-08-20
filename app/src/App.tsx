@@ -8,7 +8,7 @@
  *              ② 监听 app:close-requested（Rust 侧拦截了关闭）→ 确认框 →
  *                 确认后 stop_live_session 再 close，取消则采集继续。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -41,6 +41,9 @@ function App() {
   // v0.8.0 F2（2026-08-21）：AI 任务完成通知——全局监听 ai:task-update，
   // 跨页面可见（REQ-145"完成通知"落地；内联卡片之外的第二通道）
   const [aiToast, setAiToast] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
+  // 审查修复（2026-08-21）：toast 计时器用 ref 持有——组件卸载/新事件时
+  // 清理旧 timer（原实现每个事件都新起 timer，卸载后仍残留空转）
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -59,8 +62,11 @@ function App() {
             const [kind, msg] = Object.entries(reason)[0] ?? ["other", "未知错误"];
             setAiToast({ text: `❌ AI 任务失败（${kind}）：${msg}`, kind: "err" });
           }
-          // toast 自动消失（重新计时——连续任务只显示最新）
-          setTimeout(() => { if (!disposed) setAiToast(null); }, 3500);
+          // toast 自动消失（清理旧 timer 重新计时——连续任务只显示最新）
+          if (toastTimer.current) clearTimeout(toastTimer.current);
+          toastTimer.current = setTimeout(() => {
+            if (!disposed) setAiToast(null);
+          }, 3500);
         }),
       );
       // 采集主状态：recording=采集中；stopped/failed=结束（live_session 事件）
@@ -127,6 +133,7 @@ function App() {
     })();
     return () => {
       disposed = true;
+      if (toastTimer.current) clearTimeout(toastTimer.current);
       unlisteners.forEach((u) => u());
     };
   }, []);

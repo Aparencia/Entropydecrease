@@ -90,23 +90,30 @@ pub async fn ai_enrich_start(
             return Err("未配置 API 密钥（设置页保存密钥或配置环境变量 SILICONFLOW_API_KEY）".to_string());
         }
     }
-    // F1 修复（2026-08-21）：任务去重——同笔记存在进行中任务时拒绝重复启动
+    // F1 修复（2026-08-21）+ 审查修复（2026-08-21）：任务去重——按
+    // **目标笔记**粒度检查（防同笔记重复扣费；不同笔记互不阻塞）
     {
         let tasks = st.ai_tasks.lock().map_err(|e| format!("任务注册表锁中毒: {}", e))?;
         let active = tasks.values().any(|t| {
-            matches!(t.state, crate::ai_task::AiTaskState::Pending | crate::ai_task::AiTaskState::Running { .. })
+            t.target_id == note_id
+                && matches!(t.state, crate::ai_task::AiTaskState::Pending | crate::ai_task::AiTaskState::Running { .. })
         });
         if active {
             return Err("该笔记已有进行中的 AI 任务——请等待完成或到任务中心查看进度（防重复扣费）".to_string());
         }
     }
-    // F1 修复（2026-08-21）：每日配额接入——按预估片数消耗（启动前拦截）
+    // F1/F3-D 修复（2026-08-21）：成本硬拦截 + 每日配额接入。
+    // 顺序铁律（审查修复）：先余额拦截（失败不消耗配额），后消耗配额。
     if !mock {
         let note = get_note(&st, note_id)?;
         let chars = note.content.chars().count();
-        let slices = chars.saturating_add(crate::ai_task::SLICE_MAX_CHARS - 1)
-            / crate::ai_task::SLICE_MAX_CHARS
-            + 1;
+        let model = st.ai_settings.lock().map(|s| s.model.clone()).unwrap_or_default();
+        crate::commands_ai_refine::ensure_balance_for(&st, chars, &model)?;
+        let slices = if chars == 0 {
+            0
+        } else {
+            chars.saturating_add(crate::ai_task::SLICE_MAX_CHARS - 1) / crate::ai_task::SLICE_MAX_CHARS
+        };
         let now = crate::db_sessions_rows::unix_seconds();
         let mut guards = st.ai_guardrails.lock().map_err(|e| format!("护栏状态锁中毒: {}", e))?;
         for _ in 0..slices {
@@ -115,15 +122,11 @@ pub async fn ai_enrich_start(
             }
         }
         drop(guards);
-        // F3-D 修复（2026-08-21）：成本硬拦截——启动前校验余额（精修共用
-        // ensure_balance_for：免费档放行、余额不足拒绝、查询失败宽容放行）
-        let model = st.ai_settings.lock().map(|s| s.model.clone()).unwrap_or_default();
-        crate::commands_ai_refine::ensure_balance_for(&st, chars, &model)?;
     }
     let task_id = st.ai_task_seq.fetch_add(1, Ordering::Relaxed);
     {
         let mut tasks = st.ai_tasks.lock().map_err(|e| format!("任务注册表锁中毒: {}", e))?;
-        tasks.insert(task_id, AiTaskEntry { state: AiTaskState::Pending, result: None });
+        tasks.insert(task_id, AiTaskEntry { state: AiTaskState::Pending, result: None, target_id: note_id });
         trim_tasks(&mut tasks);
     }
     // F2 任务中心（2026-08-21）：任务记录落库（写库失败不阻断 AI 调用）
@@ -174,9 +177,11 @@ pub fn ai_enrich_apply(
 ) -> Result<Note, String> {
     // 存在性校验（versioned_save 内部也会校验——提前失败给明确错误）
     get_note(state.inner(), note_id)?;
-    let cost = crate::ai_cost::usage_cost(
+    // 审查修复（2026-08-21）：落库成本用模型感知单价（与预估同口径）
+    let cost = crate::ai_cost::usage_cost_for_model(
         result.base_markdown.chars().count(),
         result.enriched_markdown.chars().count(),
+        &result.model,
     );
     let meta = crate::note_version::VersionMeta {
         cost_yuan: Some(cost),
@@ -207,8 +212,13 @@ pub fn ai_enrich_apply(
             },
         )
         .map_err(|e| e.to_string())?;
-    // F2 任务中心：标记采纳 + 成本回填（task_id 可选；防重启后重复采纳）
+    // F2 任务中心：标记采纳 + 成本回填（task_id 可选；防重启后重复采纳）。
+    // 审查修复（2026-08-21）：服务端前置校验已采纳状态（前端禁用 + 服务端
+    // 兜底双保险——防异常调用重复建笔记）。
     if let Some(tid) = task_id {
+        if state.db.is_ai_task_adopted(tid) {
+            return Err("该任务结果已采纳落库——请勿重复采纳（可到笔记页查看）".to_string());
+        }
         let _ = state.db.mark_ai_task_adopted(tid);
         let _ = state.db.update_ai_task_cost(tid, cost);
     }
@@ -275,11 +285,24 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
                 selected_kinds: selected.clone(),
                 profile: profile.clone(),
             };
-            let resp: AiEnrichResponse = if mock {
-                mock_adapter.enrich(&req, &selected)
-            } else {
-                adapter.enrich(&req, &selected).map_err(AiTaskFailure::from)?
-            };
+            // 单片重试 1 次（审查修复 2026-08-21：与精修 SLICE_RETRY 对齐——
+            // 网络抖动瞬态失败直接重试，避免整任务失败浪费已成功的片）
+            let mut resp: Option<AiEnrichResponse> = None;
+            for attempt in 0..=1 {
+                let r = if mock {
+                    Ok(mock_adapter.enrich(&req, &selected))
+                } else {
+                    adapter.enrich(&req, &selected).map_err(AiTaskFailure::from)
+                };
+                match r {
+                    Ok(v) => { resp = Some(v); break; }
+                    Err(e) if attempt < 1 => {
+                        eprintln!("[enrich-task] task={} 片 {} 第{}次失败，重试: {}", task_id, i + 1, attempt + 1, e.message());
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+            let resp = resp.expect("重试循环必然产出结果或返回");
             all_blocks.extend(resp.blocks);
             set_task(
                 &st,
@@ -318,7 +341,8 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
             set_task(&st, task_id, AiTaskState::Succeeded);
             // F1 修复（2026-08-21）：补充调用上审计（REQ-140 轨迹可见化）
             push_enrich_audit(&st, note_id, "ok", Some(&result.model));
-            // F2 任务中心：终态落库（写库失败不阻断——H2 设计）
+            // F2 任务中心：终态落库（写库失败不阻断——H2 设计）+ 保留策略
+            // 裁剪（审查修复：运行期终态后清理超限旧终态，防表膨胀）
             let result_json = serde_json::to_string(&result).ok();
             let _ = st.db.finish_ai_task(
                 task_id,
@@ -327,6 +351,7 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
                 None,
                 elapsed_ms,
             );
+            let _ = st.db.trim_ai_tasks();
         }
         Err(reason) => {
             set_task(&st, task_id, AiTaskState::Failed { reason: reason.clone() });
@@ -338,6 +363,7 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
                 Some(&format!("{}: {}", reason.kind(), reason.message())),
                 elapsed_ms,
             );
+            let _ = st.db.trim_ai_tasks();
         }
     }
 }
