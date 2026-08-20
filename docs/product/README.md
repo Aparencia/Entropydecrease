@@ -11,6 +11,7 @@
 | [mvp-canvas.md](./mvp-canvas.md) | 做什么？MVP 验证画布：视频知识提取 + 持久化闭环 | 草案 |
 | [prd.md](./prd.md) | 怎么细化？产品需求文档（课堂助手为核心，MoSCoW + 场景 + 验收） | 草稿 |
 | [requirements-pool.md](./requirements-pool.md) | 怎么跟踪？需求 → 优先级 → 版本 → 实现 → 验收 | 维护中 |
+| [classroom-assistant-guide.md](./classroom-assistant-guide.md) | 怎么用？课堂助手使用说明（v0.7.2：信息面板/合集联动/说话人分离/断句自适应） | v0.7.2 维护中 |
 | brand-story.md | 怎么说？品牌故事（名称裁决后建立） | 待建 |
 
 ## 产品方向（2026-08 确立）
