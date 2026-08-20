@@ -312,6 +312,7 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
           <div>
             预估 token：<strong>{est.estTokens}</strong> · 预估费用：<strong>¥{est.estCostYuan.toFixed(4)}</strong>
             {est.estCostYuan === 0 && <span style={{ color: "#0d9488" }}>（当前模型免费档 ¥0）</span>}
+            {est.estCostYuan === 0 && est.priceKnown === false && <span style={{ color: "#d97706" }}>（该模型单价未登记，费用可能不准确）</span>}
           </div>
           {balance && (
             <div style={{ color: balance.lowBalanceWarning ? "#dc2626" : "#374151" }}>

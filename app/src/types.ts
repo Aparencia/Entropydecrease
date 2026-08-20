@@ -718,11 +718,13 @@ export interface AiRefineResult {
   model: string;
 }
 
-/** 成本预估（Rust CostEstimate；camelCase 契约） */
+/** 成本预估（Rust CostEstimate；camelCase 契约；priceKnown=false → 单价未登记警告） */
 export interface CostEstimate {
   estTokens: number;
   estCostYuan: number;
   pricePer1m: number;
+  /** 该模型单价是否已登记（false → 显示"费用可能不准确"警告） */
+  priceKnown: boolean;
 }
 
 /** 精修成本预估视图（Rust RefineEstimateView；camelCase 契约） */

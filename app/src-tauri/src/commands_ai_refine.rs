@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{Emitter, State};
 
 use crate::ai_client::AiClient;
-use crate::ai_cost::{estimate_for_content, CostEstimate};
+use crate::ai_cost::{estimate_for_content_model, CostEstimate};
 use crate::ai_mock::AiMockAdapter;
 use crate::ai_note_refine::AiNoteRefineAdapter;
 use crate::ai_refine_protocol::AiRefineRequest;
@@ -78,7 +78,8 @@ pub struct RefineEstimateView {
     pub remember_cost_choice: bool,
 }
 
-/// 成本预估（REQ-143 基础版：按转写+OCR 字符数估算 token/费用——保守上界）。
+/// 成本预估（REQ-143 + F1 修复：按模型映射单价、预估含输出 token——
+/// 切付费模型后费用不再显示 ¥0，消灭成本失真）。
 #[tauri::command]
 pub fn ai_refine_estimate(state: State<'_, AppState>, session_id: i64) -> Result<RefineEstimateView, String> {
     if session_id <= 0 {
@@ -93,7 +94,8 @@ pub fn ai_refine_estimate(state: State<'_, AppState>, session_id: i64) -> Result
         .lock()
         .map(|s| s.remember_cost_choice)
         .unwrap_or(false);
-    Ok(RefineEstimateView { estimate: estimate_for_content(chars), remember_cost_choice: remember })
+    let model = state.ai_settings.lock().map(|s| s.model.clone()).unwrap_or_default();
+    Ok(RefineEstimateView { estimate: estimate_for_content_model(chars, &model), remember_cost_choice: remember })
 }
 
 /// 启动 AI 精修异步任务（授权红线 + 密钥解析 + 后台切片逐片精修）。

@@ -281,6 +281,7 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
             预估 token：<strong>{est.estTokens}</strong> · 预估费用：<strong>¥{est.estCostYuan.toFixed(4)}</strong>
             {est.pricePer1m > 0 && <span style={{ color: "#6b7280" }}>（单价 ¥{est.pricePer1m}/1M token）</span>}
             {est.pricePer1m === 0 && <span style={{ color: "#0d9488" }}>（当前模型免费档 ¥0）</span>}
+            {est.pricePer1m === 0 && est.priceKnown === false && <span style={{ color: "#d97706" }}>（该模型单价未登记，费用可能不准确）</span>}
           </div>
           {balance && (
             <div style={{ color: balance.lowBalanceWarning ? "#dc2626" : "#374151" }}>

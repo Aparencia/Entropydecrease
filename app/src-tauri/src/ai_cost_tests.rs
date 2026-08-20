@@ -3,7 +3,10 @@
 
 use std::sync::Mutex;
 
-use crate::ai_cost::{estimate_cost, estimate_for_content, estimate_tokens, price_per_1m, DEFAULT_PRICE_PER_1M};
+use crate::ai_cost::{
+    estimate_cost, estimate_for_content, estimate_for_content_model, estimate_tokens,
+    price_for_model, price_per_1m, DEFAULT_PRICE_PER_1M,
+};
 
 /// env 操作互斥（防并行测试互相覆盖 SILICONFLOW_PRICE_PER_1M_TOKENS）。
 static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -67,8 +70,46 @@ fn estimate_for_content_composes() {
     with_env_locked(|| {
         std::env::set_var("SILICONFLOW_PRICE_PER_1M_TOKENS", "10");
         let est = estimate_for_content(5000);
-        assert_eq!(est.est_tokens, 5000);
-        assert!((est.est_cost_yuan - 0.05).abs() < 1e-9);
+        // F1 修复：预估含输出 token（输入 ×2，重写型任务保守上界）
+        assert_eq!(est.est_tokens, 10_000);
+        assert!((est.est_cost_yuan - 0.1).abs() < 1e-9);
         assert_eq!(est.price_per_1m, 10.0);
+        assert!(est.price_known);
+    });
+}
+
+/// F1 修复（2026-08-21）：模型→单价映射表——已知模型按表取价、未知模型
+/// 回退 0 + price_known=false（前端显示"费用可能不准确"警告，不静默）。
+#[test]
+fn price_model_mapping_known_and_unknown() {
+    with_env_locked(|| {
+        std::env::remove_var("SILICONFLOW_PRICE_PER_1M_TOKENS");
+        // 已知免费档模型 → 单价 0 且已知
+        let (p, known) = price_for_model("deepseek-ai/DeepSeek-R1-0528-Qwen3-8B");
+        assert_eq!(p, 0.0);
+        assert!(known);
+        // 未知模型 → 单价 0 + 未知标记
+        let (p2, known2) = price_for_model("unknown/model");
+        assert_eq!(p2, 0.0);
+        assert!(!known2);
+        // env 整体覆盖优先于映射表（开发路径）
+        std::env::set_var("SILICONFLOW_PRICE_PER_1M_TOKENS", "3.5");
+        let (p3, known3) = price_for_model("unknown/model");
+        assert!((p3 - 3.5).abs() < 1e-9);
+        assert!(known3);
+    });
+}
+
+/// F1 修复：按模型估算——已知免费档 ¥0、未知模型带警告标记。
+#[test]
+fn estimate_for_content_model_respects_mapping() {
+    with_env_locked(|| {
+        std::env::remove_var("SILICONFLOW_PRICE_PER_1M_TOKENS");
+        let free = estimate_for_content_model(1000, "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B");
+        assert!(free.price_known);
+        assert_eq!(free.est_cost_yuan, 0.0);
+        let unknown = estimate_for_content_model(1000, "some/model");
+        assert!(!unknown.price_known, "未知模型必须标记警告");
+        assert_eq!(unknown.est_cost_yuan, 0.0);
     });
 }

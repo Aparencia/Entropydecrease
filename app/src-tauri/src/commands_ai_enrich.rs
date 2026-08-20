@@ -16,7 +16,7 @@ use std::sync::atomic::Ordering;
 use tauri::State;
 
 use crate::ai_client::AiClient;
-use crate::ai_cost::estimate_for_content;
+use crate::ai_cost::estimate_for_content_model;
 use crate::ai_enrich_protocol::{AiEnrichBlock, AiEnrichKind, AiEnrichRequest, AiEnrichResponse};
 use crate::ai_mock::AiMockAdapter;
 use crate::ai_note_enrich::AiNoteEnrichAdapter;
@@ -60,10 +60,11 @@ pub fn ai_enrich_estimate(
     let kinds = normalize_kinds(selected_kinds)?;
     let note = get_note(state.inner(), note_id)?;
     // 预估 = 笔记正文 + 子项提示词开销（每子项约 80 字符的系统说明——
-    // 保守上界，与 ai_cost 字符→token 同口径）
+    // 保守上界，与 ai_cost 字符→token 同口径；F1：按模型映射单价 + 输出 token）
     let chars = note.content.chars().count() + kinds.len() * 80;
     let remember = state.ai_settings.lock().map(|s| s.remember_cost_choice).unwrap_or(false);
-    Ok(RefineEstimateView { estimate: estimate_for_content(chars), remember_cost_choice: remember })
+    let model = state.ai_settings.lock().map(|s| s.model.clone()).unwrap_or_default();
+    Ok(RefineEstimateView { estimate: estimate_for_content_model(chars, &model), remember_cost_choice: remember })
 }
 
 /// 启动知识补充异步任务（授权红线 + 密钥解析 + 后台切片批量补充）。

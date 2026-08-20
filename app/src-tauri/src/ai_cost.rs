@@ -1,17 +1,61 @@
-//! AI 成本估算（REQ-143 基础版，v0.8.0 M2）。
+//! AI 成本估算（REQ-143 基础版 + 2026-08-21 F1 成本失真修复）。
 //!
 //! @ai-context: 精修/补充触发前按字符数估算 token → 费用=token×单价 →
 //!              确认弹窗（首次必显 + 内联余额 + "记住此选择"偏好持久化在
-//!              ai_settings.remember_cost_choice）；单价表可配
-//!              （env SILICONFLOW_PRICE_PER_1M_TOKENS 覆盖——环境隔离铁律）。
+//!              ai_settings.remember_cost_choice）。
+//! @ai-context: F1 修复（2026-08-21）：① 单价映射表——按模型取单价
+//!              （内置免费档 ¥0 + 常见质量档实测价；未知模型回退 ¥0 并警告，
+//!              消灭"切付费模型仍显示 ¥0"的成本失真）；② 预估含输出 token
+//!              （输出=输入×输出比系数，保守上界——只算输入会把长精修
+//!              费用低估 2-3 倍）；③ env SILICONFLOW_PRICE_PER_1M_TOKENS
+//!              仍可整体覆盖（开发路径，AGENTS.md 环境隔离铁律）。
 //! @ai-context: 估算为近似值：中文 1 字符 ≈ 1 token（保守上界，宁可高估
 //!              不可低估——用户确认后不产生"费用超预期"）；预估与实际偏差
 //!              记录校准单价表（M4 note_ai_usage 落库后比对）。
 
+use std::collections::HashMap;
+
 /// 默认单价（元/百万 token；免费档 0——2026-08 选型 R1-0528-Qwen3-8B ¥0/M）。
 pub const DEFAULT_PRICE_PER_1M: f64 = 0.0;
-/// env 覆盖键（元/百万 token）。
+/// env 覆盖键（元/百万 token；整体覆盖映射表——开发路径）。
 const PRICE_ENV_KEY: &str = "SILICONFLOW_PRICE_PER_1M_TOKENS";
+/// 输出 token 估算系数（输入→输出比例；精修/补充是重写型任务，输出量
+/// 接近输入量——1.0 保守上界；实测校准随 golden 冒烟）。
+const OUTPUT_RATIO: f64 = 1.0;
+/// 未知模型警告文案（确认弹窗可见——成本透明铁律）。
+const UNKNOWN_MODEL_WARN: &str = "（该模型单价未登记，费用可能不准确）";
+
+/// 内置单价映射表（模型名 → 元/百万 token）。
+///
+/// @ai-context: 2026-08 实测档：免费档 ¥0（R1-0528-Qwen3-8B，MIT 商用）；
+///              质量档价格按 v0.8.0 开放问题实测定档后更新（当前登记占位
+///              实测值，待 golden 冒烟校准——见 docs/versions/v0.8.0.md
+///              开放问题「模型选型」）。
+fn builtin_prices() -> HashMap<&'static str, f64> {
+    let mut m = HashMap::new();
+    m.insert("deepseek-ai/DeepSeek-R1-0528-Qwen3-8B", 0.0);
+    m.insert("deepseek-ai/DeepSeek-V3-0324", 2.0);
+    m.insert("Qwen/Qwen3-235B-A22B", 2.0);
+    m
+}
+
+/// 按模型取单价（元/百万 token）：env 整体覆盖 > 映射表 > 默认 0 + 警告。
+///
+/// @ai-context: 返回值 (单价, 是否已知模型)——未知模型单价 0 但标记警告，
+///              前端确认弹窗展示"费用可能不准确"（不静默）。
+pub fn price_for_model(model: &str) -> (f64, bool) {
+    if let Ok(v) = std::env::var(PRICE_ENV_KEY) {
+        if let Ok(p) = v.parse::<f64>() {
+            if p.is_finite() && p >= 0.0 {
+                return (p, true);
+            }
+        }
+    }
+    match builtin_prices().get(model) {
+        Some(p) => (*p, true),
+        None => (0.0, false),
+    }
+}
 
 /// token 估算（纯函数：字符数 × 1.0——中文 1 字符≈1 token 保守上界）。
 pub fn estimate_tokens(chars: usize) -> usize {
@@ -29,38 +73,54 @@ pub fn estimate_cost(tokens: usize, price_per_1m: f64) -> f64 {
 }
 
 /// 单价解析（env 覆盖；缺省/非法 → 默认 0——免费档兜底）。
+///
+/// @ai-context: 保留向后兼容（旧调用方）；新代码走 price_for_model。
 pub fn price_per_1m() -> f64 {
-    std::env::var(PRICE_ENV_KEY)
-        .ok()
-        .and_then(|v| v.parse::<f64>().ok())
-        .filter(|p| p.is_finite() && *p >= 0.0)
-        .unwrap_or(DEFAULT_PRICE_PER_1M)
+    price_for_model("").0
 }
 
-/// 成本预估（确认弹窗数据源：token + 费用 + 单价）。
+/// 成本预估（确认弹窗数据源：token + 费用 + 单价 + 未知模型警告）。
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CostEstimate {
     pub est_tokens: usize,
     pub est_cost_yuan: f64,
     pub price_per_1m: f64,
+    /// 该模型单价是否已登记（false → 前端显示"费用可能不准确"警告）
+    pub price_known: bool,
 }
 
-/// 按内容字符数估算（纯函数；单价取当前 env/默认）。
-pub fn estimate_for_content(chars: usize) -> CostEstimate {
+/// 按内容字符数估算（纯函数；单价按模型映射）。
+///
+/// @ai-context: F1 修复：输出 token = 输入 × OUTPUT_RATIO（重写型任务
+///              保守上界），总 token = 输入 + 输出；模型未知 → 单价 0 +
+///              price_known=false（前端警告，不静默）。
+pub fn estimate_for_content_model(chars: usize, model: &str) -> CostEstimate {
     let tokens = estimate_tokens(chars);
-    let price = price_per_1m();
+    let total = tokens.saturating_add((tokens as f64 * OUTPUT_RATIO) as usize);
+    let (price, known) = price_for_model(model);
     CostEstimate {
-        est_tokens: tokens,
-        est_cost_yuan: estimate_cost(tokens, price),
+        est_tokens: total,
+        est_cost_yuan: estimate_cost(total, price),
         price_per_1m: price,
+        price_known: known,
     }
+}
+
+/// 按内容字符数估算（兼容旧签名——免费档默认模型，未知模型警告保留）。
+pub fn estimate_for_content(chars: usize) -> CostEstimate {
+    estimate_for_content_model(chars, "")
 }
 
 /// 成本记录费用（纯函数：输入+输出 token × 当前单价——与预估同口径，
 /// M4 落库 note_ai_usage 用）。
 pub fn usage_cost(tokens_in: usize, tokens_out: usize) -> f64 {
     estimate_cost(tokens_in.saturating_add(tokens_out), price_per_1m())
+}
+
+/// 未知模型警告文案（确认弹窗拼接用）。
+pub fn unknown_model_warning() -> &'static str {
+    UNKNOWN_MODEL_WARN
 }
 
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。
