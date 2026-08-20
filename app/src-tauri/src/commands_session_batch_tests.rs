@@ -3,8 +3,10 @@
 //! @ai-context: 由 commands_session.rs 以 #[cfg(test)] #[path] 引入；
 //!              被测对象 run_batch_conversion 为纯编排（注入 Db + UiJunkList），
 //!              全部走 :memory: 隔离库（环境隔离——不触碰真实数据）。
+//! @ai-context: v0.7.6 审查硬拆：run_batch_conversion 随笔记管线移入
+//!              commands_session_note.rs——本测试引用随之更新。
 
-use crate::commands_session::run_batch_conversion;
+use crate::commands_session_note::run_batch_conversion;
 use crate::db::Db;
 use crate::types::{NewNote, NewSession, NewSessionSegment};
 use crate::ui_junk::UiJunkList;

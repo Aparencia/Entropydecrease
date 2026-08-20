@@ -53,6 +53,8 @@ mod commands_import;
 mod commands_refine;
 mod commands_refine_inner;
 mod commands_session;
+// v0.7.6 审查硬拆：会话 → 笔记转换管线（原料装载/结构渲染/单条转换/批量编排/预览）
+mod commands_session_note;
 mod commands_streaming;
 mod commands_vocab;
 mod commands_video;
@@ -148,9 +150,9 @@ mod region_tracker;
 mod streaming_asr;
 mod structure_engine;
 mod structure_models;
-mod structure_tier;
 // v0.7.6（REQ-177/178）：笔记结构渲染层——章节标题 + 词汇表块（纯函数）
 mod structure_note;
+mod structure_tier;
 mod stutter_fold;
 mod subtitle;
 mod subtitle_detect;
@@ -254,11 +256,13 @@ pub fn run() {
             commands_session::delete_session,
             commands_session::add_session_segment,
             commands_session::add_session_ocr_block,
-            commands_session::session_to_note,
+            // 会话 → 笔记（v0.7.6 审查硬拆：管线在 commands_session_note.rs，
+            // 命令按定义模块注册——tauri 宏生成项不随 pub use 重导出）
+            commands_session_note::session_to_note,
             // 批量转笔记（v0.7.1 会话体验：列表勾选批量转化）
-            commands_session::batch_session_to_note,
+            commands_session_note::batch_session_to_note,
             // 笔记预览（REQ-081，v0.6.0 M1：过滤后只读预览——单一管线双出口）
-            commands_session::preview_session_note,
+            commands_session_note::preview_session_note,
             // 会话体验（REQ-076/077/078/079，v0.6.0 M6：质量报告/大纲/课程分组/段搜索）
             commands_session::session_quality_report,
             commands_session::session_outline,
