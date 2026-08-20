@@ -1,0 +1,49 @@
+{
+  "samples": [
+    {
+      "name": "lecture-basic",
+      "profile": "lecture",
+      "glossary": ["卷积", "池化"],
+      "chapters": ["第一章 引言", "第二章 原理"],
+      "content": "## 第一章 引言\n大家好今天我们讲卷积神经网络\n嗯 卷积就是特征提取 然后池化就是下采样\n这个非常重要\n## 第二章 原理\n卷积核滑动窗口 池化取最大值\n- ![画面 1](session-images/5/full/30000.webp)",
+      "expect": {
+        "schemaVersion": 2,
+        "minSections": 1,
+        "chapterSet": ["第一章 引言", "第二章 原理"],
+        "mustHaveTypes": ["paragraph", "image"],
+        "imagesPreserved": ["session-images/5/full/30000.webp"],
+        "noNewChapters": true
+      }
+    },
+    {
+      "name": "hands-on-steps",
+      "profile": "hands-on",
+      "glossary": ["npm", "vite"],
+      "chapters": [],
+      "content": "第一步安装 npm install\n第二步启动 npm run dev\n注意路径不要有中文\n- ![画面 1](session-images/7/full/1000.webp)",
+      "expect": {
+        "schemaVersion": 2,
+        "minSections": 1,
+        "chapterSet": [],
+        "mustHaveTypes": ["list", "image"],
+        "imagesPreserved": ["session-images/7/full/1000.webp"],
+        "noNewChapters": false
+      }
+    },
+    {
+      "name": "talking-head-summary",
+      "profile": "talking-head",
+      "glossary": ["熵", "信息量"],
+      "chapters": [],
+      "content": "大家好今天我们聊聊熵这个概念\n熵就是不确定性的度量\n信息量越大 熵越小 对吧\n所以我们要追求确定性",
+      "expect": {
+        "schemaVersion": 2,
+        "minSections": 1,
+        "chapterSet": [],
+        "mustHaveTypes": ["term", "highlight"],
+        "imagesPreserved": [],
+        "noNewChapters": false
+      }
+    }
+  ]
+}

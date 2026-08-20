@@ -165,6 +165,21 @@ impl AiMockAdapter {
                         anchor_ref: None,
                     },
                 ];
+                // 档案 → 补充块类型（golden 回归覆盖档案映射：
+                // hands-on=步骤 list、talking-head=术语 term、其余 highlight 已含）
+                if request.profile == "hands-on" {
+                    blocks.push(AiRefineBlock {
+                        block_type: AiRefineBlockType::List,
+                        content: "第一步\n第二步\n第三步".to_string(),
+                        anchor_ref: None,
+                    });
+                } else if request.profile == "talking-head" && !request.glossary.is_empty() {
+                    blocks.push(AiRefineBlock {
+                        block_type: AiRefineBlockType::Term,
+                        content: request.glossary.join("；"),
+                        anchor_ref: None,
+                    });
+                }
                 // F3 v2：配图块追加（验证 image 块校验 + to_markdown 渲染）
                 blocks.extend(images.clone());
                 AiRefineSection {

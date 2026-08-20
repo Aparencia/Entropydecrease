@@ -221,3 +221,8 @@ impl AiRefineResponse {
 #[cfg(test)]
 #[path = "ai_refine_protocol_tests.rs"]
 mod tests;
+
+/// F3-E golden 结构回归（2026-08-21；REQ-147 扩展）——内置样本集 mock 全链路。
+#[cfg(test)]
+#[path = "refine_golden_tests.rs"]
+mod golden_tests;
