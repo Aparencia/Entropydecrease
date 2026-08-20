@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Note } from "../types";
+import EnrichPanel from "../components/EnrichPanel";
 
 interface Props {
   /** 跨页直达目标笔记 id（App 层注入；变化时自动选中） */
@@ -152,6 +153,19 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
               >
                 删除
               </button>
+            </div>
+            {/* v0.8.0 M3（REQ-142）：知识补充面板——九子项勾选/预估确认/任务/采纳/撤销 */}
+            <div style={{ padding: "8px 16px 0" }}>
+              <EnrichPanel
+                noteId={selected.id}
+                onUpdated={() => {
+                  // 采纳/撤销后刷新当前笔记内容（get_note 拉取最新）
+                  void invoke<Note>("get_note", { id: selected.id })
+                    .then((n) => setSelected(n))
+                    .catch(() => undefined);
+                  void load(keyword);
+                }}
+              />
             </div>
             <pre
               style={{

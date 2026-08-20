@@ -38,13 +38,17 @@ const MOCK_ENV: &str = "AI_REFINE_MOCK";
 const TASKS_CAP: usize = 100;
 
 /// 任务条目（注册表内：状态 + 成功结果）。
+///
+/// @ai-context: result 为序列化 JSON——精修（AiRefineResult）/补充
+///              （AiEnrichResult，M3）共用同一任务注册表（REQ-145 基建复用），
+///              各命令层自行反序列化。
 pub struct AiTaskEntry {
     pub state: AiTaskState,
-    pub result: Option<AiRefineResult>,
+    pub result: Option<serde_json::Value>,
 }
 
 /// 精修成功载荷（前端 diff 预览 + 采纳落库数据源）。
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiRefineResult {
     pub title: String,
@@ -149,7 +153,8 @@ pub fn ai_refine_result(state: State<'_, AppState>, task_id: u64) -> Result<AiRe
         .get(&task_id)
         .ok_or_else(|| format!("任务不存在: {}", task_id))?;
     match (&entry.state, &entry.result) {
-        (AiTaskState::Succeeded, Some(r)) => Ok(r.clone()),
+        (AiTaskState::Succeeded, Some(v)) => serde_json::from_value(v.clone())
+            .map_err(|e| format!("精修结果反序列化失败: {}", e)),
         (AiTaskState::Succeeded, None) => Err("任务成功但结果缺失（内部状态异常）".to_string()),
         (AiTaskState::Failed { reason }, _) => Err(format!("任务失败（{}）: {}", reason.kind(), reason.message())),
         _ => Err("任务仍在进行中".to_string()),
@@ -283,7 +288,7 @@ fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
             {
                 let mut tasks = st.ai_tasks.lock().unwrap_or_else(|e| e.into_inner());
                 if let Some(entry) = tasks.get_mut(&task_id) {
-                    entry.result = Some(result);
+                    entry.result = serde_json::to_value(&result).ok();
                 }
             }
             set_task(&st, task_id, AiTaskState::Succeeded);
@@ -292,8 +297,8 @@ fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
     }
 }
 
-/// 更新任务状态并推送事件（短锁内完成即释放）。
-fn set_task(st: &AppState, task_id: u64, new_state: AiTaskState) {
+/// 更新任务状态并推送事件（短锁内完成即释放）。M3 补充任务复用（pub(crate)）。
+pub(crate) fn set_task(st: &AppState, task_id: u64, new_state: AiTaskState) {
     if let Ok(mut tasks) = st.ai_tasks.lock() {
         if let Some(entry) = tasks.get_mut(&task_id) {
             entry.state = new_state.clone();
@@ -302,8 +307,8 @@ fn set_task(st: &AppState, task_id: u64, new_state: AiTaskState) {
     }
 }
 
-/// 注册表容量守卫（超限丢弃最旧终态任务——防无界增长）。
-fn trim_tasks(tasks: &mut HashMap<u64, AiTaskEntry>) {
+/// 注册表容量守卫（超限丢弃最旧终态任务——防无界增长）。M3 补充任务复用。
+pub(crate) fn trim_tasks(tasks: &mut HashMap<u64, AiTaskEntry>) {
     if tasks.len() <= TASKS_CAP {
         return;
     }

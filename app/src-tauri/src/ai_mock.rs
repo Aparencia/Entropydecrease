@@ -15,6 +15,7 @@ use crate::ai_protocol::{
 use crate::ai_refine_protocol::{
     AiRefineBlock, AiRefineBlockType, AiRefineRequest, AiRefineResponse, AiRefineSection,
 };
+use crate::ai_enrich_protocol::{AiEnrichBlock, AiEnrichKind, AiEnrichRequest, AiEnrichResponse};
 
 /// mock 适配器（无状态；后续云端适配器实现同一 trait）。
 pub struct AiMockAdapter;
@@ -148,6 +149,27 @@ impl AiMockAdapter {
             })
             .collect();
         AiRefineResponse { sections }
+    }
+
+    /// 知识补充 mock（REQ-142）：按勾选子项规则化产出合法块数组；
+    /// 响应通过 AiEnrichResponse::validate（深度块带锚点/广度块无锚点/
+    /// B6 无链接——持续验证补充协议校验链）。
+    pub fn enrich(&self, _request: &AiEnrichRequest, selected: &[AiEnrichKind]) -> AiEnrichResponse {
+        let blocks: Vec<AiEnrichBlock> = selected
+            .iter()
+            .map(|kind| AiEnrichBlock {
+                kind: *kind,
+                anchor_ref: if kind.is_depth() {
+                    Some("笔记".to_string())
+                } else {
+                    None
+                },
+                heading: format!("{}（mock）", kind.label()),
+                content: format!("{} 的 mock 补充内容", kind.label()),
+                confidence: 0.9,
+            })
+            .collect();
+        AiEnrichResponse { blocks }
     }
 }
 

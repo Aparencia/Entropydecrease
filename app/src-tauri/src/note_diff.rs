@@ -9,8 +9,8 @@
 //! @ai-context: 规模守卫：行数乘积超上限时回退前缀/后缀朴素 diff
 //!              （防 O(n²) 内存爆炸；超长笔记极少见）。
 
-/// diff 操作（三态；serde 小写 tag 供前端渲染）。
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+/// diff 操作（三态；serde 小写 tag 供前端渲染/回传）。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DiffOp {
     /// 两版共有（基线）

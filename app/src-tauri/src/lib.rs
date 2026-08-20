@@ -24,6 +24,12 @@ mod ai_cost;
 mod note_diff;
 mod ai_note_refine;
 mod commands_ai_refine;
+// v0.8.0 M3（REQ-142）：知识补充——协议（九子项/B6 无链接约束）/混合落位/
+// 适配器/命令层
+mod ai_enrich_protocol;
+mod enrich_placement;
+mod ai_note_enrich;
+mod commands_ai_enrich;
 mod asr;
 mod asr_clean;
 mod asr_dedupe;
@@ -409,6 +415,12 @@ pub fn run() {
             commands_ai_refine::ai_refine_status,
             commands_ai_refine::ai_refine_result,
             commands_ai_refine::ai_refine_apply,
+            // v0.8.0 M3（REQ-142）：知识补充——预估/任务/结果/采纳/撤销
+            commands_ai_enrich::ai_enrich_estimate,
+            commands_ai_enrich::ai_enrich_start,
+            commands_ai_enrich::ai_enrich_result,
+            commands_ai_enrich::ai_enrich_apply,
+            commands_ai_enrich::ai_enrich_revert,
             // 结构模型与课后精修（REQ-047/049/050 模型版：下载/状态/精修）
             commands_refine::structure_model_download,
             commands_refine::structure_model_status,

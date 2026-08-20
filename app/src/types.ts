@@ -729,3 +729,22 @@ export interface RefineEstimateView {
   remember_cost_choice: boolean;
 }
 
+// ────────────────────────────────────────────────────────────
+// 知识补充类型（v0.8.0 M3，REQ-142；Rust serde 契约）
+// ────────────────────────────────────────────────────────────
+
+/** 补充子项（Rust AiEnrichKind；kebab-case——d1~d3 深度/b1~b6 广度） */
+export type EnrichKind = "d1" | "d2" | "d3" | "b1" | "b2" | "b3" | "b4" | "b5" | "b6";
+
+/** 补充结果（Rust AiEnrichResult——混合落位 markdown + base 供撤销） */
+export interface AiEnrichResult {
+  note_id: number;
+  base_markdown: string;
+  enriched_markdown: string;
+  blocks: number;
+  depth_blocks: number;
+  breadth_blocks: number;
+  kinds: string[];
+  model: string;
+}
+
