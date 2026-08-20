@@ -124,6 +124,37 @@ pub async fn ai_refine_start(
             return Err("未配置 API 密钥（设置页保存密钥或配置环境变量 SILICONFLOW_API_KEY）".to_string());
         }
     }
+    // ②b F1 修复（2026-08-21）：任务去重——同一会话存在进行中任务时拒绝
+    // 重复启动（防双击/重进/多窗口重复扣费；终态任务不阻塞重试）
+    {
+        let tasks = st.ai_tasks.lock().map_err(|e| format!("任务注册表锁中毒: {}", e))?;
+        let active = tasks.values().any(|t| {
+            matches!(t.state, AiTaskState::Pending | AiTaskState::Running { .. })
+        });
+        if active {
+            return Err("该会话已有进行中的 AI 任务——请等待完成或到任务中心查看进度（防重复扣费）".to_string());
+        }
+    }
+    // ②c F1 修复（2026-08-21）：每日配额接入——按预估片数消耗（启动前
+    // 拦截而非失败后引导；耗尽 → 明确提示明日再试，REQ-145 配额出口）
+    if !mock {
+        let segments = st.db.list_segments(session_id).map_err(|e| e.to_string())?;
+        let ocr = st.db.list_ocr_blocks(session_id).map_err(|e| e.to_string())?;
+        let chars = segments.iter().map(|s| s.text.chars().count()).sum::<usize>()
+            + ocr.iter().map(|b| b.text.chars().count()).sum::<usize>();
+        // 片数估算（与 ai_task::slice_note 同口径的保守上界：字符数 / 单片上限 + 1）
+        let slices = chars.saturating_add(crate::ai_task::SLICE_MAX_CHARS - 1)
+            / crate::ai_task::SLICE_MAX_CHARS
+            + 1;
+        let now = crate::db_sessions_rows::unix_seconds();
+        let mut guards = st.ai_guardrails.lock().map_err(|e| format!("护栏状态锁中毒: {}", e))?;
+        for _ in 0..slices {
+            if !guards.quota.try_consume(now) {
+                return Err("今日 AI 精修配额已用完（请明日再试或到设置页调整）".to_string());
+            }
+        }
+        drop(guards);
+    }
     // ③ 注册任务 + 后台执行（spawn_blocking——网络/分析不阻塞异步运行时）
     let task_id = st.ai_task_seq.fetch_add(1, Ordering::Relaxed);
     {
@@ -271,6 +302,9 @@ fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
                 }
             }
             set_task(&st, task_id, AiTaskState::Succeeded);
+            // F1 修复（2026-08-21）：精修调用上审计——REQ-140 轨迹可见化
+            // （此前只有余额/测试连接/复核有记录，精修补充零审计）
+            push_refine_audit(&st, session_id, "ok", Some(&result.model));
         }
         Err(reason) => {
             // 打印具体 message——区分"未配置密钥"vs"密钥无效(401/403)"（真机排查）
@@ -281,7 +315,24 @@ fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
                 reason.message()
             );
             set_task(&st, task_id, AiTaskState::Failed { reason });
+            push_refine_audit(&st, session_id, "error", None);
         }
+    }
+}
+
+/// 精修任务审计记录（F1：REQ-140 轨迹可见化——summary 不含原文，隐私红线）。
+fn push_refine_audit(st: &AppState, session_id: i64, result: &str, model: Option<&str>) {
+    let now = crate::db_sessions_rows::unix_seconds();
+    if let Ok(mut g) = st.ai_guardrails.lock() {
+        g.push_audit(crate::ai_guardrails::AiAuditEntry {
+            at_unix: now,
+            upload_summary: format!(
+                "refine session={} model={}",
+                session_id,
+                model.unwrap_or("?")
+            ),
+            result: result.to_string(),
+        });
     }
 }
 

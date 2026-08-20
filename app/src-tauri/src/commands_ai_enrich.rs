@@ -90,6 +90,32 @@ pub async fn ai_enrich_start(
             return Err("未配置 API 密钥（设置页保存密钥或配置环境变量 SILICONFLOW_API_KEY）".to_string());
         }
     }
+    // F1 修复（2026-08-21）：任务去重——同笔记存在进行中任务时拒绝重复启动
+    {
+        let tasks = st.ai_tasks.lock().map_err(|e| format!("任务注册表锁中毒: {}", e))?;
+        let active = tasks.values().any(|t| {
+            matches!(t.state, crate::ai_task::AiTaskState::Pending | crate::ai_task::AiTaskState::Running { .. })
+        });
+        if active {
+            return Err("该笔记已有进行中的 AI 任务——请等待完成或到任务中心查看进度（防重复扣费）".to_string());
+        }
+    }
+    // F1 修复（2026-08-21）：每日配额接入——按预估片数消耗（启动前拦截）
+    if !mock {
+        let note = get_note(&st, note_id)?;
+        let chars = note.content.chars().count();
+        let slices = chars.saturating_add(crate::ai_task::SLICE_MAX_CHARS - 1)
+            / crate::ai_task::SLICE_MAX_CHARS
+            + 1;
+        let now = crate::db_sessions_rows::unix_seconds();
+        let mut guards = st.ai_guardrails.lock().map_err(|e| format!("护栏状态锁中毒: {}", e))?;
+        for _ in 0..slices {
+            if !guards.quota.try_consume(now) {
+                return Err("今日 AI 补充配额已用完（请明日再试或到设置页调整）".to_string());
+            }
+        }
+        drop(guards);
+    }
     let task_id = st.ai_task_seq.fetch_add(1, Ordering::Relaxed);
     {
         let mut tasks = st.ai_tasks.lock().map_err(|e| format!("任务注册表锁中毒: {}", e))?;
@@ -260,8 +286,29 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
                 }
             }
             set_task(&st, task_id, AiTaskState::Succeeded);
+            // F1 修复（2026-08-21）：补充调用上审计（REQ-140 轨迹可见化）
+            push_enrich_audit(&st, note_id, "ok", Some(&result.model));
         }
-        Err(reason) => set_task(&st, task_id, AiTaskState::Failed { reason }),
+        Err(reason) => {
+            set_task(&st, task_id, AiTaskState::Failed { reason });
+            push_enrich_audit(&st, note_id, "error", None);
+        }
+    }
+}
+
+/// 补充任务审计记录（F1：summary 不含原文——隐私红线）。
+fn push_enrich_audit(st: &AppState, note_id: i64, result: &str, model: Option<&str>) {
+    let now = crate::db_sessions_rows::unix_seconds();
+    if let Ok(mut g) = st.ai_guardrails.lock() {
+        g.push_audit(crate::ai_guardrails::AiAuditEntry {
+            at_unix: now,
+            upload_summary: format!(
+                "enrich note={} model={}",
+                note_id,
+                model.unwrap_or("?")
+            ),
+            result: result.to_string(),
+        });
     }
 }
 
