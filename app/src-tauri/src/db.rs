@@ -173,6 +173,8 @@ impl Db {
         )?;
         // 关联查询索引（列表 has_note 子查询 + 笔记页来源跳转共用）
         conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_notes_session ON notes(session_id)")?;
+        // v0.7.7（REQ-183）：结构图记录表（建表幂等——新库建表/旧库补表）
+        crate::db_structures::init(&conn)?;
         Ok(Self { conn: Arc::new(Mutex::new(conn)) })
     }
 

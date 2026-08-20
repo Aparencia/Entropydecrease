@@ -61,6 +61,8 @@ mod commands_video;
 mod concat;
 mod db;
 mod db_artifacts;
+// v0.7.7（REQ-183）：结构图记录存储——session_structure_images 表 CRUD
+mod db_structures;
 // v0.7.0 M1.5（REQ-108）：会话信号事件数据层（统一信号事件表读写）
 mod db_session_events;
 mod db_sessions;
@@ -154,6 +156,8 @@ mod structure_models;
 mod structure_note;
 // v0.7.7（REQ-182）：结构图检测纯函数——diagram_likeness/pick_sharpest/区域过滤
 mod structure_detect;
+// v0.7.7（REQ-183）：结构图存储——struct/ 命名空间 + 独立预算 + 去重
+mod structure_store;
 mod structure_tier;
 mod stutter_fold;
 mod subtitle;

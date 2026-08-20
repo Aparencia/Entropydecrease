@@ -267,7 +267,8 @@ pub fn encode_webp_public(bgraw: &[u8], width: u32, height: u32, path: &Path) ->
 }
 
 /// BGRA8 → RGB（纯函数；尺寸/长度不匹配返回 None）。
-fn bgra_to_rgb(bgraw: &[u8], width: u32, height: u32) -> Option<image::RgbImage> {
+/// @ai-context: pub(crate)（v0.7.7 REQ-183）：structure_store 结构图存储复用。
+pub(crate) fn bgra_to_rgb(bgraw: &[u8], width: u32, height: u32) -> Option<image::RgbImage> {
     let pixel_len = width as usize * height as usize * 4;
     if width == 0 || height == 0 || bgraw.len() != pixel_len {
         return None;
@@ -280,7 +281,8 @@ fn bgra_to_rgb(bgraw: &[u8], width: u32, height: u32) -> Option<image::RgbImage>
 }
 
 /// 编码 WebP（lossless）到文件（纯 IO）。
-fn encode_webp(rgb: &image::RgbImage, path: &Path) -> Result<()> {
+/// @ai-context: pub(crate)（v0.7.7 REQ-183）：structure_store 结构图存储复用。
+pub(crate) fn encode_webp(rgb: &image::RgbImage, path: &Path) -> Result<()> {
     let mut out = std::io::Cursor::new(Vec::new());
     let encoder = image::codecs::webp::WebPEncoder::new_lossless(&mut out);
     rgb.write_with_encoder(encoder)
@@ -290,7 +292,8 @@ fn encode_webp(rgb: &image::RgbImage, path: &Path) -> Result<()> {
 }
 
 /// 缩略图（最近邻缩小 BGRA 到 THUMB 尺寸，保持宽高比；纯函数）。
-fn resize_bgra(bgraw: &[u8], width: u32, height: u32) -> Option<image::RgbImage> {
+/// @ai-context: pub(crate)（v0.7.7 REQ-183）：structure_store 结构图缩略图复用。
+pub(crate) fn resize_bgra(bgraw: &[u8], width: u32, height: u32) -> Option<image::RgbImage> {
     let rgb = bgra_to_rgb(bgraw, width, height)?;
     if width <= THUMB_MAX_WIDTH && height <= THUMB_MAX_HEIGHT {
         return Some(rgb);
