@@ -285,41 +285,42 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
       </div>
 
       {/* v0.7.2（REQ-151）：采集信息条（平台/时长/合集/字幕——信息透明化；
-          数据源：标题信号 + 播放器 OCR + 字幕检测计数；全空时不占位） */}
-      {info &&
-        (info.platform ||
-          info.durationSecs != null ||
-          info.series ||
-          info.episode ||
-          counts.subtitle > 0) && (
-          <div
-            style={{
-              display: "flex",
-              gap: 12,
-              flexWrap: "wrap",
-              padding: "6px 14px",
-              borderBottom: "1px solid #e5e7eb",
-              fontSize: 11,
-              color: "#6b7280",
-              alignItems: "center",
-            }}
-          >
-            {info.platform && <span>🎬 {info.platform}</span>}
-            {info.durationSecs != null && (
-              <span title="播放器画面识别（OCR）">⏱ 时长 {fmtDur(info.durationSecs)}</span>
-            )}
-            {info.series && (
-              <span title="合集（标题序列号识别）">
-                📚 {info.series}
-                {info.episode != null ? ` 第${info.episode}集` : ""}
-                {info.totalEpisodes != null ? ` / 共${info.totalEpisodes}集` : ""}
-              </span>
-            )}
-            <span title={counts.subtitle > 0 ? "实时字幕检测命中" : "尚未检测到内嵌/滚动字幕"}>
-              {counts.subtitle > 0 ? "💬 字幕：检测到（内嵌/滚动）" : "💬 字幕：未检测到"}
-            </span>
-          </div>
-        )}
+          数据源：标题信号 + 播放器 OCR + 字幕检测计数。
+          修复（2026-08 用户反馈）：**采集态常显**——此前"有信息才显示"导致
+          本地窗口/无平台后缀/无合集/OCR 未出结果时整条隐藏（右侧空白）；
+          未知项用占位文案（诚实标注，不假装），信息条始终占用该区域 */}
+      {info && (
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            flexWrap: "wrap",
+            padding: "6px 14px",
+            borderBottom: "1px solid #e5e7eb",
+            fontSize: 11,
+            color: "#6b7280",
+            alignItems: "center",
+          }}
+        >
+          <span title="窗口标题后缀识别（本地）">
+            🎬 {info.platform ?? "未知平台"}
+          </span>
+          <span title="播放器画面识别（OCR，约 10s 出结果）">
+            ⏱ 时长 {info.durationSecs != null ? fmtDur(info.durationSecs) : "识别中…"}
+          </span>
+          <span title="合集（标题序列号识别 + 播放器 OCR）">
+            📚{" "}
+            {info.series
+              ? `${info.series}${info.episode != null ? ` 第${info.episode}集` : ""}${
+                  info.totalEpisodes != null ? ` / 共${info.totalEpisodes}集` : ""
+                }`
+              : "非合集/未识别"}
+          </span>
+          <span title={counts.subtitle > 0 ? "实时字幕检测命中" : "尚未检测到内嵌/滚动字幕"}>
+            {counts.subtitle > 0 ? "💬 字幕：检测到（内嵌/滚动）" : "💬 字幕：未检测到"}
+          </span>
+        </div>
+      )}
 
       {/* Tab 切换（简要两栏） */}
       <div style={{ display: "flex", gap: 4, padding: "8px 14px 0", flexShrink: 0 }}>
