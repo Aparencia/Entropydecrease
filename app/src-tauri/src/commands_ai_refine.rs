@@ -52,6 +52,8 @@ pub struct AiTaskEntry {
 #[serde(rename_all = "camelCase")]
 pub struct AiRefineResult {
     pub title: String,
+    /// 规则基线（本地规则版——采纳落库时作为首快照，版本链 [rule, ai-refine]）
+    pub base_markdown: String,
     pub refined_markdown: String,
     /// 与规则版的段级 diff（本地版为基线，AI 变化点高亮）
     pub diff: Vec<DiffOp>,
@@ -161,14 +163,14 @@ pub fn ai_refine_result(state: State<'_, AppState>, task_id: u64) -> Result<AiRe
     }
 }
 
-/// 采纳落库（REQ-141：diff 预览后用户采纳 → 新笔记，source=classroom；
-/// M4 版本管理上线后统一 versioned 写路径）。
+/// 采纳落库（REQ-141：diff 预览后用户采纳；v0.8.0 M4 版本化写路径——
+/// ① 以规则基线建笔记（首快照）→ ② 精修版 = 新版本（ai-refine，含成本
+/// meta）→ ③ 成本落库 note_ai_usage）。
 #[tauri::command]
 pub fn ai_refine_apply(
     state: State<'_, AppState>,
     session_id: i64,
-    refined_markdown: String,
-    title: String,
+    result: AiRefineResult,
 ) -> Result<Note, String> {
     if session_id <= 0 {
         return Err("无效的会话 id".to_string());
@@ -179,16 +181,57 @@ pub fn ai_refine_apply(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("会话不存在: {}", session_id))?;
     let fallback = format!("{}（AI 精修）", session.title);
-    let title = crate::commands::normalize_title(title, &fallback);
+    let title = crate::commands::normalize_title(result.title.clone(), &fallback);
+    // ① 规则基线建笔记（版本链首快照原料——可回溯精修前内容）
     let new = NewNote {
-        title,
-        content: refined_markdown,
+        title: title.clone(),
+        content: result.base_markdown.clone(),
         source: "classroom".to_string(),
         session_id: Some(session_id),
-        rule_version: Some("ai-refine".to_string()),
+        rule_version: Some("rule".to_string()),
         purify_stats: None,
     };
-    state.db.create_note(&new).map_err(|e| e.to_string())
+    let note = state.db.create_note(&new).map_err(|e| e.to_string())?;
+    // ② 精修版落库（新版本 ai-refine + 成本 meta）
+    let cost = crate::ai_cost::usage_cost(
+        result.base_markdown.chars().count(),
+        result.refined_markdown.chars().count(),
+    );
+    let meta = crate::note_version::VersionMeta {
+        cost_yuan: Some(cost),
+        model: Some(result.model.clone()),
+        slices: Some(result.slices),
+        merged_from: None,
+    };
+    state
+        .db
+        .versioned_save(
+            note.id,
+            &result.refined_markdown,
+            crate::note_version::NoteVersionSource::AiRefine,
+            &meta,
+        )
+        .map_err(|e| e.to_string())?;
+    // ③ 成本落库（token 估算与预估同口径——校准单价表数据源）
+    state
+        .db
+        .record_ai_usage(
+            note.id,
+            &crate::db_ai_usage::AiUsageInput {
+                op_type: "refine",
+                tokens_in: result.base_markdown.chars().count(),
+                tokens_out: result.refined_markdown.chars().count(),
+                cost_yuan: cost,
+                model: result.model.clone(),
+                slices: result.slices,
+            },
+        )
+        .map_err(|e| e.to_string())?;
+    state
+        .db
+        .get_note(note.id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "笔记不存在".to_string())
 }
 
 // ────────────────────────────────────────────────────────────
@@ -275,6 +318,7 @@ fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
         let (added, removed, _) = diff_stats(&diff);
         Ok(AiRefineResult {
             title: draft.title.clone(),
+            base_markdown: draft.markdown.clone(),
             refined_markdown: refined,
             diff,
             added_lines: added,

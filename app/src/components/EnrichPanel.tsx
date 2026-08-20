@@ -184,13 +184,13 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
     if (!result) return;
     const note = await invoke<{ id: number }>("ai_enrich_apply", {
       noteId,
-      enrichedMarkdown: result.enriched_markdown,
+      result,
     }).catch((e) => {
       setMsg(`采纳失败：${e}`);
       return null;
     });
     if (note) {
-      setMsg(`已应用知识补充（笔记 #${note.id}）——扩展区可手动删除或撤销还原`);
+      setMsg(`已应用知识补充（笔记 #${note.id}）——扩展区可手动删除或撤销还原；可到版本时间线对比`);
       onUpdated?.();
       reset();
     }

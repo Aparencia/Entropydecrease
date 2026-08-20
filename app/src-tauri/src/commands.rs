@@ -300,6 +300,8 @@ pub async fn get_note(state: State<'_, AppState>, id: i64) -> Result<Option<Note
 }
 
 /// 更新笔记（REQ-004；标题/正文截断防超大 payload——TD-005）。
+/// v0.8.0 M4（REQ-144）：手动保存 = 新版本（versioned_save 统一写路径——
+/// 正文版本化，标题只更新不建版本；"重新生成"从覆盖变为新版本）。
 #[tauri::command]
 pub async fn update_note(
     state: State<'_, AppState>,
@@ -310,14 +312,22 @@ pub async fn update_note(
     if id <= 0 {
         return Err("无效的笔记 id".to_string());
     }
+    let title = truncate_chars(title, TITLE_MAX_CHARS);
+    let content = truncate_chars(content, CONTENT_MAX_CHARS);
     state
         .db
-        .update_note(
+        .versioned_save(
             id,
-            &truncate_chars(title, TITLE_MAX_CHARS),
-            &truncate_chars(content, CONTENT_MAX_CHARS),
+            &content,
+            crate::note_version::NoteVersionSource::UserEdit,
+            &crate::note_version::VersionMeta::default(),
         )
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    state
+        .db
+        .update_note(id, &title, &content)
+        .map_err(|e| e.to_string())?;
+    Ok(true)
 }
 
 /// 删除笔记（REQ-004）。

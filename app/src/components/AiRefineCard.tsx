@@ -168,20 +168,20 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
     }
   };
 
-  /** ③ 采纳落库（REQ-141：diff 预览后用户采纳 → 新笔记） */
+  /** ③ 采纳落库（REQ-141：diff 预览后用户采纳 → 新笔记；v0.8.0 M4 版本化
+   * 写路径——result 回传：规则基线=首快照 + 精修版=新版本 + 成本落库） */
   const apply = async () => {
     if (!result) return;
     setMsg("");
     const note = await invoke<{ id: number }>("ai_refine_apply", {
       sessionId,
-      refinedMarkdown: result.refined_markdown,
-      title: result.title,
+      result,
     }).catch((e) => {
       setMsg(`落库失败：${e}`);
       return null;
     });
     if (note) {
-      setMsg(`已落库为笔记 #${note.id}`);
+      setMsg(`已落库为笔记 #${note.id}（可到笔记页查看版本时间线）`);
       onApplied?.(note.id);
       reset();
     }

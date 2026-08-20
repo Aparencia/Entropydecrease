@@ -57,6 +57,12 @@ pub fn estimate_for_content(chars: usize) -> CostEstimate {
     }
 }
 
+/// 成本记录费用（纯函数：输入+输出 token × 当前单价——与预估同口径，
+/// M4 落库 note_ai_usage 用）。
+pub fn usage_cost(tokens_in: usize, tokens_out: usize) -> f64 {
+    estimate_cost(tokens_in.saturating_add(tokens_out), price_per_1m())
+}
+
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。
 #[cfg(test)]
 #[path = "ai_cost_tests.rs"]

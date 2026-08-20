@@ -43,6 +43,8 @@ pub struct AiEnrichResult {
     pub blocks: usize,
     pub depth_blocks: usize,
     pub breadth_blocks: usize,
+    /// 切片数（长笔记任务执行时的切片数——成本记录用）
+    pub slices: usize,
     /// 实际返回的子项（kebab-case）
     pub kinds: Vec<String>,
     pub model: String,
@@ -110,32 +112,68 @@ pub fn ai_enrich_result(state: State<'_, AppState>, task_id: u64) -> Result<AiEn
     }
 }
 
-/// 采纳落库（update_note 覆盖内容——M4 版本管理统一 versioned 写路径）。
+/// 采纳落库（v0.8.0 M4 版本化写路径：新版本 ai-enrich + 成本 meta +
+/// note_ai_usage 落库——"重新生成"从覆盖变为新版本）。
 #[tauri::command]
 pub fn ai_enrich_apply(
     state: State<'_, AppState>,
     note_id: i64,
-    enriched_markdown: String,
+    result: AiEnrichResult,
 ) -> Result<Note, String> {
-    let note = get_note(state.inner(), note_id)?;
+    // 存在性校验（versioned_save 内部也会校验——提前失败给明确错误）
+    get_note(state.inner(), note_id)?;
+    let cost = crate::ai_cost::usage_cost(
+        result.base_markdown.chars().count(),
+        result.enriched_markdown.chars().count(),
+    );
+    let meta = crate::note_version::VersionMeta {
+        cost_yuan: Some(cost),
+        model: Some(result.model.clone()),
+        slices: Some(result.slices),
+        merged_from: None,
+    };
     state
         .db
-        .update_note(note_id, &note.title, &enriched_markdown)
+        .versioned_save(
+            note_id,
+            &result.enriched_markdown,
+            crate::note_version::NoteVersionSource::AiEnrich,
+            &meta,
+        )
+        .map_err(|e| e.to_string())?;
+    state
+        .db
+        .record_ai_usage(
+            note_id,
+            &crate::db_ai_usage::AiUsageInput {
+                op_type: "enrich",
+                tokens_in: result.base_markdown.chars().count(),
+                tokens_out: result.enriched_markdown.chars().count(),
+                cost_yuan: cost,
+                model: result.model.clone(),
+                slices: result.slices,
+            },
+        )
         .map_err(|e| e.to_string())?;
     get_note(state.inner(), note_id)
 }
 
-/// 撤销补充（删除无残留——内容还原补充前 base）。
+/// 撤销补充（删除无残留——内容还原补充前 base；v0.8.0 M4：= 新版本 user_edit）。
 #[tauri::command]
 pub fn ai_enrich_revert(
     state: State<'_, AppState>,
     note_id: i64,
     base_markdown: String,
 ) -> Result<Note, String> {
-    let note = get_note(state.inner(), note_id)?;
+    get_note(state.inner(), note_id)?;
     state
         .db
-        .update_note(note_id, &note.title, &base_markdown)
+        .versioned_save(
+            note_id,
+            &base_markdown,
+            crate::note_version::NoteVersionSource::UserEdit,
+            &crate::note_version::VersionMeta::default(),
+        )
         .map_err(|e| e.to_string())?;
     get_note(state.inner(), note_id)
 }
@@ -204,6 +242,7 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
             blocks: resp.blocks.len(),
             depth_blocks: depth,
             breadth_blocks: breadth,
+            slices: total,
             kinds,
             model: client.config.model,
         })

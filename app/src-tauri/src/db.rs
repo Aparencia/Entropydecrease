@@ -175,6 +175,9 @@ impl Db {
         conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_notes_session ON notes(session_id)")?;
         // v0.7.7（REQ-183）：结构图记录表（建表幂等——新库建表/旧库补表）
         crate::db_structures::init(&conn)?;
+        // v0.8.0 M4（REQ-144）：笔记版本快照链 + AI 成本记录（幂等建表）
+        crate::db_notes_versions::init(&conn)?;
+        crate::db_ai_usage::init(&conn)?;
         Ok(Self { conn: Arc::new(Mutex::new(conn)) })
     }
 

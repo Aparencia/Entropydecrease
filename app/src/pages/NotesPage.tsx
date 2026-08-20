@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Note } from "../types";
 import EnrichPanel from "../components/EnrichPanel";
+import VersionPanel from "../components/VersionPanel";
 
 interface Props {
   /** 跨页直达目标笔记 id（App 层注入；变化时自动选中） */
@@ -164,6 +165,15 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
                     .then((n) => setSelected(n))
                     .catch(() => undefined);
                   void load(keyword);
+                }}
+              />
+              {/* v0.8.0 M4（REQ-144/143 完整）：版本时间线——快照链/diff 对比/回滚/成本 */}
+              <VersionPanel
+                noteId={selected.id}
+                onChanged={() => {
+                  void invoke<Note>("get_note", { id: selected.id })
+                    .then((n) => setSelected(n))
+                    .catch(() => undefined);
                 }}
               />
             </div>

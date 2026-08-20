@@ -30,6 +30,12 @@ mod ai_enrich_protocol;
 mod enrich_placement;
 mod ai_note_enrich;
 mod commands_ai_enrich;
+// v0.8.0 M4（REQ-144 + REQ-143 完整）：笔记版本管理——快照链数据层/成本
+// 记录/纯逻辑/命令层
+mod note_version;
+mod db_notes_versions;
+mod db_ai_usage;
+mod commands_notes_version;
 mod asr;
 mod asr_clean;
 mod asr_dedupe;
@@ -421,6 +427,11 @@ pub fn run() {
             commands_ai_enrich::ai_enrich_result,
             commands_ai_enrich::ai_enrich_apply,
             commands_ai_enrich::ai_enrich_revert,
+            // v0.8.0 M4（REQ-144 + REQ-143 完整）：笔记版本管理——列表/diff/回滚/成本
+            commands_notes_version::note_versions_list,
+            commands_notes_version::note_versions_diff,
+            commands_notes_version::note_versions_rollback,
+            commands_notes_version::note_versions_usage,
             // 结构模型与课后精修（REQ-047/049/050 模型版：下载/状态/精修）
             commands_refine::structure_model_download,
             commands_refine::structure_model_status,

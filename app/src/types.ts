@@ -708,6 +708,8 @@ export type DiffOp = { unchanged: string } | { added: string } | { removed: stri
 /** 精修结果（Rust AiRefineResult——diff 预览 + 采纳落库数据源） */
 export interface AiRefineResult {
   title: string;
+  /** 规则基线（采纳落库时作为首快照——版本链 [rule, ai-refine]） */
+  base_markdown: string;
   refined_markdown: string;
   diff: DiffOp[];
   added_lines: number;
@@ -744,7 +746,47 @@ export interface AiEnrichResult {
   blocks: number;
   depth_blocks: number;
   breadth_blocks: number;
+  slices: number;
   kinds: string[];
   model: string;
+}
+
+// ────────────────────────────────────────────────────────────
+// 笔记版本类型（v0.8.0 M4，REQ-144/REQ-143 完整；Rust serde 契约）
+// ────────────────────────────────────────────────────────────
+
+/** 版本来源（Rust NoteVersionSource；kebab-case） */
+export type NoteVersionSource = "rule" | "ai-refine" | "ai-enrich" | "user-edit";
+
+/** 版本元数据（Rust VersionMeta） */
+export interface VersionMeta {
+  cost_yuan: number | null;
+  model: string | null;
+  slices: number | null;
+  merged_from: string | null;
+}
+
+/** 版本快照（Rust NoteVersion） */
+export interface NoteVersion {
+  id: number;
+  note_id: number;
+  content: string;
+  source: NoteVersionSource;
+  parent_id: number | null;
+  created_at: number;
+  meta: VersionMeta;
+}
+
+/** AI 成本记录（Rust AiUsageRecord） */
+export interface AiUsageRecord {
+  id: number;
+  note_id: number;
+  op_type: string;
+  tokens_in: number;
+  tokens_out: number;
+  cost_yuan: number;
+  model: string;
+  slices: number;
+  created_at: number;
 }
 

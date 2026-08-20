@@ -3,7 +3,20 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [SemVer](https://semver.org/lang/zh-CN/)。
 各版本的深度版本文档见 [docs/versions/](docs/versions/)。
 
-## [0.8.0] - 2026-08（AI 接入，M1/M2/M3 开发中）
+## [0.8.0] - 2026-08（AI 接入，M1/M2/M3/M4 开发中）
+
+### 新增（M4 版本管理与成本完整，REQ-144 + REQ-143 完整）
+
+- **notes_versions 快照链（REQ-144）**：`(id, note_id, content, source: rule|ai-refine|ai-enrich|user-edit, parent_id, created_at, meta{成本/模型/切片/合并摘要})`；旧数据迁移兼容（旧笔记首快照=当前内容，惰性创建）；**统一 versioned 写路径**——转笔记（首快照）/精修采纳/补充采纳/手动保存（update_note）/回滚全部走 versioned_save（事务：更新 notes + 插入快照 + 上限合并）
+- **50 版上限**：超限合并最旧两版（删最旧 + 次旧 meta 追加 merged_from 摘要——meta 不丢）
+- **回滚不破坏历史链**：回滚=新版本（content=目标版本，source=user-edit，parent=最新版本——线性链语义，规划"parent=目标版本"会制造分叉故取线性，见 v0.8.0.md M4 注记）
+- **任意两版段级 diff**：`note_versions_diff` 复用 note_diff 内核（版本对比视图高亮）
+- **成本落库（REQ-143 完整）**：`note_ai_usage` 表（操作类型/token 输入输出/费用/模型/切片数）——精修/补充采纳时自动落库（token 估算与预估同口径，校准单价表数据源）
+- **版本时间线 UI**：笔记详情页「🕘 版本时间线」面板——版本列表（时间/source 徽标/费用/合并摘要）+ 回滚到此处 + 两版 diff 对比（下拉选择）+ AI 成本记录
+
+### 测试
+
+- 单测 +11（全量 1264 通过）：来源标记 serde/label · meta 合并摘要（含/不含 AI 元信息）· 惰性首快照（旧数据兼容）· versioned 写链（rule 基快照 + ai-refine 新版本 + parent 链）· 回滚不破坏历史链（3 条）· 50 版上限合并（merged_from 摘要）· 成本记录 roundtrip/互不干扰 · 缺失笔记拒绝
 
 ### 新增（M3 知识补充，REQ-142）
 
