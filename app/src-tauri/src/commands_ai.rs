@@ -242,6 +242,11 @@ pub async fn review_text_filter(
         };
         // ③ 门控：全局开关 + 用户授权 + 有候选（三者缺一 → 纯规则输出）
         if !cfg.enabled || !authorized || boundary.is_empty() {
+            // v0.7.6（REQ-177/178，审查修复）：结构渲染与预览/落库同口径——
+            // AI 复核预览与一键落库输出一致（REQ-081 三出口契约）
+            crate::commands_session_note::apply_note_structure(
+                &mut result, &db, &session, &segments, &ocr_blocks, &purify_env,
+            );
             return Ok(TextFilterReview { result, ai: meta, decisions: Vec::new() });
         }
         let adapter = AiTextFilterAdapter::new(cfg.clone());
@@ -351,6 +356,12 @@ pub async fn review_text_filter(
         meta.sent = sent;
         meta.quota_hit = quota_hit;
         meta.error = error;
+        // v0.7.6（REQ-177/178，审查修复）：AI 判定全部应用后叠加结构渲染——
+        // 否则复核预览丢失章节标题/词汇表块，与一键落库输出不一致（REQ-081
+        // 单一管线三出口契约；AI 判定在结构层之前，结构层不消费判定结果）
+        crate::commands_session_note::apply_note_structure(
+            &mut result, &db, &session, &segments, &ocr_blocks, &purify_env,
+        );
         Ok(TextFilterReview { result, ai: meta, decisions: decisions_all })
     })
     .await

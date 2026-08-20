@@ -6,11 +6,11 @@
 
 use crate::chapter_detect::ChapterBoundary;
 use crate::glossary::GlossaryCandidate;
-use crate::note_filter::{FilterStats, FilteredItem, MergedItem, NoteFilterResult, PurifyEnv};
+use crate::note_filter::{FilterStats, NoteFilterResult};
 use crate::outline::OutlineEntry;
 use crate::purify_config::PurifyConfig;
 use crate::structure_note::{render_note_structure, NoteStructureConfig};
-use crate::types::{SessionScreen, SessionSegment};
+use crate::types::SessionSegment;
 
 /// 构造会话段（净化后保留段形态）。
 fn seg(id: i64, start_ms: u64, end_ms: u64, text: &str) -> SessionSegment {
@@ -310,6 +310,28 @@ fn empty_glossary_produces_no_block() {
     assert_eq!(stats.glossary_terms, 0);
 }
 
+#[test]
+fn glossary_max_terms_zero_disables_block() {
+    // Arrange：上限 0 = 不输出词汇表块（审查修复语义——原 .max(1) 会输出 1 条）
+    let mut result = base_result(vec![seg(1, 0, 5_000, "内容")]);
+    let mut config = default_config();
+    config.glossary_max_terms = 0;
+
+    // Act
+    let stats = render_note_structure(
+        &mut result,
+        &[],
+        &[],
+        &[term("T1", 1, 0, 1.0)],
+        &config,
+    );
+
+    // Assert：无词汇表块、统计 0
+    assert!(!result.markdown.contains("词汇表"));
+    assert!(!result.markdown.contains("T1"));
+    assert_eq!(stats.glossary_terms, 0);
+}
+
 // ── 零回归护栏（REQ-179）──────────────────────────────────────
 
 #[test]
@@ -390,27 +412,4 @@ fn structure_config_roundtrips_json() {
     assert_eq!(parsed.structure.glossary_max_terms, 5);
     assert!(parsed.structure.chapter_headings);
     assert!(parsed.structure.glossary_block);
-}
-
-// ── 辅助：PurifyEnv 构造器（防 unused 警告——下游接线将使用）────
-#[allow(dead_code)]
-fn env() -> PurifyEnv {
-    PurifyEnv {
-        config: PurifyConfig::default(),
-        symbol: crate::symbol_normalize::SymbolNormalizeConfig::default(),
-        corrections: crate::ocr_correction::OcrCorrectionTable::default(),
-    }
-}
-
-// 防 unused：SessionScreen 引用占位（结构渲染不消费屏对象，接线层用）
-#[allow(dead_code)]
-fn _screen_placeholder() -> Vec<SessionScreen> {
-    Vec::new()
-}
-
-// 防 unused：MergedItem/FilteredItem 字段完整性验证（与 FilterStats 同批序列化）
-#[allow(dead_code)]
-fn _payload_placeholder() {
-    let _ = MergedItem { segment_id: 1, into_segment_id: 2, text: "".into(), start_ms: 0 };
-    let _ = FilteredItem { segment_id: 1, reason: crate::note_filter::FilterReason::Fragment, text: "".into(), start_ms: 0 };
 }

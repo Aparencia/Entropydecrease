@@ -389,3 +389,35 @@ fn session31_structure_glossary_block() {
     let json = serde_json::to_string(&result.stats).expect("stats serializable");
     assert!(json.contains("glossary_terms"));
 }
+
+/// 会话31 实证：结构渲染"配置开但无结构数据"路径逐字节零回归（REQ-179 护栏）。
+///
+/// @ai-context: 审查补测：默认配置（chapter_headings/glossary_block 均开）下
+///              无章节边界/无术语候选——渲染层仍会重建 markdown（与净化管线
+///              同阈值同组装口径），必须与未接结构层前的 v0.7.5 输出逐字节
+///              一致（口播档案/无画面内容会话的最常见路径）。
+#[test]
+fn session31_structure_empty_data_is_byte_identical() {
+    // Arrange：真实管线产物（口播样例会话——无章节无术语）
+    let segments = vec![
+        asr(1, 0, 5000, "那么项目的可行性研究就是非常重要的"),
+        asr(2, 6000, 10000, "接下来我们看第三章"),
+    ];
+    let mut result = run("测试", &segments, &[]);
+    apply_session_warning(&mut result, "finished");
+    refresh_screen_points(&mut result);
+    let before = result.markdown.clone();
+    // Act：默认配置结构渲染，但空章节/空术语（无结构数据——诚实降级路径）
+    let _ = crate::structure_note::render_note_structure(
+        &mut result,
+        &[],
+        &[],
+        &[],
+        &crate::structure_note::NoteStructureConfig::default(),
+    );
+    // Assert：markdown 逐字节一致；统计全零（无结构不产生统计）
+    assert_eq!(result.markdown, before, "无结构数据必须逐字节零回归");
+    assert_eq!(result.stats.chapters, 0);
+    assert_eq!(result.stats.titled_chapters, 0);
+    assert_eq!(result.stats.glossary_terms, 0);
+}

@@ -25,7 +25,7 @@ pub struct NoteStructureConfig {
     pub chapter_headings: bool,
     /// 词汇表块（## 词汇表；默认 true）
     pub glossary_block: bool,
-    /// 词汇表条目上限（防噪音；默认 20）
+    /// 词汇表条目上限（防噪音；默认 20；0 = 不输出词汇表块——审查修复语义）
     pub glossary_max_terms: usize,
 }
 
@@ -124,11 +124,12 @@ pub fn render_note_structure(
         .collect();
     let mut md = crate::concat::assemble_markdown(&result.title, &lines, &result.ocr_points);
     // ④ 词汇表块（REQ-178）：score 降序取前 max_terms；锚点=术语在 kept 段首次出现
-    if config.glossary_block && !glossary.is_empty() {
+    //    （审查修复：max_terms=0 = 不输出块——原 .max(1) 会 0→1 条，与"0=关"直觉相悖）
+    if config.glossary_block && !glossary.is_empty() && config.glossary_max_terms > 0 {
         let mut gs: Vec<&GlossaryCandidate> = glossary.iter().collect();
         gs.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         let mut rows: Vec<String> = Vec::new();
-        for g in gs.iter().take(config.glossary_max_terms.max(1)) {
+        for g in gs.iter().take(config.glossary_max_terms) {
             let anchor = first_occurrence_ms(&result.kept, &g.term);
             match anchor {
                 Some(ms) => rows.push(format!(
