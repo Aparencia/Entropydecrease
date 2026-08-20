@@ -30,6 +30,8 @@ fn block(ts: u64, text: &str) -> SessionOcrBlock {
         score: 0.9,
         region: "full".to_string(),
         region_kind: None,
+        bbox: None,
+        screen_id: None,
     }
 }
 
@@ -118,6 +120,8 @@ fn subtitle_region_blocks_ignored() {
         score: 0.9,
         region: "subtitle".into(),
         region_kind: None,
+        bbox: None,
+        screen_id: None,
     }];
     // Act：仅字幕块 → 画面静止判定无全帧基准 → 首窗不判（不误报）
     let points = detect_practice_points(&segments, &ocr_blocks, &PracticeDetectConfig::default());

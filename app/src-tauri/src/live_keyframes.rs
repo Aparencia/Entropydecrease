@@ -28,6 +28,9 @@ use crate::types::{NewSessionOcrBlock, NewSessionSegment, TranscriptSegment};
 ///              误判时，OCR 产出时间码会每 2s 刷屏归档）。
 /// @ai-context: 修复②：空文本帧不归档——旧实现首帧无条件归档占坑（
 ///              last_archived_text=None 恒真），误判会话参考图集只剩一张开头图。
+/// @ai-context: v0.7.3（REQ-155/156，ADR-015）：屏分配——落库带 screen_id+bbox；
+///              layout_changed（版面指纹变化）与相似度/gap 共同判定新屏
+///              （ScreenTracker 纯状态机，同屏续屏不产生新屏记录）。
 #[allow(clippy::too_many_arguments)]
 pub fn handle_full_frame(
     frame: &CapturedFrame,
@@ -45,6 +48,10 @@ pub fn handle_full_frame(
     ocr_input_dhash: u64,
     // REQ-083 同口径：UI 垃圾黑名单（播放器时间码/控制条源头过滤）
     ui_junk: &crate::ui_junk::UiJunkList,
+    // v0.7.3：在线屏分配器（REQ-155）
+    screen_tracker: &mut crate::screen_tracker::ScreenTracker,
+    // v0.7.3：版面指纹变化信号（None=无版面信息，仅用相似/gap 判定）
+    layout_changed: Option<bool>,
 ) {
     // REQ-083：UI 垃圾块源头过滤（播放器时间码/控制条/水印——与字幕路径同口径）
     let kept: Vec<&crate::types::OcrBlock> =
@@ -98,6 +105,8 @@ pub fn handle_full_frame(
     if crate::import_frame::same_texts(&texts, last_texts) {
         return;
     }
+    // v0.7.3（REQ-155）：本帧块归属屏号（空文本帧不推进屏状态——前面已 return）
+    let screen_id = screen_tracker.assign_screen(frame.timestamp_ms, &texts, layout_changed);
     for block in kept {
         let _ = db.add_ocr_block(&NewSessionOcrBlock {
             session_id,
@@ -107,10 +116,13 @@ pub fn handle_full_frame(
             region: "full".to_string(),
             // M4/REQ-048：整帧直跑路径无区域标注（None=兼容旧数据口径）
             region_kind: None,
+            // v0.7.3（REQ-156）：bbox 落库（帧坐标系）+ 屏号
+            bbox: block.bbox,
+            screen_id: Some(screen_id),
         });
         let _ = app.emit(
             "live:ocr",
-            OcrEvent { timestamp_ms: frame.timestamp_ms, text: block.text.clone() },
+            OcrEvent { timestamp_ms: frame.timestamp_ms, text: block.text.clone(), screen_id },
         );
     }
     *last_texts = texts;
@@ -180,6 +192,8 @@ mod tests {
 pub struct OcrEvent {
     pub timestamp_ms: u64,
     pub text: String,
+    /// v0.7.3（REQ-161）：块所属屏号（前端按屏摘要显示）
+    pub screen_id: i64,
 }
 
 /// 停止时关键帧投票（M6/REQ-051：多信号筛选 → 关键图候选事件）。

@@ -42,9 +42,11 @@ fn detail(segments: Vec<(&str, u64, u64)>, ocr: Vec<(&str, u64)>) -> SessionDeta
             score: 0.9,
             region: "full".into(),
             region_kind: None,
+            bbox: None,
+            screen_id: None,
         })
         .collect();
-    SessionDetail { session, segments, ocr_blocks, events: Vec::new() }
+    SessionDetail { session, segments, ocr_blocks, events: Vec::new(), screens: Vec::new() }
 }
 
 /// 构造带事件的会话详情（REQ-108：真实信号消费测试）。
@@ -166,8 +168,8 @@ fn build_chapter_signals_detects_frame_switch_approximation() {
             speaker: None, confidence: None },
     ];
     let ocr = vec![
-        SessionOcrBlock { id: 0, session_id: 1, timestamp_ms: 100, text: "PPT-第一章".into(), score: 0.9, region: "full".into(), region_kind: None },
-        SessionOcrBlock { id: 1, session_id: 1, timestamp_ms: 40100, text: "PPT-第二章".into(), score: 0.9, region: "full".into(), region_kind: None },
+        SessionOcrBlock { id: 0, session_id: 1, timestamp_ms: 100, text: "PPT-第一章".into(), score: 0.9, region: "full".into(), region_kind: None, bbox: None, screen_id: None },
+        SessionOcrBlock { id: 1, session_id: 1, timestamp_ms: 40100, text: "PPT-第二章".into(), score: 0.9, region: "full".into(), region_kind: None, bbox: None, screen_id: None },
     ];
     // Act
     let signals = build_chapter_signals(&segments, &ocr);

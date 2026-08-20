@@ -142,6 +142,8 @@ fn delete_session_cascades_children() {
         score: 0.9,
         region: "full".into(),
         region_kind: None,
+        bbox: None,
+        screen_id: None,
     })
     .unwrap();
     // Act
@@ -167,6 +169,8 @@ fn recent_ocr_texts_returns_latest_sessions_only() {
             score: 0.9,
             region: "full".into(),
             region_kind: None,
+            bbox: None,
+            screen_id: None,
         })
         .unwrap();
     }

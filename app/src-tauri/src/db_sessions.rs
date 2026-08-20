@@ -185,13 +185,17 @@ impl Db {
         .map_err(Into::into)
     }
 
-    /// 追加一条 OCR 块（实时落库）。
+    /// 追加一条 OCR 块（实时落库；v0.7.3 起双写 bbox/screen_id——REQ-156）。
     pub fn add_ocr_block(&self, new: &NewSessionOcrBlock) -> Result<SessionOcrBlock> {
         let conn = self.conn.lock().expect("db lock poisoned");
+        // bbox 序列化为 JSON {x,y,w,h}（帧坐标系；None → NULL=旧口径）
+        let bbox_json = new.bbox.map(|b| {
+            serde_json::json!({ "x": b.x, "y": b.y, "w": b.w, "h": b.h }).to_string()
+        });
         conn.execute(
-            "INSERT INTO session_ocr_blocks (session_id, timestamp_ms, text, score, region, region_kind)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![new.session_id, new.timestamp_ms, new.text, new.score, new.region, new.region_kind],
+            "INSERT INTO session_ocr_blocks (session_id, timestamp_ms, text, score, region, region_kind, bbox, screen_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![new.session_id, new.timestamp_ms, new.text, new.score, new.region, new.region_kind, bbox_json, new.screen_id],
         )?;
         Ok(SessionOcrBlock {
             id: conn.last_insert_rowid(),
@@ -201,6 +205,8 @@ impl Db {
             score: new.score,
             region: new.region.clone(),
             region_kind: new.region_kind.clone(),
+            bbox: new.bbox,
+            screen_id: new.screen_id,
         })
     }
 
@@ -275,11 +281,11 @@ impl Db {
         Ok(affected > 0)
     }
 
-    /// 列出会话全部 OCR 块（按时间轴升序）。
+    /// 列出会话全部 OCR 块（按时间轴升序；v0.7.3 起含 bbox/screen_id 列）。
     pub fn list_ocr_blocks(&self, session_id: i64) -> Result<Vec<SessionOcrBlock>> {
         let conn = self.conn.lock().expect("db lock poisoned");
         let mut stmt = conn.prepare(
-            "SELECT id, session_id, timestamp_ms, text, score, region, region_kind
+            "SELECT id, session_id, timestamp_ms, text, score, region, region_kind, bbox, screen_id
              FROM session_ocr_blocks WHERE session_id = ?1 ORDER BY timestamp_ms ASC",
         )?;
         let rows = stmt.query_map(params![session_id], row_to_ocr_block)?;

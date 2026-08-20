@@ -39,7 +39,7 @@ pub async fn analyze_session_command(
         .map(|p| ProfileKind::parse(&p))
         .or_else(|| session.profile.as_deref().map(ProfileKind::parse))
         .unwrap_or(ProfileKind::Lecture);
-    let detail = crate::types::SessionDetail { session, segments, ocr_blocks, events };
+    let detail = crate::types::SessionDetail { session, segments, ocr_blocks, events, screens: Vec::new() };
     // REQ-060：口语符号映射表（AppState 加载；JSON 校准生效）
     Ok(analyze_session_opt(&detail, kind, &state.symbol_normalize))
 }

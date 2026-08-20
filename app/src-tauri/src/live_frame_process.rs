@@ -193,6 +193,8 @@ pub fn process_frame(
     image_store: &mut Option<crate::image_store::SessionImageStore>,
     // v0.6.0 M1（REQ-083）：UI 垃圾黑名单（字幕源头过滤）
     ui_junk: &crate::ui_junk::UiJunkList,
+    // v0.7.3（REQ-155，ADR-015）：在线屏分配器（全帧分支落库带屏号）
+    screen_tracker: &mut crate::screen_tracker::ScreenTracker,
 ) {
     let Some(sampler) = screen else { return };
     // 字幕区裁剪决策由 M2/REQ-037 RoiTracker 给出（播放区域 + ROI；首帧扫描期全帧）
@@ -350,10 +352,14 @@ pub fn process_frame(
     // M3/REQ-047 + M4/REQ-048：版面分析（事件帧触发）——全帧分支做区域分类，
     // 结果经缓存复用（同版面零重分析）；区域存在时走分区域 OCR（M4）
     let mut layout_regions: Vec<crate::layout_analyzer::LayoutRegion> = Vec::new();
+    // v0.7.3（REQ-155）：版面指纹变化信号（reused=false=新版面→新屏；
+    // None=无版面信息，仅用相似/gap 判定）
+    let mut layout_changed: Option<bool> = None;
     if !is_subtitle {
         if let Some(grid) = crate::frame_features::grid_from_bgra(&frame.bgraw, frame.width, frame.height) {
             let (regions, reused) =
                 crate::layout_cache::analyze_or_reuse(layout_cache, &grid, frame.timestamp_ms);
+            layout_changed = Some(!reused);
             if !reused && !regions.is_empty() {
                 // 新版面：分类构成（开发期日志；区域列表驱动分区域 OCR）
                 let summary: Vec<String> = regions
@@ -401,7 +407,7 @@ pub fn process_frame(
             crate::live_keyframes::handle_full_frame(
                 &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
                 last_archived_text, last_archived_at, image_store, ocr_input_hash,
-                ocr_input_dhash, ui_junk,
+                ocr_input_dhash, ui_junk, screen_tracker, layout_changed,
             );
         } else {
             // 区域路径无可用产出（误判/空白区域/垃圾块）→ 整帧 OCR 兜底
@@ -415,7 +421,7 @@ pub fn process_frame(
                     crate::live_keyframes::handle_full_frame(
                         &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
                         last_archived_text, last_archived_at, image_store, ocr_input_hash,
-                        ocr_input_dhash, ui_junk,
+                        ocr_input_dhash, ui_junk, screen_tracker, layout_changed,
                     );
                 }
                 Err(e) => {
@@ -454,11 +460,15 @@ pub fn process_frame(
                 } else {
                     // 全帧 OCR 成功时刻：带外触发冷却基准（ADR-011）
                     trigger.last_full_ocr_at = Instant::now();
-                    crate::live_keyframes::handle_full_frame(
-                        &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
-                        last_archived_text, last_archived_at, image_store, ocr_input_hash,
-                        ocr_input_dhash, ui_junk,
-                    );
+                    // v0.7.3（REQ-157）：前台非目标窗口期间画面要点不落库
+                    // （复用 REQ-084 字幕先例——根治其他窗口内容混入屏卡）
+                    if !roi_tracker.foreground_foreign() {
+                        crate::live_keyframes::handle_full_frame(
+                            &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
+                            last_archived_text, last_archived_at, image_store, ocr_input_hash,
+                            ocr_input_dhash, ui_junk, screen_tracker, None,
+                        );
+                    }
                 }
             }
             Err(e) => {
@@ -545,6 +555,9 @@ pub fn persist_voted_subtitle(
         region: "subtitle".to_string(),
         // 字幕区独立 ROI 管线，不属版面区域（M3 设计：字幕区不进版面分析）
         region_kind: None,
+        // v0.7.3：字幕区不进画面要点屏（无位置/屏上下文）
+        bbox: None,
+        screen_id: None,
     });
     let _ = db.add_segment(&NewSessionSegment {
         session_id,

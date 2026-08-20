@@ -41,7 +41,7 @@ pub async fn build_session_artifact(
         .unwrap_or(ProfileKind::Lecture);
     // 关键图候选（M6 投票输出；当前从图片库取时间戳近似——产物不阻断）
     let keyframes = crate::commands_images::keyframes_from_store(&state, session_id).unwrap_or_default();
-    let detail = crate::types::SessionDetail { session, segments, ocr_blocks, events };
+    let detail = crate::types::SessionDetail { session, segments, ocr_blocks, events, screens: Vec::new() };
     let artifact = build_artifact(kind, &detail, &keyframes);
     state
         .db

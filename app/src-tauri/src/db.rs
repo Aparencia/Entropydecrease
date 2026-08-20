@@ -105,6 +105,21 @@ impl Db {
             "region_kind",
             "ALTER TABLE session_ocr_blocks ADD COLUMN region_kind TEXT",
         )?;
+        // v0.7.3（REQ-156，ADR-015）：旧库迁移——ocr_blocks 表补屏卡体系两列：
+        // bbox=检测框 JSON {x,y,w,h}（帧坐标系）、screen_id=采集时分配的屏号
+        // （NULL=旧数据无屏，视图层聚类兜底——ADR-015 决策 1/2）
+        ensure_column(
+            &conn,
+            "session_ocr_blocks",
+            "bbox",
+            "ALTER TABLE session_ocr_blocks ADD COLUMN bbox TEXT",
+        )?;
+        ensure_column(
+            &conn,
+            "session_ocr_blocks",
+            "screen_id",
+            "ALTER TABLE session_ocr_blocks ADD COLUMN screen_id INTEGER",
+        )?;
         // v0.7.0 M1（REQ-103）：旧库迁移——segments 表补 volume 列
         // （段内平均音量，重点标注音量骤变信号输入；旧数据 None=未知）
         ensure_column(

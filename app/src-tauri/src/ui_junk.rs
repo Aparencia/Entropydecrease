@@ -25,6 +25,9 @@ pub enum JunkCategory {
     EditorUi,
     /// 应用 UI（"回到主界面/菜单栏…"）
     AppUi,
+    /// v0.7.3（REQ-157）：直播互动 UI（"1人正在看/发送/下载/预约…"——
+    /// 会话29 实证：直播平台观众数/互动按钮混入画面要点）
+    LiveUi,
 }
 
 /// 黑名单条目。
@@ -100,6 +103,15 @@ fn default_patterns() -> Vec<JunkPattern> {
     }
     for t in ["文件", "编辑", "视图", "工具", "窗口"] {
         push_pattern(&mut p, JunkCategory::AppUi, t, true);
+    }
+    // v0.7.3（REQ-157）：直播互动 UI（会话29 实证：观众数/互动按钮/预约回放）。
+    // 观众数子串（"1人正在看/N人在看/N人看过"不可能出现在教学讲述中）；
+    // 按钮类用 standalone（"发送请求/下载文件/分享经验/直播课"等正文不误拦）
+    for t in ["正在看", "人在看", "人看过"] {
+        push_pattern(&mut p, JunkCategory::LiveUi, t, false);
+    }
+    for t in ["发送", "下载", "预约", "回放", "分享", "直播"] {
+        push_pattern(&mut p, JunkCategory::LiveUi, t, true);
     }
     p
 }

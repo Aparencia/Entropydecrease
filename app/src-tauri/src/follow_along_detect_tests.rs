@@ -33,6 +33,8 @@ fn ocr(ts: u64, text: &str) -> SessionOcrBlock {
         score: 0.9,
         region: "full".into(),
         region_kind: None,
+        bbox: None,
+        screen_id: None,
     }
 }
 

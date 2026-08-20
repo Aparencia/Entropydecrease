@@ -33,6 +33,8 @@ fn block(ts: u64, text: &str, score: f32, kind: Option<&str>) -> SessionOcrBlock
         score,
         region: "full".to_string(),
         region_kind: kind.map(|k| k.to_string()),
+        bbox: None,
+        screen_id: None,
     }
 }
 

@@ -122,6 +122,8 @@ pub fn run_screen_worker(
     // M6/REQ-051：关键帧归档状态（新文本 + 间隔触发存图）
     let mut last_archived_text: Option<String> = None;
     let mut last_archived_at: Option<Instant> = None;
+    // v0.7.3（REQ-155，ADR-015）：在线屏分配器（全帧落库带屏号）
+    let mut screen_tracker = crate::screen_tracker::ScreenTracker::new();
     // M4/REQ-039 P8：高负载自动降级（CPU 占用采样 → 全帧降频，保 ASR 主链路）
     let mut load_monitor = crate::load_monitor::LoadMonitor::new();
     let mut last_load_check_at = Instant::now();
@@ -286,7 +288,7 @@ pub fn run_screen_worker(
                     &mut last_capture_error, &mut last_full_texts, &mut stats,
                     &mut roi_tracker, &mut layout_cache, &mut frame_samples,
                     &mut last_archived_text, &mut last_archived_at, &latest_frame,
-                    &mut image_store, &ui_junk,
+                    &mut image_store, &ui_junk, &mut screen_tracker,
                 );
             }
             // M1/REQ-125：播放器行为检测（5s 节流——非每帧；从最新帧缓存取帧做

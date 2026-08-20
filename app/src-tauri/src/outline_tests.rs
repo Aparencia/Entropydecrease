@@ -13,6 +13,8 @@ fn block(ts: u64, text: &str, score: f32, region: &str) -> SessionOcrBlock {
         score,
         region: region.to_string(),
         region_kind: None,
+        bbox: None,
+        screen_id: None,
     }
 }
 

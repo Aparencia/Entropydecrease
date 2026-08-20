@@ -152,6 +152,9 @@ mod speaker_change;
 // v0.7.2（REQ-152）：视频系列（合集）检测——标题序列号提取/平台后缀剥离（纯逻辑）
 mod series_detect;
 // v0.7.2（REQ-151）：会话信息聚合——采集信息面板数据源（平台/时长/合集/字幕）
+mod screen_merge;
+mod screens;
+mod screen_tracker;
 mod session_info;
 // v0.7.2（REQ-153）：说话人 embedding 引擎（弱化版讲者分离离线分析）
 mod speaker_engine;

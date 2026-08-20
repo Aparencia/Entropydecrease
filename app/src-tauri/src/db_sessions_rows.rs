@@ -66,8 +66,16 @@ pub fn row_to_segment(row: &Row<'_>) -> rusqlite::Result<SessionSegment> {
     })
 }
 
-/// 把 rusqlite 行映射为 SessionOcrBlock。
+/// 把 rusqlite 行映射为 SessionOcrBlock（9 列：原 7 列 + bbox JSON + screen_id）。
+///
+/// @ai-context: v0.7.3（REQ-156）：bbox 为 JSON {x,y,w,h}（帧坐标系，null=旧数据）；
+///              screen_id 为屏号（null=旧数据无屏——视图层聚类兜底）。
 pub fn row_to_ocr_block(row: &Row<'_>) -> rusqlite::Result<SessionOcrBlock> {
+    let bbox_json: Option<String> = row.get(7)?;
+    let bbox = match bbox_json.as_deref() {
+        Some(json) => serde_json::from_str(json).unwrap_or(None), // 解析失败诚实降级 None
+        None => None,
+    };
     Ok(SessionOcrBlock {
         id: row.get(0)?,
         session_id: row.get(1)?,
@@ -76,6 +84,8 @@ pub fn row_to_ocr_block(row: &Row<'_>) -> rusqlite::Result<SessionOcrBlock> {
         score: row.get(4)?,
         region: row.get(5)?,
         region_kind: row.get(6)?,
+        bbox,
+        screen_id: row.get(8)?,
     })
 }
 

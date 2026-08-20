@@ -13,6 +13,8 @@ fn ocr_block(ts: u64, text: &str, score: f32, region_kind: Option<&str>) -> Sess
         score,
         region: "full".into(),
         region_kind: region_kind.map(String::from),
+        bbox: None,
+        screen_id: None,
     }
 }
 

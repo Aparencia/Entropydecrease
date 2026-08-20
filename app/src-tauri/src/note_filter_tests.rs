@@ -38,6 +38,8 @@ fn block(ts: u64, text: &str, score: f32) -> SessionOcrBlock {
         score,
         region: "full".to_string(),
         region_kind: None,
+        bbox: None,
+        screen_id: None,
     }
 }
 
@@ -175,6 +177,8 @@ fn subtitle_region_blocks_not_in_ocr_points() {
         score: 0.9,
         region: "subtitle".into(),
         region_kind: None,
+        bbox: None,
+        screen_id: None,
     }];
     // Act
     let result = filter_note("测试", &[], &blocks, &junk());

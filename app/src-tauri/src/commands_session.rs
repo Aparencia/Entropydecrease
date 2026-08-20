@@ -65,7 +65,7 @@ pub async fn list_sessions(
         .map_err(|e| e.to_string())
 }
 
-/// 会话详情：会话 + 转写段 + OCR 块 + 信号事件（时间轴对齐，一次取全）。
+/// 会话详情：会话 + 转写段 + OCR 块 + 信号事件 + 画面要点屏（时间轴对齐，一次取全）。
 #[tauri::command]
 pub async fn get_session_detail(state: State<'_, AppState>, id: i64) -> Result<SessionDetail, String> {
     if id <= 0 {
@@ -80,7 +80,11 @@ pub async fn get_session_detail(state: State<'_, AppState>, id: i64) -> Result<S
     let ocr_blocks = state.db.list_ocr_blocks(id).map_err(|e| e.to_string())?;
     // REQ-108（v0.7.0 M1.5）：信号事件随详情取全（章节检测真实信号消费）
     let events = state.db.list_events(id).map_err(|e| e.to_string())?;
-    Ok(SessionDetail { session, segments, ocr_blocks, events })
+    // v0.7.3（REQ-160，ADR-015）：画面要点屏卡（新数据按 screen_id 分组、
+    // 旧数据聚类兜底；图匹配失败/目录缺失不阻断——前端无缩略图降级）
+    let images_dir = state.data_dir.join("session-images").join(id.to_string());
+    let screens = crate::screens::build_screens(id, &ocr_blocks, &images_dir);
+    Ok(SessionDetail { session, segments, ocr_blocks, events, screens })
 }
 
 /// 删除会话（级联清理转写段与 OCR 块）。
@@ -143,6 +147,9 @@ pub async fn add_session_ocr_block(
         region: if region == "subtitle" { "subtitle" } else { "full" }.to_string(),
         // 外部追加无版面上下文，区域标注留空
         region_kind: None,
+        // v0.7.3：外部追加无位置/屏上下文（None=旧口径，聚类兜底）
+        bbox: None,
+        screen_id: None,
     };
     state.db.add_ocr_block(&new).map(|b| b.id).map_err(|e| e.to_string())
 }

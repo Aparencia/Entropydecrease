@@ -94,10 +94,12 @@ mod tests {
         db.add_ocr_block(&NewSessionOcrBlock {
             session_id: s.id, timestamp_ms: 1000, text: "梯度下降算法详解".into(),
             score: 0.9, region: "full".into(), region_kind: None,
+            bbox: None, screen_id: None,
         }).unwrap();
         db.add_ocr_block(&NewSessionOcrBlock {
             session_id: s.id, timestamp_ms: 2000, text: "梯度下降（字幕）".into(),
             score: 0.9, region: "subtitle".into(), region_kind: None,
+            bbox: None, screen_id: None,
         }).unwrap();
         // Act
         let hits = search_ocr_blocks(&db, "梯度", 10).unwrap();
@@ -124,6 +126,7 @@ mod tests {
         db.add_ocr_block(&NewSessionOcrBlock {
             session_id: s.id, timestamp_ms: 500, text: "Python 教程".into(),
             score: 0.9, region: "full".into(), region_kind: None,
+            bbox: None, screen_id: None,
         }).unwrap();
         // Act & Assert
         assert_eq!(search_ocr_blocks(&db, "python", 10).unwrap().len(), 1);
@@ -141,6 +144,7 @@ mod tests {
             db.add_ocr_block(&NewSessionOcrBlock {
                 session_id: s.id, timestamp_ms: i * 100, text: format!("关键词{}", i),
                 score: 0.9, region: "full".into(), region_kind: None,
+            bbox: None, screen_id: None,
             }).unwrap();
         }
         // Act & Assert：limit=3

@@ -80,17 +80,29 @@ pub fn ocr_keyframe(
     last_subtitle: &mut Vec<String>,
     ui_junk: &crate::ui_junk::UiJunkList,
 ) {
+    let (orig_w, orig_h) = image.dimensions();
     // 中部区域 → 画面要点（region=full，避开字幕带干扰）
     if let Some(mid) = crop_and_scale(image, MIDDLE_TOP_RATIO, MIDDLE_BOTTOM_RATIO, OCR_MAX_WIDTH) {
-        recognize_region(db, engines, session_id, timestamp_ms, mid, "full", last_full, ui_junk);
+        recognize_region(
+            db, engines, session_id, timestamp_ms, mid, "full", MIDDLE_TOP_RATIO, orig_w, orig_h,
+            last_full, ui_junk,
+        );
     }
     // 底部区域 → 烧录字幕（region=subtitle，与实时链路语义一致）
     if let Some(bot) = crop_and_scale(image, BOTTOM_TOP_RATIO, 1.0, OCR_MAX_WIDTH) {
-        recognize_region(db, engines, session_id, timestamp_ms, bot, "subtitle", last_subtitle, ui_junk);
+        recognize_region(
+            db, engines, session_id, timestamp_ms, bot, "subtitle", BOTTOM_TOP_RATIO, orig_w, orig_h,
+            last_subtitle, ui_junk,
+        );
     }
 }
 
 /// 单区域识别 + 帧间去重 + 落库。
+///
+/// @ai-context: v0.7.3（REQ-156）：bbox 反算回帧坐标系（裁剪图坐标系 + 等比
+///              缩放因子 + 顶部偏移，TD-046 同思路）——导入链路与实时链路
+///              的 bbox 口径统一（帧坐标系）；screen_id 不分配（None），由
+///              视图层聚类兜底（与在线 ScreenTracker 同一套纯函数，结果等价）。
 #[allow(clippy::too_many_arguments)]
 fn recognize_region(
     db: &Db,
@@ -99,11 +111,26 @@ fn recognize_region(
     timestamp_ms: u64,
     region_img: image::RgbImage,
     region: &str,
+    top_ratio: f32,
+    orig_w: u32,
+    orig_h: u32,
     last_texts: &mut Vec<String>,
     ui_junk: &crate::ui_junk::UiJunkList,
 ) {
     let Ok(blocks) = engines.recognize_image(region_img) else {
         return; // 识别失败：下帧重试（不阻断管线）
+    };
+    // v0.7.3（REQ-156）：bbox 反算回帧坐标系所需的等比缩放因子
+    // （crop_and_scale 裁剪+缩放后识别，bbox 处于裁剪图坐标系——TD-046 同思路；
+    //  未缩放时 scale=1，缩放时 = 原宽/裁剪后宽，x/y 等比同用）
+    let scale = {
+        // region_img 已被识别消费，尺寸在识别前由调用方已知——此处无法取回；
+        // 改用缩放因子公式：原宽 / 目标宽（OCR_MAX_WIDTH 或原宽）
+        if orig_w > OCR_MAX_WIDTH {
+            orig_w as f32 / OCR_MAX_WIDTH as f32
+        } else {
+            1.0
+        }
     };
     let texts: Vec<String> = blocks
         .iter()
@@ -122,6 +149,8 @@ fn recognize_region(
             // REQ-117：UI 垃圾源头过滤（播放器时间码不再污染导入画面要点）
             && !ui_junk.is_junk(&block.text)
         {
+            // v0.7.3（REQ-156）：bbox 反算回帧坐标系（裁剪图坐标 + 等比缩放 + 顶部偏移；
+            // scale 已在上方计算：原宽/目标宽，x/y 等比同用）
             if let Err(e) = db.add_ocr_block(&NewSessionOcrBlock {
                 session_id,
                 timestamp_ms,
@@ -130,6 +159,14 @@ fn recognize_region(
                 region: region.to_string(),
                 // 导入链路整帧直跑（无版面分析），区域标注留空（兼容旧数据口径）
                 region_kind: None,
+                bbox: block.bbox.map(|b| crate::types::TextBox {
+                    x: b.x * scale,
+                    y: b.y * scale + top_ratio * orig_h as f32,
+                    w: b.w * scale,
+                    h: b.h * scale,
+                }),
+                // 导入链路不分配屏号——视图层聚类兜底（与在线 ScreenTracker 同逻辑）
+                screen_id: None,
             }) {
                 eprintln!("[Import] OCR 块落库失败: {}", e);
             }
