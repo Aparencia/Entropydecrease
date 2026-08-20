@@ -152,6 +152,8 @@ mod structure_engine;
 mod structure_models;
 // v0.7.6（REQ-177/178）：笔记结构渲染层——章节标题 + 词汇表块（纯函数）
 mod structure_note;
+// v0.7.7（REQ-182）：结构图检测纯函数——diagram_likeness/pick_sharpest/区域过滤
+mod structure_detect;
 mod structure_tier;
 mod stutter_fold;
 mod subtitle;
