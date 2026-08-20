@@ -238,87 +238,20 @@ pub fn ai_refine_apply(
 // ────────────────────────────────────────────────────────────
 
 /// 后台精修任务：规则草稿 → 切片 → 逐片精修（mock/云端）→ 合并 → diff。
+///
+/// @ai-context: 彻底检测加固（2026-08-21）：spawn_blocking 的 JoinHandle 未被
+///              await——闭包内 panic 会被 tokio 吞掉，任务状态永久停在
+///              Pending（前端永久显示"任务排队中"，无失败可重试）。
+///              catch_unwind 把 panic 归一为 Failed 状态，状态流转永不失联。
 fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
-    let env = PurifyEnv {
-        config: st.purify.clone(),
-        symbol: st.symbol_normalize.clone(),
-        corrections: st.ocr_corrections.clone(),
-    };
-    let outcome: Result<AiRefineResult, AiTaskFailure> = (|| {
-        // ① 规则草稿 + 结构分析一次完成（审查修复 2026-08-21：build_rule_draft_
-        //    with_analysis 返回 analysis——章节/术语直接复用，消除二次 analyze 双跑）
-        let (draft, analysis) =
-            build_rule_draft_with_analysis(&st.db, &st.ui_junk, &env, &st.data_dir, session_id, None)
-                .map_err(AiTaskFailure::Other)?;
-        // ② 精修上下文（档案/章节/术语——analysis 已含章节边界与术语表）
-        let session = st
-            .db
-            .get_session(session_id)
-            .map_err(|e| AiTaskFailure::Other(e.to_string()))?
-            .ok_or_else(|| AiTaskFailure::Other("会话不存在".to_string()))?;
-        let kind = session
-            .profile
-            .as_deref()
-            .map(ProfileKind::parse)
-            .unwrap_or(ProfileKind::Lecture);
-        let ocr_blocks = st.db.list_ocr_blocks(session_id).map_err(|e| AiTaskFailure::Other(e.to_string()))?;
-        let outline = detect_outline_smart(&ocr_blocks, &draft.ocr_screens, &OutlineConfig::default());
-        let chapters: Vec<String> = if outline.is_empty() {
-            analysis
-                .chapters
-                .iter()
-                .enumerate()
-                .map(|(i, _)| format!("第 {} 节", i + 1))
-                .collect()
-        } else {
-            outline.iter().map(|e| e.text.clone()).collect()
-        };
-        let glossary: Vec<String> = analysis.glossary.iter().map(|g| g.term.clone()).collect();
-        // ③ 切片（≤8000 字/片；进度按片上报）
-        let slices = slice_note(&draft.markdown, SLICE_MAX_CHARS);
-        let total = slices.len();
-        set_task(&st, task_id, AiTaskState::Running { finished_slices: 0, total_slices: total });
-        let settings = st.ai_settings.lock().map_err(|e| AiTaskFailure::Other(e.to_string()))?.clone();
-        let client = AiClient::from_settings(&settings, st.ai_credentials.load_key().ok().flatten());
-        let adapter = AiNoteRefineAdapter::new(client.clone());
-        let mock_adapter = AiMockAdapter;
-        let mut refined = String::new();
-        for (i, slice) in slices.iter().enumerate() {
-            let req = AiRefineRequest {
-                content: slice.clone(),
-                profile: kind.as_str().to_string(),
-                glossary: glossary.clone(),
-                chapters: chapters.clone(),
-            };
-            let resp = if mock {
-                mock_adapter.refine(&req)
-            } else {
-                adapter.refine(&req).map_err(AiTaskFailure::from)?
-            };
-            if !refined.is_empty() {
-                refined.push_str("\n\n");
-            }
-            refined.push_str(&resp.to_markdown());
-            set_task(
-                &st,
-                task_id,
-                AiTaskState::Running { finished_slices: i + 1, total_slices: total },
-            );
-        }
-        // ④ 合并 + 与规则版 diff（基线=本地版，AI 变化点高亮）
-        let diff = diff_markdown(&draft.markdown, &refined);
-        let (added, removed, _) = diff_stats(&diff);
-        Ok(AiRefineResult {
-            title: draft.title.clone(),
-            base_markdown: draft.markdown.clone(),
-            refined_markdown: refined,
-            diff,
-            added_lines: added,
-            removed_lines: removed,
-            slices: total,
-            model: client.config.model,
-        })
-    })();
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_refine_task_inner(&st, task_id, session_id, mock)
+    }))
+    .unwrap_or_else(|_| {
+        Err(AiTaskFailure::Other(
+            "精修任务内部错误（panic）——请重试；若复现请反馈".to_string(),
+        ))
+    });
     match outcome {
         Ok(result) => {
             {
@@ -331,6 +264,100 @@ fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
         }
         Err(reason) => set_task(&st, task_id, AiTaskState::Failed { reason }),
     }
+}
+
+/// 精修任务主体（返回 Result；panic 由外层 catch_unwind 兜底）。
+fn run_refine_task_inner(
+    st: &AppState,
+    task_id: u64,
+    session_id: i64,
+    mock: bool,
+) -> Result<AiRefineResult, AiTaskFailure> {
+    let env = PurifyEnv {
+        config: st.purify.clone(),
+        symbol: st.symbol_normalize.clone(),
+        corrections: st.ocr_corrections.clone(),
+    };
+    // ① 规则草稿 + 结构分析一次完成（审查修复 2026-08-21：build_rule_draft_
+    //    with_analysis 返回 analysis——章节/术语直接复用，消除二次 analyze 双跑）
+    let (draft, analysis) =
+        build_rule_draft_with_analysis(&st.db, &st.ui_junk, &env, &st.data_dir, session_id, None)
+            .map_err(AiTaskFailure::Other)?;
+    // ② 精修上下文（档案/章节/术语——analysis 已含章节边界与术语表）
+    let session = st
+        .db
+        .get_session(session_id)
+        .map_err(|e| AiTaskFailure::Other(e.to_string()))?
+        .ok_or_else(|| AiTaskFailure::Other("会话不存在".to_string()))?;
+    let kind = session
+        .profile
+        .as_deref()
+        .map(ProfileKind::parse)
+        .unwrap_or(ProfileKind::Lecture);
+    let ocr_blocks = st
+        .db
+        .list_ocr_blocks(session_id)
+        .map_err(|e| AiTaskFailure::Other(e.to_string()))?;
+    let outline = detect_outline_smart(&ocr_blocks, &draft.ocr_screens, &OutlineConfig::default());
+    let chapters: Vec<String> = if outline.is_empty() {
+        analysis
+            .chapters
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("第 {} 节", i + 1))
+            .collect()
+    } else {
+        outline.iter().map(|e| e.text.clone()).collect()
+    };
+    let glossary: Vec<String> = analysis.glossary.iter().map(|g| g.term.clone()).collect();
+    // ③ 切片（≤8000 字/片；进度按片上报）
+    let slices = slice_note(&draft.markdown, SLICE_MAX_CHARS);
+    let total = slices.len();
+    set_task(st, task_id, AiTaskState::Running { finished_slices: 0, total_slices: total });
+    let settings = st
+        .ai_settings
+        .lock()
+        .map_err(|e| AiTaskFailure::Other(e.to_string()))?
+        .clone();
+    let client = AiClient::from_settings(&settings, st.ai_credentials.load_key().ok().flatten());
+    let adapter = AiNoteRefineAdapter::new(client.clone());
+    let mock_adapter = AiMockAdapter;
+    let mut refined = String::new();
+    for (i, slice) in slices.iter().enumerate() {
+        let req = AiRefineRequest {
+            content: slice.clone(),
+            profile: kind.as_str().to_string(),
+            glossary: glossary.clone(),
+            chapters: chapters.clone(),
+        };
+        let resp = if mock {
+            mock_adapter.refine(&req)
+        } else {
+            adapter.refine(&req).map_err(AiTaskFailure::from)?
+        };
+        if !refined.is_empty() {
+            refined.push_str("\n\n");
+        }
+        refined.push_str(&resp.to_markdown());
+        set_task(
+            st,
+            task_id,
+            AiTaskState::Running { finished_slices: i + 1, total_slices: total },
+        );
+    }
+    // ④ 合并 + 与规则版 diff（基线=本地版，AI 变化点高亮）
+    let diff = diff_markdown(&draft.markdown, &refined);
+    let (added, removed, _) = diff_stats(&diff);
+    Ok(AiRefineResult {
+        title: draft.title.clone(),
+        base_markdown: draft.markdown.clone(),
+        refined_markdown: refined,
+        diff,
+        added_lines: added,
+        removed_lines: removed,
+        slices: total,
+        model: client.config.model,
+    })
 }
 
 /// 更新任务状态并推送事件（短锁内完成即释放）。M3 补充任务复用（pub(crate)）。

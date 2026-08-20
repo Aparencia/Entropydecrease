@@ -22,32 +22,32 @@ pub struct AiBalance {
     pub currency: String,
 }
 
-/// 解析余额响应（纯函数；容错：字段缺失/非法 → 0，currency 缺失 → "CNY"）。
+/// 解析余额响应（纯函数；容错：字段缺失/非法 → 0）。
 ///
-/// @ai-context: 返回 Err 仅当整体非 JSON 对象（无法尽力而为）；
-///              字段缺失按 0 处理——SiliconFlow 分项字段可能因账户类型缺失。
+/// @ai-context: 2026-08-21 彻底检测修复：硅基流动余额接口已从
+///              /user/balance 改为 GET /v1/user/info（旧路径 404——
+///              linux.do 有 user/info 相关下线通知），响应为
+///              {"code":20000,"data":{"totalBalance":"0","chargeBalance":"0","balance":"0"}}；
+///              映射：total_balance←totalBalance、topped_up←chargeBalance、
+///              grants←balance（赠额/免费额度）。数值为字符串——解析容错。
 pub fn parse_balance(body: &str) -> Result<AiBalance, String> {
     let v: serde_json::Value =
         serde_json::from_str(body).map_err(|e| format!("余额响应 JSON 解析失败: {}", e))?;
     let obj = v
-        .as_object()
-        .ok_or_else(|| "余额响应不是 JSON 对象".to_string())?;
+        .get("data")
+        .and_then(|d| d.as_object())
+        .ok_or_else(|| "余额响应缺少 data 对象".to_string())?;
     let num = |k: &str| -> f64 {
-        obj.get(k).and_then(|x| x.as_f64()).or_else(|| {
-            obj.get(k).and_then(|x| x.as_str()).and_then(|s| s.parse().ok())
-        }).unwrap_or(0.0)
+        obj.get(k)
+            .and_then(|x| x.as_f64())
+            .or_else(|| obj.get(k).and_then(|x| x.as_str()).and_then(|s| s.parse().ok()))
+            .unwrap_or(0.0)
     };
-    let currency = obj
-        .get("currency")
-        .and_then(|c| c.as_str())
-        .filter(|s| !s.is_empty())
-        .unwrap_or("CNY")
-        .to_string();
     Ok(AiBalance {
-        total_balance: num("total_balance"),
-        grants_balance: num("grants_balance"),
-        topped_up_balance: num("topped_up_balance"),
-        currency,
+        total_balance: num("totalBalance"),
+        grants_balance: num("balance"),
+        topped_up_balance: num("chargeBalance"),
+        currency: "CNY".to_string(),
     })
 }
 
@@ -81,12 +81,8 @@ impl AiBalanceAdapter {
         if self.api_key.trim().is_empty() {
             return Err("未配置 API 密钥（设置页保存密钥或配置环境变量 SILICONFLOW_API_KEY）".to_string());
         }
-        // 审查修复（2026-08-21）：只修剪尾斜杠，不得 trim "/v1"（同 ai_client
-        // ——base_url 含 /v1 是 OpenAI 兼容端点约定，删掉会 404）
-        let url = format!(
-            "{}/user/balance",
-            self.base_url.trim_end_matches('/')
-        );
+        // 2026-08-21 彻底检测修复：余额接口 = /v1/user/info（旧 /user/balance 404）
+        let url = format!("{}/user/info", self.base_url.trim_end_matches('/'));
         let agent = ureq::AgentBuilder::new()
             .timeout(std::time::Duration::from_secs(self.timeout_secs.max(5)))
             .build();

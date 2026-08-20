@@ -52,25 +52,31 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
   const [phase, setPhase] = useState<"idle" | "consent" | "confirm" | "running" | "done" | "failed">("idle");
   const [estimate, setEstimate] = useState<RefineEstimateView | null>(null);
   const [balance, setBalance] = useState<BalanceView | null>(null);
-  const [taskId, setTaskId] = useState<number | null>(null);
   const [progress, setProgress] = useState<{ finished: number; total: number } | null>(null);
   const [result, setResult] = useState<AiRefineResult | null>(null);
   const [failure, setFailure] = useState<AiTaskFailureLike | null>(null);
   const [remember, setRemember] = useState(false);
   const [msg, setMsg] = useState("");
   const polling = useRef<ReturnType<typeof setInterval> | null>(null);
+  // 审查修复（2026-08-21 真机 debug）：taskId 与 handleState 用 ref 持有——
+  // 事件/轮询回调在任务期间多次触发，若闭包捕获旧渲染版本（taskId=null），
+  // 任务成功时 ai_refine_result 以 null 查询会失败 → 永久卡"排队中"
+  const [, setTaskId] = useState<number | null>(null);
+  const taskIdRef = useRef<number | null>(null);
+  const handleStateRef = useRef<(st: AiTaskState) => Promise<void>>(async () => {});
 
-  // 事件通道（ai:task-update）——与轮询双通道，事件优先即时
+  // 事件通道（ai:task-update）——与轮询双通道，事件优先即时；订阅一次，
+  // 回调经 handleStateRef 取最新实现（无闭包过期）
   useEffect(() => {
     const un = listen<[number, AiTaskState]>("ai:task-update", (e) => {
       const [tid, st] = e.payload;
-      if (tid !== taskId) return;
-      handleState(st);
+      if (tid !== taskIdRef.current) return;
+      void handleStateRef.current(st);
     });
     return () => {
       un.then((f) => f());
     };
-  }, [taskId]);
+  }, []);
 
   // 审查修复（2026-08-21）：组件卸载时停止轮询——否则 interval 持续 invoke
   // 并对已卸载组件 setState（切会话/关面板后泄漏）
@@ -88,9 +94,10 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
   }, []);
 
   const handleState = useCallback(async (st: AiTaskState) => {
+    const tid = taskIdRef.current;
     if (st === "Succeeded") {
       stopPolling();
-      const r = await invoke<AiRefineResult>("ai_refine_result", { taskId }).catch(() => null);
+      const r = await invoke<AiRefineResult>("ai_refine_result", { taskId: tid }).catch(() => null);
       if (r) {
         setResult(r);
         setPhase("done");
@@ -103,7 +110,12 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
       setProgress({ finished: st.Running.finished_slices, total: st.Running.total_slices });
       setPhase("running");
     }
-  }, [taskId]);
+  }, []);
+
+  // 同步最新 handleState 到 ref（事件/轮询回调总用最新实现）
+  useEffect(() => {
+    handleStateRef.current = handleState;
+  }, [handleState]);
 
   const stopPolling = () => {
     if (polling.current) {
@@ -173,6 +185,7 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
       return null;
     });
     if (handle) {
+      taskIdRef.current = handle.task_id;
       setTaskId(handle.task_id);
       void handleState(handle.state);
       poll(handle.task_id);
@@ -200,6 +213,7 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
 
   const reset = () => {
     stopPolling();
+    taskIdRef.current = null;
     setPhase("idle");
     setTaskId(null);
     setResult(null);

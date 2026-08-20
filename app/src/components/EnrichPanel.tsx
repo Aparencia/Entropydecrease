@@ -61,8 +61,12 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
   const [result, setResult] = useState<AiEnrichResult | null>(null);
   const [failure, setFailure] = useState<FailureLike | null>(null);
   const [msg, setMsg] = useState("");
-  const [taskId, setTaskId] = useState<number | null>(null);
+  const [, setTaskId] = useState<number | null>(null);
   const polling = useRef<ReturnType<typeof setInterval> | null>(null);
+  // 审查修复（2026-08-21 真机 debug）：同 AiRefineCard——闭包过期会导致
+  // 事件/轮询回调用旧 taskId（null）查询结果而永久卡"排队中"
+  const taskIdRef = useRef<number | null>(null);
+  const handleStateRef = useRef<(st: AiTaskState) => Promise<void>>(async () => {});
 
   useEffect(() => {
     void invoke<AiSettingsView>("ai_get_settings").then(setSettings).catch(() => undefined);
@@ -82,9 +86,10 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
   };
 
   const handleState = useCallback(async (st: AiTaskState) => {
+    const tid = taskIdRef.current;
     if (st === "Succeeded") {
       stopPolling();
-      const r = await invoke<AiEnrichResult>("ai_enrich_result", { taskId }).catch(() => null);
+      const r = await invoke<AiEnrichResult>("ai_enrich_result", { taskId: tid }).catch(() => null);
       if (r) {
         setResult(r);
         setPhase("done");
@@ -97,17 +102,23 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
       setProgress({ finished: st.Running.finished_slices, total: st.Running.total_slices });
       setPhase("running");
     }
-  }, [taskId]);
+  }, []);
+
+  // 同步最新 handleState 到 ref（事件/轮询回调总用最新实现——无闭包过期）
+  useEffect(() => {
+    handleStateRef.current = handleState;
+  }, [handleState]);
 
   useEffect(() => {
-    // 审查修复（2026-08-21）：静态 import + 事件监听（与 AiRefineCard 一致）
+    // 审查修复（2026-08-21）：静态 import + 事件监听订阅一次，回调经 ref 取最新
     const un = listen<[number, AiTaskState]>("ai:task-update", (e) => {
-      if (e.payload[0] === taskId) void handleState(e.payload[1]);
+      if (e.payload[0] !== taskIdRef.current) return;
+      void handleStateRef.current(e.payload[1]);
     });
     return () => {
       un.then((off) => off());
     };
-  }, [taskId, handleState]);
+  }, []);
 
   const poll = (id: number) => {
     stopPolling();
