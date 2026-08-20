@@ -105,35 +105,24 @@ pub(crate) fn apply_note_structure(
     );
 }
 
-/// 会话 → 笔记核心（v0.7.1 提取：单条与批量共用同一管线）。
+/// 构建规则草稿（REQ-081 单一管线三出口：预览/落库/AI 精修共用——
+/// 净化→配图→警示→结构渲染同函数同口径；v0.8.0 M2 提取供 ai_refine 任务
+/// 复用，保证 AI 精修的输入基线 = 规则版输出基线）。
 ///
-/// @ai-context: REQ-082：过滤链（UI 垃圾/重复合并/碎片/低置信/口语净化/口头禅
-///              删除——v0.7.5 净化接线）与预览共用；ai_decisions（REQ-085）
-///              可选叠加——前端把预览中已确认的 AI 判定结果回传，落库与预览
-///              输出保持一致（默认 None=纯规则）。
-/// @ai-context: 只允许 finished/failed 会话转换；source 沿用 classroom；
-///              v0.7.1 起落库携带 session_id（列表 has_note/查看笔记跳转的数据源）；
-///              v0.7.3（REQ-160）：data_dir 供画面要点屏 attach 归档图
-///              （配图行随 image_ref 进入笔记 markdown）。
-/// @ai-context: v0.7.5：净化配置/符号映射注入（REQ-173 JSON 可校准）；失败/
-///              异常会话追加警示行（REQ-170 诚实降级）；落库携带 rule_version
-///              + purify_stats 元数据（REQ-171——旧笔记 NULL 诚实降级）。
-fn convert_to_note(
+/// @ai-context: 返回 NoteFilterResult（markdown 即规则版输出）；AI 精修任务
+///              在其上追加章节/术语上下文（analyze 另跑）后构建 AiRefineRequest。
+pub(crate) fn build_rule_draft(
     db: &Db,
     ui_junk: &UiJunkList,
     env: &PurifyEnv,
     data_dir: &std::path::Path,
     id: i64,
     title: Option<String>,
-    ai_decisions: Option<Vec<TextFilterDecision>>,
-) -> Result<Note, String> {
+) -> Result<NoteFilterResult, String> {
     let (session, segments, ocr_blocks) = load_note_material(db, id)?;
     let fallback = format!("{}（会话）", session.title);
     let title = normalize_title(title.unwrap_or_default(), &fallback);
     let mut result = filter_note(&title, &segments, &ocr_blocks, ui_junk, env);
-    if let Some(decisions) = ai_decisions {
-        result = apply_ai_decisions(result, &decisions);
-    }
     // v0.7.3（REQ-160）：画面要点配图（归档 full 图匹配；目录缺失/无图 → 纯文本降级）
     let images_dir = data_dir.join("session-images").join(id.to_string());
     crate::screens::attach_images(&mut result.ocr_screens, &images_dir);
@@ -144,6 +133,32 @@ fn convert_to_note(
     // v0.7.6（REQ-177/178）：结构渲染——章节标题 + 词汇表块（纯本地增强层；
     // 无结构数据/分析失败 → 原样输出不阻断，见 apply_note_structure）
     apply_note_structure(&mut result, db, &session, &segments, &ocr_blocks, env);
+    Ok(result)
+}
+
+/// 会话 → 笔记核心（v0.7.1 提取：单条与批量共用同一管线）。
+///
+/// @ai-context: REQ-082：过滤链（UI 垃圾/重复合并/碎片/低置信/口语净化/口头禅
+///              删除——v0.7.5 净化接线）与预览共用；ai_decisions（REQ-085）
+///              可选叠加——前端把预览中已确认的 AI 判定结果回传，落库与预览
+///              输出保持一致（默认 None=纯规则）。
+/// @ai-context: 只允许 finished/failed 会话转换；source 沿用 classroom；
+///              v0.7.1 起落库携带 session_id（列表 has_note/查看笔记跳转的数据源）；
+///              v0.8.0 M2（REQ-141）：草稿构建提取至 build_rule_draft——
+///              AI 精修任务与预览/落库共用同一输入基线。
+fn convert_to_note(
+    db: &Db,
+    ui_junk: &UiJunkList,
+    env: &PurifyEnv,
+    data_dir: &std::path::Path,
+    id: i64,
+    title: Option<String>,
+    ai_decisions: Option<Vec<TextFilterDecision>>,
+) -> Result<Note, String> {
+    let mut result = build_rule_draft(db, ui_junk, env, data_dir, id, title)?;
+    if let Some(decisions) = ai_decisions {
+        result = apply_ai_decisions(result, &decisions);
+    }
     let new = NewNote {
         title: result.title.clone(),
         content: result.markdown.clone(),

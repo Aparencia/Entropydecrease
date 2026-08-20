@@ -682,3 +682,50 @@ export interface AiAuditEntry {
   result: string;
 }
 
+// ────────────────────────────────────────────────────────────
+// AI 精修类型（v0.8.0 M2，REQ-141/145；Rust serde 契约）
+// ────────────────────────────────────────────────────────────
+
+/** 任务失败原因（Rust AiTaskFailure：{"unauthorized":".."|"network"|..} 外部标签） */
+export type AiTaskFailure = { unauthorized: string } | { network: string } | { balance: string } | { quota: string } | { server: string } | { invalid: string } | { other: string };
+
+/** 任务状态（Rust AiTaskState：单元变体字符串 / 结构变体对象） */
+export type AiTaskState =
+  | "Pending"
+  | { Running: { finished_slices: number; total_slices: number } }
+  | "Succeeded"
+  | { Failed: { reason: AiTaskFailure } };
+
+/** 任务句柄（Rust AiTaskHandle） */
+export interface AiTaskHandle {
+  task_id: number;
+  state: AiTaskState;
+}
+
+/** 段级 diff 操作（Rust DiffOp：三态外部标签） */
+export type DiffOp = { unchanged: string } | { added: string } | { removed: string };
+
+/** 精修结果（Rust AiRefineResult——diff 预览 + 采纳落库数据源） */
+export interface AiRefineResult {
+  title: string;
+  refined_markdown: string;
+  diff: DiffOp[];
+  added_lines: number;
+  removed_lines: number;
+  slices: number;
+  model: string;
+}
+
+/** 成本预估（Rust CostEstimate） */
+export interface CostEstimate {
+  est_tokens: number;
+  est_cost_yuan: number;
+  price_per_1m: number;
+}
+
+/** 精修成本预估视图（Rust RefineEstimateView） */
+export interface RefineEstimateView {
+  estimate: CostEstimate;
+  remember_cost_choice: boolean;
+}
+

@@ -3,7 +3,20 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [SemVer](https://semver.org/lang/zh-CN/)。
 各版本的深度版本文档见 [docs/versions/](docs/versions/)。
 
-## [0.8.0] - 2026-08（AI 接入，M1 开发中）
+## [0.8.0] - 2026-08（AI 接入，M1/M2 开发中）
+
+### 新增（M2 会话→笔记 AI 精修，REQ-141/145 + REQ-143 基础版）
+
+- **AI 精修双模式（REQ-141）**：笔记预览视图新增「✨ AI 精修」入口——规则草稿（单一管线三出口：预览/落库/精修同基线，`build_rule_draft` 提取）→ 切片 → 云端结构化精修（`AiRefineResponse`：sections/blocks 五类型，schema 强校验，非法响应丢弃回退）→ **diff 预览**（本地规则版为基线，新增绿/删除红高亮）→ 采纳落库/放弃
+- **档案分组提示词**：`prompts/note_refine.json`——网课=讲义式/实操=步骤式/口播=摘要式/访谈=问答式/会议=纪要式 + 扩展类（直播/白板/题目/跟练/编程）回退讲义式；核心指令"精修=整理不创作（不增补课程外事实）"
+- **异步任务化（REQ-145）**：`ai_task.rs` 状态机（Pending/Running(按片进度)/Succeeded/Failed(原因四类)）+ `slice_note` 切片纯函数（≤8000 字/片、章节边界优先、CJK 字符级硬切防 panic）；任务注册表 + "ai:task-update" 事件 + 轮询双通道；失败原因四类引导（未授权→配置密钥/网络→重试/余额→充值/配额→明日再试）+ 重试入口
+- **成本确认基础版（REQ-143）**：`ai_cost.rs` token 估算（字符数保守上界）+ 单价表可配（env `SILICONFLOW_PRICE_PER_1M_TOKENS`，默认免费档 ¥0）+ 确认面板（token/费用/内联余额 ai_get_balance 复用 + "记住此选择"持久化）
+- **段级 diff 内核**：`note_diff.rs`（行级 LCS，未变/新增/删除三态）——M4 版本对比共用
+- mock 适配器扩展（`AiMockAdapter::refine`）+ `AI_REFINE_MOCK=1` 离线开发路径
+
+### 测试
+
+- 单测 +32（全量 1236 通过）：精修协议 validate 强校验/to_markdown 五类型渲染 · 切片边界/章节优先/CJK 不 panic/失败映射 · 成本估算/单价 env 竞态锁 · diff LCS/重组/规模守卫 · 提示词模板解析/档案风格回退
 
 ### 新增（M1 AI 使能层，REQ-138/139/140）
 
@@ -18,7 +31,6 @@
 - 单测 +20（ai_settings 默认关/partial JSON/损坏回退/roundtrip/双门控边界 · ai_credentials 内存桩 roundtrip/清除/空密钥拒绝 · ai_balance 解析容错/低余额边界 · ai_client payload/no_think/剥围栏/解析错误/无密钥 Auth 错误）；全量 `cargo test --lib` 1204 通过
 
 ## [0.7.2] - 2026-08（开发中）
-
 ### 新增
 
 - **课堂助手体验三连（2026-08 用户需求，已完成）**：

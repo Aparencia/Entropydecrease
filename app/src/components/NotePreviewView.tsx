@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import type { NoteFilterResult, TextFilterDecision, TextFilterReview, TextFilterStatus } from "../types";
+import AiRefineCard from "./AiRefineCard";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 
@@ -178,7 +179,7 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
         </span>
       </div>
 
-      {/* 操作行：AI 复核 + 一键落库 */}
+      {/* 操作行：AI 复核 + AI 精修 + 一键落库 */}
       <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
         <button
           style={{ ...btn, borderRadius: 6, border: "1px solid #a5b4fc", color: "#3730a3", background: "#eef2ff" }}
@@ -200,6 +201,8 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
           {showFiltered ? "收起被过滤对照" : `被过滤对照（${preview.filtered.length}）`}
         </button>
       </div>
+      {/* v0.8.0 M2（REQ-141/145）：AI 精修卡——预估确认/异步任务/diff 预览/采纳落库 */}
+      <AiRefineCard sessionId={sessionId} />
       {status && <p style={{ fontSize: 12, color: "#2563eb", marginBottom: 6 }}>{status}</p>}
       {aiMeta && (
         <p style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>

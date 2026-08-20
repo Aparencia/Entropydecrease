@@ -125,6 +125,11 @@ pub struct AppState {
     /// v0.8.0 M1（REQ-138）：AI 密钥凭据存储（Windows DPAPI 加密文件；
     /// 密钥不落 SQLite/明文文件——安全红线）
     pub ai_credentials: std::sync::Arc<dyn crate::ai_credentials::CredentialStore>,
+    /// v0.8.0 M2（REQ-145）：AI 异步任务注册表（任务 id → 状态/结果；
+    /// 容量守卫防无界增长——见 commands_ai_refine::trim_tasks）
+    pub ai_tasks: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<u64, crate::commands_ai_refine::AiTaskEntry>>>,
+    /// v0.8.0 M2（REQ-145）：任务 id 序列（原子递增——并发安全）
+    pub ai_task_seq: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。

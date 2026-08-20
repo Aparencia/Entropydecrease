@@ -12,6 +12,9 @@ use crate::ai_protocol::{
     AiEnhanceRequest, AiEnhanceResponse, AiRequestType, AiResponseContent, TextFilterAction,
     TextFilterDecision, TextFilterRequest, TextFilterResponse,
 };
+use crate::ai_refine_protocol::{
+    AiRefineBlock, AiRefineBlockType, AiRefineRequest, AiRefineResponse, AiRefineSection,
+};
 
 /// mock 适配器（无状态；后续云端适配器实现同一 trait）。
 pub struct AiMockAdapter;
@@ -112,6 +115,39 @@ impl AiMockAdapter {
             })
             .collect();
         TextFilterResponse { decisions }
+    }
+
+    /// 精修 mock（REQ-141）：规则化整理——按输入章节组织 + 高亮标注；
+    /// 响应通过 AiRefineResponse::validate（持续验证精修协议校验链）。
+    ///
+    /// @ai-context: 精修=整理不创作语义在 mock 中体现：只重组不新增事实
+    ///              （content 原样作为 paragraph，标 mock 高亮）；M5 契约
+    ///              测试/mock 全链路消费本方法。
+    pub fn refine(&self, request: &AiRefineRequest) -> AiRefineResponse {
+        let headings: Vec<String> = if request.chapters.is_empty() {
+            vec!["笔记".to_string()]
+        } else {
+            request.chapters.clone()
+        };
+        let sections: Vec<AiRefineSection> = headings
+            .iter()
+            .map(|heading| AiRefineSection {
+                heading: heading.clone(),
+                blocks: vec![
+                    AiRefineBlock {
+                        block_type: AiRefineBlockType::Paragraph,
+                        content: request.content.clone(),
+                        anchor_ref: Some(heading.clone()),
+                    },
+                    AiRefineBlock {
+                        block_type: AiRefineBlockType::Highlight,
+                        content: "（mock 精修）已整理，未增补课程外内容".to_string(),
+                        anchor_ref: None,
+                    },
+                ],
+            })
+            .collect();
+        AiRefineResponse { sections }
     }
 }
 

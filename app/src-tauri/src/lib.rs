@@ -16,6 +16,14 @@ mod ai_balance;
 mod ai_client;
 mod ai_credentials;
 mod ai_settings;
+// v0.8.0 M2（REQ-141/145 + REQ-143 基础版）：AI 精修——协议/任务状态机/
+// 成本估算/段级 diff/适配器/命令层
+mod ai_refine_protocol;
+mod ai_task;
+mod ai_cost;
+mod note_diff;
+mod ai_note_refine;
+mod commands_ai_refine;
 mod asr;
 mod asr_clean;
 mod asr_dedupe;
@@ -394,6 +402,13 @@ pub fn run() {
             commands_ai_settings::ai_get_balance,
             commands_ai_settings::ai_audit_list,
             commands_ai_settings::ai_audit_clear,
+            // v0.8.0 M2（REQ-141/145 + REQ-143 基础版）：会话→笔记 AI 精修——
+            // 成本预估/异步任务/状态/结果/采纳落库
+            commands_ai_refine::ai_refine_estimate,
+            commands_ai_refine::ai_refine_start,
+            commands_ai_refine::ai_refine_status,
+            commands_ai_refine::ai_refine_result,
+            commands_ai_refine::ai_refine_apply,
             // 结构模型与课后精修（REQ-047/049/050 模型版：下载/状态/精修）
             commands_refine::structure_model_download,
             commands_refine::structure_model_status,

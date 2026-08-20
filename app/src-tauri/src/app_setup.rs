@@ -149,6 +149,10 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         crate::ai_settings::AiSettings::load(&ai_settings_path),
     ));
     let ai_credentials = crate::ai_credentials::platform_store(&data_dir.join("ai_credentials.bin"));
+    // v0.8.0 M2（REQ-145）：AI 异步任务注册表 + id 序列（spawn_blocking 后台
+    // 执行，前端轮询/事件双通道——禁止同步阻塞 30s+ 长会话精修）
+    let ai_tasks = crate::commands_ai_refine::task_registry();
+    let ai_task_seq = crate::commands_ai_refine::task_seq();
     app.manage(AppState {
         db,
         engines,
@@ -188,6 +192,9 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         ai_settings,
         ai_settings_path,
         ai_credentials,
+        // v0.8.0 M2（REQ-145）：AI 异步任务注册表 + id 序列
+        ai_tasks,
+        ai_task_seq,
     });
     Ok(())
 }
