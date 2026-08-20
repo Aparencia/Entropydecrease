@@ -1,4 +1,4 @@
-# 下载 ffmpeg 静态版到 src-tauri/ffmpeg/（v0.3.0 视频文件导入/内嵌字幕依赖，ADR-008）
+﻿# 下载 ffmpeg 静态版到 src-tauri/ffmpeg/（v0.3.0 视频文件导入/内嵌字幕依赖，ADR-008）
 #
 # @ai-context: 本机存在 TLS 拦截（rustls 报 UnknownIssuer），PowerShell 走 Windows
 #              证书库可正常下载——与 sherpa-archive/ort 同模式：手动运行一次，
