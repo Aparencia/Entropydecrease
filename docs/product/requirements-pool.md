@@ -198,6 +198,22 @@
 | REQ-146 | 多版本真机验收总清（M0 前置）：v0.5.0 M9 / v0.6.0 M7 / v0.7.0 M4 / v0.7.1 验收清单系统执行 + 缺陷清零 | P1 | 已排期 | v0.8.0 | AI 线不盖在未验收地基上；未通过不启动 AI 开发 |
 | REQ-147 | AI 链路契约测试：AiRefine/AiEnrich schema 强校验 + mock 适配器全链路 + 降级四路径 + 提示词 golden 冒烟回归 | P2 | 已排期 | v0.8.0 | 前端无 Vitest 基建维持真机手动清单 |
 
+### 待排期 · 画面要点屏卡体系（2026-08-20 头脑风暴裁决）
+
+> 用户反馈"画面要点（OCR）提取的内容零碎（时间整理和识别内容）"；会话29 实证（175 块 OCR / 12 时间戳重复 / 平台 UI+其他窗口污染 / 无 bbox 落库）。
+> 设计规格 [头脑风暴 OCR 屏卡体系](../archive/2026-08-20/brainstorming-ocr-screen-cards.md) · 架构决策 [ADR-015](../adr/ADR-015-screen-cards-ocr.md)。
+> 裁决：路线 A+B+D（采集治理+屏ID+屏级合并+bbox 落库+行合并/版面角色+结构识别接线）；笔记形态=屏段落+配图；AI 精修留给 v0.8.0。
+
+| ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
+|----|------|--------|------|---------|------|
+| REQ-155 | 屏级聚合与去重：screen_merge 纯函数（normalize/similarity/cluster/line_merge/classify_roles）+ ScreenTracker 在线屏（版面指纹变化=新屏）+ 旧数据聚类兜底 | P1 | 待排期 | 待排期 | 在线/离线共用同一套纯函数（单管线双出口）；翻回旧页间隔>3s=新屏 |
+| REQ-156 | bbox/screen_id 落库迁移：session_ocr_blocks 加列（ensure_column 幂等）+ 实时/导入双入口双写 | P1 | 待排期 | 待排期 | bbox JSON {x,y,w,h} 帧坐标系；NULL=旧数据；不建新表（GROUP BY 派生屏） |
+| REQ-157 | 采集治理：前台窗口过滤扩展全帧（复用 foreground_foreign，REQ-084 先例）+ ui_junk 直播互动元素扩充 | P1 | 待排期 | 待排期 | 根治会话29 平台 UI/IDE 污染；黑名单扩充+启发式兜底 |
+| REQ-158 | 屏内组织：line_merge 断行拼接 + classify_roles 版面角色（标题/正文/图注标签）+ SessionScreen 契约 | P1 | 待排期 | 待排期 | region_kind=table/formula/code 不参与行合并（徽标+精修入口） |
+| REQ-159 | 结构识别接线：refine_screen_structures 纯函数复用 commands_refine_inner（REQ-049/050 内核不动）+ 停止后批量精修 + 屏卡 Markdown/LaTeX/代码渲染 | P2 | 待排期 | 待排期 | 模型已本地就绪（pp-doclayout-l/formulanet/slanet）；失败降级徽标 |
+| REQ-160 | 消费端：SessionDetail.screens + 原料屏卡流（可展开块级明细复查）+ 笔记屏段落配图（asset:// 本地图）+ 大纲/检索按屏 | P1 | 待排期 | 待排期 | 配图可开关；旧数据降级（聚类屏无行合并/角色）；大纲无 bbox 回退文本启发式 |
+| REQ-161 | 实时面板按屏显示：live:ocr 事件带 screen_id，最近画面要点按屏摘要 | P2 | 待排期 | 待排期 | 一行=一屏摘要（区间+标题） |
+
 ### V1.0 · 体验增强（远期）
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
