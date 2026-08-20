@@ -67,6 +67,8 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
   // 事件/轮询回调用旧 taskId（null）查询结果而永久卡"排队中"
   const taskIdRef = useRef<number | null>(null);
   const handleStateRef = useRef<(st: AiTaskState) => Promise<void>>(async () => {});
+  // 卡住检测（2026-08-21 真机"排队中"排查）：任务 30s 仍 Pending → 提示查看日志
+  const lastChangeRef = useRef(0);
 
   useEffect(() => {
     void invoke<AiSettingsView>("ai_get_settings").then(setSettings).catch(() => undefined);
@@ -122,9 +124,21 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
 
   const poll = (id: number) => {
     stopPolling();
+    lastChangeRef.current = Date.now();
     polling.current = setInterval(async () => {
       const st = await invoke<AiTaskState>("ai_refine_status", { taskId: id }).catch(() => null);
-      if (st) void handleState(st);
+      if (st) {
+        if (st !== "Pending") lastChangeRef.current = Date.now();
+        void handleStateRef.current(st);
+      }
+      // 卡住检测：长时间仍 Pending = 任务未启动或后台卡死（tauri 终端看 [refine-task] 日志）
+      if (Date.now() - lastChangeRef.current > 30_000) {
+        stopPolling();
+        taskIdRef.current = null;
+        setTaskId(null);
+        setPhase("idle");
+        setMsg("任务 30 秒无进展（可能未启动或后台卡住）——请查看 tauri 终端 [refine-task] 日志后重试");
+      }
     }, 1500);
   };
 

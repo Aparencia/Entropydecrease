@@ -244,6 +244,8 @@ pub fn ai_refine_apply(
 ///              Pending（前端永久显示"任务排队中"，无失败可重试）。
 ///              catch_unwind 把 panic 归一为 Failed 状态，状态流转永不失联。
 fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
+    // 诊断日志（2026-08-21 真机"排队中"排查）：tauri dev 终端可见各阶段进度
+    eprintln!("[refine-task] task={} start session={} mock={}", task_id, session_id, mock);
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         run_refine_task_inner(&st, task_id, session_id, mock)
     }))
@@ -254,6 +256,12 @@ fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
     });
     match outcome {
         Ok(result) => {
+            eprintln!(
+                "[refine-task] task={} succeeded slices={} diff={}",
+                task_id,
+                result.slices,
+                result.diff.len()
+            );
             {
                 let mut tasks = st.ai_tasks.lock().unwrap_or_else(|e| e.into_inner());
                 if let Some(entry) = tasks.get_mut(&task_id) {
@@ -262,7 +270,10 @@ fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
             }
             set_task(&st, task_id, AiTaskState::Succeeded);
         }
-        Err(reason) => set_task(&st, task_id, AiTaskState::Failed { reason }),
+        Err(reason) => {
+            eprintln!("[refine-task] task={} failed kind={}", task_id, reason.kind());
+            set_task(&st, task_id, AiTaskState::Failed { reason });
+        }
     }
 }
 
@@ -280,9 +291,11 @@ fn run_refine_task_inner(
     };
     // ① 规则草稿 + 结构分析一次完成（审查修复 2026-08-21：build_rule_draft_
     //    with_analysis 返回 analysis——章节/术语直接复用，消除二次 analyze 双跑）
+    eprintln!("[refine-task] task={} 阶段①构建规则草稿（本地分析）", task_id);
     let (draft, analysis) =
         build_rule_draft_with_analysis(&st.db, &st.ui_junk, &env, &st.data_dir, session_id, None)
             .map_err(AiTaskFailure::Other)?;
+    eprintln!("[refine-task] task={} 草稿完成 markdown={} 字符", task_id, draft.markdown.chars().count());
     // ② 精修上下文（档案/章节/术语——analysis 已含章节边界与术语表）
     let session = st
         .db
@@ -313,6 +326,7 @@ fn run_refine_task_inner(
     // ③ 切片（≤8000 字/片；进度按片上报）
     let slices = slice_note(&draft.markdown, SLICE_MAX_CHARS);
     let total = slices.len();
+    eprintln!("[refine-task] task={} 切片 {} 片", task_id, total);
     set_task(st, task_id, AiTaskState::Running { finished_slices: 0, total_slices: total });
     let settings = st
         .ai_settings
@@ -335,6 +349,13 @@ fn run_refine_task_inner(
         } else {
             adapter.refine(&req).map_err(AiTaskFailure::from)?
         };
+        eprintln!(
+            "[refine-task] task={} 片 {}/{} 精修完成（{} 节）",
+            task_id,
+            i + 1,
+            total,
+            resp.sections.len()
+        );
         if !refined.is_empty() {
             refined.push_str("\n\n");
         }

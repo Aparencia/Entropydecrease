@@ -64,6 +64,8 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
   const [, setTaskId] = useState<number | null>(null);
   const taskIdRef = useRef<number | null>(null);
   const handleStateRef = useRef<(st: AiTaskState) => Promise<void>>(async () => {});
+  // 卡住检测（2026-08-21 真机"排队中"排查）：任务 30s 仍 Pending → 提示查看日志
+  const lastChangeRef = useRef(0);
 
   // 事件通道（ai:task-update）——与轮询双通道，事件优先即时；订阅一次，
   // 回调经 handleStateRef 取最新实现（无闭包过期）
@@ -126,9 +128,22 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
 
   const poll = (id: number) => {
     stopPolling();
+    lastChangeRef.current = Date.now();
     polling.current = setInterval(async () => {
       const st = await invoke<AiTaskState>("ai_refine_status", { taskId: id }).catch(() => null);
-      if (st) void handleState(st);
+      if (st) {
+        // 状态有进展（Running/Succeeded/Failed）→ 刷新时间戳；仅 Pending 计入卡住窗口
+        if (st !== "Pending") lastChangeRef.current = Date.now();
+        void handleStateRef.current(st);
+      }
+      // 卡住检测：长时间仍 Pending = 任务未启动或后台卡死（tauri 终端看 [refine-task] 日志）
+      if (Date.now() - lastChangeRef.current > 30_000) {
+        stopPolling();
+        taskIdRef.current = null; // 隔离旧任务后续事件
+        setTaskId(null);
+        setPhase("idle");
+        setMsg("任务 30 秒无进展（可能未启动或后台卡住）——请查看 tauri 终端 [refine-task] 日志后重试");
+      }
     }, 1500);
   };
 
