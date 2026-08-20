@@ -17,19 +17,11 @@ use std::sync::{Arc, Mutex};
 
 use tauri::{Emitter, State};
 
-use crate::ai_client::AiClient;
 use crate::ai_cost::{estimate_for_content_model, CostEstimate};
-use crate::ai_mock::AiMockAdapter;
-use crate::ai_note_refine::AiNoteRefineAdapter;
-use crate::ai_refine_protocol::AiRefineRequest;
-use crate::ai_task::{slice_note, AiTaskFailure, AiTaskState, SLICE_MAX_CHARS};
+use crate::ai_task::AiTaskState;
 use crate::commands::AppState;
-use crate::commands_session_note::build_rule_draft_with_analysis;
-use crate::note_diff::{diff_markdown, diff_stats, DiffOp};
-use crate::note_filter::PurifyEnv;
-use crate::outline::{detect_outline_smart, OutlineConfig};
+use crate::note_diff::DiffOp;
 use crate::types::{NewNote, Note};
-use crate::video_profile::ProfileKind;
 
 /// mock 模式 env 键（本地规则精修，不联网——测试/离线开发，ai_text_filter 先例）。
 const MOCK_ENV: &str = "AI_REFINE_MOCK";
@@ -59,6 +51,8 @@ pub struct AiRefineResult {
     pub added_lines: usize,
     pub removed_lines: usize,
     pub slices: usize,
+    /// F2-B4：失败片数（>0 = 部分成功——重试后仍失败保留已成功片）
+    pub failed_slices: usize,
     pub model: String,
 }
 
@@ -180,7 +174,7 @@ pub async fn ai_refine_start(
         adopted: false,
     });
     let st2 = st.clone();
-    tauri::async_runtime::spawn_blocking(move || run_refine_task(st2, task_id, session_id, mock));
+    tauri::async_runtime::spawn_blocking(move || crate::ai_refine_task::run_refine_task(st2, task_id, session_id, mock));
     Ok(AiTaskHandle { task_id, state: AiTaskState::Pending })
 }
 
@@ -306,217 +300,6 @@ pub fn ai_refine_apply(
         .get_note(note.id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "笔记不存在".to_string())
-}
-
-// ────────────────────────────────────────────────────────────
-// 任务执行（spawn_blocking 内；纯编排）
-// ────────────────────────────────────────────────────────────
-
-/// 后台精修任务：规则草稿 → 切片 → 逐片精修（mock/云端）→ 合并 → diff。
-///
-/// @ai-context: 彻底检测加固（2026-08-21）：spawn_blocking 的 JoinHandle 未被
-///              await——闭包内 panic 会被 tokio 吞掉，任务状态永久停在
-///              Pending（前端永久显示"任务排队中"，无失败可重试）。
-///              catch_unwind 把 panic 归一为 Failed 状态，状态流转永不失联。
-fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
-    // 诊断日志（2026-08-21 真机"排队中"排查）：tauri dev 终端可见各阶段进度
-    eprintln!("[refine-task] task={} start session={} mock={}", task_id, session_id, mock);
-    let started = std::time::Instant::now();
-    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run_refine_task_inner(&st, task_id, session_id, mock)
-    }))
-    .unwrap_or_else(|_| {
-        Err(AiTaskFailure::Other(
-            "精修任务内部错误（panic）——请重试；若复现请反馈".to_string(),
-        ))
-    });
-    let elapsed_ms = started.elapsed().as_millis() as i64;
-    match outcome {
-        Ok(result) => {
-            eprintln!(
-                "[refine-task] task={} succeeded slices={} diff={}",
-                task_id,
-                result.slices,
-                result.diff.len()
-            );
-            {
-                let mut tasks = st.ai_tasks.lock().unwrap_or_else(|e| e.into_inner());
-                if let Some(entry) = tasks.get_mut(&task_id) {
-                    entry.result = serde_json::to_value(&result).ok();
-                }
-            }
-            set_task(&st, task_id, AiTaskState::Succeeded);
-            // F1 修复（2026-08-21）：精修调用上审计——REQ-140 轨迹可见化
-            // （此前只有余额/测试连接/复核有记录，精修补充零审计）
-            push_refine_audit(&st, session_id, "ok", Some(&result.model));
-            // F2 任务中心：终态落库（写库失败不阻断——H2 设计）
-            let result_json = serde_json::to_string(&result).ok();
-            let _ = st.db.finish_ai_task(
-                task_id,
-                "succeeded",
-                result_json.as_deref(),
-                None,
-                elapsed_ms,
-            );
-        }
-        Err(reason) => {
-            // 打印具体 message——区分"未配置密钥"vs"密钥无效(401/403)"（真机排查）
-            eprintln!(
-                "[refine-task] task={} failed kind={} msg={}",
-                task_id,
-                reason.kind(),
-                reason.message()
-            );
-            set_task(&st, task_id, AiTaskState::Failed { reason: reason.clone() });
-            push_refine_audit(&st, session_id, "error", None);
-            let _ = st.db.finish_ai_task(
-                task_id,
-                "failed",
-                None,
-                Some(&format!("{}: {}", reason.kind(), reason.message())),
-                elapsed_ms,
-            );
-        }
-    }
-}
-
-/// 精修任务审计记录（F1：REQ-140 轨迹可见化——summary 不含原文，隐私红线）。
-fn push_refine_audit(st: &AppState, session_id: i64, result: &str, model: Option<&str>) {
-    let now = crate::db_sessions_rows::unix_seconds();
-    if let Ok(mut g) = st.ai_guardrails.lock() {
-        g.push_audit(crate::ai_guardrails::AiAuditEntry {
-            at_unix: now,
-            upload_summary: format!(
-                "refine session={} model={}",
-                session_id,
-                model.unwrap_or("?")
-            ),
-            result: result.to_string(),
-        });
-    }
-}
-
-/// 精修任务主体（返回 Result；panic 由外层 catch_unwind 兜底）。
-fn run_refine_task_inner(
-    st: &AppState,
-    task_id: u64,
-    session_id: i64,
-    mock: bool,
-) -> Result<AiRefineResult, AiTaskFailure> {
-    let env = PurifyEnv {
-        config: st.purify.clone(),
-        symbol: st.symbol_normalize.clone(),
-        corrections: st.ocr_corrections.clone(),
-    };
-    // ① 规则草稿 + 结构分析一次完成（审查修复 2026-08-21：build_rule_draft_
-    //    with_analysis 返回 analysis——章节/术语直接复用，消除二次 analyze 双跑）
-    eprintln!("[refine-task] task={} 阶段①构建规则草稿（本地分析）", task_id);
-    let (draft, analysis) =
-        build_rule_draft_with_analysis(&st.db, &st.ui_junk, &env, &st.data_dir, session_id, None)
-            .map_err(AiTaskFailure::Other)?;
-    eprintln!("[refine-task] task={} 草稿完成 markdown={} 字符", task_id, draft.markdown.chars().count());
-    // ② 精修上下文（档案/章节/术语——analysis 已含章节边界与术语表）
-    let session = st
-        .db
-        .get_session(session_id)
-        .map_err(|e| AiTaskFailure::Other(e.to_string()))?
-        .ok_or_else(|| AiTaskFailure::Other("会话不存在".to_string()))?;
-    let kind = session
-        .profile
-        .as_deref()
-        .map(ProfileKind::parse)
-        .unwrap_or(ProfileKind::Lecture);
-    let ocr_blocks = st
-        .db
-        .list_ocr_blocks(session_id)
-        .map_err(|e| AiTaskFailure::Other(e.to_string()))?;
-    let outline = detect_outline_smart(&ocr_blocks, &draft.ocr_screens, &OutlineConfig::default());
-    let chapters: Vec<String> = if outline.is_empty() {
-        analysis
-            .chapters
-            .iter()
-            .enumerate()
-            .map(|(i, _)| format!("第 {} 节", i + 1))
-            .collect()
-    } else {
-        outline.iter().map(|e| e.text.clone()).collect()
-    };
-    let glossary: Vec<String> = analysis.glossary.iter().map(|g| g.term.clone()).collect();
-    // ③ 切片（≤8000 字/片；进度按片上报）
-    let slices = slice_note(&draft.markdown, SLICE_MAX_CHARS);
-    let total = slices.len();
-    eprintln!("[refine-task] task={} 切片 {} 片", task_id, total);
-    set_task(st, task_id, AiTaskState::Running { finished_slices: 0, total_slices: total });
-    let settings = st
-        .ai_settings
-        .lock()
-        .map_err(|e| AiTaskFailure::Other(e.to_string()))?
-        .clone();
-    let env_key = std::env::var("SILICONFLOW_API_KEY").ok().filter(|k| !k.is_empty());
-    let stored_key = st.ai_credentials.load_key().ok().flatten();
-    // 密钥来源诊断（脱敏：只打长度+前 6 字符；真机 unauthorized 排查 2026-08-21）
-    eprintln!(
-        "[refine-task] task={} key: env={} stored={}",
-        task_id,
-        env_key
-            .as_ref()
-            .map(|k| format!("{}:{}..", k.len(), &k[..6.min(k.len())]))
-            .unwrap_or_else(|| "无".to_string()),
-        stored_key
-            .as_ref()
-            .map(|k| format!("{}:{}..", k.len(), &k[..6.min(k.len())]))
-            .unwrap_or_else(|| "无".to_string()),
-    );
-    let client = AiClient::from_settings(&settings, stored_key);
-    let adapter = AiNoteRefineAdapter::new(client.clone());
-    let mock_adapter = AiMockAdapter;
-    let mut refined = String::new();
-    for (i, slice) in slices.iter().enumerate() {
-        let req = AiRefineRequest {
-            content: slice.clone(),
-            profile: kind.as_str().to_string(),
-            glossary: glossary.clone(),
-            chapters: chapters.clone(),
-        };
-        let resp = if mock {
-            mock_adapter.refine(&req)
-        } else {
-            adapter.refine(&req).map_err(AiTaskFailure::from)?
-        };
-        eprintln!(
-            "[refine-task] task={} 片 {}/{} 精修完成（{} 节）",
-            task_id,
-            i + 1,
-            total,
-            resp.sections.len()
-        );
-        if !refined.is_empty() {
-            refined.push_str("\n\n");
-        }
-        refined.push_str(&resp.to_markdown());
-        set_task(
-            st,
-            task_id,
-            AiTaskState::Running { finished_slices: i + 1, total_slices: total },
-        );
-    }
-    // ④ 合并 + 与规则版 diff（基线=本地版，AI 变化点高亮）
-    // 丢图修复（2026-08-21 F1）：协议 v2 前，模型可能丢弃规则版画面配图行
-    // （`- ![画面 N](session-images/..)`）——本地合并降级：AI 未保留配图时
-    // 把规则版配图行按章节合并回精修版（不丢不假，零模型成本）
-    let refined = crate::note_image_merge::merge_rule_images(&draft.markdown, &refined);
-    let diff = diff_markdown(&draft.markdown, &refined);
-    let (added, removed, _) = diff_stats(&diff);
-    Ok(AiRefineResult {
-        title: draft.title.clone(),
-        base_markdown: draft.markdown.clone(),
-        refined_markdown: refined,
-        diff,
-        added_lines: added,
-        removed_lines: removed,
-        slices: total,
-        model: client.config.model,
-    })
 }
 
 /// 更新任务状态并推送事件（短锁内完成即释放）。M3 补充任务复用（pub(crate)）。

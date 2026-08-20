@@ -38,7 +38,7 @@
 | app/src-tauri/src/structure_note_tests.rs | ~415 | v0.7.6（REQ-177~181）：结构渲染层单测域（章节插入位置/命名窗口/词汇表排序上限锚点/零回归护栏/JSON 往返）单模块 #[path] 挂载；审查清理死代码 helpers 并补 max_terms=0 语义测试 | 若再增长：词汇表组拆至 structure_note_glossary_tests.rs |
 | app/src-tauri/src/note_filter_golden_tests.rs | ~390 | v0.7.5（REQ-172）：黄金语料回归域（会话31/29 实证 + v0.7.6 REQ-181 结构渲染 2 例 + 审查补测"配置开无数据逐字节一致"）单模块 #[path] 挂载 | 若再增长：结构渲染组拆至 note_filter_golden_structure_tests.rs |
 | app/src-tauri/src/commands_ai.rs | ~337 | v0.5.0 起 AI 复核命令域（边界批量复核/配额/缓存/审计 + v0.7.6 审查修复补结构渲染接线）；与 note_filter_ai（纯逻辑）分层 | 若再增长：批量复核循环拆至 commands_ai_review.rs |
-| app/src-tauri/src/commands_ai_refine.rs | ~330 | v0.8.0 M2（REQ-141/145 + REQ-143 基础版）：AI 精修命令域（成本预估/异步任务编排/状态/结果/采纳落库 + 任务注册表容量守卫）——任务编排与状态流转内聚于单一执行域，拆分会破坏 5 命令共享的任务注册表上下文 | 若再增长：任务执行（run_refine_task）拆至 ai_refine_task.rs |
+| app/src-tauri/src/commands_ai_refine.rs | ~352 | v0.8.0 M2（REQ-141/145 + REQ-143 基础版）+ F2（2026-08-21）：AI 精修命令域（成本预估/异步任务编排/状态/结果/采纳落库/任务历史 + 任务注册表容量守卫 + 配额/去重门控）——命令注册与注册表上下文内聚；任务执行已按登记计划拆至 ai_refine_task.rs | 若再增长：配额/去重门控拆至 commands_ai_refine_gate.rs |
 | app/src-tauri/src/video_profile_tests.rs | ~338 | 档案测试域（12 档案断言矩阵 + 检测投票 + JSON 校准）单模块 #[path] 挂载 | 若再增长：档案矩阵拆至 video_profile_data_tests.rs |
 | app/src-tauri/src/artifact_templates_tests.rs | ~336 | 产物模板测试域（五档案模板 + v0.7.0 M2 代码块/步骤卡扩展）单模块 #[path] 挂载 | 若再增长：代码块/步骤卡组拆至 artifact_code_tests.rs |
 | app/src-tauri/src/asr_merge.rs | ~351 | v0.5.0 ADR-012 F4-1 语义合并域 + v0.7.0 M2 REQ-119 混排空格（spacing_for/merge_segments_with_spacing）；合并决策与切分共用标点常量 | 若再增长：split_sentences/split_timestamps 拆至 asr_merge_split.rs |

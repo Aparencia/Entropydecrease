@@ -156,6 +156,8 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
     // v0.8.0 F2（2026-08-21）：任务中心——启动恢复未采纳的成功结果
     // （重启不丢；注册表 + id 序列以恢复结果为基准，防 id 冲突覆盖）
     {
+        // 保留策略先行（清理超限旧终态——防表膨胀）
+        let _ = db.trim_ai_tasks();
         let restored = db
             .list_restorable_succeeded(100)
             .unwrap_or_else(|e| {

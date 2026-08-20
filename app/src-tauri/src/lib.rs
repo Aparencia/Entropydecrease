@@ -23,6 +23,9 @@ mod ai_task;
 mod ai_cost;
 mod note_diff;
 mod ai_note_refine;
+// v0.8.0 F2-B4（2026-08-21）：精修任务执行（自 commands_ai_refine 拆出——
+// 并发切片/单片重试/部分成功；豁免清单拆分计划兑现）
+mod ai_refine_task;
 mod commands_ai_refine;
 // v0.8.0 M3（REQ-142）：知识补充——协议（九子项/B6 无链接约束）/混合落位/
 // 适配器/命令层

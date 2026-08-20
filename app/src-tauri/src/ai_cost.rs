@@ -16,13 +16,17 @@
 use std::collections::HashMap;
 
 /// 默认单价（元/百万 token；免费档 0——2026-08 选型 R1-0528-Qwen3-8B ¥0/M）。
+/// 保留兼容（测试断言 + 无模型回退语义），生产路径走 price_for_model。
+#[allow(dead_code)] // 兼容 API：测试断言 + 未来单价表整体覆盖入口
 pub const DEFAULT_PRICE_PER_1M: f64 = 0.0;
 /// env 覆盖键（元/百万 token；整体覆盖映射表——开发路径）。
 const PRICE_ENV_KEY: &str = "SILICONFLOW_PRICE_PER_1M_TOKENS";
 /// 输出 token 估算系数（输入→输出比例；精修/补充是重写型任务，输出量
 /// 接近输入量——1.0 保守上界；实测校准随 golden 冒烟）。
 const OUTPUT_RATIO: f64 = 1.0;
-/// 未知模型警告文案（确认弹窗可见——成本透明铁律）。
+/// 未知模型警告文案（确认弹窗展示——成本透明铁律；前端经 priceKnown
+/// 字段自行渲染，本常量保留为文案单一来源备查）。
+#[allow(dead_code)] // 文案单一来源（前端内联同文案；未来富化时消费）
 const UNKNOWN_MODEL_WARN: &str = "（该模型单价未登记，费用可能不准确）";
 
 /// 内置单价映射表（模型名 → 元/百万 token）。
@@ -75,6 +79,7 @@ pub fn estimate_cost(tokens: usize, price_per_1m: f64) -> f64 {
 /// 单价解析（env 覆盖；缺省/非法 → 默认 0——免费档兜底）。
 ///
 /// @ai-context: 保留向后兼容（旧调用方）；新代码走 price_for_model。
+#[allow(dead_code)] // 兼容 API：usage_cost 沿用 + 测试断言
 pub fn price_per_1m() -> f64 {
     price_for_model("").0
 }
@@ -108,6 +113,7 @@ pub fn estimate_for_content_model(chars: usize, model: &str) -> CostEstimate {
 }
 
 /// 按内容字符数估算（兼容旧签名——免费档默认模型，未知模型警告保留）。
+#[allow(dead_code)] // 兼容 API：测试 + 旧调用方（新代码走 _model 版）
 pub fn estimate_for_content(chars: usize) -> CostEstimate {
     estimate_for_content_model(chars, "")
 }
@@ -119,6 +125,7 @@ pub fn usage_cost(tokens_in: usize, tokens_out: usize) -> f64 {
 }
 
 /// 未知模型警告文案（确认弹窗拼接用）。
+#[allow(dead_code)] // 文案单一来源（前端经 priceKnown 自行渲染同文案）
 pub fn unknown_model_warning() -> &'static str {
     UNKNOWN_MODEL_WARN
 }
