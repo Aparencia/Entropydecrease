@@ -459,6 +459,12 @@ export interface FilterStats {
   transition?: number;
   /** v0.7.5 扩展：修辞问句删除数 */
   rhetorical?: number;
+  /** v0.7.6（REQ-180）：结构渲染——插入的章节标题数 */
+  chapters?: number;
+  /** v0.7.6（REQ-180）：结构渲染——有 outline 标题命中的章节数 */
+  titled_chapters?: number;
+  /** v0.7.6（REQ-180）：结构渲染——词汇表条目数 */
+  glossary_terms?: number;
 }
 
 /** 合并条目（Rust MergedItem） */

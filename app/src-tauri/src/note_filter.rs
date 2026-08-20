@@ -42,8 +42,8 @@ pub struct PurifyEnv {
 }
 
 /// 笔记规则版本（REQ-171：notes.rule_version 落库值——笔记可回答"用哪版规则
-/// 生成"；净化链每次规则变更递增）。
-pub const RULE_VERSION: &str = "note-rules-0.7.5";
+/// 生成"；净化链每次规则变更递增；v0.7.6 结构渲染层接入 REQ-177~181）。
+pub const RULE_VERSION: &str = "note-rules-0.7.6";
 
 /// 口头禅词集（REQ-163 删除判定 + REQ-085 AI Filler 候选共用）。
 ///
@@ -117,6 +117,15 @@ pub struct FilterStats {
     /// v0.7.5 扩展：修辞问句删除数（自问自答）
     #[serde(default)]
     pub rhetorical: usize,
+    /// v0.7.6（REQ-180）：结构渲染——插入的章节标题数
+    #[serde(default)]
+    pub chapters: usize,
+    /// v0.7.6（REQ-180）：结构渲染——有 outline 标题命中的章节数
+    #[serde(default)]
+    pub titled_chapters: usize,
+    /// v0.7.6（REQ-180）：结构渲染——词汇表条目数
+    #[serde(default)]
+    pub glossary_terms: usize,
 }
 
 /// 合并条目（相邻重复合并 / AI merge 展示层拼接）。

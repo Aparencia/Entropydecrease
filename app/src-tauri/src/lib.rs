@@ -149,6 +149,8 @@ mod streaming_asr;
 mod structure_engine;
 mod structure_models;
 mod structure_tier;
+// v0.7.6（REQ-177/178）：笔记结构渲染层——章节标题 + 词汇表块（纯函数）
+mod structure_note;
 mod stutter_fold;
 mod subtitle;
 mod subtitle_detect;

@@ -300,3 +300,92 @@ fn open_question_kept_in_note() {
     assert_eq!(result.stats.rhetorical, 0);
     assert!(result.markdown.contains("大家思考一下为什么"));
 }
+
+// ────────────────────────────────────────────────
+// v0.7.6 扩展（REQ-181）：结构渲染黄金语料——章节标题 + 词汇表
+// ────────────────────────────────────────────────
+
+/// 会话31 实证：净化产物 → 结构渲染叠加章节标题（outline 命中命名）。
+///
+/// @ai-context: 模拟命令层接线顺序（filter_note → apply_session_warning →
+///              refresh_screen_points → render_note_structure）；章节边界由
+///              chapter_detect 语义构造（网课档案）——本测试钉结构渲染产出，
+///              章节检测本身由 chapter_detect_tests 覆盖。
+#[test]
+fn session31_structure_chapter_headings_from_outline() {
+    // Arrange：两章内容（边界 9000ms/30000ms）+ 章节窗口内 outline 标题
+    let segments = vec![
+        asr(1, 0, 5000, "项目启动是一个艺术"),
+        asr(2, 10_000, 15_000, "这是项目章程"),
+        asr(3, 35_000, 40_000, "这是项目范围说明书"),
+    ];
+    let blocks = vec![
+        block(2_000, "项目启动", 0.9),
+        block(12_000, "项目章程", 0.9),
+        block(36_000, "项目范围", 0.9),
+    ];
+    let mut result = run("测试", &segments, &blocks);
+    // Act：命令层接线语义——警示行（finished 无）+ 刷新 + 结构渲染
+    apply_session_warning(&mut result, "finished");
+    refresh_screen_points(&mut result);
+    let chapters = vec![
+        crate::chapter_detect::ChapterBoundary { time_ms: 9_000, votes: 2, topic_drop: 0.5 },
+        crate::chapter_detect::ChapterBoundary { time_ms: 30_000, votes: 2, topic_drop: 0.4 },
+    ];
+    let outline = vec![
+        crate::outline::OutlineEntry { time_ms: 12_000, text: "项目章程".to_string() },
+        crate::outline::OutlineEntry { time_ms: 36_000, text: "项目范围".to_string() },
+    ];
+    let _ = crate::structure_note::render_note_structure(
+        &mut result,
+        &chapters,
+        &outline,
+        &[],
+        &crate::structure_note::NoteStructureConfig::default(),
+    );
+    // Assert：两章标题带时间锚点；章节名取各自窗口内 outline 标题
+    // （第一章窗口 [9s,30s) 命中 12s"项目章程"；第二章窗口 [30s,∞) 命中
+    // 36s"项目范围"——窗口归属正确，跨窗口不串）
+    assert!(result.markdown.contains("## 项目章程 [00:09]"), "第一章取窗口内标题");
+    assert!(result.markdown.contains("## 项目范围 [00:30]"), "第二章取窗口内标题");
+    // 统计可序列化（purify_stats 落库口径）
+    let json = serde_json::to_string(&result.stats).expect("stats serializable");
+    assert!(json.contains("chapters") && json.contains("titled_chapters"));
+}
+
+/// 会话31 实证：结构渲染词汇表块——术语候选 → 尾部词汇表（锚点回跳）。
+#[test]
+fn session31_structure_glossary_block() {
+    // Arrange：术语"项目章程"在 kept 段出现（锚点）；无 kept 出现术语不带锚点
+    let segments = vec![asr(1, 12_000, 15_000, "这是项目章程的要点")];
+    let mut result = run("测试", &segments, &[]);
+    apply_session_warning(&mut result, "finished");
+    refresh_screen_points(&mut result);
+    let glossary = vec![
+        crate::glossary::GlossaryCandidate {
+            term: "项目章程".to_string(),
+            ocr_count: 5,
+            asr_count: 1,
+            score: 8.0,
+        },
+        crate::glossary::GlossaryCandidate {
+            term: "WBS".to_string(),
+            ocr_count: 3,
+            asr_count: 0,
+            score: 3.0,
+        },
+    ];
+    // Act
+    let _ = crate::structure_note::render_note_structure(
+        &mut result,
+        &[],
+        &[],
+        &glossary,
+        &crate::structure_note::NoteStructureConfig::default(),
+    );
+    // Assert：词汇表块在尾部；命中术语带 [MM:SS] 锚点；未命中不带；统计落库
+    assert!(result.markdown.ends_with("词汇表\n\n- [00:12] 项目章程（画面 ×5 / 语音 ×1）\n- WBS（画面 ×3 / 语音 ×0）"));
+    assert_eq!(result.stats.glossary_terms, 2);
+    let json = serde_json::to_string(&result.stats).expect("stats serializable");
+    assert!(json.contains("glossary_terms"));
+}

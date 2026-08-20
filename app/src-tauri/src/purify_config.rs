@@ -64,6 +64,8 @@ pub struct PurifyConfig {
     pub ocr_correct: bool,
     /// 段落时间戳锚点 [MM:SS] 前缀（REQ-165，可开关）
     pub anchor_timestamps: bool,
+    /// v0.7.6（REQ-179）：结构渲染配置（章节标题/词汇表块——嵌套 JSON 可校准）
+    pub structure: crate::structure_note::NoteStructureConfig,
 }
 
 impl Default for PurifyConfig {
@@ -92,6 +94,7 @@ impl Default for PurifyConfig {
             filler_delete: true,
             ocr_correct: true,
             anchor_timestamps: true,
+            structure: crate::structure_note::NoteStructureConfig::default(),
         }
     }
 }

@@ -12,15 +12,19 @@ use std::collections::HashSet;
 use tauri::State;
 
 use crate::ai_protocol::TextFilterDecision;
+use crate::analysis::analyze_session_opt;
 use crate::commands::{normalize_title, AppState, TITLE_MAX_CHARS};
 use crate::db::Db;
 use crate::db_sessions::SESSION_STATUS_RECORDING;
 use crate::note_filter::{apply_ai_decisions, filter_note, NoteFilterResult, PurifyEnv, RULE_VERSION};
+use crate::outline::{detect_outline_smart, OutlineConfig};
+use crate::structure_note::render_note_structure;
 use crate::types::{
     BatchNoteResult, ConvertedNote, NewNote, NewSession, NewSessionOcrBlock, NewSessionSegment,
     Note, Session, SessionDetail, SessionListItem, SessionOcrBlock, SessionSegment, SkippedNote,
 };
 use crate::ui_junk::UiJunkList;
+use crate::video_profile::ProfileKind;
 
 /// 会话列表单页上限。
 const LIST_LIMIT_MAX: u64 = 200;
@@ -189,6 +193,47 @@ fn load_note_material(
     Ok((session, segments, ocr_blocks))
 }
 
+/// 结构渲染接线（v0.7.6 REQ-177/178，双出口共用）。
+///
+/// @ai-context: 在 refresh_screen_points 之后调用——净化/配图/警示行先落定，
+///              结构层在其上叠加章节标题与词汇表块；预览与落库同函数同口径
+///              （REQ-081 单一管线双出口契约）。
+/// @ai-context: 输入为会话原料（segments/ocr_blocks）——章节检测/大纲标题/
+///              术语表均为纯本地规则（analysis/outline/glossary 复用）——
+///              不依赖云端 AI（本地优先铁律）；失败不阻断转笔记主链路
+///              （分析失败按空结构处理，不抛错）。
+fn apply_note_structure(
+    result: &mut NoteFilterResult,
+    db: &Db,
+    session: &Session,
+    segments: &[SessionSegment],
+    ocr_blocks: &[SessionOcrBlock],
+    env: &PurifyEnv,
+) {
+    // 档案驱动：章节检测/术语表按档案开关（网课开、口播关——analysis 内部门控）
+    let kind = session
+        .profile
+        .as_deref()
+        .map(ProfileKind::parse)
+        .unwrap_or(ProfileKind::Lecture);
+    let detail = SessionDetail {
+        session: session.clone(),
+        segments: segments.to_vec(),
+        ocr_blocks: ocr_blocks.to_vec(),
+        events: db.list_events(session.id).unwrap_or_default(),
+        screens: Vec::new(),
+    };
+    let analysis = analyze_session_opt(&detail, kind, &env.symbol);
+    let outline = detect_outline_smart(ocr_blocks, &result.ocr_screens, &OutlineConfig::default());
+    let _ = render_note_structure(
+        result,
+        &analysis.chapters,
+        &outline,
+        &analysis.glossary,
+        &env.config.structure,
+    );
+}
+
 /// 会话 → 笔记核心（v0.7.1 提取：单条与批量共用同一管线）。
 ///
 /// @ai-context: REQ-082：过滤链（UI 垃圾/重复合并/碎片/低置信/口语净化/口头禅
@@ -225,6 +270,9 @@ fn convert_to_note(
     // 重建口径一致；警示为正文行，用户可手动删除）
     crate::note_filter::apply_session_warning(&mut result, &session.status);
     crate::note_filter::refresh_screen_points(&mut result);
+    // v0.7.6（REQ-177/178）：结构渲染——章节标题 + 词汇表块（纯本地增强层；
+    // 无结构数据/分析失败 → 原样输出不阻断，见 apply_note_structure）
+    apply_note_structure(&mut result, db, &session, &segments, &ocr_blocks, env);
     let new = NewNote {
         title: result.title.clone(),
         content: result.markdown.clone(),
@@ -344,28 +392,27 @@ pub async fn batch_session_to_note(
 ///              kept 段），前端展示过滤统计卡/对照复查/一键落库。
 /// @ai-context: v0.7.3（REQ-160）：ocr_screens attach 归档图（预览屏卡配图；
 ///              目录缺失/无图 → 纯文本降级）。
+/// @ai-context: v0.7.6（REQ-177/178）：预览与落库同口径——结构渲染（章节
+///              标题 + 词汇表块）在预览即生效。
 #[tauri::command]
 pub async fn preview_session_note(
     state: State<'_, AppState>,
     id: i64,
 ) -> Result<NoteFilterResult, String> {
     let (session, segments, ocr_blocks) = load_note_material(&state.db, id)?;
-    let mut result = filter_note(
-        &session.title,
-        &segments,
-        &ocr_blocks,
-        &state.ui_junk,
-        &PurifyEnv {
-            config: state.purify.clone(),
-            symbol: state.symbol_normalize.clone(),
-            corrections: state.ocr_corrections.clone(),
-        },
-    );
+    let env = PurifyEnv {
+        config: state.purify.clone(),
+        symbol: state.symbol_normalize.clone(),
+        corrections: state.ocr_corrections.clone(),
+    };
+    let mut result = filter_note(&session.title, &segments, &ocr_blocks, &state.ui_junk, &env);
     let images_dir = state.data_dir.join("session-images").join(id.to_string());
     crate::screens::attach_images(&mut result.ocr_screens, &images_dir);
     // v0.7.5（REQ-170）：预览与落库同口径——异常会话预览即带警示行
     crate::note_filter::apply_session_warning(&mut result, &session.status);
     crate::note_filter::refresh_screen_points(&mut result);
+    // v0.7.6（REQ-177/178）：结构渲染（与 convert_to_note 同函数同口径）
+    apply_note_structure(&mut result, &state.db, &session, &segments, &ocr_blocks, &env);
     Ok(result)
 }
 
