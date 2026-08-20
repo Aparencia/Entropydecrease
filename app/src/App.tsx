@@ -16,6 +16,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import ClassroomPage from "./pages/ClassroomPage";
 import NotesPage from "./pages/NotesPage";
 import SessionsPage from "./pages/SessionsPage";
+import AppErrorBoundary from "./components/AppErrorBoundary";
 
 type Page = "classroom" | "sessions" | "notes";
 
@@ -111,7 +112,10 @@ function App() {
   }, []);
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", fontFamily: "system-ui, sans-serif" }}>
+    // v0.8.0 真机白屏防御（2026-08-21）：全局错误边界——渲染异常显示错误
+    // 卡片而非整树卸载白屏；console 打印调用栈便于定位（AppErrorBoundary）
+    <AppErrorBoundary>
+      <div style={{ height: "100vh", display: "flex", flexDirection: "column", fontFamily: "system-ui, sans-serif" }}>
       {/* 顶部导航 */}
       <nav
         style={{
@@ -197,7 +201,8 @@ function App() {
           />
         </div>
       </main>
-    </div>
+      </div>
+    </AppErrorBoundary>
   );
 }
 
