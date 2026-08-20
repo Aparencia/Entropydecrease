@@ -55,7 +55,7 @@ fn build_screens_groups_by_screen_id() {
         blk(8, 60_000, "苹果为什么往下掉", Some(2), Some((100.0, 240.0, 300.0, 30.0)), None),
     ];
     // Act
-    let screens = build_screens(1, &blocks, &dir);
+    let screens = build_screens(&blocks, Some(&dir));
     // Assert：2 屏；屏1 区间 2000-30000、标题为字高最大者、标签含"要素"
     assert_eq!(screens.len(), 2);
     assert_eq!(screens[0].screen_id, Some(1));
@@ -79,7 +79,7 @@ fn build_screens_clusters_legacy_blocks() {
         blk(5, 60_000, "牛顿第一定律", None, None, None),
     ];
     // Act
-    let screens = build_screens(1, &blocks, &dir);
+    let screens = build_screens(&blocks, Some(&dir));
     // Assert：屏1（变体合并）+ 屏2（翻页）；屏1 无标题（无 bbox 诚实降级）
     assert_eq!(screens.len(), 2);
     assert_eq!(screens[0].screen_id, None);
@@ -100,7 +100,7 @@ fn build_screens_mixed_old_and_new() {
         blk(3, 65_000, "旧屏内容C", None, None, None),
     ];
     // Act
-    let screens = build_screens(1, &blocks, &dir);
+    let screens = build_screens(&blocks, Some(&dir));
     // Assert：两条路径都出屏（2 屏）
     assert_eq!(screens.len(), 2);
     assert_eq!(screens[0].screen_id, Some(1));
@@ -116,7 +116,7 @@ fn build_screens_structure_blocks_excluded_from_text() {
         blk(2, 2_000, "| A | B |", Some(1), Some((100.0, 200.0, 300.0, 60.0)), Some("table")),
     ];
     // Act
-    let screens = build_screens(1, &blocks, &dir);
+    let screens = build_screens(&blocks, Some(&dir));
     // Assert：结构块进 structure 不进 body；rendered=None（M5 精修前）
     assert_eq!(screens.len(), 1);
     assert_eq!(screens[0].structure.len(), 1);
@@ -141,8 +141,8 @@ fn build_screens_empty_and_no_full_blocks() {
         screen_id: None,
     }];
     // Act/Assert
-    assert!(build_screens(1, &[], &dir).is_empty());
-    assert!(build_screens(1, &subtitle_only, &dir).is_empty());
+    assert!(build_screens(&[], Some(&dir)).is_empty());
+    assert!(build_screens(&subtitle_only, Some(&dir)).is_empty());
 }
 
 #[test]
@@ -151,7 +151,7 @@ fn image_ref_matches_nearest_at_or_before_first_seen() {
     let dir = tmp_images_dir("img", &[2_000, 10_000, 30_000]);
     let blocks = vec![blk(1, 36_404, "内容", Some(1), Some((100.0, 100.0, 200.0, 40.0)), None)];
     // Act
-    let screens = build_screens(1, &blocks, &dir);
+    let screens = build_screens(&blocks, Some(&dir));
     // Assert
     assert_eq!(screens[0].image_ref.as_deref(), Some("full/30000.webp"));
 }
@@ -162,7 +162,7 @@ fn image_ref_none_without_dir() {
     let dir = std::env::temp_dir().join(format!("entropy-screens-missing-{}", std::process::id()));
     let blocks = vec![blk(1, 1_000, "内容", Some(1), Some((100.0, 100.0, 200.0, 40.0)), None)];
     // Act
-    let screens = build_screens(1, &blocks, &dir);
+    let screens = build_screens(&blocks, Some(&dir));
     // Assert：图匹配失败不阻断屏构建
     assert_eq!(screens.len(), 1);
     assert_eq!(screens[0].image_ref, None);

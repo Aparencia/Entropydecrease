@@ -25,12 +25,22 @@ pub struct OcrBlockHit {
     pub region: String,
     /// 命中图相对路径（full/xxx.webp；无图 None——纯 OCR 块无归档）
     pub image_path: Option<String>,
+    /// v0.7.3（REQ-160）：命中块所属屏（None=旧数据无屏）
+    #[serde(default)]
+    pub screen_id: Option<i64>,
+    /// 屏时间区间（first/last_seen；屏定位基准）
+    #[serde(default)]
+    pub screen_first_ms: Option<u64>,
+    #[serde(default)]
+    pub screen_last_ms: Option<u64>,
 }
 
-/// 检索会话 OCR 块（REQ-133）：关键词 → 命中块 + 会话标题 + 图路径。
+/// 检索会话 OCR 块（REQ-133）：关键词 → 命中块 + 会话标题 + 图路径 + 屏区间。
 ///
 /// @ai-context: 只搜画面要点（region=full——字幕区是转写冗余，搜字幕用段搜索）；
 ///              大小写不敏感；结果有界（100 条防超大 payload）。
+/// @ai-context: v0.7.3（REQ-160）：命中块带屏信息（同屏块 min/max 时间戳——
+///              前端"命中→跳屏"定位；旧数据无 screen_id → None 降级）。
 pub fn search_ocr_blocks(db: &Db, keyword: &str, limit: usize) -> Result<Vec<OcrBlockHit>> {
     let kw = keyword.trim().to_lowercase();
     if kw.is_empty() {
@@ -40,21 +50,40 @@ pub fn search_ocr_blocks(db: &Db, keyword: &str, limit: usize) -> Result<Vec<Ocr
     let mut hits = Vec::new();
     for item in db.list_sessions(None, 500, 0)? {
         let session = &item.session;
-        for block in db.list_ocr_blocks(session.id)? {
+        let blocks = db.list_ocr_blocks(session.id)?;
+        // 屏区间映射（命中定位到屏：min/max 时间戳）
+        let mut screen_ranges: std::collections::HashMap<i64, (u64, u64)> =
+            std::collections::HashMap::new();
+        for b in &blocks {
+            if let Some(sid) = b.screen_id {
+                let e = screen_ranges.entry(sid).or_insert((b.timestamp_ms, b.timestamp_ms));
+                e.0 = e.0.min(b.timestamp_ms);
+                e.1 = e.1.max(b.timestamp_ms);
+            }
+        }
+        for block in &blocks {
             if block.region != "full" {
                 continue; // 字幕区不参与图内检索（与段搜索分工）
             }
             if block.text.to_lowercase().contains(&kw) {
+                let (sf, sl) = block
+                    .screen_id
+                    .and_then(|sid| screen_ranges.get(&sid).copied())
+                    .map(|(a, b)| (Some(a), Some(b)))
+                    .unwrap_or((None, None));
                 hits.push(OcrBlockHit {
                     session_id: session.id,
                     session_title: session.title.clone(),
                     ocr_block_id: block.id,
                     timestamp_ms: block.timestamp_ms,
-                    text: block.text,
-                    region: block.region,
+                    text: block.text.clone(),
+                    region: block.region.clone(),
                     // 图路径推断：full/<ts>.webp（与 image_store 命名约定一致；
                     // 文件不存在 → None——OCR 块可能无归档图）
                     image_path: image_path_for(db, session.id, block.timestamp_ms),
+                    screen_id: block.screen_id,
+                    screen_first_ms: sf,
+                    screen_last_ms: sl,
                 });
                 if hits.len() >= limit {
                     return Ok(hits);

@@ -57,7 +57,7 @@ fn batch_converts_all_eligible_sessions() {
     let a = finished_session(&db, "A课");
     let b = finished_session(&db, "B课");
     // Act
-    let result = run_batch_conversion(&db, &UiJunkList::defaults(), vec![a, b]).expect("batch");
+    let result = run_batch_conversion(&db, &UiJunkList::defaults(), std::path::Path::new("."), vec![a, b]).expect("batch");
     // Assert：全部转换成功；关联已建立（find_note_by_session 可见）
     assert_eq!(result.converted.len(), 2);
     assert!(result.skipped.is_empty());
@@ -74,7 +74,7 @@ fn batch_skips_recording_and_duplicate_and_invalid() {
     let ok = finished_session(&db, "正常课");
     // Act
     let result =
-        run_batch_conversion(&db, &UiJunkList::defaults(), vec![live, ok, ok, 0, -3]).expect("batch");
+        run_batch_conversion(&db, &UiJunkList::defaults(), std::path::Path::new("."), vec![live, ok, ok, 0, -3]).expect("batch");
     // Assert：只转换 1 条；跳过 3 条（重复 id 静默去重，不计入跳过）
     assert_eq!(result.converted.len(), 1);
     assert_eq!(result.converted[0].session_id, ok);
@@ -99,7 +99,7 @@ fn batch_skips_already_converted_session() {
     })
     .expect("create note");
     // Act
-    let result = run_batch_conversion(&db, &UiJunkList::defaults(), vec![id]).expect("batch");
+    let result = run_batch_conversion(&db, &UiJunkList::defaults(), std::path::Path::new("."), vec![id]).expect("batch");
     // Assert：不重复生成，原因显式
     assert!(result.converted.is_empty());
     assert_eq!(result.skipped.len(), 1);
@@ -111,7 +111,7 @@ fn batch_skips_missing_session() {
     // Arrange
     let db = mem_db();
     // Act：不存在的会话 id
-    let result = run_batch_conversion(&db, &UiJunkList::defaults(), vec![9999]).expect("batch");
+    let result = run_batch_conversion(&db, &UiJunkList::defaults(), std::path::Path::new("."), vec![9999]).expect("batch");
     // Assert
     assert!(result.converted.is_empty());
     assert_eq!(result.skipped.len(), 1);
@@ -124,7 +124,7 @@ fn batch_rejects_over_limit() {
     let db = mem_db();
     let ids: Vec<i64> = (1..=51).collect();
     // Act
-    let result = run_batch_conversion(&db, &UiJunkList::defaults(), ids);
+    let result = run_batch_conversion(&db, &UiJunkList::defaults(), std::path::Path::new("."), ids);
     // Assert
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("上限 50"));
@@ -138,7 +138,7 @@ fn batch_partial_failure_does_not_block_others() {
     let ok = finished_session(&db, "正常课");
     // Act
     let result =
-        run_batch_conversion(&db, &UiJunkList::defaults(), vec![live, ok]).expect("batch");
+        run_batch_conversion(&db, &UiJunkList::defaults(), std::path::Path::new("."), vec![live, ok]).expect("batch");
     // Assert：后续会话仍成功转换
     assert_eq!(result.converted.len(), 1);
     assert_eq!(result.converted[0].session_id, ok);

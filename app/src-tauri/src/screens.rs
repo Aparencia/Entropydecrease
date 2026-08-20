@@ -16,17 +16,72 @@ use crate::screen_merge::{
     CLUSTER_GAP_MS, SCREEN_SIM_THRESHOLD,
 };
 use crate::types::{ScreenStructure, SessionOcrBlock, SessionScreen};
+use crate::ui_junk::UiJunkList;
+use crate::watermark_filter::{detect_watermarks, WatermarkConfig, WatermarkInput};
 
 /// 结构区域类型（region_kind 命中即结构块——不参与行合并）。
 const STRUCTURE_KINDS: &[&str] = &["table", "formula", "code"];
+/// 屏构建的最低块分（与 note_filter 消费口径一致——低于视为噪声）。
+const MIN_BLOCK_SCORE: f32 = 0.5;
 
-/// 构建会话屏卡（纯编排 + 图匹配 IO）：OCR 块 → 屏序列（按 first_seen 升序）。
+/// 构建会话屏卡（编排 + 图匹配 IO）：OCR 块 → 屏序列（按 first_seen 升序）。
 ///
 /// @ai-context: 只消费 region=full 的块（字幕区文本是转写冗余，独立管线）；
 ///              空文本块跳过（聚类纯函数内部同样防御）。
 /// @ai-context: 原料口径——不过滤低分/UI 垃圾（原料视图可复查，过滤在消费端
-///              note_filter 按屏执行）；旧数据聚类兜底零回归。
-pub fn build_screens(session_id: i64, blocks: &[SessionOcrBlock], images_dir: &Path) -> Vec<SessionScreen> {
+///              filter_usable_blocks 按屏执行）；旧数据聚类兜底零回归。
+pub fn build_screens(blocks: &[SessionOcrBlock], images_dir: Option<&Path>) -> Vec<SessionScreen> {
+    let session_id = blocks.first().map(|b| b.session_id).unwrap_or(0);
+    let mut screens = build_screens_inner(session_id, blocks);
+    if let Some(dir) = images_dir {
+        attach_images(&mut screens, dir);
+    }
+    screens
+}
+
+/// 可消费块过滤（纯函数）：低分/空文本/UI 垃圾/水印排除。
+///
+/// @ai-context: 与 note_filter 消费口径一致（REQ-083 黑名单 + REQ-059 水印 +
+///              低分）——过滤后屏卡即笔记画面要点（双保险：源头已过滤的新数据
+///              走同口径，旧数据兜底过滤）。
+pub fn filter_usable_blocks(blocks: &[SessionOcrBlock], ui_junk: &UiJunkList) -> Vec<SessionOcrBlock> {
+    let inputs: Vec<WatermarkInput> = blocks
+        .iter()
+        .filter(|b| b.region == "full")
+        .map(|b| WatermarkInput {
+            text: b.text.clone(),
+            timestamp_ms: b.timestamp_ms,
+            region_key: None,
+        })
+        .collect();
+    let watermarks = detect_watermarks(&inputs, &WatermarkConfig::default());
+    blocks
+        .iter()
+        .filter(|b| {
+            b.region == "full"
+                && b.score >= MIN_BLOCK_SCORE
+                && !b.text.trim().is_empty()
+                && !ui_junk.is_junk(&b.text)
+                && !watermarks.texts.iter().any(|w| b.text.trim() == w)
+        })
+        .cloned()
+        .collect()
+}
+
+/// 图匹配（IO）：为屏卡填充 image_ref（最近 ≤ 首见时刻的归档 full 图）。
+///
+/// @ai-context: 归档图按时间戳命名（full/{ts}.webp，image_store 约定）；目录
+///              缺失/无图 → 保持 None（前端无缩略图降级，不阻断）。
+pub fn attach_images(screens: &mut [SessionScreen], images_dir: &Path) {
+    for s in screens.iter_mut() {
+        if s.image_ref.is_none() {
+            s.image_ref = match_image(images_dir, s.first_seen_ms);
+        }
+    }
+}
+
+/// 屏构建核心（纯编排，无 IO）：块流 → 屏序列。
+fn build_screens_inner(session_id: i64, blocks: &[SessionOcrBlock]) -> Vec<SessionScreen> {
     let full: Vec<&SessionOcrBlock> =
         blocks.iter().filter(|b| b.region == "full" && !b.text.trim().is_empty()).collect();
     if full.is_empty() {
@@ -54,10 +109,10 @@ pub fn build_screens(session_id: i64, blocks: &[SessionOcrBlock], images_dir: &P
             clusters.push((None, c));
         }
     }
-    // ② 聚类 → 屏卡（行合并 + 角色 + 结构块 + 图匹配）
+    // ② 聚类 → 屏卡（行合并 + 角色 + 结构块）
     let mut screens: Vec<SessionScreen> = clusters
         .into_iter()
-        .map(|(screen_id, c)| screen_from_cluster(session_id, screen_id, &c, images_dir))
+        .map(|(screen_id, c)| screen_from_cluster(session_id, screen_id, &c))
         .collect();
     screens.sort_by_key(|s| s.first_seen_ms);
     screens
@@ -85,12 +140,11 @@ fn to_input(b: &SessionOcrBlock) -> ScreenBlockInput {
     }
 }
 
-/// 聚类 → SessionScreen（行合并 + 版面角色 + 结构块提取 + 图匹配）。
+/// 聚类 → SessionScreen（行合并 + 版面角色 + 结构块提取）。
 fn screen_from_cluster(
     session_id: i64,
     screen_id: Option<i64>,
     cluster: &ScreenCluster,
-    images_dir: &Path,
 ) -> SessionScreen {
     let (structure, text_blocks): (Vec<&ScreenBlockInput>, Vec<&ScreenBlockInput>) =
         cluster.blocks.iter().partition(|b| {
@@ -115,7 +169,7 @@ fn screen_from_cluster(
         title: roles.title,
         body: roles.body,
         labels: roles.labels,
-        image_ref: match_image(images_dir, cluster.first_seen_ms),
+        image_ref: None,
         structure,
     }
 }

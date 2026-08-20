@@ -207,8 +207,13 @@ pub fn cluster_blocks_into_screens(
                 last_seen_ms: ts,
                 blocks: members.iter().map(|b| (*b).clone()).collect(),
             });
+            // 新屏：累积集合重置为当前帧组文本（防跨屏文本稀释相似度——
+            // 累积含旧屏全部文本时，同屏续帧的匹配比例被拉低 → 误分屏）
+            accumulated = texts.clone();
+            last_ts = Some(ts);
+            continue;
         }
-        // 累积集合去重并入（同屏已见文本不重复累积）
+        // 同屏：累积集合去重并入（新块留作后续帧的比较基准）
         for t in texts {
             if !accumulated.iter().any(|a| block_similarity(a, &t) >= BLOCK_MATCH_THRESHOLD) {
                 accumulated.push(t);

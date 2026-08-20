@@ -83,7 +83,7 @@ pub async fn get_session_detail(state: State<'_, AppState>, id: i64) -> Result<S
     // v0.7.3（REQ-160，ADR-015）：画面要点屏卡（新数据按 screen_id 分组、
     // 旧数据聚类兜底；图匹配失败/目录缺失不阻断——前端无缩略图降级）
     let images_dir = state.data_dir.join("session-images").join(id.to_string());
-    let screens = crate::screens::build_screens(id, &ocr_blocks, &images_dir);
+    let screens = crate::screens::build_screens(&ocr_blocks, Some(&images_dir));
     Ok(SessionDetail { session, segments, ocr_blocks, events, screens })
 }
 
@@ -183,10 +183,13 @@ fn load_note_material(
 ///              ai_decisions（REQ-085）可选叠加——前端把预览中已确认的 AI
 ///              判定结果回传，落库与预览输出保持一致（默认 None=纯规则）。
 /// @ai-context: 只允许 finished/failed 会话转换；source 沿用 classroom；
-///              v0.7.1 起落库携带 session_id（列表 has_note/查看笔记跳转的数据源）。
+///              v0.7.1 起落库携带 session_id（列表 has_note/查看笔记跳转的数据源）；
+///              v0.7.3（REQ-160）：data_dir 供画面要点屏 attach 归档图
+///              （配图行随 image_ref 进入笔记 markdown）。
 fn convert_to_note(
     db: &Db,
     ui_junk: &UiJunkList,
+    data_dir: &std::path::Path,
     id: i64,
     title: Option<String>,
     ai_decisions: Option<Vec<TextFilterDecision>>,
@@ -198,6 +201,10 @@ fn convert_to_note(
     if let Some(decisions) = ai_decisions {
         result = apply_ai_decisions(result, &decisions);
     }
+    // v0.7.3（REQ-160）：画面要点配图（归档 full 图匹配；目录缺失/无图 → 纯文本降级）
+    let images_dir = data_dir.join("session-images").join(id.to_string());
+    crate::screens::attach_images(&mut result.ocr_screens, &images_dir);
+    crate::note_filter::refresh_screen_points(&mut result);
     let new = NewNote {
         title: result.title.clone(),
         content: result.markdown.clone(),
@@ -215,7 +222,7 @@ pub async fn session_to_note(
     title: Option<String>,
     ai_decisions: Option<Vec<TextFilterDecision>>,
 ) -> Result<Note, String> {
-    convert_to_note(&state.db, &state.ui_junk, id, title, ai_decisions)
+    convert_to_note(&state.db, &state.ui_junk, &state.data_dir, id, title, ai_decisions)
 }
 
 /// 批量转笔记核心编排（v0.7.1：部分成功语义——单条失败不阻塞其他）。
@@ -226,6 +233,7 @@ pub async fn session_to_note(
 pub fn run_batch_conversion(
     db: &Db,
     ui_junk: &UiJunkList,
+    data_dir: &std::path::Path,
     ids: Vec<i64>,
 ) -> Result<BatchNoteResult, String> {
     if ids.len() > 50 {
@@ -258,7 +266,7 @@ pub fn run_batch_conversion(
                     });
                     continue;
                 }
-                match convert_to_note(db, ui_junk, id, None, None) {
+                match convert_to_note(db, ui_junk, data_dir, id, None, None) {
                     Ok(note) => converted.push(ConvertedNote { session_id: id, note_id: note.id }),
                     Err(reason) => skipped.push(SkippedNote { session_id: id, reason }),
                 }
@@ -280,7 +288,7 @@ pub async fn batch_session_to_note(
     state: State<'_, AppState>,
     ids: Vec<i64>,
 ) -> Result<BatchNoteResult, String> {
-    run_batch_conversion(&state.db, &state.ui_junk, ids)
+    run_batch_conversion(&state.db, &state.ui_junk, &state.data_dir, ids)
 }
 
 /// 会话笔记预览（REQ-081）：过滤后只读预览——不落库、不改库。
@@ -288,13 +296,19 @@ pub async fn batch_session_to_note(
 /// @ai-context: 与 session_to_note 同一过滤管线（输出一致性由构造保证）；
 ///              返回 NoteFilterResult（markdown + 过滤统计 + 被过滤对照 +
 ///              kept 段），前端展示过滤统计卡/对照复查/一键落库。
+/// @ai-context: v0.7.3（REQ-160）：ocr_screens attach 归档图（预览屏卡配图；
+///              目录缺失/无图 → 纯文本降级）。
 #[tauri::command]
 pub async fn preview_session_note(
     state: State<'_, AppState>,
     id: i64,
 ) -> Result<NoteFilterResult, String> {
     let (session, segments, ocr_blocks) = load_note_material(&state.db, id)?;
-    Ok(filter_note(&session.title, &segments, &ocr_blocks, &state.ui_junk))
+    let mut result = filter_note(&session.title, &segments, &ocr_blocks, &state.ui_junk);
+    let images_dir = state.data_dir.join("session-images").join(id.to_string());
+    crate::screens::attach_images(&mut result.ocr_screens, &images_dir);
+    crate::note_filter::refresh_screen_points(&mut result);
+    Ok(result)
 }
 
 /// 归一化转写段来源标识（asr | subtitle | fused，其余回退 asr）。
@@ -326,6 +340,7 @@ pub async fn session_quality_report(
 }
 
 /// 会话大纲（REQ-077）：OCR 全帧块 → 大纲条目（产物视图侧边导航，点击跳转）。
+/// @ai-context: v0.7.3（REQ-160）：屏标题优先（版面角色分类），无屏回退文本启发式。
 #[tauri::command]
 pub async fn session_outline(
     state: State<'_, AppState>,
@@ -335,7 +350,12 @@ pub async fn session_outline(
         return Err("无效的会话 id".to_string());
     }
     let ocr_blocks = state.db.list_ocr_blocks(id).map_err(|e| e.to_string())?;
-    Ok(crate::outline::detect_outline(&ocr_blocks, &crate::outline::OutlineConfig::default()))
+    let screens = crate::screens::build_screens(&ocr_blocks, None);
+    Ok(crate::outline::detect_outline_smart(
+        &ocr_blocks,
+        &screens,
+        &crate::outline::OutlineConfig::default(),
+    ))
 }
 
 /// 课程分组（REQ-078）：课程键 = 标题章节前缀（"第3章"等）；无前缀 → 标题本身。

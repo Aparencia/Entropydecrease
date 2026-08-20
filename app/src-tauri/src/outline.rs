@@ -65,6 +65,28 @@ pub fn detect_outline(ocr_blocks: &[SessionOcrBlock], config: &OutlineConfig) ->
     out
 }
 
+/// 屏版大纲检测（v0.7.3 REQ-160，ADR-015）：有屏标题 → 屏标题优先；
+/// 无屏（旧数据无 bbox 降级）→ 回退文本启发式。
+///
+/// @ai-context: 屏标题来自版面角色分类（大字块）——比文本启发式准（正文
+///              短句不带句号时不再误判为标题）；屏标题只出一条（翻页即新屏）。
+pub fn detect_outline_smart(
+    ocr_blocks: &[SessionOcrBlock],
+    screens: &[crate::types::SessionScreen],
+    config: &OutlineConfig,
+) -> Vec<OutlineEntry> {
+    let titled: Vec<OutlineEntry> = screens
+        .iter()
+        .filter_map(|s| {
+            s.title.as_ref().map(|t| OutlineEntry { time_ms: s.first_seen_ms, text: t.clone() })
+        })
+        .collect();
+    if !titled.is_empty() {
+        return titled;
+    }
+    detect_outline(ocr_blocks, config)
+}
+
 /// 标题特征判定（纯函数）：短文本 + 无句末标点 + 含字母数字汉字。
 ///
 /// @ai-context: 正文句子以 。！？ 结尾（ASR/OCR 恢复的标点）；标题无标点；
