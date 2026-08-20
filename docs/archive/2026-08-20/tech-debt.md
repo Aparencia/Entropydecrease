@@ -1,18 +1,18 @@
-# 技术债清单（权威：2026-08-20 三轮滚动——v0.7.7 结构图批次后）
+# 技术债清单（权威：2026-08-20 四轮滚动——模型接入/自动化配置/课堂助手接线盘点后）
 
 > 本清单为当前唯一权威债务清单，归档日滚动更新；旧归档清单仅历史追溯。
-> 来源：二轮清单滚动（v0.7.6 审查批次后）+ v0.7.7 结构图批次
-> （REQ-182~187，提交 1629ea0/5bb9c3a/0ca4fbe/b13ead0/5147d85/a399365，1172 单测全绿）
-> + 三轮新增代码审查即修（fix bca36da，9 项，见"今日已偿"）。
+> 来源：三轮清单滚动（v0.7.7 结构图批次后）+ 模型接入全景盘点
+> （speaker_engine/streaming_asr/ocr/structure_models/model_downloader 等模块核验，
+> 证据见会话盘点输出）+ 四轮审查（无新增代码——f9c9638 后零变更，沿用三轮结论）。
 
 ## 未偿债务（逐笔核验；carried 仅留 ID + 一行摘要）
 
 | ID | 摘要 |
 |----|------|
-| TD-040 | bundle.resources 未含 ffmpeg（deliberate 有意不修：体积权衡，开发期脚本+PATH 覆盖）；三轮核验未涉及，保持 |
-| TD-2026-08-19-D | image_stream_store 已交付未接线（REQ-110/123/088）；三轮核验：结构图存储独立于图像流，保持 |
-| TD-2026-08-19-F | detect_pause_icon 暗底+中央亮内容可能误报暂停（与"保守不产假信号"矛盾）；三轮核验未涉及，保持 |
-| TD-2026-08-19-G | db_ocr_search 500 会话静默截断 + 图路径不校验存在性（量级控制可接受+前端降级）；三轮核验未涉及，保持 |
+| TD-040 | bundle.resources 未含 ffmpeg（deliberate 有意不修：体积权衡，开发期脚本+PATH 覆盖）；四轮核验未涉及，保持 |
+| TD-2026-08-19-D | image_stream_store 已交付未接线（REQ-110/123/088）；四轮核验：结构图存储独立于图像流，保持 |
+| TD-2026-08-19-F | detect_pause_icon 暗底+中央亮内容可能误报暂停（与"保守不产假信号"矛盾）；四轮核验未涉及，保持 |
+| TD-2026-08-19-G | db_ocr_search 500 会话静默截断 + 图路径不校验存在性（量级控制可接受+前端降级）；四轮核验未涉及，保持 |
 
 ## 今日已偿（v0.7.6 审查即修，可经代码/提交验证）
 
@@ -42,6 +42,9 @@
 | ID | 摘要 | 处置 |
 |----|------|------|
 | TD-2026-08-20-A | preview_session_note/convert_to_note 为 async 命令但主体同步执行，v0.7.6 起叠加 analyze_session_opt 全量分析（章节/术语/重点/练习/书面化）——千段长会话阻塞 IPC 线程；review_text_filter 已有 spawn_blocking 先例 | open（低）：当前会话量级可接受；长会话性能专项时按 review_text_filter 模式改造（数据装载/过滤/分析迁 spawn_blocking） |
+| TD-2026-08-20-D | 说话人模型（wespeaker）无应用内一键下载——仅有 scripts/download-speaker-model.ps1；SpeakerSwitchCard 只能提示用户手动跑脚本（对照：流式/结构模型均有应用内下载命令+UI） | open（中）：建议按 structure_models 模式加 speaker 下载命令+UI 入口（speaker_engine.rs 路径约定 speaker-embedding/model.onnx，无下载器） |
+| TD-2026-08-20-E | 就绪清单（ReadyCheckCard）不含说话人/标点模型——health_status 的 missing_models 只查流式四件套 + SenseVoice（commands_diag.rs:53-67）；说话人模型缺失到会话详情才由 SpeakerSwitchCard 提示 | open（低）：health_status 增查 speaker/punctuation 模型文件存在性，就绪清单加两项 |
+| TD-2026-08-20-F | 标点恢复模型（models/punctuation/model.int8.onnx）缺失时懒加载静默降级（streaming_asr.rs:132-140），无任何提示；仅 download-punctuation.mjs 脚本兜底 | open（低）：随 TD-E 一并处理（health_status 查文件 + 提示）；缺失不影响主链路（无标点降级） |
 
 ## 观察项（登记不立债，保持跟踪）
 

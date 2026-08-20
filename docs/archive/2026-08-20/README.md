@@ -27,18 +27,17 @@
 | `docs/Foresight/brainstorming-classroom-assistant-mechanisms.md`（含 fed-guide） | 机制摘要投喂文档——供其他 AI 模型头脑风暴输入，持续活跃 |
 | `docs/Foresight/brainstorming-no-cloud-ai-extraction-limit.md` | 前瞻构想（未排期）——活跃 |
 
-## 本批工作摘要（2026-08-20 三轮，v0.7.7 结构图批次）
+## 本批工作摘要（2026-08-20 四轮，模型接入/自动化配置/课堂助手接线盘点）
 
-- **v0.7.7 结构图捕获持久化实施**（REQ-182~187，提交 1629ea0/5bb9c3a/0ca4fbe/b13ead0/5147d85/a399365）：原子层 diagram_likeness/pick_sharpest（长直线+密度+面积+形状约束启发式）→ 业务层 struct/ 命名空间独立预算 + session_structure_images 新表 + 批量捕获管线（屏内选优帧→版面→过滤→裁剪→入库，幂等去重）→ 系统层四命令 + 停止后自动捕获 → 前端屏卡框选（BoxSelectOverlay 确认浮层）/ 图库区段 / 大图预览 / 会话列表全选框；1172 单测全绿（v0.7.7 增 34）+ 前端构建通过；实现校准：真实流程图被判 Text——Text 同过图结构门控 + 形状约束防标题误收（规格同步更新）
-- **技术债清偿 3 笔**：TD-B 术语锚点词边界+大小写折叠（1b24168）、TD-C list_events 失败留日志（f8be4d3）、TD-E 前端接入图搜/磁盘面板（5147d85）
-- **新增代码三轮审查即修 9 项**（提交 bca36da）：R1 预算/错误区分（Err(_) 吞所有错误误判预算耗尽）、R2 删除顺序（先文件后记录防孤儿文件）、R3 屏定位 first_seen_ms（聚类屏号不唯一错屏）、R4 框选单击误触全屏、R5 错误消息误导、R6 rgb_to_bgra 重复、R7 拖出残留框、R8 非错误信息用 error 态、R9 测试冗余行；接入/逻辑/牵连/性能/冗余/提交规范/安全七维检查通过项见审查输出
-- **v0.7.8 规划**：无（下一规划为 v0.8.0 AI 精修，REQ-138~147 已排期，见 [v0.8.0 版本文档](../../versions/v0.8.0.md)）
+- **模型接入全景盘点**（只读核验，无代码变更）：ASR 三级（流式 Zipformer 主链路 → SenseVoice 整句重打分 → 标点恢复）+ OCR（PaddleOCR 经 oar-ocr，ModelScope 自动缓存）+ 结构模型三类（应用内一键下载）+ 说话人（wespeaker embedding，脚本下载）+ AI 云端（SiliconFlow 骨架，v0.8.0 排期实装）；分发四路径（捆绑 models/**/* + 流式 hf-mirror 自动下载 + 结构应用内下载 + OCR ModelScope 缓存）；自动化配置：OCR 设备 Auto 微基准决策、档案自动检测+记忆、引擎预热、停止后自动精修+结构图捕获
+- **四轮审查**：无新增代码（f9c9638 后零变更）——沿用三轮结论（9 项已修复）
+- **盘点发现登记 open 3 笔**：TD-2026-08-20-D（说话人模型无应用内下载）、E（就绪清单不含说话人/标点模型）、F（标点模型缺失静默降级）——详见 [tech-debt.md](./tech-debt.md)
 
 ## 技术债摘要
 
-- **未偿 4 笔**（全部 carried，压缩一行摘要）：TD-040（deliberate）+ TD-2026-08-19-D/F/G
-- **今日已偿 15 笔**：二轮 6 笔（H1/H2/M1/M2/L1/L2）+ TD-B/TD-C/TD-E + 三轮审查 9 笔（R1~R9，详见 [tech-debt.md](./tech-debt.md)）
-- **新登记 open 1 笔**（TD-2026-08-20-A：async 命令主体同步执行 spawn_blocking 改造；TD-B/C 已偿关闭）+ 观察项 3 条
+- **未偿 4 笔**（全部 carried，四轮核验保持）：TD-040（deliberate）+ TD-2026-08-19-D/F/G
+- **今日已偿 15 笔**（四轮无新增）：二轮 6 笔（H1/H2/M1/M2/L1/L2）+ TD-B/TD-C/TD-E + 三轮审查 9 笔（R1~R9）
+- **新登记 open 4 笔**（TD-2026-08-20-A：spawn_blocking 改造；D/E/F：模型接入缺口）+ 观察项 3 条
 
 ## 关联
 
