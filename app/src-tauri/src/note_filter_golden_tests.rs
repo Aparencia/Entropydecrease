@@ -235,3 +235,68 @@ fn purify_stats_counts_are_explicit() {
     let json = serde_json::to_string(stats).expect("stats serializable");
     assert!(json.contains("filler") && json.contains("ocr_corrected"));
 }
+
+// ────────────────────────────────────────────────
+// v0.7.5 扩展（2026-08-20 讨论落地）：过渡短句 + 修辞问句
+// ────────────────────────────────────────────────
+
+/// 会话31 实证：纯过渡短句规则删除（精确表——零误杀）。
+#[test]
+fn session31_transition_short_phrases_deleted() {
+    // Arrange：单独成段的过渡词 + 带内容的过渡句 + 带话题的过渡句
+    //（"我们来看"等会被 verbal 词表先清——口头禅路径；此处用表内且
+    // 不被 verbal 覆盖的词验证过渡规则本身）
+    let segments = vec![
+        asr(1, 0, 2000, "接下来"),
+        asr(2, 2000, 5000, "首先"),
+        asr(3, 5000, 9000, "接下来我们看第三章"),
+        asr(4, 9000, 13000, "讲我们具体的工具了"),
+        asr(5, 13000, 17000, "那么项目的可行性研究就是非常重要的"),
+    ];
+    // Act
+    let result = run("测试", &segments, &[]);
+    // Assert：「接下来/首先」整句命中删除；带章节/话题的过渡句保留
+    assert_eq!(result.stats.transition, 2);
+    let kept_texts: Vec<&str> = result.kept.iter().map(|s| s.text.as_str()).collect();
+    assert!(kept_texts.iter().any(|t| t.contains("第三章")), "含章节内容不误杀");
+    assert!(kept_texts.iter().any(|t| t.contains("具体的工具")), "带话题过渡句不误杀");
+    assert!(kept_texts.iter().any(|t| t.contains("可行性研究")), "正文不受影响");
+    let reasons: Vec<FilterReason> = result.filtered.iter().map(|f| f.reason).collect();
+    assert!(reasons.contains(&FilterReason::Transition));
+}
+
+/// 会话31 实证：修辞问句删除（自问自答——答案紧邻且含核心词）。
+#[test]
+fn session31_rhetorical_question_deleted_when_answer_adjacent() {
+    // Arrange：用户反馈样本——「过程是什么？」+ 紧邻答案段
+    let segments = vec![
+        asr(1, 0, 4000, "过程是什么？"),
+        asr(2, 4000, 8000, "这个过程是制定项目章程"),
+        asr(3, 8000, 12000, "项目启动是一个艺术"),
+    ];
+    // Act
+    let result = run("测试", &segments, &[]);
+    // Assert：问句删除（信息由答案段承载）、答案与正文保留
+    assert_eq!(result.stats.rhetorical, 1);
+    assert!(!result.markdown.contains("过程是什么"));
+    assert!(result.markdown.contains("制定项目章程"));
+    assert!(result.markdown.contains("项目启动是一个艺术"));
+    let reasons: Vec<FilterReason> = result.filtered.iter().map(|f| f.reason).collect();
+    assert!(reasons.contains(&FilterReason::Rhetorical));
+}
+
+/// 误杀防护：开放问题/答案不紧邻 → 问句保留。
+#[test]
+fn open_question_kept_in_note() {
+    // Arrange：开放性问题（答案不在紧邻段）
+    let segments = vec![
+        asr(1, 0, 3000, "大家思考一下为什么？"),
+        asr(2, 3000, 6000, "我们来看下一个案例"),
+        asr(3, 6000, 9000, "案例讲完再回答"),
+    ];
+    // Act
+    let result = run("测试", &segments, &[]);
+    // Assert：保留（核心词"大家思考一下"不在下一段复现）
+    assert_eq!(result.stats.rhetorical, 0);
+    assert!(result.markdown.contains("大家思考一下为什么"));
+}

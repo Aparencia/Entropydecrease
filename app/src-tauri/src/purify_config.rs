@@ -27,6 +27,14 @@ pub struct PurifyConfig {
     pub fragment_min_duration_ms: u64,
     /// 口头禅短段最大字符数（REQ-163：≤ 且全由口头禅词组成 → 删除）
     pub filler_max_chars: usize,
+    /// 纯过渡短句删除（v0.7.5 扩展：整句 ∈ 精确表才删——零误杀低召回）
+    pub transition_delete: bool,
+    /// 纯过渡短句最大字符数（整句去标点后 ≤ 且 ∈ 精确表 → 删除）
+    pub transition_max_chars: usize,
+    /// 修辞问句删除（v0.7.5 扩展：自问自答——核心词在紧邻段复现才删）
+    pub rhetorical_delete: bool,
+    /// 修辞问句最大字符数（> 该值不删——复杂问句多为真问题）
+    pub rhetorical_max_chars: usize,
     // ── OCR 块过滤（画面要点）──
     /// 块最低置信（REQ-167：0.5→0.7 校准）
     pub min_block_score: f32,
@@ -67,6 +75,10 @@ impl Default for PurifyConfig {
             fragment_max_chars: 2,
             fragment_min_duration_ms: 500,
             filler_max_chars: 8,
+            transition_delete: true,
+            transition_max_chars: 8,
+            rhetorical_delete: true,
+            rhetorical_max_chars: 15,
             min_block_score: 0.7,
             single_char_drop: true,
             edge_strip_top_ratio: 0.08,

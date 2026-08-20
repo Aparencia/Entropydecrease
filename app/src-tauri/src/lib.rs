@@ -128,6 +128,7 @@ mod model_downloader;
 mod model_registry;
 mod note_filter;
 mod note_filter_ai;
+mod note_filter_discourse;
 mod novelty;
 mod ocr;
 mod ocr_correction;

@@ -2,12 +2,15 @@
 //!
 //! @ai-context: 过滤链（纯规则，本地优先）：
 //! ① UI 垃圾特征兜底（复用 REQ-083 黑名单同表）
-//! ② 碎片段丢弃（≤2 字 / 时长 <500ms / 纯符号）
-//! ③ 低置信丢弃（confidence <0.6）
-//! ④ 口语净化（v0.7.5 REQ-162：verbal_normalize 保守档 + symbol_normalize）→
-//!    结巴折叠 + 术语替换（REQ-164）——净化后为空/纯符号/短口头禅 → 删除
-//! ⑤ 口头禅短段规则级删除（REQ-163：≤8 字且全由口头禅词组成，免 AI）
-//! ⑥ 相邻重复段合并（净化后文本才做精确去重——净化顺序契约）
+//! ② 低置信丢弃（confidence <0.6）
+//! ③ 纯过渡短句删除（v0.7.5 扩展：整句 ∈ 精确表——零误杀低召回；
+//!    先于碎片检查——表内 2 字短语以"过渡"原因删除，统计语义更准确）
+//! ④ 口头禅短段规则级删除（REQ-163：≤8 字且全由口头禅词组成，免 AI）
+//! ⑤ 碎片段丢弃（≤2 字 / 时长 <500ms / 纯符号）
+//! ⑥ 口语净化（v0.7.5 REQ-162：verbal_normalize 保守档 + symbol_normalize）→
+//!    结巴折叠 + 术语替换（REQ-164）——净化后为空/纯符号 → 删除
+//! ⑦ 修辞问句删除（v0.7.5 扩展：自问自答——核心词在紧邻段复现；跨段 pass）
+//! ⑧ 相邻重复段合并（净化后文本才做精确去重——净化顺序契约）
 //! @ai-context: 单一管线双出口（REQ-081）：session_to_note（落库）与
 //!              preview_session_note（只读预览）共用本模块——输出一致性
 //!              由构造保证。过滤**可逆**：原料层（sessions 表）不动，被过滤
@@ -70,6 +73,10 @@ pub enum FilterReason {
     AiDelete,
     /// 口头禅短段规则级删除（REQ-163：≤8 字全口头禅；含净化后空/纯符号残留）
     Filler,
+    /// 纯过渡短句规则级删除（v0.7.5 扩展：整句 ∈ 精确表，零误杀）
+    Transition,
+    /// 修辞问句删除（v0.7.5 扩展：自问自答——核心词在紧邻段复现）
+    Rhetorical,
 }
 
 /// 被过滤条目（预览对照可复查、定位原料）。
@@ -104,6 +111,12 @@ pub struct FilterStats {
     /// v0.7.5（REQ-168）：OCR 错字纠错块数
     #[serde(default)]
     pub ocr_corrected: usize,
+    /// v0.7.5 扩展：纯过渡短句删除数（精确表）
+    #[serde(default)]
+    pub transition: usize,
+    /// v0.7.5 扩展：修辞问句删除数（自问自答）
+    #[serde(default)]
+    pub rhetorical: usize,
 }
 
 /// 合并条目（相邻重复合并 / AI merge 展示层拼接）。
@@ -182,18 +195,7 @@ pub fn filter_note(
             });
             continue;
         }
-        // ② 碎片段（≤2 字 / <500ms / 纯符号——"----/···" 等无信息内容）
-        if is_fragment(&seg, config) {
-            stats.fragments += 1;
-            filtered.push(FilteredItem {
-                segment_id: seg.id,
-                reason: FilterReason::Fragment,
-                text: text.to_string(),
-                start_ms: seg.start_ms,
-            });
-            continue;
-        }
-        // ③ 低置信丢弃（confidence=None 的字幕段跳过——无置信度证据不删）
+        // ② 低置信丢弃（confidence=None 的字幕段跳过——无置信度证据不删）
         if seg.confidence.is_some_and(|c| c < config.low_confidence_threshold) {
             stats.low_confidence += 1;
             filtered.push(FilteredItem {
@@ -204,10 +206,49 @@ pub fn filter_note(
             });
             continue;
         }
-        // ④ 口语净化（REQ-162/164）：书面化（保守档）→ 符号 → 结巴折叠 → 术语替换
+        // ③ 纯过渡短句删除（v0.7.5 扩展：整句 ∈ 精确表——"接下来/我们来看"
+        //     单独成段无信息；"接下来我们看第三章"不在表内不误杀）。
+        //     先于碎片检查：表内 2 字短语（首先/总之/好吧）若后置会被碎片规则
+        //     （≤2 字）先删，原因标签失真（过渡原因更准确）
+        if config.transition_delete
+            && crate::note_filter_discourse::is_transition_short(text, config.transition_max_chars)
+        {
+            stats.transition += 1;
+            filtered.push(FilteredItem {
+                segment_id: seg.id,
+                reason: FilterReason::Transition,
+                text: text.to_string(),
+                start_ms: seg.start_ms,
+            });
+            continue;
+        }
+        // ④ 口头禅短段规则级删除（REQ-163：免 AI——段 1018「对不对？」类；
+        //     基于原文判定——净化前形状特征未被破坏）
+        if config.filler_delete && is_filler_only(text, config) {
+            stats.filler += 1;
+            filtered.push(FilteredItem {
+                segment_id: seg.id,
+                reason: FilterReason::Filler,
+                text: text.to_string(),
+                start_ms: seg.start_ms,
+            });
+            continue;
+        }
+        // ⑤ 碎片段（≤2 字 / <500ms / 纯符号——"----/···" 等无信息内容）
+        if is_fragment(&seg, config) {
+            stats.fragments += 1;
+            filtered.push(FilteredItem {
+                segment_id: seg.id,
+                reason: FilterReason::Fragment,
+                text: text.to_string(),
+                start_ms: seg.start_ms,
+            });
+            continue;
+        }
+        // ⑥ 口语净化（REQ-162/164）：书面化（保守档）→ 符号 → 结巴折叠 → 术语替换
         let original = seg.text.clone();
         let purified = purify_segment(&original, config, symbol_cfg, &mut stats);
-        // 净化残留检查：空/纯符号（"对不对？"→"？"）/ 短口头禅（"哈"）→ 删除
+        // ⑦ 净化残留检查：空/纯符号（"对不对？"→"？"）/ 短口头禅（"哈"）→ 删除
         if is_purified_empty(&purified) {
             stats.filler += 1;
             filtered.push(FilteredItem {
@@ -218,20 +259,24 @@ pub fn filter_note(
             });
             continue;
         }
-        // ⑤ 口头禅短段规则级删除（REQ-163：免 AI——段 1018「对不对？」类）
-        if config.filler_delete && is_filler_only(&purified, config) {
-            stats.filler += 1;
-            filtered.push(FilteredItem {
-                segment_id: seg.id,
-                reason: FilterReason::Filler,
-                text: original,
-                start_ms: seg.start_ms,
-            });
-            continue;
-        }
         seg.text = purified;
-        // ⑥ 相邻重复段合并（净化后文本精确去重——净化顺序契约；合并延伸 end_ms）
-        if let Some(last) = kept.last_mut() {
+        kept.push(seg);
+    }
+    // ⑥ 修辞问句删除（v0.7.5 扩展：自问自答——问句核心词在紧邻段复现，
+    //    会话31「过程是什么？」+「这个过程是制定项目章程」实证；跨段上下文
+    //    需 kept 全集，故在单遍循环后执行）
+    if config.rhetorical_delete {
+        kept = crate::note_filter_discourse::drop_rhetorical_questions(
+            kept,
+            config.rhetorical_max_chars,
+            &mut stats,
+            &mut filtered,
+        );
+    }
+    // ⑦ 相邻重复段合并（净化后文本精确去重——净化顺序契约；合并延伸 end_ms）
+    let mut deduped: Vec<SessionSegment> = Vec::new();
+    for seg in kept {
+        if let Some(last) = deduped.last_mut() {
             if last.text.trim() == seg.text.trim() {
                 stats.duplicates += 1;
                 filtered.push(FilteredItem {
@@ -250,8 +295,9 @@ pub fn filter_note(
                 continue;
             }
         }
-        kept.push(seg);
+        deduped.push(seg);
     }
+    let kept = deduped;
     // 画面要点（v0.7.3 REQ-160：可消费块过滤 → 屏构建 → 屏段落渲染；
     //    v0.7.5：过滤含单字符/边缘条带/视频页共现/错字纠错——见 screens.rs）
     let transcript = concat_transcript(&kept);

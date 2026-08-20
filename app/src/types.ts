@@ -425,7 +425,15 @@ export interface SessionArtifact {
 /** 被过滤条目（Rust FilteredItem，kebab-case reason） */
 export interface FilteredItem {
   segment_id: number;
-  reason: "ui-junk" | "duplicate" | "fragment" | "low-confidence" | "ai-delete" | "filler";
+  reason:
+    | "ui-junk"
+    | "duplicate"
+    | "fragment"
+    | "low-confidence"
+    | "ai-delete"
+    | "filler"
+    | "transition"
+    | "rhetorical";
   text: string;
   start_ms: number;
 }
@@ -447,6 +455,10 @@ export interface FilterStats {
   term_replace?: number;
   /** v0.7.5（REQ-168）：OCR 错字纠错块数 */
   ocr_corrected?: number;
+  /** v0.7.5 扩展：纯过渡短句删除数 */
+  transition?: number;
+  /** v0.7.5 扩展：修辞问句删除数 */
+  rhetorical?: number;
 }
 
 /** 合并条目（Rust MergedItem） */

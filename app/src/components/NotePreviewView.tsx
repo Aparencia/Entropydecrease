@@ -24,6 +24,9 @@ const REASON_LABEL: Record<string, string> = {
   "ai-delete": "AI 判删",
   // v0.7.5（REQ-163）：口头禅短段规则级删除
   filler: "口头禅",
+  // v0.7.5 扩展：纯过渡短句 / 修辞问句
+  transition: "过渡句",
+  rhetorical: "反问",
 };
 
 /** HTML 转义（审查修复 2026-08-19：OCR/ASR 文本来自视频字幕，恶意字幕可含
@@ -156,6 +159,8 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
           ["碎片", stats.fragments, "#6b7280"],
           ["低置信", stats.low_confidence, "#7c3aed"],
           ["口头禅", stats.filler ?? 0, "#be185d"],
+          ["过渡", stats.transition ?? 0, "#ea580c"],
+          ["反问", stats.rhetorical ?? 0, "#0891b2"],
           ["净化", stats.verbal ?? 0, "#0d9488"],
           ["AI 判删", stats.ai_delete, "#2563eb"],
         ].map(([label, count, color]) => (

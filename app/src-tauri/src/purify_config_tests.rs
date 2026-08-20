@@ -20,9 +20,12 @@ fn defaults_match_v075_ruling() {
     assert_eq!(cfg.min_block_score, 0.7);
     // REQ-165：锚点默认开
     assert!(cfg.anchor_timestamps);
-    // 净化链默认全开（REQ-162~168）
+    // 净化链默认全开（REQ-162~168 + 过渡/问句扩展）
     assert!(cfg.verbal_normalize && cfg.symbol_normalize && cfg.stutter_fold && cfg.filler_delete);
     assert!(cfg.ocr_correct && cfg.single_char_drop);
+    assert!(cfg.transition_delete && cfg.rhetorical_delete);
+    assert_eq!(cfg.transition_max_chars, 8);
+    assert_eq!(cfg.rhetorical_max_chars, 15);
 }
 
 #[test]
