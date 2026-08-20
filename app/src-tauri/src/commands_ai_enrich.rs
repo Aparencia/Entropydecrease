@@ -115,6 +115,10 @@ pub async fn ai_enrich_start(
             }
         }
         drop(guards);
+        // F3-D 修复（2026-08-21）：成本硬拦截——启动前校验余额（精修共用
+        // ensure_balance_for：免费档放行、余额不足拒绝、查询失败宽容放行）
+        let model = st.ai_settings.lock().map(|s| s.model.clone()).unwrap_or_default();
+        crate::commands_ai_refine::ensure_balance_for(&st, chars, &model)?;
     }
     let task_id = st.ai_task_seq.fetch_add(1, Ordering::Relaxed);
     {

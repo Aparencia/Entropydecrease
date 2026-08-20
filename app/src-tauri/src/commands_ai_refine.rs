@@ -148,6 +148,10 @@ pub async fn ai_refine_start(
             }
         }
         drop(guards);
+        // ②d F3-D 修复（2026-08-21）：成本硬拦截——启动前校验余额
+        // （余额 < 预估×安全系数 → 拒绝启动 + 三出口引导；不产生"跑完
+        // 才 402 失败"的浪费；免费档 ¥0 预估 → 余额 0 也放行）
+        ensure_balance_for(&st, chars, &settings.model)?;
     }
     // ③ 注册任务 + 后台执行（spawn_blocking——网络/分析不阻塞异步运行时）
     let task_id = st.ai_task_seq.fetch_add(1, Ordering::Relaxed);
@@ -341,4 +345,49 @@ pub fn task_seq() -> Arc<AtomicU64> {
 /// 任务注册表（AppState 装配）。
 pub fn task_registry() -> Arc<Mutex<HashMap<u64, AiTaskEntry>>> {
     Arc::new(Mutex::new(HashMap::new()))
+}
+
+/// 成本硬拦截安全系数（预估费用 × 系数 < 余额才放行——防预估偏差导致
+/// 中途余额耗尽；免费档 ¥0 预估恒放行）。
+const BALANCE_SAFETY_FACTOR: f64 = 1.2;
+
+/// 成本硬拦截（F3-D，2026-08-21）：启动前校验余额。
+///
+/// @ai-context: 流程：按字符数预估费用（模型映射单价 + 输出 token）→ 查余额
+///              （复用 AiBalanceAdapter）→ 余额 < 预估×1.2 → 拒绝启动 + 三出口
+///              引导（充值/切免费档模型/放弃）。免费档（预估 ¥0）→ 恒放行
+///              （余额 0 也可精修——免费模型不扣费）；余额查询失败 → 放行
+///              （不因余额接口抖动阻断功能——降级宽容，费用风险由确认弹窗
+///              展示承担）。精修/补充共用（补充经 enrich 命令调用本函数）。
+pub(crate) fn ensure_balance_for(st: &AppState, chars: usize, model: &str) -> Result<(), String> {
+    let est = estimate_for_content_model(chars, model);
+    if est.est_cost_yuan <= 0.0 {
+        return Ok(()); // 免费档/单价 0——无扣费风险，不拦截
+    }
+    let required = est.est_cost_yuan * BALANCE_SAFETY_FACTOR;
+    // 余额查询（短超时——余额接口抖动不阻断精修；失败放行宽容降级）
+    let api_key = std::env::var("SILICONFLOW_API_KEY")
+        .ok()
+        .filter(|k| !k.is_empty())
+        .or(st.ai_credentials.load_key().ok().flatten())
+        .unwrap_or_default();
+    if api_key.is_empty() {
+        return Err("未配置 API 密钥（设置页保存密钥或配置环境变量 SILICONFLOW_API_KEY）".to_string());
+    }
+    let settings = st.ai_settings.lock().map_err(|e| format!("AI 设置锁中毒: {}", e))?.clone();
+    let cfg = crate::ai_client::AiClient::from_settings(&settings, Some(api_key)).config;
+    let adapter = crate::ai_balance::AiBalanceAdapter {
+        base_url: cfg.base_url,
+        api_key: cfg.api_key,
+        timeout_secs: cfg.timeout_secs,
+        max_retries: 0, // 拦截是前置守卫——不重试，失败放行
+    };
+    match adapter.fetch() {
+        Ok(balance) if balance.total_balance < required => Err(format!(
+            "余额不足：当前 ¥{:.2}，本次预估 ¥{:.4}（安全系数 ×1.2）——请充值或切换免费档模型后重试",
+            balance.total_balance, est.est_cost_yuan
+        )),
+        Ok(_) => Ok(()),
+        Err(_) => Ok(()), // 余额查询失败 → 放行（宽容降级，费用由确认弹窗展示）
+    }
 }

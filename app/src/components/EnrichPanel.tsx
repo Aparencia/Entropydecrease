@@ -321,6 +321,12 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
               {balance.lowBalanceWarning && <span style={{ marginLeft: 6 }}>⚠️ {balance.lowBalanceWarning}</span>}
             </div>
           )}
+          {/* F3-D：成本硬拦截提示——余额不足时启动会被后端拒绝 */}
+          {balance && est.estCostYuan > 0 && balance.balance.totalBalance < est.estCostYuan * 1.2 && (
+            <div style={{ color: "#b91c1c", marginTop: 2 }}>
+              ⚠️ 余额不足本次预估（含安全系数）——启动将被拦截，请充值或切换免费档模型
+            </div>
+          )}
           <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
             <button style={{ ...btn, background: "#0d9488", color: "#fff", border: "none" }} onClick={() => void start()}>
               开始补充

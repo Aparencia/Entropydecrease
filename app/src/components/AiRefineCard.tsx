@@ -291,6 +291,12 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
               {balance.lowBalanceWarning && <span style={{ marginLeft: 6 }}>⚠️ {balance.lowBalanceWarning}</span>}
             </div>
           )}
+          {/* F3-D：成本硬拦截提示——余额不足时启动会被后端拒绝（三出口引导） */}
+          {balance && est.estCostYuan > 0 && balance.balance.totalBalance < est.estCostYuan * 1.2 && (
+            <div style={{ color: "#b91c1c", marginTop: 2 }}>
+              ⚠️ 余额不足本次预估（含安全系数）——启动将被拦截，请充值或切换免费档模型
+            </div>
+          )}
           <label style={{ display: "flex", alignItems: "center", gap: 4, margin: "4px 0" }}>
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
             记住此选择，下次不再确认
