@@ -118,23 +118,42 @@ impl AiMockAdapter {
         TextFilterResponse { decisions }
     }
 
-    /// 精修 mock（REQ-141）：规则化整理——按输入章节组织 + 高亮标注；
+    /// 精修 mock（REQ-141，F3 v2）：规则化整理——按输入章节组织 + 高亮标注；
     /// 响应通过 AiRefineResponse::validate（持续验证精修协议校验链）。
     ///
     /// @ai-context: 精修=整理不创作语义在 mock 中体现：只重组不新增事实
-    ///              （content 原样作为 paragraph，标 mock 高亮）；M5 契约
-    ///              测试/mock 全链路消费本方法。
+    ///              （content 原样作为 paragraph，标 mock 高亮）；F3 v2：
+    ///              输入配图行（`- ![画面 N](session-images/..)`）转 image 块
+    ///              原样保留（验证 image 块校验/渲染链路）；schema_version=2。
     pub fn refine(&self, request: &AiRefineRequest) -> AiRefineResponse {
         let headings: Vec<String> = if request.chapters.is_empty() {
             vec!["笔记".to_string()]
         } else {
             request.chapters.clone()
         };
+        // 输入中的配图行 → image 块（原样路径保留——F3 v2 丢图回归）
+        let images: Vec<AiRefineBlock> = request
+            .content
+            .lines()
+            .filter(|l| l.trim_start().starts_with("- ![") && l.contains("session-images/"))
+            .filter_map(|l| {
+                // 提取 `](path)` 中的路径（配图行 `- ![alt](session-images/..)`）
+                let path = l.split("](").nth(1)?.trim_end_matches(')').trim().to_string();
+                if path.starts_with("session-images/") {
+                    Some(AiRefineBlock {
+                        block_type: AiRefineBlockType::Image,
+                        content: path,
+                        anchor_ref: None,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
         let sections: Vec<AiRefineSection> = headings
             .iter()
-            .map(|heading| AiRefineSection {
-                heading: heading.clone(),
-                blocks: vec![
+            .map(|heading| {
+                let mut blocks = vec![
                     AiRefineBlock {
                         block_type: AiRefineBlockType::Paragraph,
                         content: request.content.clone(),
@@ -145,10 +164,19 @@ impl AiMockAdapter {
                         content: "（mock 精修）已整理，未增补课程外内容".to_string(),
                         anchor_ref: None,
                     },
-                ],
+                ];
+                // F3 v2：配图块追加（验证 image 块校验 + to_markdown 渲染）
+                blocks.extend(images.clone());
+                AiRefineSection {
+                    heading: heading.clone(),
+                    blocks,
+                }
             })
             .collect();
-        AiRefineResponse { sections }
+        AiRefineResponse {
+            schema_version: crate::ai_refine_protocol::SCHEMA_VERSION_V2,
+            sections,
+        }
     }
 
     /// 知识补充 mock（REQ-142）：按勾选子项规则化产出合法块数组；

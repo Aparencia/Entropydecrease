@@ -70,13 +70,14 @@ impl NoteRefinePrompt {
         let mut profile_style = std::collections::HashMap::new();
         profile_style.insert("lecture".to_string(), "lecture".to_string());
         Self {
-            version: 1,
-            core_instruction: "精修=整理不创作：去噪 + 结构化，不增补课程外事实。".to_string(),
+            version: 2,
+            core_instruction: "精修=整理不创作：去噪 + 结构化，不增补课程外事实。"
+                .to_string(),
             styles,
             profile_style,
             fallback_style: "lecture".to_string(),
             few_shot: Vec::new(),
-            output_format: "只输出 JSON：{\"sections\":[{\"heading\":\"..\",\"blocks\":[{\"type\":\"paragraph|list|term|highlight|quote\",\"content\":\"..\",\"anchor_ref\":null}]}]}"
+            output_format: "只输出 JSON：{\"schemaVersion\":2,\"sections\":[{\"heading\":\"..\",\"blocks\":[{\"type\":\"paragraph|list|term|highlight|quote|image\",\"content\":\"..\",\"anchor_ref\":null}]}]}"
                 .to_string(),
         }
     }
@@ -122,15 +123,23 @@ impl AiNoteRefineAdapter {
     ///
     /// @ai-context: 强校验在此层做（validate 失败 → Parse 错误 → 调用方
     ///              回退纯规则，非法响应不进入笔记管线——防御性编程铁律）。
+    /// @ai-context: F3 v2：请求携带片间上下文（slice_index/total/prev/next
+    ///              summary）——提示词据此约束"只整理本片、沿用全局章节"；
+    ///              响应 schema_version=2（向后兼容：旧响应缺省 1 仍可解析）。
     pub fn refine(&self, request: &AiRefineRequest) -> Result<AiRefineResponse, AiClientError> {
         let system = self.prompt.build_system(&request.profile);
         let user = serde_json::to_string(request)
             .map_err(|e| AiClientError::Parse(format!("精修请求序列化失败: {}", e)))?;
         let v = self.client.chat_json(&system, &user)?;
-        let resp: AiRefineResponse = serde_json::from_value(v)
+        let mut resp: AiRefineResponse = serde_json::from_value(v)
             .map_err(|e| AiClientError::Parse(format!("精修响应结构非法: {}", e)))?;
         resp.validate()
             .map_err(|e| AiClientError::Parse(format!("精修响应校验失败（已丢弃回退）: {}", e)))?;
+        // F3 v2：v1 响应（缺省 1）升级标记为 v2（内容契约已校验通过——
+        // 版本字段仅记录，不改变解析语义）
+        if resp.schema_version == 1 {
+            resp.schema_version = crate::ai_refine_protocol::SCHEMA_VERSION_V2;
+        }
         Ok(resp)
     }
 }

@@ -242,12 +242,35 @@ struct RefineCtx<'a> {
     task_id: u64,
 }
 
+/// 片间摘要（F3 v2：前/后片首尾 N 字——提示词衔接上下文，防片间断裂）。
+/// 纯函数可单测：取片开头/结尾 SUMMARY_MAX_CHARS 字符（截断到字符边界）。
+fn slice_summary(text: &str, head: bool) -> Option<String> {
+    let s = text.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let max = crate::ai_refine_protocol::SUMMARY_MAX_CHARS;
+    let out: String = if head {
+        s.chars().take(max).collect()
+    } else {
+        s.chars().rev().take(max).collect::<String>().chars().rev().collect()
+    };
+    if out.chars().count() < s.chars().count() {
+        Some(format!("{}…", out))
+    } else {
+        Some(out)
+    }
+}
+
 /// 并发切片精修（纯编排）：worker 池从共享队列取片 → 单片重试 → 收集。
 ///
 /// @ai-context: 返回 (各片 markdown（保序，失败片跳过）, 失败片数)。
 ///              单片失败不 panic、不中断其他片——部分成功语义（REQ-145）。
 ///              进度经 set_task 上报（finished = 已完成的片数，含失败片——
 ///              前端进度条推进不受单片失败影响）。
+/// @ai-context: F3 v2：请求携带 slice_index/slice_total/prev_summary/
+///              next_summary——模型知道自己是第几片、前后片衔接什么
+///              （防章节标题重复/内容断裂）。
 fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usize) {
     let total = ctx.slices.len();
     if total == 0 {
@@ -260,11 +283,17 @@ fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usize) {
     let reqs: Arc<Vec<AiRefineRequest>> = Arc::new(
         ctx.slices
             .iter()
-            .map(|s| AiRefineRequest {
+            .enumerate()
+            .map(|(i, s)| AiRefineRequest {
                 content: s.clone(),
                 profile: ctx.profile.to_string(),
                 glossary: ctx.glossary.to_vec(),
                 chapters: ctx.chapters.to_vec(),
+                // F3 v2：片间上下文（前片结尾 / 后片开头摘要——衔接用）
+                slice_index: i + 1,
+                slice_total: total,
+                prev_summary: if i > 0 { slice_summary(&ctx.slices[i - 1], false) } else { None },
+                next_summary: ctx.slices.get(i + 1).and_then(|n| slice_summary(n, true)),
             })
             .collect(),
     );
