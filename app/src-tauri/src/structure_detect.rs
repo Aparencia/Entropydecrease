@@ -47,6 +47,12 @@ pub fn diagram_likeness(grid: &FrameGrid, x0: u32, y0: u32, x1: u32, y1: u32) ->
     if w < 2 || h < 2 {
         return 0.0;
     }
+    // 形状约束（实现校准）：标题细条/单行词条不可能是图结构——区域必须
+    // 是"块状"（高 ≥3 格、宽 ≥6 格）。真实流程图页密度高被判 Text，
+    // 行带可能是框线连成的大块；长标题是 1-2 格高的细条，借此拒绝。
+    if h < 3 || w < 6 {
+        return 0.0;
+    }
     // ① 长直线特征：行/列最长连续墨迹段 + 含长段行数
     let mut max_h_run = 0u32;
     let mut line_rows = 0u32;
@@ -169,9 +175,11 @@ pub fn pick_sharpest(candidates: &[(u64, FrameGrid)]) -> Option<usize> {
 
 /// 结构图候选过滤（纯函数）：版面区域 → 值得持久化的子集。
 ///
-/// @ai-context: table/formula/code 直收（is_structural）；Image 过
-///              diagram_likeness 阈值；text/unknown 跳过。输入输出均为
-///              网格坐标（编排层随后 regions_to_frame 换算帧坐标裁剪）。
+/// @ai-context: table/formula/code 直收（is_structural）；Image/Text 均过
+///              diagram_likeness 阈值（实现校准：真实流程图页密度高被判
+///              Text——长直线+形状约束天然拒纯文字/标题，故 Text 同门控）；
+///              unknown 跳过（归 V1.0 AI 补缝）。输入输出均为网格坐标
+///              （编排层随后 regions_to_frame 换算帧坐标裁剪）。
 pub fn filter_structure_regions(
     regions: &[LayoutRegion],
     grid: &FrameGrid,
@@ -180,11 +188,11 @@ pub fn filter_structure_regions(
         .iter()
         .filter(|r| match r.kind {
             RegionKind::Table | RegionKind::Formula | RegionKind::Code => true,
-            RegionKind::Image => {
+            RegionKind::Image | RegionKind::Text => {
                 diagram_likeness(grid, r.x, r.y, r.x + r.w - 1, r.y + r.h - 1)
                     >= DIAGRAM_LIKENESS_THRESHOLD
             }
-            RegionKind::Text | RegionKind::Unknown => false,
+            RegionKind::Unknown => false,
         })
         .cloned()
         .collect()

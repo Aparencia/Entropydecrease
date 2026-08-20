@@ -124,6 +124,19 @@ fn diagram_text_line_rejected() {
 }
 
 #[test]
+fn diagram_title_strip_rejected_by_shape() {
+    // Arrange：长标题细条（高 1-2 格、长词连续段占比高——形状约束拒绝）
+    let mut g = blank(32, 18, 255);
+    paint(&mut g, 2, 6, 25, 6); // 24 格长段、单行
+
+    // Act：区域 h=1（细条）
+    let score = diagram_likeness(&g, 2, 6, 25, 6);
+
+    // Assert：形状约束（h<3）→ 0 分——长标题不误收
+    assert_eq!(score, 0.0);
+}
+
+#[test]
 fn diagram_out_of_bounds_and_tiny_region_zero() {
     // Arrange：全屏空白 + 越界/过小区域
     let g = blank(32, 18, 255);
@@ -197,26 +210,34 @@ fn pick_sharpest_skips_zero_energy_frames() {
 
 #[test]
 fn filter_structure_kinds_direct_and_image_gated() {
-    // Arrange：流程图样网格 + 混合区域列表
+    // Arrange：流程图样网格 + 混合区域列表（含"被判 Text 的流程图区域"——
+    // 实现校准：真实流程图密度高被判 Text，同过图结构门控）
     let g = flowchart_like();
     let regions = vec![
         region(RegionKind::Table, 0, 0, 5, 3),
         region(RegionKind::Formula, 0, 4, 5, 3),
         region(RegionKind::Code, 0, 8, 5, 3),
-        region(RegionKind::Image, 4, 3, 20, 8), // 流程图区域（应过阈值）
+        region(RegionKind::Text, 4, 3, 20, 8), // 流程图区域被判 Text（应过门控）
+        region(RegionKind::Image, 4, 3, 20, 8), // 同区域 Image（应过门控）
         region(RegionKind::Image, 0, 12, 8, 4), // 空白区域（应拒）
-        region(RegionKind::Text, 26, 0, 5, 3),
+        region(RegionKind::Text, 26, 0, 5, 3), // 小文字区域（形状约束拒）
         region(RegionKind::Unknown, 26, 5, 5, 3),
     ];
 
     // Act
     let kept = filter_structure_regions(&regions, &g);
 
-    // Assert：结构三类直收 + Image 阈值门控；text/unknown 跳过
+    // Assert：结构三类直收 + Text/Image 过图结构门控；小文字/空白/unknown 跳过
     let kinds: Vec<RegionKind> = kept.iter().map(|r| r.kind).collect();
     assert_eq!(
         kinds,
-        vec![RegionKind::Table, RegionKind::Formula, RegionKind::Code, RegionKind::Image]
+        vec![
+            RegionKind::Table,
+            RegionKind::Formula,
+            RegionKind::Code,
+            RegionKind::Text,
+            RegionKind::Image
+        ]
     );
-    assert_eq!(kept.last().unwrap().x, 4); // 保留的是流程图区域而非空白区域
+    assert_eq!(kept[3].x, 4); // Text 流程图区域保留
 }
