@@ -53,6 +53,17 @@ function App() {
           }
         }),
       );
+      // REQ-175（v0.7.5）：停止残留兜底——融合开始 = 采集已停的可靠信号
+      // （session:fusing 在会话停止后无条件发出；live:status stopped 可能
+      // 因线程卡死/事件丢失而不到达——会话31 实证"采集中"残留至重启翻案）
+      unlisteners.push(
+        await listen<number>("session:fusing", () => {
+          if (disposed) return;
+          setCapturing(false);
+          setRecovering(false);
+          setPaused(false);
+        }),
+      );
       // 2026-08 A1：暂停/恢复（全局徽标显示"⏸ 已暂停"）
       unlisteners.push(
         await listen("live:paused", () => {

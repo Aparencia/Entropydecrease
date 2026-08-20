@@ -324,6 +324,30 @@ impl Db {
         )?;
         Ok(affected)
     }
+
+    /// 残留 recording 会话兜底标记（REQ-176 v0.7.5）：跳过进行中的会话 id。
+    ///
+    /// @ai-context: 与 mark_interrupted_sessions 同语义，但**无需重启**——列表
+    ///              拉取即翻案。会话31 实证：停止链路异常（audio.stop join 无
+    ///              超时卡死）时线程未走完 finish_session，DB 停留 recording、
+    ///              前端"采集中"残留，此前只能等下次启动兜底。running_id 为
+    ///              真正运行中的会话 id（live_session.running_session_id），
+    ///              进行中会话绝不误标。
+    pub fn mark_stale_recording(&self, running_id: Option<i64>) -> Result<usize> {
+        let conn = self.conn.lock().expect("db lock poisoned");
+        let affected = match running_id {
+            Some(id) => conn.execute(
+                "UPDATE sessions SET status = ?1, ended_at = COALESCE(ended_at, ?2)
+                 WHERE status = ?3 AND id != ?4",
+                params![SESSION_STATUS_FAILED, unix_seconds(), SESSION_STATUS_RECORDING, id],
+            )?,
+            None => conn.execute(
+                "UPDATE sessions SET status = ?1, ended_at = COALESCE(ended_at, ?2) WHERE status = ?3",
+                params![SESSION_STATUS_FAILED, unix_seconds(), SESSION_STATUS_RECORDING],
+            )?,
+        };
+        Ok(affected)
+    }
 }
 
 /// 转义 LIKE 通配符（复用 db.rs 实现，审查 L7 收敛）。

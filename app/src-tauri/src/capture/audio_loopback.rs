@@ -11,7 +11,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use windows::core::GUID;
 use windows::Win32::Media::Audio::{
@@ -32,6 +32,10 @@ const CLSID_MM_DEVICE_ENUMERATOR: GUID = GUID::from_u128(0xBCDE0395_E52F_467C_8E
 /// @ai-context: WAVEFORMATEXTENSIBLE 的 SubFormat 为 float 时的 GUID
 ///              （windows crate 未导出，按 MSDN 定义；用于 EXTENSIBLE 格式识别，审查 S1 修复）。
 const KSDATAFORMAT_SUBTYPE_IEEE_FLOAT: GUID = GUID::from_u128(0x00000003_0000_0010_8000_00AA00389B71);
+
+/// 停止 join 有界等待（REQ-174 v0.7.5）：WASAPI GetBuffer 卡在驱动层时
+/// 捕获线程无法及时退出，裸 join 永久阻塞停止链路；超时 detach 兜底。
+const STOP_JOIN_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// 捕获输出块（16kHz 单声道，定长 200ms）。
 #[derive(Debug, Clone)]
@@ -106,15 +110,34 @@ impl AudioLoopbackCapture {
         Ok(Self { stop_flag, handle: Some(handle) })
     }
 
-    /// 停止捕获并等待线程退出（join 超时保护：线程异常时不阻塞调用方）。
-    ///
-    /// @ai-context: 结构体实现 Drop 不能整体 move，故用 &mut + Option::take。
-    pub fn stop(&mut self) {
-        self.stop_flag.store(true, Ordering::SeqCst);
-        if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
+/// 停止捕获并等待线程退出（join 超时保护：线程异常/卡死时不阻塞调用方）。
+///
+/// @ai-context: REQ-174（v0.7.5）：WASAPI GetBuffer 卡在驱动层时捕获线程
+///              无法及时退出——裸 join 会永久卡死会话停止链路（会话31 实证：
+///              finish_session 未执行、live:status stopped 未发出、前端"采集中"
+///              残留至重启兜底翻案）。改为有界等待 + 超时 detach（线程最终
+///              由系统回收，资源不泄漏）。
+/// @ai-context: 结构体实现 Drop 不能整体 move，故用 &mut + Option::take。
+pub fn stop(&mut self) {
+    self.stop_flag.store(true, Ordering::SeqCst);
+    if let Some(handle) = self.handle.take() {
+        // REQ-174：有界等待替代裸 join——2s 内线程未退出即 detach（停止
+        // 响应不被 WASAPI 阻塞拖死；已置 stop_flag，线程恢复后自行退出）
+        let deadline = Instant::now() + STOP_JOIN_TIMEOUT;
+        while !handle.is_finished() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        if handle.is_finished() {
+            let _ = handle.join(); // 已退出：join 立即返回（取回线程结果）
+        } else {
+            // 超时 detach：不阻塞调用方（join 句柄 drop 即 detach）
+            eprintln!(
+                "[AudioLoopback] 捕获线程 {:.1}s 内未退出，已 detach（WASAPI 阻塞，资源由系统回收）",
+                STOP_JOIN_TIMEOUT.as_secs_f32()
+            );
         }
     }
+}
 }
 
 impl Drop for AudioLoopbackCapture {
@@ -440,5 +463,52 @@ mod tests {
         assert_eq!(d5, Duration::from_secs(10));
         assert_eq!(d6, d5);
         assert_eq!(d100, d5);
+    }
+
+    /// 构造捕获句柄（测试用：注入自定义线程）。
+    fn make_capture(stop_flag: Arc<AtomicBool>, handle: JoinHandle<()>) -> AudioLoopbackCapture {
+        AudioLoopbackCapture { stop_flag, handle: Some(handle) }
+    }
+
+    #[test]
+    fn stop_returns_promptly_when_thread_stuck() {
+        // Arrange：模拟 WASAPI GetBuffer 卡死的捕获线程（不检查 stop_flag，
+        // 永不退出）——REQ-174 场景：裸 join 会永久阻塞停止链路
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let handle = thread::Builder::new()
+            .name("stuck-capture".into())
+            .spawn(|| loop {
+                std::thread::sleep(Duration::from_millis(100));
+            })
+            .unwrap();
+        let mut cap = make_capture(stop_flag, handle);
+        // Act：stop 有界等待（2s 超时 detach）
+        let started = Instant::now();
+        cap.stop();
+        // Assert：有界返回（不永久阻塞）、句柄已 take（detach 不泄漏）
+        assert!(started.elapsed() < Duration::from_secs(3), "stop 阻塞了 {:?}", started.elapsed());
+        assert!(cap.handle.is_none());
+    }
+
+    #[test]
+    fn stop_joins_when_thread_exits_promptly() {
+        // Arrange：正常捕获线程——stop_flag 置位后快速退出
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let flag = stop_flag.clone();
+        let handle = thread::Builder::new()
+            .name("healthy-capture".into())
+            .spawn(move || {
+                while !flag.load(Ordering::SeqCst) {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+            })
+            .unwrap();
+        let mut cap = make_capture(stop_flag, handle);
+        // Act：正常路径——join 立即返回（不等满超时）
+        let started = Instant::now();
+        cap.stop();
+        // Assert：远小于超时阈值（正常 join 而非 detach）
+        assert!(started.elapsed() < Duration::from_millis(500), "正常 join 耗时 {:?}", started.elapsed());
+        assert!(cap.handle.is_none());
     }
 }

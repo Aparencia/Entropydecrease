@@ -382,6 +382,20 @@ impl LiveSessionManager {
             None => None,
         }
     }
+
+    /// 真正在运行的会话 id（REQ-176 v0.7.5）：线程已退出的残留返回 None。
+    ///
+    /// @ai-context: 与 active_session_id 的区别——active_session_id 对已退出
+    ///              残留返回其 id（供上层"刚结束"语义使用）；本方法只认
+    ///              "线程未退出"。残留回收（mark_stale_recording）用它区分
+    ///              进行中会话与会话31 类残留（线程异常退出但 DB 停留 recording）。
+    pub fn running_session_id(&self) -> Option<i64> {
+        let guard = self.active.lock().expect("live session lock poisoned");
+        match guard.as_ref() {
+            Some(a) if !a.thread.is_finished() => Some(a.session_id),
+            _ => None,
+        }
+    }
 }
 
 /// 有界等待预备线程就绪（P3）：Ready→Ok；Failed/超时→Err（原因）。

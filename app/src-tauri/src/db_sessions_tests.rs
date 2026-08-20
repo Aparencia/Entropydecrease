@@ -222,6 +222,52 @@ fn mark_interrupted_sessions_flags_recording() {
 }
 
 #[test]
+fn mark_stale_recording_skips_running() {
+    // Arrange：running_id 对应的 recording 会话不得误标（REQ-176 防御）
+    let db = mem_db();
+    let running = db.create_session(&new_session("进行中")).unwrap();
+    let stale = db.create_session(&new_session("残留")).unwrap();
+    // Act：running_id=Some(running.id)——残留标 failed，进行中不动
+    let affected = db.mark_stale_recording(Some(running.id)).expect("mark");
+    let running_fetched = db.get_session(running.id).unwrap().unwrap();
+    let stale_fetched = db.get_session(stale.id).unwrap().unwrap();
+    // Assert
+    assert_eq!(affected, 1);
+    assert_eq!(running_fetched.status, "recording");
+    assert!(running_fetched.ended_at.is_none());
+    assert_eq!(stale_fetched.status, "failed");
+    assert!(stale_fetched.ended_at.is_some());
+}
+
+#[test]
+fn mark_stale_recording_no_running_flags_all() {
+    // Arrange：无运行中会话（running_id=None）——全部 recording 标 failed
+    let db = mem_db();
+    let a = db.create_session(&new_session("残留A")).unwrap();
+    let b = db.create_session(&new_session("残留B")).unwrap();
+    // Act
+    let affected = db.mark_stale_recording(None).expect("mark");
+    // Assert
+    assert_eq!(affected, 2);
+    assert_eq!(db.get_session(a.id).unwrap().unwrap().status, "failed");
+    assert_eq!(db.get_session(b.id).unwrap().unwrap().status, "failed");
+}
+
+#[test]
+fn mark_stale_recording_idempotent() {
+    // Arrange：重复调用不重复计数（同 mark_interrupted_sessions 幂等）
+    let db = mem_db();
+    let stale = db.create_session(&new_session("残留")).unwrap();
+    // Act
+    let first = db.mark_stale_recording(None).expect("mark");
+    let second = db.mark_stale_recording(None).expect("mark again");
+    // Assert
+    assert_eq!(first, 1);
+    assert_eq!(second, 0);
+    assert_eq!(db.get_session(stale.id).unwrap().unwrap().status, "failed");
+}
+
+#[test]
 fn session_notes_tables_coexist() {
     // Arrange：会话与笔记共享同一数据库（向后兼容验证）
     let db = mem_db();

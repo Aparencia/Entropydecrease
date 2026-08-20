@@ -59,6 +59,14 @@ pub async fn list_sessions(
     offset: Option<u64>,
 ) -> Result<Vec<SessionListItem>, String> {
     let limit = limit.unwrap_or(50).min(LIST_LIMIT_MAX);
+    // REQ-176（v0.7.5）：残留 recording 会话兜底——线程已死但 DB 停留
+    // recording（停止链路异常/崩溃，会话31 实证）→ 列表拉取即翻案，
+    // 无需重启（running_session_id 排除进行中会话，绝不误标）
+    let running_id = state.live_session.running_session_id();
+    state
+        .db
+        .mark_stale_recording(running_id)
+        .map_err(|e| e.to_string())?;
     state
         .db
         .list_sessions(keyword.as_deref(), limit, offset.unwrap_or(0))
