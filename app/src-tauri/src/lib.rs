@@ -153,6 +153,9 @@ mod speaker_change;
 mod series_detect;
 // v0.7.2（REQ-151）：会话信息聚合——采集信息面板数据源（平台/时长/合集/字幕）
 mod session_info;
+// v0.7.2（REQ-153）：说话人 embedding 引擎（弱化版讲者分离离线分析）
+mod speaker_engine;
+mod commands_speaker;
 // v0.7.0 M1.5（REQ-108）：统一信号事件域（类型/分级/容量守卫；数据层在 db_session_events）
 mod session_events;
 mod symbol_normalize;
@@ -541,6 +544,8 @@ pub fn run() {
             commands_video::video_profile_by_kind,
             // 会话结构化分析（REQ-044/045/046，v0.5.0 M2：章节/重点/术语/讲者）
             commands_analysis::analyze_session_command,
+            // 说话人分离（REQ-153，v0.7.2：弱化版讲者切换离线分析——幂等懒加载）
+            commands_speaker::analyze_session_speakers,
             // 健康巡检与诊断（REQ-042，M7：F2/F3/G2）
             commands_diag::health_status,
             commands_diag::diag_snapshot,

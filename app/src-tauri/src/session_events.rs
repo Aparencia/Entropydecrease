@@ -35,11 +35,14 @@ pub enum EventKind {
     /// v0.7.2（REQ-154 S-2）：语速骤变（段间语速骤降 ≥40% = 强调/变速；
     /// 与 VolumeSurge 音量骤变姊妹信号，重点标注备数据）
     SpeechRateDrop,
+    /// v0.7.2（REQ-153）：讲者切换（弱化版说话人分离——相邻语音段音色
+    /// embedding 余弦 < 阈值；只标切换点不聚类身份；payload 含 confidence）
+    SpeakerChange,
 }
 
 impl EventKind {
     /// 全部类型（新增类型在此登记——schema 为 TEXT 无枚举约束，登记表做消费端白名单）。
-    pub const ALL: [EventKind; 10] = [
+    pub const ALL: [EventKind; 11] = [
         EventKind::FrameSwitch,
         EventKind::LongSilence,
         EventKind::VolumeSurge,
@@ -50,6 +53,7 @@ impl EventKind {
         EventKind::Pause,
         EventKind::Resume,
         EventKind::SpeechRateDrop,
+        EventKind::SpeakerChange,
     ];
 
     /// kebab-case 落库名（serde 默认 PascalCase，DB 层用显式映射防契约漂移）。
@@ -65,6 +69,7 @@ impl EventKind {
             EventKind::Pause => "pause",
             EventKind::Resume => "resume",
             EventKind::SpeechRateDrop => "speech_rate_drop",
+            EventKind::SpeakerChange => "speaker_change",
         }
     }
 
@@ -129,7 +134,8 @@ pub fn event_tier(kind: EventKind) -> EventTier {
         | EventKind::PlayerBehavior
         | EventKind::Pause
         | EventKind::Resume
-        | EventKind::SpeechRateDrop => EventTier::Low,
+        | EventKind::SpeechRateDrop
+        | EventKind::SpeakerChange => EventTier::Low,
     }
 }
 

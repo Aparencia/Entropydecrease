@@ -162,6 +162,18 @@ export interface SessionInfo {
   totalEpisodes: number | null;
 }
 
+/** 讲者切换点（Rust SpeakerChangeOut，camelCase 契约；v0.7.2 REQ-153） */
+export interface SpeakerChange {
+  timeMs: number;
+  confidence: number;
+}
+
+/** 讲者分析结果（Rust SpeakerAnalysisResult；区分"未启用"与"无切换"） */
+export interface SpeakerAnalysisResult {
+  enabled: boolean;
+  changes: SpeakerChange[];
+}
+
 /** 语音定稿事件载荷（Rust AsrFinalEvent，camelCase 契约；live:asr-final 事件，TD-043） */
 export interface AsrFinalEvent {
   timestampMs: number;

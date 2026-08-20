@@ -13,6 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 import ArtifactView from "../components/ArtifactView";
 import ImageGallery from "../components/ImageGallery";
 import NotePreviewView from "../components/NotePreviewView";
+import SpeakerSwitchCard from "../components/SpeakerSwitchCard";
 import type { OutlineEntry, QualityReport, SessionDetail } from "../types";
 import { fmtMs } from "../utils/fmt";
 
@@ -152,6 +153,9 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
           )}
         </div>
       )}
+
+      {/* v0.7.2（REQ-153）：讲者切换（弱化版说话人分离——懒加载幂等） */}
+      <SpeakerSwitchCard sessionId={sessionId} />
 
       {/* 三视图切换（原料 / 产物 / 笔记预览——REQ-081） */}
       <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>

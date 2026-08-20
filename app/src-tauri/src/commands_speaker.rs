@@ -1,0 +1,122 @@
+//! 说话人分离命令（REQ-153 / v0.7.2：弱化版讲者切换离线分析）。
+//!
+//! @ai-context: analyze_session_speakers 懒加载——会话详情打开时调用：
+//!              ① 幂等（已有 SpeakerChange 事件直接返回，不重复分析）；
+//!              ② 模型缺失 → 空列表（前端提示"未启用"，诚实降级不报错）；
+//!              ③ 段边界 = session_segments（端点断句产出 = 现成语音段，
+//!              零新增 VAD）；音频 = session-audio/<id>.wav（16k 单声道）。
+//! @ai-context: 分析成本 = 段数 × embedding 推理（~10ms/段）——百段会话
+//!              <2s，可接受；单段失败跳过（不阻断整体，判定器对无效段
+//!              重置前驱不误判）。结果落 session_events（SpeakerChange），
+//!              容量守卫防写放大（低频事件，天然安全）。
+
+use tauri::State;
+
+use crate::commands::AppState;
+use crate::session_events::{EventKind, NewSessionEvent};
+use crate::speaker_change::{detect_speaker_changes, SpeechSegment};
+use crate::speaker_engine::{self, SpeakerEmbeddingEngine};
+
+/// 讲者切换输出（camelCase 契约，前端展示用）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpeakerChangeOut {
+    /// 切换时刻（会话纪元 ms）
+    pub time_ms: u64,
+    /// 切换置信度 0.0-1.0（距余弦阈值越远越高）
+    pub confidence: f32,
+}
+
+/// 讲者分析结果（前端区分"未启用"与"无切换"——诚实展示）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpeakerAnalysisResult {
+    /// 说话人分离是否启用（模型文件存在且分析已执行）
+    pub enabled: bool,
+    pub changes: Vec<SpeakerChangeOut>,
+}
+
+/// 会话讲者切换分析（弱化版说话人分离；幂等懒加载）。
+#[tauri::command]
+pub fn analyze_session_speakers(
+    state: State<'_, AppState>,
+    session_id: i64,
+) -> Result<SpeakerAnalysisResult, String> {
+    if session_id <= 0 {
+        return Err("无效的会话 id".to_string());
+    }
+    // 1) 幂等：已有分析结果（SpeakerChange 事件）→ 直接返回
+    let existing = state
+        .db
+        .list_events_by_kind(session_id, EventKind::SpeakerChange)
+        .map_err(|e| e.to_string())?;
+    if !existing.is_empty() {
+        return Ok(SpeakerAnalysisResult {
+            enabled: true,
+            changes: existing
+                .iter()
+                .map(|e| SpeakerChangeOut {
+                    time_ms: e.timestamp_ms,
+                    confidence: e
+                        .payload
+                        .get("confidence")
+                        .and_then(|v| v.as_f64())
+                        .map(|v| v as f32)
+                        .unwrap_or(0.0),
+                })
+                .collect(),
+        });
+    }
+    // 2) 模型缺失 → 未启用（前端提示——诚实降级，不阻断）
+    let Some(model_path) = speaker_engine::speaker_model_path(&state.model_dir) else {
+        return Ok(SpeakerAnalysisResult { enabled: false, changes: Vec::new() });
+    };
+    // 3) 音频 + 段边界（端点断句产出 = 语音段）
+    let wav_path = state
+        .data_dir
+        .join("session-audio")
+        .join(format!("{}.wav", session_id));
+    let wave = sherpa_onnx::Wave::read(&wav_path.to_string_lossy())
+        .ok_or_else(|| "会话音频缺失（实时捕获未落盘或已清理）".to_string())?;
+    let segments = state.db.list_segments(session_id).map_err(|e| e.to_string())?;
+    if segments.is_empty() {
+        return Ok(SpeakerAnalysisResult { enabled: true, changes: Vec::new() });
+    }
+    // 4) 逐段提取音色向量（<MIN_SEGMENT_MS 或越界跳过——短段向量不稳）
+    let sr = wave.sample_rate() as u32;
+    let samples = wave.samples();
+    let mut engine = SpeakerEmbeddingEngine::load(&model_path)
+        .ok_or_else(|| "说话人模型加载失败（模型文件损坏？请重新下载）".to_string())?;
+    let mut speech: Vec<SpeechSegment> = Vec::new();
+    for seg in &segments {
+        if seg.end_ms.saturating_sub(seg.start_ms) < speaker_engine::MIN_SEGMENT_MS {
+            continue;
+        }
+        let Some((s, e)) =
+            speaker_engine::segment_sample_range(seg.start_ms, seg.end_ms, sr, samples.len())
+        else {
+            continue;
+        };
+        let Some(emb) = engine.embedding_of(&samples[s..e], wave.sample_rate()) else {
+            continue;
+        };
+        speech.push(SpeechSegment { start_ms: seg.start_ms, embedding: emb });
+    }
+    // 5) 相邻余弦判定（纯函数）→ 落库 → 返回
+    let changes = detect_speaker_changes(&speech);
+    for c in &changes {
+        let _ = state.db.add_event(&NewSessionEvent {
+            session_id,
+            kind: EventKind::SpeakerChange,
+            timestamp_ms: c.time_ms,
+            payload: serde_json::json!({ "confidence": c.confidence }),
+        });
+    }
+    Ok(SpeakerAnalysisResult {
+        enabled: true,
+        changes: changes
+            .iter()
+            .map(|c| SpeakerChangeOut { time_ms: c.time_ms, confidence: c.confidence })
+            .collect(),
+    })
+}
