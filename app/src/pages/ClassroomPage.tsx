@@ -29,8 +29,8 @@ import AudioLevelMeter from "../components/AudioLevelMeter";
 import ReadyCheckCard from "../components/ReadyCheckCard";
 import { VocabManager } from "../components/VocabManager";
 import { SystemStatusBadge } from "../components/SystemStatusBadge";
-// v0.5.0 模型版：结构模型设置（版面/表格/公式按需下载）
-import StructureModelSetting from "../components/StructureModelSetting";
+// 2026-08-20 用户需求：模型管理面板（原结构分析模型改名，覆盖全部模型）
+import ModelManagementPanel from "../components/ModelManagementPanel";
 // 2026-08 审查硬拆：右栏内容区 / 文件素材输入与提取
 import ClassroomRightPane from "../components/ClassroomRightPane";
 import MaterialInputPanel from "../components/MaterialInputPanel";
@@ -546,9 +546,10 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
             <VocabManager />
           </div>
 
-          {/* 结构分析模型（v0.5.0 模型版：版面/表格/公式按需下载，未下载自动规则版） */}
+          {/* 模型管理（2026-08-20 用户需求：原结构分析模型面板改名并覆盖全部模型——
+              转写/说话人/标点/OCR/结构，按需下载、未下载自动降级） */}
           <div style={panel}>
-            <StructureModelSetting />
+            <ModelManagementPanel />
             {/* TD-2026-08-19-E 清偿：模型磁盘占用面板（REQ-131 命令前端接入） */}
             <ModelDiskPanel />
           </div>

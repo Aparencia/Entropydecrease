@@ -113,7 +113,7 @@ export default function StructureModelSetting() {
   return (
     <div style={{ fontSize: 12, color: "#374151" }}>
       <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>
-        结构分析模型（按需下载，未下载自动用规则版）
+        结构模型（版面/表格/公式；按需下载，未下载自动用规则版）
       </div>
       {(["layout", "table", "formula"] as ModelKind[]).map((kind) => {
         const st = statusOf(kind);
