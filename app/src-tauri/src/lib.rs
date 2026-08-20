@@ -164,6 +164,8 @@ mod model_registry;
 mod note_filter;
 mod note_filter_ai;
 mod note_filter_discourse;
+// v0.8.0 F1（REQ-141 丢图修复）：精修版配图本地合并降级（协议 v2 image 块兜底）
+mod note_image_merge;
 mod novelty;
 mod ocr;
 mod ocr_correction;

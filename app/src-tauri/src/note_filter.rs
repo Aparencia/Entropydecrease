@@ -445,7 +445,10 @@ pub fn render_screen_points(screens: &[SessionScreen]) -> Vec<String> {
             lines.push(format!("  - 标签：{}", s.labels.join(" · ")));
         }
         if let Some(rel) = &s.image_ref {
-            lines.push(format!("  - ![画面 {}](session-images/{}/{}", i + 1, s.session_id, rel));
+            // 修复（2026-08-21 审查）：缺闭合 `)`——前端渲染正则
+            // `^\s*-\s*!\[([^\]]*)\]\(([^)]*)\)$` 要求 `)$` 结尾，缺括号时
+            // 配图行永远匹配不上 → 渲染为纯文本而非图片（丢图真因之一）
+            lines.push(format!("  - ![画面 {}](session-images/{}/{})", i + 1, s.session_id, rel));
         }
     }
     lines

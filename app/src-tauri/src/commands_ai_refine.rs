@@ -388,6 +388,10 @@ fn run_refine_task_inner(
         );
     }
     // ④ 合并 + 与规则版 diff（基线=本地版，AI 变化点高亮）
+    // 丢图修复（2026-08-21 F1）：协议 v2 前，模型可能丢弃规则版画面配图行
+    // （`- ![画面 N](session-images/..)`）——本地合并降级：AI 未保留配图时
+    // 把规则版配图行按章节合并回精修版（不丢不假，零模型成本）
+    let refined = crate::note_image_merge::merge_rule_images(&draft.markdown, &refined);
     let diff = diff_markdown(&draft.markdown, &refined);
     let (added, removed, _) = diff_stats(&diff);
     Ok(AiRefineResult {
