@@ -252,6 +252,21 @@
 | REQ-180 | 结构元数据：StructureStats 并入 purify_stats + RULE_VERSION 递增 note-rules-0.7.6 | P2 | 已实施（2026-08-20） | v0.7.6 | REQ-171 机制延续；FilterStats 三新字段 serde(default)；旧笔记 NULL 诚实降级 |
 | REQ-181 | 黄金语料回归扩展：会话31 夹具 → 期望带结构笔记断言（TDD） | P1 | 已实施（2026-08-20） | v0.7.6 | REQ-172 机制扩展（2 例：章节标题+词汇表）；预览/落库双出口同函数同口径 |
 
+### v0.7.7 · 非线性结构图像捕获与持久化（结构图）+ 会话管理两处修复（2026-08-20 头脑风暴裁决）
+
+> 版面分析已能分类 text/table/formula/code/image/unknown，但非线性文本结构缺"图像级持久化"闭环：表格/公式/代码裁剪图仅作精修中间产物；流程图/思维导图等（Image/Unknown）完全无裁剪无持久化；AI 语义重建（REQ-056/058）V1.0 才实装——本版用"图像即产物"兜底（ADR-010 诚实降级）。
+> 设计规格 [头脑风暴 结构图 v0.7.7（[ ] 已归档）](../archive/2026-08-20/brainstorming-structure-images-v0.7.7.md) · [v0.7.7 版本文档](../versions/v0.7.7.md)。
+> 裁决：方案 A+（批量时机+屏内多帧选优，不做在线状态机——增量 CPU 小但状态机复杂度/实时链路回归风险大）；混合触发（自动=结构三类+Image 过 diagram_likeness，手动=屏卡框选）；消费=会话内图库（笔记内联下版）；并修两处会话管理体验问题。
+
+| ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
+|----|------|--------|------|---------|------|
+| REQ-182 | 结构图自动捕获：批量任务（停止后触发+图库可重跑）——屏内多帧选优（pick_sharpest 边缘能量）→ 版面分析复用 → table/formula/code 直收 + Image 过 diagram_likeness（边缘密度+面积占比+灰度方差加权）→ 白边裁剪入库 | P1 | 已排期 | v0.7.7 | 每屏采样 ≤8 帧 bound 解码成本；text/unknown 跳过（unknown 归 V1.0 AI 补缝）；重跑幂等（same_image 去重） |
+| REQ-183 | 结构图持久化：session_structure_images 新表（kind/bbox/screen_id/source_ts/source）+ struct/ 命名空间（与 crop/ 精修中间产物语义分离）+ 缩略图 + 独立预算（auto 80/会话常量，manual 不限）+ same_image 去重 | P1 | 已排期 | v0.7.7 | ensure_table 幂等迁移；RegionKind 不动（kind 字符串枚举）；screen_id 留笔记消费锚点 |
+| REQ-184 | 手动结构图截取：屏卡全帧图框选（BoxSelectOverlay 拖框 + 确认浮层防误触）→ capture_structure_manual（归一化坐标/越界钳制/<32×32 拒绝/原样裁剪不白边） | P1 | 已排期 | v0.7.7 | 无 image_ref 屏禁用+提示；手动不设预算上限（用户主动行为） |
+| REQ-185 | 会话内结构图库：ImageGallery 扩展 StructureImageSection（kind/source 徽标+时间+屏号+删除+重新捕获按钮+空态） | P1 | 已排期 | v0.7.7 | list_session_structure_images / delete_structure_image / capture_session_structures 三命令 |
+| REQ-186 | 修复：会话列表全选框（当前筛选视图 filtered 口径 + indeterminate 三态；列表/分组视图共用；纯前端本地状态零后端改动） | P2 | 已排期 | v0.7.7 | 段搜索命中视图批量栏隐藏→全选框自然不出现 |
+| REQ-187 | 修复：参考图片详情查看（ImagePreviewOverlay 大图预览遮罩 + 相对路径/时间信息栏 + 删除 + ESC/点遮罩关闭；参考图/结构图共用） | P2 | 已排期 | v0.7.7 | 修复 ImageGallery 缩略图无点击处理现状 |
+
 ### V1.0 · 体验增强（远期）
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
