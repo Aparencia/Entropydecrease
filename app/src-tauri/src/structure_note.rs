@@ -194,8 +194,12 @@ fn first_occurrence_ms(kept: &[crate::types::SessionSegment], term: &str) -> Opt
 /// 前后均非 ASCII 字母数字。
 ///
 /// @ai-context: 只检查单字节（UTF-8 多字节字符的高位字节恒非 ASCII 字母数字，
-///              汉字/标点天然通过）；find 偏移恒为合法字符边界，无切片 panic。
+///              汉字/标点天然通过）；find 偏移恒为合法字符边界。
 /// @ai-context: 内部自行大小写折叠（调用方不须预 lower——TD-B 审查后健壮化）。
+/// @ai-context: 缺陷修复（2026-08-21）：命中后前进量不能是 pos+1——术语自身为
+///              CJK 多字节字符（如"告"占 3 字节）时 pos+1 落在字符中间，下轮
+///              lower[start..] 切片 panic（预览任务崩溃）。改为前移到下一个
+///              合法字符边界（is_char_boundary 逐字节扫描，最多到串尾=恒合法）。
 fn word_boundary_contains(text: &str, term: &str) -> bool {
     if term.is_empty() {
         return true;
@@ -212,7 +216,12 @@ fn word_boundary_contains(text: &str, term: &str) -> bool {
         if before_ok && after_ok {
             return true;
         }
+        // 前移到下一个字符边界：pos+1 可能位于 CJK 字符内部（多字节），
+        // 直接 +1 会在下轮切片 panic；逐字节前移保证 start 恒为合法边界
         start = pos + 1;
+        while start < bytes.len() && !lower.is_char_boundary(start) {
+            start += 1;
+        }
         if start >= bytes.len() {
             break;
         }

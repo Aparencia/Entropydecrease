@@ -449,6 +449,36 @@ fn word_boundary_empty_term_and_edge_positions() {
 }
 
 #[test]
+fn word_boundary_cjk_term_after_ascii_no_panic() {
+    // Arrange/Act/Assert：术语自身为 CJK 多字节字符（"告" 占 3 字节）且前邻
+    // ASCII 字母数字——命中被边界拒绝后须前移到下一字符边界；旧实现 start=
+    // pos+1 落在多字节中间，下轮 lower[start..] 切片 panic（预览任务崩溃：
+    // "start byte index 103 ... inside '告' (bytes 102..105)"）。
+    assert!(!word_boundary_contains("A告B", "告"), "前后 ASCII 字母数字 → 边界拒绝");
+    assert!(
+        word_boundary_contains("A告 告", "告"),
+        "第二个命中（空格边界 + 串尾）仍可匹配——前移不丢后续候选"
+    );
+}
+
+#[test]
+fn word_boundary_cjk_term_at_high_byte_offset_no_panic() {
+    // Arrange/Act/Assert：复现线上偏移——'告' 位于字节 102..105，前邻 ASCII，
+    // 旧实现 start=103 落在字符中间 panic；修复后应返回 false 而非崩溃
+    let text = "x".repeat(102) + "告B";
+    assert!(!word_boundary_contains(&text, "告"));
+}
+
+#[test]
+fn first_occurrence_cjk_term_after_ascii_no_panic() {
+    // Arrange：kept 段中 CJK 术语前邻 ASCII 字母数字（边界拒绝路径）
+    let kept = vec![seg(1, 1_000, 2_000, "本段讲 A告B 的定义")];
+
+    // Act/Assert：不 panic，边界拒绝 → 无锚点
+    assert_eq!(super::first_occurrence_ms(&kept, "告"), None);
+}
+
+#[test]
 fn first_occurrence_anchor_respects_word_boundary() {
     // Arrange：段文本含 "AI 提效"（应命中）与 "AIR 质量"（不应命中）
     let kept = vec![
