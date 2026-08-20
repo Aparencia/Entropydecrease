@@ -136,7 +136,11 @@ impl SessionImageStore {
         Ok(format!("crop/{}", name))
     }
 
-    /// 已存裁剪图相对路径列表（crop/xxx.webp，按文件名=时间戳升序）。
+    /// 已存裁剪图相对路径列表（crop/xxx.webp，按时间戳数值升序）。
+    ///
+    /// @ai-context: 修复（用户反馈"最近画面未按时间轴排列"）：文件名 = 毫秒
+    ///              时间戳，位数不固定（999/1000/11000）——字典序排序在跨位数
+    ///              时错乱（"11000"<"2000"），必须按解析出的数值排序。
     pub fn list_crops(&self) -> Vec<String> {
         let mut paths: Vec<String> = std::fs::read_dir(self.session_dir.join("crop"))
             .map(|entries| {
@@ -147,7 +151,7 @@ impl SessionImageStore {
                     .collect()
             })
             .unwrap_or_default();
-        paths.sort();
+        sort_by_timestamp(&mut paths);
         paths
     }
 
@@ -193,7 +197,12 @@ impl SessionImageStore {
         Ok(format!("full/{}", name))
     }
 
-    /// 已存图片相对路径列表（full/xxx.webp，按文件名=时间戳升序）。
+    /// 已存图片相对路径列表（full/xxx.webp，按时间戳数值升序）。
+    ///
+    /// @ai-context: 修复（用户反馈"最近画面未按时间轴排列"）：同 list_crops——
+    ///              毫秒时间戳位数不固定，字典序在跨位数时错乱
+    ///              （"999">"1000"、"11000"<"2000"），必须数值排序。
+    ///              前端"最近画面"条依赖此升序（新图追加在末尾）。
     pub fn list_images(&self) -> Vec<String> {
         let mut paths: Vec<String> = std::fs::read_dir(self.session_dir.join("full"))
             .map(|entries| {
@@ -204,9 +213,28 @@ impl SessionImageStore {
                     .collect()
             })
             .unwrap_or_default();
-        paths.sort();
+        sort_by_timestamp(&mut paths);
         paths
     }
+}
+
+/// 按文件名中的数值时间戳升序排序（full/<ts>.webp / crop/<ts>.webp）。
+///
+/// @ai-context: 纯函数（可单测）；文件名解析失败（非 <ts>.webp 形态）回退
+///              字典序兜底（防御异常文件不 panic、不丢条目）。
+fn sort_by_timestamp(paths: &mut Vec<String>) {
+    fn ts_of(rel: &str) -> Option<u64> {
+        rel.rsplit_once('/')
+            .and_then(|(_, name)| name.strip_suffix(".webp"))
+            .and_then(|ts| ts.parse::<u64>().ok())
+    }
+    paths.sort_by(|a, b| match (ts_of(a), ts_of(b)) {
+        (Some(ta), Some(tb)) => ta.cmp(&tb),
+        // 解析失败条目靠后（按字典序稳定兜底）
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => a.cmp(b),
+    });
 }
 
 /// 统计目录内 WebP 文件数（预算恢复用；目录不存在/读失败按 0 计）。

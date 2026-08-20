@@ -159,6 +159,8 @@ export interface LiveSessionStatus {
   sessionId: number | null;
   /** 引擎预热是否已就绪（P3："开始即录"提示） */
   prepared: boolean;
+  /** 是否处于暂停（2026-08 修复：刷新/重进页面后右侧面板状态机还原用） */
+  paused: boolean;
 }
 
 /** 视频导入进度（Rust ImportProgress，camelCase 契约） */

@@ -25,6 +25,9 @@ pub struct LiveSessionStatus {
     pub session_id: Option<i64>,
     /// P3：引擎预热是否已就绪（前端"开始即录"提示）
     pub prepared: bool,
+    /// 2026-08 修复：是否处于暂停（挂载拉取恢复右侧面板状态机用——
+    /// recording 事件只发一次，刷新/重进页面后需靠此字段还原 phase）
+    pub paused: bool,
 }
 
 /// 启动实时捕获会话（REQ-007~012 汇总入口）。
@@ -126,7 +129,7 @@ fn trigger_auto_refine(state: &AppState, session_id: i64) {
     });
 }
 
-/// 查询实时会话状态（活动会话 id + 预热就绪标记）。
+/// 查询实时会话状态（活动会话 id + 预热就绪标记 + 暂停标记）。
 #[tauri::command]
 pub fn live_session_status(state: State<'_, AppState>) -> LiveSessionStatus {
     LiveSessionStatus {
@@ -136,6 +139,7 @@ pub fn live_session_status(state: State<'_, AppState>) -> LiveSessionStatus {
             state.live_session.prepare_status(),
             crate::live_session_prepare::PrepareStatus::Ready
         ),
+        paused: state.live_session.is_paused(),
     }
 }
 

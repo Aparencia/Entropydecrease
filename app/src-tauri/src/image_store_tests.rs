@@ -179,6 +179,36 @@ fn list_images_sorted_by_timestamp() {
 }
 
 #[test]
+fn list_images_sorted_numerically_across_digit_lengths() {
+    // Arrange（回归：用户反馈"最近画面未按时间轴排列"——毫秒时间戳位数
+    // 不固定，字典序跨位数错乱："11000"<"2000"、"999">"1000"）
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = SessionImageStore::new(dir.path().to_path_buf()).unwrap();
+    store.save_frame(11000, &seeded_frame(32, 32, 1), 32, 32).unwrap();
+    store.save_frame(999, &seeded_frame(32, 32, 2), 32, 32).unwrap();
+    store.save_frame(2000, &seeded_frame(32, 32, 3), 32, 32).unwrap();
+    store.save_frame(1000, &seeded_frame(32, 32, 4), 32, 32).unwrap();
+    // Act
+    let list = store.list_images();
+    // Assert：按数值时间戳升序（999→1000→2000→11000），而非字典序
+    assert_eq!(list, vec!["full/999.webp", "full/1000.webp", "full/2000.webp", "full/11000.webp"]);
+}
+
+#[test]
+fn list_crops_sorted_numerically_across_digit_lengths() {
+    // Arrange（回归：与 list_images 同根因——裁剪图列表同样需要时间轴序）
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = SessionImageStore::new(dir.path().to_path_buf()).unwrap();
+    store.save_crop(1500, &seeded_frame(32, 32, 1), 32, 32).unwrap();
+    store.save_crop(99, &seeded_frame(32, 32, 2), 32, 32).unwrap();
+    store.save_crop(12000, &seeded_frame(32, 32, 3), 32, 32).unwrap();
+    // Act
+    let list = store.list_crops();
+    // Assert：数值升序（99→1500→12000），字典序会排成 12000<1500<99
+    assert_eq!(list, vec!["crop/99.webp", "crop/1500.webp", "crop/12000.webp"]);
+}
+
+#[test]
 fn duplicate_frame_deduped_by_dual_fingerprint() {
     // Arrange：REQ-067 去重语义——连续保存相同内容帧 → 第二次返回首次路径且不重复存
     let dir = tempfile::tempdir().unwrap();

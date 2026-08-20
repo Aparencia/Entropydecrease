@@ -87,7 +87,8 @@ export default function LiveImageStrip({ sessionId }: { sessionId: number | null
 
   if (!sessionId) return null;
   // 2026-08 用户需求：最近画面按时间先后排列——后端 list_session_images
-  // 已按文件名（=时间戳）升序返回，此处不再 reverse（前→后 = 旧→新，新图追加在末尾）
+  // 已按文件名中的时间戳**数值**升序返回（字典序在跨位数时错乱，已修复），
+  // 此处不再 reverse（前→后 = 旧→新，新图追加在末尾）
   const shown = images.slice(-MAX_SHOWN);
 
   return (

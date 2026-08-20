@@ -134,6 +134,12 @@ impl LiveSessionManager {
         self.session_info.snapshot()
     }
 
+    /// 是否处于暂停（2026-08 修复：live_session_status 拉取用——recording/
+    /// paused 事件只发一次，页面刷新/重进后前端需拉取还原状态机）。
+    pub fn is_paused(&self) -> bool {
+        self.pause.paused.load(Ordering::SeqCst)
+    }
+
     /// 暂停活动会话（2026-08 A1 硬暂停：完全停采）。
     ///
     /// @ai-context: 只置共享标志——实际暂停由捕获线程边沿检测执行

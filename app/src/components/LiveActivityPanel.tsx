@@ -16,7 +16,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 // 2026-08 用户需求：实时转写中显示图片数据（转写 Tab 顶部"最近画面"条，独立区域不跳动）
 import LiveImageStrip from "./LiveImageStrip";
-import type { AsrFinalEvent, OcrEvent, SessionInfo, SubtitleEvent } from "../types";
+import type { AsrFinalEvent, LiveSessionStatus, OcrEvent, SessionInfo, SubtitleEvent } from "../types";
 
 /** 定稿转写行（字幕或语音） */
 interface TranscriptLine {
@@ -128,11 +128,23 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
   // 会话切换：清空旧会话信息 + 拉取兜底（live:session-info 事件在引擎就绪时
   // 发出，可能早于本面板挂载/监听注册——invoke 拉取保证信息条始终可见；
   // 拉取失败静默：无活动会话等场景语义正确）
+  // 2026-08 修复（状态不一致）：live:status recording / live:paused 事件只发
+  // 一次——页面刷新/重进课堂助手后本面板挂载晚于事件，phase 永远停在
+  // "正在初始化…"，而左侧已由 live_session_status 拉取显示"采集中"；
+  // 挂载时拉取一次按 active/paused 还原状态机（事件仍为增量更新通道）
   useEffect(() => {
     setInfo(null);
     if (!sessionId) return;
     void invoke<SessionInfo>("live_session_info")
       .then(setInfo)
+      .catch(() => undefined);
+    void invoke<LiveSessionStatus>("live_session_status")
+      .then((s) => {
+        if (s.active) {
+          setPhase(s.paused ? "⏸ 已暂停（时间轴冻结）" : "● 采集中");
+          startedAtRef.current = startedAtRef.current ?? Date.now();
+        }
+      })
       .catch(() => undefined);
   }, [sessionId]);
 
