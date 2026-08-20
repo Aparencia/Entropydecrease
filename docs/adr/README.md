@@ -19,6 +19,7 @@
 | ADR-012 | [流式 ASR 质量修复批次（对齐/合并/重打分）](./ADR-012-streaming-asr-quality-fixes.md) | 已接受 | 2026-08-19 |
 | ADR-013 | [实时会话引擎预热与播放暂停驱动](./ADR-013-live-session-preload-and-playback-pause.md) | 已接受 | 2026-08-19 |
 | ADR-014 | [会话↔笔记关联与批量转化（notes.session_id 列 + SessionListItem 标记）](./ADR-014-session-note-association.md) | 已接受 | 2026-08-19 |
+| ADR-015 | [画面要点屏卡体系（screen_id/bbox 落库 + 屏聚合纯函数 + 派生屏视图）](./ADR-015-screen-cards-ocr.md) | 已接受 | 2026-08-20 |
 
 ## 编号规则
 
