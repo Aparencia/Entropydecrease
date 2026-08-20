@@ -49,6 +49,10 @@ export interface Note {
   source: string;
   /** v0.7.1：来源会话 id（null=手动笔记/未关联/旧数据） */
   session_id?: number | null;
+  /** v0.7.5（REQ-171）：生成规则的版本标识（null=旧笔记/手动笔记，诚实降级） */
+  rule_version?: string | null;
+  /** v0.7.5（REQ-171）：净化统计 JSON（null=旧笔记/手动笔记） */
+  purify_stats?: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -421,18 +425,28 @@ export interface SessionArtifact {
 /** 被过滤条目（Rust FilteredItem，kebab-case reason） */
 export interface FilteredItem {
   segment_id: number;
-  reason: "ui-junk" | "duplicate" | "fragment" | "low-confidence" | "ai-delete";
+  reason: "ui-junk" | "duplicate" | "fragment" | "low-confidence" | "ai-delete" | "filler";
   text: string;
   start_ms: number;
 }
 
-/** 过滤统计（Rust FilterStats） */
+/** 过滤统计（Rust FilterStats；v0.7.5 新增口头禅/净化/折叠/替换/纠错计数） */
 export interface FilterStats {
   ui_junk: number;
   duplicates: number;
   fragments: number;
   low_confidence: number;
   ai_delete: number;
+  /** v0.7.5（REQ-163）：口头禅短段删除数 */
+  filler?: number;
+  /** v0.7.5（REQ-162/164）：口语净化段数 */
+  verbal?: number;
+  /** v0.7.5（REQ-164）：结巴折叠命中段数 */
+  stutter?: number;
+  /** v0.7.5（REQ-164）：术语替换命中段数 */
+  term_replace?: number;
+  /** v0.7.5（REQ-168）：OCR 错字纠错块数 */
+  ocr_corrected?: number;
 }
 
 /** 合并条目（Rust MergedItem） */

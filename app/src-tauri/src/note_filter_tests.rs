@@ -47,6 +47,16 @@ fn junk() -> UiJunkList {
     UiJunkList::defaults()
 }
 
+/// 净化环境（v0.7.5 REQ-173 内置默认——测试零配置噪音）。
+fn env() -> crate::note_filter::PurifyEnv {
+    crate::note_filter::PurifyEnv::default()
+}
+
+/// 净化管线入口（与生产同签名——v0.7.5 起 filter_note 携带净化环境）。
+fn run(title: &str, segments: &[SessionSegment], blocks: &[SessionOcrBlock]) -> NoteFilterResult {
+    filter_note(title, segments, blocks, &junk(), &env())
+}
+
 #[test]
 fn adjacent_duplicates_merged_across_sources() {
     // Arrange：同文本连续段（asr + fused 混杂——融合窗口配额的兜底场景）
@@ -56,7 +66,7 @@ fn adjacent_duplicates_merged_across_sources() {
         asr(3, 6000, 9000, "我们开始上课"),
     ];
     // Act
-    let result = filter_note("测试", &segments, &[], &junk());
+    let result = run("测试", &segments, &[]);
     // Assert：重复段合并（kept 2 段，end 延伸），统计与对照表正确
     assert_eq!(result.kept.len(), 2);
     assert_eq!(result.kept[0].end_ms, 6000);
@@ -73,7 +83,7 @@ fn non_adjacent_same_text_not_merged() {
     // Arrange：同文本但中间隔着其他段（不是连续重复——不合并）
     let segments = vec![asr(1, 0, 1000, "要点一"), asr(2, 1000, 2000, "中间内容"), asr(3, 2000, 3000, "要点一")];
     // Act
-    let result = filter_note("测试", &segments, &[], &junk());
+    let result = run("测试", &segments, &[]);
     // Assert：三段全保留
     assert_eq!(result.kept.len(), 3);
     assert_eq!(result.stats.duplicates, 0);
@@ -90,7 +100,7 @@ fn fragments_dropped() {
         asr(5, 5000, 6000, "正常长句"),
     ];
     // Act
-    let result = filter_note("测试", &segments, &[], &junk());
+    let result = run("测试", &segments, &[]);
     // Assert：三碎片被过滤（"嗯"≤2 字；"碎片"时长不足；"----"纯符号）
     assert_eq!(result.stats.fragments, 3);
     assert!(result.kept.iter().any(|s| s.text.contains("正常长句")));
@@ -106,7 +116,7 @@ fn numbers_and_symbols_not_misclassified_as_fragments() {
         asr(3, 2000, 3000, "F=ma"),
     ];
     // Act
-    let result = filter_note("测试", &segments, &[], &junk());
+    let result = run("测试", &segments, &[]);
     // Assert：全部保留（含字母数字的短文本不误删）
     assert_eq!(result.kept.len(), 3);
     assert_eq!(result.stats.fragments, 0);
@@ -121,11 +131,12 @@ fn low_confidence_dropped() {
         seg(3, 2000, 3000, "字幕段", "subtitle", None),
     ];
     // Act
-    let result = filter_note("测试", &segments, &[], &junk());
+    let result = run("测试", &segments, &[]);
     // Assert
     assert_eq!(result.stats.low_confidence, 1);
     assert_eq!(result.kept.len(), 2);
-    assert!(result.kept.iter().any(|s| s.text == "字幕段"));
+    // v0.7.5：净化后文本带句号——按包含断言
+    assert!(result.kept.iter().any(|s| s.text.contains("字幕段")));
 }
 
 #[test]
@@ -137,7 +148,7 @@ fn ui_junk_fallback_filtered() {
         asr(3, 2000, 3000, "正常教学内容"),
     ];
     // Act
-    let result = filter_note("测试", &segments, &[], &junk());
+    let result = run("测试", &segments, &[]);
     // Assert
     assert_eq!(result.stats.ui_junk, 2);
     assert_eq!(result.kept.len(), 1);
@@ -156,7 +167,7 @@ fn ocr_points_exclude_watermark_junk_and_dupes() {
     blocks.push(block(90_000, "牛顿第二定律", 0.9));
     blocks.push(block(100_000, "噪声", 0.3));
     // Act
-    let result = filter_note("测试", &[], &blocks, &junk());
+    let result = run("测试", &[], &blocks);
     // Assert：水印/UI 垃圾/低分/重复全排除，正文保留
     assert!(result.ocr_points.iter().any(|p| p.contains("牛顿第二定律")));
     assert!(!result.ocr_points.iter().any(|p| p.contains("学习资料")));
@@ -181,7 +192,7 @@ fn subtitle_region_blocks_not_in_ocr_points() {
         screen_id: None,
     }];
     // Act
-    let result = filter_note("测试", &[], &blocks, &junk());
+    let result = run("测试", &[], &blocks);
     // Assert
     assert!(result.ocr_points.is_empty());
 }
@@ -189,7 +200,7 @@ fn subtitle_region_blocks_not_in_ocr_points() {
 #[test]
 fn empty_inputs_produce_title_only() {
     // Act
-    let result = filter_note("空会话", &[], &[], &junk());
+    let result = run("空会话", &[], &[]);
     // Assert
     assert_eq!(result.markdown, "# 空会话");
     assert!(result.stats == FilterStats::default());
@@ -201,8 +212,8 @@ fn filter_note_is_pure_and_deterministic() {
     let segments = vec![asr(1, 0, 1000, "第一句"), asr(2, 1000, 2000, "第二句")];
     let blocks = vec![block(500, "要点", 0.9)];
     // Act：同一输入两次调用
-    let a = filter_note("标题", &segments, &blocks, &junk());
-    let b = filter_note("标题", &segments, &blocks, &junk());
+    let a = run("标题", &segments, &blocks);
+    let b = run("标题", &segments, &blocks);
     // Assert：结果一致（单一管线双出口一致性的构造保证）
     assert_eq!(a.markdown, b.markdown);
     assert_eq!(a, b);

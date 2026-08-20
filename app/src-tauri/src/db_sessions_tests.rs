@@ -113,6 +113,8 @@ fn list_sessions_marks_content_and_note() {
         content: "x".into(),
         source: "classroom".into(),
         session_id: Some(with_note.id),
+        rule_version: None,
+        purify_stats: None,
     })
     .unwrap();
     // Act
@@ -278,6 +280,8 @@ fn session_notes_tables_coexist() {
         content: "v0.1.0 数据".into(),
         source: "manual".into(),
         session_id: None,
+        rule_version: None,
+        purify_stats: None,
     });
     // Assert
     assert!(note.is_ok());

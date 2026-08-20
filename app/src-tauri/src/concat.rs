@@ -42,28 +42,45 @@ pub fn build_note_draft(
 /// @ai-context: pub(crate)（v0.6.0 M1）：note_filter 复用同一段落切分——
 ///              预览与转笔记走单一管线（REQ-082），段落口径保持一致。
 pub(crate) fn split_transcript_paragraphs(segments: &[TranscriptSegment]) -> Vec<String> {
+    split_transcript_paragraphs_with(segments, PARAGRAPH_MAX_CHARS, PARAGRAPH_MAX_SPAN_MS)
+        .into_iter()
+        .map(|(_, text)| text)
+        .collect()
+}
+
+/// 带段落起点时间戳的切分（v0.7.5 REQ-165/173）。
+///
+/// @ai-context: 返回 (段首 start_ms, 段落文本)——时间戳锚点 [MM:SS] 的原料；
+///              阈值可配置（REQ-173：120字/60s 集中到 purify_config）。
+pub(crate) fn split_transcript_paragraphs_with(
+    segments: &[TranscriptSegment],
+    max_chars: usize,
+    max_span_ms: u64,
+) -> Vec<(u64, String)> {
     let mut sorted: Vec<&TranscriptSegment> =
         segments.iter().filter(|s| !s.text.trim().is_empty()).collect();
     sorted.sort_by_key(|s| s.start_ms);
 
     let mut paragraphs = Vec::new();
     let mut current = String::new();
+    let mut current_start: u64 = 0;
     let mut span_start: Option<u64> = None;
 
     for seg in sorted {
         let span_exceeded = match span_start {
-            Some(start) => seg.end_ms.saturating_sub(start) > PARAGRAPH_MAX_SPAN_MS,
+            Some(start) => seg.end_ms.saturating_sub(start) > max_span_ms,
             None => false,
         };
-        let char_exceeded = current.chars().count() + seg.text.chars().count() > PARAGRAPH_MAX_CHARS;
+        let char_exceeded = current.chars().count() + seg.text.chars().count() > max_chars;
 
         if !current.is_empty() && (span_exceeded || char_exceeded) {
-            paragraphs.push(current.trim().to_string());
+            paragraphs.push((current_start, current.trim().to_string()));
             current = String::new();
             span_start = None;
         }
         if span_start.is_none() {
             span_start = Some(seg.start_ms);
+            current_start = seg.start_ms;
         }
         if !current.is_empty() {
             current.push(' ');
@@ -71,7 +88,7 @@ pub(crate) fn split_transcript_paragraphs(segments: &[TranscriptSegment]) -> Vec
         current.push_str(seg.text.trim());
     }
     if !current.trim().is_empty() {
-        paragraphs.push(current.trim().to_string());
+        paragraphs.push((current_start, current.trim().to_string()));
     }
     paragraphs
 }

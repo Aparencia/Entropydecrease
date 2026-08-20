@@ -93,6 +93,10 @@ pub struct NoteDraft {
 /// @ai-context: 对应 SQLite notes 表；source 记录来源（manual=手动 / classroom=课堂助手联动）。
 /// @ai-context: v0.7.1（会话体验批次）：session_id 为来源会话关联（可空——手动笔记/旧数据无关联；
 ///              删除会话时 SET NULL 保笔记，见 db.rs 迁移）。
+/// @ai-context: v0.7.5（REQ-171）：rule_version 为生成该笔记的净化规则版本
+///              （"note-rules-x.y.z"；None=旧笔记/手动笔记，诚实降级不猜）；
+///              purify_stats 为净化统计 JSON（各过滤原因计数 + 净化计数，
+///              与预览统计口径一致——可回答"用哪版规则、滤了什么"）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Note {
     pub id: i64,
@@ -103,6 +107,12 @@ pub struct Note {
     /// 来源会话 id（v0.7.1；None=手动笔记/未关联/旧数据）
     #[serde(default)]
     pub session_id: Option<i64>,
+    /// 生成规则的版本标识（REQ-171；None=旧数据/手动笔记）
+    #[serde(default)]
+    pub rule_version: Option<String>,
+    /// 净化统计 JSON（REQ-171；None=旧数据/手动笔记）
+    #[serde(default)]
+    pub purify_stats: Option<String>,
     /// 创建时间（Unix 秒）
     pub created_at: i64,
     /// 更新时间（Unix 秒）
@@ -118,6 +128,12 @@ pub struct NewNote {
     /// 来源会话 id（v0.7.1；None=手动笔记；前端 create_note 可不传——serde default）
     #[serde(default)]
     pub session_id: Option<i64>,
+    /// 生成规则的版本标识（REQ-171；None=手动笔记/旧路径）
+    #[serde(default)]
+    pub rule_version: Option<String>,
+    /// 净化统计 JSON（REQ-171；None=手动笔记/旧路径）
+    #[serde(default)]
+    pub purify_stats: Option<String>,
 }
 
 // ────────────────────────────────────────────────────────────

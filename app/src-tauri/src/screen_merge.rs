@@ -334,7 +334,9 @@ pub fn classify_roles(lines: &[MergedLine]) -> ScreenRoles {
 ///              短句（"系统是实现…"）不误判——虚词是句法证据。
 /// @ai-context: 虚词表排除名词高频字（"要/等"——"要素/要点/等级"是常见
 ///              图注标签词，不能因含虚词误伤）。
-fn is_label(text: &str) -> bool {
+/// @ai-context: pub(crate)（v0.7.5）：screens.rs 视频页共现判定复用（标签形
+///              短块 = 作者名/图标垃圾候选）。
+pub(crate) fn is_label(text: &str) -> bool {
     let trimmed = text.trim();
     if trimmed.is_empty() || trimmed.chars().count() > LABEL_MAX_CHARS {
         return false;
@@ -373,6 +375,171 @@ pub fn dedupe_blocks(blocks: &[ScreenBlockInput]) -> Vec<ScreenBlockInput> {
 /// bbox 重叠判定（纯函数）：x 区间与 y 区间均重叠。
 fn boxes_overlap(a: TextBox, b: TextBox) -> bool {
     a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+}
+
+// ────────────────────────────────────────────────────────────
+// v0.7.5（REQ-166/167/169）：OCR 净化与屏修复纯函数
+// ────────────────────────────────────────────────────────────
+
+/// 单字符碎片块判定（REQ-167）：1 字符且非表格/公式/代码上下文 → 噪声。
+///
+/// @ai-context: 会话31 实证 `X/?/o/不/三` 全高分通过 0.5 阈值——单字符无
+///              上下文信息量不足；结构区域豁免（表格勾选框/公式符号/代码
+///              单字符是真实内容）。
+pub fn is_single_char_noise(text: &str, region_kind: Option<&str>) -> bool {
+    if text.trim().chars().count() != 1 {
+        return false;
+    }
+    !region_kind.is_some_and(|k| STRUCTURE_KINDS.contains(&k))
+}
+
+/// 结构区域类型（table/formula/code——与 screens.rs 同口径，集中防漂移）。
+const STRUCTURE_KINDS: &[&str] = &["table", "formula", "code"];
+
+/// 边缘条带判定（REQ-166）：bbox 落在帧边缘条带（顶/底 8%、左右 4%）→ 噪声。
+///
+/// @ai-context: 帧尺寸从同帧块分布推断（DB 不落帧宽高——诚实降级注释：
+///              以 OCR 内容包围盒外扩为近似帧边界，比真实帧略小但条带判定
+///              相对稳定）；无 bbox（旧数据）→ 不判（None 容忍契约）。
+pub fn is_edge_strip(bbox: TextBox, frame_w: f32, frame_h: f32, top: f32, bottom: f32, side: f32) -> bool {
+    if frame_w <= 0.0 || frame_h <= 0.0 {
+        return false;
+    }
+    let (x, y, w, h) = (bbox.x, bbox.y, bbox.w, bbox.h);
+    y < frame_h * top || y + h > frame_h * bottom || x < frame_w * side || x + w > frame_w * (1.0 - side)
+}
+
+/// 推断帧尺寸（纯函数）：同帧块集合 → 内容包围盒外扩 8% 作为近似帧边界。
+///
+/// @ai-context: 返回 None = 无 bbox 块（旧数据——边缘条带规则不可用，诚实跳过）。
+/// @ai-context: 外扩 8% 必须 > 边缘条带侧边比例（4%）——否则最宽内容块
+///              （x+w = 内容宽）会被自指判定为右边缘条带误杀（校准见测试）。
+pub fn infer_frame_dims(blocks: &[ScreenBlockInput]) -> Option<(f32, f32)> {
+    const MARGIN: f32 = 1.08;
+    let mut max_w = 0.0f32;
+    let mut max_h = 0.0f32;
+    for b in blocks {
+        let Some(bb) = b.bbox else { continue };
+        max_w = max_w.max(bb.x + bb.w);
+        max_h = max_h.max(bb.y + bb.h);
+    }
+    if max_w <= 0.0 || max_h <= 0.0 {
+        return None;
+    }
+    Some((max_w * MARGIN, max_h * MARGIN))
+}
+
+/// 屏文本列表（标题+正文+标签——包含率比较的输入）。
+fn screen_texts(s: &crate::types::SessionScreen) -> Vec<String> {
+    let mut texts: Vec<String> = Vec::new();
+    if let Some(t) = &s.title {
+        texts.push(t.clone());
+    }
+    texts.extend(s.body.iter().cloned());
+    texts.extend(s.labels.iter().cloned());
+    texts
+}
+
+/// 方向包含率（纯函数）：cur 中 ≥BLOCK_MATCH_THRESHOLD 相似于 base 任一块的
+/// 比例（matched / cur.len()）——"截断子集屏 ⊂ 完整屏"判定。
+///
+/// @ai-context: 与 screen_similarity 的区别：分母是 cur 自身长度（包含方向
+///              度量）——会话31 画面1（6 块截断）⊂ 画面2（16 块完整）时
+///              matched/max=6/16=0.375 误判不相似，matched/cur=0.83 正确判相似。
+pub fn containment_ratio(cur: &[String], base: &[String]) -> f32 {
+    if cur.is_empty() || base.is_empty() {
+        return 0.0;
+    }
+    let matched = cur
+        .iter()
+        .filter(|c| base.iter().any(|b| block_similarity(c, b) >= BLOCK_MATCH_THRESHOLD))
+        .count();
+    matched as f32 / cur.len() as f32
+}
+
+/// 零跨度屏合并阈值（v0.7.5 REQ-169）：合并条低于聚类条（0.5 vs 0.6）——
+/// 净化已滤侧边垃圾，剩余共享文本占比更高；二次机会只救"截断子集"屏。
+pub const ZERO_SPAN_SIM_THRESHOLD: f32 = 0.5;
+/// 零跨度屏合并时间窗（ms，v0.7.5）：会话31 校准——画面4(02:58)→画面3(00:48)
+/// gap=130s 需合并；画面6(09:29) 距前屏 5min 属"翻回旧页=新屏"语义不合并。
+pub const ZERO_SPAN_MERGE_GAP_MS: u64 = 180_000;
+
+/// 零跨度屏修复（纯函数，REQ-169）：first=last 的屏并入相邻屏。
+///
+/// @ai-context: 并入条件双重要求：① 时间窗内（gap ≤ 180s——防"翻回旧页"
+///              回看屏被误并）；② 方向包含率 ≥ 0.5（截断子集证据——同屏
+///              多帧 OCR 截断被聚类拆成多屏的修复，会话31 画面1/4/5 实证）。
+/// @ai-context: 首屏零跨度 → 与次屏比较合并（无前屏可依）；不满足条件的
+///              零跨度屏保留（真·单帧快闪——诚实展示，不发明时间）。
+pub fn merge_zero_span_screens(screens: Vec<crate::types::SessionScreen>) -> Vec<crate::types::SessionScreen> {
+    let mut out: Vec<crate::types::SessionScreen> = Vec::with_capacity(screens.len());
+    for s in screens {
+        let zero = s.first_seen_ms == s.last_seen_ms;
+        if zero {
+            if let Some(prev) = out.last_mut() {
+                let gap_ok = s.first_seen_ms.saturating_sub(prev.last_seen_ms) <= ZERO_SPAN_MERGE_GAP_MS;
+                let cur_texts = screen_texts(&s);
+                let prev_texts = screen_texts(prev);
+                if gap_ok && containment_ratio(&cur_texts, &prev_texts) >= ZERO_SPAN_SIM_THRESHOLD {
+                    merge_screen_into(prev, &s);
+                    continue;
+                }
+            }
+        }
+        out.push(s);
+    }
+    // 首屏零跨度：与次屏比较（无前屏的兜底路径）
+    if out.len() >= 2 {
+        let first = &out[0];
+        let zero = first.first_seen_ms == first.last_seen_ms;
+        if zero {
+            let gap_ok = out[1].first_seen_ms.saturating_sub(first.last_seen_ms) <= ZERO_SPAN_MERGE_GAP_MS;
+            let cur_texts = screen_texts(first);
+            let next_texts = screen_texts(&out[1]);
+            if gap_ok && containment_ratio(&cur_texts, &next_texts) >= ZERO_SPAN_SIM_THRESHOLD {
+                let first = out.remove(0);
+                merge_screen_into(&mut out[0], &first);
+            }
+        }
+    }
+    out
+}
+
+/// 屏内容并入（纯函数）：目标屏吸收来源屏的正文/标签/结构（按文本去重）；
+/// 时间区间取并集（first 取最小、last 取最大）；标题缺失时用来源标题兜底。
+fn merge_screen_into(target: &mut crate::types::SessionScreen, src: &crate::types::SessionScreen) {
+    target.first_seen_ms = target.first_seen_ms.min(src.first_seen_ms);
+    target.last_seen_ms = target.last_seen_ms.max(src.last_seen_ms);
+    if target.title.is_none() {
+        target.title = src.title.clone();
+    }
+    for t in src.body.iter().chain(src.labels.iter()) {
+        if !target.body.iter().any(|b| b == t) {
+            target.body.push(t.clone());
+        }
+    }
+    for st in &src.structure {
+        if !target.structure.iter().any(|x| x == st) {
+            target.structure.push(st.clone());
+        }
+    }
+}
+
+/// 重复图去重（纯函数，REQ-169）：相同 image_ref 只保留首个屏引用。
+///
+/// @ai-context: 归档 full 图按内容指纹去重存储（image_store 双指纹），
+///              同一文件 = 同一画面——多屏匹配到同图（会话31 画面6/7/8 共用
+///              569515.webp）说明屏间画面未实际变化，只留首个引用（不丢文本）。
+pub fn dedupe_screen_images(screens: &mut [crate::types::SessionScreen]) {
+    let mut seen: Vec<String> = Vec::new();
+    for s in screens.iter_mut() {
+        let Some(rel) = s.image_ref.clone() else { continue };
+        if seen.contains(&rel) {
+            s.image_ref = None;
+        } else {
+            seen.push(rel);
+        }
+    }
 }
 
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。

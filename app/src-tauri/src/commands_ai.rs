@@ -193,6 +193,12 @@ pub async fn review_text_filter(
     // v0.7.3 审查修复：AI 复核预览与 preview_session_note/session_to_note 同口径——
     // 画面要点屏 attach 归档图 + 重建配图行（否则复核后预览配图消失，双出口不一致）
     let data_dir = state.data_dir.clone();
+    // v0.7.5：净化配置/符号映射/纠错表与预览/落库同源（REQ-173 阈值口径一致）
+    let purify_env = crate::note_filter::PurifyEnv {
+        config: state.purify.clone(),
+        symbol: state.symbol_normalize.clone(),
+        corrections: state.ocr_corrections.clone(),
+    };
     let mock = std::env::var("AI_TEXT_FILTER_MOCK").map(|v| v == "1").unwrap_or(false);
     tauri::async_runtime::spawn_blocking(move || {
         let session = db
@@ -206,12 +212,21 @@ pub async fn review_text_filter(
         }
         let segments = db.list_segments(session_id).map_err(|e| e.to_string())?;
         let ocr_blocks = db.list_ocr_blocks(session_id).map_err(|e| e.to_string())?;
-        // ① 纯规则过滤（与 preview_session_note 同一管线）
-        let mut result = filter_note(&session.title, &segments, &ocr_blocks, &ui_junk);
+        // ① 纯规则过滤（与 preview_session_note 同一管线——v0.7.5 起净化配置/
+        //    符号映射同源，阈值/锚点口径一致）
+        let mut result = filter_note(
+            &session.title,
+            &segments,
+            &ocr_blocks,
+            &ui_junk,
+            &purify_env,
+        );
         // ①b v0.7.3 审查修复：画面要点配图（与 preview_session_note 同口径——
         // 归档图匹配 + 重建含图段落；目录缺失/无图 → 纯文本降级）
         let images_dir = data_dir.join("session-images").join(session_id.to_string());
         crate::screens::attach_images(&mut result.ocr_screens, &images_dir);
+        // ①c v0.7.5（REQ-170）：异常会话警示行（与预览/落库同口径）
+        crate::note_filter::apply_session_warning(&mut result, &session.status);
         crate::note_filter::refresh_screen_points(&mut result);
         // ② 边界候选（规则层判不了的段）
         let boundary = boundary_candidates(&result.kept);

@@ -22,9 +22,10 @@
 | app/src-tauri/src/symbol_normalize.rs | ~370 | v0.6.0 M1（REQ-060）：口语符号映射域（映射表/上下文守卫/中文数字解析）内聚；数字解析与守卫共享字符判定 | 若再增长：parse_chinese_number/replace_number_runs 拆至 symbol_numbers.rs |
 | app/src/pages/SessionsPage.tsx | ~250 | v0.7.1 硬拆落地（原 ~390 登记）：编排层（列表/详情状态 + 事件刷新 + 转化删除操作）回归 ≤300 行 | 无需拆分（已 ≤300） |
 | app/src/components/SessionListPanel.tsx | ~411 | v0.7.1 拆分产物：列表域 UI（双模式搜索/筛选排序/课程分组折叠/批量操作栏/内联转化）内聚——筛选/排序/选择为面板本地状态 | 若再增长：批量操作栏与列表项拆至 SessionListRow.tsx |
-| app/src-tauri/src/commands_session.rs | ~420 | v0.6.0 M6 增长 + v0.7.1：会话命令域（CRUD/单一管线/质量报告/课程分组/段搜索/批量转笔记）内聚于会话生命周期域；批量测试独立文件 | 若再增长：course/search 拆至 commands_session_extra.rs |
-| app/src-tauri/src/note_filter.rs | ~390 | v0.6.0 M1（REQ-082/085）：笔记过滤域（过滤链 + 边界段分类 + AI 判定应用 + 画面要点净化）内聚于单一管线（双出口一致性由构造保证） | 若再增长：boundary_candidates/apply_ai_decisions 拆至 note_filter_ai.rs |
-| app/src-tauri/src/fusion_tests.rs | ~392 | 融合测试域（ADR-005 四规则 + REQ-062 概率加权 + REQ-103 音量透传 + REQ-111 切分对齐）单模块 #[path] 挂载；测试文件沿用单模块模式未拆 | 若再增长：REQ-111 切分对齐组拆至 fusion_split_tests.rs |
+| app/src-tauri/src/commands_session.rs | ~494 | v0.6.0 M6 增长 + v0.7.1：会话命令域（CRUD/单一管线/质量报告/课程分组/段搜索/批量转笔记）内聚于会话生命周期域；v0.7.5 净化配置/警示行/元数据接线再增；批量测试独立文件 | 若再增长：course/search 拆至 commands_session_extra.rs |
+| app/src-tauri/src/note_filter.rs | ~423 | v0.6.0 M1（REQ-082/085）：笔记过滤域（过滤链 + AI 判定应用 + 画面要点净化）内聚于单一管线（双出口一致性由构造保证）；v0.7.5 净化接线（口语净化/口头禅删除/锚点/警示）——AI 部分已按登记计划拆至 note_filter_ai.rs（216 行，≤300） | 若再增长：净化链拆至 note_filter_purify.rs |
+| app/src-tauri/src/screens.rs | ~331 | v0.7.3（REQ-155/156/160）：画面要点屏构建编排（分组/聚类/图匹配 IO）+ v0.7.5（REQ-166/167/168）可消费块过滤扩展（单字符/边缘条带/视频页共现/错字纠错）——编排与纯函数分层（纯函数在 screen_merge.rs） | 若再增长：filter_usable_blocks 拆至 screen_filter.rs |
+| app/src-tauri/src/screen_merge.rs | ~454 | v0.7.3（REQ-155/158）：屏级聚合纯函数域（聚类/行合并/角色分类/块去重）+ v0.7.5（REQ-166/167/169）净化纯函数（单字符/边缘条带/零跨度合并/图去重/包含率）——纯逻辑内聚便于单测 | 若再增长：零跨度合并与图去重拆至 screen_fix.rs || app/src-tauri/src/fusion_tests.rs | ~392 | 融合测试域（ADR-005 四规则 + REQ-062 概率加权 + REQ-103 音量透传 + REQ-111 切分对齐）单模块 #[path] 挂载；测试文件沿用单模块模式未拆 | 若再增长：REQ-111 切分对齐组拆至 fusion_split_tests.rs |
 | app/src-tauri/src/analysis.rs | ~344 | v0.5.0 M2 起结构化分析编排域（章节/重点/术语/讲者 + v0.7.0 M1.5 事件消费 + M2 step_boundaries/practice_segments/player_actions 三字段 + 审查修复按类型判定）；各机制输出聚合内聚于单一分析函数 | 若再增长：build_chapter_signals 事件版拆至 analysis_signals.rs |
 | app/src-tauri/src/live_session_loop.rs | ~360 | v0.7.0 M0 拆分产物（音频编排循环）：主循环 + 长静音/音量骤变/VAD 段事件写入（审查补接线）+ drain/停止 flush；LiveLoopCtx 聚合上下文；2026-08 A1 暂停边沿（断句隔离/事件/落库）+ P1 停止 drain 重构再增 | 若再增长：事件写入块拆至 live_session_events.rs |
 | app/src-tauri/src/live_session.rs | ~512 | 会话装配骨架（引擎+捕获+worker 启动）+ 管理器（start/stop/pause/prepare 生命周期）；2026-08 A1 暂停 + P2 会话复位 + P3 引擎预热交接（start 移交/回退内联）再增 | 若再增长：管理器与预备交接拆至 live_session_manager.rs |
@@ -39,4 +40,6 @@
 > 已拆分：live_session_frame.rs（原 ~500 行登记）于 v0.6.0 ADR-011（REQ-086/087）按拆分计划将 process_frame 帧处理拆至 live_frame_process.rs——现 live_session_frame.rs ~175 行回归 ≤300 行，登记移除。
 > 已拆分：live_session.rs（原 ~798 行，v0.7.0 M0 X-O5 强制落地）按登记计划拆至 live_session_fusion.rs（融合线程）/live_session_loop.rs（音频编排循环），并补充 live_session_persist.rs（定稿落库/Final 事件处理）——现 live_session.rs ~284 行、live_session_loop.rs ~228 行、live_session_persist.rs ~224 行、live_session_fusion.rs ~95 行，均回归 ≤300 行，登记移除。
 > 已拆分：streaming_asr.rs（原 ~378 行，v0.7.0 M0 X-O5 强制落地）按登记计划将端点处理块拆至 streaming_endpoint.rs（子模块）——现 streaming_asr.rs ~248 行、streaming_endpoint.rs ~95 行，均回归 ≤300 行，登记移除。
+> 已拆分：lib.rs（原 ~562 行登记，v0.7.5 超 600 行强制落地）按登记计划将 setup 初始化块拆至 app_setup.rs（~239 行）——现 lib.rs ~347 行回归 ≤600 行，登记移除。
+> 已拆分：note_filter.rs（v0.7.5 净化接线后超 600 行风险）按登记计划将 boundary_candidates/apply_ai_decisions 拆至 note_filter_ai.rs（~216 行）——note_filter.rs 回归 ~423 行（仍登记，300-600 区间）。
 > 重新登记：live_session.rs（2026-08 A1 硬暂停 manager 方法 + P3 引擎预热交接后 ~354 行）与 live_session_frame.rs（A1 暂停冻结 + P2 自动暂停后 ~335 行）重新超 300 行——live_session.rs 若再增长将 start 交接块拆至 live_session_handoff.rs；live_session_frame.rs 若再增长将暂停轮询块拆至 live_auto_pause.rs。

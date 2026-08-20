@@ -15,7 +15,7 @@ use crate::ai_protocol::TextFilterDecision;
 use crate::commands::{normalize_title, AppState, TITLE_MAX_CHARS};
 use crate::db::Db;
 use crate::db_sessions::SESSION_STATUS_RECORDING;
-use crate::note_filter::{apply_ai_decisions, filter_note, NoteFilterResult};
+use crate::note_filter::{apply_ai_decisions, filter_note, NoteFilterResult, PurifyEnv, RULE_VERSION};
 use crate::types::{
     BatchNoteResult, ConvertedNote, NewNote, NewSession, NewSessionOcrBlock, NewSessionSegment,
     Note, Session, SessionDetail, SessionListItem, SessionOcrBlock, SessionSegment, SkippedNote,
@@ -191,16 +191,21 @@ fn load_note_material(
 
 /// 会话 → 笔记核心（v0.7.1 提取：单条与批量共用同一管线）。
 ///
-/// @ai-context: REQ-082：过滤链（UI 垃圾/重复合并/碎片/低置信）与预览共用；
-///              ai_decisions（REQ-085）可选叠加——前端把预览中已确认的 AI
-///              判定结果回传，落库与预览输出保持一致（默认 None=纯规则）。
+/// @ai-context: REQ-082：过滤链（UI 垃圾/重复合并/碎片/低置信/口语净化/口头禅
+///              删除——v0.7.5 净化接线）与预览共用；ai_decisions（REQ-085）
+///              可选叠加——前端把预览中已确认的 AI 判定结果回传，落库与预览
+///              输出保持一致（默认 None=纯规则）。
 /// @ai-context: 只允许 finished/failed 会话转换；source 沿用 classroom；
 ///              v0.7.1 起落库携带 session_id（列表 has_note/查看笔记跳转的数据源）；
 ///              v0.7.3（REQ-160）：data_dir 供画面要点屏 attach 归档图
 ///              （配图行随 image_ref 进入笔记 markdown）。
+/// @ai-context: v0.7.5：净化配置/符号映射注入（REQ-173 JSON 可校准）；失败/
+///              异常会话追加警示行（REQ-170 诚实降级）；落库携带 rule_version
+///              + purify_stats 元数据（REQ-171——旧笔记 NULL 诚实降级）。
 fn convert_to_note(
     db: &Db,
     ui_junk: &UiJunkList,
+    env: &PurifyEnv,
     data_dir: &std::path::Path,
     id: i64,
     title: Option<String>,
@@ -209,19 +214,25 @@ fn convert_to_note(
     let (session, segments, ocr_blocks) = load_note_material(db, id)?;
     let fallback = format!("{}（会话）", session.title);
     let title = normalize_title(title.unwrap_or_default(), &fallback);
-    let mut result = filter_note(&title, &segments, &ocr_blocks, ui_junk);
+    let mut result = filter_note(&title, &segments, &ocr_blocks, ui_junk, env);
     if let Some(decisions) = ai_decisions {
         result = apply_ai_decisions(result, &decisions);
     }
     // v0.7.3（REQ-160）：画面要点配图（归档 full 图匹配；目录缺失/无图 → 纯文本降级）
     let images_dir = data_dir.join("session-images").join(id.to_string());
     crate::screens::attach_images(&mut result.ocr_screens, &images_dir);
+    // v0.7.5（REQ-170）：失败/异常会话 → 警示行（refresh 前写入——markdown
+    // 重建口径一致；警示为正文行，用户可手动删除）
+    crate::note_filter::apply_session_warning(&mut result, &session.status);
     crate::note_filter::refresh_screen_points(&mut result);
     let new = NewNote {
         title: result.title.clone(),
         content: result.markdown.clone(),
         source: "classroom".to_string(),
         session_id: Some(id),
+        // REQ-171：规则版本 + 净化统计落库（可追溯"用哪版规则生成"）
+        rule_version: Some(RULE_VERSION.to_string()),
+        purify_stats: Some(serde_json::to_string(&result.stats).unwrap_or_default()),
     };
     db.create_note(&new).map_err(|e| e.to_string())
 }
@@ -234,7 +245,19 @@ pub async fn session_to_note(
     title: Option<String>,
     ai_decisions: Option<Vec<TextFilterDecision>>,
 ) -> Result<Note, String> {
-    convert_to_note(&state.db, &state.ui_junk, &state.data_dir, id, title, ai_decisions)
+    convert_to_note(
+        &state.db,
+        &state.ui_junk,
+        &PurifyEnv {
+            config: state.purify.clone(),
+            symbol: state.symbol_normalize.clone(),
+            corrections: state.ocr_corrections.clone(),
+        },
+        &state.data_dir,
+        id,
+        title,
+        ai_decisions,
+    )
 }
 
 /// 批量转笔记核心编排（v0.7.1：部分成功语义——单条失败不阻塞其他）。
@@ -245,6 +268,7 @@ pub async fn session_to_note(
 pub fn run_batch_conversion(
     db: &Db,
     ui_junk: &UiJunkList,
+    env: &PurifyEnv,
     data_dir: &std::path::Path,
     ids: Vec<i64>,
 ) -> Result<BatchNoteResult, String> {
@@ -278,7 +302,7 @@ pub fn run_batch_conversion(
                     });
                     continue;
                 }
-                match convert_to_note(db, ui_junk, data_dir, id, None, None) {
+                match convert_to_note(db, ui_junk, env, data_dir, id, None, None) {
                     Ok(note) => converted.push(ConvertedNote { session_id: id, note_id: note.id }),
                     Err(reason) => skipped.push(SkippedNote { session_id: id, reason }),
                 }
@@ -300,7 +324,17 @@ pub async fn batch_session_to_note(
     state: State<'_, AppState>,
     ids: Vec<i64>,
 ) -> Result<BatchNoteResult, String> {
-    run_batch_conversion(&state.db, &state.ui_junk, &state.data_dir, ids)
+    run_batch_conversion(
+        &state.db,
+        &state.ui_junk,
+        &PurifyEnv {
+            config: state.purify.clone(),
+            symbol: state.symbol_normalize.clone(),
+            corrections: state.ocr_corrections.clone(),
+        },
+        &state.data_dir,
+        ids,
+    )
 }
 
 /// 会话笔记预览（REQ-081）：过滤后只读预览——不落库、不改库。
@@ -316,9 +350,21 @@ pub async fn preview_session_note(
     id: i64,
 ) -> Result<NoteFilterResult, String> {
     let (session, segments, ocr_blocks) = load_note_material(&state.db, id)?;
-    let mut result = filter_note(&session.title, &segments, &ocr_blocks, &state.ui_junk);
+    let mut result = filter_note(
+        &session.title,
+        &segments,
+        &ocr_blocks,
+        &state.ui_junk,
+        &PurifyEnv {
+            config: state.purify.clone(),
+            symbol: state.symbol_normalize.clone(),
+            corrections: state.ocr_corrections.clone(),
+        },
+    );
     let images_dir = state.data_dir.join("session-images").join(id.to_string());
     crate::screens::attach_images(&mut result.ocr_screens, &images_dir);
+    // v0.7.5（REQ-170）：预览与落库同口径——异常会话预览即带警示行
+    crate::note_filter::apply_session_warning(&mut result, &session.status);
     crate::note_filter::refresh_screen_points(&mut result);
     Ok(result)
 }

@@ -1,31 +1,58 @@
-//! 笔记废话出口过滤管线（REQ-082 / v0.6.0 M1）。
+//! 笔记废话出口过滤管线（REQ-082 / v0.6.0 M1；v0.7.5 净化接线）。
 //!
-//! @ai-context: 过滤链（纯规则，本地优先）：① UI 垃圾特征兜底（复用 REQ-083
-//!              黑名单同表）→ ② 相邻重复段合并（同文本连续段，含 asr/fused
-//!              混杂——融合重复 bug 修复后的兜底）→ ③ 碎片段丢弃（≤2 字 /
-//!              时长 <500ms / 纯符号）→ ④ 低置信丢弃（confidence <0.6）。
+//! @ai-context: 过滤链（纯规则，本地优先）：
+//! ① UI 垃圾特征兜底（复用 REQ-083 黑名单同表）
+//! ② 碎片段丢弃（≤2 字 / 时长 <500ms / 纯符号）
+//! ③ 低置信丢弃（confidence <0.6）
+//! ④ 口语净化（v0.7.5 REQ-162：verbal_normalize 保守档 + symbol_normalize）→
+//!    结巴折叠 + 术语替换（REQ-164）——净化后为空/纯符号/短口头禅 → 删除
+//! ⑤ 口头禅短段规则级删除（REQ-163：≤8 字且全由口头禅词组成，免 AI）
+//! ⑥ 相邻重复段合并（净化后文本才做精确去重——净化顺序契约）
 //! @ai-context: 单一管线双出口（REQ-081）：session_to_note（落库）与
 //!              preview_session_note（只读预览）共用本模块——输出一致性
 //!              由构造保证。过滤**可逆**：原料层（sessions 表）不动，被过滤
 //!              内容带原因/时间进入 filtered 供预览对照复查。
-//! @ai-context: AI 复核（REQ-085）叠加层：boundary_candidates 选出规则层
-//!              判不了的边界段（口头禅/寒暄/破碎/截断/语义重复/过渡），
-//!              云端三态判定后 apply_ai_decisions 就地应用（delete 进过滤表、
-//!              merge 仅展示层拼接——原料仍按原始段落库）。
+//! @ai-context: AI 复核（REQ-085）叠加层：boundary_candidates/apply_ai_decisions
+//!              已拆至 note_filter_ai.rs（line-limit-exemptions 登记计划）——
+//!              本文件经 pub use 再导出，公共 API 不变。
 //! @ai-context: 误杀保护：正常长句/数字内容不误删（"3.14/2024" 等含字母数字
 //!              的短文本不是"纯符号"碎片）；confidence=None（字幕段）跳过
-//!              低置信规则。
+//!              低置信规则；净化阈值集中 purify_config（REQ-173 JSON 可校准）。
 
-use crate::ai_protocol::{TextFilterAction, TextFilterDecision};
+use crate::purify_config::PurifyConfig;
+use crate::symbol_normalize::SymbolNormalizeConfig;
 use crate::types::{SessionOcrBlock, SessionScreen, SessionSegment, TranscriptSegment};
 use crate::ui_junk::UiJunkList;
+use crate::verbal_normalize::{NormalizeConfig, NormalizeStrength};
 
-/// 碎片段最大字符数（≤2 字丢弃）。
-pub const FRAGMENT_MAX_CHARS: usize = 2;
-/// 碎片段最小时长（<500ms 丢弃）。
-pub const FRAGMENT_MIN_DURATION_MS: u64 = 500;
-/// 低置信丢弃阈值（confidence <0.6 丢弃）。
-pub const LOW_CONFIDENCE_THRESHOLD: f32 = 0.6;
+/// 净化环境（依赖注入聚合——净化配置 + 符号映射 + OCR 纠错表）。
+///
+/// @ai-context: filter_note/convert_to_note 参数收敛（clippy too_many_arguments
+///              修正 + 显式依赖注入）：三个可校准配置同生命周期（AppState
+///              装配），聚合为单一入参——调用方构造一次，纯函数消费。
+/// @ai-context: Default = 内置默认口径（测试零配置噪音；生产装配显式构造）。
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PurifyEnv {
+    pub config: PurifyConfig,
+    pub symbol: SymbolNormalizeConfig,
+    pub corrections: crate::ocr_correction::OcrCorrectionTable,
+}
+
+/// 笔记规则版本（REQ-171：notes.rule_version 落库值——笔记可回答"用哪版规则
+/// 生成"；净化链每次规则变更递增）。
+pub const RULE_VERSION: &str = "note-rules-0.7.5";
+
+/// 口头禅词集（REQ-163 删除判定 + REQ-085 AI Filler 候选共用）。
+///
+/// @ai-context: v0.7.5 扩展（与 verbal_normalize 词表对齐——「大家知道吗/
+///              咱们/我们看」等口语高频词此前只在实时路径被清，笔记路径漏网）；
+///              短段全由这些词组成 → 规则级删除；"对"单字不删（回应语义，
+///              且碎片规则已按 ≤2 字处理——验收口径）。
+pub(crate) const FILLER_WORDS: &[&str] = &[
+    "嗯", "啊", "呃", "哦", "诶", "哎", "哈", "嗯嗯", "哈哈", "好的", "对", "那个", "这个",
+    "就是", "然后", "对吧", "是吧", "对不对", "对不对啊", "好不好", "就是说", "然后呢",
+    "你们知道吗", "大家知道吗", "大家注意", "大家看", "咱们", "我们看", "我们来看", "接下来呢",
+];
 
 /// 被过滤原因。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -41,6 +68,8 @@ pub enum FilterReason {
     LowConfidence,
     /// AI 复核判删（REQ-085）
     AiDelete,
+    /// 口头禅短段规则级删除（REQ-163：≤8 字全口头禅；含净化后空/纯符号残留）
+    Filler,
 }
 
 /// 被过滤条目（预览对照可复查、定位原料）。
@@ -52,7 +81,7 @@ pub struct FilteredItem {
     pub start_ms: u64,
 }
 
-/// 过滤统计（预览过滤统计卡：UI 垃圾 x/重复 y/碎片 z/低置信 w）。
+/// 过滤统计（预览过滤统计卡 + REQ-171 purify_stats 落库 JSON）。
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FilterStats {
     pub ui_junk: usize,
@@ -60,6 +89,21 @@ pub struct FilterStats {
     pub fragments: usize,
     pub low_confidence: usize,
     pub ai_delete: usize,
+    /// v0.7.5（REQ-163）：口头禅短段删除数
+    #[serde(default)]
+    pub filler: usize,
+    /// v0.7.5（REQ-162/164）：口语净化段数（文本发生变化的段）
+    #[serde(default)]
+    pub verbal: usize,
+    /// v0.7.5（REQ-164）：结巴折叠命中段数
+    #[serde(default)]
+    pub stutter: usize,
+    /// v0.7.5（REQ-164）：术语替换命中段数
+    #[serde(default)]
+    pub term_replace: usize,
+    /// v0.7.5（REQ-168）：OCR 错字纠错块数
+    #[serde(default)]
+    pub ocr_corrected: usize,
 }
 
 /// 合并条目（相邻重复合并 / AI merge 展示层拼接）。
@@ -77,7 +121,7 @@ pub struct NoteFilterResult {
     pub title: String,
     /// 过滤后笔记 Markdown（标题+讲述内容+画面要点）
     pub markdown: String,
-    /// 保留段（合并段已延伸 end_ms；AI merge 已拼接文本——仅产物层）
+    /// 保留段（合并段已延伸 end_ms；AI merge 已拼接文本；净化后文本——仅产物层）
     pub kept: Vec<SessionSegment>,
     /// 画面要点（屏段落行：区间+标题+正文+标签+配图；水印/UI 垃圾/低分已排除）
     pub ocr_points: Vec<String>,
@@ -88,19 +132,32 @@ pub struct NoteFilterResult {
     pub stats: FilterStats,
     pub filtered: Vec<FilteredItem>,
     pub merged: Vec<MergedItem>,
+    /// v0.7.5（REQ-173）：本次净化生效配置（serde skip——内部透传用：
+    /// refresh_screen_points/apply_ai_decisions 重建 markdown 时与预览口径一致；
+    /// 不序列化给前端——前端只需消费产物）
+    #[serde(skip)]
+    pub(crate) purify: PurifyConfig,
+    /// v0.7.5（REQ-170）：会话异常警示行（命令层按会话状态写入——"失败/异常
+    /// 会话转笔记"诚实降级；serde skip：markdown 已含该行，前端无需重复字段）
+    #[serde(skip)]
+    pub(crate) warning: Option<String>,
 }
 
 /// 笔记过滤（纯函数）：转写段 + OCR 块 → 过滤后笔记。
 ///
 /// @ai-context: 转写段按过滤链处理（见模块头）；OCR 画面要点先经
-///              watermark_filter（REQ-059）+ is_ui_junk（REQ-083 同表）排除，
-///              再低分过滤与精确去重——与讲述内容同口径的"输入干净化"。
+///              screens::filter_usable_blocks（v0.7.5：低分 0.7/单字符/边缘
+///              条带/视频页 UI 共现/错字纠错）排除，再屏构建与精确去重。
 pub fn filter_note(
     title: &str,
     segments: &[SessionSegment],
     ocr_blocks: &[SessionOcrBlock],
     ui_junk: &UiJunkList,
+    env: &PurifyEnv,
 ) -> NoteFilterResult {
+    let config = &env.config;
+    let symbol_cfg = &env.symbol;
+    let corrections = &env.corrections;
     // ① 转写段过滤链（空文本段跳过；按时间排序保证相邻性）
     let mut sorted: Vec<SessionSegment> = segments
         .iter()
@@ -112,7 +169,7 @@ pub fn filter_note(
     let mut stats = FilterStats::default();
     let mut filtered = Vec::new();
     let mut merged = Vec::new();
-    for seg in sorted {
+    for mut seg in sorted {
         let text = seg.text.trim();
         // ① UI 垃圾特征兜底（与 REQ-083 同表——源头漏拦的兜底）
         if ui_junk.is_junk(text) {
@@ -126,7 +183,7 @@ pub fn filter_note(
             continue;
         }
         // ② 碎片段（≤2 字 / <500ms / 纯符号——"----/···" 等无信息内容）
-        if is_fragment(&seg) {
+        if is_fragment(&seg, config) {
             stats.fragments += 1;
             filtered.push(FilteredItem {
                 segment_id: seg.id,
@@ -137,7 +194,7 @@ pub fn filter_note(
             continue;
         }
         // ③ 低置信丢弃（confidence=None 的字幕段跳过——无置信度证据不删）
-        if seg.confidence.is_some_and(|c| c < LOW_CONFIDENCE_THRESHOLD) {
+        if seg.confidence.is_some_and(|c| c < config.low_confidence_threshold) {
             stats.low_confidence += 1;
             filtered.push(FilteredItem {
                 segment_id: seg.id,
@@ -147,21 +204,46 @@ pub fn filter_note(
             });
             continue;
         }
-        // ④ 相邻重复段合并（同文本连续段——含 asr/fused 混杂：融合窗口配额
-        //    修复后的兜底；合并延伸 end_ms，重复段进过滤表可复查）
+        // ④ 口语净化（REQ-162/164）：书面化（保守档）→ 符号 → 结巴折叠 → 术语替换
+        let original = seg.text.clone();
+        let purified = purify_segment(&original, config, symbol_cfg, &mut stats);
+        // 净化残留检查：空/纯符号（"对不对？"→"？"）/ 短口头禅（"哈"）→ 删除
+        if is_purified_empty(&purified) {
+            stats.filler += 1;
+            filtered.push(FilteredItem {
+                segment_id: seg.id,
+                reason: FilterReason::Filler,
+                text: original,
+                start_ms: seg.start_ms,
+            });
+            continue;
+        }
+        // ⑤ 口头禅短段规则级删除（REQ-163：免 AI——段 1018「对不对？」类）
+        if config.filler_delete && is_filler_only(&purified, config) {
+            stats.filler += 1;
+            filtered.push(FilteredItem {
+                segment_id: seg.id,
+                reason: FilterReason::Filler,
+                text: original,
+                start_ms: seg.start_ms,
+            });
+            continue;
+        }
+        seg.text = purified;
+        // ⑥ 相邻重复段合并（净化后文本精确去重——净化顺序契约；合并延伸 end_ms）
         if let Some(last) = kept.last_mut() {
-            if last.text.trim() == text {
+            if last.text.trim() == seg.text.trim() {
                 stats.duplicates += 1;
                 filtered.push(FilteredItem {
                     segment_id: seg.id,
                     reason: FilterReason::Duplicate,
-                    text: text.to_string(),
+                    text: seg.text.clone(),
                     start_ms: seg.start_ms,
                 });
                 merged.push(MergedItem {
                     segment_id: seg.id,
                     into_segment_id: last.id,
-                    text: text.to_string(),
+                    text: seg.text.clone(),
                     start_ms: seg.start_ms,
                 });
                 last.end_ms = last.end_ms.max(seg.end_ms);
@@ -170,23 +252,118 @@ pub fn filter_note(
         }
         kept.push(seg);
     }
-    // ② 画面要点（v0.7.3 REQ-160：可消费块过滤 → 屏构建 → 屏段落渲染；
-    //    水印 + UI 垃圾 + 低分在 filter_usable_blocks 排除——与原料口径解耦）
-    let usable = crate::screens::filter_usable_blocks(ocr_blocks, ui_junk);
+    // 画面要点（v0.7.3 REQ-160：可消费块过滤 → 屏构建 → 屏段落渲染；
+    //    v0.7.5：过滤含单字符/边缘条带/视频页共现/错字纠错——见 screens.rs）
+    let transcript = concat_transcript(&kept);
+    let (usable, ocr_corrected) =
+        crate::screens::filter_usable_blocks(ocr_blocks, ui_junk, config, &transcript, corrections);
+    stats.ocr_corrected = ocr_corrected;
     let ocr_screens = crate::screens::build_screens(&usable, None);
     let ocr_points = render_screen_points(&ocr_screens);
-    let markdown = rebuild_markdown(title, &kept, &ocr_points);
-    NoteFilterResult { title: title.to_string(), markdown, kept, ocr_points, ocr_screens, stats, filtered, merged }
+    let markdown = rebuild_markdown(title, &kept, &ocr_points, config, None);
+    NoteFilterResult {
+        title: title.to_string(),
+        markdown,
+        kept,
+        ocr_points,
+        ocr_screens,
+        stats,
+        filtered,
+        merged,
+        purify: config.clone(),
+        warning: None,
+    }
 }
 
-/// 碎片段判定（纯函数）：≤2 字 / 时长 <500ms / 纯符号。
+/// 单段口语净化（纯函数）：结巴折叠 → 书面化（保守档 Light）→ 符号规范化 →
+/// 术语替换；返回净化后文本（统计计数由调用方入参累加）。
+///
+/// @ai-context: 顺序契约（会话31 实证驱动）：**折叠必须先于书面化**——verbal
+///              compress_repeats 会把"甲甲甲"先压成"甲甲"（2 连短语重复），
+///              折叠规则（≥3 连同字）随后不再命中，结巴残留（「甲甲甲」→「甲」
+///              验收不达标）；折叠在前则 3 连先收拢、书面化不再误动。
+fn purify_segment(
+    text: &str,
+    config: &PurifyConfig,
+    symbol_cfg: &SymbolNormalizeConfig,
+    stats: &mut FilterStats,
+) -> String {
+    let mut out = text.to_string();
+    let changed = |before: &str, after: &str| before != after;
+    let before = out.clone();
+    let mut fold_hit = false;
+    if config.stutter_fold {
+        let folded = crate::stutter_fold::fold_stutter(&out);
+        fold_hit = folded != out;
+        out = folded;
+    }
+    if config.verbal_normalize {
+        let vcfg = NormalizeConfig { strength: NormalizeStrength::Light };
+        out = crate::verbal_normalize::normalize(&out, &vcfg);
+    }
+    if config.symbol_normalize {
+        out = crate::symbol_normalize::normalize(&out, symbol_cfg);
+    }
+    let mut term_hit = false;
+    if config.term_replace {
+        let replaced = crate::stutter_fold::apply_term_replacements(&out);
+        term_hit = replaced != out;
+        out = replaced;
+    }
+    if changed(&before, &out) {
+        stats.verbal += 1;
+    }
+    if fold_hit {
+        stats.stutter += 1;
+    }
+    if term_hit {
+        stats.term_replace += 1;
+    }
+    out
+}
+
+/// 净化残留判定（纯函数）：空串 / 纯符号（无字母数字汉字）→ 无信息内容。
+fn is_purified_empty(text: &str) -> bool {
+    let t = text.trim();
+    t.is_empty() || t.chars().all(|c| !c.is_alphanumeric() && !is_cjk(c))
+}
+
+/// 口头禅短段判定（纯函数，REQ-163）：去首尾标点后 ≤filler_max_chars 字且
+/// 全部空白分隔 token ∈ 口头禅词表 → 删除候选。
+///
+/// @ai-context: "对不对？"→去"？"→"对不对" ✓；"对"单字 <2 不删（回应语义）；
+///              "3.14"数字不删（非口头禅词）；"你说得对"含"你说得"不删。
+fn is_filler_only(text: &str, config: &PurifyConfig) -> bool {
+    let stripped: String = text
+        .trim()
+        .trim_matches(|c: char| c.is_ascii_punctuation() || "。！？，、；：…·".contains(c))
+        .to_string();
+    let chars = stripped.chars().count();
+    if chars < 2 || chars > config.filler_max_chars {
+        return false;
+    }
+    let tokens: Vec<&str> = stripped.split_whitespace().collect();
+    !tokens.is_empty() && tokens.iter().all(|t| FILLER_WORDS.contains(t))
+}
+
+/// 保留段转写文本拼接（供 OCR 共现校验/纠错——画面词与讲述词互证）。
+fn concat_transcript(kept: &[SessionSegment]) -> String {
+    let mut out = String::new();
+    for s in kept {
+        out.push_str(&s.text);
+        out.push(' ');
+    }
+    out
+}
+
+/// 碎片段判定（纯函数）：≤2 字 / 时长 <500ms / 纯符号（阈值可配置 REQ-173）。
 ///
 /// @ai-context: 纯符号 = 无字母数字汉字（"----/···"）；"3.14/2024" 含数字
 ///              不算纯符号——误杀保护（数字内容不误删）。
-fn is_fragment(seg: &SessionSegment) -> bool {
+fn is_fragment(seg: &SessionSegment, config: &PurifyConfig) -> bool {
     let text = seg.text.trim();
-    text.chars().count() <= FRAGMENT_MAX_CHARS
-        || seg.end_ms.saturating_sub(seg.start_ms) < FRAGMENT_MIN_DURATION_MS
+    text.chars().count() <= config.fragment_max_chars
+        || seg.end_ms.saturating_sub(seg.start_ms) < config.fragment_min_duration_ms
         || text.chars().all(|c| !c.is_alphanumeric() && !is_cjk(c))
 }
 
@@ -219,32 +396,62 @@ pub fn render_screen_points(screens: &[SessionScreen]) -> Vec<String> {
     lines
 }
 
+/// 会话异常警示行（REQ-170，纯函数）：status != finished → 追加警示。
+///
+/// @ai-context: 会话31 实证：status=failed 但内容完整（停止链路异常翻案）——
+///              照常转笔记但诚实标注"内容可能不完整"，用户自行判断；
+///              警示行是普通 Markdown 引用行（用户可手动删除）。
+/// @ai-context: 预览/落库/AI 复核三出口共用（REQ-081 单一管线）——命令层在
+///              refresh_screen_points 前调用，markdown 重建口径一致。
+pub(crate) fn apply_session_warning(result: &mut NoteFilterResult, status: &str) {
+    if status == crate::db_sessions::SESSION_STATUS_FINISHED {
+        result.warning = None;
+    } else {
+        result.warning = Some(format!("> ⚠️ 会话异常（{}），内容可能不完整", status));
+    }
+}
+
 /// 刷新画面要点段落（纯函数）：ocr_screens 重新渲染 + 重建 markdown。
 ///
 /// @ai-context: 命令层 attach_images 填充 image_ref 后调用——配图行随
 ///              image_ref 出现/消失，保持 markdown 与 ocr_screens 一致
-///              （单管线双出口原则的图版本）。
+///              （单管线双出口原则的图版本）；净化配置随 result 透传
+///              （段落阈值/锚点与预览口径一致）。
 pub fn refresh_screen_points(result: &mut NoteFilterResult) {
     result.ocr_points = render_screen_points(&result.ocr_screens);
-    let transcript: Vec<TranscriptSegment> = result
-        .kept
-        .iter()
-        .map(|s| TranscriptSegment {
-            start_ms: s.start_ms,
-            end_ms: s.end_ms,
-            text: s.text.clone(),
-            word_timestamps: None,
-            confidence: None,
-            volume: None,
-        })
-        .collect();
-    let paragraphs = crate::concat::split_transcript_paragraphs(&transcript);
-    result.markdown =
-        crate::concat::assemble_markdown(&result.title, &paragraphs, &result.ocr_points);
+    result.markdown = rebuild_markdown(
+        &result.title,
+        &result.kept,
+        &result.ocr_points,
+        &result.purify,
+        result.warning.as_deref(),
+    );
 }
 
-/// 组装 Markdown（标题 + 讲述内容 + 画面要点；段落切分复用 concat 口径）。
-fn rebuild_markdown(title: &str, kept: &[SessionSegment], ocr_points: &[String]) -> String {
+/// 组装 Markdown（标题 + 讲述内容 + 画面要点；段落切分复用 concat 口径；
+/// v0.7.5 REQ-165/170/173：段首 [MM:SS] 时间戳锚点（可回跳原视频位置，可开关）
+/// + 段落阈值走净化配置 + 会话异常警示行（None=无警示）。
+pub(crate) fn rebuild_markdown(
+    title: &str,
+    kept: &[SessionSegment],
+    ocr_points: &[String],
+    config: &PurifyConfig,
+    warning: Option<&str>,
+) -> String {
+    let mut md = assemble_purified_markdown(title, kept, ocr_points, config);
+    if let Some(w) = warning {
+        md = format!("{}\n\n{}", w, md);
+    }
+    md
+}
+
+/// 净化组装（无警示行版——供 rebuild_markdown 内部与警示拼接）。
+fn assemble_purified_markdown(
+    title: &str,
+    kept: &[SessionSegment],
+    ocr_points: &[String],
+    config: &PurifyConfig,
+) -> String {
     let transcript: Vec<TranscriptSegment> = kept
         .iter()
         .map(|s| TranscriptSegment {
@@ -257,238 +464,22 @@ fn rebuild_markdown(title: &str, kept: &[SessionSegment], ocr_points: &[String])
             volume: None,
         })
         .collect();
-    let paragraphs = crate::concat::split_transcript_paragraphs(&transcript);
-    crate::concat::assemble_markdown(title, &paragraphs, ocr_points)
-}
-
-// ────────────────────────────────────────────────────────────
-// REQ-085：AI 复核（边界段选择 + 判定应用）
-// ────────────────────────────────────────────────────────────
-
-/// 边界段类别（规则层判不了的六类）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum BoundaryKind {
-    /// 口头禅（"嗯 那个 就是"）
-    Filler,
-    /// 寒暄离题（"大家好 欢迎…"）
-    Greeting,
-    /// ASR 破碎句（逗号结尾/省略号）
-    Broken,
-    /// 截断半句（连词开头短句——需上下文衔接判定）
-    Truncated,
-    /// 语义重复（与相邻段高重叠）
-    SemanticDup,
-    /// 过渡句（"接下来我们看…"）
-    Transition,
-}
-
-impl BoundaryKind {
-    /// 送 AI 的类别提示（kebab-case；AI 参考不强制）。
-    pub fn hint(&self) -> &'static str {
-        match self {
-            BoundaryKind::Filler => "filler",
-            BoundaryKind::Greeting => "greeting",
-            BoundaryKind::Broken => "broken",
-            BoundaryKind::Truncated => "truncated",
-            BoundaryKind::SemanticDup => "semantic-dup",
-            BoundaryKind::Transition => "transition",
-        }
-    }
-}
-
-/// 边界段（送 AI 三态判定的候选）。
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct BoundarySegment {
-    pub segment_id: i64,
-    pub text: String,
-    pub start_ms: u64,
-    pub kind: BoundaryKind,
-    /// 相邻上下文（供截断句衔接判定）
-    pub prev: Option<String>,
-    pub next: Option<String>,
-}
-
-/// 口头禅词集（短句全由口头禅组成才判 Filler）。
-const FILLER_WORDS: &[&str] = &[
-    "嗯", "啊", "呃", "哦", "诶", "哎", "哈", "嗯嗯", "哈哈", "好的", "对", "那个", "这个",
-    "就是", "然后", "对吧", "是吧", "对不对", "好不好", "就是说", "然后呢",
-];
-
-/// 寒暄/开场前缀。
-const GREETING_PREFIXES: &[&str] = &[
-    "大家好", "同学们好", "各位同学", "各位老师", "各位观众", "欢迎", "好久不见", "我们开始",
-    "开始上课", "开始吧", "上课了", "今天我们来", "今天给大家",
-];
-
-/// 过渡句前缀。
-const TRANSITION_PREFIXES: &[&str] = &[
-    "接下来", "下面我们", "然后我们", "我们来看", "我们看", "先看", "首先我们", "最后我们",
-    "总之", "接下来我们", "下面",
-];
-
-/// 连词前缀（截断句特征：连词开头 + 短）。
-const CONNECTIVE_PREFIXES: &[&str] = &[
-    "所以", "然后", "但是", "因此", "不过", "而且", "因为", "如果", "虽然", "那么", "就是", "其实",
-];
-
-/// 语义重复重叠率阈值（与相邻段字符重叠 ≥60% 判语义重复）。
-const SEMANTIC_DUP_RATIO: f32 = 0.6;
-
-/// 边界段选择（纯函数）：规则层保留段 → 六类边界特征候选。
-///
-/// @ai-context: 只从 kept（规则幸存段）里选——确定性分类已由规则处理，
-///              AI 只判"边界"（不确定段），控成本（典型 20~30 段/会话）。
-/// @ai-context: 命中优先级：Filler > Greeting > Transition > Truncated >
-///              Broken > SemanticDup（首中即止，段只进一个类别）。
-pub fn boundary_candidates(kept: &[SessionSegment]) -> Vec<BoundarySegment> {
-    let mut out = Vec::new();
-    for (i, seg) in kept.iter().enumerate() {
-        let text = seg.text.trim();
-        if text.is_empty() {
-            continue;
-        }
-        let chars = text.chars().count();
-        let prev = (i > 0).then(|| kept[i - 1].text.clone());
-        let next = kept.get(i + 1).map(|s| s.text.clone());
-        let kind = classify_boundary(text, chars, &prev, &next);
-        if let Some(kind) = kind {
-            out.push(BoundarySegment {
-                segment_id: seg.id,
-                text: text.to_string(),
-                start_ms: seg.start_ms,
-                kind,
-                prev,
-                next,
-            });
-        }
-    }
-    out
-}
-
-/// 单段边界分类（纯函数；命中优先级见 boundary_candidates）。
-fn classify_boundary(
-    text: &str,
-    chars: usize,
-    prev: &Option<String>,
-    next: &Option<String>,
-) -> Option<BoundaryKind> {
-    // Filler：短句全由口头禅组成
-    if chars <= 8 {
-        let tokens: Vec<&str> = text.split_whitespace().collect();
-        if !tokens.is_empty() && tokens.iter().all(|t| FILLER_WORDS.contains(t)) {
-            return Some(BoundaryKind::Filler);
-        }
-    }
-    // Greeting：寒暄/开场前缀 + 短
-    if chars <= 40 && GREETING_PREFIXES.iter().any(|p| text.starts_with(p)) {
-        return Some(BoundaryKind::Greeting);
-    }
-    // Transition：过渡句前缀 + 短
-    if chars <= 30 && TRANSITION_PREFIXES.iter().any(|p| text.starts_with(p)) {
-        return Some(BoundaryKind::Transition);
-    }
-    // Truncated：连词开头 + 短 + 有上下文可接（AI 判 merge 方向）
-    if chars <= 8
-        && CONNECTIVE_PREFIXES.iter().any(|p| text.starts_with(p))
-        && (prev.is_some() || next.is_some())
-    {
-        return Some(BoundaryKind::Truncated);
-    }
-    // Broken：逗号/省略号结尾（ASR 破碎句特征）
-    if (chars <= 6 && text.ends_with(['，', ',', ';', '；', '、']))
-        || text.contains("……")
-        || text.contains("...")
-    {
-        return Some(BoundaryKind::Broken);
-    }
-    // SemanticDup：与相邻段高重叠（非精确重复——精确重复已由规则合并）
-    if chars >= 4 {
-        let near = prev.as_deref().unwrap_or("").to_string() + next.as_deref().unwrap_or("");
-        if !near.is_empty() && overlap_ratio(text, &near) >= SEMANTIC_DUP_RATIO {
-            return Some(BoundaryKind::SemanticDup);
-        }
-    }
-    None
-}
-
-/// 字符重叠率（纯函数）：a 中字符在 b 中出现的比例。
-fn overlap_ratio(a: &str, b: &str) -> f32 {
-    let a_chars: Vec<char> = a.chars().collect();
-    if a_chars.is_empty() {
-        return 0.0;
-    }
-    let b_chars: Vec<char> = b.chars().collect();
-    let matched = a_chars.iter().filter(|c| b_chars.contains(c)).count();
-    matched as f32 / a_chars.len() as f32
-}
-
-/// 应用 AI 三态判定（纯函数）：delete 进过滤表、merge 展示层拼接、keep 不动。
-///
-/// @ai-context: 保守兜底：判定引用的段已不存在（并发/异常）→ 跳过该判定；
-///              merge 目标非相邻段 → 保守保留（不删不并）；merge 拼接仅影响
-///              产物层 kept 文本（原料 segments 表不动——可逆契约）。
-pub fn apply_ai_decisions(
-    mut result: NoteFilterResult,
-    decisions: &[TextFilterDecision],
-) -> NoteFilterResult {
-    if decisions.is_empty() {
-        return result;
-    }
-    let mut kept = std::mem::take(&mut result.kept);
-    for d in decisions {
-        let Some(pos) = kept.iter().position(|s| s.id == d.segment_id) else {
-            continue; // 段已不存在（防御）
-        };
-        match d.action {
-            TextFilterAction::Keep => {}
-            TextFilterAction::Delete => {
-                let seg = kept.remove(pos);
-                result.stats.ai_delete += 1;
-                result.filtered.push(FilteredItem {
-                    segment_id: seg.id,
-                    reason: FilterReason::AiDelete,
-                    text: seg.text.clone(),
-                    start_ms: seg.start_ms,
-                });
+    let paragraphs = crate::concat::split_transcript_paragraphs_with(
+        &transcript,
+        config.paragraph_max_chars,
+        config.paragraph_max_span_ms,
+    );
+    let anchored: Vec<String> = paragraphs
+        .into_iter()
+        .map(|(start_ms, text)| {
+            if config.anchor_timestamps {
+                format!("[{}] {}", crate::concat::format_timestamp(start_ms), text)
+            } else {
+                text
             }
-            TextFilterAction::Merge => {
-                // 目标必须为相邻段（prev/next），否则保守保留
-                let target_pos = match d.merge_with.as_deref() {
-                    Some("prev") if pos > 0 => Some(pos - 1),
-                    Some("next") if pos + 1 < kept.len() => Some(pos + 1),
-                    _ => None,
-                };
-                if let Some(tp) = target_pos {
-                    let target_id = kept[tp].id;
-                    let seg = kept.remove(pos);
-                    // 审查修复（2026-08-19）：target 可能已被前序判定删除——
-                    // 旧实现 unwrap_or(0) 会把本段错拼到 index 0 的无关段
-                    let Some(tpos) = kept.iter().position(|s| s.id == target_id) else {
-                        // 保守恢复原段（不删不并——不损坏数据）
-                        kept.insert(pos, seg);
-                        continue;
-                    };
-                    let joined = if tp < pos {
-                        format!("{}{}", kept[tpos].text.trim(), seg.text.trim())
-                    } else {
-                        format!("{}{}", seg.text.trim(), kept[tpos].text.trim())
-                    };
-                    result.merged.push(MergedItem {
-                        segment_id: seg.id,
-                        into_segment_id: kept[tpos].id,
-                        text: seg.text.clone(),
-                        start_ms: seg.start_ms,
-                    });
-                    kept[tpos].text = joined;
-                    kept[tpos].end_ms = kept[tpos].end_ms.max(seg.end_ms);
-                }
-            }
-        }
-    }
-    result.kept = kept;
-    result.markdown = rebuild_markdown(&result.title, &result.kept, &result.ocr_points);
-    result
+        })
+        .collect();
+    crate::concat::assemble_markdown(title, &anchored, ocr_points)
 }
 
 /// CJK 统一表意文字区段（含扩展 A）。
@@ -497,11 +488,18 @@ fn is_cjk(c: char) -> bool {
     (0x4E00..=0x9FFF).contains(&u) || (0x3400..=0x4DBF).contains(&u)
 }
 
-/// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3；REQ-085 测试在第二文件）。
+// ────────────────────────────────────────────────────────────
+// REQ-085：AI 复核（已拆至 note_filter_ai.rs——登记拆分计划落地；
+// 公共 API 再导出保持对外兼容）
+// ────────────────────────────────────────────────────────────
+
+pub use crate::note_filter_ai::{apply_ai_decisions, boundary_candidates, BoundarySegment};
+
+/// 单测独立文件（保持本文件 ≤300 行目标，AGENTS.md §3）。
 #[cfg(test)]
 #[path = "note_filter_tests.rs"]
 mod tests;
 
 #[cfg(test)]
-#[path = "note_filter_ai_tests.rs"]
-mod ai_tests;
+#[path = "note_filter_golden_tests.rs"]
+mod golden_tests;

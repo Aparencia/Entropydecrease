@@ -222,7 +222,7 @@ impl SessionImageStore {
 ///
 /// @ai-context: 纯函数（可单测）；文件名解析失败（非 <ts>.webp 形态）回退
 ///              字典序兜底（防御异常文件不 panic、不丢条目）。
-fn sort_by_timestamp(paths: &mut Vec<String>) {
+fn sort_by_timestamp(paths: &mut [String]) {
     fn ts_of(rel: &str) -> Option<u64> {
         rel.rsplit_once('/')
             .and_then(|(_, name)| name.strip_suffix(".webp"))

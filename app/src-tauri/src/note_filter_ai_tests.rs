@@ -7,6 +7,8 @@
 
 use super::*;
 use crate::ai_protocol::{TextFilterAction, TextFilterDecision};
+use crate::note_filter::filter_note;
+use crate::types::{SessionOcrBlock, SessionSegment};
 use crate::ui_junk::UiJunkList;
 
 /// 构造会话段（与 note_filter_tests.rs 同口径——AI 判定作用于规则保留段）。
@@ -32,6 +34,16 @@ fn asr(id: i64, start: u64, end: u64, text: &str) -> SessionSegment {
 
 fn junk() -> UiJunkList {
     UiJunkList::defaults()
+}
+
+/// 净化环境（v0.7.5 REQ-173 内置默认——测试零配置噪音）。
+fn env() -> crate::note_filter::PurifyEnv {
+    crate::note_filter::PurifyEnv::default()
+}
+
+/// 净化管线入口（与生产同签名——AI 判定作用于规则净化后的保留段）。
+fn run(title: &str, segments: &[SessionSegment], blocks: &[SessionOcrBlock]) -> NoteFilterResult {
+    filter_note(title, segments, blocks, &junk(), &env())
 }
 
 #[test]
@@ -100,9 +112,10 @@ fn normal_segments_not_boundary() {
 
 #[test]
 fn ai_delete_applied() {
-    // Arrange：规则保留 3 段，AI 判删第 2 段
+    // Arrange：规则保留 3 段，AI 判删第 2 段（v0.7.5：段文本经口语净化——
+    // 判删作用于净化后文本，段 id 不变）
     let segments = vec![asr(1, 0, 1000, "第一句"), asr(2, 1000, 2000, "口头禅废话"), asr(3, 2000, 3000, "第三句")];
-    let result = filter_note("测试", &segments, &[], &junk());
+    let result = run("测试", &segments, &[]);
     let decisions = vec![TextFilterDecision {
         segment_id: 2,
         action: TextFilterAction::Delete,
@@ -121,9 +134,10 @@ fn ai_delete_applied() {
 
 #[test]
 fn ai_merge_with_prev_joins_text() {
-    // Arrange：截断句 merge prev（展示层拼接）
-    let segments = vec![asr(1, 0, 1000, "我们看"), asr(2, 1000, 2000, "下一部分"), asr(3, 2000, 3000, "正常句")];
-    let result = filter_note("测试", &segments, &[], &junk());
+    // Arrange：截断句 merge prev（展示层拼接）；v0.7.5：段文本净化后带句号
+    // （"我们看"类口头禅词已被规则删除——用非口头禅截断句构造）
+    let segments = vec![asr(1, 0, 1000, "前面讲的内容"), asr(2, 1000, 2000, "接下来是重点"), asr(3, 2000, 3000, "正常句")];
+    let result = run("测试", &segments, &[]);
     let decisions = vec![TextFilterDecision {
         segment_id: 2,
         action: TextFilterAction::Merge,
@@ -135,15 +149,17 @@ fn ai_merge_with_prev_joins_text() {
     let result = apply_ai_decisions(result, &decisions);
     // Assert：文本拼接、段数减一、合并表记录
     assert_eq!(result.kept.len(), 2);
-    assert!(result.kept[0].text.contains("我们看下一部分"));
+    assert!(result.kept[0].text.contains("前面讲的内容"));
+    assert!(result.kept[0].text.contains("接下来是重点"));
     assert_eq!(result.merged.len(), 1);
-    assert!(result.markdown.contains("我们看下一部分"));
+    assert!(result.markdown.contains("接下来是重点"));
 }
 
 #[test]
 fn ai_merge_with_next_joins_text() {
-    let segments = vec![asr(1, 0, 1000, "这个公式"), asr(2, 1000, 2000, "很重要"), asr(3, 2000, 3000, "正常句")];
-    let result = filter_note("测试", &segments, &[], &junk());
+    // v0.7.5：避免口头禅词（"这个"会被净化删除）——用无口头禅截断句
+    let segments = vec![asr(1, 0, 1000, "该公式"), asr(2, 1000, 2000, "很重要"), asr(3, 2000, 3000, "正常句")];
+    let result = run("测试", &segments, &[]);
     let decisions = vec![TextFilterDecision {
         segment_id: 1,
         action: TextFilterAction::Merge,
@@ -152,7 +168,8 @@ fn ai_merge_with_next_joins_text() {
         merge_with: Some("next".into()),
     }];
     let result = apply_ai_decisions(result, &decisions);
-    assert!(result.kept[0].text.contains("这个公式很重要"));
+    assert!(result.kept[0].text.contains("该公式"));
+    assert!(result.kept[0].text.contains("很重要"));
     assert_eq!(result.kept.len(), 2);
 }
 
@@ -160,7 +177,7 @@ fn ai_merge_with_next_joins_text() {
 fn ai_decisions_defensive_fallbacks() {
     // Arrange：判定引用不存在的段 / merge 无相邻段（首段 merge prev）→ 保守跳过
     let segments = vec![asr(1, 0, 1000, "第一句"), asr(2, 1000, 2000, "第二句")];
-    let result = filter_note("测试", &segments, &[], &junk());
+    let result = run("测试", &segments, &[]);
     let decisions = vec![
         TextFilterDecision {
             segment_id: 999,
@@ -188,7 +205,7 @@ fn ai_decisions_defensive_fallbacks() {
 #[test]
 fn ai_keep_leaves_unchanged() {
     let segments = vec![asr(1, 0, 1000, "第一句"), asr(2, 1000, 2000, "第二句")];
-    let result = filter_note("测试", &segments, &[], &junk());
+    let result = run("测试", &segments, &[]);
     let decisions = vec![TextFilterDecision {
         segment_id: 1,
         action: TextFilterAction::Keep,
@@ -206,7 +223,7 @@ fn ai_merge_with_deleted_target_recovers_segment() {
     // Arrange：审查回归——前序判定已删除 merge 目标段，后续 merge 判定
     // 不得把文本错拼到无关段（旧实现 unwrap_or(0) 损坏数据）
     let segments = vec![asr(1, 0, 1000, "第一句"), asr(2, 1000, 2000, "第二句"), asr(3, 2000, 3000, "第三句")];
-    let result = filter_note("测试", &segments, &[], &junk());
+    let result = run("测试", &segments, &[]);
     let decisions = vec![
         // 先删 target（段 1）……
         TextFilterDecision {
@@ -229,10 +246,10 @@ fn ai_merge_with_deleted_target_recovers_segment() {
     // Act
     let result = apply_ai_decisions(result, &decisions);
     // Assert：段 2 的 merge 目标（段 1）已被删 → 保守恢复（不删不并）；
-    // kept 保留 2 段且文本不被拼错
+    // kept 保留 2 段且文本不被拼错（v0.7.5：净化后文本带句号——按包含断言）
     assert_eq!(result.kept.len(), 2);
-    assert!(result.kept.iter().any(|s| s.text == "第二句"), "段 2 应原样保留");
-    assert!(result.kept.iter().any(|s| s.text == "第三句"));
+    assert!(result.kept.iter().any(|s| s.text.contains("第二句")), "段 2 应原样保留");
+    assert!(result.kept.iter().any(|s| s.text.contains("第三句")));
     assert!(!result.kept.iter().any(|s| s.text.contains("第二句第三句")), "不得错拼到无关段");
     assert!(result.merged.is_empty(), "目标丢失时不得登记合并");
     assert_eq!(result.stats.ai_delete, 1, "仅段 1 删除生效");

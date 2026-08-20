@@ -96,6 +96,9 @@ pub async fn artifact_to_note(
             source: "classroom".to_string(),
             // v0.7.1：产物→笔记同样建立会话关联（列表 has_note 标记口径统一）
             session_id: Some(session_id),
+            // v0.7.5（REQ-171）：产物→笔记非净化管线产物——无规则版本（None 诚实）
+            rule_version: None,
+            purify_stats: None,
         })
         .map_err(|e| e.to_string())
 }

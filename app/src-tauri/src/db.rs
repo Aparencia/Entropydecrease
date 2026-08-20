@@ -157,6 +157,20 @@ impl Db {
             "session_id",
             "ALTER TABLE notes ADD COLUMN session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL",
         )?;
+        // v0.7.5（REQ-171）：notes 表补规则版本/净化统计两列——笔记可回答
+        // "用哪版规则生成、滤了什么"；旧笔记 NULL 诚实降级（不猜不填，ADR-014 先例）
+        ensure_column(
+            &conn,
+            "notes",
+            "rule_version",
+            "ALTER TABLE notes ADD COLUMN rule_version TEXT",
+        )?;
+        ensure_column(
+            &conn,
+            "notes",
+            "purify_stats",
+            "ALTER TABLE notes ADD COLUMN purify_stats TEXT",
+        )?;
         // 关联查询索引（列表 has_note 子查询 + 笔记页来源跳转共用）
         conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_notes_session ON notes(session_id)")?;
         Ok(Self { conn: Arc::new(Mutex::new(conn)) })
@@ -167,8 +181,12 @@ impl Db {
         let now = unix_seconds();
         let conn = self.conn.lock().expect("db lock poisoned");
         conn.execute(
-            "INSERT INTO notes (title, content, source, session_id, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-            params![new.title, new.content, new.source, new.session_id, now],
+            "INSERT INTO notes (title, content, source, session_id, rule_version, purify_stats, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+            params![
+                new.title, new.content, new.source, new.session_id, new.rule_version,
+                new.purify_stats, now
+            ],
         )?;
         let id = conn.last_insert_rowid();
         Ok(Note {
@@ -177,6 +195,8 @@ impl Db {
             content: new.content.clone(),
             source: new.source.clone(),
             session_id: new.session_id,
+            rule_version: new.rule_version.clone(),
+            purify_stats: new.purify_stats.clone(),
             created_at: now,
             updated_at: now,
         })
@@ -185,7 +205,9 @@ impl Db {
     /// 按 id 读取单条笔记；不存在返回 None。
     pub fn get_note(&self, id: i64) -> Result<Option<Note>> {
         let conn = self.conn.lock().expect("db lock poisoned");
-        let mut stmt = conn.prepare("SELECT id, title, content, source, session_id, created_at, updated_at FROM notes WHERE id = ?1")?;
+        let mut stmt = conn.prepare(
+            "SELECT id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at FROM notes WHERE id = ?1",
+        )?;
         let mut rows = stmt.query_map(params![id], row_to_note)?;
         match rows.next() {
             Some(Ok(note)) => Ok(Some(note)),
@@ -198,7 +220,7 @@ impl Db {
     pub fn list_notes(&self) -> Result<Vec<Note>> {
         let conn = self.conn.lock().expect("db lock poisoned");
         let mut stmt = conn.prepare(
-            "SELECT id, title, content, source, session_id, created_at, updated_at FROM notes ORDER BY updated_at DESC",
+            "SELECT id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at FROM notes ORDER BY updated_at DESC",
         )?;
         let rows = stmt.query_map([], row_to_note)?;
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
@@ -230,7 +252,7 @@ impl Db {
         let escaped = escape_like(keyword);
         let pattern = format!("%{}%", escaped);
         let mut stmt = conn.prepare(
-            "SELECT id, title, content, source, session_id, created_at, updated_at FROM notes
+            "SELECT id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at FROM notes
              WHERE title LIKE ?1 ESCAPE '\\' OR content LIKE ?1 ESCAPE '\\'
              ORDER BY updated_at DESC",
         )?;
@@ -245,7 +267,7 @@ impl Db {
     pub fn find_note_by_session(&self, session_id: i64) -> Result<Option<Note>> {
         let conn = self.conn.lock().expect("db lock poisoned");
         let mut stmt = conn.prepare(
-            "SELECT id, title, content, source, session_id, created_at, updated_at FROM notes
+            "SELECT id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at FROM notes
              WHERE session_id = ?1 ORDER BY created_at DESC, id DESC LIMIT 1",
         )?;
         let mut rows = stmt.query_map(params![session_id], row_to_note)?;
@@ -265,8 +287,10 @@ fn row_to_note(row: &rusqlite::Row<'_>) -> rusqlite::Result<Note> {
         content: row.get(2)?,
         source: row.get(3)?,
         session_id: row.get(4)?,
-        created_at: row.get(5)?,
-        updated_at: row.get(6)?,
+        rule_version: row.get(5)?,
+        purify_stats: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
     })
 }
 
@@ -313,7 +337,7 @@ mod tests {
     fn create_and_get_note_roundtrip() {
         // Arrange
         let db = mem_db();
-        let new = NewNote { title: "物理".into(), content: "# 牛顿\nF=ma".into(), source: "manual".into(), session_id: None };
+        let new = NewNote { title: "物理".into(), content: "# 牛顿\nF=ma".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None };
         // Act
         let created = db.create_note(&new).expect("create");
         let fetched = db.get_note(created.id).expect("get").expect("exists");
@@ -327,8 +351,8 @@ mod tests {
     fn list_orders_by_updated_desc() {
         // Arrange
         let db = mem_db();
-        db.create_note(&NewNote { title: "A".into(), content: "a".into(), source: "manual".into(), session_id: None }).unwrap();
-        db.create_note(&NewNote { title: "B".into(), content: "b".into(), source: "manual".into(), session_id: None }).unwrap();
+        db.create_note(&NewNote { title: "A".into(), content: "a".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None }).unwrap();
+        db.create_note(&NewNote { title: "B".into(), content: "b".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None }).unwrap();
         // Act
         let notes = db.list_notes().expect("list");
         // Assert
@@ -339,7 +363,7 @@ mod tests {
     fn update_note_changes_content() {
         // Arrange
         let db = mem_db();
-        let created = db.create_note(&NewNote { title: "旧".into(), content: "旧内容".into(), source: "manual".into(), session_id: None }).unwrap();
+        let created = db.create_note(&NewNote { title: "旧".into(), content: "旧内容".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None }).unwrap();
         // Act
         let ok = db.update_note(created.id, "新标题", "新内容").expect("update");
         let fetched = db.get_note(created.id).unwrap().unwrap();
@@ -353,7 +377,7 @@ mod tests {
     fn delete_note_removes_row() {
         // Arrange
         let db = mem_db();
-        let created = db.create_note(&NewNote { title: "待删".into(), content: "x".into(), source: "manual".into(), session_id: None }).unwrap();
+        let created = db.create_note(&NewNote { title: "待删".into(), content: "x".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None }).unwrap();
         // Act
         let ok = db.delete_note(created.id).expect("delete");
         let fetched = db.get_note(created.id).expect("get");
@@ -366,8 +390,8 @@ mod tests {
     fn search_matches_title_and_content() {
         // Arrange
         let db = mem_db();
-        db.create_note(&NewNote { title: "化学课".into(), content: "讲分子".into(), source: "classroom".into(), session_id: None }).unwrap();
-        db.create_note(&NewNote { title: "随笔".into(), content: "含熵减概念".into(), source: "manual".into(), session_id: None }).unwrap();
+        db.create_note(&NewNote { title: "化学课".into(), content: "讲分子".into(), source: "classroom".into(), session_id: None, rule_version: None, purify_stats: None }).unwrap();
+        db.create_note(&NewNote { title: "随笔".into(), content: "含熵减概念".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None }).unwrap();
         // Act
         let by_title = db.search_notes("化学").expect("search");
         let by_content = db.search_notes("熵减").expect("search");
@@ -381,8 +405,8 @@ mod tests {
     fn search_escapes_wildcards() {
         // Arrange：用户输入含 % 应作为字面量
         let db = mem_db();
-        db.create_note(&NewNote { title: "50%off".into(), content: "促销".into(), source: "manual".into(), session_id: None }).unwrap();
-        db.create_note(&NewNote { title: "normal".into(), content: "普通".into(), source: "manual".into(), session_id: None }).unwrap();
+        db.create_note(&NewNote { title: "50%off".into(), content: "促销".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None }).unwrap();
+        db.create_note(&NewNote { title: "normal".into(), content: "普通".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None }).unwrap();
         // Act：搜索字面 "%"
         let result = db.search_notes("%off").expect("search");
         // Assert：只命中含字面 %off 的，不应命中所有
@@ -422,10 +446,73 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
+    // ── v0.7.5 规则版本/净化统计元数据（REQ-171：迁移 / 落库 / 旧数据 NULL）──
+
+    /// 旧库（无 rule_version/purify_stats 列）打开后列补齐，旧笔记两字段 NULL
+    /// （诚实降级——不猜不填，ADR-014 先例）。
+    #[test]
+    fn migration_adds_rule_metadata_to_notes() {
+        // Arrange：手工造旧 schema 库（notes 无 v0.7.5 两列，含一条旧数据）
+        let path = std::env::temp_dir().join(format!("entropy_mig_rules_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        {
+            let conn = rusqlite::Connection::open(&path).expect("open old db");
+            conn.execute_batch(
+                "CREATE TABLE notes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    source TEXT NOT NULL DEFAULT 'manual',
+                    session_id INTEGER,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                INSERT INTO notes (title, content, source, session_id, created_at, updated_at)
+                    VALUES ('旧笔记', 'v0.7.4 数据', 'classroom', 1, 1, 1);",
+            )
+            .expect("create old schema");
+        }
+        // Act：以新代码打开旧库（触发 ensure_column 迁移）
+        let db = Db::open(path.to_str().unwrap()).expect("open migrated db");
+        let old = db.list_notes().expect("list").pop().expect("old note");
+        // Assert：列补齐、旧数据读回、两字段诚实为 None
+        assert_eq!(old.title, "旧笔记");
+        assert_eq!(old.rule_version, None);
+        assert_eq!(old.purify_stats, None);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// 新笔记落库携带规则版本与净化统计（会话→笔记链路口径）；读回一致。
+    #[test]
+    fn create_note_roundtrips_rule_metadata() {
+        // Arrange（外键 ON：先建会话再关联）
+        let db = mem_db();
+        let session = db
+            .create_session(&crate::types::NewSession {
+                title: "会话".into(),
+                source_window: None,
+                profile: None,
+            })
+            .expect("create session");
+        let new = NewNote {
+            title: "净化笔记".into(),
+            content: "内容".into(),
+            source: "classroom".into(),
+            session_id: Some(session.id),
+            rule_version: Some("note-rules-0.7.5".into()),
+            purify_stats: Some(r#"{"filler":2,"verbal":3}"#.into()),
+        };
+        // Act
+        let created = db.create_note(&new).expect("create");
+        let fetched = db.get_note(created.id).expect("get").expect("exists");
+        // Assert：元数据落库并读回
+        assert_eq!(fetched.rule_version.as_deref(), Some("note-rules-0.7.5"));
+        assert_eq!(fetched.purify_stats.as_deref(), Some(r#"{"filler":2,"verbal":3}"#));
+    }
+
     /// 删除会话 → 笔记保留、关联断开（ON DELETE SET NULL 生效）。
     #[test]
-    fn delete_session_keeps_note_and_breaks_link() {
-        // Arrange
+    fn delete_session_keeps_note_and_breaks_link() {        // Arrange
         let db = mem_db();
         let session = db.create_session(&crate::types::NewSession {
             title: "待删会话".into(),
@@ -437,6 +524,8 @@ mod tests {
             content: "内容".into(),
             source: "classroom".into(),
             session_id: Some(session.id),
+            rule_version: None,
+            purify_stats: None,
         }).expect("create note");
         // Act：删除会话
         let deleted = db.delete_session(session.id).expect("delete session");
@@ -462,18 +551,24 @@ mod tests {
             content: "v1".into(),
             source: "classroom".into(),
             session_id: Some(session.id),
+            rule_version: None,
+            purify_stats: None,
         }).expect("create older");
         let newer = db.create_note(&NewNote {
             title: "第二版".into(),
             content: "v2".into(),
             source: "classroom".into(),
             session_id: Some(session.id),
+            rule_version: None,
+            purify_stats: None,
         }).expect("create newer");
         db.create_note(&NewNote {
             title: "手动".into(),
             content: "m".into(),
             source: "manual".into(),
             session_id: None,
+            rule_version: None,
+            purify_stats: None,
         }).expect("create manual");
         // Act
         let found = db.find_note_by_session(session.id).expect("find");

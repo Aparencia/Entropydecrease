@@ -1,4 +1,4 @@
-//! 画面要点屏构建（v0.7.3 REQ-155/156/160，ADR-015）。
+//! 画面要点屏构建（v0.7.3 REQ-155/156/160，ADR-015；v0.7.5 OCR 净化）。
 //!
 //! @ai-context: 把会话 OCR 块流组织为屏卡（SessionScreen）：① 有 screen_id 的
 //!              新数据按屏号分组（采集时分配）；② 旧数据（screen_id=NULL）走
@@ -6,23 +6,27 @@
 //!              行合并 + 版面角色（复用 screen_merge 纯函数，单管线双出口）；
 //!              ④ 结构块（region_kind=table/formula/code）独立成 ScreenStructure
 //!              （rendered 由 M5 精修接线填充）；⑤ image_ref 匹配归档 full 图。
+//! @ai-context: v0.7.5（REQ-166/167/169）：可消费块过滤扩展——单字符碎片
+//!              丢弃（非结构上下文）、边缘条带 bbox 黑名单、视频页 UI 共现
+//!              判定（作者名/图标垃圾）、OCR 错字纠错（种子+转写共现）；
+//!              屏构建后零跨度修复 + 重复图去重（纯函数在 screen_merge.rs）。
 //! @ai-context: 本模块含文件系统读取（图匹配）——聚合/去重逻辑仍为纯函数
 //!              （screen_merge.rs），本层只做编排与 IO。
 
 use std::path::Path;
 
+use crate::purify_config::PurifyConfig;
 use crate::screen_merge::{
-    classify_roles, cluster_blocks_into_screens, line_merge, ScreenBlockInput, ScreenCluster,
-    CLUSTER_GAP_MS, SCREEN_SIM_THRESHOLD,
+    classify_roles, cluster_blocks_into_screens, dedupe_screen_images, infer_frame_dims,
+    is_edge_strip, is_single_char_noise, line_merge, merge_zero_span_screens, ScreenBlockInput,
+    ScreenCluster, CLUSTER_GAP_MS, SCREEN_SIM_THRESHOLD,
 };
 use crate::types::{ScreenStructure, SessionOcrBlock, SessionScreen};
-use crate::ui_junk::UiJunkList;
+use crate::ui_junk::{JunkCategory, UiJunkList};
 use crate::watermark_filter::{detect_watermarks, WatermarkConfig, WatermarkInput};
 
 /// 结构区域类型（region_kind 命中即结构块——不参与行合并）。
 const STRUCTURE_KINDS: &[&str] = &["table", "formula", "code"];
-/// 屏构建的最低块分（与 note_filter 消费口径一致——低于视为噪声）。
-const MIN_BLOCK_SCORE: f32 = 0.5;
 
 /// 构建会话屏卡（编排 + 图匹配 IO）：OCR 块 → 屏序列（按 first_seen 升序）。
 ///
@@ -30,21 +34,36 @@ const MIN_BLOCK_SCORE: f32 = 0.5;
 ///              空文本块跳过（聚类纯函数内部同样防御）。
 /// @ai-context: 原料口径——不过滤低分/UI 垃圾（原料视图可复查，过滤在消费端
 ///              filter_usable_blocks 按屏执行）；旧数据聚类兜底零回归。
+/// @ai-context: v0.7.5（REQ-169）：屏构建后零跨度修复（截断子集屏并入相邻屏）
+///              ——消费端与详情端同口径（单管线双出口）。
 pub fn build_screens(blocks: &[SessionOcrBlock], images_dir: Option<&Path>) -> Vec<SessionScreen> {
     let session_id = blocks.first().map(|b| b.session_id).unwrap_or(0);
     let mut screens = build_screens_inner(session_id, blocks);
+    // REQ-169：零跨度屏修复（first=last 并入相邻屏——条件见 screen_merge）
+    screens = merge_zero_span_screens(screens);
     if let Some(dir) = images_dir {
         attach_images(&mut screens, dir);
     }
     screens
 }
 
-/// 可消费块过滤（纯函数）：低分/空文本/UI 垃圾/水印排除。
+/// 可消费块过滤（v0.7.5 扩展）：低分/空文本/UI 垃圾/水印 + 单字符/边缘条带/
+/// 视频页共现/错字纠错 → 净化的可消费块 + 纠错块数。
 ///
 /// @ai-context: 与 note_filter 消费口径一致（REQ-083 黑名单 + REQ-059 水印 +
 ///              低分）——过滤后屏卡即笔记画面要点（双保险：源头已过滤的新数据
 ///              走同口径，旧数据兜底过滤）。
-pub fn filter_usable_blocks(blocks: &[SessionOcrBlock], ui_junk: &UiJunkList) -> Vec<SessionOcrBlock> {
+/// @ai-context: transcript 为净化后转写全文——OCR 错字纠错（REQ-168：正确词
+///              在讲述中共现才纠）与视频页共现判定（作者名类短块保护）共用。
+/// @ai-context: corrections 为纠错表（AppState 装配：内置种子 + JSON 校准）。
+/// @ai-context: 返回 (块, 纠错块数)——REQ-171 purify_stats.ocr_corrected 数据源。
+pub fn filter_usable_blocks(
+    blocks: &[SessionOcrBlock],
+    ui_junk: &UiJunkList,
+    config: &PurifyConfig,
+    transcript: &str,
+    corrections: &crate::ocr_correction::OcrCorrectionTable,
+) -> (Vec<SessionOcrBlock>, usize) {
     let inputs: Vec<WatermarkInput> = blocks
         .iter()
         .filter(|b| b.region == "full")
@@ -55,17 +74,107 @@ pub fn filter_usable_blocks(blocks: &[SessionOcrBlock], ui_junk: &UiJunkList) ->
         })
         .collect();
     let watermarks = detect_watermarks(&inputs, &WatermarkConfig::default());
-    blocks
-        .iter()
-        .filter(|b| {
-            b.region == "full"
-                && b.score >= MIN_BLOCK_SCORE
-                && !b.text.trim().is_empty()
-                && !ui_junk.is_junk(&b.text)
-                && !watermarks.texts.iter().any(|w| b.text.trim() == w)
-        })
-        .cloned()
-        .collect()
+    // ① 基础过滤（低分/空文本/UI 垃圾/水印/单字符/边缘条带）——同帧批量判定
+    //    边缘条带需要帧尺寸（同帧块分布推断——DB 不落帧宽高）
+    let mut by_frame: Vec<(u64, Vec<&SessionOcrBlock>)> = Vec::new();
+    for b in blocks {
+        match by_frame.last_mut() {
+            Some((ts, members)) if *ts == b.timestamp_ms => members.push(b),
+            _ => by_frame.push((b.timestamp_ms, vec![b])),
+        }
+    }
+    let mut junk_hits: Vec<(u64, usize)> = Vec::new(); // 帧 → VideoPageUi 命中数
+    for (ts, members) in &by_frame {
+        let hits = members
+            .iter()
+            .filter(|b| ui_junk.classify(&b.text) == Some(JunkCategory::VideoPageUi))
+            .count();
+        junk_hits.push((*ts, hits));
+    }
+    let frame_junk_of = |ts: u64| junk_hits.iter().find(|(t, _)| *t == ts).map(|(_, n)| *n).unwrap_or(0);
+    let mut corrected = 0usize;
+    let mut out: Vec<SessionOcrBlock> = Vec::new();
+    for (_, members) in &by_frame {
+        let dims = infer_frame_dims(&to_inputs(members));
+        let texts: Vec<String> = members.iter().map(|b| b.text.clone()).collect();
+        for b in members {
+            if b.region != "full" {
+                continue;
+            }
+            let raw = b.text.trim();
+            if raw.is_empty() || b.score < config.min_block_score {
+                continue;
+            }
+            if ui_junk.is_junk(raw) || watermarks.texts.iter().any(|w| raw == w) {
+                continue;
+            }
+            if config.single_char_drop && is_single_char_noise(raw, b.region_kind.as_deref()) {
+                continue;
+            }
+            if let (Some(bb), Some((fw, fh))) = (b.bbox, dims) {
+                if is_edge_strip(
+                    bb,
+                    fw,
+                    fh,
+                    config.edge_strip_top_ratio,
+                    config.edge_strip_bottom_ratio,
+                    config.edge_strip_side_ratio,
+                ) {
+                    continue;
+                }
+            }
+            let mut text = raw.to_string();
+            if config.ocr_correct {
+                let c = corrections.correct(&text, transcript);
+                if c != text {
+                    corrected += 1;
+                }
+                text = c;
+            }
+            // ② 视频页 UI 共现判定（REQ-166）：帧内 VideoPageUi 命中 ≥N 且本块
+            //    标签形（≤6 字纯 CJK 无虚词）且不在讲述中共现且非同帧长块子串
+            //    ——作者名/图标垃圾（清晖加油站/若凡娃娃 类，无法枚举黑名单）
+            if config.frame_junk_min_hits > 0
+                && frame_junk_of(b.timestamp_ms) >= config.frame_junk_min_hits
+                && is_label_shaped(&text)
+                && !transcript.contains(&text)
+                && !texts.iter().any(|t| t != &text && t.contains(&text))
+            {
+                continue;
+            }
+            let mut kept = (*b).clone();
+            kept.text = text;
+            out.push(kept);
+        }
+    }
+    (out, corrected)
+}
+
+/// 同帧块 → 聚合输入（帧尺寸推断/包含判定用）。
+fn to_inputs(blocks: &[&SessionOcrBlock]) -> Vec<ScreenBlockInput> {
+    blocks.iter().map(|b| to_input(b)).collect()
+}
+
+/// 标签形判定（纯函数）：≤6 字、纯 CJK、无虚词——视频页共现规则的丢弃候选。
+///
+/// @ai-context: 复用 screen_merge::is_label（图注短词启发式）并加严：含标点/
+///              数字/ASCII 的块不判标签形（"客户地址：" 带冒号受保护——
+///              表单字段是真实内容，见会话31 画面4）。
+fn is_label_shaped(text: &str) -> bool {
+    let t = text.trim();
+    if t.is_empty() || t.chars().count() > crate::screen_merge::LABEL_MAX_CHARS {
+        return false;
+    }
+    if !t.chars().all(is_cjk) {
+        return false;
+    }
+    crate::screen_merge::is_label(t)
+}
+
+/// CJK 统一表意文字区段（含扩展 A）。
+fn is_cjk(c: char) -> bool {
+    let u = c as u32;
+    (0x4E00..=0x9FFF).contains(&u) || (0x3400..=0x4DBF).contains(&u)
 }
 
 /// 图匹配（IO）：为屏卡填充 image_ref（最近 ≤ 首见时刻的归档 full 图）。
@@ -74,6 +183,9 @@ pub fn filter_usable_blocks(blocks: &[SessionOcrBlock], ui_junk: &UiJunkList) ->
 ///              缺失/无图 → 保持 None（前端无缩略图降级，不阻断）。
 /// @ai-context: 审查修复（2026-08-20）：目录**一次扫描**建时间戳映射（原实现
 ///              每屏一次 read_dir——N 屏 = N 次目录遍历，会话多屏时浪费 IO）。
+/// @ai-context: v0.7.5（REQ-169）：匹配后按图去重——相同图只留首个屏引用
+///              （归档图按内容指纹去重存储，同文件=同画面；多屏匹配同图是
+///              屏间未实际变化的证据，重复引用只增噪不减信息）。
 pub fn attach_images(screens: &mut [SessionScreen], images_dir: &Path) {
     if screens.is_empty() {
         return;
@@ -87,6 +199,7 @@ pub fn attach_images(screens: &mut [SessionScreen], images_dir: &Path) {
             s.image_ref = match_timestamp(&ts_list, s.first_seen_ms);
         }
     }
+    dedupe_screen_images(screens);
 }
 
 /// 归档 full 图时间戳列表（纯 IO，一次扫描）。
@@ -258,34 +371,6 @@ pub fn refine_screen_structures(
             }
         }
     }
-}
-
-/// 匹配归档 full 图（纯 IO）：取时间戳 ≤ 屏首见时刻的最近图；无则取最早图。
-///
-/// @ai-context: 归档图按时间戳命名（full/{ts}.webp，image_store 约定）；屏首帧
-///              时刻附近必有归档（新文本+2s 防抖存档）——"最近 ≤"即该屏配图。
-/// @ai-context: 目录缺失/无图 → None（前端不展示缩略图，不阻断）。
-fn match_image(images_dir: &Path, first_seen_ms: u64) -> Option<String> {
-    let entries = std::fs::read_dir(images_dir.join("full")).ok()?;
-    let mut candidates: Vec<u64> = entries
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|x| x == "webp"))
-        .filter_map(|e| {
-            e.file_name()
-                .to_string_lossy()
-                .trim_end_matches(".webp")
-                .parse::<u64>()
-                .ok()
-        })
-        .collect();
-    candidates.sort_unstable();
-    let ts = candidates
-        .iter()
-        .rev()
-        .find(|&&t| t <= first_seen_ms)
-        .copied()
-        .or_else(|| candidates.first().copied())?;
-    Some(format!("full/{}.webp", ts))
 }
 
 #[cfg(test)]

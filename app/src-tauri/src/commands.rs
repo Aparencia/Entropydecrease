@@ -99,6 +99,12 @@ pub struct AppState {
     /// v0.6.0 M1（REQ-060）：口语符号映射表（内置默认 + symbol_map.json 校准合并；
     /// 产物层书面化管线消费）
     pub symbol_normalize: crate::symbol_normalize::SymbolNormalizeConfig,
+    /// v0.7.5（REQ-173）：笔记净化阈值配置（内置默认 + purify_config.json 校准合并；
+    /// 120字/60s/0.5/0.6 等集中常量，现场调参无需改码）
+    pub purify: crate::purify_config::PurifyConfig,
+    /// v0.7.5（REQ-168）：OCR 错字纠错表（内置种子 + ocr_correction.json 校准合并；
+    /// 画面词与讲述词互证，无映射不猜）
+    pub ocr_corrections: crate::ocr_correction::OcrCorrectionTable,
     /// v0.7.0 M1（REQ-104/132）：剪贴板信号存储（内存态；课中复制=高置信信号，
     /// 只存前 30 字符预览——隐私红线：原始剪贴板内容不持久化）
     pub clipboard: std::sync::Arc<crate::clipboard_signal::ClipboardSignalStore>,
@@ -170,6 +176,8 @@ pub async fn save_draft_as_note(state: State<'_, AppState>, draft: NoteDraft) ->
         content: truncate_chars(draft.markdown, CONTENT_MAX_CHARS),
         source: "classroom".to_string(),
         session_id: None,
+        rule_version: None,
+        purify_stats: None,
     };
     state.db.create_note(&new).map_err(|e| e.to_string())
 }
@@ -235,6 +243,8 @@ pub async fn process_to_note(
             content: draft.markdown.clone(),
             source: "classroom".to_string(),
             session_id: None,
+            rule_version: None,
+            purify_stats: None,
         })
         .map_err(|e| e.to_string())
     })
@@ -251,6 +261,9 @@ pub async fn create_note(state: State<'_, AppState>, new: NewNote) -> Result<Not
         source: if new.source == "classroom" { "classroom" } else { "manual" }.to_string(),
         // 手动新建笔记无来源会话（session_id 仅由会话→笔记链路写入）
         session_id: None,
+        // 手动笔记无净化规则版本/统计（None 诚实降级——REQ-171 口径）
+        rule_version: None,
+        purify_stats: None,
     };
     state.db.create_note(&new).map_err(|e| e.to_string())
 }

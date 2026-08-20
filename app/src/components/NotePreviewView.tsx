@@ -22,6 +22,8 @@ const REASON_LABEL: Record<string, string> = {
   fragment: "碎片",
   "low-confidence": "低置信",
   "ai-delete": "AI 判删",
+  // v0.7.5（REQ-163）：口头禅短段规则级删除
+  filler: "口头禅",
 };
 
 /** HTML 转义（审查修复 2026-08-19：OCR/ASR 文本来自视频字幕，恶意字幕可含
@@ -51,6 +53,10 @@ function renderMarkdown(md: string, imageBaseUrl: string): string {
       }
       if (line.startsWith("# ")) return `<h2 style="font-size:15px;margin:10px 0 4px">${escapeHtml(line.slice(2))}</h2>`;
       if (line.startsWith("## ")) return `<h3 style="font-size:13px;margin:8px 0 4px;color:#0f766e">${escapeHtml(line.slice(3))}</h3>`;
+      // v0.7.5（REQ-170）：会话异常警示行（Markdown 引用行 → 警示块）
+      if (line.startsWith("> ")) {
+        return `<div style="font-size:12px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin:6px 0">${escapeHtml(line.slice(2))}</div>`;
+      }
       if (line.startsWith("- ")) return `<div style="font-size:12px;color:#4b5563">• ${escapeHtml(line.slice(2))}</div>`;
       if (line.trim() === "") return "";
       return `<p style="font-size:13px;color:#374151;margin:4px 0">${escapeHtml(line)}</p>`;
@@ -142,13 +148,15 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
   const stats = preview.stats;
   return (
     <div>
-      {/* 过滤统计卡 */}
+      {/* 过滤统计卡（v0.7.5：口头禅/净化计数——REQ-162~164/171 口径） */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0" }}>
         {[
           ["UI 垃圾", stats.ui_junk, "#dc2626"],
           ["重复", stats.duplicates, "#b45309"],
           ["碎片", stats.fragments, "#6b7280"],
           ["低置信", stats.low_confidence, "#7c3aed"],
+          ["口头禅", stats.filler ?? 0, "#be185d"],
+          ["净化", stats.verbal ?? 0, "#0d9488"],
           ["AI 判删", stats.ai_delete, "#2563eb"],
         ].map(([label, count, color]) => (
           <span

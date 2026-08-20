@@ -231,3 +231,156 @@ fn image_ref_none_without_dir() {
     assert_eq!(screens.len(), 1);
     assert_eq!(screens[0].image_ref, None);
 }
+
+// ────────────────────────────────────────────────
+// v0.7.5（REQ-166/167/169）：OCR 净化与屏修复
+// ────────────────────────────────────────────────
+
+fn pcfg() -> crate::purify_config::PurifyConfig {
+    crate::purify_config::PurifyConfig::default()
+}
+
+fn corrections() -> crate::ocr_correction::OcrCorrectionTable {
+    crate::ocr_correction::OcrCorrectionTable::default()
+}
+
+/// 可消费块过滤入口（净化配置 + 空转写——测试零共现噪音）。
+fn usable(blocks: &[SessionOcrBlock]) -> Vec<SessionOcrBlock> {
+    crate::screens::filter_usable_blocks(
+        blocks,
+        &crate::ui_junk::UiJunkList::defaults(),
+        &pcfg(),
+        "",
+        &corrections(),
+    )
+    .0
+}
+
+#[test]
+fn min_block_score_070_filters_low_score() {
+    // Arrange：REQ-167 校准——0.5 阈值时代存活的中低分块（o=0.63/？=0.5）
+    let mut low = blk(1, 1_000, "低分噪声", None, None, None);
+    low.score = 0.6;
+    let mut high = blk(2, 1_000, "高分正文", None, None, None);
+    high.score = 0.75;
+    let blocks = vec![low, high];
+    // Act
+    let out = usable(&blocks);
+    // Assert：0.7 阈值——0.6x 块被滤，0.75 块保留（0.5→0.7 配回归验证）
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].text, "高分正文");
+}
+
+#[test]
+fn single_char_noise_dropped_except_structure_context() {
+    // Arrange：REQ-167——单字符块；表格上下文豁免
+    let blocks = vec![
+        blk(1, 1_000, "X", None, None, None),
+        blk(2, 1_000, "？", None, None, None),
+        blk(3, 1_000, "✓", None, None, Some("table")),
+    ];
+    // Act
+    let out = usable(&blocks);
+    // Assert：X/？ 丢弃；表格内单字符保留（勾选框是真实内容）
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].text, "✓");
+}
+
+#[test]
+fn edge_strip_bbox_blocks_dropped() {
+    // Arrange：REQ-166 边缘条带——顶部条带块（y<8%）与中部正文块同帧
+    let blocks = vec![
+        blk(1, 1_000, "顶部条带", None, Some((10.0, 5.0, 300.0, 20.0)), None),
+        blk(2, 1_000, "中部正文内容", None, Some((100.0, 200.0, 400.0, 30.0)), None),
+        blk(3, 1_000, "底部条带", None, Some((100.0, 980.0, 400.0, 30.0)), None),
+    ];
+    // Act
+    let out = usable(&blocks);
+    // Assert：帧尺寸从块分布推断（~1010×1021）——顶/底 8% 条带丢弃，正文保留
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].text, "中部正文内容");
+}
+
+#[test]
+fn frame_context_junk_drops_author_names_keeps_transcript_labels() {
+    // Arrange：REQ-166 共现规则——同帧 ≥3 个视频页垃圾信号（简介/评论7/48/标签）
+    // + 作者名（清晖加油站，标签形非讲述）+ 真标签（识别重大风险——讲述共现）
+    let blocks = vec![
+        blk(1, 1_000, "简介", None, None, None),
+        blk(2, 1_000, "评论7", None, None, None),
+        blk(3, 1_000, "48", None, None, None),
+        blk(4, 1_000, "标签", None, None, None),
+        blk(5, 1_000, "清晖加油站", None, None, None),
+        blk(6, 1_000, "识别重大风险", None, None, None),
+        blk(7, 1_000, "项目从立项到交付全流程|落地式项", None, None, None),
+    ];
+    // Act：转写含"识别重大风险"（画面词与讲述词互证）
+    let transcript = "项目不是在结束时失败的 识别重大风险";
+    let out = crate::screens::filter_usable_blocks(
+        &blocks,
+        &crate::ui_junk::UiJunkList::defaults(),
+        &pcfg(),
+        transcript,
+        &corrections(),
+    )
+    .0;
+    // Assert：作者名（标签形+无共现）丢弃；讲述共现标签保留；长块不误伤
+    let texts: Vec<&str> = out.iter().map(|b| b.text.as_str()).collect();
+    assert!(!texts.contains(&"清晖加油站"));
+    assert!(!texts.contains(&"简介"));
+    assert!(texts.contains(&"识别重大风险"));
+    assert!(texts.contains(&"项目从立项到交付全流程|落地式项"));
+}
+
+#[test]
+fn zero_span_screens_merged_into_adjacent() {
+    // Arrange：REQ-169——屏A（单帧截断子集）→ 屏B（单帧完整内容）——聚类
+    // 相似度 0.5<0.6 未合并 → 两零跨度屏；零跨度修复二次机会合并
+    let dir = tmp_images_dir("zerospan", &[]);
+    let blocks = vec![
+        blk(1, 1_000, "完整标题内容A", None, None, None),
+        blk(2, 5_000, "完整标题内容A", None, None, None),
+        blk(3, 5_000, "补充正文内容", None, None, None),
+    ];
+    // Act
+    let screens = build_screens(&blocks, Some(&dir));
+    // Assert：1 屏、非零跨度、内容合并（标题+正文都在）
+    assert_eq!(screens.len(), 1, "截断子集屏并入相邻屏");
+    assert_ne!(screens[0].first_seen_ms, screens[0].last_seen_ms);
+    assert!(screens[0].body.iter().any(|b| b.contains("完整标题内容A")));
+    assert!(screens[0].body.iter().any(|b| b.contains("补充正文内容")));
+}
+
+#[test]
+fn zero_span_genuine_flash_screen_kept() {
+    // Arrange：零跨度但内容与相邻屏无关（真·单帧快闪）——保守保留不误并
+    let dir = tmp_images_dir("flash", &[]);
+    let blocks = vec![
+        blk(1, 1_000, "第一屏内容甲", None, None, None),
+        blk(2, 5_000, "第一屏内容甲", None, None, None),
+        blk(3, 9_000, "快闪内容乙", None, None, None),
+    ];
+    // Act
+    let screens = build_screens(&blocks, Some(&dir));
+    // Assert：快闪屏独立保留（零跨度——诚实展示，不发明时间）
+    assert_eq!(screens.len(), 2);
+    assert_eq!(screens[1].first_seen_ms, screens[1].last_seen_ms);
+    assert!(screens[1].body.iter().any(|b| b.contains("快闪内容乙")));
+}
+
+#[test]
+fn duplicate_image_ref_kept_only_on_first_screen() {
+    // Arrange：REQ-169——归档仅 569515.webp；两屏都匹配它（会话31 画面6/7/8
+    // 共用一张图的实证）——图去重只留首个屏引用
+    let dir = tmp_images_dir("dupimg", &[569_515]);
+    let blocks = vec![
+        blk(1, 929_000, "明确项目合法地位", None, None, None),
+        blk(2, 946_000, "经理应该前置管理", None, None, None),
+    ];
+    // Act
+    let screens = build_screens(&blocks, Some(&dir));
+    // Assert：首屏保留图引用；后续屏清空（文本不丢）
+    assert_eq!(screens.len(), 2);
+    assert_eq!(screens[0].image_ref.as_deref(), Some("full/569515.webp"));
+    assert_eq!(screens[1].image_ref, None);
+}

@@ -28,6 +28,9 @@ pub enum JunkCategory {
     /// v0.7.3（REQ-157）：直播互动 UI（"1人正在看/发送/下载/预约…"——
     /// 会话29 实证：直播平台观众数/互动按钮混入画面要点）
     LiveUi,
+    /// v0.7.5（REQ-166）：视频页 UI（"简介/评论/点赞/收藏/投币/观看数/标签/
+    /// 展开/二维码/推荐…"——会话31 实证：B站页面框架文字混入画面要点）
+    VideoPageUi,
 }
 
 /// 黑名单条目。
@@ -113,6 +116,34 @@ fn default_patterns() -> Vec<JunkPattern> {
     for t in ["发送", "下载", "预约", "回放", "分享", "直播"] {
         push_pattern(&mut p, JunkCategory::LiveUi, t, true);
     }
+    // v0.7.5（REQ-166）：视频页 UI（会话31 实证：B站页面框架——简介/评论/
+    // 点赞/收藏/投币/观看数/标签/展开/推荐卡片/二维码/作者信息区）。
+    // 交互按钮（点赞/收藏/投币/转发/观看/标签/展开/简介/举报）用 standalone——
+    // 教学正文"这个方案值得点赞"（点赞后随 CJK）不误拦；"评论"后随数字
+    // （评论7=评论数）才拦（digit_after）——"评论"单独出现多为正文短句；
+    // "粉丝"独立成词（B站作者区"粉丝 1.3万"），正文"粉丝经济"（后随 CJK）不拦
+    for t in [
+        "简介", "点赞", "收藏", "投币", "观看", "标签", "展开", "二维码", "举报",
+        "稍后再看", "追番", "充电", "三连", "一键三连", "合集", "剧集", "分P",
+        "预告", "花絮", "热门", "排行榜", "投稿", "创作中心", "大会员", "粉丝", "获赞",
+    ] {
+        push_pattern(&mut p, JunkCategory::VideoPageUi, t, true);
+    }
+    p.push(JunkPattern {
+        category: JunkCategory::VideoPageUi,
+        text: "评论".to_string(),
+        standalone: true,
+        digit_after: true,
+    });
+    // 复合特征子串（独特性高、无歧义——"评论区/视频简介/播放量"不可能是
+    // 教学正文短语）；"相关推荐/推荐视频"为推荐卡片区标题
+    for t in [
+        "评论区", "视频简介", "相关推荐", "推荐视频", "播放列表", "视频详情",
+        "播放量", "观看数", "点赞数", "收藏数", "投币数", "评论数", "弹幕数",
+        "充电专属", "会员专享", "一键三连",
+    ] {
+        push_pattern(&mut p, JunkCategory::VideoPageUi, t, false);
+    }
     p
 }
 
@@ -168,11 +199,16 @@ impl UiJunkList {
         if self.timecode_enabled && has_timecode(trimmed) {
             return Some(JunkCategory::PlayerUi);
         }
+        // v0.7.5（REQ-166）：数字量词短串（"1.3万/48/178/451781112"——播放量/
+        // 点赞数/视频号）与二维码/群号（"qh202522"）——整块判定（正文数字不误杀）
+        if is_video_page_number(trimmed) || is_qr_like_id(trimmed) {
+            return Some(JunkCategory::VideoPageUi);
+        }
         for p in &self.patterns {
             let hit = if p.standalone {
                 match standalone_match_pos(trimmed, &p.text) {
                     Some(pos) => !p.digit_after || next_non_space_is_digit(trimmed, pos + p.text.chars().count()),
-                    None => false,
+                    None => p.digit_after && digit_after_match_pos(trimmed, &p.text).is_some(),
                 }
             } else {
                 trimmed.contains(&p.text)
@@ -235,6 +271,74 @@ pub fn has_timecode(text: &str) -> bool {
     false
 }
 
+/// 视频页数字量词短串判定（纯函数，REQ-166）。
+///
+/// @ai-context: 播放量/点赞数/评论数/视频号特征："48/178/1.3万/18.0万423/
+///              451781112"（会话31 实证）。防误杀设计：
+///  - 整块 ≤12 字符且数字系字符占比 ≥60%（"第 48 页"=40% 不拦；正文含数字的长句超长不拦）
+///  - 按空白切 token 匹配：纯数字 2-10 位（"2024"年份孤块拦——正文年份几乎
+///    必带"年"字，纯数字块是计数特征）；"3.14"含小数点不匹配纯数字；
+///    万量词 `^\d+(\.\d+)?万\d*$`（"1.3万/18.0万423"——OCR 常把 万 后数字粘连）；
+///    "2024年"含"年"非纯数字不拦
+fn is_video_page_number(text: &str) -> bool {
+    let total = text.chars().count();
+    if total == 0 || total > 12 {
+        return false;
+    }
+    let digitish = text
+        .chars()
+        .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '万')
+        .count();
+    if digitish * 100 / total < 60 {
+        return false;
+    }
+    text.split_whitespace().any(|tok| {
+        is_pure_digits(tok) || is_wan_quantity(tok)
+    })
+}
+
+/// 纯数字短串（2-10 位；"48/178/451781112"；1 位交给单字符规则，11 位是手机号不拦）。
+fn is_pure_digits(tok: &str) -> bool {
+    let n = tok.chars().count();
+    (2..=10).contains(&n) && tok.chars().all(|c| c.is_ascii_digit())
+}
+
+/// 万量词（"1.3万/18.0万423"；"3.14"无万不命中——测试规格 3.14 不误杀）。
+fn is_wan_quantity(tok: &str) -> bool {
+    let n = tok.chars().count();
+    if !(2..=12).contains(&n) {
+        return false;
+    }
+    let digits: String = tok.chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
+    let rest = &tok[digits.len()..];
+    if !rest.starts_with('万') {
+        return false;
+    }
+    // 万 前必须有数字（防"万"单字）；万 后只允许数字粘连（OCR 把计数粘连）。
+    // chars().skip(1) 而非 rest[1..]——万 为 3 字节 UTF-8，字节切片会 panic
+    !digits.is_empty()
+        && digits.chars().all(|c| c.is_ascii_digit() || c == '.')
+        && rest.chars().skip(1).all(|c| c.is_ascii_digit())
+}
+
+/// 二维码/群号判定（纯函数，REQ-166）：小写字母前缀 + ≥4 位数字尾（6-12 字符）。
+///
+/// @ai-context: 会话31 实证"qh202522"（二维码/学习群号）；保守边界：全大写
+///              缩略词（SGD/CNN）与混合大小写模型名（ResNet50）不命中——
+///              大写字母开头直接排除（"qh"小写前缀 + 长数字尾是群号特征）。
+fn is_qr_like_id(text: &str) -> bool {
+    let n = text.chars().count();
+    if !(6..=12).contains(&n) {
+        return false;
+    }
+    let letters: String = text.chars().take_while(|c| c.is_ascii_lowercase()).collect();
+    if letters.is_empty() {
+        return false;
+    }
+    let digits = &text[letters.len()..];
+    digits.len() >= 4 && digits.chars().all(|c| c.is_ascii_digit())
+}
+
 /// 独立成词匹配（纯函数）：返回首个独立成词匹配的字符位置。
 ///
 /// @ai-context: needle 在 hay 中且前后边界非字母/汉字/数字；
@@ -251,6 +355,35 @@ fn standalone_match_pos(hay: &str, needle: &str) -> Option<usize> {
             let left_ok = i == 0 || !is_word(chars[i - 1]);
             let right_ok = i + n.len() == chars.len() || !is_word(chars[i + n.len()]);
             if left_ok && right_ok {
+                return Some(i);
+            }
+        }
+    }
+    None
+}
+
+/// 数字紧随匹配（纯函数，v0.7.5）：左边界独立成词 + 右边界为数字（可空格）
+/// ——"评论7"（视频页评论数，无空格粘连）在 standalone_match_pos 下右边界
+/// 数字被拒（is_word 含数字），digit_after 语义需此放宽路径。
+///
+/// @ai-context: 仅 digit_after 条目使用（当前：评论/Ln/Col）——"Ln3"（数字
+///              紧随）也会命中，数学"Ln(3)"（右边界括号）不受影响（保守）。
+fn digit_after_match_pos(hay: &str, needle: &str) -> Option<usize> {
+    let chars: Vec<char> = hay.chars().collect();
+    let n: Vec<char> = needle.chars().collect();
+    if n.is_empty() || n.len() >= chars.len() {
+        return None; // 需要右边界数字，长度相等时无后继
+    }
+    let is_word = |c: char| c.is_alphanumeric() || is_cjk(c);
+    for i in 0..=(chars.len() - n.len()) {
+        if chars[i..i + n.len()] == n[..] {
+            let left_ok = i == 0 || !is_word(chars[i - 1]);
+            let mut j = i + n.len();
+            while j < chars.len() && (chars[j] == ' ' || chars[j] == '\t') {
+                j += 1;
+            }
+            let right_digit = j < chars.len() && chars[j].is_ascii_digit();
+            if left_ok && right_digit {
                 return Some(i);
             }
         }

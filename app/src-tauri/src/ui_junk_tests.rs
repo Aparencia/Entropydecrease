@@ -128,3 +128,86 @@ fn timecode_disabled_skips_timecode_rule() {
     assert!(!list.is_junk("00:12"));
     assert!(list.is_junk("回到主界面"));
 }
+
+// ────────────────────────────────────────────────
+// v0.7.5（REQ-166）：视频页 UI（VideoPageUi）
+// ────────────────────────────────────────────────
+
+#[test]
+fn video_page_ui_features_hit() {
+    // Arrange：会话31 实证样本——页面框架文字
+    let list = UiJunkList::defaults();
+    // Act & Assert：standalone 词命中（点赞/收藏 已有 PlayerUi 子串条目——
+    // 类别归属 PlayerUi 但同为垃圾，断言按 is_junk 口径）
+    assert_eq!(list.classify("简介"), Some(JunkCategory::VideoPageUi));
+    assert_eq!(list.classify("标签"), Some(JunkCategory::VideoPageUi));
+    assert_eq!(list.classify("展开"), Some(JunkCategory::VideoPageUi));
+    assert!(list.is_junk("点赞"));
+    assert!(list.is_junk("收藏"));
+    assert_eq!(list.classify("投币"), Some(JunkCategory::VideoPageUi));
+    // 复合特征子串（评论数/播放量）
+    assert_eq!(list.classify("评论区"), Some(JunkCategory::VideoPageUi));
+    assert_eq!(list.classify("播放量 1.3万"), Some(JunkCategory::VideoPageUi));
+    // 评论后随数字（评论数）命中
+    assert_eq!(list.classify("评论7"), Some(JunkCategory::VideoPageUi));
+    assert_eq!(list.classify("评论7？"), Some(JunkCategory::VideoPageUi));
+}
+
+#[test]
+fn video_page_ui_not_block_teaching_text() {
+    // Arrange：误杀保护——正文含同词短语不拦
+    let list = UiJunkList::defaults();
+    // Act & Assert：standalone 边界（后随/前随 CJK = 词内）
+    // 注意：点赞/收藏 等词在 PlayerUi 有历史子串条目（v0.6.0 字幕兜底口径），
+    // 教学句避开这些词——standalone 语义在 简介/标签/展开/粉丝 上验证
+    assert!(!list.is_junk("这个方案值得大家肯定"));
+    assert!(!list.is_junk("给数据打标签"), "标签前随汉字");
+    assert!(!list.is_junk("展开公式"), "展开后随汉字");
+    assert!(!list.is_junk("粉丝经济"), "粉丝后随汉字");
+    assert!(!list.is_junk("项目简介"), "简介前随汉字");
+    assert!(!list.is_junk("评论"), "评论单独出现不拦（语义短句）");
+}
+
+#[test]
+fn number_quantity_tokens_hit() {
+    // Arrange：会话31 实证——播放量/点赞数/视频号
+    let list = UiJunkList::defaults();
+    // Act & Assert
+    assert_eq!(list.classify("1.3万"), Some(JunkCategory::VideoPageUi));
+    assert_eq!(list.classify("1.3万0"), Some(JunkCategory::VideoPageUi));
+    assert_eq!(list.classify("1.3万 0"), Some(JunkCategory::VideoPageUi));
+    assert_eq!(list.classify("18.0万423"), Some(JunkCategory::VideoPageUi));
+    assert_eq!(list.classify("48"), Some(JunkCategory::VideoPageUi));
+    assert_eq!(list.classify("178"), Some(JunkCategory::VideoPageUi));
+    assert_eq!(list.classify("451781112"), Some(JunkCategory::VideoPageUi));
+    // 测试规格：数字量词正则边界
+    assert!(!list.is_junk("3.14"), "小数正文不误杀");
+    assert!(!list.is_junk("0.5"), "小数正文不误杀");
+    assert!(!list.is_junk("2024年"), "年份带'年'不误杀");
+    assert!(!list.is_junk("第 48 页"), "数字占比不足（40%）不拦");
+    assert!(!list.is_junk("13800138000"), "11 位手机号不拦");
+}
+
+#[test]
+fn qr_like_ids_hit() {
+    // Arrange：会话31 实证——二维码/学习群号
+    let list = UiJunkList::defaults();
+    // Act & Assert
+    assert_eq!(list.classify("qh202522"), Some(JunkCategory::VideoPageUi));
+    // 保守边界：缩略词/模型名/短 ID 不误拦
+    assert!(!list.is_junk("SGD"), "全大写缩略词");
+    assert!(!list.is_junk("CNN"), "全大写缩略词");
+    assert!(!list.is_junk("ResNet50"), "混合大小写模型名（大写开头）");
+    assert!(!list.is_junk("win11"), "长度不足 6");
+    assert!(!list.is_junk("python310"), "数字尾仅 3 位");
+}
+
+#[test]
+fn video_page_junk_mergeable_via_json() {
+    // Arrange：JSON 校准新增视频页特征（合并语义）
+    let json = r#"{"patterns": [{"category": "video-page-ui", "text": "充电专属"}]}"#;
+    let list = UiJunkList::from_json(json).unwrap();
+    // Act & Assert
+    assert_eq!(list.classify("充电专属"), Some(JunkCategory::VideoPageUi));
+    assert_eq!(list.classify("简介"), Some(JunkCategory::VideoPageUi), "内置默认仍保留");
+}
