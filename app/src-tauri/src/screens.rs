@@ -72,12 +72,52 @@ pub fn filter_usable_blocks(blocks: &[SessionOcrBlock], ui_junk: &UiJunkList) ->
 ///
 /// @ai-context: 归档图按时间戳命名（full/{ts}.webp，image_store 约定）；目录
 ///              缺失/无图 → 保持 None（前端无缩略图降级，不阻断）。
+/// @ai-context: 审查修复（2026-08-20）：目录**一次扫描**建时间戳映射（原实现
+///              每屏一次 read_dir——N 屏 = N 次目录遍历，会话多屏时浪费 IO）。
 pub fn attach_images(screens: &mut [SessionScreen], images_dir: &Path) {
+    if screens.is_empty() {
+        return;
+    }
+    let ts_list = list_full_image_timestamps(images_dir);
+    if ts_list.is_empty() {
+        return;
+    }
     for s in screens.iter_mut() {
         if s.image_ref.is_none() {
-            s.image_ref = match_image(images_dir, s.first_seen_ms);
+            s.image_ref = match_timestamp(&ts_list, s.first_seen_ms);
         }
     }
+}
+
+/// 归档 full 图时间戳列表（纯 IO，一次扫描）。
+fn list_full_image_timestamps(images_dir: &Path) -> Vec<u64> {
+    let entries = std::fs::read_dir(images_dir.join("full")).ok();
+    let mut ts: Vec<u64> = entries
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().is_some_and(|x| x == "webp"))
+        .filter_map(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .trim_end_matches(".webp")
+                .parse::<u64>()
+                .ok()
+        })
+        .collect();
+    ts.sort_unstable();
+    ts
+}
+
+/// 时间戳匹配（纯函数）：取 ≤ 目标的最近者；无则取最早者（None=空列表）。
+fn match_timestamp(sorted: &[u64], target: u64) -> Option<String> {
+    let ts = sorted
+        .iter()
+        .rev()
+        .find(|&&t| t <= target)
+        .copied()
+        .or_else(|| sorted.first().copied())?;
+    Some(format!("full/{}.webp", ts))
 }
 
 /// 屏构建核心（纯编排，无 IO）：块流 → 屏序列。
@@ -87,7 +127,9 @@ fn build_screens_inner(session_id: i64, blocks: &[SessionOcrBlock]) -> Vec<Sessi
     if full.is_empty() {
         return Vec::new();
     }
-    // ① 有 screen_id 的新数据按屏号分组（同屏块时间连续落库——连续分组成立）；
+    // ① 有 screen_id 的新数据按屏号分组（同屏块时间连续落库——连续分组成立：
+    //    在线 ScreenTracker 屏号单调递增，同一屏号绝不跨屏段出现；非连续同号
+    //    仅可能来自外部写入（防御不变量注释，遇破坏时按独立屏处理不崩溃）；
     //    无 screen_id 的旧数据单独聚类兜底
     let mut clusters: Vec<(Option<i64>, ScreenCluster)> = Vec::new();
     let mut grouped: Vec<(i64, Vec<&SessionOcrBlock>)> = Vec::new();

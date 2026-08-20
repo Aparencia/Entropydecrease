@@ -88,8 +88,8 @@ pub fn normalize(text: &str) -> String {
         .collect()
 }
 
-/// CJK 统一表意文字（含扩展 A；与 note_filter 同口径）。
-pub(crate) fn is_cjk(c: char) -> bool {
+/// CJK 统一表意文字（含扩展 A；与 note_filter/outline 各自私有实现同口径）。
+fn is_cjk(c: char) -> bool {
     let u = c as u32;
     (0x4E00..=0x9FFF).contains(&u) || (0x3400..=0x4DBF).contains(&u)
 }
@@ -230,6 +230,8 @@ pub fn cluster_blocks_into_screens(
 ///              且 x 间隔 ≤ 字高×LINE_X_GAP_RATIO → 同行（文本直接拼接，无空格——
 ///              中文字符天然连续）；否则换行。x 间隔为负（重叠）视为同行。
 /// @ai-context: 无 bbox 块降级：每块一行（按时间序，全 0 包围盒）。
+///              混合场景（部分块 bbox 缺失）时无 bbox 块按 y=0 排最前——
+///              顺序不完美但不丢内容（诚实降级，注释说明已知局限）。
 pub fn line_merge(blocks: &[ScreenBlockInput]) -> Vec<MergedLine> {
     let mut sorted: Vec<&ScreenBlockInput> = blocks.iter().collect();
     sorted.sort_by(|a, b| {
