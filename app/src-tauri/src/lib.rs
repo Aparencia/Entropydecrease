@@ -55,6 +55,8 @@ mod commands_refine_inner;
 mod commands_session;
 // v0.7.6 审查硬拆：会话 → 笔记转换管线（原料装载/结构渲染/单条转换/批量编排/预览）
 mod commands_session_note;
+// v0.7.7（REQ-182/183/184）：结构图命令层——批量捕获/手动框选/列表/删除
+mod commands_structures;
 mod commands_streaming;
 mod commands_vocab;
 mod commands_video;
@@ -341,6 +343,11 @@ pub fn run() {
             commands_images::delete_session_images_all,
             commands_images::save_user_screenshot,
             commands_images::session_images_base_url,
+            // 结构图（REQ-182/183/184，v0.7.7：非线性结构图像捕获持久化 + 图库）
+            commands_structures::capture_session_structures,
+            commands_structures::capture_structure_manual,
+            commands_structures::list_session_structure_images,
+            commands_structures::delete_structure_image,
             // 会话音频落盘（REQ-068，v0.6.0 M4：状态/清理——M6 清理 UI 消费）
             commands_audio::session_audio_status,
             commands_audio::session_audio_cleanup,

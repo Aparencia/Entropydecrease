@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use serde::Serialize;
+use tauri::Emitter;
 use tauri::State;
 
 use crate::commands::AppState;
@@ -100,8 +101,42 @@ pub async fn stop_live_session(state: State<'_, AppState>) -> Result<Option<i64>
     // 无结构区域 → 内部降级跳过——run_refine 已有完整降级链）
     if let Some(sid) = stopped {
         trigger_auto_refine(&state, sid);
+        // v0.7.7（REQ-182）：停止后自动结构图捕获（非线性结构"图像即产物"；
+        // 无屏/无图/版面空 → 内部降级跳过；去重幂等可重跑）
+        trigger_auto_capture_structures(&state, sid);
     }
     Ok(stopped)
+}
+
+/// 停止后自动结构图捕获触发（v0.7.7 REQ-182）。
+///
+/// @ai-context: 与 trigger_auto_refine 并列的停止后批处理——纯本地规则管线
+///              （版面分析 + 启发式过滤），无模型依赖；失败仅留日志不阻断
+///              （捕获是增强非主链路）。
+fn trigger_auto_capture_structures(state: &AppState, session_id: i64) {
+    let state: AppState = (*state).clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        match crate::structure_capture::capture_session_structures(
+            &state.db,
+            &state.data_dir,
+            session_id,
+            now,
+        ) {
+            Ok(summary) if summary.captured > 0 => {
+                eprintln!(
+                    "[Structures] 会话 {} 停止：自动捕获 {} 张结构图（扫描 {} 屏）",
+                    session_id, summary.captured, summary.screens_scanned
+                );
+                let _ = state.app.emit("session:structures-updated", &summary);
+            }
+            Ok(_) => {} // 无结构区域/无图：静默跳过（常态）
+            Err(e) => eprintln!("[Structures] 会话 {} 自动捕获失败: {}", session_id, e),
+        }
+    });
 }
 
 /// 停止后自动结构精修触发（v0.7.3 REQ-159）。
