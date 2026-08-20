@@ -98,7 +98,7 @@ pub fn delete_structure_image(db: &Db, id: i64) -> Result<Option<StructureImageR
             row_to_record,
         )
         .optional()?;
-    if let Some(rec) = &existing {
+    if existing.is_some() {
         conn.execute("DELETE FROM session_structure_images WHERE id = ?1", params![id])?;
     }
     Ok(existing)

@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import ArtifactView from "../components/ArtifactView";
+import BoxSelectOverlay from "../components/BoxSelectOverlay";
 import ImageGallery from "../components/ImageGallery";
 import NotePreviewView from "../components/NotePreviewView";
 import SpeakerSwitchCard from "../components/SpeakerSwitchCard";
@@ -52,6 +53,9 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
   const [outline, setOutline] = useState<OutlineEntry[]>([]);
   // v0.7.3（REQ-160）：屏卡配图 baseUrl（图集同款：convertFileSrc 拼本地路径）
   const [baseUrl, setBaseUrl] = useState("");
+  // v0.7.7（REQ-184）：框选截取状态（first_seen_ms 标识屏）+ 保存反馈
+  const [selectingScreen, setSelectingScreen] = useState<number | null>(null);
+  const [toastMsg, setToastMsg] = useState("");
   const sessionId = detail.session.id;
 
   // 质量报告 + 大纲随详情加载（失败不阻断详情展示）
@@ -295,18 +299,52 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
                   </div>
                 )}
                 {s.image_ref && baseUrl && (
-                  <img
-                    src={convertFileSrc(`${baseUrl}/${s.image_ref}`)}
-                    alt={`屏 ${i + 1}`}
-                    loading="lazy"
-                    style={{
-                      maxWidth: 260,
-                      marginTop: 6,
-                      borderRadius: 6,
-                      border: "1px solid #e5e7eb",
-                      display: "block",
-                    }}
-                  />
+                  <div style={{ marginTop: 6 }}>
+                    {toastMsg && (
+                      <div style={{ fontSize: 11, color: "#047857", background: "#ecfdf5", border: "1px solid #6ee7b7", borderRadius: 6, padding: "4px 8px", marginBottom: 4 }}>
+                        {toastMsg}
+                      </div>
+                    )}
+                    <div style={{ position: "relative", display: "inline-block" }}>
+                      <img
+                        src={convertFileSrc(`${baseUrl}/${s.image_ref}`)}
+                        alt={`屏 ${i + 1}`}
+                        loading="lazy"
+                        style={{
+                          maxWidth: 260,
+                          borderRadius: 6,
+                          border: "1px solid #e5e7eb",
+                          display: "block",
+                        }}
+                      />
+                      {/* v0.7.7（REQ-184）：屏卡全帧图框选截取（无图屏不出现按钮） */}
+                      {selectingScreen === s.first_seen_ms && (
+                        <BoxSelectOverlay
+                          src={convertFileSrc(`${baseUrl}/${s.image_ref}`)}
+                          sessionId={sessionId}
+                          screenId={s.screen_id}
+                          onDone={() => {
+                            setSelectingScreen(null);
+                            setToastMsg("✓ 已保存为结构图（见图集「结构图」区段）");
+                            setTimeout(() => setToastMsg(""), 4000);
+                          }}
+                          onCancel={() => setSelectingScreen(null)}
+                        />
+                      )}
+                    </div>
+                    <div>
+                      <button
+                        style={{ ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #0d9488", background: "#f0fdfa", color: "#0f766e", marginTop: 4 }}
+                        onClick={() => {
+                          setSelectingScreen(s.first_seen_ms);
+                          setToastMsg("");
+                        }}
+                        title="拖框截取此屏中的流程图/图表等非线性结构为结构图"
+                      >
+                        ✂ 框选截取
+                      </button>
+                    </div>
+                  </div>
                 )}
                 {raw.length > 0 && (
                   <details style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>

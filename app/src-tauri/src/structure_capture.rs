@@ -138,7 +138,7 @@ fn frame_candidates(
     // 均匀抽样（首尾必含——首帧=屏开始画面、尾帧=最近画面，都值得参与选优）
     let last = in_window.len() - 1;
     (0..max)
-        .map(|i| in_window[((i as f32 * last as f32 / (max - 1) as f32).round() as usize)])
+        .map(|i| in_window[(i as f32 * last as f32 / (max - 1) as f32).round() as usize])
         .collect()
 }
 

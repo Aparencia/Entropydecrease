@@ -15,6 +15,8 @@ import { listen } from "@tauri-apps/api/event";
 import { WindowSelectCard } from "../components/WindowSelectCard";
 import VideoImportPanel from "../components/VideoImportPanel";
 import { OcrDeviceSetting } from "../components/OcrDeviceSetting";
+// TD-2026-08-19-E 清偿：模型磁盘占用面板（REQ-131 命令前端接入）
+import ModelDiskPanel from "../components/ModelDiskPanel";
 // v0.7.0 M1（REQ-101）：音频预处理链开关（CER 微基准定默认后的用户通道）
 import { AudioPreprocSetting } from "../components/AudioPreprocSetting";
 // 2026-08 A2：实时音频电平条（VU 表——试听自检实时化）
@@ -517,6 +519,8 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
           {/* 结构分析模型（v0.5.0 模型版：版面/表格/公式按需下载，未下载自动规则版） */}
           <div style={panel}>
             <StructureModelSetting />
+            {/* TD-2026-08-19-E 清偿：模型磁盘占用面板（REQ-131 命令前端接入） */}
+            <ModelDiskPanel />
           </div>
 
           {/* 素材输入 + 提取按钮（v0.1.0 文件流水线；审查硬拆——MaterialInputPanel） */}

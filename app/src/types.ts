@@ -135,6 +135,44 @@ export interface SessionDetail {
   screens: SessionScreen[];
 }
 
+/** 结构图记录（Rust StructureImageRecord；v0.7.7 REQ-183 非线性结构图像持久化） */
+export interface StructureImageRecord {
+  id: number;
+  sessionId: number;
+  /** 所属屏（null=旧数据无屏/手动无屏上下文） */
+  screenId: number | null;
+  /** table | formula | code | image | manual */
+  kind: string;
+  /** 帧坐标 JSON */
+  bbox: string;
+  /** 裁剪源帧时间戳 */
+  sourceTsMs: number;
+  /** struct/xxx.webp 相对路径 */
+  cropPath: string;
+  /** auto | manual */
+  source: string;
+  createdAt: number;
+}
+
+/** 图内文字检索命中（Rust OcrBlockHit；TD-2026-08-19-E 前端接入） */
+export interface OcrBlockHit {
+  sessionId: number;
+  sessionTitle: string;
+  ocrBlockId: number;
+  /** 关键帧相对会话起点时间戳（图定位基准） */
+  timestampMs: number;
+  /** 命中 OCR 文本（含关键词） */
+  text: string;
+  /** subtitle | full */
+  region: string;
+  /** 命中图相对路径（full/xxx.webp；null=无归档图） */
+  imagePath: string | null;
+  /** 命中块所属屏（null=旧数据无屏） */
+  screenId: number | null;
+  screenFirstMs: number | null;
+  screenLastMs: number | null;
+}
+
 /** 流式 ASR 模型就绪状态 */
 export interface StreamingModelStatus {
   ready: boolean;

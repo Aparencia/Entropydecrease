@@ -10,7 +10,7 @@
  */
 import { useCallback, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { CourseGroup, SegmentHit, Session, SessionListItem } from "../types";
+import type { CourseGroup, OcrBlockHit, SegmentHit, Session, SessionListItem } from "../types";
 import { fmtDate, fmtDuration, fmtMs } from "../utils/fmt";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
@@ -28,7 +28,8 @@ const viewNoteBtn: React.CSSProperties = {
 type StatusFilter = "all" | "recording" | "finished" | "failed";
 type ConvertedFilter = "all" | "todo" | "done";
 type SortBy = "time-desc" | "time-asc" | "duration";
-type SearchMode = "title" | "content";
+// TD-2026-08-19-E 清偿：三模式搜索——标题（本地）/ 内容（段搜索）/ 画面（图内文字检索）
+type SearchMode = "title" | "content" | "ocr";
 
 interface Props {
   items: SessionListItem[];
@@ -59,6 +60,9 @@ export default function SessionListPanel({
   const [searchMode, setSearchMode] = useState<SearchMode>("title");
   const [searchKw, setSearchKw] = useState("");
   const [hits, setHits] = useState<SegmentHit[] | null>(null); // REQ-079：段搜索命中
+  // TD-2026-08-19-E 清偿：图内文字检索命中（REQ-133 search_ocr_blocks 前端接入）
+  const [ocrHits, setOcrHits] = useState<OcrBlockHit[] | null>(null);
+  const [ocrBusy, setOcrBusy] = useState(false);
   const [filterStatus, setFilterStatus] = useState<StatusFilter>("all");
   const [filterConverted, setFilterConverted] = useState<ConvertedFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("time-desc");
@@ -76,6 +80,23 @@ export default function SessionListPanel({
       setHits(await invoke<SegmentHit[]>("search_session_segments", { keyword: kw }));
     } catch (e) {
       showToast(`段搜索失败: ${e}`, "err");
+    }
+  };
+
+  /** TD-2026-08-19-E 清偿：图内文字检索（REQ-133——搜 PPT 上的词命中图） */
+  const searchOcrBlocks = async () => {
+    const kw = searchKw.trim();
+    if (!kw) {
+      setOcrHits(null);
+      return;
+    }
+    setOcrBusy(true);
+    try {
+      setOcrHits(await invoke<OcrBlockHit[]>("search_ocr_blocks", { keyword: kw }));
+    } catch (e) {
+      showToast(`画面检索失败: ${e}`, "err");
+    } finally {
+      setOcrBusy(false);
     }
   };
 
@@ -287,8 +308,9 @@ export default function SessionListPanel({
       {/* 搜索：标题（本地即时过滤）/ 转写内容（段搜索）双模式单输入框 */}
       <div style={{ padding: 10, display: "flex", gap: 6 }}>
         <div style={{ display: "flex", border: "1px solid #e5e7eb", borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
-          <button style={modeBtn(searchMode === "title")} onClick={() => { setSearchMode("title"); setHits(null); }}>标题</button>
-          <button style={modeBtn(searchMode === "content")} onClick={() => setSearchMode("content")}>内容</button>
+          <button style={modeBtn(searchMode === "title")} onClick={() => { setSearchMode("title"); setHits(null); setOcrHits(null); }}>标题</button>
+          <button style={modeBtn(searchMode === "content")} onClick={() => { setSearchMode("content"); setHits(null); setOcrHits(null); }}>内容</button>
+          <button style={modeBtn(searchMode === "ocr")} onClick={() => { setSearchMode("ocr"); setHits(null); setOcrHits(null); }}>画面</button>
         </div>
         {searchMode === "title" ? (
           <input
@@ -297,6 +319,19 @@ export default function SessionListPanel({
             placeholder="搜索标题/窗口…"
             style={{ flex: 1, fontSize: 12, padding: "5px 8px" }}
           />
+        ) : searchMode === "ocr" ? (
+          <>
+            <input
+              value={searchKw}
+              onChange={(e) => setSearchKw(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void searchOcrBlocks()}
+              placeholder="画面文字关键词（PPT 上的词）…"
+              style={{ flex: 1, fontSize: 12, padding: "5px 8px" }}
+            />
+            <button style={btn} onClick={() => void searchOcrBlocks()} disabled={ocrBusy}>
+              {ocrBusy ? "检索中…" : "图搜"}
+            </button>
+          </>
         ) : (
           <>
             <input
@@ -374,6 +409,30 @@ export default function SessionListPanel({
               </div>
             ))}
           </div>
+        ) : ocrHits ? (
+          /* TD-2026-08-19-E 清偿：图内文字检索命中（命中图 → 跳详情看屏卡/图集） */
+          <div style={{ padding: 8 }}>
+            <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>
+              「{searchKw}」画面命中 {ocrHits.length} 条（点击跳详情）
+            </div>
+            {ocrHits.map((h, i) => (
+              <div
+                key={i}
+                onClick={() => onOpenDetail(h.sessionId)}
+                style={{ fontSize: 12, color: "#374151", padding: "6px 8px", cursor: "pointer", borderBottom: "1px solid #f3f4f6" }}
+              >
+                <div style={{ fontWeight: 500, color: "#0f766e" }}>
+                  {h.sessionTitle}
+                  {h.imagePath && <span style={{ marginLeft: 6 }} title="此命中有关联图">📷</span>}
+                </div>
+                <div style={{ color: "#9ca3af", fontVariantNumeric: "tabular-nums" }}>
+                  [{fmtMs(h.timestampMs)}]
+                  {h.screenFirstMs != null && ` · 屏 ${h.screenId ?? "?"} ${fmtMs(h.screenFirstMs)}–${fmtMs(h.screenLastMs ?? 0)}`}
+                </div>
+                <div>{h.text}</div>
+              </div>
+            ))}
+          </div>
         ) : grouped && groupedView ? (
           /* 课程分组（折叠 + 组内筛选排序） */
           groupedView.map((g) => (
@@ -401,8 +460,26 @@ export default function SessionListPanel({
       </div>
 
       {/* 批量操作栏（勾选后出现；段搜索命中视图隐藏——避免对不可见列表误操作） */}
-      {!hits && selected.size > 0 && (
+      {!hits && !ocrHits && selected.size > 0 && (
         <div style={{ borderTop: "1px solid #e5e7eb", padding: 8, display: "flex", gap: 6, alignItems: "center", background: "#fff" }}>
+          {/* v0.7.7（REQ-186 修复）：全选框——当前筛选视图（filtered）口径三态
+              （indeterminate 用回调 ref 每渲染刷新——部分选中显示横杠） */}
+          <input
+            type="checkbox"
+            ref={(el) => {
+              if (el) el.indeterminate = selected.size > 0 && selected.size < filtered.length;
+            }}
+            checked={selected.size === filtered.length && filtered.length > 0}
+            onChange={() => {
+              if (selected.size === filtered.length && filtered.length > 0) {
+                clearSelection();
+              } else {
+                setSelected(new Set(filtered.map((f) => f.session.id)));
+              }
+            }}
+            style={{ cursor: "pointer", flexShrink: 0 }}
+            title="全选当前筛选视图的会话"
+          />
           <span style={{ fontSize: 12, color: "#374151" }}>已选 {selected.size} 个</span>
           <button
             style={{ ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #0d9488", background: "#f0fdfa", color: "#0f766e", fontWeight: 600 }}

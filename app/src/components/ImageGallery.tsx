@@ -11,6 +11,8 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import ImagePreviewOverlay from "./ImagePreviewOverlay";
+import StructureImageSection from "./StructureImageSection";
 
 const btn: React.CSSProperties = { padding: "4px 10px", cursor: "pointer", fontSize: 12 };
 
@@ -18,6 +20,8 @@ export default function ImageGallery({ sessionId }: { sessionId: number }) {
   const [images, setImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // v0.7.7（REQ-187 修复）：参考图详情预览（点击缩略图 → 大图遮罩）
+  const [preview, setPreview] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -78,7 +82,12 @@ export default function ImageGallery({ sessionId }: { sessionId: number }) {
       )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8 }}>
         {images.map((rel) => (
-          <div key={rel} style={{ border: "1px solid #e5e7eb", borderRadius: 6, overflow: "hidden", position: "relative" }}>
+          <div
+            key={rel}
+            onClick={() => setPreview(rel)}
+            style={{ border: "1px solid #e5e7eb", borderRadius: 6, overflow: "hidden", position: "relative", cursor: "pointer" }}
+            title="点击查看大图"
+          >
             {baseUrl && (
               <img
                 src={convertFileSrc(`${baseUrl}/${rel}`)}
@@ -90,7 +99,10 @@ export default function ImageGallery({ sessionId }: { sessionId: number }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "3px 6px", fontSize: 10, color: "#6b7280" }}>
               <span title={rel}>{rel.split("/")[1]?.replace(".webp", "") ?? rel}</span>
               <button
-                onClick={() => void removeImage(rel)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void removeImage(rel);
+                }}
                 style={{ border: "none", background: "none", color: "#dc2626", cursor: "pointer", fontSize: 11 }}
                 title="删除此图"
               >
@@ -100,6 +112,15 @@ export default function ImageGallery({ sessionId }: { sessionId: number }) {
           </div>
         ))}
       </div>
+      {preview && baseUrl && (
+        <ImagePreviewOverlay
+          src={convertFileSrc(`${baseUrl}/${preview}`)}
+          title={preview}
+          onClose={() => setPreview(null)}
+        />
+      )}
+      {/* v0.7.7（REQ-185）：结构图区段（非线性结构图像持久化图库） */}
+      <StructureImageSection sessionId={sessionId} baseUrl={baseUrl} />
     </div>
   );
 }
