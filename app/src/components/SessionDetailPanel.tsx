@@ -10,6 +10,7 @@
  */
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import ArtifactView from "../components/ArtifactView";
 import ImageGallery from "../components/ImageGallery";
 import NotePreviewView from "../components/NotePreviewView";
@@ -49,6 +50,8 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
   const [quality, setQuality] = useState<QualityReport | null>(null);
   // M6（REQ-077）：大纲（产物视图侧边导航）
   const [outline, setOutline] = useState<OutlineEntry[]>([]);
+  // v0.7.3（REQ-160）：屏卡配图 baseUrl（图集同款：convertFileSrc 拼本地路径）
+  const [baseUrl, setBaseUrl] = useState("");
   const sessionId = detail.session.id;
 
   // 质量报告 + 大纲随详情加载（失败不阻断详情展示）
@@ -62,6 +65,9 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
     void invoke<OutlineEntry[]>("session_outline", { id: sessionId })
       .then(setOutline)
       .catch(() => undefined);
+    void invoke<string>("session_images_base_url", { sessionId })
+      .then(setBaseUrl)
+      .catch(() => setBaseUrl(""));
   }, [sessionId]);
 
   return (
@@ -230,18 +236,91 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
             ))}
           </div>
 
-          {/* 画面要点 */}
-          <h3 style={{ fontSize: 13, margin: "16px 0 6px" }}>画面要点（OCR）</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-            {detail.ocr_blocks.length === 0 && <p style={{ fontSize: 12, color: "#9ca3af" }}>本会话无画面识别内容</p>}
-            {detail.ocr_blocks.map((b) => (
-              <div key={b.id} id={`ocr-${sessionId}-${b.timestamp_ms}`} style={{ fontSize: 12, color: "#4b5563" }}>
-                <span style={{ color: "#9ca3af", fontVariantNumeric: "tabular-nums" }}>[{fmtMs(b.timestamp_ms)}]</span>{" "}
-                {b.text}
-                {b.region === "subtitle" && <span style={{ color: "#0d9488", marginLeft: 4 }}>字幕</span>}
+          {/* 画面要点（v0.7.3 屏卡流：区间+标题+正文+标签+配图+结构徽标；可展开块级明细复查） */}
+          <h3 style={{ fontSize: 13, margin: "16px 0 6px" }}>
+            画面要点（OCR）· {detail.screens.length} 屏
+            <span style={{ color: "#9ca3af", fontWeight: 400 }}>
+              {detail.screens.length === 0 ? "" : `（原始 ${detail.ocr_blocks.length} 块）`}
+            </span>
+          </h3>
+          {detail.screens.length === 0 && (
+            <p style={{ fontSize: 12, color: "#9ca3af" }}>本会话无画面识别内容</p>
+          )}
+          {detail.screens.map((s, i) => {
+            // 块级明细（原料复查）：屏时间区间内的原始块
+            const raw = detail.ocr_blocks.filter(
+              (b) => b.timestamp_ms >= s.first_seen_ms && b.timestamp_ms <= s.last_seen_ms,
+            );
+            return (
+              <div
+                key={i}
+                id={`ocr-${sessionId}-${s.first_seen_ms}`}
+                style={{
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 8,
+                  padding: "8px 10px",
+                  marginBottom: 8,
+                  background: "#fafafa",
+                }}
+              >
+                <div style={{ fontSize: 11, color: "#0f766e", fontWeight: 600, marginBottom: 4 }}>
+                  📄 屏 {s.screen_id ?? i + 1} · {fmtMs(s.first_seen_ms)} – {fmtMs(s.last_seen_ms)}
+                  {s.structure.length > 0 &&
+                    s.structure.map((st, j) => (
+                      <span key={j} style={{ marginLeft: 8, color: "#7c3aed" }}>
+                        {st.kind === "table" ? "📊" : st.kind === "formula" ? "∑" : "⟨code⟩"} {st.kind}
+                      </span>
+                    ))}
+                </div>
+                {s.title && (
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", marginBottom: 2 }}>
+                    {s.title}
+                  </div>
+                )}
+                {s.body.map((b, j) => (
+                  <div key={j} style={{ fontSize: 12.5, color: "#374151", lineHeight: 1.6 }}>
+                    {b}
+                  </div>
+                ))}
+                {s.labels.length > 0 && (
+                  <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>
+                    标签：{s.labels.join(" · ")}
+                  </div>
+                )}
+                {s.structure.length > 0 && (
+                  <div style={{ fontSize: 11.5, color: "#7c3aed", marginTop: 3 }}>
+                    {s.structure.map((st, j) => (
+                      <div key={j}>[{st.kind}] {st.rendered ?? st.text.slice(0, 60)}</div>
+                    ))}
+                  </div>
+                )}
+                {s.image_ref && baseUrl && (
+                  <img
+                    src={convertFileSrc(`${baseUrl}/${s.image_ref}`)}
+                    alt={`屏 ${i + 1}`}
+                    loading="lazy"
+                    style={{
+                      maxWidth: 260,
+                      marginTop: 6,
+                      borderRadius: 6,
+                      border: "1px solid #e5e7eb",
+                      display: "block",
+                    }}
+                  />
+                )}
+                {raw.length > 0 && (
+                  <details style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
+                    <summary style={{ cursor: "pointer" }}>块级明细（{raw.length} 块，可复查误合并）</summary>
+                    {raw.map((b) => (
+                      <div key={b.id}>
+                        [{fmtMs(b.timestamp_ms)}] {b.text}
+                      </div>
+                    ))}
+                  </details>
+                )}
               </div>
-            ))}
-          </div>
+            );
+          })}
 
           {/* 参考图集（v0.5.0 M6：REQ-051 三层图结构） */}
           <h3 style={{ fontSize: 13, margin: "16px 0 6px" }}>参考图集</h3>

@@ -96,11 +96,39 @@ export interface SessionOcrBlock {
   region: string;
 }
 
-/** 会话详情（会话 + 转写段 + OCR 块） */
+/** 屏内结构块（Rust ScreenStructure；v0.7.3 REQ-159） */
+export interface ScreenStructure {
+  kind: string; // table | formula | code
+  text: string;
+  /** 精修渲染产物（None=未精修/失败） */
+  rendered: string | null;
+}
+
+/** 画面要点屏（Rust SessionScreen；v0.7.3 REQ-155/158/160，ADR-015） */
+export interface SessionScreen {
+  session_id: number;
+  /** 屏号（None=旧数据聚类派生） */
+  screen_id: number | null;
+  first_seen_ms: number;
+  last_seen_ms: number;
+  /** 标题角色行（None=无 bbox 降级/无标题） */
+  title: string | null;
+  /** 正文行（行合并后） */
+  body: string[];
+  /** 图注/标签 */
+  labels: string[];
+  /** 归档 full 图相对路径（None=无匹配图） */
+  image_ref: string | null;
+  structure: ScreenStructure[];
+}
+
+/** 会话详情（会话 + 转写段 + OCR 块 + 画面要点屏） */
 export interface SessionDetail {
   session: Session;
   segments: SessionSegment[];
   ocr_blocks: SessionOcrBlock[];
+  /** v0.7.3：画面要点屏卡（旧数据聚类兜底） */
+  screens: SessionScreen[];
 }
 
 /** 流式 ASR 模型就绪状态 */
@@ -146,6 +174,8 @@ export interface ImportProgress {
 export interface OcrEvent {
   timestampMs: number;
   text: string;
+  /** v0.7.3：块所属屏号（前端按屏摘要显示） */
+  screenId: number;
 }
 
 /** 会话信息（Rust SessionInfo，camelCase 契约；live:session-info 事件，v0.7.2 REQ-151） */
@@ -416,7 +446,10 @@ export interface NoteFilterResult {
   title: string;
   markdown: string;
   kept: SessionSegment[];
+  /** 画面要点（屏段落行） */
   ocr_points: string[];
+  /** v0.7.3：画面要点屏（结构化渲染用） */
+  ocr_screens: SessionScreen[];
   stats: FilterStats;
   filtered: FilteredItem[];
   merged: MergedItem[];

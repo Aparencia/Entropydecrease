@@ -11,7 +11,7 @@
  *              生效，落库时经 ai_decisions 回传保持输出一致。
  */
 import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import type { NoteFilterResult, TextFilterDecision, TextFilterReview, TextFilterStatus } from "../types";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
@@ -36,12 +36,19 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/** 轻量 Markdown 渲染（标题/段落/列表——笔记正文结构有限，避免引渲染库；
- *  所有文本经 escapeHtml 转义——本地内容仍按不可信输入处理） */
-function renderMarkdown(md: string): string {
+/** 轻量 Markdown 渲染（标题/段落/列表/屏配图——笔记正文结构有限，避免引渲染库；
+ *  所有文本经 escapeHtml 转义——本地内容仍按不可信输入处理；
+ *  v0.7.3：`![alt](session-images/...)` 配图行 → 本地图（baseUrl + convertFileSrc）） */
+function renderMarkdown(md: string, imageBaseUrl: string): string {
   return md
     .split("\n")
     .map((line) => {
+      // 屏配图行（v0.7.3 REQ-160：笔记画面要点配图，本地路径不出本机）
+      const img = line.match(/^\s*-\s*!\[([^\]]*)\]\(([^)]*)\)$/);
+      if (img) {
+        const src = imageBaseUrl ? convertFileSrc(`${imageBaseUrl}/${img[2]}`) : "";
+        return `<img src="${src}" alt="${escapeHtml(img[1])}" loading="lazy" style="max-width:260px;border-radius:6px;border:1px solid #e5e7eb;margin:4px 0" />`;
+      }
       if (line.startsWith("# ")) return `<h2 style="font-size:15px;margin:10px 0 4px">${escapeHtml(line.slice(2))}</h2>`;
       if (line.startsWith("## ")) return `<h3 style="font-size:13px;margin:8px 0 4px;color:#0f766e">${escapeHtml(line.slice(3))}</h3>`;
       if (line.startsWith("- ")) return `<div style="font-size:12px;color:#4b5563">• ${escapeHtml(line.slice(2))}</div>`;
@@ -60,6 +67,8 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
   const [aiStatus, setAiStatus] = useState<TextFilterStatus | null>(null);
   // 审查修复（2026-08-19）：AI 判定列表——落库回传保证预览/落库一致
   const [aiDecisions, setAiDecisions] = useState<TextFilterDecision[]>([]);
+  // v0.7.3（REQ-160）：屏配图 baseUrl（图集同款）
+  const [baseUrl, setBaseUrl] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -73,7 +82,10 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
   useEffect(() => {
     void load();
     void invoke<TextFilterStatus>("text_filter_status").then(setAiStatus).catch(() => undefined);
-  }, [load]);
+    void invoke<string>("session_images_base_url", { sessionId })
+      .then(setBaseUrl)
+      .catch(() => setBaseUrl(""));
+  }, [load, sessionId]);
 
   /** 一键落库（复用 session_to_note；AI 判定结果回传保持预览一致——REQ-081） */
   const saveToNote = async () => {
@@ -147,7 +159,7 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
           </span>
         ))}
         <span style={{ fontSize: 11, color: "#6b7280", alignSelf: "center" }}>
-          保留 {preview.kept.length} 段 · 画面要点 {preview.ocr_points.length} 条
+          保留 {preview.kept.length} 段 · 画面要点 {preview.ocr_screens.length} 屏
         </span>
       </div>
 
@@ -184,7 +196,7 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
       {/* 过滤后笔记正文 */}
       <div
         style={{ fontSize: 13, lineHeight: 1.6, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}
-        dangerouslySetInnerHTML={{ __html: renderMarkdown(preview.markdown) }}
+        dangerouslySetInnerHTML={{ __html: renderMarkdown(preview.markdown, baseUrl) }}
       />
 
       {/* 被过滤内容对照（可复查误杀——来源定位原料） */}

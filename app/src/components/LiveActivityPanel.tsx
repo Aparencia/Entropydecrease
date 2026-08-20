@@ -40,10 +40,12 @@ interface PendingLine {
   committed: boolean;
 }
 
-/** 画面要点行 */
+/** 画面要点行（v0.7.3 REQ-161：一行=一屏摘要——同屏块合并显示） */
 interface OcrLine {
   id: number;
   time: number;
+  /** 屏号（同屏事件合并为一行） */
+  screenId: number;
   text: string;
 }
 
@@ -235,8 +237,20 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
       }),
       listen<OcrEvent>("live:ocr", (e) => {
         setOcrLines((prev) => {
-          // TD-043：时间戳取后端会话纪元
-          const next = [...prev, { id: nextId(), time: e.payload.timestampMs, text: e.payload.text }];
+          // TD-043：时间戳取后端会话纪元；v0.7.3（REQ-161）：同屏块合并为
+          // 一行屏摘要（首块 + 后续小字块追加，防 175 行碎片刷屏）
+          const last = prev[prev.length - 1];
+          if (last && last.screenId === e.payload.screenId) {
+            const next = [...prev];
+            const text =
+              last.text.length < 80 ? `${last.text} ${e.payload.text}` : last.text;
+            next[next.length - 1] = { ...last, text };
+            return next;
+          }
+          const next = [
+            ...prev,
+            { id: nextId(), time: e.payload.timestampMs, screenId: e.payload.screenId, text: e.payload.text },
+          ];
           return next.length > MAX_KEPT ? next.slice(next.length - MAX_KEPT) : next;
         });
         countsRef.current.ocr += 1;
@@ -459,13 +473,15 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
                 <span style={{ fontSize: 11, color: "#9ca3af", width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
                   {fmtTime(o.time)}
                 </span>
-                <span style={{ width: 8, height: 8, borderRadius: 4, flexShrink: 0, alignSelf: "center", background: "#2563eb" }} />
+                <span style={{ fontSize: 10, color: "#2563eb", flexShrink: 0, fontWeight: 600 }}>
+                  屏{o.screenId}
+                </span>
                 <span style={{ color: "#1e40af" }}>{o.text}</span>
               </div>
             ))}
             {counts.ocr > SHOW_OCR_LINES && (
               <p style={{ fontSize: 11, color: "#9ca3af", margin: "4px 0 0", paddingLeft: 52 }}>
-                ⋯ 共 {counts.ocr} 条，仅显示最近 {SHOW_OCR_LINES} 条（会话页可看全部）
+                ⋯ 共 {counts.ocr} 块 / {ocrLines.length} 屏，仅显示最近 {SHOW_OCR_LINES} 屏（会话页可看全部）
               </p>
             )}
           </div>
