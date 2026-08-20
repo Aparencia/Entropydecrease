@@ -12,6 +12,7 @@
 | app/src-tauri/src/vocab.rs | ~373 | 词表域（存储/纠错/候选提取/n-gram 分词）内聚；分词纯逻辑与存储同域便于单测 | 若再增长：collect_tokens/split_runs 拆至 vocab_tokens.rs |
 | app/src-tauri/src/db_sessions.rs | ~330 | 会话仓储（会话/段/OCR 块/建议查询）；SQL 与行映射内聚；v0.7.1 列表标记子查询 | 若再增长：recent_ocr_texts 等建议查询拆至 db_sessions_queries.rs |
 | app/src/pages/ClassroomPage.tsx | ~548 | 装配层页面：左栏配置区（就绪清单/窗口选择/实时捕获/视频导入/OCR 设备/词表/素材）+ 右栏内容区；2026-08 审查硬拆（>600 违规）已拆出 ClassroomRightPane（右栏）与 MaterialInputPanel（素材+提取）回归 548 | 若再增长：将实时捕获卡片拆出 LiveCaptureCard（状态与事件监听下沉） |
+| app/src/components/AiServicePanel.tsx | ~390 | v0.8.0 M1（REQ-138/139/140）AI 服务设置面板：全局开关/密钥管理（掩码+DPAPI 保存）/端点模型/测试连接/余额卡片/授权确认卡/审计列表——配置面板 UI 内聚（表单态与视图解耦），拆分会割裂配置域 | 若再增长：余额卡片与审计列表拆至 AiBalanceCard.tsx / AiAuditList.tsx |
 | app/src-tauri/src/video_profile.rs | ~394 | v0.5.0 M1（REQ-043）：档案域（类型/检测投票/记忆偏好/JSON IO）内聚；档案常量数据已拆至 video_profile_data.rs | 若再增长：检测投票与记忆偏好拆至 video_profile_detect.rs |
 | app/src-tauri/src/layout_analyzer.rs | ~475 | v0.5.0 M3（REQ-047）：规则版版面分析（行/列投影 + 表格线检测 + 区域分类启发式）内聚于同一分类管线；六轮审查再增（公式启发加固 + 低信息纯色方差滤除）至 ~475 | 若再增长：区域分类启发式拆至 layout_classify.rs |
 | app/src-tauri/src/artifact_templates.rs | ~501 | v0.5.0 M7（REQ-052）：五档案模板函数（讲义/步骤卡/摘要/对话纪要/会议纪要）内聚于同一模板域，各模板共享原料注入签名 | 若再增长：会议/访谈模板拆至 artifact_templates_meeting.rs |
