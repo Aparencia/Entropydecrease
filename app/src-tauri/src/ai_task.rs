@@ -15,8 +15,14 @@ use serde::{Deserialize, Serialize};
 pub const SLICE_MAX_CHARS: usize = 8000;
 
 /// 任务状态（前端任务卡片：进行中(按片进度)/成功/失败(原因)）。
+///
+/// @ai-context: 契约修复（2026-08-21 真机"调用有记录但结果未使用"根因）：
+///              曾带 rename_all="camelCase" 把变体名小写化（"succeeded"/{"running"}），
+///              前端按 PascalCase 比较（"Succeeded"/"Running" in st）全部失配——
+///              任务后台真实成功、前端永久"排队中"、结果永不取回。
+///              现去掉 rename_all：变体名=默认 PascalCase，字段=snake_case，
+///              与前端 types.ts 逐字匹配（契约快照测试见 ai_task_tests.rs）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub enum AiTaskState {
     Pending,
     Running {
@@ -30,6 +36,12 @@ pub enum AiTaskState {
 }
 
 /// 任务失败原因（降级链可见——不静默降级；前端按类引导出口）。
+///
+/// @ai-context: 契约修复（2026-08-21）：camelCase 下 InsufficientBalance →
+///              "insufficientBalance"、InvalidResponse → "invalidResponse"，
+///              前端期待 "balance"/"invalid"（四类出口）——显式 rename 对齐；
+///              其余变体 camelCase 转换后本就与前端匹配（unauthorized/network/
+///              quota/server/other）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum AiTaskFailure {
@@ -38,12 +50,14 @@ pub enum AiTaskFailure {
     /// 网络错误（引导重试）
     Network(String),
     /// 余额不足（引导充值/切免费档）
+    #[serde(rename = "balance")]
     InsufficientBalance(String),
     /// 配额受限（引导明日再试）
     Quota(String),
     /// 服务端错误（引导稍后重试）
     Server(String),
     /// 响应非法（已丢弃回退——本地版保留，不丢不假）
+    #[serde(rename = "invalid")]
     InvalidResponse(String),
     /// 其他
     Other(String),

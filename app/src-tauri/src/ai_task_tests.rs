@@ -5,7 +5,7 @@
 //!              失败 kind/message 访问。
 
 use crate::ai_client::AiClientError;
-use crate::ai_task::{slice_note, AiTaskFailure, SLICE_MAX_CHARS};
+use crate::ai_task::{slice_note, AiTaskFailure, AiTaskState, SLICE_MAX_CHARS};
 
 #[test]
 fn short_note_single_slice() {
@@ -83,4 +83,64 @@ fn failure_mapping_from_client_error() {
         assert_eq!(f.kind(), expected_kind, "错误 {:?} 映射类别", err);
         assert!(!f.message().is_empty());
     }
+}
+
+/// 契约快照测试（2026-08-21 真机"调用有记录但结果未使用"根因的回归护栏）：
+///
+/// @ai-context: 前端 types.ts 按 PascalCase 变体名 + snake_case 字段消费
+///              AiTaskState（"Pending"/{"Running":{finished_slices,...}}/
+///              "Succeeded"/{"Failed":{reason}}），失败原因按四类小写标签
+///              （unauthorized/network/balance/quota/server/invalid/other）。
+///              本测试断言 serde 输出 = 前端期望的 JSON 字面量——任何一端
+///              契约漂移立即红，杜绝"后端成功前端永久排队中"类事故复发。
+#[test]
+fn serde_contract_snapshot_matches_frontend() {
+    // AiTaskState：变体名 PascalCase（unit variant = 字符串字面量）
+    assert_eq!(serde_json::to_string(&AiTaskState::Pending).unwrap(), r#""Pending""#);
+    assert_eq!(serde_json::to_string(&AiTaskState::Succeeded).unwrap(), r#""Succeeded""#);
+    // struct variant：外部标签 PascalCase + 字段 snake_case
+    let running = AiTaskState::Running { finished_slices: 1, total_slices: 3 };
+    assert_eq!(
+        serde_json::to_string(&running).unwrap(),
+        r#"{"Running":{"finished_slices":1,"total_slices":3}}"#
+    );
+    // 失败嵌套 reason
+    let failed = AiTaskState::Failed { reason: AiTaskFailure::Unauthorized("x".into()) };
+    assert_eq!(
+        serde_json::to_string(&failed).unwrap(),
+        r#"{"Failed":{"reason":{"unauthorized":"x"}}}"#
+    );
+    // AiTaskFailure：四类出口标签（camelCase + 两个显式 rename）
+    assert_eq!(
+        serde_json::to_string(&AiTaskFailure::Unauthorized("a".into())).unwrap(),
+        r#"{"unauthorized":"a"}"#
+    );
+    assert_eq!(
+        serde_json::to_string(&AiTaskFailure::Network("n".into())).unwrap(),
+        r#"{"network":"n"}"#
+    );
+    assert_eq!(
+        serde_json::to_string(&AiTaskFailure::InsufficientBalance("b".into())).unwrap(),
+        r#"{"balance":"b"}"#
+    );
+    assert_eq!(
+        serde_json::to_string(&AiTaskFailure::Quota("q".into())).unwrap(),
+        r#"{"quota":"q"}"#
+    );
+    assert_eq!(
+        serde_json::to_string(&AiTaskFailure::Server("s".into())).unwrap(),
+        r#"{"server":"s"}"#
+    );
+    assert_eq!(
+        serde_json::to_string(&AiTaskFailure::InvalidResponse("i".into())).unwrap(),
+        r#"{"invalid":"i"}"#
+    );
+    assert_eq!(
+        serde_json::to_string(&AiTaskFailure::Other("o".into())).unwrap(),
+        r#"{"other":"o"}"#
+    );
+    // 反序列化回环（任务注册表存 JSON——恢复路径依赖）
+    let v = serde_json::to_value(&running).unwrap();
+    let back: AiTaskState = serde_json::from_value(v).unwrap();
+    assert_eq!(back, running);
 }
