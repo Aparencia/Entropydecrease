@@ -77,9 +77,7 @@ impl AiSettings {
     ///
     /// @ai-context: 失败文案携带引导（未开启→去设置页开开关；未授权→先同意
     ///              授权说明），供前端弹引导，不静默降级（REQ-140 验收：授权前
-    ///              任何 AI 调用不可达）。M1 无消费方（M2 精修/M3 补充采用），
-    ///              登记豁免 dead_code（与 ai_guardrails V1.0 预留同模式）。
-    #[allow(dead_code)]
+    ///              任何 AI 调用不可达）。由 M2 精修 / M3 补充命令消费。
     pub fn content_gate(&self) -> Result<(), String> {
         if !self.enabled {
             return Err("AI 功能未开启（设置页全局开关默认关闭）".to_string());
@@ -92,7 +90,8 @@ impl AiSettings {
 
     /// 非内容类 AI 调用门控（余额查询/测试连接：仅要求开关开启——避免关闭
     /// 状态下误以为功能可用；测试连接为配置验证操作不 gate，见 command 层）。
-    /// M1 无消费方（预留；与 content_gate 同登记豁免）。
+    /// 当前无消费方（预留——若未来余额查询/测试连接要求开启开关时启用），
+    /// 登记豁免 dead_code（与 ai_guardrails V1.0 预留同模式）。
     #[allow(dead_code)]
     pub fn enabled_gate(&self) -> Result<(), String> {
         if !self.enabled {

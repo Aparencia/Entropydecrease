@@ -16,7 +16,7 @@ use std::collections::HashSet;
 use tauri::State;
 
 use crate::ai_protocol::TextFilterDecision;
-use crate::analysis::analyze_session_opt;
+use crate::analysis::{analyze_session_opt, SessionAnalysis};
 use crate::commands::{normalize_title, AppState};
 use crate::db::Db;
 use crate::db_sessions::SESSION_STATUS_RECORDING;
@@ -53,25 +53,15 @@ fn load_note_material(
     Ok((session, segments, ocr_blocks))
 }
 
-/// 结构渲染接线（v0.7.6 REQ-177/178，预览/落库/AI 复核三出口共用）。
-///
-/// @ai-context: 在 refresh_screen_points 之后调用——净化/配图/警示行先落定，
-///              结构层在其上叠加章节标题与词汇表块；预览与落库同函数同口径
-///              （REQ-081 单一管线双出口契约）。
-/// @ai-context: 输入为会话原料（segments/ocr_blocks）——章节检测/大纲标题/
-///              术语表均为纯本地规则（analysis/outline/glossary 复用）——
-///              不依赖云端 AI（本地优先铁律）；失败不阻断转笔记主链路
-///              （分析失败按空结构处理，不抛错）。
-/// @ai-context: pub(crate)（v0.7.6 审查修复）：commands_ai.rs AI 复核出口
-///              复用——复核后预览与落库同含结构层（REQ-081 三出口一致）。
-pub(crate) fn apply_note_structure(
-    result: &mut NoteFilterResult,
+/// 结构渲染分析（纯本地：章节/术语——apply_note_structure 与
+/// build_rule_draft_with_analysis 共用，审查修复 2026-08-21：消除双跑）。
+fn analyze_for_structure(
     db: &Db,
     session: &Session,
     segments: &[SessionSegment],
     ocr_blocks: &[SessionOcrBlock],
     env: &PurifyEnv,
-) {
+) -> SessionAnalysis {
     // 档案驱动：章节检测/术语表按档案开关（网课开、口播关——analysis 内部门控）
     let kind = session
         .profile
@@ -94,7 +84,41 @@ pub(crate) fn apply_note_structure(
         events,
         screens: Vec::new(),
     };
-    let analysis = analyze_session_opt(&detail, kind, &env.symbol);
+    analyze_session_opt(&detail, kind, &env.symbol)
+}
+
+/// 结构渲染接线（v0.7.6 REQ-177/178，预览/落库/AI 复核三出口共用）。
+///
+/// @ai-context: 在 refresh_screen_points 之后调用——净化/配图/警示行先落定，
+///              结构层在其上叠加章节标题与词汇表块；预览与落库同函数同口径
+///              （REQ-081 单一管线双出口契约）。
+/// @ai-context: 输入为会话原料（segments/ocr_blocks）——章节检测/大纲标题/
+///              术语表均为纯本地规则（analysis/outline/glossary 复用）——
+///              不依赖云端 AI（本地优先铁律）；失败不阻断转笔记主链路
+///              （分析失败按空结构处理，不抛错）。
+/// @ai-context: pub(crate)（v0.7.6 审查修复）：commands_ai.rs AI 复核出口
+///              复用——复核后预览与落库同含结构层（REQ-081 三出口一致）。
+pub(crate) fn apply_note_structure(
+    result: &mut NoteFilterResult,
+    db: &Db,
+    session: &Session,
+    segments: &[SessionSegment],
+    ocr_blocks: &[SessionOcrBlock],
+    env: &PurifyEnv,
+) {
+    let analysis = analyze_for_structure(db, session, segments, ocr_blocks, env);
+    apply_note_structure_with_analysis(result, session, ocr_blocks, env, &analysis);
+}
+
+/// 结构渲染接线（复用外部分析结果——精修任务避免双跑 analyze，审查修复
+/// 2026-08-21：build_rule_draft_with_analysis 提供一次分析供结构层 + 任务共用）。
+pub(crate) fn apply_note_structure_with_analysis(
+    result: &mut NoteFilterResult,
+    _session: &Session,
+    ocr_blocks: &[SessionOcrBlock],
+    env: &PurifyEnv,
+    analysis: &SessionAnalysis,
+) {
     let outline = detect_outline_smart(ocr_blocks, &result.ocr_screens, &OutlineConfig::default());
     let _ = render_note_structure(
         result,
@@ -119,6 +143,19 @@ pub(crate) fn build_rule_draft(
     id: i64,
     title: Option<String>,
 ) -> Result<NoteFilterResult, String> {
+    Ok(build_rule_draft_with_analysis(db, ui_junk, env, data_dir, id, title)?.0)
+}
+
+/// 构建规则草稿 + 结构分析（审查修复 2026-08-21：分析与结构渲染一次完成并
+/// 返回 analysis——AI 精修任务直接复用章节/术语，消除二次 analyze 双跑）。
+pub(crate) fn build_rule_draft_with_analysis(
+    db: &Db,
+    ui_junk: &UiJunkList,
+    env: &PurifyEnv,
+    data_dir: &std::path::Path,
+    id: i64,
+    title: Option<String>,
+) -> Result<(NoteFilterResult, SessionAnalysis), String> {
     let (session, segments, ocr_blocks) = load_note_material(db, id)?;
     let fallback = format!("{}（会话）", session.title);
     let title = normalize_title(title.unwrap_or_default(), &fallback);
@@ -132,8 +169,9 @@ pub(crate) fn build_rule_draft(
     crate::note_filter::refresh_screen_points(&mut result);
     // v0.7.6（REQ-177/178）：结构渲染——章节标题 + 词汇表块（纯本地增强层；
     // 无结构数据/分析失败 → 原样输出不阻断，见 apply_note_structure）
-    apply_note_structure(&mut result, db, &session, &segments, &ocr_blocks, env);
-    Ok(result)
+    let analysis = analyze_for_structure(db, &session, &segments, &ocr_blocks, env);
+    apply_note_structure_with_analysis(&mut result, &session, &ocr_blocks, env, &analysis);
+    Ok((result, analysis))
 }
 
 /// 会话 → 笔记核心（v0.7.1 提取：单条与批量共用同一管线）。

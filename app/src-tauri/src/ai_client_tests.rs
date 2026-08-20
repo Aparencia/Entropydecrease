@@ -1,9 +1,32 @@
 //! ai_client.rs 单测（AAA 模式；payload/解析纯函数——网络路径不单测）。
 
 use crate::ai_client::{
-    build_chat_payload, extract_content, parse_json_object, AiClient, AiClientConfig, AiClientError,
+    build_chat_payload, chat_completions_url, extract_content, parse_json_object, AiClient,
+    AiClientConfig, AiClientError,
 };
 use crate::ai_settings::AiSettings;
+
+#[test]
+fn chat_url_preserves_v1_segment() {
+    // 审查回归（2026-08-21）：/v1 不得被 trim——默认端点 + 自定义端点均保留
+    assert_eq!(
+        chat_completions_url("https://api.siliconflow.cn/v1"),
+        "https://api.siliconflow.cn/v1/chat/completions"
+    );
+    assert_eq!(
+        chat_completions_url("https://api.siliconflow.cn/v1/"),
+        "https://api.siliconflow.cn/v1/chat/completions"
+    );
+    assert_eq!(
+        chat_completions_url("https://custom.example.com/v1"),
+        "https://custom.example.com/v1/chat/completions"
+    );
+    // 用户配置裸主机（无 /v1）时按原样拼接（端点兜底由设置页提示约束）
+    assert_eq!(
+        chat_completions_url("https://custom.example.com"),
+        "https://custom.example.com/chat/completions"
+    );
+}
 
 #[test]
 fn payload_has_expected_shape() {

@@ -72,6 +72,17 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
     };
   }, [taskId]);
 
+  // 审查修复（2026-08-21）：组件卸载时停止轮询——否则 interval 持续 invoke
+  // 并对已卸载组件 setState（切会话/关面板后泄漏）
+  useEffect(() => {
+    return () => {
+      if (polling.current) {
+        clearInterval(polling.current);
+        polling.current = null;
+      }
+    };
+  }, []);
+
   useEffect(() => {
     void invoke<AiSettingsView>("ai_get_settings").then(setSettings).catch(() => undefined);
   }, []);

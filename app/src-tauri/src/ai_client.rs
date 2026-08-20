@@ -104,10 +104,7 @@ impl AiClient {
             return Err(AiClientError::Auth("未配置 API 密钥（设置页保存或配置环境变量）".to_string()));
         }
         let payload = build_chat_payload(&self.config.model, system, user);
-        let url = format!(
-            "{}/chat/completions",
-            self.config.base_url.trim_end_matches('/').trim_end_matches("/v1")
-        );
+        let url = chat_completions_url(&self.config.base_url);
         let agent = ureq::AgentBuilder::new()
             .timeout(std::time::Duration::from_secs(self.config.timeout_secs.max(5)))
             .build();
@@ -168,14 +165,22 @@ impl AiClient {
     ///
     /// @ai-context: 重试仅针对 429/5xx/传输错误（幂等读操作）；401/402/403
     ///              不重试直接归一错误；解析失败（非 JSON/结构非法）→ Parse。
-    /// @ai-context: M1 无消费方（M2 ai_note_refine/M3 ai_enrich 采用——
-    ///              chat_json = chat_text + parse_json_object 组合），
-    ///              登记豁免 dead_code（与 ai_guardrails V1.0 预留同模式）。
-    #[allow(dead_code)]
+    /// @ai-context: 由 M2 ai_note_refine / M3 ai_note_enrich 适配器消费
+    ///              （chat_json = chat_text + parse_json_object 组合）。
     pub fn chat_json(&self, system: &str, user: &str) -> Result<serde_json::Value, AiClientError> {
         let raw = self.chat_text(system, user)?;
         parse_json_object(&raw)
     }
+}
+
+/// chat/completions 端点 URL（纯函数可单测：只修剪尾斜杠）。
+///
+/// @ai-context: 审查修复（2026-08-21）：**不得** trim "/v1"——base_url 默认含
+///              /v1（OpenAI 兼容端点约定 https://api.siliconflow.cn/v1），
+///              trim_end_matches("/v1") 会把 /v1 一并删掉 → 请求打到缺 /v1
+///              的路径 404，测试连接/余额/复核/精修/补充全部网络调用失败。
+pub fn chat_completions_url(base_url: &str) -> String {
+    format!("{}/chat/completions", base_url.trim_end_matches('/'))
 }
 
 /// 构建 chat/completions payload（纯函数可单测；temperature=0 + json_object）。
@@ -212,8 +217,7 @@ pub fn extract_content(body: &str) -> Result<String, AiClientError> {
 ///
 /// @ai-context: 推理模型偶发用代码块包裹 JSON——先剥围栏再 parse；
 ///              解析失败 → Parse 错误（调用方回退本地结果，不丢不假）。
-/// @ai-context: M1 仅 chat_json 引用（M2/M3 消费），登记豁免 dead_code。
-#[allow(dead_code)]
+///              由 chat_json 消费（M2/M3 适配器链）。
 pub fn parse_json_object(raw: &str) -> Result<serde_json::Value, AiClientError> {
     let trimmed = raw.trim();
     let stripped = trimmed

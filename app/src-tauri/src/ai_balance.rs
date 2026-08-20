@@ -81,9 +81,11 @@ impl AiBalanceAdapter {
         if self.api_key.trim().is_empty() {
             return Err("未配置 API 密钥（设置页保存密钥或配置环境变量 SILICONFLOW_API_KEY）".to_string());
         }
+        // 审查修复（2026-08-21）：只修剪尾斜杠，不得 trim "/v1"（同 ai_client
+        // ——base_url 含 /v1 是 OpenAI 兼容端点约定，删掉会 404）
         let url = format!(
             "{}/user/balance",
-            self.base_url.trim_end_matches('/').trim_end_matches("/v1")
+            self.base_url.trim_end_matches('/')
         );
         let agent = ureq::AgentBuilder::new()
             .timeout(std::time::Duration::from_secs(self.timeout_secs.max(5)))

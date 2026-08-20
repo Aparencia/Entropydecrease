@@ -23,13 +23,12 @@ use crate::ai_mock::AiMockAdapter;
 use crate::ai_note_refine::AiNoteRefineAdapter;
 use crate::ai_refine_protocol::AiRefineRequest;
 use crate::ai_task::{slice_note, AiTaskFailure, AiTaskState, SLICE_MAX_CHARS};
-use crate::analysis::{analyze_session_opt, SessionAnalysis};
 use crate::commands::AppState;
-use crate::commands_session_note::build_rule_draft;
+use crate::commands_session_note::build_rule_draft_with_analysis;
 use crate::note_diff::{diff_markdown, diff_stats, DiffOp};
 use crate::note_filter::PurifyEnv;
 use crate::outline::{detect_outline_smart, OutlineConfig};
-use crate::types::{NewNote, Note, SessionDetail};
+use crate::types::{NewNote, Note};
 use crate::video_profile::ProfileKind;
 
 /// mock 模式 env 键（本地规则精修，不联网——测试/离线开发，ai_text_filter 先例）。
@@ -246,10 +245,12 @@ fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
         corrections: st.ocr_corrections.clone(),
     };
     let outcome: Result<AiRefineResult, AiTaskFailure> = (|| {
-        // ① 规则草稿（单一管线三出口——AI 输入基线 = 规则版输出基线）
-        let draft = build_rule_draft(&st.db, &st.ui_junk, &env, &st.data_dir, session_id, None)
-            .map_err(AiTaskFailure::Other)?;
-        // ② 精修上下文（档案/章节/术语——与 apply_note_structure 同源分析）
+        // ① 规则草稿 + 结构分析一次完成（审查修复 2026-08-21：build_rule_draft_
+        //    with_analysis 返回 analysis——章节/术语直接复用，消除二次 analyze 双跑）
+        let (draft, analysis) =
+            build_rule_draft_with_analysis(&st.db, &st.ui_junk, &env, &st.data_dir, session_id, None)
+                .map_err(AiTaskFailure::Other)?;
+        // ② 精修上下文（档案/章节/术语——analysis 已含章节边界与术语表）
         let session = st
             .db
             .get_session(session_id)
@@ -260,16 +261,7 @@ fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
             .as_deref()
             .map(ProfileKind::parse)
             .unwrap_or(ProfileKind::Lecture);
-        let segments = st.db.list_segments(session_id).map_err(|e| AiTaskFailure::Other(e.to_string()))?;
         let ocr_blocks = st.db.list_ocr_blocks(session_id).map_err(|e| AiTaskFailure::Other(e.to_string()))?;
-        let detail = SessionDetail {
-            session: session.clone(),
-            segments,
-            ocr_blocks: ocr_blocks.clone(),
-            events: Vec::new(),
-            screens: Vec::new(),
-        };
-        let analysis: SessionAnalysis = analyze_session_opt(&detail, kind, &env.symbol);
         let outline = detect_outline_smart(&ocr_blocks, &draft.ocr_screens, &OutlineConfig::default());
         let chapters: Vec<String> = if outline.is_empty() {
             analysis
@@ -352,18 +344,23 @@ pub(crate) fn set_task(st: &AppState, task_id: u64, new_state: AiTaskState) {
 }
 
 /// 注册表容量守卫（超限丢弃最旧终态任务——防无界增长）。M3 补充任务复用。
+///
+/// @ai-context: 审查修复（2026-08-21）：原实现终态任务数 < excess 时删不完
+///              （并行 Running 占满时 len 持续 > CAP）——改为 while 循环，
+///              无终态可删时停止（Running 任务不可删——任务执行中）。
 pub(crate) fn trim_tasks(tasks: &mut HashMap<u64, AiTaskEntry>) {
-    if tasks.len() <= TASKS_CAP {
-        return;
-    }
-    let mut ids: Vec<u64> = tasks.iter().filter_map(|(id, t)| match t.state {
-        AiTaskState::Pending | AiTaskState::Running { .. } => None,
-        _ => Some(*id),
-    }).collect();
-    ids.sort_unstable();
-    let excess = tasks.len() - TASKS_CAP;
-    for id in ids.into_iter().take(excess) {
-        tasks.remove(&id);
+    while tasks.len() > TASKS_CAP {
+        let oldest_terminal = tasks
+            .iter()
+            .filter(|(_, t)| !matches!(t.state, AiTaskState::Pending | AiTaskState::Running { .. }))
+            .min_by_key(|(id, _)| **id)
+            .map(|(id, _)| *id);
+        match oldest_terminal {
+            Some(id) => {
+                tasks.remove(&id);
+            }
+            None => break,
+        }
     }
 }
 

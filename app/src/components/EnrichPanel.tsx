@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type {
   AiEnrichResult,
   AiSettingsView,
@@ -99,14 +100,10 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
   }, [taskId]);
 
   useEffect(() => {
-    const un = (async () => {
-      const off = await import("@tauri-apps/api/event").then((m) =>
-        m.listen<[number, AiTaskState]>("ai:task-update", (e) => {
-          if (e.payload[0] === taskId) void handleState(e.payload[1]);
-        }),
-      );
-      return off;
-    })();
+    // 审查修复（2026-08-21）：静态 import + 事件监听（与 AiRefineCard 一致）
+    const un = listen<[number, AiTaskState]>("ai:task-update", (e) => {
+      if (e.payload[0] === taskId) void handleState(e.payload[1]);
+    });
     return () => {
       un.then((off) => off());
     };
@@ -119,6 +116,17 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
       if (st) void handleState(st);
     }, 1500);
   };
+
+  useEffect(() => {
+    // 审查修复（2026-08-21）：组件卸载时停止轮询——否则 interval 持续 invoke
+    // 并对已卸载组件 setState（切会话/关面板后泄漏）
+    return () => {
+      if (polling.current) {
+        clearInterval(polling.current);
+        polling.current = null;
+      }
+    };
+  }, []);
 
   const toggle = (k: EnrichKind) => {
     setSelected((prev) => {

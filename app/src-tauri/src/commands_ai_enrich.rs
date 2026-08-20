@@ -59,7 +59,9 @@ pub fn ai_enrich_estimate(
 ) -> Result<RefineEstimateView, String> {
     let kinds = normalize_kinds(selected_kinds)?;
     let note = get_note(state.inner(), note_id)?;
-    let chars = note.content.chars().count() + kinds.len() * 80; // 子项提示词开销
+    // 预估 = 笔记正文 + 子项提示词开销（每子项约 80 字符的系统说明——
+    // 保守上界，与 ai_cost 字符→token 同口径）
+    let chars = note.content.chars().count() + kinds.len() * 80;
     let remember = state.ai_settings.lock().map(|s| s.remember_cost_choice).unwrap_or(false);
     Ok(RefineEstimateView { estimate: estimate_for_content(chars), remember_cost_choice: remember })
 }
@@ -190,7 +192,8 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
             .get_note(note_id)
             .map_err(|e| AiTaskFailure::Other(e.to_string()))?
             .ok_or_else(|| AiTaskFailure::Other("笔记不存在".to_string()))?;
-        // 档案：关联会话档案（无则空=提示词回退讲义式）
+        // 档案：关联会话档案（无则空=提示词回退讲义式）。DB 错误吞掉是有意
+        // 降级（补充不因档案缺失失败——档案只是提示词参考，非必需输入）
         let profile = match note.session_id {
             Some(sid) => st
                 .db
