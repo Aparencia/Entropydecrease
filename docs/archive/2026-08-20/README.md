@@ -27,17 +27,17 @@
 | `docs/Foresight/brainstorming-classroom-assistant-mechanisms.md`（含 fed-guide） | 机制摘要投喂文档——供其他 AI 模型头脑风暴输入，持续活跃 |
 | `docs/Foresight/brainstorming-no-cloud-ai-extraction-limit.md` | 前瞻构想（未排期）——活跃 |
 
-## 本批工作摘要（2026-08-20 四轮，模型接入/自动化配置/课堂助手接线盘点）
+## 本批工作摘要（2026-08-20 五轮，技术债偿还批次）
 
-- **模型接入全景盘点**（只读核验 + 即修 1 项）：ASR 三级（流式 Zipformer 主链路 → SenseVoice 整句重打分 → 标点恢复）+ OCR（PaddleOCR 经 oar-ocr，ModelScope 自动缓存）+ 结构模型三类（应用内一键下载）+ 说话人（wespeaker embedding，脚本下载）+ AI 云端（SiliconFlow 骨架，v0.8.0 排期实装）；分发四路径（捆绑 models/**/* + 流式 hf-mirror 自动下载 + 结构应用内下载 + OCR ModelScope 缓存）；自动化配置：OCR 设备 Auto 微基准决策、档案自动检测+记忆、引擎预热、停止后自动精修+结构图捕获
-- **四轮审查**：无新增代码（f9c9638 后零变更）——沿用三轮结论（9 项已修复）；盘点即修 S1（speaker_change 过时 dead_code 豁免移除，56e1133）
-- **盘点发现登记 open 7 笔**：TD-2026-08-20-D（说话人模型无应用内下载）、E（就绪清单不含说话人/标点/结构模型）、F（标点模型缺失静默降级）、G（备份/恢复无 UI）、H（音频落盘 UI 承诺未兑现）、I（live:window-lost 无监听）+ 观察项 8 条——详见 [tech-debt.md](./tech-debt.md)
+- **技术债偿还 7 笔全清**（提交 0336b51/1a88581/5969f55）：TD-A 会话转笔记三命令迁 spawn_blocking（千段长会话不再阻塞 IPC）；TD-D 说话人模型应用内一键下载（speaker_download.rs 双镜像/.part 原子写/进度事件 + SpeakerSwitchCard 下载按钮）；TD-E/F 就绪清单补说话人/标点模型（health_status 增查 + ReadyCheckCard 两项）；TD-G 备份/恢复 UI（BackupPanel，REQ-107 TRUST-1 可达化）；TD-H 音频落盘管理面板（AudioStoragePanel，REQ-068 承诺兑现）；TD-I 目标窗口丢失横幅（live:window-lost 监听 + 可关闭）
+- **台账 open 归零**：五轮核验 7 笔全部 closed（注明提交哈希）；carried 4 笔保持（TD-040 deliberate + TD-2026-08-19-D/F/G）；观察项 8 条保持（观察 1 处置更新：拷贝已随 TD-A 移出 IPC 线程）
+- 验证：1176 单测全绿 + 前端构建通过
 
 ## 技术债摘要
 
-- **未偿 4 笔**（全部 carried，四轮核验保持）：TD-040（deliberate）+ TD-2026-08-19-D/F/G
-- **今日已偿 16 笔**：二轮 6 笔（H1/H2/M1/M2/L1/L2）+ TD-B/TD-C/TD-E + 三轮审查 9 笔（R1~R9）+ 盘点即修 S1（56e1133）
-- **新登记 open 7 笔**（TD-2026-08-20-A：spawn_blocking 改造；D/E/F：模型接入缺口；G/H/I：前端接线缺口）+ 观察项 8 条
+- **未偿 4 笔**（全部 carried，五轮核验保持）：TD-040（deliberate）+ TD-2026-08-19-D/F/G
+- **今日已偿 23 笔**：二轮 6 笔（H1/H2/M1/M2/L1/L2）+ TD-B/TD-C/TD-E + 三轮审查 9 笔（R1~R9）+ 盘点即修 S1 + **五轮偿还批次 7 笔（TD-A/D/E/F/G/H/I）**
+- **新登记 open 0 笔**（台账 open 归零）+ 观察项 8 条
 
 ## 关联
 

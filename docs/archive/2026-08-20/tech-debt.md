@@ -1,9 +1,9 @@
-# 技术债清单（权威：2026-08-20 四轮滚动——模型接入/自动化配置/课堂助手接线盘点后）
+# 技术债清单（权威：2026-08-20 五轮滚动——技术债偿还批次后）
 
 > 本清单为当前唯一权威债务清单，归档日滚动更新；旧归档清单仅历史追溯。
-> 来源：三轮清单滚动（v0.7.7 结构图批次后）+ 模型接入全景盘点
-> （speaker_engine/streaming_asr/ocr/structure_models/model_downloader 等模块核验，
-> 证据见会话盘点输出）+ 四轮审查（无新增代码——f9c9638 后零变更，沿用三轮结论）。
+> 来源：四轮清单滚动（模型/前端接线盘点后）+ 技术债偿还批次
+> （TD-A/D/E/F/G/H/I 七笔全部 closed：0336b51/1a88581/5969f55，见"今日已偿"）。
+> 五轮核验：open 7 笔全部偿清——台账 open 归零；carried 4 笔保持。
 
 ## 未偿债务（逐笔核验；carried 仅留 ID + 一行摘要）
 
@@ -38,23 +38,25 @@
 | （三轮审查 R8） | StructureImageSection 用 error state 显示非错误信息（重跑无新增显示红色） | info state 分离（错误红/信息灰）；提交 bca36da |
 | （三轮审查 R9） | structure_capture_tests 冗余行 `let _: FrameGrid = grid;` | 删除；提交 bca36da |
 
-## 今日新登记 open（审查观察，暂不修）
+## 今日新登记 open
 
-| ID | 摘要 | 处置 |
-|----|------|------|
-| TD-2026-08-20-A | preview_session_note/convert_to_note 为 async 命令但主体同步执行，v0.7.6 起叠加 analyze_session_opt 全量分析（章节/术语/重点/练习/书面化）——千段长会话阻塞 IPC 线程；review_text_filter 已有 spawn_blocking 先例 | open（低）：当前会话量级可接受；长会话性能专项时按 review_text_filter 模式改造（数据装载/过滤/分析迁 spawn_blocking） |
-| TD-2026-08-20-D | 说话人模型（wespeaker）无应用内一键下载——仅有 scripts/download-speaker-model.ps1；SpeakerSwitchCard 只能提示用户手动跑脚本（对照：流式/结构模型均有应用内下载命令+UI） | open（中）：建议按 structure_models 模式加 speaker 下载命令+UI 入口（speaker_engine.rs 路径约定 speaker-embedding/model.onnx，无下载器） |
-| TD-2026-08-20-E | 就绪清单（ReadyCheckCard）不含说话人/标点模型——health_status 的 missing_models 只查流式四件套 + SenseVoice（commands_diag.rs:53-67）；说话人模型缺失到会话详情才由 SpeakerSwitchCard 提示 | open（低）：health_status 增查 speaker/punctuation 模型文件存在性，就绪清单加两项 |
-| TD-2026-08-20-F | 标点恢复模型（models/punctuation/model.int8.onnx）缺失时懒加载静默降级（streaming_asr.rs:132-140），无任何提示；仅 download-punctuation.mjs 脚本兜底 | open（低）：随 TD-E 一并处理（health_status 查文件 + 提示）；缺失不影响主链路（无标点降级） |
-| TD-2026-08-20-G | 备份/恢复（backup_create/backup_restore，REQ-107 TRUST-1）后端已实施但全应用无 UI 入口——数据备份能力不可达 | open（中）：设置/管理页加备份面板（清单+创建+恢复入口）；前端盘点发现 |
-| TD-2026-08-20-H | session_audio_status/session_audio_cleanup 后端注释自称"M6 清理 UI 消费"但前端零调用——注释承诺未兑现 | open（低）：会话页/设置页补音频落盘状态与清理入口，或修正注释 |
-| TD-2026-08-20-I | live:window-lost 事件（live_frame_process.rs:128/206）无前端监听——实时捕获中目标窗口丢失用户无提示 | open（中）：ClassroomPage 监听事件出一次性横幅（与 asr-degraded 同模式） |
+**五轮核验（2026-08-20 技术债偿还批次）：open 全部偿清——台账 open 归零。**
+
+| ID | 摘要 | 偿还方式 |
+|----|------|----------|
+| TD-2026-08-20-A | 会话→笔记三命令（session_to_note/batch/preview）async 但主体同步执行——千段长会话阻塞 IPC 线程 | 三命令迁 spawn_blocking（AppState clone 移入闭包，review_text_filter 先例）；提交 1a88581 |
+| TD-2026-08-20-D | 说话人模型（wespeaker）无应用内一键下载 | 新增 speaker_download.rs 下载器（双镜像回退/.part 原子写/进度事件）+ download_speaker_model/speaker_model_download_status 命令 + SpeakerSwitchCard 下载按钮（进度展示、完成自动重分析）；提交 0336b51 |
+| TD-2026-08-20-E | 就绪清单（ReadyCheckCard）不含说话人/标点模型 | health_status 增查 speaker/punctuation 文件 + ReadyCheckCard 加两项（缺失明细提示）；提交 0336b51 |
+| TD-2026-08-20-F | 标点恢复模型缺失静默降级无提示 | 随 TD-E 一并（health_status 查文件 + 就绪清单提示"无标点降级"）；提交 0336b51 |
+| TD-2026-08-20-G | 备份/恢复（REQ-107 TRUST-1）无 UI 入口 | BackupPanel（创建备份 + dialog 选文件恢复 + 覆盖确认 + 重启提示）；提交 5969f55 |
+| TD-2026-08-20-H | 音频落盘状态/清理 UI 承诺未兑现 | AudioStoragePanel（状态/清理/未启用提示）挂课堂助手设置区；提交 0336b51 |
+| TD-2026-08-20-I | live:window-lost 无前端监听 | ClassroomPage 监听出一次性横幅（可关闭，停止会话自动清除）；提交 0336b51 |
 
 ## 观察项（登记不立债，保持跟踪）
 
 | ID | 摘要 | 处置 |
 |----|------|------|
-| （观察 1） | apply_note_structure 构造 SessionDetail 时对 segments/ocr_blocks 全量 clone（千段会话每次预览/转换 2 次拷贝） | 量级为 MB 级拷贝，毫秒级成本；若长会话分析改 spawn_blocking（TD-A）时一并评估借用形态 |
+| （观察 1） | apply_note_structure 构造 SessionDetail 时对 segments/ocr_blocks 全量 clone（千段会话每次预览/转换 2 次拷贝） | 五轮核验：拷贝现位于 spawn_blocking 线程内（TD-A 后）不再阻塞 UI；消除拷贝收益微小，保持跟踪 |
 | （观察 2） | render_note_structure 在无章节/无术语时仍重建整篇 markdown（逐字节一致但白算） | 正确性已验证（黄金测试 M2）；如需优化可加"无结构数据早退"（与全关早退同模式），收益微小 |
 | （观察 3） | 前端统计卡未展示 titled_chapters（有标题命中的章节数）——仅展示章节总数/词汇表数 | 展示面可后续迭代补（前端一行事）；数据已随 FilterStats 落库 |
 | （盘点观察 4） | VAD 无模型——实际为 RMS 能量阈值 + 自适应 P10 分位数（vad_adaptive.rs），与 AGENTS.md"Silero VAD"表述不符 | 文档/规范差异：更新 AGENTS.md §2 表述或补 Silero 模型接入（产品未承诺具体模型，倾向改文档） |
