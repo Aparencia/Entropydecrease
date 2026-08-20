@@ -12,7 +12,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-import type { NoteFilterResult, TextFilterDecision, TextFilterReview, TextFilterStatus } from "../types";
+import type { Note, NoteFilterResult, TextFilterDecision, TextFilterReview, TextFilterStatus } from "../types";
 import AiRefineCard from "./AiRefineCard";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
@@ -79,6 +79,9 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
   const [aiDecisions, setAiDecisions] = useState<TextFilterDecision[]>([]);
   // v0.7.3（REQ-160）：屏配图 baseUrl（图集同款）
   const [baseUrl, setBaseUrl] = useState("");
+  // 2026-08-21：AI 精修采纳后预览联动——采纳成功 → 拉取笔记（精修版）就地展示，
+  // 解决「精修成功但预览无变化、看起来没被使用」的体验缺口（原 onApplied 未接线）
+  const [adopted, setAdopted] = useState<Note | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -88,6 +91,17 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
       setStatus(`预览加载失败: ${e}`);
     }
   }, [sessionId]);
+
+  /** AI 精修采纳联动：拉取精修版笔记内容展示（规则版经「回到规则版预览」恢复） */
+  const handleRefineApplied = useCallback(async (noteId: number) => {
+    try {
+      const note = await invoke<Note>("get_note", { id: noteId });
+      setAdopted(note);
+      setStatus(`AI 精修版已落库为笔记 #${noteId}——预览已切换为精修内容`);
+    } catch (e) {
+      setStatus(`已落库为笔记 #${noteId}，但读取内容失败: ${e}`);
+    }
+  }, []);
 
   useEffect(() => {
     void load();
@@ -191,8 +205,9 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
         <button
           style={{ ...btn, borderRadius: 6, background: "#0d9488", color: "#fff", border: "none" }}
           onClick={() => void saveToNote()}
+          title="仅将规则版草稿落库为笔记；AI 精修版请用下方精修卡内的「采纳落库」"
         >
-          📝 一键落库
+          📝 一键落库（规则版）
         </button>
         <button
           style={{ ...btn, borderRadius: 6, border: "1px solid #e5e7eb" }}
@@ -201,8 +216,9 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
           {showFiltered ? "收起被过滤对照" : `被过滤对照（${preview.filtered.length}）`}
         </button>
       </div>
-      {/* v0.8.0 M2（REQ-141/145）：AI 精修卡——预估确认/异步任务/diff 预览/采纳落库 */}
-      <AiRefineCard sessionId={sessionId} />
+      {/* v0.8.0 M2（REQ-141/145）：AI 精修卡——预估确认/异步任务/diff 预览/采纳落库；
+          采纳成功 → onApplied 联动切换预览为精修版（2026-08-21 体验修复） */}
+      <AiRefineCard sessionId={sessionId} onApplied={(id) => void handleRefineApplied(id)} />
       {status && <p style={{ fontSize: 12, color: "#2563eb", marginBottom: 6 }}>{status}</p>}
       {aiMeta && (
         <p style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>
@@ -211,14 +227,32 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
         </p>
       )}
 
-      {/* 过滤后笔记正文 */}
-      <div
-        style={{ fontSize: 13, lineHeight: 1.6, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}
-        dangerouslySetInnerHTML={{ __html: renderMarkdown(preview.markdown, baseUrl) }}
-      />
+      {/* 正文：采纳精修后展示精修版（可回到规则版）；否则展示规则版草稿 */}
+      {adopted ? (
+        <div style={{ border: "1px solid #a7f3d0", borderRadius: 8, background: "#ecfdf5", padding: 10, marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <span style={{ fontWeight: 600, fontSize: 12, color: "#047857" }}>✨ AI 精修版 · 笔记 #{adopted.id}</span>
+            <button
+              style={{ ...btn, borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" }}
+              onClick={() => setAdopted(null)}
+            >
+              回到规则版预览
+            </button>
+          </div>
+          <div
+            style={{ fontSize: 13, lineHeight: 1.6, background: "#fff", border: "1px solid #d1fae5", borderRadius: 6, padding: 12 }}
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(adopted.content, baseUrl) }}
+          />
+        </div>
+      ) : (
+        <div
+          style={{ fontSize: 13, lineHeight: 1.6, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(preview.markdown, baseUrl) }}
+        />
+      )}
 
       {/* 被过滤内容对照（可复查误杀——来源定位原料） */}
-      {showFiltered && (
+      {showFiltered && !adopted && (
         <div style={{ marginTop: 10, border: "1px solid #fee2e2", borderRadius: 8, padding: 10, background: "#fff7f7" }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: "#b91c1c", marginBottom: 6 }}>
             被过滤内容（原料层未动——如属误杀请在产物/笔记中人工补回）
