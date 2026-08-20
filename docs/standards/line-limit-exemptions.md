@@ -22,8 +22,9 @@
 | app/src-tauri/src/symbol_normalize.rs | ~370 | v0.6.0 M1（REQ-060）：口语符号映射域（映射表/上下文守卫/中文数字解析）内聚；数字解析与守卫共享字符判定 | 若再增长：parse_chinese_number/replace_number_runs 拆至 symbol_numbers.rs |
 | app/src/pages/SessionsPage.tsx | ~250 | v0.7.1 硬拆落地（原 ~390 登记）：编排层（列表/详情状态 + 事件刷新 + 转化删除操作）回归 ≤300 行 | 无需拆分（已 ≤300） |
 | app/src/components/SessionListPanel.tsx | ~411 | v0.7.1 拆分产物：列表域 UI（双模式搜索/筛选排序/课程分组折叠/批量操作栏/内联转化）内聚——筛选/排序/选择为面板本地状态 | 若再增长：批量操作栏与列表项拆至 SessionListRow.tsx |
-| app/src-tauri/src/commands_session.rs | ~494 | v0.6.0 M6 增长 + v0.7.1：会话命令域（CRUD/单一管线/质量报告/课程分组/段搜索/批量转笔记）内聚于会话生命周期域；v0.7.5 净化配置/警示行/元数据接线再增；批量测试独立文件 | 若再增长：course/search 拆至 commands_session_extra.rs |
-| app/src-tauri/src/note_filter.rs | ~423 | v0.6.0 M1（REQ-082/085）：笔记过滤域（过滤链 + AI 判定应用 + 画面要点净化）内聚于单一管线（双出口一致性由构造保证）；v0.7.5 净化接线（口语净化/口头禅删除/锚点/警示）——AI 部分已按登记计划拆至 note_filter_ai.rs（216 行，≤300） | 若再增长：净化链拆至 note_filter_purify.rs |
+| app/src-tauri/src/commands_session.rs | ~366 | v0.6.0 M6 增长 + v0.7.1：会话命令域（CRUD/质量报告/课程分组/段搜索）内聚；v0.7.6 审查硬拆：笔记转换管线（原料装载/结构渲染/单条转换/批量编排/预览，~245 行）拆至 commands_session_note.rs（≤300 行）——commands_session 自 ~611 行回归本值（拆前登记 ~494 过期） | 若再增长：course/search 拆至 commands_session_extra.rs |
+| app/src-tauri/src/commands_session_note.rs | ~245 | v0.7.6 审查硬拆产物：会话→笔记转换管线（load_note_material/apply_note_structure/convert_to_note/session_to_note/run_batch_conversion/batch_session_to_note/preview_session_note）内聚于笔记转换域 | 无需拆分（已 ≤300）；若再增长：convert_to_note 拆至 commands_session_note_convert.rs |
+| app/src-tauri/src/note_filter.rs | ~560 | v0.6.0 M1（REQ-082/085）：笔记过滤域（过滤链 + AI 判定应用 + 画面要点净化）内聚于单一管线（双出口一致性由构造保证）；v0.7.5 净化接线（口语净化/口头禅删除/锚点/警示）+ v0.7.6 结构统计三字段（chapters/titled_chapters/glossary_terms）；AI 部分已按登记计划拆至 note_filter_ai.rs（~250 行，≤300） | 若再增长：净化链拆至 note_filter_purify.rs |
 | app/src-tauri/src/screens.rs | ~331 | v0.7.3（REQ-155/156/160）：画面要点屏构建编排（分组/聚类/图匹配 IO）+ v0.7.5（REQ-166/167/168）可消费块过滤扩展（单字符/边缘条带/视频页共现/错字纠错）——编排与纯函数分层（纯函数在 screen_merge.rs） | 若再增长：filter_usable_blocks 拆至 screen_filter.rs |
 | app/src-tauri/src/screen_merge.rs | ~454 | v0.7.3（REQ-155/158）：屏级聚合纯函数域（聚类/行合并/角色分类/块去重）+ v0.7.5（REQ-166/167/169）净化纯函数（单字符/边缘条带/零跨度合并/图去重/包含率）——纯逻辑内聚便于单测 | 若再增长：零跨度合并与图去重拆至 screen_fix.rs || app/src-tauri/src/fusion_tests.rs | ~392 | 融合测试域（ADR-005 四规则 + REQ-062 概率加权 + REQ-103 音量透传 + REQ-111 切分对齐）单模块 #[path] 挂载；测试文件沿用单模块模式未拆 | 若再增长：REQ-111 切分对齐组拆至 fusion_split_tests.rs |
 | app/src-tauri/src/analysis.rs | ~344 | v0.5.0 M2 起结构化分析编排域（章节/重点/术语/讲者 + v0.7.0 M1.5 事件消费 + M2 step_boundaries/practice_segments/player_actions 三字段 + 审查修复按类型判定）；各机制输出聚合内聚于单一分析函数 | 若再增长：build_chapter_signals 事件版拆至 analysis_signals.rs |
@@ -32,6 +33,9 @@
 | app/src-tauri/src/live_session_persist.rs | ~337 | 定稿落库域（persist_final/digest_merged/handle_final_event）+ P2 flush_tail_and_persist（停止/暂停共用尾句落库）内聚 | 若再增长：flush_tail_and_persist 与 digest_merged 拆至 live_session_persist_tail.rs |
 | app/src-tauri/src/live_session_frame.rs | ~321 | 屏幕采样线程编排（自适应采样/空闲降频/前台监控/播放器检测）；2026-08 A1 暂停冻结 + P2 自动暂停轻量轮询（仅取帧+恢复检测）再增 | 若再增长：暂停轻量轮询拆至 live_session_pause_poll.rs |
 | app/src-tauri/src/analysis_tests.rs | ~339 | 分析编排测试域（档案门控矩阵 + REQ-108 事件消费 + M2 三字段）单模块 #[path] 挂载 | 若再增长：事件消费组拆至 analysis_events_tests.rs |
+| app/src-tauri/src/structure_note_tests.rs | ~415 | v0.7.6（REQ-177~181）：结构渲染层单测域（章节插入位置/命名窗口/词汇表排序上限锚点/零回归护栏/JSON 往返）单模块 #[path] 挂载；审查清理死代码 helpers 并补 max_terms=0 语义测试 | 若再增长：词汇表组拆至 structure_note_glossary_tests.rs |
+| app/src-tauri/src/note_filter_golden_tests.rs | ~390 | v0.7.5（REQ-172）：黄金语料回归域（会话31/29 实证 + v0.7.6 REQ-181 结构渲染 2 例 + 审查补测"配置开无数据逐字节一致"）单模块 #[path] 挂载 | 若再增长：结构渲染组拆至 note_filter_golden_structure_tests.rs |
+| app/src-tauri/src/commands_ai.rs | ~337 | v0.5.0 起 AI 复核命令域（边界批量复核/配额/缓存/审计 + v0.7.6 审查修复补结构渲染接线）；与 note_filter_ai（纯逻辑）分层 | 若再增长：批量复核循环拆至 commands_ai_review.rs |
 | app/src-tauri/src/video_profile_tests.rs | ~338 | 档案测试域（12 档案断言矩阵 + 检测投票 + JSON 校准）单模块 #[path] 挂载 | 若再增长：档案矩阵拆至 video_profile_data_tests.rs |
 | app/src-tauri/src/artifact_templates_tests.rs | ~336 | 产物模板测试域（五档案模板 + v0.7.0 M2 代码块/步骤卡扩展）单模块 #[path] 挂载 | 若再增长：代码块/步骤卡组拆至 artifact_code_tests.rs |
 | app/src-tauri/src/asr_merge.rs | ~351 | v0.5.0 ADR-012 F4-1 语义合并域 + v0.7.0 M2 REQ-119 混排空格（spacing_for/merge_segments_with_spacing）；合并决策与切分共用标点常量 | 若再增长：split_sentences/split_timestamps 拆至 asr_merge_split.rs |
