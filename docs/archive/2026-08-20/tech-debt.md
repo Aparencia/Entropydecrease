@@ -1,19 +1,18 @@
-# 技术债清单（权威：2026-08-20 二轮滚动——v0.7.5/v0.7.6 批次后）
+# 技术债清单（权威：2026-08-20 三轮滚动——v0.7.7 结构图批次后）
 
 > 本清单为当前唯一权威债务清单，归档日滚动更新；旧归档清单仅历史追溯。
-> 来源：2026-08-20 一轮清单滚动（其源为 2026-08-19 十六轮清单）+ v0.7.5 会话转
-> 笔记规则净化（REQ-162~176，提交 14d4843/f2efab9）+ v0.7.6 笔记纯本地结构渲染
-> （REQ-177~181，提交 974343b/4edb5db，1131 单测全绿）+ 新增代码七维审查即修
-> （refactor 4dbafdf + fix 84c867f + docs fb40c1e，见"今日已偿"）。
+> 来源：二轮清单滚动（v0.7.6 审查批次后）+ v0.7.7 结构图批次
+> （REQ-182~187，提交 1629ea0/5bb9c3a/0ca4fbe/b13ead0/5147d85/a399365，1172 单测全绿）
+> + 三轮新增代码审查即修（fix bca36da，9 项，见"今日已偿"）。
 
-## 未偿债务（逐笔核验）
+## 未偿债务（逐笔核验；carried 仅留 ID + 一行摘要）
 
-| ID | 摘要 | 备注 |
-|----|------|------|
-| TD-040 | tauri.conf.json bundle.resources 未含 ffmpeg——生产安装包无捆绑 ffmpeg（v0.3.0 审查，2026-08-18） | carried（deliberate 有意不修）：resources glob 对缺失目录构建失败；捆绑 ffmpeg（~80MB）与安装包体积权衡留待体积策略；开发期用 download-ffmpeg.ps1 + PATH 覆盖。二轮核验（v0.7.6）：未涉及模型分发/捆绑，保持 carried |
-| TD-2026-08-19-D | image_stream_store 已交付未接线（REQ-110 图像流存储层/REQ-123 步骤图卡配图/REQ-088 图注影子层）；ImageStreamStore 零生产调用 | carried：接线点明确（live_frame_process 帧归档处创建 + record；analysis 产物模板消费 step_frames），待 M3 平台图像后续迭代接线。三轮核验（v0.7.7）：结构图存储独立于图像流，保持 |
-| TD-2026-08-19-F | detect_pause_icon 颜色统计对暗底+中央亮内容（深色幻灯片白字/投影幕布）可能误报暂停——与"保守不产假信号"声明矛盾 | carried：需形状约束（中央连通亮块/双竖杠）或结合画面变化（diff_pass）；真机播放器样本校准计划保留。三轮核验：未涉及，保持 |
-| TD-2026-08-19-G | db_ocr_search 只搜最近 500 会话静默截断 + image_path_for 恒返回固定路径不校验存在性 | carried：全库扫描量级控制（500 会话上限可接受，注释注明）；图路径由前端加载降级（诚实）。三轮核验：未涉及，保持 |
+| ID | 摘要 |
+|----|------|
+| TD-040 | bundle.resources 未含 ffmpeg（deliberate 有意不修：体积权衡，开发期脚本+PATH 覆盖）；三轮核验未涉及，保持 |
+| TD-2026-08-19-D | image_stream_store 已交付未接线（REQ-110/123/088）；三轮核验：结构图存储独立于图像流，保持 |
+| TD-2026-08-19-F | detect_pause_icon 暗底+中央亮内容可能误报暂停（与"保守不产假信号"矛盾）；三轮核验未涉及，保持 |
+| TD-2026-08-19-G | db_ocr_search 500 会话静默截断 + 图路径不校验存在性（量级控制可接受+前端降级）；三轮核验未涉及，保持 |
 
 ## 今日已偿（v0.7.6 审查即修，可经代码/提交验证）
 
@@ -28,6 +27,15 @@
 | （TD-B） | 术语锚点 first_occurrence_ms 大小写敏感子串匹配——短术语（如 "AI"）可能锚到无关段或漏锚 | word_boundary_contains 词边界 + 内部大小写折叠（汉字前后不设限）；5 个新单测；提交 1b24168 |
 | （TD-C） | apply_note_structure 中 db.list_events 错误静默吞掉——事件缺失时章节检测回退 OCR/gap 近似（诚实降级），但无日志线索 | match + eprintln（purify_config 同模式），降级行为不变；提交 f8be4d3 |
 | （TD-E） | 前端未接入 search_ocr_blocks（REQ-133 图内检索）与 model_disk_overview（REQ-131 磁盘占用） | 会话列表搜索框新增「画面」模式（图搜：命中行带时间/屏区间/📷 标记，点击跳详情）+ 模型设置面板挂 ModelDiskPanel（总占用+明细+版本徽标）；提交 5147d85 |
+| （三轮审查 R1） | structure_capture 预算耗尽处理：`Err(_)` 吞所有错误——单区域编码/IO 失败被误判预算耗尽，终止整个会话后续捕获 | 预算前置检查（remaining_budget）拦截 + 单区域失败仅 eprintln 继续；提交 bca36da |
+| （三轮审查 R2） | 删除结构图顺序：先删 DB 记录后删文件——文件删除失败时记录已删、孤儿文件残留不一致 | db_structures 分离 get_structure_image 查询；命令层先删文件后删记录（失败时记录保留可重试）；提交 bca36da |
+| （三轮审查 R3） | 手动捕获屏定位按 screen_id——旧数据聚类屏 screen_id 全 NULL，多聚类屏时匹配错屏 | 命令参数改 first_seen_ms 精确定位（前端 BoxSelectOverlay/SessionDetailPanel 同步）；提交 bca36da |
+| （三轮审查 R4） | BoxSelectOverlay 单击未拖动（初始占位 w=h=1）→ 确认浮层全屏框选——误触保存整屏图 | moved 标志区分"拖拽/单击"（单击忽略）；提交 bca36da |
+| （三轮审查 R5） | 手动捕获 <32px 错误消息误导（越界钳制后报"过小"） | 消息改"框选区域无效（过小或超出画面边缘）"；提交 bca36da |
+| （三轮审查 R6） | rgb_to_bgra 在 structure_capture 与 commands_structures 重复实现 | structure_capture 提 pub(crate) 复用，命令层删除重复；提交 bca36da |
+| （三轮审查 R7） | BoxSelectOverlay 拖出框外残留虚线框（onMouseLeave 仅清 dragging） | onMouseLeave 同时清 box 残留；提交 bca36da |
+| （三轮审查 R8） | StructureImageSection 用 error state 显示非错误信息（重跑无新增显示红色） | info state 分离（错误红/信息灰）；提交 bca36da |
+| （三轮审查 R9） | structure_capture_tests 冗余行 `let _: FrameGrid = grid;` | 删除；提交 bca36da |
 
 ## 今日新登记 open（审查观察，暂不修）
 
