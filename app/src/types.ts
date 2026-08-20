@@ -696,9 +696,9 @@ export type AiTaskState =
   | "Succeeded"
   | { Failed: { reason: AiTaskFailure } };
 
-/** 任务句柄（Rust AiTaskHandle） */
+/** 任务句柄（Rust AiTaskHandle——camelCase 契约：taskId，2026-08-21 修复） */
 export interface AiTaskHandle {
-  task_id: number;
+  taskId: number;
   state: AiTaskState;
 }
 

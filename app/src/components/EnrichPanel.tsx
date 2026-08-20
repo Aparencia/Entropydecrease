@@ -197,7 +197,10 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
   const start = async () => {
     setMsg("");
     setPhase("running");
-    const handle = await invoke<{ task_id: number; state: AiTaskState }>("ai_enrich_start", {
+    // 契约修复（2026-08-21 真机"排队中"根因）：Rust AiTaskHandle 为 camelCase
+    // 序列化（taskId）——此前读 handle.task_id 恒为 undefined；且本组件遗漏
+    // taskIdRef 赋值，事件通道永远失效，一并补上（与 AiRefineCard 同款修复）
+    const handle = await invoke<{ taskId: number; state: AiTaskState }>("ai_enrich_start", {
       noteId,
       selectedKinds: selected,
       authorized: true,
@@ -207,9 +210,10 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
       return null;
     });
     if (handle) {
-      setTaskId(handle.task_id);
+      taskIdRef.current = handle.taskId;
+      setTaskId(handle.taskId);
       void handleState(handle.state);
-      poll(handle.task_id);
+      poll(handle.taskId);
     }
   };
 

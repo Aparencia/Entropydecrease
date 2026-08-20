@@ -126,8 +126,18 @@ impl AiClient {
                         .map_err(|e| AiClientError::Network(format!("读取响应失败: {}", e)))?;
                     return extract_content(&body);
                 }
-                Err(ureq::Error::Status(401 | 403, _)) => {
-                    return Err(AiClientError::Auth("API 密钥无效或无权限（请检查设置页密钥）".to_string()));
+                // 401/403 拆分（2026-08-21 真机 unauthorized 排查）：401=密钥
+                // 无效（换密钥），403=账号无权限/模型未开通（换模型或开权限）——
+                // 合并时用户无法区分该修密钥还是该换模型
+                Err(ureq::Error::Status(401, _)) => {
+                    return Err(AiClientError::Auth(
+                        "API 密钥无效（HTTP 401）——请检查设置页密钥或环境变量 SILICONFLOW_API_KEY".to_string(),
+                    ));
+                }
+                Err(ureq::Error::Status(403, _)) => {
+                    return Err(AiClientError::Auth(
+                        "API 密钥无权限（HTTP 403）——账号未开通该模型或额度受限".to_string(),
+                    ));
                 }
                 Err(ureq::Error::Status(402, _)) => {
                     return Err(AiClientError::Balance("账户余额不足（请充值或切换免费档模型）".to_string()));

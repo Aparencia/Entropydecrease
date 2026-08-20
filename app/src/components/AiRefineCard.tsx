@@ -191,7 +191,10 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
       }).catch(() => undefined);
     }
     setPhase("running");
-    const handle = await invoke<{ task_id: number; state: AiTaskState }>("ai_refine_start", {
+    // 契约修复（2026-08-21 真机"排队中"根因）：Rust AiTaskHandle 为 camelCase
+    // 序列化（taskId），此前读 handle.task_id 恒为 undefined → 事件被忽略、
+    // 轮询缺参报错 → 前端永久"排队中"而任务实际早已失败
+    const handle = await invoke<{ taskId: number; state: AiTaskState }>("ai_refine_start", {
       sessionId,
       authorized: true,
     }).catch((e) => {
@@ -200,10 +203,10 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
       return null;
     });
     if (handle) {
-      taskIdRef.current = handle.task_id;
-      setTaskId(handle.task_id);
+      taskIdRef.current = handle.taskId;
+      setTaskId(handle.taskId);
       void handleState(handle.state);
-      poll(handle.task_id);
+      poll(handle.taskId);
     }
   };
 

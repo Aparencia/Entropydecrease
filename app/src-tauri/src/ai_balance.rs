@@ -103,8 +103,13 @@ impl AiBalanceAdapter {
                         .map_err(|e| format!("读取余额响应失败: {}", e))?;
                     return parse_balance(&body);
                 }
-                Err(ureq::Error::Status(401 | 403, _)) => {
-                    return Err("API 密钥无效或无权限（请检查设置页密钥）".to_string());
+                // 401/403 拆分（2026-08-21 真机 unauthorized 排查）：与
+                // ai_client.rs 同口径——401=密钥无效，403=无权限/模型未开通
+                Err(ureq::Error::Status(401, _)) => {
+                    return Err("API 密钥无效（HTTP 401）——请检查设置页密钥或环境变量 SILICONFLOW_API_KEY".to_string());
+                }
+                Err(ureq::Error::Status(403, _)) => {
+                    return Err("API 密钥无权限（HTTP 403）——账号未开通该模型或额度受限".to_string());
                 }
                 Err(ureq::Error::Status(429, _)) => {
                     last_err = "请求过频（HTTP 429）".to_string();
