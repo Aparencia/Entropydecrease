@@ -18,6 +18,7 @@
 
 | ID | 摘要 | 偿还方式 |
 |----|------|----------|
+| （盘点清偿 S1） | speaker_change.rs `#![allow(dead_code)]` 与"V1.0 接线时移除"注释已过时——v0.7.2（REQ-153）已被 commands_speaker.rs 实际接线 | 移除过时豁免 + 注释更新（盘点核验发现）；提交 56e1133 |
 | （审查 H1） | AI 复核路径（review_text_filter）未接结构渲染层——复核后预览丢失章节标题/词汇表块，与 preview_session_note/session_to_note 输出不一致（REQ-081 单一管线三出口契约违约） | apply_note_structure 提升 pub(crate)，review_text_filter 两返回点前补调用（与落库同函数同口径）；提交 84c867f |
 | （审查 H2） | commands_session.rs 611 行 >600 硬拆阈值（v0.7.6 增 69 行致 542→611，AGENTS.md §3 不允许豁免）+ 豁免登记过期（登记 ~494） | 笔记转换管线（原料装载/结构渲染/单条转换/批量编排/预览）拆至 commands_session_note.rs（240 行 ≤300）；commands_session 回归 ~357 行并重新登记；lib.rs 按定义模块注册；提交 4dbafdf |
 | （审查 M1） | glossary_max_terms=0 语义：.max(1) 使 0→1 条，与"0=关闭"直觉相悖 | 0 = 不输出词汇表块（条件加 >0 守卫），补单测 glossary_max_terms_zero_disables_block；提交 84c867f |
@@ -45,6 +46,9 @@
 | TD-2026-08-20-D | 说话人模型（wespeaker）无应用内一键下载——仅有 scripts/download-speaker-model.ps1；SpeakerSwitchCard 只能提示用户手动跑脚本（对照：流式/结构模型均有应用内下载命令+UI） | open（中）：建议按 structure_models 模式加 speaker 下载命令+UI 入口（speaker_engine.rs 路径约定 speaker-embedding/model.onnx，无下载器） |
 | TD-2026-08-20-E | 就绪清单（ReadyCheckCard）不含说话人/标点模型——health_status 的 missing_models 只查流式四件套 + SenseVoice（commands_diag.rs:53-67）；说话人模型缺失到会话详情才由 SpeakerSwitchCard 提示 | open（低）：health_status 增查 speaker/punctuation 模型文件存在性，就绪清单加两项 |
 | TD-2026-08-20-F | 标点恢复模型（models/punctuation/model.int8.onnx）缺失时懒加载静默降级（streaming_asr.rs:132-140），无任何提示；仅 download-punctuation.mjs 脚本兜底 | open（低）：随 TD-E 一并处理（health_status 查文件 + 提示）；缺失不影响主链路（无标点降级） |
+| TD-2026-08-20-G | 备份/恢复（backup_create/backup_restore，REQ-107 TRUST-1）后端已实施但全应用无 UI 入口——数据备份能力不可达 | open（中）：设置/管理页加备份面板（清单+创建+恢复入口）；前端盘点发现 |
+| TD-2026-08-20-H | session_audio_status/session_audio_cleanup 后端注释自称"M6 清理 UI 消费"但前端零调用——注释承诺未兑现 | open（低）：会话页/设置页补音频落盘状态与清理入口，或修正注释 |
+| TD-2026-08-20-I | live:window-lost 事件（live_frame_process.rs:128/206）无前端监听——实时捕获中目标窗口丢失用户无提示 | open（中）：ClassroomPage 监听事件出一次性横幅（与 asr-degraded 同模式） |
 
 ## 观察项（登记不立债，保持跟踪）
 
@@ -53,3 +57,8 @@
 | （观察 1） | apply_note_structure 构造 SessionDetail 时对 segments/ocr_blocks 全量 clone（千段会话每次预览/转换 2 次拷贝） | 量级为 MB 级拷贝，毫秒级成本；若长会话分析改 spawn_blocking（TD-A）时一并评估借用形态 |
 | （观察 2） | render_note_structure 在无章节/无术语时仍重建整篇 markdown（逐字节一致但白算） | 正确性已验证（黄金测试 M2）；如需优化可加"无结构数据早退"（与全关早退同模式），收益微小 |
 | （观察 3） | 前端统计卡未展示 titled_chapters（有标题命中的章节数）——仅展示章节总数/词汇表数 | 展示面可后续迭代补（前端一行事）；数据已随 FilterStats 落库 |
+| （盘点观察 4） | VAD 无模型——实际为 RMS 能量阈值 + 自适应 P10 分位数（vad_adaptive.rs），与 AGENTS.md"Silero VAD"表述不符 | 文档/规范差异：更新 AGENTS.md §2 表述或补 Silero 模型接入（产品未承诺具体模型，倾向改文档） |
+| （盘点观察 5） | 说话人卡片与结构图捕获入口仅在会话详情页——课堂助手页停止后自动捕获但看不到结果 | 设计现状（消费端=会话页图库）；课堂助手页加结果提示可后续迭代 |
+| （盘点观察 6） | 无"首启自动下载缺失模型"机制——下载全靠命令/脚本/ModelScope 缓存；app_setup 只做目录+捆绑同步 | 设计现状（应用内下载入口已齐备）；全自动首启下载留待分发策略决策 |
+| （盘点观察 7） | 结构图捕获走纯规则版面分析（layout_analyzer），课后精修走模型版（pp-doclayout）——"双版面"并存、结果不互认 | 设计如此（实时轻量/课后重器）；统一口径需 ADR 决策 |
+| （盘点观察 8） | 词级时间戳未暴露——sherpa-onnx Rust 包装未开 token timestamps 开关（asr.rs 返回 None） | 协议/提取函数已就位；待上游支持或换绑定 |

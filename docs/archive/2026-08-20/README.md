@@ -29,15 +29,15 @@
 
 ## 本批工作摘要（2026-08-20 四轮，模型接入/自动化配置/课堂助手接线盘点）
 
-- **模型接入全景盘点**（只读核验，无代码变更）：ASR 三级（流式 Zipformer 主链路 → SenseVoice 整句重打分 → 标点恢复）+ OCR（PaddleOCR 经 oar-ocr，ModelScope 自动缓存）+ 结构模型三类（应用内一键下载）+ 说话人（wespeaker embedding，脚本下载）+ AI 云端（SiliconFlow 骨架，v0.8.0 排期实装）；分发四路径（捆绑 models/**/* + 流式 hf-mirror 自动下载 + 结构应用内下载 + OCR ModelScope 缓存）；自动化配置：OCR 设备 Auto 微基准决策、档案自动检测+记忆、引擎预热、停止后自动精修+结构图捕获
-- **四轮审查**：无新增代码（f9c9638 后零变更）——沿用三轮结论（9 项已修复）
-- **盘点发现登记 open 3 笔**：TD-2026-08-20-D（说话人模型无应用内下载）、E（就绪清单不含说话人/标点模型）、F（标点模型缺失静默降级）——详见 [tech-debt.md](./tech-debt.md)
+- **模型接入全景盘点**（只读核验 + 即修 1 项）：ASR 三级（流式 Zipformer 主链路 → SenseVoice 整句重打分 → 标点恢复）+ OCR（PaddleOCR 经 oar-ocr，ModelScope 自动缓存）+ 结构模型三类（应用内一键下载）+ 说话人（wespeaker embedding，脚本下载）+ AI 云端（SiliconFlow 骨架，v0.8.0 排期实装）；分发四路径（捆绑 models/**/* + 流式 hf-mirror 自动下载 + 结构应用内下载 + OCR ModelScope 缓存）；自动化配置：OCR 设备 Auto 微基准决策、档案自动检测+记忆、引擎预热、停止后自动精修+结构图捕获
+- **四轮审查**：无新增代码（f9c9638 后零变更）——沿用三轮结论（9 项已修复）；盘点即修 S1（speaker_change 过时 dead_code 豁免移除，56e1133）
+- **盘点发现登记 open 7 笔**：TD-2026-08-20-D（说话人模型无应用内下载）、E（就绪清单不含说话人/标点/结构模型）、F（标点模型缺失静默降级）、G（备份/恢复无 UI）、H（音频落盘 UI 承诺未兑现）、I（live:window-lost 无监听）+ 观察项 8 条——详见 [tech-debt.md](./tech-debt.md)
 
 ## 技术债摘要
 
 - **未偿 4 笔**（全部 carried，四轮核验保持）：TD-040（deliberate）+ TD-2026-08-19-D/F/G
-- **今日已偿 15 笔**（四轮无新增）：二轮 6 笔（H1/H2/M1/M2/L1/L2）+ TD-B/TD-C/TD-E + 三轮审查 9 笔（R1~R9）
-- **新登记 open 4 笔**（TD-2026-08-20-A：spawn_blocking 改造；D/E/F：模型接入缺口）+ 观察项 3 条
+- **今日已偿 16 笔**：二轮 6 笔（H1/H2/M1/M2/L1/L2）+ TD-B/TD-C/TD-E + 三轮审查 9 笔（R1~R9）+ 盘点即修 S1（56e1133）
+- **新登记 open 7 笔**（TD-2026-08-20-A：spawn_blocking 改造；D/E/F：模型接入缺口；G/H/I：前端接线缺口）+ 观察项 8 条
 
 ## 关联
 
