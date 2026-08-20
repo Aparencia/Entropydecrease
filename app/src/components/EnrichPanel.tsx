@@ -208,7 +208,7 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
     if (!result) return;
     await invoke<{ id: number }>("ai_enrich_revert", {
       noteId,
-      baseMarkdown: result.base_markdown,
+      baseMarkdown: result.baseMarkdown,
     }).catch((e) => setMsg(`撤销失败：${e}`));
     setMsg("已撤销补充（内容还原补充前——删除无残留）");
     onUpdated?.();
@@ -237,7 +237,7 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
         )}
         {phase === "done" && result && (
           <span style={{ fontSize: 11, color: "#7c3aed" }}>
-            深度 {result.depth_blocks} · 广度 {result.breadth_blocks} · 切片 {result.blocks}
+            深度 {result.depthBlocks} · 广度 {result.breadthBlocks} · 切片 {result.blocks}
           </span>
         )}
       </div>
@@ -281,8 +281,8 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
         <div style={{ border: "1px solid #e5e7eb", background: "#fff", borderRadius: 6, padding: 8, marginBottom: 6, fontSize: 12 }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>成本确认</div>
           <div>
-            预估 token：<strong>{est.est_tokens}</strong> · 预估费用：<strong>¥{est.est_cost_yuan.toFixed(4)}</strong>
-            {est.est_cost_yuan === 0 && <span style={{ color: "#0d9488" }}>（当前模型免费档 ¥0）</span>}
+            预估 token：<strong>{est.estTokens}</strong> · 预估费用：<strong>¥{est.estCostYuan.toFixed(4)}</strong>
+            {est.estCostYuan === 0 && <span style={{ color: "#0d9488" }}>（当前模型免费档 ¥0）</span>}
           </div>
           {balance && (
             <div style={{ color: balance.lowBalanceWarning ? "#dc2626" : "#374151" }}>
@@ -318,7 +318,7 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
       {phase === "done" && result && (
         <div>
           <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff", padding: 8, fontSize: 11, fontFamily: "monospace", marginBottom: 6, whiteSpace: "pre-wrap" }}>
-            {result.enriched_markdown.slice(-800)}
+            {result.enrichedMarkdown.slice(-800)}
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             <button style={{ ...btn, background: "#7c3aed", color: "#fff", border: "none" }} onClick={() => void apply()}>

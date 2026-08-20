@@ -145,9 +145,9 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
     }
     setEstimate(est);
     setBalance(bal);
-    setRemember(est.remember_cost_choice);
+    setRemember(est.rememberCostChoice);
     // 已"记住此选择"且同意过 → 跳过确认直接开始
-    if (est.remember_cost_choice) {
+    if (est.rememberCostChoice) {
       void start(est);
     } else {
       setPhase("confirm");
@@ -220,7 +220,7 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
         )}
         {phase === "done" && (
           <span style={{ fontSize: 11, color: "#0d9488" }}>
-            新增 {result?.added_lines} 行 · 删除 {result?.removed_lines} 行 · 切片 {result?.slices}
+            新增 {result?.addedLines} 行 · 删除 {result?.removedLines} 行 · 切片 {result?.slices}
           </span>
         )}
       </div>
@@ -246,9 +246,9 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
         <div style={{ border: "1px solid #e5e7eb", background: "#fff", borderRadius: 6, padding: 8, marginBottom: 6, fontSize: 12 }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>成本确认</div>
           <div>
-            预估 token：<strong>{est.est_tokens}</strong> · 预估费用：<strong>¥{est.est_cost_yuan.toFixed(4)}</strong>
-            {est.price_per_1m > 0 && <span style={{ color: "#6b7280" }}>（单价 ¥{est.price_per_1m}/1M token）</span>}
-            {est.price_per_1m === 0 && <span style={{ color: "#0d9488" }}>（当前模型免费档 ¥0）</span>}
+            预估 token：<strong>{est.estTokens}</strong> · 预估费用：<strong>¥{est.estCostYuan.toFixed(4)}</strong>
+            {est.pricePer1m > 0 && <span style={{ color: "#6b7280" }}>（单价 ¥{est.pricePer1m}/1M token）</span>}
+            {est.pricePer1m === 0 && <span style={{ color: "#0d9488" }}>（当前模型免费档 ¥0）</span>}
           </div>
           {balance && (
             <div style={{ color: balance.lowBalanceWarning ? "#dc2626" : "#374151" }}>

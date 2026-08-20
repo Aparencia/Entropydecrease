@@ -76,7 +76,7 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
   const rollback = async (versionId: number) => {
     const v = versions.find((x) => x.id === versionId);
     if (!v) return;
-    if (!window.confirm(`回滚到「${SOURCE_BADGE[v.source].label}」版本（${fmtTime(v.created_at)}）？将创建新版本，历史链保留。`)) return;
+    if (!window.confirm(`回滚到「${SOURCE_BADGE[v.source].label}」版本（${fmtTime(v.createdAt)}）？将创建新版本，历史链保留。`)) return;
     try {
       await invoke<{ id: number }>("note_versions_rollback", { noteId, targetVersionId: versionId });
       setMsg("已回滚（新版本 user-edit，历史链未破坏）");
@@ -87,7 +87,7 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
     }
   };
 
-  const totalCost = usage.reduce((s, u) => s + u.cost_yuan, 0);
+  const totalCost = usage.reduce((s, u) => s + u.costYuan, 0);
 
   return (
     <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 10, background: "#fcfcfd" }}>
@@ -108,11 +108,11 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
               const badge = SOURCE_BADGE[v.source] ?? SOURCE_BADGE.rule;
               return (
                 <div key={v.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 8px", borderBottom: "1px solid #f3f4f6", fontSize: 11 }}>
-                  <span style={{ color: "#6b7280", width: 110, flexShrink: 0 }}>{fmtTime(v.created_at)}</span>
+                  <span style={{ color: "#6b7280", width: 110, flexShrink: 0 }}>{fmtTime(v.createdAt)}</span>
                   <span style={{ color: badge.color, background: badge.bg, borderRadius: 8, padding: "1px 8px", fontWeight: 600 }}>{badge.label}</span>
-                  {v.meta.cost_yuan != null && <span style={{ color: "#b45309" }}>¥{v.meta.cost_yuan.toFixed(4)}</span>}
+                  {v.meta.costYuan != null && <span style={{ color: "#b45309" }}>¥{v.meta.costYuan.toFixed(4)}</span>}
                   {v.meta.model && <span style={{ color: "#9ca3af", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.meta.model}</span>}
-                  {v.meta.merged_from && <span style={{ color: "#9ca3af" }} title={v.meta.merged_from}>· 已合并</span>}
+                  {v.meta.mergedFrom && <span style={{ color: "#9ca3af" }} title={v.meta.mergedFrom}>· 已合并</span>}
                   <span style={{ flex: 1 }} />
                   {i !== versions.length - 1 && (
                     <button style={{ ...btn, color: "#b45309" }} onClick={() => void rollback(v.id)}>
@@ -150,7 +150,7 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
               <div style={{ fontSize: 11, fontWeight: 600, color: "#374151", marginBottom: 4 }}>AI 成本记录</div>
               {usage.map((u) => (
                 <div key={u.id} style={{ fontSize: 11, color: "#6b7280", padding: "2px 0" }}>
-                  {fmtTime(u.created_at)} · {u.op_type === "refine" ? "精修" : "补充"} · in {u.tokens_in} / out {u.tokens_out} token · ¥{u.cost_yuan.toFixed(4)} · {u.model} · {u.slices} 片
+                  {fmtTime(u.createdAt)} · {u.opType === "refine" ? "精修" : "补充"} · in {u.tokensIn} / out {u.tokensOut} token · ¥{u.costYuan.toFixed(4)} · {u.model} · {u.slices} 片
                 </div>
               ))}
             </div>

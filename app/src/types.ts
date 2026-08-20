@@ -705,30 +705,30 @@ export interface AiTaskHandle {
 /** 段级 diff 操作（Rust DiffOp：三态外部标签） */
 export type DiffOp = { unchanged: string } | { added: string } | { removed: string };
 
-/** 精修结果（Rust AiRefineResult——diff 预览 + 采纳落库数据源） */
+/** 精修结果（Rust AiRefineResult——diff 预览 + 采纳落库数据源；camelCase 契约） */
 export interface AiRefineResult {
   title: string;
   /** 规则基线（采纳落库时作为首快照——版本链 [rule, ai-refine]） */
-  base_markdown: string;
-  refined_markdown: string;
+  baseMarkdown: string;
+  refinedMarkdown: string;
   diff: DiffOp[];
-  added_lines: number;
-  removed_lines: number;
+  addedLines: number;
+  removedLines: number;
   slices: number;
   model: string;
 }
 
-/** 成本预估（Rust CostEstimate） */
+/** 成本预估（Rust CostEstimate；camelCase 契约） */
 export interface CostEstimate {
-  est_tokens: number;
-  est_cost_yuan: number;
-  price_per_1m: number;
+  estTokens: number;
+  estCostYuan: number;
+  pricePer1m: number;
 }
 
-/** 精修成本预估视图（Rust RefineEstimateView） */
+/** 精修成本预估视图（Rust RefineEstimateView；camelCase 契约） */
 export interface RefineEstimateView {
   estimate: CostEstimate;
-  remember_cost_choice: boolean;
+  rememberCostChoice: boolean;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -738,14 +738,14 @@ export interface RefineEstimateView {
 /** 补充子项（Rust AiEnrichKind；kebab-case——d1~d3 深度/b1~b6 广度） */
 export type EnrichKind = "d1" | "d2" | "d3" | "b1" | "b2" | "b3" | "b4" | "b5" | "b6";
 
-/** 补充结果（Rust AiEnrichResult——混合落位 markdown + base 供撤销） */
+/** 补充结果（Rust AiEnrichResult——混合落位 markdown + base 供撤销；camelCase） */
 export interface AiEnrichResult {
-  note_id: number;
-  base_markdown: string;
-  enriched_markdown: string;
+  noteId: number;
+  baseMarkdown: string;
+  enrichedMarkdown: string;
   blocks: number;
-  depth_blocks: number;
-  breadth_blocks: number;
+  depthBlocks: number;
+  breadthBlocks: number;
   slices: number;
   kinds: string[];
   model: string;
@@ -758,35 +758,35 @@ export interface AiEnrichResult {
 /** 版本来源（Rust NoteVersionSource；kebab-case） */
 export type NoteVersionSource = "rule" | "ai-refine" | "ai-enrich" | "user-edit";
 
-/** 版本元数据（Rust VersionMeta） */
+/** 版本元数据（Rust VersionMeta；camelCase 契约） */
 export interface VersionMeta {
-  cost_yuan: number | null;
+  costYuan: number | null;
   model: string | null;
   slices: number | null;
-  merged_from: string | null;
+  mergedFrom: string | null;
 }
 
-/** 版本快照（Rust NoteVersion） */
+/** 版本快照（Rust NoteVersion；camelCase 契约） */
 export interface NoteVersion {
   id: number;
-  note_id: number;
+  noteId: number;
   content: string;
   source: NoteVersionSource;
-  parent_id: number | null;
-  created_at: number;
+  parentId: number | null;
+  createdAt: number;
   meta: VersionMeta;
 }
 
-/** AI 成本记录（Rust AiUsageRecord） */
+/** AI 成本记录（Rust AiUsageRecord；camelCase 契约） */
 export interface AiUsageRecord {
   id: number;
-  note_id: number;
-  op_type: string;
-  tokens_in: number;
-  tokens_out: number;
-  cost_yuan: number;
+  noteId: number;
+  opType: string;
+  tokensIn: number;
+  tokensOut: number;
+  costYuan: number;
   model: string;
   slices: number;
-  created_at: number;
+  createdAt: number;
 }
 
