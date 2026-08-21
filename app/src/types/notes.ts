@@ -48,6 +48,8 @@ export interface Note {
   properties?: string | null;
   /** v0.10.0：固定标记（0=未固定，1=固定） */
   pin: number;
+  /** v0.11.0（REQ-195）：所属笔记组 id（null=未归组/旧数据） */
+  group_id?: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -62,6 +64,46 @@ export interface NewNote {
   tags?: string;
   /** v0.10.0：属性 JSON 对象 */
   properties?: string | null;
+  /** v0.11.0：直接指定组（组视图内新建；缺省不归组） */
+  group_id?: number | null;
+}
+
+// ────────────────────────────────────────────────────────────
+// 笔记组类型（v0.11.0 REQ-195~198；Rust NoteGroup camelCase 契约）
+// ────────────────────────────────────────────────────────────
+
+/** 组地形：container（课程/容器）/ feed（碎片） */
+export type GroupTerrain = "container" | "feed";
+
+/** 组类别：course 课程组 / topic 主题组 / standalone 独立组 */
+export type GroupKind = "course" | "topic" | "standalone";
+
+/** 路由理由 JSON（Rust 侧序列化；损坏时前端防御性回退） */
+export interface GroupRouteReason {
+  /** own / topic / confirm / course */
+  action?: string;
+  /** true=信号冲突/低结构无领域——UI 高亮待确认 */
+  needsConfirm?: boolean;
+  reasons?: string[];
+}
+
+/** 笔记组（统一产物层唯一容器，v4 §7.4） */
+export interface NoteGroup {
+  id: number;
+  name: string;
+  terrain: GroupTerrain;
+  kind: GroupKind;
+  domainTag: string | null;
+  /** route / series / manual */
+  source: string;
+  seriesKey: string | null;
+  /** 路由理由 JSON 字符串（解析见 GroupRouteReason） */
+  routeReason: string | null;
+  /** 0=自动路由，1=用户已改判（修改即记忆） */
+  routeOverridden: number;
+  noteCount: number;
+  createdAt: number;
+  updatedAt: number;
 }
 
 // ────────────────────────────────────────────────────────────

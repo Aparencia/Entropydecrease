@@ -16,6 +16,7 @@ import type { Note } from "../types";
 import NoteEditView from "../components/NoteEditView";
 import NoteListView, { parseTags } from "../components/NoteListView";
 import type { SortMode } from "../components/NoteListView";
+import NoteGroupPanel from "../components/NoteGroupPanel";
 import NoteReadingView from "../components/NoteReadingView";
 import ImagePreviewOverlay from "../components/ImagePreviewOverlay";
 import VersionPanel from "../components/VersionPanel";
@@ -32,6 +33,8 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
   const [keyword, setKeyword] = useState("");
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>("updated-desc");
+  // v0.11.0：组过滤（null=全部；NoteGroupPanel 受控）
+  const [groupFilter, setGroupFilter] = useState<number | null>(null);
   const [selected, setSelected] = useState<Note | null>(null);
   const [status, setStatus] = useState("");
   // M3：编辑态
@@ -199,6 +202,12 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
     return Array.from(set).sort();
   }, [notes]);
 
+  // v0.11.0：组过滤在客户端生效（列表已全量加载；组切换零请求）
+  const visibleNotes = useMemo(
+    () => (groupFilter === null ? notes : notes.filter((n) => n.group_id === groupFilter)),
+    [notes, groupFilter],
+  );
+
   // H3：辅助面板插槽——VersionPanel（版本时间线）+ EnrichPanel（知识补充），
   // 与 NoteEditView 同层的笔记详情区；key=note.id 切笔记重置面板内部任务态
   const auxPanels = selected ? (
@@ -210,9 +219,16 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
 
   return (
     <div style={{ display: "flex", height: "calc(100vh - 56px)", minHeight: 0 }}>
+      {/* ── 组侧栏（v0.11.0：统一产物层入口——过滤/路由可见可改）── */}
+      <NoteGroupPanel
+        groupFilter={groupFilter}
+        onGroupFilterChange={setGroupFilter}
+        selectedNoteId={selected?.id ?? null}
+        onChanged={() => void load(keyword, tagFilter, sortMode)}
+      />
       {/* ── 左栏：搜索 + 标签过滤 + 排序 + 列表 ── */}
       <NoteListView
-        notes={notes}
+        notes={visibleNotes}
         keyword={keyword}
         tagFilter={tagFilter}
         sortMode={sortMode}
