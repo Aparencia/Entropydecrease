@@ -161,10 +161,8 @@ fn match_ep_prefix(t: &str) -> Option<(String, u32)> {
     for i in 0..chars.len() {
         // EP（任意大小写组合）后跟 1-3 位数字；EP 前须为边界
         let ep = (i + 1 < chars.len())
-            && ((chars[i] == 'E' && chars[i + 1] == 'P')
-                || (chars[i] == 'e' && chars[i + 1] == 'p')
-                || (chars[i] == 'E' && chars[i + 1] == 'p')
-                || (chars[i] == 'e' && chars[i + 1] == 'P'));
+            && (chars[i] == 'e' || chars[i] == 'E')
+            && (chars[i + 1] == 'p' || chars[i + 1] == 'P');
         if ep && (i == 0 || is_boundary(chars[i - 1])) {
             let mut k = i + 2;
             while k < chars.len() && chars[k].is_ascii_digit() {

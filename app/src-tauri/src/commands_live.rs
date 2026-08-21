@@ -29,6 +29,9 @@ pub struct LiveSessionStatus {
     /// 2026-08 修复：是否处于暂停（挂载拉取恢复右侧面板状态机用——
     /// recording 事件只发一次，刷新/重进页面后需靠此字段还原 phase）
     pub paused: bool,
+    /// v0.9.0 M2（REQ-189）：当前生效画面档（kebab-case；None=未定档——
+    /// 前端面板挂载拉取兑底，tier-changed 事件可能早于监听注册）
+    pub tier: Option<String>,
 }
 
 /// 启动实时捕获会话（REQ-007~012 汇总入口）。
@@ -78,12 +81,35 @@ pub async fn start_live_session(
         ui_junk: state.ui_junk.clone(),
         // REQ-115：VAD 阈值共享槽（会话线程发布，诊断面板可查）
         vad_slot: state.vad_slot.clone(),
+        // v0.9.0 M2（REQ-189）：画面档降档确认共享状态（前端确认后写入，
+        // screen worker 消费并 retune 采样器）
+        tier_override: state.live_session.tier_override(),
+        // v0.9.0 M2（REQ-189）：当前生效画面档共享槽（worker 写入，command 查询）
+        applied_tier: state.live_session.applied_tier_slot(),
     };
     // REQ-104/132：剪贴板监听时间戳基准——与实时会话纪元同域（图片文件名不冲突）
     let epoch = Instant::now();
     let session_id = state.live_session.start(params).map_err(|e| e.to_string())?;
     start_clipboard_monitor(&state, session_id, epoch);
     Ok(session_id)
+}
+
+/// 确认画面档降档（v0.9.0 M2，REQ-189：降档需用户确认——降采样可能丢信息）。
+///
+/// @param tier - 确认后的档位标识（kebab-case；非法值明确报错）
+/// @ai-context: 升档静默生效无需确认（更积极采样无损失）；降档确认写入共享
+///              override → screen worker 下轮检测消费并 retune 采样器。
+#[tauri::command]
+pub async fn confirm_tier_downgrade(
+    state: State<'_, AppState>,
+    tier: String,
+) -> Result<(), String> {
+    let tier = crate::video_profile_spec::VisualTier::parse(&tier.chars().take(30).collect::<String>())
+        .ok_or_else(|| "非法画面档位标识".to_string())?;
+    state
+        .live_session
+        .confirm_tier_downgrade(tier)
+        .map_err(|e| e.to_string())
 }
 
 /// 停止实时捕获会话；返回被停止的会话 id（None=无活动会话）。
@@ -175,6 +201,8 @@ pub fn live_session_status(state: State<'_, AppState>) -> LiveSessionStatus {
             crate::live_session_prepare::PrepareStatus::Ready
         ),
         paused: state.live_session.is_paused(),
+        // v0.9.0 M2（REQ-189）：当前生效画面档（None=未定档/未激活）
+        tier: state.live_session.applied_tier().map(|t| t.as_str().to_string()),
     }
 }
 

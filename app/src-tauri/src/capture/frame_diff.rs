@@ -135,6 +135,19 @@ impl DualRateScheduler {
         self
     }
 
+    /// v0.9.0 M2（REQ-189）：会话中动态调档——画面价值重评升档时静默生效
+    /// （更积极的采样无损失）；降档由用户确认后经本方法应用。
+    ///
+    /// @ai-context: 保留已计 tick 数（升档不需重置节奏——调高频率后下一 tick
+    ///              自然进入新档位）；降档保留 tick 可避免同 tick 重复触发。
+    pub fn retune(&mut self, budget: crate::video_profile::SamplingBudget) {
+        self.subtitle_every = budget.subtitle_every.max(1);
+        self.full_every = budget.full_every.max(1);
+        self.silent_subtitle_every = budget.silent_subtitle_every.max(1);
+        self.silent_full_every = budget.silent_full_every.max(1);
+        self.degraded_full_every = self.full_every * 2;
+    }
+
     /// 推进一个 tick 并返回本次采样区域（speech_active=语音活跃度；degraded=高负载降级）。
     ///
     /// @ai-context: 字幕区与全帧各自独立计数（审查修复）：重叠 tick 优先字幕区

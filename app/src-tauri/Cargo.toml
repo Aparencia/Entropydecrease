@@ -17,6 +17,33 @@ default-run = "entropydecrease"
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+# 隐式 lib test 禁用（2026-08-21 构建修复）：统一由下方显式 [[test]] app_lib_tests
+# 承载——其链接经 build.rs 注入 comctl32 v6 manifest（隐式目标无法注入，
+# 加载 system32 的 comctl32 5.82 报 0xc0000139）
+test = false
+
+# 显式测试目标（2026-08-21 构建修复）：build.rs 的 comctl32 v6 manifest 注入
+# 经 cargo:rustc-link-arg-tests 只作用于测试目标；bin test=false——隐式 bin test
+# 无测试（0 用例）且链接 tauri-build 的 resource.lib（已含 MANIFEST 资源），
+# 重复注入会 CVT1100 duplicate resource。
+[[test]]
+name = "app_lib_tests"
+path = "src/lib.rs"
+
+[[bin]]
+name = "entropydecrease"
+path = "src/main.rs"
+test = false
+
+[[bin]]
+name = "asr_forensic"
+path = "src/bin/asr_forensic.rs"
+test = false
+
+[[bin]]
+name = "cer_bench"
+path = "src/bin/cer_bench.rs"
+test = false
 
 [features]
 # ADR-009（v0.4.0 M1）：OCR CUDA EP 编译开关（默认开）——ORT 1.28 官方 gpu_cuda12

@@ -203,6 +203,8 @@ export interface LiveSessionStatus {
   prepared: boolean;
   /** 是否处于暂停（2026-08 修复：刷新/重进页面后右侧面板状态机还原用） */
   paused: boolean;
+  /** v0.9.0（REQ-189）：当前生效画面档（kebab-case；null=未定档——采集态档案条拉取兑底） */
+  tier: string | null;
 }
 
 /** 视频导入进度（Rust ImportProgress，camelCase 契约） */
@@ -378,6 +380,55 @@ export interface DetectResult {
   candidates: ProfileCandidate[];
   needs_confirmation: boolean;
   memory_hit: ProfileKind | null;
+  /** v0.9.0（REQ-188）：记忆命中时的四维形态（检测卡 v2 展示；旧响应缺省 null） */
+  memory_form?: ContentForm | null;
+  /** v0.9.0（REQ-190）：领域标签检测结果（平台分区/标题词四来源；旧响应缺省 null） */
+  domain?: DomainDetection | null;
+}
+
+/** 领域检测结果（Rust DomainDetection） */
+export interface DomainDetection {
+  kind: string | null;
+  fine_tags: string[];
+  source: string;
+  confidence: number;
+}
+
+// ────────────────────────────────────────────────────────────
+// 视频档案框架 v2 四维解耦领域类型（v0.9.0 M1，REQ-188，与 Rust serde 契约对齐）
+// ────────────────────────────────────────────────────────────
+
+/** 内容形态（Rust ContentForm，kebab-case；7 类决定产物模板） */
+export type ContentForm =
+  | "lecture"
+  | "hands-on"
+  | "explainer"
+  | "dialog"
+  | "exercise"
+  | "coding"
+  | "audio";
+
+/** 画面信息价值档位（Rust VisualTier，kebab-case；4 档决定采样/OCR/存储） */
+export type VisualTier = "rich" | "medium" | "low" | "none";
+
+/** 内容领域标签（Rust DomainTag；粗领域 + 细标签开放） */
+export interface DomainTag {
+  coarse: string | null;
+  fine: string[];
+}
+
+/** 语言标签（Rust LanguageTag；预留维——当前中文单语） */
+export type LanguageTag = "zh" | "en" | "mixed";
+
+/** 四维档案规格（Rust ProfileSpec；检测输出/会话落库/检测卡 v2 传输） */
+export interface ProfileSpec {
+  /** 内容形态（None=识别中——不阻塞会话开始，参数走默认档） */
+  form: ContentForm | null;
+  /** 画面价值档位（开始前默认中档 + 诚实声明） */
+  visual_tier: VisualTier;
+  /** 内容领域（null=空领域——不阻塞，会话中自动补全） */
+  domain: DomainTag | null;
+  language: LanguageTag;
 }
 
 // ────────────────────────────────────────────────────────────

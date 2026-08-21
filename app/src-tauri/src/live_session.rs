@@ -64,6 +64,12 @@ pub struct LiveSessionParams {
     pub ui_junk: crate::ui_junk::UiJunkList,
     /// v0.7.0 M2（REQ-115）：VAD 阈值共享槽（会话线程发布当前阈值，诊断可查）
     pub vad_slot: std::sync::Arc<crate::vad_threshold_slot::VadThresholdSlot>,
+    /// v0.9.0 M2（REQ-189）：画面档降档确认共享状态（None=无待确认/升档静默
+    /// 直改；降档时前端确认后写入——screen worker 消费并 retune 采样器）
+    pub tier_override: std::sync::Arc<std::sync::Mutex<Option<crate::video_profile_spec::VisualTier>>>,
+    /// v0.9.0 M2（REQ-189）：当前生效画面档共享槽（worker 应用档位时写入，
+    /// command 查询——live:tier-changed 事件可能早于前端面板挂载，拉取兜底）
+    pub applied_tier: std::sync::Arc<std::sync::Mutex<Option<crate::video_profile_spec::VisualTier>>>,
 }
 
 /// 活动会话记录。
@@ -85,6 +91,10 @@ pub struct LiveSessionManager {
     prepared: Arc<Mutex<Option<PreparedSession>>>,
     /// v0.7.2（REQ-151）：会话信息聚合（面板数据源——屏幕 worker 写入，事件/命令读取）
     session_info: crate::session_info::SessionInfoCollector,
+    /// v0.9.0 M2（REQ-189）：画面档降档确认共享状态（命令层写入，worker 消费）
+    tier_override: std::sync::Arc<std::sync::Mutex<Option<crate::video_profile_spec::VisualTier>>>,
+    /// v0.9.0 M2（REQ-189）：当前生效画面档（worker 应用档位时写入，command 查询）
+    applied_tier: std::sync::Arc<std::sync::Mutex<Option<crate::video_profile_spec::VisualTier>>>,
 }
 
 impl Default for LiveSessionManager {
@@ -102,6 +112,8 @@ impl Clone for LiveSessionManager {
             pause: self.pause.clone(),
             prepared: self.prepared.clone(),
             session_info: self.session_info.clone(),
+            tier_override: self.tier_override.clone(),
+            applied_tier: self.applied_tier.clone(),
         }
     }
 }
@@ -115,6 +127,8 @@ impl LiveSessionManager {
             pause: Default::default(),
             prepared: Arc::new(Mutex::new(None)),
             session_info: crate::session_info::SessionInfoCollector::new(),
+            tier_override: Arc::new(Mutex::new(None)),
+            applied_tier: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -138,6 +152,36 @@ impl LiveSessionManager {
     /// paused 事件只发一次，页面刷新/重进后前端需拉取还原状态机）。
     pub fn is_paused(&self) -> bool {
         self.pause.paused.load(Ordering::SeqCst)
+    }
+
+    /// 画面档降档确认共享状态句柄（command 层组装 LiveSessionParams 时获取；
+    /// v0.9.0 M2 REQ-189——前端确认降档后写入，worker 消费）。
+    pub fn tier_override(&self) -> std::sync::Arc<std::sync::Mutex<Option<crate::video_profile_spec::VisualTier>>> {
+        self.tier_override.clone()
+    }
+
+    /// 确认画面档降档（v0.9.0 M2 REQ-189）：写入共享状态 → screen worker
+    /// 下轮检测消费并 retune 采样器；无活动会话 → 明确报错（幂等拒绝）。
+    pub fn confirm_tier_downgrade(&self, tier: crate::video_profile_spec::VisualTier) -> Result<()> {
+        let guard = self.active.lock().expect("live session lock poisoned");
+        if guard.is_none() {
+            return Err(AppError::Io("无活动实时会话".to_string()));
+        }
+        *self.tier_override.lock().expect("tier override lock poisoned") = Some(tier);
+        Ok(())
+    }
+
+    /// 当前生效画面档快照（v0.9.0 M2 REQ-189：worker 应用档位时写入；
+    /// 前端挂载拉取兜底——tier-changed 事件可能早于面板监听注册）。
+    pub fn applied_tier(&self) -> Option<crate::video_profile_spec::VisualTier> {
+        self.applied_tier.lock().ok().and_then(|g| *g)
+    }
+
+    /// 生效画面档共享槽句柄（command 层组装 LiveSessionParams 时获取）。
+    pub fn applied_tier_slot(
+        &self,
+    ) -> std::sync::Arc<std::sync::Mutex<Option<crate::video_profile_spec::VisualTier>>> {
+        self.applied_tier.clone()
     }
 
     /// 暂停活动会话（2026-08 A1 硬暂停：完全停采）。
@@ -587,6 +631,11 @@ pub(crate) fn run_session_after_engine(
         let worker_pause = pause.clone();
         // v0.7.2（REQ-151）：会话信息聚合（worker 播放器 OCR 写入）
         let worker_session_info = session_info.clone();
+        // v0.9.0 M2（REQ-189）：画面档降档确认共享状态（前端确认后写入，
+        // worker 消费并 retune 采样器）
+        let worker_tier_override = params.tier_override.clone();
+        // v0.9.0 M2（REQ-189）：当前生效画面档共享槽（worker 应用档位时写入）
+        let worker_applied_tier = params.applied_tier.clone();
         match std::thread::Builder::new()
             .name("entropy-screen-worker".into())
             .spawn(move || {
@@ -611,6 +660,10 @@ pub(crate) fn run_session_after_engine(
                     worker_pause,
                     // v0.7.2（REQ-151）：会话信息聚合（播放器 OCR 写入）
                     worker_session_info,
+                    // v0.9.0 M2（REQ-189）：画面档降档确认共享状态
+                    worker_tier_override,
+                    // v0.9.0 M2（REQ-189）：当前生效画面档共享槽
+                    worker_applied_tier,
                 )
             }) {
             Ok(h) => Some(h),

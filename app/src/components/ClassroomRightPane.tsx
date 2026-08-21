@@ -48,7 +48,11 @@ export default function ClassroomRightPane({
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {liveActive || stopping || fusionActive ? (
         /* 活动态：实时转写流 + 最近画面条 + 画面要点流 + 状态机（简要：仅最近几条） */
-        <LiveActivityPanel sessionId={liveSessionId} />
+        <LiveActivityPanel
+          sessionId={liveSessionId}
+          /* v0.9.0 验收缺陷修复：采集态档案条（形态/领域检测输入——窗口标题） */
+          windowTitle={selectedWindow?.title ?? null}
+        />
       ) : (
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
           {/* A4：融合完成直达卡片（停止后右侧顶部；一键跳会话页定位） */}

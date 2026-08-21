@@ -73,6 +73,12 @@ pub fn run_screen_worker(
     pause: crate::capture::audio_loopback::SessionPause,
     // v0.7.2（REQ-151）：会话信息聚合（播放器 OCR 文本 → 平台/时长/合集信息面板）
     session_info: crate::session_info::SessionInfoCollector,
+    // v0.9.0 M2（REQ-189）：画面档降档确认共享状态（前端确认后写入——
+    // 本 worker 消费并 retune 采样器；None=无待确认）
+    tier_override: std::sync::Arc<std::sync::Mutex<Option<crate::video_profile_spec::VisualTier>>>,
+    // v0.9.0 M2（REQ-189）：当前生效画面档共享槽（应用档位时写入——
+    // command 查询用；事件可能早于前端面板挂载，拉取兑底）
+    applied_tier: std::sync::Arc<std::sync::Mutex<Option<crate::video_profile_spec::VisualTier>>>,
 ) {
     let mut screen = match ScreenCaptureSampler::new(hwnd.map(crate::windows::hwnd_from_i64)) {
         Ok(s) => {
@@ -102,6 +108,15 @@ pub fn run_screen_worker(
         budget.silent_subtitle_every,
         budget.silent_full_every,
     );
+    // v0.9.0 M2（REQ-189）：画面价值观测器（每 2-3 分钟重评窗口；
+    // 帧切换/OCR 面积/结构区三信号 → 升档静默/降档确认——见 video_tier_detect.rs）
+    let mut tier_observer =
+        crate::video_tier_detect::TierObserver::new(epoch.elapsed().as_secs());
+    // 观测增量基线（diff_pass/ocr_ok 只增不减——差量即本 tick 是否发生）
+    let mut last_tier_diff_pass: u64 = 0;
+    let mut last_tier_ocr_ok: u64 = 0;
+    // 已生效画面档（None=未定档——开始前默认中档占位由前端声明）
+    let mut tier_applied_tier: Option<crate::video_profile_spec::VisualTier> = None;
     // ADR-011：触发链路状态（全帧/ROI 网格 diff + 面板检测 + OCR 时刻）
     let mut trigger = TriggerState::new();
     let mut voter = SubtitleVoter::new();
@@ -290,6 +305,79 @@ pub fn run_screen_worker(
                     &mut last_archived_text, &mut last_archived_at, &latest_frame,
                     &mut image_store, &ui_junk, &mut screen_tracker,
                 );
+            }
+            // v0.9.0 M2（REQ-189）：画面价值观测注入（每采样 tick）——帧切换
+            // 上升沿（diff_pass 增量）、OCR 面积占比（ocr_ok 增量：本版以
+            // 固定 0.4 近似——全帧变化路径即画面有文字；区域构成留 M4 迭代）
+            // @review C12: has_structure 恒 false(区域构成信号暂缺实际注入)
+            tier_observer.observe(
+                now_ms / 1000,
+                stats.diff_pass > last_tier_diff_pass,
+                (stats.ocr_ok > last_tier_ocr_ok).then_some(0.4),
+                false,
+            );
+            last_tier_diff_pass = stats.diff_pass;
+            last_tier_ocr_ok = stats.ocr_ok;
+            // 重评窗口结算后：升档静默生效（retune 采样器）；降档需确认——
+            // 确认结果经 tier_override 共享状态回流（前端 confirm_tier_downgrade）
+            if let Some(new_tier) = tier_observer.current_tier() {
+                let applied = tier_applied_tier;
+                if applied != Some(new_tier) {
+                    let change = crate::video_tier_detect::decide_change(applied, Some(new_tier));
+                    let budget = crate::video_profile_spec_data::sampling_for_tier(new_tier);
+                    match change {
+                        crate::video_tier_detect::TierChange::UpgradeSilent
+                        | crate::video_tier_detect::TierChange::None => {
+                            // 升档/首定档静默应用（更积极采样无损失）；同档无需动作
+                            scheduler.retune(budget);
+                            tier_applied_tier = Some(new_tier);
+                            if let Ok(mut guard) = applied_tier.lock() {
+                                *guard = Some(new_tier);
+                            }
+                            let _ = app.emit(
+                                "live:tier-changed",
+                                serde_json::json!({
+                                    "tier": new_tier.as_str(),
+                                    "reason": "upgrade-silent",
+                                }),
+                            );
+                        }
+                        crate::video_tier_detect::TierChange::DowngradeConfirm => {
+                            // 降档需确认：读取共享确认状态——用户已确认 → 应用；
+                            // 未确认 → 保持现状档（不丢信息），下轮重评再询
+                            let confirmed = tier_override
+                                .lock()
+                                .ok()
+                                .and_then(|g| *g)
+                                .filter(|t| *t == new_tier);
+                            if confirmed.is_some() {
+                                scheduler.retune(budget);
+                                tier_applied_tier = Some(new_tier);
+                                if let Ok(mut guard) = applied_tier.lock() {
+                                    *guard = Some(new_tier);
+                                }
+                                if let Ok(mut guard) = tier_override.lock() {
+                                    *guard = None;
+                                }
+                                let _ = app.emit(
+                                    "live:tier-changed",
+                                    serde_json::json!({
+                                        "tier": new_tier.as_str(),
+                                        "reason": "downgrade-confirmed",
+                                    }),
+                                );
+                            } else {
+                                let _ = app.emit(
+                                    "live:tier-downgrade-request",
+                                    serde_json::json!({
+                                        "from": tier_applied_tier.map(|t| t.as_str()),
+                                        "to": new_tier.as_str(),
+                                    }),
+                                );
+                            }
+                        }
+                    }
+                }
             }
             // M1/REQ-125：播放器行为检测（5s 节流——非每帧；从最新帧缓存取帧做
             // 暂停图标检测；Pause→无图标 状态机推导 Play 事件；无帧/转换失败 →

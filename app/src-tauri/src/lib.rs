@@ -228,6 +228,18 @@ mod vad_threshold_slot;
 mod verbal_normalize;
 mod video_profile;
 mod video_profile_data;
+// v0.9.0 M1（REQ-188）：视频档案框架 v2 四维解耦数据模型（形态×画面档×领域×语言）
+mod video_profile_spec;
+mod video_profile_spec_data;
+// v0.9.0 M2（REQ-189）：画面价值档位检测（三信号投票 + 重评窗口 + 升降档裁决）
+mod video_tier_detect;
+// v0.9.0 M3（REQ-190）：内容领域标签体系（粗 15 领域 + 细标签 + 四来源检测）
+mod video_profile_domain;
+mod video_profile_domain_data;
+// v0.9.0 M4（REQ-191）：平台信号适配（bilibili/local 轻量适配 + OCR 标签通用化）
+mod platform_adapter;
+// v0.9.0 M5（REQ-193）：叙事结构检测（故事线/结构化条目/直接教学 模板变体）
+mod narrative_detect;
 mod vocab;
 mod watermark_filter;
 // v0.7.0 窗口过滤增强：站点首页判定/可捕获性纯逻辑（2026-08 用户需求）
@@ -339,6 +351,10 @@ pub fn run() {
             commands_live::pause_live_session,
             #[cfg(target_os = "windows")]
             commands_live::resume_live_session,
+            // v0.9.0 M2（REQ-189）：画面档降档确认（降采样可能丢信息——
+            // 升档静默无需确认；确认后 worker retune 采样器）
+            #[cfg(target_os = "windows")]
+            commands_live::confirm_tier_downgrade,
             // P3：引擎预热（选窗口阶段后台加载，开始即录）/ 释放
             #[cfg(target_os = "windows")]
             commands_live::prepare_live_session,
@@ -364,6 +380,13 @@ pub fn run() {
             commands_video::remember_video_profile,
             commands_video::video_profile_memory,
             commands_video::video_profile_by_kind,
+            // v0.9.0 M1（REQ-188）：四维解耦 command（矩阵查询/旧档案映射/形态记忆）
+            commands_video::video_profile_for_spec,
+            commands_video::video_profile_spec_by_kind,
+            commands_video::remember_video_profile_form,
+            // v0.9.0 M3（REQ-190）：领域标签检测 + hotwords 预热
+            commands_video::detect_video_domain,
+            commands_video::preheat_domain_hotwords,
             // 会话结构化分析（REQ-044/045/046，v0.5.0 M2：章节/重点/术语/讲者）
             commands_analysis::analyze_session_command,
             // 说话人分离（REQ-153，v0.7.2：弱化版讲者切换离线分析——幂等懒加载）

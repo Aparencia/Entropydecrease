@@ -258,6 +258,14 @@ pub struct DetectResult {
     pub needs_confirmation: bool,
     /// 记忆偏好命中（同窗口标题上次确认过；直接生效无需确认）
     pub memory_hit: Option<ProfileKind>,
+    /// v0.9.0（REQ-188）：记忆命中时的四维形态（检测卡 v2 展示；
+    /// 旧 JSON/旧记忆缺省 None——经 memory_hit.to_form() 映射兜底，零回归）
+    #[serde(default)]
+    pub memory_form: Option<crate::video_profile_spec::ContentForm>,
+    /// v0.9.0（REQ-190）：领域标签检测结果（平台分区/标题词/用户确认/术语频率
+    /// 四来源；None=未检测——旧 JSON/旧前端零回归）
+    #[serde(default)]
+    pub domain: Option<crate::video_profile_domain::DomainDetection>,
 }
 
 /// 检测得分阈值：top 得分低于该值视为信号不足。
@@ -296,6 +304,8 @@ pub fn vote_detect(signals: &ObservedSignals) -> DetectResult {
             candidates: vec![ProfileCandidate { kind: ProfileKind::Unknown, score: 1.0 }],
             needs_confirmation: true,
             memory_hit: None,
+            memory_form: None,
+            domain: None,
         };
     }
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -308,7 +318,7 @@ pub fn vote_detect(signals: &ObservedSignals) -> DetectResult {
             .get(1)
             .map(|(_, s)| scored[0].1 - *s < CONFLICT_GAP)
             .unwrap_or(false);
-    DetectResult { candidates, needs_confirmation, memory_hit: None }
+    DetectResult { candidates, needs_confirmation, memory_hit: None, memory_form: None, domain: None }
 }
 
 /// 单档案得分（纯函数，可注入 fake 信号单测）。
@@ -355,6 +365,10 @@ pub struct MemoryEntry {
     /// 同系列各集共享记忆；旧 JSON 缺省 false（零回归）。
     #[serde(default)]
     pub is_series: bool,
+    /// v0.9.0（REQ-188）：四维形态记忆（旧 13 类 kind 的映射结果；
+    /// 旧 JSON 缺省 None → 读取时经 kind.to_form() 映射，零迁移风险）。
+    #[serde(default)]
+    pub form: Option<crate::video_profile_spec::ContentForm>,
 }
 
 /// 记忆偏好库（JSON 持久化；同 vocab 模式：路径可注入，测试用 tempfile）。
@@ -414,6 +428,27 @@ impl ProfileMemory {
     /// @ai-context: v0.7.2（REQ-152）：标题可识别系列 → 存**系列键**（is_series=true，
     ///              同系列各集共享）；否则存完整标题（现状行为零回归）。
     pub fn remember(&mut self, keyword: &str, kind: ProfileKind) {
+        let form = kind.to_form();
+        self.remember_with_form(keyword, kind, form);
+    }
+
+    /// 记录用户确认（四维形态优先版，REQ-188）：kind 存代表旧类（消费端兼容），
+    /// form 存新形态（检测卡 v2 下次直接生效——同标题/同系列）。
+    ///
+    /// @ai-context: form 为 None（Unknown 等无可映射形态）时仅记 kind——
+    ///              形态维度诚实未知，不猜默认；读取时 lookup_form 返回 None。
+    pub fn remember_form(&mut self, keyword: &str, form: crate::video_profile_spec::ContentForm) {
+        let kind = crate::video_profile_spec_data::legacy_kind_for_form(form);
+        self.remember_with_form(keyword, kind, Some(form));
+    }
+
+    /// 记录内部实现（series 键剥离 + 条目覆盖/追加 + form 同步）。
+    fn remember_with_form(
+        &mut self,
+        keyword: &str,
+        kind: ProfileKind,
+        form: Option<crate::video_profile_spec::ContentForm>,
+    ) {
         let keyword = keyword.trim().to_string();
         if keyword.is_empty() {
             return;
@@ -425,9 +460,45 @@ impl ProfileMemory {
         if let Some(e) = self.entries.iter_mut().find(|e| e.keyword == key) {
             e.kind = kind;
             e.is_series = is_series;
+            e.form = form;
         } else {
-            self.entries.push(MemoryEntry { keyword: key, kind, is_series });
+            self.entries.push(MemoryEntry { keyword: key, kind, is_series, form });
         }
+    }
+
+    /// 按标题查询四维形态记忆（REQ-188）：form 优先，旧条目经 kind 映射兜底。
+    ///
+    /// @ai-context: 消费端 v2（检测卡/会话落库）用本方法；旧 lookup 保留为
+    ///              13 类兼容（零回归）。序列键剥离逻辑与 lookup 同口径。
+    pub fn lookup_form(&self, title: &str) -> Option<crate::video_profile_spec::ContentForm> {
+        if let Some(info) = crate::series_detect::extract_series(title) {
+            if let Some(form) = self.lookup_form_best(&info.series) {
+                return Some(form);
+            }
+        }
+        self.lookup_form_best(title)
+    }
+
+    /// 最长关键词优先匹配（纯函数；form 优先、kind 映射兜底）。
+    fn lookup_form_best(
+        &self,
+        key: &str,
+    ) -> Option<crate::video_profile_spec::ContentForm> {
+        let mut best: Option<(usize, crate::video_profile_spec::ContentForm)> = None;
+        for e in &self.entries {
+            if key.contains(&e.keyword) && !e.keyword.is_empty() {
+                let len = e.keyword.chars().count();
+                let form = e
+                    .form
+                    .or_else(|| e.kind.to_form());
+                if let Some(f) = form {
+                    if best.as_ref().is_none_or(|(bl, _)| len > *bl) {
+                        best = Some((len, f));
+                    }
+                }
+            }
+        }
+        best.map(|(_, form)| form)
     }
 }
 

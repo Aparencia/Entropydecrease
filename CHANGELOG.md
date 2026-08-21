@@ -5,6 +5,16 @@
 
 ## [Unreleased] - 2026-08-21
 
+### 视频档案框架 v2 四维解耦（任务 5：v0.9.0 M1~M5 代码建设，2026-08-21）
+
+- **四维解耦数据模型（REQ-188）**：新增 `video_profile_spec.rs` + `video_profile_spec_data.rs`——形态 7 类（讲授/实操/解说/对话/题目/代码/音频）× 画面档 4 档（高/中/低/无）× 领域 × 语言 四维解耦；13→7 映射（whiteboard→讲授=高、podcast/live→音频=无档）；参数矩阵（形态→产物模板+后处理、画面档→采样/OCR/存储）；记忆库 kind 映射迁移（MemoryEntry.form 字段 + remember_form/lookup_form，旧 JSON 零回归）；新 command（video_profile_for_spec / video_profile_spec_by_kind / remember_video_profile_form）
+- **画面价值自动检测（REQ-189）**：新增 `video_tier_detect.rs`——三信号加权投票（帧切换率/OCR 文字面积/区域构成）+ 升降档裁决（升档静默/降档确认）+ 重评窗口聚合（150s 定档）；screen worker 集成观测器 + DualRateScheduler::retune 动态调档 + live:tier-changed / live:tier-downgrade-request 事件 + confirm_tier_downgrade command
+- **领域标签体系（REQ-190）**：新增 `video_profile_domain.rs` + `video_profile_domain_data.rs`——粗 15 领域 × 种子词表 + 细标签开放 + 四来源检测（平台>用户>标题>术语）；hotwords 预热（preheat_domain_hotwords 注入 VocabManager）、术语筛选、区域预期（数学→公式区）接线
+- **平台信号适配（REQ-191）**：新增 `platform_adapter.rs`——平台推断（标题后缀/URL/本地文件）+ bilibili 分区标签提取（会话 33 实证 `知识科普|经济管理`）+ local 路径语义 + OCR 标签通用化（不依赖平台枚举）；无平台信号零回归
+- **检测卡 v2（REQ-192）**：ProfileDetector 重写为三维一体交互（形态/画面/领域各自可调下拉，修改即记忆）；未知维"识别中"不阻塞；形态低置信必问；档案卡无开始按钮（归采集控制区）
+- **叙事结构模板变体（REQ-193）**：新增 `narrative_detect.rs`——故事化特征投票（角色+转折词）→ 摘要模板"叙事线+要点提取"变体（会话 33 小马故事归属）；直接教学零回归
+- 验收：cargo test 1352 全绿 + clippy 零警告；M6 真机验收（会话 33 复测）待执行
+
 ### 重构与基建（任务 4 完成）
 
 - **分支重构**：远程分支重建为 `dev`（日常开发主线）/ `main`（发布线，semantic-release 自动发布）/ `old`（旧代码存档，dev+main 合并，只读）；删除 `rebuild`；GitHub 默认分支切换为 dev

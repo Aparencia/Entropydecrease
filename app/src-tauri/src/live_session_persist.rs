@@ -219,7 +219,7 @@ pub(crate) struct FinalEventCtx<'a> {
 ///              段透传事件置信度。
 /// @ai-context: now_ms=当前音频块时刻（句尾校正回退基准）。
 pub(crate) fn handle_final_event(
-    mut ctx: FinalEventCtx<'_>,
+    ctx: FinalEventCtx<'_>,
     text: String,
     merge_with_next: bool,
     confidence: Option<f32>,
@@ -283,7 +283,7 @@ pub(crate) fn handle_final_event(
                         end_ms,
                         &merged,
                         p_vol,
-                        &mut ctx.last_speech_rate,
+                        ctx.last_speech_rate,
                     ) {
                         Some((rest, rest_start)) => {
                             // 残余半句继续挂起（链式延续；切分后置信度/音量无法归因 → None）
@@ -309,7 +309,7 @@ pub(crate) fn handle_final_event(
                 p_conf,
                 p_vol,
                 None,
-                &mut ctx.last_speech_rate,
+                ctx.last_speech_rate,
             );
         }
         // 新挂起段：保留本事件置信度/音量（后续合并/兜底落库时透传）
@@ -340,7 +340,7 @@ pub(crate) fn handle_final_event(
                 end_ms,
                 &merged,
                 p_vol,
-                &mut ctx.last_speech_rate,
+                ctx.last_speech_rate,
             ) {
                 // 合并切分后的残余置信度/音量/停顿无法归因 → None（诚实）
                 persist_final(
@@ -354,7 +354,7 @@ pub(crate) fn handle_final_event(
                     None,
                     None,
                     None,
-                    &mut ctx.last_speech_rate,
+                    ctx.last_speech_rate,
                 );
             }
             // 合并段整体已落库 → 更新上一段 end（停顿基准）
@@ -372,7 +372,7 @@ pub(crate) fn handle_final_event(
             p_conf,
             p_vol,
             None,
-            &mut ctx.last_speech_rate,
+            ctx.last_speech_rate,
         );
         // 挂起段兜底落库 → 更新上一段 end
         *ctx.last_segment_end = Some(p_end);
@@ -390,7 +390,7 @@ pub(crate) fn handle_final_event(
         confidence,
         volume,
         pause_ms,
-        &mut ctx.last_speech_rate,
+        ctx.last_speech_rate,
     );
     // 正常段已落库 → 更新上一段 end（停顿基准）
     *ctx.last_segment_end = Some(end_ms);
@@ -409,7 +409,7 @@ pub(crate) fn handle_final_event(
 /// @ai-context: 参数为编排上下文传递（与 persist_final 同模式，登记豁免）。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn flush_tail_and_persist(
-    mut ctx: FinalEventCtx<'_>,
+    ctx: FinalEventCtx<'_>,
     asr_engine: &mut StreamingAsrEngine,
     now_ms: u64,
     sentence_rms_sum: &mut f32,
@@ -430,7 +430,7 @@ pub(crate) fn flush_tail_and_persist(
             p_vol,
             // 中断兜底落库：段前停顿无基准（None——诚实未知）
             None,
-            &mut ctx.last_speech_rate,
+            ctx.last_speech_rate,
         );
         any = true;
     }
@@ -464,7 +464,7 @@ pub(crate) fn flush_tail_and_persist(
                 confidence,
                 volume,
                 pause_ms,
-                &mut ctx.last_speech_rate,
+                ctx.last_speech_rate,
             );
             // 尾句已落库 → 更新上一段 end（暂停恢复后下一句的停顿基准正确）
             *ctx.last_segment_end = Some(end_ms);

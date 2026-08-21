@@ -172,7 +172,29 @@ fn hands_on_blocks(
 }
 
 /// 摘要文（口播）：C2 重点 → Claim 排序 + Quote 金句 + 关键词索引
+///
+/// @ai-context: v0.9.0 M5（REQ-193）：叙事变体——故事化科普（会话 33 类）
+///              产出「叙事线 + 要点提取」（叙事段保序 + 编号要点）；
+///              直接教学/无故事化特征 → 现有路径零回归。
 fn talking_head_blocks(detail: &SessionDetail, analysis: &SessionAnalysis) -> Vec<ArtifactBlock> {
+    // 叙事检测（故事化特征：角色 + 转折词；命中 → 叙事线+要点变体）
+    let narrative = crate::narrative_detect::detect_narrative(
+        &crate::narrative_detect::NarrativeSignals {
+            segments: detail
+                .segments
+                .iter()
+                .map(|s| s.text.clone())
+                .collect(),
+            ocr_texts: detail
+                .ocr_blocks
+                .iter()
+                .map(|b| b.text.clone())
+                .collect(),
+        },
+    );
+    if narrative.style == crate::narrative_detect::NarrativeStyle::Storytelling {
+        return storytelling_blocks(detail, &narrative);
+    }
     let mut blocks = Vec::new();
     let mut order = 0u32;
     // 重点候选 → Claim
@@ -203,6 +225,60 @@ fn talking_head_blocks(detail: &SessionDetail, analysis: &SessionAnalysis) -> Ve
                 kind: ArtifactKind::Quote,
                 refs: BlockRefs { segment_id: Some(seg.id), ocr_block_id: None, frame_ms: Some(seg.start_ms) },
                 payload: BlockPayload::Text(text),
+                order,
+                source: BlockSource::Local,
+                id: 0,
+            });
+            order += 1;
+        }
+    }
+    blocks
+}
+
+/// 故事化叙事变体（REQ-193）：叙事线（保序叙事段）+ 要点提取（编号要点）。
+///
+/// @ai-context: 会话 33 实证形态——叙事段作为正文段落保留故事主线；
+///              要点作为 Highlight 块结构化呈现（"1、公积金贷款利息低"）；
+///              无要点时兜底叙事段直出（不丢故事）。
+fn storytelling_blocks(
+    detail: &SessionDetail,
+    narrative: &crate::narrative_detect::NarrativeDetection,
+) -> Vec<ArtifactBlock> {
+    let mut blocks = Vec::new();
+    let mut order = 0u32;
+    // 叙事线：含故事化特征的段保序（引用转写段 id——可回看可跳转）
+    for seg in &detail.segments {
+        if narrative.narrative_line.iter().any(|n| n == &seg.text) {
+            blocks.push(ArtifactBlock {
+                kind: ArtifactKind::Paragraph,
+                refs: BlockRefs { segment_id: Some(seg.id), ocr_block_id: None, frame_ms: Some(seg.start_ms) },
+                payload: BlockPayload::Text(seg.text.clone()),
+                order,
+                source: BlockSource::Local,
+                id: 0,
+            });
+            order += 1;
+        }
+    }
+    // 要点提取：编号要点段 → Highlight（结构化呈现）
+    for point in &narrative.key_points {
+        blocks.push(ArtifactBlock {
+            kind: ArtifactKind::Highlight,
+            refs: BlockRefs { segment_id: None, ocr_block_id: None, frame_ms: None },
+            payload: BlockPayload::Text(point.clone()),
+            order,
+            source: BlockSource::Local,
+            id: 0,
+        });
+        order += 1;
+    }
+    // 兜底：无叙事线（故事化但特征段缺失——罕见）→ 全部段直出不丢内容
+    if blocks.is_empty() {
+        for seg in &detail.segments {
+            blocks.push(ArtifactBlock {
+                kind: ArtifactKind::Paragraph,
+                refs: BlockRefs { segment_id: Some(seg.id), ocr_block_id: None, frame_ms: Some(seg.start_ms) },
+                payload: BlockPayload::Text(seg.text.clone()),
                 order,
                 source: BlockSource::Local,
                 id: 0,

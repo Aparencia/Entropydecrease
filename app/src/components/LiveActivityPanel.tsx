@@ -16,6 +16,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 // 2026-08 用户需求：实时转写中显示图片数据（转写 Tab 顶部"最近画面"条，独立区域不跳动）
 import LiveImageStrip from "./LiveImageStrip";
+// v0.9.0 验收缺陷修复：采集态档案条（形态×画面档×领域 + 升降档提示/确认）
+import LiveProfileStrip from "./LiveProfileStrip";
 import type { AsrFinalEvent, LiveSessionStatus, OcrEvent, SessionInfo, SubtitleEvent } from "../types";
 
 /** 定稿转写行（字幕或语音） */
@@ -107,7 +109,7 @@ function hasText(seg: string): boolean {
   return seg.trim().length > 0 && !/^[。！？!?…\s]+$/.test(seg);
 }
 
-export default function LiveActivityPanel({ sessionId }: { sessionId?: number | null }) {
+export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionId?: number | null; windowTitle?: string | null }) {
   const [tab, setTab] = useState<"transcript" | "ocr">("transcript");
   // 状态机（简要徽标文本）
   const [phase, setPhase] = useState<string>("正在初始化…");
@@ -347,6 +349,9 @@ export default function LiveActivityPanel({ sessionId }: { sessionId?: number | 
           </span>
         </div>
       )}
+
+      {/* v0.9.0 验收缺陷修复：采集态档案条（形态×画面档×领域常显 + 升降档提示/降档确认） */}
+      <LiveProfileStrip windowTitle={windowTitle ?? null} />
 
       {/* Tab 切换（简要两栏） */}
       <div style={{ display: "flex", gap: 4, padding: "8px 14px 0", flexShrink: 0 }}>

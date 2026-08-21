@@ -1,10 +1,41 @@
 //! ai_client.rs 单测（AAA 模式；payload/解析纯函数——网络路径不单测）。
 
+use std::sync::Mutex;
+
 use crate::ai_client::{
     build_chat_payload, chat_completions_url, extract_content, parse_json_object, AiClient,
     AiClientConfig, AiClientError,
 };
 use crate::ai_settings::AiSettings;
+
+/// env 操作互斥（防并行测试互相覆盖 SILICONFLOW_*——与 ai_cost_tests 同模式）。
+static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+/// 在锁内执行 env 敏感操作（清除后执行闭包；保存/还原宿主环境）。
+fn with_env_locked(f: impl FnOnce()) {
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let keys = [
+        "SILICONFLOW_API_KEY",
+        "SILICONFLOW_BASE_URL",
+        "SILICONFLOW_MODEL",
+        "SILICONFLOW_TIMEOUT_SECS",
+        "SILICONFLOW_RETRIES",
+        "SILICONFLOW_MAX_TOKENS",
+    ];
+    let saved: Vec<(String, Option<String>)> =
+        keys.iter().map(|k| (k.to_string(), std::env::var(k).ok())).collect();
+    // 清除所有相关 env（防宿主机泄漏干扰测试——闭包内 env 操作纯净）
+    for k in &keys {
+        std::env::remove_var(k);
+    }
+    f();
+    for (k, v) in saved {
+        match v {
+            Some(val) => std::env::set_var(k, val),
+            None => std::env::remove_var(k),
+        }
+    }
+}
 
 #[test]
 fn chat_url_preserves_v1_segment() {
@@ -82,50 +113,35 @@ fn parse_json_object_invalid_is_parse_error() {
 
 #[test]
 fn from_settings_resolves_defaults() {
-    // Arrange：清除相关环境变量（防宿主机泄漏——本机 User 级已设 DeepSeek
-    // 配置；沿用 ai_text_filter_tests 的 save/remove/restore 模式，末尾还原）
-    let keys = [
-        "SILICONFLOW_API_KEY",
-        "SILICONFLOW_BASE_URL",
-        "SILICONFLOW_MODEL",
-        "SILICONFLOW_TIMEOUT_SECS",
-        "SILICONFLOW_RETRIES",
-        "SILICONFLOW_MAX_TOKENS",
-    ];
-    let saved: Vec<(String, Option<String>)> =
-        keys.iter().map(|k| (k.to_string(), std::env::var(k).ok())).collect();
-    for k in &keys {
-        std::env::remove_var(k);
-    }
-    // Act：无 env/凭据 → 设置值；密钥为空
-    let s = AiSettings::default();
-    let c = AiClient::from_settings(&s, None).config;
-    // Assert：2026-08-21 真机排查后默认值——长生成超时 300s + 输出上限 20000 token
-    assert_eq!(c.base_url, s.base_url);
-    assert_eq!(c.model, s.model);
-    assert!(c.api_key.is_empty());
-    assert_eq!(c.timeout_secs, 300);
-    assert_eq!(c.max_retries, 2);
-    assert_eq!(c.max_tokens, 20000);
-    // env 覆盖 max_tokens（顺序执行，无并行竞争）
-    std::env::set_var("SILICONFLOW_MAX_TOKENS", "4096");
-    let c2 = AiClient::from_settings(&AiSettings::default(), None).config;
-    assert_eq!(c2.max_tokens, 4096);
-    // 清理（还原宿主环境，防污染其他测试）
-    for (k, v) in saved {
-        match v {
-            Some(val) => std::env::set_var(k, val),
-            None => std::env::remove_var(k),
-        }
-    }
+    // 测试隔离（与 ai_cost_tests 同模式）：锁内清除/还原宿主环境变量
+    with_env_locked(|| {
+        // Act：无 env/凭据 → 设置值；密钥为空
+        let s = AiSettings::default();
+        let c = AiClient::from_settings(&s, None).config;
+        // Assert：2026-08-21 真机排查后默认值——长生成超时 300s + 输出上限 20000 token
+        assert_eq!(c.base_url, s.base_url);
+        assert_eq!(c.model, s.model);
+        assert!(c.api_key.is_empty());
+        assert_eq!(c.timeout_secs, 300);
+        assert_eq!(c.max_retries, 2);
+        assert_eq!(c.max_tokens, 20000);
+        // env 覆盖 max_tokens（锁内顺序执行，无并行竞争）
+        std::env::set_var("SILICONFLOW_MAX_TOKENS", "4096");
+        let c2 = AiClient::from_settings(&AiSettings::default(), None).config;
+        assert_eq!(c2.max_tokens, 4096);
+    });
 }
 
 #[test]
 fn from_settings_uses_stored_key_when_no_env() {
-    // 凭据库密钥生效（无 env 时）
-    let s = AiSettings::default();
-    let c = AiClient::from_settings(&s, Some("sk-stored".to_string())).config;
-    assert_eq!(c.api_key, "sk-stored");
+    // 测试隔离（与 ai_cost_tests 同模式）：锁内清除宿主泄漏的 SILICONFLOW_API_KEY
+    // （本机 User 级已设真实密钥）——无 env 才验证凭据库密钥
+    with_env_locked(|| {
+        // 凭据库密钥生效（无 env 时）
+        let s = AiSettings::default();
+        let c = AiClient::from_settings(&s, Some("sk-stored".to_string())).config;
+        assert_eq!(c.api_key, "sk-stored");
+    });
 }
 
 #[test]

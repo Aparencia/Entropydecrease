@@ -14,9 +14,9 @@
 | app/src/pages/ClassroomPage.tsx | ~548 | 装配层页面：左栏配置区（就绪清单/窗口选择/实时捕获/视频导入/OCR 设备/词表/素材）+ 右栏内容区；2026-08 审查硬拆（>600 违规）已拆出 ClassroomRightPane（右栏）与 MaterialInputPanel（素材+提取）回归 548 | 若再增长：将实时捕获卡片拆出 LiveCaptureCard（状态与事件监听下沉） |
 | app/src/components/AiServicePanel.tsx | ~390 | v0.8.0 M1（REQ-138/139/140）AI 服务设置面板：全局开关/密钥管理（掩码+DPAPI 保存）/端点模型/测试连接/余额卡片/授权确认卡/审计列表——配置面板 UI 内聚（表单态与视图解耦），拆分会割裂配置域 | 若再增长：余额卡片与审计列表拆至 AiBalanceCard.tsx / AiAuditList.tsx |
 | app/src/components/EnrichPanel.tsx | ~330 | v0.8.0 M3（REQ-142）知识补充面板：九子项勾选（记忆上次选择）/授权/成本确认/异步任务/结果预览/采纳撤销——单一面板完整交互流内聚（与 AiRefineCard 同模式） | 若再增长：子项勾选与结果预览拆至 EnrichKindsPicker.tsx / EnrichPreview.tsx |
-| app/src-tauri/src/video_profile.rs | ~394 | v0.5.0 M1（REQ-043）：档案域（类型/检测投票/记忆偏好/JSON IO）内聚；档案常量数据已拆至 video_profile_data.rs | 若再增长：检测投票与记忆偏好拆至 video_profile_detect.rs |
+| app/src-tauri/src/video_profile.rs | ~509 | v0.5.0 M1（REQ-043）：档案域（类型/检测投票/记忆偏好/JSON IO）内聚；档案常量数据已拆至 video_profile_data.rs；v0.9.0 M1 记忆库 kind 映射迁移（MemoryEntry.form + remember_form/lookup_form）再增 | 若再增长：检测投票与记忆偏好拆至 video_profile_detect.rs |
 | app/src-tauri/src/layout_analyzer.rs | ~475 | v0.5.0 M3（REQ-047）：规则版版面分析（行/列投影 + 表格线检测 + 区域分类启发式）内聚于同一分类管线；六轮审查再增（公式启发加固 + 低信息纯色方差滤除）至 ~475 | 若再增长：区域分类启发式拆至 layout_classify.rs |
-| app/src-tauri/src/artifact_templates.rs | ~501 | v0.5.0 M7（REQ-052）：五档案模板函数（讲义/步骤卡/摘要/对话纪要/会议纪要）内聚于同一模板域，各模板共享原料注入签名 | 若再增长：会议/访谈模板拆至 artifact_templates_meeting.rs |
+| app/src-tauri/src/artifact_templates.rs | ~572 | v0.5.0 M7（REQ-052）：五档案模板函数（讲义/步骤卡/摘要/对话纪要/会议纪要）内聚于同一模板域，各模板共享原料注入签名；v0.9.0 M5 叙事变体（storytelling_blocks——故事化科普叙事线+要点）再增 | 若再增长：会议/访谈模板拆至 artifact_templates_meeting.rs |
 | app/src-tauri/src/db.rs | ~470 | v0.5.0 M9 增长：notes + sessions 三表 schema + ensure_column 幂等迁移（v0.5.0 M1/M4 两列迁移 + v0.7.0 M1 REQ-103 volume 列 + v0.7.1 notes.session_id 列）+ 行映射；SQL 与迁移内聚 | 若再增长：ensure_column 迁移拆至 db_migrations.rs |
 | app/src-tauri/src/region_tracker.rs | ~422 | v0.4.0 M2（REQ-037）起：ROI 跟踪状态机（播放区域检测/锁定聚簇/重扫/前台切换冻结）+ 纯函数单测内联；与 RoiTracker 状态强耦合 | 若再增长：lock_roi/prior_roi 纯函数拆至 region_lock.rs |
 | app/src-tauri/src/commands_refine_inner.rs | ~301 | v0.5.0 模型版：课后精修编排（清单构建/降级决策/引擎懒加载/逐候选识别/产物回填/HTML→MD 转换）内聚于精修执行域 | 若再增长：html_to_markdown 拆至 html_table_md.rs |
@@ -31,9 +31,9 @@
 | app/src-tauri/src/screen_merge.rs | ~454 | v0.7.3（REQ-155/158）：屏级聚合纯函数域（聚类/行合并/角色分类/块去重）+ v0.7.5（REQ-166/167/169）净化纯函数（单字符/边缘条带/零跨度合并/图去重/包含率）——纯逻辑内聚便于单测 | 若再增长：零跨度合并与图去重拆至 screen_fix.rs || app/src-tauri/src/fusion_tests.rs | ~392 | 融合测试域（ADR-005 四规则 + REQ-062 概率加权 + REQ-103 音量透传 + REQ-111 切分对齐）单模块 #[path] 挂载；测试文件沿用单模块模式未拆 | 若再增长：REQ-111 切分对齐组拆至 fusion_split_tests.rs |
 | app/src-tauri/src/analysis.rs | ~344 | v0.5.0 M2 起结构化分析编排域（章节/重点/术语/讲者 + v0.7.0 M1.5 事件消费 + M2 step_boundaries/practice_segments/player_actions 三字段 + 审查修复按类型判定）；各机制输出聚合内聚于单一分析函数 | 若再增长：build_chapter_signals 事件版拆至 analysis_signals.rs |
 | app/src-tauri/src/live_session_loop.rs | ~360 | v0.7.0 M0 拆分产物（音频编排循环）：主循环 + 长静音/音量骤变/VAD 段事件写入（审查补接线）+ drain/停止 flush；LiveLoopCtx 聚合上下文；2026-08 A1 暂停边沿（断句隔离/事件/落库）+ P1 停止 drain 重构再增 | 若再增长：事件写入块拆至 live_session_events.rs |
-| app/src-tauri/src/live_session.rs | ~512 | 会话装配骨架（引擎+捕获+worker 启动）+ 管理器（start/stop/pause/prepare 生命周期）；2026-08 A1 暂停 + P2 会话复位 + P3 引擎预热交接（start 移交/回退内联）再增 | 若再增长：管理器与预备交接拆至 live_session_manager.rs |
+| app/src-tauri/src/live_session.rs | ~592 | 会话装配骨架（引擎+捕获+worker 启动）+ 管理器（start/stop/pause/prepare 生命周期）；2026-08 A1 暂停 + P2 会话复位 + P3 引擎预热交接（start 移交/回退内联）再增；v0.9.0 M2 画面档降档确认（tier_override 共享状态 + confirm_tier_downgrade）再增 | 若再增长：管理器与预备交接拆至 live_session_manager.rs |
 | app/src-tauri/src/live_session_persist.rs | ~337 | 定稿落库域（persist_final/digest_merged/handle_final_event）+ P2 flush_tail_and_persist（停止/暂停共用尾句落库）内聚 | 若再增长：flush_tail_and_persist 与 digest_merged 拆至 live_session_persist_tail.rs |
-| app/src-tauri/src/live_session_frame.rs | ~321 | 屏幕采样线程编排（自适应采样/空闲降频/前台监控/播放器检测）；2026-08 A1 暂停冻结 + P2 自动暂停轻量轮询（仅取帧+恢复检测）再增 | 若再增长：暂停轻量轮询拆至 live_session_pause_poll.rs |
+| app/src-tauri/src/live_session_frame.rs | ~533 | 屏幕采样线程编排（自适应采样/空闲降频/前台监控/播放器检测）；2026-08 A1 暂停冻结 + P2 自动暂停轻量轮询（仅取帧+恢复检测）再增；v0.9.0 M2 画面价值观测注入 + 升降档裁决（retune/事件）再增 | 若再增长：暂停轻量轮询拆至 live_session_pause_poll.rs |
 | app/src-tauri/src/analysis_tests.rs | ~339 | 分析编排测试域（档案门控矩阵 + REQ-108 事件消费 + M2 三字段）单模块 #[path] 挂载 | 若再增长：事件消费组拆至 analysis_events_tests.rs |
 | app/src-tauri/src/structure_note_tests.rs | ~415 | v0.7.6（REQ-177~181）：结构渲染层单测域（章节插入位置/命名窗口/词汇表排序上限锚点/零回归护栏/JSON 往返）单模块 #[path] 挂载；审查清理死代码 helpers 并补 max_terms=0 语义测试 | 若再增长：词汇表组拆至 structure_note_glossary_tests.rs |
 | app/src-tauri/src/note_filter_golden_tests.rs | ~390 | v0.7.5（REQ-172）：黄金语料回归域（会话31/29 实证 + v0.7.6 REQ-181 结构渲染 2 例 + 审查补测"配置开无数据逐字节一致"）单模块 #[path] 挂载 | 若再增长：结构渲染组拆至 note_filter_golden_structure_tests.rs |
@@ -42,7 +42,7 @@
 | app/src-tauri/src/commands_ai_enrich.rs | ~388 | v0.8.0 M3（REQ-142）+ F1/F2/F3（2026-08-21）：知识补充命令域（九子项校验/预估/异步任务/采纳/撤销 + 配额去重门控 + 成本硬拦截 + 任务落库）——与精修共用任务注册表上下文，命令域内聚 | 若再增长：门控/拦截拆至 commands_ai_enrich_gate.rs |
 | app/src-tauri/src/ai_refine_task.rs | ~358 | v0.8.0 F2-B4（2026-08-21）拆分产物：精修任务执行域（任务编排/并发切片 worker 池/单片重试/部分成功/审计/落库）——并发编排与状态流转内聚，拆分会破坏 worker 池与进度上报的耦合 | 若再增长：refine_slices_concurrent 拆至 ai_refine_task_workers.rs |
 | app/src-tauri/src/video_profile_tests.rs | ~338 | 档案测试域（12 档案断言矩阵 + 检测投票 + JSON 校准）单模块 #[path] 挂载 | 若再增长：档案矩阵拆至 video_profile_data_tests.rs |
-| app/src-tauri/src/artifact_templates_tests.rs | ~336 | 产物模板测试域（五档案模板 + v0.7.0 M2 代码块/步骤卡扩展）单模块 #[path] 挂载 | 若再增长：代码块/步骤卡组拆至 artifact_code_tests.rs |
+| app/src-tauri/src/artifact_templates_tests.rs | ~369 | 产物模板测试域（五档案模板 + v0.7.0 M2 代码块/步骤卡扩展 + v0.9.0 M5 叙事变体 golden）单模块 #[path] 挂载 | 若再增长：代码块/步骤卡组拆至 artifact_code_tests.rs |
 | app/src-tauri/src/asr_merge.rs | ~351 | v0.5.0 ADR-012 F4-1 语义合并域 + v0.7.0 M2 REQ-119 混排空格（spacing_for/merge_segments_with_spacing）；合并决策与切分共用标点常量 | 若再增长：split_sentences/split_timestamps 拆至 asr_merge_split.rs |
 
 > 已拆分：dxgi_capture.rs（原 ~333 行）于 v0.4.0 M0（TD-033，提交 2a88b25）将 DxgiState 拆至 dxgi_state.rs——现 dxgi_capture.rs ~176 行、dxgi_state.rs ~219 行，均回归 ≤300 行，无需登记。

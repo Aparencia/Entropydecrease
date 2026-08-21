@@ -70,3 +70,42 @@ fn sentence_end_falls_back_without_speech() {
     // Act & Assert：无语音记录（异常路径）→ 回退当前块时刻，不 panic
     assert_eq!(sentence_end_ms(None, 5000), 5000);
 }
+
+// ── v0.9.0 M2（REQ-189）：当前生效画面档共享槽（采集态档案条拉取兑底）────
+
+#[test]
+fn applied_tier_slot_defaults_none() {
+    // Arrange & Act：新管理器未定档
+    let manager = crate::live_session::LiveSessionManager::new();
+    // Assert
+    assert_eq!(manager.applied_tier(), None);
+}
+
+#[test]
+fn applied_tier_slot_publishes_and_reads_back() {
+    // Arrange：worker 语义——经共享槽句柄写入（run_screen_worker 等价操作）
+    let manager = crate::live_session::LiveSessionManager::new();
+    let slot = manager.applied_tier_slot();
+    // Act：应用档位写入
+    *slot.lock().expect("slot lock") = Some(crate::video_profile_spec::VisualTier::Medium);
+    // Assert：命令层查询读到同一档位
+    assert_eq!(
+        manager.applied_tier(),
+        Some(crate::video_profile_spec::VisualTier::Medium)
+    );
+}
+
+#[test]
+fn applied_tier_slot_clone_shares_state() {
+    // Arrange：克隆共享同一槽（manager 与 command 层句柄同实例语义）
+    let manager = crate::live_session::LiveSessionManager::new();
+    let clone = manager.clone();
+    // Act：经克隆句柄写入生效档
+    clone
+        .applied_tier_slot()
+        .lock()
+        .expect("lock")
+        .replace(crate::video_profile_spec::VisualTier::Rich);
+    // Assert：原句柄可见
+    assert_eq!(manager.applied_tier(), Some(crate::video_profile_spec::VisualTier::Rich));
+}

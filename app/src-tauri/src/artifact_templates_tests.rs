@@ -366,3 +366,57 @@ fn follow_along_template_produces_step_cards_from_boundaries() {
     // 口令边界 → 标签=口令原文
     assert!(steps.iter().any(|s| matches!(&s.payload, BlockPayload::Step { label: Some(l), .. } if l == "第一组")));
 }
+
+// ── v0.9.0 M5（REQ-193）：叙事结构模板变体 ──
+
+/// 会话 33 类故事化科普会话（小马买房公积金知识）。
+fn storytelling_detail() -> SessionDetail {
+    detail(
+        vec![
+            ("小马工作几年存了一点钱", 0, 3000),
+            ("有一天，小马想买房了", 3000, 6000),
+            ("后来小马了解到公积金贷款利息低", 6000, 10000),
+            ("1、公积金贷款利息低", 10000, 13000),
+            ("2、其他情况可以取出", 13000, 16000),
+            ("于是小马决定用公积金贷款", 16000, 20000),
+        ],
+        vec![("要点：公积金贷款", 7000)],
+    )
+}
+
+#[test]
+fn storytelling_科普_produces_narrative_line_and_points() {
+    // Arrange：故事化科普会话（会话 33 归属——口播/解说档案）
+    let d = storytelling_detail();
+    // Act：口播档案构建产物（叙事变体路径）
+    let artifact = build_artifact(ProfileKind::TalkingHead, &d, &[]);
+    // Assert：叙事线段落（含角色段保序）+ 要点 Highlight
+    let paras: Vec<&ArtifactBlock> = artifact.blocks.iter().filter(|b| b.kind == ArtifactKind::Paragraph).collect();
+    let points: Vec<&ArtifactBlock> = artifact.blocks.iter().filter(|b| b.kind == ArtifactKind::Highlight).collect();
+    assert!(!paras.is_empty(), "故事化科普应产出叙事线段落");
+    assert!(paras.iter().any(|b| matches!(&b.payload, BlockPayload::Text(t) if t.contains("小马"))), "叙事线含角色段");
+    assert!(!points.is_empty(), "故事化科普应产出结构化要点");
+    assert!(points.iter().any(|b| matches!(&b.payload, BlockPayload::Text(t) if t.contains("1、公积金贷款利息低"))), "要点提取命中编号段");
+}
+
+#[test]
+fn direct_teaching_模板_零回归() {
+    // Arrange：直接教学会话（无故事化特征——现有路径）
+    let d = detail(
+        vec![
+            ("微积分的核心概念是极限", 0, 5000),
+            ("极限的定义如下", 6000, 10000),
+            ("连续函数满足三个条件", 11000, 15000),
+        ],
+        vec![("板书：极限定义", 1000)],
+    );
+    // Act：口播档案构建（直接教学路径——现有摘要模板）
+    let artifact = build_artifact(ProfileKind::TalkingHead, &d, &[]);
+    // Assert：零回归——无叙事线段落（走 Claim/Quote 现有路径）
+    assert!(!artifact.blocks.iter().any(|b| b.kind == ArtifactKind::Paragraph), "直接教学不产叙事线段落");
+    // 兜底 Quote 或 Claim 至少存在（现有摘要语义）
+    assert!(
+        artifact.blocks.iter().any(|b| matches!(b.kind, ArtifactKind::Quote | ArtifactKind::Claim)),
+        "直接教学走现有摘要路径"
+    );
+}

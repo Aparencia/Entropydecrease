@@ -10,7 +10,54 @@
 fn main() {
     tauri_build::build();
     copy_onnxruntime_dll();
+    declare_comctl32_v6_manifest();
 }
+
+/// 声明 comctl32 v6 SxS 依赖（2026-08-21 真机定位修复）。
+///
+/// @ai-context: Windows 25H2 的 system32\comctl32.dll 为 5.82（无 TaskDialogIndirect
+///              导出），v6 需 manifest 声明后从 WinSxS 按需加载；tauri（windows
+///              crate）链接了 TaskDialogIndirect，而 rustc 的 MSVC 链接默认不生成
+///              manifest——lib 测试 exe 全量链接时加载 5.82 报
+///              0xc0000139 STATUS_ENTRYPOINT_NOT_FOUND（bin 因链接剪裁不含该符号
+///              不受影响）。作用于 bin/test/cdylib 全部链接目标（含 cargo test）。
+/// @ai-context: 不用 /MANIFESTDEPENDENCY 内联声明——其值含空格，经 rustc 透传后
+///              link.exe 按空格拆参（LNK1181）；改 /MANIFESTINPUT 指向 manifest
+///              文件，路径写入 TEMP 根（避免 "work space" 类空格路径同样拆参失败），
+///              TEMP 含空格时降级跳过（仅影响 TaskDialog 调用场景，不阻断构建）。
+/// @ai-context: 仅对 test 目标注入（rustc-link-arg-tests）——应用/bin 已有
+///              tauri-build 的 resource.lib manifest（含 v6 声明），重复注入
+///              会 CVT1100 duplicate resource；lib test/bin test 无 manifest
+///              才需要（cargo test 全量链接必现 0xc0000139）。
+#[cfg(all(target_os = "windows", target_env = "msvc"))]
+fn declare_comctl32_v6_manifest() {
+    let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0" processorArchitecture="amd64" publicKeyToken="6595b64144ccf1df" language="*"/>
+    </dependentAssembly>
+  </dependency>
+</assembly>
+"#;
+    let Ok(dir) = std::env::var("TEMP") else {
+        return;
+    };
+    if dir.contains(' ') {
+        println!("cargo:warning=TEMP 路径含空格，跳过 comctl32 v6 manifest 注入（TaskDialog 调用场景可能加载 5.82 失败）");
+        return;
+    }
+    let manifest = std::path::Path::new(&dir).join("entropy-comctl32-v6.manifest");
+    if let Err(e) = std::fs::write(&manifest, xml) {
+        println!("cargo:warning=写入 comctl32 v6 manifest 失败: {e}");
+        return;
+    }
+    println!("cargo:rustc-link-arg-tests=/MANIFEST:EMBED");
+    println!("cargo:rustc-link-arg-tests=/MANIFESTINPUT:{}", manifest.display());
+}
+
+#[cfg(not(all(target_os = "windows", target_env = "msvc")))]
+fn declare_comctl32_v6_manifest() {} // 非 Windows/MSVC 无 SxS manifest 机制
 
 /// 复制 onnxruntime.dll 到 target 输出目录（dev/release 均生效）。
 fn copy_onnxruntime_dll() {
