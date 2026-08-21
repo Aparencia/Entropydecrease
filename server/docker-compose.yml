@@ -1,0 +1,112 @@
+# =============================================================================
+# entropy-decrease 本地开发环境 Docker Compose 编排
+# 使用方式：docker compose up -d
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 —— 主数据库，存储用户、笔记、闪卡、番茄钟等业务数据
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: entropy-decrease-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: entropy-decrease
+      POSTGRES_PASSWORD: entropy-decrease_dev
+      POSTGRES_DB: entropy-decrease
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U entropy-decrease"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - entropy-decrease-network
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 —— 缓存层，用于会话管理、AI 网关缓存等
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: entropy-decrease-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - entropy-decrease-network
+
+  # ---------------------------------------------------------------------------
+  # sync-service —— Go + Gin 同步服务，负责数据同步与持久化（监听 :8080）
+  # ---------------------------------------------------------------------------
+  sync-service:
+    build:
+      context: ./sync-service
+    container_name: entropy-decrease-sync-service
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://entropy-decrease:entropy-decrease_dev@postgres:5432/entropy-decrease
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: dev-jwt-secret-change-in-production
+    volumes:
+      # 挂载源码目录，支持开发模式热重载（需配合 air 等工具）
+      - ./sync-service:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - entropy-decrease-network
+
+  # ---------------------------------------------------------------------------
+  # ai-gateway —— Python + FastAPI AI 网关，对接大模型提供智能功能（监听 :8000）
+  # ---------------------------------------------------------------------------
+  ai-gateway:
+    build:
+      context: ./ai-gateway
+    container_name: entropy-decrease-ai-gateway
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # 大模型 API Key，通过宿主机环境变量或 .env 文件注入，未设置时为空
+      QWEN_API_KEY: ${QWEN_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      GLM_API_KEY: ${GLM_API_KEY:-}
+      REDIS_URL: redis://redis:6379/1
+      SYNC_SERVICE_URL: http://sync-service:8080
+    volumes:
+      # 挂载源码目录，支持开发模式热重载（需配合 uvicorn --reload）
+      - ./ai-gateway:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - entropy-decrease-network
+
+# =============================================================================
+# 命名卷 —— 持久化数据库数据，避免容器重建后数据丢失
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+
+# =============================================================================
+# 自定义网络 —— 所有服务共享，容器间可通过服务名互相访问
+# =============================================================================
+networks:
+  entropy-decrease-network:
+    driver: bridge

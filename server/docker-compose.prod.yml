@@ -1,0 +1,206 @@
+# =============================================================================
+# entropy-decrease 生产环境 Docker Compose 编排
+# 使用方式：docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 —— 主数据库
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: entropy-decrease-postgres
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: ${DB_USER:-entropy-decrease}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-entropy-decrease}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-entropy-decrease}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - entropy-decrease-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 —— 缓存层
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: entropy-decrease-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-entropy-decrease_redis_prod}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-entropy-decrease_redis_prod}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - entropy-decrease-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # sync-service —— Go + Gin 同步服务（端口 8080）
+  # ---------------------------------------------------------------------------
+  sync-service:
+    build:
+      context: ./sync-service
+    container_name: entropy-decrease-sync-service
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:8080:8080"
+    environment:
+      PORT: "8080"
+      APP_ENV: production
+      GIN_MODE: release
+      DATABASE_URL: postgres://${DB_USER:-entropy-decrease}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-entropy-decrease}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-entropy-decrease_redis_prod}@redis:6379/0
+      JWT_SECRET: ${JWT_SECRET}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - entropy-decrease-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # ai-gateway —— Python + FastAPI AI 网关（端口 8000）
+  # ---------------------------------------------------------------------------
+  ai-gateway:
+    build:
+      context: ./ai-gateway
+    container_name: entropy-decrease-ai-gateway
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:8000:8000"
+    environment:
+      APP_ENV: production
+      QWEN_API_KEY: ${QWEN_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      GLM_API_KEY: ${GLM_API_KEY:-}
+      # Gemini API 密钥：用于视频分析功能（多模态视觉理解），从 .env.production 注入
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-entropy-decrease_redis_prod}@redis:6379/1
+      SYNC_SERVICE_URL: http://sync-service:8080
+      # JWT 验证密钥：网关校验请求方身份（与 sync-service 同一套签发/验证密钥）
+      JWT_SECRET: ${JWT_SECRET}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-}
+      # 开发者白名单（邮箱或 user_id，逗号分隔）：完全豁免配额/费用限制并赋予 lifetime 身份
+      DEV_USER_IDS: ${DEV_USER_IDS:-}
+      # 预算控制（0 = 不限制；默认 free 档 200K tokens / ¥0.5）
+      BUDGET_DAILY_TOKEN_LIMIT: ${BUDGET_DAILY_TOKEN_LIMIT:-200000}
+      BUDGET_DAILY_COST_LIMIT: ${BUDGET_DAILY_COST_LIMIT:-0.5}
+      # 付费系统（面包多，可选）
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-}
+      PAYMENT_API_KEY: ${PAYMENT_API_KEY:-}
+      PAYMENT_API_SECRET: ${PAYMENT_API_SECRET:-}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
+      PAYMENT_API_BASE_URL: ${PAYMENT_API_BASE_URL:-}
+      PAYMENT_TIMEOUT_MS: ${PAYMENT_TIMEOUT_MS:-5000}
+      PAYMENT_RETRY_COUNT: ${PAYMENT_RETRY_COUNT:-3}
+      # 生产环境禁止开发降级模式（缺密钥时必须拒绝启动而非放行）
+      GATEWAY_ALLOW_DEV_AUTH: "false"
+      # OpenTelemetry 导出（可选）
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - entropy-decrease-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Nginx —— 反向代理（端口 80/443）
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: entropy-decrease-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - /opt/Entropydecrease/website:/usr/share/nginx/html:ro
+      # 安装包下载目录：独立于 website（其部署会 rm 清空目录），由 release.yml 同步
+      - /opt/Entropydecrease/downloads:/usr/share/nginx/downloads:ro
+      # PWA 移动端目录：由 mobile-release.yml 同步至 /opt/Entropydecrease/pwa
+      - /opt/Entropydecrease/pwa:/usr/share/nginx/pwa:ro
+    depends_on:
+      - ai-gateway
+      - sync-service
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep nginx > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - entropy-decrease-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# =============================================================================
+# 命名卷
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# =============================================================================
+# 自定义网络
+# =============================================================================
+networks:
+  entropy-decrease-network:
+    driver: bridge

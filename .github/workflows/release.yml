@@ -1,0 +1,198 @@
+name: Release Tauri App
+
+# 由 semantic-release 创建的 v* tag 触发：构建 Tauri 安装包并附加到对应 Release
+# 适配说明（2026-08-21）：原 Electron 发布链适配为 Tauri——
+#   electron-builder → cargo tauri build（nsis）；更新源 latest.yml → Tauri 安装包直链
+#   （updater 端点未启用，TODO：启用 tauri.conf updater 后补 latest.json 同步）
+on:
+  push:
+    tags: ['v*']
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-tauri-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+      - name: Test
+        run: cd app/src-tauri && cargo test
+
+  build:
+    needs: lint-test
+    runs-on: windows-latest
+    # Tauri 打包 + 上传 + 服务器同步：上限 90 分钟
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+      # 模型资源占位：models/ 不入库（AGENTS.md 铁律），CI 构建时创建空目录
+      # 避免 tauri bundle 资源 glob 报错；运行时缺失模型有下载/降级路径兜底
+      - name: Prepare models placeholder
+        shell: bash
+        run: mkdir -p app/src-tauri/models
+      - name: Install frontend deps
+        run: cd app && npm ci
+      - name: Build Tauri app (NSIS)
+        shell: bash
+        run: cd app && npx tauri build --bundles nsis
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-latest
+          path: |
+            app/src-tauri/target/release/bundle/nsis/*.exe
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HAS_ALIYUN_AK: ${{ secrets.ALIYUN_ACCESS_KEY_ID != '' }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release-*/*
+
+      # ---------------------------------------------------------------
+      # 同步安装包至自建服务器（国内主下载源；服务器连接继承自原项目）
+      # ---------------------------------------------------------------
+      - name: Generate latest.json for download page
+        id: meta
+        run: |
+          FILE=$(ls release-windows-latest/*.exe | head -1 | xargs basename)
+          SIZE=$(stat -c%s "release-windows-latest/$FILE")
+          SHA256=$(sha256sum "release-windows-latest/$FILE" | awk '{print $1}')
+          DATE=$(date -u +%F)
+          printf '{"version":"%s","fileName":"%s","size":%s,"sha256":"%s","releaseDate":"%s"}\n' \
+            "${{ github.ref_name }}" "$FILE" "$SIZE" "$SHA256" "$DATE" > release-windows-latest/latest.json
+          cat release-windows-latest/latest.json
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure downloads directory on server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: mkdir -p /opt/Entropydecrease/downloads
+
+      - name: Upload installer to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: release-windows-latest/*.exe
+          target: /opt/Entropydecrease/downloads
+          strip_components: 1
+
+      - name: Publish metadata (last, avoids 404 window)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: release-windows-latest/latest.json
+          target: /opt/Entropydecrease/downloads
+          strip_components: 1
+
+      # ---------------------------------------------------------------
+      # 同步至 OSS（CDN 源站；可选——未配置阿里云凭据时跳过）
+      # ---------------------------------------------------------------
+      - name: Upload to OSS (CDN origin)
+        if: env.HAS_ALIYUN_AK == 'true'
+        env:
+          AK_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+          AK_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+          OSS_ENDPOINT_IN: ${{ secrets.OSS_ENDPOINT }}
+          FILE_NAME: ${{ steps.meta.outputs.file }}
+        run: |
+          set -eo pipefail
+          OSS_ENDPOINT="${OSS_ENDPOINT_IN:-oss-cn-hangzhou.aliyuncs.com}"
+          curl -sL https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz -o /tmp/aliyun.tgz
+          tar -xzf /tmp/aliyun.tgz -C /tmp
+          /tmp/aliyun configure set --profile ossci --mode AK --region cn-hangzhou \
+            --access-key-id "$AK_ID" --access-key-secret "$AK_SECRET"
+          /tmp/aliyun oss cp "release-windows-latest/$FILE_NAME" \
+            "oss://${{ secrets.OSS_BUCKET }}/downloads/$FILE_NAME" \
+            --force -e "$OSS_ENDPOINT" --profile ossci
+          /tmp/aliyun oss cp release-windows-latest/latest.json \
+            "oss://${{ secrets.OSS_BUCKET }}/downloads/latest.json" \
+            --force -e "$OSS_ENDPOINT" --profile ossci
+          echo "OSS sync done"
+
+      # ---------------------------------------------------------------
+      # 保留策略：仅保留最近 3 个版本的安装包，防止磁盘增长
+      # ---------------------------------------------------------------
+      - name: Prune old versions (keep last 3)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/Entropydecrease/downloads
+            ls -t -- *.exe 2>/dev/null | tail -n +4 | while read -r f; do
+              rm -f -- "$f"
+            done
+
+      # ---------------------------------------------------------------
+      # 发布结果校验：防止"空 Release"（历史事故 v0.27.0/v0.28.7）
+      # ---------------------------------------------------------------
+      - name: Verify release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eo pipefail
+          names=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+          echo "Assets of $TAG:"
+          echo "$names"
+          if ! echo "$names" | grep -qE '\.exe$'; then
+            echo "::error::Release $TAG 缺少 .exe 安装包资产"
+            exit 1
+          fi
+          echo "发布资产完整校验通过"
+
+      - name: Check installer size
+        run: |
+          set -eo pipefail
+          for exe in release-windows-latest/*.exe; do
+            [ -f "$exe" ] || continue
+            SIZE=$(stat -c%s "$exe")
+            SIZE_MB=$(awk "BEGIN {printf \"%.2f\", $SIZE / 1048576}")
+            echo "📦 $exe: ${SIZE_MB} MB"
+            if [ "$SIZE" -gt 419430400 ]; then
+              echo "::warning::${exe} 超过 400MB，请检查是否误打包大文件（模型不入库）"
+            fi
+          done

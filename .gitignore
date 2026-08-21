@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+vendor/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Build
+dist/
+build/
+*.exe
+*.wasm
+*.pdb
+*.dll
+target/
+dist-electron/
+
+# IDE
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+.qoder/
+
+# Env / secrets（本地密钥永不入库）
+.env
+.env.local
+*.local
+server/.env
+
+# OS
+Thumbs.db
+.DS_Store

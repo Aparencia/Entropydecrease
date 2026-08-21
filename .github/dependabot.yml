@@ -1,0 +1,45 @@
+# Dependabot 自动安全更新配置
+# 定期扫描项目各模块的依赖漏洞，自动发起 Pull Request 升级受影响的依赖版本。
+# 详见：https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
+
+version: 2
+updates:
+  # ─── 客户端 npm 依赖 ───
+  # Electron + React 桌面客户端，依赖数量最多，每周扫描安全漏洞
+  - package-ecosystem: "npm"
+    directory: "/client"
+    schedule:
+      interval: "weekly"        # 每周检查一次更新
+    open-pull-requests-limit: 10 # 最多同时保持 10 个 PR，避免维护负担过重
+
+  # ─── 官网 npm 依赖 ───
+  # Next.js 静态官网，依赖相对较少
+  - package-ecosystem: "npm"
+    directory: "/website"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # ─── AI 网关 pip 依赖 ───
+  # Python FastAPI 后端，负责多模型路由与 AI 调度
+  - package-ecosystem: "pip"
+    directory: "/server/ai-gateway"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # ─── 同步服务 Go 依赖 ───
+  # Go Gin 后端，负责数据同步与 WebSocket 通道
+  - package-ecosystem: "gomod"
+    directory: "/server/sync-service"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # ─── GitHub Actions 依赖 ───
+  # CI/CD 流水线中使用的第三方 Action 插件
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
