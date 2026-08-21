@@ -113,10 +113,23 @@ pub struct Note {
     /// 净化统计 JSON（REQ-171；None=旧数据/手动笔记）
     #[serde(default)]
     pub purify_stats: Option<String>,
+    /// 标签 JSON 数组（v0.10.0；默认 `[]`）
+    #[serde(default = "default_tags")]
+    pub tags: String,
+    /// 属性 JSON 对象（v0.10.0；扩展位，None=无）
+    #[serde(default)]
+    pub properties: Option<String>,
+    /// 固定标记（v0.10.0；0=未固定，1=固定）
+    #[serde(default)]
+    pub pin: i64,
     /// 创建时间（Unix 秒）
     pub created_at: i64,
     /// 更新时间（Unix 秒）
     pub updated_at: i64,
+}
+
+fn default_tags() -> String {
+    "[]".to_string()
 }
 
 /// 新建笔记的入参（不含 id 与时间戳，由数据层填充）。
@@ -134,6 +147,12 @@ pub struct NewNote {
     /// 净化统计 JSON（REQ-171；None=手动笔记/旧路径）
     #[serde(default)]
     pub purify_stats: Option<String>,
+    /// 标签 JSON 数组（v0.10.0；None=空数组）
+    #[serde(default)]
+    pub tags: Option<String>,
+    /// 属性 JSON 对象（v0.10.0；扩展位，None=无）
+    #[serde(default)]
+    pub properties: Option<String>,
 }
 
 // ────────────────────────────────────────────────────────────
@@ -378,4 +397,16 @@ pub struct SkippedNote {
 pub struct BatchNoteResult {
     pub converted: Vec<ConvertedNote>,
     pub skipped: Vec<SkippedNote>,
+}
+
+/// 笔记列表排序模式（v0.10.0）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum NoteSortMode {
+    /// 按更新时间倒序（默认）
+    UpdatedDesc,
+    /// 固定优先 + 按更新时间倒序
+    PinFirst,
+    /// 按创建时间倒序
+    CreatedDesc,
 }

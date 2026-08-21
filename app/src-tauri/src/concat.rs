@@ -118,10 +118,12 @@ fn dedupe_ocr_points(ocr_blocks: &[OcrBlock]) -> Vec<String> {
     points
 }
 
-/// 毫秒时间戳格式化为 MM:SS。
+/// 毫秒时间戳格式化为 `[[ts:ms]]` Markdown 回链标记（v0.10.0 M4）。
 pub(crate) fn format_timestamp(ms: u64) -> String {
     let total_seconds = ms / 1000;
-    format!("{:02}:{:02}", total_seconds / 60, total_seconds % 60)
+    let min = total_seconds / 60;
+    let sec = total_seconds % 60;
+    format!("[⏱ {:02}:{:02}]([[ts:{}]])", min, sec, ms)
 }
 
 /// 组装 Markdown 全文。
@@ -193,8 +195,8 @@ mod tests {
         let blocks = vec![ocr(Some(3000), "牛顿第二定律", 0.9)];
         // Act
         let draft = build_note_draft("截图", &[], &blocks);
-        // Assert
-        assert_eq!(draft.ocr_points, vec!["[00:03] 牛顿第二定律".to_string()]);
+        // Assert：画面要点带时间戳回链锚点（v0.10.0 M4 格式）
+        assert_eq!(draft.ocr_points, vec!["[[⏱ 00:03]([[ts:3000]])] 牛顿第二定律".to_string()]);
         assert!(draft.markdown.contains("## 画面要点"));
         assert!(!draft.markdown.contains("## 讲述内容"));
     }
@@ -260,8 +262,8 @@ mod tests {
     #[test]
     fn format_timestamp_converts_ms_to_mmss() {
         // Act & Assert
-        assert_eq!(format_timestamp(0), "00:00");
-        assert_eq!(format_timestamp(63_000), "01:03");
-        assert_eq!(format_timestamp(3_600_000), "60:00");
+        assert_eq!(format_timestamp(0), "[⏱ 00:00]([[ts:0]])");
+        assert_eq!(format_timestamp(63_000), "[⏱ 01:03]([[ts:63000]])");
+        assert_eq!(format_timestamp(3_600_000), "[⏱ 60:00]([[ts:3600000]])");
     }
 }

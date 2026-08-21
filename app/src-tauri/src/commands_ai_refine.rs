@@ -263,6 +263,8 @@ pub fn ai_refine_apply(
         session_id: Some(session_id),
         rule_version: Some("rule".to_string()),
         purify_stats: None,
+        tags: None,
+        properties: None,
     };
     let note = state.db.create_note(&new).map_err(|e| e.to_string())?;
     // ② 精修版落库（新版本 ai-refine + 成本 meta）

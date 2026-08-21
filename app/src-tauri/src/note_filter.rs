@@ -531,7 +531,7 @@ fn assemble_purified_markdown(
         .into_iter()
         .map(|(start_ms, text)| {
             if config.anchor_timestamps {
-                format!("[{}] {}", crate::concat::format_timestamp(start_ms), text)
+                format!("{} {}", crate::concat::format_timestamp(start_ms), text)
             } else {
                 text
             }

@@ -171,6 +171,25 @@ impl Db {
             "purify_stats",
             "ALTER TABLE notes ADD COLUMN purify_stats TEXT",
         )?;
+        // v0.10.0（REQ-004 增强）：notes 表补 tags/properties/pin 列
+        ensure_column(
+            &conn,
+            "notes",
+            "tags",
+            "ALTER TABLE notes ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'",
+        )?;
+        ensure_column(
+            &conn,
+            "notes",
+            "properties",
+            "ALTER TABLE notes ADD COLUMN properties TEXT",
+        )?;
+        ensure_column(
+            &conn,
+            "notes",
+            "pin",
+            "ALTER TABLE notes ADD COLUMN pin INTEGER NOT NULL DEFAULT 0",
+        )?;
         // 关联查询索引（列表 has_note 子查询 + 笔记页来源跳转共用）
         conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_notes_session ON notes(session_id)")?;
         // v0.7.7（REQ-183）：结构图记录表（建表幂等——新库建表/旧库补表）
@@ -187,13 +206,14 @@ impl Db {
     /// 新建笔记，返回含 id 与时间戳的完整记录。
     pub fn create_note(&self, new: &NewNote) -> Result<Note> {
         let now = unix_seconds();
+        let tags = new.tags.clone().unwrap_or_else(|| "[]".to_string());
         let conn = self.conn.lock().expect("db lock poisoned");
         conn.execute(
-            "INSERT INTO notes (title, content, source, session_id, rule_version, purify_stats, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+            "INSERT INTO notes (title, content, source, session_id, rule_version, purify_stats, tags, properties, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)",
             params![
                 new.title, new.content, new.source, new.session_id, new.rule_version,
-                new.purify_stats, now
+                new.purify_stats, tags, new.properties, now
             ],
         )?;
         let id = conn.last_insert_rowid();
@@ -205,6 +225,9 @@ impl Db {
             session_id: new.session_id,
             rule_version: new.rule_version.clone(),
             purify_stats: new.purify_stats.clone(),
+            tags,
+            properties: new.properties.clone(),
+            pin: 0,
             created_at: now,
             updated_at: now,
         })
@@ -214,7 +237,7 @@ impl Db {
     pub fn get_note(&self, id: i64) -> Result<Option<Note>> {
         let conn = self.conn.lock().expect("db lock poisoned");
         let mut stmt = conn.prepare(
-            "SELECT id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at FROM notes WHERE id = ?1",
+            "SELECT id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at, tags, properties, pin FROM notes WHERE id = ?1",
         )?;
         let mut rows = stmt.query_map(params![id], row_to_note)?;
         match rows.next() {
@@ -228,7 +251,7 @@ impl Db {
     pub fn list_notes(&self) -> Result<Vec<Note>> {
         let conn = self.conn.lock().expect("db lock poisoned");
         let mut stmt = conn.prepare(
-            "SELECT id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at FROM notes ORDER BY updated_at DESC",
+            "SELECT id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at, tags, properties, pin FROM notes ORDER BY updated_at DESC",
         )?;
         let rows = stmt.query_map([], row_to_note)?;
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
@@ -260,7 +283,7 @@ impl Db {
         let escaped = escape_like(keyword);
         let pattern = format!("%{}%", escaped);
         let mut stmt = conn.prepare(
-            "SELECT id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at FROM notes
+            "SELECT id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at, tags, properties, pin FROM notes
              WHERE title LIKE ?1 ESCAPE '\\' OR content LIKE ?1 ESCAPE '\\'
              ORDER BY updated_at DESC",
         )?;
@@ -275,7 +298,7 @@ impl Db {
     pub fn find_note_by_session(&self, session_id: i64) -> Result<Option<Note>> {
         let conn = self.conn.lock().expect("db lock poisoned");
         let mut stmt = conn.prepare(
-            "SELECT id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at FROM notes
+            "SELECT id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at, tags, properties, pin FROM notes
              WHERE session_id = ?1 ORDER BY created_at DESC, id DESC LIMIT 1",
         )?;
         let mut rows = stmt.query_map(params![session_id], row_to_note)?;
@@ -284,6 +307,59 @@ impl Db {
             Some(Err(e)) => Err(e.into()),
             None => Ok(None),
         }
+    }
+
+    /// 更新笔记标签（v0.10.0；幂等覆盖写入 JSON 数组）。
+    pub fn update_note_tags(&self, id: i64, tags: &str) -> Result<bool> {
+        let conn = self.conn.lock().expect("db lock poisoned");
+        let affected = conn.execute(
+            "UPDATE notes SET tags = ?1, updated_at = ?2 WHERE id = ?3",
+            params![tags, unix_seconds(), id],
+        )?;
+        Ok(affected > 0)
+    }
+
+    /// 更新笔记固定状态（v0.10.0；pin=0 取消，=1 固定）。
+    pub fn update_note_pin(&self, id: i64, pin: i64) -> Result<bool> {
+        let conn = self.conn.lock().expect("db lock poisoned");
+        let affected = conn.execute(
+            "UPDATE notes SET pin = ?1, updated_at = ?2 WHERE id = ?3",
+            params![pin, unix_seconds(), id],
+        )?;
+        Ok(affected > 0)
+    }
+
+    /// 列出笔记（支持排序模式；v0.10.0）。
+    pub fn list_notes_sorted(&self, sort_mode: &crate::types::NoteSortMode) -> Result<Vec<Note>> {
+        let conn = self.conn.lock().expect("db lock poisoned");
+        let sql = match sort_mode {
+            crate::types::NoteSortMode::UpdatedDesc => {
+                "SELECT id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at, tags, properties, pin FROM notes ORDER BY updated_at DESC"
+            }
+            crate::types::NoteSortMode::PinFirst => {
+                "SELECT id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at, tags, properties, pin FROM notes ORDER BY pin DESC, updated_at DESC"
+            }
+            crate::types::NoteSortMode::CreatedDesc => {
+                "SELECT id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at, tags, properties, pin FROM notes ORDER BY created_at DESC"
+            }
+        };
+        let mut stmt = conn.prepare(sql)?;
+        let rows = stmt.query_map([], row_to_note)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+    }
+
+    /// 按标签过滤笔记（v0.10.0；JSON 数组包含式匹配）。
+    pub fn search_notes_by_tag(&self, tag: &str) -> Result<Vec<Note>> {
+        let conn = self.conn.lock().expect("db lock poisoned");
+        let escaped = escape_like(tag);
+        let pattern = format!("%\"{}%\"%", escaped);
+        let mut stmt = conn.prepare(
+            "SELECT id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at, tags, properties, pin FROM notes
+             WHERE tags LIKE ?1 ESCAPE '\\'
+             ORDER BY updated_at DESC",
+        )?;
+        let rows = stmt.query_map(params![pattern], row_to_note)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
     }
 }
 
@@ -299,6 +375,9 @@ fn row_to_note(row: &rusqlite::Row<'_>) -> rusqlite::Result<Note> {
         purify_stats: row.get(6)?,
         created_at: row.get(7)?,
         updated_at: row.get(8)?,
+        tags: row.get(9)?,
+        properties: row.get(10)?,
+        pin: row.get(11)?,
     })
 }
 
@@ -345,7 +424,7 @@ mod tests {
     fn create_and_get_note_roundtrip() {
         // Arrange
         let db = mem_db();
-        let new = NewNote { title: "物理".into(), content: "# 牛顿\nF=ma".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None };
+        let new = NewNote { title: "物理".into(), content: "# 牛顿\nF=ma".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None };
         // Act
         let created = db.create_note(&new).expect("create");
         let fetched = db.get_note(created.id).expect("get").expect("exists");
@@ -359,8 +438,8 @@ mod tests {
     fn list_orders_by_updated_desc() {
         // Arrange
         let db = mem_db();
-        db.create_note(&NewNote { title: "A".into(), content: "a".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None }).unwrap();
-        db.create_note(&NewNote { title: "B".into(), content: "b".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None }).unwrap();
+        db.create_note(&NewNote { title: "A".into(), content: "a".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None }).unwrap();
+        db.create_note(&NewNote { title: "B".into(), content: "b".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None }).unwrap();
         // Act
         let notes = db.list_notes().expect("list");
         // Assert
@@ -371,7 +450,7 @@ mod tests {
     fn update_note_changes_content() {
         // Arrange
         let db = mem_db();
-        let created = db.create_note(&NewNote { title: "旧".into(), content: "旧内容".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None }).unwrap();
+        let created = db.create_note(&NewNote { title: "旧".into(), content: "旧内容".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None }).unwrap();
         // Act
         let ok = db.update_note(created.id, "新标题", "新内容").expect("update");
         let fetched = db.get_note(created.id).unwrap().unwrap();
@@ -385,7 +464,7 @@ mod tests {
     fn delete_note_removes_row() {
         // Arrange
         let db = mem_db();
-        let created = db.create_note(&NewNote { title: "待删".into(), content: "x".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None }).unwrap();
+        let created = db.create_note(&NewNote { title: "待删".into(), content: "x".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None }).unwrap();
         // Act
         let ok = db.delete_note(created.id).expect("delete");
         let fetched = db.get_note(created.id).expect("get");
@@ -398,8 +477,8 @@ mod tests {
     fn search_matches_title_and_content() {
         // Arrange
         let db = mem_db();
-        db.create_note(&NewNote { title: "化学课".into(), content: "讲分子".into(), source: "classroom".into(), session_id: None, rule_version: None, purify_stats: None }).unwrap();
-        db.create_note(&NewNote { title: "随笔".into(), content: "含熵减概念".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None }).unwrap();
+        db.create_note(&NewNote { title: "化学课".into(), content: "讲分子".into(), source: "classroom".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None }).unwrap();
+        db.create_note(&NewNote { title: "随笔".into(), content: "含熵减概念".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None }).unwrap();
         // Act
         let by_title = db.search_notes("化学").expect("search");
         let by_content = db.search_notes("熵减").expect("search");
@@ -413,8 +492,8 @@ mod tests {
     fn search_escapes_wildcards() {
         // Arrange：用户输入含 % 应作为字面量
         let db = mem_db();
-        db.create_note(&NewNote { title: "50%off".into(), content: "促销".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None }).unwrap();
-        db.create_note(&NewNote { title: "normal".into(), content: "普通".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None }).unwrap();
+        db.create_note(&NewNote { title: "50%off".into(), content: "促销".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None }).unwrap();
+        db.create_note(&NewNote { title: "normal".into(), content: "普通".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None }).unwrap();
         // Act：搜索字面 "%"
         let result = db.search_notes("%off").expect("search");
         // Assert：只命中含字面 %off 的，不应命中所有
@@ -509,6 +588,8 @@ mod tests {
             session_id: Some(session.id),
             rule_version: Some("note-rules-0.7.5".into()),
             purify_stats: Some(r#"{"filler":2,"verbal":3}"#.into()),
+            tags: None,
+            properties: None,
         };
         // Act
         let created = db.create_note(&new).expect("create");
@@ -534,6 +615,8 @@ mod tests {
             session_id: Some(session.id),
             rule_version: None,
             purify_stats: None,
+            tags: None,
+            properties: None,
         }).expect("create note");
         // Act：删除会话
         let deleted = db.delete_session(session.id).expect("delete session");
@@ -561,6 +644,8 @@ mod tests {
             session_id: Some(session.id),
             rule_version: None,
             purify_stats: None,
+            tags: None,
+            properties: None,
         }).expect("create older");
         let newer = db.create_note(&NewNote {
             title: "第二版".into(),
@@ -569,6 +654,8 @@ mod tests {
             session_id: Some(session.id),
             rule_version: None,
             purify_stats: None,
+            tags: None,
+            properties: None,
         }).expect("create newer");
         db.create_note(&NewNote {
             title: "手动".into(),
@@ -577,6 +664,8 @@ mod tests {
             session_id: None,
             rule_version: None,
             purify_stats: None,
+            tags: None,
+            properties: None,
         }).expect("create manual");
         // Act
         let found = db.find_note_by_session(session.id).expect("find");

@@ -115,6 +115,8 @@ fn list_sessions_marks_content_and_note() {
         session_id: Some(with_note.id),
         rule_version: None,
         purify_stats: None,
+        tags: None,
+        properties: None,
     })
     .unwrap();
     // Act
@@ -282,6 +284,8 @@ fn session_notes_tables_coexist() {
         session_id: None,
         rule_version: None,
         purify_stats: None,
+        tags: None,
+        properties: None,
     });
     // Assert
     assert!(note.is_ok());

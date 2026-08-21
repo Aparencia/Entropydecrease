@@ -98,6 +98,14 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
         {totalCost > 0 && (
           <span style={{ fontSize: 11, color: "#6b7280" }}>AI 累计成本 ¥{totalCost.toFixed(4)}</span>
         )}
+        {/* A4：版本统计摘要 */}
+        {versions.length > 0 && (
+          <span style={{ fontSize: 10, color: "#9ca3af", marginLeft: "auto" }}>
+            {versions.filter((v) => v.source === "user-edit").length} 次编辑 ·
+            {versions.filter((v) => v.source === "ai-refine" || v.source === "ai-enrich").length} 次 AI ·
+            {versions.length} 版本
+          </span>
+        )}
       </div>
 
       {open && (

@@ -119,9 +119,9 @@ fn session31_paragraph_timestamp_anchors() {
     let segments = vec![asr(1, 0, 5000, "项目启动是一个艺术"), asr(2, 63_000, 68_000, "这是项目章程")];
     // Act
     let result = run("测试", &segments, &[]);
-    // Assert：锚点 [MM:SS] 前缀（段首 start_ms）；段落可回跳
-    assert!(result.markdown.contains("[00:00] 项目启动是一个艺术。"));
-    assert!(result.markdown.contains("[01:03] 这是项目章程。"));
+    // Assert：锚点 [⏱ MM:SS]([[ts:ms]]) 前缀（段首 start_ms）；段落可回跳
+    assert!(result.markdown.contains("[⏱ 00:00]([[ts:0]]) 项目启动是一个艺术。"));
+    assert!(result.markdown.contains("[⏱ 01:03]([[ts:63000]]) 这是项目章程。"));
     // 可开关（REQ-165）：关闭后无锚点
     let mut cfg = crate::purify_config::PurifyConfig::default();
     cfg.anchor_timestamps = false;
@@ -131,7 +131,7 @@ fn session31_paragraph_timestamp_anchors() {
         corrections: crate::ocr_correction::OcrCorrectionTable::default(),
     };
     let off = filter_note("测试", &segments, &[], &junk(), &env_off);
-    assert!(!off.markdown.contains("[01:03]"));
+    assert!(!off.markdown.contains("[⏱ 01:03]"));
 }
 
 /// 会话31 实证：视频页 UI 垃圾 + 单字符碎片 + OCR 错字纠错（REQ-166/167/168）。
@@ -346,8 +346,8 @@ fn session31_structure_chapter_headings_from_outline() {
     // Assert：两章标题带时间锚点；章节名取各自窗口内 outline 标题
     // （第一章窗口 [9s,30s) 命中 12s"项目章程"；第二章窗口 [30s,∞) 命中
     // 36s"项目范围"——窗口归属正确，跨窗口不串）
-    assert!(result.markdown.contains("## 项目章程 [00:09]"), "第一章取窗口内标题");
-    assert!(result.markdown.contains("## 项目范围 [00:30]"), "第二章取窗口内标题");
+    assert!(result.markdown.contains("## 项目章程 [[⏱ 00:09]([[ts:9000]])]"), "第一章取窗口内标题");
+    assert!(result.markdown.contains("## 项目范围 [[⏱ 00:30]([[ts:30000]])]"), "第二章取窗口内标题");
     // 统计可序列化（purify_stats 落库口径）
     let json = serde_json::to_string(&result.stats).expect("stats serializable");
     assert!(json.contains("chapters") && json.contains("titled_chapters"));
@@ -384,7 +384,7 @@ fn session31_structure_glossary_block() {
         &crate::structure_note::NoteStructureConfig::default(),
     );
     // Assert：词汇表块在尾部；命中术语带 [MM:SS] 锚点；未命中不带；统计落库
-    assert!(result.markdown.ends_with("词汇表\n\n- [00:12] 项目章程（画面 ×5 / 语音 ×1）\n- WBS（画面 ×3 / 语音 ×0）"));
+    assert!(result.markdown.ends_with("词汇表\n\n- [[⏱ 00:12]([[ts:12000]])] 项目章程（画面 ×5 / 语音 ×1）\n- WBS（画面 ×3 / 语音 ×0）"));
     assert_eq!(result.stats.glossary_terms, 2);
     let json = serde_json::to_string(&result.stats).expect("stats serializable");
     assert!(json.contains("glossary_terms"));

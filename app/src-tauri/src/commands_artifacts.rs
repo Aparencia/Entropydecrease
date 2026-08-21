@@ -99,6 +99,8 @@ pub async fn artifact_to_note(
             // v0.7.5（REQ-171）：产物→笔记非净化管线产物——无规则版本（None 诚实）
             rule_version: None,
             purify_stats: None,
+            tags: None,
+            properties: None,
         })
         .map_err(|e| e.to_string())
 }

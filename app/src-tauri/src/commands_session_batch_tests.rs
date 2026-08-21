@@ -108,6 +108,8 @@ fn batch_skips_already_converted_session() {
         session_id: Some(id),
         rule_version: None,
         purify_stats: None,
+        tags: None,
+        properties: None,
     })
     .expect("create note");
     // Act

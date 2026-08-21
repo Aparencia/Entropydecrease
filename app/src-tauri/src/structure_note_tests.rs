@@ -96,9 +96,9 @@ fn chapter_heading_inserted_before_first_paragraph_after_boundary() {
         &default_config(),
     );
 
-    // Assert：标题在段落文本之前；章节名占位"章节 1"
-    assert!(result.markdown.contains("## 章节 1 [00:09]"));
-    let heading_pos = result.markdown.find("## 章节 1 [00:09]").unwrap();
+    // Assert：标题在段落文本之前；章节名占位"章节 1"（时间戳回链锚点格式）
+    assert!(result.markdown.contains("## 章节 1 [[⏱ 00:09]([[ts:9000]])]"));
+    let heading_pos = result.markdown.find("## 章节 1 [[⏱ 00:09]([[ts:9000]])]").unwrap();
     let body_pos = result.markdown.find("正题内容").unwrap();
     assert!(heading_pos < body_pos, "标题应插在边界后首段之前");
     assert_eq!(stats.chapters, 1);
@@ -120,7 +120,7 @@ fn chapter_heading_boundary_inside_paragraph_keeps_paragraph_unsplit() {
     render_note_structure(&mut result, &[boundary(12_000)], &[], &[], &default_config());
 
     // Assert：标题在段3前、段2后（不切段——诚实粗粒度）
-    let h = result.markdown.find("## 章节 1 [00:12]").unwrap();
+    let h = result.markdown.find("## 章节 1 [[⏱ 00:12]([[ts:12000]])]").unwrap();
     let seg2_pos = result.markdown.find("跨边界长段").unwrap();
     let seg3_pos = result.markdown.find("下一章内容").unwrap();
     assert!(seg2_pos < h && h < seg3_pos);
@@ -137,7 +137,7 @@ fn chapter_heading_boundary_after_last_paragraph_appends_at_end() {
     render_note_structure(&mut result, &[boundary(40_000)], &[], &[], &default_config());
 
     // Assert：标题存在且位于正题之后
-    let h = result.markdown.find("## 章节 1 [00:40]").unwrap();
+    let h = result.markdown.find("## 章节 1 [[⏱ 00:40]([[ts:40000]])]").unwrap();
     let body_pos = result.markdown.find("正题内容").unwrap();
     assert!(body_pos < h);
 }
@@ -162,8 +162,8 @@ fn multiple_chapters_inserted_in_order() {
     );
 
     // Assert：两个标题按时间序出现，编号正确
-    let h1 = result.markdown.find("## 章节 1 [00:09]").unwrap();
-    let h2 = result.markdown.find("## 章节 2 [00:22]").unwrap();
+    let h1 = result.markdown.find("## 章节 1 [[⏱ 00:09]([[ts:9000]])]").unwrap();
+    let h2 = result.markdown.find("## 章节 2 [[⏱ 00:22]([[ts:22000]])]").unwrap();
     assert!(h1 < h2);
     assert_eq!(stats.chapters, 2);
 }
@@ -186,7 +186,7 @@ fn chapter_named_from_outline_title_in_window() {
     );
 
     // Assert：章节名取 outline 标题；titled 计数 1
-    assert!(result.markdown.contains("## 色彩理论 [00:09]"));
+    assert!(result.markdown.contains("## 色彩理论 [[⏱ 00:09]([[ts:9000]])]"));
     assert_eq!(stats.titled_chapters, 1);
 }
 
@@ -206,7 +206,7 @@ fn chapter_title_outside_window_not_used() {
     );
 
     // Assert：占位"章节 1"，不用窗口外标题
-    assert!(result.markdown.contains("## 章节 1 [00:09]"));
+    assert!(result.markdown.contains("## 章节 1 [[⏱ 00:09]([[ts:9000]])]"));
     assert!(!result.markdown.contains("旧标题"));
     assert_eq!(stats.titled_chapters, 0);
 }
@@ -231,8 +231,8 @@ fn chapter_title_belongs_to_first_window_not_second() {
     );
 
     // Assert：第一章有标题、第二章占位
-    assert!(result.markdown.contains("## 第一章标题 [00:09]"));
-    assert!(result.markdown.contains("## 章节 2 [00:22]"));
+    assert!(result.markdown.contains("## 第一章标题 [[⏱ 00:09]([[ts:9000]])]"));
+    assert!(result.markdown.contains("## 章节 2 [[⏱ 00:22]([[ts:22000]])]"));
 }
 
 // ── 词汇表 ─────────────────────────────────────────────────────
@@ -256,7 +256,7 @@ fn glossary_block_sorted_by_score_desc_with_anchor() {
     let b_pos = result.markdown.find("术语B").unwrap();
     let a_pos = result.markdown.find("术语A").unwrap();
     assert!(a_pos < b_pos, "高分在前");
-    assert!(result.markdown.contains("- [00:03] 术语A（画面 ×8 / 语音 ×1）"));
+    assert!(result.markdown.contains("- [[⏱ 00:03]([[ts:3000]])] 术语A（画面 ×8 / 语音 ×1）"));
     assert_eq!(stats.glossary_terms, 2);
 }
 

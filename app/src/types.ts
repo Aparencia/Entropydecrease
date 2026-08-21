@@ -53,6 +53,12 @@ export interface Note {
   rule_version?: string | null;
   /** v0.7.5（REQ-171）：净化统计 JSON（null=旧笔记/手动笔记） */
   purify_stats?: string | null;
+  /** v0.10.0：标签 JSON 数组 */
+  tags: string;
+  /** v0.10.0：属性 JSON 对象（null=无） */
+  properties?: string | null;
+  /** v0.10.0：固定标记（0=未固定，1=固定） */
+  pin: number;
   created_at: number;
   updated_at: number;
 }
@@ -63,6 +69,10 @@ export interface NewNote {
   content: string;
   source: string;
   session_id?: number | null;
+  /** v0.10.0：标签 JSON 数组 */
+  tags?: string;
+  /** v0.10.0：属性 JSON 对象 */
+  properties?: string | null;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -139,7 +149,7 @@ export interface SessionDetail {
 export interface StructureImageRecord {
   id: number;
   sessionId: number;
-  /** 所属屏（null=旧数据无屏/手动无屏上下文） */
+  /** 所属屏（null=旧数据无屏/手动无屏上下文/v0.10.2 起自动捕获无屏关联） */
   screenId: number | null;
   /** table | formula | code | image | manual */
   kind: string;

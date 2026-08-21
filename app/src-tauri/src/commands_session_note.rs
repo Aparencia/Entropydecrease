@@ -205,6 +205,8 @@ fn convert_to_note(
         // REQ-171：规则版本 + 净化统计落库（可追溯"用哪版规则生成"）
         rule_version: Some(RULE_VERSION.to_string()),
         purify_stats: Some(serde_json::to_string(&result.stats).unwrap_or_default()),
+        tags: None,
+        properties: None,
     };
     db.create_note(&new).map_err(|e| e.to_string())
 }

@@ -116,7 +116,7 @@ pub fn render_note_structure(
             if text.starts_with("## ") {
                 text.clone()
             } else if result.purify.anchor_timestamps {
-                format!("[{}] {}", crate::concat::format_timestamp(*start), text)
+                format!("{} {}", crate::concat::format_timestamp(*start), text)
             } else {
                 text.clone()
             }
