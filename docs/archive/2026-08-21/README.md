@@ -79,3 +79,21 @@
 - **新登记 open 0 笔**：审查发现 L2(区域构成信号暂缺)/L3(OCR 面积固定近似) 登记为观察项（M4 迭代），不登记正式债务
 - **未偿 5 笔保持**（TD-040 / TD-2026-08-19-D/F/G）：本次未涉及 Rust 核心引擎/存储/UI，逐笔核验保持 carried
 
+## 本批补充（第五轮：v0.10.1 编辑机制修复 + 笔记图片功能，2026-08-21）
+
+**归档判定**：本批无文档归档——`docs/versions/v0.10.1.md` 为活跃版本规划（实施中）；`docs/product/note-design-philosophy.md` / `product-design-philosophy.md` 为活跃产品理念文档（持续引用非实施文档）；本次无已实施完成、不再活跃维护的新方案文档。
+
+**工作摘要**：
+
+- **0.10.1 规划定稿**（三轮探讨：编辑机制复杂度 / 浏览态价值 / 图片技术选型）→ `docs/versions/v0.10.1.md`
+- **编辑机制修复 F1~F5**：串写（切笔记退出编辑 + key 重建 + 卸载 dirty 自动保存）、`create_version` 参数接通（自动保存不建版本，恢复 v0.10.0 状态一致性规范）、版本内容去重、完成按钮改名 + ESC 退出、Ctrl+E handler ref 稳定化
+- **笔记图片功能**：`resolve_note_image`/`import_note_image`/`app_data_dir` 三命令（前缀白名单 + 归属校验 + 穿越防护 + 扩展名/大小限制）+ NoteImage 组件 + NotePreviewView 拼接修复（`session-images/` 前缀重复路径 v0.7.3 遗留疑点）+ 点击放大预览
+- 验证：新增 8 单测全绿；cargo test 1359 passed / 12 failed（既有断言过时 → TD-2026-08-21-B）；clippy 新代码零警告；前端 tsc/build 通过
+
+## 技术债摘录（本批滚动）
+
+- **审查即修 3 项**：P0-1（NotePreviewView 图片 src 未转义 XSS 注入面 → escapeHtml 兜底）/ P2-1（async 按钮 void 包装）/ P2-2（indent 死代码），提交随 0.10.1 交付批次
+- **新登记 open 1 笔**：TD-2026-08-21-B（v0.10.0 时间戳锚点断言过时 12 项）
+- **未偿保持 4 笔**（TD-040 / TD-2026-08-19-D/F/G）；TD-2026-08-21-A 保持已偿（四轮 close）
+- **观察项 +1**：卸载自动保存与在飞保存乱序（低概率，保持跟踪）
+

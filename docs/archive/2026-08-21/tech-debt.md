@@ -59,3 +59,32 @@
 |----|------|----------|
 | TD-2026-08-21-A | 瀛橀噺 clippy 鍛婅 9 涓紙live_session_persist 脳8 + series_detect 脳1锛夆€斺€旂幆澧冪増鏈紓绉绘墍鑷?| v0.9.0 浠ｇ爜寤鸿涓叏閮ㄦ竻鍋匡細live_session_persist 涓ゅ mut 鍐椾綑(鑷姩fix)+ series_detect EP 甯冨皵绠€鍖?manual fix)+ video_profile_domain 涓ゅ clone 浼樺寲(manual fix)锛沜lippy 闆惰鍛婃牳楠岄€氳繃 |
 
+
+## 五轮补充（v0.10.1 编辑机制修复 + 笔记图片功能建设，2026-08-21）
+> 来源：v0.10.1 规划文档（docs/versions/v0.10.1.md，三轮探讨定稿）+ 代码建设
+> 验证：cargo test 1359 passed / 12 failed（既有断言过时，见 TD-B）+ 新增 8 单测全绿 + clippy 新代码零警告 + 前端 tsc/build 通过
+
+### 今日已偿（本批核验 + 审查即修）
+
+| ID | 摘要 | 偿还方式 |
+|----|------|----------|
+| （审查 P0-1） | NotePreviewView 图片 src 未转义——http 直出分支把 markdown 内容拼进属性值（\\" onerror=\"\ 存储型 XSS 注入面，内容来自视频字幕不可信输入） | escapeHtml(src) 统一兜底（本次即修，提交随 0.10.1 交付批次） |
+| （审查 P2-1） | NoteEditView 工具栏 async 调用未 void 包装（eslint no-misused-promises 提交拦截风险） | 全部按钮统一 void 包装（本次即修） |
+| （审查 P2-2） | NoteEditView 拆分段 indent 变量两分支同值（死代码，v0.10.0 遗留） | 删除冗余变量（本次即修） |
+
+### 新登记（open）
+
+| ID | 摘要 | 类型 |
+|----|------|------|
+| TD-2026-08-21-B | v0.10.0 时间戳回链（[[ts:...]] 锚点格式）引入后 concat/note_filter/structure_note 共 12 项断言未同步更新（cargo test 12 failed）——v0.10.0 交付遗留，建议随 v0.10.0 收尾更新断言 | 无意 |
+
+### 观察项（登记不立债）
+
+| ID | 摘要 | 处置 |
+|----|------|------|
+| （观察 0.10.1-1） | NoteEditView 卸载自动保存为 fire-and-forget invoke，可能与 30s 自动保存在飞的 invoke 乱序（同 id 两次保存后发先至 → 旧覆盖新） | 30s timer 卸载时已清理，碰撞窗口极小；SQLite 串行执行；保持跟踪 |
+
+### 未偿核验（保持 carried）
+
+TD-040（deliberate ffmpeg 体积权衡）· TD-2026-08-19-D/F/G（4 笔）：本次未涉及，保持。
+TD-2026-08-21-A：四轮已 close（clippy 9 个清偿），本次核验保持已偿。
