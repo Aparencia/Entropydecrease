@@ -39,6 +39,9 @@ impl FeatureFlags {
     }
 
     /// 按名读取（白名单；未知开关 → None，诚实不猜）。
+    /// 登记豁免 dead_code：get_feature_flags 命令直接返回全量结构，
+    /// 按名读取留给后续开关增多时的精确消费。
+    #[allow(dead_code)]
     pub fn get(&self, name: &str) -> Option<bool> {
         match name {
             "feed_capture" => Some(self.feed_capture),

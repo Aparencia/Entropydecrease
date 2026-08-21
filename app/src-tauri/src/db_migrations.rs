@@ -142,7 +142,15 @@ pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
             payload_json TEXT NOT NULL DEFAULT '{}',
             created_at INTEGER NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS idx_metrics_kind ON metrics_events(kind);",
+        CREATE INDEX IF NOT EXISTS idx_metrics_kind ON metrics_events(kind);
+        -- v0.11.3（组结算机制；防沼泽仪式记录——结算历史可追溯）
+        CREATE TABLE IF NOT EXISTS settlements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER NOT NULL REFERENCES note_groups(id) ON DELETE CASCADE,
+            stats_json TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_settlements_group ON settlements(group_id, created_at);",
     )?;
     // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）
     ensure_column(conn, "sessions", "profile", "ALTER TABLE sessions ADD COLUMN profile TEXT")?;

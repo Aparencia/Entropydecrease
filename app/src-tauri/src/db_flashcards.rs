@@ -154,6 +154,8 @@ impl Db {
     }
 
     /// 组是否有复习记录（北极星组成①；经 flashcards.group_id 关联）。
+    /// 登记豁免 dead_code：按组北极星展示接线在 V1.0 周报面（v4 §7.5）。
+    #[allow(dead_code)]
     pub fn group_has_reviews(&self, group_id: i64) -> Result<bool> {
         self.with_conn(|conn| {
             let count: i64 = conn.query_row(

@@ -77,6 +77,8 @@ mod commands_groups;
 mod commands_fragments;
 // v0.11.2：闪卡与复习命令层（生成/复习队列/评分/自测）
 mod commands_flashcards;
+// v0.11.3：组结算命令层（计划/执行/核心提炼——防沼泽仪式）
+mod commands_settlement;
 // 实时会话链路依赖 Windows 捕获 API（WASAPI/DXGI/COM），非 Windows 平台不编译（TD-027 修复）
 #[cfg(target_os = "windows")]
 mod commands_live;
@@ -115,6 +117,8 @@ mod db_note_groups;
 mod db_fragments;
 // v0.11.2：闪卡/复习日志/指标事件数据层（学习循环统一）
 mod db_flashcards;
+// v0.11.3：结算记录数据层（settlements 表 + 归档候选判据）
+mod db_settlements;
 mod db_artifacts;
 // v0.7.7（REQ-183）：结构图记录存储——session_structure_images 表 CRUD
 mod db_structures;
@@ -218,6 +222,8 @@ mod purify_config;
 mod refine;
 // v0.11.2：间隔重复调度器（FSRS-6；弹性承诺无 streak，ADR-018）
 mod scheduler;
+// v0.11.3：组结算纯函数（阈值/周期双触发 + 重复合并判据）
+mod settlement;
 mod region_ocr;
 mod region_tracker;
 mod streaming_asr;
@@ -364,6 +370,10 @@ pub fn run() {
             commands_flashcards::count_due_cards,
             commands_flashcards::review_card,
             commands_flashcards::quiz_group_cards,
+            commands_flashcards::learning_metrics,
+            // v0.11.3：组结算机制——计划呈现/执行（用户可见仪式，防沼泽化）
+            commands_settlement::settlement_plan,
+            commands_settlement::execute_settlement,
             // 会话管理（REQ-010，ADR-004）
             commands_session::create_session,
             commands_session::finish_session,

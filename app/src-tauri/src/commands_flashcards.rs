@@ -194,3 +194,25 @@ impl Rating {
         .to_string()
     }
 }
+
+/// 学习循环指标读数（v4 §8 过程指标可见化——防测量层过度建设的前提是先有读数）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LearningMetrics {
+    pub card_reviewed: i64,
+    pub fragment_upgraded: i64,
+    pub group_settled: i64,
+}
+
+/// 学习循环指标（北极星过程读数：复习次数/碎片升级数/组结算数）。
+#[tauri::command]
+pub fn learning_metrics(state: State<'_, AppState>) -> Result<LearningMetrics, String> {
+    Ok(LearningMetrics {
+        card_reviewed: state.db.count_metric_events("card_reviewed").map_err(|e| e.to_string())?,
+        fragment_upgraded: state
+            .db
+            .count_metric_events("fragment_upgraded")
+            .map_err(|e| e.to_string())?,
+        group_settled: state.db.count_metric_events("group_settled").map_err(|e| e.to_string())?,
+    })
+}

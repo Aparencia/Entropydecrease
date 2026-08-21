@@ -85,6 +85,9 @@ impl Db {
     }
 
     /// 碎片计数（组结算触发信号；按组+status 统计）。
+    /// 登记豁免 dead_code：结算触发器当前用 list 长度折算，计数接口留
+    /// 给 v0.11.3+ 阈值埋点面板消费。
+    #[allow(dead_code)]
     pub fn count_fragments(&self, group_id: Option<i64>, status: Option<&str>) -> Result<i64> {
         self.with_conn(|conn| {
             let mut sql = "SELECT COUNT(*) FROM fragments WHERE 1=1".to_string();
@@ -106,6 +109,8 @@ impl Db {
     }
 
     /// 移动碎片到组（None=移出；用户纠错/结算归组共用）。
+    /// 登记豁免 dead_code：碎片移动 UI 随 v0.11.3+ 结算面建设接线。
+    #[allow(dead_code)]
     pub fn update_fragment_group(&self, id: i64, group_id: Option<i64>) -> Result<bool> {
         self.with_conn(|conn| {
             let affected = conn.execute(
