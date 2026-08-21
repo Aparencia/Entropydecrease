@@ -7,6 +7,8 @@
 
 // v0.7.0 M0：silence_feed_decision 随端点处理域拆至子模块 endpoint
 use super::endpoint::silence_feed_decision;
+// 2026-08-21 热词崩溃修复：纯函数在模块级（与引擎分离，纯逻辑可单测）
+use super::{filter_hotwords_by_tokens, load_token_chars};
 use crate::streaming_asr::{
     StreamingAsrConfig, StreamingAsrEngine, StreamingAsrEvent, StreamingAsrModels,
 };
@@ -66,6 +68,58 @@ fn silence_blocks_counter_counts_all_silent_blocks() {
 fn default_rule3_is_8_seconds() {
     // 默认 8s（5s 过短致句中硬切，取证 ADR-012）
     assert_eq!(StreamingAsrConfig::default().rule3_min_utterance_secs, 8.0);
+}
+
+// ── 热词 tokens 过滤（2026-08-21：领域热词含 tokens 表外字 → 解码 abort）──
+
+#[test]
+fn filter_hotwords_keeps_covered_words() {
+    // Arrange：token 集合覆盖常用字（焦/冥/哲 缺席——用户真机日志实证）
+    let chars: std::collections::HashSet<char> =
+        "心理成长情绪压力习惯认知思维自律人生哲学".chars().collect();
+    // Act & Assert：全覆盖词原样保留
+    assert_eq!(
+        filter_hotwords_by_tokens("心理 成长 习惯", &chars),
+        "心理 成长 习惯"
+    );
+}
+
+#[test]
+fn filter_hotwords_drops_uncovered_words() {
+    // Arrange：冥想/哲学 含表外字（冥/哲）→ 整词剔除（词级，语义完整）
+    let chars: std::collections::HashSet<char> = "心理成长".chars().collect();
+    // Act & Assert：覆盖词保留，表外词剔除
+    assert_eq!(
+        filter_hotwords_by_tokens("心理 冥想 哲学 成长", &chars),
+        "心理 成长"
+    );
+}
+
+#[test]
+fn filter_hotwords_all_uncovered_returns_empty() {
+    // Act & Assert：全部被剔 → 空串（调用方回退普通流，防 ContextGraph 崩溃）
+    let chars: std::collections::HashSet<char> = "心理".chars().collect();
+    assert_eq!(filter_hotwords_by_tokens("冥想 哲学", &chars), "");
+}
+
+#[test]
+fn load_token_chars_collects_single_char_tokens() {
+    // Arrange：临时 tokens.txt（单字 + 多字符 token + 带 id 行混合）
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("tokens.txt");
+    std::fs::write(&path, "心 1\n理 2\n▁ 3\n<sos> 4\n成长 5\n").unwrap();
+    // Act：读取构建单字集合
+    let chars = load_token_chars(path.to_str().unwrap()).unwrap();
+    // Assert：仅单字符 token 入集（▁=U+2581 也是单字符；多字符 token 不参与）
+    assert!(chars.contains(&'心') && chars.contains(&'理') && chars.contains(&'▁'));
+    assert!(!chars.contains(&'成'));
+    assert_eq!(chars.len(), 3);
+}
+
+#[test]
+fn load_token_chars_missing_file_is_none() {
+    // Act & Assert：文件缺失 → None（不阻断加载，仅失去过滤能力）
+    assert!(load_token_chars("C:\\nonexistent\\tokens.txt").is_none());
 }
 
 /// 集成测试：用本机真实 Zipformer 模型验证加载与喂入不崩溃。

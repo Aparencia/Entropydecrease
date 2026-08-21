@@ -93,6 +93,8 @@ pub struct StreamingAsrEngine {
     /// 可选标点恢复器（ADR-012 F4-2：重打分未通过的 final 补语义标点；
     /// 模型缺失 → None 零开销降级，不阻断 ASR）
     punctuator: Option<OfflinePunctuation>,
+    /// tokens.txt 单字集合（热词过滤；读取失败 → None 不阻断——仅失去过滤能力）
+    token_chars: Option<std::collections::HashSet<char>>,
 }
 
 impl StreamingAsrEngine {
@@ -154,6 +156,11 @@ impl StreamingAsrEngine {
             sentence_pcm: Vec::new(),
             rescorer,
             punctuator,
+            // 2026-08-21 热词崩溃修复：tokens.txt 单字集合——领域热词（心理成长
+            // 种子词等）含 tokens 表外字（焦/冥/哲）时 sherpa-onnx EncodeBase
+            // 失败仍创建 ContextGraph，greedy_search 解码断言 abort（exit
+            // 0xffffffff，用户真机日志实证）；读取失败 → None（不阻断加载）。
+            token_chars: load_token_chars(&models.tokens),
         })
     }
 
@@ -250,7 +257,18 @@ impl StreamingAsrEngine {
             .and_then(|v| v.hotwords_string());
         match hotwords.as_deref() {
             Some(h) if !h.trim().is_empty() => {
-                self.recognizer.create_stream_with_hotwords(h)
+                // TD-032 延伸修复（2026-08-21）：热词含 tokens.txt 外字符时
+                // sherpa-onnx 编码失败仍创建 ContextGraph → greedy_search 解码
+                // 断言 abort（exit 0xffffffff）；过滤后重建，空则回退普通流。
+                let filtered = match &self.token_chars {
+                    Some(chars) => filter_hotwords_by_tokens(h, chars),
+                    None => h.to_string(),
+                };
+                if filtered.trim().is_empty() {
+                    self.recognizer.create_stream()
+                } else {
+                    self.recognizer.create_stream_with_hotwords(&filtered)
+                }
             }
             _ => self.recognizer.create_stream(),
         }
@@ -305,6 +323,36 @@ impl StreamingAsrEngine {
             _ => fallback(),
         }
     }
+}
+
+/// 读取 tokens.txt 构建单字集合（纯函数；失败 → None）。
+///
+/// @ai-context: sherpa-onnx 的 EncodeBase 按字符查 token ID（日志实证
+///              "Cannot find ID for token 焦"）——只收集单字符 token；
+///              多字符 token（▁/标点/英文词）不参与单字覆盖判断。
+fn load_token_chars(tokens_path: &str) -> Option<std::collections::HashSet<char>> {
+    std::fs::read_to_string(tokens_path).ok().map(|raw| {
+        raw.lines()
+            .filter_map(|l| l.split_whitespace().next())
+            .filter(|t| t.chars().count() == 1)
+            .flat_map(|t| t.chars())
+            .collect()
+    })
+}
+
+/// 热词 tokens 过滤（纯函数）：仅保留所有字符都在 token 集合中的词。
+///
+/// @ai-context: 词级剔除（"冥想"含非法字"冥" → 整词剔除，语义完整）；
+///              全部被剔 → 空串（调用方回退普通流，防 ContextGraph 崩溃）。
+fn filter_hotwords_by_tokens(
+    hotwords: &str,
+    token_chars: &std::collections::HashSet<char>,
+) -> String {
+    hotwords
+        .split_whitespace()
+        .filter(|w| w.chars().all(|c| token_chars.contains(&c)))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 // 兼容 re-export：编辑距离（asr_rescore.rs 实现；dtw_align/subtitle_ocr/fusion 引用此路径）。
