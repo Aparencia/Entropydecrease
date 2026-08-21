@@ -272,7 +272,7 @@ v3 导航层裁决并入此架构：**容器管线出现在每日视图/会话�
 - **Phase 2：学习循环统一**——闪卡/复习绑定粒度提升到组、主题自测、组进度对账
 - **Phase 3：组结算机制**——阈值/周期触发、核心提炼、重复合并、低价值归档
 - **Phase 4：测量层增强（可选）**——显影报告 / 盲测仪器 / 常模库（重资产），以 Phase 2 的碎片升级率为启用前置条件
-代码建设顺序的实态映射见 [Foresight/v3-roadmap-build-order-analysis.md](../Foresight/v3-roadmap-build-order-analysis.md)（前瞻分析，待裁决）。
+代码建设顺序的实态映射见 [Foresight/v4-roadmap-build-order-analysis.md](../Foresight/v4-roadmap-build-order-analysis.md)（前瞻规划，待裁决）。
 ### 11.2 理论层节点的远期映射（不进入当前排期）
 | 学习层节点 | 远期去向 |
 |-----------|----------|

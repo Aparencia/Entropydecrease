@@ -31,4 +31,4 @@
 
 - 取代文档：[pain-points-v4.md](../../product/pain-points-v4.md)（统一卷，唯一主导规划文档）
 - 归档文档：[pain-points-v2.md](./pain-points-v2.md) · [pain-points-v3.md](./pain-points-v3.md)（[ ] 已归档）
-- 前瞻分析：[v3-roadmap-build-order-analysis.md](../../Foresight/v3-roadmap-build-order-analysis.md)（建设顺序分析，依据的 Phase 1-4 已并入 v4 §11，待裁决立项）
+- 前瞻规划：[v4-roadmap-build-order-analysis.md](../../Foresight/v4-roadmap-build-order-analysis.md)（建设顺序规划，2026-08-22 重新规划版；依据的 Phase 1-4 已并入 v4 §11，待裁决立项）
