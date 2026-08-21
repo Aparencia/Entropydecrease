@@ -21,6 +21,7 @@
 | ADR-014 | [会话↔笔记关联与批量转化（notes.session_id 列 + SessionListItem 标记）](./ADR-014-session-note-association.md) | 已接受 | 2026-08-19 |
 | ADR-015 | [画面要点屏卡体系（screen_id/bbox 落库 + 屏聚合纯函数 + 派生屏视图）](./ADR-015-screen-cards-ocr.md) | 已接受 | 2026-08-20 |
 | ADR-016 | [AI 凭据存储方案（Windows DPAPI/keyring）](./ADR-016-ai-credentials-dpapi.md) | 已接受 | 2026-08-21 |
+| ADR-017 | [安全加固批（CSP 基线与白名单、opener 移除、compose 强制配置、nginx 安全头、.env.production 去跟踪）](./ADR-017-security-hardening-batch.md) | 已接受 | 2026-08-21 |
 
 ## 编号规则
 
