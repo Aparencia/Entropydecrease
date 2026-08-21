@@ -1,7 +1,7 @@
 # 视频档案框架 v2：四维解耦重新设计
 
-**状态**: 2026-08-21 头脑风暴定稿（会话 33 实证驱动），待立项——登记 [需求池 REQ-188~193](../product/requirements-pool.md)；
-关联 [brainstorming-video-profile-detection.md](./brainstorming-video-profile-detection.md)（13 类检测改进候选，v2 为"抛开现有代码"的重新设计）。
+**状态**: 已排期（2026-08-21 头脑风暴定稿，v0.9.0 规划）——登记 [需求池 REQ-188~193](../product/requirements-pool.md)；
+关联 [brainstorming-video-profile-detection.md](./brainstorming-video-profile-detection.md)（13 类检测改进候选，已由本 v2 取代，保留作历史分析）。
 
 ## 基本信息
 
