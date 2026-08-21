@@ -7,7 +7,8 @@
 
 | 文档 | 回答的问题 | 状态 |
 |------|-----------|------|
-| [pain-points.md](./pain-points.md) | 为什么做？学习全链路痛点图谱（47 痛点 + 26 科学机制） | v1.0 草案 |
+| [pain-points-v2.md](./pain-points-v2.md) | 为什么做？学习全链路认知地图与产品蓝图（飞轮模型 + 三层架构 + 九状态坐标系） | v2.0 终稿 |
+| pain-points-v1.md（[→ 已归档](../archive/2026-08-21/pain-points-v1.md)） | 学习全链路痛点图谱 v1.0（历史参考，被 v2.0 取代） | [ ] 已归档 |
 | [mvp-canvas.md](./mvp-canvas.md) | 做什么？MVP 验证画布：视频知识提取 + 持久化闭环 | 草案 |
 | [prd.md](./prd.md) | 怎么细化？产品需求文档（课堂助手为核心，MoSCoW + 场景 + 验收） | 草稿 |
 | [requirements-pool.md](./requirements-pool.md) | 怎么跟踪？需求 → 优先级 → 版本 → 实现 → 验收 | 维护中 |
