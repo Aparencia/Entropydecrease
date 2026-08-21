@@ -77,6 +77,7 @@ zip = "2"
 # v0.7.0 M1（REQ-104/132）：剪贴板轮询监听（文本信号 + 图片直贴）；
 # arboard 3.x 在 Windows 用 clipboard-win 实现，无额外系统依赖
 arboard = "3"
+fsrs = { version = "6.6.1", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"
