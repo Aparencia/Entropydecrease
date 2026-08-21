@@ -6,7 +6,7 @@
 
 1. **原工作区只读**：`D:\Program own\aicode\work space\Entropydecrease` 下任何文件**不得改动**，仅作参照。
 2. **改动只在重构区**：所有新增/修改必须发生在 `D:\Program own\aicode\work space\Entropydecrease -重构区`。
-3. **提交到 rebuild 分支**：重构区的提交推送到 `https://github.com/Aparencia/Entropydecrease` 的 `rebuild` 分支（当前本地分支即 `rebuild`）。禁止 push 到 main/dev。
+3. **分支规范（2026-08-21 重构完成）**：开发在 `dev` 分支（重构区本地即 `dev`），发布在 `main` 分支（semantic-release 自动发布，`branches=["main"]`），旧代码存档在 `old` 分支（只读，禁止 push 到 old）。重构区的提交推送到 `https://github.com/Aparencia/Entropydecrease` 的 `dev`（日常开发）/`main`（发布）。
 4. **规范与代码冲突时以规范为准**；规范过时时先改规范再改代码。
 
 ## 1. 项目概述
@@ -60,7 +60,7 @@
 - **格式**：`<type>(<scope>): <subject>`（Conventional Commits），subject ≤50 字、动词开头、不加句号
 - **type**：feat / fix / docs / style / refactor / perf / test / build / ci / chore / revert
 - **原子提交**：一个提交只做一件事，能通过编译和测试；禁止 "update code"/"wip"
-- **分支**：当前开发在 `rebuild`；大功能（>2 天）开 `feature/*`；禁止 force push
+- **分支**：当前开发在 `dev`；发布线 `main`（semantic-release，禁止直接开发）；旧代码存档 `old`（只读）；大功能（>2 天）开 `feature/*`；禁止 force push（分支重构等例外需用户明确授权）
 - **.env / 密钥 / 模型大文件**：永不入库（模型走下载脚本或 .gitignore + LFS）
 
 ## 6. 文档规范（源自 standards/documentation.md）
