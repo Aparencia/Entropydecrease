@@ -45,15 +45,25 @@ function escapeHtml(s: string): string {
 /** 轻量 Markdown 渲染（标题/段落/列表/屏配图——笔记正文结构有限，避免引渲染库；
  *  所有文本经 escapeHtml 转义——本地内容仍按不可信输入处理；
  *  v0.7.3：`![alt](session-images/...)` 配图行 → 本地图（baseUrl + convertFileSrc）） */
-function renderMarkdown(md: string, imageBaseUrl: string): string {
+function renderMarkdown(md: string, imageBaseUrl: string, dataDir: string): string {
   return md
     .split("\n")
     .map((line) => {
-      // 屏配图行（v0.7.3 REQ-160：笔记画面要点配图，本地路径不出本机）
+      // 屏配图行（v0.7.3 REQ-160：笔记画面要点配图，本地路径不出本机；
+      // v0.10.1 修复：`session-images/...` 前缀是 data_dir 相对引用（note_filter
+      // 配图行格式），拼接会话图目录 baseUrl 会重复前缀——统一前缀判断）
       const img = line.match(/^\s*-\s*!\[([^\]]*)\]\(([^)]*)\)$/);
       if (img) {
-        const src = imageBaseUrl ? convertFileSrc(`${imageBaseUrl}/${img[2]}`) : "";
-        return `<img src="${src}" alt="${escapeHtml(img[1])}" loading="lazy" style="max-width:260px;border-radius:6px;border:1px solid #e5e7eb;margin:4px 0" />`;
+        const ref = img[2];
+        const src = /^https?:|^data:/i.test(ref)
+          ? ref // 外部 URL 直出
+          : ref.startsWith("session-images/")
+            ? (dataDir ? convertFileSrc(`${dataDir}/${ref}`) : "")
+            : (imageBaseUrl ? convertFileSrc(`${imageBaseUrl}/${ref}`) : "");
+        // 审查修复（2026-08-21 二轮）：src 同样按不可信输入转义——http 直出
+        // 分支会把 markdown 内容拼进属性值（`" onerror="` 可注入事件），
+        // convertFileSrc 虽已编码但直出分支无编码，统一 escapeHtml 兜底
+        return `<img src="${escapeHtml(src)}" alt="${escapeHtml(img[1])}" loading="lazy" style="max-width:260px;border-radius:6px;border:1px solid #e5e7eb;margin:4px 0" />`;
       }
       if (line.startsWith("# ")) return `<h2 style="font-size:15px;margin:10px 0 4px">${escapeHtml(line.slice(2))}</h2>`;
       if (line.startsWith("## ")) return `<h3 style="font-size:13px;margin:8px 0 4px;color:#0f766e">${escapeHtml(line.slice(3))}</h3>`;
@@ -79,6 +89,8 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
   const [aiDecisions, setAiDecisions] = useState<TextFilterDecision[]>([]);
   // v0.7.3（REQ-160）：屏配图 baseUrl（图集同款）
   const [baseUrl, setBaseUrl] = useState("");
+  // v0.10.1：data_dir 基准（`session-images/...` 前缀引用的解析根）
+  const [dataDir, setDataDir] = useState("");
   // 2026-08-21：AI 精修采纳后预览联动——采纳成功 → 拉取笔记（精修版）就地展示，
   // 解决「精修成功但预览无变化、看起来没被使用」的体验缺口（原 onApplied 未接线）
   const [adopted, setAdopted] = useState<Note | null>(null);
@@ -109,6 +121,9 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
     void invoke<string>("session_images_base_url", { sessionId })
       .then(setBaseUrl)
       .catch(() => setBaseUrl(""));
+    void invoke<string>("app_data_dir")
+      .then(setDataDir)
+      .catch(() => setDataDir(""));
   }, [load, sessionId]);
 
   /** 一键落库（复用 session_to_note；AI 判定结果回传保持预览一致——REQ-081） */
@@ -241,13 +256,13 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
           </div>
           <div
             style={{ fontSize: 13, lineHeight: 1.6, background: "#fff", border: "1px solid #d1fae5", borderRadius: 6, padding: 12 }}
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(adopted.content, baseUrl) }}
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(adopted.content, baseUrl, dataDir) }}
           />
         </div>
       ) : (
         <div
           style={{ fontSize: 13, lineHeight: 1.6, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(preview.markdown, baseUrl) }}
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(preview.markdown, baseUrl, dataDir) }}
         />
       )}
 

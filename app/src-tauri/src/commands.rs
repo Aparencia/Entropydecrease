@@ -25,6 +25,8 @@ pub(crate) const TITLE_MAX_CHARS: usize = 100;
 const CONTENT_MAX_CHARS: usize = 200_000;
 /// 搜索关键词最大长度。
 const KEYWORD_MAX_CHARS: usize = 100;
+/// 标签最大长度（防超长标签字符串）。
+const TAG_MAX_CHARS: usize = 50;
 /// 一键流水线最大图片数。
 const MAX_IMAGES: usize = 20;
 /// 拼接输入段/块数量上限（防恶意超大列表拖垮拼接）。
@@ -194,6 +196,8 @@ pub async fn save_draft_as_note(state: State<'_, AppState>, draft: NoteDraft) ->
         session_id: None,
         rule_version: None,
         purify_stats: None,
+        tags: None,
+        properties: None,
     };
     state.db.create_note(&new).map_err(|e| e.to_string())
 }
@@ -261,6 +265,8 @@ pub async fn process_to_note(
             session_id: None,
             rule_version: None,
             purify_stats: None,
+            tags: None,
+            properties: None,
         })
         .map_err(|e| e.to_string())
     })
@@ -280,14 +286,22 @@ pub async fn create_note(state: State<'_, AppState>, new: NewNote) -> Result<Not
         // 手动笔记无净化规则版本/统计（None 诚实降级——REQ-171 口径）
         rule_version: None,
         purify_stats: None,
+        tags: None,
+        properties: None,
     };
     state.db.create_note(&new).map_err(|e| e.to_string())
 }
 
-/// 列出全部笔记（REQ-004）。
+/// 列出全部笔记（REQ-004；v0.10.0 支持排序模式）。
 #[tauri::command]
-pub async fn list_notes(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
-    state.db.list_notes().map_err(|e| e.to_string())
+pub async fn list_notes(
+    state: State<'_, AppState>,
+    sort_mode: Option<crate::types::NoteSortMode>,
+) -> Result<Vec<Note>, String> {
+    match sort_mode {
+        Some(mode) => state.db.list_notes_sorted(&mode).map_err(|e| e.to_string()),
+        None => state.db.list_notes().map_err(|e| e.to_string()),
+    }
 }
 
 /// 读取单条笔记（REQ-004）。
@@ -308,21 +322,32 @@ pub async fn update_note(
     id: i64,
     title: String,
     content: String,
+    create_version: Option<bool>,
 ) -> Result<bool, String> {
     if id <= 0 {
         return Err("无效的笔记 id".to_string());
     }
     let title = truncate_chars(title, TITLE_MAX_CHARS);
     let content = truncate_chars(content, CONTENT_MAX_CHARS);
-    state
-        .db
-        .versioned_save(
-            id,
-            &content,
-            crate::note_version::NoteVersionSource::UserEdit,
-            &crate::note_version::VersionMeta::default(),
-        )
-        .map_err(|e| e.to_string())?;
+    // v0.10.1 F2：轻量保存（自动保存/失焦/任务勾选回写）——只刷新内容不建版本
+    // （v0.10.0 状态一致性规则：版本快照只在显式保存/AI 采纳时建立）
+    if create_version == Some(false) {
+        return state.db.update_note(id, &title, &content).map_err(|e| e.to_string());
+    }
+    // v0.10.1 F3：内容去重——与最新版本相同则跳过 versioned_save
+    // （防 Ctrl+S 空保存/重复保存污染版本时间线；无版本时照常建链）
+    let latest = state.db.latest_version_content(id).map_err(|e| e.to_string())?;
+    if latest.as_deref() != Some(content.as_str()) {
+        state
+            .db
+            .versioned_save(
+                id,
+                &content,
+                crate::note_version::NoteVersionSource::UserEdit,
+                &crate::note_version::VersionMeta::default(),
+            )
+            .map_err(|e| e.to_string())?;
+    }
     state
         .db
         .update_note(id, &title, &content)
@@ -339,11 +364,54 @@ pub async fn delete_note(state: State<'_, AppState>, id: i64) -> Result<bool, St
     state.db.delete_note(id).map_err(|e| e.to_string())
 }
 
-/// 搜索笔记（REQ-004；关键词截断——TD-005）。
+/// 搜索笔记（REQ-004；关键词截断——TD-005；v0.10.0 支持按标签过滤）。
 #[tauri::command]
-pub async fn search_notes(state: State<'_, AppState>, keyword: String) -> Result<Vec<Note>, String> {
+pub async fn search_notes(
+    state: State<'_, AppState>,
+    keyword: String,
+    tag: Option<String>,
+) -> Result<Vec<Note>, String> {
+    // 按标签过滤优先
+    if let Some(t) = tag {
+        return state
+            .db
+            .search_notes_by_tag(&truncate_chars(t, TAG_MAX_CHARS))
+            .map_err(|e| e.to_string());
+    }
     state
         .db
         .search_notes(&truncate_chars(keyword, KEYWORD_MAX_CHARS))
+        .map_err(|e| e.to_string())
+}
+
+/// 更新笔记标签（v0.10.0）。
+#[tauri::command]
+pub async fn update_note_tags(
+    state: State<'_, AppState>,
+    id: i64,
+    tags: String,
+) -> Result<bool, String> {
+    if id <= 0 {
+        return Err("无效的笔记 id".to_string());
+    }
+    state
+        .db
+        .update_note_tags(id, &tags)
+        .map_err(|e| e.to_string())
+}
+
+/// 更新笔记固定状态（v0.10.0）。
+#[tauri::command]
+pub async fn update_note_pin(
+    state: State<'_, AppState>,
+    id: i64,
+    pin: i64,
+) -> Result<bool, String> {
+    if id <= 0 {
+        return Err("无效的笔记 id".to_string());
+    }
+    state
+        .db
+        .update_note_pin(id, pin)
         .map_err(|e| e.to_string())
 }

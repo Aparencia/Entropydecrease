@@ -83,6 +83,8 @@ mod commands_backup;
 mod commands_device;
 mod commands_diag;
 mod commands_images;
+// v0.10.1：笔记图片命令——显示解析/本地导入/data_dir 基准
+mod commands_note_images;
 mod commands_import;
 mod commands_refine;
 mod commands_refine_inner;
@@ -192,9 +194,9 @@ mod structure_engine;
 mod structure_models;
 // v0.7.6（REQ-177/178）：笔记结构渲染层——章节标题 + 词汇表块（纯函数）
 mod structure_note;
-// v0.7.7（REQ-182）：结构图检测纯函数——diagram_likeness/pick_sharpest/区域过滤
+// v0.7.7（REQ-182；v0.10.2 重构）：结构图检测纯函数——diagram_likeness + decide_keep 四层过滤
 mod structure_detect;
-// v0.7.7（REQ-182）：结构图批量捕获管线——屏→选优帧→版面→过滤→裁剪→入库
+// v0.7.7（REQ-182；v0.10.2 重构）：结构图批量捕获管线——直扫参考图集→版面→四层过滤→裁剪→入库
 mod structure_capture;
 // v0.7.7（REQ-183）：结构图存储——struct/ 命名空间 + 独立预算 + 去重
 mod structure_store;
@@ -308,6 +310,9 @@ pub fn run() {
             commands::update_note,
             commands::delete_note,
             commands::search_notes,
+            // v0.10.0：标签/固定管理
+            commands::update_note_tags,
+            commands::update_note_pin,
             // 会话管理（REQ-010，ADR-004）
             commands_session::create_session,
             commands_session::finish_session,
@@ -407,6 +412,10 @@ pub fn run() {
             commands_images::delete_session_images_all,
             commands_images::save_user_screenshot,
             commands_images::session_images_base_url,
+            // v0.10.1：笔记图片——Markdown 引用解析 / 本地导入 / data_dir 基准
+            commands_note_images::resolve_note_image,
+            commands_note_images::import_note_image,
+            commands_note_images::app_data_dir,
             // 结构图（REQ-182/183/184，v0.7.7：非线性结构图像捕获持久化 + 图库）
             commands_structures::capture_session_structures,
             commands_structures::capture_structure_manual,

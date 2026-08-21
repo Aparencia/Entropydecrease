@@ -57,6 +57,21 @@ impl Db {
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
+    /// 最新版本内容（v0.10.1 F3 去重比较用；无版本返回 None——不建首快照，
+    /// 与 list_versions 的惰性建快照语义区分：只读比较不应产生写）。
+    pub fn latest_version_content(&self, note_id: i64) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let cur: Option<String> = conn
+            .query_row(
+                "SELECT content FROM notes_versions WHERE note_id = ?1
+                 ORDER BY created_at DESC, id DESC LIMIT 1",
+                params![note_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(cur)
+    }
+
     /// 按 id 读单条版本。
     pub fn get_version(&self, id: i64) -> Result<Option<NoteVersion>> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
