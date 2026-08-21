@@ -157,6 +157,48 @@ fn load_and_feed_streaming_zipformer_integration() {
     println!("流式引擎加载与喂入通过（模型目录: {}", base);
 }
 
+/// 集成测试：热词 + 流式解码不崩溃（2026-08-21 崩溃回归——领域预热首次注入热词
+/// 暴露 greedy_search 解码器不兼容 ContextGraph 流，断言 abort exit 0xffffffff；
+/// 修复为 modified_beam_search 后带热词解码正常）。
+///
+/// @ai-context: 模型目录同 load_and_feed 集成测试；热词表注入领域种子词
+///              （"心理/成长"——tokens 全覆盖，编码必然成功——专门验证
+///              ContextGraph 流解码路径）。
+#[test]
+#[ignore = "集成测试：需要真实模型文件（崩溃回归，热词+解码）"]
+fn hotwords_streaming_decode_integration() {
+    use std::sync::{Arc, Mutex};
+    // Arrange：模型路径（环境变量优先，回退 AppData 默认）
+    let base = std::env::var("ENTROPY_STREAMING_MODEL_DIR").unwrap_or_else(|_| {
+        let appdata = std::env::var("APPDATA").expect("APPDATA 环境变量");
+        format!("{}\\com.entropydecrease.app\\models\\streaming-zipformer", appdata)
+    });
+    let p = |name: &str| format!("{}\\{}", base, name);
+    let models = StreamingAsrModels {
+        encoder: p("encoder.fp16.onnx"),
+        decoder: p("decoder.fp16.onnx"),
+        joiner: p("joiner.fp16.onnx"),
+        tokens: p("tokens.txt"),
+    };
+    // 热词表（REQ-040 通道）：领域种子词（tokens 全覆盖——编码必成功）
+    let vocab: Arc<Mutex<crate::vocab::VocabStore>> =
+        Arc::new(Mutex::new(crate::vocab::VocabStore::default()));
+    vocab
+        .lock()
+        .expect("vocab lock")
+        .add_hotwords(&["心理".to_string(), "成长".to_string()]);
+    // Act：加载（带热词 → create_stream_with_hotwords → ContextGraph 流）
+    let mut engine =
+        StreamingAsrEngine::load(&models, &StreamingAsrConfig::default(), None, Some(vocab), None)
+            .expect("流式模型加载成功");
+    // 喂入合成音频（非静音，走完整 decode 路径——崩溃点：带 graph 流 Decode）
+    let samples: Vec<f32> = (0..16000).map(|i| ((i % 997) as f32 / 997.0 - 0.5) * 0.2).collect();
+    let _ = engine.feed(&samples, false);
+    let _ = engine.flush();
+    // Assert：不崩溃即通过（热词解码断言 abort 修复回归）
+    println!("热词流式解码通过（模型目录: {}", base);
+}
+
 /// 集成测试：标点恢复模型加载与中文标点补全（ADR-012 F4-2）。
 ///
 /// @ai-context: 模型目录取 ENTROPY_PUNCT_MODEL_DIR 环境变量，默认

@@ -122,6 +122,11 @@ impl StreamingAsrEngine {
         //              2025-06-30）依赖 C++ 侧按 transducer 三件套自动推断；
         //              误设 zipformer2 会要求 query_head_dims 元数据而崩溃（原项目踩坑）。
         recognizer_config.enable_endpoint = true;
+        // 2026-08-21 热词解码崩溃修复：带 ContextGraph（热词）的流必须用
+        // modified_beam_search 解码——greedy_search（默认）的 Decode 接口不处理
+        // 带 graph 的流，断言 abort（exit 0xffffffff，用户真机日志实证 Decode:101）；
+        // 无热词时同样兼容（beam 搜索对普通流无副作用，识别质量相当或更优）。
+        recognizer_config.decoding_method = Some("modified_beam_search".into());
         // 端点规则：尾静音 2.4s / 1.2s 断句（sherpa-onnx 默认），
         // rule3 强制断句 = 可配置（ADR-012 F3-1：默认 8s，env 可覆盖）
         recognizer_config.rule1_min_trailing_silence = 2.4;
