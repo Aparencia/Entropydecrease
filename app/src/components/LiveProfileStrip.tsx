@@ -50,13 +50,58 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
   const [error, setError] = useState("");
   // 提示计时器句柄（后到提示清除前一个定时器——防旧 timer 提前清掉新提示）
   const noteTimer = useRef<number | null>(null);
+  // 档位镜像（事件闭包读最新档位——首次定档判定用，审查 M2）
+  const tierRef = useRef<VisualTier | null>(null);
+  // 已忽略的降档建议档（保持现状——后端每采样 tick 重发，按建议档去重防重复弹条，审查 M1）
+  const dismissedRef = useRef<VisualTier | null>(null);
+
+  // 档位事件：升档静默可见化；降档请求 → 确认条（幂等去重）。
+  // 审查 L1：监听先于挂载拉取注册——事件落在（快照、监听）间隙会丢失
+  useEffect(() => {
+    const unlisteners: Promise<() => void>[] = [
+      listen<TierChangedPayload>("live:tier-changed", (e) => {
+        const t = e.payload.tier as VisualTier;
+        // 首次定档（此前未定档）不是升档——不展示升档文案（审查 M2）
+        const isInitial = tierRef.current === null;
+        tierRef.current = t;
+        setTier(t);
+        setDowngrade(null); // 档位已变化（含降档确认后），确认条使命完成
+        dismissedRef.current = null; // 档位已变，降档可重新询问
+        if (e.payload.reason === "upgrade-silent" && !isInitial) {
+          setNote(`画面档已自动升为「${TIER_LABELS[t] ?? t}档」`);
+          if (noteTimer.current) window.clearTimeout(noteTimer.current);
+          noteTimer.current = window.setTimeout(() => setNote(null), NOTE_TTL_MS);
+        }
+      }),
+      listen<TierDowngradeRequest>("live:tier-downgrade-request", (e) => {
+        // 幂等：同一降档请求重复询问不重复弹（保持现状后按建议档去重；审查 M1）
+        const to = e.payload.to as VisualTier;
+        if (dismissedRef.current !== to) setDowngrade(to);
+      }),
+      // 停止过渡期清空确认条（confirm 命令要求活动会话，停止后必失败——审查 L2）
+      listen<string>("live:status", (e) => {
+        if (e.payload === "stopped") {
+          setDowngrade(null);
+          dismissedRef.current = null;
+        }
+      }),
+    ];
+    return () => {
+      unlisteners.forEach((p) => void p.then((fn) => fn()));
+      if (noteTimer.current) window.clearTimeout(noteTimer.current);
+    };
+  }, []);
 
   // 挂载：档位拉取兜底（事件可能早于本组件挂载——同 session-info 模式）；
   // 形态/领域重跑检测（与档案卡同口径，窗口标题确定性输入）
   useEffect(() => {
     void invoke<{ tier: string | null }>("live_session_status")
       .then((s) => {
-        if (s.tier) setTier(s.tier as VisualTier);
+        if (s.tier) {
+          const t = s.tier as VisualTier;
+          tierRef.current = t;
+          setTier(t);
+        }
       })
       .catch(() => undefined);
     if (!windowTitle) return;
@@ -73,30 +118,6 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
       cancelled = true;
     };
   }, [windowTitle]);
-
-  // 档位事件：升档静默可见化；降档请求 → 确认条（幂等覆盖，不重复闪烁）
-  useEffect(() => {
-    const unlisteners: Promise<() => void>[] = [
-      listen<TierChangedPayload>("live:tier-changed", (e) => {
-        const t = e.payload.tier as VisualTier;
-        setTier(t);
-        setDowngrade(null); // 档位已变化（含降档确认后），确认条使命完成
-        if (e.payload.reason === "upgrade-silent") {
-          setNote(`画面档已自动升为「${TIER_LABELS[t]}档」`);
-          if (noteTimer.current) window.clearTimeout(noteTimer.current);
-          noteTimer.current = window.setTimeout(() => setNote(null), NOTE_TTL_MS);
-        }
-      }),
-      listen<TierDowngradeRequest>("live:tier-downgrade-request", (e) => {
-        // 幂等：同一降档请求重复询问直接覆盖更新（后端下轮重评再询直到确认/档位变化）
-        setDowngrade(e.payload.to as VisualTier);
-      }),
-    ];
-    return () => {
-      unlisteners.forEach((p) => void p.then((fn) => fn()));
-      if (noteTimer.current) window.clearTimeout(noteTimer.current);
-    };
-  }, []);
 
   /** 确认降档：写入共享 override → worker 下轮检测消费并 retune；档位由
    *  随后的 tier-changed 事件同步（乐观关闭确认条） */
@@ -130,7 +151,7 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
           📋 {form ? FORM_LABELS[form] : "形态识别中"}
         </span>
         <span title="画面价值档（会话中自动重评：升档静默/降档确认）">
-          🎨 画面 {tier ? `${TIER_LABELS[tier]}档` : "未定档"}
+          🎨 画面 {tier ? `${TIER_LABELS[tier] ?? tier}档` : "未定档"}
         </span>
         <span title="内容领域（标题/平台信号；增强项）">
           🏷 {domain?.kind ? domainLabel(domain.kind) : "领域未定"}
@@ -157,7 +178,7 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
             padding: "4px 8px",
           }}
         >
-          <span style={{ color: "#b45309" }}>画面价值降低，是否降为「{TIER_LABELS[downgrade]}档」？</span>
+          <span style={{ color: "#b45309" }}>画面价值降低，是否降为「{TIER_LABELS[downgrade] ?? downgrade}档」？</span>
           <button
             onClick={() => void confirmDowngrade()}
             disabled={busy}
@@ -174,7 +195,11 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
             {busy ? "确认中…" : "确认降档"}
           </button>
           <button
-            onClick={() => setDowngrade(null)}
+            onClick={() => {
+              // 保持现状：记录已忽略的建议档（后端每采样 tick 重发——同档不再弹条，审查 M1）
+              dismissedRef.current = downgrade;
+              setDowngrade(null);
+            }}
             disabled={busy}
             style={{
               padding: "2px 8px",

@@ -265,9 +265,11 @@ impl StreamingAsrEngine {
                 // TD-032 延伸修复（2026-08-21）：热词含 tokens.txt 外字符时
                 // sherpa-onnx 编码失败仍创建 ContextGraph → greedy_search 解码
                 // 断言 abort（exit 0xffffffff）；过滤后重建，空则回退普通流。
+                // 审查修复（M3）：tokens 读取失败（None）保守回退普通流——
+                // 不过滤会放行表外字符热词（原始崩溃输入路径），防御链缺口。
                 let filtered = match &self.token_chars {
                     Some(chars) => filter_hotwords_by_tokens(h, chars),
-                    None => h.to_string(),
+                    None => String::new(),
                 };
                 if filtered.trim().is_empty() {
                     self.recognizer.create_stream()

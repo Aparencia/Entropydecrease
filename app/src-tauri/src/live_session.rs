@@ -242,6 +242,12 @@ impl LiveSessionManager {
         // 2026-08 A1：会话暂停共享状态——按会话复位（P2 补漏：标志/补偿时长
         // 跨会话残留会让新会话起始即暂停、时间戳偏移）
         self.pause.reset();
+        // 2026-08-21 审查修复（H1）：画面档共享槽按会话复位——槽跨会话残留会
+        // 让新会话起始即显示上一会话档位（音频档案无 screen worker 写入，
+        // 残留永久生效）；tier_override 残留会让新会话首次降档裁决被静默
+        // 自动消费（未经本会话用户确认即降档）。
+        *self.tier_override.lock().expect("tier override lock poisoned") = None;
+        *self.applied_tier.lock().expect("applied tier lock poisoned") = None;
         let pause = self.pause.clone();
         // v0.7.2（REQ-151）：从窗口标题初始化会话信息（平台/系列/集号——
         // 标题信号零成本；时长/分P 由屏幕 worker 播放器 OCR 增量补充）
