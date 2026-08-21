@@ -15,6 +15,7 @@ build/
 *.dll
 target/
 dist-electron/
+.firecrawl/
 
 # IDE
 .vscode/
