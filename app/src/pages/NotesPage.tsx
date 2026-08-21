@@ -17,6 +17,7 @@ import NoteEditView from "../components/NoteEditView";
 import NoteListView, { parseTags } from "../components/NoteListView";
 import type { SortMode } from "../components/NoteListView";
 import NoteGroupPanel from "../components/NoteGroupPanel";
+import ReviewSessionOverlay from "../components/ReviewSessionOverlay";
 import NoteReadingView from "../components/NoteReadingView";
 import ImagePreviewOverlay from "../components/ImagePreviewOverlay";
 import VersionPanel from "../components/VersionPanel";
@@ -35,6 +36,8 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
   const [sortMode, setSortMode] = useState<SortMode>("updated-desc");
   // v0.11.0：组过滤（null=全部；NoteGroupPanel 受控）
   const [groupFilter, setGroupFilter] = useState<number | null>(null);
+  // v0.11.2：复习面（groupId=null 全量；undefined=关闭）
+  const [review, setReview] = useState<{ groupId: number | null; name: string } | undefined>(undefined);
   const [selected, setSelected] = useState<Note | null>(null);
   const [status, setStatus] = useState("");
   // M3：编辑态
@@ -225,6 +228,7 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
         onGroupFilterChange={setGroupFilter}
         selectedNoteId={selected?.id ?? null}
         onChanged={() => void load(keyword, tagFilter, sortMode)}
+        onOpenReview={(groupId, name) => setReview({ groupId, name })}
       />
       {/* ── 左栏：搜索 + 标签过滤 + 排序 + 列表 ── */}
       <NoteListView
@@ -279,6 +283,14 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
         编辑态无 Markdown 渲染，预览只存在于阅读态） */}
       {previewImg && (
         <ImagePreviewOverlay src={previewImg.src} title={previewImg.title} onClose={() => setPreviewImg(null)} />
+      )}
+      {/* v0.11.2：组级复习面（提取优先；评分推进 FSRS 调度） */}
+      {review && (
+        <ReviewSessionOverlay
+          groupId={review.groupId}
+          groupName={review.name}
+          onClose={() => setReview(undefined)}
+        />
       )}
     </div>
   );

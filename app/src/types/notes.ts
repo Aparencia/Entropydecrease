@@ -107,6 +107,27 @@ export interface NoteGroup {
 }
 
 // ────────────────────────────────────────────────────────────
+// 闪卡类型（v0.11.2 学习循环统一；Rust Flashcard camelCase 契约）
+// ────────────────────────────────────────────────────────────
+
+/** 闪卡（提取优先：front 线索→回忆→back 验证→评分） */
+export interface Flashcard {
+  id: number;
+  groupId: number;
+  noteId: number | null;
+  fragmentId: number | null;
+  front: string;
+  back: string;
+  /** fact 先做；action/model 预埋不做（N13） */
+  kind: string;
+  /** CardState JSON（后端调度契约，前端透传不解析） */
+  stateJson: string;
+  /** 到期时刻（Unix 毫秒） */
+  dueAt: number;
+  createdAt: number;
+}
+
+// ────────────────────────────────────────────────────────────
 // 笔记版本类型（v0.8.0 M4，REQ-144/REQ-143 完整；Rust serde 契约）
 // ────────────────────────────────────────────────────────────
 

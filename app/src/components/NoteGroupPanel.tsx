@@ -46,15 +46,19 @@ interface Props {
   selectedNoteId: number | null;
   /** 组/笔记变更后的刷新回调（NotesPage 重载笔记列表） */
   onChanged: () => void;
+  /** v0.11.2：打开复习面（groupId=null 全量；groupName 呈现用） */
+  onOpenReview: (groupId: number | null, groupName: string) => void;
 }
 
-export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selectedNoteId, onChanged }: Props) {
+export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selectedNoteId, onChanged, onOpenReview }: Props) {
   const [groups, setGroups] = useState<NoteGroup[]>([]);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [status, setStatus] = useState("");
   // v0.11.1：feed 捕获开关（默认关——功能预览纪律）与捕获输入态
   const [feedCaptureOn, setFeedCaptureOn] = useState(false);
   const [fragText, setFragText] = useState("");
+  // v0.11.2：全量到期卡数（顶栏"复习 N"徽标）
+  const [dueTotal, setDueTotal] = useState(0);
   // 改判表单态（展开区消费）
   const [overrideKind, setOverrideKind] = useState("standalone");
   const [overrideDomain, setOverrideDomain] = useState("");
@@ -63,6 +67,8 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
     try {
       const list = await invoke<NoteGroup[]>("list_note_groups", { terrain: null });
       setGroups(list);
+      const due = await invoke<number>("count_due_cards", { groupId: null });
+      setDueTotal(due);
     } catch (e) {
       setStatus(`组加载失败: ${e}`);
     }
@@ -138,11 +144,30 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
     }
   };
 
+  // ── v0.11.2：组→闪卡生成（本地规则版；幂等）──
+  const runGenerateCards = async (g: NoteGroup) => {
+    try {
+      const n = await invoke<number>("generate_group_cards", { groupId: g.id });
+      setStatus(n > 0 ? `已生成 ${n} 张闪卡` : "无新卡可生成（已生成过或无可出卡素材）");
+      await load();
+    } catch (e) {
+      setStatus(`闪卡生成失败: ${e}`);
+    }
+  };
+
   return (
     <div style={{ width: 230, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "10px 12px", borderBottom: "1px solid #e5e7eb", fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
         <span>🗂 笔记组</span>
-        <button onClick={() => void load()} style={{ marginLeft: "auto", fontSize: 13, cursor: "pointer" }} title="刷新组列表">⟳</button>
+        {/* v0.11.2：全量复习入口（UI 最小化——只一个按钮 + 到期数） */}
+        <button
+          onClick={() => onOpenReview(null, "全部组")}
+          style={{ marginLeft: "auto", fontSize: 11, cursor: "pointer", padding: "2px 8px", borderRadius: 4, border: "1px solid #0f766e", background: dueTotal > 0 ? "#f0fdfa" : "#fff", color: "#0f766e" }}
+          title="开始复习到期卡片"
+        >
+          🎴 复习{dueTotal > 0 ? ` ${dueTotal}` : ""}
+        </button>
+        <button onClick={() => void load()} style={{ fontSize: 13, cursor: "pointer" }} title="刷新组列表">⟳</button>
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: 6 }}>
         {/* v0.11.1：碎片快速捕获区（开关默认关；开启后置顶——feed 进料口） */}
@@ -256,6 +281,16 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
                     <button onClick={() => void runOverride(g)}
                       style={{ fontSize: 11, cursor: "pointer", padding: "2px 8px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>
                       ✓ 改判
+                    </button>
+                    {/* v0.11.2：组→闪卡生成 + 组级复习（学习循环入口） */}
+                    <button onClick={() => void runGenerateCards(g)}
+                      style={{ fontSize: 11, cursor: "pointer", padding: "2px 8px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}
+                      title="从组内笔记词汇表/碎片生成闪卡（幂等）">
+                      ⚙ 生成闪卡
+                    </button>
+                    <button onClick={() => onOpenReview(g.id, g.name)}
+                      style={{ fontSize: 11, cursor: "pointer", padding: "2px 8px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>
+                      🎴 复习本组
                     </button>
                     {selectedNoteId != null && (
                       <>
