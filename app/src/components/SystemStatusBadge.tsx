@@ -8,15 +8,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-
-/** 健康快照（Rust HealthSnapshot，snake_case 契约） */
-interface HealthSnapshot {
-  disk_free_gb: number | null;
-  disk_warn: boolean;
-  missing_models: string[];
-  asr_alive: boolean;
-  ocr_alive: boolean;
-}
+// L11 去重：HealthSnapshot 单一定义源在 types/system.ts（Rust HealthSnapshot，snake_case 契约）
+import type { HealthSnapshot } from "../types";
 
 /** 诊断快照（Rust DiagSnapshot，snake_case 契约） */
 interface DiagSnapshot {

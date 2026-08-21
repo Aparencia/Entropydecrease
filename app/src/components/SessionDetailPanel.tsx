@@ -8,7 +8,7 @@
  *              session:fused 到达后父层自动刷新 detail 重挂本面板。
  * @ai-context: REQ-080 降级分级：live:asr-degraded 一次性横幅（父层透传）。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import ArtifactView from "../components/ArtifactView";
@@ -16,7 +16,7 @@ import BoxSelectOverlay from "../components/BoxSelectOverlay";
 import ImageGallery from "../components/ImageGallery";
 import NotePreviewView from "../components/NotePreviewView";
 import SpeakerSwitchCard from "../components/SpeakerSwitchCard";
-import type { OutlineEntry, QualityReport, SessionDetail } from "../types";
+import type { OutlineEntry, QualityReport, SessionDetail, SessionOcrBlock } from "../types";
 import { fmtMs } from "../utils/fmt";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
@@ -55,8 +55,44 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
   const [baseUrl, setBaseUrl] = useState("");
   // v0.7.7（REQ-184）：框选截取状态（first_seen_ms 标识屏）+ 保存反馈
   const [selectingScreen, setSelectingScreen] = useState<number | null>(null);
-  const [toastMsg, setToastMsg] = useState("");
+  // M2 修复：toast 携带屏键（first_seen_ms）——原单一 string 在 screens.map 内渲染导致 N 屏同显，
+  // 现仅匹配屏渲染（改动最小方案：保持原位展示，不提升到列表外）
+  const [panelToast, setPanelToast] = useState<{ screenKey: number; msg: string } | null>(null);
+  const panelToastTimerRef = useRef<number | null>(null);
   const sessionId = detail.session.id;
+
+  // toast 定时器卸载清理（防卸载后 setState）
+  useEffect(
+    () => () => {
+      if (panelToastTimerRef.current) window.clearTimeout(panelToastTimerRef.current);
+    },
+    [],
+  );
+
+  /** 面板内单屏 toast（4s 自动消失；新消息重置计时） */
+  const showPanelToast = (screenKey: number, msg: string) => {
+    setPanelToast({ screenKey, msg });
+    if (panelToastTimerRef.current) window.clearTimeout(panelToastTimerRef.current);
+    panelToastTimerRef.current = window.setTimeout(() => setPanelToast(null), 4000);
+  };
+
+  // M7 修复：屏→OCR 块分组预构建（原 screens.map 内逐屏 filter 为 O(n×m)）——
+  // 排序后双指针一次遍历归组；屏区间不重叠，与原 filter 语义一致
+  const ocrBlocksByScreen = useMemo(() => {
+    const map = new Map<number, SessionOcrBlock[]>();
+    for (const s of detail.screens) map.set(s.first_seen_ms, []);
+    const screens = [...detail.screens].sort((a, b) => a.first_seen_ms - b.first_seen_ms);
+    const blocks = [...detail.ocr_blocks].sort((a, b) => a.timestamp_ms - b.timestamp_ms);
+    let si = 0;
+    for (const b of blocks) {
+      // 块时间戳单调递增——跳过已结束的屏（last_seen_ms < ts）
+      while (si < screens.length && screens[si].last_seen_ms < b.timestamp_ms) si++;
+      if (si < screens.length && b.timestamp_ms >= screens[si].first_seen_ms) {
+        map.get(screens[si].first_seen_ms)?.push(b);
+      }
+    }
+    return map;
+  }, [detail]);
 
   // 质量报告 + 大纲随详情加载（失败不阻断详情展示）
   useEffect(() => {
@@ -251,13 +287,11 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
             <p style={{ fontSize: 12, color: "#9ca3af" }}>本会话无画面识别内容</p>
           )}
           {detail.screens.map((s, i) => {
-            // 块级明细（原料复查）：屏时间区间内的原始块
-            const raw = detail.ocr_blocks.filter(
-              (b) => b.timestamp_ms >= s.first_seen_ms && b.timestamp_ms <= s.last_seen_ms,
-            );
+            // 块级明细（原料复查）：预构建分组直取（M7：替代逐屏 O(n×m) filter）
+            const raw = ocrBlocksByScreen.get(s.first_seen_ms) ?? [];
             return (
               <div
-                key={i}
+                key={s.first_seen_ms}
                 id={`ocr-${sessionId}-${s.first_seen_ms}`}
                 style={{
                   border: "1px solid #e5e7eb",
@@ -300,9 +334,10 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
                 )}
                 {s.image_ref && baseUrl && (
                   <div style={{ marginTop: 6 }}>
-                    {toastMsg && (
+                    {/* M2：仅匹配屏渲染 toast（screenKey=first_seen_ms） */}
+                    {panelToast && panelToast.screenKey === s.first_seen_ms && (
                       <div style={{ fontSize: 11, color: "#047857", background: "#ecfdf5", border: "1px solid #6ee7b7", borderRadius: 6, padding: "4px 8px", marginBottom: 4 }}>
-                        {toastMsg}
+                        {panelToast.msg}
                       </div>
                     )}
                     <div style={{ position: "relative", display: "inline-block" }}>
@@ -325,8 +360,8 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
                           firstSeenMs={s.first_seen_ms}
                           onDone={() => {
                             setSelectingScreen(null);
-                            setToastMsg("✓ 已保存为结构图（见图集「结构图」区段）");
-                            setTimeout(() => setToastMsg(""), 4000);
+                            // 定时消失逻辑收敛到 showPanelToast（ref 持有 + 卸载清理）
+                            showPanelToast(s.first_seen_ms, "✓ 已保存为结构图（见图集「结构图」区段）");
                           }}
                           onCancel={() => setSelectingScreen(null)}
                         />
@@ -337,7 +372,7 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
                         style={{ ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #0d9488", background: "#f0fdfa", color: "#0f766e", marginTop: 4 }}
                         onClick={() => {
                           setSelectingScreen(s.first_seen_ms);
-                          setToastMsg("");
+                          setPanelToast(null);
                         }}
                         title="拖框截取此屏中的流程图/图表等非线性结构为结构图"
                       >

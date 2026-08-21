@@ -7,6 +7,10 @@
  */
 import katex from "katex";
 import "katex/dist/katex.min.css";
+// L11 去重：escapeHtml 单一定义源在 utils/html.ts；此处 re-export 保持既有公共 API 兼容
+import { escapeHtml } from "../utils/html";
+
+export { escapeHtml };
 
 /** LaTeX 渲染（KaTeX 本地化：renderToString 无网络依赖） */
 export function renderLatex(latex: string): string {
@@ -47,16 +51,6 @@ export function renderMarkdownTable(md: string): string {
     )
     .join("")}</tbody>`;
   return `<table>${thead}${tbody}</table>`;
-}
-
-/** HTML 转义（防御：产物文本不可信） */
-export function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 /** 低置信样式类名（黄色虚线下划线；低置信/AI 占位渲染统一入口） */

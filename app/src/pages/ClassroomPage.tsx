@@ -24,6 +24,8 @@ import { SystemStatusBadge } from "../components/SystemStatusBadge";
 import ClassroomRightPane from "../components/ClassroomRightPane";
 import MaterialInputPanel from "../components/MaterialInputPanel";
 import type { Note, WindowInfo, StreamingModelStatus, LiveSessionStatus, DownloadProgress, DownloadStatus, ProfileKind } from "../types";
+// Low 清扫：标题截断长度单一定义源（与 MaterialInputPanel 共享）
+import { NOTE_TITLE_MAX_LEN } from "../utils/constants";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
 const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
@@ -94,7 +96,10 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
     warmUp();
     // 离开页面释放预热引擎（内存 ~数百 MB；后端另有 15min TTL 兜底）
     return () => {
-      void invoke("release_live_prepare").catch(() => {});
+      // Low 清扫：不吞异常——释放失败记录上下文（TTL 兜底仍会回收）
+      void invoke("release_live_prepare").catch((e) => {
+        console.warn("[ClassroomPage] 释放预热引擎失败（TTL 兜底仍生效）:", e);
+      });
     };
   }, [warmUp]);
 
@@ -240,7 +245,7 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   const startLive = async () => {
     setLiveError("");
     try {
-      const title = selectedWindow ? selectedWindow.title.slice(0, 60) : "实时课堂";
+      const title = selectedWindow ? selectedWindow.title.slice(0, NOTE_TITLE_MAX_LEN) : "实时课堂";
       const id = await invoke<number>("start_live_session", {
         title,
         sourceWindow: selectedWindow?.title ?? null,

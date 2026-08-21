@@ -15,28 +15,8 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import StructureModelSetting from "./StructureModelSetting";
-
-/** 健康快照（health_status 载荷）。 */
-interface HealthSnapshot {
-  disk_free_gb: number | null;
-  disk_warn: boolean;
-  missing_models: string[];
-  asr_alive: boolean;
-  ocr_alive: boolean;
-}
-
-/** 流式模型就绪状态。 */
-interface StreamingModelStatus {
-  ready: boolean;
-  missing: string[];
-}
-
-/** 下载进度（model_downloader::DownloadProgress 契约）。 */
-interface DownloadProgress {
-  file: string;
-  downloadedBytes: number;
-  totalBytes: number;
-}
+// L11 去重：HealthSnapshot/StreamingModelStatus/DownloadProgress 单一定义源在 types/system.ts
+import type { DownloadProgress, HealthSnapshot, StreamingModelStatus } from "../types";
 
 /** 说话人下载状态。 */
 interface SpeakerDownloadStatus {

@@ -8,9 +8,11 @@
  *              内容·需核实"扩展区）→ 采纳 update_note / 撤销（base 还原，
  *              删除无残留）。B6 仅标题不输出链接（后端 schema 保证）。
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+// M8：轮询/事件双通道/卡住检测抽入共用 hook（与 AiRefineCard 同源）
+import { useAiTaskPolling } from "../hooks/useAiTaskPolling";
+import { failureGuide } from "./aiTaskFailure";
 import type {
   AiEnrichResult,
   AiSettingsView,
@@ -38,19 +40,6 @@ const KINDS: { key: EnrichKind; label: string; group: "深度" | "广度" }[] = 
 const MEM_KEY = "entropy.enrich.kinds";
 type FailureLike = Record<string, string>;
 
-/** 失败原因 → 引导文案（与精修同口径四类出口） */
-function failureGuide(f: FailureLike): string {
-  const [kind, msg] = Object.entries(f)[0] ?? ["other", "未知错误"];
-  switch (kind) {
-    case "unauthorized": return `未授权：${msg}（请到设置页配置密钥并开启 AI 功能）`;
-    case "network": return `网络错误：${msg}（可重试）`;
-    case "balance": return `余额不足：${msg}（请充值或切换免费档模型）`;
-    case "quota": return `配额受限：${msg}（请明日再试）`;
-    case "invalid": return `响应非法已丢弃：${msg}（未落任何补充内容）`;
-    default: return msg;
-  }
-}
-
 export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onUpdated?: () => void }) {
   const [settings, setSettings] = useState<AiSettingsView | null>(null);
   const [selected, setSelected] = useState<EnrichKind[]>([]);
@@ -62,13 +51,31 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
   const [failure, setFailure] = useState<FailureLike | null>(null);
   const [msg, setMsg] = useState("");
   const [, setTaskId] = useState<number | null>(null);
-  const polling = useRef<ReturnType<typeof setInterval> | null>(null);
-  // 审查修复（2026-08-21 真机 debug）：同 AiRefineCard——闭包过期会导致
-  // 事件/轮询回调用旧 taskId（null）查询结果而永久卡"排队中"
-  const taskIdRef = useRef<number | null>(null);
-  const handleStateRef = useRef<(st: AiTaskState) => Promise<void>>(async () => {});
-  // 卡住检测（2026-08-21 真机"排队中"排查）：任务 30s 仍 Pending → 提示查看日志
-  const lastChangeRef = useRef(0);
+
+  // M8：任务状态派发（纯业务）——轮询/事件/卡住检测/卸载清理均由
+  // useAiTaskPolling 承担；taskId 以参数传入避免闭包过期
+  const handleState = useCallback(async (st: AiTaskState, tid: number | null) => {
+    if (st === "Succeeded") {
+      const r = await invoke<AiEnrichResult>("ai_enrich_result", { taskId: tid }).catch(() => null);
+      if (r) {
+        setResult(r);
+        setPhase("done");
+      }
+    } else if (typeof st === "object" && st !== null && "Failed" in st) {
+      setFailure(st.Failed.reason as FailureLike);
+      setPhase("failed");
+    } else if (typeof st === "object" && st !== null && "Running" in st) {
+      setProgress({ finished: st.Running.finished_slices, total: st.Running.total_slices });
+      setPhase("running");
+    }
+  }, []);
+
+  const { taskIdRef, startPolling, stopPolling } = useAiTaskPolling(handleState, () => {
+    // 30s 卡住 UI 复位（文案与抽取前一致）
+    setTaskId(null);
+    setPhase("idle");
+    setMsg("任务 30 秒无进展（可能未启动或后台卡住）——请查看 tauri 终端 [refine-task] 日志后重试");
+  });
 
   useEffect(() => {
     void invoke<AiSettingsView>("ai_get_settings").then(setSettings).catch(() => undefined);
@@ -78,79 +85,6 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
       if (saved) setSelected(JSON.parse(saved) as EnrichKind[]);
     } catch { /* 损坏记忆回退默认 */ }
     if (!localStorage.getItem(MEM_KEY)) setSelected(["d1", "d2", "b1", "b5"]);
-  }, []);
-
-  const stopPolling = () => {
-    if (polling.current) {
-      clearInterval(polling.current);
-      polling.current = null;
-    }
-  };
-
-  const handleState = useCallback(async (st: AiTaskState) => {
-    const tid = taskIdRef.current;
-    if (st === "Succeeded") {
-      stopPolling();
-      const r = await invoke<AiEnrichResult>("ai_enrich_result", { taskId: tid }).catch(() => null);
-      if (r) {
-        setResult(r);
-        setPhase("done");
-      }
-    } else if (typeof st === "object" && st !== null && "Failed" in st) {
-      stopPolling();
-      setFailure(st.Failed.reason as FailureLike);
-      setPhase("failed");
-    } else if (typeof st === "object" && st !== null && "Running" in st) {
-      setProgress({ finished: st.Running.finished_slices, total: st.Running.total_slices });
-      setPhase("running");
-    }
-  }, []);
-
-  // 同步最新 handleState 到 ref（事件/轮询回调总用最新实现——无闭包过期）
-  useEffect(() => {
-    handleStateRef.current = handleState;
-  }, [handleState]);
-
-  useEffect(() => {
-    // 审查修复（2026-08-21）：静态 import + 事件监听订阅一次，回调经 ref 取最新
-    const un = listen<[number, AiTaskState]>("ai:task-update", (e) => {
-      if (e.payload[0] !== taskIdRef.current) return;
-      void handleStateRef.current(e.payload[1]);
-    });
-    return () => {
-      un.then((off) => off());
-    };
-  }, []);
-
-  const poll = (id: number) => {
-    stopPolling();
-    lastChangeRef.current = Date.now();
-    polling.current = setInterval(async () => {
-      const st = await invoke<AiTaskState>("ai_refine_status", { taskId: id }).catch(() => null);
-      if (st) {
-        if (st !== "Pending") lastChangeRef.current = Date.now();
-        void handleStateRef.current(st);
-      }
-      // 卡住检测：长时间仍 Pending = 任务未启动或后台卡死（tauri 终端看 [refine-task] 日志）
-      if (Date.now() - lastChangeRef.current > 30_000) {
-        stopPolling();
-        taskIdRef.current = null;
-        setTaskId(null);
-        setPhase("idle");
-        setMsg("任务 30 秒无进展（可能未启动或后台卡住）——请查看 tauri 终端 [refine-task] 日志后重试");
-      }
-    }, 1500);
-  };
-
-  useEffect(() => {
-    // 审查修复（2026-08-21）：组件卸载时停止轮询——否则 interval 持续 invoke
-    // 并对已卸载组件 setState（切会话/关面板后泄漏）
-    return () => {
-      if (polling.current) {
-        clearInterval(polling.current);
-        polling.current = null;
-      }
-    };
   }, []);
 
   const toggle = (k: EnrichKind) => {
@@ -212,8 +146,8 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
     if (handle) {
       taskIdRef.current = handle.taskId;
       setTaskId(handle.taskId);
-      void handleState(handle.state);
-      poll(handle.taskId);
+      void handleState(handle.state, handle.taskId);
+      startPolling(handle.taskId);
     }
   };
 
@@ -236,13 +170,19 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
 
   const revert = async () => {
     if (!result) return;
-    await invoke<{ id: number }>("ai_enrich_revert", {
-      noteId,
-      baseMarkdown: result.baseMarkdown,
-    }).catch((e) => setMsg(`撤销失败：${e}`));
-    setMsg("已撤销补充（内容还原补充前——删除无残留）");
-    onUpdated?.();
-    reset();
+    try {
+      // M1：原实现 .catch(setMsg) 后无条件走成功分支 → 失败也报"已撤销"误报；
+      // 改 await 成功路径：仅成功才提示+刷新+复位，失败只提示错误保留预览可重试
+      await invoke<{ id: number }>("ai_enrich_revert", {
+        noteId,
+        baseMarkdown: result.baseMarkdown,
+      });
+      setMsg("已撤销补充（内容还原补充前——删除无残留）");
+      onUpdated?.();
+      reset();
+    } catch (e) {
+      setMsg(`撤销失败：${e}`);
+    }
   };
 
   const reset = () => {
@@ -346,7 +286,7 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
       {/* 失败 */}
       {phase === "failed" && failure && (
         <div style={{ fontSize: 12, color: "#b91c1c" }}>
-          ❌ {failureGuide(failure)}
+          ❌ {failureGuide(failure, "未落任何补充内容")}
           <button style={{ ...btn, marginLeft: 8, border: "1px solid #d1d5db" }} onClick={reset}>重试</button>
         </div>
       )}

@@ -46,6 +46,8 @@ export default function SessionsPage({ focusSessionId, active, onOpenNote }: Pro
   const openIdRef = useRef<number | null>(null);
   const prevFinishedRef = useRef<Set<number>>(new Set()); // 上次快照的已完成 id 集
   const toastTimerRef = useRef<number | null>(null);
+  // 段搜索定位滚动定时器（ref 持有 + 卸载清理——防卸载后 DOM 操作残留）
+  const scrollTimerRef = useRef<number | null>(null);
   // TD-003 模式：请求序号防竞态——live:status 与 session:fused 可并发触发刷新，
   // 慢响应返回时不覆盖新结果（旧快照短暂回显 + justFinished 重复计数）
   const refreshSeqRef = useRef(0);
@@ -56,10 +58,11 @@ export default function SessionsPage({ focusSessionId, active, onOpenNote }: Pro
     toastTimerRef.current = window.setTimeout(() => setToast(null), 3000);
   }, []);
 
-  // toast 定时器卸载清理（防卸载后 setState）
+  // toast 定时器 + 滚动定位定时器卸载清理（防卸载后 setState/DOM 操作）
   useEffect(
     () => () => {
       if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+      if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
     },
     [],
   );
@@ -97,10 +100,33 @@ export default function SessionsPage({ focusSessionId, active, onOpenNote }: Pro
     if (active) void refresh();
   }, [active, refresh]);
 
+  /** 打开会话详情（可选 targetSegId：段搜索命中段定位；无则不强制滚动） */
+  const openDetail = useCallback(
+    async (id: number, targetSegId?: number) => {
+      openIdRef.current = id;
+      try {
+        const d = await invoke<SessionDetail>("get_session_detail", { id });
+        setDetail(d);
+        // M4 修复：滚动目标改用命中段 id（原硬编码 segments[0] 导致段搜索定位失效）；
+        // 无目标段时不滚动（普通打开/融合刷新保持视口不跳动）
+        if (targetSegId != null) {
+          if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
+          scrollTimerRef.current = window.setTimeout(() => {
+            document.getElementById(`seg-${id}-${targetSegId}`)?.scrollIntoView({ block: "center" });
+          }, 50);
+        }
+      } catch (e) {
+        showToast(`加载详情失败: ${e}`, "err");
+      }
+    },
+    [showToast],
+  );
+
   // 2026-08 A4：跨页直达——课堂助手融合完成跳转后自动打开目标会话详情
+  // （依赖补齐：openDetail 为稳定 useCallback——补入依赖数组消除隐式依赖）
   useEffect(() => {
     if (focusSessionId) void openDetail(focusSessionId);
-  }, [focusSessionId]);
+  }, [focusSessionId, openDetail]);
 
   // 融合事件（REQ-031 异步化）+ v0.7.1 会话完成事件驱动列表刷新
   useEffect(() => {
@@ -126,22 +152,7 @@ export default function SessionsPage({ focusSessionId, active, onOpenNote }: Pro
     return () => {
       unlisteners.forEach((p) => void p.then((fn) => fn()));
     };
-  }, [refresh]);
-
-  const openDetail = useCallback(async (id: number) => {
-    openIdRef.current = id;
-    try {
-      const d = await invoke<SessionDetail>("get_session_detail", { id });
-      setDetail(d);
-      // 段搜索点击后滚动到目标段（跳详情定位）
-      setTimeout(() => {
-        const el = document.getElementById(`seg-${id}-${d.segments[0]?.id}`);
-        el?.scrollIntoView({ block: "center" });
-      }, 50);
-    } catch (e) {
-      showToast(`加载详情失败: ${e}`, "err");
-    }
-  }, [showToast]);
+  }, [refresh, openDetail, showToast]);
 
   /** REQ-078：切换课程分组模式 */
   const toggleGrouped = async () => {
@@ -252,7 +263,7 @@ export default function SessionsPage({ focusSessionId, active, onOpenNote }: Pro
         justFinished={justFinished}
         onDismissJustFinished={() => setJustFinished(0)}
         openSessionId={detail?.session.id ?? null}
-        onOpenDetail={(id) => void openDetail(id)}
+        onOpenDetail={(id, targetSegId) => void openDetail(id, targetSegId)}
         onConvert={(item) => void convertOne(item)}
         onOpenNote={onOpenNote}
         onBatchConvert={(ids) => void convertSelected(ids)}

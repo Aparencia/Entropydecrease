@@ -8,9 +8,12 @@
  * @ai-context: 降级可见：任务失败按原因四类展示引导（未授权→设置密钥/授权、
  *              网络→重试、余额→充值、配额→明日再试），本地规则版保留。
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+// M8：轮询/事件双通道/卡住检测抽入共用 hook（与 EnrichPanel 同源）
+import { useAiTaskPolling } from "../hooks/useAiTaskPolling";
+import { failureGuide } from "./aiTaskFailure";
+import type { AiTaskFailureLike } from "./aiTaskFailure";
 import type {
   AiRefineResult,
   AiSettingsView,
@@ -21,20 +24,6 @@ import type {
 } from "../types";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6 };
-
-/** 任务失败原因 → 引导文案（REQ-145 四类出口） */
-function failureGuide(failure: AiTaskFailureLike): string {
-  const [kind, msg] = Object.entries(failure)[0] ?? ["other", "未知错误"];
-  switch (kind) {
-    case "unauthorized": return `未授权：${msg}（请到设置页配置密钥并开启 AI 功能）`;
-    case "network": return `网络错误：${msg}（可重试）`;
-    case "balance": return `余额不足：${msg}（请充值或切换免费档模型）`;
-    case "quota": return `配额受限：${msg}（请明日再试）`;
-    case "invalid": return `响应非法已丢弃：${msg}（本地规则版保留）`;
-    default: return msg;
-  }
-}
-type AiTaskFailureLike = Record<string, string>;
 
 /** diff 三态渲染（本地版为基线：删除红划线/新增绿底/未变灰） */
 function DiffLine({ op }: { op: DiffOp }) {
@@ -57,55 +46,23 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
   const [failure, setFailure] = useState<AiTaskFailureLike | null>(null);
   const [remember, setRemember] = useState(false);
   const [msg, setMsg] = useState("");
-  const polling = useRef<ReturnType<typeof setInterval> | null>(null);
-  // 审查修复（2026-08-21 真机 debug）：taskId 与 handleState 用 ref 持有——
-  // 事件/轮询回调在任务期间多次触发，若闭包捕获旧渲染版本（taskId=null），
-  // 任务成功时 ai_refine_result 以 null 查询会失败 → 永久卡"排队中"
   const [, setTaskId] = useState<number | null>(null);
-  const taskIdRef = useRef<number | null>(null);
-  const handleStateRef = useRef<(st: AiTaskState) => Promise<void>>(async () => {});
-  // 卡住检测（2026-08-21 真机"排队中"排查）：任务 30s 仍 Pending → 提示查看日志
-  const lastChangeRef = useRef(0);
-
-  // 事件通道（ai:task-update）——与轮询双通道，事件优先即时；订阅一次，
-  // 回调经 handleStateRef 取最新实现（无闭包过期）
-  useEffect(() => {
-    const un = listen<[number, AiTaskState]>("ai:task-update", (e) => {
-      const [tid, st] = e.payload;
-      if (tid !== taskIdRef.current) return;
-      void handleStateRef.current(st);
-    });
-    return () => {
-      un.then((f) => f());
-    };
-  }, []);
-
-  // 审查修复（2026-08-21）：组件卸载时停止轮询——否则 interval 持续 invoke
-  // 并对已卸载组件 setState（切会话/关面板后泄漏）
-  useEffect(() => {
-    return () => {
-      if (polling.current) {
-        clearInterval(polling.current);
-        polling.current = null;
-      }
-    };
-  }, []);
 
   useEffect(() => {
     void invoke<AiSettingsView>("ai_get_settings").then(setSettings).catch(() => undefined);
   }, []);
 
-  const handleState = useCallback(async (st: AiTaskState) => {
-    const tid = taskIdRef.current;
+  // M8：任务状态派发（纯业务）——轮询/事件/卡住检测/卸载清理均由
+  // useAiTaskPolling 承担；taskId 以参数传入（原实现靠 ref 镜像防闭包过期，
+  // 现由 hook 内部 ref 统一保障）
+  const handleState = useCallback(async (st: AiTaskState, tid: number | null) => {
     if (st === "Succeeded") {
-      stopPolling();
       const r = await invoke<AiRefineResult>("ai_refine_result", { taskId: tid }).catch(() => null);
       if (r) {
         setResult(r);
         setPhase("done");
       }
     } else if (typeof st === "object" && st !== null && "Failed" in st) {
-      stopPolling();
       setFailure(st.Failed.reason as AiTaskFailureLike);
       setPhase("failed");
     } else if (typeof st === "object" && st !== null && "Running" in st) {
@@ -114,38 +71,12 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
     }
   }, []);
 
-  // 同步最新 handleState 到 ref（事件/轮询回调总用最新实现）
-  useEffect(() => {
-    handleStateRef.current = handleState;
-  }, [handleState]);
-
-  const stopPolling = () => {
-    if (polling.current) {
-      clearInterval(polling.current);
-      polling.current = null;
-    }
-  };
-
-  const poll = (id: number) => {
-    stopPolling();
-    lastChangeRef.current = Date.now();
-    polling.current = setInterval(async () => {
-      const st = await invoke<AiTaskState>("ai_refine_status", { taskId: id }).catch(() => null);
-      if (st) {
-        // 状态有进展（Running/Succeeded/Failed）→ 刷新时间戳；仅 Pending 计入卡住窗口
-        if (st !== "Pending") lastChangeRef.current = Date.now();
-        void handleStateRef.current(st);
-      }
-      // 卡住检测：长时间仍 Pending = 任务未启动或后台卡死（tauri 终端看 [refine-task] 日志）
-      if (Date.now() - lastChangeRef.current > 30_000) {
-        stopPolling();
-        taskIdRef.current = null; // 隔离旧任务后续事件
-        setTaskId(null);
-        setPhase("idle");
-        setMsg("任务 30 秒无进展（可能未启动或后台卡住）——请查看 tauri 终端 [refine-task] 日志后重试");
-      }
-    }, 1500);
-  };
+  const { taskIdRef, startPolling, stopPolling } = useAiTaskPolling(handleState, () => {
+    // 30s 卡住 UI 复位（文案与抽取前一致）
+    setTaskId(null);
+    setPhase("idle");
+    setMsg("任务 30 秒无进展（可能未启动或后台卡住）——请查看 tauri 终端 [refine-task] 日志后重试");
+  });
 
   /** ① 预估 + 余额（确认弹窗数据源） */
   const prepare = async () => {
@@ -205,8 +136,8 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
     if (handle) {
       taskIdRef.current = handle.taskId;
       setTaskId(handle.taskId);
-      void handleState(handle.state);
-      poll(handle.taskId);
+      void handleState(handle.state, handle.taskId);
+      startPolling(handle.taskId);
     }
   };
 
@@ -330,7 +261,7 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
       {/* 失败（降级可见 + 原因引导 + 重试） */}
       {phase === "failed" && failure && (
         <div style={{ fontSize: 12, color: "#b91c1c", marginBottom: 6 }}>
-          ❌ {failureGuide(failure)}
+          ❌ {failureGuide(failure, "本地规则版保留")}
           <div style={{ marginTop: 6 }}>
             <button style={{ ...btn, border: "1px solid #d1d5db" }} onClick={reset}>重试</button>
             <span style={{ marginLeft: 8, color: "#6b7280" }}>本地规则版保留（不丢不假）</span>

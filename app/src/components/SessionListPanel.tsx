@@ -42,7 +42,8 @@ interface Props {
   onDismissJustFinished: () => void;
   /** 当前打开详情会话 id（列表高亮） */
   openSessionId: number | null;
-  onOpenDetail: (id: number) => void;
+  /** 打开详情（可选 targetSegId：段搜索命中段定位——M4 修复透传） */
+  onOpenDetail: (id: number, targetSegId?: number) => void;
   onConvert: (item: SessionListItem) => void;
   onOpenNote: (noteId: number) => void;
   /** 批量转笔记（入参已过滤为可转化 id；父层负责 invoke/toast/刷新） */
@@ -390,10 +391,10 @@ export default function SessionListPanel({
             <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>
               「{searchKw}」命中 {hits.length} 条
             </div>
-            {hits.map((h, i) => (
+            {hits.map((h) => (
               <div
-                key={i}
-                onClick={() => onOpenDetail(h.session_id)}
+                key={`${h.session_id}-${h.segment_id}`}
+                onClick={() => onOpenDetail(h.session_id, h.segment_id)}
                 style={{ fontSize: 12, color: "#374151", padding: "6px 8px", cursor: "pointer", borderBottom: "1px solid #f3f4f6" }}
               >
                 <div style={{ fontWeight: 500, color: "#0f766e" }}>{h.session_title}</div>
@@ -415,9 +416,9 @@ export default function SessionListPanel({
             <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>
               「{searchKw}」画面命中 {ocrHits.length} 条（点击跳详情）
             </div>
-            {ocrHits.map((h, i) => (
+            {ocrHits.map((h) => (
               <div
-                key={i}
+                key={`${h.sessionId}-${h.ocrBlockId}`}
                 onClick={() => onOpenDetail(h.sessionId)}
                 style={{ fontSize: 12, color: "#374151", padding: "6px 8px", cursor: "pointer", borderBottom: "1px solid #f3f4f6" }}
               >

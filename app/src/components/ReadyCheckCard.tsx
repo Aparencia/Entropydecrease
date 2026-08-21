@@ -9,14 +9,8 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-
-interface HealthSnapshot {
-  disk_free_gb: number | null;
-  disk_warn: boolean;
-  missing_models: string[];
-  asr_alive: boolean;
-  ocr_alive: boolean;
-}
+// L11 去重：HealthSnapshot 单一定义源在 types/system.ts（三组件重复定义清偿）
+import type { HealthSnapshot } from "../types";
 
 interface StructureStatus {
   kind: string;

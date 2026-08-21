@@ -99,6 +99,8 @@ export default function ProfileDetector({
   const [domain, setDomain] = useState<DomainDetection | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [error, setError] = useState("");
+  // M3 诚实化：画面档修改的轻提示（仅本次会话生效——后端无 tier 记忆通道）
+  const [tierNotice, setTierNotice] = useState("");
   const [profiles, setProfiles] = useState<VideoProfile[]>([]);
 
   // 档案列表（只读展示当前配置；一次加载）
@@ -165,24 +167,17 @@ export default function ProfileDetector({
     [windowTitle],
   );
 
-  /** 画面档修改（默认中档通常不问；修改即生效——采样策略随档位切换） */
-  const changeTier = useCallback(
-    async (t: VisualTier) => {
-      setTier(t);
-      // 画面档修改 → 记忆（v1 无 tier 通道——沿用形态记忆键，同标题下次生效）
-      if (!windowTitle) return;
-      try {
-        await invoke("remember_video_profile_form", {
-          title: windowTitle,
-          form: form ?? "lecture",
-        });
-        setError("");
-      } catch (e) {
-        setError(`记忆画面档失败: ${e}`);
-      }
-    },
-    [windowTitle, form],
-  );
+  /**
+   * 画面档修改（默认中档通常不问；修改即生效——采样策略随档位切换）。
+   * M3 诚实化：后端当前**无 tier 记忆通道**（remember_video_profile_form 只记形态），
+   * 故此处不再调用该命令伪装记忆——仅本地生效并轻提示；
+   * TODO(后端): 需新增如 remember_video_profile_tier 命令后才能跨会话记忆画面档。
+   */
+  const changeTier = useCallback((t: VisualTier) => {
+    setTier(t);
+    setError("");
+    setTierNotice("画面档修改仅本次会话生效");
+  }, []);
 
   /** 领域修改（增强项——不问可改；修改即记忆） */
   const changeDomain = useCallback(
@@ -262,6 +257,10 @@ export default function ProfileDetector({
             </select>
             <span style={{ fontSize: 10, color: "#9ca3af" }}>会话中自动重评 · 升档静默/降档确认</span>
           </div>
+          {/* M3 诚实化：画面档无后端记忆通道——明示仅本次会话生效 */}
+          {tierNotice && (
+            <div style={{ fontSize: 10, color: "#b45309", marginBottom: 6, marginLeft: 64 }}>{tierNotice}</div>
+          )}
           {/* 维度③：内容领域（粗 15 下拉——不问可改；命中即预热 hotwords） */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
             <span style={{ fontSize: 11, color: "#6b7280", width: 56 }}>领域</span>

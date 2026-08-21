@@ -11,6 +11,8 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { Note } from "../types";
+// Low 清扫：标题截断长度单一定义源（与 ClassroomPage 共享）
+import { NOTE_TITLE_MAX_LEN } from "../utils/constants";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
 const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
@@ -41,7 +43,7 @@ export default function MaterialInputPanel({ windowTitle, onNote, onStatus }: Pr
     setProcessing(true);
     onStatus("流水线处理中（转写 + OCR + 拼接 + 落库）…");
     try {
-      const title = windowTitle ? windowTitle.slice(0, 60) : "课堂记录";
+      const title = windowTitle ? windowTitle.slice(0, NOTE_TITLE_MAX_LEN) : "课堂记录";
       const note = await invoke<Note>("process_to_note", { title, audioPath, imagePaths });
       onNote(note);
       onStatus(`完成，已保存笔记 #${note.id}`);

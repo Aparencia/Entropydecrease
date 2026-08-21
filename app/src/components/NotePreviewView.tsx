@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import type { Note, NoteFilterResult, TextFilterDecision, TextFilterReview, TextFilterStatus } from "../types";
+import { escapeHtml } from "../utils/html";
 import AiRefineCard from "./AiRefineCard";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
@@ -30,20 +31,8 @@ const REASON_LABEL: Record<string, string> = {
   rhetorical: "反问",
 };
 
-/** HTML 转义（审查修复 2026-08-19：OCR/ASR 文本来自视频字幕，恶意字幕可含
- *  `<script>`/`<img onerror>` 等 HTML——dangerouslySetInnerHTML 渲染前必须
- *  转义，防存储型 XSS） */
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 /** 轻量 Markdown 渲染（标题/段落/列表/屏配图——笔记正文结构有限，避免引渲染库；
- *  所有文本经 escapeHtml 转义——本地内容仍按不可信输入处理；
+ *  所有文本经 escapeHtml（utils/html.ts 单一定义源）转义——本地内容仍按不可信输入处理；
  *  v0.7.3：`![alt](session-images/...)` 配图行 → 本地图（baseUrl + convertFileSrc）） */
 function renderMarkdown(md: string, imageBaseUrl: string, dataDir: string): string {
   return md
@@ -55,8 +44,11 @@ function renderMarkdown(md: string, imageBaseUrl: string, dataDir: string): stri
       const img = line.match(/^\s*-\s*!\[([^\]]*)\]\(([^)]*)\)$/);
       if (img) {
         const ref = img[2];
+        // 隐私取舍声明（不改行为）：http(s)/data: 外部图直出是唯一离开本机的渲染请求——
+        // 此类引用只可能来自用户显式触发的 AI 增强产物（授权门禁在 AI 使能层），
+        // 本地管线产出（session-images/相对路径）一律走 convertFileSrc 本地加载不出机。
         const src = /^https?:|^data:/i.test(ref)
-          ? ref // 外部 URL 直出
+          ? ref // 外部 URL 直出（取舍见上方声明）
           : ref.startsWith("session-images/")
             ? (dataDir ? convertFileSrc(`${dataDir}/${ref}`) : "")
             : (imageBaseUrl ? convertFileSrc(`${imageBaseUrl}/${ref}`) : "");
@@ -275,8 +267,8 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
           {preview.filtered.length === 0 && (
             <p style={{ fontSize: 12, color: "#9ca3af" }}>无被过滤内容</p>
           )}
-          {preview.filtered.map((f, i) => (
-            <div key={i} style={{ fontSize: 12, color: "#4b5563", marginBottom: 3 }}>
+          {preview.filtered.map((f) => (
+            <div key={f.segment_id} style={{ fontSize: 12, color: "#4b5563", marginBottom: 3 }}>
               <span style={{ color: "#b91c1c", marginRight: 6 }}>[{REASON_LABEL[f.reason] ?? f.reason}]</span>
               <span style={{ color: "#9ca3af", fontVariantNumeric: "tabular-nums" }}>
                 {Math.floor(f.start_ms / 1000 / 60)}:{String(Math.floor(f.start_ms / 1000) % 60).padStart(2, "0")}

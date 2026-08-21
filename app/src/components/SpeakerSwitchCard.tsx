@@ -13,14 +13,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { SpeakerAnalysisResult } from "../types";
+import type { DownloadProgress, SpeakerAnalysisResult } from "../types";
 import { fmtMs } from "../utils/fmt";
-
-interface DownloadProgress {
-  file: string;
-  downloadedBytes: number;
-  totalBytes: number;
-}
 
 export default function SpeakerSwitchCard({ sessionId }: { sessionId: number }) {
   // null=加载中；未启用（模型缺失）时 result.enabled=false

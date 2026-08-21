@@ -128,7 +128,10 @@ function App() {
           if (ok) {
             // 停止采集（失败也继续尝试关闭——无活动会话时 CloseRequested 直接放行；
             // 若会话仍存活则再次拦截弹框，用户可二次决定）
-            await invoke("stop_live_session").catch(() => {});
+            // Low 清扫：不吞异常——失败时记录上下文便于诊断（不阻断退出流程）
+            await invoke("stop_live_session").catch((e) => {
+              console.warn("[App] app:close-requested 停止采集失败（继续关闭）:", e);
+            });
             await getCurrentWindow().close();
           }
         }),

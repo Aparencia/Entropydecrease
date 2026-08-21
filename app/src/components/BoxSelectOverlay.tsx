@@ -121,13 +121,15 @@ export default function BoxSelectOverlay({ src, sessionId, firstSeenMs, onDone, 
     : {};
 
   // CSS 放大镜预览：以框选区域为视口显示原图（确认浮层）
+  // Low 清扫：框贴近右/下缘时 1-w/1-h → 0 导致除零（NaN%/Infinity%）——
+  // clamp 分母下限 0.05，语义上预览偏移封顶，行为不变但数值安全
   const zoomStyle: React.CSSProperties = confirm
     ? {
         width: 240,
         height: 160,
         backgroundImage: `url(${src})`,
         backgroundSize: `${100 / confirm.w}% ${100 / confirm.h}%`,
-        backgroundPosition: `${(confirm.x / (1 - confirm.w)) * 100}% ${(confirm.y / (1 - confirm.h)) * 100}%`,
+        backgroundPosition: `${(confirm.x / Math.max(1 - confirm.w, 0.05)) * 100}% ${(confirm.y / Math.max(1 - confirm.h, 0.05)) * 100}%`,
         backgroundRepeat: "no-repeat",
         border: "1px solid #e5e7eb",
         borderRadius: 6,

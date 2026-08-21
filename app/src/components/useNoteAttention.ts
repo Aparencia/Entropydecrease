@@ -27,7 +27,12 @@ function flushRecords() {
   records = [];
 }
 
-/** 周期刷新：每 60s 清一次缓冲区 */
+/**
+ * 周期刷新：每 60s 清一次缓冲区。
+ * 应用级单例，无需清理：flushTimer 是模块级唯一定时器（ensureFlushTimer
+ * 幂等守卫），生命周期与应用一致而非随组件卸载——若随组件清理，多实例
+ * 挂载/卸载会反复重建定时器且最后一个卸载者误清全局导致缓冲永不上报。
+ */
 let flushTimer: ReturnType<typeof setInterval> | null = null;
 function ensureFlushTimer() {
   if (flushTimer) return;
@@ -56,8 +61,9 @@ export function useNoteAttention(noteId: number | null, noteTitle: string) {
   }, [noteId, noteTitle]);
 }
 
-// 初始化定时器
+// 初始化定时器（应用级单例：模块导入时启动一次，无需清理——与
+// flushTimer 同生命周期，页面关闭前由下方 beforeunload 完成末次上报）
 ensureFlushTimer();
 
-// 页面卸载前尝试上报
+// 页面卸载前尝试上报（beforeunload 监听同样为应用级单例，无需移除）
 window.addEventListener?.("beforeunload", () => flushRecords());
