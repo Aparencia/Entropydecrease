@@ -211,6 +211,29 @@ pub struct NewNoteGroup {
 }
 
 // ────────────────────────────────────────────────────────────
+// 碎片类型（v0.11.1 feed 进料口；v4 契约：碎片不是笔记，身份诚实）
+// ────────────────────────────────────────────────────────────
+
+/// 碎片（feed 地形原料层；几句话+可选示范画面，防"假燃料"死法）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Fragment {
+    pub id: i64,
+    pub text: String,
+    /// 图片相对路径（data_dir/fragments/ 下；None=纯文本碎片）
+    pub image_path: Option<String>,
+    /// DomainKind kebab-case（自动归组依据；None=未命中）
+    pub domain_tag: Option<String>,
+    /// 所属 feed 主题组（None=未归组——结算面兜底）
+    pub group_id: Option<i64>,
+    /// manual / clipboard
+    pub source: String,
+    /// active / archived（v0.11.3 组结算归档标记）
+    pub status: String,
+    pub created_at: i64,
+}
+
+// ────────────────────────────────────────────────────────────
 // 会话领域类型（REQ-010，ADR-004）
 // ────────────────────────────────────────────────────────────
 

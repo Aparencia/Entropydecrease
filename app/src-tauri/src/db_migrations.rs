@@ -98,7 +98,20 @@ pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
         -- 课程组幂等键（同一系列名唯一；部分索引仅约束非 NULL）
         CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_series
             ON note_groups(series_key) WHERE series_key IS NOT NULL;
-        CREATE INDEX IF NOT EXISTS idx_groups_domain ON note_groups(domain_tag);",
+        CREATE INDEX IF NOT EXISTS idx_groups_domain ON note_groups(domain_tag);
+        -- v0.11.1（feed 进料口；v4 契约：碎片不是笔记，独立原料层身份诚实）
+        -- status 列预埋（v0.11.3 组结算归档用；active/archived）
+        CREATE TABLE IF NOT EXISTS fragments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            text TEXT NOT NULL,
+            image_path TEXT,
+            domain_tag TEXT,
+            group_id INTEGER REFERENCES note_groups(id) ON DELETE SET NULL,
+            source TEXT NOT NULL DEFAULT 'manual',
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_fragments_group ON fragments(group_id);",
     )?;
     // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）
     ensure_column(conn, "sessions", "profile", "ALTER TABLE sessions ADD COLUMN profile TEXT")?;

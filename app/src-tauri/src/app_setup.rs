@@ -101,6 +101,12 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
     // v0.5.0 M8（REQ-055）：补缝式 AI 护栏骨架（配额/缓存/审计；云端 V1.0 生效）
     let ai_guardrails =
         std::sync::Arc::new(std::sync::Mutex::new(crate::ai_guardrails::AiGuardrails::default()));
+    // v0.11.1：功能开关（feed_capture 默认关——v4 §11.3；JSON 持久化，
+    // 缺失/损坏回退默认不阻断启动；同 ai_settings 模式）
+    let feature_flags_path = data_dir.join("feature_flags.json");
+    let feature_flags = std::sync::Arc::new(std::sync::Mutex::new(
+        crate::feature_flags::FeatureFlags::load(&feature_flags_path),
+    ));
     // v0.6.0 M1（REQ-083/060）：可校准配置——ui_junk.json 黑名单与
     // symbol_map.json 映射表（缺失走内置默认；损坏回退默认，不阻断启动）
     let ui_junk = crate::ui_junk::UiJunkList::load(&data_dir.join("ui_junk.json"));
@@ -210,6 +216,8 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         profile_memory,
         data_dir,
         ai_guardrails,
+        feature_flags,
+        feature_flags_path,
         structure_downloader,
         speaker_downloader,
         structure_tier_path,

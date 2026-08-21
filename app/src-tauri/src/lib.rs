@@ -71,6 +71,8 @@ mod clipboard_signal;
 mod commands;
 // v0.11.0（REQ-195~198）：笔记组命令层（列表/详情/自建/改判/移动）
 mod commands_groups;
+// v0.11.1：feed 进料口命令层（功能开关/碎片捕获/列表）
+mod commands_fragments;
 // 实时会话链路依赖 Windows 捕获 API（WASAPI/DXGI/COM），非 Windows 平台不编译（TD-027 修复）
 #[cfg(target_os = "windows")]
 mod commands_live;
@@ -105,6 +107,8 @@ mod db_migrations;
 mod db_notes;
 // v0.11.0（REQ-195）：笔记组数据层（统一产物层唯一容器，v4 §7.4）
 mod db_note_groups;
+// v0.11.1：碎片原料层数据读写（fragments 表；碎片不是笔记，独立身份）
+mod db_fragments;
 mod db_artifacts;
 // v0.7.7（REQ-183）：结构图记录存储——session_structure_images 表 CRUD
 mod db_structures;
@@ -123,6 +127,8 @@ mod device_probe;
 mod engine;
 mod engine_worker;
 mod error;
+// v0.11.1：功能开关（feed_capture 默认关；v4 §11.3 交付层纪律）
+mod feature_flags;
 mod ffmpeg;
 // v0.7.0 M2（REQ-123）：跟练档案步骤边界检测（口令/练习段/示范跟练交替三信号）
 mod follow_along_detect;
@@ -338,6 +344,12 @@ pub fn run() {
             commands_groups::rename_note_group,
             commands_groups::override_group_route,
             commands_groups::move_note_to_group,
+            // v0.11.1：feed 进料口——功能开关读写/碎片捕获/碎片列表
+            commands_fragments::get_feature_flags,
+            commands_fragments::set_feature_flag,
+            commands_fragments::capture_fragment,
+            commands_fragments::list_fragments,
+            commands_fragments::list_group_fragments,
             // 会话管理（REQ-010，ADR-004）
             commands_session::create_session,
             commands_session::finish_session,

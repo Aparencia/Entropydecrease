@@ -113,6 +113,10 @@ pub struct AppState {
     /// v0.5.0 M8（REQ-055）：补缝式 AI 护栏状态（每日配额 + 同图 hash 缓存；
     /// 云端 V1.0 实装后生效，骨架就位）
     pub ai_guardrails: std::sync::Arc<std::sync::Mutex<crate::ai_guardrails::AiGuardrails>>,
+    /// v0.11.1：功能开关内存态单点（锁内 read-modify-write，同词表模式防 TOCTOU）
+    pub feature_flags: std::sync::Arc<std::sync::Mutex<crate::feature_flags::FeatureFlags>>,
+    /// v0.11.1：功能开关 JSON 路径（应用数据目录）
+    pub feature_flags_path: std::path::PathBuf,
     /// v0.5.0 模型版（REQ-047/049/050）：结构模型下载器（版面/表格/公式按需下载）
     pub structure_downloader: crate::structure_models::StructureModelDownloader,
     /// TD-2026-08-20-D 清偿（G1）：说话人模型下载器（wespeaker 应用内一键下载）
