@@ -1,7 +1,17 @@
 # Changelog
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [SemVer](https://semver.org/lang/zh-CN/)。
-各版本的深度版本文档见 [docs/versions/](docs/versions/)。
+各版本的深度版本文档在 [docs/versions/](docs/versions/)。
+
+## [Unreleased] - 2026-08-21
+
+### 重构与基建（任务 4 完成）
+
+- **分支重构**：远程分支重建为 `dev`（日常开发主线）/ `main`（发布线，semantic-release 自动发布）/ `old`（旧代码存档，dev+main 合并，只读）；删除 `rebuild`；GitHub 默认分支切换为 dev
+- **目录互换**：原项目目录更名 `Entropydecrease-old`（只读存档）；主工作区保留原名 `Entropydecrease -重构区`（IDE 工作区绑定稳定优先）
+- **工作设施继承与适配**：`.husky`（commitlint hooks）+ `commitlint.config.js` + 根 `package.json`（semantic-release 工具链）+ `scripts/`（docs-check/version-bump/validate-all/session-*）+ `.releaserc.json`（assets 适配 app/）+ CI workflows（pr-check 适配为 app-frontend/app-rust/docs 三 job；release 适配为 Tauri NSIS 打包 + 服务器/OSS 同步骨架）+ `server/` 部署配置（deploy.sh/docker-compose/nginx/.env 模板，不含真实密钥）+ 根 `.gitignore` 适配版
+- **文档**：视频档案框架 v2 设计文档（docs/Foresight/video-profile-framework-v2.md）+ v0.9.0 版本文档 + 需求池登记 REQ-188~193；docs-check 全绿（索引补登记 ADR-016/long-term×2/v0.9.0；note31 归档）
+- 待办：首次发布前需在 main 手动打 `v0.8.0` 基线 tag（semantic-release 从 v1.0.0 起步）
 
 ## [0.8.0] - 2026-08（AI 接入，M1/M2/M3/M4 开发中）
 
@@ -225,4 +235,4 @@
 
 本地提取链路 MVP（ASR + OCR + 拼接 + 笔记）。详见 [docs/versions/v0.1.0.md](docs/versions/v0.1.0.md)。
 
-[0.4.0]: https://github.com/Aparencia/Entropydecrease/tree/rebuild
+[0.4.0]: https://github.com/Aparencia/Entropydecrease/tree/dev

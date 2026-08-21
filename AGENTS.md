@@ -4,8 +4,8 @@
 
 ## 0. 工作区铁律（最高优先级，违反即失败）
 
-1. **旧项目存档只读**：`D:\Program own\aicode\work space\Entropydecrease-old` 下任何文件**不得改动**，仅作参照（2026-08-21 目录互换后旧工作区更名存档）。
-2. **改动只在主工作区**：所有新增/修改必须发生在 `D:\Program own\aicode\work space\Entropydecrease`（2026-08-21 目录互换后重构区更名为主工作区）。
+1. **旧项目存档只读**：`D:\Program own\aicode\work space\Entropydecrease-old` 下任何文件**不得改动**，仅作参照（2026-08-21 目录互换：原项目更名存档）。
+2. **改动只在主工作区**：所有新增/修改必须发生在 `D:\Program own\aicode\work space\Entropydecrease -重构区`（2026-08-21 目录互换尝试后**保留原名**——IDE 工作区绑定稳定优先，AGENTS.md 第 2 节不变）。
 3. **分支规范（2026-08-21 重构完成）**：开发在 `dev` 分支（重构区本地即 `dev`），发布在 `main` 分支（semantic-release 自动发布，`branches=["main"]`），旧代码存档在 `old` 分支（只读，禁止 push 到 old）。重构区的提交推送到 `https://github.com/Aparencia/Entropydecrease` 的 `dev`（日常开发）/`main`（发布）。
 4. **规范与代码冲突时以规范为准**；规范过时时先改规范再改代码。
 
