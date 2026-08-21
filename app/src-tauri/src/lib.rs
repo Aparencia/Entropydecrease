@@ -62,6 +62,8 @@ mod audio_store;
 // v0.7.0 M1（REQ-107，TRUST-1）：数据备份/恢复（SQLite+图+音频 zip 打包/解压）
 mod backup;
 mod capture;
+// v0.11.2：组→闪卡生成纯函数（词汇表块/碎片多句两类卡源）
+mod card_generate;
 // v0.7.0 M1（REQ-101）：CER 计算（预处理链默认值定标的微基准依据）
 // pub：bin/cer_bench.rs 引用（审查 H1 修复，同 audio_preprocess）
 pub mod cer;
@@ -73,6 +75,8 @@ mod commands;
 mod commands_groups;
 // v0.11.1：feed 进料口命令层（功能开关/碎片捕获/列表）
 mod commands_fragments;
+// v0.11.2：闪卡与复习命令层（生成/复习队列/评分/自测）
+mod commands_flashcards;
 // 实时会话链路依赖 Windows 捕获 API（WASAPI/DXGI/COM），非 Windows 平台不编译（TD-027 修复）
 #[cfg(target_os = "windows")]
 mod commands_live;
@@ -109,6 +113,8 @@ mod db_notes;
 mod db_note_groups;
 // v0.11.1：碎片原料层数据读写（fragments 表；碎片不是笔记，独立身份）
 mod db_fragments;
+// v0.11.2：闪卡/复习日志/指标事件数据层（学习循环统一）
+mod db_flashcards;
 mod db_artifacts;
 // v0.7.7（REQ-183）：结构图记录存储——session_structure_images 表 CRUD
 mod db_structures;
@@ -210,6 +216,8 @@ mod practice_detect;
 mod quality_report;
 mod purify_config;
 mod refine;
+// v0.11.2：间隔重复调度器（FSRS-6；弹性承诺无 streak，ADR-018）
+mod scheduler;
 mod region_ocr;
 mod region_tracker;
 mod streaming_asr;
@@ -350,6 +358,12 @@ pub fn run() {
             commands_fragments::capture_fragment,
             commands_fragments::list_fragments,
             commands_fragments::list_group_fragments,
+            // v0.11.2：学习循环统一——组→闪卡生成/到期队列/计数/复习评分/自测
+            commands_flashcards::generate_group_cards,
+            commands_flashcards::list_due_cards,
+            commands_flashcards::count_due_cards,
+            commands_flashcards::review_card,
+            commands_flashcards::quiz_group_cards,
             // 会话管理（REQ-010，ADR-004）
             commands_session::create_session,
             commands_session::finish_session,

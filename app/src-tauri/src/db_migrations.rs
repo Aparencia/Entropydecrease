@@ -111,7 +111,38 @@ pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
             status TEXT NOT NULL DEFAULT 'active',
             created_at INTEGER NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS idx_fragments_group ON fragments(group_id);",
+        CREATE INDEX IF NOT EXISTS idx_fragments_group ON fragments(group_id);
+        -- v0.11.2（学习循环统一；闪卡绑定粒度从一开始就是「组」，v4 契约二）
+        CREATE TABLE IF NOT EXISTS flashcards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER NOT NULL REFERENCES note_groups(id) ON DELETE CASCADE,
+            note_id INTEGER REFERENCES notes(id) ON DELETE SET NULL,
+            fragment_id INTEGER REFERENCES fragments(id) ON DELETE SET NULL,
+            front TEXT NOT NULL,
+            back TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'fact',
+            state_json TEXT NOT NULL,
+            due_at INTEGER NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_cards_due ON flashcards(due_at);
+        CREATE INDEX IF NOT EXISTS idx_cards_group ON flashcards(group_id);
+        -- 复习日志（弹性承诺：无 streak 字段——不追债不清零，N10 防御）
+        CREATE TABLE IF NOT EXISTS review_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            card_id INTEGER NOT NULL REFERENCES flashcards(id) ON DELETE CASCADE,
+            rating TEXT NOT NULL,
+            reviewed_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_logs_card ON review_logs(card_id);
+        -- 指标事件（北极星与过程指标从第一天记——Phase 4 门控判据）
+        CREATE TABLE IF NOT EXISTS metrics_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind TEXT NOT NULL,
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_metrics_kind ON metrics_events(kind);",
     )?;
     // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）
     ensure_column(conn, "sessions", "profile", "ALTER TABLE sessions ADD COLUMN profile TEXT")?;

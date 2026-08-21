@@ -234,6 +234,32 @@ pub struct Fragment {
 }
 
 // ────────────────────────────────────────────────────────────
+// 闪卡类型（v0.11.2 学习循环统一；绑定粒度=组，v4 契约二）
+// ────────────────────────────────────────────────────────────
+
+/// 闪卡（提取优先：front 线索 → 回忆 → back 验证）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Flashcard {
+    pub id: i64,
+    /// 绑定组（学习单元——复习/自测/结算都按组，契约二）
+    pub group_id: i64,
+    /// 来源笔记（None=碎片卡/旧数据）
+    pub note_id: Option<i64>,
+    /// 来源碎片（None=笔记卡）
+    pub fragment_id: Option<i64>,
+    pub front: String,
+    pub back: String,
+    /// 内容分型预埋（N13）：fact 先做；action/model 留接口不做
+    pub kind: String,
+    /// CardState 序列化（scheduler 契约；损坏回退新卡状态——诚实降级）
+    pub state_json: String,
+    /// 到期时刻（Unix 毫秒；due_at ≤ now 进复习队列）
+    pub due_at: i64,
+    pub created_at: i64,
+}
+
+// ────────────────────────────────────────────────────────────
 // 会话领域类型（REQ-010，ADR-004）
 // ────────────────────────────────────────────────────────────
 
