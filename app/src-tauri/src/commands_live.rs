@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use serde::Serialize;
-use tauri::State;
+use tauri::{Emitter, State};
 
 use crate::commands::AppState;
 use crate::live_session::LiveSessionParams;
@@ -153,16 +153,25 @@ fn trigger_auto_refine(state: &AppState, session_id: i64) {
     eprintln!("[Refine] 会话 {} 停止：检测到表格/公式区域，自动触发结构精修", session_id);
     let state: AppState = (*state).clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let _ = crate::commands_refine_inner::run_refine(&state, session_id);
+        // L1 修复：不再静默吞错——run_refine 失败（引擎/落库异常）时日志 +
+        // 事件双通道可观测；与内部降级路径同事件名（session:refine-skipped），
+        // 前端已有监听无需新增。不阻断语义保留（自动精修是增强非关键路径）
+        if let Err(e) = crate::commands_refine_inner::run_refine(&state, session_id) {
+            eprintln!("[Refine] 会话 {} 自动精修失败: {}", session_id, e);
+            let _ = state.app.emit("session:refine-skipped", format!("自动精修失败: {}", e));
+        }
     });
 }
 
 /// 查询实时会话状态（活动会话 id + 预热就绪标记 + 暂停标记）。
 #[tauri::command]
 pub fn live_session_status(state: State<'_, AppState>) -> LiveSessionStatus {
+    // L1 修复：active_session_id 只查一次存局部变量（原两次调用间状态可能
+    // 变化导致 active 与 session_id 口径不一致；也省一次锁）
+    let active_id = state.live_session.active_session_id();
     LiveSessionStatus {
-        active: state.live_session.active_session_id().is_some(),
-        session_id: state.live_session.active_session_id(),
+        active: active_id.is_some(),
+        session_id: active_id,
         prepared: matches!(
             state.live_session.prepare_status(),
             crate::live_session_prepare::PrepareStatus::Ready

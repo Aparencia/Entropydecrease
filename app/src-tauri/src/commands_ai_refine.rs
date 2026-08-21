@@ -168,8 +168,9 @@ pub async fn ai_refine_start(
         trim_tasks(&mut tasks);
     }
     // F2 任务中心（2026-08-21）：任务记录落库（pending 起步；终态在
-    // run_refine_task 回写——写库失败不阻断 AI 调用，H2 设计）
-    let _ = st.db.insert_ai_task(&crate::db_ai_tasks::AiTaskRecord {
+    // run_refine_task 回写）。L4 修复：写库失败仍不阻断 AI 调用（H2 设计不变），
+    // 但不再静默——落库失败意味着任务中心重启后无法恢复该任务，必须可观测
+    if let Err(e) = st.db.insert_ai_task(&crate::db_ai_tasks::AiTaskRecord {
         task_id,
         op_type: "refine".to_string(),
         ref_id: session_id,
@@ -183,7 +184,9 @@ pub async fn ai_refine_start(
         created_at: crate::db_sessions_rows::unix_seconds(),
         finished_at: None,
         adopted: false,
-    });
+    }) {
+        eprintln!("[AiTasks] refine 任务 {} 落库失败（不阻断 AI 调用；重启后不可恢复）: {}", task_id, e);
+    }
     let st2 = st.clone();
     tauri::async_runtime::spawn_blocking(move || crate::ai_refine_task::run_refine_task(st2, task_id, session_id, mock));
     Ok(AiTaskHandle { task_id, state: AiTaskState::Pending })

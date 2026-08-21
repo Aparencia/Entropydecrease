@@ -530,7 +530,8 @@ fn probe_player_info(
     else {
         return;
     };
-    let Ok(blocks) = engines.recognize_image(img) else { return };
+    // H2 修复：有界等待变体——探测帧 OCR 卡死时超时即弃（实时链路不得无限阻塞）
+    let Ok(blocks) = engines.recognize_image_timeout(img, crate::engine::OCR_REQUEST_TIMEOUT) else { return };
     let text = blocks.iter().map(|b| b.text.as_str()).collect::<Vec<_>>().join(" ");
     if session_info.observe_player_text(&text) {
         let _ = app.emit("live:session-info", session_info.snapshot());

@@ -129,8 +129,9 @@ pub async fn ai_enrich_start(
         tasks.insert(task_id, AiTaskEntry { state: AiTaskState::Pending, result: None, target_id: note_id });
         trim_tasks(&mut tasks);
     }
-    // F2 任务中心（2026-08-21）：任务记录落库（写库失败不阻断 AI 调用）
-    let _ = st.db.insert_ai_task(&crate::db_ai_tasks::AiTaskRecord {
+    // F2 任务中心（2026-08-21）：任务记录落库。L4 修复：写库失败仍不阻断
+    // AI 调用，但不再静默（落库失败 = 重启后任务不可恢复，必须可观测）
+    if let Err(e) = st.db.insert_ai_task(&crate::db_ai_tasks::AiTaskRecord {
         task_id,
         op_type: "enrich".to_string(),
         ref_id: note_id,
@@ -144,7 +145,9 @@ pub async fn ai_enrich_start(
         created_at: crate::db_sessions_rows::unix_seconds(),
         finished_at: None,
         adopted: false,
-    });
+    }) {
+        eprintln!("[AiTasks] enrich 任务 {} 落库失败（不阻断 AI 调用；重启后不可恢复）: {}", task_id, e);
+    }
     let st2 = st.clone();
     tauri::async_runtime::spawn_blocking(move || run_enrich_task(st2, task_id, note_id, kinds, mock));
     Ok(AiTaskHandle { task_id, state: AiTaskState::Pending })

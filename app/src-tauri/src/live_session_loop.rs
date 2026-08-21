@@ -116,7 +116,9 @@ pub(crate) fn run_audio_loop(
     // 2026-08-19 取优整合：停止后 drain——停止瞬间 channel 中已送达未处理的音频块
     // 继续喂入（内容不丢；"停止时积压丢弃"兜底，会话 22 类缺失防御）。drain 有界
     // （宽限 8s，停止响应与内容完整性权衡）；队列空（Timeout）即退出。
-    let drain_deadline = Instant::now() + Duration::from_secs(DRAIN_GRACE_SECS);
+    // H1 修复：deadline 不能在循环启动前计算——长会话（运行 >8s）停止时
+    // deadline 早已过期，宽限从未生效；改为 draining 置位时才起算（Option<Instant>）
+    let mut drain_deadline: Option<Instant> = None;
     let mut draining = false;
     // 2026-08 A1：暂停边沿跟踪（false→true 断句隔离；暂停期捕获线程停采，
     // channel 空 → recv_timeout 空转，无需显式消费处理）
@@ -182,7 +184,11 @@ pub(crate) fn run_audio_loop(
             }
             loop_paused = paused_now;
         }
-        if draining && Instant::now() >= drain_deadline {
+        // H1 修复：deadline 在 draining 置位时才起算（见声明处注释），此处
+        // 仅在已置位的情况下判定到期；None 表示尚未进入 drain 阶段
+        if draining
+            && drain_deadline.is_some_and(|d| Instant::now() >= d)
+        {
             eprintln!("[LiveSession] 停止宽限 {}s 到期，剩余积压音频丢弃（可观测）", DRAIN_GRACE_SECS);
             break;
         }
@@ -370,6 +376,8 @@ pub(crate) fn run_audio_loop(
                 }
                 if ctx.stop.load(Ordering::SeqCst) {
                     draining = true;
+                    // H1 修复：宽限从停止瞬间起算，而非循环启动时
+                    drain_deadline = Some(Instant::now() + Duration::from_secs(DRAIN_GRACE_SECS));
                     audio.stop();
                 }
             }

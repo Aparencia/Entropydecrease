@@ -159,7 +159,9 @@ pub fn region_ocr_blocks(
             }
         }
         let Some(rgb) = bgra_to_rgb_image(&crop, cw, ch) else { continue };
-        match engines.recognize_image(rgb) {
+        // H2 修复：有界等待变体——单区域推理卡死时计入 failed 后继续下一区域
+        // （分区域 OCR 属实时热路径，不得无限阻塞）
+        match engines.recognize_image_timeout(rgb, crate::engine::OCR_REQUEST_TIMEOUT) {
             Ok(blocks) => {
                 for mut b in blocks {
                     // 坐标还原：裁剪图坐标 → 原帧坐标（bbox 相对 OCR 输入图）

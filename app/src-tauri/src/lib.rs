@@ -98,6 +98,9 @@ mod commands_vocab;
 mod commands_video;
 mod concat;
 mod db;
+// H3 拆分（db.rs 原 678 行硬拆）：schema 建表/列迁移 + notes 读写独立成块
+mod db_migrations;
+mod db_notes;
 mod db_artifacts;
 // v0.7.7（REQ-183）：结构图记录存储——session_structure_images 表 CRUD
 mod db_structures;
@@ -114,6 +117,7 @@ mod dtw_align;
 #[cfg(target_os = "windows")]
 mod device_probe;
 mod engine;
+mod engine_worker;
 mod error;
 mod ffmpeg;
 // v0.7.0 M2（REQ-123）：跟练档案步骤边界检测（口令/练习段/示范跟练交替三信号）
@@ -160,6 +164,11 @@ mod live_session_frame;
 // P3：引擎预热（预备线程——选窗口阶段后台加载，start 交接）
 #[cfg(target_os = "windows")]
 mod live_session_prepare;
+// Task #14 硬限拆分：管理器查询/控制方法簇 + 启动/预热生命周期
+#[cfg(target_os = "windows")]
+mod live_session_manager;
+#[cfg(target_os = "windows")]
+mod live_session_lifecycle;
 #[cfg(target_os = "windows")]
 mod live_keyframes;
 mod load_monitor;
@@ -248,10 +257,8 @@ mod watermark_filter;
 mod window_filter;
 mod windows;
 
-// 临时诊断模块（定位实时链路无 OCR 根因；诊断后删除）
-#[cfg(all(test, target_os = "windows"))]
-#[path = "live_pipeline_diag.rs"]
-mod live_pipeline_diag;
+// L5 清理：live_pipeline_diag 为"诊断后删除"的临时模块（仅 test cfg 注册，
+// 无其他引用）——实时链路无 OCR 根因已定位，模块文件与注册一并移除。
 
 // v0.7.5（line-limit-exemptions 登记计划）：setup 装配块拆至 app_setup.rs——
 // lib.rs 只保留声明与 command 注册（>600 行硬拆落地）
@@ -275,7 +282,8 @@ fn punctuation_model(model_dir: &std::path::Path) -> Option<String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
+        // 三维复审 #8：opener 插件已移除——应用内无外链打开需求，
+        // 保留只会扩大 IPC 攻击面（前端 @tauri-apps/plugin-opener 同步移除）
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // AppState 装配（数据目录/DB/引擎池/可校准配置——拆至 app_setup.rs，

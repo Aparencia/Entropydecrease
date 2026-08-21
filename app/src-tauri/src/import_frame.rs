@@ -117,8 +117,10 @@ fn recognize_region(
     last_texts: &mut Vec<String>,
     ui_junk: &crate::ui_junk::UiJunkList,
 ) {
-    let Ok(blocks) = engines.recognize_image(region_img) else {
-        return; // 识别失败：下帧重试（不阻断管线）
+    // H2 修复：有界等待变体——单区域推理卡死时超时返回 Err 走下帧重试，
+    // 不得无限阻塞导入管线
+    let Ok(blocks) = engines.recognize_image_timeout(region_img, crate::engine::OCR_REQUEST_TIMEOUT) else {
+        return; // 识别失败/超时：下帧重试（不阻断管线）
     };
     // v0.7.3（REQ-156）：bbox 反算回帧坐标系所需的等比缩放因子
     // （crop_and_scale 裁剪+缩放后识别，bbox 处于裁剪图坐标系——TD-046 同思路；

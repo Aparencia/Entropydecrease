@@ -6,51 +6,47 @@
 //!              OCR 推理阻塞 SenseVoice 重打分、反之亦然；文件导入（v0.3.0）的长转写会整段
 //!              阻塞实时 OCR。拆双线程后两路并行，各线程只加载自己的模型（内存不翻倍）。
 //! @ai-context: 外部经 EnginePool（内部仅两个 channel sender，可廉价 Clone）同步发请求等结果。
+//! @ai-context: worker 主循环与请求协议已拆至 engine_worker.rs（三维复审 #9：
+//!              接入超时排空机制后逼近 600 行硬拆线，按豁免登记计划落地）。
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use crate::asr::{AsrEngine, AsrModels};
+use crate::asr::AsrModels;
 use crate::device_config::{OcrBackend, OcrDeviceStatus};
+use crate::engine_worker::{asr_worker_loop, ocr_worker_loop, AsrRequest, OcrRequest};
 use crate::error::{AppError, Result};
-use crate::ocr::{OcrEngine, OcrModels, OcrParams};
+use crate::ocr::{OcrModels, OcrParams};
 use crate::types::{OcrBlock, TranscriptSegment};
-use crate::vocab::{apply_replacements, VocabStore};
+use crate::vocab::VocabStore;
 
-/// ASR 引擎请求（reply channel 回传结果）。
-enum AsrRequest {
-    Transcribe {
-        path: String,
-        reply: Sender<Result<TranscriptSegment>>,
-    },
-    /// 流式端点句的 SenseVoice 整句重打分（ADR-003 §5）
-    TranscribePcm {
-        samples: Vec<f32>,
-        sample_rate: i32,
-        reply: Sender<Result<TranscriptSegment>>,
-    },
-}
+/// H2 修复：ASR 单请求默认超时预算。
+/// Why 60s：文件导入分窗转写正常在数十秒内完成，但引擎异常（CPU 竞争/
+/// 模型卡顿）时不得让调用方裸 recv 永久挂起；特殊长任务可自行传更大 timeout。
+pub const ASR_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
-/// OCR 引擎请求。
-enum OcrRequest {
-    Recognize {
-        path: String,
-        reply: Sender<Result<Vec<OcrBlock>>>,
-    },
-    /// 内存图像 OCR（TD-025：实时链路免磁盘临时文件；image::RgbImage 为纯数据，可跨线程）
-    RecognizeImage {
-        image: image::RgbImage,
-        reply: Sender<Result<Vec<OcrBlock>>>,
-    },
-}
+/// 三维复审 #3：整文件 WAV 转写（process_to_note 一键流水线）专用超时预算。
+/// Why 30 分钟：整文件转写耗时与音频时长线性相关（40 分钟课堂录音远超短请求
+/// 60s 预算）——行为契约是"长录音必达"，与短请求路径（ASR_REQUEST_TIMEOUT）
+/// 语义不同，不得复用同一常量。
+pub const ASR_FILE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
+/// H2 修复：OCR 单图默认超时预算。
+/// Why 20s：单帧推理正常在秒级内完成；实时热路径单帧异常时不得无限阻塞
+/// （超时后调用方计入错误统计并继续下一帧——降级不阻塞）。
+pub const OCR_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
 /// 引擎池句柄（Clone 仅复制请求 channel，开销极低）。
 #[derive(Clone)]
 pub struct EnginePool {
     asr_tx: Sender<AsrRequest>,
     ocr_tx: Sender<OcrRequest>,
+    /// 三维复审 #5：与 worker 共享的请求通道 receiver（超时后排空已积压请求）。
+    /// 测试装配（dummy/with_*_channel）为 None——排空直接 no-op。
+    asr_rx: Option<Arc<Mutex<Receiver<AsrRequest>>>>,
+    ocr_rx: Option<Arc<Mutex<Receiver<OcrRequest>>>>,
     /// ADR-009：OCR 设备运行时状态（worker 更新生效后端/回退原因；命令层只读）
     ocr_device_status: Arc<Mutex<OcrDeviceStatus>>,
     /// ADR-009：校准进行中标记（防并发重复校准）
@@ -84,6 +80,9 @@ impl EnginePool {
     ) -> Result<Self> {
         let (asr_tx, asr_rx) = mpsc::channel();
         let (ocr_tx, ocr_rx) = mpsc::channel();
+        // 三维复审 #5：receiver 经 Arc<Mutex> 与 worker 共享——超时路径可 try_recv 排空积压
+        let asr_rx = Arc::new(Mutex::new(asr_rx));
+        let ocr_rx = Arc::new(Mutex::new(ocr_rx));
         let asr_alive = Arc::new(AtomicBool::new(true));
         let ocr_alive = Arc::new(AtomicBool::new(true));
         let asr_failures = Arc::new(AtomicU64::new(0));
@@ -93,9 +92,10 @@ impl EnginePool {
         let rescore_timeouts = Arc::new(AtomicU64::new(0));
         let asr_alive_w = asr_alive.clone();
         let asr_fail_w = asr_failures.clone();
+        let asr_rx_w = asr_rx.clone();
         thread::Builder::new()
             .name("entropy-asr-engine".into())
-            .spawn(move || asr_worker_loop(asr_rx, asr_models, asr_alive_w, asr_fail_w))
+            .spawn(move || asr_worker_loop(asr_rx_w, asr_models, asr_alive_w, asr_fail_w))
             .map_err(|e| AppError::Io(format!("启动 ASR 引擎线程失败: {}", e)))?;
         let status_for_worker = ocr_device_status.clone();
         let vocab_for_worker = vocab.clone();
@@ -103,11 +103,12 @@ impl EnginePool {
         let ocr_fail_w = ocr_failures.clone();
         let ocr_hits_w = ocr_cache_hits.clone();
         let ocr_misses_w = ocr_cache_misses.clone();
+        let ocr_rx_w = ocr_rx.clone();
         thread::Builder::new()
             .name("entropy-ocr-engine".into())
             .spawn(move || {
                 ocr_worker_loop(
-                    ocr_rx,
+                    ocr_rx_w,
                     ocr_models,
                     ocr_params,
                     backend,
@@ -123,6 +124,8 @@ impl EnginePool {
         Ok(Self {
             asr_tx,
             ocr_tx,
+            asr_rx: Some(asr_rx),
+            ocr_rx: Some(ocr_rx),
             ocr_device_status,
             ocr_calibrating: Arc::new(AtomicBool::new(false)),
             asr_alive,
@@ -151,12 +154,22 @@ impl EnginePool {
         Self::assemble(asr_tx, ocr_tx)
     }
 
+    /// 测试用：注入自建 OCR 通道（receiver 由调用方持活——超时变体单测专用）。
+    #[cfg(test)]
+    pub fn with_ocr_channel(ocr_tx: Sender<OcrRequest>) -> Self {
+        let (asr_tx, _) = mpsc::channel::<AsrRequest>();
+        Self::assemble(asr_tx, ocr_tx)
+    }
+
     /// 测试装配：计数/状态 Arc 全部归零或默认（start 与测试构造共用，避免重复）。
     #[cfg(test)]
     fn assemble(asr_tx: Sender<AsrRequest>, ocr_tx: Sender<OcrRequest>) -> Self {
         Self {
             asr_tx,
             ocr_tx,
+            // 测试池不共享 receiver（dummy 需保持 receiver 已 drop 的"立即失败"语义）
+            asr_rx: None,
+            ocr_rx: None,
             ocr_device_status: Arc::new(Mutex::new(OcrDeviceStatus::new(
                 crate::device_config::OcrDeviceMode::Auto,
                 OcrBackend::Cpu,
@@ -221,12 +234,32 @@ impl EnginePool {
     }
 
     /// 转写音频（阻塞等待 ASR 线程返回）。
+    /// @ai-context: H2 修复后调用方均已切换 *_timeout 变体；保留此阻塞原语
+    ///              以维持引擎池公共 API 兼容（外部/未来调用方可选无界等待）。
+    #[allow(dead_code)]
     pub fn transcribe(&self, path: &str) -> Result<TranscriptSegment> {
         let (reply, rx) = mpsc::channel();
         self.asr_tx
             .send(AsrRequest::Transcribe { path: path.to_string(), reply })
             .map_err(|_| AppError::Asr("ASR 引擎线程已退出".to_string()))?;
         rx.recv().map_err(|_| AppError::Asr("ASR 引擎线程未返回结果".to_string()))?
+    }
+
+    /// 转写音频（**有界等待**变体，H2 修复）：超时返回 Err，调用方可诊断/降级。
+    ///
+    /// @ai-context: 原 transcribe 为裸 rx.recv()——引擎线程卡死时调用方永久阻塞
+    ///              （导入管线/命令层均受累）；原接口保留不破坏调用方，
+    ///              新调用点应使用本变体。不计数 rescore_timeouts（那是
+    ///              流式重打分专用降级指标，与文件转写语义不同）。
+    pub fn transcribe_timeout(&self, path: &str, timeout: std::time::Duration) -> Result<TranscriptSegment> {
+        let (reply, rx) = mpsc::channel();
+        self.asr_tx
+            .send(AsrRequest::Transcribe { path: path.to_string(), reply })
+            .map_err(|_| AppError::Asr("ASR 引擎线程已退出".to_string()))?;
+        rx.recv_timeout(timeout).map_err(|_| {
+            self.drain_asr_backlog();
+            AppError::Asr(format!("ASR 转写超时（{}s 未返回，引擎可能卡死）", timeout.as_secs()))
+        })?
     }
 
     /// 转写 PCM 内存样本（SenseVoice 重打分/分窗转写，阻塞等待 ASR 线程返回）。
@@ -269,11 +302,15 @@ impl EnginePool {
                 // 调用方走降级（保留 Zipformer 流式结果）——计数该降级事件，
                 // 质量报告 rescore_timeouts 由此变真实（此前恒 0）。
                 self.rescore_timeouts.fetch_add(1, Ordering::Relaxed);
+                // 三维复审 #5：同 transcribe_timeout——超时后排空 ASR 队列积压
+                self.drain_asr_backlog();
                 AppError::Asr("SenseVoice 重打分超时（降级保留流式结果）".to_string())
             })?
     }
 
     /// 识别图片（阻塞等待 OCR 线程返回）。
+    /// @ai-context: 保留理由同 transcribe——阻塞原语，调用方已切 recognize_timeout。
+    #[allow(dead_code)]
     pub fn recognize(&self, path: &str) -> Result<Vec<OcrBlock>> {
         let (reply, rx) = mpsc::channel();
         self.ocr_tx
@@ -282,7 +319,22 @@ impl EnginePool {
         rx.recv().map_err(|_| AppError::Ocr("OCR 引擎线程未返回结果".to_string()))?
     }
 
+    /// 识别图片（**有界等待**变体，H2 修复）：超时返回 Err，调用方可诊断/降级。
+    /// @ai-context: 同 transcribe_timeout——裸 recv 在 OCR 引擎卡死时永久阻塞调用方。
+    pub fn recognize_timeout(&self, path: &str, timeout: std::time::Duration) -> Result<Vec<OcrBlock>> {
+        let (reply, rx) = mpsc::channel();
+        self.ocr_tx
+            .send(OcrRequest::Recognize { path: path.to_string(), reply })
+            .map_err(|_| AppError::Ocr("OCR 引擎线程已退出".to_string()))?;
+        rx.recv_timeout(timeout).map_err(|_| {
+            self.drain_ocr_backlog();
+            AppError::Ocr(format!("OCR 识别超时（{}s 未返回，引擎可能卡死）", timeout.as_secs()))
+        })?
+    }
+
     /// 识别内存图像（TD-025：实时链路免磁盘临时文件，阻塞等待 OCR 线程返回）。
+    /// @ai-context: 保留理由同 transcribe——阻塞原语，调用方已切 recognize_image_timeout。
+    #[allow(dead_code)]
     pub fn recognize_image(&self, image: image::RgbImage) -> Result<Vec<OcrBlock>> {
         let (reply, rx) = mpsc::channel();
         self.ocr_tx
@@ -290,30 +342,61 @@ impl EnginePool {
             .map_err(|_| AppError::Ocr("OCR 引擎线程已退出".to_string()))?;
         rx.recv().map_err(|_| AppError::Ocr("OCR 引擎线程未返回结果".to_string()))?
     }
-}
 
-/// M5/REQ-040：替换词纠错（纯函数；空表原样返回）。
-fn correct_blocks(blocks: Vec<OcrBlock>, pairs: Option<&[crate::vocab::ReplacePair]>) -> Vec<OcrBlock> {
-    let Some(pairs) = pairs else { return blocks };
-    if pairs.is_empty() {
-        return blocks;
+    /// 识别内存图像（**有界等待**变体，H2 修复）：实时热路径专用——
+    /// 超时返回 Err，调用方计入错误统计并继续下一帧（降级不阻塞）。
+    /// @ai-context: 屏幕捕获帧处理是持续热路径，单帧裸 recv 卡死会冻结整条
+    ///              OCR 管线（后续帧全部排队等待）——超时变体是结构性防御。
+    pub fn recognize_image_timeout(
+        &self,
+        image: image::RgbImage,
+        timeout: std::time::Duration,
+    ) -> Result<Vec<OcrBlock>> {
+        let (reply, rx) = mpsc::channel();
+        self.ocr_tx
+            .send(OcrRequest::RecognizeImage { image, reply })
+            .map_err(|_| AppError::Ocr("OCR 引擎线程已退出".to_string()))?;
+        rx.recv_timeout(timeout).map_err(|_| {
+            self.drain_ocr_backlog();
+            AppError::Ocr(format!("OCR 识别超时（{}s 未返回，引擎可能卡死）", timeout.as_secs()))
+        })?
     }
-    blocks
-        .into_iter()
-        .map(|mut b| {
-            b.text = apply_replacements(&b.text, pairs);
-            b
-        })
-        .collect()
-}
 
-/// 读取当前替换词表（TD-048 修复：请求循环内重读，运行期变更即时生效；
-/// 锁中毒回退 None——与热词读取同口径）。
-fn current_replacements(vocab: &Option<Arc<Mutex<VocabStore>>>) -> Option<Vec<crate::vocab::ReplacePair>> {
-    vocab
-        .as_ref()
-        .and_then(|v| v.lock().ok())
-        .map(|v| v.replacements.clone())
+    /// 超时后排空 ASR 请求队列积压（三维复审 #5，best-effort）。
+    ///
+    /// @ai-context: Why——worker 串行处理，调用方超时后已入队请求无法取消；
+    ///              过期请求在引擎恢复后被"追赶"处理只延长陈旧状态。
+    ///              排空逐个回复 Err（等待中的其他调用方立即得到可诊断错误，
+    ///              而非裸等到自己的超时）。
+    /// @ai-context: 竞态说明——排空期间其他调用方可能并发入队，try_recv 只排
+    ///              此刻已在队列中的（尽力而为）；漏网的请求或被下次超时再排，
+    ///              或被 worker 正常处理（晚到回复 send 失败自然忽略），可接受。
+    fn drain_asr_backlog(&self) {
+        let Some(rx) = self.asr_rx.as_ref() else { return };
+        let guard = rx.lock().unwrap_or_else(|p| p.into_inner());
+        while let Ok(req) = guard.try_recv() {
+            let reply = match req {
+                AsrRequest::Transcribe { reply, .. } | AsrRequest::TranscribePcm { reply, .. } => reply,
+            };
+            let _ = reply.send(Err(AppError::Asr("ASR 请求已废弃（调用方超时，积压排空）".to_string())));
+        }
+    }
+
+    /// 超时后排空 OCR 请求队列积压（三维复审 #5，best-effort）。
+    ///
+    /// @ai-context: Why——OCR 串行队列积压的是过期帧（每帧一份 RgbImage，
+    ///              内存线性增长）；不排空则引擎恢复后追赶积压 = 内存峰值 +
+    ///              陈旧结果连环返回。语义与竞态说明同 drain_asr_backlog。
+    fn drain_ocr_backlog(&self) {
+        let Some(rx) = self.ocr_rx.as_ref() else { return };
+        let guard = rx.lock().unwrap_or_else(|p| p.into_inner());
+        while let Ok(req) = guard.try_recv() {
+            let reply = match req {
+                OcrRequest::Recognize { reply, .. } | OcrRequest::RecognizeImage { reply, .. } => reply,
+            };
+            let _ = reply.send(Err(AppError::Ocr("OCR 请求已废弃（调用方超时，积压排空）".to_string())));
+        }
+    }
 }
 
 /// 校准标记 RAII guard（drop 时释放；防 panic 路径卡死校准标记）。
@@ -325,165 +408,6 @@ impl Drop for CalibrateGuard {
     fn drop(&mut self) {
         self.flag.store(false, Ordering::SeqCst);
     }
-}
-
-/// 引擎心跳守卫（TD-045 修复）：worker 线程无论正常退出还是 panic，
-/// 只要本守卫被 drop，心跳即置 false——health_status 才能真实反映线程存活。
-struct AliveGuard(Arc<AtomicBool>);
-
-impl Drop for AliveGuard {
-    fn drop(&mut self) {
-        self.0.store(false, Ordering::Relaxed);
-    }
-}
-
-/// ASR 线程主循环：启动即加载模型，随后顺序处理请求（引擎天然串行，无需加锁）。
-fn asr_worker_loop(
-    rx: Receiver<AsrRequest>,
-    asr_models: AsrModels,
-    alive: Arc<AtomicBool>,
-    failures: Arc<AtomicU64>,
-) {
-    let _alive_guard = AliveGuard(alive.clone());
-    let mut asr = AsrEngine::load(&asr_models);
-    for req in rx {
-        alive.store(true, Ordering::Relaxed);
-        // 解构请求与 reply 通道（reply 随匹配臂带出，统一回传）
-        let (result, reply) = match req {
-            AsrRequest::Transcribe { path, reply } => {
-                let result = match asr.as_mut() {
-                    Ok(engine) => engine.transcribe(&path),
-                    Err(_) => Err(AppError::Asr("ASR 引擎加载失败（请检查模型文件是否就绪）".to_string())),
-                };
-                (result, reply)
-            }
-            AsrRequest::TranscribePcm { samples, sample_rate, reply } => {
-                let result = match asr.as_mut() {
-                    Ok(engine) => engine.transcribe_pcm(&samples, sample_rate),
-                    Err(_) => Err(AppError::Asr("ASR 引擎加载失败（请检查模型文件是否就绪）".to_string())),
-                };
-                (result, reply)
-            }
-        };
-        if result.is_err() {
-            failures.fetch_add(1, Ordering::Relaxed);
-        }
-        let _ = reply.send(result);
-    }
-}
-
-/// OCR 线程主循环：启动即加载模型，随后顺序处理请求。
-///
-/// @ai-context: ADR-009——加载成功后把实际后端/回退原因回写共享状态（命令层可查）；
-///              加载失败同样回写（actual 保持请求值、fallback_reason 记录失败）。
-/// @ai-context: 参数多为编排上下文传递（模型/后端/状态/词表/巡检计数），
-///              聚合会破坏内聚，登记 clippy 豁免（M7 巡检计数接入后 10 参）。
-#[allow(clippy::too_many_arguments)]
-fn ocr_worker_loop(
-    rx: Receiver<OcrRequest>,
-    ocr_models: OcrModels,
-    ocr_params: OcrParams,
-    backend: OcrBackend,
-    device_status: Arc<Mutex<OcrDeviceStatus>>,
-    vocab: Option<Arc<Mutex<VocabStore>>>,
-    alive: Arc<AtomicBool>,
-    failures: Arc<AtomicU64>,
-    cache_hits: Arc<AtomicU64>,
-    cache_misses: Arc<AtomicU64>,
-) {
-    // @ai-context: OCR 首次构建可能触发 ModelScope 模型下载，耗时较长但在后台线程不影响 UI。
-    let mut ocr = OcrEngine::load(&ocr_models, &ocr_params, backend);
-    // @ai-context: 加载失败此前静默（仅首次识别时报错），排查"会话无 OCR"无法定位——
-    //              启动即打印结果，加载失败可观测（与 ASR 引擎同口径）。
-    match &ocr {
-        Ok(engine) => {
-            eprintln!(
-                "[Engine] OCR 引擎加载成功（{}，后端 {:?}{}）",
-                ocr_models.det,
-                engine.backend,
-                engine
-                    .fallback_reason
-                    .as_ref()
-                    .map(|r| format!("，回退原因: {}", r))
-                    .unwrap_or_default()
-            );
-            if let Ok(mut s) = device_status.lock() {
-                s.actual = engine.backend;
-                s.fallback_reason = engine.fallback_reason.clone();
-            }
-        }
-        Err(e) => {
-            eprintln!("[Engine] OCR 引擎加载失败: {}", e);
-            if let Ok(mut s) = device_status.lock() {
-                s.fallback_reason = Some(format!("OCR 引擎加载失败: {}", e));
-            }
-        }
-    }
-    // M4/REQ-039 E5：OCR 结果 LRU 缓存（A→B→A 帧往返零推理；worker 独占）
-    let mut ocr_cache = crate::ocr_cache::OcrCache::new();
-    // M5/REQ-040：替换词纠错——缓存只存**原始识别结果**，纠错在返回路径统一应用：
-    // ①运行期新增替换词即时生效（TD-048 修复，与热词同模式）；②词表变更后
-    // 缓存命中仍得到新纠错（无陈旧纠错结果残留）
-    for req in rx {
-        alive.store(true, Ordering::Relaxed);
-        let (result, reply) = match req {
-            OcrRequest::Recognize { path, reply } => {
-                let result = match ocr.as_mut() {
-                    Ok(engine) => {
-                        let pairs = current_replacements(&vocab);
-                        engine
-                            .recognize(&path)
-                            .map(|blocks| correct_blocks(blocks, pairs.as_deref()))
-                    }
-                    Err(_) => Err(AppError::Ocr("OCR 引擎加载失败（请检查模型下载/网络）".to_string())),
-                };
-                (result, reply)
-            }
-            OcrRequest::RecognizeImage { image, reply } => {
-                let result: Result<Vec<OcrBlock>> = match ocr.as_mut() {
-                    Ok(engine) => {
-                        // E5：区域感知哈希（8×8 aHash）→ 命中直接返回缓存（零推理）
-                        let key = crate::ocr_cache::average_hash(&image);
-                        let raw = match ocr_cache.get(key) {
-                            Some(blocks) => {
-                                cache_hits.fetch_add(1, Ordering::Relaxed);
-                                Ok(blocks)
-                            }
-                            None => {
-                                cache_misses.fetch_add(1, Ordering::Relaxed);
-                                match engine.recognize_image(image) {
-                                    Ok(blocks) => {
-                                        // 只缓存原始结果（纠错在返回路径统一应用，
-                                        // 词表变更后命中缓存仍得新纠错——TD-048）
-                                        ocr_cache.put(key, blocks.clone());
-                                        Ok(blocks)
-                                    }
-                                    Err(e) => Err(e),
-                                }
-                            }
-                        };
-                        // TD-048：每次请求读取最新替换词（运行期新增即时生效）
-                        raw.map(|blocks| {
-                            let pairs = current_replacements(&vocab);
-                            correct_blocks(blocks, pairs.as_deref())
-                        })
-                    }
-                    Err(_) => Err(AppError::Ocr("OCR 引擎加载失败（请检查模型下载/网络）".to_string())),
-                };
-                (result, reply)
-            }
-        };
-        if result.is_err() {
-            failures.fetch_add(1, Ordering::Relaxed);
-        }
-        let _ = reply.send(result);
-    }
-    // 退出时打印缓存统计（M7 诊断面板数据源；开发期日志）
-    let (hits, misses) = ocr_cache.stats();
-    eprintln!("[Engine] OCR 缓存退出统计: 命中 {} 未命中 {}（命中率 {:.0}%）", hits, misses, {
-        let total = hits + misses;
-        if total == 0 { 0.0 } else { hits as f64 * 100.0 / total as f64 }
-    });
 }
 
 /// 单测（AAA 模式；只测有界等待超时计数——重打分降级事件不再是恒 0）。
@@ -501,5 +425,17 @@ mod tests {
         // Assert：Err 且超时计数 +1（正常应答路径不计数）
         assert!(result.is_err());
         assert_eq!(pool.rescore_timeout_count(), 1);
+    }
+
+    #[test]
+    fn recognize_image_timeout_returns_err_on_bounded_wait() {
+        // Arrange：持活 receiver 的 OCR 通道——send 成功、recv 必超时（无 worker 应答）
+        let (ocr_tx, _ocr_rx) = mpsc::channel::<OcrRequest>();
+        let pool = EnginePool::with_ocr_channel(ocr_tx);
+        let img = image::RgbImage::new(4, 4);
+        // Act：有界等待 10ms → 超时 Err
+        let result = pool.recognize_image_timeout(img, std::time::Duration::from_millis(10));
+        // Assert：Err（超时变体不阻塞、可诊断）
+        assert!(result.is_err());
     }
 }

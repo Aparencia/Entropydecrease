@@ -32,6 +32,29 @@ const MAX_IMAGES: usize = 20;
 /// 拼接输入段/块数量上限（防恶意超大列表拖垮拼接）。
 const MAX_INPUT_ITEMS: usize = 5000;
 
+/// 音频文件扩展名白名单（安全 L1 修复：transcribe_audio 不得接受任意非音频路径，
+/// 与 commands_import::VIDEO_EXTENSIONS 同口径）。
+const AUDIO_EXTENSIONS: [&str; 6] = ["mp3", "wav", "m4a", "flac", "ogg", "aac"];
+/// 图片文件扩展名白名单（安全 L1 修复：recognize_image 同口径）。
+const IMAGE_EXTENSIONS: [&str; 5] = ["png", "jpg", "jpeg", "webp", "bmp"];
+
+/// 扩展名白名单校验（安全 L1）：返回小写扩展名，不在白名单内返回可诊断错误。
+/// Why：旧实现接受任意绝对路径无限制——非媒体文件进推理管线只能得到
+/// 模糊的引擎报错，且扩大了 IPC 入参攻击面；白名单前置拒绝可诊断。
+fn require_media_extension(path: &str, allowed: &[&str], kind: &str) -> Result<String, String> {
+    let ext = std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    if !allowed.contains(&ext.as_str()) {
+        // 三维复审 #7：无扩展名时显示"（无扩展名）"而非空的 "."（可诊断性）
+        let shown = if ext.is_empty() { "（无扩展名）".to_string() } else { format!(".{}", ext) };
+        return Err(format!("不支持的{}文件类型: {}（支持: {}）", kind, shown, allowed.join("/")));
+    }
+    Ok(ext)
+}
+
 /// 校验并归一化标题：空串回退默认名，超长截断（TD-005 统一口径，commands_session 复用）。
 pub(crate) fn normalize_title(raw: String, fallback: &str) -> String {
     let trimmed = raw.trim().to_string();
@@ -150,8 +173,13 @@ pub async fn transcribe_audio(state: State<'_, AppState>, path: String) -> Resul
     if path.trim().is_empty() {
         return Err("音频路径为空".to_string());
     }
+    // 安全 L1 修复：扩展名白名单前置校验（拒绝非音频路径）
+    require_media_extension(&path, &AUDIO_EXTENSIONS, "音频")?;
     let engines = state.engines.clone();
-    tauri::async_runtime::spawn_blocking(move || engines.transcribe(&path))
+    // H2 修复：有界等待变体——引擎卡死时返回可诊断超时错误而非永久阻塞
+    tauri::async_runtime::spawn_blocking(move || {
+        engines.transcribe_timeout(&path, crate::engine::ASR_REQUEST_TIMEOUT)
+    })
         .await
         .map_err(|e| format!("任务调度失败: {}", e))?
         .map_err(|e| e.to_string())
@@ -163,8 +191,13 @@ pub async fn recognize_image(state: State<'_, AppState>, path: String) -> Result
     if path.trim().is_empty() {
         return Err("图片路径为空".to_string());
     }
+    // 安全 L1 修复：扩展名白名单前置校验（拒绝非图片路径）
+    require_media_extension(&path, &IMAGE_EXTENSIONS, "图片")?;
     let engines = state.engines.clone();
-    tauri::async_runtime::spawn_blocking(move || engines.recognize(&path))
+    // H2 修复：有界等待变体（同 transcribe_audio）
+    tauri::async_runtime::spawn_blocking(move || {
+        engines.recognize_timeout(&path, crate::engine::OCR_REQUEST_TIMEOUT)
+    })
         .await
         .map_err(|e| format!("任务调度失败: {}", e))?
         .map_err(|e| e.to_string())
@@ -224,20 +257,35 @@ pub async fn process_to_note(
     if audio_path.as_ref().is_some_and(|p| p.trim().is_empty()) {
         return Err("音频路径为空".to_string());
     }
+    // 安全 L1 修复（三维复审 #4）：直送媒体路径同样套用扩展名白名单，
+    // 与 transcribe_audio/recognize_image 同口径（此前本 command 是缺口）
+    if let Some(p) = audio_path.as_deref() {
+        require_media_extension(p, &AUDIO_EXTENSIONS, "音频")?;
+    }
+    for p in &image_paths {
+        require_media_extension(p, &IMAGE_EXTENSIONS, "图片")?;
+    }
     let title = normalize_title(title, "未命名笔记");
     let engines = state.engines.clone();
     let db = state.db.clone();
     tauri::async_runtime::spawn_blocking(move || {
         // 1) 转写（可选音频）
+        // H2 修复：有界等待变体——Err 携带超时/引擎诊断信息返回前端
+        // 三维复审 #3：整文件转写用 ASR_FILE_TIMEOUT（30 分钟）——耗时与音频
+        // 时长线性相关，短请求 60s 预算会误杀长录音（行为契约回归）
         let mut segments = Vec::new();
         if let Some(path) = audio_path {
-            segments.push(engines.transcribe(&path).map_err(|e| e.to_string())?);
+            segments.push(
+                engines
+                    .transcribe_timeout(&path, crate::engine::ASR_FILE_TIMEOUT)
+                    .map_err(|e| e.to_string())?,
+            );
         }
         // 2) 多图 OCR（单图失败跳过不阻断，但记录警告——TD-001 修复：不再静默吞错）
         let mut ocr_blocks = Vec::new();
         let mut skipped: Vec<String> = Vec::new();
         for path in image_paths {
-            match engines.recognize(&path) {
+            match engines.recognize_timeout(&path, crate::engine::OCR_REQUEST_TIMEOUT) {
                 Ok(blocks) => ocr_blocks.extend(blocks),
                 Err(e) => skipped.push(format!("{}: {}", path, e)),
             }

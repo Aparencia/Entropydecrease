@@ -412,7 +412,9 @@ pub fn process_frame(
         } else {
             // 区域路径无可用产出（误判/空白区域/垃圾块）→ 整帧 OCR 兜底
             // （结构性回退链：误判/空白区域不得阻断全帧识别——真实画面文字必须仍有出口）
-            match engines.recognize_image(rgb) {
+            // H2 修复：改用有界等待变体——引擎卡死时本帧超时计入 ocr_err 后
+            // 继续下一帧（降级不阻塞整条管线）
+            match engines.recognize_image_timeout(rgb, crate::engine::OCR_REQUEST_TIMEOUT) {
                 Ok(blocks) => {
                     stats.ocr_err += failed_regions as u64;
                     stats.ocr_ok += 1;
@@ -431,7 +433,8 @@ pub fn process_frame(
             }
         }
     } else {
-        match engines.recognize_image(rgb) {
+        // H2 修复：同上有界等待——超时时走 Err 分支计 ocr_err 并继续下一帧
+        match engines.recognize_image_timeout(rgb, crate::engine::OCR_REQUEST_TIMEOUT) {
             Ok(blocks) => {
                 stats.ocr_ok += 1;
                 // 成功识别即刷新 OCR 时刻（无论是否产出文本——防漏检兜底周期基准）
@@ -549,9 +552,12 @@ pub fn persist_voted_subtitle(
         session_id,
         timestamp_ms: voted.start_ms,
         text: text.clone(),
-        // REQ-098 CORE-D4（v0.7.0 M1）：OCR 块 score 用字幕投票置信度
-        // （此前硬编码 0.9——质量报告/低分统计消费假数据）
-        score: voted.confidence.unwrap_or(0.9),
+        // L2 修复（置信度口径）：投票器未产出 confidence 时不再硬编码 0.9 假高分
+        // （旧值让质量报告/低分统计消费假数据）。Why 0.5：score 列为 NOT NULL
+        // （改 NULL 需动 schema + 全部消费方，改动大）——0.5 是中位降级值，
+        // 诚实表达"置信度未知"；与 segment 分支（confidence: Option 透传 None）
+        // 语义对齐（未知即不假装高分），且不低于 is_useful_block 的 0.5 阈值
+        score: voted.confidence.unwrap_or(0.5),
         region: "subtitle".to_string(),
         // 字幕区独立 ROI 管线，不属版面区域（M3 设计：字幕区不进版面分析）
         region_kind: None,

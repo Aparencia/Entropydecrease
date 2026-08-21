@@ -323,7 +323,9 @@ pub async fn search_ocr_blocks(
     state: State<'_, AppState>,
     keyword: String,
 ) -> Result<Vec<crate::db_ocr_search::OcrBlockHit>, String> {
-    crate::db_ocr_search::search_command(&state.db, &keyword).map_err(|e| e.to_string())
+    // M4 修复：传入数据目录——命中图路径做真实存在性校验（不再假数据）
+    crate::db_ocr_search::search_command(&state.db, Some(&state.data_dir), &keyword)
+        .map_err(|e| e.to_string())
 }
 
 /// 片段上下文（纯函数）：命中位置前后各 12 字符（省略号标注截断）。
