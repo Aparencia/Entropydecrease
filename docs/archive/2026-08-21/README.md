@@ -54,3 +54,28 @@
 - 版本与需求：[v0.8.0 版本文档](../../versions/v0.8.0.md) · [需求池 REQ-138~147](../../product/requirements-pool.md) · [v0.9.0 版本文档](../../versions/v0.9.0.md)（框架 v2 规划，REQ-188~193）
 - 设计文档：[AI 精修非功能扩展设计（[ ] 已归档）](./brainstorming-ai-refine-nonfunctional-rebuild.md)
 - 技术债：[tech-debt.md](./tech-debt.md)（唯一权威清单）
+
+## 本批补充（第四轮：v0.9.0 四维解耦代码建设 M1~M5，2026-08-21）
+
+**归档 2 份**（设计文档已实施完成，生命周期终结）：
+
+| 源路径 → 归档路径 | 归档原因/状态 |
+|------|-----------|
+| `docs/Foresight/video-profile-framework-v2.md` → `docs/archive/2026-08-21/video-profile-framework-v2.md` | **[ ] 已归档**——四维解耦框架设计文档（形态 7 × 画面 4 档 × 粗 15 领域 × 语言预留），M1~M5 全部代码建设完成（cargo test 1352 全绿 + clippy 零警告），生命周期终结 |
+| `docs/Foresight/brainstorming-video-profile-detection.md` → `docs/archive/2026-08-21/brainstorming-video-profile-detection.md` | **[ ] 已归档**——v1 检测改进候选（13 类检测改进），已被四维解耦 v2 取代，保留作历史分析 |
+
+**工作摘要**：
+
+- **M1 四维解耦**：ContentForm/VisualTier/DomainTag 类型 + 13→7 映射 + 参数矩阵（形态→模板+后处理、画面档→采样/OCR/存储）+ 记忆库 kind 映射迁移 + 新 command
+- **M2 画面价值检测**：三信号加权投票 + 升降档裁决 + DualRateScheduler::retune + screen worker 集成 + live:tier-changed 事件
+- **M3 领域标签体系**：粗 15 领域 × 种子词表 + 四来源检测(平台>用户>标题>术语) + hotwords 预热 + 术语筛选 + 区域预期
+- **M4 平台适配**：bilibili/local 适配 + OCR 标签通用化(不依赖平台枚举)
+- **M5 检测卡 v2 + 叙事变体**：ProfileDetector 三维一体交互 + narrative_detect 故事化叙事(叙事线+要点)模板变体
+- 验证：cargo test 1352 全绿 + clippy 零警告 + 前端 tsc/build 通过
+
+## 技术债摘录（本批滚动）
+
+- **已偿 1 笔新增**：TD-2026-08-21-A（存量 clippy 告警 9 个——live_session_persist ×8 + series_detect ×1）在本次 v0.9.0 代码建设中全部清偿（clippy 零警告），close
+- **新登记 open 0 笔**：审查发现 L2(区域构成信号暂缺)/L3(OCR 面积固定近似) 登记为观察项（M4 迭代），不登记正式债务
+- **未偿 5 笔保持**（TD-040 / TD-2026-08-19-D/F/G）：本次未涉及 Rust 核心引擎/存储/UI，逐笔核验保持 carried
+
