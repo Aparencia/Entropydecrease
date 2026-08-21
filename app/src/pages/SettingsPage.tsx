@@ -19,6 +19,7 @@ import ModelManagementPanel from "../components/ModelManagementPanel";
 import ModelDiskPanel from "../components/ModelDiskPanel";
 import AiServicePanel from "../components/AiServicePanel";
 import AiTaskPanel from "../components/AiTaskPanel";
+import FeatureFlagSetting from "../components/FeatureFlagSetting";
 
 const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
 const groupTitle: React.CSSProperties = {
@@ -78,10 +79,16 @@ export default function SettingsPage() {
           <BackupPanel />
         </div>
 
-        {/* ── 词表（热词/替换词闭环） ── */}
+        {/* ── 词表（热词/替换词闭环）── */}
         <GroupTitle>词表</GroupTitle>
         <div style={{ ...panel, marginBottom: 4 }}>
           <VocabManager />
+        </div>
+      
+        {/* ── 功能预览（默认关的新能力开关，v4 §11.3）── */}
+        <GroupTitle>功能预览</GroupTitle>
+        <div style={{ ...panel, marginBottom: 4 }}>
+          <FeatureFlagSetting />
         </div>
       </div>
     </div>

@@ -52,6 +52,9 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
   const [groups, setGroups] = useState<NoteGroup[]>([]);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [status, setStatus] = useState("");
+  // v0.11.1：feed 捕获开关（默认关——功能预览纪律）与捕获输入态
+  const [feedCaptureOn, setFeedCaptureOn] = useState(false);
+  const [fragText, setFragText] = useState("");
   // 改判表单态（展开区消费）
   const [overrideKind, setOverrideKind] = useState("standalone");
   const [overrideDomain, setOverrideDomain] = useState("");
@@ -65,7 +68,46 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    // 开关状态只在挂载时读一次（设置页改动后重新进笔记页即刷新）
+    invoke<{ feedCapture: boolean }>("get_feature_flags")
+      .then((f) => setFeedCaptureOn(f.feedCapture))
+      .catch(() => setFeedCaptureOn(false));
+  }, [load]);
+
+  // ── 碎片捕获（feed 进料口；后端二次校验开关）──
+  const runCapture = async (source: "manual" | "clipboard") => {
+    try {
+      let text = fragText.trim();
+      let imageBytes: number[] | null = null;
+      if (source === "clipboard") {
+        // 剪贴板优先：文本+图片一次捕获（REQ-132 预留兑现）
+        const clipText = await navigator.clipboard.readText().catch(() => "");
+        if (clipText.trim()) text = clipText.trim();
+        const items = await navigator.clipboard.read().catch(() => []);
+        for (const item of items) {
+          const imgType = item.types.find((t) => t.startsWith("image/"));
+          if (imgType) {
+            const blob = await item.getType(imgType);
+            imageBytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
+            break;
+          }
+        }
+      }
+      if (!text && !imageBytes) {
+        setStatus("请输入碎片内容或复制剪贴板后再捕获");
+        return;
+      }
+      await invoke("capture_fragment", { text, imageBytes, source });
+      setFragText("");
+      setStatus("");
+      await load(); // 可能新建 feed 主题组——刷新组列表
+      onChanged();
+    } catch (e) {
+      setStatus(`碎片捕获失败: ${e}`);
+    }
+  };
 
   // ── 改判（REQ-198 修改即记忆）──
   const runOverride = async (g: NoteGroup) => {
@@ -103,6 +145,30 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
         <button onClick={() => void load()} style={{ marginLeft: "auto", fontSize: 13, cursor: "pointer" }} title="刷新组列表">⟳</button>
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: 6 }}>
+        {/* v0.11.1：碎片快速捕获区（开关默认关；开启后置顶——feed 进料口） */}
+        {feedCaptureOn && (
+          <div style={{ margin: "2px 0 8px", padding: 8, background: "#faf5ff", borderRadius: 6, border: "1px solid #e9d5ff" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#7c3aed", marginBottom: 4 }}>⚡ 碎片捕获</div>
+            <textarea
+              value={fragText}
+              onChange={(e) => setFragText(e.target.value)}
+              placeholder="几句话记下刚学到的…"
+              rows={2}
+              style={{ width: "100%", fontSize: 12, padding: 4, border: "1px solid #e5e7eb", borderRadius: 4, resize: "vertical", boxSizing: "border-box" }}
+            />
+            <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+              <button onClick={() => void runCapture("manual")}
+                style={{ fontSize: 11, cursor: "pointer", padding: "2px 8px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>
+                捕获
+              </button>
+              <button onClick={() => void runCapture("clipboard")}
+                style={{ fontSize: 11, cursor: "pointer", padding: "2px 8px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}
+                title="文本+图片从剪贴板一次捕获">
+                📋 剪贴板捕获
+              </button>
+            </div>
+          </div>
+        )}
         {/* 全部（取消组过滤） */}
         <div
           onClick={() => onGroupFilterChange(null)}
@@ -149,6 +215,9 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 3 }}>
                   <span style={{ fontSize: 10, color: badge.color, background: "#f9fafb", borderRadius: 8, padding: "0 5px" }}>{badge.label}</span>
+                  {g.terrain === "feed" && (
+                    <span style={{ fontSize: 10, color: "#7c3aed", background: "#faf5ff", borderRadius: 8, padding: "0 5px" }}>feed</span>
+                  )}
                   {reason.needsConfirm && !g.routeOverridden && (
                     <span style={{ fontSize: 10, color: "#b45309", background: "#fffbeb", borderRadius: 8, padding: "0 5px" }}>⚠ 待确认</span>
                   )}
