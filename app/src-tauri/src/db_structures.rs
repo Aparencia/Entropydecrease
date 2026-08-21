@@ -1,10 +1,11 @@
 //! 结构图记录存储（REQ-183 / v0.7.7）：session_structure_images 表 CRUD。
 //!
 //! @ai-context: 非线性结构图的持久化元数据（文件在会话目录 struct/，本表记录
-//!              归属/类型/坐标/时间/来源）——图库 UI 与将来笔记消费（按屏
-//!              screen_id 锚点）的数据源；文件删除由记录驱动。
+//!              归属/类型/坐标/时间/来源）——图库 UI 与将来笔记消费的数据源；
+//!              文件删除由记录驱动。
 //! @ai-context: kind/source 为字符串枚举（不动 RegionKind——版面分析模块零
-//!              改动）；bbox 为 JSON 帧坐标；旧会话（无 screen_id）NULL 降级。
+//!              改动）；bbox 为 JSON 帧坐标；screen_id 仅手动框选/旧数据有值
+//!              （v0.10.2 起自动捕获直扫参考图集，无屏概念 → NULL）。
 
 use rusqlite::{params, Connection, OptionalExtension};
 
@@ -17,7 +18,7 @@ use crate::error::Result;
 pub struct StructureImageRecord {
     pub id: i64,
     pub session_id: i64,
-    /// 所属屏（NULL=旧数据无屏/手动无屏上下文）
+    /// 所属屏（NULL=旧数据无屏/手动无屏上下文/v0.10.2 起自动捕获无屏关联）
     #[serde(default)]
     pub screen_id: Option<i64>,
     /// table/formula/code/image/manual

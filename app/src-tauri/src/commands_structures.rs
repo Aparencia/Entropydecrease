@@ -1,10 +1,11 @@
-//! 结构图命令层（REQ-182/183/184 / v0.7.7）：批量捕获 / 手动框选 / 列表 / 删除。
+//! 结构图命令层（REQ-182/183/184 / v0.7.7；v0.10.2 重构）：参考图集分析 / 手动框选 / 列表 / 删除。
 //!
 //! @ai-context: IPC 安全边界：全部入参校验（session_id>0、归一化坐标 0-1、
 //!              最小尺寸）；文件访问限定会话图片目录（data_dir/session-images/<id>，
 //!              AGENTS.md 安全红线）；事件 session:structures-updated 驱动前端图库刷新。
-//! @ai-context: 停止后自动触发与手动重跑共用同一管线（capture_session_structures）——
-//!              去重幂等，重跑不重复入库。
+//! @ai-context: v0.10.2 起取消停止后自动触发——改为前端「分析参考图集」手动
+//!              调用（capture_session_structures 直扫 full/ 参考帧 + 四层过滤）；
+//!              去重幂等，重复分析不重复入库。
 
 use tauri::Emitter;
 use tauri::State;
@@ -18,7 +19,7 @@ fn session_images_dir(data_dir: &std::path::Path, session_id: i64) -> std::path:
     data_dir.join("session-images").join(session_id.to_string())
 }
 
-/// 批量捕获结构图（停止后自动触发 / 图库「重新捕获」重跑；幂等）。
+/// 批量捕获结构图（图库「分析参考图集」触发；v0.10.2 起不再自动触发；幂等）。
 #[tauri::command]
 pub async fn capture_session_structures(
     state: State<'_, AppState>,

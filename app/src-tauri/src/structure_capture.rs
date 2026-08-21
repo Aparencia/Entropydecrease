@@ -1,32 +1,33 @@
-//! 结构图批量捕获管线（REQ-182 / v0.7.7）：屏 → 选优帧 → 版面分析 → 过滤 → 裁剪 → 入库。
+//! 结构图批量捕获管线（REQ-182 / v0.7.7；v0.10.2 重构）：参考图集 → 版面分析 → 过滤 → 裁剪 → 入库。
 //!
 //! @ai-context: 非线性结构（表格/公式/代码/流程图等）"图像即产物"兜底（ADR-010）：
-//!              会话停止后批量执行（live 停止链路触发）+ 图库「重新捕获」可重跑
-//!              （same_image 去重保证幂等——同图不重复入库）。
-//! @ai-context: 方案 A+（2026-08-20 裁决）：不动实时链路——对每屏时间窗内的
-//!              归档 full 帧采样（≤8 帧 bound 解码成本）→ pick_sharpest 选优
-//!              （边缘能量，动效结束后的稳定清晰帧）→ analyze_layout 复用 →
-//!              table/formula/code 直收 + Image 过 diagram_likeness → 白边裁剪
-//!              （image_crop 机制）→ struct/ + 记录入库。
-//! @ai-context: 预算耗尽（auto 桶 80/会话）→ 停止本会话后续捕获（summary 标记，
-//!              命令层提示）；旧会话无屏/无图 → 自然跳过（降级链）。
+//!              v0.10.2 起取消逐屏自动捕获（会话 33 实测 50%+ 误收字幕条）——
+//!              改为手动一键分析参考图集（full/ 全部归档帧，与图集画廊同源）：
+//!              逐帧 decode → analyze_layout → regions_to_frame → decide_keep
+//!              （L0 字幕重叠 / L1 版面类型 / L2 OCR 置信度反向 / L3 位置约束）
+//!              → 白边裁剪（image_crop 机制）→ struct/ + 记录入库。
+//! @ai-context: 去重（same_image）保证幂等——同图不重复入库，可重复分析；
+//!              预算耗尽（auto 桶 80/会话）→ 停止本会话后续捕获（summary 标记，
+//!              命令层提示）；旧会话无图 → 自然跳过（降级链）。
 
 use std::path::Path;
 
 use crate::db::Db;
 use crate::error::Result;
-use crate::layout_analyzer::{analyze_layout, FrameGrid, LayoutRegion};
-use crate::structure_detect::{filter_structure_regions, pick_sharpest};
+use crate::layout_analyzer::{analyze_layout, FrameGrid, LayoutRegion, RegionKind};
+use crate::structure_detect::{decide_keep, diagram_likeness, StructureFilterContext};
+use crate::types::SessionOcrBlock;
 
-/// 每屏采样上限（帧解码成本 bound——屏窗口内归档帧通常 1-2 张，长屏最多 8）。
-const MAX_FRAMES_PER_SCREEN: usize = 8;
+/// OCR 块过滤时间窗（±3s）：字幕/full 块按帧时间戳对齐（同时间基：相对会话
+/// 起点 ms）。字幕持续出现，相邻帧块可跨帧关联；窗太宽会引入他帧噪声。
+const STRUCTURE_OCR_WINDOW_MS: u64 = 3_000;
 
 /// 捕获结果摘要（命令层事件/前端提示数据源）。
 #[derive(Debug, Clone, Copy, Default, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CaptureSummary {
-    /// 有图屏数（参与扫描的屏）
-    pub screens_scanned: usize,
+    /// 扫描参考图数（full/ 归档帧）
+    pub images_scanned: usize,
     /// 实际入库结构图数
     pub captured: usize,
     /// 自动桶预算是否耗尽（提前终止）
@@ -35,8 +36,8 @@ pub struct CaptureSummary {
 
 /// 批量捕获主入口（编排 + IO；纯逻辑均在 structure_detect/layout_analyzer）。
 ///
-/// @ai-context: now_ms 注入（文件名时间基；测试可控）；每屏独立失败不阻断
-///              （解码失败帧跳过、无候选屏跳过——诚实降级）。
+/// @ai-context: now_ms 注入（文件名时间基；测试可控）；逐帧独立失败不阻断
+///              （解码失败帧跳过——诚实降级）。
 pub fn capture_session_structures(
     db: &Db,
     data_dir: &Path,
@@ -44,58 +45,64 @@ pub fn capture_session_structures(
     now_ms: u64,
 ) -> Result<CaptureSummary> {
     let images_dir = data_dir.join("session-images").join(session_id.to_string());
+    // ① 参考图集时间戳（全量；与图集画廊 list_session_images 同源）
+    let timestamps = crate::screens::list_full_image_timestamps(&images_dir);
+    // ② OCR 块（过滤上下文数据源：字幕 bbox + full 块置信度）
     let blocks = db.list_ocr_blocks(session_id)?;
-    // ① 屏构建（复用屏卡体系；只保留有归档图的屏——无图无法裁剪）
-    let mut screens = crate::screens::build_screens(&blocks, Some(&images_dir));
-    screens.retain(|s| s.image_ref.is_some());
     let mut store = crate::structure_store::StructureImageStore::new(images_dir.clone())?;
-    let mut summary = CaptureSummary { screens_scanned: screens.len(), ..Default::default() };
+    let mut summary = CaptureSummary { images_scanned: timestamps.len(), ..Default::default() };
     let mut seq = 0u64;
-    for screen in &screens {
-        // ② 屏时间窗内归档帧采样（≤8 均匀）
-        let candidates = frame_candidates(
-            &images_dir,
-            screen.first_seen_ms,
-            screen.last_seen_ms,
-            MAX_FRAMES_PER_SCREEN,
-        );
-        // ③ 解码（失败帧跳过）+ 网格
-        let decoded = decode_candidates(&images_dir, &candidates);
-        if decoded.is_empty() {
-            continue;
-        }
-        let grids: Vec<(u64, FrameGrid)> =
-            decoded.iter().map(|(ts, img)| (*ts, grid_from_rgb(img))).collect();
-        // ④ 选优帧（边缘能量最高；全零能量 → 该屏跳过）
-        let Some(idx) = pick_sharpest(&grids) else { continue };
-        let grid = &grids[idx].1;
-        // ⑤ 版面分析 + 区域过滤（结构三类直收 + Text/Image 门控）
-        let kept = filter_structure_regions(&analyze_layout(grid), grid);
-        if kept.is_empty() {
-            continue;
-        }
-        let frame = &decoded[idx].1;
+    for ts in timestamps {
+        // ③ 解码（失败帧跳过，不阻断后续帧）
+        let Some(frame) = decode_frame(&images_dir, ts) else { continue };
+        let grid = grid_from_rgb(&frame);
+        // ④ 版面分析（网格坐标）→ 帧坐标区域（顺序保持，索引对应）
+        let analyzed = analyze_layout(&grid);
         let frame_regions = crate::frame_features::regions_to_frame(
-            &kept,
+            &analyzed,
             grid.cols,
             grid.rows,
             frame.width(),
             frame.height(),
         );
-        // ⑥ 逐区域裁剪 → 存储 → 记录
-        for r in frame_regions {
+        if frame_regions.is_empty() {
+            continue;
+        }
+        // ⑤ 过滤上下文（时间窗 ±3s）——逐帧组装（按帧 ts 对齐）
+        let ctx = build_filter_context(&blocks, ts);
+        // ⑥ 逐区域判定 → 裁剪 → 存储 → 记录
+        for (i, r) in frame_regions.iter().enumerate() {
             // 预算前置检查（save_auto 内部同检查——前置拦截避免单区域编码/IO
             // 错误被误判为预算耗尽而终止整个会话：审查修复）
             if store.remaining_budget() == 0 {
                 summary.budget_exhausted = true;
                 return Ok(summary);
             }
-            let Some(crop) = crop_region(frame, &r) else { continue };
+            // 图结构似然（仅 Image/Text 需要；结构三类 0.0 占位）
+            let diagram_score = match r.kind {
+                RegionKind::Image | RegionKind::Text => {
+                    let gr = &analyzed[i];
+                    diagram_likeness(&grid, gr.x, gr.y, gr.x + gr.w - 1, gr.y + gr.h - 1)
+                }
+                _ => 0.0,
+            };
+            // 四层判定（L3 位置 → L0 字幕重叠 → L1 类型 → L2 OCR 置信度）
+            if !decide_keep(
+                r.kind,
+                r,
+                diagram_score,
+                &ctx,
+                frame.width(),
+                frame.height(),
+            ) {
+                continue;
+            }
+            let Some(crop) = crop_region(&frame, r) else { continue };
             let bgra = rgb_to_bgra(&crop);
             seq += 1;
             match store.save_auto(now_ms + seq, &bgra, crop.width(), crop.height()) {
                 Ok(outcome) => {
-                    // 去重命中（跨屏同图/重跑）：不重复插记录——同图只留一份
+                    // 去重命中（跨帧同图/重跑）：不重复插记录——同图只留一份
                     if !outcome.is_new {
                         continue;
                     }
@@ -104,10 +111,10 @@ pub fn capture_session_structures(
                         &crate::db_structures::StructureImageRecord {
                             id: 0,
                             session_id,
-                            screen_id: screen.screen_id,
+                            screen_id: None,
                             kind: kind_name(r.kind),
-                            bbox: bbox_json(&r),
-                            source_ts_ms: grids[idx].0,
+                            bbox: bbox_json(r),
+                            source_ts_ms: ts,
                             crop_path: outcome.rel,
                             source: "auto".to_string(),
                             created_at: now_ms + seq,
@@ -125,39 +132,41 @@ pub fn capture_session_structures(
     Ok(summary)
 }
 
-/// 屏时间窗内归档帧候选（纯函数）：时间戳 ∈ [first, last]；超出采样上限
-/// 均匀抽样（bound 解码成本）；目录缺失/空 → 空列表。
-fn frame_candidates(
-    images_dir: &Path,
-    first_ms: u64,
-    last_ms: u64,
-    max: usize,
-) -> Vec<u64> {
-    let in_window: Vec<u64> = crate::screens::list_full_image_timestamps(images_dir)
-        .into_iter()
-        .filter(|t| *t >= first_ms && *t <= last_ms)
-        .collect();
-    if in_window.len() <= max {
-        return in_window;
+/// 过滤上下文组装（纯函数）：OCR 块 → 帧时间窗 ±STRUCTURE_OCR_WINDOW_MS 内信号。
+///
+/// @ai-context: 字幕块（region="subtitle"）进 subtitle_boxes（L0 重叠拦截）；
+///              其余（region="full"）进 full_blocks 带置信度（L2 反向信号）。
+///              无 bbox 的旧数据块跳过（无法参与重叠判定——L3 位置兜底）。
+fn build_filter_context(blocks: &[SessionOcrBlock], ts: u64) -> StructureFilterContext {
+    let (lo, hi) = (
+        ts.saturating_sub(STRUCTURE_OCR_WINDOW_MS),
+        ts + STRUCTURE_OCR_WINDOW_MS,
+    );
+    let mut ctx = StructureFilterContext {
+        subtitle_boxes: Vec::new(),
+        full_blocks: Vec::new(),
+    };
+    for b in blocks {
+        if b.timestamp_ms < lo || b.timestamp_ms > hi {
+            continue;
+        }
+        if let Some(bb) = b.bbox {
+            if b.region == "subtitle" {
+                ctx.subtitle_boxes.push(bb);
+            } else {
+                ctx.full_blocks.push((bb, b.score));
+            }
+        }
     }
-    // 均匀抽样（首尾必含——首帧=屏开始画面、尾帧=最近画面，都值得参与选优）
-    let last = in_window.len() - 1;
-    (0..max)
-        .map(|i| in_window[(i as f32 * last as f32 / (max - 1) as f32).round() as usize])
-        .collect()
+    ctx
 }
 
-/// 解码候选帧（纯 IO）：webp → RGB；解码失败帧跳过（不阻断）。
-fn decode_candidates(images_dir: &Path, timestamps: &[u64]) -> Vec<(u64, image::RgbImage)> {
-    timestamps
-        .iter()
-        .filter_map(|t| {
-            let img = image::open(images_dir.join("full").join(format!("{t}.webp")))
-                .ok()?
-                .to_rgb8();
-            Some((*t, img))
-        })
-        .collect()
+/// 解码单帧（纯 IO）：webp → RGB；失败 → None（调用方跳过该帧）。
+fn decode_frame(images_dir: &Path, ts: u64) -> Option<image::RgbImage> {
+    image::open(images_dir.join("full").join(format!("{ts}.webp")))
+        .ok()?
+        .to_rgb8()
+        .into()
 }
 
 /// RGB 帧 → 版面网格（纯函数；与 frame_features::grid_from_bgra 同口径：

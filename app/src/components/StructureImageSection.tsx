@@ -2,9 +2,10 @@
  * StructureImageSection — 会话结构图区段（v0.7.7 REQ-185）。
  *
  * @ai-context: 非线性结构图（表格/公式/代码/流程图/手动框选）图库——kind/source
- *              徽标 + 时间 + 屏号 + 删除 + 「重新捕获」重跑（幂等）；点击缩略图
- *              大图预览（ImagePreviewOverlay 共用）；监听 session:structures-updated
- *              自动刷新（停止后自动捕获/手动截取/删除均触发）。
+ *              徽标 + 时间 + 删除 + 「分析参考图集」一键重跑（v0.10.2：取消
+ *              逐屏自动捕获，改为直扫参考图集 full/ 帧 + 四层过滤保准确）；
+ *              点击缩略图大图预览（ImagePreviewOverlay 共用）；监听
+ *              session:structures-updated 自动刷新（分析/手动截取/删除均触发）。
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -72,13 +73,13 @@ export default function StructureImageSection({ sessionId, baseUrl }: { sessionI
     setError("");
     setInfo("");
     try {
-      const summary = await invoke<{ captured: number; screensScanned: number; budgetExhausted: boolean }>(
+      const summary = await invoke<{ imagesScanned: number; captured: number; budgetExhausted: boolean }>(
         "capture_session_structures",
         { sessionId },
       );
-      if (summary.captured === 0) setInfo("重新捕获完成：无新增结构图（已去重或本会话无结构区域）");
+      if (summary.captured === 0) setInfo("分析完成：无新增结构图（已去重或参考图集中无结构区域）");
     } catch (e) {
-      setError(`重新捕获失败: ${e}`);
+      setError(`分析失败: ${e}`);
     } finally {
       setBusy(false);
     }
@@ -89,7 +90,7 @@ export default function StructureImageSection({ sessionId, baseUrl }: { sessionI
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
         <span style={{ fontSize: 12, fontWeight: 600 }}>🧩 结构图（{images.length}）</span>
         <button style={btn} onClick={() => void recapture()} disabled={busy}>
-          {busy ? "捕获中…" : "⟳ 重新捕获"}
+          {busy ? "分析中…" : "⟳ 分析参考图集"}
         </button>
         <button style={btn} onClick={() => void refresh()} disabled={loading}>
           {loading ? "加载中…" : "刷新"}
@@ -99,7 +100,7 @@ export default function StructureImageSection({ sessionId, baseUrl }: { sessionI
       </div>
       {images.length === 0 && !loading && (
         <div style={{ fontSize: 11, color: "#9ca3af" }}>
-          暂无结构图（停止采集后自动捕获表格/公式/代码/流程图；或到原料屏卡上框选截取）
+          暂无结构图（点击上方按钮分析参考图集中的表格/公式/代码/流程图；或到原料屏卡上框选截取）
         </div>
       )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>

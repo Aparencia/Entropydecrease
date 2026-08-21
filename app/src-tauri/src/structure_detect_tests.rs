@@ -1,14 +1,14 @@
-//! 结构图检测纯函数单测（REQ-182 / v0.7.7，AAA 模式）。
+//! 结构图检测纯函数单测（REQ-182 / v0.7.7；v0.10.2 重构，AAA 模式）。
 //!
 //! @ai-context: 合成网格标定 diagram_likeness——流程图样（框线+文字）必过、
 //!              照片样（无长直线高密度纹理）必拒、纯色样（低方差装饰）必拒、
-//!              文字样（长词误入 Image）必拒；pick_sharpest 清晰度代理选优；
-//!              区域过滤门控（结构三类直收 + Image 阈值 + text/unknown 跳过）。
+//!              文字样（长词误入 Image）必拒；decide_keep 四层判定——L0 字幕
+//!              重叠拦截 / L1 结构三类直收 / L2 OCR 置信度反向信号 / L3 底部
+//!              条带形状约束。
 
 use crate::layout_analyzer::{FrameGrid, LayoutRegion, RegionKind};
-use crate::structure_detect::{
-    diagram_likeness, edge_energy, filter_structure_regions, pick_sharpest,
-};
+use crate::structure_detect::{decide_keep, diagram_likeness, StructureFilterContext};
+use crate::types::TextBox;
 
 /// 空白网格（bg=背景灰度）。
 fn blank(cols: u32, rows: u32, bg: u8) -> FrameGrid {
@@ -147,97 +147,113 @@ fn diagram_out_of_bounds_and_tiny_region_zero() {
     assert_eq!(diagram_likeness(&g, 5, 5, 4, 6), 0.0);
 }
 
+/// 空过滤上下文（无字幕/无画面要点块）。
+fn empty_ctx() -> StructureFilterContext {
+    StructureFilterContext { subtitle_boxes: Vec::new(), full_blocks: Vec::new() }
+}
+
 #[test]
-fn edge_energy_ranks_sharp_over_blurry() {
-    // Arrange：清晰帧（黑白分界锐利）vs 模糊帧（灰度渐变过渡）
-    let mut sharp = blank(8, 4, 255);
-    paint(&mut sharp, 0, 0, 3, 3); // 左半黑右半白——大梯度
-    let blur = blank(8, 4, 200); // 全灰——零梯度
+fn decide_keep_subtitle_overlap_rejected() {
+    // Arrange：L0——区域与字幕块高重叠（IoU≈0.68），图似然分高也无效
+    let r = region(RegionKind::Image, 100, 100, 400, 80);
+    let ctx = StructureFilterContext {
+        subtitle_boxes: vec![TextBox { x: 120.0, y: 110.0, w: 360.0, h: 60.0 }],
+        full_blocks: Vec::new(),
+    };
+
+    // Act/Assert：字幕重叠 → 拒（即使 diagram_score 高）
+    assert!(!decide_keep(r.kind, &r, 0.9, &ctx, 640, 360));
+}
+
+#[test]
+fn decide_keep_structural_kinds_direct_accept() {
+    // Arrange：L1——结构三类直收（diagram_score 0.0 占位、无 OCR 上下文）
+    let ctx = empty_ctx();
+    for kind in [RegionKind::Table, RegionKind::Formula, RegionKind::Code] {
+        let r = region(kind, 0, 0, 300, 200);
+
+        // Act/Assert：不依赖任何启发式 → 收
+        assert!(decide_keep(kind, &r, 0.0, &ctx, 640, 360), "{kind:?} 应直收");
+    }
+}
+
+#[test]
+fn decide_keep_unknown_and_low_likeness_rejected() {
+    // Arrange：L1/L2 前门——Unknown 拒、Image 图似然不足拒
+    let ctx = empty_ctx();
+    let unknown = region(RegionKind::Unknown, 0, 0, 300, 200);
+    let weak_img = region(RegionKind::Image, 100, 100, 400, 80);
 
     // Act/Assert
-    assert!(edge_energy(&sharp) > edge_energy(&blur));
-    assert_eq!(edge_energy(&blur), 0);
+    assert!(!decide_keep(RegionKind::Unknown, &unknown, 0.0, &ctx, 640, 360));
+    assert!(!decide_keep(RegionKind::Image, &weak_img, 0.4, &ctx, 640, 360));
 }
 
 #[test]
-fn pick_sharpest_selects_highest_energy() {
-    // Arrange：同一画面（左 2 列黑块）三种对比度——清晰(0/255) > 模糊(80/175) > 更糊(130/155)
-    let frame = |dark: u8, light: u8| {
-        let mut g = blank(8, 4, light);
-        for y in 0..4 {
-            for x in 0..2 {
-                g.cells[(y * g.cols + x) as usize] = dark;
-            }
-        }
-        g
+fn decide_keep_ocr_confident_text_rejected() {
+    // Arrange：L2——区域内 full 块高置信（OCR 已还原线性文本）→ 拒
+    let r = region(RegionKind::Text, 100, 100, 400, 80);
+    let ctx = StructureFilterContext {
+        subtitle_boxes: Vec::new(),
+        full_blocks: vec![(TextBox { x: 120.0, y: 110.0, w: 360.0, h: 60.0 }, 0.9)],
     };
-    let worse = frame(130, 155); // 对比度 25 → 能量最低
-    let mid = frame(80, 175); // 对比度 95
-    let best = frame(0, 255); // 对比度 255 → 能量最高
-    let candidates = vec![(1_000u64, worse), (2_000u64, mid), (3_000u64, best)];
 
-    // Act
-    let idx = pick_sharpest(&candidates);
-
-    // Assert：选能量最高的帧 2
-    assert_eq!(idx, Some(2));
-    assert_eq!(candidates[idx.unwrap()].0, 3_000);
+    // Act/Assert
+    assert!(!decide_keep(r.kind, &r, 0.9, &ctx, 640, 360));
 }
 
 #[test]
-fn pick_sharpest_empty_or_all_flat_returns_none() {
-    // Arrange：空列表 + 全纯色帧列表
-    let flat = blank(8, 4, 128);
+fn decide_keep_ocr_weak_or_missing_accepted() {
+    // Arrange：L2——低置信（OCR 还原不了）与无块（OCR 未覆盖）→ 收
+    let r = region(RegionKind::Text, 100, 100, 400, 80);
+    let weak = StructureFilterContext {
+        subtitle_boxes: Vec::new(),
+        full_blocks: vec![(TextBox { x: 120.0, y: 110.0, w: 360.0, h: 60.0 }, 0.3)],
+    };
+    let mid = StructureFilterContext {
+        subtitle_boxes: Vec::new(),
+        full_blocks: vec![(TextBox { x: 120.0, y: 110.0, w: 360.0, h: 60.0 }, 0.6)],
+    };
+    let none = empty_ctx();
 
-    // Act/Assert：无可捕获帧 → None（调用方跳过该屏）
-    assert_eq!(pick_sharpest(&[]), None);
-    assert_eq!(pick_sharpest(&[(1_000, flat.clone()), (2_000, flat.clone())]), None);
+    // Act/Assert：0.3 低置信 / 0.6 模糊地带 / 无重叠块 → 均收
+    assert!(decide_keep(r.kind, &r, 0.9, &weak, 640, 360));
+    assert!(decide_keep(r.kind, &r, 0.9, &mid, 640, 360));
+    assert!(decide_keep(r.kind, &r, 0.9, &none, 640, 360));
 }
 
 #[test]
-fn pick_sharpest_skips_zero_energy_frames() {
-    // Arrange：纯色帧 + 有效帧混排（纯色帧排前）
-    let flat = blank(8, 4, 128);
-    let mut good = blank(8, 4, 255);
-    paint(&mut good, 0, 0, 2, 3);
+fn decide_keep_tiny_overlap_block_not_counted() {
+    // Arrange：L2 审查修复——整帧大块与区域微量重叠（ratio≈0.14 < 0.3），
+    //          高置信也不计入信号 → 不误拒真实结构图
+    let r = region(RegionKind::Text, 100, 100, 400, 80);
+    let ctx = StructureFilterContext {
+        subtitle_boxes: Vec::new(),
+        full_blocks: vec![(TextBox { x: 0.0, y: 0.0, w: 640.0, h: 360.0 }, 0.9)],
+    };
 
-    // Act
-    let idx = pick_sharpest(&[(1_000, flat), (2_000, good)]);
-
-    // Assert：跳过零能量帧，选有效帧
-    assert_eq!(idx, Some(1));
+    // Act/Assert：大块不计入 → avg=0 → 收（修复前 `iou>0` 会误拒）
+    assert!(decide_keep(r.kind, &r, 0.9, &ctx, 640, 360));
 }
 
 #[test]
-fn filter_structure_kinds_direct_and_image_gated() {
-    // Arrange：流程图样网格 + 混合区域列表（含"被判 Text 的流程图区域"——
-    // 实现校准：真实流程图密度高被判 Text，同过图结构门控）
-    let g = flowchart_like();
-    let regions = vec![
-        region(RegionKind::Table, 0, 0, 5, 3),
-        region(RegionKind::Formula, 0, 4, 5, 3),
-        region(RegionKind::Code, 0, 8, 5, 3),
-        region(RegionKind::Text, 4, 3, 20, 8), // 流程图区域被判 Text（应过门控）
-        region(RegionKind::Image, 4, 3, 20, 8), // 同区域 Image（应过门控）
-        region(RegionKind::Image, 0, 12, 8, 4), // 空白区域（应拒）
-        region(RegionKind::Text, 26, 0, 5, 3), // 小文字区域（形状约束拒）
-        region(RegionKind::Unknown, 26, 5, 5, 3),
-    ];
+fn decide_keep_bottom_strip_rejected_by_shape() {
+    // Arrange：L3——底部细长条带（高宽比 > 8、中心在底部 12%），无字幕块
+    //          （防旧数据无字幕标记）
+    let r = region(RegionKind::Text, 0, 310, 640, 30);
+    let ctx = empty_ctx();
 
-    // Act
-    let kept = filter_structure_regions(&regions, &g);
+    // Act/Assert：形状约束 → 拒
+    assert!(!decide_keep(r.kind, &r, 0.9, &ctx, 640, 360));
+}
 
-    // Assert：结构三类直收 + Text/Image 过图结构门控；小文字/空白/unknown 跳过
-    let kinds: Vec<RegionKind> = kept.iter().map(|r| r.kind).collect();
-    assert_eq!(
-        kinds,
-        vec![
-            RegionKind::Table,
-            RegionKind::Formula,
-            RegionKind::Code,
-            RegionKind::Text,
-            RegionKind::Image
-        ]
-    );
-    assert_eq!(kept[3].x, 4); // Text 流程图区域保留
+#[test]
+fn decide_keep_bottom_wide_strip_not_rejected() {
+    // Arrange：L3 边界——底部但块状（高宽比 ≤ 8）不触发形状约束；无字幕
+    //          块、无 OCR 块 → 正常走 L1/L2 收
+    let r = region(RegionKind::Text, 0, 280, 640, 80);
+    let ctx = empty_ctx();
+
+    // Act/Assert：宽高比 8 恰好不触发（非细条）；底部位置不单独拒
+    assert!(decide_keep(r.kind, &r, 0.9, &ctx, 640, 360));
 }

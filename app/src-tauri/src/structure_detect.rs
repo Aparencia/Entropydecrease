@@ -1,19 +1,36 @@
-//! 结构图检测纯函数（REQ-182 / v0.7.7）：diagram_likeness + pick_sharpest + 区域过滤。
+//! 结构图检测纯函数（REQ-182 / v0.7.7；v0.10.2 重构）：diagram_likeness + decide_keep 过滤。
 //!
 //! @ai-context: 非线性文本结构（表格/公式/代码/流程图/思维导图/架构图）的
 //!              "图像即产物"兜底（ADR-010：图语义纯本地无法还原）——版面分析
 //!              已分类区域，本模块决定**哪些区域值得持久化为结构图**：
-//!              ① table/formula/code 直接候选（is_structural）；
-//!              ② Image 区域过 diagram_likeness 启发式（防照片/装饰误收）；
-//!              ③ text/unknown 跳过（text 走 OCR 线性文本；unknown 归 V1.0 AI 补缝）。
-//! @ai-context: pick_sharpest 解决"屏卡代表帧可能不是最清晰帧"——屏时间窗内
-//!              多张归档帧选边缘能量最高者（动效结束后的静止清晰帧）。
-//! @ai-context: 纯函数无 IO（网格输入）；合成网格可单测（layout_analyzer 先例）。
+//!              ① L1 table/formula/code 直收（is_structural）；
+//!              ② Image/Text 过 diagram_likeness 启发式（防照片/装饰误收）；
+//!              ③ L2 OCR 置信度反向验证（v0.10.2：OCR 已高置信还原的线性
+//!                 文本不收——结构图只收"OCR 不准确"的含文本图）；
+//!              ④ L0 字幕块重叠拦截 + L3 底部条带形状约束（v0.10.2：会话 33
+//!                 实测 50%+ 误收为字幕条——背景条+文字的长直线信号骗过旧
+//!                 启发式；字幕块 bbox 由 OCR 字幕管线落库，直接可查）。
+//! @ai-context: 纯函数无 IO（网格/上下文输入）；合成网格可单测（layout_analyzer 先例）。
 
 use crate::layout_analyzer::{FrameGrid, LayoutRegion, RegionKind};
+use crate::types::TextBox;
 
 /// Image 区域判定为"疑似图结构"的阈值（0-1；合成网格标定，真机调参）。
 pub const DIAGRAM_LIKENESS_THRESHOLD: f32 = 0.5;
+/// 字幕重叠拦截 IoU 下限（v0.10.2）：候选区域与字幕 OCR 块重叠 ≥ 该值 → 拒。
+pub const SUBTITLE_IOU_MIN: f32 = 0.3;
+/// OCR 块计入区域信号的重叠下限（v0.10.2 审查修复）：块与区域重叠面积 ≥ 块面积
+/// 该比例才视为"属于该区域"——防整帧/大框 OCR 块与区域微量重叠即拉高平均分
+/// 而误拒真实结构图（旧判据 `iou>0` 过宽）。
+const BLOCK_OVERLAP_MIN: f32 = 0.3;
+/// OCR 置信度反向信号：区域内重叠 OCR 块平均分 ≥ 该值 → 线性文本已还原 → 拒。
+const OCR_SCORE_CONFIDENT: f32 = 0.7;
+/// OCR 置信度反向信号：平均分 < 该值 → OCR 还原不了 → 收（结构图兜底）。
+const OCR_SCORE_WEAK: f32 = 0.5;
+/// 底部条带判定：区域中心位于画面底部 (1-BOTTOM_BAND_RATIO) 比例内 → 字幕条特征。
+const BOTTOM_BAND_RATIO: f32 = 0.88;
+/// 底部条带判定：高宽比超该值 → 细长条带（字幕条/进度条），非块状结构。
+const SUB_BAR_ASPECT: f32 = 8.0;
 /// 墨迹判定阈值（与 layout_analyzer INK_THRESHOLD 同口径 160——两模块独立
 /// 常量防耦合，改阈值须双处同步）。
 const INK_THRESHOLD: u8 = 160;
@@ -134,68 +151,115 @@ fn is_ink(grid: &FrameGrid, y: u32, x: u32) -> bool {
     grid.cells[(y * grid.cols + x) as usize] < INK_THRESHOLD
 }
 
-/// 帧边缘能量（纯函数）：水平+垂直相邻格亮度差绝对值之和——清晰度代理指标
-/// （文字/线条边缘锐利 → 能量高；模糊/纯色帧 → 能量低或零）。
-pub fn edge_energy(grid: &FrameGrid) -> u64 {
-    if grid.cols == 0 || grid.rows == 0 {
-        return 0;
-    }
-    let mut energy = 0u64;
-    for y in 0..grid.rows {
-        for x in 0..grid.cols {
-            let v = grid.cells[(y * grid.cols + x) as usize] as i64;
-            if x + 1 < grid.cols {
-                energy += (v - grid.cells[(y * grid.cols + x + 1) as usize] as i64).unsigned_abs();
-            }
-            if y + 1 < grid.rows {
-                energy += (v - grid.cells[((y + 1) * grid.cols + x) as usize] as i64).unsigned_abs();
-            }
-        }
-    }
-    energy
+/// 结构图过滤上下文（v0.10.2）：同帧时间窗内的 OCR 块信号（帧坐标）。
+///
+/// @ai-context: 由编排层（structure_capture）从 SessionOcrBlock 按时间窗组装：
+///              subtitle_boxes=字幕管线块（region="subtitle"，独立 ROI 不进
+///              版面——字幕条与版面区域重叠是旧版误收主因）；full_blocks=画面
+///              要点块（region="full"，含 OCR 置信度）——L2 反向信号数据源。
+pub struct StructureFilterContext {
+    /// 同时间窗字幕块 bbox（帧坐标）
+    pub subtitle_boxes: Vec<TextBox>,
+    /// 同时间窗画面要点块 (bbox, OCR 置信度 0-1)
+    pub full_blocks: Vec<(TextBox, f32)>,
 }
 
-/// 最清晰帧选择（纯函数）：候选 (时间戳, 网格) 列表 → 边缘能量最高者索引。
+/// 区域是否值得持久化为结构图（纯函数；v0.10.2 重构，取代 filter_structure_regions）。
 ///
-/// @ai-context: 零能量帧（纯色/黑屏，无内容）跳过；全部零能量 → None
-///              （该屏无可捕获帧，调用方跳过——诚实降级）。
-pub fn pick_sharpest(candidates: &[(u64, FrameGrid)]) -> Option<usize> {
-    let mut best: Option<(usize, u64)> = None;
-    for (i, (_, g)) in candidates.iter().enumerate() {
-        let e = edge_energy(g);
-        if e == 0 {
-            continue;
-        }
-        if best.as_ref().is_none_or(|(_, be)| e > *be) {
-            best = Some((i, e));
+/// @ai-context: 判定顺序——L3 位置（最廉价预过滤）→ L0 字幕重叠 → L1 版面
+///              类型 → L2 OCR 置信度反向信号；任一拒则拒，全部过则收。
+/// @ai-context: diagram_score 由调用方预计算（仅 Image/Text 需要；结构三类
+///              传 0.0 占位）——本函数不依赖网格，输入均为帧坐标，便于单测
+///              与编排层解耦。
+pub fn decide_keep(
+    kind: RegionKind,
+    r: &LayoutRegion,
+    diagram_score: f32,
+    ctx: &StructureFilterContext,
+    _frame_w: u32,
+    frame_h: u32,
+) -> bool {
+    // L3 位置约束：底部细长条带 → 字幕条特征（防旧数据无字幕标记的兜底）
+    if r.h > 0 && r.w as f32 / r.h as f32 > SUB_BAR_ASPECT {
+        let cy = r.y as f32 + r.h as f32 / 2.0;
+        if frame_h > 0 && cy > frame_h as f32 * BOTTOM_BAND_RATIO {
+            return false;
         }
     }
-    best.map(|(i, _)| i)
-}
-
-/// 结构图候选过滤（纯函数）：版面区域 → 值得持久化的子集。
-///
-/// @ai-context: table/formula/code 直收（is_structural）；Image/Text 均过
-///              diagram_likeness 阈值（实现校准：真实流程图页密度高被判
-///              Text——长直线+形状约束天然拒纯文字/标题，故 Text 同门控）；
-///              unknown 跳过（归 V1.0 AI 补缝）。输入输出均为网格坐标
-///              （编排层随后 regions_to_frame 换算帧坐标裁剪）。
-pub fn filter_structure_regions(
-    regions: &[LayoutRegion],
-    grid: &FrameGrid,
-) -> Vec<LayoutRegion> {
-    regions
+    // L0 字幕重叠拦截：与任一字幕块 IoU ≥ 阈值 → 字幕区，不收
+    if ctx
+        .subtitle_boxes
         .iter()
-        .filter(|r| match r.kind {
-            RegionKind::Table | RegionKind::Formula | RegionKind::Code => true,
-            RegionKind::Image | RegionKind::Text => {
-                diagram_likeness(grid, r.x, r.y, r.x + r.w - 1, r.y + r.h - 1)
-                    >= DIAGRAM_LIKENESS_THRESHOLD
+        .any(|b| iou_frame(r, b) >= SUBTITLE_IOU_MIN)
+    {
+        return false;
+    }
+    // L1 版面类型
+    match kind {
+        RegionKind::Table | RegionKind::Formula | RegionKind::Code => true,
+        RegionKind::Unknown => false,
+        RegionKind::Image | RegionKind::Text => {
+            if diagram_score < DIAGRAM_LIKENESS_THRESHOLD {
+                return false;
             }
-            RegionKind::Unknown => false,
-        })
-        .cloned()
-        .collect()
+            // L2 OCR 置信度反向信号：区域内（重叠面积 ≥ 块面积 30%）full 块
+            // 平均分——高置信 → OCR 已还原线性文本（字幕/PPT 正文）→ 无需
+            // 图像兜底 → 拒；低置信/无区域内块 → OCR 还原不了 → 收；模糊地带
+            // 偏向收（V1.0 用户删除反馈校准阈值）。
+            let mut sum = 0.0f32;
+            let mut n = 0u32;
+            for (bb, score) in &ctx.full_blocks {
+                if overlap_ratio(r, bb) >= BLOCK_OVERLAP_MIN {
+                    sum += score;
+                    n += 1;
+                }
+            }
+            let avg = if n > 0 { sum / n as f32 } else { 0.0 };
+            match avg {
+                a if a >= OCR_SCORE_CONFIDENT => false,
+                a if a < OCR_SCORE_WEAK => true,
+                _ => true,
+            }
+        }
+    }
+}
+
+/// 块与区域的重叠面积占比（纯函数）：重叠面积 / 块面积——判断块是否"属于"区域。
+/// 与 iou_frame（对称 IoU）互补：L0 字幕拦截用对称 IoU（区域与字幕条整体
+/// 重合度）；L2 信号归属用非对称占比（防止巨大 OCR 框微量重叠污染平均分）。
+fn overlap_ratio(r: &LayoutRegion, b: &TextBox) -> f32 {
+    let (rx1, ry1) = (r.x as f32 + r.w as f32, r.y as f32 + r.h as f32);
+    let (bx1, by1) = (b.x + b.w, b.y + b.h);
+    let ix = rx1.min(bx1) - (r.x as f32).max(b.x);
+    let iy = ry1.min(by1) - (r.y as f32).max(b.y);
+    if ix <= 0.0 || iy <= 0.0 {
+        return 0.0;
+    }
+    let inter = ix * iy;
+    let block_area = b.w * b.h;
+    if block_area <= 0.0 {
+        0.0
+    } else {
+        inter / block_area
+    }
+}
+
+/// 帧坐标区域与 OCR 块 bbox 的 IoU（纯函数；无重叠/空尺寸防御为 0）。
+fn iou_frame(r: &LayoutRegion, b: &TextBox) -> f32 {
+    let (rx1, ry1) = (r.x as f32 + r.w as f32, r.y as f32 + r.h as f32);
+    let (bx1, by1) = (b.x + b.w, b.y + b.h);
+    let ix = rx1.min(bx1) - (r.x as f32).max(b.x);
+    let iy = ry1.min(by1) - (r.y as f32).max(b.y);
+    if ix <= 0.0 || iy <= 0.0 {
+        return 0.0;
+    }
+    let inter = ix * iy;
+    let union = r.w as f32 * r.h as f32 + b.w * b.h - inter;
+    if union <= 0.0 {
+        0.0
+    } else {
+        inter / union
+    }
 }
 
 #[cfg(test)]
