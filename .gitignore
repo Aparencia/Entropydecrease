@@ -30,6 +30,10 @@ dist-electron/
 .env.local
 *.local
 server/.env
+# 生产环境配置含真实密钥/PII，永不入库（模板为 .env.production.example，须保留可跟踪）
+.env.production
+*.env.production
+!.env.production.example
 
 # OS
 Thumbs.db
