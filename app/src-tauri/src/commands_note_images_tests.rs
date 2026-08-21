@@ -26,6 +26,7 @@ fn make_note(session_id: Option<i64>) -> Note {
         purify_stats: None,
         tags: None,
         properties: None,
+        group_id: None,
     };
     db.create_note(&new).expect("create")
 }

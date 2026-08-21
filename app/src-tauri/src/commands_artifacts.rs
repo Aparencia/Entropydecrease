@@ -101,6 +101,10 @@ pub async fn artifact_to_note(
             purify_stats: None,
             tags: None,
             properties: None,
+            // v0.11.0：产物笔记继承会话组归属（同会话同组；会话未归组则 None）
+            group_id: crate::note_group_assign::group_of_session(&state.db, session_id)
+                .ok()
+                .flatten(),
         })
         .map_err(|e| e.to_string())
 }

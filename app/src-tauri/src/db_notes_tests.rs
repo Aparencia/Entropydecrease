@@ -12,7 +12,7 @@ fn mem_db() -> Db {
 fn create_and_get_note_roundtrip() {
     // Arrange
     let db = mem_db();
-    let new = NewNote { title: "物理".into(), content: "# 牛顿\nF=ma".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None };
+    let new = NewNote { title: "物理".into(), content: "# 牛顿\nF=ma".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None, group_id: None };
     // Act
     let created = db.create_note(&new).expect("create");
     let fetched = db.get_note(created.id).expect("get").expect("exists");
@@ -26,8 +26,8 @@ fn create_and_get_note_roundtrip() {
 fn list_orders_by_updated_desc() {
     // Arrange
     let db = mem_db();
-    db.create_note(&NewNote { title: "A".into(), content: "a".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None }).unwrap();
-    db.create_note(&NewNote { title: "B".into(), content: "b".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None }).unwrap();
+    db.create_note(&NewNote { title: "A".into(), content: "a".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None, group_id: None }).unwrap();
+    db.create_note(&NewNote { title: "B".into(), content: "b".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None, group_id: None }).unwrap();
     // Act
     let notes = db.list_notes().expect("list");
     // Assert
@@ -38,7 +38,7 @@ fn list_orders_by_updated_desc() {
 fn update_note_changes_content() {
     // Arrange
     let db = mem_db();
-    let created = db.create_note(&NewNote { title: "旧".into(), content: "旧内容".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None }).unwrap();
+    let created = db.create_note(&NewNote { title: "旧".into(), content: "旧内容".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None, group_id: None }).unwrap();
     // Act
     let ok = db.update_note(created.id, "新标题", "新内容").expect("update");
     let fetched = db.get_note(created.id).unwrap().unwrap();
@@ -52,7 +52,7 @@ fn update_note_changes_content() {
 fn delete_note_removes_row() {
     // Arrange
     let db = mem_db();
-    let created = db.create_note(&NewNote { title: "待删".into(), content: "x".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None }).unwrap();
+    let created = db.create_note(&NewNote { title: "待删".into(), content: "x".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None, group_id: None }).unwrap();
     // Act
     let ok = db.delete_note(created.id).expect("delete");
     let fetched = db.get_note(created.id).expect("get");
@@ -65,8 +65,8 @@ fn delete_note_removes_row() {
 fn search_matches_title_and_content() {
     // Arrange
     let db = mem_db();
-    db.create_note(&NewNote { title: "化学课".into(), content: "讲分子".into(), source: "classroom".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None }).unwrap();
-    db.create_note(&NewNote { title: "随笔".into(), content: "含熵减概念".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None }).unwrap();
+    db.create_note(&NewNote { title: "化学课".into(), content: "讲分子".into(), source: "classroom".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None, group_id: None }).unwrap();
+    db.create_note(&NewNote { title: "随笔".into(), content: "含熵减概念".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None, group_id: None }).unwrap();
     // Act
     let by_title = db.search_notes("化学").expect("search");
     let by_content = db.search_notes("熵减").expect("search");
@@ -80,8 +80,8 @@ fn search_matches_title_and_content() {
 fn search_escapes_wildcards() {
     // Arrange：用户输入含 % 应作为字面量
     let db = mem_db();
-    db.create_note(&NewNote { title: "50%off".into(), content: "促销".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None }).unwrap();
-    db.create_note(&NewNote { title: "normal".into(), content: "普通".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None }).unwrap();
+    db.create_note(&NewNote { title: "50%off".into(), content: "促销".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None, group_id: None }).unwrap();
+    db.create_note(&NewNote { title: "normal".into(), content: "普通".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None, group_id: None }).unwrap();
     // Act：搜索字面 "%"
     let result = db.search_notes("%off").expect("search");
     // Assert：只命中含字面 %off 的，不应命中所有
@@ -177,7 +177,7 @@ fn create_note_roundtrips_rule_metadata() {
         rule_version: Some("note-rules-0.7.5".into()),
         purify_stats: Some(r#"{"filler":2,"verbal":3}"#.into()),
         tags: None,
-        properties: None,
+        properties: None, group_id: None,
     };
     // Act
     let created = db.create_note(&new).expect("create");
@@ -204,7 +204,7 @@ fn delete_session_keeps_note_and_breaks_link() {        // Arrange
         rule_version: None,
         purify_stats: None,
         tags: None,
-        properties: None,
+        properties: None, group_id: None,
     }).expect("create note");
     // Act：删除会话
     let deleted = db.delete_session(session.id).expect("delete session");
@@ -233,7 +233,7 @@ fn find_note_by_session_picks_latest() {
         rule_version: None,
         purify_stats: None,
         tags: None,
-        properties: None,
+        properties: None, group_id: None,
     }).expect("create older");
     let newer = db.create_note(&NewNote {
         title: "第二版".into(),
@@ -243,7 +243,7 @@ fn find_note_by_session_picks_latest() {
         rule_version: None,
         purify_stats: None,
         tags: None,
-        properties: None,
+        properties: None, group_id: None,
     }).expect("create newer");
     db.create_note(&NewNote {
         title: "手动".into(),
@@ -253,7 +253,7 @@ fn find_note_by_session_picks_latest() {
         rule_version: None,
         purify_stats: None,
         tags: None,
-        properties: None,
+        properties: None, group_id: None,
     }).expect("create manual");
     // Act
     let found = db.find_note_by_session(session.id).expect("find");

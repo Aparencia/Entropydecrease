@@ -79,7 +79,26 @@ pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
             payload_json TEXT NOT NULL DEFAULT '{}'
         );
         CREATE INDEX IF NOT EXISTS idx_events_session ON session_events(session_id, timestamp_ms);
-        CREATE INDEX IF NOT EXISTS idx_events_kind ON session_events(session_id, kind);",
+        CREATE INDEX IF NOT EXISTS idx_events_kind ON session_events(session_id, kind);
+        -- v0.11.0（REQ-195，v4 §7.4 融合点基建）：笔记组——统一产物层唯一容器；
+        -- terrain 为管线分叉前提（container/feed），kind 三种形成方式（课程/主题/独立）
+        CREATE TABLE IF NOT EXISTS note_groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            terrain TEXT NOT NULL DEFAULT 'container',
+            kind TEXT NOT NULL DEFAULT 'standalone',
+            domain_tag TEXT,
+            source TEXT NOT NULL DEFAULT 'route',
+            series_key TEXT,
+            route_reason TEXT,
+            route_overridden INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        -- 课程组幂等键（同一系列名唯一；部分索引仅约束非 NULL）
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_series
+            ON note_groups(series_key) WHERE series_key IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_groups_domain ON note_groups(domain_tag);",
     )?;
     // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）
     ensure_column(conn, "sessions", "profile", "ALTER TABLE sessions ADD COLUMN profile TEXT")?;
@@ -177,6 +196,16 @@ pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
     )?;
     // 关联查询索引（列表 has_note 子查询 + 笔记页来源跳转共用）
     conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_notes_session ON notes(session_id)")?;
+    // v0.11.0（REQ-195）：notes 补 group_id 列——笔记↔组关联
+    // （删组 ON DELETE SET NULL：笔记是用户资产，只断关联不删笔记；
+    //   旧数据 NULL=未归组，不猜不填——ADR-014 先例）
+    ensure_column(
+        conn,
+        "notes",
+        "group_id",
+        "ALTER TABLE notes ADD COLUMN group_id INTEGER REFERENCES note_groups(id) ON DELETE SET NULL",
+    )?;
+    conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_notes_group ON notes(group_id)")?;
     // v0.7.7（REQ-183）：结构图记录表（建表幂等——新库建表/旧库补表）
     crate::db_structures::init(conn)?;
     // v0.8.0 M4（REQ-144）：笔记版本快照链 + AI 成本记录（幂等建表）

@@ -12,7 +12,7 @@ use crate::error::Result;
 use crate::types::{NewNote, Note};
 
 /// notes 表统一查询列（列顺序与 row_to_note 严格对应——改一处必须同步另一处）。
-const NOTE_COLUMNS: &str = "id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at, tags, properties, pin";
+const NOTE_COLUMNS: &str = "id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at, tags, properties, pin, group_id";
 
 impl Db {
     /// 新建笔记，返回含 id 与时间戳的完整记录。
@@ -21,11 +21,11 @@ impl Db {
         let tags = new.tags.clone().unwrap_or_else(|| "[]".to_string());
         self.with_conn(|conn| {
             conn.execute(
-                "INSERT INTO notes (title, content, source, session_id, rule_version, purify_stats, tags, properties, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)",
+                "INSERT INTO notes (title, content, source, session_id, rule_version, purify_stats, tags, properties, group_id, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)",
                 params![
                     new.title, new.content, new.source, new.session_id, new.rule_version,
-                    new.purify_stats, tags, new.properties, now
+                    new.purify_stats, tags, new.properties, new.group_id, now
                 ],
             )?;
             let id = conn.last_insert_rowid();
@@ -40,6 +40,7 @@ impl Db {
                 tags,
                 properties: new.properties.clone(),
                 pin: 0,
+                group_id: new.group_id,
                 created_at: now,
                 updated_at: now,
             })
@@ -190,6 +191,28 @@ impl Db {
             rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
         })
     }
+    /// 更新笔记所属组（v0.11.0 组化接线/改判移动共用；None=移出组）。
+    pub fn update_note_group(&self, id: i64, group_id: Option<i64>) -> Result<bool> {
+        self.with_conn(|conn| {
+            let affected = conn.execute(
+                "UPDATE notes SET group_id = ?1, updated_at = ?2 WHERE id = ?3",
+                params![group_id, unix_seconds(), id],
+            )?;
+            Ok(affected > 0)
+        })
+    }
+
+    /// 按组列出笔记（v0.11.0 组详情；按更新时间倒序）。
+    pub fn list_notes_by_group(&self, group_id: i64) -> Result<Vec<Note>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(&format!(
+                "SELECT {} FROM notes WHERE group_id = ?1 ORDER BY updated_at DESC",
+                NOTE_COLUMNS
+            ))?;
+            let rows = stmt.query_map(params![group_id], row_to_note)?;
+            rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+        })
+    }
 }
 
 /// 把 rusqlite 行映射为 Note。
@@ -207,6 +230,7 @@ fn row_to_note(row: &rusqlite::Row<'_>) -> rusqlite::Result<Note> {
         tags: row.get(9)?,
         properties: row.get(10)?,
         pin: row.get(11)?,
+        group_id: row.get(12)?,
     })
 }
 

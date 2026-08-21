@@ -122,6 +122,9 @@ pub struct Note {
     /// 固定标记（v0.10.0；0=未固定，1=固定）
     #[serde(default)]
     pub pin: i64,
+    /// 所属笔记组 id（v0.11.0 REQ-195；None=未归组/旧数据——不猜不填）
+    #[serde(default)]
+    pub group_id: Option<i64>,
     /// 创建时间（Unix 秒）
     pub created_at: i64,
     /// 更新时间（Unix 秒）
@@ -153,6 +156,58 @@ pub struct NewNote {
     /// 属性 JSON 对象（v0.10.0；扩展位，None=无）
     #[serde(default)]
     pub properties: Option<String>,
+    /// 所属笔记组 id（v0.11.0 REQ-195；前端可不传——组归属由组化接线写入）
+    #[serde(default)]
+    pub group_id: Option<i64>,
+}
+
+// ────────────────────────────────────────────────────────────
+// 笔记组类型（v0.11.0 REQ-195；v4 §7.4 统一产物层）
+// ────────────────────────────────────────────────────────────
+
+/// 笔记组（组是唯一容器；terrain 区分两种形成方式，v4 §7.4）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteGroup {
+    pub id: i64,
+    pub name: String,
+    /// 地形：container（结构在内容里）/ feed（结构在行为里）
+    pub terrain: String,
+    /// 组类别：course 课程组 / topic 主题组 / standalone 独立组
+    pub kind: String,
+    /// DomainKind kebab-case（主题组归组依据；None=未命中/课程组/独立组）
+    pub domain_tag: Option<String>,
+    /// 形成来源：route（路由）/ series（系列检测）/ manual（用户自建）
+    pub source: String,
+    /// series_detect 系列名（课程组幂等键；其余 None）
+    pub series_key: Option<String>,
+    /// 路由理由 JSON（REQ-198：命中信号明细，可见可改）
+    pub route_reason: Option<String>,
+    /// 用户改判标记（REQ-198：修改即记忆；0=自动路由，1=已改判）
+    #[serde(default)]
+    pub route_overridden: i64,
+    /// 组内笔记数（list 查询填充；单查为 0）
+    #[serde(default)]
+    pub note_count: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// 新建笔记组的入参（不含 id 与时间戳，由数据层填充）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct NewNoteGroup {
+    pub name: String,
+    pub terrain: String,
+    pub kind: String,
+    #[serde(default)]
+    pub domain_tag: Option<String>,
+    #[serde(default)]
+    pub source: String,
+    #[serde(default)]
+    pub series_key: Option<String>,
+    #[serde(default)]
+    pub route_reason: Option<String>,
 }
 
 // ────────────────────────────────────────────────────────────

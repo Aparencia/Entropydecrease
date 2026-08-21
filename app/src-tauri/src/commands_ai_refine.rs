@@ -268,6 +268,9 @@ pub fn ai_refine_apply(
         purify_stats: None,
         tags: None,
         properties: None,
+        // v0.11.0：精修基线笔记继承会话组归属（组化接线在会话转笔记链路写入，
+        // 精修新建基线同样归组——同会话同组，防组内资产漏登）
+        group_id: crate::note_group_assign::group_of_session(&state.db, session_id).ok().flatten(),
     };
     let note = state.db.create_note(&new).map_err(|e| e.to_string())?;
     // ② 精修版落库（新版本 ai-refine + 成本 meta）

@@ -69,6 +69,8 @@ mod chapter_detect;
 // v0.7.0 M1（REQ-104/132）：剪贴板信号（文本信号 + 图片直贴；内存态，arboard 轮询）
 mod clipboard_signal;
 mod commands;
+// v0.11.0（REQ-195~198）：笔记组命令层（列表/详情/自建/改判/移动）
+mod commands_groups;
 // 实时会话链路依赖 Windows 捕获 API（WASAPI/DXGI/COM），非 Windows 平台不编译（TD-027 修复）
 #[cfg(target_os = "windows")]
 mod commands_live;
@@ -101,6 +103,8 @@ mod db;
 // H3 拆分（db.rs 原 678 行硬拆）：schema 建表/列迁移 + notes 读写独立成块
 mod db_migrations;
 mod db_notes;
+// v0.11.0（REQ-195）：笔记组数据层（统一产物层唯一容器，v4 §7.4）
+mod db_note_groups;
 mod db_artifacts;
 // v0.7.7（REQ-183）：结构图记录存储——session_structure_images 表 CRUD
 mod db_structures;
@@ -129,6 +133,8 @@ mod frame_features;
 mod foreground_timeline;
 mod fusion;
 mod glossary;
+// v0.11.0（REQ-196）：结构密度路由纯函数（组路由三态，golden 用例先行）
+mod group_route;
 mod health_check;
 mod highlight_detect;
 mod idle_governor;
@@ -180,6 +186,8 @@ mod model_registry;
 mod note_filter;
 mod note_filter_ai;
 mod note_filter_discourse;
+// v0.11.0（REQ-197）：容器侧组化业务层（系列课程组 + 结构密度路由）
+mod note_group_assign;
 // v0.8.0 F1（REQ-141 丢图修复）：精修版配图本地合并降级（协议 v2 image 块兜底）
 mod note_image_merge;
 mod novelty;
@@ -321,6 +329,15 @@ pub fn run() {
             // v0.10.0：标签/固定管理
             commands::update_note_tags,
             commands::update_note_pin,
+            // v0.11.0（REQ-195~198）：笔记组——列表/详情/组内笔记/自建主题组/
+            // 重命名/路由改判（修改即记忆）/移动笔记
+            commands_groups::list_note_groups,
+            commands_groups::get_note_group,
+            commands_groups::list_group_notes,
+            commands_groups::create_topic_group,
+            commands_groups::rename_note_group,
+            commands_groups::override_group_route,
+            commands_groups::move_note_to_group,
             // 会话管理（REQ-010，ADR-004）
             commands_session::create_session,
             commands_session::finish_session,

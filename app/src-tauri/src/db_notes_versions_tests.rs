@@ -25,6 +25,7 @@ fn create_note(db: &Db, content: &str) -> i64 {
         purify_stats: None,
         tags: None,
         properties: None,
+        group_id: None,
     })
     .expect("建笔记")
     .id

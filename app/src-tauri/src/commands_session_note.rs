@@ -129,23 +129,6 @@ pub(crate) fn apply_note_structure_with_analysis(
     );
 }
 
-/// 构建规则草稿（REQ-081 单一管线三出口：预览/落库/AI 精修共用——
-/// 净化→配图→警示→结构渲染同函数同口径；v0.8.0 M2 提取供 ai_refine 任务
-/// 复用，保证 AI 精修的输入基线 = 规则版输出基线）。
-///
-/// @ai-context: 返回 NoteFilterResult（markdown 即规则版输出）；AI 精修任务
-///              在其上追加章节/术语上下文（analyze 另跑）后构建 AiRefineRequest。
-pub(crate) fn build_rule_draft(
-    db: &Db,
-    ui_junk: &UiJunkList,
-    env: &PurifyEnv,
-    data_dir: &std::path::Path,
-    id: i64,
-    title: Option<String>,
-) -> Result<NoteFilterResult, String> {
-    Ok(build_rule_draft_with_analysis(db, ui_junk, env, data_dir, id, title)?.0)
-}
-
 /// 构建规则草稿 + 结构分析（审查修复 2026-08-21：分析与结构渲染一次完成并
 /// 返回 analysis——AI 精修任务直接复用章节/术语，消除二次 analyze 双跑）。
 pub(crate) fn build_rule_draft_with_analysis(
@@ -193,10 +176,31 @@ fn convert_to_note(
     title: Option<String>,
     ai_decisions: Option<Vec<TextFilterDecision>>,
 ) -> Result<Note, String> {
-    let mut result = build_rule_draft(db, ui_junk, env, data_dir, id, title)?;
+    // v0.11.0：取草稿同时拿 analysis（章节/术语——结构密度路由信号，免二次分析）
+    let (mut result, analysis) =
+        build_rule_draft_with_analysis(db, ui_junk, env, data_dir, id, title)?;
     if let Some(decisions) = ai_decisions {
         result = apply_ai_decisions(result, &decisions);
     }
+    // v0.11.0（REQ-197）：容器侧组化——系列课程组/结构密度路由；组化失败
+    // 不阻断转笔记主链路（笔记先落库，group_id=None 诚实降级）
+    let group_id = match load_note_material(db, id) {
+        Ok((session, segments, ocr_blocks)) => {
+            match crate::note_group_assign::resolve_group_for_session(
+                db, &session, &analysis, &segments, &ocr_blocks,
+            ) {
+                Ok(gid) => Some(gid),
+                Err(e) => {
+                    eprintln!("[groups] 组化失败（笔记照常落库，未归组）: {e}");
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("[groups] 组化原料装载失败（笔记照常落库）: {e}");
+            None
+        }
+    };
     let new = NewNote {
         title: result.title.clone(),
         content: result.markdown.clone(),
@@ -207,6 +211,7 @@ fn convert_to_note(
         purify_stats: Some(serde_json::to_string(&result.stats).unwrap_or_default()),
         tags: None,
         properties: None,
+        group_id,
     };
     db.create_note(&new).map_err(|e| e.to_string())
 }

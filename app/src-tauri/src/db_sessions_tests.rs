@@ -117,6 +117,7 @@ fn list_sessions_marks_content_and_note() {
         purify_stats: None,
         tags: None,
         properties: None,
+        group_id: None,
     })
     .unwrap();
     // Act
@@ -286,6 +287,7 @@ fn session_notes_tables_coexist() {
         purify_stats: None,
         tags: None,
         properties: None,
+        group_id: None,
     });
     // Assert
     assert!(note.is_ok());

@@ -231,6 +231,7 @@ pub async fn save_draft_as_note(state: State<'_, AppState>, draft: NoteDraft) ->
         purify_stats: None,
         tags: None,
         properties: None,
+        group_id: None,
     };
     state.db.create_note(&new).map_err(|e| e.to_string())
 }
@@ -315,6 +316,7 @@ pub async fn process_to_note(
             purify_stats: None,
             tags: None,
             properties: None,
+            group_id: None,
         })
         .map_err(|e| e.to_string())
     })
@@ -325,6 +327,12 @@ pub async fn process_to_note(
 /// 手动新建笔记（REQ-004）。
 #[tauri::command]
 pub async fn create_note(state: State<'_, AppState>, new: NewNote) -> Result<Note, String> {
+    // v0.11.0 入参校验：指定组必须存在（外键拦截前置为可诊断错误）
+    if let Some(gid) = new.group_id {
+        if gid <= 0 || state.db.get_group(gid).map_err(|e| e.to_string())?.is_none() {
+            return Err(format!("指定的笔记组不存在: {}", gid));
+        }
+    }
     let new = NewNote {
         title: normalize_title(new.title, "未命名笔记"),
         content: truncate_chars(new.content, CONTENT_MAX_CHARS),
@@ -336,6 +344,8 @@ pub async fn create_note(state: State<'_, AppState>, new: NewNote) -> Result<Not
         purify_stats: None,
         tags: None,
         properties: None,
+        // v0.11.0：手动建笔记可直接指定组（组视图内新建；无效 id 由外键拦截）
+        group_id: new.group_id,
     };
     state.db.create_note(&new).map_err(|e| e.to_string())
 }
