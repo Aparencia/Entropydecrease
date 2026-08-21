@@ -1,7 +1,7 @@
 # 需求池
 
 > 熵减 (Entropydecrease) 项目需求的统一登记入口：需求 → 优先级 → 版本 → 实现 → 验收追踪。
-> 需求来源：痛点图谱 [pain-points.md](./pain-points.md) · PRD [prd.md](./prd.md)（MoSCoW）· 课堂助手路线图（原项目 P0-P2 映射）· 图像复用头脑风暴（2026-08-19）。
+> 需求来源：痛点图谱 [pain-points-v1.md（[ ] 已归档）](../archive/2026-08-21/pain-points-v1.md) · PRD [prd.md](./prd.md)（MoSCoW）· 课堂助手路线图（原项目 P0-P2 映射）· 图像复用头脑风暴（2026-08-19）。
 > **阶段划分（2026-08 确立）**：第一阶段 v0.1.0 聚焦"本地 ASR + 本地 OCR + 内容本地拼接 + 笔记基本功能 + 联动"，先跑通纯本地提取链路；**阶段顺序确认：实时捕获（v0.2.0）先于文件导入（v0.3.0）**；字幕检测（有字幕优先、无字幕才 ASR）随文件导入阶段落地。
 
 ## 需求条目
@@ -167,7 +167,7 @@
 ### v0.7.2 · 课堂助手实时体验深化（2026-08 用户需求批次）
 
 > 2026-08 用户需求：采集过程信息透明化 + 说话人切换可见 + 合集识别联动 + 断句自适应；
-> 设计依据 [档案检测准确度头脑风暴](../Foresight/brainstorming-video-profile-detection.md) · [视频数据提取清单](../Foresight/video-data-extraction-inventory.md) · [v0.7.2 版本文档](../versions/v0.7.2.md)。
+> 设计依据 [档案检测准确度头脑风暴（[ ] 已归档）](../archive/2026-08-21/brainstorming-video-profile-detection.md) · [视频数据提取清单](../Foresight/video-data-extraction-inventory.md) · [v0.7.2 版本文档](../versions/v0.7.2.md)。
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
 |----|------|--------|------|---------|------|
@@ -271,8 +271,8 @@
 
 ### v0.9.0 · 视频档案框架 v2（第九阶段，2026-08-21 头脑风暴定稿）
 
-> 设计依据：[video-profile-framework-v2.md（[ ] 待归档）](../Foresight/video-profile-framework-v2.md)——会话 33（动画科普）实证驱动，四维解耦重新设计；
-> 关联 [brainstorming-video-profile-detection.md（[ ] 待归档）](../Foresight/brainstorming-video-profile-detection.md)（v1 检测改进候选，v2 为其重新设计版）。
+> 设计依据：[video-profile-framework-v2.md（[ ] 已归档）](../archive/2026-08-21/video-profile-framework-v2.md)——会话 33（动画科普）实证驱动，四维解耦重新设计；
+> 关联 [brainstorming-video-profile-detection.md（[ ] 已归档）](../archive/2026-08-21/brainstorming-video-profile-detection.md)（v1 检测改进候选，v2 为其重新设计版）。
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
 |----|------|--------|------|---------|------|

@@ -156,3 +156,22 @@
 - **已偿 0 笔**：纯文档变更，无 Rust/前端代码改动
 - **新登记 open 0 笔**
 - **未偿 4 笔保持**（TD-040 / TD-2026-08-19-D/F/G）
+
+## 本批补充（十轮：日收工归档——v3 建设顺序分析沉淀 + docs-check 治理，2026-08-21）
+
+**归档判定**：本批无文档移入归档夹——`docs/superpowers/specs/2026-08-21-screen-ocr-value-and-display-no-design.md` 经核验未实施（display_no/屏序连续化等核心设计无代码落地），保持活跃；pain-points-v2/v3 并行生效持续活跃。
+
+**工作摘要**：
+- **v3 建设顺序分析沉淀**：新建 `docs/Foresight/v3-roadmap-build-order-analysis.md`（前瞻分析，待裁决）——pain-points-v3 Phase 1-4 ↔ 代码实态盘点（公共底座已建成属实；terrain/note_group/闪卡 SM-2/feed 进料口全部零代码）→ Step 0~7 建设顺序（先容器侧组化后 feed；间隔重复引擎为最大新建块；指标埋点与功能同批）+ 待裁决三项
+- **docs-check 治理（归档遗留修复）**：四/七轮归档后未同步的失效链接 10 处修复——Foresight README ×2 / long-term-optimization-inventory ×1 / mvp-canvas ×1 / prd ×2 / requirements-pool ×3（含待归档标注改已归档）/ v0.7.2 ×1，全部改指归档路径并标 `[ ] 已归档`
+- **假阳性根治**：docs-check.mjs extractLinks 补剔除围栏代码块/行内代码（代码示例中的 `](...)` 模式不再误判为链接），v0.10.1.md 第 58/74 行配图格式示例 5 处假阳性消除，文档原貌还原不动
+- **索引缺漏补登记**：product/README.md ×2（product-design-philosophy / note-design-philosophy）+ versions/README.md（v0.10.1 条目 + v0.10.0/0.10.2 状态同步）+ Foresight/README.md ×1（v3 分析文档登记）
+- **技术债滚动**：七轮代码批登记的 TD-2026-08-21-C（db 锁点 with_conn 迁移）随未提交代码批待提交；本轮未偿核验 5 笔保持
+
+**验证**：docs-check 门禁复验（提交前执行，结果见提交记录）
+
+**技术债摘要（本批）**：
+- **已偿 0 笔**：纯文档变更，无 Rust/前端代码改动
+- **新登记 open 0 笔**
+- **未偿 5 笔保持**（TD-040 / TD-2026-08-19-D/F/G / TD-2026-08-21-B）+ TD-2026-08-21-C 随七轮代码批待提交
+

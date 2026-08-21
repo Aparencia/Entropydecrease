@@ -14,6 +14,8 @@
 | [prd.md](./prd.md) | 怎么细化？产品需求文档（课堂助手为核心，MoSCoW + 场景 + 验收） | 草稿 |
 | [requirements-pool.md](./requirements-pool.md) | 怎么跟踪？需求 → 优先级 → 版本 → 实现 → 验收 | 维护中 |
 | [classroom-assistant-guide.md](./classroom-assistant-guide.md) | 怎么用？课堂助手使用说明（v0.7.2：信息面板/合集联动/说话人分离/断句自适应） | v0.7.2 维护中 |
+| [product-design-philosophy.md](./product-design-philosophy.md) | 为什么这样设计？产品设计理念：学习科学的工程化（顶层设计哲学与一致性逻辑） | 活跃 |
+| [note-design-philosophy.md](./note-design-philosophy.md) | 笔记是什么？笔记设计理念：活沉淀（Living Sediment，v0.10.0 定位依据） | 活跃 |
 | brand-story.md | 怎么说？品牌故事（名称裁决后建立） | 待建 |
 
 ## 产品方向（2026-08 确立）

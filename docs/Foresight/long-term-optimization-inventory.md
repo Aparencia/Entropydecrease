@@ -134,4 +134,4 @@ K2 测验 → REQ-097 测验引用图；E1 导出 → REQ-095 导出带图
 
 ## 关联
 
-- [需求池远期区段](../product/requirements-pool.md)（V1.0/V1.1+）· [机制摘要](brainstorming-classroom-assistant-mechanisms.md)（42 项候选+ROI）· [提取极限](brainstorming-no-cloud-ai-extraction-limit.md)（L1-L4）· [数据清单](video-data-extraction-inventory.md)（30 项）· [档案检测](brainstorming-video-profile-detection.md)（20 项）· [技术债台账](../archive/2026-08-20/tech-debt.md)
+- [需求池远期区段](../product/requirements-pool.md)（V1.0/V1.1+）· [机制摘要](brainstorming-classroom-assistant-mechanisms.md)（42 项候选+ROI）· [提取极限](brainstorming-no-cloud-ai-extraction-limit.md)（L1-L4）· [数据清单](video-data-extraction-inventory.md)（30 项）· [档案检测（[ ] 已归档）](../archive/2026-08-21/brainstorming-video-profile-detection.md)（20 项）· [技术债台账](../archive/2026-08-20/tech-debt.md)

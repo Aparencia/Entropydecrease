@@ -119,3 +119,37 @@ TD-2026-08-21-A：四轮已 close（clippy 9 个清偿），本次核验保持�
 TD-040（deliberate ffmpeg 体积权衡）· TD-2026-08-19-D/F/G（4 笔）：本次未涉及，保持。
 TD-2026-08-21-A：已 close（四轮），保持。
 TD-2026-08-21-B（v0.10.0 锚点断言过时）：本次实测仍失败（全量 16 项，含 v0.10.1 未提交代码 4 项），open 保持。
+
+## 七轮补充（三维复审 Rust/配置侧闭环修复批，2026-08-21）
+> 来源：三维复审修复清单（Rust/配置侧 12 项）；本批同步交付 deploy.sh REDISCLI_AUTH 修复、
+> process_to_note 文件级超时与白名单补齐、engine 超时排空、opener 移除、CSP img-src https:、ADR-017。
+> 验证：cargo build + cargo test（见交付批验证记录）
+
+### 新登记（open）
+
+| ID | 摘要 | 类型 |
+|----|------|------|
+| TD-2026-08-21-C | db_sessions.rs / db_ai_tasks.rs 等文件的 `lock().expect` 锁点尚未迁移至 db.rs::with_conn（毒锁恢复 + ROLLBACK 孤儿事务兜底口径）——with_conn 目前仅覆盖原 db.rs/db_notes.rs 范围；任持锁线程 panic 后其余文件仍会连锁 panic | 有意（分批收敛，风险面已限缩） |
+
+## 十轮补充（日收工归档：v3 建设顺序分析沉淀 + docs-check 治理，2026-08-21）
+> 来源：本轮归档批——pain-points-v3 代码建设顺序分析沉淀至 Foresight（待裁决）；
+> docs-check 治理：四/七轮归档遗留的失效链接修复（已归档文档引用改指归档路径）+ 索引缺漏补登记。
+> 验证：docs-check 门禁复验（结果见十轮 README）
+
+### 未偿核验（carried 保持，共 5 笔）
+
+| ID | 摘要 |
+|----|------|
+| TD-040 | bundle.resources 未含 ffmpeg（deliberate 有意不修：体积权衡）；本轮未涉及，保持 |
+| TD-2026-08-19-D | image_stream_store 已交付未接线（REQ-110/123/088）；本轮未涉及，保持 |
+| TD-2026-08-19-F | detect_pause_icon 暗底+中央亮内容可能误报暂停；本轮未涉及，保持 |
+| TD-2026-08-19-G | db_ocr_search 500 会话静默截断 + 图路径不校验存在性；本轮未涉及，保持 |
+| TD-2026-08-21-B | v0.10.0 时间戳锚点断言过时（全量 16 项）；本轮未涉及，保持 open |
+
+> 注：TD-2026-08-21-C（七轮新登记：db 锁点 with_conn 迁移未收敛）随七轮代码批提交后转 carried；本轮仅文档变更未涉及。
+
+### 今日已偿 / 新登记（open）
+
+- 已偿 0 笔（纯文档变更，无 Rust/前端代码改动）
+- 新登记 open 0 笔
+

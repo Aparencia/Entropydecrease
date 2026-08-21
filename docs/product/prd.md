@@ -9,7 +9,7 @@
 | 作者 | Aparencia |
 | 日期 | 2026-08-18 |
 | 状态 | 草稿 |
-| 关联文档 | [pain-points.md](./pain-points.md)（痛点图谱）· [mvp-canvas.md](./mvp-canvas.md)（MVP 画布） |
+| 关联文档 | [pain-points-v1.md（[ ] 已归档）](../archive/2026-08-21/pain-points-v1.md)（痛点图谱 v1，演进见 pain-points-v2/v3）· [mvp-canvas.md](./mvp-canvas.md)（MVP 画布） |
 
 ## 1. 概述
 
@@ -185,6 +185,6 @@
 
 - 竞品对标：参考原项目调研《课堂助手竞品差异化对比分析报告》（Otter / 讯飞听见 / 腾讯会议 / 通义听悟 / Notta，2026-08），重构区后续在 Foresight/ 沉淀
 - 课堂助手路线图：参考原项目《课堂助手可执行优化路线图》（P0 止血 → P1 核心体验 → P2 差异化），本 PRD 里程碑映射自该路线图
-- 科学依据：[pain-points.md](./pain-points.md) 四、科学基础索引（26 机制）
+- 科学依据：[pain-points-v1.md（[ ] 已归档）](../archive/2026-08-21/pain-points-v1.md) 四、科学基础索引（26 机制）
 - 用户调研数据：待建立（MVP 访谈后补充）
 - 原型/设计稿链接：待建立（UI 阶段）

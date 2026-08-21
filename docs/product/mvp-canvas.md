@@ -7,7 +7,7 @@
 | 产品名称 | 熵减 (Entropydecrease)（暂定） |
 | 日期 | 2026-08-18 |
 | 验证阶段 | 方案验证（问题已由痛点图谱 v1.0 系统化论证） |
-| 关联文档 | [pain-points.md](./pain-points.md)（47 痛点 + 26 科学机制）· [prd.md](./prd.md) |
+| 关联文档 | [pain-points-v1.md（[ ] 已归档）](../archive/2026-08-21/pain-points-v1.md)（47 痛点 + 26 科学机制）· [prd.md](./prd.md) |
 
 ---
 

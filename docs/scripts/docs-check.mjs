@@ -65,9 +65,12 @@ function collectMd(dir) {
 /** 提取 markdown 链接目标（忽略外部 URL/锚点/图片），区分相对与 file:// */
 function extractLinks(content) {
   const links = [];
+  // 先剔除围栏代码块与行内代码：代码示例中的 ](...) 模式不是真实链接，
+  // 不剔除会把配图格式示例等误判为失效链接（v0.10.1.md 实证，2026-08-21 十轮修复）
+  const stripped = content.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '');
   const re = /\[[^\]]*\]\(([^)]+)\)/g;
   let m;
-  while ((m = re.exec(content)) !== null) {
+  while ((m = re.exec(stripped)) !== null) {
     const target = m[1].trim();
     if (!target || target.startsWith('#')) continue;
     if (/^(https?:|mailto:|data:)/.test(target)) continue;
