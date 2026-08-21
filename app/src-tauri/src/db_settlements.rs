@@ -38,6 +38,9 @@ impl Db {
     }
 
     /// 碎片是否有闪卡绑定（归档候选判据：有卡碎片不进归档——学习循环资产）。
+    /// 登记豁免 dead_code：计划构建已改走 fragment_ids_with_cards 批量口径，
+    /// 单查接口留给后续单碎片操作面（单测消费中）。
+    #[allow(dead_code)]
     pub fn fragment_has_card(&self, fragment_id: i64) -> Result<bool> {
         self.with_conn(|conn| {
             let count: i64 = conn.query_row(
@@ -46,6 +49,18 @@ impl Db {
                 |r| r.get(0),
             )?;
             Ok(count > 0)
+        })
+    }
+
+    /// 有卡绑定的碎片 id 集合（审查修复 2026-08-22：结算计划批量判定替代
+    /// 逐碎片 fragment_has_card 的 N+1 查询——单条 SQL 全集）。
+    pub fn fragment_ids_with_cards(&self) -> Result<std::collections::HashSet<i64>> {
+        self.with_conn(|conn| {
+            let mut stmt =
+                conn.prepare("SELECT DISTINCT fragment_id FROM flashcards WHERE fragment_id IS NOT NULL")?;
+            let rows = stmt.query_map([], |r| r.get::<_, i64>(0))?;
+            let set: std::collections::HashSet<i64> = rows.collect::<rusqlite::Result<Vec<_>>>()?.into_iter().collect();
+            Ok(set)
         })
     }
 }

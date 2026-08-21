@@ -132,6 +132,24 @@ fn override_route_marks_and_updates() {
 }
 
 #[test]
+fn override_course_group_clears_series_key() {
+    // Arrange：课程组带系列键（审查修复回归：改判后系列键不得残留，
+    // 否则后续同系列会话经 find_group_by_series_key 误归入已改判的组）
+    let db = mem_db();
+    let mut course = group("零基础化妆");
+    course.kind = "course".to_string();
+    course.source = "series".to_string();
+    course.series_key = Some("零基础化妆".to_string());
+    let g = db.create_group(&course).expect("create");
+    // Act：改判为主题组
+    db.override_group_route(g.id, "topic", Some("beauty"), "用户改判").expect("override");
+    // Assert：系列键清空，系列查找不再命中
+    let fetched = db.get_group(g.id).expect("get").expect("exists");
+    assert_eq!(fetched.series_key, None);
+    assert!(db.find_group_by_series_key("零基础化妆").expect("find").is_none());
+}
+
+#[test]
 fn move_note_between_groups() {
     // Arrange
     let db = mem_db();

@@ -144,6 +144,10 @@ impl Db {
 
     /// 路由改判（REQ-198 修改即记忆）：覆盖 kind/domain_tag，reason 追加来源，
     /// route_overridden 置 1——后续自动路由不得覆盖用户裁决。
+    ///
+    /// @ai-context: 审查修复（2026-08-22）：改判为非课程组时同步清空 series_key——
+    /// 残留的系列键会让后续同系列会话经 find_group_by_series_key 误归入
+    /// 已被改判的组（路由误判 ★★★★ 死法的改判侧漏洞）。
     pub fn override_group_route(
         &self,
         id: i64,
@@ -154,7 +158,9 @@ impl Db {
         self.with_conn(|conn| {
             let affected = conn.execute(
                 "UPDATE note_groups SET kind = ?1, domain_tag = ?2, route_reason = ?3,
-                 route_overridden = 1, updated_at = ?4 WHERE id = ?5",
+                 route_overridden = 1,
+                 series_key = CASE WHEN ?1 = 'course' THEN series_key ELSE NULL END,
+                 updated_at = ?4 WHERE id = ?5",
                 params![kind, domain_tag, reason, unix_seconds(), id],
             )?;
             Ok(affected > 0)

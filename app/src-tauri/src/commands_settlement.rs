@@ -96,8 +96,14 @@ pub fn execute_settlement(
             }
         }
     }
-    // 核心提炼：组核心笔记（本地规则——笔记目录 + 碎片摘要，落组内）
-    let core_note_id = create_core_note(&state_clone, group_id)?;
+    // 核心提炼：组核心笔记（本地规则——笔记目录 + 碎片摘要，落组内）。
+    // 审查修复（2026-08-22）：无合并无归档的空转结算不产核心笔记——
+    // 防反复点击结算刷出重复笔记（仪式留痕靠 settlements 记录即可）。
+    let core_note_id = if merged > 0 || archived > 0 {
+        create_core_note(&state_clone, group_id)?
+    } else {
+        None
+    };
     // 留痕：结算记录 + 北极星埋点（组成③经历过结算）
     let stats = serde_json::json!({
         "merged": merged, "archived": archived, "coreNoteId": core_note_id,
@@ -144,9 +150,11 @@ fn settlement_plan_inner(state: &AppState, group_id: i64) -> Result<SettlementPl
         })
         .collect();
     let age_cutoff = now_secs - ARCHIVE_AGE_DAYS * 86_400;
+    // 审查修复（2026-08-22）：有卡绑定判定改单条 SQL 全集（替代逐碎片 N+1）
+    let card_bound = state.db.fragment_ids_with_cards().map_err(|e| e.to_string())?;
     let mut archive_candidates = Vec::new();
     for f in &fragments {
-        if f.created_at < age_cutoff && !state.db.fragment_has_card(f.id).map_err(|e| e.to_string())? {
+        if f.created_at < age_cutoff && !card_bound.contains(&f.id) {
             archive_candidates.push(ArchiveCandidateView { id: f.id, text: f.text.clone() });
         }
     }
