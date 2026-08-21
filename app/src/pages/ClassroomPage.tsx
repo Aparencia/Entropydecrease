@@ -14,26 +14,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { WindowSelectCard } from "../components/WindowSelectCard";
 import VideoImportPanel from "../components/VideoImportPanel";
-import { OcrDeviceSetting } from "../components/OcrDeviceSetting";
-// TD-2026-08-19-E 清偿：模型磁盘占用面板（REQ-131 命令前端接入）
-import ModelDiskPanel from "../components/ModelDiskPanel";
-// TD-2026-08-20-H 清偿：音频落盘状态与清理入口
-import AudioStoragePanel from "../components/AudioStoragePanel";
-// TD-2026-08-20-G 清偿：数据备份/恢复（REQ-107 TRUST-1）
-import BackupPanel from "../components/BackupPanel";
-// v0.7.0 M1（REQ-101）：音频预处理链开关（CER 微基准定默认后的用户通道）
-import { AudioPreprocSetting } from "../components/AudioPreprocSetting";
+// 2026-08-21 用户需求：设置类面板迁出至设置页（模型/音频/AI/数据/词表）
 // 2026-08 A2：实时音频电平条（VU 表——试听自检实时化）
 import AudioLevelMeter from "../components/AudioLevelMeter";
 // 2026-08 C1：引擎与模型就绪清单（开始前准备流——聚合现有只读命令）
 import ReadyCheckCard from "../components/ReadyCheckCard";
-import { VocabManager } from "../components/VocabManager";
 import { SystemStatusBadge } from "../components/SystemStatusBadge";
-// 2026-08-20 用户需求：模型管理面板（原结构分析模型改名，覆盖全部模型）
-import ModelManagementPanel from "../components/ModelManagementPanel";
-import AiServicePanel from "../components/AiServicePanel";
-// v0.8.0 F2（2026-08-21）：AI 任务中心面板（历史/恢复/采纳复核）
-import AiTaskPanel from "../components/AiTaskPanel";
 // 2026-08 审查硬拆：右栏内容区 / 文件素材输入与提取
 import ClassroomRightPane from "../components/ClassroomRightPane";
 import MaterialInputPanel from "../components/MaterialInputPanel";
@@ -527,45 +513,8 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
           {/* 视频文件导入（v0.3.0：REQ-015 第二入口，字幕优先 + ASR fallback） */}
           <VideoImportPanel />
 
-          {/* OCR 推理设备（v0.4.0 M1：REQ-036，ADR-009：CUDA 卸载/回退可观测/重新检测） */}
-          <div style={panel}>
-            <OcrDeviceSetting />
-          </div>
-
-          {/* 音频预处理链（v0.7.0 M1：REQ-101——CER 微基准定默认后的用户开关） */}
-          <div style={panel}>
-            <AudioPreprocSetting />
-            {/* TD-2026-08-20-H 清偿：音频落盘状态与清理入口（REQ-068 承诺兑现） */}
-            <AudioStoragePanel />
-          </div>
-
-          {/* TD-2026-08-20-G 清偿：数据备份/恢复（REQ-107 TRUST-1 能力可达化） */}
-          <div style={panel}>
-            <BackupPanel />
-          </div>
-
-          {/* v0.8.0 M1（REQ-138/139/140）：AI 服务使能层——密钥管理（DPAPI 安全
-              存储）/余额查询/授权默认关+审计可见化 */}
-          <div style={panel}>
-            <AiServicePanel />
-            {/* v0.8.0 F2（2026-08-21）：AI 任务中心——历史持久化/重启恢复/采纳复核 */}
-            <div style={{ marginTop: 8 }}>
-              <AiTaskPanel />
-            </div>
-          </div>
-
-          {/* 词表管理（v0.4.0 M5：REQ-040：热词/替换词闭环 + 课件预热） */}
-          <div style={panel}>
-            <VocabManager />
-          </div>
-
-          {/* 模型管理（2026-08-20 用户需求：原结构分析模型面板改名并覆盖全部模型——
-              转写/说话人/标点/OCR/结构，按需下载、未下载自动降级） */}
-          <div style={panel}>
-            <ModelManagementPanel />
-            {/* TD-2026-08-19-E 清偿：模型磁盘占用面板（REQ-131 命令前端接入） */}
-            <ModelDiskPanel />
-          </div>
+          {/* 2026-08-21 用户需求：OCR 设备/音频预处理/备份/AI 服务/词表/模型管理等
+              设置类面板已迁出至「⚙ 设置」页——课堂助手左栏仅保留采集动线 */}
 
           {/* 素材输入 + 提取按钮（v0.1.0 文件流水线；审查硬拆——MaterialInputPanel） */}
           <MaterialInputPanel

@@ -16,15 +16,18 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import ClassroomPage from "./pages/ClassroomPage";
 import NotesPage from "./pages/NotesPage";
 import SessionsPage from "./pages/SessionsPage";
+// 2026-08-21 用户需求：设置页（课堂助手设置类面板迁出，单页滚动+分组）
+import SettingsPage from "./pages/SettingsPage";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import type { AiTaskState } from "./types";
 
-type Page = "classroom" | "sessions" | "notes";
+type Page = "classroom" | "sessions" | "notes" | "settings";
 
 const NAV_ITEMS: { key: Page; label: string }[] = [
   { key: "classroom", label: "📡 课堂助手" },
   { key: "sessions", label: "🗂 会话" },
   { key: "notes", label: "📝 笔记" },
+  { key: "settings", label: "⚙ 设置" },
 ];
 
 function App() {
@@ -247,6 +250,10 @@ function App() {
               setPage("sessions");
             }}
           />
+        </div>
+        <div style={{ flex: 1, display: page === "settings" ? "block" : "none", overflow: "hidden" }}>
+          {/* 2026-08-21：设置页（保留挂载——面板状态不因切页重置；TD-004 同模式） */}
+          <SettingsPage />
         </div>
       </main>
       </div>
