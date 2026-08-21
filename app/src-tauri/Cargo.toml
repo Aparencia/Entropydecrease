@@ -78,6 +78,9 @@ zip = "2"
 # arboard 3.x 在 Windows 用 clipboard-win 实现，无额外系统依赖
 arboard = "3"
 fsrs = { version = "6.6.1", default-features = false }
+# v0.11.1 审查修复：碎片图片 IPC 传输改 base64（原数字数组序列化 10MB 图≈35MB JSON，
+# 剪贴板捕获卡顿）；版本已在依赖树锁内（零新增下载）
+base64 = "0.22"
 
 [dev-dependencies]
 tempfile = "3"

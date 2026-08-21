@@ -59,6 +59,17 @@ interface Props {
   onOpenReview: (groupId: number | null, groupName: string) => void;
 }
 
+/** Blob → base64（分块转换——大截图防 String.fromCharCode 栈溢出） */
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  let bin = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < buf.length; i += CHUNK) {
+    bin += String.fromCharCode(...buf.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
+}
+
 export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selectedNoteId, onChanged, onOpenReview }: Props) {
   const [groups, setGroups] = useState<NoteGroup[]>([]);
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -94,10 +105,12 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
   }, [load]);
 
   // ── 碎片捕获（feed 进料口；后端二次校验开关）──
+  // 审查修复（2026-08-22）：图片改 base64 传输（原数字数组序列化 10MB 图≈35MB
+  // JSON 卡顿）；分块 btoa 防大图一次性转换栈溢出。
   const runCapture = async (source: "manual" | "clipboard") => {
     try {
       let text = fragText.trim();
-      let imageBytes: number[] | null = null;
+      let imageB64: string | null = null;
       if (source === "clipboard") {
         // 剪贴板优先：文本+图片一次捕获（REQ-132 预留兑现）
         const clipText = await navigator.clipboard.readText().catch(() => "");
@@ -107,16 +120,16 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
           const imgType = item.types.find((t) => t.startsWith("image/"));
           if (imgType) {
             const blob = await item.getType(imgType);
-            imageBytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
+            imageB64 = await blobToBase64(blob);
             break;
           }
         }
       }
-      if (!text && !imageBytes) {
+      if (!text && !imageB64) {
         setStatus("请输入碎片内容或复制剪贴板后再捕获");
         return;
       }
-      await invoke("capture_fragment", { text, imageBytes, source });
+      await invoke("capture_fragment", { text, imageB64, source });
       setFragText("");
       setStatus("");
       await load(); // 可能新建 feed 主题组——刷新组列表

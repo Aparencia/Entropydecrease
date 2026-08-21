@@ -45,16 +45,19 @@ pub fn set_feature_flag(
     Ok(value)
 }
 
-/// 碎片快速捕获（feed 进料口；文本 + 可选图片字节）。
+/// 碎片快速捕获（feed 进料口；文本 + 可选 base64 图片）。
 ///
-/// @ai-context: 流程——开关准入 → 文本校验 → 图片解码验证落盘 →
+/// @ai-context: 流程——开关准入 → 文本/图片至少一项 → 图片解码验证落盘 →
 ///              DomainTag 检测 → feed 主题组查/建 → 碎片落库。
 ///              图片失败不阻断文本捕获（诚实降级：纯文本碎片）。
+/// @ai-context: 审查修复（2026-08-22）：① 图片改 base64 传输——原 Vec<u8>
+///              数字数组序列化 10MB 图≈35MB JSON，剪贴板捕获卡顿；② 纯图片
+///              捕获不再被空文本检查拒绝（text 占位"（图片碎片）"保列表可读）。
 #[tauri::command]
 pub async fn capture_fragment(
     state: State<'_, AppState>,
     text: String,
-    image_bytes: Option<Vec<u8>>,
+    image_b64: Option<String>,
     source: Option<String>,
 ) -> Result<Fragment, String> {
     // 开关准入（后端不信前端隐藏——v4 §11.3 默认关纪律）
@@ -65,17 +68,18 @@ pub async fn capture_fragment(
         }
     }
     let text: String = text.trim().chars().take(FRAGMENT_TEXT_MAX).collect();
-    if text.is_empty() {
-        return Err("碎片内容不能为空".to_string());
+    let has_image = image_b64.as_deref().map(|s| !s.trim().is_empty()).unwrap_or(false);
+    if text.is_empty() && !has_image {
+        return Err("碎片内容不能为空（文本或图片至少一项）".to_string());
     }
     let source = match source.as_deref() {
         Some("clipboard") => "clipboard".to_string(),
         _ => "manual".to_string(),
     };
-    // 图片：解码验证 + 统一转 PNG 落盘（白名单格式由解码器把关）
-    let image_path = match image_bytes {
-        Some(bytes) if !bytes.is_empty() => {
-            match save_fragment_image(&state.data_dir, &bytes) {
+    // 图片：base64 解码 + 解码器验证 + 统一转 PNG 落盘（白名单格式由解码器把关）
+    let image_path = match image_b64 {
+        Some(b64) if !b64.trim().is_empty() => {
+            match decode_and_save_fragment_image(&state.data_dir, &b64) {
                 Ok(rel) => Some(rel),
                 Err(e) => {
                     // 图片失败不阻断文本捕获（降级为纯文本碎片，留日志线索）
@@ -86,6 +90,8 @@ pub async fn capture_fragment(
         }
         _ => None,
     };
+    // 纯图片碎片：text 占位保列表/卡片可读（NOT NULL 约束 + UI 诚实呈现）
+    let text = if text.is_empty() { "（图片碎片）".to_string() } else { text };
     // DomainTag 自动归组（detect_domain 标题词路径——碎片文本即判据源）
     let detection = detect_domain(&DomainSignals {
         title: Some(text.clone()),
@@ -138,11 +144,22 @@ pub fn list_group_fragments(state: State<'_, AppState>, group_id: i64) -> Result
     state.db.list_fragments_by_group(group_id).map_err(|e| e.to_string())
 }
 
-/// 解码验证并落盘碎片图片（返回 fragments/ 下相对路径）。
+/// base64 解码 + 解码验证并落盘碎片图片（返回 fragments/ 下相对路径）。
 ///
 /// @ai-context: image::load_from_memory 把关格式白名单（png/jpeg/webp/gif/bmp…
 ///              解码器支持集）；统一转 PNG 存储（前端展示口径单一）；
-///              超限字节数前置拒绝（解码前，省 CPU）。
+///              base64 解码失败前置拒绝（可诊断错误，不落盘垃圾）。
+fn decode_and_save_fragment_image(data_dir: &std::path::Path, b64: &str) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(b64.trim())
+        .map_err(|e| format!("图片 base64 解码失败: {}", e))?;
+    save_fragment_image(data_dir, &bytes)
+}
+
+/// 解码验证并落盘碎片图片（字节入口；返回 fragments/ 下相对路径）。
+///
+/// @ai-context: 超限字节数前置拒绝（解码前，省 CPU）。
 fn save_fragment_image(data_dir: &std::path::Path, bytes: &[u8]) -> Result<String, String> {
     if bytes.len() > FRAGMENT_IMAGE_MAX_BYTES {
         return Err(format!("图片超限（上限 {} MB）", FRAGMENT_IMAGE_MAX_BYTES / 1024 / 1024));

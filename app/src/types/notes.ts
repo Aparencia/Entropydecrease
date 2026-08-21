@@ -107,6 +107,25 @@ export interface NoteGroup {
 }
 
 // ────────────────────────────────────────────────────────────
+// 碎片类型（v0.11.1 feed 原料层；Rust Fragment camelCase 契约）
+// ────────────────────────────────────────────────────────────
+
+/** 碎片（feed 地形原料；不是笔记，身份诚实——v4 契约） */
+export interface Fragment {
+  id: number;
+  text: string;
+  /** 图片相对路径（fragments/ 下；null=纯文本碎片） */
+  imagePath: string | null;
+  domainTag: string | null;
+  groupId: number | null;
+  /** manual / clipboard */
+  source: string;
+  /** active / archived（v0.11.3 结算归档） */
+  status: string;
+  createdAt: number;
+}
+
+// ────────────────────────────────────────────────────────────
 // 闪卡类型（v0.11.2 学习循环统一；Rust Flashcard camelCase 契约）
 // ────────────────────────────────────────────────────────────
 
