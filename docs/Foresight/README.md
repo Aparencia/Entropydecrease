@@ -20,6 +20,8 @@
 | [brainstorming-video-profile-detection.md](./brainstorming-video-profile-detection.md) | 档案自动检测准确度头脑风暴（2026-08：根因代码级定位（仅标题信号在生效/关键词重叠/无负证据/无反馈闭环）+ 20 项候选 + 三批落地建议） |
 | [video-data-extraction-inventory.md](./video-data-extraction-inventory.md) | 视频可提取数据清单（2026-08：音/字/图/构/行/产六层 30 项，逐项标注已投入/未接线/未实现） |
 | [video-profile-framework-v2.md](./video-profile-framework-v2.md) | 视频档案框架 v2 设计（2026-08-21：会话 33 实证驱动，四维解耦重新设计——形态 7 类 × 画面价值 4 档 × 领域标签 × 语言预留 + 叙事变体；已排期 v0.9.0 REQ-188~193） |
+| [long-term-optimization-inventory.md](./long-term-optimization-inventory.md) | 长期优化清单——全面调研汇总（2026-08-20：六源合并，v0.8.0 AI 线之后批次的排期输入） |
+| [long-term-optimization-checklist.md](./long-term-optimization-checklist.md) | 长期优化完整清单——规则/阈值/词表持续校准项（2026-08-20：代码↔文档↔git 三方核验；与 inventory 互补） |
 | [brainstorming-classroom-assistant-gaps.md（[ ] 已归档）](../archive/2026-08-19/brainstorming-classroom-assistant-gaps.md) | 课堂助手缺口评估：提取 / 性能 / 算法 / 体验 四维头脑风暴（2026-08：50 项机制评估；§9 裁决 22 项已排期 v0.6.0 → REQ-059~080；未选与远期项保留于归档副本待议） |
 | [brainstorming-video-types.md（[ ] 已归档）](../archive/2026-08-19/brainstorming-video-types.md) | 视频类型 × 提取优化 × 图片配套 × 结构预处理 × 产物形态 × 补缝式 AI 头脑风暴（2026-08-18：六轮，已采纳进 v0.5.0；2026-08-19 归档） |
 | [2026-08-19-ocr-trigger-redesign.md（[ ] 已归档）](../archive/2026-08-19/2026-08-19-ocr-trigger-redesign.md) | OCR 触发重做与 UI 面板抑制设计规格（2026-08-19：ADR-011/REQ-086/087 已实施 M1-M3，659 单测全绿，M4 真机验收待执行；2026-08-19 归档） |
