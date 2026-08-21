@@ -97,3 +97,20 @@
 - **未偿保持 4 笔**（TD-040 / TD-2026-08-19-D/F/G）；TD-2026-08-21-A 保持已偿（四轮 close）
 - **观察项 +1**：卸载自动保存与在飞保存乱序（低概率，保持跟踪）
 
+
+## 六轮补充（v0.10.2 结构图准确性重构，2026-08-21）
+
+**归档判定**：本批无文档归档——`docs/versions/v0.10.2.md` 为活跃版本规划（代码已实施未发布，versions/ 不归档）；Foresight 全部文档活跃或已归档；screen-ocr spec 未实施完成。
+
+**归档摘要**：
+
+- **v0.10.2 结构图机制重构**：取消会话停止时的逐屏自动捕获（会话 33 实测 50%+ 结构图围绕字幕）；改为图库「分析参考图集」手动一键，直扫 full/ 全部归档帧；`decide_keep` 四层过滤（L3 位置约束 → L0 字幕块重叠拦截 → L1 版面类型 → L2 OCR 置信度反向信号）；删除 edge_energy/pick_sharpest/frame_candidates 旧管线死代码；`CaptureSummary.screens_scanned → images_scanned`；前端文案与事件同步（StructureImageSection）。
+- **审查即修 2 项**：H1（L2 重叠判据过宽 → overlap_ratio ≥30% + 回归测试）/ M1（screen_id 语义注释同步）
+- **验证**：structure_detect 14 + structure_capture 10 单测全绿；clippy 本次改动零警告；前端 tsc 通过
+
+## 技术债摘要（本轮）
+
+- **即修 2 笔**：审查 H1（L2 重叠判据）/ M1（screen_id 注释同步）
+- **新登记 open 0 笔**：七维审查无遗留
+- **未偿 4 笔保持**：TD-040 / TD-2026-08-19-D/F/G（TD-2026-08-21-A 已 close，TD-2026-08-21-B open 保持——锚点断言过时实测 16 项仍失败）
+- **观察项 +3**：O(n²) 窗口扫描 / budgetExhausted 前端无提示 / _frame_w 冗余参数
