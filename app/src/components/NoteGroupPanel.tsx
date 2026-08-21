@@ -27,6 +27,15 @@ function kindBadge(kind: string): { label: string; color: string } {
   return { label: "📄 独立", color: "#6b7280" };
 }
 
+/** 结算计划（v0.11.3；仪式第一步——呈现沼泽全貌） */
+interface SettlementPlan {
+  itemCount: number;
+  due: boolean;
+  lastSettledAt: number | null;
+  mergePairs: { keepId: number; dropId: number; keepText: string; dropText: string }[];
+  archiveCandidates: { id: number; text: string }[];
+}
+
 /** 解析路由理由 JSON（损坏防御性回退空对象）。 */
 export function parseRouteReason(raw: string | null): GroupRouteReason {
   if (!raw) return {};
@@ -62,6 +71,8 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
   // 改判表单态（展开区消费）
   const [overrideKind, setOverrideKind] = useState("standalone");
   const [overrideDomain, setOverrideDomain] = useState("");
+  // v0.11.3：结算计划态（展开区仪式）
+  const [settlePlan, setSettlePlan] = useState<SettlementPlan | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -155,6 +166,32 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
     }
   };
 
+  // ── v0.11.3：组结算仪式（先呈现计划，用户确认后执行）──
+  const runSettlementPlan = async (g: NoteGroup) => {
+    try {
+      const plan = await invoke<SettlementPlan>("settlement_plan", { groupId: g.id });
+      setSettlePlan(plan);
+      setStatus("");
+    } catch (e) {
+      setStatus(`结算计划失败: ${e}`);
+    }
+  };
+
+  const runExecuteSettlement = async (g: NoteGroup) => {
+    try {
+      const r = await invoke<{ merged: number; archived: number; coreNoteId: number | null }>(
+        "execute_settlement",
+        { groupId: g.id, applyMerges: true, applyArchives: true },
+      );
+      setSettlePlan(null);
+      setStatus(`结算完成：合并 ${r.merged} 条重复、归档 ${r.archived} 条低价值，已生成核心提炼笔记`);
+      await load();
+      onChanged();
+    } catch (e) {
+      setStatus(`结算执行失败: ${e}`);
+    }
+  };
+
   return (
     <div style={{ width: 230, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "10px 12px", borderBottom: "1px solid #e5e7eb", fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
@@ -231,7 +268,7 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
                   </span>
                   <span style={{ fontSize: 11, color: "#9ca3af" }}>{g.noteCount}</span>
                   <span
-                    onClick={(e) => { e.stopPropagation(); setExpandedId(expanded ? null : g.id); setOverrideKind(g.kind); setOverrideDomain(g.domainTag ?? ""); }}
+                    onClick={(e) => { e.stopPropagation(); setExpandedId(expanded ? null : g.id); setOverrideKind(g.kind); setOverrideDomain(g.domainTag ?? ""); setSettlePlan(null); }}
                     style={{ fontSize: 11, color: "#6b7280", cursor: "pointer", padding: "0 3px" }}
                     title="路由详情/改判"
                   >
@@ -292,6 +329,12 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
                       style={{ fontSize: 11, cursor: "pointer", padding: "2px 8px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>
                       🎴 复习本组
                     </button>
+                    {/* v0.11.3：组结算入口（防沼泽仪式） */}
+                    <button onClick={() => void runSettlementPlan(g)}
+                      style={{ fontSize: 11, cursor: "pointer", padding: "2px 8px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}
+                      title="对账本组：提炼核心/合并重复/归档低价值">
+                      🧹 结算
+                    </button>
                     {selectedNoteId != null && (
                       <>
                         <button onClick={() => void runMove(g.id)}
@@ -305,6 +348,32 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
                       </>
                     )}
                   </div>
+                  {/* v0.11.3：结算计划呈现（仪式第一步：看见沼泽全貌再动手） */}
+                  {settlePlan && (
+                    <div style={{ marginTop: 8, padding: 8, background: "#fff", borderRadius: 6, border: "1px solid #e5e7eb" }}>
+                      <div style={{ fontWeight: 600, color: "#374151", marginBottom: 4 }}>
+                        结算计划 · 共 {settlePlan.itemCount} 条目
+                        {settlePlan.due && <span style={{ color: "#b45309", marginLeft: 6 }}>⚠ 建议结算</span>}
+                      </div>
+                      <div style={{ color: "#6b7280" }}>重复合并：{settlePlan.mergePairs.length} 对（保留长文本，归档短重复）</div>
+                      {settlePlan.mergePairs.slice(0, 3).map((p) => (
+                        <div key={p.dropId} style={{ color: "#9ca3af", paddingLeft: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          「{p.keepText.slice(0, 18)}…」⇐「{p.dropText.slice(0, 18)}…」
+                        </div>
+                      ))}
+                      <div style={{ color: "#6b7280", marginTop: 2 }}>低价值归档：{settlePlan.archiveCandidates.length} 条（老化且无卡绑定，可恢复）</div>
+                      <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
+                        <button onClick={() => void runExecuteSettlement(g)}
+                          style={{ fontSize: 11, cursor: "pointer", padding: "2px 10px", borderRadius: 4, border: "1px solid #0f766e", background: "#f0fdfa", color: "#0f766e" }}>
+                          ✓ 执行结算（含核心提炼）
+                        </button>
+                        <button onClick={() => setSettlePlan(null)}
+                          style={{ fontSize: 11, cursor: "pointer", padding: "2px 8px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
