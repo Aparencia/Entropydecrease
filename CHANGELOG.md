@@ -3,6 +3,238 @@
 本项目所有值得关注的变更都会记录在此文件中。
 版本号遵循 [语义化版本 SemVer](https://semver.org/lang/zh-CN/)，提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)。
 
+## [0.42.0](https://github.com/Aparencia/Entropydecrease/compare/v0.41.0...v0.42.0) (2026-08-17)
+
+### ✨ 新功能
+
+* **ai-gateway:** webhook 支付确认后自动绑定用户（支付→激活闭环） ([6a1d8b8](https://github.com/Aparencia/Entropydecrease/commit/6a1d8b863c44117144eb844328c99c28d6a1cb56))
+
+### 🐛 缺陷修复
+
+* **ci:** build-apk checkout 启用 Git LFS——TWA 资源 PNG 为 LFS 文件，未拉取致 AAPT2 编译失败 ([30bcb90](https://github.com/Aparencia/Entropydecrease/commit/30bcb90ddda7b1b0e5fb3ef3543ed6f153505895))
+
+## [0.41.0](https://github.com/Aparencia/Entropydecrease/compare/v0.40.1...v0.41.0) (2026-08-17)
+
+### ✨ 新功能
+
+* **ai-gateway:** 新增套餐列表 API GET /api/v1/license/plans ([e7b47cf](https://github.com/Aparencia/Entropydecrease/commit/e7b47cf63ea208129af28df89e45c180242f9e7a))
+
+### 🐛 缺陷修复
+
+* **ai-gateway:** 修复 BUDGET_DAILY_TOKEN_LIMIT 默认 0 导致全站 429 ([ed72bf0](https://github.com/Aparencia/Entropydecrease/commit/ed72bf08f5b6fa982b2993aefad8767457bb3864))
+* **android:** gradlew 添加可执行位——CI bubblewrap build 权限拒绝根因 ([9a66ee4](https://github.com/Aparencia/Entropydecrease/commit/9a66ee467e9b2074a15d0f6ae8166430442cb65b))
+
+## [0.40.1](https://github.com/Aparencia/Entropydecrease/compare/v0.40.0...v0.40.1) (2026-08-17)
+
+### 🐛 缺陷修复
+
+* **ci:** bubblewrap 构建链路三处交互/参数修复——APK 下载 404 根因 ([18c9d09](https://github.com/Aparencia/Entropydecrease/commit/18c9d097af35349365760a70fbe39b319ca7f94b))
+
+## [0.40.0](https://github.com/Aparencia/Entropydecrease/compare/v0.39.0...v0.40.0) (2026-08-16)
+
+### ✨ 新功能
+
+* **android:** TWA 工程生成（com.entropydecrease.twa）+ CI 签名 alias/APK 重命名对齐 ([8e2f68c](https://github.com/Aparencia/Entropydecrease/commit/8e2f68c10ed88460076c3d99cf4e7dbe108e860e))
+* **pwa:** 官网 iOS 跳转链接 + PWA 部署 CDN 预热 ([002b992](https://github.com/Aparencia/Entropydecrease/commit/002b9923dbafa44bf4b536a9fdec7953ccdee3b6))
+
+## [0.39.0](https://github.com/Aparencia/Entropydecrease/compare/v0.38.0...v0.39.0) (2026-08-16)
+
+### ✨ 新功能
+
+* **pwa:** 移动端下载 A+B（iOS 安装引导 + Android TWA APK 构建/官网下载入口） ([6d7fe72](https://github.com/Aparencia/Entropydecrease/commit/6d7fe72e6ba56dc3c323a037fba28cf36b83bd54))
+
+## [0.38.0](https://github.com/Aparencia/Entropydecrease/compare/v0.37.0...v0.38.0) (2026-08-16)
+
+### ✨ 新功能
+
+* **ai:** AI 配额常驻显示与 429 全局提示（标题栏胶囊/用量卡增强/quotaStore） ([5312345](https://github.com/Aparencia/Entropydecrease/commit/5312345d9ff73324903a2985b603422bbdf0f03d))
+* **classroom:** P0-1 识别评估基线工具（CER + 热词命中率 + 语料规范） ([d72b920](https://github.com/Aparencia/Entropydecrease/commit/d72b920f62a324305e024ec45b3c8921004999e5))
+* **classroom:** P0-2 Silero VAD 升级（主进程 onnxruntime + 渲染精判集成） ([8d28984](https://github.com/Aparencia/Entropydecrease/commit/8d28984613099a7fbe1ba6d0816f7e723d04d596))
+* **classroom:** P0-3 真实置信度与低置信度质量门控 ([6652b7f](https://github.com/Aparencia/Entropydecrease/commit/6652b7ff67722a0aa8e33b946f00f05b0a60c417))
+* **classroom:** P0-7 识别统计条（引擎徽标+帧数+句数+VAD状态） ([980ea39](https://github.com/Aparencia/Entropydecrease/commit/980ea39e8630b71845cd7857369137604a607f31))
+* **classroom:** P1-1 两遍重打分（SenseVoice 整句复核） ([6ea6f0e](https://github.com/Aparencia/Entropydecrease/commit/6ea6f0ed92e93bdcc8be2690d7ffc510577409c6))
+* **classroom:** P1-2 动态热词闭环 + P1-3 修正回写 + P1-8 漏捕检测/手动补截 ([9a52e84](https://github.com/Aparencia/Entropydecrease/commit/9a52e84bd83403be02dadaca23cf9f3334366c2d))
+* **classroom:** P1-4 说话人手动重识别 + P1-5 中英混说 spike ([3296c4d](https://github.com/Aparencia/Entropydecrease/commit/3296c4dd6be1bef264a20a20438b942bb0b43bb9))
+* **classroom:** P1-6 内容类型感知 + P1-7 指令句补帧 + P1-9 实时截图流 ([45caf98](https://github.com/Aparencia/Entropydecrease/commit/45caf98960920dd0d1aa74bf5941eb54a7d2a710))
+* **classroom:** P2-1 本地OCR完整实现（PP-OCRv5 det/rec 联调验证） ([015ce93](https://github.com/Aparencia/Entropydecrease/commit/015ce93dbe4dc15a6ae97f4cc9a05c84032fba1d))
+* **classroom:** P2-1 本地OCR骨架 + P2-2/3/5/6 集成文档 ([69d4fad](https://github.com/Aparencia/Entropydecrease/commit/69d4fad8035d28fec18cd52bc8c1b3f1bb6864cb))
+* **classroom:** P2-4 采集期时间轴对齐（结果时间戳改用采集时刻） ([d29a79b](https://github.com/Aparencia/Entropydecrease/commit/d29a79b8eade980f6b52bac3ea8ca8938bd84ef9))
+* **classroom:** P2-7 步骤化笔记 + P2-8 步骤复习联动 ([19b03e1](https://github.com/Aparencia/Entropydecrease/commit/19b03e17f2779db69665514d7a0c57169f224d29))
+* **electron:** 主进程 AI 请求 429 配额耗尽事件推送（gatewayHttp/Stream/preload） ([b73a088](https://github.com/Aparencia/Entropydecrease/commit/b73a088c9258f1415367be1b4ca7522468d2906f))
+* merge dev with window-recognition optimization (14 commits) ([351ccc4](https://github.com/Aparencia/Entropydecrease/commit/351ccc410ec66e369f60eb98dd31f50b3c1b4c27))
+* **pwa:** M1 Task1 - PWA manifest 完善（lang zh-CN + iOS 图标与 meta） ([af50f1e](https://github.com/Aparencia/Entropydecrease/commit/af50f1ecb2fcfd39168c5624882963cf0c17def9))
+* **pwa:** M1 Task2 - BottomNav 增加课堂助手入口 ([fc18a89](https://github.com/Aparencia/Entropydecrease/commit/fc18a898c3f233076db1ead2bef8b1dc1c190345))
+* **pwa:** M1 Task3 - iOS Safari 细节（text-size-adjust/防缩放/100dvh） ([f9c0636](https://github.com/Aparencia/Entropydecrease/commit/f9c063619388fa15452ec5674db8dfecf3ee991f))
+* **pwa:** M2 Task7 - 剪藏浏览器替代（fetch+DOMParser）+ PDF 明确降级提示 ([03eef25](https://github.com/Aparencia/Entropydecrease/commit/03eef255fa7ecc6678bf18b95d0e0b9746294ae0))
+* **pwa:** M3 Task10 - 视频转笔记（浏览器上传 + 抖音链接引导） ([81cbd42](https://github.com/Aparencia/Entropydecrease/commit/81cbd42a9009ba2c8e3677f1c3e2e9380cf7ecbc))
+* **pwa:** M3 Task11 - 课堂会话页响应式布局（移动端 flex-col + 左栏限高） ([4505ae9](https://github.com/Aparencia/Entropydecrease/commit/4505ae9c6c179ac821786c5807672d6b55d87c58))
+* **pwa:** M3 Task9 - WebCaptureAdapter 麦克风应急通道 + 会话启停 PWA 分支 ([c0aeeb1](https://github.com/Aparencia/Entropydecrease/commit/c0aeeb14ffb47566aa9931bc58890578d49f5002))
+* **server:** 开发者白名单生产透传与配额端点无限展示（DEV_USER_IDS） ([49f9abf](https://github.com/Aparencia/Entropydecrease/commit/49f9abf2d6b427c4a57acd6a175ddd97b743fbf6))
+* **website:** 下载页与 FAQ 补充移动端 PWA 入口（/pwa/ 即开即用） ([c237f7d](https://github.com/Aparencia/Entropydecrease/commit/c237f7d5ca9262efe206d7291910796159327311))
+* **window-recognition:** native 扩展窗口几何/置顶/前台HWND枚举 ([a6a78f7](https://github.com/Aparencia/Entropydecrease/commit/a6a78f72bc106b2fa5d88dbf8b42e8de622ea196))
+* **window-recognition:** UI理由展示+内容分类进程信号+监听diff含标题变化 ([b7c02b0](https://github.com/Aparencia/Entropydecrease/commit/b7c02b055bcdf6b32832658a0386716b02967c23))
+* **window-recognition:** WindowInfo 类型扩展（置信度/理由/记忆课程名） ([38b745c](https://github.com/Aparencia/Entropydecrease/commit/38b745cc06366736f252a943d5062d1122688e69))
+* **window-recognition:** windowScorer 组合入口（信号注入+记忆查找，导出兼容） ([0a4a6e1](https://github.com/Aparencia/Entropydecrease/commit/0a4a6e12fbefafe072754e168453dcbfae2d4b22))
+* **window-recognition:** 完整信号注入（进程/几何/前台窗口，native缺失降级） ([2e36c5e](https://github.com/Aparencia/Entropydecrease/commit/2e36c5ef77aae84f99bcedfa5c60ef3d50b521d0))
+* **window-recognition:** 窗口信号层（HWND解析/几何计算，注入式可测） ([f4cdd7f](https://github.com/Aparencia/Entropydecrease/commit/f4cdd7f81ac9dfd8131e0744ad766ebf35c33583))
+* **window-recognition:** 窗口双向评分规则纯函数（学习意图正信号↔娱乐负分） ([15f7839](https://github.com/Aparencia/Entropydecrease/commit/15f7839c68088dae445bb51c2afe61b2c47ae138))
+* **window-recognition:** 窗口选择记忆层（标题模板hash+boost+LRU） ([0885f86](https://github.com/Aparencia/Entropydecrease/commit/0885f8662da38d0730cda7865bf6c812e8659301))
+* **window-recognition:** 自动选中三规则与记忆课程名回填 ([e91ff7c](https://github.com/Aparencia/Entropydecrease/commit/e91ff7ca5f997cae035159cc29470b351bd74117))
+* **window-recognition:** 记忆IPC通道与评分boost接入 ([ad29419](https://github.com/Aparencia/Entropydecrease/commit/ad29419b26de5fe22294dc04fe7f98f80a4a9a68))
+
+### 🐛 缺陷修复
+
+* **ai-gateway:** ruff 自动修复 license_webhook 未使用导入 ([07efa72](https://github.com/Aparencia/Entropydecrease/commit/07efa72859475e9626c0a10427059d7067bf52a0))
+* **ai-gateway:** 安全/熔断路径静默放行补 warning 日志（prompt_guard/input_validation/key 轮换/熔断标记） ([fc25a4a](https://github.com/Aparencia/Entropydecrease/commit/fc25a4a9482efe6985eb4204776f8c956344a672))
+* **ci:** lint-staged oxlint 显式指定 client/.oxlintrc.json，pre-commit 与 CI 规则集一致 ([b098898](https://github.com/Aparencia/Entropydecrease/commit/b0988985f98ee6f9d7ae34404852a50dea6c87b8))
+* **classroom:** P0-4/P0-5/P0-6 离线ASR重复/CPU/准确率修复 ([75f3f70](https://github.com/Aparencia/Entropydecrease/commit/75f3f704909860e5c75b2d5357fbb9873e906ce8))
+* **deps:** 升级 react-router-dom 7.18.2（RSC CSRF）与 dompurify 3.4.13（XSS） ([3be24cc](https://github.com/Aparencia/Entropydecrease/commit/3be24cccbe2f6352a0d73c935ade8d893bd6fccb))
+* **env:** 补全 .env.example 缺失变量并转发 prod compose 环境变量 ([62807ae](https://github.com/Aparencia/Entropydecrease/commit/62807ae165ca6d53418059f75fc7ce4428eecca1))
+* **feynman:** convertedCount 复制粘贴 bug——新增 converted 字段区分已转闪卡与已掌握 ([dedadf3](https://github.com/Aparencia/Entropydecrease/commit/dedadf3bae47face28fd64fb840623b267f74901))
+* **pwa:** 修复逻辑审查三处问题（尾段丢失/暂停未接、视频上传401/429、剪藏截断） ([4dbb92e](https://github.com/Aparencia/Entropydecrease/commit/4dbb92e42a856cbe3add652d83d3e8ae68e532cb))
+* **server:** requirements 版本锁定，CI go 版本对齐 go.mod，删除 dead proto，conftest 补 [@ai-context](https://github.com/ai-context) ([e6629ee](https://github.com/Aparencia/Entropydecrease/commit/e6629ee402deb6ce10c32416fd514c3ae2e0cf4f))
+* **sync:** 全部 goroutine 启动点加 panic 防护（GoSafe/goSafe），防单协程异常击穿进程 ([0de78f3](https://github.com/Aparencia/Entropydecrease/commit/0de78f3e868663539c5ce90259c0c0940c0b2ff6))
+* **website:** 公安备案徽标补尺寸并抑制 no-img-element 误报 ([5c38066](https://github.com/Aparencia/Entropydecrease/commit/5c3806621297ce17ac6b07d594349fb5f7c1b0b9))
+* **window-recognition:** classifyContent 接入 processName 信号（连接 contentClassifier 进程名兜底） ([54d41f6](https://github.com/Aparencia/Entropydecrease/commit/54d41f6233888831ea071d19fbeaf877ca4d003e))
+* **window-recognition:** iqiyi/youku 移入娱乐负分（对齐设计文档 §3.2）；追加沉底用例 ([5cb10cc](https://github.com/Aparencia/Entropydecrease/commit/5cb10ccdf3d6b8ec4265491f2a66620a76ce1b10))
+* **window-recognition:** MEDIUM_CONFIDENCE_MIN 修正为 70（设计规格） ([f80e944](https://github.com/Aparencia/Entropydecrease/commit/f80e9444f6eb8cef90584246894fdb3aa6114bdd))
+
+### ♻️ 重构
+
+* **ai-gateway:** _TIER_RANK 单源化消除重复定义，nginx 限流双层设计加注释说明 ([cc17288](https://github.com/Aparencia/Entropydecrease/commit/cc1728878bb06f51e2a13237e6ee0dec5ab7e654))
+* **ai-gateway:** auth.py 613 行拆 jwt_keys/jwt_verify/auth 三模块，331 测试全过 ([fd75259](https://github.com/Aparencia/Entropydecrease/commit/fd75259fe8fa7d66ed24e2968d117f56e99a1011))
+* captureManager 558→261 拆 5 管线文件，InspirationPage 463→288 拆 6 子组件 ([5f63ef4](https://github.com/Aparencia/Entropydecrease/commit/5f63ef4e98a53f4f975148ab1cb5e2d96cf51323))
+* **classroom:** 六项审查修复 + 审查报告 + 计划状态更新 ([24bca6b](https://github.com/Aparencia/Entropydecrease/commit/24bca6ba53444412f31f30ff3dd1917ee59e94b8))
+* **client:** lint 清零并收敛 store 订阅与工具函数 ([807a068](https://github.com/Aparencia/Entropydecrease/commit/807a0686da166c501ee6c3449b4a25e978973e16))
+* **client:** 开启 noUnusedLocals 并清理 10 处死代码，生产代码 any 清零 ([9c5846f](https://github.com/Aparencia/Entropydecrease/commit/9c5846f14ef1f11d36155f82dba97c20121cceb5))
+* **electron:** 清理未用 import 与死代码，回退 mp3 LFS 跟踪 ([32d4529](https://github.com/Aparencia/Entropydecrease/commit/32d45298a931195461adb0b3733be83abee09314))
+* flashcards 三文件（630/490/507→276/296/284）与 Onboarding 577→94/ProfileSettings 443→234 拆分 ([16b38ff](https://github.com/Aparencia/Entropydecrease/commit/16b38ffc0fa620fd15335c1d91bbb242e0e53d90))
+* **notes:** NoteEditPage 879→274 拆 17 文件，FreeCanvas 672→268 拆 5 文件 ([0dcc26a](https://github.com/Aparencia/Entropydecrease/commit/0dcc26ab769d9b068bb876f2a7448b94c8a45004))
+* **notes:** NotesPage 1299 行拆 22 文件（7 hooks + 14 组件 + 1 lib），主文件 293 行 ([e4a5a3b](https://github.com/Aparencia/Entropydecrease/commit/e4a5a3b23f260dd60033e204fcca65e822468250))
+* **notes:** useNoteStore 611 行拆组合式 slice（note/folder/search + lib 外移），主入口 79 行 ([f9f9a09](https://github.com/Aparencia/Entropydecrease/commit/f9f9a09e1e916a8d5ea288b51519f6c6bfa3f503))
+* **sync:** rooms.go/relay.go 按职责拆分 5 文件（manager/handlers/ws），全部 ≤300 行 ([30f1ede](https://github.com/Aparencia/Entropydecrease/commit/30f1edede65b797de4847098d50456cf8d4d69ec))
+* **window-recognition:** 阶段一接入评分组合入口（行为兼容） ([66808c0](https://github.com/Aparencia/Entropydecrease/commit/66808c0c1ccdb92804dc105ca75e50f39f69db1f))
+
+## [0.37.0](https://github.com/Aparencia/Entropydecrease/compare/v0.36.0...v0.37.0) (2026-08-11)
+
+### ✨ 新功能
+
+* **website:** add dive feature landing page with playable chronos demo ([b6ad23c](https://github.com/Aparencia/Entropydecrease/commit/b6ad23cf50de946ea47cfa29d395519b37577074))
+* **website:** add feature config types, chronos states and dive content config ([da342c2](https://github.com/Aparencia/Entropydecrease/commit/da342c2d0de1dc9770b1f6685f767ff7967353e6))
+* **website:** add features overview page with module cards ([b79b945](https://github.com/Aparencia/Entropydecrease/commit/b79b945377c665451cbe17d891597924fe712c7d))
+* **website:** add playable chronos canvas demo with six-state machine ([7e63acf](https://github.com/Aparencia/Entropydecrease/commit/7e63acf5b09c52231eb934903cdb8de137cafa09))
+* **website:** add reusable feature page template sections ([35a91aa](https://github.com/Aparencia/Entropydecrease/commit/35a91aa6d2560c7acb504d289e51bf5e8bdf3c9f))
+* **website:** convert brand story page to design philosophy page ([10e9e55](https://github.com/Aparencia/Entropydecrease/commit/10e9e55d35bb27338d0315a1b8c0b6d4b48857ea))
+* **website:** unify module registry and link homepage cards to feature pages ([d3a0a22](https://github.com/Aparencia/Entropydecrease/commit/d3a0a2209e9b6440e73a9324975d3f8f5d772661))
+* **website:** update navbar to design philosophy and features entries ([ef19063](https://github.com/Aparencia/Entropydecrease/commit/ef190633f98d632ec097824dd04a3ba5ab115716))
+
+### 🐛 缺陷修复
+
+* **ci:** update IndexNow URLs to new feature pages ([0467b7e](https://github.com/Aparencia/Entropydecrease/commit/0467b7ece06adb22263a659fc712a74db476e412))
+* **website:** add keyboard support and guard zero-size canvas in chronos demo ([1e6fe93](https://github.com/Aparencia/Entropydecrease/commit/1e6fe934aed079b53bb9d61cb4d374dc49fe68a1))
+* **website:** keep chronos demo free interaction after card selection ([6117c3d](https://github.com/Aparencia/Entropydecrease/commit/6117c3d27cdb59b9b805dc3446e4c609afcde4d1))
+* **website:** move download CTA to first screen and add scroll hint ([e13f7b5](https://github.com/Aparencia/Entropydecrease/commit/e13f7b5343fe057b62696e2cfe34971defc4dade))
+* **website:** route incomplete modules to overview page from homepage ([040b303](https://github.com/Aparencia/Entropydecrease/commit/040b303c58aacf2a9fef7cfa54cb9abd20ccd482))
+
+### ♻️ 重构
+
+* **website:** add key field to feature mechanics items ([82e3c07](https://github.com/Aparencia/Entropydecrease/commit/82e3c076030c8c699be050ef09fb7302b3c57c45))
+* **website:** fix mechanics card semantics and onSelect item signature ([2337f8e](https://github.com/Aparencia/Entropydecrease/commit/2337f8e7c08ab6676abb190e500085b9bae77dea))
+
+## [0.36.0](https://github.com/Aparencia/Entropydecrease/compare/v0.35.2...v0.36.0) (2026-08-11)
+
+### ✨ 新功能
+
+* **3d:** Dashboard 深海世界新增 LeviathanShadow 远景巨影 ([8f86127](https://github.com/Aparencia/Entropydecrease/commit/8f86127fd7a999949e613b12ce3b077336b85937))
+* **3d:** switch rendering backend from WebGL to WebGPU and restore Chronos 3D sphere ([1ec8b37](https://github.com/Aparencia/Entropydecrease/commit/1ec8b3704b6c3d28e08a9fd0658c4783996d1ede))
+* **ai-gateway:** ASR 热词增强全链路透传 ([bf2c882](https://github.com/Aparencia/Entropydecrease/commit/bf2c882f28b8037b2150c06e0ac4ac27c312775e))
+* **ai:** AI hooks 流式化改造——苏格拉底追问/救援打字机渐进展示 ([5d2318c](https://github.com/Aparencia/Entropydecrease/commit/5d2318ce271560509ccb832332e96f63b7fe1364))
+* **assistant:** F3 睡前复习气泡拉起 5 卡迷你复习 + T4 孵化呼吸引导 ([5004b44](https://github.com/Aparencia/Entropydecrease/commit/5004b4492c82df031870285cb2f778aa7dec6ea6))
+* **assistant:** 水母受惊弹开+右键固定+用户活跃检测(10min空闲阈值) ([cf76a18](https://github.com/Aparencia/Entropydecrease/commit/cf76a1820f3af945dadd091b2d354133c1840a79))
+* **beta:** 客户端付费体系——设备指纹/付费状态/AI 用量卡 ([3b4d6c3](https://github.com/Aparencia/Entropydecrease/commit/3b4d6c30625acf15cd139d3b7d0a04ea53634ad6))
+* **classroom:** 课堂模块增强——热词/转录编辑/章节导航/视觉模式 ([2f1a644](https://github.com/Aparencia/Entropydecrease/commit/2f1a6441546d0cc1ac846e4884acfc41ce3b46bf))
+* **dashboard:** D5 热力图效率维度 + R3 结束仪式 + R9 成就证书 ([e2e4b85](https://github.com/Aparencia/Entropydecrease/commit/e2e4b85b9f1708572a99911fb0d76efffbcc5c14))
+* **dashboard:** 主页三视图认知重构与双方案视觉系统 ([7d76b6e](https://github.com/Aparencia/Entropydecrease/commit/7d76b6eb3943c84a95cf5262dfbd84141952fbcf))
+* **dashboard:** 学习脉搏加入非番茄钟折算(笔记/复习/费曼)(内测反馈) ([af9a867](https://github.com/Aparencia/Entropydecrease/commit/af9a8678ab971fbc5c005ef3536131cf8cc7fb4e))
+* **electron:** G7 全局快捷键框架 + E2 录音持久化 IPC 白名单 ([0ab8f2a](https://github.com/Aparencia/Entropydecrease/commit/0ab8f2ac83e4e9d58701523eca2f3eabc464542d))
+* **feynman:** E2 录音关联持久化与跨会话回放(userData/recordings) ([76241a3](https://github.com/Aparencia/Entropydecrease/commit/76241a30c9b6a87535d3445722184dcdfadf592f))
+* **flashcards:** 批量管理(选择/重学/搁置/删除)+牌组重命名+会话上限可配置 ([1119e79](https://github.com/Aparencia/Entropydecrease/commit/1119e79c7b516377cfd585f6f157e3b6791c2324))
+* **inbox:** 统一收件箱——剪贴板/灵感/导入三路合并 + 24h 去重 ([3c725ed](https://github.com/Aparencia/Entropydecrease/commit/3c725ed74e6a7637667d5f1d3fd8b3f30a63a458))
+* **innovation:** 创新功能目录四期实施 + 全量审查修复 ([7504119](https://github.com/Aparencia/Entropydecrease/commit/75041193a34a1e3cf55a978becf35a69ecaa6f82))
+* **license:** AI 网关付费授权体系 ([9f7ed90](https://github.com/Aparencia/Entropydecrease/commit/9f7ed90eb86495ea9a5c7d9134a45309a1f7ab8b))
+* **notes,flashcards,feynman:** 未接线组件全量接入 + DashboardPage 编译修复 ([4990849](https://github.com/Aparencia/Entropydecrease/commit/49908496cca483e630a7b317cbb906ebce6e9391))
+* **notes:** N5 闪卡只取核心层文本 + N2 合书测试答后 diff 高亮 ([7eff581](https://github.com/Aparencia/Entropydecrease/commit/7eff58196eba6ec3362235413636f2b9f3bb2426))
+* **notes:** 搜索栏重构为笔记内筛选+批量删除+模板筛选+文件夹树删除 ([40d7366](https://github.com/Aparencia/Entropydecrease/commit/40d7366a8688cbe5beb977244cf7f55499553642))
+* **notes:** 珊瑚礁视图与视口锚定——笔记深潜增强 ([2b82b5e](https://github.com/Aparencia/Entropydecrease/commit/2b82b5eb373e83829c1bc5bea965ae2cc1b2b4fc))
+* **notes:** 笔记功能创新全面实施——7阶段25文件 ([d0e0776](https://github.com/Aparencia/Entropydecrease/commit/d0e0776fe6a1213fe6d7c49ceb164153a37ad9df))
+* **notes:** 笔记模块 P0-P2 改进 — 14 项功能实施 ([a081bf6](https://github.com/Aparencia/Entropydecrease/commit/a081bf618f8d7ee80681b6c3a1f29ba5c613d73b))
+* **notes:** 第一轮头脑风暴剩余5项构建完成 ([df90cf2](https://github.com/Aparencia/Entropydecrease/commit/df90cf2552f85b7b7d9217087eadcdcfd2203039))
+* **notes:** 第一轮头脑风暴剩余创新点构建 ([9f6838b](https://github.com/Aparencia/Entropydecrease/commit/9f6838b8bbe36ffab53a0444e0792e5b64c210a5))
+* **payment:** 临时收入方案全栈实现（数据库+UI+AI网关tier分级） ([acf72e3](https://github.com/Aparencia/Entropydecrease/commit/acf72e3872ef56340583c87f5c52d4aafbf3e1bc))
+* **pomodoro:** Chronos 时间生物可视化（P0-P2） ([1d7ab71](https://github.com/Aparencia/Entropydecrease/commit/1d7ab71528784de6b40c9e707d280cfbaeca146a))
+* **pomodoro:** Chronos 液态金属形态与完整状态指示系统 ([dd34528](https://github.com/Aparencia/Entropydecrease/commit/dd34528ef8ba684d00a0d8022441f8433929dd70))
+* **pomodoro:** Chronos 粒子球全面修复与 TimerFace 高频区重构 ([2f96df2](https://github.com/Aparencia/Entropydecrease/commit/2f96df2fbd8ded6f98ec0957faff5ff60fd2e788))
+* **pomodoro:** 修复计时状态机与数据一致性问题，接线体验增强功能 ([74f1893](https://github.com/Aparencia/Entropydecrease/commit/74f18933d9fadb75ac6b3942a6fa2f4d40b4eced))
+* **pomodoro:** 深潜设置页下潜档案重构与番茄钟体验增强 ([317d84b](https://github.com/Aparencia/Entropydecrease/commit/317d84b01b4e76b7b73b5e35c805bdab4b13f9c0))
+* **pomodoro:** 表盘与预设标签 UI 增强 ([3a91f24](https://github.com/Aparencia/Entropydecrease/commit/3a91f240f1bffcadcff261643293cdd1dbc13b26))
+* **sop:** SOP 系统 MVP——四表落库/模板运行状态机/三页面/5 条 lint 规则 ([77064a4](https://github.com/Aparencia/Entropydecrease/commit/77064a479692e2c1f35c547651a1baa5683a3007))
+* **ui:** 命令面板集成全局内容搜索(content类别)+Tag可交互+work-area属性 ([410d582](https://github.com/Aparencia/Entropydecrease/commit/410d5826768d44362c5cb14b332cebdd52ce784a))
+* **ui:** 设置页升级引导 + 每日色相微调对抗感觉适应 ([400e650](https://github.com/Aparencia/Entropydecrease/commit/400e65049d050b1a0ac86ceb88256bbcbf84b4e1))
+* **wiki:** 侧边栏独立折叠与自动保存状态提示 + 命令面板 SOP 入口 ([dd812b9](https://github.com/Aparencia/Entropydecrease/commit/dd812b973d2d3d53604cfd0573ef180fb9e1ae3e))
+
+### 🐛 缺陷修复
+
+* **3d:** add forceWebGL=true to WebGPURenderer for async init compatibility ([5c3b01c](https://github.com/Aparencia/Entropydecrease/commit/5c3b01cc90b2ab95af4b5a169c17edf42c5e8d76))
+* **3d:** revert WebGPURenderer to THREE.WebGLRenderer for R3F compatibility ([0832b21](https://github.com/Aparencia/Entropydecrease/commit/0832b21a6b3d54d5b1429fd6b62caa097dad2f87))
+* **3d:** 主题切换/场景切换手动渲染修复(docked冻结)+routeToModuleId抽离 ([b6735e2](https://github.com/Aparencia/Entropydecrease/commit/b6735e2bf52a4520e50c343fd22affcbb3daf539))
+* add cleanup to showTime timer effect to prevent stale timeout ([2a5cf31](https://github.com/Aparencia/Entropydecrease/commit/2a5cf31aee4dd8bf657aac5c90fe089e00a7e1dd))
+* **ai-asr:** 重构 ASR 引擎为 zipformer-transducer 单引擎 ([3522567](https://github.com/Aparencia/Entropydecrease/commit/352256754e74dcf22c0fd7136b8c79989923bf7e))
+* **ai-gateway:** Python 3.12 部署启动修复（Any 导入 + BOM 清理 + F401） ([96ac0f5](https://github.com/Aparencia/Entropydecrease/commit/96ac0f5e17a49f2ff1dc766739cbe88b6fcb19f5))
+* App启动初始化番茄钟+设置页返回按钮+API本地模式401不踢登录+批量选择hook ([9958306](https://github.com/Aparencia/Entropydecrease/commit/99583060da27c3cdf41999180ab127e85e28793f))
+* **audit3:** resolve deferred findings X1-X6 ([9e625ca](https://github.com/Aparencia/Entropydecrease/commit/9e625ca89512e8845dbdb89694a3030100036b6b))
+* **audit3:** resolve round-3 review findings on round-2 fixes ([beed8b4](https://github.com/Aparencia/Entropydecrease/commit/beed8b4d7a9efafd13bcdaaccf0c62e5ddf887f5))
+* **chronos:** eliminate per-frame THREE.Color allocation in useFrame ([6f2411b](https://github.com/Aparencia/Entropydecrease/commit/6f2411b29239ffdfba2becb8bd97b90c6039f516))
+* **client:** resolve frontend medium-risk issues FRONT2-M1~M8 ([c00c087](https://github.com/Aparencia/Entropydecrease/commit/c00c08786afd66969f0558ced1c2bd0524aa174a))
+* **client:** 同步引擎高危修复——resume死锁/冲突循环/localData空对象/synced类型不一致 ([7ef8ad8](https://github.com/Aparencia/Entropydecrease/commit/7ef8ad8d9e8df78b9b4d95f537775f25b38b04cf))
+* **client:** 学习算法修复——FSRS初始稳定性对齐权重/sm2缺失字段防御/复习写失败可恢复 ([0d43362](https://github.com/Aparencia/Entropydecrease/commit/0d43362ac9af89888e1d0fbba8908e32d0dcd529))
+* **client:** 客户端中危修复——IPC批处理返回值/流式超时与连接释放/代理路径校验/MCP最小环境/采集源校验/备份保护/watchdog上限 ([b572994](https://github.com/Aparencia/Entropydecrease/commit/b572994af505c1c37bca571efb93664aaf5529de))
+* **client:** 客户端低危修复——文件读写限制/更新状态机/崩溃恢复/迁移可诊断/preload白名单统一 ([af1b353](https://github.com/Aparencia/Entropydecrease/commit/af1b35343a2aaca08a066eb2bc62542f8a9166fa))
+* **client:** 客户端高危修复——采集stop挂起/迁移列错位/搜索全量返回/FTS阻塞/复习双击竞态 ([1feb466](https://github.com/Aparencia/Entropydecrease/commit/1feb4661e60c42f7d63ac30b5d1325b8c7a234e4))
+* **electron:** resolve ELEC2-M1/L1/L2 ([064f636](https://github.com/Aparencia/Entropydecrease/commit/064f6361049b7250e2920d06ad0d313756d81bb1))
+* **electron:** SSEServerTransport 类型注解修复 ([b999e05](https://github.com/Aparencia/Entropydecrease/commit/b999e0557e40ff991ceae24d5ce0787a0c5ff7d8))
+* **gateway:** AI网关中低危修复——熔断器语义/探活超时/JWKS安全/Key冷却/重试策略/错误脱敏/Redis重连/限流原子化 ([d3be873](https://github.com/Aparencia/Entropydecrease/commit/d3be873f3935e51fb2f532f58e5866f50a4f6324))
+* **gateway:** AI网关高危修复——并发信号量/预算记账/流式限流/SSE资源释放/事件循环阻塞/请求体限制/降级链容错 ([8e78b6f](https://github.com/Aparencia/Entropydecrease/commit/8e78b6fd9245b4a2066b1e6b2be8d3172995fd53))
+* **gateway:** JWT 算法自动适配消除 HS256/ES256 错位 401，学习计划认证就绪前不发请求 ([ed5c55a](https://github.com/Aparencia/Entropydecrease/commit/ed5c55ad45c7b90a62048dc2a07691c8b14fe631))
+* **gateway:** resolve high-risk issues [#1](https://github.com/Aparencia/Entropydecrease/issues/1)-[#4](https://github.com/Aparencia/Entropydecrease/issues/4) ([1aeeac5](https://github.com/Aparencia/Entropydecrease/commit/1aeeac5b369e8334bf17816832b2d1f8a5c95189))
+* **gateway:** resolve low-risk issues [#11](https://github.com/Aparencia/Entropydecrease/issues/11)-[#14](https://github.com/Aparencia/Entropydecrease/issues/14) ([12a6e68](https://github.com/Aparencia/Entropydecrease/commit/12a6e6867ecf367064c5ccacc596cd58bd09603e))
+* **gateway:** resolve medium-risk issues [#5](https://github.com/Aparencia/Entropydecrease/issues/5)-[#10](https://github.com/Aparencia/Entropydecrease/issues/10) ([f0b92a9](https://github.com/Aparencia/Entropydecrease/commit/f0b92a9ea8362f2c9e71b34e626513ceb6ee8feb))
+* **misc:** vite base 动态导入 504 / 流式路径正则 / mcpEnv 转义 / AuthGuard 依赖修正 ([7658c81](https://github.com/Aparencia/Entropydecrease/commit/7658c818c8eec2a7292ddaf610de305f901af69a))
+* **misc:** 杂项修复与文档更新 ([5e43dd8](https://github.com/Aparencia/Entropydecrease/commit/5e43dd8d4a6c202936b69772eb9565e106d843a7))
+* **notes:** 修复 EchoDiscovery 未使用导入并完成全量验证 ([c1d2a3d](https://github.com/Aparencia/Entropydecrease/commit/c1d2a3dfd685d05de3743d498afc3b9e1d5cd51e))
+* **perf:** 性能模式变更即时生效，活跃采集优雅重启 ([71304db](https://github.com/Aparencia/Entropydecrease/commit/71304dbe184333fcf0d7741b96b3a88aa8b241a7))
+* **pomodoro:** Chronos 交互补齐与构建级类型修复 ([d8adfb5](https://github.com/Aparencia/Entropydecrease/commit/d8adfb5f3dc8c67e49cab1c047fea782d751ba59))
+* remove stale audioPrefs reference in PomodoroAudioLayer ([cad2ad4](https://github.com/Aparencia/Entropydecrease/commit/cad2ad49762931c7040f2299d33241544ddbfc6e))
+* replace remaining audioPrefs references in PomodoroControls JSX ([62e8255](https://github.com/Aparencia/Entropydecrease/commit/62e8255bfcbf4c76036a6b55550e1f75b46eb057))
+* restore skip on break click in ImmersiveTimer ([336ee8a](https://github.com/Aparencia/Entropydecrease/commit/336ee8a0fa5e22b834d17f27484e15f7b98cdbe4))
+* **sync:** OfflineQueue 版本排序改内存排序（Dexie Table 无 sortBy） ([60d72a3](https://github.com/Aparencia/Entropydecrease/commit/60d72a34a80808c833749f75c53356efb41de3e4))
+* **sync:** resolve low-risk logic issues SYNC2-L1~L5 ([b82668d](https://github.com/Aparencia/Entropydecrease/commit/b82668d22b845be8b7b9ffc4c8293b2191845cd7))
+* **sync:** 同步服务修复——版本冲突判定/WS查询洪泛/Resolve安全/CRDT幂等/广播完整性 ([c7bdb7b](https://github.com/Aparencia/Entropydecrease/commit/c7bdb7bd17fb71cae571b72bcb11e4e2abca77b8))
+* **tokens:** 材质类层叠顺序 - 深色段移至浅色段后，修复深色主题错误显示浅色材质 ([3bb49b9](https://github.com/Aparencia/Entropydecrease/commit/3bb49b96b714c7ec7c7be55347f66420feef0c3a))
+* **website:** 下载页版本信息拉取超时与重试——消除源站挂起时的无限等待 ([7753dc7](https://github.com/Aparencia/Entropydecrease/commit/7753dc7d490c02625e7159681efb6958f0c16579))
+
+### ⚡ 性能优化
+
+* **3d:** migrate 6 particle systems to GPU vertex shader and consolidate useFrame ([0e9dc4a](https://github.com/Aparencia/Entropydecrease/commit/0e9dc4aab4e362a1a6d15bd8e3b5414d8cca2798))
+* **client:** 性能优化第二批次——笔记投影/课堂内存/订阅治理/3D 算法优化 ([a734883](https://github.com/Aparencia/Entropydecrease/commit/a73488379014048a68fe32817dfe614d555acc6b))
+* **ui:** split whole-store subscriptions and fix effect re-registration ([1f2308b](https://github.com/Aparencia/Entropydecrease/commit/1f2308b5acc4c2dc5c2bb750d13ac4d5ed5d4a20))
+
+### ♻️ 重构
+
+* **chronos:** 粒子渲染 WebGL 单网格→Canvas 2D 伪 3D 重构 ([45e2752](https://github.com/Aparencia/Entropydecrease/commit/45e27520892327c31bee073a51ee1ff6f1ba3e59))
+* **dashboard:** Dashboard 重构——移除深海主题死代码 ([32f84b3](https://github.com/Aparencia/Entropydecrease/commit/32f84b307fd376f532f3623c75e44421b7cc9ca3))
+* **pomodoro:** usePomodoroStore 拆分为 timer/settings/session/preset 四 slice ([a7d69de](https://github.com/Aparencia/Entropydecrease/commit/a7d69de22f21df4767fdf8ef41cb5a40aefe9398))
+* 大规模死代码清理——移除未使用组件/钩子/工具 ([1432871](https://github.com/Aparencia/Entropydecrease/commit/14328715efdf3c864ee5e887ad2181c3f1d9bcc5))
+
 ## [0.35.2](https://github.com/Aparencia/Entropydecrease/compare/v0.35.1...v0.35.2) (2026-08-04)
 
 ### 🐛 缺陷修复

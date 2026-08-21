@@ -121,9 +121,17 @@ services:
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-}
       # 开发者白名单（邮箱或 user_id，逗号分隔）：完全豁免配额/费用限制并赋予 lifetime 身份
       DEV_USER_IDS: ${DEV_USER_IDS:-}
-      # 预算控制（每日 token/费用上限，0=不限制）
-      BUDGET_DAILY_TOKEN_LIMIT: ${BUDGET_DAILY_TOKEN_LIMIT:-0}
-      BUDGET_DAILY_COST_LIMIT: ${BUDGET_DAILY_COST_LIMIT:-0}
+      # 预算控制（0 = 不限制；默认 free 档 200K tokens / ¥0.5）
+      BUDGET_DAILY_TOKEN_LIMIT: ${BUDGET_DAILY_TOKEN_LIMIT:-200000}
+      BUDGET_DAILY_COST_LIMIT: ${BUDGET_DAILY_COST_LIMIT:-0.5}
+      # 付费系统（面包多，可选）
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-}
+      PAYMENT_API_KEY: ${PAYMENT_API_KEY:-}
+      PAYMENT_API_SECRET: ${PAYMENT_API_SECRET:-}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
+      PAYMENT_API_BASE_URL: ${PAYMENT_API_BASE_URL:-}
+      PAYMENT_TIMEOUT_MS: ${PAYMENT_TIMEOUT_MS:-5000}
+      PAYMENT_RETRY_COUNT: ${PAYMENT_RETRY_COUNT:-3}
       # 生产环境禁止开发降级模式（缺密钥时必须拒绝启动而非放行）
       GATEWAY_ALLOW_DEV_AUTH: "false"
       # OpenTelemetry 导出（可选）

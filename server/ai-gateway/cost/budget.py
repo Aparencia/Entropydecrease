@@ -77,7 +77,7 @@ class BudgetMiddleware(BaseHTTPMiddleware):
         tracker = get_cost_tracker()
         usage = await tracker.get_user_daily_usage(user_id)
 
-        if usage["tokens"] >= DAILY_TOKEN_LIMIT:
+        if DAILY_TOKEN_LIMIT > 0 and usage["tokens"] >= DAILY_TOKEN_LIMIT:
             logger.warning(
                 "预算拦截(token): user=%s, tokens=%d/%d",
                 user_id, usage["tokens"], DAILY_TOKEN_LIMIT,
@@ -94,7 +94,7 @@ class BudgetMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-        if usage["yuan"] >= daily_cost_limit:
+        if daily_cost_limit > 0 and usage["yuan"] >= daily_cost_limit:
             logger.warning(
                 "预算拦截(cost): user=%s, yuan=%.2f/%.2f",
                 user_id, usage["yuan"], daily_cost_limit,

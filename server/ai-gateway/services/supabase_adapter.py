@@ -265,3 +265,81 @@ async def update_paid_metadata(user_id: str, paid: dict[str, Any]) -> bool:
         json_body={"user_metadata": {"paid": paid}},
     )
     return bool(data)
+
+
+# ============================================================
+# Webhook 自动绑定闭环（支付 → 自动激活）
+# ============================================================
+
+
+async def get_user_by_email(email: str) -> dict | None:
+    """通过邮箱查询 Supabase 用户（Auth Admin API）。
+
+    @ai-context: webhook 携带 buyer_email 时，需要先解析出 user_id 才能写入
+    user_metadata.paid；查询失败返回 None，调用方跳过自动绑定回落手动激活。
+
+    Args:
+        email: 买家邮箱
+
+    Returns:
+        dict | None: 用户对象（含 id），未找到/查询失败返回 None
+    """
+    if _is_mock_mode():
+        return _mock_metadata.get(email)
+    data = await _http_request(
+        "GET",
+        f"{_config()[0]}/auth/v1/admin/users?email={email}",
+    )
+    if not data:
+        return None
+    if isinstance(data, list):
+        return data[0] if data else None
+    # Supabase Auth Admin API 返回 {"users": [...]} 结构，取首个匹配用户
+    if isinstance(data, dict) and data.get("users"):
+        return data["users"][0]
+    return data
+
+
+async def auto_bind_license(code: str, user_id: str) -> bool:
+    """Webhook 确认后自动绑定许可证（sold → bound）+ 更新 paid metadata。
+
+    这是「支付→自动激活」闭环的核心：无需用户手动输入激活码。
+    返回 False 表示激活码不存在、状态不是 sold 或绑定失败。
+
+    @ai-context: 自动绑定为幂等增强：绑定失败不抛异常、不阻塞订单确认，
+    由调用方记录日志，用户可回落手动输入激活码流程。
+
+    Args:
+        code: 激活码（webhook 已确认订单）
+        user_id: 买家用户 ID
+
+    Returns:
+        bool: 是否绑定成功
+    """
+    from datetime import datetime, timedelta, timezone
+
+    row = await get_license_by_code(code)
+    if not row:
+        return False
+
+    if row.get("status") != "sold":
+        logger.warning("自动绑定拒绝: 状态不是 sold (code=%s, status=%s)", code[:12], row.get("status"))
+        return False
+
+    duration = row.get("duration_days", 30)
+    now = datetime.now(timezone.utc)
+    expires_at = (now + timedelta(days=duration)).isoformat()
+
+    bound = await bind_license(code, user_id, "auto-webhook", expires_at)
+    if not bound:
+        return False
+
+    tier = "lifetime" if row.get("type") == "lifetime" else "pro"
+    paid = {
+        "tier": tier,
+        "expires_at": expires_at if tier == "pro" else None,
+        "updated_at": now.isoformat(),
+    }
+    await update_paid_metadata(user_id, paid)
+
+    return True
