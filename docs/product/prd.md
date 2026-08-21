@@ -9,7 +9,7 @@
 | 作者 | Aparencia |
 | 日期 | 2026-08-18 |
 | 状态 | 草稿 |
-| 关联文档 | [pain-points-v1.md（[ ] 已归档）](../archive/2026-08-21/pain-points-v1.md)（痛点图谱 v1，演进见 pain-points-v2/v3）· [mvp-canvas.md](./mvp-canvas.md)（MVP 画布） |
+| 关联文档 | [pain-points-v4.md](./pain-points-v4.md)（统一卷，产品规划唯一主导文档；演进史见 v1/v2/v3 归档副本）· [mvp-canvas.md](./mvp-canvas.md)（MVP 画布） |
 
 ## 1. 概述
 

@@ -2,7 +2,7 @@
 
 > **状态**: 前瞻分析（未立项，待裁决）
 > 日期：2026-08-21
-> 依据：[pain-points-v3.md](../product/pain-points-v3.md) 第七部分实施路线图 + 代码库实态盘点（dev 分支，v0.10.2 交付后）
+> 依据：[pain-points-v3.md（[ ] 已归档）](../archive/2026-08-22/pain-points-v3.md) 第七部分实施路线图（已并入 [pain-points-v4.md](../product/pain-points-v4.md) §11）+ 代码库实态盘点（dev 分支，v0.10.2 交付后）
 > 立项后本文档迁移至 `versions/` 跟踪并按归档机制处置。
 
 ## 一、现状盘点：v3 三层架构中"已建成"与"零代码"的边界

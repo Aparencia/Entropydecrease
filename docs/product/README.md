@@ -7,8 +7,9 @@
 
 | 文档 | 回答的问题 | 状态 |
 |------|-----------|------|
-| [pain-points-v3.md](./pain-points-v3.md) | 怎么融合？融合裁决卷：地形定义（结构承载性）+ 统一产物模型（笔记组）+ 学习循环统一 | v3.0 终稿 |
-| [pain-points-v2.md](./pain-points-v2.md) | 为什么做？学习全链路认知地图与产品蓝图（上卷飞轮模型 + 下卷同步器模型；两地形理论，融合裁决见 v3） | v2.0 终稿 |
+| [pain-points-v4.md](./pain-points-v4.md) | 怎么融合？统一卷：两地形、一产物、一循环——地形定义（结构承载性）+ 统一理论（同步器/飞轮）+ 笔记组产物层 + 统一指标/护城河/路线图 | v4.0 统一终稿（唯一主导） |
+| pain-points-v3.md（[→ 已归档](../archive/2026-08-22/pain-points-v3.md)） | 融合裁决卷（三裁决 + Phase 1-4，已内化为 v4 正文） | [ ] 已归档 |
+| pain-points-v2.md（[→ 已归档](../archive/2026-08-22/pain-points-v2.md)） | 双卷认知地图（上卷飞轮 + 下卷同步器，已整合入 v4） | [ ] 已归档 |
 | pain-points-v1.md（[→ 已归档](../archive/2026-08-21/pain-points-v1.md)） | 学习全链路痛点图谱 v1.0（历史参考，被 v2.0 取代） | [ ] 已归档 |
 | [mvp-canvas.md](./mvp-canvas.md) | 做什么？MVP 验证画布：视频知识提取 + 持久化闭环 | 草案 |
 | [prd.md](./prd.md) | 怎么细化？产品需求文档（课堂助手为核心，MoSCoW + 场景 + 验收） | 草稿 |
@@ -28,7 +29,7 @@
 
 ## 文档演进顺序（Lean Product）
 
-1. 痛点图谱立论（pain-points.md）
+1. 痛点图谱立论（pain-points v1 → v2/v3 → [v4 统一卷](./pain-points-v4.md)）
 2. MVP 画布定范围（mvp-canvas.md）
 3. PRD 细化功能（prd.md）
 4. 需求池跟踪排期（requirements-pool.md）
