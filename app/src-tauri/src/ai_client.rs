@@ -11,7 +11,14 @@
 //!              网络调用不持全局锁——防 300s 超时阻塞其他 AI 命令）。
 //! @ai-context: 网络路径不单测（与 model_downloader 同口径）；payload 构建/
 //!              响应提取/JSON 解析为纯函数可单测。
+//! @ai-context: v0.11.6 M1 多 Provider 化：from_provider（BYOK Provider 直接
+//!              构建）+ from_settings_with_store（默认 Provider 接管 base_url/
+//!              model，无 Provider 配置回退旧字段——兼容迁移前状态）+
+//!              is_fallbackable/fallback_provider_ids（降级链纯函数：
+//!              Network/Server/Quota 瞬态可降级，Auth/Balance/Parse 归因
+//!              用户/响应不降级；实际 fallback 调用由任务层接线）。
 
+use crate::ai_provider::{AiProviderConfig, AiProviderStore};
 use crate::ai_settings::AiSettings;
 
 /// 单请求超时默认（秒；env SILICONFLOW_TIMEOUT_SECS 可覆盖）。
@@ -74,6 +81,17 @@ impl std::fmt::Display for AiClientError {
     }
 }
 
+impl AiClientError {
+    /// 是否可触发 Provider 降级（Network/Server/Quota 瞬态；Auth/Balance/
+    /// Parse 归因用户或响应——不降级，错误原样上抛引导）。
+    pub fn is_fallbackable(&self) -> bool {
+        matches!(
+            self,
+            AiClientError::Network(_) | AiClientError::Server(_) | AiClientError::Quota(_)
+        )
+    }
+}
+
 /// 共享 AI client（阻塞调用——command 层 spawn_blocking 包裹）。
 #[derive(Debug, Clone)]
 pub struct AiClient {
@@ -108,6 +126,34 @@ impl AiClient {
 
     pub fn new(config: AiClientConfig) -> Self {
         Self { config }
+    }
+
+    /// 从 Provider 配置构建（M1：BYOK 多 Provider 入口；密钥由 command 层
+    /// 按 scope 解析注入——env 优先，否则 per-provider 凭据）。
+    pub fn from_provider(provider: &AiProviderConfig, api_key: Option<String>) -> Self {
+        Self::new(AiClientConfig {
+            base_url: provider.base_url.clone(),
+            api_key: api_key.unwrap_or_default(),
+            model: provider.default_model.clone(),
+            timeout_secs: env_parse("SILICONFLOW_TIMEOUT_SECS", DEFAULT_TIMEOUT_SECS),
+            max_retries: env_parse("SILICONFLOW_RETRIES", DEFAULT_MAX_RETRIES as u64) as u32,
+            max_tokens: env_parse(MAX_TOKENS_ENV, DEFAULT_MAX_TOKENS as u64) as u32,
+        })
+    }
+
+    /// 旧入口升级：从设置 + Provider 存储解析（默认 Provider 接管
+    /// base_url/model；无 Provider 配置时回退旧字段——兼容迁移前状态）。
+    pub fn from_settings_with_store(
+        settings: &AiSettings,
+        stored_key: Option<String>,
+        store: &AiProviderStore,
+    ) -> Self {
+        if let Some(id) = store.effective_default_id() {
+            if let Some(p) = store.get(&id) {
+                return Self::from_provider(p, stored_key);
+            }
+        }
+        Self::from_settings(settings, stored_key)
     }
 
     /// chat/completions 请求 → 原始 assistant 文本（未 parse；各适配器自行解析）。
@@ -263,6 +309,22 @@ pub fn parse_json_object(raw: &str) -> Result<serde_json::Value, AiClientError> 
 /// 环境变量数字解析（缺省/非法 → 默认值）。
 fn env_parse(key: &str, default: u64) -> u64 {
     std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+}
+
+/// 降级链 Provider id 序列（纯函数）：默认 Provider + 其 fallback_order 中
+/// 存在且启用的 id（去重；M1 简单版：只解析顺序，实际 fallback 调用由
+/// 任务层接线——最多 fallback 一次）。
+pub fn fallback_provider_ids(store: &AiProviderStore, primary: &AiProviderConfig) -> Vec<String> {
+    let mut ids = vec![primary.id.clone()];
+    for id in &primary.fallback_order {
+        if id != &primary.id
+            && store.get(id).map(|p| p.enabled).unwrap_or(false)
+            && !ids.contains(id)
+        {
+            ids.push(id.clone());
+        }
+    }
+    ids
 }
 
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。

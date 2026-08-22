@@ -3,9 +3,10 @@
 use std::sync::Mutex;
 
 use crate::ai_client::{
-    build_chat_payload, chat_completions_url, extract_content, parse_json_object, AiClient,
-    AiClientConfig, AiClientError,
+    build_chat_payload, chat_completions_url, extract_content, fallback_provider_ids, parse_json_object,
+    AiClient, AiClientConfig, AiClientError,
 };
+use crate::ai_provider::{preset_templates, AiProviderStore};
 use crate::ai_settings::AiSettings;
 
 /// env 操作互斥（防并行测试互相覆盖 SILICONFLOW_*——与 ai_cost_tests 同模式）。
@@ -159,4 +160,76 @@ fn chat_json_without_key_is_auth_error() {
         Err(AiClientError::Auth(_)) => {}
         other => panic!("期望 Auth 错误，实际 {:?}", other.map(|_| ())),
     }
+}
+
+// ---- v0.11.6 M1：Provider 化 + 降级链（Task 3 纯函数层）----
+
+#[test]
+fn from_provider_builds_config_from_provider() {
+    let mut p = preset_templates().remove(0);
+    p.id = "p1".to_string();
+    let client = AiClient::from_provider(&p, Some("sk-p1".to_string()));
+    assert_eq!(client.config.base_url, p.base_url);
+    assert_eq!(client.config.model, p.default_model);
+    assert_eq!(client.config.api_key, "sk-p1");
+}
+
+#[test]
+fn from_settings_resolves_default_provider_when_set() {
+    let mut store = AiProviderStore::default();
+    let mut p = preset_templates().remove(0);
+    p.id = "prov-a".to_string();
+    p.default_model = "model-a".to_string();
+    store.providers.push(p);
+    store.default_provider_id = Some("prov-a".to_string());
+    let client = AiClient::from_settings_with_store(
+        &crate::ai_settings::AiSettings::default(),
+        Some("sk-x".to_string()),
+        &store,
+    );
+    assert_eq!(client.config.model, "model-a");
+    assert_eq!(client.config.base_url, "https://api.siliconflow.cn/v1");
+}
+
+#[test]
+fn from_settings_falls_back_to_legacy_fields_without_store() {
+    // 测试隔离：宿主可能已设 SILICONFLOW_MODEL——锁内清除后走旧字段解析
+    with_env_locked(|| {
+        let client = AiClient::from_settings_with_store(
+            &crate::ai_settings::AiSettings::default(),
+            Some("sk-x".to_string()),
+            &AiProviderStore::default(),
+        );
+        // 空 store → 回退旧字段解析（兼容迁移前状态）
+        assert_eq!(client.config.model, crate::ai_settings::DEFAULT_AI_MODEL);
+    });
+}
+
+#[test]
+fn fallback_chain_skips_auth_balance_errors() {
+    use crate::ai_client::AiClientError;
+    assert!(AiClientError::Network("x".into()).is_fallbackable());
+    assert!(AiClientError::Server("x".into()).is_fallbackable());
+    assert!(AiClientError::Quota("x".into()).is_fallbackable());
+    assert!(!AiClientError::Auth("x".into()).is_fallbackable());
+    assert!(!AiClientError::Balance("x".into()).is_fallbackable());
+    assert!(!AiClientError::Parse("x".into()).is_fallbackable());
+}
+
+#[test]
+fn fallback_chain_order_resolves_provider_sequence() {
+    let mut store = AiProviderStore::default();
+    let mk = |id: &str| {
+        let mut p = preset_templates().remove(0);
+        p.id = id.to_string();
+        p
+    };
+    store.providers.push(mk("a"));
+    store.providers.push(mk("b"));
+    store.providers.push(mk("c"));
+    store.default_provider_id = Some("a".to_string());
+    let mut a = store.get("a").unwrap().clone();
+    a.fallback_order = vec!["b".to_string(), "ghost".to_string(), "c".to_string()];
+    let ids = fallback_provider_ids(&store, &a);
+    assert_eq!(ids, vec!["a".to_string(), "b".to_string(), "c".to_string()]);
 }
