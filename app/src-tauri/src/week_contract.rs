@@ -10,6 +10,8 @@
 
 /// 一周秒数（周一零点周界计算用）。
 pub const WEEK_SECS: i64 = 7 * 86_400;
+/// 一天毫秒数（聚合按天去重口径——review_logs.reviewed_at 为毫秒）。
+const DAY_MS: i64 = 86_400_000;
 /// 最小可行日徽标阈值：本周完成卡数达到此值即"成立"（N9/N11 低谷生存
 /// 的最轻形态——一天状态崩坏不否定整周，但至少 3 次提取才算成立）。
 pub const MINIMAL_DAY_CARDS: usize = 3;
@@ -34,14 +36,17 @@ pub struct WeekAggregate {
     pub review_cards: usize,
 }
 
-/// review 记录（reviewed_at Unix 秒列表）→ 周聚合。
+/// review 记录（reviewed_at Unix 毫秒列表）→ 周聚合。
 ///
-/// @ai-context: 天数按 (t / 86400) 去重——同一天多次复习只算一天（日历日口径，
+/// @ai-context: 天数按 (t / DAY_MS) 去重——同一天多次复习只算一天（日历日口径，
 ///              与 week_start 周界一致）；卡数=复习次数（提取动作次数）。
+/// @ai-context: 审查修复（2026-08-22）：口径统一毫秒——review_logs.reviewed_at
+///              由 review_card 以毫秒写入，此前按秒除 86400 会致同一天内
+///              全部去重为同一"毫秒天"（完成度失真）。
 pub fn aggregate_week(reviewed_ats: &[i64]) -> WeekAggregate {
     let mut days = std::collections::HashSet::new();
     for t in reviewed_ats {
-        days.insert(t / 86_400);
+        days.insert(t / DAY_MS);
     }
     WeekAggregate {
         review_days: days.len(),

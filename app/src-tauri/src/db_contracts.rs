@@ -72,15 +72,20 @@ impl Db {
     /// @ai-context: JOIN flashcards 按组过滤（review_logs 无组概念，弹性承诺
     ///              日志只记卡）；范围 [week_start, week_start+7d) 左闭右开——
     ///              下一周周一零点归下周，周界不重叠。
+    /// @ai-context: 审查修复（2026-08-22）：review_logs.reviewed_at 由 review_card
+    ///              以毫秒写入（now_ms），而 week_start 为秒——边界须乘 1000
+    ///              转毫秒，否则秒级边界永远小于毫秒级数据（完成度恒零）。
     pub fn review_ats_in_week(&self, group_id: i64, week_start: i64) -> Result<Vec<i64>> {
         self.with_conn(|conn| {
+            let start_ms = week_start * 1000;
+            let end_ms = (week_start + WEEK_SECS) * 1000;
             let mut stmt = conn.prepare(
                 "SELECT l.reviewed_at FROM review_logs l
                  JOIN flashcards c ON c.id = l.card_id
                  WHERE c.group_id = ?1 AND l.reviewed_at >= ?2 AND l.reviewed_at < ?3
                  ORDER BY l.reviewed_at ASC",
             )?;
-            let rows = stmt.query_map(params![group_id, week_start, week_start + WEEK_SECS], |r| r.get(0))?;
+            let rows = stmt.query_map(params![group_id, start_ms, end_ms], |r| r.get(0))?;
             rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
         })
     }

@@ -87,23 +87,24 @@ fn missing_contract_returns_none() {
 
 #[test]
 fn review_ats_in_week_filters_group_and_range() {
-    // Arrange：两组各一卡；本周 3 次复习 + 下周 1 次
+    // Arrange：两组各一卡；本周 3 次复习 + 下周 1 次（reviewed_at 为毫秒口径）
     let db = mem_db();
     let g1 = make_group(&db, "组一");
     let g2 = make_group(&db, "组二");
     let card1 = make_card(&db, g1.id, "卡一");
     let card2 = make_card(&db, g2.id, "卡二");
     let ws = week_start_secs(1_767_225_600);
-    db.add_review_log(card1.id, "good", ws + 3_600).expect("r1"); // 本周
-    db.add_review_log(card1.id, "good", ws + 86_400).expect("r2"); // 本周
-    db.add_review_log(card2.id, "easy", ws + 43_200).expect("r3"); // 本周·他组
-    db.add_review_log(card1.id, "again", ws + 604_800 + 100).expect("r4"); // 下周
+    let ws_ms = ws * 1000;
+    db.add_review_log(card1.id, "good", ws_ms + 3_600_000).expect("r1"); // 本周
+    db.add_review_log(card1.id, "good", ws_ms + 86_400_000).expect("r2"); // 本周
+    db.add_review_log(card2.id, "easy", ws_ms + 43_200_000).expect("r3"); // 本周·他组
+    db.add_review_log(card1.id, "again", ws_ms + 604_800_000 + 100).expect("r4"); // 下周
     // Act
     let ats = db.review_ats_in_week(g1.id, ws).expect("query");
-    // Assert：仅组一本周 2 条（下周归下周、他组不计）
+    // Assert：仅组一本周 2 条（下周归下周、他组不计；返回毫秒原值）
     assert_eq!(ats.len(), 2);
-    assert!(ats.contains(&(ws + 3_600)));
-    assert!(ats.contains(&(ws + 86_400)));
+    assert!(ats.contains(&(ws_ms + 3_600_000)));
+    assert!(ats.contains(&(ws_ms + 86_400_000)));
 }
 
 #[test]

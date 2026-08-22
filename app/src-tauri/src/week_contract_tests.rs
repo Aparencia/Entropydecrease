@@ -50,9 +50,9 @@ fn week_start_cross_year_boundary() {
 
 #[test]
 fn aggregate_dedup_same_day() {
-    // Arrange：同一天 3 次复习 + 另一天 1 次
-    let day1 = 1_767_225_600 + 3_600; // 周四 01:00
-    let day2 = 1_767_225_600 + 86_400; // 周五
+    // Arrange：同一天 3 次复习 + 另一天 1 次（reviewed_at 为毫秒口径）
+    let day1 = 1_767_225_600_000 + 3_600_000; // 周四 01:00
+    let day2 = 1_767_225_600_000 + 86_400_000; // 周五
     let reviews = [day1, day1 + 100, day1 + 200, day2];
     // Act
     let agg = aggregate_week(&reviews);
