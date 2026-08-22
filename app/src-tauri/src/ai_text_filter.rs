@@ -168,6 +168,7 @@ impl AiTextFilterAdapter {
             // 2026-08-21 真机排查：显式输出上限（缺省时 DeepSeek 8192 token
             // 硬切 JSON 截断）——与共享 client 同默认，env 可覆盖
             max_tokens: self.config.max_tokens,
+            is_local: false,
         });
         let raw = client
             .chat_text(&system, &user)

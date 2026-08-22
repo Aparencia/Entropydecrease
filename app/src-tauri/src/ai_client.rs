@@ -49,6 +49,8 @@ pub struct AiClientConfig {
     pub timeout_secs: u64,
     pub max_retries: u32,
     pub max_tokens: u32,
+    /// 本地端点（Ollama 等免密钥推理；空密钥不触发 Auth 检查——本地优先叙事）
+    pub is_local: bool,
 }
 
 /// 归一化 AI 错误（REQ-145 失败原因四类 + 服务端/解析补充）。
@@ -121,6 +123,7 @@ impl AiClient {
             timeout_secs: env_parse("SILICONFLOW_TIMEOUT_SECS", DEFAULT_TIMEOUT_SECS),
             max_retries: env_parse("SILICONFLOW_RETRIES", DEFAULT_MAX_RETRIES as u64) as u32,
             max_tokens: env_parse(MAX_TOKENS_ENV, DEFAULT_MAX_TOKENS as u64) as u32,
+            is_local: false,
         })
     }
 
@@ -138,6 +141,8 @@ impl AiClient {
             timeout_secs: env_parse("SILICONFLOW_TIMEOUT_SECS", DEFAULT_TIMEOUT_SECS),
             max_retries: env_parse("SILICONFLOW_RETRIES", DEFAULT_MAX_RETRIES as u64) as u32,
             max_tokens: env_parse(MAX_TOKENS_ENV, DEFAULT_MAX_TOKENS as u64) as u32,
+            // Why: Ollama 本地端点无需密钥；空密钥不触发 Auth 检查——本地优先叙事
+            is_local: provider.kind == crate::ai_provider::ProviderKind::Ollama,
         })
     }
 
@@ -162,7 +167,7 @@ impl AiClient {
     ///              parse_response 做 TextFilterResponse 反序列化）；
     ///              chat_json = chat_text + parse_json_object 的组合。
     pub fn chat_text(&self, system: &str, user: &str) -> Result<String, AiClientError> {
-        if self.config.api_key.trim().is_empty() {
+        if !self.config.is_local && self.config.api_key.trim().is_empty() {
             return Err(AiClientError::Auth("未配置 API 密钥（设置页保存或配置环境变量）".to_string()));
         }
         let payload = build_chat_payload(&self.config.model, system, user, self.config.max_tokens);

@@ -155,11 +155,29 @@ fn chat_json_without_key_is_auth_error() {
         timeout_secs: 5,
         max_retries: 0,
         max_tokens: 20000,
+        is_local: false,
     });
     match client.chat_json("sys", "usr") {
         Err(AiClientError::Auth(_)) => {}
         other => panic!("期望 Auth 错误，实际 {:?}", other.map(|_| ())),
     }
+}
+
+#[test]
+fn chat_json_without_key_skips_auth_when_local() {
+    // Why: Ollama 本地端点无需密钥——is_local=true 时空密钥不触发 Auth 拒绝
+    let client = AiClient::new(AiClientConfig {
+        base_url: "http://127.0.0.1:11434/v1".to_string(),
+        api_key: "".to_string(),
+        model: "llama3".to_string(),
+        timeout_secs: 5,
+        max_retries: 0,
+        max_tokens: 20000,
+        is_local: true,
+    });
+    // is_local 时空密钥应跳过 Auth 检查，实际会触发网络/传输错误（非 Auth）
+    let result = client.chat_json("sys", "usr");
+    assert!(!matches!(result, Err(AiClientError::Auth(_))), "is_local 不应返回 Auth 错误");
 }
 
 // ---- v0.11.6 M1：Provider 化 + 降级链（Task 3 纯函数层）----
@@ -172,6 +190,18 @@ fn from_provider_builds_config_from_provider() {
     assert_eq!(client.config.base_url, p.base_url);
     assert_eq!(client.config.model, p.default_model);
     assert_eq!(client.config.api_key, "sk-p1");
+    // Why: Ollama 预设 is_local=true；云端预设（SiliconFlow）is_local=false
+    assert!(!client.config.is_local, "云端 Provider is_local=false");
+}
+
+#[test]
+fn from_provider_sets_is_local_for_ollama() {
+    // Why: Ollama 本地端点无需密钥——is_local=true 确保空密钥不触发 Auth 拒绝
+    let ollama_preset = preset_templates().into_iter().find(|p| p.kind == crate::ai_provider::ProviderKind::Ollama)
+        .expect("Ollama 预设存在");
+    let client = AiClient::from_provider(&ollama_preset, None);
+    assert!(client.config.is_local, "Ollama Provider is_local=true");
+    assert!(client.config.api_key.is_empty(), "Ollama 空密钥预期");
 }
 
 #[test]

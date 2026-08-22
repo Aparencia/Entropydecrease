@@ -84,10 +84,9 @@ pub async fn ai_enrich_start(
     }
     let mock = std::env::var(MOCK_ENV).map(|v| v == "1").unwrap_or(false);
     if !mock {
-        let env_key = std::env::var("SILICONFLOW_API_KEY").ok().filter(|k| !k.is_empty());
-        let stored = st.ai_credentials.load_key("default")?;
-        if env_key.is_none() && stored.is_none() {
-            return Err("未配置 API 密钥（设置页保存密钥或配置环境变量 SILICONFLOW_API_KEY）".to_string());
+        let has_key = crate::commands_ai_providers::resolve_default_provider_key(&st)?.is_some();
+        if !has_key {
+            return Err("未配置 API 密钥（请在设置页 AI 服务提供商中配置）".to_string());
         }
     }
     // F1 修复（2026-08-21）+ 审查修复（2026-08-21）：任务去重——按
