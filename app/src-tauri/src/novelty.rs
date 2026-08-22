@@ -16,9 +16,14 @@ pub const REDUNDANT_THRESHOLD: f32 = 0.85;
 
 /// 画面档 → 冗余阈值（v0.11.5 Task 2）。
 ///
+/// 契约（单一来源）：字符串值必须与 `VisualTier::as_str()` 同口径——
+/// "rich" → 0.90, "low" → 0.80；未知档回退默认 0.85。
+/// 若 `VisualTier::as_str()` 新增变体，此处必须同步更新。
+///
 /// @ai-context: rich 档 0.90 更宽松——画面信息价值高时少判冗余（板书/代码
 ///              翻页细变也保留）；low 档 0.80 更严格——低价值画面（口播）
 ///              轻微变化直接跳过省预算；未知档回退默认 0.85（零回归）。
+/// @ai-context: "rich"/"low" 字符串值必须与 `VisualTier::as_str()` 同口径（单一来源契约）。
 pub fn tier_threshold(tier: &str) -> f32 {
     match tier {
         "rich" => 0.90,

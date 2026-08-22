@@ -149,9 +149,12 @@ fn changed_region_texts(
         .filter_map(|b| {
             let tb = b.bbox.as_ref()?;
             // TextBox（x/y/w/h，帧坐标）→ Rect（left/top/right/bottom，相交口径）
+            // Minor #2 修复：bottom/right 用 ceil() 防止亚像素截断漏判
+            // （left/top 用 floor 语义已由 trunc 隐含满足——x/y 非负时
+            //  as i32 等价于 floor——亚像素区域左边缘不会漏进内部）
             let r = crate::capture::frame_diff::Rect {
                 left: tb.x as i32, top: tb.y as i32,
-                right: (tb.x + tb.w) as i32, bottom: (tb.y + tb.h) as i32,
+                right: (tb.x + tb.w).ceil() as i32, bottom: (tb.y + tb.h).ceil() as i32,
             };
             bounds.intersect(&r).map(|_| b.text.clone())
         })
@@ -214,9 +217,74 @@ mod tests {
         assert!(has_useful_blocks(&mixed, &junk), "存在可用块应判定为有产出");
         assert!(!has_useful_blocks(&[], &junk));
     }
+    /// 构造带 bbox 的 OCR 块（测试辅助）。
+    fn block_with_bbox(text: &str, x: f32, y: f32, w: f32, h: f32) -> crate::types::OcrBlock {
+        crate::types::OcrBlock {
+            timestamp_ms: None,
+            text: text.to_string(),
+            score: 0.9,
+            bbox: Some(crate::types::TextBox { x, y, w, h }),
+            region_kind: None,
+        }
+    }
+
+    /// 构造 GridDiff（测试辅助）。
+    fn grid_diff_with_bounds(
+        bounds: Option<crate::capture::frame_diff::Rect>,
+    ) -> crate::capture::grid_diff::GridDiff {
+        crate::capture::grid_diff::GridDiff {
+            changed_cells: vec![],
+            bounds,
+            changed_ratio: 0.0,
+        }
+    }
+
+    #[test]
+    fn changed_region_texts_bounds_none_fallback_full() {
+        // Arrange：无变化包围盒 → 回退整帧文本
+        let blocks = vec![block("文本A", 0.9), block("文本B", 0.9)];
+        let kept: Vec<&crate::types::OcrBlock> = blocks.iter().collect();
+        let grid = grid_diff_with_bounds(None);
+        // Act
+        let result = changed_region_texts(&kept, &grid);
+        // Assert：返回全部 kept 块的 text
+        assert_eq!(result, vec!["文本A", "文本B"], "bounds=None 应返回整帧文本");
+    }
+
+    #[test]
+    fn changed_region_texts_intersecting_blocks_only() {
+        // Arrange：3 个块，仅第 1 个与变化包围盒相交
+        let b1 = block_with_bbox("相交块", 10.0, 10.0, 20.0, 20.0); // rect: (10,10,30,30)
+        let b2 = block_with_bbox("不相交块1", 200.0, 200.0, 20.0, 20.0); // rect: (200,200,220,220)
+        let b3 = block_with_bbox("不相交块2", 300.0, 300.0, 20.0, 20.0); // rect: (300,300,320,320)
+        let blocks = vec![b1, b2, b3];
+        let kept: Vec<&crate::types::OcrBlock> = blocks.iter().collect();
+        // 变化包围盒仅与 b1 相交（15,15,25,25 ∩ 10,10,30,30 → (15,15,25,25) 非空）
+        let bounds = crate::capture::frame_diff::Rect { left: 15, top: 15, right: 25, bottom: 25 };
+        let grid = grid_diff_with_bounds(Some(bounds));
+        // Act
+        let result = changed_region_texts(&kept, &grid);
+        // Assert：仅返回相交块的文本
+        assert_eq!(result, vec!["相交块"], "应仅返回与变化包围盒相交的块文本");
+    }
+
+    #[test]
+    fn changed_region_texts_any_missing_bbox_fallback_full() {
+        // Arrange：一个块缺 bbox → 整帧回退（当前实现行为）
+        let b1 = block_with_bbox("有bbox块", 10.0, 10.0, 20.0, 20.0);
+        let b2 = block("缺bbox块", 0.9); // bbox=None
+        let blocks = vec![b1, b2];
+        let kept: Vec<&crate::types::OcrBlock> = blocks.iter().collect();
+        let bounds = crate::capture::frame_diff::Rect { left: 15, top: 15, right: 25, bottom: 25 };
+        let grid = grid_diff_with_bounds(Some(bounds));
+        // Act
+        let result = changed_region_texts(&kept, &grid);
+        // Assert：降级为整帧回退（任意缺 bbox 不精确过滤）
+        // 取舍说明：缺 bbox 的块无法判断是否在变化区域内，安全降级整帧
+        assert_eq!(result, vec!["有bbox块", "缺bbox块"], "缺 bbox 应降级回退整帧");
+    }
 }
 
-/// 实时画面要点事件载荷（前端实时画面流，简要单行卡片）。
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OcrEvent {
