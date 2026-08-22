@@ -5,6 +5,10 @@
  *              启用/删除/设默认）+ "添加 Provider"向导（预设模板：SiliconFlow/
  *              DeepSeek/OpenRouter/Ollama/自定义）。密钥只写不回传——视图仅
  *              显示"已配置"；测试连接走 ai_provider_test（最小 chat 请求）。
+ *
+ * @line-limit-exemption: 338 行（300 上限）——v0.11.6 M1 code-review 修复
+ *               （确认弹窗/内联密钥输入/textarea 模型列表）后越线，
+ *               已登记 docs/standards/line-limit-exemptions.md。
  */
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -42,6 +46,8 @@ export default function AiProviderSettings() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<AiProviderView | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [keyInputId, setKeyInputId] = useState<string | null>(null);
+  const [keyInput, setKeyInput] = useState("");
 
   useEffect(() => {
     void load();
@@ -58,6 +64,7 @@ export default function AiProviderSettings() {
 
   const run = async (op: () => Promise<unknown>, okText?: string) => {
     setBusy(true);
+    setMsg({ kind: "ok", text: "处理中…" });
     try {
       await op();
       if (okText) setMsg({ kind: "ok", text: okText });
@@ -75,8 +82,10 @@ export default function AiProviderSettings() {
       setMsg({ kind: "ok", text: `连接成功：${reply}` });
     });
 
-  const removeProvider = (id: string) =>
+  const removeProvider = (id: string) => {
+    if (!window.confirm("删除后该 Provider 配置与密钥将永久清除，且不可恢复。确定删除？")) return;
     run(() => invoke("ai_provider_remove", { id }), "已删除");
+  };
 
   const setDefault = (id: string) =>
     run(() => invoke("ai_set_default_provider", { id }), "已设为默认");
@@ -99,14 +108,10 @@ export default function AiProviderSettings() {
       p.enabled ? "已禁用" : "已启用",
     );
 
-  const saveKey = (id: string) => {
-    const key = window.prompt("输入 API 密钥（将加密保存到系统凭据保护）");
-    if (key === null) return;
-    run(() => invoke("ai_provider_save_key", { id, apiKey: key.trim() }), "密钥已保存");
-  };
-
-  const clearKey = (id: string) =>
+  const clearKey = (id: string) => {
+    if (!window.confirm("清除后密钥不可恢复（需重新输入）。确定清除？")) return;
     run(() => invoke("ai_provider_clear_key", { id }), "密钥已清除");
+  };
 
   return (
     <div style={{ fontSize: 12, color: "#1f2937" }}>
@@ -142,12 +147,43 @@ export default function AiProviderSettings() {
             {p.hasKey ? (
               <button style={btn} onClick={() => void clearKey(p.id)} disabled={busy}>清除密钥</button>
             ) : (
-              <button style={btn} onClick={() => void saveKey(p.id)} disabled={busy}>配置密钥</button>
+              <button style={btn} onClick={() => setKeyInputId(p.id)} disabled={busy}>配置密钥</button>
             )}
             {!p.isDefault && (
               <button style={{ ...btn, color: "#dc2626" }} onClick={() => void removeProvider(p.id)} disabled={busy}>删除</button>
             )}
           </div>
+          {keyInputId === p.id && (
+            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+              <input
+                style={inputStyle}
+                type="password"
+                placeholder="API 密钥"
+                value={keyInput}
+                onChange={(e) => setKeyInput(e.target.value)}
+              />
+              <button
+                style={{ ...btn, background: "#0d9488", color: "#fff", border: "none" }}
+                disabled={busy}
+                onClick={() => {
+                  void run(() => invoke("ai_provider_save_key", { id: p.id, apiKey: keyInput.trim() }), "密钥已保存");
+                  setKeyInput("");
+                  setKeyInputId(null);
+                }}
+              >
+                保存
+              </button>
+              <button
+                style={btn}
+                onClick={() => {
+                  setKeyInputId(null);
+                  setKeyInput("");
+                }}
+              >
+                取消
+              </button>
+            </div>
+          )}
         </div>
       ))}
 
@@ -230,7 +266,7 @@ function ProviderForm({
       models: modelList,
       defaultModel: defaultModel.trim(),
       enabled: initial?.enabled ?? true,
-      fallbackOrder: [],
+      fallbackOrder: initial?.fallbackOrder ?? [],
       apiKey: apiKey.trim() || undefined,
     };
     setBusy(true);
@@ -271,7 +307,13 @@ function ProviderForm({
         <input style={{ ...inputStyle, width: 160 }} placeholder="端点 URL" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
       </div>
       <div style={{ marginBottom: 6 }}>
-        <input style={inputStyle} placeholder="模型列表（每行一个）" value={models} onChange={(e) => setModels(e.target.value)} />
+        <textarea
+          style={{ ...inputStyle, resize: "vertical" }}
+          rows={2}
+          placeholder="模型列表（每行一个）"
+          value={models}
+          onChange={(e) => setModels(e.target.value)}
+        />
       </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
         <input style={inputStyle} placeholder="默认模型" value={defaultModel} onChange={(e) => setDefaultModel(e.target.value)} />
