@@ -127,6 +127,8 @@ pub fn run_screen_worker(
     let mut last_capture_error: Option<Instant> = None;
     // 全帧文本去重（强制 OCR 下静止画面不重复落库）
     let mut last_full_texts: Vec<String> = Vec::new();
+    // v0.11.5（Task 2）：变化区域新颖度基准（独立于全量文本——比较域解耦）
+    let mut last_changed_texts: Vec<String> = Vec::new();
     let mut stats = ScreenStats::default();
     // M2/REQ-037：动态字幕区域跟踪（播放区域检测 + ROI 锁定/重扫；尺寸首帧自适应）
     let mut roi_tracker = crate::region_tracker::RoiTracker::new(0, 0);
@@ -304,6 +306,9 @@ pub fn run_screen_worker(
                     &mut roi_tracker, &mut layout_cache, &mut frame_samples,
                     &mut last_archived_text, &mut last_archived_at, &latest_frame,
                     &mut image_store, &ui_junk, &mut screen_tracker,
+                    // v0.11.5（Task 2）：变化区域基准 + 生效画面档（None=未定档→medium 默认）
+                    &mut last_changed_texts,
+                    tier_applied_tier.map(|t| t.as_str()).unwrap_or("medium"),
                 );
             }
             // v0.9.0 M2（REQ-189）：画面价值观测注入（每采样 tick）——帧切换

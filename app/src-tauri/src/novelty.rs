@@ -14,6 +14,19 @@ use std::collections::HashSet;
 /// 冗余判定阈值：重叠率 ≥ 该值视为冗余帧（预算让给新内容）。
 pub const REDUNDANT_THRESHOLD: f32 = 0.85;
 
+/// 画面档 → 冗余阈值（v0.11.5 Task 2）。
+///
+/// @ai-context: rich 档 0.90 更宽松——画面信息价值高时少判冗余（板书/代码
+///              翻页细变也保留）；low 档 0.80 更严格——低价值画面（口播）
+///              轻微变化直接跳过省预算；未知档回退默认 0.85（零回归）。
+pub fn tier_threshold(tier: &str) -> f32 {
+    match tier {
+        "rich" => 0.90,
+        "low" => 0.80,
+        _ => REDUNDANT_THRESHOLD,
+    }
+}
+
 /// 新颖度得分（纯函数）：新文本 token 集与最近文本 token 集的 Jaccard 重叠率。
 ///
 /// @ai-context: 0 = 全新内容（优先采样）；1 = 完全冗余；最近文本为空 →

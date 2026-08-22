@@ -195,6 +195,9 @@ pub fn process_frame(
     ui_junk: &crate::ui_junk::UiJunkList,
     // v0.7.3（REQ-155，ADR-015）：在线屏分配器（全帧分支落库带屏号）
     screen_tracker: &mut crate::screen_tracker::ScreenTracker,
+    // v0.11.5（Task 2）：变化区域新颖度基准（独立于全量文本）+ 画面档（阈值自适应）
+    last_changed_texts: &mut Vec<String>,
+    tier: &str,
 ) {
     let Some(sampler) = screen else { return };
     // 字幕区裁剪决策由 M2/REQ-037 RoiTracker 给出（播放区域 + ROI；首帧扫描期全帧）
@@ -408,6 +411,7 @@ pub fn process_frame(
                 &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
                 last_archived_text, last_archived_at, image_store, ocr_input_hash,
                 ocr_input_dhash, ui_junk, screen_tracker, layout_changed,
+                &grid, last_changed_texts, tier,
             );
         } else {
             // 区域路径无可用产出（误判/空白区域/垃圾块）→ 整帧 OCR 兜底
@@ -424,6 +428,7 @@ pub fn process_frame(
                         &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
                         last_archived_text, last_archived_at, image_store, ocr_input_hash,
                         ocr_input_dhash, ui_junk, screen_tracker, layout_changed,
+                        &grid, last_changed_texts, tier,
                     );
                 }
                 Err(e) => {
@@ -470,6 +475,7 @@ pub fn process_frame(
                             &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
                             last_archived_text, last_archived_at, image_store, ocr_input_hash,
                             ocr_input_dhash, ui_junk, screen_tracker, None,
+                            &grid, last_changed_texts, tier,
                         );
                     }
                 }

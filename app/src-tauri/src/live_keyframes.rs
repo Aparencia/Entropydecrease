@@ -52,18 +52,22 @@ pub fn handle_full_frame(
     screen_tracker: &mut crate::screen_tracker::ScreenTracker,
     // v0.7.3：版面指纹变化信号（None=无版面信息，仅用相似/gap 判定）
     layout_changed: Option<bool>,
+    // v0.11.5（Task 2）：新颖度变化区域（grid 变化包围盒）+ 独立基准 + 画面档
+    grid: &crate::capture::grid_diff::GridDiff,
+    last_changed_texts: &mut Vec<String>,
+    tier: &str,
 ) {
     // REQ-083：UI 垃圾块源头过滤（播放器时间码/控制条/水印——与字幕路径同口径）
     let kept: Vec<&crate::types::OcrBlock> =
         blocks.iter().filter(|b| is_useful_block(b, ui_junk)).collect();
     let texts: Vec<String> = kept.iter().map(|b| b.text.clone()).collect();
-    // REQ-066（v0.6.0 M3）：帧新颖度——与最近已见文本高重叠 → 冗余帧：
-    // 不落库/不归档/不收集样本（预算花在新内容上；与变化检测两级串联：
-    // 变化检测滤"无变化"帧，新颖度滤"微变但内容冗余"帧）。
-    // 冗余帧不更新 last_texts 基准（保持"最后有意义内容"——防基准污染）。
-    if !texts.is_empty() && !last_texts.is_empty() {
-        let score = crate::novelty::novelty_score(&texts, last_texts);
-        if crate::novelty::is_redundant(score, crate::novelty::REDUNDANT_THRESHOLD) {
+    // REQ-066 + v0.11.5（Task 2）：新颖度比较域 = 变化区域文本（grid_diff 变化
+    // 包围盒 ∩ 块 bbox——固定版面文字不参与重叠率）+ 阈值按画面档自适应。
+    // 冗余帧不更新任何基准（防基准污染）。
+    let changed_texts = changed_region_texts(&kept, grid);
+    if !changed_texts.is_empty() && !last_changed_texts.is_empty() {
+        let score = crate::novelty::novelty_score(&changed_texts, last_changed_texts);
+        if crate::novelty::is_redundant(score, crate::novelty::tier_threshold(tier)) {
             return;
         }
     }
@@ -126,6 +130,32 @@ pub fn handle_full_frame(
         );
     }
     *last_texts = texts;
+    // v0.11.5（Task 2）：变化区域基准独立更新（全量基准服务落库去重/样本收集）
+    *last_changed_texts = changed_texts;
+}
+
+/// 变化区域文本（v0.11.5 Task 2）：kept 过滤后仅保留与 grid_diff 变化包围盒
+/// 相交的块文本（帧坐标）。防御降级：无变化（bounds=None）/缺 bbox → 整帧。
+fn changed_region_texts(
+    kept: &[&crate::types::OcrBlock],
+    grid: &crate::capture::grid_diff::GridDiff,
+) -> Vec<String> {
+    let full = || kept.iter().map(|b| b.text.clone()).collect::<Vec<String>>();
+    let Some(bounds) = grid.bounds.as_ref() else { return full() };
+    if kept.iter().any(|b| b.bbox.is_none()) {
+        return full();
+    }
+    kept.iter()
+        .filter_map(|b| {
+            let tb = b.bbox.as_ref()?;
+            // TextBox（x/y/w/h，帧坐标）→ Rect（left/top/right/bottom，相交口径）
+            let r = crate::capture::frame_diff::Rect {
+                left: tb.x as i32, top: tb.y as i32,
+                right: (tb.x + tb.w) as i32, bottom: (tb.y + tb.h) as i32,
+            };
+            bounds.intersect(&r).map(|_| b.text.clone())
+        })
+        .collect()
 }
 
 /// 块是否有用（纯函数）：score ≥ 0.5 + 非空文本 + 非 UI 垃圾。
