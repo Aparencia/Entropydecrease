@@ -9,6 +9,7 @@
  *              不经 window.devicePixelRatio（显示缩放已含在 letterbox scale）。
  */
 import { useRef, useState } from "react";
+import { normToPixels } from "../utils/photoCrop";
 
 interface Props {
   /** 全屏快照 data URL（JPEG；capture_screen_snapshot 的 base64 拼前缀） */
@@ -84,21 +85,18 @@ export default function ScreenSelectOverlay({ src, imageWidth, imageHeight, savi
     setConfirm(box);
   };
 
-  /** canvas 物理像素裁剪 → PNG base64（OCR 无损输入） */
+  /** canvas 物理像素裁剪 → PNG base64（OCR 无损输入；坐标换算走 photoCrop 纯函数） */
   const cropAndConfirm = () => {
     if (!confirm) return;
     const img = new Image();
     img.onload = () => {
-      const sx = Math.round(confirm.x * imageWidth);
-      const sy = Math.round(confirm.y * imageHeight);
-      const sw = Math.max(1, Math.round(confirm.w * imageWidth));
-      const sh = Math.max(1, Math.round(confirm.h * imageHeight));
+      const r = normToPixels(confirm.x, confirm.y, confirm.w, confirm.h, imageWidth, imageHeight);
       const canvas = document.createElement("canvas");
-      canvas.width = sw;
-      canvas.height = sh;
+      canvas.width = r.w;
+      canvas.height = r.h;
       const ctx = canvas.getContext("2d");
       if (!ctx) { onCancel(); return; }
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      ctx.drawImage(img, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
       onConfirm(canvas.toDataURL("image/png").split(",")[1] ?? "");
     };
     img.src = src;

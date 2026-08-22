@@ -247,6 +247,8 @@ export default function SessionListPanel({
           <span style={{ fontVariantNumeric: "tabular-nums" }}>
             #{item.displayNo} · {fmtDate(s.started_at)}
           </span>
+          {/* v0.11.7：会话类型徽标（图文会话标识；视频类不显示零回归） */}
+          {s.kind === "photo" && <span style={{ fontWeight: 600 }}>📷 图文</span>}
           <span>{s.status === "recording" ? "进行中" : fmtDuration(durationMs)}</span>
           {s.source_window && (
             <span style={{ maxWidth: 130, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>

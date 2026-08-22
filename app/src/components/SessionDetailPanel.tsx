@@ -329,7 +329,12 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
           {/* 转写时间轴（字幕为主，语音/融合弱化；段 id 锚点供大纲/搜索跳转） */}
           <h3 style={{ fontSize: 13, margin: "12px 0 6px" }}>转写时间轴</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {detail.segments.length === 0 && <p style={{ fontSize: 12, color: "#9ca3af" }}>本会话无转写段</p>}
+            {/* v0.11.7：图文会话空态语义区分（无讲述内容）；其余会话维持原文案 */}
+            {detail.segments.length === 0 && (
+              <p style={{ fontSize: 12, color: "#9ca3af" }}>
+                {detail.session.kind === "photo" ? "本会话无讲述内容（图文采集）" : "本会话无转写段"}
+              </p>
+            )}
             {detail.segments.map((seg) => (
               <div key={seg.id} id={`seg-${sessionId}-${seg.id}`} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
                 <span style={{ fontSize: 11, color: "#9ca3af", width: 70, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
