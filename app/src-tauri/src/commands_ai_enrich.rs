@@ -84,8 +84,8 @@ pub async fn ai_enrich_start(
     }
     let mock = std::env::var(MOCK_ENV).map(|v| v == "1").unwrap_or(false);
     if !mock {
-        let has_key = crate::commands_ai_providers::resolve_default_provider_key(&st)?.is_some();
-        if !has_key {
+        let ready = crate::commands_ai_providers::default_provider_ready(&st)?;
+        if !ready {
             return Err("未配置 API 密钥（请在设置页 AI 服务提供商中配置）".to_string());
         }
     }
@@ -274,10 +274,11 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
         };
         let settings = st.ai_settings.lock().map_err(|e| AiTaskFailure::Other(e.to_string()))?.clone();
         let store = st.ai_providers.lock().map_err(|e| AiTaskFailure::Other(format!("AI Provider 存储锁中毒: {}", e)))?.clone();
-        // M1 统一解析口：env 优先 > 默认 Provider per-provider 凭据 > 旧 default scope
+        // m-2：密钥解析错误统一传播（原 .ok().flatten() 静默吞错）
         let client = AiClient::from_settings_with_store(
             &settings,
-            crate::commands_ai_providers::resolve_default_provider_key(&st).ok().flatten(),
+            crate::commands_ai_providers::resolve_default_provider_key(&st)
+                .map_err(|e| AiTaskFailure::Other(e))?,
             &store,
         );
         let adapter = AiNoteEnrichAdapter::new(client.clone());

@@ -140,6 +140,8 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
     setResult(null);
     setFailure(null);
     setProgress(null);
+    setEstimate(null);
+    setBalance(null);
   };
 
   const est = estimate?.estimate;

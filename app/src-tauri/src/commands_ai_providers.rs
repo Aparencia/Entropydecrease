@@ -10,10 +10,15 @@
 //!              精修/补充/余额 4 个旧调用点统一改走此口——Provider 面板
 //!              保存的密钥对实际 AI 调用生效（Task 4 审查 Important 修复）。
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use tauri::State;
 
 use crate::ai_provider::{preset_templates, provider_scope, AiProviderConfig};
 use crate::commands::AppState;
+
+/// Provider id 生成计数器（同秒碰撞防御）。
+static ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Provider 视图（前端展示；密钥只暴露存在性与来源——明文红线）。
 #[derive(Debug, Clone, serde::Serialize)]
@@ -88,9 +93,15 @@ pub fn ai_provider_list(state: State<'_, AppState>) -> Result<Vec<AiProviderView
 #[tauri::command]
 pub fn ai_provider_add(state: State<'_, AppState>, input: AiProviderInput) -> Result<AiProviderView, String> {
     let mut provider = resolve_input(&input)?;
+    let now = crate::db_sessions_rows::unix_seconds();
+    let seq = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
     provider.id = input.id.filter(|s| !s.trim().is_empty()).unwrap_or_else(|| {
-        format!("p-{}", crate::db_sessions_rows::unix_seconds())
+        format!("p-{}-{}", now, seq)
     });
+    // m-3：id 字符白名单校验（防 scope 文件路径注入碰撞）
+    if !provider.id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err("Provider id 仅允许字母/数字/连字符/下划线".to_string());
+    }
     provider.validate()?;
     let mut store = state.ai_providers.lock().map_err(|e| format!("AI Provider 存储锁中毒: {}", e))?;
     // 持锁跨 save_key + save：保证凭据与配置写入原子性（凭据先写——
@@ -134,7 +145,9 @@ pub fn ai_provider_remove(state: State<'_, AppState>, id: String) -> Result<(), 
         return Err("默认 Provider 不能删除——请先设置其他默认".to_string());
     }
     store.providers.retain(|p| p.id != id);
-    let _ = state.ai_credentials.clear_key(&provider_scope(&id));
+    if let Err(e) = state.ai_credentials.clear_key(&provider_scope(&id)) {
+        eprintln!("[AiProvider] 删除 Provider {} 凭据失败: {}", id, e);
+    }
     store.save(&state.ai_providers_path)
 }
 
@@ -183,6 +196,10 @@ pub fn ai_provider_test(state: State<'_, AppState>, id: String) -> Result<String
         return Err("请先选择默认模型".to_string());
     }
     let api_key = state.ai_credentials.load_key(&provider_scope(&id))?.unwrap_or_default();
+    // m-7.1：非 Ollama Provider 无密钥时明确提示
+    if api_key.is_empty() && provider.kind != crate::ai_provider::ProviderKind::Ollama {
+        return Err("该 Provider 未配置密钥——请先配置密钥再测试连接".to_string());
+    }
     let client = crate::ai_client::AiClient::from_provider(&provider, Some(api_key));
     let reply = client
         .chat_text(
@@ -212,6 +229,41 @@ pub fn resolve_default_provider_key(state: &AppState) -> Result<Option<String>, 
         Some(id) => state.ai_credentials.load_key(&provider_scope(&id)),
         None => state.ai_credentials.load_key("default"),
     }
+}
+
+/// 默认 Provider 是否就绪（有密钥 或 本地免密钥端点——Ollama 本地推理
+/// 无需 API 密钥，门禁据此放行；本地优先叙事）。
+pub fn default_provider_ready(state: &AppState) -> Result<bool, String> {
+    let default_id = {
+        let store = state.ai_providers.lock().map_err(|e| format!("AI Provider 存储锁中毒: {}", e))?;
+        store.effective_default_id()
+    };
+    if let Some(id) = default_id {
+        let is_local = state
+            .ai_providers
+            .lock()
+            .map_err(|e| format!("AI Provider 存储锁中毒: {}", e))?
+            .get(&id)
+            .map(|p| p.kind == crate::ai_provider::ProviderKind::Ollama)
+            .unwrap_or(false);
+        if is_local {
+            return Ok(true);
+        }
+    }
+    Ok(resolve_default_provider_key(state)?.is_some())
+}
+
+/// 默认 Provider 是否为本地（Ollama——无计费语义）。
+pub fn is_default_provider_local(state: &AppState) -> bool {
+    let store = state.ai_providers.lock();
+    store
+        .ok()
+        .and_then(|s| {
+            let id = s.effective_default_id()?;
+            let p = s.get(&id)?;
+            Some(p.kind == crate::ai_provider::ProviderKind::Ollama)
+        })
+        .unwrap_or(false)
 }
 
 /// 入参 → 配置（kind 字符串解析 + 公共字段映射；id 由调用方决定）。

@@ -6,8 +6,8 @@
  *              DeepSeek/OpenRouter/Ollama/自定义）。密钥只写不回传——视图仅
  *              显示"已配置"；测试连接走 ai_provider_test（最小 chat 请求）。
  *
- * @line-limit-exemption: 338 行（300 上限）——v0.11.6 M1 code-review 修复
- *               （确认弹窗/内联密钥输入/textarea 模型列表）后越线，
+ * @line-limit-exemption: 329 行（300 上限）——v0.11.6 M1 code-review 修复
+ *               （确认弹窗/内联密钥输入/presetOptions/textarea 模型列表）后越线，
  *               已登记 docs/standards/line-limit-exemptions.md。
  */
 import { useEffect, useState } from "react";
@@ -48,6 +48,8 @@ export default function AiProviderSettings() {
   const [showAdd, setShowAdd] = useState(false);
   const [keyInputId, setKeyInputId] = useState<string | null>(null);
   const [keyInput, setKeyInput] = useState("");
+  // I-3：预设双源——后端 ai_provider_presets 优先，失败回退内置常量
+  const [presetOptions, setPresetOptions] = useState(PRESET_OPTIONS);
 
   useEffect(() => {
     void load();
@@ -60,6 +62,11 @@ export default function AiProviderSettings() {
     } catch (e) {
       setMsg({ kind: "err", text: `读取 Provider 列表失败：${e}` });
     }
+    // I-3：预设双源——从后端拉取预设模板，失败保持内置常量兜底
+    try {
+      const presets = await invoke<AiProviderView[]>("ai_provider_presets");
+      setPresetOptions(presets.map((p) => ({ kind: p.kind as AiProviderInput["kind"], name: p.name, baseUrl: p.baseUrl, models: p.models[0] ?? "" })));
+    } catch { /* 保持内置常量兜底 */ }
   };
 
   const run = async (op: () => Promise<unknown>, okText?: string) => {
@@ -147,7 +154,7 @@ export default function AiProviderSettings() {
             {p.hasKey ? (
               <button style={btn} onClick={() => void clearKey(p.id)} disabled={busy}>清除密钥</button>
             ) : (
-              <button style={btn} onClick={() => setKeyInputId(p.id)} disabled={busy}>配置密钥</button>
+              <button style={btn} onClick={() => { setKeyInputId(p.id); setKeyInput(""); }} disabled={busy}>配置密钥</button>
             )}
             {!p.isDefault && (
               <button style={{ ...btn, color: "#dc2626" }} onClick={() => void removeProvider(p.id)} disabled={busy}>删除</button>
@@ -166,9 +173,11 @@ export default function AiProviderSettings() {
                 style={{ ...btn, background: "#0d9488", color: "#fff", border: "none" }}
                 disabled={busy}
                 onClick={() => {
-                  void run(() => invoke("ai_provider_save_key", { id: p.id, apiKey: keyInput.trim() }), "密钥已保存");
-                  setKeyInput("");
-                  setKeyInputId(null);
+                  void run(async () => {
+                    await invoke("ai_provider_save_key", { id: p.id, apiKey: keyInput.trim() });
+                    setKeyInput("");
+                    setKeyInputId(null);
+                  }, "密钥已保存");
                 }}
               >
                 保存
@@ -189,6 +198,7 @@ export default function AiProviderSettings() {
 
       {showAdd && (
         <ProviderForm
+          presetOptions={presetOptions}
           onCancel={() => setShowAdd(false)}
           onDone={(text) => {
             setShowAdd(false);
@@ -201,6 +211,7 @@ export default function AiProviderSettings() {
 
       {editing && (
         <ProviderForm
+          presetOptions={presetOptions}
           initial={editing}
           onCancel={() => setEditing(null)}
           onDone={(text) => {
@@ -227,13 +238,15 @@ function ProviderForm({
   onCancel,
   onDone,
   onError,
+  presetOptions = PRESET_OPTIONS,
 }: {
   initial?: AiProviderView;
   onCancel: () => void;
   onDone: (text: string) => void;
   onError: (text: string) => void;
+  presetOptions: { kind: AiProviderInput["kind"]; name: string; baseUrl: string; models: string }[];
 }) {
-  const [preset, setPreset] = useState(PRESET_OPTIONS[0]);
+  const [preset, setPreset] = useState(presetOptions[0]);
   const [name, setName] = useState(initial?.name ?? "");
   const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
   const [models, setModels] = useState(initial?.models.join("\n") ?? "");
@@ -242,7 +255,7 @@ function ProviderForm({
   const [busy, setBusy] = useState(false);
 
   const applyPreset = (i: number) => {
-    const p = PRESET_OPTIONS[i];
+    const p = presetOptions[i];
     setPreset(p);
     if (!initial) {
       setName(p.name);
@@ -291,7 +304,7 @@ function ProviderForm({
       {!initial && (
         <div style={{ marginBottom: 8 }}>
           <span style={{ marginRight: 6 }}>模板：</span>
-          {PRESET_OPTIONS.map((p, i) => (
+          {presetOptions.map((p, i) => (
             <button
               key={p.name}
               style={{ ...btn, marginRight: 4, background: preset.name === p.name ? "#0d9488" : "#fff", color: preset.name === p.name ? "#fff" : "#1f2937", border: "none" }}

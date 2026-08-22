@@ -48,16 +48,11 @@ pub struct BalanceView {
 pub fn ai_get_settings(state: State<'_, AppState>) -> Result<AiSettingsView, String> {
     let s = snapshot_settings(&state)?;
     let env_key = env_api_key();
-    // v0.11.6 M1：密钥存在性走统一解析口（env > 默认 Provider per-provider >
-    // 旧 default scope）——Provider 面板配置的密钥对前端门禁同样生效
-    let stored = if env_key.is_none() {
-        crate::commands_ai_providers::resolve_default_provider_key(&state)?
-    } else {
-        None
-    };
+    // v0.11.6 M1 code-review 修复：统一走 default_provider_ready（Ollama 本地
+    // 无需密钥视为已就绪；env 优先展示语义保留）
     let (has_key, key_source) = if env_key.is_some() {
         (true, "env".to_string())
-    } else if stored.is_some() {
+    } else if crate::commands_ai_providers::default_provider_ready(&state)? {
         (true, "credential".to_string())
     } else {
         (false, "none".to_string())

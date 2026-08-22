@@ -86,6 +86,8 @@ impl std::fmt::Display for AiClientError {
 impl AiClientError {
     /// 是否可触发 Provider 降级（Network/Server/Quota 瞬态；Auth/Balance/
     /// Parse 归因用户或响应——不降级，错误原样上抛引导）。
+    /// m-1：M3 任务层降级接线（v0.11.6.md 遗留登记）——纯函数已有单测，保留待接线。
+    #[allow(dead_code)]
     pub fn is_fallbackable(&self) -> bool {
         matches!(
             self,
@@ -319,6 +321,8 @@ fn env_parse(key: &str, default: u64) -> u64 {
 /// 降级链 Provider id 序列（纯函数）：默认 Provider + 其 fallback_order 中
 /// 存在且启用的 id（去重；M1 简单版：只解析顺序，实际 fallback 调用由
 /// 任务层接线——最多 fallback 一次）。
+/// m-1：M3 任务层降级接线（v0.11.6.md 遗留登记）——纯函数已有单测，保留待接线。
+#[allow(dead_code)]
 pub fn fallback_provider_ids(store: &AiProviderStore, primary: &AiProviderConfig) -> Vec<String> {
     let mut ids = vec![primary.id.clone()];
     for id in &primary.fallback_order {

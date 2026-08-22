@@ -192,6 +192,8 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
     setResult(null);
     setFailure(null);
     setProgress(null);
+    setEstimate(null);
+    setBalance(null);
   };
 
   const est = estimate?.estimate;

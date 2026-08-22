@@ -133,8 +133,8 @@ pub async fn ai_refine_start(
     let mock = std::env::var(MOCK_ENV).map(|v| v == "1").unwrap_or(false);
     // ② 密钥解析（env > 凭据库）；非 mock 且无密钥 → 明确错误（不创建任务）
     if !mock {
-        let has_key = crate::commands_ai_providers::resolve_default_provider_key(&st)?.is_some();
-        if !has_key {
+        let ready = crate::commands_ai_providers::default_provider_ready(&st)?;
+        if !ready {
             return Err("未配置 API 密钥（请在设置页 AI 服务提供商中配置）".to_string());
         }
     }
@@ -489,14 +489,14 @@ pub(crate) fn ensure_balance_for(st: &AppState, chars: usize, model: &str) -> Re
     }
     let required = est.est_cost_yuan * BALANCE_SAFETY_FACTOR;
     // 余额查询（短超时——余额接口抖动不阻断精修；失败放行宽容降级）
-    // M1 统一解析口：env 优先 > 默认 Provider per-provider 凭据 > 旧 default scope
-    let api_key = crate::commands_ai_providers::resolve_default_provider_key(st)
-        .ok()
-        .flatten()
-        .unwrap_or_default();
-    if api_key.is_empty() {
-        return Err("未配置 API 密钥（设置页保存密钥或配置环境变量 SILICONFLOW_API_KEY）".to_string());
+    // M1 统一门禁：Ollama 本地 Provider 无计费语义——跳过余额检查（m-7.3）
+    if crate::commands_ai_providers::is_default_provider_local(st) {
+        return Ok(());
     }
+    if !crate::commands_ai_providers::default_provider_ready(st)? {
+        return Err("未配置 API 密钥——请在设置页「AI 服务提供商」配置密钥（或使用 Ollama 本地）".to_string());
+    }
+    let api_key = crate::commands_ai_providers::resolve_default_provider_key(st)?.unwrap_or_default();
     let settings = st.ai_settings.lock().map_err(|e| format!("AI 设置锁中毒: {}", e))?.clone();
     let store = st.ai_providers.lock().map_err(|e| format!("AI Provider 存储锁中毒: {}", e))?.clone();
     let cfg = crate::ai_client::AiClient::from_settings_with_store(&settings, Some(api_key), &store).config;
