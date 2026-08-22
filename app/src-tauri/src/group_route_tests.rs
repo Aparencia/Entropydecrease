@@ -89,6 +89,22 @@ fn zero_signals_fallback_own_group() {
 }
 
 #[test]
+fn single_low_signal_with_domain_routes_topic_group() {
+    // Arrange：低密度单票（零章节）+ 领域命中——Task 14 实证：
+    //          B站标题有领域词但低密度票不足 2（形态已识别/术语不成块）
+    let s = GroupRouteSignals {
+        chapter_density: Some(0.0),
+        domain_kind: Some(DomainKind::Economy),
+        ..Default::default()
+    };
+    // Act
+    let d = route_group(&s);
+    // Assert：领域命中是强前提——低密度 1 票即归主题组，不落兜底独立组
+    assert_eq!(d.action, RouteAction::TopicGroup);
+    assert!(d.reasons.iter().any(|r| r.contains("领域")));
+}
+
+#[test]
 fn ninety_second_derivation_still_own_group() {
     // Arrange：90 秒完整公式推导（v4 §3.3 边缘案例）——时长短但结构密度高
     let s = GroupRouteSignals {

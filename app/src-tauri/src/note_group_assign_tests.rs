@@ -117,6 +117,25 @@ fn low_structure_with_domain_joins_topic_group() {
 }
 
 #[test]
+fn bilibili_marketing_title_with_domain_routes_to_topic() {
+    // Arrange：低结构会话（无系列、零章节、术语不成块、形态已识别）
+    //          + 领域命中（标题"公积金"→ 经济管理）——Task 0 实证：
+    //          B站标题有领域词但低密度票不足 2（仅"零章节"1 票），
+    //          旧判据落入兜底独立组，新判据应归主题组
+    let db = mem_db();
+    let s = session("你长大了，该了解公积金了", 600, Some("lecture"));
+    let segs = vec![segment("公积金制度讲解")];
+    let empty: Vec<SessionOcrBlock> = vec![];
+    // Act
+    let g = resolve_group_for_session(&db, &s, &analysis_with(0, 3), &segs, &empty)
+        .expect("resolve");
+    // Assert：应归入主题组（而非独立组/待确认）
+    let group = db.get_group(g).expect("get").expect("exists");
+    assert_eq!(group.kind, "topic");
+    assert_eq!(group.domain_tag.as_deref(), Some("economy"));
+}
+
+#[test]
 fn group_of_session_inherits_from_note() {
     // Arrange：会话笔记已归组——精修基线继承路径
     let db = mem_db();
