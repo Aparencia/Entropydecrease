@@ -36,6 +36,8 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
   const [sortMode, setSortMode] = useState<SortMode>("updated-desc");
   // v0.11.0：组过滤（null=全部；NoteGroupPanel 受控）
   const [groupFilter, setGroupFilter] = useState<number | null>(null);
+  // v0.11.5：树模式受控展开组 id（单值——同一时间只展开一个组；M4 跨页直达设置）
+  const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null);
   // v0.11.2：复习面（groupId=null 全量；undefined=关闭）
   const [review, setReview] = useState<{ groupId: number | null; name: string } | undefined>(undefined);
   const [selected, setSelected] = useState<Note | null>(null);
@@ -47,6 +49,9 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
   const seqRef = useRef(0);
   // L2：收集异步流程中的 setTimeout——effect cleanup 统一清理防卸载后触发
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // M4：跨页直达 effect 读取最新展开组（避免 stale closure）
+  const expandedGroupIdRef = useRef<number | null>(null);
+  useEffect(() => { expandedGroupIdRef.current = expandedGroupId; }, [expandedGroupId]);
   // A6：注意力跟踪
   useNoteAttention(selected?.id ?? null, selected?.title ?? "");
 
@@ -96,11 +101,16 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
         const target = list.find((n) => n.id === focusNoteId);
         if (target) {
           setSelected(target);
+          // M4（审查修复）：跨页直达——目标笔记已归组且该组未展开时，
+          // 先展开目标组（受控 expandedGroupId），再等待 DOM 渲染后滚动
+          const targetGroupId = target.group_id ?? null;
+          const needExpand = targetGroupId != null && expandedGroupIdRef.current !== targetGroupId;
+          if (needExpand) setExpandedGroupId(targetGroupId);
           // L2：定时器登记入 ref（cleanup 可清理），不再裸 setTimeout
           timersRef.current.push(
             setTimeout(() => {
               document.getElementById(`note-row-${target.id}`)?.scrollIntoView({ block: "center" });
-            }, 50),
+            }, needExpand ? 200 : 50),
           );
         }
       } catch (e) {
@@ -237,6 +247,13 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
         selectedId={selected?.id ?? null}
         onSelectNote={handleSelect}
         onOpenSession={(id) => onOpenSessions?.(id)}
+        keyword={keyword}
+        tagFilter={tagFilter}
+        sortMode={sortMode}
+        onKeywordChange={(kw) => { setKeyword(kw); setTagFilter(null); }}
+        onCreate={handleCreate}
+        expandedGroupId={expandedGroupId}
+        onExpandedGroupChange={setExpandedGroupId}
       />
       {/* v0.11.5：平铺模式（搜索/标签过滤激活）→ 显示传统列表 */}
       {flatMode && (
