@@ -90,13 +90,15 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
   const load = useCallback(async () => {
     try {
       const list = await invoke<NoteGroup[]>("list_note_groups", { terrain: null });
-      setGroups(list);
+      // v4 §11.3 默认关纪律：feed 组仅开关开启时显示（开关关闭时碎片
+      // 操作面整体不可见——命令层另有二次校验，防绕过 UI 直调）
+      setGroups(feedCaptureOn ? list : list.filter((g) => g.terrain !== "feed"));
       const due = await invoke<number>("count_due_cards", { groupId: null });
       setDueTotal(due);
     } catch (e) {
       setStatus(`组加载失败: ${e}`);
     }
-  }, []);
+  }, [feedCaptureOn]);
 
   useEffect(() => {
     void load();

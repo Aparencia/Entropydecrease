@@ -61,12 +61,7 @@ pub async fn capture_fragment(
     source: Option<String>,
 ) -> Result<Fragment, String> {
     // 开关准入（后端不信前端隐藏——v4 §11.3 默认关纪律）
-    {
-        let guard = state.feature_flags.lock().map_err(|e| format!("开关锁失败: {}", e))?;
-        if !guard.feed_capture {
-            return Err("碎片捕获未启用（请在设置中开启 feed 捕获开关）".to_string());
-        }
-    }
+    require_feed_enabled(&state)?;
     let text: String = text.trim().chars().take(FRAGMENT_TEXT_MAX).collect();
     let has_image = image_b64.as_deref().map(|s| !s.trim().is_empty()).unwrap_or(false);
     if text.is_empty() && !has_image {
@@ -201,6 +196,8 @@ pub fn resolve_fragment_image(
     state: State<'_, AppState>,
     fragment_id: i64,
 ) -> Result<Option<String>, String> {
+    // 开关准入（与 delete/移组对称——feed 能力默认关纪律，防绕过 UI 直调）
+    require_feed_enabled(&state)?;
     if fragment_id <= 0 {
         return Err("无效的碎片 id".to_string());
     }

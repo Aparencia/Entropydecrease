@@ -35,7 +35,8 @@ function FragmentThumb({ fragment }: { fragment: Fragment }) {
     return () => {
       disposed = true;
     };
-  }, [fragment]);
+    // 依赖收窄到稳定基元（对象引用每次 load 都变，会触发无谓重新 resolve）
+  }, [fragment.id, fragment.imagePath]);
   if (!url) return null;
   return (
     <img
