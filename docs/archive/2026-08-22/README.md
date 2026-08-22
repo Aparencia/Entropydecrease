@@ -1,15 +1,17 @@
-# 归档索引：2026-08-22（pain-points v2/v3 被 v4 统一卷取代归档）
+# 归档索引：2026-08-22（pain-points v2/v3 被 v4 统一卷取代归档 + v0.11.5 设计文档/实现计划归档）
 
 > 归档判定见 [archive README](../README.md)。本日归档夹为技术债滚动快照（唯一权威清单）。
 
 ## 归档清单
 
-**本日归档 2 份**：
+**本日归档 4 份**：
 
 | 源路径 → 归档路径 | 归档原因/状态 |
 |------|-----------|
-| `docs/product/pain-points-v2.md` → `docs/archive/2026-08-22/pain-points-v2.md` | **[ ] 已归档**——v2.0 双卷认知地图（上卷容器飞轮 + 下卷 feed 同步器），已被 v4.0 统一卷整合取代；保留作理论细节与三轮头脑风暴演进史追溯 |
-| `docs/product/pain-points-v3.md` → `docs/archive/2026-08-22/pain-points-v3.md` | **[ ] 已归档**——v3.0 融合裁决卷（三裁决 + Phase 1-4），裁决内容已内化为 v4 正文，不再以补丁形式外挂；保留作裁决过程追溯 |
+| `docs/product/pain-points-v2.md` → `docs/archive/2026-08-22/pain-points-v2.md` | **[ ] 已归档**——v2.0 双卷认知地图，已被 v4.0 统一卷整合取代 |
+| `docs/product/pain-points-v3.md` → `docs/archive/2026-08-22/pain-points-v3.md` | **[ ] 已归档**——v3.0 融合裁决卷，裁决内容已内化为 v4 正文 |
+| `docs/superpowers/specs/2026-08-22-v0.11.x-capture-notes-polish-design.md` → `docs/archive/2026-08-22/2026-08-22-v0.11.x-capture-notes-polish-design.md` | **[ ] 已归档**——v0.11.5 设计 spec，11 项已全部实施交付 |
+| `docs/superpowers/plans/2026-08-22-v0.11.5-capture-notes-polish.md` → `docs/archive/2026-08-22/2026-08-22-v0.11.5-capture-notes-polish.md` | **[ ] 已归档**——v0.11.5 实现计划，14 Task 全部执行完成 |
 
 **取代文档**：`docs/product/pain-points-v4.md`（统一卷：两地形、一产物、一循环）成为唯一主导规划文档。
 
@@ -22,9 +24,9 @@
 
 ## 技术债摘要
 
-- **已偿 0 笔**：纯文档变更，无 Rust/前端代码改动
+- **已偿 0 笔**：v0.11.5 六维审查 20+ 项已通过独立修复提交清偿
 - **新登记 open 0 笔**
-- **未偿 5 笔继承**（TD-040 / TD-2026-08-19-D/F/G / TD-2026-08-21-B）+ TD-2026-08-21-C 随七轮代码批待提交；详见本目录 tech-debt.md
+- **未偿 5 笔继承**（TD-040 / TD-2026-08-19-D/F/G / TD-2026-08-21-B）；详见本目录 tech-debt.md
 
 ## 备注
 
