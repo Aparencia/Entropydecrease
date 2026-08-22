@@ -191,7 +191,7 @@ fn run_refine_task_inner(
         .map_err(|e| AiTaskFailure::Other(e.to_string()))?
         .clone();
     let env_key = std::env::var("SILICONFLOW_API_KEY").ok().filter(|k| !k.is_empty());
-    let stored_key = st.ai_credentials.load_key().ok().flatten();
+    let stored_key = st.ai_credentials.load_key("default").ok().flatten();
     // 密钥来源诊断（脱敏：只打长度+前 6 字符；真机 unauthorized 排查 2026-08-21）
     eprintln!(
         "[refine-task] task={} key: env={} stored={}",

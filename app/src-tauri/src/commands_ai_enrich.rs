@@ -85,7 +85,7 @@ pub async fn ai_enrich_start(
     let mock = std::env::var(MOCK_ENV).map(|v| v == "1").unwrap_or(false);
     if !mock {
         let env_key = std::env::var("SILICONFLOW_API_KEY").ok().filter(|k| !k.is_empty());
-        let stored = st.ai_credentials.load_key()?;
+        let stored = st.ai_credentials.load_key("default")?;
         if env_key.is_none() && stored.is_none() {
             return Err("未配置 API 密钥（设置页保存密钥或配置环境变量 SILICONFLOW_API_KEY）".to_string());
         }
@@ -274,7 +274,7 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
             None => String::new(),
         };
         let settings = st.ai_settings.lock().map_err(|e| AiTaskFailure::Other(e.to_string()))?.clone();
-        let client = AiClient::from_settings(&settings, st.ai_credentials.load_key().ok().flatten());
+        let client = AiClient::from_settings(&settings, st.ai_credentials.load_key("default").ok().flatten());
         let adapter = AiNoteEnrichAdapter::new(client.clone());
         let mock_adapter = AiMockAdapter;
         // 切片（长笔记按章节切——REQ-145 基建复用；锚点跨片=全局章节标题）

@@ -1,9 +1,13 @@
-//! AI 密钥凭据存储（REQ-138，v0.8.0 M1 使能层）。
+//! AI 密钥凭据存储（REQ-138，v0.8.0 M1 使能层；v0.11.6 M1 scope 化）。
 //!
 //! @ai-context: 安全红线（AGENTS.md §4）：密钥不落 SQLite/明文文件——
 //!              Windows 用 DPAPI CryptProtectData 加密后写入数据目录
 //!              ai_credentials.bin（当前用户作用域，管理员与其他用户不可解；
 //!              CRYPTPROTECT_UI_FORBIDDEN 禁弹窗，服务化场景不卡 UI）。
+//! @ai-context: scope 化（v0.11.6 M1）：默认条目 scope="default" 保持旧文件名
+//!              ai_credentials.bin 向后兼容（已存用户凭据不失效）；per-provider
+//!              隔离用 "provider:<id>" → ai_credentials_<safe_id>.bin，各自独立
+//!              DPAPI 加密。scope 字符白名单：字母/数字/-/_，其余映射为 '_'。
 //! @ai-context: keyring crate spike 因本机 TLS 拦截（crates.io 新依赖下载
 //!              失败）跳过，直接走 v0.8.0 规划裁决的 DPAPI 直写 fallback
 //!              路径（裁决见 ADR-016）；环境变量 SILICONFLOW_API_KEY 保留
@@ -14,11 +18,12 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-/// 凭据存储抽象（测试注入内存桩；平台存储 Windows=DPAPI）。
+/// 凭据存储抽象（scope：默认条目 "default" 或 per-provider "provider:<id>"；
+/// 测试注入内存桩；平台存储 Windows=DPAPI 加密文件）。
 pub trait CredentialStore: Send + Sync {
-    fn save_key(&self, api_key: &str) -> Result<(), String>;
-    fn load_key(&self) -> Result<Option<String>, String>;
-    fn clear_key(&self) -> Result<(), String>;
+    fn save_key(&self, scope: &str, api_key: &str) -> Result<(), String>;
+    fn load_key(&self, scope: &str) -> Result<Option<String>, String>;
+    fn clear_key(&self, scope: &str) -> Result<(), String>;
 }
 
 /// 平台存储构造（Windows=DPAPI 加密文件；非 Windows 内存存储 + 告警——
@@ -50,18 +55,33 @@ pub struct DpapiCredentialStore {
 }
 
 #[cfg(target_os = "windows")]
+impl DpapiCredentialStore {
+    /// scope → 凭据文件路径（default=旧文件名兼容；provider:<id> 按 id 隔离）
+    fn scoped_path(&self, scope: &str) -> PathBuf {
+        if scope == "default" {
+            return self.path.clone();
+        }
+        let safe: String = scope
+            .chars()
+            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+            .collect();
+        self.path.with_file_name(format!("ai_credentials_{}.bin", safe))
+    }
+}
+
+#[cfg(target_os = "windows")]
 impl CredentialStore for DpapiCredentialStore {
-    fn save_key(&self, api_key: &str) -> Result<(), String> {
+    fn save_key(&self, scope: &str, api_key: &str) -> Result<(), String> {
         if api_key.trim().is_empty() {
             return Err("密钥不能为空".to_string());
         }
         let encrypted = dpapi_protect(api_key.as_bytes())?;
-        std::fs::write(&self.path, encrypted)
+        std::fs::write(self.scoped_path(scope), encrypted)
             .map_err(|e| format!("写入凭据文件失败: {}", e))
     }
 
-    fn load_key(&self) -> Result<Option<String>, String> {
-        let raw = match std::fs::read(&self.path) {
+    fn load_key(&self, scope: &str) -> Result<Option<String>, String> {
+        let raw = match std::fs::read(self.scoped_path(scope)) {
             Ok(b) => b,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(format!("读取凭据文件失败: {}", e)),
@@ -74,8 +94,8 @@ impl CredentialStore for DpapiCredentialStore {
         Ok(Some(key))
     }
 
-    fn clear_key(&self) -> Result<(), String> {
-        match std::fs::remove_file(&self.path) {
+    fn clear_key(&self, scope: &str) -> Result<(), String> {
+        match std::fs::remove_file(self.scoped_path(scope)) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(e) => Err(format!("删除凭据文件失败: {}", e)),
@@ -151,24 +171,30 @@ fn dpapi_unprotect(blob: &[u8]) -> Result<Vec<u8>, String> {
 #[allow(dead_code)]
 #[derive(Default)]
 pub struct MemoryCredentialStore {
-    inner: Mutex<Option<String>>,
+    inner: Mutex<std::collections::HashMap<String, String>>,
 }
 
 impl CredentialStore for MemoryCredentialStore {
-    fn save_key(&self, api_key: &str) -> Result<(), String> {
+    fn save_key(&self, scope: &str, api_key: &str) -> Result<(), String> {
         if api_key.trim().is_empty() {
             return Err("密钥不能为空".to_string());
         }
-        *self.inner.lock().map_err(|_| "凭据锁中毒".to_string())? = Some(api_key.to_string());
+        self.inner
+            .lock()
+            .map_err(|_| "凭据锁中毒".to_string())?
+            .insert(scope.to_string(), api_key.to_string());
         Ok(())
     }
 
-    fn load_key(&self) -> Result<Option<String>, String> {
-        Ok(self.inner.lock().map_err(|_| "凭据锁中毒".to_string())?.clone())
+    fn load_key(&self, scope: &str) -> Result<Option<String>, String> {
+        Ok(self.inner.lock().map_err(|_| "凭据锁中毒".to_string())?.get(scope).cloned())
     }
 
-    fn clear_key(&self) -> Result<(), String> {
-        *self.inner.lock().map_err(|_| "凭据锁中毒".to_string())? = None;
+    fn clear_key(&self, scope: &str) -> Result<(), String> {
+        self.inner
+            .lock()
+            .map_err(|_| "凭据锁中毒".to_string())?
+            .remove(scope);
         Ok(())
     }
 }

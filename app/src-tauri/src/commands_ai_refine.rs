@@ -134,7 +134,7 @@ pub async fn ai_refine_start(
     // ② 密钥解析（env > 凭据库）；非 mock 且无密钥 → 明确错误（不创建任务）
     if !mock {
         let env_key = std::env::var("SILICONFLOW_API_KEY").ok().filter(|k| !k.is_empty());
-        let stored = st.ai_credentials.load_key()?;
+        let stored = st.ai_credentials.load_key("default")?;
         if env_key.is_none() && stored.is_none() {
             return Err("未配置 API 密钥（设置页保存密钥或配置环境变量 SILICONFLOW_API_KEY）".to_string());
         }
@@ -493,7 +493,7 @@ pub(crate) fn ensure_balance_for(st: &AppState, chars: usize, model: &str) -> Re
     let api_key = std::env::var("SILICONFLOW_API_KEY")
         .ok()
         .filter(|k| !k.is_empty())
-        .or(st.ai_credentials.load_key().ok().flatten())
+        .or(st.ai_credentials.load_key("default").ok().flatten())
         .unwrap_or_default();
     if api_key.is_empty() {
         return Err("未配置 API 密钥（设置页保存密钥或配置环境变量 SILICONFLOW_API_KEY）".to_string());

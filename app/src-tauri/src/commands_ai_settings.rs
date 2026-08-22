@@ -48,7 +48,7 @@ pub struct BalanceView {
 pub fn ai_get_settings(state: State<'_, AppState>) -> Result<AiSettingsView, String> {
     let s = snapshot_settings(&state)?;
     let env_key = env_api_key();
-    let stored = state.ai_credentials.load_key()?;
+    let stored = state.ai_credentials.load_key("default")?;
     let (has_key, key_source) = if env_key.is_some() {
         (true, "env".to_string())
     } else if stored.is_some() {
@@ -78,13 +78,13 @@ pub fn ai_save_key(state: State<'_, AppState>, api_key: String) -> Result<(), St
     if key.chars().count() > API_KEY_MAX_CHARS {
         return Err(format!("密钥超长（上限 {} 字符）", API_KEY_MAX_CHARS));
     }
-    state.ai_credentials.save_key(&key)
+    state.ai_credentials.save_key("default", &key)
 }
 
 /// 清除凭据库密钥（文件不存在视为已清除——幂等）。
 #[tauri::command]
 pub fn ai_clear_key(state: State<'_, AppState>) -> Result<(), String> {
-    state.ai_credentials.clear_key()
+    state.ai_credentials.clear_key("default")
 }
 
 /// 更新 AI 设置（白名单校验后持久化；command 层锁内 read-modify-write）。
@@ -216,7 +216,7 @@ fn snapshot_settings(state: &AppState) -> Result<AiSettings, String> {
 fn balance_adapter(state: &AppState) -> Result<AiBalanceAdapter, String> {
     let s = snapshot_settings(state)?;
     let api_key = env_api_key()
-        .or(state.ai_credentials.load_key()?)
+        .or(state.ai_credentials.load_key("default")?)
         .unwrap_or_default();
     let cfg = crate::ai_client::AiClient::from_settings(&s, Some(api_key)).config;
     Ok(AiBalanceAdapter {
