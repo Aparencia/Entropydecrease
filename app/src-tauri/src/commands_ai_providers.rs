@@ -59,16 +59,27 @@ pub fn ai_provider_presets() -> Vec<AiProviderView> {
 /// 当前 Provider 列表（含默认标记与密钥存在性）。
 #[tauri::command]
 pub fn ai_provider_list(state: State<'_, AppState>) -> Result<Vec<AiProviderView>, String> {
-    let store = state.ai_providers.lock().map_err(|e| format!("AI Provider 存储锁中毒: {}", e))?;
-    let default_id = store.effective_default_id();
+    // 快照后释放锁——load_key 为 DPAPI 文件 I/O，不持配置锁（短锁契约）
+    let snapshot = {
+        let store = state.ai_providers.lock().map_err(|e| format!("AI Provider 存储锁中毒: {}", e))?;
+        let default_id = store.effective_default_id();
+        let ids: Vec<(String, bool)> = store
+            .providers
+            .iter()
+            .map(|p| (p.id.clone(), Some(p.id.as_str()) == default_id.as_deref()))
+            .collect();
+        (store.providers.clone(), ids)
+    };
     let mut views = Vec::new();
-    for p in &store.providers {
+    for (id, is_default) in &snapshot.1 {
         let has_key = state
             .ai_credentials
-            .load_key(&provider_scope(&p.id))
+            .load_key(&provider_scope(id))
             .map(|k| k.is_some())
             .unwrap_or(false);
-        views.push(to_view(p, has_key, Some(p.id.as_str()) == default_id.as_deref()));
+        if let Some(p) = snapshot.0.iter().find(|p| &p.id == id) {
+            views.push(to_view(p, has_key, *is_default));
+        }
     }
     Ok(views)
 }
@@ -82,6 +93,9 @@ pub fn ai_provider_add(state: State<'_, AppState>, input: AiProviderInput) -> Re
     });
     provider.validate()?;
     let mut store = state.ai_providers.lock().map_err(|e| format!("AI Provider 存储锁中毒: {}", e))?;
+    // 持锁跨 save_key + save：保证凭据与配置写入原子性（凭据先写——
+    // 若 JSON 写入失败，凭据已存的残留可通过重试修复；反向序会留下
+    // 无凭据的 Provider）
     if store.get(&provider.id).is_some() {
         return Err(format!("Provider id 已存在: {}", provider.id));
     }
@@ -215,7 +229,10 @@ fn resolve_input(input: &AiProviderInput) -> Result<AiProviderConfig, String> {
         models: input.models.iter().map(|m| m.trim().to_string()).filter(|m| !m.is_empty()).collect(),
         default_model: input.default_model.trim().to_string(),
         enabled: input.enabled,
-        fallback_order: input.fallback_order.clone(),
+        fallback_order: input.fallback_order.iter()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect(),
     })
 }
 
