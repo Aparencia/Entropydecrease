@@ -1,5 +1,5 @@
 /**
- * SessionDetailPanel — 会话详情面板（原料 / 产物 / 笔记预览三视图）。
+ * SessionDetailPanel — 会话详情面板（原料 / 笔记预览两视图；v0.11.5 产物视图下线）。
  *
  * @ai-context: v0.7.1 自 SessionsPage 拆出（豁免清单登记拆分计划）——质量报告、
  *              大纲、视图模式为面板内部状态（仅依赖 sessionId），与列表页解耦，
@@ -7,17 +7,28 @@
  * @ai-context: REQ-031（融合停止异步化）：fusing 时显示"融合中"标记，
  *              session:fused 到达后父层自动刷新 detail 重挂本面板。
  * @ai-context: REQ-080 降级分级：live:asr-degraded 一次性横幅（父层透传）。
+ * @ai-context: v0.11.5（spec 5️⃣）：产物视图下线（ArtifactView 删除）——课后精修
+ *              入口迁移到面板层；进入原料视图懒触发 auto_refine_session（幂等：
+ *              已精修屏跳过），session:refined 事件驱动重新拉详情（屏卡 rendered 回填），
+ *              refine-skipped 徽标提示（模型未下载降级链）。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import ArtifactView from "../components/ArtifactView";
+import { listen } from "@tauri-apps/api/event";
 import BoxSelectOverlay from "../components/BoxSelectOverlay";
 import ImageGallery from "../components/ImageGallery";
 import NotePreviewView from "../components/NotePreviewView";
 import SpeakerSwitchCard from "../components/SpeakerSwitchCard";
-import type { GlossaryTerm, OutlineEntry, QualityReport, SessionDetail, SessionOcrBlock } from "../types";
+import type { GlossaryTerm, QualityReport, SessionDetail, SessionOcrBlock } from "../types";
 import { fmtMs } from "../utils/fmt";
+
+/** 精修进度载荷（Rust RefineProgress；v0.11.5 事件驱动屏卡回填） */
+interface RefineProgressPayload {
+  done: number;
+  total: number;
+  currentKind: string;
+}
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 
@@ -42,15 +53,15 @@ interface Props {
   onToNote: (id: number) => void;
   /** 删除会话（父层负责确认/反馈/刷新） */
   onRemove: (id: number) => void;
+  /** 重新拉详情（v0.11.5：session:refined 事件驱动屏卡结构回填） */
+  onRefreshDetail: (id: number) => void;
 }
 
-export default function SessionDetailPanel({ detail, fusing, degradedBanner, onToNote, onRemove }: Props) {
-  // v0.5.0 M7（REQ-052）+ v0.6.0 M6（REQ-081）：三视图
-  const [viewMode, setViewMode] = useState<"raw" | "artifact" | "preview">("raw");
+export default function SessionDetailPanel({ detail, fusing, degradedBanner, onToNote, onRemove, onRefreshDetail }: Props) {
+  // v0.5.0 M7（REQ-052）+ v0.6.0 M6（REQ-081）：两视图（v0.11.5 产物视图下线）
+  const [viewMode, setViewMode] = useState<"raw" | "preview">("raw");
   // M6（REQ-076）：质量报告（可信度总览卡片）
   const [quality, setQuality] = useState<QualityReport | null>(null);
-  // M6（REQ-077）：大纲（产物视图侧边导航）
-  const [outline, setOutline] = useState<OutlineEntry[]>([]);
   // v0.11.5（spec 8️⃣）：术语表（词汇表移出笔记 → 会话详情直供；null=加载中）
   const [glossary, setGlossary] = useState<GlossaryTerm[] | null>(null);
   // v0.7.3（REQ-160）：屏卡配图 baseUrl（图集同款：convertFileSrc 拼本地路径）
@@ -61,6 +72,13 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
   // 现仅匹配屏渲染（改动最小方案：保持原位展示，不提升到列表外）
   const [panelToast, setPanelToast] = useState<{ screenKey: number; msg: string } | null>(null);
   const panelToastTimerRef = useRef<number | null>(null);
+  // v0.11.5（spec 5️⃣）：课后精修状态（精修中/完成/跳过——面板层徽标，自 ArtifactView 迁移）
+  const [refining, setRefining] = useState(false);
+  const [refineMsg, setRefineMsg] = useState("");
+  // 懒触发防重（每会话只触发一次；sessionId 变化重置）
+  const autoRefinedRef = useRef<Set<number>>(new Set());
+  const onRefreshDetailRef = useRef(onRefreshDetail);
+  onRefreshDetailRef.current = onRefreshDetail;
   const sessionId = detail.session.id;
 
   // toast 定时器卸载清理（防卸载后 setState）
@@ -96,17 +114,13 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
     return map;
   }, [detail]);
 
-  // 质量报告 + 大纲 + 术语表随详情加载（失败不阻断详情展示）
+  // 质量报告 + 术语表随详情加载（v0.11.5：大纲随产物视图下线；失败不阻断详情展示）
   useEffect(() => {
     setQuality(null);
-    setOutline([]);
     setGlossary(null);
     setViewMode("raw");
     void invoke<QualityReport>("session_quality_report", { id: sessionId })
       .then(setQuality)
-      .catch(() => undefined);
-    void invoke<OutlineEntry[]>("session_outline", { id: sessionId })
-      .then(setOutline)
       .catch(() => undefined);
     void invoke<GlossaryTerm[]>("session_glossary", { id: sessionId })
       .then(setGlossary)
@@ -114,6 +128,51 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
     void invoke<string>("session_images_base_url", { sessionId })
       .then(setBaseUrl)
       .catch(() => setBaseUrl(""));
+  }, [sessionId]);
+
+  // v0.11.5（spec 5️⃣）：课后精修懒自动化——原料视图首次进入自动触发
+  // （每会话仅一次：autoRefinedRef 防重；停止后触发通道已覆盖刚停止的会话——
+  // 双通道共享 run_refine 幂等过滤，不会重复推理）
+  useEffect(() => {
+    if (viewMode !== "raw") return;
+    if (autoRefinedRef.current.has(sessionId)) return;
+    autoRefinedRef.current.add(sessionId);
+    void invoke<string>("auto_refine_session", { sessionId })
+      .then((msg) => {
+        // no-pending=无待精修结构区域（静默）；started=后台精修启动（事件驱动刷新）；
+        // 其他（模型未下载等）= 降级提示徽标
+        if (msg !== "no-pending" && msg !== "started") setRefineMsg(msg);
+      })
+      .catch(() => undefined);
+  }, [viewMode, sessionId]);
+
+  // v0.11.5（spec 5️⃣）：精修事件监听（自 ArtifactView 迁移）——
+  // refining 进度 → refined 重新拉详情（屏卡 rendered 回填）→ skipped/failed 徽标
+  useEffect(() => {
+    const unlisteners: Promise<() => void>[] = [
+      listen<RefineProgressPayload>("session:refining", (e) => {
+        setRefining(true);
+        setRefineMsg(`精修中：${e.payload.currentKind} ${e.payload.done}/${e.payload.total}`);
+      }),
+      listen<RefineProgressPayload>("session:refined", (e) => {
+        setRefining(false);
+        setRefineMsg(`精修完成：${e.payload.done} 区域已升级为模型版`);
+        // 事件驱动屏卡实时回填：重新拉详情（父层受控 detail）
+        onRefreshDetailRef.current(sessionId);
+      }),
+      listen<string>("session:refine-skipped", (e) => {
+        setRefining(false);
+        setRefineMsg(e.payload);
+      }),
+      listen<string>("session:refine-failed", (e) => {
+        setRefining(false);
+        setRefineMsg(e.payload);
+      }),
+    ];
+    return () => {
+      unlisteners.forEach((p) => void p.then((fn) => fn()));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   return (
@@ -209,12 +268,11 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
       {/* v0.7.2（REQ-153）：讲者切换（弱化版说话人分离——懒加载幂等） */}
       <SpeakerSwitchCard sessionId={sessionId} />
 
-      {/* 三视图切换（原料 / 产物 / 笔记预览——REQ-081） */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+      {/* 两视图切换（原料 / 笔记预览——REQ-081；v0.11.5 产物视图下线） */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
         {(
           [
             ["raw", "原料视图"],
-            ["artifact", "产物视图"],
             ["preview", "笔记预览"],
           ] as const
         ).map(([mode, label]) => (
@@ -232,37 +290,40 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
             {label}
           </button>
         ))}
+        {/* v0.11.5（spec 5️⃣）：课后精修入口迁移到面板层（与懒触发同命令，幂等防重） */}
+        <button
+          style={{ ...btn, borderRadius: 6, border: "1px solid #0d9488", background: "#f0fdfa", color: "#0f766e", marginLeft: "auto" }}
+          onClick={() => {
+            setRefining(true);
+            setRefineMsg("精修启动中…");
+            void invoke<string>("auto_refine_session", { sessionId })
+              .then((msg) => {
+                if (msg === "no-pending") {
+                  setRefining(false);
+                  setRefineMsg("无待精修结构区域（表格/公式）");
+                } else if (msg !== "started") {
+                  setRefining(false);
+                  setRefineMsg(msg);
+                }
+              })
+              .catch((e) => {
+                setRefining(false);
+                setRefineMsg(`精修失败: ${e}`);
+              });
+          }}
+          disabled={refining}
+        >
+          {refining ? "精修中…" : "🔬 课后精修"}
+        </button>
       </div>
+      {refineMsg && (
+        <div style={{ fontSize: 11, color: refining ? "#b45309" : "#0d9488", marginBottom: 6 }}>
+          {refining ? "⏳ " : ""}{refineMsg}
+        </div>
+      )}
 
       {viewMode === "preview" ? (
         <NotePreviewView sessionId={sessionId} />
-      ) : viewMode === "artifact" ? (
-        <div style={{ display: "flex", gap: 12 }}>
-          {/* M6（REQ-077）：大纲侧边导航（点击跳转时间轴） */}
-          {outline.length > 0 && (
-            <div style={{ width: 180, flexShrink: 0, borderRight: "1px solid #e5e7eb", paddingRight: 10 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#0f766e", marginBottom: 6 }}>📑 大纲</div>
-              {outline.map((o, i) => (
-                <div
-                  key={i}
-                  onClick={() =>
-                    document.getElementById(`ocr-${sessionId}-${o.time_ms}`)?.scrollIntoView({ block: "center" })
-                  }
-                  style={{ fontSize: 12, color: "#374151", cursor: "pointer", padding: "3px 0", borderBottom: "1px dashed #f3f4f6" }}
-                  title={`${fmtMs(o.time_ms)}`}
-                >
-                  <span style={{ color: "#9ca3af", marginRight: 4, fontVariantNumeric: "tabular-nums" }}>
-                    {fmtMs(o.time_ms)}
-                  </span>
-                  {o.text}
-                </div>
-              ))}
-            </div>
-          )}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <ArtifactView sessionId={sessionId} />
-          </div>
-        </div>
       ) : (
         <>
           {/* 转写时间轴（字幕为主，语音/融合弱化；段 id 锚点供大纲/搜索跳转） */}

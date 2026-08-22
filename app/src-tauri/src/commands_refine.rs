@@ -6,9 +6,10 @@
 //!              structure_model_status（三类状态）、structure_models_dir（装配目录）、
 //!              refine_session（课后精修触发；事件 session:refining/refined/skipped）。
 
-use tauri::State;
+use tauri::{Emitter, State};
 
 use crate::commands::AppState;
+use crate::refine::decide_refine;
 use crate::structure_models::StructureModelKind;
 
 /// 结构模型装配目录（models/structure；下载器/引擎共用，禁止硬编码绝对路径）。
@@ -117,6 +118,55 @@ pub async fn refine_session(state: State<'_, AppState>, session_id: i64) -> Resu
     })
     .await
     .map_err(|e| format!("任务调度失败: {}", e))?
+}
+
+/// 自动精修（懒触发，v0.11.5 spec 5️⃣）：进入会话详情（原料视图）时调用。
+///
+/// 返回值："no-pending"（无未精修结构区域——快速返回，不启动后台任务）|
+///         "started"（已启动后台精修）| 模型缺失等降级原因（复用 run_refine 降级链语义）。
+///
+/// @ai-context: 幂等：pending_candidates 过滤已精修区域（产物模型版结构块即标记）——
+///              停止后自动触发（commands_live::trigger_auto_refine）与本命令双通道防重，
+///              已精修屏跳过不重复推理。
+/// @ai-context: 事件通道：模型未下载 → emit session:refine-skipped（屏卡徽标提示，
+///              降级链已有）；启动后由 run_refine 逐候选 emit session:refining →
+///              session:refined（前端事件驱动屏卡 rendered 实时回填）。
+#[tauri::command]
+pub async fn auto_refine_session(state: State<'_, AppState>, session_id: i64) -> Result<String, String> {
+    if session_id <= 0 {
+        return Err("无效的会话 id".to_string());
+    }
+    let state: AppState = (*state).clone();
+    // ① 快速幂等检查：无未精修结构区域 → no-pending（不启动后台任务白跑）
+    let session_images_dir = state
+        .data_dir
+        .join("session-images")
+        .join(session_id.to_string());
+    let pending =
+        crate::commands_refine_inner::pending_candidates(&state.db, &session_images_dir, session_id)?;
+    if pending.is_empty() {
+        return Ok("no-pending".to_string());
+    }
+    // ② 模型就绪检查（诚实降级：未下载 → skipped 事件 + 返回原因——与 run_refine 同语义）
+    let models = structure_model_paths(&state);
+    let (go, reason) = decide_refine(
+        models.layout_ready(),
+        models.table_ready(),
+        models.formula_ready(),
+        &pending,
+    );
+    if !go {
+        let _ = state.app.emit("session:refine-skipped", reason.clone());
+        return Ok(reason);
+    }
+    // ③ 后台精修（run_refine 内部再次幂等过滤——双保险；失败不阻断语义保留）
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Err(e) = crate::commands_refine_inner::run_refine(&state, session_id) {
+            eprintln!("[Refine] 会话 {} 自动精修失败: {}", session_id, e);
+            let _ = state.app.emit("session:refine-skipped", format!("自动精修失败: {}", e));
+        }
+    });
+    Ok("started".to_string())
 }
 
 /// 解析命令入参（非法值回退 layout）。

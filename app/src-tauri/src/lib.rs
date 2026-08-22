@@ -564,6 +564,9 @@ pub fn run() {
             commands_refine::structure_models_dir_cmd,
             commands_refine::structure_formula_tier,
             commands_refine::refine_session,
+            // v0.11.5（spec 5️⃣）：课后精修懒自动化（详情进入原料视图自动触发；
+            // 幂等——已精修屏跳过，与停止后自动触发双通道防重）
+            commands_refine::auto_refine_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

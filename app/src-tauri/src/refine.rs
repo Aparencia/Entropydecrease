@@ -46,12 +46,16 @@ pub struct RefineProgress {
 
 /// 构建待精修清单（纯函数）：实时链路保存的裁剪图 → 候选列表。
 ///
-/// @ai-context: 输入为会话图片库列表（full/<ts>.webp）+ 版面区域类型记录
-///              （实时链路落库的 region_kind=table/formula 的 OCR 块）；
-///              无裁剪图（模型未启用时未保存）→ 空清单（精修跳过）。
+/// @ai-context: 输入为会话图片库列表（crop/<ts>.webp；H2 分离后结构区域存裁剪图
+///              命名空间）+ 版面区域类型记录（实时链路落库的 region_kind=table/formula
+///              的 OCR 块）；无裁剪图（模型未启用时未保存）→ 空清单（精修跳过）。
+/// @ai-context: 审查修复（v0.11.5 懒自动化前置）：原实现只匹配 full/<ts>.webp，
+///              H2 修复（c5eae08）后调用方改传 crop/ 列表——候选永空、精修静默
+///              失效；现 crop/ 优先 + full/ 兼容旧数据（H2 前结构区域图在归档命名空间），
+///              候选携带实际存在的路径（refine_one 按此读图）。
 pub fn build_refine_candidates(
     region_records: &[(String, u64)], // (region_kind, timestamp_ms)
-    image_paths: &[String],           // full/<ts>.webp
+    image_paths: &[String],           // 图片库相对路径（crop/ 或 full/<ts>.webp）
 ) -> Vec<RefineCandidate> {
     let mut candidates = Vec::new();
     for (kind, ts) in region_records {
@@ -59,12 +63,14 @@ pub fn build_refine_candidates(
         if !wanted {
             continue;
         }
-        // 裁剪图按时间戳匹配（full/<ts>.webp）
-        let crop = format!("full/{}.webp", ts);
-        if image_paths.iter().any(|p| p == &crop) {
+        // 裁剪图按时间戳匹配：crop/ 优先（H2 后实时链路落库命名空间），
+        // full/ 兼容旧数据（H2 前结构区域图随归档关键帧）
+        let crop = format!("crop/{}.webp", ts);
+        let legacy = format!("full/{}.webp", ts);
+        if let Some(existing) = image_paths.iter().find(|p| **p == crop || **p == legacy) {
             candidates.push(RefineCandidate {
                 kind: kind.clone(),
-                crop_image: crop,
+                crop_image: existing.clone(),
                 time_ms: *ts,
             });
         }
@@ -72,6 +78,35 @@ pub fn build_refine_candidates(
     // 按时间升序（稳定精修顺序）
     candidates.sort_by_key(|c| c.time_ms);
     candidates
+}
+
+/// 幂等过滤（纯函数，v0.11.5）：产物中已有同类型同 frame_ms 结构块 → 剔除候选。
+///
+/// @ai-context: 结构块（Table/Formula）只由精修产出（规则版模板不产生——
+///              artifact_templates::build_artifact 无结构块）——产物块即幂等标记：
+///              已精修区域不再重复推理（停止后自动触发 + 详情进入懒触发双通道防重）。
+/// @ai-context: 产物缺失（None）→ 全量保留（首跑语义）。
+pub fn filter_refined_candidates(
+    candidates: Vec<RefineCandidate>,
+    artifact: Option<&crate::artifact::SessionArtifact>,
+) -> Vec<RefineCandidate> {
+    let Some(art) = artifact else { return candidates };
+    let refined: Vec<(crate::artifact::ArtifactKind, u64)> = art
+        .blocks
+        .iter()
+        .filter_map(|b| b.refs.frame_ms.map(|f| (b.kind, f)))
+        .collect();
+    candidates
+        .into_iter()
+        .filter(|c| {
+            let want = if c.kind == "formula" {
+                crate::artifact::ArtifactKind::Formula
+            } else {
+                crate::artifact::ArtifactKind::Table
+            };
+            !refined.iter().any(|(k, f)| *k == want && *f == c.time_ms)
+        })
+        .collect()
 }
 
 /// 精修降级决策（纯函数）：模型就绪 + 有待精修清单 → 是否启动精修。

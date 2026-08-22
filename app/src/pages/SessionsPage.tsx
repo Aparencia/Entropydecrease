@@ -284,6 +284,8 @@ export default function SessionsPage({ focusSessionId, active, onOpenNote }: Pro
             degradedBanner={degradedBanner}
             onToNote={toNote}
             onRemove={removeOne}
+            // v0.11.5（spec 5️⃣）：session:refined 事件驱动重新拉详情（屏卡 rendered 回填）
+            onRefreshDetail={(id) => void openDetail(id)}
           />
         )}
       </div>

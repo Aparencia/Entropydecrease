@@ -1,9 +1,110 @@
 //! 课后结构精修调度单测（REQ-047/049/050 模型版）。
 //!
 //! @ai-context: AAA 模式；覆盖待精修清单构建（类型过滤/时间戳匹配/排序）
-//!              与降级决策矩阵。
+//!              与降级决策矩阵、幂等过滤（v0.11.5：已精修区域跳过）。
 
 use super::*;
+use crate::artifact::{ArtifactBlock, ArtifactKind, BlockPayload, BlockRefs, BlockSource, SessionArtifact};
+use crate::table_reconstruct::TableBlock;
+
+/// 已精修产物块夹具（Table/Formula + frame_ms 对齐区域时刻——精修回填形态）。
+fn refined_block(kind: ArtifactKind, frame_ms: u64, order: u32) -> ArtifactBlock {
+    ArtifactBlock {
+        id: 0,
+        kind,
+        refs: BlockRefs { segment_id: None, ocr_block_id: None, frame_ms: Some(frame_ms) },
+        payload: match kind {
+            ArtifactKind::Table => BlockPayload::Table(TableBlock {
+                markdown: "|A|B|".into(),
+                structure_confidence: 0.9,
+                cell_refs: Vec::new(),
+            }),
+            _ => BlockPayload::Formula(crate::formula_reconstruct::FormulaBlock {
+                latex: "x^2".into(),
+                source_text: String::new(),
+                confidence: 0.9,
+            }),
+        },
+        order,
+        source: BlockSource::Local,
+    }
+}
+
+#[test]
+fn auto_refine_skips_already_refined() {
+    // Arrange：混合候选（table@1000/formula@2000 已精修；table@5000 未精修）
+    let candidates = vec![
+        RefineCandidate { kind: "table".into(), crop_image: "full/1000.webp".into(), time_ms: 1000 },
+        RefineCandidate { kind: "formula".into(), crop_image: "full/2000.webp".into(), time_ms: 2000 },
+        RefineCandidate { kind: "table".into(), crop_image: "full/5000.webp".into(), time_ms: 5000 },
+    ];
+    let artifact = SessionArtifact {
+        session_id: 1,
+        profile: String::new(),
+        blocks: vec![
+            refined_block(ArtifactKind::Table, 1000, 0),
+            refined_block(ArtifactKind::Formula, 2000, 1),
+        ],
+    };
+    // Act：自动精修入口的数据层过滤
+    let pending = filter_refined_candidates(candidates, Some(&artifact));
+    // Assert：已精修屏跳过，未精修保留（幂等——不重复推理）
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].kind, "table");
+    assert_eq!(pending[0].time_ms, 5000);
+}
+
+#[test]
+fn auto_refine_no_pending_when_all_refined() {
+    // Arrange：全部候选已精修（产物块与候选一一对应）
+    let candidates = vec![RefineCandidate {
+        kind: "table".into(),
+        crop_image: "full/1000.webp".into(),
+        time_ms: 1000,
+    }];
+    let artifact = SessionArtifact {
+        session_id: 1,
+        profile: String::new(),
+        blocks: vec![refined_block(ArtifactKind::Table, 1000, 0)],
+    };
+    // Act
+    let pending = filter_refined_candidates(candidates, Some(&artifact));
+    // Assert：空（no-pending 快速返回路径）
+    assert!(pending.is_empty());
+}
+
+#[test]
+fn auto_refine_first_run_keeps_all_without_artifact() {
+    // Arrange：无产物（首跑/规则版重建后）
+    let candidates = vec![RefineCandidate {
+        kind: "table".into(),
+        crop_image: "full/1000.webp".into(),
+        time_ms: 1000,
+    }];
+    // Act：产物 None → 全量保留
+    let pending = filter_refined_candidates(candidates, None);
+    // Assert
+    assert_eq!(pending.len(), 1);
+}
+
+#[test]
+fn auto_refine_kind_mismatch_keeps_candidate() {
+    // Arrange：产物有 table@1000，候选是 formula@1000（同刻不同类型——不互认）
+    let candidates = vec![RefineCandidate {
+        kind: "formula".into(),
+        crop_image: "full/1000.webp".into(),
+        time_ms: 1000,
+    }];
+    let artifact = SessionArtifact {
+        session_id: 1,
+        profile: String::new(),
+        blocks: vec![refined_block(ArtifactKind::Table, 1000, 0)],
+    };
+    // Act
+    let pending = filter_refined_candidates(candidates, Some(&artifact));
+    // Assert：类型不同 → 仍需精修
+    assert_eq!(pending.len(), 1);
+}
 
 #[test]
 fn build_candidates_filters_and_matches() {
@@ -22,6 +123,30 @@ fn build_candidates_filters_and_matches() {
     assert_eq!(candidates[0].kind, "table");
     assert_eq!(candidates[0].time_ms, 1000);
     assert_eq!(candidates[1].kind, "formula");
+}
+
+#[test]
+fn build_candidates_matches_crop_namespace() {
+    // Arrange：crop/ 命名空间（H2 分离后结构区域存裁剪图——懒自动化主路径）
+    let records = vec![("table".to_string(), 1000)];
+    let images = vec!["crop/1000.webp".to_string()];
+    // Act
+    let candidates = build_refine_candidates(&records, &images);
+    // Assert：命中且携带实际存在的 crop/ 路径（refine_one 按此读图）
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].crop_image, "crop/1000.webp");
+}
+
+#[test]
+fn build_candidates_legacy_full_fallback() {
+    // Arrange：旧数据（H2 前结构区域图在归档关键帧命名空间）
+    let records = vec![("table".to_string(), 1000)];
+    let images = vec!["full/1000.webp".to_string()];
+    // Act
+    let candidates = build_refine_candidates(&records, &images);
+    // Assert：兼容命中（历史会话可精修）
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].crop_image, "full/1000.webp");
 }
 
 #[test]

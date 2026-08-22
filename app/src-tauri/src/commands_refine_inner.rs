@@ -12,8 +12,38 @@ use tauri::Emitter;
 
 use crate::artifact::{ArtifactBlock, ArtifactKind, BlockPayload};
 use crate::commands::AppState;
-use crate::refine::{build_refine_candidates, decide_refine, RefineCandidate};
+use crate::db::Db;
+use crate::refine::{build_refine_candidates, decide_refine, filter_refined_candidates, RefineCandidate};
 use crate::structure_engine::StructureEngine;
+
+/// 待精修候选（数据层，v0.11.5 幂等化）：OCR 区域记录 + 裁剪图清单 → 幂等过滤。
+///
+/// @ai-context: 与 run_refine 共用同一数据源——停止后自动触发（commands_live）与
+///              详情进入懒触发（auto_refine_session）双通道防重；产物模型版结构块
+///              即幂等标记（filter_refined_candidates 纯函数），已精修区域不重复推理。
+/// @ai-context: 参数化 (db, images_dir) 而非 AppState——内存库 + 临时目录可端到端测试。
+pub fn pending_candidates(
+    db: &Db,
+    session_images_dir: &std::path::Path,
+    session_id: i64,
+) -> Result<Vec<RefineCandidate>, String> {
+    // ① 表格/公式区域记录（实时链路落库的 OCR 块 region_kind）
+    let ocr_blocks = db.list_ocr_blocks(session_id).map_err(|e| e.to_string())?;
+    let records: Vec<(String, u64)> = ocr_blocks
+        .iter()
+        .filter_map(|b| {
+            b.region_kind
+                .as_deref()
+                .map(|k| (k.to_string(), b.timestamp_ms))
+        })
+        .collect();
+    // ② 裁剪图清单（crop/ 命名空间；审查 H2 修复后与关键帧 full/ 分离）
+    let images = crop_list_from_store(session_images_dir);
+    let candidates = build_refine_candidates(&records, &images);
+    // ③ 幂等过滤：已精修（产物同类型同 frame_ms 模型版块）→ 跳过
+    let artifact = db.get_artifact(session_id).map_err(|e| e.to_string())?;
+    Ok(filter_refined_candidates(candidates, artifact.as_ref()))
+}
 
 /// 运行精修（阻塞调用方线程；由 command 的 spawn_blocking 包裹）。
 pub fn run_refine(state: &AppState, session_id: i64) -> Result<String, String> {
@@ -23,19 +53,13 @@ pub fn run_refine(state: &AppState, session_id: i64) -> Result<String, String> {
         .data_dir
         .join("session-images")
         .join(session_id.to_string());
-    // ① 待精修清单：表格/公式区域记录（实时链路落库的 OCR 块 region_kind）+ 裁剪图库
-    let ocr_blocks = state.db.list_ocr_blocks(session_id).map_err(|e| e.to_string())?;
-    let records: Vec<(String, u64)> = ocr_blocks
-        .iter()
-        .filter_map(|b| {
-            b.region_kind
-                .as_deref()
-                .map(|k| (k.to_string(), b.timestamp_ms))
-        })
-        .collect();
-    // 裁剪图清单（crop/ 命名空间；审查 H2 修复后与关键帧 full/ 分离）
-    let images = crop_list_from_store(&session_images_dir);
-    let candidates = build_refine_candidates(&records, &images);
+    // ① 待精修清单（幂等：产物已有模型版结构块 → 已精修跳过；
+    //    停止后触发 + 详情进入懒触发双通道共享此过滤——防重复推理）
+    let candidates = pending_candidates(&state.db, &session_images_dir, session_id)?;
+    if candidates.is_empty() {
+        // 无待精修区域（无结构区域 或 已全部精修）——快速返回，不误报跳过事件
+        return Ok("no-pending".to_string());
+    }
     // ② 降级决策
     let (go, reason) = decide_refine(
         models.layout_ready(),
@@ -283,98 +307,6 @@ pub fn _html_to_markdown_for_test(html: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use oar_ocr::domain::structure::{TableResult, TableType};
-    use oar_ocr::processors::BoundingBox;
+#[path = "commands_refine_inner_tests.rs"]
+mod tests;
 
-    fn table_result(x1: f32, y1: f32, x2: f32, y2: f32) -> TableResult {
-        TableResult {
-            bbox: BoundingBox::from_coords(x1, y1, x2, y2),
-            table_type: TableType::Wired,
-            classification_confidence: Some(0.9),
-            structure_confidence: Some(0.8),
-            cells: Vec::new(),
-            html_structure: Some("<table></table>".into()),
-            cell_texts: None,
-            structure_tokens: None,
-            detected_cell_bboxes: None,
-            is_e2e: false,
-        }
-    }
-
-    fn structure_result(tables: Vec<TableResult>) -> oar_ocr::domain::structure::StructureResult {
-        oar_ocr::domain::structure::StructureResult {
-            input_path: "test".into(),
-            index: 0,
-            layout_elements: Vec::new(),
-            tables,
-            formulas: Vec::new(),
-            text_regions: None,
-            orientation_angle: None,
-            region_blocks: None,
-            page_continuation_flags: None,
-            rectified_img: None,
-        }
-    }
-
-    #[test]
-    fn html_table_converts_to_markdown() {
-        // Arrange：SLANet 典型 html 结构输出
-        let html = "<table><tr><td>姓名</td><td>年龄</td></tr><tr><td>张三</td><td>25</td></tr></table>";
-        // Act
-        let md = _html_to_markdown_for_test(html);
-        // Assert：表头/数据行
-        assert!(md.contains("|姓名|年龄|"));
-        assert!(md.contains("|张三|25|"));
-    }
-
-    #[test]
-    fn html_empty_returns_empty() {
-        // Assert：空/空白输入 → 空串（产物层低置信标记）
-        assert_eq!(_html_to_markdown_for_test(""), "");
-        assert_eq!(_html_to_markdown_for_test("   "), "");
-    }
-
-    #[test]
-    fn html_th_cells_included() {
-        // Arrange：th 表头
-        let html = "<table><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>";
-        // Act
-        let md = _html_to_markdown_for_test(html);
-        // Assert
-        assert!(md.contains("|A|B|"));
-        assert!(md.contains("|1|2|"));
-    }
-
-    #[test]
-    fn html_malformed_does_not_crash() {
-        // Act/Assert：畸形标签防御（不 panic）
-        let md = _html_to_markdown_for_test("<table><tr><td>只有开头");
-        assert!(!md.contains('<')); // 未闭合的 cell 内容不产生垃圾
-    }
-
-    #[test]
-    fn best_table_picks_largest_bbox() {
-        // Arrange（审查 M3 回归：多候选时选 bbox 面积最大者——裁剪图区域本体）
-        let result = structure_result(vec![
-            table_result(0.0, 0.0, 100.0, 100.0),  // 小表格（干扰）
-            table_result(0.0, 0.0, 400.0, 300.0),  // 大表格（区域本体）
-        ]);
-        // Act
-        let best = best_table(&result, None);
-        // Assert：选面积最大的
-        assert!(best.is_some());
-        let bb = &best.unwrap().bbox;
-        assert!((bb.x_max() - bb.x_min()) > 300.0);
-    }
-
-    #[test]
-    fn best_table_single_or_empty() {
-        // Assert：无表格 → None；单表格 → 该表格
-        let empty = structure_result(Vec::new());
-        assert!(best_table(&empty, None).is_none());
-        let single = structure_result(vec![table_result(0.0, 0.0, 10.0, 10.0)]);
-        assert!(best_table(&single, None).is_some());
-    }
-}
