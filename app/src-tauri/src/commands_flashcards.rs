@@ -57,7 +57,7 @@ pub fn generate_group_cards(state: State<'_, AppState>, group_id: i64) -> Result
                     fragment_id: None,
                     front: cand.front,
                     back: cand.back,
-                    kind: "fact".to_string(),
+                    kind: cand.kind.clone(),
                     state_json: new_state.clone(),
                     due_at: now as i64,
                 })
@@ -80,7 +80,7 @@ pub fn generate_group_cards(state: State<'_, AppState>, group_id: i64) -> Result
                 fragment_id: Some(frag.id),
                 front: cand.front,
                 back: cand.back,
-                kind: "fact".to_string(),
+                kind: cand.kind.clone(),
                 state_json: new_state.clone(),
                 due_at: now as i64,
             })
