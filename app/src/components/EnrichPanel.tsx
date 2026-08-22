@@ -102,7 +102,7 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
       return;
     }
     if (!settings.hasKey) {
-      setMsg("未配置 API 密钥——请到设置页「AI 服务」保存密钥");
+      setMsg("未配置 API 密钥——请在设置页「AI 服务提供商」配置密钥");
       return;
     }
     if (selected.length === 0) {
