@@ -42,6 +42,9 @@ export default function NoteReadingView({
   const [searchMatches, setSearchMatches] = useState<HTMLElement[]>([]);
   const contentRef = useRef<HTMLDivElement>(null);
 
+  // v0.11.5 大纲折叠态
+  const [outlineCollapsed, setOutlineCollapsed] = useState(false);
+
   // ── 大纲：从 Markdown 提取标题 ──
   const outline = useMemo(() => {
     const lines = note.content.split("\n");
@@ -83,33 +86,63 @@ export default function NoteReadingView({
 
   return (
     <>
-      {/* 大纲面板 */}
-      <div style={{ width: 180, flexShrink: 0, borderRight: "1px solid #f3f4f6", overflowY: "auto", padding: "12px 8px", background: "#fafafa" }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", marginBottom: 8 }}>大纲</div>
-        {outline.length === 0 && <p style={{ fontSize: 11, color: "#d1d5db" }}>无标题</p>}
-        {outline.map((h, i) => (
-          <div
-            key={i}
-            onClick={() => scrollToHeading(h.index)}
-            style={{
-              paddingLeft: `${(h.level - 1) * 12}px`,
-              fontSize: 12,
-              color: "#4b5563",
-              cursor: "pointer",
-              lineHeight: 1.8,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-            title={h.text}
-          >
-            {h.text}
+      {/* v0.11.5 大纲面板（可收起） */}
+      {!outlineCollapsed && (
+        <div style={{ width: 180, flexShrink: 0, borderRight: "1px solid #f3f4f6", overflowY: "auto", padding: "12px 8px", background: "#fafafa" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, fontWeight: 600, color: "#6b7280", marginBottom: 8 }}>
+            <span>大纲</span>
+            <button
+              onClick={() => setOutlineCollapsed(true)}
+              style={{ fontSize: 12, color: "#9ca3af", cursor: "pointer", border: "none", background: "none", padding: "0 2px", lineHeight: 1 }}
+              title="收起大纲"
+            >
+              ✕
+            </button>
           </div>
-        ))}
-      </div>
+          {outline.length === 0 && <p style={{ fontSize: 11, color: "#d1d5db" }}>无标题</p>}
+          {outline.map((h, i) => (
+            <div
+              key={i}
+              onClick={() => scrollToHeading(h.index)}
+              style={{
+                paddingLeft: `${(h.level - 1) * 12}px`,
+                fontSize: 12,
+                color: "#4b5563",
+                cursor: "pointer",
+                lineHeight: 1.8,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+              title={h.text}
+            >
+              {h.text}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 正文区 */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+        {/* v0.11.5 大纲折叠悬浮按钮 */}
+        {outlineCollapsed && (
+          <button
+            onClick={() => setOutlineCollapsed(false)}
+            style={{
+              position: "absolute",
+              left: 8, top: 8, zIndex: 10,
+              fontSize: 16, cursor: "pointer",
+              padding: "4px 8px", borderRadius: 6,
+              border: "1px solid #e5e7eb",
+              background: "#fff",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+              lineHeight: 1,
+            }}
+            title="展开大纲"
+          >
+            📑
+          </button>
+        )}
         {/* 标题栏 */}
         <div style={{ padding: "12px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 8 }}>
           <h2 style={{ margin: 0, fontSize: 16, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>

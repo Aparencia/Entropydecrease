@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { GroupRouteReason, NoteGroup } from "../types";
+import type { GroupRouteReason, Note, NoteGroup } from "../types";
 import FeedFragmentList from "./FeedFragmentList";
 import WeekContractCard from "./WeekContractCard";
 
@@ -59,6 +59,16 @@ interface Props {
   onChanged: () => void;
   /** v0.11.2：打开复习面（groupId=null 全量；groupName 呈现用） */
   onOpenReview: (groupId: number | null, groupName: string) => void;
+  /** v0.11.5 树模式——全量笔记列表 */
+  allNotes: Note[];
+  /** v0.11.5 退化为平铺侧栏模式（搜索/标签过滤激活时） */
+  flatMode: boolean;
+  /** v0.11.5 当前选中笔记 id */
+  selectedId: number | null;
+  /** v0.11.5 笔记选中回调 */
+  onSelectNote: (note: Note) => void;
+  /** v0.11.5 跳转来源会话 */
+  onOpenSession: (sessionId: number) => void;
 }
 
 /** Blob → base64（分块转换——大截图防 String.fromCharCode 栈溢出） */
@@ -72,7 +82,7 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(bin);
 }
 
-export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selectedNoteId, onChanged, onOpenReview }: Props) {
+export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selectedNoteId, onChanged, onOpenReview, allNotes = [], flatMode = false, selectedId = null, onSelectNote, onOpenSession: onOpenSessionProp }: Props) {
   const [groups, setGroups] = useState<NoteGroup[]>([]);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [status, setStatus] = useState("");
@@ -209,8 +219,53 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
     }
   };
 
+  /** v0.11.5 树模式：笔记行（复用 NoteListView 行样式） */
+  function NoteRowView({ note, onSelectSession }: { note: Note; onSelectSession: (id: number) => void }) {
+    let tags: string[] = [];
+    try {
+      const t = JSON.parse(note.tags);
+      tags = Array.isArray(t) ? t : [];
+    } catch { /* 损坏 JSON 防御 */ }
+    const fmtDate = (unix: number) => new Date(unix * 1000).toLocaleString();
+    return (
+      <div
+        id={`note-row-${note.id}`}
+        onClick={() => onSelectNote?.(note)}
+        style={{
+          padding: "8px 14px 8px 24px",
+          borderBottom: "1px solid #f3f4f6",
+          cursor: "pointer",
+          background: selectedId === note.id ? "#f0fdfa" : "transparent",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {note.pin ? <span style={{ fontSize: 11, color: "#b45309" }}>📌</span> : null}
+          <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>
+            {note.title}
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
+          <span>{note.source === "classroom" ? "📡 课堂" : "✍ 手动"} · {fmtDate(note.updated_at)}</span>
+          {tags.slice(0, 3).map((t) => (
+            <span key={t} style={{ fontSize: 10, color: "#6b7280", background: "#f3f4f6", borderRadius: 8, padding: "0 4px" }}>{t}</span>
+          ))}
+          {tags.length > 3 && <span style={{ fontSize: 10, color: "#9ca3af" }}>+{tags.length - 3}</span>}
+          {note.session_id != null && (
+            <span
+              onClick={(e) => { e.stopPropagation(); onSelectSession(note.session_id as number); }}
+              style={{ fontSize: 11, color: "#0f766e", cursor: "pointer", fontWeight: 600 }}
+              title="跳转到来源会话"
+            >
+              来源会话 →
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ width: 230, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column" }}>
+    <div style={{ width: flatMode ? 230 : 550, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "10px 12px", borderBottom: "1px solid #e5e7eb", fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
         <span>🗂 笔记组</span>
         {/* v0.11.2：全量复习入口（UI 最小化——只一个按钮 + 到期数） */}
@@ -259,6 +314,14 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
         >
           全部笔记
         </div>
+        {/* v0.11.5 树模式：全部笔记根展开——平铺所有笔记（含未归组） */}
+        {!flatMode && groupFilter === null && allNotes.length > 0 && (
+          <div style={{ marginLeft: 8, borderLeft: "1px solid #e5e7eb", marginTop: 2, marginBottom: 4 }}>
+            {allNotes.map((n) => (
+              <NoteRowView key={n.id} note={n} onSelectSession={onOpenSessionProp} />
+            ))}
+          </div>
+        )}
         {groups.length === 0 && (
           <p style={{ fontSize: 12, color: "#9ca3af", padding: "12px 8px" }}>
             暂无笔记组——会话转笔记时自动归组
@@ -396,6 +459,18 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
                   {/* v0.11.4（REQ-201）：feed 组碎片列表——消费闭环（仅 feed 地形） */}
                   {g.terrain === "feed" && (
                     <FeedFragmentList groupId={g.id} onChanged={() => void load()} />
+                  )}
+                  {/* v0.11.5 树模式：组内笔记叶子 */}
+                  {!flatMode && (
+                    <div style={{ marginTop: 6 }}>
+                      <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 2, paddingLeft: 4 }}>组内笔记</div>
+                      {allNotes.filter((n) => n.group_id === g.id).length === 0 && (
+                        <div style={{ fontSize: 11, color: "#d1d5db", paddingLeft: 8 }}>此组暂无笔记</div>
+                      )}
+                      {allNotes.filter((n) => n.group_id === g.id).map((n) => (
+                        <NoteRowView key={n.id} note={n} onSelectSession={onOpenSessionProp} />
+                      ))}
+                    </div>
                   )}
                 </div>
               )}

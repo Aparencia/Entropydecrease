@@ -211,6 +211,9 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
     [notes, groupFilter],
   );
 
+  // v0.11.5：搜索/标签过滤激活 → 平铺模式（树退化为两栏布局）
+  const flatMode = keyword !== "" || tagFilter !== null;
+
   // H3：辅助面板插槽——VersionPanel（版本时间线）+ EnrichPanel（知识补充），
   // 与 NoteEditView 同层的笔记详情区；key=note.id 切笔记重置面板内部任务态
   const auxPanels = selected ? (
@@ -222,31 +225,38 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
 
   return (
     <div style={{ display: "flex", height: "calc(100vh - 56px)", minHeight: 0 }}>
-      {/* ── 组侧栏（v0.11.0：统一产物层入口——过滤/路由可见可改）── */}
+      {/* ── 组树面板（v0.11.5：非平铺=树形合并；平铺=仅组侧栏）── */}
       <NoteGroupPanel
         groupFilter={groupFilter}
         onGroupFilterChange={setGroupFilter}
         selectedNoteId={selected?.id ?? null}
         onChanged={() => void load(keyword, tagFilter, sortMode)}
         onOpenReview={(groupId, name) => setReview({ groupId, name })}
-      />
-      {/* ── 左栏：搜索 + 标签过滤 + 排序 + 列表 ── */}
-      <NoteListView
-        notes={visibleNotes}
-        keyword={keyword}
-        tagFilter={tagFilter}
-        sortMode={sortMode}
-        allTags={allTags}
+        allNotes={notes}
+        flatMode={flatMode}
         selectedId={selected?.id ?? null}
-        status={status}
-        onKeywordChange={(kw) => { setKeyword(kw); setTagFilter(null); }}
-        onTagFilterChange={(tag) => { setTagFilter(tag); if (tag) setKeyword(""); }}
-        onSortModeChange={setSortMode}
-        onSelect={handleSelect}
-        onCreate={handleCreate}
-        onRefresh={() => void load(keyword, tagFilter, sortMode)}
+        onSelectNote={handleSelect}
         onOpenSession={(id) => onOpenSessions?.(id)}
       />
+      {/* v0.11.5：平铺模式（搜索/标签过滤激活）→ 显示传统列表 */}
+      {flatMode && (
+        <NoteListView
+          notes={visibleNotes}
+          keyword={keyword}
+          tagFilter={tagFilter}
+          sortMode={sortMode}
+          allTags={allTags}
+          selectedId={selected?.id ?? null}
+          status={status}
+          onKeywordChange={(kw) => { setKeyword(kw); setTagFilter(null); }}
+          onTagFilterChange={(tag) => { setTagFilter(tag); if (tag) setKeyword(""); }}
+          onSortModeChange={setSortMode}
+          onSelect={handleSelect}
+          onCreate={handleCreate}
+          onRefresh={() => void load(keyword, tagFilter, sortMode)}
+          onOpenSession={(id) => onOpenSessions?.(id)}
+        />
+      )}
 
       {/* ── 右栏：阅读视图 / 编辑视图 ── */}
       <div style={{ flex: 1, minWidth: 0, display: "flex", overflow: "hidden" }}>
