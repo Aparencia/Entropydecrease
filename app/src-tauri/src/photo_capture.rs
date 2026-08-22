@@ -22,8 +22,11 @@ const OCR_MAX_WIDTH: u32 = 960;
 const MIN_SCORE: f32 = 0.5;
 /// 识别预览条数上限（前端即时反馈）。
 const PREVIEW_MAX: usize = 3;
-/// 单图 base64 解码后字节上限（16MB——解码前拒绝，省 CPU）。
-const MAX_PHOTO_BYTES: usize = 16 * 1024 * 1024;
+/// base64 串长度上限（16MB 字节 → base64 膨胀 4/3——解码前拒绝，省 CPU）。
+const MAX_PHOTO_B64_LEN: usize = 16 * 1024 * 1024 * 4 / 3 + 4;
+/// 解码后像素数上限（40MP——压缩炸弹防御：小体积 PNG 可解出超大位图，
+/// to_rgb8 前拒绝，避免数百 MB 内存分配）。
+const MAX_PIXELS: u64 = 40_000_000;
 
 /// 截图保存结果（前端反馈契约；camelCase 与前端 PhotoResult 对齐）。
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -75,10 +78,10 @@ pub fn save_photo_capture(
         if b.score < MIN_SCORE || b.text.trim().is_empty() {
             continue;
         }
-        count += 1;
         if preview.len() < PREVIEW_MAX {
             preview.push(b.text.clone());
         }
+        // 审查修复：成功落库才计数（与 import_frame 链路口径一致——失败不虚高）
         if let Err(e) = db.add_ocr_block(&NewSessionOcrBlock {
             session_id,
             timestamp_ms,
@@ -95,6 +98,8 @@ pub fn save_photo_capture(
             screen_id: None,
         }) {
             eprintln!("[Photo] OCR 块落库失败: {}", e);
+        } else {
+            count += 1;
         }
     }
     Ok(PhotoCaptureResult { duplicated: false, block_count: count, preview, image_ref: rel })
@@ -102,20 +107,27 @@ pub fn save_photo_capture(
 
 /// base64 解码 + 解码器验证（白名单由 image 解码器把关——capture_fragment 同模式）。
 fn decode_image(image_b64: &str) -> Result<image::RgbImage, String> {
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(image_b64.trim())
-        .map_err(|e| format!("图片 base64 解码失败: {}", e))?;
-    if bytes.is_empty() {
+    let trimmed = image_b64.trim();
+    if trimmed.is_empty() {
         return Err("图片数据为空".to_string());
     }
-    if bytes.len() > MAX_PHOTO_BYTES {
-        return Err(format!("图片超限（>{}MB）", MAX_PHOTO_BYTES / 1024 / 1024));
+    // 审查修复：解码前按 base64 长度预估拒绝（16MB 字节上限——省解码 CPU）
+    if trimmed.len() > MAX_PHOTO_B64_LEN {
+        return Err(format!("图片超限（>{}MB）", MAX_PHOTO_B64_LEN / 4 * 3 / 1024 / 1024));
     }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(trimmed)
+        .map_err(|e| format!("图片 base64 解码失败: {}", e))?;
     let img = image::load_from_memory(&bytes)
         .map_err(|e| format!("图片解码失败（仅支持 PNG/JPEG 等常见格式）: {}", e))?;
     let (w, h) = img.dimensions();
     if w == 0 || h == 0 {
         return Err("图片尺寸非法".to_string());
+    }
+    // 审查修复：像素数上限（压缩炸弹防御——小体积 PNG 解出超大位图时，
+    // to_rgb8 的 w*h*3 分配可达数百 MB，解码后立即拒绝）
+    if (w as u64) * (h as u64) > MAX_PIXELS {
+        return Err(format!("图片像素超限（>{}MP）", MAX_PIXELS / 1_000_000));
     }
     Ok(img.to_rgb8())
 }

@@ -54,11 +54,14 @@ fn now_unix_ms() -> u64 {
 ///              （JS Date 格式化，Rust 侧免引本地时间依赖）。
 #[tauri::command]
 pub fn start_photo_session(state: State<'_, AppState>, title: Option<String>) -> Result<i64, String> {
+    let mut guard = state.photo_session.lock().map_err(|_| "图文采集状态锁中毒".to_string())?;
+    // 互斥检查（审查修复：live_active 读取移入锁内——缩小"检查后占用前被
+    // live 抢先"的 TOCTOU 窗口；残余窗口：live 侧检查与置位分属不同临界区，
+    // 双面板极端时序仍可能并存——UX 级防护已足够，live 侧同样在开始时查本槽）
     #[cfg(target_os = "windows")]
     let live_active = state.live_session.active_session_id().is_some();
     #[cfg(not(target_os = "windows"))]
     let live_active = false;
-    let mut guard = state.photo_session.lock().map_err(|_| "图文采集状态锁中毒".to_string())?;
     check_photo_mutex(live_active, *guard)?;
     let title = title
         .map(|t| t.trim().to_string())
@@ -73,10 +76,14 @@ pub fn start_photo_session(state: State<'_, AppState>, title: Option<String>) ->
             kind: Some("photo".to_string()),
         })
         .map_err(|e| e.to_string())?;
-    *guard = Some(session.id);
-    // 长驻图片库 store（跨截图保持去重 FIFO 与预算计数——实时链路同模式）
+    // 长驻图片库 store（跨截图保持去重 FIFO 与预算计数——实时链路同模式）；
+    // 审查修复：先建 store 再占用互斥槽——创建失败回滚会话，不留占用与空壳
     let dir = state.data_dir.join("session-images").join(session.id.to_string());
-    let store = SessionImageStore::new(dir).map_err(|e| e.to_string())?;
+    let store = SessionImageStore::new(dir).map_err(|e| {
+        let _ = state.db.delete_session(session.id);
+        format!("初始化图片库失败: {}", e)
+    })?;
+    *guard = Some(session.id);
     *state.photo_store.lock().map_err(|_| "图文图片库锁中毒".to_string())? = Some(store);
     Ok(session.id)
 }
@@ -148,9 +155,9 @@ pub fn finish_photo_session(state: State<'_, AppState>, session_id: i64) -> Resu
         return Err("该会话不是进行中的图文采集".to_string());
     }
     let dir = state.data_dir.join("session-images").join(session_id.to_string());
-    let has_images = SessionImageStore::new(dir.clone())
-        .map(|s| !s.list_images().is_empty())
-        .unwrap_or(false);
+    // 审查修复：store 创建失败视为异常传播（不得当作"无图"而误删会话）
+    let store = SessionImageStore::new(dir.clone()).map_err(|e| format!("读取图片库失败: {}", e))?;
+    let has_images = !store.list_images().is_empty();
     if has_images {
         state.db.finish_session(session_id).map_err(|e| e.to_string())?;
     } else {

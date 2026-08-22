@@ -172,6 +172,18 @@ export default function PhotoCapturePanel({ onOpenSessions, onStatus }: Props) {
                 去会话页查看
               </button>
             )}
+            {/* 审查修复：完成后可原地开始下一组采集（无需切页重挂载回 idle） */}
+            <button
+              onClick={() => {
+                setPhase("idle");
+                setSessionId(null);
+                setCount(0);
+                setMsg("");
+              }}
+              style={{ ...btn, width: "100%", marginTop: 6, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6 }}
+            >
+              ▶ 再来一组
+            </button>
           </>
         )}
       </div>

@@ -20,9 +20,19 @@ describe("normToPixels", () => {
     expect(r).toEqual({ x: 480, y: 270, w: 960, h: 540 });
   });
 
-  it("越界输入 clamp 到图像内", () => {
+  it("越界输入 clamp 到图像内且输出不越界", () => {
+    // 输入全越界（起点在右/下边界外）→ 起点收至末行/末列、宽高收至剩余空间
     const r = normToPixels(-0.5, 1.5, 2, 2, 100, 100);
-    expect(r).toEqual({ x: 0, y: 100, w: 100, h: 100 });
+    expect(r).toEqual({ x: 0, y: 99, w: 100, h: 1 });
+  });
+
+  it("起点在界内但宽高越界 → 收窄到图像边界（审查 P7）", () => {
+    // 框选右下角 50%，起点 (0.9, 0.9) → 剩余空间仅 10px
+    const r = normToPixels(0.9, 0.9, 0.5, 0.5, 100, 100);
+    expect(r).toEqual({ x: 90, y: 90, w: 10, h: 10 });
+    // 输出矩形必须完全在图像内（canvas 源矩形越界 → 透明带）
+    expect(r.x + r.w).toBeLessThanOrEqual(100);
+    expect(r.y + r.h).toBeLessThanOrEqual(100);
   });
 
   it("非整数坐标取整（含四舍五入）", () => {

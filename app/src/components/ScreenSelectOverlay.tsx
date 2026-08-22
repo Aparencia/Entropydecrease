@@ -8,7 +8,7 @@
  *              先减 letterbox 偏移、除以显示缩放，再按图像物理像素换算；
  *              不经 window.devicePixelRatio（显示缩放已含在 letterbox scale）。
  */
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { normToPixels } from "../utils/photoCrop";
 
 interface Props {
@@ -35,7 +35,7 @@ export default function ScreenSelectOverlay({ src, imageWidth, imageHeight, savi
   const [fit, setFit] = useState<{ scale: number; left: number; top: number } | null>(null);
 
   /** letterbox 布局：图像完整可见居中（含窗口外屏幕区域），比例 = 显示/物理 */
-  const measureFit = () => {
+  const measureFit = useCallback(() => {
     const el = wrapRef.current;
     if (!el) return;
     const rw = el.clientWidth;
@@ -43,7 +43,20 @@ export default function ScreenSelectOverlay({ src, imageWidth, imageHeight, savi
     if (rw <= 0 || rh <= 0 || imageWidth <= 0 || imageHeight <= 0) return;
     const scale = Math.min(rw / imageWidth, rh / imageHeight);
     setFit({ scale, left: (rw - imageWidth * scale) / 2, top: (rh - imageHeight * scale) / 2 });
-  };
+  }, [imageWidth, imageHeight]);
+
+  // 审查修复：Esc 取消（与提示文案一致）+ 窗口 resize 重算 letterbox（防框选错位）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", measureFit);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", measureFit);
+    };
+  }, [onCancel, measureFit]);
 
   /** 鼠标坐标 → 图像归一化坐标（减 letterbox 偏移 + 除显示缩放 + clamp） */
   const norm = (clientX: number, clientY: number): Box | null => {
