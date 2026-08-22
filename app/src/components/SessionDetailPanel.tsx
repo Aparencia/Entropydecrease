@@ -16,7 +16,7 @@ import BoxSelectOverlay from "../components/BoxSelectOverlay";
 import ImageGallery from "../components/ImageGallery";
 import NotePreviewView from "../components/NotePreviewView";
 import SpeakerSwitchCard from "../components/SpeakerSwitchCard";
-import type { OutlineEntry, QualityReport, SessionDetail, SessionOcrBlock } from "../types";
+import type { GlossaryTerm, OutlineEntry, QualityReport, SessionDetail, SessionOcrBlock } from "../types";
 import { fmtMs } from "../utils/fmt";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
@@ -51,6 +51,8 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
   const [quality, setQuality] = useState<QualityReport | null>(null);
   // M6（REQ-077）：大纲（产物视图侧边导航）
   const [outline, setOutline] = useState<OutlineEntry[]>([]);
+  // v0.11.5（spec 8️⃣）：术语表（词汇表移出笔记 → 会话详情直供；null=加载中）
+  const [glossary, setGlossary] = useState<GlossaryTerm[] | null>(null);
   // v0.7.3（REQ-160）：屏卡配图 baseUrl（图集同款：convertFileSrc 拼本地路径）
   const [baseUrl, setBaseUrl] = useState("");
   // v0.7.7（REQ-184）：框选截取状态（first_seen_ms 标识屏）+ 保存反馈
@@ -94,10 +96,11 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
     return map;
   }, [detail]);
 
-  // 质量报告 + 大纲随详情加载（失败不阻断详情展示）
+  // 质量报告 + 大纲 + 术语表随详情加载（失败不阻断详情展示）
   useEffect(() => {
     setQuality(null);
     setOutline([]);
+    setGlossary(null);
     setViewMode("raw");
     void invoke<QualityReport>("session_quality_report", { id: sessionId })
       .then(setQuality)
@@ -105,6 +108,9 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
     void invoke<OutlineEntry[]>("session_outline", { id: sessionId })
       .then(setOutline)
       .catch(() => undefined);
+    void invoke<GlossaryTerm[]>("session_glossary", { id: sessionId })
+      .then(setGlossary)
+      .catch(() => setGlossary([]));
     void invoke<string>("session_images_base_url", { sessionId })
       .then(setBaseUrl)
       .catch(() => setBaseUrl(""));
@@ -394,6 +400,43 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
               </div>
             );
           })}
+
+          {/* 术语表（v0.11.5 spec 8️⃣：词汇表移出笔记 → 会话详情展示；
+              分析层 glossary 产出——画面高频 × 语音低频交叉，score 降序） */}
+          <h3 style={{ fontSize: 13, margin: "16px 0 6px" }}>📖 术语表</h3>
+          <details
+            style={{
+              fontSize: 12,
+              border: "1px solid #e5e7eb",
+              borderRadius: 8,
+              padding: "8px 10px",
+              background: "#fafafa",
+              marginBottom: 8,
+            }}
+          >
+            <summary style={{ cursor: "pointer", color: "#0f766e", fontWeight: 600 }}>
+              {glossary === null
+                ? "加载中…"
+                : glossary.length === 0
+                  ? "无术语（画面高频 × 语音低频未命中）"
+                  : `${glossary.length} 条（画面高频 × 语音低频）`}
+            </summary>
+            {glossary !== null && glossary.length > 0 && (
+              <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 3 }}>
+                {glossary.map((g) => (
+                  <div key={g.term} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                    <span style={{ fontWeight: 600, color: "#111827" }}>{g.term}</span>
+                    <span style={{ fontSize: 11, color: "#6b7280" }}>
+                      画面 ×{g.ocrCount} / 语音 ×{g.asrCount}
+                    </span>
+                    <span style={{ fontSize: 10, color: "#9ca3af", marginLeft: "auto" }}>
+                      分 {g.score.toFixed(1)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </details>
 
           {/* 参考图集（v0.5.0 M6：REQ-051 三层图结构） */}
           <h3 style={{ fontSize: 13, margin: "16px 0 6px" }}>参考图集</h3>

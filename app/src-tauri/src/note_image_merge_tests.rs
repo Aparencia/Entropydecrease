@@ -2,6 +2,10 @@
 //!
 //! @ai-context: 覆盖：提取（宽松匹配/空输入/非配图行排除）、精修版已含图
 //!              跳过、已有画面要点章节插入、无章节文末追加、降级不动输入。
+//! @ai-context: v0.11.5（spec 8️⃣）：真实管线规则版不再产出"## 画面要点"段
+//!              （配图行随段消失，merge 自动跳过）——本文件为函数级契约测试，
+//!              用手工构造的旧格式夹具验证 merge 对旧输入仍保留配图能力
+//!              （AI 精修 image 块 + NoteImage 渲染路径不变），故断言保留。
 
 use crate::note_image_merge::{extract_image_lines, has_image_lines, merge_rule_images};
 

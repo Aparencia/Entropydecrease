@@ -302,7 +302,7 @@ fn open_question_kept_in_note() {
 }
 
 // ────────────────────────────────────────────────
-// v0.7.6 扩展（REQ-181）：结构渲染黄金语料——章节标题 + 词汇表
+// v0.7.6 扩展（REQ-181）：结构渲染黄金语料——章节标题
 // ────────────────────────────────────────────────
 
 /// 会话31 实证：净化产物 → 结构渲染叠加章节标题（outline 命中命名）。
@@ -353,10 +353,12 @@ fn session31_structure_chapter_headings_from_outline() {
     assert!(json.contains("chapters") && json.contains("titled_chapters"));
 }
 
-/// 会话31 实证：结构渲染词汇表块——术语候选 → 尾部词汇表（锚点回跳）。
+/// 会话31 实证（v0.11.5 spec 8️⃣ 反转）：结构渲染不再输出词汇表块——
+/// 即使传入术语候选，markdown 也不含 "## 词汇表"（术语表改在会话详情
+/// session_glossary 命令直供前端展示）。
 #[test]
-fn session31_structure_glossary_block() {
-    // Arrange：术语"项目章程"在 kept 段出现（锚点）；无 kept 出现术语不带锚点
+fn session31_structure_excludes_glossary_block() {
+    // Arrange：术语候选传入（旧版会渲染尾部词汇表块，锚点/计数格式同黄金语料）
     let segments = vec![asr(1, 12_000, 15_000, "这是项目章程的要点")];
     let mut result = run("测试", &segments, &[]);
     apply_session_warning(&mut result, "finished");
@@ -383,19 +385,20 @@ fn session31_structure_glossary_block() {
         &glossary,
         &crate::structure_note::NoteStructureConfig::default(),
     );
-    // Assert：词汇表块在尾部；命中术语带 [MM:SS] 锚点；未命中不带；统计落库
-    assert!(result.markdown.ends_with("词汇表\n\n- [[⏱ 00:12]([[ts:12000]])] 项目章程（画面 ×5 / 语音 ×1）\n- WBS（画面 ×3 / 语音 ×0）"));
-    assert_eq!(result.stats.glossary_terms, 2);
+    // Assert：词汇表块与术语文本均不得进笔记；glossary_terms 恒 0（兼容字段）
+    assert!(!result.markdown.contains("## 词汇表"));
+    assert!(!result.markdown.contains("项目章程（画面"));
+    assert_eq!(result.stats.glossary_terms, 0);
     let json = serde_json::to_string(&result.stats).expect("stats serializable");
     assert!(json.contains("glossary_terms"));
 }
 
 /// 会话31 实证：结构渲染"配置开但无结构数据"路径逐字节零回归（REQ-179 护栏）。
 ///
-/// @ai-context: 审查补测：默认配置（chapter_headings/glossary_block 均开）下
-///              无章节边界/无术语候选——渲染层仍会重建 markdown（与净化管线
-///              同阈值同组装口径），必须与未接结构层前的 v0.7.5 输出逐字节
-///              一致（口播档案/无画面内容会话的最常见路径）。
+/// @ai-context: 审查补测：默认配置（chapter_headings 开）下无章节边界——渲染层
+///              仍会重建 markdown（与净化管线同阈值同组装口径），必须与未接
+///              结构层前的 v0.7.5 输出逐字节一致（口播档案/无画面内容会话的
+///              最常见路径）。
 #[test]
 fn session31_structure_empty_data_is_byte_identical() {
     // Arrange：真实管线产物（口播样例会话——无章节无术语）

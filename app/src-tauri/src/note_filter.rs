@@ -123,7 +123,8 @@ pub struct FilterStats {
     /// v0.7.6（REQ-180）：结构渲染——有 outline 标题命中的章节数
     #[serde(default)]
     pub titled_chapters: usize,
-    /// v0.7.6（REQ-180）：结构渲染——词汇表条目数
+    /// v0.7.6（REQ-180）：结构渲染——词汇表条目数（v0.11.5 词汇表移出笔记后
+    /// 恒 0，保留字段兼容旧 JSON）
     #[serde(default)]
     pub glossary_terms: usize,
 }
@@ -141,7 +142,8 @@ pub struct MergedItem {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NoteFilterResult {
     pub title: String,
-    /// 过滤后笔记 Markdown（标题+讲述内容+画面要点）
+    /// 过滤后笔记 Markdown（标题+讲述内容；画面要点 v0.11.5 移出笔记，
+    /// 原料视图屏卡流呈现）
     pub markdown: String,
     /// 保留段（合并段已延伸 end_ms；AI merge 已拼接文本；净化后文本——仅产物层）
     pub kept: Vec<SessionSegment>,
@@ -315,7 +317,7 @@ pub fn filter_note(
     stats.ocr_corrected = ocr_corrected;
     let ocr_screens = crate::screens::build_screens(&usable, None);
     let ocr_points = render_screen_points(&ocr_screens);
-    let markdown = rebuild_markdown(title, &kept, &ocr_points, config, None);
+    let markdown = rebuild_markdown(title, &kept, &[], config, None);
     NoteFilterResult {
         title: title.to_string(),
         markdown,
@@ -469,34 +471,35 @@ pub(crate) fn apply_session_warning(result: &mut NoteFilterResult, status: &str)
     }
 }
 
-/// 刷新画面要点段落（纯函数）：ocr_screens 重新渲染 + 重建 markdown。
+/// 刷新画面要点数据（纯函数）：ocr_screens 重新渲染 + 重建 markdown。
 ///
-/// @ai-context: 命令层 attach_images 填充 image_ref 后调用——配图行随
-///              image_ref 出现/消失，保持 markdown 与 ocr_screens 一致
-///              （单管线双出口原则的图版本）；净化配置随 result 透传
-///              （段落阈值/锚点与预览口径一致）。
+/// @ai-context: 命令层 attach_images 填充 image_ref 后调用——原料视图
+///              屏卡配图随 image_ref 出现/消失；markdown 重建不含画面要点
+///              （v0.11.5 移出笔记，配图行仅存于 AI 精修 image 块）；
+///              净化配置随 result 透传（段落阈值/锚点与预览口径一致）。
 pub fn refresh_screen_points(result: &mut NoteFilterResult) {
     result.ocr_points = render_screen_points(&result.ocr_screens);
     result.markdown = rebuild_markdown(
         &result.title,
         &result.kept,
-        &result.ocr_points,
+        &[],
         &result.purify,
         result.warning.as_deref(),
     );
 }
 
-/// 组装 Markdown（标题 + 讲述内容 + 画面要点；段落切分复用 concat 口径；
+/// 组装 Markdown（标题 + 讲述内容；段落切分复用 concat 口径；
 /// v0.7.5 REQ-165/170/173：段首 [MM:SS] 时间戳锚点（可回跳原视频位置，可开关）
 /// + 段落阈值走净化配置 + 会话异常警示行（None=无警示）。
+/// v0.11.5：画面要点段移出笔记（_ocr_points 签名保留兼容调用方，忽略）。
 pub(crate) fn rebuild_markdown(
     title: &str,
     kept: &[SessionSegment],
-    ocr_points: &[String],
+    _ocr_points: &[String],
     config: &PurifyConfig,
     warning: Option<&str>,
 ) -> String {
-    let mut md = assemble_purified_markdown(title, kept, ocr_points, config);
+    let mut md = assemble_purified_markdown(title, kept, _ocr_points, config);
     if let Some(w) = warning {
         md = format!("{}\n\n{}", w, md);
     }
@@ -507,7 +510,7 @@ pub(crate) fn rebuild_markdown(
 fn assemble_purified_markdown(
     title: &str,
     kept: &[SessionSegment],
-    ocr_points: &[String],
+    _ocr_points: &[String],
     config: &PurifyConfig,
 ) -> String {
     let transcript: Vec<TranscriptSegment> = kept
@@ -537,7 +540,7 @@ fn assemble_purified_markdown(
             }
         })
         .collect();
-    crate::concat::assemble_markdown(title, &anchored, ocr_points)
+    crate::concat::assemble_markdown(title, &anchored, &[])
 }
 
 /// CJK 统一表意文字区段（含扩展 A）。

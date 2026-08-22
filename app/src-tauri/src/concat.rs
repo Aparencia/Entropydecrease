@@ -127,7 +127,11 @@ pub(crate) fn format_timestamp(ms: u64) -> String {
 }
 
 /// 组装 Markdown 全文。
-pub(crate) fn assemble_markdown(title: &str, paragraphs: &[String], ocr_points: &[String]) -> String {
+///
+/// @ai-context: v0.11.5（8️⃣）：画面要点段完全移出笔记（无配置开关）——
+///              ocr_points 参数保留签名兼容旧调用方（内部忽略，笔记仅讲述内容）；
+///              画面要点在会话内原料视图可见（屏卡流）。
+pub(crate) fn assemble_markdown(title: &str, paragraphs: &[String], _ocr_points: &[String]) -> String {
     let mut md = String::new();
     md.push_str(&format!("# {}\n", title));
 
@@ -136,12 +140,6 @@ pub(crate) fn assemble_markdown(title: &str, paragraphs: &[String], ocr_points: 
         for p in paragraphs {
             md.push_str(p);
             md.push_str("\n\n");
-        }
-    }
-    if !ocr_points.is_empty() {
-        md.push_str("## 画面要点\n\n");
-        for point in ocr_points {
-            md.push_str(&format!("- {}\n", point));
         }
     }
     md.trim_end().to_string()
@@ -190,28 +188,30 @@ mod tests {
     }
 
     #[test]
-    fn ocr_only_produces_points() {
+    fn ocr_points_stay_out_of_markdown() {
         // Arrange
         let blocks = vec![ocr(Some(3000), "牛顿第二定律", 0.9)];
         // Act
         let draft = build_note_draft("截图", &[], &blocks);
-        // Assert：画面要点带时间戳回链锚点（v0.10.0 M4 格式）
+        // Assert：画面要点仍带时间戳回链锚点（v0.10.0 M4 格式）且留在 ocr_points
+        // 字段——但不再进笔记 markdown（v0.11.5 8️⃣：画面要点移出笔记，会话内可见）
         assert_eq!(draft.ocr_points, vec!["[[⏱ 00:03]([[ts:3000]])] 牛顿第二定律".to_string()]);
-        assert!(draft.markdown.contains("## 画面要点"));
+        assert!(!draft.markdown.contains("## 画面要点"));
+        assert!(!draft.markdown.contains("牛顿第二定律"));
         assert!(!draft.markdown.contains("## 讲述内容"));
     }
 
     #[test]
-    fn mixed_input_contains_both_sections() {
+    fn mixed_input_markdown_has_transcript_only() {
         // Arrange
         let segments = vec![seg(0, 4000, "讲解公式")];
         let blocks = vec![ocr(Some(2000), "F=ma", 0.95)];
         // Act
         let draft = build_note_draft("混合", &segments, &blocks);
-        // Assert
+        // Assert：讲述内容进笔记；OCR 要点仅留在 ocr_points 字段（v0.11.5 8️⃣）
         assert!(draft.markdown.contains("## 讲述内容"));
-        assert!(draft.markdown.contains("## 画面要点"));
-        assert!(draft.markdown.contains("F=ma"));
+        assert!(!draft.markdown.contains("## 画面要点"));
+        assert!(draft.ocr_points[0].contains("F=ma"));
     }
 
     #[test]

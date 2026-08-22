@@ -237,7 +237,7 @@ pub fn apply_ai_decisions(
     result.markdown = crate::note_filter::rebuild_markdown(
         &result.title,
         &result.kept,
-        &result.ocr_points,
+        &[], // v0.11.5：画面要点移出笔记，markdown 不再含该段
         &cfg,
         warning.as_deref(),
     );

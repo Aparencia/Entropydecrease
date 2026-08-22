@@ -206,6 +206,17 @@ export interface OutlineEntry {
   text: string;
 }
 
+/** 术语表条目（Rust GlossaryTerm；v0.11.5 会话详情——camelCase 契约） */
+export interface GlossaryTerm {
+  term: string;
+  /** 精化候选分（ocr_count × idf；降序展示依据） */
+  score: number;
+  /** OCR 出现次数（画面高频） */
+  ocrCount: number;
+  /** ASR 出现次数（语音低频） */
+  asrCount: number;
+}
+
 /** 课程分组（Rust CourseGroup；REQ-078，camelCase 契约；v0.7.1 组内携带转化标记） */
 export interface CourseGroup {
   course: string;

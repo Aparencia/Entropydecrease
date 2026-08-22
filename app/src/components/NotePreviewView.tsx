@@ -186,7 +186,6 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
           ["净化", stats.verbal ?? 0, "#0d9488"],
           ["AI 判删", stats.ai_delete, "#2563eb"],
           ["章节", stats.chapters ?? 0, "#4f46e5"],
-          ["词汇表", stats.glossary_terms ?? 0, "#7c3aed"],
         ].map(([label, count, color]) => (
           <span
             key={label as string}

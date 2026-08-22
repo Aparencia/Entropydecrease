@@ -1,15 +1,16 @@
 //! 结构渲染层单测（REQ-177/178/179/180 / v0.7.6，AAA 模式）。
 //!
 //! @ai-context: 纯函数单测——章节插入位置（段前/段中/无段/首边界）、章节命名
-//!              （outline 命中/占位/窗口归属）、词汇表（降序/上限/锚点/空）、
-//!              配置全关 = v0.7.5 逐字节一致（零回归护栏）、统计正确。
+//!              （outline 命中/占位/窗口归属）、词汇表移出笔记（v0.11.5 反向
+//!              断言——术语候选不得进 markdown）、配置全关 = v0.7.5 逐字节
+//!              一致（零回归护栏）、统计正确。
 
 use crate::chapter_detect::ChapterBoundary;
 use crate::glossary::GlossaryCandidate;
 use crate::note_filter::{FilterStats, NoteFilterResult};
 use crate::outline::OutlineEntry;
 use crate::purify_config::PurifyConfig;
-use crate::structure_note::{render_note_structure, word_boundary_contains, NoteStructureConfig};
+use crate::structure_note::{render_note_structure, NoteStructureConfig};
 use crate::types::SessionSegment;
 
 /// 构造会话段（净化后保留段形态）。
@@ -235,101 +236,30 @@ fn chapter_title_belongs_to_first_window_not_second() {
     assert!(result.markdown.contains("## 章节 2 [[⏱ 00:22]([[ts:22000]])]"));
 }
 
-// ── 词汇表 ─────────────────────────────────────────────────────
+// ── 词汇表（v0.11.5 spec 8️⃣：完全移出笔记——术语改在会话详情展示）───────────
 
 #[test]
-fn glossary_block_sorted_by_score_desc_with_anchor() {
-    // Arrange：两个术语，高分在后（验证排序）；"术语A"在 kept 段出现（锚点）
+fn glossary_candidates_never_enter_markdown() {
+    // Arrange：传入术语候选（旧版会渲染 "## 词汇表" 尾部块）
     let kept = vec![seg(1, 3_000, 5_000, "介绍了术语A的定义")];
     let mut result = base_result(kept);
 
-    // Act
+    // Act：默认配置渲染（无章节数据——纯术语路径）
     let stats = render_note_structure(
         &mut result,
         &[],
         &[],
-        &[term("术语B", 5, 0, 2.0), term("术语A", 8, 1, 8.0)],
+        &[term("术语A", 8, 1, 8.0), term("术语B", 5, 0, 2.0)],
         &default_config(),
     );
 
-    // Assert：score 降序；锚点 [00:03] 前缀；格式含计数
-    let b_pos = result.markdown.find("术语B").unwrap();
-    let a_pos = result.markdown.find("术语A").unwrap();
-    assert!(a_pos < b_pos, "高分在前");
-    assert!(result.markdown.contains("- [[⏱ 00:03]([[ts:3000]])] 术语A（画面 ×8 / 语音 ×1）"));
-    assert_eq!(stats.glossary_terms, 2);
-}
-
-#[test]
-fn glossary_term_without_kept_occurrence_has_no_anchor() {
-    // Arrange：术语不在 kept 段 → 无锚点但保留行
-    let kept = vec![seg(1, 3_000, 5_000, "普通内容")];
-    let mut result = base_result(kept);
-
-    // Act
-    render_note_structure(&mut result, &[], &[], &[term("生僻词", 3, 0, 3.0)], &default_config());
-
-    // Assert：无 [MM:SS] 前缀，行不丢
-    assert!(result.markdown.contains("- 生僻词（画面 ×3 / 语音 ×0）"));
-    assert!(!result.markdown.contains("-[0"), "无锚点");
-}
-
-#[test]
-fn glossary_max_terms_truncates() {
-    // Arrange：3 个术语，上限 2
-    let mut result = base_result(vec![seg(1, 0, 5_000, "内容")]);
-    let mut config = default_config();
-    config.glossary_max_terms = 2;
-
-    // Act
-    let stats = render_note_structure(
-        &mut result,
-        &[],
-        &[],
-        &[term("T1", 1, 0, 1.0), term("T2", 2, 0, 2.0), term("T3", 3, 0, 3.0)],
-        &config,
-    );
-
-    // Assert：只保留最高分 2 个
-    assert!(result.markdown.contains("T3"));
-    assert!(result.markdown.contains("T2"));
-    assert!(!result.markdown.contains("T1"));
-    assert_eq!(stats.glossary_terms, 2);
-}
-
-#[test]
-fn empty_glossary_produces_no_block() {
-    // Arrange：空术语
-    let mut result = base_result(vec![seg(1, 0, 5_000, "内容")]);
-
-    // Act
-    let stats = render_note_structure(&mut result, &[], &[], &[], &default_config());
-
-    // Assert：无词汇表块
-    assert!(!result.markdown.contains("词汇表"));
+    // Assert：词汇表标题与术语文本均不得进 markdown；统计恒 0（serde 兼容字段）
+    assert!(!result.markdown.contains("## 词汇表"));
+    assert!(!result.markdown.contains("术语A"));
+    assert!(!result.markdown.contains("术语B"));
     assert_eq!(stats.glossary_terms, 0);
-}
-
-#[test]
-fn glossary_max_terms_zero_disables_block() {
-    // Arrange：上限 0 = 不输出词汇表块（审查修复语义——原 .max(1) 会输出 1 条）
-    let mut result = base_result(vec![seg(1, 0, 5_000, "内容")]);
-    let mut config = default_config();
-    config.glossary_max_terms = 0;
-
-    // Act
-    let stats = render_note_structure(
-        &mut result,
-        &[],
-        &[],
-        &[term("T1", 1, 0, 1.0)],
-        &config,
-    );
-
-    // Assert：无词汇表块、统计 0
-    assert!(!result.markdown.contains("词汇表"));
-    assert!(!result.markdown.contains("T1"));
-    assert_eq!(stats.glossary_terms, 0);
+    let json = serde_json::to_string(&result.stats).expect("stats serializable");
+    assert!(json.contains("glossary_terms"));
 }
 
 // ── 零回归护栏（REQ-179）──────────────────────────────────────
@@ -342,8 +272,6 @@ fn config_all_off_returns_markdown_unchanged() {
     let before = result.markdown.clone();
     let config = NoteStructureConfig {
         chapter_headings: false,
-        glossary_block: false,
-        glossary_max_terms: 20,
     };
 
     // Act
@@ -363,7 +291,7 @@ fn config_all_off_returns_markdown_unchanged() {
 
 #[test]
 fn stats_written_into_filter_stats() {
-    // Arrange：1 章节（无标题）+ 1 术语
+    // Arrange：1 章节（无标题）+ 术语参数（v0.11.5 起被忽略）
     let mut result = base_result(vec![
         seg(1, 0, 5_000, "内容"),
         seg(2, 10_000, 15_000, "更多"),
@@ -378,10 +306,10 @@ fn stats_written_into_filter_stats() {
         &default_config(),
     );
 
-    // Assert：FilterStats 字段同步（purify_stats 落库同源）
+    // Assert：FilterStats 字段同步（purify_stats 落库同源）；词汇表恒 0
     assert_eq!(result.stats.chapters, 1);
     assert_eq!(result.stats.titled_chapters, 0);
-    assert_eq!(result.stats.glossary_terms, 1);
+    assert_eq!(result.stats.glossary_terms, 0);
 }
 
 #[test]
@@ -402,93 +330,21 @@ fn warning_stays_on_top() {
 
 #[test]
 fn structure_config_roundtrips_json() {
-    // Arrange：partial JSON（只覆盖 structure.glossaryMaxTerms）
-    let json = r#"{"structure": {"glossaryMaxTerms": 5}}"#;
+    // Arrange：partial JSON（只覆盖 structure.chapterHeadings）
+    let json = r#"{"structure": {"chapterHeadings": false}}"#;
 
     // Act
     let parsed: PurifyConfig = serde_json::from_str(json).unwrap();
 
     // Assert：覆盖生效、其余默认（嵌套结构字段 serde default）
-    assert_eq!(parsed.structure.glossary_max_terms, 5);
-    assert!(parsed.structure.chapter_headings);
-    assert!(parsed.structure.glossary_block);
+    assert!(!parsed.structure.chapter_headings);
+    // v0.11.5：旧配置文件遗留 glossaryBlock/glossaryMaxTerms 被 serde 忽略（不阻断）
+    let legacy = serde_json::from_str::<PurifyConfig>(
+        r#"{"structure": {"glossaryBlock": true, "glossaryMaxTerms": 5}}"#,
+    )
+    .unwrap();
+    assert!(legacy.structure.chapter_headings, "旧多余字段忽略，默认生效");
 }
 
-// TD-2026-08-20-B：词边界 + 大小写折叠（词边界匹配直接单测 + 经 first_occurrence_ms 集成）
-
-#[test]
-fn word_boundary_rejects_short_term_inside_longer_word() {
-    // Arrange/Act/Assert：短术语 "AI" 不得锚到 "AIR"/"said" 等子串
-    assert!(!word_boundary_contains("AIR 飞行指南", "ai"));
-    assert!(!word_boundary_contains("saidthings", "said")); // 折叠后仍在词内 → 拒绝
-    assert!(word_boundary_contains("AI 时代来了", "ai"));
-    assert!(word_boundary_contains("he said it", "said"));
-}
-
-#[test]
-fn word_boundary_case_insensitive() {
-    // Act/Assert：大小写折叠——"OCR" 命中 "ocr 引擎"
-    assert!(word_boundary_contains("OCR 引擎已加载", "ocr"));
-    assert!(word_boundary_contains("OCR 引擎已加载", "OCR"));
-    assert!(!word_boundary_contains("SOCRATES 哲学", "ocr")); // 折叠后仍在词内 → 拒绝
-}
-
-#[test]
-fn word_boundary_chinese_substring_unaffected() {
-    // Act/Assert：汉字前后不设边界（中文无词边界概念）——"项目" 命中 "项目管理"
-    assert!(word_boundary_contains("项目管理很关键", "项目"));
-    assert!(word_boundary_contains("敏捷开发", "开发"));
-}
-
-#[test]
-fn word_boundary_empty_term_and_edge_positions() {
-    // Act/Assert：空术语防御性命中；串首/串尾边界成立
-    assert!(word_boundary_contains("任意文本", ""));
-    assert!(word_boundary_contains("AI起步", "ai"));
-    assert!(word_boundary_contains("起步AI", "ai"));
-}
-
-#[test]
-fn word_boundary_cjk_term_after_ascii_no_panic() {
-    // Arrange/Act/Assert：术语自身为 CJK 多字节字符（"告" 占 3 字节）且前邻
-    // ASCII 字母数字——命中被边界拒绝后须前移到下一字符边界；旧实现 start=
-    // pos+1 落在多字节中间，下轮 lower[start..] 切片 panic（预览任务崩溃：
-    // "start byte index 103 ... inside '告' (bytes 102..105)"）。
-    assert!(!word_boundary_contains("A告B", "告"), "前后 ASCII 字母数字 → 边界拒绝");
-    assert!(
-        word_boundary_contains("A告 告", "告"),
-        "第二个命中（空格边界 + 串尾）仍可匹配——前移不丢后续候选"
-    );
-}
-
-#[test]
-fn word_boundary_cjk_term_at_high_byte_offset_no_panic() {
-    // Arrange/Act/Assert：复现线上偏移——'告' 位于字节 102..105，前邻 ASCII，
-    // 旧实现 start=103 落在字符中间 panic；修复后应返回 false 而非崩溃
-    let text = "x".repeat(102) + "告B";
-    assert!(!word_boundary_contains(&text, "告"));
-}
-
-#[test]
-fn first_occurrence_cjk_term_after_ascii_no_panic() {
-    // Arrange：kept 段中 CJK 术语前邻 ASCII 字母数字（边界拒绝路径）
-    let kept = vec![seg(1, 1_000, 2_000, "本段讲 A告B 的定义")];
-
-    // Act/Assert：不 panic，边界拒绝 → 无锚点
-    assert_eq!(super::first_occurrence_ms(&kept, "告"), None);
-}
-
-#[test]
-fn first_occurrence_anchor_respects_word_boundary() {
-    // Arrange：段文本含 "AI 提效"（应命中）与 "AIR 质量"（不应命中）
-    let kept = vec![
-        seg(1, 1_000, 2_000, "本章讲 AIR 质量模型"),
-        seg(2, 3_000, 4_000, "AI 提效的三个方法"),
-    ];
-
-    // Act：锚点应为第二段
-    let anchor = super::first_occurrence_ms(&kept, "AI");
-
-    // Assert
-    assert_eq!(anchor, Some(3_000));
-}
+// v0.11.5（spec 8️⃣）：词汇表完全移出笔记——first_occurrence_ms/word_boundary_contains
+// 锚点工具与其专属单测一并删除（仅服务词汇表锚点；术语展示不再需要回跳锚点）

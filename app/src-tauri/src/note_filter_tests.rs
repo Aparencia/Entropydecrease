@@ -174,7 +174,8 @@ fn ocr_points_exclude_watermark_junk_and_dupes() {
     assert!(!result.ocr_points.iter().any(|p| p.contains("选集")));
     assert!(!result.ocr_points.iter().any(|p| p.contains("噪声")));
     assert_eq!(result.ocr_points.iter().filter(|p| p.contains("牛顿")).count(), 1);
-    assert!(result.markdown.contains("## 画面要点"));
+    // v0.11.5（spec 8️⃣）：画面要点只进 ocr_points 数据（原料视图），markdown 不再含该段
+    assert!(!result.markdown.contains("## 画面要点"));
 }
 
 #[test]

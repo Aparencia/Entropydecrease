@@ -106,6 +106,8 @@ mod commands_refine_inner;
 mod commands_session;
 // v0.7.6 审查硬拆：会话 → 笔记转换管线（原料装载/结构渲染/单条转换/批量编排/预览）
 mod commands_session_note;
+// v0.11.5（spec 8️⃣）：会话详情术语表——词汇表移出笔记后直供前端展示
+mod commands_session_glossary;
 // v0.7.7（REQ-182/183/184）：结构图命令层——批量捕获/手动框选/列表/删除
 mod commands_structures;
 mod commands_streaming;
@@ -413,6 +415,8 @@ pub fn run() {
             commands_session::search_session_segments,
             // 图内文字检索（REQ-133，v0.7.0 M3：OCR 块视图——搜 PPT 上的词命中图）
             commands_session::search_ocr_blocks,
+            // 会话详情术语表（v0.11.5 spec 8️⃣：词汇表移出笔记 → 详情页直供）
+            commands_session_glossary::session_glossary,
             // 流式 ASR 模型状态（REQ-009，ADR-003）
             commands_streaming::asr_streaming_model_status,
             // 模型自动下载（ADR-003 模型分发）
