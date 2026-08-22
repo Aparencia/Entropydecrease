@@ -303,6 +303,8 @@ pub struct Session {
     pub status: String,
     /// 视频类型档案标识（kebab-case；None=未指定，走默认档案）
     pub profile: Option<String>,
+    /// v0.11.7（图文会话，ADR-020）：会话类型（None=视频类会话；Some("photo")=图文截屏会话）
+    pub kind: Option<String>,
 }
 
 /// 新建会话入参。
@@ -312,6 +314,8 @@ pub struct NewSession {
     pub source_window: Option<String>,
     /// 视频类型档案标识（REQ-043；None=默认档案不阻断）
     pub profile: Option<String>,
+    /// v0.11.7（图文会话，ADR-020）：会话类型（None=视频类；Some("photo")=图文会话）
+    pub kind: Option<String>,
 }
 
 /// 会话转写段（ASR final 段 / 字幕段 / 融合段统一落库）。

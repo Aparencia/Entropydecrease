@@ -18,13 +18,14 @@ pub fn row_to_session(row: &Row<'_>) -> rusqlite::Result<Session> {
         ended_at: row.get(4)?,
         status: row.get(5)?,
         profile: row.get(6)?,
+        kind: row.get(7)?,
     })
 }
 
-/// 把 rusqlite 行映射为 SessionListItem（v0.7.1 列表标记，10 列）。
+/// 把 rusqlite 行映射为 SessionListItem（v0.11.7 起 11 列）。
 ///
-/// @ai-context: 列序与 list_sessions SQL 对齐：前 7 列 = sessions 原列，
-///              8 = has_content（EXISTS 子查询）、9 = note_id、10 = note_title。
+/// @ai-context: 列序与 list_sessions SQL 对齐：前 8 列 = sessions 原列（含 kind），
+///              9 = has_content（EXISTS 子查询）、10 = note_id、11 = note_title。
 pub fn row_to_session_list_item(row: &Row<'_>) -> rusqlite::Result<SessionListItem> {
     let session = Session {
         id: row.get(0)?,
@@ -34,10 +35,11 @@ pub fn row_to_session_list_item(row: &Row<'_>) -> rusqlite::Result<SessionListIt
         ended_at: row.get(4)?,
         status: row.get(5)?,
         profile: row.get(6)?,
+        kind: row.get(7)?,
     };
-    let has_content = row.get::<_, i64>(7)? != 0;
-    let note_id: Option<i64> = row.get(8)?;
-    let note_title: Option<String> = row.get(9)?;
+    let has_content = row.get::<_, i64>(8)? != 0;
+    let note_id: Option<i64> = row.get(9)?;
+    let note_title: Option<String> = row.get(10)?;
     Ok(SessionListItem {
         session,
         has_note: note_id.is_some(),

@@ -61,6 +61,7 @@ fn setup_session_with_table_frame(
             title: "结构图测试".to_string(),
             source_window: None,
             profile: None,
+            kind: None,
         })
         .unwrap();
     // 屏成员块（screen_id=1；first=last=1000）
@@ -90,6 +91,7 @@ fn setup_session_with_subtitle_and_table(dir: &Path, db: &Db) -> i64 {
             title: "字幕拦截测试".to_string(),
             source_window: None,
             profile: None,
+            kind: None,
         })
         .unwrap();
     // 表格画面要点块（ts=1000）
@@ -170,6 +172,7 @@ fn capture_skips_session_without_images() {
             title: "空会话".to_string(),
             source_window: None,
             profile: None,
+            kind: None,
         })
         .unwrap();
 

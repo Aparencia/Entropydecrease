@@ -12,6 +12,7 @@ fn session(db: &Db) -> i64 {
         title: "测试会话".to_string(),
         source_window: None,
         profile: None,
+        kind: None,
     })
     .unwrap()
     .id

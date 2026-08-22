@@ -157,7 +157,7 @@ mod tests {
         // Arrange：full 区含关键词 + subtitle 区含关键词（不应命中）
         let db = Db::open(":memory:").unwrap();
         let s = db.create_session(&NewSession {
-            title: "PPT 课".into(), source_window: None, profile: None,
+            title: "PPT 课".into(), source_window: None, profile: None, kind: None,
         }).unwrap();
         add_block(&db, s.id, 1000, "梯度下降算法详解", "full", None);
         add_block(&db, s.id, 2000, "梯度下降（字幕）", "subtitle", None);
@@ -181,7 +181,7 @@ mod tests {
         // Arrange：英文关键词大小写不敏感（LIKE ASCII 口径）
         let db = Db::open(":memory:").unwrap();
         let s = db.create_session(&NewSession {
-            title: "t".into(), source_window: None, profile: None,
+            title: "t".into(), source_window: None, profile: None, kind: None,
         }).unwrap();
         add_block(&db, s.id, 500, "Python 教程", "full", None);
         // Act & Assert
@@ -194,7 +194,7 @@ mod tests {
         // Arrange：关键词含 % 应作字面量（escape_like 口径）
         let db = Db::open(":memory:").unwrap();
         let s = db.create_session(&NewSession {
-            title: "t".into(), source_window: None, profile: None,
+            title: "t".into(), source_window: None, profile: None, kind: None,
         }).unwrap();
         add_block(&db, s.id, 100, "50%off 促销", "full", None);
         add_block(&db, s.id, 200, "普通内容", "full", None);
@@ -209,7 +209,7 @@ mod tests {
         // Arrange：多命中 → 结果有界
         let db = Db::open(":memory:").unwrap();
         let s = db.create_session(&NewSession {
-            title: "t".into(), source_window: None, profile: None,
+            title: "t".into(), source_window: None, profile: None, kind: None,
         }).unwrap();
         for i in 0..5 {
             add_block(&db, s.id, i * 100, &format!("关键词{}", i), "full", None);
@@ -224,7 +224,7 @@ mod tests {
         // 屏区间应取全部块的 min/max（与旧实现口径一致）
         let db = Db::open(":memory:").unwrap();
         let s = db.create_session(&NewSession {
-            title: "t".into(), source_window: None, profile: None,
+            title: "t".into(), source_window: None, profile: None, kind: None,
         }).unwrap();
         add_block(&db, s.id, 500, "字幕行一", "subtitle", Some(7));
         add_block(&db, s.id, 2000, "画面要点目标", "full", Some(7));
@@ -244,7 +244,7 @@ mod tests {
         let db = Db::open(":memory:").unwrap();
         let dir = tempfile::tempdir().unwrap();
         let s = db.create_session(&NewSession {
-            title: "t".into(), source_window: None, profile: None,
+            title: "t".into(), source_window: None, profile: None, kind: None,
         }).unwrap();
         add_block(&db, s.id, 1000, "有图画面", "full", None);
         add_block(&db, s.id, 2000, "无图画面", "full", None);

@@ -33,7 +33,9 @@ pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
             ended_at INTEGER,
             status TEXT NOT NULL DEFAULT 'recording',
             -- v0.5.0 M1（REQ-043）：视频类型档案标识（kebab-case；NULL=默认档案）
-            profile TEXT
+            profile TEXT,
+            -- v0.11.7（图文会话，ADR-020）：会话类型（NULL=实时/视频导入等视频类；'photo'=图文截屏会话）
+            kind TEXT
         );
         -- 会话转写段（ASR final / 字幕 / 融合统一落库）
         CREATE TABLE IF NOT EXISTS session_segments (
@@ -167,6 +169,9 @@ CREATE TABLE IF NOT EXISTS contracts (
     )?;
     // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）
     ensure_column(conn, "sessions", "profile", "ALTER TABLE sessions ADD COLUMN profile TEXT")?;
+    // v0.11.7（图文会话，ADR-020）：旧库迁移——sessions 表补 kind 列
+    // （NULL=视频类会话零回归；'photo'=图文截屏会话；列表徽标/残留清扫依赖此列）
+    ensure_column(conn, "sessions", "kind", "ALTER TABLE sessions ADD COLUMN kind TEXT")?;
     // v0.5.0 M4（REQ-048）：旧库迁移——ocr_blocks 表补 region_kind 列
     ensure_column(
         conn,

@@ -101,6 +101,8 @@ pub fn run_video_import<F: Fn(&ImportProgress)>(
         source_window: None,
         // 文件导入路径无档案检测（无窗口标题信号），走默认档案（REQ-043）
         profile: None,
+        // 视频导入 = 视频类会话（图文会话走 photo 命令线）
+        kind: None,
     })?;
     let session_id = session.id;
     // 中间文件限定系统临时目录（导入后即清理，不污染应用数据目录）

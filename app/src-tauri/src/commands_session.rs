@@ -41,6 +41,8 @@ pub async fn create_session(
         title: normalize_title(title, "未命名会话"),
         source_window: source_window.map(|s| s.chars().take(TITLE_MAX_CHARS).collect()),
         profile: profile.map(|p| p.chars().take(30).collect()),
+        // v0.11.7：命令级建会话默认视频类（图文会话走 commands_photo::start_photo_session）
+        kind: None,
     };
     state.db.create_session(&new).map_err(|e| e.to_string())
 }

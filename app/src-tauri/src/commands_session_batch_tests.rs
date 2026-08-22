@@ -22,6 +22,7 @@ fn finished_session(db: &Db, title: &str) -> i64 {
             title: title.into(),
             source_window: None,
             profile: None,
+            kind: None,
         })
         .expect("create session");
     db.finish_session(s.id).expect("finish session");
@@ -47,6 +48,7 @@ fn recording_session(db: &Db, title: &str) -> i64 {
         title: title.into(),
         source_window: None,
         profile: None,
+        kind: None,
     })
     .expect("create session")
     .id

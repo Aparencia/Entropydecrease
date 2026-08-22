@@ -28,8 +28,8 @@ impl Db {
         let now = unix_seconds();
         let conn = self.conn.lock().expect("db lock poisoned");
         conn.execute(
-            "INSERT INTO sessions (title, source_window, started_at, status, profile) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![new.title, new.source_window, now, SESSION_STATUS_RECORDING, new.profile],
+            "INSERT INTO sessions (title, source_window, started_at, status, profile, kind) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![new.title, new.source_window, now, SESSION_STATUS_RECORDING, new.profile, new.kind],
         )?;
         Ok(Session {
             id: conn.last_insert_rowid(),
@@ -39,6 +39,7 @@ impl Db {
             ended_at: None,
             status: SESSION_STATUS_RECORDING.to_string(),
             profile: new.profile.clone(),
+            kind: new.kind.clone(),
         })
     }
 
@@ -67,7 +68,7 @@ impl Db {
     ) -> Result<Vec<SessionListItem>> {
         let conn = self.conn.lock().expect("db lock poisoned");
         let mut sql = String::from(
-            "SELECT s.id, s.title, s.source_window, s.started_at, s.ended_at, s.status, s.profile,
+            "SELECT s.id, s.title, s.source_window, s.started_at, s.ended_at, s.status, s.profile, s.kind,
                     (EXISTS(SELECT 1 FROM session_segments ss WHERE ss.session_id = s.id)
                      OR EXISTS(SELECT 1 FROM session_ocr_blocks so WHERE so.session_id = s.id)) AS has_content,
                     (SELECT n.id FROM notes n WHERE n.session_id = s.id
@@ -105,7 +106,7 @@ impl Db {
     pub fn get_session(&self, id: i64) -> Result<Option<Session>> {
         let conn = self.conn.lock().expect("db lock poisoned");
         let mut stmt = conn.prepare(
-            "SELECT id, title, source_window, started_at, ended_at, status, profile FROM sessions WHERE id = ?1",
+            "SELECT id, title, source_window, started_at, ended_at, status, profile, kind FROM sessions WHERE id = ?1",
         )?;
         let mut rows = stmt.query_map(params![id], row_to_session)?;
         match rows.next() {
@@ -279,6 +280,23 @@ impl Db {
             params![SESSION_STATUS_FAILED, unix_seconds(), session_id],
         )?;
         Ok(affected > 0)
+    }
+
+    /// v0.11.7（图文会话，ADR-020）：清扫崩溃残留的图文会话。
+    ///
+    /// @ai-context: 图文采集无后台线程（命令式动线），应用崩溃会残留
+    ///              recording 会话；kind=photo + recording + started_at 超时
+    ///              → failed（ended_at 补记）。24h 阈值保证不误伤进行中的采集。
+    /// @ai-context: 返回清扫条数（幂等；非 photo / 未超时会话零影响）。
+    pub fn sweep_stale_photo_sessions(&self, stale_secs: i64) -> Result<usize> {
+        let cutoff = unix_seconds() - stale_secs;
+        let conn = self.conn.lock().expect("db lock poisoned");
+        let affected = conn.execute(
+            "UPDATE sessions SET status = ?1, ended_at = COALESCE(ended_at, ?2) \
+             WHERE kind = 'photo' AND status = ?3 AND started_at < ?4",
+            params![SESSION_STATUS_FAILED, unix_seconds(), SESSION_STATUS_RECORDING, cutoff],
+        )?;
+        Ok(affected)
     }
 
     /// 列出会话全部 OCR 块（按时间轴升序；v0.7.3 起含 bbox/screen_id 列）。

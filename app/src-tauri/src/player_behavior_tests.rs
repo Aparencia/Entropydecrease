@@ -18,6 +18,7 @@ fn mem_db_with_session() -> (Db, i64) {
             title: "播放器行为测试".to_string(),
             source_window: None,
             profile: None,
+            kind: None,
         })
         .expect("会话创建成功");
     (db, session.id)

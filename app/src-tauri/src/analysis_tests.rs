@@ -15,6 +15,7 @@ fn detail(segments: Vec<(&str, u64, u64)>, ocr: Vec<(&str, u64)>) -> SessionDeta
         ended_at: Some(100),
         status: "finished".into(),
         profile: None,
+        kind: None,
     };
     let segments = segments
         .into_iter()

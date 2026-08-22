@@ -36,7 +36,7 @@ fn replace_and_get_artifact_roundtrip() {
     // Arrange
     let db = mem_db();
     let session = db
-        .create_session(&NewSession { title: "产物会话".into(), source_window: None, profile: Some("lecture".into()) })
+        .create_session(&NewSession { title: "产物会话".into(), source_window: None, profile: Some("lecture".into()), kind: None })
         .unwrap();
     let artifact = artifact(session.id);
     // Act
@@ -58,7 +58,7 @@ fn replace_and_get_artifact_roundtrip() {
 fn replace_artifact_overwrites() {
     // Arrange：可重算语义——第二次构建覆盖旧产物
     let db = mem_db();
-    let session = db.create_session(&NewSession { title: "x".into(), source_window: None, profile: None }).unwrap();
+    let session = db.create_session(&NewSession { title: "x".into(), source_window: None, profile: None, kind: None }).unwrap();
     let first = artifact(session.id);
     db.replace_artifact(&first).unwrap();
     // Act：第二次（少一块）
@@ -78,7 +78,7 @@ fn replace_artifact_overwrites() {
 fn get_artifact_none_when_empty() {
     // Arrange：无产物
     let db = mem_db();
-    let session = db.create_session(&NewSession { title: "x".into(), source_window: None, profile: None }).unwrap();
+    let session = db.create_session(&NewSession { title: "x".into(), source_window: None, profile: None, kind: None }).unwrap();
     // Act/Assert：None（不报错）
     assert!(db.get_artifact(session.id).unwrap().is_none());
 }
@@ -87,7 +87,7 @@ fn get_artifact_none_when_empty() {
 fn delete_session_cascades_artifact() {
     // Arrange：产物随会话级联删除（外键）
     let db = mem_db();
-    let session = db.create_session(&NewSession { title: "x".into(), source_window: None, profile: None }).unwrap();
+    let session = db.create_session(&NewSession { title: "x".into(), source_window: None, profile: None, kind: None }).unwrap();
     db.replace_artifact(&artifact(session.id)).unwrap();
     // Act
     db.delete_session(session.id).unwrap();
@@ -99,7 +99,7 @@ fn delete_session_cascades_artifact() {
 fn empty_artifact_blocks_ok() {
     // Arrange：空块产物（模板可产出空）
     let db = mem_db();
-    let session = db.create_session(&NewSession { title: "x".into(), source_window: None, profile: None }).unwrap();
+    let session = db.create_session(&NewSession { title: "x".into(), source_window: None, profile: None, kind: None }).unwrap();
     let empty = SessionArtifact { session_id: session.id, profile: "meeting".into(), blocks: Vec::new() };
     // Act
     db.replace_artifact(&empty).unwrap();

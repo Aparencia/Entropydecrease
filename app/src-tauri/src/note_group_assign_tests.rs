@@ -39,6 +39,7 @@ fn session(title: &str, duration_secs: i64, profile: Option<&str>) -> Session {
         ended_at: Some(1000 + duration_secs),
         status: "finished".to_string(),
         profile: profile.map(|p| p.to_string()),
+        kind: None,
     }
 }
 
@@ -148,6 +149,7 @@ fn group_of_session_inherits_from_note() {
         title: "会话X".into(),
         source_window: None,
         profile: None,
+        kind: None,
     })
     .expect("session");
     db.create_note(&NewNote {

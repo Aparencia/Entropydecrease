@@ -4,7 +4,7 @@
 //!              （AGENTS.md §3 模块化）。
 
 use crate::db::Db;
-use crate::db_sessions::{SESSION_STATUS_FINISHED, SESSION_STATUS_RECORDING};
+use crate::db_sessions::{SESSION_STATUS_FAILED, SESSION_STATUS_FINISHED, SESSION_STATUS_RECORDING};
 use crate::types::{NewNote, NewSession, NewSessionOcrBlock, NewSessionSegment};
 
 fn mem_db() -> Db {
@@ -13,7 +13,7 @@ fn mem_db() -> Db {
 }
 
 fn new_session(title: &str) -> NewSession {
-    NewSession { title: title.into(), source_window: Some("网课窗口".into()), profile: None }
+    NewSession { title: title.into(), source_window: Some("网课窗口".into()), profile: None, kind: None }
 }
 
 fn segment(session_id: i64, start_ms: u64, end_ms: u64, text: &str) -> NewSessionSegment {
@@ -67,7 +67,7 @@ fn list_sessions_orders_by_started_desc_and_filters_keyword() {
     let db = mem_db();
     let a = db.create_session(&new_session("物理课")).unwrap();
     let b = db.create_session(&new_session("数学课")).unwrap();
-    let c = db.create_session(&NewSession { title: "随笔".into(), source_window: None, profile: None }).unwrap();
+    let c = db.create_session(&NewSession { title: "随笔".into(), source_window: None, profile: None, kind: None }).unwrap();
     // Act
     let all = db.list_sessions(None, 10, 0).expect("list all");
     let matched = db.list_sessions(Some("物理"), 10, 0).expect("list by keyword");
@@ -87,7 +87,7 @@ fn list_sessions_paginates() {
     // Arrange
     let db = mem_db();
     for i in 0..5 {
-        db.create_session(&NewSession { title: format!("课{}", i), source_window: None, profile: None }).unwrap();
+        db.create_session(&NewSession { title: format!("课{}", i), source_window: None, profile: None, kind: None }).unwrap();
     }
     // Act
     let page1 = db.list_sessions(None, 2, 0).unwrap();
@@ -294,4 +294,61 @@ fn session_notes_tables_coexist() {
     assert_eq!(db.list_sessions(None, 10, 0).unwrap().len(), 1);
     assert_eq!(db.list_notes().unwrap().len(), 1);
     assert_eq!(session.id, 1);
+}
+
+// ── v0.11.7（图文会话，ADR-020）：kind 字段与残留清扫 ──
+
+#[test]
+fn create_session_kind_roundtrip() {
+    // Arrange：图文会话（kind=photo）
+    let db = mem_db();
+    // Act
+    let created = db
+        .create_session(&NewSession {
+            title: "图文会话".into(),
+            source_window: None,
+            profile: None,
+            kind: Some("photo".into()),
+        })
+        .expect("create");
+    let fetched = db.get_session(created.id).unwrap().unwrap();
+    // Assert：kind 往返一致（列表项同样携带）
+    assert_eq!(fetched.kind.as_deref(), Some("photo"));
+    let listed = db.list_sessions(None, 10, 0).unwrap();
+    assert_eq!(listed[0].session.kind.as_deref(), Some("photo"));
+}
+
+#[test]
+fn sweep_stale_photo_sessions_marks_only_stale_photo() {
+    // Arrange：旧 photo recording（started_at=1s）、新 photo recording（now）、旧非 photo recording
+    let db = mem_db();
+    let stale_photo = db
+        .create_session(&NewSession {
+            title: "旧图文".into(),
+            source_window: None,
+            profile: None,
+            kind: Some("photo".into()),
+        })
+        .unwrap();
+    let fresh_photo = db
+        .create_session(&NewSession {
+            title: "新图文".into(),
+            source_window: None,
+            profile: None,
+            kind: Some("photo".into()),
+        })
+        .unwrap();
+    let old_live = db.create_session(&new_session("旧实时")).unwrap();
+    db.conn
+        .lock()
+        .unwrap()
+        .execute("UPDATE sessions SET started_at = 1 WHERE id = ?1", rusqlite::params![stale_photo.id])
+        .unwrap();
+    // Act：1 小时超时阈值
+    let swept = db.sweep_stale_photo_sessions(3600).unwrap();
+    // Assert：仅旧图文被清扫；新图文与非 photo 不受影响
+    assert_eq!(swept, 1);
+    assert_eq!(db.get_session(stale_photo.id).unwrap().unwrap().status, SESSION_STATUS_FAILED);
+    assert_eq!(db.get_session(fresh_photo.id).unwrap().unwrap().status, SESSION_STATUS_RECORDING);
+    assert_eq!(db.get_session(old_live.id).unwrap().unwrap().status, SESSION_STATUS_RECORDING);
 }

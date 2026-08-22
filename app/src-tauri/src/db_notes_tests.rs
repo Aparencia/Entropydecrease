@@ -167,6 +167,7 @@ fn create_note_roundtrips_rule_metadata() {
             title: "会话".into(),
             source_window: None,
             profile: None,
+            kind: None,
         })
         .expect("create session");
     let new = NewNote {
@@ -195,6 +196,7 @@ fn delete_session_keeps_note_and_breaks_link() {        // Arrange
         title: "待删会话".into(),
         source_window: None,
         profile: None,
+        kind: None,
     }).expect("create session");
     let note = db.create_note(&NewNote {
         title: "关联笔记".into(),
@@ -224,6 +226,7 @@ fn find_note_by_session_picks_latest() {
         title: "会话".into(),
         source_window: None,
         profile: None,
+        kind: None,
     }).expect("create session");
     let older = db.create_note(&NewNote {
         title: "第一版".into(),

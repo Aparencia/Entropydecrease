@@ -19,6 +19,7 @@ fn lecture_detail() -> SessionDetail {
         ended_at: Some(5000),
         status: "finished".to_string(),
         profile: Some("lecture".to_string()),
+        kind: None,
     };
     let ocr_blocks: Vec<SessionOcrBlock> = [1000u64, 2000, 3000]
         .into_iter()

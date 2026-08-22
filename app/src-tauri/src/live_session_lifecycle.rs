@@ -40,6 +40,8 @@ impl LiveSessionManager {
                 source_window: params.source_window.clone(),
                 // REQ-043：档案标识落库（None=默认档案）
                 profile: params.profile.map(|k| k.as_str().to_string()),
+                // 实时捕获 = 视频类会话（图文会话走 photo 命令线）
+                kind: None,
             })
             .map_err(|e| AppError::Db(e.to_string()))?
             .id;
