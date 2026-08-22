@@ -13,6 +13,7 @@
 //! @ai-context: 本模块含文件系统读取（图匹配）——聚合/去重逻辑仍为纯函数
 //!              （screen_merge.rs），本层只做编排与 IO。
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::purify_config::PurifyConfig;
@@ -23,7 +24,9 @@ use crate::screen_merge::{
 };
 use crate::types::{ScreenStructure, SessionOcrBlock, SessionScreen};
 use crate::ui_junk::{JunkCategory, UiJunkList};
-use crate::watermark_filter::{detect_watermarks, WatermarkConfig, WatermarkInput};
+use crate::watermark_filter::{
+    detect_watermarks, region_key_from_bbox, WatermarkConfig, WatermarkInput,
+};
 
 /// 结构区域类型（region_kind 命中即结构块——不参与行合并）。
 const STRUCTURE_KINDS: &[&str] = &["table", "formula", "code"];
@@ -64,18 +67,8 @@ pub fn filter_usable_blocks(
     transcript: &str,
     corrections: &crate::ocr_correction::OcrCorrectionTable,
 ) -> (Vec<SessionOcrBlock>, usize) {
-    let inputs: Vec<WatermarkInput> = blocks
-        .iter()
-        .filter(|b| b.region == "full")
-        .map(|b| WatermarkInput {
-            text: b.text.clone(),
-            timestamp_ms: b.timestamp_ms,
-            region_key: None,
-        })
-        .collect();
-    let watermarks = detect_watermarks(&inputs, &WatermarkConfig::default());
-    // ① 基础过滤（低分/空文本/UI 垃圾/水印/单字符/边缘条带）——同帧批量判定
-    //    边缘条带需要帧尺寸（同帧块分布推断——DB 不落帧宽高）
+    // ① 帧分组（块按时间有序——同 ts 连续分组成立）+ 帧尺寸推断（bbox 归一化
+    //    网格区域键需要帧坐标系；同帧内容包围盒外扩近似——DB 不落帧宽高）
     let mut by_frame: Vec<(u64, Vec<&SessionOcrBlock>)> = Vec::new();
     for b in blocks {
         match by_frame.last_mut() {
@@ -83,6 +76,28 @@ pub fn filter_usable_blocks(
             _ => by_frame.push((b.timestamp_ms, vec![b])),
         }
     }
+    let frame_dims: BTreeMap<u64, (f32, f32)> = by_frame
+        .iter()
+        .filter_map(|(ts, members)| infer_frame_dims(&to_inputs(members)).map(|d| (*ts, d)))
+        .collect();
+    // 水印输入（A 层：bbox → 4x4 归一化网格区域键；无 bbox/帧尺寸 → None 降级
+    // 为全局文本判定——与 v0.11.5 前行为一致）
+    let inputs: Vec<WatermarkInput> = blocks
+        .iter()
+        .filter(|b| b.region == "full")
+        .map(|b| WatermarkInput {
+            text: b.text.clone(),
+            timestamp_ms: b.timestamp_ms,
+            region_key: b.bbox.and_then(|bb| {
+                frame_dims.get(&b.timestamp_ms).and_then(|(fw, fh)| {
+                    region_key_from_bbox(bb.x, bb.y, bb.w, bb.h, *fw, *fh)
+                })
+            }),
+        })
+        .collect();
+    let watermarks = detect_watermarks(&inputs, &WatermarkConfig::default());
+    // ② 基础过滤（低分/空文本/UI 垃圾/水印/单字符/边缘条带）——同帧批量判定
+    //    边缘条带需要帧尺寸（同帧块分布推断——DB 不落帧宽高）
     let mut junk_hits: Vec<(u64, usize)> = Vec::new(); // 帧 → VideoPageUi 命中数
     for (ts, members) in &by_frame {
         let hits = members

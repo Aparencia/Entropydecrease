@@ -9,6 +9,8 @@
 //! @ai-context: 说话人变化（A3）：无 embedding 数据 → 返回空事件（访谈/会议档案
 //!              降级为无讲者标注形态）；embedding 提取接入留 V1.0（模型分发 G4）。
 
+use std::collections::BTreeMap;
+
 use crate::chapter_detect::{detect_chapters, ChapterBoundary, ChapterSignal, DEFAULT_MIN_VOTES};
 use crate::follow_along_detect::{detect_step_boundaries, StepBoundary};
 use crate::glossary::{
@@ -144,13 +146,42 @@ pub fn analyze_session_opt(
             .map(|s| s.text.as_str())
             .collect();
         // 水印词排除（REQ-059：区域稳定性+文本不变性 → 角标台标不进术语统计）
+        // A 层：bbox → 4x4 归一化网格区域键——帧尺寸 = 同帧内容包围盒外扩近似
+        //（与 screen_merge::infer_frame_dims 同口径，1.08 外扩）；无 bbox/帧尺寸
+        // 缺失 → None（降级为全局文本判定，与旧行为一致）
+        let frame_dims: BTreeMap<u64, (f32, f32)> = ocr_blocks
+            .iter()
+            .filter(|b| b.region == "full")
+            .filter_map(|b| b.bbox.map(|bb| (b.timestamp_ms, (bb.x + bb.w, bb.y + bb.h))))
+            .fold(BTreeMap::<u64, (f32, f32)>::new(), |mut m, (ts, (w, h))| {
+                let e = m.entry(ts).or_insert((0.0, 0.0));
+                e.0 = e.0.max(w);
+                e.1 = e.1.max(h);
+                m
+            })
+            .into_iter()
+            .filter_map(|(ts, (w, h))| {
+                (w > 0.0 && h > 0.0).then_some((ts, (w * 1.08, h * 1.08)))
+            })
+            .collect();
         let watermark_inputs: Vec<WatermarkInput> = ocr_blocks
             .iter()
             .filter(|b| b.region == "full")
             .map(|b| WatermarkInput {
                 text: b.text.clone(),
                 timestamp_ms: b.timestamp_ms,
-                region_key: None,
+                region_key: b.bbox.and_then(|bb| {
+                    frame_dims.get(&b.timestamp_ms).and_then(|(fw, fh)| {
+                        crate::watermark_filter::region_key_from_bbox(
+                            bb.x,
+                            bb.y,
+                            bb.w,
+                            bb.h,
+                            *fw,
+                            *fh,
+                        )
+                    })
+                }),
             })
             .collect();
         let watermarks = detect_watermarks(&watermark_inputs, &WatermarkConfig::default());

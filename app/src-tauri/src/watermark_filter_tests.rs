@@ -132,3 +132,88 @@ fn same_frame_multiple_blocks_count_once() {
     // Assert：两条命中（两个区域键）文本相同
     assert_eq!(result.texts.iter().filter(|t| *t == "角标").count(), 2);
 }
+
+#[test]
+fn ocr_jitter_variants_clustered_as_one_watermark() {
+    // Arrange：半透明水印 OCR 抖动（会话 38 "万事如番茄LilLil" 实证）——
+    //          同区域同位置文本每帧略有差异（尾随空格/截断变体）
+    let mut blocks = Vec::new();
+    for i in 0..10 {
+        let variant = match i % 3 {
+            0 => "万事如番茄LilLil",
+            1 => "万事如番茄LilLil ", // 尾随空格（trim 后与原文本相同）
+            2 => "万事如番茄LilL",   // 截断变体（与原文编辑距离 1）
+            _ => unreachable!(),
+        };
+        blocks.push(wm(variant, i * 10_000, "corner-br"));
+        blocks.push(wm(&format!("正文内容{}", i), i * 10_000, "slide"));
+    }
+    // Act：相似聚类——变体归并同一候选（代表=出现最多的原文），计数 10 帧
+    let result = detect_watermarks(&blocks, &WatermarkConfig::default());
+    // Assert：抖动的变体应聚类为同一水印，实际文本: {:?}
+    assert!(
+        result.texts.iter().any(|t| t.contains("万事如番茄LilLil")),
+        "抖动的变体应聚类为同一水印，实际文本: {:?}",
+        result.texts
+    );
+    // 回归：正文（每帧 1 次）不得误判
+    assert!(!result.texts.iter().any(|t| t.contains("正文内容")));
+}
+
+#[test]
+fn region_appearance_rate_detects_stable_text() {
+    // Arrange：区域稳定（7/7 帧）+ 区域内文本每帧在变（角标0..6，聚类也难归并）
+    //          + 整帧内容在变 → 区域级水印（C 层，与具体文本解耦）
+    let mut blocks = Vec::new();
+    for i in 0..7 {
+        blocks.push(wm(&format!("角标{}", i), i * 10_000, "corner-br"));
+        blocks.push(wm(&format!("正文{}", i), i * 10_000, "slide"));
+        blocks.push(wm(&format!("正文{}", i), i * 10_000, "slide"));
+    }
+    // Act：区域出现率检测（C 层新入口）
+    let result = detect_region_watermarks(&blocks, &WatermarkConfig::default());
+    // Assert：corner-br 7 帧 ≥ 5、区域内 7 种文本（变化）、帧签名 7 种 ≥ 2 → 命中
+    assert!(
+        !result.texts.is_empty(),
+        "区域出现率应检测到角标水印，实际文本: {:?}",
+        result.texts
+    );
+}
+
+#[test]
+fn region_detection_stable_text_not_matched() {
+    // Arrange：区域内文本完全稳定（1 种）——区域级判定不适用
+    //          （文本不变场景由 detect_watermarks 的文本不变性判定覆盖）
+    let mut blocks = Vec::new();
+    for i in 0..7 {
+        blocks.push(wm("固定页眉", i * 10_000, "header"));
+    }
+    // Act：区域内文本种类 1 < 2 → 不命中（区域级误杀保护）
+    let result = detect_region_watermarks(&blocks, &WatermarkConfig::default());
+    // Assert
+    assert!(result.texts.is_empty(), "区域文本稳定不得判为区域级水印: {:?}", result.texts);
+}
+
+#[test]
+fn bbox_region_key_grid_units() {
+    // Arrange：1920x1080 帧（A 层归一化网格 4x4）
+    // Act & Assert：右下角 bbox（y_center≈940 → row 3，x_center≈1550 → col 3）
+    assert_eq!(
+        region_key_from_bbox(1500.0, 900.0, 100.0, 80.0, 1920.0, 1080.0).as_deref(),
+        Some("g3-3")
+    );
+    // 左上角 → 0-0 格
+    assert_eq!(
+        region_key_from_bbox(10.0, 10.0, 100.0, 80.0, 1920.0, 1080.0).as_deref(),
+        Some("g0-0")
+    );
+    // 坐标恰在帧边界（防御性 clamp，防 4 越界）
+    assert_eq!(
+        region_key_from_bbox(1920.0, 1080.0, 0.0, 0.0, 1920.0, 1080.0).as_deref(),
+        Some("g3-3")
+    );
+    // 无帧尺寸 → None（调用方降级全局判定）
+    assert_eq!(region_key_from_bbox(10.0, 10.0, 100.0, 80.0, 0.0, 0.0), None);
+    // 负尺寸 → None（防御）
+    assert_eq!(region_key_from_bbox(10.0, 10.0, -1.0, 80.0, 1920.0, 1080.0), None);
+}

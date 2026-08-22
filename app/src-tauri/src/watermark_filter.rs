@@ -1,4 +1,4 @@
-//! 水印/台标/角标过滤（REQ-059 / v0.6.0 M1）。
+//! 水印/台标/角标过滤（REQ-059 / v0.6.0 M1；v0.11.5 spec 10️⃣ A+B+C 落地）。
 //!
 //! @ai-context: 产物与术语统计的"输入干净化"——区域稳定性（同区域同文本出现
 //!              ≥N 次）+ 文本不变性（内容不随版面变化）→ 水印候选集；
@@ -8,11 +8,22 @@
 //!              水印是帧内唯一文本（签名恒定）→ 不命中（防"纯水印帧"误杀，
 //!              也保护"老师固定位置常驻提示语"这类合法内容）。
 //! @ai-context: 误杀兜底：阈值可校准 + 产物层可逆（原始 OCR 块保留在库中，
-//!              预览/过滤统计可复查）。DB 层未落 bbox（region_key=None）时
-//!              退化为纯文本不变性判定——仍可拦截高频常驻文字。
-//! @ai-context: 纯函数可单测（合成帧 golden：台标/角标/水印命中，正文不误杀）。
+//!              预览/过滤统计可复查）。
+//! @ai-context: v0.11.5（spec 10️⃣）三件套：A bbox→region_key 接入（screens/
+//!              analysis 从 DB bbox 列构造归一化网格键，区域稳定性信号启用）；
+//!              B 文本相似聚类（编辑距离 ≤2 归并，OCR 抖动漏检防御——会话 38
+//!              "万事如番茄LilLil" 实证）；C 区域级出现率（区域稳定+文本变化+内容
+//!              在变 → 区域水印，与具体文本解耦）。纯函数在 watermark_cluster.rs
+//!              （子模块）——本文件保持 ≤300 行（AGENTS.md §3）。
 
 use std::collections::{BTreeMap, BTreeSet};
+
+use watermark_cluster::cluster_texts;
+// A 层对外入口（screens/analysis 接线用）
+pub use watermark_cluster::region_key_from_bbox;
+// C 层对外入口：lib 内暂无调用方（测试目标已覆盖；接线留后续任务）
+#[allow(unused_imports)]
+pub use watermark_cluster::detect_region_watermarks;
 
 /// 水印检测输入块。
 #[derive(Debug, Clone, PartialEq)]
@@ -69,22 +80,17 @@ pub struct WatermarkResult {
 
 /// 水印检测（纯函数）：OCR 块流 → 水印候选集。
 ///
-/// @ai-context: 两阶段：① 按时间戳聚帧求整帧文本签名；② 按 (区域键, 文本)
-///              分组统计出现帧数/跨度/签名种类，三阈值全过 → 水印。
-/// @ai-context: 区域键为 None 的块按全局文本聚合（DB 无 bbox 时的降级路径）。
+/// @ai-context: 两阶段：① 按时间戳聚帧求整帧文本签名；② 按 (区域键, 聚类代表
+///              文本) 分组统计出现帧数/跨度/签名种类，三阈值全过 → 水印。
+/// @ai-context: v0.11.5（B 层）：分组前经 cluster_texts 做编辑距离 ≤2 相似聚类
+///              ——OCR 抖动变体归并同一候选；无抖动时各文本自成组（行为兼容，
+///              旧用例零回归）。区域键为 None 的块按全局文本聚合（DB 无 bbox
+///              时的降级路径）。
 pub fn detect_watermarks(blocks: &[WatermarkInput], cfg: &WatermarkConfig) -> WatermarkResult {
     // ① 帧签名：timestamp → 该帧去重文本集合（排序 join）
-    let mut frame_texts: BTreeMap<u64, BTreeSet<String>> = BTreeMap::new();
-    for b in blocks {
-        let t = b.text.trim();
-        if t.is_empty() {
-            continue;
-        }
-        frame_texts
-            .entry(b.timestamp_ms)
-            .or_default()
-            .insert(t.to_string());
-    }
+    let frame_texts = frame_text_signatures(blocks);
+    // ①.5 文本相似聚类（B 层）：(region, 原文) → 聚类代表
+    let cluster = cluster_texts(blocks);
 
     // ② 分组统计
     #[derive(Default)]
@@ -99,7 +105,12 @@ pub fn detect_watermarks(blocks: &[WatermarkInput], cfg: &WatermarkConfig) -> Wa
             continue;
         }
         let key = b.region_key.clone().unwrap_or_default();
-        let group = groups.entry((key, t.to_string())).or_default();
+        // 键改为聚类代表文本（无抖动时代表=原文，行为兼容）
+        let rep = cluster
+            .get(&(key.clone(), t.to_string()))
+            .cloned()
+            .unwrap_or_else(|| t.to_string());
+        let group = groups.entry((key, rep)).or_default();
         group.timestamps.insert(b.timestamp_ms);
         if let Some(sig) = frame_texts.get(&b.timestamp_ms) {
             group.frame_sigs.insert(sig.iter().cloned().collect::<Vec<_>>().join("|"));
@@ -129,16 +140,43 @@ pub fn detect_watermarks(blocks: &[WatermarkInput], cfg: &WatermarkConfig) -> Wa
             })
         })
         .collect();
-    // 确定性排序：出现次数降序 → 跨度降序 → 文本字典序
+    sort_hits(&mut hits);
+    let texts: Vec<String> = hits.iter().map(|h| h.text.clone()).collect();
+    WatermarkResult { texts, hits }
+}
+
+/// 帧签名表（共享）：timestamp → 该帧去重文本集合（排序 join 由调用方做）。
+///
+/// @ai-context: detect_watermarks 与 detect_region_watermarks 共用同一"内容变化
+///              证据"口径——两路径的 distinct_frames 统计不打架。
+fn frame_text_signatures(blocks: &[WatermarkInput]) -> BTreeMap<u64, BTreeSet<String>> {
+    let mut frame_texts: BTreeMap<u64, BTreeSet<String>> = BTreeMap::new();
+    for b in blocks {
+        let t = b.text.trim();
+        if t.is_empty() {
+            continue;
+        }
+        frame_texts
+            .entry(b.timestamp_ms)
+            .or_default()
+            .insert(t.to_string());
+    }
+    frame_texts
+}
+
+/// 命中明细排序（共享）：出现次数降序 → 跨度降序 → 文本字典序（确定性）。
+fn sort_hits(hits: &mut Vec<WatermarkHit>) {
     hits.sort_by(|a, b| {
         b.occurrences
             .cmp(&a.occurrences)
             .then(b.span_ms.cmp(&a.span_ms))
             .then(a.text.cmp(&b.text))
     });
-    let texts: Vec<String> = hits.iter().map(|h| h.text.clone()).collect();
-    WatermarkResult { texts, hits }
 }
+
+/// B/C 层纯函数子模块（聚类 + 区域出现率 + bbox 区域键；≤300 行约束）。
+#[path = "watermark_cluster.rs"]
+mod watermark_cluster;
 
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。
 #[cfg(test)]
