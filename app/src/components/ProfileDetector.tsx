@@ -198,6 +198,8 @@ export default function ProfileDetector({
   if (!windowTitle) return null;
   const needConfirm = result?.needs_confirmation ?? false;
   const fromMemory = result?.memory_hit ?? null;
+  // v0.11.5（Task 5）：记忆与检测高置信冲突 → 检测为准 + 展示冲突提示（可手动修改）
+  const conflictKind = result?.memory_conflict ?? null;
 
   return (
     <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>
@@ -210,7 +212,11 @@ export default function ProfileDetector({
         <div>
           <div style={{ fontSize: 12, marginBottom: 6 }}>
             检测为：
-            {needConfirm ? (
+            {conflictKind ? (
+              <span style={{ color: "#b45309" }}>
+                （记忆「{KIND_TO_FORM[conflictKind] ?? conflictKind}」与检测冲突，已按检测结果——可手动修改）
+              </span>
+            ) : needConfirm ? (
               <span style={{ color: "#b45309" }}>（信号不足/冲突，请确认）</span>
             ) : fromMemory ? (
               <span style={{ color: "#0d9488" }}>（记忆偏好生效）</span>

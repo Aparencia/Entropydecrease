@@ -181,6 +181,8 @@ export interface DetectResult {
   memory_form?: ContentForm | null;
   /** v0.9.0（REQ-190）：领域标签检测结果（平台分区/标题词四来源；旧响应缺省 null） */
   domain?: DomainDetection | null;
+  /** v0.11.5（Task 5）：记忆命中 + 检测高置信但冲突 → 检测为准（标记被否决的记忆类别；旧响应缺省 null） */
+  memory_conflict?: ProfileKind | null;
 }
 
 /** 领域检测结果（Rust DomainDetection） */

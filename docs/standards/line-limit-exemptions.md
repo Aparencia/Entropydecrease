@@ -14,7 +14,7 @@
 | app/src-tauri/src/artifact_templates.rs | 572 | v0.5.0 M7（REQ-052）：五档案模板函数（讲义/步骤卡/摘要/对话纪要/会议纪要）内聚于同一模板域，各模板共享原料注入签名；v0.9.0 M5 叙事变体再增 | 若再增长：会议/访谈模板拆至 artifact_templates_meeting.rs |
 | app/src-tauri/src/live_session_frame.rs | 544 | 屏幕采样线程编排（自适应采样/空闲降频/前台监控/播放器检测）；A1 暂停冻结 + P2 自动暂停轻量轮询 + 画面价值观测注入 + 升降档裁决多轮叠加；H2 修复（OCR 调用切超时变体）行数微增 | 若再增长：暂停轻量轮询拆至 live_session_pause_poll.rs |
 | app/src-tauri/src/capture/audio_loopback.rs | 514 | ADR-007 重连机制（重试循环/退避/恢复回调）内聚于捕获线程实现，拆出需跨函数传递 COM 生命周期参数，内聚性优先；2026-08 A1 硬暂停（端点 Stop/Start + 暂停时长补偿 + 残留缓冲清空）再增 | 若再增长：将 run_capture_inner 拆至 audio_loopback_session.rs |
-| app/src-tauri/src/video_profile.rs | 509 | v0.5.0 M1（REQ-043）：档案域（类型/检测投票/记忆偏好/JSON IO）内聚；档案常量数据已拆至 video_profile_data.rs；v0.9.0 M1 记忆库 kind 映射迁移再增 | 若再增长：检测投票与记忆偏好拆至 video_profile_detect.rs |
+| app/src-tauri/src/video_profile.rs | 549 | v0.5.0 M1（REQ-043）：档案域（类型/检测投票/记忆偏好/JSON IO）内聚；档案常量数据已拆至 video_profile_data.rs；v0.9.0 M1 记忆库 kind 映射迁移 + v0.11.5 Task 5 四象限记忆后置判定（apply_profile_memory）再增 | 若再增长：检测投票与记忆偏好拆至 video_profile_detect.rs |
 | app/src-tauri/src/engine.rs | 441 | 引擎池句柄与同步 API（双 worker 编排 + ADR-009 设备状态 + M7 心跳/失败/缓存计数 + 有界等待变体）；三维复审 #5 超时排空机制（drain_asr/ocr_backlog）与 #3 ASR_FILE_TIMEOUT 文件级超时常量接入后，worker 主循环与请求协议按登记计划拆至 engine_worker.rs（见文末"已拆分"注记）回归本值 | 若再增长：排空机制与同步 API 变体拆至 engine_request.rs |
 | app/src-tauri/src/live_frame_process.rs | 489 | v0.6.0 ADR-011 拆分产物：帧处理域（网格差异触发/两级判变/带外事件驱动/UI 面板抑制/字幕落库）内聚；process_frame 上下文参数 20+；H2 修复（OCR 热路径切超时变体）+ L2 修复（score 口径诚实化）行数微增 + v0.11.5 Task 2 新颖度变化区域接线再增 | 若再增长：handle_subtitle_frame 与 persist_voted_subtitle 拆至 live_subtitle_persist.rs |
 | app/src-tauri/src/lib.rs | 494 | Tauri 装配层（setup 初始化 + 决策链路 + command 注册 + 模块声明）；全部为声明与装配，拆分会破坏注册可读性；三维复审 #8 移除 opener 插件注册、新增 engine_worker 模块注册后再增 | 若再增长：command 注册清单拆至 app_commands.rs |
@@ -63,7 +63,7 @@
 | app/src/components/SessionListPanel.tsx | 501 | v0.7.1 拆分产物：列表域 UI（双模式搜索/筛选排序/课程分组折叠/批量操作栏/内联转化）内聚——筛选/排序/选择为面板本地状态 | 若再增长：批量操作栏与列表项拆至 SessionListRow.tsx |
 | app/src/components/AiServicePanel.tsx | 390 | v0.8.0 M1（REQ-138/139/140）AI 服务设置面板：全局开关/密钥管理（掩码+DPAPI 保存）/端点模型/测试连接/余额卡片/授权确认卡/审计列表——配置面板 UI 内聚 | 若再增长：余额卡片与审计列表拆至 AiBalanceCard.tsx / AiAuditList.tsx |
 | app/src/components/SessionDetailPanel.tsx | 371 | 会话详情面板：质量报告/段列表/OCR 概览/操作区单一面板完整交互流内聚（前端审查登记） | 若再增长：质量报告区拆至 SessionQualityReport.tsx |
-| app/src/components/ProfileDetector.tsx | 346 | 档案检测组件：投票/确认流/记忆偏好 UI 内聚（前端审查登记） | 若再增长：确认流拆至 ProfileConfirmFlow.tsx |
+| app/src/components/ProfileDetector.tsx | 330 | 档案检测组件：投票/确认流/记忆偏好 UI + v0.11.5 Task 5 冲突提示内聚（实测 2026-08-22） | 若再增长：确认流拆至 ProfileConfirmFlow.tsx |
 | app/src/components/NoteEditView.tsx | 315 | 笔记编辑视图：编辑态/标签/结构面板内聚（前端审查登记） | 若再增长：结构面板拆至 NoteStructurePane.tsx |
 | app/src/components/NoteGroupPanel.tsx | 393 | v0.11.0~4 笔记组侧栏：组列表/路由可见可改/碎片捕获/闪卡生成与复习入口/结算仪式/周契约卡/feed 碎片列表（周契约与碎片列表已拆独立组件 WeekContractCard/FeedFragmentList）——组域交互单一面板内聚 | 若再增长：结算仪式区拆至 GroupSettlementPane.tsx |
 

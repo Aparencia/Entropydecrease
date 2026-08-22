@@ -266,6 +266,11 @@ pub struct DetectResult {
     /// 四来源；None=未检测——旧 JSON/旧前端零回归）
     #[serde(default)]
     pub domain: Option<crate::video_profile_domain::DomainDetection>,
+    /// v0.11.5（Task 5）：记忆命中 + 检测高置信但**冲突**（记忆 kind ≠ 检测首位）
+    /// → 检测为准，记忆以标记方式带回（前端展示"记忆与检测冲突，已按检测"）；
+    /// 检测低置信/同 kind 时不设（记忆正常生效）；旧 JSON 缺省 None（零回归）
+    #[serde(default)]
+    pub memory_conflict: Option<ProfileKind>,
 }
 
 /// 检测得分阈值：top 得分低于该值视为信号不足。
@@ -306,6 +311,7 @@ pub fn vote_detect(signals: &ObservedSignals) -> DetectResult {
             memory_hit: None,
             memory_form: None,
             domain: None,
+            memory_conflict: None,
         };
     }
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -318,7 +324,41 @@ pub fn vote_detect(signals: &ObservedSignals) -> DetectResult {
             .get(1)
             .map(|(_, s)| scored[0].1 - *s < CONFLICT_GAP)
             .unwrap_or(false);
-    DetectResult { candidates, needs_confirmation, memory_hit: None, memory_form: None, domain: None }
+    DetectResult { candidates, needs_confirmation, memory_hit: None, memory_form: None, domain: None, memory_conflict: None }
+}
+
+/// 四象限记忆后置判定（纯函数，v0.11.5 Task 5）：检测优先 + 记忆兜底 + 冲突以检测为准。
+///
+/// @ai-context: 调用方（command 层）先跑 vote_detect 得到检测结果，再以记忆后置裁决：
+///              ① 记忆命中 + 检测高置信且同 kind → 记忆生效（快路径，无确认）
+///              ② 记忆命中 + 检测高置信但冲突（≠检测首位）→ **检测为准** + 标记
+///                 memory_conflict（前端提示"记忆与新检测冲突，已按检测"）
+///              ③ 记忆命中 + 检测低置信/冲突 → 记忆生效（用户先验 > 弱证据）
+///              ④ 无记忆 → 纯检测（结果原样）
+/// @ai-context: 本函数不触碰 domain（命令层赋值）；记忆命中时按 REQ-188 回填
+///              memory_form（检测为准的②场景不设——形态随检测）。
+pub fn apply_profile_memory(
+    mut result: DetectResult,
+    memory: &ProfileMemory,
+    title: &str,
+) -> DetectResult {
+    if let Some(kind) = memory.lookup(title) {
+        let top = result.candidates.first().map(|c| c.kind);
+        let high_conf = !result.needs_confirmation;
+        if high_conf && top.is_some() && top != Some(kind) {
+            // 象限②：检测高置信但冲突 → 检测为准 + 标记冲突记忆
+            result.memory_conflict = Some(kind);
+        } else {
+            // 象限①/③：同 kind 或低置信 → 记忆生效（用户已裁决过，快路径）
+            result.candidates = vec![ProfileCandidate { kind, score: 1.0 }];
+            result.needs_confirmation = false;
+            result.memory_hit = Some(kind);
+            // REQ-188：记忆命中的四维形态（新记忆 form 优先，旧记忆经 kind.to_form()
+            // 映射兜底——检测卡 v2 直接展示）
+            result.memory_form = memory.lookup_form(title);
+        }
+    }
+    result
 }
 
 /// 单档案得分（纯函数，可注入 fake 信号单测）。

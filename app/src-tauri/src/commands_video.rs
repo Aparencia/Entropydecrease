@@ -10,8 +10,8 @@ use tauri::State;
 
 use crate::commands::AppState;
 use crate::video_profile::{
-    builtin_profiles, profile_by_kind, vote_detect, DetectResult, ObservedSignals, ProfileKind,
-    ProfileMemory, VideoProfile,
+    apply_profile_memory, builtin_profiles, profile_by_kind, vote_detect, DetectResult,
+    ObservedSignals, ProfileKind, ProfileMemory, VideoProfile,
 };
 use crate::video_profile_spec::{ContentForm, ProfileSpec};
 
@@ -24,7 +24,8 @@ pub fn video_profiles() -> Vec<VideoProfile> {
     builtin_profiles()
 }
 
-/// 混合检测：窗口标题信号 → 候选档案（先查记忆偏好，命中直接生效）。
+/// 混合检测：窗口标题信号 → 候选档案（v0.11.5 四象限：检测优先——先信号投票，
+/// 再记忆后置裁决：高置信冲突 → 检测为准 + 冲突标记；同 kind/低置信 → 记忆生效快路径）。
 ///
 /// @param title - 目标窗口标题（A5 信号；记忆偏好匹配键）
 /// @param url - 可选 URL/播放器标题（B站/网课平台关键词信号）
@@ -78,43 +79,24 @@ pub fn detect_video_profile(
         },
     );
     let domain = (domain.kind.is_some() || !domain.fine_tags.is_empty()).then_some(domain);
-    // 1) 记忆偏好优先：同窗口标题上次确认过 → 直接生效（无需再次询问）
+    // 1) 信号投票（检测优先——v0.11.5 Task 5：不再被记忆命中短路，先跑检测）
+    let mut result = vote_detect(&ObservedSignals {
+        title: title.clone(),
+        url,
+        frame_switch_rate: frame_switch_rate.map(|r| r.clamp(0.0, 1000.0)),
+        has_subtitle,
+        duration_min: None,
+    });
+    // 2) 记忆后置判定（四象限：高置信同 kind/低置信 → 记忆生效兜底；
+    //    高置信冲突 → 检测为准 + memory_conflict 标记——前端展示冲突提示）
     if let Some(t) = title.as_deref() {
         let memory = state
             .profile_memory
             .lock()
             .map(|m| m.clone())
             .unwrap_or_default();
-        if let Some(kind) = memory.lookup(t) {
-            let mut result = vote_detect(&ObservedSignals {
-                title: title.clone(),
-                url,
-                frame_switch_rate,
-                has_subtitle,
-                duration_min: None,
-            });
-            // 记忆命中覆盖候选：单候选 + 无需确认（用户已裁决过）
-            result.candidates = vec![crate::video_profile::ProfileCandidate {
-                kind,
-                score: 1.0,
-            }];
-            result.needs_confirmation = false;
-            result.memory_hit = Some(kind);
-            // v0.9.0（REQ-188）：记忆命中的四维形态（新记忆 form 优先，
-            // 旧记忆经 kind.to_form() 映射兜底——检测卡 v2 直接展示）
-            result.memory_form = memory.lookup_form(t);
-            result.domain = domain;
-            return result;
-        }
+        result = apply_profile_memory(result, &memory, t);
     }
-    // 2) 信号投票（无记忆命中）
-    let mut result = vote_detect(&ObservedSignals {
-        title,
-        url,
-        frame_switch_rate: frame_switch_rate.map(|r| r.clamp(0.0, 1000.0)),
-        has_subtitle,
-        duration_min: None,
-    });
     result.domain = domain;
     result
 }
@@ -295,3 +277,8 @@ pub fn remember_video_profile_form(
     }
     Ok(())
 }
+
+// ── 单测独立文件（四象限矩阵 + 记忆/检测回归）──
+#[cfg(test)]
+#[path = "commands_video_tests.rs"]
+mod tests;
