@@ -1,8 +1,9 @@
 //! ai_provider.rs 单测（AAA 模式）。
 //!
-//! @ai-context: 覆盖：预设模板完整性（4 Provider）、配置校验（合法/非法 URL
-//!              与空模型）、JSON roundtrip（顺序与默认保持）、幽灵 id 回退、
-//!              旧版单 Provider 配置迁移（SiliconFlow）。
+//! @ai-context: 覆盖：预设模板完整性（4 Provider）、配置校验（合法/非法 URL、
+//!              空模型、默认模型不在列表/空白）、JSON roundtrip（顺序与默认
+//!              保持）、幽灵 id 回退（含全禁用边界）、旧版单 Provider 配置
+//!              迁移（SiliconFlow，含非法配置回退预设）。
 
 use crate::ai_provider::*;
 
@@ -33,6 +34,11 @@ fn provider_validate_rejects_bad_url_and_empty_model() {
     p.base_url = "https://ok".to_string();
     p.models.clear();
     assert!(p.validate().is_err());
+    p.models = vec!["m".to_string()];
+    p.default_model = "not-in-list".to_string();
+    assert!(p.validate().is_err());
+    p.default_model = "  ".to_string();
+    assert!(p.validate().is_err());
 }
 
 #[test]
@@ -53,14 +59,16 @@ fn store_roundtrip_keeps_order_and_default() {
 }
 
 #[test]
-fn store_missing_default_falls_back_to_first_enabled() {
+fn store_ghost_default_falls_back_to_first_enabled() {
     let mut store = AiProviderStore::default();
     let mut a = preset_templates().remove(0);
     a.id = "a".to_string();
-    a.enabled = true;
     store.providers.push(a);
     store.default_provider_id = Some("ghost".to_string());
     assert_eq!(store.effective_default_id(), Some("a".to_string()));
+    // 全部禁用 → 无生效默认
+    store.providers[0].enabled = false;
+    assert_eq!(store.effective_default_id(), None);
 }
 
 #[test]
@@ -76,4 +84,18 @@ fn migrate_from_legacy_creates_siliconflow() {
     assert_eq!(providers[0].base_url, s.base_url);
     assert_eq!(providers[0].default_model, s.model);
     assert_eq!(default_id, Some(providers[0].id.clone()));
+}
+
+#[test]
+fn migrate_from_legacy_falls_back_on_invalid_config() {
+    let s = crate::ai_settings::AiSettings {
+        base_url: "ftp://bad".to_string(),
+        model: String::new(),
+        ..Default::default()
+    };
+    let (providers, default_id) = migrate_from_legacy(&s);
+    assert_eq!(providers.len(), 1);
+    assert_eq!(providers[0].id, "legacy-siliconflow");
+    assert!(providers[0].validate().is_ok());
+    assert_eq!(default_id, Some("legacy-siliconflow".to_string()));
 }
