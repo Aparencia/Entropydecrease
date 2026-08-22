@@ -123,7 +123,8 @@ pub fn route_group(signals: &GroupRouteSignals) -> GroupRouteDecision {
     }
     // 规则 4：低密度票 + 领域命中 → 主题组（领域=强前提，低密度 1 票即可触发——
     // Task 14 实证：B站标题有领域词但低密度票不足 2 的会话不再落兜底独立组）
-    if low >= 1 && signals.domain_kind.is_some() {
+    if low >= 1 {
+        // 审查修复（L2）：去掉重复 is_some() 外层判断——内层 if let 已覆盖
         if let Some(kind) = signals.domain_kind {
             reasons_low.push(format!("领域命中（{}）", kind.label()));
             return GroupRouteDecision { action: RouteAction::TopicGroup, reasons: reasons_low };

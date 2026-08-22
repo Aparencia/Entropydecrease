@@ -68,6 +68,12 @@ export function WindowSelectCard({ windows, selected, onSelect, onRefresh, loadi
   const [open, setOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  // L1（审查修复）：展开刷新防抖定时器——快速开合只保留最后一次刷新，
+  // 避免连续触发 list_windows 堆积过期请求（旧请求先完成覆盖新结果）
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // L1：卸载时清理防抖定时器
+  useEffect(() => () => { if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current); }, []);
 
   // 推荐窗口 = 评分命中；其余收进"显示全部"折叠区
   const recommended = windows.filter((w) => w.score > 0);
@@ -88,7 +94,11 @@ export function WindowSelectCard({ windows, selected, onSelect, onRefresh, loadi
     const next = !open;
     setOpen(next);
     // v0.11.5：展开时自动后台刷新（旧列表先显，完成替换——无闪烁）
-    if (next) onRefresh(true);
+    // L1（审查修复）：防抖 200ms——快速开合只刷新最后一次，杜绝请求堆积竞态
+    if (next) {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = setTimeout(() => onRefresh(true), 200);
+    }
   };
 
   const handlePick = (win: WindowInfo) => {

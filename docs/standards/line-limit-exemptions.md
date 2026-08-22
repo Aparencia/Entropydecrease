@@ -65,7 +65,7 @@
 | app/src/components/SessionDetailPanel.tsx | 371 | 会话详情面板：质量报告/段列表/OCR 概览/操作区单一面板完整交互流内聚（前端审查登记） | 若再增长：质量报告区拆至 SessionQualityReport.tsx |
 | app/src/components/ProfileDetector.tsx | 330 | 档案检测组件：投票/确认流/记忆偏好 UI + v0.11.5 Task 5 冲突提示内聚（实测 2026-08-22） | 若再增长：确认流拆至 ProfileConfirmFlow.tsx |
 | app/src/components/NoteEditView.tsx | 315 | 笔记编辑视图：编辑态/标签/结构面板内聚（前端审查登记） | 若再增长：结构面板拆至 NoteStructurePane.tsx |
-| app/src/components/NoteGroupPanel.tsx | 393 | v0.11.0~4 笔记组侧栏：组列表/路由可见可改/碎片捕获/闪卡生成与复习入口/结算仪式/周契约卡/feed 碎片列表（周契约与碎片列表已拆独立组件 WeekContractCard/FeedFragmentList）——组域交互单一面板内聚 | 若再增长：结算仪式区拆至 GroupSettlementPane.tsx |
+| app/src/components/NoteGroupPanel.tsx | 545 | v0.11.0~4 笔记组侧栏：组列表/路由可见可改/碎片捕获/闪卡生成与复习入口/结算仪式/周契约卡/feed 碎片列表（周契约与碎片列表已拆独立组件 WeekContractCard/FeedFragmentList）——组域交互单一面板内聚；v0.11.5 树形合并（buildTree 消费/搜索新建工具条/受控展开组） | 若再增长：结算仪式区拆至 GroupSettlementPane.tsx |
 
 > 前端 **拆分中**（Task #9 笔记域修复进行中，暂不登记行数）：`app/src/types.ts`、`app/src/pages/NotesPage.tsx`——待前端拆分完成后以实测行数重新评估。
 > 前端 SessionsPage.tsx 审查快照 304 行（登记值），v0.7.1 硬拆后长期 ≤300，本轮审查期间轻微越线；随 NotesPage/types.ts 拆分任务一并复核，若仍越线按上表模式登记。

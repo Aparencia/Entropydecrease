@@ -119,7 +119,7 @@ fn low_structure_with_domain_joins_topic_group() {
 #[test]
 fn bilibili_marketing_title_with_domain_routes_to_topic() {
     // Arrange：低结构会话（无系列、零章节、术语不成块、形态已识别）
-    //          + 领域命中（标题"公积金"→ 经济管理）——Task 0 实证：
+    //          + 领域命中（标题"公积金"→ 经济管理）——Task 14 实证：
     //          B站标题有领域词但低密度票不足 2（仅"零章节"1 票），
     //          旧判据落入兜底独立组，新判据应归主题组
     let db = mem_db();
