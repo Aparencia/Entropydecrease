@@ -142,6 +142,17 @@ fn run_refine_task_inner(
         build_rule_draft_with_analysis(&st.db, &st.ui_junk, &env, &st.data_dir, session_id, None)
             .map_err(AiTaskFailure::Other)?;
     eprintln!("[refine-task] task={} 草稿完成 markdown={} 字符", task_id, draft.markdown.chars().count());
+    // 7️⃣ 锚点剥离（2026-08-22，spec 7️⃣）：段落锚点全剥省 token（锚点对整理
+    // 无语义，段级溯源由协议 anchor_ref 承担）；章节锚点记录 (标题, ms) 映射，
+    // 精修输出合并后按标题精确匹配回挂（不丢不假）
+    let (strip_md, chapter_anchors) = crate::anchor_strip::strip_anchors_with_map(&draft.markdown);
+    eprintln!(
+        "[refine-task] task={} 锚点剥离: {} → {} 字符（章节锚点 {} 个）",
+        task_id,
+        draft.markdown.chars().count(),
+        strip_md.chars().count(),
+        chapter_anchors.len()
+    );
     // ② 精修上下文（档案/章节/术语——analysis 已含章节边界与术语表）
     let session = st
         .db
@@ -169,8 +180,8 @@ fn run_refine_task_inner(
         outline.iter().map(|e| e.text.clone()).collect()
     };
     let glossary: Vec<String> = analysis.glossary.iter().map(|g| g.term.clone()).collect();
-    // ③ 切片（≤8000 字/片；进度按片上报）
-    let slices = slice_note(&draft.markdown, SLICE_MAX_CHARS);
+    // ③ 切片（≤8000 字/片；进度按片上报）——输入为剥离锚点后的 markdown
+    let slices = slice_note(&strip_md, SLICE_MAX_CHARS);
     let total = slices.len();
     eprintln!("[refine-task] task={} 切片 {} 片", task_id, total);
     set_task(st, task_id, AiTaskState::Running { finished_slices: 0, total_slices: total });
@@ -211,8 +222,10 @@ fn run_refine_task_inner(
         st,
         task_id,
     });
-    let mut refined = markdowns.join("\n\n");
-    // ④ 合并 + 与规则版 diff（基线=本地版，AI 变化点高亮）
+    // ④ 合并（协议层 merge_refine_slices：各片 join + 章节锚点回挂——7️⃣
+    // 剥离的章节锚点按标题精确匹配还原，未匹配不挂）
+    let mut refined = crate::ai_refine_protocol::merge_refine_slices(&markdowns, &chapter_anchors);
+    // 与规则版 diff（基线=本地版，AI 变化点高亮）
     // 丢图修复（2026-08-21 F1）：协议 v2 前，模型可能丢弃规则版画面配图行
     // （`- ![画面 N](session-images/..)`）——本地合并降级：AI 未保留配图时
     // 把规则版配图行按章节合并回精修版（不丢不假，零模型成本）

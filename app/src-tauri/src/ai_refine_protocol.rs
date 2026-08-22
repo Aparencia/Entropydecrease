@@ -32,6 +32,17 @@ pub const SUMMARY_MAX_CHARS: usize = 200;
 /// 协议版本（v2=1? 语义：缺省 1；本版响应显式写 2——见 AiRefineResponse）。
 pub const SCHEMA_VERSION_V2: u32 = 2;
 
+/// 合并各片精修输出 + 章节锚点回挂（spec 7️⃣，2026-08-22）。
+///
+/// @ai-context: 各片 to_markdown 以 "\n\n" 连接（原 run_refine_task_inner 合并
+///              逻辑收口至协议层）；随后按 `## 标题` 行精确匹配回挂剥离的
+///              章节锚点（大小写敏感——精修不改变标题大小写），未匹配不挂
+///              （诚实降级：AI 合并/改名后宁缺勿错）。
+pub fn merge_refine_slices(slices: &[String], anchors: &[(String, u64)]) -> String {
+    let joined = slices.join("\n\n");
+    crate::anchor_strip::reattach_chapter_anchors(&joined, anchors)
+}
+
 /// 精修输入（规则草稿上下文——提示词参考，AI 不得增补课程外事实）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

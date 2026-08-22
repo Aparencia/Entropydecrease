@@ -16,6 +16,9 @@ mod ai_balance;
 mod ai_client;
 mod ai_credentials;
 mod ai_settings;
+// v0.11.5 spec 7️⃣（2026-08-22）：AI 精修输入锚点剥离（段落锚点剥除省 token；
+// 章节锚点记录映射、精修输出回挂）——纯函数，只依赖 std
+mod anchor_strip;
 // v0.8.0 M2（REQ-141/145 + REQ-143 基础版）：AI 精修——协议/任务状态机/
 // 成本估算/段级 diff/适配器/命令层
 mod ai_refine_protocol;

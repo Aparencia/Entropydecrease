@@ -20,7 +20,9 @@ use tauri::{Emitter, State};
 use crate::ai_cost::{estimate_for_content_model, CostEstimate};
 use crate::ai_task::AiTaskState;
 use crate::commands::AppState;
+use crate::commands_session_note::build_rule_draft_with_analysis;
 use crate::note_diff::DiffOp;
+use crate::note_filter::PurifyEnv;
 use crate::types::{NewNote, Note};
 
 /// mock 模式 env 键（本地规则精修，不联网——测试/离线开发，ai_text_filter 先例）。
@@ -77,15 +79,29 @@ pub struct RefineEstimateView {
 
 /// 成本预估（REQ-143 + F1 修复：按模型映射单价、预估含输出 token——
 /// 切付费模型后费用不再显示 ¥0，消灭成本失真）。
+/// 7️⃣ 修正（2026-08-22，spec 7️⃣）：字符数按剥离锚点后的规则草稿计——与
+/// 精修实际输入同口径（段落锚点不入模省 token），预估不再虚高。
 #[tauri::command]
 pub fn ai_refine_estimate(state: State<'_, AppState>, session_id: i64) -> Result<RefineEstimateView, String> {
     if session_id <= 0 {
         return Err("无效的会话 id".to_string());
     }
-    let segments = state.db.list_segments(session_id).map_err(|e| e.to_string())?;
-    let ocr = state.db.list_ocr_blocks(session_id).map_err(|e| e.to_string())?;
-    let chars = segments.iter().map(|s| s.text.chars().count()).sum::<usize>()
-        + ocr.iter().map(|b| b.text.chars().count()).sum::<usize>();
+    // 构建规则草稿（与精修任务同管线：filter + 结构渲染，本地快）后剥离锚点
+    let env = PurifyEnv {
+        config: state.purify.clone(),
+        symbol: state.symbol_normalize.clone(),
+        corrections: state.ocr_corrections.clone(),
+    };
+    let (draft, _) = build_rule_draft_with_analysis(
+        &state.db,
+        &state.ui_junk,
+        &env,
+        &state.data_dir,
+        session_id,
+        None,
+    )
+    .map_err(|e| e.to_string())?;
+    let chars = crate::anchor_strip::strip_anchors(&draft.markdown).chars().count();
     let remember = state
         .ai_settings
         .lock()
