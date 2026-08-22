@@ -130,6 +130,8 @@ mod db_structures;
 // v0.7.0 M1.5（REQ-108）：会话信号事件数据层（统一信号事件表读写）
 mod db_session_events;
 mod db_sessions;
+// v0.11.5：会话显示序号纯函数（列表展示编号与内部 id 分离，删除后归位）
+mod session_display;
 // v0.7.0 M3（REQ-133）：图内文字检索（OCR 块视图）
 mod db_ocr_search;
 mod db_sessions_rows;

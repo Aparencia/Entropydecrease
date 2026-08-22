@@ -496,6 +496,8 @@ pub struct SessionListItem {
     pub note_title: Option<String>,
     /// 有转写段或 OCR 块（空会话不进入"待转化"）
     pub has_content: bool,
+    /// v0.11.5：显示序号（按 started_at 升序 rank，删除后自动重排；与内部 id 分离）
+    pub display_no: i64,
 }
 
 /// 批量转笔记成功项（v0.7.1）。

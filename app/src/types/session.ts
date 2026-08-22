@@ -223,6 +223,8 @@ export interface SessionListItem {
   noteTitle: string | null;
   /** 有转写段或 OCR 块（空会话不进入"待转化"） */
   hasContent: boolean;
+  /** v0.11.5：显示序号（按 started_at 升序 rank，删除会话后自动归位；与内部 id 分离） */
+  displayNo: number;
 }
 
 /** 批量转笔记成功项 */

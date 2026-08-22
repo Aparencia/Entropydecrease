@@ -245,7 +245,7 @@ export default function SessionListPanel({
         </div>
         <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3, display: "flex", alignItems: "center", gap: 8, paddingLeft: 22 }}>
           <span style={{ fontVariantNumeric: "tabular-nums" }}>
-            #{s.id} · {fmtDate(s.started_at)}
+            #{item.displayNo} · {fmtDate(s.started_at)}
           </span>
           <span>{s.status === "recording" ? "进行中" : fmtDuration(durationMs)}</span>
           {s.source_window && (

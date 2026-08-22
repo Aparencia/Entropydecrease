@@ -15,6 +15,20 @@ use crate::types::{NewSession, NewSessionOcrBlock, NewSessionSegment, Session, S
 /// 会话列表单页上限。
 const LIST_LIMIT_MAX: u64 = 200;
 
+/// 会话列表项填充显示序号（v0.11.5）：按 (started_at, id) 升序 rank 一次赋值。
+///
+/// @ai-context: 纯函数 assign_display_no 见 session_display.rs（仅 std 依赖，
+///              rustc 独立可测）；本 helper 只做列表↔纯函数的形状适配，
+///              数据层不计算 rank（分页下非全局），由命令层统一赋值。
+fn apply_display_no(items: &mut [SessionListItem]) {
+    let pairs: Vec<(i64, i64)> =
+        items.iter().map(|i| (i.session.id, i.session.started_at)).collect();
+    let display = crate::session_display::assign_display_no(&pairs);
+    for item in items.iter_mut() {
+        item.display_no = display[&item.session.id];
+    }
+}
+
 /// 新建会话（REQ-010；v0.5.0 M1/REQ-043：可指定视频类型档案）。
 #[tauri::command]
 pub async fn create_session(
@@ -57,10 +71,13 @@ pub async fn list_sessions(
         .db
         .mark_stale_recording(running_id)
         .map_err(|e| e.to_string())?;
-    state
+    let mut items = state
         .db
         .list_sessions(keyword.as_deref(), limit, offset.unwrap_or(0))
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    // v0.11.5：显示序号 = 时间序 rank（删除会话后自动归位；与内部 id/排序模式解耦）
+    apply_display_no(&mut items);
+    Ok(items)
 }
 
 /// 会话详情：会话 + 转写段 + OCR 块 + 信号事件 + 画面要点屏（时间轴对齐，一次取全）。
@@ -253,10 +270,13 @@ pub struct CourseGroup {
 /// 会话列表按课程分组（REQ-078：长列表可折叠）。
 #[tauri::command]
 pub async fn list_session_courses(state: State<'_, AppState>) -> Result<Vec<CourseGroup>, String> {
-    let sessions = state
+    let mut sessions = state
         .db
         .list_sessions(None, LIST_LIMIT_MAX, 0)
         .map_err(|e| e.to_string())?;
+    // v0.11.5：先对全量赋显示序号——课程分组只是视图（组内 item 自全量 move），
+    // 合并去重后调用一次，保证全局连续；删除会话后自动重排（不复用旧号）
+    apply_display_no(&mut sessions);
     let mut groups: std::collections::BTreeMap<String, Vec<SessionListItem>> =
         std::collections::BTreeMap::new();
     for s in sessions {

@@ -44,6 +44,8 @@ pub fn row_to_session_list_item(row: &Row<'_>) -> rusqlite::Result<SessionListIt
         note_id,
         note_title,
         has_content,
+        // v0.11.5：数据层不计算 rank（分页下非全局）——命令层统一赋真实值
+        display_no: 0,
     })
 }
 
