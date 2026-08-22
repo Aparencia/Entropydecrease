@@ -183,6 +183,11 @@ pub fn preset_templates() -> Vec<AiProviderConfig> {
     ]
 }
 
+/// Provider 凭据 scope 键（per-provider DPAPI 隔离；与 ai_credentials scope 约定一致）。
+pub fn provider_scope(provider_id: &str) -> String {
+    format!("provider:{}", provider_id)
+}
+
 /// 旧配置迁移（首启）：旧 ai_settings 的 base_url/model → SiliconFlow Provider。
 ///
 /// @ai-context: 迁移幂等——ai_providers.json 已存在时不触发（调用方判断）；

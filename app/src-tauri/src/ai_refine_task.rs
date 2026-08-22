@@ -191,7 +191,9 @@ fn run_refine_task_inner(
         .map_err(|e| AiTaskFailure::Other(e.to_string()))?
         .clone();
     let env_key = std::env::var("SILICONFLOW_API_KEY").ok().filter(|k| !k.is_empty());
-    let stored_key = st.ai_credentials.load_key("default").ok().flatten();
+    // M1 统一解析口：env 优先 > 默认 Provider per-provider 凭据 > 旧 default scope
+    let stored_key = crate::commands_ai_providers::resolve_default_provider_key(st)
+        .map_err(|e| AiTaskFailure::Other(e.to_string()))?;
     // 密钥来源诊断（脱敏：只打长度+前 6 字符；真机 unauthorized 排查 2026-08-21）
     eprintln!(
         "[refine-task] task={} key: env={} stored={}",
@@ -205,7 +207,7 @@ fn run_refine_task_inner(
             .map(|k| format!("{}:{}..", k.len(), &k[..6.min(k.len())]))
             .unwrap_or_else(|| "无".to_string()),
     );
-    let store = st.ai_providers.lock().map_err(|e| AiTaskFailure::Other(e.to_string()))?.clone();
+    let store = st.ai_providers.lock().map_err(|e| AiTaskFailure::Other(format!("AI Provider 存储锁中毒: {}", e)))?.clone();
     let client = AiClient::from_settings_with_store(&settings, stored_key, &store);
     let adapter = AiNoteRefineAdapter::new(client.clone());
     let mock_adapter = AiMockAdapter;

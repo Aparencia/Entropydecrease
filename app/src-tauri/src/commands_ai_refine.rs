@@ -490,10 +490,10 @@ pub(crate) fn ensure_balance_for(st: &AppState, chars: usize, model: &str) -> Re
     }
     let required = est.est_cost_yuan * BALANCE_SAFETY_FACTOR;
     // 余额查询（短超时——余额接口抖动不阻断精修；失败放行宽容降级）
-    let api_key = std::env::var("SILICONFLOW_API_KEY")
+    // M1 统一解析口：env 优先 > 默认 Provider per-provider 凭据 > 旧 default scope
+    let api_key = crate::commands_ai_providers::resolve_default_provider_key(st)
         .ok()
-        .filter(|k| !k.is_empty())
-        .or(st.ai_credentials.load_key("default").ok().flatten())
+        .flatten()
         .unwrap_or_default();
     if api_key.is_empty() {
         return Err("未配置 API 密钥（设置页保存密钥或配置环境变量 SILICONFLOW_API_KEY）".to_string());

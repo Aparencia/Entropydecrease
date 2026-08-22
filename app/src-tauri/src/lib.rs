@@ -95,6 +95,8 @@ mod commands_photo;
 mod commands_ai;
 // v0.8.0 M1（REQ-138/139/140）：AI 使能层命令——密钥管理/余额/授权/审计
 mod commands_ai_settings;
+// v0.11.6 M1（BYOK 多端点）：AI Provider 管理命令——预设/列表/增删改/密钥/默认/测试
+mod commands_ai_providers;
 mod commands_analysis;
 mod commands_artifacts;
 mod commands_audio;
@@ -551,6 +553,17 @@ pub fn run() {
             commands_ai_settings::ai_get_balance,
             commands_ai_settings::ai_audit_list,
             commands_ai_settings::ai_audit_clear,
+            // v0.11.6 M1（BYOK 多端点）：AI Provider 管理——预设/列表/增删改/
+            // 密钥/默认/测试连接（Provider 面板数据源）
+            commands_ai_providers::ai_provider_presets,
+            commands_ai_providers::ai_provider_list,
+            commands_ai_providers::ai_provider_add,
+            commands_ai_providers::ai_provider_update,
+            commands_ai_providers::ai_provider_remove,
+            commands_ai_providers::ai_provider_save_key,
+            commands_ai_providers::ai_provider_clear_key,
+            commands_ai_providers::ai_set_default_provider,
+            commands_ai_providers::ai_provider_test,
             // v0.8.0 M2（REQ-141/145 + REQ-143 基础版）：会话→笔记 AI 精修——
             // 成本预估/异步任务/状态/结果/采纳落库
             commands_ai_refine::ai_refine_estimate,

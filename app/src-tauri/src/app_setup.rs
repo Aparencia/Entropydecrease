@@ -155,9 +155,13 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         crate::ai_settings::AiSettings::load(&ai_settings_path),
     ));
     let ai_credentials = crate::ai_credentials::platform_store(&data_dir.join("ai_credentials.bin"));
-    // v0.11.6 M1：AI Provider 装配——首启迁移（ai_providers.json 不存在且
-    // 旧配置非默认值 → 生成 SiliconFlow Provider）；密钥迁移同处完成
-    // （旧凭据条目 → provider:legacy-siliconflow 新条目）
+    // v0.11.6 M1：AI Provider 装配——providers 为空即迁移（新用户亦生成
+    // 无密钥预设 Provider，行为自洽）；密钥迁移同处完成（旧凭据条目 →
+    // provider:legacy-siliconflow 新条目）。
+    // 锁序契约：启动单线程装配、锁序（providers→settings）与运行时调用点
+    // （settings→providers）相反，禁止在命令层持 providers 锁读 settings。
+    // save 决策：保存失败阻断启动是有意 fail-fast（数据目录不可写时后续
+    // 持久化同样失败），勿改为静默吞错。
     let ai_providers_path = data_dir.join("ai_providers.json");
     let ai_providers = std::sync::Arc::new(std::sync::Mutex::new(
         crate::ai_provider::AiProviderStore::load(&ai_providers_path),

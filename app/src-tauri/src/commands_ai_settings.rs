@@ -212,13 +212,11 @@ fn snapshot_settings(state: &AppState) -> Result<AiSettings, String> {
         .map_err(|e| format!("AI 设置锁中毒: {}", e))
 }
 
-/// 余额适配器（密钥解析：env > 凭据库；超时/重试走共享默认）。
+/// 余额适配器（密钥解析：env 优先 > 默认 Provider 凭据——统一解析口 M1）。
 fn balance_adapter(state: &AppState) -> Result<AiBalanceAdapter, String> {
     let s = snapshot_settings(state)?;
-    let api_key = env_api_key()
-        .or(state.ai_credentials.load_key("default")?)
-        .unwrap_or_default();
-    let store = state.ai_providers.lock().map_err(|e| e.to_string())?.clone();
+    let api_key = crate::commands_ai_providers::resolve_default_provider_key(state)?.unwrap_or_default();
+    let store = state.ai_providers.lock().map_err(|e| format!("AI Provider 存储锁中毒: {}", e))?.clone();
     let cfg = crate::ai_client::AiClient::from_settings_with_store(&s, Some(api_key), &store).config;
     Ok(AiBalanceAdapter {
         base_url: cfg.base_url,
