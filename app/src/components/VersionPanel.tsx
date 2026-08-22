@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiUsageRecord, DiffOp, NoteVersion, NoteVersionSource } from "../types";
+import RefineWorkbench from "./RefineWorkbench";
 
 const btn: React.CSSProperties = { padding: "4px 8px", cursor: "pointer", fontSize: 11, borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" };
 
@@ -42,6 +43,7 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
   const [v1Id, setV1Id] = useState<number | null>(null);
   const [v2Id, setV2Id] = useState<number | null>(null);
   const [msg, setMsg] = useState("");
+  const [compareData, setCompareData] = useState<{ ruleMd: string; refinedMd: string; sessionId: number } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -122,6 +124,12 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
                   {v.meta.model && <span style={{ color: "#9ca3af", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.meta.model}</span>}
                   {v.meta.mergedFrom && <span style={{ color: "#9ca3af" }} title={v.meta.mergedFrom}>· 已合并</span>}
                   <span style={{ flex: 1 }} />
+                  <button
+                    style={{ ...btn, color: "#2563eb" }}
+                    onClick={() => setCompareData({ ruleMd: v.content, refinedMd: versions[versions.length - 1].content, sessionId: noteId })}
+                  >
+                    对比
+                  </button>
                   {i !== versions.length - 1 && (
                     <button style={{ ...btn, color: "#b45309" }} onClick={() => void rollback(v.id)}>
                       回滚到此处
@@ -166,6 +174,17 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
 
           {msg && <div style={{ fontSize: 11, color: "#dc2626", marginTop: 4 }}>{msg}</div>}
         </div>
+      )}
+
+      {/* 版本对比 → 只读工作台 */}
+      {compareData && (
+        <RefineWorkbench
+          sessionId={compareData.sessionId}
+          readonly
+          ruleMd={compareData.ruleMd}
+          refinedMd={compareData.refinedMd}
+          onClose={() => setCompareData(null)}
+        />
       )}
     </div>
   );

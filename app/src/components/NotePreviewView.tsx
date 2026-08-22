@@ -116,6 +116,10 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
     void invoke<string>("app_data_dir")
       .then(setDataDir)
       .catch(() => setDataDir(""));
+    // v0.11.5（Task 11）：挂载时查已落库精修笔记 → 优先展示精修版（持久化）
+    void invoke<Note | null>("note_by_session", { sessionId }).then((n) => {
+      if (n) setAdopted(n);
+    }).catch(() => undefined);
   }, [load, sessionId]);
 
   /** 一键落库（复用 session_to_note；AI 判定结果回传保持预览一致——REQ-081） */

@@ -6,7 +6,7 @@
  */
 
 // DiffOp 定义归笔记域（避免跨域重复定义——单一定义源原则）
-import type { DiffOp } from "./notes";
+import type { DiffOp, VersionMeta } from "./notes";
 
 /** AI 设置视图（Rust AiSettingsView；camelCase——密钥只报存在性，不回传明文） */
 export interface AiSettingsView {
@@ -121,6 +121,37 @@ export interface CostEstimate {
 export interface RefineEstimateView {
   estimate: CostEstimate;
   rememberCostChoice: boolean;
+}
+
+// ────────────────────────────────────────────────────────────
+// 精修工作台类型（v0.11.5 Task 11，spec 6️⃣）
+// ────────────────────────────────────────────────────────────
+
+/** 章节 diff 状态（Rust DiffStatus；lowercase） */
+export type DiffStatus = "modified" | "added" | "removed" | "unchanged";
+
+/** 章节级 diff 分组（Rust SectionDiff；snake_case——首次出现，勿改） */
+export interface SectionDiff {
+  heading: string;
+  status: DiffStatus;
+  removed_lines: string[];
+  added_lines: string[];
+}
+
+/** diff 统计（Rust DiffStats） */
+export interface DiffStats {
+  added: number;
+  removed: number;
+  unchanged: number;
+}
+
+/** 工作台数据（Rust WorkbenchData；camelCase） */
+export interface WorkbenchData {
+  ruleMarkdown: string;
+  refinedMarkdown: string | null;
+  sections: SectionDiff[];
+  stats: DiffStats;
+  meta: VersionMeta | null;
 }
 
 // ────────────────────────────────────────────────────────────

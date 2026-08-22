@@ -19,22 +19,11 @@ import type {
   AiSettingsView,
   AiTaskState,
   BalanceView,
-  DiffOp,
   RefineEstimateView,
 } from "../types";
+import RefineWorkbench from "./RefineWorkbench";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6 };
-
-/** diff 三态渲染（本地版为基线：删除红划线/新增绿底/未变灰） */
-function DiffLine({ op }: { op: DiffOp }) {
-  if ("added" in op) {
-    return <div style={{ background: "#ecfdf5", color: "#047857", padding: "2px 6px", borderRadius: 4 }}>+ {op.added}</div>;
-  }
-  if ("removed" in op) {
-    return <div style={{ background: "#fef2f2", color: "#b91c1c", padding: "2px 6px", borderRadius: 4, textDecoration: "line-through" }}>− {op.removed}</div>;
-  }
-  return <div style={{ color: "#6b7280", padding: "2px 6px" }}>  {("unchanged" in op ? op.unchanged : "").replace(/^#+\s*/, "") || " "}</div>;
-}
 
 export default function AiRefineCard({ sessionId, onApplied }: { sessionId: number; onApplied?: (id: number) => void }) {
   const [settings, setSettings] = useState<AiSettingsView | null>(null);
@@ -47,6 +36,7 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
   const [remember, setRemember] = useState(false);
   const [msg, setMsg] = useState("");
   const [, setTaskId] = useState<number | null>(null);
+  const [showWorkbench, setShowWorkbench] = useState(false);
 
   useEffect(() => {
     void invoke<AiSettingsView>("ai_get_settings").then(setSettings).catch(() => undefined);
@@ -141,27 +131,7 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
     }
   };
 
-  /** ③ 采纳落库（REQ-141：diff 预览后用户采纳 → 新笔记；v0.8.0 M4 版本化
-   * 写路径——result 回传：规则基线=首快照 + 精修版=新版本 + 成本落库。
-   * F2：taskId 回传标记采纳（防重启后从任务中心重复采纳）） */
-  const apply = async () => {
-    if (!result) return;
-    setMsg("");
-    const note = await invoke<{ id: number }>("ai_refine_apply", {
-      sessionId,
-      result,
-      taskId: taskIdRef.current,
-    }).catch((e) => {
-      setMsg(`落库失败：${e}`);
-      return null;
-    });
-    if (note) {
-      setMsg(`已落库为笔记 #${note.id}（可到笔记页查看版本时间线）`);
-      onApplied?.(note.id);
-      reset();
-    }
-  };
-
+  /** ③ 采纳落库已移至 RefineWorkbench 组件（Task 11 工作台） */
   const reset = () => {
     stopPolling();
     taskIdRef.current = null;
@@ -269,22 +239,29 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
         </div>
       )}
 
-      {/* diff 预览（本地版为基线 + 采纳/放弃） */}
+      {/* 精修完成 → 打开工作台（替代内嵌 diff） */}
       {phase === "done" && result && (
         <div>
-          <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff", padding: 6, fontSize: 11, fontFamily: "monospace", marginBottom: 6 }}>
-            {result.diff.length === 0 ? (
-              <div style={{ color: "#6b7280" }}>AI 精修与规则版无差异</div>
-            ) : (
-              result.diff.map((op, i) => <DiffLine key={i} op={op} />)
-            )}
-          </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button style={{ ...btn, background: "#0d9488", color: "#fff", border: "none" }} onClick={() => void apply()}>
-              ✅ 采纳落库
-            </button>
-            <button style={btn} onClick={reset}>放弃（保留规则版）</button>
-          </div>
+          {showWorkbench ? (
+            <RefineWorkbench
+              sessionId={sessionId}
+              taskResult={result}
+              onClose={() => setShowWorkbench(false)}
+              onApplied={(id) => { reset(); onApplied?.(id); }}
+            />
+          ) : (
+            <div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                <button
+                  style={{ ...btn, background: "#4f46e5", color: "#fff", border: "none", fontSize: 12 }}
+                  onClick={() => setShowWorkbench(true)}
+                >
+                  🔧 打开工作台
+                </button>
+                <button style={btn} onClick={reset}>放弃（保留规则版）</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
