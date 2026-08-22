@@ -16,6 +16,9 @@ mod ai_balance;
 mod ai_client;
 mod ai_credentials;
 mod ai_settings;
+// v0.11.6 M1：AI Provider 配置模型——BYOK 多端点（SiliconFlow/DeepSeek/
+// OpenRouter/Ollama），预设模板 + 旧版迁移 + 降级链数据层
+mod ai_provider;
 // v0.11.5 spec 7️⃣（2026-08-22）：AI 精修输入锚点剥离（段落锚点剥除省 token；
 // 章节锚点记录映射、精修输出回挂）——纯函数，只依赖 std
 mod anchor_strip;
