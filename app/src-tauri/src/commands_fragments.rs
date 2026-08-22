@@ -144,6 +144,94 @@ pub fn list_group_fragments(state: State<'_, AppState>, group_id: i64) -> Result
     state.db.list_fragments_by_group(group_id).map_err(|e| e.to_string())
 }
 
+/// 移动碎片到组（None=移出组；用户纠错/重新归组——REQ-201 消费闭环）。
+///
+/// @ai-context: 与 capture_fragment 同开关准入（feed 能力默认关纪律对称——
+///              后端不信前端隐藏）；目标组存在性校验（不写孤儿引用）。
+#[tauri::command]
+pub fn update_fragment_group(
+    state: State<'_, AppState>,
+    fragment_id: i64,
+    group_id: Option<i64>,
+) -> Result<bool, String> {
+    require_feed_enabled(&state)?;
+    if fragment_id <= 0 {
+        return Err("无效的碎片 id".to_string());
+    }
+    if state.db.get_fragment(fragment_id).map_err(|e| e.to_string())?.is_none() {
+        return Err(format!("碎片不存在: {}", fragment_id));
+    }
+    if let Some(gid) = group_id {
+        if gid <= 0 {
+            return Err("无效的组 id".to_string());
+        }
+        if state.db.get_group(gid).map_err(|e| e.to_string())?.is_none() {
+            return Err(format!("笔记组不存在: {}", gid));
+        }
+    }
+    state
+        .db
+        .update_fragment_group(fragment_id, group_id)
+        .map_err(|e| e.to_string())
+}
+
+/// 删除碎片（REQ-201 用户主动删除——真删；绑定卡自动解绑保留）。
+///
+/// @ai-context: 开关准入同 capture_fragment（feed 能力对称纪律）；存在性校验
+///              前置（删不存在的碎片返回明确错误而非静默 false）。
+#[tauri::command]
+pub fn delete_fragment(state: State<'_, AppState>, fragment_id: i64) -> Result<bool, String> {
+    require_feed_enabled(&state)?;
+    if fragment_id <= 0 {
+        return Err("无效的碎片 id".to_string());
+    }
+    if state.db.get_fragment(fragment_id).map_err(|e| e.to_string())?.is_none() {
+        return Err(format!("碎片不存在: {}", fragment_id));
+    }
+    state.db.delete_fragment(fragment_id).map_err(|e| e.to_string())
+}
+
+/// 碎片图片 → 本地绝对路径（前端 convertFileSrc 消费；REQ-201 缩略图）。
+///
+/// @ai-context: resolve 先例同 resolve_note_image——WebView 不能直接读本地文件；
+///              本命令从库读 image_path 而非信任前端传参（防任意路径穿越），
+///              只放行 fragments/ 前缀；无图 → None（UI 降级文本预览）。
+#[tauri::command]
+pub fn resolve_fragment_image(
+    state: State<'_, AppState>,
+    fragment_id: i64,
+) -> Result<Option<String>, String> {
+    if fragment_id <= 0 {
+        return Err("无效的碎片 id".to_string());
+    }
+    let frag = state
+        .db
+        .get_fragment(fragment_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("碎片不存在: {}", fragment_id))?;
+    let Some(rel) = frag.image_path else { return Ok(None) };
+    // 只放行 fragments/ 前缀 + 防穿越（落盘时的白名单格式已由 image crate 把关）
+    let rel_trim = rel.trim_start_matches(['/', '\\']);
+    if !rel_trim.starts_with("fragments/") || rel_trim.split(['/', '\\']).any(|seg| seg == "..") {
+        eprintln!("[fragments] 异常图片路径被拒: {}", rel);
+        return Ok(None);
+    }
+    let abs = state.data_dir.join(rel_trim);
+    Ok(Some(abs.to_string_lossy().into_owned()))
+}
+
+/// feed 能力开关准入（capture/delete/移组共用——后端不信前端隐藏）。
+fn require_feed_enabled(state: &AppState) -> Result<(), String> {
+    let guard = state
+        .feature_flags
+        .lock()
+        .map_err(|e| format!("开关锁失败: {}", e))?;
+    if !guard.feed_capture {
+        return Err("feed 能力未启用（请在设置中开启 feed 捕获开关）".to_string());
+    }
+    Ok(())
+}
+
 /// base64 解码 + 解码验证并落盘碎片图片（返回 fragments/ 下相对路径）。
 ///
 /// @ai-context: image::load_from_memory 把关格式白名单（png/jpeg/webp/gif/bmp…

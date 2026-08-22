@@ -3,7 +3,6 @@
 use crate::db::Db;
 use crate::db_fragments::NewFragment;
 use crate::types::NewNoteGroup;
-
 /// 内存库。
 fn mem_db() -> Db {
     Db::open(":memory:").expect("内存库打开")
@@ -136,4 +135,59 @@ fn delete_group_keeps_fragments() {
     assert_eq!(fetched.len(), 1);
     assert_eq!(fetched[0].id, f.id);
     assert_eq!(fetched[0].group_id, None);
+}
+
+#[test]
+fn delete_fragment_removes_and_detaches_cards() {
+    // Arrange：碎片 + 绑定卡（fragment_id 外键）
+    let db = mem_db();
+    let group = db
+        .create_group(&NewNoteGroup {
+            name: "消费组".to_string(),
+            terrain: "feed".to_string(),
+            kind: "topic".to_string(),
+            domain_tag: Some("beauty".to_string()),
+            source: "route".to_string(),
+            series_key: None,
+            route_reason: None,
+        })
+        .expect("group");
+    let f = db.create_fragment(&frag("待删碎片", None, Some(group.id))).expect("f");
+    let card = db
+        .create_card(&crate::db_flashcards::NewFlashcard {
+            group_id: group.id,
+            note_id: None,
+            fragment_id: Some(f.id),
+            front: "线索".to_string(),
+            back: "验证".to_string(),
+            kind: "fact".to_string(),
+            state_json: "{}".to_string(),
+            due_at: 0,
+        })
+        .expect("card");
+    // Act：真删碎片
+    assert!(db.delete_fragment(f.id).expect("delete"));
+    // Assert：碎片消失；卡保留且 fragment_id 解绑（SET NULL——卡是独立资产）
+    assert!(db.get_fragment(f.id).expect("get").is_none());
+    let fetched = db.get_card(card.id).expect("get").expect("卡应保留");
+    assert_eq!(fetched.fragment_id, None);
+}
+
+#[test]
+fn get_fragment_roundtrip_and_missing() {
+    // Arrange
+    let db = mem_db();
+    let f = db.create_fragment(&frag("可查碎片", None, None)).expect("f");
+    // Act/Assert：存在返回完整记录；不存在返回 None
+    let got = db.get_fragment(f.id).expect("get").expect("应存在");
+    assert_eq!(got.text, "可查碎片");
+    assert_eq!(got.status, "active");
+    assert!(db.get_fragment(9999).expect("get").is_none());
+}
+
+#[test]
+fn delete_missing_fragment_returns_false() {
+    // Arrange/Act/Assert：删不存在的碎片诚实返回 false（不报错不panic）
+    let db = mem_db();
+    assert!(!db.delete_fragment(9999).expect("delete"));
 }

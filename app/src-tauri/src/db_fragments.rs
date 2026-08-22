@@ -108,15 +108,41 @@ impl Db {
         })
     }
 
-    /// 移动碎片到组（None=移出；用户纠错/结算归组共用）。
-    /// 登记豁免 dead_code：碎片移动 UI 随 v0.11.3+ 结算面建设接线。
-    #[allow(dead_code)]
+    /// 移动碎片到组（None=移出；用户纠错/结算归组共用；v0.11.4 命令接线）。
     pub fn update_fragment_group(&self, id: i64, group_id: Option<i64>) -> Result<bool> {
         self.with_conn(|conn| {
             let affected = conn.execute(
                 "UPDATE fragments SET group_id = ?1 WHERE id = ?2",
                 params![group_id, id],
             )?;
+            Ok(affected > 0)
+        })
+    }
+
+    /// 按 id 读取碎片；不存在返回 None（delete/移组命令的存在性校验）。
+    pub fn get_fragment(&self, id: i64) -> Result<Option<Fragment>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(&format!(
+                "SELECT {} FROM fragments WHERE id = ?1",
+                FRAGMENT_COLUMNS
+            ))?;
+            let mut rows = stmt.query_map(params![id], row_to_fragment)?;
+            match rows.next() {
+                Some(Ok(f)) => Ok(Some(f)),
+                Some(Err(e)) => Err(e.into()),
+                None => Ok(None),
+            }
+        })
+    }
+
+    /// 删除碎片（v0.11.4 REQ-201 用户主动删除——真删非归档）。
+    ///
+    /// @ai-context: 绑定闪卡经 flashcards.fragment_id ON DELETE SET NULL 自动
+    ///              解绑保留（学习循环资产不被碎片删除连带——身份诚实：
+    ///              卡已生成即独立资产）；结算归档走 set_fragment_status 不删。
+    pub fn delete_fragment(&self, id: i64) -> Result<bool> {
+        self.with_conn(|conn| {
+            let affected = conn.execute("DELETE FROM fragments WHERE id = ?1", params![id])?;
             Ok(affected > 0)
         })
     }
