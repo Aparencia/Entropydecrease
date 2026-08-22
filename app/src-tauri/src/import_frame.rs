@@ -79,22 +79,24 @@ pub fn ocr_keyframe(
     last_full: &mut Vec<String>,
     last_subtitle: &mut Vec<String>,
     ui_junk: &crate::ui_junk::UiJunkList,
-) {
+) -> usize {
     let (orig_w, orig_h) = image.dimensions();
     // 中部区域 → 画面要点（region=full，避开字幕带干扰）
+    let mut count = 0usize;
     if let Some(mid) = crop_and_scale(image, MIDDLE_TOP_RATIO, MIDDLE_BOTTOM_RATIO, OCR_MAX_WIDTH) {
-        recognize_region(
+        count += recognize_region(
             db, engines, session_id, timestamp_ms, mid, "full", MIDDLE_TOP_RATIO, orig_w, orig_h,
             last_full, ui_junk,
         );
     }
     // 底部区域 → 烧录字幕（region=subtitle，与实时链路语义一致）
     if let Some(bot) = crop_and_scale(image, BOTTOM_TOP_RATIO, 1.0, OCR_MAX_WIDTH) {
-        recognize_region(
+        count += recognize_region(
             db, engines, session_id, timestamp_ms, bot, "subtitle", BOTTOM_TOP_RATIO, orig_w, orig_h,
             last_subtitle, ui_junk,
         );
     }
+    count
 }
 
 /// 单区域识别 + 帧间去重 + 落库。
@@ -116,11 +118,11 @@ fn recognize_region(
     orig_h: u32,
     last_texts: &mut Vec<String>,
     ui_junk: &crate::ui_junk::UiJunkList,
-) {
+) -> usize {
     // H2 修复：有界等待变体——单区域推理卡死时超时返回 Err 走下帧重试，
     // 不得无限阻塞导入管线
     let Ok(blocks) = engines.recognize_image_timeout(region_img, crate::engine::OCR_REQUEST_TIMEOUT) else {
-        return; // 识别失败/超时：下帧重试（不阻断管线）
+        return 0; // 识别失败/超时：下帧重试（不阻断管线）
     };
     // v0.7.3（REQ-156）：bbox 反算回帧坐标系所需的等比缩放因子
     // （crop_and_scale 裁剪+缩放后识别，bbox 处于裁剪图坐标系——TD-046 同思路；
@@ -143,8 +145,10 @@ fn recognize_region(
         .map(|b| b.text.clone())
         .collect();
     if same_texts(&texts, last_texts) {
-        return; // 静态画面：与上帧完全一致，不重复落库
+        return 0; // 静态画面：与上帧完全一致，不重复落库
     }
+    // 本区域本次新落库块数（进度消息用；v0.11.7）
+    let mut count = 0usize;
     for block in blocks {
         if block.score >= MIN_SCORE
             && !block.text.trim().is_empty()
@@ -171,10 +175,13 @@ fn recognize_region(
                 screen_id: None,
             }) {
                 eprintln!("[Import] OCR 块落库失败: {}", e);
+            } else {
+                count += 1;
             }
         }
     }
     *last_texts = texts;
+    count
 }
 
 #[cfg(test)]

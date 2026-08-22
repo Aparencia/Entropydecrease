@@ -249,17 +249,19 @@ fn ocr_keyframes<F: Fn(&ImportProgress)>(
     // 各区域帧间文本去重（静态画面不重复落库）
     let mut last_full: Vec<String> = Vec::new();
     let mut last_subtitle: Vec<String> = Vec::new();
+    // v0.11.7：累计识别块数（进度消息「已识别 N 块文字」）
+    let mut total_blocks = 0usize;
     for (i, path) in files.iter().enumerate() {
         let timestamp_ms = (i as u64) * FRAME_INTERVAL_MS;
         match image::open(path).map(|d| d.into_rgb8()) {
-            Ok(img) => crate::import_frame::ocr_keyframe(
+            Ok(img) => total_blocks += crate::import_frame::ocr_keyframe(
                 db, engines, session_id, timestamp_ms, &img, &mut last_full, &mut last_subtitle, ui_junk,
             ),
             Err(e) => eprintln!("[Import] 关键帧解码失败（跳过）: {}", e),
         }
         progress(&ImportProgress {
             stage: "ocr".into(),
-            message: format!("画面识别 {}/{}", i + 1, total),
+            message: format!("画面识别 {}/{} · 已识别 {} 块文字", i + 1, total, total_blocks),
             done: (i + 1) as u32,
             total,
         });
