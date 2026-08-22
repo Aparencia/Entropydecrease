@@ -15,7 +15,9 @@ pub const KIND_FACT: &str = "fact";
 pub const KIND_ACTION: &str = "action";
 
 /// 步骤语义元词（命中任一即判 action——中文教程/操作高频词）。
-const STEP_META_WORDS: [&str; 6] = ["第一步", "步骤", "做法", "流程", "操作步骤", "教程"];
+const STEP_META_WORDS: [&str; 7] = ["第一步", "步骤", "做法", "流程", "操作步骤", "教程", "首先"];
+/// "先…然后"成对信号的误判守卫词（普通叙事高频，非步骤语义）。
+const PAIR_SIGNAL_GUARD: [&str; 4] = ["先生", "先后", "优先", "先修"];
 
 /// 生成的卡片候选（front/back + 内容分型 kind）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,11 +132,25 @@ pub fn card_from_fragment(text: &str) -> Option<CardCandidate> {
 
 /// 步骤语义信号判定（REQ-199）：步骤元词命中，或"先…然后"成对出现。
 ///
-/// @ai-context: "先/然后"单现不算信号（普通叙事高频词，误判会把知识卡
-///              伪装成动作卡）；成对出现才隐含操作顺序。
+/// @ai-context: 审查修复（2026-08-22）："先"单字高频（先生/先后/优先/先修），
+///              且"先…然后"普通叙事（如"先修课…然后…"）不隐含操作顺序——
+///              成对信号须满足：守卫词不命中 + 至少 3 句 + 两词跨句（步骤
+///              序列的最小形态），元词命中不受限（词义明确）。
 fn has_step_signal(text: &str) -> bool {
-    STEP_META_WORDS.iter().any(|w| text.contains(w))
-        || (text.contains("先") && text.contains("然后"))
+    if STEP_META_WORDS.iter().any(|w| text.contains(w)) {
+        return true;
+    }
+    if PAIR_SIGNAL_GUARD.iter().any(|w| text.contains(w)) {
+        return false;
+    }
+    let sentences: Vec<&str> = text
+        .split(|c| "。！？；\n".contains(c))
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let xian_at = sentences.iter().position(|s| s.contains("先"));
+    let ranhou_at = sentences.iter().position(|s| s.contains("然后"));
+    sentences.len() >= 3 && xian_at.is_some() && ranhou_at.is_some() && xian_at != ranhou_at
 }
 
 #[cfg(test)]

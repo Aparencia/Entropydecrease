@@ -119,6 +119,38 @@ fn lone_ranhou_is_not_action_signal() {
 }
 
 #[test]
+fn xiu_ke_narrative_not_action() {
+    // Arrange："先修课…然后…"——"先"是课程名一部分，守卫词命中且非步骤
+    let text = "先修课是线性代数。然后学微积分。最后是概率论。";
+    // Act
+    let card = card_from_fragment(text).expect("出卡");
+    // Assert：维持 fact（守卫词拦截——防"先修/先后/优先/先生"误判）
+    assert_eq!(card.kind, KIND_FACT);
+    assert!(!card.back.starts_with("1. "));
+}
+
+#[test]
+fn two_sentence_xian_ranhou_not_action() {
+    // Arrange："先…然后"同现但仅 2 句——步骤序列的最小形态是 3 句
+    let text = "先复习错题。然后做新题。";
+    // Act
+    let card = card_from_fragment(text).expect("出卡");
+    // Assert：2 句不成序列（不足 3 句），维持 fact 诚实
+    assert_eq!(card.kind, KIND_FACT);
+}
+
+#[test]
+fn shou_xian_meta_word_counts_as_action() {
+    // Arrange："首先"入元词表——列表/步骤描述高频，词义明确不受句数限制
+    let text = "首先打开软件。接着导入素材。最后点击导出。";
+    // Act
+    let card = card_from_fragment(text).expect("出卡");
+    // Assert：元词命中 → action（跨句信号不需要，词义已定）
+    assert_eq!(card.kind, KIND_ACTION);
+    assert!(card.back.starts_with("1. 首先打开软件"));
+}
+
+#[test]
 fn single_sentence_with_signal_still_no_card() {
     // Arrange：单句含步骤信号——无多句结构，步骤清单无从谈起
     let card = card_from_fragment("第一步先打开软件");
