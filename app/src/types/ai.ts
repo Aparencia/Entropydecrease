@@ -173,3 +173,38 @@ export interface AiEnrichResult {
   kinds: string[];
   model: string;
 }
+
+// ────────────────────────────────────────────────────────────
+// AI Provider 类型（v0.11.6 M1；Rust serde 契约）
+// ────────────────────────────────────────────────────────────
+
+/** Provider 类型（Rust ProviderKind kebab→camel 映射） */
+export type ProviderKind = "openAiCompat" | "ollama";
+
+/** Provider 视图（Rust AiProviderView；密钥只报存在性，不回传明文） */
+export interface AiProviderView {
+  id: string;
+  name: string;
+  kind: ProviderKind;
+  baseUrl: string;
+  models: string[];
+  defaultModel: string;
+  enabled: boolean;
+  fallbackOrder: string[];
+  hasKey: boolean;
+  keySource: string;
+  isDefault: boolean;
+}
+
+/** Provider 创建/更新入参（Rust AiProviderInput；apiKey 可选=更新留空不改） */
+export interface AiProviderInput {
+  id?: string;
+  name: string;
+  kind: ProviderKind;
+  baseUrl: string;
+  models: string[];
+  defaultModel: string;
+  enabled: boolean;
+  fallbackOrder: string[];
+  apiKey?: string;
+}

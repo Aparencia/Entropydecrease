@@ -18,6 +18,7 @@ import { VocabManager } from "../components/VocabManager";
 import ModelManagementPanel from "../components/ModelManagementPanel";
 import ModelDiskPanel from "../components/ModelDiskPanel";
 import AiServicePanel from "../components/AiServicePanel";
+import AiProviderSettings from "../components/AiProviderSettings";
 import AiTaskPanel from "../components/AiTaskPanel";
 import FeatureFlagSetting from "../components/FeatureFlagSetting";
 
@@ -64,10 +65,13 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* ── AI 服务（密钥授权/任务中心） ── */}
+        {/* ── AI 服务（Provider/开关授权/任务中心） ── */}
         <GroupTitle>AI 服务</GroupTitle>
         <div style={{ ...panel, marginBottom: 4 }}>
-          <AiServicePanel />
+          <AiProviderSettings />
+          <div style={{ marginTop: 8 }}>
+            <AiServicePanel />
+          </div>
           <div style={{ marginTop: 8 }}>
             <AiTaskPanel />
           </div>
