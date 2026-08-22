@@ -23,6 +23,7 @@
 | ADR-016 | [AI 凭据存储方案（Windows DPAPI/keyring）](./ADR-016-ai-credentials-dpapi.md) | 已接受 | 2026-08-21 |
 | ADR-017 | [安全加固批（CSP 基线与白名单、opener 移除、compose 强制配置、nginx 安全头、.env.production 去跟踪）](./ADR-017-security-hardening-batch.md) | 已接受 | 2026-08-21 |
 | ADR-018 | [间隔重复调度器引入 fsrs crate（FSRS-6）](./ADR-018-fsrs-scheduler-adoption.md) | 已接受 | 2026-08-22 |
+| ADR-020 | [会话类型字段（图文会话）](./ADR-020-session-kind-field.md) | 已接受 | 2026-08-22 |
 
 ## 编号规则
 

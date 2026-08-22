@@ -219,3 +219,19 @@ fn filter_note_is_pure_and_deterministic() {
     assert_eq!(a.markdown, b.markdown);
     assert_eq!(a, b);
 }
+
+/// v0.11.7（图文会话，ADR-020）：纯 OCR 会话（无转写段）转笔记——不 panic、
+/// 画面要点保留（ocr_points 数据源——v0.11.5 已移出 markdown）、markdown 非空
+/// （图文会话转笔记的可行性契约，spec §五）。
+#[test]
+fn filter_note_with_empty_segments_keeps_ocr_points() {
+    // Arrange：空转写 + 两条 OCR 块（region=full，图文截图链路同形态）
+    let blocks = vec![block(1000, "网页标题", 0.92), block(2000, "正文要点", 0.88)];
+    // Act：空 segments 直跑过滤链
+    let result = run("图文会话", &[], &blocks);
+    // Assert：不 panic、画面要点保留（ocr_points 屏段落行）、markdown 非空（标题）
+    assert!(!result.markdown.is_empty());
+    let points: String = result.ocr_points.join("\n");
+    assert!(points.contains("网页标题"), "画面要点应保留: {points}");
+    assert!(points.contains("正文要点"), "画面要点应保留: {points}");
+}
