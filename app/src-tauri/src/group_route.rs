@@ -124,9 +124,10 @@ pub fn route_group(signals: &GroupRouteSignals) -> GroupRouteDecision {
     // 规则 4：低密度票 + 领域命中 → 主题组（领域=强前提，低密度 1 票即可触发——
     // Task 14 实证：B站标题有领域词但低密度票不足 2 的会话不再落兜底独立组）
     if low >= 1 && signals.domain_kind.is_some() {
-        let kind = signals.domain_kind.expect("已判 Some");
-        reasons_low.push(format!("领域命中（{}）", kind.label()));
-        return GroupRouteDecision { action: RouteAction::TopicGroup, reasons: reasons_low };
+        if let Some(kind) = signals.domain_kind {
+            reasons_low.push(format!("领域命中（{}）", kind.label()));
+            return GroupRouteDecision { action: RouteAction::TopicGroup, reasons: reasons_low };
+        }
     }
     // 规则 5：低结构共振但无领域——主题组无处可归，诚实待确认（不硬塞大类抽屉）
     if low >= MIN_RESONANT_VOTES {

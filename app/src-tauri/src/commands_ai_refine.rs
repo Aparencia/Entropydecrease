@@ -410,13 +410,11 @@ pub async fn refine_workbench(
             unchanged: total_unchanged,
         };
         // 取最新版本 meta
-        let m = versions.last().and_then(|v| {
-            Some(VersionMeta {
-                cost_yuan: v.meta.cost_yuan,
-                model: v.meta.model.clone(),
-                slices: v.meta.slices,
-                merged_from: v.meta.merged_from.clone(),
-            })
+        let m = versions.last().map(|v| VersionMeta {
+            cost_yuan: v.meta.cost_yuan,
+            model: v.meta.model.clone(),
+            slices: v.meta.slices,
+            merged_from: v.meta.merged_from.clone(),
         });
         (Some(latest), secs, st, m)
     } else {

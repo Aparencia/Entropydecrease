@@ -242,7 +242,7 @@ mod tests {
     #[test]
     fn changed_region_texts_bounds_none_fallback_full() {
         // Arrange：无变化包围盒 → 回退整帧文本
-        let blocks = vec![block("文本A", 0.9), block("文本B", 0.9)];
+        let blocks = [block("文本A", 0.9), block("文本B", 0.9)];
         let kept: Vec<&crate::types::OcrBlock> = blocks.iter().collect();
         let grid = grid_diff_with_bounds(None);
         // Act
@@ -257,7 +257,7 @@ mod tests {
         let b1 = block_with_bbox("相交块", 10.0, 10.0, 20.0, 20.0); // rect: (10,10,30,30)
         let b2 = block_with_bbox("不相交块1", 200.0, 200.0, 20.0, 20.0); // rect: (200,200,220,220)
         let b3 = block_with_bbox("不相交块2", 300.0, 300.0, 20.0, 20.0); // rect: (300,300,320,320)
-        let blocks = vec![b1, b2, b3];
+        let blocks = [b1, b2, b3];
         let kept: Vec<&crate::types::OcrBlock> = blocks.iter().collect();
         // 变化包围盒仅与 b1 相交（15,15,25,25 ∩ 10,10,30,30 → (15,15,25,25) 非空）
         let bounds = crate::capture::frame_diff::Rect { left: 15, top: 15, right: 25, bottom: 25 };
@@ -273,7 +273,7 @@ mod tests {
         // Arrange：一个块缺 bbox → 整帧回退（当前实现行为）
         let b1 = block_with_bbox("有bbox块", 10.0, 10.0, 20.0, 20.0);
         let b2 = block("缺bbox块", 0.9); // bbox=None
-        let blocks = vec![b1, b2];
+        let blocks = [b1, b2];
         let kept: Vec<&crate::types::OcrBlock> = blocks.iter().collect();
         let bounds = crate::capture::frame_diff::Rect { left: 15, top: 15, right: 25, bottom: 25 };
         let grid = grid_diff_with_bounds(Some(bounds));

@@ -89,7 +89,7 @@ fn large_input_falls_back_without_panic() {
     let before = a.join("\n");
     let after = b.join("\n");
     let ops = diff_markdown(&before, &after);
-    assert!(ops.len() > 0);
+    assert!(!ops.is_empty());
 }
 
 fn op_kind(op: &DiffOp) -> &'static str {
