@@ -435,6 +435,9 @@ pub fn run() {
             // 升档静默无需确认；确认后 worker retune 采样器）
             #[cfg(target_os = "windows")]
             commands_live::confirm_tier_downgrade,
+            // v0.11.5 Task 6：采集态档案三维热切换（form/tier/domain 覆写）
+            #[cfg(target_os = "windows")]
+            commands_live::update_live_profile,
             // P3：引擎预热（选窗口阶段后台加载，开始即录）/ 释放
             #[cfg(target_os = "windows")]
             commands_live::prepare_live_session,

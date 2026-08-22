@@ -79,6 +79,14 @@ pub fn run_screen_worker(
     // v0.9.0 M2（REQ-189）：当前生效画面档共享槽（应用档位时写入——
     // command 查询用；事件可能早于前端面板挂载，拉取兑底）
     applied_tier: std::sync::Arc<std::sync::Mutex<Option<crate::video_profile_spec::VisualTier>>>,
+    // v0.11.5（Task 6）：档案三维覆写共享槽（command 写入，本 worker 消费后清空）
+    profile_override:
+        std::sync::Arc<std::sync::Mutex<Option<crate::live_session::ProfileOverride>>>,
+    // v0.11.5（Task 6）：窗口标题（形态/领域自动重评用）
+    window_title: String,
+    // v0.11.5（Task 6）：当前生效三维档案快照共享槽（worker 消费 override 后写入）
+    applied_profile:
+        std::sync::Arc<std::sync::Mutex<Option<crate::live_session::ProfileOverride>>>,
 ) {
     let mut screen = match ScreenCaptureSampler::new(hwnd.map(crate::windows::hwnd_from_i64)) {
         Ok(s) => {
@@ -117,6 +125,13 @@ pub fn run_screen_worker(
     let mut last_tier_ocr_ok: u64 = 0;
     // 已生效画面档（None=未定档——开始前默认中档占位由前端声明）
     let mut tier_applied_tier: Option<crate::video_profile_spec::VisualTier> = None;
+    // v0.11.5（Task 6）：已生效形态/领域状态（内存跟踪；None=未定）
+    let mut current_form: Option<crate::video_profile_spec::ContentForm> = None;
+    let mut current_domain_kind: Option<crate::video_profile_domain::DomainKind> = None;
+    // OCR 文本累计（领域自动检测用；去重上限 50 条）
+    let mut accumulated_ocr_text: Vec<String> = Vec::new();
+    // 重评窗口计数器（form/domain 仅在窗口结算后做一次自动重评）
+    let mut last_profile_reeval_secs: u64 = 0;
     // ADR-011：触发链路状态（全帧/ROI 网格 diff + 面板检测 + OCR 时刻）
     let mut trigger = TriggerState::new();
     let mut voter = SubtitleVoter::new();
@@ -310,6 +325,15 @@ pub fn run_screen_worker(
                     &mut last_changed_texts,
                     tier_applied_tier.map(|t| t.as_str()).unwrap_or("medium"),
                 );
+                // v0.11.5（Task 6）：OCR 文本累计（去重→领域检测用）
+                for t in &last_changed_texts {
+                    if !accumulated_ocr_text.contains(t) {
+                        accumulated_ocr_text.push(t.clone());
+                        if accumulated_ocr_text.len() > 50 {
+                            accumulated_ocr_text.remove(0);
+                        }
+                    }
+                }
             }
             // v0.9.0 M2（REQ-189）：画面价值观测注入（每采样 tick）——帧切换
             // 上升沿（diff_pass 增量）、OCR 面积占比（ocr_ok 增量：本版以
@@ -382,6 +406,63 @@ pub fn run_screen_worker(
                             }
                         }
                     }
+                }
+            }
+            // ── v0.11.5 Task 6: 消费档案三维覆写 ──
+            if let Ok(mut guard) = profile_override.lock() {
+                if let Some(po) = guard.take() {
+                    let mut changed = false;
+                    if let Some(t) = po.tier {
+                        let budget = crate::video_profile_spec_data::sampling_for_tier(t);
+                        scheduler.retune(budget);
+                        tier_applied_tier = Some(t);
+                        if let Ok(mut ag) = applied_tier.lock() { *ag = Some(t); }
+                        changed = true;
+                    }
+                    if let Some(f) = po.form { current_form = Some(f); changed = true; }
+                    if let Some(d) = po.domain { current_domain_kind = Some(d); changed = true; }
+                    if changed {
+                        let snapshot = crate::live_session::ProfileOverride {
+                            form: current_form,
+                            tier: tier_applied_tier,
+                            domain: current_domain_kind,
+                        };
+                        if let Ok(mut ag) = applied_profile.lock() { *ag = Some(snapshot); }
+                        let _ = app.emit("live:profile-updated", serde_json::json!({
+                            "form": current_form.map(|f| f.as_str()),
+                            "tier": tier_applied_tier.map(|t| t.as_str()),
+                            "domain": current_domain_kind.map(|d| d.as_str()),
+                        }));
+                    }
+                }
+            }
+            // ── v0.11.5 Task 6: 领域自动重评（同画面档窗口节拍）──
+            let profile_reeval_now = now_ms / 1000;
+            if profile_reeval_now >= last_profile_reeval_secs + 150 {
+                last_profile_reeval_secs = profile_reeval_now;
+                let domain_signal = crate::video_profile_domain::DomainSignals {
+                    title: Some(window_title.clone()),
+                    platform_tags: Vec::new(),
+                    user_confirmed: None,
+                    term_freq: accumulated_ocr_text.clone(),
+                };
+                let detected = crate::video_profile_domain::detect_domain(&domain_signal);
+                if detected.kind.is_some()
+                    && detected.kind != current_domain_kind
+                    && detected.confidence >= 0.6
+                {
+                    current_domain_kind = detected.kind;
+                    let snapshot = crate::live_session::ProfileOverride {
+                        form: current_form,
+                        tier: tier_applied_tier,
+                        domain: current_domain_kind,
+                    };
+                    if let Ok(mut ag) = applied_profile.lock() { *ag = Some(snapshot); }
+                    let _ = app.emit("live:profile-updated", serde_json::json!({
+                        "form": current_form.map(|f| f.as_str()),
+                        "tier": tier_applied_tier.map(|t| t.as_str()),
+                        "domain": current_domain_kind.map(|d| d.as_str()),
+                    }));
                 }
             }
             // M1/REQ-125：播放器行为检测（5s 节流——非每帧；从最新帧缓存取帧做

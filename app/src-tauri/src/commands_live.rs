@@ -49,7 +49,7 @@ pub async fn start_live_session(
 ) -> Result<i64, String> {
     // 防御性校验：标题归一化（与 create_session 同口径）
     let trimmed = title.trim().to_string();
-    let title = if trimmed.is_empty() {
+    let title: String = if trimmed.is_empty() {
         source_window
             .clone()
             .unwrap_or_else(|| "实时会话".to_string())
@@ -61,7 +61,7 @@ pub async fn start_live_session(
     };
 
     let params = LiveSessionParams {
-        title,
+        title: title.clone(),
         source_window: source_window.map(|s| s.chars().take(100).collect()),
         hwnd: window_id,
         db: state.db.clone(),
@@ -85,6 +85,12 @@ pub async fn start_live_session(
         tier_override: state.live_session.tier_override(),
         // v0.9.0 M2（REQ-189）：当前生效画面档共享槽（worker 写入，command 查询）
         applied_tier: state.live_session.applied_tier_slot(),
+        // v0.11.5（Task 6）：档案三维覆写共享槽（update_live_profile 写入，worker 消费）
+        profile_override: state.live_session.profile_override_slot(),
+        // v0.11.5（Task 6）：当前生效三维档案快照（worker 写入，command 查询）
+        applied_profile: state.live_session.applied_profile_slot(),
+        // v0.11.5（Task 6）：窗口标题（档案重评用）
+        window_title: title.clone(),
     };
     // REQ-104/132：剪贴板监听时间戳基准——与实时会话纪元同域（图片文件名不冲突）
     let epoch = Instant::now();
@@ -284,4 +290,59 @@ fn stop_clipboard_monitor(state: &AppState) {
             handle.stop.store(true, Ordering::SeqCst);
         }
     }
+}
+
+/// 采集态档案三维热切换（v0.11.5 Task 6：form/tier/domain 可选组合，至少一项）。
+///
+/// @param form - 内容形态（kebab-case；None=不覆写该维）
+/// @param tier - 画面档位（kebab-case；None=不覆写该维）
+/// @param domain - 领域（kebab-case；None=不覆写该维）
+/// @ai-context: 写入 profile_override 共享槽 → screen worker 下轮采样 tick 消费
+///              并 emit live:profile-updated 事件回推前端。
+#[tauri::command]
+pub fn update_live_profile(
+    state: State<'_, AppState>,
+    form: Option<String>,
+    tier: Option<String>,
+    domain: Option<String>,
+) -> Result<bool, String> {
+    // 至少一项
+    if form.is_none() && tier.is_none() && domain.is_none() {
+        return Err("form/tier/domain 至少需一项".to_string());
+    }
+    let parsed_form = form
+        .as_deref()
+        .and_then(crate::video_profile_spec::ContentForm::parse);
+    let parsed_tier = tier
+        .as_deref()
+        .and_then(crate::video_profile_spec::VisualTier::parse);
+    let parsed_domain = domain
+        .as_deref()
+        .and_then(crate::video_profile_domain::DomainKind::parse);
+    // form/tier/domain 的非法值各自报错（不模糊——让前端知道哪维错了）
+    if let Some(ref f) = form {
+        if parsed_form.is_none() {
+            return Err(format!("非法形态标识: {}", f));
+        }
+    }
+    if let Some(ref t) = tier {
+        if parsed_tier.is_none() {
+            return Err(format!("非法画面档位标识: {}", t));
+        }
+    }
+    if let Some(ref d) = domain {
+        if parsed_domain.is_none() {
+            return Err(format!("非法领域标识: {}", d));
+        }
+    }
+    let po = crate::live_session::ProfileOverride {
+        form: parsed_form,
+        tier: parsed_tier,
+        domain: parsed_domain,
+    };
+    state
+        .live_session
+        .update_profile_override(po)
+        .map_err(|e| e.to_string())?;
+    Ok(true)
 }

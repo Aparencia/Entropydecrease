@@ -75,6 +75,14 @@ pub struct LiveSessionParams {
     /// v0.9.0 M2（REQ-189）：当前生效画面档共享槽（worker 应用档位时写入，
     /// command 查询——live:tier-changed 事件可能早于前端面板挂载，拉取兜底）
     pub applied_tier: std::sync::Arc<std::sync::Mutex<Option<crate::video_profile_spec::VisualTier>>>,
+    /// v0.11.5（Task 6）：采集态档案三维热切换覆写共享槽（command 写入，worker 消费）
+    pub profile_override:
+        std::sync::Arc<std::sync::Mutex<Option<ProfileOverride>>>,
+    /// v0.11.5（Task 6）：当前生效三维档案快照（worker 应用后写入，command 查询/事件）
+    pub applied_profile:
+        std::sync::Arc<std::sync::Mutex<Option<ProfileOverride>>>,
+    /// v0.11.5（Task 6）：窗口标题（档案重评用——form/domain 检测依赖标题信号）
+    pub window_title: String,
 }
 
 /// 活动会话记录。
@@ -107,6 +115,12 @@ pub struct LiveSessionManager {
     pub(crate) tier_override: std::sync::Arc<std::sync::Mutex<Option<crate::video_profile_spec::VisualTier>>>,
     /// v0.9.0 M2（REQ-189）：当前生效画面档（worker 应用档位时写入，command 查询）
     pub(crate) applied_tier: std::sync::Arc<std::sync::Mutex<Option<crate::video_profile_spec::VisualTier>>>,
+    /// v0.11.5（Task 6）：采集态档案三维热切换共享覆写槽（command 写入，worker 消费）
+    pub(crate) profile_override:
+        std::sync::Arc<std::sync::Mutex<Option<ProfileOverride>>>,
+    /// v0.11.5（Task 6）：当前生效三维档案快照（worker 应用后写入，事件/命令读取）
+    pub(crate) applied_profile:
+        std::sync::Arc<std::sync::Mutex<Option<ProfileOverride>>>,
 }
 
 impl Default for LiveSessionManager {
@@ -126,6 +140,8 @@ impl Clone for LiveSessionManager {
             session_info: self.session_info.clone(),
             tier_override: self.tier_override.clone(),
             applied_tier: self.applied_tier.clone(),
+            profile_override: self.profile_override.clone(),
+            applied_profile: self.applied_profile.clone(),
         }
     }
 }
@@ -141,8 +157,21 @@ impl LiveSessionManager {
             session_info: crate::session_info::SessionInfoCollector::new(),
             tier_override: Arc::new(Mutex::new(None)),
             applied_tier: Arc::new(Mutex::new(None)),
+            profile_override: Arc::new(Mutex::new(None)),
+            applied_profile: Arc::new(Mutex::new(None)),
         }
     }
+}
+
+/// 采集态档案三维热切换覆写（v0.11.5 Task 6）。
+///
+/// @ai-context: form/tier/domain 全可选（至少一项），由 update_live_profile 写入，
+///              screen worker 下轮采样 tick 一次性消费并清空。None = 不覆写该维。
+#[derive(Debug, Clone, Default)]
+pub struct ProfileOverride {
+    pub form: Option<crate::video_profile_spec::ContentForm>,
+    pub tier: Option<crate::video_profile_spec::VisualTier>,
+    pub domain: Option<crate::video_profile_domain::DomainKind>,
 }
 
 /// 会话装配后半段（引擎就绪后）：音频捕获 → 屏幕 worker → 主循环 → 后台融合。
@@ -262,6 +291,8 @@ pub(crate) fn run_session_after_engine(
         let worker_tier_override = params.tier_override.clone();
         // v0.9.0 M2（REQ-189）：当前生效画面档共享槽（worker 应用档位时写入）
         let worker_applied_tier = params.applied_tier.clone();
+        let worker_profile_override = params.profile_override.clone();
+        let worker_window_title = params.window_title.clone();
         match std::thread::Builder::new()
             .name("entropy-screen-worker".into())
             .spawn(move || {
@@ -290,6 +321,10 @@ pub(crate) fn run_session_after_engine(
                     worker_tier_override,
                     // v0.9.0 M2（REQ-189）：当前生效画面档共享槽
                     worker_applied_tier,
+                    // v0.11.5（Task 6）：档案三维覆写 + 窗口标题 + 生效档案快照
+                    worker_profile_override,
+                    worker_window_title,
+                    params.applied_profile.clone(),
                 )
             }) {
             Ok(h) => Some(h),

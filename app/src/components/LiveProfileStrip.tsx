@@ -54,6 +54,15 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
   const tierRef = useRef<VisualTier | null>(null);
   // 已忽略的降档建议档（保持现状——后端每采样 tick 重发，按建议档去重防重复弹条，审查 M1）
   const dismissedRef = useRef<VisualTier | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [profileBusy, setProfileBusy] = useState(false);
+
+  /** profile-updated 事件载荷（Rust serde_json 结构） */
+  interface ProfileUpdatedPayload {
+    form: string | null;
+    tier: string | null;
+    domain: string | null;
+  }
 
   // 档位事件：升档静默可见化；降档请求 → 确认条（幂等去重）。
   // 审查 L1：监听先于挂载拉取注册——事件落在（快照、监听）间隙会丢失
@@ -84,6 +93,15 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
           setDowngrade(null);
           dismissedRef.current = null;
         }
+      }),
+      listen<ProfileUpdatedPayload>("live:profile-updated", (e) => {
+        if (e.payload.form) setForm(e.payload.form as ContentForm);
+        if (e.payload.tier) {
+          const t = e.payload.tier as VisualTier;
+          tierRef.current = t;
+          setTier(t);
+        }
+        if (e.payload.domain) setDomain({ kind: e.payload.domain, fine_tags: [], source: "override", confidence: 1.0 });
       }),
     ];
     return () => {
@@ -135,6 +153,23 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
     }
   }, [downgrade, busy]);
 
+  /** 手动覆写档案三维：表单值变化时立即 invoke（null=不覆写该维） */
+  const handleProfileChange = useCallback(async (dimension: "form" | "tier" | "domain", value: string | null) => {
+    if (profileBusy) return;
+    setProfileBusy(true);
+    try {
+      await invoke("update_live_profile", {
+        form: dimension === "form" ? value : null,
+        tier: dimension === "tier" ? value : null,
+        domain: dimension === "domain" ? value : null,
+      });
+    } catch (e) {
+      setError(`档案更新失败: ${e}`);
+    } finally {
+      setProfileBusy(false);
+    }
+  }, [profileBusy]);
+
   return (
     <div
       style={{
@@ -147,18 +182,56 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
     >
       {/* 常显档案摘要（采集态信息透明——形态×画面档×领域） */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <span title="内容形态（采集前检测/记忆）">
-          📋 {form ? FORM_LABELS[form] : "形态识别中"}
-        </span>
-        <span title="画面价值档（会话中自动重评：升档静默/降档确认）">
-          🎨 画面 {tier ? `${TIER_LABELS[tier] ?? tier}档` : "未定档"}
-        </span>
-        <span title="内容领域（标题/平台信号；增强项）">
-          🏷 {domain?.kind ? domainLabel(domain.kind) : "领域未定"}
-        </span>
-        {domain?.fine_tags?.length ? (
-          <span style={{ color: "#9ca3af" }}>细标签：{domain.fine_tags.join(" / ")}</span>
-        ) : null}
+        {editing ? (
+          <>
+            <select value={form ?? ""} onChange={(e) => { const v = e.target.value; setForm(v ? (v as ContentForm) : null); void handleProfileChange("form", v || null); }} style={{ fontSize: 11, padding: "1px 2px" }}>
+              <option value="">形态自动</option>
+              {(Object.keys(FORM_LABELS) as ContentForm[]).map((k) => (
+                <option key={k} value={k}>{FORM_LABELS[k]}</option>
+              ))}
+            </select>
+            <select value={tier ?? ""} onChange={(e) => { const v = e.target.value; setTier(v ? (v as VisualTier) : null); void handleProfileChange("tier", v || null); }} style={{ fontSize: 11, padding: "1px 2px" }}>
+              <option value="">画面自动</option>
+              {(Object.keys(TIER_LABELS) as VisualTier[]).map((k) => (
+                <option key={k} value={k}>{TIER_LABELS[k]}档</option>
+              ))}
+            </select>
+            <select value={domain?.kind ?? ""} onChange={(e) => { const v = e.target.value; setDomain(v ? { kind: v, fine_tags: [], source: "override", confidence: 1.0 } : null); void handleProfileChange("domain", v || null); }} style={{ fontSize: 11, padding: "1px 2px" }}>
+              <option value="">领域自动</option>
+              {DOMAIN_OPTIONS.map(([k, lbl]) => (
+                <option key={k} value={k}>{lbl}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => setEditing(false)}
+              style={{ fontSize: 10, padding: "1px 4px", border: "none", borderRadius: 3, background: "#e5e7eb", cursor: "pointer" }}
+            >
+              完成
+            </button>
+          </>
+        ) : (
+          <>
+            <span title="内容形态（采集前检测/记忆）">
+              📋 {form ? FORM_LABELS[form] : "形态识别中"}
+            </span>
+            <span title="画面价值档（会话中自动重评：升档静默/降档确认）">
+              🎨 画面 {tier ? `${TIER_LABELS[tier] ?? tier}档` : "未定档"}
+            </span>
+            <span title="内容领域（标题/平台信号；增强项）">
+              🏷 {domain?.kind ? domainLabel(domain.kind) : "领域未定"}
+            </span>
+            {domain?.fine_tags?.length ? (
+              <span style={{ color: "#9ca3af" }}>细标签：{domain.fine_tags.join(" / ")}</span>
+            ) : null}
+            <button
+              onClick={() => setEditing(true)}
+              style={{ fontSize: 10, padding: "1px 4px", border: "none", borderRadius: 3, background: "#e5e7eb", cursor: "pointer" }}
+              title="手动设置档案（覆写自动检测结果）"
+            >
+              编辑
+            </button>
+          </>
+        )}
       </div>
 
       {/* 升档提示（瞬时，3s 自动消失） */}

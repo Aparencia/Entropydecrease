@@ -69,6 +69,40 @@ impl LiveSessionManager {
         self.applied_tier.clone()
     }
 
+    /// v0.11.5（Task 6）：档案三维覆写共享槽句柄（command 层组装 LiveSessionParams 时获取）。
+    pub fn profile_override_slot(
+        &self,
+    ) -> std::sync::Arc<std::sync::Mutex<Option<crate::live_session::ProfileOverride>>> {
+        self.profile_override.clone()
+    }
+
+    /// v0.11.5（Task 6）：写入三维档案覆写（无活动会话 → 明确报错）。
+    pub fn update_profile_override(
+        &self,
+        po: crate::live_session::ProfileOverride,
+    ) -> Result<()> {
+        let guard = self.active.lock().expect("live session lock poisoned");
+        if guard.is_none() {
+            return Err(AppError::Io("无活动实时会话".to_string()));
+        }
+        *self.profile_override.lock().expect("profile override lock poisoned") = Some(po);
+        Ok(())
+    }
+
+    /// v0.11.5（Task 6）：当前生效三维档案快照（worker 应用后写入；None=未设置）。
+    pub fn applied_profile(
+        &self,
+    ) -> Option<crate::live_session::ProfileOverride> {
+        self.applied_profile.lock().ok().and_then(|g| g.clone())
+    }
+
+    /// v0.11.5（Task 6）：当前生效三维档案共享槽句柄（command 层读取）。
+    pub fn applied_profile_slot(
+        &self,
+    ) -> std::sync::Arc<std::sync::Mutex<Option<crate::live_session::ProfileOverride>>> {
+        self.applied_profile.clone()
+    }
+
     /// 暂停活动会话（2026-08 A1 硬暂停：完全停采）。
     ///
     /// @ai-context: 只置共享标志——实际暂停由捕获线程边沿检测执行
