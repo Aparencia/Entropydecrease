@@ -259,6 +259,25 @@ pub struct Flashcard {
     pub created_at: i64,
 }
 
+/// 周契约（v0.11.4 REQ-200；弹性承诺呈现层——用户自设本周目标，非打卡 KPI）。
+///
+/// @ai-context: 无 streak 无惩罚——契约只记录承诺本身，完成度由
+///              review_logs 周聚合实时计算（week_contract.rs 纯函数）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct WeekContract {
+    pub id: i64,
+    /// 绑定组（契约粒度=组——与学习循环绑定粒度一致，契约二）
+    pub group_id: i64,
+    /// 周界：周一零点（UTC Unix 秒）
+    pub week_start: i64,
+    /// 本周承诺复习天数（1..7）
+    pub target_days: i64,
+    /// 本周承诺复习卡数（有界）
+    pub target_cards: i64,
+    pub created_at: i64,
+}
+
 // ────────────────────────────────────────────────────────────
 // 会话领域类型（REQ-010，ADR-004）
 // ────────────────────────────────────────────────────────────

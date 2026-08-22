@@ -150,7 +150,20 @@ pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
             stats_json TEXT NOT NULL,
             created_at INTEGER NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS idx_settlements_group ON settlements(group_id, created_at);",
+        CREATE INDEX IF NOT EXISTS idx_settlements_group ON settlements(group_id, created_at);
+        -- v0.11.4（REQ-200，弹性承诺呈现层）：周契约——用户自设本周目标
+        -- （target_days/target_cards），非打卡 KPI；(group_id, week_start) 唯一
+        -- 保证每周每组一份契约，upsert 幂等覆盖本周（无 streak 无惩罚）
+CREATE TABLE IF NOT EXISTS contracts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER NOT NULL REFERENCES note_groups(id) ON DELETE CASCADE,
+            week_start INTEGER NOT NULL,     -- 周一零点（UTC Unix 秒）
+            target_days INTEGER NOT NULL,    -- 本周承诺复习天数（1..7）
+            target_cards INTEGER NOT NULL,   -- 本周承诺复习卡数（有界）
+            created_at INTEGER NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_contracts_group_week
+            ON contracts(group_id, week_start);",
     )?;
     // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）
     ensure_column(conn, "sessions", "profile", "ALTER TABLE sessions ADD COLUMN profile TEXT")?;
