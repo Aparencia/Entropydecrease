@@ -25,7 +25,7 @@
 | app/src-tauri/src/asr_merge.rs | 453 | v0.5.0 ADR-012 F4-1 语义合并域 + v0.7.0 M2 REQ-119 混排空格（spacing_for/merge_segments_with_spacing）；合并决策与切分共用标点常量 | 若再增长：split_sentences/split_timestamps 拆至 asr_merge_split.rs |
 | app/src-tauri/src/region_tracker.rs | 426 | v0.4.0 M2（REQ-037）起：ROI 跟踪状态机（播放区域检测/锁定聚簇/重扫/前台切换冻结）+ 纯函数单测内联；与 RoiTracker 状态强耦合 | 若再增长：lock_roi/prior_roi 纯函数拆至 region_lock.rs |
 | app/src-tauri/src/commands_ai_refine.rs | 413 | v0.8.0 M2（REQ-141/145）+ F1/F2/F3：AI 精修命令域（成本预估/异步任务编排/状态/结果/采纳落库/任务历史/配额去重门控/成本硬拦截 + 任务注册表容量守卫）；任务执行已拆至 ai_refine_task.rs；L4 修复（落库失败日志）微增 | 若再增长：门控/拦截拆至 commands_ai_refine_gate.rs |
-| app/src-tauri/src/types.rs | 412 | 全局共享类型域（会话/段/OCR 块/笔记/设置等 DTO + 序列化）；类型定义集中便于契约一致，拆分易引发跨模块引用涟漪 | 若再增长：笔记与 OCR 块类型拆至 types_note.rs / types_ocr.rs |
+| app/src-tauri/src/types.rs | 503 | 全局共享类型域（会话/段/OCR 块/笔记/设置/闪卡/周契约等 DTO + 序列化）；类型定义集中便于契约一致，拆分易引发跨模块引用涟漪 | 若再增长：笔记与 OCR 块类型拆至 types_note.rs / types_ocr.rs |
 | app/src-tauri/src/video_profile_tests.rs | 411 | 档案测试域（12 档案断言矩阵 + 检测投票 + JSON 校准）单模块 #[path] 挂载 | 若再增长：档案矩阵拆至 video_profile_data_tests.rs |
 | app/src-tauri/src/live_session_persist.rs | 401 | 定稿落库域（persist_final/digest_merged/handle_final_event）+ P2 flush_tail_and_persist（停止/暂停共用尾句落库）内聚 | 若再增长：flush_tail_and_persist 与 digest_merged 拆至 live_session_persist_tail.rs |
 | app/src-tauri/src/layout_analyzer.rs | 400 | v0.5.0 M3（REQ-047）：规则版版面分析（行/列投影 + 表格线检测 + 区域分类启发式）内聚于同一分类管线；审查加固（公式启发 + 低信息纯色方差滤除） | 若再增长：区域分类启发式拆至 layout_classify.rs |
@@ -65,7 +65,7 @@
 | app/src/components/SessionDetailPanel.tsx | 371 | 会话详情面板：质量报告/段列表/OCR 概览/操作区单一面板完整交互流内聚（前端审查登记） | 若再增长：质量报告区拆至 SessionQualityReport.tsx |
 | app/src/components/ProfileDetector.tsx | 346 | 档案检测组件：投票/确认流/记忆偏好 UI 内聚（前端审查登记） | 若再增长：确认流拆至 ProfileConfirmFlow.tsx |
 | app/src/components/NoteEditView.tsx | 315 | 笔记编辑视图：编辑态/标签/结构面板内聚（前端审查登记） | 若再增长：结构面板拆至 NoteStructurePane.tsx |
-| app/src/components/NoteGroupPanel.tsx | 391 | v0.11.0~4 笔记组侧栏：组列表/路由可见可改/碎片捕获/闪卡生成与复习入口/结算仪式/周契约卡/feed 碎片列表（周契约与碎片列表已拆独立组件 WeekContractCard/FeedFragmentList）——组域交互单一面板内聚 | 若再增长：结算仪式区拆至 GroupSettlementPane.tsx |
+| app/src/components/NoteGroupPanel.tsx | 393 | v0.11.0~4 笔记组侧栏：组列表/路由可见可改/碎片捕获/闪卡生成与复习入口/结算仪式/周契约卡/feed 碎片列表（周契约与碎片列表已拆独立组件 WeekContractCard/FeedFragmentList）——组域交互单一面板内聚 | 若再增长：结算仪式区拆至 GroupSettlementPane.tsx |
 
 > 前端 **拆分中**（Task #9 笔记域修复进行中，暂不登记行数）：`app/src/types.ts`、`app/src/pages/NotesPage.tsx`——待前端拆分完成后以实测行数重新评估。
 > 前端 SessionsPage.tsx 审查快照 304 行（登记值），v0.7.1 硬拆后长期 ≤300，本轮审查期间轻微越线；随 NotesPage/types.ts 拆分任务一并复核，若仍越线按上表模式登记。
