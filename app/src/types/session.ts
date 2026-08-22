@@ -14,6 +14,8 @@ export interface Session {
   started_at: number;
   ended_at: number | null;
   status: string; // recording | finished | failed
+  /** v0.11.7：会话类型（null=视频类会话；'photo'=图文截屏会话） */
+  kind: string | null;
 }
 
 /** 会话转写段（asr | subtitle | fused） */

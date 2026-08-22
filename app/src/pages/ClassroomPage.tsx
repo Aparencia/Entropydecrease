@@ -23,6 +23,8 @@ import { SystemStatusBadge } from "../components/SystemStatusBadge";
 // 2026-08 审查硬拆：右栏内容区 / 文件素材输入与提取
 import ClassroomRightPane from "../components/ClassroomRightPane";
 import MaterialInputPanel from "../components/MaterialInputPanel";
+// v0.11.7：图文采集（第三动线：截屏导入图文内容 → 图文会话）
+import PhotoCapturePanel from "../components/PhotoCapturePanel";
 import type { Note, WindowInfo, StreamingModelStatus, LiveSessionStatus, DownloadProgress, DownloadStatus, ProfileKind } from "../types";
 // Low 清扫：标题截断长度单一定义源（与 MaterialInputPanel 共享）
 import { NOTE_TITLE_MAX_LEN } from "../utils/constants";
@@ -516,7 +518,7 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
           </div>
 
           {/* 视频文件导入（v0.3.0：REQ-015 第二入口，字幕优先 + ASR fallback） */}
-          <VideoImportPanel />
+          <VideoImportPanel onOpenSessions={onOpenSessions} />
 
           {/* 2026-08-21 用户需求：OCR 设备/音频预处理/备份/AI 服务/词表/模型管理等
               设置类面板已迁出至「⚙ 设置」页——课堂助手左栏仅保留采集动线 */}
@@ -527,6 +529,9 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
             onNote={setLastNote}
             onStatus={setStatus}
           />
+
+          {/* v0.11.7：图文采集（第三动线：截屏导入图文内容 → 图文会话） */}
+          <PhotoCapturePanel onOpenSessions={onOpenSessions} onStatus={setStatus} />
 
           {status && <p style={{ fontSize: 12, color: "#2563eb" }}>{status}</p>}
         </div>

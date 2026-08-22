@@ -16,7 +16,7 @@ const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontS
 /** 视频文件扩展名（与 Rust 侧白名单一致） */
 const VIDEO_EXTENSIONS = ["mp4", "mkv", "mov", "avi", "wmv", "flv", "webm", "ts", "m4v"];
 
-export default function VideoImportPanel() {
+export default function VideoImportPanel({ onOpenSessions }: { onOpenSessions?: (sessionId: number) => void }) {
   const [videoPath, setVideoPath] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState<ImportProgress | null>(null);
@@ -110,6 +110,15 @@ export default function VideoImportPanel() {
       {sessionId && (
         <p style={{ fontSize: 11, color: "#2563eb", margin: "6px 0 0" }}>
           ✅ 已导入会话 #{sessionId}，可到「会话」页查看时间轴
+          {/* v0.11.7：完成直达（与图文采集面板共用交互） */}
+          {onOpenSessions && (
+            <button
+              onClick={() => onOpenSessions(sessionId)}
+              style={{ marginLeft: 8, fontSize: 11, border: "1px solid #2563eb", borderRadius: 4, background: "#fff", color: "#2563eb", cursor: "pointer", padding: "2px 8px" }}
+            >
+              去会话页
+            </button>
+          )}
         </p>
       )}
     </div>
