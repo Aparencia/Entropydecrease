@@ -1,10 +1,10 @@
-# 归档索引：2026-08-22（pain-points v2/v3 被 v4 统一卷取代归档 + v0.11.5 设计文档/实现计划归档 + v0.11.6 M1 实现计划归档）
+# 归档索引：2026-08-22（pain-points v2/v3 被 v4 统一卷取代归档 + v0.11.5 设计文档/实现计划归档 + v0.11.6 M1 实现计划归档 + v0.11.7 spec/plan 归档）
 
 > 归档判定见 [archive README](../README.md)。本日归档夹为技术债滚动快照（唯一权威清单）。
 
 ## 归档清单
 
-**本日归档 5 份**：
+**本日归档 7 份**：
 
 | 源路径 → 归档路径 | 归档原因/状态 |
 |------|-----------|
@@ -13,6 +13,8 @@
 | `docs/superpowers/specs/2026-08-22-v0.11.x-capture-notes-polish-design.md` → `docs/archive/2026-08-22/2026-08-22-v0.11.x-capture-notes-polish-design.md` | **[ ] 已归档**——v0.11.5 设计 spec，11 项已全部实施交付 |
 | `docs/superpowers/plans/2026-08-22-v0.11.5-capture-notes-polish.md` → `docs/archive/2026-08-22/2026-08-22-v0.11.5-capture-notes-polish.md` | **[ ] 已归档**——v0.11.5 实现计划，14 Task 全部执行完成 |
 | `docs/superpowers/plans/2026-08-22-v0.11.6-m1-ai-provider.md` → `docs/archive/2026-08-22/2026-08-22-v0.11.6-m1-ai-provider.md` | **[ ] 已归档**——v0.11.6 M1 实现计划，7 Task 全部执行完成 + 两轮审查闭环（TDD/Subagent-Driven） |
+| `docs/superpowers/specs/2026-08-22-v0.11.7-photo-session-design.md` → `docs/archive/2026-08-22/2026-08-22-v0.11.7-photo-session-design.md` | **[ ] 已归档**——v0.11.7 设计 spec，T1-T7 全链路实施交付 + 六维审查 8 项即修闭环（25386d9） |
+| `docs/superpowers/plans/2026-08-22-v0.11.7-photo-session.md` → `docs/archive/2026-08-22/2026-08-22-v0.11.7-photo-session.md` | **[ ] 已归档**——v0.11.7 实现计划，7 Task 全部执行完成（T1~T6 五提交 + T7 文档收尾 172f490） |
 
 **取代文档**：`docs/product/pain-points-v4.md`（统一卷：两地形、一产物、一循环）成为唯一主导规划文档。
 
@@ -28,6 +30,12 @@
 - **已偿 2 笔**：TD-2026-08-21-B（时间戳锚点断言过时，1521 全绿核验 closed）+ v0.11.5 六维审查 20+ 项（独立修复提交清偿）；M1 七维审查 11 项全部即修（464533d + 审查修复提交）
 - **新登记 open 0 笔**（M1 审查无遗留 open；观察项 4 条登记见 tech-debt.md）
 - **未偿 5 笔继承 + 1 笔补登**（TD-040 / TD-2026-08-19-D/F/G / TD-2026-08-21-B→closed / TD-2026-08-21-C 补登 carried）；详见本目录 tech-debt.md
+
+### 六轮补充（v0.11.7 图文会话交付 + 六维审查 + 归档）
+
+- **已偿 8 项**：v0.11.7 六维审查 P1-P8 全部即修（25386d9：store 失败回滚/像素上限/计数口径/互斥 TOCTOU 窗口/Esc+resize/裁剪越界/再来一组）；cargo test 1521 全绿 + tsc 零错误 + vitest 49 通过
+- **新登记 open 1 笔**：TD-2026-08-22-A（clippy --all-targets -D warnings 20 项错误——存量 + v0.11.6 M1 引入，未随 M1 验收闭环）
+- **未偿 6 笔**（TD-040 / TD-2026-08-19-D/F/G / TD-2026-08-21-C 保持 carried + TD-2026-08-22-A open）；详见本目录 tech-debt.md
 
 ## 备注
 

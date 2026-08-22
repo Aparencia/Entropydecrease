@@ -88,5 +88,5 @@ v0.11.7（图文会话）新增第三采集动线：用户连续框选截屏组�
 
 ## 参考
 
-- [v0.11.7 设计 spec](../superpowers/specs/2026-08-22-v0.11.7-photo-session-design.md)
+- [v0.11.7 设计 spec](../archive/2026-08-22/2026-08-22-v0.11.7-photo-session-design.md)（[ ] 已归档）
 - [v0.11.7 版本文档](../versions/v0.11.7.md)

@@ -57,6 +57,44 @@
 | 观察 M1-3 | 授权文案 SiliconFlow 特指（AiRefineCard/EnrichPanel） | M3 已登记 |
 | 观察 M1-4 | ai_balance 余额接口为 SiliconFlow 专属路径，非 SiliconFlow 默认 Provider 时余额查询失败（调用方宽容放行） | M3 退役范围 |
 
+## 六轮补充（v0.11.7 图文会话交付 + 六维审查 + 归档，2026-08-22）
+
+> 来源：v0.11.7 代码建设（T1~T7，9866c50→172f490 九提交）+ 新增代码六维审查（8 项问题全部即修 25386d9）
+> 验证：cargo test 1521 passed + vitest 49 passed + tsc 零错误 + 前端 build 通过；**clippy --all-targets -D warnings 未过（见下 TD-2026-08-22-A）**
+
+### 未偿核对（逐笔）
+
+| ID | 摘要 | 状态 |
+|----|------|------|
+| TD-040 | bundle.resources 未含 ffmpeg（deliberate 体积权衡） | carried（v0.11.7 未涉及） |
+| TD-2026-08-19-D | image_stream_store 已交付未接线 | carried（v0.11.7 未涉及） |
+| TD-2026-08-19-F | detect_pause_icon 可能误报暂停 | carried（v0.11.7 未涉及） |
+| TD-2026-08-19-G | db_ocr_search 500 会话静默截断 + 图路径不校验 | carried（v0.11.7 未涉及） |
+| TD-2026-08-21-C | db_sessions/db_ai_tasks 的 lock().expect 未迁移 with_conn | carried（v0.11.7 未涉及 db 层） |
+
+### 今日已偿（v0.11.7 六维审查即修，可经提交验证 25386d9）
+
+| ID | 摘要 | 偿还方式 |
+|----|------|----------|
+| P1 | start_photo_session store 创建失败不释放互斥槽 + 残留会话 | 先建 store 再占用槽；失败回滚删会话 |
+| P2 | decode_image 无像素上限（压缩炸弹）+ 限长检查在解码后 | MAX_PIXELS 40MP 解码后拒绝 + base64 长度解码前预估 |
+| P3 | block_count 落库失败也计数（与 import_frame 口径分叉） | 成功落库才 count += 1 |
+| P4 | finish_photo_session store 异常被当"无图"误删会话 | store 创建失败传播 Err |
+| P5 | 图文/实时互斥 TOCTOU 窗口 | live_active 读取移入 photo_session 锁内 + 注释残余窗口 |
+| P6 | 遮罩 Esc 提示无监听 + resize 不重算 letterbox | window keydown/resize 监听 |
+| P7 | photoCrop 输出矩形可越界（canvas 透明带） | 起点收至末行末列 + 宽高收至边界 + 测试 |
+| P8 | 完成态无法原地开始新采集 | done 态"再来一组"按钮 |
+
+### 新登记（open）
+
+| ID | 摘要 | 处置 |
+|----|------|------|
+| TD-2026-08-22-A | clippy --all-targets -D warnings 20 项错误（enrich_placement/live_session_manager/commands_ai_enrich/db_settlements/feature_flags/watermark_filter/note_filter doc 列表等——存量 6 项 + v0.11.6 M1 引入 ~14 项；M1 验收"clippy 新增零警告"未覆盖 all-targets） | open——M2 或专项批次清偿；目标：clippy -D warnings 全绿 |
+
+### 观察项（登记不立债）
+
+无新增（v0.11.7 审查低危项全部即修，无观察遗留）。
+
 ## 关联
 
 - 版本与需求：[v0.11.md 系列（v0.11.0~5）](../../versions/v0.11.md)
