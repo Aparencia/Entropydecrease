@@ -10,6 +10,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { GroupRouteReason, NoteGroup } from "../types";
+import FeedFragmentList from "./FeedFragmentList";
+import WeekContractCard from "./WeekContractCard";
 
 /** 领域标签选项（与 Rust DomainKind 15 类同口径；改判下拉用） */
 const DOMAIN_OPTIONS: [string, string][] = [
@@ -386,6 +388,12 @@ export default function NoteGroupPanel({ groupFilter, onGroupFilterChange, selec
                         </button>
                       </div>
                     </div>
+                  )}
+                  {/* v0.11.4（REQ-200）：周契约卡——弹性承诺呈现层（所有组展开区） */}
+                  <WeekContractCard groupId={g.id} />
+                  {/* v0.11.4（REQ-201）：feed 组碎片列表——消费闭环（仅 feed 地形） */}
+                  {g.terrain === "feed" && (
+                    <FeedFragmentList groupId={g.id} onChanged={() => void load()} />
                   )}
                 </div>
               )}

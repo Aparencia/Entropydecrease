@@ -137,13 +137,43 @@ export interface Flashcard {
   fragmentId: number | null;
   front: string;
   back: string;
-  /** fact 先做；action/model 预埋不做（N13） */
+  /** v0.11.4（REQ-199）：fact 知识卡 / action 动作卡（model 留接口） */
   kind: string;
   /** CardState JSON（后端调度契约，前端透传不解析） */
   stateJson: string;
   /** 到期时刻（Unix 毫秒） */
   dueAt: number;
   createdAt: number;
+}
+
+// ────────────────────────────────────────────────────────────
+// 周契约类型（v0.11.4 REQ-200；Rust WeekContract camelCase 契约）
+// ────────────────────────────────────────────────────────────
+
+/** 周契约（用户自设本周目标——弹性承诺，非打卡 KPI） */
+export interface WeekContract {
+  id: number;
+  groupId: number;
+  /** 周一零点（UTC 秒；展示时转本地日期） */
+  weekStart: number;
+  /** 本周承诺复习天数（1..7） */
+  targetDays: number;
+  /** 本周承诺复习卡数 */
+  targetCards: number;
+  createdAt: number;
+}
+
+/** 周契约状态读数（承诺 vs 实际；Rust WeekContractStatus camelCase 契约） */
+export interface WeekContractStatus {
+  /** 本周契约（null=未立约——显示设定表单） */
+  contract: WeekContract | null;
+  weekStart: number;
+  /** 本周实际复习天数（按日去重——断签不清零） */
+  actualDays: number;
+  /** 本周实际复习卡次数 */
+  actualCards: number;
+  /** 最小可行日徽标：本周完成 ≥3 卡即成立（N9/N11 低谷生存最轻形态） */
+  minimalDayMet: boolean;
 }
 
 // ────────────────────────────────────────────────────────────

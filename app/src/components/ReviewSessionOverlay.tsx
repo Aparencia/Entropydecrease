@@ -109,6 +109,19 @@ export default function ReviewSessionOverlay({ groupId, groupName, onClose }: Pr
 
         {current && !finished && (
           <div>
+            {/* 卡类型徽标（REQ-199 内容分型 + REQ-201 碎片卡——身份诚实可见） */}
+            <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>
+              {current.fragmentId != null && (
+                <span style={{ fontSize: 10, color: "#7c3aed", background: "#faf5ff", borderRadius: 8, padding: "0 6px" }}>
+                  🧩 碎片卡
+                </span>
+              )}
+              {current.kind === "action" && (
+                <span style={{ fontSize: 10, color: "#b45309", background: "#fffbeb", borderRadius: 8, padding: "0 6px" }}>
+                  ⚡ 动作卡
+                </span>
+              )}
+            </div>
             {/* front（线索——先回忆再看） */}
             <div style={{
               minHeight: 90, padding: 16, background: "#f9fafb", borderRadius: 8,
