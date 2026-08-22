@@ -440,11 +440,39 @@ pub fn run_screen_worker(
             let profile_reeval_now = now_ms / 1000;
             if profile_reeval_now >= last_profile_reeval_secs + 150 {
                 last_profile_reeval_secs = profile_reeval_now;
+                // v0.11.5 Task 7: B站 选集 OCR 证据增强——标题确认 B站 且累计
+                // OCR 中选集命中（`P3/12`/`第X集`，adapt_bilibili_episode 解析）
+                // → 累计 OCR 文本提升为平台证据（命中才加权，不命中不惩罚）
+                let mut platform_tags: Vec<String> = Vec::new();
+                if crate::platform_adapter::infer_platform(
+                    Some(&window_title),
+                    None,
+                ) == Some(crate::platform_adapter::PlatformKind::Bilibili)
+                    && accumulated_ocr_text
+                        .iter()
+                        .any(|t| crate::platform_adapter::adapt_bilibili_episode(t).is_some())
+                {
+                    platform_tags = accumulated_ocr_text.clone();
+                }
+                // v0.11.5 Task 7: ASR 开场白——前 30s 段文本（现有段累计可达，
+                // 不为它新建数据流）；无段 → None 诚实降级
+                let asr_opening: Option<String> = subtitle_segments
+                    .lock()
+                    .ok()
+                    .map(|g| {
+                        g.iter()
+                            .filter(|s| s.start_ms <= 30_000)
+                            .map(|s| s.text.clone())
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    })
+                    .filter(|t| !t.trim().is_empty());
                 let domain_signal = crate::video_profile_domain::DomainSignals {
                     title: Some(window_title.clone()),
-                    platform_tags: Vec::new(),
+                    platform_tags,
                     user_confirmed: None,
                     term_freq: accumulated_ocr_text.clone(),
+                    asr_opening,
                 };
                 let detected = crate::video_profile_domain::detect_domain(&domain_signal);
                 if detected.kind.is_some()

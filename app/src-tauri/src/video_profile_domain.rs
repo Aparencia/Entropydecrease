@@ -1,16 +1,12 @@
 //! 内容领域标签体系（REQ-190 / v0.9.0 M3：粗 15 领域 + 细标签开放）。
 //!
-//! @ai-context: 会话 33（公积金科普）实证——B站分区标签 `知识科普|经济管理` 是
-//!              零成本强信号。粗领域（10-15 个带参数）内置种子词表，细标签开放
-//!              （平台原文/术语频率自动命中，"公积金"不必枚举）。
-//! @ai-context: 作用链（与现有能力接线）：
-//!              - hotwords 预热：VocabManager 通道（REQ-040）→ ASR 命中率↑
-//!              - 术语表构建：产物 glossary 用领域词表筛选高频词
-//!              - 区域预期：数学→公式区权重↑；代码→code 区；白板→板书区
-//! @ai-context: 来源（按可靠性排序）：① 平台分区标签（B站 OCR）→ ② 标题领域词
-//!              → ③ 用户确认（检测卡下拉，一次确认进记忆）→ ④ 会话中术语频率
-//!              自动补全。降级原则：开始前有则生效、无则空领域（不阻塞）；
-//!              领域错判代价低，无需确认门禁，用户可随时改。
+//! @ai-context: 会话 33 实证——B站分区标签 `知识科普|经济管理` 是零成本强信号；
+//!              粗领域内置种子词表，细标签开放（平台原文/术语自动命中）。
+//! @ai-context: 作用链：hotwords 预热（REQ-040）→ ASR 命中率↑；术语表筛选；
+//!              区域预期（数学→公式区、代码→code 区）。
+//! @ai-context: 来源（按可靠性）：① 平台分区标签（B站 OCR）→ ② 标题领域词
+//!              → ③ 用户确认（检测卡下拉）→ ④ 术语频率自动补全 → ⑤ ASR 开场白
+//!              （Task 7：开头 30s 自我介绍常含领域自称）。降级：无则空领域不阻塞。
 //! @ai-context: 纯逻辑模块（无 IO/DB）；词表数据在 video_profile_domain_data.rs。
 
 use serde::{Deserialize, Serialize};
@@ -133,7 +129,7 @@ impl DomainKind {
     }
 }
 
-/// 领域检测输入信号（四来源聚合；全部可选——无信号零回归）。
+/// 领域检测输入信号（五来源聚合；全部可选——无信号零回归）。
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct DomainSignals {
     /// 窗口标题（来源②标题领域词）
@@ -144,6 +140,9 @@ pub struct DomainSignals {
     pub user_confirmed: Option<DomainKind>,
     /// 会话中术语频率词（来源④——自动补全；None=尚未观测）
     pub term_freq: Vec<String>,
+    /// ASR 开场白（来源⑤——会话开头 30s 文本；None=诚实降级；serde(default) 向后兼容）
+    #[serde(default)]
+    pub asr_opening: Option<String>,
 }
 
 /// 领域检测结果。
@@ -159,11 +158,11 @@ pub struct DomainDetection {
     pub confidence: f32,
 }
 
-/// 四来源检测（纯函数）：平台分区 > 用户确认 > 标题词 > 术语频率。
+/// 五来源检测（纯函数）：平台分区 > 用户确认 > 标题词 > 开场白 > 术语频率。
 ///
-/// @ai-context: 可靠性排序（REQ-190）：① 平台分区标签（B站官方分类）→
-///              ③ 用户确认（显式裁决）→ ② 标题领域词（弱但零成本）→
-///              ④ 术语频率（会话中补全）。同分时按此优先级。
+/// @ai-context: 可靠性排序（REQ-190）：① 平台分区标签 → ③ 用户确认 → ② 标题词
+///              → ⑤ ASR 开场白（口语弱信号：仅 title 未命中时补位，自我介绍
+///              常含领域自称）→ ④ 术语频率。同分时按此优先级。
 /// @ai-context: 细标签：平台原文/术语原文原样保留（"公积金"不必枚举——
 ///              细标签开放；粗领域命中词同时作为 hotwords 预热候选）。
 pub fn detect_domain(signals: &DomainSignals) -> DomainDetection {
@@ -196,6 +195,17 @@ pub fn detect_domain(signals: &DomainSignals) -> DomainDetection {
                 kind: Some(kind),
                 fine_tags: Vec::new(),
                 source: "title".to_string(),
+                confidence: (hits as f32 / 3.0).min(1.0),
+            };
+        }
+    }
+    // ⑤ ASR 开场白（口语弱信号：仅 title 未命中时补位；复用种子词表不新增数据）
+    if let Some(opening) = signals.asr_opening.as_deref() {
+        if let Some((kind, hits)) = match_domain_words_count(&[opening.to_string()]) {
+            return DomainDetection {
+                kind: Some(kind),
+                fine_tags: Vec::new(),
+                source: "asr".to_string(),
                 confidence: (hits as f32 / 3.0).min(1.0),
             };
         }

@@ -101,6 +101,17 @@ fn ocr_tags_unknown_text_no_domain() {
 }
 
 #[test]
+fn bilibili_episode_ocr_parsed() {
+    // Arrange/Act/Assert：B站 选集按钮 OCR（P分P/总集数 → 合集信息；证据增强）
+    assert_eq!(adapt_bilibili_episode("P3/12"), Some((3, Some(12))));
+    assert_eq!(adapt_bilibili_episode("第3集/共12集"), Some((3, Some(12))));
+    // 无总集数不判（合集信息不完整——诚实原则）
+    assert_eq!(adapt_bilibili_episode("P3"), None);
+    // 非选集 OCR（画面噪声）→ None（不命中不惩罚）
+    assert_eq!(adapt_bilibili_episode("播放"), None);
+}
+
+#[test]
 fn platform_hints_json_roundtrip() {
     // Arrange
     let h = PlatformHints {

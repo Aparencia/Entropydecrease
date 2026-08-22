@@ -3,7 +3,8 @@
 //! @ai-context: 信号来源分层（framework-v2 §3）：通用层（窗口标题/URL/帧切换率/
 //!              OCR 密度——任何平台都有）之上叠加平台层（各平台特有，适配器解析）：
 //!              - bilibili：分区标签（`知识科普|经济管理` 会话 33 实证——OCR 画面
-//!                内分区标签/标题卡文字）、防骗提示
+//!                内分区标签/标题卡文字）、防骗提示、选集按钮 OCR（v0.11.5
+//!                Task 7 试点：`P3/12` → 合集信息——证据增强，命中才加权）
 //!              - local：文件路径、目录名（常含分类语义）
 //!              - 独立播放器/浏览器：无平台信号 → 纯内容信号（零回归）
 //! @ai-context: 轻量适配原则：纯文本解析（标题/路径/OCR 文本），无网络无 ML；
@@ -89,6 +90,22 @@ pub fn adapt_bilibili(title: Option<&str>, url: Option<&str>) -> PlatformHints {
     PlatformHints { platform_tags: tags, path_segments: Vec::new() }
 }
 
+/// B站 选集 OCR 解析（v0.11.5 Task 7 试点）：P分P/总集数 → 合集信息。
+///
+/// @ai-context: 证据增强语义——命中才加权、不命中不惩罚：选集命中（`P3/12`/
+///              `第3集/共12集`）证明画面内是 B站 播放器 UI，调用方可将累计
+///              OCR 文本提升为平台证据（分区标签置信↑）；解析失败 → None，
+///              调用方维持原信号通道（零回归）。
+/// @ai-context: 复用 session_info::parse_player_text 单一来源（播放器 OCR 解析
+///              唯一实现，两处维护会漂移）；仅当前集号无总集数（`P3`）→
+///              parse 层拒绝 → None（合集信息不完整不判——诚实原则）。
+pub fn adapt_bilibili_episode(ocr_text: &str) -> Option<(u32, Option<u32>)> {
+    crate::session_info::parse_player_text(ocr_text).and_then(|info| {
+        let episode = info.episode?;
+        Some((episode, info.total_episodes))
+    })
+}
+
 /// local 适配：文件路径/目录名 → 路径语义关键词（领域投票候选）。
 ///
 /// @ai-context: 播放器窗口标题 = 完整文件路径（`D:\教程\化妆\眼影篇.mp4`）——
@@ -135,6 +152,7 @@ pub fn ocr_tags_to_domain(texts: &[String]) -> crate::video_profile_domain::Doma
         platform_tags: texts.to_vec(),
         user_confirmed: None,
         term_freq: Vec::new(),
+        asr_opening: None,
     };
     detect_domain(&signals)
 }

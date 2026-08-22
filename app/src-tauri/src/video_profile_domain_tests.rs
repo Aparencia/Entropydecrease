@@ -32,6 +32,7 @@ fn platform_tag_wins_over_title() {
         platform_tags: vec!["经济管理".into()],
         user_confirmed: None,
         term_freq: Vec::new(),
+        asr_opening: None,
     };
     // Act
     let d = detect_domain(&s);
@@ -50,6 +51,7 @@ fn user_confirmed_beats_title() {
         platform_tags: Vec::new(),
         user_confirmed: Some(DomainKind::Beauty),
         term_freq: Vec::new(),
+        asr_opening: None,
     };
     // Act/Assert：用户确认优先（来源③高于标题②）
     let d = detect_domain(&s);
@@ -65,6 +67,7 @@ fn title_domain_word_detected() {
         platform_tags: Vec::new(),
         user_confirmed: None,
         term_freq: Vec::new(),
+        asr_opening: None,
     };
     // Act
     let d = detect_domain(&s);
@@ -81,6 +84,7 @@ fn term_frequency_backfills_domain() {
         platform_tags: Vec::new(),
         user_confirmed: None,
         term_freq: vec!["公积金".into(), "贷款".into(), "利息".into()],
+        asr_opening: None,
     };
     // Act
     let d = detect_domain(&s);
@@ -111,6 +115,7 @@ fn fine_tags_open_platform_raw_text() {
         platform_tags: vec!["知识科普".into()],
         user_confirmed: None,
         term_freq: Vec::new(),
+        asr_opening: None,
     };
     // Act：知识科普 无领域种子词直接命中 → 平台标签不进领域（诚实不猜）
     let d = detect_domain(&s);
@@ -160,6 +165,42 @@ fn region_expectation_follows_domain() {
     );
     assert_eq!(DomainKind::Economy.expected_region(), None);
     assert_eq!(DomainKind::Music.expected_region(), None);
+}
+
+// ── ASR 开场白信号（v0.11.5 Task 7：全平台通用增强）──
+
+#[test]
+fn asr_opening_intro_detects_domain() {
+    // Arrange：开场白自我介绍（口语含领域自称/主题词）+ 无领域词标题
+    let signals = DomainSignals {
+        title: Some("零基础教程".to_string()),
+        platform_tags: vec![],
+        user_confirmed: None,
+        term_freq: vec![],
+        asr_opening: Some("大家好我是美妆博主，今天教大家画眼影".to_string()),
+    };
+    // Act
+    let d = detect_domain(&signals);
+    // Assert：开场白命中美妆领域（"美妆"/"眼影"均为 Beauty 种子词）
+    assert_eq!(d.kind, Some(DomainKind::Beauty));
+    assert_eq!(d.source, "asr");
+}
+
+#[test]
+fn asr_opening_none_no_regression() {
+    // Arrange：无开场白（Task 6 现状输入——标题命中领域词）
+    let s = DomainSignals {
+        title: Some("公积金贷款攻略".into()),
+        platform_tags: Vec::new(),
+        user_confirmed: None,
+        term_freq: Vec::new(),
+        asr_opening: None,
+    };
+    // Act
+    let d = detect_domain(&s);
+    // Assert：与"无 asr_opening 的旧行为"一致（标题通道 economy/source=title）
+    assert_eq!(d.kind, Some(DomainKind::Economy));
+    assert_eq!(d.source, "title");
 }
 
 #[test]

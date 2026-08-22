@@ -76,6 +76,7 @@ pub fn detect_video_profile(
                 .collect(),
             user_confirmed: None,
             term_freq: Vec::new(),
+            asr_opening: None,
         },
     );
     let domain = (domain.kind.is_some() || !domain.fine_tags.is_empty()).then_some(domain);
@@ -141,6 +142,7 @@ pub fn detect_video_domain(
             .into_iter()
             .map(|t| t.chars().take(50).collect())
             .collect(),
+        asr_opening: None,
     })
 }
 
