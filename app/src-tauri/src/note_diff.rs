@@ -160,8 +160,9 @@ pub struct DiffStats {
 
 /// 章节级分组 diff：按 heading 分块 → 块级行 diff → hunk 汇总。
 ///
-/// 章节按 `heading` 文本匹配（相同标题配对），新增/删除/修改 四态标记，
-/// removed_lines/added_lines 为块内 LCS 增删行。
+/// 章节先按 `heading` 文本精确匹配（相同标题配对）；未匹配章节（标题变更/
+/// 重排）按顺序一一配对为单个 Modified hunk——spec 6️⃣：一个逻辑改动=一个
+/// hunk，重命名=修改而非 Removed+Added 噪声；剩余未配对按 删除/新增 处理。
 pub fn diff_sections(old: &str, new: &str) -> Vec<SectionDiff> {
     let old_secs = parse_sections(old);
     let new_secs = parse_sections(new);
@@ -175,34 +176,31 @@ pub fn diff_sections(old: &str, new: &str) -> Vec<SectionDiff> {
 
     let mut result = Vec::with_capacity(old_secs.len().max(new_secs.len()));
     let mut new_used = vec![false; new_secs.len()];
+    // 未精确匹配的旧章节下标（原顺序）——待与新版未匹配章节顺序配对
+    let mut old_unmatched: Vec<usize> = Vec::new();
 
-    for old_sec in &old_secs {
+    for (oi, old_sec) in old_secs.iter().enumerate() {
         if let Some(&ni) = new_by_heading.get(old_sec.heading.as_str()) {
             if !new_used[ni] {
                 new_used[ni] = true;
-                let ns = &new_secs[ni];
-                let ops = diff_markdown(&old_sec.body, &ns.body);
-                let (added, removed, _) = diff_stats(&ops);
-                result.push(SectionDiff {
-                    heading: old_sec.heading.clone(),
-                    status: if added == 0 && removed == 0 {
-                        DiffStatus::Unchanged
-                    } else {
-                        DiffStatus::Modified
-                    },
-                    removed_lines: ops.iter().filter_map(|o| match o {
-                        DiffOp::Removed(s) => Some(s.clone()),
-                        _ => None,
-                    }).collect(),
-                    added_lines: ops.iter().filter_map(|o| match o {
-                        DiffOp::Added(s) => Some(s.clone()),
-                        _ => None,
-                    }).collect(),
-                });
+                result.push(compare_blocks(old_sec, &new_secs[ni], old_sec.heading.clone()));
                 continue;
             }
         }
-        // 旧版章节在新版中未找到
+        old_unmatched.push(oi);
+    }
+
+    // 未匹配章节顺序配对（第 N 个旧未匹配 ↔ 第 N 个新未匹配）→ Modified
+    let new_unmatched: Vec<usize> = (0..new_secs.len()).filter(|&i| !new_used[i]).collect();
+    let paired = old_unmatched.len().min(new_unmatched.len());
+    for k in 0..paired {
+        let old_sec = &old_secs[old_unmatched[k]];
+        let new_sec = &new_secs[new_unmatched[k]];
+        result.push(compare_blocks(old_sec, new_sec, new_sec.heading.clone()));
+    }
+    // 剩余旧章节（无新版对应）→ 删除
+    for &oi in &old_unmatched[paired..] {
+        let old_sec = &old_secs[oi];
         result.push(SectionDiff {
             heading: old_sec.heading.clone(),
             status: DiffStatus::Removed,
@@ -210,20 +208,41 @@ pub fn diff_sections(old: &str, new: &str) -> Vec<SectionDiff> {
             added_lines: vec![],
         });
     }
-
-    // 新版新增章节（未匹配到旧版）
-    for (i, ns) in new_secs.iter().enumerate() {
-        if !new_used[i] {
-            result.push(SectionDiff {
-                heading: ns.heading.clone(),
-                status: DiffStatus::Added,
-                removed_lines: vec![],
-                added_lines: ns.body.lines().map(String::from).collect(),
-            });
-        }
+    // 剩余新章节（无旧版对应）→ 新增
+    for &ni in &new_unmatched[paired..] {
+        let ns = &new_secs[ni];
+        result.push(SectionDiff {
+            heading: ns.heading.clone(),
+            status: DiffStatus::Added,
+            removed_lines: vec![],
+            added_lines: ns.body.lines().map(String::from).collect(),
+        });
     }
 
     result
+}
+
+/// 两块章节行级 diff → SectionDiff（heading 由调用方决定：精确匹配取原标题，
+/// 重命名配对取新版标题——同逻辑一处实现，避免两处重复）。
+fn compare_blocks(old: &SectionBlock, new: &SectionBlock, heading: String) -> SectionDiff {
+    let ops = diff_markdown(&old.body, &new.body);
+    let (added, removed, _) = diff_stats(&ops);
+    SectionDiff {
+        heading,
+        status: if added == 0 && removed == 0 {
+            DiffStatus::Unchanged
+        } else {
+            DiffStatus::Modified
+        },
+        removed_lines: ops.iter().filter_map(|o| match o {
+            DiffOp::Removed(s) => Some(s.clone()),
+            _ => None,
+        }).collect(),
+        added_lines: ops.iter().filter_map(|o| match o {
+            DiffOp::Added(s) => Some(s.clone()),
+            _ => None,
+        }).collect(),
+    }
 }
 
 /// 内部章节块（解析中间表示）。

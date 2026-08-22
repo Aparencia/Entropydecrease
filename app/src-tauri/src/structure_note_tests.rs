@@ -253,10 +253,12 @@ fn glossary_candidates_never_enter_markdown() {
         &default_config(),
     );
 
-    // Assert：词汇表标题与术语文本均不得进 markdown；统计恒 0（serde 兼容字段）
+    // Assert：词汇表标题块不得进 markdown；"术语A"在讲述内容原文中（ASR
+    //         高频词，正文含该词属正常）——断言语义是"词汇表块不输出"而非
+    //         "正文不含该词"；未在正文出现的术语不得凭空进入
     assert!(!result.markdown.contains("## 词汇表"));
-    assert!(!result.markdown.contains("术语A"));
-    assert!(!result.markdown.contains("术语B"));
+    assert!(result.markdown.contains("术语A"), "讲述内容含术语属正常（ASR 原文）");
+    assert!(!result.markdown.contains("术语B"), "未在讲述内容出现的术语不得进 markdown");
     assert_eq!(stats.glossary_terms, 0);
     let json = serde_json::to_string(&result.stats).expect("stats serializable");
     assert!(json.contains("glossary_terms"));

@@ -52,13 +52,15 @@ fn upsert_creates_and_overrides_this_week() {
     let c2 = db
         .upsert_week_contract(group.id, ws, 5, 30)
         .expect("override");
-    // Assert：同周同组仅一份契约，目标值已覆盖
+    // Assert：同周同组仅一份契约，目标值已覆盖；created_at 单调不倒退
+    //         （秒级时间戳同秒两次 upsert 相等属正常——幂等覆盖语义）
     let fetched = db.get_week_contract(group.id, ws).expect("get");
     let fetched = fetched.expect("契约应存在");
     assert_eq!(fetched.id, c1.id);
     assert_eq!(fetched.target_days, 5);
     assert_eq!(fetched.target_cards, 30);
-    assert_ne!(fetched.created_at, c2.created_at); // created_at 刷新
+    assert_eq!(fetched.created_at, c2.created_at, "upsert 返回值与落库一致");
+    assert!(c2.created_at >= c1.created_at, "created_at 单调不倒退（同秒幂等允许相等）");
 }
 
 #[test]
