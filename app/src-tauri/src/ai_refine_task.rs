@@ -205,7 +205,8 @@ fn run_refine_task_inner(
             .map(|k| format!("{}:{}..", k.len(), &k[..6.min(k.len())]))
             .unwrap_or_else(|| "无".to_string()),
     );
-    let client = AiClient::from_settings(&settings, stored_key);
+    let store = st.ai_providers.lock().map_err(|e| AiTaskFailure::Other(e.to_string()))?.clone();
+    let client = AiClient::from_settings_with_store(&settings, stored_key, &store);
     let adapter = AiNoteRefineAdapter::new(client.clone());
     let mock_adapter = AiMockAdapter;
     // F2-B4：并发精修（worker 池消费切片队列；按片上报进度；失败片重试后

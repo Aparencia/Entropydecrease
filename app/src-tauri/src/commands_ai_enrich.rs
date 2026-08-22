@@ -274,7 +274,8 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
             None => String::new(),
         };
         let settings = st.ai_settings.lock().map_err(|e| AiTaskFailure::Other(e.to_string()))?.clone();
-        let client = AiClient::from_settings(&settings, st.ai_credentials.load_key("default").ok().flatten());
+        let store = st.ai_providers.lock().map_err(|e| AiTaskFailure::Other(e.to_string()))?.clone();
+        let client = AiClient::from_settings_with_store(&settings, st.ai_credentials.load_key("default").ok().flatten(), &store);
         let adapter = AiNoteEnrichAdapter::new(client.clone());
         let mock_adapter = AiMockAdapter;
         // 切片（长笔记按章节切——REQ-145 基建复用；锚点跨片=全局章节标题）

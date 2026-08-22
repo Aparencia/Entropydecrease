@@ -154,6 +154,11 @@ pub struct AppState {
     /// v0.8.0 M1（REQ-138）：AI 密钥凭据存储（Windows DPAPI 加密文件；
     /// 密钥不落 SQLite/明文文件——安全红线）
     pub ai_credentials: std::sync::Arc<dyn crate::ai_credentials::CredentialStore>,
+    /// v0.11.6 M1：AI Provider 存储（多 Provider 配置内存态单点；持久化见
+    /// ai_providers_path——密钥不在 JSON，走 ai_credentials scope 化凭据）
+    pub ai_providers: std::sync::Arc<std::sync::Mutex<crate::ai_provider::AiProviderStore>>,
+    /// v0.11.6 M1：AI Provider 配置文件路径（应用数据目录 ai_providers.json）
+    pub ai_providers_path: std::path::PathBuf,
     /// v0.8.0 M2（REQ-145）：AI 异步任务注册表（任务 id → 状态/结果；
     /// 容量守卫防无界增长——见 commands_ai_refine::trim_tasks）
     pub ai_tasks: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<u64, crate::commands_ai_refine::AiTaskEntry>>>,

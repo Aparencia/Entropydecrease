@@ -499,7 +499,8 @@ pub(crate) fn ensure_balance_for(st: &AppState, chars: usize, model: &str) -> Re
         return Err("未配置 API 密钥（设置页保存密钥或配置环境变量 SILICONFLOW_API_KEY）".to_string());
     }
     let settings = st.ai_settings.lock().map_err(|e| format!("AI 设置锁中毒: {}", e))?.clone();
-    let cfg = crate::ai_client::AiClient::from_settings(&settings, Some(api_key)).config;
+    let store = st.ai_providers.lock().map_err(|e| format!("AI Provider 存储锁中毒: {}", e))?.clone();
+    let cfg = crate::ai_client::AiClient::from_settings_with_store(&settings, Some(api_key), &store).config;
     let adapter = crate::ai_balance::AiBalanceAdapter {
         base_url: cfg.base_url,
         api_key: cfg.api_key,

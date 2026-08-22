@@ -218,7 +218,8 @@ fn balance_adapter(state: &AppState) -> Result<AiBalanceAdapter, String> {
     let api_key = env_api_key()
         .or(state.ai_credentials.load_key("default")?)
         .unwrap_or_default();
-    let cfg = crate::ai_client::AiClient::from_settings(&s, Some(api_key)).config;
+    let store = state.ai_providers.lock().map_err(|e| e.to_string())?.clone();
+    let cfg = crate::ai_client::AiClient::from_settings_with_store(&s, Some(api_key), &store).config;
     Ok(AiBalanceAdapter {
         base_url: cfg.base_url,
         api_key: cfg.api_key,

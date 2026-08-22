@@ -155,6 +155,29 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         crate::ai_settings::AiSettings::load(&ai_settings_path),
     ));
     let ai_credentials = crate::ai_credentials::platform_store(&data_dir.join("ai_credentials.bin"));
+    // v0.11.6 M1：AI Provider 装配——首启迁移（ai_providers.json 不存在且
+    // 旧配置非默认值 → 生成 SiliconFlow Provider）；密钥迁移同处完成
+    // （旧凭据条目 → provider:legacy-siliconflow 新条目）
+    let ai_providers_path = data_dir.join("ai_providers.json");
+    let ai_providers = std::sync::Arc::new(std::sync::Mutex::new(
+        crate::ai_provider::AiProviderStore::load(&ai_providers_path),
+    ));
+    {
+        let mut store = ai_providers.lock().map_err(|e| e.to_string())?;
+        if store.providers.is_empty() {
+            let legacy = ai_settings.lock().map_err(|e| e.to_string())?.clone();
+            let (providers, default_id) = crate::ai_provider::migrate_from_legacy(&legacy);
+            store.providers = providers;
+            store.default_provider_id = default_id;
+            // 密钥迁移：旧凭据存在且新 scope 不存在 → 复制（旧条目保留供回退）
+            if let Ok(Some(key)) = ai_credentials.load_key("default") {
+                if ai_credentials.load_key("provider:legacy-siliconflow").ok().flatten().is_none() {
+                    let _ = ai_credentials.save_key("provider:legacy-siliconflow", &key);
+                }
+            }
+            store.save(&ai_providers_path)?;
+        }
+    }
     // v0.8.0 M2（REQ-145）：AI 异步任务注册表 + id 序列（spawn_blocking 后台
     // 执行，前端轮询/事件双通道——禁止同步阻塞 30s+ 长会话精修）
     let ai_tasks = crate::commands_ai_refine::task_registry();
@@ -238,6 +261,9 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         ai_settings,
         ai_settings_path,
         ai_credentials,
+        // v0.11.6 M1：AI Provider 存储 + 配置路径
+        ai_providers,
+        ai_providers_path,
         // v0.8.0 M2（REQ-145）：AI 异步任务注册表 + id 序列
         ai_tasks,
         ai_task_seq,
