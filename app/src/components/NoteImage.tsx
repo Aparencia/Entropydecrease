@@ -74,7 +74,10 @@ export default function NoteImage({ src, alt = "", noteId, onOpen }: Props) {
       loading="lazy"
       onClick={() => onOpen?.(url, alt)}
       style={{
-        maxWidth: "100%",
+        // v0.11.5：笔记图片缩略图（240px cover）——点击经 onOpen 看原图
+        width: 240,
+        height: 160,
+        objectFit: "cover",
         borderRadius: 6,
         border: "1px solid #e5e7eb",
         cursor: onOpen ? "zoom-in" : "default",
