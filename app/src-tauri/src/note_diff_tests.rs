@@ -3,7 +3,7 @@
 //! @ai-context: 覆盖：全同/全异/插入/删除/混合重组（LCS 保住未变行）/
 //!              空输入/统计/规模守卫回退路径不 panic。
 
-use crate::note_diff::{diff_markdown, diff_stats, DiffOp};
+use crate::note_diff::{diff_markdown, diff_sections, diff_stats, DiffOp, DiffStatus};
 
 #[test]
 fn identical_text_all_unchanged() {
@@ -98,4 +98,76 @@ fn op_kind(op: &DiffOp) -> &'static str {
         DiffOp::Added(_) => "added",
         DiffOp::Removed(_) => "removed",
     }
+}
+
+// ────────────────────────────────────────────────────────────
+// 章节级分组 diff 测试（Task 11 / spec 6️⃣）
+// ────────────────────────────────────────────────────────────
+
+#[test]
+fn section_rename_groups_as_one_hunk() {
+    // 章节标题变化 + 内容变化 → Modified（非 Removed+Added 两条）
+    let d = diff_sections("## 第一章\nA\n## 第二章\nC", "## 第一章\nA\n## 第三章\nD");
+    // 两节：第一章 unchanged，第三章 modified
+    assert!(
+        d.iter().any(|s| s.status == DiffStatus::Modified && s.heading.contains("第三章")),
+        "Expected Modified for renamed section heading"
+    );
+    assert!(
+        d.iter().any(|s| s.status == DiffStatus::Unchanged && s.heading.contains("第一章")),
+        "Expected Unchanged for identical section"
+    );
+}
+
+#[test]
+fn removed_lines_expandable() {
+    let d = diff_sections("## 章\n甲\n乙", "## 章\n甲");
+    let rm = d.iter().find(|s| s.heading == "章").unwrap();
+    assert_eq!(rm.removed_lines, vec!["乙"]);
+    assert!(rm.added_lines.is_empty());
+    assert_eq!(rm.status, DiffStatus::Modified);
+}
+
+#[test]
+fn added_section_detected() {
+    let d = diff_sections("## 现有\n内容", "## 现有\n内容\n## 新增\n新内容");
+    let added = d.iter().find(|s| s.status == DiffStatus::Added).unwrap();
+    assert_eq!(added.heading, "新增");
+    assert_eq!(added.added_lines, vec!["新内容"]);
+}
+
+#[test]
+fn removed_section_detected() {
+    let d = diff_sections("## 删除\n内容\n## 保留\n内容", "## 保留\n内容");
+    let rm = d.iter().find(|s| s.status == DiffStatus::Removed).unwrap();
+    assert_eq!(rm.heading, "删除");
+}
+
+#[test]
+fn unchanged_sections_unmarked() {
+    let d = diff_sections("## 甲\nA", "## 甲\nA");
+    assert_eq!(d.len(), 1);
+    assert_eq!(d[0].status, DiffStatus::Unchanged);
+    assert!(d[0].removed_lines.is_empty());
+    assert!(d[0].added_lines.is_empty());
+}
+
+#[test]
+fn no_headings_fallback() {
+    // 无 heading → 视为单章（空标题）
+    let d = diff_sections("纯文本\n多行", "纯文本\n多行\n新增行");
+    assert_eq!(d.len(), 1);
+    // 空标题章节，正文有变化 → Modified
+    assert_eq!(d[0].status, DiffStatus::Modified);
+    assert_eq!(d[0].added_lines, vec!["新增行"]);
+}
+
+#[test]
+fn multi_level_headings() {
+    let d = diff_sections(
+        "# H1\n内容A\n## H2\n内容B",
+        "# H1\n内容A\n## H2\n内容B\n### H3\n新增",
+    );
+    let added = d.iter().find(|s| s.status == DiffStatus::Added).unwrap();
+    assert_eq!(added.heading, "H3");
 }

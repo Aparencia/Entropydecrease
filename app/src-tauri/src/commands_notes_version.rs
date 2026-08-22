@@ -11,7 +11,7 @@ use tauri::State;
 use crate::commands::AppState;
 use crate::db_ai_usage::AiUsageRecord;
 use crate::db_notes_versions::NoteVersion;
-use crate::note_diff::{diff_markdown, DiffOp};
+use crate::note_diff::{diff_markdown, diff_sections, DiffOp, SectionDiff};
 use crate::types::Note;
 
 /// 版本列表（旧→新；含惰性首快照——旧数据迁移兼容）。
@@ -64,6 +64,18 @@ pub fn note_versions_usage(state: State<'_, AppState>, note_id: i64) -> Result<V
         return Err("无效的笔记 id".to_string());
     }
     state.db.list_ai_usage(note_id).map_err(|e| e.to_string())
+}
+
+/// 按会话 id 查关联笔记（取最新）。
+#[tauri::command]
+pub fn note_by_session(state: State<'_, AppState>, session_id: i64) -> Result<Option<Note>, String> {
+    state.db.find_note_by_session(session_id).map_err(|e| e.to_string())
+}
+
+/// 任意两篇 markdown 的章节级分组 diff（VersionPanel 对比用）。
+#[tauri::command]
+pub fn diff_markdown_sections(old_md: String, new_md: String) -> Vec<SectionDiff> {
+    diff_sections(&old_md, &new_md)
 }
 
 /// 读版本并校验归属（diff 输入防御）。

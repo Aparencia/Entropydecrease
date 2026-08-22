@@ -127,6 +127,158 @@ fn naive_common(a: &[&str], b: &[&str]) -> Vec<(usize, usize)> {
     pairs
 }
 
+// ────────────────────────────────────────────────────────────
+// 章节级分组 diff（Task 11 / spec 6️⃣——工作台并排展示数据源）
+// ────────────────────────────────────────────────────────────
+
+/// 章节 diff 状态（四态；serde 小写 tag）。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DiffStatus {
+    Modified,
+    Added,
+    Removed,
+    Unchanged,
+}
+
+/// 章节级 diff 分组结果。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SectionDiff {
+    pub heading: String,
+    pub status: DiffStatus,
+    pub removed_lines: Vec<String>,
+    pub added_lines: Vec<String>,
+}
+
+/// diff 统计（新增/删除/未变行数）。
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub struct DiffStats {
+    pub added: usize,
+    pub removed: usize,
+    pub unchanged: usize,
+}
+
+/// 章节级分组 diff：按 heading 分块 → 块级行 diff → hunk 汇总。
+///
+/// 章节按 `heading` 文本匹配（相同标题配对），新增/删除/修改 四态标记，
+/// removed_lines/added_lines 为块内 LCS 增删行。
+pub fn diff_sections(old: &str, new: &str) -> Vec<SectionDiff> {
+    let old_secs = parse_sections(old);
+    let new_secs = parse_sections(new);
+
+    // 新版本 heading → index 映射（首次出现，处理同名章节）
+    use std::collections::HashMap;
+    let mut new_by_heading: HashMap<&str, usize> = HashMap::new();
+    for (i, sec) in new_secs.iter().enumerate() {
+        new_by_heading.entry(sec.heading.as_str()).or_insert(i);
+    }
+
+    let mut result = Vec::with_capacity(old_secs.len().max(new_secs.len()));
+    let mut new_used = vec![false; new_secs.len()];
+
+    for old_sec in &old_secs {
+        if let Some(&ni) = new_by_heading.get(old_sec.heading.as_str()) {
+            if !new_used[ni] {
+                new_used[ni] = true;
+                let ns = &new_secs[ni];
+                let ops = diff_markdown(&old_sec.body, &ns.body);
+                let (added, removed, _) = diff_stats(&ops);
+                result.push(SectionDiff {
+                    heading: old_sec.heading.clone(),
+                    status: if added == 0 && removed == 0 {
+                        DiffStatus::Unchanged
+                    } else {
+                        DiffStatus::Modified
+                    },
+                    removed_lines: ops.iter().filter_map(|o| match o {
+                        DiffOp::Removed(s) => Some(s.clone()),
+                        _ => None,
+                    }).collect(),
+                    added_lines: ops.iter().filter_map(|o| match o {
+                        DiffOp::Added(s) => Some(s.clone()),
+                        _ => None,
+                    }).collect(),
+                });
+                continue;
+            }
+        }
+        // 旧版章节在新版中未找到
+        result.push(SectionDiff {
+            heading: old_sec.heading.clone(),
+            status: DiffStatus::Removed,
+            removed_lines: old_sec.body.lines().map(String::from).collect(),
+            added_lines: vec![],
+        });
+    }
+
+    // 新版新增章节（未匹配到旧版）
+    for (i, ns) in new_secs.iter().enumerate() {
+        if !new_used[i] {
+            result.push(SectionDiff {
+                heading: ns.heading.clone(),
+                status: DiffStatus::Added,
+                removed_lines: vec![],
+                added_lines: ns.body.lines().map(String::from).collect(),
+            });
+        }
+    }
+
+    result
+}
+
+/// 内部章节块（解析中间表示）。
+struct SectionBlock {
+    heading: String,
+    body: String,
+}
+
+/// 按 `^#{1,6} ` 切分 markdown 为章节块。
+fn parse_sections(text: &str) -> Vec<SectionBlock> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut sections: Vec<SectionBlock> = Vec::new();
+    let mut cur_h = String::new();
+    let mut cur_b: Vec<&str> = Vec::new();
+
+    fn flush(
+        sections: &mut Vec<SectionBlock>,
+        heading: &mut String,
+        body: &mut Vec<&str>,
+    ) {
+        if !heading.is_empty() || !body.is_empty() {
+            sections.push(SectionBlock {
+                heading: std::mem::take(heading),
+                body: body.join("\n"),
+            });
+            body.clear();
+        }
+    }
+
+    for line in &lines {
+        // 检测 `^#{1,6} ` 开头的 heading 行
+        let trimmed = line.trim_start();
+        let is_heading = {
+            let bytes = trimmed.as_bytes();
+            if bytes.first() != Some(&b'#') {
+                false
+            } else {
+                let h_count = bytes.iter().take_while(|&&b| b == b'#').count();
+                (1..=6).contains(&h_count) && bytes.get(h_count) == Some(&b' ')
+            }
+        };
+
+        if is_heading {
+            flush(&mut sections, &mut cur_h, &mut cur_b);
+            // 提取纯文字标题（去掉 # 前缀和空格）
+            cur_h = trimmed.trim_start_matches('#').trim().to_string();
+        } else {
+            cur_b.push(line);
+        }
+    }
+    flush(&mut sections, &mut cur_h, &mut cur_b);
+
+    sections
+}
+
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。
 #[cfg(test)]
 #[path = "note_diff_tests.rs"]

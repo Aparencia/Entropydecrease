@@ -545,6 +545,7 @@ pub fn run() {
             commands_ai_refine::ai_refine_status,
             commands_ai_refine::ai_refine_result,
             commands_ai_refine::ai_refine_apply,
+            commands_ai_refine::refine_workbench,
             // v0.8.0 F2（2026-08-21）：任务中心——历史列表（面板数据源）
             commands_ai_refine::ai_task_history,
             // v0.8.0 M3（REQ-142）：知识补充——预估/任务/结果/采纳/撤销
@@ -558,6 +559,8 @@ pub fn run() {
             commands_notes_version::note_versions_diff,
             commands_notes_version::note_versions_rollback,
             commands_notes_version::note_versions_usage,
+            commands_notes_version::note_by_session,
+            commands_notes_version::diff_markdown_sections,
             // 结构模型与课后精修（REQ-047/049/050 模型版：下载/状态/精修）
             commands_refine::structure_model_download,
             commands_refine::structure_model_status,

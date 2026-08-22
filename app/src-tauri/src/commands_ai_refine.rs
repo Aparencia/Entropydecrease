@@ -21,8 +21,10 @@ use crate::ai_cost::{estimate_for_content_model, CostEstimate};
 use crate::ai_task::AiTaskState;
 use crate::commands::AppState;
 use crate::commands_session_note::build_rule_draft_with_analysis;
-use crate::note_diff::DiffOp;
+use crate::anchor_strip::strip_anchors;
+use crate::note_diff::{diff_sections, DiffOp, DiffStats, SectionDiff};
 use crate::note_filter::PurifyEnv;
+use crate::note_version::VersionMeta;
 use crate::types::{NewNote, Note};
 
 /// mock 模式 env 键（本地规则精修，不联网——测试/离线开发，ai_text_filter 先例）。
@@ -343,6 +345,91 @@ pub fn ai_refine_apply(
         .get_note(note.id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "笔记不存在".to_string())
+}
+
+// ────────────────────────────────────────────────────────────
+// 精修工作台（Task 11 / spec 6️⃣——规则草稿+精修结果+章节分组 diff 一次取全）
+// ────────────────────────────────────────────────────────────
+
+/// 工作台数据（前端 RefineWorkbench 模态数据源）。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WorkbenchData {
+    pub rule_markdown: String,
+    pub refined_markdown: Option<String>,
+    pub sections: Vec<SectionDiff>,
+    pub stats: DiffStats,
+    pub meta: Option<VersionMeta>,
+}
+
+/// 工作台数据接口：规则草稿 + 精修结果 + 章节分组 diff 一次取全。
+///
+/// refined_markdown 为 None → 尚未精修；否则包含最新笔记精修版内容
+/// 与章节 diff。
+#[tauri::command]
+pub async fn refine_workbench(
+    state: State<'_, AppState>,
+    session_id: i64,
+) -> Result<WorkbenchData, String> {
+    if session_id <= 0 {
+        return Err("无效的会话 id".to_string());
+    }
+    // ① 构建规则草稿（与精修任务同管线）
+    let env = PurifyEnv {
+        config: state.purify.clone(),
+        symbol: state.symbol_normalize.clone(),
+        corrections: state.ocr_corrections.clone(),
+    };
+    let (draft, _) = build_rule_draft_with_analysis(
+        &state.db,
+        &state.ui_junk,
+        &env,
+        &state.data_dir,
+        session_id,
+        None,
+    )
+    .map_err(|e| e.to_string())?;
+    let rule_md = strip_anchors(&draft.markdown);
+
+    // ② 查已落库精修笔记（有无精修结果）
+    let note = state.db.find_note_by_session(session_id).map_err(|e| e.to_string())?;
+    let (refined_md, sections, stats, meta) = if let Some(ref note) = note {
+        // 取最新版本内容作为精修版
+        let versions = state.db.list_versions(note.id).map_err(|e| e.to_string())?;
+        let latest = versions.last()
+            .map(|v| v.content.clone())
+            .unwrap_or_else(|| note.content.clone());
+        let secs = diff_sections(&rule_md, &latest);
+        let total_added: usize = secs.iter().map(|s| s.added_lines.len()).sum();
+        let total_removed: usize = secs.iter().map(|s| s.removed_lines.len()).sum();
+        let total_unchanged: usize = secs.iter()
+            .filter(|s| s.status == crate::note_diff::DiffStatus::Unchanged)
+            .count();
+        let st = DiffStats {
+            added: total_added,
+            removed: total_removed,
+            unchanged: total_unchanged,
+        };
+        // 取最新版本 meta
+        let m = versions.last().and_then(|v| {
+            Some(VersionMeta {
+                cost_yuan: v.meta.cost_yuan,
+                model: v.meta.model.clone(),
+                slices: v.meta.slices,
+                merged_from: v.meta.merged_from.clone(),
+            })
+        });
+        (Some(latest), secs, st, m)
+    } else {
+        (None, vec![], DiffStats { added: 0, removed: 0, unchanged: 0 }, None)
+    };
+
+    Ok(WorkbenchData {
+        rule_markdown: rule_md,
+        refined_markdown: refined_md,
+        sections,
+        stats,
+        meta,
+    })
 }
 
 /// 更新任务状态并推送事件（短锁内完成即释放）。M3 补充任务复用（pub(crate)）。
