@@ -159,6 +159,12 @@ pub struct AppState {
     pub ai_tasks: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<u64, crate::commands_ai_refine::AiTaskEntry>>>,
     /// v0.8.0 M2（REQ-145）：任务 id 序列（原子递增——并发安全）
     pub ai_task_seq: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// v0.11.7（图文会话，ADR-020）：进行中的图文采集会话 id（互斥槽；
+    /// start/finish/discard 独占修改——同一时刻最多一个图文采集）
+    pub photo_session: std::sync::Arc<std::sync::Mutex<Option<i64>>>,
+    /// v0.11.7（图文会话，ADR-020）：图文图片库 store（跨截图常驻——保持
+    /// 双指纹去重 FIFO 与预算计数；与 photo_session 同生命周期）
+    pub photo_store: std::sync::Arc<std::sync::Mutex<Option<crate::image_store::SessionImageStore>>>,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。

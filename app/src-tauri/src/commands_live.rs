@@ -47,6 +47,10 @@ pub async fn start_live_session(
     window_id: Option<i64>,
     profile: Option<String>,
 ) -> Result<i64, String> {
+    // v0.11.7（图文会话，ADR-020）：互斥——图文采集中不得开始实时捕获
+    if state.photo_session.lock().map(|g| g.is_some()).unwrap_or(false) {
+        return Err("图文采集进行中，请先完成或放弃".to_string());
+    }
     // 防御性校验：标题归一化（与 create_session 同口径）
     let trimmed = title.trim().to_string();
     let title: String = if trimmed.is_empty() {

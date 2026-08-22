@@ -69,6 +69,11 @@ pub async fn list_sessions(
     limit: Option<u64>,
     offset: Option<u64>,
 ) -> Result<Vec<SessionListItem>, String> {
+    // v0.11.7（图文会话，ADR-020）：崩溃残留清扫（kind=photo + recording +
+    // 超 24h → failed）——清扫失败不阻断列表（防御：列表永远可用）
+    if let Err(e) = state.db.sweep_stale_photo_sessions(24 * 3600) {
+        eprintln!("[sessions] 图文残留清扫失败（列表照常返回）: {e}");
+    }
     let limit = limit.unwrap_or(50).min(LIST_LIMIT_MAX);
     // REQ-176（v0.7.5）：残留 recording 会话兜底——线程已死但 DB 停留
     // recording（停止链路异常/崩溃，会话31 实证）→ 列表拉取即翻案，

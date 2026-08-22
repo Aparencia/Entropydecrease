@@ -87,6 +87,8 @@ mod commands_contracts;
 // 实时会话链路依赖 Windows 捕获 API（WASAPI/DXGI/COM），非 Windows 平台不编译（TD-027 修复）
 #[cfg(target_os = "windows")]
 mod commands_live;
+// v0.11.7（图文会话，ADR-020）：图文采集命令层（截屏导入第三动线；与实时捕获互斥）
+mod commands_photo;
 mod commands_ai;
 // v0.8.0 M1（REQ-138/139/140）：AI 使能层命令——密钥管理/余额/授权/审计
 mod commands_ai_settings;
@@ -354,6 +356,12 @@ pub fn run() {
             commands::build_draft,
             commands::save_draft_as_note,
             commands::process_to_note,
+            // v0.11.7（图文会话，ADR-020）：图文采集 5 命令
+            commands_photo::start_photo_session,
+            commands_photo::capture_screen_snapshot,
+            commands_photo::save_photo_capture,
+            commands_photo::finish_photo_session,
+            commands_photo::discard_photo_session,
             commands::create_note,
             commands::list_notes,
             commands::get_note,

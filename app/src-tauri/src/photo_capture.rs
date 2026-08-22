@@ -127,7 +127,7 @@ fn ocr_blocks(img: &image::RgbImage, engines: &EnginePool) -> (Vec<crate::types:
     let (w, h) = img.dimensions();
     let scale = if w > OCR_MAX_WIDTH { w as f32 / OCR_MAX_WIDTH as f32 } else { 1.0 };
     let input = if w > OCR_MAX_WIDTH {
-        let new_h = ((h as u64 * OCR_MAX_WIDTH as u64 / w as u64)).max(1) as u32;
+        let new_h = (h as u64 * OCR_MAX_WIDTH as u64 / w as u64).max(1) as u32;
         image::imageops::resize(img, OCR_MAX_WIDTH, new_h, image::imageops::FilterType::Triangle)
     } else {
         img.clone()

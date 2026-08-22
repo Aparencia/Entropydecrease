@@ -241,6 +241,9 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         // v0.8.0 M2（REQ-145）：AI 异步任务注册表 + id 序列
         ai_tasks,
         ai_task_seq,
+        // v0.11.7（图文会话，ADR-020）：图文采集互斥槽（会话 id + 长驻图片库 store）
+        photo_session: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        photo_store: std::sync::Arc::new(std::sync::Mutex::new(None)),
     });
     Ok(())
 }
