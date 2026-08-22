@@ -55,6 +55,11 @@ pub async fn finish_session(state: State<'_, AppState>, id: i64) -> Result<bool,
 }
 
 /// 列出会话（关键词可选；默认第 1 页 50 条，新→旧；v0.7.1 起携带转化状态标记）。
+///
+/// @ai-context: display_no 为单次返回列表内的 rank 语义（按时间序 1..=len）——
+///              offset=0 时页内编号即全局编号（当前前端仅取第 1 页）；
+///              offset>0 时页内 rank 从 1 重新编号，与首页重复，非全局连续；
+///              全局连续编号由 list_session_courses 对全量赋值保证（v0.11.5）。
 #[tauri::command]
 pub async fn list_sessions(
     state: State<'_, AppState>,

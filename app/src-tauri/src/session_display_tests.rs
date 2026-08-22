@@ -40,3 +40,18 @@ fn display_no_ignores_input_order() {
     assert_eq!(a[&2], 2);
     assert_eq!(a[&3], 3);
 }
+
+#[test]
+fn display_no_empty_input_returns_empty_map() {
+    // 边界：空输入不 panic，返回空 map（rank 域为空集）
+    let map = assign_display_no(&[]);
+    assert!(map.is_empty());
+}
+
+#[test]
+fn display_no_single_item_rank_1() {
+    // 边界：单元素恒为 rank 1（起点确定，与时间戳取值无关）
+    let map = assign_display_no(&[(42, 0)]);
+    assert_eq!(map.len(), 1);
+    assert_eq!(map[&42], 1);
+}
