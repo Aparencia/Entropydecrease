@@ -128,6 +128,9 @@ pub fn run_screen_worker(
     // v0.11.5（Task 6）：已生效形态/领域状态（内存跟踪；None=未定）
     let mut current_form: Option<crate::video_profile_spec::ContentForm> = None;
     let mut current_domain_kind: Option<crate::video_profile_domain::DomainKind> = None;
+    // v0.11.5（终审 I-1）：领域用户手动覆写标记——用户裁决 > 自动检测，
+    // 覆写后自动重评不再覆盖该维度（用户手动改过的不自动推翻）
+    let mut domain_user_locked = false;
     // OCR 文本累计（领域自动检测用；去重上限 50 条）
     let mut accumulated_ocr_text: Vec<String> = Vec::new();
     // 重评窗口计数器（form/domain 仅在窗口结算后做一次自动重评）
@@ -420,7 +423,12 @@ pub fn run_screen_worker(
                         changed = true;
                     }
                     if let Some(f) = po.form { current_form = Some(f); changed = true; }
-                    if let Some(d) = po.domain { current_domain_kind = Some(d); changed = true; }
+                    if let Some(d) = po.domain {
+                        current_domain_kind = Some(d);
+                        // 用户手动覆写 → 锁定该维度（重评不覆盖）
+                        domain_user_locked = true;
+                        changed = true;
+                    }
                     if changed {
                         let snapshot = crate::live_session::ProfileOverride {
                             form: current_form,
@@ -475,7 +483,9 @@ pub fn run_screen_worker(
                     asr_opening,
                 };
                 let detected = crate::video_profile_domain::detect_domain(&domain_signal);
-                if detected.kind.is_some()
+                // 终审 I-1：用户已手动覆写领域 → 跳过自动覆盖（用户裁决优先）
+                if !domain_user_locked
+                    && detected.kind.is_some()
                     && detected.kind != current_domain_kind
                     && detected.confidence >= 0.6
                 {
