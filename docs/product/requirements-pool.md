@@ -309,7 +309,7 @@
 | **v0.11.1** | Phase 1 后半（Step 3） | feed 进料口：碎片快速捕获 + fragments 原料层 + DomainTag 归组；功能开关默认关 | **已交付**（2026-08-22） |
 | **v0.11.2** | Phase 2（Step 4+5） | 学习循环统一：FSRS 间隔重复引擎（SM-2 降级；提取优先 + 弹性承诺）+ 组级复习/自测 UI（最小化）+ 北极星/过程指标埋点 | **已交付**（2026-08-22，fsrs crate 引入成功，ADR-018） |
 | **v0.11.3** | Phase 3（Step 6） | 组结算机制：阈值/周期触发 + 核心提炼 + 重复合并 + 低价值归档（防沼泽仪式） | **已交付**（2026-08-22） |
-| **v0.11.4** | 学习循环补齐 + feed 消费闭环 | 内容分型（N13 续：action 卡最小版）+ 周契约视图 UI（弹性承诺呈现层）+ feed 最小消费闭环（碎片生命周期 UI + 碎片卡徽标；开关默认关） | **已立项**（2026-08-22 用户裁决：feed 最小闭环入版、三块合并单版本；REQ-199~201） |
+| **v0.11.4** | 学习循环补齐 + feed 消费闭环 | 内容分型（N13 续：action 卡最小版）+ 周契约视图 UI（弹性承诺呈现层）+ feed 最小消费闭环（碎片生命周期 UI + 碎片卡徽标；开关默认关） | **已交付**（2026-08-22，REQ-199~201 实施） |
 
 > Phase 4（测量层：显影报告/盲测仪器/常模库）以 v0.11.2 碎片升级率数据为启用前置，**门控另议不预占版本号**（防测量层过度建设死法）。
 > 前置事项（Step 0）：REQ-146 真机验收总清（待用户真机执行）+ 七轮安全加固代码批提交（✅ 2026-08-22 已提交 6 个原子 commit）。
@@ -332,9 +332,9 @@
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
 |----|------|--------|------|---------|------|
-| REQ-199 | 内容分型动作卡（N13 续）：flashcards.kind 扩展 fact/action（model 留接口）；动作卡生成规则纯函数（碎片含步骤语义信号→action 卡，front=动作名 back=步骤清单；无信号维持 fact）；golden TDD | P1 | 待评估 | v0.11.4 | v2 §8.1 内容分型最小版；不做动手闭环 UI（N12 另议） |
-| REQ-200 | 周契约视图 UI（弹性承诺呈现层 P31+N10）：contracts 表（group_id/week_start/target_days/target_cards）+ upsert_week_contract 幂等 + week_contract_status（review_logs 周聚合纯函数）；组面板周契约卡（目标设定/完成进度/断签不清零视觉/最小可行日徽标） | P1 | 待评估 | v0.11.4 | 弹性承诺纪律不变：无 streak、无惩罚、欠账不追 |
-| REQ-201 | feed 消费闭环（最小范围）：delete_fragment 命令 + list_group_fragments/update_fragment_group 接线；feed 组展开区碎片列表（文本+图片缩略，resolve 复用 app_data_dir）+ 删除/移出 + 空态引导；复习面"碎片卡"徽标（fragmentId） | P1 | 待评估 | v0.11.4 | 开关默认关（v4 §11.3）；零新界面；碎片→笔记升级不做（身份诚实）；契约二兑现 |
+| REQ-199 | 内容分型动作卡（N13 续）：flashcards.kind 扩展 fact/action（model 留接口）；动作卡生成规则纯函数（碎片含步骤语义信号→action 卡，front=动作名 back=步骤清单；无信号维持 fact）；golden TDD | P1 | 已实施 | v0.11.4 | v2 §8.1 内容分型最小版；不做动手闭环 UI（N12 另议）；**代码已交付（2026-08-22，card_generate 分型规则 + 5 个 golden 用例，22 测通过）** |
+| REQ-200 | 周契约视图 UI（弹性承诺呈现层 P31+N10）：contracts 表（group_id/week_start/target_days/target_cards）+ upsert_week_contract 幂等 + week_contract_status（review_logs 周聚合纯函数）；组面板周契约卡（目标设定/完成进度/断签不清零视觉/最小可行日徽标） | P1 | 已实施 | v0.11.4 | 弹性承诺纪律不变：无 streak、无惩罚、欠账不追；**代码已交付（2026-08-22，week_contract 纯函数 16 测通过 + contracts 表 + 周契约卡）** |
+| REQ-201 | feed 消费闭环（最小范围）：delete_fragment 命令 + list_group_fragments/update_fragment_group 接线；feed 组展开区碎片列表（文本+图片缩略，resolve 复用 app_data_dir）+ 删除/移出 + 空态引导；复习面"碎片卡"徽标（fragmentId） | P1 | 已实施 | v0.11.4 | 开关默认关（v4 §11.3）；零新界面；碎片→笔记升级不做（身份诚实）；契约二兑现；**代码已交付（2026-08-22，delete/移组/图片 resolve 三命令 + feed 碎片列表 + 复习面徽标）** |
 
 ### V1.0 · 体验增强（远期）
 

@@ -5,6 +5,15 @@
 
 ## [Unreleased] - 2026-08-21
 
+### v0.11 大目标系列：笔记组与学习循环（2026-08-22 全系列交付，详见 [docs/versions/v0.11.md](docs/versions/v0.11.md)）
+
+- **v0.11.0 笔记组基建·容器侧（REQ-195~198）**：note_groups 表（terrain container/feed + kind course/topic/standalone + domain_tag + series_key 唯一）+ notes.group_id 幂等迁移；group_route 结构密度路由纯函数（加权投票三态 + 7 个 golden 用例）；容器侧组化接线（会话→笔记自动归课程组/主题组/独立组）；组侧栏 UI（路由理由可见/一键改判/笔记移动）
+- **v0.11.1 feed 进料口（功能开关默认关）**：fragments 独立原料层（碎片不是笔记）；feature_flags 开关机制（feed_capture 默认关 + 后端二次校验）；碎片快速捕获（文本 + 剪贴板图片 base64，解码验证落盘）；DomainTag 自动归 feed 主题组；设置页开关 + 组侧栏捕获区
+- **v0.11.2 学习循环统一（REQ-199 前置基建）**：FSRS-6 调度器（fsrs crate，ADR-018；无 streak 弹性承诺）；flashcards/review_logs/metrics_events 三表；组→闪卡本地规则生成（词汇表术语卡 + 碎片多句卡，幂等查重）；复习面最小化 UI（front→回忆→back→四档评分）；北极星/过程指标埋点 + learning_metrics 读数
+- **v0.11.3 组结算机制（防沼泽仪式）**：settlement 双触发判据（≥50 条阈值 / ≥20 条且 ≥90 天周期）；重复合并判据（bigram 包含度 ≥0.7 贪心一对一）；结算仪式（计划呈现→确认→执行）+ settlements 留痕 + group_settled 埋点；归档不删除可恢复
+- **v0.11.4 学习循环补齐 + feed 消费闭环（REQ-199~201）**：内容分型 action 卡最小版（步骤信号→kind=action，front=动作名 back=步骤清单，golden TDD）；周契约视图 UI（contracts 表 + upsert_week_contract 幂等 + week_contract_status 周聚合纯函数 + 周契约卡：目标设定/进度/断签不清零视觉/最小可行日徽标）；feed 消费闭环（delete_fragment/update_fragment_group/resolve_fragment_image 三命令 + feed 组碎片列表（文本+图片缩略+删除/移出+空态引导）+ 复习面碎片卡/动作卡徽标）
+- 验收：card_generate 22 测 + week_contract 16 测独立验证通过；cargo build + clippy 零错误；前端 tsc + vite + vitest 35 通过；**环境备注**：cargo test 运行受阻（test harness 0xc0000139，2026-08-12 Windows 更新引入的加载期兼容问题，与本版代码无关，纯函数已独立编译验证）
+
 ### 视频档案框架 v2 四维解耦（任务 5：v0.9.0 M1~M5 代码建设，2026-08-21）
 
 - **四维解耦数据模型（REQ-188）**：新增 `video_profile_spec.rs` + `video_profile_spec_data.rs`——形态 7 类（讲授/实操/解说/对话/题目/代码/音频）× 画面档 4 档（高/中/低/无）× 领域 × 语言 四维解耦；13→7 映射（whiteboard→讲授=高、podcast/live→音频=无档）；参数矩阵（形态→产物模板+后处理、画面档→采样/OCR/存储）；记忆库 kind 映射迁移（MemoryEntry.form 字段 + remember_form/lookup_form，旧 JSON 零回归）；新 command（video_profile_for_spec / video_profile_spec_by_kind / remember_video_profile_form）
