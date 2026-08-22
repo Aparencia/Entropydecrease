@@ -228,6 +228,8 @@ mod outline;
 mod playback_region;
 // v0.7.0 M2（REQ-125）：播放器行为信号（暂停检测 + M17 倍速缩放采样）
 mod player_behavior;
+// v0.11.7（图文会话，ADR-020）：图文截图保存 + OCR 编排（业务模块，命令层在 commands_photo）
+mod photo_capture;
 mod practice_detect;
 mod quality_report;
 mod purify_config;
