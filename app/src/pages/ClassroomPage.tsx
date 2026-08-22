@@ -67,15 +67,15 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   const [lastNote, setLastNote] = useState<Note | null>(null);
   const [status, setStatus] = useState("");
 
-  const refreshWindows = useCallback(async () => {
-    setWindowsLoading(true);
+  const refreshWindows = useCallback(async (background = false) => {
+    if (!background) setWindowsLoading(true);
     try {
       const list = await invoke<WindowInfo[]>("list_windows");
       setWindows(list);
     } catch (e) {
       setStatus(`窗口枚举失败: ${e}`);
     } finally {
-      setWindowsLoading(false);
+      if (!background) setWindowsLoading(false);
     }
   }, []);
 

@@ -13,7 +13,7 @@ interface Props {
   windows: WindowInfo[];
   selected: WindowInfo | null;
   onSelect: (win: WindowInfo) => void;
-  onRefresh: () => void;
+  onRefresh: (background?: boolean) => void;
   loading: boolean;
   disabled?: boolean;
 }
@@ -87,8 +87,8 @@ export function WindowSelectCard({ windows, selected, onSelect, onRefresh, loadi
     if (disabled) return;
     const next = !open;
     setOpen(next);
-    // 首次展开且列表为空时顺手刷新，减少一次点击
-    if (next && windows.length === 0 && !loading) onRefresh();
+    // v0.11.5：展开时自动后台刷新（旧列表先显，完成替换——无闪烁）
+    if (next) onRefresh(true);
   };
 
   const handlePick = (win: WindowInfo) => {
@@ -145,7 +145,7 @@ export function WindowSelectCard({ windows, selected, onSelect, onRefresh, loadi
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 4px 6px" }}>
             <span style={{ fontSize: 11, color: "#6b7280" }}>推荐窗口</span>
-            <button onClick={onRefresh} disabled={loading} style={{ fontSize: 11, color: "#0d9488", cursor: "pointer" }}>
+                          <button onClick={() => onRefresh()} disabled={loading} style={{ fontSize: 11, color: "#0d9488", cursor: "pointer" }}>
               {loading ? "加载中…" : "⟳ 刷新"}
             </button>
           </div>
