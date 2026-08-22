@@ -45,6 +45,7 @@
 | app/src-tauri/src/analysis_tests.rs | 341 | 分析编排测试域（档案门控矩阵 + REQ-108 事件消费 + M2 三字段）单模块 #[path] 挂载 | 若再增长：事件消费组拆至 analysis_events_tests.rs |
 | app/src-tauri/src/streaming_asr_tests.rs | 340 | 流式 ASR 测试域（端点处理/静音判定/段切分回归）单模块 #[path] 挂载 | 若再增长：端点处理组拆至 streaming_endpoint_tests.rs |
 | app/src-tauri/src/commands_ai.rs | 340 | v0.5.0 起 AI 复核命令域（边界批量复核/配额/缓存/审计 + 结构渲染接线）；与 note_filter_ai（纯逻辑）分层 | 若再增长：批量复核循环拆至 commands_ai_review.rs |
+| app/src-tauri/src/ai_client.rs | 334 | v0.11.6 M1（AiClient::from_provider / from_settings_with_store / is_fallbackable / fallback_provider_ids）——Provider 解析与错误分类内聚于 AiClient 域，构造入口与降级链纯函数同文件便于单测 | 若再增长：fallback_provider_ids 拆至 ai_fallback.rs |
 | app/src-tauri/src/screens.rs | 332 | v0.7.3（REQ-155/156/160）：画面要点屏构建编排（分组/聚类/图匹配 IO）+ 可消费块过滤扩展——编排与纯函数分层（纯函数在 screen_merge.rs） | 若再增长：filter_usable_blocks 拆至 screen_filter.rs |
 | app/src-tauri/src/ocr_cache.rs | 329 | OCR 结果缓存域（内容指纹键/容量淘汰/命中率统计）内聚；缓存策略与指纹算法共享上下文 | 若再增长：指纹算法拆至 ocr_fingerprint.rs |
 | app/src-tauri/src/ai_refine_task.rs | 322 | v0.8.0 F2-B4 拆分产物：精修任务执行域（任务编排/并发切片 worker 池/单片重试/部分成功/审计/落库）——并发编排与状态流转内聚 | 若再增长：refine_slices_concurrent 拆至 ai_refine_task_workers.rs |
