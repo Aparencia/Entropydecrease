@@ -14,14 +14,16 @@ use super::*;
 
 /// 编辑距离（朴素 DP，O(n*m)；水印文本通常 ≤30 字符，无需三数组优化）。
 ///
-/// @ai-context: 长度差 >2 直接剪枝返回 3（>2 即不聚类）——避免对长文本开
-///              O(n*m) 矩阵。
+/// @ai-context: 长度差 >2 直接剪枝返回最大距离 n+m（>2 即不聚类）——避免对
+///              长文本开 O(n*m) 矩阵。
 pub(crate) fn edit_distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
     let (n, m) = (a.len(), b.len());
+    // 长度差超编辑距离阈值（2）→ 直接返回最大可能距离（n+m，超过阈值即可，避免无用计算）
+    // v0.11.5 审查修复：原固定返回 3（脆性——阈值变后语义偏移），改回最大距离
     if n.abs_diff(m) > 2 {
-        return 3;
+        return n + m;
     }
     // 滚动两行 DP（前一行 + 当前行）
     let mut prev: Vec<usize> = (0..=m).collect();
@@ -99,8 +101,8 @@ pub(crate) fn cluster_texts(blocks: &[WatermarkInput]) -> BTreeMap<(String, Stri
 ///              误杀——沿用 detect_watermarks 的内容变化证据）。
 /// @ai-context: region_key=None 的块跳过（区域级判定需要区域概念；无 bbox
 ///              降级路径由 detect_watermarks 的全局文本不变性覆盖）。
-/// @ai-context: lib 内暂无调用方（C 层接线留后续任务）——测试目标已覆盖；
-///              接线后移除 allow(dead_code)。
+/// @ai-context: lib 内暂无调用方（C 层接线留后续任务，目标接线版本：v0.12.0）
+///              ——测试目标已覆盖；接线后移除 allow(dead_code)。
 #[allow(dead_code)]
 pub fn detect_region_watermarks(blocks: &[WatermarkInput], cfg: &WatermarkConfig) -> WatermarkResult {
     // ① 帧签名（整帧内容变化证据，与 detect_watermarks 同款）

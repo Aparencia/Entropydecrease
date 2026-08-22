@@ -48,7 +48,8 @@ pub enum DomainKind {
 }
 
 impl DomainKind {
-    /// 前端展示名（检测卡 v2 下拉用；登记豁免 dead_code——M5 接线）。
+    /// 前端展示名（检测卡 v2 下拉用；登记豁免 dead_code——M5 接线，
+    /// 目标激活版本：v0.12.0）。
     #[allow(dead_code)]
     pub fn label(self) -> &'static str {
         match self {
@@ -93,7 +94,7 @@ impl DomainKind {
     }
 
     /// 领域标识（kebab-case，与 parse/serde 同口径；落库/传输用，
-    /// 登记豁免 dead_code——会话落库接线在 M5 检测卡 v2）。
+    /// 登记豁免 dead_code——会话落库接线在 M5 检测卡 v2，目标激活版本：v0.12.0）。
     #[allow(dead_code)]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -117,7 +118,8 @@ impl DomainKind {
 
     /// 区域预期（REQ-190 作用链）：数学→公式区、代码→code 区、设计→图片区；
     /// 其余无强预期（None——不改变现状区域权重）。
-    /// 登记豁免 dead_code：区域预期接线在 M4 平台适配（OCR 标签通用化后生效）。
+    /// 登记豁免 dead_code：区域预期接线在 M4 平台适配（OCR 标签通用化后生效），
+    /// 目标激活版本：v0.12.0。
     #[allow(dead_code)]
     pub fn expected_region(self) -> Option<crate::layout_analyzer::RegionKind> {
         match self {
@@ -281,7 +283,8 @@ pub fn hotword_candidates(kind: DomainKind) -> Vec<String> {
 }
 
 /// 领域 → 术语表筛选词（glossary 构建用：仅保留命中领域词表的候选术语）。
-/// 登记豁免 dead_code：术语筛选接线在产物层（M5 叙事变体后随模板消费）。
+/// 登记豁免 dead_code：术语筛选接线在产物层（M5 叙事变体后随模板消费），
+/// 目标激活版本：v0.12.0。
 #[allow(dead_code)]
 pub fn filter_glossary(kind: DomainKind, candidates: &[String]) -> Vec<String> {
     let seeds = crate::video_profile_domain_data::seed_words(kind);

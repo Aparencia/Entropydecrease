@@ -329,10 +329,13 @@ pub fn run_screen_worker(
                     tier_applied_tier.map(|t| t.as_str()).unwrap_or("medium"),
                 );
                 // v0.11.5（Task 6）：OCR 文本累计（去重→领域检测用）
+                // v0.11.5 审查修复（A6）：FIFO 上限 50→100——领域检测信号缓存
+                // 保守放大，避免 B站选集证据（`P3/12`/`第3集/共12集`）在
+                // 150s 重评窗口前被 FIFO 淘汰而丢失平台证据
                 for t in &last_changed_texts {
                     if !accumulated_ocr_text.contains(t) {
                         accumulated_ocr_text.push(t.clone());
-                        if accumulated_ocr_text.len() > 50 {
+                        if accumulated_ocr_text.len() > 100 {
                             accumulated_ocr_text.remove(0);
                         }
                     }
@@ -423,6 +426,11 @@ pub fn run_screen_worker(
                         changed = true;
                     }
                     if let Some(f) = po.form { current_form = Some(f); changed = true; }
+                    // v0.11.5 审查修复（A3）：domain 为 None（用户未选领域）→
+                    // 重置锁定，重新启用自动检测（领域重评不再跳过覆盖）
+                    if po.domain.is_none() && domain_user_locked {
+                        domain_user_locked = false;
+                    }
                     if let Some(d) = po.domain {
                         current_domain_kind = Some(d);
                         // 用户手动覆写 → 锁定该维度（重评不覆盖）
@@ -441,6 +449,10 @@ pub fn run_screen_worker(
                             "tier": tier_applied_tier.map(|t| t.as_str()),
                             "domain": current_domain_kind.map(|d| d.as_str()),
                         }));
+                    } else {
+                        // v0.11.5 审查修复（A2）：override 取到全空值（command 层
+                        // 应已拒绝全空，此为防御）
+                        eprintln!("[LiveSession] profile_override 取到全空值（command 层应已拒绝全空，此为防御）");
                     }
                 }
             }

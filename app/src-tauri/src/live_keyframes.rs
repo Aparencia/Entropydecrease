@@ -136,6 +136,9 @@ pub fn handle_full_frame(
 
 /// 变化区域文本（v0.11.5 Task 2）：kept 过滤后仅保留与 grid_diff 变化包围盒
 /// 相交的块文本（帧坐标）。防御降级：无变化（bounds=None）/缺 bbox → 整帧。
+/// v0.11.5 审查修复（A1）：bbox 物理约束守卫——w/h 非正（异常数据）的块跳过
+/// （不参与变化区域过滤，也不触发整帧降级——缺 bbox 才降级，非法值按损坏
+/// 数据逐块丢弃）。
 fn changed_region_texts(
     kept: &[&crate::types::OcrBlock],
     grid: &crate::capture::grid_diff::GridDiff,
@@ -148,6 +151,11 @@ fn changed_region_texts(
     kept.iter()
         .filter_map(|b| {
             let tb = b.bbox.as_ref()?;
+            // v0.11.5 审查修复（A1）：bbox 物理约束守卫——w/h 非正（异常数据）
+            // → 跳过该块（不参与变化区域过滤，也不触发整帧降级）
+            if tb.w <= 0.0 || tb.h <= 0.0 {
+                return None;
+            }
             // TextBox（x/y/w/h，帧坐标）→ Rect（left/top/right/bottom，相交口径）
             // Minor #2 修复：bottom/right 用 ceil() 防止亚像素截断漏判
             // （left/top 用 floor 语义已由 trunc 隐含满足——x/y 非负时
