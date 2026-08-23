@@ -63,8 +63,15 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 rusqlite = { version = "0.32", features = ["bundled"] }
-sherpa-onnx = "1.13"
-oar-ocr = { version = "0.9", features = ["auto-download"] }
+sherpa-onnx = { version = "1.13", default-features = false, features = ["shared"] }
+# v0.12.0 构建修复：sherpa-onnx 由 static（MT 静态库，内嵌 onnxruntime 符号）切 shared
+# （DLL 动态链接）——否则与 oar-ocr 的 ort-sys（MD 动态链接 onnxruntime.dll）链接时
+# 发生 LNK2038 RuntimeLibrary 冲突 + LNK2005 onnxruntime 符号重复；shared 包
+# sherpa-onnx-v1.13.5-win-x64-shared-MT-Release-lib.tar.bz2 在 sherpa-archive/。
+oar-ocr = { version = "0.9", default-features = false, features = ["simd"] }
+# v0.12.0 构建修复：oar-ocr 关 default（download-binaries 下载 onnxruntime 会请求
+# cdn.pyke.io 被 TLS 拦截）——本地 ORT 经 .cargo/config.toml ORT_LIB_LOCATION 链接，
+# simd 保留默认推理加速；CUDA 经 ocr-cuda feature（见 [features]）。
 # 内存图像 OCR（TD-025）：oar-ocr 的 predict 接收 image::RgbImage，实时链路避免磁盘临时 BMP；
 # 版本与 oar-ocr 0.9 依赖的 image 0.25.6 对齐，否则类型不兼容（同 crate 不同版本是两个类型）
 image = "0.25"
