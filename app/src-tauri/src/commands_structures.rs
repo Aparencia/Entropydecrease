@@ -93,9 +93,16 @@ fn manual_capture_inner(
 ) -> std::result::Result<StructureImageRecord, String> {
     // ① 定位屏卡 image_ref（复用屏卡体系；按 first_seen 精确定位——聚类屏
     //    屏号不唯一；无图 → 明确错误，前端禁用按钮）
+    // v0.12.0 M5 补完成：画面要点屏按会话类型分派（photo=OCR 屏；video=关键帧
+    // 纯图屏）——框选截取入口与详情/预览同一分派，防屏卡定位错表
     let blocks = state.db.list_ocr_blocks(session_id).map_err(|e| e.to_string())?;
     let images_dir = session_images_dir(&state.data_dir, session_id);
-    let screens = crate::screens::build_screens(&blocks, Some(&images_dir));
+    let kind = state
+        .db
+        .get_session(session_id)
+        .map_err(|e| e.to_string())?
+        .and_then(|s| s.kind);
+    let screens = crate::screens::build_view_screens(kind.as_deref(), session_id, &blocks, Some(&images_dir));
     let screen = screens
         .iter()
         .find(|s| s.first_seen_ms == first_seen_ms)

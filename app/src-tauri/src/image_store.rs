@@ -108,6 +108,11 @@ impl SessionImageStore {
     /// @ai-context: 修复：双指纹去重与 save_frame 同口径——旧实现无去重，
     ///              视频进度条等静态误判区域每 tick 重复存图（会话 15 实测
     ///              49 张全同垃圾 crop，耗尽与 full 共享的 50 张预算）。
+    /// @ai-context: v0.12.0 M5 补完成后无生产调用方（视频会话区域 OCR 下线——
+    ///              唯一写入方 region_ocr_blocks 退役；crop/ 列表消费方
+    ///              commands_refine_inner 仍在），存储层保留（图文/结构场景
+    ///              未来可复用；单测覆盖）——dead_code 豁免（机制先行模式）。
+    #[allow(dead_code)]
     pub fn save_crop(
         &mut self,
         timestamp_ms: u64,

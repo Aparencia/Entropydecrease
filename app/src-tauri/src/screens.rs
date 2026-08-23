@@ -50,6 +50,48 @@ pub fn build_screens(blocks: &[SessionOcrBlock], images_dir: Option<&Path>) -> V
     screens
 }
 
+/// 关键帧纯图屏（v0.12.0 M5 补完成）：视频会话画面要点 = 关键帧纯图。
+///
+/// @ai-context: 视频会话不再识别画面要点（ADR-023）——无 full OCR 块可聚屏；
+///              画面要点以归档 full 图直接成屏（一张图 = 一张屏卡；无标题/
+///              正文/标签/结构）。真实画面要点经 vision-exp 精修提取，原料层
+///              纯图存证。屏卡区间 = 图时间戳（与参考图集同一数据源）。
+pub fn build_keyframe_screens(session_id: i64, images_dir: Option<&Path>) -> Vec<SessionScreen> {
+    let Some(dir) = images_dir else { return Vec::new() };
+    list_full_image_timestamps(dir)
+        .into_iter()
+        .map(|ts| SessionScreen {
+            session_id,
+            screen_id: None,
+            first_seen_ms: ts,
+            last_seen_ms: ts,
+            title: None,
+            body: Vec::new(),
+            labels: Vec::new(),
+            image_ref: Some(format!("full/{}.webp", ts)),
+            structure: Vec::new(),
+        })
+        .collect()
+}
+
+/// 画面要点屏构建入口（按会话类型分派）：photo=OCR 文本屏（图文采集正文即
+/// OCR——不变）；video（kind≠photo）=关键帧纯图屏。
+///
+/// @ai-context: v0.12.0 M5 补完成：视频会话画面要点 = 纯图片（无 OCR 文字）——
+///              原料视图/笔记预览/框选截取共用同一分派，单点定义避免各出口漂移。
+pub fn build_view_screens(
+    kind: Option<&str>,
+    session_id: i64,
+    blocks: &[SessionOcrBlock],
+    images_dir: Option<&Path>,
+) -> Vec<SessionScreen> {
+    if kind == Some("photo") {
+        build_screens(blocks, images_dir)
+    } else {
+        build_keyframe_screens(session_id, images_dir)
+    }
+}
+
 /// 可消费块过滤（v0.7.5 扩展）：低分/空文本/UI 垃圾/水印 + 单字符/边缘条带/
 /// 视频页共现/错字纠错 → 净化的可消费块 + 纠错块数。
 ///

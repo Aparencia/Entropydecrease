@@ -1,10 +1,11 @@
 //! 导入关键帧画面处理（REQ-015，ADR-008；TD-037 区域裁剪优化）。
 //!
-//! @ai-context: "区域裁剪 → 识别 → 信息整合"：关键帧按语义分两路识别——
-//!              中部区域（画面要点，region=full，避开标题栏/字幕带）与
-//!              底部区域（烧录字幕，region=subtitle，与实时链路 region 语义一致）。
-//!              烧录字幕是 L1/L2 探测不到的硬字幕，底部裁剪保证其不被丢弃。
-//! @ai-context: 两路均缩至 960px 宽（OCR 成本近平方下降，相对全帧直识别快 ~4 倍）；
+//! @ai-context: 视频导入关键帧处理在 v0.12.0 M5 补完成后只做**字幕带 OCR**——
+//!              中部区域（画面要点 OCR，region=full）随 ADR-023 下线：视频会话
+//!              不再识别画面要点，关键帧纯图归档（存图不识别；真实画面要点经
+//!              vision-exp 精修提取）。底部区域（烧录字幕，region=subtitle，
+//!              与实时链路 region 语义一致）保留——本地 OCR 只做字幕（视频）。
+//! @ai-context: 均缩至 960px 宽（OCR 成本近平方下降，相对全帧直识别快 ~4 倍）；
 //!              帧间文本集合去重——10s 采样下静态画面（老师站桩）不重复落库。
 //! @ai-context: 本模块纯图像/文本逻辑（无 ffmpeg 依赖），管线编排在 import.rs。
 
@@ -12,9 +13,6 @@ use crate::db::Db;
 use crate::engine::EnginePool;
 use crate::types::NewSessionOcrBlock;
 
-/// 中部区域上下边界（帧高度比例）：顶部 5%（避开标题栏）~ 75%（避开字幕带）。
-const MIDDLE_TOP_RATIO: f32 = 0.05;
-const MIDDLE_BOTTOM_RATIO: f32 = 0.75;
 /// 底部区域（烧录字幕带）上边界（比例）。
 const BOTTOM_TOP_RATIO: f32 = 0.75;
 /// OCR 输入最大宽度（与实时链路 P4 同口径）。
@@ -61,35 +59,30 @@ pub fn same_texts(a: &[String], b: &[String]) -> bool {
     x == y
 }
 
-/// 单帧两路识别落库：中部（full）+ 底部（subtitle），各自帧间去重。
+/// 单帧字幕带识别落库（region=subtitle，与实时链路语义一致）。
 ///
+/// @ai-context: v0.12.0 M5 补完成：中部（full）画面要点 OCR 下线——视频会话
+///              不再识别画面要点（ADR-023），关键帧纯图归档在 import.rs；
+///              本函数只做底部烧录字幕（L1/L2 探测不到的硬字幕）。
 /// @ai-context: 识别失败静默跳过（下帧重试语义）；落库失败记录告警不阻断
-///              （与实时链路 OCR 块同口径，画面要点为增强内容）。
+///              （与实时链路 OCR 块同口径，字幕为增强内容）。
 /// @ai-context: REQ-117（v0.7.0 M2，PRE-O6）：落库前过 is_ui_junk 源头过滤
-///              ——导入/实时双入口口径统一（播放器时间码/水印不进画面要点）。
+///              ——导入/实时双入口口径统一（播放器时间码/水印不落库）。
 /// @ai-context: 参数为管线上下文传递（DB/引擎/会话/时间戳/图像/去重状态/黑名单），
 ///              登记 clippy 豁免（与 persist_final 同模式）。
 #[allow(clippy::too_many_arguments)]
-pub fn ocr_keyframe(
+pub fn ocr_keyframe_subtitles(
     db: &Db,
     engines: &EnginePool,
     session_id: i64,
     timestamp_ms: u64,
     image: &image::RgbImage,
-    last_full: &mut Vec<String>,
     last_subtitle: &mut Vec<String>,
     ui_junk: &crate::ui_junk::UiJunkList,
 ) -> usize {
     let (orig_w, orig_h) = image.dimensions();
-    // 中部区域 → 画面要点（region=full，避开字幕带干扰）
-    let mut count = 0usize;
-    if let Some(mid) = crop_and_scale(image, MIDDLE_TOP_RATIO, MIDDLE_BOTTOM_RATIO, OCR_MAX_WIDTH) {
-        count += recognize_region(
-            db, engines, session_id, timestamp_ms, mid, "full", MIDDLE_TOP_RATIO, orig_w, orig_h,
-            last_full, ui_junk,
-        );
-    }
     // 底部区域 → 烧录字幕（region=subtitle，与实时链路语义一致）
+    let mut count = 0usize;
     if let Some(bot) = crop_and_scale(image, BOTTOM_TOP_RATIO, 1.0, OCR_MAX_WIDTH) {
         count += recognize_region(
             db, engines, session_id, timestamp_ms, bot, "subtitle", BOTTOM_TOP_RATIO, orig_w, orig_h,

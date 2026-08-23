@@ -384,3 +384,50 @@ fn duplicate_image_ref_kept_only_on_first_screen() {
     assert_eq!(screens[0].image_ref.as_deref(), Some("full/569515.webp"));
     assert_eq!(screens[1].image_ref, None);
 }
+
+// ── v0.12.0 M5 补完成：视频会话画面要点 = 关键帧纯图屏（ADR-023）──
+
+#[test]
+fn keyframe_screens_one_per_archived_image() {
+    // Arrange：归档 3 张 full 图（乱序时间戳——升序输出契约）
+    let dir = tmp_images_dir("keyframe", &[30_000, 10_000, 20_000]);
+    // Act
+    let screens = crate::screens::build_keyframe_screens(1, Some(&dir));
+    // Assert：一张图 = 一屏；升序；image_ref 直引归档图；无任何 OCR 文本
+    assert_eq!(screens.len(), 3);
+    assert_eq!(screens[0].first_seen_ms, 10_000);
+    assert_eq!(screens[0].image_ref.as_deref(), Some("full/10000.webp"));
+    assert_eq!(screens[1].first_seen_ms, 20_000);
+    assert_eq!(screens[2].image_ref.as_deref(), Some("full/30000.webp"));
+    assert!(screens.iter().all(|s| s.title.is_none() && s.body.is_empty() && s.labels.is_empty() && s.structure.is_empty()), "纯图屏无文本字段");
+}
+
+#[test]
+fn keyframe_screens_empty_without_images() {
+    // Arrange & Act：无归档图 / 目录不存在 → 空屏（诚实降级）
+    let dir = tmp_images_dir("keyframe-empty", &[]);
+    assert!(crate::screens::build_keyframe_screens(1, Some(&dir)).is_empty());
+    assert!(crate::screens::build_keyframe_screens(1, None).is_empty());
+}
+
+#[test]
+fn view_screens_dispatches_by_kind() {
+    // Arrange：photo 会话一块 full OCR + video 会话同块——分派应按 kind 分流
+    let dir = tmp_images_dir("dispatch", &[5_000]);
+    let blocks = vec![
+        blk(1, 5_000, "图文内容", Some(1), Some((100.0, 100.0, 300.0, 40.0)), None),
+    ];
+    // Act（photo）→ OCR 文本屏；Assert：标题保留
+    let photo = crate::screens::build_view_screens(Some("photo"), 1, &blocks, Some(&dir));
+    assert_eq!(photo.len(), 1);
+    assert_eq!(photo[0].title.as_deref(), Some("图文内容"));
+    // Act（video/None）→ 关键帧纯图屏；Assert：无文本、image_ref 直引
+    let video = crate::screens::build_view_screens(None, 1, &blocks, Some(&dir));
+    assert_eq!(video.len(), 1);
+    assert_eq!(video[0].image_ref.as_deref(), Some("full/5000.webp"));
+    assert!(video[0].title.is_none());
+    // Act（video + 无图）→ 空屏（不落回 OCR 文本屏——视频会话默认纯图语义）
+    let empty_dir = tmp_images_dir("dispatch-empty", &[]);
+    let video_empty = crate::screens::build_view_screens(None, 1, &blocks, Some(&empty_dir));
+    assert!(video_empty.is_empty(), "视频会话无图即无屏（纯图语义，不回退 OCR）");
+}

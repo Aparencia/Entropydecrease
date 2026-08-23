@@ -9,14 +9,22 @@
 use crate::layout_analyzer::FrameGrid;
 
 /// 目标网格宽（格）。
+/// @ai-context: v0.12.0 M5 补完成：grid_from_bgra 无生产调用方（视频会话版面
+///              分析随全帧 OCR 下线——ADR-023），仅 structure_capture 测试交叉
+///              校验网格口径使用——dead_code 豁免（机制先行模式，image_caption 先例）。
+#[allow(dead_code)]
 const TARGET_COLS: u32 = 32;
 /// 目标网格高（格）。
+#[allow(dead_code)]
 const TARGET_ROWS: u32 = 18;
 
 /// BGRA8 帧 → 版面分析网格（纯函数；尺寸/数据不匹配返回 None）。
 ///
 /// @ai-context: 每格采样其中心像素的亮度（Rec.601：0.299R+0.587G+0.114B，
 ///              BGRA 存储序 = [B,G,R,A]）；网格尺寸不足时退化为 1 格。
+/// @ai-context: v0.12.0 M5 补完成：生产调用方随视频会话版面分析下线（ADR-023），
+///              保留纯函数与测试（structure_capture 同口径交叉校验）。
+#[allow(dead_code)]
 pub fn grid_from_bgra(bgraw: &[u8], width: u32, height: u32) -> Option<FrameGrid> {
     if width == 0 || height == 0 || bgraw.len() != (width as usize) * (height as usize) * 4 {
         return None;

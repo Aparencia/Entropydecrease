@@ -349,15 +349,19 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
             ))}
           </div>
 
-          {/* 画面要点（v0.7.3 屏卡流：区间+标题+正文+标签+配图+结构徽标；可展开块级明细复查） */}
+          {/* 画面要点（v0.7.3 屏卡流：区间+标题+正文+标签+配图+结构徽标；可展开块级明细复查）
+              v0.12.0 M5 补完成：视频会话（kind≠photo）画面要点 = 关键帧纯图（无 OCR 文字）；
+              图文会话（kind=photo）保持 OCR 文本屏 —— 头部文案与原始块提示随类型分派 */}
           <h3 style={{ fontSize: 13, margin: "16px 0 6px" }}>
-            画面要点（OCR）· {detail.screens.length} 屏
+            {detail.session.kind === "photo" ? "画面要点（OCR）" : "画面要点（关键帧纯图）"} · {detail.screens.length} 屏
             <span style={{ color: "#9ca3af", fontWeight: 400 }}>
-              {detail.screens.length === 0 ? "" : `（原始 ${detail.ocr_blocks.length} 块）`}
+              {detail.screens.length === 0 || detail.session.kind !== "photo" ? "" : `（原始 ${detail.ocr_blocks.length} 块）`}
             </span>
           </h3>
           {detail.screens.length === 0 && (
-            <p style={{ fontSize: 12, color: "#9ca3af" }}>本会话无画面识别内容</p>
+            <p style={{ fontSize: 12, color: "#9ca3af" }}>
+              {detail.session.kind === "photo" ? "本会话无画面识别内容" : "本会话无关键帧图"}
+            </p>
           )}
           {detail.screens.map((s, i) => {
             // 块级明细（原料复查）：预构建分组直取（M7：替代逐屏 O(n×m) filter）

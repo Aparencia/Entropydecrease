@@ -180,8 +180,6 @@ pub fn process_frame(
     last_full_texts: &mut Vec<String>,
     stats: &mut ScreenStats,
     roi_tracker: &mut crate::region_tracker::RoiTracker,
-    // M3/REQ-047：版面缓存（事件帧触发——同版面复用，变化才重分析）
-    layout_cache: &mut crate::layout_cache::LayoutCache,
     // M6/REQ-051：关键帧样本缓冲（全帧分支收集，停止时投票）
     frame_samples: &mut Vec<crate::frame_cluster::FrameSample>,
     // M6/REQ-051：关键帧归档状态（新文本 + 间隔触发存图）
@@ -352,82 +350,14 @@ pub fn process_frame(
         return;
     }
 
-    // M3/REQ-047 + M4/REQ-048：版面分析（事件帧触发）——全帧分支做区域分类，
-    // 结果经缓存复用（同版面零重分析）；区域存在时走分区域 OCR（M4）
-    let mut layout_regions: Vec<crate::layout_analyzer::LayoutRegion> = Vec::new();
-    // v0.7.3（REQ-155）：版面指纹变化信号（reused=false=新版面→新屏；
-    // None=无版面信息，仅用相似/gap 判定）
-    let mut layout_changed: Option<bool> = None;
-    if !is_subtitle {
-        if let Some(grid) = crate::frame_features::grid_from_bgra(&frame.bgraw, frame.width, frame.height) {
-            let (regions, reused) =
-                crate::layout_cache::analyze_or_reuse(layout_cache, &grid, frame.timestamp_ms);
-            layout_changed = Some(!reused);
-            if !reused && !regions.is_empty() {
-                // 新版面：分类构成（开发期日志；区域列表驱动分区域 OCR）
-                let summary: Vec<String> = regions
-                    .iter()
-                    .map(|r| format!("{:?}@{}x{}+{}+{}", r.kind, r.w, r.h, r.x, r.y))
-                    .collect();
-                eprintln!("[Layout] 会话 {} 版面区域: {}", session_id, summary.join(", "));
-            }
-            // 网格坐标 → 帧像素坐标（crop_spec/map_to_frame 按像素消费；修复：
-            // 此前网格坐标被当像素裁剪，区域错位漏识别——layout_analyzer 与
-            // region_ocr 注释互相声称对方换算，实际谁都没做）
-            layout_regions = crate::frame_features::regions_to_frame(
-                &regions,
-                grid.cols,
-                grid.rows,
-                frame.width,
-                frame.height,
-            );
-        }
-    }
-
-    // TD-025：BGRA8 帧 → 内存 RgbImage 直送 OCR（不再写磁盘临时 BMP，杜绝崩溃残留）
+    // TD-025：BGRA8 帧 → 内存 RgbImage 直送 OCR（字幕路径用；不再写磁盘临时 BMP，杜绝崩溃残留）
     let Some(rgb) = crate::region_ocr::bgra_to_rgb_image(&frame.bgraw, frame.width, frame.height) else { return };
     // M6/REQ-051：OCR 输入图 aHash（关键帧样本去重/聚类输入）
     let ocr_input_hash = crate::ocr_cache::average_hash(&rgb);
     // M3/REQ-067：dHash 双指纹（与 aHash 组合——帧聚类任一显著变化即新簇）
     let ocr_input_dhash = crate::ocr_cache::difference_hash(&rgb);
-    // M4/REQ-048：全帧分支优先分区域 OCR（版面区域 → 区域裁剪 → 识别 → 坐标还原）；
-    // 区域路径空产出（误判区域/空白区域/识别失败）→ 回退整帧直跑（修复：
-    // 此前区域一旦存在即独占整帧路径，OCR 只跑在小裁剪块上——视频画面误判
-    // 区域时全程 0 OCR 块，参考图集只剩首帧占坑图，会话 14/15 实测）
-    if !is_subtitle && !layout_regions.is_empty() {
-        let (blocks, failed_regions) =
-            crate::region_ocr::region_ocr_blocks(&frame, engines, &layout_regions, image_store);
-        // 六轮审查修复：回退判定以**过滤后有无可用块**为准（score ≥0.5 + 非空 +
-        // 非 UI 垃圾）——原实现看原始块是否为空：区域 OCR 产出任意低分/垃圾块
-        // （播放器时间码/画面误检）时整帧兜底被跳过，真实画面文字仍可能无出口
-        if crate::live_keyframes::has_useful_blocks(&blocks, ui_junk) {
-            // 区域路径有可用产出：正常分支（失败区域数计入统计，不阻断整体）
-            stats.ocr_err += failed_regions as u64;
-            stats.ocr_ok += 1;
-            // OCR 成功即刷新兜底基准（无论是否产出文本）
-            trigger.last_ocr_at = Instant::now();
-            trigger.last_full_ocr_at = Instant::now();
-            crate::live_keyframes::handle_full_frame(
-                &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
-                last_archived_text, last_archived_at, image_store, ocr_input_hash,
-                ocr_input_dhash, ui_junk, screen_tracker, layout_changed,
-                &grid, last_changed_texts, tier,
-            );
-        } else {
-            // v0.12.0 M5（视频会话全帧 OCR 下线）：区域路径无可用产出时不再整帧
-            // OCR 兜底——关键帧纯图归档（handle_full_frame 空块走 grid-change 触发，
-            // 存图不识别；真实画面要点经 vision-exp 精修提取）
-            if !roi_tracker.foreground_foreign() {
-                crate::live_keyframes::handle_full_frame(
-                    &frame, &[], db, app, session_id, last_full_texts, frame_samples,
-                    last_archived_text, last_archived_at, image_store, ocr_input_hash,
-                    ocr_input_dhash, ui_junk, screen_tracker, layout_changed,
-                    &grid, last_changed_texts, tier,
-                );
-            }
-        }
-    } else if is_subtitle {
-        // 字幕区：既有路径不变（v0.12.0 M5 只下线全帧画面要点 OCR）
+    if is_subtitle {
+        // 字幕区：既有路径不变（v0.12.0 M5 只下线全帧画面要点 OCR——本地 OCR 只做字幕）
         // H2 修复：同上有界等待——超时时走 Err 分支计 ocr_err 并继续下一帧
         match engines.recognize_image_timeout(rgb, crate::engine::OCR_REQUEST_TIMEOUT) {
             Ok(blocks) => {
@@ -461,18 +391,21 @@ pub fn process_frame(
             }
         }
     } else {
-        // v0.12.0 M5（视频会话全帧 OCR 下线）：全帧画面要点不再识别——关键帧纯图
-        // 归档（handle_full_frame 空块走 grid-change 触发，存图不识别；真实画面
-        // 要点经 vision-exp 精修提取）。前台非目标窗口期间不归档（REQ-157）。
+        // v0.12.0 M5 补完（视频会话画面要点 = 纯图——2026-08-23 真机验收修复）：
+        // 非字幕帧不做任何画面要点识别——关键帧纯图归档（handle_full_frame 空块
+        // 走 grid-change 触发，存图不识别；真实画面要点经 vision-exp 精修提取）。
+        // 前台非目标窗口期间不归档（REQ-157）。
         // 审查修复：全帧处理时刻刷新 last_full_ocr_at——force_full 的 2s 冷却基准
         // （EVENT_FULL_OCR_COOLDOWN_MS）依赖该字段，旧实现每次全帧 OCR 成功刷新；
         // 全帧 OCR 下线后若不刷新，冷却恒满足 → 连续带外变化期逐帧强制全帧分支
+        // M5 补完：布局分析/区域 OCR 一并下线（版面 → 区域 → 识别 → 落库）——
+        // 区域路径此前仍产出 full 区域 OCR 文字，视频会话画面要点因此非纯图
         if !roi_tracker.foreground_foreign() {
             trigger.last_full_ocr_at = Instant::now();
             crate::live_keyframes::handle_full_frame(
                 &frame, &[], db, app, session_id, last_full_texts, frame_samples,
                 last_archived_text, last_archived_at, image_store, ocr_input_hash,
-                ocr_input_dhash, ui_junk, screen_tracker, layout_changed,
+                ocr_input_dhash, ui_junk, screen_tracker, None,
                 &grid, last_changed_texts, tier,
             );
         }

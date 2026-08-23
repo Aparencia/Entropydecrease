@@ -358,7 +358,14 @@ pub async fn preview_session_note(
         };
         let mut result = filter_note(&session.title, &segments, &ocr_blocks, &state.ui_junk, &env);
         let images_dir = state.data_dir.join("session-images").join(id.to_string());
-        crate::screens::attach_images(&mut result.ocr_screens, &images_dir);
+        // v0.12.0 M5 补完成：视频会话（kind≠photo）画面要点 = 关键帧纯图屏（无 OCR
+        // 文字——ADR-023 视频会话不再识别画面要点，真实要点经 vision-exp 精修提取）；
+        // 图文会话保持过滤链 OCR 屏（attach_images，与落库同口径零变化）。
+        if session.kind.as_deref() == Some("photo") {
+            crate::screens::attach_images(&mut result.ocr_screens, &images_dir);
+        } else {
+            result.ocr_screens = crate::screens::build_keyframe_screens(session.id, Some(&images_dir));
+        }
         // v0.7.5（REQ-170）：预览与落库同口径——异常会话预览即带警示行
         crate::note_filter::apply_session_warning(&mut result, &session.status);
         crate::note_filter::refresh_screen_points(&mut result);

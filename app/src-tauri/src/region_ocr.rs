@@ -8,6 +8,13 @@
 //! @ai-context: 回退链：layout 失败 → 整帧直跑（现状行为）；区域识别失败 →
 //!              该区域标记 unknown（低置信 → 图片归档候选/AI 补缝 V1.0）。
 
+// v0.12.0 M5 补完成后（ADR-023 视频会话不再识别画面要点）：region_ocr_blocks
+// 及其专属辅助（schedule_regions/crop_spec/map_to_frame/crop_region_bgra/
+// upscale_bgra）无生产调用方（实时链路版面分析随全帧 OCR 一并下线）——
+// dead_code 豁免（机制先行模式，image_caption 先例）；bgra_to_rgb_image
+// 仍被实时探针/字幕路径使用。纯函数与单测保留，未来图文/结构场景可复用。
+#![allow(dead_code)]
+
 use crate::layout_analyzer::{region_sampling_weight, LayoutRegion, RegionKind};
 
 /// 区域裁剪边距（像素）：防文字贴边被切（规划 M4：10-20px）。

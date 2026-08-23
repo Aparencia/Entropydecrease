@@ -109,8 +109,14 @@ pub async fn get_session_detail(state: State<'_, AppState>, id: i64) -> Result<S
     let events = state.db.list_events(id).map_err(|e| e.to_string())?;
     // v0.7.3（REQ-160，ADR-015）：画面要点屏卡（新数据按 screen_id 分组、
     // 旧数据聚类兜底；图匹配失败/目录缺失不阻断——前端无缩略图降级）
+    // v0.12.0 M5 补完成：按会话类型分派——photo=OCR 文本屏；video=关键帧纯图屏
     let images_dir = state.data_dir.join("session-images").join(id.to_string());
-    let mut screens = crate::screens::build_screens(&ocr_blocks, Some(&images_dir));
+    let mut screens = crate::screens::build_view_screens(
+        session.kind.as_deref(),
+        session.id,
+        &ocr_blocks,
+        Some(&images_dir),
+    );
     // v0.7.3（REQ-159）：屏内结构块渲染课后精修产物（表格 Markdown/公式 LaTeX；
     // 未精修 → 保留原始 OCR 文本，徽标降级）
     let artifact = state.db.get_artifact(id).map_err(|e| e.to_string())?;

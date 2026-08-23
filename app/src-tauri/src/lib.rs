@@ -189,9 +189,15 @@ mod import;
 mod interruption_detect;
 mod import_frame;
 // v0.7.0 M2（REQ-113）：导入音轨转写（import.rs 拆出——重叠窗合并转写）
-mod import_transcribe;
+// v0.5.0 M3（REQ-047）：规则版版面分析（行/列投影 + 表格线检测 + 区域分类启发式）
 mod layout_analyzer;
+// v0.5.0 M3：版面缓存（事件帧触发复用）——v0.12.0 M5 补完成后视频会话不再做
+// 全帧 OCR（ADR-023），实时链路无生产调用方；纯函数与单测保留（供未来图文/
+// 结构场景复用），登记 dead_code 豁免（机制先行模式，image_caption 先例）。
+#[allow(dead_code)]
 mod layout_cache;
+// v0.7.0 M2（REQ-113）：导入音轨转写（import.rs 拆出——重叠窗合并转写）
+mod import_transcribe;
 #[cfg(target_os = "windows")]
 mod live_session;
 // v0.7.0 M0 X-O5：live_session.rs 798 行超限硬拆——音频主循环/定稿落库/融合线程

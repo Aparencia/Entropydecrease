@@ -150,8 +150,6 @@ pub fn run_screen_worker(
     let mut stats = ScreenStats::default();
     // M2/REQ-037：动态字幕区域跟踪（播放区域检测 + ROI 锁定/重扫；尺寸首帧自适应）
     let mut roi_tracker = crate::region_tracker::RoiTracker::new(0, 0);
-    // M3/REQ-047：版面缓存（事件帧触发——同版面复用分区，变化才重分析）
-    let mut layout_cache = crate::layout_cache::LayoutCache::new();
     // M6/REQ-051：关键帧样本缓冲（全帧分支收集，停止时投票产出关键图候选）
     let mut frame_samples: Vec<crate::frame_cluster::FrameSample> = Vec::new();
     // M6/REQ-051：关键帧归档状态（新文本 + 间隔触发存图）
@@ -321,7 +319,7 @@ pub fn run_screen_worker(
                     screen.as_mut(), &mut trigger, &mut voter, &mut last_frame_text, &mut last_preview,
                     &db, &engines, &app, session_id, region, &subtitle_segments, comp_epoch,
                     &mut last_capture_error, &mut last_full_texts, &mut stats,
-                    &mut roi_tracker, &mut layout_cache, &mut frame_samples,
+                    &mut roi_tracker, &mut frame_samples,
                     &mut last_archived_text, &mut last_archived_at, &latest_frame,
                     &mut image_store, &ui_junk, &mut screen_tracker,
                     // v0.11.5（Task 2）：变化区域基准 + 生效画面档（None=未定档→medium 默认）

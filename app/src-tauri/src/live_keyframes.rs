@@ -181,14 +181,6 @@ pub fn is_useful_block(block: &crate::types::OcrBlock, ui_junk: &crate::ui_junk:
     block.score >= 0.5 && !block.text.trim().is_empty() && !ui_junk.is_junk(&block.text)
 }
 
-/// 是否存在可用块（纯函数；区域路径整帧回退判定入口）。
-pub fn has_useful_blocks(
-    blocks: &[crate::types::OcrBlock],
-    ui_junk: &crate::ui_junk::UiJunkList,
-) -> bool {
-    blocks.iter().any(|b| is_useful_block(b, ui_junk))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,17 +206,6 @@ mod tests {
         assert!(!is_useful_block(&block("", 0.9), &junk), "空文本不可用");
         assert!(!is_useful_block(&block("   ", 0.9), &junk), "空白不可用");
         assert!(!is_useful_block(&block("14:25", 0.9), &junk), "播放器时间码不可用");
-    }
-
-    #[test]
-    fn has_useful_blocks_any_match() {
-        let junk = crate::ui_junk::UiJunkList::defaults();
-        // 全部垃圾/低分 → false；混入一个可用块 → true
-        let all_junk = vec![block("暂停", 0.9), block("14:25", 0.95)];
-        assert!(!has_useful_blocks(&all_junk, &junk), "全垃圾块不得判定为有产出");
-        let mixed = vec![block("14:25", 0.95), block("真实内容", 0.8)];
-        assert!(has_useful_blocks(&mixed, &junk), "存在可用块应判定为有产出");
-        assert!(!has_useful_blocks(&[], &junk));
     }
     /// 构造带 bbox 的 OCR 块（测试辅助）。
     fn block_with_bbox(text: &str, x: f32, y: f32, w: f32, h: f32) -> crate::types::OcrBlock {
