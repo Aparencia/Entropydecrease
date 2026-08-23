@@ -68,10 +68,15 @@ sherpa-onnx = { version = "1.13", default-features = false, features = ["shared"
 # （DLL 动态链接）——否则与 oar-ocr 的 ort-sys（MD 动态链接 onnxruntime.dll）链接时
 # 发生 LNK2038 RuntimeLibrary 冲突 + LNK2005 onnxruntime 符号重复；shared 包
 # sherpa-onnx-v1.13.5-win-x64-shared-MT-Release-lib.tar.bz2 在 sherpa-archive/。
-oar-ocr = { version = "0.9", default-features = false, features = ["simd"] }
+oar-ocr = { version = "0.9", default-features = false, features = ["simd", "auto-download"] }
 # v0.12.0 构建修复：oar-ocr 关 default（download-binaries 下载 onnxruntime 会请求
 # cdn.pyke.io 被 TLS 拦截）——本地 ORT 经 .cargo/config.toml ORT_LIB_LOCATION 链接，
 # simd 保留默认推理加速；CUDA 经 ocr-cuda feature（见 [features]）。
+# v0.12.1 回归修复：**auto-download 必须保留**——它与 download-binaries 相互独立
+# （auto-download = ["oar-ocr-core/auto-download"]，默认不包含）；
+# v0.12.0 关 default 时被一并关闭 → 模型注册名（pp-ocrv6_tiny_*）不再解析为
+# ModelScope 缓存路径，引擎以裸文件名读字典直接 os error 2（OCR 全链路不可用）。
+# 模型缓存目录：$OAR_HOME（默认 ~/.oar），文件存在且 sha256 校验通过时零网络命中。
 # 内存图像 OCR（TD-025）：oar-ocr 的 predict 接收 image::RgbImage，实时链路避免磁盘临时 BMP；
 # 版本与 oar-ocr 0.9 依赖的 image 0.25.6 对齐，否则类型不兼容（同 crate 不同版本是两个类型）
 image = "0.25"
