@@ -2,7 +2,10 @@
  * RefineWorkbench — 精修工作台模态组件（v0.11.5 Task 11 / spec 6️⃣）。
  *
  * @ai-context: 并排双栏（规则版 + 精修版）+ 章节级 diff 高亮 + 同步滚动 +
- *              采纳/重新生成/放弃。数据取全（refine_workbench 接口）。
+ *              采纳/重新生成/放弃。数据源：非只读带 taskResult（采纳前内存
+ *              结果）→ refine_workbench 回传 result（消除未落库右侧恒空）；
+ *              无 taskResult → refine_workbench（后端兜底未采纳任务/已落库
+ *              笔记，重启可恢复）；只读（VersionPanel）→ ruleMd/refinedMd 透传。
  * @ai-context: 只读模式（VersionPanel 对比）：ruleMd/refinedMd 透传，底部无操作。
  *              普通模式（AiRefineCard）：taskResult 可选——传入则采纳按钮可用。
  */
@@ -58,12 +61,22 @@ function decorateRefined(md: string, sections: WorkbenchData["sections"]): strin
   return result;
 }
 
+/**
+ * 精修工作台（普通模式=采纳前对比；只读模式=版本对比）。
+ *
+ * @ai-context: 普通模式 data 统一走后端 refine_workbench（规则草稿+锚点剥离+
+ *              章节 diff 单一口径）；taskResult 以 refineResult 参数回传——
+ *              后端优先采用（修复：原实现只按已落库笔记取精修版，采纳前
+ *              右侧恒空，且存在事件先行/DB 写库竞态）。
+ */
 export default function RefineWorkbench({
   sessionId,
   onClose,
   onApplied,
   readonly = false,
   taskResult,
+  taskId,
+  onRegenerate,
   ruleMd: propRuleMd,
   refinedMd: propRefinedMd,
 }: {
@@ -71,8 +84,12 @@ export default function RefineWorkbench({
   onClose: () => void;
   onApplied?: (noteId: number) => void;
   readonly?: boolean;
-  /** AiRefineCard 传的精修任务结果（启用采纳按钮） */
+  /** AiRefineCard 传的精修任务结果（非只读时优先作为双栏数据源 + 启用采纳按钮） */
   taskResult?: AiRefineResult;
+  /** 任务 id（采纳落库时回传——标记 adopted + 成本回填，防重启后重复采纳） */
+  taskId?: number | null;
+  /** 重新生成回调（走父级任务管线：running 态 + 轮询/事件，防止状态残留） */
+  onRegenerate?: () => void | Promise<void>;
   /** 只读模式透传规则版 markdown */
   ruleMd?: string;
   /** 只读模式透传精修版 markdown */
@@ -107,14 +124,19 @@ export default function RefineWorkbench({
         setStatus("ready");
         return;
       }
-      const d = await invoke<WorkbenchData>("refine_workbench", { sessionId });
+      // 非只读 + 精修结果在内存（采纳前）→ 回传后端 refine_workbench：
+      // 后端优先采用该结果（消除未落库右侧恒空 + 事件先行的 DB 写库竞态）
+      const d = await invoke<WorkbenchData>("refine_workbench", {
+        sessionId,
+        refineResult: !readonly && taskResult ? taskResult : null,
+      });
       setData(d);
       setStatus("ready");
     } catch (e) {
       setErrMsg(`加载失败：${e}`);
       setStatus("error");
     }
-  }, [sessionId, readonly, propRuleMd, propRefinedMd]);
+  }, [sessionId, readonly, propRuleMd, propRefinedMd, taskResult]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -132,7 +154,7 @@ export default function RefineWorkbench({
     requestAnimationFrame(() => { syncingRef.current = false; });
   }, []);
 
-  /** 采纳——复用 ai_refine_apply（需 taskResult） */
+  /** 采纳——复用 ai_refine_apply（需 taskResult；回传 taskId 标记采纳防重复落库） */
   const apply = async () => {
     if (!taskResult || !data?.refinedMarkdown) return;
     setMsg("⏳ 落库中…");
@@ -140,7 +162,9 @@ export default function RefineWorkbench({
       const note = await invoke<{ id: number }>("ai_refine_apply", {
         sessionId,
         result: taskResult,
-        taskId: null,
+        // 修复：原实现恒传 null → 任务记录不标记 adopted、成本不回填——
+        // 重启后任务中心仍可恢复该结果并再次采纳（重复建笔记风险）
+        taskId: taskId ?? null,
       });
       setMsg(`✅ 已落库为笔记 #${note.id}`);
       onApplied?.(note.id);
@@ -150,11 +174,16 @@ export default function RefineWorkbench({
     }
   };
 
-  /** 重新生成 */
+  /** 重新生成——优先走父级任务管线（running 态 + 轮询/事件 + 卡住检测） */
   const regenerate = async () => {
     setMsg("⟳ 重新启动精修任务……");
     try {
-      await invoke("ai_refine_start", { sessionId, authorized: true });
+      if (onRegenerate) {
+        await onRegenerate();
+      } else {
+        // 兜底（防御）：无回调时直接重启任务（仅 readonly 外的非标准调用可能触发）
+        await invoke("ai_refine_start", { sessionId, authorized: true });
+      }
       onClose();
     } catch (e) {
       setMsg(`启动失败：${e}`);

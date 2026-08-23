@@ -1,6 +1,6 @@
 [package]
 name = "entropydecrease"
-version = "0.12.4"
+version = "0.12.5"
 description = "熵减 - 视频知识提取与持久化（本地优先）"
 authors = ["Aparencia"]
 edition = "2021"

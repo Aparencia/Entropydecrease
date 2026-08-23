@@ -51,6 +51,9 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
       if (r) {
         setResult(r);
         setPhase("done");
+        // 线路优化：完成即自动打开工作台（对比+采纳/放弃/重新生成一体——
+        // 原"打开工作台/放弃"中间步冗余，工作台内本就有这两个出口）
+        setShowWorkbench(true);
       }
     } else if (typeof st === "object" && st !== null && "Failed" in st) {
       setFailure(st.Failed.reason as AiTaskFailureLike);
@@ -241,13 +244,19 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
         </div>
       )}
 
-      {/* 精修完成 → 打开工作台（替代内嵌 diff） */}
+      {/* 精修完成 → 工作台（完成即自动打开；关闭后可经下方按钮重开） */}
       {phase === "done" && result && (
         <div>
           {showWorkbench ? (
             <RefineWorkbench
               sessionId={sessionId}
               taskResult={result}
+              // 采纳落库回传真实 taskId——标记 adopted + 成本回填（防重启后
+              // 任务中心重复采纳产生重复笔记；原实现恒传 null 丢失该保障）
+              taskId={taskIdRef.current}
+              // 重新生成走父级任务管线（running 态 + 轮询/事件 + 卡住检测）——
+              // 原工作台直连 ai_refine_start 导致卡片状态残留（旧结果+无进度）
+              onRegenerate={async () => { await start(); }}
               onClose={() => setShowWorkbench(false)}
               onApplied={(id) => { reset(); onApplied?.(id); }}
             />

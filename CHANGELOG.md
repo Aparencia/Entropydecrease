@@ -5,6 +5,14 @@
 
 ## [Unreleased] - 2026-08-23
 
+### v0.12.5 AI 精修线路修复：工作台采纳前右侧恒空 + 精修流程优化（2026-08-23 交付，详见 [docs/versions/v0.12.5.md](docs/versions/v0.12.5.md)）
+
+- **P0 采纳前工作台右侧恒空（用户报告）**：精修成功 → 「打开工作台」→ 左侧规则版有内容、右侧精修版空（"尚未精修"占位）。根因：`refine_workbench` 的精修版只按**已落库笔记**取（`find_note_by_session`），采纳前笔记不存在 → `None`；前端持有的 `AiRefineResult` 未进入数据源；且任务成功事件先于 DB 落库（竞态）。修复：`refine_workbench` 新增可选 `refine_result` 参数（调用方内存结果，消除竞态）→ 新增 `Db::find_latest_unadopted_refine`（`ai_tasks` 未采纳成功任务按会话取最新——重启后仍可回显）→ 已落库笔记最新版本，三级数据源；前端 `RefineWorkbench` 携带 `taskResult` 时回传 `refineResult`；采纳前成本不虚假回填
+- **线路优化：完成即自动打开工作台**：任务 Succeeded → 直开工作台（工作台内含 采纳落库/放弃/重新生成 三出口，消除"打开工作台/放弃"中间步）；关闭后卡片保留重开按钮
+- **P1 采纳落库回传真实 taskId**：原来恒传 `null` → 任务不标记 adopted、成本不回填 → 重启后任务中心仍可恢复该结果并再次采纳（**重复建笔记风险**）；现回传并服务端标记 + 成本回填（与任务中心采纳路径收敛）
+- **P1 重新生成接入父级管线**：工作台 `onRegenerate` 复用卡片 start（running 态 + 轮询/事件 + 卡住检测）；原实现直连 `ai_refine_start` → 卡片停留旧结果 done 态、新任务无进度（状态残留）
+- 验证：Rust 新增 2 项单测（find_latest_unadopted_refine_by_session / stats_from 统计口径）全量通过（既有基线失败项与本版无关）；`tsc --noEmit` 零错误 / vitest 全绿（新增 `RefineWorkbench.test.tsx` 4 项：refineResult 契约 / null 兜底 / 采纳 taskId / null 占位不崩）
+
 ### v0.12.4 视频会话画面要点纯图落地 + 笔记预览时间戳锚点 chip 化（2026-08-23 交付，详见 [docs/versions/v0.12.4.md](docs/versions/v0.12.4.md)）
 
 - **P0 视频画面要点残留 OCR 文字（用户 0.12.1 复测）**：v0.12.0 M5（ADR-023）帧侧只删了全帧 OCR 兜底与明文路径，残留两条仍产 OCR 文字的分支——直播路径 `!is_subtitle` 布局分析后仍调 `region_ocr_blocks`（`region=full` 入库），导入路径关键帧不归档图片 + 中区域 OCR。修复：直播 `else` 纯关键帧归档（零 OCR）；导入关键帧无条件纯图归档（`rgb_to_bgra`），仅字幕 OCR 门控保留，删中区域 OCR；展示层 `build_view_screens` 按 kind 分派（photo 保留 ADR-021 OCR 文本屏不变，video 走 `build_keyframe_screens` 纯图屏）；`get_session_detail`/`preview_session_note`/`manual_capture_inner` 三处接入

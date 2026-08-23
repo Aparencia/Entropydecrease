@@ -165,6 +165,29 @@ impl Db {
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(|e| e.into())
     }
 
+    /// 会话最新未采纳的成功精修任务（精修工作台数据源——采纳前/重启后回显）。
+    ///
+    /// @ai-context: 精修结果在任务成功时已落库（finish_ai_task），但采纳前
+    ///              笔记未建——refine_workbench 原只查已采纳笔记导致工作台
+    ///              右侧恒空；本方法取回那条"待决策"结果（重启后同样可用，
+    ///              与 list_restorable_succeeded 同数据面，粒度按会话）。
+    pub fn find_latest_unadopted_refine(&self, ref_id: i64) -> Result<Option<AiTaskRecord>> {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT task_id, op_type, ref_id, state, result_json, cost_yuan, elapsed_ms,
+                    model, error, slices, created_at, finished_at, adopted
+             FROM ai_tasks
+             WHERE op_type='refine' AND ref_id=?1 AND state='succeeded'
+                   AND adopted=0 AND result_json IS NOT NULL
+             ORDER BY created_at DESC LIMIT 1",
+        )?;
+        let mut rows = stmt.query_map(params![ref_id], map_record)?;
+        match rows.next() {
+            Some(r) => Ok(Some(r?)),
+            None => Ok(None),
+        }
+    }
+
     /// 任务历史（任务面板数据源；op_type 过滤 + 时间倒序 + 上限）。
     pub fn list_ai_tasks(&self, op_type: &str, limit: usize) -> Result<Vec<AiTaskRecord>> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());

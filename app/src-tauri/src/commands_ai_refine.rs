@@ -371,12 +371,18 @@ pub struct WorkbenchData {
 
 /// 工作台数据接口：规则草稿 + 精修结果 + 章节分组 diff 一次取全。
 ///
-/// refined_markdown 为 None → 尚未精修；否则包含最新笔记精修版内容
-/// 与章节 diff。
+/// refined_markdown 为 None → 尚未精修；否则包含最新精修版内容与章节 diff。
+///
+/// @ai-context: 精修版三级数据源（修复：原实现只查已落库笔记——采纳前打开
+///              工作台右侧恒空；且任务成功事件先于 DB 落库，存在竞态）：
+///              ① refine_result 参数（调用方内存结果——采纳前刚完成的任务，
+///                 消除竞态）② 最新未采纳成功任务（DB 持久化——重启后恢复）
+///              ③ 已落库笔记最新版本（采纳后）。
 #[tauri::command]
 pub async fn refine_workbench(
     state: State<'_, AppState>,
     session_id: i64,
+    refine_result: Option<AiRefineResult>,
 ) -> Result<WorkbenchData, String> {
     if session_id <= 0 {
         return Err("无效的会话 id".to_string());
@@ -398,25 +404,42 @@ pub async fn refine_workbench(
     .map_err(|e| e.to_string())?;
     let rule_md = strip_anchors(&draft.markdown);
 
-    // ② 查已落库精修笔记（有无精修结果）
+    // ② 精修版数据源：内存结果（优先）＞ 未采纳成功任务（DB 兜底）＞ 已落库笔记
+    let unadopted = state
+        .db
+        .find_latest_unadopted_refine(session_id)
+        .map_err(|e| e.to_string())?;
+    let pending_result: Option<AiRefineResult> = match (refine_result, unadopted) {
+        (Some(r), _) => Some(r),
+        // 解析失败降级（日志可观测——不影响工作台打开，可经任务中心重取）
+        (None, Some(task)) => task.result_json.as_deref().and_then(|j| {
+            serde_json::from_str::<AiRefineResult>(j)
+                .map_err(|e| eprintln!("[refine-workbench] 未采纳任务 {} 结果解析失败: {}", task.task_id, e))
+                .ok()
+        }),
+        (None, None) => None,
+    };
+
     let note = state.db.find_note_by_session(session_id).map_err(|e| e.to_string())?;
-    let (refined_md, sections, stats, meta) = if let Some(ref note) = note {
+    let (refined_md, sections, stats, meta) = if let Some(result) = pending_result {
+        let secs = diff_sections(&rule_md, &result.refined_markdown);
+        let st = stats_from(&secs);
+        // 未落库：成本按模型单价在 apply 时核算——此处不做虚假回填
+        let m = VersionMeta {
+            cost_yuan: None,
+            model: Some(result.model.clone()),
+            slices: Some(result.slices),
+            merged_from: None,
+        };
+        (Some(result.refined_markdown), secs, st, Some(m))
+    } else if let Some(ref note) = note {
         // 取最新版本内容作为精修版
         let versions = state.db.list_versions(note.id).map_err(|e| e.to_string())?;
         let latest = versions.last()
             .map(|v| v.content.clone())
             .unwrap_or_else(|| note.content.clone());
         let secs = diff_sections(&rule_md, &latest);
-        let total_added: usize = secs.iter().map(|s| s.added_lines.len()).sum();
-        let total_removed: usize = secs.iter().map(|s| s.removed_lines.len()).sum();
-        let total_unchanged: usize = secs.iter()
-            .filter(|s| s.status == crate::note_diff::DiffStatus::Unchanged)
-            .count();
-        let st = DiffStats {
-            added: total_added,
-            removed: total_removed,
-            unchanged: total_unchanged,
-        };
+        let st = stats_from(&secs);
         // 取最新版本 meta
         let m = versions.last().map(|v| VersionMeta {
             cost_yuan: v.meta.cost_yuan,
@@ -436,6 +459,17 @@ pub async fn refine_workbench(
         stats,
         meta,
     })
+}
+
+/// 章节分组 diff 统计（新增/删除/未变行数——与 diff_sections 同口径）。
+fn stats_from(secs: &[SectionDiff]) -> DiffStats {
+    DiffStats {
+        added: secs.iter().map(|s| s.added_lines.len()).sum(),
+        removed: secs.iter().map(|s| s.removed_lines.len()).sum(),
+        unchanged: secs.iter()
+            .filter(|s| s.status == crate::note_diff::DiffStatus::Unchanged)
+            .count(),
+    }
 }
 
 /// 更新任务状态并推送事件（短锁内完成即释放）。M3 补充任务复用（pub(crate)）。
@@ -569,5 +603,21 @@ mod tests {
         assert!(sec.get("removed_lines").is_some(), "SectionDiff 嵌套键保持 snake_case");
         assert!(sec.get("added_lines").is_some());
         assert_eq!(sec["status"], "modified");
+    }
+
+    /// stats_from：按 diff_sections 分组行数统计（工作台头部 新增/删除/未变 徽标）。
+    #[test]
+    fn stats_from_aggregates_section_lines() {
+        use crate::note_diff::{DiffStatus, SectionDiff};
+        let secs = vec![
+            SectionDiff { heading: "A".into(), status: DiffStatus::Modified, removed_lines: vec!["a".into()], added_lines: vec!["A".into(), "B".into()] },
+            SectionDiff { heading: "B".into(), status: DiffStatus::Unchanged, removed_lines: vec![], added_lines: vec![] },
+            SectionDiff { heading: "C".into(), status: DiffStatus::Added, removed_lines: vec![], added_lines: vec!["c".into()] },
+            SectionDiff { heading: "D".into(), status: DiffStatus::Removed, removed_lines: vec!["d".into()], added_lines: vec![] },
+        ];
+        let s = stats_from(&secs);
+        assert_eq!(s.added, 3);
+        assert_eq!(s.removed, 2);
+        assert_eq!(s.unchanged, 1);
     }
 }

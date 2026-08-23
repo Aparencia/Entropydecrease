@@ -122,6 +122,22 @@ fn cost_backfill_updates_record() {
 }
 
 #[test]
+fn find_latest_unadopted_refine_by_session() {
+    let db = open_mem();
+    // Arrange：同会话两条成功任务（旧+新）+ 他会话已采纳任务 + 他类任务
+    db.insert_ai_task(&rec(10, "refine", 5, "succeeded")).unwrap();
+    db.insert_ai_task(&rec(20, "refine", 5, "succeeded")).unwrap();
+    db.insert_ai_task(&rec(30, "refine", 6, "succeeded")).unwrap();
+    db.mark_ai_task_adopted(30).unwrap();
+    db.insert_ai_task(&rec(40, "enrich", 5, "succeeded")).unwrap();
+    // Act + Assert：取最新未采纳（created_at=20）；已采纳/他类/不存在 → None
+    let found = db.find_latest_unadopted_refine(5).unwrap();
+    assert_eq!(found.as_ref().map(|t| t.task_id), Some(20), "应取同会话最新未采纳成功任务");
+    assert!(db.find_latest_unadopted_refine(6).unwrap().is_none(), "已采纳任务不返回");
+    assert!(db.find_latest_unadopted_refine(999).unwrap().is_none(), "无任务不返回");
+}
+
+#[test]
 fn adopted_query_true_after_mark_false_otherwise() {
     let db = open_mem();
     db.insert_ai_task(&rec(8, "refine", 4, "succeeded")).unwrap();
