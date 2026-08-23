@@ -85,6 +85,11 @@ mod commands_fragments;
 mod commands_flashcards;
 // v0.11.3：组结算命令层（计划/执行/核心提炼——防沼泽仪式）
 mod commands_settlement;
+// v0.13.1（REQ-202~205）：知识体系命令层——共享校验 + 体系/问题树（commands_knowledge_systems）
+// + 概念/模型/引用/审计（commands_knowledge_core）；源单文件按规格 §四拆（>300 行豁免拆）
+mod commands_knowledge;
+mod commands_knowledge_systems;
+mod commands_knowledge_core;
 // v0.11.4：周契约命令层（弹性承诺呈现层——upsert/状态读数）
 mod commands_contracts;
 // 实时会话链路依赖 Windows 捕获 API（WASAPI/DXGI/COM），非 Windows 平台不编译（TD-027 修复）
@@ -447,6 +452,25 @@ pub fn run() {
             // v0.11.4（REQ-200）：周契约——设定/覆盖本周目标 + 状态读数
             commands_contracts::upsert_week_contract,
             commands_contracts::week_contract_status,
+            // v0.13.1（REQ-202~205）：知识体系层——体系/问题树/概念/模型/引用/审计探测
+            commands_knowledge_systems::list_knowledge_systems,
+            commands_knowledge_systems::create_knowledge_system,
+            commands_knowledge_systems::update_knowledge_system,
+            commands_knowledge_systems::archive_knowledge_system,
+            commands_knowledge_systems::add_knowledge_node,
+            commands_knowledge_systems::update_knowledge_node,
+            commands_knowledge_systems::delete_knowledge_node,
+            commands_knowledge_systems::list_knowledge_nodes,
+            commands_knowledge_core::add_knowledge_concept,
+            commands_knowledge_core::update_knowledge_concept,
+            commands_knowledge_core::list_knowledge_concepts,
+            commands_knowledge_core::add_knowledge_model,
+            commands_knowledge_core::update_knowledge_model,
+            commands_knowledge_core::list_knowledge_models,
+            commands_knowledge_core::link_knowledge_target,
+            commands_knowledge_core::list_knowledge_links,
+            commands_knowledge_core::delete_knowledge_link,
+            commands_knowledge_core::audit_due_for_system,
             // 会话管理（REQ-010，ADR-004）
             commands_session::create_session,
             commands_session::finish_session,

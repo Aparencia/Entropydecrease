@@ -55,6 +55,8 @@
 | app/src-tauri/src/structure_models.rs | 311 | v0.5.0 模型版：模型清单/独立状态机下载器（进度事件/.part 原子写/按需启用三分类）+ 磁盘就绪判定（disk_done）内聚 | 若再增长：download_one 拆至 structure_download.rs |
 | app/src-tauri/src/commands_session.rs | 310 | v0.6.0 M6 + v0.7.6 审查硬拆后回归：会话命令域（CRUD/质量报告/课程分组/段搜索）内聚；笔记转换管线已拆至 commands_session_note.rs；M2 修复（search_ocr_blocks 传 data_dir 参数） | 若再增长：course/search 拆至 commands_session_extra.rs |
 | app/src-tauri/src/import.rs | 304 | 导入域编排（音视频/图片导入流程 + 帧提取调度）内聚；与 import_frame/import_transcribe 分层 | 若再增长：导入参数校验拆至 import_validate.rs |
+| app/src-tauri/src/commands_knowledge_core.rs | 469 | v0.13.1（REQ-202~205）：知识体系命令域（概念/模型/引用/审计——commands 9-18）内聚；源 commands_knowledge.rs（18 命令 + 校验）超限按规格 §四拆，本文件承接后半；commands 薄壳 + inner 纯函数 + @ai-context 注释内聚于命令域 | 若再增长：引用与审计拆至 commands_knowledge_links.rs |
+| app/src-tauri/src/commands_knowledge_tests.rs | 435 | v0.13.1（REQ-202~205）：知识体系命令层单测域（校验纯函数 + inner 编排 + 四类 target/审计信号聚合）单模块 #[path] 挂载 | 若再增长：引用与审计组拆至 commands_knowledge_links_tests.rs |
 
 ## 前端（app/src/，数字来自前端审查快照；Task #9/10 拆分进行中）
 
