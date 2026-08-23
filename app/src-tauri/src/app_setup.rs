@@ -274,6 +274,8 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         // v0.11.7（图文会话，ADR-020）：图文采集互斥槽（会话 id + 长驻图片库 store）
         photo_session: std::sync::Arc::new(std::sync::Mutex::new(None)),
         photo_store: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        // v0.12.0 M3：系统级覆盖层截图临时文件路径（open_capture_overlay 写入）
+        overlay_image_path: std::sync::Arc::new(std::sync::Mutex::new(None)),
     });
     Ok(())
 }

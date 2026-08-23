@@ -20,6 +20,7 @@ import SessionsPage from "./pages/SessionsPage";
 import SettingsPage from "./pages/SettingsPage";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import CaptureFloatPanel from "./components/CaptureFloatPanel";
+import CaptureOverlayPanel from "./components/CaptureOverlayPanel";
 import type { AiTaskState } from "./types";
 
 type Page = "classroom" | "sessions" | "notes" | "settings";
@@ -32,6 +33,12 @@ const NAV_ITEMS: { key: Page; label: string }[] = [
 ];
 
 function App() {
+  // v0.12.0 M3：系统级覆盖层截图窗口入口——URL 带 ?overlay=1 时仅渲染
+  // CaptureOverlayPanel（全屏透明 1:1 框选；不渲染主导航壳；独立窗口）。
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  if (new URLSearchParams(window.location.search).get("overlay") === "1") {
+    return <CaptureOverlayPanel />;
+  }
   // v0.12.0 M6：采集浮窗入口——URL 带 ?float=1 时仅渲染 CaptureFloatPanel
   //（不渲染主导航壳；浮窗独立窗口 alwaysOnTop，加载 index.html?float=1）。
   // 规则：float 标志 per-window 恒定（URL 不变），故此处 before-hooks 早返回安全；

@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main", "capture-float"],
+  "windows": ["main", "capture-float", "capture-overlay"],
   "permissions": [
     "core:default",
     "dialog:default"

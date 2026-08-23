@@ -8,9 +8,10 @@
  * @ai-context: 互斥（实时捕获进行中）由后端 start_photo_session 拒绝，前端
  *              仅原样展示错误原因（不静默）。
  */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import ScreenSelectOverlay from "./ScreenSelectOverlay";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
@@ -62,10 +63,17 @@ export default function PhotoCapturePanel({ onOpenSessions, onStatus }: Props) {
 
   const openCapture = async () => {
     try {
-      const s = await invoke<{ base64: string; width: number; height: number }>("capture_screen_snapshot");
-      setSnapshot({ src: `data:image/jpeg;base64,${s.base64}`, w: s.width, h: s.height });
-    } catch (e) {
-      onStatus(`截屏失败: ${e}`);
+      // v0.12.0 M3：系统级覆盖层截图（全屏透明窗口 1:1 原始像素框选）——
+      // 确认后经 overlay:captured 事件回传 PNG base64（下方监听接线）
+      await invoke("open_capture_overlay");
+    } catch {
+      // 降级：应用内 letterbox 框选（覆盖层窗口创建失败时保留旧路径）
+      try {
+        const s = await invoke<{ base64: string; width: number; height: number }>("capture_screen_snapshot");
+        setSnapshot({ src: `data:image/jpeg;base64,${s.base64}`, w: s.width, h: s.height });
+      } catch (e) {
+        onStatus(`截屏失败: ${e}`);
+      }
     }
   };
 
@@ -99,6 +107,24 @@ export default function PhotoCapturePanel({ onOpenSessions, onStatus }: Props) {
     },
     [sessionId, baseUrl],
   );
+
+  // v0.12.0 M3：覆盖层确认 → save_photo_capture（PNG base64 与 letterbox 同口径）；
+  // 取消 → 无副作用（恢复可截屏）
+  useEffect(() => {
+    let disposed = false;
+    const un: Promise<() => void>[] = [
+      listen<{ imageB64: string }>("overlay:captured", (e) => {
+        if (!disposed) void confirmCapture(e.payload.imageB64);
+      }),
+      listen("overlay:cancelled", () => {
+        if (!disposed) setMsg("");
+      }),
+    ];
+    return () => {
+      disposed = true;
+      un.forEach((p) => void p.then((fn) => fn()));
+    };
+  }, [confirmCapture]);
 
   const finish = async () => {
     if (sessionId == null) return;
