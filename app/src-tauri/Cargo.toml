@@ -122,5 +122,14 @@ windows = { version = "0.61", features = [
     # 明文文件）。keyring spike 因本机 TLS 拦截（crates.io 新依赖下载失败）
     # 跳过，直接走规划裁决的 DPAPI fallback 路径（ADR-016）
     "Win32_Security_Cryptography",
+    # v0.12.0 M2（WGC 窗口级捕获，ADR-022）：Windows.Graphics.Capture WinRT——
+    # 窗口级桌面捕获（GraphicsCaptureItem / Direct3D11CaptureFramePool /
+    # FrameArrived 异步回调 → 通道同步化）
+    "Win32_System_WinRT",
+    "Win32_System_WinRT_Graphics_Capture",
+    "Win32_System_WinRT_Direct3D11",
+    "Graphics_Capture",
+    "Graphics_DirectX",
+    "Graphics_DirectX_Direct3D11",
 ] }
 

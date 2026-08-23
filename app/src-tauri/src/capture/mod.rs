@@ -11,6 +11,9 @@ pub mod audio_loopback;
 mod dxgi_state;
 #[cfg(target_os = "windows")]
 pub mod dxgi_capture;
+// ADR-022（v0.12.0 M2）：WGC 窗口级捕获（三级降级链主路径）
+#[cfg(target_os = "windows")]
+pub mod wgc_capture;
 pub mod frame_diff;
 #[cfg(target_os = "windows")]
 pub mod gdi_capture;

@@ -14,6 +14,7 @@ use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
 use super::dxgi_state::{point_in_output, window_center, DxgiState};
 use super::frame_diff::{crop_frame, Rect};
 use super::gdi_capture::gdi_capture;
+use super::wgc_capture::WgcState;
 
 /// 捕获帧（BGRA8 像素）。
 #[derive(Debug, Clone)]
@@ -39,9 +40,25 @@ const DXGI_RECREATE_INTERVAL: std::time::Duration = std::time::Duration::from_se
 /// 不再等 30s 周期重建（否则最长 30s 空窗/裁剪错位）。
 const DXGI_REBIND_FAST_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
 
-/// 屏幕捕获采样器（DXGI 主路径 + GDI 降级 + 周期重建自愈）。
+/// 捕获后端（ADR-022 三级降级链：WGC 窗口级 → DXGI 屏幕级 → GDI 兜底）。
+///
+/// @ai-context: WGC=窗口级（目标窗口不被遮挡，主路径）；DXGI=屏幕级+窗口裁剪
+///              （降级 1，当前既有主路径）；GDI=全场景兜底。WGC 失败后不回切
+///              （YAGNI——沿用 DXGI 已有 30s 周期重建）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CaptureBackend {
+    Wgc,
+    Dxgi,
+    Gdi,
+}
+
+/// 屏幕捕获采样器（WGC 主路径 + DXGI 降级 1 + GDI 兜底 + 周期重建自愈）。
 pub struct ScreenCaptureSampler {
+    /// ADR-022：WGC 窗口级捕获（主路径；None=未启用/已降级）
+    wgc: Option<WgcState>,
     dxgi: Option<DxgiState>,
+    /// 当前生效后端（诊断/路由——capture() 按其分派）
+    backend: CaptureBackend,
     window_rect: Rect,
     started: std::time::Instant,
     /// 目标窗口句柄（重建 DXGI 与刷新窗口矩形用；None=全屏）
@@ -55,7 +72,7 @@ pub struct ScreenCaptureSampler {
 }
 
 impl ScreenCaptureSampler {
-    /// 创建采样器：优先 DXGI（按窗口所在显示器 duplication），失败降级 GDI。
+    /// 创建采样器：WGC → DXGI → GDI 逐级尝试（ADR-022 三级自愈链）。
     pub fn new(hwnd: Option<HWND>) -> crate::error::Result<Self> {
         let window_rect = match hwnd {
             Some(h) => {
@@ -66,20 +83,35 @@ impl ScreenCaptureSampler {
             }
             None => Rect { left: 0, top: 0, right: 0, bottom: 0 },
         };
-        let dxgi = match DxgiState::create(hwnd) {
-            Ok(state) => Some(state),
-            Err(e) => {
-                // 创建失败降级 GDI——必须可观测（用户反馈 4/5 会话无 OCR 排查：
-                // DXGI 并发上限/远程桌面/驱动异常时此处曾静默，无法定位）
-                eprintln!("[ScreenCapture] DXGI 初始化失败，降级 GDI: {}", e);
-                None
-            }
+        // 主路径：WGC（窗口级，抗遮挡）——仅窗口捕获启用；失败逐级降级。
+        // 全屏捕获（无目标窗口）无窗口级语义，直接 DXGI。
+        let (wgc, dxgi) = match hwnd {
+            Some(h) => match WgcState::create(h) {
+                Ok(state) => (Some(state), None),
+                Err(e) => {
+                    // WGC 不可用（Win10 1903 以下/安全桌面/无 DWM/窗口最小化）→ DXGI
+                    eprintln!("[ScreenCapture] WGC 初始化失败，降级 DXGI: {}", e);
+                    (None, DxgiState::create(hwnd).ok())
+                }
+            },
+            None => (None, DxgiState::create(hwnd).ok()),
+        };
+        let backend = if wgc.is_some() {
+            CaptureBackend::Wgc
+        } else if dxgi.is_some() {
+            CaptureBackend::Dxgi
+        } else {
+            eprintln!("[ScreenCapture] DXGI 初始化失败，降级 GDI");
+            CaptureBackend::Gdi
         };
         Ok(Self {
+            wgc,
             dxgi,
+            backend,
             window_rect,
             started: std::time::Instant::now(),
             hwnd,
+            // GDI 期间周期尝试重建（backend_name 同步）
             last_recreate: std::time::Instant::now(),
             out_of_bounds: false,
             pending_event: None,
@@ -130,6 +162,7 @@ impl ScreenCaptureSampler {
             Ok(state) => {
                 eprintln!("[ScreenCapture] DXGI 主路径已恢复");
                 self.out_of_bounds = false;
+                self.backend = CaptureBackend::Dxgi;
                 self.dxgi = Some(state);
             }
             Err(e) => eprintln!("[ScreenCapture] DXGI 重建失败（节流后重试）: {}", e),
@@ -149,55 +182,89 @@ impl ScreenCaptureSampler {
         !point_in_output(cx, cy, state.desktop_coords)
     }
 
-    /// 捕获一帧（可选裁剪区域，相对桌面帧坐标）。
+    /// 捕获一帧（可选裁剪区域，相对捕获帧坐标）。
     ///
-    /// @ai-context: 返回 Ok(None) 表示桌面无变化（超时）；DXGI 连续失效自动切 GDI。
-    /// @ai-context: 先按目标窗口矩形裁剪（ADR-002 承诺，审查 M3 修复），再叠加区域裁剪；
-    ///              字幕区裁剪（bottom_quarter）基于窗口尺寸由上层重新计算。
+    /// @ai-context: 返回 Ok(None) 表示无新帧（WGC 无新帧 / DXGI 桌面超时）；
+    ///              后端失效自动降级下一级（WGC→DXGI→GDI，ADR-022 三级自愈链）。
+    /// @ai-context: WGC 帧=窗口内容（无需窗口矩形裁剪，仅叠加上层 crop）；DXGI
+    ///              先按目标窗口矩形裁剪（ADR-002 承诺，审查 M3 修复），再叠加
+    ///              区域裁剪；字幕区裁剪（bottom_quarter）由上层基于窗口尺寸计算。
     pub fn capture(&mut self, crop: Option<&Rect>) -> crate::error::Result<Option<CapturedFrame>> {
         // ADR-007：每次捕获前刷新窗口矩形（移动/缩放/关闭自适应）
         self.refresh_window_rect();
         let elapsed_ms = self.started.elapsed().as_millis() as u64;
-        // TD-033：先判越界再取可变借用（借用规则：不可变检查与可变修改分离）
-        let window_out_of_output = self.dxgi.as_ref().is_some_and(|s| self.window_center_out_of_output(s));
-        if let Some(state) = self.dxgi.as_mut() {
-            // TD-033：窗口中心越出 duplication 输出区域（跨显示器移动）→ 弃用当前
-            // DXGI 立即重建；否则持续复制旧显示器桌面，窗口裁剪为空画面（最长 30s 空窗）
-            if window_out_of_output {
-                eprintln!("[ScreenCapture] 窗口中心越出输出区域，弃用 DXGI 快速重建（TD-033）");
-                self.dxgi = None;
-                self.out_of_bounds = true;
-                self.try_create_dxgi();
-                self.last_recreate = std::time::Instant::now();
-            } else {
-                match state.capture_frame(elapsed_ms) {
-                    Ok(Some(mut frame)) => {
-                        // 窗口裁剪（全屏时 window_rect 为空矩形，裁剪无效果）
-                        let window_crop = (self.window_rect.width() > 0).then_some(self.window_rect);
-                        if let Some(w) = window_crop {
-                            crop_frame(&mut frame.bgraw, &mut frame.width, &mut frame.height, Some(&w));
+        // WGC 主路径（窗口级——帧即窗口内容，不做窗口矩形裁剪）
+        if self.backend == CaptureBackend::Wgc {
+            match self.wgc.as_mut().expect("backend=Wgc 必有 wgc").capture(elapsed_ms) {
+                Ok(Some(mut frame)) => {
+                    crop_frame(&mut frame.bgraw, &mut frame.width, &mut frame.height, crop);
+                    return Ok(Some(frame));
+                }
+                Ok(None) => return Ok(None),
+                Err(e) => {
+                    // WGC 失效（窗口关闭/最小化/会话丢失）→ 降级 DXGI（一次性，
+                    // 不回切 WGC——YAGNI，沿用 DXGI 周期重建）
+                    eprintln!("[ScreenCapture] WGC 失效，降级 DXGI: {}", e);
+                    self.wgc = None;
+                    self.dxgi = DxgiState::create(self.hwnd).ok();
+                    self.backend = if self.dxgi.is_some() {
+                        CaptureBackend::Dxgi
+                    } else {
+                        eprintln!("[ScreenCapture] DXGI 重建失败，降级 GDI");
+                        CaptureBackend::Gdi
+                    };
+                }
+            }
+        }
+        // DXGI 降级 1（屏幕级 + 窗口裁剪——既有逻辑）
+        if self.backend == CaptureBackend::Dxgi {
+            // TD-033：先判越界再取可变借用（借用规则：不可变检查与可变修改分离）
+            let window_out_of_output = self.dxgi.as_ref().is_some_and(|s| self.window_center_out_of_output(s));
+            if let Some(state) = self.dxgi.as_mut() {
+                // TD-033：窗口中心越出 duplication 输出区域（跨显示器移动）→ 弃用当前
+                // DXGI 立即重建；否则持续复制旧显示器桌面，窗口裁剪为空画面（最长 30s 空窗）
+                if window_out_of_output {
+                    eprintln!("[ScreenCapture] 窗口中心越出输出区域，弃用 DXGI 快速重建（TD-033）");
+                    self.dxgi = None;
+                    self.out_of_bounds = true;
+                    self.try_create_dxgi();
+                    self.last_recreate = std::time::Instant::now();
+                } else {
+                    match state.capture_frame(elapsed_ms) {
+                        Ok(Some(mut frame)) => {
+                            // 窗口裁剪（全屏时 window_rect 为空矩形，裁剪无效果）
+                            let window_crop = (self.window_rect.width() > 0).then_some(self.window_rect);
+                            if let Some(w) = window_crop {
+                                crop_frame(&mut frame.bgraw, &mut frame.width, &mut frame.height, Some(&w));
+                            }
+                            crop_frame(&mut frame.bgraw, &mut frame.width, &mut frame.height, crop);
+                            return Ok(Some(frame));
                         }
-                        crop_frame(&mut frame.bgraw, &mut frame.width, &mut frame.height, crop);
-                        return Ok(Some(frame));
-                    }
-                    Ok(None) => return Ok(None),
-                    Err(e) => {
-                        // DXGI 失效（远程桌面/锁屏/设备丢失）→ 降级 GDI（ADR-002）
-                        eprintln!("[ScreenCapture] DXGI 失效，降级 GDI: {}", e);
-                        self.dxgi = None;
-                        self.last_recreate = std::time::Instant::now();
+                        Ok(None) => return Ok(None),
+                        Err(e) => {
+                            // DXGI 失效（远程桌面/锁屏/设备丢失）→ 降级 GDI（ADR-002）
+                            eprintln!("[ScreenCapture] DXGI 失效，降级 GDI: {}", e);
+                            self.dxgi = None;
+                            self.backend = CaptureBackend::Gdi;
+                            self.last_recreate = std::time::Instant::now();
+                        }
                     }
                 }
             }
         }
-        // GDI 期间周期尝试重建 DXGI 主路径（ADR-007 自愈；TD-033 越界后为 2s 快速节流）
+        // GDI 兜底（全场景可用）；GDI 期间周期尝试重建 DXGI 主路径
+        // （ADR-007 自愈；TD-033 越界后为 2s 快速节流）
         self.maybe_recreate_dxgi();
         self.capture_gdi(crop, elapsed_ms)
     }
 
     /// 当前后端名（诊断/日志——live_session 启动时记录，增强捕获后端可观测性）。
     pub fn backend_name(&self) -> &'static str {
-        if self.dxgi.is_some() { "dxgi" } else { "gdi" }
+        match self.backend {
+            CaptureBackend::Wgc => "wgc",
+            CaptureBackend::Dxgi => "dxgi",
+            CaptureBackend::Gdi => "gdi",
+        }
     }
 
     fn capture_gdi(&mut self, crop: Option<&Rect>, elapsed_ms: u64) -> crate::error::Result<Option<CapturedFrame>> {
