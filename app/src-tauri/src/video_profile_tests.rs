@@ -302,6 +302,67 @@ fn memory_series_roundtrip_preserves_flag() {
     assert_eq!(back.lookup("零基础化妆教程 P9"), Some(ProfileKind::HandsOn));
 }
 
+// ── v0.13.6（REQ-222）：领域记忆独立通道 ──
+
+#[test]
+fn domain_memory_isolated_from_kind_channel_and_series_aware() {
+    // Arrange：领域记忆（独立通道——domain-only 条目不得污染 kind/form 查询）
+    let mut memory = ProfileMemory::default();
+    memory.remember_domain(
+        "化妆教程",
+        &crate::video_profile_spec::DomainTag {
+            coarse: Some("beauty".into()),
+            fine: vec!["makeup".into()],
+        },
+    );
+    // Act（series 键）：P1 记忆 → P5 命中（同系列共享）
+    memory.remember_domain(
+        "眼影课 P1",
+        &crate::video_profile_spec::DomainTag { coarse: Some("beauty".into()), fine: vec![] },
+    );
+    // Assert：领域查询命中（最长关键词）；kind 通道零污染（lookup/lookup_form 均 None）
+    let hit = memory.lookup_domain("化妆教程 第3集_哔哩哔哩").expect("领域记忆命中");
+    assert_eq!(hit.coarse.as_deref(), Some("beauty"));
+    assert_eq!(hit.fine, vec!["makeup".to_string()]);
+    assert_eq!(memory.lookup("化妆教程"), None, "domain-only 条目不得进 kind 通道");
+    assert_eq!(memory.lookup_form("化妆教程"), None);
+    assert_eq!(
+        memory.lookup_domain("眼影课 P5").map(|t| t.fine),
+        Some(vec![]),
+        "series 键剥离后各集命中"
+    );
+    // 覆盖：同键重新记忆 → 覆盖而非追加
+    memory.remember_domain(
+        "化妆教程",
+        &crate::video_profile_spec::DomainTag { coarse: Some("beauty".into()), fine: vec!["skincare".into()] },
+    );
+    assert_eq!(memory.domain_entries.len(), 2, "P1 键 + 化妆教程键共 2 条（覆盖不追加）");
+    assert_eq!(
+        memory.lookup_domain("化妆教程").map(|t| t.fine),
+        Some(vec!["skincare".to_string()])
+    );
+}
+
+#[test]
+fn domain_memory_legacy_json_zero_migration() {
+    // Arrange：旧序列化 JSON（无 domain_entries 字段——v0.13.6 前格式）
+    let legacy = r#"{"entries":[{"keyword":"网课","kind":"lecture","is_series":false,"form":"lecture"}]}"#;
+    // Act：加载
+    let memory: ProfileMemory = serde_json::from_str(legacy).unwrap();
+    // Assert：零迁移——kind 通道照常 + domain_entries 缺省空
+    assert_eq!(memory.lookup("网课"), Some(ProfileKind::Lecture));
+    assert!(memory.domain_entries.is_empty());
+    // roundtrip：新增字段可序列化（增量兼容）
+    let mut m = memory;
+    m.remember_domain(
+        "网课",
+        &crate::video_profile_spec::DomainTag { coarse: Some("economy".into()), fine: vec![] },
+    );
+    let raw = serde_json::to_string(&m).unwrap();
+    let back: ProfileMemory = serde_json::from_str(&raw).unwrap();
+    assert_eq!(back, m);
+}
+
 #[test]
 fn memory_json_roundtrip_and_corrupt_fallback() {
     // Arrange：写库 → 读回

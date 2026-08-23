@@ -1,4 +1,4 @@
-//! 四维参数矩阵数据（REQ-188 / v0.9.0 M1：7 形态 × 4 画面档）。
+//! 四维参数矩阵数据（REQ-188 / v0.9.0 M1：10 形态 × 4 画面档；v0.13.6 形态展平）。
 //!
 //! @ai-context: 与 video_profile_spec.rs 的类型定义分离（保持逻辑文件 ≤300 行）；
 //!              矩阵值归纳自旧 13 类配置（framework-v2 §5 映射表），保证新检测
@@ -7,6 +7,9 @@
 //!              - 画面档表（tier_* 函数）：采样预算 + 信号权重 + 存储档（画面信息轴）
 //! @ai-context: 维度独立降级：形态 unknown（None）→ 默认讲义式模板（不阻塞）；
 //!              画面档 none → disable_ocr=true（P4 无图短路，与旧播客/直播同语义）。
+//! @ai-context: impl ContentForm 自 video_profile_spec.rs 迁入（v0.13.6 拆分计划：
+//!              形态静态映射归数据模块，类型文件维持 ≤300；跨文件 impl 先例
+//!              LiveSessionManager）——消费端路径零变化。
 
 use crate::video_profile::{
     DetectSignals, PostprocessRules, ProfileKind, SamplingBudget, SignalWeights, StoreTier,
@@ -14,11 +17,67 @@ use crate::video_profile::{
 };
 use crate::video_profile_spec::{ContentForm, VisualTier};
 
+/// ContentForm 静态映射（label/parse/as_str——10 形态；解析失败 → None 诚实不猜）。
+impl ContentForm {
+    /// 前端展示名（检测卡 v2 三维一体用；当前前端自带标签映射，
+    /// 本方法保留为后端展示/日志用，登记豁免 dead_code——与 ProfileKind::label 同模式）。
+    #[allow(dead_code)]
+    pub fn label(self) -> &'static str {
+        match self {
+            ContentForm::Lecture => "讲授",
+            ContentForm::HandsOn => "实操",
+            ContentForm::Explainer => "解说",
+            ContentForm::Dialog => "对话",
+            ContentForm::Exercise => "题目",
+            ContentForm::Coding => "代码",
+            ContentForm::Audio => "音频",
+            ContentForm::Meeting => "会议",
+            ContentForm::Live => "直播",
+            ContentForm::Narrative => "影视",
+        }
+    }
+
+    /// 解析前端传入的形态标识（kebab-case）；非法值 → None（诚实不猜默认）。
+    pub fn parse(s: &str) -> Option<ContentForm> {
+        match s {
+            "lecture" => Some(ContentForm::Lecture),
+            "hands-on" => Some(ContentForm::HandsOn),
+            "explainer" => Some(ContentForm::Explainer),
+            "dialog" => Some(ContentForm::Dialog),
+            "exercise" => Some(ContentForm::Exercise),
+            "coding" => Some(ContentForm::Coding),
+            "audio" => Some(ContentForm::Audio),
+            "meeting" => Some(ContentForm::Meeting),
+            "live" => Some(ContentForm::Live),
+            "narrative" => Some(ContentForm::Narrative),
+            _ => None,
+        }
+    }
+
+    /// 形态标识（kebab-case，与 parse/serde 同口径；sessions.profile 落库用，
+    /// 登记豁免 dead_code——落库接线在 M5 检测卡 v2）。
+    #[allow(dead_code)]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ContentForm::Lecture => "lecture",
+            ContentForm::HandsOn => "hands-on",
+            ContentForm::Explainer => "explainer",
+            ContentForm::Dialog => "dialog",
+            ContentForm::Exercise => "exercise",
+            ContentForm::Coding => "coding",
+            ContentForm::Audio => "audio",
+            ContentForm::Meeting => "meeting",
+            ContentForm::Live => "live",
+            ContentForm::Narrative => "narrative",
+        }
+    }
+}
+
 /// 形态 → 代表旧类（VideoProfile.kind 契约字段用；仅标识，参数走矩阵）。
 ///
 /// @ai-context: ProfileKind 是 13 类兼容枚举（消费端契约），四维形态没有
 ///              一一对应值——取语义最接近的代表旧类（解说→口播、对话→访谈、
-///              音频→播客），展示/落库不误导。
+///              音频→播客、影视→口播），展示/落库不误导。
 pub fn legacy_kind_for_form(form: ContentForm) -> ProfileKind {
     match form {
         ContentForm::Lecture => ProfileKind::Lecture,
@@ -28,6 +87,9 @@ pub fn legacy_kind_for_form(form: ContentForm) -> ProfileKind {
         ContentForm::Exercise => ProfileKind::Exercise,
         ContentForm::Coding => ProfileKind::Coding,
         ContentForm::Audio => ProfileKind::Podcast,
+        ContentForm::Meeting => ProfileKind::Meeting,
+        ContentForm::Live => ProfileKind::Live,
+        ContentForm::Narrative => ProfileKind::TalkingHead,
     }
 }
 
@@ -97,6 +159,34 @@ pub fn postprocess_for_form(form: ContentForm) -> PostprocessRules {
             speaker_detect: false,
             glossary: false,
         },
+        // 会议：纪要式——说话人+重点（决策/待办结构；非线性不章节化）
+        ContentForm::Meeting => PostprocessRules {
+            chapter_detect: false,
+            step_cards: false,
+            verbal_normalize: false,
+            highlight: true,
+            speaker_detect: true,
+            glossary: false,
+        },
+        // 直播：高口语摘要文——书面化+重点（时间轴摘要；无字幕不章节）
+        ContentForm::Live => PostprocessRules {
+            chapter_detect: false,
+            step_cards: false,
+            verbal_normalize: true,
+            highlight: true,
+            speaker_detect: false,
+            glossary: false,
+        },
+        // 影视：叙事线+要点（narrative_detect 变体见 artifact_templates）——
+        // 非教学不术语表/不步骤卡；章节闭（叙事结构非线性）
+        ContentForm::Narrative => PostprocessRules {
+            chapter_detect: false,
+            step_cards: false,
+            verbal_normalize: true,
+            highlight: true,
+            speaker_detect: false,
+            glossary: false,
+        },
     }
 }
 
@@ -104,13 +194,20 @@ pub fn postprocess_for_form(form: ContentForm) -> PostprocessRules {
 /// 保留不动，本表供平台/OCR 标签通用投票（REQ-191）接线）。
 pub fn detect_signals_for_form(form: ContentForm) -> DetectSignals {
     let title_keywords: Vec<String> = match form {
-        ContentForm::Lecture => vec!["课程", "网课", "教程", "课堂", "教学", "公开课", "学习"],
+        ContentForm::Lecture => vec!["课程", "网课", "教程", "课堂", "教学", "公开课", "学习", "精讲"],
         ContentForm::HandsOn => vec!["实操", "实战", "演练", "跟练", "操作", "案例", "从零"],
         ContentForm::Explainer => vec!["科普", "知识", "解读", "分享", "演讲", "TED"],
-        ContentForm::Dialog => vec!["访谈", "对话", "对谈", "专访", "聊天", "会议", "周会"],
+        ContentForm::Dialog => vec!["访谈", "对话", "对谈", "专访", "聊天"],
+        // v0.13.6：会议独立形态——评审/复盘等会议场景不再误归对话
+        ContentForm::Meeting => vec!["会议", "例会", "周会", "复盘", "评审", "研讨会", "答辩", "晨会"],
         ContentForm::Exercise => vec!["题目", "习题", "刷题", "真题"],
         ContentForm::Coding => vec!["编程", "代码", "开发", "Python", "Java", "JavaScript", "前端", "后端"],
-        ContentForm::Audio => vec!["播客", "有声书", "听书", "电台", "直播"],
+        ContentForm::Audio => vec!["播客", "有声书", "听书", "电台"],
+        // v0.13.6：直播独立形态（原并入音频——直播有画面，仅画面价值低）
+        ContentForm::Live => vec!["直播", "带货", "开播", "直播间", "回放", "实况"],
+        // v0.13.6：影视叙事形态——纪录片/剧集/电影内容大头此前无类可归；
+        // 单字"第"/"集"过泛不收录（系列识别走 series_detect，不在此表）
+        ContentForm::Narrative => vec!["纪录片", "电影", "电视剧", "剧集", "动画", "影视", "微电影", "正片"],
     }
     .into_iter()
     .map(String::from)

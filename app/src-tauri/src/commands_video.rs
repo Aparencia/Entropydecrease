@@ -67,6 +67,10 @@ pub fn detect_video_profile(
         }
         _ => {}
     }
+    // v0.13.6（REQ-221）：分区映射表 → 形态候选（强信号：影视/直播分区直接定
+    // 形态，防标题词误判讲授/解说；未命中 None——回落记忆/标题链）
+    let platform_form = crate::video_profile_platform_map::lookup_zone_first(&platform_hints)
+        .and_then(|e| e.form);
     let domain = crate::video_profile_domain::detect_domain(
         &crate::video_profile_domain::DomainSignals {
             title: title.clone(),
@@ -79,7 +83,8 @@ pub fn detect_video_profile(
             asr_opening: None,
         },
     );
-    let domain = (domain.kind.is_some() || !domain.fine_tags.is_empty()).then_some(domain);
+    let domain = (domain.kind.is_some() || !domain.fine_tags.is_empty() || !domain.fine_ids.is_empty())
+        .then_some(domain);
     // 1) 信号投票（检测优先——v0.11.5 Task 5：不再被记忆命中短路，先跑检测）
     let mut result = vote_detect(&ObservedSignals {
         title: title.clone(),
@@ -97,7 +102,26 @@ pub fn detect_video_profile(
             .map(|m| m.clone())
             .unwrap_or_default();
         result = apply_profile_memory(result, &memory, t);
+        // v0.13.6（REQ-222）：领域记忆兜底——映射/检测为空时用户确认过的
+        // 粗+细目直接生效（检测 > 记忆——仅检测为空才兜底；source=memory 可诊断）
+        if result.domain.is_none() {
+            if let Some(tag) = memory.lookup_domain(t) {
+                result.domain = Some(crate::video_profile_domain::DomainDetection {
+                    kind: tag
+                        .coarse
+                        .as_deref()
+                        .and_then(crate::video_profile_domain::DomainKind::parse),
+                    fine_tags: Vec::new(),
+                    fine_ids: tag.fine,
+                    source: "memory".to_string(),
+                    confidence: 1.0,
+                });
+            }
+        }
     }
+    // v0.13.6（REQ-221）：分区映射形态为最强检测信号——未命中则为 None（回落前端
+    // 记忆/候选链）；命中时即便记忆/标题候选冲突也以分区为准（平台裁决语义）
+    result.platform_form = platform_form;
     result.domain = domain;
     result
 }
@@ -150,16 +174,28 @@ pub fn detect_video_domain(
 /// ASR 术语命中率↑；幂等去重）。
 ///
 /// @param kind - 领域标识（kebab-case；非法值明确报错）
+/// @param fine - v0.13.6（REQ-220）：细目 id 数组（可选）——候选集 = 粗种子 ∪ 细目种子
+///               （前端/后端术语不同，细分预热命中率↑）；缺省 None 向后兼容
 #[tauri::command]
 pub fn preheat_domain_hotwords(
     state: State<'_, AppState>,
     kind: String,
+    fine: Option<Vec<String>>,
 ) -> Result<usize, String> {
     let kind = crate::video_profile_domain::DomainKind::parse(
         &kind.chars().take(30).collect::<String>(),
     )
     .ok_or_else(|| "非法领域标识".to_string())?;
-    let candidates = crate::video_profile_domain::hotword_candidates(kind);
+    let mut candidates = crate::video_profile_domain::hotword_candidates(kind);
+    // 细目候选（并集去重；非法 id 静默跳过——诚实降级为仅粗通道）
+    for c in crate::video_profile_domain_fine::fine_hotword_candidates(
+        kind,
+        &fine.unwrap_or_default(),
+    ) {
+        if !candidates.contains(&c) {
+            candidates.push(c);
+        }
+    }
     let mut vocab = state
         .vocab
         .lock()
@@ -169,6 +205,69 @@ pub fn preheat_domain_hotwords(
         .save(&state.vocab_path)
         .map_err(|e| format!("保存词表失败: {}", e))?;
     Ok(added)
+}
+
+/// v0.13.6（REQ-222）：记录用户确认的领域（coarse+细目多选）——同标题/系列下次直接生效。
+///
+/// @param title - 窗口标题（记忆匹配键；series 键剥离与形态记忆同口径）
+/// @param coarse - 粗领域标识（kebab-case；非法值明确报错）
+/// @param fine - 细目 id 数组（可选；逐项校验属于该粗领域——非法报错不静默）
+#[tauri::command]
+pub fn remember_video_profile_domain(
+    state: State<'_, AppState>,
+    title: String,
+    coarse: String,
+    fine: Option<Vec<String>>,
+) -> Result<(), String> {
+    let title = title.trim().to_string();
+    if title.is_empty() {
+        return Err("标题为空，无法记忆".to_string());
+    }
+    let kind = crate::video_profile_domain::DomainKind::parse(
+        &coarse.chars().take(30).collect::<String>(),
+    )
+    .ok_or_else(|| "非法领域标识".to_string())?;
+    let fine = fine.unwrap_or_default();
+    for id in &fine {
+        if crate::video_profile_domain_fine::parse_fine(kind, id).is_none() {
+            return Err(format!("非法细目标识: {}（不属于领域 {}", id, kind.as_str()));
+        }
+    }
+    let tag = crate::video_profile_spec::DomainTag {
+        coarse: Some(kind.as_str().to_string()),
+        fine,
+    };
+    let path = state.profile_memory_path.clone();
+    let memory = state.profile_memory.clone();
+    // 锁内 read-modify-write（与形态记忆同模式，防 TOCTOU 文件竞争）
+    {
+        let mut guard = memory
+            .lock()
+            .map_err(|e| format!("档案记忆锁中毒: {}", e))?;
+        guard.remember_domain(&title, &tag);
+        guard
+            .save(&path)
+            .map_err(|e| format!("保存档案记忆失败: {}", e))?;
+    }
+    Ok(())
+}
+
+/// v0.13.6（REQ-220）：细目选项表（单一数据源——前端 chips 下拉从 Rust 拉取，
+/// 与 VideoProfile 检测卡同源；未登记粗领域 → 空列表诚实）。
+#[tauri::command]
+pub fn list_domain_fine() -> Vec<(String, Vec<crate::video_profile_domain_fine::FineTagDto>)> {
+    crate::video_profile_domain_fine::fine_table()
+        .iter()
+        .map(|(k, list)| (
+            k.as_str().to_string(),
+            list.iter()
+                .map(|f| crate::video_profile_domain_fine::FineTagDto {
+                    id: f.id.to_string(),
+                    label: f.label.to_string(),
+                })
+                .collect(),
+        ))
+        .collect()
 }
 
 /// 记录用户确认/修改：窗口标题 → 档案（记忆偏好，下次同标题直接生效）。

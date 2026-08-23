@@ -301,6 +301,8 @@ fn stop_clipboard_monitor(state: &AppState) {
 /// @param form - 内容形态（kebab-case；None=不覆写该维）
 /// @param tier - 画面档位（kebab-case；None=不覆写该维）
 /// @param domain - 领域（kebab-case；None=不覆写该维）
+/// @param fine - v0.13.6（REQ-220）：细目 id 数组（可选；与 domain 同传——
+///               逐项校验属于该粗领域；仅 fine 无 domain → 报错）
 /// @ai-context: 写入 profile_override 共享槽 → screen worker 下轮采样 tick 消费
 ///              并 emit live:profile-updated 事件回推前端。
 #[tauri::command]
@@ -309,6 +311,7 @@ pub fn update_live_profile(
     form: Option<String>,
     tier: Option<String>,
     domain: Option<String>,
+    fine: Option<Vec<String>>,
 ) -> Result<bool, String> {
     // 至少一项
     if form.is_none() && tier.is_none() && domain.is_none() {
@@ -339,10 +342,26 @@ pub fn update_live_profile(
             return Err(format!("非法领域标识: {}", d));
         }
     }
+    // 细目校验：仅当 domain 同传且粗领域可解析——逐项 belong 校验（非法报错不静默）
+    let parsed_fine: Vec<String> = match fine {
+        Some(fs) => {
+            let d = parsed_domain.ok_or_else(|| "fine 需与 domain 同传".to_string())?;
+            let mut out = Vec::with_capacity(fs.len());
+            for f in &fs {
+                if crate::video_profile_domain_fine::parse_fine(d, f).is_none() {
+                    return Err(format!("非法细目标识: {}（不属于领域 {}", f, d.as_str()));
+                }
+                out.push(f.clone());
+            }
+            out
+        }
+        None => Vec::new(),
+    };
     let po = crate::live_session::ProfileOverride {
         form: parsed_form,
         tier: parsed_tier,
         domain: parsed_domain,
+        fine: parsed_fine,
     };
     state
         .live_session

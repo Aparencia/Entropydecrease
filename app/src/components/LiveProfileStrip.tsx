@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { DOMAIN_OPTIONS, FORM_LABELS, KIND_TO_FORM, TIER_LABELS } from "./ProfileDetector";
-import type { ContentForm, DetectResult, DomainDetection, VisualTier } from "../types";
+import type { ContentForm, DetectResult, DomainDetection, DomainFineOption, VisualTier } from "../types";
 
 /** 升档提示停留时长（ms）——简要设计：瞬时提示不占常驻空间 */
 const NOTE_TTL_MS = 3000;
@@ -56,12 +56,20 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
   const dismissedRef = useRef<VisualTier | null>(null);
   const [editing, setEditing] = useState(false);
   const [profileBusy, setProfileBusy] = useState(false);
+  // v0.13.6（REQ-220）：细目 id → 展示标签（list_domain_fine 单一数据源；失败静默）
+  const [fineMap, setFineMap] = useState<Record<string, DomainFineOption[]>>({});
+  useEffect(() => {
+    void invoke<Array<[string, DomainFineOption[]]>>("list_domain_fine")
+      .then((rows) => setFineMap(Object.fromEntries(rows)))
+      .catch(() => undefined);
+  }, []);
 
-  /** profile-updated 事件载荷（Rust serde_json 结构） */
+  /** profile-updated 事件载荷（Rust serde_json 结构；v0.13.6 增 fine 数组） */
   interface ProfileUpdatedPayload {
     form: string | null;
     tier: string | null;
     domain: string | null;
+    fine?: string[];
   }
 
   // 档位事件：升档静默可见化；降档请求 → 确认条（幂等去重）。
@@ -101,7 +109,7 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
           tierRef.current = t;
           setTier(t);
         }
-        if (e.payload.domain) setDomain({ kind: e.payload.domain, fine_tags: [], source: "override", confidence: 1.0 });
+        if (e.payload.domain) setDomain({ kind: e.payload.domain, fine_tags: [], fine_ids: e.payload.fine ?? [], source: "override", confidence: 1.0 });
       }),
     ];
     return () => {
@@ -128,8 +136,11 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
       .then((r) => {
         if (cancelled) return;
         const top = r.candidates[0]?.kind;
-        setForm(r.memory_form ?? (top ? (KIND_TO_FORM[top] ?? null) : null));
-        if (r.domain?.kind || r.domain?.fine_tags?.length) setDomain(r.domain);
+        // v0.13.6：平台分区映射形态优先（影视/直播分区——标题链常误判）
+        setForm(r.platform_form ?? r.memory_form ?? (top ? (KIND_TO_FORM[top] ?? null) : null));
+        if (r.domain?.kind || r.domain?.fine_tags?.length || r.domain?.fine_ids?.length) {
+          setDomain(r.domain);
+        }
       })
       .catch(() => undefined);
     return () => {
@@ -153,7 +164,8 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
     }
   }, [downgrade, busy]);
 
-  /** 手动覆写档案三维：表单值变化时立即 invoke（null=不覆写该维） */
+  /** 手动覆写档案三维：表单值变化时立即 invoke（null=不覆写该维）；
+   *  v0.13.6：domain 覆写带 fine（[]=仅粗领域——采集条简洁语义） */
   const handleProfileChange = useCallback(async (dimension: "form" | "tier" | "domain", value: string | null) => {
     if (profileBusy) return;
     setProfileBusy(true);
@@ -162,6 +174,7 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
         form: dimension === "form" ? value : null,
         tier: dimension === "tier" ? value : null,
         domain: dimension === "domain" ? value : null,
+        fine: dimension === "domain" ? [] : null,
       });
     } catch (e) {
       setError(`档案更新失败: ${e}`);
@@ -196,7 +209,7 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
                 <option key={k} value={k}>{TIER_LABELS[k]}档</option>
               ))}
             </select>
-            <select value={domain?.kind ?? ""} onChange={(e) => { const v = e.target.value; setDomain(v ? { kind: v, fine_tags: [], source: "override", confidence: 1.0 } : null); void handleProfileChange("domain", v || null); }} style={{ fontSize: 11, padding: "1px 2px" }}>
+            <select value={domain?.kind ?? ""} onChange={(e) => { const v = e.target.value; setDomain(v ? { kind: v, fine_tags: [], fine_ids: [], source: "override", confidence: 1.0 } : null); void handleProfileChange("domain", v || null); }} style={{ fontSize: 11, padding: "1px 2px" }}>
               <option value="">领域自动</option>
               {DOMAIN_OPTIONS.map(([k, lbl]) => (
                 <option key={k} value={k}>{lbl}</option>
@@ -220,6 +233,11 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
             <span title="内容领域（标题/平台信号；增强项）">
               🏷 {domain?.kind ? domainLabel(domain.kind) : "领域未定"}
             </span>
+            {(domain?.fine_ids?.length ?? 0) > 0 ? (
+              <span style={{ color: "#9ca3af" }}>
+                细目：{domain!.fine_ids!.map((id) => (domain!.kind ? fineMap[domain!.kind]?.find((f) => f.id === id)?.label ?? id : id)).join(" / ")}
+              </span>
+            ) : null}
             {domain?.fine_tags?.length ? (
               <span style={{ color: "#9ca3af" }}>细标签：{domain.fine_tags.join(" / ")}</span>
             ) : null}

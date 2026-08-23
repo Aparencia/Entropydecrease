@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::video_profile::{ArtifactTemplate, ProfileKind, VideoProfile};
 
-/// 内容形态（7 类，决定产物模板；REQ-188 形态轴）。
+/// 内容形态（10 类，决定产物模板；REQ-188 形态轴）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ContentForm {
@@ -26,61 +26,25 @@ pub enum ContentForm {
     HandsOn,
     /// 解说：知识科普/观点表达（真人或动画；会话 33 归属）→ 叙事线+要点
     Explainer,
-    /// 对话：多人交流（访谈/会议/对谈）→ 纪要式
+    /// 对话：多人交流（访谈/对谈）→ 纪要式
     Dialog,
     /// 题目：习题/真题演练 → 题面+讲解对
     Exercise,
     /// 代码：编程构建 → 代码块重建+讲解
     Coding,
-    /// 音频：纯音频/弱画面（播客/有声书/直播）→ 摘要文
+    /// 音频：纯音频/弱画面（播客/有声书）→ 摘要文
     Audio,
+    /// 会议（v0.13.6）：周会/评审/复盘/研讨会——纪要结构与对话不同（决策/待办）
+    Meeting,
+    /// 直播（v0.13.6）：直播/带货/实况——有画面但画面价值低（区别于旧 audio）
+    Live,
+    /// 影视（v0.13.6）：纪录片/电影/剧集/故事/动画——叙事内容，非教学
+    Narrative,
 }
 
-impl ContentForm {
-    /// 前端展示名（检测卡 v2 三维一体用；当前前端自带标签映射，
-    /// 本方法保留为后端展示/日志用，登记豁免 dead_code——与 ProfileKind::label 同模式）。
-    #[allow(dead_code)]
-    pub fn label(self) -> &'static str {
-        match self {
-            ContentForm::Lecture => "讲授",
-            ContentForm::HandsOn => "实操",
-            ContentForm::Explainer => "解说",
-            ContentForm::Dialog => "对话",
-            ContentForm::Exercise => "题目",
-            ContentForm::Coding => "代码",
-            ContentForm::Audio => "音频",
-        }
-    }
-
-    /// 解析前端传入的形态标识（kebab-case）；非法值 → None（诚实不猜默认）。
-    pub fn parse(s: &str) -> Option<ContentForm> {
-        match s {
-            "lecture" => Some(ContentForm::Lecture),
-            "hands-on" => Some(ContentForm::HandsOn),
-            "explainer" => Some(ContentForm::Explainer),
-            "dialog" => Some(ContentForm::Dialog),
-            "exercise" => Some(ContentForm::Exercise),
-            "coding" => Some(ContentForm::Coding),
-            "audio" => Some(ContentForm::Audio),
-            _ => None,
-        }
-    }
-
-    /// 形态标识（kebab-case，与 parse/serde 同口径；sessions.profile 落库用，
-    /// 登记豁免 dead_code——落库接线在 M5 检测卡 v2）。
-    #[allow(dead_code)]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ContentForm::Lecture => "lecture",
-            ContentForm::HandsOn => "hands-on",
-            ContentForm::Explainer => "explainer",
-            ContentForm::Dialog => "dialog",
-            ContentForm::Exercise => "exercise",
-            ContentForm::Coding => "coding",
-            ContentForm::Audio => "audio",
-        }
-    }
-}
+// impl ContentForm（label/parse/as_str——10 形态静态映射）按 v0.13.6 拆分计划
+// 移至 video_profile_spec_data.rs（本文件维持 ≤300；跨文件 impl 先例：LiveSessionManager）。
+// 消费端不受影响——impl 同 crate 全域可见，use super::* 的测试路径零改动。
 
 /// 画面信息价值档位（4 档，决定采样/OCR/存储；REQ-188 画面轴）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -193,13 +157,14 @@ impl Default for ProfileSpec {
     }
 }
 
-/// 13→7 映射：旧档案 → 新形态（framework-v2 §5 映射表）。
+/// 13→10 映射：旧档案 → 新形态（framework-v2 §5 映射表 + v0.13.6 会议/直播回归独立形态）。
 impl ProfileKind {
-    /// 旧 13 类 → 新 7 形态（多对一收敛映射；Unknown → None 诚实未知）。
+    /// 旧 13 类 → 新 10 形态（多对一收敛映射；Unknown → None 诚实未知）。
     ///
     /// @ai-context: whiteboard 归讲授（画面档=高由 default_tier 表达）；
-    ///              podcast/live 归音频；follow-along/game-tutorial 归实操；
-    ///              interview/meeting 归对话。
+    ///              podcast 归音频；follow-along/game-tutorial 归实操；
+    ///              interview 归对话；v0.13.6：meeting 回归独立会议形态、
+    ///              live 回归独立直播形态（不再折叠进对话/音频）。
     pub fn to_form(self) -> Option<ContentForm> {
         match self {
             ProfileKind::Lecture | ProfileKind::Whiteboard => Some(ContentForm::Lecture),
@@ -207,10 +172,12 @@ impl ProfileKind {
                 Some(ContentForm::HandsOn)
             }
             ProfileKind::TalkingHead => Some(ContentForm::Explainer),
-            ProfileKind::Interview | ProfileKind::Meeting => Some(ContentForm::Dialog),
+            ProfileKind::Interview => Some(ContentForm::Dialog),
+            ProfileKind::Meeting => Some(ContentForm::Meeting),
             ProfileKind::Exercise => Some(ContentForm::Exercise),
             ProfileKind::Coding => Some(ContentForm::Coding),
-            ProfileKind::Podcast | ProfileKind::Live => Some(ContentForm::Audio),
+            ProfileKind::Podcast => Some(ContentForm::Audio),
+            ProfileKind::Live => Some(ContentForm::Live),
             ProfileKind::Unknown => None,
         }
     }
@@ -228,7 +195,9 @@ impl ProfileKind {
             ProfileKind::TalkingHead => VisualTier::Low,
             ProfileKind::Interview | ProfileKind::Meeting => VisualTier::Low,
             ProfileKind::Exercise | ProfileKind::Coding => VisualTier::Rich,
-            ProfileKind::Podcast | ProfileKind::Live => VisualTier::None,
+            ProfileKind::Podcast => VisualTier::None,
+            // v0.13.6：直播独立形态——浅画面（OCR 待命，不再短路画面链）
+            ProfileKind::Live => VisualTier::Low,
             ProfileKind::Unknown => VisualTier::Medium,
         }
     }
@@ -254,11 +223,13 @@ pub fn spec_from_kind(kind: ProfileKind) -> ProfileSpec {
     }
 }
 
-/// 形态 → 默认档位（无任何信号时的新会话起点；解说/对话低档、实操中档）。
+/// 形态 → 默认档位（无任何信号时的新会话起点；解说/对话/会议/直播/影视低档、
+/// 实操中档——直播/影视有画面但价值低，不开天窗也不短路）。
 pub fn default_tier_for_form(form: ContentForm) -> VisualTier {
     match form {
         ContentForm::Lecture | ContentForm::HandsOn => VisualTier::Medium,
-        ContentForm::Explainer | ContentForm::Dialog => VisualTier::Low,
+        ContentForm::Explainer | ContentForm::Dialog | ContentForm::Meeting
+        | ContentForm::Live | ContentForm::Narrative => VisualTier::Low,
         ContentForm::Exercise | ContentForm::Coding => VisualTier::Rich,
         ContentForm::Audio => VisualTier::None,
     }
@@ -269,15 +240,18 @@ pub fn tier_skips_ocr(tier: VisualTier) -> bool {
     tier == VisualTier::None
 }
 
-/// 产物模板（形态表）：讲义式/步骤卡/叙事线摘要/纪要式/题面讲解/代码讲义/摘要文。
+/// 产物模板（形态表）：讲义式/步骤卡/叙事线摘要/纪要式/题面讲解/代码讲义/摘要文/
+/// 会议纪要（v0.13.6：meeting→既有 MeetingNotes——零新模板）。
 pub fn template_for_form(form: ContentForm) -> ArtifactTemplate {
     match form {
         ContentForm::Lecture | ContentForm::Exercise | ContentForm::Coding => {
             ArtifactTemplate::LectureNotes
         }
         ContentForm::HandsOn => ArtifactTemplate::StepCards,
-        ContentForm::Explainer | ContentForm::Audio => ArtifactTemplate::Summary,
+        ContentForm::Explainer | ContentForm::Audio | ContentForm::Live
+        | ContentForm::Narrative => ArtifactTemplate::Summary,
         ContentForm::Dialog => ArtifactTemplate::DialogueNotes,
+        ContentForm::Meeting => ArtifactTemplate::MeetingNotes,
     }
 }
 

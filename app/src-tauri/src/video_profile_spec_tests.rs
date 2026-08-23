@@ -7,8 +7,8 @@ use super::*;
 use crate::video_profile::{ArtifactTemplate, StoreTier};
 use crate::video_profile_spec_data as data;
 
-/// 全 7 形态（测试遍历用）。
-fn all_forms() -> [ContentForm; 7] {
+/// 全 10 形态（测试遍历用；v0.13.6 形态展平 +3）。
+fn all_forms() -> [ContentForm; 10] {
     [
         ContentForm::Lecture,
         ContentForm::HandsOn,
@@ -17,6 +17,9 @@ fn all_forms() -> [ContentForm; 7] {
         ContentForm::Exercise,
         ContentForm::Coding,
         ContentForm::Audio,
+        ContentForm::Meeting,
+        ContentForm::Live,
+        ContentForm::Narrative,
     ]
 }
 
@@ -57,15 +60,15 @@ fn mapping_13_to_7_follows_framework_table() {
     assert_eq!(ProfileKind::GameTutorial.to_form(), Some(ContentForm::HandsOn));
     // Assert：解说组（talking-head —— 会话 33 动画科普归属）
     assert_eq!(ProfileKind::TalkingHead.to_form(), Some(ContentForm::Explainer));
-    // Assert：对话组（interview/meeting）
+    // Assert：对话组（interview —— v0.13.6：meeting 回归独立会议形态）
     assert_eq!(ProfileKind::Interview.to_form(), Some(ContentForm::Dialog));
-    assert_eq!(ProfileKind::Meeting.to_form(), Some(ContentForm::Dialog));
+    assert_eq!(ProfileKind::Meeting.to_form(), Some(ContentForm::Meeting));
     // Assert：题目/代码独立形态
     assert_eq!(ProfileKind::Exercise.to_form(), Some(ContentForm::Exercise));
     assert_eq!(ProfileKind::Coding.to_form(), Some(ContentForm::Coding));
-    // Assert：音频组（podcast/live）
+    // Assert：音频组（podcast —— v0.13.6：live 回归独立直播形态）
     assert_eq!(ProfileKind::Podcast.to_form(), Some(ContentForm::Audio));
-    assert_eq!(ProfileKind::Live.to_form(), Some(ContentForm::Audio));
+    assert_eq!(ProfileKind::Live.to_form(), Some(ContentForm::Live));
     // Assert：unknown → None（诚实未知，不猜默认）
     assert_eq!(ProfileKind::Unknown.to_form(), None);
 }
@@ -84,7 +87,8 @@ fn mapping_default_tier_follows_framework_table() {
     assert_eq!(ProfileKind::Exercise.default_tier(), VisualTier::Rich);
     assert_eq!(ProfileKind::Coding.default_tier(), VisualTier::Rich);
     assert_eq!(ProfileKind::Podcast.default_tier(), VisualTier::None);
-    assert_eq!(ProfileKind::Live.default_tier(), VisualTier::None);
+    // v0.13.6：直播独立形态——浅画面，OCR 待命（不再短路画面链）
+    assert_eq!(ProfileKind::Live.default_tier(), VisualTier::Low);
     // unknown 走默认中档（参数不阻塞）
     assert_eq!(ProfileKind::Unknown.default_tier(), VisualTier::Medium);
 }
@@ -101,6 +105,44 @@ fn template_follows_form_independently() {
     assert_eq!(template_for_form(ContentForm::Exercise), ArtifactTemplate::LectureNotes);
     assert_eq!(template_for_form(ContentForm::Coding), ArtifactTemplate::LectureNotes);
     assert_eq!(template_for_form(ContentForm::Audio), ArtifactTemplate::Summary);
+    // v0.13.6 新形态：会议→既有会议纪要模板；直播/影视→摘要（叙事线变体由 narrative_detect 触发）
+    assert_eq!(template_for_form(ContentForm::Meeting), ArtifactTemplate::MeetingNotes);
+    assert_eq!(template_for_form(ContentForm::Live), ArtifactTemplate::Summary);
+    assert_eq!(template_for_form(ContentForm::Narrative), ArtifactTemplate::Summary);
+}
+
+#[test]
+fn postprocess_golden_for_new_forms() {
+    // Arrange/Act：v0.13.6 新形态后处理规则
+    let meeting = data::postprocess_for_form(ContentForm::Meeting);
+    let live = data::postprocess_for_form(ContentForm::Live);
+    let narrative = data::postprocess_for_form(ContentForm::Narrative);
+    // Assert：会议=说话人+重点、非章节（纪要结构非线性）
+    assert!(meeting.speaker_detect && meeting.highlight);
+    assert!(!meeting.chapter_detect && !meeting.step_cards && !meeting.verbal_normalize && !meeting.glossary);
+    // Assert：直播=书面化+重点、无步骤卡/术语
+    assert!(live.verbal_normalize && live.highlight);
+    assert!(!live.chapter_detect && !live.step_cards && !live.speaker_detect && !live.glossary);
+    // Assert：影视=书面化+重点、非教学（无术语/无步骤卡）
+    assert!(narrative.verbal_normalize && narrative.highlight);
+    assert!(!narrative.chapter_detect && !narrative.step_cards && !narrative.glossary);
+}
+
+#[test]
+fn detect_signals_keywords_cover_new_forms() {
+    // Arrange/Act：信号词表（防"纪录片"误归讲授/解说——词表必须独立）
+    let meeting = data::detect_signals_for_form(ContentForm::Meeting);
+    let live = data::detect_signals_for_form(ContentForm::Live);
+    let narrative = data::detect_signals_for_form(ContentForm::Narrative);
+    let audio = data::detect_signals_for_form(ContentForm::Audio);
+    // Assert：新形态词表非空且含代表性词
+    assert!(meeting.title_keywords.iter().any(|k| k == "复盘"));
+    assert!(live.title_keywords.iter().any(|k| k == "直播"));
+    assert!(narrative.title_keywords.iter().any(|k| k == "纪录片"));
+    // Assert：直播关键词已从音频词表移除（音频=播客/有声书——不再折叠直播）
+    assert!(!audio.title_keywords.iter().any(|k| k == "直播"));
+    // Assert：过泛单字不入影视词表（"第"/"集"系列识别走 series_detect）
+    assert!(!narrative.title_keywords.iter().any(|k| k == "第" || k == "集"));
 }
 
 #[test]
@@ -216,4 +258,8 @@ fn default_tier_per_form_sane() {
     assert_eq!(default_tier_for_form(ContentForm::Explainer), VisualTier::Low);
     assert_eq!(default_tier_for_form(ContentForm::Coding), VisualTier::Rich);
     assert_eq!(default_tier_for_form(ContentForm::Audio), VisualTier::None);
+    // v0.13.6 新形态：浅画面默认低档（有画面不短路 OCR，也不会用满采样）
+    assert_eq!(default_tier_for_form(ContentForm::Meeting), VisualTier::Low);
+    assert_eq!(default_tier_for_form(ContentForm::Live), VisualTier::Low);
+    assert_eq!(default_tier_for_form(ContentForm::Narrative), VisualTier::Low);
 }

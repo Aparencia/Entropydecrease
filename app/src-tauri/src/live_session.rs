@@ -172,6 +172,8 @@ pub struct ProfileOverride {
     pub form: Option<crate::video_profile_spec::ContentForm>,
     pub tier: Option<crate::video_profile_spec::VisualTier>,
     pub domain: Option<crate::video_profile_domain::DomainKind>,
+    /// v0.13.6（REQ-220）：细目 id 多选（与 domain 同传；空=仅粗领域）
+    pub fine: Vec<String>,
 }
 
 /// 会话装配后半段（引擎就绪后）：音频捕获 → 屏幕 worker → 主循环 → 后台融合。

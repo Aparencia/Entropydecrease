@@ -271,6 +271,10 @@ pub struct DetectResult {
     /// 检测低置信/同 kind 时不设（记忆正常生效）；旧 JSON 缺省 None（零回归）
     #[serde(default)]
     pub memory_conflict: Option<ProfileKind>,
+    /// v0.13.6（REQ-221）：平台分区映射表命中的形态（确定性检测信号——优先级
+    /// 高于记忆/标题候选：影视/直播分区直接定叙事/直播形态）；未命中 None。
+    #[serde(default)]
+    pub platform_form: Option<crate::video_profile_spec::ContentForm>,
 }
 
 /// 检测得分阈值：top 得分低于该值视为信号不足。
@@ -312,6 +316,7 @@ pub fn vote_detect(signals: &ObservedSignals) -> DetectResult {
             memory_form: None,
             domain: None,
             memory_conflict: None,
+            platform_form: None,
         };
     }
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -324,7 +329,7 @@ pub fn vote_detect(signals: &ObservedSignals) -> DetectResult {
             .get(1)
             .map(|(_, s)| scored[0].1 - *s < CONFLICT_GAP)
             .unwrap_or(false);
-    DetectResult { candidates, needs_confirmation, memory_hit: None, memory_form: None, domain: None, memory_conflict: None }
+    DetectResult { candidates, needs_confirmation, memory_hit: None, memory_form: None, domain: None, memory_conflict: None, platform_form: None }
 }
 
 /// 四象限记忆后置判定（纯函数，v0.11.5 Task 5）：检测优先 + 记忆兜底 + 冲突以检测为准。
@@ -411,10 +416,29 @@ pub struct MemoryEntry {
     pub form: Option<crate::video_profile_spec::ContentForm>,
 }
 
+/// v0.13.6（REQ-222）：领域记忆条目——coarse+细目 id（用户确认即记忆）。
+///
+/// @ai-context: 与 MemoryEntry（kind/form 通道）**分离**：领域记忆不参与 lookup()
+///              的 kind 匹配——防 domain-only 条目把 legacy kind 结果染成 Unknown；
+///              检索走 lookup_domain（同最长关键词/series 键规则）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DomainMemoryEntry {
+    pub keyword: String,
+    /// series 键标记（与 MemoryEntry.is_series 同口径）
+    #[serde(default)]
+    pub is_series: bool,
+    /// 用户确认的领域（粗 + 细目 id 多选）；空 fine=仅粗领域（合法——不阻塞）
+    #[serde(default)]
+    pub domain: crate::video_profile_spec::DomainTag,
+}
+
 /// 记忆偏好库（JSON 持久化；同 vocab 模式：路径可注入，测试用 tempfile）。
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ProfileMemory {
     pub entries: Vec<MemoryEntry>,
+    /// v0.13.6（REQ-222）：领域记忆独立通道（旧 JSON 缺省空——零迁移）
+    #[serde(default)]
+    pub domain_entries: Vec<DomainMemoryEntry>,
 }
 
 impl ProfileMemory {
@@ -489,14 +513,10 @@ impl ProfileMemory {
         kind: ProfileKind,
         form: Option<crate::video_profile_spec::ContentForm>,
     ) {
-        let keyword = keyword.trim().to_string();
-        if keyword.is_empty() {
+        let (key, is_series) = Self::memory_key(keyword);
+        if key.is_empty() {
             return;
         }
-        let (key, is_series) = match crate::series_detect::extract_series(&keyword) {
-            Some(info) => (info.series, true),
-            None => (keyword, false),
-        };
         if let Some(e) = self.entries.iter_mut().find(|e| e.keyword == key) {
             e.kind = kind;
             e.is_series = is_series;
@@ -504,6 +524,65 @@ impl ProfileMemory {
         } else {
             self.entries.push(MemoryEntry { keyword: key, kind, is_series, form });
         }
+    }
+
+    /// 记忆键归一化（series 剥离；空键 → None 语义由调用方拒绝）。
+    ///
+    /// @ai-context: MemoryEntry/DomainMemoryEntry 共用——键规则单一来源防漂移。
+    fn memory_key(keyword: &str) -> (String, bool) {
+        let keyword = keyword.trim().to_string();
+        if keyword.is_empty() {
+            return (keyword, false);
+        }
+        match crate::series_detect::extract_series(&keyword) {
+            Some(info) => (info.series, true),
+            None => (keyword, false),
+        }
+    }
+
+    /// 记录用户确认的领域（coarse+细目多选；REQ-222）——同标题/系列下次直接生效。
+    ///
+    /// @ai-context: 独立通道（DomainMemoryEntry）不污染 kind/form 记忆；
+    ///              细目为空（仅粗领域）同样合法；空键拒绝（不记悬挂条目）。
+    pub fn remember_domain(&mut self, keyword: &str, domain: &crate::video_profile_spec::DomainTag) {
+        let (key, is_series) = Self::memory_key(keyword);
+        if key.is_empty() {
+            return;
+        }
+        if let Some(e) = self.domain_entries.iter_mut().find(|e| e.keyword == key) {
+            e.is_series = is_series;
+            e.domain = domain.clone();
+        } else {
+            self.domain_entries.push(DomainMemoryEntry {
+                keyword: key,
+                is_series,
+                domain: domain.clone(),
+            });
+        }
+    }
+
+    /// 按标题查询领域记忆（REQ-222）：series 键优先，完整标题兜底；最长关键词优先。
+    pub fn lookup_domain(&self, title: &str) -> Option<crate::video_profile_spec::DomainTag> {
+        if let Some(info) = crate::series_detect::extract_series(title) {
+            if let Some(tag) = self.lookup_domain_best(&info.series) {
+                return Some(tag);
+            }
+        }
+        self.lookup_domain_best(title)
+    }
+
+    /// 最长关键词优先匹配（纯函数；领域记忆专用通道）。
+    fn lookup_domain_best(&self, key: &str) -> Option<crate::video_profile_spec::DomainTag> {
+        let mut best: Option<(usize, crate::video_profile_spec::DomainTag)> = None;
+        for e in &self.domain_entries {
+            if key.contains(&e.keyword) && !e.keyword.is_empty() {
+                let len = e.keyword.chars().count();
+                if best.as_ref().is_none_or(|(bl, _)| len > *bl) {
+                    best = Some((len, e.domain.clone()));
+                }
+            }
+        }
+        best.map(|(_, tag)| tag)
     }
 
     /// 按标题查询四维形态记忆（REQ-188）：form 优先，旧条目经 kind 映射兜底。

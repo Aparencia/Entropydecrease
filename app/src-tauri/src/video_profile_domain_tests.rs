@@ -209,7 +209,8 @@ fn domain_json_roundtrip() {
     let d = DomainDetection {
         kind: Some(DomainKind::Economy),
         fine_tags: vec!["公积金".into()],
-        source: "platform".into(),
+        fine_ids: vec!["invest".into()],
+        source: "platform-map".into(),
         confidence: 1.0,
     };
     // Act：JSON roundtrip（检测卡 v2 / 会话落库传输）
@@ -217,4 +218,10 @@ fn domain_json_roundtrip() {
     let back: DomainDetection = serde_json::from_str(&raw).unwrap();
     // Assert：字段无损
     assert_eq!(back, d);
+    // 旧 JSON（无 fine_ids）→ 缺省空数组（零回归）
+    let legacy = serde_json::from_str::<DomainDetection>(
+        r#"{"kind":"economy","fine_tags":[],"source":"platform","confidence":1.0}"#,
+    )
+    .unwrap();
+    assert!(legacy.fine_ids.is_empty());
 }

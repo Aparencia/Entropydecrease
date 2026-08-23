@@ -11,7 +11,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 粗领域标识（15 类，带参数——种子词表/区域预期/热词通道）。
+/// 粗领域标识（20 类，带参数——种子词表/区域预期/热词通道；v0.13.6 +5）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum DomainKind {
@@ -45,77 +45,22 @@ pub enum DomainKind {
     Gaming,
     /// 心理/成长/哲学
     Psychology,
+    /// 美食/烹饪/烘焙（v0.13.6；烘焙从手工迁入）
+    Cooking,
+    /// 摄影/视频制作（v0.13.6）
+    PhotoVideo,
+    /// 历史/人文/社科（v0.13.6）
+    HistoryHumanities,
+    /// 写作/阅读（v0.13.6）
+    Writing,
+    /// 数码/硬件/评测（v0.13.6）
+    TechGadgets,
 }
 
+// impl DomainKind（label/parse/as_str——20 类静态映射）按 v0.13.6 拆分计划
+// 移至 video_profile_domain_data.rs（本文件维持 ≤300；跨文件 impl 先例：LiveSessionManager）。
+
 impl DomainKind {
-    /// 前端展示名（检测卡 v2 下拉用；登记豁免 dead_code——M5 接线，
-    /// 目标激活版本：v0.12.0）。
-    #[allow(dead_code)]
-    pub fn label(self) -> &'static str {
-        match self {
-            DomainKind::Economy => "经济管理",
-            DomainKind::Programming => "编程开发",
-            DomainKind::MathScience => "数学理科",
-            DomainKind::Language => "语言学习",
-            DomainKind::Beauty => "化妆美妆",
-            DomainKind::Fitness => "健身运动",
-            DomainKind::Law => "法律",
-            DomainKind::Medical => "医学健康",
-            DomainKind::Career => "职场技能",
-            DomainKind::Design => "设计创意",
-            DomainKind::Music => "音乐",
-            DomainKind::Handcraft => "手工",
-            DomainKind::Exam => "考试考证",
-            DomainKind::Gaming => "游戏电竞",
-            DomainKind::Psychology => "心理成长",
-        }
-    }
-
-    /// 解析前端传入的领域标识（kebab-case）；非法值 → None（诚实不猜）。
-    pub fn parse(s: &str) -> Option<DomainKind> {
-        match s {
-            "economy" => Some(DomainKind::Economy),
-            "programming" => Some(DomainKind::Programming),
-            "math-science" => Some(DomainKind::MathScience),
-            "language" => Some(DomainKind::Language),
-            "beauty" => Some(DomainKind::Beauty),
-            "fitness" => Some(DomainKind::Fitness),
-            "law" => Some(DomainKind::Law),
-            "medical" => Some(DomainKind::Medical),
-            "career" => Some(DomainKind::Career),
-            "design" => Some(DomainKind::Design),
-            "music" => Some(DomainKind::Music),
-            "handcraft" => Some(DomainKind::Handcraft),
-            "exam" => Some(DomainKind::Exam),
-            "gaming" => Some(DomainKind::Gaming),
-            "psychology" => Some(DomainKind::Psychology),
-            _ => None,
-        }
-    }
-
-    /// 领域标识（kebab-case，与 parse/serde 同口径；落库/传输用，
-    /// 登记豁免 dead_code——会话落库接线在 M5 检测卡 v2，目标激活版本：v0.12.0）。
-    #[allow(dead_code)]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            DomainKind::Economy => "economy",
-            DomainKind::Programming => "programming",
-            DomainKind::MathScience => "math-science",
-            DomainKind::Language => "language",
-            DomainKind::Beauty => "beauty",
-            DomainKind::Fitness => "fitness",
-            DomainKind::Law => "law",
-            DomainKind::Medical => "medical",
-            DomainKind::Career => "career",
-            DomainKind::Design => "design",
-            DomainKind::Music => "music",
-            DomainKind::Handcraft => "handcraft",
-            DomainKind::Exam => "exam",
-            DomainKind::Gaming => "gaming",
-            DomainKind::Psychology => "psychology",
-        }
-    }
-
     /// 区域预期（REQ-190 作用链）：数学→公式区、代码→code 区、设计→图片区；
     /// 其余无强预期（None——不改变现状区域权重）。
     /// 登记豁免 dead_code：区域预期接线在 M4 平台适配（OCR 标签通用化后生效），
@@ -154,27 +99,56 @@ pub struct DomainDetection {
     pub kind: Option<DomainKind>,
     /// 细标签（开放集合：平台原文/术语频率命中；去重保留原文）
     pub fine_tags: Vec<String>,
-    /// 命中来源（诊断/记忆用途：platform/title/user/term）
+    /// v0.13.6（REQ-220）：curated 细目 id（kebab；多选；与 DomainTag.fine 同契约）。
+    /// serde(default)——旧响应缺省，前端回退空数组。
+    #[serde(default)]
+    pub fine_ids: Vec<String>,
+    /// 命中来源（诊断/记忆用途：platform/platform-map/user/title/term）
     pub source: String,
     /// 置信（命中词数加权 0.0-1.0；领域错判代价低，无需确认门禁）
     pub confidence: f32,
 }
 
-/// 五来源检测（纯函数）：平台分区 > 用户确认 > 标题词 > 开场白 > 术语频率。
+/// 六源检测（纯函数）：分区映射表 > 平台种子词 > 用户确认 > 标题词 > 开场白 > 术语频率。
 ///
-/// @ai-context: 可靠性排序（REQ-190）：① 平台分区标签 → ③ 用户确认 → ② 标题词
-///              → ⑤ ASR 开场白（口语弱信号：仅 title 未命中时补位，自我介绍
-///              常含领域自称）→ ④ 术语频率。同分时按此优先级。
+/// @ai-context: 可靠性排序（REQ-190/221）：①a 平台分区映射表（确定性，置信 1.0）
+///              → ①b 分区标签原文种子词 → ③ 用户确认 → ② 标题词 → ⑤ ASR 开场白
+///              （口语弱信号：仅 title 未命中时补位，自我介绍常含领域自称）→
+///              ④ 术语频率。同分时按此优先级。
 /// @ai-context: 细标签：平台原文/术语原文原样保留（"公积金"不必枚举——
-///              细标签开放；粗领域命中词同时作为 hotwords 预热候选）。
+///              细标签开放）；细目：curated id（v0.13.6，粗领域内细分，如
+///              programming-frontend）——两者并存互不覆盖。
 pub fn detect_domain(signals: &DomainSignals) -> DomainDetection {
     let fine_tags: Vec<String> = Vec::new();
-    // ① 平台分区标签（强信号：官方分类原文直接进细标签）
+    // ①a 平台分区映射表（v0.13.6 REQ-221：确定性映射——置信 1.0，细目预选；
+    // 影视/直播分区 coarse=None——领域留给内容信号，不在此短路）
+    if let Some(entry) =
+        crate::video_profile_platform_map::lookup_zone_first(&signals.platform_tags)
+    {
+        if let Some(kind) = entry.coarse {
+            let fine_ids = entry.fine.map(|f| vec![f.to_string()]).unwrap_or_default();
+            let hit_tag = signals
+                .platform_tags
+                .iter()
+                .find(|t| crate::video_profile_platform_map::lookup_zone(t).is_some())
+                .cloned()
+                .unwrap_or_default();
+            return DomainDetection {
+                kind: Some(kind),
+                fine_ids,
+                fine_tags: if hit_tag.is_empty() { Vec::new() } else { vec![hit_tag] },
+                source: "platform-map".to_string(),
+                confidence: 1.0,
+            };
+        }
+    }
+    // ①b 平台分区标签原文（强信号：官方分类原文直接进细标签）
     for tag in &signals.platform_tags {
         if let Some(kind) = match_domain_words(std::slice::from_ref(tag)) {
             let source = "platform".to_string();
             return DomainDetection {
                 kind: Some(kind),
+                fine_ids: Vec::new(),
                 fine_tags: vec![tag.clone()],
                 source,
                 confidence: 1.0,
@@ -185,16 +159,21 @@ pub fn detect_domain(signals: &DomainSignals) -> DomainDetection {
     if let Some(kind) = signals.user_confirmed {
         return DomainDetection {
             kind: Some(kind),
+            fine_ids: Vec::new(),
             fine_tags,
             source: "user".to_string(),
             confidence: 1.0,
         };
     }
-    // ② 标题领域词（弱信号：命中即定粗领域，细标签留空）
+    // ② 标题领域词（弱信号：命中即定粗领域，细目种子词进一步细分）
     if let Some(title) = signals.title.as_deref() {
         if let Some((kind, hits)) = match_domain_words_count(&[title.to_string()]) {
             return DomainDetection {
                 kind: Some(kind),
+                fine_ids: crate::video_profile_domain_fine::match_fine(&[title.to_string()], kind)
+                    .into_iter()
+                    .map(String::from)
+                    .collect(),
                 fine_tags: Vec::new(),
                 source: "title".to_string(),
                 confidence: (hits as f32 / 3.0).min(1.0),
@@ -206,13 +185,14 @@ pub fn detect_domain(signals: &DomainSignals) -> DomainDetection {
         if let Some((kind, hits)) = match_domain_words_count(&[opening.to_string()]) {
             return DomainDetection {
                 kind: Some(kind),
+                fine_ids: Vec::new(),
                 fine_tags: Vec::new(),
                 source: "asr".to_string(),
                 confidence: (hits as f32 / 3.0).min(1.0),
             };
         }
     }
-    // ④ 术语频率（会话中补全：命中词进 hotwords 预热候选）
+    // ④ 术语频率（会话中补全：命中词进 hotwords 预热候选；细目按细目种子细分）
     if !signals.term_freq.is_empty() {
         if let Some((kind, hits)) = match_domain_words_count(&signals.term_freq) {
             let seeds = crate::video_profile_domain_data::seed_words(kind);
@@ -225,13 +205,17 @@ pub fn detect_domain(signals: &DomainSignals) -> DomainDetection {
                 .collect::<Vec<_>>();
             return DomainDetection {
                 kind: Some(kind),
+                fine_ids: crate::video_profile_domain_fine::match_fine(&signals.term_freq, kind)
+                    .into_iter()
+                    .map(String::from)
+                    .collect(),
                 fine_tags: top,
                 source: "term".to_string(),
                 confidence: (hits as f32 / 3.0).min(1.0),
             };
         }
     }
-    DomainDetection { kind: None, fine_tags, source: "none".to_string(), confidence: 0.0 }
+    DomainDetection { kind: None, fine_ids: Vec::new(), fine_tags, source: "none".to_string(), confidence: 0.0 }
 }
 
 /// 平台分区标签/单文本 → 领域（分区标签词可能直接含领域名如"经济管理"）。
@@ -255,8 +239,8 @@ fn match_domain_words_count(texts: &[String]) -> Option<(DomainKind, usize)> {
     best
 }
 
-/// 全 15 领域（检测遍历用）。
-pub const ALL_DOMAINS: [DomainKind; 15] = [
+/// 全 20 领域（检测遍历用；v0.13.6 +5）。
+pub const ALL_DOMAINS: [DomainKind; 20] = [
     DomainKind::Economy,
     DomainKind::Programming,
     DomainKind::MathScience,
@@ -272,6 +256,11 @@ pub const ALL_DOMAINS: [DomainKind; 15] = [
     DomainKind::Exam,
     DomainKind::Gaming,
     DomainKind::Psychology,
+    DomainKind::Cooking,
+    DomainKind::PhotoVideo,
+    DomainKind::HistoryHumanities,
+    DomainKind::Writing,
+    DomainKind::TechGadgets,
 ];
 
 /// 领域命中 → hotwords 预热候选（种子词表原文；供 VocabManager 通道注入）。

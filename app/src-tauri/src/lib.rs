@@ -324,9 +324,15 @@ mod video_profile_spec;
 mod video_profile_spec_data;
 // v0.9.0 M2（REQ-189）：画面价值档位检测（三信号投票 + 重评窗口 + 升降档裁决）
 mod video_tier_detect;
-// v0.9.0 M3（REQ-190）：内容领域标签体系（粗 15 领域 + 细标签 + 四来源检测）
+// v0.9.0 M3（REQ-190）：内容领域标签体系（粗 20 领域 + 细标签 + 四来源检测；
+// v0.13.6：粗 15→20 + curated 细目两层——REQ-220）
 mod video_profile_domain;
 mod video_profile_domain_data;
+mod video_profile_domain_fine;
+mod video_profile_domain_fine_data;
+// v0.13.6（REQ-221）：平台分区映射表（B站 分区 → 形态/粗领域/细目）
+mod video_profile_platform_map;
+mod video_profile_platform_map_data;
 // v0.9.0 M4（REQ-191）：平台信号适配（bilibili/local 轻量适配 + OCR 标签通用化）
 mod platform_adapter;
 // v0.9.0 M5（REQ-193）：叙事结构检测（故事线/结构化条目/直接教学 模板变体）
@@ -564,6 +570,9 @@ pub fn run() {
             // v0.9.0 M3（REQ-190）：领域标签检测 + hotwords 预热
             commands_video::detect_video_domain,
             commands_video::preheat_domain_hotwords,
+            // v0.13.6（REQ-220/222）：细目选项表 + 领域记忆（coarse+细目多选）
+            commands_video::list_domain_fine,
+            commands_video::remember_video_profile_domain,
             // v0.12.0 M6（采集体验债）：采集浮窗打开/关闭
             commands_window::open_capture_float,
             commands_window::close_capture_float,

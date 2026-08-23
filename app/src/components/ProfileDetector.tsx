@@ -14,6 +14,7 @@ import type {
   ContentForm,
   DetectResult,
   DomainDetection,
+  DomainFineOption,
   ProfileKind,
   VideoProfile,
   VisualTier,
@@ -28,6 +29,9 @@ export const FORM_LABELS: Record<ContentForm, string> = {
   exercise: "题目",
   coding: "代码",
   audio: "音频",
+  meeting: "会议",
+  live: "直播",
+  narrative: "影视",
 };
 
 /** 画面档标签映射（Rust VisualTier::label 同源） */
@@ -38,7 +42,7 @@ export const TIER_LABELS: Record<VisualTier, string> = {
   none: "无",
 };
 
-/** 全 7 形态（检测卡下拉选项） */
+/** 全 10 形态（检测卡下拉选项；v0.13.6 形态展平 +3） */
 const ALL_FORMS: ContentForm[] = [
   "lecture",
   "hands-on",
@@ -47,12 +51,16 @@ const ALL_FORMS: ContentForm[] = [
   "exercise",
   "coding",
   "audio",
+  "meeting",
+  "live",
+  "narrative",
 ];
 
 /** 全 4 画面档（检测卡下拉选项） */
 const ALL_TIERS: VisualTier[] = ["rich", "medium", "low", "none"];
 
-/** 旧 13 类 → 新 7 形态映射（Rust ProfileKind::to_form 同源；unknown → null） */
+/** 旧 13 类 → 新 10 形态映射（Rust ProfileKind::to_form 同源；unknown → null；
+ *  v0.13.6：meeting/live 回归独立形态——不再折叠进对话/音频） */
 export const KIND_TO_FORM: Partial<Record<ProfileKind, ContentForm>> = {
   lecture: "lecture",
   whiteboard: "lecture",
@@ -61,11 +69,11 @@ export const KIND_TO_FORM: Partial<Record<ProfileKind, ContentForm>> = {
   "game-tutorial": "hands-on",
   "talking-head": "explainer",
   interview: "dialog",
-  meeting: "dialog",
+  meeting: "meeting",
   exercise: "exercise",
   coding: "coding",
   podcast: "audio",
-  live: "audio",
+  live: "live",
 };
 
 /** 旧 13 类 → 默认画面档（Rust ProfileKind::default_tier 同源） */
@@ -81,7 +89,8 @@ const KIND_TO_TIER: Partial<Record<ProfileKind, VisualTier>> = {
   exercise: "rich",
   coding: "rich",
   podcast: "none",
-  live: "none",
+  // v0.13.6：直播浅画面（OCR 待命——不再短路画面链）
+  live: "low",
 };
 
 export default function ProfileDetector({
@@ -102,12 +111,20 @@ export default function ProfileDetector({
   // M3 诚实化：画面档修改的轻提示（仅本次会话生效——后端无 tier 记忆通道）
   const [tierNotice, setTierNotice] = useState("");
   const [profiles, setProfiles] = useState<VideoProfile[]>([]);
+  // v0.13.6（REQ-220）：细目选项表（粗领域 → 细目列表；单一数据源 list_domain_fine）
+  const [fineMap, setFineMap] = useState<Record<string, DomainFineOption[]>>({});
+  // v0.13.6：已选细目 id（检测预选；用户 chips 可改；与 domain.kind 联动）
+  const [fineSel, setFineSel] = useState<string[]>([]);
 
   // 档案列表（只读展示当前配置；一次加载）
   useEffect(() => {
     void invoke<VideoProfile[]>("video_profiles")
       .then(setProfiles)
       .catch((e) => setError(`档案加载失败: ${e}`));
+    // 细目选项表（chips 源；失败静默——仅粗领域也可用，不阻塞）
+    void invoke<Array<[string, DomainFineOption[]]>>("list_domain_fine")
+      .then((rows) => setFineMap(Object.fromEntries(rows)))
+      .catch(() => undefined);
   }, []);
 
   // 窗口标题变化 → 自动检测（标题信号 + 记忆偏好 + 平台/领域信号）
@@ -123,15 +140,21 @@ export default function ProfileDetector({
       .then((r) => {
         if (cancelled) return;
         setResult(r);
-        // 三维回填（v2）：形态=记忆命中优先，其次候选首位映射；画面档=默认中档
+        // 三维回填（v2）：形态=平台分区映射 > 记忆命中 > 候选首位映射（v0.13.6
+        // REQ-221：影视/直播分区映射为最强检测信号）；画面档=默认中档
         // （开始前默认+诚实声明——REQ-189）；领域=检测结果（平台/标题来源）
         const top = r.candidates[0]?.kind ?? "unknown";
-        const fromMemory = r.memory_form ?? KIND_TO_FORM[top] ?? null;
+        const fromMemory = r.platform_form ?? r.memory_form ?? KIND_TO_FORM[top] ?? null;
         setForm(fromMemory);
         setTier(KIND_TO_TIER[top] ?? "medium");
         // 领域检测结果（detect_video_profile 内已含平台/标题领域检测）
-        if (r.domain?.kind || r.domain?.fine_tags?.length) {
+        if (r.domain?.kind || r.domain?.fine_tags?.length || r.domain?.fine_ids?.length) {
           setDomain(r.domain);
+          // v0.13.6：细目预选 = 检测 hits（curated id）
+          setFineSel(r.domain?.fine_ids ?? []);
+        } else {
+          setDomain(null);
+          setFineSel([]);
         }
         // 兼容 v1 通道：高置信/记忆命中自动生效（无确认门禁——形态低置信必问）
         if (!r.needs_confirmation && top !== "unknown") {
@@ -179,17 +202,20 @@ export default function ProfileDetector({
     setTierNotice("画面档修改仅本次会话生效");
   }, []);
 
-  /** 领域修改（增强项——不问可改；修改即记忆） */
+  /** 领域修改（增强项——不问可改；修改即记忆 v0.13.6：coarse+细目多选一起记） */
   const changeDomain = useCallback(
-    async (d: DomainDetection | null) => {
+    async (d: DomainDetection | null, fineIds: string[]) => {
       setDomain(d);
+      setFineSel(fineIds);
       if (!windowTitle || !d?.kind) return;
       try {
-        // 领域命中 → hotwords 预热（ASR 术语命中率↑；幂等去重）
-        await invoke("preheat_domain_hotwords", { kind: d.kind });
+        // 领域命中 → hotwords 预热（候选 = 粗种子 ∪ 细目种子；ASR 术语命中率↑；幂等去重）
+        await invoke("preheat_domain_hotwords", { kind: d.kind, fine: fineIds });
+        // 修改即记忆：粗+细目写入（同标题/系列下次直接生效）
+        await invoke("remember_video_profile_domain", { title: windowTitle, coarse: d.kind, fine: fineIds });
         setError("");
       } catch (e) {
-        setError(`领域热词预热失败: ${e}`);
+        setError(`领域热词/记忆失败: ${e}`);
       }
     },
     [windowTitle],
@@ -222,7 +248,7 @@ export default function ProfileDetector({
               <span style={{ color: "#0d9488" }}>（记忆偏好生效）</span>
             ) : null}
           </div>
-          {/* 维度①：内容形态（7 类下拉——点击可调） */}
+          {/* 维度①：内容形态（10 类下拉——点击可调；v0.13.6 展平 +3） */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
             <span style={{ fontSize: 11, color: "#6b7280", width: 56 }}>形态</span>
             <select
@@ -267,14 +293,17 @@ export default function ProfileDetector({
           {tierNotice && (
             <div style={{ fontSize: 10, color: "#b45309", marginBottom: 6, marginLeft: 64 }}>{tierNotice}</div>
           )}
-          {/* 维度③：内容领域（粗 15 下拉——不问可改；命中即预热 hotwords） */}
+          {/* 维度③：内容领域（粗 20 下拉 + 细目多选 chips——不问可改；命中即预热 hotwords） */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
             <span style={{ fontSize: 11, color: "#6b7280", width: 56 }}>领域</span>
             <select
               value={domain?.kind ?? ""}
               onChange={(e) => {
                 const v = e.target.value;
-                void changeDomain(v ? { kind: v, fine_tags: [], source: "user", confidence: 1 } : null);
+                void changeDomain(
+                  v ? { kind: v, fine_tags: [], fine_ids: [], source: "user", confidence: 1 } : null,
+                  [],
+                );
               }}
               style={{ fontSize: 12, padding: "2px 6px", borderRadius: 4, border: "1px solid #d1d5db" }}
             >
@@ -285,10 +314,37 @@ export default function ProfileDetector({
                 </option>
               ))}
             </select>
-            {domain?.fine_tags?.length ? (
-              <span style={{ fontSize: 10, color: "#6b7280" }}>细标签：{domain.fine_tags.join(" / ")}</span>
-            ) : null}
           </div>
+          {/* 细目多选 chips（v0.13.6 REQ-220：curated 表——list_domain_fine 单一数据源；
+              检测预选；0 个=仅粗领域合法（不阻塞）） */}
+          {domain?.kind && (fineMap[domain.kind]?.length ?? 0) > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6, marginLeft: 64 }}>
+              {fineMap[domain.kind]!.map((f) => {
+                const on = fineSel.includes(f.id);
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => {
+                      const next = on ? fineSel.filter((x) => x !== f.id) : [...fineSel, f.id];
+                      void changeDomain(domain, next);
+                    }}
+                    style={{
+                      fontSize: 11, padding: "1px 8px", borderRadius: 10, cursor: "pointer",
+                      border: on ? "1px solid #0d9488" : "1px solid #d1d5db",
+                      background: on ? "#f0fdfa" : "#fff", color: on ? "#0d9488" : "#6b7280",
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {domain?.fine_tags?.length ? (
+            <div style={{ fontSize: 10, color: "#6b7280", marginLeft: 64, marginBottom: 6 }}>
+              细标签（原始）：{domain.fine_tags.join(" / ")}
+            </div>
+          ) : null}
           {result && result.candidates.length > 1 && (
             <div style={{ fontSize: 10, color: "#9ca3af" }}>
               候选：{result.candidates.map((c) => `${KIND_TO_FORM[c.kind] ?? c.kind}(${(c.score * 100) | 0}%)`).join(" / ")}
@@ -327,10 +383,16 @@ function formToKind(form: ContentForm): ProfileKind {
       return "coding";
     case "audio":
       return "podcast";
+    case "meeting":
+      return "meeting";
+    case "live":
+      return "live";
+    case "narrative":
+      return "talking-head";
   }
 }
 
-/** 粗 15 领域选项（Rust DomainKind 同源；kebab-case, 展示名） */
+/** 粗 20 领域选项（Rust DomainKind 同源；kebab-case, 展示名） */
 export const DOMAIN_OPTIONS: Array<[string, string]> = [
   ["economy", "经济管理"],
   ["programming", "编程开发"],
@@ -347,4 +409,9 @@ export const DOMAIN_OPTIONS: Array<[string, string]> = [
   ["exam", "考试考证"],
   ["gaming", "游戏电竞"],
   ["psychology", "心理成长"],
+  ["cooking", "美食烹饪"],
+  ["photo-video", "摄影视频"],
+  ["history-humanities", "历史人文"],
+  ["writing", "写作阅读"],
+  ["tech-gadgets", "数码硬件"],
 ];

@@ -183,21 +183,31 @@ export interface DetectResult {
   domain?: DomainDetection | null;
   /** v0.11.5（Task 5）：记忆命中 + 检测高置信但冲突 → 检测为准（标记被否决的记忆类别；旧响应缺省 null） */
   memory_conflict?: ProfileKind | null;
+  /** v0.13.6（REQ-221）：平台分区映射表命中的形态（优先级高于记忆/标题候选；未命中缺省 null） */
+  platform_form?: ContentForm | null;
 }
 
 /** 领域检测结果（Rust DomainDetection） */
 export interface DomainDetection {
   kind: string | null;
   fine_tags: string[];
+  /** v0.13.6（REQ-220）：curated 细目 id（多选；检测预选/用户确认；旧响应缺省 []） */
+  fine_ids?: string[];
   source: string;
   confidence: number;
+}
+
+/** 细目选项项（Rust FineTagDto，list_domain_fine 命令响应元素） */
+export interface DomainFineOption {
+  id: string;
+  label: string;
 }
 
 // ────────────────────────────────────────────────────────────
 // 视频档案框架 v2 四维解耦领域类型（v0.9.0 M1，REQ-188，与 Rust serde 契约对齐）
 // ────────────────────────────────────────────────────────────
 
-/** 内容形态（Rust ContentForm，kebab-case；7 类决定产物模板） */
+/** 内容形态（Rust ContentForm，kebab-case；10 类决定产物模板——v0.13.6 展平 +3） */
 export type ContentForm =
   | "lecture"
   | "hands-on"
@@ -205,7 +215,10 @@ export type ContentForm =
   | "dialog"
   | "exercise"
   | "coding"
-  | "audio";
+  | "audio"
+  | "meeting"
+  | "live"
+  | "narrative";
 
 /** 画面信息价值档位（Rust VisualTier，kebab-case；4 档决定采样/OCR/存储） */
 export type VisualTier = "rich" | "medium" | "low" | "none";

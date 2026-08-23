@@ -128,6 +128,8 @@ pub fn run_screen_worker(
     // v0.11.5（Task 6）：已生效形态/领域状态（内存跟踪；None=未定）
     let mut current_form: Option<crate::video_profile_spec::ContentForm> = None;
     let mut current_domain_kind: Option<crate::video_profile_domain::DomainKind> = None;
+    // v0.13.6（REQ-220）：已生效细目 id（与 domain 同栅——domain 未定时为空）
+    let mut current_fine_ids: Vec<String> = Vec::new();
     // v0.11.5（终审 I-1）：领域用户手动覆写标记——用户裁决 > 自动检测，
     // 覆写后自动重评不再覆盖该维度（用户手动改过的不自动推翻）
     let mut domain_user_locked = false;
@@ -425,27 +427,33 @@ pub fn run_screen_worker(
                     }
                     if let Some(f) = po.form { current_form = Some(f); changed = true; }
                     // v0.11.5 审查修复（A3）：domain 为 None（用户未选领域）→
-                    // 重置锁定，重新启用自动检测（领域重评不再跳过覆盖）
+                    // 重置锁定，重新启用自动检测（领域重评不再跳过覆盖）；
+                    // v0.13.6：细目与领域同栅——领域未定时细目一并清空
                     if po.domain.is_none() && domain_user_locked {
                         domain_user_locked = false;
+                        current_fine_ids.clear();
                     }
                     if let Some(d) = po.domain {
                         current_domain_kind = Some(d);
                         // 用户手动覆写 → 锁定该维度（重评不覆盖）
                         domain_user_locked = true;
                         changed = true;
+                        // v0.13.6（REQ-220）：细目随领域覆写（空=仅粗领域，合法）
+                        current_fine_ids = po.fine.clone();
                     }
                     if changed {
                         let snapshot = crate::live_session::ProfileOverride {
                             form: current_form,
                             tier: tier_applied_tier,
                             domain: current_domain_kind,
+                            fine: current_fine_ids.clone(),
                         };
                         if let Ok(mut ag) = applied_profile.lock() { *ag = Some(snapshot); }
                         let _ = app.emit("live:profile-updated", serde_json::json!({
                             "form": current_form.map(|f| f.as_str()),
                             "tier": tier_applied_tier.map(|t| t.as_str()),
                             "domain": current_domain_kind.map(|d| d.as_str()),
+                            "fine": current_fine_ids,
                         }));
                     } else {
                         // v0.11.5 审查修复（A2）：override 取到全空值（command 层
@@ -500,16 +508,20 @@ pub fn run_screen_worker(
                     && detected.confidence >= 0.6
                 {
                     current_domain_kind = detected.kind;
+                    // v0.13.6：自动重评命中的细目随之生效（curated 预选；空则仅粗领域）
+                    current_fine_ids = detected.fine_ids;
                     let snapshot = crate::live_session::ProfileOverride {
                         form: current_form,
                         tier: tier_applied_tier,
                         domain: current_domain_kind,
+                        fine: current_fine_ids.clone(),
                     };
                     if let Ok(mut ag) = applied_profile.lock() { *ag = Some(snapshot); }
                     let _ = app.emit("live:profile-updated", serde_json::json!({
                         "form": current_form.map(|f| f.as_str()),
                         "tier": tier_applied_tier.map(|t| t.as_str()),
                         "domain": current_domain_kind.map(|d| d.as_str()),
+                        "fine": current_fine_ids,
                     }));
                 }
             }
