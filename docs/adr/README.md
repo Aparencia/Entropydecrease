@@ -27,6 +27,7 @@
 | ADR-021 | [笔记正文源多态——`detect_body_source` 抽象层（图文会话 OCR 进笔记正文）](./ADR-021-note-body-source-polymorphism.md) | 已接受（v0.12.0 M1，已交付） | 2026-08-23 |
 | ADR-022 | [WGC 窗口级捕获——三级降级链（WGC→DXGI→GDI）](./ADR-022-wgc-window-capture.md) | 已接受（v0.12.0 M2，已交付） | 2026-08-23 |
 | ADR-023 | [视频会话 OCR 下线 + AI 精修图片理解（含隐私授权契约）](./ADR-023-video-ocr-offline-vision-extract.md) | 已接受（v0.12.0 M5，精修侧已交付） | 2026-08-23 |
+| ADR-024 | [知识体系层（方案 B）——有界体系通过、自由双链/图谱仍出局](./ADR-024-knowledge-system-layer.md) | 已接受（v0.13 系列） | 2026-08-23 |
 
 ## 编号规则
 
