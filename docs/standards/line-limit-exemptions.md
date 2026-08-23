@@ -67,7 +67,7 @@
 | app/src/components/SessionDetailPanel.tsx | 371 | 会话详情面板：质量报告/段列表/OCR 概览/操作区单一面板完整交互流内聚（前端审查登记） | 若再增长：质量报告区拆至 SessionQualityReport.tsx |
 | app/src/components/ProfileDetector.tsx | 330 | 档案检测组件：投票/确认流/记忆偏好 UI + v0.11.5 Task 5 冲突提示内聚（实测 2026-08-22） | 若再增长：确认流拆至 ProfileConfirmFlow.tsx |
 | app/src/components/NoteEditView.tsx | —— | v0.12.2 行数修正：实测 299 行（登记值 315 过期），本版新增 autoFocus 一行后仍 300 行以内——登记移除，见"已拆分/登记移除记录" | —— |
-| app/src/pages/NotesPage.tsx | 334 | v0.12.2 三栏编排（GroupSidebar/FeedFragmentList/NoteListView 插槽 + 收件箱动线 onPromoted 接线 + 新建零对话框）——编排层内聚（数据获取/选中态/快捷键/辅助面板插槽），组件已全部下沉拆件；2026-08-23 审查修复（onPromoted 同步清搜索态/onOpenInbox 清组过滤）+6 行 | 若再增长：键盘监听与收件箱动线回调拆至 useNotesPageShortcuts.ts / useInboxFlow.ts |
+| app/src/pages/NotesPage.tsx | 361 | v0.12.2 三栏编排（GroupSidebar/FeedFragmentList/NoteListView 插槽 + 收件箱动线 onPromoted 接线 + 新建零对话框）——编排层内聚（数据获取/选中态/快捷键/辅助面板插槽），组件已全部下沉拆件；2026-08-23 审查修复（onPromoted 同步清搜索态/onOpenInbox 清组过滤）+6 行；v0.12.8 列表级批量删除（runBatchDelete 确认+逐条 invoke+刷新，confirm 导入，+27 行） | 若再增长：键盘监听与收件箱动线回调拆至 useNotesPageShortcuts.ts / useInboxFlow.ts |
 | app/src/components/AiProviderSettings.tsx | 329 | v0.11.6 M1 code-review 修复（2026-08-22）：删除/清钥加 window.confirm、window.prompt 改卡片内联 password 输入（+2 state + 内联表单）、模型列表 input 改 textarea、fallbackOrder 透传 initial、run 置"处理中"反馈、预设双源 presetOptions 后端拉取——修复净增约 13 行越线（实测 329，含 4 行豁免头注释） | 若再增长：内联密钥表单拆至 AiProviderKeyInput.tsx |
 
 > 前端 **拆分中**（Task #9 笔记域修复进行中，暂不登记行数）：`app/src/types.ts`——待前端拆分完成后以实测行数重新评估。

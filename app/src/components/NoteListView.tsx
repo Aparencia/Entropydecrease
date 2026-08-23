@@ -4,10 +4,10 @@
  * @ai-context: 纯展示/受控组件——数据与状态全部由 NotesPage 编排（参照
  *              SessionsPage → SessionListPanel/SessionDetailPanel 既有模式）。
  *              行 id=`note-row-{id}` 供 focusNoteId 跨页直达滚动定位。
- * @ai-context: v0.12.7 勾选批量删除（与会话管理台同逻辑：行内勾选 +
+ * @ai-context: v0.12.8 勾选批量删除（与会话管理台同逻辑：行内勾选 +
  *              底部批量操作栏；副作用经 onBatchDelete 上抛父层确认/invoke）。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Note } from "../types";
 
 export type SortMode = "updated-desc" | "pin-first" | "created-desc";
@@ -66,6 +66,22 @@ export default function NoteListView({
   };
 
   const clearSelection = () => setSelected(new Set());
+
+  // v0.12.8 审查即修：列表数据变化（搜索/标签/排序/组过滤/删除后刷新）后裁剪勾选，
+  // 防止批量删除波及当前视图外的笔记——"只删可见子集"安全边界
+  useEffect(() => {
+    setSelected((cur) => {
+      if (cur.size === 0) return cur;
+      const visible = new Set(notes.map((n) => n.id));
+      let changed = false;
+      const next = new Set<number>();
+      for (const id of cur) {
+        if (visible.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : cur;
+    });
+  }, [notes]);
 
   return (
     <div style={{ width: 320, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column" }}>
@@ -180,7 +196,7 @@ export default function NoteListView({
           );
         })}
       </div>
-      {/* v0.12.7：勾选批量删除栏（与会话管理台同模式——全选三态 + 计数 + 批量删除） */}
+      {/* v0.12.8：勾选批量删除栏（与会话管理台同模式——全选三态 + 计数 + 批量删除） */}
       {selected.size > 0 && (
         <div style={{ borderTop: "1px solid #e5e7eb", padding: 8, display: "flex", gap: 6, alignItems: "center", background: "#fff" }}>
           <input
