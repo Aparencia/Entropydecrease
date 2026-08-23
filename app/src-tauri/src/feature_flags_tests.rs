@@ -3,11 +3,11 @@
 use crate::feature_flags::FeatureFlags;
 
 #[test]
-fn defaults_all_off() {
+fn defaults_feed_capture_on() {
     // Arrange/Act
     let flags = FeatureFlags::default();
-    // Assert：保守默认——feed 捕获默认关
-    assert!(!flags.feed_capture);
+    // Assert：v0.12.2 转正——feed 快速捕获（收件箱动线）默认开启
+    assert!(flags.feed_capture);
 }
 
 #[test]
@@ -44,8 +44,7 @@ fn save_and_reload_persists() {
     let dir = std::env::temp_dir().join("ff_save_test");
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("flags.json");
-    let mut flags = FeatureFlags::default();
-    flags.feed_capture = true;
+    let mut flags = FeatureFlags { feed_capture: true };
     // Act
     flags.save(&path).expect("save");
     let loaded = FeatureFlags::load(&path);

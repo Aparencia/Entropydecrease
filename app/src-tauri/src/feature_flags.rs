@@ -6,17 +6,20 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 功能开关集（新增开关必须默认 false——保守默认纪律）。
+/// 功能开关集（新增开关必须默认 false——保守默认纪律；v0.12.2 例外：
+/// feed_capture 已转正为「快速记录入口」——收件箱动线是本版本正式功能，
+/// 用户裁决默认开启；已持久化的旧配置不受影响——load 优先读取 JSON 文件）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct FeatureFlags {
-    /// feed 碎片快速捕获（v0.11.1 默认关——Phase 2 验证前不默认启用）
+    /// feed 碎片快速捕获（v0.11.1 默认关——Phase 2 验证前不默认启用；
+    /// v0.12.2 转正后默认开——快速记录收件箱成为笔记页正式动线）
     pub feed_capture: bool,
 }
 
 impl Default for FeatureFlags {
     fn default() -> Self {
-        Self { feed_capture: false }
+        Self { feed_capture: true }
     }
 }
 

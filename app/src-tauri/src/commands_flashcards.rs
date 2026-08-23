@@ -93,6 +93,54 @@ pub fn generate_group_cards(state: State<'_, AppState>, group_id: i64) -> Result
     Ok(generated)
 }
 
+/// 碎片升为闪卡（v0.12.2 收件箱动线；REQ-201 升级出口——复用多句卡生成规则）。
+///
+/// @ai-context: 幂等（可重复触发）——已为该碎片生成过卡返回 0 不重产；单句
+///              碎片诚实不出卡（card_from_fragment 内门控，返回 0）；卡绑定
+///              碎片所在组（flashcards.group_id NOT NULL）——未归组碎片无卡
+///              可挂，返回明确错误引导先归组/升笔记（碎片归属=卡分组依据）。
+#[tauri::command]
+pub fn promote_fragment_to_card(state: State<'_, AppState>, fragment_id: i64) -> Result<usize, String> {
+    crate::commands_fragments::require_feed_enabled(&state)?;
+    if fragment_id <= 0 {
+        return Err("无效的碎片 id".to_string());
+    }
+    let frag = state
+        .db
+        .get_fragment(fragment_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("碎片不存在: {}", fragment_id))?;
+    let Some(group_id) = frag.group_id else {
+        return Err("碎片未归组，不能升闪卡——请先移入组或升为笔记".to_string());
+    };
+    // 幂等：已升级过（同碎片已有卡）→ 0（不报错，可重复触发）
+    if state.db.card_by_fragment(fragment_id).map_err(|e| e.to_string())?.is_some() {
+        return Ok(0);
+    }
+    let Some(cand) = card_from_fragment(&frag.text) else {
+        return Ok(0); // 单句碎片无卡可出（card_generate 门控——诚实不出卡）
+    };
+    let now = now_ms();
+    let new_state = serde_json::to_string(&CardState::default()).unwrap_or_default();
+    state
+        .db
+        .create_card(&NewFlashcard {
+            group_id,
+            note_id: None,
+            fragment_id: Some(frag.id),
+            front: cand.front,
+            back: cand.back,
+            kind: cand.kind.clone(),
+            state_json: new_state,
+            due_at: now as i64,
+        })
+        .map_err(|e| e.to_string())?;
+    // 碎片升级率埋点（与 generate_group_cards 同口径——Phase 4 门控判据）
+    let payload = serde_json::json!({ "fragmentId": frag.id, "groupId": group_id }).to_string();
+    let _ = state.db.add_metric_event("fragment_upgraded", &payload);
+    Ok(1)
+}
+
 /// 到期复习队列（组过滤可选；到期最紧在前）。
 #[tauri::command]
 pub fn list_due_cards(

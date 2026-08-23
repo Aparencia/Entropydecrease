@@ -53,6 +53,30 @@ fn create_and_get_card_roundtrip() {
 }
 
 #[test]
+fn card_by_fragment_is_idempotency_judge() {
+    // Arrange：碎片绑定卡（v0.12.2 升卡幂等判据）
+    let db = mem_db();
+    let gid = make_group(&db);
+    let f = db
+        .create_fragment(&crate::db_fragments::NewFragment {
+            text: "多句碎片：先晕染再定妆。".to_string(),
+            image_path: None,
+            domain_tag: None,
+            group_id: Some(gid),
+            source: "manual".to_string(),
+        })
+        .expect("frag");
+    let mut c = card(gid, "晕染步骤", 1000);
+    c.fragment_id = Some(f.id);
+    db.create_card(&c).expect("card");
+    // Act/Assert：命中返回卡；无卡碎片返回 None
+    let hit = db.card_by_fragment(f.id).expect("hit").expect("应命中");
+    assert_eq!(hit.front, "晕染步骤");
+    let miss = db.card_by_fragment(9999).expect("miss");
+    assert!(miss.is_none());
+}
+
+#[test]
 fn front_exists_dedup_key() {
     // Arrange：同组同 front 幂等查重（生成防重）
     let db = mem_db();

@@ -81,6 +81,23 @@ impl Db {
         })
     }
 
+    /// 按碎片查卡（v0.12.2 升卡幂等判据：已为碎片生成过卡即视为已升级，
+    /// 可重复触发不再产重卡）。
+    pub fn card_by_fragment(&self, fragment_id: i64) -> Result<Option<Flashcard>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(&format!(
+                "SELECT {} FROM flashcards WHERE fragment_id = ?1 LIMIT 1",
+                CARD_COLUMNS
+            ))?;
+            let mut rows = stmt.query_map(params![fragment_id], row_to_card)?;
+            match rows.next() {
+                Some(Ok(c)) => Ok(Some(c)),
+                Some(Err(e)) => Err(e.into()),
+                None => Ok(None),
+            }
+        })
+    }
+
     /// 到期复习队列（due_at ≤ now；组过滤可选；到期最紧在前——弹性承诺不追债，
     /// 只按客观到期时刻排序呈现）。
     pub fn list_due_cards(&self, group_id: Option<i64>, now_ms: i64, limit: usize) -> Result<Vec<Flashcard>> {

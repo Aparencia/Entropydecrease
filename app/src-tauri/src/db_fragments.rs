@@ -8,7 +8,7 @@ use rusqlite::params;
 
 use crate::db::{unix_seconds, Db};
 use crate::error::Result;
-use crate::types::Fragment;
+use crate::types::{Fragment, Note};
 
 /// fragments 表统一查询列（列顺序与 row_to_fragment 严格对应）。
 const FRAGMENT_COLUMNS: &str =
@@ -157,6 +157,113 @@ impl Db {
             Ok(affected > 0)
         })
     }
+
+    /// 碎片升为笔记（v0.12.2：REQ-201 补升级出口——碎片是原料，升笔记=沉淀）。
+    ///
+    /// @ai-context: 单事务（建笔记 + 删碎片）——任一步失败整链回滚，不留
+    ///              "笔记已建但碎片还在"的半态；图片搬运是事务内副作用
+    ///              （复制失败降级纯文本笔记，碎片文本不丢——与
+    ///              capture_fragment 图片降级同纪律，最坏遗留孤儿文件）。
+    /// @ai-context: 图引用写 `notes-images/{note_id}/{name}`（resolve_note_image
+    ///              规则 2 可解析）；source=manual、rule_version=None（手动沉淀
+    ///              路径诚实降级）；碎片删除后绑定卡经外键 SET NULL 自动解绑
+    ///              保留（卡是独立资产——升笔记不等于消卡）。
+    pub fn promote_fragment_to_note(
+        &self,
+        data_dir: &std::path::Path,
+        fragment_id: i64,
+        title: &str,
+        group_id: Option<i64>,
+    ) -> Result<Note> {
+        let now = unix_seconds();
+        self.with_conn(|conn| {
+            // ① 读碎片（事务内读取——存在性校验与删除同锁，防竞态双升）
+            let fragment = {
+                let mut stmt = conn.prepare(&format!(
+                    "SELECT {} FROM fragments WHERE id = ?1",
+                    FRAGMENT_COLUMNS
+                ))?;
+                let mut rows = stmt.query_map(params![fragment_id], row_to_fragment)?;
+                match rows.next() {
+                    Some(Ok(f)) => f,
+                    Some(Err(e)) => return Err(e.into()),
+                    None => {
+                        return Err(crate::error::AppError::Db(format!(
+                            "碎片不存在: {}",
+                            fragment_id
+                        )))
+                    }
+                }
+            };
+            // ② 建笔记（正文先落碎片文本；图片在 ③ 补写）
+            conn.execute(
+                "INSERT INTO notes (title, content, source, session_id, rule_version, purify_stats, tags, properties, group_id, created_at, updated_at)
+                 VALUES (?1, ?2, 'manual', NULL, NULL, NULL, '[]', NULL, ?3, ?4, ?4)",
+                params![title, fragment.text, group_id, now],
+            )?;
+            let note_id = conn.last_insert_rowid();
+            // ③ 图片搬运 fragments/ → notes-images/{note_id}/（失败降级纯文本）
+            let mut content = fragment.text.clone();
+            if let Some(rel) = fragment.image_path.as_deref() {
+                match copy_fragment_image(data_dir, note_id, rel) {
+                    Some(img_ref) => {
+                        content = format!("{}\n\n![]({})\n", content, img_ref);
+                    }
+                    None => {
+                        eprintln!(
+                            "[db_fragments] 碎片 {} 图片搬运失败（降级纯文本笔记）: {}",
+                            fragment_id, rel
+                        );
+                    }
+                }
+            }
+            if content != fragment.text {
+                conn.execute(
+                    "UPDATE notes SET content = ?1 WHERE id = ?2",
+                    params![content, note_id],
+                )?;
+            }
+            // ④ 删碎片（绑定卡自动解绑保留）
+            conn.execute("DELETE FROM fragments WHERE id = ?1", params![fragment_id])?;
+            // ⑤ 组装返回（与库内一致）
+            Ok(Note {
+                id: note_id,
+                title: title.to_string(),
+                content,
+                source: "manual".to_string(),
+                session_id: None,
+                rule_version: None,
+                purify_stats: None,
+                tags: "[]".to_string(),
+                properties: None,
+                pin: 0,
+                group_id,
+                created_at: now,
+                updated_at: now,
+            })
+        })
+    }
+}
+
+/// 搬运碎片图进笔记图目录（返回 notes-images 相对引用；失败返回 None 降级）。
+///
+/// @ai-context: 只放行 fragments/ 前缀 + 防 `..` 穿越（与 resolve_fragment_image
+///              落盘口径一致）；源文件缺失/IO 失败 → None（调用方降级纯文本）。
+fn copy_fragment_image(data_dir: &std::path::Path, note_id: i64, rel: &str) -> Option<String> {
+    let rel_trim = rel.trim_start_matches(['/', '\\']);
+    if !rel_trim.starts_with("fragments/") || rel_trim.split(['/', '\\']).any(|seg| seg == "..") {
+        return None;
+    }
+    let src = data_dir.join(rel_trim);
+    if !src.is_file() {
+        return None;
+    }
+    // 文件名沿用碎片存储名（毫秒+随机后缀已防碰撞；同笔记内无冲突）
+    let name = std::path::Path::new(rel_trim).file_name()?.to_str()?.to_string();
+    let target_dir = data_dir.join("notes-images").join(note_id.to_string());
+    std::fs::create_dir_all(&target_dir).ok()?;
+    std::fs::copy(&src, target_dir.join(&name)).ok()?;
+    Some(format!("notes-images/{}/{}", note_id, name))
 }
 
 /// 把 rusqlite 行映射为 Fragment。

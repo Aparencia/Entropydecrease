@@ -10,7 +10,7 @@ use tauri::State;
 
 use crate::commands::AppState;
 use crate::db_fragments::NewFragment;
-use crate::types::{Fragment, NewNoteGroup};
+use crate::types::{Fragment, NewNoteGroup, Note};
 use crate::video_profile_domain::{detect_domain, DomainSignals};
 
 /// 碎片文本最大长度（防超大 payload 拖垮 IPC/DB；几句话的碎片远用不到）。
@@ -186,6 +186,46 @@ pub fn delete_fragment(state: State<'_, AppState>, fragment_id: i64) -> Result<b
     state.db.delete_fragment(fragment_id).map_err(|e| e.to_string())
 }
 
+/// 碎片升为笔记（v0.12.2 收件箱动线：原料→沉淀；REQ-201 补升级出口）。
+///
+/// @ai-context: 事务在数据层（建笔记+删碎片原子——promote_fragment_to_note）；
+///              本层只做入参校验：标题必填（前端预填首句可改，后端拒绝空串）、
+///              组存在性校验、开关准入（升笔记是碎片生命周期操作，feed 能力
+///              对称纪律）。图随碎片搬运进 notes-images/（失败降级纯文本）。
+#[tauri::command]
+pub fn promote_fragment_to_note(
+    state: State<'_, AppState>,
+    fragment_id: i64,
+    title: String,
+    group_id: Option<i64>,
+) -> Result<Note, String> {
+    require_feed_enabled(&state)?;
+    if fragment_id <= 0 {
+        return Err("无效的碎片 id".to_string());
+    }
+    // 标题必填（二元论裁决：升笔记需要标题——前端预填首句，后端兜底拒绝）
+    let title_trim = title.trim();
+    if title_trim.is_empty() {
+        return Err("笔记标题不能为空".to_string());
+    }
+    let title = crate::commands::normalize_title(title, "碎片笔记");
+    if state.db.get_fragment(fragment_id).map_err(|e| e.to_string())?.is_none() {
+        return Err(format!("碎片不存在: {}", fragment_id));
+    }
+    if let Some(gid) = group_id {
+        if gid <= 0 {
+            return Err("无效的组 id".to_string());
+        }
+        if state.db.get_group(gid).map_err(|e| e.to_string())?.is_none() {
+            return Err(format!("笔记组不存在: {}", gid));
+        }
+    }
+    state
+        .db
+        .promote_fragment_to_note(&state.data_dir, fragment_id, &title, group_id)
+        .map_err(|e| e.to_string())
+}
+
 /// 碎片图片 → 本地绝对路径（前端 convertFileSrc 消费；REQ-201 缩略图）。
 ///
 /// @ai-context: resolve 先例同 resolve_note_image——WebView 不能直接读本地文件；
@@ -217,8 +257,10 @@ pub fn resolve_fragment_image(
     Ok(Some(abs.to_string_lossy().into_owned()))
 }
 
-/// feed 能力开关准入（capture/delete/移组共用——后端不信前端隐藏）。
-fn require_feed_enabled(state: &AppState) -> Result<(), String> {
+/// feed 能力开关准入（capture/delete/升笔记共用——后端不信前端隐藏）。
+/// @ai-context: pub(crate) 供 commands_flashcards::promote_fragment_to_card 复用
+///              （碎片生命周期操作对称纪律）。
+pub(crate) fn require_feed_enabled(state: &AppState) -> Result<(), String> {
     let guard = state
         .feature_flags
         .lock()

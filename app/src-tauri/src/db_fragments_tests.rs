@@ -191,3 +191,92 @@ fn delete_missing_fragment_returns_false() {
     let db = mem_db();
     assert!(!db.delete_fragment(9999).expect("delete"));
 }
+
+#[test]
+fn promote_fragment_to_note_creates_note_and_deletes_fragment() {
+    // Arrange
+    let db = mem_db();
+    let f = db.create_fragment(&frag("碎片文本：眼影要晕染", None, None)).expect("f");
+    // Act：升为未归组笔记
+    let note = db.promote_fragment_to_note(std::path::Path::new("."), f.id, "眼影晕染", None).expect("promote");
+    // Assert：笔记成立（正文=碎片文本、source=manual、未归组）；碎片已删
+    assert_eq!(note.content, "碎片文本：眼影要晕染");
+    assert_eq!(note.source, "manual");
+    assert_eq!(note.group_id, None);
+    assert!(db.get_fragment(f.id).expect("get").is_none());
+    let fetched = db.get_note(note.id).expect("get").expect("note 应存在");
+    assert_eq!(fetched.content, "碎片文本：眼影要晕染");
+}
+
+#[test]
+fn promote_fragment_copies_image_and_embeds_ref() {
+    // Arrange：临时目录伪造碎片图（promote 只做 fs::copy，字节内容无关）
+    let dir = std::env::temp_dir().join(format!("dsh_promote_img_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("fragments")).expect("dir");
+    std::fs::write(dir.join("fragments").join("1-abc.png"), b"fake").expect("img");
+    let db = mem_db();
+    let group = db
+        .create_group(&NewNoteGroup {
+            name: "目标组".to_string(),
+            terrain: "container".to_string(),
+            kind: "topic".to_string(),
+            domain_tag: Some("beauty".to_string()),
+            source: "route".to_string(),
+            series_key: None,
+            route_reason: None,
+        })
+        .expect("group");
+    let f = db
+        .create_fragment(&NewFragment {
+            text: "带图碎片".to_string(),
+            image_path: Some("fragments/1-abc.png".to_string()),
+            domain_tag: None,
+            group_id: Some(group.id),
+            source: "manual".to_string(),
+        })
+        .expect("f");
+    // Act：升入指定组
+    let note = db
+        .promote_fragment_to_note(&dir, f.id, "带图笔记", Some(group.id))
+        .expect("promote");
+    // Assert：图片已搬运入 notes-images/{nid}/ 且正文含引用；碎片已删；归组生效
+    let img_ref = format!("![](notes-images/{}/1-abc.png)", note.id);
+    assert!(note.content.contains(&img_ref), "正文应含图片引用: {}", note.content);
+    assert!(dir.join("notes-images").join(note.id.to_string()).join("1-abc.png").is_file());
+    assert_eq!(note.group_id, Some(group.id));
+    assert!(db.get_fragment(f.id).expect("get").is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn promote_fragment_image_missing_degrades_to_text() {
+    // Arrange：碎片记录引用不存在图片（外部清理等）
+    let db = mem_db();
+    let f = db
+        .create_fragment(&NewFragment {
+            text: "图丢了也要升".to_string(),
+            image_path: Some("fragments/ghost.png".to_string()),
+            domain_tag: None,
+            group_id: None,
+            source: "manual".to_string(),
+        })
+        .expect("f");
+    // Act：升笔记（临时目录无 fragments/ghost.png）
+    let note = db
+        .promote_fragment_to_note(&std::env::temp_dir(), f.id, "降级笔记", None)
+        .expect("promote");
+    // Assert：图片缺失降级纯文本（碎片文本不丢——诚实降级纪律）
+    assert_eq!(note.content, "图丢了也要升");
+    assert!(db.get_fragment(f.id).expect("get").is_none());
+}
+
+#[test]
+fn promote_fragment_missing_returns_error() {
+    // Arrange/Act/Assert：升不存在的碎片返回明确错误（不 panic 不静默）
+    let db = mem_db();
+    let err = db
+        .promote_fragment_to_note(std::path::Path::new("."), 99999, "标题", None)
+        .expect_err("应报错");
+    assert!(err.to_string().contains("碎片不存在"));
+}

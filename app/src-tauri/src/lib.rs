@@ -402,12 +402,16 @@ pub fn run() {
             commands_fragments::delete_fragment,
             commands_fragments::update_fragment_group,
             commands_fragments::resolve_fragment_image,
+            // v0.12.2：收件箱动线——碎片升为笔记（事务建笔记+删碎片）
+            commands_fragments::promote_fragment_to_note,
             // v0.11.2：学习循环统一——组→闪卡生成/到期队列/计数/复习评分/自测
             commands_flashcards::generate_group_cards,
             commands_flashcards::list_due_cards,
             commands_flashcards::count_due_cards,
             commands_flashcards::review_card,
             commands_flashcards::quiz_group_cards,
+            // v0.12.2：收件箱动线——碎片升为闪卡（幂等）
+            commands_flashcards::promote_fragment_to_card,
             commands_flashcards::learning_metrics,
             // v0.11.3：组结算机制——计划呈现/执行（用户可见仪式，防沼泽化）
             commands_settlement::settlement_plan,
