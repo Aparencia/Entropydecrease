@@ -1,10 +1,11 @@
-# 技术债清单（权威：2026-08-23 · 四轮）
+# 技术债清单（权威：2026-08-23 · 五轮）
 
 > 本清单为当前唯一权威债务清单，归档日滚动更新；旧归档清单仅历史追溯。
 > 来源：2026-08-23 一轮（v0.12.0 七里程碑交付 + 新增代码七维审查，4 项即修 c624f4c）
 >        → 二轮（v0.12.3 浮窗死锁修复 + 交互/架构升级 + 精修工作台契约修复，新增代码七维审查，3 处即修 f8db9e2）
 >        → 三轮（**v0.12.2 笔记页信息架构重构交付 + 新增代码七维审查，8 处问题全部即修 fe8c919/f5731e1**）
 >        → 四轮（**v0.12.4 视频画面要点纯图落地 + 笔记预览锚点 chip 化交付 + 新增代码七维审查，零 P0/P1 缺陷、2 项 P3 观察不修；无文档归档**）
+>        → 五轮（**v0.12.5 AI 精修线路修复 + v0.12.6 浮窗显隐/锁定自解锁交付 + 新增代码七维审查，P1×1/P2×1/P3×1 即修 30a7502；无文档归档**）
 
 ## 未偿债务（逐笔保持 carried，仅留 ID + 一行摘要）
 
@@ -23,10 +24,20 @@
 - **已偿 0 笔**：本批未触及旧债务模块
 - **新登记 open 0 笔**：本批七维审查结论——接入性通过 / 逻辑性 1 项 P1（视频会话大纲检测恒空，判定为 ADR-023 设计内行为变更，v0.12.4 文档已补说明）+ 1 项 P3（锚点段落正则尾 `]` 残渣，无真实触发路径，不修）/ 牵连性、性能、冗余、规范、安全全部通过；2 项观察登记见下
 
+## 本批滚动（2026-08-23 五轮：v0.12.5 AI 精修线路 + v0.12.6 浮窗显隐/锁定自解锁交付 + 新增代码七维审查）
+
+- **未偿 6 笔保持 carried**：TD-040（ffmpeg 体积）/ TD-2026-08-19-D/F/G（图库/暂停误报/OCR 搜索）/ TD-2026-08-21-C（lock().expect 迁移）本批未触及；TD-2026-08-22-A（clippy 存量 lib 5 项）经本批 `cargo clippy --lib` 复核——告警集合与四轮完全一致（applied_profile / redundant closure / i64 cast / doc list / ptr_arg），本批及审查批新增文件零告警，未清偿
+- **已偿 0 笔**：无旧债触及
+- **新登记 open 0 笔**：新增代码七维审查结论——接入性通过（float_toggle 注册/插件 handler/类型复用无孤立项）/ 逻辑性 P1（全局快捷键注册失败=锁定死局）与 P2（set_always_on_top 失败漂移）即修 30a7502 + P3（bar 双锁图标冗余）同批即修 / 牵连性通过（命令签名兼容、Cargo.lock 同步、文档/豁免登记/docs-check 一致）/ 性能通过 / 冗余通过（buildDataFromResult 中间产物零残留）/ 规范通过 / 安全通过（CSS 静态注入、快捷键 Rust 侧无前端权限面、无新 IPC 入参面）；4 项观察登记见下
+
 ## 观察项（登记不立债）
 
 | ID | 摘要 | 处置 |
 |----|------|------|
+| 观察 v0.12.5-1 | 浮窗「放弃」仅关闭、任务记录保持未采纳（工作台结果可恢复设计——任务中心仍可查看/采纳） | 保持（v0.12.5 文档已知问题已说明） |
+| 观察 v0.12.5-2 | 同会话重复精修会产生第二条笔记（apply 恒新建，v0.11.5 现状） | 需求池评估"同会话复用笔记" |
+| 观察 v0.12.6-1 | 浮窗 toggle/按钮快速连按理论可交错（无动作级互斥锁——各操作幂等 + float:state 事件回流，最终状态一致） | 按反馈门控（必要时动作级锁） |
+| 观察 v0.12.6-2 | 主窗随浮窗打开隐藏后，浮窗无"退出应用"入口（设计内——收起即回主窗；全局键在任何焦点下可收起） | 保持（按反馈门控加退出键） |
 | 观察 v0.12.4-1 | 视频会话大纲检测恒空（`detect_outline` 只消费 `region=="full"` 块，ADR-023 下线后无 full 块）——设计内行为，精修 vision 图片经 `load_session_vision_images` 独立读归档目录不受影响 | 真机验证确认后关闭 |
 | 观察 v0.12.4-2 | `import_frame.rs` 测试 `middle_region_crops_and_scales_to_max_width` 注释文案残留"中部区域（画面要点）"（中区域 OCR 已删，纯函数仍被字幕带复用）——文案性残留非代码缺陷 | 后续文档治理轮顺手清理 |
 | 观察 v0.12.0-1 | M4 仅 commands_ai_providers env 改 DEEPSEEK_API_KEY；ai_client / ai_balance / ai_refine_task / ai_text_filter 等 legacy 单 Provider 路径仍读 SILICONFLOW_API_KEY（昨日观察 M1-1/M1-4 延续） | 专项退役或后序范围 |
@@ -43,6 +54,6 @@
 
 ## 关联
 
-- 版本与需求：[v0.12.0 版本文档](../../versions/v0.12.0.md) / [v0.12.2 版本文档](../../versions/v0.12.2.md) / [v0.12.3 版本文档](../../versions/v0.12.3.md)
-- 决策：ADR-021（正文源多态）/ ADR-022（WGC 三级链）/ ADR-023（视频 OCR 下线 + vision 精修）
-- 验证：cargo check / cargo clippy（本批零新增告警）/ cargo test（promote 4 测 + feed_capture + card_by_fragment 全绿；全量 1543 通过 3 项既有失败——ai_client from_settings / note_filter golden session29 / ocr_points 过滤器，dev HEAD 上 stash 实证与本批无关；测试二进制本机加载期环境问题仍存）；tsc 零错误 / vitest 83 通过 / 前端 build 通过
+- 版本与需求：[v0.12.0 版本文档](../../versions/v0.12.0.md) / [v0.12.2 版本文档](../../versions/v0.12.2.md) / [v0.12.3 版本文档](../../versions/v0.12.3.md) / [v0.12.5 版本文档](../../versions/v0.12.5.md) / [v0.12.6 版本文档](../../versions/v0.12.6.md)
+- 决策：ADR-021（正文源多态）/ ADR-022（WGC 三级链）/ ADR-023（视频 OCR 下线 + vision 精修）/ ADR-025（浮窗锁定自解锁——全局快捷键方案）
+- 验证：cargo check（v0.12.5/v0.12.6/审查批零错误）/ cargo clippy（五轮零新增告警，存量 5 项与四轮一致）/ cargo test（v0.12.5 全量 1550 通过 3 项既有失败——ai_client from_settings / note_filter golden session29 / ocr_points 过滤器，HEAD 基线与本版无关；v0.12.6 批 float_next_action_machine 新增；测试二进制加载期环境问题在应用运行中仍存——应用进程占用 onnxruntime.dll 时 lib 测试 exe 报 STATUS_ENTRYPOINT_NOT_FOUND，属本机环境非代码问题）；tsc 零错误 / vitest 92 通过 / 前端 build 通过
