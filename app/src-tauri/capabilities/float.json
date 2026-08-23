@@ -1,9 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "capture-float",
-  "description": "Capability for the capture float window (v0.12.3: 最小权限——无 dialog，浮窗仅消费 live:* 事件与窗口自身操作)",
+  "description": "Capability for the capture float window (v0.12.3: 最小权限——无 dialog；core:window:default 仅含只读查询，浮窗交互所需的 3 个变更权限显式列出：拖拽/位置恢复吸附/双形态 resize)",
   "windows": ["capture-float"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position",
+    "core:window:allow-start-dragging"
   ]
 }

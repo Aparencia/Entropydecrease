@@ -26,6 +26,9 @@ import MaterialInputPanel from "../components/MaterialInputPanel";
 // v0.11.7：图文采集（第三动线：截屏导入图文内容 → 图文会话）
 import PhotoCapturePanel from "../components/PhotoCapturePanel";
 import type { Note, WindowInfo, StreamingModelStatus, LiveSessionStatus, DownloadProgress, DownloadStatus, ProfileKind } from "../types";
+// v0.12.3：浮窗状态快照类型（与 Rust FloatUiView camelCase 契约同源；
+// 审查 LOW-3：统一共享类型替代内联重复声明）
+import type { FloatSnapshot } from "../hooks/useFloatWindow";
 // Low 清扫：标题截断长度单一定义源（与 MaterialInputPanel 共享）
 import { NOTE_TITLE_MAX_LEN } from "../utils/constants";
 
@@ -64,7 +67,7 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   // P3：引擎预热状态（选窗口阶段后台加载；与 Rust PrepareStatus 契约一致）
   const [prepareState, setPrepareState] = useState<PrepareState>("idle");
   // v0.12.3：浮窗状态（按钮语义：浮窗化 ⇄ 收起 ⇄ 解锁穿透；Rust 单一来源）
-  const [floatSnap, setFloatSnap] = useState<{ open: boolean; locked: boolean }>({ open: false, locked: false });
+  const [floatSnap, setFloatSnap] = useState<FloatSnapshot>({ open: false, locked: false, topmost: true });
 
   // ── 素材与结果（文件流水线，v0.1.0）──
   // 素材路径/处理中状态已下沉 MaterialInputPanel（审查硬拆）；父级仅保留产物与提示
@@ -219,13 +222,13 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   useEffect(() => {
     let disposed = false;
     const unlisteners: Promise<() => void>[] = [];
-    void invoke<{ open: boolean; locked: boolean }>("float_state")
+    void invoke<FloatSnapshot>("float_state")
       .then((s) => {
         if (!disposed) setFloatSnap(s);
       })
       .catch(() => undefined);
     unlisteners.push(
-      listen<{ open: boolean; locked: boolean }>("float:state", (e) => {
+      listen<FloatSnapshot>("float:state", (e) => {
         if (!disposed) setFloatSnap(e.payload);
       }),
     );

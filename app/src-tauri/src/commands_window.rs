@@ -31,13 +31,17 @@ pub const FLOAT_STATE_EVENT: &str = "float:state";
 /// 浮窗 UI 状态（Rust 侧单一来源；set_ignore_cursor_events 无 getter 必须自存）。
 #[derive(Debug, Clone, Copy, Default)]
 pub struct FloatUi {
+    /// 是否**显示**（open 语义）。预创建常驻后窗口对象恒存在，
+    /// 不能用 get_webview_window 存在性判定 open——否则按钮语义恒为
+    /// "收起"且永远无法重新打开（审查 P0，v0.12.3 审查即修）。
+    pub open: bool,
     /// 点击穿透（锁定后浮窗不可点，主窗按钮/快捷键解锁）
     pub locked: bool,
     /// 是否置顶
     pub topmost: bool,
 }
 
-/// 对外状态视图（camelCase 契约——前端按钮语义数据源）。
+/// 对外状态视图（camelCase 契约——前端按钮语义数据源；纯函数构造可单测）。
 #[derive(Debug, Clone, Copy, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FloatUiView {
@@ -46,16 +50,16 @@ pub struct FloatUiView {
     pub topmost: bool,
 }
 
-fn view(app: &tauri::AppHandle, ui: &FloatUi) -> FloatUiView {
+fn view(ui: &FloatUi) -> FloatUiView {
     FloatUiView {
-        open: app.get_webview_window(CAPTURE_FLOAT_LABEL).is_some(),
+        open: ui.open,
         locked: ui.locked,
         topmost: ui.topmost,
     }
 }
 
 fn emit_float_state(app: &tauri::AppHandle, ui: &FloatUi) {
-    let _ = app.emit(FLOAT_STATE_EVENT, view(app, ui));
+    let _ = app.emit(FLOAT_STATE_EVENT, view(ui));
 }
 
 /// setup 预创建隐藏浮窗（P2-10：常驻秒开；失败回落为打开时懒创建——不阻断启动）。
@@ -100,20 +104,28 @@ pub async fn open_capture_float(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let ui = *state
+    let topmost = state
         .float_ui
         .lock()
-        .map_err(|e| format!("浮窗状态锁中毒: {}", e))?;
+        .map_err(|e| format!("浮窗状态锁中毒: {}", e))?
+        .topmost;
     let window = match app.get_webview_window(CAPTURE_FLOAT_LABEL) {
         Some(w) => w,
         None => build_float_window(&app, false)?,
     };
     window.show().map_err(|e| format!("显示采集浮窗失败: {}", e))?;
     window
-        .set_always_on_top(ui.topmost)
+        .set_always_on_top(topmost)
         .map_err(|e| format!("设置浮窗置顶失败: {}", e))?;
     let _ = window.set_focus();
-    emit_float_state(&app, &ui);
+    {
+        let mut ui = state
+            .float_ui
+            .lock()
+            .map_err(|e| format!("浮窗状态锁中毒: {}", e))?;
+        ui.open = true;
+        emit_float_state(&app, &ui);
+    }
     Ok(())
 }
 
@@ -131,10 +143,11 @@ pub async fn close_capture_float(
     if let Some(window) = app.get_webview_window(CAPTURE_FLOAT_LABEL) {
         window.hide().map_err(|e| format!("隐藏采集浮窗失败: {}", e))?;
     }
-    let ui = *state
+    let mut ui = state
         .float_ui
         .lock()
         .map_err(|e| format!("浮窗状态锁中毒: {}", e))?;
+    ui.open = false;
     emit_float_state(&app, &ui);
     Ok(())
 }
@@ -163,7 +176,7 @@ pub async fn float_set_locked(
         .lock()
         .map_err(|e| format!("浮窗状态锁中毒: {}", e))?;
     ui.locked = locked;
-    let v = view(&app, &ui);
+    let v = view(&ui);
     emit_float_state(&app, &ui);
     Ok(v)
 }
@@ -185,19 +198,39 @@ pub async fn float_set_topmost(
         .lock()
         .map_err(|e| format!("浮窗状态锁中毒: {}", e))?;
     ui.topmost = topmost;
-    let v = view(&app, &ui);
+    let v = view(&ui);
     emit_float_state(&app, &ui);
     Ok(v)
 }
 
 /// 浮窗当前状态（主窗挂载/快捷键语义同步；轻量读，无需 async）。
 #[tauri::command]
-pub fn float_state(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<FloatUiView, String> {
+pub fn float_state(state: State<'_, AppState>) -> Result<FloatUiView, String> {
     let ui = *state
         .float_ui
         .lock()
         .map_err(|e| format!("浮窗状态锁中毒: {}", e))?;
-    Ok(view(&app, &ui))
+    Ok(view(&ui))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 审查即修（v0.12.3）：open 必须是显式状态——常驻预创建后窗口对象恒存在，
+    /// 不能用 get_webview_window 存在性判定（否则 open 恒 true，主窗按钮
+    /// 永远显示"收起"且无法再次打开）。
+    #[test]
+    fn float_ui_view_open_is_explicit_state() {
+        let ui = FloatUi { open: false, locked: true, topmost: false };
+        let v = view(&ui);
+        let json = serde_json::to_value(v).expect("序列化失败");
+        assert_eq!(json["open"], false, "open 必须为显式状态（预创建存在≠显示）");
+        assert_eq!(json["locked"], true);
+        assert_eq!(json["topmost"], false);
+        // camelCase 契约锚定（前端直接消费该 JSON 键）
+        assert!(json.get("open").is_some() && json.get("locked").is_some() && json.get("topmost").is_some());
+    }
 }
 
 /// 回主窗：显示 + 还原 + 聚焦主窗口（浮窗保留——回主窗不损失悬浮态）。

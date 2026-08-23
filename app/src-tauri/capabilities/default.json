@@ -1,10 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "Capability for the main window (allow-close: App.tsx 关闭确认流程 getCurrentWindow().close()——审查发现 core:window:default 仅只读、该调用此前被 ACL 静默拒绝)",
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "dialog:default"
+    "dialog:default",
+    "core:window:allow-close"
   ]
 }

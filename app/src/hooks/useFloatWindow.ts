@@ -33,7 +33,10 @@ export interface FloatSnapshot {
 const MOVE_FINALIZE_DEBOUNCE_MS = 250;
 
 export function useFloatWindow() {
-  const prefsRef = useRef(loadFloatPrefs());
+  // 惰性一次读取（审查 MED-1：useRef(loadFloatPrefs()) 每渲染求值——
+  // 浮窗 1s tick 重渲染时等价于每秒 localStorage 读 + JSON.parse）
+  const [initialPrefs] = useState(loadFloatPrefs);
+  const prefsRef = useRef(initialPrefs);
   const [snapshot, setSnapshot] = useState<FloatSnapshot>({
     open: true,
     locked: false,
@@ -46,6 +49,7 @@ export function useFloatWindow() {
   // 挂载兜底：拉取一次状态 + 订阅 float:state 事件（Rust 单一来源）
   useEffect(() => {
     let disposed = false;
+    let unlisten: (() => void) | undefined;
     void invoke<FloatSnapshot>("float_state")
       .then((s) => {
         if (disposed) return;
@@ -56,11 +60,15 @@ export function useFloatWindow() {
     void listen<FloatSnapshot>("float:state", (e) => {
       setSnapshot(e.payload);
       prefsRef.current = { ...prefsRef.current, topmost: e.payload.topmost };
-    }).then((un) => {
-      if (disposed) void un();
+    }).then((fn) => {
+      // 审查修复：listen 异步 resolve——若卸载已发生立即释放，
+      // 否则存入 ref 供卸载时调用（原实现仅 disposed 分支释放，热重载/StrictMode 会泄漏）
+      if (disposed) void fn();
+      else unlisten = fn;
     });
     return () => {
       disposed = true;
+      unlisten?.();
     };
   }, []);
 
