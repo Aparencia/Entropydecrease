@@ -134,8 +134,8 @@ export default function FeedFragmentList({ onChanged, onPromoted }: Props) {
     setBusy(true);
     try {
       const n = await invoke<number>("promote_fragment_to_card", { fragmentId: f.id });
-      setErr("");
       if (n > 0) {
+        // 成功出卡：清错误 + 刷新收件箱（碎片保留——仍可升笔记）
         setErr("");
         await load();
         onChanged();
@@ -225,6 +225,7 @@ export default function FeedFragmentList({ onChanged, onPromoted }: Props) {
                   onChange={(e) => setPromote({ ...promote, title: e.target.value })}
                   placeholder="笔记标题…"
                   autoFocus
+                  maxLength={100} // 与后端 TITLE_MAX_CHARS 同口径（防超长 payload）
                   style={{ width: "100%", fontSize: 12, padding: "4px 6px", border: "1px solid #e5e7eb", borderRadius: 4, boxSizing: "border-box", marginBottom: 4 }}
                 />
                 <select

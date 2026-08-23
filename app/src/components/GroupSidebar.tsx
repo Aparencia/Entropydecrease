@@ -115,7 +115,8 @@ export default function GroupSidebar({
       await invoke("capture_fragment", { text, imageB64, source });
       setFragText("");
       setStatus("");
-      await load(); // 可能新建 feed 主题组——刷新组列表/计数
+      // 刷新统一由 onChanged（refreshToken）驱动——本组件 load 与 NotesPage
+      // 列表重载各执行一次（审查修复：原显式 load + onChanged 会双跑全套请求）
       onChanged();
     } catch (e) {
       setStatus(`碎片捕获失败: ${e}`);
@@ -251,13 +252,16 @@ export default function GroupSidebar({
 
       {status && <p style={{ padding: 8, fontSize: 12, color: "#dc2626" }}>{status}</p>}
 
-      {/* ⓘ 弹层（受控单开；变更后刷新） */}
+      {/* ⓘ 弹层（受控单开；key=group.id——切组重置内部表单态，
+          防 A 组的改判/结算选择串进 B 组——审查修复） */}
       {popover && (
         <RouteInfoPopover
+          key={popover.group.id}
           group={popover.group}
           anchor={popover.anchor}
           onClose={() => setPopover(null)}
-          onChanged={() => { void load(); onChanged(); }}
+          // via onChanged（refreshToken）驱动本组件 load——不再显式双跑
+          onChanged={onChanged}
           onOpenReview={(gid, name) => { setPopover(null); onOpenReview(gid, name); }}
           selectedNoteId={selectedNoteId}
         />

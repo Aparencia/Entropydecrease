@@ -244,7 +244,9 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
         onChanged={refreshAll}
         onOpenReview={(groupId, name) => setReview({ groupId, name })}
         selectedNoteId={selected?.id ?? null}
-        onOpenInbox={() => setView("inbox")}
+        // 收件箱=全量碎片视图，与组过滤无关——清组过滤消除"组行高亮 + 收件箱"
+        // 并存矛盾（审查修复）
+        onOpenInbox={() => { setGroupFilter(null); setView("inbox"); }}
         inboxActive={view === "inbox"}
         refreshToken={refreshToken}
       />
@@ -257,7 +259,11 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
             // 右侧自动打开新笔记（闭环可见）；碎片已从收件箱移除（列表已刷新）
             setSelected(note);
             setEditing(false);
-            // 新笔记（可能已归组）回到全部笔记列表——确保「全部笔记」可见
+            // 搜索/标签态同步清空（审查修复：原只 load("") 不更新 keyword/tagFilter，
+            // 防抖 effect 会用旧搜索词重新覆盖列表——新笔记在「全部笔记」可见）
+            setKeyword("");
+            setTagFilter(null);
+            setGroupFilter(null);
             void load("", null, sortMode);
           }}
         />
