@@ -1,5 +1,11 @@
-//! 笔记废话出口过滤管线（REQ-082 / v0.6.0 M1；v0.7.5 净化接线）。
+//! 笔记废话出口过滤管线（REQ-082 / v0.6.0 M1；v0.7.5 净化接线；v0.12.0 M1 正文源多态）。
 //!
+//! @ai-context: v0.12.0（ADR-021）：filter_note 升级为正文源分派入口——
+//!              detect_body_source 判定 (segments, ocr_blocks) 的正文来源：
+//!              Transcript→既有口语过滤链（视频，零改动）；OcrDirect→
+//!              note_filter_ocr 精简链（图文，OCR 文本直接入 markdown 正文）；
+//!              Empty→标题仅。分派后重建路径（refresh_screen_points/
+//!              apply_ai_decisions/structure）按 body_source 分流，防覆盖。
 //! @ai-context: 过滤链（纯规则，本地优先）：
 //! ① UI 垃圾特征兜底（复用 REQ-083 黑名单同表）
 //! ② 低置信丢弃（confidence <0.6）
@@ -22,6 +28,7 @@
 //!              的短文本不是"纯符号"碎片）；confidence=None（字幕段）跳过
 //!              低置信规则；净化阈值集中 purify_config（REQ-173 JSON 可校准）。
 
+use crate::note_body_source::{detect_body_source, BodySource};
 use crate::purify_config::PurifyConfig;
 use crate::symbol_normalize::SymbolNormalizeConfig;
 use crate::types::{SessionOcrBlock, SessionScreen, SessionSegment, TranscriptSegment};
@@ -165,14 +172,45 @@ pub struct NoteFilterResult {
     /// 会话转笔记"诚实降级；serde skip：markdown 已含该行，前端无需重复字段）
     #[serde(skip)]
     pub(crate) warning: Option<String>,
+    /// v0.12.0（ADR-021）：正文来源（serde skip——内部透传：refresh_screen_points/
+    /// apply_ai_decisions/structure 按来源分派重建，不序列化给前端）
+    #[serde(skip)]
+    pub(crate) body_source: BodySource,
+    /// v0.12.0（ADR-021）：OCR 直接正文净化文本序列（OcrDirect 分支产物；
+    /// serde skip——markdown 已含正文，前端无需重复字段）
+    #[serde(skip)]
+    pub(crate) ocr_body: Vec<String>,
 }
 
-/// 笔记过滤（纯函数）：转写段 + OCR 块 → 过滤后笔记。
+/// 笔记过滤（纯函数，正文源分派入口）：转写段 + OCR 块 → 过滤后笔记。
+///
+/// @ai-context: v0.12.0（ADR-021）：detect_body_source 三路分派——
+///              Transcript→filter_note_transcript（既有口语过滤链，零改动）；
+///              OcrDirect→filter_note_from_ocr（图文 OCR 精简链，文本入正文）；
+///              Empty→标题仅。视频会话路径行为逐字节不变（回归护栏）。
+pub fn filter_note(
+    title: &str,
+    segments: &[SessionSegment],
+    ocr_blocks: &[SessionOcrBlock],
+    ui_junk: &UiJunkList,
+    env: &PurifyEnv,
+) -> NoteFilterResult {
+    match detect_body_source(segments, ocr_blocks) {
+        BodySource::Transcript => {
+            filter_note_transcript(title, segments, ocr_blocks, ui_junk, env)
+        }
+        BodySource::OcrDirect => crate::note_filter_ocr::filter_note_from_ocr(title, ocr_blocks, env),
+        BodySource::Empty => filter_note_empty(title),
+    }
+}
+
+/// 转写段正文过滤链（视频会话——既有路径，v0.12.0 提取自原 filter_note 主体，
+/// 逻辑零改动；OcrDirect/Empty 分派见 filter_note）。
 ///
 /// @ai-context: 转写段按过滤链处理（见模块头）；OCR 画面要点先经
 ///              screens::filter_usable_blocks（v0.7.5：低分 0.7/单字符/边缘
 ///              条带/视频页 UI 共现/错字纠错）排除，再屏构建与精确去重。
-pub fn filter_note(
+fn filter_note_transcript(
     title: &str,
     segments: &[SessionSegment],
     ocr_blocks: &[SessionOcrBlock],
@@ -329,6 +367,29 @@ pub fn filter_note(
         merged,
         purify: config.clone(),
         warning: None,
+        body_source: BodySource::Transcript,
+        ocr_body: Vec::new(),
+    }
+}
+
+/// 空正文过滤链（纯函数）：无转写段且无可用 OCR 块 → 标题仅 markdown。
+///
+/// @ai-context: 不 panic 契约（图文会话无内容时转笔记的诚实降级——标题
+///              即全部；与 v0.11.7 可行性契约一致）。
+fn filter_note_empty(title: &str) -> NoteFilterResult {
+    NoteFilterResult {
+        title: title.to_string(),
+        markdown: format!("# {}", title),
+        kept: Vec::new(),
+        ocr_points: Vec::new(),
+        ocr_screens: Vec::new(),
+        stats: FilterStats::default(),
+        filtered: Vec::new(),
+        merged: Vec::new(),
+        purify: PurifyConfig::default(),
+        warning: None,
+        body_source: BodySource::Empty,
+        ocr_body: Vec::new(),
     }
 }
 
@@ -479,13 +540,23 @@ pub(crate) fn apply_session_warning(result: &mut NoteFilterResult, status: &str)
 ///              净化配置随 result 透传（段落阈值/锚点与预览口径一致）。
 pub fn refresh_screen_points(result: &mut NoteFilterResult) {
     result.ocr_points = render_screen_points(&result.ocr_screens);
-    result.markdown = rebuild_markdown(
-        &result.title,
-        &result.kept,
-        &[],
-        &result.purify,
-        result.warning.as_deref(),
-    );
+    // v0.12.0（ADR-021）：按正文源分派重建——OcrDirect 走 OCR 正文重建
+    // （kept 为空，走 rebuild_markdown 会把 OCR 正文覆盖成标题仅）
+    result.markdown = match result.body_source {
+        BodySource::OcrDirect => crate::note_filter_ocr::rebuild_ocr_markdown(
+            &result.title,
+            &result.ocr_body,
+            &result.purify,
+            result.warning.as_deref(),
+        ),
+        _ => rebuild_markdown(
+            &result.title,
+            &result.kept,
+            &[],
+            &result.purify,
+            result.warning.as_deref(),
+        ),
+    };
 }
 
 /// 组装 Markdown（标题 + 讲述内容；段落切分复用 concat 口径；

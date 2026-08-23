@@ -5,6 +5,16 @@
 
 ## [Unreleased] - 2026-08-21
 
+### v0.12.0 图文与窗口捕获重塑（2026-08-23 规划定稿，详见 [docs/versions/v0.12.0.md](docs/versions/v0.12.0.md)）
+
+- **正文源多态（M1）**：filter_note 增加 detect_body_source 抽象层——图文会话 OCR 文本直接进笔记 markdown（修复纯图文会话转笔记空内容）；OCR 走精简净化链（跳过口语净化）
+- **WGC 窗口级捕获（M2）**：新增 capture/wgc_capture.rs，WGC 主路径 + DXGI 降级 1 + GDI 兜底三级自愈链——目标窗口不被遮挡
+- **系统级覆盖层截图（M3）**：Tauri 独立全屏透明窗口替代应用内 letterbox 框选，1:1 原始像素显示 + 全局快捷键
+- **DeepSeek 默认化（M4）**：默认 Provider 切 DeepSeek + 默认模型 deepseek-v4-flash-vision-exp；设置页预设/文案/价格表同步；旧 key 环境变量废除
+- **视频画面要点降级 + vision 精修（M5）**：本地 OCR 只做字幕/图文采集（视频会话关键帧纯图，存图触发解耦）；AI 精修可选图片理解（vision_refine_enabled 开关默认关，仅视频会话）
+- **采集浮窗化（M6）**：Tauri 子窗口 alwaysOnTop 悬浮小窗（状态/转写/控制），全屏看视频时仍可操作采集
+- **文档（M7）**：ADR-021（正文源多态）+ ADR-022（WGC 三级链）+ ADR-023（视频 OCR 下线 + vision 精修隐私契约）
+
 ### v0.11.7 图文会话（截屏导入）（2026-08-22 规划，详见 [docs/versions/v0.11.7.md](docs/versions/v0.11.7.md)）
 
 - **图文采集**：课堂助手第三动线——全屏框选截屏 → kind=photo 图文会话（OCR 全图识别 + 屏卡流 + 转笔记）；sessions.kind 字段 + 列表 📷 徽标 + 详情空态；与实时捕获互斥 + 24h 崩溃残留清扫 + 零截图不留空壳

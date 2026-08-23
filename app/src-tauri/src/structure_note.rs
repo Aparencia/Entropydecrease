@@ -63,6 +63,12 @@ pub fn render_note_structure(
     config: &NoteStructureConfig,
 ) -> StructureStats {
     let mut stats = StructureStats::default();
+    // v0.12.0（ADR-021）：OcrDirect 分支正文为 OCR 文本序列（无时间轴叙述
+    // 结构，章节插入不适用）——原样返回零统计，避免用 kept（空）重建覆盖
+    // OCR 正文（图文会话已按框选顺序成文，章节增强留给未来 AI 精修）
+    if result.body_source == crate::note_body_source::BodySource::OcrDirect {
+        return stats;
+    }
     if !config.chapter_headings {
         return stats;
     }

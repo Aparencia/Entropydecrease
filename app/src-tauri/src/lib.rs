@@ -221,6 +221,9 @@ mod model_registry;
 mod note_filter;
 mod note_filter_ai;
 mod note_filter_discourse;
+// v0.12.0 M1（ADR-021）：正文源多态——BodySource 判定 + OCR 精简过滤链
+mod note_body_source;
+mod note_filter_ocr;
 // v0.11.0（REQ-197）：容器侧组化业务层（系列课程组 + 结构密度路由）
 mod note_group_assign;
 // v0.8.0 F1（REQ-141 丢图修复）：精修版配图本地合并降级（协议 v2 image 块兜底）

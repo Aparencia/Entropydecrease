@@ -175,6 +175,11 @@ pub fn apply_ai_decisions(
     mut result: NoteFilterResult,
     decisions: &[TextFilterDecision],
 ) -> NoteFilterResult {
+    // v0.12.0（ADR-021）：OcrDirect 分支无转写段——AI 判定针对段 id，对图文
+    // OCR 正文无操作；markdown 重建若按 kept（空）会覆盖 OCR 正文，直接返回
+    if result.body_source == crate::note_body_source::BodySource::OcrDirect {
+        return result;
+    }
     if decisions.is_empty() {
         return result;
     }

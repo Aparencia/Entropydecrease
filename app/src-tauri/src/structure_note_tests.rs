@@ -61,6 +61,8 @@ fn base_result(kept: Vec<SessionSegment>) -> NoteFilterResult {
         merged: Vec::new(),
         purify: PurifyConfig::default(),
         warning: None,
+        body_source: crate::note_body_source::BodySource::Transcript,
+        ocr_body: Vec::new(),
     }
 }
 
