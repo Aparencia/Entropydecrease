@@ -21,6 +21,8 @@ interface OcrDeviceStatus {
   mode: string;
   actual: string | { Cuda: { device_id: number } };
   fallback_reason: string | null;
+  /** v0.12.1：引擎加载成功标志（false=加载中/失败；就绪判定以此为准） */
+  engine_ready: boolean;
 }
 
 interface ReadyItem {
@@ -78,11 +80,15 @@ export default function ReadyCheckCard() {
           detail: missingPunct.length > 0 ? "未下载（无标点降级，不影响转写）" : undefined,
         },
         {
-          label: `OCR 引擎（${ocrBackendLabel(ocr.actual)}）`,
-          ok: health.ocr_alive,
-          warn: !health.ocr_alive ? false : !!ocr.fallback_reason,
-          detail: !health.ocr_alive
-            ? "引擎未就绪"
+          // v0.12.1：就绪判定由线程心跳改为 engine_ready（加载成功才算就绪；
+          // 原 ocr_alive 在引擎加载失败时仍为 true——线程活着≠引擎可用，
+          // 曾导致 OCR 全挂仍显示 ✓ 的误报）；未就绪时标签不显示后端，
+          // 避免"GPU (CUDA #0)"这类请求态冒充生效态
+          label: `OCR 引擎（${ocr.engine_ready ? ocrBackendLabel(ocr.actual) : "未就绪"}）`,
+          ok: ocr.engine_ready,
+          warn: !ocr.engine_ready ? false : !!ocr.fallback_reason,
+          detail: !ocr.engine_ready
+            ? "引擎未就绪" + (ocr.fallback_reason ? `：${ocr.fallback_reason}` : "")
             : ocr.fallback_reason ?? undefined,
         },
         {

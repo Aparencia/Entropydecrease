@@ -59,6 +59,8 @@ export interface OcrDeviceStatus {
   requested: OcrBackend;
   actual: OcrBackend;
   fallback_reason: string | null;
+  /** v0.12.1：引擎加载成功标志（false=加载中/失败；就绪判定以此为准，非线程心跳） */
+  engine_ready: boolean;
   bench: BenchResult | null;
   calibrating: boolean;
 }

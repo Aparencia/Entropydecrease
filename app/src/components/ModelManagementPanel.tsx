@@ -16,7 +16,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import StructureModelSetting from "./StructureModelSetting";
 // L11 去重：HealthSnapshot/StreamingModelStatus/DownloadProgress 单一定义源在 types/system.ts
-import type { DownloadProgress, HealthSnapshot, StreamingModelStatus } from "../types";
+import type { DownloadProgress, HealthSnapshot, OcrDeviceStatus, StreamingModelStatus } from "../types";
 
 /** 说话人下载状态。 */
 interface SpeakerDownloadStatus {
@@ -31,6 +31,7 @@ const badge: React.CSSProperties = { fontSize: 11, padding: "1px 8px", borderRad
 
 export default function ModelManagementPanel() {
   const [health, setHealth] = useState<HealthSnapshot | null>(null);
+  const [ocr, setOcr] = useState<OcrDeviceStatus | null>(null);
   const [streaming, setStreaming] = useState<StreamingModelStatus | null>(null);
   const [streamProgress, setStreamProgress] = useState<DownloadProgress | null>(null);
   const [streamBusy, setStreamBusy] = useState(false);
@@ -41,12 +42,14 @@ export default function ModelManagementPanel() {
   const refresh = useCallback(async () => {
     setError("");
     try {
-      const [h, s] = await Promise.all([
+      const [h, s, o] = await Promise.all([
         invoke<HealthSnapshot>("health_status"),
         invoke<StreamingModelStatus>("asr_streaming_model_status"),
+        invoke<OcrDeviceStatus>("ocr_device_status"),
       ]);
       setHealth(h);
       setStreaming(s);
+      setOcr(o);
       setSpeaker(await invoke<SpeakerDownloadStatus>("speaker_model_download_status"));
     } catch (e) {
       setError(`模型状态查询失败: ${e}`);
@@ -177,15 +180,19 @@ export default function ModelManagementPanel() {
         <span style={{ fontSize: 10.5, color: "#9ca3af" }}>脚本 scripts/download-punctuation.mjs 可安装</span>
       </div>
 
-      {/* OCR 模型（ModelScope 自动缓存） */}
+      {/* OCR 模型（ModelScope 自动缓存）——v0.12.1：就绪判定用 engine_ready
+          （引擎加载成功），不再用 ocr_alive 线程心跳（活 ≠ 就绪） */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9, flexWrap: "wrap" }}>
         <span style={{ fontSize: 11, width: 200 }}>OCR（PP-OCRv6）</span>
-        {health?.ocr_alive ? (
+        {ocr?.engine_ready ? (
           <span style={{ ...badge, background: "#f0fdfa", color: "#0d9488" }}>✓ 引擎运行中</span>
         ) : (
-          <span style={{ ...badge, background: "#fffbeb", color: "#b45309" }}>引擎未就绪</span>
+          <span style={{ ...badge, background: "#fef2f2", color: "#dc2626" }}>✗ 引擎未就绪</span>
         )}
         <span style={{ fontSize: 10.5, color: "#9ca3af" }}>首次使用经 ModelScope 自动缓存</span>
+        {!ocr?.engine_ready && (
+          <span style={{ fontSize: 10.5, color: "#b45309" }}>重启应用自动重试；失败原因见设置页「OCR 推理设备」</span>
+        )}
       </div>
 
       {/* 结构模型（版面/表格/公式——原结构分析模型区段） */}

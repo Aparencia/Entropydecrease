@@ -20,6 +20,8 @@ interface DiagSnapshot {
   ocr_failures: number;
   ocr_backend: string | { Cuda: { device_id: number } };
   ocr_fallback_reason: string | null;
+  /** v0.12.1：OCR 引擎加载成功标志（false=加载中/失败——徽标告警依据） */
+  ocr_engine_ready: boolean;
 }
 
 function backendLabel(b: DiagSnapshot["ocr_backend"]): string {
@@ -53,7 +55,14 @@ export function SystemStatusBadge() {
     return () => clearInterval(timer);
   }, [refresh]);
 
-  const warn = health?.disk_warn || (health?.missing_models.length ?? 0) > 0 || health?.asr_alive === false || health?.ocr_alive === false;
+  // v0.12.1：OCR 引擎加载失败（engine_ready=false）计入告警——此前仅看线程心跳，
+  // 引擎挂了仍显示健康
+  const warn =
+    health?.disk_warn ||
+    (health?.missing_models.length ?? 0) > 0 ||
+    health?.asr_alive === false ||
+    health?.ocr_alive === false ||
+    diag?.ocr_engine_ready === false;
   const engineDown = health && (health.asr_alive === false || health.ocr_alive === false);
 
   return (
@@ -102,6 +111,9 @@ export function SystemStatusBadge() {
           <div>
             引擎心跳：ASR {health?.asr_alive ? "●" : "✗"} OCR {health?.ocr_alive ? "●" : "✗"}
             {engineDown && <b style={{ color: "#dc2626" }}>（引擎异常）</b>}
+          </div>
+          <div>
+            OCR 引擎：{diag?.ocr_engine_ready ? "✓ 就绪" : <b style={{ color: "#dc2626" }}>未就绪（重启应用重试）</b>}
           </div>
           <hr style={{ border: "none", borderTop: "1px solid #f3f4f6", margin: "6px 0" }} />
           <div style={{ fontWeight: 600, marginBottom: 4 }}>诊断（开发期）</div>

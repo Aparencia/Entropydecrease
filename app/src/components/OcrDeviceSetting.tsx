@@ -137,8 +137,23 @@ export function OcrDeviceSetting() {
       </div>
       {status && (
         <div style={{ fontSize: 11, lineHeight: 1.7, color: "#6b7280" }}>
+          {!status.engine_ready && (
+            <div
+              style={{
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                borderRadius: 6,
+                padding: "5px 8px",
+                marginBottom: 6,
+                color: "#b91c1c",
+              }}
+            >
+              ⚠ OCR 引擎未就绪：模型文件缺失或下载失败，重启应用自动重试（
+              <span style={{ fontWeight: 600 }}>{backendLabel(status.actual)}</span> 请求未生效）
+            </div>
+          )}
           <div>
-            当前后端：
+            {status.engine_ready ? "当前后端：" : "请求后端："}
             <b style={{ color: backendLabel(status.actual) === "CPU" ? "#6b7280" : "#0d9488" }}>
               {backendLabel(status.actual)}
             </b>
@@ -150,7 +165,10 @@ export function OcrDeviceSetting() {
             <div style={{ color: "#b45309" }}>⚠ {status.fallback_reason}</div>
           )}
           {status.bench && (
-            <div>校准：CPU {status.bench.cpu_ms.toFixed(1)}ms / GPU {status.bench.gpu_ms.toFixed(1)}ms</div>
+            <div style={{ color: status.engine_ready ? undefined : "#9ca3af" }}>
+              校准：CPU {status.bench.cpu_ms.toFixed(1)}ms / GPU {status.bench.gpu_ms.toFixed(1)}ms
+              {!status.engine_ready && "（历史基准，引擎恢复后重新检测）"}
+            </div>
           )}
         </div>
       )}

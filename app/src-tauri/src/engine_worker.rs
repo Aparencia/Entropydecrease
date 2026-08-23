@@ -149,14 +149,22 @@ pub(crate) fn ocr_worker_loop(
                     .unwrap_or_default()
             );
             if let Ok(mut s) = device_status.lock() {
+                // v0.12.1：engine_ready 与 actual/fallback_reason 一起回写——
+                // 前端就绪判定必须用 engine_ready，不得用线程心跳（活 ≠ 引擎就绪）
                 s.actual = engine.backend;
+                s.engine_ready = true;
                 s.fallback_reason = engine.fallback_reason.clone();
             }
         }
         Err(e) => {
             eprintln!("[Engine] OCR 引擎加载失败: {}", e);
             if let Ok(mut s) = device_status.lock() {
-                s.fallback_reason = Some(format!("OCR 引擎加载失败: {}", e));
+                // v0.12.1：失败显式回写 engine_ready=false（加载中的初始值也是 false，
+                // 重启场景仍显式置位，防未来复用旧状态）；附可行动提示——
+                // auto-download 已恢复，重启应用即重试 ModelScope 缓存命中/下载
+                s.engine_ready = false;
+                s.fallback_reason =
+                    Some(format!("OCR 引擎加载失败: {}（模型缺失或下载失败——重启应用自动重试）", e));
             }
         }
     }

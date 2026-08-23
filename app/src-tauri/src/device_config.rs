@@ -59,6 +59,10 @@ pub struct OcrDeviceStatus {
     pub actual: OcrBackend,
     /// 回退原因（无回退为 None；如"运行时无 CUDA 支持"）
     pub fallback_reason: Option<String>,
+    /// 引擎是否加载成功（v0.12.1：true=加载成功可用；false=加载中或加载失败——
+    /// 失败原因见 fallback_reason；线程心跳 alive ≠ 引擎就绪，前端不得混用）
+    #[serde(default)]
+    pub engine_ready: bool,
     /// 最近校准基准
     pub bench: Option<BenchResult>,
     /// 校准进行中标记（前端轮询用）
@@ -67,7 +71,15 @@ pub struct OcrDeviceStatus {
 
 impl OcrDeviceStatus {
     pub fn new(mode: OcrDeviceMode, requested: OcrBackend, bench: Option<BenchResult>) -> Self {
-        Self { mode, requested, actual: requested, fallback_reason: None, bench, calibrating: false }
+        Self {
+            mode,
+            requested,
+            actual: requested,
+            fallback_reason: None,
+            engine_ready: false,
+            bench,
+            calibrating: false,
+        }
     }
 }
 
@@ -241,5 +253,29 @@ mod tests {
         assert_eq!(s.requested, s.actual);
         assert!(!s.calibrating);
         assert!(s.fallback_reason.is_none());
+        // v0.12.1：新建状态引擎未就绪（worker 加载成功后才置 true）
+        assert!(!s.engine_ready);
+    }
+
+    #[test]
+    fn status_roundtrip_keeps_engine_ready() {
+        // v0.12.1：engine_ready 缺省反序列化为 false（旧前端/旧 JSON 零回归）；
+        // 显式 false 往返一致
+        let s = OcrDeviceStatus {
+            mode: OcrDeviceMode::ForceCpu,
+            requested: OcrBackend::Cpu,
+            actual: OcrBackend::Cpu,
+            fallback_reason: Some("请求后端 Cuda 构建失败".to_string()),
+            engine_ready: false,
+            bench: None,
+            calibrating: false,
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        let back: OcrDeviceStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, s);
+        // 无 engine_ready 键的旧载荷 → false（不阻断反序列化）
+        let legacy = r#"{"mode":"Auto","requested":{"Cuda":{"device_id":0}},"actual":{"Cuda":{"device_id":0}},"fallback_reason":null,"bench":null,"calibrating":false}"#;
+        let from_legacy: OcrDeviceStatus = serde_json::from_str(legacy).unwrap();
+        assert!(!from_legacy.engine_ready);
     }
 }

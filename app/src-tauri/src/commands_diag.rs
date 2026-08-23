@@ -32,6 +32,8 @@ pub struct DiagSnapshot {
     pub ocr_failures: u64,
     pub ocr_backend: OcrBackend,
     pub ocr_fallback_reason: Option<String>,
+    /// v0.12.1：OCR 引擎加载成功标志（false=加载中/失败——系统徽标据此告警）
+    pub ocr_engine_ready: bool,
 }
 
 /// 健康巡检（磁盘剩余 + 模型文件 + 引擎线程心跳）。
@@ -51,7 +53,9 @@ pub fn health_status(state: State<'_, AppState>) -> HealthSnapshot {
     };
     let (asr_alive, ocr_alive) = state.engines.liveness();
     // 模型完整性：流式四件套 + 离线 SenseVoice（审查修复——此前仅查流式，
-    // sensevoice 缺失要到首次识别失败才能暴露；OCR 模型经 ModelScope 缓存路径不稳定，留日志侧）
+    // sensevoice 缺失要到首次识别失败才能暴露）。OCR 模型由 oar-ocr 托管在
+    // $OAR_HOME（默认 ~/.oar，非 app 模型目录）——就绪状态经 ocr_device_status
+    // 的 engine_ready 暴露（加载成功才算就绪），不在此处查文件清单。
     // TD-2026-08-20-E/F 清偿：增查说话人（wespeaker）与标点恢复模型——
     // 此前就绪清单（ReadyCheckCard）不含这两项，缺失要到会话页才暴露
     let missing = {
@@ -103,6 +107,7 @@ pub fn diag_snapshot(state: State<'_, AppState>) -> DiagSnapshot {
         ocr_failures,
         ocr_backend: status.actual,
         ocr_fallback_reason: status.fallback_reason,
+        ocr_engine_ready: status.engine_ready,
     }
 }
 
