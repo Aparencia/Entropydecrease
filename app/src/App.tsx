@@ -19,6 +19,7 @@ import SessionsPage from "./pages/SessionsPage";
 // 2026-08-21 用户需求：设置页（课堂助手设置类面板迁出，单页滚动+分组）
 import SettingsPage from "./pages/SettingsPage";
 import AppErrorBoundary from "./components/AppErrorBoundary";
+import CaptureFloatPanel from "./components/CaptureFloatPanel";
 import type { AiTaskState } from "./types";
 
 type Page = "classroom" | "sessions" | "notes" | "settings";
@@ -31,6 +32,14 @@ const NAV_ITEMS: { key: Page; label: string }[] = [
 ];
 
 function App() {
+  // v0.12.0 M6：采集浮窗入口——URL 带 ?float=1 时仅渲染 CaptureFloatPanel
+  //（不渲染主导航壳；浮窗独立窗口 alwaysOnTop，加载 index.html?float=1）。
+  // 规则：float 标志 per-window 恒定（URL 不变），故此处 before-hooks 早返回安全；
+  // 它使浮窗不注册主导航的 live:* 监听（数据流由 CaptureFloatPanel 的 hook 持有）。
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  if (new URLSearchParams(window.location.search).get("float") === "1") {
+    return <CaptureFloatPanel />;
+  }
   const [page, setPage] = useState<Page>("classroom");
   // 2026-08 A4：跨页直达目标会话（课堂助手融合完成 → 会话页自动打开详情）
   const [focusSessionId, setFocusSessionId] = useState<number | null>(null);

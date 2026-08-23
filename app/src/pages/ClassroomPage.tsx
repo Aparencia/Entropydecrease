@@ -200,6 +200,18 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // v0.12.0 M6：浮窗化快捷键 Ctrl+Shift+F（采集中一键浮窗——全屏看视频不中断）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (liveActive && e.ctrlKey && e.shiftKey && (e.key === "F" || e.key === "f")) {
+        e.preventDefault();
+        void invoke("open_capture_float").catch((err) => setLiveError(`浮窗失败: ${err}`));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [liveActive]);
+
   // 启动时检查流式模型状态 + 活动会话恢复 + 下载状态恢复
   // TD-016：invoke 失败不再静默——展示错误并允许重试（此前按钮永久禁用且无提示）
   useEffect(() => {
@@ -286,6 +298,8 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
       setLiveSessionId(null);
       setLivePaused(false);
       setStatus(id ? `已停止会话 #${id}，融合完成后可到「会话」页查看` : "无活动会话");
+      // v0.12.0 M6：停止后自动关闭采集浮窗（若已打开）
+      void invoke("close_capture_float").catch(() => undefined);
       // P3：停止后重新预热（页面仍在，下一次开始同样秒启）
       warmUp();
     } catch (e) {
@@ -479,6 +493,25 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
                   }}
                 >
                   ⏹ 停止
+                </button>
+                {/* v0.12.0 M6：浮窗化——采集中全屏看视频时悬浮常显（快捷键 Ctrl+Shift+F） */}
+                <button
+                  onClick={() => {
+                    void invoke("open_capture_float").catch((err) => setLiveError(`浮窗失败: ${err}`));
+                  }}
+                  title="快捷键 Ctrl+Shift+F"
+                  style={{
+                    ...btn,
+                    flex: 1,
+                    padding: "8px 0",
+                    fontWeight: 600,
+                    background: "#fff",
+                    color: "#0d9488",
+                    border: "1px solid #99f6e4",
+                    borderRadius: 6,
+                  }}
+                >
+                  🗕 浮窗化
                 </button>
               </div>
             ) : (

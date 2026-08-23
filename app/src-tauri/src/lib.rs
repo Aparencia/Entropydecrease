@@ -120,6 +120,8 @@ mod commands_structures;
 mod commands_streaming;
 mod commands_vocab;
 mod commands_video;
+// v0.12.0 M6（采集体验债）：采集浮窗窗口命令（open/close_capture_float）
+mod commands_window;
 mod concat;
 mod db;
 // H3 拆分（db.rs 原 678 行硬拆）：schema 建表/列迁移 + notes 读写独立成块
@@ -495,6 +497,9 @@ pub fn run() {
             // v0.9.0 M3（REQ-190）：领域标签检测 + hotwords 预热
             commands_video::detect_video_domain,
             commands_video::preheat_domain_hotwords,
+            // v0.12.0 M6（采集体验债）：采集浮窗打开/关闭
+            commands_window::open_capture_float,
+            commands_window::close_capture_float,
             // 会话结构化分析（REQ-044/045/046，v0.5.0 M2：章节/重点/术语/讲者）
             commands_analysis::analyze_session_command,
             // 说话人分离（REQ-153，v0.7.2：弱化版讲者切换离线分析——幂等懒加载）
