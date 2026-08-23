@@ -5,6 +5,14 @@
 
 ## [Unreleased] - 2026-08-23
 
+### v0.12.6 采集浮窗显隐链路修复 + 锁定自解锁（2026-08-23 交付，详见 [docs/versions/v0.12.6.md](docs/versions/v0.12.6.md)）
+
+- **P0 浮窗启动自动显示（用户报告）**：setup 预创建浮窗误传 `precreated=false` → `visible(true)` + 抢焦点——浮窗应用启动即出现。修复：隐藏预创建（失败仍回落懒创建），浮窗只在用户选择（按钮/快捷键）时出现
+- **浮窗出现 → 主窗隐藏**：用户要求"出现后主页面隐藏"；打开浮窗后主窗隐藏，收起/停止采集/回主窗一律回显（show+unminimize+focus——绝不把用户留在无可见窗口）
+- **锁定自解锁（ADR-025）**：点击穿透是窗口级能力（锁定态浮窗收不到鼠标事件），tauri 2.11.5 无 `set_cursor_hit_test`（分区点击穿透缺失）——引入 `tauri-plugin-global-shortcut`：Ctrl+Shift+F **全局快捷键**（浮窗打开期间注册/收起注销，任意焦点可解锁）；三态语义收拢到 Rust `float_toggle_core`（关→开 / 开未锁→收起 / 开已锁→解锁）+ `float_toggle` 命令，主窗按钮/快捷键共用同一出口（防主窗键+全局键双触发双翻转）；锁定态浮窗显示"🔒 已锁定"提示
+- **浮窗两侧透明区 + 最右滚条**：无全局 CSS 下 body 默认 8px margin + 100vh 溢出 → 左右透明条 + 滚动条——浮窗组件注入窗口级重置（margin 0 / overflow hidden / 100%）
+- 验证：Rust 新增 `float_next_action_machine` 单测（三态状态机）；`cargo check` 通过；`tsc --noEmit` 零错误；vitest 全绿
+
 ### v0.12.5 AI 精修线路修复：工作台采纳前右侧恒空 + 精修流程优化（2026-08-23 交付，详见 [docs/versions/v0.12.5.md](docs/versions/v0.12.5.md)）
 
 - **P0 采纳前工作台右侧恒空（用户报告）**：精修成功 → 「打开工作台」→ 左侧规则版有内容、右侧精修版空（"尚未精修"占位）。根因：`refine_workbench` 的精修版只按**已落库笔记**取（`find_note_by_session`），采纳前笔记不存在 → `None`；前端持有的 `AiRefineResult` 未进入数据源；且任务成功事件先于 DB 落库（竞态）。修复：`refine_workbench` 新增可选 `refine_result` 参数（调用方内存结果，消除竞态）→ 新增 `Db::find_latest_unadopted_refine`（`ai_tasks` 未采纳成功任务按会话取最新——重启后仍可回显）→ 已落库笔记最新版本，三级数据源；前端 `RefineWorkbench` 携带 `taskResult` 时回传 `refineResult`；采纳前成本不虚假回填

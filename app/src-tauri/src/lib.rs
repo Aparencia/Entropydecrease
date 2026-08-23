@@ -347,6 +347,20 @@ pub fn run() {
         // 三维复审 #8：opener 插件已移除——应用内无外链打开需求，
         // 保留只会扩大 IPC 攻击面（前端 @tauri-apps/plugin-opener 同步移除）
         .plugin(tauri_plugin_dialog::init())
+        // ADR-025（v0.12.6）：浮窗全局快捷键 Ctrl+Shift+F——锁定态浮窗不可点
+        // 且主窗已隐藏，全局键是唯一解锁/切换入口；注册窗口期=浮窗打开期
+        // （open/close 在 commands_window.rs 内 register/unregister）
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        if let Err(e) = crate::commands_window::float_toggle_core(app) {
+                            eprintln!("[capture-float] 全局快捷键切换失败: {}", e);
+                        }
+                    }
+                })
+                .build(),
+        )
         .setup(|app| {
             // AppState 装配（数据目录/DB/引擎池/可校准配置——拆至 app_setup.rs，
             // line-limit-exemptions 登记计划：lib.rs >600 硬拆落地）
@@ -517,6 +531,9 @@ pub fn run() {
             commands_window::float_set_topmost,
             commands_window::float_state,
             commands_window::show_main_window,
+            // v0.12.6（ADR-025）：浮窗三态切换（主窗按钮/快捷键共用——全局快捷键
+            // 与主窗键通道语义收拢，防双触发双翻转）
+            commands_window::float_toggle,
             // v0.12.0 M3（系统级覆盖层截图）：打开/取图/确认裁剪/取消
             commands_overlay::open_capture_overlay,
             commands_overlay::overlay_get_image,

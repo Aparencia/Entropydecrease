@@ -1,6 +1,6 @@
 [package]
 name = "entropydecrease"
-version = "0.12.5"
+version = "0.12.6"
 description = "熵减 - 视频知识提取与持久化（本地优先）"
 authors = ["Aparencia"]
 edition = "2021"
@@ -59,6 +59,9 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["protocol-asset"] }
 # 三维复审 #8：tauri-plugin-opener 已移除（无外链打开需求，收窄 IPC 攻击面）
 tauri-plugin-dialog = "2"
+# v0.12.6（ADR-025）：浮窗全局快捷键 Ctrl+Shift+F——锁定（点击穿透）后浮窗
+# 自身不可点，主窗又随浮窗隐藏，全局键是唯一自解锁路径（进程级热键，采集中生效）
+tauri-plugin-global-shortcut = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

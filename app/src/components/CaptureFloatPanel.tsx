@@ -5,7 +5,8 @@
  *              顶部状态/时长、中部最近转写、底部最近画面要点、控制按钮。
  *              与主面板共用 useLiveSessionEvents hook（同一 live:* 数据流）。
  * @ai-context: v0.12.3 双形态：面板（360×240 全功能）⇄ 字幕条（360×44 只读
- *              展示，Esc 切换）；点击穿透锁定后只读悬浮（解锁路径在主窗）。
+ *              展示，Esc 切换）；点击穿透锁定后只读悬浮（解锁走全局快捷键
+ *              Ctrl+Shift+F——ADR-025，v0.12.6 起主窗随浮窗打开而隐藏）。
  *              窗口级行为（拖拽/吸附/持久化/锁定/置顶/透明度）在
  *              useFloatWindow hook；几何纯函数在 utils/floatWindow.ts。
  * @ai-context: 控制按钮走真实命令（暂停/继续/停止/回主窗）；"标记"无后端命令，
@@ -14,6 +15,7 @@
  * @line-limit-exemption: 浮窗内容密度高（360×240 内状态/转写/画面/控制分区 +
  *              双形态渲染），登记 docs/standards/line-limit-exemptions.md。
  */
+import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useLiveSessionEvents } from "../hooks/useLiveSessionEvents";
 import { useFloatWindow } from "../hooks/useFloatWindow";
@@ -51,6 +53,16 @@ export default function CaptureFloatPanel() {
   const { snapshot, mode, opacity, setViewMode, updateOpacity, startDrag, toggleLocked, toggleTopmost, backToMain } =
     useFloatWindow();
   const paused = phase.startsWith("⏸");
+
+  // 浮窗窗口 body 默认 8px margin + 100vh 溢出 → 左右透明条 + 最右滚条
+  // （用户反馈"两侧透明区"）；浮窗无全局 CSS——此处注入窗口级重置
+  useEffect(() => {
+    const s = document.createElement("style");
+    s.textContent =
+      "html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent}";
+    document.head.appendChild(s);
+    return () => s.remove();
+  }, []);
 
   const togglePause = () => {
     void invoke(paused ? "resume_live_session" : "pause_live_session").catch((e) =>
@@ -103,7 +115,12 @@ export default function CaptureFloatPanel() {
           {lastLine}
         </span>
         <span style={{ color: "#6b7280", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>⏱ {fmtTime(elapsedMs)}</span>
-        <button style={iconBtn} title={snapshot.locked ? "已锁定（主窗解锁）" : "点击穿透锁定"} onClick={toggleLocked}>
+        {snapshot.locked && (
+          <span style={{ color: "#b45309", fontWeight: 600, flexShrink: 0 }} title="点击穿透已锁定——按 Ctrl+Shift+F 解锁">
+            🔒
+          </span>
+        )}
+        <button style={iconBtn} title={snapshot.locked ? "已锁定（Ctrl+Shift+F 解锁）" : "点击穿透锁定"} onClick={toggleLocked}>
           {snapshot.locked ? "🔒" : "🔓"}
         </button>
         <button style={iconBtn} title="展开为面板（Esc）" onClick={expandToPanel}>⤢</button>
@@ -148,9 +165,14 @@ export default function CaptureFloatPanel() {
         <button style={iconBtn} title={snapshot.topmost ? "取消置顶" : "置顶"} onClick={toggleTopmost}>
           {snapshot.topmost ? "📌" : "📍"}
         </button>
-        <button style={iconBtn} title={snapshot.locked ? "点击穿透已锁定（主窗解锁）" : "点击穿透锁定"} onClick={toggleLocked}>
+        <button style={iconBtn} title={snapshot.locked ? "点击穿透已锁定（Ctrl+Shift+F 解锁）" : "点击穿透锁定"} onClick={toggleLocked}>
           {snapshot.locked ? "🔒" : "🔓"}
         </button>
+        {snapshot.locked && (
+          <span style={{ fontSize: 10, color: "#b45309", flexShrink: 0 }} title="点击穿透已锁定——按 Ctrl+Shift+F 解锁">
+            已锁定
+          </span>
+        )}
         <button style={iconBtn} title="收起为字幕条（Esc）" onClick={shrinkToBar}>⤡</button>
       </div>
 

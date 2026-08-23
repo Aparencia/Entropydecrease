@@ -206,17 +206,13 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   }, []);
 
   // v0.12.0 M6：浮窗化快捷键 Ctrl+Shift+F（采集中一键浮窗——全屏看视频不中断）
-  // v0.12.3 语义升级：未开=打开；已开未锁=收起；已锁=解锁（点击穿透后浮窗
-  // 自身不可点，主窗是唯一解锁口——键/按钮复用同一切换逻辑）
+  // v0.12.6（ADR-025）：三态语义收拢到 Rust float_toggle（单一来源，防主窗键与
+  // 全局快捷键双触发双翻转）——前端按钮/键只调 toggle，状态由 float:state 事件回流
   const toggleFloat = useCallback(() => {
-    if (!floatSnap.open) {
-      void invoke("open_capture_float").catch((err) => setLiveError(`浮窗失败: ${err}`));
-    } else if (floatSnap.locked) {
-      void invoke("float_set_locked", { locked: false }).catch((err) => setLiveError(`解锁浮窗失败: ${err}`));
-    } else {
-      void invoke("close_capture_float").catch((err) => setLiveError(`收起浮窗失败: ${err}`));
-    }
-  }, [floatSnap.open, floatSnap.locked]);
+    void invoke<FloatSnapshot>("float_toggle")
+      .then(setFloatSnap)
+      .catch((err) => setLiveError(`浮窗切换失败: ${err}`));
+  }, []);
 
   // v0.12.3：浮窗状态同步（挂载拉取 + float:state 事件订阅——Rust 单一来源）
   useEffect(() => {
@@ -240,14 +236,16 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (liveActive && e.ctrlKey && e.shiftKey && (e.key === "F" || e.key === "f")) {
+      // v0.12.6：仅浮窗关闭时生效——浮窗打开期间快捷键已升级为全局快捷键
+      // （Rust 侧统一处理，语义见 float_toggle_core），此处拦截避免双触发
+      if (liveActive && !floatSnap.open && e.ctrlKey && e.shiftKey && (e.key === "F" || e.key === "f")) {
         e.preventDefault();
         toggleFloat();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [liveActive, toggleFloat]);
+  }, [liveActive, floatSnap.open, toggleFloat]);
 
   // 启动时检查流式模型状态 + 活动会话恢复 + 下载状态恢复
   // TD-016：invoke 失败不再静默——展示错误并允许重试（此前按钮永久禁用且无提示）
