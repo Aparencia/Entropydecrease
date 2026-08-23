@@ -140,6 +140,14 @@ mod db_settlements;
 // v0.11.4：周契约数据层（contracts 表 + 按周取数）与周聚合纯函数
 mod db_contracts;
 mod week_contract;
+// v0.13.1（REQ-202~205）：知识体系基建——原子层纯函数 + 六张数据表
+mod knowledge_pure;
+mod db_knowledge_systems;
+mod db_knowledge_nodes;
+mod db_knowledge_concepts;
+mod db_knowledge_models;
+mod db_knowledge_links;
+mod db_knowledge_audits;
 mod db_artifacts;
 // v0.7.7（REQ-183）：结构图记录存储——session_structure_images 表 CRUD
 mod db_structures;

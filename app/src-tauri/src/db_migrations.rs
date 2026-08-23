@@ -165,7 +165,79 @@ CREATE TABLE IF NOT EXISTS contracts (
             created_at INTEGER NOT NULL
         );
         CREATE UNIQUE INDEX IF NOT EXISTS idx_contracts_group_week
-            ON contracts(group_id, week_start);",
+            ON contracts(group_id, week_start);
+        -- v0.13.1（REQ-202）：知识体系主表（体系只引用、不收纳——引用走 knowledge_links）
+        -- global/domain 两 kind；global 唯一索引兜底防多核心稀释（command 层白名单校验 kind）
+        CREATE TABLE IF NOT EXISTS knowledge_systems (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            parent_system_id INTEGER REFERENCES knowledge_systems(id) ON DELETE SET NULL,
+            name TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'domain',        -- global/domain（command 层白名单校验）
+            core_question TEXT,                          -- global 必填（command 层校验非空）
+            status TEXT NOT NULL DEFAULT 'active',       -- active/watching/archived
+            created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_systems_global
+            ON knowledge_systems(kind) WHERE kind = 'global';   -- 全局体系唯一（防多核心稀释）
+        -- v0.13.1（REQ-202）：问题树节点（type=question/scenario/domain_entry；
+        -- parent 自引用 ON DELETE CASCADE 级联清子树——删节点连子树一并清）
+        CREATE TABLE IF NOT EXISTS knowledge_nodes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            system_id INTEGER NOT NULL REFERENCES knowledge_systems(id) ON DELETE CASCADE,
+            parent_id INTEGER REFERENCES knowledge_nodes(id) ON DELETE CASCADE,
+            type TEXT NOT NULL DEFAULT 'question',       -- question/scenario/domain_entry
+            text TEXT NOT NULL,
+            order_idx INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'active',       -- active/watching/archived
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_tree ON knowledge_nodes(system_id, parent_id);
+        -- v0.13.1（REQ-202）：概念表（name 全局 UNIQUE——交叉点判定前提；
+        -- 三问 essence/boundary/relation；last_applied_at 留 v0.13.3 应用记录）
+        CREATE TABLE IF NOT EXISTS knowledge_concepts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            system_id INTEGER NOT NULL REFERENCES knowledge_systems(id) ON DELETE CASCADE,
+            name TEXT NOT NULL UNIQUE,                   -- 全局唯一：交叉点判定的前提
+            essence TEXT, boundary TEXT, relation TEXT,  -- 三问：本质/边界/联系
+            status TEXT NOT NULL DEFAULT 'core',         -- core/watching/archived
+            last_applied_at INTEGER,
+            created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+        );
+        -- v0.13.1（REQ-202）：知识模型（disciplines JSON 数组≥1学科；cross_checks 预埋可空）
+        CREATE TABLE IF NOT EXISTS knowledge_models (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            system_id INTEGER NOT NULL REFERENCES knowledge_systems(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            disciplines TEXT NOT NULL,                   -- JSON 数组（≥1 学科，command 层校验）
+            claim TEXT, valid_when TEXT, invalid_when TEXT,
+            cross_checks TEXT,                           -- JSON（v0.13.1 预埋字段，可空）
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_knowledge_models_system ON knowledge_models(system_id);
+        -- v0.13.1（REQ-202）：唯一引用通道（体系只引用不收纳——node/concept/model 三向
+        -- 可空；target SET NULL 保引用键；target_type 白名单）
+        CREATE TABLE IF NOT EXISTS knowledge_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            system_id INTEGER NOT NULL REFERENCES knowledge_systems(id) ON DELETE CASCADE,
+            node_id INTEGER REFERENCES knowledge_nodes(id) ON DELETE SET NULL,
+            concept_id INTEGER REFERENCES knowledge_concepts(id) ON DELETE SET NULL,
+            model_id INTEGER REFERENCES knowledge_models(id) ON DELETE SET NULL,
+            target_type TEXT NOT NULL,                   -- note_group/note/flashcard/fragment
+            target_id INTEGER NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_knowledge_links_system ON knowledge_links(system_id);
+        CREATE INDEX IF NOT EXISTS idx_knowledge_links_target ON knowledge_links(target_type, target_id);
+        -- v0.13.1（REQ-202）：审计记录（items_json/stats_json 自 v0.13.4 使用；
+        -- v0.13.1 仅留表——审计探测 read 路径备好）
+        CREATE TABLE IF NOT EXISTS knowledge_audits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            system_id INTEGER NOT NULL REFERENCES knowledge_systems(id) ON DELETE CASCADE,
+            items_json TEXT NOT NULL,                    -- v0.13.4 起使用；v0.13.1 仅留表
+            stats_json TEXT NOT NULL DEFAULT '{}',
+            created_at INTEGER NOT NULL
+        );",
     )?;
     // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）
     ensure_column(conn, "sessions", "profile", "ALTER TABLE sessions ADD COLUMN profile TEXT")?;
