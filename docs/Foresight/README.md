@@ -24,6 +24,7 @@
 | [long-term-optimization-checklist.md](./long-term-optimization-checklist.md) | 长期优化完整清单——规则/阈值/词表持续校准项（2026-08-20：代码↔文档↔git 三方核验；与 inventory 互补） |
 | [v4-roadmap-build-order-analysis.md](./v4-roadmap-build-order-analysis.md) | v4 路线图代码建设顺序规划（2026-08-22 重新规划版，取代 v3 版：pain-points-v4 §11 Phase 1-4 ↔ 代码实态盘点 → Step 0~7 建设顺序 + 理论节点映射/反动机App化约束/统一指标埋点三增量，待裁决立项） |
 | [competitive-analysis-knowledge-system-layer.md](./competitive-analysis-knowledge-system-layer.md) | 竞品调研：知识体系层与学习闭环赛道（2026-08-23：五层竞品地图 + 定价锚点 + 「应用/决策」零竞品带判读；v0.13 立项依据） |
+| [competitive-analysis-knowledge-system-software.md](./competitive-analysis-knowledge-system-software.md) | 知识体系类软件调研：第二大脑/PKM 赛道细分（2026-08-23：五流派图谱 + 四件套支持度对比 + 方法论空白在"检验"不在"组织"；含上轮结论修订与 v0.13 spec 输入） |
 | [personal-knowledge-system-layer-integration.md](./personal-knowledge-system-layer-integration.md) | 整合分析·方案 B：个人知识体系指南 × 熵减（2026-08-23：范式判断/映射总表/数据模型概要/理念修订提案/防线扩展；已裁决落位 v0.13 系列） |
 | [source-personal-knowledge-system-guide-v2.md](./source-personal-knowledge-system-guide-v2.md) | 指南源文档存档（用户提供《个人知识体系搭建指南（综合版）》v2.0 原文） |
 | [brainstorming-classroom-assistant-gaps.md（[ ] 已归档）](../archive/2026-08-19/brainstorming-classroom-assistant-gaps.md) | 课堂助手缺口评估：提取 / 性能 / 算法 / 体验 四维头脑风暴（2026-08：50 项机制评估；§9 裁决 22 项已排期 v0.6.0 → REQ-059~080；未选与远期项保留于归档副本待议） |
