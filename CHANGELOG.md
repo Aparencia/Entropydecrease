@@ -5,7 +5,15 @@
 
 ## [Unreleased] - 2026-08-21
 
-### v0.12.2 笔记页信息架构重构（三栏 + 收件箱动线 + 路由信息收敛，2026-08-23 交付，详见 [docs/versions/v0.12.2.md](docs/versions/v0.12.2.md)）
+### v0.12.3 浮窗死锁修复 + 浮窗交互/架构升级 + 精修工作台契约修复（2026-08-23 交付，详见 [docs/versions/v0.12.3.md](docs/versions/v0.12.3.md)）
+
+- **P0 浮窗/覆盖层窗口创建死锁（wry#583）**：同步 command 在 WebView2 IPC 回调（主线程）内执行 `WebviewWindowBuilder::build()`——`CreateCoreWebView2ControllerWithOptions` 完成回调需主线程派发而主线程阻塞在回调内等它（循环等待）。症状：点「浮窗化」→ 空白窗 + 全应用不可点击（ASR 引擎线程独立不受影响）。修复：建窗/关窗命令全部 async（Tauri 官方要求模式），`commands_window.rs` / `commands_overlay.rs` 四个命令 + 注释锚定
+- **P0 精修工作台 undefined.split 崩溃**：`WorkbenchData` 缺失 `#[serde(rename_all = "camelCase")]`（同模块唯一漏网）→ 前端 `ruleMarkdown` 读到 undefined → `renderMd(undefined).split` 崩。修复：回填契约 + Rust 序列化单测（含嵌套 SectionDiff 保持 snake_case 锚定）+ 前端 `?? ""` 防御
+- **浮窗交互层（P1）**：面板/字幕条双形态（Esc/⤡⤢ 切换）+ 拖拽移动 + 位置记忆（localStorage）+ 边缘吸附（≤8px）+ 点击穿透锁定（主窗解锁）+ 置顶开关 + 透明度滑杆（35–100%）+ 回主窗改为显示聚焦且浮窗保留；主窗按钮三态（浮窗化 ⇄ 收起 ⇄ 解锁）
+- **浮窗架构层（P2）**：setup 预创建常驻（隐藏，秒开 + 点击期零建窗风险；失败回落懒创建）+ 窗口状态收敛（AppState.float_ui 单一来源 + float:state 事件）+ capabilities 拆分（default/float/overlay，浮窗与覆盖层去 dialog 权限）
+- 验证：`cargo test`（新增契约单测）/ `cargo check --all-targets` / `tsc --noEmit` 零错误 / `vitest` 81 通过（新增 floatWindow 14 项：钳制/吸附/偏好往返/损坏回退/透明度钳制）
+
+### v0.12.2 笔记页信息架构重构（三栏 + 收件箱动线 + 路由信息收敛，2026-08-23 规划定稿、未启动——顺延为后续版本候选，详见 [docs/versions/v0.12.2.md](docs/versions/v0.12.2.md)）
 
 - **三栏布局（P0 交互债）**：笔记页从"550px 一栏塞三职"重构为三栏分工——GroupSidebar（240px 组筛选/快速记录/收件箱入口）+ NoteListView（320px 常驻中部）+ NoteReadingView（右栏）；组行单击=仅过滤（消除"过滤+展开"双动作歧义）；搜索/标签过滤时中部列表原位切换，布局不变
 - **收件箱动线（P0 产品缺口）**：碎片二元论转正——碎片=原料不是短笔记；收件箱恒常首项（待处理计数）只装碎片，未归组笔记在「全部笔记」（两种实体两条动线）；碎片卡三出口：✍ 升为笔记（轻确认：标题预填首句可改 + 归组下拉默认未归组 → 右侧自动打开新笔记闭环可见）/ ⚙ 升为闪卡（幂等可重复触发）/ 🗑 删除（二次确认）；空态引导三种归宿
