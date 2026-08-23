@@ -55,7 +55,7 @@ export default function PhotoCapturePanel({ onOpenSessions, onStatus }: Props) {
       setBaseUrl("");
       setMsg("");
       setPhase("collecting");
-      onStatus(`图文采集已开始（会话 #${id}）`);
+      onStatus("图文采集已开始");
     } catch (e) {
       onStatus(`开始采集失败: ${e}`);
     }
@@ -164,7 +164,7 @@ export default function PhotoCapturePanel({ onOpenSessions, onStatus }: Props) {
         {phase === "collecting" && sessionId != null && (
           <>
             <p style={{ fontSize: 11, color: "#0f766e", margin: "0 0 6px" }}>
-              会话 #{sessionId} 采集中 · 已截 {count} 张
+              图文采集中 · 已截 {count} 张
             </p>
             {lastImageRef && baseUrl && (
               <img
@@ -189,7 +189,7 @@ export default function PhotoCapturePanel({ onOpenSessions, onStatus }: Props) {
         )}
         {phase === "done" && sessionId != null && (
           <>
-            <p style={{ fontSize: 11, color: "#047857", margin: "0 0 6px" }}>✅ 图文会话 #{sessionId} 已保存（{count} 张截图）</p>
+            <p style={{ fontSize: 11, color: "#047857", margin: "0 0 6px" }}>✅ 图文会话已保存（{count} 张截图）</p>
             {onOpenSessions && (
               <button
                 onClick={() => onOpenSessions(sessionId)}

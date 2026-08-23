@@ -304,7 +304,7 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
       setLiveActive(true);
       setLiveSessionId(id);
       setFusedSessionId(null); // 新会话开始：清除旧融合直达卡片
-      setStatus(`实时捕获已开始（会话 #${id}）`);
+      setStatus("实时捕获已开始");
     } catch (e) {
       // 防御性恢复（修复反馈）：UI 与后端状态不同步（事件丢失/竞态）时，
       // 查询真实状态恢复按钮语义，避免"假空闲"下重复点击被后端拒绝
@@ -328,11 +328,11 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
     // 停止过渡期：面板保持显示（live:status stopped 到达后由监听清除）
     setStopping(true);
     try {
-      const id = await invoke<number | null>("stop_live_session");
+      await invoke<number | null>("stop_live_session");
       setLiveActive(false);
       setLiveSessionId(null);
       setLivePaused(false);
-      setStatus(id ? `已停止会话 #${id}，融合完成后可到「会话」页查看` : "无活动会话");
+      setStatus("已停止会话，融合完成后可到「会话」页查看");
       // v0.12.0 M6：停止后自动关闭采集浮窗（若已打开）
       void invoke("close_capture_float").catch(() => undefined);
       // P3：停止后重新预热（页面仍在，下一次开始同样秒启）
@@ -586,7 +586,7 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
               </>
             )}
             {liveSessionId && (
-              <p style={{ fontSize: 11, color: "#6b7280", margin: "6px 0 0" }}>会话 #{liveSessionId}（可到「会话」页查看）</p>
+              <p style={{ fontSize: 11, color: "#6b7280", margin: "6px 0 0" }}>实时捕获中（可到「会话」页查看）</p>
             )}
           </div>
 

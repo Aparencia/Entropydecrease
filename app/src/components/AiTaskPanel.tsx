@@ -147,7 +147,7 @@ export default function AiTaskPanel() {
                   {badge.text}
                 </span>
                 <span style={{ color: "#374151", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {t.opType === "refine" ? `会话 #${t.refId}` : `笔记 #${t.refId}`}
+                  {t.opType === "refine" ? "会话" : `笔记 #${t.refId}`}
                   {t.model && <span style={{ color: "#9ca3af" }}> · {t.model}</span>}
                 </span>
                 <span style={{ color: "#9ca3af", width: 52, textAlign: "right" }}>{fmtMs(t.elapsedMs)}</span>

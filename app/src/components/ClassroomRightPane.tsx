@@ -59,7 +59,7 @@ export default function ClassroomRightPane({
           {fusedSessionId && (
             <div style={{ padding: "12px 16px 0", maxWidth: 640 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid #99f6e4", background: "#f0fdfa", borderRadius: 8, padding: "8px 12px" }}>
-                <span style={{ fontSize: 12, color: "#0f766e" }}>✅ 融合完成（会话 #{fusedSessionId}）</span>
+                <span style={{ fontSize: 12, color: "#0f766e" }}>✅ 融合完成</span>
                 <button
                   onClick={() => onOpenSessions?.(fusedSessionId)}
                   style={{ ...btn, marginLeft: "auto", background: "#0d9488", color: "#fff", border: "none", borderRadius: 6 }}

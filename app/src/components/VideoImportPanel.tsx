@@ -109,7 +109,7 @@ export default function VideoImportPanel({ onOpenSessions }: { onOpenSessions?: 
       {error && <p style={{ fontSize: 11, color: "#dc2626", margin: "6px 0 0", wordBreak: "break-all" }}>{error}</p>}
       {sessionId && (
         <p style={{ fontSize: 11, color: "#2563eb", margin: "6px 0 0" }}>
-          ✅ 已导入会话 #{sessionId}，可到「会话」页查看时间轴
+          ✅ 已导入会话，可到「会话」页查看时间轴
           {/* v0.11.7：完成直达（与图文采集面板共用交互） */}
           {onOpenSessions && (
             <button
