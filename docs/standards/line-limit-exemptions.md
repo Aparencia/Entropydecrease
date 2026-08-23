@@ -65,11 +65,11 @@
 | app/src/components/AiServicePanel.tsx | 390 | v0.8.0 M1（REQ-138/139/140）AI 服务设置面板：全局开关/密钥管理（掩码+DPAPI 保存）/端点模型/测试连接/余额卡片/授权确认卡/审计列表——配置面板 UI 内聚 | 若再增长：余额卡片与审计列表拆至 AiBalanceCard.tsx / AiAuditList.tsx |
 | app/src/components/SessionDetailPanel.tsx | 371 | 会话详情面板：质量报告/段列表/OCR 概览/操作区单一面板完整交互流内聚（前端审查登记） | 若再增长：质量报告区拆至 SessionQualityReport.tsx |
 | app/src/components/ProfileDetector.tsx | 330 | 档案检测组件：投票/确认流/记忆偏好 UI + v0.11.5 Task 5 冲突提示内聚（实测 2026-08-22） | 若再增长：确认流拆至 ProfileConfirmFlow.tsx |
-| app/src/components/NoteEditView.tsx | 315 | 笔记编辑视图：编辑态/标签/结构面板内聚（前端审查登记） | 若再增长：结构面板拆至 NoteStructurePane.tsx |
-| app/src/components/NoteGroupPanel.tsx | 545 | v0.11.0~4 笔记组侧栏：组列表/路由可见可改/碎片捕获/闪卡生成与复习入口/结算仪式/周契约卡/feed 碎片列表（周契约与碎片列表已拆独立组件 WeekContractCard/FeedFragmentList）——组域交互单一面板内聚；v0.11.5 树形合并（buildTree 消费/搜索新建工具条/受控展开组） | 若再增长：结算仪式区拆至 GroupSettlementPane.tsx |
+| app/src/components/NoteEditView.tsx | —— | v0.12.2 行数修正：实测 299 行（登记值 315 过期），本版新增 autoFocus 一行后仍 300 行以内——登记移除，见"已拆分/登记移除记录" | —— |
+| app/src/pages/NotesPage.tsx | 328 | v0.12.2 三栏编排（GroupSidebar/FeedFragmentList/NoteListView 插槽 + 收件箱动线 onPromoted 接线 + 新建零对话框）——编排层内聚（数据获取/选中态/快捷键/辅助面板插槽），组件已全部下沉拆件 | 若再增长：键盘监听与收件箱动线回调拆至 useNotesPageShortcuts.ts / useInboxFlow.ts |
 | app/src/components/AiProviderSettings.tsx | 329 | v0.11.6 M1 code-review 修复（2026-08-22）：删除/清钥加 window.confirm、window.prompt 改卡片内联 password 输入（+2 state + 内联表单）、模型列表 input 改 textarea、fallbackOrder 透传 initial、run 置"处理中"反馈、预设双源 presetOptions 后端拉取——修复净增约 13 行越线（实测 329，含 4 行豁免头注释） | 若再增长：内联密钥表单拆至 AiProviderKeyInput.tsx |
 
-> 前端 **拆分中**（Task #9 笔记域修复进行中，暂不登记行数）：`app/src/types.ts`、`app/src/pages/NotesPage.tsx`——待前端拆分完成后以实测行数重新评估。
+> 前端 **拆分中**（Task #9 笔记域修复进行中，暂不登记行数）：`app/src/types.ts`——待前端拆分完成后以实测行数重新评估。
 > 前端 SessionsPage.tsx 审查快照 304 行（登记值），v0.7.1 硬拆后长期 ≤300，本轮审查期间轻微越线；随 NotesPage/types.ts 拆分任务一并复核，若仍越线按上表模式登记。
 > 前端 EnrichPanel.tsx 实测已回归 299 行（登记值 ~330 移除）。
 
@@ -78,6 +78,8 @@
 > 已拆分：engine.rs（三维复审 #5 超时排空机制接入后逼近 600 行硬拆线）按登记计划将 worker 主循环与请求协议（AsrRequest/OcrRequest/双 worker 循环/词表纠错纯函数）拆至 engine_worker.rs（253 行）——engine.rs 回归 440 行（仍登记，300-600 区间），engine_worker.rs ≤300 行无需登记。
 > 已拆分：db.rs（2026-08-21 H3 硬拆，原 678 行超 600 硬限违规）：schema 建表 + ensure_column 列迁移拆至 db_migrations.rs（204 行），notes CRUD 拆至 db_notes.rs（216 行，测试迁至 db_notes_tests.rs 265 行）——db.rs 回归 72 行（Db 结构体/连接锁/with_conn/通用工具），三新文件均 ≤300 行，登记移除。M3 锁中毒恢复（with_conn + into_inner）随拆分一并落地。
 > 已拆分：live_session.rs（2026-08-21 Task #14 硬拆，实测 727 行超 600 硬限违规）：状态查询/控制方法簇（快照/暂停/停止/会话 id 查询）拆至 live_session_manager.rs（150 行），启动与预热生命周期（start/prepare/run_session/wait_prepared_ready）拆至 live_session_lifecycle.rs（288 行）——live_session.rs 回归 284 行（参数/结构体定义 + 构造 + run_session_after_engine 装配骨架），impl LiveSessionManager 跨文件分布，公共 API 签名零变化；三文件均 ≤300 行，登记移除。
+> 已拆分/删除：NoteGroupPanel.tsx（v0.12.2 笔记页三栏重构，原 545 行登记）——三合一职责拆分：GroupSidebar.tsx（267 行组筛选侧栏）+ RouteInfoPopover.tsx（278 行 ⓘ 弹层四区）；FeedFragmentList.tsx 改为收件箱碎片卡（263 行）；noteTree.ts/v0.11.5 树形合并下线；四文件均 ≤300 行，登记移除。
+> 登记移除：NoteEditView.tsx（登记值 315 过期——实测 299；v0.12.2 新增 autoFocus 一行后仍 ≤300，无需登记）。
 > 已删除：live_pipeline_diag.rs（2026-08-21 L5 清理）——"诊断后删除"的临时诊断模块，确认 lib.rs 注册仅 test cfg 且无其他引用后整体移除。
 > 已拆分：dxgi_capture.rs（原 ~333 行）于 v0.4.0 M0（TD-033，提交 2a88b25）将 DxgiState 拆至 dxgi_state.rs——现均 ≤300 行，无需登记。
 > 已拆分：live_session_frame.rs（原 ~500 行登记）于 v0.6.0 ADR-011（REQ-086/087）按拆分计划将 process_frame 帧处理拆至 live_frame_process.rs。
