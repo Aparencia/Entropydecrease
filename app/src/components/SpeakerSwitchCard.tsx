@@ -16,7 +16,14 @@ import { listen } from "@tauri-apps/api/event";
 import type { DownloadProgress, SpeakerAnalysisResult } from "../types";
 import { fmtMs } from "../utils/fmt";
 
-export default function SpeakerSwitchCard({ sessionId }: { sessionId: number }) {
+export default function SpeakerSwitchCard({
+  sessionId,
+  kind,
+}: {
+  sessionId: number;
+  /** 会话类型（v0.11.7：'photo'=图文截屏会话，无音频；v0.12.1 起跳过讲者分析） */
+  kind?: string | null;
+}) {
   // null=加载中；未启用（模型缺失）时 result.enabled=false
   const [result, setResult] = useState<SpeakerAnalysisResult | null>(null);
   const [error, setError] = useState("");
@@ -26,6 +33,13 @@ export default function SpeakerSwitchCard({ sessionId }: { sessionId: number }) 
 
   const analyze = useCallback(
     (cancelled: { current: boolean }) => {
+      // v0.12.1：图文会话无音频——不发起分析（此前每个图文会话详情页都会
+      // 报"讲者分析不可用：会话音频缺失"，把预期降级渲染成红色错误）
+      if (kind === "photo") {
+        setResult(null);
+        setError("");
+        return;
+      }
       setResult(null);
       setError("");
       void invoke<SpeakerAnalysisResult>("analyze_session_speakers", { sessionId })
@@ -36,7 +50,7 @@ export default function SpeakerSwitchCard({ sessionId }: { sessionId: number }) 
           if (!cancelled.current) setError(`讲者分析失败: ${e}`);
         });
     },
-    [sessionId],
+    [sessionId, kind],
   );
 
   useEffect(() => {
@@ -82,6 +96,14 @@ export default function SpeakerSwitchCard({ sessionId }: { sessionId: number }) 
     }
   };
 
+  // v0.12.1：图文会话无音频——直接渲染"不适用"，不进入错误/加载/未启用分支
+  if (kind === "photo") {
+    return (
+      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 8 }}>
+        👥 讲者分析不适用（图文会话无音频）
+      </div>
+    );
+  }
   if (error) {
     return (
       <div style={{ fontSize: 11, color: "#dc2626", marginBottom: 8 }}>

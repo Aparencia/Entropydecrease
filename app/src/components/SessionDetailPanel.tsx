@@ -265,8 +265,9 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
         </div>
       )}
 
-      {/* v0.7.2（REQ-153）：讲者切换（弱化版说话人分离——懒加载幂等） */}
-      <SpeakerSwitchCard sessionId={sessionId} />
+      {/* v0.7.2（REQ-153）：讲者切换（弱化版说话人分离——懒加载幂等；
+          v0.12.1：图文会话跳过（无音频，不再误报红色错误）） */}
+      <SpeakerSwitchCard sessionId={sessionId} kind={detail.session.kind} />
 
       {/* 两视图切换（原料 / 笔记预览——REQ-081；v0.11.5 产物视图下线） */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
