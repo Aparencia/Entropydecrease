@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiRefineResult, WorkbenchData } from "../types";
-import { escapeHtml } from "../utils/html";
+import { escapeHtml, renderTimestampAnchors } from "../utils/html";
 
 const overlay: React.CSSProperties = {
   position: "fixed", inset: 0, zIndex: 999,
@@ -27,12 +27,14 @@ const headerBtn: React.CSSProperties = {
 
 function renderMd(md: string): string {
   return md.split("\n").map((line) => {
-    if (line.startsWith("# ")) return `<h2 style="font-size:14px;margin:8px 0 3px">${escapeHtml(line.slice(2))}</h2>`;
-    if (line.startsWith("## ")) return `<h3 style="font-size:13px;margin:6px 0 2px;color:#0f766e">${escapeHtml(line.slice(3))}</h3>`;
-    if (line.startsWith("### ")) return `<h4 style="font-size:12px;margin:4px 0 2px;color:#374151">${escapeHtml(line.slice(4))}</h4>`;
-    if (line.startsWith("- ")) return `<div style="font-size:12px;color:#4b5563">• ${escapeHtml(line.slice(2))}</div>`;
+    // v0.12.0：先转义再替换时间戳锚点（章节锚点 `## 标题 [[⏱ ...]]` 与段落锚点；
+    // 精修版回挂的章节锚点此前以原始 markdown 文本显示——真机验收修复）
+    if (line.startsWith("# ")) return `<h2 style="font-size:14px;margin:8px 0 3px">${renderTimestampAnchors(escapeHtml(line.slice(2)))}</h2>`;
+    if (line.startsWith("## ")) return `<h3 style="font-size:13px;margin:6px 0 2px;color:#0f766e">${renderTimestampAnchors(escapeHtml(line.slice(3)))}</h3>`;
+    if (line.startsWith("### ")) return `<h4 style="font-size:12px;margin:4px 0 2px;color:#374151">${renderTimestampAnchors(escapeHtml(line.slice(4)))}</h4>`;
+    if (line.startsWith("- ")) return `<div style="font-size:12px;color:#4b5563">• ${renderTimestampAnchors(escapeHtml(line.slice(2)))}</div>`;
     if (line.trim() === "") return "";
-    return `<p style="font-size:12px;color:#374151;margin:2px 0">${escapeHtml(line)}</p>`;
+    return `<p style="font-size:12px;color:#374151;margin:2px 0">${renderTimestampAnchors(escapeHtml(line))}</p>`;
   }).join("");
 }
 
