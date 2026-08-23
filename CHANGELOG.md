@@ -3,7 +3,15 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [SemVer](https://semver.org/lang/zh-CN/)。
 各版本的深度版本文档在 [docs/versions/](docs/versions/)。
 
-## [Unreleased] - 2026-08-21
+## [Unreleased] - 2026-08-23
+
+### v0.12.4 视频会话画面要点纯图落地 + 笔记预览时间戳锚点 chip 化（2026-08-23 交付，详见 [docs/versions/v0.12.4.md](docs/versions/v0.12.4.md)）
+
+- **P0 视频画面要点残留 OCR 文字（用户 0.12.1 复测）**：v0.12.0 M5（ADR-023）帧侧只删了全帧 OCR 兜底与明文路径，残留两条仍产 OCR 文字的分支——直播路径 `!is_subtitle` 布局分析后仍调 `region_ocr_blocks`（`region=full` 入库），导入路径关键帧不归档图片 + 中区域 OCR。修复：直播 `else` 纯关键帧归档（零 OCR）；导入关键帧无条件纯图归档（`rgb_to_bgra`），仅字幕 OCR 门控保留，删中区域 OCR；展示层 `build_view_screens` 按 kind 分派（photo 保留 ADR-021 OCR 文本屏不变，video 走 `build_keyframe_screens` 纯图屏）；`get_session_detail`/`preview_session_note`/`manual_capture_inner` 三处接入
+- **P0 笔记预览原始时间戳锚点外露**：`[⏱ 00:00]([[ts:233]])` 在预览（未精修）阶段仍原文显示——v0.11.5 chip 只落了正式渲染（`NoteMarkdown`），漏了两个轻量字符串渲染器（`NotePreviewView.renderMarkdown`/`RefineWorkbench.renderMd`）。修复：`utils/html.ts` 新增 `renderTimestampAnchors`（已转义文本上先章头后段落，输出与正式笔记同款可跳转 chip），两个渲染器全分支接入
+- **会话详情面板 kind 感知**：photo「画面要点（OCR）」/ video「画面要点（关键帧纯图）」标题与空态文案区分，`（原始 N 块）` 提示仅 photo
+- **退役机制标注**：残留 OCR 相关机制按 `#[allow(dead_code)]` + `@ai-context` 保留（region_ocr/layout_cache/grid_from_bgra/save_crop），不删除
+- 验证：Rust 新增 3 单测（纯图屏逐图/无图空屏/按 kind 分派）全量 1547 通过（3 失败为预存基线：ai_client 默认 Provider 断言旧 SiliconFlow、note_filter 两条黄金用例，HEAD 复现与本版无关）；`tsc --noEmit` 零错误 / vitest 全绿（新增 5 项锚点 chip 用例）/ vite 构建通过 / clippy 零新增警告
 
 ### v0.12.3 浮窗死锁修复 + 浮窗交互/架构升级 + 精修工作台契约修复（2026-08-23 交付，详见 [docs/versions/v0.12.3.md](docs/versions/v0.12.3.md)）
 
