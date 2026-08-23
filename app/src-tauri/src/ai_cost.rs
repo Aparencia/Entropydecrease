@@ -40,6 +40,10 @@ fn builtin_prices() -> HashMap<&'static str, f64> {
     m.insert("deepseek-ai/DeepSeek-R1-0528-Qwen3-8B", 0.0);
     m.insert("deepseek-ai/DeepSeek-V3-0324", 2.0);
     m.insert("Qwen/Qwen3-235B-A22B", 2.0);
+    // v0.12.0 M4（默认链 DeepSeek）：deepseek-v4-flash-vision-exp 分段价
+    // （官方 2026-08：输入缓存未命中 1.5-3.0 元/百万 token，输出 4.5-9.0 元/百万）
+    // ——取保守上界 9.0 登记（宁可高估不可低估，待 golden 冒烟实测校准后分段）。
+    m.insert("deepseek-v4-flash-vision-exp", 9.0);
     m
 }
 

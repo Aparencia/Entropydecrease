@@ -157,7 +157,7 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
     let ai_credentials = crate::ai_credentials::platform_store(&data_dir.join("ai_credentials.bin"));
     // v0.11.6 M1：AI Provider 装配——providers 为空即迁移（新用户亦生成
     // 无密钥预设 Provider，行为自洽）；密钥迁移同处完成（旧凭据条目 →
-    // provider:legacy-siliconflow 新条目）。
+    // provider:legacy-deepseek 新条目，v0.12.0 M4 迁移目标改 DeepSeek）。
     // 锁序契约：启动单线程装配、锁序（providers→settings）与运行时调用点
     // （settings→providers）相反，禁止在命令层持 providers 锁读 settings。
     // save 决策：保存失败阻断启动是有意 fail-fast（数据目录不可写时后续
@@ -175,8 +175,8 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
             store.default_provider_id = default_id;
             // 密钥迁移：旧凭据存在且新 scope 不存在 → 复制（旧条目保留供回退）
             if let Ok(Some(key)) = ai_credentials.load_key("default") {
-                if ai_credentials.load_key("provider:legacy-siliconflow").ok().flatten().is_none() {
-                    let _ = ai_credentials.save_key("provider:legacy-siliconflow", &key);
+                if ai_credentials.load_key("provider:legacy-deepseek").ok().flatten().is_none() {
+                    let _ = ai_credentials.save_key("provider:legacy-deepseek", &key);
                 }
             }
             store.save(&ai_providers_path)?;

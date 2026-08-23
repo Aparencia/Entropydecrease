@@ -171,7 +171,7 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
       {phase === "consent" && (
         <div style={{ border: "1px solid #f59e0b", background: "#fffbeb", borderRadius: 6, padding: 8, marginBottom: 6, fontSize: 12 }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>首次使用需授权</div>
-          精修将上传<strong>转写文本与最小上下文</strong>至 SiliconFlow；本地优先铁律：<strong>音视频/图像永不出本机</strong>。是否同意？
+          精修将上传<strong>转写文本与最小上下文</strong>至 DeepSeek；本地优先铁律：<strong>音视频/图像永不出本机</strong>。是否同意？
           <div style={{ marginTop: 6, display: "flex", gap: 6 }}>
             <button style={{ ...btn, background: "#0d9488", color: "#fff", border: "none" }} onClick={async () => {
               await invoke("ai_set_authorized", { authorized: true }).catch(() => undefined);

@@ -100,6 +100,22 @@ fn price_model_mapping_known_and_unknown() {
     });
 }
 
+/// v0.12.0 M4（默认链 DeepSeek）：vision 模型单价登记（保守上界 9.0——官方
+/// 分段价输入 1.5-3.0 / 输出 4.5-9.0 元/百万 token，取上界宁可高估）。
+#[test]
+fn deepseek_vision_model_price_registered() {
+    with_env_locked(|| {
+        std::env::remove_var("SILICONFLOW_PRICE_PER_1M_TOKENS");
+        let (p, known) = price_for_model("deepseek-v4-flash-vision-exp");
+        assert_eq!(p, 9.0);
+        assert!(known, "vision 模型单价已登记——必须无未知警告");
+        let est = estimate_for_content_model(1000, "deepseek-v4-flash-vision-exp");
+        assert!(est.price_known);
+        // 估算含输出 token（输入 ×2），1000→2000 token × ¥9/1M = ¥0.018
+        assert!((est.est_cost_yuan - 0.018).abs() < 1e-9, "实得 {}", est.est_cost_yuan);
+    });
+}
+
 /// F1 修复：按模型估算——已知免费档 ¥0、未知模型带警告标记。
 #[test]
 fn estimate_for_content_model_respects_mapping() {

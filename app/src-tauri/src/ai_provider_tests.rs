@@ -1,9 +1,10 @@
 //! ai_provider.rs 单测（AAA 模式）。
 //!
-//! @ai-context: 覆盖：预设模板完整性（4 Provider）、配置校验（合法/非法 URL、
-//!              空模型、默认模型不在列表/空白）、JSON roundtrip（顺序与默认
-//!              保持）、幽灵 id 回退（含全禁用边界）、旧版单 Provider 配置
-//!              迁移（SiliconFlow，含非法配置回退预设）。
+//! @ai-context: 覆盖：预设模板完整性（4 Provider、DeepSeek 首位 + vision 默认）、
+//!              配置校验（合法/非法 URL、空模型、默认模型不在列表/空白）、JSON
+//!              roundtrip（顺序与默认保持）、幽灵 id 回退（含全禁用边界）、旧版
+//!              单 Provider 配置迁移（DeepSeek——v0.12.0 M4 默认链，含非法配置
+//!              仍产出合法 Provider）。
 
 use crate::ai_provider::*;
 
@@ -12,6 +13,10 @@ fn preset_templates_cover_four_providers() {
     let presets = preset_templates();
     assert_eq!(presets.len(), 4);
     assert!(presets.iter().any(|p| p.kind == ProviderKind::Ollama));
+    // v0.12.0 M4：DeepSeek 提首位（effective_default_id 取第一个 enabled → 默认链）
+    assert_eq!(presets[0].id, "deepseek");
+    assert_eq!(presets[0].default_model, "deepseek-v4-flash-vision-exp");
+    assert!(presets[0].models.iter().any(|m| m == "deepseek-v4-flash-vision-exp"));
     let sf = presets.iter().find(|p| p.name == "SiliconFlow").unwrap();
     assert!(sf.base_url.starts_with("https://"));
     assert!(!sf.models.is_empty());
@@ -72,7 +77,9 @@ fn store_ghost_default_falls_back_to_first_enabled() {
 }
 
 #[test]
-fn migrate_from_legacy_creates_siliconflow() {
+fn migrate_from_legacy_creates_deepseek() {
+    // v0.12.0 M4：迁移目标由 SiliconFlow 改为 DeepSeek 默认链——legacy 配置
+    // （旧 SiliconFlow 链路）不再沿用，直接生成 DeepSeek 官方端点 + vision 默认模型。
     let s = crate::ai_settings::AiSettings {
         base_url: "https://api.siliconflow.cn/v1".to_string(),
         model: "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B".to_string(),
@@ -80,14 +87,18 @@ fn migrate_from_legacy_creates_siliconflow() {
     };
     let (providers, default_id) = migrate_from_legacy(&s);
     assert_eq!(providers.len(), 1);
-    assert_eq!(providers[0].name, "SiliconFlow");
-    assert_eq!(providers[0].base_url, s.base_url);
-    assert_eq!(providers[0].default_model, s.model);
+    assert_eq!(providers[0].name, "DeepSeek");
+    assert_eq!(providers[0].base_url, "https://api.deepseek.com/v1");
+    assert_eq!(providers[0].default_model, "deepseek-v4-flash-vision-exp");
+    assert!(providers[0].models.iter().any(|m| m == "deepseek-v4-flash-vision-exp"));
+    assert_eq!(providers[0].id, "legacy-deepseek");
     assert_eq!(default_id, Some(providers[0].id.clone()));
 }
 
 #[test]
-fn migrate_from_legacy_falls_back_on_invalid_config() {
+fn migrate_from_legacy_always_produces_valid_deepseek() {
+    // 旧配置非法 → 迁移仍产出合法 DeepSeek 默认 Provider（保可用不崩；
+    // 旧 SiliconFlow 链路已废除，不再回退旧端点）。
     let s = crate::ai_settings::AiSettings {
         base_url: "ftp://bad".to_string(),
         model: String::new(),
@@ -95,7 +106,8 @@ fn migrate_from_legacy_falls_back_on_invalid_config() {
     };
     let (providers, default_id) = migrate_from_legacy(&s);
     assert_eq!(providers.len(), 1);
-    assert_eq!(providers[0].id, "legacy-siliconflow");
+    assert_eq!(providers[0].id, "legacy-deepseek");
     assert!(providers[0].validate().is_ok());
-    assert_eq!(default_id, Some("legacy-siliconflow".to_string()));
+    assert_eq!(providers[0].default_model, "deepseek-v4-flash-vision-exp");
+    assert_eq!(default_id, Some("legacy-deepseek".to_string()));
 }

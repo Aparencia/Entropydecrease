@@ -217,7 +217,7 @@ pub fn ai_provider_test(state: State<'_, AppState>, id: String) -> Result<String
 /// 解析默认 Provider 密钥（env 优先 > per-provider 凭据——Provider 面板
 /// 配置的密钥在此生效；无默认 Provider 回退旧 default scope 兼容迁移前）。
 pub fn resolve_default_provider_key(state: &AppState) -> Result<Option<String>, String> {
-    let env_key = std::env::var("SILICONFLOW_API_KEY").ok().filter(|k| !k.is_empty());
+    let env_key = std::env::var("DEEPSEEK_API_KEY").ok().filter(|k| !k.is_empty());
     if env_key.is_some() {
         return Ok(env_key);
     }

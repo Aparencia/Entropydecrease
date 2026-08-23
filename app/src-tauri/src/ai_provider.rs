@@ -8,8 +8,9 @@
 //!              "缺失/损坏回退内置默认"加载模式；密钥不在此层（DPAPI
 //!              per-provider，ai_credentials.rs）。
 //! @ai-context: 旧版（v0.11.5 及之前）单 Provider 配置（ai_settings.json 的
-//!              base_url/model + 单密钥）首启自动迁移为 SiliconFlow Provider
-//!              ——用户无感，4 处 AiClient::from_settings 调用点零改动。
+//!              base_url/model + 单密钥）首启自动迁移为 DeepSeek Provider
+//!              （v0.12.0 M4 默认链切换——旧 SiliconFlow 链路废除）——用户无感，
+//!              4 处 AiClient::from_settings 调用点零改动。
 
 use serde::{Deserialize, Serialize};
 
@@ -27,7 +28,8 @@ pub enum ProviderKind {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AiProviderConfig {
-    /// 唯一 id（生成时 uuid/slug；迁移时固定 "legacy-siliconflow"）
+    /// 唯一 id（生成时 uuid/slug；迁移时固定 "legacy-deepseek"——v0.12.0 M4
+    /// 迁移目标由 SiliconFlow 改为 DeepSeek 新默认链）
     pub id: String,
     /// 显示名（"SiliconFlow"）
     pub name: String,
@@ -149,19 +151,21 @@ pub fn preset_templates() -> Vec<AiProviderConfig> {
         fallback_order: Vec::new(),
     };
     vec![
+        // v0.12.0 M4（默认链 DeepSeek）：DeepSeek 提首位——effective_default_id
+        // 取第一个 enabled → 新装/迁移用户默认 Provider 即 DeepSeek。
+        mk(
+            "deepseek",
+            "DeepSeek",
+            "https://api.deepseek.com/v1",
+            &["deepseek-v4-flash-vision-exp", "deepseek-chat", "deepseek-reasoner"],
+            "deepseek-v4-flash-vision-exp",
+        ),
         mk(
             "siliconflow",
             "SiliconFlow",
             "https://api.siliconflow.cn/v1",
             &["deepseek-ai/DeepSeek-R1-0528-Qwen3-8B", "deepseek-ai/DeepSeek-V3.2"],
             "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
-        ),
-        mk(
-            "deepseek",
-            "DeepSeek",
-            "https://api.deepseek.com/v1",
-            &["deepseek-chat", "deepseek-reasoner"],
-            "deepseek-chat",
         ),
         mk(
             "openrouter",
@@ -188,24 +192,28 @@ pub fn provider_scope(provider_id: &str) -> String {
     format!("provider:{}", provider_id)
 }
 
-/// 旧配置迁移（首启）：旧 ai_settings 的 base_url/model → SiliconFlow Provider。
+/// 旧配置迁移（首启）：旧版单 Provider 配置 → DeepSeek 默认链（v0.12.0 M4）。
 ///
 /// @ai-context: 迁移幂等——ai_providers.json 已存在时不触发（调用方判断）；
 ///              密钥迁移在 command 层（旧凭据条目 → provider:<id> 新条目）。
-pub fn migrate_from_legacy(legacy: &crate::ai_settings::AiSettings) -> (Vec<AiProviderConfig>, Option<String>) {
-    let mut p = AiProviderConfig {
-        id: "legacy-siliconflow".to_string(),
-        name: "SiliconFlow".to_string(),
-        base_url: legacy.base_url.clone(),
-        default_model: legacy.model.clone(),
-        models: vec![legacy.model.clone()],
+/// @ai-context: v0.12.0 M4（默认链 DeepSeek）：迁移目标由 SiliconFlow 改为
+///              DeepSeek 官方端点 + deepseek-v4-flash-vision-exp 默认模型——
+///              旧 key 已废除，legacy.base_url/model（旧 SiliconFlow 链路）不再
+///              沿用，直接生成 DeepSeek 默认 Provider（保可用不崩）。
+pub fn migrate_from_legacy(_legacy: &crate::ai_settings::AiSettings) -> (Vec<AiProviderConfig>, Option<String>) {
+    // 取 DeepSeek 预设（id=="deepseek"）为迁移模板——默认链目标。
+    let ds = preset_templates()
+        .into_iter()
+        .find(|p| p.id == "deepseek")
+        .expect("DeepSeek 预设必须存在（M4 默认链）");
+    let p = AiProviderConfig {
+        id: "legacy-deepseek".to_string(),
+        name: "DeepSeek".to_string(),
+        base_url: ds.base_url,
+        default_model: ds.default_model,
+        models: ds.models,
         ..Default::default()
     };
-    if p.validate().is_err() {
-        // 旧配置非法 → 回退预设 SiliconFlow（保可用不崩）
-        p = preset_templates().remove(0);
-        p.id = "legacy-siliconflow".to_string();
-    }
     let default_id = p.id.clone();
     (vec![p], Some(default_id))
 }

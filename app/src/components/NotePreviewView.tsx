@@ -139,11 +139,11 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
   const aiReview = async () => {
     const enabled = aiStatus?.enabled;
     if (!enabled) {
-      setStatus("AI 复核未启用（需配置 SILICONFLOW_API_KEY 与 AI_TEXT_FILTER_ENABLED）");
+      setStatus("AI 复核未启用（需配置 DEEPSEEK_API_KEY 与 AI_TEXT_FILTER_ENABLED）");
       return;
     }
     const count = preview?.filtered.length ?? 0;
-    if (!window.confirm(`将发送 ${count} 段边界文本至 SiliconFlow（模型 ${aiStatus?.model}）进行删除/保留/合并判定。是否继续？`)) {
+    if (!window.confirm(`将发送 ${count} 段边界文本至 DeepSeek（模型 ${aiStatus?.model}）进行删除/保留/合并判定。是否继续？`)) {
       setStatus("已取消（预览保持纯规则结果）");
       return;
     }
