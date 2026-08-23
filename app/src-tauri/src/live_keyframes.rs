@@ -1,6 +1,6 @@
 //! 实时链路关键帧处理与融合重写（live_session_frame.rs 拆分，保持主文件 ≤600 行）。
 //!
-//! @ai-context: ① handle_full_frame：全帧画面要点落库 + M6 关键帧样本收集与
+//! @ai-context: ① handle_full_frame：全帧画面要点落库 + 关键帧样本收集与
 //!              归档存图（三层图结构参考图集数据源）；② 停止时关键帧投票
 //!              （session:keyframes 事件）；③ rewrite_with_fusion：融合重写
 //!              （原属 live_session_frame，REQ-031 无字幕短路）。
@@ -21,13 +21,14 @@ use crate::types::{NewSessionOcrBlock, NewSessionSegment, TranscriptSegment};
 /// @ai-context: 去重（与导入链路 same_texts 同口径）：强制 OCR 兜底会使静止画面
 ///              每 15s 重复识别——文本集合与上次完全一致时跳过落库，防要点列表刷屏。
 /// @ai-context: 落库成功即 emit live:ocr（前端实时画面流，简要单行卡片）。
-/// @ai-context: M6/REQ-051：关键帧样本收集（停止时投票）+ 新画面文本归档存图
+/// @ai-context: M6/REQ-051：关键帧样本收集（停止时投票）+ 归档存图
 ///              （三层图结构参考图集数据源；预算上限由 image_store 控制）。
+/// @ai-context: v0.12.0 M5（关键帧纯图）：存图触发解耦——不再依赖 OCR 文本非空，
+///              改「网格差异变化 + 2s 防抖」（视频全帧 OCR 下线后纯图帧仍归档）；
+///              关键帧样本收集亦随视觉变化触发（纯图帧采样，文本为可选信号）。
 /// @ai-context: 修复①：UI 垃圾（播放器时间码/控制条/水印）源头过滤——与字幕路径
 ///              （REQ-083）同口径，不进文本集/不落库/不归档（播放器区域被版面
 ///              误判时，OCR 产出时间码会每 2s 刷屏归档）。
-/// @ai-context: 修复②：空文本帧不归档——旧实现首帧无条件归档占坑（
-///              last_archived_text=None 恒真），误判会话参考图集只剩一张开头图。
 /// @ai-context: v0.7.3（REQ-155/156，ADR-015）：屏分配——落库带 screen_id+bbox；
 ///              layout_changed（版面指纹变化）与相似度/gap 共同判定新屏
 ///              （ScreenTracker 纯状态机，同屏续屏不产生新屏记录）。
@@ -40,7 +41,7 @@ pub fn handle_full_frame(
     session_id: i64,
     last_texts: &mut Vec<String>,
     frame_samples: &mut Vec<crate::frame_cluster::FrameSample>,
-    last_archived_text: &mut Option<String>,
+    _last_archived_text: &mut Option<String>,
     last_archived_at: &mut Option<Instant>,
     image_store: &mut Option<crate::image_store::SessionImageStore>,
     ocr_input_hash: u64,
@@ -71,40 +72,40 @@ pub fn handle_full_frame(
             return;
         }
     }
-    // M6：关键帧样本收集（全帧分支每次 OCR 成功记录；停止时投票器消费）
-    if !texts.is_empty() {
+    // v0.12.0 M5：视觉变化信号（关键帧样本收集 + 存图触发共用——解耦后不再
+    // 依赖 OCR 文本）
+    let grid_changed = !grid.changed_cells.is_empty();
+    // v0.12.0 M5：关键帧样本收集改随视觉变化触发（纯图帧亦采样——投票器按
+    // ahash/dhash 聚类，文本为可选信号）
+    if grid_changed {
+        let sample_text = if texts.is_empty() { None } else { Some(texts.join(" ")) };
         frame_samples.push(crate::frame_cluster::FrameSample {
             timestamp_ms: frame.timestamp_ms,
             ahash: ocr_input_hash,
             dhash: ocr_input_dhash,
-            ocr_text: Some(texts.join(" ")),
+            ocr_text: sample_text,
             change_magnitude: 0.0,
         });
     }
-    // M6：新画面文本 → 归档存图（参考图集；同文本不重复归档 + 2s 防抖）。
-    // 修复：空文本帧不归档——旧实现首帧无条件归档占坑（last_archived_text=None
-    // 恒真，哪怕文本为空），误判会话参考图集只剩一张开头占坑图
-    if !texts.is_empty() {
-        let joined = texts.join(" ");
-        let is_new_text = last_archived_text.as_deref() != Some(joined.as_str());
-        let interval_ok = last_archived_at.is_none_or(|t| t.elapsed() >= Duration::from_secs(2));
-        if is_new_text && interval_ok {
-            if let Some(store) = image_store.as_mut() {
-                match store.save_frame(frame.timestamp_ms, &frame.bgraw, frame.width, frame.height) {
-                    Ok(rel) => {
-                        // 2026-08 用户需求：实时图片数据显示——归档成功即推送
-                        // （前端转写面板"最近画面"条据此即时刷新，无需轮询）
-                        let _ = app.emit("live:image-saved", rel);
-                    }
-                    Err(e) => {
-                        // 归档失败不阻断 OCR 主链路（预算满/IO 错误静默降级，日志可观测）
-                        eprintln!("[ScreenWorker] 关键帧归档失败: {}", e);
-                    }
+    // v0.12.0 M5（关键帧纯图）：存图触发解耦——不再依赖 OCR 文本非空，
+    // 改为「网格差异变化 + 2s 防抖」。（视频全帧 OCR 下线后关键帧纯图仍须归档；
+    // 旧"同文本不重复/空文本不归档"的文本口径废弃——视觉变化即触发，纯图帧也归档。）
+    let interval_ok = last_archived_at.is_none_or(|t| t.elapsed() >= Duration::from_secs(2));
+    if grid_changed && interval_ok {
+        if let Some(store) = image_store.as_mut() {
+            match store.save_frame(frame.timestamp_ms, &frame.bgraw, frame.width, frame.height) {
+                Ok(rel) => {
+                    // 2026-08 用户需求：实时图片数据显示——归档成功即推送
+                    // （前端转写面板"最近画面"条据此即时刷新，无需轮询）
+                    let _ = app.emit("live:image-saved", rel);
+                }
+                Err(e) => {
+                    // 归档失败不阻断主链路（预算满/IO 错误静默降级，日志可观测）
+                    eprintln!("[ScreenWorker] 关键帧归档失败: {}", e);
                 }
             }
-            *last_archived_text = Some(joined);
-            *last_archived_at = Some(Instant::now());
         }
+        *last_archived_at = Some(Instant::now());
     }
     if crate::import_frame::same_texts(&texts, last_texts) {
         return;
