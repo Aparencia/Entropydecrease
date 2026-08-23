@@ -46,3 +46,29 @@
 - v0.12.3 四提交（904f53a fix(ai) 精修工作台契约修复 / 17c15a9 feat(live) 浮窗死锁修复+交互架构升级 / da555b3 build(tauri) 版本号 0.12.3 / 2d1b507 docs(versions) 版本文档与索引、CHANGELOG）
 - 审查即修 f8db9e2（浮窗 ACL 权限 / open 开态语义 / 监听清理 + 惰性化与类型统一）
 - 验证：cargo check 通过、clippy 本批零新增告警、tsc 零错误、vitest 83 通过（新增 floatWindow 14 项）
+
+---
+
+# 三轮归档（v0.12.2 交付 + 新增代码七维审查 + 滚动）
+
+> 归档说明：同日三轮。v0.12.2 交付文档仍属"不归档"类别（[v0.12.2 版本文档](../../versions/v0.12.2.md) 属 versions/ 内容规则且未发布；CHANGELOG / requirements-pool / line-limit-exemptions / standards 均活跃；无新增设计 spec / ADR / 调研文档落盘——v0.12.2 规划直接落于 versions/），**无文档移入归档夹**；本日三轮 = 技术债滚动 + 索引建立。
+
+## 归档内容（三轮）
+
+无。
+
+- [v0.12.2 版本文档](../../versions/v0.12.2.md)：**不归档**（versions/ 内容规则；未发布——"已发布版本的规划文档"条件不满足，发布后补归档）
+- 需求回填：[requirements-pool.md](../../product/requirements-pool.md) **活跃**（REQ-198 重释 / REQ-201 补升级出口回填，持续维护）
+- 行数豁免登记：[line-limit-exemptions.md](../../standards/line-limit-exemptions.md) **活跃**（standards/ 规则）
+
+## 技术债摘要（三轮）
+
+- 未偿 6 笔保持 carried（TD-040 / TD-2026-08-19-D/F/G / TD-2026-08-21-C / TD-2026-08-22-A），无一笔被本批触及；TD-2026-08-22-A 经本批 clippy --all-targets 复核，存量集合与二轮一致，本批新增零警告（一次过程性 unused_mut 已同批清除）
+- 已偿 0 笔；新增代码七维审查发现 8 处问题（HIGH×1 / MED×2 / LOW×5）全部即修（fe8c919 + f5731e1），不立债
+- 新登记 open 0 笔；观察项新增 5 项（v0.12.2-1~5：archived 碎片升笔记边界 / 升卡静默 / ESC 双触发 / 弹层锚点与图名碰撞 / 事务内文件 IO 折中）
+
+## 本日三轮交付
+
+- v0.12.2 三提交（483ad4e 碎片升级出口 + feedCapture 转正 / 82ca3d8 笔记页三栏 + 收件箱动线 + ⓘ 弹层 / 027ca6a 交付文档与 REQ 回填）
+- 审查即修 2 提交（fe8c919 事务修复 / f5731e1 前端串组与竞态 6 项）
+- 验证：cargo test 本批 6 新测全绿（全量 1543 通过，3 项既有失败 stash 实证与本批无关）、clippy 零新增、tsc 零错误、vitest 83 通过（新增 routeReason/inbox/收件箱状态机/ⓘ 弹层/GroupSidebar 16 项）、前端 build 通过
