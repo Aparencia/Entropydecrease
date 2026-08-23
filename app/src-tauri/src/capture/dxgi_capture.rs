@@ -195,22 +195,35 @@ impl ScreenCaptureSampler {
         let elapsed_ms = self.started.elapsed().as_millis() as u64;
         // WGC 主路径（窗口级——帧即窗口内容，不做窗口矩形裁剪）
         if self.backend == CaptureBackend::Wgc {
-            match self.wgc.as_mut().expect("backend=Wgc 必有 wgc").capture(elapsed_ms) {
-                Ok(Some(mut frame)) => {
-                    crop_frame(&mut frame.bgraw, &mut frame.width, &mut frame.height, crop);
-                    return Ok(Some(frame));
-                }
-                Ok(None) => return Ok(None),
-                Err(e) => {
-                    // WGC 失效（窗口关闭/最小化/会话丢失）→ 降级 DXGI（一次性，
-                    // 不回切 WGC——YAGNI，沿用 DXGI 周期重建）
-                    eprintln!("[ScreenCapture] WGC 失效，降级 DXGI: {}", e);
-                    self.wgc = None;
+            match self.wgc.as_mut() {
+                Some(wgc) => match wgc.capture(elapsed_ms) {
+                    Ok(Some(mut frame)) => {
+                        crop_frame(&mut frame.bgraw, &mut frame.width, &mut frame.height, crop);
+                        return Ok(Some(frame));
+                    }
+                    Ok(None) => return Ok(None),
+                    Err(e) => {
+                        // WGC 失效（窗口关闭/最小化/会话丢失）→ 降级 DXGI（一次性，
+                        // 不回切 WGC——YAGNI，沿用 DXGI 周期重建）
+                        eprintln!("[ScreenCapture] WGC 失效，降级 DXGI: {}", e);
+                        self.wgc = None;
+                        self.dxgi = DxgiState::create(self.hwnd).ok();
+                        self.backend = if self.dxgi.is_some() {
+                            CaptureBackend::Dxgi
+                        } else {
+                            eprintln!("[ScreenCapture] DXGI 重建失败，降级 GDI");
+                            CaptureBackend::Gdi
+                        };
+                    }
+                },
+                // 防御（审查修复）：backend 标记与 wgc 状态失配（不变量，不可达）
+                // ——不 panic（AGENTS.md 防御性编程），保守降级 DXGI
+                None => {
+                    eprintln!("[ScreenCapture] WGC 状态失配，降级 DXGI");
                     self.dxgi = DxgiState::create(self.hwnd).ok();
                     self.backend = if self.dxgi.is_some() {
                         CaptureBackend::Dxgi
                     } else {
-                        eprintln!("[ScreenCapture] DXGI 重建失败，降级 GDI");
                         CaptureBackend::Gdi
                     };
                 }

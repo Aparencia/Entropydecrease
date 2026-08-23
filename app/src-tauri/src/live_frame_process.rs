@@ -464,7 +464,11 @@ pub fn process_frame(
         // v0.12.0 M5（视频会话全帧 OCR 下线）：全帧画面要点不再识别——关键帧纯图
         // 归档（handle_full_frame 空块走 grid-change 触发，存图不识别；真实画面
         // 要点经 vision-exp 精修提取）。前台非目标窗口期间不归档（REQ-157）。
+        // 审查修复：全帧处理时刻刷新 last_full_ocr_at——force_full 的 2s 冷却基准
+        // （EVENT_FULL_OCR_COOLDOWN_MS）依赖该字段，旧实现每次全帧 OCR 成功刷新；
+        // 全帧 OCR 下线后若不刷新，冷却恒满足 → 连续带外变化期逐帧强制全帧分支
         if !roi_tracker.foreground_foreign() {
+            trigger.last_full_ocr_at = Instant::now();
             crate::live_keyframes::handle_full_frame(
                 &frame, &[], db, app, session_id, last_full_texts, frame_samples,
                 last_archived_text, last_archived_at, image_store, ocr_input_hash,

@@ -26,20 +26,14 @@ export default function CaptureOverlayPanel() {
   const imgRef = useRef<HTMLImageElement>(null);
   const scaleRef = useRef<{ x: number; y: number }>({ x: 1, y: 1 });
 
+  // 加载待选截图（仅一次）
   useEffect(() => {
     void invoke<string | null>("overlay_get_image")
       .then((p) => {
         if (p) setSrc(convertFileSrc(p));
       })
       .catch(() => undefined);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") void invoke("overlay_cancel").catch(() => undefined);
-      if (e.key === "Enter" && sel) void submit();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sel]);
+  }, []);
 
   const onLoad = () => {
     const img = imgRef.current;
@@ -74,6 +68,23 @@ export default function CaptureOverlayPanel() {
     if (!r) return;
     void invoke("overlay_submit_capture", { rect: r }).catch(() => undefined);
   };
+
+  // 键盘（Esc/Enter）单次注册——经 ref 读最新 sel/submit
+  // （审查修复：原 [sel] 依赖在拖拽 mousemove 高频重注册 + 闭包陈旧风险）
+  const selRef = useRef<Sel | null>(null);
+  const submitRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    selRef.current = sel;
+    submitRef.current = submit;
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") void invoke("overlay_cancel").catch(() => undefined);
+      if (e.key === "Enter" && selRef.current) submitRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const onMouseDown = (e: React.MouseEvent) => {
     dragging.current = true;
