@@ -414,68 +414,43 @@ pub fn process_frame(
                 &grid, last_changed_texts, tier,
             );
         } else {
-            // 区域路径无可用产出（误判/空白区域/垃圾块）→ 整帧 OCR 兜底
-            // （结构性回退链：误判/空白区域不得阻断全帧识别——真实画面文字必须仍有出口）
-            // H2 修复：改用有界等待变体——引擎卡死时本帧超时计入 ocr_err 后
-            // 继续下一帧（降级不阻塞整条管线）
-            match engines.recognize_image_timeout(rgb, crate::engine::OCR_REQUEST_TIMEOUT) {
-                Ok(blocks) => {
-                    stats.ocr_err += failed_regions as u64;
-                    stats.ocr_ok += 1;
-                    trigger.last_ocr_at = Instant::now();
-                    trigger.last_full_ocr_at = Instant::now();
-                    crate::live_keyframes::handle_full_frame(
-                        &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
-                        last_archived_text, last_archived_at, image_store, ocr_input_hash,
-                        ocr_input_dhash, ui_junk, screen_tracker, layout_changed,
-                        &grid, last_changed_texts, tier,
-                    );
-                }
-                Err(e) => {
-                    stats.ocr_err += 1 + failed_regions as u64;
-                    eprintln!("[ScreenWorker] 整帧 OCR 兜底失败（区域 OCR 亦无产出）: {}", e);
-                }
+            // v0.12.0 M5（视频会话全帧 OCR 下线）：区域路径无可用产出时不再整帧
+            // OCR 兜底——关键帧纯图归档（handle_full_frame 空块走 grid-change 触发，
+            // 存图不识别；真实画面要点经 vision-exp 精修提取）
+            if !roi_tracker.foreground_foreign() {
+                crate::live_keyframes::handle_full_frame(
+                    &frame, &[], db, app, session_id, last_full_texts, frame_samples,
+                    last_archived_text, last_archived_at, image_store, ocr_input_hash,
+                    ocr_input_dhash, ui_junk, screen_tracker, layout_changed,
+                    &grid, last_changed_texts, tier,
+                );
             }
         }
-    } else {
+    } else if is_subtitle {
+        // 字幕区：既有路径不变（v0.12.0 M5 只下线全帧画面要点 OCR）
         // H2 修复：同上有界等待——超时时走 Err 分支计 ocr_err 并继续下一帧
         match engines.recognize_image_timeout(rgb, crate::engine::OCR_REQUEST_TIMEOUT) {
             Ok(blocks) => {
                 stats.ocr_ok += 1;
                 // 成功识别即刷新 OCR 时刻（无论是否产出文本——防漏检兜底周期基准）
                 trigger.last_ocr_at = Instant::now();
-                if is_subtitle {
-                    // M2/REQ-037：bbox 回喂 ROI 跟踪器（锁定/失效判定；
-                    // 裁剪图坐标系 + 原点平移 + TD-046 缩放比反算；
-                    // REQ-084：前台非目标窗口期间 feed_ocr 内部冻结）
-                    let boxes: Vec<crate::types::TextBox> =
-                        blocks.iter().filter_map(|b| b.bbox).collect();
-                    roi_tracker.feed_ocr(&boxes, crop_origin, ocr_input_scale);
-                    // REQ-084：前台切换期间其他窗口内容不得进字幕投票器
-                    if !roi_tracker.foreground_foreign() {
-                        // REQ-087（ADR-011）：UI 面板活跃期 → 字幕源头丢弃
-                        // （控制栏/弹窗文本不得进投票器/落段；原料层不动可复查）
-                        if trigger.panel.is_active() {
-                            stats.panel_filtered += 1;
-                        } else {
-                            handle_subtitle_frame(
-                                &frame, &blocks, voter, &mut trigger.scrolling,
-                                last_frame_text, last_preview, db, app,
-                                session_id, subtitle_segments, ui_junk, stats,
-                            );
-                        }
-                    }
-                } else {
-                    // 全帧 OCR 成功时刻：带外触发冷却基准（ADR-011）
-                    trigger.last_full_ocr_at = Instant::now();
-                    // v0.7.3（REQ-157）：前台非目标窗口期间画面要点不落库
-                    // （复用 REQ-084 字幕先例——根治其他窗口内容混入屏卡）
-                    if !roi_tracker.foreground_foreign() {
-                        crate::live_keyframes::handle_full_frame(
-                            &frame, &blocks, db, app, session_id, last_full_texts, frame_samples,
-                            last_archived_text, last_archived_at, image_store, ocr_input_hash,
-                            ocr_input_dhash, ui_junk, screen_tracker, None,
-                            &grid, last_changed_texts, tier,
+                // M2/REQ-037：bbox 回喂 ROI 跟踪器（锁定/失效判定；
+                // 裁剪图坐标系 + 原点平移 + TD-046 缩放比反算；
+                // REQ-084：前台非目标窗口期间 feed_ocr 内部冻结）
+                let boxes: Vec<crate::types::TextBox> =
+                    blocks.iter().filter_map(|b| b.bbox).collect();
+                roi_tracker.feed_ocr(&boxes, crop_origin, ocr_input_scale);
+                // REQ-084：前台切换期间其他窗口内容不得进字幕投票器
+                if !roi_tracker.foreground_foreign() {
+                    // REQ-087（ADR-011）：UI 面板活跃期 → 字幕源头丢弃
+                    // （控制栏/弹窗文本不得进投票器/落段；原料层不动可复查）
+                    if trigger.panel.is_active() {
+                        stats.panel_filtered += 1;
+                    } else {
+                        handle_subtitle_frame(
+                            &frame, &blocks, voter, &mut trigger.scrolling,
+                            last_frame_text, last_preview, db, app,
+                            session_id, subtitle_segments, ui_junk, stats,
                         );
                     }
                 }
@@ -484,6 +459,18 @@ pub fn process_frame(
                 stats.ocr_err += 1;
                 eprintln!("[ScreenWorker] OCR 识别失败（下帧重试）: {}", e)
             }
+        }
+    } else {
+        // v0.12.0 M5（视频会话全帧 OCR 下线）：全帧画面要点不再识别——关键帧纯图
+        // 归档（handle_full_frame 空块走 grid-change 触发，存图不识别；真实画面
+        // 要点经 vision-exp 精修提取）。前台非目标窗口期间不归档（REQ-157）。
+        if !roi_tracker.foreground_foreign() {
+            crate::live_keyframes::handle_full_frame(
+                &frame, &[], db, app, session_id, last_full_texts, frame_samples,
+                last_archived_text, last_archived_at, image_store, ocr_input_hash,
+                ocr_input_dhash, ui_junk, screen_tracker, layout_changed,
+                &grid, last_changed_texts, tier,
+            );
         }
     }
 }
