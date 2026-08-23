@@ -176,71 +176,78 @@ impl Db {
         group_id: Option<i64>,
     ) -> Result<Note> {
         let now = unix_seconds();
-        self.with_conn(|conn| {
-            // ① 读碎片（事务内读取——存在性校验与删除同锁，防竞态双升）
-            let fragment = {
-                let mut stmt = conn.prepare(&format!(
-                    "SELECT {} FROM fragments WHERE id = ?1",
-                    FRAGMENT_COLUMNS
-                ))?;
-                let mut rows = stmt.query_map(params![fragment_id], row_to_fragment)?;
-                match rows.next() {
-                    Some(Ok(f)) => f,
-                    Some(Err(e)) => return Err(e.into()),
-                    None => {
-                        return Err(crate::error::AppError::Db(format!(
-                            "碎片不存在: {}",
-                            fragment_id
-                        )))
-                    }
+        // 显式事务（审查修复）：with_conn 只给 &Connection 无法开事务，而
+        // rusqlite 默认 autocommit——多语句各自提交，④ 失败会留下"笔记已建/
+        // 碎片未删"半态。与 versioned_save 同模式：直接锁 + conn.transaction()。
+        let mut conn = self
+            .conn
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let tx = conn.transaction()?;
+        // ① 读碎片（事务内读取——存在性校验与删除同锁，防竞态双升）
+        let fragment = {
+            let mut stmt = tx.prepare(&format!(
+                "SELECT {} FROM fragments WHERE id = ?1",
+                FRAGMENT_COLUMNS
+            ))?;
+            let mut rows = stmt.query_map(params![fragment_id], row_to_fragment)?;
+            match rows.next() {
+                Some(Ok(f)) => f,
+                Some(Err(e)) => return Err(e.into()),
+                None => {
+                    return Err(crate::error::AppError::Db(format!(
+                        "碎片不存在: {}",
+                        fragment_id
+                    )))
                 }
-            };
-            // ② 建笔记（正文先落碎片文本；图片在 ③ 补写）
-            conn.execute(
-                "INSERT INTO notes (title, content, source, session_id, rule_version, purify_stats, tags, properties, group_id, created_at, updated_at)
-                 VALUES (?1, ?2, 'manual', NULL, NULL, NULL, '[]', NULL, ?3, ?4, ?4)",
-                params![title, fragment.text, group_id, now],
+            }
+        };
+        // ② 建笔记（正文先落碎片文本；图片在 ③ 补写）
+        tx.execute(
+            "INSERT INTO notes (title, content, source, session_id, rule_version, purify_stats, tags, properties, group_id, created_at, updated_at)
+             VALUES (?1, ?2, 'manual', NULL, NULL, NULL, '[]', NULL, ?3, ?4, ?4)",
+            params![title, fragment.text, group_id, now],
+        )?;
+        let note_id = tx.last_insert_rowid();
+        // ③ 图片搬运 fragments/ → notes-images/{note_id}/（失败降级纯文本）
+        let mut content = fragment.text.clone();
+        if let Some(rel) = fragment.image_path.as_deref() {
+            match copy_fragment_image(data_dir, note_id, rel) {
+                Some(img_ref) => {
+                    content = format!("{}\n\n![]({})\n", content, img_ref);
+                }
+                None => {
+                    eprintln!(
+                        "[db_fragments] 碎片 {} 图片搬运失败（降级纯文本笔记）: {}",
+                        fragment_id, rel
+                    );
+                }
+            }
+        }
+        if content != fragment.text {
+            tx.execute(
+                "UPDATE notes SET content = ?1 WHERE id = ?2",
+                params![content, note_id],
             )?;
-            let note_id = conn.last_insert_rowid();
-            // ③ 图片搬运 fragments/ → notes-images/{note_id}/（失败降级纯文本）
-            let mut content = fragment.text.clone();
-            if let Some(rel) = fragment.image_path.as_deref() {
-                match copy_fragment_image(data_dir, note_id, rel) {
-                    Some(img_ref) => {
-                        content = format!("{}\n\n![]({})\n", content, img_ref);
-                    }
-                    None => {
-                        eprintln!(
-                            "[db_fragments] 碎片 {} 图片搬运失败（降级纯文本笔记）: {}",
-                            fragment_id, rel
-                        );
-                    }
-                }
-            }
-            if content != fragment.text {
-                conn.execute(
-                    "UPDATE notes SET content = ?1 WHERE id = ?2",
-                    params![content, note_id],
-                )?;
-            }
-            // ④ 删碎片（绑定卡自动解绑保留）
-            conn.execute("DELETE FROM fragments WHERE id = ?1", params![fragment_id])?;
-            // ⑤ 组装返回（与库内一致）
-            Ok(Note {
-                id: note_id,
-                title: title.to_string(),
-                content,
-                source: "manual".to_string(),
-                session_id: None,
-                rule_version: None,
-                purify_stats: None,
-                tags: "[]".to_string(),
-                properties: None,
-                pin: 0,
-                group_id,
-                created_at: now,
-                updated_at: now,
-            })
+        }
+        // ④ 删碎片（绑定卡自动解绑保留）——与 ② 同事务：任一步失败整链回滚
+        tx.execute("DELETE FROM fragments WHERE id = ?1", params![fragment_id])?;
+        tx.commit()?;
+        // ⑤ 组装返回（与库内一致）
+        Ok(Note {
+            id: note_id,
+            title: title.to_string(),
+            content,
+            source: "manual".to_string(),
+            session_id: None,
+            rule_version: None,
+            purify_stats: None,
+            tags: "[]".to_string(),
+            properties: None,
+            pin: 0,
+            group_id,
+            created_at: now,
+            updated_at: now,
         })
     }
 }
