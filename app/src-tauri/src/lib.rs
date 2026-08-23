@@ -90,6 +90,9 @@ mod commands_settlement;
 mod commands_knowledge;
 mod commands_knowledge_systems;
 mod commands_knowledge_core;
+// v0.13.2（REQ-206~207）：概念模型卡命令层（创建/组列表）——卡→概念升格拆至 promote 子模块
+mod commands_knowledge_cards;
+mod commands_knowledge_cards_promote;
 // v0.11.4：周契约命令层（弹性承诺呈现层——upsert/状态读数）
 mod commands_contracts;
 // 实时会话链路依赖 Windows 捕获 API（WASAPI/DXGI/COM），非 Windows 平台不编译（TD-027 修复）
@@ -473,6 +476,10 @@ pub fn run() {
             commands_knowledge_core::list_knowledge_links,
             commands_knowledge_core::delete_knowledge_link,
             commands_knowledge_core::audit_due_for_system,
+            // v0.13.2（REQ-206~207）：概念模型卡创建/组列表/升格
+            commands_knowledge_cards::create_model_card,
+            commands_knowledge_cards::list_group_cards,
+            commands_knowledge_cards_promote::promote_card_to_concept,
             // 会话管理（REQ-010，ADR-004）
             commands_session::create_session,
             commands_session::finish_session,

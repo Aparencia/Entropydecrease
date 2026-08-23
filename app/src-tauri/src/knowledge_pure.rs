@@ -119,7 +119,12 @@ pub struct PromoteInput {
 }
 
 /// 升格决策。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// @ai-context: v0.13.2：升格结果回传前端序列化（`promote_card_to_concept` 把本决策随
+///              PromoteResult 返回前端，需 impl Serialize）；与 AuditSignal 同款
+///              camelCase 契约——变体名/字段名统一 camelCase 随前端口径改写到线。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum PromoteDecision {
     /// 新建概念
     Create,
