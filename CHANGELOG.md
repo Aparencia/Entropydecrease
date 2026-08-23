@@ -5,6 +5,15 @@
 
 ## [Unreleased] - 2026-08-23
 
+### v0.13.1 知识体系基建（2026-08-23 交付，详见 [docs/versions/v0.13.md](docs/versions/v0.13.md) 与 [设计规格](docs/superpowers/specs/2026-08-23-v0.13.1-knowledge-system-foundation-design.md)）
+
+- **数据层（REQ-202，M1）**：db_migrations 幂等新增 7 表——knowledge_systems（global 部分唯一索引）/nodes（问题树，级联子树）/concepts（name 全局唯一→交叉点判定）/models（disciplines JSON ≥1）/links（体系↔证据唯一引用通道）/audits（v0.13.1 仅留表）；零破坏（既有表结构不动）
+- **纯函数 TDD（REQ-205，M1）**：`knowledge_pure.rs`——`audit_due`（90 天周期 + 首次创建基线；item_count ≥20 才周期打扰）、`concept_stale`（90/180 天失效降级：无引用→待观察/归档建议）、`promote_rules`（卡→概念升格规则：创建/合并/跨体系提示；归一化匹配）golden 全绿；规格精化：信号补 `created_at_ms` 基线（与 settlement_due 同构）、existing 三元组支撑跨体系判定
+- **18 命令（REQ-203/204，M2）**：体系/问题树/概念/模型/引用/审计探测——参数校验（id>0、kind/type/status/target_type 白名单、名称归一化 trim+折叠≤2000、global 唯一与 core_question 必填、parent 同体系、引用实体同体系 + 四类 target 存在性、幂等防双链）；`audit_due_for_system` 信号聚合（ms 口径喂纯函数）
+- **前端（M3）**：导航新增「🧠 体系」（三时钟纪律：体系页不进每日复习面）；KnowledgePage 三区布局（全局置顶 + 领域列表 / 问题树·概念·模型 / 详情面板）+ 三步创建向导（核心问题→3-5 领域入口→本周第一个输出，不预填内容防假燃料）+ 树展开折叠/类型标签/挂载引用数 + 概念三问/模型多学科编辑器 + 「挂引用」（组/笔记/卡/碎片）
+- 验证：`cargo test --test app_lib_tests knowledge` 71 全绿（新增 71：纯函数 13 + db 29 + 命令 29）；全量 1621 passed / 3 failed（预存基线：ai_client 默认 provider 断言、note_filter 两条黄金用例）/ 6 ignored；clippy 零新增警告；`tsc --noEmit` 零错误；vitest 16 文件 106 用例全绿；vite build 通过
+- 边界（本版不做）：概念记忆面与升格接线（v0.13.2）、决策/应用（v0.13.3）、审计界面与交叉点（v0.13.4）、AI、图谱可视化；真机走查待 REQ-146 批执行
+
 ### v0.12.8 笔记列表级批量删除（2026-08-23 交付，详见 [docs/versions/v0.12.8.md](docs/versions/v0.12.8.md)）
 
 - **笔记删除与会话同操作逻辑（用户要求）**：列表行新增勾选 + 底部批量操作栏（全选三态 / 已选计数 / 批量删除 / 取消）——无需先打开笔记；确认框说明后果，取消确认保留勾选；删除后右栏选中态同步清空并刷新列表；右栏单条删除按钮保留
