@@ -347,6 +347,27 @@
 | REQ-200 | 周契约视图 UI | P1 | 已实施 | v0.11.4 | v0.12.2 UI 迁入 ⓘ 弹层四区第④区（组行展开区下线，功能不变） |
 | REQ-201 | feed 消费闭环（范围修订） | P1 | 已实施 | v0.11.4 → v0.12.2 | v0.12.2 修订 v0.11.4"碎片→笔记升级不做（身份诚实）"决策：本版补**升级出口**——promote_fragment_to_note（事务建笔记+搬运图+删碎片，轻确认）+ promote_fragment_to_card（幂等）；收件箱恒常视图（全量 active 碎片，不再依赖 feed 组展开）；feedCapture 开关语义改「快速记录入口」默认开启（用户裁决转正，旧持久化配置不受影响）；**代码已交付（2026-08-23）** |
 
+### v0.13 · 大目标版本系列：知识体系层（方案 B，2026-08-23 裁决立项）
+
+> 2026-08-23 用户全盘采纳 [整合分析·方案 B](../Foresight/personal-knowledge-system-layer-integration.md)，裁决：**v0.13 为大目标版本**，按整合分析 §六 分小版本推进；
+> 依据：[竞品调研](../Foresight/competitive-analysis-knowledge-system-layer.md)（"应用/决策"零竞品带）· [指南源文档](../Foresight/source-personal-knowledge-system-guide-v2.md)；
+> 理念局部修订（P13 重裁决等）随 **v0.13.0 前置文档批**（ADR-024）；前置门控：REQ-146 真机验收总清（组级学习循环通过）；
+> 系列规划详见 [versions/v0.13.md](../versions/v0.13.md)。
+
+| ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
+|----|------|--------|------|---------|------|
+| REQ-202 | 知识体系数据模型：knowledge_systems/nodes/concepts/models/links/audits 表（db_migrations 幂等；concepts.name 全局唯一→交叉点判定） | P0 | 已立项 | v0.13.1 | 整合分析 §四.2；零破坏（既有表不动，flashcards.kind 补值 model） |
+| REQ-203 | 体系 CRUD：全局体系创建向导（极简启动模板：核心问题→3-5 领域入口→本周第一个输出）+ 领域体系 + 问题树节点 CRUD | P0 | 已立项 | v0.13.1 | 创建向导防"从分类开始搭"误区；不预填内容（防假燃料） |
+| REQ-204 | 引用层 knowledge_links：体系↔组/笔记/卡/碎片引用命令（引用不复制；体系无内容收纳权） | P0 | 已立项 | v0.13.1 | 契约一/组是唯一容器纪律延续 |
+| REQ-205 | 纯函数 TDD：audit_due（结算同构）/ concept_stale（90 天无引用→待观察、180 天未应用→归档建议）/ promote_rules（升格规则 golden） | P1 | 已立项 | v0.13.1 | 防体系沼泽化；判定规则先于 UI |
+| REQ-206 | 内容分型 model 落地：flashcards.kind='model'（front=概念名，back=三问本质/边界/联系＋锚点回链，延迟揭示） | P1 | 已立项 | v0.13.2 | REQ-199 预埋接口兑现；N13 心智模型→重建 |
+| REQ-207 | 卡→概念升格：组内 model 卡"纳入体系"→ 创建/关联概念＋回填三问（AI 可选默认关）＋概念库 UI（三问一用卡片） | P1 | 已立项 | v0.13.2 | 升格单向（概念→卡不反向）；metrics_events(concept_promoted) |
+| REQ-208 | 决策/应用一表两面：knowledge_decisions（kind=decision/application；四行法 content/expectation/actual/reflection＋used_refs 引用必填） | P0 | 已立项 | v0.13.3 | 防双重记账；只记"我的决策"（产物 Decision 块禁自动升格） |
+| REQ-209 | 应用记录入口（动手闭环 N12 最小环）：概念页/组/复习面"记一次使用"→ 四行 → 概念 last_applied_at 更新 | P1 | 已立项 | v0.13.3 | N12 从"另议"转落地；Phase 4 显影"应用率"数据源 |
+| REQ-210 | 决策日志 UI ＋ metrics_events 扩展（decision_logged/application_logged/system_audited/concept_promoted） | P1 | 已立项 | v0.13.3 | 指标从第一天记（v4 §8 纪律） |
+| REQ-211 | 体系审计：季度触发（settlement_due 同构）＋审计清单（指南附录 D 六项）＋组结算第三步增强（概念失效检查） | P1 | 已立项 | v0.13.4 | 审计产出建议、用户确认后生效（防古德哈特/骚扰） |
+| REQ-212 | 交叉点派生提示（概念被 ≥2 领域体系引用时提示升格/建引用；默认关）＋审计报告视图（思辨动作 vs 学习动作并列） | P2 | 已立项 | v0.13.4 | 不做跨体系自由引用/图谱可视化；v0.14 视数据转正 |
+
 ### V1.0 · 体验增强（远期）
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
