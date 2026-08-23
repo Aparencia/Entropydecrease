@@ -506,6 +506,11 @@ pub fn run() {
             // v0.12.0 M6（采集体验债）：采集浮窗打开/关闭
             commands_window::open_capture_float,
             commands_window::close_capture_float,
+            // v0.12.3（交互/架构升级）：浮窗点击穿透/置顶/状态查询 + 回主窗
+            commands_window::float_set_locked,
+            commands_window::float_set_topmost,
+            commands_window::float_state,
+            commands_window::show_main_window,
             // v0.12.0 M3（系统级覆盖层截图）：打开/取图/确认裁剪/取消
             commands_overlay::open_capture_overlay,
             commands_overlay::overlay_get_image,

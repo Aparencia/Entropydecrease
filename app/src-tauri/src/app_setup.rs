@@ -280,7 +280,12 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         photo_store: std::sync::Arc::new(std::sync::Mutex::new(None)),
         // v0.12.0 M3：系统级覆盖层截图临时文件路径（open_capture_overlay 写入）
         overlay_image_path: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        // v0.12.3：浮窗 UI 状态（locked/topmost——Rust 侧单一来源，见 commands_window.rs）
+        float_ui: std::sync::Arc::new(std::sync::Mutex::new(crate::commands_window::FloatUi::default())),
     });
+    // v0.12.3（P2-10）：浮窗预创建常驻（隐藏）——打开秒显、点击期零建窗风险；
+    // 失败幂等回落为打开时懒创建（open_capture_float 内部兜底）。
+    crate::commands_window::precreate_float(app.handle());
     Ok(())
 }
 

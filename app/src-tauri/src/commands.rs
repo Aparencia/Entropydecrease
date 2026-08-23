@@ -173,6 +173,9 @@ pub struct AppState {
     /// v0.12.0 M3：系统级覆盖层截图临时文件路径（open_capture_overlay 写入；
     /// 覆盖层窗口与其后主窗口裁剪共用——窗口不持久，截完即销毁）
     pub overlay_image_path: std::sync::Arc<std::sync::Mutex<Option<std::path::PathBuf>>>,
+    /// v0.12.3：浮窗 UI 状态（locked/topmost——set_ignore_cursor_events 无 getter，
+    /// 锁定态必须自存；单一来源即 commands_window.rs，变更 emit float:state 事件）
+    pub float_ui: std::sync::Arc<std::sync::Mutex<crate::commands_window::FloatUi>>,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。

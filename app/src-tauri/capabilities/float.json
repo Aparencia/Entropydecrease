@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "capture-float",
+  "description": "Capability for the capture float window (v0.12.3: 最小权限——无 dialog，浮窗仅消费 live:* 事件与窗口自身操作)",
+  "windows": ["capture-float"],
+  "permissions": [
+    "core:default"
+  ]
+}

@@ -63,6 +63,8 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   const [windowLost, setWindowLost] = useState(false);
   // P3：引擎预热状态（选窗口阶段后台加载；与 Rust PrepareStatus 契约一致）
   const [prepareState, setPrepareState] = useState<PrepareState>("idle");
+  // v0.12.3：浮窗状态（按钮语义：浮窗化 ⇄ 收起 ⇄ 解锁穿透；Rust 单一来源）
+  const [floatSnap, setFloatSnap] = useState<{ open: boolean; locked: boolean }>({ open: false, locked: false });
 
   // ── 素材与结果（文件流水线，v0.1.0）──
   // 素材路径/处理中状态已下沉 MaterialInputPanel（审查硬拆）；父级仅保留产物与提示
@@ -201,16 +203,48 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   }, []);
 
   // v0.12.0 M6：浮窗化快捷键 Ctrl+Shift+F（采集中一键浮窗——全屏看视频不中断）
+  // v0.12.3 语义升级：未开=打开；已开未锁=收起；已锁=解锁（点击穿透后浮窗
+  // 自身不可点，主窗是唯一解锁口——键/按钮复用同一切换逻辑）
+  const toggleFloat = useCallback(() => {
+    if (!floatSnap.open) {
+      void invoke("open_capture_float").catch((err) => setLiveError(`浮窗失败: ${err}`));
+    } else if (floatSnap.locked) {
+      void invoke("float_set_locked", { locked: false }).catch((err) => setLiveError(`解锁浮窗失败: ${err}`));
+    } else {
+      void invoke("close_capture_float").catch((err) => setLiveError(`收起浮窗失败: ${err}`));
+    }
+  }, [floatSnap.open, floatSnap.locked]);
+
+  // v0.12.3：浮窗状态同步（挂载拉取 + float:state 事件订阅——Rust 单一来源）
+  useEffect(() => {
+    let disposed = false;
+    const unlisteners: Promise<() => void>[] = [];
+    void invoke<{ open: boolean; locked: boolean }>("float_state")
+      .then((s) => {
+        if (!disposed) setFloatSnap(s);
+      })
+      .catch(() => undefined);
+    unlisteners.push(
+      listen<{ open: boolean; locked: boolean }>("float:state", (e) => {
+        if (!disposed) setFloatSnap(e.payload);
+      }),
+    );
+    return () => {
+      disposed = true;
+      unlisteners.forEach((p) => void p.then((fn) => fn()));
+    };
+  }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (liveActive && e.ctrlKey && e.shiftKey && (e.key === "F" || e.key === "f")) {
         e.preventDefault();
-        void invoke("open_capture_float").catch((err) => setLiveError(`浮窗失败: ${err}`));
+        toggleFloat();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [liveActive]);
+  }, [liveActive, toggleFloat]);
 
   // 启动时检查流式模型状态 + 活动会话恢复 + 下载状态恢复
   // TD-016：invoke 失败不再静默——展示错误并允许重试（此前按钮永久禁用且无提示）
@@ -494,24 +528,29 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
                 >
                   ⏹ 停止
                 </button>
-                {/* v0.12.0 M6：浮窗化——采集中全屏看视频时悬浮常显（快捷键 Ctrl+Shift+F） */}
+                {/* v0.12.0 M6：浮窗化——采集中全屏看视频时悬浮常显（快捷键 Ctrl+Shift+F）
+                    v0.12.3：三态语义（浮窗化 ⇄ 收起 ⇄ 解锁点击穿透） */}
                 <button
-                  onClick={() => {
-                    void invoke("open_capture_float").catch((err) => setLiveError(`浮窗失败: ${err}`));
-                  }}
-                  title="快捷键 Ctrl+Shift+F"
+                  onClick={toggleFloat}
+                  title={
+                    floatSnap.open
+                      ? floatSnap.locked
+                        ? "点击穿透已锁定——点击解锁（快捷键 Ctrl+Shift+F）"
+                        : "收起采集浮窗（快捷键 Ctrl+Shift+F）"
+                      : "采集中全屏看视频时悬浮常显（快捷键 Ctrl+Shift+F）"
+                  }
                   style={{
                     ...btn,
                     flex: 1,
                     padding: "8px 0",
                     fontWeight: 600,
                     background: "#fff",
-                    color: "#0d9488",
-                    border: "1px solid #99f6e4",
+                    color: floatSnap.locked ? "#dc2626" : "#0d9488",
+                    border: floatSnap.locked ? "1px solid #fecaca" : "1px solid #99f6e4",
                     borderRadius: 6,
                   }}
                 >
-                  🗕 浮窗化
+                  {floatSnap.open ? (floatSnap.locked ? "🔓 解锁浮窗" : "🗕 收起浮窗") : "🗕 浮窗化"}
                 </button>
               </div>
             ) : (

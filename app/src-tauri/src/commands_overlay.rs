@@ -1,4 +1,4 @@
-//! 系统级覆盖层截图命令（v0.12.0 M3，ADR-022 关联——交互债）。
+//! 系统级覆盖层截图命令（v0.12.0 M3，ADR-022 关联——交互债；v0.12.3 死锁修复）。
 //!
 //! @ai-context: 替代应用内 letterbox 框选（4K 屏在 1200px 窗口内缩到 73%，
 //!              文字细节丢失 + 三步操作）：Tauri 独立全屏透明窗口 1:1 原始像素
@@ -10,6 +10,9 @@
 //! @ai-context: 截图临时文件（data_dir/overlay-tmp/snapshot.jpg）经 asset 协议
 //!              供覆盖层窗口显示；主窗口裁剪与 OCR 均不依赖前端 canvas（前端
 //!              无 taint 问题——crop 收敛到后端 image crate）。
+//! @ai-context: **建窗/关窗命令必须 async**（wry#583，与 capture-float 同因）——
+//!              Windows 上同步 command 在主线程 WebView2 IPC 回调内执行
+//!              WebviewWindowBuilder::build() 会死锁（完成回调依赖主线程派发）。
 
 use base64::Engine;
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -37,8 +40,11 @@ pub struct OverlayCapturedPayload {
 pub const CAPTURE_OVERLAY_LABEL: &str = "capture-overlay";
 
 /// 打开覆盖层截图：截屏 → 存临时文件 → 创建全屏透明覆盖层窗口（幂等）。
+///
+/// @ai-context: async（wry#583）——建窗不能在主线程/WebView2 IPC 回调内同步执行
+///              （死锁，与 capture-float 同因）；截屏重活也移到线程池，不再卡主线程。
 #[tauri::command]
-pub fn open_capture_overlay(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
+pub async fn open_capture_overlay(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
@@ -86,8 +92,10 @@ pub fn overlay_get_image(state: State<'_, AppState>) -> Result<Option<String>, S
 ///
 /// @ai-context: 裁剪在 Rust 侧完成（前端 canvas 可能被 asset 协议 taint——
 ///              裁剪收敛到 image crate，回传 base64 与旧 letterbox 路径同语义）。
+/// @ai-context: async——由覆盖层窗口自身的 WebView2 IPC 回调发起，裁剪重活和
+///              关窗均避免在主线程回调内同步执行（wry#583 同类风险）。
 #[tauri::command]
-pub fn overlay_submit_capture(
+pub async fn overlay_submit_capture(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
     rect: OverlayRect,
@@ -116,14 +124,19 @@ pub fn overlay_submit_capture(
 }
 
 /// 覆盖层取消（Esc）→ overlay:cancelled 通知主窗口 → 关窗，无副作用。
+///
+/// @ai-context: async——由覆盖层窗口自身 IPC 回调发起，关窗不在主线程回调内同步执行。
 #[tauri::command]
-pub fn overlay_cancel(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn overlay_cancel(app: tauri::AppHandle) -> Result<(), String> {
     let _ = app.emit("overlay:cancelled", ());
     close_overlay(&app);
     Ok(())
 }
 
 /// 关闭覆盖层窗口（不存在视为已关闭——幂等）。
+///
+/// @ai-context: 可能从 overlay 自身 IPC 回调链调用（submit/cancel）；
+///              调用方已 async 化，此处仅销毁不阻塞（close 经 dispatcher 消息）。
 fn close_overlay(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window(CAPTURE_OVERLAY_LABEL) {
         let _ = window.close();
