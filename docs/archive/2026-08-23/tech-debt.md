@@ -1,9 +1,10 @@
-# 技术债清单（权威：2026-08-23 · 三轮）
+# 技术债清单（权威：2026-08-23 · 四轮）
 
 > 本清单为当前唯一权威债务清单，归档日滚动更新；旧归档清单仅历史追溯。
 > 来源：2026-08-23 一轮（v0.12.0 七里程碑交付 + 新增代码七维审查，4 项即修 c624f4c）
 >        → 二轮（v0.12.3 浮窗死锁修复 + 交互/架构升级 + 精修工作台契约修复，新增代码七维审查，3 处即修 f8db9e2）
 >        → 三轮（**v0.12.2 笔记页信息架构重构交付 + 新增代码七维审查，8 处问题全部即修 fe8c919/f5731e1**）
+>        → 四轮（**v0.12.4 视频画面要点纯图落地 + 笔记预览锚点 chip 化交付 + 新增代码七维审查，零 P0/P1 缺陷、2 项 P3 观察不修；无文档归档**）
 
 ## 未偿债务（逐笔保持 carried，仅留 ID + 一行摘要）
 
@@ -14,18 +15,20 @@
 | TD-2026-08-19-F | detect_pause_icon 暗底+中央亮内容可能误报暂停 |
 | TD-2026-08-19-G | db_ocr_search 500 会话静默截断 + 图路径不校验存在性 |
 | TD-2026-08-21-C | db_sessions/db_ai_tasks 的 lock().expect 未迁移 with_conn |
-| TD-2026-08-22-A | clippy --all-targets -D warnings 未绿（存量 lib 5 项：live_session_manager applied_profile / commands_ai_enrich redundant closure / db_settlements i64 cast / note_filter doc list / watermark_filter ptr_arg，tests 类另有 ~14 项；**v0.12.2 批新增零警告**） |
+| TD-2026-08-22-A | clippy --all-targets -D warnings 未绿（存量 lib 5 项：live_session_manager applied_profile / commands_ai_enrich redundant closure / db_settlements i64 cast / note_filter doc list / watermark_filter ptr_arg，tests 类另有 ~14 项；**v0.12.2/v0.12.4 批新增零警告**） |
 
-## 本批滚动（2026-08-23 三轮：v0.12.2 笔记页信息架构重构交付 + 新增代码七维审查 + 归档）
+## 本批滚动（2026-08-23 四轮：v0.12.4 视频画面要点纯图 + 笔记预览锚点 chip 交付 + 新增代码七维审查）
 
-- **未偿 6 笔保持 carried**：全部未触及对应模块（v0.12.2 为笔记页/碎片域，与 ffmpeg/讲者暂停/OCR 搜索/锁迁移/clippy 存量项无交集）；TD-2026-08-22-A 经本批 `cargo clippy --all-targets` 复核——存量告警集合与二轮一致，本批新增文件零告警（唯一一次过程性告警 feature_flags_tests unused_mut 已于同批 fe8c919 清除，HEAD 态零新增），未清偿
+- **未偿 6 笔保持 carried**：全部未触及对应模块（v0.12.4 为视频画面要点/笔记预览域，与 ffmpeg/讲者暂停/OCR 搜索/锁迁移/clippy 存量项无交集）；TD-2026-08-22-A 经本批 `cargo clippy --tests` 复核——存量告警集合与三轮一致，本批新增文件零告警（唯一相关线索：screens_tests 曾现 unused_mut 已即修），未清偿
 - **已偿 0 笔**：本批未触及旧债务模块
-- **新登记 open 0 笔**：v0.12.2 新增代码七维审查发现 8 处问题全部即修——HIGH×1（promote_fragment_to_note 伪事务半态风险 → 显式 transaction，fe8c919）+ MED×2（ⓘ 弹层跨组表单串组 → key=group.id；升笔记 onPromoted 搜索态竞态 → 同步清 keyword/tagFilter/groupFilter）+ LOW×5（双 load 合并 / setErr 重复 / 标题 maxLength / 码点截断 / 文档错字），均入 fe8c919/f5731e1，无残留
+- **新登记 open 0 笔**：本批七维审查结论——接入性通过 / 逻辑性 1 项 P1（视频会话大纲检测恒空，判定为 ADR-023 设计内行为变更，v0.12.4 文档已补说明）+ 1 项 P3（锚点段落正则尾 `]` 残渣，无真实触发路径，不修）/ 牵连性、性能、冗余、规范、安全全部通过；2 项观察登记见下
 
 ## 观察项（登记不立债）
 
 | ID | 摘要 | 处置 |
 |----|------|------|
+| 观察 v0.12.4-1 | 视频会话大纲检测恒空（`detect_outline` 只消费 `region=="full"` 块，ADR-023 下线后无 full 块）——设计内行为，精修 vision 图片经 `load_session_vision_images` 独立读归档目录不受影响 | 真机验证确认后关闭 |
+| 观察 v0.12.4-2 | `import_frame.rs` 测试 `middle_region_crops_and_scales_to_max_width` 注释文案残留"中部区域（画面要点）"（中区域 OCR 已删，纯函数仍被字幕带复用）——文案性残留非代码缺陷 | 后续文档治理轮顺手清理 |
 | 观察 v0.12.0-1 | M4 仅 commands_ai_providers env 改 DEEPSEEK_API_KEY；ai_client / ai_balance / ai_refine_task / ai_text_filter 等 legacy 单 Provider 路径仍读 SILICONFLOW_API_KEY（昨日观察 M1-1/M1-4 延续） | 专项退役或后序范围 |
 | 观察 v0.12.0-2 | commands_overlay 的 overlay-tmp/snapshot.jpg 覆盖式临时文件（单张有界） | 真机确定是否需清理 |
 | 观察 v0.12.0-3 | WGC 失效后不回切（沿用 DXGI 周期重建自愈）——YAGNI 决策已在 ADR-022 注明 | 保持 |
