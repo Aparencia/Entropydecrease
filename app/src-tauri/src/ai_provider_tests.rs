@@ -111,3 +111,56 @@ fn migrate_from_legacy_always_produces_valid_deepseek() {
     assert_eq!(providers[0].default_model, "deepseek-v4-flash-vision-exp");
     assert_eq!(default_id, Some("legacy-deepseek".to_string()));
 }
+
+/// v0.12.0 M4：既有安装默认链升级——旧 SiliconFlow 链默认 → DeepSeek 默认。
+#[test]
+fn upgrade_existing_siliconflow_default_to_deepseek() {
+    let mut store = AiProviderStore::default();
+    let sf = preset_templates().into_iter().find(|p| p.id == "siliconflow").unwrap();
+    store.providers.push(sf);
+    store.default_provider_id = Some("siliconflow".to_string());
+    // Act
+    assert!(upgrade_existing_default_to_deepseek(&mut store));
+    // Assert：DeepSeek 插入首位并设默认；旧 Provider 保留（密钥/回退不受影响）
+    assert_eq!(store.default_provider_id.as_deref(), Some("deepseek"));
+    assert_eq!(store.providers[0].id, "deepseek");
+    assert!(store.get("siliconflow").is_some(), "旧 Provider 必须保留");
+}
+
+/// 已有 DeepSeek → 不重复插入（幂等——用户删除后不再误加由守卫承担）。
+#[test]
+fn upgrade_skips_when_deepseek_present() {
+    let mut store = AiProviderStore::default();
+    let ds = preset_templates().into_iter().find(|p| p.id == "deepseek").unwrap();
+    let sf = preset_templates().into_iter().find(|p| p.id == "siliconflow").unwrap();
+    store.providers.push(ds);
+    store.providers.push(sf);
+    store.default_provider_id = Some("siliconflow".to_string());
+    let before = store.clone();
+    // Act & Assert
+    assert!(!upgrade_existing_default_to_deepseek(&mut store));
+    assert_eq!(store, before, "已含 DeepSeek 时不得改动");
+}
+
+/// 用户显式设其他默认（OpenRouter/自定义）→ 不覆盖用户选择。
+#[test]
+fn upgrade_skips_custom_default() {
+    let mut store = AiProviderStore::default();
+    let or = preset_templates().into_iter().find(|p| p.id == "openrouter").unwrap();
+    store.providers.push(or);
+    store.default_provider_id = Some("openrouter".to_string());
+    // Act & Assert
+    assert!(!upgrade_existing_default_to_deepseek(&mut store));
+    assert_eq!(store.default_provider_id.as_deref(), Some("openrouter"));
+}
+
+/// 默认未显式设置（None）→ 不触碰（尊重 first-enabled 语义）。
+#[test]
+fn upgrade_skips_unset_default() {
+    let mut store = AiProviderStore::default();
+    let sf = preset_templates().into_iter().find(|p| p.id == "siliconflow").unwrap();
+    store.providers.push(sf);
+    store.default_provider_id = None;
+    // Act & Assert
+    assert!(!upgrade_existing_default_to_deepseek(&mut store));
+}

@@ -218,6 +218,35 @@ pub fn migrate_from_legacy(_legacy: &crate::ai_settings::AiSettings) -> (Vec<AiP
     (vec![p], Some(default_id))
 }
 
+/// v0.12.0 M4：既有用户默认链升级（纯函数，返回是否变更）。
+///
+/// @ai-context: 首启迁移只在 providers 为空时触发（新装/迁移）——**既有安装**
+///              （ai_providers.json 已存在）的默认 Provider 仍是旧 SiliconFlow 链，
+///              与"默认 Provider=DeepSeek"的 M4 目标不符（真机截图取证）。
+///              本函数：默认 Provider 为旧链（siliconflow/legacy-siliconflow）且
+///              尚无 deepseek Provider 时，插入 DeepSeek 预设并设为默认——
+///              旧 Provider 保留（密钥不受影响，可回退/降级链使用）。
+/// @ai-context: 保守边界——用户显式改为其他默认（openrouter/自定义）不覆盖；
+///              仅升级一次的守卫 = "无 deepseek Provider"（用户主动删除 DeepSeek
+///              并重回 SiliconFlow 默认时下次启动会重新插入——可接受的一次性
+///              迁移语义，登记观察项）。
+pub fn upgrade_existing_default_to_deepseek(store: &mut AiProviderStore) -> bool {
+    let on_old_chain = store
+        .default_provider_id
+        .as_deref()
+        .map(|id| id == "siliconflow" || id == "legacy-siliconflow")
+        .unwrap_or(false);
+    if !on_old_chain || store.get("deepseek").is_some() {
+        return false;
+    }
+    let Some(ds) = preset_templates().into_iter().find(|p| p.id == "deepseek") else {
+        return false;
+    };
+    store.providers.insert(0, ds);
+    store.default_provider_id = Some("deepseek".to_string());
+    true
+}
+
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。
 #[cfg(test)]
 #[path = "ai_provider_tests.rs"]

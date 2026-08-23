@@ -180,6 +180,10 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
                 }
             }
             store.save(&ai_providers_path)?;
+        } else if crate::ai_provider::upgrade_existing_default_to_deepseek(&mut store) {
+            // v0.12.0 M4：既有安装默认链升级（硅基旧链 → DeepSeek 默认；旧
+            // Provider 保留不丢配置——真机取证：既有用户默认仍是 SiliconFlow）
+            store.save(&ai_providers_path)?;
         }
     }
     // v0.8.0 M2（REQ-145）：AI 异步任务注册表 + id 序列（spawn_blocking 后台
