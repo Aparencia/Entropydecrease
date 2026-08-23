@@ -4,10 +4,15 @@
  * @ai-context: 纯展示/受控组件——数据与状态全部由 NotesPage 编排（参照
  *              SessionsPage → SessionListPanel/SessionDetailPanel 既有模式）。
  *              行 id=`note-row-{id}` 供 focusNoteId 跨页直达滚动定位。
+ * @ai-context: v0.12.7 勾选批量删除（与会话管理台同逻辑：行内勾选 +
+ *              底部批量操作栏；副作用经 onBatchDelete 上抛父层确认/invoke）。
  */
+import { useState } from "react";
 import type { Note } from "../types";
 
 export type SortMode = "updated-desc" | "pin-first" | "created-desc";
+
+const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 
 /** 解析 tags JSON 为字符串数组（损坏 JSON 回退空数组——防御性） */
 export function parseTags(note: Note): string[] {
@@ -39,12 +44,29 @@ interface Props {
   onCreate: () => void;
   onRefresh: () => void;
   onOpenSession: (sessionId: number) => void;
+  /** 批量删除（父层负责确认/invoke/刷新；resolve=true 表示已执行删除——
+   *  勾选集合在删除执行后才清空，取消确认时保留勾选——与会话管理台一致） */
+  onBatchDelete: (ids: number[]) => Promise<boolean>;
 }
 
 export default function NoteListView({
   notes, keyword, tagFilter, sortMode, allTags, selectedId, status,
-  onKeywordChange, onTagFilterChange, onSortModeChange, onSelect, onCreate, onRefresh, onOpenSession,
+  onKeywordChange, onTagFilterChange, onSortModeChange, onSelect, onCreate, onRefresh, onOpenSession, onBatchDelete,
 }: Props) {
+  // v0.12.7：勾选集合（面板本地状态——结构与会话管理台 selected 一致）
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  const toggleSelect = (id: number) => {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelected(new Set());
+
   return (
     <div style={{ width: 320, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
@@ -125,6 +147,14 @@ export default function NoteListView({
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={selected.has(n.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={() => toggleSelect(n.id)}
+                  style={{ cursor: "pointer", flexShrink: 0 }}
+                  title="勾选后可批量删除"
+                />
                 {n.pin ? <span style={{ fontSize: 11, color: "#b45309" }}>📌</span> : null}
                 <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>
                   {n.title}
@@ -150,6 +180,40 @@ export default function NoteListView({
           );
         })}
       </div>
+      {/* v0.12.7：勾选批量删除栏（与会话管理台同模式——全选三态 + 计数 + 批量删除） */}
+      {selected.size > 0 && (
+        <div style={{ borderTop: "1px solid #e5e7eb", padding: 8, display: "flex", gap: 6, alignItems: "center", background: "#fff" }}>
+          <input
+            type="checkbox"
+            ref={(el) => {
+              if (el) el.indeterminate = selected.size > 0 && selected.size < notes.length;
+            }}
+            checked={selected.size === notes.length && notes.length > 0}
+            onChange={() => {
+              if (selected.size === notes.length && notes.length > 0) {
+                clearSelection();
+              } else {
+                setSelected(new Set(notes.map((n) => n.id)));
+              }
+            }}
+            style={{ cursor: "pointer", flexShrink: 0 }}
+            title="全选当前列表的笔记"
+          />
+          <span style={{ fontSize: 12, color: "#374151" }}>已选 {selected.size} 个</span>
+          <button
+            style={{ ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #fca5a5", color: "#dc2626", background: "#fff" }}
+            onClick={async () => {
+              const ids = [...selected];
+              if (await onBatchDelete(ids)) clearSelection();
+            }}
+          >
+            批量删除
+          </button>
+          <button style={{ ...btn, marginLeft: "auto", fontSize: 11 }} onClick={clearSelection}>
+            取消
+          </button>
+        </div>
+      )}
       {status && <p style={{ padding: 8, fontSize: 12, color: "#dc2626" }}>{status}</p>}
     </div>
   );

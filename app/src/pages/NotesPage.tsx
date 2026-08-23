@@ -13,6 +13,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import type { Note } from "../types";
 import NoteEditView from "../components/NoteEditView";
 import NoteListView, { parseTags } from "../components/NoteListView";
@@ -155,6 +156,31 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
     }
   };
 
+  /**
+   * v0.12.7：列表级批量删除（用户要求：与「会话」管理台同操作逻辑——勾选 +
+   * 确认 + 逐条 invoke，无需先打开笔记；删除选中笔记同步清空右栏选中态）。
+   * 返回是否执行了删除（取消确认返回 false——父面板据此保留/清空勾选）。
+   */
+  const runBatchDelete = async (ids: number[]): Promise<boolean> => {
+    const ok = await confirm(`确定删除选中的 ${ids.length} 个笔记？删除后不可恢复。`, {
+      title: "熵减",
+      kind: "warning",
+    });
+    if (!ok) return false;
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await invoke<boolean>("delete_note", { id });
+        if (selected?.id === id) setSelected(null);
+      } catch {
+        failed += 1;
+      }
+    }
+    setStatus(failed > 0 ? `已删除 ${ids.length - failed} 个，${failed} 个失败` : "");
+    void load(keyword, tagFilter, sortMode);
+    return true;
+  };
+
   const runPinToggle = async (note: Note) => {
     try {
       const newPin = note.pin ? 0 : 1;
@@ -283,6 +309,7 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
           onCreate={handleCreate}
           onRefresh={() => void load(keyword, tagFilter, sortMode)}
           onOpenSession={(id) => onOpenSessions?.(id)}
+          onBatchDelete={runBatchDelete}
         />
       )}
 
