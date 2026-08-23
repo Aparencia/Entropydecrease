@@ -381,6 +381,11 @@
 | REQ-216 | 体会模板（"这本书改变了我哪个判断/我打算怎么用"应用字段）→ 一键复用 v0.13.3 application 记录（content=应用字段，挂概念/问题）——"书→判断"贯通 | P1 | 已立项 | v0.13.5 | 应用字段可空；解析/转义纯函数 TDD |
 | REQ-217 | 阅读状态生命周期（toread→reading→finished/abandoned 白名单）＋ book_stale 纯函数（finished 90 天无访问→审计"这本书还在影响你吗？"） | P1 | 已立项 | v0.13.5 | concept_stale 同范式；随 v0.13.4 审计清单展示；书版沼泽化防御 |
 | REQ-218 | 体会升卡与复习：复用 generate_group_cards/复习面（书组自然生效）+ 书组徽标 | P1 | 已立项 | v0.13.5 | 零新代码（接线+徽标）；生成效应（自己产出记忆深 2-5 倍） |
+| REQ-219 | 形态展平 7→10：ContentForm 增 meeting/live/narrative（会议/直播/影视——挂既有模板 MeetingNotes/Summary+叙事线变体；矩阵/反向映射/词表/下拉同步） | P0 | 已立项 | v0.13.6 | 零新模板零 DB 迁移；旧 13 类 Meeting/Live 反向映射回归新形态 |
+| REQ-220 | 领域两层：DomainKind 15→20（新增美食烹饪/摄影视频/历史人文/写作阅读/数码硬件）＋细目 curated 静态表（84 项，kebab id+标签+种子词；DomainTag.fine 升级为细目 id 多选数组，旧 raw 兼容展示） | P0 | 已立项 | v0.13.6 | 细目多选 chips（用户裁决）；hotwords/术语筛选按细目细分 |
+| REQ-221 | 检测链升级：平台分区映射表（B站 分区→形态/粗领域/细目；影视/直播分区→narrative/live）＋形态信号词表扩展＋分区→形态优先于标题词 | P1 | 已立项 | v0.13.6 | 会话 33 实证分区是零成本强信号；映射未命中回落现状零回归 |
+| REQ-222 | 领域记忆扩展：ProfileMemory 增 domain 字段（serde default 零迁移）＋remember_domain/lookup_domain（series 键同口径）——用户确认的 coarse+细目下次同标题/系列直接生效 | P1 | 已立项 | v0.13.6 | 修改即记忆纪律延续（现状仅形态记忆）；检测>记忆兜底 |
+| REQ-223 | 修复批：add_knowledge_node 契约（前端 type→nodeType，2 调用点+测试）+ 笔记编辑完成即时刷新（await 保存＋get_note 回填 selected＋列表重载，补齐 ESC 路径） | P0 | 已立项 | v0.13.6 | 用户实测 P0；标题修改显示不生效同根因 |
 
 ### V1.0 · 体验增强（远期）
 
