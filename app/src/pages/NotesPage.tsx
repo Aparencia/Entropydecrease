@@ -133,7 +133,9 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
         setEditing(true);
       } else if (e.key === "Escape" && editingRef.current) {
         e.preventDefault();
+        // v0.13.6：ESC 退出编辑同样刷新（列表 + 选中笔记）——原实现连列表都不刷
         setEditing(false);
+        void handleNoteChangedRef.current();
       }
     };
     window.addEventListener("keydown", handler);
@@ -215,6 +217,11 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
       console.warn(`[NotesPage] 刷新笔记 ${cur.id} 失败`, e);
     }
   }, [keyword, tagFilter, sortMode, load]);
+
+  // v0.13.6：编辑退出三出口（完成/Ctrl+E/ESC）统一刷新——ESC 是 []-deps 窗口监听，
+  // 经 ref 取最新 handleNoteChanged（防闭包持有旧 keyword/tagFilter 快照）
+  const handleNoteChangedRef = useRef(handleNoteChanged);
+  useEffect(() => { handleNoteChangedRef.current = handleNoteChanged; }, [handleNoteChanged]);
 
   // 新建笔记（v0.12.2 去摩擦：零对话框——新建即编辑；落未归组「全部笔记」可见）
   const handleCreate = () => {
@@ -324,8 +331,9 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
                 key={selected.id}
                 note={selected}
                 onCancel={() => {
+                  // v0.13.6：完成编辑 → 列表重载 + 选中笔记重取（右栏立即显示新标题/正文）
                   setEditing(false);
-                  void load(keyword, tagFilter, sortMode);
+                  void handleNoteChanged();
                 }}
               />
             }

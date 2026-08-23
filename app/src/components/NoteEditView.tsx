@@ -216,10 +216,14 @@ export default function NoteEditView({ note, onCancel }: Props) {
     }
   };
 
-  // 完成编辑（保存草稿后退出——v0.10.1 F4：原「取消」语义矛盾，改名诚实化）
-  const handleDone = () => {
-    if (dirty) void saveDraft(false);
-    onCancel();
+  // 完成编辑（先 await 保存再退出——v0.13.6：原异步不等待，退出后右栏/列表
+  // 读到旧值；保存失败也退出（status 已展示），不卡死编辑态）
+  const handleDone = async () => {
+    try {
+      if (dirty) await saveDraft(false);
+    } finally {
+      onCancel();
+    }
   };
 
   // v0.10.1 F1：卸载时 dirty 自动保存（切笔记/切页不丢编辑内容——
@@ -270,7 +274,7 @@ export default function NoteEditView({ note, onCancel }: Props) {
         >
           {saving ? "保存中…" : "💾 保存（Ctrl+S）"}
         </button>
-        <button onClick={handleDone} style={{ ...TOOLBAR_BTN, color: "#6b7280" }}>完成（Ctrl+E）</button>
+        <button onClick={() => void handleDone()} style={{ ...TOOLBAR_BTN, color: "#6b7280" }}>完成（Ctrl+E）</button>
       </div>
 
       {/* 标题 */}

@@ -106,9 +106,9 @@ describe("KnowledgeSystemWizard 三步校验", () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("create_knowledge_system", {
       name: "全局体系", kind: "global", coreQuestion: "如何练好化妆",
     }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("add_knowledge_node", { systemId: 1, type: "domain_entry", text: "化妆" }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("add_knowledge_node", { systemId: 1, type: "domain_entry", text: "打光" }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("add_knowledge_node", { systemId: 1, type: "scenario", text: "画好一个眼影" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("add_knowledge_node", { systemId: 1, nodeType: "domain_entry", text: "化妆" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("add_knowledge_node", { systemId: 1, nodeType: "domain_entry", text: "打光" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("add_knowledge_node", { systemId: 1, nodeType: "scenario", text: "画好一个眼影" }));
 
     // 顺序契约：create 在 add 之前
     const createIdx = invokeMock.mock.calls.findIndex((c) => c[0] === "create_knowledge_system");

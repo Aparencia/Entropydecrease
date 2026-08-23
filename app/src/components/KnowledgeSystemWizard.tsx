@@ -102,11 +102,11 @@ export default function KnowledgeSystemWizard({ onClose, onCreated }: Props) {
       });
       // ② 非空领域入口逐条落节点（已去重；顺序即输入顺序）
       for (const text of filledEntries) {
-        await invoke("add_knowledge_node", { systemId: system.id, type: "domain_entry" satisfies KnowledgeNodeType, text });
+        await invoke("add_knowledge_node", { systemId: system.id, nodeType: "domain_entry" satisfies KnowledgeNodeType, text });
       }
       // ③ 第一条输出（若有）落为「场景」节点（挂全局体系，根节点）
       if (firstOutput.trim()) {
-        await invoke("add_knowledge_node", { systemId: system.id, type: "scenario" satisfies KnowledgeNodeType, text: firstOutput.trim() });
+        await invoke("add_knowledge_node", { systemId: system.id, nodeType: "scenario" satisfies KnowledgeNodeType, text: firstOutput.trim() });
       }
       onCreated(system);
     } catch (e) {

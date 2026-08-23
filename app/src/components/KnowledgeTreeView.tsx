@@ -97,7 +97,7 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
   const confirmAdd = async () => {
     if (!addDraft || !addText.trim()) return;
     try {
-      await invoke("add_knowledge_node", { systemId, parentId: addDraft.parentId, type: addDraft.type, text: addText.trim() });
+      await invoke("add_knowledge_node", { systemId, parentId: addDraft.parentId, nodeType: addDraft.type, text: addText.trim() });
       setAddDraft(null);
       setAddText("");
       onChanged();
