@@ -5,6 +5,13 @@
 
 ## [Unreleased] - 2026-08-21
 
+### v0.12.1 OCR 引擎回归修复（2026-08-23 交付，详见 [docs/versions/v0.12.1.md](docs/versions/v0.12.1.md)）
+
+- **P0 回归修复**：`oar-ocr` 恢复 `auto-download` feature（v0.12.0 构建修复关 default 时误关独立 feature——模型注册名不再解析为 ModelScope 缓存路径，OCR 引擎 CUDA/CPU 双后端读字典均失败，全链路不可用）；模型已在本机 `~/.oar` 缓存，恢复后零网络命中
+- **引擎就绪状态真实化（engine_ready）**：OcrDeviceStatus 新增 engine_ready（worker 加载成功/失败回写）；就绪清单（ReadyCheckCard）/ 模型管理面板 / OCR 设备设置 / 系统徽标四处改用——不再用线程心跳冒充引擎就绪（v0.12.0 验收误报根因：OCR 全挂仍显示 ✓）
+- **图文会话讲者分析误报修复**：SpeakerSwitchCard 按 `kind=photo` 跳过分析，输出"不适用"灰态——修复每个图文会话详情页误报红色"讲者分析不可用：会话音频缺失"
+- 验证：device_config 单测补充（engine_ready 缺省 + 往返 + 旧载荷兼容）；tsc / vite 构建通过；真机验收回归路径待执行
+
 ### v0.12.0 图文与窗口捕获重塑（2026-08-23 规划定稿，详见 [docs/versions/v0.12.0.md](docs/versions/v0.12.0.md)）
 
 - **正文源多态（M1）**：filter_note 增加 detect_body_source 抽象层——图文会话 OCR 文本直接进笔记 markdown（修复纯图文会话转笔记空内容）；OCR 走精简净化链（跳过口语净化）
