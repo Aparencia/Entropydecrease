@@ -14,10 +14,11 @@ import type {
   KnowledgeSystem, KnowledgeNode, KnowledgeConcept, KnowledgeModel,
   KnowledgeLink, KnowledgeSelection,
 } from "../types/knowledge";
-import { systemStatusLabel, conceptStatusLabel } from "../types/knowledge";
+import { systemStatusLabel } from "../types/knowledge";
 import KnowledgeSystemWizard from "../components/KnowledgeSystemWizard";
 import KnowledgeTreeView from "../components/KnowledgeTreeView";
 import KnowledgeDetailPanel from "../components/KnowledgeDetailPanel";
+import ConceptCardRow from "../components/ConceptCardRow";
 
 type MiddleView = "tree" | "concept" | "model";
 
@@ -190,13 +191,12 @@ export default function KnowledgePage() {
             <button data-testid="concept-add" onClick={() => setSelection({ type: "concept", id: null })} style={{ marginBottom: 10, fontSize: 12, cursor: "pointer", padding: "4px 12px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>＋ 添加概念</button>
             {concepts.length === 0 && <p style={{ fontSize: 12, color: "#9ca3af" }}>暂无概念——从卡住你的词开始。</p>}
             {concepts.map((c) => (
-              <div key={c.id} data-testid={`concept-row-${c.id}`} onClick={() => setSelection({ type: "concept", id: c.id })} style={{ padding: "6px 8px", borderRadius: 6, cursor: "pointer", background: selection?.type === "concept" && selection.id === c.id ? "#f0fdfa" : "transparent", border: selection?.type === "concept" && selection.id === c.id ? "1px solid #99f6e4" : "1px solid transparent" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{c.name}</span>
-                  <span style={{ fontSize: 10, color: "#7c3aed", background: "#faf5ff", borderRadius: 8, padding: "0 5px" }}>{conceptStatusLabel[c.status]}</span>
-                </div>
-                {c.essence && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.essence}</div>}
-              </div>
+              <ConceptCardRow
+                key={c.id}
+                concept={c}
+                selected={selection?.type === "concept" && selection.id === c.id}
+                onSelect={() => setSelection({ type: "concept", id: c.id })}
+              />
             ))}
           </div>
         ) : (

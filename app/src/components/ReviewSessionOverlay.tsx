@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Flashcard } from "../types";
+import PromoteCardButton from "./PromoteCardButton";
 
 /** 四档评分按钮（文案=回忆质量自评） */
 const RATINGS: { value: string; label: string; color: string }[] = [
@@ -121,6 +122,11 @@ export default function ReviewSessionOverlay({ groupId, groupName, onClose }: Pr
                   ⚡ 动作卡
                 </span>
               )}
+              {current.kind === "model" && (
+                <span style={{ fontSize: 10, color: "#7c3aed", background: "#faf5ff", borderRadius: 8, padding: "0 6px" }}>
+                  🧠 概念卡
+                </span>
+              )}
             </div>
             {/* front（线索——先回忆再看） */}
             <div style={{
@@ -166,6 +172,12 @@ export default function ReviewSessionOverlay({ groupId, groupName, onClose }: Pr
                     </button>
                   ))}
                 </div>
+                {/* v0.13.2 kind==='model' 卡：纳入体系（独立一行，不打断评分流——§五） */}
+                {current.kind === "model" && (
+                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #f3f4f6" }}>
+                    <PromoteCardButton card={current} />
+                  </div>
+                )}
               </>
             )}
           </div>

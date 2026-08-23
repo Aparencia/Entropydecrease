@@ -112,6 +112,7 @@ export default function KnowledgeDetailPanel({ system, nodes, concepts, models, 
   }
 
   const selectedNode = selection?.type === "node" ? nodes.find((n) => n.id === selection.id) ?? null : null;
+  const selectedConcept = selection?.type === "concept" ? concepts.find((c) => c.id === selection.id) ?? null : null;
 
   return (
     <div data-testid="detail-panel" style={{ width: 320, flexShrink: 0, borderLeft: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minWidth: 0, background: "#fff" }}>
@@ -161,6 +162,15 @@ export default function KnowledgeDetailPanel({ system, nodes, concepts, models, 
               {CONCEPT_STATUSES.map((s) => <option key={s} value={s}>{conceptStatusLabel[s]}</option>)}
             </select>
             <SaveButton label={selection.id == null ? "创建概念" : "保存更改"} saving={saving} onClick={() => void saveConcept()} dataTestid="concept-save" />
+            {/* 最近应用只读行（§五）——lastAppliedAt 有值→秒级时间，null→从未应用 */}
+            {selection.id != null && (
+              <div style={{ marginTop: 12 }}>
+                <div style={label}>最近应用</div>
+                <div data-testid="concept-last-applied" style={{ fontSize: 12, color: "#6b7280" }}>
+                  {selectedConcept?.lastAppliedAt != null ? formatSeconds(selectedConcept.lastAppliedAt) : "从未应用"}
+                </div>
+              </div>
+            )}
             {selection.id != null && <KnowledgeLinkSection systemId={system.id} entityType="concept" entityId={selection.id} links={links} onChanged={onChanged} />}
           </div>
         )}
@@ -212,3 +222,10 @@ const input: React.CSSProperties = { width: "100%", fontSize: 13, padding: "6px 
 const textarea: React.CSSProperties = { ...input, resize: "vertical", fontFamily: "inherit" };
 /** 下拉样式 */
 const select: React.CSSProperties = { width: "100%", fontSize: 12, padding: "5px 6px", border: "1px solid #e5e7eb", borderRadius: 6, boxSizing: "border-box" };
+
+/** 秒级格式化时间（Y-M-D H:m:s；"最近应用"只读行） */
+function formatSeconds(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}

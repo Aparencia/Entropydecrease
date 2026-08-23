@@ -13,6 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { NoteGroup } from "../types";
 import { humanRouteLine, parseRouteReason } from "../utils/routeReason";
 import WeekContractCard from "./WeekContractCard";
+import ModelCardCreateDialog from "./ModelCardCreateDialog";
 
 /** 领域标签选项（与 Rust DomainKind 15 类同口径；改判下拉用） */
 const DOMAIN_OPTIONS: [string, string][] = [
@@ -64,6 +65,8 @@ export default function RouteInfoPopover({
   const [settlePlan, setSettlePlan] = useState<SettlementPlan | null>(null);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  // v0.13.2：组侧「＋ 概念卡」弹窗开合（组仍是唯一容器——只在此组内建卡）
+  const [cardDialogOpen, setCardDialogOpen] = useState(false);
 
   const reason = useMemo(() => parseRouteReason(group.routeReason), [group.routeReason]);
 
@@ -234,6 +237,7 @@ export default function RouteInfoPopover({
           <div style={{ fontWeight: 600, color: "#374151", marginBottom: 4 }}>组管理</div>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
             <button onClick={() => void runGenerateCards()} disabled={busy} style={BTN} title="从组内笔记词汇表/碎片生成闪卡（幂等）">⚙ 生成闪卡</button>
+            <button onClick={() => setCardDialogOpen(true)} data-testid="model-card-open" style={BTN} title="在组内建一张概念卡（模型卡）——组内记忆面">＋ 概念卡</button>
             <button onClick={() => void runSettlementPlan()} disabled={busy} style={BTN} title="对账本组：提炼核心/合并重复/归档低价值">🧹 结算</button>
             <button onClick={() => onOpenReview(group.id, group.name)} style={BTN}>🎴 复习本组</button>
             {selectedNoteId != null && (
@@ -273,6 +277,15 @@ export default function RouteInfoPopover({
 
         {status && <p data-testid="popover-status" style={{ margin: "6px 0 0", fontSize: 11, color: "#dc2626" }}>{status}</p>}
       </div>
+
+      {/* v0.13.2：组侧「＋ 概念卡」弹窗（仅在组内建 model 卡——不建体系侧入口） */}
+      {cardDialogOpen && (
+        <ModelCardCreateDialog
+          groupId={group.id}
+          groupName={group.name}
+          onClose={() => setCardDialogOpen(false)}
+        />
+      )}
     </>
   );
 }

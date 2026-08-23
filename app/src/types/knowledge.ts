@@ -271,3 +271,53 @@ export interface KnowledgeSelection {
 
 /** 供「挂引用」note_group 下拉使用的组（复用既有 NoteGroup 契约——避免重复定义） */
 export type KnowledgeGroupOption = NoteGroup;
+
+// ────────────────────────────────────────────────────────────
+// v0.13.2 概念双面体：模型卡（记忆面）× 概念（思辨面）单向升格
+//
+// @ai-context: 双面体单向升格（§五）——组内 model 卡（记忆面）→ 体系概念
+//              （思辨面）单向；概念→卡不反向（杜绝"概念卡与闪卡重复记账"）。
+//              组仍是唯一容器：model 卡在组内（flashcards.group_id），概念在体系；
+//              升格不搬运内容，只建引用（knowledge_links 唯一通道）与回链锚点。
+// @ai-context: 前端只读这些返回与 decision，不解释后端 promote_rules 内部结构；
+//              仅按 action 四态分支渲染结果文案。
+// ────────────────────────────────────────────────────────────
+
+/** 模型卡背面（三问：本质/边界/联系——记忆面卡面契约 §三） */
+export interface ModelCardBack {
+  essence: string | null;
+  boundary: string | null;
+  relation: string | null;
+}
+
+/** 新建 model 卡入参（对应 create_model_card 契约；组仍是唯一容器 §一） */
+export interface NewModelCard {
+  groupId: number;
+  name: string;
+  essence?: string | null;
+  boundary?: string | null;
+  relation?: string | null;
+}
+
+/** 升格动作（promote_card_to_concept 返回的 action 枚举——四态） */
+export type PromoteAction = "created" | "merged" | "hinted" | "already";
+
+/** 升格决策（后端 promote_rules 决策序列化——前端只读不解释其内部结构） */
+export interface PromoteDecision {
+  [key: string]: unknown;
+}
+
+/**
+ * 升格结果（promote_card_to_concept 返回；camelCase 契约）。
+ * @ai-context: action 四态——created 新建概念 / merged 关联既有 / hinted 跨体系
+ *               不落库（v0.13.4 交叉点数据源，仅提示）/ already 已纳入免重复。
+ *               link 在 created/merged 为新建引用，hinted/already 为 null
+ *               （未落库/既有——不新增引用）。
+ */
+export interface PromoteResult {
+  action: PromoteAction;
+  concept: KnowledgeConcept;
+  link: KnowledgeLink | null;
+  /** 后端决策枚举序列化（只读；前端仅据 action 分支渲染） */
+  decision?: PromoteDecision;
+}
