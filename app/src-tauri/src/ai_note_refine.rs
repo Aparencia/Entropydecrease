@@ -11,7 +11,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::ai_client::{AiClient, AiClientError};
+use crate::ai_client::{AiClient, AiClientError, parse_json_object};
 use crate::ai_refine_protocol::{AiRefineRequest, AiRefineResponse};
 
 /// 提示词模板（prompts/note_refine.json 结构）。
@@ -127,10 +127,30 @@ impl AiNoteRefineAdapter {
     ///              summary）——提示词据此约束"只整理本片、沿用全局章节"；
     ///              响应 schema_version=2（向后兼容：旧响应缺省 1 仍可解析）。
     pub fn refine(&self, request: &AiRefineRequest) -> Result<AiRefineResponse, AiClientError> {
+        // v0.12.0 M5：单一实现——refine = refine_vision(request, &[])（纯文本，
+        // 与既有行为逐字节一致；画面理解是可选增强，不改变默认链）
+        self.refine_vision(request, &[])
+    }
+
+    /// 单次精修（多模态分支，v0.12.0 M5：vision-exp 视觉提取）。
+    ///
+    /// @ai-context: images 非空 → 屏卡图随切片请求送 vision-exp（content 数组
+    ///              多模态，chat_vision）；空 → 纯文本（chat_json，零变化）。
+    ///              精修输出直接含画面要点；校验/回退逻辑与 refine 共用。
+    pub fn refine_vision(
+        &self,
+        request: &AiRefineRequest,
+        images: &[String],
+    ) -> Result<AiRefineResponse, AiClientError> {
         let system = self.prompt.build_system(&request.profile);
         let user = serde_json::to_string(request)
             .map_err(|e| AiClientError::Parse(format!("精修请求序列化失败: {}", e)))?;
-        let v = self.client.chat_json(&system, &user)?;
+        let v = if images.is_empty() {
+            self.client.chat_json(&system, &user)?
+        } else {
+            let raw = self.client.chat_vision(&system, &user, images)?;
+            parse_json_object(&raw)?
+        };
         let mut resp: AiRefineResponse = serde_json::from_value(v)
             .map_err(|e| AiClientError::Parse(format!("精修响应结构非法: {}", e)))?;
         resp.validate()

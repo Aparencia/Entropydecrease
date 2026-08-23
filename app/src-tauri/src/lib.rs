@@ -552,6 +552,7 @@ pub fn run() {
             commands_ai_settings::ai_update_settings,
             commands_ai_settings::ai_set_authorized,
             commands_ai_settings::ai_set_enabled,
+            commands_ai_settings::ai_set_vision_refine,
             commands_ai_settings::ai_test_connection,
             commands_ai_settings::ai_get_balance,
             commands_ai_settings::ai_audit_list,

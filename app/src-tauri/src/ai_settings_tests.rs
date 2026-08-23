@@ -20,6 +20,8 @@ fn default_is_disabled_and_unauthorized() {
     let s = AiSettings::default();
     assert!(!s.enabled, "全局开关默认必须关闭");
     assert!(!s.authorized, "授权默认必须未同意");
+    // v0.12.0 M5：图片上传最敏感——vision 画面理解默认关（隐私红线）
+    assert!(!s.vision_refine_enabled, "图片理解默认必须关闭");
 }
 
 #[test]
@@ -51,6 +53,8 @@ fn save_load_roundtrip() {
     s.model = "acme/model-1".to_string();
     s.low_balance_threshold = 5.0;
     s.remember_cost_choice = true;
+    // v0.12.0 M5：vision 画面理解默认关——持久化 roundtrip 保真
+    s.vision_refine_enabled = true;
     s.save(&path).expect("保存成功");
     let loaded = AiSettings::load(&path);
     assert_eq!(loaded, s);

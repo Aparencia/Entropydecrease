@@ -34,6 +34,11 @@ pub struct AiSettings {
     pub low_balance_threshold: f64,
     /// 成本确认"记住此选择"偏好（REQ-143 基础版；M2 精修消费）
     pub remember_cost_choice: bool,
+    /// 精修时启用画面理解（v0.12.0 M5）：开启后 AI 精修请求附带屏卡图
+    /// （content 数组多模态，deepseek-v4-flash-vision-exp 视觉提取画面要点）。
+    /// 图片上传最敏感——独立闸门；默认关（关闭则精修纯文本，现有行为零变化）。
+    /// 仅视频会话生效；图文会话 OCR 已足够，不触发 vision。
+    pub vision_refine_enabled: bool,
 }
 
 impl Default for AiSettings {
@@ -45,6 +50,7 @@ impl Default for AiSettings {
             model: DEFAULT_AI_MODEL.to_string(),
             low_balance_threshold: DEFAULT_LOW_BALANCE_THRESHOLD,
             remember_cost_choice: false,
+            vision_refine_enabled: false,
         }
     }
 }

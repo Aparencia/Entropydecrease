@@ -16,6 +16,8 @@ export interface AiSettingsView {
   model: string;
   lowBalanceThreshold: number;
   rememberCostChoice: boolean;
+  /** v0.12.0 M5：精修时启用画面理解（默认关——图片随精修上传，仅视频会话生效） */
+  visionRefineEnabled: boolean;
   hasKey: boolean;
   /** credential（凭据库）| env（环境变量）| none */
   keySource: string;

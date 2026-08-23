@@ -13,6 +13,8 @@ use std::collections::VecDeque;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
+use base64::Engine;
+
 use crate::ai_client::AiClient;
 use crate::ai_mock::AiMockAdapter;
 use crate::ai_note_refine::AiNoteRefineAdapter;
@@ -211,6 +213,13 @@ fn run_refine_task_inner(
     let client = AiClient::from_settings_with_store(&settings, stored_key, &store);
     let adapter = AiNoteRefineAdapter::new(client.clone());
     let mock_adapter = AiMockAdapter;
+    // v0.12.0 M5：画面理解——仅精修设置开启时装载会话屏卡图（≤1280px 控 token；
+    // 空 → 精修纯文本，现有行为零变化；图文会话不触发——调用方只对视频会话接线）
+    let vision_images = if settings.vision_refine_enabled {
+        load_session_vision_images(&st.data_dir, session_id)
+    } else {
+        Vec::new()
+    };
     // F2-B4：并发精修（worker 池消费切片队列；按片上报进度；失败片重试后
     // 仍失败 → 记 failed 下标，不中断其他片——部分成功语义）
     let (markdowns, failed) = refine_slices_concurrent(RefineCtx {
@@ -224,6 +233,7 @@ fn run_refine_task_inner(
         workers: total.min(CONCURRENCY),
         st,
         task_id,
+        vision_images: &vision_images,
     });
     // ④ 合并（协议层 merge_refine_slices：各片 join + 章节锚点回挂——7️⃣
     // 剥离的章节锚点按标题精确匹配还原，未匹配不挂）
@@ -260,6 +270,9 @@ struct RefineCtx<'a> {
     workers: usize,
     st: &'a AppState,
     task_id: u64,
+    /// v0.12.0 M5：屏卡图 base64 data URI 列表（vision_refine_enabled 开启且
+    /// 会话有归档图时非空；空 → 精修纯文本，现有行为零变化）
+    vision_images: &'a [String],
 }
 
 /// 片间摘要（F3 v2：前/后片首尾 N 字——提示词衔接上下文，防片间断裂）。
@@ -280,6 +293,52 @@ fn slice_summary(text: &str, head: bool) -> Option<String> {
     } else {
         Some(out)
     }
+}
+
+/// v0.12.0 M5：装载会话屏卡图（≤1280px 控 token → PNG base64 data URI）。
+///
+/// @ai-context: 仅 vision_refine_enabled 开启时调用；目录缺失/解码失败 → 跳过
+///              （空列表 → 精修纯文本，现有行为零变化——画面理解是可选增强，
+///              不是硬依赖，绝不阻塞精修主链路）。图片库为
+///              data_dir/session-images/<id> 下平铺 PNG/JPEG 屏卡。
+/// @ai-context: 隐私红线（ADR-010 扩展）：图片仅随精修切片请求上云，不作独立
+///              提取命令；缩放控 token（长图缩放不裁剪，保画面完整）。
+fn load_session_vision_images(data_dir: &std::path::Path, session_id: i64) -> Vec<String> {
+    const MAX_EDGE: u32 = 1280;
+    let dir = data_dir.join("session-images").join(session_id.to_string());
+    let Ok(entries) = std::fs::read_dir(&dir) else { return Vec::new() };
+    let mut out = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+        if ext != "png" && ext != "jpg" && ext != "jpeg" {
+            continue;
+        }
+        let Ok(frame) = image::open(&path) else { continue };
+        // 长边 >1280 按比例缩放（保比例；小图原样——控 token 同时不糊画面）。
+        // resize 返回 RgbaImage，与 to_rgba8() 同型。
+        let (w, h) = (frame.width(), frame.height());
+        let max_edge = w.max(h);
+        let rgb = if max_edge > MAX_EDGE {
+            let scale = MAX_EDGE as f32 / max_edge as f32;
+            let nw = (w as f32 * scale).round().max(1.0) as u32;
+            let nh = (h as f32 * scale).round().max(1.0) as u32;
+            image::imageops::resize(&frame, nw, nh, image::imageops::FilterType::Triangle)
+        } else {
+            frame.to_rgba8()
+        };
+        let mut buf = std::io::Cursor::new(Vec::new());
+        let encoder = image::codecs::png::PngEncoder::new(&mut buf);
+        if rgb.write_with_encoder(encoder).is_err() {
+            continue;
+        }
+        let b64 = base64::engine::general_purpose::STANDARD.encode(buf.into_inner());
+        out.push(format!("data:image/png;base64,{}", b64));
+    }
+    out
 }
 
 /// 并发切片精修（纯编排）：worker 池从共享队列取片 → 单片重试 → 收集。
@@ -338,8 +397,13 @@ fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usize) {
                 for attempt in 0..=SLICE_RETRY {
                     let resp = if mock {
                         Ok(mock_adapter.refine(req))
-                    } else {
+                    } else if ctx.vision_images.is_empty() {
                         adapter.refine(req).map_err(AiTaskFailure::from)
+                    } else {
+                        // v0.12.0 M5：开启画面理解 → 屏卡图随切片请求送 vision-exp
+                        adapter
+                            .refine_vision(req, ctx.vision_images)
+                            .map_err(AiTaskFailure::from)
                     };
                     match resp {
                         Ok(r) => {

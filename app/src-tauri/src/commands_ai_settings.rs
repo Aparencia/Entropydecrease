@@ -29,6 +29,8 @@ pub struct AiSettingsView {
     pub model: String,
     pub low_balance_threshold: f64,
     pub remember_cost_choice: bool,
+    /// 精修时启用画面理解（v0.12.0 M5——默认关，图片上传最敏感独立闸门）
+    pub vision_refine_enabled: bool,
     /// 是否已配置密钥（env 或凭据库）
     pub has_key: bool,
     /// 密钥来源：credential | env | none
@@ -64,6 +66,7 @@ pub fn ai_get_settings(state: State<'_, AppState>) -> Result<AiSettingsView, Str
         model: s.model,
         low_balance_threshold: s.low_balance_threshold,
         remember_cost_choice: s.remember_cost_choice,
+        vision_refine_enabled: s.vision_refine_enabled,
         has_key,
         key_source,
     })
@@ -135,6 +138,20 @@ pub fn ai_set_enabled(state: State<'_, AppState>, enabled: bool) -> Result<(), S
         .lock()
         .map_err(|e| format!("AI 设置锁中毒: {}", e))?;
     lock.enabled = enabled;
+    lock.save(&state.ai_settings_path)
+}
+
+/// 开启/关闭"精修时画面理解"（v0.12.0 M5——图片上传最敏感，独立闸门默认关）。
+///
+/// @ai-context: 仅影响 AI 音视频会话精修是否随请求上传屏卡图；开启不等于自动
+///              上传——仍需全局 enabled + authorized（content_gate 门控）。
+#[tauri::command]
+pub fn ai_set_vision_refine(state: State<'_, AppState>, refine_enabled: bool) -> Result<(), String> {
+    let mut lock = state
+        .ai_settings
+        .lock()
+        .map_err(|e| format!("AI 设置锁中毒: {}", e))?;
+    lock.vision_refine_enabled = refine_enabled;
     lock.save(&state.ai_settings_path)
 }
 

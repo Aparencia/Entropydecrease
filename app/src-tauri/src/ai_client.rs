@@ -169,10 +169,35 @@ impl AiClient {
     ///              parse_response 做 TextFilterResponse 反序列化）；
     ///              chat_json = chat_text + parse_json_object 的组合。
     pub fn chat_text(&self, system: &str, user: &str) -> Result<String, AiClientError> {
+        let payload = build_chat_payload(&self.config.model, system, user, self.config.max_tokens);
+        let body = self.post_completions(payload)?;
+        extract_content(&body)
+    }
+
+    /// chat/completions 多模态请求（v0.12.0 M5：vision-exp 视觉提取）→ 原始文本。
+    ///
+    /// @ai-context: content 数组（text + image_url data URI，OpenAI 兼容）。
+    ///              images 为 base64 data URI 列表（"data:image/png;base64,.."），
+    ///              调用方负责缩放 ≤1280px 控 token；空 images 回落纯文本
+    ///              content（与 chat_text 行为一致）。与 chat_text/chat_json
+    ///              共用 post_completions 的降级链/重试/错误归一——9 处既有调用零改动。
+    pub fn chat_vision(
+        &self,
+        system: &str,
+        user: &str,
+        images: &[String],
+    ) -> Result<String, AiClientError> {
+        let payload = build_vision_payload(&self.config.model, system, user, images, self.config.max_tokens);
+        let body = self.post_completions(payload)?;
+        extract_content(&body)
+    }
+
+    /// 发送 chat/completions payload（HTTP + 指数退避重试 + 错误归一；纯网络
+    /// 路径不单测）。chat_text/chat_vision 共用——降级链/重试单一实现。
+    fn post_completions(&self, payload: serde_json::Value) -> Result<String, AiClientError> {
         if !self.config.is_local && self.config.api_key.trim().is_empty() {
             return Err(AiClientError::Auth("未配置 API 密钥（设置页保存或配置环境变量）".to_string()));
         }
-        let payload = build_chat_payload(&self.config.model, system, user, self.config.max_tokens);
         let url = chat_completions_url(&self.config.base_url);
         let agent = ureq::AgentBuilder::new()
             .timeout(std::time::Duration::from_secs(self.config.timeout_secs.max(5)))
@@ -190,17 +215,16 @@ impl AiClient {
                 .send_json(payload.clone());
             match resp {
                 Ok(resp) => {
-                    let body = resp
+                    return resp
                         .into_string()
-                        .map_err(|e| AiClientError::Network(format!("读取响应失败: {}", e)))?;
-                    return extract_content(&body);
+                        .map_err(|e| AiClientError::Network(format!("读取响应失败: {}", e)));
                 }
                 // 401/403 拆分（2026-08-21 真机 unauthorized 排查）：401=密钥
                 // 无效（换密钥），403=账号无权限/模型未开通（换模型或开权限）——
                 // 合并时用户无法区分该修密钥还是该换模型
                 Err(ureq::Error::Status(401, _)) => {
                     return Err(AiClientError::Auth(
-                        "API 密钥无效（HTTP 401）——请检查设置页密钥或环境变量 SILICONFLOW_API_KEY".to_string(),
+                        "API 密钥无效（HTTP 401）——请检查设置页密钥或环境变量 DEEPSEEK_API_KEY".to_string(),
                     ));
                 }
                 Err(ureq::Error::Status(403, _)) => {
@@ -276,6 +300,41 @@ pub fn build_chat_payload(model: &str, system: &str, user: &str, max_tokens: u32
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user}
+        ],
+        "temperature": 0,
+        "max_tokens": max_tokens,
+        "response_format": {"type": "json_object"}
+    });
+    if model.to_lowercase().contains("r1") {
+        body["no_think"] = serde_json::json!(true);
+    }
+    body
+}
+
+/// 构建多模态 chat/completions payload（v0.12.0 M5：vision-exp 视觉提取。
+/// 纯函数可单测；content 为数组——text + image_url data URI，OpenAI 兼容）。
+///
+/// @ai-context: images 为空 → content 回归纯文本（与 build_chat_payload 一致，
+///              但多加 json_object 约束——视觉精修输出结构同 note_refine v2）。
+/// @ai-context: image_url 走 data URI（base64 内联，无本地上传路径——隐私红线：
+///              图片仅随精修切片请求上云，不作独立提取命令）。
+pub fn build_vision_payload(
+    model: &str,
+    system: &str,
+    user: &str,
+    images: &[String],
+    max_tokens: u32,
+) -> serde_json::Value {
+    let mut content: Vec<serde_json::Value> = Vec::new();
+    content.push(serde_json::json!({"type": "text", "text": user}));
+    for img in images {
+        content.push(serde_json::json!({"type": "image_url", "image_url": {"url": img}}));
+    }
+    let mut body = serde_json::json!({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": content}
         ],
         "temperature": 0,
         "max_tokens": max_tokens,

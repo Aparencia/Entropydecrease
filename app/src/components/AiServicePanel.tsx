@@ -106,6 +106,20 @@ export default function AiServicePanel() {
     }
   };
 
+  /** v0.12.0 M5：精修画面理解开关（图片上传最敏感——独立闸门默认关） */
+  const toggleVisionRefine = async (on: boolean) => {
+    setBusy(true);
+    try {
+      await invoke("ai_set_vision_refine", { refineEnabled: on });
+      setMsg({ kind: "ok", text: on ? "已开启画面理解（仅视频会话精修生效）" : "已关闭画面理解" });
+      await load();
+    } catch (e) {
+      setMsg({ kind: "err", text: `操作失败：${e}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div style={{ fontSize: 12, color: "#1f2937" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
@@ -129,6 +143,20 @@ export default function AiServicePanel() {
           AI 功能开关
         </label>
         <span style={{ color: "#6b7280" }}>（默认关——AI 调用须显式开启）</span>
+      </div>
+
+      {/* v0.12.0 M5：精修画面理解（图片上传最敏感——独立闸门默认关） */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={!!view?.visionRefineEnabled}
+            disabled={busy}
+            onChange={(e) => void toggleVisionRefine(e.target.checked)}
+          />
+          精修时启用画面理解
+        </label>
+        <span style={{ color: "#6b7280" }}>（默认关——图片随精修上传，仅视频会话生效）</span>
       </div>
 
       {/* 授权确认卡（开启且未授权时出现） */}
