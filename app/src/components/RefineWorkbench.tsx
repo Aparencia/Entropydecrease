@@ -181,9 +181,15 @@ export default function RefineWorkbench({
   }
 
   const wb = data!;
-  const hasRefined = wb.refinedMarkdown != null;
-  const leftHtml = renderMd(wb.ruleMarkdown);
-  const rightHtml = hasRefined ? decorateRefined(renderMd(wb.refinedMarkdown!), wb.sections) : "";
+  // v0.12.3 防御（Bug#2）：后端字段缺失/契约漂移时渲染不崩——
+  // 原实现 wb.ruleMarkdown 直接 split，serde 键错配时为 undefined 白屏。
+  const ruleMd = wb.ruleMarkdown ?? "";
+  const refinedMd = wb.refinedMarkdown ?? null;
+  const sections = wb.sections ?? [];
+  const stats = wb.stats ?? { added: 0, removed: 0, unchanged: 0 };
+  const hasRefined = refinedMd != null;
+  const leftHtml = renderMd(ruleMd);
+  const rightHtml = hasRefined ? decorateRefined(renderMd(refinedMd), sections) : "";
 
   return (
     <div style={overlay} onClick={onClose}>
@@ -195,9 +201,9 @@ export default function RefineWorkbench({
           background: "#f9fafb", flexShrink: 0,
         }}>
           <span style={{ fontWeight: 600, fontSize: 13 }}>🔧 精修工作台</span>
-          <span style={{ fontSize: 11, color: "#047857" }}>新增 {wb.stats.added} 行</span>
-          <span style={{ fontSize: 11, color: "#b91c1c" }}>删除 {wb.stats.removed} 行</span>
-          <span style={{ fontSize: 11, color: "#6b7280" }}>章节 {wb.sections.length}</span>
+          <span style={{ fontSize: 11, color: "#047857" }}>新增 {stats.added} 行</span>
+          <span style={{ fontSize: 11, color: "#b91c1c" }}>删除 {stats.removed} 行</span>
+          <span style={{ fontSize: 11, color: "#6b7280" }}>章节 {sections.length}</span>
           {wb.meta?.model && <span style={{ fontSize: 10, color: "#9ca3af" }}>{wb.meta.model}</span>}
           {wb.meta?.costYuan != null && (
             <span style={{ fontSize: 10, color: "#b45309" }}>¥{wb.meta.costYuan.toFixed(4)}</span>

@@ -351,7 +351,16 @@ pub fn ai_refine_apply(
 // ────────────────────────────────────────────────────────────
 
 /// 工作台数据（前端 RefineWorkbench 模态数据源）。
+///
+/// @ai-context: 必须 camelCase（与 AiRefineResult 等兄弟结构体一致）——本模块
+///              其余结构体均已 2026-08 统一契约；此处缺失曾导致前端按
+///              ruleMarkdown 读取得到 undefined → renderMd(undefined).split
+///              （"Cannot read properties of undefined (reading 'split')"，
+///              v0.11.5 引入、真机验收漏测，v0.12.3 修复补测）。
+/// @ai-context: 嵌套 section（SectionDiff）保持 snake_case 是刻意契约
+///              （首次出现即定，前端类型注释"勿改"），rename 只作用于顶层键。
 #[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkbenchData {
     pub rule_markdown: String,
     pub refined_markdown: Option<String>,
@@ -513,5 +522,52 @@ pub(crate) fn ensure_balance_for(st: &AppState, chars: usize, model: &str) -> Re
         )),
         Ok(_) => Ok(()),
         Err(_) => Ok(()), // 余额查询失败 → 放行（宽容降级，费用由确认弹窗展示）
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// v0.12.3 回归（Bug#2）：WorkbenchData 顶层键必须 camelCase——
+    /// 前端按 ruleMarkdown/refinedMarkdown 读取；snake_case 键使字段为
+    /// undefined → renderMd(undefined).split 抛
+    /// "Cannot read properties of undefined (reading 'split')"
+    /// （原实现缺失 rename_all，v0.11.5 引入、真机验收漏测）。
+    #[test]
+    fn workbench_data_serializes_camel_case_top_level() {
+        let data = WorkbenchData {
+            rule_markdown: "# 标题\n正文".to_string(),
+            refined_markdown: Some("# 标题\n精修正文".to_string()),
+            sections: vec![crate::note_diff::SectionDiff {
+                heading: "标题".to_string(),
+                status: crate::note_diff::DiffStatus::Modified,
+                removed_lines: vec!["正文".to_string()],
+                added_lines: vec!["精修正文".to_string()],
+            }],
+            stats: crate::note_diff::DiffStats {
+                added: 1,
+                removed: 1,
+                unchanged: 0,
+            },
+            meta: Some(crate::note_version::VersionMeta {
+                cost_yuan: Some(0.01),
+                model: Some("test-model".to_string()),
+                slices: Some(1),
+                merged_from: None,
+            }),
+        };
+        let v = serde_json::to_value(&data).expect("序列化失败");
+        let obj = v.as_object().expect("应为 JSON 对象");
+        assert!(obj.contains_key("ruleMarkdown"), "顶层键必须为 ruleMarkdown（camelCase）");
+        assert!(obj.contains_key("refinedMarkdown"), "顶层键必须为 refinedMarkdown（camelCase）");
+        assert!(obj.contains_key("sections"));
+        assert!(obj.contains_key("stats"));
+        assert!(obj.contains_key("meta"));
+        // 嵌套 SectionDiff 保持 snake_case（首次出现即定的契约，勿随顶层 rename）
+        let sec = &obj["sections"][0];
+        assert!(sec.get("removed_lines").is_some(), "SectionDiff 嵌套键保持 snake_case");
+        assert!(sec.get("added_lines").is_some());
+        assert_eq!(sec["status"], "modified");
     }
 }
