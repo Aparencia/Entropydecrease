@@ -115,14 +115,13 @@ export default function CaptureFloatPanel() {
           {lastLine}
         </span>
         <span style={{ color: "#6b7280", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>⏱ {fmtTime(elapsedMs)}</span>
-        {snapshot.locked && (
+        {snapshot.locked ? (
           <span style={{ color: "#b45309", fontWeight: 600, flexShrink: 0 }} title="点击穿透已锁定——按 Ctrl+Shift+F 解锁">
-            🔒
+            🔒 已锁定
           </span>
+        ) : (
+          <button style={iconBtn} title="点击穿透锁定" onClick={toggleLocked}>🔓</button>
         )}
-        <button style={iconBtn} title={snapshot.locked ? "已锁定（Ctrl+Shift+F 解锁）" : "点击穿透锁定"} onClick={toggleLocked}>
-          {snapshot.locked ? "🔒" : "🔓"}
-        </button>
         <button style={iconBtn} title="展开为面板（Esc）" onClick={expandToPanel}>⤢</button>
       </div>
     );

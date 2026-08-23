@@ -133,11 +133,21 @@ fn show_main_core(app: &tauri::AppHandle) {
     }
 }
 
-/// 全局快捷键注册（浮窗打开期间有效——进程级热键冲突面最小化）。
-fn register_float_shortcut(app: &tauri::AppHandle) {
-    if let Err(e) = app.global_shortcut().register(FLOAT_SHORTCUT) {
-        eprintln!("[capture-float] 全局快捷键注册失败（不影响浮窗使用）: {}", e);
+/// 全局快捷键注册（幂等 + 可失败——打开浮窗的前置条件）。
+///
+/// @ai-context: 审查修复（2026-08-23 新增代码审查）：原实现失败仅日志——
+///              但锁定态浮窗不可点、主窗已隐藏，全局快捷键是**唯一**解锁入口，
+///              注册失败 = 用户被锁死在无可见窗口（只能任务管理器杀进程）。
+///              改为：先查 is_registered（幂等——show 失败后的重试路径自愈），
+///              失败则返回 Err 中止打开（错误可见、主窗保持可见，可重试）。
+fn register_float_shortcut(app: &tauri::AppHandle) -> Result<(), String> {
+    let global = app.global_shortcut();
+    if global.is_registered(FLOAT_SHORTCUT) {
+        return Ok(()); // 已注册（此前 show 失败重试等场景）——幂等放行
     }
+    global
+        .register(FLOAT_SHORTCUT)
+        .map_err(|e| format!("全局快捷键 Ctrl+Shift+F 注册失败（可能被系统占用）: {}", e))
 }
 
 /// 全局快捷键注销（幂等——未注册/重复调用均无副作用）。
@@ -145,9 +155,13 @@ fn unregister_float_shortcut(app: &tauri::AppHandle) {
     let _ = app.global_shortcut().unregister(FLOAT_SHORTCUT);
 }
 
-/// 浮窗打开核心：显示浮窗 + 主窗隐藏（用户要求：浮窗出现后主页面隐藏）。
+/// 浮窗打开核心：注册全局快捷键 → 显示浮窗 + 主窗隐藏（用户要求：浮窗出现后主页面隐藏）。
 fn float_open_core(app: &tauri::AppHandle) -> Result<(), String> {
-    // State 绑定到局部变量——app.state() 临时值在语句末释放会导致锁守卫借用失效
+    // 审查修复（2026-08-23 新增代码审查）：① 注册前置——失败时中止打开
+    // （浮窗不显示、主窗不隐藏、错误可见），杜绝"打开后锁定但无法解锁"死局；
+    // ② 置顶设置失败降级容忍（仅影响置顶层级，不阻断打开——原实现
+    // window.show() 成功后才报错，留下"窗口已显示但 ui.open 未置位"漂移态）
+    register_float_shortcut(app)?;
     let state = app.state::<AppState>();
     let topmost = state
         .float_ui
@@ -159,9 +173,7 @@ fn float_open_core(app: &tauri::AppHandle) -> Result<(), String> {
         None => build_float_window(app, false)?,
     };
     window.show().map_err(|e| format!("显示采集浮窗失败: {}", e))?;
-    window
-        .set_always_on_top(topmost)
-        .map_err(|e| format!("设置浮窗置顶失败: {}", e))?;
+    let _ = window.set_always_on_top(topmost);
     // 浮窗出现 → 主页面隐藏（顺序：先显示浮窗再隐藏主窗，避免无窗口空窗）
     if let Some(main) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         let _ = main.hide();
@@ -175,8 +187,6 @@ fn float_open_core(app: &tauri::AppHandle) -> Result<(), String> {
         ui.open = true;
         emit_float_state(app, &ui);
     }
-    // 锁定态浮窗不可点且主窗已隐藏——全局快捷键是唯一解锁/切换入口（ADR-025）
-    register_float_shortcut(app);
     Ok(())
 }
 
