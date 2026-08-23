@@ -5,6 +5,16 @@
 
 ## [Unreleased] - 2026-08-23
 
+### v0.13.6 视频档案分类细化＋修复批（2026-08-23 交付，详见 [设计规格](docs/superpowers/specs/2026-08-23-v0.13.6-video-profile-classification-refinement-design.md) 与 [v0.13 系列](docs/versions/v0.13.md)）
+
+- **修复批（REQ-223，用户实测 P0）**：① `add_knowledge_node` 契约错误——前端传 `type` 而命令契约 `nodeType`（向导/问题树 3 调用点 + 测试断言同步），知识体系创建向导领域入口/场景节点落库不再失败；② 笔记编辑完成即时刷新——`handleDone` 未 await 保存 + `onCancel` 只重载列表不重取 `selected`（右栏恒旧标题/旧正文，即"视频/图文会话笔记标题修改不生效"根因）——完成/Ctrl+E/ESC 三出口统一刷新（`get_note` 回填 + 列表重载）
+- **形态展平 7→10（REQ-219）**：`ContentForm` 增 会议/直播/影视（独立形态，不再折叠进对话/音频——旧 13 类 Meeting/Live 反向映射回归）；挂既有模板零新增（会议→meeting-notes、直播/影视→summary 叙事线变体）；旧 13 类 live 默认档 None→Low（浅画面 OCR 待命）；矩阵/词表/前端下拉/契约测试全对齐
+- **领域两层 15→20＋细目（REQ-220）**：粗领域 +5（美食烹饪/摄影视频/历史人文/写作阅读/数码硬件，与 B站 分区对齐）；细目 curated 静态表 84 项（每类 4-6 项，kebab id+标签+种子词，新模块 `video_profile_domain_fine*.rs`）；`DomainTag.fine` 升级为细目 id 多选数组（旧 raw 展示兼容）；检测卡领域区改两级（粗下拉+细目 chips 多选，`list_domain_fine` 单一数据源）
+- **检测链升级（REQ-221）**：平台分区映射表（`video_profile_platform_map*.rs`，48 行金数据：内联标签双轨 + 完整分区名）——分区命中即置信 1.0 定 (形态, 粗领域, 细目预选)，影视/直播分区直接定 narrative/live 形态（优先于记忆/标题候选——平台裁决）；检测链六源：映射 > 平台种子 > 用户 > 标题（细目细分）> 开场白 > 术语（细目细分）；hotwords 预热候选 = 粗种子 ∪ 细目种子（`preheat_domain_hotwords` 增 `fine` 参数）
+- **领域记忆（REQ-222）**：`ProfileMemory` 增独立领域通道（`DomainMemoryEntry`——与 kind/form 通道分离防污染；旧 JSON 零迁移）；`remember_video_profile_domain` 命令（粗+细目一次写入，series 键同口径）；`update_live_profile` 增 `fine` 参数（校验归属粗领域）＋采集条 `live:profile-updated` 事件带 `fine`
+- 验证：`cargo test --test app_lib_tests video_profile` 70 全绿（形态矩阵/细目表/映射表/领域记忆增量）+ knowledge 140 全绿；clippy 无新增警告（本版代码零警告）；`tsc --noEmit` 零错误；vitest 24 文件 132 用例全绿（新增 ProfileDetector 检测卡契约 2 项 + NotesPage 刷新 1 项）；vite build 通过
+- 边界（本版不做）：视频档案库/检索页、档案与知识体系领域桥接、新产物模板、细目自由输入、B站 网络抓取分区——见设计规格 §七；行数豁免/超限债务（lib.rs、live_session_frame.rs 预存超 600 硬限）已登记 `docs/standards/line-limit-exemptions.md` 并承接拆分计划（v0.13.7 优先）
+
 ### v0.13.1 知识体系基建（2026-08-23 交付，详见 [docs/versions/v0.13.md](docs/versions/v0.13.md) 与 [设计规格](docs/superpowers/specs/2026-08-23-v0.13.1-knowledge-system-foundation-design.md)）
 
 - **数据层（REQ-202，M1）**：db_migrations 幂等新增 7 表——knowledge_systems（global 部分唯一索引）/nodes（问题树，级联子树）/concepts（name 全局唯一→交叉点判定）/models（disciplines JSON ≥1）/links（体系↔证据唯一引用通道）/audits（v0.13.1 仅留表）；零破坏（既有表结构不动）

@@ -12,12 +12,12 @@
 | 文件 | 行数 | 豁免理由 | 拆分计划 |
 |------|------|---------|---------|
 | app/src-tauri/src/artifact_templates.rs | 572 | v0.5.0 M7（REQ-052）：五档案模板函数（讲义/步骤卡/摘要/对话纪要/会议纪要）内聚于同一模板域，各模板共享原料注入签名；v0.9.0 M5 叙事变体再增 | 若再增长：会议/访谈模板拆至 artifact_templates_meeting.rs |
-| app/src-tauri/src/live_session_frame.rs | 544 | 屏幕采样线程编排（自适应采样/空闲降频/前台监控/播放器检测）；A1 暂停冻结 + P2 自动暂停轻量轮询 + 画面价值观测注入 + 升降档裁决多轮叠加；H2 修复（OCR 调用切超时变体）行数微增 | 若再增长：暂停轻量轮询拆至 live_session_pause_poll.rs |
+| app/src-tauri/src/live_session_frame.rs | 681 | 屏幕采样线程编排（自适应采样/空闲降频/前台监控/播放器检测）；A1 暂停冻结 + P2 自动暂停轻量轮询 + 画面价值观测注入 + 升降档裁决多轮叠加；H2 修复（OCR 调用切超时变体）行数微增；v0.13.6（REQ-220）细目同栅消费再增 12 行——**注意：HEAD 即已 669 超 600 硬限（v0.12.x 增长），本版未拆（超限为预存债务，随 v0.13.6 登记并承接拆分计划）** | **拆分计划（超硬限必须拆）**：暂停轻量轮询拆至 live_session_pause_poll.rs / 帧消费块拆至 live_frame_consume.rs；v0.13.7 优先执行 |
 | app/src-tauri/src/capture/audio_loopback.rs | 514 | ADR-007 重连机制（重试循环/退避/恢复回调）内聚于捕获线程实现，拆出需跨函数传递 COM 生命周期参数，内聚性优先；2026-08 A1 硬暂停（端点 Stop/Start + 暂停时长补偿 + 残留缓冲清空）再增 | 若再增长：将 run_capture_inner 拆至 audio_loopback_session.rs |
-| app/src-tauri/src/video_profile.rs | 549 | v0.5.0 M1（REQ-043）：档案域（类型/检测投票/记忆偏好/JSON IO）内聚；档案常量数据已拆至 video_profile_data.rs；v0.9.0 M1 记忆库 kind 映射迁移 + v0.11.5 Task 5 四象限记忆后置判定（apply_profile_memory）再增 | 若再增长：检测投票与记忆偏好拆至 video_profile_detect.rs |
+| app/src-tauri/src/video_profile.rs | 590 | v0.5.0 M1（REQ-043）：档案域（类型/检测投票/记忆偏好/JSON IO）内聚；档案常量数据已拆至 video_profile_data.rs；v0.9.0 M1 记忆库 kind 映射迁移 + v0.11.5 Task 5 四象限记忆后置判定（apply_profile_memory）再增；v0.13.6（REQ-222）领域记忆独立通道（DomainMemoryEntry/remember_domain/lookup_domain）+ platform_form 字段再增 | 若再增长：检测投票与记忆偏好拆至 video_profile_detect.rs |
 | app/src-tauri/src/engine.rs | 441 | 引擎池句柄与同步 API（双 worker 编排 + ADR-009 设备状态 + M7 心跳/失败/缓存计数 + 有界等待变体）；三维复审 #5 超时排空机制（drain_asr/ocr_backlog）与 #3 ASR_FILE_TIMEOUT 文件级超时常量接入后，worker 主循环与请求协议按登记计划拆至 engine_worker.rs（见文末"已拆分"注记）回归本值 | 若再增长：排空机制与同步 API 变体拆至 engine_request.rs |
 | app/src-tauri/src/live_frame_process.rs | 489 | v0.6.0 ADR-011 拆分产物：帧处理域（网格差异触发/两级判变/带外事件驱动/UI 面板抑制/字幕落库）内聚；process_frame 上下文参数 20+；H2 修复（OCR 热路径切超时变体）+ L2 修复（score 口径诚实化）行数微增 + v0.11.5 Task 2 新颖度变化区域接线再增 | 若再增长：handle_subtitle_frame 与 persist_voted_subtitle 拆至 live_subtitle_persist.rs |
-| app/src-tauri/src/lib.rs | 494 | Tauri 装配层（setup 初始化 + 决策链路 + command 注册 + 模块声明）；全部为声明与装配，拆分会破坏注册可读性；三维复审 #8 移除 opener 插件注册、新增 engine_worker 模块注册后再增 | 若再增长：command 注册清单拆至 app_commands.rs |
+| app/src-tauri/src/lib.rs | 703 | Tauri 装配层（setup 初始化 + 决策链路 + command 注册 + 模块声明）；全部为声明与装配，拆分会破坏注册可读性；三维复审 #8 移除 opener 插件注册、新增 engine_worker 模块注册后再增；v0.13.1~5 知识体系模块/命令继续增——**注意：HEAD 即已 684 超 600 硬限（v0.12.x~v0.13.x 增长），本版 +19（v0.13.6 模块与命令注册），超限为预存债务** | **拆分计划（超硬限必须拆）**：command 注册清单拆至 app_commands.rs；v0.13.7 优先执行 |
 | app/src-tauri/src/note_filter.rs | 480 | v0.6.0 M1（REQ-082/085）：笔记过滤域（过滤链 + AI 判定应用 + 画面要点净化）内聚于单一管线（双出口一致性由构造保证）；AI 部分已按登记计划拆至 note_filter_ai.rs | 若再增长：净化链拆至 note_filter_purify.rs |
 | app/src-tauri/src/structure_note_tests.rs | 470 | v0.7.6（REQ-177~181）：结构渲染层单测域（章节插入位置/命名窗口/词汇表排序上限锚点/零回归护栏/JSON 往返）单模块 #[path] 挂载 | 若再增长：词汇表组拆至 structure_note_glossary_tests.rs |
 | app/src-tauri/src/screen_merge.rs | 454 | v0.7.3（REQ-155/158）：屏级聚合纯函数域（聚类/行合并/角色分类/块去重）+ v0.7.5 净化纯函数（单字符/边缘条带/零跨度合并/图去重/包含率）——纯逻辑内聚便于单测 | 若再增长：零跨度合并与图去重拆至 screen_fix.rs |
@@ -27,7 +27,7 @@
 | app/src-tauri/src/commands_ai_refine.rs | 413 | v0.8.0 M2（REQ-141/145）+ F1/F2/F3：AI 精修命令域（成本预估/异步任务编排/状态/结果/采纳落库/任务历史/配额去重门控/成本硬拦截 + 任务注册表容量守卫）；任务执行已拆至 ai_refine_task.rs；L4 修复（落库失败日志）微增 | 若再增长：门控/拦截拆至 commands_ai_refine_gate.rs |
 | app/src-tauri/src/commands_window.rs | 352 | 浮窗窗口命令域（v0.12.3 架构升级计划：全部窗口操作集中单文件）+ v0.12.6（ADR-025）显隐链路与全局快捷键三态切换核心（open/close/locked/topmost/toggle 核心 fn + 命令薄包装 + 状态机/序列化单测内联）；拆分需跨 fn 传递 AppHandle/State，内聚性优先 | 若再增长：浮窗核心逻辑拆至 float_core.rs（命令薄包装保留本文件） |
 | app/src-tauri/src/types.rs | 503 | 全局共享类型域（会话/段/OCR 块/笔记/设置/闪卡/周契约等 DTO + 序列化）；类型定义集中便于契约一致，拆分易引发跨模块引用涟漪 | 若再增长：笔记与 OCR 块类型拆至 types_note.rs / types_ocr.rs |
-| app/src-tauri/src/video_profile_tests.rs | 411 | 档案测试域（12 档案断言矩阵 + 检测投票 + JSON 校准）单模块 #[path] 挂载 | 若再增长：档案矩阵拆至 video_profile_data_tests.rs |
+| app/src-tauri/src/video_profile_tests.rs | 477 | 档案测试域（12 档案断言矩阵 + 检测投票 + JSON 校准 + v0.13.6 领域记忆独立通道/旧 JSON 零迁移用例）单模块 #[path] 挂载 | 若再增长：档案矩阵拆至 video_profile_data_tests.rs |
 | app/src-tauri/src/live_session_persist.rs | 401 | 定稿落库域（persist_final/digest_merged/handle_final_event）+ P2 flush_tail_and_persist（停止/暂停共用尾句落库）内聚 | 若再增长：flush_tail_and_persist 与 digest_merged 拆至 live_session_persist_tail.rs |
 | app/src-tauri/src/layout_analyzer.rs | 400 | v0.5.0 M3（REQ-047）：规则版版面分析（行/列投影 + 表格线检测 + 区域分类启发式）内聚于同一分类管线；审查加固（公式启发 + 低信息纯色方差滤除） | 若再增长：区域分类启发式拆至 layout_classify.rs |
 | app/src-tauri/src/fusion_tests.rs | 392 | 融合测试域（ADR-005 四规则 + REQ-062 概率加权 + REQ-103 音量透传 + REQ-111 切分对齐）单模块 #[path] 挂载 | 若再增长：REQ-111 切分对齐组拆至 fusion_split_tests.rs |
@@ -57,6 +57,9 @@
 | app/src-tauri/src/import.rs | 304 | 导入域编排（音视频/图片导入流程 + 帧提取调度）内聚；与 import_frame/import_transcribe 分层 | 若再增长：导入参数校验拆至 import_validate.rs |
 | app/src-tauri/src/commands_knowledge_core.rs | 469 | v0.13.1（REQ-202~205）：知识体系命令域（概念/模型/引用/审计——commands 9-18）内聚；源 commands_knowledge.rs（18 命令 + 校验）超限按规格 §四拆，本文件承接后半；commands 薄壳 + inner 纯函数 + @ai-context 注释内聚于命令域 | 若再增长：引用与审计拆至 commands_knowledge_links.rs |
 | app/src-tauri/src/commands_knowledge_tests.rs | 435 | v0.13.1（REQ-202~205）：知识体系命令层单测域（校验纯函数 + inner 编排 + 四类 target/审计信号聚合）单模块 #[path] 挂载 | 若再增长：引用与审计组拆至 commands_knowledge_links_tests.rs |
+| app/src-tauri/src/commands_video.rs | 361 | v0.5.0 M1（REQ-043）起：视频档案命令域（检测装配/领域检测/预热/记忆）；v0.13.6（REQ-219~222）形态/领域/细目/记忆命令 + 分区映射形态接线再增 | 若再增长：领域命令组拆至 commands_video_domain.rs |
+| app/src-tauri/src/commands_live.rs | 353 | 实时采集命令域（启动/停止/档案热切换/剪辑监听）；v0.13.6（REQ-220）update_live_profile 细目参数与校验再增 | 若再增长：档案覆写命令拆至 commands_live_profile.rs |
+| app/src-tauri/src/live_session.rs | 368 | 会话装配/状态（LiveSessionParams 聚合 + run_session_after_engine 骨架 + ProfileOverride 细目字段）；v0.13.6 +2 | 若再增长：ProfileOverride 与参数分拆至 live_session_params.rs |
 
 ## 前端（app/src/，数字来自前端审查快照；Task #9/10 拆分进行中）
 
@@ -67,9 +70,9 @@
 | app/src/components/SessionListPanel.tsx | 501 | v0.7.1 拆分产物：列表域 UI（双模式搜索/筛选排序/课程分组折叠/批量操作栏/内联转化）内聚——筛选/排序/选择为面板本地状态 | 若再增长：批量操作栏与列表项拆至 SessionListRow.tsx |
 | app/src/components/AiServicePanel.tsx | 390 | v0.8.0 M1（REQ-138/139/140）AI 服务设置面板：全局开关/密钥管理（掩码+DPAPI 保存）/端点模型/测试连接/余额卡片/授权确认卡/审计列表——配置面板 UI 内聚 | 若再增长：余额卡片与审计列表拆至 AiBalanceCard.tsx / AiAuditList.tsx |
 | app/src/components/SessionDetailPanel.tsx | 371 | 会话详情面板：质量报告/段列表/OCR 概览/操作区单一面板完整交互流内聚（前端审查登记） | 若再增长：质量报告区拆至 SessionQualityReport.tsx |
-| app/src/components/ProfileDetector.tsx | 330 | 档案检测组件：投票/确认流/记忆偏好 UI + v0.11.5 Task 5 冲突提示内聚（实测 2026-08-22） | 若再增长：确认流拆至 ProfileConfirmFlow.tsx |
+| app/src/components/ProfileDetector.tsx | 374 | 档案检测组件：投票/确认流/记忆偏好 UI + v0.11.5 Task 5 冲突提示内聚 + v0.13.6（REQ-219~222）形态 10 下拉/领域 20 下拉/细目多选 chips/分区映射形态优先（实测 2026-08-23） | 若再增长：确认流与细目 chips 拆至 ProfileConfirmFlow.tsx |
 | app/src/components/NoteEditView.tsx | —— | v0.12.2 行数修正：实测 299 行（登记值 315 过期），本版新增 autoFocus 一行后仍 300 行以内——登记移除，见"已拆分/登记移除记录" | —— |
-| app/src/pages/NotesPage.tsx | 361 | v0.12.2 三栏编排（GroupSidebar/FeedFragmentList/NoteListView 插槽 + 收件箱动线 onPromoted 接线 + 新建零对话框）——编排层内聚（数据获取/选中态/快捷键/辅助面板插槽），组件已全部下沉拆件；2026-08-23 审查修复（onPromoted 同步清搜索态/onOpenInbox 清组过滤）+6 行；v0.12.8 列表级批量删除（runBatchDelete 确认+逐条 invoke+刷新，confirm 导入，+27 行） | 若再增长：键盘监听与收件箱动线回调拆至 useNotesPageShortcuts.ts / useInboxFlow.ts |
+| app/src/pages/NotesPage.tsx | 346 | v0.12.2 三栏编排（GroupSidebar/FeedFragmentList/NoteListView 插槽 + 收件箱动线 onPromoted 接线 + 新建零对话框）——编排层内聚（数据获取/选中态/快捷键/辅助面板插槽），组件已全部下沉拆件；2026-08-23 审查修复（onPromoted 同步清搜索态/onOpenInbox 清组过滤）+6 行；v0.12.8 列表级批量删除（runBatchDelete 确认+逐条 invoke+刷新，confirm 导入，+27 行）；v0.13.6（REQ-223）编辑退出统一刷新回调 | 若再增长：键盘监听与收件箱动线回调拆至 useNotesPageShortcuts.ts / useInboxFlow.ts |
 | app/src/components/AiProviderSettings.tsx | 329 | v0.11.6 M1 code-review 修复（2026-08-22）：删除/清钥加 window.confirm、window.prompt 改卡片内联 password 输入（+2 state + 内联表单）、模型列表 input 改 textarea、fallbackOrder 透传 initial、run 置"处理中"反馈、预设双源 presetOptions 后端拉取——修复净增约 13 行越线（实测 329，含 4 行豁免头注释） | 若再增长：内联密钥表单拆至 AiProviderKeyInput.tsx |
 
 > 前端 **拆分中**（Task #9 笔记域修复进行中，暂不登记行数）：`app/src/types.ts`——待前端拆分完成后以实测行数重新评估。
