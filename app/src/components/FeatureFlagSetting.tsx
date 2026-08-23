@@ -1,8 +1,9 @@
 /**
- * FeatureFlagSetting — 功能预览开关面板（v0.11.1：feed 碎片捕获）。
+ * FeatureFlagSetting — 功能开关面板（v0.11.1：feed 碎片捕获；v0.12.2 转正）。
  *
- * @ai-context: v4 §11.3 交付层纪律——feed 能力功能开关默认关；本面板是
- *              用户唯一的开关入口（后端 capture_fragment 二次校验，不信前端隐藏）。
+ * @ai-context: v0.11.1 预览纪律（默认关）→ v0.12.2 收件箱动线转正：本开关
+ *              语义改为「快速记录入口」（默认开）；后端 promote/delete 等
+ *              命令二次校验仍保留（后端不信前端隐藏——switch 减面不减安全）。
  *              开关状态经 get_feature_flags/set_feature_flag 读写（JSON 持久化）。
  */
 import { useCallback, useEffect, useState } from "react";
@@ -45,19 +46,19 @@ export default function FeatureFlagSetting() {
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
           <input
             type="checkbox"
-            checked={flags?.feedCapture ?? false}
+            checked={flags?.feedCapture ?? true}
             disabled={!flags}
             onChange={() => void toggleFeed()}
           />
-          碎片快速捕获（feed 进料口）
+          快速记录（收件箱碎片捕获入口）
         </label>
         <span style={{ fontSize: 11, color: "#9ca3af" }}>
-          {flags?.feedCapture ? "已启用" : "默认关闭"}
+          {flags?.feedCapture ? "已启用" : "已关闭"}
         </span>
       </div>
       <p style={{ fontSize: 12, color: "#9ca3af", margin: "6px 0 0" }}>
-        启用后笔记页组侧栏出现碎片捕获框：几句话 + 可选截图，按领域自动归入主题组。
-        碎片不是笔记——独立原料层，供组级复习与结算消费（v4 契约）。
+        笔记页侧栏的「⚡ 快速记录」入口与收件箱的升笔记/升卡/删除操作。
+        碎片不是笔记——独立原料层，升为笔记沉淀或升为闪卡复习（v0.12.2 收件箱动线）。
       </p>
       {status && <p style={{ fontSize: 12, color: "#dc2626", margin: "6px 0 0" }}>{status}</p>}
     </div>

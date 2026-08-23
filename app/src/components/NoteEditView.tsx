@@ -289,6 +289,7 @@ export default function NoteEditView({ note, onCancel }: Props) {
         onChange={(e) => { setContent(e.target.value); setDirty(true); }}
         onKeyDown={handleKeyDown}
         onBlur={() => { if (dirty) void saveDraft(false); }}
+        autoFocus // v0.12.2：新建即编辑态聚焦首行（去摩擦——零对话框新建后直接可输入）
         style={{ flex: 1, padding: 16, fontSize: 14, lineHeight: 1.8, border: "none", outline: "none", resize: "none", fontFamily: "monospace", background: "#fcfcfc" }}
         placeholder="在此编辑笔记内容…"
       />
