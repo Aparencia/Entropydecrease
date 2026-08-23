@@ -147,6 +147,8 @@ mod db_contracts;
 mod week_contract;
 // v0.13.1（REQ-202~205）：知识体系基建——原子层纯函数 + 六张数据表
 mod knowledge_pure;
+// v0.13.2（REQ-206）：概念卡卡面契约纯函数
+mod knowledge_card;
 mod db_knowledge_systems;
 mod db_knowledge_nodes;
 mod db_knowledge_concepts;

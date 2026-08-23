@@ -156,3 +156,71 @@ fn metric_events_record_and_count() {
     assert_eq!(db.count_metric_events("fragment_upgraded").expect("f"), 1);
     assert_eq!(db.count_metric_events("group_settled").expect("s"), 0);
 }
+
+/// 指定 kind 的卡（kind 过滤/模型卡数据源测试用；区别于默认 fact 的 card()）。
+fn card_kind(group_id: i64, front: &str, kind: &str) -> NewFlashcard {
+    NewFlashcard {
+        group_id,
+        note_id: None,
+        fragment_id: None,
+        front: front.to_string(),
+        back: format!("{} 的释义", front),
+        kind: kind.to_string(),
+        state_json: "{}".to_string(),
+        due_at: 1000,
+    }
+}
+
+#[test]
+fn list_cards_by_group_filters_by_kind() {
+    // Arrange：同组建 fact + model 两卡；按创建序（id 升序）应稳定排
+    let db = mem_db();
+    let gid = make_group(&db);
+    db.create_card(&card(gid, "极限", 1000)).expect("fact");
+    db.create_card(&card_kind(gid, "安全边际", "model")).expect("model");
+    db.create_card(&card_kind(gid, "复利", "model")).expect("model2");
+    // Act：无 kind 过滤 / model 过滤 / fact 过滤 / 不存在 kind
+    let all = db.list_cards_by_group(gid, None).expect("all");
+    let models = db.list_cards_by_group(gid, Some("model")).expect("model");
+    let facts = db.list_cards_by_group(gid, Some("fact")).expect("fact");
+    // Assert：ORDER BY id 升序；kind 过滤正确；他组不受影响
+    assert_eq!(all.len(), 3);
+    assert_eq!(all[0].front, "极限");
+    assert_eq!(all[1].front, "安全边际");
+    assert_eq!(all[2].front, "复利");
+    assert_eq!(models.len(), 2);
+    assert!(models.iter().all(|c| c.kind == "model"));
+    assert_eq!(facts.len(), 1);
+    assert_eq!(facts[0].front, "极限");
+    assert_eq!(facts[0].kind, "fact");
+    assert_eq!(db.list_cards_by_group(9999, None).expect("other").len(), 0);
+}
+
+#[test]
+fn find_card_by_front_hit_and_miss() {
+    // Arrange：同组建一卡（同组同 front 幂等取卡——升格判据）
+    let db = mem_db();
+    let gid = make_group(&db);
+    db.create_card(&card_kind(gid, "安全边际", "model")).expect("create");
+    // Act/Assert：命中返回整卡；未命中返回 None
+    let hit = db.find_card_by_front(gid, "安全边际").expect("hit").expect("应命中");
+    assert_eq!(hit.front, "安全边际");
+    assert_eq!(hit.kind, "model");
+    assert!(db.find_card_by_front(gid, "不存在").expect("miss").is_none());
+}
+
+#[test]
+fn update_card_back_roundtrip() {
+    // Arrange：建卡后升格追加锚点再写回
+    let db = mem_db();
+    let gid = make_group(&db);
+    let c = db.create_card(&card(gid, "极限", 1000)).expect("create");
+    // Act：把锚点独立行追加到 back 并写回
+    let new_back = format!("{}\n→ 概念「安全边际」", c.back);
+    let updated = db.update_card_back(c.id, &new_back).expect("update");
+    // Assert：往返命中；不存在的 id 返回 false（无该行可更新）
+    assert!(updated);
+    let fetched = db.get_card(c.id).expect("get").expect("exists");
+    assert_eq!(fetched.back, new_back);
+    assert!(!db.update_card_back(9999, "x").expect("miss"));
+}

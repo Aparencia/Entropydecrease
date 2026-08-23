@@ -209,6 +209,65 @@ impl Db {
             Ok(count)
         })
     }
+
+    /// 列组内卡片（kind 过滤可选；ORDER BY id ASC）。
+    ///
+    /// @ai-context: 组仍是唯一容器（spec §一）——model 卡在组内，本方法是组卡列表
+    ///              与"模型卡列表"两处的数据源（kind=Some("model")）。排序按 id 升序
+    ///              稳定（创建序，避免依赖插入顺序）。
+    /// @ai-context: kind 为补值级增量（kind TEXT 无 CHECK；'model' 新增补值，命令层
+    ///              透传）：过滤时传 None 取全组卡，传 Some 按 kind 过滤。
+    pub fn list_cards_by_group(&self, group_id: i64, kind: Option<&str>) -> Result<Vec<Flashcard>> {
+        self.with_conn(|conn| {
+            let mut sql =
+                format!("SELECT {} FROM flashcards WHERE group_id = ?1", CARD_COLUMNS);
+            if kind.is_some() {
+                sql.push_str(" AND kind = ?2");
+            }
+            sql.push_str(" ORDER BY id ASC");
+            let mut stmt = conn.prepare(&sql)?;
+            let rows = match kind {
+                Some(k) => stmt.query_map(params![group_id, k], row_to_card)?,
+                None => stmt.query_map(params![group_id], row_to_card)?,
+            };
+            rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+        })
+    }
+
+    /// 同组同 front 幂等取卡（已有 card_front_exists 是 bool；本方法取全卡用于升格）。
+    ///
+    /// @ai-context: 升格/免重复判据要拿到既有卡本体（front/kind/back 等）而不是布尔：
+    ///              create_model_card 幂等（同组同 front 已有则复用）依赖本方法取整卡。
+    /// @ai-context: 同组同 front 理论上唯一（生成幂等键），故 `LIMIT 1`；未命中 → None。
+    pub fn find_card_by_front(&self, group_id: i64, front: &str) -> Result<Option<Flashcard>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(&format!(
+                "SELECT {} FROM flashcards WHERE group_id = ?1 AND front = ?2 LIMIT 1",
+                CARD_COLUMNS
+            ))?;
+            let mut rows = stmt.query_map(params![group_id, front], row_to_card)?;
+            match rows.next() {
+                Some(Ok(c)) => Ok(Some(c)),
+                Some(Err(e)) => Err(e.into()),
+                None => Ok(None),
+            }
+        })
+    }
+
+    /// 更新卡背面 back（升格锚点追加写回）。
+    ///
+    /// @ai-context: 升格在 Create/Merge 分支把"→ 概念「name」"独立锚点行追加到 back
+    ///              （以 back_has_anchor 幂等判定先查后写）——本方法只写 back，不回填
+    ///              其他列，保持零 schema/零破坏。无该 id → false。
+    pub fn update_card_back(&self, id: i64, back: &str) -> Result<bool> {
+        self.with_conn(|conn| {
+            let affected = conn.execute(
+                "UPDATE flashcards SET back = ?1 WHERE id = ?2",
+                params![back, id],
+            )?;
+            Ok(affected > 0)
+        })
+    }
 }
 
 /// 把 rusqlite 行映射为 Flashcard。
