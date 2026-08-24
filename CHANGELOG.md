@@ -5,7 +5,7 @@
 
 ## [Unreleased] - 2026-08-24
 
-### v0.13.7 知识体系上手路径（2026-08-24 交付，详见 [v0.13 系列](docs/versions/v0.13.md) 与 [设计规格](docs/superpowers/specs/2026-08-24-v0.13.7-knowledge-system-onboarding-design.md)）
+### v0.13.7 知识体系上手路径（2026-08-24 交付，详见 [v0.13 系列](docs/versions/v0.13.md) 与 [设计规格](docs/archive/2026-08-24/2026-08-24-v0.13.7-knowledge-system-onboarding-design.md)（[ ] 已归档））
 
 - **入口补全三触点（体系不再是孤岛）**：① 组行体系徽标（SystemBadge + GroupSidebar——组被体系引用即显示徽标，点击跨页直达体系页并自动选中，`focusSystemId` 与既有 focusNoteId 同模式）；② 笔记「挂到体系」（NoteLinkToSystem——修复手工输 id 断点：选体系→选节点→确认，targetType/targetId 自动携带，已挂可取消）；③ 结算体系简报（RouteInfoPopover——本组 model 卡可纳入体系 + 体系概念 90 天未引用提醒，纯只读提示）
 - **具象化（抽象概念看得见）**：摄影示例体系（`knowledgeSample` 常量 + KnowledgeSampleView 浏览/一键复制，全局体系前置检查，复制按 golden 顺序逐条落库）；体系页空态示例入口；创建向导每步「例如」参照行（不写入输入框）

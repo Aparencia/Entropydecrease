@@ -2,6 +2,7 @@
 
 > 本清单为当前唯一权威债务清单，归档日滚动更新；旧归档清单仅历史追溯。
 > 来源：2026-08-24（v0.13.6 交付后新增代码审查——三段并行 agent + 跨切面；高×2/中×6/低×8 **16 项**全部即修 8464f99；审前规格自查修订 81a83a5 + 修复批 a21af26/b043970/400fbe4/4dfa2af）
+> **二轮（v0.13.7 交付后审查）**：七维审查新增登记 2 笔 open（TD-2026-08-24-B/C），规格与计划归档。
 
 ## 未偿债务
 
@@ -13,7 +14,9 @@
 | TD-2026-08-19-G | db_ocr_search 500 会话静默截断 + 图路径不校验存在性 | 无意 | P2 | 2026-08-19 | carried |
 | TD-2026-08-21-C | db_sessions/db_ai_tasks 的 lock().expect 未迁移 with_conn | 无意 | P3 | 2026-08-21 | carried |
 | TD-2026-08-22-A | clippy --all-targets -D warnings 未绿（存量 lib 5 项 + tests 类 ~14 项；**v0.13.6 交付批 + 审查批均零新增**，经本日复核） | 无意 | P3 | 2026-08-22 | carried |
-| TD-2026-08-24-A | lib.rs（703 行）/ live_session_frame.rs（683 行）超 600 硬限——预存债务（HEAD 即 684/669，v0.12.x~v0.13.x 增长），已登记行数豁免 + 承接拆分计划（v0.13.7：command 注册拆 app_commands.rs / 帧消费拆 live_frame_consume.rs） | 有意 | P1 | 2026-08-24 | open |
+ TD-2026-08-24-A | lib.rs（703 行）/ live_session_frame.rs（683 行）超 600 硬限——预存债务（HEAD 即 684/669，v0.12.x~v0.13.x 增长），已登记行数豁免 + 承接拆分计划（v0.13.7：command 注册拆 app_commands.rs / 帧消费拆 live_frame_consume.rs） | 有意 | P1 | 2026-08-24 | open |
+| TD-2026-08-24-B | RouteInfoPopover sysBrief 仅查 groupLinks[0] 体系——多体系组其余体系的概念失效不提示（触点①允许多徽标，此处功能缺口） | 无意 | P2 | 2026-08-24 | open |
+| TD-2026-08-24-C | KnowledgePage KnowledgeSampleView refreshGlobal={0} 恒传死参数——checkGlobal 只在挂载执行，参数承诺的"全局创建完成后触发"从未兑现 | 无意 | P3 | 2026-08-24 | open |
 
 ## 今日已偿
 
