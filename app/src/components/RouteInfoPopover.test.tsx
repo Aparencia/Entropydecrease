@@ -22,9 +22,12 @@ const groupWithReason: NoteGroup = {
   routeOverridden: 0, noteCount: 5, createdAt: 0, updatedAt: 0,
 };
 
+/** 共享默认 invoke 实现（beforeEach 挂载；用例覆写知识命令时委托回它） */
+let baseInvoke: (cmd: string, args?: { systemId?: number }) => Promise<unknown>;
+
 beforeEach(() => {
   invokeMock.mockReset();
-  invokeMock.mockImplementation(async (cmd: string) => {
+  const impl = async (cmd: string, args?: { systemId?: number }) => {
     switch (cmd) {
       case "week_contract_status":
         return { contract: null, weekStart: 0, actualDays: 0, actualCards: 0, minimalDayMet: false };
@@ -32,10 +35,27 @@ beforeEach(() => {
         return true;
       case "generate_group_cards":
         return 2;
+      case "settlement_plan":
+        // 空结算计划（无重复/无可归档）
+        return { itemCount: 0, due: false, lastSettledAt: null, mergePairs: [], archiveCandidates: [] };
+      case "list_group_cards":
+        // 无 model 卡 → 行 1 不出现（用例内按需覆写）
+        return [];
+      case "list_knowledge_systems":
+        return [];
+      case "list_knowledge_links":
+        // 后端契约：强制 system_id（无全局查询）——按入参过滤
+        return args?.systemId === 2
+          ? [{ id: 1, systemId: 2, nodeId: null, conceptId: null, modelId: null, targetType: "note_group", targetId: 3, createdAt: 0 }]
+          : [];
+      case "list_knowledge_concepts":
+        return [];
       default:
         throw new Error(`unexpected: ${cmd}`);
     }
-  });
+  };
+  baseInvoke = impl;
+  invokeMock.mockImplementation(impl);
 });
 
 afterEach(() => cleanup());
@@ -103,5 +123,33 @@ describe("RouteInfoPopover ⓘ 弹层", () => {
     await screen.findByText("系统按内容特征归入：系列连续内容");
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("结算简报：组内有 model 卡且体系有失效概念时两行提示", async () => {
+    // 覆写知识命令为有数据版本（其余走共享默认）；list_knowledge_links 按 system_id 过滤
+    invokeMock.mockImplementation(async (cmd: string, args?: { systemId?: number }) => {
+      switch (cmd) {
+        case "list_group_cards":
+          return [
+            { id: 1, groupId: 3, kind: "model", front: "曝光三角", back: "q", noteId: null, fragmentId: null, stateJson: "", createdAt: 0, updatedAt: 0, dueAt: 0 },
+          ];
+        case "list_knowledge_systems":
+          return [{ id: 2, parentSystemId: null, name: "摄影", kind: "domain", coreQuestion: null, status: "active", createdAt: 0, updatedAt: 0 }];
+        case "list_knowledge_links":
+          return args?.systemId === 2
+            ? [{ id: 1, systemId: 2, nodeId: null, conceptId: null, modelId: null, targetType: "note_group", targetId: 3, createdAt: 0 }]
+            : [];
+        case "list_knowledge_concepts":
+          // last_applied_at = 200 天前 → stale（90 天未引用）
+          return [{ id: 5, systemId: 2, name: "曝光三角", essence: "e", boundary: "b", relation: "r", status: "core", lastAppliedAt: Date.now() - 200 * 86400_000, createdAt: 0, updatedAt: 0 }];
+        default:
+          return baseInvoke(cmd, args);
+      }
+    });
+
+    renderPopover();
+    fireEvent.click(await screen.findByTestId("settle-button"));
+    expect(await screen.findByTestId("sys-brief-model")).toBeTruthy();
+    expect(await screen.findByTestId("sys-brief-stale")).toBeTruthy();
   });
 });

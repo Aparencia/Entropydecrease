@@ -7,10 +7,15 @@
  *              结算/复习本组/移入移出选中笔记）；④ 周契约卡（REQ-200）。
  * @ai-context: 弹层由 GroupSidebar 锚定渲染（fixed 定位 + 透明背板关闭 +
  *              ESC 关闭）；所有变更经 onChanged 通知 NotesPage 刷新列表。
+ * @ai-context: v0.13.7 触点③ 结算体系简报——弹层挂载时并行拉取组内 model 卡
+ *              计数与体系引用/概念失效态（90 天未应用）；纯提示、加载失败静默
+ *              降级（不阻塞结算区）；list_knowledge_links 契约强制 system_id，
+ *              按非归档体系逐个查询聚合。
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { NoteGroup } from "../types";
+import type { Flashcard, NoteGroup } from "../types";
+import type { KnowledgeConcept, KnowledgeLink, KnowledgeSystem } from "../types/knowledge";
 import { humanRouteLine, parseRouteReason } from "../utils/routeReason";
 import WeekContractCard from "./WeekContractCard";
 import ModelCardCreateDialog from "./ModelCardCreateDialog";
@@ -67,6 +72,8 @@ export default function RouteInfoPopover({
   const [busy, setBusy] = useState(false);
   // v0.13.2：组侧「＋ 概念卡」弹窗开合（组仍是唯一容器——只在此组内建卡）
   const [cardDialogOpen, setCardDialogOpen] = useState(false);
+  // v0.13.7 触点③：结算体系简报（model 卡计数 + 关联体系概念失效数）
+  const [sysBrief, setSysBrief] = useState<{ modelCount: number; staleConcepts: number; systemName: string } | null>(null);
 
   const reason = useMemo(() => parseRouteReason(group.routeReason), [group.routeReason]);
 
@@ -108,6 +115,39 @@ export default function RouteInfoPopover({
       setBusy(false);
     }
   };
+
+  // ③ v0.13.7 触点③ 结算体系简报（弹层挂载时并行拉取；纯提示——失败静默降级）
+  const loadSystemBrief = useCallback(async () => {
+    try {
+      const [cards, sysList] = await Promise.all([
+        invoke<Flashcard[]>("list_group_cards", { groupId: group.id }),
+        invoke<KnowledgeSystem[]>("list_knowledge_systems"),
+      ]);
+      const modelCount = cards.filter((c) => c.kind === "model").length;
+      // 后端 list_knowledge_links 强制 system_id——按非归档体系聚合
+      const activeSystems = sysList.filter((s) => s.status !== "archived");
+      const linkArrays = await Promise.all(
+        activeSystems.map((s) => invoke<KnowledgeLink[]>("list_knowledge_links", { systemId: s.id })),
+      );
+      const links = linkArrays.flat();
+      const groupLinks = links.filter((l) => l.targetType === "note_group" && l.targetId === group.id);
+      if (modelCount === 0 && groupLinks.length === 0) { setSysBrief(null); return; }
+      const sys = sysList.find((s) => s.id === groupLinks[0]?.systemId) ?? null;
+      let staleConcepts = 0;
+      if (sys) {
+        const concepts = await invoke<KnowledgeConcept[]>("list_knowledge_concepts", { systemId: sys.id });
+        const now = Date.now();
+        staleConcepts = concepts.filter((c) => {
+          const base = c.lastAppliedAt ?? c.createdAt;
+          return now - base > 90 * 86400_000;
+        }).length;
+      }
+      setSysBrief({ modelCount, staleConcepts, systemName: sys?.name ?? "" });
+    } catch { setSysBrief(null); } // 简报为纯提示——加载失败静默降级
+  }, [group.id]);
+
+  // 弹层挂载时触发（一次性；结算区展开时并行拉取）
+  useEffect(() => { void loadSystemBrief(); }, [loadSystemBrief]);
 
   // ③ 结算计划（呈现→确认→执行）
   const runSettlementPlan = async () => {
@@ -238,7 +278,7 @@ export default function RouteInfoPopover({
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
             <button onClick={() => void runGenerateCards()} disabled={busy} style={BTN} title="从组内笔记词汇表/碎片生成闪卡（幂等）">⚙ 生成闪卡</button>
             <button onClick={() => setCardDialogOpen(true)} data-testid="model-card-open" style={BTN} title="在组内建一张概念卡（模型卡）——组内记忆面">＋ 概念卡</button>
-            <button onClick={() => void runSettlementPlan()} disabled={busy} style={BTN} title="对账本组：提炼核心/合并重复/归档低价值">🧹 结算</button>
+            <button onClick={() => void runSettlementPlan()} disabled={busy} data-testid="settle-button" style={BTN} title="对账本组：提炼核心/合并重复/归档低价值">🧹 结算</button>
             <button onClick={() => onOpenReview(group.id, group.name)} style={BTN}>🎴 复习本组</button>
             {selectedNoteId != null && (
               <>
@@ -268,6 +308,18 @@ export default function RouteInfoPopover({
                 </button>
                 <button onClick={() => setSettlePlan(null)} style={BTN}>取消</button>
               </div>
+            </div>
+          )}
+          {/* v0.13.7 触点③ 结算体系简报（model 卡计数 + 体系概念失效） */}
+          {sysBrief && (sysBrief.modelCount > 0 || sysBrief.staleConcepts > 0) && (
+            <div data-testid="sys-brief" style={{ marginTop: 8, padding: 8, background: "#f0fdfa", borderRadius: 6, border: "1px solid #99f6e4" }}>
+              <div style={{ fontWeight: 600, color: "#0f766e", marginBottom: 4 }}>体系简报</div>
+              {sysBrief.modelCount > 0 && (
+                <div data-testid="sys-brief-model" style={{ fontSize: 11, color: "#0f766e" }}>🧬 本组有 {sysBrief.modelCount} 张 model 卡可纳入体系（复习面「纳入体系」）</div>
+              )}
+              {sysBrief.staleConcepts > 0 && sysBrief.systemName && (
+                <div data-testid="sys-brief-stale" style={{ fontSize: 11, color: "#b45309", marginTop: 2 }}>⏳ 体系「{sysBrief.systemName}」有 {sysBrief.staleConcepts} 个概念 90 天未引用</div>
+              )}
             </div>
           )}
         </div>
