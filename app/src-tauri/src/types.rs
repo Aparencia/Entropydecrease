@@ -593,6 +593,9 @@ pub struct NewKnowledgeSystem {
 ///
 /// @ai-context: 对应 knowledge_nodes 表；type 取 question/scenario/domain_entry；
 ///              parent_id 自引用（同级树），order_idx 为同级排序（前端拖拽序）。
+/// @ai-context: v0.13.8 画布——canvas_x/y 为节点在画布上的 React Flow 位置
+///              （左上角坐标；None=未布局，首次打开画布触发辐射布局批量初始化）。
+///              serde(default) 保证旧前端/旧测试构造的 JSON 缺省字段不炸反序列化。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct KnowledgeNode {
@@ -608,6 +611,12 @@ pub struct KnowledgeNode {
     /// active | watching | archived
     pub status: String,
     pub created_at: i64,
+    /// 画布 X 坐标（v0.13.8；None=未布局——首次打开画布由前端辐射布局初始化）
+    #[serde(default)]
+    pub canvas_x: Option<f64>,
+    /// 画布 Y 坐标（v0.13.8；与 canvas_x 成对）
+    #[serde(default)]
+    pub canvas_y: Option<f64>,
 }
 
 /// 新建节点入参。
@@ -842,4 +851,36 @@ pub struct UsedRefs {
     pub note_id: Option<i64>,
     #[serde(default)]
     pub fragment_id: Option<i64>,
+}
+
+// ────────────────────────────────────────────────────────────
+// v0.13.8 画布：节点位置与视口契约
+//
+// @ai-context: 画布=手动画布非自动图（REQ-029 P3 维持）——节点位置由用户拖拽决定，
+//              首次打开时以辐射布局初始化（BFS 算法），算法只在首次生效。
+//              坐标口径：React Flow 左上角（node.position 语义），与 DB 存储一致。
+// ────────────────────────────────────────────────────────────
+
+/// 画布节点位置（batch_initialize_canvas_positions 入参；x/y 为左上角坐标）。
+///
+/// @ai-context: 三表 id 空间独立（nodes/concepts/models），但本入参仅服务
+///              knowledge_nodes（概念/模型无画布列，属浮动参照——每次打开重排）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CanvasNodePosition {
+    pub node_id: i64,
+    pub x: f64,
+    pub y: f64,
+}
+
+/// 画布视口（get_canvas_viewport 返回；save_canvas_viewport 存储态）。
+///
+/// @ai-context: 切回画布时经 setViewport 恢复；zoom 必须 >0（错误缩放直接拒绝，
+///              防损坏值放大/缩小到不可见）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CanvasViewport {
+    pub viewport_x: f64,
+    pub viewport_y: f64,
+    pub zoom: f64,
 }

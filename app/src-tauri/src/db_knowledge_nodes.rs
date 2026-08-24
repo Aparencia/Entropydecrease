@@ -15,7 +15,9 @@ use crate::error::Result;
 use crate::types::{KnowledgeNode, NewKnowledgeNode};
 
 /// knowledge_nodes 表统一查询列（列顺序与 row_to_node 严格对应）。
-const NODE_COLUMNS: &str = "id, system_id, parent_id, type, text, order_idx, status, created_at";
+/// @ai-context: v0.13.8 追加 canvas_x/canvas_y（画布位置；list 随行返回供画布直接读取）。
+const NODE_COLUMNS: &str =
+    "id, system_id, parent_id, type, text, order_idx, status, created_at, canvas_x, canvas_y";
 
 impl Db {
     /// 新建节点，返回完整记录。
@@ -40,6 +42,9 @@ impl Db {
                 order_idx: new.order_idx,
                 status: "active".to_string(),
                 created_at: now,
+                // 新节点无画布位置（NULL=未布局——首次打开画布由前端辐射布局初始化）
+                canvas_x: None,
+                canvas_y: None,
             })
         })
     }
@@ -132,6 +137,8 @@ fn row_to_node(row: &rusqlite::Row<'_>) -> rusqlite::Result<KnowledgeNode> {
         order_idx: row.get(5)?,
         status: row.get(6)?,
         created_at: row.get(7)?,
+        canvas_x: row.get(8)?,
+        canvas_y: row.get(9)?,
     })
 }
 

@@ -189,7 +189,11 @@ CREATE TABLE IF NOT EXISTS contracts (
             text TEXT NOT NULL,
             order_idx INTEGER NOT NULL DEFAULT 0,
             status TEXT NOT NULL DEFAULT 'active',       -- active/watching/archived
-            created_at INTEGER NOT NULL
+            created_at INTEGER NOT NULL,
+            -- v0.13.8（画布）：节点画布位置（NULL=未布局——首次打开画布触发辐射布局批量初始化；
+            -- 位置按 React Flow 左上角坐标存储，零破坏——NULL 不影响树视图与既有命令）
+            canvas_x REAL,
+            canvas_y REAL
         );
         CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_tree ON knowledge_nodes(system_id, parent_id);
         -- v0.13.1（REQ-202）：概念表（name 全局 UNIQUE——交叉点判定前提；
@@ -252,6 +256,14 @@ CREATE TABLE IF NOT EXISTS contracts (
         );
         CREATE INDEX IF NOT EXISTS idx_decisions_system ON knowledge_decisions(system_id);
         CREATE INDEX IF NOT EXISTS idx_decisions_kind   ON knowledge_decisions(kind);
+        -- v0.13.8（画布）：体系画布状态表（视口位置恢复——system_id 体系 1:1，
+        -- upsert 覆盖；ON DELETE 走软归档无硬删，保持 REFERENCES 语义与规格一致）
+        CREATE TABLE IF NOT EXISTS knowledge_canvas_states (
+            system_id INTEGER PRIMARY KEY REFERENCES knowledge_systems(id),
+            viewport_x REAL DEFAULT 0,
+            viewport_y REAL DEFAULT 0,
+            zoom REAL DEFAULT 1.0
+        );
         ",
     )?;
     // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）
@@ -363,6 +375,21 @@ CREATE TABLE IF NOT EXISTS contracts (
         "ALTER TABLE notes ADD COLUMN group_id INTEGER REFERENCES note_groups(id) ON DELETE SET NULL",
     )?;
     conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_notes_group ON notes(group_id)")?;
+    // v0.13.8（画布）：旧库迁移——knowledge_nodes 补画布位置两列
+    // （NULL=未布局；CREATE TABLE 只对新库生效，旧库缺列必须 ALTER 补齐，
+    //   位置列缺省不影响树视图/既有命令——零破坏纪律 §二.3）
+    ensure_column(
+        conn,
+        "knowledge_nodes",
+        "canvas_x",
+        "ALTER TABLE knowledge_nodes ADD COLUMN canvas_x REAL",
+    )?;
+    ensure_column(
+        conn,
+        "knowledge_nodes",
+        "canvas_y",
+        "ALTER TABLE knowledge_nodes ADD COLUMN canvas_y REAL",
+    )?;
     // v0.7.7（REQ-183）：结构图记录表（建表幂等——新库建表/旧库补表）
     crate::db_structures::init(conn)?;
     // v0.8.0 M4（REQ-144）：笔记版本快照链 + AI 成本记录（幂等建表）
