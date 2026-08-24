@@ -26,6 +26,8 @@ interface Props {
   onSelectNode: (id: number) => void;
   /** 数据变更后刷新（父页重载 nodes/links） */
   onChanged: () => void;
+  /** v0.13.8：顶部「画布」浮钮（§4.5 内嵌切换——点击切 middleView="canvas"） */
+  onOpenCanvas?: () => void;
 }
 
 /** 节点类型配色（决策仪表盘质感） */
@@ -41,13 +43,15 @@ interface AddDraft {
   type: KnowledgeNodeType;
 }
 
-export default function KnowledgeTreeView({ systemId, nodes, links, selectedNodeId, onSelectNode, onChanged }: Props) {
+export default function KnowledgeTreeView({ systemId, nodes, links, selectedNodeId, onSelectNode, onChanged, onOpenCanvas }: Props) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [addDraft, setAddDraft] = useState<AddDraft | null>(null);
   const [addText, setAddText] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const [status, setStatus] = useState("");
+  // v0.13.8：画布浮钮 hover 变色（§4.5——小号、无色边框）
+  const [hoverCanvas, setHoverCanvas] = useState(false);
 
   // parentId -> children（同层按 orderIdx 再 id 排序，保持稳定）
   const children = useMemo(() => {
@@ -240,6 +244,18 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div style={{ padding: "8px 10px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>问题树</span>
+        {onOpenCanvas && (
+          <button
+            data-testid="tree-open-canvas"
+            onClick={onOpenCanvas}
+            onMouseEnter={() => setHoverCanvas(true)}
+            onMouseLeave={() => setHoverCanvas(false)}
+            title="切换到画布视图"
+            style={{ fontSize: 11, cursor: "pointer", padding: "3px 8px", borderRadius: 4, border: "none", background: "transparent", color: hoverCanvas ? "#0f766e" : "#6b7280" }}
+          >
+            🎨 画布
+          </button>
+        )}
         <button data-testid="tree-add-root" onClick={() => startAdd(null)} style={{ marginLeft: "auto", fontSize: 11, cursor: "pointer", padding: "3px 10px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>
           ＋ 添加根问题
         </button>

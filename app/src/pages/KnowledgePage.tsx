@@ -1,32 +1,39 @@
 /**
- * KnowledgePage — 知识体系页（v0.13.1 §五 UI 层）。
+ * KnowledgePage — 知识体系页（v0.13.1 §五 UI 层；v0.13.8 画布）。
  *
  * @ai-context: 三区布局（§五）——左：体系列表（全局置顶 + 领域列表）；中：问题树
- *              / 概念 / 模型（segmented master 视图）；右：详情面板（node/concept/
- *              model 编辑器）。树＋列表，不做图可视化（§五 UI 原则）。
+ *              / 概念 / 模型 / 画布（segmented master 视图）；右：详情面板
+ *              （node/concept/model 编辑器）。
+ * @ai-context: v0.13.8——画布与树视图共存不取代（§二.2）：树视图常驻（display
+ *              切换——折叠展开状态保持）；画布激活才挂载（§4.5「首次切换时计算
+ *              辐射布局初始位置」），切回树视图卸载——视口恢复走 save/get_
+ *              canvas_viewport 持久化路径。
  * @ai-context: 三时钟纪律（总架构 §一）——本页是体系页（周/季度视图），不进每日
  *              复习面；与「笔记」/「复习」动线隔离。空态不预填内容（预填＝假燃料）。
  * @ai-context: 体系只引用、不收纳——本页不搬内容进体系，只做引用与结构管理。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   KnowledgeSystem, KnowledgeNode, KnowledgeConcept, KnowledgeModel,
   KnowledgeLink, KnowledgeSelection,
 } from "../types/knowledge";
 import { systemStatusLabel } from "../types/knowledge";
+import { canvasKey } from "../utils/canvasElements";
 import KnowledgeSystemWizard from "../components/KnowledgeSystemWizard";
 import KnowledgeTreeView from "../components/KnowledgeTreeView";
+import KnowledgeCanvasView from "../components/KnowledgeCanvasView";
 import KnowledgeDetailPanel from "../components/KnowledgeDetailPanel";
 import KnowledgeConceptDialog from "../components/KnowledgeConceptDialog";
 import KnowledgeModelDialog from "../components/KnowledgeModelDialog";
 import ConceptCardRow from "../components/ConceptCardRow";
 import KnowledgeSampleView from "../components/KnowledgeSampleView";
 
-type MiddleView = "tree" | "concept" | "model";
+type MiddleView = "tree" | "canvas" | "concept" | "model";
 
 const MIDDLE_TABS: { key: MiddleView; label: string }[] = [
   { key: "tree", label: "🌳 问题树" },
+  { key: "canvas", label: "🗺 画布" },
   { key: "concept", label: "🧬 概念" },
   { key: "model", label: "⚙ 模型" },
 ];
@@ -102,6 +109,20 @@ export default function KnowledgePage({ focusSystemId }: Props) {
     setSelection(null);
     setMiddleView("tree");
   };
+
+  // v0.13.8：树视图浮钮 / 画布标签 → 打开画布（挂载即触发辐射布局初始化，
+  // 首次切换语义精确满足 §4.5；切回树视图画布卸载——视口恢复走持久化路径）
+  const openCanvas = useCallback(() => {
+    setMiddleView("canvas");
+  }, []);
+
+  // 画布选中键（`q:1`/`c:2`/`m:3`——与树视图/列表共享同一选中态）
+  const selectedCanvasKey = useMemo(() => {
+    if (selection?.id == null) return null;
+    if (selection.type === "node") return canvasKey("question", selection.id);
+    if (selection.type === "concept") return canvasKey("concept", selection.id);
+    return canvasKey("model", selection.id);
+  }, [selection]);
 
   const globalSystem = systems.find((s) => s.kind === "global") ?? null;
   const domainSystems = systems.filter((s) => s.kind === "domain");
@@ -210,34 +231,68 @@ export default function KnowledgePage({ focusSystemId }: Props) {
 
         {!selectedSystem ? (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: 13 }}>从左侧选择一个体系查看</div>
-        ) : middleView === "tree" ? (
-          <KnowledgeTreeView systemId={selectedSystem.id} nodes={nodes} links={links} selectedNodeId={selection?.type === "node" ? selection.id : null} onSelectNode={(id) => setSelection({ type: "node", id })} onChanged={() => void reloadAll()} />
-        ) : middleView === "concept" ? (
-          <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
-            <button data-testid="concept-add" onClick={() => setConceptDialogOpen(true)} style={{ marginBottom: 10, fontSize: 12, cursor: "pointer", padding: "4px 12px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>＋ 添加概念</button>
-            {concepts.length === 0 && <p style={{ fontSize: 12, color: "#9ca3af" }}>暂无概念——从卡住你的词开始。</p>}
-            {concepts.map((c) => (
-              <ConceptCardRow
-                key={c.id}
-                concept={c}
-                selected={selection?.type === "concept" && selection.id === c.id}
-                onSelect={() => setSelection({ type: "concept", id: c.id })}
-              />
-            ))}
-          </div>
         ) : (
-          <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
-            <button data-testid="model-add" onClick={() => setModelDialogOpen(true)} style={{ marginBottom: 10, fontSize: 12, cursor: "pointer", padding: "4px 12px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>＋ 添加模型</button>
-            {models.length === 0 && <p style={{ fontSize: 12, color: "#9ca3af" }}>暂无模型——把可验证的断言写下来。</p>}
-            {models.map((m) => (
-              <div key={m.id} data-testid={`model-row-${m.id}`} onClick={() => setSelection({ type: "model", id: m.id })} style={{ padding: "6px 8px", borderRadius: 6, cursor: "pointer", background: selection?.type === "model" && selection.id === m.id ? "#f0fdfa" : "transparent", border: selection?.type === "model" && selection.id === m.id ? "1px solid #99f6e4" : "1px solid transparent" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{m.name}</span>
-                  <span style={{ fontSize: 10, color: "#6b7280", background: "#f9fafb", borderRadius: 8, padding: "0 5px" }}>{m.disciplines.join(" / ")}</span>
-                </div>
-                {m.claim && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.claim}</div>}
+          <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+            {/* 树视图常驻（display 切换——折叠/展开状态保持，§4.5 组件不退场） */}
+            <div style={{ display: middleView === "tree" ? "block" : "none", height: "100%", minHeight: 0 }}>
+              <KnowledgeTreeView
+                systemId={selectedSystem.id}
+                nodes={nodes}
+                links={links}
+                selectedNodeId={selection?.type === "node" ? selection.id : null}
+                onSelectNode={(id) => setSelection({ type: "node", id })}
+                onChanged={() => void reloadAll()}
+                onOpenCanvas={openCanvas}
+              />
+            </div>
+            {/* 画布：激活才挂载（§4.5 首次切换计算辐射布局初始位置；卸载时
+                拖拽位置兜底刷新，视口恢复走 save/get_canvas_viewport 持久化）；
+                按体系 key 重挂（切体系即重置位置/视口状态） */}
+            {middleView === "canvas" && (
+              <div style={{ height: "100%", minHeight: 0 }}>
+                <KnowledgeCanvasView
+                  key={selectedSystem.id}
+                  systemId={selectedSystem.id}
+                  coreQuestion={selectedSystem.coreQuestion}
+                  nodes={nodes}
+                  concepts={concepts}
+                  models={models}
+                  links={links}
+                  selectedKey={selectedCanvasKey}
+                  onSelectItem={(kind, id) => setSelection({ type: kind, id })}
+                  onGoBack={() => setMiddleView("tree")}
+                />
               </div>
-            ))}
+            )}
+            {middleView === "concept" && (
+              <div style={{ position: "absolute", inset: 0, overflowY: "auto", padding: 12, background: "#fff" }}>
+                <button data-testid="concept-add" onClick={() => setConceptDialogOpen(true)} style={{ marginBottom: 10, fontSize: 12, cursor: "pointer", padding: "4px 12px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>＋ 添加概念</button>
+                {concepts.length === 0 && <p style={{ fontSize: 12, color: "#9ca3af" }}>暂无概念——从卡住你的词开始。</p>}
+                {concepts.map((c) => (
+                  <ConceptCardRow
+                    key={c.id}
+                    concept={c}
+                    selected={selection?.type === "concept" && selection.id === c.id}
+                    onSelect={() => setSelection({ type: "concept", id: c.id })}
+                  />
+                ))}
+              </div>
+            )}
+            {middleView === "model" && (
+              <div style={{ position: "absolute", inset: 0, overflowY: "auto", padding: 12, background: "#fff" }}>
+                <button data-testid="model-add" onClick={() => setModelDialogOpen(true)} style={{ marginBottom: 10, fontSize: 12, cursor: "pointer", padding: "4px 12px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>＋ 添加模型</button>
+                {models.length === 0 && <p style={{ fontSize: 12, color: "#9ca3af" }}>暂无模型——把可验证的断言写下来。</p>}
+                {models.map((m) => (
+                  <div key={m.id} data-testid={`model-row-${m.id}`} onClick={() => setSelection({ type: "model", id: m.id })} style={{ padding: "6px 8px", borderRadius: 6, cursor: "pointer", background: selection?.type === "model" && selection.id === m.id ? "#f0fdfa" : "transparent", border: selection?.type === "model" && selection.id === m.id ? "1px solid #99f6e4" : "1px solid transparent" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{m.name}</span>
+                      <span style={{ fontSize: 10, color: "#6b7280", background: "#f9fafb", borderRadius: 8, padding: "0 5px" }}>{m.disciplines.join(" / ")}</span>
+                    </div>
+                    {m.claim && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.claim}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

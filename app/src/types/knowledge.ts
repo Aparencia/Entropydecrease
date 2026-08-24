@@ -65,6 +65,12 @@ export interface KnowledgeNode {
   orderIdx: number;
   status: KnowledgeNodeStatus;
   createdAt: number;
+  /**
+   * v0.13.8 画布：节点画布位置（左上角坐标；null=未布局——首次打开画布
+   * 触发辐射布局批量初始化）。概念/模型无画布列（浮动参照，每次打开重排）。
+   */
+  canvasX?: number | null;
+  canvasY?: number | null;
 }
 
 /** 知识概念（三问：本质/边界/联系；name 全局唯一） */
@@ -219,6 +225,28 @@ export interface KnowledgeAuditSignal {
 export interface KnowledgeAuditStatus {
   due: boolean;
   signal: KnowledgeAuditSignal;
+}
+
+// ────────────────────────────────────────────────────────────
+// v0.13.8 画布：节点位置与视口契约（与 Rust serde camelCase 对齐）
+//
+// @ai-context: 画布=手动画布非自动图（REQ-029 P3 维持）——节点位置由用户拖拽
+//              决定，首次打开时以辐射布局初始化（BFS），算法只在首次生效。
+//              坐标口径：React Flow 左上角（node.position 语义），与 DB 存储一致。
+// ────────────────────────────────────────────────────────────
+
+/** 画布节点位置（batch_initialize_canvas_positions 入参；x/y 为左上角坐标） */
+export interface CanvasNodePosition {
+  nodeId: number;
+  x: number;
+  y: number;
+}
+
+/** 画布视口（get_canvas_viewport 返回；save_canvas_viewport 存储态） */
+export interface CanvasViewport {
+  viewportX: number;
+  viewportY: number;
+  zoom: number;
 }
 
 // ────────────────────────────────────────────────────────────
