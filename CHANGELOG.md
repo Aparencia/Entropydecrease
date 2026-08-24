@@ -5,7 +5,7 @@
 
 ## [Unreleased] - 2026-08-23
 
-### v0.13.6 视频档案分类细化＋修复批（2026-08-23 交付，详见 [设计规格](docs/superpowers/specs/2026-08-23-v0.13.6-video-profile-classification-refinement-design.md) 与 [v0.13 系列](docs/versions/v0.13.md)）
+### v0.13.6 视频档案分类细化＋修复批（2026-08-23 交付，详见 [设计规格](docs/archive/2026-08-24/2026-08-23-v0.13.6-video-profile-classification-refinement-design.md)（[ ] 已归档）与 [v0.13 系列](docs/versions/v0.13.md)）
 
 - **修复批（REQ-223，用户实测 P0）**：① `add_knowledge_node` 契约错误——前端传 `type` 而命令契约 `nodeType`（向导/问题树 3 调用点 + 测试断言同步），知识体系创建向导领域入口/场景节点落库不再失败；② 笔记编辑完成即时刷新——`handleDone` 未 await 保存 + `onCancel` 只重载列表不重取 `selected`（右栏恒旧标题/旧正文，即"视频/图文会话笔记标题修改不生效"根因）——完成/Ctrl+E/ESC 三出口统一刷新（`get_note` 回填 + 列表重载）
 - **形态展平 7→10（REQ-219）**：`ContentForm` 增 会议/直播/影视（独立形态，不再折叠进对话/音频——旧 13 类 Meeting/Live 反向映射回归）；挂既有模板零新增（会议→meeting-notes、直播/影视→summary 叙事线变体）；旧 13 类 live 默认档 None→Low（浅画面 OCR 待命）；矩阵/词表/前端下拉/契约测试全对齐
