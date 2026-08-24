@@ -117,4 +117,19 @@ describe("KnowledgeSystemWizard 三步校验", () => {
     expect(firstAddIdx).toBeGreaterThan(createIdx);
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
   });
+
+  it("每步显示「例如」示例行（不写入输入框）", async () => {
+    renderWizard();
+    await screen.findByTestId("knowledge-wizard");
+    expect(screen.getByTestId("wizard-example-1").textContent).toContain("化妆又快又自然");
+    // 填核心问题以允许前进到第 2 步；但例不会被预填到输入框
+    fireEvent.change(screen.getByTestId("wizard-core-question"), { target: { value: "如何练好化妆" } });
+    // 第 1 步确认：输入框未被示例预填，值为用户键入内容
+    expect((screen.getByTestId("wizard-core-question") as HTMLTextAreaElement).value).toBe("如何练好化妆");
+    fireEvent.click(screen.getByTestId("wizard-next"));
+    expect(await screen.findByTestId("wizard-example-2")).toBeTruthy();
+    // 第 3 步的示例行
+    fireEvent.click(screen.getByTestId("wizard-next"));
+    expect(await screen.findByTestId("wizard-example-3")).toBeTruthy();
+  });
 });

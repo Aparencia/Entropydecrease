@@ -32,6 +32,13 @@ const GUIDE = {
   step3: "本周你想产出的第一个可验证输出（可选）。写下一个具体成果，它会成为一个「场景」节点，提醒你体系要产出、不要囤积。",
 };
 
+/** 每步示例行（纯参考·不预填——示例≠预填纪律） */
+const EXAMPLES: Record<1 | 2 | 3, string> = {
+  1: "例如：如何让化妆又快又自然？",
+  2: "例如：底妆 / 眼妆 / 发型",
+  3: "例如：本周完成一个 5 分钟通勤妆视频",
+};
+
 export default function KnowledgeSystemWizard({ onClose, onCreated }: Props) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [name, setName] = useState("");
@@ -170,6 +177,9 @@ export default function KnowledgeSystemWizard({ onClose, onCreated }: Props) {
         <div style={{ padding: "16px 18px" }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{stepTitle(step)}</div>
           <p style={{ fontSize: 12, color: "#6b7280", margin: "0 0 12px", lineHeight: 1.6 }}>{GUIDE[`step${step}`]}</p>
+          <p data-testid={`wizard-example-${step}`} style={{ fontSize: 11, color: "#0f766e", background: "#f0fdfa", border: "1px dashed #99f6e4", borderRadius: 6, padding: "6px 10px", margin: "0 0 12px" }}>
+            {EXAMPLES[step]}
+          </p>
 
           {step === 1 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
