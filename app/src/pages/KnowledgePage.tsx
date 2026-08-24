@@ -21,6 +21,7 @@ import KnowledgeDetailPanel from "../components/KnowledgeDetailPanel";
 import KnowledgeConceptDialog from "../components/KnowledgeConceptDialog";
 import KnowledgeModelDialog from "../components/KnowledgeModelDialog";
 import ConceptCardRow from "../components/ConceptCardRow";
+import KnowledgeSampleView from "../components/KnowledgeSampleView";
 
 type MiddleView = "tree" | "concept" | "model";
 
@@ -126,6 +127,16 @@ export default function KnowledgePage() {
         <button data-testid="page-create-first" onClick={() => setWizardOpen(true)} style={{ fontSize: 14, cursor: "pointer", padding: "10px 24px", borderRadius: 8, border: "1px solid #0f766e", background: "#f0fdfa", color: "#0f766e", fontWeight: 600 }}>
           ✳ 创建你的第一个体系
         </button>
+        {/* v0.13.7：空态示例入口——浏览为被动参照，复制得骨架（"待改造"非"已完成"） */}
+        {/* 无全局体系时 onNeedGlobal 打开向导；创建后 handleCreated 刷新并选中，空态随之退出 */}
+        <KnowledgeSampleView
+          onCopied={(sys) => {
+            setWizardOpen(false);
+            void loadSystems().then(() => setSelectedSystemId(sys.id));
+          }}
+          onNeedGlobal={() => setWizardOpen(true)}
+          refreshGlobal={0}
+        />
         {wizardOpen && <KnowledgeSystemWizard onClose={() => setWizardOpen(false)} onCreated={(sys) => void handleCreated(sys)} />}
       </div>
     );
