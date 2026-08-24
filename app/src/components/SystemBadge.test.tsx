@@ -6,7 +6,7 @@
  *              只显示名字，有计数时显示"名 · N 引用"。
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import SystemBadge from "./SystemBadge";
 
 describe("SystemBadge", () => {
@@ -24,7 +24,7 @@ describe("SystemBadge", () => {
   it("点击触发 onClick", () => {
     const onClick = vi.fn();
     render(<SystemBadge name="摄影" linkCount={0} onClick={onClick} />);
-    screen.getByTestId("system-badge").click();
+    fireEvent.click(screen.getByTestId("system-badge"));
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 });

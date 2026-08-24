@@ -30,12 +30,14 @@ import { useNoteAttention } from "../components/useNoteAttention";
 interface Props {
   focusNoteId?: number | null;
   onOpenSessions?: (sessionId: number) => void;
+  /** 打开体系页并选中体系（v0.13.7 触点① 组行徽标） */
+  onOpenSystem?: (systemId: number) => void;
 }
 
 /** 中部视图：notes=笔记列表（组过滤/搜索/标签）；inbox=收件箱碎片列表 */
 type MiddleView = "notes" | "inbox";
 
-export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
+export default function NotesPage({ focusNoteId, onOpenSessions, onOpenSystem }: Props) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [keyword, setKeyword] = useState("");
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -294,6 +296,7 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
         onOpenInbox={() => { setGroupFilter(null); setView("inbox"); }}
         inboxActive={view === "inbox"}
         refreshToken={refreshToken}
+        onOpenSystem={(id) => onOpenSystem?.(id)}
       />
 
       {/* ── 中部：收件箱视图 ↔ 笔记列表原位切换（布局不变）── */}

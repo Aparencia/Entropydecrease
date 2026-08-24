@@ -6,7 +6,8 @@
  *              修复）：组 A 改了判类（未确认）→ 点组 B ⓘ → 弹层显示 B 且
  *              判类下拉回到 B.kind（防把 A 的选择误用到 B——路径: 改判误操作）。
  *              invoke 全 mock（list_note_groups/count_due_cards/list_fragments/
- *              get_feature_flags/week_contract_status）。
+ *              get_feature_flags/week_contract_status/list_knowledge_systems/
+ *              list_knowledge_links）。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -38,6 +39,10 @@ beforeEach(() => {
       case "get_feature_flags": return { feedCapture: true };
       case "week_contract_status":
         return { contract: null, weekStart: 0, actualDays: 0, actualCards: 0, minimalDayMet: false };
+      case "list_knowledge_systems":
+        return [{ id: 10, parentSystemId: null, name: "摄影", kind: "domain", coreQuestion: null, status: "active", createdAt: 0, updatedAt: 0 }];
+      case "list_knowledge_links":
+        return [{ id: 1, systemId: 10, nodeId: null, conceptId: null, modelId: null, targetType: "note_group", targetId: 1, createdAt: 0 }];
       case "override_group_route": return true;
       default:
         throw new Error(`unexpected: ${cmd}`);
@@ -58,6 +63,7 @@ function renderSidebar() {
       onOpenInbox={vi.fn()}
       inboxActive={false}
       refreshToken={0}
+      onOpenSystem={vi.fn()}
     />,
   );
 }
@@ -75,6 +81,7 @@ describe("GroupSidebar ⓘ 弹层", () => {
         onOpenInbox={vi.fn()}
         inboxActive={false}
         refreshToken={0}
+        onOpenSystem={vi.fn()}
       />,
     );
     await screen.findByTestId("group-row-1");
@@ -101,5 +108,30 @@ describe("GroupSidebar ⓘ 弹层", () => {
     await waitFor(() => expect(kindB.value).toBe("standalone"));
     // 明细折叠态与结算计划同样重置
     expect(screen.queryByTestId("route-details")).toBeNull();
+  });
+
+  it("组行显示关联体系徽标并点击跳转（触点①）", async () => {
+    const onOpenSystem = vi.fn();
+    const onGroupFilterChange = vi.fn();
+    render(
+      <GroupSidebar
+        groupFilter={null}
+        onGroupFilterChange={onGroupFilterChange}
+        onChanged={vi.fn()}
+        onOpenReview={vi.fn()}
+        selectedNoteId={null}
+        onOpenInbox={vi.fn()}
+        inboxActive={false}
+        refreshToken={0}
+        onOpenSystem={onOpenSystem}
+      />,
+    );
+    await screen.findByTestId("group-row-1");
+    const badge = await screen.findByTestId("system-badge");
+    expect(badge.textContent).toContain("摄影");
+    // 点击徽标跳体系页（stopPropagation——不触发组过滤）
+    fireEvent.click(badge);
+    expect(onOpenSystem).toHaveBeenCalledWith(10);
+    expect(onGroupFilterChange).not.toHaveBeenCalled();
   });
 });

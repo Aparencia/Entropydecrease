@@ -11,8 +11,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Fragment, NoteGroup } from "../types";
+import type { KnowledgeLink, KnowledgeSystem } from "../types/knowledge";
 import { parseRouteReason, routeLineState } from "../utils/routeReason";
 import RouteInfoPopover from "./RouteInfoPopover";
+import SystemBadge from "./SystemBadge";
 
 interface Props {
   /** 当前过滤组（null=全部笔记） */
@@ -30,6 +32,8 @@ interface Props {
   inboxActive: boolean;
   /** 外部刷新令牌（捕获/升笔记/升卡后触发本栏重载计数） */
   refreshToken: number;
+  /** 跳转体系页并选中体系（v0.13.7 触点①） */
+  onOpenSystem: (systemId: number) => void;
 }
 
 /** 组类别徽标（文案+配色） */
@@ -52,7 +56,7 @@ async function blobToBase64(blob: Blob): Promise<string> {
 
 export default function GroupSidebar({
   groupFilter, onGroupFilterChange, onChanged, onOpenReview, selectedNoteId,
-  onOpenInbox, inboxActive, refreshToken,
+  onOpenInbox, inboxActive, refreshToken, onOpenSystem,
 }: Props) {
   const [groups, setGroups] = useState<NoteGroup[]>([]);
   const [feedCaptureOn, setFeedCaptureOn] = useState(true);
@@ -62,6 +66,9 @@ export default function GroupSidebar({
   // 收件箱待处理数（active 碎片计数）
   const [inboxCount, setInboxCount] = useState(0);
   const [status, setStatus] = useState("");
+  // 体系引用映射（组 id → 引用它的体系列表；v0.13.7 触点① 徽标）
+  const [systemLinks, setSystemLinks] = useState<Record<number, { systemId: number; count: number }[]>>({});
+  const [systems, setSystems] = useState<KnowledgeSystem[]>([]);
   // ⓘ 弹层态（受控单开——同一时间只开一个组）
   const [popover, setPopover] = useState<{ group: NoteGroup; anchor: { x: number; y: number } } | null>(null);
 
@@ -74,6 +81,24 @@ export default function GroupSidebar({
       setDueTotal(due);
       const frags = await invoke<Fragment[]>("list_fragments", { status: "active", limit: 500 });
       setInboxCount(frags.length);
+      // v0.13.7 触点①：体系 + 引用拉取（并行——徽标数据与组列表无依赖）
+      const [sysList, links] = await Promise.all([
+        invoke<KnowledgeSystem[]>("list_knowledge_systems"),
+        invoke<KnowledgeLink[]>("list_knowledge_links"),
+      ]);
+      setSystems(sysList);
+      const map: Record<number, { systemId: number; count: number }[]> = {};
+      for (const l of links) {
+        if (l.targetType !== "note_group") continue;
+        (map[l.targetId] ??= []).push({ systemId: l.systemId, count: 0 });
+      }
+      // 合并同体系多引用为一条（count 累加——一行一个徽标，不重复堆叠）
+      for (const gid of Object.keys(map)) {
+        const merged: Record<number, number> = {};
+        for (const item of map[Number(gid)]) merged[item.systemId] = (merged[item.systemId] ?? 0) + 1;
+        map[Number(gid)] = Object.entries(merged).map(([sid, count]) => ({ systemId: Number(sid), count }));
+      }
+      setSystemLinks(map);
       setStatus("");
     } catch (e) {
       setStatus(`组加载失败: ${e}`);
@@ -222,6 +247,19 @@ export default function GroupSidebar({
                 {g.terrain === "feed" && (
                   <span style={{ fontSize: 10, color: "#7c3aed", background: "#faf5ff", borderRadius: 8, padding: "0 5px" }}>feed</span>
                 )}
+                {/* 体系徽标（触点①：该组被哪些体系引用；点击跳体系页） */}
+                {systemLinks[g.id]?.map((sl) => {
+                  const sys = systems.find((s) => s.id === sl.systemId);
+                  if (!sys || sys.status === "archived") return null;
+                  return (
+                    <SystemBadge
+                      key={sl.systemId}
+                      name={sys.name}
+                      linkCount={sl.count}
+                      onClick={() => onOpenSystem(sl.systemId)}
+                    />
+                  );
+                })}
                 <span style={{ fontSize: 10, color: line.needsConfirm ? "#b45309" : "#9ca3af", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
                   {line.label}
                 </span>
