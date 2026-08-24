@@ -5,6 +5,16 @@
 
 ## [Unreleased] - 2026-08-24
 
+### v0.13.8 知识体系画布（React Flow 节点式无限画布，2026-08-24 交付，详见 [设计规格](docs/superpowers/specs/2026-08-24-v0.13.8-knowledge-canvas-design.md) 与 [v0.13 系列](docs/versions/v0.13.md#v0138-交付记录2026-08-24)）
+
+- **画布=手动画布非自动图（REQ-029 P3 维持）**：节点位置由用户拖拽决定；首次打开无位置节点以辐射布局初始化（BFS 算法，只算一次），之后「自动排列」按钮显式触发才整体重排覆盖；连线只反映既有 parent_id（用户不能画线即建引用，§二.4/§九）
+- **数据层（M1）**：knowledge_nodes 补 `canvas_x/canvas_y`（REAL，NULL=未布局；新库建表内联 + 旧库 ensure_column 零破坏）；新表 `knowledge_canvas_states`（system_id 1:1：视口 x/y/zoom，upsert 覆盖，切回画布恢复）；概念/模型无画布列——浮动参照，每次打开重排且置 `draggable:false`（拖了不持久，禁拖防困惑）
+- **4 命令（M1）**：`update_node_canvas_position`（拖拽落点防抖保存）/`batch_initialize_canvas_positions`（辐射布局首批 + 自动排列覆盖；全量预校验——跨体系/重复/缺失整体拒绝，零部分写入，事务原子）/`save_canvas_viewport`/`get_canvas_viewport`（**规格列 3 条，复盘补第 4 条**——§4.5 视口恢复需要读路径，第 4 条为读写闭环补全，差异登记见 v0.13.8 交付记录）；校验：id>0、坐标有限值（拒 NaN/Infinity）、zoom (0,10]
+- **辐射布局纯函数（M2，TDD 8 golden）**：`layoutRadial`——核心问题虚拟圆心（coreQuestion 渲染不可拖/不可选核心卡）／无核心时首根圆心；ring1=220px 每环+200px；环≥2 子节点父角度扇区（spread=60°/(子数+1)）；碰撞沿角度+50px 最多 2 次后下一环；孤儿/概念/模型 golden angle 确定性兜底——零随机零 React，可复现可断言
+- **前端（M2）**：`canvasElements` 纯转换（`q/c/m` 前缀 key 防三表 id 冲突、parent_id→smoothstep 边、links→概念/模型徽标+引用计数与树视图同口径）；三自定义节点（§七 缩放分级：>0.7 全文/0.4-0.7 仅标题/<0.4 缩略卡）；`KnowledgeCanvasView`（MiniMap/Controls/适配视图/自动排列工具栏；拖拽与视口防抖保存；切回 setViewport 恢复、未存 fitView 兜底；首次缺位批量初始化）；KnowledgePage「🗺 画布」标签 + 树视图「🎨 画布」浮钮双入口（§4.5）——树常驻 display 切换（折叠展开保持），画布激活才挂载（首次切换语义精确；视口恢复走持久化）
+- **只展示+拖拽（§九 全守）**：画布上不新建/编辑节点、不手动连线、无颜色/标签自定义、无导出图片、无框选批量移动、无移动端、无 AI 建议布局
+- 验证：`cargo test --test app_lib_tests knowledge` **151/151 全绿**（本版新增 11：命令 8 + 数据层 3）；全量 1721 passed / 3 failed（预存基线：ai_client 默认 Provider 断言旧 SiliconFlow、note_filter 两条黄金用例，与本版无关）/ 6 ignored；clippy 新文件零警告；`tsc --noEmit` 零错误；vitest **34 文件 188 用例全绿**（新增 layoutRadial 8 / canvasElements 7 / CanvasNodes 6 / KnowledgeCanvasView 9 / KnowledgePage 画布入口 2）；vite build 通过；真机走查待 REQ-146 批执行
+
 ### v0.13.7 知识体系上手路径（2026-08-24 交付，详见 [v0.13 系列](docs/versions/v0.13.md) 与 [设计规格](docs/archive/2026-08-24/2026-08-24-v0.13.7-knowledge-system-onboarding-design.md)（[ ] 已归档））
 
 - **入口补全三触点（体系不再是孤岛）**：① 组行体系徽标（SystemBadge + GroupSidebar——组被体系引用即显示徽标，点击跨页直达体系页并自动选中，`focusSystemId` 与既有 focusNoteId 同模式）；② 笔记「挂到体系」（NoteLinkToSystem——修复手工输 id 断点：选体系→选节点→确认，targetType/targetId 自动携带，已挂可取消）；③ 结算体系简报（RouteInfoPopover——本组 model 卡可纳入体系 + 体系概念 90 天未引用提醒，纯只读提示）

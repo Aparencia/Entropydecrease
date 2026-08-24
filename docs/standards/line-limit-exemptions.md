@@ -77,6 +77,7 @@
 | app/src/components/NoteEditView.tsx | —— | v0.12.2 行数修正：实测 299 行（登记值 315 过期），本版新增 autoFocus 一行后仍 300 行以内——登记移除，见"已拆分/登记移除记录" | —— |
 | app/src/pages/NotesPage.tsx | 359 | v0.12.2 三栏编排（GroupSidebar/FeedFragmentList/NoteListView 插槽 + 收件箱动线 onPromoted 接线 + 新建零对话框）——编排层内聚（数据获取/选中态/快捷键/辅助面板插槽），组件已全部下沉拆件；2026-08-23 审查修复（onPromoted 同步清搜索态/onOpenInbox 清组过滤）+6 行；v0.12.8 列表级批量删除（runBatchDelete 确认+逐条 invoke+刷新，confirm 导入，+27 行）；v0.13.6（REQ-223）编辑退出统一刷新回调 + 审查轮（ESC flush 出口） | 若再增长：键盘监听与收件箱动线回调拆至 useNotesPageShortcuts.ts / useInboxFlow.ts |
 | app/src/components/AiProviderSettings.tsx | 329 | v0.11.6 M1 code-review 修复（2026-08-22）：删除/清钥加 window.confirm、window.prompt 改卡片内联 password 输入（+2 state + 内联表单）、模型列表 input 改 textarea、fallbackOrder 透传 initial、run 置"处理中"反馈、预设双源 presetOptions 后端拉取——修复净增约 13 行越线（实测 329，含 4 行豁免头注释） | 若再增长：内联密钥表单拆至 AiProviderKeyInput.tsx |
+| app/src/pages/KnowledgePage.tsx | 310 | v0.13.8 画布接线越线（原 296）：中栏新增「画布」标签 + 树/画布双入口（树视图浮钮 + 标签栏）+ 中栏 display 切换（树常驻/画布激活挂载）——页面编排层内聚（数据获取/选中态/标签态为页面本地状态），子组件已全部下沉（Tree/Canvas/DetailPanel/Wizard/ConceptCardRow/Sample） | 若再增长：中栏视图块（树/画布/概念/模型 + 标签栏）拆至 KnowledgeMiddlePane.tsx，SystemCard 拆至 SystemSidebarCard.tsx |
 
 > 前端 **拆分中**（Task #9 笔记域修复进行中，暂不登记行数）：`app/src/types.ts`——待前端拆分完成后以实测行数重新评估。
 > 前端 SessionsPage.tsx 审查快照 304 行（登记值），v0.7.1 硬拆后长期 ≤300，本轮审查期间轻微越线；随 NotesPage/types.ts 拆分任务一并复核，若仍越线按上表模式登记。
