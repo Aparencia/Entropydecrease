@@ -31,7 +31,12 @@ const MIDDLE_TABS: { key: MiddleView; label: string }[] = [
   { key: "model", label: "⚙ 模型" },
 ];
 
-export default function KnowledgePage() {
+interface Props {
+  /** 跨页直达目标体系（v0.13.7：组行徽标/结算简报 → 体系页自动选中） */
+  focusSystemId?: number | null;
+}
+
+export default function KnowledgePage({ focusSystemId }: Props) {
   const [systems, setSystems] = useState<KnowledgeSystem[]>([]);
   const [selectedSystemId, setSelectedSystemId] = useState<number | null>(null);
   const [nodes, setNodes] = useState<KnowledgeNode[]>([]);
@@ -80,6 +85,12 @@ export default function KnowledgePage() {
   }, [loadSystems]);
 
   useEffect(() => { void loadSystems(); }, [loadSystems]);
+
+  // v0.13.7：跨页直达目标体系（与 NotesPage focusNoteId 同模式——仅 focusSystemId
+  // 变化时跟随；空态无体系时该值无意义，由既有选中/创建逻辑接管）
+  useEffect(() => {
+    if (focusSystemId != null) setSelectedSystemId(focusSystemId);
+  }, [focusSystemId]);
 
   useEffect(() => {
     if (selectedSystemId != null) void loadSystemDetail(selectedSystemId);

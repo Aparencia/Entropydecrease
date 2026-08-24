@@ -55,6 +55,8 @@ function App() {
   const [focusSessionId, setFocusSessionId] = useState<number | null>(null);
   // v0.7.1：跨页直达目标笔记（会话页"查看笔记" → 笔记页自动选中并滚动可见）
   const [focusNoteId, setFocusNoteId] = useState<number | null>(null);
+  // v0.13.7：跨页直达目标体系（组行徽标/结算简报 → 体系页自动选中）
+  const [focusSystemId, setFocusSystemId] = useState<number | null>(null);
   // 全局采集状态（ADR-007：与页面解耦，徽标常驻导航栏）
   const [capturing, setCapturing] = useState(false);
   const [recovering, setRecovering] = useState(false);
@@ -267,6 +269,10 @@ function App() {
           {/* v0.7.1：focusNoteId 定位 + 来源会话反向跳转（与课堂助手 onOpenSessions 同模式） */}
           <NotesPage
             focusNoteId={focusNoteId}
+            onOpenSystem={(id) => {
+              setFocusSystemId(id);
+              setPage("knowledge");
+            }}
             onOpenSessions={(id) => {
               setFocusSessionId(id);
               setPage("sessions");
@@ -274,8 +280,9 @@ function App() {
           />
         </div>
         <div style={{ flex: 1, display: page === "knowledge" ? "block" : "none", overflow: "hidden" }}>
-          {/* v0.13.1：知识体系页（三时钟纪律——体系进周/季度视图，不与每日复习面混排） */}
-          <KnowledgePage />
+          {/* v0.13.1：知识体系页（三时钟纪律——体系进周/季度视图，不与每日复习面混排）
+              v0.13.7：focusSystemId 跨页直达（组行徽标/结算简报 → 自动选中体系） */}
+          <KnowledgePage focusSystemId={focusSystemId} />
         </div>
         <div style={{ flex: 1, display: page === "settings" ? "block" : "none", overflow: "hidden" }}>
           {/* 2026-08-21：设置页（保留挂载——面板状态不因切页重置；TD-004 同模式） */}
