@@ -140,8 +140,8 @@ describe("RouteInfoPopover ⓘ 弹层", () => {
             ? [{ id: 1, systemId: 2, nodeId: null, conceptId: null, modelId: null, targetType: "note_group", targetId: 3, createdAt: 0 }]
             : [];
         case "list_knowledge_concepts":
-          // last_applied_at = 200 天前 → stale（90 天未引用）
-          return [{ id: 5, systemId: 2, name: "曝光三角", essence: "e", boundary: "b", relation: "r", status: "core", lastAppliedAt: Date.now() - 200 * 86400_000, createdAt: 0, updatedAt: 0 }];
+          // last_applied_at = 200 天前（Unix 秒）→ stale（90 天未引用）
+          return [{ id: 5, systemId: 2, name: "曝光三角", essence: "e", boundary: "b", relation: "r", status: "core", lastAppliedAt: Math.floor(Date.now() / 1000) - 200 * 86400, createdAt: 0, updatedAt: 0 }];
         default:
           return baseInvoke(cmd, args);
       }

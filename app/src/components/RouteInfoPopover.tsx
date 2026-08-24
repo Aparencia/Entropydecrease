@@ -136,10 +136,10 @@ export default function RouteInfoPopover({
       let staleConcepts = 0;
       if (sys) {
         const concepts = await invoke<KnowledgeConcept[]>("list_knowledge_concepts", { systemId: sys.id });
-        const now = Date.now();
+        const now = Math.floor(Date.now() / 1000);
         staleConcepts = concepts.filter((c) => {
           const base = c.lastAppliedAt ?? c.createdAt;
-          return now - base > 90 * 86400_000;
+          return now - base > 90 * 86400;
         }).length;
       }
       setSysBrief({ modelCount, staleConcepts, systemName: sys?.name ?? "" });

@@ -88,7 +88,7 @@ export default function KnowledgeSampleView({ onCopied, onNeedGlobal, refreshGlo
       }
       for (const m of SAMPLE_SYSTEM.models) {
         await invoke("add_knowledge_model", {
-          systemId: sys.id, name: m.name, disciplines: m.disciplines, claim: m.claim,
+          systemId: sys.id, name: m.name, disciplines: JSON.stringify(m.disciplines), claim: m.claim,
           validWhen: m.validWhen, invalidWhen: m.invalidWhen,
         });
       }
