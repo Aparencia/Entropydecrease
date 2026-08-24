@@ -118,7 +118,7 @@ export default function KnowledgePage() {
   // ── 整页空态（无任何体系）──
   if (systems.length === 0) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", padding: 24, textAlign: "center" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", padding: 24, textAlign: "center", overflowY: "auto" }}>
         <div style={{ fontSize: 40, marginBottom: 12 }}>🧠</div>
         <div style={{ fontSize: 18, fontWeight: 700, color: "#374151", marginBottom: 8 }}>结构在问题里的，成为体系</div>
         <p style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.7, maxWidth: 380, margin: "0 auto 20px" }}>
