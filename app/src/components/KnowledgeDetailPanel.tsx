@@ -1,9 +1,10 @@
 /**
- * KnowledgeDetailPanel — 知识体系右栏详情面板（v0.13.1 §五）。
+ * KnowledgeDetailPanel — 知识体系右栏详情面板（v0.13.x）。
  *
  * @ai-context: 按选中实体三态分派——节点（只读信息 + 引用）/概念（三问编辑）/
- *              模型（跨国学科断言编辑）。新建态（selection.id===null）复用编辑器
- *              走 add_* command（编辑器与列表共用同一 UI，免重复表单）。
+ *              模型（跨国学科断言编辑）。新建概念/模型已改为独立弹窗
+ *              （KnowledgeConceptDialog / KnowledgeModelDialog），本面板仅处理
+ *              已存实体的查看与编辑——selection.id 始终为有效 id。
  * @ai-context: 概念名全局唯一（§二）——保存时依赖 command 层唯一校验报错，
  *              前端仅做非空拦截；三问（本质/边界/联系）为概念记忆面的提问骨架。
  * @ai-context: 面板整体可折叠（§五 折叠按钮）——折叠成窄栏保留可读性，
@@ -17,6 +18,8 @@ import type {
 } from "../types/knowledge";
 import { nodeTypeLabel, conceptStatusLabel } from "../types/knowledge";
 import KnowledgeLinkSection from "./KnowledgeLinkSection";
+import KnowledgeDecisionForm from "./KnowledgeDecisionForm";
+import KnowledgeDecisionLog from "./KnowledgeDecisionLog";
 
 interface Props {
   system: KnowledgeSystem;
@@ -35,6 +38,7 @@ const MODEL_STATUSES: KnowledgeModelStatus[] = ["active", "watching", "archived"
 
 export default function KnowledgeDetailPanel({ system, nodes, concepts, models, links, selection, onChanged }: Props) {
   const [collapsed, setCollapsed] = useState(false);
+  const [decisionFormOpen, setDecisionFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   // 概念/模型编辑草稿（与选中实体同步）
@@ -50,7 +54,7 @@ export default function KnowledgeDetailPanel({ system, nodes, concepts, models, 
   const [mInvalidWhen, setMInvalidWhen] = useState("");
   const [mStatus, setMStatus] = useState<KnowledgeModelStatus>("active");
 
-  // 选中实体变化 → 同步编辑器草稿（新建态清空）
+  // 选中实体变化 → 同步编辑器草稿
   useEffect(() => {
     if (selection?.type === "concept") {
       const c = concepts.find((x) => x.id === selection.id) ?? null;
@@ -75,27 +79,37 @@ export default function KnowledgeDetailPanel({ system, nodes, concepts, models, 
 
   const saveConcept = async () => {
     if (!cName.trim()) { setErr("概念名不能为空"); return; }
+    if (selection?.type !== "concept" || selection.id == null) return;
     setSaving(true); setErr("");
     try {
-      const common = { name: cName.trim(), essence: cEssence.trim() || null, boundary: cBoundary.trim() || null, relation: cRelation.trim() || null };
-      if (selection?.id == null) await invoke("add_knowledge_concept", { systemId: system.id, ...common });
-      else await invoke("update_knowledge_concept", { id: selection.id, ...common, status: cStatus });
+      await invoke("update_knowledge_concept", {
+        id: selection.id,
+        name: cName.trim(),
+        essence: cEssence.trim() || null,
+        boundary: cBoundary.trim() || null,
+        relation: cRelation.trim() || null,
+        status: cStatus,
+      });
       onChanged();
     } catch (e) { setErr(`概念保存失败: ${e}`); } finally { setSaving(false); }
   };
 
   const saveModel = async () => {
     if (!mName.trim()) { setErr("模型名不能为空"); return; }
+    if (selection?.type !== "model" || selection.id == null) return;
     setSaving(true); setErr("");
     try {
       const disciplines = mDisciplines.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
       if (disciplines.length === 0) { setErr("至少填写一个学科"); setSaving(false); return; }
-      const common = {
-        name: mName.trim(), disciplines,
-        claim: mClaim.trim() || null, validWhen: mValidWhen.trim() || null, invalidWhen: mInvalidWhen.trim() || null,
-      };
-      if (selection?.id == null) await invoke("add_knowledge_model", { systemId: system.id, ...common });
-      else await invoke("update_knowledge_model", { id: selection.id, ...common, status: mStatus });
+      await invoke("update_knowledge_model", {
+        id: selection.id,
+        name: mName.trim(),
+        disciplines,
+        claim: mClaim.trim() || null,
+        validWhen: mValidWhen.trim() || null,
+        invalidWhen: mInvalidWhen.trim() || null,
+        status: mStatus,
+      });
       onChanged();
     } catch (e) { setErr(`模型保存失败: ${e}`); } finally { setSaving(false); }
   };
@@ -145,10 +159,10 @@ export default function KnowledgeDetailPanel({ system, nodes, concepts, models, 
           </div>
         )}
 
-        {/* ── 概念：三问编辑 + 状态 + 引用（新建态无引用段） ── */}
+        {/* ── 概念：三问编辑 + 状态 + 引用 ── */}
         {selection?.type === "concept" && (
           <div>
-            <div style={sectionTitle}>{selection.id == null ? "新建概念" : "概念"}</div>
+            <div style={sectionTitle}>概念</div>
             <label style={label}>名称 *</label>
             <input data-testid="concept-name" value={cName} onChange={(e) => setCName(e.target.value)} style={input} />
             <label style={label}>本质（它"是"什么）</label>
@@ -161,7 +175,7 @@ export default function KnowledgeDetailPanel({ system, nodes, concepts, models, 
             <select data-testid="concept-status" value={cStatus} onChange={(e) => setCStatus(e.target.value as KnowledgeConceptStatus)} style={select}>
               {CONCEPT_STATUSES.map((s) => <option key={s} value={s}>{conceptStatusLabel[s]}</option>)}
             </select>
-            <SaveButton label={selection.id == null ? "创建概念" : "保存更改"} saving={saving} onClick={() => void saveConcept()} dataTestid="concept-save" />
+            <SaveButton label="保存更改" saving={saving} onClick={() => void saveConcept()} dataTestid="concept-save" />
             {/* 最近应用只读行（§五）——lastAppliedAt 有值→秒级时间，null→从未应用 */}
             {selection.id != null && (
               <div style={{ marginTop: 12 }}>
@@ -171,14 +185,29 @@ export default function KnowledgeDetailPanel({ system, nodes, concepts, models, 
                 </div>
               </div>
             )}
+            {/* 记一次使用按钮（§五 概念面板入口）——仅已保存概念可记 */}
+            {selection.id != null && (
+              <div style={{ marginTop: 12 }}>
+                <button data-testid="log-application-open" onClick={() => setDecisionFormOpen(true)} title="记录一次使用（学习面）" style={{ fontSize: 12, cursor: "pointer", padding: "5px 12px", borderRadius: 6, border: "1px solid #0f766e", background: "#f0fdfa", color: "#0f766e" }}>
+                  📝 记一次使用
+                </button>
+              </div>
+            )}
             {selection.id != null && <KnowledgeLinkSection systemId={system.id} entityType="concept" entityId={selection.id} links={links} onChanged={onChanged} />}
+            {/* 决策日志区（§五）——概念关联，默认开 */}
+            {selection.id != null && (
+              <div style={{ marginTop: 12, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+                <div style={{ fontWeight: 600, fontSize: 12, color: "#374151", marginBottom: 6 }}>🧭 决策日志</div>
+                <KnowledgeDecisionLog systemId={system.id} conceptId={selection.id} onChanged={() => onChanged()} />
+              </div>
+            )}
           </div>
         )}
 
-        {/* ── 模型：多学科断言编辑 + 引用（新建态无引用段） ── */}
+        {/* ── 模型：多学科断言编辑 + 引用 ── */}
         {selection?.type === "model" && (
           <div>
-            <div style={sectionTitle}>{selection.id == null ? "新建模型" : "模型"}</div>
+            <div style={sectionTitle}>模型</div>
             <label style={label}>名称 *</label>
             <input data-testid="model-name" value={mName} onChange={(e) => setMName(e.target.value)} style={input} />
             <label style={label}>学科（逗号分隔）</label>
@@ -193,13 +222,23 @@ export default function KnowledgeDetailPanel({ system, nodes, concepts, models, 
             <select data-testid="model-status" value={mStatus} onChange={(e) => setMStatus(e.target.value as KnowledgeModelStatus)} style={select}>
               {MODEL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
-            <SaveButton label={selection.id == null ? "创建模型" : "保存更改"} saving={saving} onClick={() => void saveModel()} dataTestid="model-save" />
+            <SaveButton label="保存更改" saving={saving} onClick={() => void saveModel()} dataTestid="model-save" />
             {selection.id != null && <KnowledgeLinkSection systemId={system.id} entityType="model" entityId={selection.id} links={links} onChanged={onChanged} />}
           </div>
         )}
       </div>
 
       {err && <p data-testid="detail-error" style={{ padding: "6px 12px", fontSize: 12, color: "#dc2626", borderTop: "1px solid #f3f4f6" }}>{err}</p>}
+
+      {decisionFormOpen && (
+        <KnowledgeDecisionForm
+          mode="application"
+          systemId={system.id}
+          conceptId={selection?.type === "concept" ? selection.id : null}
+          onSaved={() => { setDecisionFormOpen(false); onChanged(); }}
+          onClose={() => setDecisionFormOpen(false)}
+        />
+      )}
     </div>
   );
 }

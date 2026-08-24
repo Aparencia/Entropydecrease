@@ -759,3 +759,87 @@ pub struct KnowledgeAudit {
     pub stats_json: String,
     pub created_at: i64,
 }
+
+/// 决策/应用记录（v0.13.3 REQ-208；一表两面，kind 区分）。
+///
+/// @ai-context: 对应 knowledge_decisions 表——decision=思辨面（决策），application=学习面
+///              （记一次使用）；一表两面不双表。used_refs 为 JSON 文本（存储态，原样保存，
+///              结构契约由知识纯函数 validate_decision_input 校验；解析辅助见 UsedRefs）。
+///              decided_at 为决策/应用时刻（Unix 秒，数据层填充）。
+/// @ai-context: M1 类型供 M2 command 层接入用（机制先行）；接入后移除本 allow。
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeDecision {
+    pub id: i64,
+    /// decision / application
+    pub kind: String,
+    /// 所属体系（None=未挂体系，仅体系级应用允许）
+    pub system_id: Option<i64>,
+    /// 关联问题树节点（None=未挂节点）
+    pub question_id: Option<i64>,
+    /// 引用 JSON 文本（存储态；引用必填，command 层拒绝空）
+    pub used_refs: String,
+    /// 决策内容/应用动作（必填）
+    pub content: String,
+    /// 预期结果（四行法；None=未填）
+    pub expectation: Option<String>,
+    /// 实际结果（四行法；None=未填）
+    pub actual: Option<String>,
+    /// 反思（四行法：如果重来改变什么；None=未填）
+    pub reflection: Option<String>,
+    /// 决策/应用时刻（Unix 秒，数据层填充）
+    pub decided_at: i64,
+    pub created_at: i64,
+}
+
+/// 新建决策/应用记录入参（id/decided_at/created_at 由数据层填充；kind 由调用方传入）。
+/// @ai-context: M1 类型供 M2 command 层接入用（机制先行）；接入后移除本 allow。
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct NewKnowledgeDecision {
+    /// decision / application（调用方传入；command 层白名单校验）
+    pub kind: String,
+    #[serde(default)]
+    pub system_id: Option<i64>,
+    #[serde(default)]
+    pub question_id: Option<i64>,
+    /// 引用 JSON 文本（必填非空——command 层经 validate_decision_input 校验）
+    pub used_refs: String,
+    /// 决策内容/应用动作（必填）
+    pub content: String,
+    #[serde(default)]
+    pub expectation: Option<String>,
+    #[serde(default)]
+    pub actual: Option<String>,
+    #[serde(default)]
+    pub reflection: Option<String>,
+}
+
+/// used_refs JSON 结构的解析辅助（仅作解析；DB 仍存原始 JSON 文本）。
+///
+/// @ai-context: 一表包全引用——体系实体（node/concept/model）＋四类证据引用
+///              （group/card/note/fragment，即四类 LinkTarget）。serde camelCase；
+///              结构契约（键白名单/正整数/非空）由 validate_decision_input（知识纯函数）校验，
+///              本结构仅供 command 层读取 used_refs 时反序列化。
+/// @ai-context: M1 类型供 M2 command 层接入用（机制先行）；接入后移除本 allow。
+#[allow(dead_code)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UsedRefs {
+    #[serde(default)]
+    pub node_ids: Vec<i64>,
+    #[serde(default)]
+    pub concept_ids: Vec<i64>,
+    #[serde(default)]
+    pub model_ids: Vec<i64>,
+    #[serde(default)]
+    pub group_id: Option<i64>,
+    #[serde(default)]
+    pub card_id: Option<i64>,
+    #[serde(default)]
+    pub note_id: Option<i64>,
+    #[serde(default)]
+    pub fragment_id: Option<i64>,
+}

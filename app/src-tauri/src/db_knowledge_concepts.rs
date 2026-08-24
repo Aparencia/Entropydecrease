@@ -162,6 +162,23 @@ impl Db {
             rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
         })
     }
+
+    /// 记一次应用：更新概念最近应用时刻（v0.13.3 REQ-208；列已存在，零迁移）。
+    ///
+    /// @ai-context: **时间口径**——本方法接收并落**Unix 秒**（与全库 db 层 unix_seconds
+    ///              一致，last_applied_at 即秒）；纯函数概念老化 StaleSignal 需要毫秒
+    ///              时由**调用方（command 层）×1000** 换算后喂入（纯函数层自身仍用 ms，
+    ///              两口径在 db 层/纯函数层界面上由调用方裁决，不在此换算）。
+    /// @ai-context: 一次 UPDATE 同时刷新 updated_at；幂等——不存在 id 返回 false 不报错。
+    pub fn set_concept_applied(&self, id: i64, applied_at_secs: i64) -> Result<bool> {
+        self.with_conn(|conn| {
+            let affected = conn.execute(
+                "UPDATE knowledge_concepts SET last_applied_at = ?1, updated_at = ?2 WHERE id = ?3",
+                params![applied_at_secs, unix_seconds(), id],
+            )?;
+            Ok(affected > 0)
+        })
+    }
 }
 
 /// 把 rusqlite 行映射为 KnowledgeConcept。

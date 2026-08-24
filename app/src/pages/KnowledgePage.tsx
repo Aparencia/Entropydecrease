@@ -18,6 +18,8 @@ import { systemStatusLabel } from "../types/knowledge";
 import KnowledgeSystemWizard from "../components/KnowledgeSystemWizard";
 import KnowledgeTreeView from "../components/KnowledgeTreeView";
 import KnowledgeDetailPanel from "../components/KnowledgeDetailPanel";
+import KnowledgeConceptDialog from "../components/KnowledgeConceptDialog";
+import KnowledgeModelDialog from "../components/KnowledgeModelDialog";
 import ConceptCardRow from "../components/ConceptCardRow";
 
 type MiddleView = "tree" | "concept" | "model";
@@ -38,6 +40,8 @@ export default function KnowledgePage() {
   const [middleView, setMiddleView] = useState<MiddleView>("tree");
   const [selection, setSelection] = useState<KnowledgeSelection | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [conceptDialogOpen, setConceptDialogOpen] = useState(false);
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const [domainCreate, setDomainCreate] = useState<{ open: boolean; name: string }>({ open: false, name: "" });
   const [status, setStatus] = useState("");
 
@@ -188,7 +192,7 @@ export default function KnowledgePage() {
           <KnowledgeTreeView systemId={selectedSystem.id} nodes={nodes} links={links} selectedNodeId={selection?.type === "node" ? selection.id : null} onSelectNode={(id) => setSelection({ type: "node", id })} onChanged={() => void reloadAll()} />
         ) : middleView === "concept" ? (
           <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
-            <button data-testid="concept-add" onClick={() => setSelection({ type: "concept", id: null })} style={{ marginBottom: 10, fontSize: 12, cursor: "pointer", padding: "4px 12px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>＋ 添加概念</button>
+            <button data-testid="concept-add" onClick={() => setConceptDialogOpen(true)} style={{ marginBottom: 10, fontSize: 12, cursor: "pointer", padding: "4px 12px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>＋ 添加概念</button>
             {concepts.length === 0 && <p style={{ fontSize: 12, color: "#9ca3af" }}>暂无概念——从卡住你的词开始。</p>}
             {concepts.map((c) => (
               <ConceptCardRow
@@ -201,7 +205,7 @@ export default function KnowledgePage() {
           </div>
         ) : (
           <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
-            <button data-testid="model-add" onClick={() => setSelection({ type: "model", id: null })} style={{ marginBottom: 10, fontSize: 12, cursor: "pointer", padding: "4px 12px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>＋ 添加模型</button>
+            <button data-testid="model-add" onClick={() => setModelDialogOpen(true)} style={{ marginBottom: 10, fontSize: 12, cursor: "pointer", padding: "4px 12px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>＋ 添加模型</button>
             {models.length === 0 && <p style={{ fontSize: 12, color: "#9ca3af" }}>暂无模型——把可验证的断言写下来。</p>}
             {models.map((m) => (
               <div key={m.id} data-testid={`model-row-${m.id}`} onClick={() => setSelection({ type: "model", id: m.id })} style={{ padding: "6px 8px", borderRadius: 6, cursor: "pointer", background: selection?.type === "model" && selection.id === m.id ? "#f0fdfa" : "transparent", border: selection?.type === "model" && selection.id === m.id ? "1px solid #99f6e4" : "1px solid transparent" }}>
@@ -222,6 +226,22 @@ export default function KnowledgePage() {
       )}
 
       {wizardOpen && <KnowledgeSystemWizard onClose={() => setWizardOpen(false)} onCreated={(sys) => void handleCreated(sys)} />}
+
+      {/* 新建概念/模型走独立弹窗——不再占用右栏编辑器 */}
+      {selectedSystem && conceptDialogOpen && (
+        <KnowledgeConceptDialog
+          systemId={selectedSystem.id}
+          onCreated={() => { setConceptDialogOpen(false); void reloadAll(); }}
+          onClose={() => setConceptDialogOpen(false)}
+        />
+      )}
+      {selectedSystem && modelDialogOpen && (
+        <KnowledgeModelDialog
+          systemId={selectedSystem.id}
+          onCreated={() => { setModelDialogOpen(false); void reloadAll(); }}
+          onClose={() => setModelDialogOpen(false)}
+        />
+      )}
     </div>
   );
 }

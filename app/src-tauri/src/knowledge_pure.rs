@@ -173,6 +173,81 @@ pub fn promote_rules(input: &PromoteInput) -> PromoteDecision {
     PromoteDecision::Create
 }
 
+/// used_refs JSON 结构校验 + 规范化（v0.13.3 REQ-208；无副作用、无 DB）。
+///
+/// @ai-context: **纯结构契约，非证据契约**——只校验引用 JSON 的形状（键白名单/正整数/
+///              kind 驱动的非空），实体/证据存在性由 command 层查询校验。返回规范化紧凑
+///              JSON（仅含出现过的键、数组保序、无多余空白），与存储态一致——同一 refs 的
+///              多种写法序列化为同一结果（存储态唯一规范）。
+/// @ai-context: kind 驱动规则——
+///   * decision（思辨面）：至少引一个体系实体（node/concept/model）**或**一个证据
+///     （group/card/note/fragment），全空 Err；
+///   * application（学习面）：至少一个引用（概念或证据）；概念/体系挂载规则由 command 层
+///     按 §四 执行（纯函数只保证结构非空），故体系模式 group_id 引用亦 Ok（已批准修正）。
+///
+/// 边界：非对象（数组/字符串）Err「引用需为对象」；非法 JSON Err「引用格式错误」；
+///       未知键 Err「不支持的引用键」；id ≤0 或非整数 Err「无效的 id」；
+///       非白名单 kind Err「不支持的类型」。
+pub fn validate_decision_input(refs_json: &str, kind: &str) -> Result<String, String> {
+    if kind != "decision" && kind != "application" {
+        return Err(format!("不支持的类型: {kind}"));
+    }
+    let value: serde_json::Value =
+        serde_json::from_str(refs_json).map_err(|_| "引用格式错误".to_string())?;
+    let obj = value.as_object().ok_or_else(|| "引用需为对象".to_string())?;
+
+    const ALLOWED_KEYS: [&str; 7] = [
+        "node_ids", "concept_ids", "model_ids",
+        "group_id", "card_id", "note_id", "fragment_id",
+    ];
+
+    for key in obj.keys() {
+        if !ALLOWED_KEYS.contains(&key.as_str()) {
+            return Err("不支持的引用键".to_string());
+        }
+    }
+
+    let mut has_any = false;
+    let mut out = serde_json::Map::new();
+    for key in ALLOWED_KEYS {
+        let Some(val) = obj.get(key) else { continue };
+        if key.ends_with("_ids") {
+            // 数组型引用（node/concept/model）：空数组不算引用（golden 边界）
+            let arr = val.as_array().ok_or_else(|| "无效的 id".to_string())?;
+            let mut nums = Vec::with_capacity(arr.len());
+            for item in arr {
+                let n = item.as_i64().ok_or_else(|| "无效的 id".to_string())?;
+                if n <= 0 {
+                    return Err("无效的 id".to_string());
+                }
+                nums.push(n);
+            }
+            if !nums.is_empty() {
+                has_any = true;
+            }
+            out.insert(key.to_string(), serde_json::Value::Array(nums.into_iter().map(serde_json::Value::from).collect()));
+        } else {
+            // 单值引用（group/card/note/fragment）
+            let n = val.as_i64().ok_or_else(|| "无效的 id".to_string())?;
+            if n <= 0 {
+                return Err("无效的 id".to_string());
+            }
+            has_any = true;
+            out.insert(key.to_string(), serde_json::Value::from(n));
+        }
+    }
+
+    if !has_any {
+        return Err(if kind == "decision" {
+            "决策需引用体系实体或证据".to_string()
+        } else {
+            "应用记录必须至少一个引用".to_string()
+        });
+    }
+
+    serde_json::to_string(&serde_json::Value::Object(out)).map_err(|e| e.to_string())
+}
+
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3；TDD golden 先行）。
 #[cfg(test)]
 #[path = "knowledge_pure_tests.rs"]

@@ -321,3 +321,156 @@ export interface PromoteResult {
   /** 后端决策枚举序列化（只读；前端仅据 action 分支渲染） */
   decision?: PromoteDecision;
 }
+
+// ────────────────────────────────────────────────────────────
+// v0.13.3 决策与应用：一表两面（REQ-208~210）
+//
+// @ai-context: 一表两面（§一）——knowledge_decisions 用 kind 区分 decision
+//              （思辨面：我依据什么判断）/ application（学习面：我用它做了什么）。
+//              不双表双记，避免同一经历在两面各记一遍造成膨胀。
+// @ai-context: 只记"我的决策"（红线）——本记录是唯一写入路径，仅存用户显式输入；
+//              禁止从产物层 ArtifactKind::Decision（笔记内容里的"决策"）自动升格。
+//              前端本批也**不做**任何"决策→记录"回路。
+// @ai-context: 引用必填防膨胀（§一）——used_refs 非空才计入指标；引用是记录成立的
+//              前提（挂概念或证据），前端提交前拦截空引用，command 层再强制一次。
+// @ai-context: 字段契约与 Rust serde camelCase 对齐；used_refs 是 JSON 字符串
+//              （结构见 UsedRefs），前端用 parseUsedRefs 解析展示，不直接展开。
+// ────────────────────────────────────────────────────────────
+
+/** 记录类型：decision 思辨面 / application 学习面（一表两面，命名纪律 §一） */
+export type DecisionKind = "decision" | "application";
+
+/**
+ * 引用（used_refs JSON 结构）——体系实体 + 证据，二者至少其一。
+ * @ai-context: 体系实体（node/concept/model）指向体系内结构；证据
+ *               （group/card/note/fragment）指向内容层（笔记/闪卡/碎片/组）。
+ *               数组为空、证据为 null 即"未引用"；command 层据此拒绝空引用。
+ */
+export interface UsedRefs {
+  /** 体系实体：节点 id 列表 */
+  nodeIds: number[];
+  /** 体系实体：概念 id 列表 */
+  conceptIds: number[];
+  /** 体系实体：模型 id 列表 */
+  modelIds: number[];
+  /** 证据：笔记组 id（null=未选） */
+  groupId: number | null;
+  /** 证据：闪卡 id（null=未选） */
+  cardId: number | null;
+  /** 证据：笔记 id（null=未选） */
+  noteId: number | null;
+  /** 证据：碎片 id（null=未选） */
+  fragmentId: number | null;
+}
+
+/** 决策/应用记录（used_refs 以 JSON 字符串存储；解析见 parseUsedRefs） */
+export interface KnowledgeDecision {
+  id: number;
+  kind: DecisionKind;
+  systemId: number | null;
+  questionId: number | null;
+  /** 引用 JSON 字符串（损坏时 parseUsedRefs 回退空结构，不崩 UI） */
+  usedRefs: string;
+  /** 决策内容 / 应用动作（必填，≤2000） */
+  content: string;
+  /** 预期结果（四行法第 2 行） */
+  expectation: string | null;
+  /** 实际结果（四行法第 3 行；允许负面——失败真实记录，不评质量） */
+  actual: string | null;
+  /** 反思：如果重来改变什么（四行法第 4 行） */
+  reflection: string | null;
+  /** 决策/应用时刻（Unix 毫秒；与 created_at 分离——可回填旧决策） */
+  decidedAt: number;
+  createdAt: number;
+}
+
+/** 新建决策/应用入参（log_decision / log_application 的参数契约） */
+export interface NewKnowledgeDecision {
+  /** 所属体系（decision 必填；application 与 conceptId 至少其一） */
+  systemId?: number | null;
+  /** 关联问题节点 id（decision 可选；application 传 conceptId 不用） */
+  questionId?: number | null;
+  /** 挂载概念 id（application 概念模式：usedRefs 必含 conceptIds=[conceptId]） */
+  conceptId?: number | null;
+  content: string;
+  expectation?: string | null;
+  actual?: string | null;
+  reflection?: string | null;
+  /** 引用（序列化为 JSON 字符串提交） */
+  usedRefs: UsedRefs;
+}
+
+/** 空引用结构（parseUsedRefs 防御回退 & 初始态共用） */
+const EMPTY_USEREFS: UsedRefs = {
+  nodeIds: [], conceptIds: [], modelIds: [],
+  groupId: null, cardId: null, noteId: null, fragmentId: null,
+};
+
+/** 将未知值归一为 id 数组（过滤非正整数；损坏值防御） */
+function toIdArray(v: unknown): number[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((x): x is number => typeof x === "number" && Number.isInteger(x) && x > 0);
+}
+
+/** 将未知值归一为 id 或 null（仅正整数合法；其余防御为 null） */
+function toIdOrNull(v: unknown): number | null {
+  return typeof v === "number" && Number.isInteger(v) && v > 0 ? v : null;
+}
+
+/**
+ * 解析 used_refs JSON 字符串 → UsedRefs。
+ * @ai-context: 防御性解析（AGENTS.md §3）——DB 里 used_refs 可能因旧版本/手工
+ *               编辑为损坏 JSON；解析失败或结构不符时回退空结构（仅"无引用"展示），
+ *               不抛错、不崩列表。兼容 camelCase（本批契约）与 snake_case（§二 SQL
+ *               存法）两种键名，避免键名漂移导致旧记录解析为空。
+ */
+export function parseUsedRefs(json: string): UsedRefs {
+  if (!json) return { ...EMPTY_USEREFS };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return { ...EMPTY_USEREFS };
+  }
+  if (typeof parsed !== "object" || parsed === null) return { ...EMPTY_USEREFS };
+  const o = parsed as Record<string, unknown>;
+  return {
+    nodeIds: toIdArray(o.nodeIds ?? o.node_ids),
+    conceptIds: toIdArray(o.conceptIds ?? o.concept_ids),
+    modelIds: toIdArray(o.modelIds ?? o.model_ids),
+    groupId: toIdOrNull(o.groupId ?? o.group_id),
+    cardId: toIdOrNull(o.cardId ?? o.card_id),
+    noteId: toIdOrNull(o.noteId ?? o.note_id),
+    fragmentId: toIdOrNull(o.fragmentId ?? o.fragment_id),
+  };
+}
+
+/** 引用摘要文本（决策日志行：计数标签） */
+export function countUsedRefs(refs: UsedRefs): number {
+  return refs.nodeIds.length + refs.conceptIds.length + refs.modelIds.length
+    + (refs.groupId != null ? 1 : 0) + (refs.cardId != null ? 1 : 0)
+    + (refs.noteId != null ? 1 : 0) + (refs.fragmentId != null ? 1 : 0);
+}
+
+/** 引用是否有任何实体（used_refs 非空判定——command 层强制，前端预拦截） */
+export function hasUsedRefs(refs: UsedRefs): boolean {
+  return countUsedRefs(refs) > 0;
+}
+
+/**
+ * used_refs → 规范化 JSON 字符串（后端存储契约 snake_case 键）。
+ * @ai-context: 后端 validate_decision_input 的键白名单为 snake_case（node_ids…）且
+ *               校验 id>0——null/空数组字段必须省略（null 会被判"无效的 id"）；
+ *               字段顺延固定，输出紧凑序列化（存储态一致性）。
+ */
+export function serializeUsedRefs(refs: UsedRefs): string {
+  const out: Record<string, number | number[]> = {};
+  if (refs.nodeIds.length) out.node_ids = refs.nodeIds;
+  if (refs.conceptIds.length) out.concept_ids = refs.conceptIds;
+  if (refs.modelIds.length) out.model_ids = refs.modelIds;
+  if (refs.groupId != null) out.group_id = refs.groupId;
+  if (refs.cardId != null) out.card_id = refs.cardId;
+  if (refs.noteId != null) out.note_id = refs.noteId;
+  if (refs.fragmentId != null) out.fragment_id = refs.fragmentId;
+  return JSON.stringify(out);
+}

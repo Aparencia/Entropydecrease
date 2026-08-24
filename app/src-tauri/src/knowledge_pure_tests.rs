@@ -1,8 +1,8 @@
 //! knowledge_pure 单测（AAA 模式；golden 边界全覆盖——spec §三 + 规格精化 created_at_ms）。
 
 use crate::knowledge_pure::{
-    audit_due, concept_stale, promote_rules, AuditSignal, PromoteDecision, PromoteInput,
-    StaleLevel, StaleSignal,
+    audit_due, concept_stale, promote_rules, validate_decision_input, AuditSignal,
+    PromoteDecision, PromoteInput, StaleLevel, StaleSignal,
 };
 
 // audit_due golden：首次（last_audit=None）以 created_at_ms 为基线；二次以 last_audit 为基线。
@@ -179,4 +179,108 @@ fn promote_empty_name_panics() {
     };
     // Act：应 panic（提示 command 层须先校验）
     let _ = promote_rules(&input);
+}
+
+// validate_decision_input golden（kind 驱动结构契约；AAA + 边界注释）。
+
+#[test]
+fn validate_decision_entity_and_evidence_ok() {
+    // Arrange：决策引用概念 + 证据（复合引用）
+    let refs = r#"{"concept_ids":[3],"group_id":2}"#;
+    // Act：合法决策（实体 + 证据）→ Ok，返回规范化 JSON
+    let out = validate_decision_input(refs, "decision");
+    // Assert
+    assert!(out.is_ok());
+    let s = out.expect("ok");
+    assert!(s.contains("\"concept_ids\":[3]"));
+    assert!(s.contains("\"group_id\":2"));
+}
+
+#[test]
+fn validate_decision_no_ref_err() {
+    // Arrange：空对象
+    // Act：无任何引用 → Err（决策需引用体系实体或证据）
+    let err = validate_decision_input("{}", "decision");
+    // Assert
+    assert_eq!(err, Err("决策需引用体系实体或证据".to_string()));
+}
+
+#[test]
+fn validate_decision_model_only_ok() {
+    // Arrange：仅引用模型
+    // Act：合法决策（体系实体）
+    let out = validate_decision_input(r#"{"model_ids":[7]}"#, "decision");
+    // Assert
+    assert!(out.is_ok());
+}
+
+#[test]
+fn validate_decision_evidence_only_ok() {
+    // Arrange：仅引用证据（组）——体系模式决策
+    // Act：合法决策（体系实体或证据之一即可）
+    assert!(validate_decision_input(r#"{"group_id":2}"#, "decision").is_ok());
+}
+
+#[test]
+fn validate_decision_array_is_err() {
+    // Arrange：JSON 是数组而非对象
+    let err = validate_decision_input("[1,2]", "decision");
+    // Assert：非对象 → Err「引用需为对象」
+    assert_eq!(err, Err("引用需为对象".to_string()));
+}
+
+#[test]
+fn validate_decision_negative_id_err() {
+    // Arrange：node_id 为负
+    let err = validate_decision_input(r#"{"node_ids":[-1]}"#, "decision");
+    // Assert：≤0 → Err「无效的 id」
+    assert_eq!(err, Err("无效的 id".to_string()));
+}
+
+#[test]
+fn validate_decision_unknown_key_err() {
+    // Arrange：含白名单外键
+    let err = validate_decision_input(r#"{"unknown":1}"#, "decision");
+    // Assert：未知键 → Err「不支持的引用键」
+    assert_eq!(err, Err("不支持的引用键".to_string()));
+}
+
+#[test]
+fn validate_invalid_json_err() {
+    // Arrange：非法 JSON
+    let err = validate_decision_input("not-json", "decision");
+    // Assert：解析失败 → Err「引用格式错误」
+    assert_eq!(err, Err("引用格式错误".to_string()));
+}
+
+#[test]
+fn validate_application_empty_ids_err() {
+    // Arrange：application 的 concept_ids 为空数组
+    let err = validate_decision_input(r#"{"concept_ids":[]}"#, "application");
+    // Assert：空数组不算引用 → Err「应用记录必须至少一个引用」
+    assert_eq!(err, Err("应用记录必须至少一个引用".to_string()));
+}
+
+#[test]
+fn validate_application_concept_and_card_ok() {
+    // Arrange：application 引用概念 + 闪卡
+    // Act：合法应用（概念 + 证据）
+    let out = validate_decision_input(r#"{"concept_ids":[5],"card_id":9}"#, "application");
+    // Assert
+    assert!(out.is_ok());
+}
+
+#[test]
+fn validate_application_group_evidence_ok() {
+    // Arrange：application 仅引用组（体系模式证据引用——已批准修正）
+    // Act：合法应用（至少一个引用即可，不强制概念）
+    assert!(validate_decision_input(r#"{"group_id":2}"#, "application").is_ok());
+}
+
+#[test]
+fn validate_bogus_kind_err() {
+    // Arrange：非法 kind
+    let err = validate_decision_input("{}", "bogus");
+    // Assert：非白名单 kind → Err
+    assert!(err.is_err());
 }

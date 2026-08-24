@@ -219,7 +219,9 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
   const roots = children.get(null) ?? [];
 
   // 零节点空态：只给指引，不注入示例内容（预填＝假燃料）
-  if (nodes.length === 0) {
+  // 但当用户已点击「添加根问题」时（addDraft 非空且 parentId===null），
+  // 不走空态早返回——否则添加表单永远渲染不到（Bug 修复）
+  if (nodes.length === 0 && !(addDraft?.parentId === null)) {
     return (
       <div style={{ padding: "24px 20px", textAlign: "center" }}>
         <div style={{ fontSize: 26, marginBottom: 8 }}>🌱</div>
@@ -244,6 +246,16 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
+        {/* 空态下用户已点击添加——展示引导文案 + 添加表单 */}
+        {nodes.length === 0 && addDraft?.parentId === null && (
+          <div style={{ padding: "16px 8px 8px", textAlign: "center" }}>
+            <div style={{ fontSize: 20, marginBottom: 6 }}>🌱</div>
+            <p style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6, margin: "0 0 10px" }}>
+              写下第一个根问题，让它成为问题树的起点。
+            </p>
+          </div>
+        )}
+
         {/* 根节点添加表单（addDraft.parentId === null） */}
         {addDraft?.parentId === null && (
           <div style={{ display: "flex", gap: 4, alignItems: "center", padding: "3px 0", marginBottom: 4 }}>
@@ -252,7 +264,7 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
                 <option key={t} value={t}>{nodeTypeLabel[t]}</option>
               ))}
             </select>
-            <input data-testid="node-add-input" value={addText} onChange={(e) => setAddText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void confirmAdd(); }} placeholder="根问题…" style={{ flex: 1, fontSize: 12, padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 4 }} />
+            <input data-testid="node-add-input" value={addText} onChange={(e) => setAddText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void confirmAdd(); }} placeholder="根问题…" style={{ flex: 1, fontSize: 12, padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 4 }} autoFocus />
             <button data-testid="node-add-confirm" onClick={() => void confirmAdd()} style={actionBtn}>✓</button>
             <button data-testid="node-add-cancel" onClick={() => setAddDraft(null)} style={actionBtn}>取消</button>
           </div>

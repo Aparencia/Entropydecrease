@@ -237,7 +237,22 @@ CREATE TABLE IF NOT EXISTS contracts (
             items_json TEXT NOT NULL,                    -- v0.13.4 起使用；v0.13.1 仅留表
             stats_json TEXT NOT NULL DEFAULT '{}',
             created_at INTEGER NOT NULL
-        );",
+        );
+        -- v0.13.3（REQ-208）：决策与应用（一表两面；四行法字段——decision=思辨面/application=学习面；
+        -- used_refs 引用必填，command 层拒绝空；最小红环只记我的决策，禁止产物层自动升格）
+        CREATE TABLE IF NOT EXISTS knowledge_decisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind TEXT NOT NULL DEFAULT 'decision',       -- decision/application
+            system_id INTEGER REFERENCES knowledge_systems(id) ON DELETE SET NULL,
+            question_id INTEGER REFERENCES knowledge_nodes(id) ON DELETE SET NULL,
+            used_refs TEXT NOT NULL DEFAULT '{}',        -- JSON（结构见 types::UsedRefs；引用必填，command 层拒绝空）
+            content TEXT NOT NULL,                       -- 决策内容/应用动作
+            expectation TEXT, actual TEXT, reflection TEXT,
+            decided_at INTEGER NOT NULL, created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_decisions_system ON knowledge_decisions(system_id);
+        CREATE INDEX IF NOT EXISTS idx_decisions_kind   ON knowledge_decisions(kind);
+        ",
     )?;
     // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）
     ensure_column(conn, "sessions", "profile", "ALTER TABLE sessions ADD COLUMN profile TEXT")?;

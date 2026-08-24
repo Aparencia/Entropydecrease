@@ -93,4 +93,16 @@ describe("KnowledgeTreeView 问题树", () => {
     expect(await screen.findByTestId("tree-add-root")).toBeTruthy();
     expect(screen.getByText("从子问题开始")).toBeTruthy();
   });
+
+  it("空态点击「添加根问题」后显示输入表单（Bug 修复：此前无反应）", async () => {
+    render(
+      <KnowledgeTreeView systemId={5} nodes={[]} links={[]} selectedNodeId={null} onSelectNode={vi.fn()} onChanged={vi.fn()} />,
+    );
+    const btn = await screen.findByTestId("tree-add-root");
+    fireEvent.click(btn);
+    // 点击后应显示输入表单（此前 Bug：空态早返回导致表单不渲染）
+    expect(await screen.findByTestId("node-add-input")).toBeTruthy();
+    expect(screen.getByTestId("node-add-confirm")).toBeTruthy();
+    expect(screen.getByTestId("node-add-cancel")).toBeTruthy();
+  });
 });

@@ -121,3 +121,23 @@ fn list_concepts_filter_system_and_status() {
     assert_eq!(s1_watching.len(), 1);
     assert_eq!(s1_watching[0].name, "乙");
 }
+
+#[test]
+fn set_concept_applied_updates_and_idempotent() {
+    // Arrange：建概念（last_applied_at 初始 NULL）
+    let db = mem_db();
+    let sid = host_system(&db, "体系");
+    let c = db.add_knowledge_concept(&concept(sid, "应用概念")).expect("create");
+    // Act：应用一次 → 再次应用覆盖 → 不存在 id
+    let ok = db.set_concept_applied(c.id, 1_700_000_000).expect("first");
+    let again = db.set_concept_applied(c.id, 1_700_000_100).expect("again");
+    let miss = db.set_concept_applied(9_999, 1_700_000_000).expect("miss");
+    let fetched = db.get_knowledge_concept(c.id).expect("get").expect("exists");
+    // Assert：last_applied_at 落秒（非毫秒口径——db 层统一 unix_seconds）；
+    // updated_at 同步刷新；幂等（再次应用仍 true）；不存在 id → false（不报错）
+    assert!(ok);
+    assert!(again);
+    assert!(!miss);
+    assert_eq!(fetched.last_applied_at, Some(1_700_000_100));
+    assert!(fetched.updated_at > 0);
+}

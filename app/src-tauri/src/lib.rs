@@ -93,6 +93,8 @@ mod commands_knowledge_core;
 // v0.13.2（REQ-206~207）：概念模型卡命令层（创建/组列表）——卡→概念升格拆至 promote 子模块
 mod commands_knowledge_cards;
 mod commands_knowledge_cards_promote;
+// v0.13.3（REQ-208~210）：决策与应用命令层（decision/application 一表两面；log_application 事务）
+mod commands_knowledge_decisions;
 // v0.11.4：周契约命令层（弹性承诺呈现层——upsert/状态读数）
 mod commands_contracts;
 // 实时会话链路依赖 Windows 捕获 API（WASAPI/DXGI/COM），非 Windows 平台不编译（TD-027 修复）
@@ -158,6 +160,8 @@ mod db_knowledge_concepts;
 mod db_knowledge_models;
 mod db_knowledge_links;
 mod db_knowledge_audits;
+// v0.13.3（REQ-208）：决策与应用数据层（knowledge_decisions 一表两面；used_refs 结构契约在 knowledge_pure）
+mod db_knowledge_decisions;
 mod db_artifacts;
 // v0.7.7（REQ-183）：结构图记录存储——session_structure_images 表 CRUD
 mod db_structures;
@@ -486,6 +490,12 @@ pub fn run() {
             commands_knowledge_cards::create_model_card,
             commands_knowledge_cards::list_group_cards,
             commands_knowledge_cards_promote::promote_card_to_concept,
+            // v0.13.3（REQ-208~210）：决策与应用——一表两面/记一次使用
+            commands_knowledge_decisions::log_decision,
+            commands_knowledge_decisions::log_application,
+            commands_knowledge_decisions::list_decisions,
+            commands_knowledge_decisions::get_decision,
+            commands_knowledge_decisions::delete_decision,
             // 会话管理（REQ-010，ADR-004）
             commands_session::create_session,
             commands_session::finish_session,
