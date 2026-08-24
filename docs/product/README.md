@@ -15,8 +15,11 @@
 | [prd.md](./prd.md) | 怎么细化？产品需求文档（课堂助手为核心，MoSCoW + 场景 + 验收） | 草稿 |
 | [requirements-pool.md](./requirements-pool.md) | 怎么跟踪？需求 → 优先级 → 版本 → 实现 → 验收 | 维护中 |
 | [classroom-assistant-guide.md](./classroom-assistant-guide.md) | 怎么用？课堂助手使用说明（v0.7.2：信息面板/合集联动/说话人分离/断句自适应） | v0.7.2 维护中 |
-| [product-design-philosophy.md](./product-design-philosophy.md) | 为什么这样设计？产品设计理念：学习科学的工程化（顶层设计哲学与一致性逻辑） | 活跃 |
+| [product-design-philosophy.md](./product-design-philosophy.md) | 为什么这样设计？产品设计理念：学习科学的工程化（顶层设计哲学与一致性逻辑，基线：pain-points-v4 统一卷） | 活跃 |
 | [note-design-philosophy.md](./note-design-philosophy.md) | 笔记是什么？笔记设计理念：活沉淀（Living Sediment，v0.10.0 定位依据） | 活跃 |
+| [knowledge-system-design-philosophy.md](./knowledge-system-design-philosophy.md) | 知识体系是什么？知识体系设计理念：决策操作系统（围绕问题组织学习、以使用为检验，ADR-024 依据） | 活跃 |
+| [theme.md](./theme.md) | 视觉基调？色彩与风格理念：Apple 式精准 × 熵减式理解（思维显形/语义排印/相变资产） | 活跃 |
+| [ui-ux-system.md](./ui-ux-system.md) | 组件/交互细则？UI/UX 系统：相变资产与三机制的系统级实现（组件规格/动效/tokens） | 活跃 |
 | brand-story.md | 怎么说？品牌故事（名称裁决后建立） | 待建 |
 
 ## 产品方向（2026-08 确立）
@@ -38,7 +41,6 @@
 ## 暂不建立（按新项目视角裁剪）
 
 - `positioning.md`：AI 时代生存定位，暂未裁决，后续补
-- `theme.md` / `ui-ux-system.md`：UI/UX 阶段再建立
 - beta 系列 / 支付 / 收入方案：运营期再建立
 - `migration-spec.md`：重构完成后再沉淀
 
