@@ -621,7 +621,7 @@ impl ProfileMemory {
     }
 }
 
-/// 单测独立文件（本文件 ~394 行已登记豁免——见 line-limit-exemptions.md；
+/// 单测独立文件（本文件 ~590 行已登记豁免——见 line-limit-exemptions.md；
 /// 审查 L5 修复：原"保持 ≤300 行"注释不实，改为豁免说明）。
 #[cfg(test)]
 #[path = "video_profile_tests.rs"]

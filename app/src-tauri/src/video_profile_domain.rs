@@ -121,26 +121,22 @@ pub struct DomainDetection {
 pub fn detect_domain(signals: &DomainSignals) -> DomainDetection {
     let fine_tags: Vec<String> = Vec::new();
     // ①a 平台分区映射表（v0.13.6 REQ-221：确定性映射——置信 1.0，细目预选；
-    // 影视/直播分区 coarse=None——领域留给内容信号，不在此短路）
-    if let Some(entry) =
-        crate::video_profile_platform_map::lookup_zone_first(&signals.platform_tags)
-    {
-        if let Some(kind) = entry.coarse {
-            let fine_ids = entry.fine.map(|f| vec![f.to_string()]).unwrap_or_default();
-            let hit_tag = signals
-                .platform_tags
-                .iter()
-                .find(|t| crate::video_profile_platform_map::lookup_zone(t).is_some())
-                .cloned()
-                .unwrap_or_default();
-            return DomainDetection {
-                kind: Some(kind),
-                fine_ids,
-                fine_tags: if hit_tag.is_empty() { Vec::new() } else { vec![hit_tag] },
-                source: "platform-map".to_string(),
-                confidence: 1.0,
-            };
-        }
+    // 影视/直播分区 coarse=None——领域留给内容信号，不在此短路）。
+    // 审查 M2 修复：取**首个带 coarse 的**分区条目（首个命中条目可能是
+    // coarse=None 的知识科普/直播——若整体跳过会丢失后续已登记 coarse 分区）
+    let zone_hit = signals.platform_tags.iter().find_map(|t| {
+        crate::video_profile_platform_map::lookup_zone(t)
+            .and_then(|e| e.coarse.map(|k| (e, k, t)))
+    });
+    if let Some((entry, kind, tag)) = zone_hit {
+        let fine_ids = entry.fine.map(|f| vec![f.to_string()]).unwrap_or_default();
+        return DomainDetection {
+            kind: Some(kind),
+            fine_ids,
+            fine_tags: vec![tag.clone()],
+            source: "platform-map".to_string(),
+            confidence: 1.0,
+        };
     }
     // ①b 平台分区标签原文（强信号：官方分类原文直接进细标签）
     for tag in &signals.platform_tags {

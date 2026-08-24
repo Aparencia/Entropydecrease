@@ -5,7 +5,7 @@
  *              A1：Ctrl+Shift+↑↓ 提升/降低标题层级、Ctrl+Shift+M 合并段、Ctrl+Shift+S 拆分段。
  *              工具栏按钮插入 Markdown 语法片段。
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { Note } from "../types";
@@ -21,6 +21,12 @@ interface Props {
   onCancel: () => void;
 }
 
+/** v0.13.6（审查 H1 修复）：父层命令式出口——ESC 出口先 await 保存再刷新
+ *  （原 ESC 由父层直接 setEditing(false)，卸载保存与刷新竞态重演 P0） */
+export interface NoteEditHandle {
+  flushSave: () => Promise<void>;
+}
+
 // L14：自动保存双计时参数——停止输入 2s 存一次（debounce）；dirty 期间最长
 // 30s 必存一次（maxWait）。Why：纯 debounce 在持续输入时计时器反复重置永不
 // 触发，长篇输入全程内容只活在内存里，崩溃/误关即丢失
@@ -32,7 +38,7 @@ const TOOLBAR_BTN: React.CSSProperties = {
   border: "1px solid #e5e7eb", borderRadius: 4, background: "#fff", color: "#374151",
 };
 
-export default function NoteEditView({ note, onCancel }: Props) {
+const NoteEditView = forwardRef<NoteEditHandle, Props>(function NoteEditView({ note, onCancel }, ref) {
   const [title, setTitle] = useState(note.title);
   const [content, setContent] = useState(note.content);
   const [dirty, setDirty] = useState(false);
@@ -103,6 +109,23 @@ export default function NoteEditView({ note, onCancel }: Props) {
     if (maxWaitTimerRef.current) clearTimeout(maxWaitTimerRef.current);
   }, []);
 
+  // v0.13.6（审查 H1）：绕开 saving 卫兵的"最终保存"——在途自动保存可能携带旧闭包
+  // 值，以 refs 最新快照强制落库（同值重复写幂等无害）；完成后 dirty 清零，卸载
+  // 自动保存不再重复写。ESC/完成/Ctrl+E 三出口共用本函数保证"先保存后刷新"。
+  const flushLatest = useCallback(async () => {
+    if (!dirtyRef.current) return;
+    await invoke("update_note", {
+      id: note.id,
+      title: titleRef.current,
+      content: contentRef.current,
+      createVersion: false,
+    });
+    setDirty(false);
+  }, [note.id]);
+
+  // 父层命令式出口（NotesPage ESC 出口先 await 再刷新）
+  useImperativeHandle(ref, () => ({ flushSave: () => flushLatest() }), [flushLatest]);
+
   // Ctrl+S 显式保存（建版本）
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     const ta = taRef.current;
@@ -120,7 +143,8 @@ export default function NoteEditView({ note, onCancel }: Props) {
       e.preventDefault();
       // L15：.finally 保证保存失败也能退出编辑态——原 .then 在保存 promise
       // 异常路径下卡死在编辑态（用户无法退出）；失败信息仍由 status 展示
-      saveDraft(false).finally(() => onCancel());
+      // v0.13.6（审查 H1）：改走 flushLatest（含在途保存场景的确定性落库）
+      void flushLatest().finally(() => onCancel());
       return;
     }
 
@@ -148,7 +172,7 @@ export default function NoteEditView({ note, onCancel }: Props) {
         applyEdit(splitAtCursor(content, selStart));
       }
     }
-  }, [content, saveDraft, onCancel]);
+  }, [content, saveDraft, flushLatest, onCancel]);
 
   // H2：应用编辑结果——setContent 走受控更新（React state 为唯一数据源），
   // 再经 rAF 在本轮渲染提交后恢复光标选区（受控 textarea 重写 value 会把
@@ -218,9 +242,10 @@ export default function NoteEditView({ note, onCancel }: Props) {
 
   // 完成编辑（先 await 保存再退出——v0.13.6：原异步不等待，退出后右栏/列表
   // 读到旧值；保存失败也退出（status 已展示），不卡死编辑态）
+  // 审查 H1 修复：走 flushLatest（在途自动保存时也确定性落库最新快照）
   const handleDone = async () => {
     try {
-      if (dirty) await saveDraft(false);
+      await flushLatest();
     } finally {
       onCancel();
     }
@@ -301,4 +326,6 @@ export default function NoteEditView({ note, onCancel }: Props) {
       {status && <p style={{ padding: "4px 16px", fontSize: 12, color: "#047857" }}>{status}</p>}
     </div>
   );
-}
+});
+
+export default NoteEditView;

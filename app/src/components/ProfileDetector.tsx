@@ -8,7 +8,7 @@
  * @ai-context: 询问门禁=错判代价：形态（产物模板错）低置信必问；画面价值
  *              （开始前默认中档）通常不问；领域（增强项）不问可改。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   ContentForm,
@@ -42,19 +42,9 @@ export const TIER_LABELS: Record<VisualTier, string> = {
   none: "无",
 };
 
-/** 全 10 形态（检测卡下拉选项；v0.13.6 形态展平 +3） */
-const ALL_FORMS: ContentForm[] = [
-  "lecture",
-  "hands-on",
-  "explainer",
-  "dialog",
-  "exercise",
-  "coding",
-  "audio",
-  "meeting",
-  "live",
-  "narrative",
-];
+/** 全 10 形态（检测卡下拉选项；v0.13.6 形态展平 +3；自 FORM_LABELS 派生——单源，
+ *  审查 L7 修复：原独立列表与 Object.keys(FORM_LABELS)（LiveProfileStrip 用）双写易漂移） */
+const ALL_FORMS: ContentForm[] = Object.keys(FORM_LABELS) as ContentForm[];
 
 /** 全 4 画面档（检测卡下拉选项） */
 const ALL_TIERS: VisualTier[] = ["rich", "medium", "low", "none"];
@@ -102,6 +92,9 @@ export default function ProfileDetector({
   onProfileChange?: (kind: ProfileKind) => void;
 }) {
   const [result, setResult] = useState<DetectResult | null>(null);
+  // v0.13.6（审查 L5）：onProfileChange 经 ref——回调标识变化不触发 detect effect 重跑
+  const onProfileChangeRef = useRef(onProfileChange);
+  useEffect(() => { onProfileChangeRef.current = onProfileChange; }, [onProfileChange]);
   // 三维状态（v2）：形态/画面/领域各自可调
   const [form, setForm] = useState<ContentForm | null>(null);
   const [tier, setTier] = useState<VisualTier>("medium");
@@ -158,7 +151,7 @@ export default function ProfileDetector({
         }
         // 兼容 v1 通道：高置信/记忆命中自动生效（无确认门禁——形态低置信必问）
         if (!r.needs_confirmation && top !== "unknown") {
-          onProfileChange?.(top);
+          onProfileChangeRef.current?.(top);
         }
       })
       .catch((e) => {
@@ -178,7 +171,7 @@ export default function ProfileDetector({
       setForm(f);
       // 形态 → 兼容 v1 kind（代表旧类；start_live_session 走既有通道）
       const kind = formToKind(f);
-      onProfileChange?.(kind);
+      onProfileChangeRef.current?.(kind);
       if (!windowTitle) return;
       try {
         await invoke("remember_video_profile_form", { title: windowTitle, form: f });
@@ -208,15 +201,20 @@ export default function ProfileDetector({
       setDomain(d);
       setFineSel(fineIds);
       if (!windowTitle || !d?.kind) return;
+      // 审查 L2 修复：preheat 与 remember 相互独立（热词失败不阻断记忆写）
+      let warmErr = "";
       try {
-        // 领域命中 → hotwords 预热（候选 = 粗种子 ∪ 细目种子；ASR 术语命中率↑；幂等去重）
         await invoke("preheat_domain_hotwords", { kind: d.kind, fine: fineIds });
-        // 修改即记忆：粗+细目写入（同标题/系列下次直接生效）
-        await invoke("remember_video_profile_domain", { title: windowTitle, coarse: d.kind, fine: fineIds });
-        setError("");
       } catch (e) {
-        setError(`领域热词/记忆失败: ${e}`);
+        warmErr = `领域热词预热失败: ${e}`;
       }
+      try {
+        await invoke("remember_video_profile_domain", { title: windowTitle, coarse: d.kind, fine: fineIds });
+      } catch (e) {
+        setError(warmErr || `领域记忆失败: ${e}`);
+        return;
+      }
+      setError(warmErr || "");
     },
     [windowTitle],
   );
@@ -326,7 +324,8 @@ export default function ProfileDetector({
                     key={f.id}
                     onClick={() => {
                       const next = on ? fineSel.filter((x) => x !== f.id) : [...fineSel, f.id];
-                      void changeDomain(domain, next);
+                      // 审查 L3 修复：chip 变更同步回写 domain.fine_ids（fineSel 唯一真源）
+                      void changeDomain({ ...domain!, fine_ids: next }, next);
                     }}
                     style={{
                       fontSize: 11, padding: "1px 8px", borderRadius: 10, cursor: "pointer",

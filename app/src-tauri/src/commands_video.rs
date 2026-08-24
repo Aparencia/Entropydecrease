@@ -93,6 +93,12 @@ pub fn detect_video_profile(
         has_subtitle,
         duration_min: None,
     });
+    // v0.13.6（REQ-221）：分区映射形态为最强检测信号——未命中则为 None（回落前端
+    // 记忆/候选链）；命中时即便记忆/标题候选冲突也以分区为准（平台裁决语义）
+    result.platform_form = platform_form;
+    // 领域赋值**先于**记忆兜底（审查 H1 修复）：vote_detect 恒 domain=None，
+    // 若兜底在赋值前执行会被本行无条件覆盖成死代码——检测 > 记忆（仅空才兜底）
+    result.domain = domain;
     // 2) 记忆后置判定（四象限：高置信同 kind/低置信 → 记忆生效兜底；
     //    高置信冲突 → 检测为准 + memory_conflict 标记——前端展示冲突提示）
     if let Some(t) = title.as_deref() {
@@ -103,7 +109,7 @@ pub fn detect_video_profile(
             .unwrap_or_default();
         result = apply_profile_memory(result, &memory, t);
         // v0.13.6（REQ-222）：领域记忆兜底——映射/检测为空时用户确认过的
-        // 粗+细目直接生效（检测 > 记忆——仅检测为空才兜底；source=memory 可诊断）
+        // 粗+细目直接生效（仅检测为空才兜底；source=memory 可诊断）
         if result.domain.is_none() {
             if let Some(tag) = memory.lookup_domain(t) {
                 result.domain = Some(crate::video_profile_domain::DomainDetection {
@@ -119,10 +125,6 @@ pub fn detect_video_profile(
             }
         }
     }
-    // v0.13.6（REQ-221）：分区映射形态为最强检测信号——未命中则为 None（回落前端
-    // 记忆/候选链）；命中时即便记忆/标题候选冲突也以分区为准（平台裁决语义）
-    result.platform_form = platform_form;
-    result.domain = domain;
     result
 }
 

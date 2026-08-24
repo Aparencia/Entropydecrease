@@ -55,7 +55,9 @@ describe("ProfileDetector v0.13.6 三维交互", () => {
     // 三个下拉按 DOM 顺序：形态/画面/领域
     const combos = await screen.findAllByRole("combobox");
     const formSelect = combos[0] as HTMLSelectElement;
-    await waitFor(() => expect(formSelect.textContent).toContain("会议"));
+    // 审查 L4 修复：显式断言 10 项（不只抽查 3 项）+ 选项文本
+    expect(formSelect.options.length).toBe(11); // 10 形态 + "识别中…" 占位
+    expect(formSelect.textContent).toContain("会议");
     expect(formSelect.textContent).toContain("直播");
     expect(formSelect.textContent).toContain("影视");
     // 平台映射优先：正文候选 talking-head（解说）被 platform_form=讲授 覆盖
@@ -66,8 +68,9 @@ describe("ProfileDetector v0.13.6 三维交互", () => {
     render(<ProfileDetector windowTitle="某视频_哔哩哔哩_bilibili" />);
     const combos = await screen.findAllByRole("combobox");
     const domainSelect = combos[2] as HTMLSelectElement;
-    // 新增粗类出现在下拉 + 检测结果预选 economy
-    await waitFor(() => expect(domainSelect.textContent).toContain("美食烹饪"));
+    // 新增粗类出现在下拉 + 检测结果预选 economy（显式 waitFor——不依赖前序 await 冲刷）
+    expect(domainSelect.options.length).toBe(21); // 20 粗类 + "未定" 占位
+    expect(domainSelect.textContent).toContain("美食烹饪");
     await waitFor(() => expect(domainSelect.value).toBe("economy"));
     // 细目 chips：检测预选 invest；点 accounting → 多选并写记忆（修改即记忆契约）
     await waitFor(() => expect(screen.getByRole("button", { name: "投资理财" })).toBeTruthy());

@@ -165,9 +165,8 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
   }, [downgrade, busy]);
 
   /** 手动覆写档案三维：表单值变化时立即 invoke（null=不覆写该维）；
-   *  v0.13.6：domain 覆写带 fine（[]=仅粗领域——采集条简洁语义）；
-   *  回退"领域自动"（value=null）时 fine 必须同为 null——后端校验
-   *  "fine 需与 domain 同传"，空数组+空 domain 会被误判报错 */
+   *  v0.13.6（审查 M1）：「领域自动」用空串 sentinel 表达"清除领域覆写"——
+   *  null 语义是"不覆写该维"，否则全部为 null 会触发后端"至少需一项"误报 */
   const handleProfileChange = useCallback(async (dimension: "form" | "tier" | "domain", value: string | null) => {
     if (profileBusy) return;
     setProfileBusy(true);
@@ -175,8 +174,8 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
       await invoke("update_live_profile", {
         form: dimension === "form" ? value : null,
         tier: dimension === "tier" ? value : null,
-        domain: dimension === "domain" ? value : null,
-        fine: dimension === "domain" && value ? [] : null,
+        domain: dimension === "domain" ? (value ?? "") : null,
+        fine: dimension === "domain" ? [] : null,
       });
     } catch (e) {
       setError(`档案更新失败: ${e}`);

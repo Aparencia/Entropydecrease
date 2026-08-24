@@ -9,7 +9,7 @@ use crate::video_profile_domain_data as data;
 
 #[test]
 fn domain_parse_and_label_roundtrip() {
-    // Arrange/Act/Assert：15 领域 kebab-case 解析 + 展示名非空
+    // Arrange/Act/Assert：20 领域 kebab-case 解析 + 展示名非空
     for k in ALL_DOMAINS {
         assert_eq!(DomainKind::parse(k.as_str()), Some(k), "{:?} roundtrip", k);
         assert!(!k.label().is_empty(), "{:?} 展示名非空", k);
@@ -119,10 +119,44 @@ fn fine_tags_open_platform_raw_text() {
     };
     // Act：知识科普 无领域种子词直接命中 → 平台标签不进领域（诚实不猜）
     let d = detect_domain(&s);
-    // Assert：无领域命中（科普不属于 15 领域之一）——空领域不阻塞；
+    // Assert：无领域命中（科普不属于 20 领域之一）——空领域不阻塞；
     // 细标签不携带（平台标签仅当命中领域时作为证据）
     assert_eq!(d.kind, None);
     assert_eq!(d.source, "none");
+}
+
+// ── v0.13.6 审查回归（M1 烘焙迁移 / M4 单字种子守卫）──
+
+#[test]
+fn baking_migrated_to_cooking_not_handcraft() {
+    // Arrange：烘焙类标题（审查 M1——Handcraft 词表已移除"烘焙"，
+    // 否则 ALL_DOMAINS 顺序下 Handcraft 先命中且 tie-break 不替换，恒归"手工"）
+    let s = DomainSignals {
+        title: Some("烘焙基础教程".into()),
+        platform_tags: Vec::new(),
+        user_confirmed: None,
+        term_freq: Vec::new(),
+        asr_opening: None,
+    };
+    // Act/Assert：归美食烹饪（迁移意图：烘焙自手工迁入）
+    let d = detect_domain(&s);
+    assert_eq!(d.kind, Some(DomainKind::Cooking), "烘焙不得再归手工");
+}
+
+#[test]
+fn no_single_char_cjk_seeds() {
+    // 审查 M4 守卫：单字 CJK 种子 + contains 无边界匹配会跨领域误命中
+    // （"家谱"→Music、"慢炖"→Cooking 等）——粗领域种子必须 ≥2 字（ASCII 缩写除外）
+    for kind in ALL_DOMAINS {
+        for w in crate::video_profile_domain_data::seed_words(kind) {
+            assert!(
+                w.chars().count() >= 2 || w.is_ascii(),
+                "{:?} 单字 CJK 种子: {}（M4 审查）",
+                kind,
+                w
+            );
+        }
+    }
 }
 
 // ── 消费接线（hotwords/术语筛选/区域预期）──

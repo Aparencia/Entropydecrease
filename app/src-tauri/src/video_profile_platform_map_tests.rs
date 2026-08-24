@@ -9,6 +9,32 @@ use crate::video_profile_domain::{detect_domain, DomainKind, DomainSignals};
 use crate::video_profile_spec::ContentForm;
 
 #[test]
+fn multi_tag_first_zone_coarse_none_skips_to_coarse_zone() {
+    // 审查 M2 回归：首个分区 coarse=None（知识科普——形不定、领域留内容信号）
+    // 不得阻塞后续已登记 coarse 分区（财经商业）；修复前整块跳过丢失映射
+    let signals = DomainSignals {
+        title: None,
+        platform_tags: vec!["知识科普".into(), "财经商业".into()],
+        user_confirmed: None,
+        term_freq: vec![],
+        asr_opening: None,
+    };
+    let d = detect_domain(&signals);
+    assert_eq!(d.kind, Some(DomainKind::Economy));
+    assert_eq!(d.fine_ids, vec!["invest".to_string()]);
+    assert_eq!(d.source, "platform-map");
+    // 反向：全部 coarse=None 分区 → 空领域（不猜；①b 种子词不命中分区名）
+    let none = DomainSignals {
+        title: None,
+        platform_tags: vec!["知识科普".into(), "直播".into()],
+        user_confirmed: None,
+        term_freq: vec![],
+        asr_opening: None,
+    };
+    assert_eq!(detect_domain(&none).kind, None);
+}
+
+#[test]
 fn lookup_zone_exact_match_and_case() {
     // Act/Assert：精确匹配 + 大小写不敏感 + 空值/未命中 None
     assert_eq!(lookup_zone("知识-科学科普").and_then(|e| e.coarse), Some(DomainKind::MathScience));

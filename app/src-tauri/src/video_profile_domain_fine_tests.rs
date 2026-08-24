@@ -66,3 +66,20 @@ fn fine_hotword_candidates_union_dedup_and_skip_invalid() {
     assert!(cands.iter().any(|c| c == "React") && cands.iter().any(|c| c == "Vue"));
     assert!(!cands.iter().any(|c| c == "no-such"));
 }
+
+#[test]
+fn no_single_char_cjk_fine_seeds() {
+    // 审查 M4 守卫：细目种子同样禁止单字 CJK（"折"/"炒"/"刨"等无边界误命中）
+    for (_, list) in fine_table() {
+        for f in *list {
+            for s in f.seeds {
+                assert!(
+                    s.chars().count() >= 2 || s.is_ascii(),
+                    "细目 {} 单字 CJK 种子: {}（M4 审查）",
+                    f.id,
+                    s
+                );
+            }
+        }
+    }
+}

@@ -92,4 +92,26 @@ describe("NotesPage 编辑完成即时刷新", () => {
     });
     await waitFor(() => expect(screen.getByRole("heading", { name: "新标题" })).toBeTruthy());
   });
+
+  it("ESC 退出（审查 H1）：先 flush 保存再刷新——update_note 先于 get_note", async () => {
+    render(<NotesPage />);
+    const rowTitle = await screen.findByText("旧标题");
+    fireEvent.click(rowTitle);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "旧标题" })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /编辑/ }));
+    const titleInput = await screen.findByPlaceholderText("笔记标题");
+    fireEvent.change(titleInput, { target: { value: "ESC 新标题" } });
+    // ESC 出口：窗口级监听 → 先 flushSave 再刷新（修复前 get_note 先于卸载保存）
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() => {
+      const calls = invokeMock.mock.calls.filter((c) => c[0] === "update_note" || c[0] === "get_note");
+      const up = calls.findIndex((c) => c[0] === "update_note");
+      const get = calls.findIndex((c) => c[0] === "get_note");
+      expect(up).toBeGreaterThanOrEqual(0);
+      expect(get).toBeGreaterThan(up);
+    });
+    await waitFor(() => expect(screen.getByRole("heading", { name: "ESC 新标题" })).toBeTruthy());
+  });
 });

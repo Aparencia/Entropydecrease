@@ -455,13 +455,16 @@ fn podcast_profile_is_asr_only() {
 
 #[test]
 fn disable_ocr_flags_follow_profile() {
-    // Arrange/Act：REQ-130 P4 无图短路声明
+    // Arrange/Act：REQ-130 P4 无图短路声明（v0.13.6 审查 M3：直播语义对齐为浅画面）
     let podcast = profile_by_kind(ProfileKind::Podcast);
     let live = profile_by_kind(ProfileKind::Live);
     let lecture = profile_by_kind(ProfileKind::Lecture);
-    // Assert：播客/直播 disable_ocr=true（纯语音/无 OCR 裁决）；网课 false（零回归）
+    // Assert：播客 disable_ocr=true（纯语音 P4 短路）；直播=浅画面 OCR 待命
+    // （v0.13.6 独立形态语义——不再短路画面链）；网课 false（零回归）
     assert!(podcast.disable_ocr, "播客跳过画面链（P4 内存收益）");
-    assert!(live.disable_ocr, "直播不做 OCR（裁决）");
+    assert!(!live.disable_ocr, "直播浅画面——OCR 待命（v0.13.6 REQ-219）");
+    assert!(live.signal_weights.ocr_weight > 0.0, "直播 OCR 权重 0.1（低档）");
+    assert!(live.sampling_budget.full_every < 999, "直播低档采样（不再纯音频 999）");
     assert!(!lecture.disable_ocr, "网课保留画面链");
 }
 

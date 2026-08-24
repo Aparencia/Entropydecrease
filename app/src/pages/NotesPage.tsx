@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { Note } from "../types";
-import NoteEditView from "../components/NoteEditView";
+import NoteEditView, { type NoteEditHandle } from "../components/NoteEditView";
 import NoteListView, { parseTags } from "../components/NoteListView";
 import type { SortMode } from "../components/NoteListView";
 import GroupSidebar from "../components/GroupSidebar";
@@ -133,9 +133,18 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
         setEditing(true);
       } else if (e.key === "Escape" && editingRef.current) {
         e.preventDefault();
-        // v0.13.6：ESC 退出编辑同样刷新（列表 + 选中笔记）——原实现连列表都不刷
-        setEditing(false);
-        void handleNoteChangedRef.current();
+        // v0.13.6（审查 H1）：ESC 先 await 保存再刷新——原实现先 setEditing(false)
+        // 直出，卸载保存与 get_note/list load 竞态（UI 停留旧值）；保存失败也退出
+        // （编辑器 status 已展示错误），刷新照常执行
+        void (async () => {
+          try {
+            await editorRef.current?.flushSave?.();
+          } catch {
+            /* 保存失败不阻断退出——编辑器内已展示 */
+          }
+          setEditing(false);
+          void handleNoteChangedRef.current();
+        })();
       }
     };
     window.addEventListener("keydown", handler);
@@ -222,6 +231,9 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
   // 经 ref 取最新 handleNoteChanged（防闭包持有旧 keyword/tagFilter 快照）
   const handleNoteChangedRef = useRef(handleNoteChanged);
   useEffect(() => { handleNoteChangedRef.current = handleNoteChanged; }, [handleNoteChanged]);
+  // v0.13.6（审查 H1 修复）：编辑器命令式出口——ESC 先 await 保存再刷新（防卸载
+  // 保存与 get_note 竞态在 ESC 出口重演"编辑后右栏旧值"）
+  const editorRef = useRef<NoteEditHandle | null>(null);
 
   // 新建笔记（v0.12.2 去摩擦：零对话框——新建即编辑；落未归组「全部笔记」可见）
   const handleCreate = () => {
@@ -329,6 +341,7 @@ export default function NotesPage({ focusNoteId, onOpenSessions }: Props) {
             editor={
               <NoteEditView
                 key={selected.id}
+                ref={editorRef}
                 note={selected}
                 onCancel={() => {
                   // v0.13.6：完成编辑 → 列表重载 + 选中笔记重取（右栏立即显示新标题/正文）

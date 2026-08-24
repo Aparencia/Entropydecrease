@@ -300,7 +300,7 @@ fn stop_clipboard_monitor(state: &AppState) {
 ///
 /// @param form - 内容形态（kebab-case；None=不覆写该维）
 /// @param tier - 画面档位（kebab-case；None=不覆写该维）
-/// @param domain - 领域（kebab-case；None=不覆写该维）
+/// @param domain - 领域（kebab-case；None=不覆写该维；**空串 = 清除领域覆写回自动**）
 /// @param fine - v0.13.6（REQ-220）：细目 id 数组（可选；与 domain 同传——
 ///               逐项校验属于该粗领域；仅 fine 无 domain → 报错）
 /// @ai-context: 写入 profile_override 共享槽 → screen worker 下轮采样 tick 消费
@@ -313,10 +313,14 @@ pub fn update_live_profile(
     domain: Option<String>,
     fine: Option<Vec<String>>,
 ) -> Result<bool, String> {
-    // 至少一项
-    if form.is_none() && tier.is_none() && domain.is_none() {
+    // 至少一项（审查修复：fine 计入——仅传 fine 时给出"需与 domain 同传"而非误导性提示；
+    // 空串 sentinel 同样是合法"有动作"——清除领域覆写）
+    if form.is_none() && tier.is_none() && domain.is_none() && fine.is_none() {
         return Err("form/tier/domain 至少需一项".to_string());
     }
+    // 领域自动回退：空串 = 清除领域覆写（协议级 sentinel——None=不覆写该维；
+    // 审查 M1 修复：原「null=不覆写」无法表达"还原自动"，领域重置触发"至少需一项"误报）
+    let clear_domain = domain.as_deref() == Some("");
     let parsed_form = form
         .as_deref()
         .and_then(crate::video_profile_spec::ContentForm::parse);
@@ -326,7 +330,8 @@ pub fn update_live_profile(
     let parsed_domain = domain
         .as_deref()
         .and_then(crate::video_profile_domain::DomainKind::parse);
-    // form/tier/domain 的非法值各自报错（不模糊——让前端知道哪维错了）
+    // form/tier/domain 的非法值各自报错（不模糊——让前端知道哪维错了；
+    // 空串为清除语义不算非法）
     if let Some(ref f) = form {
         if parsed_form.is_none() {
             return Err(format!("非法形态标识: {}", f));
@@ -338,12 +343,14 @@ pub fn update_live_profile(
         }
     }
     if let Some(ref d) = domain {
-        if parsed_domain.is_none() {
+        if parsed_domain.is_none() && !clear_domain {
             return Err(format!("非法领域标识: {}", d));
         }
     }
-    // 细目校验：仅当 domain 同传且粗领域可解析——逐项 belong 校验（非法报错不静默）
+    // 细目校验：仅当 domain 同传且粗领域可解析——逐项 belong 校验（非法报错不静默）。
+    // 审查修复：Some([])（空数组）与 None 语义统一（空=无细目，不要求 domain）
     let parsed_fine: Vec<String> = match fine {
+        Some(fs) if fs.is_empty() => Vec::new(),
         Some(fs) => {
             let d = parsed_domain.ok_or_else(|| "fine 需与 domain 同传".to_string())?;
             let mut out = Vec::with_capacity(fs.len());
@@ -360,8 +367,10 @@ pub fn update_live_profile(
     let po = crate::live_session::ProfileOverride {
         form: parsed_form,
         tier: parsed_tier,
-        domain: parsed_domain,
-        fine: parsed_fine,
+        // 清除语义：空串 → domain=None + fine 清空（worker 侧 domain None+locked →
+        // 解锁并清当前领域——A3 语义即"还原自动"）
+        domain: if clear_domain { None } else { parsed_domain },
+        fine: if clear_domain { Vec::new() } else { parsed_fine },
     };
     state
         .live_session

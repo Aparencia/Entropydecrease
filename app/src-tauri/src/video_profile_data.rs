@@ -133,23 +133,26 @@ pub fn builtin_profiles() -> Vec<VideoProfile> {
             disable_ocr: true,
             disable_asr: false,
         },
-        // REQ-124（T1）直播：ASR 为主 + 画面低频（裁决：无 OCR/弹幕——
-        // disable_ocr=true 跳过画面链；图像流存储层接线后直播画面走 stream）
+        // REQ-124（T1）直播：v0.13.6（REQ-219，审查 M3 对齐）——独立形态语义
+        // 定稿为「浅画面」：OCR 待命（disable_ocr=false + ocr_weight=0.1 +
+        // 低档采样 full_every=30），不再短路画面链（旧裁决无 OCR 与"直播有画面
+        // 只是价值低"的新四维上下文冲突，以新语义为准——旧会话零回归由
+        // ProfileKind::Live → ContentForm::Live → resolve_profile 同矩阵保证）
         VideoProfile {
             kind: ProfileKind::Live,
             detect_signals: DetectSignals {
-                title_keywords: vec!["直播", "开播", "live"].into_iter().map(String::from).collect(),
+                title_keywords: vec!["直播", "开播", "live", "带货", "实况", "回放"].into_iter().map(String::from).collect(),
                 url_keywords: Vec::new(),
                 frame_switch_range: None,
                 prefers_subtitle: false,
                 min_duration_min: None,
             },
-            sampling_budget: SamplingBudget { subtitle_every: 2, full_every: 999, silent_subtitle_every: 4, silent_full_every: 999 },
-            signal_weights: SignalWeights { subtitle_priority: false, ocr_weight: 0.0, asr_weight: 1.0 },
-            postprocess_rules: PostprocessRules { chapter_detect: true, step_cards: false, verbal_normalize: true, highlight: true, speaker_detect: false, glossary: false },
+            sampling_budget: SamplingBudget { subtitle_every: 4, full_every: 30, silent_subtitle_every: 6, silent_full_every: 30 },
+            signal_weights: SignalWeights { subtitle_priority: false, ocr_weight: 0.1, asr_weight: 1.0 },
+            postprocess_rules: PostprocessRules { chapter_detect: false, step_cards: false, verbal_normalize: true, highlight: true, speaker_detect: false, glossary: false },
             artifact_template: ArtifactTemplate::Summary,
             storage_tier: StoreTier::TextFirst,
-            disable_ocr: true,
+            disable_ocr: false,
             disable_asr: false,
         },
         // REQ-124（T2）白板：时间轴图像流——画面就是主体（全帧高频 full_every=1），

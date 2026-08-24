@@ -428,9 +428,11 @@ pub fn run_screen_worker(
                     if let Some(f) = po.form { current_form = Some(f); changed = true; }
                     // v0.11.5 审查修复（A3）：domain 为 None（用户未选领域）→
                     // 重置锁定，重新启用自动检测（领域重评不再跳过覆盖）；
-                    // v0.13.6：细目与领域同栅——领域未定时细目一并清空
+                    // v0.13.6（审查修复）：领域一并清空——避免 emit 出
+                    // domain=旧/fine=[] 的不一致快照（"领域自动"语义）
                     if po.domain.is_none() && domain_user_locked {
                         domain_user_locked = false;
+                        current_domain_kind = None;
                         current_fine_ids.clear();
                     }
                     if let Some(d) = po.domain {

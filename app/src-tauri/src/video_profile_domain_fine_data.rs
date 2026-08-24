@@ -117,9 +117,9 @@ pub static FINE_TABLE: &[(DomainKind, &[FineTag])] = &[
         DomainKind::Handcraft,
         &[
             FineTag { id: "knitting", label: "编织", seeds: &["编织", "毛线", "钩针", "棒针", "图解"] },
-            FineTag { id: "woodwork", label: "木工", seeds: &["木工", "榫卯", "刨", "锯", "上漆"] },
-            FineTag { id: "pottery", label: "陶艺", seeds: &["陶艺", "拉坯", "釉", "窑", "黏土"] },
-            FineTag { id: "origami", label: "折纸", seeds: &["折纸", "折", "纸艺", "图解"] },
+            FineTag { id: "woodwork", label: "木工", seeds: &["木工", "榫卯", "木刨", "锯子", "上漆"] },
+            FineTag { id: "pottery", label: "陶艺", seeds: &["陶艺", "拉坯", "上釉", "窑炉", "黏土"] },
+            FineTag { id: "origami", label: "折纸", seeds: &["折纸", "纸艺", "图解", "千纸鹤"] },
             FineTag { id: "beading", label: "串珠", seeds: &["串珠", "珠子", "手链", "编绳"] },
         ],
     ),
@@ -153,7 +153,7 @@ pub static FINE_TABLE: &[(DomainKind, &[FineTag])] = &[
     (
         DomainKind::Cooking,
         &[
-            FineTag { id: "home", label: "家常菜", seeds: &["家常", "快手", "下饭", "炒", "炖"] },
+            FineTag { id: "home", label: "家常菜", seeds: &["家常", "快手", "下饭", "炒菜", "炖菜"] },
             FineTag { id: "baking", label: "烘焙", seeds: &["烘焙", "烤箱", "面包", "蛋糕", "发酵"] },
             FineTag { id: "western", label: "西餐", seeds: &["西餐", "牛排", "意面", "沙拉", "摆盘"] },
             FineTag { id: "drink", label: "饮品咖啡", seeds: &["咖啡", "手冲", "饮品", "奶茶", "拉花"] },
