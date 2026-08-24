@@ -51,6 +51,37 @@ describe("NoteLinkToSystem", () => {
     });
   });
 
+  it("未选节点时确认按钮禁用（默认项「选择节点…」——不挂体系根）", async () => {
+    render(<NoteLinkToSystem noteId={7} onChanged={vi.fn()} />);
+    fireEvent.click(await screen.findByTestId("note-link-open"));
+    // 选体系但未选节点
+    fireEvent.change(await screen.findByTestId("note-link-system"), { target: { value: "2" } });
+    const nodeSelect = (await screen.findByTestId("note-link-node")) as HTMLSelectElement;
+    expect(nodeSelect.value).toBe("");
+    const confirm = screen.getByTestId("note-link-confirm") as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    // 选节点后确认可用（后端拒绝空实体——nodeId 必选）
+    fireEvent.change(nodeSelect, { target: { value: "11" } });
+    expect((screen.getByTestId("note-link-confirm") as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("切换体系时重置节点选择（防 nodeId 残留串体系——后端报「引用实体不属于该体系」）", async () => {
+    render(<NoteLinkToSystem noteId={7} onChanged={vi.fn()} />);
+    fireEvent.click(await screen.findByTestId("note-link-open"));
+    // 体系 2 + 节点 11
+    fireEvent.change(await screen.findByTestId("note-link-system"), { target: { value: "2" } });
+    fireEvent.change(await screen.findByTestId("note-link-node"), { target: { value: "11" } });
+    // 切到体系 1（无节点）——nodeId 必须重置
+    fireEvent.change(await screen.findByTestId("note-link-system"), { target: { value: "1" } });
+    const nodeSelect = (await screen.findByTestId("note-link-node")) as HTMLSelectElement;
+    expect(nodeSelect.value).toBe("");
+    const confirm = screen.getByTestId("note-link-confirm") as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    // 再切回体系 2 仍须重新选节点（残留 11 不复活）
+    fireEvent.change(await screen.findByTestId("note-link-system"), { target: { value: "2" } });
+    expect(((await screen.findByTestId("note-link-node")) as HTMLSelectElement).value).toBe("");
+  });
+
   it("已挂接时显示「已挂 · 体系名」并可取消", async () => {
     invokeMock.mockImplementation(async (cmd: string) => {
       switch (cmd) {

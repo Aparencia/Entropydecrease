@@ -31,7 +31,7 @@ const groupB: NoteGroup = {
 
 beforeEach(() => {
   invokeMock.mockReset();
-  invokeMock.mockImplementation(async (cmd: string) => {
+  invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
     switch (cmd) {
       case "list_note_groups": return [groupA, groupB];
       case "count_due_cards": return 0;
@@ -42,7 +42,10 @@ beforeEach(() => {
       case "list_knowledge_systems":
         return [{ id: 10, parentSystemId: null, name: "摄影", kind: "domain", coreQuestion: null, status: "active", createdAt: 0, updatedAt: 0 }];
       case "list_knowledge_links":
-        return [{ id: 1, systemId: 10, nodeId: null, conceptId: null, modelId: null, targetType: "note_group", targetId: 1, createdAt: 0 }];
+        // 后端强制 system_id（无全局查询）——仅体系 10 返回该组引用
+        return args?.systemId === 10
+          ? [{ id: 1, systemId: 10, nodeId: null, conceptId: null, modelId: null, targetType: "note_group", targetId: 1, createdAt: 0 }]
+          : [];
       case "override_group_route": return true;
       default:
         throw new Error(`unexpected: ${cmd}`);
@@ -129,6 +132,8 @@ describe("GroupSidebar ⓘ 弹层", () => {
     await screen.findByTestId("group-row-1");
     const badge = await screen.findByTestId("system-badge");
     expect(badge.textContent).toContain("摄影");
+    // 按体系聚合调用（后端 list_knowledge_links 强制 system_id）
+    expect(invokeMock).toHaveBeenCalledWith("list_knowledge_links", { systemId: 10 });
     // 点击徽标跳体系页（stopPropagation——不触发组过滤）
     fireEvent.click(badge);
     expect(onOpenSystem).toHaveBeenCalledWith(10);

@@ -82,11 +82,15 @@ export default function GroupSidebar({
       const frags = await invoke<Fragment[]>("list_fragments", { status: "active", limit: 500 });
       setInboxCount(frags.length);
       // v0.13.7 触点①：体系 + 引用拉取（并行——徽标数据与组列表无依赖）
-      const [sysList, links] = await Promise.all([
-        invoke<KnowledgeSystem[]>("list_knowledge_systems"),
-        invoke<KnowledgeLink[]>("list_knowledge_links"),
-      ]);
+      const sysList = await invoke<KnowledgeSystem[]>("list_knowledge_systems");
       setSystems(sysList);
+      // 后端 list_knowledge_links 强制 system_id（无全局查询）——
+      // 按非归档体系逐次查询后聚合（审查修复：原无参调用必报"必须指定体系"）
+      const activeSystems = sysList.filter((s) => s.status !== "archived");
+      const linkArrays = await Promise.all(
+        activeSystems.map((s) => invoke<KnowledgeLink[]>("list_knowledge_links", { systemId: s.id })),
+      );
+      const links = linkArrays.flat();
       const map: Record<number, { systemId: number; count: number }[]> = {};
       for (const l of links) {
         if (l.targetType !== "note_group") continue;

@@ -41,14 +41,17 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
       );
       const links = linkGroups.flat();
       setLinked(links.find((l) => l.targetType === "note" && l.targetId === noteId) ?? null);
+      setErr(""); // 成功后清掉陈旧错误（审查修复）
     } catch (e) { setErr(`体系加载失败: ${e}`); }
   }, [noteId]);
 
   useEffect(() => { void load(); }, [load]);
 
-  // 选体系后拉取该体系节点树
+  // 选体系后拉取该体系节点树（体系一变即重置节点选择——
+  // 防残留 nodeId 串体系被后端拒「引用实体不属于该体系」，审查修复）
   useEffect(() => {
-    if (systemId == null) { setNodes([]); setNodeId(null); return; }
+    setNodeId(null);
+    if (systemId == null) { setNodes([]); return; }
     invoke<KnowledgeNode[]>("list_knowledge_nodes", { systemId })
       .then(setNodes)
       .catch((e) => setErr(`节点加载失败: ${e}`));
@@ -87,7 +90,7 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
   const linkedSystem = systems.find((s) => s.id === linked?.systemId) ?? null;
 
   return (
-    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", gap: 4, position: "relative" }}>
       <button
         data-testid="note-link-open"
         onClick={() => setOpen((v) => !v)}
@@ -129,7 +132,7 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
                 style={{ fontSize: 12, padding: "4px 6px", border: "1px solid #e5e7eb", borderRadius: 4 }}
                 disabled={effectiveSystemId == null}
               >
-                <option value="">挂到体系根（不选节点）</option>
+                <option value="">选择节点…</option>
                 {nodes.map((n) => (
                   <option key={n.id} value={n.id}>{n.text.slice(0, 24)}</option>
                 ))}
@@ -147,7 +150,7 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
                 <button
                   data-testid="note-link-confirm"
                   onClick={() => void confirmLink()}
-                  disabled={busy || effectiveSystemId == null}
+                  disabled={busy || effectiveSystemId == null || nodeId == null}
                   style={{ fontSize: 12, cursor: "pointer", padding: "4px 0", borderRadius: 4, border: "1px solid #0f766e", background: "#f0fdfa", color: "#0f766e" }}
                 >
                   {busy ? "挂接中…" : "确认挂接"}
