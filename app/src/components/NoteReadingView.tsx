@@ -22,6 +22,8 @@ interface Props {
   editor?: ReactNode;
   /** H3：版本时间线/知识补充等辅助面板插槽（阅读态显示） */
   auxPanels?: ReactNode;
+  /** 标题栏右侧扩展插槽（v0.13.7 触点② 挂到体系） */
+  headerExtra?: ReactNode;
   onEdit: () => void;
   onPinToggle: () => void;
   onDelete: () => void;
@@ -32,7 +34,7 @@ interface Props {
 }
 
 export default function NoteReadingView({
-  note, editing, editor, auxPanels,
+  note, editing, editor, auxPanels, headerExtra,
   onEdit, onPinToggle, onDelete, onTagClick, onOpenSession, onTaskToggle, onImageOpen,
 }: Props) {
   // A2：搜索高亮（M6：匹配集合=渲染产物只读查询，计数经此状态驱动）
@@ -161,6 +163,7 @@ export default function NoteReadingView({
           >
             ✏ 编辑（Ctrl+E）
           </button>
+          {headerExtra}
           <button
             onClick={onDelete}
             style={{ fontSize: 12, color: "#dc2626", cursor: "pointer", padding: "4px 10px", borderRadius: 4, border: "1px solid #fecaca", background: "#fff" }}

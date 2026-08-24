@@ -59,9 +59,11 @@ describe("NotesPage 编辑完成即时刷新", () => {
         case "get_note":
           return store;
         default:
-          // 子面板（EnrichPanel/VersionPanel 等）挂载期查询——空值兜底不抛错
+          // 子面板（EnrichPanel/VersionPanel/NoteLinkToSystem 等）挂载期查询——空值兜底不抛错
           if (cmd === "note_versions_list") return [];
           if (cmd === "note_versions_usage") return [];
+          if (cmd === "list_knowledge_systems") return [];
+          if (cmd === "list_knowledge_links") return [];
           return null;
       }
     });

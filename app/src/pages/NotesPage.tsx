@@ -25,6 +25,7 @@ import NoteReadingView from "../components/NoteReadingView";
 import ImagePreviewOverlay from "../components/ImagePreviewOverlay";
 import VersionPanel from "../components/VersionPanel";
 import EnrichPanel from "../components/EnrichPanel";
+import NoteLinkToSystem from "../components/NoteLinkToSystem";
 import { useNoteAttention } from "../components/useNoteAttention";
 
 interface Props {
@@ -354,6 +355,10 @@ export default function NotesPage({ focusNoteId, onOpenSessions, onOpenSystem }:
               />
             }
             auxPanels={auxPanels}
+            headerExtra={
+              // v0.13.7 触点②：标题栏「挂到体系」入口；key=note.id 切笔记重置内部态
+              <NoteLinkToSystem key={`link-${selected.id}`} noteId={selected.id} onChanged={() => void handleNoteChanged()} />
+            }
             onEdit={() => setEditing(true)}
             onPinToggle={() => void runPinToggle(selected)}
             onDelete={() => void runDelete(selected.id)}
