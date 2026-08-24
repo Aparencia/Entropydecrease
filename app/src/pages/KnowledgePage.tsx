@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   KnowledgeSystem, KnowledgeNode, KnowledgeConcept, KnowledgeModel,
-  KnowledgeLink, KnowledgeSelection,
+  KnowledgeLink, KnowledgeSelection, CanvasNodePosition,
 } from "../types/knowledge";
 import { systemStatusLabel } from "../types/knowledge";
 import { canvasKey } from "../utils/canvasElements";
@@ -123,6 +123,20 @@ export default function KnowledgePage({ focusSystemId }: Props) {
     if (selection.type === "concept") return canvasKey("concept", selection.id);
     return canvasKey("model", selection.id);
   }, [selection]);
+
+  // v0.13.8：画布位置持久化成功 → 合并进本页 nodes props（重挂载后 props 即已存
+  // 位置——防辐射布局重算覆盖用户拖走的落点，§4.4 纪律"位置只由用户决定"）
+  const applyCanvasPositions = useCallback((updates: CanvasNodePosition[]) => {
+    const byId = new Map(updates.map((u) => [u.nodeId, u]));
+    setNodes((prev) =>
+      prev.map((n) => {
+        const u = byId.get(n.id);
+        if (!u) return n;
+        if (n.canvasX === u.x && n.canvasY === u.y) return n;
+        return { ...n, canvasX: u.x, canvasY: u.y };
+      }),
+    );
+  }, []);
 
   const globalSystem = systems.find((s) => s.kind === "global") ?? null;
   const domainSystems = systems.filter((s) => s.kind === "domain");
@@ -260,6 +274,7 @@ export default function KnowledgePage({ focusSystemId }: Props) {
                   links={links}
                   selectedKey={selectedCanvasKey}
                   onSelectItem={(kind, id) => setSelection({ type: kind, id })}
+                  onPositionsSaved={applyCanvasPositions}
                   onGoBack={() => setMiddleView("tree")}
                 />
               </div>

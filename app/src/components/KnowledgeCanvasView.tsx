@@ -19,7 +19,7 @@ import {
   type Edge, type Node, type NodeProps, type OnMoveEnd, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { KnowledgeConcept, KnowledgeLink, KnowledgeModel, KnowledgeNode } from "../types/knowledge";
+import type { KnowledgeConcept, KnowledgeLink, KnowledgeModel, KnowledgeNode, CanvasNodePosition } from "../types/knowledge";
 import {
   buildCanvasElements, canvasKey, entityIdFromKey,
   type CanvasNodeData, type CanvasSelectKind,
@@ -40,6 +40,11 @@ interface Props {
   /** 当前选中实体 key（`q:1`/`c:2`/`m:3`——与树视图/列表共享选中态） */
   selectedKey: string | null;
   onSelectItem: (kind: CanvasSelectKind, entityId: number) => void;
+  /**
+   * 位置持久化成功回调（父页合并进 nodes props——重挂载后 props 即为已存位置，
+   * 杜绝"辐射布局重算覆盖已拖走位置"；规格 §4.4 纪律：位置只由用户决定）。
+   */
+  onPositionsSaved?: (updates: CanvasNodePosition[]) => void;
   /** 返回树视图（§4.5 切换） */
   onGoBack: () => void;
 }
@@ -71,7 +76,7 @@ export default function KnowledgeCanvasView(props: Props) {
 }
 
 function CanvasFlow({
-  systemId, coreQuestion, nodes, concepts, models, links, selectedKey, onSelectItem, onGoBack,
+  systemId, coreQuestion, nodes, concepts, models, links, selectedKey, onSelectItem, onPositionsSaved, onGoBack,
 }: Props) {
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<Node<CanvasNodeData>>([]);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -83,6 +88,10 @@ function CanvasFlow({
   const rfApi = useRef({ fitView, setViewport });
   rfApi.current.fitView = fitView;
   rfApi.current.setViewport = setViewport;
+
+  // onPositionsSaved 经 ref 透传：防抖/卸载回调在闭包外执行，ref 保证拿到最新回调
+  const savedRef = useRef(onPositionsSaved);
+  savedRef.current = onPositionsSaved;
 
   // 拖拽落点本地覆盖（props 未刷新前保持视图正确；systemId 切换随组件卸载清空）
   const localOverrides = useRef(new Map<number, CanvasPoint>());
@@ -98,13 +107,18 @@ function CanvasFlow({
     }
     const entries = [...pendingPositions.current.entries()];
     pendingPositions.current.clear();
-    for (const [nodeId, pos] of entries) {
-      void invoke("update_node_canvas_position", { nodeId, canvasX: pos.x, canvasY: pos.y })
-        .catch((e) => setStatus(`位置保存失败: ${e}`));
-    }
+    if (entries.length === 0) return;
+    // 全部成功才回传父页合并（部分失败不污染 props——下次重挂载用 DB 兜底）
+    void Promise.all(
+      entries.map(([nodeId, pos]) =>
+        invoke("update_node_canvas_position", { nodeId, canvasX: pos.x, canvasY: pos.y }),
+      ),
+    )
+      .then(() => savedRef.current?.(entries.map(([nodeId, pos]) => ({ nodeId, x: pos.x, y: pos.y }))))
+      .catch((e) => setStatus(`位置保存失败: ${e}`));
   }, []);
 
-  // 卸载兜底：清定时器 + 刷新未保存的拖拽落点（防切页丢失）
+  // 卸载兜底：清定时器 + 刷新未保存的拖拽落点（防切页丢失；父页存活，合并安全）
   useEffect(() => {
     return () => {
       if (dragTimer.current != null) window.clearTimeout(dragTimer.current);
@@ -112,9 +126,11 @@ function CanvasFlow({
       if (pendingPositions.current.size > 0) {
         const entries = [...pendingPositions.current.entries()];
         pendingPositions.current.clear();
-        for (const [nodeId, pos] of entries) {
-          void invoke("update_node_canvas_position", { nodeId, canvasX: pos.x, canvasY: pos.y });
-        }
+        void Promise.all(
+          entries.map(([nodeId, pos]) =>
+            invoke("update_node_canvas_position", { nodeId, canvasX: pos.x, canvasY: pos.y }),
+          ),
+        ).then(() => savedRef.current?.(entries.map(([nodeId, pos]) => ({ nodeId, x: pos.x, y: pos.y }))));
       }
     };
   }, []);
@@ -161,6 +177,7 @@ function CanvasFlow({
     if (batchPersist.length > 0) {
       // 首次打开（或新增未布局节点）→ 批量初始化；失败不阻塞渲染（下次打开重试）
       void invoke("batch_initialize_canvas_positions", { systemId, positions: batchPersist })
+        .then(() => savedRef.current?.(batchPersist))
         .catch((e) => setStatus(`布局初始化失败: ${e}`));
     }
 
@@ -250,6 +267,7 @@ function CanvasFlow({
     setRfNodes(rfn);
     setRfEdges(edges);
     void invoke("batch_initialize_canvas_positions", { systemId, positions: persist })
+      .then(() => savedRef.current?.(persist))
       .catch((e) => setStatus(`布局保存失败: ${e}`));
     void fitView({ padding: 0.15 });
   };
@@ -279,6 +297,10 @@ function CanvasFlow({
           maxZoom={2}
           nodesConnectable={false}
           edgesReconnectable={false}
+          // §九 不做清单：框选批量移动（RF 内置但本版暂不暴露）——禁用元素选择
+          // 引擎，杜绝 shift 框选 + 多节点拖拽导致的"其余节点视觉位移不持久"竞态
+          elementsSelectable={false}
+          selectionKeyCode={null}
           deleteKeyCode={null}
           fitView={false}
         >

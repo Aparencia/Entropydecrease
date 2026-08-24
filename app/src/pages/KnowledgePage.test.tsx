@@ -38,7 +38,7 @@ const aNode = {
   orderIdx: 0, status: "active", createdAt: 0, canvasX: null, canvasY: null,
 };
 
-/** 有体系 + 画布命令的 mock（画布激活时需要的命令回路） */
+/** 有体系的 mock（画布视图已 mock——本层只需列表命令回路） */
 function withSystemMock() {
   invokeMock.mockImplementation(async (cmd: string) => {
     switch (cmd) {
@@ -47,8 +47,6 @@ function withSystemMock() {
       case "list_knowledge_concepts": return [];
       case "list_knowledge_models": return [];
       case "list_knowledge_links": return [];
-      case "get_canvas_viewport": return null;
-      case "batch_initialize_canvas_positions": return true;
       default: throw new Error(`unexpected: ${cmd}`);
     }
   });

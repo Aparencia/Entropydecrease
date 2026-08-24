@@ -67,9 +67,11 @@ function renderView(overrides: {
   coreQuestion?: string | null;
   onSelectItem?: (kind: string, id: number) => void;
   onGoBack?: () => void;
+  onPositionsSaved?: (updates: { nodeId: number; x: number; y: number }[]) => void;
 } = {}) {
   const onSelectItem = overrides.onSelectItem ?? vi.fn();
   const onGoBack = overrides.onGoBack ?? vi.fn();
+  const onPositionsSaved = (overrides.onPositionsSaved ?? vi.fn()) as unknown as ReturnType<typeof vi.fn>;
   const utils = render(
     <KnowledgeCanvasView
       systemId={5}
@@ -80,10 +82,11 @@ function renderView(overrides: {
       links={links}
       selectedKey={null}
       onSelectItem={onSelectItem}
+      onPositionsSaved={onPositionsSaved as unknown as (updates: { nodeId: number; x: number; y: number }[]) => void}
       onGoBack={onGoBack}
     />,
   );
-  return { onSelectItem, onGoBack, ...utils };
+  return { onSelectItem, onGoBack, onPositionsSaved, ...utils };
 }
 
 /** 最近一次 ReactFlow 收到的 props */
@@ -123,9 +126,9 @@ function batchCalls() {
 }
 
 describe("KnowledgeCanvasView 画布", () => {
-  it("首次打开（全部未布局）→ 辐射布局批量初始化，位置落入 RF 节点", async () => {
+  it("首次打开（全部未布局）→ 辐射布局批量初始化，位置落入 RF 节点且回传父页合并", async () => {
     // Arrange + Act
-    renderView();
+    const { onPositionsSaved } = renderView();
     // Assert：批量初始化携全量节点（左上角口径——根 (−110,−40)，子 (−110,−260)）
     await waitFor(() => expect(batchCalls()).toHaveLength(1));
     const [, args] = batchCalls()[0];
@@ -136,6 +139,28 @@ describe("KnowledgeCanvasView 画布", () => {
     expect(rounded(positions.find((p) => p.nodeId === 2)!)).toEqual({ x: -110, y: -260 });
     // RF 节点位置与持久化一致（root0 圆心 (0,0) → 左上角 (-110,-40)）
     await waitFor(() => expect(rounded(rfNode("q:1").position)).toEqual({ x: -110, y: -40 }));
+    // 父页合并回调（防重挂载覆盖）
+    await waitFor(() => expect(onPositionsSaved).toHaveBeenCalled());
+    expect(rounded((onPositionsSaved.mock.calls[0][0] as { x: number; y: number }[])[0])).toEqual({ x: -110, y: -40 });
+  });
+
+  it("回归：重挂载且父页已合并位置 → 不再批量初始化（拖拽落点不被辐射重算覆盖）", async () => {
+    // Arrange：首次打开 → 批量初始化 → 父页合并（模拟 onPositionsSaved 生效）
+    const saved: { nodeId: number; x: number; y: number }[] = [];
+    const { unmount } = renderView({
+      onPositionsSaved: (updates) => { saved.push(...updates); },
+    });
+    await waitFor(() => expect(saved).toHaveLength(2));
+    unmount();
+    // Act：以"已存位置"的 props 重挂载（父页合并后的状态）
+    renderView({ nodes: makeNodes(true).map((n) => {
+      const s = saved.find((x) => x.nodeId === n.id)!;
+      return { ...n, canvasX: s.x, canvasY: s.y };
+    }) });
+    // Assert：不再触发第二次批量初始化，位置来自存储
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0));
+    expect(batchCalls()).toHaveLength(1);
+    expect(rounded(rfNode("q:1").position)).toEqual({ x: -110, y: -40 });
   });
 
   it("已存位置 → 不触发初始化，位置来自存储", async () => {
@@ -148,9 +173,9 @@ describe("KnowledgeCanvasView 画布", () => {
     expect(rfNode("q:2").position).toEqual({ x: 30, y: 40 });
   });
 
-  it("拖拽结束 → 防抖后保存 update_node_canvas_position", async () => {
+  it("拖拽结束 → 防抖后保存 update_node_canvas_position 并回传父页合并", async () => {
     // Arrange
-    renderView({ nodes: makeNodes(true) });
+    const { onPositionsSaved } = renderView({ nodes: makeNodes(true) });
     await waitFor(() => expect(rfProps.length).toBeGreaterThan(0));
     const onNodeDragStop = latestRf().onNodeDragStop as (e: unknown, node: { id: string; position: { x: number; y: number } }) => void;
     // Act：拖拽 q:1 到 (100, 200)
@@ -159,6 +184,8 @@ describe("KnowledgeCanvasView 画布", () => {
     await waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith("update_node_canvas_position", { nodeId: 1, canvasX: 100, canvasY: 200 }),
     );
+    // 父页合并回调（拖拽位置同步进 props——重挂载不丢）
+    await waitFor(() => expect(onPositionsSaved).toHaveBeenCalledWith([{ nodeId: 1, x: 100, y: 200 }]));
   });
 
   it("节点点击 → onSelectItem（问题/概念/模型分派）", async () => {
