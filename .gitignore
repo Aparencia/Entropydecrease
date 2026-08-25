@@ -13,6 +13,7 @@ build/
 *.wasm
 *.pdb
 *.dll
+*.err
 target/
 dist-electron/
 .firecrawl/
