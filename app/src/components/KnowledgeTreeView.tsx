@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { KnowledgeNode, KnowledgeLink, KnowledgeNodeType } from "../types/knowledge";
-import { nodeTypeLabel } from "../types/knowledge";
+import { nodeTypeColor, nodeTypeLabel } from "../types/knowledge";
 
 interface Props {
   systemId: number;
@@ -28,13 +28,6 @@ interface Props {
   onChanged: () => void;
   /** v0.13.8：顶部「画布」浮钮（§4.5 内嵌切换——点击切 middleView="canvas"） */
   onOpenCanvas?: () => void;
-}
-
-/** 节点类型配色（决策仪表盘质感） */
-function typeColor(t: KnowledgeNodeType): string {
-  if (t === "domain_entry") return "#7c3aed";
-  if (t === "scenario") return "#d97706";
-  return "#0f766e";
 }
 
 /** 当前正在添加的节点草稿（parentId=null 表示添加根节点） */
@@ -139,7 +132,10 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
     }
   };
 
-  const renderNode = (n: KnowledgeNode): React.ReactNode => {
+  // v0.13.9：depth 驱动缩进（16px/层）——此前递归无缩进，多层级视觉平齐
+  // 无法区分层级（对比大纲面板有 (level-1)*12 缩进）；引导线=子树左竖线 +
+  // 子行水平短线（折叠时整棵子树不渲染，引导线自然收起）
+  const renderNode = (n: KnowledgeNode, depth: number): React.ReactNode => {
     const kids = children.get(n.id) ?? [];
     const hasKids = kids.length > 0;
     const open = expanded.has(n.id);
@@ -154,7 +150,7 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
           data-testid={`node-${n.id}`}
           onClick={() => onSelectNode(n.id)}
           style={{
-            display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 6,
+            display: "flex", alignItems: "center", gap: 6, padding: `5px 8px 5px ${8 + depth * 16}px`, borderRadius: 6,
             cursor: "pointer", background: isSelected ? "#f0fdfa" : "transparent",
             border: isSelected ? "1px solid #99f6e4" : "1px solid transparent",
           }}
@@ -166,7 +162,7 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
           >
             {hasKids ? (open ? "▾" : "▸") : "·"}
           </span>
-          <span data-testid={`node-type-${n.id}`} style={{ fontSize: 11, padding: "1px 6px", borderRadius: 8, background: "#f9fafb", color: typeColor(n.type), whiteSpace: "nowrap" }}>
+          <span data-testid={`node-type-${n.id}`} style={{ fontSize: 11, padding: "1px 6px", borderRadius: 8, background: "#f9fafb", color: nodeTypeColor[n.type], whiteSpace: "nowrap" }}>
             {nodeTypeLabel[n.type]}
           </span>
           {isEditing ? (
@@ -193,9 +189,9 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
           )}
         </div>
 
-        {/* 子节点添加表单（inline） */}
+        {/* 子节点添加表单（inline；v0.13.9：缩进随层级同步，防错位） */}
         {isAddHere && (
-          <div style={{ display: "flex", gap: 4, marginLeft: 28, alignItems: "center", padding: "3px 0" }}>
+          <div style={{ display: "flex", gap: 4, marginLeft: 28 + depth * 16, alignItems: "center", padding: "3px 0" }}>
             <select data-testid="node-add-type" value={addDraft!.type} onChange={(e) => setAddDraft({ ...addDraft!, type: e.target.value as KnowledgeNodeType })} style={{ fontSize: 11, padding: "2px 4px", border: "1px solid #e5e7eb", borderRadius: 4 }}>
               {(Object.keys(nodeTypeLabel) as KnowledgeNodeType[]).map((t) => (
                 <option key={t} value={t}>{nodeTypeLabel[t]}</option>
@@ -207,15 +203,28 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
           </div>
         )}
 
-        {/* 编辑确认/取消 */}
+        {/* 编辑确认/取消（v0.13.9：缩进随层级同步） */}
         {isEditing && (
-          <div style={{ display: "flex", gap: 4, marginLeft: 28, padding: "3px 0" }}>
+          <div style={{ display: "flex", gap: 4, marginLeft: 28 + depth * 16, padding: "3px 0" }}>
             <button data-testid="node-edit-confirm" onClick={() => void confirmEdit()} style={actionBtn}>✓ 保存</button>
             <button data-testid="node-edit-cancel" onClick={() => setEditId(null)} style={actionBtn}>取消</button>
           </div>
         )}
 
-        {open && kids.map((k) => renderNode(k))}
+        {/* 子树（v0.13.9：左竖线引导 + 每子行水平短线；折叠时整体不渲染） */}
+        {open && kids.length > 0 && (
+          <div style={{ marginLeft: 15, paddingLeft: 11, borderLeft: "1px solid #e5e7eb" }}>
+            {kids.map((k) => (
+              <div key={k.id} style={{ position: "relative" }}>
+                <span
+                  data-testid={`node-guide-${k.id}`}
+                  style={{ position: "absolute", left: -11, top: 12, width: 11, height: 1, background: "#e5e7eb" }}
+                />
+                {renderNode(k, depth + 1)}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   };
@@ -286,7 +295,7 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
           </div>
         )}
 
-        {roots.map((r) => renderNode(r))}
+        {roots.map((r) => renderNode(r, 0))}
       </div>
 
       {status && <p style={{ padding: "6px 10px", fontSize: 12, color: "#dc2626" }}>{status}</p>}

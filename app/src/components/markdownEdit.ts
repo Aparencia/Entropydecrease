@@ -52,6 +52,46 @@ function lineIndexOf(content: string, offset: number): number {
   return lines.length - 1;
 }
 
+/**
+ * 标题层级转换：对选区逐行（或光标所在行）行首加 `# `×level；已是标题的行跳过。
+ * 多行选区 → 选区每行转换；无选区 → 光标所在行转换。光标落在末行标记后。
+ *
+ * Why（v0.13.9 修复）：原 wrapSelection 只在选区开头插一次标记——全选多行加 H1
+ * 只有首行生效，且光标回跳到文档开头（选区起点 0 → 视图跳顶）；本函数逐行转换
+ * + 光标落在末行，视图停在被编辑区域，不跳顶。
+ */
+export function headingLines(content: string, selStart: number, selEnd: number, level: number): EditResult {
+  const start = Math.min(selStart, selEnd);
+  const end = Math.max(selStart, selEnd);
+  const lines = content.split("\n");
+  let startLine = lineIndexOf(content, start);
+  let endLine = lineIndexOf(content, end);
+  // 选区尾恰在行首（\n 之后第一字符）且非空选区 → 该行未被选中（选区到上一行结尾止）
+  if (end > start && end > 0 && content[end - 1] === "\n" && endLine > startLine) {
+    endLine -= 1;
+  }
+  const marker = "#".repeat(Math.max(1, Math.min(level, 6))) + " ";
+  // 原文本每行行首 offset（行尾 \n 记 1 字符）——光标落位用
+  const lineOffsets: number[] = [0];
+  for (let i = 1; i < lines.length; i++) {
+    lineOffsets.push(lineOffsets[i - 1] + lines[i - 1].length + 1);
+  }
+  let insertedBeforeEndLine = 0; // 末行之前累计插入的标记字符数
+  let endLineGotMarker = false; // 末行自身是否被加标记
+  for (let i = startLine; i <= endLine; i++) {
+    if (/^#{1,6}\s/.test(lines[i])) continue; // 已是标题不叠加
+    lines[i] = marker + lines[i];
+    if (i < endLine) {
+      insertedBeforeEndLine += marker.length;
+    } else {
+      endLineGotMarker = true;
+    }
+  }
+  // 光标 = 末行行首 + 之前行插入量 +（末行加了标记则 + 标记长）——多行停在末行标记后，单行停在原行标记后
+  const cursor = lineOffsets[endLine] + insertedBeforeEndLine + (endLineGotMarker ? marker.length : 0);
+  return { value: lines.join("\n"), selStart: cursor, selEnd: cursor };
+}
+
 /** A1：提升标题层级（减一个 #）；H1 → 普通段落；不可提升返回 null（不动内容） */
 export function promoteHeading(content: string, selStart: number): EditResult | null {
   const lines = content.split("\n");

@@ -11,17 +11,17 @@
  * @ai-context: 视口经 knowledge_canvas_states 持久化——切回画布 setViewport 恢复
  *              （§4.5；无记录时 fitView 按内容兜底）。
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  Background, BackgroundVariant, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider,
+  Background, BackgroundVariant, Controls, Handle, MiniMap, Panel, Position, ReactFlow, ReactFlowProvider,
   useEdgesState, useNodesState, useReactFlow,
   type Edge, type Node, type NodeProps, type OnMoveEnd, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { KnowledgeConcept, KnowledgeLink, KnowledgeModel, KnowledgeNode, CanvasNodePosition } from "../types/knowledge";
 import {
-  buildCanvasElements, canvasKey, entityIdFromKey,
+  buildCanvasElements, canvasKey, entityIdFromKey, resolveEdgeHandles,
   type CanvasNodeData, type CanvasSelectKind,
 } from "../utils/canvasElements";
 import { CANVAS_BBOX, layoutRadial, type CanvasLayoutItem, type CanvasPoint } from "../utils/layoutRadial";
@@ -33,6 +33,8 @@ interface Props {
   systemId: number;
   /** 体系核心问题——存在时画布圆心渲染核心问题卡（布局圆心被虚拟核心占用） */
   coreQuestion: string | null;
+  /** v0.13.9：体系名——coreQuestion 为空（领域体系）时圆心渲染体系名卡 */
+  systemName: string | null;
   nodes: KnowledgeNode[];
   concepts: KnowledgeConcept[];
   models: KnowledgeModel[];
@@ -76,12 +78,20 @@ export default function KnowledgeCanvasView(props: Props) {
 }
 
 function CanvasFlow({
-  systemId, coreQuestion, nodes, concepts, models, links, selectedKey, onSelectItem, onPositionsSaved, onGoBack,
+  systemId, coreQuestion, systemName, nodes, concepts, models, links, selectedKey, onSelectItem, onPositionsSaved, onGoBack,
 }: Props) {
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<Node<CanvasNodeData>>([]);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [status, setStatus] = useState("");
   const { fitView, setViewport } = useReactFlow();
+
+  // v0.13.9：体系根卡（全局=核心问题 / 领域=体系名）——null 时不渲染圆心卡
+  // （防御：无核心问题也无体系名的异常态保持旧行为，不凭空造根）
+  const rootCard = useMemo<{ title: string; subtitle: string } | null>(() => {
+    if (coreQuestion) return { title: coreQuestion, subtitle: "核心问题" };
+    if (systemName) return { title: systemName, subtitle: "领域体系" };
+    return null;
+  }, [coreQuestion, systemName]);
 
   // useReactFlow 返回值身份可能随渲染变化——ref 捕获避免恢复 effect 依赖抖动
   // （依赖 fitView/setViewport 身份变化会反复触发恢复循环）
@@ -181,22 +191,12 @@ function CanvasFlow({
         .catch((e) => setStatus(`布局初始化失败: ${e}`));
     }
 
-    const { nodes: rfn, edges } = buildCanvasElements({ nodes, concepts, models, links, positions, selectedKey });
-    const extras: Node<CanvasNodeData>[] = [];
-    if (coreQuestion) {
-      extras.push({
-        id: "core",
-        type: "core",
-        position: { x: -120, y: -40 },
-        draggable: false,
-        selectable: false,
-        focusable: false,
-        data: { kind: "question", entityId: 0, title: coreQuestion, subtitle: null, badges: [], statusText: null, statusColor: null, refCount: 0 },
-      });
-    }
-    setRfNodes([...rfn, ...extras]);
+    const { nodes: rfn, edges } = buildCanvasElements({ nodes, concepts, models, links, positions, selectedKey, rootCard });
+    // v0.13.9：rootCard 由 buildCanvasElements 统一产出（含 core 卡 + 根节点虚线边）——
+    // 初始布局与「自动排列」同路径，杜绝双份逻辑漂移（此前 autoLayout 漏加 core 卡）
+    setRfNodes(rfn);
     setRfEdges(edges);
-  }, [systemId, coreQuestion, nodes, concepts, models, links, selectedKey, setRfNodes, setRfEdges]);
+  }, [systemId, rootCard, nodes, concepts, models, links, selectedKey, setRfNodes, setRfEdges]);
 
   // 视口恢复（§4.5）：已存 → setViewport；未存 → fitView 按内容兜底
   useEffect(() => {
@@ -248,7 +248,7 @@ function CanvasFlow({
       ...concepts.map((c) => ({ key: canvasKey("concept", c.id), kind: "concept" as const, parentKey: null })),
       ...models.map((m) => ({ key: canvasKey("model", m.id), kind: "model" as const, parentKey: null })),
     ];
-    const layout = layoutRadial({ hasCore: coreQuestion != null, items: layoutItems });
+    const layout = layoutRadial({ hasCore: rootCard != null, items: layoutItems });
     const positions = new Map<string, CanvasPoint>();
     const persist: { nodeId: number; x: number; y: number }[] = [];
     for (const n of nodes) {
@@ -263,7 +263,7 @@ function CanvasFlow({
     for (const m of models) {
       positions.set(canvasKey("model", m.id), toTopLeft(layout.get(canvasKey("model", m.id)) ?? { x: 0, y: 0 }, CANVAS_BBOX.model));
     }
-    const { nodes: rfn, edges } = buildCanvasElements({ nodes, concepts, models, links, positions, selectedKey });
+    const { nodes: rfn, edges } = buildCanvasElements({ nodes, concepts, models, links, positions, selectedKey, rootCard });
     setRfNodes(rfn);
     setRfEdges(edges);
     void invoke("batch_initialize_canvas_positions", { systemId, positions: persist })
@@ -271,6 +271,20 @@ function CanvasFlow({
       .catch((e) => setStatus(`布局保存失败: ${e}`));
     void fitView({ padding: 0.15 });
   };
+
+  // v0.13.9：接线方向动态化——按源/目标当前中心相对方位选 Handle（拖拽后随
+  // rfNodes 位置重算；纯函数 resolveEdgeHandles 可单测）。解决接线位置固定：
+  // 移动节点后边始终从同一侧接入，产生大量回字形折角。
+  const smartEdges = useMemo(() => {
+    const centerOf = (id: string): CanvasPoint => {
+      const n = rfNodes.find((x) => x.id === id);
+      const p = n?.position ?? { x: 0, y: 0 };
+      // core 卡无固定尺寸（maxWidth 240，标题 1-2 行）——按布局假定尺寸估算中心
+      const bbox = n?.type === "core" ? { w: 240, h: 80 } : CANVAS_BBOX[n?.data.kind ?? "question"];
+      return { x: p.x + bbox.w / 2, y: p.y + bbox.h / 2 };
+    };
+    return rfEdges.map((e) => ({ ...e, ...resolveEdgeHandles(centerOf(e.source), centerOf(e.target)) }));
+  }, [rfNodes, rfEdges]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
@@ -286,7 +300,7 @@ function CanvasFlow({
       <div style={{ flex: 1, minHeight: 0 }}>
         <ReactFlow
           nodes={rfNodes}
-          edges={rfEdges}
+          edges={smartEdges}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
@@ -330,14 +344,19 @@ function CanvasFlow({
   );
 }
 
-/** 核心问题节点（虚拟中心——不可拖/不可选，仅展示体系核心问题） */
+/** 体系根卡（虚拟中心——不可拖/不可选，仅展示体系根：全局=核心问题，领域=体系名） */
 function CanvasCoreNode({ data }: NodeProps<Node<CanvasNodeData, "core">>) {
   return (
     <div
       data-testid="canvas-core"
       style={{ maxWidth: 240, borderRadius: 10, padding: "10px 14px", background: "#0f766e", color: "#fff", border: "1px solid #0f766e", boxShadow: "0 2px 8px rgba(15,118,110,0.25)" }}
     >
-      <div style={{ fontSize: 11, opacity: 0.85 }}>核心问题</div>
+      {/* v0.13.9：四边 source Handle——根节点虚线边接线方向随相对方位动态选择 */}
+      <Handle type="source" id="source-top" position={Position.Top} style={{ opacity: 0, width: 2, height: 2 }} />
+      <Handle type="source" id="source-bottom" position={Position.Bottom} style={{ opacity: 0, width: 2, height: 2 }} />
+      <Handle type="source" id="source-left" position={Position.Left} style={{ opacity: 0, width: 2, height: 2 }} />
+      <Handle type="source" id="source-right" position={Position.Right} style={{ opacity: 0, width: 2, height: 2 }} />
+      <div style={{ fontSize: 11, opacity: 0.85 }}>{data.subtitle ?? "体系"}</div>
       <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{data.title}</div>
     </div>
   );

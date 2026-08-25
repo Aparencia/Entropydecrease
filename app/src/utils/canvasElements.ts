@@ -10,7 +10,7 @@
  *               （规格 §六：画布组件仅测数据转换，RF 渲染跳过 jsdom）。
  */
 import type { Edge, Node } from "@xyflow/react";
-import type { KnowledgeConcept, KnowledgeLink, KnowledgeModel, KnowledgeNode } from "../types/knowledge";
+import type { KnowledgeConcept, KnowledgeLink, KnowledgeModel, KnowledgeNode, KnowledgeNodeType } from "../types/knowledge";
 import { conceptStatusLabel, type KnowledgeConceptStatus } from "../types/knowledge";
 import type { CanvasPoint } from "./layoutRadial";
 
@@ -41,6 +41,11 @@ export type CanvasNodeData = {
   statusColor: string | null;
   /** 挂载引用数（问题节点；概念/模型恒 0——引用走节点侧） */
   refCount: number;
+  /**
+   * v0.13.9：树节点类型（问题/场景/领域入口）——画布类型 chip 渲染（与树视图
+   * typeColor 同口径）；概念/模型恒 null。此前所有树节点统一 ❓ 样式无法区分。
+   */
+  nodeType: KnowledgeNodeType | null;
 };
 
 /** 节点 key 前缀（三表 id 空间独立，必须区分） */
@@ -71,6 +76,12 @@ export interface CanvasElementsInput {
   links: KnowledgeLink[];
   positions: Map<string, CanvasPoint>;
   selectedKey: string | null;
+  /**
+   * v0.13.9：体系根卡（全局体系=核心问题 / 领域体系=体系名；subtitle=卡片标签）。
+   * 存在时渲染圆心 core 节点 + 根节点虚线边——展示层虚拟边（不落库）：根节点的
+   * 父是体系本身，§二.4"连线只反映既有关系"仍成立（parent_id 边不受影响）。
+   */
+  rootCard: { title: string; subtitle: string } | null;
 }
 
 /** 概念状态徽标颜色（与概念列表同口径） */
@@ -81,6 +92,27 @@ function conceptStatusColor(status: KnowledgeConceptStatus): string {
 }
 
 /**
+ * v0.13.9：按源/目标相对方位选择接线 Handle（移动节点后接线方向随之改变）。
+ * |dx|>|dy| 水平接入（左右侧 Handle），否则垂直接入（上下侧）；返回值与
+ * CanvasNodeQuestion/CanvasCoreNode 四边 Handle id 声明对应。纯函数可单测。
+ */
+export function resolveEdgeHandles(
+  sourceCenter: CanvasPoint,
+  targetCenter: CanvasPoint,
+): { sourceHandle: string; targetHandle: string } {
+  const dx = targetCenter.x - sourceCenter.x;
+  const dy = targetCenter.y - sourceCenter.y;
+  if (Math.abs(dx) > Math.abs(dy)) {
+    return dx >= 0
+      ? { sourceHandle: "source-right", targetHandle: "target-left" }
+      : { sourceHandle: "source-left", targetHandle: "target-right" };
+  }
+  return dy >= 0
+    ? { sourceHandle: "source-bottom", targetHandle: "target-top" }
+    : { sourceHandle: "source-top", targetHandle: "target-bottom" };
+}
+
+/**
  * 知识实体 → React Flow nodes/edges（纯转换）。
  *
  * @ai-context: 问题节点 = 树实体（id/被选态/位置直传）；概念/模型 = 浮动参照
@@ -88,7 +120,7 @@ function conceptStatusColor(status: KnowledgeConceptStatus): string {
  *              边只连「父存在且同树」的 parent_id（孤儿不连——布局层兜底处理）。
  */
 export function buildCanvasElements(input: CanvasElementsInput): { nodes: Node<CanvasNodeData>[]; edges: Edge[] } {
-  const { nodes, concepts, models, links, positions, selectedKey } = input;
+  const { nodes, concepts, models, links, positions, selectedKey, rootCard } = input;
 
   const conceptById = new Map(concepts.map((c) => [c.id, c]));
   const modelById = new Map(models.map((m) => [m.id, m]));
@@ -139,6 +171,7 @@ export function buildCanvasElements(input: CanvasElementsInput): { nodes: Node<C
         statusText: null,
         statusColor: null,
         refCount: refCounts.get(n.id) ?? 0,
+        nodeType: n.type,
       },
     });
   }
@@ -161,6 +194,7 @@ export function buildCanvasElements(input: CanvasElementsInput): { nodes: Node<C
         statusText: conceptStatusLabel[c.status],
         statusColor: conceptStatusColor(c.status),
         refCount: 0,
+        nodeType: null,
       },
     });
   }
@@ -183,6 +217,32 @@ export function buildCanvasElements(input: CanvasElementsInput): { nodes: Node<C
         statusText: null,
         statusColor: null,
         refCount: 0,
+        nodeType: null,
+      },
+    });
+  }
+
+  // v0.13.9：体系根卡（圆心虚拟节点——不可拖/不可选）。此前仅视图层在布局
+  // effect 手动 push，"自动排列"路径漏加（核心卡消失）；改由纯转换统一产出，
+  // 初始布局与自动排列走同一路径，杜绝双份逻辑漂移。
+  if (rootCard) {
+    rfNodes.push({
+      id: "core",
+      type: "core",
+      position: { x: -120, y: -40 },
+      draggable: false,
+      selectable: false,
+      focusable: false,
+      data: {
+        kind: "question",
+        entityId: 0,
+        title: rootCard.title,
+        subtitle: rootCard.subtitle,
+        badges: [],
+        statusText: null,
+        statusColor: null,
+        refCount: 0,
+        nodeType: null,
       },
     });
   }
@@ -198,6 +258,21 @@ export function buildCanvasElements(input: CanvasElementsInput): { nodes: Node<C
       target: canvasKey("question", n.id),
       type: "smoothstep",
     });
+  }
+
+  // v0.13.9：根节点 → 体系根卡虚线边（展示层虚拟边不落库；接线方向由视图层
+  // resolveEdgeHandles 按相对方位动态选择，与父子边同路径）
+  if (rootCard) {
+    for (const n of nodes) {
+      if (n.parentId != null) continue;
+      edges.push({
+        id: `e:core:${n.id}`,
+        source: "core",
+        target: canvasKey("question", n.id),
+        type: "smoothstep",
+        style: { stroke: "#cbd5e1", strokeDasharray: "5 4" },
+      });
+    }
   }
 
   return { nodes: rfNodes, edges };

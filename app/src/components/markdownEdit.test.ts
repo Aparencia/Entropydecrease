@@ -5,7 +5,72 @@
  * 光标位置计算错误会导致受控 textarea 恢复选区错位——此处锁住契约。
  */
 import { describe, expect, it } from "vitest";
-import { insertAtCursor, wrapSelection } from "./markdownEdit";
+import { headingLines, insertAtCursor, wrapSelection } from "./markdownEdit";
+
+describe("headingLines", () => {
+  it("无选区：光标所在行行首加 #，光标落在标记后", () => {
+    // Arrange：光标在第二行"世界"开头（offset 3）
+    const current = "你好\n世界\n结尾";
+    // Act
+    const r = headingLines(current, 3, 3, 1);
+    // Assert：仅第二行加标记
+    expect(r.value).toBe("你好\n# 世界\n结尾");
+    expect(r.selStart).toBe(5); // 3（第二行行首）+ 2（标记长）
+    expect(r.selEnd).toBe(5);
+  });
+
+  it("多行选区：每行行首加 #，光标落在末行标记后（不跳顶）", () => {
+    // Arrange：选中第一行到第二行（offset 0..4，含换行）
+    const current = "甲行\n乙行\n丙行";
+    // Act
+    const r = headingLines(current, 0, 4, 1);
+    // Assert：前两行转换，第三行不动；光标在第二行标记后（行首 3 + 标记 2）
+    expect(r.value).toBe("# 甲行\n# 乙行\n丙行");
+    expect(r.selStart).toBe(7);
+    expect(r.selEnd).toBe(7);
+  });
+
+  it("已是标题的行跳过不叠加（含末行为标题时光标落在末行行首）", () => {
+    // Arrange：第一行正文，第二行已是 H2（## ）——光标在第一行（offset 0）
+    const current = "正文\n## 已有标题\n尾巴";
+    // Act：仅第一行转换
+    const r = headingLines(current, 0, 0, 1);
+    // Assert：第一行加 #；第二行保持 ##（不叠加成 ###）
+    expect(r.value).toBe("# 正文\n## 已有标题\n尾巴");
+    expect(r.selStart).toBe(2);
+    // 多行选区含已标题行：末行（## ）不加标记，光标落在末行行首（3 + 前面插入 2）
+    const r2 = headingLines(current, 0, 4, 1);
+    expect(r2.value).toBe("# 正文\n## 已有标题\n尾巴");
+    expect(r2.selStart).toBe(5);
+  });
+
+  it("选区尾恰在行首：不含下一行（选中到上一行结尾止）", () => {
+    // Arrange：选中第一行全文（offset 0..3，恰在第一行末尾 \n 前）——selEnd 指向 "\n" 前
+    const current = "甲乙\n丙丁\n戊己";
+    // Act：selEnd = 2（"甲乙" 结尾），不是行首；用 selEnd=3（\n 位置）模拟选中含换行
+    const r1 = headingLines(current, 0, 3, 1);
+    expect(r1.value).toBe("# 甲乙\n丙丁\n戊己"); // selEnd=3 恰在 \n 上 → 只含第一行
+    // 若 selEnd 指向下一行行首（4）→ 含第二行
+    const r2 = headingLines(current, 0, 4, 1);
+    expect(r2.value).toBe("# 甲乙\n# 丙丁\n戊己");
+  });
+
+  it("level 越界防御：clamp 到 1..6", () => {
+    // Arrange + Act
+    const r1 = headingLines("行", 0, 0, 0);
+    expect(r1.value).toBe("# 行");
+    const r6 = headingLines("行", 0, 0, 9);
+    expect(r6.value).toBe("###### 行");
+  });
+
+  it("空内容边界：首行加标记，光标在标记后", () => {
+    // Act
+    const r = headingLines("", 0, 0, 1);
+    // Assert
+    expect(r.value).toBe("# ");
+    expect(r.selStart).toBe(2);
+  });
+});
 
 describe("insertAtCursor", () => {
   it("光标位置插入：新字符串正确拼接，光标移到插入文本末尾", () => {

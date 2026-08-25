@@ -268,6 +268,7 @@ export default function KnowledgePage({ focusSystemId }: Props) {
                   key={selectedSystem.id}
                   systemId={selectedSystem.id}
                   coreQuestion={selectedSystem.coreQuestion}
+                  systemName={selectedSystem.name}
                   nodes={nodes}
                   concepts={concepts}
                   models={models}

@@ -12,7 +12,7 @@ import type { Note } from "../types";
 // H2：插入/包裹改为纯函数（返回新字符串+光标位置）——受控更新走 setContent；
 // A1 段落/层级操作同款纯函数（自本组件抽出，可单测）
 import {
-  insertAtCursor, wrapSelection, promoteHeading, demoteHeading, mergeSelection, splitAtCursor,
+  insertAtCursor, wrapSelection, headingLines, promoteHeading, demoteHeading, mergeSelection, splitAtCursor,
   type EditResult,
 } from "./markdownEdit";
 
@@ -195,14 +195,27 @@ const NoteEditView = forwardRef<NoteEditHandle, Props>(function NoteEditView({ n
     if (!ta) return;
     // 读取当前 DOM 值与选区（受控组件下与 content state 一致）
     const v = ta.value;
-    const s = ta.selectionStart;
-    const e = ta.selectionEnd;
+    let s = ta.selectionStart;
+    let e = ta.selectionEnd;
+    // v0.13.9（H1 跳顶修复）：滚动查看但未聚焦 textarea 时，选区滞留旧位置
+    // （光标还在顶部/上次点击处）——按可视区比例重定位到行首。对所有工具栏
+    // 插入类操作统一生效（标题/粗体/列表等），插入落在用户"正在看的行"
+    // （所见即所得），不再跑到文档开头导致视图跳顶
+    if (document.activeElement !== ta && ta.scrollTop > 0) {
+      const ratio = ta.scrollTop / Math.max(1, ta.scrollHeight - ta.clientHeight);
+      let offset = Math.floor(v.length * ratio);
+      const nl = v.lastIndexOf("\n", Math.max(0, offset - 1));
+      offset = nl >= 0 ? nl + 1 : 0;
+      s = offset;
+      e = offset;
+    }
     switch (action) {
       case "bold": applyEdit(wrapSelection(v, s, e, "**", "**")); break;
       case "italic": applyEdit(wrapSelection(v, s, e, "*", "*")); break;
-      case "h1": applyEdit(wrapSelection(v, s, e, "# ", "")); break;
-      case "h2": applyEdit(wrapSelection(v, s, e, "## ", "")); break;
-      case "h3": applyEdit(wrapSelection(v, s, e, "### ", "")); break;
+      // v0.13.9：标题走逐行转换（多行选区每行加 #，光标落在末行——不跳顶）
+      case "h1": applyEdit(headingLines(v, s, e, 1)); break;
+      case "h2": applyEdit(headingLines(v, s, e, 2)); break;
+      case "h3": applyEdit(headingLines(v, s, e, 3)); break;
       case "ul": applyEdit(wrapSelection(v, s, e, "- ", "")); break;
       case "ol": applyEdit(wrapSelection(v, s, e, "1. ", "")); break;
       case "quote": applyEdit(wrapSelection(v, s, e, "> ", "")); break;

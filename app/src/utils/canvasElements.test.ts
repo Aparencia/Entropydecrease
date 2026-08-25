@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { KnowledgeConcept, KnowledgeLink, KnowledgeModel, KnowledgeNode } from "../types/knowledge";
-import { buildCanvasElements, canvasKey, entityIdFromKey, type CanvasElementsInput } from "./canvasElements";
+import { buildCanvasElements, canvasKey, entityIdFromKey, resolveEdgeHandles, type CanvasElementsInput } from "./canvasElements";
 
 const node = (id: number, parentId: number | null, text: string): KnowledgeNode => ({
   id, systemId: 5, parentId, type: "question", text, orderIdx: 0, status: "active", createdAt: 0,
@@ -38,6 +38,7 @@ function build(overrides?: Partial<CanvasElementsInput>) {
     links: [link(1, 10, 20)],
     positions: new Map([[canvasKey("question", 1), { x: 100, y: 200 }]]),
     selectedKey: null,
+    rootCard: null,
     ...overrides,
   });
 }
@@ -96,12 +97,93 @@ describe("buildCanvasElements 数据转换", () => {
     expect(edges).toEqual([{ id: "e:1:2", source: "q:1", target: "q:2", type: "smoothstep" }]);
   });
 
+  it("v0.13.9 根卡：rootCard 存在 → 圆心 core 节点 + 根节点虚线边（子节点/孤儿不连）", () => {
+    // Arrange：1 根 + 1 子 + 1 孤儿
+    const { nodes, edges } = build({
+      nodes: [node(1, null, "根"), node(2, 1, "子"), node(3, 999, "孤儿")],
+      rootCard: { title: "大学规划", subtitle: "领域体系" },
+    });
+    // Assert：core 节点（不可拖/不可选，标题=体系名，副标=领域体系）
+    const core = nodes.find((n) => n.id === "core")!;
+    expect(core.type).toBe("core");
+    expect(core.draggable).toBe(false);
+    expect(core.data.title).toBe("大学规划");
+    expect(core.data.subtitle).toBe("领域体系");
+    // Assert：仅根节点（parentId=null）连虚线边到 core；子节点连父；孤儿不连
+    const coreEdges = edges.filter((e) => e.source === "core");
+    expect(coreEdges).toEqual([
+      { id: "e:core:1", source: "core", target: "q:1", type: "smoothstep", style: { stroke: "#cbd5e1", strokeDasharray: "5 4" } },
+    ]);
+    expect(edges).toHaveLength(2); // 根卡虚边 + 父子边
+    expect(edges.some((e) => e.id === "e:core:3")).toBe(false); // 孤儿不连根卡
+  });
+
+  it("v0.13.9 根卡缺失（rootCard null）→ 无 core 节点、无虚边（旧行为）", () => {
+    // Arrange + Act
+    const { nodes, edges } = build({ nodes: [node(1, null, "根")] });
+    // Assert
+    expect(nodes.find((n) => n.id === "core")).toBeUndefined();
+    expect(edges.some((e) => e.source === "core")).toBe(false);
+  });
+
+  it("v0.13.9 问题节点 data.nodeType 透传（概念/模型恒 null）", () => {
+    // Arrange：根 + 子 + 概念 + 模型
+    const { nodes } = build({
+      nodes: [node(1, null, "根"), node(2, 1, "子")],
+      concepts: [concept(10, "曝光三角")],
+      models: [model(20, "黄金时刻法则")],
+    });
+    // Assert
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    expect(byId.get("q:1")!.data.nodeType).toBe("question");
+    expect(byId.get("q:2")!.data.nodeType).toBe("question");
+    expect(byId.get("c:10")!.data.nodeType).toBeNull();
+    expect(byId.get("m:20")!.data.nodeType).toBeNull();
+  });
+
   it("被选态：selectedKey 匹配才置 selected", () => {
     // Arrange + Act
     const { nodes } = build({ selectedKey: "m:20" });
     // Assert
     expect(nodes.find((n) => n.id === "m:20")!.selected).toBe(true);
     expect(nodes.find((n) => n.id === "q:1")!.selected).toBe(false);
+  });
+});
+
+describe("resolveEdgeHandles 接线方向", () => {
+  it("目标在源下方 → 垂直接入（source-bottom / target-top）", () => {
+    // Arrange + Act：源 (0,0)、目标 (20, 100)
+    const h = resolveEdgeHandles({ x: 0, y: 0 }, { x: 20, y: 100 });
+    // Assert
+    expect(h).toEqual({ sourceHandle: "source-bottom", targetHandle: "target-top" });
+  });
+
+  it("目标在源上方 → 反向垂直接入（source-top / target-bottom）", () => {
+    // Act：目标在 (-10, -80)
+    const h = resolveEdgeHandles({ x: 0, y: 0 }, { x: -10, y: -80 });
+    // Assert
+    expect(h).toEqual({ sourceHandle: "source-top", targetHandle: "target-bottom" });
+  });
+
+  it("目标在源右侧（|dx|>|dy|）→ 水平接入（source-right / target-left）", () => {
+    // Act：目标 (100, 30)
+    const h = resolveEdgeHandles({ x: 0, y: 0 }, { x: 100, y: 30 });
+    // Assert
+    expect(h).toEqual({ sourceHandle: "source-right", targetHandle: "target-left" });
+  });
+
+  it("目标在源左侧 → 水平反向接入（source-left / target-right）", () => {
+    // Act：目标 (-100, 30)
+    const h = resolveEdgeHandles({ x: 0, y: 0 }, { x: -100, y: 30 });
+    // Assert
+    expect(h).toEqual({ sourceHandle: "source-left", targetHandle: "target-right" });
+  });
+
+  it("对角线（|dx|==|dy|）→ 归入垂直接入（dy 优先）", () => {
+    // Act：目标 (50, 50)
+    const h = resolveEdgeHandles({ x: 0, y: 0 }, { x: 50, y: 50 });
+    // Assert
+    expect(h).toEqual({ sourceHandle: "source-bottom", targetHandle: "target-top" });
   });
 });
 

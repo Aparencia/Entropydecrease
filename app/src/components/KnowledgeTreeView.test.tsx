@@ -68,6 +68,29 @@ describe("KnowledgeTreeView 问题树", () => {
     expect(screen.getByTestId("node-type-3").textContent).toBe("领域入口");
   });
 
+  it("v0.13.9 层级缩进：子节点 paddingLeft 随 depth 递增（16px/层），引导线渲染", async () => {
+    // Arrange + Act：node1 根（depth 0）、node2 是 node1 子（depth 1）、node3 根（depth 0）
+    renderTree();
+    await screen.findByTestId("node-1");
+    // Assert：仅子节点多缩进 16px；根节点不受影响
+    expect(screen.getByTestId("node-1").style.paddingLeft).toBe("8px");
+    expect(screen.getByTestId("node-2").style.paddingLeft).toBe("24px");
+    expect(screen.getByTestId("node-3").style.paddingLeft).toBe("8px");
+    // 引导线：子节点行有水平短线
+    expect(screen.getByTestId("node-guide-2")).toBeTruthy();
+    expect(screen.queryByTestId("node-guide-3")).toBeNull(); // 根节点无引导线
+  });
+
+  it("v0.13.9 折叠后引导线随子树隐藏", async () => {
+    // Arrange + Act
+    renderTree();
+    await screen.findByTestId("node-guide-2");
+    fireEvent.click(screen.getByTestId("node-toggle-1"));
+    // Assert：子树（含引导线）整体不渲染
+    expect(screen.queryByTestId("node-2")).toBeNull();
+    expect(screen.queryByTestId("node-guide-2")).toBeNull();
+  });
+
   it("节点选中回调：点击节点 → onSelectNode 携带 id", async () => {
     const onSelectNode = vi.fn();
     renderTree(onSelectNode);

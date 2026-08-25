@@ -260,6 +260,13 @@ export const nodeTypeLabel: Record<KnowledgeNodeType, string> = {
   domain_entry: "领域入口",
 };
 
+/** 节点类型主色（问题树标签/画布 chip 共用——v0.13.9 提取，防两处颜色漂移） */
+export const nodeTypeColor: Record<KnowledgeNodeType, string> = {
+  question: "#0f766e",
+  scenario: "#d97706",
+  domain_entry: "#7c3aed",
+};
+
 /** 体系类别中文标签 */
 export const systemKindLabel: Record<SystemKind, string> = {
   global: "全局体系",

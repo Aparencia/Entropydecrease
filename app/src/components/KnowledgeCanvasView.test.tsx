@@ -65,6 +65,7 @@ const links: KnowledgeLink[] = [];
 function renderView(overrides: {
   nodes?: KnowledgeNode[];
   coreQuestion?: string | null;
+  systemName?: string | null;
   onSelectItem?: (kind: string, id: number) => void;
   onGoBack?: () => void;
   onPositionsSaved?: (updates: { nodeId: number; x: number; y: number }[]) => void;
@@ -76,6 +77,7 @@ function renderView(overrides: {
     <KnowledgeCanvasView
       systemId={5}
       coreQuestion={overrides.coreQuestion ?? null}
+      systemName={overrides.systemName ?? null}
       nodes={overrides.nodes ?? makeNodes()}
       concepts={concepts}
       models={models}
@@ -251,7 +253,35 @@ describe("KnowledgeCanvasView 画布", () => {
     const [, args] = batchCalls()[0];
     const positions = args.positions as { nodeId: number; x: number; y: number }[];
     expect(rounded(positions.find((p) => p.nodeId === 1)!)).toEqual({ x: -110, y: -260 });
-    expect(rounded(positions.find((p) => p.nodeId === 2)!)).toEqual({ x: -110, y: -460 });
+    // v0.13.9：RING_STEP 200→160 → 环 2 半径 420→380 → 子节点上移 40px
+    expect(rounded(positions.find((p) => p.nodeId === 2)!)).toEqual({ x: -110, y: -420 });
+  });
+
+  it("v0.13.9 领域体系：无核心问题但有体系名 → 圆心体系名卡 + 根节点虚线边", async () => {
+    // Arrange：领域体系（coreQuestion null）+ systemName 非空
+    renderView({ systemName: "大学规划" });
+    // Assert：core 卡标题=体系名、副标=领域体系；仅根节点（node1）连虚线边
+    await waitFor(() => expect(rfNode("core")).toBeTruthy());
+    await waitFor(() => expect(batchCalls()).toHaveLength(1));
+    const core = rfNode("core") as unknown as { data: { title: string; subtitle: string } };
+    expect(core.data.title).toBe("大学规划");
+    expect(core.data.subtitle).toBe("领域体系");
+    const edges = latestRf().edges as { id: string; source: string; target: string; style?: { strokeDasharray?: string } }[];
+    const coreEdges = edges.filter((e) => e.source === "core");
+    expect(coreEdges).toHaveLength(1); // node1 根；node2 是子不连根卡
+    expect(coreEdges[0]).toMatchObject({ id: "e:core:1", target: "q:1" });
+    expect(coreEdges[0].style?.strokeDasharray).toBe("5 4");
+  });
+
+  it("v0.13.9 接线动态化：edges 携带按相对方位计算的 sourceHandle/targetHandle", async () => {
+    // Arrange：已存位置（q:1 左上角 (10,20)、q:2 (30,40)——q:2 在 q:1 右下方）
+    renderView({ nodes: makeNodes(true) });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0));
+    // Assert：中心差 dx=20, dy=20（|dx|==|dy| → 垂直接入 source-bottom/target-top）
+    const edges = latestRf().edges as { id: string; sourceHandle?: string; targetHandle?: string }[];
+    const e = edges.find((x) => x.id === "e:1:2")!;
+    expect(e.sourceHandle).toBe("source-bottom");
+    expect(e.targetHandle).toBe("target-top");
   });
 
   it("返回按钮 → onGoBack（切回树视图）", async () => {

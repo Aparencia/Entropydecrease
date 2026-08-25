@@ -11,8 +11,20 @@ import { memo } from "react";
 import { Handle, Position, useStore, type Node, type NodeProps } from "@xyflow/react";
 import type { CanvasNodeData } from "../utils/canvasElements";
 import { CANVAS_BBOX } from "../utils/layoutRadial";
+import { nodeTypeColor, nodeTypeLabel, type KnowledgeNodeType } from "../types/knowledge";
 
 export type QuestionRfNode = Node<CanvasNodeData, "question">;
+
+/** 节点类型图标（与 chip 同源） */
+const typeIcon: Record<KnowledgeNodeType, string> = {
+  question: "❓",
+  scenario: "🎯",
+  domain_entry: "📂",
+};
+
+/** v0.13.9：四边 Handle 统一样式（透明化——连线只反映既有关系，用户不能画线） */
+const hiddenHandle: React.CSSProperties = { opacity: 0, width: 2, height: 2 };
+
 
 /** 标题最多 2 行省略（内容为问题文本，宽 220px 下 2 行足够） */
 const clamp2: React.CSSProperties = {
@@ -45,14 +57,29 @@ export default memo(function CanvasNodeQuestion({ data, selected }: NodeProps<Qu
         padding: 8,
       }}
     >
-      {/* 隐式 Handle：连线只反映既有关系，用户不能手动画线 */}
-      <Handle type="target" position={Position.Top} style={{ opacity: 0, width: 2, height: 2 }} />
-      <Handle type="source" position={Position.Bottom} style={{ opacity: 0, width: 2, height: 2 }} />
+      {/* v0.13.9：四边 Handle——接线方向随源/目标相对方位动态选择
+          （resolveEdgeHandles）；透明化——连线只反映既有关系，用户不能画线 */}
+      <Handle type="target" id="target-top" position={Position.Top} style={hiddenHandle} />
+      <Handle type="target" id="target-bottom" position={Position.Bottom} style={hiddenHandle} />
+      <Handle type="target" id="target-left" position={Position.Left} style={hiddenHandle} />
+      <Handle type="target" id="target-right" position={Position.Right} style={hiddenHandle} />
+      <Handle type="source" id="source-top" position={Position.Top} style={hiddenHandle} />
+      <Handle type="source" id="source-bottom" position={Position.Bottom} style={hiddenHandle} />
+      <Handle type="source" id="source-left" position={Position.Left} style={hiddenHandle} />
+      <Handle type="source" id="source-right" position={Position.Right} style={hiddenHandle} />
 
       {full ? (
         <>
           <div style={{ display: "flex", gap: 6, alignItems: "flex-start", fontSize: 13, fontWeight: 500, color: "#374151" }}>
-            <span style={{ fontSize: 14, flexShrink: 0 }}>❓</span>
+            {/* v0.13.9：类型 chip（此前统一 ❓ 无法区分问题/场景/领域入口） */}
+            {data.nodeType && (
+              <span
+                data-testid={`canvas-node-type-${data.entityId}`}
+                style={{ fontSize: 10, borderRadius: 8, padding: "0 5px", lineHeight: 1.7, whiteSpace: "nowrap", background: "#f9fafb", color: nodeTypeColor[data.nodeType], border: `1px solid ${nodeTypeColor[data.nodeType]}33` }}
+              >
+                {typeIcon[data.nodeType]} {nodeTypeLabel[data.nodeType]}
+              </span>
+            )}
             <span style={clamp2}>{data.title}</span>
           </div>
           {data.badges.length > 0 && (

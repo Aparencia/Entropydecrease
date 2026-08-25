@@ -40,8 +40,8 @@ export const CANVAS_BBOX: Record<CanvasKind, { w: number; h: number }> = {
 
 /** ring 1 环半径（规格 §4.4；圆心即 ring 0） */
 export const RING_BASE = 220;
-/** 每环半径增量 */
-export const RING_STEP = 200;
+/** 每环半径增量（v0.13.9：200 → 160——深度≥3 层边长超过 600px 横穿画布，缩短长边） */
+export const RING_STEP = 160;
 /** 碰撞外推步长（规格 §4.4：沿角度 +50px） */
 const COLLISION_STEP = 50;
 /** 碰撞外推最大次数（超过则到下一环） */

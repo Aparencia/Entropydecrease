@@ -29,7 +29,7 @@ import CanvasNodeModel from "./CanvasNodeModel";
 function data(partial: Partial<CanvasNodeData>): CanvasNodeData {
   return {
     kind: "question", entityId: 1, title: "", subtitle: null, badges: [],
-    statusText: null, statusColor: null, refCount: 0, ...partial,
+    statusText: null, statusColor: null, refCount: 0, nodeType: null, ...partial,
   };
 }
 
@@ -57,6 +57,27 @@ describe("画布节点缩放分级", () => {
     expect(screen.getByText(/曝光三角/)).toBeTruthy();
     // 「📋 N 条笔记」为单文本节点（emoji 前缀）——正则匹配
     expect(screen.getByText(/2 条笔记/)).toBeTruthy();
+  });
+
+  it("v0.13.9 类型 chip：问题/场景/领域入口分类渲染（full 模式）", () => {
+    // Arrange + Act
+    zoomValue = 1;
+    render(<CanvasNodeQuestion {...qp(data({ entityId: 7, title: "色彩理论", nodeType: "domain_entry" }))} />);
+    render(<CanvasNodeQuestion {...qp(data({ entityId: 8, title: "完成通勤妆", nodeType: "scenario" }))} />);
+    render(<CanvasNodeQuestion {...qp(data({ entityId: 9, title: "如何练好化妆", nodeType: "question" }))} />);
+    // Assert：chip 文本 = 图标 + 类型名
+    expect(screen.getByTestId("canvas-node-type-7").textContent).toBe("📂 领域入口");
+    expect(screen.getByTestId("canvas-node-type-8").textContent).toBe("🎯 场景");
+    expect(screen.getByTestId("canvas-node-type-9").textContent).toBe("❓ 问题");
+  });
+
+  it("v0.13.9 类型 chip 仅 full 模式显示（titleOnly 保持简洁）", () => {
+    // Arrange + Act
+    zoomValue = 0.5;
+    render(<CanvasNodeQuestion {...qp(data({ entityId: 7, title: "色彩理论", nodeType: "domain_entry" }))} />);
+    // Assert：chip 不渲染，标题保留
+    expect(screen.queryByTestId("canvas-node-type-7")).toBeNull();
+    expect(screen.getByText("色彩理论")).toBeTruthy();
   });
 
   it("zoom 0.4~0.7：仅标题（徽标/计数隐藏）", () => {
