@@ -89,6 +89,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: app/src-tauri
+      # models/ 不入库（AGENTS.md 铁律），build.rs 的 bundle.resources glob 需要空目录占位
+      - name: Prepare models placeholder
+        shell: bash
+        run: mkdir -p app/src-tauri/models
       - name: Test
         run: cd app/src-tauri && cargo test
       - name: Lint (clippy)
