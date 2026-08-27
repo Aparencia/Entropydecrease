@@ -90,21 +90,15 @@ jobs:
       - name: Prepare models placeholder
         shell: bash
         run: mkdir -p app/src-tauri/models
+      # .cargo/config.toml 注入的是本机 Windows 预编译库绝对路径（sherpa-archive/、ort/），
+      # ort-sys/sherpa-onnx-sys 只要见到 ORT_LIB_LOCATION/SHERPA_ONNX_ARCHIVE_DIR 存在即跳过下载——
+      # CI 无法 unset env，直接移除 config 使注入消失，两库回退在线下载（CI 网络可达）
+      - name: Remove local cargo config (CI online download)
+        shell: bash
+        run: rm -f app/src-tauri/.cargo/config.toml
       - name: Test
-        # 覆盖 .cargo/config.toml 的本地 Windows 预编译库路径：CI runner 无 D:/ 本机目录，
-        # 清空后 sherpa-onnx-sys/ort-sys 回退在线下载（CI 网络可达）
-        env:
-          SHERPA_ONNX_ARCHIVE_DIR: ""
-          ORT_LIB_LOCATION: ""
-          ORT_SKIP_DOWNLOAD: "0"
-          ORT_PREFER_DYNAMIC_LINK: "1"
         run: cd app/src-tauri && cargo test
       - name: Lint (clippy)
-        env:
-          SHERPA_ONNX_ARCHIVE_DIR: ""
-          ORT_LIB_LOCATION: ""
-          ORT_SKIP_DOWNLOAD: "0"
-          ORT_PREFER_DYNAMIC_LINK: "1"
         run: cd app/src-tauri && cargo clippy -- -D warnings
 
   # ===========================================================================
