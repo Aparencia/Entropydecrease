@@ -147,34 +147,27 @@ jobs:
 
       # ---------------------------------------------------------------
       # 同步安装包至自建服务器（国内主下载源；服务器连接继承自原项目）
+      # appleboy/ssh-action 与 scp-action 不支持 Windows runner（MSYS 平台检测失败），
+      # 改用 Windows 自带 OpenSSH（ssh/scp 均在 Git Bash 可用）
       # ---------------------------------------------------------------
-      - name: Ensure downloads directory on server
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: mkdir -p /opt/Entropydecrease/downloads
-
-      - name: Upload installer to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: release-files/*.exe
-          target: /opt/Entropydecrease/downloads
-          strip_components: 1
-
-      - name: Publish metadata (last, avoids 404 window)
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: release-files/latest.json
-          target: /opt/Entropydecrease/downloads
-          strip_components: 1
+      - name: Sync installer to server
+        shell: bash
+        env:
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=30"
+          ssh $SSH_OPTS "$SERVER_USER@$SERVER_HOST" "mkdir -p /opt/Entropydecrease/downloads"
+          scp $SSH_OPTS release-files/*.exe "$SERVER_USER@$SERVER_HOST:/opt/Entropydecrease/downloads/"
+          # 元数据最后发布，避免 404 窗口期
+          scp $SSH_OPTS release-files/latest.json "$SERVER_USER@$SERVER_HOST:/opt/Entropydecrease/downloads/"
+          # 保留策略：仅保留最近 3 个版本的安装包，防止磁盘增长
+          ssh $SSH_OPTS "$SERVER_USER@$SERVER_HOST" "cd /opt/Entropydecrease/downloads && ls -t -- *.exe 2>/dev/null | tail -n +4 | while read -r f; do rm -f -- \"\$f\"; done"
+          rm -f ~/.ssh/deploy_key
 
       # ---------------------------------------------------------------
       # 同步至 OSS（CDN 源站；可选——未配置阿里云凭据时跳过）
@@ -202,21 +195,6 @@ jobs:
             "oss://${{ secrets.OSS_BUCKET }}/downloads/latest.json" \
             --force -e "$OSS_ENDPOINT" --profile ossci
           echo "OSS sync done"
-
-      # ---------------------------------------------------------------
-      # 保留策略：仅保留最近 3 个版本的安装包，防止磁盘增长
-      # ---------------------------------------------------------------
-      - name: Prune old versions (keep last 3)
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /opt/Entropydecrease/downloads
-            ls -t -- *.exe 2>/dev/null | tail -n +4 | while read -r f; do
-              rm -f -- "$f"
-            done
 
       # ---------------------------------------------------------------
       # 发布结果校验：防止"空 Release"（历史事故 v0.27.0/v0.28.7）
