@@ -78,6 +78,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      # Tauri 在 Linux 上编译需要 glib/gtk/webkit 系统库（glib-sys 等 -sys crate 的 pkg-config 依赖）
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
       # sherpa-onnx 等 crate 编译耗时较长，启用 sccache 加速重复构建
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2
