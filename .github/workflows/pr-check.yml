@@ -108,12 +108,12 @@ jobs:
       - name: Test
         # ORT_PREFER_DYNAMIC_LINK=1：与本地一致走动态链接，规避 static MT 与项目 MD 运行时的 LNK2038 冲突
         env:
-          ORT_LIB_LOCATION: ort/ci
+          ORT_LIB_LOCATION: ${{ github.workspace }}/app/src-tauri/ort/ci
           ORT_PREFER_DYNAMIC_LINK: "1"
         run: cd app/src-tauri && cargo test
       - name: Lint (clippy)
         env:
-          ORT_LIB_LOCATION: ort/ci
+          ORT_LIB_LOCATION: ${{ github.workspace }}/app/src-tauri/ort/ci
           ORT_PREFER_DYNAMIC_LINK: "1"
         run: cd app/src-tauri && cargo clippy -- -D warnings
 

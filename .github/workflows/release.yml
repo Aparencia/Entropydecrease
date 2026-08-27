@@ -55,7 +55,7 @@ jobs:
       - name: Test
         # ORT_PREFER_DYNAMIC_LINK=1：与本地一致走动态链接，规避 static MT 与项目 MD 运行时的 LNK2038 冲突
         env:
-          ORT_LIB_LOCATION: ort/ci
+          ORT_LIB_LOCATION: ${{ github.workspace }}/app/src-tauri/ort/ci
           ORT_PREFER_DYNAMIC_LINK: "1"
         run: cd app/src-tauri && cargo test
 
@@ -100,7 +100,7 @@ jobs:
         # oar-ocr 未启用 ort-sys download-binaries（本地靠 ORT_LIB_LOCATION 链接），
         # CI 手动提供 ORT 库并复用同一机制；动态链接规避 LNK2038（同本地 config）
         env:
-          ORT_LIB_LOCATION: ort/ci
+          ORT_LIB_LOCATION: ${{ github.workspace }}/app/src-tauri/ort/ci
           ORT_PREFER_DYNAMIC_LINK: "1"
       - uses: actions/upload-artifact@v4
         with:
