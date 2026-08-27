@@ -54,12 +54,22 @@ jobs:
           curl -sL https://github.com/microsoft/onnxruntime/releases/download/v1.28.0/onnxruntime-win-x64-1.28.0.zip -o /tmp/ort.zip
           unzip -q /tmp/ort.zip -d /tmp/ortx
           cp /tmp/ortx/onnxruntime-win-x64-1.28.0/lib/onnxruntime.* app/src-tauri/ort/ci/
+      # sherpa-onnx-sys 自带的在线下载在 CI 上不稳定（曾出现解压残缺导致 LNK1181），
+      # 改用官方 SHERPA_ONNX_ARCHIVE_DIR 机制（与本地 config 一致）：curl 预下载 tar 包，
+      # build script 从 archive 解压，绕开其内嵌下载逻辑
+      - name: Prepare sherpa-onnx archive for CI
+        shell: bash
+        run: |
+          mkdir -p app/src-tauri/sherpa-archive
+          curl -sL "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.5/sherpa-onnx-v1.13.5-win-x64-shared-MT-Release-lib.tar.bz2" \
+            -o app/src-tauri/sherpa-archive/sherpa-onnx-v1.13.5-win-x64-shared-MT-Release-lib.tar.bz2
       - name: Test
         # ORT_PREFER_DYNAMIC_LINK=1：与本地一致走动态链接，规避 static MT 与项目 MD 运行时的 LNK2038 冲突
         shell: bash
         env:
           ORT_LIB_LOCATION: ${{ github.workspace }}/app/src-tauri/ort/ci
           ORT_PREFER_DYNAMIC_LINK: "1"
+          SHERPA_ONNX_ARCHIVE_DIR: ${{ github.workspace }}/app/src-tauri/sherpa-archive
         # 跳过 3 个预存基线失败（CHANGELOG 已登记，与本版无关）：
         #   ai_client 默认 Provider 断言 / note_filter 两条黄金用例——待后续版本修复
         run: |
@@ -96,14 +106,22 @@ jobs:
         run: mkdir -p app/src-tauri/models
       - name: Install frontend deps
         run: cd app && npm ci
+      # sherpa-onnx-sys 自带的在线下载在 CI 上不稳定（曾出现解压残缺导致 LNK1181），
+      # 改用官方 SHERPA_ONNX_ARCHIVE_DIR 机制（与本地 config 一致）：curl 预下载 tar 包
+      - name: Prepare sherpa-onnx archive for CI
+        shell: bash
+        run: |
+          mkdir -p app/src-tauri/sherpa-archive
+          curl -sL "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.5/sherpa-onnx-v1.13.5-win-x64-shared-MT-Release-lib.tar.bz2" \
+            -o app/src-tauri/sherpa-archive/sherpa-onnx-v1.13.5-win-x64-shared-MT-Release-lib.tar.bz2
       - name: Build Tauri app (NSIS)
         shell: bash
         # .cargo/config.toml 注入的是本机 Windows 预编译库绝对路径（sherpa-archive/、ort/），
         # ort-sys/sherpa-onnx-sys 只要见到 ORT_LIB_LOCATION/SHERPA_ONNX_ARCHIVE_DIR 存在即跳过下载——
-        # CI 无法 unset env，直接移除 config 使注入消失，两库回退在线下载（CI 网络可达）
+        # CI 无法 unset env，直接移除 config 使注入消失，改由下方 env 显式注入 CI 预下载路径
         run: |
           rm -f app/src-tauri/.cargo/config.toml
-          # rust-cache 恢复的 target/sherpa-onnx-prebuilt 可能不完整（历史 LNK1181），强制重新下载
+          # rust-cache 恢复的 target/sherpa-onnx-prebuilt 可能不完整（历史 LNK1181），强制重新解压
           rm -rf app/src-tauri/target/sherpa-onnx-prebuilt
           mkdir -p app/src-tauri/ort/ci
           curl -sL https://github.com/microsoft/onnxruntime/releases/download/v1.28.0/onnxruntime-win-x64-1.28.0.zip -o /tmp/ort.zip
@@ -115,6 +133,7 @@ jobs:
         env:
           ORT_LIB_LOCATION: ${{ github.workspace }}/app/src-tauri/ort/ci
           ORT_PREFER_DYNAMIC_LINK: "1"
+          SHERPA_ONNX_ARCHIVE_DIR: ${{ github.workspace }}/app/src-tauri/sherpa-archive
 
       # ---------------------------------------------------------------
       # 发布阶段（不再走 artifact 中转：配额 500MB 装不下 349MB 安装包多次构建）
