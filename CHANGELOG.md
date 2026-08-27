@@ -3,7 +3,9 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [SemVer](https://semver.org/lang/zh-CN/)。
 各版本的深度版本文档在 [docs/versions/](docs/versions/)。
 
-## [Unreleased] - 2026-08-24
+## [0.13.9] - 2026-08-27
+
+> **聚合发布**：本版为重构区首次正式发布（Tauri 桌面端），自 v0.8.0 后的全部交付（v0.9.0 视频档案框架 → v0.13.9 知识体系深化）随本版一并发布。各小版本交付详情见下方记录与 [docs/versions/](docs/versions/)。
 
 ### v0.13.8 知识体系画布（React Flow 节点式无限画布，2026-08-24 交付，详见 [设计规格](docs/archive/2026-08-24/2026-08-24-v0.13.8-knowledge-canvas-design.md)（[ ] 已归档）与 [v0.13 系列](docs/versions/v0.13.md#v0138-交付记录2026-08-24)）
 
