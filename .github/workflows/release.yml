@@ -20,17 +20,15 @@ concurrency:
 
 jobs:
   lint-test:
-    runs-on: ubuntu-latest
+    # 项目含 Windows 专用模块（audio_route_probe/device_probe/gdi_capture 等未做 Linux cfg 隔离），
+    # 测试必须在 Windows runner 执行；Linux 编译会因 E0433 失败
+    runs-on: windows-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      # Tauri 在 Linux 上编译需要 glib/gtk/webkit 系统库（glib-sys 等 -sys crate 的 pkg-config 依赖）
-      - name: Install Linux system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
-            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+        with:
+          targets: x86_64-pc-windows-msvc
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2
         with:
@@ -40,6 +38,13 @@ jobs:
         shell: bash
         run: mkdir -p app/src-tauri/models
       - name: Test
+        # 覆盖 .cargo/config.toml 的本地 Windows 预编译库路径：CI runner 无 D:/ 本机目录，
+        # 清空后 sherpa-onnx-sys/ort-sys 回退在线下载（CI 网络可达）
+        env:
+          SHERPA_ONNX_ARCHIVE_DIR: ""
+          ORT_LIB_LOCATION: ""
+          ORT_SKIP_DOWNLOAD: "0"
+          ORT_PREFER_DYNAMIC_LINK: "1"
         run: cd app/src-tauri && cargo test
 
   build:
