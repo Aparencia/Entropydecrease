@@ -63,6 +63,8 @@ jobs:
         #   ai_client 默认 Provider 断言 / note_filter 两条黄金用例——待后续版本修复
         run: |
           cd app/src-tauri
+          # rust-cache 恢复的 target/sherpa-onnx-prebuilt 可能不完整（历史 LNK1181），强制重新下载
+          rm -rf target/sherpa-onnx-prebuilt
           cargo test -- --skip ai_client::tests::from_settings_resolves_default_provider_when_set --skip note_filter::golden_tests::session29_live_ui_excluded_from_points --skip note_filter::tests::ocr_points_exclude_watermark_junk_and_dupes
 
   build:
@@ -100,6 +102,8 @@ jobs:
         # CI 无法 unset env，直接移除 config 使注入消失，两库回退在线下载（CI 网络可达）
         run: |
           rm -f app/src-tauri/.cargo/config.toml
+          # rust-cache 恢复的 target/sherpa-onnx-prebuilt 可能不完整（历史 LNK1181），强制重新下载
+          rm -rf app/src-tauri/target/sherpa-onnx-prebuilt
           mkdir -p app/src-tauri/ort/ci
           curl -sL https://github.com/microsoft/onnxruntime/releases/download/v1.28.0/onnxruntime-win-x64-1.28.0.zip -o /tmp/ort.zip
           unzip -q /tmp/ort.zip -d /tmp/ortx
