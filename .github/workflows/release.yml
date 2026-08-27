@@ -43,7 +43,20 @@ jobs:
       - name: Remove local cargo config (CI online download)
         shell: bash
         run: rm -f app/src-tauri/.cargo/config.toml
+      # oar-ocr 未启用 ort-sys 的 download-binaries feature（本地靠 ORT_LIB_LOCATION 链接），
+      # CI 必须手动提供 ONNX Runtime 库，与本地 ORT_LIB_LOCATION 同机制（CPU 包即可，测试不初始化 CUDA）
+      - name: Prepare ONNX Runtime for CI
+        shell: bash
+        run: |
+          mkdir -p app/src-tauri/ort/ci
+          curl -sL https://github.com/microsoft/onnxruntime/releases/download/v1.28.0/onnxruntime-win-x64-1.28.0.zip -o /tmp/ort.zip
+          unzip -q /tmp/ort.zip -d /tmp/ortx
+          cp /tmp/ortx/onnxruntime-win-x64-1.28.0/lib/onnxruntime.* app/src-tauri/ort/ci/
       - name: Test
+        # ORT_PREFER_DYNAMIC_LINK=1：与本地一致走动态链接，规避 static MT 与项目 MD 运行时的 LNK2038 冲突
+        env:
+          ORT_LIB_LOCATION: ort/ci
+          ORT_PREFER_DYNAMIC_LINK: "1"
         run: cd app/src-tauri && cargo test
 
   build:
@@ -79,7 +92,16 @@ jobs:
         # CI 无法 unset env，直接移除 config 使注入消失，两库回退在线下载（CI 网络可达）
         run: |
           rm -f app/src-tauri/.cargo/config.toml
+          mkdir -p app/src-tauri/ort/ci
+          curl -sL https://github.com/microsoft/onnxruntime/releases/download/v1.28.0/onnxruntime-win-x64-1.28.0.zip -o /tmp/ort.zip
+          unzip -q /tmp/ort.zip -d /tmp/ortx
+          cp /tmp/ortx/onnxruntime-win-x64-1.28.0/lib/onnxruntime.* app/src-tauri/ort/ci/
           cd app && npx tauri build --bundles nsis
+        # oar-ocr 未启用 ort-sys download-binaries（本地靠 ORT_LIB_LOCATION 链接），
+        # CI 手动提供 ORT 库并复用同一机制；动态链接规避 LNK2038（同本地 config）
+        env:
+          ORT_LIB_LOCATION: ort/ci
+          ORT_PREFER_DYNAMIC_LINK: "1"
       - uses: actions/upload-artifact@v4
         with:
           name: release-windows-latest
