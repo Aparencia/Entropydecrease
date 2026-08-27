@@ -56,6 +56,7 @@ jobs:
           cp /tmp/ortx/onnxruntime-win-x64-1.28.0/lib/onnxruntime.* app/src-tauri/ort/ci/
       - name: Test
         # ORT_PREFER_DYNAMIC_LINK=1：与本地一致走动态链接，规避 static MT 与项目 MD 运行时的 LNK2038 冲突
+        shell: bash
         env:
           ORT_LIB_LOCATION: ${{ github.workspace }}/app/src-tauri/ort/ci
           ORT_PREFER_DYNAMIC_LINK: "1"

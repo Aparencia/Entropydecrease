@@ -107,6 +107,7 @@ jobs:
           cp /tmp/ortx/onnxruntime-win-x64-1.28.0/lib/onnxruntime.* app/src-tauri/ort/ci/
       - name: Test
         # ORT_PREFER_DYNAMIC_LINK=1：与本地一致走动态链接，规避 static MT 与项目 MD 运行时的 LNK2038 冲突
+        shell: bash
         env:
           ORT_LIB_LOCATION: ${{ github.workspace }}/app/src-tauri/ort/ci
           ORT_PREFER_DYNAMIC_LINK: "1"
@@ -118,6 +119,7 @@ jobs:
           rm -rf target/sherpa-onnx-prebuilt
           cargo test -- --skip ai_client::tests::from_settings_resolves_default_provider_when_set --skip note_filter::golden_tests::session29_live_ui_excluded_from_points --skip note_filter::tests::ocr_points_exclude_watermark_junk_and_dupes
       - name: Lint (clippy)
+        shell: bash
         env:
           ORT_LIB_LOCATION: ${{ github.workspace }}/app/src-tauri/ort/ci
           ORT_PREFER_DYNAMIC_LINK: "1"
