@@ -196,8 +196,11 @@ jobs:
       # ---------------------------------------------------------------
       # 同步至 OSS（CDN 源站；可选——未配置阿里云凭据时跳过）
       # ---------------------------------------------------------------
+      # OSS 凭据可能过期/被禁用（历史 UserDisable），不阻断发布链
+      # 构建+GitHub Release+服务器同步已完成，OSS 仅为 CDN 源站加速
       - name: Upload to OSS (CDN origin)
         if: env.HAS_ALIYUN_AK == 'true'
+        continue-on-error: true
         shell: bash
         env:
           AK_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
