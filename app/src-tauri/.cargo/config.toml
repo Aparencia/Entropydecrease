@@ -10,7 +10,10 @@
 #              相对路径会解析到不存在的目录导致静默回退在线下载。
 # @ai-context: 预编译包下载命令（一次性，模型/库更新时重跑）：
 #   Invoke-WebRequest -Uri "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.5/sherpa-onnx-v1.13.5-win-x64-shared-MT-Release-lib.tar.bz2" -OutFile "sherpa-archive\sherpa-onnx-v1.13.5-win-x64-shared-MT-Release-lib.tar.bz2"
-[env]
+# @ai-context: 以上本地预编译库路径均为 Windows 专用（sherpa-archive/ 与 ort/ 下的 win-x64 包），
+#              CI（Linux/Windows runner）必须走在线下载，故限定 [target.x86_64-pc-windows-msvc.env]——
+#              Linux 目标不注入这些 env，sherpa-onnx-sys/ort-sys 回退默认下载路径（CI 网络可达）。
+[target.x86_64-pc-windows-msvc.env]
 SHERPA_ONNX_ARCHIVE_DIR = "D:/Program own/aicode/work space/Entropydecrease/app/src-tauri/sherpa-archive"
 # oar-ocr 底层同样使用 pyke ort：cdn.pyke.io 被墙，改用已下载的本地 ONNX Runtime（跳过在线下载）。
 # ADR-009（v0.4.0 M1）：CUDA EP——ORT 1.28 官方 gpu_cuda12 包（含 CUDA 插件与运行时，
