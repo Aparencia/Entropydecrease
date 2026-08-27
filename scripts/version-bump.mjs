@@ -37,7 +37,7 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const projectDirs = (process.env.VERSION_SYNC_DIRS
   ? process.env.VERSION_SYNC_DIRS.split(',')
-  : ['app']
+  : ['app', 'website']
 ).map((s) => s.trim()).filter(Boolean);
 
 /** 读取 JSON，交由 mutate 修改后写回，保留 2 空格缩进与末尾换行（npm 默认风格） */

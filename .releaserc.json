@@ -67,7 +67,9 @@
         "assets": [
           "CHANGELOG.md",
           "app/package.json",
-          "app/package-lock.json"
+          "app/package-lock.json",
+          "website/package.json",
+          "website/package-lock.json"
         ],
         "message": "chore(release): v${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }

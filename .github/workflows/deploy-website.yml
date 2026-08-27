@@ -1,0 +1,81 @@
+name: Deploy Website
+
+on:
+  push:
+    branches: [main]
+    paths: ['website/**']
+  # 手动触发入口：用于部署链路验证与紧急重部署（不依赖路径变更）
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies and build
+        env:
+          # 下载源基址：配置了 CDN 后填入该 Secret（如 https://dl.entropydecrease.com）；
+          # 未配置时为空字符串，前端自动回退至自建服务器
+          NEXT_PUBLIC_DOWNLOAD_BASE: ${{ secrets.DOWNLOAD_BASE_URL }}
+        run: |
+          cd website
+          npm ci
+          npm run build
+
+      - name: Ensure target directory exists
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: mkdir -p /opt/Entropydecrease/website
+
+      - name: Upload static files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: website/out/*
+          target: /opt/Entropydecrease/website
+          strip_components: 2
+          rm: true
+
+      - name: Restart Nginx and verify deployment
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # scp 的 rm:true 会重建挂载目录导致 bind mount 失效，必须重启容器
+            docker restart entropy-decrease-nginx
+            sleep 5
+            curl -sf https://entropydecrease.com/ | grep -q "熵减" || exit 1
+
+      - name: Notify IndexNow
+        run: |
+          curl -sf -X POST "https://api.indexnow.org/indexnow" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d '{
+              "host": "entropydecrease.com",
+              "key": "2483a0d298b94b62a30be65fce88940e",
+              "keyLocation": "https://entropydecrease.com/2483a0d298b94b62a30be65fce88940e.txt",
+              "urlList": [
+                "https://entropydecrease.com/",
+                "https://entropydecrease.com/download",
+                "https://entropydecrease.com/philosophy",
+                "https://entropydecrease.com/features",
+                "https://entropydecrease.com/features/dive",
+                "https://entropydecrease.com/support",
+                "https://entropydecrease.com/faq"
+              ]
+            }' || echo "IndexNow notify failed (non-blocking)"

@@ -1,0 +1,244 @@
+@import "tailwindcss";
+
+/* ============================================================
+   熵减（Entropydecrease）双世界设计系统
+   深海意识 (dark) × 晨曦穹顶 (light)
+   ============================================================ */
+
+/* --- 默认：晨曦穹顶 (light) --- */
+:root {
+  /* 背景 — 晨曦砂白/羊皮纸白 */
+  --kb-bg-primary: #FAF8F5;
+  --kb-bg-secondary: #F3F0EA;
+  --kb-bg-tertiary: #EBE7DF;
+  --kb-bg-elevated: #FFFFFF;
+
+  /* 品牌主色 — 晴空蓝 */
+  --kb-brand-300: #93C5FD;
+  --kb-brand-400: #60A5FA;
+  --kb-brand-500: #3B82F6;
+  --kb-brand-600: #2563EB;
+
+  /* 辅助色 — 晨曦琥珀 */
+  --kb-accent-300: #FDBA74;
+  --kb-accent-400: #FB923C;
+  --kb-accent-500: #F59E0B;
+  --kb-accent-600: #D97706;
+
+  /* 功能色 */
+  --kb-focus-blue: #3B82F6;
+  --kb-amber: #F59E0B;
+  --kb-moss-green: #6BAF8A;
+  --kb-cyber-cyan: #06B6D4;
+
+  /* 文字 */
+  --kb-text-primary: #1E293B;
+  --kb-text-secondary: #475569;
+  --kb-text-tertiary: #94A3B8;
+
+  /* 边框 */
+  --kb-border-default: #E5E0D8;
+  --kb-border-strong: #D4CEC4;
+
+  /* 玻璃拟态 */
+  --kb-glass-bg: rgba(255, 255, 255, 0.72);
+  --kb-glass-border: rgba(255, 255, 255, 0.5);
+
+  /* 有色弥散阴影 */
+  --kb-shadow-brand: 0 8px 32px rgba(59, 130, 246, 0.12);
+  --kb-shadow-accent: 0 8px 32px rgba(245, 158, 11, 0.12);
+  --kb-shadow-card: 0 4px 24px rgba(30, 41, 59, 0.06);
+
+  /* 光晕粒子 */
+  --kb-glow-1: rgba(59, 130, 246, 0.25);
+  --kb-glow-2: rgba(245, 158, 11, 0.2);
+  --kb-glow-3: rgba(107, 175, 138, 0.2);
+}
+
+/* --- 深海意识 (dark) --- */
+.dark {
+  /* 背景 — 极夜深海调 */
+  --kb-bg-primary: #0C1524;
+  --kb-bg-secondary: #12203A;
+  --kb-bg-tertiary: #182A48;
+  --kb-bg-elevated: #12203A;
+
+  /* 品牌主色 — 靛蓝 */
+  --kb-brand-300: #4A4E9E;
+  --kb-brand-400: #6366F1;
+  --kb-brand-500: #818CF8;
+  --kb-brand-600: #6366F1;
+
+  /* 辅助色 — 赛博青 */
+  --kb-accent-300: #0E7490;
+  --kb-accent-400: #0891B2;
+  --kb-accent-500: #22D3EE;
+  --kb-accent-600: #06B6D4;
+
+  /* 功能色 */
+  --kb-focus-blue: #60A5FA;
+  --kb-amber: #FBBF24;
+  --kb-moss-green: #82C9A3;
+  --kb-cyber-cyan: #22D3EE;
+
+  /* 文字 */
+  --kb-text-primary: #E0E6F0;
+  --kb-text-secondary: #90A0B8;
+  --kb-text-tertiary: #607088;
+
+  /* 边框 */
+  --kb-border-default: #223550;
+  --kb-border-strong: #2E4568;
+
+  /* 玻璃拟态 */
+  --kb-glass-bg: rgba(18, 32, 58, 0.72);
+  --kb-glass-border: rgba(46, 69, 104, 0.4);
+
+  /* 有色弥散阴影 */
+  --kb-shadow-brand: 0 8px 32px rgba(99, 102, 241, 0.2);
+  --kb-shadow-accent: 0 8px 32px rgba(34, 211, 238, 0.15);
+  --kb-shadow-card: 0 4px 24px rgba(0, 0, 0, 0.3);
+
+  /* 光晕粒子 */
+  --kb-glow-1: rgba(99, 102, 241, 0.3);
+  --kb-glow-2: rgba(34, 211, 238, 0.25);
+  --kb-glow-3: rgba(130, 201, 163, 0.2);
+}
+
+/* --- Tailwind 4 主题映射 --- */
+@theme inline {
+  --color-kb-bg: var(--kb-bg-primary);
+  --color-kb-bg2: var(--kb-bg-secondary);
+  --color-kb-bg3: var(--kb-bg-tertiary);
+  --color-kb-elevated: var(--kb-bg-elevated);
+  --color-kb-brand: var(--kb-brand-400);
+  --color-kb-brand-light: var(--kb-brand-500);
+  --color-kb-brand-deep: var(--kb-brand-600);
+  --color-kb-accent: var(--kb-accent-500);
+  --color-kb-accent-light: var(--kb-accent-400);
+  --color-kb-amber: var(--kb-amber);
+  --color-kb-moss: var(--kb-moss-green);
+  --color-kb-cyan: var(--kb-cyber-cyan);
+  --color-kb-text: var(--kb-text-primary);
+  --color-kb-text2: var(--kb-text-secondary);
+  --color-kb-text3: var(--kb-text-tertiary);
+  --color-kb-border: var(--kb-border-default);
+  --color-kb-border-strong: var(--kb-border-strong);
+
+  --font-sans: var(--font-noto-sans), "Noto Sans SC", system-ui, sans-serif;
+  --font-serif: var(--font-noto-serif), "Noto Serif SC", serif;
+
+  --shadow-kb-brand: var(--kb-shadow-brand);
+  --shadow-kb-accent: var(--kb-shadow-accent);
+  --shadow-kb-card: var(--kb-shadow-card);
+
+  --ease-fluid: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* --- 全局基础 --- */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--kb-bg-primary);
+  color: var(--kb-text-primary);
+  font-family: var(--font-sans);
+  transition: background-color 0.6s var(--ease-fluid), color 0.6s var(--ease-fluid);
+  overflow-x: hidden;
+}
+
+/* 超级椭圆连续曲率圆角 */
+.squircle {
+  border-radius: 24px;
+  clip-path: path("M 0,24 C 0,6 6,0 24,0 L calc(100% - 24px),0 C calc(100% - 6px),0 100%,6 100%,24");
+}
+
+/* 毛玻璃面板 */
+.glass-panel {
+  background: var(--kb-glass-bg);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid var(--kb-glass-border);
+}
+
+/* 羽化渐隐分隔线（替代1px硬边框） */
+.feather-divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--kb-border-default) 20%,
+    var(--kb-border-default) 80%,
+    transparent
+  );
+}
+
+/* 呼吸光晕动画 */
+@keyframes breathe {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.08); }
+}
+
+.animate-breathe {
+  animation: breathe 4s ease-in-out infinite;
+}
+
+/* 粒子漂浮动画 */
+@keyframes float-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.6; }
+  25% { transform: translate(10px, -20px) scale(1.1); opacity: 0.9; }
+  50% { transform: translate(-5px, -35px) scale(0.95); opacity: 0.7; }
+  75% { transform: translate(-15px, -15px) scale(1.05); opacity: 0.85; }
+}
+
+.animate-float {
+  animation: float-drift 8s ease-in-out infinite;
+}
+
+/* 赛博青脉冲（AI呼吸灯） */
+@keyframes cyber-pulse {
+  0%, 100% { box-shadow: 0 0 8px 2px var(--kb-glow-2); opacity: 0.6; }
+  50% { box-shadow: 0 0 20px 6px var(--kb-glow-2); opacity: 1; }
+}
+
+.animate-cyber-pulse {
+  animation: cyber-pulse 3s ease-in-out infinite;
+}
+
+/* 水墨涟漪扩散 */
+@keyframes ink-ripple {
+  0% { transform: scale(0.8); opacity: 0.5; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* 选区颜色 */
+::selection {
+  background: var(--kb-brand-400);
+  color: #fff;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--kb-bg-secondary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--kb-border-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--kb-brand-400);
+}
+
+/* 下载页滚动提示（向下滚动指示） */
+@keyframes scroll-hint-dot {
+  0% { transform: translateY(0); opacity: 1; }
+  70% { transform: translateY(10px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 0; }
+}
+.scroll-hint-dot {
+  animation: scroll-hint-dot 1.8s ease-in-out infinite;
+}
