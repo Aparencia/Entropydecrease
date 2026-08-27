@@ -12,6 +12,9 @@
 
 # 模型文件（大文件，不入库；下载/捆绑说明见 AGENTS.md）
 /models/
+# 保留 .gitkeep 占位：models/ 是 tauri bundle.resources 的 glob 目标，
+# CI 无模型文件时空目录会让 glob 匹配失败（"path not found"），占位文件保证目录存在
+!/models/.gitkeep
 
 # ffmpeg 捆绑二进制（v0.3.0，ADR-008；scripts/download-ffmpeg.ps1 下载）
 /ffmpeg/
