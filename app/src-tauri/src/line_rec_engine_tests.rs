@@ -183,3 +183,22 @@ fn pipeline_all_healthy_no_rec_call() {
     // Assert：0 替换（无识别请求——crops 空）
     assert_eq!(replaced, 0);
 }
+
+#[test]
+fn invalid_bbox_never_sent_to_recognition() {
+    // Arrange：零宽 bbox 疑碎块 + 识别器返回整屏内容（审查 M2——原实现会把
+    //          整屏图送识别并静默替换碎片文本，污染落库）
+    let mut blocks = vec![blk("碎", 0.9, Some((10.0, 10.0, 0.0, 20.0)))];
+    let rec = FakeRec {
+        results: vec![LineRecResult { text: "整屏内容".to_string(), score: 0.9 }],
+        fail: false,
+    };
+    let img = RgbImage::from_pixel(100, 50, image::Rgb([0, 0, 0]));
+
+    // Act
+    let replaced = rec_pipeline_on_blocks(&rec, &img, &mut blocks, 0.5);
+
+    // Assert：无效 bbox 不裁剪不识别——块文本原样保留
+    assert_eq!(replaced, 0);
+    assert_eq!(blocks[0].text, "碎", "无效 bbox 块不得被整屏结果替换");
+}

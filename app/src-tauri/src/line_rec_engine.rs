@@ -35,8 +35,12 @@ pub fn is_suspect_line(text: &str, score: f32) -> bool {
 }
 
 /// 行图裁剪（纯函数）：bbox + padding → 裁剪图（越界 clamp）。
+///
+/// @ai-context: 空矩形防御（审查 M2 双保险）——非法 bbox（零宽高）不裁剪返回
+///              原图；调用方 rec_pipeline_on_blocks 已先过滤无效 bbox（无效
+///              不送识别），本检查兜底防未来调用方遗漏（原图送识别会以整屏
+///              结果静默替换碎片，污染落库数据）。
 pub fn crop_line(image: &RgbImage, bbox: &TextBox) -> RgbImage {
-    // 空矩形防御：非法 bbox（零宽高）不裁剪（返回原图——调用方按 1:1 索引忽略）
     if bbox.w <= 0.0 || bbox.h <= 0.0 {
         return image.clone();
     }
@@ -128,7 +132,11 @@ pub fn rec_pipeline_on_blocks(
     let suspects: Vec<usize> = blocks
         .iter()
         .enumerate()
-        .filter(|(_, b)| b.bbox.is_some() && is_suspect_line(&b.text, b.score))
+        .filter(|(_, b)| {
+            // 无效 bbox（零宽高）不裁剪不识别（审查 M2）——crop_line 对无效
+            // bbox 返回原图，若送识别会以整屏图结果静默替换碎片文本（落库污染）
+            b.bbox.is_some_and(|bb| bb.w > 0.0 && bb.h > 0.0) && is_suspect_line(&b.text, b.score)
+        })
         .map(|(i, _)| i)
         .collect();
     if suspects.is_empty() {

@@ -242,3 +242,31 @@ fn bbox_shift_keeps_both_frames() {
     // Assert：两屏都输出（位置位移 → 新屏，不误并）
     assert_eq!(result.ocr_body, vec!["标题内容".to_string(), "标题内容更多".to_string()]);
 }
+
+// ── 审查 M1 回归：ASCII 词间空格保持 ────────────────────────────
+
+#[test]
+fn merge_two_keeps_ascii_word_gap() {
+    // Arrange：英文行合并（"Hello " + "World"）——trim 后直拼会单词粘连
+    let a = blk_boxed(1_000, "Hello ", 0.9, 0.0, 0.0, 50.0, 20.0);
+    let b = blk_boxed(1_000, "World", 0.9, 50.0, 0.0, 50.0, 20.0);
+
+    // Act
+    let merged = super::merge_two(&a, &b);
+
+    // Assert：补词间空格（空格信息在 trim 前已存在，恢复语义）
+    assert_eq!(merged.text, "Hello World");
+}
+
+#[test]
+fn merge_two_chinese_joins_without_gap() {
+    // Arrange：中文行合并——无词间空格语义，直拼不受影响（零回归）
+    let a = blk_boxed(1_000, "红色代表", 0.9, 0.0, 0.0, 80.0, 20.0);
+    let b = blk_boxed(1_000, "热情", 0.9, 80.0, 0.0, 40.0, 20.0);
+
+    // Act
+    let merged = super::merge_two(&a, &b);
+
+    // Assert：中文直拼无空格
+    assert_eq!(merged.text, "红色代表热情");
+}

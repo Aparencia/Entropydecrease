@@ -188,21 +188,24 @@ export default function GroupSidebar({
 
   /** 访问组：写最近使用（LRU）+ 过滤切换（toggle=组行单击互斥；recent=直达） */
   const handleGroupSelect = (g: NoteGroup, toggle: boolean) => {
-    setRecentIds((cur) => {
-      const next = pushRecentGroup(cur, g.id);
-      writeRecentGroupIds(window.localStorage, next);
-      return next;
-    });
+    setRecentIds((cur) => pushRecentGroup(cur, g.id));
     onGroupFilterChange(toggle ? (groupFilter === g.id ? null : g.id) : g.id);
   };
 
   const toggleFolded = (kind: string) => {
-    setFolded((cur) => {
-      const next = { ...cur, [kind]: !cur[kind] };
-      writeFolded(window.localStorage, kind, next[kind]);
-      return next;
-    });
+    setFolded((cur) => ({ ...cur, [kind]: !cur[kind] }));
   };
+
+  // v0.14 C1 审查（L6）：setState updater 保持纯函数——localStorage 副作用移出，
+  // 经 useEffect 在 state 落定后同步（StrictMode 双调用/并发渲染下行为确定）；
+  // 挂载后首写与初始化值相同，幂等无副作用
+  useEffect(() => {
+    writeRecentGroupIds(window.localStorage, recentIds);
+  }, [recentIds]);
+  useEffect(() => {
+    // folded 键数固定（GROUP_SECTIONS），全量写量级忽略
+    Object.entries(folded).forEach(([kind, value]) => writeFolded(window.localStorage, kind, value));
+  }, [folded]);
 
   /** 拖拽归组（组行 drop；noteId 来自 NoteListView 行 dragStart） */
   const handleGroupDrop = (g: NoteGroup, e: React.DragEvent) => {

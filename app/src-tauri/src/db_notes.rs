@@ -88,6 +88,14 @@ impl Db {
     /// 删除笔记；返回是否实际删除。
     pub fn delete_note(&self, id: i64) -> Result<bool> {
         self.with_conn(|conn| {
+            // v0.14 C3 审查（L5 悬空边）：笔记删除级联清理 knowledge_links 的
+            // target 引用——图谱/反查不出现指向已删除笔记的悬空边。先清引用
+            // 后删笔记：失败半态 = 反查少一条（可重挂），优于悬空边；单连接
+            // Mutex 串行执行无并发窗口（项目无事务先例，保持 with_conn 风格）
+            conn.execute(
+                "DELETE FROM knowledge_links WHERE target_type = 'note' AND target_id = ?1",
+                params![id],
+            )?;
             let affected = conn.execute("DELETE FROM notes WHERE id = ?1", params![id])?;
             Ok(affected > 0)
         })

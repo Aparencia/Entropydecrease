@@ -250,10 +250,12 @@ pub(crate) fn ocr_worker_loop(
                         };
                         (result, reply)
                     }
-                    // 外层 match 已分流 RecognizeLines（返回类型不同）——逻辑不可达
+                    // 外层 match 已分流 RecognizeLines（返回类型不同）——逻辑不可达；
+                    // 防御（审查 L2）：即使可达也不得以裸 return 退出主循环（会
+                    // 静默终止整个 OCR worker，后续请求全部失败）——跳过继续
                     OcrRequest::RecognizeLines { reply, .. } => {
                         let _ = reply.send(Err(AppError::Ocr("行级重识别请求分流失效".to_string())));
-                        return;
+                        continue;
                     }
                 };
                 if result.is_err() {

@@ -177,23 +177,36 @@ fn to_line_input(b: &SessionOcrBlock) -> crate::line_merge::LineInput {
 }
 
 /// 两块合并（① 产物）：文本直拼（中文行内拼接）+ 得分均值 + bbox 并集。
+///
+/// @ai-context: ASCII 词间空格保持（审查 M1）——英文/数字 OCR 块 trim 后直拼会
+///              单词粘连（"Hello " + "World" → "HelloWorld"，空格信息已丢失
+///              不可恢复）；中文无词间空格不受影响。
 fn merge_two(a: &SessionOcrBlock, b: &SessionOcrBlock) -> SessionOcrBlock {
     let (ba, bb) = (a.bbox.unwrap(), b.bbox.unwrap());
     let x = ba.x.min(bb.x);
     let y = ba.y.min(bb.y);
     let x2 = (ba.x + ba.w).max(bb.x + bb.w);
     let y2 = (ba.y + ba.h).max(bb.y + bb.h);
+    let (a_t, b_t) = (a.text.trim(), b.text.trim());
+    let gap = if ascii_gap(a_t, b_t) { " " } else { "" };
     SessionOcrBlock {
         id: a.id,
         session_id: a.session_id,
         timestamp_ms: a.timestamp_ms,
-        text: format!("{}{}", a.text.trim(), b.text.trim()),
+        text: format!("{}{}{}", a_t, gap, b_t),
         score: (a.score + b.score) / 2.0,
         region: a.region.clone(),
         region_kind: a.region_kind.clone(),
         bbox: Some(TextBox { x, y, w: x2 - x, h: y2 - y }),
         screen_id: a.screen_id,
     }
+}
+
+/// ASCII 词间空格判定（审查 M1）：a 尾字符与 b 首字符均为 ASCII 字母/数字 →
+/// 需补空格（英文/数字行合并场景；中文首尾字符非 ASCII 不触发）。
+fn ascii_gap(a: &str, b: &str) -> bool {
+    a.chars().last().is_some_and(|c| c.is_ascii_alphanumeric())
+        && b.chars().next().is_some_and(|c| c.is_ascii_alphanumeric())
 }
 
 /// 块 → 净化行（trim 文本/bbox）。
