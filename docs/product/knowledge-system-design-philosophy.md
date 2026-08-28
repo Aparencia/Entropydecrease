@@ -2,9 +2,9 @@
 
 > 本文档阐述熵减知识体系层的设计哲学——不是知识仓库，不是第二大脑模板，
 > 而是一个**围绕真实问题组织学习、以使用为检验的决策操作系统**。
-> 关联：[ADR-024](../adr/ADR-024-knowledge-system-layer.md) · [整合分析·方案 B](../Foresight/personal-knowledge-system-layer-integration.md) ·
-> [竞品调研·品类深化](../Foresight/competitive-analysis-knowledge-system-software.md) ·
-> [pain-points-v4](./pain-points-v4.md)（L2 体系枝）· [指南源文档](../Foresight/source-personal-knowledge-system-guide-v2.md)
+> 关联：[ADR-024](../adr/ADR-024-knowledge-system-layer.md) · [整合分析·方案 B（[ ] 已归档）](../archive/2026-08-28/personal-knowledge-system-layer-integration.md) ·
+> [竞品调研·品类深化（[ ] 已归档）](../archive/2026-08-28/competitive-analysis-knowledge-system-software.md) ·
+> [pain-points-v4](./pain-points-v4.md)（L2 体系枝）· [指南源文档（[ ] 已归档）](../archive/2026-08-28/source-personal-knowledge-system-guide-v2.md)
 > 分工：本文档是知识体系模块的**子理念**；顶层哲学以 [product-design-philosophy.md](./product-design-philosophy.md) 为准——凡冲突，改设计或改理念，不允许静默并存。
 
 ---
@@ -126,7 +126,7 @@ P13（知识图谱出局）排的是"**连成网**"作为增长机制——失�
 ## 八、参考
 
 - [ADR-024](../adr/ADR-024-knowledge-system-layer.md)：裁决（有界体系通过、P13 重裁决、红线）
-- [整合分析·方案 B](../Foresight/personal-knowledge-system-layer-integration.md)：映射总表/数据模型/防线
-- [竞品调研·品类深化](../Foresight/competitive-analysis-knowledge-system-software.md)：方法论空白在"检验"；模板不是体系；Roam 低锁定教训
+- [整合分析·方案 B（[ ] 已归档）](../archive/2026-08-28/personal-knowledge-system-layer-integration.md)：映射总表/数据模型/防线
+- [竞品调研·品类深化（[ ] 已归档）](../archive/2026-08-28/competitive-analysis-knowledge-system-software.md)：方法论空白在"检验"；模板不是体系；Roam 低锁定教训
 - [v0.13 系列](../versions/v0.13.md)：落地路线（v0.13.0~4）
-- [指南源文档](../Foresight/source-personal-knowledge-system-guide-v2.md)：方法论来源（五环/三问一用/四行法/审计清单）
+- [指南源文档（[ ] 已归档）](../archive/2026-08-28/source-personal-knowledge-system-guide-v2.md)：方法论来源（五环/三问一用/四行法/审计清单）

@@ -10,11 +10,11 @@
 
 ## 背景
 
-用户提供《个人知识体系搭建指南 v2.0》（问题树/概念三问一用/模型交叉验证/决策日志/季度审计五环），要求整合进熵减。经范式判断（[整合分析](../Foresight/personal-knowledge-system-layer-integration.md)）：指南是 KM 范式＋获取隐喻，熵减是学习科学＋成为隐喻；两者**闭环互补**（指南缺记忆发动机与证据层，熵减缺"为什么学"与"应用闭环"），但指南的"知识资产/双链/多领域体系"要素与熵减现有裁决直接冲突：
+用户提供《个人知识体系搭建指南 v2.0》（问题树/概念三问一用/模型交叉验证/决策日志/季度审计五环），要求整合进熵减。经范式判断（[整合分析（[ ] 已归档）](../archive/2026-08-28/personal-knowledge-system-layer-integration.md)）：指南是 KM 范式＋获取隐喻，熵减是学习科学＋成为隐喻；两者**闭环互补**（指南缺记忆发动机与证据层，熵减缺"为什么学"与"应用闭环"），但指南的"知识资产/双链/多领域体系"要素与熵减现有裁决直接冲突：
 
 - 原则 4 克制清单：知识图谱/双链不做（[P13 出局](../product/pain-points-v4.md)）；不做 Notion 式通用工作区。
 - 契约一：组粒度对齐领域、拒绝大类；组是唯一容器。
-- 竞品调研（[赛道全景](../Foresight/competitive-analysis-knowledge-system-layer.md)＋[品类深化](../Foresight/competitive-analysis-knowledge-system-software.md)）：「提取→记忆→应用→决策」完整闭环无人做；整合型「概念/模型↔决策日志↔审计」为零竞品带（独立决策日志 App 存在但孤立）；方法论空白在"**检验**"（知识是否被用、决策是否变好）而非"组织"——卡片盒/PARA/MOC 全部只回答"怎么存、怎么找"。
+- 竞品调研（[赛道全景（[ ] 已归档）](../archive/2026-08-28/competitive-analysis-knowledge-system-layer.md)＋[品类深化（[ ] 已归档）](../archive/2026-08-28/competitive-analysis-knowledge-system-software.md)）：「提取→记忆→应用→决策」完整闭环无人做；整合型「概念/模型↔决策日志↔审计」为零竞品带（独立决策日志 App 存在但孤立）；方法论空白在"**检验**"（知识是否被用、决策是否变好）而非"组织"——卡片盒/PARA/MOC 全部只回答"怎么存、怎么找"。
 
 ## 决策
 
@@ -80,7 +80,7 @@
 
 ## 参考
 
-- [整合分析·方案 B](../Foresight/personal-knowledge-system-layer-integration.md)
-- [竞品调研·赛道全景](../Foresight/competitive-analysis-knowledge-system-layer.md)／[品类深化](../Foresight/competitive-analysis-knowledge-system-software.md)
+- [整合分析·方案 B（[ ] 已归档）](../archive/2026-08-28/personal-knowledge-system-layer-integration.md)
+- [竞品调研·赛道全景（[ ] 已归档）](../archive/2026-08-28/competitive-analysis-knowledge-system-layer.md)／[品类深化（[ ] 已归档）](../archive/2026-08-28/competitive-analysis-knowledge-system-software.md)
 - [v0.13 系列文档](../versions/v0.13.md)
-- [指南源文档](../Foresight/source-personal-knowledge-system-guide-v2.md)
+- [指南源文档（[ ] 已归档）](../archive/2026-08-28/source-personal-knowledge-system-guide-v2.md)

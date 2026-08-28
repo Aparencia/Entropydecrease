@@ -349,8 +349,8 @@
 
 ### v0.13 · 大目标版本系列：知识体系层（方案 B，2026-08-23 裁决立项）
 
-> 2026-08-23 用户全盘采纳 [整合分析·方案 B](../Foresight/personal-knowledge-system-layer-integration.md)，裁决：**v0.13 为大目标版本**，按整合分析 §六 分小版本推进；
-> 依据：[竞品调研](../Foresight/competitive-analysis-knowledge-system-layer.md)（"应用/决策"零竞品带）· [指南源文档](../Foresight/source-personal-knowledge-system-guide-v2.md)；
+> 2026-08-23 用户全盘采纳 [整合分析·方案 B（[ ] 已归档）](../archive/2026-08-28/personal-knowledge-system-layer-integration.md)，裁决：**v0.13 为大目标版本**，按整合分析 §六 分小版本推进；
+> 依据：[竞品调研（[ ] 已归档）](../archive/2026-08-28/competitive-analysis-knowledge-system-layer.md)（"应用/决策"零竞品带）· [指南源文档（[ ] 已归档）](../archive/2026-08-28/source-personal-knowledge-system-guide-v2.md)；
 > 理念局部修订（P13 重裁决等）随 **v0.13.0 前置文档批**（ADR-024）；前置门控：REQ-146 真机验收总清（组级学习循环通过）；
 > 系列规划详见 [versions/v0.13.md](../versions/v0.13.md)。
 
