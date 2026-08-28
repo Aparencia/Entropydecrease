@@ -15,7 +15,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { Note } from "../types";
-import NoteEditView, { type NoteEditHandle } from "../components/NoteEditView";
+import type { NoteEditHandle } from "../components/NoteEditView";
+// v0.14 A：编辑器容器切换为 RichEditorView（CM 富编辑：图片内联/撤销/草稿恢复）；
+// NoteEditView 保留为 CM 初始化失败的降级路径（RichEditorView 内部回退）
+import RichEditorView from "../components/RichEditorView";
 import NoteListView, { parseTags } from "../components/NoteListView";
 import type { SortMode } from "../components/NoteListView";
 import GroupSidebar from "../components/GroupSidebar";
@@ -343,7 +346,7 @@ export default function NotesPage({ focusNoteId, onOpenSessions, onOpenSystem }:
             note={selected}
             editing={editing}
             editor={
-              <NoteEditView
+              <RichEditorView
                 key={selected.id}
                 ref={editorRef}
                 note={selected}
@@ -352,6 +355,8 @@ export default function NotesPage({ focusNoteId, onOpenSessions, onOpenSystem }:
                   setEditing(false);
                   void handleNoteChanged();
                 }}
+                // v0.14 A：编辑态图片点击放大（与阅读态同一入口）
+                onImageOpen={(src, title) => setPreviewImg({ src, title })}
               />
             }
             auxPanels={auxPanels}

@@ -8,6 +8,8 @@
  */
 import { useEffect, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+// v0.14 A：外链/本地判定提取为共享纯函数（编辑 widget 与阅读共用同一解析逻辑）
+import { resolveNoteImageSrc } from "../utils/resolveNoteImageSrc";
 
 interface Props {
   src: string;
@@ -17,8 +19,7 @@ interface Props {
   onOpen?: (url: string, title?: string) => void;
 }
 
-/** 无需本地解析的直出源（http/data/blob） */
-const EXTERNAL = /^(https?:|data:|blob:)/i;
+/** 无需本地解析的直出源判定已提取至 utils/resolveNoteImageSrc（v0.14 A） */
 
 const PLACEHOLDER: React.CSSProperties = {
   display: "flex",
@@ -36,14 +37,19 @@ const PLACEHOLDER: React.CSSProperties = {
 };
 
 export default function NoteImage({ src, alt = "", noteId, onOpen }: Props) {
-  const [url, setUrl] = useState<string | null>(EXTERNAL.test(src) ? src : null);
+  const kind = resolveNoteImageSrc(src);
+  const [url, setUrl] = useState<string | null>(kind === "external" ? src : null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let disposed = false;
-    if (EXTERNAL.test(src)) {
+    if (kind === "external") {
       setUrl(src);
       setFailed(false);
+      return;
+    }
+    if (kind === "invalid") {
+      setFailed(true);
       return;
     }
     setUrl(null);
@@ -59,7 +65,7 @@ export default function NoteImage({ src, alt = "", noteId, onOpen }: Props) {
     return () => {
       disposed = true;
     };
-  }, [src, noteId]);
+  }, [src, noteId, kind]);
 
   if (failed) {
     return <div style={PLACEHOLDER}>🖼 {alt || "图片不可用"}</div>;

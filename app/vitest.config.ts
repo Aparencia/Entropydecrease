@@ -11,6 +11,8 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
+    // v0.14 A：CM6 挂载需 Range 几何桩（见 src/test/setup.ts）
+    setupFiles: ["src/test/setup.ts"],
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },
 });
