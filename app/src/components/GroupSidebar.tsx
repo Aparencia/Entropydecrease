@@ -1,20 +1,30 @@
 /**
- * GroupSidebar — 笔记页左侧组筛选侧栏（v0.12.2 三栏拆分；自 NoteGroupPanel 拆分）。
+ * GroupSidebar — 笔记页左侧组筛选侧栏（v0.14 C1 Obsidian 式重构）。
  *
- * @ai-context: 职责单一化（规划 §7）——组筛选（行单击=仅过滤，无展开动作——
- *              v0.12.2 决策 1 三元分离：一个手势只触发一个动作）+ ⓘ 弹层入口
- *              （路由理由/改判/组管理/周契约收敛进 RouteInfoPopover）+
- *              快速记录（feed 进料口）+ 收件箱入口（恒常首项 + 待处理计数）。
- * @ai-context: 路由理由"可见"重释（REQ-198）——行小字人话一行
- *              （系统自动归类/⚠ 待确认/已改判 + ⓘ），算法原文不进行内。
+ * @ai-context: 原 240px 平铺混排（痛点 C1：展示混乱）——重构为分区组织：
+ *              最近使用区（LRU≤5，访问组时写入 localStorage）+ 收件箱/全部/
+ *              复习（移出"组"概念区）+ 组分区（按 kind：课程/主题/独立/feed，
+ *              折叠记忆 localStorage）+ 组过滤（纯函数 filterGroups）+
+ *              拖拽归组（组行为 drop target，笔记卡片为 drag source，
+ *              move_note_to_group 命令）。组行渲染提取至 GroupSidebarRow
+ *              （行内徽标收敛为 1-2 个）。三条设计契约延续：展示层组织，
+ *              不改组模型（无父子组）。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Fragment, NoteGroup } from "../types";
 import type { KnowledgeLink, KnowledgeSystem } from "../types/knowledge";
-import { parseRouteReason, routeLineState } from "../utils/routeReason";
+import {
+  GROUP_SECTIONS,
+  filterGroups,
+  pushRecentGroup,
+  readFolded,
+  readRecentGroupIds,
+  writeFolded,
+  writeRecentGroupIds,
+} from "../utils/groupSidebar";
 import RouteInfoPopover from "./RouteInfoPopover";
-import SystemBadge from "./SystemBadge";
+import GroupSidebarRow from "./GroupSidebarRow";
 
 interface Props {
   /** 当前过滤组（null=全部笔记） */
@@ -34,13 +44,6 @@ interface Props {
   refreshToken: number;
   /** 跳转体系页并选中体系（v0.13.7 触点①） */
   onOpenSystem: (systemId: number) => void;
-}
-
-/** 组类别徽标（文案+配色） */
-function kindBadge(kind: string): { label: string; color: string } {
-  if (kind === "course") return { label: "📚 课程", color: "#0f766e" };
-  if (kind === "topic") return { label: "🏷 主题", color: "#7c3aed" };
-  return { label: "📄 独立", color: "#6b7280" };
 }
 
 /** Blob → base64（分块转换——大截图防 String.fromCharCode 栈溢出） */
@@ -71,6 +74,23 @@ export default function GroupSidebar({
   const [systems, setSystems] = useState<KnowledgeSystem[]>([]);
   // ⓘ 弹层态（受控单开——同一时间只开一个组）
   const [popover, setPopover] = useState<{ group: NoteGroup; anchor: { x: number; y: number } } | null>(null);
+  // v0.14 B：组色选择器打开态（受控单开；null=全关）
+  const [colorPickerFor, setColorPickerFor] = useState<number | null>(null);
+  // ── v0.14 C1：Obsidian 式状态 ──
+  const [groupQuery, setGroupQuery] = useState("");
+  // 分区折叠记忆（localStorage 初始化；kind → 是否折叠）
+  const [folded, setFolded] = useState<Record<string, boolean>>(() => {
+    if (typeof window === "undefined") return {};
+    const f: Record<string, boolean> = {};
+    for (const s of GROUP_SECTIONS) f[s.kind] = readFolded(window.localStorage, s.kind);
+    return f;
+  });
+  // 最近使用（LRU≤5；访问组时写入 localStorage）
+  const [recentIds, setRecentIds] = useState<number[]>(() =>
+    typeof window === "undefined" ? [] : readRecentGroupIds(window.localStorage),
+  );
+  // 拖拽悬停态（组行高亮）
+  const [dragOverId, setDragOverId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -159,6 +179,73 @@ export default function GroupSidebar({
     setPopover((prev) => (prev?.group.id === g.id ? null : { group: g, anchor }));
   };
 
+  // ── v0.14 C1：过滤 / 最近使用 / 折叠 / 拖拽 ──
+  const filteredGroups = useMemo(() => filterGroups(groups, groupQuery), [groups, groupQuery]);
+  const recentGroups = useMemo(
+    () => recentIds.map((id) => groups.find((g) => g.id === id)).filter((g): g is NoteGroup => !!g),
+    [recentIds, groups],
+  );
+
+  /** 访问组：写最近使用（LRU）+ 过滤切换（toggle=组行单击互斥；recent=直达） */
+  const handleGroupSelect = (g: NoteGroup, toggle: boolean) => {
+    setRecentIds((cur) => {
+      const next = pushRecentGroup(cur, g.id);
+      writeRecentGroupIds(window.localStorage, next);
+      return next;
+    });
+    onGroupFilterChange(toggle ? (groupFilter === g.id ? null : g.id) : g.id);
+  };
+
+  const toggleFolded = (kind: string) => {
+    setFolded((cur) => {
+      const next = { ...cur, [kind]: !cur[kind] };
+      writeFolded(window.localStorage, kind, next[kind]);
+      return next;
+    });
+  };
+
+  /** 拖拽归组（组行 drop；noteId 来自 NoteListView 行 dragStart） */
+  const handleGroupDrop = (g: NoteGroup, e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverId(null);
+    const noteId = Number(e.dataTransfer.getData("text/note-id"));
+    if (!noteId) return;
+    invoke("move_note_to_group", { noteId, groupId: g.id })
+      .then(() => onChanged())
+      .catch((err) => setStatus(`归组失败: ${err}`));
+  };
+
+  const renderGroupRow = (g: NoteGroup) => (
+    <GroupSidebarRow
+      key={g.id}
+      group={g}
+      active={groupFilter === g.id}
+      systems={systems}
+      systemLinks={systemLinks[g.id] ?? []}
+      colorPickerOpen={colorPickerFor === g.id}
+      dragOver={dragOverId === g.id}
+      onSelect={() => handleGroupSelect(g, true)}
+      onInfo={(e) => openPopover(g, e)}
+      onToggleColorPicker={() => setColorPickerFor(colorPickerFor === g.id ? null : g.id)}
+      onColorChange={(color) => {
+        invoke("update_group_color", { id: g.id, color })
+          .then(() => { setColorPickerFor(null); onChanged(); })
+          .catch((e) => setStatus(`组颜色设置失败: ${e}`));
+      }}
+      onOpenSystem={(id) => onOpenSystem(id)}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("text/note-id")) {
+          e.preventDefault();
+          setDragOverId(g.id);
+        }
+      }}
+      onDragLeave={() => setDragOverId((cur) => (cur === g.id ? null : cur))}
+      onDrop={(e) => handleGroupDrop(g, e)}
+    />
+  );
+
+  const filtering = groupQuery.trim().length > 0;
+
   return (
     <div style={{ width: 240, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", position: "relative", minWidth: 0 }}>
       {/* 头部：标题 + 刷新 */}
@@ -168,6 +255,15 @@ export default function GroupSidebar({
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: 6, display: "flex", flexDirection: "column", gap: 2 }}>
+        {/* v0.14 C1：组过滤框 */}
+        <input
+          data-testid="group-filter-input"
+          value={groupQuery}
+          onChange={(e) => setGroupQuery(e.target.value)}
+          placeholder="🔍 过滤组…"
+          style={{ width: "100%", fontSize: 12, padding: "4px 8px", border: "1px solid #e5e7eb", borderRadius: 4, boxSizing: "border-box", marginBottom: 4 }}
+        />
+
         {/* ⚡ 快速记录（feedCapture 开关=快速记录入口；默认开） */}
         {feedCaptureOn && (
           <div data-testid="quick-capture" style={{ margin: "2px 0 6px", padding: 8, background: "#faf5ff", borderRadius: 6, border: "1px solid #e9d5ff" }}>
@@ -218,67 +314,65 @@ export default function GroupSidebar({
           📁 全部笔记
         </div>
 
+        {/* v0.14 C1：最近使用区（LRU≤5；点击直达过滤——无 toggle 互斥） */}
+        {!filtering && recentGroups.length > 0 && (
+          <div data-testid="recent-groups" style={{ marginTop: 6 }}>
+            <div style={{ fontSize: 11, color: "#9ca3af", padding: "2px 10px", fontWeight: 600 }}>🕐 最近使用</div>
+            {recentGroups.map((g) => (
+              <div
+                key={g.id}
+                onClick={() => handleGroupSelect(g, false)}
+                style={{
+                  padding: "5px 10px", borderRadius: 6, cursor: "pointer", fontSize: 12,
+                  background: groupFilter === g.id ? "#f0fdfa" : "transparent",
+                  color: groupFilter === g.id ? "#0f766e" : "#374151",
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}
+              >
+                {g.name}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* v0.14 C1：组分区（无查询→按 kind 分区+折叠记忆；有查询→扁平过滤结果） */}
+        {filtering ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {filteredGroups.map(renderGroupRow)}
+            {filteredGroups.length === 0 && (
+              <p style={{ fontSize: 12, color: "#9ca3af", padding: "12px 8px" }}>无匹配组</p>
+            )}
+          </div>
+        ) : (
+          GROUP_SECTIONS.map((sec) => {
+            const secGroups = filteredGroups.filter((g) => g.kind === sec.kind);
+            if (secGroups.length === 0) return null;
+            const isFolded = folded[sec.kind] ?? false;
+            return (
+              <div key={sec.kind} data-testid={`group-section-${sec.kind}`} style={{ marginTop: 6 }}>
+                <div
+                  data-testid={`section-toggle-${sec.kind}`}
+                  onClick={() => toggleFolded(sec.kind)}
+                  style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", padding: "2px 10px", cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 4 }}
+                >
+                  <span>{isFolded ? "▸" : "▾"}</span> {sec.title}
+                  <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 400 }}>{secGroups.length}</span>
+                </div>
+                {!isFolded && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    {secGroups.map(renderGroupRow)}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+
         {groups.length === 0 && (
           <p style={{ fontSize: 12, color: "#9ca3af", padding: "12px 8px" }}>
             暂无笔记组——会话转笔记时自动归组
           </p>
         )}
-
-        {/* 组行：单击=仅过滤（无展开动作）；ⓘ 打开弹层 */}
-        {groups.map((g) => {
-          const badge = kindBadge(g.kind);
-          const reason = parseRouteReason(g.routeReason);
-          const line = routeLineState(reason, g.routeOverridden);
-          const active = groupFilter === g.id;
-          return (
-            <div
-              key={g.id}
-              data-testid={`group-row-${g.id}`}
-              onClick={() => onGroupFilterChange(active ? null : g.id)}
-              style={{
-                padding: "7px 10px", borderRadius: 6, cursor: "pointer",
-                background: active ? "#f0fdfa" : "transparent",
-                border: line.needsConfirm && !g.routeOverridden ? "1px dashed #f59e0b" : "1px solid transparent",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 500, flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g.name}</span>
-                <span style={{ fontSize: 11, color: "#9ca3af" }}>{g.noteCount}</span>
-              </div>
-              {/* 行小字：人话归因一行 + ⓘ（结果可见；原因进弹层明细） */}
-              <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 3 }}>
-                <span style={{ fontSize: 10, color: badge.color, background: "#f9fafb", borderRadius: 8, padding: "0 5px" }}>{badge.label}</span>
-                {g.terrain === "feed" && (
-                  <span style={{ fontSize: 10, color: "#7c3aed", background: "#faf5ff", borderRadius: 8, padding: "0 5px" }}>feed</span>
-                )}
-                {/* 体系徽标（触点①：该组被哪些体系引用；点击跳体系页） */}
-                {systemLinks[g.id]?.map((sl) => {
-                  const sys = systems.find((s) => s.id === sl.systemId);
-                  if (!sys || sys.status === "archived") return null;
-                  return (
-                    <SystemBadge
-                      key={sl.systemId}
-                      name={sys.name}
-                      linkCount={sl.count}
-                      onClick={() => onOpenSystem(sl.systemId)}
-                    />
-                  );
-                })}
-                <span style={{ fontSize: 10, color: line.needsConfirm ? "#b45309" : "#9ca3af", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
-                  {line.label}
-                </span>
-                <button
-                  data-testid={`group-info-${g.id}`}
-                  onClick={(e) => openPopover(g, e)}
-                  style={{ marginLeft: "auto", fontSize: 11, cursor: "pointer", border: "none", background: "none", color: "#6b7280", padding: "0 2px", lineHeight: 1 }}
-                  title="路由详情 / 改判 / 组管理 / 周契约"
-                >
-                  ⓘ
-                </button>
-              </div>
-            </div>
-          );
-        })}
 
         {/* 🎴 复习（全量入口：UI 最小化——一个按钮 + 到期数） */}
         <div style={{ marginTop: "auto", paddingTop: 6 }}>

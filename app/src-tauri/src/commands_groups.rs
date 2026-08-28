@@ -166,3 +166,20 @@ pub fn move_note_to_group(
     }
     state.db.update_note_group(note_id, group_id).map_err(|e| e.to_string())
 }
+
+
+/// v0.14 B（视觉系统）：组级颜色设置（色板 id；None=清除回默认灰）。
+#[tauri::command]
+pub fn update_group_color(
+    state: State<'_, AppState>,
+    id: i64,
+    color: Option<String>,
+) -> Result<bool, String> {
+    if id <= 0 {
+        return Err("无效的组 id".to_string());
+    }
+    state
+        .db
+        .update_group_color(id, color.as_deref())
+        .map_err(|e| e.to_string())
+}

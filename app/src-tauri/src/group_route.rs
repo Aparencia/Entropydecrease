@@ -19,6 +19,20 @@ const CHAPTER_DENSITY_LOW: f32 = 0.5;
 const GLOSSARY_HIGH: usize = 5;
 /// OCR 文本密度阈值（0..1）：≥ 此值投高密度票（画面承载文字结构）。
 const OCR_DENSITY_HIGH: f32 = 0.5;
+
+/// OCR 文本密度（纯函数，0..1；None=无 OCR/转写数据不投票，不猜）。
+///
+/// @ai-context: 口径 = OCR 字符数 / 转写字符数（上限 1.0）——PPT 密集课堂画面
+///              文字远超口播文本 → 高值；纯音频 → 0。pub(crate)（v0.14 D）：
+///              信号定义与计算同模块（spec 3.2）——会话级信号；章节级同口径
+///              复用见 chapter_morph::ocr_density（无数据返回 0.0 的章节语境）。
+pub(crate) fn ocr_text_density(transcript_chars: usize, ocr_chars: usize) -> Option<f32> {
+    if transcript_chars > 0 || ocr_chars > 0 {
+        Some((ocr_chars as f32 / transcript_chars.max(1) as f32).min(1.0))
+    } else {
+        None
+    }
+}
 /// 高密度/低密度判定的最小共振票数（单一信号不足以定路由——vote_tier 同哲学）。
 const MIN_RESONANT_VOTES: u32 = 2;
 

@@ -16,12 +16,23 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ confirm: vi.fn().mockResolvedValue(true) }));
+// v0.14 C3：跨页事件监听 mock（jsdom 无 Tauri 运行时——listen 返回卸载函数）
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() => {}) }));
 // v0.13.8：页面级测试只断言接线——画布视图本身 mock（RF 渲染跳过 jsdom，规格 §六；
 // 画布内部行为由 KnowledgeCanvasView.test 覆盖）
 vi.mock("../components/KnowledgeCanvasView", () => ({
   default: ({ onGoBack }: { onGoBack: () => void }) => (
     <div data-testid="canvas-view">
       <button data-testid="canvas-back" onClick={onGoBack}>← 树视图</button>
+    </div>
+  ),
+}));
+// v0.14 C2：图谱视图 mock——页面级测试只断言接线（图谱内部行为由 KnowledgeGraphView.test 覆盖）
+vi.mock("../components/KnowledgeGraphView", () => ({
+  default: ({ onOpenNote, onOpenGroup }: { onOpenNote: (id: number) => void; onOpenGroup: (id: number) => void }) => (
+    <div data-testid="graph-view">
+      <button data-testid="graph-open-note" onClick={() => onOpenNote(5)}>笔记 5</button>
+      <button data-testid="graph-open-group" onClick={() => onOpenGroup(3)}>组 3</button>
     </div>
   ),
 }));
@@ -108,5 +119,32 @@ describe("KnowledgePage 画布入口（v0.13.8）", () => {
     // 画布「← 树视图」返回按钮 → 切回树视图（浮钮回显）
     fireEvent.click(screen.getByTestId("canvas-back"));
     expect(await screen.findByTestId("tree-open-canvas")).toBeTruthy();
+  });
+});
+
+describe("KnowledgePage 图谱入口（v0.14 C2）", () => {
+  it("中栏「🕸 图谱」标签 → 挂载图谱视图（全局视图——无需选中体系）", async () => {
+    // Arrange：有体系但未选中（图谱跨体系，不依赖选中态）
+    withSystemMock();
+    render(<KnowledgePage />);
+    await screen.findByTestId("system-global");
+    // Act：直接点「图谱」标签（不先选体系）
+    fireEvent.click(screen.getByText("🕸 图谱"));
+    // Assert：图谱挂载
+    expect(await screen.findByTestId("graph-view")).toBeTruthy();
+  });
+
+  it("图谱笔记/组跳转回调透传到页面 props", async () => {
+    // Arrange
+    const onOpenNote = vi.fn();
+    const onOpenGroup = vi.fn();
+    withSystemMock();
+    render(<KnowledgePage onOpenNote={onOpenNote} onOpenGroup={onOpenGroup} />);
+    fireEvent.click(await screen.findByText("🕸 图谱"));
+    // Act：图谱视图内按钮触发跳转回调
+    fireEvent.click(await screen.findByTestId("graph-open-note"));
+    expect(onOpenNote).toHaveBeenCalledWith(5);
+    fireEvent.click(screen.getByTestId("graph-open-group"));
+    expect(onOpenGroup).toHaveBeenCalledWith(3);
   });
 });

@@ -5,7 +5,7 @@
 
 use super::*;
 use crate::note_body_source::BodySource;
-use crate::types::SessionOcrBlock;
+use crate::types::{SessionOcrBlock, TextBox};
 
 fn block(ts: u64, region: &str, text: &str, score: f32) -> SessionOcrBlock {
     SessionOcrBlock {
@@ -17,6 +17,21 @@ fn block(ts: u64, region: &str, text: &str, score: f32) -> SessionOcrBlock {
         region: region.to_string(),
         region_kind: None,
         bbox: None,
+        screen_id: None,
+    }
+}
+
+/// 带 bbox 的块（净化链 ① 行合并/③ 增量用）。
+fn blk_boxed(ts: u64, text: &str, score: f32, x: f32, y: f32, w: f32, h: f32) -> SessionOcrBlock {
+    SessionOcrBlock {
+        id: 0,
+        session_id: 1,
+        timestamp_ms: ts,
+        text: text.to_string(),
+        score,
+        region: "full".to_string(),
+        region_kind: None,
+        bbox: Some(TextBox { x, y, w, h }),
         screen_id: None,
     }
 }
@@ -134,4 +149,96 @@ fn filter_note_from_ocr_is_deterministic() {
     // Assert
     assert_eq!(a.markdown, b.markdown);
     assert_eq!(a, b);
+}
+
+// ── v0.14 D 净化链（① 行合并 / ③ 跨帧增量）──────────────────────────
+
+/// 净化链 ①：同帧同行相邻块（det 切开）→ 评分器合并为一行。
+#[test]
+fn same_row_blocks_merge_in_frame() {
+    // Arrange：同一逻辑行被 det 切两块（y 同、x 相邻、行高一致）——净化链 ①
+    let blocks = vec![
+        blk_boxed(1000, "系统是由相互联系的若干要素", 0.9, 100.0, 300.0, 468.0, 40.0),
+        blk_boxed(1000, "组成的整体", 0.88, 575.0, 300.0, 180.0, 40.0),
+    ];
+    // Act
+    let result = run("图文会话", &blocks);
+    // Assert：拼成一行一句（should_merge_lines 几何 3 项全中）
+    assert_eq!(result.ocr_body.len(), 1);
+    assert_eq!(result.ocr_body[0], "系统是由相互联系的若干要素组成的整体");
+}
+
+/// 净化链 ①：同帧不同行（y 差大）不合并。
+#[test]
+fn distinct_rows_stay_separate_in_frame() {
+    // Arrange：两行正文（y 差 80 > 容差 8）
+    let blocks = vec![
+        blk_boxed(1000, "第一行内容", 0.9, 100.0, 300.0, 300.0, 40.0),
+        blk_boxed(1000, "第二行内容", 0.88, 100.0, 380.0, 300.0, 40.0),
+    ];
+    // Act
+    let result = run("图文会话", &blocks);
+    // Assert：两行分开
+    assert_eq!(result.ocr_body.len(), 2);
+    assert_eq!(result.ocr_body[0], "第一行内容");
+    assert_eq!(result.ocr_body[1], "第二行内容");
+}
+
+/// 净化链 ①：句号断开——同帧同行也不合并（反误合并原则）。
+#[test]
+fn period_terminator_breaks_row_merge() {
+    // Arrange：a 尾句号（-3 强断开）：同行 1 + 相邻 1 + 一致 1 - 3 = 0 < 3
+    let blocks = vec![
+        blk_boxed(1000, "这是完整句子。", 0.9, 100.0, 300.0, 300.0, 40.0),
+        blk_boxed(1000, "下一句内容", 0.88, 410.0, 300.0, 200.0, 40.0),
+    ];
+    // Act
+    let result = run("图文会话", &blocks);
+    // Assert：不合并（不制造跨句幻觉行）
+    assert_eq!(result.ocr_body.len(), 2);
+}
+
+/// 净化链 ③：后帧 ⊇ 前帧（PPT 动画逐行出现）→ 同屏增量取后帧完整文本。
+#[test]
+fn incremental_frames_merge_to_latest() {
+    // Arrange：帧1 一行、帧2 两行（增量出现——帧2 文本含帧1）；bbox 位置稳定
+    let blocks = vec![
+        blk_boxed(1000, "第一行", 0.9, 100.0, 100.0, 120.0, 40.0),
+        blk_boxed(2000, "第一行", 0.88, 100.0, 100.0, 120.0, 40.0),
+        blk_boxed(2000, "第二行", 0.9, 100.0, 150.0, 120.0, 40.0),
+    ];
+    // Act
+    let result = run("图文会话", &blocks);
+    // Assert：帧2 行集替换帧1（增量合并——不重复输出第一行）
+    assert_eq!(result.ocr_body, vec!["第一行".to_string(), "第二行".to_string()]);
+}
+
+/// 净化链 ③：翻页（后帧不含前帧）→ 新屏输出。
+#[test]
+fn page_turn_keeps_both_frames() {
+    // Arrange：帧2 文本不包含帧1（翻页）
+    let blocks = vec![
+        blk_boxed(1000, "第一页内容", 0.9, 100.0, 100.0, 200.0, 40.0),
+        blk_boxed(2000, "第二页全新内容", 0.88, 100.0, 100.0, 200.0, 40.0),
+    ];
+    // Act
+    let result = run("图文会话", &blocks);
+    // Assert：两屏都输出
+    assert_eq!(result.ocr_body, vec!["第一页内容".to_string(), "第二页全新内容".to_string()]);
+}
+
+/// 净化链 ③：bbox 大幅位移（翻页动画）→ 即使文本包含也不合并。
+#[test]
+fn bbox_shift_keeps_both_frames() {
+    // Arrange：帧2 文本含帧1（增量假象）但 bbox 位移 300px（> 行高×0.5）——
+    // position_stable 防线：位移超阈值 → 新屏（不误并）；文本不同故相邻去重
+    // 不会掩盖两条输出
+    let blocks = vec![
+        blk_boxed(1000, "标题内容", 0.9, 100.0, 100.0, 200.0, 40.0),
+        blk_boxed(2000, "标题内容更多", 0.88, 100.0, 400.0, 200.0, 40.0),
+    ];
+    // Act
+    let result = run("图文会话", &blocks);
+    // Assert：两屏都输出（位置位移 → 新屏，不误并）
+    assert_eq!(result.ocr_body, vec!["标题内容".to_string(), "标题内容更多".to_string()]);
 }

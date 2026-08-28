@@ -264,6 +264,13 @@ CREATE TABLE IF NOT EXISTS contracts (
             viewport_y REAL DEFAULT 0,
             zoom REAL DEFAULT 1.0
         );
+        -- v0.14 B（视觉系统）：标签颜色表——tags 无独立表（notes.tags JSON 数组），
+        -- 以标签名称为键（规格中 tag_id 前提不存在，按最小合理偏差用 tag 文本主键）；
+        -- color 为 12 色板 id，未知色板 id 前端回退默认灰不崩溃
+        CREATE TABLE IF NOT EXISTS tag_colors (
+            tag TEXT PRIMARY KEY,
+            color TEXT NOT NULL
+        );
         ",
     )?;
     // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）
@@ -389,6 +396,14 @@ CREATE TABLE IF NOT EXISTS contracts (
         "knowledge_nodes",
         "canvas_y",
         "ALTER TABLE knowledge_nodes ADD COLUMN canvas_y REAL",
+    )?;
+    // v0.14 B（视觉系统）：旧库迁移——note_groups 补 color 列
+    // （NULL=未设置；CREATE TABLE 只对新库生效，旧库缺列必须 ALTER 补齐）
+    ensure_column(
+        conn,
+        "note_groups",
+        "color",
+        "ALTER TABLE note_groups ADD COLUMN color TEXT",
     )?;
     // v0.7.7（REQ-183）：结构图记录表（建表幂等——新库建表/旧库补表）
     crate::db_structures::init(conn)?;

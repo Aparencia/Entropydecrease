@@ -20,6 +20,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import type { Note } from "../types";
+import { remarkMarkHighlight } from "../utils/remarkMarkHighlight";
 import NoteImage from "./NoteImage";
 
 interface Props {
@@ -151,9 +152,13 @@ export default function NoteMarkdown({ note, searchQuery, onTaskToggle, onOpenSe
 
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath]}
+      remarkPlugins={[remarkGfm, remarkMath, remarkMarkHighlight]}
       rehypePlugins={[rehypeKatex]}
       components={{
+        // v0.14 B：==文本== 荧光笔（remark 插件产出 mark 节点；单色黄，浅/深主题通用）
+        mark: ({ node, children, ...props }) => (
+          <mark style={{ background: "#fde68a", borderRadius: 2, padding: "0 1px" }} {...props}>{hl(children)}</mark>
+        ),
         // 任务清单勾选（H1：渲染时记录序号 → 仅替换对应源行）
         input: ({ node, ...props }) => {
           const order = taskCounterRef.current++;

@@ -7,8 +7,10 @@
  * @ai-context: v0.12.8 勾选批量删除（与会话管理台同逻辑：行内勾选 +
  *              底部批量操作栏；副作用经 onBatchDelete 上抛父层确认/invoke）。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Note } from "../types";
+import { paletteHex } from "../utils/colorPalette";
+import type { ThemeMode } from "../utils/colorPalette";
 
 export type SortMode = "updated-desc" | "pin-first" | "created-desc";
 
@@ -37,6 +39,10 @@ interface Props {
   allTags: string[];
   selectedId: number | null;
   status: string;
+  /** v0.14 B：笔记色板 id 映射（noteId → 色板 id；null=默认灰）——父层 resolveNoteColor 计算 */
+  noteColors?: Record<number, string | null>;
+  /** v0.14 B：标签色板 id 映射（tag → 色板 id）——标签徽标底色 */
+  tagColors?: Record<string, string>;
   onKeywordChange: (kw: string) => void;
   onTagFilterChange: (tag: string | null) => void;
   onSortModeChange: (mode: SortMode) => void;
@@ -51,8 +57,15 @@ interface Props {
 
 export default function NoteListView({
   notes, keyword, tagFilter, sortMode, allTags, selectedId, status,
+  noteColors, tagColors,
   onKeywordChange, onTagFilterChange, onSortModeChange, onSelect, onCreate, onRefresh, onOpenSession, onBatchDelete,
 }: Props) {
+  // v0.14 B：当前主题（跟随 prefers-color-scheme；jsdom 无 matchMedia 回退 light）
+  const theme: ThemeMode = useMemo(
+    () => (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
+    [],
+  );
+
   // v0.12.7：勾选集合（面板本地状态——结构与会话管理台 selected 一致）
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
@@ -150,14 +163,23 @@ export default function NoteListView({
         {notes.length === 0 && <p style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", marginTop: 24 }}>暂无笔记</p>}
         {notes.map((n) => {
           const tags = parseTags(n);
+          // v0.14 B：行左侧色条（resolveNoteColor 结果；未知 id paletteHex 回退默认灰）
+          const accent = paletteHex(noteColors?.[n.id] ?? null, theme);
           return (
             <div
               key={n.id}
               id={`note-row-${n.id}`}
+              draggable
+              onDragStart={(e) => {
+                // v0.14 C1：拖拽归组——笔记卡片为 drag source（组行为 drop target）
+                e.dataTransfer.setData("text/note-id", String(n.id));
+                e.dataTransfer.effectAllowed = "move";
+              }}
               onClick={() => onSelect(n)}
               style={{
                 padding: "10px 14px",
                 borderBottom: "1px solid #f3f4f6",
+                borderLeft: `4px solid ${accent}`,
                 cursor: "pointer",
                 background: selectedId === n.id ? "#f0fdfa" : "transparent",
               }}
@@ -179,7 +201,16 @@ export default function NoteListView({
               <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
                 <span>{n.source === "classroom" ? "📡 课堂" : "✍ 手动"} · {fmtDate(n.updated_at)}</span>
                 {tags.slice(0, 3).map((t) => (
-                  <span key={t} style={{ fontSize: 10, color: "#6b7280", background: "#f3f4f6", borderRadius: 8, padding: "0 4px" }}>{t}</span>
+                  <span
+                    key={t}
+                    style={{
+                      fontSize: 10, color: "#6b7280", borderRadius: 8, padding: "0 4px",
+                      // v0.14 B：标签色徽标底色（tagColors 命中用色板色 13% 透明底；否则默认灰底）
+                      background: tagColors?.[t] ? `${paletteHex(tagColors[t], theme)}22` : "#f3f4f6",
+                    }}
+                  >
+                    {t}
+                  </span>
                 ))}
                 {tags.length > 3 && <span style={{ fontSize: 10, color: "#9ca3af" }}>+{tags.length - 3}</span>}
                 {n.session_id != null && (

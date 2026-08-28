@@ -11,7 +11,7 @@
 use crate::analysis::SessionAnalysis;
 use crate::db::Db;
 use crate::error::Result;
-use crate::group_route::{route_group, GroupRouteSignals, RouteAction};
+use crate::group_route::{ocr_text_density, route_group, GroupRouteSignals, RouteAction};
 use crate::types::{NewNoteGroup, Session, SessionOcrBlock, SessionSegment};
 use crate::video_profile_domain::{detect_domain, DomainSignals};
 
@@ -123,11 +123,8 @@ fn collect_signals(
     };
     let transcript_chars: usize = segments.iter().map(|s| s.text.chars().count()).sum();
     let ocr_chars: usize = ocr_blocks.iter().map(|b| b.text.chars().count()).sum();
-    let ocr_text_density = if transcript_chars > 0 || ocr_chars > 0 {
-        Some((ocr_chars as f32 / transcript_chars.max(1) as f32).min(1.0))
-    } else {
-        None
-    };
+    // 密度计算下沉 group_route（spec 3.2：信号定义与计算同模块；章节级复用）
+    let density = ocr_text_density(transcript_chars, ocr_chars);
     let domain = detect_domain(&DomainSignals {
         title: Some(session.title.clone()),
         ..Default::default()
@@ -136,7 +133,7 @@ fn collect_signals(
         has_series: false, // 系列在 resolve 层早退，此处恒 false
         chapter_density,
         glossary_terms: Some(analysis.glossary.len()),
-        ocr_text_density,
+        ocr_text_density: density,
         profile_unknown: session.profile.as_deref() == Some("unknown"),
         tier_rich: false, // 画面档未随会话落库（V1.0 接线；缺省不投票）
         domain_kind: domain.kind,

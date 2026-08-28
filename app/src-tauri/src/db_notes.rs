@@ -5,7 +5,7 @@
 //! @ai-context: 锁访问统一走 Db::with_conn（M3 修复：中毒锁恢复而非 panic）。
 //!              公共 API 签名与拆分前完全一致。
 
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 
 use crate::db::{unix_seconds, Db};
 use crate::error::Result;
@@ -148,6 +148,35 @@ impl Db {
             let affected = conn.execute(
                 "UPDATE notes SET pin = ?1, updated_at = ?2 WHERE id = ?3",
                 params![pin, unix_seconds(), id],
+            )?;
+            Ok(affected > 0)
+        })
+    }
+
+    /// 更新笔记颜色（v0.14 B 视觉系统；properties.color 字段读写——
+    /// color=None 删除字段；properties 非 JSON 时防御性重置为仅含 color 的对象）。
+    pub fn update_note_color(&self, id: i64, color: Option<&str>) -> Result<bool> {
+        self.with_conn(|conn| {
+            // 闭包显式 Option 读 NULL 列（properties 可为 NULL）；optional 转行不存在；flatten 去双重 Option
+            let cur: Option<String> = conn
+                .query_row("SELECT properties FROM notes WHERE id = ?1", params![id], |row| row.get::<_, Option<String>>(0))
+                .optional()?
+                .flatten();
+            let mut props: serde_json::Value = cur
+                .as_deref()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_else(|| serde_json::json!({}));
+            match color {
+                Some(c) => props["color"] = serde_json::Value::String(c.to_string()),
+                None => {
+                    if let Some(obj) = props.as_object_mut() {
+                        obj.remove("color");
+                    }
+                }
+            }
+            let affected = conn.execute(
+                "UPDATE notes SET properties = ?1, updated_at = ?2 WHERE id = ?3",
+                params![props.to_string(), unix_seconds(), id],
             )?;
             Ok(affected > 0)
         })

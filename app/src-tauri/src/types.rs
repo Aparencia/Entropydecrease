@@ -189,6 +189,9 @@ pub struct NoteGroup {
     /// 组内笔记数（list 查询填充；单查为 0）
     #[serde(default)]
     pub note_count: i64,
+    /// v0.14 B（视觉系统）：组级颜色（色板 id；None=未设置——笔记未显式定义时继承组色）
+    #[serde(default)]
+    pub color: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -735,6 +738,45 @@ pub struct KnowledgeLink {
     pub target_type: String,
     pub target_id: i64,
     pub created_at: i64,
+}
+
+/// 图谱节点（v0.14 C2 graph_snapshot；id 带类型前缀 `note:`/`concept:`/`model:`/`group:`——
+/// 四表 id 空间独立，前端 parseGraphNodeKey 解析）。
+///
+/// @ai-context: color 为 B 子项目色板 id（None → 前端按 kind 类型色）；
+///              system_id 仅供 concept/model 跳转体系页（note/group 恒 None）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphNode {
+    pub id: String,
+    /// note | concept | model | group
+    pub kind: String,
+    pub label: String,
+    pub color: Option<String>,
+    /// 实体原始 id（跳转笔记页/过滤组用——不依赖解析 id 前缀）
+    pub entity_id: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_id: Option<i64>,
+}
+
+/// 图谱边（v0.14 C2；type 三选一——link 引用 / trace 溯源 / belong 归属，前端图层开关过滤）
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphEdge {
+    pub id: String,
+    pub source: String,
+    pub target: String,
+    /// link | trace | belong
+    #[serde(rename = "type")]
+    pub edge_type: String,
+}
+
+/// 图谱快照（v0.14 C2 graph_snapshot 单次拉取完整图谱——避免 N 次全量拉取）
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphSnapshot {
+    pub nodes: Vec<GraphNode>,
+    pub edges: Vec<GraphEdge>,
 }
 
 /// 新建引用入参。

@@ -12,7 +12,7 @@ use crate::error::Result;
 use crate::types::{NewNoteGroup, NoteGroup};
 
 /// note_groups 表统一查询列（列顺序与 row_to_group 严格对应）。
-const GROUP_COLUMNS: &str = "id, name, terrain, kind, domain_tag, source, series_key, route_reason, route_overridden, created_at, updated_at";
+const GROUP_COLUMNS: &str = "id, name, terrain, kind, domain_tag, source, series_key, route_reason, route_overridden, color, created_at, updated_at";
 
 impl Db {
     /// 新建笔记组，返回含 id 与时间戳的完整记录。
@@ -39,6 +39,7 @@ impl Db {
                 route_reason: new.route_reason.clone(),
                 route_overridden: 0,
                 note_count: 0,
+                color: None,
                 created_at: now,
                 updated_at: now,
             })
@@ -166,6 +167,17 @@ impl Db {
             Ok(affected > 0)
         })
     }
+
+    /// v0.14 B（视觉系统）：组级颜色设置（色板 id；None=清除回默认灰）。
+    pub fn update_group_color(&self, id: i64, color: Option<&str>) -> Result<bool> {
+        self.with_conn(|conn| {
+            let affected = conn.execute(
+                "UPDATE note_groups SET color = ?1, updated_at = ?2 WHERE id = ?3",
+                params![color, unix_seconds(), id],
+            )?;
+            Ok(affected > 0)
+        })
+    }
 }
 
 /// JOIN 查询时列名加 g. 前缀（list_groups 专用）。
@@ -189,16 +201,17 @@ fn row_to_group(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteGroup> {
         series_key: row.get(6)?,
         route_reason: row.get(7)?,
         route_overridden: row.get(8)?,
+        color: row.get(9)?,
         note_count: 0,
-        created_at: row.get(9)?,
-        updated_at: row.get(10)?,
+        created_at: row.get(10)?,
+        updated_at: row.get(11)?,
     })
 }
 
 /// 把 rusqlite 行映射为 NoteGroup（含 JOIN 计数列）。
 fn row_to_group_with_count(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteGroup> {
     let mut g = row_to_group(row)?;
-    g.note_count = row.get(11)?;
+    g.note_count = row.get(12)?;
     Ok(g)
 }
 

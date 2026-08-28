@@ -494,3 +494,21 @@ pub async fn update_note_pin(
         .update_note_pin(id, pin)
         .map_err(|e| e.to_string())
 }
+
+/// 更新笔记颜色（v0.14 B 视觉系统；color=None/空串清除 properties.color）。
+#[tauri::command]
+pub async fn update_note_color(
+    state: State<'_, AppState>,
+    id: i64,
+    color: Option<String>,
+) -> Result<bool, String> {
+    if id <= 0 {
+        return Err("无效的笔记 id".to_string());
+    }
+    // 空串等价清除（前端清除按钮传 null；防御空串）
+    let trimmed = color.as_deref().map(str::trim).filter(|c| !c.is_empty());
+    state
+        .db
+        .update_note_color(id, trimmed)
+        .map_err(|e| e.to_string())
+}

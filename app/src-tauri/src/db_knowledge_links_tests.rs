@@ -190,3 +190,83 @@ fn link_target_exists_four_types() {
     assert!(!miss_card);
     assert!(!miss_frag);
 }
+
+#[test]
+fn list_links_by_target_reverse_lookup() {
+    // Arrange：两体系都引用同一笔记（跨体系反查命中多体系；FK 需真实实体）
+    let db = mem_db();
+    let sid_a = host_system(&db);
+    let sid_b = host_system(&db);
+    let cid = db
+        .add_knowledge_concept(&NewKnowledgeConcept {
+            system_id: sid_a,
+            name: "妆前保湿".to_string(),
+            essence: None,
+            boundary: None,
+            relation: None,
+        })
+        .expect("concept")
+        .id;
+    let mid = db
+        .add_knowledge_model(&NewKnowledgeModel {
+            system_id: sid_b,
+            name: "三庭五眼".to_string(),
+            disciplines: "[\"美学\"]".to_string(),
+            claim: None,
+            valid_when: None,
+            invalid_when: None,
+            cross_checks: None,
+        })
+        .expect("model")
+        .id;
+    let nid = db
+        .create_note(&NewNote {
+            title: "笔记".to_string(),
+            content: "x".to_string(),
+            source: "manual".to_string(),
+            session_id: None,
+            rule_version: None,
+            purify_stats: None,
+            tags: None,
+            properties: None,
+            group_id: None,
+        })
+        .expect("note")
+        .id;
+    db.add_knowledge_link(&NewKnowledgeLink {
+        system_id: sid_a,
+        node_id: None,
+        concept_id: Some(cid),
+        model_id: None,
+        target_type: "note".to_string(),
+        target_id: nid,
+    })
+    .expect("link a");
+    db.add_knowledge_link(&NewKnowledgeLink {
+        system_id: sid_b,
+        node_id: None,
+        concept_id: None,
+        model_id: Some(mid),
+        target_type: "note".to_string(),
+        target_id: nid,
+    })
+    .expect("link b");
+    db.add_knowledge_link(&NewKnowledgeLink {
+        system_id: sid_a,
+        node_id: None,
+        concept_id: Some(cid),
+        model_id: None,
+        target_type: "note_group".to_string(),
+        target_id: 5,
+    })
+    .expect("other target");
+    // Act：反查笔记（不限定体系）
+    let hits = db.list_links_by_target("note", nid).expect("reverse");
+    // Assert：两条命中（体系 A 概念 + 体系 B 模型）；组目标不串入
+    assert_eq!(hits.len(), 2);
+    assert!(hits.iter().all(|l| l.target_type == "note" && l.target_id == nid));
+    assert!(hits.iter().any(|l| l.system_id == sid_a));
+    assert!(hits.iter().any(|l| l.system_id == sid_b));
+    // 反查不存在的目标 → 空
+    assert!(db.list_links_by_target("note", 999_999).expect("empty").is_empty());
+}

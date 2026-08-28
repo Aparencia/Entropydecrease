@@ -64,6 +64,9 @@ describe("NotesPage 编辑完成即时刷新", () => {
           if (cmd === "note_versions_usage") return [];
           if (cmd === "list_knowledge_systems") return [];
           if (cmd === "list_knowledge_links") return [];
+          // v0.14：颜色数据（B2 色板）与反查（C3）——空值兜底不抛错
+          if (cmd === "list_tag_colors") return [];
+          if (cmd === "list_links_by_target") return [];
           return null;
       }
     });

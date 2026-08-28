@@ -90,6 +90,8 @@ mod commands_settlement;
 mod commands_knowledge;
 mod commands_knowledge_systems;
 mod commands_knowledge_core;
+// v0.14 C2：知识图谱命令层（graph_snapshot 单次聚合）
+mod commands_graph;
 // v0.13.2（REQ-206~207）：概念模型卡命令层（创建/组列表）——卡→概念升格拆至 promote 子模块
 mod commands_knowledge_cards;
 mod commands_knowledge_cards_promote;
@@ -98,6 +100,8 @@ mod commands_knowledge_decisions;
 // v0.13.8：知识体系画布命令层（节点位置 + 体系视口读写）
 mod commands_knowledge_canvas;
 // v0.11.4：周契约命令层（弹性承诺呈现层——upsert/状态读数）
+mod commands_colors;
+mod db_colors;
 mod commands_contracts;
 // 实时会话链路依赖 Windows 捕获 API（WASAPI/DXGI/COM），非 Windows 平台不编译（TD-027 修复）
 #[cfg(target_os = "windows")]
@@ -166,6 +170,19 @@ mod db_knowledge_audits;
 mod db_knowledge_decisions;
 // v0.13.8：画布数据层（knowledge_nodes 位置列读写 + knowledge_canvas_states 视口读写）
 mod db_knowledge_canvas;
+// v0.14 C2：知识图谱快照数据层（graph_snapshot 三类边单次聚合）
+mod db_graph;
+// v0.14 D：采集质量纯函数层——章节形态决策/OCR 质量分/版面重建/行合并评分/跨帧增量
+mod chapter_morph;
+mod ocr_quality;
+mod layout_reorder;
+mod line_merge;
+mod incremental_merge;
+// v0.14 D：行级重识别引擎（adapter 编排）与平台版面模板（三层降级）
+mod line_rec_engine;
+mod platform_layout;
+// v0.14 D：章节级混合形态组装（图文章节/口语章节混编 + 质量门控）
+mod chapter_note;
 mod db_artifacts;
 // v0.7.7（REQ-183）：结构图记录存储——session_structure_images 表 CRUD
 mod db_structures;
@@ -435,6 +452,8 @@ pub fn run() {
             // v0.10.0：标签/固定管理
             commands::update_note_tags,
             commands::update_note_pin,
+            // v0.14 B：视觉系统——笔记级颜色（properties.color）
+            commands::update_note_color,
             // v0.11.0（REQ-195~198）：笔记组——列表/详情/组内笔记/自建主题组/
             // 重命名/路由改判（修改即记忆）/移动笔记
             commands_groups::list_note_groups,
@@ -444,6 +463,7 @@ pub fn run() {
             commands_groups::rename_note_group,
             commands_groups::override_group_route,
             commands_groups::move_note_to_group,
+            commands_groups::update_group_color,
             // v0.11.1：feed 进料口——功能开关读写/碎片捕获/碎片列表
             commands_fragments::get_feature_flags,
             commands_fragments::set_feature_flag,
@@ -469,6 +489,9 @@ pub fn run() {
             commands_settlement::settlement_plan,
             commands_settlement::execute_settlement,
             // v0.11.4（REQ-200）：周契约——设定/覆盖本周目标 + 状态读数
+            commands_colors::list_tag_colors,
+            commands_colors::set_tag_color,
+            commands_colors::reset_tag_color,
             commands_contracts::upsert_week_contract,
             commands_contracts::week_contract_status,
             // v0.13.1（REQ-202~205）：知识体系层——体系/问题树/概念/模型/引用/审计探测
@@ -489,7 +512,11 @@ pub fn run() {
             commands_knowledge_core::link_knowledge_target,
             commands_knowledge_core::list_knowledge_links,
             commands_knowledge_core::delete_knowledge_link,
+            // v0.14 C3：引用反查（内容侧 → 体系侧）
+            commands_knowledge_core::list_links_by_target,
             commands_knowledge_core::audit_due_for_system,
+            // v0.14 C2：知识图谱快照（三类边单次聚合）
+            commands_graph::graph_snapshot,
             // v0.13.2（REQ-206~207）：概念模型卡创建/组列表/升格
             commands_knowledge_cards::create_model_card,
             commands_knowledge_cards::list_group_cards,

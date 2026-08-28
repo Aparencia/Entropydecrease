@@ -135,6 +135,9 @@ fn decode_image(image_b64: &str) -> Result<image::RgbImage, String> {
 /// 全图 OCR：缩至 960px 后识别，返回 (块, bbox 缩放比)。
 /// @ai-context: 缩放比用于 bbox 反算回原图坐标系（TD-046 同思路——OCR 输入
 ///              缩小后 bbox 处于缩小坐标系）。
+/// @ai-context: v0.14 D 净化链 ②（源头执行）：落库前对疑碎块（≤4 字/低置信）
+///              做行级重识别（bbox 处于缩小坐标系——用缩小图裁剪）；rec 引擎
+///              不可用/超时 → 保留原结果（能力降级不失效，spec §5）。
 fn ocr_blocks(img: &image::RgbImage, engines: &EnginePool) -> (Vec<crate::types::OcrBlock>, f32) {
     let (w, h) = img.dimensions();
     let scale = if w > OCR_MAX_WIDTH { w as f32 / OCR_MAX_WIDTH as f32 } else { 1.0 };
@@ -144,8 +147,14 @@ fn ocr_blocks(img: &image::RgbImage, engines: &EnginePool) -> (Vec<crate::types:
     } else {
         img.clone()
     };
-    match engines.recognize_image_timeout(input, crate::engine::OCR_REQUEST_TIMEOUT) {
-        Ok(blocks) => (blocks, scale),
+    // 行级重识别与全图 OCR 共用同一缩小图（克隆一份供 OCR 消费——裁剪在重识别侧）
+    let input_for_ocr = input.clone();
+    match engines.recognize_image_timeout(input_for_ocr, crate::engine::OCR_REQUEST_TIMEOUT) {
+        Ok(mut blocks) => {
+            let rec = crate::engine::PoolLineRecognizer::new(engines);
+            let _ = crate::line_rec_engine::rec_pipeline_on_blocks(&rec, &input, &mut blocks, MIN_SCORE);
+            (blocks, scale)
+        }
         Err(e) => {
             // OCR 失败/超时：图已保存，块数 0 诚实返回（下张截图重试语义）
             eprintln!("[Photo] OCR 失败（截图已保存，块数 0）: {}", e);

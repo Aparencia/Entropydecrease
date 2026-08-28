@@ -155,7 +155,7 @@ export default function KnowledgeDetailPanel({ system, nodes, concepts, models, 
                 父节点：{selectedNode.parentId != null ? (nodes.find((n) => n.id === selectedNode.parentId)?.text ?? "—") : "（根）"}
               </span>
             </div>
-            <KnowledgeLinkSection systemId={system.id} entityType="node" entityId={selectedNode.id} links={links} onChanged={onChanged} />
+            <KnowledgeLinkSection systemId={system.id} entityType="node" entityId={selectedNode.id} links={links} nodes={nodes} concepts={concepts} models={models} onChanged={onChanged} />
           </div>
         )}
 
@@ -193,7 +193,7 @@ export default function KnowledgeDetailPanel({ system, nodes, concepts, models, 
                 </button>
               </div>
             )}
-            {selection.id != null && <KnowledgeLinkSection systemId={system.id} entityType="concept" entityId={selection.id} links={links} onChanged={onChanged} />}
+            {selection.id != null && <KnowledgeLinkSection systemId={system.id} entityType="concept" entityId={selection.id} links={links} nodes={nodes} concepts={concepts} models={models} onChanged={onChanged} />}
             {/* 决策日志区（§五）——概念关联，默认开 */}
             {selection.id != null && (
               <div style={{ marginTop: 12, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
@@ -223,7 +223,7 @@ export default function KnowledgeDetailPanel({ system, nodes, concepts, models, 
               {MODEL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
             <SaveButton label="保存更改" saving={saving} onClick={() => void saveModel()} dataTestid="model-save" />
-            {selection.id != null && <KnowledgeLinkSection systemId={system.id} entityType="model" entityId={selection.id} links={links} onChanged={onChanged} />}
+            {selection.id != null && <KnowledgeLinkSection systemId={system.id} entityType="model" entityId={selection.id} links={links} nodes={nodes} concepts={concepts} models={models} onChanged={onChanged} />}
           </div>
         )}
       </div>

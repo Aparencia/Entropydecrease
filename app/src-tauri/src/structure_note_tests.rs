@@ -97,6 +97,7 @@ fn chapter_heading_inserted_before_first_paragraph_after_boundary() {
         &[],
         &[],
         &default_config(),
+        None,
     );
 
     // Assert：标题在段落文本之前；章节名占位"章节 1"（时间戳回链锚点格式）
@@ -120,7 +121,7 @@ fn chapter_heading_boundary_inside_paragraph_keeps_paragraph_unsplit() {
     let mut result = base_result(kept);
 
     // Act
-    render_note_structure(&mut result, &[boundary(12_000)], &[], &[], &default_config());
+    render_note_structure(&mut result, &[boundary(12_000)], &[], &[], &default_config(), None);
 
     // Assert：标题在段3前、段2后（不切段——诚实粗粒度）
     let h = result.markdown.find("## 章节 1 [[⏱ 00:12]([[ts:12000]])]").unwrap();
@@ -137,7 +138,7 @@ fn chapter_heading_boundary_after_last_paragraph_appends_at_end() {
     let mut result = base_result(kept);
 
     // Act
-    render_note_structure(&mut result, &[boundary(40_000)], &[], &[], &default_config());
+    render_note_structure(&mut result, &[boundary(40_000)], &[], &[], &default_config(), None);
 
     // Assert：标题存在且位于正题之后
     let h = result.markdown.find("## 章节 1 [[⏱ 00:40]([[ts:40000]])]").unwrap();
@@ -162,6 +163,7 @@ fn multiple_chapters_inserted_in_order() {
         &[],
         &[],
         &default_config(),
+        None,
     );
 
     // Assert：两个标题按时间序出现，编号正确
@@ -186,6 +188,7 @@ fn chapter_named_from_outline_title_in_window() {
         &[outline(9_500, "色彩理论")],
         &[],
         &default_config(),
+        None,
     );
 
     // Assert：章节名取 outline 标题；titled 计数 1
@@ -206,6 +209,7 @@ fn chapter_title_outside_window_not_used() {
         &[outline(5_000, "旧标题")],
         &[],
         &default_config(),
+        None,
     );
 
     // Assert：占位"章节 1"，不用窗口外标题
@@ -231,6 +235,7 @@ fn chapter_title_belongs_to_first_window_not_second() {
         &[outline(9_500, "第一章标题")],
         &[],
         &default_config(),
+        None,
     );
 
     // Assert：第一章有标题、第二章占位
@@ -253,6 +258,7 @@ fn glossary_candidates_never_enter_markdown() {
         &[],
         &[term("术语A", 8, 1, 8.0), term("术语B", 5, 0, 2.0)],
         &default_config(),
+        None,
     );
 
     // Assert：词汇表标题块不得进 markdown；"术语A"在讲述内容原文中（ASR
@@ -285,6 +291,7 @@ fn config_all_off_returns_markdown_unchanged() {
         &[outline(9_500, "标题")],
         &[term("T", 1, 0, 1.0)],
         &config,
+        None,
     );
 
     // Assert：markdown 逐字节一致；统计全零
@@ -308,6 +315,7 @@ fn stats_written_into_filter_stats() {
         &[],
         &[term("T", 1, 0, 1.0)],
         &default_config(),
+        None,
     );
 
     // Assert：FilterStats 字段同步（purify_stats 落库同源）；词汇表恒 0
@@ -324,7 +332,7 @@ fn warning_stays_on_top() {
     result.warning = Some("> ⚠️ 会话异常（failed），内容可能不完整".to_string());
 
     // Act
-    render_note_structure(&mut result, &[boundary(9_000)], &[], &[], &default_config());
+    render_note_structure(&mut result, &[boundary(9_000)], &[], &[], &default_config(), None);
 
     // Assert：警示行仍置顶
     let w = result.markdown.find("会话异常").unwrap();
@@ -348,6 +356,102 @@ fn structure_config_roundtrips_json() {
     )
     .unwrap();
     assert!(legacy.structure.chapter_headings, "旧多余字段忽略，默认生效");
+}
+
+// ── v0.14 D（spec §4.1）：章节级混合形态（hybrid_quality=Some）────────────
+
+#[test]
+fn hybrid_quality_some_routes_to_mixed_assembly() {
+    // Arrange：章节 + 高质量分 → 图文章节（OCR 主体 + 口语引用块）
+    let kept = vec![seg(1, 10_000, 15_000, "口播内容")];
+    let mut result = base_result(kept);
+    result.ocr_screens = vec![crate::types::SessionScreen {
+        session_id: 1,
+        screen_id: Some(1),
+        first_seen_ms: 10_000,
+        last_seen_ms: 10_500,
+        title: Some("第一章".to_string()),
+        body: vec!["OCR长文本主体内容".to_string()],
+        labels: vec![],
+        image_ref: None,
+        structure: vec![],
+    }];
+
+    // Act
+    let stats = render_note_structure(
+        &mut result,
+        &[boundary(9_000)],
+        &[outline(9_500, "色彩理论")],
+        &[],
+        &default_config(),
+        Some(&[0.9]),
+    );
+
+    // Assert：混合形态（标题 + OCR 主体 + 引用块）；统计同口径（titled 命中）
+    assert!(result.markdown.contains("## 色彩理论 [[⏱ 00:09]([[ts:9000]])]"));
+    assert!(result.markdown.contains("**第一章**"));
+    assert!(result.markdown.contains("OCR长文本主体内容"));
+    assert!(result.markdown.contains("> 讲者：[⏱ 00:10]([[ts:10000]]) 口播内容"));
+    assert_eq!(stats.chapters, 1);
+    assert_eq!(stats.titled_chapters, 1);
+    assert_eq!(result.stats.chapters, 1);
+    assert_eq!(result.stats.titled_chapters, 1);
+}
+
+#[test]
+fn hybrid_quality_some_without_chapters_keeps_plain() {
+    // Arrange：Some(质量) 但无章节边界（分析失败/口播档案）→ 退化现状段落
+    let kept = vec![seg(1, 10_000, 15_000, "口播内容")];
+    let mut result = base_result(kept);
+
+    // Act
+    let stats = render_note_structure(
+        &mut result,
+        &[],
+        &[],
+        &[],
+        &default_config(),
+        Some(&[]),
+    );
+
+    // Assert：无章节标题插入（`## 讲述内容` 为固定小节标题，非章节）；段落带锚点原样；统计零
+    assert!(result.markdown.contains("[⏱ 00:10]([[ts:10000]]) 口播内容"));
+    assert!(!result.markdown.contains("## 章节"));
+    assert_eq!(stats.chapters, 0);
+}
+
+#[test]
+fn hybrid_quality_some_low_quality_stays_spoken() {
+    // Arrange：低质量分（< QUALITY_TH）→ 口语章节——OCR 弃用（门控内建）
+    let kept = vec![seg(1, 10_000, 15_000, "口播内容")];
+    let mut result = base_result(kept);
+    result.ocr_screens = vec![crate::types::SessionScreen {
+        session_id: 1,
+        screen_id: Some(1),
+        first_seen_ms: 10_000,
+        last_seen_ms: 10_500,
+        title: Some("第一章".to_string()),
+        body: vec!["碎片".to_string()],
+        labels: vec![],
+        image_ref: None,
+        structure: vec![],
+    }];
+
+    // Act
+    render_note_structure(
+        &mut result,
+        &[boundary(9_000)],
+        &[],
+        &[],
+        &default_config(),
+        Some(&[0.3]),
+    );
+
+    // Assert：口语现状段落；OCR 屏不进正文
+    assert!(result.markdown.contains("[⏱ 00:10]([[ts:10000]]) 口播内容"));
+    assert!(!result.markdown.contains("**第一章**"));
+    assert!(!result.markdown.contains("碎片"));
+    assert!(!result.markdown.contains("> 讲者"));
 }
 
 // v0.11.5（spec 8️⃣）：词汇表完全移出笔记——first_occurrence_ms/word_boundary_contains

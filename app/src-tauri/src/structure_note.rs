@@ -55,12 +55,17 @@ pub struct StructureStats {
 ///              逐字节一致（零回归护栏）。
 /// @ai-context: v0.11.5：词汇表参数保留（_glossary 忽略）——调用方（命令层
 ///              分析管线）签名不变，术语表改由 session_glossary 命令直供前端。
+/// @ai-context: v0.14 D（hybrid_quality）：章节级混合形态——Some(每章质量分)
+///              时图文章节（OCR 主体 + 口语引用块）/口语章节混编（spec §4.1）；
+///              None 走原逻辑逐字节一致（零回归护栏）。质量门控内建于组装
+///              （低质量章节 OCR 弃用——笔记/AI 双出口同源同控）。
 pub fn render_note_structure(
     result: &mut NoteFilterResult,
     chapters: &[ChapterBoundary],
     outline: &[OutlineEntry],
     _glossary: &[GlossaryCandidate],
     config: &NoteStructureConfig,
+    hybrid_quality: Option<&[f32]>,
 ) -> StructureStats {
     let mut stats = StructureStats::default();
     // v0.12.0（ADR-021）：OcrDirect 分支正文为 OCR 文本序列（无时间轴叙述
@@ -94,7 +99,34 @@ pub fn render_note_structure(
     // ② 章节标题插入（REQ-177）：边界 → 第一个 start_ms ≥ 边界的段前插入
     //    （边界落在段内 = 该段归上一章，跨边界段不切——粗粒度诚实标注）
     let mut titled = 0;
-    if config.chapter_headings && !chapters.is_empty() {
+    let lines: Vec<String> = if let Some(quality) = hybrid_quality {
+        // v0.14 D：章节级混合形态——图文章节（OCR 主体 + 口语引用块）/口语
+        // 章节混编（spec §4.1）；无章节边界退化现状（原样段落 + 锚点）
+        if !chapters.is_empty() {
+            let (hybrid_lines, t) = crate::chapter_note::assemble_hybrid_note(
+                &paragraphs,
+                chapters,
+                outline,
+                &result.ocr_screens,
+                quality,
+                result.purify.anchor_timestamps,
+            );
+            stats.chapters = chapters.len();
+            stats.titled_chapters = t;
+            hybrid_lines
+        } else {
+            paragraphs
+                .iter()
+                .map(|(start, text)| {
+                    if result.purify.anchor_timestamps {
+                        format!("{} {}", crate::concat::format_timestamp(*start), text)
+                    } else {
+                        text.clone()
+                    }
+                })
+                .collect()
+        }
+    } else if config.chapter_headings && !chapters.is_empty() {
         let mut boundaries: Vec<&ChapterBoundary> = chapters.iter().collect();
         boundaries.sort_by_key(|c| c.time_ms);
         // 从后往前插入——索引不漂移
@@ -113,20 +145,32 @@ pub fn render_note_structure(
         }
         stats.chapters = boundaries.len();
         stats.titled_chapters = titled;
-    }
-    // ③ 组装正文（锚点口径与净化管线一致——标题行以 "## " 开头不再加锚点）
-    let lines: Vec<String> = paragraphs
-        .iter()
-        .map(|(start, text)| {
-            if text.starts_with("## ") {
-                text.clone()
-            } else if result.purify.anchor_timestamps {
-                format!("{} {}", crate::concat::format_timestamp(*start), text)
-            } else {
-                text.clone()
-            }
-        })
-        .collect();
+        // ③ 组装正文（锚点口径与净化管线一致——标题行以 "## " 开头不再加锚点）
+        paragraphs
+            .iter()
+            .map(|(start, text)| {
+                if text.starts_with("## ") {
+                    text.clone()
+                } else if result.purify.anchor_timestamps {
+                    format!("{} {}", crate::concat::format_timestamp(*start), text)
+                } else {
+                    text.clone()
+                }
+            })
+            .collect()
+    } else {
+        // ③ 无章节：现状段落 + 锚点
+        paragraphs
+            .iter()
+            .map(|(start, text)| {
+                if result.purify.anchor_timestamps {
+                    format!("{} {}", crate::concat::format_timestamp(*start), text)
+                } else {
+                    text.clone()
+                }
+            })
+            .collect()
+    };
     let mut md = crate::concat::assemble_markdown(&result.title, &lines, &[]);
     // ⑤ 会话异常警示行（REQ-170）置顶——与 rebuild_markdown 口径一致
     if let Some(w) = &result.warning {
@@ -145,7 +189,9 @@ pub fn render_note_structure(
 ///
 /// @ai-context: outline 为 OCR 大字块/屏标题（REQ-077）——章节窗口内的标题
 ///              大概率是本章节名；窗口外（旧标题残留）不取。
-fn chapter_name(
+/// @ai-context: pub(crate)（v0.14 D）：chapter_note 混合形态组装复用同一命名
+///              逻辑（标题资产单一来源，避免两处漂移）。
+pub(crate) fn chapter_name(
     boundary: &ChapterBoundary,
     next_time_ms: Option<u64>,
     outline: &[OutlineEntry],

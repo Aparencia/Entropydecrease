@@ -342,6 +342,7 @@ fn session31_structure_chapter_headings_from_outline() {
         &outline,
         &[],
         &crate::structure_note::NoteStructureConfig::default(),
+        None,
     );
     // Assert：两章标题带时间锚点；章节名取各自窗口内 outline 标题
     // （第一章窗口 [9s,30s) 命中 12s"项目章程"；第二章窗口 [30s,∞) 命中
@@ -384,6 +385,7 @@ fn session31_structure_excludes_glossary_block() {
         &[],
         &glossary,
         &crate::structure_note::NoteStructureConfig::default(),
+        None,
     );
     // Assert：词汇表块与术语文本均不得进笔记；glossary_terms 恒 0（兼容字段）
     assert!(!result.markdown.contains("## 词汇表"));
@@ -417,6 +419,7 @@ fn session31_structure_empty_data_is_byte_identical() {
         &[],
         &[],
         &crate::structure_note::NoteStructureConfig::default(),
+        None,
     );
     // Assert：markdown 逐字节一致；统计全零（无结构不产生统计）
     assert_eq!(result.markdown, before, "无结构数据必须逐字节零回归");

@@ -101,9 +101,21 @@ export interface NoteGroup {
   routeReason: string | null;
   /** 0=自动路由，1=用户已改判（修改即记忆） */
   routeOverridden: number;
+  /** v0.14 B：组色板 id（null=未设置；笔记未显式颜色时继承） */
+  color?: string | null;
   noteCount: number;
   createdAt: number;
   updatedAt: number;
+}
+
+// ────────────────────────────────────────────────────────────
+// 标签颜色类型（v0.14 B 视觉系统；Rust TagColor camelCase 契约）
+// ────────────────────────────────────────────────────────────
+
+/** 标签颜色条目（tag 文本主键 → 色板 id；组色未命中时的次选） */
+export interface TagColor {
+  tag: string;
+  color: string;
 }
 
 // ────────────────────────────────────────────────────────────

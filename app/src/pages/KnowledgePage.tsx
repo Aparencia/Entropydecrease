@@ -28,12 +28,14 @@ import KnowledgeConceptDialog from "../components/KnowledgeConceptDialog";
 import KnowledgeModelDialog from "../components/KnowledgeModelDialog";
 import ConceptCardRow from "../components/ConceptCardRow";
 import KnowledgeSampleView from "../components/KnowledgeSampleView";
+import KnowledgeGraphView from "../components/KnowledgeGraphView";
 
-type MiddleView = "tree" | "canvas" | "concept" | "model";
+type MiddleView = "tree" | "canvas" | "concept" | "model" | "graph";
 
 const MIDDLE_TABS: { key: MiddleView; label: string }[] = [
   { key: "tree", label: "🌳 问题树" },
   { key: "canvas", label: "🗺 画布" },
+  { key: "graph", label: "🕸 图谱" },
   { key: "concept", label: "🧬 概念" },
   { key: "model", label: "⚙ 模型" },
 ];
@@ -41,9 +43,13 @@ const MIDDLE_TABS: { key: MiddleView; label: string }[] = [
 interface Props {
   /** 跨页直达目标体系（v0.13.7：组行徽标/结算简报 → 体系页自动选中） */
   focusSystemId?: number | null;
+  /** 图谱双击笔记节点 → 笔记页定位（v0.14 C2） */
+  onOpenNote?: (noteId: number) => void;
+  /** 图谱双击组节点 → 笔记页过滤该组 */
+  onOpenGroup?: (groupId: number) => void;
 }
 
-export default function KnowledgePage({ focusSystemId }: Props) {
+export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup }: Props) {
   const [systems, setSystems] = useState<KnowledgeSystem[]>([]);
   const [selectedSystemId, setSelectedSystemId] = useState<number | null>(null);
   const [nodes, setNodes] = useState<KnowledgeNode[]>([]);
@@ -92,6 +98,19 @@ export default function KnowledgePage({ focusSystemId }: Props) {
   }, [loadSystems]);
 
   useEffect(() => { void loadSystems(); }, [loadSystems]);
+
+  // v0.14 C3：跨页即时同步——笔记页挂接/撤销后体系页引用区与图谱即时刷新
+  // （Rust 侧 link/delete 成功后广播 knowledge:links-changed，spec §3.3 refreshToken 机制）
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/event").then(({ listen }) =>
+      listen("knowledge:links-changed", () => {
+        if (!disposed) void reloadAll();
+      }).then((u) => { unlisten = u; }),
+    );
+    return () => { disposed = true; unlisten?.(); };
+  }, [reloadAll]);
 
   // v0.13.7：跨页直达目标体系（与 NotesPage focusNoteId 同模式——仅 focusSystemId
   // 变化时跟随；空态无体系时该值无意义，由既有选中/创建逻辑接管）
@@ -243,7 +262,17 @@ export default function KnowledgePage({ focusSystemId }: Props) {
           ))}
         </div>
 
-        {!selectedSystem ? (
+        {/* v0.14 C2：图谱=全局视图（跨体系——不依赖选中体系；双击节点跳转） */}
+        {middleView === "graph" ? (
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <KnowledgeGraphView
+              onOpenNote={(id) => onOpenNote?.(id)}
+              onOpenGroup={(id) => onOpenGroup?.(id)}
+              onOpenSystem={(sid) => { setSelectedSystemId(sid); setMiddleView("tree"); }}
+            />
+          </div>
+        ) : (
+        !selectedSystem ? (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: 13 }}>从左侧选择一个体系查看</div>
         ) : (
           <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
@@ -310,6 +339,7 @@ export default function KnowledgePage({ focusSystemId }: Props) {
               </div>
             )}
           </div>
+        )
         )}
       </div>
 

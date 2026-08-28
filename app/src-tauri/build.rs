@@ -10,6 +10,7 @@
 fn main() {
     tauri_build::build();
     copy_onnxruntime_dll();
+    copy_sherpa_dlls();
     declare_comctl32_v6_manifest();
 }
 
@@ -58,6 +59,57 @@ fn declare_comctl32_v6_manifest() {
 
 #[cfg(not(all(target_os = "windows", target_env = "msvc")))]
 fn declare_comctl32_v6_manifest() {} // 非 Windows/MSVC 无 SxS manifest 机制
+
+/// 复制 sherpa-onnx-c-api/cxx-api.dll 到 target 输出目录（dev/release 均生效）。
+///
+/// @ai-context: 集成测试 exe 位于 <target>/<profile>/deps/，静态导入 sherpa-onnx-c-api.dll
+///              （tauri dev 的主 exe 走 bundle.resources 侧；测试 exe 无此机制）——该 DLL 只在
+///              sherpa-onnx-sys 解压目录（target/sherpa-onnx-prebuilt/<pkg>/lib/），不在 exe
+///              搜索路径时测试进程 0xC0000135。与 copy_onnxruntime_dll 同机制拷贝到 profile
+///              与 deps（集成测试 exe 目录），免手工 PATH 注入。
+fn copy_sherpa_dlls() {
+    let Ok(out_dir) = std::env::var("OUT_DIR") else {
+        return;
+    };
+    let out_path = std::path::Path::new(&out_dir);
+    let Some(profile_dir) = out_path
+        .ancestors()
+        .find(|p| p.file_name().is_some_and(|n| n == "build"))
+        .and_then(|b| b.parent())
+    else {
+        return;
+    };
+    // sherpa-onnx-sys 解压目录：<target>/sherpa-onnx-prebuilt/<pkg>/lib/
+    let target_dir = profile_dir.parent().unwrap_or(profile_dir);
+    let Ok(entries) = std::fs::read_dir(target_dir.join("sherpa-onnx-prebuilt")) else {
+        return;
+    };
+    let mut lib_dir = None;
+    for entry in entries.flatten() {
+        let candidate = entry.path().join("lib");
+        if candidate.join("sherpa-onnx-c-api.dll").exists() {
+            lib_dir = Some(candidate);
+            break;
+        }
+    }
+    let Some(lib_dir) = lib_dir else {
+        return;
+    };
+    for name in ["sherpa-onnx-c-api.dll", "sherpa-onnx-cxx-api.dll"] {
+        let src = lib_dir.join(name);
+        if !src.exists() {
+            continue;
+        }
+        println!("cargo:rerun-if-changed={}", src.display());
+        for dest_dir in [profile_dir.to_path_buf(), profile_dir.join("deps")] {
+            if dest_dir.is_dir() {
+                if let Err(e) = std::fs::copy(&src, dest_dir.join(name)) {
+                    println!("cargo:warning=复制 {name} 失败: {e}");
+                }
+            }
+        }
+    }
+}
 
 /// 复制 onnxruntime.dll 到 target 输出目录（dev/release 均生效）。
 fn copy_onnxruntime_dll() {

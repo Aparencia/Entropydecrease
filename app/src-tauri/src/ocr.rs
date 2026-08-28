@@ -171,7 +171,9 @@ fn build_engine(models: &OcrModels, params: &OcrParams, backend: OcrBackend) -> 
 /// @ai-context: CUDA 请求在 feature 未启用时显式返回 Err（触发 load 的 CPU 回退
 ///              并记录原因）；feature 启用后由 ort 会话构建失败兜底
 ///              （无 NVIDIA 驱动/运行时为 CPU 版时 CUDA EP 注册失败）。
-fn ort_config_for(backend: OcrBackend) -> Result<Option<OrtSessionConfig>> {
+/// @ai-context: pub(crate)（v0.14 D）：line_rec_engine（行级重识别适配器）在
+///              OCR worker 线程构建时复用同一 EP 注入——与主 OCR 同后端口径。
+pub(crate) fn ort_config_for(backend: OcrBackend) -> Result<Option<OrtSessionConfig>> {
     ort_config_for_impl(backend)
 }
 

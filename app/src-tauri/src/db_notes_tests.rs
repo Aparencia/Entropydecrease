@@ -266,3 +266,72 @@ fn find_note_by_session_picks_latest() {
     assert_ne!(found.as_ref().unwrap().id, older.id);
     assert!(none.is_none());
 }
+
+// ────────────────────────────────────────────────────────────
+// v0.14 B 视觉系统：笔记颜色（properties.color）
+// ────────────────────────────────────────────────────────────
+
+fn base_new() -> NewNote {
+    NewNote { title: "色笔记".into(), content: "x".into(), source: "manual".into(), session_id: None, rule_version: None, purify_stats: None, tags: None, properties: None, group_id: None }
+}
+
+/// 读取 properties JSON 中的 color 字段（测试辅助）
+fn color_of(db: &Db, id: i64) -> Option<String> {
+    let note = db.get_note(id).unwrap().unwrap();
+    note.properties
+        .as_deref()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+        .and_then(|v| v.get("color").and_then(|c| c.as_str().map(String::from)))
+}
+
+#[test]
+fn update_note_color_set_roundtrip() {
+    // Arrange
+    let db = mem_db();
+    let n = db.create_note(&base_new()).unwrap();
+    // Act
+    let ok = db.update_note_color(n.id, Some("blue")).unwrap();
+    // Assert
+    assert!(ok);
+    assert_eq!(color_of(&db, n.id).as_deref(), Some("blue"));
+}
+
+#[test]
+fn update_note_color_preserves_other_properties() {
+    // Arrange：已有其他属性（如 ai_refined）
+    let db = mem_db();
+    let n = db.create_note(&NewNote { properties: Some(r#"{"ai_refined":true}"#.into()), ..base_new() }).unwrap();
+    // Act：覆盖写入 color
+    db.update_note_color(n.id, Some("red")).unwrap();
+    // Assert：color 写入且其他字段保留
+    let note = db.get_note(n.id).unwrap().unwrap();
+    let props: serde_json::Value = serde_json::from_str(note.properties.as_deref().unwrap()).unwrap();
+    assert_eq!(props["color"], "red");
+    assert_eq!(props["ai_refined"], true);
+}
+
+#[test]
+fn update_note_color_none_removes_field() {
+    // Arrange
+    let db = mem_db();
+    let n = db.create_note(&base_new()).unwrap();
+    db.update_note_color(n.id, Some("green")).unwrap();
+    // Act：None 清除
+    let ok = db.update_note_color(n.id, None).unwrap();
+    // Assert：字段删除（幂等——再清一次也成功）
+    assert!(ok);
+    assert_eq!(color_of(&db, n.id), None);
+    assert!(db.update_note_color(n.id, None).unwrap());
+}
+
+#[test]
+fn update_note_color_corrupt_properties_defensive() {
+    // Arrange：properties 非 JSON（历史数据损坏）
+    let db = mem_db();
+    let n = db.create_note(&NewNote { properties: Some("not-json".into()), ..base_new() }).unwrap();
+    // Act：写入 color 不 panic，重置为仅含 color 的对象
+    let ok = db.update_note_color(n.id, Some("purple")).unwrap();
+    // Assert
+    assert!(ok);
+    assert_eq!(color_of(&db, n.id).as_deref(), Some("purple"));
+}

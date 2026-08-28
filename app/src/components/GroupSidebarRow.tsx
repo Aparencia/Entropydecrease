@@ -1,0 +1,117 @@
+/**
+ * GroupSidebarRow — 组侧栏单行（v0.14 C1 Obsidian 式改造自 GroupSidebar 提取）。
+ *
+ * @ai-context: 行内信息收敛为两行（spec §3.1 徽标收敛 1-2 个）：第一行
+ *              色点 + 组名 + 计数 + ⓘ；第二行体系徽标 + 路由理由小字。
+ *              kind 由分区表达（行内不再重复 kind badge）；feed 由分区表达。
+ *              兼作拖拽归组 drop target（HTML5 DnD——NoteListView 行是 drag source）。
+ */
+import { useMemo } from "react";
+import type { NoteGroup } from "../types";
+import type { KnowledgeSystem } from "../types/knowledge";
+import { parseRouteReason, routeLineState } from "../utils/routeReason";
+import { paletteHex } from "../utils/colorPalette";
+import type { ThemeMode } from "../utils/colorPalette";
+import SystemBadge from "./SystemBadge";
+import NoteColorPicker from "./NoteColorPicker";
+
+interface Props {
+  group: NoteGroup;
+  active: boolean;
+  systems: KnowledgeSystem[];
+  /** 该组被哪些体系引用（触点① 徽标） */
+  systemLinks: { systemId: number; count: number }[];
+  colorPickerOpen: boolean;
+  dragOver: boolean;
+  onSelect: () => void;
+  onInfo: (e: React.MouseEvent<HTMLElement>) => void;
+  onToggleColorPicker: () => void;
+  onColorChange: (color: string | null) => void;
+  onOpenSystem: (systemId: number) => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragLeave: () => void;
+  onDrop: (e: React.DragEvent) => void;
+}
+
+export default function GroupSidebarRow({
+  group, active, systems, systemLinks, colorPickerOpen, dragOver,
+  onSelect, onInfo, onToggleColorPicker, onColorChange, onOpenSystem,
+  onDragOver, onDragLeave, onDrop,
+}: Props) {
+  const theme: ThemeMode = useMemo(
+    () => (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
+    [],
+  );
+  const reason = parseRouteReason(group.routeReason);
+  const line = routeLineState(reason, group.routeOverridden);
+
+  return (
+    <div
+      data-testid={`group-row-${group.id}`}
+      onClick={onSelect}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      style={{
+        padding: "7px 10px", borderRadius: 6, cursor: "pointer",
+        background: active ? "#f0fdfa" : dragOver ? "#fefce8" : "transparent",
+        border: line.needsConfirm && !group.routeOverridden ? "1px dashed #f59e0b" : "1px solid transparent",
+        outline: dragOver ? "1px dashed #0d9488" : "none",
+        position: "relative",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {/* v0.14 B：组色点（点击设置；未设置显示灰点） */}
+        <span
+          data-testid={`group-color-dot-${group.id}`}
+          onClick={(e) => { e.stopPropagation(); onToggleColorPicker(); }}
+          title="设置组颜色"
+          style={{
+            width: 10, height: 10, borderRadius: 3, flexShrink: 0, cursor: "pointer", display: "inline-block",
+            background: group.color ? paletteHex(group.color, theme) : "#d1d5db",
+          }}
+        />
+        <span style={{ fontSize: 13, fontWeight: 500, flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{group.name}</span>
+        <span style={{ fontSize: 11, color: "#9ca3af" }}>{group.noteCount}</span>
+      </div>
+      {/* 第二行：体系徽标 + 路由理由小字（ⓘ 弹层明细） */}
+      <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 3, paddingLeft: 16 }}>
+        {systemLinks.map((sl) => {
+          const sys = systems.find((s) => s.id === sl.systemId);
+          if (!sys || sys.status === "archived") return null;
+          return (
+            <SystemBadge
+              key={sl.systemId}
+              name={sys.name}
+              linkCount={sl.count}
+              onClick={() => onOpenSystem(sl.systemId)}
+            />
+          );
+        })}
+        <span style={{ fontSize: 10, color: line.needsConfirm ? "#b45309" : "#9ca3af", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+          {line.label}
+        </span>
+        <button
+          data-testid={`group-info-${group.id}`}
+          onClick={onInfo}
+          style={{ marginLeft: "auto", fontSize: 11, cursor: "pointer", border: "none", background: "none", color: "#6b7280", padding: "0 2px", lineHeight: 1 }}
+          title="路由详情 / 改判 / 组管理 / 周契约"
+        >
+          ⓘ
+        </button>
+      </div>
+      {/* v0.14 B：组色选择浮层（相对组行定位；stopPropagation 防误触行过滤） */}
+      {colorPickerOpen && (
+        <div
+          data-testid={`group-color-picker-${group.id}`}
+          style={{ position: "absolute", top: "100%", left: 8, zIndex: 20, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}
+        >
+          <NoteColorPicker
+            value={group.color ?? null}
+            onChange={onColorChange}
+          />
+        </div>
+      )}
+    </div>
+  );
+}

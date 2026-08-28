@@ -120,12 +120,16 @@ pub(crate) fn apply_note_structure_with_analysis(
     analysis: &SessionAnalysis,
 ) {
     let outline = detect_outline_smart(ocr_blocks, &result.ocr_screens, &OutlineConfig::default());
+    // v0.14 D（spec §4.1）：章节级混合形态——质量门控内建于组装（低质量章节
+    // OCR 弃用），笔记/AI 双出口同源同控；分析失败（chapters 空）→ 退化现状
+    let quality = crate::chapter_note::chapter_quality_scores(&analysis.chapters, ocr_blocks);
     let _ = render_note_structure(
         result,
         &analysis.chapters,
         &outline,
         &analysis.glossary,
         &env.config.structure,
+        Some(&quality),
     );
 }
 

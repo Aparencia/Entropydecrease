@@ -47,6 +47,7 @@ beforeEach(() => {
           ? [{ id: 1, systemId: 10, nodeId: null, conceptId: null, modelId: null, targetType: "note_group", targetId: 1, createdAt: 0 }]
           : [];
       case "override_group_route": return true;
+      case "move_note_to_group": return true;
       default:
         throw new Error(`unexpected: ${cmd}`);
     }
@@ -138,5 +139,78 @@ describe("GroupSidebar ⓘ 弹层", () => {
     fireEvent.click(badge);
     expect(onOpenSystem).toHaveBeenCalledWith(10);
     expect(onGroupFilterChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("GroupSidebar v0.14 C1 Obsidian 式", () => {
+  // 折叠/最近记忆跨测试残留（localStorage 不清空会串态——折叠态隐藏组行）
+  beforeEach(() => localStorage.clear());
+
+  it("组按 kind 分区渲染（空分区不显示）", async () => {
+    renderSidebar();
+    await screen.findByTestId("group-row-1");
+    expect(screen.getByTestId("group-section-course")).toBeTruthy();
+    expect(screen.getByTestId("group-section-standalone")).toBeTruthy();
+    // 无 topic/feed 组 → 对应分区不渲染
+    expect(screen.queryByTestId("group-section-topic")).toBeNull();
+    expect(screen.queryByTestId("group-section-feed")).toBeNull();
+  });
+
+  it("折叠分区隐藏组行并写入 localStorage 记忆", async () => {
+    localStorage.clear();
+    renderSidebar();
+    await screen.findByTestId("group-row-1");
+    fireEvent.click(screen.getByTestId("section-toggle-course"));
+    expect(screen.queryByTestId("group-row-1")).toBeNull();
+    expect(localStorage.getItem("group-sidebar-folded:course")).toBe("1");
+  });
+
+  it("过滤关键词只显示匹配组（扁平结果无分区）", async () => {
+    renderSidebar();
+    await screen.findByTestId("group-row-1");
+    fireEvent.change(screen.getByTestId("group-filter-input"), { target: { value: "手账" } });
+    expect(screen.queryByTestId("group-row-1")).toBeNull();
+    expect(screen.getByTestId("group-row-2")).toBeTruthy();
+    expect(screen.queryByTestId("group-section-course")).toBeNull();
+    // 清空过滤恢复分区
+    fireEvent.change(screen.getByTestId("group-filter-input"), { target: { value: "" } });
+    expect(screen.getByTestId("group-section-course")).toBeTruthy();
+  });
+
+  it("点击组行写入最近使用（LRU 存储 + 最近区显示）", async () => {
+    localStorage.clear();
+    renderSidebar();
+    await screen.findByTestId("group-row-1");
+    expect(screen.queryByTestId("recent-groups")).toBeNull();
+    fireEvent.click(screen.getByTestId("group-row-1"));
+    expect(JSON.parse(localStorage.getItem("group-sidebar-recent") ?? "[]")).toEqual([1]);
+    expect(screen.getByTestId("recent-groups")).toBeTruthy();
+  });
+
+  it("拖拽笔记到组行 → move_note_to_group（noteId 来自 dataTransfer）", async () => {
+    renderSidebar();
+    await screen.findByTestId("group-row-1");
+    const row = screen.getByTestId("group-row-1");
+    fireEvent.dragOver(row, { dataTransfer: { types: ["text/note-id"] } });
+    fireEvent.drop(row, { dataTransfer: { getData: () => "42" } });
+    expect(invokeMock).toHaveBeenCalledWith("move_note_to_group", { noteId: 42, groupId: 1 });
+  });
+
+  it("拖拽归组失败显示提示（不吞错）", async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "move_note_to_group") throw new Error("group not found");
+      if (cmd === "list_note_groups") return [groupA, groupB];
+      if (cmd === "count_due_cards") return 0;
+      if (cmd === "list_fragments") return [];
+      if (cmd === "get_feature_flags") return { feedCapture: true };
+      if (cmd === "week_contract_status") return { contract: null, weekStart: 0, actualDays: 0, actualCards: 0, minimalDayMet: false };
+      if (cmd === "list_knowledge_systems") return [];
+      if (cmd === "list_knowledge_links") return [];
+      return true;
+    });
+    renderSidebar();
+    await screen.findByTestId("group-row-1");
+    fireEvent.drop(screen.getByTestId("group-row-1"), { dataTransfer: { getData: () => "42" } });
+    expect(await screen.findByText(/归组失败/)).toBeTruthy();
   });
 });

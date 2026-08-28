@@ -13,7 +13,7 @@
 //! @ai-context: 入参出参契约——id>0；status 白名单；target_type 白名单；命名归一化；
 //!              错误信息中文 + 业务语义（沿用 commands_groups 口径）。
 
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use serde::Serialize;
 
@@ -146,8 +146,11 @@ pub fn list_knowledge_models(state: State<'_, AppState>, system_id: i64) -> Resu
 /// @ai-context: 体系只引用、不收纳——本命令是唯一引用通道；每个给到的实体必须属于该体系；
 ///              target 四类（组/笔记/闪卡/碎片）经 link_target_exists 校验存在。
 ///              @side-effect 同 (system, entity, target) 幂等返回现有——防 UI 双击双链。
+///              @side-effect v0.14 C3：成功后广播 knowledge:links-changed——跨页即时同步
+///              （笔记页挂接 → 体系页引用区/图谱即时刷新，spec §3.3 refreshToken 机制）。
 #[tauri::command]
 pub fn link_knowledge_target(
+    app: AppHandle,
     state: State<'_, AppState>,
     system_id: i64,
     node_id: Option<i64>,
@@ -156,7 +159,11 @@ pub fn link_knowledge_target(
     target_type: String,
     target_id: i64,
 ) -> Result<KnowledgeLink, String> {
-    link_knowledge_target_inner(&state.db, system_id, node_id, concept_id, model_id, target_type, target_id)
+    let link = link_knowledge_target_inner(
+        &state.db, system_id, node_id, concept_id, model_id, target_type, target_id,
+    )?;
+    let _ = app.emit("knowledge:links-changed", ());
+    Ok(link)
 }
 
 /// 列出引用（体系必选；node/concept/model 过滤可选）。
@@ -178,9 +185,42 @@ pub fn list_knowledge_links(
 ///
 /// @ai-context: 只删引用键，不动目标内容（target 删除后引用键保留由 ON DELETE SET NULL
 ///              语义保证——本命令只撤销体系侧指向）。
+///              @side-effect v0.14 C3：成功后广播 knowledge:links-changed（同挂接）。
 #[tauri::command]
-pub fn delete_knowledge_link(state: State<'_, AppState>, id: i64) -> Result<bool, String> {
-    delete_knowledge_link_inner(&state.db, id)
+pub fn delete_knowledge_link(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+) -> Result<bool, String> {
+    let ok = delete_knowledge_link_inner(&state.db, id)?;
+    let _ = app.emit("knowledge:links-changed", ());
+    Ok(ok)
+}
+
+/// 反查：按目标实体查引用（内容侧 → 体系侧；v0.14 C3）。
+///
+/// @ai-context: 与 list_knowledge_links（体系侧正查）互补——本命令不限定体系，
+///              从内容（笔记/组/卡/碎片）看"被哪些体系/实体挂接"。spec §4.3
+///              参数为 (体系, 实体)，落位为全局反查：调用场景（笔记挂接反查）
+///              天然不知体系；体系侧需求由聚合视图（list_knowledge_links 全量）覆盖。
+#[tauri::command]
+pub fn list_links_by_target(
+    state: State<'_, AppState>,
+    target_type: String,
+    target_id: i64,
+) -> Result<Vec<KnowledgeLink>, String> {
+    list_links_by_target_inner(&state.db, target_type, target_id)
+}
+
+/// 反查 inner（target_type 白名单 + id 校验）。
+pub(crate) fn list_links_by_target_inner(
+    db: &Db,
+    target_type: String,
+    target_id: i64,
+) -> Result<Vec<KnowledgeLink>, String> {
+    require_id(target_id)?;
+    parse_target_type(&target_type)?;
+    db.list_links_by_target(&target_type, target_id).map_err(|e| e.to_string())
 }
 
 /// 审计探测（返回结构性 {due, signal}——v0.13.4 审计界面的前置读）。

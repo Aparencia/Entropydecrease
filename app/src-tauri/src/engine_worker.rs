@@ -16,6 +16,7 @@ use std::sync::{Arc, Mutex};
 use crate::asr::{AsrEngine, AsrModels};
 use crate::device_config::OcrBackend;
 use crate::error::{AppError, Result};
+use crate::line_rec_engine::LineRecognizer;
 use crate::ocr::{OcrEngine, OcrModels, OcrParams};
 use crate::types::{OcrBlock, TranscriptSegment};
 use crate::vocab::{apply_replacements, VocabStore};
@@ -44,6 +45,11 @@ pub(crate) enum OcrRequest {
     RecognizeImage {
         image: image::RgbImage,
         reply: Sender<Result<Vec<OcrBlock>>>,
+    },
+    /// v0.14 D：行级重识别（净化链 ② 源头执行——疑碎行裁剪图批量 rec）
+    RecognizeLines {
+        crops: Vec<image::RgbImage>,
+        reply: Sender<Result<Vec<crate::line_rec_engine::LineRecResult>>>,
     },
 }
 
@@ -170,62 +176,92 @@ pub(crate) fn ocr_worker_loop(
     }
     // M4/REQ-039 E5：OCR 结果 LRU 缓存（A→B→A 帧往返零推理；worker 独占）
     let mut ocr_cache = crate::ocr_cache::OcrCache::new();
+    // v0.14 D：行级重识别引擎（懒构建——首个 RecognizeLines 请求时加载 rec 模型；
+    // 构建失败保持 None → 每次请求 Err 降级，净化链保留碎片——能力降级不失效）
+    let mut rec_engine: Option<crate::line_rec_engine::RecLineEngine> = None;
     // M5/REQ-040：替换词纠错——缓存只存**原始识别结果**，纠错在返回路径统一应用：
     // ①运行期新增替换词即时生效（TD-048 修复，与热词同模式）；②词表变更后
     // 缓存命中仍得到新纠错（无陈旧纠错结果残留）
     while let Some(req) = next_request(&rx) {
         alive.store(true, Ordering::Relaxed);
-        let (result, reply) = match req {
-            OcrRequest::Recognize { path, reply } => {
-                let result = match ocr.as_mut() {
-                    Ok(engine) => {
-                        let pairs = current_replacements(&vocab);
-                        engine
-                            .recognize(&path)
-                            .map(|blocks| correct_blocks(blocks, pairs.as_deref()))
-                    }
-                    Err(_) => Err(AppError::Ocr("OCR 引擎加载失败（请检查模型下载/网络）".to_string())),
+        match req {
+            // v0.14 D：行级重识别（返回类型与全图 OCR 不同——独立分支处理）
+            OcrRequest::RecognizeLines { crops, reply } => {
+                // 懒构建：首个请求时加载 rec 模型（与主 OCR 同后端口径）；
+                // 失败打印原因并保持 None——每次请求 Err（净化链保留碎片）
+                if rec_engine.is_none() {
+                    ensure_rec_engine(&mut rec_engine, &ocr_models, backend);
+                }
+                let result = match rec_engine.as_ref() {
+                    Some(e) => e.recognize_lines(&crops),
+                    None => Err(AppError::Ocr(
+                        "行级重识别引擎不可用（rec 模型加载失败——净化链 ② 降级保留碎片）".to_string(),
+                    )),
                 };
-                (result, reply)
+                if result.is_err() {
+                    failures.fetch_add(1, Ordering::Relaxed);
+                }
+                let _ = reply.send(result);
             }
-            OcrRequest::RecognizeImage { image, reply } => {
-                let result: Result<Vec<OcrBlock>> = match ocr.as_mut() {
-                    Ok(engine) => {
-                        // E5：区域感知哈希（8×8 aHash）→ 命中直接返回缓存（零推理）
-                        let key = crate::ocr_cache::average_hash(&image);
-                        let raw = match ocr_cache.get(key) {
-                            Some(blocks) => {
-                                cache_hits.fetch_add(1, Ordering::Relaxed);
-                                Ok(blocks)
+            other => {
+                let (result, reply) = match other {
+                    OcrRequest::Recognize { path, reply } => {
+                        let result = match ocr.as_mut() {
+                            Ok(engine) => {
+                                let pairs = current_replacements(&vocab);
+                                engine
+                                    .recognize(&path)
+                                    .map(|blocks| correct_blocks(blocks, pairs.as_deref()))
                             }
-                            None => {
-                                cache_misses.fetch_add(1, Ordering::Relaxed);
-                                match engine.recognize_image(image) {
-                                    Ok(blocks) => {
-                                        // 只缓存原始结果（纠错在返回路径统一应用，
-                                        // 词表变更后命中缓存仍得新纠错——TD-048）
-                                        ocr_cache.put(key, blocks.clone());
+                            Err(_) => Err(AppError::Ocr("OCR 引擎加载失败（请检查模型下载/网络）".to_string())),
+                        };
+                        (result, reply)
+                    }
+                    OcrRequest::RecognizeImage { image, reply } => {
+                        let result: Result<Vec<OcrBlock>> = match ocr.as_mut() {
+                            Ok(engine) => {
+                                // E5：区域感知哈希（8×8 aHash）→ 命中直接返回缓存（零推理）
+                                let key = crate::ocr_cache::average_hash(&image);
+                                let raw = match ocr_cache.get(key) {
+                                    Some(blocks) => {
+                                        cache_hits.fetch_add(1, Ordering::Relaxed);
                                         Ok(blocks)
                                     }
-                                    Err(e) => Err(e),
-                                }
+                                    None => {
+                                        cache_misses.fetch_add(1, Ordering::Relaxed);
+                                        match engine.recognize_image(image) {
+                                            Ok(blocks) => {
+                                                // 只缓存原始结果（纠错在返回路径统一应用，
+                                                // 词表变更后命中缓存仍得新纠错——TD-048）
+                                                ocr_cache.put(key, blocks.clone());
+                                                Ok(blocks)
+                                            }
+                                            Err(e) => Err(e),
+                                        }
+                                    }
+                                };
+                                // TD-048：每次请求读取最新替换词（运行期新增即时生效）
+                                raw.map(|blocks| {
+                                    let pairs = current_replacements(&vocab);
+                                    correct_blocks(blocks, pairs.as_deref())
+                                })
                             }
+                            Err(_) => Err(AppError::Ocr("OCR 引擎加载失败（请检查模型下载/网络）".to_string())),
                         };
-                        // TD-048：每次请求读取最新替换词（运行期新增即时生效）
-                        raw.map(|blocks| {
-                            let pairs = current_replacements(&vocab);
-                            correct_blocks(blocks, pairs.as_deref())
-                        })
+                        (result, reply)
                     }
-                    Err(_) => Err(AppError::Ocr("OCR 引擎加载失败（请检查模型下载/网络）".to_string())),
+                    // 外层 match 已分流 RecognizeLines（返回类型不同）——逻辑不可达
+                    OcrRequest::RecognizeLines { reply, .. } => {
+                        let _ = reply.send(Err(AppError::Ocr("行级重识别请求分流失效".to_string())));
+                        return;
+                    }
                 };
-                (result, reply)
+                if result.is_err() {
+                    failures.fetch_add(1, Ordering::Relaxed);
+                }
+                let _ = reply.send(result);
             }
-        };
-        if result.is_err() {
-            failures.fetch_add(1, Ordering::Relaxed);
         }
-        let _ = reply.send(result);
     }
     // 退出时打印缓存统计（M7 诊断面板数据源；开发期日志）
     let (hits, misses) = ocr_cache.stats();
@@ -257,4 +293,27 @@ fn current_replacements(vocab: &Option<Arc<Mutex<VocabStore>>>) -> Option<Vec<cr
         .as_ref()
         .and_then(|v| v.lock().ok())
         .map(|v| v.replacements.clone())
+}
+
+/// 懒构建行级重识别引擎（首个 RecognizeLines 请求时；失败打印原因并保持
+/// None——降级可观测，净化链保留碎片不失效）。
+///
+/// @ai-context: v0.14 D——复用主 OCR 的 rec 模型/字典与 EP 注入（同后端口径，
+///              CUDA 构建失败回退 CPU 的语义由 ort_config_for 保证）。
+fn ensure_rec_engine(
+    slot: &mut Option<crate::line_rec_engine::RecLineEngine>,
+    models: &OcrModels,
+    backend: OcrBackend,
+) {
+    if slot.is_some() {
+        return;
+    }
+    match crate::line_rec_engine::RecLineEngine::build(
+        &models.rec,
+        &models.dict,
+        crate::ocr::ort_config_for(backend).ok().flatten(),
+    ) {
+        Ok(engine) => *slot = Some(engine),
+        Err(e) => eprintln!("[Engine] 行级重识别引擎构建失败（净化链 ② 降级保留碎片）: {}", e),
+    }
 }

@@ -362,6 +362,26 @@ impl EnginePool {
         })?
     }
 
+    /// 行级重识别（v0.14 D 净化链 ②：疑碎行裁剪图批量 rec；有界等待同 OCR 单图）。
+    ///
+    /// @ai-context: 调用方（photo_capture 源头净化）裁剪行图后整批提交——rec 引擎
+    ///              批量推理（supports_batching）；超时/引擎不可用 → Err（调用方
+    ///              保留原结果，能力降级不失效）。
+    pub fn recognize_lines_timeout(
+        &self,
+        crops: Vec<image::RgbImage>,
+        timeout: std::time::Duration,
+    ) -> Result<Vec<crate::line_rec_engine::LineRecResult>> {
+        let (reply, rx) = mpsc::channel();
+        self.ocr_tx
+            .send(OcrRequest::RecognizeLines { crops, reply })
+            .map_err(|_| AppError::Ocr("OCR 引擎线程已退出".to_string()))?;
+        rx.recv_timeout(timeout).map_err(|_| {
+            self.drain_ocr_backlog();
+            AppError::Ocr(format!("行级重识别超时（{}s 未返回，引擎可能卡死）", timeout.as_secs()))
+        })?
+    }
+
     /// 超时后排空 ASR 请求队列积压（三维复审 #5，best-effort）。
     ///
     /// @ai-context: Why——worker 串行处理，调用方超时后已入队请求无法取消；
@@ -391,11 +411,43 @@ impl EnginePool {
         let Some(rx) = self.ocr_rx.as_ref() else { return };
         let guard = rx.lock().unwrap_or_else(|p| p.into_inner());
         while let Ok(req) = guard.try_recv() {
-            let reply = match req {
-                OcrRequest::Recognize { reply, .. } | OcrRequest::RecognizeImage { reply, .. } => reply,
-            };
-            let _ = reply.send(Err(AppError::Ocr("OCR 请求已废弃（调用方超时，积压排空）".to_string())));
+            match req {
+                OcrRequest::Recognize { reply, .. } | OcrRequest::RecognizeImage { reply, .. } => {
+                    let _ = reply.send(Err(AppError::Ocr("OCR 请求已废弃（调用方超时，积压排空）".to_string())));
+                }
+                OcrRequest::RecognizeLines { reply, .. } => {
+                    let _ = reply.send(Err(AppError::Ocr("行级重识别请求已废弃（调用方超时，积压排空）".to_string())));
+                }
+            }
         }
+    }
+}
+
+/// EnginePool → LineRecognizer 适配（photo_capture 源头净化注入；超时同 OCR 单图）。
+///
+/// @ai-context: v0.14 D——line_rec_engine 编排层经 trait 注入识别器；生产实现
+///              走引擎池请求（rec 模型由 OCR worker 懒构建持有——FFI 线程约束
+///              与主 OCR 同架构规避）。
+pub struct PoolLineRecognizer {
+    pool: EnginePool,
+    timeout: std::time::Duration,
+}
+
+impl PoolLineRecognizer {
+    pub fn new(pool: &EnginePool) -> Self {
+        Self {
+            pool: pool.clone(),
+            timeout: OCR_REQUEST_TIMEOUT,
+        }
+    }
+}
+
+impl crate::line_rec_engine::LineRecognizer for PoolLineRecognizer {
+    fn recognize_lines(
+        &self,
+        crops: &[image::RgbImage],
+    ) -> Result<Vec<crate::line_rec_engine::LineRecResult>> {
+        self.pool.recognize_lines_timeout(crops.to_vec(), self.timeout)
     }
 }
 

@@ -14,7 +14,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
-import type { Note } from "../types";
+import type { Note, NoteGroup, TagColor } from "../types";
+import { paletteHex, parseNoteProperties, resolveNoteColor } from "../utils/colorPalette";
+import type { ThemeMode } from "../utils/colorPalette";
+import NoteColorPicker from "../components/NoteColorPicker";
 import type { NoteEditHandle } from "../components/NoteEditView";
 // v0.14 A：编辑器容器切换为 RichEditorView（CM 富编辑：图片内联/撤销/草稿恢复）；
 // NoteEditView 保留为 CM 初始化失败的降级路径（RichEditorView 内部回退）
@@ -33,6 +36,8 @@ import { useNoteAttention } from "../components/useNoteAttention";
 
 interface Props {
   focusNoteId?: number | null;
+  /** v0.14 C2：图谱双击组节点 → 过滤该组（变化时跟随，同 focusNoteId 模式） */
+  focusGroupId?: number | null;
   onOpenSessions?: (sessionId: number) => void;
   /** 打开体系页并选中体系（v0.13.7 触点① 组行徽标） */
   onOpenSystem?: (systemId: number) => void;
@@ -41,7 +46,7 @@ interface Props {
 /** 中部视图：notes=笔记列表（组过滤/搜索/标签）；inbox=收件箱碎片列表 */
 type MiddleView = "notes" | "inbox";
 
-export default function NotesPage({ focusNoteId, onOpenSessions, onOpenSystem }: Props) {
+export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, onOpenSystem }: Props) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [keyword, setKeyword] = useState("");
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -60,7 +65,33 @@ export default function NotesPage({ focusNoteId, onOpenSessions, onOpenSystem }:
   const [previewImg, setPreviewImg] = useState<{ src: string; title?: string } | null>(null);
   // v0.12.2：侧栏刷新令牌（捕获/升降/结算后计数与组列表重载）
   const [refreshToken, setRefreshToken] = useState(0);
+  // v0.14 B：视觉系统数据——组列表（组色继承）与标签色映射；笔记色选择器开关
+  const [groups, setGroups] = useState<NoteGroup[]>([]);
+  const [tagColors, setTagColors] = useState<Record<string, string>>({});
+  const [noteColorPickerOpen, setNoteColorPickerOpen] = useState(false);
   const seqRef = useRef(0);
+  // v0.14 B：当前主题（跟随 prefers-color-scheme；jsdom 无 matchMedia 回退 light）
+  const theme: ThemeMode = useMemo(
+    () => (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
+    [],
+  );
+
+  // v0.14 B：颜色数据加载（refreshToken 驱动——组色/标签色设置后经 onChanged 刷新）
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [gs, tcs] = await Promise.all([
+          invoke<NoteGroup[]>("list_note_groups", { terrain: null }),
+          invoke<TagColor[]>("list_tag_colors"),
+        ]);
+        setGroups(gs);
+        // tcs 空值防御（旧 mock/异常后端返回 null——不崩列表）
+        setTagColors(Object.fromEntries((tcs ?? []).map((t) => [t.tag, t.color])));
+      } catch (e) {
+        console.warn("[NotesPage] 颜色数据加载失败", e);
+      }
+    })();
+  }, [refreshToken]);
   // L2：收集异步流程中的 setTimeout——effect cleanup 统一清理防卸载后触发
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   // A6：注意力跟踪
@@ -126,6 +157,15 @@ export default function NotesPage({ focusNoteId, onOpenSessions, onOpenSystem }:
     })();
     return () => { disposed = true; };
   }, [focusNoteId]);
+
+  // v0.14 C2：图谱组节点直达——仅过滤（三栏下列表常驻；不触发展开）
+  useEffect(() => {
+    if (focusGroupId == null) return;
+    setGroupFilter(focusGroupId);
+    setView("notes");
+    setKeyword("");
+    setTagFilter(null);
+  }, [focusGroupId]);
 
   // v0.10.1 F5：Ctrl+E 进入 / ESC 退出编辑——单一 window 监听 + ref 持有
   const editingRef = useRef(editing);
@@ -278,6 +318,17 @@ export default function NotesPage({ focusNoteId, onOpenSessions, onOpenSystem }:
     [notes, groupFilter],
   );
 
+  // v0.14 B：组映射（noteId → 组，resolveNoteColor 组继承档用）
+  const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
+  // v0.14 B：笔记色板 id 映射（四档优先级解析——笔记显式 > 组继承 > 标签 > 默认灰）
+  const noteColors = useMemo(() => {
+    const m: Record<number, string | null> = {};
+    for (const n of visibleNotes) {
+      m[n.id] = resolveNoteColor(n, n.group_id != null ? groupMap.get(n.group_id) : null, tagColors);
+    }
+    return m;
+  }, [visibleNotes, groupMap, tagColors]);
+
   // H3：辅助面板插槽——VersionPanel + EnrichPanel，key=note.id 切笔记重置内部任务态
   const auxPanels = selected ? (
     <>
@@ -336,6 +387,8 @@ export default function NotesPage({ focusNoteId, onOpenSessions, onOpenSystem }:
           onRefresh={() => void load(keyword, tagFilter, sortMode)}
           onOpenSession={(id) => onOpenSessions?.(id)}
           onBatchDelete={runBatchDelete}
+          noteColors={noteColors}
+          tagColors={tagColors}
         />
       )}
 
@@ -361,8 +414,38 @@ export default function NotesPage({ focusNoteId, onOpenSessions, onOpenSystem }:
             }
             auxPanels={auxPanels}
             headerExtra={
-              // v0.13.7 触点②：标题栏「挂到体系」入口；key=note.id 切笔记重置内部态
-              <NoteLinkToSystem key={`link-${selected.id}`} noteId={selected.id} onChanged={() => void handleNoteChanged()} />
+              <>
+                {/* v0.14 B：笔记级颜色入口——色点显示解析色（含继承），picker 编辑显式色 */}
+                <div style={{ position: "relative" }}>
+                  <span
+                    data-testid="note-color-dot"
+                    onClick={() => setNoteColorPickerOpen((v) => !v)}
+                    title="设置笔记颜色"
+                    style={{ width: 12, height: 12, borderRadius: 3, cursor: "pointer", display: "inline-block", background: paletteHex(noteColors[selected.id] ?? null, theme) }}
+                  />
+                  {noteColorPickerOpen && (
+                    <div
+                      data-testid="note-color-picker-pop"
+                      style={{ position: "absolute", top: "100%", right: 0, zIndex: 30, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}
+                    >
+                      <NoteColorPicker
+                        value={parseNoteProperties(selected).color ?? null}
+                        onChange={(color) => {
+                          invoke("update_note_color", { id: selected.id, color })
+                            .then(() => {
+                              setNoteColorPickerOpen(false);
+                              // 刷新列表（色条）+ 右栏（笔记对象，handleNoteChanged 内 get_note 取最新）
+                              void handleNoteChanged();
+                            })
+                            .catch((e) => setStatus(`笔记颜色设置失败: ${e}`));
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+                {/* v0.13.7 触点②：标题栏「挂到体系」入口；key=note.id 切笔记重置内部态 */}
+                <NoteLinkToSystem key={`link-${selected.id}`} noteId={selected.id} onChanged={() => void handleNoteChanged()} />
+              </>
             }
             onEdit={() => setEditing(true)}
             onPinToggle={() => void runPinToggle(selected)}

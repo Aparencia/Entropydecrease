@@ -1,0 +1,21 @@
+{
+  "bilibili": {
+    "videoRoi": [0.15, 0.08, 0.62, 0.72],
+    "subtitleBand": { "y": 0.82, "h": 0.10 },
+    "noiseMasks": ["danmaku_band", "right_recommend"]
+  },
+  "douyin": {
+    "videoRoi": [0.0, 0.12, 1.0, 0.8],
+    "subtitleBand": { "y": 0.6, "h": 0.15 },
+    "noiseMasks": ["right_comments", "left_likes"]
+  },
+  "youtube": {
+    "videoRoi": [0.0, 0.08, 1.0, 0.84],
+    "subtitleBand": { "y": 0.88, "h": 0.08 },
+    "noiseMasks": ["right_recommend"]
+  },
+  "edge-local": {
+    "videoRoi": [0.0, 0.0, 1.0, 1.0],
+    "noiseMasks": []
+  }
+}

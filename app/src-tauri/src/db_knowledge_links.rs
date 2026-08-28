@@ -126,6 +126,23 @@ impl Db {
             Ok(count > 0)
         })
     }
+
+    /// 反查：按目标实体查引用（内容侧 → 体系侧；v0.14 C3）。
+    ///
+    /// @ai-context: 正查（list_knowledge_links）从体系侧看"引用了什么"；反查从内容
+    ///              （笔记/组/卡/碎片）看"被哪些体系/实体挂接"——NoteLinkToSystem
+    ///              一次调用替代逐体系正查聚合。target_type 白名单在 command 层。
+    pub fn list_links_by_target(&self, target_type: &str, target_id: i64) -> Result<Vec<KnowledgeLink>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(&format!(
+                "SELECT {} FROM knowledge_links
+                 WHERE target_type = ?1 AND target_id = ?2 ORDER BY id ASC",
+                LINK_COLUMNS,
+            ))?;
+            let rows = stmt.query_map(params![target_type, target_id], row_to_link)?;
+            rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+        })
+    }
 }
 
 /// 把 rusqlite 行映射为 KnowledgeLink。
