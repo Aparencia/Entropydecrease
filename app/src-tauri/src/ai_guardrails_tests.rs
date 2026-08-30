@@ -21,9 +21,9 @@ fn quota_consumes_until_limit() {
 fn quota_resets_on_new_day() {
     // Arrange：配额 2，首日耗尽
     let mut quota = DailyQuota::new(2);
-    assert!(quota.try_consume(86_400 * 1));
-    assert!(quota.try_consume(86_400 * 1));
-    assert!(!quota.try_consume(86_400 * 1));
+    assert!(quota.try_consume(86_400));
+    assert!(quota.try_consume(86_400));
+    assert!(!quota.try_consume(86_400));
     // Act：次日
     assert!(quota.try_consume(86_400 * 2), "跨日应重置配额");
     assert_eq!(quota.usage(), (1, 2));

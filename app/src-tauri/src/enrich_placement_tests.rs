@@ -4,7 +4,7 @@
 //!              混合落位、同锚点多块合并、锚点未命中追加尾部（不丢块）。
 
 use crate::ai_enrich_protocol::{AiEnrichBlock, AiEnrichKind, AiEnrichResponse};
-use crate::enrich_placement::{render_depth_block, render_enriched_note, render_extension_area};
+use crate::enrich_placement::{render_enriched_note, render_extension_area};
 
 fn block(kind: AiEnrichKind, anchor: Option<&str>, heading: &str, content: &str) -> AiEnrichBlock {
     AiEnrichBlock {
@@ -98,7 +98,7 @@ fn unknown_anchor_appends_to_tail_not_lost() {
 
 #[test]
 fn render_extension_area_standalone() {
-    let blocks = vec![block(AiEnrichKind::B2, None, "进阶方向", "进阶内容")];
+    let blocks = [block(AiEnrichKind::B2, None, "进阶方向", "进阶内容")];
     let refs: Vec<&AiEnrichBlock> = blocks.iter().collect();
     let out = render_extension_area(&refs);
     assert!(out.contains("### 进阶方向"));

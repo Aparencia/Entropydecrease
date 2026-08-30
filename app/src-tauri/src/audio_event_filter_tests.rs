@@ -44,7 +44,7 @@ fn synth_speech(sample_rate: u32, dur_secs: f32, amp: f32) -> Vec<f32> {
         }
         i += blen;
         let glen = gap.min(n - i);
-        out.extend(std::iter::repeat(0.0f32).take(glen));
+        out.extend(std::iter::repeat_n(0.0f32, glen));
         i += glen;
     }
     out

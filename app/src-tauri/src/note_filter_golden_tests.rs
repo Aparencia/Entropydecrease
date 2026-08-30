@@ -123,8 +123,7 @@ fn session31_paragraph_timestamp_anchors() {
     assert!(result.markdown.contains("[⏱ 00:00]([[ts:0]]) 项目启动是一个艺术。"));
     assert!(result.markdown.contains("[⏱ 01:03]([[ts:63000]]) 这是项目章程。"));
     // 可开关（REQ-165）：关闭后无锚点
-    let mut cfg = crate::purify_config::PurifyConfig::default();
-    cfg.anchor_timestamps = false;
+    let cfg = crate::purify_config::PurifyConfig { anchor_timestamps: false, ..Default::default() };
     let env_off = crate::note_filter::PurifyEnv {
         config: cfg,
         symbol: crate::symbol_normalize::SymbolNormalizeConfig::default(),

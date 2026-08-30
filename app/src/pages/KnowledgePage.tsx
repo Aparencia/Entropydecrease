@@ -63,6 +63,10 @@ export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup }
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const [domainCreate, setDomainCreate] = useState<{ open: boolean; name: string }>({ open: false, name: "" });
   const [status, setStatus] = useState("");
+  // TD-2026-08-24-C 偿还：示例检查重试令牌——原 refreshGlobal={0} 恒传死参数
+  // （创建全局体系后 KnowledgeSampleView 的 checkGlobal 永不重跑）；创建成功
+  // 递增令牌驱动其重试（空态退出/示例行刷新）
+  const [sampleRefresh, setSampleRefresh] = useState(0);
 
   const loadSystems = useCallback(async () => {
     try {
@@ -95,6 +99,8 @@ export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup }
     setWizardOpen(false);
     await loadSystems();
     setSelectedSystemId(system.id);
+    // 创建成功 → 示例检查重试令牌递增（原死参数修复；onCopied 复制路径同源）
+    setSampleRefresh((t) => t + 1);
   }, [loadSystems]);
 
   useEffect(() => { void loadSystems(); }, [loadSystems]);
@@ -198,9 +204,10 @@ export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup }
           onCopied={(sys) => {
             setWizardOpen(false);
             void loadSystems().then(() => setSelectedSystemId(sys.id));
+            setSampleRefresh((t) => t + 1);
           }}
           onNeedGlobal={() => setWizardOpen(true)}
-          refreshGlobal={0}
+          refreshGlobal={sampleRefresh}
         />
         {wizardOpen && <KnowledgeSystemWizard onClose={() => setWizardOpen(false)} onCreated={(sys) => void handleCreated(sys)} />}
       </div>

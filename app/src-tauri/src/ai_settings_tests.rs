@@ -46,15 +46,16 @@ fn save_load_roundtrip() {
     // 持久化 roundtrip：enabled/authorized/端点/模型/阈值/记住选择全保真
     let path = tmp_settings_file("roundtrip.json");
     let _ = std::fs::remove_file(&path);
-    let mut s = AiSettings::default();
-    s.enabled = true;
-    s.authorized = true;
-    s.base_url = "https://example.com/v1".to_string();
-    s.model = "acme/model-1".to_string();
-    s.low_balance_threshold = 5.0;
-    s.remember_cost_choice = true;
-    // v0.12.0 M5：vision 画面理解默认关——持久化 roundtrip 保真
-    s.vision_refine_enabled = true;
+    let s = AiSettings {
+        enabled: true,
+        authorized: true,
+        base_url: "https://example.com/v1".to_string(),
+        model: "acme/model-1".to_string(),
+        low_balance_threshold: 5.0,
+        remember_cost_choice: true,
+        // v0.12.0 M5：vision 画面理解默认关——持久化 roundtrip 保真
+        vision_refine_enabled: true,
+    };
     s.save(&path).expect("保存成功");
     let loaded = AiSettings::load(&path);
     assert_eq!(loaded, s);

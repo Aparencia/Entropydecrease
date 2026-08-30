@@ -89,14 +89,10 @@ impl LiveSessionManager {
         Ok(())
     }
 
-    /// v0.11.5（Task 6）：当前生效三维档案快照（worker 应用后写入；None=未设置）。
-    pub fn applied_profile(
-        &self,
-    ) -> Option<crate::live_session::ProfileOverride> {
-        self.applied_profile.lock().ok().and_then(|g| g.clone())
-    }
-
     /// v0.11.5（Task 6）：当前生效三维档案共享槽句柄（command 层读取）。
+    /// @ai-context: applied_profile 快照读取方法无任何调用方（0.11.5 起仅 slot 被
+    ///               live_session.rs/commands_live.rs 使用）——按 YAGNI 删除
+    ///               （dead_code 存量告警来源；git 历史可追溯，接线时从槽读）。
     pub fn applied_profile_slot(
         &self,
     ) -> std::sync::Arc<std::sync::Mutex<Option<crate::live_session::ProfileOverride>>> {

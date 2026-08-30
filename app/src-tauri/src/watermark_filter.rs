@@ -165,7 +165,7 @@ fn frame_text_signatures(blocks: &[WatermarkInput]) -> BTreeMap<u64, BTreeSet<St
 }
 
 /// 命中明细排序（共享）：出现次数降序 → 跨度降序 → 文本字典序（确定性）。
-fn sort_hits(hits: &mut Vec<WatermarkHit>) {
+fn sort_hits(hits: &mut [WatermarkHit]) {
     hits.sort_by(|a, b| {
         b.occurrences
             .cmp(&a.occurrences)

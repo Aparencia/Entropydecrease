@@ -17,7 +17,7 @@ impl Db {
                 "INSERT INTO settlements (group_id, stats_json, created_at) VALUES (?1, ?2, ?3)",
                 params![group_id, stats_json, now],
             )?;
-            Ok(conn.last_insert_rowid() as i64)
+            Ok(conn.last_insert_rowid())
         })
     }
 

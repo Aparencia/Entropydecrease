@@ -562,7 +562,7 @@ pub fn refresh_screen_points(result: &mut NoteFilterResult) {
 /// 组装 Markdown（标题 + 讲述内容；段落切分复用 concat 口径；
 /// v0.7.5 REQ-165/170/173：段首 [MM:SS] 时间戳锚点（可回跳原视频位置，可开关）
 /// + 段落阈值走净化配置 + 会话异常警示行（None=无警示）。
-/// v0.11.5：画面要点段移出笔记（_ocr_points 签名保留兼容调用方，忽略）。
+///   v0.11.5：画面要点段移出笔记（_ocr_points 签名保留兼容调用方，忽略）。
 pub(crate) fn rebuild_markdown(
     title: &str,
     kept: &[SessionSegment],

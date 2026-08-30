@@ -325,6 +325,6 @@ fn combined_snapshot_mixes_all_edge_types() {
     assert_eq!(snap.edges.iter().filter(|e| e.edge_type == "link").count(), 1);
     assert_eq!(snap.edges.iter().filter(|e| e.edge_type == "trace").count(), 1);
     assert_eq!(snap.edges.iter().filter(|e| e.edge_type == "belong").count(), 2);
-    assert_eq!(snap.edges.iter().filter(|e| e.edge_type == "trace").next().expect("t").source, format!("note:{n1}"));
-    assert_eq!(snap.edges.iter().filter(|e| e.edge_type == "trace").next().expect("t2").target, format!("note:{n2}"));
+    assert_eq!(snap.edges.iter().find(|e| e.edge_type == "trace").expect("t").source, format!("note:{n1}"));
+    assert_eq!(snap.edges.iter().find(|e| e.edge_type == "trace").expect("t2").target, format!("note:{n2}"));
 }

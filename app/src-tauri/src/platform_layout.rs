@@ -82,7 +82,9 @@ impl From<NormalizedRoi> for [f32; 4] {
 
 impl NormalizedRoi {
     /// 像素化 ROI（帧尺寸 → (x, y, w, h) 像素矩形）。
-    pub fn to_pixels(&self, fw: f32, fh: f32) -> (f32, f32, f32, f32) {
+    /// @ai-context: Copy 类型接 self 值（clippy to_* 惯例）；调用方引用也自动
+    ///              解引用复制——行为不变。
+    pub fn to_pixels(self, fw: f32, fh: f32) -> (f32, f32, f32, f32) {
         (self.x * fw, self.y * fh, self.w * fw, self.h * fh)
     }
 }

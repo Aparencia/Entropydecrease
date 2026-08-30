@@ -27,70 +27,72 @@ impl Db {
     ///              前台切换基线（低频、practice_segments 对齐锚点）不被
     ///              高频写放大误删（2h 会话 ≈ 数百条高频，远未触发守卫）。
     pub fn add_event(&self, new: &NewSessionEvent) -> Result<SessionEvent> {
-        let conn = self.conn.lock().expect("db lock poisoned");
-        conn.execute("BEGIN TRANSACTION", [])?;
-        let result = (|| -> Result<SessionEvent> {
-            // 容量守卫：超预算先删最旧（同一事务，防写放大无限增长）
-            if crate::session_events::over_budget(self.count_events_locked(&conn, new.session_id)?) {
-                // 优先删高频噪声事件（可重建信号；基线/行为事件保留）
-                let deleted = conn.execute(
-                    "DELETE FROM session_events WHERE id IN (
-                         SELECT id FROM session_events
-                         WHERE session_id = ?1
-                           AND kind IN ('frame_switch', 'long_silence', 'volume_surge')
-                         ORDER BY timestamp_ms ASC LIMIT 1
-                     )",
-                    params![new.session_id],
-                )?;
-                if deleted == 0 {
-                    // 无高频可删（异常会话全为基线/行为事件）→ 回退删最旧整体
-                    conn.execute(
+        self.with_conn(|conn| {
+            conn.execute("BEGIN TRANSACTION", [])?;
+            let result = (|| -> Result<SessionEvent> {
+                // 容量守卫：超预算先删最旧（同一事务，防写放大无限增长）
+                if crate::session_events::over_budget(self.count_events_locked(conn, new.session_id)?) {
+                    // 优先删高频噪声事件（可重建信号；基线/行为事件保留）
+                    let deleted = conn.execute(
                         "DELETE FROM session_events WHERE id IN (
-                             SELECT id FROM session_events WHERE session_id = ?1 ORDER BY timestamp_ms ASC LIMIT 1
+                             SELECT id FROM session_events
+                             WHERE session_id = ?1
+                               AND kind IN ('frame_switch', 'long_silence', 'volume_surge')
+                             ORDER BY timestamp_ms ASC LIMIT 1
                          )",
                         params![new.session_id],
                     )?;
+                    if deleted == 0 {
+                        // 无高频可删（异常会话全为基线/行为事件）→ 回退删最旧整体
+                        conn.execute(
+                            "DELETE FROM session_events WHERE id IN (
+                                 SELECT id FROM session_events WHERE session_id = ?1 ORDER BY timestamp_ms ASC LIMIT 1
+                             )",
+                            params![new.session_id],
+                        )?;
+                    }
+                }
+                conn.execute(
+                    "INSERT INTO session_events (session_id, kind, timestamp_ms, payload_json)
+                     VALUES (?1, ?2, ?3, ?4)",
+                    params![
+                        new.session_id,
+                        new.kind.as_str(),
+                        new.timestamp_ms as i64,
+                        new.payload.to_string(),
+                    ],
+                )?;
+                Ok(SessionEvent {
+                    id: conn.last_insert_rowid(),
+                    session_id: new.session_id,
+                    kind: new.kind,
+                    timestamp_ms: new.timestamp_ms,
+                    payload: new.payload.clone(),
+                })
+            })();
+            match result {
+                Ok(e) => {
+                    conn.execute("COMMIT", [])?;
+                    Ok(e)
+                }
+                Err(e) => {
+                    let _ = conn.execute("ROLLBACK", []);
+                    Err(e)
                 }
             }
-            conn.execute(
-                "INSERT INTO session_events (session_id, kind, timestamp_ms, payload_json)
-                 VALUES (?1, ?2, ?3, ?4)",
-                params![
-                    new.session_id,
-                    new.kind.as_str(),
-                    new.timestamp_ms as i64,
-                    new.payload.to_string(),
-                ],
-            )?;
-            Ok(SessionEvent {
-                id: conn.last_insert_rowid(),
-                session_id: new.session_id,
-                kind: new.kind,
-                timestamp_ms: new.timestamp_ms,
-                payload: new.payload.clone(),
-            })
-        })();
-        match result {
-            Ok(e) => {
-                conn.execute("COMMIT", [])?;
-                Ok(e)
-            }
-            Err(e) => {
-                let _ = conn.execute("ROLLBACK", []);
-                Err(e)
-            }
-        }
+        })
     }
 
     /// 列出会话全部信号事件（按时间轴升序；消费端过滤类型）。
     pub fn list_events(&self, session_id: i64) -> Result<Vec<SessionEvent>> {
-        let conn = self.conn.lock().expect("db lock poisoned");
-        let mut stmt = conn.prepare(
-            "SELECT id, session_id, kind, timestamp_ms, payload_json
-             FROM session_events WHERE session_id = ?1 ORDER BY timestamp_ms ASC",
-        )?;
-        let rows = stmt.query_map(params![session_id], row_to_event)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, session_id, kind, timestamp_ms, payload_json
+                 FROM session_events WHERE session_id = ?1 ORDER BY timestamp_ms ASC",
+            )?;
+            let rows = stmt.query_map(params![session_id], row_to_event)?;
+            rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+        })
     }
 
     /// 按类型列出事件（章节检测等消费端按需过滤）。
@@ -99,13 +101,14 @@ impl Db {
     ///              登记豁免 dead_code（V1.0 周报聚合同样需要）。
     #[allow(dead_code)]
     pub fn list_events_by_kind(&self, session_id: i64, kind: EventKind) -> Result<Vec<SessionEvent>> {
-        let conn = self.conn.lock().expect("db lock poisoned");
-        let mut stmt = conn.prepare(
-            "SELECT id, session_id, kind, timestamp_ms, payload_json
-             FROM session_events WHERE session_id = ?1 AND kind = ?2 ORDER BY timestamp_ms ASC",
-        )?;
-        let rows = stmt.query_map(params![session_id, kind.as_str()], row_to_event)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, session_id, kind, timestamp_ms, payload_json
+                 FROM session_events WHERE session_id = ?1 AND kind = ?2 ORDER BY timestamp_ms ASC",
+            )?;
+            let rows = stmt.query_map(params![session_id, kind.as_str()], row_to_event)?;
+            rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+        })
     }
 
     /// 会话事件计数（容量守卫内部用；锁已持有）。

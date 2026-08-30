@@ -35,6 +35,9 @@ struct GoldenSample {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GoldenExpect {
+    /// golden fixture 的 schema 版本（契约完整性说明字段——fixture 演进时
+    /// 校验依据；当前断言按字段子集，保留不读防误删）
+    #[allow(dead_code)]
     schema_version: u32,
     min_sections: usize,
     #[serde(default)]

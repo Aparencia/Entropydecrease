@@ -149,6 +149,9 @@ pub fn list_knowledge_models(state: State<'_, AppState>, system_id: i64) -> Resu
 ///              @side-effect v0.14 C3：成功后广播 knowledge:links-changed——跨页即时同步
 ///              （笔记页挂接 → 体系页引用区/图谱即时刷新，spec §3.3 refreshToken 机制）。
 #[tauri::command]
+// @ai-context: Tauri command 接口签名固定（注入 app/state + 8 个业务参数——
+//              clippy too_many_arguments 允许：接口契约不因 lint 改形参分拆）
+#[allow(clippy::too_many_arguments)]
 pub fn link_knowledge_target(
     app: AppHandle,
     state: State<'_, AppState>,

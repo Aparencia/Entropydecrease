@@ -36,5 +36,5 @@ fn kind_as_str_matches_kebab_case() {
 #[test]
 fn fallback_never_empty() {
     let p = NoteEnrichPrompt::fallback();
-    assert!(!p.build_system(&AiEnrichKind::all().to_vec()).is_empty());
+    assert!(!p.build_system(AiEnrichKind::all().as_ref()).is_empty());
 }

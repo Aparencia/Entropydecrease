@@ -278,7 +278,7 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
         let client = AiClient::from_settings_with_store(
             &settings,
             crate::commands_ai_providers::resolve_default_provider_key(&st)
-                .map_err(|e| AiTaskFailure::Other(e))?,
+                .map_err(AiTaskFailure::Other)?,
             &store,
         );
         let adapter = AiNoteEnrichAdapter::new(client.clone());

@@ -37,7 +37,7 @@ fn grid_luma_weighting_bgra_order() {
     let grid = grid_from_bgra(&frame, w, h).expect("grid");
     // Assert：Rec.601 亮度（红色权重 0.299）
     let v = grid.cells[0];
-    assert!(v >= 70 && v <= 82, "红色亮度应 ≈76，实际 {}", v);
+    assert!((70..=82).contains(&v), "红色亮度应 ≈76，实际 {}", v);
 }
 
 #[test]

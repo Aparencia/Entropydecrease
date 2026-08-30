@@ -129,17 +129,23 @@ export default function RouteInfoPopover({
       const links = linkArrays.flat();
       const groupLinks = links.filter((l) => l.targetType === "note_group" && l.targetId === group.id);
       if (modelCount === 0 && groupLinks.length === 0) { setSysBrief(null); return; }
-      const sys = sysList.find((s) => s.id === groupLinks[0]?.systemId) ?? null;
+      // TD-2026-08-24-B 偿还：原仅查 groupLinks[0] 体系——多体系组的其余体系
+      // 概念失效不提示；改为聚合全部关联体系（unique systemId），stale 总数
+      const allSystems = sysList.filter((s) => s.status !== "archived");
+      const refSystemIds = [...new Set(groupLinks.map((l) => l.systemId))];
+      const sysToCheck = allSystems.filter((s) => refSystemIds.includes(s.id));
       let staleConcepts = 0;
-      if (sys) {
+      const now = Math.floor(Date.now() / 1000);
+      for (const sys of sysToCheck) {
         const concepts = await invoke<KnowledgeConcept[]>("list_knowledge_concepts", { systemId: sys.id });
-        const now = Math.floor(Date.now() / 1000);
-        staleConcepts = concepts.filter((c) => {
+        staleConcepts += concepts.filter((c) => {
           const base = c.lastAppliedAt ?? c.createdAt;
           return now - base > 90 * 86400;
         }).length;
       }
-      setSysBrief({ modelCount, staleConcepts, systemName: sys?.name ?? "" });
+      const firstName = sysToCheck[0]?.name ?? "";
+      const systemName = sysToCheck.length > 1 ? `${firstName} 等 ${sysToCheck.length} 个体系` : firstName;
+      setSysBrief({ modelCount, staleConcepts, systemName });
     } catch { setSysBrief(null); } // 简报为纯提示——加载失败静默降级
   }, [group.id]);
 

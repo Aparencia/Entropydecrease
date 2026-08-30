@@ -163,6 +163,6 @@ fn invalid_frame_data_rejected() {
     let mut store = StructureImageStore::new(dir.path().to_path_buf()).unwrap();
 
     // Act/Assert：数据无效 → Err（不 panic、不落盘）
-    assert!(store.save_auto(1_000, &vec![0u8; 10], 200, 100).is_err());
-    assert!(store.save_manual(1_000, &vec![0u8; 10], 200, 100).is_err());
+    assert!(store.save_auto(1_000, &[0u8; 10], 200, 100).is_err());
+    assert!(store.save_manual(1_000, &[0u8; 10], 200, 100).is_err());
 }
