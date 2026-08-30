@@ -9,7 +9,7 @@ use rusqlite::params;
 
 use crate::db::{unix_seconds, Db};
 use crate::error::Result;
-use crate::types::{NewNoteGroup, NoteGroup};
+use crate::types::{GroupDeleteImpact, NewNoteGroup, NoteGroup};
 
 /// note_groups 表统一查询列（列顺序与 row_to_group 严格对应）。
 const GROUP_COLUMNS: &str = "id, name, terrain, kind, domain_tag, source, series_key, route_reason, route_overridden, color, created_at, updated_at";
@@ -177,6 +177,47 @@ impl Db {
             )?;
             Ok(affected > 0)
         })
+    }
+
+    /// 组删除影响面（v0.14.1：确认弹窗数据源——只读计数，无副作用）。
+    ///
+    /// @ai-context: 删除语义=影响面确认后级联（规格 §2.1）：notes/fragments 将
+    ///              SET NULL（移入"全部"），flashcards/settlements/contracts 将
+    ///              CASCADE（级联删），knowledge_links 悬空引用将清理——六项计数
+    ///              如实呈现，用户确认前可反悔。
+    pub fn group_delete_impact(&self, id: i64) -> Result<GroupDeleteImpact> {
+        self.with_conn(|conn| {
+            let count = |sql: &str| -> Result<i64> { Ok(conn.query_row(sql, params![id], |row| row.get::<_, i64>(0))?) };
+            Ok(GroupDeleteImpact {
+                notes: count("SELECT COUNT(*) FROM notes WHERE group_id = ?1")?,
+                fragments: count("SELECT COUNT(*) FROM fragments WHERE group_id = ?1")?,
+                cards: count("SELECT COUNT(*) FROM flashcards WHERE group_id = ?1")?,
+                settlements: count("SELECT COUNT(*) FROM settlements WHERE group_id = ?1")?,
+                contracts: count("SELECT COUNT(*) FROM contracts WHERE group_id = ?1")?,
+                system_refs: count(
+                    "SELECT COUNT(*) FROM knowledge_links WHERE target_type = 'note_group' AND target_id = ?1",
+                )?,
+            })
+        })
+    }
+
+    /// 删除组（v0.14.1：单事务——先清悬空引用再删组，级联由 FK 自动生效）。
+    ///
+    /// @ai-context: knowledge_links 无 FK 到 note_groups（target_type/target_id
+    ///              泛化目标，白名单校验在命令层），必须显式清理——否则体系页
+    ///              引用区出现悬空反查。PRAGMA foreign_keys=ON 每连接开启（db.rs），
+    ///              notes/fragments SET NULL 与 flashcards/settlements/contracts
+    ///              CASCADE 由建表契约自动生效；组不存在 → false（命令层转错误）。
+    pub fn delete_group(&self, id: i64) -> Result<bool> {
+        let mut conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let tx = conn.transaction()?;
+        tx.execute(
+            "DELETE FROM knowledge_links WHERE target_type = 'note_group' AND target_id = ?1",
+            params![id],
+        )?;
+        let affected = tx.execute("DELETE FROM note_groups WHERE id = ?1", params![id])?;
+        tx.commit()?;
+        Ok(affected > 0)
     }
 }
 

@@ -14,6 +14,7 @@ use rusqlite::params;
 
 use crate::db::Db;
 use crate::error::Result;
+use crate::types::CanvasPrefs;
 
 impl Db {
     /// 保存单个节点画布位置（拖拽落点；幂等覆盖；节点不存在返回 false）。
@@ -78,6 +79,52 @@ impl Db {
                  VALUES (?1, ?2, ?3, ?4)
                  ON CONFLICT(system_id) DO UPDATE SET viewport_x = ?2, viewport_y = ?3, zoom = ?4",
                 params![system_id, x, y, zoom],
+            )?;
+            Ok(true)
+        })
+    }
+
+    /// 读取体系画布偏好（v0.14.1；从未保存返回 None——前端回落默认值）。
+    ///
+    /// @ai-context: 与视口同表（states 1:1），但行可能先由视口写入而偏好列落
+    ///              DEFAULT——视口与偏好独立读写互不覆盖。
+    pub fn get_canvas_prefs(&self, system_id: i64) -> Result<Option<CanvasPrefs>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT edge_style, edge_arrows, layout_algorithm FROM knowledge_canvas_states WHERE system_id = ?1",
+            )?;
+            let mut rows = stmt.query_map(params![system_id], |row| {
+                Ok(CanvasPrefs {
+                    edge_style: row.get(0)?,
+                    edge_arrows: row.get::<_, i64>(1)? != 0,
+                    layout_algorithm: row.get(2)?,
+                })
+            })?;
+            match rows.next() {
+                Some(Ok(v)) => Ok(Some(v)),
+                Some(Err(e)) => Err(e.into()),
+                None => Ok(None),
+            }
+        })
+    }
+
+    /// 保存体系画布偏好（upsert——只更新偏好列，视口列保持不动）。
+    ///
+    /// @ai-context: 与 save_canvas_viewport 同 ON CONFLICT(system_id) 模式；枚举
+    ///              合法性校验在 command 层（白名单前后端同口径）——本层只落库。
+    pub fn save_canvas_prefs(
+        &self,
+        system_id: i64,
+        edge_style: &str,
+        edge_arrows: bool,
+        layout_algorithm: &str,
+    ) -> Result<bool> {
+        self.with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO knowledge_canvas_states (system_id, edge_style, edge_arrows, layout_algorithm)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(system_id) DO UPDATE SET edge_style = ?2, edge_arrows = ?3, layout_algorithm = ?4",
+                params![system_id, edge_style, edge_arrows, layout_algorithm],
             )?;
             Ok(true)
         })

@@ -7,8 +7,8 @@
 //!              ③ 坐标有限值/zoom 正数校验（NaN/Infinity/0/负值/超界拒绝）。
 
 use crate::commands_knowledge_canvas::{
-    batch_initialize_canvas_positions_inner, get_canvas_viewport_inner,
-    save_canvas_viewport_inner, update_node_canvas_position_inner,
+    batch_initialize_canvas_positions_inner, get_canvas_prefs_inner, get_canvas_viewport_inner,
+    save_canvas_prefs_inner, save_canvas_viewport_inner, update_node_canvas_position_inner,
 };
 use crate::commands_knowledge_systems::{
     add_knowledge_node_inner, create_knowledge_system_inner, list_knowledge_nodes_inner,
@@ -228,4 +228,55 @@ fn viewport_rejects_bad_zoom_and_unknown_system() {
     assert!(get_canvas_viewport_inner(&db, 99999).is_err());
     // 拒绝后无记录
     assert_eq!(get_canvas_viewport_inner(&db, sid).expect("读"), None);
+}
+
+#[test]
+fn canvas_prefs_save_get_roundtrip_and_default_missing() {
+    // Arrange
+    let db = mem_db();
+    let sid = make_global(&db);
+    // Act：从未保存 → None（前端回落默认 smoothstep + radial）
+    assert_eq!(get_canvas_prefs_inner(&db, sid).expect("首次读"), None);
+    // 保存 → 回读
+    save_canvas_prefs_inner(&db, sid, "bezier", true, "mindmap").expect("保存");
+    let p = get_canvas_prefs_inner(&db, sid).expect("读").expect("有记录");
+    // Assert：camelCase 契约字段与箭头布尔往返
+    assert_eq!(p.edge_style, "bezier");
+    assert!(p.edge_arrows);
+    assert_eq!(p.layout_algorithm, "mindmap");
+    // upsert 覆盖
+    save_canvas_prefs_inner(&db, sid, "straight", false, "org").expect("覆盖");
+    let p2 = get_canvas_prefs_inner(&db, sid).expect("读").expect("有");
+    assert_eq!((p2.edge_style.as_str(), p2.edge_arrows, p2.layout_algorithm.as_str()), ("straight", false, "org"));
+}
+
+#[test]
+fn canvas_prefs_rejects_unknown_enum_and_system() {
+    // Arrange
+    let db = mem_db();
+    let sid = make_global(&db);
+    // Act/Assert：非法连线/布局枚举拒绝（白名单前后端同口径）
+    assert!(save_canvas_prefs_inner(&db, sid, "curvy", false, "radial").is_err());
+    assert!(save_canvas_prefs_inner(&db, sid, "smoothstep", false, "force").is_err());
+    assert!(save_canvas_prefs_inner(&db, sid, "", false, "").is_err());
+    // 不存在的体系（save/get 都拒绝）
+    assert!(save_canvas_prefs_inner(&db, 99999, "straight", false, "radial").is_err());
+    assert!(get_canvas_prefs_inner(&db, 99999).is_err());
+    // 非法 id 拒绝
+    assert!(save_canvas_prefs_inner(&db, 0, "straight", false, "radial").is_err());
+}
+
+#[test]
+fn canvas_prefs_whitelist_all_valid_values() {
+    // Arrange：合法枚举全套逐一试（防白名单漏项——前端枚举同口径）
+    let db = mem_db();
+    let sid = make_global(&db);
+    for style in ["straight", "bezier", "smoothstep", "step"] {
+        for algo in ["radial", "mindmap", "treeRight", "org", "fishbone", "dualRing"] {
+            save_canvas_prefs_inner(&db, sid, style, false, algo).expect("合法保存");
+            let p = get_canvas_prefs_inner(&db, sid).expect("读").expect("有");
+            assert_eq!(p.edge_style, style);
+            assert_eq!(p.layout_algorithm, algo);
+        }
+    }
 }

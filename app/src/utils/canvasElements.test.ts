@@ -204,3 +204,55 @@ describe("key 工具", () => {
     expect(entityIdFromKey("q:-3")).toBeNull();
   });
 });
+
+describe("v0.14.1 连线样式与箭头", () => {
+  const parentEdge = (edges: { id: string; type?: string }[]) => edges.find((e) => e.id === "e:1:2")!;
+
+  it("edgeStyle 四枚举 → RF edge type 映射（缺省 smoothstep）", () => {
+    // Arrange
+    const input = {
+      nodes: [node(1, null, "根"), node(2, 1, "子")],
+      concepts: [], models: [], links: [], positions: new Map<string, { x: number; y: number }>(),
+      selectedKey: null, rootCard: null,
+    };
+    // Act/Assert：逐一映射
+    expect(parentEdge(buildCanvasElements({ ...input, edgeStyle: "straight" }).edges).type).toBe("straight");
+    expect(parentEdge(buildCanvasElements({ ...input, edgeStyle: "bezier" }).edges).type).toBe("bezier");
+    expect(parentEdge(buildCanvasElements({ ...input, edgeStyle: "step" }).edges).type).toBe("step");
+    expect(parentEdge(buildCanvasElements({ ...input, edgeStyle: "smoothstep" }).edges).type).toBe("smoothstep");
+    // 缺省（未传）→ smoothstep（旧调用兼容）
+    expect(parentEdge(buildCanvasElements(input).edges).type).toBe("smoothstep");
+  });
+
+  it("edgeArrows=true → 全部边带 ArrowClosed markerEnd（父子边与根卡虚边一致）", () => {
+    // Arrange：父子 + 根卡虚边
+    const { edges } = build({
+      nodes: [node(1, null, "根"), node(2, 1, "子")],
+      edgeArrows: true,
+      edgeStyle: "bezier",
+    });
+    // Assert：所有边都带 markerEnd（无箭头时缺省无此键——保持旧测试等价）
+    expect(edges.every((e) => (e.markerEnd as { type?: string } | undefined)?.type === "arrowclosed")).toBe(true);
+    expect(edges).toHaveLength(1); // 无 rootCard 时仅父子边
+    // 根卡边：样式继承 + 虚线保持 + 箭头
+    const withRoot = build({
+      nodes: [node(1, null, "根")],
+      rootCard: { title: "体系", subtitle: "领域体系" },
+      edgeArrows: true,
+      edgeStyle: "straight",
+    }).edges;
+    const coreEdge = withRoot.find((e) => e.source === "core")!;
+    expect(coreEdge.type).toBe("straight");
+    expect(coreEdge.style).toEqual({ stroke: "#cbd5e1", strokeDasharray: "5 4" });
+  });
+
+  it("未知 edgeStyle（旧库/损坏值）→ 回退 smoothstep 不炸", () => {
+    // Arrange
+    const { edges } = build({
+      nodes: [node(1, null, "根"), node(2, 1, "子")],
+      edgeStyle: "curvy" as never,
+    });
+    // Assert
+    expect(edges[0].type).toBe("smoothstep");
+  });
+});

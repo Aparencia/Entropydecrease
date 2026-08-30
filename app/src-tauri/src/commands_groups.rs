@@ -8,7 +8,7 @@
 use tauri::State;
 
 use crate::commands::{normalize_title, AppState};
-use crate::types::{NewNoteGroup, Note, NoteGroup};
+use crate::types::{GroupDeleteImpact, NewNoteGroup, Note, NoteGroup};
 use crate::video_profile_domain::DomainKind;
 
 /// 组类别白名单（非法值拒绝——前端枚举同口径）。
@@ -183,3 +183,53 @@ pub fn update_group_color(
         .update_group_color(id, color.as_deref())
         .map_err(|e| e.to_string())
 }
+
+/// 组删除影响面（v0.14.1；只读——确认弹窗数据源，无副作用）。
+///
+/// @ai-context: 两步删除（先 impact 后 delete）——确认弹窗展示的数量与执行时的
+///              真实状态分离，防"确认后数据漂移"造成误删语义（规格 §3.2）。
+#[tauri::command]
+pub fn get_group_delete_impact(
+    state: State<'_, AppState>,
+    id: i64,
+) -> Result<GroupDeleteImpact, String> {
+    get_group_delete_impact_inner(&state.db, id)
+}
+
+/// 删除组（v0.14.1：影响面确认后级联——单事务清理引用再删组）。
+///
+/// @ai-context: 不区分组来源（container/feed、course/topic/standalone 皆可删——
+///              误生成纠错是主诉求）；删除后组内笔记/碎片经 FK SET NULL 移入
+///              "全部"，闪卡/结算/周契约 CASCADE，体系引用显式清理。
+#[tauri::command]
+pub fn delete_note_group(state: State<'_, AppState>, id: i64) -> Result<bool, String> {
+    delete_note_group_inner(&state.db, id)
+}
+
+pub(crate) fn get_group_delete_impact_inner(
+    db: &crate::db::Db,
+    id: i64,
+) -> Result<GroupDeleteImpact, String> {
+    if id <= 0 {
+        return Err("无效的组 id".to_string());
+    }
+    if db.get_group(id).map_err(|e| e.to_string())?.is_none() {
+        return Err(format!("笔记组不存在: {}", id));
+    }
+    db.group_delete_impact(id).map_err(|e| e.to_string())
+}
+
+pub(crate) fn delete_note_group_inner(db: &crate::db::Db, id: i64) -> Result<bool, String> {
+    if id <= 0 {
+        return Err("无效的组 id".to_string());
+    }
+    if db.get_group(id).map_err(|e| e.to_string())?.is_none() {
+        return Err(format!("笔记组不存在: {}", id));
+    }
+    db.delete_group(id).map_err(|e| e.to_string())
+}
+
+/// 命令层单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。
+#[cfg(test)]
+#[path = "commands_groups_tests.rs"]
+mod tests;

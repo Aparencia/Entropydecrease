@@ -35,6 +35,7 @@ vi.mock("@xyflow/react", async () => {
     BackgroundVariant: { Dots: "dots", Lines: "lines" },
     Handle: () => null,
     Position: { Top: "top", Bottom: "bottom", Left: "left", Right: "right" },
+    MarkerType: { ArrowClosed: "arrowclosed", Arrow: "arrow" },
     useReactFlow: () => ({ fitView: fitViewMock, setViewport: setViewportMock }),
     useNodesState: (initial: unknown[]) => {
       const [nodes, setNodes] = React.useState(initial);
@@ -117,6 +118,8 @@ beforeEach(() => {
     if (cmd === "get_canvas_viewport") return null;
     if (cmd === "update_node_canvas_position") return true;
     if (cmd === "save_canvas_viewport") return true;
+    if (cmd === "get_canvas_prefs") return null;
+    if (cmd === "save_canvas_prefs") return true;
     throw new Error(`unexpected: ${cmd}`);
   });
 });
@@ -160,7 +163,7 @@ describe("KnowledgeCanvasView 画布", () => {
       return { ...n, canvasX: s.x, canvasY: s.y };
     }) });
     // Assert：不再触发第二次批量初始化，位置来自存储
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0));
+    await waitFor(() => expect(rfNode("q:1")).toBeTruthy());
     expect(batchCalls()).toHaveLength(1);
     expect(rounded(rfNode("q:1").position)).toEqual({ x: -110, y: -40 });
   });
@@ -168,8 +171,8 @@ describe("KnowledgeCanvasView 画布", () => {
   it("已存位置 → 不触发初始化，位置来自存储", async () => {
     // Arrange：全部节点已有画布位置
     renderView({ nodes: makeNodes(true) });
-    // Assert
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0));
+    // Assert：v0.14.1 偏好门控——waitFor 至元素渲染（初始渲染 nodes=[]）
+    await waitFor(() => expect(rfNode("q:1")).toBeTruthy());
     expect(batchCalls()).toHaveLength(0);
     expect(rfNode("q:1").position).toEqual({ x: 10, y: 20 });
     expect(rfNode("q:2").position).toEqual({ x: 30, y: 40 });
@@ -229,11 +232,11 @@ describe("KnowledgeCanvasView 画布", () => {
     );
   });
 
-  it("自动排列 → 全量重算并批量覆盖（含已存位置）", async () => {
-    // Arrange：已存位置也参与重算（规格 §4.4：用户点「自动排列」覆盖已存位置）
+  it("「布局 ▾」选择（radial）→ 全量重算并批量覆盖（含已存位置）", async () => {
+    // Arrange：已存位置也参与重算（规格 §4.4：用户显式选择布局覆盖已存位置）
     renderView({ nodes: makeNodes(true) });
     await waitFor(() => expect(batchCalls()).toHaveLength(0));
-    fireEvent.click(screen.getByTestId("canvas-auto-layout"));
+    fireEvent.change(screen.getByTestId("canvas-layout-select"), { target: { value: "radial" } });
     // Act + Assert
     await waitFor(() => expect(batchCalls()).toHaveLength(1));
     const [, args] = batchCalls()[0];
@@ -242,6 +245,69 @@ describe("KnowledgeCanvasView 画布", () => {
     expect(rounded(rfNode("q:1").position)).toEqual({ x: -110, y: -40 });
     // 适配视图也被触发
     expect(fitViewMock).toHaveBeenCalled();
+  });
+
+  it("「布局 ▾」切换（treeRight）→ 用该算法重排 + save_canvas_prefs 持久化", async () => {
+    // Arrange
+    renderView({ nodes: makeNodes(true) });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0));
+    // Act：切换布局算法
+    fireEvent.change(screen.getByTestId("canvas-layout-select"), { target: { value: "treeRight" } });
+    // Assert：批量重排 + 偏好落库（edge 字段保持当前值——只改 layout）
+    await waitFor(() => expect(batchCalls()).toHaveLength(1));
+    expect(invokeMock).toHaveBeenCalledWith("save_canvas_prefs", {
+      systemId: 5, edgeStyle: "smoothstep", edgeArrows: false, layoutAlgorithm: "treeRight",
+    });
+  });
+
+  it("「连线 ▾」切换（bezier）→ 即时重渲染（edges type）+ save_canvas_prefs", async () => {
+    // Arrange
+    renderView({ nodes: makeNodes(true) });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0));
+    // Act：切换连线样式
+    fireEvent.change(screen.getByTestId("canvas-edge-style-select"), { target: { value: "bezier" } });
+    // Assert：边即时变为 bezier；偏好落库（layout 保持）
+    await waitFor(() => expect((latestRf().edges as { type: string }[])[0].type).toBe("bezier"));
+    expect(invokeMock).toHaveBeenCalledWith("save_canvas_prefs", {
+      systemId: 5, edgeStyle: "bezier", edgeArrows: false, layoutAlgorithm: "radial",
+    });
+  });
+
+  it("箭头复选框 → markerEnd 生效 + save_canvas_prefs", async () => {
+    // Arrange
+    renderView({ nodes: makeNodes(true) });
+    // v0.14.1：偏好门控——先等边渲染（初始渲染 edges=[]）
+    await waitFor(() => expect((latestRf().edges as unknown[]).length).toBeGreaterThan(0));
+    expect((latestRf().edges as { markerEnd?: unknown }[])[0].markerEnd).toBeUndefined();
+    // Act：勾选箭头
+    fireEvent.click(screen.getByTestId("canvas-edge-arrows"));
+    // Assert：全部边带 markerEnd；偏好落库
+    await waitFor(() =>
+      expect((latestRf().edges as { markerEnd?: { type: string } }[])[0].markerEnd?.type).toBe("arrowclosed"),
+    );
+    expect(invokeMock).toHaveBeenCalledWith("save_canvas_prefs", {
+      systemId: 5, edgeStyle: "smoothstep", edgeArrows: true, layoutAlgorithm: "radial",
+    });
+  });
+
+  it("已存偏好（treeRight+bezier+箭头）→ 首次缺位布局用已存算法、边按已存样式", async () => {
+    // Arrange：get_canvas_prefs 返回已存偏好
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_canvas_prefs") {
+        return { edgeStyle: "bezier", edgeArrows: true, layoutAlgorithm: "treeRight" };
+      }
+      if (cmd === "batch_initialize_canvas_positions") return true;
+      if (cmd === "get_canvas_viewport") return null;
+      throw new Error(`unexpected: ${cmd}`);
+    });
+    renderView({ nodes: makeNodes(false) });
+    // Assert：边按 bezier + 箭头渲染；缺位节点按 treeRight 布局（子节点 depth1 x=280）
+    await waitFor(() => expect(batchCalls()).toHaveLength(1));
+    const [, args] = batchCalls()[0];
+    const positions = args.positions as { nodeId: number; x: number; y: number }[];
+    expect(rounded(positions.find((p) => p.nodeId === 1)!)).toEqual({ x: -110, y: -40 });
+    expect(rounded(positions.find((p) => p.nodeId === 2)!)).toEqual({ x: 170, y: -40 });
+    await waitFor(() => expect((latestRf().edges as { type: string }[])[0].type).toBe("bezier"));
   });
 
   it("核心问题存在 → 渲染核心虚拟节点且根节点上环 1", async () => {
@@ -276,12 +342,16 @@ describe("KnowledgeCanvasView 画布", () => {
   it("v0.13.9 接线动态化：edges 携带按相对方位计算的 sourceHandle/targetHandle", async () => {
     // Arrange：已存位置（q:1 左上角 (10,20)、q:2 (30,40)——q:2 在 q:1 右下方）
     renderView({ nodes: makeNodes(true) });
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0));
     // Assert：中心差 dx=20, dy=20（|dx|==|dy| → 垂直接入 source-bottom/target-top）
-    const edges = latestRf().edges as { id: string; sourceHandle?: string; targetHandle?: string }[];
-    const e = edges.find((x) => x.id === "e:1:2")!;
-    expect(e.sourceHandle).toBe("source-bottom");
-    expect(e.targetHandle).toBe("target-top");
+    // v0.14.1：布局经偏好加载门控（prefsLoaded）——元素渲染先于 RF 语义化就绪，
+    //          waitFor 重试至 edges 出现（初始渲染 nodes=[]）
+    await waitFor(() => {
+      const edges = latestRf().edges as { id: string; sourceHandle?: string; targetHandle?: string }[];
+      const e = edges.find((x) => x.id === "e:1:2");
+      expect(e).toBeTruthy();
+      expect(e!.sourceHandle).toBe("source-bottom");
+      expect(e!.targetHandle).toBe("target-top");
+    });
   });
 
   it("返回按钮 → onGoBack（切回树视图）", async () => {

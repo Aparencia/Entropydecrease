@@ -213,6 +213,23 @@ pub struct NewNoteGroup {
     pub route_reason: Option<String>,
 }
 
+/// 组删除影响面（v0.14.1：get_group_delete_impact 返回——确认弹窗数据源）。
+///
+/// @ai-context: 删除语义已裁决（规格 §2.1 影响面确认后级联）：notes/fragments
+///              SET NULL（移入"全部"），flashcards/settlements/contracts CASCADE
+///              （级联删——弹窗明示数量），knowledge_links 无 FK 到 note_groups
+///              （悬空引用必须命令层显式清理）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupDeleteImpact {
+    pub notes: i64,
+    pub fragments: i64,
+    pub cards: i64,
+    pub settlements: i64,
+    pub contracts: i64,
+    pub system_refs: i64,
+}
+
 // ────────────────────────────────────────────────────────────
 // 碎片类型（v0.11.1 feed 进料口；v4 契约：碎片不是笔记，身份诚实）
 // ────────────────────────────────────────────────────────────
@@ -925,4 +942,17 @@ pub struct CanvasViewport {
     pub viewport_x: f64,
     pub viewport_y: f64,
     pub zoom: f64,
+}
+
+/// 画布偏好（v0.14.1：连线样式/箭头/布局算法；按体系持久化）。
+///
+/// @ai-context: 枚举白名单在命令层校验（EDGE_STYLES/LAYOUT_ALGORITHMS——前后端同
+///              口径，未知值拒绝入库）；states 行可能不存在（首开）→ 前端回落默认值
+///              （smoothstep + radial，与迁移 DEFAULT 一致）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CanvasPrefs {
+    pub edge_style: String,
+    pub edge_arrows: bool,
+    pub layout_algorithm: String,
 }

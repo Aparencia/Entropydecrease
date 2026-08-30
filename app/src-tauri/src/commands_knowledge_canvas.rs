@@ -16,7 +16,13 @@ use tauri::State;
 use crate::commands::AppState;
 use crate::commands_knowledge::require_id;
 use crate::db::Db;
-use crate::types::{CanvasNodePosition, CanvasViewport};
+use crate::types::{CanvasNodePosition, CanvasPrefs, CanvasViewport};
+
+/// 连线样式白名单（v0.14.1；前端枚举同口径——未知值拒绝，防字符串入库）。
+const EDGE_STYLES: [&str; 4] = ["straight", "bezier", "smoothstep", "step"];
+
+/// 布局算法白名单（v0.14.1；前端枚举同口径）。
+const LAYOUT_ALGORITHMS: [&str; 6] = ["radial", "mindmap", "treeRight", "org", "fishbone", "dualRing"];
 
 /// 保存节点画布位置（拖拽落点；防抖后调用；幂等覆盖）。
 ///
@@ -160,6 +166,61 @@ pub(crate) fn get_canvas_viewport_inner(
     }
     db.get_canvas_viewport(system_id)
         .map(|v| v.map(|(x, y, z)| CanvasViewport { viewport_x: x, viewport_y: y, zoom: z }))
+        .map_err(|e| e.to_string())
+}
+
+/// 读取体系画布偏好（v0.14.1；从未保存 → None——前端回落默认值）。
+#[tauri::command]
+pub fn get_canvas_prefs(state: State<'_, AppState>, system_id: i64) -> Result<Option<CanvasPrefs>, String> {
+    get_canvas_prefs_inner(&state.db, system_id)
+}
+
+/// 保存体系画布偏好（upsert；枚举白名单校验）。
+#[tauri::command]
+pub fn save_canvas_prefs(
+    state: State<'_, AppState>,
+    system_id: i64,
+    edge_style: String,
+    edge_arrows: bool,
+    layout_algorithm: String,
+) -> Result<bool, String> {
+    save_canvas_prefs_inner(&state.db, system_id, &edge_style, edge_arrows, &layout_algorithm)
+}
+
+pub(crate) fn get_canvas_prefs_inner(db: &Db, system_id: i64) -> Result<Option<CanvasPrefs>, String> {
+    require_id(system_id)?;
+    if db.get_knowledge_system(system_id).map_err(|e| e.to_string())?.is_none() {
+        return Err(format!("体系不存在: {}", system_id));
+    }
+    db.get_canvas_prefs(system_id).map_err(|e| e.to_string())
+}
+
+pub(crate) fn save_canvas_prefs_inner(
+    db: &Db,
+    system_id: i64,
+    edge_style: &str,
+    edge_arrows: bool,
+    layout_algorithm: &str,
+) -> Result<bool, String> {
+    require_id(system_id)?;
+    if db.get_knowledge_system(system_id).map_err(|e| e.to_string())?.is_none() {
+        return Err(format!("体系不存在: {}", system_id));
+    }
+    if !EDGE_STYLES.contains(&edge_style) {
+        return Err(format!(
+            "不支持的连线样式: {}（支持: {}）",
+            edge_style,
+            EDGE_STYLES.join("/")
+        ));
+    }
+    if !LAYOUT_ALGORITHMS.contains(&layout_algorithm) {
+        return Err(format!(
+            "不支持的布局算法: {}（支持: {}）",
+            layout_algorithm,
+            LAYOUT_ALGORITHMS.join("/")
+        ));
+    }
+    db.save_canvas_prefs(system_id, edge_style, edge_arrows, layout_algorithm)
         .map_err(|e| e.to_string())
 }
 

@@ -8,35 +8,25 @@
  *              每层向外 +200px（ring 1 = 220px）；ring ≥2 子节点落在父节点
  *              角度扇区内（spread = 60°/(子节点数+1)）；碰撞沿角度外推 +50px
  *              最多 2 次、仍重叠则到下一环（规格 §4.4 步骤 6）。
+ * @ai-context: v0.14.1：公共件迁出至 layoutShared（本文件行为零变化——仅改为
+ *              import + re-export，既有消费者 import 路径不变；新增布局算法
+ *              mindmap/treeRight/org/fishbone/dualRing 复用同一公共件）。
  * @ai-context: 零随机——孤儿与概念/模型浮动项用 golden angle 兜底（确定性伪随机），
  *              单测可精确断言；返回值为**圆心**坐标，React Flow 左上角转换
  *              （x - 宽/2, y - 高/2）由画布视图层完成。
  */
+import {
+  CANVAS_BBOX,
+  byKey,
+  overlapsAny,
+  polar,
+  type CanvasKind,
+  type CanvasLayoutItem,
+  type CanvasPoint,
+} from "./layoutShared";
 
-/** 画布节点类别：问题（树）/ 概念 / 模型（浮动参照） */
-export type CanvasKind = "question" | "concept" | "model";
-
-/** 画布布局输入项（key = `q:1`/`c:2`/`m:3`——三表 id 空间独立，必须带类型前缀） */
-export interface CanvasLayoutItem {
-  /** 画布节点唯一键（与 React Flow node.id 同源） */
-  key: string;
-  kind: CanvasKind;
-  /** 问题树父子关系（concept/model 恒 null——浮动参照，落最外环） */
-  parentKey: string | null;
-}
-
-/** 画布坐标点（圆心口径） */
-export interface CanvasPoint {
-  x: number;
-  y: number;
-}
-
-/** 画布节点包围盒（规格 §4.4：问题 220x80、概念/模型 180x70） */
-export const CANVAS_BBOX: Record<CanvasKind, { w: number; h: number }> = {
-  question: { w: 220, h: 80 },
-  concept: { w: 180, h: 70 },
-  model: { w: 180, h: 70 },
-};
+export type { CanvasKind, CanvasLayoutItem, CanvasPoint };
+export { CANVAS_BBOX };
 
 /** ring 1 环半径（规格 §4.4；圆心即 ring 0） */
 export const RING_BASE = 220;
@@ -151,26 +141,4 @@ export function layoutRadial(input: RadialLayoutInput): Map<string, CanvasPoint>
   orphans.forEach((it, idx) => placeAt(it, (idx * GOLDEN_ANGLE_DEG) % 360, outerRadius));
 
   return out;
-}
-
-/** 关键字排序（确定性——输入顺序不影响布局结果） */
-function byKey(a: CanvasLayoutItem, b: CanvasLayoutItem): number {
-  return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
-}
-
-/** 角度（度）→ 圆上点（半径 radius） */
-function polar(angleDeg: number, radius: number): CanvasPoint {
-  const rad = (angleDeg * Math.PI) / 180;
-  return { x: radius * Math.cos(rad), y: radius * Math.sin(rad) };
-}
-
-/** 中心点 + bbox 是否与任一已放置节点重叠（规格 §4.4 步骤 6 碰撞检测） */
-function overlapsAny(
-  center: CanvasPoint,
-  bbox: { w: number; h: number },
-  placed: { x: number; y: number; w: number; h: number }[],
-): boolean {
-  return placed.some(
-    (p) => Math.abs(center.x - p.x) < (bbox.w + p.w) / 2 && Math.abs(center.y - p.y) < (bbox.h + p.h) / 2,
-  );
 }

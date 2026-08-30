@@ -50,6 +50,10 @@ beforeEach(() => {
           : [];
       case "list_knowledge_concepts":
         return [];
+      case "get_group_delete_impact":
+        return { notes: 2, fragments: 0, cards: 3, settlements: 0, contracts: 1, systemRefs: 1 };
+      case "delete_note_group":
+        return true;
       default:
         throw new Error(`unexpected: ${cmd}`);
     }
@@ -151,5 +155,49 @@ describe("RouteInfoPopover ⓘ 弹层", () => {
     fireEvent.click(await screen.findByTestId("settle-button"));
     expect(await screen.findByTestId("sys-brief-model")).toBeTruthy();
     expect(await screen.findByTestId("sys-brief-stale")).toBeTruthy();
+  });
+
+  it("⑤ 删除组：影响面展示（笔记移入全部/卡与契约级联），未勾选禁用执行，勾选后 delete+关闭+刷新", async () => {
+    // Arrange
+    const onChanged = vi.fn();
+    const onClose = vi.fn();
+    renderPopover({ onChanged, onClose });
+    await screen.findByText("系统按内容特征归入：系列连续内容");
+    // Act：打开删除确认 → 影响面加载
+    fireEvent.click(screen.getByTestId("group-delete-open"));
+    const impact = await screen.findByTestId("group-delete-impact");
+    // Assert：影响面如实展示（笔记/碎片保留、卡/契约级联、引用解除）
+    expect(impact.textContent).toContain("2 条");
+    expect(impact.textContent).toContain("3 张");
+    expect(impact.textContent).toContain("级联删除");
+    expect(impact.textContent).toContain("1 处");
+    // 有级联项未勾选 → 执行按钮禁用
+    const submit = screen.getByTestId("group-delete-submit") as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    // 勾选后执行
+    fireEvent.click(screen.getByTestId("group-delete-ack"));
+    expect(submit.disabled).toBe(false);
+    fireEvent.click(submit);
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("delete_note_group", { id: 3 }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("⑤ 删除组：无级联项（纯笔记组）→ 无需勾选即可执行", async () => {
+    // Arrange：只读影响面返回零级联
+    invokeMock.mockImplementation(async (cmd: string, args?: { systemId?: number }) => {
+      if (cmd === "get_group_delete_impact") {
+        return { notes: 1, fragments: 0, cards: 0, settlements: 0, contracts: 0, systemRefs: 0 };
+      }
+      if (cmd === "delete_note_group") return true;
+      return baseInvoke(cmd, args);
+    });
+    renderPopover();
+    await screen.findByText("系统按内容特征归入：系列连续内容");
+    fireEvent.click(screen.getByTestId("group-delete-open"));
+    await screen.findByTestId("group-delete-impact");
+    // Assert：无级联 → 无确认勾选；执行按钮可用
+    expect(screen.queryByTestId("group-delete-ack")).toBeNull();
+    expect((screen.getByTestId("group-delete-submit") as HTMLButtonElement).disabled).toBe(false);
   });
 });

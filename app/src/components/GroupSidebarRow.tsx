@@ -5,8 +5,10 @@
  *              色点 + 组名 + 计数 + ⓘ；第二行体系徽标 + 路由理由小字。
  *              kind 由分区表达（行内不再重复 kind badge）；feed 由分区表达。
  *              兼作拖拽归组 drop target（HTML5 DnD——NoteListView 行是 drag source）。
+ * @ai-context: v0.14.1 ✎ 内联重命名——Enter 保存 / Esc 取消 / 失焦取消；
+ *              所有事件 stopPropagation（不与行点击过滤/色点/ⓘ/拖拽冲突）。
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { NoteGroup } from "../types";
 import type { KnowledgeSystem } from "../types/knowledge";
 import { parseRouteReason, routeLineState } from "../utils/routeReason";
@@ -27,6 +29,8 @@ interface Props {
   onInfo: (e: React.MouseEvent<HTMLElement>) => void;
   onToggleColorPicker: () => void;
   onColorChange: (color: string | null) => void;
+  /** v0.14.1：行内重命名提交（Enter；空白名不提交——父级校验） */
+  onRename: (name: string) => void;
   onOpenSystem: (systemId: number) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: () => void;
@@ -35,7 +39,7 @@ interface Props {
 
 export default function GroupSidebarRow({
   group, active, systems, systemLinks, colorPickerOpen, dragOver,
-  onSelect, onInfo, onToggleColorPicker, onColorChange, onOpenSystem,
+  onSelect, onInfo, onToggleColorPicker, onColorChange, onRename, onOpenSystem,
   onDragOver, onDragLeave, onDrop,
 }: Props) {
   const theme: ThemeMode = useMemo(
@@ -43,6 +47,26 @@ export default function GroupSidebarRow({
     [],
   );
   const reason = parseRouteReason(group.routeReason);
+  // v0.14.1：内联编辑态（受控——编辑中行点击过滤不触发）
+  const [editing, setEditing] = useState(false);
+  const [nameDraft, setNameDraft] = useState(group.name);
+
+  const startEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNameDraft(group.name);
+    setEditing(true);
+  };
+
+  const commitEdit = () => {
+    const t = nameDraft.trim();
+    setEditing(false);
+    if (t && t !== group.name) onRename(t);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setNameDraft(group.name);
+  };
   const line = routeLineState(reason, group.routeOverridden);
 
   return (
@@ -71,7 +95,24 @@ export default function GroupSidebarRow({
             background: group.color ? paletteHex(group.color, theme) : "#d1d5db",
           }}
         />
-        <span style={{ fontSize: 13, fontWeight: 500, flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{group.name}</span>
+        {editing ? (
+          <input
+            data-testid={`group-rename-input-${group.id}`}
+            autoFocus
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") commitEdit();
+              if (e.key === "Escape") cancelEdit();
+            }}
+            onBlur={cancelEdit}
+            onClick={(e) => e.stopPropagation()}
+            style={{ fontSize: 13, flex: 1, minWidth: 0, padding: "2px 6px", border: "1px solid #0d9488", borderRadius: 4, outline: "none" }}
+          />
+        ) : (
+          <span style={{ fontSize: 13, fontWeight: 500, flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{group.name}</span>
+        )}
         <span style={{ fontSize: 11, color: "#9ca3af" }}>{group.noteCount}</span>
       </div>
       {/* 第二行：体系徽标 + 路由理由小字（ⓘ 弹层明细） */}
@@ -92,9 +133,17 @@ export default function GroupSidebarRow({
           {line.label}
         </span>
         <button
+          data-testid={`group-rename-${group.id}`}
+          onClick={startEdit}
+          style={{ marginLeft: "auto", fontSize: 11, cursor: "pointer", border: "none", background: "none", color: "#9ca3af", padding: "0 2px", lineHeight: 1, flexShrink: 0 }}
+          title="重命名组"
+        >
+          ✎
+        </button>
+        <button
           data-testid={`group-info-${group.id}`}
           onClick={onInfo}
-          style={{ marginLeft: "auto", fontSize: 11, cursor: "pointer", border: "none", background: "none", color: "#6b7280", padding: "0 2px", lineHeight: 1 }}
+          style={{ fontSize: 11, cursor: "pointer", border: "none", background: "none", color: "#6b7280", padding: "0 2px", lineHeight: 1, flexShrink: 0 }}
           title="路由详情 / 改判 / 组管理 / 周契约"
         >
           ⓘ

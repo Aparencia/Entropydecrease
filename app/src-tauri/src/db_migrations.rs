@@ -262,7 +262,12 @@ CREATE TABLE IF NOT EXISTS contracts (
             system_id INTEGER PRIMARY KEY REFERENCES knowledge_systems(id),
             viewport_x REAL DEFAULT 0,
             viewport_y REAL DEFAULT 0,
-            zoom REAL DEFAULT 1.0
+            zoom REAL DEFAULT 1.0,
+            -- v0.14.1：画布偏好（连线样式/箭头开关/布局算法——按体系持久化；
+            -- DEFAULT 与前端缺省同口径：smoothstep + 无箭头 + radial）
+            edge_style TEXT NOT NULL DEFAULT 'smoothstep',
+            edge_arrows INTEGER NOT NULL DEFAULT 0,
+            layout_algorithm TEXT NOT NULL DEFAULT 'radial'
         );
         -- v0.14 B（视觉系统）：标签颜色表——tags 无独立表（notes.tags JSON 数组），
         -- 以标签名称为键（规格中 tag_id 前提不存在，按最小合理偏差用 tag 文本主键）；
@@ -404,6 +409,27 @@ CREATE TABLE IF NOT EXISTS contracts (
         "note_groups",
         "color",
         "ALTER TABLE note_groups ADD COLUMN color TEXT",
+    )?;
+    // v0.14.1：旧库迁移——knowledge_canvas_states 补画布偏好三列
+    // （CREATE TABLE 只对新库生效；旧行升级后落 DEFAULT——行为与默认设置一致，
+    //   零破坏纪律：不猜用户偏好，首开即默认 smoothstep + radial）
+    ensure_column(
+        conn,
+        "knowledge_canvas_states",
+        "edge_style",
+        "ALTER TABLE knowledge_canvas_states ADD COLUMN edge_style TEXT NOT NULL DEFAULT 'smoothstep'",
+    )?;
+    ensure_column(
+        conn,
+        "knowledge_canvas_states",
+        "edge_arrows",
+        "ALTER TABLE knowledge_canvas_states ADD COLUMN edge_arrows INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        conn,
+        "knowledge_canvas_states",
+        "layout_algorithm",
+        "ALTER TABLE knowledge_canvas_states ADD COLUMN layout_algorithm TEXT NOT NULL DEFAULT 'radial'",
     )?;
     // v0.7.7（REQ-183）：结构图记录表（建表幂等——新库建表/旧库补表）
     crate::db_structures::init(conn)?;

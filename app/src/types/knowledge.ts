@@ -250,6 +250,52 @@ export interface CanvasViewport {
 }
 
 // ────────────────────────────────────────────────────────────
+// v0.14.1 画布偏好：连线样式 / 布局算法（按体系持久化）
+//
+// @ai-context: 枚举与 Rust 命令层白名单同口径（EDGE_STYLES/LAYOUT_ALGORITHMS）——
+//              前端只从枚举取值，未知值（旧版防御）回退默认。Rust CanvasPrefs
+//              camelCase 契约。
+// ────────────────────────────────────────────────────────────
+
+/** 连线样式（React Flow edge type 映射见 canvasElements.ts） */
+export type EdgeStyle = "straight" | "bezier" | "smoothstep" | "step";
+
+/** 布局算法（分发器 layoutCanvas；每个算法一个纯函数文件） */
+export type LayoutAlgorithm = "radial" | "mindmap" | "treeRight" | "org" | "fishbone" | "dualRing";
+
+/** 画布偏好（states 行缺失时用 DEFAULT——与迁移 DEFAULT 一致） */
+export interface CanvasPrefs {
+  edgeStyle: EdgeStyle;
+  edgeArrows: boolean;
+  layoutAlgorithm: LayoutAlgorithm;
+}
+
+/** 默认偏好（get_canvas_prefs 返回 null / 未知枚举时回落） */
+export const DEFAULT_CANVAS_PREFS: CanvasPrefs = {
+  edgeStyle: "smoothstep",
+  edgeArrows: false,
+  layoutAlgorithm: "radial",
+};
+
+/** 连线样式下拉候选（展示文案 + 枚举值；枚举与 Rust 白名单同口径） */
+export const EDGE_STYLE_OPTIONS: { value: EdgeStyle; label: string }[] = [
+  { value: "straight", label: "直线" },
+  { value: "bezier", label: "曲线" },
+  { value: "smoothstep", label: "圆角折线" },
+  { value: "step", label: "硬折线" },
+];
+
+/** 布局算法下拉候选（展示文案 + 枚举值） */
+export const LAYOUT_OPTIONS: { value: LayoutAlgorithm; label: string }[] = [
+  { value: "radial", label: "辐射" },
+  { value: "mindmap", label: "双翼思维导图" },
+  { value: "treeRight", label: "水平逻辑树" },
+  { value: "org", label: "垂直组织树" },
+  { value: "fishbone", label: "鱼骨图（简化）" },
+  { value: "dualRing", label: "双环（浮动项贴树）" },
+];
+
+// ────────────────────────────────────────────────────────────
 // 展示层常量（类型标签/状态徽标文案——决策仪表盘质感，非文档树）
 // ────────────────────────────────────────────────────────────
 

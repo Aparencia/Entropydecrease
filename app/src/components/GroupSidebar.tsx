@@ -25,6 +25,7 @@ import {
 } from "../utils/groupSidebar";
 import RouteInfoPopover from "./RouteInfoPopover";
 import GroupSidebarRow from "./GroupSidebarRow";
+import GroupCreateDialog from "./GroupCreateDialog";
 
 interface Props {
   /** 当前过滤组（null=全部笔记） */
@@ -76,6 +77,8 @@ export default function GroupSidebar({
   const [popover, setPopover] = useState<{ group: NoteGroup; anchor: { x: number; y: number } } | null>(null);
   // v0.14 B：组色选择器打开态（受控单开；null=全关）
   const [colorPickerFor, setColorPickerFor] = useState<number | null>(null);
+  // v0.14.1：新建组弹窗开合
+  const [createOpen, setCreateOpen] = useState(false);
   // ── v0.14 C1：Obsidian 式状态 ──
   const [groupQuery, setGroupQuery] = useState("");
   // 分区折叠记忆（localStorage 初始化；kind → 是否折叠）
@@ -218,6 +221,17 @@ export default function GroupSidebar({
       .catch((err) => setStatus(`归组失败: ${err}`));
   };
 
+  /** v0.14.1：行内重命名提交（rename_note_group 命令自 v0.11.0 存在，本版接线） */
+  const handleRename = async (g: NoteGroup, name: string) => {
+    try {
+      await invoke<boolean>("rename_note_group", { id: g.id, name });
+      setStatus("");
+      onChanged();
+    } catch (e) {
+      setStatus(`重命名失败: ${e}`);
+    }
+  };
+
   const renderGroupRow = (g: NoteGroup) => (
     <GroupSidebarRow
       key={g.id}
@@ -235,6 +249,7 @@ export default function GroupSidebar({
           .then(() => { setColorPickerFor(null); onChanged(); })
           .catch((e) => setStatus(`组颜色设置失败: ${e}`));
       }}
+      onRename={(name) => void handleRename(g, name)}
       onOpenSystem={(id) => onOpenSystem(id)}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes("text/note-id")) {
@@ -251,10 +266,18 @@ export default function GroupSidebar({
 
   return (
     <div style={{ width: 240, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", position: "relative", minWidth: 0 }}>
-      {/* 头部：标题 + 刷新 */}
+      {/* 头部：标题 + 新建组 + 刷新 */}
       <div style={{ padding: "10px 12px", borderBottom: "1px solid #e5e7eb", fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
         <span>📁 笔记组</span>
-        <button onClick={() => void load()} style={{ marginLeft: "auto", fontSize: 13, cursor: "pointer" }} title="刷新组列表">⟳</button>
+        <button
+          data-testid="group-create-open"
+          onClick={() => setCreateOpen(true)}
+          style={{ marginLeft: "auto", fontSize: 13, cursor: "pointer", border: "1px solid #d1d5db", background: "#fff", borderRadius: 4, padding: "0 6px", lineHeight: "18px", color: "#0f766e" }}
+          title="新建主题组（名称+领域+颜色）"
+        >
+          ＋ 新建组
+        </button>
+        <button onClick={() => void load()} style={{ fontSize: 13, cursor: "pointer" }} title="刷新组列表">⟳</button>
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: 6, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -403,6 +426,14 @@ export default function GroupSidebar({
           onChanged={onChanged}
           onOpenReview={(gid, name) => { setPopover(null); onOpenReview(gid, name); }}
           selectedNoteId={selectedNoteId}
+        />
+      )}
+
+      {/* v0.14.1：新建组弹窗（创建成功 → 关闭 + onChanged refreshToken 驱动刷新） */}
+      {createOpen && (
+        <GroupCreateDialog
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => { setCreateOpen(false); onChanged(); }}
         />
       )}
     </div>

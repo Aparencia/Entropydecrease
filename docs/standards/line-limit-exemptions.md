@@ -26,7 +26,7 @@
 | app/src-tauri/src/region_tracker.rs | 426 | v0.4.0 M2（REQ-037）起：ROI 跟踪状态机（播放区域检测/锁定聚簇/重扫/前台切换冻结）+ 纯函数单测内联；与 RoiTracker 状态强耦合 | 若再增长：lock_roi/prior_roi 纯函数拆至 region_lock.rs |
 | app/src-tauri/src/commands_ai_refine.rs | 413 | v0.8.0 M2（REQ-141/145）+ F1/F2/F3：AI 精修命令域（成本预估/异步任务编排/状态/结果/采纳落库/任务历史/配额去重门控/成本硬拦截 + 任务注册表容量守卫）；任务执行已拆至 ai_refine_task.rs；L4 修复（落库失败日志）微增 | 若再增长：门控/拦截拆至 commands_ai_refine_gate.rs |
 | app/src-tauri/src/commands_window.rs | 352 | 浮窗窗口命令域（v0.12.3 架构升级计划：全部窗口操作集中单文件）+ v0.12.6（ADR-025）显隐链路与全局快捷键三态切换核心（open/close/locked/topmost/toggle 核心 fn + 命令薄包装 + 状态机/序列化单测内联）；拆分需跨 fn 传递 AppHandle/State，内聚性优先 | 若再增长：浮窗核心逻辑拆至 float_core.rs（命令薄包装保留本文件） |
-| app/src-tauri/src/types.rs | 503 | 全局共享类型域（会话/段/OCR 块/笔记/设置/闪卡/周契约等 DTO + 序列化）；类型定义集中便于契约一致，拆分易引发跨模块引用涟漪 | 若再增长：笔记与 OCR 块类型拆至 types_note.rs / types_ocr.rs |
+| app/src-tauri/src/types.rs | 958 | 全局共享类型域（会话/段/OCR 块/笔记/设置/闪卡/周契约等 DTO + 序列化）；类型定义集中便于契约一致，拆分易引发跨模块引用涟漪；v0.14.1 +GroupDeleteImpact/CanvasPrefs（+30 行） | 若再增长：笔记与 OCR 块类型拆至 types_note.rs / types_ocr.rs |
 | app/src-tauri/src/video_profile_tests.rs | 480 | 档案测试域（12 档案断言矩阵 + 检测投票 + JSON 校准 + v0.13.6 领域记忆独立通道/旧 JSON 零迁移用例 + 审查回归（烘焙迁移/单字种子守卫））单模块 #[path] 挂载 | 若再增长：档案矩阵拆至 video_profile_data_tests.rs |
 | app/src-tauri/src/live_session_persist.rs | 401 | 定稿落库域（persist_final/digest_merged/handle_final_event）+ P2 flush_tail_and_persist（停止/暂停共用尾句落库）内聚 | 若再增长：flush_tail_and_persist 与 digest_merged 拆至 live_session_persist_tail.rs |
 | app/src-tauri/src/layout_analyzer.rs | 400 | v0.5.0 M3（REQ-047）：规则版版面分析（行/列投影 + 表格线检测 + 区域分类启发式）内聚于同一分类管线；审查加固（公式启发 + 低信息纯色方差滤除） | 若再增长：区域分类启发式拆至 layout_classify.rs |
@@ -72,12 +72,15 @@
 | app/src/components/SessionDetailPanel.tsx | 371 | 会话详情面板：质量报告/段列表/OCR 概览/操作区单一面板完整交互流内聚（前端审查登记） | 若再增长：质量报告区拆至 SessionQualityReport.tsx |
 | app/src/components/ProfileDetector.tsx | 373 | 档案检测组件：投票/确认流/记忆偏好 UI + v0.11.5 Task 5 冲突提示内聚 + v0.13.6（REQ-219~222）形态 10 下拉/领域 20 下拉/细目多选 chips/分区映射形态优先 + 审查轮（onProfileChange ref/独立 try/fine_ids 同步，实测 2026-08-24） | 若再增长：确认流与细目 chips 拆至 ProfileConfirmFlow.tsx |
 | app/src/components/NoteEditView.tsx | 306 | v0.13.6（审查 H1 修复）重新越线：forwardRef 命令式 flushSave 出口（ESC 先保存后刷新）+ flushLatest 最终保存——编辑视图保存/快捷键/工具栏内聚 | 若再增长：工具栏与 MarkdownEdit 快捷键拆至 NoteToolbar.tsx |
-| app/src/components/GroupSidebar.tsx | 314 | v0.13.7（触点①）新增体系引用聚合/徽标渲染逻辑（systemLinks 状态 + load 中并行拉取 + 行内渲染映射）——组行筛选与体系徽标混合在同一 load 域 | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook |
-| app/src/components/RouteInfoPopover.tsx | 344 | v0.13.7（触点③）新增体系简报（loadSystemBrief 并行拉取 + 简报渲染块），v0.12.2 注册值 278 行；本版增量约 +58 行因弹层内新增结算区/简报两个域 | 若再增长：简报拉取与渲染拆至 SystemBriefSection.tsx |
+| app/src/components/GroupSidebar.tsx | 441 | v0.13.7（触点①）体系引用聚合/徽标渲染 + v0.14 C1 Obsidian 式（分区/过滤/最近/拖拽）+ v0.14.1 新建组弹窗与行内重命名接线（+31 行）——组行筛选与体系徽标混合在同一 load 域 | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook；新建/重命名编排拆至 useGroupCrud.ts |
+| app/src/components/RouteInfoPopover.tsx | 360 | v0.13.7（触点③）体系简报 + v0.14.1 删除组第五区（+16 行）——弹层内四区交互流内聚 | 若再增长：简报拉取与渲染拆至 SystemBriefSection.tsx |
 | app/src/components/NoteEditView.tsx | —— | v0.12.2 行数修正：实测 299 行（登记值 315 过期），本版新增 autoFocus 一行后仍 300 行以内——登记移除，见"已拆分/登记移除记录" | —— |
 | app/src/pages/NotesPage.tsx | 359 | v0.12.2 三栏编排（GroupSidebar/FeedFragmentList/NoteListView 插槽 + 收件箱动线 onPromoted 接线 + 新建零对话框）——编排层内聚（数据获取/选中态/快捷键/辅助面板插槽），组件已全部下沉拆件；2026-08-23 审查修复（onPromoted 同步清搜索态/onOpenInbox 清组过滤）+6 行；v0.12.8 列表级批量删除（runBatchDelete 确认+逐条 invoke+刷新，confirm 导入，+27 行）；v0.13.6（REQ-223）编辑退出统一刷新回调 + 审查轮（ESC flush 出口） | 若再增长：键盘监听与收件箱动线回调拆至 useNotesPageShortcuts.ts / useInboxFlow.ts |
 | app/src/components/AiProviderSettings.tsx | 329 | v0.11.6 M1 code-review 修复（2026-08-22）：删除/清钥加 window.confirm、window.prompt 改卡片内联 password 输入（+2 state + 内联表单）、模型列表 input 改 textarea、fallbackOrder 透传 initial、run 置"处理中"反馈、预设双源 presetOptions 后端拉取——修复净增约 13 行越线（实测 329，含 4 行豁免头注释） | 若再增长：内联密钥表单拆至 AiProviderKeyInput.tsx |
 | app/src/pages/KnowledgePage.tsx | 322 | v0.13.8 画布接线越线（原 296）：中栏新增「画布」标签 + 树/画布双入口（树视图浮钮 + 标签栏）+ 中栏 display 切换（树常驻/画布激活挂载）+ 审查修复（applyCanvasPositions 位置合并回传）——页面编排层内聚（数据获取/选中态/标签态为页面本地状态），子组件已全部下沉（Tree/Canvas/DetailPanel/Wizard/ConceptCardRow/Sample） | 若再增长：中栏视图块（树/画布/概念/模型 + 标签栏）拆至 KnowledgeMiddlePane.tsx，SystemCard 拆至 SystemSidebarCard.tsx |
+| app/src/components/KnowledgeCanvasView.tsx | 435 | v0.13.8 画布主视图（RF 装配/拖拽防抖保存/视口持久化/自动排列）；v0.13.9 根卡 + 接线方向动态化；v0.14.1 布局/连线下拉 + 偏好读写（+72 行）——RF 状态与持久化编排内聚（元素构建已拆至 canvasElements/layout* 纯函数） | 若再增长：偏好读写与下拉拆至 useCanvasPrefs.ts；位置持久化拆至 useCanvasPositions.ts |
+| app/src/utils/canvasElements.ts | 301 | v0.13.8 实体 → RF 元素纯转换域；v0.13.9 根卡/接线方向；v0.14.1 连线样式/箭头入参（+20 行）——单测共用纯函数域（零 React 依赖），拆分破坏转换一致性 | 若再增长：节点构建与边构建拆至 canvasNodes.ts / canvasEdges.ts |
+| app/src/types/knowledge.ts | 557 | 知识体系类型域（体系/节点/概念/模型/引用/审计/决策 + v0.13.8 画布契约 + v0.14.1 画布偏好枚举与下拉文案常量）——类型与文案常量同域防漂移（前端类型域拆分任务待执行） | 若再增长：画布偏好类型与文案拆至 types/canvas.ts |
 
 > 前端 **拆分中**（Task #9 笔记域修复进行中，暂不登记行数）：`app/src/types.ts`——待前端拆分完成后以实测行数重新评估。
 > 前端 SessionsPage.tsx 审查快照 304 行（登记值），v0.7.1 硬拆后长期 ≤300，本轮审查期间轻微越线；随 NotesPage/types.ts 拆分任务一并复核，若仍越线按上表模式登记。

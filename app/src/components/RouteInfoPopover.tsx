@@ -17,17 +17,10 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Flashcard, NoteGroup } from "../types";
 import type { KnowledgeConcept, KnowledgeLink, KnowledgeSystem } from "../types/knowledge";
 import { humanRouteLine, parseRouteReason } from "../utils/routeReason";
+import { DOMAIN_OPTIONS } from "../utils/domainOptions";
 import WeekContractCard from "./WeekContractCard";
 import ModelCardCreateDialog from "./ModelCardCreateDialog";
-
-/** 领域标签选项（与 Rust DomainKind 15 类同口径；改判下拉用） */
-const DOMAIN_OPTIONS: [string, string][] = [
-  ["economy", "经济管理"], ["programming", "编程开发"], ["math-science", "数学理科"],
-  ["language", "语言学习"], ["beauty", "化妆美妆"], ["fitness", "健身运动"],
-  ["law", "法律"], ["medical", "医学健康"], ["career", "职场技能"],
-  ["design", "设计创意"], ["music", "音乐"], ["handcraft", "手工"],
-  ["exam", "考试考证"], ["gaming", "游戏电竞"], ["psychology", "心理成长"],
-];
+import GroupDeleteConfirm from "./GroupDeleteConfirm";
 
 /** 结算计划（v0.11.3；与后端 settlement_plan 返回契约对齐） */
 interface SettlementPlan {
@@ -74,6 +67,8 @@ export default function RouteInfoPopover({
   const [cardDialogOpen, setCardDialogOpen] = useState(false);
   // v0.13.7 触点③：结算体系简报（model 卡计数 + 关联体系概念失效数）
   const [sysBrief, setSysBrief] = useState<{ modelCount: number; staleConcepts: number; systemName: string } | null>(null);
+  // v0.14.1：删除组确认弹窗开合（⑤ 危险操作）
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const reason = useMemo(() => parseRouteReason(group.routeReason), [group.routeReason]);
 
@@ -327,6 +322,19 @@ export default function RouteInfoPopover({
         {/* ④ 周契约卡（REQ-200 弹性承诺呈现层） */}
         <WeekContractCard groupId={group.id} />
 
+        {/* ⑤ v0.14.1：组管理·危险操作——删除组（影响面确认后级联） */}
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e5e7eb" }}>
+          <button
+            data-testid="group-delete-open"
+            onClick={() => setDeleteOpen(true)}
+            style={{ fontSize: 11, cursor: "pointer", padding: "3px 10px", borderRadius: 4, border: "1px solid #fecaca", background: "#fef2f2", color: "#b91c1c" }}
+            title="删除组——笔记/碎片保留移入「全部」，闪卡/结算/契约级联删除"
+          >
+            🗑 删除组…
+          </button>
+          <span style={{ fontSize: 10, color: "#9ca3af", marginLeft: 6 }}>影响面确认后执行</span>
+        </div>
+
         {status && <p data-testid="popover-status" style={{ margin: "6px 0 0", fontSize: 11, color: "#dc2626" }}>{status}</p>}
       </div>
 
@@ -336,6 +344,15 @@ export default function RouteInfoPopover({
           groupId={group.id}
           groupName={group.name}
           onClose={() => setCardDialogOpen(false)}
+        />
+      )}
+
+      {/* v0.14.1：删除组确认弹窗（⑤；删除成功 → 关闭弹层 + 通知父级刷新） */}
+      {deleteOpen && (
+        <GroupDeleteConfirm
+          group={group}
+          onClose={() => setDeleteOpen(false)}
+          onDeleted={() => { setDeleteOpen(false); onClose(); onChanged(); }}
         />
       )}
     </>

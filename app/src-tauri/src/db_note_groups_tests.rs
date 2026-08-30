@@ -1,7 +1,9 @@
 //! db_note_groups 单测（内存库；AAA 模式）。
 
 use crate::db::Db;
-use crate::types::{NewNote, NewNoteGroup};
+use crate::db_fragments::NewFragment;
+use crate::db_flashcards::NewFlashcard;
+use crate::types::{NewKnowledgeLink, NewKnowledgeSystem, NewNote, NewNoteGroup};
 
 /// 内存库（schema 经 Db::open 初始化——建表幂等路径同真库）。
 fn mem_db() -> Db {
@@ -205,4 +207,162 @@ fn delete_group_keeps_notes() {
     // Assert：笔记存活且 group_id 置空（ON DELETE SET NULL）
     let fetched = db.get_note(note.id).expect("get").expect("exists");
     assert_eq!(fetched.group_id, None);
+}
+
+#[test]
+fn group_delete_impact_counts_six_dimensions() {
+    // Arrange：组内挂 2 笔记 + 1 碎片 + 1 卡 + 1 结算 + 1 契约；体系引用 2 条
+    let db = mem_db();
+    let g = db.create_group(&group("将删")).expect("create");
+    for title in ["A", "B"] {
+        db.create_note(&NewNote {
+            title: title.to_string(),
+            content: "x".to_string(),
+            source: "manual".to_string(),
+            session_id: None,
+            rule_version: None,
+            purify_stats: None,
+            tags: None,
+            properties: None,
+            group_id: Some(g.id),
+        })
+        .expect("note");
+    }
+    db.create_fragment(&NewFragment {
+        text: "碎片".to_string(),
+        image_path: None,
+        domain_tag: None,
+        group_id: Some(g.id),
+        source: "manual".to_string(),
+    })
+    .expect("frag");
+    db.create_card(&NewFlashcard {
+        group_id: g.id,
+        note_id: None,
+        fragment_id: None,
+        front: "f".to_string(),
+        back: "b".to_string(),
+        kind: "fact".to_string(),
+        state_json: "{}".to_string(),
+        due_at: 0,
+    })
+    .expect("card");
+    db.create_settlement(g.id, "{}").expect("settlement");
+    db.upsert_week_contract(g.id, 1, 3, 5).expect("contract");
+    let sys = db
+        .create_knowledge_system(&NewKnowledgeSystem {
+            name: "体系".to_string(),
+            kind: "domain".to_string(),
+            parent_system_id: None,
+            core_question: None,
+        })
+        .expect("sys");
+    for _ in 0..2 {
+        db.add_knowledge_link(&NewKnowledgeLink {
+            system_id: sys.id,
+            node_id: None,
+            concept_id: None,
+            model_id: None,
+            target_type: "note_group".to_string(),
+            target_id: g.id,
+        })
+        .expect("link");
+    }
+    // Act
+    let impact = db.group_delete_impact(g.id).expect("impact");
+    // Assert：六项计数如实（确认弹窗数据源口径）
+    assert_eq!(impact.notes, 2);
+    assert_eq!(impact.fragments, 1);
+    assert_eq!(impact.cards, 1);
+    assert_eq!(impact.settlements, 1);
+    assert_eq!(impact.contracts, 1);
+    assert_eq!(impact.system_refs, 2);
+}
+
+#[test]
+fn delete_group_cascades_and_clears_links() {
+    // Arrange：1 笔记 + 1 碎片 + 1 卡 + 1 契约 + 1 体系引用（级联影响面最小集）
+    let db = mem_db();
+    let g = db.create_group(&group("将删")).expect("create");
+    let note = db
+        .create_note(&NewNote {
+            title: "幸存".to_string(),
+            content: "x".to_string(),
+            source: "manual".to_string(),
+            session_id: None,
+            rule_version: None,
+            purify_stats: None,
+            tags: None,
+            properties: None,
+            group_id: Some(g.id),
+        })
+        .expect("note");
+    db.create_fragment(&NewFragment {
+        text: "碎片".to_string(),
+        image_path: None,
+        domain_tag: None,
+        group_id: Some(g.id),
+        source: "manual".to_string(),
+    })
+    .expect("frag");
+    db.create_card(&NewFlashcard {
+        group_id: g.id,
+        note_id: None,
+        fragment_id: None,
+        front: "f".to_string(),
+        back: "b".to_string(),
+        kind: "fact".to_string(),
+        state_json: "{}".to_string(),
+        due_at: 0,
+    })
+    .expect("card");
+    db.upsert_week_contract(g.id, 1, 3, 5).expect("contract");
+    let sys = db
+        .create_knowledge_system(&NewKnowledgeSystem {
+            name: "体系".to_string(),
+            kind: "domain".to_string(),
+            parent_system_id: None,
+            core_question: None,
+        })
+        .expect("sys");
+    db.add_knowledge_link(&NewKnowledgeLink {
+        system_id: sys.id,
+        node_id: None,
+        concept_id: None,
+        model_id: None,
+        target_type: "note_group".to_string(),
+        target_id: g.id,
+    })
+    .expect("link");
+    // Act
+    let ok = db.delete_group(g.id).expect("delete");
+    // Assert：组消失；笔记/碎片 SET NULL 存活；卡/契约 CASCADE 归零；引用清理
+    assert!(ok);
+    assert!(db.get_group(g.id).expect("get").is_none());
+    assert_eq!(db.get_note(note.id).expect("get").expect("note").group_id, None);
+    // 碎片存活但已归组脱离（SET NULL——与笔记同为用户资产）
+    assert!(db.list_fragments_by_group(g.id).expect("frags").is_empty());
+    let frags = db.list_fragments(Some("active"), 500).expect("frags");
+    assert_eq!(frags.len(), 1);
+    assert_eq!(frags[0].group_id, None);
+    let counts = db
+        .with_conn(|conn| {
+            let n: i64 = conn.query_row("SELECT COUNT(*) FROM flashcards", [], |r| r.get(0))?;
+            let c: i64 = conn.query_row("SELECT COUNT(*) FROM contracts", [], |r| r.get(0))?;
+            let s: i64 = conn.query_row("SELECT COUNT(*) FROM settlements", [], |r| r.get(0))?;
+            Ok((n, c, s))
+        })
+        .expect("counts");
+    assert_eq!(counts, (0, 0, 0));
+    assert!(db.list_links_by_target("note_group", g.id).expect("links").is_empty());
+}
+
+#[test]
+fn delete_missing_group_returns_false() {
+    // Arrange：内存库无任何组
+    let db = mem_db();
+    // Act
+    let ok = db.delete_group(999).expect("delete");
+    // Assert：不存在 → false（命令层转错误，不静默）
+    assert!(!ok);
 }

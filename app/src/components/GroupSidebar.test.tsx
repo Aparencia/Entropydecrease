@@ -48,6 +48,12 @@ beforeEach(() => {
           : [];
       case "override_group_route": return true;
       case "move_note_to_group": return true;
+      case "create_topic_group": return { id: 99, name: args?.name ?? "新组", terrain: "container", kind: "topic", domainTag: args?.domainTag ?? "beauty", source: "manual", seriesKey: null, routeReason: null, routeOverridden: 0, noteCount: 0, createdAt: 0, updatedAt: 0 };
+      case "update_group_color": return true;
+      case "rename_note_group": return true;
+      case "get_group_delete_impact":
+        return { notes: 1, fragments: 0, cards: 0, settlements: 0, contracts: 0, systemRefs: 0 };
+      case "delete_note_group": return true;
       default:
         throw new Error(`unexpected: ${cmd}`);
     }
@@ -212,5 +218,74 @@ describe("GroupSidebar v0.14 C1 Obsidian 式", () => {
     await screen.findByTestId("group-row-1");
     fireEvent.drop(screen.getByTestId("group-row-1"), { dataTransfer: { getData: () => "42" } });
     expect(await screen.findByText(/归组失败/)).toBeTruthy();
+  });
+});
+
+describe("GroupSidebar v0.14.1 新建/重命名", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("「＋ 新建组」→ 弹窗校验拦截（空名/无领域），合法提交走 create→color→onChanged", async () => {
+    // Arrange
+    const onChanged = vi.fn();
+    render(
+      <GroupSidebar
+        groupFilter={null}
+        onGroupFilterChange={vi.fn()}
+        onChanged={onChanged}
+        onOpenReview={vi.fn()}
+        selectedNoteId={null}
+        onOpenInbox={vi.fn()}
+        inboxActive={false}
+        refreshToken={0}
+        onOpenSystem={vi.fn()}
+      />,
+    );
+    // Act：空名提交被拦截
+    fireEvent.click(screen.getByTestId("group-create-open"));
+    fireEvent.click(await screen.findByTestId("group-create-submit"));
+    expect(screen.getByTestId("group-create-status").textContent).toContain("组名不能为空");
+    // 填名不选领域 → 领域校验拦截
+    fireEvent.change(screen.getByTestId("group-create-name"), { target: { value: "化妆美妆" } });
+    fireEvent.click(screen.getByTestId("group-create-submit"));
+    expect(screen.getByTestId("group-create-status").textContent).toContain("领域标签");
+    // 合法提交（选领域 + 颜色）→ create_topic_group + update_group_color + onChanged
+    fireEvent.change(screen.getByTestId("group-create-domain"), { target: { value: "beauty" } });
+    fireEvent.click(screen.getByTestId("group-create-submit"));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("create_topic_group", { name: "化妆美妆", domainTag: "beauty" }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    // 未选颜色 → 不调 update_group_color
+    expect(invokeMock).not.toHaveBeenCalledWith("update_group_color", expect.anything());
+  });
+
+  it("行内 ✎ 重命名：Enter 提交 rename_note_group + onChanged；Esc 取消不提交", async () => {
+    // Arrange
+    const onChanged = vi.fn();
+    render(
+      <GroupSidebar
+        groupFilter={null}
+        onGroupFilterChange={vi.fn()}
+        onChanged={onChanged}
+        onOpenReview={vi.fn()}
+        selectedNoteId={null}
+        onOpenInbox={vi.fn()}
+        inboxActive={false}
+        refreshToken={0}
+        onOpenSystem={vi.fn()}
+      />,
+    );
+    await screen.findByTestId("group-row-1");
+    // Act：✎ 进入编辑 → 改名 → Enter
+    fireEvent.click(screen.getByTestId("group-rename-1"));
+    const input = screen.getByTestId("group-rename-input-1") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "化妆课 A·重修" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("rename_note_group", { id: 1, name: "化妆课 A·重修" }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    // 再次 ✎ → Esc 取消：无第二次提交
+    fireEvent.click(screen.getByTestId("group-rename-1"));
+    const input2 = screen.getByTestId("group-rename-input-1") as HTMLInputElement;
+    fireEvent.change(input2, { target: { value: "不该提交" } });
+    fireEvent.keyDown(input2, { key: "Escape" });
+    expect(invokeMock).not.toHaveBeenCalledWith("rename_note_group", { id: 1, name: "不该提交" });
   });
 });

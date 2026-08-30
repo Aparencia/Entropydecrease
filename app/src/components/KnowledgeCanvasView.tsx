@@ -19,12 +19,14 @@ import {
   type Edge, type Node, type NodeProps, type OnMoveEnd, type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { KnowledgeConcept, KnowledgeLink, KnowledgeModel, KnowledgeNode, CanvasNodePosition } from "../types/knowledge";
+import type { CanvasPrefs, EdgeStyle, KnowledgeConcept, KnowledgeLink, KnowledgeModel, KnowledgeNode, CanvasNodePosition, LayoutAlgorithm } from "../types/knowledge";
+import { DEFAULT_CANVAS_PREFS, EDGE_STYLE_OPTIONS, LAYOUT_OPTIONS } from "../types/knowledge";
 import {
   buildCanvasElements, canvasKey, entityIdFromKey, resolveEdgeHandles,
   type CanvasNodeData, type CanvasSelectKind,
 } from "../utils/canvasElements";
-import { CANVAS_BBOX, layoutRadial, type CanvasLayoutItem, type CanvasPoint } from "../utils/layoutRadial";
+import { CANVAS_BBOX, type CanvasLayoutItem, type CanvasPoint } from "../utils/layoutRadial";
+import { layoutCanvas } from "../utils/layoutCanvas";
 import CanvasNodeQuestion from "./CanvasNodeQuestion";
 import CanvasNodeConcept from "./CanvasNodeConcept";
 import CanvasNodeModel from "./CanvasNodeModel";
@@ -83,6 +85,9 @@ function CanvasFlow({
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<Node<CanvasNodeData>>([]);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [status, setStatus] = useState("");
+  // v0.14.1：画布偏好（连线样式/箭头/布局算法——按体系持久化；加载完成前不布局）
+  const [prefs, setPrefs] = useState<CanvasPrefs>(DEFAULT_CANVAS_PREFS);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
   const { fitView, setViewport } = useReactFlow();
 
   // v0.13.9：体系根卡（全局=核心问题 / 领域=体系名）——null 时不渲染圆心卡
@@ -145,9 +150,12 @@ function CanvasFlow({
     };
   }, []);
 
-  // 元素构建：位置 = 已存（props/本地覆盖）?? 辐射布局（首次不布局的节点）；
+  // 元素构建：位置 = 已存（props/本地覆盖）?? 已选算法布局（首次不布局的节点）；
   // 首次打开（存在未布局问题节点）→ 批量初始化入库（规格 §4.3/§4.6）
   useEffect(() => {
+    // v0.14.1：偏好未加载完成不布局——防"默认辐射先写库、用户偏好后到"的竞态
+    // （首开缺位节点按已存布局算法初始化，一次写入）
+    if (!prefsLoaded) return;
     const layoutItems: CanvasLayoutItem[] = [
       ...nodes.map((n) => ({
         key: canvasKey("question", n.id),
@@ -157,7 +165,7 @@ function CanvasFlow({
       ...concepts.map((c) => ({ key: canvasKey("concept", c.id), kind: "concept" as const, parentKey: null })),
       ...models.map((m) => ({ key: canvasKey("model", m.id), kind: "model" as const, parentKey: null })),
     ];
-    const layout = layoutRadial({ hasCore: coreQuestion != null, items: layoutItems });
+    const layout = layoutCanvas({ hasCore: coreQuestion != null, items: layoutItems }, prefs.layoutAlgorithm);
 
     const positions = new Map<string, CanvasPoint>();
     let batchPersist: { nodeId: number; x: number; y: number }[] = [];
@@ -191,12 +199,15 @@ function CanvasFlow({
         .catch((e) => setStatus(`布局初始化失败: ${e}`));
     }
 
-    const { nodes: rfn, edges } = buildCanvasElements({ nodes, concepts, models, links, positions, selectedKey, rootCard });
+    const { nodes: rfn, edges } = buildCanvasElements({
+      nodes, concepts, models, links, positions, selectedKey, rootCard,
+      edgeStyle: prefs.edgeStyle, edgeArrows: prefs.edgeArrows,
+    });
     // v0.13.9：rootCard 由 buildCanvasElements 统一产出（含 core 卡 + 根节点虚线边）——
     // 初始布局与「自动排列」同路径，杜绝双份逻辑漂移（此前 autoLayout 漏加 core 卡）
     setRfNodes(rfn);
     setRfEdges(edges);
-  }, [systemId, rootCard, nodes, concepts, models, links, selectedKey, setRfNodes, setRfEdges]);
+  }, [systemId, rootCard, nodes, concepts, models, links, selectedKey, setRfNodes, setRfEdges, prefs, prefsLoaded]);
 
   // 视口恢复（§4.5）：已存 → setViewport；未存 → fitView 按内容兜底
   useEffect(() => {
@@ -206,6 +217,18 @@ function CanvasFlow({
         else void rfApi.current.fitView({ padding: 0.15 });
       })
       .catch(() => void rfApi.current.fitView({ padding: 0.15 }));
+  }, [systemId]);
+
+  // v0.14.1：偏好加载（体系切换重置；失败静默回落默认——偏好丢失不阻塞画布）
+  useEffect(() => {
+    setPrefsLoaded(false);
+    setPrefs(DEFAULT_CANVAS_PREFS);
+    invoke<CanvasPrefs | null>("get_canvas_prefs", { systemId })
+      .then((p) => {
+        if (p) setPrefs(p);
+      })
+      .catch(() => setPrefs(DEFAULT_CANVAS_PREFS))
+      .finally(() => setPrefsLoaded(true));
   }, [systemId]);
 
   // 拖拽结束 → 本地覆盖 + 防抖批量保存（规格 §4.3 onNodeDragStop → debounce → invoke）
@@ -238,7 +261,16 @@ function CanvasFlow({
   }, [systemId]);
 
   // 「自动排列」：整体重排 + 批量覆盖 + fitView（规格 §4.4：用户显式触发才覆盖已存位置）
-  const autoLayout = () => {
+  /** 偏好保存（v0.14.1；失败状态行提示——视觉选择会话内仍生效） */
+  const savePrefs = useCallback((p: CanvasPrefs) => invoke("save_canvas_prefs", {
+    systemId,
+    edgeStyle: p.edgeStyle,
+    edgeArrows: p.edgeArrows,
+    layoutAlgorithm: p.layoutAlgorithm,
+  }), [systemId]);
+
+  /** 「布局 ▾」选择 = 用该算法整体重排 + 写偏好 + fitView（规格 §4.4 显式触发才覆盖已存位置） */
+  const autoLayout = (algorithm: LayoutAlgorithm) => {
     const layoutItems: CanvasLayoutItem[] = [
       ...nodes.map((n) => ({
         key: canvasKey("question", n.id),
@@ -248,7 +280,7 @@ function CanvasFlow({
       ...concepts.map((c) => ({ key: canvasKey("concept", c.id), kind: "concept" as const, parentKey: null })),
       ...models.map((m) => ({ key: canvasKey("model", m.id), kind: "model" as const, parentKey: null })),
     ];
-    const layout = layoutRadial({ hasCore: rootCard != null, items: layoutItems });
+    const layout = layoutCanvas({ hasCore: rootCard != null, items: layoutItems }, algorithm);
     const positions = new Map<string, CanvasPoint>();
     const persist: { nodeId: number; x: number; y: number }[] = [];
     for (const n of nodes) {
@@ -263,13 +295,33 @@ function CanvasFlow({
     for (const m of models) {
       positions.set(canvasKey("model", m.id), toTopLeft(layout.get(canvasKey("model", m.id)) ?? { x: 0, y: 0 }, CANVAS_BBOX.model));
     }
-    const { nodes: rfn, edges } = buildCanvasElements({ nodes, concepts, models, links, positions, selectedKey, rootCard });
+    const { nodes: rfn, edges } = buildCanvasElements({
+      nodes, concepts, models, links, positions, selectedKey, rootCard,
+      edgeStyle: prefs.edgeStyle, edgeArrows: prefs.edgeArrows,
+    });
     setRfNodes(rfn);
     setRfEdges(edges);
     void invoke("batch_initialize_canvas_positions", { systemId, positions: persist })
       .then(() => savedRef.current?.(persist))
       .catch((e) => setStatus(`布局保存失败: ${e}`));
+    const next = { ...prefs, layoutAlgorithm: algorithm };
+    setPrefs(next);
+    void savePrefs(next).catch((e) => setStatus(`布局偏好保存失败: ${e}`));
     void fitView({ padding: 0.15 });
+  };
+
+  /** 「连线 ▾」选择 = 即时重渲染 + 写偏好 */
+  const onEdgeStyleChange = (edgeStyle: EdgeStyle) => {
+    const next = { ...prefs, edgeStyle };
+    setPrefs(next);
+    void savePrefs(next).catch((e) => setStatus(`连线偏好保存失败: ${e}`));
+  };
+
+  /** 箭头开关 = 即时重渲染 + 写偏好 */
+  const onEdgeArrowsChange = (edgeArrows: boolean) => {
+    const next = { ...prefs, edgeArrows };
+    setPrefs(next);
+    void savePrefs(next).catch((e) => setStatus(`连线偏好保存失败: ${e}`));
   };
 
   // v0.13.9：接线方向动态化——按源/目标当前中心相对方位选 Handle（拖拽后随
@@ -321,14 +373,34 @@ function CanvasFlow({
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
           <MiniMap pannable zoomable />
           <Controls />
-          <Panel position="top-right" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <button
-              data-testid="canvas-auto-layout"
-              onClick={autoLayout}
-              style={{ fontSize: 11, cursor: "pointer", padding: "4px 10px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", color: "#374151" }}
+          <Panel position="top-right" style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "stretch" }}>
+            {/* v0.14.1：「布局 ▾」「连线 ▾」下拉（选择即重排/重渲染 + 按体系持久化；
+                原「✨ 自动排列」按钮并入布局下拉——避免双入口语义分歧） */}
+            <select
+              data-testid="canvas-layout-select"
+              value={prefs.layoutAlgorithm}
+              onChange={(e) => autoLayout(e.target.value as LayoutAlgorithm)}
+              style={{ fontSize: 11, padding: "4px 6px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", color: "#374151", cursor: "pointer", minWidth: 132 }}
+              title="选择布局算法并自动排列（覆盖已存位置）"
             >
-              ✨ 自动排列
-            </button>
+              {LAYOUT_OPTIONS.map((o) => <option key={o.value} value={o.value}>✨ {o.label}</option>)}
+            </select>
+            <select
+              data-testid="canvas-edge-style-select"
+              value={prefs.edgeStyle}
+              onChange={(e) => onEdgeStyleChange(e.target.value as EdgeStyle)}
+              style={{ fontSize: 11, padding: "4px 6px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", color: "#374151", cursor: "pointer", minWidth: 132 }}
+              title="连线样式"
+            >
+              {EDGE_STYLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>〰 {o.label}</option>)}
+            </select>
+            <label
+              data-testid="canvas-edge-arrows"
+              style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", color: "#374151", cursor: "pointer" }}
+            >
+              <input type="checkbox" checked={prefs.edgeArrows} onChange={(e) => onEdgeArrowsChange(e.target.checked)} />
+              边箭头
+            </label>
             <button
               data-testid="canvas-fit-view"
               onClick={() => void fitView({ padding: 0.15 })}

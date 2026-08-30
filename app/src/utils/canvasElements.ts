@@ -5,14 +5,15 @@
  *               概念/模型徽标源于 knowledge_links 的 concept_id/model_id 引用，
  *               用户不能画线即建引用。三表 id 空间独立，节点 key 带类型前缀
  *               （`q:1`/`c:2`/`m:3`，与 layoutRadial 同源）。
- * @ai-context: 本函数纯数据转换（零 React 依赖，仅 type-only import @xyflow/react——
- *               类型擦除后单测可直接运行），供 KnowledgeCanvasView 与单测共用
- *               （规格 §六：画布组件仅测数据转换，RF 渲染跳过 jsdom）。
+ * @ai-context: 本函数纯数据转换（零 React 依赖——@xyflow/react 仅用于类型与
+ *              MarkerType 枚举常量，MarkerType 为字符串常量无运行时关联；
+ *              类型擦除后单测可直接运行），供 KnowledgeCanvasView 与单测共用
+ *              （规格 §六：画布组件仅测数据转换，RF 渲染跳过 jsdom）。
  */
-import type { Edge, Node } from "@xyflow/react";
+import { MarkerType, type Edge, type Node } from "@xyflow/react";
 import type { KnowledgeConcept, KnowledgeLink, KnowledgeModel, KnowledgeNode, KnowledgeNodeType } from "../types/knowledge";
-import { conceptStatusLabel, type KnowledgeConceptStatus } from "../types/knowledge";
-import type { CanvasPoint } from "./layoutRadial";
+import { conceptStatusLabel, type EdgeStyle, type KnowledgeConceptStatus } from "../types/knowledge";
+import type { CanvasPoint } from "./layoutShared";
 
 /** 画布节点实体类别（与 CanvasNodeData.kind 同枚举，仅少 core——核心问题单独渲染） */
 export type CanvasEntityKind = "question" | "concept" | "model";
@@ -82,7 +83,19 @@ export interface CanvasElementsInput {
    * 父是体系本身，§二.4"连线只反映既有关系"仍成立（parent_id 边不受影响）。
    */
   rootCard: { title: string; subtitle: string } | null;
+  /** v0.14.1：连线样式（缺省 smoothstep——与迁移 DEFAULT / 旧调用兼容） */
+  edgeStyle?: EdgeStyle;
+  /** v0.14.1：箭头开关（缺省 false——保持现状无箭头） */
+  edgeArrows?: boolean;
 }
+
+/** RF edge type 映射（v0.14.1；EdgeStyle 枚举与 Rust 白名单同口径） */
+const EDGE_TYPE: Record<EdgeStyle, string> = {
+  straight: "straight",
+  bezier: "bezier",
+  smoothstep: "smoothstep",
+  step: "step",
+};
 
 /** 概念状态徽标颜色（与概念列表同口径） */
 function conceptStatusColor(status: KnowledgeConceptStatus): string {
@@ -120,7 +133,14 @@ export function resolveEdgeHandles(
  *              边只连「父存在且同树」的 parent_id（孤儿不连——布局层兜底处理）。
  */
 export function buildCanvasElements(input: CanvasElementsInput): { nodes: Node<CanvasNodeData>[]; edges: Edge[] } {
-  const { nodes, concepts, models, links, positions, selectedKey, rootCard } = input;
+  const {
+    nodes, concepts, models, links, positions, selectedKey, rootCard,
+    edgeStyle = "smoothstep", edgeArrows = false,
+  } = input;
+
+  // v0.14.1：连线样式映射 + 箭头开关（防御未知枚举值 → 回退 smoothstep）
+  const edgeType = EDGE_TYPE[edgeStyle] ?? "smoothstep";
+  const markerEnd = edgeArrows ? { type: MarkerType.ArrowClosed } : undefined;
 
   const conceptById = new Map(concepts.map((c) => [c.id, c]));
   const modelById = new Map(models.map((m) => [m.id, m]));
@@ -256,7 +276,8 @@ export function buildCanvasElements(input: CanvasElementsInput): { nodes: Node<C
       id: `e:${n.parentId}:${n.id}`,
       source: canvasKey("question", n.parentId),
       target: canvasKey("question", n.id),
-      type: "smoothstep",
+      type: edgeType,
+      ...(markerEnd ? { markerEnd } : {}),
     });
   }
 
@@ -269,8 +290,9 @@ export function buildCanvasElements(input: CanvasElementsInput): { nodes: Node<C
         id: `e:core:${n.id}`,
         source: "core",
         target: canvasKey("question", n.id),
-        type: "smoothstep",
+        type: edgeType,
         style: { stroke: "#cbd5e1", strokeDasharray: "5 4" },
+        ...(markerEnd ? { markerEnd } : {}),
       });
     }
   }

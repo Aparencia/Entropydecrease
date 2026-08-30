@@ -464,6 +464,9 @@ pub fn run() {
             commands_groups::override_group_route,
             commands_groups::move_note_to_group,
             commands_groups::update_group_color,
+            // v0.14.1：组删除（影响面确认后级联——两命令：只读影响面 + 执行删除）
+            commands_groups::get_group_delete_impact,
+            commands_groups::delete_note_group,
             // v0.11.1：feed 进料口——功能开关读写/碎片捕获/碎片列表
             commands_fragments::get_feature_flags,
             commands_fragments::set_feature_flag,
@@ -532,6 +535,9 @@ pub fn run() {
             commands_knowledge_canvas::batch_initialize_canvas_positions,
             commands_knowledge_canvas::save_canvas_viewport,
             commands_knowledge_canvas::get_canvas_viewport,
+            // v0.14.1：画布偏好（连线样式/箭头/布局算法——按体系持久化）
+            commands_knowledge_canvas::get_canvas_prefs,
+            commands_knowledge_canvas::save_canvas_prefs,
             // 会话管理（REQ-010，ADR-004）
             commands_session::create_session,
             commands_session::finish_session,
