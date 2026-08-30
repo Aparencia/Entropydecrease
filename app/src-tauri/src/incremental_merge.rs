@@ -52,14 +52,26 @@ fn position_stable(a: &ScreenFrame, b: &ScreenFrame) -> bool {
 
 /// 跨帧增量合并：顺序扫描——后帧包含前帧且位置稳定 → 合并（文本取后帧）；
 /// 否则新屏（翻页）。输入须按时间序（调用方保证）。
+///
+/// @ai-context: TD-2026-08-28-B 偿还——原实现每帧 `frames.iter().find(p.id==cur.id)`
+///              线性回查 O(n²)；改为预建 id→帧索引（HashMap），回查 O(1)，
+///              整体 O(n)。纯函数零副作用（输入不变）。
 pub fn merge_incremental(frames: &[ScreenFrame]) -> Vec<MergedScreen> {
     let mut out: Vec<MergedScreen> = Vec::new();
+    // 帧索引（首帧 id → 帧；id 唯一性由调用方保证——同屏帧集）
+    let by_id: std::collections::HashMap<u64, &ScreenFrame> =
+        frames.iter().map(|f| (f.id, f)).collect();
     for f in frames {
         let Some(cur) = out.last_mut() else {
             out.push(MergedScreen { id: f.id, text: f.text.clone() });
             continue;
         };
-        if text_contains(&cur.text, &f.text) && position_stable(frames.iter().find(|p| p.id == cur.id).unwrap_or(f), f) {
+        if text_contains(&cur.text, &f.text)
+            && position_stable(
+                by_id.get(&cur.id).copied().unwrap_or(f),
+                f,
+            )
+        {
             // 同屏增量：文本取后帧（更完整），屏号保持首帧
             cur.text = f.text.clone();
         } else {

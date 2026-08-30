@@ -40,19 +40,23 @@ pub struct OcrBlockHit {
     pub screen_last_ms: Option<u64>,
 }
 
-/// 会话检索范围上限（与旧实现 list_sessions(None, 500, 0) 同口径）。
-const SESSION_SCOPE: i64 = 500;
-
+/// 会话检索范围（TD-2026-08-19-G 偿还：原 500 上限静默截断已移除——全库检索，
+/// 结果由 limit 有界；本常量删除，保留占位注释防回归引入）。
+///
+/// @ai-context: 曾经 const SESSION_SCOPE: i64 = 500；若未来重新加上限，必须
+///              在 UI 暴露"仅搜最近 N 会话"并明示（静默截断是 2026-08-19-G 根因）。
 /// 检索会话 OCR 块（REQ-133）：关键词 → 命中块 + 会话标题 + 图路径 + 屏区间。
 ///
 /// @ai-context: 只搜画面要点（region=full——字幕区是转写冗余，搜字幕用段搜索）；
 ///              大小写不敏感（LIKE 对 ASCII 天然忽略大小写，CJK 无大小写概念）；
 ///              结果有界（100 条防超大 payload）。
-/// @ai-context: M2 修复——单条 SQL 语义等价于旧逐会话循环：
-///              ① 会话范围 = 最近 500 会话（started_at DESC, id DESC 子查询）；
-///              ② 屏区间 = 同会话同屏全部块（含字幕块，旧实现不过滤 region）
+/// @ai-context: M2 修复——单条 SQL 语义等价于旧逐会话循环（无会话范围上限；
+///              屏区间 = 同会话同屏全部块（含字幕块，旧实现不过滤 region）
 ///              的 min/max 时间戳（LEFT JOIN 聚合子查询）；
-///              ③ 排序 = 会话倒序 + 块时间升序（与旧双层循环一致）。
+///              排序 = 会话倒序 + 块时间升序（与旧双层循环一致）。
+/// @ai-context: TD-2026-08-19-G 偿还——原 SESSION_SCOPE=500 静默截断：会话数
+///              >500 时旧会话命中被漏（用户"搜不到"无从感知）；移除上限改全库
+///              检索（本地 SQLite 万行级 + 结果 LIMIT 100 有界，无性能顾虑）。
 /// @param data_dir - 应用数据目录（图存在性校验；None 时 image_path 恒 None）
 pub fn search_ocr_blocks(
     db: &Db,
@@ -83,13 +87,10 @@ pub fn search_ocr_blocks(
              ) sr ON sr.session_id = b.session_id AND sr.screen_id = b.screen_id
              WHERE b.region = 'full'
                AND b.text LIKE ?1 ESCAPE '\\'
-               AND b.session_id IN (
-                   SELECT id FROM sessions ORDER BY started_at DESC, id DESC LIMIT ?2
-               )
              ORDER BY s.started_at DESC, s.id DESC, b.timestamp_ms ASC
-             LIMIT ?3",
+             LIMIT ?2",
         )?;
-        let rows = stmt.query_map(params![pattern, SESSION_SCOPE, limit as i64], |row| {
+        let rows = stmt.query_map(params![pattern, limit as i64], |row| {
             Ok(OcrBlockHit {
                 ocr_block_id: row.get(0)?,
                 session_id: row.get(1)?,
@@ -216,6 +217,29 @@ mod tests {
         }
         // Act & Assert：limit=3
         assert_eq!(search_ocr_blocks(&db, None, "关键词", 3).unwrap().len(), 3);
+    }
+
+    #[test]
+    fn search_beyond_500_sessions_not_silently_truncated() {
+        // TD-2026-08-19-G 回归：原 SESSION_SCOPE=500 静默截断——第 501+ 会话的
+        // 命中被漏（用户"搜不到"无感知）；移除上限后全库命中
+        let db = Db::open(":memory:").unwrap();
+        // Arrange：造 501 会话，命中关键词放在**最早**（第 1 个）会话
+        let mut hit_sid = 0;
+        for i in 0..501 {
+            let s = db.create_session(&NewSession {
+                title: format!("会话{}", i), source_window: None, profile: None, kind: None,
+            }).unwrap();
+            if i == 0 {
+                add_block(&db, s.id, 1000, "老会话目标词", "full", None);
+                hit_sid = s.id;
+            }
+        }
+        // Act
+        let hits = search_ocr_blocks(&db, None, "目标词", 10).unwrap();
+        // Assert：命中（旧实现此用例必失败——第 1 会话不在最近 500 之内）
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].session_id, hit_sid);
     }
 
     #[test]

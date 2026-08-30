@@ -56,9 +56,12 @@ pub fn detect_player_action(frame: &RgbImage) -> Option<PlayerAction> {
 ///
 /// @ai-context: 播放器暂停态 = 视频暗遮罩 + 中央大图标（白三角/双竖条），
 ///              用中央区域颜色统计近似：中央区暗像素占比高（暗遮罩/黑圆盘）
-///              且存在中等占比亮像素（白色图标）→ 判定暂停。
-/// @ai-context: 阈值偏严防假信号：暗色视频场景无图标时 bright 占比过低不判；
+///              且存在中等占比**白色**像素（图标是白色，非任意亮色）→ 判定暂停。
+/// @ai-context: 阈值偏严防假信号：暗色视频场景无图标时白像素占比过低不判；
 ///              全亮画面 dark 不足不判；字幕在画面底部、不落在中央区（不干扰）。
+/// @ai-context: TD-2026-08-19-F 偿还——原实现只判"亮像素"（lum>210），暗底+中央
+///              亮色内容（如暗色视频里发光的彩色标题/物体）会误报为暂停；
+///              图标白 = 高亮 + 低饱和（R≈G≈B，±40 容差），彩色亮块不再命中。
 /// @ai-context: 输入为 RGB 字节（image::RgbImage.as_raw()）；w/h 为像素尺寸；
 ///              输入异常（尺寸过小/字节不足）→ false（防御）。
 pub fn detect_pause_icon(pixels: &[u8], w: u32, h: u32) -> bool {
@@ -71,19 +74,25 @@ pub fn detect_pause_icon(pixels: &[u8], w: u32, h: u32) -> bool {
     let x0 = w / 2 - cw / 2;
     let y0 = h / 2 - ch / 2;
     let mut dark = 0u32;
-    let mut bright = 0u32;
+    let mut white = 0u32;
     let mut total = 0u32;
     for y in y0..(y0 + ch).min(h) {
         for x in x0..(x0 + cw).min(w) {
             let i = ((y * w + x) * 3) as usize;
+            let r = pixels[i] as u32;
+            let g = pixels[i + 1] as u32;
+            let b = pixels[i + 2] as u32;
             // 近似亮度（Rec.601 整数版，0-255）
-            let lum = (pixels[i] as u32 * 299 + pixels[i + 1] as u32 * 587 + pixels[i + 2] as u32 * 114)
-                / 1000;
+            let lum = (r * 299 + g * 587 + b * 114) / 1000;
             if lum < 45 {
                 dark += 1;
             }
+            // 图标白：高亮 + 低饱和（R≈G≈B ±40——白三角/双竖条；彩色亮块不算）
             if lum > 210 {
-                bright += 1;
+                let (r, g, b) = (r as i32, g as i32, b as i32);
+                if (r - g).abs() < 40 && (g - b).abs() < 40 && (r - b).abs() < 40 {
+                    white += 1;
+                }
             }
             total += 1;
         }
@@ -92,8 +101,8 @@ pub fn detect_pause_icon(pixels: &[u8], w: u32, h: u32) -> bool {
         return false;
     }
     let dark_ratio = dark as f32 / total as f32;
-    let bright_ratio = bright as f32 / total as f32;
-    dark_ratio >= 0.55 && (0.02..=0.6).contains(&bright_ratio)
+    let white_ratio = white as f32 / total as f32;
+    dark_ratio >= 0.55 && (0.015..=0.35).contains(&white_ratio)
 }
 
 /// 采样间隔按播放速率缩放（M17，纯函数）。

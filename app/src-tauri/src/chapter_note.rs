@@ -128,25 +128,35 @@ pub fn assemble_hybrid_note(
 /// @ai-context: 近似口径——调用方传**净化后**块可得精确分；本函数接受原料块
 ///              （junk/低分块压分 → 门控更严，宁缺毋滥符合 spec 哲学）；无
 ///              行合并上下文时 merged_lines 取块文本（块即行保守近似）。
+/// @ai-context: TD-2026-08-28-A 偿还——原实现每章节全量过滤 blocks（O(C×B)）+
+///              每块文本克隆；改为块按时间戳排序一次 + 章节有序滑动窗口
+///              （partition_point 定界），整体 O(B log B + C log B)，章节间隙块
+///              语义不变（不属于任何窗口——与原 filter 行为一致）。
 pub fn chapter_quality_scores(
     chapters: &[ChapterBoundary],
     blocks: &[SessionOcrBlock],
 ) -> Vec<f32> {
     let mut bounds: Vec<&ChapterBoundary> = chapters.iter().collect();
     bounds.sort_by_key(|c| c.time_ms);
+    if bounds.is_empty() {
+        return Vec::new();
+    }
+    // 画面块按时间戳排序（只一次——窗口定界用；region 过滤与原实现一致）
+    let mut full: Vec<&SessionOcrBlock> = blocks.iter().filter(|bl| bl.region == "full").collect();
+    full.sort_by_key(|bl| bl.timestamp_ms);
+    // 起始游标跳过最早章节之前的块（与原实现 timestamp >= b.time 语义一致）
+    let mut start = full.partition_point(|bl| bl.timestamp_ms < bounds[0].time_ms);
     bounds
         .iter()
         .enumerate()
-        .map(|(i, b)| {
+        .map(|(i, _b)| {
             let next_ms = bounds.get(i + 1).map(|n| n.time_ms);
-            let window: Vec<&SessionOcrBlock> = blocks
-                .iter()
-                .filter(|bl| {
-                    bl.region == "full"
-                        && bl.timestamp_ms >= b.time_ms
-                        && next_ms.is_none_or(|n| bl.timestamp_ms < n)
-                })
-                .collect();
+            // 窗口内块（时间序连续——章节有序，块有序，滑动定界无需重扫）
+            let end = full.partition_point(|bl| {
+                next_ms.is_none_or(|n| bl.timestamp_ms < n)
+            });
+            let window = &full[start..end];
+            start = end;
             if window.is_empty() {
                 return 0.0;
             }

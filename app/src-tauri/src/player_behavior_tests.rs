@@ -92,6 +92,27 @@ fn tiny_frame_returns_none() {
 }
 
 #[test]
+fn dark_scene_with_colored_glow_not_detected() {
+    // TD-2026-08-19-F 回归：暗底 + 中央亮**彩色**内容（发光红点/橙标题）——
+    // 修复前被判为暂停（bright 满足），修复后白色判据拒绝
+    let frame = RgbImage::from_fn(240, 135, |x, y| {
+        let cx = 120i32;
+        let cy = 67i32;
+        let dx = x as i32 - cx;
+        let dy = y as i32 - cy;
+        if dx * dx + dy * dy <= 15 * 15 {
+            Rgb([255, 40, 40]) // 中央亮红圆（饱和度极高，非白）
+        } else {
+            Rgb([30, 30, 30]) // 暗底
+        }
+    });
+    // Act
+    let action = detect_player_action(&frame);
+    // Assert：彩色亮内容不是暂停图标 → 不判
+    assert!(action.is_none());
+}
+
+#[test]
 fn speed_scaled_interval_boundaries() {
     // Assert：1.0x → base；2.0x → base/2；0.5x → base*2（上限保护）
     assert_eq!(speed_scaled_interval(1000, 1.0), 1000);
