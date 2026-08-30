@@ -26,12 +26,10 @@ export interface ColumnLayout {
   folded: boolean;
   /** 用户手动折叠态（自动折叠兜底下的用户意图保留） */
   manuallyFolded: boolean;
-  setWidth: (w: number) => void;
   /** 拖拽手柄增量化（负数=收窄——列方向感知由调用方处理） */
   resizeBy: (delta: number) => void;
   resetWidth: () => void;
   setManualFolded: (v: boolean) => void;
-  toggleFold: () => void;
   /** 立即展开（同时清自动/手动折叠态——窄窗下点击窄条仍可展开，resize 后按阈值重折） */
   expand: () => void;
 }
@@ -39,6 +37,8 @@ export interface ColumnLayout {
 const clamp = (w: number, min: number, max: number) => Math.max(min, Math.min(max, Math.round(w)));
 
 function readNumber(key: string, fallback: number): number {
+  // window 守卫（GroupSidebar 同款模式）——非浏览器环境（SSR/未来测试宿主）零崩溃
+  if (typeof window === "undefined") return fallback;
   try {
     const v = window.localStorage.getItem(`layout:col-width:${key}`);
     return v != null ? Number(v) : fallback;
@@ -48,6 +48,7 @@ function readNumber(key: string, fallback: number): number {
 }
 
 function readBool(key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback;
   try {
     const v = window.localStorage.getItem(`layout:col-fold:${key}`);
     return v != null ? v === "1" : fallback;
@@ -57,6 +58,7 @@ function readBool(key: string, fallback: boolean): boolean {
 }
 
 function writeLayout(key: string, value: string) {
+  if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(key, value);
   } catch {
@@ -85,12 +87,10 @@ export function useColumnLayout(key: string, opts: Options): ColumnLayout {
   useEffect(() => { writeLayout(`layout:col-width:${key}`, String(width)); }, [key, width]);
   useEffect(() => { writeLayout(`layout:col-fold:${key}`, manualFolded ? "1" : "0"); }, [key, manualFolded]);
 
-  const setWidth = useCallback((w: number) => setWidthState(clamp(w, opts.min, opts.max)), [opts.min, opts.max]);
   const resizeBy = useCallback((delta: number) => {
     setWidthState((cur) => clamp(cur + delta, opts.min, opts.max));
   }, [opts.min, opts.max]);
   const resetWidth = useCallback(() => setWidthState(opts.default), [opts.default]);
-  const toggleFold = useCallback(() => setManualFolded((v) => !v), []);
   const expand = useCallback(() => {
     setAutoFolded(false);
     setManualFolded(false);
@@ -100,11 +100,9 @@ export function useColumnLayout(key: string, opts: Options): ColumnLayout {
     width,
     folded: autoFolded || manualFolded,
     manuallyFolded: manualFolded,
-    setWidth,
     resizeBy,
     resetWidth,
     setManualFolded,
-    toggleFold,
     expand,
-  }), [width, autoFolded, manualFolded, setWidth, resizeBy, resetWidth, toggleFold, expand]);
+  }), [width, autoFolded, manualFolded, resizeBy, resetWidth, expand]);
 }

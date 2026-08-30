@@ -8,16 +8,14 @@ interface Props {
   icon: string;
   title: string;
   onClick: () => void;
-  /** 附加徽标（如收件箱计数）——窄条上不常显，仅 title 提示 */
-  badge?: string;
 }
 
-export default function ColumnBar({ icon, title, onClick, badge }: Props) {
+export default function ColumnBar({ icon, title, onClick }: Props) {
   return (
     <div
       data-testid="column-bar"
       onClick={onClick}
-      title={`${title}${badge ? `（${badge}）` : ""}`}
+      title={title}
       style={{
         width: 26,
         flexShrink: 0,

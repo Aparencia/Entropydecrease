@@ -120,6 +120,11 @@ pub async fn import_note_image_b64(
     if state.db.get_note(note_id).map_err(|e| e.to_string())?.is_none() {
         return Err("笔记不存在".to_string());
     }
+    // 解码前尺寸防线：base64 膨胀率 4/3（+填充余量）——纯文本长度超上限直接拒绝，
+    // 防恶意/畸形超大输入先完整解码再检查的内存峰值（解码缓冲区翻倍）
+    if image_b64.len() as u64 > IMAGE_MAX_BYTES / 3 * 4 + 64 {
+        return Err(format!("图片数据超过大小上限（{} 字节）", IMAGE_MAX_BYTES));
+    }
     let bytes = BASE64
         .decode(image_b64.trim())
         .map_err(|_| "图片数据解码失败（非法 base64）".to_string())?;
