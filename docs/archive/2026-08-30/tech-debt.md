@@ -13,6 +13,7 @@
 | TD-2026-08-19-D | image_stream_store 已交付未接线（REQ-110/123/088） | 有意 | P2 | 2026-08-19 | carried |
 | TD-2026-08-24-A | lib.rs/live_session_frame.rs 超 600 硬限——lib.rs 注册清单 Tauri v2 单点 generate_handler proc-macro 展开下技术上不可拆分（E0282 实测），维持；live_session_frame 拆分方案已登记顺延 | 有意 | P1 | 2026-08-24 | carried |
 | TD-2026-08-30-A | ClassroomPage 607 行超 600 硬限——预存债务（登记值 547 为过期快照）v0.15 列状态接线后实测纠偏；拆分计划已登记（实时捕获卡片拆 LiveCaptureCard） | 有意 | P1 | 2026-08-30 | open |
+| TD-2026-08-30-B | note_filter 预存失败 2 笔（session29_live_ui_excluded_from_points / ocr_points_exclude_watermark_junk_and_dupes）——v0.12.x 正文多态/过滤行为漂移后夹具断言未同步；v0.16.0 全量回归复现（clean HEAD 同失败），与本次改动无关 | 预存 | P2 | 2026-08-30 | open |
 
 ## 今日已偿
 
@@ -30,14 +31,21 @@
 | 观察 2026-08-29-3 | layoutForest 成环父引用静默丢失（数据损坏/导入异常路径） | 低优先（正常 UI 造不出环；不变式测试守护） |
 | 观察 2026-08-30-1 | 正文手写/粘贴绝对路径图片引用不改写（用户裁决：入口全落盘后巡检不需要；高频观察后再在 paste 钩子转换） | 保持边界（v0.15 §6 登记） |
 | 观察 2026-08-30-2 | 历史孤儿图片目录（删除笔记清理仅覆盖新删除；v0.15 前遗留目录） | 垃圾回收后续任务（v0.15 遗留登记） |
+| 观察 2026-08-30-3 | AI 对话停止响应延迟上限：ureq 无请求取消句柄——响应头未到时 chat_cancel 需等 HTTP 超时（默认 60s 级）才生效；流已出 token 则即时生效（每行检查取消标志） | 保持（换 reqwest 属架构级重构，登记后续评估；DSH 同类型轻量实现可先用） |
+| 观察 2026-08-30-4 | SSE usage 若附在 delta 非空行（少数 OpenAI 兼容端点）则 parse_sse_line 走 Delta 分支丢失 usage——token 显示降级为 null（会话不受影响） | 低优先（extract_usage 在 Ignore 行提取；delta 行补充提取随端点实测再定） |
+| 观察 2026-08-30-5 | AI 对话流式渲染：每 chunk 全量 markdown 解析（长回答 10K+ 字符流式期间 CPU 可感知；与 DSH 同策略） | 保持（阈值实测后再节流渲染） |
+| 观察 2026-08-30-6 | trajectory 存储体积：约 50-200KB/任务（user 含每片草稿全文 + response 全量）——保留策略 50 条/类型，上限约 10MB 级 | 可接受（与 result_json 同量级；上限硬约束已有） |
+| 观察 2026-08-30-7 | chat_set_model 对自定义 Provider 要求模型在该 Provider models 列表（default_model 未入列会拒绝——设置页补录即可） | 保持（校验防御性正确；文案已引导） |
+| 观察 2026-08-30-8 | ChatStreamEvent::Done.content 当前未被前端消费（事件仅作终态信号，内容以消息落库为准） | 保留（协议完整性 + 未来轻量端点；注释已述） |
 
 ## 验证记录
 
 - 前端 vitest 53 文件 431 用例全绿（含审查即修后回归）；`tsc --noEmit` 零错误；`vite build` 通过
 - Rust cargo test 1840 通过（3 预存失败与本次无关：ai_client provider 默认值 + note_filter golden×2——clean HEAD 已复现）；clippy 零新增警告
 - docs-check 链接校验（归档后活跃区引用全部改指归档路径）
+- **追加（2026-08-30 晚，v0.16.0 会话）**：cargo test 1864 通过（新增 23 测；ai_client 预存失败 1 笔已修——断言改被选 Provider 自身 base_url，见 6778114f 同批）· 预存失败剩 note_filter×2（→ TD-2026-08-30-B）· clippy 零新增 · vitest 438 通过（新增 7 测）· tsc 零错误
 
 ## 关联
 
-- 版本与需求：[v0.15 版本文档](../../versions/v0.15.md)（交付 51896a7f~71640416 + 审查即修 aece95f）
+- 版本与需求：[v0.15 版本文档](../../versions/v0.15.md)（交付 51896a7f~71640416 + 审查即修 aece95f）· [v0.16.0 版本文档](../../versions/v0.16.0.md)（交付 6778114f + 审查修复 f3df9777）
 - 归档快照：[2026-08-30 README](./README.md) · [v0.15 设计规格（[ ] 已归档）](./2026-08-30-v0.15-notes-polish-design.md)
