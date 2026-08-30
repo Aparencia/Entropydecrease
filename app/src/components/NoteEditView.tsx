@@ -9,6 +9,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { Note } from "../types";
+import { useClipboardImagePaste } from "../hooks/useClipboardImagePaste";
 // H2：插入/包裹改为纯函数（返回新字符串+光标位置）——受控更新走 setContent；
 // A1 段落/层级操作同款纯函数（自本组件抽出，可单测）
 import {
@@ -188,6 +189,18 @@ const NoteEditView = forwardRef<NoteEditHandle, Props>(function NoteEditView({ n
     });
   };
 
+  // v0.15：剪贴板图片粘贴（与 RichEditorView 同入口纪律——提取即拦截 → 落盘
+  // → 插入引用；applyEdit 定义于此后调用——闭包运行时绑定已初始化）
+  const handleImagePaste = useClipboardImagePaste({
+    noteId: note.id,
+    onInsert: (rel) => {
+      const ta = taRef.current;
+      if (!ta) return;
+      applyEdit(insertAtCursor(ta.value, ta.selectionStart, ta.selectionEnd, `![图片](${rel})\n`));
+    },
+    onError: (msg) => setStatus(msg),
+  });
+
   // 工具栏操作（v0.10.1：local-image 需异步导入——dialog 选文件后复制进
   // data_dir 再插入相对引用；import 失败明确提示不落脏数据）
   const toolbarAction = async (action: string) => {
@@ -228,10 +241,18 @@ const NoteEditView = forwardRef<NoteEditHandle, Props>(function NoteEditView({ n
       }
       case "latex": applyEdit(wrapSelection(v, s, e, "$", "$")); break;
       case "image": {
-        // 外部链接图（保留原 prompt URL 入口）
+        // v0.15：外链图自动下载复制（防源站删除丢资源）——失败降级插原 URL + 提示
         const alt = prompt("图片描述：") || "";
         const url = prompt("图片链接：", "https://");
-        if (url) applyEdit(insertAtCursor(v, s, e, `![${alt}](${url})\n`));
+        if (!url) break;
+        try {
+          const rel = await invoke<string>("import_note_image_url", { noteId: note.id, url });
+          // 异步返回后重读光标（dialog 期间选区可能已变）
+          applyEdit(insertAtCursor(ta.value, ta.selectionStart, ta.selectionEnd, `![${alt}](${rel})\n`));
+        } catch (err) {
+          applyEdit(insertAtCursor(ta.value, ta.selectionStart, ta.selectionEnd, `![${alt}](${url})\n`));
+          setStatus(`外链图下载失败（已插入原链接——可能随源站点删除而失效）: ${err}`);
+        }
         break;
       }
       case "local-image": {
@@ -299,7 +320,7 @@ const NoteEditView = forwardRef<NoteEditHandle, Props>(function NoteEditView({ n
         <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("table")} title="表格">⊞ 表格</button>
         <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("link")} title="链接">🔗</button>
         <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("local-image")} title="插入本地图片（复制进应用数据目录）">🖼 图片</button>
-        <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("image")} title="插入外部链接图">🌐 链接图</button>
+        <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("image")} title="插入外链图（自动下载为本地副本）">🌐 链接图</button>
         <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("latex")} title="LaTeX">Σ</button>
         <span style={{ flex: 1 }} />
         {/* A1段落操作提示 */}
@@ -330,6 +351,7 @@ const NoteEditView = forwardRef<NoteEditHandle, Props>(function NoteEditView({ n
         value={content}
         onChange={(e) => { setContent(e.target.value); setDirty(true); }}
         onKeyDown={handleKeyDown}
+        onPaste={(e) => { handleImagePaste(e); }}
         onBlur={() => { if (dirty) void saveDraft(false); }}
         autoFocus // v0.12.2：新建即编辑态聚焦首行（去摩擦——零对话框新建后直接可输入）
         style={{ flex: 1, padding: 16, fontSize: 14, lineHeight: 1.8, border: "none", outline: "none", resize: "none", fontFamily: "monospace", background: "#fcfcfc" }}

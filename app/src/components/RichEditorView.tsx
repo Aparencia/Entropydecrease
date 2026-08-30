@@ -18,6 +18,7 @@ import { EditorView, keymap } from "@codemirror/view";
 import type { Note } from "../types";
 import { useCodeMirror } from "../hooks/useCodeMirror";
 import { useNoteAutosave } from "../hooks/useNoteAutosave";
+import { useClipboardImagePaste } from "../hooks/useClipboardImagePaste";
 import { headingCommand, headingKeymap } from "../commands/headingCommand";
 import { insertTextCommand, wrapSelectionCommand } from "../commands/toolbarCommands";
 import { imageDecorationPlugin } from "./imageDecorationPlugin";
@@ -66,6 +67,26 @@ const RichEditorView = forwardRef<NoteEditHandle, Props>(function RichEditorView
   useEffect(() => { onCancelRef.current = onCancel; }, [onCancel]);
   useEffect(() => { onImageOpenRef.current = onImageOpen; }, [onImageOpen]);
 
+  // ── v0.15 剪贴板图片：粘贴即落盘（import_note_image_b64）+ 插入相对引用 ──
+  const onInsertImage = useCallback((rel: string) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const main = view.state.selection.main;
+    const line = view.state.doc.lineAt(main.head);
+    // 空行粘贴：带尾换行（独立行图片 block 化，不留行内空隙）；行中粘贴：纯内联
+    const text = line.text.trim() === "" ? `![图片](${rel})\n` : `![图片](${rel})`;
+    view.dispatch({
+      changes: { from: main.from, to: main.to, insert: text },
+      selection: { anchor: main.from + text.length },
+      userEvent: "input.paste",
+    });
+  }, []);
+  const handleImagePaste = useClipboardImagePaste({
+    noteId: note.id,
+    onInsert: onInsertImage,
+    onError: (msg) => setStatus(msg),
+  });
+
   // ── 保存 + 草稿层（双计时器/flushLatest/卸载保存/草稿节流，spec §4.4）──
   const getSnapshot = useCallback(() => ({ title: titleRef.current, content: contentRef.current }), []);
   const autosave = useNoteAutosave({
@@ -102,9 +123,11 @@ const RichEditorView = forwardRef<NoteEditHandle, Props>(function RichEditorView
       { key: "Mod-s", run: () => { autosave.saveVersioned(); return true; } },
       { key: "Mod-e", run: () => { void autosave.flushLatestRef.current().finally(() => onCancelRef.current()); return true; } },
     ]),
+    // v0.15：粘贴图片 → 拦截 + 落盘 + 插入引用（文字粘贴走默认行为）
+    EditorView.domEventHandlers({ paste: (e) => handleImagePaste(e) }),
     imageDecorationPlugin({ noteId: note.id, onOpen: (url, t) => onImageOpenRef.current?.(url, t) }),
     editorTheme,
-  ], [note.id, autosave.saveVersioned, autosave.flushLatestRef]);
+  ], [note.id, autosave.saveVersioned, autosave.flushLatestRef, handleImagePaste]);
 
   const { containerRef, viewRef } = useCodeMirror({
     doc: content,
@@ -141,9 +164,17 @@ const RichEditorView = forwardRef<NoteEditHandle, Props>(function RichEditorView
       }
       case "latex": wrapSelectionCommand("$", "$")(view); break;
       case "image": {
+        // v0.15：外链图自动下载复制（防源站删除丢资源）——失败降级插原 URL + 提示
         const alt = prompt("图片描述：") || "";
         const url = prompt("图片链接：", "https://");
-        if (url) insertTextCommand(`![${alt}](${url})\n`)(view);
+        if (!url) break;
+        try {
+          const rel = await invoke<string>("import_note_image_url", { noteId: note.id, url });
+          insertTextCommand(`![${alt}](${rel})\n`)(view);
+        } catch (err) {
+          insertTextCommand(`![${alt}](${url})\n`)(view);
+          setStatus(`外链图下载失败（已插入原链接——可能随源站点删除而失效）: ${err}`);
+        }
         break;
       }
       case "local-image": {
@@ -214,7 +245,7 @@ const RichEditorView = forwardRef<NoteEditHandle, Props>(function RichEditorView
         <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("table")} title="表格">⊞ 表格</button>
         <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("link")} title="链接">🔗</button>
         <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("local-image")} title="插入本地图片（复制进应用数据目录）">🖼 图片</button>
-        <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("image")} title="插入外部链接图">🌐 链接图</button>
+        <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("image")} title="插入外链图（自动下载为本地副本）">🌐 链接图</button>
         <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("latex")} title="LaTeX">Σ</button>
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 10, color: "#9ca3af" }}>Ctrl+Shift+↑↓层级 · Ctrl+Z 撤销</span>
