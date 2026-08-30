@@ -5,7 +5,7 @@
 
 ## [0.15.0] - 2026-08-30
 
-> **笔记体验打磨**（v0.14 交付后用户实测 6 项，设计规格见 [docs/superpowers/specs/2026-08-30-v0.15-notes-polish-design.md](docs/superpowers/specs/2026-08-30-v0.15-notes-polish-design.md)，交付记录见 [docs/versions/v0.15.md](docs/versions/v0.15.md)）
+> **笔记体验打磨**（v0.14 交付后用户实测 6 项，设计规格见 [docs/archive/2026-08-30/2026-08-30-v0.15-notes-polish-design.md](docs/archive/2026-08-30/2026-08-30-v0.15-notes-polish-design.md)（[ ] 已归档），交付记录见 [docs/versions/v0.15.md](docs/versions/v0.15.md)）
 
 - **① 标题切换语义**：`computeHeadingChanges`/`headingLines` 由"已是标题跳过"改 set-or-toggle——同级别再点 → 剥除还原普通段；其他级别/普通段 → 置为该级（CM 与 textarea 降级双路径同步 + 4 单测改造，"点 H1 无取消"修复，按钮高亮闭环）
 - **② 全站列自适应**：`useColumnLayout`（宽度记忆 + min/max 夹取 + 窄窗阈值自动折叠：<1100 大纲/<860 侧栏/<700 列表；手动状态优先，窗口回宽恢复）+ `ColumnResizer`（拖拽手柄，双击恢复默认）+ `ColumnBar`（折叠窄条）——迁移笔记页 3 列/会话页/知识页 2 列/课堂页 1 列（7 处固定宽列）；`NoteImage` 脱离 240×160 固定缩略，按原始比例自适应（maxWidth 100% / maxHeight 60vh）
