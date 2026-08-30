@@ -73,11 +73,13 @@ export default function RouteInfoPopover({
   const reason = useMemo(() => parseRouteReason(group.routeReason), [group.routeReason]);
 
   // ESC 关闭（弹层是模态背板——键盘可达性）
+  // 审查修复：删除确认弹窗打开时 ESC 只关最顶层模态（两层 ESC 监听并存曾一次
+  // 关掉弹层+确认窗——未确认的改判/结算态随 ⓘ 弹层一起丢失）
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape" && !deleteOpen) onClose(); };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [onClose]);
+  }, [onClose, deleteOpen]);
 
   // ② 改判（REQ-198 修改即记忆——路由偏好持久化）
   const runOverride = async () => {

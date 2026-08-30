@@ -1,4 +1,4 @@
-//! 知识体系画布命令层（v0.13.8 系统层；4 命令）。
+//! 知识体系画布命令层（v0.13.8 系统层；v0.14.1：6 命令）。
 //!
 //! @ai-context: 本层只做参数校验、调用数据层、错误映射（AGENTS.md §6）；编排逻辑
 //!              `fn xxx_inner(db, ...)` 为纯函数（:memory: 可测），薄 `#[tauri::command]`
@@ -10,6 +10,9 @@
 //! @ai-context: 设计规格 §4.6 列 3 条命令；规格同时要求"切回画布视口恢复"，
 //!              恢复需要读路径——补 `get_canvas_viewport`（第 4 条）补齐读写闭环，
 //!              已在版本文档 v0.13.8 交付记录登记（规格增补，非契约变更）。
+//! @ai-context: v0.14.1 增 2 条（第 5/6 条）——get_canvas_prefs/save_canvas_prefs：
+//!              连线样式与布局算法按体系持久化，枚举白名单前后端同口径
+//!              （EDGE_STYLES/LAYOUT_ALGORITHMS 未知值拒绝，防任意字符串入库）。
 
 use tauri::State;
 
@@ -169,13 +172,23 @@ pub(crate) fn get_canvas_viewport_inner(
         .map_err(|e| e.to_string())
 }
 
-/// 读取体系画布偏好（v0.14.1；从未保存 → None——前端回落默认值）。
+/// 体系存在性校验（R-低3：偏好读写 inner 共用；风格与 require_id 一致）。
+fn require_system(db: &Db, system_id: i64) -> Result<(), String> {
+    require_id(system_id)?;
+    if db.get_knowledge_system(system_id).map_err(|e| e.to_string())?.is_none() {
+        return Err(format!("体系不存在: {}", system_id));
+    }
+    Ok(())
+}
+
+/// 读取体系画布偏好（v0.14.1；从未保存 → None——前端回落默认值，与迁移
+/// DEFAULT smoothstep/radial/无箭头同口径）。
 #[tauri::command]
 pub fn get_canvas_prefs(state: State<'_, AppState>, system_id: i64) -> Result<Option<CanvasPrefs>, String> {
     get_canvas_prefs_inner(&state.db, system_id)
 }
 
-/// 保存体系画布偏好（upsert；枚举白名单校验）。
+/// 保存体系画布偏好（upsert——只改偏好列不碰视口；枚举白名单校验）。
 #[tauri::command]
 pub fn save_canvas_prefs(
     state: State<'_, AppState>,
@@ -188,10 +201,7 @@ pub fn save_canvas_prefs(
 }
 
 pub(crate) fn get_canvas_prefs_inner(db: &Db, system_id: i64) -> Result<Option<CanvasPrefs>, String> {
-    require_id(system_id)?;
-    if db.get_knowledge_system(system_id).map_err(|e| e.to_string())?.is_none() {
-        return Err(format!("体系不存在: {}", system_id));
-    }
+    require_system(db, system_id)?;
     db.get_canvas_prefs(system_id).map_err(|e| e.to_string())
 }
 
@@ -202,10 +212,7 @@ pub(crate) fn save_canvas_prefs_inner(
     edge_arrows: bool,
     layout_algorithm: &str,
 ) -> Result<bool, String> {
-    require_id(system_id)?;
-    if db.get_knowledge_system(system_id).map_err(|e| e.to_string())?.is_none() {
-        return Err(format!("体系不存在: {}", system_id));
-    }
+    require_system(db, system_id)?;
     if !EDGE_STYLES.contains(&edge_style) {
         return Err(format!(
             "不支持的连线样式: {}（支持: {}）",

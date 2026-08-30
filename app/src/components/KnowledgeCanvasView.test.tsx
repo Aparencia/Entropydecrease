@@ -337,6 +337,9 @@ describe("KnowledgeCanvasView 画布", () => {
     expect(coreEdges).toHaveLength(1); // node1 根；node2 是子不连根卡
     expect(coreEdges[0]).toMatchObject({ id: "e:core:1", target: "q:1" });
     expect(coreEdges[0].style?.strokeDasharray).toBe("5 4");
+    // 审查修复（hasCore 统一 rootCard 口径）：领域体系首根上环 1——
+    // 不再与圆心体系名卡重叠（圆心占位 = (-110,-40)）
+    expect(rounded(rfNode("q:1").position)).not.toEqual({ x: -110, y: -40 });
   });
 
   it("v0.13.9 接线动态化：edges 携带按相对方位计算的 sourceHandle/targetHandle", async () => {

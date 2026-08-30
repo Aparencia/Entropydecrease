@@ -4,20 +4,24 @@
  * @ai-context: 手动新建走 create_topic_group（契约一：粒度对齐领域——领域标签
  *              必填，同领域同地形已有主题组时后端幂等复用返回既有组）；颜色
  *              可选（复用 NoteColorPicker 12 色板）——两步命令：建组 → 设色
- *              → onCreated 通知父级刷新。领域常量自 utils/domainOptions 共享
- *              （改判下拉同源，防枚举漂移）。
+ *              → onCreated(反馈文案) 通知父级刷新。领域常量自 utils/domainOptions
+ *              共享（改判/档案下拉同源，防枚举漂移；审查修复：与 Rust 20 类对齐）。
+ * @ai-context: 审查修复：① update_group_color 失败与建组失败分离——组已建成只
+ *              提示色设置失败并仍通知刷新（原 catch 误归因"创建失败"且漏 onChanged
+ *              ——组建成却 UI 不可见）；② 成功反馈经 onCreated 文案上抛父级承载
+ *              （弹窗随即关闭，内部 setStatus 一帧即卸载——死代码）。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { DOMAIN_OPTIONS } from "../utils/domainOptions";
 import NoteColorPicker from "./NoteColorPicker";
 import type { NoteGroup } from "../types";
 
 interface Props {
-  /** 关闭弹窗（遮罩/✕） */
+  /** 关闭弹窗（遮罩/✕/ESC） */
   onClose: () => void;
-  /** 创建成功回调（父级刷新组列表/关闭） */
-  onCreated: () => void;
+  /** 创建成功回调（父级刷新组列表/关闭）；text=成功反馈文案（父级 status 承载） */
+  onCreated: (text: string) => void;
 }
 
 const label: React.CSSProperties = { display: "block", fontSize: 12, color: "#374151", margin: "8px 0 4px" };
@@ -37,25 +41,40 @@ export default function GroupCreateDialog({ onClose, onCreated }: Props) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ text: string; error: boolean } | null>(null);
 
+  // ESC 关闭（模态弹层键盘可达性——与 GroupDeleteConfirm 同款；审查补齐）
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onClose]);
+
   const submit = async () => {
     const trimmed = name.trim();
     if (!trimmed) { setStatus({ text: "组名不能为空", error: true }); return; }
     if (!domainTag) { setStatus({ text: "请选择领域标签", error: true }); return; }
     setBusy(true); setStatus(null);
+    let group: NoteGroup;
     try {
-      const group = await invoke<NoteGroup>("create_topic_group", { name: trimmed, domainTag });
-      // 同领域同地形已有主题组时后端幂等复用返回既有组（create_topic_group 无
-      // created 标记——不区分新建/复用）；用户已选色则应用（可随时清除/改）
-      if (color) {
-        await invoke<boolean>("update_group_color", { id: group.id, color });
-      }
-      setStatus({ text: `主题组「${group.name}」就绪（同领域已有组则复用）`, error: false });
-      onCreated();
+      group = await invoke<NoteGroup>("create_topic_group", { name: trimmed, domainTag });
     } catch (e) {
       setStatus({ text: `创建失败: ${e}`, error: true });
-    } finally {
       setBusy(false);
+      return;
     }
+    // 同领域同地形已有主题组时后端幂等复用返回既有组（create_topic_group 无
+    // created 标记——不区分新建/复用）；用户已选色则应用（可随时清除/改）
+    if (color) {
+      try {
+        await invoke<boolean>("update_group_color", { id: group.id, color });
+      } catch (e) {
+        // 部分失败：组已建成——归因正确 + 仍通知刷新（组数据必须可见）
+        onCreated(`主题组「${group.name}」已创建，但颜色设置失败: ${e}`);
+        setBusy(false);
+        return;
+      }
+    }
+    onCreated(`主题组「${group.name}」就绪（同领域已有组则复用）`);
+    setBusy(false);
   };
 
   return (

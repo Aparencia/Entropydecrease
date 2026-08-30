@@ -37,6 +37,8 @@ export default function GroupDeleteConfirm({ group, onClose, onDeleted }: Props)
   const [impact, setImpact] = useState<GroupDeleteImpact | null>(null);
   const [ack, setAck] = useState(false);
   const [busy, setBusy] = useState(false);
+  // 影响面读取失败文案（与删除失败分离——底部 status 仅承载删除错误，防重复展示）
+  const [loadError, setLoadError] = useState("");
   const [status, setStatus] = useState("");
 
   // ESC 关闭（模态弹层键盘可达性）
@@ -47,12 +49,14 @@ export default function GroupDeleteConfirm({ group, onClose, onDeleted }: Props)
   }, [onClose]);
 
   const load = useCallback(async () => {
+    setLoadError("");
     try {
       const data = await invoke<GroupDeleteImpact>("get_group_delete_impact", { id: group.id });
       setImpact(data);
       setStatus("");
     } catch (e) {
-      setStatus(`影响面读取失败: ${e}`);
+      // 审查修复：读取失败不进死胡同——loadError 分支提供重试按钮
+      setLoadError(`影响面读取失败: ${e}`);
     }
   }, [group.id]);
 
@@ -89,9 +93,22 @@ export default function GroupDeleteConfirm({ group, onClose, onDeleted }: Props)
         </div>
 
         {!impact ? (
-          <p data-testid="group-delete-loading" style={{ fontSize: 12, color: "#6b7280" }}>
-            {status || "正在统计影响面…"}
-          </p>
+          <div data-testid="group-delete-loading" style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.8 }}>
+            {loadError ? (
+              <>
+                <span style={{ color: "#dc2626" }}>{loadError}</span>
+                <button
+                  data-testid="group-delete-retry"
+                  onClick={() => void load()}
+                  style={{ ...BTN, marginLeft: 8 }}
+                >
+                  重试
+                </button>
+              </>
+            ) : (
+              "正在统计影响面…"
+            )}
+          </div>
         ) : (
           <div data-testid="group-delete-impact" style={{ fontSize: 12, color: "#374151", lineHeight: 1.9 }}>
             <div>📄 组内笔记：{impact.notes} 条 → 移入「全部笔记」不删除</div>
@@ -122,7 +139,7 @@ export default function GroupDeleteConfirm({ group, onClose, onDeleted }: Props)
             {busy ? "删除中…" : "确认删除"}
           </button>
         </div>
-        {status && <p data-testid="group-delete-status" style={{ marginTop: 8, fontSize: 12, color: "#dc2626" }}>{status}</p>}
+        {status && impact && <p data-testid="group-delete-status" style={{ marginTop: 8, fontSize: 12, color: "#dc2626" }}>{status}</p>}
       </div>
     </div>
   );

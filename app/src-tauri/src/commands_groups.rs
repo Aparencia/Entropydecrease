@@ -206,27 +206,35 @@ pub fn delete_note_group(state: State<'_, AppState>, id: i64) -> Result<bool, St
     delete_note_group_inner(&state.db, id)
 }
 
+/// 组存在性校验（R-低3：get_group_delete_impact/delete_note_group 共用——
+/// 防校验规则演进时口径漂移；风格与 commands_knowledge::require_id 一致）。
+fn require_group(db: &crate::db::Db, id: i64) -> Result<(), String> {
+    if id <= 0 {
+        return Err("无效的组 id".to_string());
+    }
+    if db.get_group(id).map_err(|e| e.to_string())?.is_none() {
+        return Err(format!("笔记组不存在: {}", id));
+    }
+    Ok(())
+}
+
 pub(crate) fn get_group_delete_impact_inner(
     db: &crate::db::Db,
     id: i64,
 ) -> Result<GroupDeleteImpact, String> {
-    if id <= 0 {
-        return Err("无效的组 id".to_string());
-    }
-    if db.get_group(id).map_err(|e| e.to_string())?.is_none() {
-        return Err(format!("笔记组不存在: {}", id));
-    }
+    require_group(db, id)?;
     db.group_delete_impact(id).map_err(|e| e.to_string())
 }
 
 pub(crate) fn delete_note_group_inner(db: &crate::db::Db, id: i64) -> Result<bool, String> {
-    if id <= 0 {
-        return Err("无效的组 id".to_string());
-    }
-    if db.get_group(id).map_err(|e| e.to_string())?.is_none() {
+    require_group(db, id)?;
+    // R-低2：存在性检查与删除之间仍可能有并发删除窗口——Ok(false) 显式转错误，
+    // 使"组不存在 → 错误"的文档承诺成立（前端不误判为成功）
+    let deleted = db.delete_group(id).map_err(|e| e.to_string())?;
+    if !deleted {
         return Err(format!("笔记组不存在: {}", id));
     }
-    db.delete_group(id).map_err(|e| e.to_string())
+    Ok(true)
 }
 
 /// 命令层单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。

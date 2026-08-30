@@ -44,8 +44,13 @@ export function layoutFishbone(input: RadialLayoutInput): Map<string, CanvasPoin
   }
   const roots = sorted.filter((i) => i.parentKey == null).map((i) => i.key);
   const headKey = hasCore || roots.length === 0 ? null : roots[0];
-  const bones = (hasCore || roots.length === 0 ? roots : roots.slice(1)).slice();
-  orphanKeys.forEach((k) => bones.push(k));
+  // 骨刺 = 鱼头子节点（无核心时=一级根，审查修复：此前 head 子树丢失）+ 其余根 + 孤儿
+  // （headKey 的子节点不入 bones 会永远不被 walk 触达——鱼头整棵子树丢位并回退 (0,0) 写库）
+  const bones = [
+    ...(headKey != null ? children.get(headKey) ?? [] : []),
+    ...(hasCore || roots.length === 0 ? roots : roots.slice(1)),
+    ...orphanKeys,
+  ];
 
   // 鱼头：核心卡（hasCore）或首根——圆心 (0,0)
   if (headKey != null) out.set(headKey, { x: 0, y: 0 });

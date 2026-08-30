@@ -113,3 +113,37 @@ fn viewport_and_prefs_do_not_clobber_each_other() {
     assert!(p.edge_arrows);
     assert_eq!(p.layout_algorithm, "fishbone");
 }
+
+#[test]
+fn migration_adds_pref_columns_to_legacy_states() {
+    // Arrange：手工造 v0.13.8 旧 schema（canvas_states 仅视口三列 + 一行旧视口）
+    //（R-低7：ALTER 迁移分支此前无覆盖——新库走 CREATE TABLE 含三列，旧库
+    //  ensure_column 分支从未被执行验证；本用例按 db_notes_tests 旧库造法）
+    let path = std::env::temp_dir().join(format!("entropy_mig_canvas_{}.db", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    {
+        let conn = rusqlite::Connection::open(&path).expect("open old db");
+        conn.execute_batch(
+            "CREATE TABLE knowledge_canvas_states (
+                system_id INTEGER PRIMARY KEY,
+                viewport_x REAL DEFAULT 0,
+                viewport_y REAL DEFAULT 0,
+                zoom REAL DEFAULT 1.0
+            );
+            INSERT INTO knowledge_canvas_states (system_id, viewport_x, viewport_y, zoom)
+                VALUES (1, 10, 20, 1.5);",
+        )
+        .expect("create old schema");
+    }
+    // Act：以新代码打开旧库（ensure_column 补齐三列；旧表无 FK 子句——不依赖表关联）
+    let db = Db::open(path.to_str().unwrap()).expect("open migrated db");
+    // Assert：旧行落 DEFAULT（smoothstep / 无箭头 / radial，与前端缺省同口径）；
+    //         视口列未被迁移触碰
+    let p = db.get_canvas_prefs(1).expect("读").expect("有");
+    assert_eq!(p.edge_style, "smoothstep");
+    assert!(!p.edge_arrows);
+    assert_eq!(p.layout_algorithm, "radial");
+    let (x, y, z) = db.get_canvas_viewport(1).expect("读").expect("有");
+    assert_eq!((x, y, z), (10.0, 20.0, 1.5));
+    let _ = std::fs::remove_file(&path);
+}

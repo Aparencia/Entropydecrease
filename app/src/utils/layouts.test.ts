@@ -31,19 +31,24 @@ const typical = () => ({
   items: [q(1, null), q(2, null), q(3, null), q(4, 1), q(5, 1), q(6, 4), c(11), m(12), c(13)],
 });
 
+/** 无核心变体：首根带头子树（审查回归——鱼骨头子树曾整体丢位）+ 浮动项 */
+const typicalNoCore = () => ({
+  hasCore: false,
+  items: [q(1, null), q(2, 1), q(3, 1), q(4, null), c(11), m(12)],
+});
+
 function kindOf(key: string): "question" | "concept" | "model" {
   return key.startsWith("q:") ? "question" : key.startsWith("c:") ? "concept" : "model";
 }
 
-/** 通用不变式：key 全覆盖 + 两跑一致 + 无重叠 */
-function expectInvariants(alg: LayoutAlgorithm) {
+/** 通用不变式：key 全覆盖 + 两跑一致 + 无重叠（输入可指定——hasCore 两种形态） */
+function expectInvariants(alg: LayoutAlgorithm, input: { hasCore: boolean; items: CanvasLayoutItem[] } = typical()) {
   // Arrange
-  const input = typical();
   // Act
   const a = layoutCanvas(input, alg);
   const b = layoutCanvas(input, alg);
-  // Assert：key 全覆盖（所有 item 都有位置）
-  for (const it of input.items) expect(a.get(it.key)).toBeDefined();
+  // Assert：key 全覆盖（所有 item 都有位置——缺失会以 (0,0) 兜底并写库，禁缺）
+  expect([...a.keys()].sort()).toEqual(input.items.map((i) => i.key).sort());
   // 确定性：两跑完全相同
   expect([...a.entries()].sort()).toEqual([...b.entries()].sort());
   // 无重叠（按各自 kind 包围盒：dx < (w1+w2)/2 且 dy < (h1+h2)/2）
@@ -62,8 +67,13 @@ function expectInvariants(alg: LayoutAlgorithm) {
 
 describe("新增布局算法通用不变式（全覆盖/确定性/无重叠）", () => {
   it.each(["mindmap", "treeRight", "org", "fishbone", "dualRing"] as LayoutAlgorithm[])(
-    "%s",
+    "%s（有核心）",
     (alg) => expectInvariants(alg),
+  );
+  // 审查修复：矩阵补 hasCore=false 变体——各算法"首根占圆心/头带子树"路径
+  it.each(["mindmap", "treeRight", "org", "fishbone", "dualRing"] as LayoutAlgorithm[])(
+    "%s（无核心·首根带头子树）",
+    (alg) => expectInvariants(alg, typicalNoCore()),
   );
 });
 
@@ -159,20 +169,39 @@ describe("layoutFishbone 鱼骨图（简化版）", () => {
 });
 
 describe("layoutDualRing 双环（浮动项贴树）", () => {
-  it("浮动项环半径收紧：高于树缘、低于辐射整环外置；树节点输出与辐射一致", () => {
-    // Arrange：2 层树（最深半径 380 = 220 + 160）+ 2 浮动项
+  it("浮动项贴树缘：树缘口径（圆心距+半宽+90+20）而非圆心距+半环；树节点输出与辐射一致", () => {
+    // Arrange：2 层树（最深圆心距 380 = 220 + 160）+ 2 浮动项
     const input = { hasCore: true, items: [q(1, null), q(2, 1), q(3, 2), c(11), c(12)] };
     const dual = layoutDualRing(input);
     const radial = layoutRadial(input);
-    // Assert：浮动项刚好贴树（半径 = 树深 380 + 半环 80 = 460；碰撞预算 8×60 兜底）
+    // Assert：浮动项落在树缘（380 + 问题半宽 110 + 浮动半宽 90 + 间隙 20 = 600；
+    //         碰撞预算 8×60 兜底只外推）
     const deepest = Math.max(...["q:1", "q:2", "q:3"].map((k) => Math.hypot(radial.get(k)!.x, radial.get(k)!.y)));
     for (const k of ["c:11", "c:12"]) {
       const r = Math.hypot(dual.get(k)!.x, dual.get(k)!.y);
-      expect(r).toBeGreaterThanOrEqual(deepest - 1e-6);
-      expect(r).toBeLessThanOrEqual(deepest + 80 + 8 * 60 + 1e-6);
+      expect(r).toBeGreaterThanOrEqual(deepest + 110 + 90 + 20 - 1e-6);
+      expect(r).toBeLessThanOrEqual(deepest + 110 + 90 + 20 + 8 * 60 + 1e-6);
     }
     // Assert：树节点与辐射布局同输出（行为零变化）
     for (const k of ["q:1", "q:2", "q:3"]) expect(dual.get(k)).toEqual(radial.get(k));
+  });
+
+  it("单环扁树（5 根 + 5 浮动项，审查回归）：浮动项与树节点 AABB 全部不重叠", () => {
+    // Arrange：单环 5 根（角距 72°）+ 5 概念——修复前 4/5 浮动项压住 ring1 节点
+    const roots = [q(1, null), q(2, null), q(3, null), q(4, null), q(5, null)];
+    const floaters = [c(11), c(12), c(13), c(14), c(15)];
+    const pos = layoutDualRing({ hasCore: true, items: [...roots, ...floaters] });
+    // Assert：每个浮动项与每个树节点无重叠（同款 AABB 判定）
+    for (const f of floaters) {
+      const p1 = pos.get(f.key)!;
+      const b1 = CANVAS_BBOX.concept;
+      for (const r of roots) {
+        const p2 = pos.get(r.key)!;
+        const b2 = CANVAS_BBOX.question;
+        const ov = Math.abs(p1.x - p2.x) < (b1.w + b2.w) / 2 && Math.abs(p1.y - p2.y) < (b1.h + b2.h) / 2;
+        expect(ov, `${f.key} 与 ${r.key} 重叠`).toBe(false);
+      }
+    }
   });
 });
 

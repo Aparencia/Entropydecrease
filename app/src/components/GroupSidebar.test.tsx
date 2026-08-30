@@ -48,6 +48,9 @@ beforeEach(() => {
           : [];
       case "override_group_route": return true;
       case "move_note_to_group": return true;
+      // 审查修复：ⓘ 弹层静默降级依赖的 mock 补齐（简报拉取 list_group_cards——原缺省
+      // throw 依赖"简报静默降级"容错，测试通过≠mock 完备）
+      case "list_group_cards": return [];
       case "create_topic_group": return { id: 99, name: args?.name ?? "新组", terrain: "container", kind: "topic", domainTag: args?.domainTag ?? "beauty", source: "manual", seriesKey: null, routeReason: null, routeOverridden: 0, noteCount: 0, createdAt: 0, updatedAt: 0 };
       case "update_group_color": return true;
       case "rename_note_group": return true;
@@ -250,20 +253,50 @@ describe("GroupSidebar v0.14.1 新建/重命名", () => {
     expect(screen.getByTestId("group-create-status").textContent).toContain("领域标签");
     // 合法提交（选领域 + 颜色）→ create_topic_group + update_group_color + onChanged
     fireEvent.change(screen.getByTestId("group-create-domain"), { target: { value: "beauty" } });
+    // 审查修复（低6）：原用例注释声称覆盖颜色链路但从未点击色板——补真断言
+    fireEvent.click(screen.getByTestId("color-teal"));
+    expect(screen.getByTestId("group-create-color-set")).toBeTruthy();
     fireEvent.click(screen.getByTestId("group-create-submit"));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("create_topic_group", { name: "化妆美妆", domainTag: "beauty" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_group_color", { id: 99, color: "teal" }));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
-    // 未选颜色 → 不调 update_group_color
-    expect(invokeMock).not.toHaveBeenCalledWith("update_group_color", expect.anything());
+    // 成功反馈经 notice 区承载（弹窗已关——反馈上抛父级 status 区）
+    expect(await screen.findByTestId("group-notice")).toBeTruthy();
   });
 
-  it("行内 ✎ 重命名：Enter 提交 rename_note_group + onChanged；Esc 取消不提交", async () => {
+  it("新建组：未选颜色 → 不调 update_group_color（无颜色分支独立）", async () => {
     // Arrange
     const onChanged = vi.fn();
     render(
       <GroupSidebar
         groupFilter={null}
         onGroupFilterChange={vi.fn()}
+        onChanged={onChanged}
+        onOpenReview={vi.fn()}
+        selectedNoteId={null}
+        onOpenInbox={vi.fn()}
+        inboxActive={false}
+        refreshToken={0}
+        onOpenSystem={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("group-create-open"));
+    fireEvent.change(await screen.findByTestId("group-create-name"), { target: { value: "化妆美妆" } });
+    fireEvent.change(screen.getByTestId("group-create-domain"), { target: { value: "beauty" } });
+    fireEvent.click(screen.getByTestId("group-create-submit"));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("create_topic_group", { name: "化妆美妆", domainTag: "beauty" }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    expect(invokeMock).not.toHaveBeenCalledWith("update_group_color", expect.anything());
+  });
+
+  it("行内 ✎ 重命名：Enter 提交 rename_note_group + onChanged；Esc 取消不提交", async () => {
+    // Arrange
+    const onChanged = vi.fn();
+    const onGroupFilterChange = vi.fn();
+    render(
+      <GroupSidebar
+        groupFilter={null}
+        onGroupFilterChange={onGroupFilterChange}
         onChanged={onChanged}
         onOpenReview={vi.fn()}
         selectedNoteId={null}
@@ -287,5 +320,14 @@ describe("GroupSidebar v0.14.1 新建/重命名", () => {
     fireEvent.change(input2, { target: { value: "不该提交" } });
     fireEvent.keyDown(input2, { key: "Escape" });
     expect(invokeMock).not.toHaveBeenCalledWith("rename_note_group", { id: 1, name: "不该提交" });
+    // 审查修复（IME 守卫）：中文输入法确认候选的 Enter（isComposing）不触发提交
+    fireEvent.click(screen.getByTestId("group-rename-1"));
+    const input3 = screen.getByTestId("group-rename-input-1") as HTMLInputElement;
+    fireEvent.change(input3, { target: { value: "拼音候选" } });
+    fireEvent.keyDown(input3, { key: "Enter", isComposing: true });
+    expect(invokeMock).not.toHaveBeenCalledWith("rename_note_group", { id: 1, name: "拼音候选" });
+    // 审查修复（低7）：编辑态点击行空白区只停止传播（不触发组过滤切换）
+    fireEvent.click(screen.getByTestId("group-row-1"));
+    expect(onGroupFilterChange).not.toHaveBeenCalled();
   });
 });

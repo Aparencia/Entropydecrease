@@ -29,7 +29,7 @@ interface Props {
   onInfo: (e: React.MouseEvent<HTMLElement>) => void;
   onToggleColorPicker: () => void;
   onColorChange: (color: string | null) => void;
-  /** v0.14.1：行内重命名提交（Enter；空白名不提交——父级校验） */
+  /** v0.14.1：行内重命名提交（Enter；空白/同名在**子组件 commitEdit 内拦截**——父级拿名即 invoke） */
   onRename: (name: string) => void;
   onOpenSystem: (systemId: number) => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -72,7 +72,9 @@ export default function GroupSidebarRow({
   return (
     <div
       data-testid={`group-row-${group.id}`}
-      onClick={onSelect}
+      // 审查修复：编辑态行点击短路——原仅 input/✎ 等 stopPropagation，
+      // 行空白区点击会先 blur 取消编辑再触发组过滤切换（内容丢失+浏览位置漂移）
+      onClick={editing ? (e) => e.stopPropagation() : onSelect}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -103,6 +105,9 @@ export default function GroupSidebarRow({
             onChange={(e) => setNameDraft(e.target.value)}
             onKeyDown={(e) => {
               e.stopPropagation();
+              // 审查修复：IME 组合态守卫——中文输入法下确认候选的 Enter 也会
+              // 触发提交（compositionend 前），半成品组名被提前 rename
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
               if (e.key === "Enter") commitEdit();
               if (e.key === "Escape") cancelEdit();
             }}

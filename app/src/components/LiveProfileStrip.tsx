@@ -15,7 +15,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { DOMAIN_OPTIONS, FORM_LABELS, KIND_TO_FORM, TIER_LABELS } from "./ProfileDetector";
+import { FORM_LABELS, KIND_TO_FORM, TIER_LABELS } from "./ProfileDetector";
+// 审查修复：领域常量改走共享单一事实源（原经 ProfileDetector re-export——
+// 消重后 ProfileDetector 不再导出，直接 import 共享常量）
+import { DOMAIN_OPTIONS } from "../utils/domainOptions";
 import type { ContentForm, DetectResult, DomainDetection, DomainFineOption, VisualTier } from "../types";
 
 /** 升档提示停留时长（ms）——简要设计：瞬时提示不占常驻空间 */

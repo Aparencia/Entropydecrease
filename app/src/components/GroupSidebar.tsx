@@ -70,6 +70,8 @@ export default function GroupSidebar({
   // 收件箱待处理数（active 碎片计数）
   const [inboxCount, setInboxCount] = useState(0);
   const [status, setStatus] = useState("");
+  // v0.14.1：成功提示区（绿色——与 status 错误红区分；新建组反馈承载）
+  const [notice, setNotice] = useState("");
   // 体系引用映射（组 id → 引用它的体系列表；v0.13.7 触点① 徽标）
   const [systemLinks, setSystemLinks] = useState<Record<number, { systemId: number; count: number }[]>>({});
   const [systems, setSystems] = useState<KnowledgeSystem[]>([]);
@@ -413,6 +415,7 @@ export default function GroupSidebar({
       </div>
 
       {status && <p style={{ padding: 8, fontSize: 12, color: "#dc2626" }}>{status}</p>}
+      {notice && <p data-testid="group-notice" style={{ padding: 8, fontSize: 12, color: "#0f766e" }}>{notice}</p>}
 
       {/* ⓘ 弹层（受控单开；key=group.id——切组重置内部表单态，
           防 A 组的改判/结算选择串进 B 组——审查修复） */}
@@ -429,11 +432,12 @@ export default function GroupSidebar({
         />
       )}
 
-      {/* v0.14.1：新建组弹窗（创建成功 → 关闭 + onChanged refreshToken 驱动刷新） */}
+      {/* v0.14.1：新建组弹窗（创建成功 → 关闭 + onChanged refreshToken 驱动刷新；
+          成功反馈文案经回调上抛——status 区承载，替代弹窗内一帧即卸载的死代码） */}
       {createOpen && (
         <GroupCreateDialog
           onClose={() => setCreateOpen(false)}
-          onCreated={() => { setCreateOpen(false); onChanged(); }}
+          onCreated={(text) => { setCreateOpen(false); setNotice(text); onChanged(); }}
         />
       )}
     </div>

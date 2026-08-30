@@ -198,12 +198,9 @@ fn delete_group_keeps_notes() {
             group_id: Some(g.id),
         })
         .expect("note");
-    // Act
-    db.with_conn(|conn| {
-        conn.execute("DELETE FROM note_groups WHERE id = ?1", rusqlite::params![g.id])
-            .map_err(Into::into)
-    })
-    .expect("delete");
+    // Act：走新 API（R-低8：原裸 SQL 直删与 delete_group_cascades 重叠——
+    // 改经被测代码的真实删除路径，SET NULL 断言覆盖新 API）
+    assert!(db.delete_group(g.id).expect("delete"));
     // Assert：笔记存活且 group_id 置空（ON DELETE SET NULL）
     let fetched = db.get_note(note.id).expect("get").expect("exists");
     assert_eq!(fetched.group_id, None);
@@ -211,7 +208,8 @@ fn delete_group_keeps_notes() {
 
 #[test]
 fn group_delete_impact_counts_six_dimensions() {
-    // Arrange：组内挂 2 笔记 + 1 碎片 + 1 卡 + 1 结算 + 1 契约；体系引用 2 条
+    // Arrange：组内挂 2 笔记 + 1 碎片 + 1 卡 + 1 结算 + 1 契约；
+    //         体系引用 2 条（note_group 直引）+ 1 条 flashcard 间接引（R-中1）
     let db = mem_db();
     let g = db.create_group(&group("将删")).expect("create");
     for title in ["A", "B"] {
@@ -236,17 +234,18 @@ fn group_delete_impact_counts_six_dimensions() {
         source: "manual".to_string(),
     })
     .expect("frag");
-    db.create_card(&NewFlashcard {
-        group_id: g.id,
-        note_id: None,
-        fragment_id: None,
-        front: "f".to_string(),
-        back: "b".to_string(),
-        kind: "fact".to_string(),
-        state_json: "{}".to_string(),
-        due_at: 0,
-    })
-    .expect("card");
+    let card = db
+        .create_card(&NewFlashcard {
+            group_id: g.id,
+            note_id: None,
+            fragment_id: None,
+            front: "f".to_string(),
+            back: "b".to_string(),
+            kind: "fact".to_string(),
+            state_json: "{}".to_string(),
+            due_at: 0,
+        })
+        .expect("card");
     db.create_settlement(g.id, "{}").expect("settlement");
     db.upsert_week_contract(g.id, 1, 3, 5).expect("contract");
     let sys = db
@@ -268,20 +267,30 @@ fn group_delete_impact_counts_six_dimensions() {
         })
         .expect("link");
     }
+    db.add_knowledge_link(&NewKnowledgeLink {
+        system_id: sys.id,
+        node_id: None,
+        concept_id: None,
+        model_id: None,
+        target_type: "flashcard".to_string(),
+        target_id: card.id,
+    })
+    .expect("link");
     // Act
     let impact = db.group_delete_impact(g.id).expect("impact");
-    // Assert：六项计数如实（确认弹窗数据源口径）
+    // Assert：六项计数如实（确认弹窗数据源口径；system_refs 含两类引用）
     assert_eq!(impact.notes, 2);
     assert_eq!(impact.fragments, 1);
     assert_eq!(impact.cards, 1);
     assert_eq!(impact.settlements, 1);
     assert_eq!(impact.contracts, 1);
-    assert_eq!(impact.system_refs, 2);
+    assert_eq!(impact.system_refs, 3);
 }
 
 #[test]
 fn delete_group_cascades_and_clears_links() {
-    // Arrange：1 笔记 + 1 碎片 + 1 卡 + 1 契约 + 1 体系引用（级联影响面最小集）
+    // Arrange：1 笔记 + 1 碎片 + 1 卡 + 1 契约 + note_group/fashcard 引用各 1
+    //（级联影响面最小集；R-中1：flashcard 间接引用必须一并清理）
     let db = mem_db();
     let g = db.create_group(&group("将删")).expect("create");
     let note = db
@@ -305,17 +314,18 @@ fn delete_group_cascades_and_clears_links() {
         source: "manual".to_string(),
     })
     .expect("frag");
-    db.create_card(&NewFlashcard {
-        group_id: g.id,
-        note_id: None,
-        fragment_id: None,
-        front: "f".to_string(),
-        back: "b".to_string(),
-        kind: "fact".to_string(),
-        state_json: "{}".to_string(),
-        due_at: 0,
-    })
-    .expect("card");
+    let card = db
+        .create_card(&NewFlashcard {
+            group_id: g.id,
+            note_id: None,
+            fragment_id: None,
+            front: "f".to_string(),
+            back: "b".to_string(),
+            kind: "fact".to_string(),
+            state_json: "{}".to_string(),
+            due_at: 0,
+        })
+        .expect("card");
     db.upsert_week_contract(g.id, 1, 3, 5).expect("contract");
     let sys = db
         .create_knowledge_system(&NewKnowledgeSystem {
@@ -333,10 +343,19 @@ fn delete_group_cascades_and_clears_links() {
         target_type: "note_group".to_string(),
         target_id: g.id,
     })
-    .expect("link");
+    .expect("group link");
+    db.add_knowledge_link(&NewKnowledgeLink {
+        system_id: sys.id,
+        node_id: None,
+        concept_id: None,
+        model_id: None,
+        target_type: "flashcard".to_string(),
+        target_id: card.id,
+    })
+    .expect("card link");
     // Act
     let ok = db.delete_group(g.id).expect("delete");
-    // Assert：组消失；笔记/碎片 SET NULL 存活；卡/契约 CASCADE 归零；引用清理
+    // Assert：组消失；笔记/碎片 SET NULL 存活；卡/契约 CASCADE 归零；两类引用清理
     assert!(ok);
     assert!(db.get_group(g.id).expect("get").is_none());
     assert_eq!(db.get_note(note.id).expect("get").expect("note").group_id, None);
@@ -355,6 +374,7 @@ fn delete_group_cascades_and_clears_links() {
         .expect("counts");
     assert_eq!(counts, (0, 0, 0));
     assert!(db.list_links_by_target("note_group", g.id).expect("links").is_empty());
+    assert!(db.list_links_by_target("flashcard", card.id).expect("card links").is_empty());
 }
 
 #[test]
