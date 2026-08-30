@@ -3,7 +3,8 @@
 > 本清单为当前唯一权威债务清单，归档日滚动更新；旧归档清单仅历史追溯。
 > 来源：2026-08-29（v0.14.1 交付 20da94e7 + 新增代码七维审查即修 313dd9ff：
 > 三区域并行 agent——Rust 侧 1中7低 / 前端纯函数层 2高3中6低 / 前端组管理 4中6低，
-> 全部即修或登记，无残留 open；设计规格归档）
+> 全部即修或登记，无残留 open；设计规格归档；**技术债专项 5cddb95/f8df1b6：
+> 存量 11 笔偿清 8 笔**）
 
 ## 未偿债务
 
@@ -11,17 +12,22 @@
 |----|------|------|--------|----------|------|
 | TD-040 | bundle.resources 未含 ffmpeg（deliberate 有意不修：体积权衡） | 有意 | P2 | 2026-08-18 | carried |
 | TD-2026-08-19-D | image_stream_store 已交付未接线（REQ-110/123/088） | 有意 | P2 | 2026-08-19 | carried |
-| TD-2026-08-19-F | detect_pause_icon 暗底+中央亮内容可能误报暂停 | 无意 | P3 | 2026-08-19 | carried |
-| TD-2026-08-19-G | db_ocr_search 500 会话静默截断 + 图路径不校验存在性 | 无意 | P2 | 2026-08-19 | carried |
-| TD-2026-08-21-C | db_sessions/db_ai_tasks 的 lock().expect 未迁移 with_conn | 无意 | P3 | 2026-08-21 | carried |
-| TD-2026-08-22-A | clippy --all-targets -D warnings 未绿（存量项；后续交付批均零新增） | 无意 | P3 | 2026-08-22 | carried |
-| TD-2026-08-24-A | lib.rs（712 行）/ live_session_frame.rs（683 行）超 600 硬限——拆分计划顺延下一窗口 | 有意 | P1 | 2026-08-24 | carried |
-| TD-2026-08-24-B | RouteInfoPopover sysBrief 仅查 groupLinks[0] 体系——多体系组其余体系的概念失效不提示 | 无意 | P2 | 2026-08-24 | carried |
-| TD-2026-08-24-C | KnowledgePage KnowledgeSampleView refreshGlobal={0} 恒传死参数 | 无意 | P3 | 2026-08-24 | carried |
-| TD-2026-08-28-A | chapter_quality_scores 每章全量扫描 blocks（O(C×B)）+ 每块文本克隆——正确性无影响，纯性能优化项 | 无意 | P3 | 2026-08-28 | carried |
-| TD-2026-08-28-B | incremental_merge 循环内线性 find 导致 O(n²)——dead code 模块（已登记豁免）；修复前提（D4 接线）在 v0.14.1 未发生，顺延 | 无意 | P3 | 2026-08-28 | carried |
+| TD-2026-08-24-A | lib.rs（752 行）/ live_session_frame.rs（692 行）超 600 硬限——本轮评估：lib.rs 注册清单在 Tauri v2 单点 generate_handler proc-macro 展开（分组函数实测 E0282 类型不可推断）——**技术上不可拆分**，维持（752 行主体为 mod 声明+注册声明区，无业务逻辑）；live_session_frame 拆分方案已登记（SessionFrameCtx 聚合，含豁免文档） | 有意 | P1 | 2026-08-24 | carried |
 
-## 今日已偿
+## 今日已偿（技术债专项：5cddb95 / f8df1b6）
+
+| ID | 摘要 | 偿还提交 |
+|----|------|----------|
+| TD-2026-08-19-F | detect_pause_icon 暗底+中央亮内容误报——白像素判定（高亮+低饱和 ±40）+ bright 上限收紧 0.35 + 暗底彩亮块回归测试 | 5cddb95 |
+| TD-2026-08-19-G | db_ocr_search 500 会话静默截断——移除会话范围上限（全库检索，结果仍有界 100）+ >500 会话回归测试；图路径存在性校验（M4）确认已在 | 5cddb95 |
+| TD-2026-08-28-A | chapter_quality_scores O(C×B)——块排序一次 + 章节滑动窗口（partition_point 定界，O(B log B + C log B)，间隙块语义不变） | 5cddb95 |
+| TD-2026-08-28-B | incremental_merge 帧回查 O(n²)——id→帧 HashMap 索引（O(n)）；修复不依赖 D4 接线 | 5cddb95 |
+| TD-2026-08-21-C | db_sessions/db_session_events 20 处 lock().expect 连接锁——全部迁移 with_conn（毒锁恢复+ROLLBACK 口径；子代理执行 + 编译/20 测试通过） | f8df1b6 |
+| TD-2026-08-24-B | RouteInfoPopover sysBrief 仅查 groupLinks[0]——聚合全部关联体系（unique systemId），stale 概念跨体系计数 | f8df1b6 |
+| TD-2026-08-24-C | KnowledgePage refreshGlobal={0} 死参数——sampleRefresh 令牌（创建/复制成功后递增驱动 KnowledgeSampleView checkGlobal 重试） | f8df1b6 |
+| TD-2026-08-22-A | clippy--all-targets 存量告警——clippy --fix 自动批量 + 9 项人工（注释缩进/签名 Copy by value/too_many_arguments allow/Vec→slice/dead_code 删除等）；**clipty 零代码告警**（仅系统级 build-target 元警告） | f8df1b6 |
+
+## 审查已偿（313dd9ff 批次，详见下方延续段）
 
 | ID | 摘要 | 偿还提交 |
 |----|------|----------|

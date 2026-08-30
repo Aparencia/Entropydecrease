@@ -40,7 +40,8 @@
 | app/src-tauri/src/vocab.rs | 373 | 词表域（存储/纠错/候选提取/n-gram 分词）内聚；分词纯逻辑与存储同域便于单测 | 若再增长：collect_tokens/split_runs 拆至 vocab_tokens.rs |
 | app/src-tauri/src/live_session_loop.rs | 369 | v0.7.0 M0 拆分产物（音频编排循环）：主循环 + 长静音/音量骤变/VAD 段事件写入 + drain/停止 flush；LiveSessionCtx 聚合上下文；A1 暂停边沿 + P1 停止 drain 重构；H1 修复（drain_deadline 改 Option，draining 置位时才计算） | 若再增长：事件写入块拆至 live_session_events.rs |
 | app/src-tauri/src/screens_tests.rs | 366 | 画面要点屏构建测试域（分组/聚类/图匹配/可消费块过滤回归）单模块 #[path] 挂载 | 若再增长：可消费块过滤组拆至 screens_filter_tests.rs |
-| app/src-tauri/src/db_sessions.rs | 359 | 会话仓储（会话/段/OCR 块/建议查询）；SQL 与行映射内聚；v0.7.1 列表标记子查询 | 若再增长：recent_ocr_texts 等建议查询拆至 db_sessions_queries.rs |
+| app/src-tauri/src/db_sessions.rs | 394 | 会话仓储（会话/段/OCR 块/建议查询）；SQL 与行映射内聚；v0.7.1 列表标记子查询；TD-21-C 全部锁点迁移 with_conn 后 +35 行（闭包包裹） | 若再增长：recent_ocr_texts 等建议查询拆至 db_sessions_queries.rs |
+| app/src-tauri/src/live_session_frame.rs | 692 | 屏幕采样线程（采样循环/暂停隔离/播放器检测/tier 重评/视频档案重评）单单体函数——TD-24-A 拆分方案已登记（SessionFrameCtx 聚合 + 段落方法提取），本轮评估：与 lib.rs 同批后置 | 若再增长：按 Ctx 聚合方案拆至 live_session_frame_scan.rs |
 | app/src-tauri/src/commands_refine_inner.rs | 353 | v0.5.0 模型版：课后精修编排（清单构建/降级决策/引擎懒加载/逐候选识别/产物回填/HTML→MD 转换）内聚于精修执行域 | 若再增长：html_to_markdown 拆至 html_table_md.rs |
 | app/src-tauri/src/ui_junk.rs | 347 | UI 噪声过滤域（水印/字幕条/角标检测规则 + 窗口过滤启发式）内聚于同一判定管线，规则共享窗口几何上下文 | 若再增长：窗口过滤拆至 ui_junk_window.rs |
 | app/src-tauri/src/analysis.rs | 344 | v0.5.0 M2 起结构化分析编排域（章节/重点/术语/讲者 + 事件消费 + step_boundaries/practice_segments/player_actions 三字段 + 审查修复按类型判定）；各机制输出聚合内聚于单一分析函数 | 若再增长：build_chapter_signals 事件版拆至 analysis_signals.rs |

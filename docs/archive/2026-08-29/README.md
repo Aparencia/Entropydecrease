@@ -19,10 +19,9 @@
 
 ## 技术债摘要
 
-- **滚动**：昨日（2026-08-28）9 carried + 2 open → 全部核实为 **11 carried**（TD-2026-08-28-B 的修复前提 D4 接线在本版未发生，转入 carried；无 closed）
-- **今日新增**：无残留 open——本次审查发现的问题（Rust 1 中 7 低，前端 2 高 5 中 12 低）全部即修（提交 313dd9ff）或登记观察项
-- **观察项**：新增 2026-08-29-1/2/3（原子提交记录 / 会话暂停重连循环待确认实施 / 成环父引用防御低优先）；既有 2026-08-28-1/2/3 继承
-- 权威清单：[tech-debt.md](./tech-debt.md)（11 carried + 6 观察项）
+- **状态**：存量 11 笔 → **偿清 8 笔**（19-F/19-G/28-A/28-B = `5cddb95`；21-C/24-B/24-C/22-A = `f8df1b6`）；**剩余 3 笔 carried**——TD-040（有意不修：ffmpeg 体积权衡）、TD-19-D（有意未接线：image_store，v0.7.3 体系后接线价值衰减）、TD-24-A（**本轮评估：lib.rs 注册清单在 Tauri v2 单点 generate_handler proc-macro 展开下技术上不可拆分**（分组函数实测 E0282）；live_session_frame 单函数拆分方案已登记——继续顺延）
+- **clippy**：存量代码级告警清零（TD-22-A 关闭）；仅剩系统级 build-target 元警告（非代码 lint）
+- 权威清单：[tech-debt.md](./tech-debt.md)（3 carried + 6 观察项）
 
 ## 验证
 
