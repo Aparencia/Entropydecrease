@@ -434,13 +434,24 @@ pub async fn update_note(
     Ok(true)
 }
 
-/// 删除笔记（REQ-004）。
+/// 删除笔记（REQ-004；v0.15 顺带清理笔记图片目录——防孤立残留）。
 #[tauri::command]
 pub async fn delete_note(state: State<'_, AppState>, id: i64) -> Result<bool, String> {
     if id <= 0 {
         return Err("无效的笔记 id".to_string());
     }
-    state.db.delete_note(id).map_err(|e| e.to_string())
+    let deleted = state.db.delete_note(id).map_err(|e| e.to_string())?;
+    if deleted {
+        // v0.15：notes-images/{nid}/ 只属于该笔记——删除笔记即清空（尽力而为：
+        // 失败不阻断（用户重试删除无意义时也允许残留，垃圾回收后续单独任务）
+        let img_dir = state.data_dir.join("notes-images").join(id.to_string());
+        if let Err(e) = std::fs::remove_dir_all(&img_dir) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                eprintln!("[notes] 清理笔记图片目录失败（{img_dir:?}）: {e}");
+            }
+        }
+    }
+    Ok(deleted)
 }
 
 /// 搜索笔记（REQ-004；关键词截断——TD-005；v0.10.0 支持按标签过滤）。

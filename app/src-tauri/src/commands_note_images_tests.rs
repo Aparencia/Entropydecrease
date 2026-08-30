@@ -2,9 +2,19 @@
 
 use std::fs;
 
-use crate::commands_note_images::{import_image_file, resolve_note_image_path};
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine as _;
+
+use crate::commands_note_images::{
+    download_image_limited, import_image_bytes, import_image_file, resolve_note_image_path,
+    write_image_bytes,
+};
 use crate::db::Db;
 use crate::types::{NewNote, Note};
+
+/// 1×1 透明 PNG（合法魔数 + 数据——字节嗅探用例用）。
+const TINY_PNG_B64: &str =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
 /// 构造带指定来源会话的笔记（内存库；会话外键需先存在）。
 fn make_note(session_id: Option<i64>) -> Note {
@@ -130,4 +140,48 @@ fn import_rejects_bad_source() {
     let big = dir.path().join("big.png");
     fs::write(&big, vec![0u8; 200]).unwrap();
     assert!(import_image_file(big.to_str().unwrap(), dir.path(), 9, 100).is_err());
+}
+
+#[test]
+fn import_bytes_sniffs_png_and_writes() {
+    // Arrange：合法 1×1 PNG 字节（模拟剪贴板/下载来源）
+    let png = BASE64.decode(TINY_PNG_B64).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    // Act
+    let rel = import_image_bytes(&png, dir.path(), 9, 1024 * 1024).unwrap();
+    // Assert：嗅探定格式 → .png 落盘且字节一致
+    assert!(rel.starts_with("notes-images/9/") && rel.ends_with(".png"));
+    let abs = dir.path().join(rel.replace('/', std::path::MAIN_SEPARATOR_STR));
+    assert_eq!(fs::read(&abs).unwrap(), png);
+}
+
+#[test]
+fn import_bytes_rejects_garbage_and_oversize() {
+    // Arrange
+    let dir = tempfile::tempdir().unwrap();
+    let png = BASE64.decode(TINY_PNG_B64).unwrap();
+    // Act & Assert：垃圾数据嗅探失败；合法图超过 max_bytes 拒绝
+    assert!(import_image_bytes(b"fake-png-bytes", dir.path(), 9, 1024).is_err());
+    assert!(import_image_bytes(&png, dir.path(), 9, 10).is_err());
+}
+
+#[test]
+fn write_bytes_unique_name_on_conflict() {
+    // Arrange
+    let dir = tempfile::tempdir().unwrap();
+    // Act：同秒重名 → 序列后缀（文件入口同契约）
+    let rel1 = write_image_bytes(dir.path(), 9, b"a", "png", 1024).unwrap();
+    let rel2 = write_image_bytes(dir.path(), 9, b"a", "png", 1024).unwrap();
+    // Assert
+    assert_ne!(rel1, rel2);
+    assert!(rel2.contains('_'));
+}
+
+#[test]
+fn download_rejects_non_http_scheme() {
+    // Arrange & Act：非 http/https 直接拒绝（不触网——纯前缀校验路径）
+    // Assert
+    assert!(download_image_limited("ftp://host/a.png", 1024).is_err());
+    assert!(download_image_limited("file:///C:/x/a.png", 1024).is_err());
+    assert!(download_image_limited("C:/x/a.png", 1024).is_err());
 }

@@ -662,8 +662,11 @@ pub fn run() {
             commands_images::save_user_screenshot,
             commands_images::session_images_base_url,
             // v0.10.1：笔记图片——Markdown 引用解析 / 本地导入 / data_dir 基准
+            // v0.15：剪贴板 base64 导入 + 外链 URL 下载导入（图片落盘三入口）
             commands_note_images::resolve_note_image,
             commands_note_images::import_note_image,
+            commands_note_images::import_note_image_b64,
+            commands_note_images::import_note_image_url,
             commands_note_images::app_data_dir,
             // 结构图（REQ-182/183/184，v0.7.7：非线性结构图像捕获持久化 + 图库）
             commands_structures::capture_session_structures,
