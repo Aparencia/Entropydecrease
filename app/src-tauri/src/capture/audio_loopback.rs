@@ -302,6 +302,24 @@ where
             on_recovery(false);
         }
 
+        // 审查修复（暂停重连循环，观察 2026-08-29-2）：端点启动前先看暂停标志——
+        // 暂停期间重连（如 Stop 失败重连接管）若不提前判定，会在 Start 之后由
+        // 内层循环再次检测边沿执行 Stop；Stop 若持续失败则每轮重连都重复
+        // "Start→Stop 失败→重连"的永动循环，期间前端"采集中/恢复中"与真实停采
+        // 信息差。已暂停时保持端点停机、直接进入暂停空转——一次性消除循环。
+        let (capture_paused, started) = match pause.as_ref() {
+            Some(p) if p.paused.load(Ordering::SeqCst) => (true, false),
+            Some(_) => (false, true),
+            None => (false, true),
+        };
+        if started {
+            audio_client
+                .Start()
+                .map_err(|e| crate::error::AppError::Io(format!("启动捕获失败: {}", e)))?;
+        } else {
+            eprintln!("[AudioLoopback] 端点保持停机（会话已处于暂停——免 Start/Stop 重连循环）");
+        }
+
         // 归一化管线：字节 → f32 → 混单声道 → 重采样 16k → 200ms 切块
         // @ai-context: 时间戳用会话纪元（epoch 由编排层注入，ADR-008 A1：音频/屏幕/
         //              flush 三处同基准）而非有效音频计数——静默期时间轴也推进，
@@ -313,7 +331,8 @@ where
         let block_samples = (TARGET_SAMPLE_RATE as usize) / 5;
         let mut format_error_logged = false;
         // 暂停边沿状态（本线程内维护；paused 由命令层置位）
-        let mut capture_paused = false;
+        // 审查修复：初始化值随上方提前判定（已暂停重连时直接进入空转，边沿状态一致）
+        let mut capture_paused = capture_paused;
         let mut paused_at: Option<std::time::Instant> = None;
 
         while !stop_flag.load(Ordering::SeqCst) {
