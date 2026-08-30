@@ -3,7 +3,19 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与 [SemVer](https://semver.org/lang/zh-CN/)。
 各版本的深度版本文档在 [docs/versions/](docs/versions/)。
 
-## [0.13.9] - 2026-08-27
+## [0.15.0] - 2026-08-30
+
+> **笔记体验打磨**（v0.14 交付后用户实测 6 项，设计规格见 [docs/superpowers/specs/2026-08-30-v0.15-notes-polish-design.md](docs/superpowers/specs/2026-08-30-v0.15-notes-polish-design.md)，交付记录见 [docs/versions/v0.15.md](docs/versions/v0.15.md)）
+
+- **① 标题切换语义**：`computeHeadingChanges`/`headingLines` 由"已是标题跳过"改 set-or-toggle——同级别再点 → 剥除还原普通段；其他级别/普通段 → 置为该级（CM 与 textarea 降级双路径同步 + 4 单测改造，"点 H1 无取消"修复，按钮高亮闭环）
+- **② 全站列自适应**：`useColumnLayout`（宽度记忆 + min/max 夹取 + 窄窗阈值自动折叠：<1100 大纲/<860 侧栏/<700 列表；手动状态优先，窗口回宽恢复）+ `ColumnResizer`（拖拽手柄，双击恢复默认）+ `ColumnBar`（折叠窄条）——迁移笔记页 3 列/会话页/知识页 2 列/课堂页 1 列（7 处固定宽列）；`NoteImage` 脱离 240×160 固定缩略，按原始比例自适应（maxWidth 100% / maxHeight 60vh）
+- **③ 分组树 + 整列折叠**：中部列表改分组树——组头 chevron 收起/展开（折叠记忆 localStorage）、组名点击=过滤（v0.12.2 决策 1 不变）、搜索/标签/排序激活退化平铺、空组不渲染；三列均可折叠为窄条（大纲悬浮按钮并入统一体系）；行渲染拆 `NoteListRow`
+- **④ 图片落盘三入口**：`import_note_image_b64`（剪贴板，`image::guess_format` 字节嗅探定格式——不信任 MIME）+ `import_note_image_url`（ureq 下载：超时 10s/限流 10MB/重定向 ≤3/Content-Type 白名单，失败降级插原 URL + 提示）复用 `write_image_bytes` 落盘核心（大小上限/唯一命名）；删除笔记顺带清理 `notes-images/{nid}/`（尽力而为，失败不阻断）；用户插入图片全部留副本，防源文件/源站删除丢资源
+- **⑤ 编辑态剪贴板导入图片**：`useClipboardImagePaste` + `utils/clipboardImage`——`event.clipboardData` 同步提取（无权限弹窗）→ base64 → 落盘 → 插入引用；CM `domEventHandlers.paste` 与 textarea `onPaste` 双入口；图片即时内联显示（decoration 自动重算）；超 10MB 前置拦截
+- **⑥ 换行一致**：`NoteMarkdown` 启用 remark-breaks——单换行（软换行）渲染 `<br>`，编辑/阅读所见一致；存量笔记零数据变更自动修复；`\`/两空格强断行保留；不设开关（YAGNI）
+- 验证：`cargo test` 1840 passed（3 failed 为预存基线：ai_client 默认 Provider + note_filter 两条黄金用例，v0.13.8 已登记）；clippy 零新增警告；vitest **53 文件 431 用例全绿**（新增 27）；`tsc --noEmit` 零错误；`vite build` 通过；真机走查待用户验收批执行
+
+### v0.13.9 聚合发布（2026-08-27，重构区首次正式发布）
 
 > **聚合发布**：本版为重构区首次正式发布（Tauri 桌面端），自 v0.8.0 后的全部交付（v0.9.0 视频档案框架 → v0.13.9 知识体系深化）随本版一并发布。各小版本交付详情见下方记录与 [docs/versions/](docs/versions/)。
 
