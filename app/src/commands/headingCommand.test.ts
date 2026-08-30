@@ -41,11 +41,23 @@ describe("computeHeadingChanges（纯逻辑）", () => {
     expect(r.cursor).toBe(4 + 2 + 2); // 末行行首 + 首行插入 2 + 末行插入 2
   });
 
-  it("已是标题的行跳过不叠加", () => {
+  it("同级别标题行剥除标记（切回普通段）", () => {
+    const r = computeHeadingChanges(Text.of(["### 已有"]), 0, 0, 3);
+    expect(r.changes).toEqual([{ from: 0, to: 4, insert: "" }]);
+    expect(r.cursor).toBe(0);
+  });
+
+  it("不同级别标题行换级（剥旧标记+插新标记）", () => {
+    const r = computeHeadingChanges(Text.of(["## 已有"]), 0, 0, 1);
+    expect(r.changes).toEqual([{ from: 0, to: 3, insert: "# " }]);
+    expect(r.cursor).toBe(2);
+  });
+
+  it("混合选区：普通段插入 / 同级别剥除 / 不同级别换级", () => {
     const r = computeHeadingChanges(doc, 0, doc.length, 2);
-    // 第三行是标题跳过；其余三行插入
-    expect(r.changes).toHaveLength(3);
-    expect(r.changes.some((c) => c.insert === "### ")).toBe(false);
+    expect(r.changes).toHaveLength(4);
+    // 第三行 "### 已有标题" 换级为 "## "（替换 [行首, 行首+4)）
+    expect(r.changes[2]).toEqual({ from: doc.line(3).from, to: doc.line(3).from + 4, insert: "## " });
   });
 
   it("H6 边界：level 夹取 1..6", () => {
@@ -61,10 +73,13 @@ describe("computeHeadingChanges（纯逻辑）", () => {
     expect(r.cursor).toBe(2);
   });
 
-  it("全选已全是标题 → 无变更", () => {
-    const allHeadings = Text.of(["# a", "## b"]);
-    const r = computeHeadingChanges(allHeadings, 0, allHeadings.length, 3);
-    expect(r.changes).toHaveLength(0);
+  it("全选全部同级别 → 全部剥除", () => {
+    const allHeadings = Text.of(["# a", "# b"]);
+    const r = computeHeadingChanges(allHeadings, 0, allHeadings.length, 1);
+    expect(r.changes).toEqual([
+      { from: 0, to: 2, insert: "" },
+      { from: 4, to: 6, insert: "" },
+    ]);
   });
 
   it("CRLF 行尾文档正常处理", () => {
@@ -87,10 +102,20 @@ describe("headingCommand（真实 Command）", () => {
     view.destroy();
   });
 
-  it("已是标题 → 返回 false 无变化", () => {
+  it("同级别标题再点 → 取消回普通段", () => {
     const { view, docOf } = makeView("## 已有");
-    expect(headingCommand(2)(view)).toBe(false);
-    expect(docOf()).toBe("## 已有");
+    expect(headingCommand(2)(view)).toBe(true);
+    expect(docOf()).toBe("已有");
+    // 剥除后光标落新行行首
+    expect(view.state.selection.main.anchor).toBe(0);
+    view.destroy();
+  });
+
+  it("混合行选区：H1 行取消 / H2 行换级", () => {
+    const { view, docOf } = makeView("# a\n## b\nc");
+    view.dispatch({ selection: { anchor: 0, head: 7 } }); // 选 "# a\n## b"（到 'b' 前）
+    headingCommand(1)(view);
+    expect(docOf()).toBe("a\n# b\nc");
     view.destroy();
   });
 

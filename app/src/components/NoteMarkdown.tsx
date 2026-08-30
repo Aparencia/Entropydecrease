@@ -16,6 +16,7 @@
 import { isValidElement, cloneElement, useMemo, useRef } from "react";
 import type { ReactElement, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -152,7 +153,10 @@ export default function NoteMarkdown({ note, searchQuery, onTaskToggle, onOpenSe
 
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath, remarkMarkHighlight]}
+      // v0.15：remark-breaks——单换行（软换行）渲染为 <br>，与编辑态所见一致
+      // （CommonMark 标准语义是软换行=空格，导致"编辑态换行、阅读态连上"；
+      // 存量笔记内容零数据变更自动修复；`\` 与两空格强断行语义保留）
+      remarkPlugins={[remarkGfm, remarkMath, remarkMarkHighlight, remarkBreaks]}
       rehypePlugins={[rehypeKatex]}
       components={{
         // v0.14 B：==文本== 荧光笔（remark 插件产出 mark 节点；单色黄，浅/深主题通用）

@@ -30,18 +30,23 @@ describe("headingLines", () => {
     expect(r.selEnd).toBe(7);
   });
 
-  it("已是标题的行跳过不叠加（含末行为标题时光标落在末行行首）", () => {
-    // Arrange：第一行正文，第二行已是 H2（## ）——光标在第一行（offset 0）
+  it("切换语义：同级别剥除 / 不同级别换级 / 普通段插入", () => {
+    // Arrange：第一行正文，第二行已是 H2 —— 光标在第一行（offset 0）
     const current = "正文\n## 已有标题\n尾巴";
-    // Act：仅第一行转换
+    // Act：目标 H1——逐行独立判定：第一行插入；第二行不在选区不处理
     const r = headingLines(current, 0, 0, 1);
-    // Assert：第一行加 #；第二行保持 ##（不叠加成 ###）
+    // Assert
     expect(r.value).toBe("# 正文\n## 已有标题\n尾巴");
     expect(r.selStart).toBe(2);
-    // 多行选区含已标题行：末行（## ）不加标记，光标落在末行行首（3 + 前面插入 2）
-    const r2 = headingLines(current, 0, 4, 1);
-    expect(r2.value).toBe("# 正文\n## 已有标题\n尾巴");
-    expect(r2.selStart).toBe(5);
+    // 多行选区（0..5 覆盖前两行）：第一行插入 `# `；第二行 ## 换级为 #
+    const r2 = headingLines(current, 0, 5, 1);
+    expect(r2.value).toBe("# 正文\n# 已有标题\n尾巴");
+    // 光标 = 新末行行首（3 + 前面插入 2）+ 标记后（2）= 7
+    expect(r2.selStart).toBe(7);
+    // 同级别剥除：H1 行再点 H1 → 切回普通段，光标落行首
+    const r3 = headingLines("# 一级", 0, 0, 1);
+    expect(r3.value).toBe("一级");
+    expect(r3.selStart).toBe(0);
   });
 
   it("选区尾恰在行首：不含下一行（选中到上一行结尾止）", () => {

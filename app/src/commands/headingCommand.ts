@@ -1,16 +1,19 @@
 /**
- * headingCommand — CodeMirror 标题转换命令（v0.14 子项目 A）。
+ * headingCommand — CodeMirror 标题转换命令（v0.14 子项目 A / v0.15 切换语义）。
  *
  * @ai-context: 输入驱动（`## ` 即时生效）之外，工具栏按钮与 Ctrl+1/2/3 快捷键需要
- *              显式命令：对单行/多行选区逐行行首设置 `#`×level；已是标题的行跳过
- *              （重复按不叠加）；光标落末行标记后。不复用 markdownEdit.ts 的
- *              headingLines（字符串+offset 模型）——CM 原生 Text.lines + lineAt
- *              原生支持 CRLF 边界（spec §4.3）。computeHeadingChanges 纯逻辑可单测。
+ *              显式命令：对单行/多行选区逐行 set-or-toggle——行已精确等于所点级别
+ *              则剥掉 `#×level+空格` 切回普通段（v0.15 修复"点 H1 无取消"），
+ *              其他级别/普通段一律置为该级别（原"已是标题跳过"语义废弃——
+ *              按钮高亮态的取消承诺与跳过行为冲突；Overleaf/Obsidian 同款）。
+ *              不复用 markdownEdit.ts 的 headingLines（字符串+offset 模型）——
+ *              CM 原生 Text.lines + lineAt 原生支持 CRLF 边界（spec §4.3）。
+ *              computeHeadingChanges 纯逻辑可单测。
  */
 import { Text, type Extension } from "@codemirror/state";
 import { EditorView, keymap, type Command } from "@codemirror/view";
 
-/** 单行插入变更（行首插入 marker） */
+/** 单行变更（行首插 marker / 剥同级 marker / 换级 = 替换区间） */
 export interface HeadingChange {
   from: number;
   to: number;
@@ -19,13 +22,14 @@ export interface HeadingChange {
 
 export interface HeadingChangeResult {
   changes: HeadingChange[];
-  /** 转换后光标应落的位置（末行标记后） */
+  /** 转换后光标应落的位置（新文档坐标：末行标记后；剥除时落行首） */
   cursor: number;
 }
 
 /**
- * 计算标题转换变更集（纯逻辑）：选区范围 [from, to) 覆盖的每行行首插入
- * `#`×level + 空格；已是标题的行跳过。选区尾恰在行首时该行不纳入（对齐
+ * 计算标题转换变更集（纯逻辑）：选区范围 [from, to) 覆盖的每行逐行判定——
+ * 行已等于目标级别 → 删除 `#×level+空格`；已是其他级别 → 替换为该级别；
+ * 普通段 → 行首插入 `#×level+空格`。选区尾恰在行首时该行不纳入（对齐
  * textarea 版 headingLines 语义）。level 夹取 1..6。
  */
 export function computeHeadingChanges(
@@ -43,17 +47,34 @@ export function computeHeadingChanges(
     end -= 1;
   }
   const changes: HeadingChange[] = [];
-  let insertedBeforeEnd = 0;
-  let endLineGotMarker = false;
+  // 末行之前各行的净变更增量（插入为正、剥除/换级为负）——末行行首平移量
+  let deltaBeforeEnd = 0;
+  // 末行自身变换后光标在"新末行"内的落点（无变换=0；插入/换级=标记后）
+  let endCursorDelta = 0;
   for (let n = start; n <= end; n++) {
     const line = doc.line(n);
-    if (/^#{1,6}\s/.test(line.text)) continue; // 已是标题不叠加
-    changes.push({ from: line.from, to: line.from, insert: marker });
-    if (n < end) insertedBeforeEnd += marker.length;
-    else endLineGotMarker = true;
+    const m = /^(#{1,6})\s/.exec(line.text);
+    if (m) {
+      const cur = m[1].length;
+      if (cur === clamped) {
+        // 同级别 → 剥除（切换取消：H1 按 H1 → 普通段）
+        changes.push({ from: line.from, to: line.from + clamped + 1, insert: "" });
+        if (n < end) deltaBeforeEnd -= clamped + 1;
+      } else {
+        // 其他级别 → 剥旧标记 + 插新标记（净效果=换级）
+        changes.push({ from: line.from, to: line.from + cur + 1, insert: marker });
+        if (n < end) deltaBeforeEnd += marker.length - (cur + 1);
+        else endCursorDelta = marker.length;
+      }
+    } else {
+      // 普通段 → 行首插入
+      changes.push({ from: line.from, to: line.from, insert: marker });
+      if (n < end) deltaBeforeEnd += marker.length;
+      else endCursorDelta = marker.length;
+    }
   }
-  // 光标 = 末行行首 + 末行之前行累计插入 +（末行自身加标记则再 + 标记长）
-  const cursor = doc.line(end).from + insertedBeforeEnd + (endLineGotMarker ? marker.length : 0);
+  // 光标 = 新末行行首 + 末行落点（selection 坐标为新文档坐标）
+  const cursor = doc.line(end).from + deltaBeforeEnd + endCursorDelta;
   return { changes, cursor };
 }
 

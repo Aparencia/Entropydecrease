@@ -53,8 +53,11 @@ function lineIndexOf(content: string, offset: number): number {
 }
 
 /**
- * 标题层级转换：对选区逐行（或光标所在行）行首加 `# `×level；已是标题的行跳过。
- * 多行选区 → 选区每行转换；无选区 → 光标所在行转换。光标落在末行标记后。
+ * 标题层级转换：对选区逐行（或光标所在行）set-or-toggle——行已精确等于目标级别
+ * 则剥掉 `#×level+空格` 切回普通段；其他级别/普通段一律置为该级别（v0.15：
+ * 对齐 CM 版 computeHeadingChanges 的切换语义，修复"点 H1 无取消"；
+ * 原"已是标题的行跳过"已废弃）。多行选区 → 选区每行转换；无选区 → 光标所在行
+ * 转换。光标落在末行标记后（剥除时落行首）。
  *
  * Why（v0.13.9 修复）：原 wrapSelection 只在选区开头插一次标记——全选多行加 H1
  * 只有首行生效，且光标回跳到文档开头（选区起点 0 → 视图跳顶）；本函数逐行转换
@@ -70,25 +73,39 @@ export function headingLines(content: string, selStart: number, selEnd: number, 
   if (end > start && end > 0 && content[end - 1] === "\n" && endLine > startLine) {
     endLine -= 1;
   }
-  const marker = "#".repeat(Math.max(1, Math.min(level, 6))) + " ";
+  const target = Math.max(1, Math.min(level, 6));
+  const marker = "#".repeat(target) + " ";
   // 原文本每行行首 offset（行尾 \n 记 1 字符）——光标落位用
   const lineOffsets: number[] = [0];
   for (let i = 1; i < lines.length; i++) {
     lineOffsets.push(lineOffsets[i - 1] + lines[i - 1].length + 1);
   }
-  let insertedBeforeEndLine = 0; // 末行之前累计插入的标记字符数
-  let endLineGotMarker = false; // 末行自身是否被加标记
+  let deltaBeforeEnd = 0; // 末行之前各行的净变更增量（插入为正、剥除/换级为负）
+  let endLineDelta = 0; // 末行自身变换后光标在"新末行"内的落点
   for (let i = startLine; i <= endLine; i++) {
-    if (/^#{1,6}\s/.test(lines[i])) continue; // 已是标题不叠加
-    lines[i] = marker + lines[i];
-    if (i < endLine) {
-      insertedBeforeEndLine += marker.length;
+    const m = /^(#{1,6})\s/.exec(lines[i]);
+    if (m) {
+      const cur = m[1].length;
+      if (cur === target) {
+        // 同级别 → 剥除（切换取消）
+        lines[i] = lines[i].slice(m[0].length);
+        if (i < endLine) deltaBeforeEnd -= m[0].length;
+      } else {
+        // 其他级别 → 剥旧标记 + 插新标记（换级）
+        lines[i] = marker + lines[i].slice(m[0].length);
+        const net = marker.length - m[0].length;
+        if (i < endLine) deltaBeforeEnd += net;
+        else endLineDelta = marker.length;
+      }
     } else {
-      endLineGotMarker = true;
+      // 普通段 → 行首插入
+      lines[i] = marker + lines[i];
+      if (i < endLine) deltaBeforeEnd += marker.length;
+      else endLineDelta = marker.length;
     }
   }
-  // 光标 = 末行行首 + 之前行插入量 +（末行加了标记则 + 标记长）——多行停在末行标记后，单行停在原行标记后
-  const cursor = lineOffsets[endLine] + insertedBeforeEndLine + (endLineGotMarker ? marker.length : 0);
+  // 光标 = 新末行行首 + 末行落点
+  const cursor = lineOffsets[endLine] + deltaBeforeEnd + endLineDelta;
   return { value: lines.join("\n"), selStart: cursor, selEnd: cursor };
 }
 
