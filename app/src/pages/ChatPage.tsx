@@ -3,20 +3,21 @@
  *
  * @ai-context: 统一对话中枢：①💬 自由聊天（流式/停止/重发/编辑重发/会话
  *              CRUD/模型选择）②🤖 AI 任务对话（精修/补充轨迹——提示词与
- *              回答全文 + 可跳转引用）。任务视图复用 ai_task_history +
- *              ai_task_conversation；聊天复用 chat_* 命令。
- * @ai-context: 单活跃流纪律（REQ-225）：streaming 态下不可再发送；停止=
- *              chat_cancel（后端每行检查取消标志）；失败置 failed 占位，
- *              重试=chat_regenerate（删除占位后重流）。
+ *              回答全文 + 可跳转引用）。流式状态机在 useChatStream（per-
+ *              session 隔离）；任务视图复用 ai_task_history + ai_task_conversation。
+ * @ai-context: 授权红线：chat_send 前置 content_gate（默认关）——门禁错误
+ *              显示引导卡 + 禁输入；首次发送前一次性云端提示（localStorage
+ *              记忆，审查补充：设计承诺的实现缺口）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { AiTaskRecord, AiProviderView, ChatMessage, ChatSession, ChatStreamEvent } from "../types";
 import ChatSidebar from "../components/ChatSidebar";
 import ChatMessageList from "../components/ChatMessageList";
 import ChatComposer from "../components/ChatComposer";
 import TaskConversationView from "../components/TaskConversationView";
+import useChatStream from "../hooks/useChatStream";
 
 interface Props {
   /** 跨页直达（任务对话引用跳转） */
@@ -30,6 +31,12 @@ interface SessionRow {
   title: string;
 }
 
+/** 首次发送云端提示的记忆键（一次性确认） */
+const CLOUD_NOTICE_KEY = "entropy-ai-chat-cloud-notice";
+
+const CLOUD_NOTICE_TEXT =
+  "对话内容（纯文本）将发送至所选模型的云端服务商；本地音视频/图片/笔记永不出本机。是否同意？";
+
 export default function ChatPage(props: Props) {
   const { onOpenSessions, onOpenNote, onOpenSettings } = props;
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -38,7 +45,6 @@ export default function ChatPage(props: Props) {
   const [activeChatId, setActiveChatId] = useState<number | null>(null);
   const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [streaming, setStreaming] = useState<{ text: string | null; error: { kind: string; message: string } | null } | null>(null);
   const [gateError, setGateError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
@@ -46,37 +52,52 @@ export default function ChatPage(props: Props) {
   const [retryBusy, setRetryBusy] = useState(false);
   const [sessionTitles, setSessionTitles] = useState<Map<number, string>>(new Map());
   const [noteTitles, setNoteTitles] = useState<Map<number, string>>(new Map());
-  const streamRef = useRef<{ sessionId: number; acc: string } | null>(null);
-
-  const refreshSessions = useCallback(async () => {
-    const list = await invoke<ChatSession[]>("chat_list_sessions").catch(() => [] as ChatSession[]);
-    setSessions(list);
-    return list;
-  }, []);
-
-  const refreshAll = useCallback(async () => {
-    await refreshSessions();
-    const refine = await invoke<AiTaskRecord[]>("ai_task_history", { opType: "refine", limit: 30 }).catch(() => [] as AiTaskRecord[]);
-    const enrich = await invoke<AiTaskRecord[]>("ai_task_history", { opType: "enrich", limit: 30 }).catch(() => [] as AiTaskRecord[]);
-    setTasks([...refine, ...enrich].sort((a, b) => b.createdAt - a.createdAt).slice(0, 60));
-    setProviders(await invoke<AiProviderView[]>("ai_provider_list").catch(() => [] as AiProviderView[]));
-    // 引用标题解析（会话/笔记名——任务卡可读性；失败降级显示 #id）
-    const sessRows = await invoke<SessionRow[]>("list_sessions", { limit: 500 }).catch(() => [] as SessionRow[]);
-    setSessionTitles(new Map(sessRows.map((s) => [s.id, s.title])));
-    const notes = await invoke<{ id: number; title: string }[]>("search_notes", { keyword: "", tag: null as string | null }).catch(() => [] as { id: number; title: string }[]);
-    setNoteTitles(new Map(notes.map((n) => [n.id, n.title])));
-  }, [refreshSessions]);
-
-  useEffect(() => {
-    refreshAll();
-    // 任务状态轻轮询（未完成的任务存在时刷新——流式聊天不轮询，事件驱动）
-    const t = setInterval(() => void refreshAll(), 6000);
-    return () => clearInterval(t);
-  }, [refreshAll]);
+  const [staticLoaded, setStaticLoaded] = useState(false);
+  const activeChatRef = useRef<number | null>(null);
+  activeChatRef.current = activeChatId;
 
   const loadMessages = useCallback(async (sessionId: number) => {
     setMessages(await invoke<ChatMessage[]>("chat_list_messages", { sessionId }).catch(() => [] as ChatMessage[]));
   }, []);
+
+  /** 流终态 → 刷新消息（仅当终态会话仍为当前展示——旧流后台完成不打扰） */
+  const onStreamSettled = useCallback(async (sessionId: number, _ev: ChatStreamEvent) => {
+    if (activeChatRef.current === sessionId) await loadMessages(sessionId);
+  }, [loadMessages]);
+
+  const { view, setActive, isStreaming, launch, stop } = useChatStream((sid, ev) => void onStreamSettled(sid, ev));
+
+  // 静态数据（会话/Provider/标题映射）只加载一次——审查优化：原 6s 全量刷新
+  useEffect(() => {
+    if (staticLoaded) return;
+    void (async () => {
+      setSessions(await invoke<ChatSession[]>("chat_list_sessions").catch(() => [] as ChatSession[]));
+      setProviders(await invoke<AiProviderView[]>("ai_provider_list").catch(() => [] as AiProviderView[]));
+      const sessRows = await invoke<SessionRow[]>("list_sessions", { limit: 500 }).catch(() => [] as SessionRow[]);
+      setSessionTitles(new Map(sessRows.map((s) => [s.id, s.title])));
+      const notes = await invoke<{ id: number; title: string }[]>("search_notes", { keyword: "", tag: null as string | null }).catch(() => [] as { id: number; title: string }[]);
+      setNoteTitles(new Map(notes.map((n) => [n.id, n.title])));
+      setStaticLoaded(true);
+    })();
+  }, [staticLoaded]);
+
+  // 任务列表：初始 + 仅当存在未终态任务时轮询（审查优化：无进行中任务零轮询）
+  const reloadTasks = useCallback(async () => {
+    const refine = await invoke<AiTaskRecord[]>("ai_task_history", { opType: "refine", limit: 30 }).catch(() => [] as AiTaskRecord[]);
+    const enrich = await invoke<AiTaskRecord[]>("ai_task_history", { opType: "enrich", limit: 30 }).catch(() => [] as AiTaskRecord[]);
+    setTasks([...refine, ...enrich].sort((a, b) => b.createdAt - a.createdAt).slice(0, 60));
+  }, []);
+
+  useEffect(() => {
+    void reloadTasks();
+  }, [reloadTasks]);
+
+  const hasActiveTask = tasks.some((t) => t.state === "pending" || t.state === "running");
+  useEffect(() => {
+    if (!hasActiveTask) return;
+    const t = setInterval(() => void reloadTasks(), 5000);
+    return () => clearInterval(t);
+  }, [hasActiveTask, reloadTasks]);
 
   const selectChat = useCallback(async (id: number) => {
     setActiveChatId(id);
@@ -85,13 +106,14 @@ export default function ChatPage(props: Props) {
     setGateError(null);
     setEditingId(null);
     setDraft("");
+    setActive(id);
     await loadMessages(id);
-  }, [loadMessages]);
+  }, [loadMessages, setActive]);
 
   const selectTask = useCallback(async (taskId: number) => {
     setActiveTaskId(taskId);
     setActiveChatId(null);
-    setStreaming(null);
+    setActive(null);
     setGateError(null);
     try {
       const [task, turns] = await invoke<[AiTaskRecord, import("../types").AiTurn[]]>("ai_task_conversation", { taskId });
@@ -100,6 +122,10 @@ export default function ChatPage(props: Props) {
       setTaskDetail(null);
       setGateError(String(e));
     }
+  }, [setActive]);
+
+  const refreshSessions = useCallback(async () => {
+    setSessions(await invoke<ChatSession[]>("chat_list_sessions").catch(() => [] as ChatSession[]));
   }, []);
 
   const newChat = useCallback(async () => {
@@ -122,64 +148,47 @@ export default function ChatPage(props: Props) {
   const deleteChat = useCallback(async (id: number) => {
     const ok = await confirm("删除该对话？历史消息将一并清除。", { title: "熵减", kind: "warning" });
     if (!ok) return;
+    stop(id); // 进行中流先停（后端流循环出口；残留由删除语义兜底）
     await invoke("chat_delete_session", { sessionId: id });
-    if (activeChatId === id) setActiveChatId(null);
-    await refreshAll();
-  }, [activeChatId, refreshAll]);
-
-  /** 流式发送核心（chat_send / chat_regenerate 共用信道处理） */
-  const runChannel = useCallback(async (sessionId: number, cmd: string, args: Record<string, unknown>) => {
-    if (streamRef.current) return; // 单活跃流（前端兜底）
-    const channel = new Channel<ChatStreamEvent>();
-    let acc = "";
-    streamRef.current = { sessionId, acc };
-    setStreaming({ text: "", error: null });
-    channel.onmessage = (ev) => {
-      if (ev.kind === "chunk") {
-        acc += ev.delta;
-        streamRef.current = { sessionId, acc };
-        setStreaming({ text: acc, error: null });
-      } else if (ev.kind === "done" || ev.kind === "aborted") {
-        streamRef.current = null;
-        setStreaming(null);
-        loadMessages(sessionId);
-      } else if (ev.kind === "failed") {
-        streamRef.current = null;
-        setStreaming({ text: null, error: { kind: ev.errorKind, message: ev.message } });
-        loadMessages(sessionId);
-      }
-    };
-    try {
-      await invoke(cmd, { ...args, sessionId, channel });
-    } catch (e) {
-      streamRef.current = null;
-      setStreaming(null);
-      setGateError(String(e));
-      loadMessages(sessionId);
+    if (activeChatId === id) {
+      setActiveChatId(null);
+      setActive(null);
     }
-  }, [loadMessages]);
+    await refreshSessions();
+  }, [activeChatId, refreshSessions, setActive, stop]);
 
   const send = useCallback(async () => {
-    if (!activeChatId || streamRef.current) return;
+    if (!activeChatId) return;
     const content = draft.trim();
     if (!content) return;
+    // 首次发送前一次性云端提示（审查补充：设计承诺→实现）
+    if (!localStorage.getItem(CLOUD_NOTICE_KEY)) {
+      const ok = await confirm(CLOUD_NOTICE_TEXT, { title: "熵减 · AI 对话", kind: "warning" });
+      if (!ok) return;
+      localStorage.setItem(CLOUD_NOTICE_KEY, "1");
+    }
     const resendId = editingId ?? undefined;
     setEditingId(null);
     setDraft("");
     setGateError(null);
-    await runChannel(activeChatId, "chat_send", { content, resendMessageId: resendId });
-  }, [activeChatId, editingId, draft, runChannel]);
+    try {
+      const ok = await launch(activeChatId, "chat_send", { content, resendMessageId: resendId });
+      if (!ok) setGateError("该会话已有进行中的对话——请等待完成或先停止");
+    } catch (e) {
+      setGateError(String(e));
+    }
+  }, [activeChatId, draft, editingId, launch]);
 
   const regenerate = useCallback(async () => {
-    if (!activeChatId || streamRef.current) return;
-    setGateError(null);
-    await runChannel(activeChatId, "chat_regenerate", {});
-  }, [activeChatId, runChannel]);
-
-  const stop = useCallback(() => {
     if (!activeChatId) return;
-    void invoke("chat_cancel", { sessionId: activeChatId });
-  }, [activeChatId]);
+    setGateError(null);
+    try {
+      const ok = await launch(activeChatId, "chat_regenerate", {});
+      if (!ok) setGateError("该会话已有进行中的对话——请等待完成或先停止");
+    } catch (e) {
+      setGateError(String(e));
+    }
+  }, [activeChatId, launch]);
 
   const setModel = useCallback(async (providerId: string | null, model: string) => {
     if (!activeChatId) return;
@@ -196,13 +205,13 @@ export default function ChatPage(props: Props) {
     setRetryBusy(true);
     try {
       await invoke("ai_refine_start", { sessionId: task.refId, authorized: true });
-      await refreshAll();
+      await reloadTasks();
     } catch (e) {
       setGateError(String(e));
     } finally {
       setRetryBusy(false);
     }
-  }, [refreshAll]);
+  }, [reloadTasks]);
 
   const activeSession = sessions.find((s) => s.id === activeChatId) ?? null;
   const isGateBlocked = gateError !== null && (gateError.includes("未开启") || gateError.includes("授权") || gateError.includes("密钥") || gateError.includes("Provider"));
@@ -210,6 +219,8 @@ export default function ChatPage(props: Props) {
     setEditingId(m.id);
     setDraft(m.content);
   };
+  /** 当前展示会话的流式视图（非展示会话的流不可见——后台完成不污染 UI） */
+  const streamView = view && view.sessionId === activeChatId ? { text: view.text } : null;
 
   return (
     <div style={{ height: "100%", display: "flex", minHeight: 0 }}>
@@ -218,11 +229,11 @@ export default function ChatPage(props: Props) {
         tasks={tasks}
         activeChatId={activeChatId}
         activeTaskId={activeTaskId}
-        onSelectChat={selectChat}
-        onSelectTask={selectTask}
-        onNewChat={newChat}
-        onRenameChat={renameChat}
-        onDeleteChat={deleteChat}
+        onSelectChat={(id) => void selectChat(id)}
+        onSelectTask={(id) => void selectTask(id)}
+        onNewChat={() => void newChat()}
+        onRenameChat={(id) => void renameChat(id)}
+        onDeleteChat={(id) => void deleteChat(id)}
         sessionTitles={sessionTitles}
         noteTitles={noteTitles}
       />
@@ -232,6 +243,9 @@ export default function ChatPage(props: Props) {
           {activeSession && (
             <>
               <span style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{activeSession.title}</span>
+              {isStreaming(activeSession.id) && (
+                <span style={{ fontSize: 12, color: "#b45309", fontWeight: 600 }}>● 生成中</span>
+              )}
               <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center", fontSize: 12, color: "#6b7280" }}>
                 模型
                 <select
@@ -274,7 +288,7 @@ export default function ChatPage(props: Props) {
           <>
             <ChatMessageList
               messages={messages}
-              streaming={streaming}
+              streaming={streamView}
               onRegenerate={() => void regenerate()}
               onEditUser={editMessage}
               editingId={editingId}
@@ -282,9 +296,10 @@ export default function ChatPage(props: Props) {
             <ChatComposer
               value={draft}
               onChange={setDraft}
-              streaming={streaming !== null}
+              streaming={streamView !== null}
               onSend={() => void send()}
-              onStop={stop}
+              onStop={() => stop(activeChatId)}
+              disabled={isGateBlocked}
             />
           </>
         )}

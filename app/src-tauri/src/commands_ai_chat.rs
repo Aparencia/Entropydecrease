@@ -11,11 +11,13 @@ use tauri::ipc::Channel;
 use tauri::State;
 
 use crate::ai_chat::{
-    AiTurn, CancelFlag, ChatMessageInput, ChatRole, build_messages, trajectory_from_json,
+    AiTurn, ChatMessageInput, ChatRole, build_messages, trajectory_from_json,
+};
+use crate::ai_chat_client::{
+    end_stream, resolve_chat_client, truncate_chars, try_begin_stream, validate_session,
 };
 use crate::ai_chat_stream::{ChatStreamEvent, stream_chat};
 use crate::ai_client::AiClient;
-use crate::ai_provider::{AiProviderConfig, ProviderKind, provider_scope};
 use crate::commands::AppState;
 use crate::db_ai_chat::{ChatMessage, ChatSession};
 
@@ -25,59 +27,6 @@ const CHAT_SYSTEM_PROMPT: &str =
 
 /// 单条消息最大字符数（防误粘贴巨文——超限明确拒绝而非静默截断）。
 const MAX_MESSAGE_CHARS: usize = 16000;
-
-fn validate_session(state: &AppState, session_id: i64) -> Result<ChatSession, String> {
-    state
-        .db
-        .get_chat_session(session_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "会话不存在".to_string())
-}
-
-/// 会话客户端解析：session.provider_id 显式 > 默认 Provider；密钥口径
-/// 显式=per-scope（env 不覆盖显式选择），默认=resolve_default_provider_key
-/// （env > per-provider > legacy，与精修链同口径）。
-fn resolve_chat_client(
-    state: &AppState,
-    session: &ChatSession,
-) -> Result<(AiClient, Option<String>), String> {
-    let store = state
-        .ai_providers
-        .lock()
-        .map_err(|e| format!("AI Provider 存储锁中毒: {}", e))?
-        .clone();
-    if let Some(pid) = session.provider_id.clone() {
-        let provider = store
-            .get(&pid)
-            .cloned()
-            .ok_or_else(|| format!("Provider {} 不存在（请到设置页检查）", pid))?;
-        let client = build_provider_client(state, &provider, &pid)?;
-        return Ok((client, Some(pid)));
-    }
-    let settings = state
-        .ai_settings
-        .lock()
-        .map_err(|e| format!("AI 设置锁中毒: {}", e))?
-        .clone();
-    let stored_key = crate::commands_ai_providers::resolve_default_provider_key(state)?;
-    Ok((AiClient::from_settings_with_store(&settings, stored_key, &store), None))
-}
-
-/// 显式 Provider 客户端（Ollama 免密钥；其余 per-scope 凭据缺失 → 明确报错）。
-fn build_provider_client(
-    state: &AppState,
-    provider: &AiProviderConfig,
-    pid: &str,
-) -> Result<AiClient, String> {
-    if provider.kind == ProviderKind::Ollama {
-        return Ok(AiClient::from_provider(provider, None));
-    }
-    let key = state
-        .ai_credentials
-        .load_key(&provider_scope(pid))?
-        .ok_or_else(|| format!("Provider {} 未保存密钥（设置页保存后重试）", provider.name))?;
-    Ok(AiClient::from_provider(provider, Some(key)))
-}
 
 /// 新建会话（标题可空——默认"新对话"）。
 #[tauri::command]
@@ -171,19 +120,42 @@ pub async fn chat_send(
     // 先解析客户端（Provider/密钥缺失 → 明确报错，不落无应答的用户消息）
     let (client, provider_id) = resolve_chat_client(&state, &session)?;
     let model = client.config.model.clone();
-    // 编辑后重发：改内容 + 作废旧回答（其后消息全删）
+    // 单活跃流注册必须早于任何落库（审查修复：原在 run_stream 内注册——
+    // 并发 chat_send 会先重复落库再被拒，防重复扣费/重复请求）
+    let flag = try_begin_stream(&state, session_id)?;
+    // 编辑后重发：改内容 + 作废旧回答（其后消息全删）；
+    // 入参校验（审查修复）：消息必须属于本会话且为 user 角色（防跨会话误改）
     if let Some(mid) = resend_message_id {
-        state.db.update_chat_message_content(mid as i64, &content).map_err(|e| e.to_string())?;
-        state.db.delete_chat_messages_after(session_id, mid as i64).map_err(|e| e.to_string())?;
-    } else {
-        state.db.insert_chat_message(session_id, "user", &content, "done").map_err(|e| e.to_string())?;
+        let role = state.db.chat_message_role(session_id, mid as i64).map_err(|e| e.to_string())?;
+        match role.as_deref() {
+            Some("user") => {}
+            Some(_) => {
+                end_stream(&state, session_id);
+                return Err("编辑重发只能作用于用户消息（assistant 消息用「重发」）".to_string());
+            }
+            None => {
+                end_stream(&state, session_id);
+                return Err("要编辑的消息不存在或不属于该会话".to_string());
+            }
+        }
+        if let Err(e) = state.db.update_chat_message_content(session_id, mid as i64, &content) {
+            end_stream(&state, session_id);
+            return Err(e.to_string());
+        }
+        if let Err(e) = state.db.delete_chat_messages_after(session_id, mid as i64) {
+            end_stream(&state, session_id);
+            return Err(e.to_string());
+        }
+    } else if let Err(e) = state.db.insert_chat_message(session_id, "user", &content, "done") {
+        end_stream(&state, session_id);
+        return Err(e.to_string());
     }
     if let Some(pid) = &provider_id {
         state.db.set_chat_session_model(session_id, Some(pid), &model).map_err(|e| e.to_string())?;
     } else {
         state.db.set_chat_session_model(session_id, None, &model).map_err(|e| e.to_string())?;
     }
-    run_stream(&state, session_id, model, client, channel)
+    run_stream(&state, session_id, model, client, channel, flag)
 }
 
 /// 重新生成（重发/重试）：删除最后一条 assistant（含 failed/aborted 占位）后重流。
@@ -203,13 +175,19 @@ pub async fn chat_regenerate(
     // 先解析客户端（Provider/密钥失败 → 不删旧回答，保留可重发状态）
     let (client, _provider_id) = resolve_chat_client(&state, &session)?;
     let model = client.config.model.clone();
+    // 单活跃流注册早于删除动作（审查修复：与 chat_send 同纪律）
+    let flag = try_begin_stream(&state, session_id)?;
     let msgs = state.db.list_chat_messages(session_id).map_err(|e| e.to_string())?;
     if let Some(last_assistant) = msgs.iter().rev().find(|m| m.role == "assistant") {
-        state.db.delete_chat_message(session_id, last_assistant.id).map_err(|e| e.to_string())?;
+        if let Err(e) = state.db.delete_chat_message(session_id, last_assistant.id) {
+            end_stream(&state, session_id);
+            return Err(e.to_string());
+        }
     } else {
+        end_stream(&state, session_id);
         return Err("没有可重新生成的消息".to_string());
     }
-    run_stream(&state, session_id, model, client, channel)
+    run_stream(&state, session_id, model, client, channel, flag)
 }
 
 /// 停止（置取消标志 → 流循环下一行检查短路；无进行中流则 no-op）。
@@ -225,25 +203,15 @@ pub fn chat_cancel(state: State<'_, AppState>, session_id: i64) -> Result<(), St
     Ok(())
 }
 
-/// 单活跃流编排（chat_send/chat_regenerate 共用）。
+/// 单活跃流编排（chat_send/chat_regenerate 共用；flag 由调用方注册）。
 fn run_stream(
     state: &AppState,
     session_id: i64,
     model: String,
     client: AiClient,
     channel: Channel<ChatStreamEvent>,
+    flag: crate::ai_chat::CancelFlag,
 ) -> Result<(), String> {
-    // 单活跃流：同会话已有进行中的发送 → 拒绝（防并发重复扣费）
-    let flag = CancelFlag::new();
-    {
-        let mut cancels = state
-            .chat_cancels
-            .lock()
-            .map_err(|e| format!("取消表锁中毒: {}", e))?;
-        if cancels.insert(session_id, flag.clone()).is_some() {
-            return Err("该会话已有进行中的对话——请等待完成或先停止".to_string());
-        }
-    }
     // 历史组装（最新消息已入库；failed 占位不喂上下文——用户已见错误）。
     // 列表失败不阻断流传输（消息刚插入过）；打印可观测，历史为空保守降级。
     let messages = match state.db.list_chat_messages(session_id) {
@@ -271,11 +239,13 @@ fn run_stream(
         }) {
             Ok(o) => o,
             Err(e) => {
-                // 失败：落 assistant 占位（status=failed，空内容）——前端错误
-                // 气泡 + 重试（chat_regenerate 删占位后重流）；不静默不丢失
+                // 失败：占位消息 content=错误原文（审查修复：L2 优先级——错误
+                // 文本持久化，前端失败气泡不再依赖瞬态事件态，重启/切换后仍可读）；
+                // 重试=chat_regenerate（删占位后重流）
+                let msg = e.to_string();
                 let _ = channel.send(ChatStreamEvent::from(&e));
-                let _ = st.db.insert_chat_message(session_id, "assistant", "", "failed");
-                st.chat_cancels.lock().unwrap_or_else(|x| x.into_inner()).remove(&session_id);
+                let _ = st.db.insert_chat_message(session_id, "assistant", &truncate_chars(&msg, 500), "failed");
+                end_stream(&st, session_id);
                 return;
             }
         };
@@ -298,7 +268,7 @@ fn run_stream(
         } else {
             let _ = channel.send(ChatStreamEvent::Done { content: outcome.content, usage_json: outcome.usage_json });
         }
-        st.chat_cancels.lock().unwrap_or_else(|x| x.into_inner()).remove(&session_id);
+        end_stream(&st, session_id);
     });
     Ok(())
 }

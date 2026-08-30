@@ -90,14 +90,30 @@ fn edit_resend_deletes_messages_after() {
     let sid = db.insert_chat_session(None).unwrap();
     let m1 = db.insert_chat_message(sid, "user", "原来", "done").unwrap();
     let _m2 = db.insert_chat_message(sid, "assistant", "旧回答", "done").unwrap();
-    // 编辑后重发：改内容 + 删除其后消息
-    db.update_chat_message_content(m1, "改后").unwrap();
+    // 编辑后重发：改内容 + 删除其后消息（会话限定）
+    db.update_chat_message_content(sid, m1, "改后").unwrap();
     db.delete_chat_messages_after(sid, m1).unwrap();
     let msgs = db.list_chat_messages(sid).unwrap();
     assert_eq!(msgs.len(), 1);
     assert_eq!(msgs[0].content, "改后");
     // m2 已删（id > m1 排除）
     assert!(db.list_chat_messages(sid).unwrap().len() == 1);
+    // 跨会话编辑被拒（会话限定——查无此行，内容不变）
+    let s2 = db.insert_chat_session(None).unwrap();
+    db.update_chat_message_content(s2, m1, "篡改").unwrap();
+    assert_eq!(db.list_chat_messages(sid).unwrap()[0].content, "改后");
+}
+
+#[test]
+fn chat_message_role_scoped_and_role_report() {
+    let db = open_mem();
+    let sid = db.insert_chat_session(None).unwrap();
+    let um = db.insert_chat_message(sid, "user", "u", "done").unwrap();
+    let am = db.insert_chat_message(sid, "assistant", "a", "done").unwrap();
+    assert_eq!(db.chat_message_role(sid, um).unwrap().as_deref(), Some("user"));
+    assert_eq!(db.chat_message_role(sid, am).unwrap().as_deref(), Some("assistant"));
+    // 跨会话 id → None（不入参校验即误改的根因防线）
+    assert_eq!(db.chat_message_role(sid + 100, um).unwrap(), None);
 }
 
 #[test]

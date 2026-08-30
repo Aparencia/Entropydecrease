@@ -48,10 +48,11 @@ mod db_ai_usage;
 mod db_ai_tasks;
 mod commands_notes_version;
 // v0.16.0（REQ-224/225/230）：AI 对话——纯函数层（消息组装/SSE 解析/
-// 轨迹序列化）+ 流式发送 + 会话/消息持久化 + 命令层
+// 轨迹序列化）+ 流式发送 + 会话/消息持久化 + 命令层 + 客户端解析（审查拆分）
 mod ai_chat;
 mod db_ai_chat;
 mod ai_chat_stream;
+mod ai_chat_client;
 mod commands_ai_chat;
 mod asr;
 mod asr_clean;

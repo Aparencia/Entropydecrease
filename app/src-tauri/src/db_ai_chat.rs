@@ -194,12 +194,25 @@ impl Db {
         Ok(())
     }
 
-    /// 编辑历史消息内容（编辑后重发；仅 user 消息语义）。
-    pub fn update_chat_message_content(&self, id: i64, content: &str) -> Result<()> {
+    /// 消息角色查询（编辑重发入参校验：必须属于该会话且为 user——防跨会话误改）。
+    pub fn chat_message_role(&self, session_id: i64, message_id: i64) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        conn.query_row(
+            "SELECT role FROM chat_messages WHERE id=?1 AND session_id=?2",
+            params![message_id, session_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(Into::into)
+    }
+
+    /// 编辑历史消息内容（编辑后重发；会话限定——审查修复：原无 session 条件，
+    /// IPC 可传任意消息 id 误改他会话内容）。
+    pub fn update_chat_message_content(&self, session_id: i64, id: i64, content: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.execute(
-            "UPDATE chat_messages SET content=?1, created_at=?2 WHERE id=?3",
-            params![content, crate::db_sessions_rows::unix_seconds(), id],
+            "UPDATE chat_messages SET content=?1, created_at=?2 WHERE id=?3 AND session_id=?4",
+            params![content, crate::db_sessions_rows::unix_seconds(), id, session_id],
         )?;
         Ok(())
     }

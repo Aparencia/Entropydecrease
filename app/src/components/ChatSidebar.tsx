@@ -7,8 +7,9 @@
  */
 import type { AiTaskRecord, ChatSession } from "../types";
 
-/** 任务类型标签（refine/enrich → 中文 + 图标） */
-export const OP_LABEL: Record<string, string> = {
+/** 任务类型标签（refine/enrich → 中文 + 图标；模块内消费——审查修复：原
+ *  export 无外部消费方，收窄为非导出） */
+const OP_LABEL: Record<string, string> = {
   refine: "✨ 精修",
   enrich: "📚 补充",
 };

@@ -10,9 +10,8 @@ import type { ChatMessage } from "../types";
 import ChatMessageMarkdown from "./ChatMessageMarkdown";
 
 export interface StreamingState {
-  /** 流式累积文本（null=非流式） */
+  /** 流式累积文本（非 null = 流式生成中） */
   text: string | null;
-  error: { kind: string; message: string } | null;
 }
 
 interface Props {
@@ -79,7 +78,7 @@ export default function ChatMessageList({ messages, streaming, onRegenerate, onE
                 </div>
               ) : m.status === "failed" ? (
                 <div style={{ border: "1px solid #fecaca", background: "#fef2f2", borderRadius: 8, padding: "8px 10px", fontSize: 12.5, color: "#991b1b" }}>
-                  生成失败：{streaming?.error?.message ?? "未知错误"}
+                  生成失败：{m.content || "未知错误"}
                   <div>
                     <button onClick={onRegenerate} style={{ marginTop: 6, fontSize: 12, padding: "2px 10px", border: "1px solid #fca5a5", borderRadius: 6, background: "#fff", color: "#b91c1c", cursor: "pointer" }}>
                       ↩ 重试
