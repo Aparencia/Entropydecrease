@@ -254,7 +254,8 @@ pub fn ai_enrich_revert(
 /// 后台补充任务：读笔记 → 切片 → 逐片批量补充（mock/云端）→ 合并 → 混合落位。
 fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnrichKind>, mock: bool) {
     let started = std::time::Instant::now();
-    let outcome: Result<AiEnrichResult, AiTaskFailure> = (|| {
+    // v0.16.0（REQ-230）：返回轨迹（每片提示词/回答——任务对话视图数据源）
+    let outcome: Result<(AiEnrichResult, Vec<crate::ai_chat::AiTurn>), AiTaskFailure> = (|| {
         let note = st
             .db
             .get_note(note_id)
@@ -288,6 +289,7 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
         let total = slices.len();
         set_task(&st, task_id, AiTaskState::Running { finished_slices: 0, total_slices: total });
         let mut all_blocks: Vec<AiEnrichBlock> = Vec::new();
+        let mut turns: Vec<crate::ai_chat::AiTurn> = Vec::with_capacity(total);
         for (i, slice) in slices.iter().enumerate() {
             let req = AiEnrichRequest {
                 note_content: slice.clone(),
@@ -304,7 +306,17 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
                     adapter.enrich(&req, &selected).map_err(AiTaskFailure::from)
                 };
                 match r {
-                    Ok(v) => { resp = Some(v); break; }
+                    Ok(v) => {
+                        // REQ-230：成功片记录轨迹（提示词/回答原文）
+                        turns.push(crate::ai_chat::AiTurn {
+                            turn: i + 1,
+                            system: adapter.prompt.build_system(&selected),
+                            user: serde_json::to_string(&req).unwrap_or_default(),
+                            response: serde_json::to_string(&v).unwrap_or_default(),
+                        });
+                        resp = Some(v);
+                        break;
+                    }
                     Err(e) if attempt < 1 => {
                         eprintln!("[enrich-task] task={} 片 {} 第{}次失败，重试: {}", task_id, i + 1, attempt + 1, e.message());
                     }
@@ -326,21 +338,30 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
         let depth = resp.blocks.iter().filter(|b| b.kind.is_depth()).count();
         let breadth = resp.blocks.len() - depth;
         let kinds: Vec<String> = resp.blocks.iter().map(|b| b.kind.as_str().to_string()).collect();
-        Ok(AiEnrichResult {
-            note_id,
-            base_markdown: note.content,
-            enriched_markdown: enriched,
-            blocks: resp.blocks.len(),
-            depth_blocks: depth,
-            breadth_blocks: breadth,
-            slices: total,
-            kinds,
-            model: client.config.model,
-        })
+        Ok((
+            AiEnrichResult {
+                note_id,
+                base_markdown: note.content,
+                enriched_markdown: enriched,
+                blocks: resp.blocks.len(),
+                depth_blocks: depth,
+                breadth_blocks: breadth,
+                slices: total,
+                kinds,
+                model: client.config.model,
+            },
+            turns,
+        ))
     })();
     let elapsed_ms = started.elapsed().as_millis() as i64;
     match outcome {
-        Ok(result) => {
+        Ok((result, turns)) => {
+            // v0.16.0（REQ-230）：轨迹落库（提示词/回答全文——任务对话视图数据源）
+            if let Some(json) = crate::ai_chat::trajectory_to_json(&turns) {
+                if let Err(e) = st.db.update_ai_task_trajectory(task_id, &json) {
+                    eprintln!("[enrich-task] task={} 轨迹落库失败（不阻断）: {}", task_id, e);
+                }
+            }
             {
                 let mut tasks = st.ai_tasks.lock().unwrap_or_else(|e| e.into_inner());
                 if let Some(entry) = tasks.get_mut(&task_id) {

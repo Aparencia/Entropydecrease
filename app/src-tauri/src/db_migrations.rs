@@ -444,7 +444,9 @@ CREATE TABLE IF NOT EXISTS contracts (
 /// @ai-context: CREATE TABLE IF NOT EXISTS 只对新库生效——既有数据库缺列时必须
 ///              ALTER 补齐（v0.5.0 M1：sessions.profile）；列存在性经 PRAGMA
 ///              table_info 检查，重复启动幂等。
-fn ensure_column(conn: &Connection, table: &str, column: &str, add_sql: &str) -> Result<()> {
+/// @ai-context: pub(crate) 供子模块建表后随表补列（db_ai_tasks 的
+///              trajectory_json——表在 init_ai_tasks 建，时序晚于本文件）。
+pub(crate) fn ensure_column(conn: &Connection, table: &str, column: &str, add_sql: &str) -> Result<()> {
     let mut stmt = conn.prepare(&format!("PRAGMA table_info({})", table))?;
     let exists = stmt
         .query_map([], |row| row.get::<_, String>(1))?

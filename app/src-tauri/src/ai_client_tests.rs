@@ -210,6 +210,9 @@ fn from_settings_resolves_default_provider_when_set() {
     let mut p = preset_templates().remove(0);
     p.id = "prov-a".to_string();
     p.default_model = "model-a".to_string();
+    // Why：v0.12.0 默认链切 DeepSeek（预设首位 DeepSeek）——断言用被选 Provider
+    // 自身 base_url，不硬编码（原硬编码 SiliconFlow 在默认链迁移后已过期）
+    let expected_base = p.base_url.clone();
     store.providers.push(p);
     store.default_provider_id = Some("prov-a".to_string());
     let client = AiClient::from_settings_with_store(
@@ -218,7 +221,7 @@ fn from_settings_resolves_default_provider_when_set() {
         &store,
     );
     assert_eq!(client.config.model, "model-a");
-    assert_eq!(client.config.base_url, "https://api.siliconflow.cn/v1");
+    assert_eq!(client.config.base_url, expected_base);
 }
 
 #[test]

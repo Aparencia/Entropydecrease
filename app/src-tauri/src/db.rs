@@ -35,6 +35,8 @@ impl Db {
         // v0.8.0 F2（2026-08-21）：AI 任务中心持久化（任务记录/恢复/保留）
         let db = Self { conn: Arc::new(Mutex::new(conn)) };
         db.init_ai_tasks()?;
+        // v0.16.0（REQ-224）：AI 对话持久化（会话/消息双表）
+        db.init_ai_chat()?;
         Ok(db)
     }
 

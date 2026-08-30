@@ -14,4 +14,5 @@ export * from "./types/session";
 export * from "./types/artifact";
 export * from "./types/live";
 export * from "./types/ai";
+export * from "./types/chat";
 export * from "./types/system";

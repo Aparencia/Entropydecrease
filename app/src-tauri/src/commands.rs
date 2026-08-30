@@ -164,6 +164,9 @@ pub struct AppState {
     pub ai_tasks: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<u64, crate::commands_ai_refine::AiTaskEntry>>>,
     /// v0.8.0 M2（REQ-145）：任务 id 序列（原子递增——并发安全）
     pub ai_task_seq: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// v0.16.0（REQ-225）：AI 对话流取消标志表（会话 id → CancelFlag；
+    /// chat_cancel 置位 → 流循环退出；发送结束/失败即清除）
+    pub chat_cancels: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<i64, crate::ai_chat::CancelFlag>>>,
     /// v0.11.7（图文会话，ADR-020）：进行中的图文采集会话 id（互斥槽；
     /// start/finish/discard 独占修改——同一时刻最多一个图文采集）
     pub photo_session: std::sync::Arc<std::sync::Mutex<Option<i64>>>,

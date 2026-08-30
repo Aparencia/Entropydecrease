@@ -16,6 +16,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import ClassroomPage from "./pages/ClassroomPage";
 import NotesPage from "./pages/NotesPage";
 import SessionsPage from "./pages/SessionsPage";
+// v0.16.0：AI 对话页（纯聊天 + AI 任务对话视图——DSH 交互范式）
+import ChatPage from "./pages/ChatPage";
 // 2026-08-21 用户需求：设置页（课堂助手设置类面板迁出，单页滚动+分组）
 import SettingsPage from "./pages/SettingsPage";
 // v0.13.1：知识体系页（三时钟纪律——体系进周/季度视图，不入每日复习面）
@@ -25,12 +27,14 @@ import CaptureFloatPanel from "./components/CaptureFloatPanel";
 import CaptureOverlayPanel from "./components/CaptureOverlayPanel";
 import type { AiTaskState } from "./types";
 
-type Page = "classroom" | "sessions" | "notes" | "knowledge" | "settings";
+type Page = "classroom" | "sessions" | "notes" | "chat" | "knowledge" | "settings";
 
 const NAV_ITEMS: { key: Page; label: string }[] = [
   { key: "classroom", label: "📡 课堂助手" },
   { key: "sessions", label: "🗂 会话" },
   { key: "notes", label: "📝 笔记" },
+  // v0.16.0：AI 对话页（纯聊天 + AI 任务对话视图）
+  { key: "chat", label: "💬 AI 对话" },
   { key: "knowledge", label: "🧠 体系" },
   { key: "settings", label: "⚙ 设置" },
 ];
@@ -282,6 +286,14 @@ function App() {
               setFocusSessionId(id);
               setPage("sessions");
             }}
+          />
+        </div>
+        <div style={{ flex: 1, display: page === "chat" ? "block" : "none", overflow: "hidden" }}>
+          {/* v0.16.0：AI 对话页——跨页跳转复用 focus 机制（任务对话引用 → 会话/笔记/设置） */}
+          <ChatPage
+            onOpenSessions={(id) => { setFocusSessionId(id); setPage("sessions"); }}
+            onOpenNote={(id) => { setFocusNoteId(id); setPage("notes"); }}
+            onOpenSettings={() => setPage("settings")}
           />
         </div>
         <div style={{ flex: 1, display: page === "knowledge" ? "block" : "none", overflow: "hidden" }}>

@@ -47,6 +47,12 @@ mod db_ai_usage;
 // v0.8.0 F2（2026-08-21）：AI 任务中心持久化——任务记录/结果恢复/保留策略
 mod db_ai_tasks;
 mod commands_notes_version;
+// v0.16.0（REQ-224/225/230）：AI 对话——纯函数层（消息组装/SSE 解析/
+// 轨迹序列化）+ 流式发送 + 会话/消息持久化 + 命令层
+mod ai_chat;
+mod db_ai_chat;
+mod ai_chat_stream;
+mod commands_ai_chat;
 mod asr;
 mod asr_clean;
 mod asr_dedupe;
@@ -727,6 +733,18 @@ pub fn run() {
             commands_ai_refine::refine_workbench,
             // v0.8.0 F2（2026-08-21）：任务中心——历史列表（面板数据源）
             commands_ai_refine::ai_task_history,
+            // v0.16.0（REQ-224/225/226/227/228/230）：内嵌 AI 对话——
+            // 纯聊天（会话 CRUD/流式发送/停止/重发）+ 任务对话视图（轨迹详情）
+            commands_ai_chat::chat_create_session,
+            commands_ai_chat::chat_list_sessions,
+            commands_ai_chat::chat_rename_session,
+            commands_ai_chat::chat_delete_session,
+            commands_ai_chat::chat_list_messages,
+            commands_ai_chat::chat_set_model,
+            commands_ai_chat::chat_send,
+            commands_ai_chat::chat_regenerate,
+            commands_ai_chat::chat_cancel,
+            commands_ai_chat::ai_task_conversation,
             // v0.8.0 M3（REQ-142）：知识补充——预估/任务/结果/采纳/撤销
             commands_ai_enrich::ai_enrich_estimate,
             commands_ai_enrich::ai_enrich_start,

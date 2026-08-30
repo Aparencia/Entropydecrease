@@ -1,0 +1,120 @@
+/**
+ * ChatMessageList — AI 对话消息流（v0.16.0 REQ-225，DSH 交互范式）。
+ *
+ * @ai-context: 状态机对应——streamingText 非空 = 流式生成中（打字光标 +
+ *              停止由 Composer 控制）；失败占位（status=failed）渲染错误
+ *              气泡 + 重发按钮（chat_regenerate）；aborted 渲染停止态。
+ */
+import { useEffect, useRef } from "react";
+import type { ChatMessage } from "../types";
+import ChatMessageMarkdown from "./ChatMessageMarkdown";
+
+export interface StreamingState {
+  /** 流式累积文本（null=非流式） */
+  text: string | null;
+  error: { kind: string; message: string } | null;
+}
+
+interface Props {
+  messages: ChatMessage[];
+  streaming: StreamingState | null;
+  onRegenerate: () => void;
+  /** 编辑后重发入口（user 消息 ✎ → 预填 composer） */
+  onEditUser?: (message: ChatMessage) => void;
+  /** 当前正在编辑的消息 id（高亮） */
+  editingId?: number | null;
+}
+
+function fmtTime(unix: number): string {
+  const d = new Date(unix * 1000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+export function parseUsage(usageJson: string | null): { tokens: number | null } {
+  if (!usageJson) return { tokens: null };
+  try {
+    const u = JSON.parse(usageJson) as { total_tokens?: number; totalTokens?: number; prompt_tokens?: number; completion_tokens?: number };
+    const total = u.total_tokens ?? u.totalTokens ?? ((u.prompt_tokens ?? 0) + (u.completion_tokens ?? 0));
+    return { tokens: total > 0 ? total : null };
+  } catch {
+    return { tokens: null };
+  }
+}
+
+export default function ChatMessageList({ messages, streaming, onRegenerate, onEditUser, editingId }: Props) {
+  const endRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length, streaming?.text]);
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 16px" }}>
+      {messages.length === 0 && !streaming && (
+        <div style={{ textAlign: "center", color: "#9ca3af", marginTop: 80, fontSize: 13 }}>
+          开始你的第一句话——例如「用通俗的语言解释一下什么是梯度下降」
+        </div>
+      )}
+      {messages.map((m) => {
+        const isUser = m.role === "user";
+        return (
+          <div key={m.id} style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom: 12 }}>
+            <div style={{ maxWidth: "86%", ...(isUser ? { background: "#0d9488", color: "#fff", padding: "8px 12px", borderRadius: "10px 10px 2px 10px" } : { padding: "2px 0" }) }}>
+              {isUser ? (
+                <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 13.5 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end" }}>
+                    <span style={{ fontSize: 11, color: "#99f6e4" }}>{fmtTime(m.createdAt)}</span>
+                    {onEditUser && m.status === "done" && (
+                      <span
+                        role="button"
+                        title="编辑后重发"
+                        onClick={() => onEditUser(m)}
+                        style={{ fontSize: 11, cursor: "pointer", color: editingId === m.id ? "#fff" : "#99f6e4", textDecoration: editingId === m.id ? "underline" : "none" }}
+                      >
+                        ✎ {editingId === m.id ? "编辑中" : "编辑"}
+                      </span>
+                    )}
+                  </div>
+                  <div>{m.content}</div>
+                </div>
+              ) : m.status === "failed" ? (
+                <div style={{ border: "1px solid #fecaca", background: "#fef2f2", borderRadius: 8, padding: "8px 10px", fontSize: 12.5, color: "#991b1b" }}>
+                  生成失败：{streaming?.error?.message ?? "未知错误"}
+                  <div>
+                    <button onClick={onRegenerate} style={{ marginTop: 6, fontSize: 12, padding: "2px 10px", border: "1px solid #fca5a5", borderRadius: 6, background: "#fff", color: "#b91c1c", cursor: "pointer" }}>
+                      ↩ 重试
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ borderRadius: "10px 10px 10px 2px" }}>
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 2, display: "flex", gap: 8 }}>
+                    <span>🤖 {m.model ?? "AI"}</span>
+                    <span>{fmtTime(m.createdAt)}</span>
+                    {m.status === "aborted" && <span style={{ color: "#b45309" }}>已停止</span>}
+                    {parseUsage(m.usageJson).tokens != null && (
+                      <span>{parseUsage(m.usageJson).tokens} tokens</span>
+                    )}
+                  </div>
+                  <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px" }}>
+                    <ChatMessageMarkdown content={m.content} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      {/* 流式占位（进行中回答） */}
+      {streaming?.text !== null && streaming?.text !== undefined && (
+        <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 12 }}>
+          <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", maxWidth: "86%" }}>
+            <ChatMessageMarkdown content={streaming.text} />
+            <span style={{ display: "inline-block", width: 6, height: 14, background: "#0d9488", animation: "chatBlink 1s infinite", verticalAlign: "text-bottom", marginLeft: 2 }} />
+          </div>
+        </div>
+      )}
+      <div ref={endRef} />
+    </div>
+  );
+}

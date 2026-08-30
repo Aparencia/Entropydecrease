@@ -387,6 +387,20 @@
 | REQ-222 | 领域记忆扩展：ProfileMemory 增领域独立通道（DomainMemoryEntry，serde default 零迁移）＋remember_domain/lookup_domain（series 键同口径）——用户确认的 coarse+细目下次同标题/系列直接生效 | P1 | 已实施 | v0.13.6 | 修改即记忆纪律延续；检测>记忆兜底；领域通道与 kind/form 通道分离防污染（规格精化）；**代码已交付（2026-08-23）** |
 | REQ-223 | 修复批：add_knowledge_node 契约（前端 type→nodeType，2 调用点+测试）+ 笔记编辑完成即时刷新（await 保存＋get_note 回填 selected＋列表重载，补齐 ESC 路径） | P0 | 已实施 | v0.13.6 | 用户实测 P0；标题修改显示不生效同根因；**代码已交付（2026-08-23）** |
 
+### v0.16.0 · 内嵌 AI 对话（纯聊天 · DeepSeek Harness 蓝本）
+
+> 规划见 [versions/v0.16.0.md](../versions/v0.16.0.md)；用户裁决（2026-08-30）：轻量复刻 DSH 交互范式 + 复用 BYOK 平台 + 精修对话轨迹整合；AI 增强采集（REQ-229）后续再议。
+
+| REQ | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
+|----|------|--------|------|---------|------|
+| REQ-224 | AI 对话页（纯聊天）：顶部 Tab「AI 对话」+ 多轮文本聊天 + 消息落 SQLite（ai_chat_sessions/ai_chat_messages 两表）+ markdown 渲染 | P0 | 已立项 | v0.16.0 | 复用 react-markdown+GFM+KaTeX；不做上下文注入/工具调用 |
+| REQ-225 | 聊天流式输出 + 停止 + 重发/编辑重发 + 错误重试：SSE（ureq into_reader 逐行解析 → Tauri 2 Channel）+ 状态机 preparing/streaming/done/aborted/failed + 单活跃流 | P0 | 已立项 | v0.16.0 | DSH 手感核心；错误复用 AiClientError 六类 |
+| REQ-226 | 聊天会话管理：侧栏新建/重命名/删除/搜索 + 会话切换保留挂载 | P0 | 已立项 | v0.16.0 | TD-004 同模式 |
+| REQ-227 | 每会话模型选择：复用 AI Provider 预设（默认=设置默认）+ 消息模型标签 | P1 | 已立项 | v0.16.0 | 预设下拉 |
+| REQ-228 | 聊天授权/成本/审计：content_gate 双闸门（默认关）+ 空态引导 + 每消息 token/成本 + 用量/审计落库 | P0 | 已立项 | v0.16.0 | 复用现链；首次发送云端提示 |
+| REQ-229 | AI 增强采集（实时理解/智能切片，抖音范式） | P2 | 待评估 | 后续再议 | 2026-08-30 用户裁决：后续再议，本版登记不进范围 |
+| REQ-230 | AI 任务对话视图（精修/补充轨迹）：ai_tasks 加 trajectory_json（[{turn,system,user,response}]）→ AI 对话页「AI 任务」段只读对话展示提示词/回答全文 + 可跳转引用（来源会话/笔记/工作台）+ 失败重试 | P0 | 已立项 | v0.16.0 | 用户裁决：需看到提示词和回答，会话用可跳转引用 |
+
 ### V1.0 · 体验增强（远期）
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |

@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use base64::Engine;
 
+use crate::ai_chat::{AiTurn, trajectory_to_json};
 use crate::ai_client::AiClient;
 use crate::ai_mock::AiMockAdapter;
 use crate::ai_note_refine::AiNoteRefineAdapter;
@@ -72,7 +73,7 @@ pub fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) 
     });
     let elapsed_ms = started.elapsed().as_millis() as i64;
     match outcome {
-        Ok(result) => {
+        Ok((result, turns)) => {
             eprintln!(
                 "[refine-task] task={} succeeded slices={} failed={} diff={}",
                 task_id,
@@ -80,6 +81,12 @@ pub fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) 
                 result.failed_slices,
                 result.diff.len()
             );
+            // v0.16.0（REQ-230）：轨迹落库（提示词/回答全文——任务对话视图数据源）
+            if let Some(json) = trajectory_to_json(&turns) {
+                if let Err(e) = st.db.update_ai_task_trajectory(task_id, &json) {
+                    eprintln!("[refine-task] task={} 轨迹落库失败（不阻断）: {}", task_id, e);
+                }
+            }
             {
                 let mut tasks = st.ai_tasks.lock().unwrap_or_else(|e| e.into_inner());
                 if let Some(entry) = tasks.get_mut(&task_id) {
@@ -126,12 +133,15 @@ pub fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) 
 }
 
 /// 精修任务主体（返回 Result；panic 由外层 catch_unwind 兜底）。
+///
+/// @ai-context: v0.16.0（REQ-230）返回 (结果, 轨迹)——轨迹为每片 LLM 调用的
+///              提示词/回答；外层终态时随任务落库（任务对话视图数据源）。
 fn run_refine_task_inner(
     st: &AppState,
     task_id: u64,
     session_id: i64,
     mock: bool,
-) -> Result<AiRefineResult, AiTaskFailure> {
+) -> Result<(AiRefineResult, Vec<AiTurn>), AiTaskFailure> {
     let env = PurifyEnv {
         config: st.purify.clone(),
         symbol: st.symbol_normalize.clone(),
@@ -222,7 +232,7 @@ fn run_refine_task_inner(
     };
     // F2-B4：并发精修（worker 池消费切片队列；按片上报进度；失败片重试后
     // 仍失败 → 记 failed 下标，不中断其他片——部分成功语义）
-    let (markdowns, failed) = refine_slices_concurrent(RefineCtx {
+    let (markdowns, failed, mut turns) = refine_slices_concurrent(RefineCtx {
         slices: &slices,
         chapters: &chapters,
         glossary: &glossary,
@@ -245,17 +255,21 @@ fn run_refine_task_inner(
     refined = crate::note_image_merge::merge_rule_images(&draft.markdown, &refined);
     let diff = diff_markdown(&draft.markdown, &refined);
     let (added, removed, _) = diff_stats(&diff);
-    Ok(AiRefineResult {
-        title: draft.title.clone(),
-        base_markdown: draft.markdown.clone(),
-        refined_markdown: refined,
-        diff,
-        added_lines: added,
-        removed_lines: removed,
-        slices: total,
-        failed_slices: failed,
-        model: client.config.model,
-    })
+    turns.sort_by_key(|t| t.turn); // 轨迹按片序排列（并发收集序 ≠ 片序）
+    Ok((
+        AiRefineResult {
+            title: draft.title.clone(),
+            base_markdown: draft.markdown.clone(),
+            refined_markdown: refined,
+            diff,
+            added_lines: added,
+            removed_lines: removed,
+            slices: total,
+            failed_slices: failed,
+            model: client.config.model,
+        },
+        turns,
+    ))
 }
 
 /// 并发精修上下文（参数聚合——clippy too_many_arguments 修复）。
@@ -362,21 +376,25 @@ fn load_session_vision_images(data_dir: &std::path::Path, session_id: i64) -> Ve
 
 /// 并发切片精修（纯编排）：worker 池从共享队列取片 → 单片重试 → 收集。
 ///
-/// @ai-context: 返回 (各片 markdown（保序，失败片跳过）, 失败片数)。
+/// @ai-context: 返回 (各片 markdown（保序，失败片跳过）, 失败片数, 轨迹（每片
+///              成功调用的提示词/回答——REQ-230；vision 调用只记图数占位，
+///              base64 不入轨迹库）)。
 ///              单片失败不 panic、不中断其他片——部分成功语义（REQ-145）。
 ///              进度经 set_task 上报（finished = 已完成的片数，含失败片——
 ///              前端进度条推进不受单片失败影响）。
 /// @ai-context: F3 v2：请求携带 slice_index/slice_total/prev_summary/
 ///              next_summary——模型知道自己是第几片、前后片衔接什么
 ///              （防章节标题重复/内容断裂）。
-fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usize) {
+fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usize, Vec<AiTurn>) {
     let total = ctx.slices.len();
     if total == 0 {
-        return (Vec::new(), 0);
+        return (Vec::new(), 0, Vec::new());
     }
     let queue: Arc<Mutex<VecDeque<usize>>> = Arc::new(Mutex::new((0..total).collect()));
     let (tx, rx) = mpsc::channel::<(usize, Option<String>)>();
     let workers = ctx.workers.max(1).min(total);
+    // 轨迹收集槽（REQ-230）：worker 并发写，Mutex 保护；顺序由 turn 字段定
+    let turns: Arc<Mutex<Vec<AiTurn>>> = Arc::new(Mutex::new(Vec::with_capacity(total)));
     // 请求一次构建（Arc 共享——worker 只读，避免每 worker 重复克隆切片）
     let reqs: Arc<Vec<AiRefineRequest>> = Arc::new(
         ctx.slices
@@ -405,6 +423,9 @@ fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usize) {
             let mock_adapter = ctx.mock_adapter;
             let mock = ctx.mock;
             let task_id = ctx.task_id;
+            let profile = ctx.profile; // 轨迹 system 提示词构建用（模板分组同请求）
+            let vision_images = ctx.vision_images;
+            let turns = turns.clone();
             scope.spawn(move || loop {
                 let idx = {
                     let mut q = queue.lock().unwrap_or_else(|e| e.into_inner());
@@ -426,6 +447,16 @@ fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usize) {
                     };
                     match resp {
                         Ok(r) => {
+                            // REQ-230：成功片记录轨迹（提示词/回答全文——任务对话视图）
+                            turns
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .push(AiTurn {
+                                    turn: idx + 1,
+                                    system: adapter.prompt.build_system(profile),
+                                    user: turn_user_text(req, vision_images),
+                                    response: serde_json::to_string(&r).unwrap_or_default(),
+                                });
                             outcome = Some(r.to_markdown());
                             break;
                         }
@@ -457,5 +488,19 @@ fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usize) {
     }
     let failed = by_index.iter().filter(|o| o.is_none()).count();
     let markdowns: Vec<String> = by_index.into_iter().flatten().collect();
-    (markdowns, failed)
+    let turn_out = turns.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    (markdowns, failed, turn_out)
+}
+
+/// 轨迹 user 文本：请求 JSON（vision 附加张数占位——base64 不入轨迹库，
+/// 原图在本机会话图库；REQ-230 提示词/回答可见 + 存储可控）。
+fn turn_user_text(req: &AiRefineRequest, images: &[String]) -> String {
+    let mut s = serde_json::to_string(req).unwrap_or_default();
+    if !images.is_empty() {
+        s.push_str(&format!(
+            "\n\n[附带画面图 {} 张——原始图在本机会话图库，轨迹不存 base64]",
+            images.len()
+        ));
+    }
+    s
 }
