@@ -23,6 +23,9 @@ import { SystemStatusBadge } from "../components/SystemStatusBadge";
 // 2026-08 审查硬拆：右栏内容区 / 文件素材输入与提取
 import ClassroomRightPane from "../components/ClassroomRightPane";
 import MaterialInputPanel from "../components/MaterialInputPanel";
+import ColumnResizer from "../components/ColumnResizer";
+import ColumnBar from "../components/ColumnBar";
+import { useColumnLayout } from "../hooks/useColumnLayout";
 // v0.11.7：图文采集（第三动线：截屏导入图文内容 → 图文会话）
 import PhotoCapturePanel from "../components/PhotoCapturePanel";
 import type { Note, WindowInfo, StreamingModelStatus, LiveSessionStatus, DownloadProgress, DownloadStatus, ProfileKind } from "../types";
@@ -39,6 +42,8 @@ const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 
 type PrepareState = "idle" | "loading" | "ready" | "failed";
 
 export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (sessionId: number) => void }) {
+  // v0.15：左栏列状态（可拖拽 + 记忆 + 窄窗折叠；默认 320=历史值）
+  const leftCol = useColumnLayout("classroom-left", { default: 320, min: 240, max: 420, autoFoldBelow: 860 });
   // ── 窗口/进程选择 ──
   const [windows, setWindows] = useState<WindowInfo[]>([]);
   const [selectedWindow, setSelectedWindow] = useState<WindowInfo | null>(null);
@@ -370,20 +375,27 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
 
   return (
     <div style={{ display: "flex", height: "calc(100vh - 56px)", minHeight: 0 }}>
-      {/* ── 左栏：配置面板（窗口选择 → 素材 → 启动按钮） ── */}
+      {/* ── 左栏：配置面板（窗口选择 → 素材 → 启动按钮；v0.15 可拖拽/折叠） ── */}
+      {leftCol.folded ? (
+        <ColumnBar icon="📡" title="课堂助手" onClick={leftCol.expand} />
+      ) : (
       <div
         style={{
-          width: 320,
+          width: leftCol.width,
           flexShrink: 0,
           borderRight: "1px solid #e5e7eb",
           display: "flex",
           flexDirection: "column",
+          minWidth: 0,
         }}
       >
         <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span>📡 课堂助手</span>
-          {/* M7/REQ-042 F2/G2：健康徽标 + 诊断面板（开发期可见） */}
-          <SystemStatusBadge />
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {/* M7/REQ-042 F2/G2：健康徽标 + 诊断面板（开发期可见） */}
+            <SystemStatusBadge />
+            <button onClick={() => leftCol.setManualFolded(true)} style={{ fontSize: 12, cursor: "pointer", border: "none", background: "none", color: "#9ca3af" }} title="折叠侧栏">⟨</button>
+          </div>
         </div>
 
         {asrDegraded && (
@@ -609,6 +621,8 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
           {status && <p style={{ fontSize: 12, color: "#2563eb" }}>{status}</p>}
         </div>
       </div>
+      )}
+      <ColumnResizer onResize={leftCol.resizeBy} onReset={leftCol.resetWidth} />
 
       {/* ── 右栏：内容区（档案配置 + 实时活动面板 / 笔记预览 / 空态说明书） ── */}
       {/* 2026-08 审查硬拆：右栏内容区整体下沉 ClassroomRightPane */}

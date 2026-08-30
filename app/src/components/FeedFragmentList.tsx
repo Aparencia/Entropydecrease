@@ -16,10 +16,14 @@ import type { Fragment, Note, NoteGroup } from "../types";
 import { fragmentPreview, promoteTitleFor } from "../utils/inbox";
 
 interface Props {
+  /** 列宽（v0.15 全站自适应——父层 useColumnLayout 驱动；缺省 320=历史值） */
+  width?: number;
   /** 碎片列表变更（捕获/升降/删除）后刷新回调——父层重载笔记与计数 */
   onChanged: () => void;
   /** 升笔记成功——父层打开新笔记（右侧自动打开，闭环可见） */
   onPromoted: (note: Note) => void;
+  /** v0.15：折叠为窄条（父层 useColumnLayout.setManualFolded(true)） */
+  onCollapse?: () => void;
 }
 
 /** 碎片图片缩略（后端 resolve 校验 → asset 协议；无图/失败降级文本） */
@@ -63,7 +67,7 @@ interface PromoteForm {
   groupId: string;
 }
 
-export default function FeedFragmentList({ onChanged, onPromoted }: Props) {
+export default function FeedFragmentList({ width = 320, onChanged, onPromoted, onCollapse }: Props) {
   const [fragments, setFragments] = useState<Fragment[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState("");
@@ -164,9 +168,10 @@ export default function FeedFragmentList({ onChanged, onPromoted }: Props) {
   };
 
   return (
-    <div style={{ width: 320, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minWidth: 0 }}>
-      <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", fontWeight: 600 }}>
+    <div style={{ width, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
         📥 收件箱 <span style={{ fontWeight: 400, fontSize: 11, color: "#9ca3af" }}>碎片（{fragments.length}）· 原料层</span>
+        <button onClick={onCollapse} style={{ marginLeft: "auto", fontSize: 12, cursor: "pointer", border: "none", background: "none", color: "#9ca3af" }} title="折叠收件箱">⟨</button>
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>

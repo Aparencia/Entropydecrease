@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Note } from "../types";
 import NoteMarkdown from "./NoteMarkdown";
+import ColumnBar from "./ColumnBar";
 import { fmtDate, parseTags } from "./NoteListView";
 
 interface Props {
@@ -24,6 +25,9 @@ interface Props {
   auxPanels?: ReactNode;
   /** 标题栏右侧扩展插槽（v0.13.7 触点② 挂到体系） */
   headerExtra?: ReactNode;
+  /** v0.15：大纲列折叠（统一列折叠体系——父层 useColumnLayout 驱动，替代悬浮按钮） */
+  outlineFolded?: boolean;
+  onToggleOutline?: () => void;
   onEdit: () => void;
   onPinToggle: () => void;
   onDelete: () => void;
@@ -35,6 +39,7 @@ interface Props {
 
 export default function NoteReadingView({
   note, editing, editor, auxPanels, headerExtra,
+  outlineFolded = false, onToggleOutline,
   onEdit, onPinToggle, onDelete, onTagClick, onOpenSession, onTaskToggle, onImageOpen,
 }: Props) {
   // A2：搜索高亮（M6：匹配集合=渲染产物只读查询，计数经此状态驱动）
@@ -44,9 +49,7 @@ export default function NoteReadingView({
   const [searchMatches, setSearchMatches] = useState<HTMLElement[]>([]);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // v0.11.5 大纲折叠态
-  const [outlineCollapsed, setOutlineCollapsed] = useState(false);
-
+  // v0.15：大纲折叠态外提至 NotesPage（统一列折叠）；本组件仅剩取数
   // ── 大纲：从 Markdown 提取标题 ──
   const outline = useMemo(() => {
     const lines = note.content.split("\n");
@@ -88,13 +91,15 @@ export default function NoteReadingView({
 
   return (
     <>
-      {/* v0.11.5 大纲面板（可收起） */}
-      {!outlineCollapsed && (
+      {/* v0.11.5/v0.15 大纲面板（统一列折叠体系：折叠 → 26px 窄条） */}
+      {outlineFolded ? (
+        <ColumnBar icon="📑" title="大纲" onClick={() => onToggleOutline?.()} />
+      ) : (
         <div style={{ width: 180, flexShrink: 0, borderRight: "1px solid #f3f4f6", overflowY: "auto", padding: "12px 8px", background: "#fafafa" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, fontWeight: 600, color: "#6b7280", marginBottom: 8 }}>
             <span>大纲</span>
             <button
-              onClick={() => setOutlineCollapsed(true)}
+              onClick={() => onToggleOutline?.()}
               style={{ fontSize: 12, color: "#9ca3af", cursor: "pointer", border: "none", background: "none", padding: "0 2px", lineHeight: 1 }}
               title="收起大纲"
             >
@@ -126,25 +131,6 @@ export default function NoteReadingView({
 
       {/* 正文区 */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-        {/* v0.11.5 大纲折叠悬浮按钮 */}
-        {outlineCollapsed && (
-          <button
-            onClick={() => setOutlineCollapsed(false)}
-            style={{
-              position: "absolute",
-              left: 8, top: 8, zIndex: 10,
-              fontSize: 16, cursor: "pointer",
-              padding: "4px 8px", borderRadius: 6,
-              border: "1px solid #e5e7eb",
-              background: "#fff",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-              lineHeight: 1,
-            }}
-            title="展开大纲"
-          >
-            📑
-          </button>
-        )}
         {/* 标题栏 */}
         <div style={{ padding: "12px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 8 }}>
           <h2 style={{ margin: 0, fontSize: 16, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>

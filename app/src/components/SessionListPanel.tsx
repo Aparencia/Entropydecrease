@@ -32,6 +32,8 @@ type SortBy = "time-desc" | "time-asc" | "duration";
 type SearchMode = "title" | "content" | "ocr";
 
 interface Props {
+  /** 列宽（v0.15 全站自适应——父层 useColumnLayout 驱动；缺省 320=历史值） */
+  width?: number;
   items: SessionListItem[];
   groups: CourseGroup[] | null;
   grouped: boolean;
@@ -51,11 +53,14 @@ interface Props {
   /** 批量删除（父层负责确认/invoke/toast/刷新） */
   onBatchDelete: (ids: number[]) => void;
   showToast: (msg: string, kind: "ok" | "err") => void;
+  /** v0.15：折叠为窄条（父层 useColumnLayout.setManualFolded(true)） */
+  onCollapse?: () => void;
 }
 
 export default function SessionListPanel({
-  items, groups, grouped, onToggleGrouped, loading, justFinished, onDismissJustFinished,
+  width = 320, items, groups, grouped, onToggleGrouped, loading, justFinished, onDismissJustFinished,
   openSessionId, onOpenDetail, onConvert, onOpenNote, onBatchConvert, onBatchDelete, showToast,
+  onCollapse,
 }: Props) {
   const [keyword, setKeyword] = useState("");
   const [searchMode, setSearchMode] = useState<SearchMode>("title");
@@ -296,9 +301,16 @@ export default function SessionListPanel({
   });
 
   return (
-    <div style={{ width: 320, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column" }}>
+    <div style={{ width, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minWidth: 0 }}>
       <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", fontWeight: 600, display: "flex", alignItems: "center" }}>
         🗂 学习会话
+        <button
+          onClick={onCollapse}
+          style={{ ...btn, fontSize: 11, border: "none", background: "none", color: "#9ca3af", marginLeft: 4 }}
+          title="折叠列表"
+        >
+          ⟨
+        </button>
         <button
           style={{ ...btn, marginLeft: "auto", fontSize: 11, borderRadius: 6, border: grouped ? "1px solid #0d9488" : "1px solid #e5e7eb", background: grouped ? "#ccfbf1" : "#fff" }}
           onClick={onToggleGrouped}

@@ -22,6 +22,9 @@ import { systemStatusLabel } from "../types/knowledge";
 import { canvasKey } from "../utils/canvasElements";
 import KnowledgeSystemWizard from "../components/KnowledgeSystemWizard";
 import KnowledgeTreeView from "../components/KnowledgeTreeView";
+import ColumnResizer from "../components/ColumnResizer";
+import ColumnBar from "../components/ColumnBar";
+import { useColumnLayout } from "../hooks/useColumnLayout";
 import KnowledgeCanvasView from "../components/KnowledgeCanvasView";
 import KnowledgeDetailPanel from "../components/KnowledgeDetailPanel";
 import KnowledgeConceptDialog from "../components/KnowledgeConceptDialog";
@@ -50,6 +53,9 @@ interface Props {
 }
 
 export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup }: Props) {
+  // v0.15：左列可拖拽/记忆/窄窗折叠（默认 260=历史值）；详情面板宽度由父层持有
+  const leftCol = useColumnLayout("knowledge-left", { default: 260, min: 200, max: 360, autoFoldBelow: 860 });
+  const detailCol = useColumnLayout("knowledge-detail", { default: 320, min: 260, max: 420 });
   const [systems, setSystems] = useState<KnowledgeSystem[]>([]);
   const [selectedSystemId, setSelectedSystemId] = useState<number | null>(null);
   const [nodes, setNodes] = useState<KnowledgeNode[]>([]);
@@ -216,13 +222,17 @@ export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup }
 
   return (
     <div style={{ display: "flex", height: "calc(100vh - 56px)", minHeight: 0 }}>
-      {/* ── 左：体系列表（全局置顶固定 + 领域列表） ── */}
-      <div style={{ width: 260, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minWidth: 0 }}>
+      {/* ── 左：体系列表（全局置顶固定 + 领域列表；v0.15 可拖拽/折叠为窄条） ── */}
+      {leftCol.folded ? (
+        <ColumnBar icon="🧭" title="知识体系" onClick={leftCol.expand} />
+      ) : (
+      <div style={{ width: leftCol.width, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minWidth: 0 }}>
         <div style={{ padding: "10px 12px", borderBottom: "1px solid #e5e7eb", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
           <span>🧭 知识体系</span>
           <button data-testid="sidebar-new" onClick={() => setWizardOpen(true)} style={{ marginLeft: "auto", fontSize: 11, cursor: "pointer", padding: "3px 10px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>
             ＋ 新建体系
           </button>
+          <button onClick={() => leftCol.setManualFolded(true)} style={{ fontSize: 12, cursor: "pointer", border: "none", background: "none", color: "#9ca3af" }} title="折叠侧栏">⟨</button>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -258,6 +268,8 @@ export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup }
         </div>
         {status && <p data-testid="page-status" style={{ padding: "6px 10px", fontSize: 12, color: "#dc2626" }}>{status}</p>}
       </div>
+      )}
+      <ColumnResizer onResize={leftCol.resizeBy} onReset={leftCol.resetWidth} />
 
       {/* ── 中：问题树 / 概念 / 模型（segmented master） ── */}
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
@@ -350,9 +362,15 @@ export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup }
         )}
       </div>
 
-      {/* ── 右：详情面板（可折叠；node/concept/model 编辑器；未选体系时收起） ── */}
+      {/* ── 右：详情面板（可折叠；node/concept/model 编辑器；未选体系时收起；v0.15 宽度自适应） ── */}
       {selectedSystem && (
-        <KnowledgeDetailPanel system={selectedSystem} nodes={nodes} concepts={concepts} models={models} links={links} selection={selection} onChanged={() => void reloadAll()} />
+        <>
+          <KnowledgeDetailPanel
+            width={detailCol.width}
+            system={selectedSystem} nodes={nodes} concepts={concepts} models={models} links={links} selection={selection} onChanged={() => void reloadAll()}
+          />
+          <ColumnResizer side="left" onResize={detailCol.resizeBy} onReset={detailCol.resetWidth} />
+        </>
       )}
 
       {wizardOpen && <KnowledgeSystemWizard onClose={() => setWizardOpen(false)} onCreated={(sys) => void handleCreated(sys)} />}

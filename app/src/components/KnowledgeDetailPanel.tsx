@@ -22,6 +22,8 @@ import KnowledgeDecisionForm from "./KnowledgeDecisionForm";
 import KnowledgeDecisionLog from "./KnowledgeDecisionLog";
 
 interface Props {
+  /** 面板宽（v0.15 全站自适应——父层 useColumnLayout 驱动；缺省 320=历史值） */
+  width?: number;
   system: KnowledgeSystem;
   nodes: KnowledgeNode[];
   concepts: KnowledgeConcept[];
@@ -36,7 +38,7 @@ const CONCEPT_STATUSES: KnowledgeConceptStatus[] = ["core", "watching", "archive
 /** 模型状态选项（active/watching/archived） */
 const MODEL_STATUSES: KnowledgeModelStatus[] = ["active", "watching", "archived"];
 
-export default function KnowledgeDetailPanel({ system, nodes, concepts, models, links, selection, onChanged }: Props) {
+export default function KnowledgeDetailPanel({ width = 320, system, nodes, concepts, models, links, selection, onChanged }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [decisionFormOpen, setDecisionFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -129,7 +131,7 @@ export default function KnowledgeDetailPanel({ system, nodes, concepts, models, 
   const selectedConcept = selection?.type === "concept" ? concepts.find((c) => c.id === selection.id) ?? null : null;
 
   return (
-    <div data-testid="detail-panel" style={{ width: 320, flexShrink: 0, borderLeft: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minWidth: 0, background: "#fff" }}>
+    <div data-testid="detail-panel" style={{ width, flexShrink: 0, borderLeft: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minWidth: 0, background: "#fff" }}>
       <div style={{ display: "flex", alignItems: "center", padding: "8px 12px", borderBottom: "1px solid #e5e7eb" }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>详情</span>
         <button data-testid="detail-collapse" onClick={() => setCollapsed(true)} title="折叠详情面板" style={{ marginLeft: "auto", border: "none", background: "none", cursor: "pointer", fontSize: 14, color: "#9ca3af" }}>

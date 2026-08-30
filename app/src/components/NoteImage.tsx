@@ -80,12 +80,12 @@ export default function NoteImage({ src, alt = "", noteId, onOpen }: Props) {
       loading="lazy"
       onClick={() => onOpen?.(url, alt)}
       style={{
-        // 当前为 CSS 缩略图：全尺寸图片加载后 CSS 缩放为 240×160 cover（容器约束保留）。
-        // TODO(v0.12.0): 使用后端 thumbs/ 缩略图路径替代全尺寸 CSS 缩放
+        // v0.15：尺寸自适应——按原始比例缩放（约 60vh 上限；窄窗 maxWidth 100% 不溢出）
         maxWidth: "100%",
-        width: 240,
-        height: 160,
-        objectFit: "cover",
+        maxHeight: "60vh",
+        width: "auto",
+        height: "auto",
+        display: "block",
         borderRadius: 6,
         border: "1px solid #e5e7eb",
         cursor: onOpen ? "zoom-in" : "default",

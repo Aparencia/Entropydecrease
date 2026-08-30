@@ -26,8 +26,11 @@ import {
 import RouteInfoPopover from "./RouteInfoPopover";
 import GroupSidebarRow from "./GroupSidebarRow";
 import GroupCreateDialog from "./GroupCreateDialog";
+import { blobToBase64 } from "../utils/blobToBase64";
 
 interface Props {
+  /** 列宽（v0.15 全站自适应——父层 useColumnLayout 驱动；缺省 240=历史值） */
+  width?: number;
   /** 当前过滤组（null=全部笔记） */
   groupFilter: number | null;
   onGroupFilterChange: (id: number | null) => void;
@@ -45,22 +48,13 @@ interface Props {
   refreshToken: number;
   /** 跳转体系页并选中体系（v0.13.7 触点①） */
   onOpenSystem: (systemId: number) => void;
-}
-
-/** Blob → base64（分块转换——大截图防 String.fromCharCode 栈溢出） */
-async function blobToBase64(blob: Blob): Promise<string> {
-  const buf = new Uint8Array(await blob.arrayBuffer());
-  let bin = "";
-  const CHUNK = 0x8000;
-  for (let i = 0; i < buf.length; i += CHUNK) {
-    bin += String.fromCharCode(...buf.subarray(i, i + CHUNK));
-  }
-  return btoa(bin);
+  /** v0.15：折叠为窄条（父层 useColumnLayout.setManualFolded(true)） */
+  onCollapse?: () => void;
 }
 
 export default function GroupSidebar({
-  groupFilter, onGroupFilterChange, onChanged, onOpenReview, selectedNoteId,
-  onOpenInbox, inboxActive, refreshToken, onOpenSystem,
+  width = 240, groupFilter, onGroupFilterChange, onChanged, onOpenReview, selectedNoteId,
+  onOpenInbox, inboxActive, refreshToken, onOpenSystem, onCollapse,
 }: Props) {
   const [groups, setGroups] = useState<NoteGroup[]>([]);
   const [feedCaptureOn, setFeedCaptureOn] = useState(true);
@@ -267,7 +261,7 @@ export default function GroupSidebar({
   const filtering = groupQuery.trim().length > 0;
 
   return (
-    <div style={{ width: 240, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", position: "relative", minWidth: 0 }}>
+    <div style={{ width, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", position: "relative", minWidth: 0 }}>
       {/* 头部：标题 + 新建组 + 刷新 */}
       <div style={{ padding: "10px 12px", borderBottom: "1px solid #e5e7eb", fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
         <span>📁 笔记组</span>
@@ -280,6 +274,7 @@ export default function GroupSidebar({
           ＋ 新建组
         </button>
         <button onClick={() => void load()} style={{ fontSize: 13, cursor: "pointer" }} title="刷新组列表">⟳</button>
+        <button onClick={onCollapse} style={{ fontSize: 12, cursor: "pointer", border: "none", background: "none", color: "#9ca3af" }} title="折叠侧栏">⟨</button>
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: 6, display: "flex", flexDirection: "column", gap: 2 }}>

@@ -16,6 +16,9 @@ import { listen } from "@tauri-apps/api/event";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import SessionDetailPanel from "../components/SessionDetailPanel";
 import SessionListPanel from "../components/SessionListPanel";
+import ColumnResizer from "../components/ColumnResizer";
+import ColumnBar from "../components/ColumnBar";
+import { useColumnLayout } from "../hooks/useColumnLayout";
 import type {
   BatchNoteResult, CourseGroup, SessionDetail, SessionListItem,
 } from "../types";
@@ -34,6 +37,8 @@ interface Toast {
 }
 
 export default function SessionsPage({ focusSessionId, active, onOpenNote }: Props) {
+  // v0.15：左栏列状态（可拖拽 + 记忆 + 窄窗折叠；默认值=历史固定宽度 320）
+  const listCol = useColumnLayout("sessions-list", { default: 320, min: 240, max: 420, autoFoldBelow: 860 });
   const [items, setItems] = useState<SessionListItem[]>([]);
   const [groups, setGroups] = useState<CourseGroup[] | null>(null); // REQ-078：课程分组模式
   const [grouped, setGrouped] = useState(false);
@@ -253,23 +258,30 @@ export default function SessionsPage({ focusSessionId, active, onOpenNote }: Pro
 
   return (
     <div style={{ display: "flex", height: "calc(100vh - 56px)", minHeight: 0 }}>
-      {/* ── 左栏：会话管理台（v0.7.1 拆出 SessionListPanel） ── */}
-      <SessionListPanel
-        items={items}
-        groups={groups}
-        grouped={grouped}
-        onToggleGrouped={() => void toggleGrouped()}
-        loading={loading}
-        justFinished={justFinished}
-        onDismissJustFinished={() => setJustFinished(0)}
-        openSessionId={detail?.session.id ?? null}
-        onOpenDetail={(id, targetSegId) => void openDetail(id, targetSegId)}
-        onConvert={(item) => void convertOne(item)}
-        onOpenNote={onOpenNote}
-        onBatchConvert={(ids) => void convertSelected(ids)}
-        onBatchDelete={(ids) => void deleteSelected(ids)}
-        showToast={showToast}
-      />
+      {/* ── 左栏：会话管理台（v0.7.1 拆出 SessionListPanel；v0.15 可拖拽/折叠） ── */}
+      {listCol.folded ? (
+        <ColumnBar icon="🗂" title="会话列表" onClick={listCol.expand} />
+      ) : (
+        <SessionListPanel
+          width={listCol.width}
+          items={items}
+          groups={groups}
+          grouped={grouped}
+          onToggleGrouped={() => void toggleGrouped()}
+          loading={loading}
+          justFinished={justFinished}
+          onDismissJustFinished={() => setJustFinished(0)}
+          openSessionId={detail?.session.id ?? null}
+          onOpenDetail={(id, targetSegId) => void openDetail(id, targetSegId)}
+          onConvert={(item) => void convertOne(item)}
+          onOpenNote={onOpenNote}
+          onBatchConvert={(ids) => void convertSelected(ids)}
+          onBatchDelete={(ids) => void deleteSelected(ids)}
+          showToast={showToast}
+          onCollapse={() => listCol.setManualFolded(true)}
+        />
+      )}
+      <ColumnResizer onResize={listCol.resizeBy} onReset={listCol.resetWidth} />
 
       {/* ── 右栏：会话详情（v0.7.1 拆出 SessionDetailPanel） ── */}
       <div style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: 16 }}>

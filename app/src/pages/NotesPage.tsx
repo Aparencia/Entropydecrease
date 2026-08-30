@@ -32,6 +32,9 @@ import ImagePreviewOverlay from "../components/ImagePreviewOverlay";
 import VersionPanel from "../components/VersionPanel";
 import EnrichPanel from "../components/EnrichPanel";
 import NoteLinkToSystem from "../components/NoteLinkToSystem";
+import ColumnResizer from "../components/ColumnResizer";
+import ColumnBar from "../components/ColumnBar";
+import { useColumnLayout } from "../hooks/useColumnLayout";
 import { useNoteAttention } from "../components/useNoteAttention";
 
 interface Props {
@@ -70,6 +73,10 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
   const [tagColors, setTagColors] = useState<Record<string, string>>({});
   const [noteColorPickerOpen, setNoteColorPickerOpen] = useState(false);
   const seqRef = useRef(0);
+  // v0.15：三栏列状态（可拖拽 + 宽度记忆 + 窄窗自动折叠；默认值=历史固定宽度）
+  const groupsCol = useColumnLayout("notes-groups", { default: 240, min: 180, max: 320, autoFoldBelow: 860 });
+  const listCol = useColumnLayout("notes-list", { default: 320, min: 240, max: 420, autoFoldBelow: 700 });
+  const outlineCol = useColumnLayout("notes-outline", { default: 180, min: 140, max: 260, autoFoldBelow: 1100 });
   // v0.14 B：当前主题（跟随 prefers-color-scheme；jsdom 无 matchMedia 回退 light）
   const theme: ThemeMode = useMemo(
     () => (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
@@ -339,24 +346,34 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
 
   return (
     <div style={{ display: "flex", height: "calc(100vh - 56px)", minHeight: 0 }}>
-      {/* ── 左侧：组筛选侧栏（240px）── */}
-      <GroupSidebar
-        groupFilter={groupFilter}
-        onGroupFilterChange={(id) => { setGroupFilter(id); setView("notes"); }}
-        onChanged={refreshAll}
-        onOpenReview={(groupId, name) => setReview({ groupId, name })}
-        selectedNoteId={selected?.id ?? null}
-        // 收件箱=全量碎片视图，与组过滤无关——清组过滤消除"组行高亮 + 收件箱"
-        // 并存矛盾（审查修复）
-        onOpenInbox={() => { setGroupFilter(null); setView("inbox"); }}
-        inboxActive={view === "inbox"}
-        refreshToken={refreshToken}
-        onOpenSystem={(id) => onOpenSystem?.(id)}
-      />
+      {/* ── 左侧：组筛选侧栏（240px；v0.15 可拖拽/折叠为窄条）── */}
+      {groupsCol.folded ? (
+        <ColumnBar icon="📁" title="笔记组" onClick={groupsCol.expand} />
+      ) : (
+        <GroupSidebar
+          width={groupsCol.width}
+          groupFilter={groupFilter}
+          onGroupFilterChange={(id) => { setGroupFilter(id); setView("notes"); }}
+          onChanged={refreshAll}
+          onOpenReview={(groupId, name) => setReview({ groupId, name })}
+          selectedNoteId={selected?.id ?? null}
+          // 收件箱=全量碎片视图，与组过滤无关——清组过滤消除"组行高亮 + 收件箱"
+          // 并存矛盾（审查修复）
+          onOpenInbox={() => { setGroupFilter(null); setView("inbox"); }}
+          inboxActive={view === "inbox"}
+          refreshToken={refreshToken}
+          onOpenSystem={(id) => onOpenSystem?.(id)}
+          onCollapse={() => groupsCol.setManualFolded(true)}
+        />
+      )}
+      <ColumnResizer onResize={groupsCol.resizeBy} onReset={groupsCol.resetWidth} />
 
-      {/* ── 中部：收件箱视图 ↔ 笔记列表原位切换（布局不变）── */}
-      {view === "inbox" ? (
+      {/* ── 中部：收件箱视图 ↔ 笔记列表原位切换（布局不变；v0.15 分组树/可折叠）── */}
+      {listCol.folded ? (
+        <ColumnBar icon="📝" title="笔记列表" onClick={listCol.expand} />
+      ) : view === "inbox" ? (
         <FeedFragmentList
+          width={listCol.width}
           onChanged={refreshAll}
           onPromoted={(note) => {
             // 右侧自动打开新笔记（闭环可见）；碎片已从收件箱移除（列表已刷新）
@@ -369,10 +386,15 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
             setGroupFilter(null);
             void load("", null, sortMode);
           }}
+          onCollapse={() => listCol.setManualFolded(true)}
         />
       ) : (
         <NoteListView
+          width={listCol.width}
           notes={visibleNotes}
+          groups={groups}
+          groupFilter={groupFilter}
+          onGroupFilterChange={setGroupFilter}
           keyword={keyword}
           tagFilter={tagFilter}
           sortMode={sortMode}
@@ -389,8 +411,10 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
           onBatchDelete={runBatchDelete}
           noteColors={noteColors}
           tagColors={tagColors}
+          onCollapse={() => listCol.setManualFolded(true)}
         />
       )}
+      <ColumnResizer onResize={listCol.resizeBy} onReset={listCol.resetWidth} />
 
       {/* ── 右栏：阅读视图 / 编辑视图 ── */}
       <div style={{ flex: 1, minWidth: 0, display: "flex", overflow: "hidden" }}>
@@ -398,6 +422,8 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
           <NoteReadingView
             note={selected}
             editing={editing}
+            outlineFolded={outlineCol.folded}
+            onToggleOutline={() => outlineCol.setManualFolded(!outlineCol.manuallyFolded)}
             editor={
               <RichEditorView
                 key={selected.id}
