@@ -12,18 +12,31 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
-import type { AiTaskRecord, AiProviderView, ChatMessage, ChatSession, ChatStreamEvent } from "../types";
+import type { AiTaskRecord, AiProviderView, ChatMessage, ChatSession, ChatStreamEvent, NoteGroup } from "../types";
 import ChatSidebar from "../components/ChatSidebar";
 import ChatMessageList from "../components/ChatMessageList";
 import ChatComposer from "../components/ChatComposer";
 import TaskConversationView from "../components/TaskConversationView";
 import useChatStream from "../hooks/useChatStream";
+// v0.16.1：对话「另存为笔记」——双入口（顶栏整段 / AI 消息级）+ 转写纯函数
+import ChatSaveNoteDialog from "../components/ChatSaveNoteDialog";
+import { buildConversationMarkdown } from "../utils/chatTranscript";
+// v0.16.1：任务对话化——对话内发起任务（按钮 + '/' 命令）+ 线程任务卡 + 追问预填
+import TaskLaunchDialog, { type LaunchTargetRow } from "../components/TaskLaunchDialog";
+import TaskThreadCard from "../components/TaskThreadCard";
+import { buildTaskFollowUpPrompt } from "../utils/taskFollowUp";
 
 interface Props {
   /** 跨页直达（任务对话引用跳转） */
   onOpenSessions: (sessionId: number) => void;
   onOpenNote: (noteId: number) => void;
   onOpenSettings: () => void;
+  /** v0.16.1：任务进入对话页（会话页精修启动自动跳转——挂载即选中该任务） */
+  focusTaskId?: number | null;
+  /** v0.16.1：focusTaskId 消费完成回调（App 清空——防陈旧值跨导航复触发） */
+  onFocusTaskConsumed?: () => void;
+  /** v0.16.1：任务视图 → 精修工作台深链（App 切会话页并自动展开） */
+  onOpenRefineWorkbench?: (sessionId: number, taskId: number) => void;
 }
 
 interface SessionRow {
@@ -38,7 +51,7 @@ const CLOUD_NOTICE_TEXT =
   "对话内容（纯文本）将发送至所选模型的云端服务商；本地音视频/图片/笔记永不出本机。是否同意？";
 
 export default function ChatPage(props: Props) {
-  const { onOpenSessions, onOpenNote, onOpenSettings } = props;
+  const { onOpenSessions, onOpenNote, onOpenSettings, focusTaskId, onFocusTaskConsumed, onOpenRefineWorkbench } = props;
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [tasks, setTasks] = useState<AiTaskRecord[]>([]);
   const [providers, setProviders] = useState<AiProviderView[]>([]);
@@ -53,6 +66,15 @@ export default function ChatPage(props: Props) {
   const [sessionTitles, setSessionTitles] = useState<Map<number, string>>(new Map());
   const [noteTitles, setNoteTitles] = useState<Map<number, string>>(new Map());
   const [staticLoaded, setStaticLoaded] = useState(false);
+  // v0.16.1：对话转笔记——组列表（目标组下拉）与保存对话框态
+  const [noteGroups, setNoteGroups] = useState<NoteGroup[]>([]);
+  const [saveDialog, setSaveDialog] = useState<{ initialTitle: string; content: string } | null>(null);
+  // v0.16.1：任务对话化——发起面板（工具条下拉）/ 启动对话框 / 目标清单
+  const [launchMenuOpen, setLaunchMenuOpen] = useState(false);
+  const [launchDialog, setLaunchDialog] = useState<"refine" | "enrich" | null>(null);
+  const [launchTargetId, setLaunchTargetId] = useState<number | null>(null);
+  const [sessionRows, setSessionRows] = useState<LaunchTargetRow[]>([]);
+  const [noteRows, setNoteRows] = useState<LaunchTargetRow[]>([]);
   const activeChatRef = useRef<number | null>(null);
   activeChatRef.current = activeChatId;
 
@@ -75,8 +97,12 @@ export default function ChatPage(props: Props) {
       setProviders(await invoke<AiProviderView[]>("ai_provider_list").catch(() => [] as AiProviderView[]));
       const sessRows = await invoke<SessionRow[]>("list_sessions", { limit: 500 }).catch(() => [] as SessionRow[]);
       setSessionTitles(new Map(sessRows.map((s) => [s.id, s.title])));
+      setSessionRows(sessRows.map((s) => ({ id: s.id, title: s.title })));
       const notes = await invoke<{ id: number; title: string }[]>("search_notes", { keyword: "", tag: null as string | null }).catch(() => [] as { id: number; title: string }[]);
       setNoteTitles(new Map(notes.map((n) => [n.id, n.title])));
+      setNoteRows(notes.map((n) => ({ id: n.id, title: n.title })));
+      // v0.16.1：组列表（保存对话框目标组下拉——失败静默仅无组可选）
+      setNoteGroups(await invoke<NoteGroup[]>("list_note_groups", { terrain: null }).catch(() => [] as NoteGroup[]));
       setStaticLoaded(true);
     })();
   }, [staticLoaded]);
@@ -128,6 +154,32 @@ export default function ChatPage(props: Props) {
     setSessions(await invoke<ChatSession[]>("chat_list_sessions").catch(() => [] as ChatSession[]));
   }, []);
 
+  // v0.16.1：任务对话化——目标名解析 / 追问预填 / 启动成功
+  const taskRefTitle = useCallback((t: import("../types").AiTaskRecord): string =>
+    t.opType === "refine"
+      ? sessionTitles.get(t.refId) ?? `会话 #${t.refId}`
+      : noteTitles.get(t.refId) ?? `笔记 #${t.refId}`,
+  [sessionTitles, noteTitles]);
+  const followUpTask = useCallback((t: import("../types").AiTaskRecord) => {
+    setDraft(buildTaskFollowUpPrompt(t, taskRefTitle(t)));
+  }, [taskRefTitle]);
+  const onTaskLaunched = useCallback((taskId: number) => {
+    setLaunchDialog(null);
+    setLaunchTargetId(null);
+    setLaunchMenuOpen(false);
+    void reloadTasks();
+    // 启动后切到任务对话视图（进度/轨迹即时可见；聊天视图内有同款线程卡）
+    void selectTask(taskId);
+  }, [reloadTasks, selectTask]);
+
+  // v0.16.1：任务进入对话页（会话页精修启动 → App 传 focusTaskId → 选中该任务；
+  // 消费后回调清空——防陈旧值在后续导航复触发）
+  useEffect(() => {
+    if (focusTaskId == null) return;
+    void selectTask(focusTaskId);
+    onFocusTaskConsumed?.();
+  }, [focusTaskId, selectTask, onFocusTaskConsumed]);
+
   const newChat = useCallback(async () => {
     const s = await invoke<ChatSession>("chat_create_session", { title: null });
     await refreshSessions();
@@ -161,6 +213,15 @@ export default function ChatPage(props: Props) {
     if (!activeChatId) return;
     const content = draft.trim();
     if (!content) return;
+    // v0.16.1：'/' 命令——精确形态 `/refine` `123` 或 `/enrich` `7`（打开任务发起
+    // 面板并预选目标）；审查修复：拒绝任意前缀误劫持（"/refine 怎么用？" 是正常提问）
+    const cmd = content.match(/^\/(refine|enrich)(?:\s+(\d+))?$/);
+    if (cmd) {
+      setLaunchDialog(cmd[1] as "refine" | "enrich");
+      setLaunchTargetId(cmd[2] ? Number(cmd[2]) : null);
+      setDraft("");
+      return;
+    }
     // 首次发送前一次性云端提示（审查补充：设计承诺→实现）
     if (!localStorage.getItem(CLOUD_NOTICE_KEY)) {
       const ok = await confirm(CLOUD_NOTICE_TEXT, { title: "熵减 · AI 对话", kind: "warning" });
@@ -215,6 +276,17 @@ export default function ChatPage(props: Props) {
 
   const activeSession = sessions.find((s) => s.id === activeChatId) ?? null;
   const isGateBlocked = gateError !== null && (gateError.includes("未开启") || gateError.includes("授权") || gateError.includes("密钥") || gateError.includes("Provider"));
+
+  // v0.16.1：对话转笔记——双入口共用的开窗逻辑（标题默认取首条提问首行）
+  const openSaveDialog = (upToId?: number) => {
+    if (messages.length === 0) return;
+    const firstUser = messages.find((m) => m.role === "user" && m.content.trim() !== "");
+    const firstLine = (firstUser?.content ?? "").split("\n")[0]?.trim() ?? "";
+    setSaveDialog({
+      initialTitle: (firstLine || activeSession?.title || "AI 对话记录").slice(0, 60),
+      content: buildConversationMarkdown(messages, upToId),
+    });
+  };
   const editMessage = (m: ChatMessage) => {
     setEditingId(m.id);
     setDraft(m.content);
@@ -247,6 +319,17 @@ export default function ChatPage(props: Props) {
                 <span style={{ fontSize: 12, color: "#b45309", fontWeight: 600 }}>● 生成中</span>
               )}
               <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center", fontSize: 12, color: "#6b7280" }}>
+                {/* v0.16.1：整段对话另存为笔记（含提问与回答的完整转写） */}
+                {messages.length > 0 && (
+                  <button
+                    data-testid="chat-save-conversation"
+                    onClick={() => openSaveDialog()}
+                    style={{ fontSize: 12, cursor: "pointer", padding: "3px 10px", borderRadius: 6, border: "1px solid #99f6e4", background: "#f0fdfa", color: "#0f766e", fontWeight: 600 }}
+                    title="把本段对话（含提问与回答）另存为笔记"
+                  >
+                    📄 转笔记
+                  </button>
+                )}
                 模型
                 <select
                   value={activeSession.providerId ?? ""}
@@ -286,12 +369,47 @@ export default function ChatPage(props: Props) {
         {/* 内容区 */}
         {activeChatId !== null && activeSession && (
           <>
+            {/* v0.16.1：任务对话化——发起工具条（按钮）/ '-' 命令同义 */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 16px", flexShrink: 0 }}>
+              <div style={{ position: "relative" }}>
+                <button
+                  data-testid="task-launch-open"
+                  onClick={() => setLaunchMenuOpen((v) => !v)}
+                  style={{ fontSize: 12, cursor: "pointer", padding: "3px 10px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", color: "#374151" }}
+                  title="在对话中发起 AI 任务（也支持 '/refine' '/enrich'）"
+                >
+                  ✨ 发起任务 ▾
+                </button>
+                {launchMenuOpen && (
+                  <>
+                    <div onClick={() => setLaunchMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30, background: "transparent" }} />
+                    <div data-testid="task-launch-menu" data-app-menu="" style={{ position: "absolute", top: "100%", left: 0, zIndex: 31, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: 4, boxShadow: "0 4px 12px rgba(0,0,0,0.12)", minWidth: 180 }}>
+                      <button data-testid="task-launch-refine" style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", borderRadius: 6, padding: "6px 10px", fontSize: 12.5, cursor: "pointer", color: "#374151" }} onClick={() => { setLaunchDialog("refine"); setLaunchTargetId(null); setLaunchMenuOpen(false); }}>
+                        ✨ AI 精修（会话 → 精修成笔记）
+                      </button>
+                      <button data-testid="task-launch-enrich" style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", borderRadius: 6, padding: "6px 10px", fontSize: 12.5, cursor: "pointer", color: "#374151" }} onClick={() => { setLaunchDialog("enrich"); setLaunchTargetId(null); setLaunchMenuOpen(false); }}>
+                        📚 AI 知识补充（笔记 → 补外部知识）
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+              <span style={{ fontSize: 11, color: "#9ca3af" }}>试试 '/refine' '/enrich' 快捷命令</span>
+            </div>
+            {/* v0.16.1：线程任务卡（进行中实时 + 完成可追问） */}
+            <TaskThreadCard
+              tasks={tasks}
+              onFollowUp={followUpTask}
+              onOpenTask={(id) => void selectTask(id)}
+              refTitle={taskRefTitle}
+            />
             <ChatMessageList
               messages={messages}
               streaming={streamView}
               onRegenerate={() => void regenerate()}
               onEditUser={editMessage}
               editingId={editingId}
+              onSaveMessage={(m) => openSaveDialog(m.id)}
             />
             <ChatComposer
               value={draft}
@@ -314,6 +432,8 @@ export default function ChatPage(props: Props) {
             onOpenNote={onOpenNote}
             onRetry={(t) => void retryTask(t)}
             busy={retryBusy}
+            // v0.16.1：精修成功任务 → 会话页工作台深链
+            onOpenWorkbench={onOpenRefineWorkbench ? (t) => onOpenRefineWorkbench(t.refId, t.taskId) : undefined}
           />
         )}
         {activeChatId === null && activeTaskId === null && (
@@ -322,6 +442,29 @@ export default function ChatPage(props: Props) {
           </div>
         )}
       </div>
+
+      {/* v0.16.1：对话转笔记对话框（顶栏整段 / AI 消息级共用） */}
+      {saveDialog && (
+        <ChatSaveNoteDialog
+          initialTitle={saveDialog.initialTitle}
+          content={saveDialog.content}
+          groups={noteGroups}
+          onOpenNote={onOpenNote}
+          onClose={() => setSaveDialog(null)}
+        />
+      )}
+
+      {/* v0.16.1：对话内发起任务对话框（按钮 / '/' 命令共用） */}
+      {launchDialog && (
+        <TaskLaunchDialog
+          kind={launchDialog}
+          sessions={sessionRows}
+          notes={noteRows}
+          initialTargetId={launchTargetId}
+          onClose={() => { setLaunchDialog(null); setLaunchTargetId(null); }}
+          onStarted={onTaskLaunched}
+        />
+      )}
     </div>
   );
 }

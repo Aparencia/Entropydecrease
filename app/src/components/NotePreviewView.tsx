@@ -73,7 +73,15 @@ function renderMarkdown(md: string, imageBaseUrl: string, dataDir: string): stri
     .join("");
 }
 
-export default function NotePreviewView({ sessionId }: { sessionId: number }) {
+export default function NotePreviewView({
+  sessionId, autoTaskId, onTaskStarted,
+}: {
+  sessionId: number;
+  /** v0.16.1：工作台深链任务 id（透传 AiRefineCard——对话页任务视图跳转） */
+  autoTaskId?: number | null;
+  /** v0.16.1：精修任务启动回调（会话页 → 跳 AI 对话页） */
+  onTaskStarted?: (sessionId: number, taskId: number) => void;
+}) {
   const [preview, setPreview] = useState<NoteFilterResult | null>(null);
   const [status, setStatus] = useState("");
   const [showFiltered, setShowFiltered] = useState(false);
@@ -231,7 +239,13 @@ export default function NotePreviewView({ sessionId }: { sessionId: number }) {
       </div>
       {/* v0.8.0 M2（REQ-141/145）：AI 精修卡——预估确认/异步任务/diff 预览/采纳落库；
           采纳成功 → onApplied 联动切换预览为精修版（2026-08-21 体验修复） */}
-      <AiRefineCard sessionId={sessionId} onApplied={(id) => void handleRefineApplied(id)} />
+      <AiRefineCard
+        sessionId={sessionId}
+        onApplied={(id) => void handleRefineApplied(id)}
+        // v0.16.1：深链/跳转透传（对话页任务视图 → 工作台；会话页精修启动 → 对话页）
+        autoTaskId={autoTaskId}
+        onTaskStarted={onTaskStarted}
+      />
       {status && <p style={{ fontSize: 12, color: "#2563eb", marginBottom: 6 }}>{status}</p>}
       {aiMeta && (
         <p style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>

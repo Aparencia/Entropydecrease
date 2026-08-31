@@ -55,9 +55,15 @@ interface Props {
   onRemove: (id: number) => void;
   /** 重新拉详情（v0.11.5：session:refined 事件驱动屏卡结构回填） */
   onRefreshDetail: (id: number) => void;
+  /** v0.16.1：工作台深链任务 id（对话页任务视图跳转——自动切预览视图并展开工作台） */
+  autoRefineTaskId?: number | null;
+  /** v0.16.1：autoTaskId 消费完成回调（App 清空 focus——防陈旧值跨导航复触发） */
+  onAutoTaskConsumed?: () => void;
+  /** v0.16.1：精修任务启动回调（→ AI 对话页） */
+  onRefineTaskStarted?: (sessionId: number, taskId: number) => void;
 }
 
-export default function SessionDetailPanel({ detail, fusing, degradedBanner, onToNote, onRemove, onRefreshDetail }: Props) {
+export default function SessionDetailPanel({ detail, fusing, degradedBanner, onToNote, onRemove, onRefreshDetail, autoRefineTaskId, onAutoTaskConsumed, onRefineTaskStarted }: Props) {
   // v0.5.0 M7（REQ-052）+ v0.6.0 M6（REQ-081）：两视图（v0.11.5 产物视图下线）
   const [viewMode, setViewMode] = useState<"raw" | "preview">("raw");
   // M6（REQ-076）：质量报告（可信度总览卡片）
@@ -145,6 +151,20 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
       })
       .catch(() => undefined);
   }, [viewMode, sessionId]);
+
+  // v0.16.1：工作台深链——autoTaskId 到达即切预览视图（精修卡所在视图——原默认 raw）。
+  // 面板内持有深链快照（deepTaskId）供 NotePreviewView/AiRefineCard 消费：App 侧
+  // focus 清空发生在本面板 effect 之后，若直接透传 prop 会在卡片挂载前被置空
+  // （竞态——工作台永不展开）；快照 + 会话切换清除保证"只消费一次、不跨会话遗留"。
+  const [deepTaskId, setDeepTaskId] = useState<number | null>(null);
+  useEffect(() => { setDeepTaskId(null); }, [sessionId]);
+  useEffect(() => {
+    if (autoRefineTaskId != null) {
+      setDeepTaskId(autoRefineTaskId);
+      setViewMode("preview");
+      onAutoTaskConsumed?.();
+    }
+  }, [autoRefineTaskId, onAutoTaskConsumed]);
 
   // v0.11.5（spec 5️⃣）：精修事件监听（自 ArtifactView 迁移）——
   // refining 进度 → refined 重新拉详情（屏卡 rendered 回填）→ skipped/failed 徽标
@@ -324,7 +344,11 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
       )}
 
       {viewMode === "preview" ? (
-        <NotePreviewView sessionId={sessionId} />
+        <NotePreviewView
+          sessionId={sessionId}
+          autoTaskId={deepTaskId}
+          onTaskStarted={onRefineTaskStarted}
+        />
       ) : (
         <>
           {/* 转写时间轴（字幕为主，语音/融合弱化；段 id 锚点供大纲/搜索跳转） */}

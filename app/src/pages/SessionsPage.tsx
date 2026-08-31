@@ -25,6 +25,12 @@ import type {
 
 interface Props {
   focusSessionId?: number | null;
+  /** v0.16.1：工作台深链任务 id（对话页任务视图 → 会话页自动展开精修工作台） */
+  focusRefineTaskId?: number | null;
+  /** v0.16.1：focusRefineTaskId 消费完成回调（App 清空——防陈旧值跨导航复触发） */
+  onFocusRefineTaskConsumed?: () => void;
+  /** v0.16.1：精修任务启动回调（→ AI 对话页展示任务卡/可追问） */
+  onRefineTaskStarted?: (sessionId: number, taskId: number) => void;
   /** 页面激活（App 层注入；切到会话页时刷新列表——根治挂载不刷新） */
   active: boolean;
   /** 查看笔记 → 笔记页直达（App 层切页 + focusNoteId） */
@@ -36,7 +42,7 @@ interface Toast {
   kind: "ok" | "err";
 }
 
-export default function SessionsPage({ focusSessionId, active, onOpenNote }: Props) {
+export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocusRefineTaskConsumed, onRefineTaskStarted, active, onOpenNote }: Props) {
   // v0.15：左栏列状态（可拖拽 + 记忆 + 窄窗折叠；默认值=历史固定宽度 320）
   const listCol = useColumnLayout("sessions-list", { default: 320, min: 240, max: 420, autoFoldBelow: 860 });
   const [items, setItems] = useState<SessionListItem[]>([]);
@@ -298,6 +304,10 @@ export default function SessionsPage({ focusSessionId, active, onOpenNote }: Pro
             onRemove={removeOne}
             // v0.11.5（spec 5️⃣）：session:refined 事件驱动重新拉详情（屏卡 rendered 回填）
             onRefreshDetail={(id) => void openDetail(id)}
+            // v0.16.1：工作台深链 / 精修启动跳转
+            autoRefineTaskId={focusRefineTaskId}
+            onAutoTaskConsumed={onFocusRefineTaskConsumed}
+            onRefineTaskStarted={onRefineTaskStarted}
           />
         )}
       </div>

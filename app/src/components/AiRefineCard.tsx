@@ -8,7 +8,7 @@
  * @ai-context: 降级可见：任务失败按原因四类展示引导（未授权→设置密钥/授权、
  *              网络→重试、余额→充值、配额→明日再试），本地规则版保留。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 // M8：轮询/事件双通道/卡住检测抽入共用 hook（与 EnrichPanel 同源）
 import { useAiTaskPolling } from "../hooks/useAiTaskPolling";
@@ -25,7 +25,18 @@ import RefineWorkbench from "./RefineWorkbench";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6 };
 
-export default function AiRefineCard({ sessionId, onApplied }: { sessionId: number; onApplied?: (id: number) => void }) {
+export default function AiRefineCard({
+  sessionId, onApplied, autoTaskId, onTaskStarted, onAutoTaskMissing,
+}: {
+  sessionId: number;
+  onApplied?: (id: number) => void;
+  /** v0.16.1：深链任务 id——挂载即取回结果并直接展开工作台（对话页任务视图跳转） */
+  autoTaskId?: number | null;
+  /** v0.16.1：任务启动成功回调（会话页精修 → 自动跳 AI 对话页） */
+  onTaskStarted?: (sessionId: number, taskId: number) => void;
+  /** v0.16.1：深链任务取回失败（任务非成功态/已清理——父层提示并清焦点） */
+  onAutoTaskMissing?: () => void;
+}) {
   const [settings, setSettings] = useState<AiSettingsView | null>(null);
   const [phase, setPhase] = useState<"idle" | "consent" | "confirm" | "running" | "done" | "failed">("idle");
   const [estimate, setEstimate] = useState<RefineEstimateView | null>(null);
@@ -37,10 +48,30 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
   const [msg, setMsg] = useState("");
   const [, setTaskId] = useState<number | null>(null);
   const [showWorkbench, setShowWorkbench] = useState(false);
+  // v0.16.1 审查修复：工作台「重新生成」不经用户启动路径——旁路导航跳转
+  // （否则每次 regenerate 都会 onTaskStarted → App 把你从会话页拽到 AI 对话页）
+  const skipNavigateRef = useRef(false);
 
   useEffect(() => {
     void invoke<AiSettingsView>("ai_get_settings").then(setSettings).catch(() => undefined);
   }, []);
+
+  // v0.16.1：工作台深链——带 autoTaskId 挂载 → 取回结果直接展开工作台（免重跑流程）
+  useEffect(() => {
+    if (autoTaskId == null) return;
+    void (async () => {
+      try {
+        const r = await invoke<AiRefineResult>("ai_refine_result", { taskId: autoTaskId });
+        taskIdRef.current = autoTaskId;
+        setResult(r);
+        setPhase("done");
+        setShowWorkbench(true);
+      } catch {
+        onAutoTaskMissing?.();
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoTaskId]);
 
   // M8：任务状态派发（纯业务）——轮询/事件/卡住检测/卸载清理均由
   // useAiTaskPolling 承担；taskId 以参数传入（原实现靠 ref 镜像防闭包过期，
@@ -128,6 +159,9 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
     });
     if (handle) {
       taskIdRef.current = handle.taskId;
+      // v0.16.1：会话页精修启动 → 自动跳 AI 对话页（任务卡入聊天线程/可追问）；
+      // 工作台重新生成路径经 skipNavigateRef 旁路（审查修复：不跳转）
+      if (!skipNavigateRef.current) onTaskStarted?.(sessionId, handle.taskId);
       setTaskId(handle.taskId);
       void handleState(handle.state, handle.taskId);
       startPolling(handle.taskId);
@@ -255,8 +289,12 @@ export default function AiRefineCard({ sessionId, onApplied }: { sessionId: numb
               // 任务中心重复采纳产生重复笔记；原实现恒传 null 丢失该保障）
               taskId={taskIdRef.current}
               // 重新生成走父级任务管线（running 态 + 轮询/事件 + 卡住检测）——
-              // 原工作台直连 ai_refine_start 导致卡片状态残留（旧结果+无进度）
-              onRegenerate={async () => { await start(); }}
+              // 原工作台直连 ai_refine_start 导致卡片状态残留（旧结果+无进度）；
+              // 审查修复：regenerate 旁路 onTaskStarted 导航（不离开当前页）
+              onRegenerate={async () => {
+                skipNavigateRef.current = true;
+                try { await start(); } finally { skipNavigateRef.current = false; }
+              }}
               onClose={() => setShowWorkbench(false)}
               onApplied={(id) => { reset(); onApplied?.(id); }}
             />

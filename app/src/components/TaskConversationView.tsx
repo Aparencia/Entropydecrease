@@ -21,6 +21,8 @@ interface Props {
   onRetry: (task: AiTaskRecord) => void;
   /** 重试中（进行中任务禁用按钮） */
   busy: boolean;
+  /** v0.16.1：工作台深链（会话页自动展开精修工作台；缺省=不显示按钮） */
+  onOpenWorkbench?: (task: AiTaskRecord) => void;
 }
 
 function fmtDateTime(unix: number): string {
@@ -37,7 +39,7 @@ const STATE_LABEL: Record<string, { text: string; color: string }> = {
   partial_failed: { text: "部分成功", color: "#b45309" },
 };
 
-export default function TaskConversationView({ task, turns, refTitle, onOpenSession, onOpenNote, onRetry, busy }: Props) {
+export default function TaskConversationView({ task, turns, refTitle, onOpenSession, onOpenNote, onRetry, busy, onOpenWorkbench }: Props) {
   const [openResult, setOpenResult] = useState(false);
   const [openTurns, setOpenTurns] = useState<Record<number, boolean>>({});
   const st = STATE_LABEL[task.state] ?? { text: task.state, color: "#6b7280" };
@@ -86,6 +88,17 @@ export default function TaskConversationView({ task, turns, refTitle, onOpenSess
               style={{ fontSize: 12, padding: "2px 10px", borderRadius: 6, border: "1px solid #99f6e4", background: "#f0fdfa", color: "#0f766e", cursor: "pointer" }}
             >
               📌 来源笔记 #{task.refId} →
+            </button>
+          )}
+          {/* v0.16.1：精修成功任务 → 会话页工作台深链（对比/采纳/重新生成一体） */}
+          {isRefine && task.state === "succeeded" && onOpenWorkbench && (
+            <button
+              data-testid="open-workbench"
+              onClick={() => onOpenWorkbench(task)}
+              style={{ fontSize: 12, padding: "2px 10px", borderRadius: 6, border: "1px solid #c7d2fe", background: "#f5f3ff", color: "#4f46e5", cursor: "pointer" }}
+              title="在会话页打开精修工作台（diff 对比 + 采纳/放弃/重新生成）"
+            >
+              🛠 打开精修工作台 →
             </button>
           )}
           {task.state === "failed" && (

@@ -25,6 +25,8 @@ import KnowledgePage from "./pages/KnowledgePage";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import CaptureFloatPanel from "./components/CaptureFloatPanel";
 import CaptureOverlayPanel from "./components/CaptureOverlayPanel";
+// v0.16.1：浏览器痕迹去除（原生右键菜单抑制 + 文本输入应用内右键小菜单）
+import BrowserChrome from "./components/BrowserChrome";
 import type { AiTaskState } from "./types";
 
 type Page = "classroom" | "sessions" | "notes" | "chat" | "knowledge" | "settings";
@@ -63,6 +65,10 @@ function App() {
   const [focusSystemId, setFocusSystemId] = useState<number | null>(null);
   // v0.14 C2：图谱组节点 → 笔记页过滤该组（同 focusNoteId 模式）
   const [focusGroupId, setFocusGroupId] = useState<number | null>(null);
+  // v0.16.1：工作台深链（对话页任务视图 → 会话页自动展开精修工作台）与
+  // 任务进入对话页（会话页精修启动 → AI 对话页选中该任务）
+  const [focusRefineTaskId, setFocusRefineTaskId] = useState<number | null>(null);
+  const [focusChatTaskId, setFocusChatTaskId] = useState<number | null>(null);
   // 全局采集状态（ADR-007：与页面解耦，徽标常驻导航栏）
   const [capturing, setCapturing] = useState(false);
   const [recovering, setRecovering] = useState(false);
@@ -176,6 +182,8 @@ function App() {
     // 卡片而非整树卸载白屏；console 打印调用栈便于定位（AppErrorBoundary）
     <AppErrorBoundary>
       <div style={{ height: "100vh", display: "flex", flexDirection: "column", fontFamily: "system-ui, sans-serif" }}>
+      {/* v0.16.1：浏览器痕迹去除——原生右键菜单抑制 + 文本输入应用内右键小菜单 */}
+      <BrowserChrome />
       {/* 顶部导航 */}
       <nav
         style={{
@@ -266,6 +274,13 @@ function App() {
           {/* v0.7.1：active 驱动列表刷新（display:none 挂载不刷新根治）+ 查看笔记跨页直达 */}
           <SessionsPage
             focusSessionId={focusSessionId}
+            // v0.16.1：工作台深链 / 精修启动 → AI 对话页（focus 消费后即清空）
+            focusRefineTaskId={focusRefineTaskId}
+            onFocusRefineTaskConsumed={() => setFocusRefineTaskId(null)}
+            onRefineTaskStarted={(_sessionId, taskId) => {
+              setFocusChatTaskId(taskId);
+              setPage("chat");
+            }}
             active={page === "sessions"}
             onOpenNote={(id) => {
               setFocusNoteId(id);
@@ -294,6 +309,14 @@ function App() {
             onOpenSessions={(id) => { setFocusSessionId(id); setPage("sessions"); }}
             onOpenNote={(id) => { setFocusNoteId(id); setPage("notes"); }}
             onOpenSettings={() => setPage("settings")}
+            // v0.16.1：任务进入对话页（会话页精修启动自动跳转）；任务视图 → 工作台深链
+            focusTaskId={focusChatTaskId}
+            onFocusTaskConsumed={() => setFocusChatTaskId(null)}
+            onOpenRefineWorkbench={(sessionId, taskId) => {
+              setFocusSessionId(sessionId);
+              setFocusRefineTaskId(taskId);
+              setPage("sessions");
+            }}
           />
         </div>
         <div style={{ flex: 1, display: page === "knowledge" ? "block" : "none", overflow: "hidden" }}>
