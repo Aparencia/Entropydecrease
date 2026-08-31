@@ -24,6 +24,8 @@ import { insertTextCommand, wrapSelectionCommand } from "../commands/toolbarComm
 import { imageDecorationPlugin } from "./imageDecorationPlugin";
 import { clearDraft, readDraft } from "../utils/draftStore";
 import NoteEditView, { type NoteEditHandle } from "./NoteEditView";
+// v0.16.1：正文多色荧光笔——色板复用（选中色 → 包裹 ==[色]…==）
+import NoteColorPicker from "./NoteColorPicker";
 
 interface Props {
   note: Note;
@@ -55,6 +57,8 @@ const RichEditorView = forwardRef<NoteEditHandle, Props>(function RichEditorView
   const [fallback, setFallback] = useState(false);
   const [activeHeading, setActiveHeading] = useState(0);
   const [draftPrompt, setDraftPrompt] = useState<{ title: string; content: string } | null>(null);
+  // v0.16.1：荧光笔色板弹层开合（受控——选色/默认黄/点击外部关闭）
+  const [highlightOpen, setHighlightOpen] = useState(false);
 
   // refs 快照（卸载/定时器闭包取最新值，防 state 闭包过期——同 NoteEditView）
   const titleRef = useRef(title);
@@ -247,6 +251,34 @@ const RichEditorView = forwardRef<NoteEditHandle, Props>(function RichEditorView
         <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("local-image")} title="插入本地图片（复制进应用数据目录）">🖼 图片</button>
         <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("image")} title="插入外链图（自动下载为本地副本）">🌐 链接图</button>
         <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("latex")} title="LaTeX">Σ</button>
+        {/* v0.16.1：正文多色荧光笔——默认黄 / 12 色板（包裹选区 ==文本== / ==[色]文本==） */}
+        <div style={{ position: "relative" }}>
+          <button style={TOOLBAR_BTN} data-testid="highlight-open" onClick={() => setHighlightOpen((v) => !v)} title="荧光笔：==文本==（默认黄）；==[色]文本==">🖍 荧光</button>
+          {highlightOpen && (
+            <>
+              <div onClick={() => setHighlightOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30, background: "transparent" }} />
+              <div
+                data-testid="highlight-pop"
+                style={{ position: "absolute", top: "100%", left: 0, zIndex: 31, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.12)", maxWidth: 200 }}
+              >
+                <button
+                  data-testid="highlight-default"
+                  style={{ ...TOOLBAR_BTN, width: "100%", marginBottom: 6, background: "#fefce8" }}
+                  onClick={() => { wrapSelectionCommand("==", "==")(viewRef.current!); setHighlightOpen(false); }}
+                >
+                  🖍 默认黄 ==文本==
+                </button>
+                <NoteColorPicker
+                  value={null}
+                  onChange={(c) => {
+                    if (c) wrapSelectionCommand(`==[${c}]`, "==")(viewRef.current!);
+                    setHighlightOpen(false);
+                  }}
+                />
+              </div>
+            </>
+          )}
+        </div>
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 10, color: "#9ca3af" }}>Ctrl+Shift+↑↓层级 · Ctrl+Z 撤销</span>
         <span style={{ width: 1, height: 20, background: "#d1d5db" }} />

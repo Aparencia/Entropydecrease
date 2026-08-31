@@ -16,6 +16,8 @@ import {
   insertAtCursor, wrapSelection, headingLines, promoteHeading, demoteHeading, mergeSelection, splitAtCursor,
   type EditResult,
 } from "./markdownEdit";
+// v0.16.1：正文多色荧光笔——色板复用（选中色 → 包裹 ==[色]…==）
+import NoteColorPicker from "./NoteColorPicker";
 
 interface Props {
   note: Note;
@@ -45,6 +47,8 @@ const NoteEditView = forwardRef<NoteEditHandle, Props>(function NoteEditView({ n
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
+  // v0.16.1：荧光笔色板弹层开合（与 RichEditorView 同模式）
+  const [highlightOpen, setHighlightOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
   // L14：双计时器 ref（idle debounce + maxWait，常量见文件头注释）
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -203,7 +207,7 @@ const NoteEditView = forwardRef<NoteEditHandle, Props>(function NoteEditView({ n
 
   // 工具栏操作（v0.10.1：local-image 需异步导入——dialog 选文件后复制进
   // data_dir 再插入相对引用；import 失败明确提示不落脏数据）
-  const toolbarAction = async (action: string) => {
+  const toolbarAction = async (action: string, color?: string | null) => {
     const ta = taRef.current;
     if (!ta) return;
     // 读取当前 DOM 值与选区（受控组件下与 content state 一致）
@@ -240,6 +244,11 @@ const NoteEditView = forwardRef<NoteEditHandle, Props>(function NoteEditView({ n
         break;
       }
       case "latex": applyEdit(wrapSelection(v, s, e, "$", "$")); break;
+      // v0.16.1：正文多色荧光笔——默认黄 / 指定色（==文本== / ==[色]文本==）
+      case "highlight-default": applyEdit(wrapSelection(v, s, e, "==", "==")); break;
+      case "highlight-color":
+        if (color) applyEdit(wrapSelection(v, s, e, `==[${color}]`, "=="));
+        break;
       case "image": {
         // v0.15：外链图自动下载复制（防源站删除丢资源）——失败降级插原 URL + 提示
         const alt = prompt("图片描述：") || "";
@@ -322,6 +331,34 @@ const NoteEditView = forwardRef<NoteEditHandle, Props>(function NoteEditView({ n
         <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("local-image")} title="插入本地图片（复制进应用数据目录）">🖼 图片</button>
         <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("image")} title="插入外链图（自动下载为本地副本）">🌐 链接图</button>
         <button style={TOOLBAR_BTN} onClick={() => void toolbarAction("latex")} title="LaTeX">Σ</button>
+        {/* v0.16.1：正文多色荧光笔——默认黄 / 12 色板（降级 textarea 与 CM 版同入口） */}
+        <div style={{ position: "relative" }}>
+          <button style={TOOLBAR_BTN} data-testid="highlight-open" onClick={() => setHighlightOpen((v) => !v)} title="荧光笔：==文本==（默认黄）；==[色]文本==">🖍 荧光</button>
+          {highlightOpen && (
+            <>
+              <div onClick={() => setHighlightOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30, background: "transparent" }} />
+              <div
+                data-testid="highlight-pop"
+                style={{ position: "absolute", top: "100%", left: 0, zIndex: 31, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.12)", maxWidth: 200 }}
+              >
+                <button
+                  data-testid="highlight-default"
+                  style={{ ...TOOLBAR_BTN, width: "100%", marginBottom: 6, background: "#fefce8" }}
+                  onClick={() => { void toolbarAction("highlight-default"); setHighlightOpen(false); }}
+                >
+                  🖍 默认黄 ==文本==
+                </button>
+                <NoteColorPicker
+                  value={null}
+                  onChange={(c) => {
+                    if (c) void toolbarAction("highlight-color", c);
+                    setHighlightOpen(false);
+                  }}
+                />
+              </div>
+            </>
+          )}
+        </div>
         <span style={{ flex: 1 }} />
         {/* A1段落操作提示 */}
         <span style={{ fontSize: 10, color: "#9ca3af" }}>Ctrl+Shift+↑↓层级 · M合并 · S拆分</span>

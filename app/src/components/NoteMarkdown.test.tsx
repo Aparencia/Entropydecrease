@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 /**
- * NoteMarkdown.test.tsx — 换行语义锁定（v0.15 remark-breaks）。
+ * NoteMarkdown.test.tsx — 换行语义锁定（v0.15 remark-breaks）+ 荧光笔渲染链
+ * （v0.16.1 多色 + hName 修复）。
  *
  * @ai-context: 修复"编辑态换行、阅读态连上"——单换行（软换行）必须渲染为 <br>；
  *              段落分隔（\n\n）仍是两段不产生 <br>；`\` 强断行语义保留。
  *              锁契约防未来 remark 插件顺序回归。
+ * @ai-context: v0.16.1——==[red]重点== 渲染 <mark class="note-mark note-mark-red">；
+ *              ==默认== 渲染 <mark class="note-mark">（插件 hName 修复：原落 div，
+ *              components.mark 按 hast tagName 匹配实际从未命中=无样式）。
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "@testing-library/react";
@@ -67,5 +71,21 @@ describe("NoteMarkdown 换行语义（v0.15 remark-breaks）", () => {
     // br 打断文本节点——按整段文本断言（queryByText 全文匹配对打断文本失效）
     expect((li as HTMLElement).textContent).toContain("续行内容");
     expect((li as HTMLElement).querySelector("br")).toBeTruthy();
+  });
+
+  it("==[red]重点== 渲染 <mark class=note-mark note-mark-red>（v0.16.1 多色）", () => {
+    const { container } = renderMd("==[red]重点==");
+    const m = container.querySelector("mark.note-mark.note-mark-red");
+    expect(m).toBeTruthy();
+    expect(m?.textContent).toBe("重点");
+  });
+
+  it("==默认== 渲染 <mark class=note-mark>（v0.16.1 hName 修复——原落 div 无样式）", () => {
+    const { container } = renderMd("==默认==");
+    const m = container.querySelector("mark.note-mark");
+    expect(m).toBeTruthy();
+    expect(m?.textContent).toBe("默认");
+    // 除 mark 外无其他元素（不落 div 容器）
+    expect(container.querySelector("div")).toBeNull();
   });
 });

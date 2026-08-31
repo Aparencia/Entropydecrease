@@ -159,9 +159,12 @@ export default function NoteMarkdown({ note, searchQuery, onTaskToggle, onOpenSe
       remarkPlugins={[remarkGfm, remarkMath, remarkMarkHighlight, remarkBreaks]}
       rehypePlugins={[rehypeKatex]}
       components={{
-        // v0.14 B：==文本== 荧光笔（remark 插件产出 mark 节点；单色黄，浅/深主题通用）
-        mark: ({ node, children, ...props }) => (
-          <mark style={{ background: "#fde68a", borderRadius: 2, padding: "0 1px" }} {...props}>{hl(children)}</mark>
+        // v0.14 B：==文本== 荧光笔（remark 插件产出 mdast mark 节点 + hName/hProperties）
+        // v0.16.1：多色——className 由插件注入（note-mark[-{colorId}]，样式见 note-mark.css）；
+        //          原实现硬编码单色黄（且无 hName 经 defaultUnknownHandler 落 div——
+        //          组件按 hast tagName 匹配实际从未命中，现由插件 hName 修复）
+        mark: ({ node, className, children, ...props }) => (
+          <mark className={className} {...props}>{hl(children)}</mark>
         ),
         // 任务清单勾选（H1：渲染时记录序号 → 仅替换对应源行）
         input: ({ node, ...props }) => {

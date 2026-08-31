@@ -1,0 +1,49 @@
+/* 
+ * note-mark.css — 正文多色荧光笔样式（v0.16.1 用户决定①）。
+ *
+ * @ai-context: 类名由 remarkMarkHighlight 插件经 mdast data.hProperties 注入
+ *              （note-mark [+ note-mark-{colorId}]）；双主题变体与
+ *              utils/colorPalette 12 色板对齐，前景色按 WCAG AA（≥4.5:1）
+ *              取黑/白（生成脚本 scripts/gen-mark-css.mjs——改色板先重跑脚本
+ *              再提交，保证定义期一致；纯函数层 isThemeSafe 契约不变）。
+ *              默认黄（无前缀 ==文本==）走 .note-mark 基础规则，与旧版一致。
+ */
+.note-mark {
+  border-radius: 2px;
+  padding: 0 1px;
+  background: #fde68a;
+  color: #1c1c1e;
+}
+
+/* light */
+.note-mark-red { background: #E5484D; color: #1C1C1E; }
+.note-mark-orange { background: #F76B15; color: #1C1C1E; }
+.note-mark-yellow { background: #F5D90A; color: #1C1C1E; }
+.note-mark-green { background: #30A46C; color: #1C1C1E; }
+.note-mark-teal { background: #12A594; color: #1C1C1E; }
+.note-mark-blue { background: #0091FF; color: #1C1C1E; }
+.note-mark-purple { background: #8E4EC6; color: #FFFFFF; }
+.note-mark-pink { background: #D6409F; color: #1C1C1E; }
+.note-mark-brown { background: #8D6E63; color: #FFFFFF; }
+.note-mark-gray { background: #8E8E93; color: #1C1C1E; }
+.note-mark-black { background: #1C1C1E; color: #FFFFFF; }
+.note-mark-white { background: #FFFFFF; color: #1C1C1E; }
+
+@media (prefers-color-scheme: dark) {
+  .note-mark {
+    background: #ffe45c;
+    color: #1c1c1e;
+  }
+  .note-mark-red { background: #FF6369; color: #1C1C1E; }
+  .note-mark-orange { background: #FF8B3D; color: #1C1C1E; }
+  .note-mark-yellow { background: #FFE45C; color: #1C1C1E; }
+  .note-mark-green { background: #3DD68C; color: #1C1C1E; }
+  .note-mark-teal { background: #29E0CB; color: #1C1C1E; }
+  .note-mark-blue { background: #5EB1FF; color: #1C1C1E; }
+  .note-mark-purple { background: #C59BFF; color: #1C1C1E; }
+  .note-mark-pink { background: #FF8AD8; color: #1C1C1E; }
+  .note-mark-brown { background: #B89B8A; color: #1C1C1E; }
+  .note-mark-gray { background: #9E9EA3; color: #1C1C1E; }
+  .note-mark-black { background: #F2F2F7; color: #1C1C1E; }
+  .note-mark-white { background: #1C1C1E; color: #FFFFFF; }
+}
