@@ -22,6 +22,8 @@ interface Props {
   onEditUser?: (message: ChatMessage) => void;
   /** 当前正在编辑的消息 id（高亮） */
   editingId?: number | null;
+  /** v0.16.1：AI 消息「存为笔记」入口（父层开保存对话框——至该条的完整上文） */
+  onSaveMessage?: (message: ChatMessage) => void;
 }
 
 function fmtTime(unix: number): string {
@@ -41,7 +43,7 @@ export function parseUsage(usageJson: string | null): { tokens: number | null } 
   }
 }
 
-export default function ChatMessageList({ messages, streaming, onRegenerate, onEditUser, editingId }: Props) {
+export default function ChatMessageList({ messages, streaming, onRegenerate, onEditUser, editingId, onSaveMessage }: Props) {
   const endRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -98,6 +100,19 @@ export default function ChatMessageList({ messages, streaming, onRegenerate, onE
                   <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px" }}>
                     <ChatMessageMarkdown content={m.content} />
                   </div>
+                  {/* v0.16.1：AI 回答整段存为笔记（至该条的完整对话上下文） */}
+                  {onSaveMessage && (m.status === "done" || m.status === "aborted") && (
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 2 }}>
+                      <button
+                        data-testid={`save-message-${m.id}`}
+                        onClick={() => onSaveMessage(m)}
+                        style={{ fontSize: 11, cursor: "pointer", border: "none", background: "none", color: "#0d9488", padding: "1px 4px" }}
+                        title="把这段对话（含提问）另存为笔记"
+                      >
+                        📄 存为笔记
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
