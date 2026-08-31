@@ -65,7 +65,7 @@ pub async fn open_capture_overlay(state: State<'_, AppState>, app: tauri::AppHan
         .map_err(|e| format!("覆盖层截图路径锁中毒: {}", e))? = Some(path);
     // 3) 创建覆盖层窗口（已存在则复用——幂等）
     if app.get_webview_window(CAPTURE_OVERLAY_LABEL).is_none() {
-        WebviewWindowBuilder::new(&app, CAPTURE_OVERLAY_LABEL, WebviewUrl::App("index.html?overlay=1".into()))
+        let overlay = WebviewWindowBuilder::new(&app, CAPTURE_OVERLAY_LABEL, WebviewUrl::App("index.html?overlay=1".into()))
             .title("熵减截图")
             .decorations(false)
             .transparent(true)
@@ -74,6 +74,10 @@ pub async fn open_capture_overlay(state: State<'_, AppState>, app: tauri::AppHan
             .always_on_top(true)
             .build()
             .map_err(|e| format!("创建覆盖层窗口失败: {}", e))?;
+        // v0.16.1：框选窗同样禁用 WebView2 原生右键菜单（浏览器痕迹去除——失败仅日志）
+        if let Err(e) = crate::browser_chrome::disable_default_context_menu(&overlay) {
+            eprintln!("[browser-chrome] 框选窗禁用默认右键菜单失败: {e}");
+        }
     }
     Ok(())
 }

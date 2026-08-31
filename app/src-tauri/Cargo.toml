@@ -140,4 +140,7 @@ windows = { version = "0.61", features = [
     "Graphics_DirectX",
     "Graphics_DirectX_Direct3D11",
 ] }
+# v0.16.1：浏览器痕迹去除——with_webview 取 ICoreWebView2Settings 禁用原生右键菜单；
+# 版本与 tauri 依赖树对齐（lock 内已有 0.38.2，零新增下载）
+webview2-com = "0.38"
 

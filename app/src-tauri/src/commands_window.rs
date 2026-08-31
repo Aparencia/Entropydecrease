@@ -107,7 +107,7 @@ pub fn precreate_float(app: &tauri::AppHandle) {
 
 /// 构建浮窗窗口（precreated=true → 隐藏未聚焦——预创建路径；false → 可见带焦点——懒创建打开路径）。
 fn build_float_window(app: &tauri::AppHandle, precreated: bool) -> Result<WebviewWindow, String> {
-    WebviewWindowBuilder::new(app, CAPTURE_FLOAT_LABEL, WebviewUrl::App("index.html?float=1".into()))
+    let win = WebviewWindowBuilder::new(app, CAPTURE_FLOAT_LABEL, WebviewUrl::App("index.html?float=1".into()))
         .title("采集浮窗")
         .inner_size(360.0, 240.0)
         .decorations(false)
@@ -118,7 +118,12 @@ fn build_float_window(app: &tauri::AppHandle, precreated: bool) -> Result<Webvie
         .visible(!precreated)
         .focused(!precreated)
         .build()
-        .map_err(|e| format!("创建采集浮窗失败: {}", e))
+        .map_err(|e| format!("创建采集浮窗失败: {}", e))?;
+    // v0.16.1：浮窗同样禁用 WebView2 原生右键菜单（浏览器痕迹去除——失败仅日志不阻断）
+    if let Err(e) = crate::browser_chrome::disable_default_context_menu(&win) {
+        eprintln!("[browser-chrome] 浮窗禁用默认右键菜单失败: {e}");
+    }
+    Ok(win)
 }
 
 /// 显示 + 还原 + 聚焦主窗（回主窗/收起浮窗后的兜底——绝不把用户留在无可见窗口）。

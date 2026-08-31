@@ -9,6 +9,8 @@ mod ai_judge;
 mod ai_mock;
 mod ai_protocol;
 mod ai_text_filter;
+// v0.16.1：WebView2 浏览器痕迹去除（原生右键菜单全局禁用——Windows host 侧设置）
+mod browser_chrome;
 // v0.8.0 M1（REQ-138/139/140）：AI 使能层——全局设置（授权红线默认关）/
 // 密钥凭据存储（DPAPI）/余额查询/共享 AI client（ai_text_filter 与 M2/M3
 // ai_note_refine/ai_enrich 共用）
@@ -420,7 +422,15 @@ pub fn run() {
         .setup(|app| {
             // AppState 装配（数据目录/DB/引擎池/可校准配置——拆至 app_setup.rs，
             // line-limit-exemptions 登记计划：lib.rs >600 硬拆落地）
-            crate::app_setup::setup_app_state(app).map_err(Into::into)
+            crate::app_setup::setup_app_state(app).map_err(|e| Box::<dyn std::error::Error>::from(e))?;
+            // v0.16.1：浏览器原生右键菜单全局禁用——失败仅日志（降级=原生菜单，
+            // 前端 contextmenu preventDefault 兜底；文本输入右键粘贴由前端自绘小菜单补齐）
+            if let Some(main) = app.get_webview_window(crate::commands_window::MAIN_WINDOW_LABEL) {
+                if let Err(e) = crate::browser_chrome::disable_default_context_menu(&main) {
+                    eprintln!("[browser-chrome] 主窗禁用默认右键菜单失败: {e}");
+                }
+            }
+            Ok(())
         })
         // ADR-007：采集进行时拦截窗口关闭——prevent_close + 通知前端弹确认框；
         // 用户确认后前端先 stop_live_session 再 close（届时无活动会话，放行）
