@@ -75,6 +75,17 @@ describe("RichEditorView 核心编辑", () => {
     fireEvent.keyDown(cmContent(), { key: "3", ctrlKey: true });
     await waitFor(() => expect(cmContent().textContent).toContain("### 第一行"));
   });
+
+  // v0.16.1 回归：插件不得产出 block decoration（CM6 抛 RangeError「Block
+  // decorations may not be specified via plugins」——插入独立行图片即崩）
+  it("独立行图片渲染为 widget（不抛 RangeError，原语法被替换）", async () => {
+    const note = { ...baseNote, content: "前文\n![图](notes-images/1/a.png)\n后文" };
+    render(<RichEditorView note={note} onCancel={vi.fn()} />);
+    await waitFor(() => expect(document.querySelector(".cm-note-image")).not.toBeNull());
+    // 语法文本已被 widget 替换（不残留源码）
+    expect(cmContent().textContent).not.toContain("![图]");
+    expect(cmContent().textContent).toContain("前文");
+  });
 });
 
 describe("RichEditorView 草稿恢复层", () => {

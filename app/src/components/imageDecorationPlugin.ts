@@ -3,12 +3,18 @@
  *
  * @ai-context: 将 `![alt](url)` 以 Decoration.replace widget 替换为真实图片
  *              （NoteImageWidget 挂载 React NoteImage）。仅 docChanged 重算
- *              decorations（spec §4.1）；独立行图片 block 化（占整行，替换后
- *              不残留行内空隙）。noteId/onOpen 经工厂参数注入（组件层持有）。
+ *              decorations（spec §4.1）。
+ * @ai-context: v0.16.1 修复：插件 decorations 一律 inline replace——CM6 明确
+ *              禁止插件产出 block decoration（ViewPlugin 的 decorations 经
+ *              disallowBlockEffectsFor 校验，block:true 抛 RangeError
+ *              "Block decorations may not be specified via plugins"，插入
+ *              独立行图片即崩）。独立行图片所在行仅空白，inline replace 替换
+ *              整段语法后自然独占一行（视觉等价，无行为回退）。
+ *              noteId/onOpen 经工厂参数注入（组件层持有）。
  */
 import { RangeSetBuilder } from "@codemirror/state";
 import { Decoration, ViewPlugin, type DecorationSet, type EditorView, type ViewUpdate } from "@codemirror/view";
-import { scanImageRefs, type ImageRef } from "./imageDecoration";
+import { scanImageRefs } from "./imageDecoration";
 import { NoteImageWidget } from "./NoteImageWidget";
 
 interface PluginContext {
@@ -16,23 +22,12 @@ interface PluginContext {
   onOpen?: (url: string, title?: string) => void;
 }
 
-/** 独立行图片：所在行除图片语法外仅空白 → block 占整行 */
-function isBlockImage(view: EditorView, ref: ImageRef): boolean {
-  const line = view.state.doc.lineAt(ref.from);
-  const before = line.text.slice(0, ref.from - line.from);
-  const after = line.text.slice(ref.to - line.from);
-  return before.trim() === "" && after.trim() === "";
-}
-
 function computeDecorations(view: EditorView, ctx: PluginContext): DecorationSet {
   const refs = scanImageRefs(view.state.doc.toString());
   // RangeSetBuilder 是带位置的唯一构造途径（Decoration.replace 只接受 spec）
   const builder = new RangeSetBuilder<Decoration>();
   for (const r of refs) {
-    builder.add(r.from, r.to, Decoration.replace({
-      widget: new NoteImageWidget(r, ctx),
-      block: isBlockImage(view, r),
-    }));
+    builder.add(r.from, r.to, Decoration.replace({ widget: new NoteImageWidget(r, ctx) }));
   }
   return builder.finish();
 }
