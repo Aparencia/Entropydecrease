@@ -255,6 +255,8 @@ export default function GroupSidebar({
       }}
       onDragLeave={() => setDragOverId((cur) => (cur === g.id ? null : cur))}
       onDrop={(e) => handleGroupDrop(g, e)}
+      // v0.16.1：右键组行 = 打开 ⓘ 组管理弹层（同语义；原生菜单已全局禁用）
+      onContextMenu={(e) => openPopover(g, e)}
     />
   );
 

@@ -35,12 +35,14 @@ interface Props {
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent) => void;
+  /** v0.16.1：右键组行 → 打开 ⓘ 组管理弹层（右键菜单完整性——与 ⓘ 同语义） */
+  onContextMenu?: (e: React.MouseEvent<HTMLElement>) => void;
 }
 
 export default function GroupSidebarRow({
   group, active, systems, systemLinks, colorPickerOpen, dragOver,
   onSelect, onInfo, onToggleColorPicker, onColorChange, onRename, onOpenSystem,
-  onDragOver, onDragLeave, onDrop,
+  onDragOver, onDragLeave, onDrop, onContextMenu,
 }: Props) {
   const theme: ThemeMode = useMemo(
     () => (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
@@ -75,6 +77,7 @@ export default function GroupSidebarRow({
       // 审查修复：编辑态行点击短路——原仅 input/✎ 等 stopPropagation，
       // 行空白区点击会先 blur 取消编辑再触发组过滤切换（内容丢失+浏览位置漂移）
       onClick={editing ? (e) => e.stopPropagation() : onSelect}
+      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onContextMenu?.(e); }}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}

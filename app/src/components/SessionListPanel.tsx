@@ -228,6 +228,12 @@ export default function SessionListPanel({
       <div
         key={s.id}
         onClick={() => onOpenDetail(s.id)}
+        onContextMenu={(e) => {
+          // v0.16.1：右键菜单完整性——会话行右键 = 打开详情（原生菜单已全局禁用）
+          e.preventDefault();
+          e.stopPropagation();
+          onOpenDetail(s.id);
+        }}
         style={{
           padding: "9px 14px",
           borderBottom: "1px solid #f3f4f6",

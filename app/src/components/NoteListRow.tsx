@@ -21,10 +21,12 @@ interface Props {
   onSelect: (note: Note) => void;
   onToggleSelect: (id: number) => void;
   onOpenSession: (sessionId: number) => void;
+  /** v0.16.1：右键菜单打开（父层持有坐标/状态；默认浏览器菜单已全局禁用） */
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
 export default function NoteListRow({
-  note, accent, selectedId, checked, tagColors, onSelect, onToggleSelect, onOpenSession,
+  note, accent, selectedId, checked, tagColors, onSelect, onToggleSelect, onOpenSession, onContextMenu,
 }: Props) {
   const tags = parseTags(note);
   // v0.14 B：当前主题（跟随 prefers-color-scheme；jsdom 无 matchMedia 回退 light）
@@ -40,6 +42,12 @@ export default function NoteListRow({
         // v0.14 C1：拖拽归组——笔记卡片为 drag source（组行为 drop target）
         e.dataTransfer.setData("text/note-id", String(note.id));
         e.dataTransfer.effectAllowed = "move";
+      }}
+      onContextMenu={(e) => {
+        // v0.16.1：应用内右键菜单——抑制原生菜单（前端兜底）+ 上抛坐标
+        e.preventDefault();
+        e.stopPropagation();
+        onContextMenu?.(e);
       }}
       onClick={() => onSelect(note)}
       style={{

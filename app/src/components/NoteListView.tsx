@@ -17,6 +17,8 @@ import { paletteHex } from "../utils/colorPalette";
 import type { ThemeMode } from "../utils/colorPalette";
 import NoteListRow from "./NoteListRow";
 import NoteTreeSection from "./NoteTreeSection";
+// v0.16.1：笔记行右键菜单（原生菜单已全局禁用——应用内替代）
+import NoteRowContextMenu from "./NoteRowContextMenu";
 
 // 兼容既有导入面（NoteReadingView/NotesPage/parseTags.test 从此解析——v0.15 移厝 utils）
 export { parseTags, fmtDate } from "../utils/noteHelpers";
@@ -54,6 +56,12 @@ interface Props {
   /** 批量删除（父层负责确认/invoke/刷新；resolve=true 表示已执行删除——
    *  勾选集合在删除执行后才清空，取消确认时保留勾选——与会话管理台一致） */
   onBatchDelete: (ids: number[]) => Promise<boolean>;
+  // v0.16.1：右键菜单动作（父层既有处理；缺省时对应菜单项隐藏）
+  onNotePinToggle?: (note: Note) => void;
+  onNoteEdit?: (note: Note) => void;
+  onNoteDelete?: (note: Note) => void;
+  /** 归组成功后刷新（父层重载列表 + 右栏选中重取） */
+  onNoteMoved?: () => void;
   /** v0.15：折叠为窄条（父层 useColumnLayout.setManualFolded(true)） */
   onCollapse?: () => void;
 }
@@ -72,6 +80,7 @@ export default function NoteListView({
   keyword, tagFilter, sortMode, allTags, selectedId, status,
   noteColors, tagColors,
   onKeywordChange, onTagFilterChange, onSortModeChange, onSelect, onCreate, onRefresh, onOpenSession, onBatchDelete,
+  onNotePinToggle, onNoteEdit, onNoteDelete, onNoteMoved,
   onCollapse,
 }: Props) {
   // v0.14 B：当前主题（跟随 prefers-color-scheme；jsdom 无 matchMedia 回退 light）
@@ -140,6 +149,9 @@ export default function NoteListView({
 
   const toggleGroupFold = (key: string) => setGroupFolds((cur) => ({ ...cur, [key]: !cur[key] }));
 
+  // v0.16.1：右键菜单态（note + 视口坐标；null=关闭）
+  const [contextMenu, setContextMenu] = useState<{ note: Note; x: number; y: number } | null>(null);
+
   // v0.15：树退化规则——搜索/标签/排序激活时平铺（树上下文无意义）
   const treeMode = keyword.trim() === "" && tagFilter === null && sortMode === "updated-desc";
   const grouped = useMemo(() => {
@@ -168,6 +180,7 @@ export default function NoteListView({
       onSelect={onSelect}
       onToggleSelect={toggleSelect}
       onOpenSession={onOpenSession}
+      onContextMenu={(e) => setContextMenu({ note: n, x: e.clientX, y: e.clientY })}
     />
   );
 
@@ -313,6 +326,21 @@ export default function NoteListView({
         </div>
       )}
       {status && <p style={{ padding: 8, fontSize: 12, color: "#dc2626" }}>{status}</p>}
+
+      {/* v0.16.1：笔记行右键菜单（原生菜单已全局禁用——应用内替代） */}
+      {contextMenu && onNotePinToggle && onNoteEdit && onNoteDelete && onNoteMoved && (
+        <NoteRowContextMenu
+          note={contextMenu.note}
+          groups={groups}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          onPinToggle={onNotePinToggle}
+          onEdit={onNoteEdit}
+          onDelete={onNoteDelete}
+          onMoved={onNoteMoved}
+        />
+      )}
     </div>
   );
 }

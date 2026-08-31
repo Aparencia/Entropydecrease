@@ -32,6 +32,8 @@ import ImagePreviewOverlay from "../components/ImagePreviewOverlay";
 import VersionPanel from "../components/VersionPanel";
 import EnrichPanel from "../components/EnrichPanel";
 import NoteLinkToSystem from "../components/NoteLinkToSystem";
+// v0.16.1：阅读头「移动到组」显式手动分组入口（拖拽/ⓘ 之外的可发现路径）
+import NoteMoveToGroupMenu from "../components/NoteMoveToGroupMenu";
 import ColumnResizer from "../components/ColumnResizer";
 import ColumnBar from "../components/ColumnBar";
 import { useColumnLayout } from "../hooks/useColumnLayout";
@@ -411,6 +413,11 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
           onBatchDelete={runBatchDelete}
           noteColors={noteColors}
           tagColors={tagColors}
+          // v0.16.1：笔记行右键菜单动作（复用既有处理——固定/编辑/删除/归组刷新）
+          onNotePinToggle={(n) => void runPinToggle(n)}
+          onNoteEdit={(n) => { handleSelect(n); setEditing(true); }}
+          onNoteDelete={(n) => void runDelete(n.id)}
+          onNoteMoved={() => { refreshAll(); void handleNoteChanged(); }}
           onCollapse={() => listCol.setManualFolded(true)}
         />
       )}
@@ -469,6 +476,13 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
                     </div>
                   )}
                 </div>
+                {/* v0.16.1：手动分组显式入口——移动/移出组（handleNoteChanged 刷新列表+右栏） */}
+                <NoteMoveToGroupMenu
+                  key={`move-${selected.id}`}
+                  note={selected}
+                  groups={groups}
+                  onChanged={() => void handleNoteChanged()}
+                />
                 {/* v0.13.7 触点②：标题栏「挂到体系」入口；key=note.id 切笔记重置内部态 */}
                 <NoteLinkToSystem key={`link-${selected.id}`} noteId={selected.id} onChanged={() => void handleNoteChanged()} />
               </>
