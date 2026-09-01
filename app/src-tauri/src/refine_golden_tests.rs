@@ -152,7 +152,7 @@ fn golden_prompt_template_parses_with_v2_contract() {
     // ——note_refine.json 改动破坏契约时立即红（防漂移）
     let prompt = crate::ai_note_refine::NoteRefinePrompt::bundled();
     assert!(prompt.version >= 2, "提示词模板必须升级到 v2");
-    let sys = prompt.build_system("lecture");
+    let sys = prompt.build_system("lecture", None);
     assert!(sys.contains("image"), "v2 提示词必须声明 image 块类型");
     assert!(sys.contains("schemaVersion"), "v2 提示词必须声明 schemaVersion");
     assert!(sys.contains("slice"), "v2 提示词必须声明片间上下文约束");
