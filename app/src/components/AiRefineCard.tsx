@@ -18,10 +18,9 @@ import type {
   AiRefineResult,
   AiSettingsView,
   AiTaskState,
-  BalanceView,
-  RefineEstimateView,
 } from "../types";
 import RefineWorkbench from "./RefineWorkbench";
+import RefineLaunchDialog from "./RefineLaunchDialog";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6 };
 
@@ -39,15 +38,14 @@ export default function AiRefineCard({
 }) {
   const [settings, setSettings] = useState<AiSettingsView | null>(null);
   const [phase, setPhase] = useState<"idle" | "consent" | "confirm" | "running" | "done" | "failed">("idle");
-  const [estimate, setEstimate] = useState<RefineEstimateView | null>(null);
-  const [balance, setBalance] = useState<BalanceView | null>(null);
   const [progress, setProgress] = useState<{ finished: number; total: number } | null>(null);
   const [result, setResult] = useState<AiRefineResult | null>(null);
   const [failure, setFailure] = useState<AiTaskFailureLike | null>(null);
-  const [remember, setRemember] = useState(false);
   const [msg, setMsg] = useState("");
   const [, setTaskId] = useState<number | null>(null);
   const [showWorkbench, setShowWorkbench] = useState(false);
+  // v0.17.0：策略发起对话框（目标/档位/旋钮/提示词预览/成本确认在对话框内）
+  const [showLaunch, setShowLaunch] = useState(false);
   // v0.16.1 审查修复：工作台「重新生成」不经用户启动路径——旁路导航跳转
   // （否则每次 regenerate 都会 onTaskStarted → App 把你从会话页拽到 AI 对话页）
   const skipNavigateRef = useRef(false);
@@ -102,7 +100,7 @@ export default function AiRefineCard({
     setMsg("任务 30 秒无进展（可能未启动或后台卡住）——请查看 tauri 终端 [refine-task] 日志后重试");
   });
 
-  /** ① 预估 + 余额（确认弹窗数据源） */
+  /** ① 快速检查 → 打开策略发起对话框（授权/成本确认/策略选择在对话框内） */
   const prepare = async () => {
     setMsg("");
     if (!settings?.enabled) {
@@ -115,36 +113,22 @@ export default function AiRefineCard({
       setPhase("idle");
       return;
     }
-    if (!settings.authorized) {
-      setPhase("consent");
-      return;
-    }
-    const est = await invoke<RefineEstimateView>("ai_refine_estimate", { sessionId }).catch(() => null);
-    const bal = await invoke<BalanceView>("ai_get_balance").catch(() => null);
-    if (!est) {
-      setMsg("成本预估失败，无法继续");
-      return;
-    }
-    setEstimate(est);
-    setBalance(bal);
-    setRemember(est.rememberCostChoice);
-    // 已"记住此选择"且同意过 → 跳过确认直接开始
-    if (est.rememberCostChoice) {
-      void start(est);
-    } else {
-      setPhase("confirm");
-    }
+    setShowLaunch(true);
   };
 
-  /** ② 启动任务（确认/授权通过后） */
-  const start = async (est?: RefineEstimateView) => {
+  /** ② 对话框确认启动回调（策略已由对话框传入——回接轮询/事件双通道） */
+  const handleDialogStarted = useCallback((sid: number, taskId: number) => {
+    setPhase("running");
+    taskIdRef.current = taskId;
+    // v0.16.1：会话页精修启动 → 自动跳 AI 对话页（任务卡入聊天线程/可追问）
+    if (!skipNavigateRef.current) onTaskStarted?.(sid, taskId);
+    setTaskId(taskId);
+    startPolling(taskId);
+  }, [onTaskStarted, startPolling]);
+
+  /** ② 启动任务（工作台「重新生成」路径——沿全局默认偏好；策略选择在主发起对话框） */
+  const start = async () => {
     setMsg("");
-    if (remember && !est) {
-      // 勾选"记住" → 持久化偏好
-      await invoke("ai_update_settings", {
-        settings: { ...settings, rememberCostChoice: true },
-      }).catch(() => undefined);
-    }
     setPhase("running");
     // 契约修复（2026-08-21 真机"排队中"根因）：Rust AiTaskHandle 为 camelCase
     // 序列化（taskId），此前读 handle.task_id 恒为 undefined → 事件被忽略、
@@ -177,11 +161,7 @@ export default function AiRefineCard({
     setResult(null);
     setFailure(null);
     setProgress(null);
-    setEstimate(null);
-    setBalance(null);
   };
-
-  const est = estimate?.estimate;
 
   return (
     <div style={{ border: "1px solid #c7d2fe", borderRadius: 8, padding: 10, marginBottom: 8, background: "#f5f3ff" }}>
@@ -204,56 +184,8 @@ export default function AiRefineCard({
         )}
       </div>
 
-      {/* 授权卡（首次：上传内容说明） */}
-      {phase === "consent" && (
-        <div style={{ border: "1px solid #f59e0b", background: "#fffbeb", borderRadius: 6, padding: 8, marginBottom: 6, fontSize: 12 }}>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>首次使用需授权</div>
-          精修将上传<strong>转写文本与最小上下文</strong>至 DeepSeek；本地优先铁律：<strong>音视频/图像永不出本机</strong>。是否同意？
-          <div style={{ marginTop: 6, display: "flex", gap: 6 }}>
-            <button style={{ ...btn, background: "#0d9488", color: "#fff", border: "none" }} onClick={async () => {
-              await invoke("ai_set_authorized", { authorized: true }).catch(() => undefined);
-              setSettings({ ...settings!, authorized: true });
-              setPhase("confirm");
-            }}>同意并继续</button>
-            <button style={btn} onClick={() => setPhase("idle")}>暂不</button>
-          </div>
-        </div>
-      )}
-
-      {/* 成本确认（REQ-143 基础版：token 预估 + 费用 + 内联余额） */}
-      {phase === "confirm" && est && (
-        <div style={{ border: "1px solid #e5e7eb", background: "#fff", borderRadius: 6, padding: 8, marginBottom: 6, fontSize: 12 }}>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>成本确认</div>
-          <div>
-            预估 token：<strong>{est.estTokens}</strong> · 预估费用：<strong>¥{est.estCostYuan.toFixed(4)}</strong>
-            {est.pricePer1m > 0 && <span style={{ color: "#6b7280" }}>（单价 ¥{est.pricePer1m}/1M token）</span>}
-            {est.pricePer1m === 0 && <span style={{ color: "#0d9488" }}>（当前模型免费档 ¥0）</span>}
-            {est.pricePer1m === 0 && est.priceKnown === false && <span style={{ color: "#d97706" }}>（该模型单价未登记，费用可能不准确）</span>}
-          </div>
-          {balance && (
-            <div style={{ color: balance.lowBalanceWarning ? "#dc2626" : "#374151" }}>
-              当前余额：<strong>¥{balance.balance.totalBalance.toFixed(2)}</strong>
-              {balance.lowBalanceWarning && <span style={{ marginLeft: 6 }}>⚠️ {balance.lowBalanceWarning}</span>}
-            </div>
-          )}
-          {/* F3-D：成本硬拦截提示——余额不足时启动会被后端拒绝（三出口引导） */}
-          {balance && est.estCostYuan > 0 && balance.balance.totalBalance < est.estCostYuan * 1.2 && (
-            <div style={{ color: "#b91c1c", marginTop: 2 }}>
-              ⚠️ 余额不足本次预估（含安全系数）——启动将被拦截，请充值或切换免费档模型
-            </div>
-          )}
-          <label style={{ display: "flex", alignItems: "center", gap: 4, margin: "4px 0" }}>
-            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-            记住此选择，下次不再确认
-          </label>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button style={{ ...btn, background: "#0d9488", color: "#fff", border: "none" }} onClick={() => void start()}>
-              开始精修
-            </button>
-            <button style={btn} onClick={reset}>取消</button>
-          </div>
-        </div>
-      )}
+      {/* 授权卡由 RefineLaunchDialog 承载（v0.17.0——策略/成本/授权一屏编排） */}
+      {phase === "consent" && null}
 
       {/* 任务进行中（切片进度） */}
       {phase === "running" && (
@@ -315,6 +247,15 @@ export default function AiRefineCard({
       )}
 
       {msg && <div style={{ fontSize: 11, color: msg.startsWith("已") ? "#0d9488" : "#dc2626", marginTop: 4 }}>{msg}</div>}
+
+      {/* v0.17.0：策略发起对话框（目标/档位/旋钮/预览/成本/授权） */}
+      {showLaunch && (
+        <RefineLaunchDialog
+          sessionId={sessionId}
+          onClose={() => setShowLaunch(false)}
+          onStarted={handleDialogStarted}
+        />
+      )}
     </div>
   );
 }

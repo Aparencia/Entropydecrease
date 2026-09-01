@@ -5,8 +5,12 @@
  *              完成任务（「在对话中追问」预填结果要点 + 「查看轨迹」）——
  *              任务不再只是侧栏的孤立状态，而是贴着对话、可继续聊的实体。
  *              纯展示组件：数据由 ChatPage 轮询提供（ai_task_history）。
+ * @ai-context: v0.17.0（REQ-247）精修任务卡片升级：进行中显示流式正文
+ *              （片级解析流——useRefineStream，逐章流出）+ 完成态双入口
+ *              [回到会话] [查看笔记]（用户裁决：完成后快速闭环）。
  */
 import type { AiTaskRecord } from "../types";
+import { orderedBlockFrames, useRefineStream } from "../hooks/useRefineStream";
 
 interface Props {
   tasks: AiTaskRecord[];
@@ -16,6 +20,10 @@ interface Props {
   onOpenTask: (taskId: number) => void;
   /** 目标名解析（会话/笔记标题 → 展示） */
   refTitle: (task: AiTaskRecord) => string;
+  /** v0.17.0：完成双入口——回到会话（精修来源） */
+  onOpenSession?: (sessionId: number) => void;
+  /** v0.17.0：完成双入口——查看笔记 */
+  onOpenNote?: (noteId: number) => void;
 }
 
 const OP_LABEL: Record<string, string> = { refine: "✨ 精修", enrich: "📚 补充" };
@@ -40,7 +48,38 @@ function recentDone(tasks: AiTaskRecord[]): AiTaskRecord | null {
   return done[0] ?? null;
 }
 
-export default function TaskThreadCard({ tasks, onFollowUp, onOpenTask, refTitle }: Props) {
+/** 精修流式正文（进行中任务卡内——逐章流出；无帧则仅进度行） */
+function RefineStreamBody({ taskId, total }: { taskId: number; total: number | null }) {
+  const frames = useRefineStream(taskId);
+  const blocks = orderedBlockFrames(frames);
+  const doneFrames = frames.filter((f) => f.kind === "done").length;
+  const failedCount = frames.filter((f) => f.kind === "sliceFailed").length;
+  if (blocks.length === 0 && frames.length === 0) return null;
+  return (
+    <div style={{ width: "100%", marginTop: 4, borderTop: "1px dashed #e5e7eb", paddingTop: 4 }}>
+      <div style={{ fontSize: 10.5, color: "#9ca3af", marginBottom: 2 }}>
+        已整理 {blocks.length}/{total ?? "?"} 片{failedCount > 0 && ` · 失败 ${failedCount} 片（保留规则版）`}
+        {doneFrames > 0 && " · 完成"}
+      </div>
+      {blocks.map((b) => (
+        <pre
+          key={b.sliceIndex}
+          style={{
+            whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "inherit",
+            fontSize: 11.5, color: "#374151", margin: 0, padding: "2px 0",
+            borderTop: b.sliceIndex > 1 ? "1px solid #f3f4f6" : "none",
+          }}
+        >
+          {b.markdown}
+        </pre>
+      ))}
+    </div>
+  );
+}
+
+export default function TaskThreadCard({
+  tasks, onFollowUp, onOpenTask, refTitle, onOpenSession, onOpenNote,
+}: Props) {
   const active = tasks.filter(isActive).slice(0, 3);
   const done = recentDone(tasks);
   if (active.length === 0 && !done) return null;
@@ -57,6 +96,7 @@ export default function TaskThreadCard({ tasks, onFollowUp, onOpenTask, refTitle
           <button style={{ marginLeft: "auto", fontSize: 11, cursor: "pointer", border: "none", background: "none", color: "#6b7280" }} onClick={() => onOpenTask(t.taskId)}>
             查看轨迹 ▸
           </button>
+          {t.opType === "refine" && <RefineStreamBody taskId={t.taskId} total={t.slices} />}
         </div>
       ))}
       {done && (
@@ -65,6 +105,29 @@ export default function TaskThreadCard({ tasks, onFollowUp, onOpenTask, refTitle
             ✓ {OP_LABEL[done.opType] ?? done.opType} {refTitle(done)}
           </span>
           <span style={{ color: "#047857" }}>已完成</span>
+          {/* v0.17.0：完成双入口（精修——回到会话/查看笔记闭环） */}
+          {done.opType === "refine" && (
+            <>
+              {onOpenSession != null && (
+                <button
+                  data-testid="task-thread-back-session"
+                  onClick={() => onOpenSession(done.refId)}
+                  style={{ fontSize: 11, cursor: "pointer", border: "1px solid #99f6e4", background: "#fff", color: "#0f766e", borderRadius: 6, padding: "2px 8px" }}
+                >
+                  🏠 回到会话
+                </button>
+              )}
+              {onOpenNote != null && (
+                <button
+                  data-testid="task-thread-view-note"
+                  onClick={() => onOpenNote(done.refId)}
+                  style={{ fontSize: 11, cursor: "pointer", border: "1px solid #99f6e4", background: "#fff", color: "#0f766e", borderRadius: 6, padding: "2px 8px" }}
+                >
+                  📄 查看笔记
+                </button>
+              )}
+            </>
+          )}
           <button
             data-testid="task-thread-followup"
             onClick={() => onFollowUp(done)}

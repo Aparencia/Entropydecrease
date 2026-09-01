@@ -396,12 +396,15 @@ export default function ChatPage(props: Props) {
               </div>
               <span style={{ fontSize: 11, color: "#9ca3af" }}>试试 '/refine' '/enrich' 快捷命令</span>
             </div>
-            {/* v0.16.1：线程任务卡（进行中实时 + 完成可追问） */}
+            {/* v0.16.1：线程任务卡（进行中实时 + 完成可追问）；v0.17.0 精修
+                完成双入口（回到会话/查看笔记——REQ-247） */}
             <TaskThreadCard
               tasks={tasks}
               onFollowUp={followUpTask}
               onOpenTask={(id) => void selectTask(id)}
               refTitle={taskRefTitle}
+              onOpenSession={onOpenSessions}
+              onOpenNote={onOpenNote}
             />
             <ChatMessageList
               messages={messages}

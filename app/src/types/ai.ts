@@ -18,6 +18,8 @@ export interface AiSettingsView {
   rememberCostChoice: boolean;
   /** v0.12.0 M5：精修时启用画面理解（默认关——图片随精修上传，仅视频会话生效） */
   visionRefineEnabled: boolean;
+  /** v0.17.0：精修产出策略偏好（默认档位 + 逐维覆盖） */
+  refineStrategy: RefineStrategyPrefs;
   hasKey: boolean;
   /** credential（凭据库）| env（环境变量）| none */
   keySource: string;
@@ -108,6 +110,8 @@ export interface AiRefineResult {
   /** F2-B4：失败片数（>0 = 部分成功——重试后仍失败保留已成功片） */
   failedSlices: number;
   model: string;
+  /** v0.17.0：策略溯源（档位 + 每维最终值——工作台溯源条数据源；旧任务无此字段） */
+  strategy?: RefineStrategyInfo | null;
 }
 
 /** 成本预估（Rust CostEstimate；camelCase 契约；priceKnown=false → 单价未登记警告） */
@@ -123,6 +127,68 @@ export interface CostEstimate {
 export interface RefineEstimateView {
   estimate: CostEstimate;
   rememberCostChoice: boolean;
+}
+
+// ────────────────────────────────────────────────────────────
+// 精修策略类型（v0.17.0 REQ-245；Rust ai_strategy serde 契约——声明后端单一事实源）
+// ────────────────────────────────────────────────────────────
+
+/** 维度档位（value=协议值；instruction=注入提示词的指令文案） */
+export interface StrategyDimOption {
+  value: string;
+  label: string;
+  instruction: string;
+}
+
+/** 策略维度声明（一个旋钮） */
+export interface StrategyDimDef {
+  key: string;
+  label: string;
+  options: StrategyDimOption[];
+  default: string;
+}
+
+/** 档位预设（阶梯：原文保真/标准/深度/极简——dimValues=维度值预设组合） */
+export interface LadderPresetDef {
+  id: string;
+  name: string;
+  desc: string;
+  instruction: string;
+  dimValues: Record<string, string>;
+}
+
+/** 目标意图预设（chips + 自由输入关键词映射；书面命名） */
+export interface IntentPresetDef {
+  id: string;
+  label: string;
+  keywords: string[];
+  instruction: string;
+  dimValues: Record<string, string>;
+}
+
+/** 策略声明元数据（Rust RefineStrategyMeta；camelCase——ai_refine_strategy_meta） */
+export interface RefineStrategyMeta {
+  strategyDims: StrategyDimDef[];
+  ladderPresets: LadderPresetDef[];
+  intents: IntentPresetDef[];
+}
+
+/** 任务级策略覆盖（Rust StrategyOverride；camelCase——发起点传参） */
+export interface StrategyOverride {
+  presetId?: string | null;
+  dims: Record<string, string>;
+}
+
+/** 全局策略偏好（Rust RefineStrategyPrefs；camelCase——设置页默认档位+逐维覆盖） */
+export interface RefineStrategyPrefs {
+  defaultLadder: string;
+  dimOverrides: Record<string, string>;
+}
+
+/** 策略溯源（Rust RefineStrategyInfo；camelCase——工作台溯源条） */
+export interface RefineStrategyInfo {
+  presetId: string;
+  dims: Record<string, string>;
 }
 
 // ────────────────────────────────────────────────────────────

@@ -100,7 +100,11 @@ const RichEditorView = forwardRef<NoteEditHandle, Props>(function RichEditorView
   });
 
   // 父层命令式出口（NotesPage ESC 先 await 再刷新）
-  useImperativeHandle(ref, () => ({ flushSave: () => autosave.flushLatestRef.current() }), [autosave.flushLatestRef]);
+  useImperativeHandle(
+    ref,
+    () => ({ flushSave: () => autosave.flushLatestRef.current(), getContent: () => contentRef.current }),
+    [autosave.flushLatestRef],
+  );
 
   // ── 草稿恢复：挂载时检查，草稿比 DB 新 → 提示 ──
   useEffect(() => {

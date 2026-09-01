@@ -25,9 +25,11 @@ interface Props {
 }
 
 /** v0.13.6（审查 H1 修复）：父层命令式出口——ESC 出口先 await 保存再刷新
- *  （原 ESC 由父层直接 setEditing(false)，卸载保存与刷新竞态重演 P0） */
+ *  （原 ESC 由父层直接 setEditing(false)，卸载保存与刷新竞态重演 P0）
+ *  v0.17.0：getContent——编辑器当前内容（AI 发起所见即所修，未保存传参） */
 export interface NoteEditHandle {
   flushSave: () => Promise<void>;
+  getContent: () => string;
 }
 
 // L14：自动保存双计时参数——停止输入 2s 存一次（debounce）；dirty 期间最长
@@ -129,7 +131,11 @@ const NoteEditView = forwardRef<NoteEditHandle, Props>(function NoteEditView({ n
   }, [note.id]);
 
   // 父层命令式出口（NotesPage ESC 出口先 await 再刷新）
-  useImperativeHandle(ref, () => ({ flushSave: () => flushLatest() }), [flushLatest]);
+  useImperativeHandle(
+    ref,
+    () => ({ flushSave: () => flushLatest(), getContent: () => contentRef.current }),
+    [flushLatest],
+  );
 
   // Ctrl+S 显式保存（建版本）
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {

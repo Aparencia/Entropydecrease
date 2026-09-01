@@ -30,7 +30,7 @@ import ReviewSessionOverlay from "../components/ReviewSessionOverlay";
 import NoteReadingView from "../components/NoteReadingView";
 import ImagePreviewOverlay from "../components/ImagePreviewOverlay";
 import VersionPanel from "../components/VersionPanel";
-import EnrichPanel from "../components/EnrichPanel";
+import NoteAiDialog from "../components/NoteAiDialog";
 import NoteLinkToSystem from "../components/NoteLinkToSystem";
 // v0.16.1：阅读头「移动到组」显式手动分组入口（拖拽/ⓘ 之外的可发现路径）
 import NoteMoveToGroupMenu from "../components/NoteMoveToGroupMenu";
@@ -66,6 +66,9 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
   const [status, setStatus] = useState("");
   // M3：编辑态
   const [editing, setEditing] = useState(false);
+  // v0.17.0：编辑态 AI 能力对话框（精修/知识补充统一入口——REQ-246）
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [aiContent, setAiContent] = useState("");
   // v0.10.1：图片点击放大预览
   const [previewImg, setPreviewImg] = useState<{ src: string; title?: string } | null>(null);
   // v0.12.2：侧栏刷新令牌（捕获/升降/结算后计数与组列表重载）
@@ -290,6 +293,16 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
   // 保存与 get_note 竞态在 ESC 出口重演"编辑后右栏旧值"）
   const editorRef = useRef<NoteEditHandle | null>(null);
 
+  // v0.17.0：AI 能力入口——阅读态使用直接进入编辑态（用户裁决）+ 内容快照
+  // （编辑态取编辑器当前内容=未保存所见即所修；阅读态用已存笔记内容——快照
+  // 在进入编辑前采集，编辑器挂载前 ref 为空，兜底 selected.content）
+  const openAiDialog = useCallback(() => {
+    if (!selected) return;
+    setEditing(true);
+    setAiContent(editorRef.current?.getContent() ?? selected.content);
+    setAiDialogOpen(true);
+  }, [selected]);
+
   // 新建笔记（v0.12.2 去摩擦：零对话框——新建即编辑；落未归组「全部笔记」可见）
   const handleCreate = () => {
     invoke<Note>("create_note", { new: { title: "未命名笔记", content: "", source: "manual" } })
@@ -338,10 +351,10 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
     return m;
   }, [visibleNotes, groupMap, tagColors]);
 
-  // H3：辅助面板插槽——VersionPanel + EnrichPanel，key=note.id 切笔记重置内部任务态
+  // H3：辅助面板插槽——VersionPanel（知识补充已迁移至编辑态 🤖 AI 菜单——
+  // v0.17.0 REQ-246：阅读态独立面板移除，用 AI 直接进入编辑态）
   const auxPanels = selected ? (
     <>
-      <EnrichPanel key={`enrich-${selected.id}`} noteId={selected.id} onUpdated={() => void handleNoteChanged()} />
       <VersionPanel key={`version-${selected.id}`} noteId={selected.id} onChanged={() => void handleNoteChanged()} />
     </>
   ) : null;
@@ -485,6 +498,18 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
                 />
                 {/* v0.13.7 触点②：标题栏「挂到体系」入口；key=note.id 切笔记重置内部态 */}
                 <NoteLinkToSystem key={`link-${selected.id}`} noteId={selected.id} onChanged={() => void handleNoteChanged()} />
+                {/* v0.17.0：编辑态 AI 能力统一入口（阅读态点击直接进入编辑态） */}
+                <button
+                  data-testid="note-ai-entry"
+                  onClick={openAiDialog}
+                  title="AI 精修 / 知识补充"
+                  style={{
+                    padding: "3px 8px", cursor: "pointer", fontSize: 11, borderRadius: 6,
+                    border: "1px solid #c7d2fe", background: "#f5f3ff", color: "#4c1d95",
+                  }}
+                >
+                  🤖 AI
+                </button>
               </>
             }
             onEdit={() => setEditing(true)}
@@ -501,6 +526,16 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
           </div>
         )}
       </div>
+      {/* v0.17.0：编辑态 AI 能力对话框（精修/知识补充——REQ-246） */}
+      {aiDialogOpen && selected && (
+        <NoteAiDialog
+          key={`ai-${selected.id}`}
+          noteId={selected.id}
+          noteContent={aiContent}
+          onClose={() => setAiDialogOpen(false)}
+          onUpdated={() => void handleNoteChanged()}
+        />
+      )}
       {/* v0.10.1：图片放大预览（ESC/点击遮罩关闭——与编辑退出 ESC 互斥） */}
       {previewImg && (
         <ImagePreviewOverlay src={previewImg.src} title={previewImg.title} onClose={() => setPreviewImg(null)} />

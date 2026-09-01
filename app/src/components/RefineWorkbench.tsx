@@ -11,8 +11,30 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AiRefineResult, WorkbenchData } from "../types";
+import type { AiRefineResult, RefineStrategyInfo, RefineStrategyMeta, WorkbenchData } from "../types";
 import { escapeHtml, renderTimestampAnchors } from "../utils/html";
+
+/** 档位显示名（meta 声明解析；intent:xxx 前缀 → intent 名；未知 id 原样——诚实不猜） */
+function strategyName(presetId: string, meta: RefineStrategyMeta | null): string {
+  if (presetId.startsWith("intent:")) {
+    const id = presetId.slice(7);
+    return meta?.intents.find((i) => i.id === id)?.label ?? presetId;
+  }
+  return meta?.ladderPresets.find((p) => p.id === presetId)?.name ?? presetId;
+}
+
+/** 非默认旋钮 chips（只展示偏离声明默认的维度——溯源聚焦变化差异） */
+function strategyDimsChips(info: RefineStrategyInfo, meta: RefineStrategyMeta | null): string[] {
+  if (!meta) return [];
+  const out: string[] = [];
+  for (const dim of meta.strategyDims) {
+    const v = info.dims[dim.key];
+    if (!v || v === dim.default) continue;
+    const opt = dim.options.find((o) => o.value === v);
+    out.push(`${dim.label}·${opt?.label ?? v}`);
+  }
+  return out;
+}
 
 const overlay: React.CSSProperties = {
   position: "fixed", inset: 0, zIndex: 999,
@@ -71,6 +93,8 @@ function decorateRefined(md: string, sections: WorkbenchData["sections"]): strin
  */
 export default function RefineWorkbench({
   sessionId,
+  noteId,
+  noteMode = false,
   onClose,
   onApplied,
   readonly = false,
@@ -80,15 +104,20 @@ export default function RefineWorkbench({
   ruleMd: propRuleMd,
   refinedMd: propRefinedMd,
 }: {
-  sessionId: number;
+  /** 会话级目标（规则草稿基线；与 noteMode 二选一） */
+  sessionId?: number;
+  /** 笔记级目标（笔记当前版基线——手写/任意笔记；REQ-246） */
+  noteId?: number;
+  /** 笔记级模式：基线=当前笔记版（非规则草稿），采纳走 ai_note_refine_apply */
+  noteMode?: boolean;
   onClose: () => void;
   onApplied?: (noteId: number) => void;
   readonly?: boolean;
-  /** AiRefineCard 传的精修任务结果（非只读时优先作为双栏数据源 + 启用采纳按钮） */
+  /** 精修任务结果（非只读时优先作为双栏数据源 + 启用采纳按钮） */
   taskResult?: AiRefineResult;
-  /** 任务 id（采纳落库时回传——标记 adopted + 成本回填，防重启后重复采纳） */
+  /** 任务 id（采纳落库时回传——标记 adopted + 成本回填） */
   taskId?: number | null;
-  /** 重新生成回调（走父级任务管线：running 态 + 轮询/事件，防止状态残留） */
+  /** 重新生成回调（走父级任务管线：running 态 + 轮询/事件） */
   onRegenerate?: () => void | Promise<void>;
   /** 只读模式透传规则版 markdown */
   ruleMd?: string;
@@ -99,10 +128,17 @@ export default function RefineWorkbench({
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [errMsg, setErrMsg] = useState("");
   const [msg, setMsg] = useState("");
+  // v0.17.0：策略溯源条（档位/旋钮 chips——meta 声明解析名称）
+  const [strategyMeta, setStrategyMeta] = useState<RefineStrategyMeta | null>(null);
 
   const leftRef = useRef<HTMLDivElement>(null);
   const rightRef = useRef<HTMLDivElement>(null);
   const syncingRef = useRef(false);
+
+  // 溯源条元数据（一次加载——档位/旋钮显示名）
+  useEffect(() => {
+    void invoke<RefineStrategyMeta>("ai_refine_strategy_meta").then(setStrategyMeta).catch(() => undefined);
+  }, []);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -124,6 +160,27 @@ export default function RefineWorkbench({
         setStatus("ready");
         return;
       }
+      if (noteMode) {
+        // 笔记级：内存结果即基线（无规则草稿链路）；章节 diff 前端按基线/精修版算
+        if (!taskResult) {
+          throw new Error("笔记级精修缺少任务结果（请重新发起精修）");
+        }
+        const secs = await invoke<WorkbenchData["sections"]>("diff_markdown_sections", {
+          oldMd: taskResult.baseMarkdown,
+          newMd: taskResult.refinedMarkdown,
+        }).catch(() => []);
+        const totalAdded = secs.reduce((s, x) => s + x.added_lines.length, 0);
+        const totalRemoved = secs.reduce((s, x) => s + x.removed_lines.length, 0);
+        setData({
+          ruleMarkdown: taskResult.baseMarkdown,
+          refinedMarkdown: taskResult.refinedMarkdown,
+          sections: secs,
+          stats: { added: totalAdded, removed: totalRemoved, unchanged: secs.filter((s) => s.status === "unchanged").length },
+          meta: null,
+        });
+        setStatus("ready");
+        return;
+      }
       // 非只读 + 精修结果在内存（采纳前）→ 回传后端 refine_workbench：
       // 后端优先采用该结果（消除未落库右侧恒空 + 事件先行的 DB 写库竞态）
       const d = await invoke<WorkbenchData>("refine_workbench", {
@@ -136,7 +193,7 @@ export default function RefineWorkbench({
       setErrMsg(`加载失败：${e}`);
       setStatus("error");
     }
-  }, [sessionId, readonly, propRuleMd, propRefinedMd, taskResult]);
+  }, [sessionId, readonly, propRuleMd, propRefinedMd, taskResult, noteMode]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -154,19 +211,18 @@ export default function RefineWorkbench({
     requestAnimationFrame(() => { syncingRef.current = false; });
   }, []);
 
-  /** 采纳——复用 ai_refine_apply（需 taskResult；回传 taskId 标记采纳防重复落库） */
+  /** 采纳（会话级 ai_refine_apply / 笔记级 ai_note_refine_apply——REQ-246） */
   const apply = async () => {
     if (!taskResult || !data?.refinedMarkdown) return;
     setMsg("⏳ 落库中…");
     try {
-      const note = await invoke<{ id: number }>("ai_refine_apply", {
-        sessionId,
-        result: taskResult,
-        // 修复：原实现恒传 null → 任务记录不标记 adopted、成本不回填——
-        // 重启后任务中心仍可恢复该结果并再次采纳（重复建笔记风险）
-        taskId: taskId ?? null,
-      });
-      setMsg(`✅ 已落库为笔记 #${note.id}`);
+      const note = await invoke<{ id: number }>(
+        noteMode ? "ai_note_refine_apply" : "ai_refine_apply",
+        noteMode
+          ? { noteId, result: taskResult, taskId: taskId ?? null }
+          : { sessionId, result: taskResult, taskId: taskId ?? null },
+      );
+      setMsg(`✅ 已采纳更新笔记 #${note.id}`);
       onApplied?.(note.id);
       onClose();
     } catch (e) {
@@ -242,6 +298,30 @@ export default function RefineWorkbench({
           <span style={{ flex: 1 }} />
           <button style={{ ...headerBtn, border: "none", background: "transparent", fontWeight: 600, color: "#6b7280" }} onClick={onClose}>✕</button>
         </div>
+
+        {/* v0.17.0：策略溯源条（档位+旋钮 chips——「按什么规则变的」可溯源） */}
+        {!readonly && taskResult?.strategy && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
+            padding: "6px 16px", background: "#f5f3ff", borderBottom: "1px solid #e0e7ff",
+            fontSize: 11, color: "#4c1d95",
+          }}>
+            <span style={{ fontWeight: 600 }}>本次档位：</span>
+            <span>{strategyName(taskResult.strategy.presetId, strategyMeta)}</span>
+            {strategyDimsChips(taskResult.strategy, strategyMeta).map((c) => (
+              <span key={c} style={{ background: "#ede9fe", borderRadius: 999, padding: "1px 8px", color: "#5b21b6" }}>{c}</span>
+            ))}
+            {taskId != null && (
+              <button
+                style={{ ...headerBtn, border: "1px solid #c7d2fe", background: "#fff", color: "#4c1d95", marginLeft: 4 }}
+                onClick={() => {/* 完整提示词在 AI 对话页任务卡（轨迹）可查看 */}}
+                title="完整提示词在 AI 对话页「AI 任务」卡可查看（轨迹存档）"
+              >
+                💬 查看提示词
+              </button>
+            )}
+          </div>
+        )}
 
         {/* 双栏 */}
         <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
