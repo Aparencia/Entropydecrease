@@ -415,6 +415,16 @@
 | REQ-243 | 右键菜单完整性：笔记行完整菜单（移动到组子菜单/固定/复制标题正文/编辑/删除）+ 组行右键=ⓘ 组管理弹层 + 会话行右键=打开详情 | P1 | 已实施 | v0.16.1 | 2026-08-31 用户裁决「完整菜单+检测其他区域」；知识画布/树右键暂不新增（无既有处理语义，全局已禁原生菜单） |
 | REQ-244 | 浏览器元素去除：全局禁用 WebView2 原生右键菜单（host 侧 AreDefaultContextMenusEnabled=false——wry with_webview + ICoreWebView2 链）+ 前端 contextmenu preventDefault 兜底 + 文本输入应用内右键小菜单（剪切/复制/粘贴/全选） | P0 | 已实施 | v0.16.1 | 2026-08-31 用户裁决「先修浏览器右键」；prompt/confirm/alert 13 处替换经用户确认**本批不做**（后续批） |
 
+### v0.17.0 · AI 精修可到达度——策略化提示词 + 笔记级 AI 能力 + 流式会话化（2026-09-01 用户裁决）
+
+> 依据：用户对话——①精修提示词可选项化（例子具体程度/概念学术通俗/原文保留程度等）②笔记页编辑模式使用 AI 精修（手写刚需）+ 知识补充并入编辑模式入口③精修会话化（跳转 AI 对话/显示所发送提示词/流式返回/完成后回到会话与查看笔记）；复活 v0.11.6 策略层设计（2026-08-22 已批准未实施）并扩展；设计见 [spec 2026-09-01](../superpowers/specs/2026-09-01-ai-refine-strategy-flow-design.md) + [ADR-026](../adr/ADR-026-ai-refine-strategy-flow.md)。
+
+| REQ | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
+|----|------|--------|------|---------|------|
+| REQ-245 | AI 精修策略层：prompts/note_refine.json v3（strategy_dims/ladder_presets/intents）+ ai_strategy.rs 纯函数 + 组装 pipeline（core+style+strategy+few_shot+output）+ 目标 chips（原文保真/考点浓缩/通俗转述/速查纲要/金句摘录 + 自由输入本地关键词映射未命中诚实提示）+ 4 档阶梯（L1 忠实整理/L2 标准精修=现状零变化/L3 深度改写/L4 极简提取）+ 6 旋钮高级微调 + ai_refine_prompt_preview（与实发同代码路径）+ ai_refine_strategy_meta + AiSettings.refine_strategy（全局默认+任务级覆盖） | P0 | 已立项 | v0.17.0 | 协议零改动（策略只改提示词）；非法值回退默认；L3 表达改写但事实红线不动（不新增事实/术语数据原样） |
+| REQ-246 | 笔记级 AI 能力：编辑态「🤖 AI」菜单（AI 精修/知识补充/预留）+ NoteAiDialog + 笔记级精修（输入=编辑器当前内容直接传参、基线=当前笔记版、版本链 source=ai-refine 复用）+ handwritten 档案（笔记式，仅笔记级请求，采集端零改动）+ ai_note_refine_estimate/start + 工作台笔记级模式 + 阅读态 AI 入口直接进入编辑态 + 阅读态独立 EnrichPanel 移除 | P0 | 已立项 | v0.17.0 | 手写笔记刚需；image 块前缀白名单化（session-images/+notes-images/，向后兼容） |
+| REQ-247 | 精修流式会话化：Tauri IPC 流式通道（progress/block_done/slice_failed/done 帧）+ 后端片级流式（片完成 validate 后推渲染，协议强校验/失败回退不变）+ 对话页消息流（消息1=提示词全文立即显示/消息2=片级解析流）+ 完成自动升工作台（diff 同步打开）+ 消息底部 [回到会话][查看笔记] 双入口 + 追问保留（10 分钟窗口） | P0 | 已立项 | v0.17.0 | B+ 档（片级解析流）；任务表语义（幂等/成本/审计/重试/trajectory 终态）全保留——流式=呈现增强 |
+
 ### V1.0 · 体验增强（远期）
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
