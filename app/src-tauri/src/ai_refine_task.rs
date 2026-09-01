@@ -14,12 +14,14 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
 use base64::Engine;
+use tauri::Emitter;
 
 use crate::ai_chat::{AiTurn, trajectory_to_json};
 use crate::ai_client::AiClient;
 use crate::ai_mock::AiMockAdapter;
 use crate::ai_note_refine::AiNoteRefineAdapter;
 use crate::ai_refine_protocol::AiRefineRequest;
+use crate::ai_strategy::ResolvedDims;
 use crate::ai_task::{slice_note, AiTaskFailure, AiTaskState, SLICE_MAX_CHARS};
 use crate::commands::AppState;
 use crate::commands_ai_refine::{set_task, AiRefineResult};
@@ -30,28 +32,54 @@ use crate::outline::{detect_outline_smart, OutlineConfig};
 use crate::video_profile::ProfileKind;
 
 /// 切片并发上限（REQ-145：并发 2-3——配额并发安全由 command 层启动前按
-/// 预估片数一次性消耗保证，此处 worker 数不超切片数）。
-const CONCURRENCY: usize = 3;
+/// 预估片数一次性消耗保证，此处 worker 数不超切片数）。v0.17.0：pub(crate)
+/// ——笔记级精修任务共用同一上限。
+pub(crate) const CONCURRENCY: usize = 3;
+
+/// 精修流式帧（REQ-247 B+ 档：片级解析流——片完成 validate 后推渲染，
+/// 中间态永不承诺；事件通道 "ai:refine-stream"，载荷 RefineStreamPayload）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum RefineStreamFrame {
+    /// 片完成进度（收集推进时推——前端进度行）
+    Progress { slice_index: usize, slice_total: usize },
+    /// 该片精修结果（validate 通过后的渲染 markdown——逐章正文流出）
+    BlockDone { slice_index: usize, markdown: String },
+    /// 该片失败（回退纯规则语义——诚实降级提示）
+    SliceFailed { slice_index: usize, reason: String },
+    /// 任务终态（全部片合并完成）
+    Done { slices: usize, failed_slices: usize },
+}
+
+/// 流式事件载荷（taskId 过滤——多任务并行时各订阅只收自己的帧）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RefineStreamPayload {
+    task_id: u64,
+    frame: RefineStreamFrame,
+}
+
+/// 推送精修流帧（失败静默——流式是呈现增强，不得影响任务主链路）。
+fn emit_refine_stream(st: &AppState, task_id: u64, frame: RefineStreamFrame) {
+    let _ = st.app.emit("ai:refine-stream", RefineStreamPayload { task_id, frame });
+}
 /// 单片失败重试次数（幂等片——同片重跑不产生副作用）。
 const SLICE_RETRY: usize = 1;
 
 /// 精修任务审计记录（F1：REQ-140 轨迹可见化——summary 不含原文，隐私红线）。
-fn push_refine_audit(st: &AppState, session_id: i64, result: &str, model: Option<&str>) {
+/// v0.17.0：summary_ctx 泛化（"session=1"/"note=3"——会话级/笔记级共用）。
+fn push_refine_audit(st: &AppState, summary_ctx: &str, result: &str, model: Option<&str>) {
     let now = crate::db_sessions_rows::unix_seconds();
     if let Ok(mut g) = st.ai_guardrails.lock() {
         g.push_audit(crate::ai_guardrails::AiAuditEntry {
             at_unix: now,
-            upload_summary: format!(
-                "refine session={} model={}",
-                session_id,
-                model.unwrap_or("?")
-            ),
+            upload_summary: format!("refine {} model={}", summary_ctx, model.unwrap_or("?")),
             result: result.to_string(),
         });
     }
 }
 
-/// 后台精修任务：规则草稿 → 切片 → 逐片精修（mock/云端）→ 合并 → diff。
+/// 任务收尾公共骨架（会话级/笔记级共用——v0.17.0 REQ-246 提取）。
 ///
 /// @ai-context: 彻底检测加固（2026-08-21）：spawn_blocking 的 JoinHandle 未被
 ///              await——闭包内 panic 会被 tokio 吞掉，任务状态永久停在
@@ -59,14 +87,14 @@ fn push_refine_audit(st: &AppState, session_id: i64, result: &str, model: Option
 ///              catch_unwind 把 panic 归一为 Failed 状态，状态流转永不失联。
 /// @ai-context: F2-B4：单片失败重试后仍失败 → 保留已成功片（partial_failed
 ///              语义：failed_slices > 0，前端显示"部分成功 x/y 片"）。
-pub fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) {
-    // 诊断日志（2026-08-21 真机"排队中"排查）：tauri dev 终端可见各阶段进度
-    eprintln!("[refine-task] task={} start session={} mock={}", task_id, session_id, mock);
+pub(crate) fn run_refine_task_skeleton(
+    st: AppState,
+    task_id: u64,
+    target_summary: String,
+    work: impl FnOnce() -> Result<(AiRefineResult, Vec<AiTurn>), AiTaskFailure>,
+) {
     let started = std::time::Instant::now();
-    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run_refine_task_inner(&st, task_id, session_id, mock)
-    }))
-    .unwrap_or_else(|_| {
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)).unwrap_or_else(|_| {
         Err(AiTaskFailure::Other(
             "精修任务内部错误（panic）——请重试；若复现请反馈".to_string(),
         ))
@@ -94,9 +122,13 @@ pub fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) 
                 }
             }
             set_task(&st, task_id, AiTaskState::Succeeded);
+            // REQ-247：终态帧（前端消息定格为最终摘要+双入口）
+            emit_refine_stream(&st, task_id, RefineStreamFrame::Done {
+                slices: result.slices,
+                failed_slices: result.failed_slices,
+            });
             // F1 修复（2026-08-21）：精修调用上审计——REQ-140 轨迹可见化
-            // （此前只有余额/测试连接/复核有记录，精修补充零审计）
-            push_refine_audit(&st, session_id, "ok", Some(&result.model));
+            push_refine_audit(&st, &target_summary, "ok", Some(&result.model));
             // F2 任务中心：终态落库（写库失败不阻断——H2 设计）+ 保留策略
             // 裁剪（审查修复：trim 原只在启动时跑，运行期终态任务会累积——
             // 每次终态后清理超限旧终态，防表膨胀）
@@ -119,7 +151,7 @@ pub fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) 
                 reason.message()
             );
             set_task(&st, task_id, AiTaskState::Failed { reason: reason.clone() });
-            push_refine_audit(&st, session_id, "error", None);
+            push_refine_audit(&st, &target_summary, "error", None);
             let _ = st.db.finish_ai_task(
                 task_id,
                 "failed",
@@ -132,6 +164,55 @@ pub fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool) 
     }
 }
 
+/// 后台精修任务：规则草稿 → 切片 → 逐片精修（mock/云端）→ 合并 → diff。
+///
+/// @ai-context: v0.17.0（REQ-245）：dims=策略解析结果（command 层 resolve 后
+///              传入）——每片提示词一致（切片间风格统一），协议零改动。
+pub fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool, dims: ResolvedDims) {
+    // 诊断日志（2026-08-21 真机"排队中"排查）：tauri dev 终端可见各阶段进度
+    eprintln!(
+        "[refine-task] task={} start session={} mock={} strategy={}",
+        task_id, session_id, mock, dims.preset_id
+    );
+    run_refine_task_skeleton(st.clone(), task_id, format!("session={}", session_id), move || {
+        run_refine_task_inner(&st, task_id, session_id, mock, &dims)
+    });
+}
+
+/// 构建精修适配器（密钥解析/Provider 解析统一口径——会话级/笔记级共用；
+/// v0.17.0 REQ-246 提取）。密钥来源诊断日志在层内（脱敏：只打长度+前 6 字符）。
+pub(crate) fn build_refine_adapter(
+    st: &AppState,
+) -> Result<(AiClient, AiNoteRefineAdapter), AiTaskFailure> {
+    let settings = st
+        .ai_settings
+        .lock()
+        .map_err(|e| AiTaskFailure::Other(e.to_string()))?
+        .clone();
+    let env_key = std::env::var("SILICONFLOW_API_KEY").ok().filter(|k| !k.is_empty());
+    // M1 统一解析口：env 优先 > 默认 Provider per-provider 凭据 > 旧 default scope
+    let stored_key = crate::commands_ai_providers::resolve_default_provider_key(st)
+        .map_err(|e| AiTaskFailure::Other(e.to_string()))?;
+    eprintln!(
+        "[refine-task] key: env={} stored={}",
+        env_key
+            .as_ref()
+            .map(|k| format!("{}:{}..", k.len(), &k[..6.min(k.len())]))
+            .unwrap_or_else(|| "无".to_string()),
+        stored_key
+            .as_ref()
+            .map(|k| format!("{}:{}..", k.len(), &k[..6.min(k.len())]))
+            .unwrap_or_else(|| "无".to_string()),
+    );
+    let store = st
+        .ai_providers
+        .lock()
+        .map_err(|e| AiTaskFailure::Other(format!("AI Provider 存储锁中毒: {}", e)))?
+        .clone();
+    let client = AiClient::from_settings_with_store(&settings, stored_key, &store);
+    Ok((client.clone(), AiNoteRefineAdapter::new(client)))
+}
+
 /// 精修任务主体（返回 Result；panic 由外层 catch_unwind 兜底）。
 ///
 /// @ai-context: v0.16.0（REQ-230）返回 (结果, 轨迹)——轨迹为每片 LLM 调用的
@@ -141,6 +222,7 @@ fn run_refine_task_inner(
     task_id: u64,
     session_id: i64,
     mock: bool,
+    dims: &ResolvedDims,
 ) -> Result<(AiRefineResult, Vec<AiTurn>), AiTaskFailure> {
     let env = PurifyEnv {
         config: st.purify.clone(),
@@ -202,26 +284,8 @@ fn run_refine_task_inner(
         .lock()
         .map_err(|e| AiTaskFailure::Other(e.to_string()))?
         .clone();
-    let env_key = std::env::var("SILICONFLOW_API_KEY").ok().filter(|k| !k.is_empty());
-    // M1 统一解析口：env 优先 > 默认 Provider per-provider 凭据 > 旧 default scope
-    let stored_key = crate::commands_ai_providers::resolve_default_provider_key(st)
-        .map_err(|e| AiTaskFailure::Other(e.to_string()))?;
-    // 密钥来源诊断（脱敏：只打长度+前 6 字符；真机 unauthorized 排查 2026-08-21）
-    eprintln!(
-        "[refine-task] task={} key: env={} stored={}",
-        task_id,
-        env_key
-            .as_ref()
-            .map(|k| format!("{}:{}..", k.len(), &k[..6.min(k.len())]))
-            .unwrap_or_else(|| "无".to_string()),
-        stored_key
-            .as_ref()
-            .map(|k| format!("{}:{}..", k.len(), &k[..6.min(k.len())]))
-            .unwrap_or_else(|| "无".to_string()),
-    );
-    let store = st.ai_providers.lock().map_err(|e| AiTaskFailure::Other(format!("AI Provider 存储锁中毒: {}", e)))?.clone();
-    let client = AiClient::from_settings_with_store(&settings, stored_key, &store);
-    let adapter = AiNoteRefineAdapter::new(client.clone());
+    // v0.17.0：密钥/Provider/适配器统一解析口（会话级/笔记级共用）
+    let (client, adapter) = build_refine_adapter(st)?;
     let mock_adapter = AiMockAdapter;
     // v0.12.0 M5：画面理解——仅精修设置开启时装载会话屏卡图（≤1280px 控 token；
     // 空 → 精修纯文本，现有行为零变化；图文会话不触发——调用方只对视频会话接线）
@@ -244,6 +308,7 @@ fn run_refine_task_inner(
         st,
         task_id,
         vision_images: &vision_images,
+        dims,
     });
     // ④ 合并（协议层 merge_refine_slices：各片 join + 章节锚点回挂——7️⃣
     // 剥离的章节锚点按标题精确匹配还原，未匹配不挂）
@@ -267,31 +332,39 @@ fn run_refine_task_inner(
             slices: total,
             failed_slices: failed,
             model: client.config.model,
+            // v0.17.0：策略溯源（档位 + 每维最终值——工作台溯源条数据源）
+            strategy: Some(crate::commands_ai_refine::RefineStrategyInfo {
+                preset_id: dims.preset_id.clone(),
+                dims: dims.dims.clone(),
+            }),
         },
         turns,
     ))
 }
 
-/// 并发精修上下文（参数聚合——clippy too_many_arguments 修复）。
-struct RefineCtx<'a> {
-    slices: &'a [String],
-    chapters: &'a [String],
-    glossary: &'a [String],
-    profile: &'a str,
-    adapter: &'a AiNoteRefineAdapter,
-    mock_adapter: &'a AiMockAdapter,
-    mock: bool,
-    workers: usize,
-    st: &'a AppState,
-    task_id: u64,
+/// 并发精修上下文（参数聚合——clippy too_many_arguments 修复；
+/// v0.17.0：字段 pub(crate)——笔记级精修任务共用）。
+pub(crate) struct RefineCtx<'a> {
+    pub(crate) slices: &'a [String],
+    pub(crate) chapters: &'a [String],
+    pub(crate) glossary: &'a [String],
+    pub(crate) profile: &'a str,
+    pub(crate) adapter: &'a AiNoteRefineAdapter,
+    pub(crate) mock_adapter: &'a AiMockAdapter,
+    pub(crate) mock: bool,
+    pub(crate) workers: usize,
+    pub(crate) st: &'a AppState,
+    pub(crate) task_id: u64,
     /// v0.12.0 M5：屏卡图 base64 data URI 列表（vision_refine_enabled 开启且
     /// 会话有归档图时非空；空 → 精修纯文本，现有行为零变化）
-    vision_images: &'a [String],
+    pub(crate) vision_images: &'a [String],
+    /// v0.17.0：策略解析结果（command 层 resolve——每片提示词一致）
+    pub(crate) dims: &'a ResolvedDims,
 }
 
 /// 片间摘要（F3 v2：前/后片首尾 N 字——提示词衔接上下文，防片间断裂）。
 /// 纯函数可单测：取片开头/结尾 SUMMARY_MAX_CHARS 字符（截断到字符边界）。
-fn slice_summary(text: &str, head: bool) -> Option<String> {
+pub(crate) fn slice_summary(text: &str, head: bool) -> Option<String> {
     let s = text.trim();
     if s.is_empty() {
         return None;
@@ -385,7 +458,7 @@ fn load_session_vision_images(data_dir: &std::path::Path, session_id: i64) -> Ve
 /// @ai-context: F3 v2：请求携带 slice_index/slice_total/prev_summary/
 ///              next_summary——模型知道自己是第几片、前后片衔接什么
 ///              （防章节标题重复/内容断裂）。
-fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usize, Vec<AiTurn>) {
+pub(crate) fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usize, Vec<AiTurn>) {
     let total = ctx.slices.len();
     if total == 0 {
         return (Vec::new(), 0, Vec::new());
@@ -425,6 +498,7 @@ fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usize, Vec<AiTu
             let task_id = ctx.task_id;
             let profile = ctx.profile; // 轨迹 system 提示词构建用（模板分组同请求）
             let vision_images = ctx.vision_images;
+            let dims = ctx.dims; // 策略解析结果（worker 只读共享）
             let turns = turns.clone();
             scope.spawn(move || loop {
                 let idx = {
@@ -438,11 +512,11 @@ fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usize, Vec<AiTu
                     let resp = if mock {
                         Ok(mock_adapter.refine(req))
                     } else if ctx.vision_images.is_empty() {
-                        adapter.refine(req).map_err(AiTaskFailure::from)
+                        adapter.refine(req, Some(dims)).map_err(AiTaskFailure::from)
                     } else {
                         // v0.12.0 M5：开启画面理解 → 屏卡图随切片请求送 vision-exp
                         adapter
-                            .refine_vision(req, ctx.vision_images)
+                            .refine_vision(req, ctx.vision_images, Some(dims))
                             .map_err(AiTaskFailure::from)
                     };
                     match resp {
@@ -453,7 +527,7 @@ fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usize, Vec<AiTu
                                 .unwrap_or_else(|e| e.into_inner())
                                 .push(AiTurn {
                                     turn: idx + 1,
-                                    system: adapter.prompt.build_system(profile),
+                                    system: adapter.prompt.build_system(profile, Some(dims)),
                                     user: turn_user_text(req, vision_images),
                                     response: serde_json::to_string(&r).unwrap_or_default(),
                                 });
@@ -485,6 +559,22 @@ fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usize, Vec<AiTu
             ctx.task_id,
             AiTaskState::Running { finished_slices: pos + 1, total_slices: total },
         );
+        // REQ-247：进度帧（片完成推进——前端进度行）
+        emit_refine_stream(ctx.st, ctx.task_id, RefineStreamFrame::Progress {
+            slice_index: pos + 1,
+            slice_total: total,
+        });
+        // REQ-247：片级解析流帧（片完成即推——validate 已过；失败诚实提示）
+        match out {
+            Some(md) => emit_refine_stream(ctx.st, ctx.task_id, RefineStreamFrame::BlockDone {
+                slice_index: slice_idx + 1,
+                markdown: md.clone(),
+            }),
+            None => emit_refine_stream(ctx.st, ctx.task_id, RefineStreamFrame::SliceFailed {
+                slice_index: slice_idx + 1,
+                reason: "重试后仍失败（保留已成功片）".to_string(),
+            }),
+        }
     }
     let failed = by_index.iter().filter(|o| o.is_none()).count();
     let markdowns: Vec<String> = by_index.into_iter().flatten().collect();
@@ -494,7 +584,7 @@ fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usize, Vec<AiTu
 
 /// 轨迹 user 文本：请求 JSON（vision 附加张数占位——base64 不入轨迹库，
 /// 原图在本机会话图库；REQ-230 提示词/回答可见 + 存储可控）。
-fn turn_user_text(req: &AiRefineRequest, images: &[String]) -> String {
+pub(crate) fn turn_user_text(req: &AiRefineRequest, images: &[String]) -> String {
     let mut s = serde_json::to_string(req).unwrap_or_default();
     if !images.is_empty() {
         s.push_str(&format!(

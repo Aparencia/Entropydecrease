@@ -1,32 +1,46 @@
-//! AI 笔记精修适配器（REQ-141，v0.8.0 M2）。
+//! AI 笔记精修适配器（REQ-141，v0.8.0 M2；v0.17.0 策略层透传）。
 //!
 //! @ai-context: 输入=note_filter 规则草稿（markdown+档案+术语表+章节）→
-//!              按档案提示词模板（prompts/note_refine.json 编译期捆绑）→
-//!              云端结构化精修 → 强校验（AiRefineResponse::validate）→
-//!              失败回退纯规则（不丢不假，本地优先铁律；错误经 AiClientError
-//!              归一为任务失败四类原因）。
+//!              按档案提示词模板（prompts/note_refine.json 编译期捆绑，v3
+//!              含策略声明）→ 云端结构化精修 → 强校验（AiRefineResponse::
+//!              validate）→ 失败回退纯规则（不丢不假，本地优先铁律；错误经
+//!              AiClientError 归一为任务失败四类原因）。
 //! @ai-context: 档案分组：网课=讲义式/实操=步骤式/口播=摘要式/访谈=问答式/
 //!              会议=纪要式 + 扩展类（直播/白板/题目/跟练/编程…）回退讲义式
-//!              ——profile_style 映射表可校准；模型切换零代码改动。
+//!              + v0.17.0 handwritten（笔记式——仅笔记级精修请求使用，
+//!              采集端零改动）——profile_style 映射表可校准；模型切换零代码改动。
+//! @ai-context: 策略层（REQ-245）：build_system 增 ResolvedDims（可选）——
+//!              空指令段落 → 不追加（standard 档与 v0.16.1 逐字节一致）；
+//!              策略只改提示词，协议与校验零改动（ADR-026-1）。
 
 use serde::{Deserialize, Serialize};
 
 use crate::ai_client::{AiClient, AiClientError, parse_json_object};
 use crate::ai_refine_protocol::{AiRefineRequest, AiRefineResponse};
+use crate::ai_strategy::{IntentPreset, LadderPreset, ResolvedDims, StrategyDim};
 
-/// 提示词模板（prompts/note_refine.json 结构）。
+/// 提示词模板（prompts/note_refine.json v3 结构）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NoteRefinePrompt {
     pub version: u32,
     /// 核心指令（精修=整理不创作——所有档案共享）
     pub core_instruction: String,
-    /// 五种风格模板（讲义/步骤/摘要/问答/纪要）
+    /// 风格模板（讲义/步骤/摘要/问答/纪要/笔记式——v0.17.0 增 handwritten）
     pub styles: std::collections::HashMap<String, NoteRefineStyle>,
     /// 档案 → 风格映射（扩展类回退讲义式）
     pub profile_style: std::collections::HashMap<String, String>,
     pub fallback_style: String,
     pub few_shot: Vec<PromptExample>,
     pub output_format: String,
+    /// 策略维度声明（REQ-245：旋钮——声明进 JSON 可校准）
+    #[serde(default)]
+    pub strategy_dims: Vec<StrategyDim>,
+    /// 档位预设（阶梯：L1 忠实/L2 标准/L3 深度/L4 极简）
+    #[serde(default)]
+    pub ladder_presets: Vec<LadderPreset>,
+    /// 目标意图预设（chips + 自由输入关键词映射）
+    #[serde(default)]
+    pub intents: Vec<IntentPreset>,
 }
 
 /// 单风格模板（style 名 + system 提示词）。
@@ -70,7 +84,7 @@ impl NoteRefinePrompt {
         let mut profile_style = std::collections::HashMap::new();
         profile_style.insert("lecture".to_string(), "lecture".to_string());
         Self {
-            version: 2,
+            version: 3,
             core_instruction: "精修=整理不创作：去噪 + 结构化，不增补课程外事实。"
                 .to_string(),
             styles,
@@ -79,6 +93,9 @@ impl NoteRefinePrompt {
             few_shot: Vec::new(),
             output_format: "只输出 JSON：{\"schemaVersion\":2,\"sections\":[{\"heading\":\"..\",\"blocks\":[{\"type\":\"paragraph|list|term|highlight|quote|image\",\"content\":\"..\",\"anchor_ref\":null}]}]}"
                 .to_string(),
+            strategy_dims: Vec::new(),
+            ladder_presets: Vec::new(),
+            intents: Vec::new(),
         }
     }
 
@@ -96,9 +113,19 @@ impl NoteRefinePrompt {
             .unwrap_or_else(|| "你是课堂笔记整理助手。".to_string())
     }
 
-    /// 组装 system 提示词（核心指令 + 档案风格 + few-shot + 输出约束）。
-    pub fn build_system(&self, profile: &str) -> String {
+    /// 组装 system 提示词（核心指令 + 档案风格 + 策略段落 + few-shot + 输出约束）。
+    ///
+    /// @ai-context: 策略段落插在 few_shot 前（spec 管线顺序）；dims=None 或
+    ///              指令段落为空 → 与 v0.16.1 输出逐字节一致（零变化保证——
+    ///              standard 档/旧调用路径不扰动既有行为）。
+    pub fn build_system(&self, profile: &str, dims: Option<&ResolvedDims>) -> String {
         let mut s = format!("{}\n{}", self.core_instruction, self.style_system(profile));
+        if let Some(d) = dims {
+            let strategy = crate::ai_strategy::strategy_instructions(d, self);
+            if !strategy.is_empty() {
+                s.push_str(&format!("\n{}", strategy));
+            }
+        }
         for ex in &self.few_shot {
             s.push_str(&format!("\n示例输入: {}\n示例输出: {}", ex.input, ex.output));
         }
@@ -119,17 +146,15 @@ impl AiNoteRefineAdapter {
         Self { client, prompt: NoteRefinePrompt::bundled() }
     }
 
-    /// 单次精修（一请求=一切片；长笔记切片由 command 层任务编排）。
-    ///
-    /// @ai-context: 强校验在此层做（validate 失败 → Parse 错误 → 调用方
-    ///              回退纯规则，非法响应不进入笔记管线——防御性编程铁律）。
-    /// @ai-context: F3 v2：请求携带片间上下文（slice_index/total/prev/next
-    ///              summary）——提示词据此约束"只整理本片、沿用全局章节"；
-    ///              响应 schema_version=2（向后兼容：旧响应缺省 1 仍可解析）。
-    pub fn refine(&self, request: &AiRefineRequest) -> Result<AiRefineResponse, AiClientError> {
+    /// 单次精修（纯文本路径；dims=None=标准档/路径，行为与 v0.16.1 一致）。
+    pub fn refine(
+        &self,
+        request: &AiRefineRequest,
+        dims: Option<&ResolvedDims>,
+    ) -> Result<AiRefineResponse, AiClientError> {
         // v0.12.0 M5：单一实现——refine = refine_vision(request, &[])（纯文本，
         // 与既有行为逐字节一致；画面理解是可选增强，不改变默认链）
-        self.refine_vision(request, &[])
+        self.refine_vision(request, &[], dims)
     }
 
     /// 单次精修（多模态分支，v0.12.0 M5：vision-exp 视觉提取）。
@@ -137,12 +162,14 @@ impl AiNoteRefineAdapter {
     /// @ai-context: images 非空 → 屏卡图随切片请求送 vision-exp（content 数组
     ///              多模态，chat_vision）；空 → 纯文本（chat_json，零变化）。
     ///              精修输出直接含画面要点；校验/回退逻辑与 refine 共用。
+    ///              v0.17.0：dims 透传提示词策略段落（协议零改动）。
     pub fn refine_vision(
         &self,
         request: &AiRefineRequest,
         images: &[String],
+        dims: Option<&ResolvedDims>,
     ) -> Result<AiRefineResponse, AiClientError> {
-        let system = self.prompt.build_system(&request.profile);
+        let system = self.prompt.build_system(&request.profile, dims);
         let user = serde_json::to_string(request)
             .map_err(|e| AiClientError::Parse(format!("精修请求序列化失败: {}", e)))?;
         let v = if images.is_empty() {

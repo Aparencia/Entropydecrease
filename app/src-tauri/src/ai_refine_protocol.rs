@@ -26,6 +26,9 @@ const BLOCK_MAX_CHARS: usize = 4000;
 const BLOCKS_TOTAL_MAX: usize = 200;
 /// 单节 image 块数上限（防配图刷屏——F3 v2）。
 const IMAGES_PER_SECTION_MAX: usize = 5;
+/// image 块允许的前缀白名单（v0.17.0 REQ-246：会话图库 + 笔记图库——
+/// 手写笔记级精修配图引用 notes-images/{note_id}/…；向后兼容）。
+const IMAGE_PREFIXES: &[&str] = &["session-images/", "notes-images/"];
 /// 片间摘要长度上限（prev/next summary 截断——防超长上下文撑爆提示词）。
 pub const SUMMARY_MAX_CHARS: usize = 200;
 
@@ -159,9 +162,10 @@ impl AiRefineResponse {
                     return Err("内容块为空或超长".to_string());
                 }
                 if b.block_type == AiRefineBlockType::Image {
-                    // F3 v2：配图必须引用本地会话图库（相对路径前缀校验）
-                    if !content.starts_with("session-images/") {
-                        return Err("image 块必须引用本地会话图库（session-images/ 前缀）".to_string());
+                    // F3 v2 + REQ-246：配图必须引用本地图库（会话图库
+                    // session-images/ 或笔记图库 notes-images/——前缀白名单校验）
+                    if !IMAGE_PREFIXES.iter().any(|p| content.starts_with(p)) {
+                        return Err("image 块必须引用本地图库（session-images/ 或 notes-images/ 前缀）".to_string());
                     }
                     images_in_section += 1;
                 }

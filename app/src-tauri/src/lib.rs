@@ -34,7 +34,15 @@ mod ai_note_refine;
 // v0.8.0 F2-B4（2026-08-21）：精修任务执行（自 commands_ai_refine 拆出——
 // 并发切片/单片重试/部分成功；豁免清单拆分计划兑现）
 mod ai_refine_task;
+// v0.17.0（REQ-246）：笔记级精修任务（输入=笔记内容传参；基线=当前笔记版；
+// profile=handwritten——手写笔记刚需，复用并发/收尾骨架）
+mod ai_note_refine_task;
+// v0.17.0（REQ-245）：精修策略层——维度/档位/意图声明（JSON v3）解析、
+// 指令拼装、任务覆盖/全局默认回退链（纯函数；策略只改提示词）
+mod ai_strategy;
 mod commands_ai_refine;
+// v0.17.0（REQ-246）：笔记级精修 commands（估计/启动/采纳——版本链复用）
+mod commands_ai_note_refine;
 // v0.8.0 M3（REQ-142）：知识补充——协议（九子项/B6 无链接约束）/混合落位/
 // 适配器/命令层
 mod ai_enrich_protocol;
@@ -719,6 +727,7 @@ pub fn run() {
             commands_ai_settings::ai_set_authorized,
             commands_ai_settings::ai_set_enabled,
             commands_ai_settings::ai_set_vision_refine,
+            commands_ai_settings::ai_set_refine_strategy,
             commands_ai_settings::ai_test_connection,
             commands_ai_settings::ai_get_balance,
             commands_ai_settings::ai_audit_list,
@@ -739,9 +748,15 @@ pub fn run() {
             commands_ai_refine::ai_refine_estimate,
             commands_ai_refine::ai_refine_start,
             commands_ai_refine::ai_refine_status,
+            commands_ai_refine::ai_refine_strategy_meta,
+            commands_ai_refine::ai_refine_prompt_preview,
             commands_ai_refine::ai_refine_result,
             commands_ai_refine::ai_refine_apply,
             commands_ai_refine::refine_workbench,
+            // v0.17.0（REQ-246）：笔记级 AI 精修——估计/启动/采纳（手写笔记）
+            commands_ai_note_refine::ai_note_refine_estimate,
+            commands_ai_note_refine::ai_note_refine_start,
+            commands_ai_note_refine::ai_note_refine_apply,
             // v0.8.0 F2（2026-08-21）：任务中心——历史列表（面板数据源）
             commands_ai_refine::ai_task_history,
             // v0.16.0（REQ-224/225/226/227/228/230）：内嵌 AI 对话——

@@ -18,6 +18,8 @@ use std::sync::{Arc, Mutex};
 use tauri::{Emitter, State};
 
 use crate::ai_cost::{estimate_for_content_model, CostEstimate};
+use crate::ai_note_refine::NoteRefinePrompt;
+use crate::ai_strategy::{RefineStrategyMeta, StrategyOverride};
 use crate::ai_task::AiTaskState;
 use crate::commands::AppState;
 use crate::commands_session_note::build_rule_draft_with_analysis;
@@ -26,6 +28,7 @@ use crate::note_diff::{diff_sections, DiffOp, DiffStats, SectionDiff};
 use crate::note_filter::PurifyEnv;
 use crate::note_version::VersionMeta;
 use crate::types::{NewNote, Note};
+use crate::video_profile::ProfileKind;
 
 /// mock 模式 env 键（本地规则精修，不联网——测试/离线开发，ai_text_filter 先例）。
 const MOCK_ENV: &str = "AI_REFINE_MOCK";
@@ -61,6 +64,21 @@ pub struct AiRefineResult {
     /// F2-B4：失败片数（>0 = 部分成功——重试后仍失败保留已成功片）
     pub failed_slices: usize,
     pub model: String,
+    /// v0.17.0：本次策略溯源（档位 + 每维最终值——工作台溯源条数据源；
+    /// serde default 向前兼容：旧任务结果无此字段）
+    #[serde(default)]
+    pub strategy: Option<RefineStrategyInfo>,
+}
+
+/// 策略溯源信息（AI 产出按什么规则变的——工作台溯源条展示）。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefineStrategyInfo {
+    /// 档位 id（standard/faithful/deep/minimal 或 intent:xxx——名称由前端
+    /// 按 meta 声明解析，未知 id 原样展示——诚实不猜）
+    pub preset_id: String,
+    /// 每维最终值（key → value；chips 渲染源）
+    pub dims: std::collections::HashMap<String, String>,
 }
 
 /// 任务句柄（前端轮询/事件对应用）。
@@ -114,11 +132,16 @@ pub fn ai_refine_estimate(state: State<'_, AppState>, session_id: i64) -> Result
 }
 
 /// 启动 AI 精修异步任务（授权红线 + 密钥解析 + 后台切片逐片精修）。
+///
+/// @ai-context: v0.17.0（REQ-245）：strategy=任务级策略覆盖（可选——档位 +
+///              逐维覆盖；缺省用设置全局默认；非法值 resolve 内部回退默认，
+///              永不阻断）。dims 解析后传入任务（每片提示词一致）。
 #[tauri::command]
 pub async fn ai_refine_start(
     state: State<'_, AppState>,
     session_id: i64,
     authorized: bool,
+    strategy: Option<StrategyOverride>,
 ) -> Result<AiTaskHandle, String> {
     if session_id <= 0 {
         return Err("无效的会话 id".to_string());
@@ -205,8 +228,69 @@ pub async fn ai_refine_start(
         eprintln!("[AiTasks] refine 任务 {} 落库失败（不阻断 AI 调用；重启后不可恢复）: {}", task_id, e);
     }
     let st2 = st.clone();
-    tauri::async_runtime::spawn_blocking(move || crate::ai_refine_task::run_refine_task(st2, task_id, session_id, mock));
+    // v0.17.0：策略解析（任务覆盖 > 设置全局默认 > 内置 standard——非法值
+    // resolve 内回退，永不阻断精修主链路；标准档=现状逐字节一致）
+    let dims = crate::ai_strategy::resolve(
+        &NoteRefinePrompt::bundled(),
+        &settings.refine_strategy,
+        strategy.as_ref(),
+    );
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::ai_refine_task::run_refine_task(st2, task_id, session_id, mock, dims)
+    });
     Ok(AiTaskHandle { task_id, state: AiTaskState::Pending })
+}
+
+/// 策略声明元数据（发起对话框/设置页渲染数据源——后端声明即事实源）。
+#[tauri::command]
+pub fn ai_refine_strategy_meta() -> Result<RefineStrategyMeta, String> {
+    let p = NoteRefinePrompt::bundled();
+    Ok(RefineStrategyMeta {
+        strategy_dims: p.strategy_dims,
+        ladder_presets: p.ladder_presets,
+        intents: p.intents,
+    })
+}
+
+/// 提示词组装预览（与实发精修同一 build_system 代码路径——所见即所发）。
+///
+/// @ai-context: 档案来源二选一：session_id（会话级——会话档案驱动风格模板）
+///              或 profile（笔记级——handwritten/用户所选档案）；全局偏好 +
+///              任务级覆盖参与解析；返回完整 system 提示词（只读预览 + 复制）。
+#[tauri::command]
+pub fn ai_refine_prompt_preview(
+    state: State<'_, AppState>,
+    session_id: Option<i64>,
+    profile: Option<String>,
+    strategy: Option<StrategyOverride>,
+) -> Result<String, String> {
+    let kind = match session_id.filter(|v| *v > 0) {
+        Some(sid) => {
+            let session = state
+                .db
+                .get_session(sid)
+                .map_err(|e| format!("读取会话失败: {}", e))?
+                .ok_or_else(|| "会话不存在".to_string())?;
+            session
+                .profile
+                .as_deref()
+                .map(ProfileKind::parse)
+                .unwrap_or(ProfileKind::Lecture)
+        }
+        None => ProfileKind::parse(profile.as_deref().unwrap_or("handwritten")),
+    };
+    let prefs = state
+        .ai_settings
+        .lock()
+        .map_err(|e| format!("AI 设置锁中毒: {}", e))?
+        .refine_strategy
+        .clone();
+    Ok(crate::ai_strategy::preview_system(
+        &NoteRefinePrompt::bundled(),
+        kind.as_str(),
+        &prefs,
+        strategy.as_ref(),
+    ))
 }
 
 /// 任务状态查询（前端轮询通道；事件通道见 "ai:task-update"）。

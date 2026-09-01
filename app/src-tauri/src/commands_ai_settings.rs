@@ -31,6 +31,8 @@ pub struct AiSettingsView {
     pub remember_cost_choice: bool,
     /// 精修时启用画面理解（v0.12.0 M5——默认关，图片上传最敏感独立闸门）
     pub vision_refine_enabled: bool,
+    /// 精修产出策略偏好（v0.17.0 REQ-245：默认档位 + 逐维覆盖）
+    pub refine_strategy: crate::ai_strategy::RefineStrategyPrefs,
     /// 是否已配置密钥（env 或凭据库）
     pub has_key: bool,
     /// 密钥来源：credential | env | none
@@ -67,6 +69,7 @@ pub fn ai_get_settings(state: State<'_, AppState>) -> Result<AiSettingsView, Str
         low_balance_threshold: s.low_balance_threshold,
         remember_cost_choice: s.remember_cost_choice,
         vision_refine_enabled: s.vision_refine_enabled,
+        refine_strategy: s.refine_strategy.clone(),
         has_key,
         key_source,
     })
@@ -152,6 +155,21 @@ pub fn ai_set_vision_refine(state: State<'_, AppState>, refine_enabled: bool) ->
         .lock()
         .map_err(|e| format!("AI 设置锁中毒: {}", e))?;
     lock.vision_refine_enabled = refine_enabled;
+    lock.save(&state.ai_settings_path)
+}
+
+/// 保存精修产出策略偏好（v0.17.0 REQ-245：设置页默认档位 + 逐维覆盖——
+/// 发起点任务级覆盖优先于此；非法值在 resolve 层回退，本命令只存原值）。
+#[tauri::command]
+pub fn ai_set_refine_strategy(
+    state: State<'_, AppState>,
+    prefs: crate::ai_strategy::RefineStrategyPrefs,
+) -> Result<(), String> {
+    let mut lock = state
+        .ai_settings
+        .lock()
+        .map_err(|e| format!("AI 设置锁中毒: {}", e))?;
+    lock.refine_strategy = prefs;
     lock.save(&state.ai_settings_path)
 }
 

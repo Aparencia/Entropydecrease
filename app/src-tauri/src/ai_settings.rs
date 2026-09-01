@@ -11,6 +11,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::ai_strategy::RefineStrategyPrefs;
+
 /// 默认端点（SiliconFlow OpenAI 兼容；env SILICONFLOW_BASE_URL 可覆盖）。
 pub const DEFAULT_AI_BASE_URL: &str = "https://api.siliconflow.cn/v1";
 /// 默认模型（2026-08 选型免费档：¥0/M + MIT 商用；质量档裁决见 v0.8.0 开放问题）。
@@ -39,6 +41,9 @@ pub struct AiSettings {
     /// 图片上传最敏感——独立闸门；默认关（关闭则精修纯文本，现有行为零变化）。
     /// 仅视频会话生效；图文会话 OCR 已足够，不触发 vision。
     pub vision_refine_enabled: bool,
+    /// 精修产出策略偏好（v0.17.0 REQ-245）：默认档位 + 逐维覆盖——
+    /// 全局默认（任务级覆盖优先）；serde default：旧 JSON 零迁移回填标准档
+    pub refine_strategy: RefineStrategyPrefs,
 }
 
 impl Default for AiSettings {
@@ -51,6 +56,7 @@ impl Default for AiSettings {
             low_balance_threshold: DEFAULT_LOW_BALANCE_THRESHOLD,
             remember_cost_choice: false,
             vision_refine_enabled: false,
+            refine_strategy: RefineStrategyPrefs::default(),
         }
     }
 }

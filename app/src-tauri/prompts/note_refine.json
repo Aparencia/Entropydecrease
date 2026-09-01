@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "core_instruction": "精修=整理不创作：去除非知识内容（寒暄/废话/重复/口头禅），按层级组织为结构化笔记；不增补课程外事实、不编造、不修正技术内容（错词/术语属书面化域不归你管）；沿用输入中的章节层级与术语表，不自行发明章节；技术术语/数字/专有名词即使片段也保留。F3 v2：输入含 slice_index/slice_total/prev_summary/next_summary——你是长笔记的第 N 片：只整理本片 content 对应内容，禁止重复输出全局章节标题（沿用 chapters 全局章节），片首/片尾与相邻片衔接处不重复内容；输入中的配图行（- ![画面 N](session-images/...)）必须以 image 块原样保留（content 完整路径，不得改写）。",
   "styles": {
     "lecture": {
@@ -21,6 +21,10 @@
     "meeting": {
       "name": "纪要式",
       "system": "你是会议纪要整理助手。整理为结构化纪要：决议/行动项/要点分层，行动项用 list 呈现，删除闲谈与重复。"
+    },
+    "handwritten": {
+      "name": "笔记式",
+      "system": "你是学习笔记整理助手。把零散的原始笔记整理成结构化知识笔记：合并碎片化条目、按逻辑层级组织（概念/步骤/要点/结论）、保留原文信息与措辞含义，删除重复与冗余；不补全笔记中缺失的知识（补全是另一项能力，不属于整理）。"
     }
   },
   "profile_style": {
@@ -36,7 +40,8 @@
     "exercise": "lecture",
     "follow-along": "hands-on",
     "coding": "hands-on",
-    "unknown": "lecture"
+    "unknown": "lecture",
+    "handwritten": "handwritten"
   },
   "fallback_style": "lecture",
   "few_shot": [
@@ -45,5 +50,133 @@
       "output": "{\"schemaVersion\":2,\"sections\":[{\"heading\":\"第一章 引言\",\"blocks\":[{\"type\":\"paragraph\",\"content\":\"卷积神经网络的核心概念：卷积与池化。\",\"anchor_ref\":\"第一章 引言\"},{\"type\":\"term\",\"content\":\"卷积：对输入进行特征提取的运算。\",\"anchor_ref\":null},{\"type\":\"term\",\"content\":\"池化：对特征图进行下采样。\",\"anchor_ref\":null},{\"type\":\"highlight\",\"content\":\"重要：本节为核心概念。\",\"anchor_ref\":null},{\"type\":\"image\",\"content\":\"session-images/5/full/30000.webp\",\"anchor_ref\":null}]}]}"
     }
   ],
-  "output_format": "只输出 JSON，不要任何其他文字、解释或代码块标记。格式：{\"schemaVersion\":2,\"sections\":[{\"heading\":\"<章节标题，沿用输入章节或按内容归纳>\",\"blocks\":[{\"type\":\"paragraph|list|term|highlight|quote|image\",\"content\":\"<内容>\",\"anchor_ref\":\"<可空：引用的章节标题>\"}]}]}。要求：schemaVersion 必须为 2；sections 非空；每节至少 1 个块；content 非空且不超过 4000 字；总块数不超过 200；type 只能取六个枚举值之一；image 块 content 必须以 session-images/ 开头（配图原样保留，禁止改写路径）；每节 image 块不超过 5 个。"
+  "output_format": "只输出 JSON，不要任何其他文字、解释或代码块标记。格式：{\"schemaVersion\":2,\"sections\":[{\"heading\":\"<章节标题，沿用输入章节或按内容归纳>\",\"blocks\":[{\"type\":\"paragraph|list|term|highlight|quote|image\",\"content\":\"<内容>\",\"anchor_ref\":\"<可空：引用的章节标题>\"}]}]}。要求：schemaVersion 必须为 2；sections 非空；每节至少 1 个块；content 非空且不超过 4000 字；总块数不超过 200；type 只能取六个枚举值之一；image 块 content 必须以 session-images/ 开头（配图原样保留，禁止改写路径）；每节 image 块不超过 5 个。",
+  "strategy_dims": [
+    {
+      "key": "examples",
+      "label": "例子密度",
+      "options": [
+        { "value": "keep_all", "label": "全保留", "instruction": "例子全部保留。" },
+        { "value": "standard", "label": "标准", "instruction": "例子保留典型示例。" },
+        { "value": "condensed", "label": "浓缩", "instruction": "例子只保留一个典型示例并压缩说明。" }
+      ],
+      "default": "standard"
+    },
+    {
+      "key": "concept",
+      "label": "概念表达",
+      "options": [
+        { "value": "original", "label": "原文术语", "instruction": "概念保留原文表达与术语。" },
+        { "value": "academic", "label": "学术书面", "instruction": "概念用学术书面语表达：术语保留、定义清晰、表述严谨。" },
+        { "value": "plain", "label": "通俗白话", "instruction": "概念用通俗白话转述，可用生活化类比，但术语与数据保持原文。" }
+      ],
+      "default": "original"
+    },
+    {
+      "key": "colloquial",
+      "label": "口语保留",
+      "options": [
+        { "value": "purified", "label": "纯知识", "instruction": "删除所有口语痕迹，保留书面知识表述。" },
+        { "value": "light", "label": "轻度保留", "instruction": "轻度保留口语痕迹（语气词与口语化表达少量保留），无意义填充词仍删除。" },
+        { "value": "verbatim", "label": "原文保真", "instruction": "保留原文口吻与句式（仅合并碎句、删除填充词）。" }
+      ],
+      "default": "purified"
+    },
+    {
+      "key": "emotion",
+      "label": "情绪内容",
+      "options": [
+        { "value": "drop", "label": "全删", "instruction": "删除自嘲、调侃、情绪化表达，只留知识。" },
+        { "value": "light", "label": "轻度保留", "instruction": "轻度保留情绪化表达（自嘲/调侃金句），不干扰知识密度。" },
+        { "value": "keep", "label": "保留", "instruction": "保留原文情绪化表达与共鸣句，知识密度允许略降。" }
+      ],
+      "default": "drop"
+    },
+    {
+      "key": "conclusion",
+      "label": "结论优先级",
+      "options": [
+        { "value": "as_is", "label": "原文顺序", "instruction": "按原文顺序组织，不调整内容顺序。" },
+        { "value": "highlight_top", "label": "金句置顶", "instruction": "每节开头用 highlight 置顶本节核心结论（从原文提炼，不得虚构）。" },
+        { "value": "summary_top", "label": "摘要+置顶", "instruction": "每节开头加一句概括导语，并置顶核心结论（从原文提炼，不得虚构）。" }
+      ],
+      "default": "as_is"
+    },
+    {
+      "key": "sections",
+      "label": "章节结构",
+      "options": [
+        { "value": "inherit", "label": "沿用", "instruction": "沿用输入章节结构，不自行发明章节。" },
+        { "value": "ai", "label": "AI 归纳", "instruction": "按内容逻辑归纳章节标题（可合并/归纳，不增补章节内容）。" }
+      ],
+      "default": "inherit"
+    }
+  ],
+  "ladder_presets": [
+    {
+      "id": "faithful",
+      "name": "忠实整理",
+      "desc": "仅去口癖/碎句合并，句序句风原样",
+      "instruction": "本次为忠实整理档：仅做轻度整理（删除无意义填充词与重复、合并碎句），保留原句顺序与口吻，不做归纳改写。",
+      "dimValues": { "examples": "keep_all", "concept": "original", "colloquial": "verbatim", "emotion": "keep", "conclusion": "as_is", "sections": "inherit" }
+    },
+    {
+      "id": "standard",
+      "name": "标准精修",
+      "desc": "去非知识+结构化（现状行为）",
+      "instruction": "",
+      "dimValues": {}
+    },
+    {
+      "id": "deep",
+      "name": "深度改写",
+      "desc": "通俗转述+金句置顶+每节导语",
+      "instruction": "本次为深度改写档：允许表达转述与概括提炼（通俗化/金句置顶/导语），但事实红线不动——不新增课程外具体事实/数字/概念，术语与数据保持原文，不确定时保留原文表达。",
+      "dimValues": { "concept": "plain", "conclusion": "summary_top", "colloquial": "light", "emotion": "light" }
+    },
+    {
+      "id": "minimal",
+      "name": "极简提取",
+      "desc": "只留骨架：概念/步骤/结论",
+      "instruction": "本次为极简提取档：每节只保留核心概念/步骤/结论，删除例子与铺垫，单节内容块不超过 3 个，直接呈现骨架。",
+      "dimValues": { "examples": "condensed", "colloquial": "purified", "emotion": "drop", "conclusion": "as_is", "sections": "inherit" }
+    }
+  ],
+  "intents": [
+    {
+      "id": "verbatim",
+      "label": "原文保真",
+      "keywords": ["原样", "保真", "不改", "忠实"],
+      "instruction": "本次为原文保真档：仅做轻度整理（删除无意义填充词与重复、合并碎句），保留原句顺序与口吻，不做归纳改写。",
+      "dimValues": { "examples": "keep_all", "concept": "original", "colloquial": "verbatim", "emotion": "keep", "conclusion": "as_is", "sections": "inherit" }
+    },
+    {
+      "id": "exam",
+      "label": "考点浓缩",
+      "keywords": ["背", "考点", "复习", "考试", "背诵"],
+      "instruction": "本次为考点浓缩档：按考点浓缩知识——只留概念/公式/步骤/结论骨架，删除例子与铺垫，每节内容块不超过 3 个。",
+      "dimValues": { "examples": "condensed", "colloquial": "purified", "emotion": "drop", "conclusion": "as_is", "sections": "inherit" }
+    },
+    {
+      "id": "plain",
+      "label": "通俗转述",
+      "keywords": ["通俗", "说人话", "白话", "易懂", "好懂"],
+      "instruction": "本次为通俗转述档：允许表达转述与概括提炼（通俗化/金句置顶/导语），但事实红线不动——不新增课程外具体事实/数字/概念，术语与数据保持原文，不确定时保留原文表达。",
+      "dimValues": { "concept": "plain", "conclusion": "summary_top", "colloquial": "light", "emotion": "light" }
+    },
+    {
+      "id": "quickref",
+      "label": "速查纲要",
+      "keywords": ["速查", "快查", "纲要", "检索", "速览"],
+      "instruction": "本次为速查纲要档：每节组织结构清晰，只留要点与结论，删除非必要解释，例子压缩。",
+      "dimValues": { "examples": "condensed", "conclusion": "highlight_top" }
+    },
+    {
+      "id": "golden",
+      "label": "金句摘录",
+      "keywords": ["金句", "观点", "语录", "精辟"],
+      "instruction": "本次为金句摘录档：保留原句表达与情绪共鸣，结论金句置顶，例子保留完整。",
+      "dimValues": { "conclusion": "summary_top", "emotion": "keep", "examples": "keep_all" }
+    }
+  ]
 }

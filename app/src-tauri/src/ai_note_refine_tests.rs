@@ -31,7 +31,7 @@ fn style_resolution_with_fallback() {
 #[test]
 fn build_system_composes_all_parts() {
     let p = NoteRefinePrompt::bundled();
-    let s = p.build_system("lecture");
+    let s = p.build_system("lecture", None);
     assert!(s.contains("整理不创作"), "核心指令进入提示词");
     assert!(s.contains("讲义"), "档案风格进入提示词");
     assert!(s.contains("示例输入"), "few-shot 进入提示词");
@@ -42,6 +42,6 @@ fn build_system_composes_all_parts() {
 fn bundled_fallback_never_empty() {
     // 模板解析失败路径：fallback 仍可解析出可用提示词（不阻断功能）
     let p = NoteRefinePrompt::fallback();
-    assert!(!p.build_system("lecture").is_empty());
-    assert!(!p.build_system("unknown").is_empty());
+    assert!(!p.build_system("lecture", None).is_empty());
+    assert!(!p.build_system("unknown", None).is_empty());
 }

@@ -55,6 +55,11 @@ fn save_load_roundtrip() {
         remember_cost_choice: true,
         // v0.12.0 M5：vision 画面理解默认关——持久化 roundtrip 保真
         vision_refine_enabled: true,
+        // v0.17.0：策略偏好 roundtrip 保真（默认档位 + 逐维覆盖）
+        refine_strategy: crate::ai_strategy::RefineStrategyPrefs {
+            default_ladder: "deep".to_string(),
+            dim_overrides: std::collections::HashMap::from([("examples".to_string(), "condensed".to_string())]),
+        },
     };
     s.save(&path).expect("保存成功");
     let loaded = AiSettings::load(&path);
