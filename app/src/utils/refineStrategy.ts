@@ -11,6 +11,7 @@
 import type {
   IntentPresetDef,
   LadderPresetDef,
+  RefineStrategyInfo,
   RefineStrategyMeta,
   RefineStrategyPrefs,
   StrategyOverride,
@@ -93,6 +94,15 @@ export function isDeviating(draft: StrategyDraft, meta: RefineStrategyMeta | nul
 /** 提交给后端的 StrategyOverride（intent 基准只传 dims——后端 resolve 以全局基准 + dims 覆盖） */
 export function toOverride(draft: StrategyDraft): StrategyOverride {
   return { presetId: draft.presetId.startsWith("intent:") ? null : draft.presetId || null, dims: draft.dims };
+}
+
+/** 从任务溯源信息还原 override（「重新生成·沿用本次档位」——P1 审查修复：
+ * 依赖 result.strategy 而非回退全局默认，保重生成与首版同档位） */
+export function overrideFromInfo(info: RefineStrategyInfo): StrategyOverride {
+  return {
+    presetId: info.presetId.startsWith("intent:") ? null : info.presetId || null,
+    dims: { ...info.dims },
+  };
 }
 
 /** 草稿 → 全局偏好（设置页保存：仅存偏离基准档的组合——最小集语义） */

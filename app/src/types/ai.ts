@@ -63,6 +63,9 @@ export interface AiTaskRecord {
   opType: string;
   /** 精修=会话 id、补充=笔记 id */
   refId: number;
+  /** v0.17.0 审查修复：目标类别（session|note；NULL=旧数据按 session 语义）——
+   * 双入口"回到会话/查看笔记"按此分发（防 ref_id 语义错跳） */
+  targetKind?: string | null;
   /** pending|running|succeeded|failed */
   state: string;
   resultJson: string | null;

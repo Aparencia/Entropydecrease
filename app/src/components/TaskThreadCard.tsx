@@ -105,28 +105,26 @@ export default function TaskThreadCard({
             ✓ {OP_LABEL[done.opType] ?? done.opType} {refTitle(done)}
           </span>
           <span style={{ color: "#047857" }}>已完成</span>
-          {/* v0.17.0：完成双入口（精修——回到会话/查看笔记闭环） */}
-          {done.opType === "refine" && (
-            <>
-              {onOpenSession != null && (
-                <button
-                  data-testid="task-thread-back-session"
-                  onClick={() => onOpenSession(done.refId)}
-                  style={{ fontSize: 11, cursor: "pointer", border: "1px solid #99f6e4", background: "#fff", color: "#0f766e", borderRadius: 6, padding: "2px 8px" }}
-                >
-                  🏠 回到会话
-                </button>
-              )}
-              {onOpenNote != null && (
-                <button
-                  data-testid="task-thread-view-note"
-                  onClick={() => onOpenNote(done.refId)}
-                  style={{ fontSize: 11, cursor: "pointer", border: "1px solid #99f6e4", background: "#fff", color: "#0f766e", borderRadius: 6, padding: "2px 8px" }}
-                >
-                  📄 查看笔记
-                </button>
-              )}
-            </>
+          {/* v0.17.0：完成双入口（精修——回到会话/查看笔记闭环）。
+              审查修复：按 target_kind 分发——会话级→回会话；笔记级→看笔记
+              （ref_id 语义不同，错跳为旧实现缺陷） */}
+          {done.opType === "refine" && done.targetKind !== "note" && onOpenSession != null && (
+            <button
+              data-testid="task-thread-back-session"
+              onClick={() => onOpenSession(done.refId)}
+              style={{ fontSize: 11, cursor: "pointer", border: "1px solid #99f6e4", background: "#fff", color: "#0f766e", borderRadius: 6, padding: "2px 8px" }}
+            >
+              🏠 回到会话
+            </button>
+          )}
+          {done.opType !== "enrich" && done.targetKind === "note" && onOpenNote != null && (
+            <button
+              data-testid="task-thread-view-note"
+              onClick={() => onOpenNote(done.refId)}
+              style={{ fontSize: 11, cursor: "pointer", border: "1px solid #99f6e4", background: "#fff", color: "#0f766e", borderRadius: 6, padding: "2px 8px" }}
+            >
+              📄 查看笔记
+            </button>
           )}
           <button
             data-testid="task-thread-followup"

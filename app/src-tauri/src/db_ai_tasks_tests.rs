@@ -27,6 +27,7 @@ fn rec(task_id: u64, op: &str, ref_id: i64, state: &str) -> AiTaskRecord {
         created_at: task_id as i64,
         finished_at: if state == "succeeded" { Some(task_id as i64) } else { None },
         adopted: false,
+        target_kind: None,
     }
 }
 

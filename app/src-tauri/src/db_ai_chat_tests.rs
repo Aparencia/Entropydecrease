@@ -29,6 +29,7 @@ fn task_rec(task_id: u64, state: &str) -> AiTaskRecord {
         created_at: 1,
         finished_at: None,
         adopted: false,
+        target_kind: None,
     }
 }
 

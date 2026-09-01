@@ -144,6 +144,7 @@ pub async fn ai_enrich_start(
         created_at: crate::db_sessions_rows::unix_seconds(),
         finished_at: None,
         adopted: false,
+        target_kind: Some("note".to_string()),
     }) {
         eprintln!("[AiTasks] enrich 任务 {} 落库失败（不阻断 AI 调用；重启后不可恢复）: {}", task_id, e);
     }

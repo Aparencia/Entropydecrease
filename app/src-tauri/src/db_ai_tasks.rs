@@ -28,6 +28,10 @@ pub struct AiTaskRecord {
     pub ref_id: i64,
     /// 状态（pending|running|succeeded|failed|partial_failed）
     pub state: String,
+    /// 目标类别（v0.17.0 审查修复：session=会话级精修 | note=笔记级精修/补充；
+    /// NULL=旧数据（展示层按 session 语义兜底——后端不猜，防双入口错跳）
+    #[serde(default)]
+    pub target_kind: Option<String>,
     /// 成功结果 JSON（AiRefineResult/AiEnrichResult；失败/进行中 NULL）
     pub result_json: Option<String>,
     /// 成本（元；采纳落库后回填）
@@ -61,6 +65,7 @@ impl Db {
                 error TEXT,
                 slices INTEGER,
                 trajectory_json TEXT,
+                target_kind TEXT,
                 created_at INTEGER NOT NULL,
                 finished_at INTEGER,
                 adopted INTEGER NOT NULL DEFAULT 0
@@ -77,6 +82,14 @@ impl Db {
             "trajectory_json",
             "ALTER TABLE ai_tasks ADD COLUMN trajectory_json TEXT",
         )?;
+        // v0.17.0 审查修复：目标类别列（session|note——双入口错跳修复）。
+        // 幂等迁移；旧数据 NULL（展示层按 session 语义兜底——不猜）。
+        crate::db_migrations::ensure_column(
+            &conn,
+            "ai_tasks",
+            "target_kind",
+            "ALTER TABLE ai_tasks ADD COLUMN target_kind TEXT",
+        )?;
         Ok(())
     }
 
@@ -86,8 +99,8 @@ impl Db {
         conn.execute(
             "INSERT OR REPLACE INTO ai_tasks
                 (task_id, op_type, ref_id, state, result_json, cost_yuan, elapsed_ms,
-                 model, error, slices, created_at, finished_at, adopted)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+                 model, error, slices, target_kind, created_at, finished_at, adopted)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
             params![
                 rec.task_id as i64,
                 rec.op_type,
@@ -99,6 +112,7 @@ impl Db {
                 rec.model,
                 rec.error,
                 rec.slices.map(|s| s as i64),
+                rec.target_kind.as_deref(),
                 rec.created_at,
                 rec.finished_at,
                 rec.adopted as i64,
@@ -188,7 +202,7 @@ impl Db {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let mut stmt = conn.prepare(
             "SELECT task_id, op_type, ref_id, state, result_json, cost_yuan, elapsed_ms,
-                    model, error, slices, created_at, finished_at, adopted
+                    model, error, slices, target_kind, created_at, finished_at, adopted
              FROM ai_tasks
              WHERE state='succeeded' AND adopted=0 AND result_json IS NOT NULL
              ORDER BY created_at DESC LIMIT ?1",
@@ -207,7 +221,7 @@ impl Db {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let mut stmt = conn.prepare(
             "SELECT task_id, op_type, ref_id, state, result_json, cost_yuan, elapsed_ms,
-                    model, error, slices, created_at, finished_at, adopted
+                    model, error, slices, target_kind, created_at, finished_at, adopted
              FROM ai_tasks
              WHERE op_type='refine' AND ref_id=?1 AND state='succeeded'
                    AND adopted=0 AND result_json IS NOT NULL
@@ -225,7 +239,7 @@ impl Db {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let mut stmt = conn.prepare(
             "SELECT task_id, op_type, ref_id, state, result_json, cost_yuan, elapsed_ms,
-                    model, error, slices, created_at, finished_at, adopted
+                    model, error, slices, target_kind, created_at, finished_at, adopted
              FROM ai_tasks
              WHERE op_type=?1
              ORDER BY created_at DESC LIMIT ?2",
@@ -239,7 +253,7 @@ impl Db {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let mut stmt = conn.prepare(
             "SELECT task_id, op_type, ref_id, state, result_json, cost_yuan, elapsed_ms,
-                    model, error, slices, created_at, finished_at, adopted
+                    model, error, slices, target_kind, created_at, finished_at, adopted
              FROM ai_tasks WHERE task_id=?1",
         )?;
         let mut rows = stmt.query_map(params![task_id as i64], map_record)?;
@@ -280,9 +294,10 @@ fn map_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<AiTaskRecord> {
         model: row.get(7)?,
         error: row.get(8)?,
         slices: row.get::<_, Option<i64>>(9)?.map(|v| v as usize),
-        created_at: row.get(10)?,
-        finished_at: row.get(11)?,
-        adopted: row.get::<_, i64>(12)? != 0,
+        target_kind: row.get(10)?,
+        created_at: row.get(11)?,
+        finished_at: row.get(12)?,
+        adopted: row.get::<_, i64>(13)? != 0,
     })
 }
 

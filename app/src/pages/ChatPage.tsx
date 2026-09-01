@@ -435,8 +435,12 @@ export default function ChatPage(props: Props) {
             onOpenNote={onOpenNote}
             onRetry={(t) => void retryTask(t)}
             busy={retryBusy}
-            // v0.16.1：精修成功任务 → 会话页工作台深链
-            onOpenWorkbench={onOpenRefineWorkbench ? (t) => onOpenRefineWorkbench(t.refId, t.taskId) : undefined}
+            // v0.16.1：精修成功任务 → 会话页工作台深链；v0.17.0 审查修复：
+            // 笔记级任务（targetKind=note）→ 直接查看笔记（ref_id=noteId，
+            // 会话页深链会错目标）
+            onOpenWorkbench={onOpenRefineWorkbench
+              ? (t) => (t.targetKind === "note" ? onOpenNote(t.refId) : onOpenRefineWorkbench(t.refId, t.taskId))
+              : undefined}
           />
         )}
         {activeChatId === null && activeTaskId === null && (

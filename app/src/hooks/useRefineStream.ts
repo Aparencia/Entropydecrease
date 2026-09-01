@@ -20,9 +20,13 @@ export function useRefineStream(taskId: number | null): RefineStreamFrame[] {
   useEffect(() => {
     if (taskId == null) return;
     setFrames([]);
+    // 审查修复：listen 失败容错（无事件系统环境/测试渲染——绝不抛未处理 rejection）
     const un = listen<{ taskId: number; frame: RefineStreamFrame }>("ai:refine-stream", (e) => {
       if (e.payload.taskId !== taskId) return;
       setFrames((f) => [...f, e.payload.frame]);
+    }).catch(() => {
+      /* 流式订阅不可用 = 呈现增强缺失，不影响任务主链路（轮询兜底） */
+      return () => undefined;
     });
     return () => { void un.then((f) => f()); };
   }, [taskId]);

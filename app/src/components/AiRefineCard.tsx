@@ -18,9 +18,11 @@ import type {
   AiRefineResult,
   AiSettingsView,
   AiTaskState,
+  StrategyOverride,
 } from "../types";
 import RefineWorkbench from "./RefineWorkbench";
 import RefineLaunchDialog from "./RefineLaunchDialog";
+import { overrideFromInfo } from "../utils/refineStrategy";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6 };
 
@@ -37,7 +39,7 @@ export default function AiRefineCard({
   onAutoTaskMissing?: () => void;
 }) {
   const [settings, setSettings] = useState<AiSettingsView | null>(null);
-  const [phase, setPhase] = useState<"idle" | "consent" | "confirm" | "running" | "done" | "failed">("idle");
+  const [phase, setPhase] = useState<"idle" | "running" | "done" | "failed">("idle");
   const [progress, setProgress] = useState<{ finished: number; total: number } | null>(null);
   const [result, setResult] = useState<AiRefineResult | null>(null);
   const [failure, setFailure] = useState<AiTaskFailureLike | null>(null);
@@ -126,8 +128,8 @@ export default function AiRefineCard({
     startPolling(taskId);
   }, [onTaskStarted, startPolling]);
 
-  /** ② 启动任务（工作台「重新生成」路径——沿全局默认偏好；策略选择在主发起对话框） */
-  const start = async () => {
+  /** ② 启动任务（重生成路径——沿用本次策略档位；主发起对话框传策略） */
+  const start = async (strategy?: StrategyOverride) => {
     setMsg("");
     setPhase("running");
     // 契约修复（2026-08-21 真机"排队中"根因）：Rust AiTaskHandle 为 camelCase
@@ -136,6 +138,7 @@ export default function AiRefineCard({
     const handle = await invoke<{ taskId: number; state: AiTaskState }>("ai_refine_start", {
       sessionId,
       authorized: true,
+      strategy: strategy ?? null,
     }).catch((e) => {
       setMsg(`启动失败：${e}`);
       setPhase("idle");
@@ -184,9 +187,6 @@ export default function AiRefineCard({
         )}
       </div>
 
-      {/* 授权卡由 RefineLaunchDialog 承载（v0.17.0——策略/成本/授权一屏编排） */}
-      {phase === "consent" && null}
-
       {/* 任务进行中（切片进度） */}
       {phase === "running" && (
         <div style={{ fontSize: 12, color: "#4b5563" }}>
@@ -225,7 +225,10 @@ export default function AiRefineCard({
               // 审查修复：regenerate 旁路 onTaskStarted 导航（不离开当前页）
               onRegenerate={async () => {
                 skipNavigateRef.current = true;
-                try { await start(); } finally { skipNavigateRef.current = false; }
+                try {
+                  // 审查修复：重生成沿用本次策略档位（首版与重生成同档位）
+                  await start(result.strategy ? overrideFromInfo(result.strategy) : undefined);
+                } finally { skipNavigateRef.current = false; }
               }}
               onClose={() => setShowWorkbench(false)}
               onApplied={(id) => { reset(); onApplied?.(id); }}

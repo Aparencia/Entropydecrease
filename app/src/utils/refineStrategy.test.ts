@@ -11,6 +11,7 @@ import {
   draftFromPrefs,
   isDeviating,
   matchIntent,
+  overrideFromInfo,
   prefsFromDraft,
   toOverride,
 } from "./refineStrategy";
@@ -92,6 +93,12 @@ describe("toOverride / prefsFromDraft（前后端契约）", () => {
   it("intent 基准只传 dims（后端以全局基准融合）", () => {
     const d = applyIntent(draftFromPrefs(undefined, meta), meta.intents[0]);
     expect(toOverride(d)).toEqual({ presetId: null, dims: { examples: "condensed", concept: "original" } });
+  });
+  it("overrideFromInfo（重生成沿用本次档位——P1 审查修复）", () => {
+    expect(overrideFromInfo({ presetId: "deep", dims: { examples: "condensed" } }))
+      .toEqual({ presetId: "deep", dims: { examples: "condensed" } });
+    expect(overrideFromInfo({ presetId: "intent:exam", dims: { examples: "condensed" } }))
+      .toEqual({ presetId: null, dims: { examples: "condensed" } });
   });
   it("prefsFromDraft 仅存偏离最小集", () => {
     const d = applyDim(applyPreset(draftFromPrefs(undefined, meta), meta.ladderPresets[1]), "concept", "plain");
