@@ -137,7 +137,7 @@ node app/scripts/download-punctuation.mjs
 | [docs/product/](docs/product/README.md) | 产品文档：PRD / 痛点图谱 / MVP 画布 / 需求池 |
 | [docs/adr/](docs/adr/README.md) | 架构决策记录（ADR-001 ~ ADR-016） |
 | [docs/standards/](docs/standards/README.md) | 工程规范（ai-coding / testing / git-workflow / security 等 20+ 篇） |
-| [docs/versions/](docs/versions/README.md) | 版本深度文档（v0.1.0 ~ v0.16.1） |
+| [docs/versions/](docs/versions/README.md) | 版本深度文档（v0.1.0 ~ v0.17.0） |
 | [docs/archive/](docs/archive/README.md) | 归档机制（每日快照 + 技术债滚动清单） |
 | [CHANGELOG.md](CHANGELOG.md) | 全量变更流水账 |
 
