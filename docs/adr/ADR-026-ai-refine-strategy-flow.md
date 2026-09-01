@@ -1,7 +1,7 @@
 # ADR-026：AI 精修策略化与流式会话化
 
 > 状态：已接受（2026-09-01，用户批准）
-> 关联：[spec](../../superpowers/specs/2026-09-01-ai-refine-strategy-flow-design.md) · REQ-245/246/247 · v0.11.6 策略层设计（2026-08-22，未实施）· ADR-010（AI 为增强层·本地兜底铁律）· ADR-016（密钥 DPAPI）
+> 关联：[spec（[ ] 已归档）](../../archive/2026-09-01/2026-09-01-ai-refine-strategy-flow-design.md) · REQ-245/246/247 · v0.11.6 策略层设计（2026-08-22，未实施）· ADR-010（AI 为增强层·本地兜底铁律）· ADR-016（密钥 DPAPI）
 
 ## 背景
 
