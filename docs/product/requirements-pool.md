@@ -425,6 +425,18 @@
 | REQ-246 | 笔记级 AI 能力：编辑态「🤖 AI」菜单（AI 精修/知识补充/预留）+ NoteAiDialog + 笔记级精修（输入=编辑器当前内容直接传参、基线=当前笔记版、版本链 source=ai-refine 复用）+ handwritten 档案（笔记式，仅笔记级请求，采集端零改动）+ ai_note_refine_estimate/start + 工作台笔记级模式 + 阅读态 AI 入口直接进入编辑态 + 阅读态独立 EnrichPanel 移除 | P0 | 已立项 | v0.17.0 | 手写笔记刚需；image 块前缀白名单化（session-images/+notes-images/，向后兼容） |
 | REQ-247 | 精修流式会话化：Tauri IPC 流式通道（progress/block_done/slice_failed/done 帧）+ 后端片级流式（片完成 validate 后推渲染，协议强校验/失败回退不变）+ 对话页消息流（消息1=提示词全文立即显示/消息2=片级解析流）+ 完成自动升工作台（diff 同步打开）+ 消息底部 [回到会话][查看笔记] 双入口 + 追问保留（10 分钟窗口） | P0 | 已立项 | v0.17.0 | B+ 档（片级解析流）；任务表语义（幂等/成本/审计/重试/trajectory 终态）全保留——流式=呈现增强 |
 
+### v0.18.0 · 学习目标层（2026-09-02 用户裁决立项）
+
+> 依据：用户指令「探讨学习目标（长期/短期）是否偏离产品」「目标设定需通过询问明确真正需求，而非『我要学习 xx』」＋优化评审 10 项全部采纳（删缓存列/删 draft 态/单组件双展开/单行卡/FSRS 弱项/里程碑草案/table-driven golden/切分微调/预算档位化）；
+> 设计：[spec 2026-09-02-v0.18-learning-goals-design.md](../superpowers/specs/2026-09-02-v0.18-learning-goals-design.md) ＋ [ADR-027](../adr/ADR-027-goal-layer-modeling.md)；
+> 系列规划详见 [versions/v0.18.0.md](../versions/v0.18.0.md)（M1 目标对象+访谈+聚合视图（无 AI）→ M2 毕业仪式+回顾流 → M3 AI 教练默认关）。
+
+| REQ | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
+|----|------|--------|------|---------|------|
+| REQ-248 | 学习目标数据模型：goals/goal_milestones/goal_groups 三表（db_migrations 幂等；N:M 绑定 UNIQUE(goal_id,group_id)；判据配方/访谈答案 JSON；status 四态无 draft）+ metrics_events kind 扩展（goal_created/goal_milestone_done 写入；self_test_passed/failed 占位契约）+ 组删除 CASCADE 行为测试（goal_groups 级联清、ref_group_id SET NULL） | P1 | 已实施 | v0.18.0 | 意图层对象（目标=组的容器，组仍是唯一容器）；进度信号现算零双写；**代码已交付（2026-09-02，db_goals + 三表 + CASCADE/结算钩子测试）** |
+| REQ-249 | 访谈式目标设定：一套 InterviewDialog 双展开（访谈=四步向导+宣言确认，第 1/3 问必答、2/4 问折叠可跳过；快速=名称+期限判据走默认档）+ goal_interview 纯函数（答案→判据配方/suggest_milestones 里程碑草案/宣言组装，table-driven golden 6 条端到端+参数矩阵）+ 答案可回溯编辑（重新访谈配方重推） | P1 | 已实施 | v0.18.0 | 0 AI 本地规则（M3 叠加 AI 追问）；访谈中断不落库；**代码已交付（2026-09-02，goal_interview + 里程碑草案命令 + InterviewDialog/InterviewSteps）** |
+| REQ-250 | 目标聚合视图：GoalPage 独立 Tab（单行卡：名称/状态徽标/一句话进度/🎓可毕业）+ GoalDetail（里程碑勾选/关联组 N:M/判据明细/弱项块=FSRS 低稳定性卡占比 Top 组）+ goal_rules 四态状态机与毕业判据 + 埋点 + 组结算里程碑自动通过钩子 | P1 | 已实施 | v0.18.0 | 毕业仪式/回顾流/pause-abandon UI 属 M2（状态机纯函数与守卫已先行）；**代码已交付（2026-09-02，GoalPage/GoalCard/GoalDetail + goal_rules/goal_progress + 结算钩子）** |
+
 ### V1.0 · 体验增强（远期）
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
@@ -457,7 +469,7 @@
 | REQ-027 | 重点标记→闪卡自动联动 | P3 | 待评估 | V1.1 | 竞品无此闭环 |
 | REQ-028 | 中英混说识别 | P3 | 待评估 | V1.1 | 先做本地模型 spike |
 | REQ-029 | 知识图谱可视化（P13） | P3 | 待评估 | 远期 | 高成本；**2026-08-23 联动（ADR-024）**：体系层（有界体系）落地后本项含义降为"体系数据可视化补充"，维持 P3；不做力导向图（Heptabase 已占位 + P13） |
-| REQ-030 | 学习计划系统（P17） | P3 | 待评估 | 远期 | 目标→任务→追踪 |
+| REQ-030 | 学习计划系统（P17） | P3 | 已激活（v0.18.0 系列立项） | v0.18.0 | 目标→任务→追踪；**2026-09-02 激活**：目标层定位=意图层（目标＝组的容器 N:M、访谈式设定、判据配方、四态生命周期），拆分登记为 REQ-248~250；后续：生成式复习（REQ-021 单独立项）依赖本线自测链路 |
 | REQ-096 | 跨会话图指纹关联：相同图跨课程出现 → 课程关联（P13 轻量版） | P3 | 待评估 | V1.1 | 2026-08-19 头脑风暴（图像复用）；REQ-067 指纹的消费端 |
 | REQ-097 | 测验引用图：测验自生成时图表作题干素材 | P3 | 待评估 | V1.1 | 2026-08-19 头脑风暴（图像复用）；依赖 K2 测验自生成 |
 
