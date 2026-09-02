@@ -444,7 +444,7 @@
 
 > 依据：用户指令「目标仅规则算法——我想要接入 AI 用 AI 对目标进行规划，规划内容同步构建体系等等深度联动」＋ 用户逐项裁决（双入口/建议制确认落库/联动四项全选/**AI 提供初步体系**/默认关+授权确认）；
 > 排期：**v0.18.1（M2 毕业仪式）先行 → v0.18.2 实施**；
-> 设计：[2026-09-02-v0.18.2-ai-goal-planning-design.md](../superpowers/specs/2026-09-02-v0.18.2-ai-goal-planning-design.md) ＋ [ADR-028](../adr/ADR-028-ai-goal-planner.md)（已批准）。
+> 设计：[2026-09-02-v0.18.2-ai-goal-planning-design.md（[ ] 已归档）](../archive/2026-09-02/2026-09-02-v0.18.2-ai-goal-planning-design.md) ＋ [ADR-028](../adr/ADR-028-ai-goal-planner.md)（已批准）。
 
 | REQ | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
 |----|------|--------|------|---------|------|

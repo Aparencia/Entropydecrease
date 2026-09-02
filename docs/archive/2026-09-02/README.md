@@ -8,6 +8,7 @@
 | 源路径 | 归档路径 | 状态 |
 |--------|----------|------|
 | [docs/superpowers/specs/2026-09-02-v0.18-learning-goals-design.md](../superpowers/specs/2026-09-02-v0.18-learning-goals-design.md) | [2026-09-02-v0.18-learning-goals-design.md](./2026-09-02-v0.18-learning-goals-design.md) | [ ] 已归档（学习目标层意图式设计：M1 目标对象+访谈式设定+聚合视图已实施交付；M2/M3（毕业仪式/回顾流/AI 教练默认关）按批次实施时沿用归档 spec——v0.13.6~9 同批先例；git mv 保留历史链） |
+| [docs/superpowers/specs/2026-09-02-v0.18.2-ai-goal-planning-design.md](../superpowers/specs/2026-09-02-v0.18.2-ai-goal-planning-design.md) | [2026-09-02-v0.18.2-ai-goal-planning-design.md](./2026-09-02-v0.18.2-ai-goal-planning-design.md) | [ ] 已归档（AI 目标规划师设计：建议制/双入口/体系深度联动/默认关+授权——v0.18.2 全链路实施完成（含收尾批 8a1b257d 与审查即修 c4e6d88）后生命周期终结；git mv 保留历史链） |
 
 ## 不归档说明
 
@@ -16,13 +17,20 @@
 - **requirements-pool REQ-030/REQ-248~250 登记**——活跃登记区，不归档
 - **v0.18.1/v0.18.2 系列规划引用**——归档后 3 个活跃区链接已改指归档路径并标 `[ ] 已归档`
 
+### 二轮追加（v0.18.2 AI 规划师 + 审查即修）
+
+> v0.18.2 全链路交付（6d6039e6/e4891376/8a1b257d + 审查即修 c4e6d88）+ 本日代码审查：**P1×3/P2×2/P3×2 即修**（编辑标题回弹 / AI 路径重复建目标 / 规划并发互斥 / apply 白名单与状态守卫 / 坏快照降级 / 日历换算回归）；观察项 4 登记。
+
 ## 活跃区链接更新
 
 | 文件 | 变更 |
 |------|------|
 | docs/adr/ADR-027-goal-layer-modeling.md | spec 链接改指归档路径 + `[ ] 已归档`（2 处） |
-| docs/product/requirements-pool.md | 同上（v0.18 区段设计行） |
+| docs/product/requirements-pool.md | 同上（v0.18 区段设计行 + v0.18.2 区段设计行） |
 | docs/versions/v0.18.0.md | 同上（header 依据行 + 关联行，2 处） |
+| docs/adr/ADR-028-ai-goal-planner.md | spec 链接改指归档路径 + `[ ] 已归档` |
+| docs/versions/v0.18.2.md | 同上（依据行 + 关联行，2 处） |
+| docs/versions/v0.18.1.md | 后续行改指归档路径 + `[ ] 已归档` |
 
 ## 技术债摘要
 

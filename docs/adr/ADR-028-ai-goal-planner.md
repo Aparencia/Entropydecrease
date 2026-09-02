@@ -1,7 +1,7 @@
 # ADR-028：AI 目标规划师——建议制规划 + 体系深度联动
 
 > 状态：已接受（2026-09-02，随 v0.18.2 设计批准；实施于 v0.18.1 之后）
-> 关联：[v0.18.2 设计规格](../superpowers/specs/2026-09-02-v0.18.2-ai-goal-planning-design.md) · [ADR-027 目标层建模](./ADR-027-goal-layer-modeling.md)（本 ADR **局部修订**其 §决策 5 与所引"不做 AI 自动拆解里程碑"条款）· [v0.18 设计（[ ] 已归档）](../archive/2026-09-02/2026-09-02-v0.18-learning-goals-design.md) · REQ-251~254
+> 关联：[v0.18.2 设计规格（[ ] 已归档）](../archive/2026-09-02/2026-09-02-v0.18.2-ai-goal-planning-design.md) · [ADR-027 目标层建模](./ADR-027-goal-layer-modeling.md)（本 ADR **局部修订**其 §决策 5 与所引"不做 AI 自动拆解里程碑"条款）· [v0.18 设计（[ ] 已归档）](../archive/2026-09-02/2026-09-02-v0.18-learning-goals-design.md) · REQ-251~254
 
 ## 背景
 
