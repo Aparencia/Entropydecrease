@@ -186,9 +186,19 @@ fn update_and_delete_goal() {
     assert!(update_goal_inner(&db, goal.id, "改名", None, Some("6m".to_string())).expect("改"));
     let g = db.get_goal(goal.id).expect("读").unwrap();
     assert_eq!(g.name, "改名");
+    assert!(g.horizon_end.is_some(), "改名传 6m 重设时限锚点");
     assert!(update_goal_status_inner(&db, goal.id, "paused").is_ok());
-    // 重访谈：信息仍可编辑 → 非法状态转移拦截（paused 状态更新元数据合法，但状态不在这条命令）
+    // 重访谈：名称随对话窗口生效（空名回退旧名），判据/意图重推
     assert!(update_goal_interview_inner(&db, goal.id, &input(Some(TIER_HANDS_ON), Some("新场景"), vec![])).expect("重访谈"));
+    let g2 = db.get_goal(goal.id).expect("读").unwrap();
+    assert_eq!(g2.name, "学会 Python", "重访谈名称生效（input 名称）");
+    assert!(g2.intent_json.contains("新场景"));
+    // 改名不传 horizon（None）= 不改变时限锚点——防无期限目标被顺带抹掉
+    let horizon_before = g2.horizon_end;
+    assert!(update_goal_inner(&db, goal.id, "再改名", None, None).expect("改2"));
+    let g3 = db.get_goal(goal.id).expect("读").unwrap();
+    assert_eq!(g3.horizon_end, horizon_before, "horizon=None 保持原锚点");
+    assert_eq!(g3.name, "再改名");
     assert!(delete_goal_inner(&db, goal.id).expect("删除"));
     assert!(require_goal(&db, goal.id).is_err());
 }
@@ -208,6 +218,21 @@ fn milestone_validation_whitelists() {
     // 非法状态拒绝
     let err3 = set_goal_milestone_status_inner(&db, 1, "archived").expect_err("非法状态");
     assert!(err3.contains("不支持的里程碑状态"));
+}
+
+#[test]
+fn interview_texts_bounded_in_storage() {
+    let db = mem_db();
+    let mut inp = input(Some(TIER_HANDS_ON), Some("场景"), vec![]);
+    inp.scenario = Some("长".repeat(300));
+    inp.non_scope = Some("宽".repeat(300));
+    let goal = create_goal_inner(&db, &inp).expect("建");
+    let intent: crate::goal_schema::GoalIntent = serde_json::from_str(&goal.intent_json).expect("解析");
+    assert_eq!(intent.scenario.as_deref().unwrap().chars().count(), 200, "超长截断保留 200 字");
+    // 判据 statement 的边界文案同样截断（derive_criteria 入参 bounded）
+    let criteria: crate::goal_schema::SuccessCriteria =
+        serde_json::from_str(&goal.success_criteria_json).expect("解析");
+    assert!(!criteria.statement.contains("宽".repeat(250).as_str()), "边界文案截断入配方");
 }
 
 #[test]

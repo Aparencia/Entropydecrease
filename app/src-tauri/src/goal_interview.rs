@@ -126,6 +126,8 @@ pub fn suggest_milestones(level: Option<&str>, weekly_commitment: Option<&str>) 
 /// @ai-context: 第 5 步确认前的回显文案——criteria_statement 优先（用户
 ///              原始表述），缺失时回退配方的可读 statement（未填第 3 问但
 ///              档位已定——配方语义兜底，不是只有一条路径）。
+/// @ai-context: 无期限（none）是「长期目标」语义——文案走「长期目标（无期限）：
+///              学会…」而非「用无期限学会…」（语法与语义双重校准，审查 2026-09-02）。
 pub fn assemble_declaration(
     name: &str,
     scenario: Option<&str>,
@@ -134,7 +136,6 @@ pub fn assemble_declaration(
     non_scope: Option<&str>,
     horizon: Option<&str>,
 ) -> String {
-    let horizon_label = horizon_label(horizon);
     let goal = name.trim();
     let scene = scenario
         .map(|s| s.trim())
@@ -146,14 +147,24 @@ pub fn assemble_declaration(
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
         .unwrap_or_else(|| criteria_fallback.to_string());
-    format!(
-        "用{}学会{}{}，达成标准：{}；边界：{}",
-        horizon_label,
-        goal,
-        scene,
-        standard,
-        non_scope_label(non_scope)
-    )
+    if horizon == Some("none") {
+        format!(
+            "长期目标（无期限）：学会{}{}，达成标准：{}；边界：{}",
+            goal,
+            scene,
+            standard,
+            non_scope_label(non_scope)
+        )
+    } else {
+        format!(
+            "用{}学会{}{}，达成标准：{}；边界：{}",
+            horizon_label(horizon),
+            goal,
+            scene,
+            standard,
+            non_scope_label(non_scope)
+        )
+    }
 }
 
 /// 时限 → 中周期锚点（Unix 秒；None=无期限——合法非 KPI 截止日）。
@@ -170,14 +181,13 @@ pub fn horizon_end_secs(horizon: Option<&str>, now_secs: i64) -> Option<i64> {
     }
 }
 
-/// 时限 → 展示文案（宣言回显用）。
+/// 时限 → 展示文案（宣言回显用；none 走 assemble_declaration 的长期目标分支）。
 fn horizon_label(horizon: Option<&str>) -> String {
     match horizon {
         Some("3m") => "3 个月".to_string(),
         Some("6m") => "半年".to_string(),
         Some("2w") => "先试两周".to_string(),
-        // none/None/未知 → 默认节奏（12 周——与里程碑草案的通用节奏呼应，
-        // 展示层文案不是 KPI，用户可在声明页/详情改期）
+        // None/未知 → 默认节奏（展示层文案不是 KPI，用户可在声明页/详情改期）
         _ => "12 周".to_string(),
     }
 }

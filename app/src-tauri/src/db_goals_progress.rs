@@ -31,10 +31,11 @@ impl Db {
         // 绑定组先取（独立锁窗口——闭包内不可再进锁）
         let group_ids = self.list_goal_group_ids(goal_id)?;
         self.with_conn(|conn| {
-            // 里程碑计数（判据①）
+            // 里程碑计数（判据①）：skipped=废弃计划项——不计入分母与分子，
+            // 防「跳过」拖死毕业判据（里程碑全部 done 的语义=活跃计划全完成）
             let (m_total, m_done): (i64, i64) = conn.query_row(
                 "SELECT COUNT(*), COALESCE(SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END), 0)
-                 FROM goal_milestones WHERE goal_id = ?1",
+                 FROM goal_milestones WHERE goal_id = ?1 AND status != 'skipped'",
                 params![goal_id],
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )?;

@@ -89,7 +89,7 @@ const PATHS: [Path; 6] = [
         expect_drafts: 3,
         expect_due_weeks: &[8, 16, 24],
         expect_horizon_end: None,
-        expect_decl_contains: "用12 周学会",
+        expect_decl_contains: "长期目标（无期限）：学会",
     },
     Path {
         name: "说不清→默认档×系统学过一半",
@@ -264,4 +264,8 @@ fn matrix_declaration_components() {
     assert!(blank.contains("学会水彩"));
     assert!(!blank.contains("（场景："));
     assert!(blank.contains("达成标准：配方兜底"));
+    // 无期限（none）= 长期目标语义——不走「用无期限学会」病句
+    let none = assemble_declaration("乐理", None, None, "配方兜底", None, Some("none"));
+    assert!(none.starts_with("长期目标（无期限）：学会乐理"));
+    assert!(!none.contains("用无期限"));
 }

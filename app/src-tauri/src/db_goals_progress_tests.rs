@@ -197,6 +197,26 @@ fn weak_groups_ratio_and_top_ordering() {
 }
 
 #[test]
+fn skipped_milestones_excluded_from_progress() {
+    // 审查修复（2026-09-02）：skipped=废弃计划项——不计入进度分母与毕业判据，
+    // 防「跳过」拖死整个目标（里程碑全部 done 的语义=活跃计划全完成）
+    let db = mem_db();
+    let goal_id = goal_with(&db, "跳过测试", vec![]);
+    let m1 = db.add_milestone(goal_id, &crate::goal_schema::NewMilestone {
+        title: "做".to_string(), due_at: None, order_idx: 0,
+        criteria_type: "manual".to_string(), ref_group_id: None,
+    }).expect("m1").id;
+    let m2 = db.add_milestone(goal_id, &crate::goal_schema::NewMilestone {
+        title: "跳过".to_string(), due_at: None, order_idx: 1,
+        criteria_type: "manual".to_string(), ref_group_id: None,
+    }).expect("m2").id;
+    db.set_milestone_status(m2, "skipped").expect("跳过");
+    db.set_milestone_status(m1, "done").expect("完成");
+    let s = db.goal_progress_signals(goal_id, NOW).expect("信号");
+    assert_eq!((s.milestone_total, s.milestone_done), (1, 1), "skipped 不计入分母分子");
+}
+
+#[test]
 fn weak_groups_ignores_invalid_state_json_and_missing_group() {
     let db = mem_db();
     let gid = group(&db, "脏数据组");

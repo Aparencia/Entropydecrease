@@ -28,6 +28,8 @@ use crate::video_profile_domain::DomainKind;
 
 /// 一周秒数（草案 due_at 换算：第 N 周 = created_at + N*7d）。
 const WEEK_SECS: i64 = 7 * 86_400;
+/// 访谈答案文本上限（防御超大 payload；chips/填空兜底的答案均为短文本）。
+const INTENT_FIELD_MAX: usize = 200;
 
 /// 新建目标入参（前端访谈结果全量提交；serde camelCase 契约）。
 #[derive(Debug, Clone, Deserialize)]
@@ -273,13 +275,14 @@ pub(crate) fn create_goal_inner(db: &Db, input: &GoalCreateInput) -> Result<Goal
     // 访谈校验：tier 与 scenario 同缺=快速模式；缺一=必答拦截（第 1/3 问必答）
     let tier_explicit = input.tier.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let tier = tier_explicit.unwrap_or(TIER_DEFAULT);
-    let scenario = trimmed(input.scenario.as_deref());
+    let scenario = bounded(input.scenario.as_deref());
     if tier_explicit.is_some() && scenario.is_none() {
         return Err("第 1 问「学会以后想用它做什么？」必答".to_string());
     }
     let domain = parse_domain(input.domain_tag.as_deref())?;
     let now = unix_seconds();
-    let criteria = derive_criteria(tier, input.non_scope.as_deref());
+    let non_scope = bounded(input.non_scope.as_deref());
+    let criteria = derive_criteria(tier, non_scope.as_deref());
     // 边界校验：group_ids 逐组存在；草案 due_weeks 有界防溢出
     for gid in &input.group_ids {
         if db.get_group(*gid).map_err(|e| e.to_string())?.is_none() {
@@ -338,7 +341,10 @@ pub(crate) fn list_goals_inner(db: &Db) -> Result<Vec<GoalCardView>, String> {
 
 pub(crate) fn get_goal_detail_inner(db: &Db, id: i64) -> Result<GoalDetailView, String> {
     require_goal(db, id)?;
-    let goal = db.get_goal(id).map_err(|e| e.to_string())?.unwrap();
+    let goal = db
+        .get_goal(id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("目标不存在: {}", id))?;
     let milestones = db.list_milestones(id).map_err(|e| e.to_string())?;
     let group_ids = db.list_goal_group_ids(id).map_err(|e| e.to_string())?;
     let mut groups = Vec::new();
@@ -378,7 +384,10 @@ pub(crate) fn get_goal_detail_inner(db: &Db, id: i64) -> Result<GoalDetailView, 
 
 pub(crate) fn get_goal_progress_inner(db: &Db, id: i64) -> Result<GoalProgressView, String> {
     require_goal(db, id)?;
-    let goal = db.get_goal(id).map_err(|e| e.to_string())?.unwrap();
+    let goal = db
+        .get_goal(id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("目标不存在: {}", id))?;
     let signals = collect_signals(db, id)?;
     let progress = build_report(&signals);
     let statement = progress_statement(&progress);
@@ -400,14 +409,22 @@ pub(crate) fn update_goal_inner(
     horizon: Option<String>,
 ) -> Result<bool, String> {
     require_goal(db, id)?;
-    let goal = db.get_goal(id).map_err(|e| e.to_string())?.unwrap();
+    let goal = db
+        .get_goal(id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("目标不存在: {}", id))?;
     let domain = parse_domain(domain_tag.as_deref())?;
     let now = unix_seconds();
+    // horizon 未填（None/空白）= 不改变时限锚点——防「改名顺手抹掉无期限锚点」
+    let horizon_end = match horizon.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(_) => horizon_end_secs(horizon.as_deref(), now),
+        None => goal.horizon_end,
+    };
     db.update_goal_core(
         id,
         &normalize_title(name.to_string(), "未命名目标"),
         domain.as_deref(),
-        horizon_end_secs(horizon.as_deref(), now),
+        horizon_end,
         &goal.success_criteria_json,
         &goal.intent_json,
     )
@@ -416,22 +433,28 @@ pub(crate) fn update_goal_inner(
 
 pub(crate) fn update_goal_interview_inner(db: &Db, id: i64, input: &GoalCreateInput) -> Result<bool, String> {
     require_goal(db, id)?;
-    let goal = db.get_goal(id).map_err(|e| e.to_string())?.unwrap();
-    // 配方重推（答案可回溯编辑——判据/意图整体重写；名字与绑组不变）
+    let goal = db
+        .get_goal(id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("目标不存在: {}", id))?;
+    // 配方重推（答案可回溯编辑——判据/意图整体重写；绑组不变；名称随对话窗口
+    // 一并生效——空名回退旧名，防「编辑态改名不落地」契约陷阱）
     let tier_explicit = input.tier.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let tier = tier_explicit.unwrap_or(TIER_DEFAULT);
-    let scenario = trimmed(input.scenario.as_deref());
+    let scenario = bounded(input.scenario.as_deref());
     if tier_explicit.is_some() && scenario.is_none() {
         return Err("第 1 问「学会以后想用它做什么？」必答".to_string());
     }
-    let criteria = derive_criteria(tier, input.non_scope.as_deref());
+    let non_scope = bounded(input.non_scope.as_deref());
+    let criteria = derive_criteria(tier, non_scope.as_deref());
     let intent = build_intent(input);
+    let name = normalize_title(input.name.clone(), &goal.name);
     let criteria_json = serde_json::to_string(&criteria).map_err(|e| e.to_string())?;
     let intent_json = serde_json::to_string(&intent).map_err(|e| e.to_string())?;
     let now = unix_seconds();
     db.update_goal_core(
         id,
-        &goal.name,
+        &name,
         goal.domain_tag.as_deref(),
         horizon_end_secs(input.horizon.as_deref(), now),
         &criteria_json,
@@ -451,7 +474,10 @@ pub(crate) fn delete_goal_inner(db: &Db, id: i64) -> Result<bool, String> {
 
 pub(crate) fn update_goal_status_inner(db: &Db, id: i64, status: &str) -> Result<bool, String> {
     require_goal(db, id)?;
-    let goal = db.get_goal(id).map_err(|e| e.to_string())?.unwrap();
+    let goal = db
+        .get_goal(id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("目标不存在: {}", id))?;
     // M1 只开放 active⇄paused（状态机守卫总入口；放弃/毕业随 M2 流程）
     if status != "active" && status != "paused" {
         return Err(format!("v0.18.0 M1 仅支持暂停/恢复（收到 {}）", status));
@@ -496,11 +522,11 @@ pub(crate) fn set_goal_milestone_status_inner(db: &Db, id: i64, status: &str) ->
         return Err(format!("不支持的里程碑状态: {}（支持: {}）", status, MILESTONE_STATUSES.join("/")));
     }
     // 取旧状态（幂等埋点判据：仅「未完成 → 完成」的转变记 goal_milestone_done）
-    let prev = db.get_milestone(id).map_err(|e| e.to_string())?;
-    if prev.is_none() {
-        return Err(format!("里程碑不存在: {}", id));
-    }
-    let was_done = prev.unwrap().status == MILESTONE_DONE;
+    let prev = db
+        .get_milestone(id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("里程碑不存在: {}", id))?;
+    let was_done = prev.status == MILESTONE_DONE;
     let ok = db.set_milestone_status(id, status).map_err(|e| e.to_string())?;
     if !ok {
         return Err(format!("里程碑不存在: {}", id));
@@ -540,17 +566,22 @@ fn trimmed(s: Option<&str>) -> Option<String> {
     s.map(str::trim).filter(|v| !v.is_empty()).map(str::to_string)
 }
 
-/// 访谈答案 → GoalIntent（全部可选字段过 trimmed 归一）。
+/// 访谈答案：空白归一 + 长度截断（防超大 payload 入库；truncate 保留前 200 字）。
+fn bounded(s: Option<&str>) -> Option<String> {
+    trimmed(s).map(|v| v.chars().take(INTENT_FIELD_MAX).collect())
+}
+
+/// 访谈答案 → GoalIntent（全部可选字段过 bounded 归一）。
 fn build_intent(input: &GoalCreateInput) -> GoalIntent {
     GoalIntent {
-        scenario: trimmed(input.scenario.as_deref()),
-        level: trimmed(input.level.as_deref()),
-        driver: trimmed(input.driver.as_deref()),
-        criteria_statement: trimmed(input.criteria_statement.as_deref()),
-        horizon: trimmed(input.horizon.as_deref()),
-        non_scope: trimmed(input.non_scope.as_deref()),
-        weekly_commitment: trimmed(input.weekly_commitment.as_deref()),
-        obstacles: trimmed(input.obstacles.as_deref()),
+        scenario: bounded(input.scenario.as_deref()),
+        level: bounded(input.level.as_deref()),
+        driver: bounded(input.driver.as_deref()),
+        criteria_statement: bounded(input.criteria_statement.as_deref()),
+        horizon: bounded(input.horizon.as_deref()),
+        non_scope: bounded(input.non_scope.as_deref()),
+        weekly_commitment: bounded(input.weekly_commitment.as_deref()),
+        obstacles: bounded(input.obstacles.as_deref()),
     }
 }
 
