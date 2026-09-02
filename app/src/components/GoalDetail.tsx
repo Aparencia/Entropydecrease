@@ -8,11 +8,12 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { GoalDetailView, GoalProgressView, GroupWeakness } from "../types/goals";
+import type { ConceptWeaknessView, GoalDetailView, GoalPlanView, GoalProgressView, GroupWeakness } from "../types/goals";
 import { GOAL_STATUS_LABELS } from "../types/goals";
 import InterviewDialog from "./InterviewDialog";
 import GraduateDialog from "./GraduateDialog";
 import RetroTimeline from "./RetroTimeline";
+import GoalPlanApprovalDialog from "./GoalPlanApprovalDialog";
 
 interface Props {
   goalId: number;
@@ -37,6 +38,10 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
   const [graduateOpen, setGraduateOpen] = useState(false);
   const [abandonMode, setAbandonMode] = useState(false);
   const [abandonReason, setAbandonReason] = useState("");
+  // v0.18.2：AI 规划（详情页重规划——增量追加）/ 最弱概念（M3 真实化规则信号）
+  const [aiPlan, setAiPlan] = useState<GoalPlanView | null>(null);
+  const [aiPlanning, setAiPlanning] = useState(false);
+  const [weakConcepts, setWeakConcepts] = useState<ConceptWeaknessView[]>([]);
 
   const refresh = useCallback(async () => {
     try {
@@ -55,7 +60,24 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
     invoke<{ id: number; name: string }[]>("list_note_groups", { terrain: "container" })
       .then((gs) => setGroups(gs))
       .catch((e) => setErr(`组列表加载失败: ${e}`));
-  }, []);
+    // v0.18.2：最弱概念（规则信号现算——M3 真实化）
+    invoke<ConceptWeaknessView[]>("goal_concept_weakness", { goalId })
+      .then((cs) => setWeakConcepts(cs.filter((c) => c.weak).slice(0, 5)))
+      .catch(() => { /* 无体系/概念时为空——次要块降级 */ });
+  }, [goalId]);
+
+  const runAiPlan = async () => {
+    setAiPlanning(true);
+    setErr("");
+    try {
+      const view = await invoke<GoalPlanView>("ai_goal_plan", { goalId, tier: null, authorized: true });
+      setAiPlan(view);
+    } catch (e) {
+      setErr(`AI 规划失败: ${e}`);
+    } finally {
+      setAiPlanning(false);
+    }
+  };
 
   if (err && !detail) return <div style={{ padding: 24, fontSize: 13, color: "#dc2626" }}>{err}</div>;
   if (!detail) return <div style={{ padding: 24, fontSize: 13, color: "#9ca3af" }}>加载中…</div>;
@@ -233,8 +255,7 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
       )}
 
       {/* 弱项块（M1：FSRS 低稳定性卡占比 Top 组） */}
-      <SectionTitle>最弱一块（FSRS 低稳定性卡占比）</SectionTitle>
-      {p && p.weakGroups.length > 0 ? (
+      <SectionTitle>最弱一块（FSRS 低稳定性卡占比）</SectionTitle>      {p && p.weakGroups.length > 0 ? (
         p.weakGroups.map((w: GroupWeakness) => (
           <div key={w.groupId} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <span style={{ fontSize: 11, width: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.groupName}</span>
@@ -248,12 +269,33 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
         <p style={{ fontSize: 11, color: "#9ca3af", margin: "0 0 10px" }}>暂无弱项信号（绑定组无卡）</p>
       )}
 
+      {/* v0.18.2：最弱概念（90 天无引用/未应用——规则信号，M3 真实化） */}
+      {weakConcepts.length > 0 && (
+        <>
+          <SectionTitle>最弱概念（90 天未动）</SectionTitle>
+          {weakConcepts.map((c) => (
+            <div key={c.conceptId} style={{ fontSize: 11, color: "#b45309", padding: "2px 0" }}>
+              ○ {c.name}——{c.reason}
+            </div>
+          ))}
+        </>
+      )}
+
       {/* 动作区 */}
       <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
         <button onClick={() => void changeStatus(goal.status === "paused" ? "active" : "paused")} style={miniPrimary}>
           {goal.status === "paused" ? "▶ 恢复" : "⏸ 暂停"}
         </button>
         <button onClick={() => setEditing(true)} style={miniPrimary}>✎ 重新访谈</button>
+        <button
+          data-testid="ai-plan-detail"
+          onClick={() => void runAiPlan()}
+          disabled={aiPlanning}
+          style={{ ...miniPrimary, border: "1px solid #7c3aed", color: "#7c3aed" }}
+          title="AI 规划建议（默认关；失败/超限不影响规则能力）"
+        >
+          {aiPlanning ? "✨ 规划中…" : "💡 AI 规划"}
+        </button>
         {goal.status === "active" || goal.status === "paused" ? (
           <>
             <button
@@ -306,6 +348,20 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
           goalId={goalId}
           onClose={() => setGraduateOpen(false)}
           onGraduated={() => { setGraduateOpen(false); onChanged(); void refresh(); }}
+        />
+      )}
+      {aiPlan && (
+        <GoalPlanApprovalDialog
+          view={aiPlan}
+          onClose={() => setAiPlan(null)}
+          onUseRules={() => { setAiPlan(null); setErr("已改用规则草案——AI 建议未采纳"); }}
+          onConfirm={async (req) => {
+            await invoke("goal_apply_plan", {
+              goalId,
+              request: { ...req, replaceMilestones: false },
+            });
+            onChanged(); await refresh();
+          }}
         />
       )}
     </div>

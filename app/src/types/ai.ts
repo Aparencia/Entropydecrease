@@ -20,6 +20,10 @@ export interface AiSettingsView {
   visionRefineEnabled: boolean;
   /** v0.17.0：精修产出策略偏好（默认档位 + 逐维覆盖） */
   refineStrategy: RefineStrategyPrefs;
+  /** v0.18.2：目标 AI（规划师）独立开关——默认关 */
+  goalPlanEnabled: boolean;
+  /** v0.18.2：目标规划预算档位（light/standard/deep） */
+  goalPlanTier: string;
   hasKey: boolean;
   /** credential（凭据库）| env（环境变量）| none */
   keySource: string;

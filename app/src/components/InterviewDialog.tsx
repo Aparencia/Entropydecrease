@@ -10,12 +10,13 @@
  */
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { Goal, MilestoneDraft } from "../types/goals";
+import type { Goal, GoalPlanView, MilestoneDraft } from "../types/goals";
 import type { InterviewAnswers } from "../utils/goalInterview";
 import {
   EMPTY_ANSWERS, interviewMissing, assembleDeclarationPreview, toCreateInput, toQuickInput,
 } from "../utils/goalInterview";
 import { StepCriteria, StepDeclaration, StepFeasibility, StepLevelDriver, StepScenario } from "./InterviewSteps";
+import GoalPlanApprovalDialog from "./GoalPlanApprovalDialog";
 
 interface Props {
   mode: "interview" | "quick";
@@ -52,6 +53,10 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
   const [suggestKey, setSuggestKey] = useState("");
+  // v0.18.2：AI 规划（先建目标（规则基线）→ 规划 → 确认替换草案）
+  const [aiPlan, setAiPlan] = useState<GoalPlanView | null>(null);
+  const [aiPlanning, setAiPlanning] = useState(false);
+  const [plannedGoalId, setPlannedGoalId] = useState<number | null>(null);
 
   const patch = (p: Partial<InterviewAnswers>) => setA((prev) => ({ ...prev, ...p }));
 
@@ -102,6 +107,30 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
     if (step === 1) { setA((p) => ({ ...p, level: p.level || "" })); }
     if (step === 2 && !a.tier) { setErr("第 3 问「做到什么程度算会了？」必答"); return; }
     setStep((s) => Math.min(4, s + 1));
+  };
+
+  // v0.18.2：✨ AI 规划——先按当前答案建目标（规则基线），再 AI 规划 →
+  // 确认对话框（替换里程碑草案——建议制语义：人类确认后落库）
+  const runAiPlan = async () => {
+    setAiPlanning(true);
+    setErr("");
+    try {
+      let gid = plannedGoalId;
+      if (gid == null) {
+        const input = toCreateInput(name, effectiveHorizon, a, []);
+        const goal = await invoke<Goal>("create_goal", { input });
+        gid = goal.id;
+        setPlannedGoalId(gid);
+      }
+      const view = await invoke<GoalPlanView>("ai_goal_plan", {
+        goalId: gid, tier: null, authorized: true,
+      });
+      setAiPlan(view);
+    } catch (e) {
+      setErr(`AI 规划失败: ${e}`);
+    } finally {
+      setAiPlanning(false);
+    }
   };
 
   // 快速模式：两字段 + 创建（访谈模式走步骤向导）
@@ -184,6 +213,17 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
           {!quickMode && (step === 1 || step === 3) && (
             <button data-testid="skip-step" onClick={() => setStep((s) => s + 1)} style={ghostBtn}>跳过／以后想</button>
           )}
+          {!quickMode && step === 4 && (
+            <button
+              data-testid="ai-plan-button"
+              onClick={() => void runAiPlan()}
+              disabled={aiPlanning}
+              style={{ ...ghostBtn, border: "1px solid #7c3aed", color: "#7c3aed" }}
+              title="AI 规划建议（默认关；未开启时失败仍按规则草案继续——本地可靠）"
+            >
+              {aiPlanning ? "✨ 规划中…" : "✨ 用 AI 规划"}
+            </button>
+          )}
           {!quickMode && step < 4 && (
             <button data-testid="next-step" onClick={next} style={primaryBtn}>下一步</button>
           )}
@@ -194,6 +234,20 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
           )}
         </div>
       </div>
+      {/* v0.18.2：AI 规划确认流（建议制——确认后替换规则草案落库） */}
+      {aiPlan && plannedGoalId != null && (
+        <GoalPlanApprovalDialog
+          view={aiPlan}
+          onClose={() => setAiPlan(null)}
+          onUseRules={() => { setAiPlan(null); setErr("已改用规则草案——AI 建议未采纳"); }}
+          onConfirm={async (req) => {
+            await invoke("goal_apply_plan", {
+              goalId: plannedGoalId,
+              request: { ...req, replaceMilestones: true },
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

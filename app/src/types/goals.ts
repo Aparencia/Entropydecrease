@@ -231,3 +231,78 @@ export interface GoalRetroView {
   entries: RetroEntry[];
   graduation: GraduationReport | null;
 }
+
+// ───────────────────────── v0.18.2 AI 目标规划（REQ-251~254） ─────────────────────────
+
+/** 里程碑建议（AI 草案） */
+export interface ProposalMilestone {
+  title: string;
+  dueWeeks: number;
+  criteriaType: "manual" | "group_settled";
+  refGroupId: number | null;
+  note: string;
+}
+
+/** 组绑定建议 */
+export interface ProposalGroup {
+  groupId: number;
+  reason: string;
+}
+
+/** 概念建议（体系骨架） */
+export interface ProposalConcept {
+  name: string;
+  essence: string;
+  boundary: string;
+  relation: string;
+}
+
+/** 体系建议（create 新建骨架 / link 挂接现有） */
+export interface ProposalSystem {
+  action: "create" | "link";
+  systemId: number | null;
+  name: string | null;
+  coreQuestion: string | null;
+  domainEntries: string[];
+  concepts: ProposalConcept[];
+  reason: string;
+}
+
+/** 周契约建议（建议值——仍需用户确认） */
+export interface ProposalContract {
+  targetDays: number;
+  targetCards: number;
+}
+
+/** 目标规划提案（AI 输出蓝图——确认前不落库） */
+export interface GoalPlanProposal {
+  milestones: ProposalMilestone[];
+  groups: ProposalGroup[];
+  systems: ProposalSystem[];
+  weeklyContract: ProposalContract | null;
+  summary: string;
+}
+
+/** 清洗登记（丢弃项诚实提示） */
+export interface PlanValidationView {
+  droppedMilestones: string[];
+  droppedGroups: string[];
+  droppedSystems: string[];
+}
+
+/** 规划结果视图（草案 + 清洗登记 + 诚实提示 + 成本） */
+export interface GoalPlanView {
+  proposal: GoalPlanProposal;
+  dropped: PlanValidationView;
+  honestNote: string;
+  costYuan: number;
+  model: string;
+}
+
+/** 概念弱信号视图 */
+export interface ConceptWeaknessView {
+  conceptId: number;
+  name: string;
+  weak: boolean;
+  reason: string;
+}
