@@ -439,7 +439,7 @@ pub fn run() {
         .setup(|app| {
             // AppState 装配（数据目录/DB/引擎池/可校准配置——拆至 app_setup.rs，
             // line-limit-exemptions 登记计划：lib.rs >600 硬拆落地）
-            crate::app_setup::setup_app_state(app).map_err(|e| Box::<dyn std::error::Error>::from(e))?;
+            crate::app_setup::setup_app_state(app).map_err(Box::<dyn std::error::Error>::from)?;
             // v0.16.1：浏览器原生右键菜单全局禁用——失败仅日志（降级=原生菜单，
             // 前端 contextmenu preventDefault 兜底；文本输入右键粘贴由前端自绘小菜单补齐）
             if let Some(main) = app.get_webview_window(crate::commands_window::MAIN_WINDOW_LABEL) {
