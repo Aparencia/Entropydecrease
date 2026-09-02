@@ -8,10 +8,11 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { GoalCardView } from "../types/goals";
+import type { GoalCardView, GraduationReport } from "../types/goals";
 import GoalCard from "../components/GoalCard";
 import GoalDetail from "../components/GoalDetail";
 import InterviewDialog from "../components/InterviewDialog";
+import { ReportBody } from "../components/GraduateDialog";
 
 const HOT_DOMAINS = ["学 Python", "练听力", "画水彩"];
 
@@ -22,6 +23,9 @@ export default function GoalsPage() {
   const [dialog, setDialog] = useState<{ mode: "interview" | "quick"; name?: string } | null>(null);
   const [err, setErr] = useState("");
   const [loaded, setLoaded] = useState(false);
+  // v0.18.1：毕业档案（快照永久保留——目标删除后仍可读；REQ-255/256）
+  const [archives, setArchives] = useState<GraduationReport[]>([]);
+  const [archiveOpen, setArchiveOpen] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -40,6 +44,10 @@ export default function GoalsPage() {
     invoke<{ id: number; name: string }[]>("list_note_groups", { terrain: "container" })
       .then(setGroups)
       .catch((e) => setErr(`组列表加载失败: ${e}`));
+    // 毕业档案（独立于目标存在性；加载失败仅降级次要区——列表主链路不阻断）
+    invoke<GraduationReport[]>("list_goal_graduations")
+      .then(setArchives)
+      .catch((e) => console.warn("[goal] 毕业档案加载失败（次要区降级）:", e));
   }, [load]);
 
   const onCreated = () => {
@@ -79,6 +87,28 @@ export default function GoalsPage() {
           {cards.map((c) => (
             <GoalCard key={c.goal.id} card={c} onClick={() => setSelectedId(c.goal.id)} />
           ))}
+          {/* v0.18.1：毕业档案——已毕业目标（含已删除者）的报告快照永久可读 */}
+          {archives.length > 0 && (
+            <div style={{ marginTop: 14, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+              <div style={{ fontWeight: 600, fontSize: 12, color: "#047857", marginBottom: 6 }}>🎓 毕业档案（{archives.length}）</div>
+              {archives.map((r) => (
+                <div key={r.goalId} style={{ marginBottom: 6 }}>
+                  <button
+                    data-testid={`archive-${r.goalId}`}
+                    onClick={() => setArchiveOpen(archiveOpen === r.goalId ? null : r.goalId)}
+                    style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid #a7f3d0", background: "#ecfdf5", color: "#047857", cursor: "pointer", width: "100%", textAlign: "left" }}
+                  >
+                    {r.goalName} · {new Date(r.graduatedAt * 1000).toISOString().slice(0, 10)} · 里程碑 {r.milestones.filter((m) => m.status === "done").length}/{r.milestones.reduce((n, m) => n + (m.status === "skipped" ? 0 : 1), 0)} · {r.reviewStats.reviewLogsTotal} 次复习
+                  </button>
+                  {archiveOpen === r.goalId && (
+                    <div style={{ border: "1px solid #a7f3d0", borderRadius: 6, padding: 10, background: "#f7fdf9", marginTop: 4 }}>
+                      <ReportBody report={r} />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           {selectedId != null ? (

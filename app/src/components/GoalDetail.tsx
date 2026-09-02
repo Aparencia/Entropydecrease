@@ -11,6 +11,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type { GoalDetailView, GoalProgressView, GroupWeakness } from "../types/goals";
 import { GOAL_STATUS_LABELS } from "../types/goals";
 import InterviewDialog from "./InterviewDialog";
+import GraduateDialog from "./GraduateDialog";
+import RetroTimeline from "./RetroTimeline";
 
 interface Props {
   goalId: number;
@@ -31,6 +33,10 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
   const [renameValue, setRenameValue] = useState("");
   const [editingMileId, setEditingMileId] = useState<number | null>(null);
   const [editingMileValue, setEditingMileValue] = useState("");
+  // v0.18.1：毕业仪式对话框 / 放弃原因内联确认
+  const [graduateOpen, setGraduateOpen] = useState(false);
+  const [abandonMode, setAbandonMode] = useState(false);
+  const [abandonReason, setAbandonReason] = useState("");
 
   const refresh = useCallback(async () => {
     try {
@@ -91,12 +97,26 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
     setBindGroupId(0); onChanged(); await refresh();
   };
   const removeGoal = async () => {
-    if (!window.confirm(`确定删除目标「${goal.name}」？里程碑与绑定将一并移除（组本身不受影响）。`)) return;
+    if (goal.status === "graduated") {
+      // 已毕业：删除仅影响目标本体——毕业报告快照永久保留（档案区可读）
+      if (!window.confirm(`确定删除已毕业目标「${goal.name}」？毕业报告快照仍会在「毕业档案」保留。`)) return;
+    } else if (!window.confirm(`确定删除目标「${goal.name}」？里程碑与绑定将一并移除（组本身不受影响）。`)) {
+      return;
+    }
     await invoke("delete_goal", { id: goalId });
     onDeleted();
   };
+  const abandon = async () => {
+    await invoke("goal_abandon", { id: goalId, reason: abandonReason.trim() || null });
+    setAbandonMode(false);
+    setAbandonReason("");
+    onChanged(); await refresh();
+  };
   const boundIds = detail.groups.map((g) => g.id);
   const bindable = groups.filter((g) => !boundIds.includes(g.id));
+  // v0.18.1：组删除降级提示（group_settled 型里程碑的绑定组被删 → ref SET NULL）
+  const degradedMilestones = milestones.filter((m) => m.criteriaType === "group_settled" && m.refGroupId == null);
+  const canGraduate = ready && goal.status === "active";
 
   return (
     <div data-testid="goal-detail" style={{ padding: 16, overflow: "auto", height: "100%", boxSizing: "border-box" }}>
@@ -148,6 +168,13 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
               {c.met ? "✓" : "○"} {c.label}：{c.detail}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* 组删除降级提示（REQ-257）：绑定组已删——判据信号丢失，按手动确认 */}
+      {degradedMilestones.length > 0 && (
+        <div data-testid="degraded-milestone-note" style={{ fontSize: 11, color: "#b45309", background: "#fffbeb", borderRadius: 6, padding: "6px 10px", margin: "8px 0" }}>
+          ⚠️ 绑定组已删除（{degradedMilestones.length} 条「随组结算」里程碑失去自动通过信号——现按手动确认）
         </div>
       )}
 
@@ -222,14 +249,48 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
       )}
 
       {/* 动作区 */}
-      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
         <button onClick={() => void changeStatus(goal.status === "paused" ? "active" : "paused")} style={miniPrimary}>
           {goal.status === "paused" ? "▶ 恢复" : "⏸ 暂停"}
         </button>
         <button onClick={() => setEditing(true)} style={miniPrimary}>✎ 重新访谈</button>
-        <button disabled style={{ ...miniDanger, opacity: 0.5 }} title="毕业仪式与回顾流随 v0.18.1（M2）交付">🎓 毕业仪式 · M2</button>
-        <button onClick={() => void removeGoal()} style={miniDanger} title="删除目标（里程碑/绑定一并移除）">🗑 删除目标</button>
+        {goal.status === "active" || goal.status === "paused" ? (
+          <>
+            <button
+              data-testid="graduate-open"
+              onClick={() => setGraduateOpen(true)}
+              disabled={!canGraduate}
+              style={{ ...miniPrimary, opacity: canGraduate ? 1 : 0.5 }}
+              title={canGraduate ? "毕业仪式——确认后生成报告快照" : "毕业判据未全部满足（见上方明细）"}
+            >
+              🎓 毕业仪式
+            </button>
+            {abandonMode ? (
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  data-testid="abandon-reason"
+                  value={abandonReason}
+                  onChange={(e) => setAbandonReason(e.target.value)}
+                  placeholder="放弃原因（可选）"
+                  style={{ fontSize: 11, padding: "3px 8px", border: "1px solid #d1d5db", borderRadius: 4, width: 140 }}
+                />
+                <button data-testid="abandon-confirm" onClick={() => void abandon()} style={miniDanger}>确认放弃</button>
+                <button onClick={() => { setAbandonMode(false); setAbandonReason(""); }} style={miniPrimary}>取消</button>
+              </div>
+            ) : (
+              <button data-testid="abandon-open" onClick={() => setAbandonMode(true)} style={miniDanger}>🗑 放弃</button>
+            )}
+          </>
+        ) : (
+          <span style={{ fontSize: 11, color: "#9ca3af" }}>{goal.status === "graduated" ? "已毕业——回顾流与报告见下方" : "已放弃——无惩罚，随时可再立新目标"}</span>
+        )}
+        <button onClick={() => void removeGoal()} style={miniDanger} title="删除目标（里程碑/绑定一并移除；毕业报告快照保留）">🗑 删除目标</button>
       </div>
+
+      {/* v0.18.1：回顾流 + 毕业报告（快照永久保留） */}
+      <SectionTitle>回顾流（创建 → 里程碑 → 结算 → 毕业）</SectionTitle>
+      <RetroTimeline goalId={goalId} />
+
       {err && <p style={{ fontSize: 11, color: "#dc2626", marginTop: 8 }}>{err}</p>}
       {editing && (
         <InterviewDialog
@@ -238,6 +299,13 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
           groups={groups}
           onClose={() => setEditing(false)}
           onCreated={() => { setEditing(false); onChanged(); void refresh(); }}
+        />
+      )}
+      {graduateOpen && (
+        <GraduateDialog
+          goalId={goalId}
+          onClose={() => setGraduateOpen(false)}
+          onGraduated={() => { setGraduateOpen(false); onChanged(); void refresh(); }}
         />
       )}
     </div>

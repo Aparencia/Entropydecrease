@@ -171,3 +171,63 @@ export const GOAL_STATUS_LABELS: Record<GoalStatus, string> = {
   graduated: "已毕业",
   abandoned: "已放弃",
 };
+
+// ───────────────────────── v0.18.1 毕业仪式/回顾流（REQ-255/256） ─────────────────────────
+
+/** 里程碑快照（毕业报告项） */
+export interface MilestoneSnapshot {
+  title: string;
+  status: MilestoneStatus;
+  completedAt: number | null;
+}
+
+/** 组结算快照（绑定组维度——历史计数，含归档组） */
+export interface GroupSettlementSnapshot {
+  groupId: number;
+  groupName: string;
+  settlementCount: number;
+  lastSettledAt: number | null;
+}
+
+/** 复习统计（毕业报告口径） */
+export interface ReviewStats {
+  cardTotal: number;
+  reviewLogsTotal: number;
+  reviewDays90: number;
+  weakCards: number;
+}
+
+/** 成果物清单（组·笔记·闪卡·概念——「我留下了什么」） */
+export interface ArtifactsInventory {
+  groups: number;
+  notes: number;
+  cards: number;
+  concepts: number;
+}
+
+/** 毕业报告（快照——毕业后冻结，目标删除仍可读） */
+export interface GraduationReport {
+  goalId: number;
+  goalName: string;
+  graduatedAt: number;
+  milestones: MilestoneSnapshot[];
+  groupSettlements: GroupSettlementSnapshot[];
+  reviewStats: ReviewStats;
+  artifacts: ArtifactsInventory;
+  criteriaStatement: string;
+}
+
+/** 回顾流条目（时间线节点） */
+export interface RetroEntry {
+  kind: "created" | "milestone" | "settlement" | "graduated";
+  occurredAt: number;
+  title: string;
+  detail: string;
+}
+
+/** 回顾流视图（现算 + 毕业报告快照） */
+export interface GoalRetroView {
+  status: GoalStatus;
+  entries: RetroEntry[];
+  graduation: GraduationReport | null;
+}
