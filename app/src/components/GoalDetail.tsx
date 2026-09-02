@@ -26,6 +26,11 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
   const [bindGroupId, setBindGroupId] = useState(0);
   const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
   const [editing, setEditing] = useState(false);
+  // 改名（update_goal 接线）与里程碑标题行内编辑（update_goal_milestone 接线）
+  const [renameMode, setRenameMode] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [editingMileId, setEditingMileId] = useState<number | null>(null);
+  const [editingMileValue, setEditingMileValue] = useState("");
 
   const refresh = useCallback(async () => {
     try {
@@ -57,6 +62,20 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
     await invoke("set_goal_milestone_status", { id: m.id, status: m.status === "done" ? "pending" : "done" });
     onChanged(); void refresh();
   };
+  const saveRename = async () => {
+    if (!renameValue.trim()) { setRenameMode(false); return; }
+    // horizon 不传 → 后端保持原锚点（update_goal_inner None=不变语义）
+    await invoke("update_goal", { id: goalId, name: renameValue.trim(), domainTag: detail!.goal.domainTag, horizon: null });
+    setRenameMode(false);
+    onChanged(); await refresh();
+  };
+  const saveMileTitle = async (id: number) => {
+    const title = editingMileValue.trim();
+    if (!title) { setEditingMileId(null); return; }
+    await invoke("update_goal_milestone", { id, title, dueAt: null });
+    setEditingMileId(null);
+    onChanged(); await refresh();
+  };
   const addMilestone = async () => {
     if (!newMile.trim()) return;
     await invoke("add_goal_milestone", { goalId, title: newMile.trim(), dueAt: null, criteriaType: null, refGroupId: null });
@@ -82,10 +101,36 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
   return (
     <div data-testid="goal-detail" style={{ padding: 16, overflow: "auto", height: "100%", boxSizing: "border-box" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontWeight: 700, fontSize: 15 }}>🎯 {goal.name}</span>
+        {renameMode ? (
+          <input
+            data-testid="rename-input"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            autoFocus
+            style={{ fontSize: 14, padding: "3px 8px", border: "1px solid #0f766e", borderRadius: 6, flex: 1 }}
+            onKeyDown={(e) => { if (e.key === "Enter") void saveRename(); }}
+          />
+        ) : (
+          <span style={{ fontWeight: 700, fontSize: 15 }}>🎯 {goal.name}</span>
+        )}
         <span style={{ fontSize: 11, color: "#6b7280" }}>{GOAL_STATUS_LABELS[goal.status]}</span>
         {ready && <span style={{ fontSize: 11, color: "#b45309", background: "#fffbeb", borderRadius: 8, padding: "1px 8px" }}>🎓 可毕业（毕业仪式 M2）</span>}
-        <span style={{ marginLeft: "auto", fontSize: 11, color: "#9ca3af" }}>始于 {new Date(goal.createdAt * 1000).toISOString().slice(0, 10)}</span>
+        {renameMode ? (
+          <>
+            <button data-testid="rename-save" onClick={() => void saveRename()} style={miniPrimary}>✓</button>
+            <button onClick={() => setRenameMode(false)} style={miniDanger}>取消</button>
+          </>
+        ) : (
+          <button
+            data-testid="rename-start"
+            onClick={() => { setRenameValue(goal.name); setRenameMode(true); }}
+            style={{ marginLeft: "auto", ...miniPrimary }}
+            title="改名（不改判据/绑组）"
+          >
+            ✎ 改名
+          </button>
+        )}
+        <span style={{ fontSize: 11, color: "#9ca3af" }}>始于 {new Date(goal.createdAt * 1000).toISOString().slice(0, 10)}</span>
       </div>
       <p style={{ fontSize: 12, color: "#4b5563", background: "#fafaf9", padding: 8, borderRadius: 6, margin: "10px 0" }}>{detail.declaration}</p>
 
@@ -111,9 +156,26 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
       {milestones.map((m) => (
         <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0" }}>
           <input type="checkbox" checked={m.status === "done"} onChange={() => void toggleMilestone(m)} />
-          <span style={{ fontSize: 12, color: m.status === "done" ? "#9ca3af" : "#1f2937", textDecoration: m.status === "done" ? "line-through" : "none" }}>{m.title}</span>
-          {m.criteriaType === "group_settled" && <span style={{ fontSize: 10, color: "#0f766e", background: "#f0fdfa", borderRadius: 8, padding: "0 6px" }}>随组结算</span>}
-          {m.status === "skipped" && <span style={{ fontSize: 10, color: "#9ca3af" }}>已跳过</span>}
+          {editingMileId === m.id ? (
+            <>
+              <input
+                data-testid="mile-title-input"
+                value={editingMileValue}
+                onChange={(e) => setEditingMileValue(e.target.value)}
+                autoFocus
+                style={{ flex: 1, fontSize: 12, padding: "2px 6px", border: "1px solid #0f766e", borderRadius: 4 }}
+                onKeyDown={(e) => { if (e.key === "Enter") void saveMileTitle(m.id); }}
+              />
+              <button onClick={() => void saveMileTitle(m.id)} style={miniPrimary}>✓</button>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: 12, color: m.status === "done" ? "#9ca3af" : "#1f2937", textDecoration: m.status === "done" ? "line-through" : "none" }}>{m.title}</span>
+              {m.criteriaType === "group_settled" && <span style={{ fontSize: 10, color: "#0f766e", background: "#f0fdfa", borderRadius: 8, padding: "0 6px" }}>随组结算</span>}
+              {m.status === "skipped" && <span style={{ fontSize: 10, color: "#9ca3af" }}>已跳过</span>}
+              <button onClick={() => { setEditingMileId(m.id); setEditingMileValue(m.title); }} style={smallGhost}>改</button>
+            </>
+          )}
           <button onClick={() => void removeMilestone(m.id)} style={smallDanger}>删</button>
         </div>
       ))}
@@ -190,3 +252,4 @@ const miniInput: React.CSSProperties = { fontSize: 11, padding: "4px 8px", borde
 const miniPrimary: React.CSSProperties = { fontSize: 11, padding: "4px 10px", borderRadius: 4, border: "1px solid #0f766e", background: "#f0fdfa", color: "#0f766e", cursor: "pointer" };
 const miniDanger: React.CSSProperties = { fontSize: 11, padding: "4px 10px", borderRadius: 4, border: "1px solid #fecaca", background: "#fff", color: "#b91c1c", cursor: "pointer" };
 const smallDanger: React.CSSProperties = { fontSize: 10, padding: "1px 6px", border: "none", background: "none", color: "#b91c1c", cursor: "pointer" };
+const smallGhost: React.CSSProperties = { fontSize: 10, padding: "1px 6px", border: "none", background: "none", color: "#6b7280", cursor: "pointer" };

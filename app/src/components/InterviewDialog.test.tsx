@@ -86,7 +86,7 @@ describe("InterviewDialog 访谈模式（四步 + 宣言）", () => {
     expect(screen.getByTestId("draft-title-0")).toBeTruthy();
   });
 
-  it("宣言页：草案预填可删改，创建契约携带删改后草案", async () => {
+  it("宣言页：草案预填可删改，创建契约携带删改后草案与时限选择", async () => {
     const onCreated = vi.fn();
     render(<InterviewDialog mode="interview" groups={[{ id: 3, name: "Python 组" }]} onClose={vi.fn()} onCreated={onCreated} />);
     fireEvent.change(screen.getByTestId("interview-name"), { target: { value: "学会 Python" } });
@@ -94,6 +94,7 @@ describe("InterviewDialog 访谈模式（四步 + 宣言）", () => {
     fireEvent.click(screen.getByTestId("next-step"));
     fireEvent.click(screen.getByTestId("skip-step")); // 现状跳过
     fireEvent.click(screen.getByTestId("tier-chip-solo_project"));
+    fireEvent.click(screen.getByTestId("horizon-chip-6m"));
     fireEvent.click(screen.getByTestId("next-step"));
     fireEvent.click(screen.getByTestId("skip-step")); // 素材跳过
     await waitFor(() => expect(screen.getByTestId("draft-title-0")).toBeTruthy());
@@ -104,7 +105,10 @@ describe("InterviewDialog 访谈模式（四步 + 宣言）", () => {
     await waitFor(() => {
       const call = invokeMock.mock.calls.find((c) => c[0] === "create_goal");
       expect(call).toBeTruthy();
-      const milestones = (call![1] as { input: { milestones: { title: string; dueWeeks: number }[] } }).input.milestones;
+      const input = (call![1] as { input: { horizon: string; milestones: { title: string; dueWeeks: number }[] } }).input;
+      // 审查修复（2026-09-02）：时效取第 3 问 chips（a.horizon）而非面板默认值
+      expect(input.horizon).toBe("6m");
+      const milestones = input.milestones;
       expect(milestones).toHaveLength(2);
       expect(milestones[0].title).toBe("应用：自己写一个小脚本");
       expect(milestones[0].dueWeeks).toBe(8);

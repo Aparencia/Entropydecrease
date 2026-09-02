@@ -8,12 +8,10 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { Goal, GoalCardView } from "../types/goals";
+import type { GoalCardView } from "../types/goals";
 import GoalCard from "../components/GoalCard";
 import GoalDetail from "../components/GoalDetail";
 import InterviewDialog from "../components/InterviewDialog";
-
-type DialogMode = "interview" | "quick" | null;
 
 const HOT_DOMAINS = ["学 Python", "练听力", "画水彩"];
 
@@ -21,7 +19,7 @@ export default function GoalsPage() {
   const [cards, setCards] = useState<GoalCardView[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
-  const [dialog, setDialog] = useState<DialogMode>(null);
+  const [dialog, setDialog] = useState<{ mode: "interview" | "quick"; name?: string } | null>(null);
   const [err, setErr] = useState("");
   const [loaded, setLoaded] = useState(false);
 
@@ -44,7 +42,7 @@ export default function GoalsPage() {
       .catch((e) => setErr(`组列表加载失败: ${e}`));
   }, [load]);
 
-  const onCreated = (_goal: Goal) => {
+  const onCreated = () => {
     setDialog(null);
     void load();
   };
@@ -54,8 +52,8 @@ export default function GoalsPage() {
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid #e5e7eb", flexShrink: 0 }}>
         <span style={{ fontWeight: 700, fontSize: 14 }}>🎯 目标</span>
         <span style={{ fontSize: 11, color: "#9ca3af" }}>意图层——把素材串成可毕业的目标</span>
-        <button data-testid="open-interview" onClick={() => setDialog("interview")} style={primaryBtn}>＋ 新建目标（访谈）</button>
-        <button data-testid="open-quick" onClick={() => setDialog("quick")} style={ghostBtn}>只想简单记一下</button>
+        <button data-testid="open-interview" onClick={() => setDialog({ mode: "interview" })} style={primaryBtn}>＋ 新建目标（访谈）</button>
+        <button data-testid="open-quick" onClick={() => setDialog({ mode: "quick" })} style={ghostBtn}>只想简单记一下</button>
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
@@ -69,7 +67,7 @@ export default function GoalsPage() {
                 {HOT_DOMAINS.map((h) => (
                   <button
                     key={h}
-                    onClick={() => { setDialog("interview"); }}
+                    onClick={() => setDialog({ mode: "interview", name: h })}
                     style={{ ...ghostBtn, margin: "0 4px" }}
                   >
                     {h}
@@ -97,8 +95,9 @@ export default function GoalsPage() {
 
       {dialog && (
         <InterviewDialog
-          mode={dialog}
+          mode={dialog.mode}
           groups={groups}
+          initialName={dialog.name}
           onClose={() => setDialog(null)}
           onCreated={onCreated}
         />

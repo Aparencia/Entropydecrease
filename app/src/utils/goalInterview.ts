@@ -113,7 +113,8 @@ export function horizonLabel(horizon: string): string {
     case "3m": return "3 个月";
     case "6m": return "半年";
     case "2w": return "先试两周";
-    default: return horizon ? "12 周" : "12 周";
+    case "none": return "无期限";
+    default: return "12 周";
   }
 }
 
@@ -126,5 +127,10 @@ export function assembleDeclarationPreview(
 ): string {
   const standard = a.criteriaStatement.trim() || tierLabel || "（未判定标准）";
   const scene = a.scenario.trim() ? `（场景：${a.scenario.trim()}）` : "";
-  return `用${horizonLabel(horizon)}学会${name.trim()}${scene}，达成标准：${standard}；边界：${a.nonScope.trim() || "暂未明确"}`;
+  const boundary = a.nonScope.trim() || "暂未明确";
+  if (a.horizon === "none" || horizon === "none") {
+    // 无期限 = 长期目标语义（与后端 assemble_declaration 分支一致）
+    return `长期目标（无期限）：学会${name.trim()}${scene}，达成标准：${standard}；边界：${boundary}`;
+  }
+  return `用${horizonLabel(a.horizon || horizon)}学会${name.trim()}${scene}，达成标准：${standard}；边界：${boundary}`;
 }

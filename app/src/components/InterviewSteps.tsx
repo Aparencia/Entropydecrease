@@ -99,7 +99,8 @@ export function StepCriteria({ a, setA }: StepProps) {
       <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>时间怎么算？</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
         {HORIZON_OPTIONS.map((o) => (
-          <Chip key={o.id} active={a.horizon === o.id} onClick={() => setA({ horizon: o.id })}>{o.label}</Chip>
+          <Chip key={o.id} testid={`horizon-chip-${o.id}`} active={a.horizon === o.id}
+            onClick={() => setA({ horizon: o.id })}>{o.label}</Chip>
         ))}
       </div>
       <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>明确不学什么？（防目标沼泽化）</div>
@@ -177,7 +178,7 @@ export function StepDeclaration({ name, declaration, drafts, onDraftChange }: De
       </div>
       {drafts.map((d, i) => (
         <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
-          <span style={{ fontSize: 12, color: "#9ca3af", width: 54 }}>第{d.dueWeeks}周</span>
+          <span style={{ fontSize: 12, color: "#9ca3af", width: 54 }}>{d.dueWeeks === 0 ? "无期限" : `第${d.dueWeeks}周`}</span>
           <input
             data-testid={`draft-title-${i}`}
             value={d.title}

@@ -21,9 +21,12 @@ interface Props {
   mode: "interview" | "quick";
   groups: { id: number; name: string }[];
   onClose: () => void;
-  onCreated: (goal: Goal) => void;
-  /** 编辑态（目标详情→重新访谈）：走 update_goal_interview（配方重推，称号不变） */
+  /** 创建成功（或编辑保存成功）回调——不携带目标对象（编辑态无新目标，调用方自行刷新） */
+  onCreated: () => void;
+  /** 编辑态（目标详情→重新访谈）：走 update_goal_interview（配方重推，名称随对话框生效） */
   goalId?: number;
+  /** 预填名称（空态热词入口） */
+  initialName?: string;
 }
 
 const HORIZON_OPTIONS = [
@@ -40,8 +43,8 @@ const TIER_LABELS: Record<string, string> = {
   default: "说不清：全部里程碑 + ≥1 组结算 + 近 90 天复习活跃",
 };
 
-export default function InterviewDialog({ mode, groups, onClose, onCreated, goalId }: Props) {
-  const [name, setName] = useState("");
+export default function InterviewDialog({ mode, groups, onClose, onCreated, goalId, initialName }: Props) {
+  const [name, setName] = useState(initialName ?? "");
   const [horizon, setHorizon] = useState("3m");
   const [a, setA] = useState<InterviewAnswers>(EMPTY_ANSWERS);
   const [drafts, setDrafts] = useState<MilestoneDraft[]>([]);
@@ -64,7 +67,9 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
   }, [step, mode, a.level, a.weeklyCommitment, suggestKey]);
 
   const tierLabel = TIER_LABELS[a.tier] ?? "";
-  const declaration = assembleDeclarationPreview(name, horizon, a, tierLabel);
+  // 时效口径：访谈模式取第 3 问 chips（a.horizon），快速模式取顶部下拉（horizon）
+  const effectiveHorizon = a.horizon || horizon;
+  const declaration = assembleDeclarationPreview(name, effectiveHorizon, a, tierLabel);
 
   const create = async () => {
     setSaving(true);
@@ -73,17 +78,17 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
       const input = mode === "quick"
         ? toQuickInput(name, horizon)
         : toCreateInput(
-            name, horizon, a,
+            name, effectiveHorizon, a,
             drafts.filter((d) => d.title.trim()).map((d) => ({ title: d.title.trim(), dueWeeks: d.dueWeeks })),
           );
       if (goalId != null) {
-        // 编辑态：配方重推（判据/意图整体重写；名称与绑组不变）
+        // 编辑态：配方重推（判据/意图整体重写；名称随对话框生效，绑组不变）
         await invoke<boolean>("update_goal_interview", { id: goalId, input });
-        onCreated({ id: goalId, name, status: "active", domainTag: null, horizonEnd: null, successCriteriaJson: "", intentJson: "", createdAt: 0, completedAt: null, updatedAt: 0 });
+        onCreated();
         return;
       }
-      const goal = await invoke<Goal>("create_goal", { input });
-      onCreated(goal);
+      await invoke<Goal>("create_goal", { input });
+      onCreated();
     } catch (e) {
       setErr(`创建失败: ${e}`);
     } finally {
