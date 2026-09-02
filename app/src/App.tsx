@@ -22,6 +22,8 @@ import ChatPage from "./pages/ChatPage";
 import SettingsPage from "./pages/SettingsPage";
 // v0.13.1：知识体系页（三时钟纪律——体系进周/季度视图，不入每日复习面）
 import KnowledgePage from "./pages/KnowledgePage";
+// v0.18.0：学习目标页（意图层——独立 Tab，零叙事元素）
+import GoalsPage from "./pages/GoalsPage";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import CaptureFloatPanel from "./components/CaptureFloatPanel";
 import CaptureOverlayPanel from "./components/CaptureOverlayPanel";
@@ -29,7 +31,7 @@ import CaptureOverlayPanel from "./components/CaptureOverlayPanel";
 import BrowserChrome from "./components/BrowserChrome";
 import type { AiTaskState } from "./types";
 
-type Page = "classroom" | "sessions" | "notes" | "chat" | "knowledge" | "settings";
+type Page = "classroom" | "sessions" | "notes" | "chat" | "knowledge" | "goals" | "settings";
 
 const NAV_ITEMS: { key: Page; label: string }[] = [
   { key: "classroom", label: "📡 课堂助手" },
@@ -38,6 +40,8 @@ const NAV_ITEMS: { key: Page; label: string }[] = [
   // v0.16.0：AI 对话页（纯聊天 + AI 任务对话视图）
   { key: "chat", label: "💬 AI 对话" },
   { key: "knowledge", label: "🧠 体系" },
+  // v0.18.0：学习目标（意图层——目标=组的容器，N:M 绑定）
+  { key: "goals", label: "🎯 目标" },
   { key: "settings", label: "⚙ 设置" },
 ];
 
@@ -327,6 +331,10 @@ function App() {
             onOpenNote={(id) => { setFocusNoteId(id); setPage("notes"); }}
             onOpenGroup={(id) => { setFocusGroupId(id); setPage("notes"); }}
           />
+        </div>
+        <div style={{ flex: 1, display: page === "goals" ? "block" : "none", overflow: "hidden" }}>
+          {/* v0.18.0：学习目标页（意图层——列表是导航不是仪表盘） */}
+          <GoalsPage />
         </div>
         <div style={{ flex: 1, display: page === "settings" ? "block" : "none", overflow: "hidden" }}>
           {/* 2026-08-21：设置页（保留挂载——面板状态不因切页重置；TD-004 同模式） */}
