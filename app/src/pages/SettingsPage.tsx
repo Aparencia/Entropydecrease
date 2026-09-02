@@ -18,6 +18,8 @@ import { VocabManager } from "../components/VocabManager";
 import ModelManagementPanel from "../components/ModelManagementPanel";
 import ModelDiskPanel from "../components/ModelDiskPanel";
 import AiServicePanel from "../components/AiServicePanel";
+// v0.18.2（REQ-254）：目标 AI 规划师开关与预算档位（默认关）
+import GoalAiSection from "../components/GoalAiSection";
 import AiProviderSettings from "../components/AiProviderSettings";
 import AiTaskPanel from "../components/AiTaskPanel";
 import FeatureFlagSetting from "../components/FeatureFlagSetting";
@@ -71,6 +73,10 @@ export default function SettingsPage() {
           <AiProviderSettings />
           <div style={{ marginTop: 8 }}>
             <AiServicePanel />
+          </div>
+          {/* v0.18.2（REQ-254）：目标 AI 规划师独立开关+预算档位（默认关） */}
+          <div style={{ marginTop: 8 }}>
+            <GoalAiSection />
           </div>
           <div style={{ marginTop: 8 }}>
             <AiTaskPanel />

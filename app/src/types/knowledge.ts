@@ -30,8 +30,8 @@ export type KnowledgeConceptStatus = "core" | "watching" | "archived";
 /** 模型状态（command 层白名单校验） */
 export type KnowledgeModelStatus = "active" | "watching" | "archived";
 
-/** 引用目标类型：note_group / note / flashcard / fragment（command 层白名单校验） */
-export type KnowledgeLinkTargetType = "note_group" | "note" | "flashcard" | "fragment";
+/** 引用目标类型：note_group / note / flashcard / fragment / goal（v0.18.2 目标↔体系联动） */
+export type KnowledgeLinkTargetType = "note_group" | "note" | "flashcard" | "fragment" | "goal";
 
 /** 知识体系（含计数——list_knowledge_systems 返回；create/update 可能缺省计数） */
 export interface KnowledgeSystem {
@@ -333,12 +333,14 @@ export const conceptStatusLabel: Record<KnowledgeConceptStatus, string> = {
   archived: "已归档",
 };
 
-/** 引用目标类型中文标签（「挂引用」下拉用） */
+/** 引用目标类型中文标签（「挂引用」下拉用；goal 供目标↔体系联动反查展示——
+ * 挂引用下拉不暴露 goal（目标侧经确认流落库，避免双入口歧义） */
 export const linkTargetTypeLabel: Record<KnowledgeLinkTargetType, string> = {
   note_group: "笔记组",
   note: "笔记",
   flashcard: "闪卡",
   fragment: "碎片",
+  goal: "目标",
 };
 
 /** 详情面板选中实体的分发类型（node/concept/model；id=null 表示新建） */

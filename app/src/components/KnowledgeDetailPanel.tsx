@@ -55,6 +55,14 @@ export default function KnowledgeDetailPanel({ width = 320, system, nodes, conce
   const [mValidWhen, setMValidWhen] = useState("");
   const [mInvalidWhen, setMInvalidWhen] = useState("");
   const [mStatus, setMStatus] = useState<KnowledgeModelStatus>("active");
+  // v0.18.2：目标↔体系反查（体系页「服务于目标 X」——knowledge_links target_type='goal'）
+  const [goalNames, setGoalNames] = useState<Map<number, string>>(new Map());
+
+  useEffect(() => {
+    invoke<{ goal: { id: number; name: string } }[]>("list_goals")
+      .then((gs) => setGoalNames(new Map(gs.map((g) => [g.goal.id, g.goal.name]))))
+      .catch(() => { /* 目标未接入时反查降级为空——次要块 */ });
+  }, []);
 
   // 选中实体变化 → 同步编辑器草稿
   useEffect(() => {
@@ -140,6 +148,17 @@ export default function KnowledgeDetailPanel({ width = 320, system, nodes, conce
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+        {/* v0.18.2：体系「服务于目标 X」反查块（任何选中态均可见——体系上下文） */}
+        {links.filter((l) => l.targetType === "goal").length > 0 && (
+          <div data-testid="goal-link-block" style={{ fontSize: 12, background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>
+            <div style={{ fontWeight: 600, color: "#0f766e", marginBottom: 4 }}>🎯 服务于目标</div>
+            {links.filter((l) => l.targetType === "goal").map((l) => (
+              <div key={l.id} style={{ color: "#374151" }}>
+                · {goalNames.get(l.targetId) ?? `目标 #${l.targetId}`}
+              </div>
+            ))}
+          </div>
+        )}
         {!selection && (
           <div style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", paddingTop: 40 }}>
             从中间选择一个实体查看详情

@@ -222,6 +222,26 @@ export default function ChatPage(props: Props) {
       setDraft("");
       return;
     }
+    // v0.18.2（REQ-253）：`/goal <目标名>`——L4.5 目标摘要现算注入（库即记忆，
+    // 与普通提问分流；找不到目标不发送，防误注入）
+    const goalCmd = content.match(/^\/goal (.+)$/);
+    let effective = content;
+    if (goalCmd) {
+      const name = goalCmd[1].trim();
+      try {
+        const goals = await invoke<{ goal: { id: number; name: string } }[]>("list_goals");
+        const g = goals.find((x) => x.goal.name === name) ?? goals.find((x) => x.goal.name.includes(name));
+        if (!g) {
+          setGateError(`找不到目标「${name}」——请在🎯目标页确认名称`);
+          return;
+        }
+        const ctx = await invoke<string>("goal_chat_context", { goalId: g.goal.id });
+        effective = `（以下为目标上下文·现算注入）\n${ctx}\n\n——请基于以上回答：我学到哪了？下一步重点是什么？`;
+      } catch (e) {
+        setGateError(String(e));
+        return;
+      }
+    }
     // 首次发送前一次性云端提示（审查补充：设计承诺→实现）
     if (!localStorage.getItem(CLOUD_NOTICE_KEY)) {
       const ok = await confirm(CLOUD_NOTICE_TEXT, { title: "熵减 · AI 对话", kind: "warning" });
@@ -233,7 +253,7 @@ export default function ChatPage(props: Props) {
     setDraft("");
     setGateError(null);
     try {
-      const ok = await launch(activeChatId, "chat_send", { content, resendMessageId: resendId });
+      const ok = await launch(activeChatId, "chat_send", { content: effective, resendMessageId: resendId });
       if (!ok) setGateError("该会话已有进行中的对话——请等待完成或先停止");
     } catch (e) {
       setGateError(String(e));
