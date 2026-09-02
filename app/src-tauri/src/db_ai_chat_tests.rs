@@ -142,4 +142,8 @@ fn trajectory_column_roundtrip_and_migration_idempotent() {
     assert_eq!(got.as_deref(), Some(r#"[{"turn":1,"system":"s","user":"u","response":"r"}]"#));
     // 无轨迹任务 → None（旧任务诚实降级）
     assert!(db.get_ai_task_trajectory(2).unwrap().is_none());
+    // v0.17.1 回归：任务存在但列为 NULL（旧任务/未写入轨迹）→ Ok(None)——
+    // 此前 get::<String> 对 NULL 列抛 "Invalid column type Null"（用户报障）
+    db.insert_ai_task(&task_rec(3, "succeeded")).unwrap();
+    assert!(db.get_ai_task_trajectory(3).unwrap().is_none());
 }

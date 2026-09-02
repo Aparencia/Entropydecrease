@@ -10,7 +10,7 @@
  *              状态机）；重生成沿用本次策略档位（overrideFromInfo——首版与
  *              重生成同档位，不回退全局默认）。
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAiTaskPolling } from "../hooks/useAiTaskPolling";
 import type { AiRefineResult, AiTaskState } from "../types";
@@ -49,7 +49,6 @@ export default function NoteAiDialog({
   const [result, setResult] = useState<AiRefineResult | null>(null);
   const [showWorkbench, setShowWorkbench] = useState(false);
   const [msg, setMsg] = useState("");
-  const taskIdRef = useRef<number | null>(null);
 
   const handleState = useCallback(async (st: AiTaskState, tid: number | null) => {
     if (st === "Succeeded") {
@@ -58,6 +57,10 @@ export default function NoteAiDialog({
         setResult(r);
         setRunning(false);
         setShowWorkbench(true);
+      } else {
+        // v0.17.1 防御：结果取回失败不得静默卡住（提示可重试）
+        setMsg("任务已完成但结果取回失败——可关闭后到 AI 对话页「AI 任务」查看或重试");
+        setRunning(false);
       }
     } else if (typeof st === "object" && st !== null && "Failed" in st) {
       setMsg(`精修失败：${JSON.stringify(st.Failed.reason ?? {})}`);
@@ -67,8 +70,11 @@ export default function NoteAiDialog({
     }
   }, []);
 
-  const { startPolling, stopPolling } = useAiTaskPolling(handleState, () => {
-    setMsg("任务 30 秒无进展（可能未启动或后台卡住）——请查看日志后重试");
+  // v0.17.1 修复：hook 的 taskIdRef 由调用方设置（事件通道过滤 + 派发参数
+  // 数据源）——此前误用本地自建 ref → 轮询以 taskId=null 派发 → 结果取回
+  // 失败被吞 → running 永不翻转（用户报障"长时间卡在处理页面"）
+  const { taskIdRef, startPolling, stopPolling } = useAiTaskPolling(handleState, () => {
+    setMsg("任务 30 秒无进展（可能未启动或后台卡住）——请查看 tauri 终端 [refine-task] 日志后重试");
     setRunning(false);
   });
 

@@ -186,14 +186,21 @@ impl Db {
     }
 
     /// 轨迹读取（任务对话视图数据源；NULL/无轨迹 → None——升级前旧任务）。
+    ///
+    /// @ai-context: v0.17.1 修复：行存在但列为 NULL 时 `get::<String>` 抛
+    ///              "Invalid column type Null at index: 0"（rusqlite 类型
+    ///              严格）——须 Option<String>（NULL=无轨迹=诚实 None；旧
+    ///              任务/失败任务/轨迹未写入均合法）。
     pub fn get_ai_task_trajectory(&self, task_id: u64) -> Result<Option<String>> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        // 双层 Option 拍平：列 NULL（无轨迹/旧任务）→ 外层 None（与"无行"同语义）
         conn.query_row(
             "SELECT trajectory_json FROM ai_tasks WHERE task_id=?1",
             params![task_id as i64],
-            |row| row.get::<_, String>(0),
+            |row| row.get::<_, Option<String>>(0),
         )
         .optional()
+        .map(|v| v.flatten())
         .map_err(Into::into)
     }
 
