@@ -83,14 +83,16 @@ pub(crate) fn normalize_text(raw: &str, label: &str) -> Result<String, String> {
     Ok(norm)
 }
 
-/// 校验引用目标类型白名单并解析为枚举（note_group/note/flashcard/fragment）。
+/// 校验引用目标类型白名单并解析为枚举
+/// （note_group/note/flashcard/fragment——v0.18.2 增 goal 目标↔体系联动）。
 pub(crate) fn parse_target_type(s: &str) -> Result<LinkTarget, String> {
     match s {
         "note_group" => Ok(LinkTarget::NoteGroup),
         "note" => Ok(LinkTarget::Note),
         "flashcard" => Ok(LinkTarget::Flashcard),
         "fragment" => Ok(LinkTarget::Fragment),
-        _ => Err(format!("不支持的目标类型: {}（支持: note_group/note/flashcard/fragment）", s)),
+        "goal" => Ok(LinkTarget::Goal),
+        _ => Err(format!("不支持的目标类型: {}（支持: note_group/note/flashcard/fragment/goal）", s)),
     }
 }
 

@@ -44,6 +44,12 @@ pub struct AiSettings {
     /// 精修产出策略偏好（v0.17.0 REQ-245）：默认档位 + 逐维覆盖——
     /// 全局默认（任务级覆盖优先）；serde default：旧 JSON 零迁移回填标准档
     pub refine_strategy: RefineStrategyPrefs,
+    /// v0.18.2（REQ-254）：目标 AI（规划师）独立闸门——内容门控之外的
+    /// 专用开关，默认关（与全局 enabled 独立：目标规划是上传类调用，
+    /// 双闸门 = content_gate + 本开关）。
+    pub goal_plan_enabled: bool,
+    /// v0.18.2（REQ-254）：目标规划预算档位（light/standard/deep；默认标准）。
+    pub goal_plan_tier: String,
 }
 
 impl Default for AiSettings {
@@ -57,6 +63,8 @@ impl Default for AiSettings {
             remember_cost_choice: false,
             vision_refine_enabled: false,
             refine_strategy: RefineStrategyPrefs::default(),
+            goal_plan_enabled: false,
+            goal_plan_tier: "standard".to_string(),
         }
     }
 }
@@ -96,6 +104,19 @@ impl AiSettings {
         }
         if !self.authorized {
             return Err("尚未同意 AI 使用授权（仅上传文本，音视频/图像永不出本机）".to_string());
+        }
+        Ok(())
+    }
+
+    /// 目标规划双闸门（v0.18.2 REQ-254）：content_gate + 目标 AI 专用开关。
+    ///
+    /// @ai-context: 目标规划=内容上传类调用（最小检索片段上云），在全局
+    ///              授权红线之上再设独立开关（默认关）——"本地优先 + 用户
+    ///              知情"；失败文案引导设置页「目标 AI」区，不静默。
+    pub fn goal_plan_gate(&self) -> Result<(), String> {
+        self.content_gate()?;
+        if !self.goal_plan_enabled {
+            return Err("目标 AI 规划未开启（设置→目标 AI 段打开开关；关闭时按规则草案正常规划，零影响）".to_string());
         }
         Ok(())
     }

@@ -14,13 +14,15 @@ use crate::db::{unix_seconds, Db};
 use crate::error::Result;
 use crate::types::{KnowledgeLink, NewKnowledgeLink};
 
-/// 引用目标类型（对应 knowledge_links.target_type 白名单）。
+/// 引用目标类型（对应 knowledge_links.target_type 白名单；
+/// v0.18.2 扩展 goal——目标↔体系联动，零迁移）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinkTarget {
     NoteGroup,
     Note,
     Flashcard,
     Fragment,
+    Goal,
 }
 
 impl LinkTarget {
@@ -31,6 +33,7 @@ impl LinkTarget {
             LinkTarget::Note => "note",
             LinkTarget::Flashcard => "flashcard",
             LinkTarget::Fragment => "fragment",
+            LinkTarget::Goal => "goal",
         }
     }
 
@@ -41,6 +44,7 @@ impl LinkTarget {
             LinkTarget::Note => "notes",
             LinkTarget::Flashcard => "flashcards",
             LinkTarget::Fragment => "fragments",
+            LinkTarget::Goal => "goals",
         }
     }
 }

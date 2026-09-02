@@ -113,6 +113,8 @@ mod commands_graph;
 mod commands_goals;
 // v0.18.1（REQ-255~257）：目标生命周期命令（毕业仪式/回顾流/放弃/毕业档案）
 mod commands_goals_lifecycle;
+// v0.18.2（REQ-251~254）：AI 目标规划——estimate/plan/摘要注入/概念弱信号
+mod commands_goals_plan;
 // v0.13.2（REQ-206~207）：概念模型卡命令层（创建/组列表）——卡→概念升格拆至 promote 子模块
 mod commands_knowledge_cards;
 mod commands_knowledge_cards_promote;
@@ -239,11 +241,16 @@ mod frame_features;
 mod foreground_timeline;
 mod fusion;
 mod glossary;
+mod budget_allocator;
+mod concept_weakness;
 mod goal_interview;
+mod goal_plan_prompt;
+mod goal_plan_protocol;
 mod goal_progress;
 mod goal_retro;
 mod goal_rules;
 mod goal_schema;
+mod goal_summary;
 // v0.11.0（REQ-196）：结构密度路由纯函数（组路由三态，golden 用例先行）
 mod group_route;
 mod health_check;
@@ -555,6 +562,12 @@ pub fn run() {
             commands_goals_lifecycle::goal_retro,
             commands_goals_lifecycle::goal_abandon,
             commands_goals_lifecycle::list_goal_graduations,
+            // v0.18.2（REQ-251~254）：AI 目标规划（默认关+授权）与摘要/弱项注入
+            commands_goals_plan::ai_goal_plan_estimate,
+            commands_goals_plan::ai_goal_plan,
+            commands_goals_plan::goal_chat_context,
+            commands_goals_plan::goal_concept_weakness,
+            commands_goals_plan::goal_apply_plan,
             // v0.13.1（REQ-202~205）：知识体系层——体系/问题树/概念/模型/引用/审计探测
             commands_knowledge_systems::list_knowledge_systems,
             commands_knowledge_systems::create_knowledge_system,
@@ -760,6 +773,8 @@ pub fn run() {
             commands_ai_settings::ai_set_authorized,
             commands_ai_settings::ai_set_enabled,
             commands_ai_settings::ai_set_vision_refine,
+            // v0.18.2（REQ-254）：目标 AI 设置（独立开关+预算档位）
+            commands_ai_settings::ai_set_goal_plan,
             commands_ai_settings::ai_set_refine_strategy,
             commands_ai_settings::ai_test_connection,
             commands_ai_settings::ai_get_balance,

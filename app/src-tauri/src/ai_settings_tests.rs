@@ -60,6 +60,9 @@ fn save_load_roundtrip() {
             default_ladder: "deep".to_string(),
             dim_overrides: std::collections::HashMap::from([("examples".to_string(), "condensed".to_string())]),
         },
+        // v0.18.2：目标 AI 独立闸门 + 预算档位 roundtrip 保真
+        goal_plan_enabled: true,
+        goal_plan_tier: "deep".to_string(),
     };
     s.save(&path).expect("保存成功");
     let loaded = AiSettings::load(&path);

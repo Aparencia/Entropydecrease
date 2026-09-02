@@ -33,6 +33,10 @@ pub struct AiSettingsView {
     pub vision_refine_enabled: bool,
     /// 精修产出策略偏好（v0.17.0 REQ-245：默认档位 + 逐维覆盖）
     pub refine_strategy: crate::ai_strategy::RefineStrategyPrefs,
+    /// v0.18.2（REQ-254）：目标 AI（规划师）独立开关——默认关（双闸门之二）
+    pub goal_plan_enabled: bool,
+    /// v0.18.2（REQ-254）：目标规划预算档位（light/standard/deep——默认标准）
+    pub goal_plan_tier: String,
     /// 是否已配置密钥（env 或凭据库）
     pub has_key: bool,
     /// 密钥来源：credential | env | none
@@ -70,6 +74,8 @@ pub fn ai_get_settings(state: State<'_, AppState>) -> Result<AiSettingsView, Str
         remember_cost_choice: s.remember_cost_choice,
         vision_refine_enabled: s.vision_refine_enabled,
         refine_strategy: s.refine_strategy.clone(),
+        goal_plan_enabled: s.goal_plan_enabled,
+        goal_plan_tier: s.goal_plan_tier.clone(),
         has_key,
         key_source,
     })
@@ -92,6 +98,27 @@ pub fn ai_save_key(state: State<'_, AppState>, api_key: String) -> Result<(), St
 #[tauri::command]
 pub fn ai_clear_key(state: State<'_, AppState>) -> Result<(), String> {
     state.ai_credentials.clear_key("default")
+}
+
+/// v0.18.2（REQ-254）：目标 AI 设置（read-modify-write 最小面——
+/// 不覆盖其他设置字段；档位白名单 light/standard/deep）。
+#[tauri::command]
+pub fn ai_set_goal_plan(
+    state: State<'_, AppState>,
+    enabled: bool,
+    tier: Option<String>,
+) -> Result<(), String> {
+    let tier = tier.unwrap_or_else(|| "standard".to_string());
+    if !matches!(tier.as_str(), "light" | "standard" | "deep") {
+        return Err(format!("不支持的预算档位: {}（支持: light/standard/deep）", tier));
+    }
+    let mut s = state
+        .ai_settings
+        .lock()
+        .map_err(|e| format!("AI 设置锁中毒: {}", e))?;
+    s.goal_plan_enabled = enabled;
+    s.goal_plan_tier = tier;
+    s.save(&state.ai_settings_path).map_err(|e| e.to_string())
 }
 
 /// 更新 AI 设置（白名单校验后持久化；command 层锁内 read-modify-write）。
