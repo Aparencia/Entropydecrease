@@ -53,6 +53,13 @@ fn civil_days_roundtrip_known_epochs() {
         created_at: 0, ..Default::default()
     });
     assert!(zero.contains("—"), "epoch 前回退");
+    // 已知锚点：1700000000 = 2023-11-14 UTC（civil_from_days 换算回归护栏）
+    let known = crate::goal_summary::build_summary(&GoalSummaryInput {
+        name: "x".to_string(),
+        created_at: 1_700_000_000,
+        ..Default::default()
+    });
+    assert!(known.contains("2023-11-14"), "历法换算: {}", known);
 }
 
 #[test]

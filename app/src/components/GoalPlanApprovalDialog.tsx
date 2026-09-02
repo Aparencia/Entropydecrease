@@ -43,10 +43,11 @@ export default function GoalPlanApprovalDialog({ view, onConfirm, onClose, onUse
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
+  // 里程碑标题：编辑覆盖优先（原实现 ...editingTitles, ...m 后展开 m 覆盖编辑——输入被拉回原文）
   const milestoneTitles = useMemo(() => {
     const m: Record<number, string> = {};
     view.proposal.milestones.forEach((ms, i) => { m[i] = ms.title; });
-    return { ...editingTitles, ...m };
+    return { ...m, ...editingTitles };
   }, [view, editingTitles]);
 
   const confirm = async () => {

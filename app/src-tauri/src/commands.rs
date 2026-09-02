@@ -88,6 +88,11 @@ pub struct AppState {
     pub model_downloader: ModelDownloader,
     /// 应用句柄（事件推送 live:* / model:*）
     pub app: tauri::AppHandle,
+    /// v0.18.2（REQ-251）：目标规划并发互斥——防多窗口/双击重复扣费。
+    /// 同步规划调用无任务去重表（ai_refine_start 的按会话去重先例）；
+    /// Arc<AtomicBool>（AppState Clone 传播）+ swap 占位（async command
+    /// 跨 await 需 Send，不用 MutexGuard）。
+    pub goal_plan_busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// OCR 设备配置文件路径（ADR-009：模式/校准持久化，应用数据目录）
     pub ocr_device_config_path: std::path::PathBuf,
     /// OCR 模型标识（ADR-009 校准"重新检测"用；与引擎池启动同源）

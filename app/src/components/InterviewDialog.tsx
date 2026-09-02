@@ -110,16 +110,20 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
   };
 
   // v0.18.2：✨ AI 规划——先按当前答案建目标（规则基线），再 AI 规划 →
-  // 确认对话框（替换里程碑草案——建议制语义：人类确认后落库）
+  // 确认对话框（替换里程碑草案——建议制语义：人类确认后落库）。
+  // @审查修复：AI 失败回滚本次新建的目标（防"再点确认创建"重复建目标）；
+  // 确认成功由 onConfirm 收口结束向导（同一路径不可能再 create_goal）。
   const runAiPlan = async () => {
     setAiPlanning(true);
     setErr("");
+    let createdHere = false;
     try {
       let gid = plannedGoalId;
       if (gid == null) {
         const input = toCreateInput(name, effectiveHorizon, a, []);
         const goal = await invoke<Goal>("create_goal", { input });
         gid = goal.id;
+        createdHere = true;
         setPlannedGoalId(gid);
       }
       const view = await invoke<GoalPlanView>("ai_goal_plan", {
@@ -127,6 +131,11 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
       });
       setAiPlan(view);
     } catch (e) {
+      if (createdHere) {
+        // 回滚基线目标——AI 失败不应留下空目标（规则草案路径由用户主动继续）
+        await invoke("delete_goal", { id: plannedGoalId }).catch(() => undefined);
+        setPlannedGoalId(null);
+      }
       setErr(`AI 规划失败: ${e}`);
     } finally {
       setAiPlanning(false);
@@ -245,6 +254,8 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
               goalId: plannedGoalId,
               request: { ...req, replaceMilestones: true },
             });
+            // AI 确认成功：目标已建+规划已落库——结束向导（防再点"确认创建"重复建）
+            onCreated();
           }}
         />
       )}

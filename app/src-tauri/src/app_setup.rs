@@ -236,6 +236,8 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         live_session: LiveSessionManager::new(),
         model_downloader: ModelDownloader::new(),
         app: app.handle().clone(),
+        // v0.18.2（REQ-251）：目标规划互斥占位（初值 false——未占用）
+        goal_plan_busy: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         ocr_device_config_path,
         ocr_device_config,
         ocr_models,

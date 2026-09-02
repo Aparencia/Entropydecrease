@@ -149,10 +149,15 @@ pub(crate) fn goal_abandon_inner(db: &Db, id: i64, reason: Option<&str>) -> Resu
 
 pub(crate) fn list_goal_graduations_inner(db: &Db) -> Result<Vec<GraduationReport>, String> {
     let jsons = db.list_graduation_reports_json().map_err(|e| e.to_string())?;
-    jsons
-        .into_iter()
-        .map(|json| serde_json::from_str::<GraduationReport>(&json).map_err(|e| e.to_string()))
-        .collect()
+    let mut out = Vec::new();
+    for json in jsons {
+        match serde_json::from_str::<GraduationReport>(&json) {
+            Ok(report) => out.push(report),
+            // 审查修复：单条快照损坏不阻塞档案区（跳过+日志——归档可读性优先）
+            Err(e) => eprintln!("[Goal] 毕业报告快照损坏跳过（id 不可定位，保留原文供排查）: {}", e),
+        }
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

@@ -79,6 +79,31 @@ pub async fn ai_goal_plan(
     authorized: bool,
 ) -> Result<GoalPlanView, String> {
     require_goal(&state.db, goal_id)?;
+    // 审查修复：状态守卫——仅进行中/已暂停可规划（已毕业/放弃无规划意义，
+    // 防误操作与无谓成本）
+    let goal_status = state
+        .db
+        .get_goal(goal_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("目标不存在: {}", goal_id))?
+        .status;
+    if goal_status != "active" && goal_status != "paused" {
+        return Err(format!("仅进行中/已暂停目标可 AI 规划（当前: {}）", goal_status));
+    }
+    // 并发互斥：同步规划无任务去重表——多窗口/双击防重复扣费
+    if state
+        .goal_plan_busy
+        .swap(true, std::sync::atomic::Ordering::SeqCst)
+    {
+        return Err("已有 AI 规划进行中——请等待完成（防重复扣费）".to_string());
+    }
+    struct BusyGuard<'a>(&'a std::sync::atomic::AtomicBool);
+    impl Drop for BusyGuard<'_> {
+        fn drop(&mut self) {
+            self.0.store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+    let _busy = BusyGuard(&state.goal_plan_busy);
     let budget = plan_budget(tier.as_deref().unwrap_or("standard"));
     let settings: AiSettings = state
         .ai_settings
@@ -327,7 +352,15 @@ pub fn goal_apply_plan(
         }
     }
     let mut new_milestones = Vec::new();
+    // 审查修复：apply 为确认流落点——白名单再校验（协议校验在草案侧，此处
+    // 防任意请求直写：self_test 占位契约 M3 前不可写；周界与 add_goal_milestone 同口径）
     for m in &request.milestones {
+        if !matches!(m.criteria_type.as_str(), "manual" | "group_settled") {
+            return Err(format!("不支持的里程碑判据类型: {}", m.criteria_type));
+        }
+        if m.due_weeks > 520 {
+            return Err("里程碑期限超出合理范围（>10 年）".to_string());
+        }
         if let Some(ref_id) = m.ref_group_id {
             if db.get_group(ref_id).map_err(|e| e.to_string())?.is_none() {
                 return Err(format!("里程碑绑定组不存在: {}", ref_id));
