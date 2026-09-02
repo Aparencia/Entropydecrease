@@ -53,7 +53,17 @@ pub(crate) fn init(conn: &Connection) -> Result<()> {
             added_at INTEGER NOT NULL,
             UNIQUE(goal_id, group_id)
         );
-        CREATE INDEX IF NOT EXISTS idx_goal_groups_group ON goal_groups(group_id);",
+        CREATE INDEX IF NOT EXISTS idx_goal_groups_group ON goal_groups(group_id);
+        -- v0.18.1（REQ-255）：毕业报告快照——目标删除后 FK SET NULL 报告仍保留
+        -- （同 notes_versions「回滚不破坏历史」哲学；goal_name 冗余便于档案列表展示）
+        CREATE TABLE IF NOT EXISTS goal_graduation_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            goal_id INTEGER REFERENCES goals(id) ON DELETE SET NULL,
+            goal_name TEXT NOT NULL,
+            report_json TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_graduation_goal ON goal_graduation_reports(goal_id);",
     )?;
     Ok(())
 }
@@ -305,6 +315,131 @@ impl Db {
                 params![now, group_id],
             )?;
             Ok(affected)
+        })
+    }
+
+    // ─────────────────────── v0.18.1 毕业报告（REQ-255/256） ───────────────────────
+
+    /// 写毕业报告快照（目标删除后保留；goal_id SET NULL——报告独立于 goals 行）。
+    pub fn create_graduation_report(&self, goal_id: i64, goal_name: &str, report_json: &str) -> Result<i64> {
+        self.with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO goal_graduation_reports (goal_id, goal_name, report_json, created_at)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![goal_id, goal_name, report_json, unix_seconds()],
+            )?;
+            Ok(conn.last_insert_rowid())
+        })
+    }
+
+    /// 目标的毕业报告 JSON（无 → None——毕业仪式只发一次，防重复确认；
+    /// 解析在命令层——AppError 无 serde 变体，存储态原样返回）。
+    pub fn get_graduation_report_json(&self, goal_id: i64) -> Result<Option<String>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT report_json FROM goal_graduation_reports WHERE goal_id = ?1 ORDER BY id DESC LIMIT 1",
+            )?;
+            let mut rows = stmt.query_map(params![goal_id], |r| r.get::<_, String>(0))?;
+            match rows.next() {
+                Some(Ok(json)) => Ok(Some(json)),
+                Some(Err(e)) => Err(e.into()),
+                None => Ok(None),
+            }
+        })
+    }
+
+    /// 全部毕业报告 JSON（档案区；已删目标的报告仍列出——解析在命令层）。
+    pub fn list_graduation_reports_json(&self) -> Result<Vec<String>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare("SELECT report_json FROM goal_graduation_reports ORDER BY id ASC")?;
+            let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+            rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+        })
+    }
+
+    /// 组结算快照（绑定组维度：名称/历史计数/最近一次——毕业报告与时间线）。
+    /// @ai-context: group_ids 先于 with_conn 取（闭包内严禁再调 self.*——锁不可重入，
+    ///              见 db_goals_progress.rs 同款注释与修复先例）。
+    pub fn goal_settlements_snapshot(
+        &self,
+        goal_id: i64,
+    ) -> Result<Vec<crate::goal_retro::GroupSettlementSnapshot>> {
+        let group_ids = self.list_goal_group_ids(goal_id)?;
+        self.with_conn(|conn| {
+            let mut out = Vec::new();
+            for gid in &group_ids {
+                let name: Option<String> = conn
+                    .query_row("SELECT name FROM note_groups WHERE id = ?1", params![gid], |r| r.get(0))
+                    .ok();
+                let (count, last): (i64, Option<i64>) = conn.query_row(
+                    "SELECT COUNT(*), MAX(created_at) FROM settlements WHERE group_id = ?1",
+                    params![gid],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )?;
+                out.push(crate::goal_retro::GroupSettlementSnapshot {
+                    group_id: *gid,
+                    group_name: name.unwrap_or_else(|| format!("组#{}", gid)),
+                    settlement_count: count as usize,
+                    last_settled_at: last,
+                });
+            }
+            Ok(out)
+        })
+    }
+
+    /// 复习统计（毕业报告口径：卡数/复习次数/90 天活跃日/低稳定性卡数——现算）。
+    pub fn goal_review_stats(&self, goal_id: i64, now_secs: i64) -> Result<crate::goal_retro::ReviewStats> {
+        let window_ms = (now_secs - 90 * 86_400) * 1000;
+        self.with_conn(|conn| {
+            let (cards, logs, days90, weak): (i64, i64, i64, i64) = conn.query_row(
+                "SELECT
+                   (SELECT COUNT(*) FROM flashcards WHERE group_id IN
+                     (SELECT group_id FROM goal_groups WHERE goal_id = ?1)),
+                   (SELECT COUNT(*) FROM review_logs l JOIN flashcards c ON c.id = l.card_id
+                     WHERE c.group_id IN (SELECT group_id FROM goal_groups WHERE goal_id = ?1)),
+                   (SELECT COUNT(DISTINCT l.reviewed_at / 86400000) FROM review_logs l
+                     JOIN flashcards c ON c.id = l.card_id
+                     WHERE c.group_id IN (SELECT group_id FROM goal_groups WHERE goal_id = ?1)
+                       AND l.reviewed_at >= ?2),
+                   (SELECT COUNT(*) FROM flashcards WHERE group_id IN
+                     (SELECT group_id FROM goal_groups WHERE goal_id = ?1)
+                     AND json_valid(state_json) = 1
+                     AND json_extract(state_json, '$.stability') < ?3)",
+                params![goal_id, window_ms, crate::goal_progress::LOW_STABILITY_DAYS],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )?;
+            Ok(crate::goal_retro::ReviewStats {
+                card_total: cards as usize,
+                review_logs_total: logs as usize,
+                review_days_90: days90 as usize,
+                weak_cards: weak as usize,
+            })
+        })
+    }
+
+    /// 成果物清单（组/笔记/卡/概念——「我留下了什么」；概念经体系引用跨链）。
+    pub fn goal_artifacts(&self, goal_id: i64) -> Result<crate::goal_retro::ArtifactsInventory> {
+        self.with_conn(|conn| {
+            let (groups, notes, cards, concepts): (i64, i64, i64, i64) = conn.query_row(
+                "SELECT
+                   (SELECT COUNT(*) FROM goal_groups WHERE goal_id = ?1),
+                   (SELECT COUNT(*) FROM notes WHERE group_id IN
+                     (SELECT group_id FROM goal_groups WHERE goal_id = ?1)),
+                   (SELECT COUNT(*) FROM flashcards WHERE group_id IN
+                     (SELECT group_id FROM goal_groups WHERE goal_id = ?1)),
+                   (SELECT COUNT(DISTINCT l.concept_id) FROM knowledge_links l
+                     WHERE l.target_type = 'note_group'
+                       AND l.target_id IN (SELECT group_id FROM goal_groups WHERE goal_id = ?1)
+                       AND l.concept_id IS NOT NULL)",
+                params![goal_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )?;
+            Ok(crate::goal_retro::ArtifactsInventory {
+                groups: groups as usize,
+                notes: notes as usize,
+                cards: cards as usize,
+                concepts: concepts as usize,
+            })
         })
     }
 }

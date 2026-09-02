@@ -111,6 +111,8 @@ mod commands_knowledge_core;
 mod commands_graph;
 // v0.18.0（REQ-248~250）：学习目标命令层（目标 CRUD/绑定/进度/埋点）
 mod commands_goals;
+// v0.18.1（REQ-255~257）：目标生命周期命令（毕业仪式/回顾流/放弃/毕业档案）
+mod commands_goals_lifecycle;
 // v0.13.2（REQ-206~207）：概念模型卡命令层（创建/组列表）——卡→概念升格拆至 promote 子模块
 mod commands_knowledge_cards;
 mod commands_knowledge_cards_promote;
@@ -239,6 +241,7 @@ mod fusion;
 mod glossary;
 mod goal_interview;
 mod goal_progress;
+mod goal_retro;
 mod goal_rules;
 mod goal_schema;
 // v0.11.0（REQ-196）：结构密度路由纯函数（组路由三态，golden 用例先行）
@@ -547,6 +550,11 @@ pub fn run() {
             commands_goals::bind_goal_group,
             commands_goals::unbind_goal_group,
             commands_goals::suggest_goal_milestones,
+            // v0.18.1（REQ-255~257）：毕业仪式/回顾流/放弃/毕业档案
+            commands_goals_lifecycle::goal_settle,
+            commands_goals_lifecycle::goal_retro,
+            commands_goals_lifecycle::goal_abandon,
+            commands_goals_lifecycle::list_goal_graduations,
             // v0.13.1（REQ-202~205）：知识体系层——体系/问题树/概念/模型/引用/审计探测
             commands_knowledge_systems::list_knowledge_systems,
             commands_knowledge_systems::create_knowledge_system,

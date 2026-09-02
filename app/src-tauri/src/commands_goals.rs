@@ -602,14 +602,14 @@ fn goal_card_metrics(db: &Db, goal: &Goal) -> Result<(String, f64, usize, usize,
     ))
 }
 
-/// 判据 JSON 解析（损坏 → 错误——调用方降级 ready=false；不静默空白）。
-fn parse_criteria(goal: &Goal) -> Result<SuccessCriteria, String> {
-    serde_json::from_str(&goal.success_criteria_json).map_err(|e| e.to_string())
+/// 进度信号收集（详情/列表共用——口径单一；lifecycle 命令组复用）。
+pub(crate) fn collect_signals(db: &Db, goal_id: i64) -> Result<GoalSignals, String> {
+    db.goal_progress_signals(goal_id, unix_seconds()).map_err(|e| e.to_string())
 }
 
-/// 进度信号收集（详情/列表共用——口径单一）。
-fn collect_signals(db: &Db, goal_id: i64) -> Result<GoalSignals, String> {
-    db.goal_progress_signals(goal_id, unix_seconds()).map_err(|e| e.to_string())
+/// 判据 JSON 解析（损坏 → 错误——调用方降级 ready=false；不静默空白）。
+pub(crate) fn parse_criteria(goal: &Goal) -> Result<SuccessCriteria, String> {
+    serde_json::from_str(&goal.success_criteria_json).map_err(|e| e.to_string())
 }
 
 /// ReadinessCheck → 客户端视图。
