@@ -436,6 +436,22 @@
 | REQ-248 | 学习目标数据模型：goals/goal_milestones/goal_groups 三表（db_migrations 幂等；N:M 绑定 UNIQUE(goal_id,group_id)；判据配方/访谈答案 JSON；status 四态无 draft）+ metrics_events kind 扩展（goal_created/goal_milestone_done 写入；self_test_passed/failed 占位契约）+ 组删除 CASCADE 行为测试（goal_groups 级联清、ref_group_id SET NULL） | P1 | 已实施 | v0.18.0 | 意图层对象（目标=组的容器，组仍是唯一容器）；进度信号现算零双写；**代码已交付（2026-09-02，db_goals + 三表 + CASCADE/结算钩子测试）** |
 | REQ-249 | 访谈式目标设定：一套 InterviewDialog 双展开（访谈=四步向导+宣言确认，第 1/3 问必答、2/4 问折叠可跳过；快速=名称+期限判据走默认档）+ goal_interview 纯函数（答案→判据配方/suggest_milestones 里程碑草案/宣言组装，table-driven golden 6 条端到端+参数矩阵）+ 答案可回溯编辑（重新访谈配方重推） | P1 | 已实施 | v0.18.0 | 0 AI 本地规则（M3 叠加 AI 追问）；访谈中断不落库；**代码已交付（2026-09-02，goal_interview + 里程碑草案命令 + InterviewDialog/InterviewSteps）** |
 | REQ-250 | 目标聚合视图：GoalPage 独立 Tab（单行卡：名称/状态徽标/一句话进度/🎓可毕业）+ GoalDetail（里程碑勾选/关联组 N:M/判据明细/弱项块=FSRS 低稳定性卡占比 Top 组）+ goal_rules 四态状态机与毕业判据 + 埋点 + 组结算里程碑自动通过钩子 | P1 | 已实施 | v0.18.0 | 毕业仪式/回顾流/pause-abandon UI 属 M2（状态机纯函数与守卫已先行）；**代码已交付（2026-09-02，GoalPage/GoalCard/GoalDetail + goal_rules/goal_progress + 结算钩子）** |
+| REQ-255 | 毕业仪式与报告快照：goal_settle 命令（毕业判据守卫：未达标/重复毕业/已放弃拒绝）+ goal_graduation_reports 快照表（里程碑/子组结算/复习统计/成果物清单——目标删除后报告仍可读，快照独立于 goals 行）+ 埋点 goal_graduated | P1 | 已立项 | v0.18.1 | 毕业＝用户确认仪式（延续 v0.11.3 结算仪式纪律）；报告快照同 notes_versions「回滚不破坏历史」哲学 |
+| REQ-256 | 回顾流时间线：创建→里程碑→组结算→毕业 全时间线（现算：goals.created_at/milestones/settlements/graduation）+ 毕业报告永久入口 + RetroTimeline UI | P1 | 已立项 | v0.18.1 | 纯只读聚合零双写；毕业报告入口独立于目标存在性（目标删除仍可读） |
+| REQ-257 | 暂停/放弃显式动作（可选原因、无惩罚文案）+ 组删除降级提示 UI（bound 里程碑 ref_group_id SET NULL→「该组已删除，判据信号丢失」按手动确认） | P1 | 已立项 | v0.18.1 | 弹性承诺上延（断签不清零无惩罚）；状态机守卫已有（ADR-027 §3） |
+
+### v0.18.2 · AI 目标规划师（2026-09-02 用户裁决立项）
+
+> 依据：用户指令「目标仅规则算法——我想要接入 AI 用 AI 对目标进行规划，规划内容同步构建体系等等深度联动」＋ 用户逐项裁决（双入口/建议制确认落库/联动四项全选/**AI 提供初步体系**/默认关+授权确认）；
+> 排期：**v0.18.1（M2 毕业仪式）先行 → v0.18.2 实施**；
+> 设计：[2026-09-02-v0.18.2-ai-goal-planning-design.md](../superpowers/specs/2026-09-02-v0.18.2-ai-goal-planning-design.md) ＋ [ADR-028](../adr/ADR-028-ai-goal-planner.md)（已批准）。
+
+| REQ | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
+|----|------|--------|------|---------|------|
+| REQ-251 | AI 规划协议与任务化：GoalPlanProposal（里程碑/组/体系/周契约/说明；serde 强校验：白名单/长度/id 有界/体系门槛）+ ai_goal_plan_estimate/start（ai_refine_estimate 范式；ai_tasks 任务化+轨迹）+ 建议制确认流（GoalPlanApprovalDialog 双入口共用；规则草案一键回退；失败整次降级） | P1 | 已立项 | v0.18.2 | **修订 spec §十六**：建议制 AI 拆解入列（人类确认+失败降级）；每日推送仍不做 |
+| REQ-252 | 目标↔体系深度联动：knowledge_links.target_type 白名单 +'goal'（零迁移）+ 目标详情「服务体系」区 + 体系页「服务于目标 X」反标 + **AI 初步体系**（骨架建议：名称+核心问题+≥1 领域入口+初始概念 3-5；门槛校验缺一丢弃；确认后既有体系命令逐项创建） | P1 | 已立项 | v0.18.2 | 只加引用通道（体系层零侵入）；骨架部分失败不污染目标层 |
+| REQ-253 | 目标↔概念弱项（M3 真实化）+ /goal 对话：目标内概念低激活信号（90 天无引用/未应用）+「最弱概念」块 + ai_chat `/goal` 命令（L4.5 目标摘要现算注入 <1K + L3 检索 top-K） | P1 | 已立项 | v0.18.2 | concept_stale 判据理念；摘要现算无缓存（优化评审 #1 延续） |
+| REQ-254 | 治理与设置：目标 AI 开关（默认关）+ 授权弹窗（content_gate）+ 预算档位化（4K/10K/30K 默认标准）+ 单次硬顶 + token/成本/trajectory 落库 + 设置页「目标 AI」段 | P1 | 已立项 | v0.18.2 | 复用 v0.11.6 Provider/v0.16 授权流/预算硬约束（ADR-027 §4） |
 
 ### V1.0 · 体验增强（远期）
 
