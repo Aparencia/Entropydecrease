@@ -1,7 +1,7 @@
 # ADR-027：学习目标层建模——意图层对象（N:M / 判据配方 / 四态状态机 / 库即记忆）
 
 > 状态：已接受（2026-09-02，随 v0.18.0 M1 实施批补登）
-> 关联：[v0.18 设计规格（已批准）](../superpowers/specs/2026-09-02-v0.18-learning-goals-design.md) · [v0.18.0 版本文档](../versions/v0.18.0.md) · REQ-030 激活/REQ-248~250 · ADR-010（AI 为增强层·本地兜底铁律）· ADR-018（FSRS 调度）· ADR-024（知识体系层）
+> 关联：[v0.18 设计规格（已批准，[ ] 已归档）](../archive/2026-09-02/2026-09-02-v0.18-learning-goals-design.md) · [v0.18.0 版本文档](../versions/v0.18.0.md) · REQ-030 激活/REQ-248~250 · ADR-010（AI 为增强层·本地兜底铁律）· ADR-018（FSRS 调度）· ADR-024（知识体系层）
 
 ## 背景
 
@@ -41,6 +41,6 @@
 
 ## 参考
 
-- [v0.18 学习目标层设计：意图层 · 访谈式设定 · 库即记忆](../superpowers/specs/2026-09-02-v0.18-learning-goals-design.md)
+- [v0.18 学习目标层设计：意图层 · 访谈式设定 · 库即记忆（[ ] 已归档）](../archive/2026-09-02/2026-09-02-v0.18-learning-goals-design.md)
 - [v0.18.0 版本文档（M1 范围/验收）](../versions/v0.18.0.md)
 - [v4 路线图构建顺序分析（P17 意图轴）](../Foresight/v4-roadmap-build-order-analysis.md)

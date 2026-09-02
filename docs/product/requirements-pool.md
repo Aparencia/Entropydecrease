@@ -428,7 +428,7 @@
 ### v0.18.0 · 学习目标层（2026-09-02 用户裁决立项）
 
 > 依据：用户指令「探讨学习目标（长期/短期）是否偏离产品」「目标设定需通过询问明确真正需求，而非『我要学习 xx』」＋优化评审 10 项全部采纳（删缓存列/删 draft 态/单组件双展开/单行卡/FSRS 弱项/里程碑草案/table-driven golden/切分微调/预算档位化）；
-> 设计：[spec 2026-09-02-v0.18-learning-goals-design.md](../superpowers/specs/2026-09-02-v0.18-learning-goals-design.md) ＋ [ADR-027](../adr/ADR-027-goal-layer-modeling.md)；
+> 设计：[spec 2026-09-02-v0.18-learning-goals-design.md（[ ] 已归档）](../archive/2026-09-02/2026-09-02-v0.18-learning-goals-design.md) ＋ [ADR-027](../adr/ADR-027-goal-layer-modeling.md)；
 > 系列规划详见 [versions/v0.18.0.md](../versions/v0.18.0.md)（M1 目标对象+访谈+聚合视图（无 AI）→ M2 毕业仪式+回顾流 → M3 AI 教练默认关）。
 
 | REQ | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
