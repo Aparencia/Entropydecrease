@@ -436,6 +436,8 @@ CREATE TABLE IF NOT EXISTS contracts (
     // v0.8.0 M4（REQ-144）：笔记版本快照链 + AI 成本记录（幂等建表）
     crate::db_notes_versions::init(conn)?;
     crate::db_ai_usage::init(conn)?;
+    // v0.18.0（REQ-248）：学习目标三表（goals/goal_milestones/goal_groups——意图层）
+    crate::db_goals::init(conn)?;
     Ok(())
 }
 

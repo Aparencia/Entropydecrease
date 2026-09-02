@@ -113,6 +113,17 @@ pub fn execute_settlement(
     state.db.create_settlement(group_id, &stats).map_err(|e| e.to_string())?;
     let payload = serde_json::json!({ "groupId": group_id, "merged": merged, "archived": archived }).to_string();
     let _ = state.db.add_metric_event("group_settled", &payload);
+    // v0.18.0（REQ-248）：目标层事件钩子——绑该组的 group_settled 型里程碑
+    // 随结算自动通过（目标层是纯只读聚合+事件钩子，不侵入结算状态机；
+    // 钩子失败仅记日志——结算仪式不能因目标层增强而失败，规格 §九 ①）。
+    match state.db.mark_group_settled_milestones(group_id) {
+        Ok(n) if n > 0 => {
+            let g_payload = serde_json::json!({ "groupId": group_id, "autoPassed": n }).to_string();
+            let _ = state.db.add_metric_event("goal_milestone_done", &g_payload);
+        }
+        Ok(_) => {}
+        Err(e) => eprintln!("[goal] 组结算里程碑自动通过失败（不影响结算）: {}", e),
+    }
     Ok(SettlementResult { merged, archived, core_note_id })
 }
 

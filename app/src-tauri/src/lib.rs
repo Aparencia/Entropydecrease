@@ -109,6 +109,8 @@ mod commands_knowledge_systems;
 mod commands_knowledge_core;
 // v0.14 C2：知识图谱命令层（graph_snapshot 单次聚合）
 mod commands_graph;
+// v0.18.0（REQ-248~250）：学习目标命令层（目标 CRUD/绑定/进度/埋点）
+mod commands_goals;
 // v0.13.2（REQ-206~207）：概念模型卡命令层（创建/组列表）——卡→概念升格拆至 promote 子模块
 mod commands_knowledge_cards;
 mod commands_knowledge_cards_promote;
@@ -189,6 +191,9 @@ mod db_knowledge_decisions;
 mod db_knowledge_canvas;
 // v0.14 C2：知识图谱快照数据层（graph_snapshot 三类边单次聚合）
 mod db_graph;
+// v0.18.0（REQ-248~250）：学习目标——意图层（goals 三表 + 进度现算聚合）
+mod db_goals;
+mod db_goals_progress;
 // v0.14 D：采集质量纯函数层——章节形态决策/OCR 质量分/版面重建/行合并评分/跨帧增量
 mod chapter_morph;
 mod ocr_quality;
@@ -232,6 +237,10 @@ mod frame_features;
 mod foreground_timeline;
 mod fusion;
 mod glossary;
+mod goal_interview;
+mod goal_progress;
+mod goal_rules;
+mod goal_schema;
 // v0.11.0（REQ-196）：结构密度路由纯函数（组路由三态，golden 用例先行）
 mod group_route;
 mod health_check;
@@ -522,6 +531,22 @@ pub fn run() {
             commands_colors::reset_tag_color,
             commands_contracts::upsert_week_contract,
             commands_contracts::week_contract_status,
+            // v0.18.0（REQ-248~250）：学习目标层——目标 CRUD/绑定/进度/埋点（无 AI）
+            commands_goals::create_goal,
+            commands_goals::list_goals,
+            commands_goals::get_goal_detail,
+            commands_goals::get_goal_progress,
+            commands_goals::update_goal,
+            commands_goals::update_goal_interview,
+            commands_goals::delete_goal,
+            commands_goals::update_goal_status,
+            commands_goals::add_goal_milestone,
+            commands_goals::update_goal_milestone,
+            commands_goals::delete_goal_milestone,
+            commands_goals::set_goal_milestone_status,
+            commands_goals::bind_goal_group,
+            commands_goals::unbind_goal_group,
+            commands_goals::suggest_goal_milestones,
             // v0.13.1（REQ-202~205）：知识体系层——体系/问题树/概念/模型/引用/审计探测
             commands_knowledge_systems::list_knowledge_systems,
             commands_knowledge_systems::create_knowledge_system,
