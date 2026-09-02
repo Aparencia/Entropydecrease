@@ -136,11 +136,19 @@ pub async fn ai_goal_plan(
     };
     let honest_note = crate::budget_allocator::honest_truncation_note(truncated).to_string();
     let model = settings.model.clone();
-    // ③ 调用（spawn_blocking：网络不阻塞异步运行时；密钥经 Provider 解析）
+    // ③ 调用（spawn_blocking：网络不阻塞异步运行时；密钥/端点经 Provider 存储
+    // 默认 Provider 解析——与精修同口径 from_settings_with_store，
+    // 修复 2026-09-02：原 from_settings 只读旧字段（SiliconFlow 端点），
+    // 用户配置的 DeepSeek Provider 被绕过 → 401 密钥无效）
     let plan = {
         let stored_key = crate::commands_ai_providers::resolve_default_provider_key(&state)
             .map_err(|e| e.to_string())?;
-        let client = crate::ai_client::AiClient::from_settings(&settings, stored_key);
+        let store = state
+            .ai_providers
+            .lock()
+            .map_err(|e| format!("AI Provider 存储锁中毒: {}", e))?
+            .clone();
+        let client = crate::ai_client::AiClient::from_settings_with_store(&settings, stored_key, &store);
         let adapter = GoalPlanAdapter::new(client);
         tauri::async_runtime::spawn_blocking(move || adapter.plan(&ctx_text))
             .await
