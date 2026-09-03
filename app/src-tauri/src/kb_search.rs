@@ -6,6 +6,10 @@
 //!              不动零破坏。命中携带源引用（note_id/fragment_id + 标题 + 组名
 //!              + 节标题）→ 引用溯源/跳转高亮天然成立。
 //! @ai-context: 结果仅读派生索引（kb_* 表），绝不反向写事实源（铁律 1）。
+//! @ai-context: 两引擎组合口径（审查 O1 登记说明）：纯 LIKE 通道（仅 2 字词）
+//!              词间为 **OR 宽松召回**（like_hits SQL）；fts+like 并存时 like 词
+//!              为 **AND 精修过滤**（fts 主链精排后逐词必中）——前者保召回
+//!              后者防 OR 噪声淹没精排，口径差异为有意设计。
 
 use rusqlite::Connection;
 
@@ -92,21 +96,28 @@ impl Db {
             return Ok(Vec::new());
         }
         self.with_conn(|conn| {
-            let rows: Vec<HitRow> = match &plan.fts {
+            let mut rows: Vec<HitRow> = match &plan.fts {
                 Some(expr) => match fts_hits(conn, expr, limit * FTS_CANDIDATE_FACTOR) {
-                    Ok(mut rows) => {
+                    Ok(rows) => {
                         // fts + like 双引擎 AND：补充词内存过滤（like 词为查询
                         // 字面无通配符——ASCII 大小写不敏感 contains 即 LIKE 等价）
                         if !plan.like_terms.is_empty() {
-                            rows.retain(|r| {
-                                let lower = r.text.to_lowercase();
-                                plan.like_terms
-                                    .iter()
-                                    .all(|t| lower.contains(&t.to_lowercase()))
-                            });
-                            rows.truncate(limit);
+                            let lower_texts: Vec<String> = rows
+                                .iter()
+                                .map(|r| r.text.to_lowercase())
+                                .collect();
+                            rows.into_iter()
+                                .zip(lower_texts)
+                                .filter(|(_, lower)| {
+                                    plan.like_terms
+                                        .iter()
+                                        .all(|t| lower.contains(&t.to_lowercase()))
+                                })
+                                .map(|(r, _)| r)
+                                .collect()
+                        } else {
+                            rows
                         }
-                        rows
                     }
                     Err(e) => {
                         // FTS 语法意外 → 整句 LIKE 兜底（防御红线：检索可用性
@@ -117,6 +128,9 @@ impl Db {
                 },
                 None => like_hits(conn, &plan.like_terms, limit)?,
             };
+            // limit 契约统一收口（fts 候选按 8× 放大取回——过滤后必须裁回；
+            // 审查 H1：此前仅在 like 过滤分支内截断，fts-only 常态超发 8 倍）
+            rows.truncate(limit);
             let hits = rows
                 .into_iter()
                 .map(|r| KbHit {
@@ -216,3 +230,8 @@ fn map_hit_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<HitRow> {
         score_kind: String::new(),
     })
 }
+
+/// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3；与 kb_* 同款 #[path] 挂载）。
+#[cfg(test)]
+#[path = "kb_search_tests.rs"]
+mod tests;

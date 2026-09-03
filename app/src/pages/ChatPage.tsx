@@ -270,11 +270,18 @@ export default function ChatPage(props: Props) {
     setGateError(null);
     try {
       const ok = await launch(activeChatId, "chat_regenerate", {});
-      if (!ok) setGateError("该会话已有进行中的对话——请等待完成或先停止");
+      if (!ok) {
+        setGateError("该会话已有进行中的对话——请等待完成或先停止");
+        return;
+      }
+      // v0.19.1 审查 L4：后端 regenerate 命令执行早期即删除旧 assistant 行——
+      // 立即刷新消息，避免旧 failed/答案气泡（含引用 chips）与新流占位双份
+      // 并列直至终态；终态回调仍照常刷新
+      await loadMessages(activeChatId);
     } catch (e) {
       setGateError(String(e));
     }
-  }, [activeChatId, launch]);
+  }, [activeChatId, launch, loadMessages]);
 
   const setModel = useCallback(async (providerId: string | null, model: string) => {
     if (!activeChatId) return;

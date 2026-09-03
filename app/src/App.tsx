@@ -67,6 +67,15 @@ function App() {
   const [focusNoteId, setFocusNoteId] = useState<number | null>(null);
   // v0.19.1（REQ-260）：引用跳笔记 + 命中词高亮（key 递增——同笔记重复引用可重触发）
   const [focusNoteSearch, setFocusNoteSearch] = useState<{ noteId: number; search: string; key: number } | null>(null);
+
+  // v0.19.1 审查 H1 修复：普通打开统一清带词态——focusNoteSearch 只写不清时，
+  // NotesPage 合并 effect 会优先取残留的旧引用笔记，后续普通跨页跳转被重定向
+  // 到错误笔记（本函数为唯一普通入口；带词打开走 onOpenNoteHighlight 双设）
+  const openNotePlain = (noteId: number) => {
+    setFocusNoteSearch(null);
+    setFocusNoteId(noteId);
+    setPage("notes");
+  };
   // v0.13.7：跨页直达目标体系（组行徽标/结算简报 → 体系页自动选中）
   const [focusSystemId, setFocusSystemId] = useState<number | null>(null);
   // v0.14 C2：图谱组节点 → 笔记页过滤该组（同 focusNoteId 模式）
@@ -288,10 +297,7 @@ function App() {
               setPage("chat");
             }}
             active={page === "sessions"}
-            onOpenNote={(id) => {
-              setFocusNoteId(id);
-              setPage("notes");
-            }}
+            onOpenNote={(id) => openNotePlain(id)}
           />
         </div>
         <div style={{ flex: 1, display: page === "notes" ? "block" : "none", overflow: "hidden" }}>
@@ -319,8 +325,7 @@ function App() {
               setFocusNoteId(noteId);
               setFocusNoteSearch({ noteId, search, key: Date.now() });
               setPage("notes");
-            }}
-            onOpenSettings={() => setPage("settings")}
+            }}            onOpenSettings={() => setPage("settings")}
             // v0.16.1：任务进入对话页（会话页精修启动自动跳转）；任务视图 → 工作台深链
             focusTaskId={focusChatTaskId}
             onFocusTaskConsumed={() => setFocusChatTaskId(null)}
@@ -345,8 +350,9 @@ function App() {
           <GoalsPage />
         </div>
         <div style={{ flex: 1, display: page === "settings" ? "block" : "none", overflow: "hidden" }}>
-          {/* 2026-08-21：设置页（保留挂载——面板状态不因切页重置；TD-004 同模式） */}
-          <SettingsPage />
+          {/* 2026-08-21：设置页（保留挂载——面板状态不因切页重置；TD-004 同模式）；
+              active 透传——学习库段 8s 轮询按可见性门控（v0.19.1 审查 L2） */}
+          <SettingsPage active={page === "settings"} />
         </div>
       </main>
       </div>

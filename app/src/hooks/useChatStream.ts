@@ -82,6 +82,14 @@ export default function useChatStream(onSettled: StreamSettled) {
         syncView(sessionId);
         return;
       }
+      // 终态显式枚举（审查加固）：未来若新增非终态事件而此处未登记——
+      // 告警忽略而不是误清流（原 else 隐含"一切未知=终态"）
+      if (ev.kind !== "done" && ev.kind !== "aborted" && ev.kind !== "failed") {
+        // 穷尽联合下本分支类型为 never——显式转 string 供告警展示
+        const unknownKind = (ev as { kind: string }).kind;
+        console.warn("[useChatStream] 未登记的事件 kind 被忽略（非终态）:", unknownKind);
+        return;
+      }
       // done / aborted / failed：流终态
       accs.current.delete(sessionId);
       hitsRef.current.delete(sessionId);

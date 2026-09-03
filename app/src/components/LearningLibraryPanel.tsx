@@ -18,7 +18,7 @@ const TIERS = [
   { id: "deep", label: "深度（~30K）" },
 ];
 
-export default function LearningLibraryPanel() {
+export default function LearningLibraryPanel({ active = true }: { active?: boolean }) {
   const [qaEnabled, setQaEnabled] = useState(false);
   const [tier, setTier] = useState("standard");
   const [stats, setStats] = useState<KbIndexStats | null>(null);
@@ -45,11 +45,16 @@ export default function LearningLibraryPanel() {
       }
     })();
     void loadStats();
-    // 轻量轮询：设置页常驻（display:none 不卸载）——索引随笔记/碎片保存演进，
-    // 统计静默自新（COUNT 级查询，个人库毫秒级）
+  }, [loadStats]);
+
+  // 轻量轮询（审查 L2 修复）：设置页随应用常驻挂载（display:none 不卸载）——
+  // 轮询只在页面可见时运行（对齐 SessionsPage active 门控先例；进入设置页即
+  // 启动首轮，离开即停——索引随保存演进，统计静默自新，COUNT 级毫秒成本）
+  useEffect(() => {
+    if (!active) return;
     const timer = setInterval(() => void loadStats(), 8000);
     return () => clearInterval(timer);
-  }, [loadStats]);
+  }, [active, loadStats]);
 
   const saveQa = async (nextEnabled: boolean, nextTier: string) => {
     setBusy(true);

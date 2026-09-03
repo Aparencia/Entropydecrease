@@ -38,7 +38,7 @@ export default function CitationChips({ hits, onOpenNote, title = "📚 本地�
                   : undefined
               }
               disabled={!clickable}
-              title={`${label}\n${h.snippet.replace(/==/g, "")}${note ? "\n点击打开笔记并高亮命中" : ""}`}
+              title={`${label}\n${(h.snippet ?? "").replace(/==/g, "")}${note ? "\n点击打开笔记并高亮命中" : ""}`}
               style={{
                 maxWidth: "100%",
                 textAlign: "left",
@@ -57,7 +57,7 @@ export default function CitationChips({ hits, onOpenNote, title = "📚 本地�
             >
               <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
               <span style={{ color: "#9ca3af", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 }}>
-                {h.snippet.replace(/==/g, "")}
+                {(h.snippet ?? "").replace(/==/g, "")}
               </span>
             </button>
           );

@@ -71,10 +71,13 @@ impl Db {
             Ok((note_ids, frag_ids))
         })?;
         let total = (note_ids.len() + frag_ids.len()) as u64;
-        // ② 启动即清零失败计数 + 落格式版本（本次重建口径的诚实报告）
+        // ② 启动：清零失败计数（本次重建口径）+ 整清两影子表——落实头注
+        // "删除全部 kb_* → 全量重切重写"；整表清同时物理消灭级联/失败路径
+        // 遗留的 kb_fts 孤儿行（审查 M2：孤儿清扫原实现只能从现存 chunk 出发，
+        // fts 引用已失 chunk 的行永不可见不可清——整清后无需孤儿清扫）
         self.with_conn(|conn| {
             reset_index_errors(conn);
-            meta_set(conn, META_INDEX_VERSION, &KB_INDEX_VERSION.to_string())?;
+            conn.execute_batch("DELETE FROM kb_fts; DELETE FROM kb_chunks;")?;
             Ok(())
         })?;
         let mut done = 0u64;
@@ -129,30 +132,12 @@ impl Db {
             done += 1;
             progress(done, total);
         }
-        // ③ 孤儿清扫（源行已失的残留块——FK 级联只覆盖常规路径；极端写
-        // 入口/历史遗留的孤儿在此物理清除——stats 脏源归零的必要条件）
-        self.with_conn(|conn| {
-            conn.execute(
-                "DELETE FROM kb_fts WHERE chunk_id IN (SELECT c.id FROM kb_chunks c
-                 LEFT JOIN notes n ON n.id = c.note_id
-                 LEFT JOIN fragments f ON f.id = c.fragment_id
-                 WHERE (c.source_kind='note' AND n.id IS NULL)
-                    OR (c.source_kind='fragment' AND f.id IS NULL))",
-                [],
-            )?;
-            conn.execute(
-                "DELETE FROM kb_chunks WHERE id IN (SELECT c.id FROM kb_chunks c
-                 LEFT JOIN notes n ON n.id = c.note_id
-                 LEFT JOIN fragments f ON f.id = c.fragment_id
-                 WHERE (c.source_kind='note' AND n.id IS NULL)
-                    OR (c.source_kind='fragment' AND f.id IS NULL))",
-                [],
-            )?;
-            Ok(())
-        })?;
-        // ④ 完成标记（失败也已落库计数——UI 角标如实；成功则 last_error 已清）
+        // ④ 完成标记：格式版本与完成时间**同点落值**（审查 L3：版本先行会在
+        // 中途终止时留下"版本已最新+零错误+旧完成时间"的自相矛盾状态——
+        // 移到收尾，中断即保持旧版本 → 角标"待重建"如实）
         let reindex_at = crate::kb_index::now_seconds();
         let _ = self.with_conn(|conn| {
+            meta_set(conn, META_INDEX_VERSION, &KB_INDEX_VERSION.to_string())?;
             meta_set(conn, META_REINDEX_ALL_AT, &reindex_at.to_string())?;
             Ok(())
         });

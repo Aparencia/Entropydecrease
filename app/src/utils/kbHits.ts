@@ -15,10 +15,26 @@ export function parseKbMeta(metaJson: string | null): KbMessageMeta | null {
     const v = JSON.parse(metaJson) as Partial<KbMessageMeta>;
     if (v?.mode !== "answer" && v?.mode !== "hits-only") return null;
     if (!Array.isArray(v.hits)) return null;
-    return { mode: v.mode, hits: v.hits as KbHit[] };
+    // 审查 L3：元素级最小校验——单条畸形（历史/手工/跨版本字段漂移）丢弃而非
+    // 整包拒绝或让渲染层对 undefined 字段崩（渲染契约依赖 snippet/chunkId）
+    const hits = (v.hits as unknown[]).filter(isKbHit);
+    return { mode: v.mode, hits };
   } catch {
     return null;
   }
+}
+
+/** 元素级契约校验（渲染所需字段齐备才算合法命中） */
+function isKbHit(x: unknown): x is KbHit {
+  if (typeof x !== "object" || x === null) return false;
+  const o = x as Record<string, unknown>;
+  return (
+    typeof o.chunkId === "number" &&
+    (o.sourceKind === "note" || o.sourceKind === "fragment") &&
+    typeof o.snippet === "string" &&
+    (o.noteId === null || typeof o.noteId === "number") &&
+    (o.noteTitle === null || typeof o.noteTitle === "string")
+  );
 }
 
 /** snippet 首个 `==词==` 标记（命中词高亮跳转搜索词；无标记 → null） */

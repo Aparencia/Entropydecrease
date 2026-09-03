@@ -65,9 +65,8 @@ pub fn truncate_retrieval(text: &str, budget_chars: usize) -> String {
 
 /// 多片段排序截断（按给定相关性得分离低；总量 ≤ budget_chars——O(N log N) 排序
 /// 后单遍累加，**输出上界与输入规模无关**：预算恒定）。
-/// 登记豁免 dead_code：多片段检索打包为 L3 FTS 接线预留（当前最小面上文为
-/// 单体串截断 truncate_retrieval——本函数 TDD 就绪，随 REQ-024 检索增强启用）。
-#[allow(dead_code)]
+/// @ai-context: v0.19.1（REQ-260）学习库问答上下文打包消费本函数（kb_prompt::kb_build_context）——
+///              原"预留 dead_code"豁免注释与 #[allow] 已随转正移除（审查 L6 清理）。
 pub fn pack_fragments(fragments: &[(String, f64)], budget_chars: usize) -> (String, bool) {
     let mut sorted: Vec<&(String, f64)> = fragments.iter().collect();
     sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));

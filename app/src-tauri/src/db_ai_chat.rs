@@ -46,7 +46,8 @@ pub struct ChatMessage {
     /// v0.19.1（REQ-260）：消息级元数据 JSON（学习库问答=命中/引用清单；
     /// NULL=无元数据——既有消息零变化）
     pub meta_json: Option<String>,
-    /// done | aborted | failed（failed 内容为空——错误详情走流事件）
+    /// done | aborted | failed（failed 内容=错误占位文本（截断）；错误详情另走
+    /// 流事件——审查注释修正：早期实现曾为空，现与 failed 占位语义一致）
     pub status: String,
     pub created_at: i64,
 }
@@ -165,6 +166,17 @@ impl Db {
     pub fn delete_chat_session(&self, id: i64) -> Result<()> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.execute("DELETE FROM chat_sessions WHERE id=?1", params![id])?;
+        Ok(())
+    }
+
+    /// 轻量交互触点（v0.19.1 审查 L5 修复）：会话"最近更新"排序 bump——
+    /// 学习库问答 gate-off/失败路径无 model 回写，须显式 touch 保持排序如实。
+    pub fn touch_chat_session(&self, id: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        conn.execute(
+            "UPDATE chat_sessions SET updated_at=?1 WHERE id=?2",
+            params![crate::db_sessions_rows::unix_seconds(), id],
+        )?;
         Ok(())
     }
 

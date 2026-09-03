@@ -64,6 +64,9 @@ pub(crate) fn kb_chat_send(
         end_stream(state, session_id);
         return Err(e.to_string());
     }
+    // 交互即"最近更新"（gate-off 路径无 model 回写不再 bump——显式 touch；
+    // 审查 L5：此前仅生成成功路径经 set_chat_session_model 顺带刷新排序）
+    let _ = state.db.touch_chat_session(session_id);
     kb_run(state, session_id, content, channel, flag, &settings)
 }
 
@@ -75,7 +78,15 @@ pub(crate) fn kb_chat_regenerate(
 ) -> Result<(), String> {
     let settings = settings_snapshot(state)?;
     let flag = try_begin_stream(state, session_id)?;
-    let msgs = state.db.list_chat_messages(session_id).map_err(|e| e.to_string())?;
+    let msgs = match state.db.list_chat_messages(session_id) {
+        Ok(m) => m,
+        // 审查 M2：flag 已注册——任何早退必须 end_stream，否则会话永久
+        // "进行中"直至重启
+        Err(e) => {
+            end_stream(state, session_id);
+            return Err(e.to_string());
+        }
+    };
     // 先定位并删除旧回答（failed/aborted 占位一并重试——语义同纯聊 regenerate）
     let old_assistant = msgs.iter().rev().find(|m| m.role == "assistant");
     if let Some(last) = old_assistant {
@@ -90,7 +101,10 @@ pub(crate) fn kb_chat_regenerate(
         .find(|m| m.role == "user")
         .map(|m| m.content.trim().to_string());
     match question {
-        Some(q) if !q.is_empty() => kb_run(state, session_id, &q, channel, flag, &settings),
+        Some(q) if !q.is_empty() => {
+            let _ = state.db.touch_chat_session(session_id);
+            kb_run(state, session_id, &q, channel, flag, &settings)
+        }
         _ => {
             end_stream(state, session_id);
             Err("没有可重新生成的提问（历史已空）".to_string())
@@ -171,15 +185,23 @@ fn kb_run(
         let _ = state.db.set_chat_session_model(session_id, None, &model);
     }
     let meta_answer = kb_meta_json("answer", &hits);
+    // 失败分支共用的 hits-only meta 快照（线程内命中引用保留——审查 H1：
+    // 生成中失败（断网/401/429）也必须挂 meta，前端 failed 气泡据此渲染引用）
+    let meta_hits = kb_meta_json("hits-only", &hits);
     let st = state.clone();
     let q = question.to_string();
     let tier = settings.kb_qa_tier.clone();
     tauri::async_runtime::spawn_blocking(move || {
         // ④ 片段全文取回 → 预算打包（pack_fragments 转正——硬顶 + 诚实截断）
-        let text_map = st
-            .db
-            .kb_chunk_texts(&hits.iter().map(|h| h.chunk_id).collect::<Vec<_>>())
-            .unwrap_or_default();
+        let chunk_ids: Vec<i64> = hits.iter().map(|h| h.chunk_id).collect();
+        let text_map = match st.db.kb_chunk_texts(&chunk_ids) {
+            Ok(m) => m,
+            Err(e) => {
+                // 审查 L4：取回失败不得静默——记录并按空文本降级（命中引用仍在）
+                eprintln!("[kb-chat] 命中全文取回失败（按空文本降级）: {}", e);
+                std::collections::HashMap::new()
+            }
+        };
         let entries: Vec<(KbHit, String)> = hits
             .iter()
             .cloned()
@@ -228,13 +250,28 @@ fn kb_run(
             Err(e) => {
                 let msg = e.to_string();
                 let _ = channel.send(ChatStreamEvent::from(&e));
-                let _ = st.db.insert_chat_message(
+                // 失败回退命中列表（hits-only meta 照挂——引用不丢；历史过滤
+                // 按 failed 排除——审查 H1 修复：生成中失败与生成前失败同契约）
+                match st.db.insert_chat_message(
                     session_id,
                     "assistant",
                     &truncate_chars(&msg, 500),
                     "failed",
-                );
-                // 失败回退命中列表（meta 照挂——引用不丢；历史过滤按 failed 排除）
+                ) {
+                    Ok(id) => {
+                        let _ = st.db.finish_chat_message(
+                            id,
+                            &truncate_chars(&msg, 500),
+                            "failed",
+                            None,
+                            Some(&model),
+                        );
+                        if let Some(meta) = &meta_hits {
+                            let _ = st.db.set_chat_message_meta(session_id, id, Some(meta));
+                        }
+                    }
+                    Err(e2) => eprintln!("[kb-chat] 失败消息落库失败: {}", e2),
+                }
             }
         }
         end_stream(&st, session_id);

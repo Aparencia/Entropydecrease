@@ -76,11 +76,35 @@ fn stopword_only_query_is_honestly_empty() {
 }
 
 #[test]
-fn quote_chars_are_escaped_in_fts() {
-    // Arrange/Act（防 FTS 语法注入——引号按 FTS5 双引号转义）
+fn quotes_are_stripped_before_engine_routing() {
+    // 审查 M1：带引号 token 先剥引号再判档——"say \"hi\" there"：say/there 进
+    // fts；"hi"（剥后 2 字）转 LIKE，与不带引号行为一致（否则 trigram 零 token
+    // 短语静默漏检）
     let p = plan_query("say \"hi\" there");
-    // Assert（say/"hi"(4 字)/there 全进 fts；`"hi"` → `"""hi"""`）
-    assert_eq!(p.fts.as_deref(), Some(r#""say" OR """hi""" OR "there""#));
+    assert_eq!(p.fts.as_deref(), Some("\"say\" OR \"there\""));
+    assert_eq!(p.like_terms, vec!["hi"]);
+    assert!(p.highlight_terms.contains(&"hi".to_string()));
+}
+
+#[test]
+fn fullwidth_quoted_two_char_cjk_routes_to_like() {
+    // 审查 M1：全角引号 “配色” 剥后 2 字 → LIKE 通道（原实现按原文 4 字符
+    // 进 FTS，实际 trigram 无法索引 2 字——静默零命中）
+    let p = plan_query("\u{201C}配色\u{201D}");
+    assert_eq!(p.fts, None);
+    assert_eq!(p.like_terms, vec!["配色"]);
+}
+
+#[test]
+fn long_segment_window_expansion_is_bounded() {
+    // 审查 M3：>6 字段滑窗只取首/尾 24 字区且总量硬顶——任意长问句表达式有界
+    let seg: String = "甲乙丙丁".repeat(40); // 160 字符
+    let p = plan_query(&seg);
+    let fts = p.fts.expect("fts 应有候选");
+    let terms = fts.matches(" OR ").count() + 1;
+    assert!(terms <= 96, "窗口膨胀必须有界（审查 M3）: {} 词", terms);
+    assert!(!fts.contains(&format!("\"{}\"", seg)), "超长段不整段 verbatim");
+    assert!(fts.contains("\"甲乙丙\""), "头区滑窗保留: {}", fts);
 }
 
 // ---------- RRF 融合 ----------

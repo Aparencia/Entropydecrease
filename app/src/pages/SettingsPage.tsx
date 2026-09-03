@@ -40,7 +40,12 @@ function GroupTitle({ children }: { children: React.ReactNode }) {
   return <div style={groupTitle}>{children}</div>;
 }
 
-export default function SettingsPage() {
+interface Props {
+  /** v0.19.1 审查 L2 修复：页面可见性（display:none 常驻——轮询类面板按此门控） */
+  active?: boolean;
+}
+
+export default function SettingsPage({ active = true }: Props) {
   return (
     <div style={{ height: "calc(100vh - 56px)", overflowY: "auto" }}>
       <div style={{ maxWidth: 720, padding: "12px 16px 24px" }}>
@@ -88,7 +93,7 @@ export default function SettingsPage() {
         {/* v0.19（REQ-258/260）：学习库（检索与发现层——引擎/生成/索引重建） */}
         <GroupTitle>学习库</GroupTitle>
         <div style={{ ...panel, marginBottom: 4 }}>
-          <LearningLibraryPanel />
+          <LearningLibraryPanel active={active} />
         </div>
 
         {/* ── 数据（备份/恢复） ── */}

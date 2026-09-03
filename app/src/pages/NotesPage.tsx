@@ -162,6 +162,10 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
         setNotes(list);
         const target = list.find((n) => n.id === targetId);
         if (target) {
+          // v0.19.1 审查 M2：引用跳转=阅读+高亮主路径——先退出编辑态
+          // （handleSelect 同款语义：NoteEditView 卸载自动保存 dirty 草稿，
+          // 防旧内容串写 + 防 externalSearch 注入落到编辑视图）
+          setEditing(false);
           setSelected(target);
           // L2：定时器登记入 ref（cleanup 可清理），不再裸 setTimeout
           timersRef.current.push(

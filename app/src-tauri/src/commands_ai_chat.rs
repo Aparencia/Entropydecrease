@@ -200,7 +200,14 @@ pub async fn chat_regenerate(
     let model = client.config.model.clone();
     // 单活跃流注册早于删除动作（审查修复：与 chat_send 同纪律）
     let flag = try_begin_stream(&state, session_id)?;
-    let msgs = state.db.list_chat_messages(session_id).map_err(|e| e.to_string())?;
+    // 审查 M2（v0.19.1 同修既有泄漏）：flag 已注册——list 失败早退必须 end_stream
+    let msgs = match state.db.list_chat_messages(session_id) {
+        Ok(m) => m,
+        Err(e) => {
+            end_stream(&state, session_id);
+            return Err(e.to_string());
+        }
+    };
     if let Some(last_assistant) = msgs.iter().rev().find(|m| m.role == "assistant") {
         if let Err(e) = state.db.delete_chat_message(session_id, last_assistant.id) {
             end_stream(&state, session_id);

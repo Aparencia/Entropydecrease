@@ -67,11 +67,15 @@ fn ascii_words_match_case_insensitive() {
     let db = mem_db();
     db.create_note(&make_note("css", "Learn Canvas Layout basics here.")).unwrap();
     db.create_note(&make_note("other", "no relevant words.")).unwrap();
-    // Act（大小写混写查询）
+    // Act（大小写混写查询——两词各自成词命中）
     let hits = db.kb_search("canvas layout", 10).unwrap();
     // Assert
     assert_eq!(hits.len(), 1);
-    assert!(hits[0].snippet.contains("==Canvas Layout=="), "snippet={}", hits[0].snippet);
+    assert!(
+        hits[0].snippet.contains("==Canvas==") && hits[0].snippet.contains("==Layout=="),
+        "snippet={}",
+        hits[0].snippet
+    );
 }
 
 #[test]
@@ -79,11 +83,11 @@ fn heading_words_are_searchable() {
     // Arrange：标题行在 chunk 文本内（heading-aware 切块保留行首）
     let db = mem_db();
     db.create_note(&make_note("色彩", "# 第二章 色彩搭配\n\n正文不限标题。")).unwrap();
-    // Act：整段标题短语为查询（trigram 命中标题行）
+    // Act：整段标题短语为查询（trigram 命中标题行；heading 字段=去 '#' 全文本）
     let hits = db.kb_search("第二章 色彩搭配", 10).unwrap();
     // Assert
     assert_eq!(hits.len(), 1);
-    assert_eq!(hits[0].heading.as_deref(), Some("色彩搭配"));
+    assert_eq!(hits[0].heading.as_deref(), Some("第二章 色彩搭配"));
 }
 
 #[test]
@@ -126,14 +130,28 @@ fn group_name_and_fragment_fields_surface() {
 #[test]
 fn fts_and_like_engines_combine_with_and() {
     // Arrange：CSS(fts) + 布局(like 2 字) 双引擎 AND——两篇只中一
+    // （夹具注意：b 正文不得含"布局"二字——审查修正原夹具误含"布局二字"致双中）
     let db = mem_db();
     db.create_note(&make_note("a", "CSS 布局教程内容。")).unwrap();
-    db.create_note(&make_note("b", "CSS 教程但没有布局二字内容。")).unwrap();
+    db.create_note(&make_note("b", "CSS 教程只讲网格与配色。")).unwrap();
     // Act
     let hits = db.kb_search("CSS 布局", 10).unwrap();
     // Assert
     assert_eq!(hits.len(), 1, "双引擎 AND——仅同时满足者命中");
     assert_eq!(hits[0].note_title.as_deref(), Some("a"));
+}
+
+#[test]
+fn quoted_two_char_word_hits_like_db() {
+    // Arrange（审查 M1 端到端）：带引号 "配色" 与不带引号行为一致——LIKE 命中
+    let db = mem_db();
+    db.create_note(&make_note("配色", "配色是配色的基础。")).unwrap();
+    // Act
+    let hits = db.kb_search("\"配色\"", 10).unwrap();
+    // Assert
+    assert_eq!(hits.len(), 1, "剥引号后 2 字走 LIKE——不再静默零命中");
+    assert_eq!(hits[0].score_kind, "like");
+    assert!(hits[0].snippet.contains("==配色=="), "snippet={}", hits[0].snippet);
 }
 
 #[test]
@@ -161,7 +179,7 @@ fn limit_is_honored_and_clamped() {
 fn long_note_chunking_keeps_search_across_sections() {
     // Arrange：800+ 字符长节后再加尾节——跨块检索正常（切块不吞内容）
     let db = mem_db();
-    let long: String = std::iter::repeat('填').take(850).collect();
+    let long: String = "填".repeat(850);
     let note = db.create_note(&make_note("长文", "")).unwrap();
     db.update_note(
         note.id,

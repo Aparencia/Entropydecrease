@@ -40,13 +40,22 @@ pub struct KbQueryPlan {
 
 /// 查询 → 候选规划（纯函数；空/全停用词 → 全空三件套——调用方按"无命中"
 /// 处理，诚实明说不猜）。
+///
+/// @ai-context: 分类前剥离成对引号（"…" 与 “…”/‘…’）——trigram 只索引字母
+///              数字连续段，带引号的 "配色" 若按原文 4 字符判长会进 FTS 而
+///              内部 token 仅 2 字符致静默零命中（审查 M1：先剥引号再按内容
+///              判档——剥后 <3 字转 LIKE 子串，与不带引号行为一致）。
 pub fn plan_query(query: &str) -> KbQueryPlan {
     let mut fts_terms: Vec<String> = Vec::new();
     let mut like_terms: Vec<String> = Vec::new();
     let mut highlight: Vec<String> = Vec::new();
     for token in query.split_whitespace() {
-        if contains_cjk(token) {
-            for seg in split_cjk_stops(token) {
+        let stripped = strip_outer_quotes(token);
+        if stripped.is_empty() {
+            continue;
+        }
+        if contains_cjk(stripped) {
+            for seg in split_cjk_stops(stripped) {
                 if seg.chars().count() == 2 {
                     push_unique(&mut like_terms, &seg);
                     push_unique(&mut highlight, &seg);
@@ -58,12 +67,12 @@ pub fn plan_query(query: &str) -> KbQueryPlan {
                 }
                 // 1 字残段丢弃（trigram 与 LIKE 均无意义——诚实舍弃）
             }
-        } else if token.chars().count() >= 3 {
-            push_unique(&mut fts_terms, token);
-            push_unique(&mut highlight, token);
-        } else if token.chars().count() == 2 {
-            push_unique(&mut like_terms, token);
-            push_unique(&mut highlight, token);
+        } else if stripped.chars().count() >= 3 {
+            push_unique(&mut fts_terms, stripped);
+            push_unique(&mut highlight, stripped);
+        } else if stripped.chars().count() == 2 {
+            push_unique(&mut like_terms, stripped);
+            push_unique(&mut highlight, stripped);
         }
     }
     let fts = (!fts_terms.is_empty()).then(|| {
@@ -74,6 +83,27 @@ pub fn plan_query(query: &str) -> KbQueryPlan {
             .join(" OR ")
     });
     KbQueryPlan { fts, like_terms, highlight_terms: highlight }
+}
+
+/// 剥离最外层成对引号（ASCII 直引号 + 中文全角引号；不成对/内嵌 → 原样）。
+fn strip_outer_quotes(token: &str) -> &str {
+    let b = token.as_bytes();
+    if b.len() < 2 {
+        return token;
+    }
+    let first = token.chars().next().expect("len≥1");
+    let last = token.chars().last().expect("len≥1");
+    let paired = matches!(
+        (first, last),
+        ('"', '"') | ('\'', '\'') | ('\u{201C}', '\u{201D}') | ('\u{2018}', '\u{2019}')
+    );
+    if paired {
+        let inner = &token[first.len_utf8()..token.len() - last.len_utf8()];
+        // 剥一层即可（内嵌引号属词内符号——由 fts 短语/LIKE 字面按原样处理）
+        inner
+    } else {
+        token
+    }
 }
 
 /// 段落含 CJK 判定（CJK 统一表意区含扩展——覆盖日常用语）。
@@ -105,16 +135,44 @@ fn split_cjk_stops(run: &str) -> Vec<String> {
 /// 段 → 整段 + 3~6 字滑动窗口短语（>6 字时展开：防"学色彩搭配"式前缀粘连
 /// 致整段短语落空——整段 verbatim 命中 + 滑窗 OR，bm25 自然把真关键词
 /// 所在块排前）。
+///
+/// @ai-context: 膨胀上界（审查 M3：聊天消息 ≤16000 字符时按 n 全展开会生成
+///              ~4n 短语 + 去重 O(n²)，秒级卡顿）：>32 字段不再发整段（verbatim
+///              命中概率趋零）；滑窗只在**首 24 / 尾 24** 两区取 k=3..6，且总量
+///              硬顶 96——任何输入下表达式有界（毫秒级），超长问句语义集中在
+///              头尾关键词，尾区保尾词召回）。
+const WINDOW_WHOLE_MAX_CHARS: usize = 32;
+const WINDOW_EDGE_CHARS: usize = 24;
+const WINDOW_TERMS_CAP: usize = 96;
+
 fn cjk_windows(seg: &str) -> Vec<String> {
     let chars: Vec<char> = seg.chars().collect();
     let n = chars.len();
     if n <= 6 {
         return vec![chars.iter().collect()];
     }
-    let mut wins = vec![chars.iter().collect()];
-    for k in 3..=6 {
-        for start in 0..=n - k {
-            wins.push(chars[start..start + k].iter().collect());
+    let mut wins: Vec<String> = Vec::new();
+    if n <= WINDOW_WHOLE_MAX_CHARS {
+        wins.push(chars.iter().collect());
+    }
+    // 首/尾两区的滑动窗（n ≤ 48 时头尾重叠——第二区置空即可全覆盖）
+    let edge2 = WINDOW_EDGE_CHARS * 2;
+    let regions: [(usize, usize); 2] = if n > edge2 {
+        [(0, WINDOW_EDGE_CHARS), (n - WINDOW_EDGE_CHARS, WINDOW_EDGE_CHARS)]
+    } else {
+        [(0, n), (0, 0)]
+    };
+    for (base, len) in regions {
+        if len == 0 {
+            continue; // 第二区占位空（len=0 无窗）
+        }
+        for k in 3..=6 {
+            for start in 0..=len.saturating_sub(k) {
+                if wins.len() >= WINDOW_TERMS_CAP {
+                    return wins;
+                }
+                wins.push(chars[base + start..base + start + k].iter().collect());
+            }
         }
     }
     wins

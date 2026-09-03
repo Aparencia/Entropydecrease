@@ -16,7 +16,9 @@
 use rusqlite::{Connection, OptionalExtension};
 
 use crate::db::unix_seconds;
-use crate::kb_chunk::{chunk_fragment, chunk_note};/// 派生索引格式版本（索引语义变更/embedding 接入时 +1——与 kb_meta 不符即
+use crate::kb_chunk::{chunk_fragment, chunk_note};
+
+/// 派生索引格式版本（索引语义变更/embedding 接入时 +1——与 kb_meta 不符即
 /// 触发前端"索引待重建"角标；reindex_all 落当前值）。
 pub const KB_INDEX_VERSION: i64 = 1;
 

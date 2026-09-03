@@ -25,6 +25,24 @@ describe("parseKbMeta", () => {
     expect(meta?.hits[0].noteId).toBe(7);
   });
 
+  it("元素级畸形命中被过滤（审查 L3——不整包拒绝也不崩渲染）", () => {
+    const malformed = [
+      { chunkId: "x", snippet: 42 }, // chunkId/snippet 类型错
+      null,
+      { ...noteHit, snippet: undefined },
+    ];
+    const meta = parseKbMeta(JSON.stringify({ mode: "answer", hits: [noteHit, ...malformed] }));
+    expect(meta?.mode).toBe("answer");
+    expect(meta?.hits).toHaveLength(1);
+    expect(meta?.hits[0].chunkId).toBe(1);
+  });
+
+  it("全部畸形 → 合法空数组（渲染零噪音）", () => {
+    const meta = parseKbMeta(JSON.stringify({ mode: "hits-only", hits: [{ junk: true }] }));
+    expect(meta).not.toBeNull();
+    expect(meta?.hits).toEqual([]);
+  });
+
   it("畸形/缺失/null 全部诚实返回 null", () => {
     expect(parseKbMeta(null)).toBeNull();
     expect(parseKbMeta("not json")).toBeNull();

@@ -51,14 +51,31 @@ export default function NoteReadingView({
   const [searchIndex, setSearchIndex] = useState(0);
   const [searchMatches, setSearchMatches] = useState<HTMLElement[]>([]);
   const contentRef = useRef<HTMLDivElement>(null);
+  // v0.19.1 审查 L1：已注入请求登记（{noteId,key}）——消费后不复活：
+  // 用户关闭搜索/离开笔记再普通打开同一笔记时，旧命中词不得自动重现
+  const injectedRef = useRef<{ noteId: number; key: number } | null>(null);
 
   // v0.19.1：外部命中词搜索（引用跳转自动激活——key 递增允许同词重触发；
-  // 用户手动关闭搜索后不再被旧请求拉起）
+  // 编辑态不注入（审查 M2——高亮只属于阅读视图，且搜索框 autoFocus 不得抢
+  // 编辑器焦点）；编辑退出后同一请求可再次注入）
   useEffect(() => {
     if (externalSearch == null) return;
+    if (editing) {
+      injectedRef.current = null;
+      return;
+    }
+    if (
+      injectedRef.current?.noteId === note.id &&
+      injectedRef.current.key === externalSearch.key
+    ) {
+      return;
+    }
+    injectedRef.current = { noteId: note.id, key: externalSearch.key };
     setSearchQuery(externalSearch.query);
     setSearchActive(true);
-  }, [externalSearch?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 请求语义=note+key+query；
+    // editing/note.id 变化需重评估（null↔值往返不注入）
+  }, [externalSearch?.key, externalSearch?.query, editing, note.id]);
 
   // v0.15：大纲折叠态外提至 NotesPage（统一列折叠）；本组件仅剩取数
   // ── 大纲：从 Markdown 提取标题 ──
