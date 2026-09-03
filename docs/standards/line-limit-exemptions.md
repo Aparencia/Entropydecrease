@@ -64,6 +64,11 @@
 | app/src-tauri/src/live_session.rs | 368 | 会话装配/状态（LiveSessionParams 聚合 + run_session_after_engine 骨架 + ProfileOverride 细目字段）；v0.13.6 +2 | 若再增长：ProfileOverride 与参数分拆至 live_session_params.rs |
 | app/src-tauri/src/commands_goals.rs | 525 | v0.18.0（REQ-248~250）：学习目标命令域（15 命令 + inner 纯编排 + 访谈校验/埋点/宣言组装/进度收集）——命令薄壳与 inner 同域（commands_knowledge_core 先例）；列表/详情/进度三视图共用 collect_signals/goal_card_metrics；v0.18.1 生命周期命令已拆至 commands_goals_lifecycle.rs | 若再增长：里程碑命令组拆至 commands_goals_milestones.rs |
 | app/src-tauri/src/db_goals.rs | 431 | v0.18.0（REQ-248~250）：goals 三表 DDL + 实体 CRUD/绑定/结算钩子内聚；行映射与事务建目标共享 add_milestone 族；v0.18.1（REQ-255/256）毕业报告快照表与报告取数（结算快照/复习统计/成果物清单）再增 | 若再增长：毕业报告取数拆至 db_goals_graduation.rs |
+| app/src-tauri/src/db_migrations.rs | 492 | v0.19.0（REQ-258）kb 三表 DDL 接入后实测 492（登记值 204 为拆分当年过期快照——含全部既有 schema 建表/ensure_column 迁移，属 pre-0.19 未登记存量）；schema 单点收敛保证新库/旧库迁移幂等一致 | 若再增长：kb_* 与 chat_* 表 DDL 拆至 db_migrations_kb.rs（v0.19 系列内如再增即执行） |
+| app/src-tauri/src/commands_ai_chat.rs | 317 | v0.16 对话命令域 + v0.19.1（REQ-260）检索分支薄壳（纯聊链路零改动；kb 编排已拆至 commands_ai_chat_kb.rs 267 行）——检索分流点与 run_stream 共用会话编排上下文 | 若再增长：run_stream 与纯聊发送拆至 commands_ai_chat_plain.rs |
+| app/src-tauri/src/commands_ai_settings.rs | 330 | AI 设置命令域（视图/密钥/授权/目标 AI） + v0.19.1 ai_set_kb_qa 最小面命令（+28）——read-modify-write 同域先例（ai_set_goal_plan）内聚 | 若再增长：kb/goal 最小面命令拆至 commands_ai_settings_extra.rs |
+| app/src-tauri/src/db_ai_chat.rs | 309 | AI 对话双表仓储 + v0.19.1（REQ-260）retrieval/meta_json 补列与行映射（+42）——SQL/行映射内聚（db_* 文件先例） | 若再增长：消息侧读写拆至 db_ai_chat_messages.rs |
+| app/src-tauri/src/db_fragments.rs | 309 | 碎片数据层 + v0.19.0（REQ-258）索引生命周期钩子（建/删/升笔记事务内清块重建，+16）——promote 显式事务与知识链接清理同域 | 若再增长：promote_fragment_to_note 事务拆至 db_fragments_promote.rs |
 
 ## 前端（app/src/，数字来自前端审查快照；Task #9/10 拆分进行中）
 
@@ -85,6 +90,9 @@
 | app/src/components/KnowledgeCanvasView.tsx | 466 | v0.13.8 画布主视图（RF 装配/拖拽防抖保存/视口持久化/自动排列）；v0.13.9 根卡 + 接线方向动态化；v0.14.1 布局/连线下拉 + 偏好读写（+72 行）+ 审查修复（布局 effect 原子化拆分建边 effect/prefsLoaded 控件门控/hasCore 统一 +31 行）——RF 状态与持久化编排内聚（元素构建已拆至 canvasElements/layout* 纯函数） | 若再增长：偏好读写与下拉拆至 useCanvasPrefs.ts；位置持久化拆至 useCanvasPositions.ts |
 | app/src/utils/canvasElements.ts | 301 | v0.13.8 实体 → RF 元素纯转换域；v0.13.9 根卡/接线方向；v0.14.1 连线样式/箭头入参（+20 行）——单测共用纯函数域（零 React 依赖），拆分破坏转换一致性 | 若再增长：节点构建与边构建拆至 canvasNodes.ts / canvasEdges.ts |
 | app/src/types/knowledge.ts | 557 | 知识体系类型域（体系/节点/概念/模型/引用/审计/决策 + v0.13.8 画布契约 + v0.14.1 画布偏好枚举与下拉文案常量）——类型与文案常量同域防漂移（前端类型域拆分任务待执行） | 若再增长：画布偏好类型与文案拆至 types/canvas.ts |
+| app/src/pages/NotesPage.tsx | 568 | 三栏笔记页编排（组侧栏/列表/阅读编辑 + 列状态 + 焦点直达）；v0.19.1（REQ-260）引用跳笔记 + 命中词阅读搜索注入（focusNoteSearch 与 focusNoteId 合并单 effect 控线）——登记值 478 过期，实测纠偏 | 若再增长：跨页直达 effect 拆至 useNotesFocus.ts hook |
+| app/src/pages/ChatPage.tsx | 522 | AI 对话页编排（会话/任务/模型/双产物消息流）；v0.19.1（REQ-260）新会话模式（纯聊/学习库问答）+ 引用跳转接线（+25）——登记值 497 过期，实测纠偏 | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
+| app/src/App.tsx | 357 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）；v0.19.1 引用高亮焦点态（+5） | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
 
 > 前端 **拆分中**（Task #9 笔记域修复进行中，暂不登记行数）：`app/src/types.ts`——待前端拆分完成后以实测行数重新评估。
 > 前端 SessionsPage.tsx 审查快照 304 行（登记值），v0.7.1 硬拆后长期 ≤300，本轮审查期间轻微越线；随 NotesPage/types.ts 拆分任务一并复核，若仍越线按上表模式登记。
