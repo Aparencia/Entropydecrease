@@ -29,6 +29,10 @@
 | ADR-023 | [视频会话 OCR 下线 + AI 精修图片理解（含隐私授权契约）](./ADR-023-video-ocr-offline-vision-extract.md) | 已接受（v0.12.0 M5，精修侧已交付） | 2026-08-23 |
 | ADR-024 | [知识体系层（方案 B）——有界体系通过、自由双链/图谱仍出局](./ADR-024-knowledge-system-layer.md) | 已接受（v0.13 系列） | 2026-08-23 |
 | ADR-025 | [浮窗锁定自解锁——全局快捷键方案（tauri-plugin-global-shortcut）](./ADR-025-float-global-shortcut.md) | 已接受（v0.12.6，已交付） | 2026-08-23 |
+| ADR-026 | [AI 精修策略化与流式会话化](./ADR-026-ai-refine-strategy-flow.md) | 已接受（2026-09-01，用户批准） | 2026-09-01 |
+| ADR-027 | [学习目标层建模——意图层对象（N:M / 判据配方 / 四态状态机 / 库即记忆）](./ADR-027-goal-layer-modeling.md) | 已接受（v0.18.0 M1） | 2026-09-02 |
+| ADR-028 | [AI 目标规划师——建议制规划 + 体系深度联动](./ADR-028-ai-goal-planner.md) | 已接受（v0.18.2） | 2026-09-02 |
+| ADR-029 | [检索与发现层（RAG 接层）——派生索引 + 双读路径 + 人工裁决闸门](./ADR-029-rag-retrieval-discovery-layer.md) | 提议 | 2026-09-03 |
 
 ## 编号规则
 
