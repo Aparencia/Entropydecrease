@@ -9,7 +9,7 @@
  * @ai-context: 2026-08 审查硬拆（>600 硬上限）：右栏内容区拆至 ClassroomRightPane，
  *              文件素材输入与提取拆至 MaterialInputPanel——本文件回归装配层职责。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { WindowSelectCard } from "../components/WindowSelectCard";
@@ -104,16 +104,20 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
       .catch(() => setPrepareState("idle"));
   }, []);
 
+  const warmedRef = useRef(false);
   useEffect(() => {
+    // dev StrictMode 会双跑 effect（挂载→cleanup→挂载）：预热是秒级重资源
+    // 加载，第二次直接跳过——否则首次预热会被 replay 的 cleanup 取消（1s
+    // join 超时 detach）后再开第二个加载线程，白跑一次引擎加载
+    if (warmedRef.current) return;
+    warmedRef.current = true;
     warmUp();
-    // 离开页面释放预热引擎（内存 ~数百 MB；后端另有 15min TTL 兜底）
-    return () => {
-      // Low 清扫：不吞异常——释放失败记录上下文（TTL 兜底仍会回收）
-      void invoke("release_live_prepare").catch((e) => {
-        console.warn("[ClassroomPage] 释放预热引擎失败（TTL 兜底仍生效）:", e);
-      });
-    };
-  }, [warmUp]);
+    // TD-004：课堂助手页常驻挂载（display:none 切换不卸载）——本 cleanup 只
+    // 在应用卸载/StrictMode replay 时触发，**不在此释放**：release 会取消正在
+    // 加载的预热线程造成 dev 双加载与"已完成→随即取消"误读；真实回收由后端
+    // 15min TTL 与显式 release_live_prepare 命令承担（浮窗/退出路径保留）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 实时会话事件监听（v0.2.0；字幕/语音实时内容由右侧 LiveActivityPanel 自监听展示）
   useEffect(() => {

@@ -123,6 +123,22 @@ pub fn run_prepared(rx: mpsc::Receiver<PrepareMsg>, env: PrepareEnv, status: Arc
             return;
         }
     };
+    // 加载期间可能已收到 Cancel/断开（release 先于加载完成——引擎加载不可中断，
+    // 请求排队的语义收口）：先消费再宣告 Ready，避免"已完成→随即取消"的自相
+    // 矛盾日志（dev StrictMode 双挂载下可稳定复现的误读观感）。
+    // Start 理论上不会出现在加载期（start 仅在 status=Ready 时发交接；Loading
+    // 期 start 走内联回退并先取消预备），但不可吞消息——交接到手就就地转会话
+    match rx.try_recv() {
+        Ok(PrepareMsg::Cancel) | Err(mpsc::TryRecvError::Disconnected) => {
+            eprintln!("[LiveSession] 加载期间已请求取消，释放引擎");
+            return;
+        }
+        Ok(PrepareMsg::Start(handoff)) => {
+            run_with_handoff(engine, *handoff);
+            return;
+        }
+        Err(mpsc::TryRecvError::Empty) => {}
+    }
     *status.lock().expect("prepare status lock poisoned") = PrepareStatus::Ready;
     eprintln!("[LiveSession] 引擎预热完成（等待开始/取消）");
 
@@ -131,26 +147,7 @@ pub fn run_prepared(rx: mpsc::Receiver<PrepareMsg>, env: PrepareEnv, status: Arc
     loop {
         match rx.recv_timeout(Duration::from_millis(PREPARE_POLL_MS)) {
             Ok(PrepareMsg::Start(handoff)) => {
-                let StartHandoff {
-                    params,
-                    session_id,
-                    stop,
-                    latest_frame,
-                    pause,
-                    session_info,
-                } = *handoff;
-                // 会话纪元在交接后创建（模型已加载——无 A1 秒级偏移）
-                let epoch = Instant::now();
-                crate::live_session::run_session_after_engine(
-                    engine,
-                    stop,
-                    params,
-                    session_id,
-                    latest_frame,
-                    pause,
-                    epoch,
-                    session_info,
-                );
+                run_with_handoff(engine, *handoff);
                 return;
             }
             Ok(PrepareMsg::Cancel) | Err(RecvTimeoutError::Disconnected) => {
@@ -165,4 +162,21 @@ pub fn run_prepared(rx: mpsc::Receiver<PrepareMsg>, env: PrepareEnv, status: Arc
             }
         }
     }
+}
+
+/// Start 交接执行（run_prepared 的就绪前/就绪后两处共用——防语义漂移）。
+fn run_with_handoff(engine: StreamingAsrEngine, handoff: StartHandoff) {
+    let StartHandoff {
+        params,
+        session_id,
+        stop,
+        latest_frame,
+        pause,
+        session_info,
+    } = handoff;
+    // 会话纪元在交接后创建（模型已加载——无 A1 秒级偏移）
+    let epoch = Instant::now();
+    crate::live_session::run_session_after_engine(
+        engine, stop, params, session_id, latest_frame, pause, epoch, session_info,
+    );
 }
