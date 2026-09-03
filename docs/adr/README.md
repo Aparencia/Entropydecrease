@@ -32,7 +32,7 @@
 | ADR-026 | [AI 精修策略化与流式会话化](./ADR-026-ai-refine-strategy-flow.md) | 已接受（2026-09-01，用户批准） | 2026-09-01 |
 | ADR-027 | [学习目标层建模——意图层对象（N:M / 判据配方 / 四态状态机 / 库即记忆）](./ADR-027-goal-layer-modeling.md) | 已接受（v0.18.0 M1） | 2026-09-02 |
 | ADR-028 | [AI 目标规划师——建议制规划 + 体系深度联动](./ADR-028-ai-goal-planner.md) | 已接受（v0.18.2） | 2026-09-02 |
-| ADR-029 | [检索与发现层（RAG 接层）——派生索引 + 双读路径 + 人工裁决闸门](./ADR-029-rag-retrieval-discovery-layer.md) | 提议 | 2026-09-03 |
+| ADR-029 | [检索与发现层（RAG 接层）——派生索引 + 双读路径 + 人工裁决闸门](./ADR-029-rag-retrieval-discovery-layer.md) | 已接受（v0.19 系列） | 2026-09-03 |
 
 ## 编号规则
 

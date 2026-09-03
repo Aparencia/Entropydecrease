@@ -453,6 +453,20 @@
 | REQ-253 | 目标↔概念弱项（M3 真实化）+ /goal 对话：目标内概念低激活信号（90 天无引用/未应用）+「最弱概念」块 + ai_chat `/goal` 命令（L4.5 目标摘要现算注入 <1K + L3 检索 top-K） | P1 | 已立项 | v0.18.2 | concept_stale 判据理念；摘要现算无缓存（优化评审 #1 延续） |
 | REQ-254 | 治理与设置：目标 AI 开关（默认关）+ 授权弹窗（content_gate）+ 预算档位化（4K/10K/30K 默认标准）+ 单次硬顶 + token/成本/trajectory 落库 + 设置页「目标 AI」段 | P1 | 已立项 | v0.18.2 | 复用 v0.11.6 Provider/v0.16 授权流/预算硬约束（ADR-027 §4） |
 
+### v0.19 · 检索与发现层（RAG 接层）（2026-09-03 用户裁决立项）
+
+> 依据：用户 2026-09-03 方向裁决「方案三：派生索引＋双读路径＋人工裁决闭环」（加一层能力 ＋ 换引擎良性内核；整体重定位/引擎替换否决）；检索欠账核实（FTS5 未实装、/goal L3 为标题占位）后立项；
+> 设计：[2026-09-03-v0.19-rag-retrieval-discovery-design.md](../superpowers/specs/2026-09-03-v0.19-rag-retrieval-discovery-design.md) ＋ [ADR-029](../adr/ADR-029-rag-retrieval-discovery-layer.md)（已接受）；
+> 排期：M0 spike → v0.19.0（索引基建）→ v0.19.1（学习库问答）→ v0.19.2（检索建议）→ v0.19.3（语义增强，spike 定案后）。
+
+| REQ | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
+|----|------|--------|------|---------|------|
+| REQ-258 | 检索与索引基建：kb_chunks/kb_meta/FTS5 影子表（节级切块 ≤800 字符硬切、多态源双可空 FK）+ 生命周期（保存收口钩子重索引/删除事务内显式清理/全量重建 reindex_all + kb_index_stats 角标）+ kb_search 混合检索（FTS5 BM25 ∪ 向量余弦 → RRF 融合；LIKE 旧链保留） | P1 | 已立项 | v0.19.0 | FTS-only 可发布；影子表写入收敛 kb_index 同事务双写（不依赖触发器） |
+| REQ-259 | 本地 embedding 引擎：EmbeddingEngine trait（Noop/Onnx/Ollama 实现）+ M0 spike 定选型（内嵌 ONNX bge-small-zh-v1.5 vs Ollama /api/embeddings；中文小评测集 ~30 查询；ORT 共存必测）+ 模型分发复用 model_registry + 混合检索开启 | P1 | 已立项 | v0.19.3（spike 定案后） | 无模型 = FTS-only 降级，不阻塞 v0.19.0~2；模型文件不入库 |
+| REQ-260 | 学习库问答「问我的学习库」：chat_sessions.retrieval 列 + chat_send 检索分支（命中列表恒可用·本地；生成经 content_gate + kb_qa_enabled 默认关）+ pack_fragments 转正 + 预算档位/成本/审计（ai_usage + meta_json 引用）+ 引用 chips 跳笔记高亮命中词 | P1 | 已立项 | v0.19.1 | 兑现 REQ-024/REQ-231 检索欠账（口径修订见设计 §十二.1）；断网回退命中列表 |
+| REQ-261 | 检索建议（发现路径）：概念/节点详情「相关素材建议」候选（混合检索 top-K ≤10，排除已链接）→ 人工勾选确认 → 既有 link_knowledge_target 落库（白名单零迁移）+ 跨体系相似概念提示（提示型不自动合并） | P2 | 已立项 | v0.19.2 | kb_discovery 默认关（交叉点默认关延续）；建议不落库零双写 |
+| REQ-262 | 治理与设置：SettingsPage「学习库」段（引擎状态/模型下载/索引统计与重建/发现开关）+ FTS5 使能核查 + 中文 BM25 切词校准 | P2 | 已立项 | v0.19 系列随批 | 复用 speaker/OCR 模型下载 UI 范式 |
+
 ### V1.0 · 体验增强（远期）
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
