@@ -44,10 +44,15 @@ fn save_and_reload_persists() {
     let dir = std::env::temp_dir().join("ff_save_test");
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("flags.json");
-    let flags = FeatureFlags { feed_capture: true };
+    let flags = FeatureFlags { feed_capture: true, kb_discovery: true };
     // Act
     flags.save(&path).expect("save");
     let loaded = FeatureFlags::load(&path);
     // Assert
     assert!(loaded.feed_capture);
+    assert!(loaded.kb_discovery, "kb_discovery 开关 roundtrip 保真");
+    // 旧 JSON 零迁移：缺失新字段回退默认关（保守默认纪律）
+    let _ = std::fs::write(&path, r#"{"feedCapture":true}"#);
+    let legacy = FeatureFlags::load(&path);
+    assert!(!legacy.kb_discovery, "旧配置缺失字段 = 默认关");
 }

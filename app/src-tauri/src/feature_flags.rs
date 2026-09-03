@@ -15,11 +15,15 @@ pub struct FeatureFlags {
     /// feed 碎片快速捕获（v0.11.1 默认关——Phase 2 验证前不默认启用；
     /// v0.12.2 转正后默认开——快速记录收件箱成为笔记页正式动线）
     pub feed_capture: bool,
+    /// v0.19.3（REQ-261）：检索建议（发现路径）——概念「相关素材建议」候选
+    /// 与跨体系相似概念提示；默认关（ADR-029：建议制·默认关延续；本地命中
+    /// 片段检索本身恒可用，不受本开关约束）
+    pub kb_discovery: bool,
 }
 
 impl Default for FeatureFlags {
     fn default() -> Self {
-        Self { feed_capture: true }
+        Self { feed_capture: true, kb_discovery: false }
     }
 }
 
@@ -48,6 +52,7 @@ impl FeatureFlags {
     pub fn get(&self, name: &str) -> Option<bool> {
         match name {
             "feed_capture" => Some(self.feed_capture),
+            "kb_discovery" => Some(self.kb_discovery),
             _ => None,
         }
     }
@@ -57,6 +62,10 @@ impl FeatureFlags {
         match name {
             "feed_capture" => {
                 self.feed_capture = value;
+                true
+            }
+            "kb_discovery" => {
+                self.kb_discovery = value;
                 true
             }
             _ => false,

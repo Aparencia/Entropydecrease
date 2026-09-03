@@ -42,3 +42,20 @@ export type KbReindexEvent =
   | { kind: "progress"; done: number; total: number }
   | { kind: "done"; report: KbReindexReport }
   | { kind: "failed"; message: string };
+
+/** v0.19.3（REQ-261）：跨体系相似概念提示（展示型——人工处置，不自动合并） */
+export interface SimilarHint {
+  systemId: number;
+  systemName: string;
+  conceptId: number;
+  conceptName: string;
+  /** 命中理由（overlap 口径） */
+  reason: string;
+}
+
+/** v0.19.3（REQ-261）：概念「相关素材建议」发现结果（Rust DiscoveryResult） */
+export interface KbDiscoveryResult {
+  /** 证据候选（KbHit 契约——snippet/来源与引用卡片一致；已链接者已排除） */
+  evidence: import("./chat").KbHit[];
+  similar: SimilarHint[];
+}

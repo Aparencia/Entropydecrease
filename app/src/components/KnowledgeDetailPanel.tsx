@@ -18,6 +18,8 @@ import type {
 } from "../types/knowledge";
 import { nodeTypeLabel, conceptStatusLabel } from "../types/knowledge";
 import KnowledgeLinkSection from "./KnowledgeLinkSection";
+// v0.19.3（REQ-261）：相关素材建议（发现路径——建议制·默认关）
+import DiscoverySuggestSection from "./DiscoverySuggestSection";
 import KnowledgeDecisionForm from "./KnowledgeDecisionForm";
 import KnowledgeDecisionLog from "./KnowledgeDecisionLog";
 
@@ -215,6 +217,10 @@ export default function KnowledgeDetailPanel({ width = 320, system, nodes, conce
               </div>
             )}
             {selection.id != null && <KnowledgeLinkSection systemId={system.id} entityType="concept" entityId={selection.id} links={links} nodes={nodes} concepts={concepts} models={models} onChanged={onChanged} />}
+            {/* v0.19.3（REQ-261）：相关素材建议（发现路径——开关默认关，区内自隐藏） */}
+            {selection.id != null && (
+              <DiscoverySuggestSection systemId={system.id} conceptId={selection.id} onChanged={onChanged} />
+            )}
             {/* 决策日志区（§五）——概念关联，默认开 */}
             {selection.id != null && (
               <div style={{ marginTop: 12, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>

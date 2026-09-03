@@ -21,6 +21,8 @@ const TIERS = [
 export default function LearningLibraryPanel({ active = true }: { active?: boolean }) {
   const [qaEnabled, setQaEnabled] = useState(false);
   const [tier, setTier] = useState("standard");
+  // v0.19.3（REQ-261/262）：相关素材建议（发现路径）开关——feature_flags 持久化
+  const [discoveryEnabled, setDiscoveryEnabled] = useState(false);
   const [stats, setStats] = useState<KbIndexStats | null>(null);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -42,6 +44,12 @@ export default function LearningLibraryPanel({ active = true }: { active?: boole
         setTier(s.kbQaTier || "standard");
       } catch (e) {
         setMsg({ kind: "err", text: `学习库设置读取失败: ${e}` });
+      }
+      try {
+        const f = await invoke<{ feedCapture: boolean; kbDiscovery: boolean }>("get_feature_flags");
+        setDiscoveryEnabled(f.kbDiscovery);
+      } catch (e) {
+        setMsg({ kind: "err", text: `功能开关读取失败: ${e}` });
       }
     })();
     void loadStats();
@@ -71,6 +79,26 @@ export default function LearningLibraryPanel({ active = true }: { active?: boole
       });
     } catch (e) {
       setMsg({ kind: "err", text: `保存失败: ${e}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // v0.19.3（REQ-261/262）：相关素材建议开关（feature_flags 持久化；建议制·默认关）
+  const saveDiscovery = async (nextEnabled: boolean) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await invoke("set_feature_flag", { name: "kb_discovery", value: nextEnabled });
+      setDiscoveryEnabled(nextEnabled);
+      setMsg({
+        kind: "ok",
+        text: nextEnabled
+          ? "已开启——概念详情出现「📎 相关素材建议」，勾选确认后经引用通道落库"
+          : "已关闭——本地检索与学习库问答不受影响",
+      });
+    } catch (e) {
+      setMsg({ kind: "err", text: `开关保存失败: ${e}` });
     } finally {
       setBusy(false);
     }
@@ -124,7 +152,7 @@ export default function LearningLibraryPanel({ active = true }: { active?: boole
         {stats?.embeddingReady ? (
           <span style={{ color: "#047857", background: "#ecfdf5", borderRadius: 10, padding: "1px 8px" }}>✓ 语义检索已接入</span>
         ) : (
-          <span style={{ color: "#6b7280", background: "#f3f4f6", borderRadius: 10, padding: "1px 8px" }} title="语义检索接入属 v0.19.3（embedding 选型 spike 后）——当前按词法精度工作，能力如实">
+          <span style={{ color: "#6b7280", background: "#f3f4f6", borderRadius: 10, padding: "1px 8px" }} title="语义检索接入属 v0.19.4（embedding 选型 spike 后）——当前按词法精度工作，能力如实">
             ○ 语义检索未接入（当前词法精度）
           </span>
         )}
@@ -156,6 +184,24 @@ export default function LearningLibraryPanel({ active = true }: { active?: boole
         </select>
         <span style={{ fontSize: 11, color: "#9ca3af" }}>
           双闸门（AI 授权之上）；片段预算硬顶；命中列表恒可用
+        </span>
+      </div>
+
+      {/* v0.19.3（REQ-261）：相关素材建议开关（建议制·默认关——本地检索恒可用） */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2, flexWrap: "wrap" }}>
+        <span style={{ fontWeight: 600, fontSize: 12, color: "#374151" }}>📎 相关素材建议</span>
+        <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+          <input
+            data-testid="kb-discovery-toggle"
+            type="checkbox"
+            checked={discoveryEnabled}
+            disabled={busy}
+            onChange={(e) => void saveDiscovery(e.target.checked)}
+          />
+          开启（默认关）
+        </label>
+        <span style={{ fontSize: 11, color: "#9ca3af" }}>
+          概念详情建议候选 · 勾选确认后经引用通道落库（建议零双写）
         </span>
       </div>
 

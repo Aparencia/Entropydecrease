@@ -256,6 +256,9 @@ mod commands_kb;
 // v0.19.1（REQ-260）：学习库问答编排（检索分支分流——纯聊链路零改动）
 mod kb_prompt;
 mod commands_ai_chat_kb;
+// v0.19.3（REQ-261）：检索建议（发现路径）——证据候选/跨体系相似提示
+mod kb_discovery;
+mod commands_kb_discovery;
 mod concept_weakness;
 mod goal_interview;
 mod goal_plan_prompt;
@@ -588,6 +591,8 @@ pub fn run() {
             commands_kb::kb_reindex_all,
             // v0.19.1（REQ-260）：学习库问答生成开关与预算档位（设置段读写）
             commands_ai_settings::ai_set_kb_qa,
+            // v0.19.3（REQ-261）：检索建议（发现路径——默认关，建议制）
+            commands_kb_discovery::kb_discovery_suggest,
             // v0.13.1（REQ-202~205）：知识体系层——体系/问题树/概念/模型/引用/审计探测
             commands_knowledge_systems::list_knowledge_systems,
             commands_knowledge_systems::create_knowledge_system,
