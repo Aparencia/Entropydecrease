@@ -23,6 +23,8 @@ interface Props {
   onSelectChat: (id: number) => void;
   onSelectTask: (id: number) => void;
   onNewChat: () => void;
+  /** v0.19.1（REQ-260）：新建学习库问答会话（检索+生成双产物模式） */
+  onNewKbChat?: () => void;
   onRenameChat: (id: number) => void;
   onDeleteChat: (id: number) => void;
   /** 会话标题解析（精修 refId=会话；补充 refId=笔记） */
@@ -39,7 +41,7 @@ function fmtTime(unix: number): string {
 export default function ChatSidebar(props: Props) {
   const {
     sessions, tasks, activeChatId, activeTaskId,
-    onSelectChat, onSelectTask, onNewChat, onRenameChat, onDeleteChat,
+    onSelectChat, onSelectTask, onNewChat, onNewKbChat, onRenameChat, onDeleteChat,
     sessionTitles, noteTitles,
   } = props;
   const itemBase: React.CSSProperties = {
@@ -60,13 +62,26 @@ export default function ChatSidebar(props: Props) {
     <div style={{ width: 240, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minHeight: 0 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 8px 4px" }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: "#6b7280" }}>💬 对话</span>
-        <button
-          onClick={onNewChat}
-          title="新建对话"
-          style={{ fontSize: 16, lineHeight: 1, cursor: "pointer", border: "none", background: "transparent", color: "#0d9488" }}
-        >
-          ＋
-        </button>
+        <div style={{ display: "flex", gap: 2 }}>
+          {/* v0.19.1：学习库问答模式（检索+带引用回答）与纯聊并列的新建入口 */}
+          {onNewKbChat && (
+            <button
+              data-testid="new-kb-chat"
+              onClick={onNewKbChat}
+              title="新建学习库问答（问我的学习库——本地命中恒可用，生成默认关）"
+              style={{ fontSize: 12, lineHeight: 1, cursor: "pointer", border: "none", background: "transparent", color: "#0d9488" }}
+            >
+              📚
+            </button>
+          )}
+          <button
+            onClick={onNewChat}
+            title="新建对话"
+            style={{ fontSize: 16, lineHeight: 1, cursor: "pointer", border: "none", background: "transparent", color: "#0d9488" }}
+          >
+            ＋
+          </button>
+        </div>
       </div>
       <div style={{ overflowY: "auto", flex: 1, minHeight: 0, padding: "0 8px 8px" }}>
         {sessions.length === 0 && (
@@ -82,7 +97,10 @@ export default function ChatSidebar(props: Props) {
               border: activeChatId === s.id ? "1px solid #99f6e4" : "1px solid transparent",
             }}
           >
-            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</span>
+            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {s.retrieval && <span title="学习库问答模式">📚 </span>}
+              {s.title}
+            </span>
             {s.model && <span style={{ fontSize: 10, color: "#9ca3af" }}>{s.model.split("/").pop()}</span>}
             <span
               role="button"

@@ -28,16 +28,24 @@ const CHAT_SYSTEM_PROMPT: &str =
 /// 单条消息最大字符数（防误粘贴巨文——超限明确拒绝而非静默截断）。
 const MAX_MESSAGE_CHARS: usize = 16000;
 
-/// 新建会话（标题可空——默认"新对话"）。
+/// 新建会话（标题可空——默认"新对话"；retrieval=true = 学习库问答模式，
+/// v0.19.1——创建时定死，已有会话不改语义）。
 #[tauri::command]
-pub fn chat_create_session(state: State<'_, AppState>, title: Option<String>) -> Result<ChatSession, String> {
+pub fn chat_create_session(
+    state: State<'_, AppState>,
+    title: Option<String>,
+    retrieval: Option<bool>,
+) -> Result<ChatSession, String> {
     let title = title.unwrap_or_default();
     if title.chars().count() > 100 {
         return Err("会话标题过长（≤100 字符）".to_string());
     }
     let id = state
         .db
-        .insert_chat_session(if title.trim().is_empty() { None } else { Some(title.trim()) })
+        .insert_chat_session(
+            if title.trim().is_empty() { None } else { Some(title.trim()) },
+            retrieval.unwrap_or(false),
+        )
         .map_err(|e| e.to_string())?;
     validate_session(&state, id)
 }
@@ -110,13 +118,24 @@ pub async fn chat_send(
     if content.chars().count() > MAX_MESSAGE_CHARS {
         return Err("消息过长（≤16000 字符）".to_string());
     }
+    let session = validate_session(&state, session_id)?;
+    // v0.19.1（REQ-260）：学习库问答会话——命中列表恒可用（本地能力不受
+    // content_gate 约束），生成走 kb 双闸门 → 整链分流入 commands_ai_chat_kb
+    if session.retrieval {
+        return crate::commands_ai_chat_kb::kb_chat_send(
+            &state,
+            session_id,
+            &content,
+            resend_message_id,
+            channel,
+        );
+    }
     let settings = state
         .ai_settings
         .lock()
         .map_err(|e| format!("AI 设置锁中毒: {}", e))?
         .clone();
     settings.content_gate()?; // 授权红线：enabled + authorized 双闸门（默认关）
-    let session = validate_session(&state, session_id)?;
     // 先解析客户端（Provider/密钥缺失 → 明确报错，不落无应答的用户消息）
     let (client, provider_id) = resolve_chat_client(&state, &session)?;
     let model = client.config.model.clone();
@@ -165,13 +184,17 @@ pub async fn chat_regenerate(
     session_id: i64,
     channel: Channel<ChatStreamEvent>,
 ) -> Result<(), String> {
+    let session = validate_session(&state, session_id)?;
+    // v0.19.1：学习库问答会话重生成——重跑检索 + 生成整链
+    if session.retrieval {
+        return crate::commands_ai_chat_kb::kb_chat_regenerate(&state, session_id, channel);
+    }
     let settings = state
         .ai_settings
         .lock()
         .map_err(|e| format!("AI 设置锁中毒: {}", e))?
         .clone();
     settings.content_gate()?;
-    let session = validate_session(&state, session_id)?;
     // 先解析客户端（Provider/密钥失败 → 不删旧回答，保留可重发状态）
     let (client, _provider_id) = resolve_chat_client(&state, &session)?;
     let model = client.config.model.clone();

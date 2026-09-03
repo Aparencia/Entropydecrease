@@ -1,15 +1,18 @@
-//! AI 对话持久化（REQ-224/226，v0.16.0）。
+//! AI 对话持久化（REQ-224/226，v0.16.0；v0.19.1 REQ-260 检索问答扩展）。
 //!
-//! @ai-context: 纯聊天双表——chat_sessions（会话元数据：标题/Provider/模型）
-//!              + chat_messages（消息：角色/内容/用量/状态）。会话删除级联
-//!              清消息（外键 ON DELETE CASCADE，ADR-004 同范式）。
+//! @ai-context: 纯聊天双表——chat_sessions（会话元数据：标题/Provider/模型/
+//!              retrieval 问答模式）+ chat_messages（消息：角色/内容/用量/
+//!              状态/meta_json）。会话删除级联清消息（外键 ON DELETE CASCADE）。
+//! @ai-context: meta_json 只存**检索元数据**（学习库问答命中清单/引用——
+//!              消息全文即轨迹，检索概要落 meta 防正文膨胀；v0.16
+//!              trajectory_json 补列同款 ensure_column 惯例）。
 //! @ai-context: 与 ai_tasks（任务中心）分离：聊天是交互式连续对话，任务是
-//!              批量结构化作业；两者在 AI 对话页合并展示（REQ-230 视图层融合，
-//!              存储不混）。
+//!              批量结构化作业；两者在 AI 对话页合并展示（REQ-230 视图层融合）。
 
 use rusqlite::{OptionalExtension, params};
 
 use crate::db::Db;
+use crate::db_migrations::ensure_column;
 use crate::error::Result;
 
 /// 聊天会话（与前端契约同构——camelCase）。
@@ -22,6 +25,8 @@ pub struct ChatSession {
     pub provider_id: Option<String>,
     /// 会话模型（首次发送后回填——消息模型标签口径）
     pub model: Option<String>,
+    /// v0.19.1（REQ-260）：学习库问答模式（0/1；创建时定死——已有会话不改语义）
+    pub retrieval: bool,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -38,13 +43,19 @@ pub struct ChatMessage {
     pub model: Option<String>,
     /// 用量 JSON（assistant 完成态；usage_json 原样存——前端展示 token/成本）
     pub usage_json: Option<String>,
+    /// v0.19.1（REQ-260）：消息级元数据 JSON（学习库问答=命中/引用清单；
+    /// NULL=无元数据——既有消息零变化）
+    pub meta_json: Option<String>,
     /// done | aborted | failed（failed 内容为空——错误详情走流事件）
     pub status: String,
     pub created_at: i64,
 }
 
+const SESSION_COLUMNS: &str =
+    "id, title, provider_id, model, retrieval, created_at, updated_at";
+
 impl Db {
-    /// 建表（幂等；db.rs open 时调用）。
+    /// 建表（幂等；db.rs open 时调用）——新库含 v0.19.1 两列；旧库 ensure 补列。
     pub fn init_ai_chat(&self) -> Result<()> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.execute_batch(
@@ -53,6 +64,7 @@ impl Db {
                 title TEXT NOT NULL DEFAULT '新对话',
                 provider_id TEXT,
                 model TEXT,
+                retrieval INTEGER NOT NULL DEFAULT 0,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             );
@@ -64,21 +76,37 @@ impl Db {
                 content TEXT NOT NULL,
                 model TEXT,
                 usage_json TEXT,
+                meta_json TEXT,
                 status TEXT NOT NULL DEFAULT 'done',
                 created_at INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, id);",
         )?;
+        // v0.19.1（REQ-260）：旧库迁移——会话问答模式列 + 消息元数据列
+        // （补列幂等；CREATE TABLE 只对新库生效——ensure_column 惯例）
+        ensure_column(
+            &conn,
+            "chat_sessions",
+            "retrieval",
+            "ALTER TABLE chat_sessions ADD COLUMN retrieval INTEGER NOT NULL DEFAULT 0",
+        )?;
+        ensure_column(
+            &conn,
+            "chat_messages",
+            "meta_json",
+            "ALTER TABLE chat_messages ADD COLUMN meta_json TEXT",
+        )?;
         Ok(())
     }
 
-    /// 新建会话（返回 id）。
-    pub fn insert_chat_session(&self, title: Option<&str>) -> Result<i64> {
+    /// 新建会话（返回 id）。retrieval=true = 学习库问答模式（v0.19.1）。
+    pub fn insert_chat_session(&self, title: Option<&str>, retrieval: bool) -> Result<i64> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let now = crate::db_sessions_rows::unix_seconds();
         conn.execute(
-            "INSERT INTO chat_sessions (title, created_at, updated_at) VALUES (?1, ?2, ?2)",
-            params![title.unwrap_or("新对话"), now],
+            "INSERT INTO chat_sessions (title, retrieval, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?3)",
+            params![title.unwrap_or("新对话"), retrieval as i64, now],
         )?;
         Ok(conn.last_insert_rowid())
     }
@@ -86,21 +114,12 @@ impl Db {
     /// 会话列表（最近更新在前）。
     pub fn list_chat_sessions(&self) -> Result<Vec<ChatSession>> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
-        let mut stmt = conn.prepare(
-            "SELECT id, title, provider_id, model, created_at, updated_at
-             FROM chat_sessions ORDER BY updated_at DESC",
-        )?;
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {} FROM chat_sessions ORDER BY updated_at DESC",
+            SESSION_COLUMNS
+        ))?;
         let rows = stmt
-            .query_map([], |r| {
-                Ok(ChatSession {
-                    id: r.get(0)?,
-                    title: r.get(1)?,
-                    provider_id: r.get(2)?,
-                    model: r.get(3)?,
-                    created_at: r.get(4)?,
-                    updated_at: r.get(5)?,
-                })
-            })?
+            .query_map([], row_to_session)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(rows)
     }
@@ -109,18 +128,9 @@ impl Db {
     pub fn get_chat_session(&self, id: i64) -> Result<Option<ChatSession>> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.query_row(
-            "SELECT id, title, provider_id, model, created_at, updated_at FROM chat_sessions WHERE id=?1",
+            &format!("SELECT {} FROM chat_sessions WHERE id=?1", SESSION_COLUMNS),
             params![id],
-            |r| {
-                Ok(ChatSession {
-                    id: r.get(0)?,
-                    title: r.get(1)?,
-                    provider_id: r.get(2)?,
-                    model: r.get(3)?,
-                    created_at: r.get(4)?,
-                    updated_at: r.get(5)?,
-                })
-            },
+            row_to_session,
         )
         .optional()
         .map_err(Into::into)
@@ -194,6 +204,21 @@ impl Db {
         Ok(())
     }
 
+    /// 消息元数据回填（v0.19.1：学习库问答命中清单——id 必须属该会话）。
+    pub fn set_chat_message_meta(
+        &self,
+        session_id: i64,
+        id: i64,
+        meta_json: Option<&str>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        conn.execute(
+            "UPDATE chat_messages SET meta_json=?1 WHERE id=?2 AND session_id=?3",
+            params![meta_json, id, session_id],
+        )?;
+        Ok(())
+    }
+
     /// 消息角色查询（编辑重发入参校验：必须属于该会话且为 user——防跨会话误改）。
     pub fn chat_message_role(&self, session_id: i64, message_id: i64) -> Result<Option<String>> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
@@ -241,25 +266,42 @@ impl Db {
     pub fn list_chat_messages(&self, session_id: i64) -> Result<Vec<ChatMessage>> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let mut stmt = conn.prepare(
-            "SELECT id, session_id, role, content, model, usage_json, status, created_at
+            "SELECT id, session_id, role, content, model, usage_json, meta_json, status, created_at
              FROM chat_messages WHERE session_id=?1 ORDER BY id ASC",
         )?;
         let rows = stmt
-            .query_map(params![session_id], |r| {
-                Ok(ChatMessage {
-                    id: r.get(0)?,
-                    session_id: r.get(1)?,
-                    role: r.get(2)?,
-                    content: r.get(3)?,
-                    model: r.get(4)?,
-                    usage_json: r.get(5)?,
-                    status: r.get(6)?,
-                    created_at: r.get(7)?,
-                })
-            })?
+            .query_map(params![session_id], row_to_message)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(rows)
     }
+}
+
+/// 会话行映射（SELECT 列序与 SESSION_COLUMNS 严格对应）。
+fn row_to_session(r: &rusqlite::Row<'_>) -> rusqlite::Result<ChatSession> {
+    Ok(ChatSession {
+        id: r.get(0)?,
+        title: r.get(1)?,
+        provider_id: r.get(2)?,
+        model: r.get(3)?,
+        retrieval: r.get::<_, i64>(4)? != 0,
+        created_at: r.get(5)?,
+        updated_at: r.get(6)?,
+    })
+}
+
+/// 消息行映射（NULL 兼容——旧行 meta_json 缺失诚实为 None）。
+fn row_to_message(r: &rusqlite::Row<'_>) -> rusqlite::Result<ChatMessage> {
+    Ok(ChatMessage {
+        id: r.get(0)?,
+        session_id: r.get(1)?,
+        role: r.get(2)?,
+        content: r.get(3)?,
+        model: r.get(4)?,
+        usage_json: r.get(5)?,
+        meta_json: r.get(6)?,
+        status: r.get(7)?,
+        created_at: r.get(8)?,
+    })
 }
 
 #[cfg(test)]

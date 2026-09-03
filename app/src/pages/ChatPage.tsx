@@ -30,6 +30,8 @@ interface Props {
   /** 跨页直达（任务对话引用跳转） */
   onOpenSessions: (sessionId: number) => void;
   onOpenNote: (noteId: number) => void;
+  /** v0.19.1（REQ-260）：引用跳笔记并高亮命中词（search=笔记内搜索词） */
+  onOpenNoteHighlight?: (noteId: number, search: string) => void;
   onOpenSettings: () => void;
   /** v0.16.1：任务进入对话页（会话页精修启动自动跳转——挂载即选中该任务） */
   focusTaskId?: number | null;
@@ -51,7 +53,7 @@ const CLOUD_NOTICE_TEXT =
   "对话内容（纯文本）将发送至所选模型的云端服务商；本地音视频/图片/笔记永不出本机。是否同意？";
 
 export default function ChatPage(props: Props) {
-  const { onOpenSessions, onOpenNote, onOpenSettings, focusTaskId, onFocusTaskConsumed, onOpenRefineWorkbench } = props;
+  const { onOpenSessions, onOpenNote, onOpenNoteHighlight, onOpenSettings, focusTaskId, onFocusTaskConsumed, onOpenRefineWorkbench } = props;
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [tasks, setTasks] = useState<AiTaskRecord[]>([]);
   const [providers, setProviders] = useState<AiProviderView[]>([]);
@@ -180,11 +182,14 @@ export default function ChatPage(props: Props) {
     onFocusTaskConsumed?.();
   }, [focusTaskId, selectTask, onFocusTaskConsumed]);
 
-  const newChat = useCallback(async () => {
-    const s = await invoke<ChatSession>("chat_create_session", { title: null });
+  const newChat = useCallback(async (retrieval = false) => {
+    // v0.19.1（REQ-260）：retrieval=true = 学习库问答模式（每会话模式——创建时定死）
+    const s = await invoke<ChatSession>("chat_create_session", { title: null, retrieval });
     await refreshSessions();
     await selectChat(s.id);
   }, [refreshSessions, selectChat]);
+
+  const newKbChat = useCallback(() => void newChat(true), [newChat]);
 
   const renameChat = useCallback(async (id: number) => {
     const title = window.prompt("会话标题：", sessions.find((s) => s.id === id)?.title ?? "");
@@ -311,8 +316,18 @@ export default function ChatPage(props: Props) {
     setEditingId(m.id);
     setDraft(m.content);
   };
-  /** 当前展示会话的流式视图（非展示会话的流不可见——后台完成不污染 UI） */
-  const streamView = view && view.sessionId === activeChatId ? { text: view.text } : null;
+  /** 当前展示会话的流式视图（非展示会话的流不可见——后台完成不污染 UI）；
+   *  v0.19.1：附带流内命中片段（kb_hits 事件累积） */
+  const streamView = view && view.sessionId === activeChatId ? { text: view.text, hits: view.hits } : null;
+
+  /** 引用跳笔记（优先带命中词高亮——最小面：无高亮回调时退化为普通打开） */
+  const openCitedNote = useCallback((noteId: number, search: string) => {
+    if (onOpenNoteHighlight) {
+      onOpenNoteHighlight(noteId, search);
+    } else {
+      onOpenNote(noteId);
+    }
+  }, [onOpenNote, onOpenNoteHighlight]);
 
   return (
     <div style={{ height: "100%", display: "flex", minHeight: 0 }}>
@@ -323,7 +338,8 @@ export default function ChatPage(props: Props) {
         activeTaskId={activeTaskId}
         onSelectChat={(id) => void selectChat(id)}
         onSelectTask={(id) => void selectTask(id)}
-        onNewChat={() => void newChat()}
+        onNewChat={() => void newChat(false)}
+        onNewKbChat={newKbChat}
         onRenameChat={(id) => void renameChat(id)}
         onDeleteChat={(id) => void deleteChat(id)}
         sessionTitles={sessionTitles}
@@ -334,7 +350,14 @@ export default function ChatPage(props: Props) {
         <div style={{ height: 44, borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 10, padding: "0 16px" }}>
           {activeSession && (
             <>
-              <span style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{activeSession.title}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>
+                {activeSession.retrieval ? "📚 " : ""}{activeSession.title}
+              </span>
+              {activeSession.retrieval && (
+                <span style={{ fontSize: 11, color: "#0f766e", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 10, padding: "0 8px" }}>
+                  学习库问答
+                </span>
+              )}
               {isStreaming(activeSession.id) && (
                 <span style={{ fontSize: 12, color: "#b45309", fontWeight: 600 }}>● 生成中</span>
               )}
@@ -433,6 +456,8 @@ export default function ChatPage(props: Props) {
               onEditUser={editMessage}
               editingId={editingId}
               onSaveMessage={(m) => openSaveDialog(m.id)}
+              // v0.19.1：引用卡片跳笔记（命中词高亮）
+              onOpenCitedNote={openCitedNote}
             />
             <ChatComposer
               value={draft}

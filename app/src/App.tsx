@@ -65,6 +65,8 @@ function App() {
   const [focusSessionId, setFocusSessionId] = useState<number | null>(null);
   // v0.7.1：跨页直达目标笔记（会话页"查看笔记" → 笔记页自动选中并滚动可见）
   const [focusNoteId, setFocusNoteId] = useState<number | null>(null);
+  // v0.19.1（REQ-260）：引用跳笔记 + 命中词高亮（key 递增——同笔记重复引用可重触发）
+  const [focusNoteSearch, setFocusNoteSearch] = useState<{ noteId: number; search: string; key: number } | null>(null);
   // v0.13.7：跨页直达目标体系（组行徽标/结算简报 → 体系页自动选中）
   const [focusSystemId, setFocusSystemId] = useState<number | null>(null);
   // v0.14 C2：图谱组节点 → 笔记页过滤该组（同 focusNoteId 模式）
@@ -296,6 +298,7 @@ function App() {
           {/* v0.7.1：focusNoteId 定位 + 来源会话反向跳转（与课堂助手 onOpenSessions 同模式） */}
           <NotesPage
             focusNoteId={focusNoteId}
+            focusNoteSearch={focusNoteSearch}
             focusGroupId={focusGroupId}
             onOpenSystem={(id) => {
               setFocusSystemId(id);
@@ -312,6 +315,11 @@ function App() {
           <ChatPage
             onOpenSessions={(id) => { setFocusSessionId(id); setPage("sessions"); }}
             onOpenNote={(id) => { setFocusNoteId(id); setPage("notes"); }}
+            onOpenNoteHighlight={(noteId, search) => {
+              setFocusNoteId(noteId);
+              setFocusNoteSearch({ noteId, search, key: Date.now() });
+              setPage("notes");
+            }}
             onOpenSettings={() => setPage("settings")}
             // v0.16.1：任务进入对话页（会话页精修启动自动跳转）；任务视图 → 工作台深链
             focusTaskId={focusChatTaskId}

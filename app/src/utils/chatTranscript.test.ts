@@ -14,6 +14,7 @@ function msg(partial: Partial<ChatMessage> & { id: number; role: "user" | "assis
     sessionId: 1,
     model: null,
     usageJson: null,
+    metaJson: null,
     status: "done",
     createdAt: 0,
     ...partial,

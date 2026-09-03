@@ -37,6 +37,11 @@ pub struct AiSettingsView {
     pub goal_plan_enabled: bool,
     /// v0.18.2（REQ-254）：目标规划预算档位（light/standard/deep——默认标准）
     pub goal_plan_tier: String,
+    /// v0.19.1（REQ-260）：学习库问答生成开关——默认关（content_gate 外
+    /// 第二闸门；命中列表恒可用不受其约束）
+    pub kb_qa_enabled: bool,
+    /// v0.19.1（REQ-260）：学习库问答片段预算档位（light/standard/deep）
+    pub kb_qa_tier: String,
     /// 是否已配置密钥（env 或凭据库）
     pub has_key: bool,
     /// 密钥来源：credential | env | none
@@ -76,6 +81,8 @@ pub fn ai_get_settings(state: State<'_, AppState>) -> Result<AiSettingsView, Str
         refine_strategy: s.refine_strategy.clone(),
         goal_plan_enabled: s.goal_plan_enabled,
         goal_plan_tier: s.goal_plan_tier.clone(),
+        kb_qa_enabled: s.kb_qa_enabled,
+        kb_qa_tier: s.kb_qa_tier.clone(),
         has_key,
         key_source,
     })
@@ -118,6 +125,27 @@ pub fn ai_set_goal_plan(
         .map_err(|e| format!("AI 设置锁中毒: {}", e))?;
     s.goal_plan_enabled = enabled;
     s.goal_plan_tier = tier;
+    s.save(&state.ai_settings_path).map_err(|e| e.to_string())
+}
+
+/// v0.19.1（REQ-260）：学习库问答生成设置（read-modify-write 最小面——
+/// 不覆盖其他设置字段；档位白名单 light/standard/deep——与目标 AI 同款）。
+#[tauri::command]
+pub fn ai_set_kb_qa(
+    state: State<'_, AppState>,
+    enabled: bool,
+    tier: Option<String>,
+) -> Result<(), String> {
+    let tier = tier.unwrap_or_else(|| "standard".to_string());
+    if !matches!(tier.as_str(), "light" | "standard" | "deep") {
+        return Err(format!("不支持的预算档位: {}（支持: light/standard/deep）", tier));
+    }
+    let mut s = state
+        .ai_settings
+        .lock()
+        .map_err(|e| format!("AI 设置锁中毒: {}", e))?;
+    s.kb_qa_enabled = enabled;
+    s.kb_qa_tier = tier;
     s.save(&state.ai_settings_path).map_err(|e| e.to_string())
 }
 

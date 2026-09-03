@@ -20,6 +20,8 @@ import ModelDiskPanel from "../components/ModelDiskPanel";
 import AiServicePanel from "../components/AiServicePanel";
 // v0.18.2（REQ-254）：目标 AI 规划师开关与预算档位（默认关）
 import GoalAiSection from "../components/GoalAiSection";
+// v0.19（REQ-258/260/262）：学习库段——引擎状态/生成开关/索引统计与重建
+import LearningLibraryPanel from "../components/LearningLibraryPanel";
 import AiProviderSettings from "../components/AiProviderSettings";
 import AiTaskPanel from "../components/AiTaskPanel";
 import FeatureFlagSetting from "../components/FeatureFlagSetting";
@@ -81,6 +83,12 @@ export default function SettingsPage() {
           <div style={{ marginTop: 8 }}>
             <AiTaskPanel />
           </div>
+        </div>
+
+        {/* v0.19（REQ-258/260）：学习库（检索与发现层——引擎/生成/索引重建） */}
+        <GroupTitle>学习库</GroupTitle>
+        <div style={{ ...panel, marginBottom: 4 }}>
+          <LearningLibraryPanel />
         </div>
 
         {/* ── 数据（备份/恢复） ── */}

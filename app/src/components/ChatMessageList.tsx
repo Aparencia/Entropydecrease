@@ -1,17 +1,25 @@
 /**
- * ChatMessageList — AI 对话消息流（v0.16.0 REQ-225，DSH 交互范式）。
+ * ChatMessageList — AI 对话消息流（v0.16.0 REQ-225，DSH 交互范式；
+ * v0.19.1 REQ-260 学习库问答双产物：命中引用卡片 + 生成回答）。
  *
- * @ai-context: 状态机对应——streamingText 非空 = 流式生成中（打字光标 +
+ * @ai-context: 状态机对应——streaming.text 非空 = 流式生成中（打字光标 +
  *              停止由 Composer 控制）；失败占位（status=failed）渲染错误
  *              气泡 + 重发按钮（chat_regenerate）；aborted 渲染停止态。
+ * @ai-context: assistant 消息 meta_json（{mode,hits}）→ 引用 chips：命中
+ *              （hits-only 引导消息与真回答同款展示）→ 点笔记卡片跨页打开
+ *              并注入首个命中词高亮（设计 §7.1 最小面——碎片仅展示）。
  */
 import { useEffect, useRef } from "react";
-import type { ChatMessage } from "../types";
+import type { ChatMessage, KbHit } from "../types";
 import ChatMessageMarkdown from "./ChatMessageMarkdown";
+import CitationChips from "./CitationChips";
+import { parseKbMeta } from "../utils/kbHits";
 
 export interface StreamingState {
   /** 流式累积文本（非 null = 流式生成中） */
   text: string | null;
+  /** v0.19.1：流内命中片段（kb_hits 事件——本地恒可用，非终态） */
+  hits?: KbHit[];
 }
 
 interface Props {
@@ -24,6 +32,8 @@ interface Props {
   editingId?: number | null;
   /** v0.16.1：AI 消息「存为笔记」入口（父层开保存对话框——至该条的完整上文） */
   onSaveMessage?: (message: ChatMessage) => void;
+  /** v0.19.1：引用卡片点击（noteId + 命中词——笔记阅读态高亮搜索） */
+  onOpenCitedNote?: (noteId: number, search: string) => void;
 }
 
 function fmtTime(unix: number): string {
@@ -43,7 +53,7 @@ export function parseUsage(usageJson: string | null): { tokens: number | null } 
   }
 }
 
-export default function ChatMessageList({ messages, streaming, onRegenerate, onEditUser, editingId, onSaveMessage }: Props) {
+export default function ChatMessageList({ messages, streaming, onRegenerate, onEditUser, editingId, onSaveMessage, onOpenCitedNote }: Props) {
   const endRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -58,6 +68,7 @@ export default function ChatMessageList({ messages, streaming, onRegenerate, onE
       )}
       {messages.map((m) => {
         const isUser = m.role === "user";
+        const meta = parseKbMeta(m.metaJson);
         return (
           <div key={m.id} style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom: 12 }}>
             <div style={{ maxWidth: "86%", ...(isUser ? { background: "#0d9488", color: "#fff", padding: "8px 12px", borderRadius: "10px 10px 2px 10px" } : { padding: "2px 0" }) }}>
@@ -80,6 +91,10 @@ export default function ChatMessageList({ messages, streaming, onRegenerate, onE
                 </div>
               ) : m.status === "failed" ? (
                 <div style={{ border: "1px solid #fecaca", background: "#fef2f2", borderRadius: 8, padding: "8px 10px", fontSize: 12.5, color: "#991b1b" }}>
+                  {/* v0.19.1：失败也保留引用（meta 命中照挂——回退命中列表 + 重试） */}
+                  {meta && meta.hits.length > 0 && (
+                    <CitationChips hits={meta.hits} onOpenNote={onOpenCitedNote} title="📚 本地命中（引用保留）" />
+                  )}
                   生成失败：{m.content || "未知错误"}
                   <div>
                     <button onClick={onRegenerate} style={{ marginTop: 6, fontSize: 12, padding: "2px 10px", border: "1px solid #fca5a5", borderRadius: 6, background: "#fff", color: "#b91c1c", cursor: "pointer" }}>
@@ -99,6 +114,10 @@ export default function ChatMessageList({ messages, streaming, onRegenerate, onE
                   </div>
                   <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px" }}>
                     <ChatMessageMarkdown content={m.content} />
+                    {/* v0.19.1：引用 chips（answer 与 hits-only 引导同款展示） */}
+                    {meta && meta.hits.length > 0 && (
+                      <CitationChips hits={meta.hits} onOpenNote={onOpenCitedNote} />
+                    )}
                   </div>
                   {/* v0.16.1：AI 回答整段存为笔记（至该条的完整对话上下文） */}
                   {onSaveMessage && (m.status === "done" || m.status === "aborted") && (
@@ -119,11 +138,12 @@ export default function ChatMessageList({ messages, streaming, onRegenerate, onE
           </div>
         );
       })}
-      {/* 流式占位（进行中回答） */}
+      {/* 流式占位（进行中回答）——命中引用随 kb_hits 事件先达 */}
       {streaming?.text !== null && streaming?.text !== undefined && (
         <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 12 }}>
           <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", maxWidth: "86%" }}>
             <ChatMessageMarkdown content={streaming.text} />
+            {(streaming.hits?.length ?? 0) > 0 && <CitationChips hits={streaming.hits ?? []} onOpenNote={onOpenCitedNote} />}
             <span style={{ display: "inline-block", width: 6, height: 14, background: "#0d9488", animation: "chatBlink 1s infinite", verticalAlign: "text-bottom", marginLeft: 2 }} />
           </div>
         </div>

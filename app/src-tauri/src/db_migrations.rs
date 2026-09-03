@@ -276,6 +276,36 @@ CREATE TABLE IF NOT EXISTS contracts (
             tag TEXT PRIMARY KEY,
             color TEXT NOT NULL
         );
+        -- v0.19.0（REQ-258，ADR-029）：检索与发现层——kb_* 派生索引三表。
+        -- 铁律：只读事实源（notes/fragments），可全量重建，永不当系统记录；
+        -- 影子表写入收敛 kb_index 模块同事务双写（不依赖触发器/recursive_triggers）
+        CREATE TABLE IF NOT EXISTS kb_chunks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_kind TEXT NOT NULL CHECK (source_kind IN ('note','fragment')),
+            note_id INTEGER REFERENCES notes(id) ON DELETE CASCADE,          -- source_kind='note'
+            fragment_id INTEGER REFERENCES fragments(id) ON DELETE CASCADE,  -- source_kind='fragment'
+            ord INTEGER NOT NULL,
+            heading TEXT,
+            char_start INTEGER NOT NULL, char_end INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            embedding BLOB,                                                  -- f32 向量（v0.19.3）；无引擎 NULL
+            CHECK ((source_kind='note'     AND note_id IS NOT NULL AND fragment_id IS NULL)
+                OR (source_kind='fragment' AND fragment_id IS NOT NULL AND note_id IS NULL))
+        );
+        -- 主清理路径 = 删除事务内显式先清（kb_index 模块）；FK CASCADE 仅兜底
+        -- （级联不负责影子表 kb_fts——勿依赖）
+        CREATE INDEX IF NOT EXISTS idx_kb_chunks_source ON kb_chunks(source_kind, note_id, fragment_id);
+        -- 词法影子表；tokenize=trigram（2026-09-03 中文 BM25 切词校准定案——
+        -- unicode61 将连续中文句视为单 token 无法子串匹配；trigram 免分词器，
+        -- bundled SQLite ≥3.34 已含，纯源码编译无 TLS 下载风险，详见 kb_fts.rs）
+        CREATE VIRTUAL TABLE IF NOT EXISTS kb_fts USING fts5(
+            text, chunk_id UNINDEXED,
+            tokenize = 'trigram'
+        );
+        -- 派生索引元数据：模型版本/dim、index_version、重建与失败统计
+        CREATE TABLE IF NOT EXISTS kb_meta (
+            key TEXT PRIMARY KEY, value TEXT NOT NULL
+        );
         ",
     )?;
     // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）

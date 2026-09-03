@@ -27,6 +27,9 @@ pub enum ChatStreamEvent {
     Failed { error_kind: String, message: String },
     /// 用户取消（content=已生成文本；消息落库标 aborted）
     Aborted { content: String },
+    /// v0.19.1（REQ-260）：学习库问答命中片段（本地恒可用——先于/独立于
+    /// 生成；无命中为空列表——前端按内容文案呈现）
+    KbHits { hits: Vec<crate::kb_search::KbHit> },
 }
 
 impl From<&AiClientError> for ChatStreamEvent {

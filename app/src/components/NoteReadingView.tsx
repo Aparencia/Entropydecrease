@@ -27,6 +27,9 @@ interface Props {
   headerExtra?: ReactNode;
   /** v0.15：大纲列折叠（统一列折叠体系——父层 useColumnLayout 驱动，替代悬浮按钮） */
   outlineFolded?: boolean;
+  /** v0.19.1（REQ-260）：外部注入的命中词搜索（引用跳转——key 递增可重触发；
+   *  复用 A2 搜索高亮与定位，仅阅读态） */
+  externalSearch?: { key: number; query: string } | null;
   onToggleOutline?: () => void;
   onEdit: () => void;
   onPinToggle: () => void;
@@ -39,7 +42,7 @@ interface Props {
 
 export default function NoteReadingView({
   note, editing, editor, auxPanels, headerExtra,
-  outlineFolded = false, onToggleOutline,
+  outlineFolded = false, externalSearch = null, onToggleOutline,
   onEdit, onPinToggle, onDelete, onTagClick, onOpenSession, onTaskToggle, onImageOpen,
 }: Props) {
   // A2：搜索高亮（M6：匹配集合=渲染产物只读查询，计数经此状态驱动）
@@ -48,6 +51,14 @@ export default function NoteReadingView({
   const [searchIndex, setSearchIndex] = useState(0);
   const [searchMatches, setSearchMatches] = useState<HTMLElement[]>([]);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // v0.19.1：外部命中词搜索（引用跳转自动激活——key 递增允许同词重触发；
+  // 用户手动关闭搜索后不再被旧请求拉起）
+  useEffect(() => {
+    if (externalSearch == null) return;
+    setSearchQuery(externalSearch.query);
+    setSearchActive(true);
+  }, [externalSearch?.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // v0.15：大纲折叠态外提至 NotesPage（统一列折叠）；本组件仅剩取数
   // ── 大纲：从 Markdown 提取标题 ──

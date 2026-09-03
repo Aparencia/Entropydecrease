@@ -63,6 +63,9 @@ fn save_load_roundtrip() {
         // v0.18.2：目标 AI 独立闸门 + 预算档位 roundtrip 保真
         goal_plan_enabled: true,
         goal_plan_tier: "deep".to_string(),
+        // v0.19.1：学习库问答生成独立闸门 + 预算档位 roundtrip 保真
+        kb_qa_enabled: true,
+        kb_qa_tier: "light".to_string(),
     };
     s.save(&path).expect("保存成功");
     let loaded = AiSettings::load(&path);
@@ -88,4 +91,15 @@ fn enabled_gate_only_checks_switch() {
     assert!(s.enabled_gate().is_err());
     let s2 = AiSettings { enabled: true, ..AiSettings::default() };
     assert!(s2.enabled_gate().is_ok());
+}
+
+#[test]
+fn kb_qa_gate_requires_content_gate_plus_kb_switch() {
+    // 双闸门（v0.19.1 REQ-260）：默认关（命中列表不受约束——生成才闸）
+    let s = AiSettings::default();
+    assert!(s.kb_qa_gate().is_err(), "默认状态生成必须被拦截");
+    let mut s2 = AiSettings { enabled: true, authorized: true, ..AiSettings::default() };
+    assert!(s2.kb_qa_gate().is_err(), "content_gate 过但 kb 开关未开仍拦截");
+    s2.kb_qa_enabled = true;
+    assert!(s2.kb_qa_gate().is_ok(), "双闸门齐开放行");
 }

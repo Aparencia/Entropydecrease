@@ -9,6 +9,7 @@ use rusqlite::{params, OptionalExtension};
 
 use crate::db::{unix_seconds, Db};
 use crate::error::Result;
+use crate::kb_index::soft_rebuild_note;
 use crate::types::{NewNote, Note};
 
 /// notes 表统一查询列（列顺序与 row_to_note 严格对应——改一处必须同步另一处）。
@@ -29,6 +30,9 @@ impl Db {
                 ],
             )?;
             let id = conn.last_insert_rowid();
+            // v0.19.0（REQ-258）索引钩子：新建笔记即入派生索引（同事务软失败
+            // 记录不阻断——失败可见于 kb_index_stats 角标）
+            soft_rebuild_note(conn, id, &new.content);
             Ok(Note {
                 id,
                 title: new.title.clone(),
@@ -74,13 +78,25 @@ impl Db {
     }
 
     /// 更新笔记标题与正文，刷新 updated_at。
+    ///
+    /// @ai-context: v0.19.0 索引钩子：正文变化才重建派生索引（标题不在 chunk
+    ///              源内——chunk 源=净化后文本 notes.content，ADR-029 决策 2）；
+    ///              纯标题保存零额外写。
     pub fn update_note(&self, id: i64, title: &str, content: &str) -> Result<bool> {
         let now = unix_seconds();
         self.with_conn(|conn| {
+            // 旧正文（比较判跳过——versioned_save 已同事务建索引后本函数仍会被
+            // 调用于标题更新，避免二次重建）
+            let cur: Option<String> = conn
+                .query_row("SELECT content FROM notes WHERE id = ?1", params![id], |r| r.get(0))
+                .optional()?;
             let affected = conn.execute(
                 "UPDATE notes SET title = ?1, content = ?2, updated_at = ?3 WHERE id = ?4",
                 params![title, content, now, id],
             )?;
+            if affected > 0 && cur.as_deref() != Some(content) {
+                soft_rebuild_note(conn, id, content);
+            }
             Ok(affected > 0)
         })
     }
@@ -88,6 +104,10 @@ impl Db {
     /// 删除笔记；返回是否实际删除。
     pub fn delete_note(&self, id: i64) -> Result<bool> {
         self.with_conn(|conn| {
+            // v0.19.0（REQ-258）：先清派生索引（kb_chunks + kb_fts 影子表——
+            // FK CASCADE 不负责 kb_fts，勿依赖；与 v0.14 C3 knowledge_links
+            // 清理同款"先清后删"位置）——失败软记录不阻断删除
+            crate::kb_index::soft_clear_note(conn, id);
             // v0.14 C3 审查（L5 悬空边）：笔记删除级联清理 knowledge_links 的
             // target 引用——图谱/反查不出现指向已删除笔记的悬空边。先清引用
             // 后删笔记：失败半态 = 反查少一条（可重挂），优于悬空边；单连接

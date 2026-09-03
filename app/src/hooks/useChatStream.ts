@@ -11,12 +11,14 @@
  */
 import { useCallback, useRef, useState } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
-import type { ChatStreamEvent } from "../types";
+import type { ChatStreamEvent, KbHit } from "../types";
 
 /** 当前展示中的流式视图（仅 actived 会话的流可见） */
 export interface ChatStreamView {
   sessionId: number;
   text: string;
+  /** v0.19.1（REQ-260）：学习库命中片段（kb_hits 事件累积——本地恒可用） */
+  hits: KbHit[];
 }
 
 /** 流终态事件回调（done/aborted/failed——调用方刷新该会话消息） */
@@ -25,10 +27,19 @@ export type StreamSettled = (sessionId: number, ev: ChatStreamEvent) => void;
 export default function useChatStream(onSettled: StreamSettled) {
   const streams = useRef(new Map<number, Channel<ChatStreamEvent>>());
   const accs = useRef(new Map<number, string>());
+  // v0.19.1（REQ-260）：每会话命中片段（kb_hits 非终态事件——与文本累积平行）
+  const hitsRef = useRef(new Map<number, KbHit[]>());
   const [view, setView] = useState<ChatStreamView | null>(null);
   const viewRef = useRef<number | null>(null);
   const onSettledRef = useRef(onSettled);
   onSettledRef.current = onSettled;
+
+  const syncView = useCallback((sessionId: number) => {
+    if (viewRef.current !== sessionId) return;
+    const acc = accs.current.get(sessionId) ?? "";
+    const hits = hitsRef.current.get(sessionId) ?? [];
+    setView(hits.length > 0 || acc !== "" ? { sessionId, text: acc, hits } : null);
+  }, []);
 
   /** 切换展示会话（null=任务视图/无会话）——流式可见性随之切换 */
   const setActive = useCallback((sessionId: number | null) => {
@@ -37,9 +48,8 @@ export default function useChatStream(onSettled: StreamSettled) {
       setView(null);
       return;
     }
-    const acc = accs.current.get(sessionId);
-    setView(acc !== undefined && acc !== "" ? { sessionId, text: acc } : null);
-  }, []);
+    syncView(sessionId);
+  }, [syncView]);
 
   /** 该会话是否有进行中的流 */
   const isStreaming = useCallback((sessionId: number) => streams.current.has(sessionId), []);
@@ -57,16 +67,24 @@ export default function useChatStream(onSettled: StreamSettled) {
     const channel = new Channel<ChatStreamEvent>();
     streams.current.set(sessionId, channel);
     accs.current.set(sessionId, "");
-    if (viewRef.current === sessionId) setView({ sessionId, text: "" });
+    hitsRef.current.set(sessionId, []);
+    if (viewRef.current === sessionId) setView({ sessionId, text: "", hits: [] });
     channel.onmessage = (ev) => {
       if (ev.kind === "chunk") {
         const acc = (accs.current.get(sessionId) ?? "") + ev.delta;
         accs.current.set(sessionId, acc);
-        if (viewRef.current === sessionId) setView({ sessionId, text: acc });
+        syncView(sessionId);
+        return;
+      }
+      if (ev.kind === "kb_hits") {
+        // v0.19.1：命中列表（本地）——非终态，文本流照常累积
+        hitsRef.current.set(sessionId, ev.hits);
+        syncView(sessionId);
         return;
       }
       // done / aborted / failed：流终态
       accs.current.delete(sessionId);
+      hitsRef.current.delete(sessionId);
       streams.current.delete(sessionId);
       if (viewRef.current === sessionId) setView(null);
       onSettledRef.current(sessionId, ev);
@@ -76,12 +94,13 @@ export default function useChatStream(onSettled: StreamSettled) {
     } catch (e) {
       // 命令前置校验失败（gate/单流/参数）——清理半启动的流槽
       accs.current.delete(sessionId);
+      hitsRef.current.delete(sessionId);
       streams.current.delete(sessionId);
       if (viewRef.current === sessionId) setView(null);
       throw e;
     }
     return true;
-  }, []);
+  }, [syncView]);
 
   /** 停止该会话流（后端置取消标志——无进行中流为 no-op） */
   const stop = useCallback((sessionId: number) => {

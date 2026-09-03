@@ -136,6 +136,12 @@ impl Db {
         )?;
         let id = tx.last_insert_rowid();
         trim_oldest(&tx, note_id)?;
+        // v0.19.0（REQ-258）保存收口索引钩子：正文变化的 versioned_save 即
+        // 事务内重建派生索引（实现口径说明见 kb_index.rs——同步重建零竞态，
+        // 单笔记毫秒级）；失败软记录进 kb_meta，主链路（保存）不反悔
+        if cur != content {
+            crate::kb_index::soft_rebuild_note(&tx, note_id, content);
+        }
         tx.commit()?;
         Ok(NoteVersion {
             id,

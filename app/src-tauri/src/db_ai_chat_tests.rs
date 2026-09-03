@@ -36,8 +36,8 @@ fn task_rec(task_id: u64, state: &str) -> AiTaskRecord {
 #[test]
 fn session_crud_roundtrip() {
     let db = open_mem();
-    let id = db.insert_chat_session(None).unwrap();
-    let id2 = db.insert_chat_session(Some("讨论深拷贝")).unwrap();
+    let id = db.insert_chat_session(None, false).unwrap();
+    let id2 = db.insert_chat_session(Some("讨论深拷贝"), false).unwrap();
     // 列表：最近更新在前
     let list = db.list_chat_sessions().unwrap();
     assert_eq!(list.len(), 2);
@@ -67,7 +67,7 @@ fn get_session_missing_returns_none() {
 #[test]
 fn message_lifecycle_and_order() {
     let db = open_mem();
-    let sid = db.insert_chat_session(None).unwrap();
+    let sid = db.insert_chat_session(None, false).unwrap();
     let _mid = db.insert_chat_message(sid, "user", "你好", "done").unwrap();
     let aid = db.insert_chat_message(sid, "assistant", "", "streaming").unwrap();
     // 终态回填（流式完成）
@@ -88,7 +88,7 @@ fn message_lifecycle_and_order() {
 #[test]
 fn edit_resend_deletes_messages_after() {
     let db = open_mem();
-    let sid = db.insert_chat_session(None).unwrap();
+    let sid = db.insert_chat_session(None, false).unwrap();
     let m1 = db.insert_chat_message(sid, "user", "原来", "done").unwrap();
     let _m2 = db.insert_chat_message(sid, "assistant", "旧回答", "done").unwrap();
     // 编辑后重发：改内容 + 删除其后消息（会话限定）
@@ -100,7 +100,7 @@ fn edit_resend_deletes_messages_after() {
     // m2 已删（id > m1 排除）
     assert!(db.list_chat_messages(sid).unwrap().len() == 1);
     // 跨会话编辑被拒（会话限定——查无此行，内容不变）
-    let s2 = db.insert_chat_session(None).unwrap();
+    let s2 = db.insert_chat_session(None, false).unwrap();
     db.update_chat_message_content(s2, m1, "篡改").unwrap();
     assert_eq!(db.list_chat_messages(sid).unwrap()[0].content, "改后");
 }
@@ -108,7 +108,7 @@ fn edit_resend_deletes_messages_after() {
 #[test]
 fn chat_message_role_scoped_and_role_report() {
     let db = open_mem();
-    let sid = db.insert_chat_session(None).unwrap();
+    let sid = db.insert_chat_session(None, false).unwrap();
     let um = db.insert_chat_message(sid, "user", "u", "done").unwrap();
     let am = db.insert_chat_message(sid, "assistant", "a", "done").unwrap();
     assert_eq!(db.chat_message_role(sid, um).unwrap().as_deref(), Some("user"));
@@ -120,8 +120,8 @@ fn chat_message_role_scoped_and_role_report() {
 #[test]
 fn delete_message_scoped_to_session() {
     let db = open_mem();
-    let s1 = db.insert_chat_session(None).unwrap();
-    let s2 = db.insert_chat_session(None).unwrap();
+    let s1 = db.insert_chat_session(None, false).unwrap();
+    let s2 = db.insert_chat_session(None, false).unwrap();
     let m = db.insert_chat_message(s1, "user", "x", "done").unwrap();
     // 跨会话删除被拒绝（消息 id 不属于 s2 → 0 行受影响，消息仍在）
     db.delete_chat_message(s2, m).unwrap();

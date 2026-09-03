@@ -24,6 +24,10 @@ export interface AiSettingsView {
   goalPlanEnabled: boolean;
   /** v0.18.2：目标规划预算档位（light/standard/deep） */
   goalPlanTier: string;
+  /** v0.19.1（REQ-260）：学习库问答生成开关——默认关（命中列表不受其约束） */
+  kbQaEnabled: boolean;
+  /** v0.19.1（REQ-260）：学习库问答片段预算档位（light/standard/deep） */
+  kbQaTier: string;
   hasKey: boolean;
   /** credential（凭据库）| env（环境变量）| none */
   keySource: string;

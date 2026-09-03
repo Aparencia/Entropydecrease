@@ -41,6 +41,9 @@ import { useNoteAttention } from "../components/useNoteAttention";
 
 interface Props {
   focusNoteId?: number | null;
+  /** v0.19.1（REQ-260）：引用跳笔记——打开目标并注入命中词阅读搜索
+   *  （key 递增：同笔记重复引用可重触发） */
+  focusNoteSearch?: { noteId: number; search: string; key: number } | null;
   /** v0.14 C2：图谱双击组节点 → 过滤该组（变化时跟随，同 focusNoteId 模式） */
   focusGroupId?: number | null;
   onOpenSessions?: (sessionId: number) => void;
@@ -51,7 +54,7 @@ interface Props {
 /** 中部视图：notes=笔记列表（组过滤/搜索/标签）；inbox=收件箱碎片列表 */
 type MiddleView = "notes" | "inbox";
 
-export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, onOpenSystem }: Props) {
+export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, onOpenSessions, onOpenSystem }: Props) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [keyword, setKeyword] = useState("");
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -64,6 +67,8 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
   const [review, setReview] = useState<{ groupId: number | null; name: string } | undefined>(undefined);
   const [selected, setSelected] = useState<Note | null>(null);
   const [status, setStatus] = useState("");
+  // v0.19.1：阅读态命中词搜索请求（来自引用跳转；key 递增可重触发）
+  const [readerSearch, setReaderSearch] = useState<{ noteId: number; search: string; key: number } | null>(null);
   // M3：编辑态
   const [editing, setEditing] = useState(false);
   // v0.17.0：编辑态 AI 能力对话框（精修/知识补充统一入口——REQ-246）
@@ -140,9 +145,11 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
     return () => timers.forEach((t) => clearTimeout(t));
   }, []);
 
-  // focusNoteId 跨页直达（三栏下无需展开——列表常驻，滚动定位即可）
+  // 跨页直达（focusNoteId 定位滚动；v0.19.1 focusNoteSearch 追加命中词阅读
+  // 搜索注入——两入口共用一次列表重载/选中/滚动，防双 effect 双拉取竞态）
   useEffect(() => {
-    if (focusNoteId == null) return;
+    const targetId = focusNoteSearch ? focusNoteSearch.noteId : focusNoteId;
+    if (targetId == null) return;
     let disposed = false;
     (async () => {
       setKeyword("");
@@ -153,7 +160,7 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
         const list = await invoke<Note[]>("list_notes", { sortMode: "updated-desc" });
         if (disposed || seqRef.current !== seq) return;
         setNotes(list);
-        const target = list.find((n) => n.id === focusNoteId);
+        const target = list.find((n) => n.id === targetId);
         if (target) {
           setSelected(target);
           // L2：定时器登记入 ref（cleanup 可清理），不再裸 setTimeout
@@ -163,12 +170,16 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
             }, 50),
           );
         }
+        if (focusNoteSearch) setReaderSearch({ ...focusNoteSearch });
       } catch (e) {
-        if (!disposed) setStatus(`加载失败: ${e}`);
+        if (!disposed) {
+          if (focusNoteSearch) setReaderSearch({ ...focusNoteSearch });
+          setStatus(`加载失败: ${e}`);
+        }
       }
     })();
     return () => { disposed = true; };
-  }, [focusNoteId]);
+  }, [focusNoteId, focusNoteSearch]);
 
   // v0.14 C2：图谱组节点直达——仅过滤（三栏下列表常驻；不触发展开）
   useEffect(() => {
@@ -442,6 +453,10 @@ export default function NotesPage({ focusNoteId, focusGroupId, onOpenSessions, o
           <NoteReadingView
             note={selected}
             editing={editing}
+            // v0.19.1：命中词阅读搜索（仅当请求属于当前选中笔记——过期请求不注入）
+            externalSearch={readerSearch && selected?.id === readerSearch.noteId
+              ? { key: readerSearch.key, query: readerSearch.search }
+              : null}
             outlineFolded={outlineCol.folded}
             onToggleOutline={() => outlineCol.setManualFolded(!outlineCol.manuallyFolded)}
             editor={

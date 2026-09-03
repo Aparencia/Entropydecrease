@@ -245,6 +245,17 @@ mod foreground_timeline;
 mod fusion;
 mod glossary;
 mod budget_allocator;
+// v0.19.0（REQ-258，ADR-029）：检索与发现层——派生索引（kb_chunks/kb_fts/
+// kb_meta：节级切块/影子表双写/混合检索/全量重建/stats）+ 命令层
+mod kb_chunk;
+mod kb_fts;
+mod kb_index;
+mod kb_reindex;
+mod kb_search;
+mod commands_kb;
+// v0.19.1（REQ-260）：学习库问答编排（检索分支分流——纯聊链路零改动）
+mod kb_prompt;
+mod commands_ai_chat_kb;
 mod concept_weakness;
 mod goal_interview;
 mod goal_plan_prompt;
@@ -571,6 +582,12 @@ pub fn run() {
             commands_goals_plan::goal_chat_context,
             commands_goals_plan::goal_concept_weakness,
             commands_goals_plan::goal_apply_plan,
+            // v0.19.0（REQ-258）：检索与发现层——检索/统计/全量重建
+            commands_kb::kb_search,
+            commands_kb::kb_index_stats,
+            commands_kb::kb_reindex_all,
+            // v0.19.1（REQ-260）：学习库问答生成开关与预算档位（设置段读写）
+            commands_ai_settings::ai_set_kb_qa,
             // v0.13.1（REQ-202~205）：知识体系层——体系/问题树/概念/模型/引用/审计探测
             commands_knowledge_systems::list_knowledge_systems,
             commands_knowledge_systems::create_knowledge_system,

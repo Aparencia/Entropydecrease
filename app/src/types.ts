@@ -15,4 +15,6 @@ export * from "./types/artifact";
 export * from "./types/live";
 export * from "./types/ai";
 export * from "./types/chat";
+// v0.19（REQ-258/260）：检索与发现层类型（索引统计/重建事件）
+export * from "./types/kb";
 export * from "./types/system";

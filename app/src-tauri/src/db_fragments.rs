@@ -8,6 +8,7 @@ use rusqlite::params;
 
 use crate::db::{unix_seconds, Db};
 use crate::error::Result;
+use crate::kb_index::{soft_clear_fragment, soft_index_fragment};
 use crate::types::{Fragment, Note};
 
 /// fragments 表统一查询列（列顺序与 row_to_fragment 严格对应）。
@@ -34,6 +35,11 @@ impl Db {
                 params![new.text, new.image_path, new.domain_tag, new.group_id, new.source, now],
             )?;
             let id = conn.last_insert_rowid();
+            // v0.19.0（REQ-258）碎片一次性索引钩子（碎片不可变——无更新路径；
+            // 纯图碎片 text 为空不入块；失败软记录不阻断捕获）
+            if !new.text.trim().is_empty() {
+                soft_index_fragment(conn, id, &new.text);
+            }
             Ok(Fragment {
                 id,
                 text: new.text.clone(),
@@ -142,6 +148,9 @@ impl Db {
     ///              卡已生成即独立资产）；结算归档走 set_fragment_status 不删。
     pub fn delete_fragment(&self, id: i64) -> Result<bool> {
         self.with_conn(|conn| {
+            // v0.19.0（REQ-258）：先清派生索引（kb_fts 影子表 FK 级联不负责——
+            // 显式清理为主路径；失败软记录不阻断删除）
+            soft_clear_fragment(conn, id);
             let affected = conn.execute("DELETE FROM fragments WHERE id = ?1", params![id])?;
             Ok(affected > 0)
         })
@@ -230,8 +239,15 @@ impl Db {
                 params![content, note_id],
             )?;
         }
-        // ④ 删碎片（绑定卡自动解绑保留）——与 ② 同事务：任一步失败整链回滚
+        // ④ 删碎片（绑定卡自动解绑保留）——与 ② 同事务：任一步失败整链回滚；
+        //    v0.19.0：先清碎片派生索引（影子表级联不负责——同事务显式清理）
+        soft_clear_fragment(&tx, fragment_id);
         tx.execute("DELETE FROM fragments WHERE id = ?1", params![fragment_id])?;
+        // v0.19.0：升笔记 = 建笔记分支（promote 若绕过 versioned_save 保存收口
+        // 则在此建笔记分支索引最终正文——事务内软失败记录不阻断）
+        if !content.trim().is_empty() {
+            crate::kb_index::soft_rebuild_note(&tx, note_id, &content);
+        }
         tx.commit()?;
         // ⑤ 组装返回（与库内一致）
         Ok(Note {

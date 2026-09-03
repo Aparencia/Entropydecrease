@@ -50,6 +50,13 @@ pub struct AiSettings {
     pub goal_plan_enabled: bool,
     /// v0.18.2（REQ-254）：目标规划预算档位（light/standard/deep；默认标准）。
     pub goal_plan_tier: String,
+    /// v0.19.1（REQ-260）：学习库问答生成独立闸门——命中片段列表恒可用
+    /// （本地零成本零上传），生成=最小片段上云 → content_gate + 本开关双闸门，
+    /// 默认关（ADR-029 决策 4/治理 §9）。
+    pub kb_qa_enabled: bool,
+    /// v0.19.1（REQ-260）：学习库问答片段预算档位（light/standard/deep；
+    /// 默认 standard——budget_allocator 档位硬顶复用）。
+    pub kb_qa_tier: String,
 }
 
 impl Default for AiSettings {
@@ -65,6 +72,8 @@ impl Default for AiSettings {
             refine_strategy: RefineStrategyPrefs::default(),
             goal_plan_enabled: false,
             goal_plan_tier: "standard".to_string(),
+            kb_qa_enabled: false,
+            kb_qa_tier: "standard".to_string(),
         }
     }
 }
@@ -117,6 +126,19 @@ impl AiSettings {
         self.content_gate()?;
         if !self.goal_plan_enabled {
             return Err("目标 AI 规划未开启（设置→目标 AI 段打开开关；关闭时按规则草案正常规划，零影响）".to_string());
+        }
+        Ok(())
+    }
+
+    /// 学习库问答生成双闸门（v0.19.1 REQ-260）：content_gate + kb_qa 开关。
+    ///
+    /// @ai-context: 学习库问答检索在本地完成（命中列表恒可用——不受本闸门
+    ///              约束）；生成才上传**最小命中片段** → 在授权红线之上再设
+    ///              独立开关（默认关）。失败文案引导设置页「学习库」段。
+    pub fn kb_qa_gate(&self) -> Result<(), String> {
+        self.content_gate()?;
+        if !self.kb_qa_enabled {
+            return Err("学习库问答生成未开启（设置→AI 服务→学习库段打开开关；关闭时命中片段列表照常可用，零影响）".to_string());
         }
         Ok(())
     }
