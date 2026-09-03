@@ -461,11 +461,28 @@
 
 | REQ | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
 |----|------|--------|------|---------|------|
-| REQ-258 | 检索与索引基建：kb_chunks/kb_meta/FTS5 影子表（节级切块 ≤800 字符硬切、多态源双可空 FK）+ 生命周期（保存收口钩子重索引/删除事务内显式清理/全量重建 reindex_all + kb_index_stats 角标）+ kb_search 混合检索（FTS5 BM25 ∪ 向量余弦 → RRF 融合；LIKE 旧链保留） | P1 | 已立项 | v0.19.0 | FTS-only 可发布；影子表写入收敛 kb_index 同事务双写（不依赖触发器） |
+| REQ-258 | 检索与索引基建：kb_chunks/kb_meta/FTS5 影子表（节级切块 ≤800 字符硬切、多态源双可空 FK）+ 生命周期（保存收口钩子重索引/删除事务内显式清理/全量重建 reindex_all + kb_index_stats 角标）+ kb_search 混合检索（FTS5 BM25 ∪ 向量余弦 → RRF 融合；LIKE 旧链保留） | P1 | 已实施 | v0.19.0 | FTS-only 可发布；影子表写入收敛 kb_index 同事务双写（不依赖触发器）；**代码已交付（2026-09-03：三表 DDL + 切块/查询纯函数 + 生命周期钩子 + reindex_all/stats + kb_search；切词校准定案=trigram+2 字 LIKE 补充；RRF 函数 TDD 先行待 v0.19.3 合流）** |
 | REQ-259 | 本地 embedding 引擎：EmbeddingEngine trait（Noop/Onnx/Ollama 实现）+ M0 spike 定选型（内嵌 ONNX bge-small-zh-v1.5 vs Ollama /api/embeddings；中文小评测集 ~30 查询；ORT 共存必测）+ 模型分发复用 model_registry + 混合检索开启 | P1 | 已立项 | v0.19.3（spike 定案后） | 无模型 = FTS-only 降级，不阻塞 v0.19.0~2；模型文件不入库 |
-| REQ-260 | 学习库问答「问我的学习库」：chat_sessions.retrieval 列 + chat_send 检索分支（命中列表恒可用·本地；生成经 content_gate + kb_qa_enabled 默认关）+ pack_fragments 转正 + 预算档位/成本/审计（ai_usage + meta_json 引用）+ 引用 chips 跳笔记高亮命中词 | P1 | 已立项 | v0.19.1 | 兑现 REQ-024/REQ-231 检索欠账（口径修订见设计 §十二.1）；断网回退命中列表 |
+| REQ-260 | 学习库问答「问我的学习库」：chat_sessions.retrieval 列 + chat_send 检索分支（命中列表恒可用·本地；生成经 content_gate + kb_qa_enabled 默认关）+ pack_fragments 转正 + 预算档位/成本/审计（ai_usage + meta_json 引用）+ 引用 chips 跳笔记高亮命中词 | P1 | 已实施 | v0.19.1 | 兑现 REQ-024/REQ-231 检索欠账（口径修订见设计 §十二.1）；断网回退命中列表；**代码已交付（2026-09-03：retrieval/meta_json 补列 + kb 双闸门编排 + KbHits 事件 + CitationChips + 笔记内命中词搜索高亮 + 设置「学习库」段）** |
 | REQ-261 | 检索建议（发现路径）：概念/节点详情「相关素材建议」候选（混合检索 top-K ≤10，排除已链接）→ 人工勾选确认 → 既有 link_knowledge_target 落库（白名单零迁移）+ 跨体系相似概念提示（提示型不自动合并） | P2 | 已立项 | v0.19.2 | kb_discovery 默认关（交叉点默认关延续）；建议不落库零双写 |
-| REQ-262 | 治理与设置：SettingsPage「学习库」段（引擎状态/模型下载/索引统计与重建/发现开关）+ FTS5 使能核查 + 中文 BM25 切词校准 | P2 | 已立项 | v0.19 系列随批 | 复用 speaker/OCR 模型下载 UI 范式 |
+| REQ-262 | 治理与设置：SettingsPage「学习库」段（引擎状态/模型下载/索引统计与重建/发现开关）+ FTS5 使能核查 + 中文 BM25 切词校准 | P2 | 部分落地（v0.19.0~1） | v0.19 系列随批 | 复用 speaker/OCR 模型下载 UI 范式；**已交付（2026-09-03）：FTS5 使能核查（bundled 恒编 FTS5）+ 中文切词校准定案（trigram）+ 设置「学习库」段（引擎状态/问答开关与档位/统计/重建）；模型下载与发现开关随 v0.19.3/v0.19.2** |
+
+### v0.20 · ASR 质量增强（2026-09-03 用户裁决立项 C：P0~P2）
+
+> 依据：repowiki+代码互证盘点（阈值经验化/实时缺全量精修/无混淆画像/三处文档落差）+ 用户裁决（① 验证必须代码自验证 ② 立项范围 C）；
+> 设计：[asr-optimization-plan.md（决策稿）](../Foresight/asr-optimization-plan.md) ＋ [ADR-030](../adr/ADR-030-asr-quality-batch.md)（已接受）＋ [v0.20 版本文档](../versions/v0.20.md)；
+> 排期：v0.20.0（P0 harness+首轮报告）→ v0.20.1（P1 DTW 接线/参数 A-B 定案/热词加固/积压验证）→ v0.20.2（P2 全量精修/混淆画像闭环/LLM 校对）；退出标准全为代码自验证。
+
+| REQ | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
+|----|------|--------|------|---------|------|
+| REQ-263 | asr_eval 自验证 harness：批量样本转写（流式/离线/参数矩阵/预处理开关）→ dtw 对齐 → CER/混淆画像 → A-B 对比表 → 回归退出码（CI）+ 有参考样本 fixtures 固化 + 首轮自测报告（含漂移分布） | P1 | 已立项 | v0.20.0（P0） | 参考信道：字幕轨>字幕OCR>会话字幕段；无参考不进 CER；复用 cer_bench/cer.rs/dtw_align/asr_forensic |
+| REQ-264 | DTW 漂移校正生产接线（dtw_align 纯函数已备、现无调用点）：接入字幕融合入口 + 漂移估计分布统计 | P1 | 已立项 | v0.20.1（P1） | 字幕权威路线错位主因；harness 自动统计无需人工 |
+| REQ-265 | 参数定案族：预处理默认定案 + VAD 预热/窗口/倍率、端点 rule1/2/3、重打分门限、融合 gap/SIM/权重、去重阈值——asr_eval 自动 A/B 标定 + 配置化/档案化（JSON/audio_preproc_config 先例） | P1 | 已立项 | v0.20.1（P1） | 向后兼容：默认值不变则零行为漂移；golden 防误删 |
+| REQ-266 | 热词加固与注入源扩展：tokens 表外字过滤/崩溃防护单测 + 标题/章节/术语候选自动注入（领域细分已有） | P1 | 已立项 | v0.20.1（P1） | 感知质量主战场（术语/专名错） |
+| REQ-267 | 重打分积压验证与停止 drain 策略（3s 有界超时下的 channel 积压/慢机内容缺失） | P1 | 已立项 | v0.20.1（P1） | harness 慢速档回放验证 |
+| REQ-268 | 会话全量离线精修档：会话结束 S4 落盘音频全量 SenseVoice 第二遍 → 段级 diff → 预览采纳/回退（原料不可变、替换段标记来源/置信） | P1 | 已立项 | v0.20.2（P2） | 实时会话获得导入同级离线质量；O4 登记项落地 |
+| REQ-269 | ASR 同音混淆画像闭环：画像→候选纠错表（共现才替换、确认制，OCR ocr_confusion 机制迁移）→ 反哺 hotwords；JSON 可校准 | P2 | 已立项 | v0.20.2（P2） | 术语/专名错自动发现与修正 |
+| REQ-270 | 可选 LLM 文本校对：建议制逐句 + content_gate 默认关 + 成本审计；仅文本上云（语音不出本机红线）；离线降级规则 | P2 | 已立项 | v0.20.2（P2） | 复用 ai_platform（本地 Ollama/云端 BYOK）；人类裁决 |
 
 ### V1.0 · 体验增强（远期）
 
