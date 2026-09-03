@@ -457,15 +457,26 @@
 
 > 依据：用户 2026-09-03 方向裁决「方案三：派生索引＋双读路径＋人工裁决闭环」（加一层能力 ＋ 换引擎良性内核；整体重定位/引擎替换否决）；检索欠账核实（FTS5 未实装、/goal L3 为标题占位）后立项；
 > 设计：[2026-09-03-v0.19-rag-retrieval-discovery-design.md（[ ] 已归档）](../archive/2026-09-03/2026-09-03-v0.19-rag-retrieval-discovery-design.md) ＋ [ADR-029](../adr/ADR-029-rag-retrieval-discovery-layer.md)（已接受）；
-> 排期：M0 spike → v0.19.0（索引基建）→ v0.19.1（学习库问答）→ v0.19.2（检索建议）→ v0.19.3（语义增强，spike 定案后）。
+> 排期：M0 spike → v0.19.0（索引基建）→ v0.19.1（学习库问答）→ v0.19.2（采集体验小版本——用户实测插队，见下段）→ v0.19.3（检索建议）→ v0.19.4（语义增强，spike 定案后）。
 
 | REQ | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
 |----|------|--------|------|---------|------|
 | REQ-258 | 检索与索引基建：kb_chunks/kb_meta/FTS5 影子表（节级切块 ≤800 字符硬切、多态源双可空 FK）+ 生命周期（保存收口钩子重索引/删除事务内显式清理/全量重建 reindex_all + kb_index_stats 角标）+ kb_search 混合检索（FTS5 BM25 ∪ 向量余弦 → RRF 融合；LIKE 旧链保留） | P1 | 已实施 | v0.19.0 | FTS-only 可发布；影子表写入收敛 kb_index 同事务双写（不依赖触发器）；**代码已交付（2026-09-03：三表 DDL + 切块/查询纯函数 + 生命周期钩子 + reindex_all/stats + kb_search；切词校准定案=trigram+2 字 LIKE 补充；RRF 函数 TDD 先行待 v0.19.3 合流）** |
-| REQ-259 | 本地 embedding 引擎：EmbeddingEngine trait（Noop/Onnx/Ollama 实现）+ M0 spike 定选型（内嵌 ONNX bge-small-zh-v1.5 vs Ollama /api/embeddings；中文小评测集 ~30 查询；ORT 共存必测）+ 模型分发复用 model_registry + 混合检索开启 | P1 | 已立项 | v0.19.3（spike 定案后） | 无模型 = FTS-only 降级，不阻塞 v0.19.0~2；模型文件不入库 |
+| REQ-259 | 本地 embedding 引擎：EmbeddingEngine trait（Noop/Onnx/Ollama 实现）+ M0 spike 定选型（内嵌 ONNX bge-small-zh-v1.5 vs Ollama /api/embeddings；中文小评测集 ~30 查询；ORT 共存必测）+ 模型分发复用 model_registry + 混合检索开启 | P1 | 已立项 | v0.19.4（spike 定案后） | 无模型 = FTS-only 降级，不阻塞 v0.19.0~2；模型文件不入库；**2026-09-03 顺延：v0.19.2 采集体验小版本用户实测插队（原 v0.19.3）** |
 | REQ-260 | 学习库问答「问我的学习库」：chat_sessions.retrieval 列 + chat_send 检索分支（命中列表恒可用·本地；生成经 content_gate + kb_qa_enabled 默认关）+ pack_fragments 转正 + 预算档位/成本/审计（ai_usage + meta_json 引用）+ 引用 chips 跳笔记高亮命中词 | P1 | 已实施 | v0.19.1 | 兑现 REQ-024/REQ-231 检索欠账（口径修订见设计 §十二.1）；断网回退命中列表；**代码已交付（2026-09-03：retrieval/meta_json 补列 + kb 双闸门编排 + KbHits 事件 + CitationChips + 笔记内命中词搜索高亮 + 设置「学习库」段）** |
-| REQ-261 | 检索建议（发现路径）：概念/节点详情「相关素材建议」候选（混合检索 top-K ≤10，排除已链接）→ 人工勾选确认 → 既有 link_knowledge_target 落库（白名单零迁移）+ 跨体系相似概念提示（提示型不自动合并） | P2 | 已立项 | v0.19.2 | kb_discovery 默认关（交叉点默认关延续）；建议不落库零双写 |
-| REQ-262 | 治理与设置：SettingsPage「学习库」段（引擎状态/模型下载/索引统计与重建/发现开关）+ FTS5 使能核查 + 中文 BM25 切词校准 | P2 | 部分落地（v0.19.0~1） | v0.19 系列随批 | 复用 speaker/OCR 模型下载 UI 范式；**已交付（2026-09-03）：FTS5 使能核查（bundled 恒编 FTS5）+ 中文切词校准定案（trigram）+ 设置「学习库」段（引擎状态/问答开关与档位/统计/重建）；模型下载与发现开关随 v0.19.3/v0.19.2** |
+| REQ-261 | 检索建议（发现路径）：概念/节点详情「相关素材建议」候选（混合检索 top-K ≤10，排除已链接）→ 人工勾选确认 → 既有 link_knowledge_target 落库（白名单零迁移）+ 跨体系相似概念提示（提示型不自动合并） | P2 | 已立项 | v0.19.3 | kb_discovery 默认关（交叉点默认关延续）；建议不落库零双写；**2026-09-03 顺延：v0.19.2 采集体验小版本用户实测插队** |
+| REQ-262 | 治理与设置：SettingsPage「学习库」段（引擎状态/模型下载/索引统计与重建/发现开关）+ FTS5 使能核查 + 中文 BM25 切词校准 | P2 | 部分落地（v0.19.0~1） | v0.19 系列随批 | 复用 speaker/OCR 模型下载 UI 范式；**已交付（2026-09-03）：FTS5 使能核查（bundled 恒编 FTS5）+ 中文切词校准定案（trigram）+ 设置「学习库」段（引擎状态/问答开关与档位/统计/重建）；模型下载随 v0.19.4、发现开关随 v0.19.3** |
+
+### v0.19.2 · 采集体验小版本（2026-09-03 用户实测插队立项）
+
+> 依据：用户实测 4 点反馈逐项裁决（B站独立播放窗口/抖音固定标题仅能全窗口选择 · 系统进程未过滤 · 点开始不等待引擎就绪）；
+> 设计/记录：[v0.19.2 版本文档](../versions/v0.19.2.md)；前置修复：live 预热 StrictMode 双跑语义收敛（802a370）。
+
+| REQ | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
+|----|------|--------|------|---------|------|
+| REQ-271 | 系统窗口过滤：window_filter 系统进程白名单（explorer/notepad/cmd/powershell/WindowsTerminal/taskmgr/UWP 宿主等）+ CaptureWindow.systemWindow + 前端默认隐藏（开关找回，能力不丢） | P1 | 已实施 | v0.19.2 | 纯函数+单测；进程名精确匹配不猜标题；**代码已交付（2026-09-03，dd5f9b2）** |
+| REQ-272 | 站点/播放器可达性与活跃置顶：评分表补抖音/快手/B站客户端（标题+进程）+ CaptureWindow.zOrder（EnumWindows 序号）推荐区同级按 z 序——活跃窗口自然靠前 | P1 | 已实施 | v0.19.2 | 真"播放中"检测（OCR/音频轮询）成本高，z 序为零成本近似——观察项；**代码已交付（2026-09-03，dd5f9b2）** |
+| REQ-273 | 开始即录就绪门控：start 有界等待 5s→15s（CUDA 冷载）；超时取消+会话行回滚+明确报错（不再双引擎重载）；前端启动过渡态——recording 事件（引擎真就绪、AV 同刻）前不显示暂停/浮窗等采集中控件 | P1 | 已实施 | v0.19.2 | 双击防抖（starting 闸）；wasEngineReady 分流防内联提前置活动态；**代码已交付（2026-09-03，dd5f9b2）** |
 
 ### v0.20 · ASR 质量增强（2026-09-03 用户裁决立项 C：P0~P2）
 
