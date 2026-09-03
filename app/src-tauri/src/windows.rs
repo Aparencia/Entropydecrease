@@ -36,6 +36,13 @@ pub struct CaptureWindow {
     /// 站点首页标记（2026-08 用户需求：B站首页等无视频内容落地页，
     /// 前端显示"首页"标签且不进入推荐；仍可手动选择兜底）
     pub is_homepage: bool,
+    /// v0.19.2：枚举 z 序（EnumWindows 自上而下，0=最顶）。推荐区同级按此
+    /// 稳定排序——"播放中/当前活跃窗口靠前"的零成本近似（真播放检测需
+    /// OCR/音频轮询，成本高，登记观察项）。
+    pub z_order: u32,
+    /// v0.19.2：系统/工具窗口（终端/资源管理器/记事本等——前端默认过滤，
+    /// 可开关找回；判定见 window_filter::is_system_window）
+    pub system_window: bool,
 }
 
 /// 标题关键词评分表：(关键词, 权重, 原因)。
@@ -54,6 +61,10 @@ const TITLE_KEYWORDS: &[(&str, u32, &str)] = &[
     ("网课", 80, "网课关键词"),
     ("zoom", 70, "Zoom 会议"),
     ("钉钉", 60, "钉钉"),
+    // v0.19.2（用户实测）：抖音/快手桌面端标题固定为平台名——补表进推荐区
+    ("抖音", 80, "抖音视频"),
+    ("douyin", 80, "抖音视频"),
+    ("快手", 60, "快手视频"),
     ("课程", 50, "课程关键词"),
     ("教程", 50, "教程关键词"),
     ("学习", 30, "学习关键词"),
@@ -66,6 +77,10 @@ const PROCESS_KEYWORDS: &[(&str, u32, &str)] = &[
     ("mpv", 60, "mpv 播放器"),
     ("kmplayer", 60, "KMPlayer 播放器"),
     ("wmplayer", 50, "Windows 播放器"),
+    // v0.19.2（用户实测）：抖音/快手/独立 B站客户端进程名（窗口标题不可靠时兜底）
+    ("douyin", 80, "抖音客户端"),
+    ("kuaishou", 60, "快手客户端"),
+    ("bilibili", 90, "B站客户端"),
     ("chrome", 40, "Chrome 浏览器"),
     ("msedge", 40, "Edge 浏览器"),
     ("firefox", 40, "Firefox 浏览器"),
@@ -209,18 +224,35 @@ pub fn list_capture_windows() -> Vec<CaptureWindow> {
             let ok = unsafe { GetWindowRect(HWND(*id as *mut core::ffi::c_void), &mut rect) };
             ok.is_ok() && crate::window_filter::has_capturable_size(rect.right - rect.left, rect.bottom - rect.top)
         })
-        .map(|(id, title, pid)| {
+        // enumerate 序号即 z 序（EnumWindows 自上而下）——0=最顶窗口
+        .enumerate()
+        .map(|(z_order, (id, title, pid))| {
             let process_name = unsafe { process_name_of(pid) };
             let (score, reasons) = score_window(&title, &process_name);
             let is_homepage = crate::window_filter::is_site_homepage(&title);
             // 站点首页降权：移出推荐（评分清零 + 原因标注），仍保留可手动选择
             let (score, reasons) =
                 crate::window_filter::demote_homepage(score, reasons, &title);
-            CaptureWindow { id, title, process_name, pid, score, reasons, is_homepage }
+            // v0.19.2：系统/工具窗口标记（终端/资源管理器等——前端默认过滤
+            // 可开关找回；不影响其余字段，供 UI 灰显与计数）
+            let system_window =
+                crate::window_filter::is_system_window(&title, &process_name);
+            CaptureWindow {
+                id,
+                title,
+                process_name,
+                pid,
+                score,
+                reasons,
+                is_homepage,
+                z_order: z_order as u32,
+                system_window,
+            }
         })
         .collect();
-    // 推荐窗口（高分）在前，同级按标题稳定排序
-    windows.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.title.cmp(&b.title)));
+    // 推荐在前（score 降序）；同级按 z 序（越靠顶越新活跃——"播放中置顶"的
+    // 零成本近似；标题排序会让活跃窗口埋没在同分浏览器标签海里）
+    windows.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.z_order.cmp(&b.z_order)));
     windows
 }
 
@@ -291,5 +323,20 @@ mod tests {
         let (lower, _) = score_window("youtube 教程", "chrome");
         // Assert
         assert_eq!(upper, lower);
+    }
+
+    #[test]
+    fn douyin_titles_and_process_score_high() {
+        // v0.19.2（用户实测）：抖音标题固定为"抖音"/进程 douyin——进推荐区
+        let (t, tr) = score_window("抖音", "douyin");
+        assert!(t >= 80, "标题命中: {}", t);
+        assert!(tr.iter().any(|r| r.contains("抖音")));
+        let (p, pr) = score_window("视频", "douyin");
+        assert!(p >= 80, "进程命中: {}", p);
+        assert!(pr.iter().any(|r| r.contains("抖音")));
+        // 标题不含平台词但进程为 B站客户端 → 仍可推荐
+        let (b, br) = score_window("一些课程名称", "bilibili");
+        assert!(b >= 90);
+        assert!(br.iter().any(|r| r.contains("B站")));
     }
 }

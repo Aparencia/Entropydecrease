@@ -16,6 +16,10 @@ export interface WindowInfo {
   reasons: string[];
   /** 站点首页标记（2026-08：B站首页等无视频内容落地页，不进入推荐） */
   isHomepage: boolean;
+  /** v0.19.2：z 序（EnumWindows 自上而下序号——0=最顶；推荐区同级按此置顶） */
+  zOrder: number;
+  /** v0.19.2：系统/工具窗口（终端/资源管理器/记事本等——默认过滤，可开关找回） */
+  systemWindow: boolean;
 }
 
 /** 实时会话状态（camelCase 契约） */

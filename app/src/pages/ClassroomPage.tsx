@@ -52,6 +52,9 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   // ── 实时捕获（v0.2.0）──
   const [liveActive, setLiveActive] = useState(false);
   const [liveSessionId, setLiveSessionId] = useState<number | null>(null);
+  // v0.19.2：liveActive 镜像 ref（resolve 分支判断 recording 事件是否已先行收口）
+  const liveActiveRef = useRef(false);
+  useEffect(() => { liveActiveRef.current = liveActive; }, [liveActive]);
   // 2026-08 A1：会话暂停（硬暂停——完全停采；由 live:paused/resumed 事件驱动）
   const [livePaused, setLivePaused] = useState(false);
   // 停止过渡期（点停止 → stopped 事件到达前，右侧面板保持显示）
@@ -71,6 +74,10 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   const [windowLost, setWindowLost] = useState(false);
   // P3：引擎预热状态（选窗口阶段后台加载；与 Rust PrepareStatus 契约一致）
   const [prepareState, setPrepareState] = useState<PrepareState>("idle");
+  // v0.19.2：等待引擎就绪的启动过渡态（就绪/事件确认前不显示会话控件）
+  const [starting, setStarting] = useState(false);
+  // v0.19.2：系统窗口默认过滤（终端/资源管理器等）——开关找回兜底
+  const [showSystemWindows, setShowSystemWindows] = useState(false);
   // v0.12.3：浮窗状态（按钮语义：浮窗化 ⇄ 收起 ⇄ 解锁穿透；Rust 单一来源）
   const [floatSnap, setFloatSnap] = useState<FloatSnapshot>({ open: false, locked: false, topmost: true });
 
@@ -122,7 +129,11 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   // 实时会话事件监听（v0.2.0；字幕/语音实时内容由右侧 LiveActivityPanel 自监听展示）
   useEffect(() => {
     const unlisteners: Promise<() => void>[] = [
-      listen<string>("live:error", (e) => setLiveError(e.payload)),
+      // v0.19.2：启动过渡期任何引擎错误即退出等待态（内联加载失败/预热失败）
+      listen<string>("live:error", (e) => {
+        setLiveError(e.payload);
+        setStarting(false);
+      }),
       // M7/REQ-042 F5：ASR 降级提示（静默失败可见化；会话停止时清除）
       listen<string>("live:asr-degraded", (e) => setAsrDegraded(e.payload)),
       // 降级恢复（审查修复）：清除降级横幅，避免残留误导
@@ -135,14 +146,17 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
       // 按钮变回"开始采集"而后端会话仍在跑，再点开始被拒绝
       listen<string>("live:status", (e) => {
         if (e.payload === "recording") {
-          // 后端确认录制中：保持/恢复活动态（invoke resolve 可能更早到达）
+          // 后端确认录制中：保持/恢复活动态（invoke resolve 可能更早到达）；
+          // v0.19.2：此刻引擎真正就绪、音频与画面同刻启动——结束启动过渡态
           setLiveActive(true);
           setStopping(false);
+          setStarting(false);
         } else {
           // stopped / failed：会话已结束
           setLiveActive(false);
           setLiveSessionId(null);
           setStopping(false);
+          setStarting(false);
           setAsrDegraded(null);
           setWindowLost(false);
           setLivePaused(false);
@@ -299,9 +313,18 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   // v0.7.1：初始「未知」——未检测/无法自动识别时如实标注（参数走默认档零回归）
   const [profileKind, setProfileKind] = useState<ProfileKind>("unknown");
 
-  /** 开始实时捕获（REQ-007~012）：窗口可选（未选=全屏）；携带档案（REQ-043） */
+  /** 开始实时捕获（REQ-007~012）：窗口可选（未选=全屏）；携带档案（REQ-043）。
+   *  v0.19.2（用户实测"无论是否就绪都会开始"）：点击进入启动过渡态——
+   *  引擎就绪（预热交接）时立即开录；未就绪时由后端有界等待（≤15s）就绪后
+   *  自动开录（音频/画面同刻）；只有 recording 事件到达（引擎真正就绪）才
+   *  显示会话控件，等待期不出现暂停/浮窗等"采集中"控件 */
   const startLive = async () => {
+    if (starting) return; // 防双击双会话（后端 active 检查前即挡住）
     setLiveError("");
+    setStarting(true);
+    // 就绪态点击=交接路径（引擎已加载）——resolve 即已开录，可直接置活动；
+    // 非就绪态 resolve 可能只是"已排队/内联加载中"——等 recording 事件
+    const wasEngineReady = prepareState === "ready";
     try {
       const title = selectedWindow ? selectedWindow.title.slice(0, NOTE_TITLE_MAX_LEN) : "实时课堂";
       const id = await invoke<number>("start_live_session", {
@@ -310,11 +333,22 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
         windowId: selectedWindow?.id ?? null,
         profile: profileKind,
       });
-      setLiveActive(true);
       setLiveSessionId(id);
       setFusedSessionId(null); // 新会话开始：清除旧融合直达卡片
-      setStatus("实时捕获已开始");
+      if (wasEngineReady) {
+        setLiveActive(true);
+        setStarting(false);
+        setStatus("实时捕获已开始");
+      } else if (liveActiveRef.current) {
+        // recording 事件已先行到达（引擎就绪窗口极短）——已开录，勿覆盖文案
+        setStarting(false);
+        setStatus("实时捕获已开始");
+      } else {
+        setStatus("引擎就绪中…就绪后自动开始（音频与画面同刻启动）");
+        // starting 保持 true——recording/error/stopped 事件负责收口
+      }
     } catch (e) {
+      setStarting(false);
       // 防御性恢复（修复反馈）：UI 与后端状态不同步（事件丢失/竞态）时，
       // 查询真实状态恢复按钮语义，避免"假空闲"下重复点击被后端拒绝
       if (String(e).includes("已有进行中的实时会话")) {
@@ -336,6 +370,7 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   const stopLive = async () => {
     // 停止过渡期：面板保持显示（live:status stopped 到达后由监听清除）
     setStopping(true);
+    setStarting(false);
     try {
       await invoke<number | null>("stop_live_session");
       setLiveActive(false);
@@ -426,8 +461,19 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
           <ReadyCheckCard />
 
           {/* 目标窗口/进程选择（v0.2.0 实时捕获上下文） */}
+          {/* v0.19.2（用户实测）：系统窗口默认过滤，开关找回（能力不丢） */}
+          {windows.some((w) => w.systemWindow) && (
+            <label style={{ fontSize: 11, color: "#6b7280", display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={showSystemWindows}
+                onChange={(e) => setShowSystemWindows(e.target.checked)}
+              />
+              显示系统窗口（终端/资源管理器等）
+            </label>
+          )}
           <WindowSelectCard
-            windows={windows}
+            windows={showSystemWindows ? windows : windows.filter((w) => !w.systemWindow)}
             selected={selectedWindow}
             onSelect={setSelectedWindow}
             onRefresh={refreshWindows}
@@ -572,36 +618,45 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
               </div>
             ) : (
               <>
-                {/* P3：引擎预热状态提示（就绪后点"开始"即录） */}
-                {prepareState === "loading" && (
-                  <p style={{ fontSize: 11, color: "#6b7280", margin: "6px 0 0" }}>
-                    ⏳ 引擎预热中…（就绪后开始即录）
+                {/* v0.19.2：启动过渡态（等待引擎就绪自动开录——不显示采集中控件） */}
+                {starting ? (
+                  <p style={{ fontSize: 11, color: "#b45309", margin: "6px 0 0" }}>
+                    ⏳ 引擎初始化中…就绪后自动开始（音频与画面同刻启动，请勿重复点击）
                   </p>
-                )}
-                {prepareState === "ready" && (
-                  <p style={{ fontSize: 11, color: "#0d9488", margin: "6px 0 0" }}>
-                    ✓ 引擎已就绪，开始即录
-                  </p>
+                ) : (
+                  <>
+                    {/* P3：引擎预热状态提示（就绪后点"开始"即录） */}
+                    {prepareState === "loading" && (
+                      <p style={{ fontSize: 11, color: "#6b7280", margin: "6px 0 0" }}>
+                        ⏳ 引擎预热中…（就绪后开始即录）
+                      </p>
+                    )}
+                    {prepareState === "ready" && (
+                      <p style={{ fontSize: 11, color: "#0d9488", margin: "6px 0 0" }}>
+                        ✓ 引擎已就绪，开始即录
+                      </p>
+                    )}
+                  </>
                 )}
                 <button
                   onClick={startLive}
-                  disabled={!modelStatus?.ready}
+                  disabled={!modelStatus?.ready || starting}
                   style={{
                     ...btn,
                     width: "100%",
                     padding: "8px 0",
                     fontWeight: 600,
-                    background: modelStatus?.ready ? "#0d9488" : "#e5e7eb",
-                    color: modelStatus?.ready ? "#fff" : "#9ca3af",
+                    background: modelStatus?.ready && !starting ? "#0d9488" : "#e5e7eb",
+                    color: modelStatus?.ready && !starting ? "#fff" : "#9ca3af",
                     border: "none",
                     borderRadius: 6,
                   }}
                 >
-                  ▶ 开始实时捕获
+                  {starting ? "⏳ 引擎初始化中…" : "▶ 开始实时捕获"}
                 </button>
               </>
             )}
-            {liveSessionId && (
+            {liveSessionId && !starting && (
               <p style={{ fontSize: 11, color: "#6b7280", margin: "6px 0 0" }}>实时捕获中（可到「会话」页查看）</p>
             )}
           </div>

@@ -67,7 +67,9 @@ impl LiveSessionManager {
 
         // P3：尝试交接预备线程
         if let Some(p) = self.prepared.lock().expect("prepared lock poisoned").take() {
-            match wait_prepared_ready(&p, std::time::Duration::from_secs(5)) {
+            // v0.19.2（用户实测）：就绪等待放宽到 15s（CUDA 冷载可能 >5s——
+            // 原 5s 常超时走"取消+内联"双引擎重载，浪费且开头不齐）
+            match wait_prepared_ready(&p, std::time::Duration::from_secs(15)) {
                 Ok(()) => {
                     let handoff = StartHandoff {
                         params,
@@ -107,7 +109,7 @@ impl LiveSessionManager {
                     }
                 }
                 Err(reason) => {
-                    // 加载失败/等待超时：取消预备线程（防双引擎内存翻倍），回退内联
+                    // 加载失败：取消预备线程（防双引擎内存翻倍），回退内联加载
                     let _ = p.tx.send(PrepareMsg::Cancel);
                     let cancel_deadline =
                         std::time::Instant::now() + std::time::Duration::from_millis(1000);
@@ -116,6 +118,15 @@ impl LiveSessionManager {
                     }
                     if !p.thread.is_finished() {
                         eprintln!("[LiveSession] 预备线程取消超时，已 detach");
+                    }
+                    if reason == "等待超时" {
+                        // v0.19.2（用户实测）：>15s 仍在加载 → 不再走内联双引擎
+                        // 重载（两个模型实例并存数秒、内存翻倍且开头不齐），
+                        // 明确失败让用户重试；本会话行标记失败防孤儿 recording
+                        let _ = params.db.mark_session_failed(session_id);
+                        return Err(AppError::Io(
+                            "引擎预热超时（模型加载过慢）——已取消，请稍候重试".to_string(),
+                        ));
                     }
                     eprintln!("[LiveSession] 预热{}，回退内联加载", reason);
                 }

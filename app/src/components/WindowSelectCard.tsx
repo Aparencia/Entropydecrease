@@ -53,6 +53,15 @@ function WindowRow({ win, isSelected, onClick }: { win: WindowInfo; isSelected: 
               🏠 首页
             </span>
           )}
+          {/* v0.19.2：系统窗口标记（默认过滤——勾选"显示系统窗口"后可见） */}
+          {win.systemWindow && (
+            <span
+              style={{ marginLeft: 6, fontSize: 10, color: "#9ca3af", background: "#f3f4f6", borderRadius: 4, padding: "0 4px" }}
+              title="系统/工具窗口（终端/资源管理器等），默认隐藏"
+            >
+              🖥 系统
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 11, color: "#6b7280" }}>
           进程: {win.processName || "未知"} (PID {win.pid})

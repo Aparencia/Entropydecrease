@@ -54,6 +54,38 @@ pub fn has_capturable_size(width: i32, height: i32) -> bool {
     width > 0 && height > 0
 }
 
+/// 系统/工具类进程白名单（v0.19.2 用户实测：终端/记事本/文件资源管理器等
+/// 系统窗口出现在选择列表属噪声）。
+///
+/// @ai-context: 判定只用**进程名**（不含扩展名、小写比较）——标题易变不可靠
+///              （资源管理器窗口标题=目录名）；浏览器/播放器/办公软件不在
+///              名单（编程教学可能录编辑器/终端以外的窗口——见"彻底过滤"
+///              的用户裁决：本名单是保守最小集，新增进程在此登记）。
+///              前端默认隐藏 systemWindow，可开关找回（能力不丢失）。
+const SYSTEM_PROCESSES: &[&str] = &[
+    // 文件管理与桌面
+    "explorer",
+    // 文本与终端
+    "notepad",
+    "cmd",
+    "powershell",
+    "pwsh",
+    "windowsterminal",
+    // 任务与系统设置（UWP 宿主窗口一并覆盖）
+    "taskmgr",
+    "applicationframehost",
+    "systemsettings",
+    "shellExperienceHost",
+    "searchapp",
+    "dwm",
+];
+
+/// 判定是否系统/工具窗口（纯函数；进程名空 → false 保留兜底选择）。
+pub fn is_system_window(_title: &str, process_name: &str) -> bool {
+    let p = process_name.trim().to_lowercase();
+    !p.is_empty() && SYSTEM_PROCESSES.iter().any(|s| *s == p)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,5 +140,29 @@ mod tests {
         assert!(!has_capturable_size(1920, 0));
         assert!(!has_capturable_size(0, 0));
         assert!(has_capturable_size(1920, 1080));
+    }
+
+    #[test]
+    fn system_processes_detected() {
+        // 终端/记事本/资源管理器/任务管理器——进程名小写无扩展名判定
+        assert!(is_system_window("随便什么标题", "explorer"));
+        assert!(is_system_window("", "Notepad"));
+        assert!(is_system_window("C:\\dev", "cmd"));
+        assert!(is_system_window("", "WindowsTerminal"));
+        assert!(is_system_window("", "pwsh"));
+        assert!(is_system_window("", "Taskmgr"));
+        assert!(is_system_window("", "ApplicationFrameHost"));
+    }
+
+    #[test]
+    fn media_and_office_not_system() {
+        // 浏览器/播放器/办公/无进程名——不得误判为系统窗口
+        assert!(!is_system_window("", "chrome"));
+        assert!(!is_system_window("", "msedge"));
+        assert!(!is_system_window("", "potplayer"));
+        assert!(!is_system_window("", "Code"));
+        assert!(!is_system_window("", "WeChat"));
+        assert!(!is_system_window("", ""), "进程名空保留兜底（不猜不滤）");
+        assert!(!is_system_window("bilibili 播放窗口", "chrome"));
     }
 }
