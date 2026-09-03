@@ -25,7 +25,7 @@
 |----|------|------|
 | 桌面壳 | **Tauri 2 + React + TypeScript** | 替代原项目 Electron |
 | 后端/系统层 | **Rust** | Tauri 主进程 |
-| 本地 ASR | **sherpa-onnx crate** | 流式 Zipformer + Silero VAD + SenseVoice 两遍解码 + hotwords |
+| 本地 ASR | **sherpa-onnx crate** | 流式 Zipformer（zh 2025-06 fp16）+ 能量自适应 VAD + SenseVoice 重打分/导入全窗两遍 + hotwords（实现口径 2026-09-03 修订，ADR-030；Silero VAD 未接线） |
 | 本地 OCR | **paddle-ocr-rs（PaddleOCR PP-OCRv5/v6 ONNX）** | 关键帧文字检测+识别 |
 | 本地数据库 | **SQLite**（rusqlite / sqlx） | 音频/转写/笔记/卡片全本地 |
 | AI 笔记增强 | 云端多模态（Qwen-VL 系），**不用 Ollama** | 增量+课后精修，离线降级本地拼接 |
