@@ -1,17 +1,27 @@
 //! AI 知识补充适配器（REQ-142，v0.8.0 M3）。
 //!
-//! @ai-context: 输入=笔记正文+勾选子项+档案 → 云端一次批量返回块数组 →
-//!              强校验（kind ∈ 勾选/B6 无链接/深度锚点必填——协议层
-//!              AiEnrichResponse::validate）→ 失败回退不落任何补充内容
-//!              （补充是增量能力，失败不破坏原笔记——与精修"降级纯规则"
-//!              语义不同，补充无本地兜底内容，失败即不补充）。
+//! @ai-context: 输入=笔记正文（切片）+章节目录+勾选子项+档案 → 云端一次批量
+//!              返回块数组 → 逐块审查（2026-09 修复：enrich_salvage 取代协议层
+//!              全有或全无的 validate——坏块隔离、好块照落，丢弃原因随回执返回
+//!              供 UI 明示；全批无一可落才失败（原语义"失败不落任何补充内容"
+//!              保留——补充是增量能力，失败不破坏原笔记）。
 //! @ai-context: 提示词模板 prompts/note_enrich.json 编译期捆绑（include_str），
-//!              勾选子项说明动态注入 system；网络/解析走共享 AiClient。
+//!              勾选子项说明动态注入 system；章节目录/无章节说明注入 user
+//!              （anchor_ref 白名单——模型不得自造或省略锚点）；网络/解析走
+//!              共享 AiClient。
 
 use serde::{Deserialize, Serialize};
 
 use crate::ai_client::{AiClient, AiClientError};
 use crate::ai_enrich_protocol::{AiEnrichKind, AiEnrichRequest, AiEnrichResponse};
+use crate::enrich_salvage::salvage_blocks;
+
+/// 单次补充结果：可落响应（已剔除违规块）+ 丢弃原因（UI 明示"哪些块为何未落"）。
+#[derive(Debug, Clone)]
+pub struct EnrichOutcome {
+    pub response: AiEnrichResponse,
+    pub dropped_reasons: Vec<String>,
+}
 
 /// 提示词模板（prompts/note_enrich.json 结构）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -41,7 +51,7 @@ impl NoteEnrichPrompt {
         }
         Self {
             version: 1,
-            system: "你是课堂笔记的知识补充助手：只补充勾选子项，深度类带章节锚点，B6 不输出链接。"
+            system: "你是课堂笔记的知识补充助手：只补充勾选子项，深度类带章节锚点（无章节时 anchor_ref=null），B6 不输出链接。"
                 .to_string(),
             kinds,
             output_format: "只输出 JSON：{\"blocks\":[{\"kind\":\"d1|..|b6\",\"anchor_ref\":\"..|null\",\"heading\":\"..\",\"content\":\"..\",\"confidence\":0.9}]}"
@@ -99,22 +109,42 @@ impl AiNoteEnrichAdapter {
 
     /// 单次批量补充（一请求=全部勾选子项；长笔记切片由 command 层任务编排）。
     ///
-    /// @ai-context: 强校验在此层做（validate 失败 → Parse 错误 → 调用方
-    ///              不落任何补充内容——非法响应不得进入笔记管线）。
+    /// @ai-context: 2026-09 修复：逐块审查在此层做（salvage_blocks）——单块违规
+    ///              只丢该块（原因随 EnrichOutcome 返回），全批无一可落才 Err
+    ///              （调用方不落任何补充内容——非法响应不得进入笔记管线）。
     pub fn enrich(
         &self,
         request: &AiEnrichRequest,
         selected: &[AiEnrichKind],
-    ) -> Result<AiEnrichResponse, AiClientError> {
+    ) -> Result<EnrichOutcome, AiClientError> {
         let system = self.prompt.build_system(selected);
-        let user = serde_json::to_string(request)
+        // 章节目录注入 user 消息（2026-09 修复）：目录=anchor_ref 白名单——
+        // 切片正文可能不含任何章节标题（长笔记跨片），不给目录模型只能省略
+        // 锚点或自造标题；无章节时显式要求 null（防模型省略字段导致整批失败）
+        let mut user_text = String::new();
+        if request.chapter_directory.is_empty() {
+            user_text.push_str(
+                "说明：本笔记没有章节标题（章节目录为空）。深度类块（d1~d3）的 anchor_ref 必须为 null——系统会把这类块安放在笔记尾部。\n\n",
+            );
+        } else {
+            user_text.push_str("笔记章节目录（深度类块 anchor_ref 必须逐字取自以下某一项，不得自造、不得省略；广度类仍为 null）：\n");
+            for c in &request.chapter_directory {
+                user_text.push_str(&format!("- {}\n", c));
+            }
+            user_text.push('\n');
+        }
+        let user_json = serde_json::to_string(request)
             .map_err(|e| AiClientError::Parse(format!("补充请求序列化失败: {}", e)))?;
-        let v = self.client.chat_json(&system, &user)?;
+        user_text.push_str(&user_json);
+        let v = self.client.chat_json(&system, &user_text)?;
         let resp: AiEnrichResponse = serde_json::from_value(v)
             .map_err(|e| AiClientError::Parse(format!("补充响应结构非法: {}", e)))?;
-        resp.validate(selected)
+        let out = salvage_blocks(resp, selected, &request.chapter_directory)
             .map_err(|e| AiClientError::Parse(format!("补充响应校验失败（已丢弃）: {}", e)))?;
-        Ok(resp)
+        Ok(EnrichOutcome {
+            response: AiEnrichResponse { blocks: out.kept },
+            dropped_reasons: out.dropped_reasons,
+        })
     }
 }
 

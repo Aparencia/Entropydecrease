@@ -209,7 +209,7 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
         )}
         {phase === "done" && result && (
           <span style={{ fontSize: 11, color: "#7c3aed" }}>
-            深度 {result.depthBlocks} · 广度 {result.breadthBlocks} · 切片 {result.blocks}
+            深度 {result.depthBlocks} · 广度 {result.breadthBlocks} · 切片 {result.slices}
           </span>
         )}
       </div>
@@ -296,6 +296,14 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
       {/* 结果预览（扩展区预览 + 采纳/撤销） */}
       {phase === "done" && result && (
         <div>
+          {/* 2026-09：逐块审查丢弃回执——坏块未落的原因可见（诚实信号） */}
+          {(result.droppedBlocks ?? 0) > 0 && (
+            <div style={{ fontSize: 11, color: "#d97706", marginBottom: 6 }}>
+              ⚠️ {result.droppedBlocks} 块因 AI 输出不合规未落：
+              {(result.droppedReasons ?? []).slice(0, 3).join("；")}
+              {(result.droppedReasons ?? []).length > 3 ? "…" : ""}（其余合规块照常展示）
+            </div>
+          )}
           <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff", padding: 8, fontSize: 11, fontFamily: "monospace", marginBottom: 6, whiteSpace: "pre-wrap" }}>
             {result.enrichedMarkdown.slice(-800)}
           </div>

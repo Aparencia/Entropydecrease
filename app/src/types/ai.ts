@@ -246,6 +246,10 @@ export interface AiEnrichResult {
   breadthBlocks: number;
   slices: number;
   kinds: string[];
+  /** 被逐块审查隔离的违规块数（2026-09：坏块丢弃、好块照落；旧任务结果无此字段） */
+  droppedBlocks?: number;
+  /** 丢弃原因（逐条人类可读——UI 明示"哪些块为何未落"） */
+  droppedReasons?: string[];
   model: string;
 }
 

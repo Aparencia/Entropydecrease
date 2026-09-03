@@ -76,6 +76,10 @@ pub struct AiEnrichRequest {
     pub note_content: String,
     pub selected_kinds: Vec<AiEnrichKind>,
     pub profile: String,
+    /// 全篇章节标题目录（2026-09 修复：跨片全局目录注入——长笔记切片后
+    /// 中间片常不含章节标题，模型无从引用；目录给模型"可引用锚点白名单"，
+    /// 空=笔记无章节，深度块 anchor_ref 允许 null 落尾部）
+    pub chapter_directory: Vec<String>,
 }
 
 /// 补充块（kind/锚点/标题/内容/置信度）。
@@ -91,6 +95,11 @@ pub struct AiEnrichBlock {
     pub confidence: f32,
 }
 
+/// 单块内容上限（防单块刷屏；协议与逐块审查共用——2026-09 提为模块常量）。
+pub const BLOCK_MAX_CHARS: usize = 3000;
+/// 响应总块数上限（九子项 + 防刷屏；协议与逐块审查共用）。
+pub const BLOCKS_MAX: usize = 50;
+
 /// 补充响应（块数组；一次批量返回）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -98,13 +107,12 @@ pub struct AiEnrichResponse {
     pub blocks: Vec<AiEnrichBlock>,
 }
 
+/// 全量强校验契约快照（2026-09 起仅测试使用——运行时已改用
+/// enrich_salvage::salvage_blocks 逐块审查：坏块隔离好块照落；本函数保留
+/// 全部规则的"任一违规即整批拒绝"语义作为协议契约的测试基准）。
+#[cfg(test)]
 impl AiEnrichResponse {
-    /// 单块内容上限（防单块刷屏）。
-    const BLOCK_MAX_CHARS: usize = 3000;
-    /// 响应总块数上限（九子项 + 防刷屏）。
-    const BLOCKS_MAX: usize = 50;
-
-    /// schema 强校验（纯函数；失败 → 丢弃 AI 结果回退——防御性编程铁律）。
+    /// schema 强校验（纯函数；失败 → 整批拒绝——契约快照语义）。
     ///
     /// @ai-context: 规则：kind ∈ 选定子项；深度块 anchor_ref 必填（锚点溯源）、
     ///              广度块 anchor_ref 应空（聚合扩展区）；heading/content 非空
@@ -114,12 +122,8 @@ impl AiEnrichResponse {
         if self.blocks.is_empty() {
             return Err("补充响应缺少内容块".to_string());
         }
-        if self.blocks.len() > Self::BLOCKS_MAX {
-            return Err(format!(
-                "补充块数超上限（{} > {}）",
-                self.blocks.len(),
-                Self::BLOCKS_MAX
-            ));
+        if self.blocks.len() > BLOCKS_MAX {
+            return Err(format!("补充块数超上限（{} > {}）", self.blocks.len(), BLOCKS_MAX));
         }
         for b in &self.blocks {
             if !selected.contains(&b.kind) {
@@ -133,7 +137,7 @@ impl AiEnrichResponse {
             if heading.is_empty() || heading.chars().count() > 200 {
                 return Err("块标题为空或超长".to_string());
             }
-            if content.is_empty() || content.chars().count() > Self::BLOCK_MAX_CHARS {
+            if content.is_empty() || content.chars().count() > BLOCK_MAX_CHARS {
                 return Err("块内容为空或超长".to_string());
             }
             if b.kind.is_depth()
@@ -155,7 +159,9 @@ impl AiEnrichResponse {
     }
 }
 
-/// 是否含 URL 模式（B6 防幻觉：http(s)/www 前缀）。
+/// 是否含 URL 模式（B6 防幻觉：http(s)/www 前缀；validate 契约快照专用——
+/// 运行时逐块审查的 URL 规则见 enrich_salvage::salvage_blocks）。
+#[cfg(test)]
 fn contains_url(s: &str) -> bool {
     let lower = s.to_lowercase();
     lower.contains("http://") || lower.contains("https://") || lower.contains("www.")

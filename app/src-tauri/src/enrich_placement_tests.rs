@@ -104,3 +104,51 @@ fn render_extension_area_standalone() {
     assert!(out.contains("### 进阶方向"));
     assert!(out.contains("进阶内容"));
 }
+
+#[test]
+fn chip_headed_chapter_matches_plain_anchor() {
+    // 章节标题行带时间戳 chip（会话笔记常态）——纯标题锚点应就近插入而非尾部兜底
+    let base = "## 第一章\n正文一\n\n## 二、核心概念 [[⏱ 01:23]([[ts:83000]])]\n正文二";
+    let resp = AiEnrichResponse {
+        blocks: vec![block(AiEnrichKind::D1, Some("二、核心概念"), "概念展开", "补充内容")],
+    };
+    let out = render_enriched_note(base, &resp);
+    let pos_ins = out.find("AI 展开").expect("插入块存在");
+    let pos_body2 = out.find("正文二").expect("保留原正文");
+    assert!(
+        pos_ins < pos_body2,
+        "带 chip 的章节标题应命中就近插入，实得 pos_ins={} pos_body2={}",
+        pos_ins,
+        pos_body2
+    );
+    assert!(out.contains("关联「二、核心概念」"));
+}
+
+#[test]
+fn anchor_with_hashes_or_chip_normalized_to_heading() {
+    // 模型原样复制 `## 标题` 作锚点——归一化后同样命中
+    let base = "## 三、实战\n正文三";
+    let resp = AiEnrichResponse {
+        blocks: vec![block(AiEnrichKind::D1, Some("## 三、实战"), "概念展开", "内容X")],
+    };
+    let out = render_enriched_note(base, &resp);
+    let pos_ins = out.find("AI 展开").expect("插入块存在");
+    let pos_body = out.find("正文三").expect("保留原正文");
+    assert!(pos_ins < pos_body, "带 # 前缀的锚点应归一化命中就近插入");
+}
+
+#[test]
+fn anchorless_depth_block_appends_tail_with_unanchored_label() {
+    // 笔记无章节时深度块锚点放行（enrich_salvage 语义）——落尾部且不给空「关联」
+    let base = "## 唯一章节\n正文";
+    let resp = AiEnrichResponse {
+        blocks: vec![block(AiEnrichKind::D1, None, "概念展开", "无锚点内容")],
+    };
+    let out = render_enriched_note(base, &resp);
+    assert!(out.contains("无锚点内容"), "无锚点深度块追加尾部不丢块");
+    assert!(
+        out.contains("未锚定章节——落于笔记尾部"),
+        "无锚点块应给未锚定标注而非空「关联」"
+    );
+    assert!(!out.contains("关联「」"), "不得出现空关联标注");
+}

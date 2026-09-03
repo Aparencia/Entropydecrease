@@ -19,13 +19,14 @@ use crate::ai_client::AiClient;
 use crate::ai_cost::estimate_for_content_model;
 use crate::ai_enrich_protocol::{AiEnrichBlock, AiEnrichKind, AiEnrichRequest, AiEnrichResponse};
 use crate::ai_mock::AiMockAdapter;
-use crate::ai_note_enrich::AiNoteEnrichAdapter;
+use crate::ai_note_enrich::{AiNoteEnrichAdapter, EnrichOutcome};
 use crate::ai_task::{slice_note, AiTaskFailure, AiTaskState, SLICE_MAX_CHARS};
 use crate::commands::AppState;
 use crate::commands_ai_refine::{
     set_task, trim_tasks, AiTaskEntry, AiTaskHandle, RefineEstimateView,
 };
 use crate::enrich_placement::render_enriched_note;
+use crate::enrich_salvage::{chapter_titles_of, salvage_blocks};
 use crate::types::Note;
 
 /// mock 模式 env 键（本地规则补充，不联网——测试/离线开发）。
@@ -47,6 +48,12 @@ pub struct AiEnrichResult {
     pub slices: usize,
     /// 实际返回的子项（kebab-case）
     pub kinds: Vec<String>,
+    /// 丢弃块数（2026-09 修复：逐块审查回执——被隔离的违规块数与原因可见）
+    #[serde(default)]
+    pub dropped_blocks: usize,
+    /// 丢弃原因（逐条人类可读；为空=无丢弃——UI 明示"哪些块为何未落"）
+    #[serde(default)]
+    pub dropped_reasons: Vec<String>,
     pub model: String,
 }
 
@@ -285,24 +292,33 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
         );
         let adapter = AiNoteEnrichAdapter::new(client.clone());
         let mock_adapter = AiMockAdapter;
+        // 全篇章节目录（2026-09 修复：跨片全局注入——切片正文常不含章节标题，
+        // 目录=anchor_ref 白名单；空=笔记无章节，深度块允许 null 锚点落尾部）
+        let chapter_dir = chapter_titles_of(&note.content);
         // 切片（长笔记按章节切——REQ-145 基建复用；锚点跨片=全局章节标题）
         let slices = slice_note(&note.content, SLICE_MAX_CHARS);
         let total = slices.len();
         set_task(&st, task_id, AiTaskState::Running { finished_slices: 0, total_slices: total });
         let mut all_blocks: Vec<AiEnrichBlock> = Vec::new();
+        // 2026-09 修复：逐块审查丢弃回执（坏块隔离，原因跨片聚合随结果返回）
+        let mut dropped_reasons_all: Vec<String> = Vec::new();
         let mut turns: Vec<crate::ai_chat::AiTurn> = Vec::with_capacity(total);
         for (i, slice) in slices.iter().enumerate() {
             let req = AiEnrichRequest {
                 note_content: slice.clone(),
                 selected_kinds: selected.clone(),
                 profile: profile.clone(),
+                chapter_directory: chapter_dir.clone(),
             };
             // 单片重试 1 次（审查修复 2026-08-21：与精修 SLICE_RETRY 对齐——
             // 网络抖动瞬态失败直接重试，避免整任务失败浪费已成功的片）
-            let mut resp: Option<AiEnrichResponse> = None;
+            let mut outcome: Option<EnrichOutcome> = None;
             for attempt in 0..=1 {
                 let r = if mock {
-                    Ok(mock_adapter.enrich(&req, &selected))
+                    Ok(EnrichOutcome {
+                        response: mock_adapter.enrich(&req, &selected),
+                        dropped_reasons: Vec::new(),
+                    })
                 } else {
                     adapter.enrich(&req, &selected).map_err(AiTaskFailure::from)
                 };
@@ -313,9 +329,9 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
                             turn: i + 1,
                             system: adapter.prompt.build_system(&selected),
                             user: serde_json::to_string(&req).unwrap_or_default(),
-                            response: serde_json::to_string(&v).unwrap_or_default(),
+                            response: serde_json::to_string(&v.response).unwrap_or_default(),
                         });
-                        resp = Some(v);
+                        outcome = Some(v);
                         break;
                     }
                     Err(e) if attempt < 1 => {
@@ -324,17 +340,25 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
                     Err(e) => return Err(e),
                 }
             }
-            let resp = resp.expect("重试循环必然产出结果或返回");
-            all_blocks.extend(resp.blocks);
+            let outcome = outcome.expect("重试循环必然产出结果或返回");
+            dropped_reasons_all.extend(outcome.dropped_reasons);
+            all_blocks.extend(outcome.response.blocks);
             set_task(
                 &st,
                 task_id,
                 AiTaskState::Running { finished_slices: i + 1, total_slices: total },
             );
         }
-        // 合并后整体强校验（非法 → 不落任何补充内容）
-        let resp = AiEnrichResponse { blocks: all_blocks };
-        resp.validate(&selected).map_err(AiTaskFailure::InvalidResponse)?;
+        // 合并后整体复审（2026-09 修复：逐块审查替代全有或全无 validate——
+        // 单片已隔离违规块；此处兜底跨片总量上限，全部不合规 → 不落任何内容）
+        let final_out = salvage_blocks(
+            AiEnrichResponse { blocks: all_blocks },
+            &selected,
+            &chapter_dir,
+        )
+        .map_err(AiTaskFailure::InvalidResponse)?;
+        dropped_reasons_all.extend(final_out.dropped_reasons);
+        let resp = AiEnrichResponse { blocks: final_out.kept };
         let enriched = render_enriched_note(&note.content, &resp);
         let depth = resp.blocks.iter().filter(|b| b.kind.is_depth()).count();
         let breadth = resp.blocks.len() - depth;
@@ -349,6 +373,8 @@ fn run_enrich_task(st: AppState, task_id: u64, note_id: i64, selected: Vec<AiEnr
                 breadth_blocks: breadth,
                 slices: total,
                 kinds,
+                dropped_blocks: dropped_reasons_all.len(),
+                dropped_reasons: dropped_reasons_all,
                 model: client.config.model,
             },
             turns,

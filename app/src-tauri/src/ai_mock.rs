@@ -195,15 +195,15 @@ impl AiMockAdapter {
     }
 
     /// 知识补充 mock（REQ-142）：按勾选子项规则化产出合法块数组；
-    /// 响应通过 AiEnrichResponse::validate（深度块带锚点/广度块无锚点/
-    /// B6 无链接——持续验证补充协议校验链）。
-    pub fn enrich(&self, _request: &AiEnrichRequest, selected: &[AiEnrichKind]) -> AiEnrichResponse {
+    /// 深度块锚点取章节目录首项（2026-09 修复：与真实路径同口径——目录空时
+    /// 深度块 anchor_ref=null，走无章节放行语义），广度块无锚点/B6 无链接。
+    pub fn enrich(&self, request: &AiEnrichRequest, selected: &[AiEnrichKind]) -> AiEnrichResponse {
         let blocks: Vec<AiEnrichBlock> = selected
             .iter()
             .map(|kind| AiEnrichBlock {
                 kind: *kind,
                 anchor_ref: if kind.is_depth() {
-                    Some("笔记".to_string())
+                    request.chapter_directory.first().cloned()
                 } else {
                     None
                 },

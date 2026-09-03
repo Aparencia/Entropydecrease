@@ -36,7 +36,7 @@
 | app/src-tauri/src/symbol_normalize.rs | 388 | v0.6.0 M1（REQ-060）：口语符号映射域（映射表/上下文守卫/中文数字解析）内聚；数字解析与守卫共享字符判定 | 若再增长：parse_chinese_number/replace_number_runs 拆至 symbol_numbers.rs |
 | app/src-tauri/src/note_filter_golden_tests.rs | 379 | v0.7.5（REQ-172）：黄金语料回归域（会话31/29 实证 + 结构渲染 2 例 + 审查补测）单模块 #[path] 挂载 | 若再增长：结构渲染组拆至 note_filter_golden_structure_tests.rs |
 | app/src-tauri/src/capture/resample.rs | 381 | 音频重采样域（采样率转换/缓冲对齐/帧切分）内聚于捕获子模块，纯函数与捕获缓冲格式共享上下文 | 若再增长：帧切分拆至 resample_frames.rs |
-| app/src-tauri/src/commands_ai_enrich.rs | 377 | v0.8.0 M3（REQ-142）+ F1/F2/F3：知识补充命令域（九子项校验/预估/异步任务/采纳/撤销 + 配额去重门控 + 成本硬拦截 + 任务落库）——与精修共用任务注册表上下文，命令域内聚；L4 修复（落库失败日志）微增 | 若再增长：门控/拦截拆至 commands_ai_enrich_gate.rs |
+| app/src-tauri/src/commands_ai_enrich.rs | 471 | v0.8.0 M3（REQ-142）+ F1/F2/F3：知识补充命令域（九子项校验/预估/异步任务/采纳/撤销 + 配额去重门控 + 成本硬拦截 + 任务落库）——与精修共用任务注册表上下文，命令域内聚；2026-09 修复（章节目录注入/逐块审查回执）微增 | 若再增长：门控/拦截拆至 commands_ai_enrich_gate.rs |
 | app/src-tauri/src/vocab.rs | 373 | 词表域（存储/纠错/候选提取/n-gram 分词）内聚；分词纯逻辑与存储同域便于单测 | 若再增长：collect_tokens/split_runs 拆至 vocab_tokens.rs |
 | app/src-tauri/src/live_session_loop.rs | 369 | v0.7.0 M0 拆分产物（音频编排循环）：主循环 + 长静音/音量骤变/VAD 段事件写入 + drain/停止 flush；LiveSessionCtx 聚合上下文；A1 暂停边沿 + P1 停止 drain 重构；H1 修复（drain_deadline 改 Option，draining 置位时才计算） | 若再增长：事件写入块拆至 live_session_events.rs |
 | app/src-tauri/src/screens_tests.rs | 366 | 画面要点屏构建测试域（分组/聚类/图匹配/可消费块过滤回归）单模块 #[path] 挂载 | 若再增长：可消费块过滤组拆至 screens_filter_tests.rs |

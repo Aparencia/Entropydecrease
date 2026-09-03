@@ -47,6 +47,9 @@ mod commands_ai_note_refine;
 // 适配器/命令层
 mod ai_enrich_protocol;
 mod enrich_placement;
+// v0.8.0 M3 修复（2026-09）：知识补充逐块审查/章节提取纯函数层
+// （丢坏块保好块——原全有或全无校验让单个缺锚点块连坐整批）
+mod enrich_salvage;
 mod ai_note_enrich;
 mod commands_ai_enrich;
 // v0.8.0 M4（REQ-144 + REQ-143 完整）：笔记版本管理——快照链数据层/成本

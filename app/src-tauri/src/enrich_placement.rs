@@ -1,23 +1,34 @@
 //! 知识补充混合落位（REQ-142，v0.8.0 M3）。
 //!
-//! @ai-context: 深度块按 anchor_ref 就近插入引用章节（## 标题）之下——
+//! @ai-context: 深度块按 anchor_ref 就近插入引用章节（#/##… 标题）之下——
 //!              "AI 展开"徽标 + 引用风边框（blockquote）+ 溯源锚点；
 //!              广度块聚合笔记尾部"扩展区"（各自成节 + "AI 补充·非课程
 //!              内容·需核实"徽标——物理隔离）；删除/重补=新版本（REQ-144
 //!              消费，本版落位为内容层——块删除由用户编辑/回滚承担）。
 //! @ai-context: 纯函数可单测；锚点未命中 → 追加尾部（宽容降级不丢块——
 //!              本地优先铁律的落位侧体现；规划"本地版可用标题粗锚点"）。
+//! @ai-context: 2026-09 修复：标题匹配归一化（去 `#` 前缀与 `[[⏱...]]` chip——
+//!              章节标题行常带时间戳 chip，原精确匹配让纯标题锚点 miss 尾部
+//!              兜底，就近插入语义失效）；无锚点深度块（笔记无章节时的放行
+//!              路径，见 enrich_salvage）落尾部并给"未锚定"标注（不给空
+//!              「关联」）。
 
 use crate::ai_enrich_protocol::{AiEnrichBlock, AiEnrichResponse};
+use crate::enrich_salvage::{heading_text, normalize_title};
 
-/// 深度块渲染（引用风边框 + AI 展开徽标 + 溯源锚点）。
+/// 深度块渲染（引用风边框 + AI 展开徽标 + 溯源锚点；无锚点 → "未锚定"标注）。
 pub fn render_depth_block(block: &AiEnrichBlock) -> String {
-    let anchor = block.anchor_ref.as_deref().unwrap_or("");
-    let mut out = format!(
-        "> 📌 **AI 展开（{}）** · 关联「{}」\n",
-        block.kind.label(),
-        anchor
-    );
+    let mut out = match block.anchor_ref.as_deref().map(str::trim).filter(|a| !a.is_empty()) {
+        Some(anchor) => format!(
+            "> 📌 **AI 展开（{}）** · 关联「{}」\n",
+            block.kind.label(),
+            anchor
+        ),
+        None => format!(
+            "> 📌 **AI 展开（{}）**（未锚定章节——落于笔记尾部，请对照原文核实）\n",
+            block.kind.label()
+        ),
+    };
     for line in block.content.lines() {
         out.push_str("> ");
         out.push_str(line.trim_end());
@@ -77,17 +88,24 @@ pub fn render_enriched_note(base: &str, response: &AiEnrichResponse) -> String {
     out
 }
 
-/// 在 `# {anchor}` / `## {anchor}` 标题行后插入内容；锚点未命中 → 追加尾部。
+/// 在 `# {anchor}` / `## {anchor}`（任意 ATX 层级）标题行后插入内容；锚点未命中
+/// → 追加尾部。
+///
+/// @ai-context: 2026-09 修复：归一化匹配——标题行可能带 `[[⏱...]]` 时间戳
+///              chip、锚点可能带 `#` 前缀（模型原样复制），一律归一化后比较。
 fn insert_after_heading(markdown: &str, anchor: &str, insert: &str) -> String {
     let anchor = anchor.trim();
     if anchor.is_empty() {
         return format!("{}\n\n{}", markdown, insert);
     }
+    let want = normalize_title(anchor);
     let pos = markdown.lines().position(|l| {
         let t = l.trim_end();
+        // 兼容旧精确形态 + 归一化形态（去 # 前缀/去 chip）
         t == format!("## {}", anchor)
             || t == format!("# {}", anchor)
             || t.strip_prefix("## ").map(|s| s.trim()) == Some(anchor)
+            || heading_text(t).as_deref() == Some(want.as_str())
     });
     match pos {
         Some(idx) => {
