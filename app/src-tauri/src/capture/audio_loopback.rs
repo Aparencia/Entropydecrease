@@ -292,32 +292,34 @@ where
             .GetService()
             .map_err(|e| crate::error::AppError::Io(format!("获取捕获客户端失败: {}", e)))?;
 
-        audio_client
-            .Start()
-            .map_err(|e| crate::error::AppError::Io(format!("启动捕获失败: {}", e)))?;
-
-        // 重连成功后通知退出恢复态（ADR-007：前端徽标恢复）
-        if *recovering {
-            *recovering = false;
-            on_recovery(false);
-        }
-
-        // 审查修复（暂停重连循环，观察 2026-08-29-2）：端点启动前先看暂停标志——
-        // 暂停期间重连（如 Stop 失败重连接管）若不提前判定，会在 Start 之后由
-        // 内层循环再次检测边沿执行 Stop；Stop 若持续失败则每轮重连都重复
-        // "Start→Stop 失败→重连"的永动循环，期间前端"采集中/恢复中"与真实停采
-        // 信息差。已暂停时保持端点停机、直接进入暂停空转——一次性消除循环。
-        let (capture_paused, started) = match pause.as_ref() {
-            Some(p) if p.paused.load(Ordering::SeqCst) => (true, false),
-            Some(_) => (false, true),
-            None => (false, true),
-        };
-        if started {
+        // Start 判定收敛到一处（暂停重连循环审查 + 2026-09 修复）：暂停期间重连
+        // （如 Stop 失败重连接管）若不提前判定，会在 Start 之后由内层循环再次检测
+        // 边沿执行 Stop——Stop 若持续失败则每轮重连都重复 "Start→Stop 失败→重连"
+        // 的永动循环。已暂停时保持端点停机、直接进入暂停空转，一次性消除该循环。
+        // 2026-09 修复（会话 67/68 实证）：02556c47 为此新增下方分支式 Start 时未
+        // 删除此前无条件 Start——非暂停进入时同一 IAudioClient 被 Start 两次，第二
+        // 次返回 AUDCLNT_E_NOT_STOPPED(0x88890005，Start 时流未停止)，capture_loop
+        // 按设备故障 0.5s→10s 永续重连，会话全程无音频。IAudioClient::Start 不允许
+        // 重复调用已启动的流：进入路径上 Start 恰好一次，别无分号。
+        let mut capture_paused = matches!(pause.as_ref(), Some(p) if p.paused.load(Ordering::SeqCst));
+        let mut paused_at: Option<std::time::Instant> = None;
+        if capture_paused {
+            eprintln!("[AudioLoopback] 端点保持停机（会话已处于暂停——免 Start/Stop 重连循环）");
+            // 预检命中暂停时记下空转起点：恢复边沿靠 paused_at 触发 Start + 累计
+            // 暂停时长（2026-09 修复：此前置 None——恢复边沿取 None 走空分支，
+            // 端点永不启动、会话静默且暂停时长不补偿）
+            paused_at = Some(std::time::Instant::now());
+        } else {
             audio_client
                 .Start()
                 .map_err(|e| crate::error::AppError::Io(format!("启动捕获失败: {}", e)))?;
-        } else {
-            eprintln!("[AudioLoopback] 端点保持停机（会话已处于暂停——免 Start/Stop 重连循环）");
+        }
+
+        // 重连成功后通知退出恢复态（ADR-007：前端徽标恢复；暂停进入的会话推迟到
+        // 恢复边沿 Start 成功——恢复前音频确实未产出，徽标保持"恢复中"更真实）
+        if *recovering {
+            *recovering = false;
+            on_recovery(false);
         }
 
         // 归一化管线：字节 → f32 → 混单声道 → 重采样 16k → 200ms 切块
@@ -330,10 +332,7 @@ where
         let mut accumulator = ChunkAccumulator::new(0);
         let block_samples = (TARGET_SAMPLE_RATE as usize) / 5;
         let mut format_error_logged = false;
-        // 暂停边沿状态（本线程内维护；paused 由命令层置位）
-        // 审查修复：初始化值随上方提前判定（已暂停重连时直接进入空转，边沿状态一致）
-        let mut capture_paused = capture_paused;
-        let mut paused_at: Option<std::time::Instant> = None;
+        // 暂停边沿状态（本线程内维护；paused 由命令层置位；已在启动预检处完成初始化）
 
         while !stop_flag.load(Ordering::SeqCst) {
             // ── 暂停边沿处理（2026-08 A1）──
