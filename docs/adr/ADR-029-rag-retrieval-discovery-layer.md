@@ -1,7 +1,7 @@
 # ADR-029：检索与发现层（RAG 接层）——派生索引 + 双读路径 + 人工裁决闸门
 
-> 状态：**已接受**（2026-09-03，随 [v0.19 设计规格](../superpowers/specs/2026-09-03-v0.19-rag-retrieval-discovery-design.md) 用户批准）
-> 关联：[v0.19 设计规格](../superpowers/specs/2026-09-03-v0.19-rag-retrieval-discovery-design.md) · [ADR-010](./ADR-010-gap-filling-ai.md)（AI 为增强层·本地兜底铁律）· [ADR-024](./ADR-024-knowledge-system-layer.md)（体系只引用不收纳·AI 只建议不生成）· [ADR-028](./ADR-028-ai-goal-planner.md)（建议制确认落库/预算硬顶/双闸门范式）· REQ-258~262（已登记）
+> 状态：**已接受**（2026-09-03，随 [v0.19 设计规格（[ ] 已归档）](../archive/2026-09-03/2026-09-03-v0.19-rag-retrieval-discovery-design.md) 用户批准）
+> 关联：[v0.19 设计规格（[ ] 已归档）](../archive/2026-09-03/2026-09-03-v0.19-rag-retrieval-discovery-design.md) · [ADR-010](./ADR-010-gap-filling-ai.md)（AI 为增强层·本地兜底铁律）· [ADR-024](./ADR-024-knowledge-system-layer.md)（体系只引用不收纳·AI 只建议不生成）· [ADR-028](./ADR-028-ai-goal-planner.md)（建议制确认落库/预算硬顶/双闸门范式）· REQ-258~262（已登记）
 
 ## 背景
 

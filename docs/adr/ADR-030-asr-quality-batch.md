@@ -1,7 +1,7 @@
 # ADR-030：ASR 质量增强批——自验证路线 + 参数治理 + 全量精修 + 混淆画像闭环
 
 > 状态：**已接受**（2026-09-03，用户裁决 C：P0~P2 全批立项，v0.20 系列）
-> 关联：[asr-optimization-plan（决策稿）](../Foresight/asr-optimization-plan.md) · [ADR-003](./ADR-003-streaming-asr-architecture.md)（本 ADR 修订其 §决策 4/5 口径）· [ADR-012](./ADR-012-streaming-asr-quality-fixes.md) · REQ-263~270（已登记）· [v0.20 版本文档](../versions/v0.20.md) · [v0.19 检索与发现层设计](../superpowers/specs/2026-09-03-v0.19-rag-retrieval-discovery-design.md)（转写文本质量互依）
+> 关联：[asr-optimization-plan（决策稿）](../Foresight/asr-optimization-plan.md) · [ADR-003](./ADR-003-streaming-asr-architecture.md)（本 ADR 修订其 §决策 4/5 口径）· [ADR-012](./ADR-012-streaming-asr-quality-fixes.md) · REQ-263~270（已登记）· [v0.20 版本文档](../versions/v0.20.md) · [v0.19 检索与发现层设计（[ ] 已归档）](../archive/2026-09-03/2026-09-03-v0.19-rag-retrieval-discovery-design.md)（转写文本质量互依）
 
 ## 背景
 

@@ -456,7 +456,7 @@
 ### v0.19 · 检索与发现层（RAG 接层）（2026-09-03 用户裁决立项）
 
 > 依据：用户 2026-09-03 方向裁决「方案三：派生索引＋双读路径＋人工裁决闭环」（加一层能力 ＋ 换引擎良性内核；整体重定位/引擎替换否决）；检索欠账核实（FTS5 未实装、/goal L3 为标题占位）后立项；
-> 设计：[2026-09-03-v0.19-rag-retrieval-discovery-design.md](../superpowers/specs/2026-09-03-v0.19-rag-retrieval-discovery-design.md) ＋ [ADR-029](../adr/ADR-029-rag-retrieval-discovery-layer.md)（已接受）；
+> 设计：[2026-09-03-v0.19-rag-retrieval-discovery-design.md（[ ] 已归档）](../archive/2026-09-03/2026-09-03-v0.19-rag-retrieval-discovery-design.md) ＋ [ADR-029](../adr/ADR-029-rag-retrieval-discovery-layer.md)（已接受）；
 > 排期：M0 spike → v0.19.0（索引基建）→ v0.19.1（学习库问答）→ v0.19.2（检索建议）→ v0.19.3（语义增强，spike 定案后）。
 
 | REQ | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
