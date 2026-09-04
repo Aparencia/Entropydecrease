@@ -50,12 +50,23 @@ pub struct DiscoveryResult {
 }
 
 impl Db {
-    /// 概念发现建议（只读编排；概念不存在 → None——命令层映射"概念不存在"）。
+    /// 概念发现建议（FTS-only 等价入口——仅测试保留；生产走 *_hybrid）。
+    #[cfg(test)]
+    pub fn kb_discovery_suggest(&self, concept_id: i64) -> Result<Option<DiscoveryResult>> {
+        self.kb_discovery_suggest_hybrid(None, concept_id)
+    }
+
+    /// 概念发现建议（REQ-259：engine=Some 时证据候选走混合检索 RRF 合流——
+    /// 引擎不可用由检索层自决降级；相似概念提示仍按名称/词法重叠规则）。
     ///
     /// @ai-context: 检索只读派生索引 kb_*；排除集 = 该概念在 knowledge_links
     ///              已引用的 note/fragment target（引用通道唯一入口且概念链
     ///              只落在自身体系内，无需 system 维度二次过滤）。
-    pub fn kb_discovery_suggest(&self, concept_id: i64) -> Result<Option<DiscoveryResult>> {
+    pub fn kb_discovery_suggest_hybrid(
+        &self,
+        engine: Option<&dyn crate::kb_embed::EmbeddingEngine>,
+        concept_id: i64,
+    ) -> Result<Option<DiscoveryResult>> {
         // ① 概念取回（查询面 name/essence + 排除集归属体系）
         let concept = self.with_conn(|conn| {
             Ok(conn
@@ -93,7 +104,7 @@ impl Db {
         if query.chars().count() > DISCOVERY_QUERY_MAX_CHARS {
             query = query.chars().take(DISCOVERY_QUERY_MAX_CHARS).collect();
         }
-        let hits = self.kb_search(&query, DISCOVERY_LIMIT)?;
+        let hits = self.kb_search_hybrid(engine, &query, DISCOVERY_LIMIT)?;
         let evidence: Vec<KbHit> = hits
             .into_iter()
             .filter(|h| {

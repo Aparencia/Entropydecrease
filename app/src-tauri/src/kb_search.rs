@@ -15,7 +15,9 @@ use rusqlite::Connection;
 
 use crate::db::Db;
 use crate::error::Result;
+use crate::kb_embed::EmbeddingEngine;
 use crate::kb_fts::{build_snippet, like_pattern, plan_query};
+use crate::kb_search_semantic::semantic_merge;
 
 /// 默认/上限命中数（命令层 clamp——防超大 payload）。
 pub const KB_SEARCH_DEFAULT_LIMIT: usize = 10;
@@ -46,6 +48,7 @@ pub struct KbHit {
 }
 
 /// 查询行（snippet 后处理前置结构）。
+#[derive(Clone)]
 struct HitRow {
     chunk_id: i64,
     source_kind: String,
@@ -83,13 +86,24 @@ impl Db {
         })
     }
 
-    /// 全库混合检索（FTS-only 现状；embedding 就绪后本签名不变——融合在
-    /// 本层内部演化，调用方零感知）。
-    ///
-    /// @ai-context: 语义：空查询/全停用词 → 空列表（"库内未找到"诚实口径由
-    ///              命令层措辞）；FTS 语法意外（tokenizer 拒绝奇形 token）
-    ///              → 降级整句 LIKE，检索不因单个查询语法被击穿。
+    /// 全库混合检索 FTS-only 等价入口（仅测试保留——生产走 *_hybrid）。
+    #[cfg(test)]
     pub fn kb_search(&self, query: &str, limit: usize) -> Result<Vec<KbHit>> {
+        self.kb_search_hybrid(None, query, limit)
+    }
+
+    /// 混合检索入口（REQ-259）：调用方持引擎时传 Some（命令层经状态槽取）。
+    ///
+    /// @ai-context: 融合口径（设计 §5.4）：FTS 候选（保词法精度）∪ 向量余弦
+    ///              top-K（保语义召回）→ rrf_merge（k=60）→ limit 截断；向量
+    ///              仅当 kb_meta.embedding_dim 与引擎 dim 一致时参与（模型更换
+    ///              未重建 → 降级 + 日志提示重建，不产出维度错乱结果）。
+    pub fn kb_search_hybrid(
+        &self,
+        engine: Option<&dyn EmbeddingEngine>,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<KbHit>> {
         let limit = limit.clamp(1, KB_SEARCH_MAX_LIMIT);
         let plan = plan_query(query);
         if plan.fts.is_none() && plan.like_terms.is_empty() {
@@ -128,6 +142,38 @@ impl Db {
                 },
                 None => like_hits(conn, &plan.like_terms, limit)?,
             };
+            // 语义合流（可选）：向量候选 + RRF 融合（任何失败/不一致 → 降级直通）
+            let hybrid = if let Some(eng) = engine {
+                let fts_ids: Vec<i64> = rows.iter().map(|r| r.chunk_id).collect();
+                semantic_merge(conn, eng, query, &fts_ids, limit)?
+            } else {
+                None
+            };
+            if let Some((merged, used_semantic)) = hybrid {
+                let merged_ids: Vec<i64> = merged;
+                // 补齐向量独有命中（FTS 未召回但语义召回的 chunk 行）
+                let have: std::collections::HashSet<i64> =
+                    rows.iter().map(|r| r.chunk_id).collect();
+                let missing: Vec<i64> = merged_ids
+                    .iter()
+                    .copied()
+                    .filter(|id| !have.contains(id))
+                    .collect();
+                if !missing.is_empty() {
+                    rows.extend(rows_by_ids(conn, &missing)?);
+                }
+                let by_id: std::collections::HashMap<i64, HitRow> =
+                    rows.into_iter().map(|r| (r.chunk_id, r)).collect();
+                rows = merged_ids
+                    .iter()
+                    .filter_map(|id| by_id.get(id).cloned())
+                    .collect();
+                if used_semantic {
+                    for r in rows.iter_mut() {
+                        r.score_kind = "rrf".to_string();
+                    }
+                }
+            }
             // limit 契约统一收口（fts 候选按 8× 放大取回——过滤后必须裁回；
             // 审查 H1：此前仅在 like 过滤分支内截断，fts-only 常态超发 8 倍）
             rows.truncate(limit);
@@ -148,6 +194,26 @@ impl Db {
             Ok(hits)
         })
     }
+}
+
+/// 按 id 列表批量取命中行（语义独有候选补齐——HIT_COLUMNS 同口径）。
+fn rows_by_ids(conn: &Connection, ids: &[i64]) -> Result<Vec<HitRow>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let placeholders = (0..ids.len()).map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT {} FROM kb_chunks c {} WHERE c.id IN ({})",
+        HIT_COLUMNS, HIT_JOINS, placeholders
+    );
+    let ids_vec: Vec<&dyn rusqlite::ToSql> = ids.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
+    let mut stmt = conn.prepare(&sql)?;
+    let hit_rows = stmt
+        .query_map(rusqlite::params_from_iter(ids_vec.iter().copied()), map_hit_row)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut rows = hit_rows;
+    rows.iter_mut().for_each(|r| r.score_kind = "rrf".to_string());
+    Ok(rows)
 }
 
 /// 命中列（三通道共用；c.id 恒有——fts 通道经影子表 join 原 chunk 行）。

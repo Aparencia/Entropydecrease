@@ -8,9 +8,9 @@
 //! @ai-context: Onnx/Ollama 具体引擎后续模块实现（OnnxEmbedding 需 ort + 模型
 //!              文件 + BERT 分词——模型分发复用 model_registry）；本模块红线：
 //!              引擎产物只是派生索引材料，绝不写结构层（人工裁决闸门铁律）。
-//! 注意：向量编解码与 cosine top-K 的检索合流接线（kb_search 混合 RRF /
-//! reindex 回填）落地前尚未被生产路径引用——dead_code 临时豁免，混合检索
-//! 接线轮必须移除本属性（TODO REQ-259）；引擎槽/契约/Noop 已被命令层引用。
+//! 注意：向量写入侧（encode_embedding + META_* 键）待 reindex 回填轮接线——
+//! 读侧（decode/cosine/META_DIM）已被 kb_search_semantic 引用；dead_code 临时
+//! 豁免缩小至写入侧，reindex 回填轮移除本属性（TODO REQ-259）。
 #![allow(dead_code)]
 
 use std::error::Error;

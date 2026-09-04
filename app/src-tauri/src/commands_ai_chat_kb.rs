@@ -129,8 +129,17 @@ fn kb_run(
     flag: CancelFlag,
     settings: &AiSettings,
 ) -> Result<(), String> {
-    // ① 本地检索（零成本零上传——不受闸门约束）
-    let hits = match state.db.kb_search(question, KB_QA_HITS_LIMIT) {
+    // ① 本地检索（零成本零上传——不受闸门约束；REQ-259：引擎就绪自动语义合流；
+    // 锁与 db 调用同作用域——引擎借用不逃逸锁生命周期）
+    let hits = {
+        let slot = state
+            .embedding_slot
+            .lock()
+            .map_err(|e| format!("embedding 引擎锁中毒: {}", e))?;
+        let engine = (slot.engine.dims().is_some()).then(|| slot.engine.as_ref());
+        state.db.kb_search_hybrid(engine, question, KB_QA_HITS_LIMIT)
+    };
+    let hits = match hits {
         Ok(h) => h,
         Err(e) => {
             // 检索层故障：failed 占位 + 诚实错误（与断网同类降级路径）

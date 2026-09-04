@@ -28,9 +28,16 @@ pub fn kb_discovery_suggest(
         return Err("相关素材建议未开启（设置 → 学习库 → 相关素材建议开关；默认关——本地检索本身不受影响）".to_string());
     }
     drop(flags);
-    state
-        .db
-        .kb_discovery_suggest(concept_id)
+    // REQ-259：证据候选走混合检索（锁与 db 调用同作用域——借用不逃逸）
+    let result = {
+        let slot = state
+            .embedding_slot
+            .lock()
+            .map_err(|e| format!("embedding 引擎锁中毒: {}", e))?;
+        let engine = (slot.engine.dims().is_some()).then(|| slot.engine.as_ref());
+        state.db.kb_discovery_suggest_hybrid(engine, concept_id)
+    };
+    result
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "概念不存在（可能已删除或不在当前体系）".to_string())
 }

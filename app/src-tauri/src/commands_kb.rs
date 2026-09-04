@@ -45,10 +45,18 @@ pub fn kb_search(
     if q.chars().count() > KB_QUERY_MAX_CHARS {
         return Err(format!("查询过长（≤{} 字符）", KB_QUERY_MAX_CHARS));
     }
-    state
-        .db
-        .kb_search(q, limit.unwrap_or(KB_SEARCH_DEFAULT_LIMIT).min(KB_SEARCH_MAX_LIMIT))
-        .map_err(|e| e.to_string())
+    // REQ-259：引擎就绪时语义合流（锁与 db 调用同作用域——借用不逃逸）
+    let result = {
+        let slot = state
+            .embedding_slot
+            .lock()
+            .map_err(|e| format!("embedding 引擎锁中毒: {}", e))?;
+        let engine = (slot.engine.dims().is_some()).then(|| slot.engine.as_ref());
+        state
+            .db
+            .kb_search_hybrid(engine, q, limit.unwrap_or(KB_SEARCH_DEFAULT_LIMIT).min(KB_SEARCH_MAX_LIMIT))
+    };
+    result.map_err(|e| e.to_string())
 }
 
 /// 索引统计（设置页/角标——含脏源/失败计数，索引失败不静默）。

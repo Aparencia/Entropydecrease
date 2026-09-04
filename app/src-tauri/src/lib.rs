@@ -256,6 +256,8 @@ mod kb_fts;
 mod kb_index;
 mod kb_reindex;
 mod kb_search;
+// REQ-259（v0.19.5）：kb 检索语义合流（RRF 融合独立模块——行数拆分）
+mod kb_search_semantic;
 mod commands_kb;
 // v0.19.1（REQ-260）：学习库问答编排（检索分支分流——纯聊链路零改动）
 mod kb_prompt;
