@@ -57,3 +57,33 @@
 
 - 版本与需求：[v0.19.2 版本文档](../../versions/v0.19.2.md) · [v0.19.3 版本文档](../../versions/v0.19.3.md)（交付 dd5f9b2/cf41a46c + 审查修复 3c1fcce9，REQ-261/262/271~273）
 - 归档快照：[2026-09-04 README](./README.md)
+
+---
+
+## 二轮滚动（2026-09-04 晚——v0.19.4/5 审查即修后权威续段）
+
+> 上半（本文件前文）为晨档；本段为同日二轮滚动。晨档 8 笔 carried 状态**不变**（无偿还条件发生）；新增内容如下。
+
+### 即修（不立债，提交已入库）
+
+| 提交 | 范围 |
+|------|------|
+| 653e8b3 | Rust 批 18 文件：采纳幂等守卫前置×3（commands_ai_{refine,note_refine,enrich}——修 check-after-write 重复落库）；组结算 Goals/Notes/NoteGroups 补广播（commands_settlement）；写端补广播（promote_fragment_to_note/note_versions_rollback/start_photo_session/knowledge-core 概念·模型×4/delete_note→Knowledge）；kb_reindex 重建起点清 embedding meta 三键（修"语义就绪"谎报）；kb_fill_embeddings 分批 512 嵌入写回（限内存限锁）；下载幂等跳过+长度校验+.part 失败清理；kb_embedding_load 异步化（模型解析出主线程）；语义合流统一降级防击穿（meta/推理/形状故障→日志+None）＋纯语义召回空词法路径；陈旧注释/allow/ndarray 直依清理 |
+| 8a4a104 | FE 批 16 文件 15 项：采纳成功后详情回写（两宿主 onTaskChanged 重取详情）；dock open 期间 ai:task-update 实时刷新；ChatPage loadMessages seq 防竞态；任务截断 40→60 统一；占位文案中性化「标题不可用」（entityLabel）；TaskConversationView 来源按钮 targetKind=note 分流；GoalsPage 总线含毕业档案重取；dock 懒加载+10s 静态时效；useChatStream unmount rAF 清理；TaskLaunchDialog 确认框去裸号；custom textarea maxLength=500；kindWord 消费；EmbeddingStatusView 归位 types/kb.ts；引擎治理拆 LearningLibraryEngineSection（面板 331→237 行）＋下载后 loadEmb 刷新；NoteAiDialog/ChatSaveNoteDialog 去裸号 |
+| 56aa05b | Cargo.lock 净化（移除 ndarray 0.16 直依——ort 自带 0.17 已足够） |
+
+### 二轮观察登记（不立债）
+
+| ID | 摘要 | 处置 |
+|----|------|------|
+| 观察 2026-09-04B-1 | 本地写+总线 300ms 双刷（幂等重拉、防抖挡风暴；成本 1-6 次轻查询/写） | 接受（页面注释说明） |
+| 观察 2026-09-04B-2 | kb_chunk 800 字符可超 bge 512 token 窗——尾段由分词器截断不入向量（词法检索不受影响） | 勘误注释已更新；收紧常量需同步 golden——随真机评测项 |
+| 观察 2026-09-04B-3 | dock 无组件自动化测试；面板/快捷键/toast 联动入真机项 | 登记（v0.19.4 版本文档真机待办） |
+| 观察 2026-09-04B-4 | data:* 事件名跨语言契约无机器校验 | 建议 CI grep 双向断言（登记后续） |
+| 观察 2026-09-04B-5 | 设置页技术串裸露（fts5+onnx/dim）与模型下载无进度事件 | 登记后续（文案与进度批） |
+
+### 验证记录（二轮终态）
+
+- Rust 全量：**2083 通过 / 2 失败（note_filter 预存 TD-30-B）/ 6 ignored**；clippy 零新警告
+- 前端：vitest **551/551**；`tsc --noEmit` 零错误
+- 终稿文档：[v0.19.4 版本文档](../../versions/v0.19.4.md) · [v0.19.5 版本文档](../../versions/v0.19.5.md)（含真机验收待办登记）
