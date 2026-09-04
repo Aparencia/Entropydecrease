@@ -605,6 +605,7 @@ pub fn run() {
             commands_kb::kb_reindex_all,
             commands_kb::kb_embedding_status,
             commands_kb::kb_embedding_load,
+            commands_kb::kb_embedding_download,
             // v0.19.1（REQ-260）：学习库问答生成开关与预算档位（设置段读写）
             commands_ai_settings::ai_set_kb_qa,
             // v0.19.3（REQ-261）：检索建议（发现路径——默认关，建议制）

@@ -68,6 +68,53 @@ pub fn kb_index_stats(state: State<'_, AppState>) -> Result<KbIndexStats, String
 /// kb embedding 模型相对目录（model_dir 下；与 speaker 下载器同约定）
 const EMBEDDING_MODEL_REL: &str = "embedding/bge-small-zh-v1.5";
 
+/// 下载 kb embedding 模型（bge-small-zh-v1.5 int8 ONNX + BERT 词表）。
+///
+/// @ai-context: 模型文件不入库、不打包（约 25MB 按需下载——REQ-262 口径）；
+///              源：ONNX 量化模型走 Xenova（社区导出），vocab.txt 走 BAAI
+///              官方仓库；下载写 .part 后原子改名（中断残留可重下覆盖）。
+///              下载完成 ≠ 就绪——需 kb_embedding_load 换槽 + 「学习库」段
+///              重建索引回填向量（命令返回值给前端引导文案）。
+#[tauri::command]
+pub async fn kb_embedding_download(state: State<'_, AppState>) -> Result<String, String> {
+    let dir = state.model_dir.join(EMBEDDING_MODEL_REL);
+    let files: [(&str, &str); 2] = [
+        (
+            "model_quantized.onnx",
+            "https://hf-mirror.com/Xenova/bge-small-zh-v1.5/resolve/main/onnx/model_quantized.onnx",
+        ),
+        (
+            "vocab.txt",
+            "https://hf-mirror.com/BAAI/bge-small-zh-v1.5/resolve/main/vocab.txt",
+        ),
+    ];
+    tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
+        std::fs::create_dir_all(&dir).map_err(|e| format!("创建模型目录失败: {e}"))?;
+        let mut downloaded = Vec::new();
+        for (name, url) in files {
+            let part = dir.join(format!("{name}.part"));
+            let target = dir.join(name);
+            let resp = ureq::get(url)
+                .timeout(std::time::Duration::from_secs(600))
+                .call()
+                .map_err(|e| format!("下载 {name} 失败: {e}"))?;
+            let mut reader = resp.into_reader();
+            let mut out = std::fs::File::create(&part).map_err(|e| format!("写临时文件失败: {e}"))?;
+            std::io::copy(&mut reader, &mut out).map_err(|e| format!("写 {name} 失败: {e}"))?;
+            drop(out);
+            std::fs::rename(&part, &target).map_err(|e| format!("落位 {name} 失败: {e}"))?;
+            downloaded.push(name.to_string());
+        }
+        Ok(format!(
+            "已下载：{}（{}）——请在「学习库」段点击加载引擎并重建索引以回填向量",
+            downloaded.join("、"),
+            dir.to_string_lossy()
+        ))
+    })
+    .await
+    .map_err(|e| format!("下载任务调度失败: {e}"))?
+}
+
 /// 引擎状态视图（设置页「学习库」段数据源——无模型如实显示 noop 与原因）。
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
