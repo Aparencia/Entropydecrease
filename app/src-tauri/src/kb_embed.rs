@@ -8,8 +8,9 @@
 //! @ai-context: Onnx/Ollama 具体引擎后续模块实现（OnnxEmbedding 需 ort + 模型
 //!              文件 + BERT 分词——模型分发复用 model_registry）；本模块红线：
 //!              引擎产物只是派生索引材料，绝不写结构层（人工裁决闸门铁律）。
-//! 注意：引擎接线（kb_search 混合 RRF / reindex 向量回填）落地前，公共 API
-//! 尚未被生产路径引用——dead_code 临时豁免，接线轮必须移除本属性（TODO REQ-259）。
+//! 注意：向量编解码与 cosine top-K 的检索合流接线（kb_search 混合 RRF /
+//! reindex 回填）落地前尚未被生产路径引用——dead_code 临时豁免，混合检索
+//! 接线轮必须移除本属性（TODO REQ-259）；引擎槽/契约/Noop 已被命令层引用。
 #![allow(dead_code)]
 
 use std::error::Error;
@@ -42,6 +43,20 @@ impl EmbeddingEngine for NoopEmbedding {
     }
     fn embed(&self, _texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
         Err("未配置本地 embedding 模型（降级 FTS-only 检索）".to_string())
+    }
+}
+
+/// 引擎槽（AppState 持有；状态命令读、加载命令换入 Onnx——锁内
+/// read-modify-write，与词表/开关同模式防 TOCTOU）。
+pub struct EmbeddingSlot {
+    pub engine: Box<dyn EmbeddingEngine>,
+    /// 引擎标识（noop | onnx——状态命令如实上报）
+    pub kind: &'static str,
+}
+
+impl Default for EmbeddingSlot {
+    fn default() -> Self {
+        Self { engine: Box::new(NoopEmbedding), kind: "noop" }
     }
 }
 

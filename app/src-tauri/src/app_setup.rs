@@ -232,6 +232,8 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         db,
         engines,
         streaming_models,
+        // REQ-259（v0.19.5）：kb embedding 引擎槽（Noop 默认——FTS-only 降级）
+        embedding_slot: std::sync::Arc::new(std::sync::Mutex::new(Default::default())),
         #[cfg(target_os = "windows")]
         live_session: LiveSessionManager::new(),
         model_downloader: ModelDownloader::new(),

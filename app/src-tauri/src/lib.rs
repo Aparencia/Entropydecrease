@@ -266,6 +266,8 @@ mod kb_discovery;
 mod kb_embed;
 // REQ-259（v0.19.5）：bge-small-zh BERT WordPiece 分词（vocab.txt 加载/编码）
 mod kb_embed_tokenizer;
+// REQ-259（v0.19.5）：bge-small-zh ONNX 推理引擎（ort 封装 + CLS/L2）
+mod kb_embed_onnx;
 mod commands_kb_discovery;
 mod concept_weakness;
 mod goal_interview;
@@ -597,6 +599,8 @@ pub fn run() {
             commands_kb::kb_search,
             commands_kb::kb_index_stats,
             commands_kb::kb_reindex_all,
+            commands_kb::kb_embedding_status,
+            commands_kb::kb_embedding_load,
             // v0.19.1（REQ-260）：学习库问答生成开关与预算档位（设置段读写）
             commands_ai_settings::ai_set_kb_qa,
             // v0.19.3（REQ-261）：检索建议（发现路径——默认关，建议制）

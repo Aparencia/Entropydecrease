@@ -12,6 +12,7 @@ use tauri::ipc::Channel;
 use tauri::State;
 
 use crate::commands::AppState;
+use crate::kb_embed::EmbeddingEngine;
 use crate::kb_reindex::{KbIndexStats, KbReindexReport};
 use crate::kb_search::{KbHit, KB_SEARCH_DEFAULT_LIMIT, KB_SEARCH_MAX_LIMIT};
 
@@ -54,6 +55,70 @@ pub fn kb_search(
 #[tauri::command]
 pub fn kb_index_stats(state: State<'_, AppState>) -> Result<KbIndexStats, String> {
     state.db.kb_index_stats().map_err(|e| e.to_string())
+}
+
+/// kb embedding 模型相对目录（model_dir 下；与 speaker 下载器同约定）
+const EMBEDDING_MODEL_REL: &str = "embedding/bge-small-zh-v1.5";
+
+/// 引擎状态视图（设置页「学习库」段数据源——无模型如实显示 noop 与原因）。
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmbeddingStatusView {
+    /// noop | onnx
+    pub kind: String,
+    /// 引擎是否可用（dim 已知 = 可推理）
+    pub ready: bool,
+    /// 输出维度（不可用 None）
+    pub dim: Option<usize>,
+    /// 模型目录（诊断）
+    pub model_dir: String,
+    /// 当前状态细节（noop=未配置；onnx=就绪/最近失败原因保留由加载命令报错）
+    pub detail: String,
+}
+
+/// 读取 embedding 引擎状态（只读；锁内瞬时快照）。
+#[tauri::command]
+pub fn kb_embedding_status(state: State<'_, AppState>) -> Result<EmbeddingStatusView, String> {
+    let slot = state
+        .embedding_slot
+        .lock()
+        .map_err(|_| "embedding 引擎锁中毒".to_string())?;
+    let dim = slot.engine.dims();
+    Ok(EmbeddingStatusView {
+        kind: slot.kind.to_string(),
+        ready: dim.is_some(),
+        dim,
+        model_dir: state.model_dir.join(EMBEDDING_MODEL_REL).to_string_lossy().into_owned(),
+        detail: if dim.is_some() { "本地模型就绪".to_string() } else { "未配置本地模型（检索按 FTS-only 精度工作）".to_string() },
+    })
+}
+
+/// 加载（或重载）本地 ONNX embedding 引擎。
+///
+/// @ai-context: 模型文件由下载命令/分发先落位（models/embedding/bge-small-zh-
+///              v1.5/{model_quantized.onnx,vocab.txt}）；本命令只做加载与换槽：
+///              成功 → 槽位切 onnx（后续 reindex 按新引擎重嵌）；失败 → 槽位
+///              保持原样并如实报错（不静默降级——状态命令仍显示旧态）。
+#[tauri::command]
+pub fn kb_embedding_load(state: State<'_, AppState>) -> Result<EmbeddingStatusView, String> {
+    let dir = state.model_dir.join(EMBEDDING_MODEL_REL);
+    let engine = crate::kb_embed_onnx::OnnxEmbedding::try_load(&dir)?;
+    let mut slot = state
+        .embedding_slot
+        .lock()
+        .map_err(|_| "embedding 引擎锁中毒".to_string())?;
+    let dim = engine.dims();
+    *slot = crate::kb_embed::EmbeddingSlot {
+        engine: Box::new(engine),
+        kind: "onnx",
+    };
+    Ok(EmbeddingStatusView {
+        kind: "onnx".to_string(),
+        ready: true,
+        dim,
+        model_dir: dir.to_string_lossy().into_owned(),
+        detail: format!("本地模型就绪（dim={}）——请在「学习库」段重建索引以回填向量", dim.unwrap_or(0)),
+    })
 }
 
 /// 全量重建（派生索引兜底闸——后台任务 + 进度事件；成功/失败逐源如实报告）。

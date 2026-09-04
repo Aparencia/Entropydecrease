@@ -11,9 +11,6 @@
 //!              同分发）；加载失败 → 引擎不可用（外层诚实报错，检索自动降级）。
 //! @ai-context: 特殊标记取自词表查找（防御换名）；词表缺 [UNK]/[CLS]/[SEP]
 //!              → 加载失败（模型不完整，宁缺勿错）。
-//! 注意：引擎模块（kb_embed_onnx）接线前本模块无生产调用——dead_code 临时
-//! 豁免，引擎接线轮必须移除本属性（TODO REQ-259）。
-#![allow(dead_code)]
 
 use std::collections::HashMap;
 use std::path::Path;

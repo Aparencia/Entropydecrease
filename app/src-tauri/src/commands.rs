@@ -88,6 +88,9 @@ pub struct AppState {
     pub model_downloader: ModelDownloader,
     /// 应用句柄（事件推送 live:* / model:*）
     pub app: tauri::AppHandle,
+    /// REQ-259（v0.19.5）：kb 语义 embedding 引擎槽（Noop 默认= FTS-only 降级；
+    /// 模型下载/就绪后经 kb_embedding_load 换入 Onnx——锁内 read-modify-write）
+    pub embedding_slot: std::sync::Arc<std::sync::Mutex<crate::kb_embed::EmbeddingSlot>>,
     /// v0.18.2（REQ-251）：目标规划并发互斥——防多窗口/双击重复扣费。
     /// 同步规划调用无任务去重表（ai_refine_start 的按会话去重先例）；
     /// Arc<AtomicBool>（AppState Clone 传播）+ swap 占位（async command

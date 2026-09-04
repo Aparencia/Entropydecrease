@@ -72,6 +72,8 @@ sherpa-onnx = { version = "1.13", default-features = false, features = ["shared"
 # .cargo/config.toml 注入）；仅取 ndarray 输入通道，禁 download-binaries
 # （crate 本地缓存 + config 零网络下载；模型文件另走 model_registry 分发）
 ort = { version = "2.0.0-rc.13", default-features = false, features = ["ndarray"] }
+# ort ndarray 通道需要直接依赖同版本 ndarray（构建张量输入）
+ndarray = "0.16"
 # v0.12.0 构建修复：sherpa-onnx 由 static（MT 静态库，内嵌 onnxruntime 符号）切 shared
 # （DLL 动态链接）——否则与 oar-ocr 的 ort-sys（MD 动态链接 onnxruntime.dll）链接时
 # 发生 LNK2038 RuntimeLibrary 冲突 + LNK2005 onnxruntime 符号重复；shared 包
