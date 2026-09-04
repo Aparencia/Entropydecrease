@@ -1,5 +1,5 @@
 /**
- * useChatStream — AI 对话流式状态 hook（v0.16.0 审查重构）。
+ * useChatStream — AI 对话流式状态 hook（v0.16.0 审查重构；REQ-275 帧级节流）。
  *
  * @ai-context: 审查发现（2026-08-30）：原实现全局单流 + 全局 streaming 态——
  *              ① 跨会话发送被静默拒绝（无提示）；② 切换会话后旧流 chunk 仍
@@ -8,6 +8,10 @@
  *              过滤：事件只在"当前展示会话"可见，旧流后台完成并落库。
  * @ai-context: 单会话单流：同会话再次发送 → return false（调用方提示）；
  *              流终态（done/aborted/failed）→ onEvent 回调（调用方刷新消息）。
+ * @ai-context: REQ-275（v0.19.4）——逐 delta IPC 高频到达时每 chunk 一次
+ *              setState 会拖垮渲染线程（用户感知"打字慢/卡顿"）；改为按帧
+ *              批量 flush（requestAnimationFrame 合并同帧全部累积 delta 为
+ *              单次 setView）。终态/切会话立即 flush 不残留。
  */
 import { useCallback, useRef, useState } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
@@ -29,6 +33,8 @@ export default function useChatStream(onSettled: StreamSettled) {
   const accs = useRef(new Map<number, string>());
   // v0.19.1（REQ-260）：每会话命中片段（kb_hits 非终态事件——与文本累积平行）
   const hitsRef = useRef(new Map<number, KbHit[]>());
+  // REQ-275：每会话挂起的帧刷新（raf 句柄）——同帧多 chunk 合并为一次 setView
+  const rafRef = useRef(new Map<number, number>());
   const [view, setView] = useState<ChatStreamView | null>(null);
   const viewRef = useRef<number | null>(null);
   const onSettledRef = useRef(onSettled);
@@ -41,15 +47,36 @@ export default function useChatStream(onSettled: StreamSettled) {
     setView(hits.length > 0 || acc !== "" ? { sessionId, text: acc, hits } : null);
   }, []);
 
+  /** 帧级批量 flush（REQ-275）：把 syncView 挂到下一帧——高频 chunk 合帧渲染 */
+  const scheduleView = useCallback((sessionId: number) => {
+    if (rafRef.current.has(sessionId)) return; // 已有挂起帧——合并
+    const rafId = requestAnimationFrame(() => {
+      rafRef.current.delete(sessionId);
+      syncView(sessionId);
+    });
+    rafRef.current.set(sessionId, rafId);
+  }, [syncView]);
+
+  /** 立即 flush（终态/切会话/取消——不留残留帧） */
+  const flushView = useCallback((sessionId: number) => {
+    const rafId = rafRef.current.get(sessionId);
+    if (rafId != null) {
+      cancelAnimationFrame(rafId);
+      rafRef.current.delete(sessionId);
+    }
+    syncView(sessionId);
+  }, [syncView]);
+
   /** 切换展示会话（null=任务视图/无会话）——流式可见性随之切换 */
   const setActive = useCallback((sessionId: number | null) => {
+    if (viewRef.current !== null) flushView(viewRef.current);
     viewRef.current = sessionId;
     if (sessionId === null) {
       setView(null);
       return;
     }
     syncView(sessionId);
-  }, [syncView]);
+  }, [flushView, syncView]);
 
   /** 该会话是否有进行中的流 */
   const isStreaming = useCallback((sessionId: number) => streams.current.has(sessionId), []);
@@ -73,13 +100,14 @@ export default function useChatStream(onSettled: StreamSettled) {
       if (ev.kind === "chunk") {
         const acc = (accs.current.get(sessionId) ?? "") + ev.delta;
         accs.current.set(sessionId, acc);
-        syncView(sessionId);
+        // REQ-275：帧级合并——同一帧内的全部 chunk 只触发一次渲染
+        scheduleView(sessionId);
         return;
       }
       if (ev.kind === "kb_hits") {
         // v0.19.1：命中列表（本地）——非终态，文本流照常累积
         hitsRef.current.set(sessionId, ev.hits);
-        syncView(sessionId);
+        scheduleView(sessionId);
         return;
       }
       // 终态显式枚举（审查加固）：未来若新增非终态事件而此处未登记——
@@ -90,7 +118,8 @@ export default function useChatStream(onSettled: StreamSettled) {
         console.warn("[useChatStream] 未登记的事件 kind 被忽略（非终态）:", unknownKind);
         return;
       }
-      // done / aborted / failed：流终态
+      // done / aborted / failed：流终态——先立即 flush 残留帧再清流
+      flushView(sessionId);
       accs.current.delete(sessionId);
       hitsRef.current.delete(sessionId);
       streams.current.delete(sessionId);
@@ -101,6 +130,7 @@ export default function useChatStream(onSettled: StreamSettled) {
       await invoke(cmd, { ...args, sessionId, channel });
     } catch (e) {
       // 命令前置校验失败（gate/单流/参数）——清理半启动的流槽
+      flushView(sessionId);
       accs.current.delete(sessionId);
       hitsRef.current.delete(sessionId);
       streams.current.delete(sessionId);
@@ -108,7 +138,7 @@ export default function useChatStream(onSettled: StreamSettled) {
       throw e;
     }
     return true;
-  }, [syncView]);
+  }, [flushView, scheduleView, syncView]);
 
   /** 停止该会话流（后端置取消标志——无进行中流为 no-op） */
   const stop = useCallback((sessionId: number) => {
