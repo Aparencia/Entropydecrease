@@ -7,7 +7,7 @@
  *              既有 link_knowledge_target 落库（白名单 note/fragment，零迁移，
  *              幂等——建议零双写，ADR-024）；跨体系相似概念为提示型只展示。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { KbDiscoveryResult, KbHit } from "../types";
 import { hitLabel } from "../utils/kbHits";
@@ -30,21 +30,29 @@ export default function DiscoverySuggestSection({ systemId, conceptId, onChanged
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  // v0.19.3 审查 MED-3：请求序号守卫——概念快速切换时旧响应必须丢弃
+  // （A 的候选挂到 B 概念 = 真实错链；切换/拉取即失效）
+  const seqRef = useRef(0);
 
-  const load = useCallback(async () => {
-    if (!enabled) return;
+  const load = useCallback(async (reset: boolean) => {
+    const seq = ++seqRef.current;
     setBusy(true);
-    setMsg("");
+    if (reset) {
+      // 切换概念/首次拉取：立即清屏（旧候选不得在加载失败后残留可勾选）
+      setResult(null);
+      setSelected(new Set());
+    }
     try {
       const r = await invoke<KbDiscoveryResult>("kb_discovery_suggest", { conceptId });
+      if (seq !== seqRef.current) return; // 过期响应丢弃
       setResult(r);
       setSelected(new Set());
     } catch (e) {
-      setMsg(String(e));
+      if (seq === seqRef.current) setMsg(String(e));
     } finally {
-      setBusy(false);
+      if (seq === seqRef.current) setBusy(false);
     }
-  }, [enabled, conceptId]);
+  }, [conceptId]);
 
   useEffect(() => {
     let disposed = false;
@@ -61,8 +69,8 @@ export default function DiscoverySuggestSection({ systemId, conceptId, onChanged
   }, []);
 
   useEffect(() => {
-    if (enabled === true) void load();
-    // 概念切换 → 清旧建议（enabled 常驻变化才拉取；依赖包含 enabled 防竞态陈旧）
+    if (enabled === true) void load(true);
+    // 概念切换即重拉（reset=true 清旧屏）；enabled 转 true 时才首拉
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, conceptId]);
 
@@ -100,7 +108,8 @@ export default function DiscoverySuggestSection({ systemId, conceptId, onChanged
       }
       onChanged();
       setMsg(`已挂接 ${selected.size} 条引用——建议不落库，仅在确认后经引用通道落库`);
-      await load();
+      // 刷新候选（已链者随即消失）；成功文案保留（load 不主动清 msg——审查 LOW-4）
+      await load(false);
     } catch (e) {
       setMsg(`挂接失败（部分成功需重试）: ${e}`);
     } finally {
@@ -116,7 +125,7 @@ export default function DiscoverySuggestSection({ systemId, conceptId, onChanged
           本地检索候选 · 人工确认后经引用通道落库（零双写）
         </span>
       </div>
-      <button onClick={() => void load()} disabled={busy} style={{ fontSize: 11, color: "#0d9488", cursor: "pointer", border: "none", background: "none", padding: 0 }}>
+      <button onClick={() => void load(false)} disabled={busy} style={{ fontSize: 11, color: "#0d9488", cursor: "pointer", border: "none", background: "none", padding: 0 }}>
         {busy ? "计算中…" : result ? "⟳ 重新建议" : "🔍 生成建议"}
       </button>
       {result && (

@@ -24,6 +24,8 @@ use crate::kb_search::KbHit;
 pub const DISCOVERY_LIMIT: usize = 10;
 /// 相似概念提示上限（提示型——控制噪音）。
 pub const SIMILAR_LIMIT: usize = 6;
+/// 建议查询字符上界（essence 无落库上限——纵深防御，见 kb_discovery_suggest）。
+const DISCOVERY_QUERY_MAX_CHARS: usize = 240;
 
 /// 跨体系相似概念提示（展示型：人工处置，不自动合并）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -81,10 +83,15 @@ impl Db {
             .map(|l| (l.target_type, l.target_id))
             .collect();
         // ③ 证据候选：name + essence 混合检索 → 排除已链接 → 截顶
+        //    （v0.19.3 审查即修：essence 落库无长度上限——查询字符截断 240，
+        //    防跨 token 无上限的 FTS 表达式膨胀；kb_fts 96 硬顶只约束 CJK 段）
         let mut query = name.clone();
         if let Some(e) = essence.as_deref().map(str::trim).filter(|e| !e.is_empty()) {
             query.push(' ');
             query.push_str(e);
+        }
+        if query.chars().count() > DISCOVERY_QUERY_MAX_CHARS {
+            query = query.chars().take(DISCOVERY_QUERY_MAX_CHARS).collect();
         }
         let hits = self.kb_search(&query, DISCOVERY_LIMIT)?;
         let evidence: Vec<KbHit> = hits
@@ -130,6 +137,8 @@ impl Db {
         let mut hints: Vec<SimilarHint> = concepts
             .into_iter()
             .filter(|c| c.id != concept_id && c.system_id != system_id)
+            // archived（归档）概念不参与提示（展示噪声；v0.19.3 审查即修）
+            .filter(|c| c.status != "archived")
             .filter(|c| concept_name_overlap(&norm, &normalize_name(&c.name)))
             .map(|c| SimilarHint {
                 system_id: c.system_id,
@@ -141,9 +150,11 @@ impl Db {
                 concept_name: c.name,
                 reason: "名称高度相似（互相包含）".to_string(),
             })
-            .take(SIMILAR_LIMIT)
             .collect();
+        // 提示型防噪：按体系/id 序稳定取前 N（无相关度排序——二进制判据，
+        // 先到先得即防噪音上限；不自动合并，人工处置）
         hints.sort_by(|a, b| a.system_id.cmp(&b.system_id).then(a.concept_id.cmp(&b.concept_id)));
+        hints.truncate(SIMILAR_LIMIT);
         Ok(hints)
     }
 }

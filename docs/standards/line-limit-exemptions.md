@@ -70,13 +70,13 @@
 | app/src-tauri/src/db_ai_chat.rs | 309 | AI 对话双表仓储 + v0.19.1（REQ-260）retrieval/meta_json 补列与行映射（+42）——SQL/行映射内聚（db_* 文件先例） | 若再增长：消息侧读写拆至 db_ai_chat_messages.rs |
 | app/src-tauri/src/db_fragments.rs | 309 | 碎片数据层 + v0.19.0（REQ-258）索引生命周期钩子（建/删/升笔记事务内清块重建，+16）——promote 显式事务与知识链接清理同域 | 若再增长：promote_fragment_to_note 事务拆至 db_fragments_promote.rs |
 | app/src-tauri/src/windows.rs | 342 | 窗口枚举/评分域 + v0.19.2（REQ-271/272）：CaptureWindow.zOrder/systemWindow 字段 + 抖音/快手/B站客户端评分表（+28）——枚举系统副作用与评分纯函数同域便于单测（既有模式） | 若再增长：z 序/系统标记纯函数拆至 windows_meta.rs |
-| app/src-tauri/src/live_session_lifecycle.rs | 301 | 会话启动/预热生命周期 + v0.19.2（REQ-273）15s 就绪等待与超时回滚（+11）——start/prepare/release 与等待/回退策略强耦合于 impl 生命周期域 | 若再增长：wait_prepared_ready 与回退策略拆至 live_session_start.rs |
+| app/src-tauri/src/live_session_lifecycle.rs | 379 | 会话启动/预热生命周期 + v0.19.2/3（REQ-273 + 审查即修：锁外等待+枚举化+辅助函数抽取，+78）——start/prepare/release 与等待/回退策略强耦合于 impl 生命周期域 | 若再增长：wait_prepared_ready 与回退策略拆至 live_session_start.rs |
 
 ## 前端（app/src/，数字来自前端审查快照；Task #9/10 拆分进行中）
 
 | 文件 | 行数 | 豁免理由 | 拆分计划 |
 |------|------|---------|---------|
-| app/src/pages/ClassroomPage.tsx | 702 | 装配层页面：左栏配置区（就绪清单/窗口选择/实时捕获/视频导入/OCR 设备/词表/素材）+ 右栏内容区；v0.15 左栏列状态再增；v0.19.2（REQ-271/273）系统窗口开关与启动过渡态（+59，实测 702）——**超 600 硬限为预存债务（TD-2026-08-30-A：v0.14 前已越线）持续累增，拆分计划（LiveCaptureCard）顺延待执行** | 若再增长：将实时捕获卡片拆出 LiveCaptureCard（状态与事件监听下沉）——超硬限必须拆 |
+| app/src/pages/ClassroomPage.tsx | 745 | 装配层页面：左栏配置区（就绪清单/窗口选择/实时捕获/视频导入/OCR 设备/词表/素材）+ 右栏内容区；v0.15 左栏列状态再增；v0.19.2/3（REQ-271/273 + 审查即修：状态机看门狗/预同步/文案收口，+43，实测 745）——**超 600 硬限为预存债务（TD-2026-08-30-A：v0.14 前已越线）持续累增，拆分计划（LiveCaptureCard）顺延待执行** | 若再增长：将实时捕获卡片拆出 LiveCaptureCard（状态与事件监听下沉）——超硬限必须拆 |
 | app/src/components/LiveActivityPanel.tsx | 510 | 实时活动面板：会话状态/转录流/OCR 预览/控制区多状态面板内聚（前端审查登记） | 若再增长：转录流与 OCR 预览拆至 LiveTranscriptStream.tsx / LiveOcrPreview.tsx |
 | app/src/components/SessionListPanel.tsx | 491 | v0.7.1 拆分产物：列表域 UI（双模式搜索/筛选排序/课程分组折叠/批量操作栏/内联转化）内聚——筛选/排序/选择为面板本地状态；v0.15 宽度 prop 适配（实测较登记值 501 回落） | 若再增长：批量操作栏与列表项拆至 SessionListRow.tsx |
 | app/src/components/AiServicePanel.tsx | 390 | v0.8.0 M1（REQ-138/139/140）AI 服务设置面板：全局开关/密钥管理（掩码+DPAPI 保存）/端点模型/测试连接/余额卡片/授权确认卡/审计列表——配置面板 UI 内聚 | 若再增长：余额卡片与审计列表拆至 AiBalanceCard.tsx / AiAuditList.tsx |

@@ -121,8 +121,9 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
     warmUp();
     // TD-004：课堂助手页常驻挂载（display:none 切换不卸载）——本 cleanup 只
     // 在应用卸载/StrictMode replay 时触发，**不在此释放**：release 会取消正在
-    // 加载的预热线程造成 dev 双加载与"已完成→随即取消"误读；真实回收由后端
-    // 15min TTL 与显式 release_live_prepare 命令承担（浮窗/退出路径保留）
+    // 加载的预热线程造成 dev 双加载与"已完成→随即取消"误读；页面无卸载时机，
+    // 引擎回收由 15min TTL 兜底（release_live_prepare 命令保留供未来显式
+    // 回收扩展，当前无调用方——v0.19.3 审查 LOW-2 注释如实化）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -148,11 +149,16 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
         if (e.payload === "recording") {
           // 后端确认录制中：保持/恢复活动态（invoke resolve 可能更早到达）；
           // v0.19.2：此刻引擎真正就绪、音频与画面同刻启动——结束启动过渡态
+          liveActiveRef.current = true; // ref 同步直写——防 resolve 读旧值（审查 LOW-1）
           setLiveActive(true);
           setStopping(false);
           setStarting(false);
+          // v0.19.3 审查 MED-1：starting→recording 迁移统一覆写文案——
+          // 非就绪启动成功路径不得残留「引擎就绪中…」常驻状态行
+          setStatus("实时捕获已开始");
         } else {
           // stopped / failed：会话已结束
+          liveActiveRef.current = false;
           setLiveActive(false);
           setLiveSessionId(null);
           setStopping(false);
@@ -322,9 +328,17 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
     if (starting) return; // 防双击双会话（后端 active 检查前即挡住）
     setLiveError("");
     setStarting(true);
+    // v0.19.3 审查 LOW-2：点击时重同步一次预热状态——TTL 静默回收后本地
+    // prepareState 可能仍为陈旧 'ready'（wasEngineReady 误判 → 控件提前/
+    // 丢音频头）；prepare 幂等：已有就绪秒返，无预备则新起加载（start 同槽
+    // 有界等待，单引擎语义不变）
+    const freshPrepare = await invoke<PrepareState>("prepare_live_session")
+      .then((s) => s as PrepareState)
+      .catch(() => "idle" as PrepareState);
+    setPrepareState(freshPrepare);
     // 就绪态点击=交接路径（引擎已加载）——resolve 即已开录，可直接置活动；
     // 非就绪态 resolve 可能只是"已排队/内联加载中"——等 recording 事件
-    const wasEngineReady = prepareState === "ready";
+    const wasEngineReady = freshPrepare === "ready";
     try {
       const title = selectedWindow ? selectedWindow.title.slice(0, NOTE_TITLE_MAX_LEN) : "实时课堂";
       const id = await invoke<number>("start_live_session", {
@@ -354,6 +368,7 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
       if (String(e).includes("已有进行中的实时会话")) {
         try {
           const s = await invoke<LiveSessionStatus>("live_session_status");
+          liveActiveRef.current = s.active;
           setLiveActive(s.active);
           setLiveSessionId(s.sessionId);
           setLiveError(s.active ? "检测到采集仍在进行，已恢复状态；如需重启请先停止" : "状态已恢复");
@@ -365,6 +380,34 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
       }
     }
   };
+
+  // v0.19.3 审查 MED-2：starting 过渡态看门狗（对齐 TD-042 stopping 先例）——
+  // recording/error/stopped 事件全部丢失时 20s（>后端 15s 上限）后查询真实
+  // 状态收口：恢复活动态或退出等待态，避免"按钮永久禁用且无停止出口"死锁
+  useEffect(() => {
+    if (!starting || liveActive) return;
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const s = await invoke<LiveSessionStatus>("live_session_status");
+          if (s.active) {
+            liveActiveRef.current = true;
+            setLiveActive(true);
+            setLiveSessionId(s.sessionId);
+            setStatus("检测到采集进行中，已恢复状态（引擎就绪后同刻开录）");
+          } else {
+            setLiveSessionId(null);
+            setStatus("启动状态未确认——引擎未开录；可直接重试（就绪即秒开）");
+          }
+        } catch (err) {
+          setStatus(`启动状态查询失败: ${err}——请重试`);
+        } finally {
+          setStarting(false);
+        }
+      })();
+    }, 20_000);
+    return () => clearTimeout(timer);
+  }, [starting, liveActive]);
 
   /** 停止实时捕获 */
   const stopLive = async () => {

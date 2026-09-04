@@ -81,8 +81,13 @@ const SYSTEM_PROCESSES: &[&str] = &[
 ];
 
 /// 判定是否系统/工具窗口（纯函数；进程名空 → false 保留兜底选择）。
+///
+/// @ai-context: 生产输入来自 QueryFullProcessImageNameW（其 lpdwSize 语义在
+///              MSDN 历史版本表述不一致——含/不含终止符两种口径都出现过），
+///              尾部 \0/空白会使下方精确相等静默全失效——先 trim 防御
+///              （v0.19.3 审查即修；单测直喂纯字符串未覆盖该路径）。
 pub fn is_system_window(_title: &str, process_name: &str) -> bool {
-    let p = process_name.trim().to_lowercase();
+    let p = process_name.trim().trim_end_matches(['\0', ' ', '\t']).to_lowercase();
     !p.is_empty() && SYSTEM_PROCESSES.iter().any(|s| *s == p)
 }
 

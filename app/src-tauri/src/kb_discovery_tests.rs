@@ -139,3 +139,42 @@ fn missing_concept_returns_none() {
     let db = mem_db();
     assert!(db.kb_discovery_suggest(9999).expect("suggest").is_none());
 }
+
+#[test]
+fn archived_cross_system_concept_not_hinted() {
+    // Arrange：跨体系归档概念不参与相似提示（v0.19.3 审查即修）
+    let db = mem_db();
+    let sys_a = insert_system(&db, "化妆体系");
+    let sys_b = insert_system(&db, "绘画体系");
+    let x = insert_concept(&db, sys_a, "眼影晕染");
+    insert_concept(&db, sys_b, "眼影晕染技巧");
+    db.with_conn(|c| {
+        c.execute("UPDATE knowledge_concepts SET status='archived' WHERE name='眼影晕染技巧'", [])?;
+        Ok(())
+    })
+    .expect("archive");
+    // Act
+    let res = db.kb_discovery_suggest(x).expect("suggest").expect("exists");
+    // Assert
+    assert!(res.similar.is_empty(), "归档概念不得提示: {:?}", res.similar);
+}
+
+#[test]
+fn unbounded_essence_is_truncated_before_search() {
+    // Arrange：essence 无落库上限——查询字符必须截断（纵深防御，审查即修）
+    let db = mem_db();
+    let sys = insert_system(&db, "化妆体系");
+    let concept = insert_concept(&db, sys, "眼影晕染");
+    let long_essence: String = "blending ".repeat(200);
+    db.with_conn(|c| {
+        c.execute(
+            "UPDATE knowledge_concepts SET essence=?1 WHERE id=?2",
+            rusqlite::params![long_essence, concept],
+        )?;
+        Ok(())
+    })
+    .expect("essence");
+    // Act/Assert：不 panic、evidence 有界（此处无命中 → 空列表合法）
+    let res = db.kb_discovery_suggest(concept).expect("suggest").expect("exists");
+    assert!(res.evidence.len() <= 10);
+}

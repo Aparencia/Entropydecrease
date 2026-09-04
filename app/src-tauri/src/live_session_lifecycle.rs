@@ -21,16 +21,42 @@ use crate::live_session::{emit_error, run_session_after_engine, ActiveSession, L
 use crate::live_session_prepare::{PreparedSession, PrepareEnv, PrepareMsg, PrepareStatus, StartHandoff};
 use crate::streaming_asr::{StreamingAsrConfig, StreamingAsrEngine};
 
+/// 预备就绪等待结果（v0.19.3 审查即修：枚举替代字符串相等做行为分支——
+/// 字符串跨函数耦合任一侧文案改动即静默退回"取消+内联"双引擎路径）。
+pub enum WaitError {
+    /// 引擎加载失败（原因——回退内联加载，旧引擎已死无内存翻倍）
+    LoadFailed(String),
+    /// 预备线程已退出（无可用预备——回退内联加载）
+    Exited,
+    /// 有界等待超时（引擎仍在加载——取消+会话行回滚+明确报错，防双引擎）
+    Timeout,
+}
+
+impl std::fmt::Display for WaitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WaitError::LoadFailed(e) => write!(f, "引擎加载失败: {}", e),
+            WaitError::Exited => write!(f, "预备线程已退出"),
+            WaitError::Timeout => write!(f, "等待超时"),
+        }
+    }
+}
+
 impl LiveSessionManager {
     /// 启动实时会话：建会话 + 起编排线程，返回会话 id。
     ///
     /// @ai-context: P3：优先交接预热线程（引擎已加载——开始毫秒级）；无预备/
-    ///              未就绪/交接失败回退内联加载（现状路径），start 永不因
-    ///              预热缺席而失败；预热加载中走有界等待 ≤5s（不双开引擎，
-    ///              防内存翻倍）。
+    ///              加载失败/交接失败回退内联加载（start 不因预热缺席失败）；
+    ///              预热加载中**有界等待 ≤15s**（v0.19.2：CUDA 冷载常 >5s，
+    ///              原 5s 超时走"取消+内联"双引擎重载，浪费且开头不齐）；
+    ///              >15s 仍加载 → 取消预备并回滚会话行后明确报错（不双开）。
+    /// @ai-context: 锁纪律（v0.19.3 审查即修）：等待期**不持有 active 锁**——
+    ///              旧实现 15s 全程持锁会让主线程 pause/resume/status 命令
+    ///              排队至事件循环冻结；改为快速初检 → 锁外等待 → 最终登记
+    ///              闸（并发双 start 后到者回滚自身并报错，单会话不变量仍在）。
     pub fn start(&self, params: LiveSessionParams) -> Result<i64> {
-        let mut guard = self.active.lock().expect("live session lock poisoned");
-        if guard.is_some() {
+        // ① 快速互斥初检（随后锁外等待——不长期占锁）
+        if self.active.lock().expect("live session lock poisoned").is_some() {
             return Err(AppError::Io("已有进行中的实时会话，请先停止".to_string()));
         }
         let session_id = params
@@ -65,85 +91,91 @@ impl LiveSessionManager {
         self.session_info
             .init_from_title(params.source_window.as_deref().unwrap_or(&params.title));
 
-        // P3：尝试交接预备线程
-        if let Some(p) = self.prepared.lock().expect("prepared lock poisoned").take() {
-            // v0.19.2（用户实测）：就绪等待放宽到 15s（CUDA 冷载可能 >5s——
-            // 原 5s 常超时走"取消+内联"双引擎重载，浪费且开头不齐）
-            match wait_prepared_ready(&p, std::time::Duration::from_secs(15)) {
-                Ok(()) => {
-                    let handoff = StartHandoff {
-                        params,
-                        session_id,
-                        stop: flag.clone(),
-                        latest_frame: latest_frame.clone(),
-                        pause: pause.clone(),
-                        session_info: self.session_info.clone(),
-                    };
-                    match p.tx.send(PrepareMsg::Start(Box::new(handoff))) {
-                        Ok(()) => {
-                            // 交接成功：预备线程就地转为会话线程（引擎不跨线程）
-                            *guard =
-                                Some(ActiveSession { stop_flag, thread: p.thread, session_id });
-                            return Ok(session_id);
-                        }
-                        Err(mpsc::SendError(PrepareMsg::Start(h))) => {
-                            // 极小竞态（预备线程恰好退出）：取回参数回退内联加载
-                            eprintln!("[LiveSession] 预备线程已退出，回退内联加载");
-                            let thread = std::thread::Builder::new()
-                                .name("entropy-live-session".into())
-                                .spawn(move || {
-                                    run_session(h.stop, h.params, h.session_id, h.latest_frame, h.pause, h.session_info)
-                                })
-                                .map_err(|e| AppError::Io(format!("启动会话线程失败: {}", e)))?;
-                            *guard = Some(ActiveSession { stop_flag, thread, session_id });
-                            return Ok(session_id);
-                        }
-                        Err(_) => {
-                            // 理论不可达（本路径只发 Start；防御：不得静默吞错）。
-                            // 注：create_session 已执行——此路径会留一条空会话记录
-                            // （与内联 spawn 失败同级别的既有边界，概率极低）
-                            return Err(AppError::Io(
-                                "预热交接失败（预备线程异常退出），请重试".to_string(),
-                            ));
-                        }
-                    }
-                }
-                Err(reason) => {
-                    // 加载失败：取消预备线程（防双引擎内存翻倍），回退内联加载
-                    let _ = p.tx.send(PrepareMsg::Cancel);
-                    let cancel_deadline =
-                        std::time::Instant::now() + std::time::Duration::from_millis(1000);
-                    while !p.thread.is_finished() && std::time::Instant::now() < cancel_deadline {
-                        std::thread::sleep(std::time::Duration::from_millis(50));
-                    }
-                    if !p.thread.is_finished() {
-                        eprintln!("[LiveSession] 预备线程取消超时，已 detach");
-                    }
-                    if reason == "等待超时" {
-                        // v0.19.2（用户实测）：>15s 仍在加载 → 不再走内联双引擎
-                        // 重载（两个模型实例并存数秒、内存翻倍且开头不齐），
-                        // 明确失败让用户重试；本会话行标记失败防孤儿 recording
-                        let _ = params.db.mark_session_failed(session_id);
-                        return Err(AppError::Io(
-                            "引擎预热超时（模型加载过慢）——已取消，请稍候重试".to_string(),
-                        ));
-                    }
-                    eprintln!("[LiveSession] 预热{}，回退内联加载", reason);
-                }
-            }
+        // ② 取预备槽（短锁）→ 锁外等待就绪（≤15s）
+        let prep_opt = self.prepared.lock().expect("prepared lock poisoned").take();
+        let wait_outcome = prep_opt
+            .as_ref()
+            .map(|p| wait_prepared_ready(p, std::time::Duration::from_secs(15)));
+
+        // ③ 最终登记闸：等待期间他人可能已注册会话（并发双 start）——
+        // 后到者取消自身预备/回滚会话行后明确报错
+        let mut guard = self.active.lock().expect("live session lock poisoned");
+        if guard.is_some() {
+            cancel_prepared_thread(prep_opt.as_ref());
+            mark_failed(&params.db, session_id);
+            return Err(AppError::Io("已有进行中的实时会话，请先停止".to_string()));
         }
 
-        // 回退：内联加载（现状路径——模型加载在会话线程内完成）
-        // 会话信息聚合器先 clone（move 闭包不得借用 &self）
-        let inline_session_info = self.session_info.clone();
-        let thread = std::thread::Builder::new()
-            .name("entropy-live-session".into())
-            .spawn(move || {
-                run_session(flag, params, session_id, latest_frame, pause, inline_session_info)
-            })
-            .map_err(|e| AppError::Io(format!("启动会话线程失败: {}", e)))?;
-        *guard = Some(ActiveSession { stop_flag, thread, session_id });
-        Ok(session_id)
+        match (prep_opt, wait_outcome) {
+            // 就绪交接：预备线程就地转为会话线程（引擎不跨线程）
+            (Some(p), Some(Ok(()))) => {
+                let handoff = StartHandoff {
+                    params,
+                    session_id,
+                    stop: flag.clone(),
+                    latest_frame: latest_frame.clone(),
+                    pause: pause.clone(),
+                    session_info: self.session_info.clone(),
+                };
+                match p.tx.send(PrepareMsg::Start(Box::new(handoff))) {
+                    Ok(()) => {
+                        *guard = Some(ActiveSession { stop_flag, thread: p.thread, session_id });
+                        Ok(session_id)
+                    }
+                    Err(mpsc::SendError(PrepareMsg::Start(h))) => {
+                        // 极小竞态（预备线程恰好退出）：取回参数回退内联加载
+                        eprintln!("[LiveSession] 预备线程已退出，回退内联加载");
+                        spawn_and_register_inline(
+                            &mut guard,
+                            stop_flag,
+                            flag,
+                            h.params,
+                            h.session_id,
+                            h.latest_frame,
+                            h.pause,
+                            h.session_info,
+                        )
+                    }
+                    Err(_) => {
+                        // 理论不可达（本路径只发 Start；防御：不得静默吞错）。
+                        // 注：create_session 已执行——此路径会留一条空会话记录
+                        // （与内联 spawn 失败同级别的既有边界，概率极低）
+                        Err(AppError::Io(
+                            "预热交接失败（预备线程异常退出），请重试".to_string(),
+                        ))
+                    }
+                }
+            }
+            // 超时：取消预备（引擎仍加载不可中断——取消排队，线程加载完自行
+            // 退出释放）并回滚会话行——**不回退内联**（双引擎内存翻倍）
+            (Some(p), Some(Err(WaitError::Timeout))) => {
+                cancel_prepared_thread(Some(&p));
+                mark_failed(&params.db, session_id);
+                Err(AppError::Io(
+                    "引擎预热超时（模型加载过慢）——已取消，请稍候重试".to_string(),
+                ))
+            }
+            // 加载失败/预备已退出：取消（线程已死——幂等）后回退内联加载
+            (Some(p), Some(Err(e))) => {
+                cancel_prepared_thread(Some(&p));
+                eprintln!("[LiveSession] 预热{}，回退内联加载", e);
+                spawn_and_register_inline(
+                    &mut guard, stop_flag, flag, params, session_id, latest_frame, pause,
+                    self.session_info.clone(),
+                )
+            }
+            // 无预备：直接内联（首次/引擎释放后）
+            (None, None) => {
+                spawn_and_register_inline(
+                    &mut guard, stop_flag, flag, params, session_id, latest_frame, pause,
+                    self.session_info.clone(),
+                )
+            }
+            (None, Some(_)) | (Some(_), None) => {
+                // 逻辑不可达（prep 存在 ⇔ 有 wait_outcome）——防御兜底
+                Err(AppError::Io("启动内部状态不一致，请重试".to_string()))
+            }
+        }
     }
 
     /// 预热流式 ASR 引擎（P3）：起预备线程加载引擎后 park 等待 Start/Cancel。
@@ -226,25 +258,71 @@ impl LiveSessionManager {
     }
 }
 
-/// 有界等待预备线程就绪（P3）：Ready→Ok；Failed/超时→Err（原因）。
-/// 注：调用方（start）持有 active 锁期间最长阻塞 5s——pause/resume/status
-/// 等命令短暂排队（同刻通常只有单个用户操作，可接受；观察项记录）。
-/// 返回类型用 std::result::Result——模块内 Result 别名是 AppError。
-fn wait_prepared_ready(p: &PreparedSession, timeout: std::time::Duration) -> std::result::Result<(), String> {
+/// 有界等待预备线程就绪（P3）：Ready→Ok；其余 → WaitError 枚举。
+/// 注：调用方（start）在**锁外**等待（v0.19.3 审查即修——最长 15s 不占
+/// active 锁，pause/resume/status 等命令不被冻结排队）。
+fn wait_prepared_ready(
+    p: &PreparedSession,
+    timeout: std::time::Duration,
+) -> std::result::Result<(), WaitError> {
     let deadline = std::time::Instant::now() + timeout;
     loop {
         match p.status() {
             PrepareStatus::Ready => return Ok(()),
-            PrepareStatus::Failed(e) => return Err(format!("引擎加载失败: {}", e)),
-            PrepareStatus::Idle => return Err("预备线程已退出".to_string()),
+            PrepareStatus::Failed(e) => return Err(WaitError::LoadFailed(e)),
+            PrepareStatus::Idle => return Err(WaitError::Exited),
             PrepareStatus::Loading => {
                 if std::time::Instant::now() >= deadline {
-                    return Err("等待超时".to_string());
+                    return Err(WaitError::Timeout);
                 }
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }
         }
     }
+}
+
+/// 取消预备线程（发送 Cancel + 有界 join ≤1s，超时 detach——引擎加载不可
+/// 中断，取消排队后线程加载完自行退出释放）。
+fn cancel_prepared_thread(p: Option<&PreparedSession>) {
+    let Some(p) = p else { return };
+    let _ = p.tx.send(PrepareMsg::Cancel);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1000);
+    while !p.thread.is_finished() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    if !p.thread.is_finished() {
+        eprintln!("[LiveSession] 预备线程取消超时，已 detach");
+    }
+}
+
+/// 会话行回滚（start 失败路径——防孤儿 recording；失败须可观测不静默）。
+fn mark_failed(db: &crate::db::Db, session_id: i64) {
+    if let Err(e) = db.mark_session_failed(session_id) {
+        eprintln!("[LiveSession] 会话 {} 标记失败回滚失败: {}", session_id, e);
+    }
+}
+
+/// 内联加载路径统一落位：起会话线程（加载流式 ASR 后进入装配）并注册活动
+/// 会话——须在持有 active 锁（最终登记闸）时调用。
+#[allow(clippy::too_many_arguments)]
+fn spawn_and_register_inline(
+    active: &mut Option<ActiveSession>,
+    stop_flag: Arc<AtomicBool>,
+    flag: Arc<AtomicBool>,
+    params: LiveSessionParams,
+    session_id: i64,
+    latest_frame: Arc<Mutex<Option<crate::live_session_frame::LatestCapturedFrame>>>,
+    pause: crate::capture::audio_loopback::SessionPause,
+    session_info: crate::session_info::SessionInfoCollector,
+) -> Result<i64> {
+    let thread = std::thread::Builder::new()
+        .name("entropy-live-session".into())
+        .spawn(move || {
+            run_session(flag, params, session_id, latest_frame, pause, session_info)
+        })
+        .map_err(|e| AppError::Io(format!("启动会话线程失败: {}", e)))?;
+    *active = Some(ActiveSession { stop_flag, thread, session_id });
+    Ok(session_id)
 }
 
 /// 会话线程（内联加载路径）：加载流式 ASR 引擎 → 装配骨架（run_session_after_engine）。

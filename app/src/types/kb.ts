@@ -1,6 +1,7 @@
 /**
  * 检索与发现层前端类型（v0.19 REQ-258/REQ-260——与 Rust serde camelCase 契约对齐）。
  */
+import type { KbHit } from "./chat";
 
 /** 索引统计（Rust kb_reindex::KbIndexStats——设置「学习库」段 + 角标数据源） */
 export interface KbIndexStats {
@@ -56,6 +57,6 @@ export interface SimilarHint {
 /** v0.19.3（REQ-261）：概念「相关素材建议」发现结果（Rust DiscoveryResult） */
 export interface KbDiscoveryResult {
   /** 证据候选（KbHit 契约——snippet/来源与引用卡片一致；已链接者已排除） */
-  evidence: import("./chat").KbHit[];
+  evidence: KbHit[];
   similar: SimilarHint[];
 }

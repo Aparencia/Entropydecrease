@@ -133,7 +133,19 @@ export function WindowSelectCard({ windows, selected, onSelect, onRefresh, loadi
         {selected ? (
           <>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{selected.title}</div>
+              <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {selected.title}
+                {/* v0.19.3 审查 LOW-3：折叠卡也标记系统窗口（标题常为终端提示符/
+                    目录名，无标记易与"已隐藏"心智冲突） */}
+                {selected.systemWindow && (
+                  <span
+                    style={{ marginLeft: 6, fontSize: 10, color: "#9ca3af", background: "#f3f4f6", borderRadius: 4, padding: "0 4px" }}
+                    title="系统/工具窗口——列表默认隐藏，可在选择器上方勾选显示系统窗口找回"
+                  >
+                    🖥 系统窗口
+                  </span>
+                )}
+              </div>
               <div style={{ fontSize: 11, color: "#0d9488" }}>
                 进程: {selected.processName || "未知"} (PID {selected.pid})
               </div>
