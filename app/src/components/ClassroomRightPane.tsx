@@ -90,7 +90,8 @@ export default function ClassroomRightPane({
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <h2 style={{ margin: 0, fontSize: 16 }}>{lastNote.title}</h2>
                 <span style={{ fontSize: 11, color: "#6b7280" }}>
-                  #{lastNote.id} · {lastNote.source} · {new Date(lastNote.updated_at * 1000).toLocaleString()}
+                  {/* REQ-277：元信息不带裸 # 数字（id 仅内部引用） */}
+                  {lastNote.source} · 更新于 {new Date(lastNote.updated_at * 1000).toLocaleString()}
                 </span>
               </div>
               <pre

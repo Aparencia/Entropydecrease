@@ -218,6 +218,8 @@ impl Db {
             params![title, fragment.text, group_id, now],
         )?;
         let note_id = tx.last_insert_rowid();
+        // REQ-277：碎片升笔记生成对外 uid（同事务；旧 schema 测试缺列静默跳过）
+        crate::db_uid::ensure_uid(&tx, crate::db_uid::TAB_NOTES, crate::db_uid::KIND_NOTE, note_id, now)?;
         // ③ 图片搬运 fragments/ → notes-images/{note_id}/（失败降级纯文本）
         let mut content = fragment.text.clone();
         if let Some(rel) = fragment.image_path.as_deref() {

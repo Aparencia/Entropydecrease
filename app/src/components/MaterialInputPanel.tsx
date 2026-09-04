@@ -46,7 +46,8 @@ export default function MaterialInputPanel({ windowTitle, onNote, onStatus }: Pr
       const title = windowTitle ? windowTitle.slice(0, NOTE_TITLE_MAX_LEN) : "课堂记录";
       const note = await invoke<Note>("process_to_note", { title, audioPath, imagePaths });
       onNote(note);
-      onStatus(`完成，已保存笔记 #${note.id}`);
+      // REQ-277：提示不带裸 # 数字（id 仅内部引用）
+      onStatus("完成，已保存笔记（可在笔记页查看）");
       setAudioPath(null);
       setImagePaths([]);
     } catch (e) {

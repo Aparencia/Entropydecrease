@@ -37,6 +37,15 @@ impl Db {
         db.init_ai_tasks()?;
         // v0.16.0（REQ-224）：AI 对话持久化（会话/消息双表）
         db.init_ai_chat()?;
+        // REQ-277（v0.19.4）：存量 notes/sessions 幂等回填 uid（只补 NULL 行；
+        // 身份增强非关键路径——失败警告不阻断启动，下轮打开再补）
+        if let Err(e) = db.with_conn(|conn| {
+            crate::db_uid::backfill_table(conn, crate::db_uid::TAB_NOTES, crate::db_uid::KIND_NOTE)?;
+            crate::db_uid::backfill_table(conn, crate::db_uid::TAB_SESSIONS, crate::db_uid::KIND_SESSION)?;
+            Ok(())
+        }) {
+            eprintln!("[Db] uid 存量回填失败（可忽略，下次启动重试）: {e}");
+        }
         Ok(db)
     }
 

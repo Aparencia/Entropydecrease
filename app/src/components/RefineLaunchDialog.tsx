@@ -144,7 +144,7 @@ export default function RefineLaunchDialog({
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <span style={{ fontWeight: 600, fontSize: 14 }}>✨ AI 精修</span>
-          <span style={{ fontSize: 11, color: "#6b7280" }}>{isNote ? `笔记 · ${noteId}` : `会话 · ${sessionId}`}</span>
+          <span style={{ fontSize: 11, color: "#6b7280" }}>{isNote ? "目标：当前笔记" : "目标：来源会话"}</span>
         </div>
 
         {/* 授权卡（首次：上传说明 + 同意） */}

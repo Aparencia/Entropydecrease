@@ -21,7 +21,9 @@ pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
             content TEXT NOT NULL,
             source TEXT NOT NULL DEFAULT 'manual',
             created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL
+            updated_at INTEGER NOT NULL,
+            -- REQ-277（v0.19.4）：对外不可变 uid（日期前缀+短哈希；旧库 ensure_column 补）
+            uid TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at DESC);
         -- 会话主表（ADR-004：每次学习 = 一个会话）
@@ -35,7 +37,9 @@ pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
             -- v0.5.0 M1（REQ-043）：视频类型档案标识（kebab-case；NULL=默认档案）
             profile TEXT,
             -- v0.11.7（图文会话，ADR-020）：会话类型（NULL=实时/视频导入等视频类；'photo'=图文截屏会话）
-            kind TEXT
+            kind TEXT,
+            -- REQ-277（v0.19.4）：对外不可变 uid（旧库 ensure_column 补）
+            uid TEXT
         );
         -- 会话转写段（ASR final / 字幕 / 融合统一落库）
         CREATE TABLE IF NOT EXISTS session_segments (
@@ -468,6 +472,14 @@ CREATE TABLE IF NOT EXISTS contracts (
     crate::db_ai_usage::init(conn)?;
     // v0.18.0（REQ-248）：学习目标三表（goals/goal_milestones/goal_groups——意图层）
     crate::db_goals::init(conn)?;
+    // REQ-277（v0.19.4）：旧库迁移——notes/sessions 补对外 uid 列 + 唯一索引
+    // （建表批只对新库生效；索引必须在此刻建——新库列已随 CREATE 存在、旧库刚补列）
+    ensure_column(conn, "notes", "uid", "ALTER TABLE notes ADD COLUMN uid TEXT")?;
+    ensure_column(conn, "sessions", "uid", "ALTER TABLE sessions ADD COLUMN uid TEXT")?;
+    conn.execute_batch(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_uid ON notes(uid);
+         CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_uid ON sessions(uid);",
+    )?;
     Ok(())
 }
 

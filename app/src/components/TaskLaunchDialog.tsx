@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { AiSettingsView, AiTaskState, RefineEstimateView } from "../types";
+import { refLabel } from "../utils/entityLabel";
 
 export interface LaunchTargetRow {
   id: number;
@@ -111,7 +112,10 @@ export default function TaskLaunchDialog({ kind, sessions, notes, initialTargetI
         >
           <option value="">选择…</option>
           {rows.map((r) => (
-            <option key={r.id} value={r.id}>{r.title || `#${r.id}`}</option>
+            // REQ-277：缺标题语义占位（未命名会话/笔记）——不带裸 # 数字
+            <option key={r.id} value={r.id}>
+              {refLabel(isRefine ? "session" : "note", r.title, isRefine ? "未命名会话" : "未命名笔记")}
+            </option>
           ))}
         </select>
         {isRefine && (

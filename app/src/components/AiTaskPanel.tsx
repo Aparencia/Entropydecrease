@@ -103,18 +103,20 @@ export default function AiTaskPanel() {
     }
     setMsg("");
     try {
-      const note = selected.opType === "refine"
-        ? await invoke<{ id: number }>("ai_refine_apply", {
+      // 采纳落库（返回 {id} 仅历史协议——REQ-277 后不再向用户展示裸编号）
+      await (selected.opType === "refine"
+        ? invoke<{ id: number }>("ai_refine_apply", {
             sessionId: selected.refId,
             result: await invoke<AiRefineResult>("ai_refine_result", { taskId: selected.taskId }),
             taskId: selected.taskId,
           })
-        : await invoke<{ id: number }>("ai_enrich_apply", {
+        : invoke<{ id: number }>("ai_enrich_apply", {
             noteId: selected.refId,
             result: await invoke<AiEnrichResult>("ai_enrich_result", { taskId: selected.taskId }),
             taskId: selected.taskId,
-          });
-      setMsg(`已落库为笔记 #${note.id}（可到笔记页查看版本时间线）`);
+          }));
+      // REQ-277：落库提示不带裸 # 数字（笔记身份=语义位置，不是编号）
+      setMsg("已落库为笔记（可到笔记页查看版本时间线）");
       setSelected(null);
       setSummary(null);
       void load();
@@ -147,7 +149,7 @@ export default function AiTaskPanel() {
                   {badge.text}
                 </span>
                 <span style={{ color: "#374151", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {t.opType === "refine" ? "会话" : `笔记 #${t.refId}`}
+                  {t.opType === "refine" ? "会话" : "笔记"}
                   {t.model && <span style={{ color: "#9ca3af" }}> · {t.model}</span>}
                 </span>
                 <span style={{ color: "#9ca3af", width: 52, textAlign: "right" }}>{fmtMs(t.elapsedMs)}</span>
@@ -174,7 +176,12 @@ export default function AiTaskPanel() {
       {/* 结果摘要 + 采纳（防重复采纳：采纳后任务标记 adopted，历史中不再可恢复） */}
       {selected && summary && (
         <div style={{ border: "1px solid #a7f3d0", background: "#ecfdf5", borderRadius: 6, padding: 8, marginTop: 6, fontSize: 11 }}>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>任务 #{selected.taskId} 结果</div>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>
+            任务结果 · {opLabel(selected.opType)}
+            <span style={{ fontWeight: 400, color: "#6b7280" }}>
+              （{new Date(selected.createdAt * 1000).toLocaleTimeString()}）
+            </span>
+          </div>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 6 }}>
             {summary.map((s) => (
               <span key={s.label} style={{ color: "#374151" }}>

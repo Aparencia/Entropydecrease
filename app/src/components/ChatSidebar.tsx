@@ -6,6 +6,7 @@
  *              全部数据由 ChatPage 加载后透传（本组件纯展示 + 事件回调）。
  */
 import type { AiTaskRecord, ChatSession } from "../types";
+import { refLabel } from "../utils/entityLabel";
 
 /** 任务类型标签（refine/enrich → 中文 + 图标；模块内消费——审查修复：原
  *  export 无外部消费方，收窄为非导出） */
@@ -121,8 +122,8 @@ export default function ChatSidebar(props: Props) {
         {tasks.length === 0 && <div style={{ fontSize: 12, color: "#9ca3af", padding: "4px 8px" }}>暂无精修/补充任务</div>}
         {tasks.map((t) => {
           const refName = t.opType === "refine"
-            ? sessionTitles.get(t.refId) ?? `会话 #${t.refId}`
-            : noteTitles.get(t.refId) ?? `笔记 #${t.refId}`;
+            ? refLabel("session", sessionTitles.get(t.refId))
+            : refLabel("note", noteTitles.get(t.refId));
           const stateBadge = t.state === "succeeded" ? "#047857" : t.state === "failed" ? "#b91c1c" : "#b45309";
           return (
             <div

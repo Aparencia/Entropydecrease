@@ -31,8 +31,11 @@ impl Db {
                 "INSERT INTO sessions (title, source_window, started_at, status, profile, kind) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![new.title, new.source_window, now, SESSION_STATUS_RECORDING, new.profile, new.kind],
             )?;
+            let id = conn.last_insert_rowid();
+            // REQ-277：新会话生成对外 uid（同事务；旧 schema 测试缺列静默跳过）
+            crate::db_uid::ensure_uid(conn, crate::db_uid::TAB_SESSIONS, crate::db_uid::KIND_SESSION, id, now)?;
             Ok(Session {
-                id: conn.last_insert_rowid(),
+                id,
                 title: new.title.clone(),
                 source_window: new.source_window.clone(),
                 started_at: now,

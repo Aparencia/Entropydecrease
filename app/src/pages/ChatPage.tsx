@@ -25,6 +25,7 @@ import { buildConversationMarkdown } from "../utils/chatTranscript";
 import TaskLaunchDialog, { type LaunchTargetRow } from "../components/TaskLaunchDialog";
 import TaskThreadCard from "../components/TaskThreadCard";
 import { buildTaskFollowUpPrompt } from "../utils/taskFollowUp";
+import { refLabel } from "../utils/entityLabel";
 
 interface Props {
   /** 跨页直达（任务对话引用跳转） */
@@ -156,11 +157,12 @@ export default function ChatPage(props: Props) {
     setSessions(await invoke<ChatSession[]>("chat_list_sessions").catch(() => [] as ChatSession[]));
   }, []);
 
-  // v0.16.1：任务对话化——目标名解析 / 追问预填 / 启动成功
+  // v0.16.1：任务对话化——目标名解析 / 追问预填 / 启动成功（REQ-277：
+  // 标题缺失语义占位——绝不回退裸 `#id`）
   const taskRefTitle = useCallback((t: import("../types").AiTaskRecord): string =>
     t.opType === "refine"
-      ? sessionTitles.get(t.refId) ?? `会话 #${t.refId}`
-      : noteTitles.get(t.refId) ?? `笔记 #${t.refId}`,
+      ? refLabel("session", sessionTitles.get(t.refId))
+      : refLabel("note", noteTitles.get(t.refId)),
   [sessionTitles, noteTitles]);
   const followUpTask = useCallback((t: import("../types").AiTaskRecord) => {
     setDraft(buildTaskFollowUpPrompt(t, taskRefTitle(t)));
@@ -480,9 +482,7 @@ export default function ChatPage(props: Props) {
           <TaskConversationView
             task={taskDetail.task}
             turns={taskDetail.turns}
-            refTitle={taskDetail.task.opType === "refine"
-              ? sessionTitles.get(taskDetail.task.refId) ?? `#${taskDetail.task.refId}`
-              : noteTitles.get(taskDetail.task.refId) ?? `#${taskDetail.task.refId}`}
+            refTitle={taskRefTitle(taskDetail.task)}
             onOpenSession={onOpenSessions}
             onOpenNote={onOpenNote}
             onRetry={(t) => void retryTask(t)}

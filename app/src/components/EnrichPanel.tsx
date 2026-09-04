@@ -162,7 +162,8 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
       return null;
     });
     if (note) {
-      setMsg(`已应用知识补充（笔记 #${note.id}）——扩展区可手动删除或撤销还原；可到版本时间线对比`);
+      // REQ-277：提示不带裸 # 数字（id 仅内部引用）
+      setMsg("已应用知识补充——扩展区可手动删除或撤销还原；可到版本时间线对比");
       onUpdated?.();
       reset();
     }

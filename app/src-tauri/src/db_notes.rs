@@ -30,6 +30,8 @@ impl Db {
                 ],
             )?;
             let id = conn.last_insert_rowid();
+            // REQ-277：新笔记生成对外 uid（同事务；列缺失=旧 schema 测试，静默跳过）
+            crate::db_uid::ensure_uid(conn, crate::db_uid::TAB_NOTES, crate::db_uid::KIND_NOTE, id, now)?;
             // v0.19.0（REQ-258）索引钩子：新建笔记即入派生索引（同事务软失败
             // 记录不阻断——失败可见于 kb_index_stats 角标）
             soft_rebuild_note(conn, id, &new.content);

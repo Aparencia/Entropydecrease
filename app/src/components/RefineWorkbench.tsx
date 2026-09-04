@@ -222,7 +222,7 @@ export default function RefineWorkbench({
           ? { noteId, result: taskResult, taskId: taskId ?? null }
           : { sessionId, result: taskResult, taskId: taskId ?? null },
       );
-      setMsg(`✅ 已采纳更新笔记 #${note.id}`);
+      setMsg("✅ 已采纳更新笔记（可到版本时间线对比/回滚）");
       onApplied?.(note.id);
       onClose();
     } catch (e) {

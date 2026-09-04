@@ -112,9 +112,10 @@ export default function NotePreviewView({
     try {
       const note = await invoke<Note>("get_note", { id: noteId });
       setAdopted(note);
-      setStatus(`AI 精修版已落库为笔记 #${noteId}——预览已切换为精修内容`);
+      // REQ-277：状态提示不带裸 # 数字（标题可见于上方徽标）
+      setStatus("AI 精修版已落库——预览已切换为精修内容");
     } catch (e) {
-      setStatus(`已落库为笔记 #${noteId}，但读取内容失败: ${e}`);
+      setStatus(`精修版已落库，但读取内容失败: ${e}`);
     }
   }, []);
 
@@ -136,11 +137,11 @@ export default function NotePreviewView({
   /** 一键落库（复用 session_to_note；AI 判定结果回传保持预览一致——REQ-081） */
   const saveToNote = async () => {
     try {
-      const note = await invoke<{ id: number }>("session_to_note", {
+      await invoke<{ id: number }>("session_to_note", {
         id: sessionId,
         aiDecisions: aiDecisions.length > 0 ? aiDecisions : null,
       });
-      setStatus(`已转为笔记 #${note.id}`);
+      setStatus("已转为笔记（可在笔记页查看）");
     } catch (e) {
       setStatus(`落库失败: ${e}`);
     }
@@ -258,7 +259,10 @@ export default function NotePreviewView({
       {adopted ? (
         <div style={{ border: "1px solid #a7f3d0", borderRadius: 8, background: "#ecfdf5", padding: 10, marginBottom: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <span style={{ fontWeight: 600, fontSize: 12, color: "#047857" }}>✨ AI 精修版 · 笔记 #{adopted.id}</span>
+            {/* REQ-277：标题语义（空标题=落库笔记占位）——不带裸 # 数字 */}
+            <span style={{ fontWeight: 600, fontSize: 12, color: "#047857" }}>
+              ✨ AI 精修版{adopted.title?.trim() ? ` · ${adopted.title}` : "（已落库）"}
+            </span>
             <button
               style={{ ...btn, borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" }}
               onClick={() => setAdopted(null)}

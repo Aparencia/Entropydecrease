@@ -78,16 +78,18 @@ export default function TaskConversationView({ task, turns, refTitle, onOpenSess
             <button
               onClick={() => onOpenSession(task.refId)}
               style={{ fontSize: 12, padding: "2px 10px", borderRadius: 6, border: "1px solid #99f6e4", background: "#f0fdfa", color: "#0f766e", cursor: "pointer" }}
+              title={refTitle}
             >
-              📌 来源会话 #{task.refId} →
+              📌 来源会话 →
             </button>
           )}
           {!isRefine && task.refId > 0 && (
             <button
               onClick={() => onOpenNote(task.refId)}
               style={{ fontSize: 12, padding: "2px 10px", borderRadius: 6, border: "1px solid #99f6e4", background: "#f0fdfa", color: "#0f766e", cursor: "pointer" }}
+              title={refTitle}
             >
-              📌 来源笔记 #{task.refId} →
+              📌 来源笔记 →
             </button>
           )}
           {/* v0.16.1：精修成功任务 → 会话页工作台深链（对比/采纳/重新生成一体） */}

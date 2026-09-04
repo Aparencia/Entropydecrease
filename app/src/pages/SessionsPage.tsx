@@ -182,8 +182,9 @@ export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocu
   /** 行内一键转化（4 步→1 步：不进详情直接转笔记） */
   const convertOne = async (item: SessionListItem) => {
     try {
-      const note = await invoke<{ id: number }>("session_to_note", { id: item.session.id });
-      showToast(`「${item.session.title}」已转为笔记 #${note.id}`, "ok");
+      await invoke<{ id: number }>("session_to_note", { id: item.session.id });
+      // REQ-277：toast 不带裸 # 数字（id 仅内部引用）
+      showToast(`「${item.session.title}」已转为笔记（可在笔记页查看）`, "ok");
       void refresh();
     } catch (e) {
       showToast(`转笔记失败: ${e}`, "err");
@@ -193,8 +194,8 @@ export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocu
   /** 详情页"转为笔记"（有意重新生成——新笔记新关联，历史保留） */
   const toNote = async (id: number) => {
     try {
-      const note = await invoke<{ id: number }>("session_to_note", { id });
-      showToast(`已转为笔记 #${note.id}`, "ok");
+      await invoke<{ id: number }>("session_to_note", { id });
+      showToast("已转为笔记（可在笔记页查看）", "ok");
       void refresh();
     } catch (e) {
       showToast(`转笔记失败: ${e}`, "err");
