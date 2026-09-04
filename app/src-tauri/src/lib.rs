@@ -264,6 +264,8 @@ mod commands_ai_chat_kb;
 mod kb_discovery;
 // REQ-259（v0.19.5）：kb 语义索引 embedding 契约与纯函数（编解码/cosine top-K）
 mod kb_embed;
+// REQ-259（v0.19.5）：bge-small-zh BERT WordPiece 分词（vocab.txt 加载/编码）
+mod kb_embed_tokenizer;
 mod commands_kb_discovery;
 mod concept_weakness;
 mod goal_interview;
