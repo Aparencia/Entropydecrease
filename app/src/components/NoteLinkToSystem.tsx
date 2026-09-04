@@ -9,6 +9,10 @@
  *              （替代逐体系正查聚合）；挂接后可切换目标（先撤旧链再建新链——
  *              幂等语义下同 target 多链会堆积）；旧版本挂接数据（仅 nodeId）
  *              自动兼容，UI 显示「问题」徽标（spec §5）。变更经 onChanged 通知。
+ * @ai-context: REQ-276（v0.19.4）浮层右缘钳制：挂体系按钮位于笔记阅读头右端，
+ *              面板左锚点向右展开会越过阅读区/窗口右缘造成残缺——改按钮右
+ *              对齐向左展开（与 NoteMoveToGroupMenu 同范式）+ 超高面板内滚动
+ *              + 外部点击背板收起（同类浮层统查：分组已右对齐、色板靠左无越缘）。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -138,10 +142,24 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
       )}
 
       {open && (
-        <div
-          data-testid="note-link-panel"
-          style={{ position: "absolute", zIndex: 30, marginTop: 30, padding: 10, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", display: "flex", flexDirection: "column", gap: 6, width: 260 }}
-        >
+        <>
+          {/* REQ-276：透明背板（与 NoteMoveToGroupMenu 同范式）——点击外部收起 */}
+          <div
+            onClick={() => setOpen(false)}
+            style={{ position: "fixed", inset: 0, zIndex: 30, background: "transparent" }}
+          />
+          <div
+            data-testid="note-link-panel"
+            style={{
+              position: "absolute", zIndex: 31, top: "calc(100% + 6px)", right: 0,
+              padding: 10, background: "#fff", border: "1px solid #e5e7eb",
+              borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+              display: "flex", flexDirection: "column", gap: 6, width: 260,
+              // REQ-276：右缘钳制（挂体系按钮位于阅读头右端——向左展开不越右缘）；
+              // 内容超高时面板内滚动（不撑破视口下缘）
+              maxHeight: 380, overflowY: "auto",
+            }}
+          >
           {domainSystems.length === 0 ? (
             <div data-testid="note-link-empty" style={{ fontSize: 12, color: "#9ca3af" }}>暂无体系——请先到「🧠 体系」页创建。</div>
           ) : (
@@ -219,7 +237,8 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
             </>
           )}
           {err && <div style={{ fontSize: 11, color: "#dc2626" }}>{err}</div>}
-        </div>
+          </div>
+        </>
       )}
     </span>
   );
