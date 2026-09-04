@@ -426,6 +426,12 @@ pub fn goal_apply_plan(
             other => return Err(format!("非法体系动作: {}", other)),
         }
     }
+    // REQ-278：规划落库成功 → 广播 goals 域；本次含体系/节点/概念动作 →
+    // 体系域同播（目标页确认后体系页即时可见，无需切页往返）
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Goals);
+    if !request.systems.is_empty() {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Knowledge);
+    }
     Ok(true)
 }
 

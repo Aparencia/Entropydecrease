@@ -173,6 +173,8 @@ mod db_migrations;
 mod db_notes;
 // REQ-277（v0.19.4）：笔记/会话对外不可变 uid（生成/回填/幂等确保）
 mod db_uid;
+// REQ-278（v0.19.4）：data:* 通用变更事件总线（写命令落库后广播）
+mod notify;
 // v0.11.0（REQ-195）：笔记组数据层（统一产物层唯一容器，v4 §7.4）
 mod db_note_groups;
 // v0.11.1：碎片原料层数据读写（fragments 表；碎片不是笔记，独立身份）

@@ -40,7 +40,10 @@ pub fn create_knowledge_system(
     parent_system_id: Option<i64>,
     core_question: Option<String>,
 ) -> Result<KnowledgeSystem, String> {
-    create_knowledge_system_inner(&state.db, name, kind, parent_system_id, core_question)
+    let sys = create_knowledge_system_inner(&state.db, name, kind, parent_system_id, core_question)?;
+    // REQ-278：体系结构变更 → 广播 knowledge 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Knowledge);
+    Ok(sys)
 }
 
 /// 更新知识体系可选字段，返回更新后实体（name 归一化；status 白名单）。
@@ -55,7 +58,10 @@ pub fn update_knowledge_system(
     core_question: Option<String>,
     status: Option<String>,
 ) -> Result<KnowledgeSystem, String> {
-    update_knowledge_system_inner(&state.db, id, name, core_question, status)
+    let sys = update_knowledge_system_inner(&state.db, id, name, core_question, status)?;
+    // REQ-278：体系更新 → 广播 knowledge 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Knowledge);
+    Ok(sys)
 }
 
 /// 幂等归档体系（status=archived；已归档再归档仍返回 true）。
@@ -64,7 +70,12 @@ pub fn update_knowledge_system(
 ///              仅状态标记；无副作用于子表。
 #[tauri::command]
 pub fn archive_knowledge_system(state: State<'_, AppState>, id: i64) -> Result<bool, String> {
-    archive_knowledge_system_inner(&state.db, id)
+    let ok = archive_knowledge_system_inner(&state.db, id)?;
+    // REQ-278：归档（软删除）→ 广播 knowledge 域
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Knowledge);
+    }
+    Ok(ok)
 }
 
 /// 在体系下新建问题树节点（parent 校验同体系）。
@@ -79,7 +90,10 @@ pub fn add_knowledge_node(
     node_type: String,
     text: String,
 ) -> Result<KnowledgeNode, String> {
-    add_knowledge_node_inner(&state.db, system_id, parent_id, node_type, text)
+    let node = add_knowledge_node_inner(&state.db, system_id, parent_id, node_type, text)?;
+    // REQ-278：节点新增 → 广播 knowledge 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Knowledge);
+    Ok(node)
 }
 
 /// 更新节点可选字段（text 归一化；status 白名单），返回更新后实体。
@@ -94,7 +108,10 @@ pub fn update_knowledge_node(
     order_idx: Option<i64>,
     status: Option<String>,
 ) -> Result<KnowledgeNode, String> {
-    update_knowledge_node_inner(&state.db, id, text, order_idx, status)
+    let node = update_knowledge_node_inner(&state.db, id, text, order_idx, status)?;
+    // REQ-278：节点更新 → 广播 knowledge 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Knowledge);
+    Ok(node)
 }
 
 /// 删除节点（级联删子树——外键已处理，command 只校验存在性）。
@@ -104,7 +121,12 @@ pub fn update_knowledge_node(
 ///              command 层只校验存在性——防误删由前端二次确认（规格 §四）。
 #[tauri::command]
 pub fn delete_knowledge_node(state: State<'_, AppState>, id: i64) -> Result<bool, String> {
-    delete_knowledge_node_inner(&state.db, id)
+    let ok = delete_knowledge_node_inner(&state.db, id)?;
+    // REQ-278：节点删除 → 广播 knowledge 域
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Knowledge);
+    }
+    Ok(ok)
 }
 
 /// 列出体系内全部节点（扁平全树，前端组树；按 order_idx, id 排序）。

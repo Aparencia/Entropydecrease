@@ -133,7 +133,10 @@ pub struct GoalProgressView {
 /// 新建目标（访谈确认后一步创建——status=active，无 draft 仪式）。
 #[tauri::command]
 pub fn create_goal(state: State<'_, AppState>, input: GoalCreateInput) -> Result<Goal, String> {
-    create_goal_inner(&state.db, &input)
+    let goal = create_goal_inner(&state.db, &input)?;
+    // REQ-278：目标创建 → 广播 goals 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Goals);
+    Ok(goal)
 }
 
 /// 全部目标卡（列表；每卡现算进度——聚合皆毫秒级查询）。
@@ -163,7 +166,12 @@ pub fn update_goal(
     domain_tag: Option<String>,
     horizon: Option<String>,
 ) -> Result<bool, String> {
-    update_goal_inner(&state.db, id, &name, domain_tag, horizon)
+    let ok = update_goal_inner(&state.db, id, &name, domain_tag, horizon)?;
+    // REQ-278：目标编辑 → 广播 goals 域
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Goals);
+    }
+    Ok(ok)
 }
 
 /// 重新访谈（答案可回溯编辑——配方重推：判据/意图整体重写）。
@@ -173,19 +181,34 @@ pub fn update_goal_interview(
     id: i64,
     input: GoalCreateInput,
 ) -> Result<bool, String> {
-    update_goal_interview_inner(&state.db, id, &input)
+    let ok = update_goal_interview_inner(&state.db, id, &input)?;
+    // REQ-278：重访谈落库 → 广播 goals 域
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Goals);
+    }
+    Ok(ok)
 }
 
 /// 删除目标（里程碑/绑定 CASCADE；M1 无快照——毕业快照保留属 M2）。
 #[tauri::command]
 pub fn delete_goal(state: State<'_, AppState>, id: i64) -> Result<bool, String> {
-    delete_goal_inner(&state.db, id)
+    let ok = delete_goal_inner(&state.db, id)?;
+    // REQ-278：目标删除 → 广播 goals 域
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Goals);
+    }
+    Ok(ok)
 }
 
 /// 暂停/恢复（M1 只开放 active⇄paused；放弃/毕业随 M2 流程开放）。
 #[tauri::command]
 pub fn update_goal_status(state: State<'_, AppState>, id: i64, status: String) -> Result<bool, String> {
-    update_goal_status_inner(&state.db, id, &status)
+    let ok = update_goal_status_inner(&state.db, id, &status)?;
+    // REQ-278：状态流转（暂停/恢复）→ 广播 goals 域
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Goals);
+    }
+    Ok(ok)
 }
 
 /// 里程碑草案建议（宣言页预填；前端薄——单一事实源在 goal_interview.rs）。
@@ -208,7 +231,10 @@ pub fn add_goal_milestone(
     criteria_type: Option<String>,
     ref_group_id: Option<i64>,
 ) -> Result<GoalMilestone, String> {
-    add_goal_milestone_inner(&state.db, goal_id, &title, due_at, criteria_type, ref_group_id)
+    let m = add_goal_milestone_inner(&state.db, goal_id, &title, due_at, criteria_type, ref_group_id)?;
+    // REQ-278：里程碑新增 → 广播 goals 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Goals);
+    Ok(m)
 }
 
 #[tauri::command]
@@ -222,7 +248,12 @@ pub fn update_goal_milestone(
         return Err("无效的里程碑 id".to_string());
     }
     let title = normalize_title(title, "未命名里程碑");
-    state.db.update_milestone(id, &title, due_at).map_err(|e| e.to_string())
+    let ok = state.db.update_milestone(id, &title, due_at).map_err(|e| e.to_string())?;
+    // REQ-278：里程碑更新 → 广播 goals 域
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Goals);
+    }
+    Ok(ok)
 }
 
 #[tauri::command]
@@ -230,23 +261,43 @@ pub fn delete_goal_milestone(state: State<'_, AppState>, id: i64) -> Result<bool
     if id <= 0 {
         return Err("无效的里程碑 id".to_string());
     }
-    state.db.delete_milestone(id).map_err(|e| e.to_string())
+    let ok = state.db.delete_milestone(id).map_err(|e| e.to_string())?;
+    // REQ-278：里程碑删除 → 广播 goals 域
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Goals);
+    }
+    Ok(ok)
 }
 
 #[tauri::command]
 pub fn set_goal_milestone_status(state: State<'_, AppState>, id: i64, status: String) -> Result<bool, String> {
-    set_goal_milestone_status_inner(&state.db, id, &status)
+    let ok = set_goal_milestone_status_inner(&state.db, id, &status)?;
+    // REQ-278：里程碑状态流转 → 广播 goals 域
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Goals);
+    }
+    Ok(ok)
 }
 
 /// 绑定/解绑组（N:M——一组可服务多目标；组仍是唯一容器）。
 #[tauri::command]
 pub fn bind_goal_group(state: State<'_, AppState>, goal_id: i64, group_id: i64) -> Result<bool, String> {
-    bind_goal_group_inner(&state.db, goal_id, group_id)
+    let ok = bind_goal_group_inner(&state.db, goal_id, group_id)?;
+    // REQ-278：绑组（N:M）→ 广播 goals 域（组侧服务标随目标页刷新）
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Goals);
+    }
+    Ok(ok)
 }
 
 #[tauri::command]
 pub fn unbind_goal_group(state: State<'_, AppState>, goal_id: i64, group_id: i64) -> Result<bool, String> {
-    unbind_goal_group_inner(&state.db, goal_id, group_id)
+    let ok = unbind_goal_group_inner(&state.db, goal_id, group_id)?;
+    // REQ-278：解绑组 → 广播 goals 域
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Goals);
+    }
+    Ok(ok)
 }
 
 // ─────────────────────────── inner（供测试与复用） ───────────────────────────

@@ -34,7 +34,10 @@ pub struct GoalRetroView {
 /// 毕业仪式（goal_settle——信号达标 + 用户确认后执行）。
 #[tauri::command]
 pub fn goal_settle(state: State<'_, AppState>, id: i64) -> Result<GraduationReport, String> {
-    goal_settle_inner(&state.db, id)
+    let report = goal_settle_inner(&state.db, id)?;
+    // REQ-278：毕业 = 目标状态机跃迁 → 广播 goals 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Goals);
+    Ok(report)
 }
 
 /// 回顾流（创建→里程碑→组结算→毕业；全现算零双写）。
@@ -46,7 +49,12 @@ pub fn goal_retro(state: State<'_, AppState>, id: i64) -> Result<GoalRetroView, 
 /// 放弃（显式动作 + 可选原因——无惩罚文案；终态拒绝）。
 #[tauri::command]
 pub fn goal_abandon(state: State<'_, AppState>, id: i64, reason: Option<String>) -> Result<bool, String> {
-    goal_abandon_inner(&state.db, id, reason.as_deref())
+    let ok = goal_abandon_inner(&state.db, id, reason.as_deref())?;
+    // REQ-278：放弃 = 目标状态机跃迁 → 广播 goals 域
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Goals);
+    }
+    Ok(ok)
 }
 
 /// 毕业档案（全部报告——已删目标的报告仍在此处可读）。

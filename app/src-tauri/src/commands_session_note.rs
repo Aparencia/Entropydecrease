@@ -233,7 +233,9 @@ pub async fn session_to_note(
     ai_decisions: Option<Vec<TextFilterDecision>>,
 ) -> Result<Note, String> {
     let state: AppState = (*state).clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    // REQ-278：spawn_blocking 移入 state 前先克隆 AppHandle（闭包 move 后不再可借）
+    let app = state.app.clone();
+    let inner = tauri::async_runtime::spawn_blocking(move || {
         convert_to_note(
             &state.db,
             &state.ui_junk,
@@ -249,7 +251,12 @@ pub async fn session_to_note(
         )
     })
     .await
-    .map_err(|e| format!("转笔记任务失败: {}", e))?
+    .map_err(|e| format!("转笔记任务失败: {}", e))?;
+    // REQ-278：转笔记成功 → 广播 notes 域（失败不广播）
+    if inner.is_ok() {
+        crate::notify::emit_changed(&app, crate::notify::DataDomain::Notes);
+    }
+    inner
 }
 
 /// 批量转笔记核心编排（v0.7.1：部分成功语义——单条失败不阻塞其他）。
@@ -319,7 +326,9 @@ pub async fn batch_session_to_note(
     ids: Vec<i64>,
 ) -> Result<BatchNoteResult, String> {
     let state: AppState = (*state).clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    // REQ-278：spawn_blocking 移入 state 前先克隆 AppHandle（闭包 move 后不再可借）
+    let app = state.app.clone();
+    let inner = tauri::async_runtime::spawn_blocking(move || {
         run_batch_conversion(
             &state.db,
             &state.ui_junk,
@@ -333,7 +342,14 @@ pub async fn batch_session_to_note(
         )
     })
     .await
-    .map_err(|e| format!("批量转笔记任务失败: {}", e))?
+    .map_err(|e| format!("批量转笔记任务失败: {}", e))?;
+    // REQ-278：有实际转出才广播 notes 域（全跳过=无变化）
+    if let Ok(res) = &inner {
+        if !res.converted.is_empty() {
+            crate::notify::emit_changed(&app, crate::notify::DataDomain::Notes);
+        }
+    }
+    inner
 }
 
 /// 会话笔记预览（REQ-081）：过滤后只读预览——不落库、不改库。

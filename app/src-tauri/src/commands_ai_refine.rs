@@ -427,11 +427,14 @@ pub fn ai_refine_apply(
         let _ = state.db.mark_ai_task_adopted(tid);
         let _ = state.db.update_ai_task_cost(tid, cost);
     }
-    state
+    let note_row = state
         .db
         .get_note(note.id)
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| "笔记不存在".to_string())
+        .ok_or_else(|| "笔记不存在".to_string())?;
+    // REQ-278：采纳落库 = 笔记内容变更 → 广播 notes 域（任务中心/会话页采纳后笔记页即时刷新）
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+    Ok(note_row)
 }
 
 // ────────────────────────────────────────────────────────────

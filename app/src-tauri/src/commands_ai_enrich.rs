@@ -232,7 +232,10 @@ pub fn ai_enrich_apply(
         let _ = state.db.mark_ai_task_adopted(tid);
         let _ = state.db.update_ai_task_cost(tid, cost);
     }
-    get_note(state.inner(), note_id)
+    let note = get_note(state.inner(), note_id)?;
+    // REQ-278：补充采纳落库 → 广播 notes 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+    Ok(note)
 }
 
 /// 撤销补充（删除无残留——内容还原补充前 base；v0.8.0 M4：= 新版本 user_edit）。
@@ -252,7 +255,10 @@ pub fn ai_enrich_revert(
             &crate::note_version::VersionMeta::default(),
         )
         .map_err(|e| e.to_string())?;
-    get_note(state.inner(), note_id)
+    let note = get_note(state.inner(), note_id)?;
+    // REQ-278：撤销补充 = 笔记内容变更 → 广播 notes 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+    Ok(note)
 }
 
 // ────────────────────────────────────────────────────────────

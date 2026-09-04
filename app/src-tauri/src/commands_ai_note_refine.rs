@@ -188,7 +188,10 @@ pub fn ai_note_refine_apply(
         let _ = state.db.mark_ai_task_adopted(tid);
         let _ = state.db.update_ai_task_cost(tid, cost);
     }
-    get_note(&state, note_id)
+    let note = get_note(&state, note_id)?;
+    // REQ-278：笔记级采纳落库 → 广播 notes 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+    Ok(note)
 }
 
 /// 笔记存在性校验（统一错误文案——command 层提前失败给明确错误）。

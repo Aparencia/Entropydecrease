@@ -25,6 +25,7 @@ import KnowledgeTreeView from "../components/KnowledgeTreeView";
 import ColumnResizer from "../components/ColumnResizer";
 import ColumnBar from "../components/ColumnBar";
 import { useColumnLayout } from "../hooks/useColumnLayout";
+import { useDbRefresh } from "../hooks/useDbRefresh";
 import KnowledgeCanvasView from "../components/KnowledgeCanvasView";
 import KnowledgeDetailPanel from "../components/KnowledgeDetailPanel";
 import KnowledgeConceptDialog from "../components/KnowledgeConceptDialog";
@@ -123,6 +124,12 @@ export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup }
     );
     return () => { disposed = true; unlisten?.(); };
   }, [reloadAll]);
+
+  // REQ-278（v0.19.4 §5）：data:knowledge-changed 常驻订阅（既有
+  // knowledge:links-changed 保留不重复造轮子；两者收敛到同一 reloadAll 刷新
+  // 回调）。常驻理由：隐藏期事件不漏收——切回体系页即最新（display:none
+  // 保留挂载下后台仅数次轻查询 + hook 内防抖合并风暴）
+  useDbRefresh(["knowledge"], reloadAll);
 
   // v0.13.7：跨页直达目标体系（与 NotesPage focusNoteId 同模式——仅 focusSystemId
   // 变化时跟随；空态无体系时该值无意义，由既有选中/创建逻辑接管）

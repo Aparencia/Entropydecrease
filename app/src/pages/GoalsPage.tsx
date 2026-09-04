@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useDbRefresh } from "../hooks/useDbRefresh";
 import type { GoalCardView, GraduationReport } from "../types/goals";
 import GoalCard from "../components/GoalCard";
 import GoalDetail from "../components/GoalDetail";
@@ -49,6 +50,11 @@ export default function GoalsPage() {
       .then(setArchives)
       .catch((e) => console.warn("[goal] 毕业档案加载失败（次要区降级）:", e));
   }, [load]);
+
+  // REQ-278（v0.19.4 §5）：data:goals-changed 常驻订阅——目标进度/里程碑由
+  // Rust 侧推进后（他页/任务流）列表现算聚合需重取；常驻理由：隐藏期事件
+  // 不漏收（切回即最新），防抖在 hook 内合并风暴
+  useDbRefresh(["goals"], () => void load());
 
   const onCreated = () => {
     setDialog(null);

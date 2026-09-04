@@ -44,7 +44,10 @@ pub async fn create_session(
         // v0.11.7：命令级建会话默认视频类（图文会话走 commands_photo::start_photo_session）
         kind: None,
     };
-    state.db.create_session(&new).map_err(|e| e.to_string())
+    let session = state.db.create_session(&new).map_err(|e| e.to_string())?;
+    // REQ-278：会话域变更广播
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Sessions);
+    Ok(session)
 }
 
 /// 结束会话（status=recording → finished）。
@@ -53,7 +56,12 @@ pub async fn finish_session(state: State<'_, AppState>, id: i64) -> Result<bool,
     if id <= 0 {
         return Err("无效的会话 id".to_string());
     }
-    state.db.finish_session(id).map_err(|e| e.to_string())
+    let ok = state.db.finish_session(id).map_err(|e| e.to_string())?;
+    // REQ-278：仅状态真正翻转（recording→finished）才广播
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Sessions);
+    }
+    Ok(ok)
 }
 
 /// 列出会话（关键词可选；默认第 1 页 50 条，新→旧；v0.7.1 起携带转化状态标记）。
@@ -130,7 +138,14 @@ pub async fn delete_session(state: State<'_, AppState>, id: i64) -> Result<bool,
     if id <= 0 {
         return Err("无效的会话 id".to_string());
     }
-    state.db.delete_session(id).map_err(|e| e.to_string())
+    let ok = state.db.delete_session(id).map_err(|e| e.to_string())?;
+    // REQ-278：删除会话 → 广播 sessions 域（列表/关联视图即时刷新）
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Sessions);
+        // 会话删除级联清笔记关联（notes.session_id SET NULL）——notes 域同播
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+    }
+    Ok(ok)
 }
 
 /// 追加转写段（实时捕获链路调用）。

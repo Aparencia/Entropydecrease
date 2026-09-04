@@ -90,7 +90,7 @@ pub fn create_topic_group(
         return Ok(existing);
     }
     let label = DomainKind::parse(&domain).map(|k| k.label()).unwrap_or("主题组");
-    state
+    let group = state
         .db
         .create_group(&NewNoteGroup {
             name: if name == "未命名组" { label.to_string() } else { name },
@@ -101,7 +101,10 @@ pub fn create_topic_group(
             series_key: None,
             route_reason: None,
         })
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    // REQ-278：组域变更广播
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::NoteGroups);
+    Ok(group)
 }
 
 /// 重命名组。
@@ -115,7 +118,12 @@ pub fn rename_note_group(
         return Err("无效的组 id".to_string());
     }
     let name = normalize_title(name, "未命名组");
-    state.db.rename_group(id, &name).map_err(|e| e.to_string())
+    let ok = state.db.rename_group(id, &name).map_err(|e| e.to_string())?;
+    // REQ-278：组域变更广播
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::NoteGroups);
+    }
+    Ok(ok)
 }
 
 /// 路由改判（REQ-198 修改即记忆）：改组类别/领域，留痕 route_reason。
@@ -140,10 +148,15 @@ pub fn override_group_route(
         kind,
         domain.as_deref().map(|d| format!("（{}）", d)).unwrap_or_default()
     );
-    state
+    let ok = state
         .db
         .override_group_route(id, &kind, domain.as_deref(), &reason)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    // REQ-278：改判 = 组语义变更 → 广播组域
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::NoteGroups);
+    }
+    Ok(ok)
 }
 
 /// 移动笔记到组（group_id=None 移出组——手动纠错路由误判的兜底路径）。
@@ -164,7 +177,13 @@ pub fn move_note_to_group(
             return Err(format!("笔记组不存在: {}", gid));
         }
     }
-    state.db.update_note_group(note_id, group_id).map_err(|e| e.to_string())
+    let ok = state.db.update_note_group(note_id, group_id).map_err(|e| e.to_string())?;
+    // REQ-278：归组 = 笔记归属 + 组内容双变 → 双域广播（成功才发）
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::NoteGroups);
+    }
+    Ok(ok)
 }
 
 
@@ -178,10 +197,15 @@ pub fn update_group_color(
     if id <= 0 {
         return Err("无效的组 id".to_string());
     }
-    state
+    let ok = state
         .db
         .update_group_color(id, color.as_deref())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    // REQ-278：组视觉变更 → 广播组域
+    if ok {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::NoteGroups);
+    }
+    Ok(ok)
 }
 
 /// 组删除影响面（v0.14.1；只读——确认弹窗数据源，无副作用）。
@@ -203,7 +227,11 @@ pub fn get_group_delete_impact(
 ///              "全部"，闪卡/结算/周契约 CASCADE，体系引用显式清理。
 #[tauri::command]
 pub fn delete_note_group(state: State<'_, AppState>, id: i64) -> Result<bool, String> {
-    delete_note_group_inner(&state.db, id)
+    let ok = delete_note_group_inner(&state.db, id)?;
+    // REQ-278：组删除级联（组内笔记/碎片 SET NULL 移入"全部"）→ 组域+笔记域双播
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::NoteGroups);
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+    Ok(ok)
 }
 
 /// 组存在性校验（R-低3：get_group_delete_impact/delete_note_group 共用——

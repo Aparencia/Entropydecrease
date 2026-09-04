@@ -38,6 +38,7 @@ import ColumnResizer from "../components/ColumnResizer";
 import ColumnBar from "../components/ColumnBar";
 import { useColumnLayout } from "../hooks/useColumnLayout";
 import { useNoteAttention } from "../components/useNoteAttention";
+import { useDbRefresh } from "../hooks/useDbRefresh";
 
 interface Props {
   focusNoteId?: number | null;
@@ -304,6 +305,20 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
   // 经 ref 取最新 handleNoteChanged（防闭包持有旧 keyword/tagFilter 快照）
   const handleNoteChangedRef = useRef(handleNoteChanged);
   useEffect(() => { handleNoteChangedRef.current = handleNoteChanged; }, [handleNoteChanged]);
+
+  // REQ-278（v0.19.4 §5）：data:notes-changed / data:note-groups-changed 常驻订阅
+  // ——覆盖"别处改动"（任务采纳/AI 落库/他页转化）。回调复用既有刷新职责：
+  // refreshToken 递增重载组侧栏/色数据（refreshAll 的 refreshToken 通道）+
+  // handleNoteChanged（列表重载 + 右栏选中对象回读），列表 load 仅执行一次；
+  // 防抖在 useDbRefresh 内合并事件风暴，与页面本地即时刷新天然错峰。常驻订阅
+  // 理由：隐藏期（display:none 保留挂载）事件不漏收——切回即最新（REQ 根治点）
+  const handleExternalDbChange = useCallback(() => {
+    setRefreshToken((t) => t + 1);
+    void handleNoteChanged();
+  }, [handleNoteChanged]);
+
+  useDbRefresh(["notes", "note-groups"], handleExternalDbChange);
+
   // v0.13.6（审查 H1 修复）：编辑器命令式出口——ESC 先 await 保存再刷新（防卸载
   // 保存与 get_note 竞态在 ESC 出口重演"编辑后右栏旧值"）
   const editorRef = useRef<NoteEditHandle | null>(null);

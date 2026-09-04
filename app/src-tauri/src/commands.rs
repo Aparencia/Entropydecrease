@@ -262,7 +262,10 @@ pub async fn save_draft_as_note(state: State<'_, AppState>, draft: NoteDraft) ->
         properties: None,
         group_id: None,
     };
-    state.db.create_note(&new).map_err(|e| e.to_string())
+    let note = state.db.create_note(&new).map_err(|e| e.to_string())?;
+    // REQ-278：笔记域变更广播（其它视图即时刷新）
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+    Ok(note)
 }
 
 /// 一键流水线：音频转写 + 多图 OCR → 本地拼接 → 自动存为笔记。
@@ -298,8 +301,7 @@ pub async fn process_to_note(
     let title = normalize_title(title, "未命名笔记");
     let engines = state.engines.clone();
     let db = state.db.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        // 1) 转写（可选音频）
+    let inner = tauri::async_runtime::spawn_blocking(move || {
         // H2 修复：有界等待变体——Err 携带超时/引擎诊断信息返回前端
         // 三维复审 #3：整文件转写用 ASR_FILE_TIMEOUT（30 分钟）——耗时与音频
         // 时长线性相关，短请求 60s 预算会误杀长录音（行为契约回归）
@@ -350,7 +352,12 @@ pub async fn process_to_note(
         .map_err(|e| e.to_string())
     })
     .await
-    .map_err(|e| format!("任务调度失败: {}", e))?
+    .map_err(|e| format!("任务调度失败: {}", e))?;
+    // REQ-278：流水线落库成功 → 广播 notes 域（失败不广播——没变就不用刷）
+    if inner.is_ok() {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+    }
+    inner
 }
 
 /// 手动新建笔记（REQ-004）。
@@ -376,7 +383,10 @@ pub async fn create_note(state: State<'_, AppState>, new: NewNote) -> Result<Not
         // v0.11.0：手动建笔记可直接指定组（组视图内新建；无效 id 由外键拦截）
         group_id: new.group_id,
     };
-    state.db.create_note(&new).map_err(|e| e.to_string())
+    let note = state.db.create_note(&new).map_err(|e| e.to_string())?;
+    // REQ-278：笔记域变更广播
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+    Ok(note)
 }
 
 /// 列出全部笔记（REQ-004；v0.10.0 支持排序模式）。
@@ -419,7 +429,10 @@ pub async fn update_note(
     // v0.10.1 F2：轻量保存（自动保存/失焦/任务勾选回写）——只刷新内容不建版本
     // （v0.10.0 状态一致性规则：版本快照只在显式保存/AI 采纳时建立）
     if create_version == Some(false) {
-        return state.db.update_note(id, &title, &content).map_err(|e| e.to_string());
+        let ok = state.db.update_note(id, &title, &content).map_err(|e| e.to_string())?;
+        // REQ-278：笔记域变更广播（自动保存同样触发——防抖在订阅端）
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+        return Ok(ok);
     }
     // v0.10.1 F3：内容去重——与最新版本相同则跳过 versioned_save
     // （防 Ctrl+S 空保存/重复保存污染版本时间线；无版本时照常建链）
@@ -439,6 +452,8 @@ pub async fn update_note(
         .db
         .update_note(id, &title, &content)
         .map_err(|e| e.to_string())?;
+    // REQ-278：笔记域变更广播（versioned_save 成功路径）
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
     Ok(true)
 }
 
@@ -458,6 +473,8 @@ pub async fn delete_note(state: State<'_, AppState>, id: i64) -> Result<bool, St
                 eprintln!("[notes] 清理笔记图片目录失败（{img_dir:?}）: {e}");
             }
         }
+        // REQ-278：确实删除才广播 notes 域
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
     }
     Ok(deleted)
 }
@@ -492,10 +509,13 @@ pub async fn update_note_tags(
     if id <= 0 {
         return Err("无效的笔记 id".to_string());
     }
-    state
+    let ok = state
         .db
         .update_note_tags(id, &tags)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    // REQ-278：标签即笔记元数据变更——广播 notes 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+    Ok(ok)
 }
 
 /// 更新笔记固定状态（v0.10.0）。
@@ -508,10 +528,13 @@ pub async fn update_note_pin(
     if id <= 0 {
         return Err("无效的笔记 id".to_string());
     }
-    state
+    let ok = state
         .db
         .update_note_pin(id, pin)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    // REQ-278：固定状态变更——广播 notes 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+    Ok(ok)
 }
 
 /// 更新笔记颜色（v0.14 B 视觉系统；color=None/空串清除 properties.color）。
@@ -526,8 +549,11 @@ pub async fn update_note_color(
     }
     // 空串等价清除（前端清除按钮传 null；防御空串）
     let trimmed = color.as_deref().map(str::trim).filter(|c| !c.is_empty());
-    state
+    let ok = state
         .db
         .update_note_color(id, trimmed)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    // REQ-278：颜色变更——广播 notes 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+    Ok(ok)
 }

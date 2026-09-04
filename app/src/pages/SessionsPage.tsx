@@ -19,6 +19,7 @@ import SessionListPanel from "../components/SessionListPanel";
 import ColumnResizer from "../components/ColumnResizer";
 import ColumnBar from "../components/ColumnBar";
 import { useColumnLayout } from "../hooks/useColumnLayout";
+import { useDbRefresh } from "../hooks/useDbRefresh";
 import type {
   BatchNoteResult, CourseGroup, SessionDetail, SessionListItem,
 } from "../types";
@@ -110,6 +111,12 @@ export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocu
   useEffect(() => {
     if (active) void refresh();
   }, [active, refresh]);
+
+  // REQ-278（v0.19.4 §5）：data:sessions-changed / data:notes-changed 常驻订阅
+  // ——会话列表含最新笔记标题/转化标记，他处（笔记改名/别页转化）也影响展示；
+  // 常驻理由：隐藏期事件不漏收（切回即最新），后台成本即防抖后一次 refresh。
+  // 注：active 翻转刷新（上方 effect）与总线刷新并存不冲突——防抖合并风暴
+  useDbRefresh(["sessions", "notes"], () => void refresh());
 
   /** 打开会话详情（可选 targetSegId：段搜索命中段定位；无则不强制滚动） */
   const openDetail = useCallback(
