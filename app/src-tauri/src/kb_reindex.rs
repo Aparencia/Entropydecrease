@@ -195,10 +195,15 @@ impl Db {
                 .unwrap_or(0);
             let last_error =
                 meta_get(conn, META_LAST_ERROR).ok().flatten().filter(|v| !v.is_empty());
+            // REQ-259：embedding 就绪 = kb_meta 已写 dim（回填完成后的诚实状态）
+            let embedding_ready = meta_get(conn, crate::kb_embed::META_DIM)
+                .ok()
+                .flatten()
+                .is_some();
             Ok(KbIndexStats {
                 fts_ready: true,
-                embedding_ready: false,
-                engine: "fts5".to_string(),
+                embedding_ready,
+                engine: if embedding_ready { "fts5+onnx" } else { "fts5" }.to_string(),
                 chunks_total: note_chunks + fragment_chunks,
                 note_chunks,
                 fragment_chunks,

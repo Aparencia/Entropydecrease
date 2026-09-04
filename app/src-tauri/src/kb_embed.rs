@@ -8,12 +8,8 @@
 //! @ai-context: Onnx/Ollama 具体引擎后续模块实现（OnnxEmbedding 需 ort + 模型
 //!              文件 + BERT 分词——模型分发复用 model_registry）；本模块红线：
 //!              引擎产物只是派生索引材料，绝不写结构层（人工裁决闸门铁律）。
-//! 注意：向量写入侧（encode_embedding + META_* 键）待 reindex 回填轮接线——
-//! 读侧（decode/cosine/META_DIM）已被 kb_search_semantic 引用；dead_code 临时
-//! 豁免缩小至写入侧，reindex 回填轮移除本属性（TODO REQ-259）。
-#![allow(dead_code)]
-
-use std::error::Error;
+//! 注意：本模块公共 API 已全部接线（槽/契约/编解码/余弦/元数据键——
+//! 读侧 kb_search_semantic，写侧 kb_embed_store）。
 
 /// kb_meta 键：当前 embedding 模型名（无引擎时无此键）
 pub const META_MODEL: &str = "embedding_model";
@@ -47,16 +43,17 @@ impl EmbeddingEngine for NoopEmbedding {
 }
 
 /// 引擎槽（AppState 持有；状态命令读、加载命令换入 Onnx——锁内
-/// read-modify-write，与词表/开关同模式防 TOCTOU）。
+/// read-modify-write，与词表/开关同模式防 TOCTOU；Arc 使引擎可廉价快照给
+/// spawn_blocking 重建任务跨线程使用）。
 pub struct EmbeddingSlot {
-    pub engine: Box<dyn EmbeddingEngine>,
+    pub engine: std::sync::Arc<dyn EmbeddingEngine>,
     /// 引擎标识（noop | onnx——状态命令如实上报）
     pub kind: &'static str,
 }
 
 impl Default for EmbeddingSlot {
     fn default() -> Self {
-        Self { engine: Box::new(NoopEmbedding), kind: "noop" }
+        Self { engine: std::sync::Arc::new(NoopEmbedding), kind: "noop" }
     }
 }
 
@@ -119,11 +116,6 @@ pub fn cosine_top_k(
     scored.sort_by(|a, b| b.1.total_cmp(&a.1));
     scored.truncate(k);
     scored
-}
-
-/// 统一错误到 String（trait 便捷——引擎内部用）
-pub fn to_string_err<E: Error>(e: E) -> String {
-    e.to_string()
 }
 
 #[cfg(test)]

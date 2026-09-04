@@ -117,7 +117,7 @@ pub fn kb_embedding_load(state: State<'_, AppState>) -> Result<EmbeddingStatusVi
         .map_err(|_| "embedding 引擎锁中毒".to_string())?;
     let dim = engine.dims();
     *slot = crate::kb_embed::EmbeddingSlot {
-        engine: Box::new(engine),
+        engine: std::sync::Arc::new(engine),
         kind: "onnx",
     };
     Ok(EmbeddingStatusView {
@@ -136,12 +136,29 @@ pub async fn kb_reindex_all(
     channel: Channel<KbReindexEvent>,
 ) -> Result<(), String> {
     let db = state.db.clone();
+    // REQ-259：引擎快照（Arc 克隆——spawn_blocking 跨线程共享；锁即放）
+    let engine: Option<std::sync::Arc<dyn crate::kb_embed::EmbeddingEngine>> = {
+        let slot = state
+            .embedding_slot
+            .lock()
+            .map_err(|e| format!("embedding 引擎锁中毒: {}", e))?;
+        (slot.engine.dims().is_some()).then(|| slot.engine.clone())
+    };
     tauri::async_runtime::spawn_blocking(move || {
         let mut progress = |done: u64, total: u64| {
             let _ = channel.send(KbReindexEvent::Progress { done, total });
         };
         match db.kb_reindex_all(&mut progress) {
             Ok(report) => {
+                // REQ-259：重建后置向量回填（引擎就绪时——失败如实记录，Done 照发）
+                if let Some(eng) = &engine {
+                    match db.kb_fill_embeddings(eng.as_ref()) {
+                        Ok(n) => eprintln!("[kb-index] embedding 回填完成：{n} 块"),
+                        Err(e) => eprintln!(
+                            "[kb-index] embedding 回填失败（检索保持 FTS-only，可重试）: {e}"
+                        ),
+                    }
+                }
                 let _ = channel.send(KbReindexEvent::Done { report });
             }
             Err(e) => {

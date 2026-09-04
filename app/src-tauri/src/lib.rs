@@ -270,6 +270,8 @@ mod kb_embed;
 mod kb_embed_tokenizer;
 // REQ-259（v0.19.5）：bge-small-zh ONNX 推理引擎（ort 封装 + CLS/L2）
 mod kb_embed_onnx;
+// REQ-259（v0.19.5）：kb 向量回填存储（全量重建后置嵌入 + kb_meta 元数据）
+mod kb_embed_store;
 mod commands_kb_discovery;
 mod concept_weakness;
 mod goal_interview;
