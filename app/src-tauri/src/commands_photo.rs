@@ -85,6 +85,8 @@ pub fn start_photo_session(state: State<'_, AppState>, title: Option<String>) ->
     })?;
     *guard = Some(session.id);
     *state.photo_store.lock().map_err(|_| "图文图片库锁中毒".to_string())? = Some(store);
+    // REQ-278 审查补端：图文会话创建（旁路 create_session）→ 广播 sessions 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Sessions);
     Ok(session.id)
 }
 

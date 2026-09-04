@@ -433,8 +433,10 @@ pub async fn update_note(
     // （v0.10.0 状态一致性规则：版本快照只在显式保存/AI 采纳时建立）
     if create_version == Some(false) {
         let ok = state.db.update_note(id, &title, &content).map_err(|e| e.to_string())?;
-        // REQ-278：笔记域变更广播（自动保存同样触发——防抖在订阅端）
-        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+        // REQ-278：确有变化才广播（空保存/同内容失焦不制造假刷新）
+        if ok {
+            crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+        }
         return Ok(ok);
     }
     // v0.10.1 F3：内容去重——与最新版本相同则跳过 versioned_save
@@ -476,8 +478,10 @@ pub async fn delete_note(state: State<'_, AppState>, id: i64) -> Result<bool, St
                 eprintln!("[notes] 清理笔记图片目录失败（{img_dir:?}）: {e}");
             }
         }
-        // REQ-278：确实删除才广播 notes 域
+        // REQ-278：确实删除才广播 notes 域；连带清 knowledge_links（note 引用）——
+        // Knowledge 页图谱/引用同样需即时刷新（低-1 审查补端）
         crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Knowledge);
     }
     Ok(deleted)
 }

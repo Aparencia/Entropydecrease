@@ -106,8 +106,13 @@ impl Db {
     ) -> Result<Vec<KbHit>> {
         let limit = limit.clamp(1, KB_SEARCH_MAX_LIMIT);
         let plan = plan_query(query);
+        // 词法计划为空时：无引擎 → 空结果（诚实）；引擎可用 → 允许纯语义召回
+        // （1-2 字查询 FTS/trigram 常漏——审查低-9 补端；未回填则由合流降级为空）
         if plan.fts.is_none() && plan.like_terms.is_empty() {
-            return Ok(Vec::new());
+            let engine_usable = engine.is_some_and(|e| e.dims().is_some());
+            if !engine_usable {
+                return Ok(Vec::new());
+            }
         }
         self.with_conn(|conn| {
             let mut rows: Vec<HitRow> = match &plan.fts {
@@ -142,10 +147,11 @@ impl Db {
                 },
                 None => like_hits(conn, &plan.like_terms, limit)?,
             };
-            // 语义合流（可选）：向量候选 + RRF 融合（任何失败/不一致 → 降级直通）
+            // 语义合流（可选）：向量候选 + RRF 融合（内部故障统一降级直通——
+            // 返回 Option 而非 Result：语义层永不击穿读路径）
             let hybrid = if let Some(eng) = engine {
                 let fts_ids: Vec<i64> = rows.iter().map(|r| r.chunk_id).collect();
-                semantic_merge(conn, eng, query, &fts_ids, limit)?
+                semantic_merge(conn, eng, query, &fts_ids, limit)
             } else {
                 None
             };

@@ -187,6 +187,12 @@ pub fn ai_enrich_apply(
 ) -> Result<Note, String> {
     // 存在性校验（versioned_save 内部也会校验——提前失败给明确错误）
     get_note(state.inner(), note_id)?;
+    // 审查修复（2026-09-04）：采纳守卫前置于任何写库（重复采纳防重复版本+usage）
+    if let Some(tid) = task_id {
+        if state.db.is_ai_task_adopted(tid) {
+            return Err("该任务结果已采纳落库——请勿重复采纳（可到笔记页查看）".to_string());
+        }
+    }
     // 审查修复（2026-08-21）：落库成本用模型感知单价（与预估同口径）
     let cost = crate::ai_cost::usage_cost_for_model(
         result.base_markdown.chars().count(),
@@ -222,13 +228,9 @@ pub fn ai_enrich_apply(
             },
         )
         .map_err(|e| e.to_string())?;
-    // F2 任务中心：标记采纳 + 成本回填（task_id 可选；防重启后重复采纳）。
-    // 审查修复（2026-08-21）：服务端前置校验已采纳状态（前端禁用 + 服务端
-    // 兜底双保险——防异常调用重复建笔记）。
+    // F2 任务中心：标记采纳 + 成本回填（task_id 可选；防重启后重复采纳——
+    // 采纳守卫已前置于写库前）
     if let Some(tid) = task_id {
-        if state.db.is_ai_task_adopted(tid) {
-            return Err("该任务结果已采纳落库——请勿重复采纳（可到笔记页查看）".to_string());
-        }
         let _ = state.db.mark_ai_task_adopted(tid);
         let _ = state.db.update_ai_task_cost(tid, cost);
     }

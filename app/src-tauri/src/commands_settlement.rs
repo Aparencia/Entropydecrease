@@ -104,6 +104,12 @@ pub fn execute_settlement(
     } else {
         None
     };
+    // REQ-278 审查补端（2026-09-04）：结算 = 多域变更（组内容/目标信号/核心
+    // 笔记）——GoalsPage 无激活自刷新，此前零广播致"切回目标页仍陈旧"。
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::NoteGroups);
+    if core_note_id.is_some() {
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+    }
     // 留痕：结算记录 + 北极星埋点（组成③经历过结算）
     let stats = serde_json::json!({
         "merged": merged, "archived": archived, "coreNoteId": core_note_id,
@@ -120,6 +126,8 @@ pub fn execute_settlement(
         Ok(n) if n > 0 => {
             let g_payload = serde_json::json!({ "groupId": group_id, "autoPassed": n }).to_string();
             let _ = state.db.add_metric_event("goal_milestone_done", &g_payload);
+            // 里程碑被自动通过 → 目标域广播（GoalsPage 总线刷新依赖此项）
+            crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Goals);
         }
         Ok(_) => {}
         Err(e) => eprintln!("[goal] 组结算里程碑自动通过失败（不影响结算）: {}", e),

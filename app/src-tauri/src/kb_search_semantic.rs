@@ -11,10 +11,26 @@ use rusqlite::{params, Connection};
 use crate::kb_embed::{cosine_top_k, decode_embedding, EmbeddingEngine, META_DIM};
 use crate::kb_fts::rrf_merge;
 
-/// 语义合流：查询嵌入 → 全库已嵌向量余弦 top-K → 与词法候选 RRF 融合。
-///
-/// 返回 (merged_ids, used_semantic)；语义不可用/不一致 → Ok(None)。
+/// 语义合流公共入口：任何内部故障（meta 读/推理/形状）→ 记录日志并返回
+/// None（检索永不因语义层被击穿——读路径红线）。
 pub(crate) fn semantic_merge(
+    conn: &Connection,
+    engine: &dyn EmbeddingEngine,
+    query: &str,
+    fts_ids: &[i64],
+    limit: usize,
+) -> Option<(Vec<i64>, bool)> {
+    match semantic_merge_inner(conn, engine, query, fts_ids, limit) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("[kb-search] 语义合流层故障，降级 FTS-only: {e}");
+            None
+        }
+    }
+}
+
+/// 语义合流内部实现（rusqlite 错误原样上抛，由公共入口统一降级）。
+fn semantic_merge_inner(
     conn: &Connection,
     engine: &dyn EmbeddingEngine,
     query: &str,
@@ -39,12 +55,17 @@ pub(crate) fn semantic_merge(
         eprintln!("[kb-search] embedding dim 不匹配（库={stored_dim:?} 引擎={dim}）——降级 FTS-only，请重建索引");
         return Ok(None);
     }
-    let Ok(qvec) = engine.embed(&[query.to_string()]) else {
-        return Ok(None); // 引擎推理失败 → 降级（检索可用性红线）
+    let qvec = match engine.embed(&[query.to_string()]) {
+        Ok(mut v) => v.pop().unwrap_or_default(),
+        Err(e) => {
+            // 推理失败 → 日志可见（状态命令同源诊断口径），降级 FTS-only
+            eprintln!("[kb-search] 查询嵌入失败，降级 FTS-only: {e}");
+            return Ok(None);
+        }
     };
-    let Some(qvec) = qvec.into_iter().next() else {
+    if qvec.is_empty() {
         return Ok(None);
-    };
+    }
     // 全库已嵌向量（只取非 NULL——重嵌中/未嵌行自然缺席）
     let decoded: Vec<(i64, Vec<u8>)> = {
         let mut stmt = conn.prepare("SELECT id, embedding FROM kb_chunks WHERE embedding IS NOT NULL")?;

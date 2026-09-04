@@ -186,11 +186,9 @@ fn push_unique(v: &mut Vec<String>, s: &str) {
 
 /// RRF 融合（多列候选 id 列表 → 单一有序去重列表；top_n 截断）。
 ///
-/// @ai-context: score = Σ 1/(k + rank)；并列按先出现列序稳定。FTS-only 期
-///              单列直通（返回原序去重）——embedding 列接入后双列融合即用；
-///              dead_code 豁免：v0.19.3 语义批的合流接口（TDD 先行——本模块
-///              单测已覆盖双列/并列/空集矩阵）。
-#[allow(dead_code)]
+/// @ai-context: score = Σ 1/(k + rank)；并列按先出现列序稳定。v0.19.5
+///              （REQ-259）已由 kb_search_semantic 接线为 词法列 ∪ 语义列 的
+///              合流函数——不再是无调用方接口。
 pub fn rrf_merge<T>(ranked_lists: &[Vec<T>], top_n: usize) -> Vec<T>
 where
     T: Eq + std::hash::Hash + Copy,

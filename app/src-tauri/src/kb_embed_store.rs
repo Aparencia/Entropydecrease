@@ -37,32 +37,34 @@ impl Db {
             })?;
             return Ok(0);
         }
-        let texts: Vec<String> = chunks.iter().map(|(_, t)| t.clone()).collect();
-        let vectors = engine
-            .embed(&texts)
-            .map_err(|e| crate::error::AppError::Db(format!("嵌入失败: {e}")))?;
-        let paired: Vec<(i64, Vec<f32>)> = chunks
-            .into_iter()
-            .zip(vectors)
-            .map(|((id, _), v)| (id, v))
-            .collect();
-        self.with_conn(|conn| {
-            // 回填幂等可重跑（失败可整轮重试）——逐条自动提交，无需事务；
-            // 单条失败中断并报错（kb_meta 最后写——元数据即"完成标记"，
-            // 未写完=未完成，检索合流按缺 dim 自动 FTS-only）
-            {
-                let mut stmt =
-                    conn.prepare("UPDATE kb_chunks SET embedding = ?1 WHERE id = ?2")?;
-                for (id, vec) in &paired {
+        // 审查修复（2026-09-04）：分批嵌入+分批写回（每批 512 行）——推理在
+        // 锁外进行、单批写回持锁时长有界；全量向量不再一次性驻留内存
+        // （万级 chunk × 512 维 ≈ 数百 MB 峰值风险消除）
+        const BATCH: usize = 512;
+        let mut written = 0usize;
+        for batch in chunks.chunks(BATCH) {
+            let texts: Vec<String> = batch.iter().map(|(_, t)| t.clone()).collect();
+            let vectors = engine
+                .embed(&texts)
+                .map_err(|e| crate::error::AppError::Db(format!("嵌入失败: {e}")))?;
+            self.with_conn(|conn| {
+                let mut stmt = conn.prepare("UPDATE kb_chunks SET embedding = ?1 WHERE id = ?2")?;
+                for ((id, _), vec) in batch.iter().zip(vectors.iter()) {
                     stmt.execute(rusqlite::params![encode_embedding(vec), id])?;
                 }
-            }
+                Ok(())
+            })?;
+            written += batch.len();
+        }
+        // 元数据最后写（=完成标记：中途失败不落 meta → 检索合流缺 dim 自动
+        // FTS-only，stats 诚实显示未回填；重跑可续）
+        self.with_conn(|conn| {
             meta_set(conn, META_MODEL, "onnx:bge-small-zh-v1.5")?;
             meta_set(conn, META_DIM, &dim.to_string())?;
             meta_set(conn, META_FORMAT, FORMAT_F32LE)?;
             Ok(())
         })?;
-        Ok(paired.len())
+        Ok(written)
     }
 }
 

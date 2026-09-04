@@ -363,6 +363,14 @@ pub fn ai_refine_apply(
         .ok_or_else(|| format!("会话不存在: {}", session_id))?;
     let fallback = format!("{}（AI 精修）", session.title);
     let title = crate::commands::normalize_title(result.title.clone(), &fallback);
+    // 审查修复（2026-09-04）：采纳守卫**前置**于任何写库——F2 注释自称"服务端
+    // 前置校验"但实为后置（先建基线笔记/写版本/记 usage 再拒，重复采纳会留
+    // 孤儿半态且 Err 早退不播 Notes）；双点/陈旧面板/多入口并发兜底依赖此处。
+    if let Some(tid) = task_id {
+        if state.db.is_ai_task_adopted(tid) {
+            return Err("该任务结果已采纳落库——请勿重复采纳（可到笔记页查看）".to_string());
+        }
+    }
     // ① 规则基线建笔记（版本链首快照原料——可回溯精修前内容）
     let new = NewNote {
         title: title.clone(),
@@ -417,13 +425,8 @@ pub fn ai_refine_apply(
         )
         .map_err(|e| e.to_string())?;
     // F2 任务中心：标记采纳 + 成本回填（task_id 可选——旧前端调用不传则跳过；
-    // 防重启后从任务中心重复采纳产生重复笔记）。
-    // 审查修复（2026-08-21）：服务端前置校验已采纳状态——防异常/重复调用
-    // 绕过前端 UI 直接重复建笔记（前端禁用 + 服务端兜底双保险）。
+    // 防重启后从任务中心重复采纳产生重复笔记——采纳守卫已前置于写库前）
     if let Some(tid) = task_id {
-        if state.db.is_ai_task_adopted(tid) {
-            return Err("该任务结果已采纳落库——请勿重复采纳（可到笔记页查看）".to_string());
-        }
         let _ = state.db.mark_ai_task_adopted(tid);
         let _ = state.db.update_ai_task_cost(tid, cost);
     }

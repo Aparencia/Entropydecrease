@@ -78,6 +78,17 @@ impl Db {
         self.with_conn(|conn| {
             reset_index_errors(conn);
             conn.execute_batch("DELETE FROM kb_fts; DELETE FROM kb_chunks;")?;
+            // 审查修复（2026-09-04）：重建起点同步清 embedding 元数据三键——
+            // meta=回填"完成标记"唯一写入点；不清则无引擎重建/回填失败路径
+            // 残留旧 dim → stats.embedding_ready/UI 徽标谎报"语义就绪"
+            conn.execute(
+                "DELETE FROM kb_meta WHERE key IN (?1, ?2, ?3)",
+                rusqlite::params![
+                    crate::kb_embed::META_MODEL,
+                    crate::kb_embed::META_DIM,
+                    crate::kb_embed::META_FORMAT
+                ],
+            )?;
             Ok(())
         })?;
         let mut done = 0u64;

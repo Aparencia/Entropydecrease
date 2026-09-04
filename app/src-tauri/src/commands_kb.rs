@@ -71,10 +71,10 @@ const EMBEDDING_MODEL_REL: &str = "embedding/bge-small-zh-v1.5";
 /// 下载 kb embedding 模型（bge-small-zh-v1.5 int8 ONNX + BERT 词表）。
 ///
 /// @ai-context: 模型文件不入库、不打包（约 25MB 按需下载——REQ-262 口径）；
-///              源：ONNX 量化模型走 Xenova（社区导出），vocab.txt 走 BAAI
-///              官方仓库；下载写 .part 后原子改名（中断残留可重下覆盖）。
-///              下载完成 ≠ 就绪——需 kb_embedding_load 换槽 + 「学习库」段
-///              重建索引回填向量（命令返回值给前端引导文案）。
+///              审查修复（2026-09-04）：双文件均已就位 → 幂等跳过（重启不重复
+///              下 25MB）；单文件下载失败清理 .part；落位前按 Content-Length
+///              校验长度（防截断半文件被加载器吞并报费解错误）。
+///              下载完成 ≠ 就绪——需 kb_embedding_load 换槽 + 重建索引回填。
 #[tauri::command]
 pub async fn kb_embedding_download(state: State<'_, AppState>) -> Result<String, String> {
     let dir = state.model_dir.join(EMBEDDING_MODEL_REL);
@@ -90,23 +90,47 @@ pub async fn kb_embedding_download(state: State<'_, AppState>) -> Result<String,
     ];
     tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
         std::fs::create_dir_all(&dir).map_err(|e| format!("创建模型目录失败: {e}"))?;
-        let mut downloaded = Vec::new();
-        for (name, url) in files {
+        let missing: Vec<&str> = files
+            .iter()
+            .filter(|(name, _)| !dir.join(name).is_file())
+            .map(|(name, _)| *name)
+            .collect();
+        if missing.is_empty() {
+            return Ok(format!(
+                "模型文件已就绪（幂等跳过下载）：{}——点击「▶ 加载引擎」后全量重建即可",
+                dir.to_string_lossy()
+            ));
+        }
+        let mut downloaded: Vec<String> = Vec::new();
+        for (name, url) in files.iter().filter(|(name, _)| missing.contains(name)) {
             let part = dir.join(format!("{name}.part"));
             let target = dir.join(name);
-            let resp = ureq::get(url)
-                .timeout(std::time::Duration::from_secs(600))
-                .call()
-                .map_err(|e| format!("下载 {name} 失败: {e}"))?;
-            let mut reader = resp.into_reader();
-            let mut out = std::fs::File::create(&part).map_err(|e| format!("写临时文件失败: {e}"))?;
-            std::io::copy(&mut reader, &mut out).map_err(|e| format!("写 {name} 失败: {e}"))?;
-            drop(out);
-            std::fs::rename(&part, &target).map_err(|e| format!("落位 {name} 失败: {e}"))?;
-            downloaded.push(name.to_string());
+            let result = (|| -> Result<(), String> {
+                let resp = ureq::get(url)
+                    .timeout(std::time::Duration::from_secs(600))
+                    .call()
+                    .map_err(|e| format!("下载 {name} 失败: {e}"))?;
+                let expected = resp
+                    .header("content-length")
+                    .and_then(|v| v.parse::<u64>().ok());
+                let mut reader = resp.into_reader();
+                let mut out = std::fs::File::create(&part).map_err(|e| format!("写临时文件失败: {e}"))?;
+                let copied = std::io::copy(&mut reader, &mut out).map_err(|e| format!("写 {name} 失败: {e}"))?;
+                drop(out);
+                if expected.is_some_and(|len| copied != len) {
+                    return Err(format!("{name} 下载不完整（{copied}/{expected:?} 字节）——已清理，请重试"));
+                }
+                std::fs::rename(&part, &target).map_err(|e| format!("落位 {name} 失败: {e}"))?;
+                Ok(())
+            })();
+            if let Err(e) = result {
+                let _ = std::fs::remove_file(&part); // 失败清理半文件（重试不留残）
+                return Err(e);
+            }
+            downloaded.push((*name).to_string());
         }
         Ok(format!(
-            "已下载：{}（{}）——请在「学习库」段点击加载引擎并重建索引以回填向量",
+            "已下载：{}（{}）——请点击「▶ 加载引擎」并「🔄 全量重建」以回填向量",
             downloaded.join("、"),
             dir.to_string_lossy()
         ))
@@ -150,14 +174,19 @@ pub fn kb_embedding_status(state: State<'_, AppState>) -> Result<EmbeddingStatus
 
 /// 加载（或重载）本地 ONNX embedding 引擎。
 ///
-/// @ai-context: 模型文件由下载命令/分发先落位（models/embedding/bge-small-zh-
-///              v1.5/{model_quantized.onnx,vocab.txt}）；本命令只做加载与换槽：
-///              成功 → 槽位切 onnx（后续 reindex 按新引擎重嵌）；失败 → 槽位
-///              保持原样并如实报错（不静默降级——状态命令仍显示旧态）。
+/// @ai-context: 模型文件由下载命令/分发先落位；本命令只做加载与换槽：成功 →
+///              槽位切 onnx（后续 reindex 按新引擎重嵌）；失败 → 槽位保持原样
+///              并如实报错。审查修复（2026-09-04）：模型解析（~25MB onnx）搬
+///              到 spawn_blocking——不在主线程/async 运行时上做秒级 CPU 工作。
 #[tauri::command]
-pub fn kb_embedding_load(state: State<'_, AppState>) -> Result<EmbeddingStatusView, String> {
+pub async fn kb_embedding_load(state: State<'_, AppState>) -> Result<EmbeddingStatusView, String> {
     let dir = state.model_dir.join(EMBEDDING_MODEL_REL);
-    let engine = crate::kb_embed_onnx::OnnxEmbedding::try_load(&dir)?;
+    let dir_for_load = dir.clone();
+    let engine = tauri::async_runtime::spawn_blocking(move || {
+        crate::kb_embed_onnx::OnnxEmbedding::try_load(&dir_for_load)
+    })
+    .await
+    .map_err(|e| format!("引擎加载任务调度失败: {e}"))??;
     let mut slot = state
         .embedding_slot
         .lock()

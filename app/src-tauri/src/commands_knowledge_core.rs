@@ -64,7 +64,10 @@ pub fn add_knowledge_concept(
     boundary: Option<String>,
     relation: Option<String>,
 ) -> Result<KnowledgeConcept, String> {
-    add_knowledge_concept_inner(&state.db, system_id, name, essence, boundary, relation)
+    let c = add_knowledge_concept_inner(&state.db, system_id, name, essence, boundary, relation)?;
+    // REQ-278 审查补端：概念新增 → 广播 knowledge 域（体系页/检索跨页刷新）
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Knowledge);
+    Ok(c)
 }
 
 /// 更新概念可选字段（name 归一化 + 查重；status 白名单），返回更新后实体。
@@ -81,7 +84,10 @@ pub fn update_knowledge_concept(
     relation: Option<String>,
     status: Option<String>,
 ) -> Result<KnowledgeConcept, String> {
-    update_knowledge_concept_inner(&state.db, id, name, essence, boundary, relation, status)
+    let c = update_knowledge_concept_inner(&state.db, id, name, essence, boundary, relation, status)?;
+    // REQ-278 审查补端：概念更新 → 广播 knowledge 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Knowledge);
+    Ok(c)
 }
 
 /// 列出概念（体系/状态过滤可选）。
@@ -110,7 +116,10 @@ pub fn add_knowledge_model(
     valid_when: Option<String>,
     invalid_when: Option<String>,
 ) -> Result<KnowledgeModel, String> {
-    add_knowledge_model_inner(&state.db, system_id, name, disciplines, claim, valid_when, invalid_when)
+    let m = add_knowledge_model_inner(&state.db, system_id, name, disciplines, claim, valid_when, invalid_when)?;
+    // REQ-278 审查补端：模型新增 → 广播 knowledge 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Knowledge);
+    Ok(m)
 }
 
 /// 更新模型可选字段（disciplines 同 add 校验），返回更新后实体。
@@ -130,7 +139,10 @@ pub fn update_knowledge_model(
     invalid_when: Option<String>,
     status: Option<String>,
 ) -> Result<KnowledgeModel, String> {
-    update_knowledge_model_inner(&state.db, id, name, disciplines, claim, valid_when, invalid_when, status)
+    let m = update_knowledge_model_inner(&state.db, id, name, disciplines, claim, valid_when, invalid_when, status)?;
+    // REQ-278 审查补端：模型更新 → 广播 knowledge 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Knowledge);
+    Ok(m)
 }
 
 /// 列出体系内模型。

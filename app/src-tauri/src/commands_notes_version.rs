@@ -50,6 +50,8 @@ pub fn note_versions_rollback(
         .db
         .rollback_to(note_id, target_version_id)
         .map_err(|e| e.to_string())?;
+    // REQ-278 审查补端：回滚 = 笔记内容变更（版本链新枝）→ 广播 notes 域
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
     state
         .db
         .get_note(note_id)

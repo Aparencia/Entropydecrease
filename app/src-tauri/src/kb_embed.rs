@@ -5,9 +5,11 @@
 //!              `NULL = 未嵌`（无引擎自动降级 FTS-only——不阻塞任何读路径）。
 //!              本模块=引擎无关的纯层：trait 契约 + Noop 兜底 + 向量编解码 +
 //!              余弦 top-K（读路径的本地语义检索无需任何外部依赖即可单测）。
-//! @ai-context: Onnx/Ollama 具体引擎后续模块实现（OnnxEmbedding 需 ort + 模型
-//!              文件 + BERT 分词——模型分发复用 model_registry）；本模块红线：
-//!              引擎产物只是派生索引材料，绝不写结构层（人工裁决闸门铁律）。
+//! @ai-context: 实现现状（v0.19.5）：OnnxEmbedding（kb_embed_onnx）+ Noop
+//!              兜底 + 词法降级链全接线（选型=内嵌 ONNX bge-small-zh-v1.5）；
+//!              OllamaEmbedding 为同一 trait 的未来实现位（设计 §六 备选，
+//!              用户自装零分发——本批不做）。本模块红线：引擎产物只是派生
+//!              索引材料，绝不写结构层（人工裁决闸门铁律）。
 //! 注意：本模块公共 API 已全部接线（槽/契约/编解码/余弦/元数据键——
 //! 读侧 kb_search_semantic，写侧 kb_embed_store）。
 

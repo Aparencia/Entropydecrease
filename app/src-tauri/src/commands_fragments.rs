@@ -220,10 +220,14 @@ pub fn promote_fragment_to_note(
             return Err(format!("笔记组不存在: {}", gid));
         }
     }
-    state
+    let note = state
         .db
         .promote_fragment_to_note(&state.data_dir, fragment_id, &title, group_id)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    // REQ-278 审查补端：碎片升笔记 = 笔记新增 + 组内容/计数变化（碎片移出）
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::NoteGroups);
+    Ok(note)
 }
 
 /// 碎片图片 → 本地绝对路径（前端 convertFileSrc 消费；REQ-201 缩略图）。

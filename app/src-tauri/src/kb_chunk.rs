@@ -4,14 +4,15 @@
 //!              转写/OCR 原料不入索引（噪声毁检索质量，ADR-029 决策 2）。
 //!              节级粒度（heading-aware）：按 markdown 标题行切块，记录
 //!              (heading, char_start, char_end) 供命中溯源/跳转定位；
-//!              ≤800 字符硬切（embedding 512 窗的安全余量——v0.19.3 语义批
-//!              的预留上界；中英文同口径按字符计）。
+//!              ≤800 字符硬切（2026-09-04 审查勘误：中文约 1 字符/token，
+//!              800 字可超 bge 512 token 窗——超窗尾段由分词器截断不入向量，
+//!              词法检索不受影响；收紧本上界需同步 kb_chunk_tests golden）。
 //! @ai-context: 纯函数零副作用——TDD golden 先例（chapter_detect/
 //!              note_filter 同款）；行切分依据 split_inclusive('\n')，切块
 //!              text 恒等于源文本的连续切片（char 区间与内容严格对应）。
 
-/// 单块硬切字符上界（800——embedding 窗 512 token 的 2 字/token 保守换算余量；
-/// 超长单段循环硬切，不吞内容）。
+/// 单块硬切字符上界（800——2026-09-04 勘误注释见模块头：中文 1 字符/token
+/// 可超 512 窗，尾段由分词器截断；超长单段循环硬切，不吞内容）。
 pub const HARD_CHUNK_CHARS: usize = 800;
 
 /// 切块结果（source_id/embedding 由索引层补，本层只管文本切分）。

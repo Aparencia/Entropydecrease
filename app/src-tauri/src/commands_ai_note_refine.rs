@@ -152,6 +152,12 @@ pub fn ai_note_refine_apply(
     if cur.content != result.base_markdown {
         return Err("笔记内容已在你精修后被修改——请重新精修（当前版本未被覆盖，可先行查看）".to_string());
     }
+    // 审查修复（2026-09-04）：采纳守卫前置于任何写库（重复采纳防重复版本+usage）
+    if let Some(tid) = task_id {
+        if state.db.is_ai_task_adopted(tid) {
+            return Err("该任务结果已采纳落库——请勿重复采纳（可到笔记页查看）".to_string());
+        }
+    }
     let cost = crate::ai_cost::usage_cost_for_model(
         result.base_markdown.chars().count(),
         result.refined_markdown.chars().count(),
@@ -182,9 +188,6 @@ pub fn ai_note_refine_apply(
         )
         .map_err(|e| e.to_string())?;
     if let Some(tid) = task_id {
-        if state.db.is_ai_task_adopted(tid) {
-            return Err("该任务结果已采纳落库——请勿重复采纳（可到笔记页查看）".to_string());
-        }
         let _ = state.db.mark_ai_task_adopted(tid);
         let _ = state.db.update_ai_task_cost(tid, cost);
     }
