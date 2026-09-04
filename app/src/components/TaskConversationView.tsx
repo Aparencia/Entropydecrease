@@ -9,7 +9,8 @@
  *              入库）；旧任务无轨迹 → 诚实提示"升级前任务无轨迹存档"。
  */
 import { useState } from "react";
-import type { AiTaskRecord, AiTurn } from "../types";
+import { invoke } from "@tauri-apps/api/core";
+import type { AiEnrichResult, AiTaskRecord, AiTurn } from "../types";
 import ChatMessageMarkdown, { truncatePreview } from "./ChatMessageMarkdown";
 
 interface Props {
@@ -23,6 +24,8 @@ interface Props {
   busy: boolean;
   /** v0.16.1：工作台深链（会话页自动展开精修工作台；缺省=不显示按钮） */
   onOpenWorkbench?: (task: AiTaskRecord) => void;
+  /** REQ-274：任务状态变化（如补充就地采纳成功）后父层刷新（缺省=无） */
+  onTaskChanged?: () => void;
 }
 
 function fmtDateTime(unix: number): string {
@@ -39,12 +42,34 @@ const STATE_LABEL: Record<string, { text: string; color: string }> = {
   partial_failed: { text: "部分成功", color: "#b45309" },
 };
 
-export default function TaskConversationView({ task, turns, refTitle, onOpenSession, onOpenNote, onRetry, busy, onOpenWorkbench }: Props) {
+export default function TaskConversationView({ task, turns, refTitle, onOpenSession, onOpenNote, onRetry, busy, onOpenWorkbench, onTaskChanged }: Props) {
   const [openResult, setOpenResult] = useState(false);
   const [openTurns, setOpenTurns] = useState<Record<number, boolean>>({});
+  // REQ-274：补充任务就地采纳（对话/面板内闭环——不再必须去任务中心）
+  const [adoptBusy, setAdoptBusy] = useState(false);
+  const [adoptMsg, setAdoptMsg] = useState("");
   const st = STATE_LABEL[task.state] ?? { text: task.state, color: "#6b7280" };
   const isRefine = task.opType === "refine";
   const canRetry = !busy && task.state === "failed" && isRefine;
+
+  /** 补充采纳（ai_enrich_apply 同 AiTaskPanel 采纳序列；成功后父层刷新 adopted） */
+  const adoptEnrich = async () => {
+    if (task.refId <= 0) return;
+    setAdoptBusy(true);
+    setAdoptMsg("");
+    try {
+      const result = await invoke<AiEnrichResult>("ai_enrich_result", { taskId: task.taskId });
+      await invoke<{ id: number }>("ai_enrich_apply", {
+        noteId: task.refId, result, taskId: task.taskId,
+      });
+      setAdoptMsg("✅ 已采纳落库——可在笔记页查看版本时间线");
+      onTaskChanged?.();
+    } catch (e) {
+      setAdoptMsg(`采纳失败：${e}`);
+    } finally {
+      setAdoptBusy(false);
+    }
+  };
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "16px 20px" }}>
@@ -103,6 +128,17 @@ export default function TaskConversationView({ task, turns, refTitle, onOpenSess
               🛠 打开精修工作台 →
             </button>
           )}
+          {!isRefine && task.state === "succeeded" && !task.adopted && task.refId > 0 && (
+            <button
+              data-testid="enrich-adopt-inline"
+              onClick={() => void adoptEnrich()}
+              disabled={adoptBusy}
+              title="把补充结果采纳为该笔记的新版本（可到笔记页版本时间线对比/回滚）"
+              style={{ fontSize: 12, padding: "2px 10px", borderRadius: 6, border: "1px solid #0d9488", background: "#f0fdfa", color: "#0f766e", cursor: adoptBusy ? "default" : "pointer" }}
+            >
+              {adoptBusy ? "采纳中…" : "✅ 采纳到笔记"}
+            </button>
+          )}
           {task.state === "failed" && (
             <button
               onClick={() => onRetry(task)}
@@ -116,6 +152,13 @@ export default function TaskConversationView({ task, turns, refTitle, onOpenSess
         </div>
         {task.state === "failed" && task.error && (
           <div style={{ marginTop: 6, fontSize: 12, color: "#b91c1c", background: "#fef2f2", borderRadius: 6, padding: "4px 8px" }}>{task.error}</div>
+        )}
+        {adoptMsg && (
+          <div style={{
+            marginTop: 6, fontSize: 12, borderRadius: 6, padding: "4px 8px",
+            color: adoptMsg.startsWith("✅") ? "#047857" : "#b91c1c",
+            background: adoptMsg.startsWith("✅") ? "#ecfdf5" : "#fef2f2",
+          }}>{adoptMsg}</div>
         )}
       </div>
 

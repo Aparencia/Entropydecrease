@@ -38,6 +38,9 @@ interface Props {
   focusTaskId?: number | null;
   /** v0.16.1：focusTaskId 消费完成回调（App 清空——防陈旧值跨导航复触发） */
   onFocusTaskConsumed?: () => void;
+  /** REQ-274：对话面板「在对话页继续」→ 直达该会话（消费后回调清空） */
+  focusChatId?: number | null;
+  onFocusChatConsumed?: () => void;
   /** v0.16.1：任务视图 → 精修工作台深链（App 切会话页并自动展开） */
   onOpenRefineWorkbench?: (sessionId: number, taskId: number) => void;
 }
@@ -54,7 +57,7 @@ const CLOUD_NOTICE_TEXT =
   "对话内容（纯文本）将发送至所选模型的云端服务商；本地音视频/图片/笔记永不出本机。是否同意？";
 
 export default function ChatPage(props: Props) {
-  const { onOpenSessions, onOpenNote, onOpenNoteHighlight, onOpenSettings, focusTaskId, onFocusTaskConsumed, onOpenRefineWorkbench } = props;
+  const { onOpenSessions, onOpenNote, onOpenNoteHighlight, onOpenSettings, focusTaskId, onFocusTaskConsumed, focusChatId, onFocusChatConsumed, onOpenRefineWorkbench } = props;
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [tasks, setTasks] = useState<AiTaskRecord[]>([]);
   const [providers, setProviders] = useState<AiProviderView[]>([]);
@@ -183,6 +186,13 @@ export default function ChatPage(props: Props) {
     void selectTask(focusTaskId);
     onFocusTaskConsumed?.();
   }, [focusTaskId, selectTask, onFocusTaskConsumed]);
+
+  // REQ-274：对话面板「在对话页继续」→ 选中该会话（消费后清空防重复触发）
+  useEffect(() => {
+    if (focusChatId == null) return;
+    void selectChat(focusChatId);
+    onFocusChatConsumed?.();
+  }, [focusChatId, selectChat, onFocusChatConsumed]);
 
   const newChat = useCallback(async (retrieval = false) => {
     // v0.19.1（REQ-260）：retrieval=true = 学习库问答模式（每会话模式——创建时定死）
@@ -487,6 +497,7 @@ export default function ChatPage(props: Props) {
             onOpenNote={onOpenNote}
             onRetry={(t) => void retryTask(t)}
             busy={retryBusy}
+            onTaskChanged={() => void reloadTasks()}
             // v0.16.1：精修成功任务 → 会话页工作台深链；v0.17.0 审查修复：
             // 笔记级任务（targetKind=note）→ 直接查看笔记（ref_id=noteId，
             // 会话页深链会错目标）

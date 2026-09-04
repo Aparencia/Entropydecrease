@@ -24,6 +24,8 @@ import SettingsPage from "./pages/SettingsPage";
 import KnowledgePage from "./pages/KnowledgePage";
 // v0.18.0：学习目标页（意图层——独立 Tab，零叙事元素）
 import GoalsPage from "./pages/GoalsPage";
+// REQ-274（v0.19.4）：全局 AI 对话面板（丙案——按需唤起 + 内容保活）
+import AiConversationDock from "./components/AiConversationDock";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import CaptureFloatPanel from "./components/CaptureFloatPanel";
 import CaptureOverlayPanel from "./components/CaptureOverlayPanel";
@@ -84,6 +86,9 @@ function App() {
   // 任务进入对话页（会话页精修启动 → AI 对话页选中该任务）
   const [focusRefineTaskId, setFocusRefineTaskId] = useState<number | null>(null);
   const [focusChatTaskId, setFocusChatTaskId] = useState<number | null>(null);
+  // REQ-274：对话面板开合 + 「在对话页继续」直达会话（消费后清空）
+  const [dockOpen, setDockOpen] = useState(false);
+  const [focusChatId, setFocusChatId] = useState<number | null>(null);
   // 全局采集状态（ADR-007：与页面解耦，徽标常驻导航栏）
   const [capturing, setCapturing] = useState(false);
   const [recovering, setRecovering] = useState(false);
@@ -192,6 +197,19 @@ function App() {
     };
   }, []);
 
+  // REQ-274：对话面板本地快捷键 Ctrl+Shift+A（v1 本地 window 级——全局
+  // 快捷键随插件能力后续升级）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === "A" || e.key === "a")) {
+        e.preventDefault();
+        setDockOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     // v0.8.0 真机白屏防御（2026-08-21）：全局错误边界——渲染异常显示错误
     // 卡片而非整树卸载白屏；console 打印调用栈便于定位（AppErrorBoundary）
@@ -231,6 +249,21 @@ function App() {
             {item.label}
           </button>
         ))}
+        {/* REQ-274：全局 AI 对话面板入口（按需唤起；Ctrl+Shift+A 等效） */}
+        <button
+          data-testid="dock-toggle"
+          onClick={() => setDockOpen((v) => !v)}
+          title="AI 任务对话面板（Ctrl+Shift+A）"
+          style={{
+            marginLeft: "auto",
+            padding: "6px 12px", fontSize: 12, cursor: "pointer",
+            border: dockOpen ? "1px solid #4f46e5" : "1px solid #d1d5db",
+            background: dockOpen ? "#eef2ff" : "#fff",
+            color: dockOpen ? "#3730a3" : "#374151", borderRadius: 8,
+          }}
+        >
+          🤖 对话面板
+        </button>
         {/* 全局采集徽标（ADR-007）：切页/最小化后仍可见采集状态；2026-08 A1 暂停态 */}
         {capturing && (
           <span
@@ -329,6 +362,9 @@ function App() {
             // v0.16.1：任务进入对话页（会话页精修启动自动跳转）；任务视图 → 工作台深链
             focusTaskId={focusChatTaskId}
             onFocusTaskConsumed={() => setFocusChatTaskId(null)}
+            // REQ-274：对话面板「在对话页继续」直达会话（消费后清空）
+            focusChatId={focusChatId}
+            onFocusChatConsumed={() => setFocusChatId(null)}
             onOpenRefineWorkbench={(sessionId, taskId) => {
               setFocusSessionId(sessionId);
               setFocusRefineTaskId(taskId);
@@ -355,6 +391,20 @@ function App() {
           <SettingsPage active={page === "settings"} />
         </div>
       </main>
+      {/* REQ-274：全局 AI 对话面板（常驻挂载——开合仅切 display，选中态/后台任务保活） */}
+      <AiConversationDock
+        open={dockOpen}
+        onClose={() => setDockOpen(false)}
+        onOpenChat={(chatId) => { setFocusChatId(chatId); setPage("chat"); }}
+        onOpenTaskInChat={(taskId) => { setFocusChatTaskId(taskId); setPage("chat"); }}
+        onOpenSessions={(id) => { setFocusSessionId(id); setPage("sessions"); }}
+        onOpenNote={(id) => openNotePlain(id)}
+        onOpenRefineWorkbench={(sessionId, taskId) => {
+          setFocusSessionId(sessionId);
+          setFocusRefineTaskId(taskId);
+          setPage("sessions");
+        }}
+      />
       </div>
     </AppErrorBoundary>
   );
