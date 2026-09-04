@@ -29,6 +29,18 @@ export interface KbIndexStats {
   lastError: string | null;
 }
 
+/**
+ * 本地语义引擎状态视图（Rust EmbeddingStatusView camelCase 契约——kb_embedding_
+ * status/load/download 的载荷：noop=未配置；onnx=就绪；detail 人读摘要）。
+ */
+export interface EmbeddingStatusView {
+  kind: string;
+  ready: boolean;
+  dim: number | null;
+  modelDir: string;
+  detail: string;
+}
+
 /** 全量重建报告（Done 帧载荷） */
 export interface KbReindexReport {
   sourcesTotal: number;

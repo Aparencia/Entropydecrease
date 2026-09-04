@@ -41,7 +41,13 @@ export default function TaskLaunchDialog({ kind, sessions, notes, initialTargetI
   const [status, setStatus] = useState("");
   const isRefine = kind === "refine";
   const rows = isRefine ? sessions : notes;
-  const targetTitle = useMemo(() => rows.find((r) => r.id === targetId)?.title ?? "", [rows, targetId]);
+  // 低1（审查裸号）：确认框标题与下拉 options 同源（refLabel 语义占位——
+  // 缺标题「未命名会话/笔记」，绝不回退裸 `#数字`；旧实现 targetTitle 空时
+  // 用 `#${targetId}` 兜底，违背 REQ-277 全站口径）
+  const targetTitle = useMemo(
+    () => refLabel(isRefine ? "session" : "note", rows.find((r) => r.id === targetId)?.title, isRefine ? "未命名会话" : "未命名笔记"),
+    [rows, targetId, isRefine],
+  );
 
   // 目标清单为空时提示（无会话/无笔记）
   useEffect(() => {
@@ -70,7 +76,7 @@ export default function TaskLaunchDialog({ kind, sessions, notes, initialTargetI
       const cost = est?.estimate?.estCostYuan;
       const estText = cost != null ? `预估费用 ¥${Number(cost).toFixed(4)}` : "费用未知（可到任务中心查看）";
       const ok2 = await confirm(
-        `启动${isRefine ? " AI 精修" : " AI 知识补充"}「${targetTitle || `#${targetId}`}」？\n${estText}`,
+        `启动${isRefine ? " AI 精修" : " AI 知识补充"}「${targetTitle}」？\n${estText}`,
         { title: "熵减 · AI 任务", kind: "warning" },
       );
       if (!ok2) { setBusy(false); return; }

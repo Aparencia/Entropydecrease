@@ -13,6 +13,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiEnrichResult, AiRefineResult, AiTaskRecord } from "../types";
+// 低5（审查）：类别词经 entityLabel.kindWord 单一来源（不带 id 的语义词）
+import { kindWord } from "../utils/entityLabel";
 
 const btn: React.CSSProperties = { padding: "3px 8px", fontSize: 11, borderRadius: 5, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" };
 
@@ -149,7 +151,7 @@ export default function AiTaskPanel() {
                   {badge.text}
                 </span>
                 <span style={{ color: "#374151", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {t.opType === "refine" ? "会话" : "笔记"}
+                  {kindWord(t.opType === "refine" ? "session" : "note")}
                   {t.model && <span style={{ color: "#9ca3af" }}> · {t.model}</span>}
                 </span>
                 <span style={{ color: "#9ca3af", width: 52, textAlign: "right" }}>{fmtMs(t.elapsedMs)}</span>

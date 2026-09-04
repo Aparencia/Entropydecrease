@@ -130,7 +130,11 @@ export default function NoteAiDialog({
           <>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <span style={{ fontWeight: 600, fontSize: 14, color: "#374151" }}>🤖 AI 能力</span>
-              <span style={{ fontSize: 11, color: "#9ca3af" }}>笔记 #{noteId}</span>
+              <span style={{ fontSize: 11, color: "#9ca3af" }}>
+                {/* 信息9（审查裸号）：本对话框未传标题上下文（仅 noteId/content）——
+                    中性「当前笔记」不裸显 #id（REQ-277 口径） */}
+                当前笔记
+              </span>
               <button style={{ ...smallBtn, border: "1px solid #d1d5db", background: "#fff" }} onClick={handleClose}>✕</button>
             </div>
             <button style={{ ...menuBtn, background: "#f5f3ff", border: "1px solid #c7d2fe" }} onClick={() => setKind("refine")}>

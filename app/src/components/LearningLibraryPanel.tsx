@@ -6,22 +6,14 @@
  *              库问答生成」开关 + 预算档位（双闸门之二，默认关——命中列表
  *              不受其约束）；③索引统计/全量重建（脏源/失败角标可见 + 重建兜
  *              底；进度经 Channel 事件流——与聊天流同构）；④v0.19.5（REQ-259/
- *              REQ-262）：本地语义引擎治理——状态/下载（hf-mirror 双源）/
- *              加载（换槽）/重建回填引导。
+ *              REQ-262）：本地语义引擎治理整块迁至 LearningLibraryEngineSection
+ *              （低4 审查拆分——状态/下载/加载/就绪徽标自管，本面板行数回归）。
  */
 import { useCallback, useEffect, useState } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type { AiSettingsView } from "../types/ai";
 import type { KbIndexStats, KbReindexEvent } from "../types/kb";
-
-/** kb_embedding_status/load 载荷（Rust EmbeddingStatusView camelCase 契约） */
-interface EmbeddingStatusView {
-  kind: string;
-  ready: boolean;
-  dim: number | null;
-  modelDir: string;
-  detail: string;
-}
+import LearningLibraryEngineSection from "./LearningLibraryEngineSection";
 
 const TIERS = [
   { id: "light", label: "轻量（~4K）" },
@@ -38,17 +30,6 @@ export default function LearningLibraryPanel({ active = true }: { active?: boole
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  // REQ-259（v0.19.5）：本地语义引擎状态（noop=未配置；onnx=就绪）
-  const [emb, setEmb] = useState<EmbeddingStatusView | null>(null);
-  const [engBusy, setEngBusy] = useState(false);
-
-  const loadEmb = useCallback(async () => {
-    try {
-      setEmb(await invoke<EmbeddingStatusView>("kb_embedding_status"));
-    } catch (e) {
-      setMsg({ kind: "err", text: `语义引擎状态读取失败: ${e}` });
-    }
-  }, []);
 
   const loadStats = useCallback(async () => {
     try {
@@ -75,8 +56,7 @@ export default function LearningLibraryPanel({ active = true }: { active?: boole
       }
     })();
     void loadStats();
-    void loadEmb();
-  }, [loadStats, loadEmb]);
+  }, [loadStats]);
 
   // 轻量轮询（审查 L2 修复）：设置页随应用常驻挂载（display:none 不卸载）——
   // 轮询只在页面可见时运行（对齐 SessionsPage active 门控先例；进入设置页即
@@ -165,37 +145,6 @@ export default function LearningLibraryPanel({ active = true }: { active?: boole
     stats != null &&
     (stats.dirtySources > 0 || (stats.errorCount > 0 || stats.indexVersion !== stats.currentIndexVersion));
 
-  /** REQ-259：加载本地语义引擎（换槽；成功后引导重建回填向量） */
-  const loadEngine = async () => {
-    if (engBusy) return;
-    setEngBusy(true);
-    setMsg(null);
-    try {
-      const v = await invoke<EmbeddingStatusView>("kb_embedding_load");
-      setEmb(v);
-      setMsg({ kind: "ok", text: v.detail });
-    } catch (e) {
-      setMsg({ kind: "err", text: `语义引擎加载失败: ${e}` });
-    } finally {
-      setEngBusy(false);
-    }
-  };
-
-  /** REQ-262：按需下载 bge 模型（model_quantized.onnx + vocab.txt） */
-  const downloadEngine = async () => {
-    if (engBusy) return;
-    setEngBusy(true);
-    setMsg(null);
-    try {
-      const text = await invoke<string>("kb_embedding_download");
-      setMsg({ kind: "ok", text });
-    } catch (e) {
-      setMsg({ kind: "err", text: `模型下载失败: ${e}` });
-    } finally {
-      setEngBusy(false);
-    }
-  };
-
   return (
     <div data-testid="learning-library-panel" style={{ padding: 8 }}>
       {/* 引擎状态（如实——FTS5 恒可用；语义引擎按槽位/回填态展示） */}
@@ -212,40 +161,9 @@ export default function LearningLibraryPanel({ active = true }: { active?: boole
         )}
       </div>
 
-      {/* v0.19.5（REQ-259/262）：本地语义引擎治理——状态 / 下载 / 加载 / 重建引导 */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8, fontSize: 11.5 }}>
-        <span style={{ fontWeight: 600, fontSize: 12, color: "#374151" }}>
-          🧬 本地语义引擎（bge-small-zh）
-        </span>
-        {emb?.ready ? (
-          <span data-testid="kb-emb-ready" style={{ color: "#047857" }}>
-            ✓ 就绪（dim={emb.dim}）
-          </span>
-        ) : (
-          <span data-testid="kb-emb-noop" style={{ color: "#9ca3af" }} title={emb?.modelDir ?? "模型目录未探测"}>
-            ○ {emb?.detail ?? "状态读取中…"}
-          </span>
-        )}
-        <span style={{ flex: 1 }} />
-        <button
-          data-testid="kb-emb-download"
-          onClick={() => void downloadEngine()}
-          disabled={engBusy || emb?.ready}
-          title="按需下载 model_quantized.onnx 与 vocab.txt（约 25MB，hf-mirror）"
-          style={{ fontSize: 12, cursor: emb?.ready || engBusy ? "default" : "pointer", padding: "3px 10px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", color: emb?.ready ? "#9ca3af" : "#374151" }}
-        >
-          {engBusy ? "处理中…" : emb?.ready ? "已下载" : "⬇ 下载模型"}
-        </button>
-        <button
-          data-testid="kb-emb-load"
-          onClick={() => void loadEngine()}
-          disabled={engBusy || emb?.ready}
-          title="从模型目录加载引擎并换槽（加载成功后点「🔄 全量重建」回填向量）"
-          style={{ fontSize: 12, cursor: emb?.ready || engBusy ? "default" : "pointer", padding: "3px 10px", borderRadius: 6, border: "1px solid #0d9488", background: emb?.ready ? "#f0fdfa" : "#fff", color: emb?.ready ? "#9ca3af" : "#0f766e" }}
-        >
-          {emb?.ready ? "已加载" : "▶ 加载引擎"}
-        </button>
-      </div>
+      {/* 本地语义引擎治理（低4 拆分：状态/下载/加载/msg 自管于独立组件——
+          面板只留语义徽标行 stats.embeddingReady 于上方原处） */}
+      <LearningLibraryEngineSection />
 
       {/* 生成开关 + 预算档位 */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>

@@ -10,10 +10,10 @@ describe("refLabel（标题优先，缺标题语义占位——绝不回退裸 #
     expect(refLabel("note", "  《CSS 入门》  ")).toBe("《CSS 入门》");
   });
 
-  it("缺标题 → 按类别默认占位（来源已删除语义）", () => {
-    expect(refLabel("session", null)).toBe("会话（来源已删除）");
-    expect(refLabel("note", undefined)).toBe("笔记（来源已删除）");
-    expect(refLabel("session", "  ")).toBe("会话（来源已删除）");
+  it("缺标题 → 按类别中性占位（未载入与已删除无法本地区分——不妄断）", () => {
+    expect(refLabel("session", null)).toBe("会话（标题不可用）");
+    expect(refLabel("note", undefined)).toBe("笔记（标题不可用）");
+    expect(refLabel("session", "  ")).toBe("会话（标题不可用）");
   });
 
   it("自定义 fallback 优先（未命名场景）", () => {

@@ -99,7 +99,19 @@ export default function TaskConversationView({ task, turns, refTitle, onOpenSess
         </div>
         {/* 可跳转引用（用户裁决：会话用可跳转引用） */}
         <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-          {isRefine && task.refId > 0 && (
+          {/* F6（0.19.5 审查）：来源跳转按 targetKind 分发——精修双入口（会话页
+              工作台 / 笔记级 AI 对话框）下 refId 语义不同：targetKind=note →
+              来源是笔记（跳会话页会扑空）；NULL=旧数据按会话语义兜底 */}
+          {isRefine && task.refId > 0 && task.targetKind === "note" && (
+            <button
+              onClick={() => onOpenNote(task.refId)}
+              style={{ fontSize: 12, padding: "2px 10px", borderRadius: 6, border: "1px solid #99f6e4", background: "#f0fdfa", color: "#0f766e", cursor: "pointer" }}
+              title={refTitle}
+            >
+              📌 来源笔记 →
+            </button>
+          )}
+          {isRefine && task.refId > 0 && task.targetKind !== "note" && (
             <button
               onClick={() => onOpenSession(task.refId)}
               style={{ fontSize: 12, padding: "2px 10px", borderRadius: 6, border: "1px solid #99f6e4", background: "#f0fdfa", color: "#0f766e", cursor: "pointer" }}

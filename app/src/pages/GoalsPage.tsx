@@ -40,21 +40,27 @@ export default function GoalsPage() {
     }
   }, []);
 
+  // F8（0.19.4/5 审查）：毕业档案独立重取函数——毕业动作把目标移出 list_goals
+  // 并新写快照，bus 回调只刷列表会漏掉档案区（毕业卡片不出现）；次要区降级
+  const loadArchives = useCallback(() => {
+    invoke<GraduationReport[]>("list_goal_graduations")
+      .then(setArchives)
+      .catch((e) => console.warn("[goal] 毕业档案加载失败（次要区降级）:", e));
+  }, []);
+
   useEffect(() => {
     void load();
     invoke<{ id: number; name: string }[]>("list_note_groups", { terrain: "container" })
       .then(setGroups)
       .catch((e) => setErr(`组列表加载失败: ${e}`));
-    // 毕业档案（独立于目标存在性；加载失败仅降级次要区——列表主链路不阻断）
-    invoke<GraduationReport[]>("list_goal_graduations")
-      .then(setArchives)
-      .catch((e) => console.warn("[goal] 毕业档案加载失败（次要区降级）:", e));
-  }, [load]);
+    loadArchives();
+  }, [load, loadArchives]);
 
   // REQ-278（v0.19.4 §5）：data:goals-changed 常驻订阅——目标进度/里程碑由
   // Rust 侧推进后（他页/任务流）列表现算聚合需重取；常驻理由：隐藏期事件
-  // 不漏收（切回即最新），防抖在 hook 内合并风暴
-  useDbRefresh(["goals"], () => void load());
+  // 不漏收（切回即最新），防抖在 hook 内合并风暴。
+  // F8：毕业档案与卡片列表一并刷新（毕业也是 goals 域变更）
+  useDbRefresh(["goals"], () => { void load(); loadArchives(); });
 
   const onCreated = () => {
     setDialog(null);

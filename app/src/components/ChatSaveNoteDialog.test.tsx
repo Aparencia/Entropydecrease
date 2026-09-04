@@ -45,7 +45,9 @@ describe("ChatSaveNoteDialog", () => {
         new: { title: "梯度下降", content, source: "manual" },
       });
     });
-    expect(screen.getByTestId("chat-note-saved").textContent).toContain("#99");
+    // 信息9（审查）：成功态去裸 `#id`——改标题语义回显（REQ-277 全站口径）
+    expect(screen.getByTestId("chat-note-saved").textContent).toContain("已保存为笔记《梯度下降》");
+    expect(screen.getByTestId("chat-note-saved").textContent).not.toContain("#");
   });
 
   it("选目标组 → group_id 直入 NewNote", async () => {

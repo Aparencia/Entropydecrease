@@ -131,15 +131,18 @@ export default function RefineStrategyPicker({
             </button>
           ))}
         </div>
-        {/* 自定义档：自由文本（空文本提示——后端按标准精修兜底） */}
+            {/* 自定义档：自由文本（空文本提示——后端按标准精修兜底） */}
         {isCustom && (
           <div style={{ marginTop: 6, border: "1px solid #e0e7ff", borderRadius: 8, padding: 8, background: "#fbfaff" }}>
-            <div style={{ fontSize: 11, color: "#3730a3", marginBottom: 4 }}>
-              自定义要求（写下你想要的精修程度/风格，将随提示词发送）
+            <div style={{ fontSize: 11, color: "#3730a3", marginBottom: 4, display: "flex", justifyContent: "space-between", gap: 8 }}>
+              <span>自定义要求（写下你想要的精修程度/风格，将随提示词发送）</span>
+              {/* 低2（审查）：maxLength 与 Rust MAX_CUSTOM_TEXT_CHARS=500 对齐——所见即所发 */}
+              <span style={{ color: "#9ca3af", flexShrink: 0 }}>≤500 字</span>
             </div>
             <textarea
               value={value.customText ?? ""}
               onChange={(e) => onChange(applyCustomText(value, e.target.value))}
+              maxLength={500}
               placeholder="例如：更口语一些，概念多用一个生活化例子解释；但技术术语保持原文…"
               style={{ width: "100%", minHeight: 56, fontSize: 12, fontFamily: "inherit",
                 border: "1px solid #d1d5db", borderRadius: 6, padding: 6, boxSizing: "border-box" }}

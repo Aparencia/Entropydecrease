@@ -85,7 +85,9 @@ export default function ChatSaveNoteDialog({ initialTitle, content, groups, onOp
         {savedId != null ? (
           <>
             <div data-testid="chat-note-saved" style={{ color: "#047857", marginBottom: 10 }}>
-              ✓ 已保存为笔记 #{savedId}（{title}）
+              {/* 信息9（审查裸号）：去 `#id`——成功态以标题语义回显（REQ-277）；
+                  title 恒非空（保存前置校验 + 默认值）——空时仅兜底不带书名号 */}
+              ✓ 已保存为笔记{title.trim() ? `《${title.trim()}》` : ""}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button

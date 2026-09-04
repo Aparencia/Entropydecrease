@@ -83,9 +83,15 @@ export default function ChatPage(props: Props) {
   const [noteRows, setNoteRows] = useState<LaunchTargetRow[]>([]);
   const activeChatRef = useRef<number | null>(null);
   activeChatRef.current = activeChatId;
+  // F3（审查竞态）：消息装载序号——并发装载只认最新（快速切会话时旧会话的
+  // 异步返回不得覆盖新会话消息；与 selectChat 的同步 set 无关，纯防错序）
+  const loadSeq = useRef(0);
 
   const loadMessages = useCallback(async (sessionId: number) => {
-    setMessages(await invoke<ChatMessage[]>("chat_list_messages", { sessionId }).catch(() => [] as ChatMessage[]));
+    const my = ++loadSeq.current;
+    const msgs = await invoke<ChatMessage[]>("chat_list_messages", { sessionId }).catch(() => [] as ChatMessage[]);
+    if (my !== loadSeq.current) return; // 已有更新的装载——丢弃陈旧结果
+    setMessages(msgs);
   }, []);
 
   /** 流终态 → 刷新消息（仅当终态会话仍为当前展示——旧流后台完成不打扰） */
@@ -497,7 +503,9 @@ export default function ChatPage(props: Props) {
             onOpenNote={onOpenNote}
             onRetry={(t) => void retryTask(t)}
             busy={retryBusy}
-            onTaskChanged={() => void reloadTasks()}
+            // F1（0.19.4 审查回写）：采纳成功后除刷新列表外重取当前任务详情——
+            // 详情里 adopted=true 才会让「✅ 采纳到笔记」按钮消失/「已采纳」徽标出现
+            onTaskChanged={() => { void reloadTasks(); if (activeTaskId != null) void selectTask(activeTaskId); }}
             // v0.16.1：精修成功任务 → 会话页工作台深链；v0.17.0 审查修复：
             // 笔记级任务（targetKind=note）→ 直接查看笔记（ref_id=noteId，
             // 会话页深链会错目标）

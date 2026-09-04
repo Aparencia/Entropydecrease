@@ -13,7 +13,7 @@
  *              批量 flush（requestAnimationFrame 合并同帧全部累积 delta 为
  *              单次 setView）。终态/切会话立即 flush 不残留。
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type { ChatStreamEvent, KbHit } from "../types";
 
@@ -39,6 +39,15 @@ export default function useChatStream(onSettled: StreamSettled) {
   const viewRef = useRef<number | null>(null);
   const onSettledRef = useRef(onSettled);
   onSettledRef.current = onSettled;
+
+  // I1（0.19.4/5 审查）：卸载时清掉全部挂起 rAF——帧回调再晚也不会落在已卸载
+  // 组件上（防悬挂句柄空转 + 卸载后 setState 的残留帧）；各会话即时 flush 路径不变
+  useEffect(() => {
+    return () => {
+      rafRef.current.forEach((rafId) => cancelAnimationFrame(rafId));
+      rafRef.current.clear();
+    };
+  }, []);
 
   const syncView = useCallback((sessionId: number) => {
     if (viewRef.current !== sessionId) return;
