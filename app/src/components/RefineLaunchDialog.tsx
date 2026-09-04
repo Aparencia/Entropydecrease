@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiSettingsView, BalanceView, RefineEstimateView, RefineStrategyMeta } from "../types";
 import {
-  draftFromPrefs, loadDraft, saveDraft, toOverride, type StrategyDraft,
+  draftFromPrefs, loadDraft, sanitizeDraft, saveDraft, toOverride, type StrategyDraft,
 } from "../utils/refineStrategy";
 import RefineStrategyPicker from "./RefineStrategyPicker";
 
@@ -59,8 +59,9 @@ export default function RefineLaunchDialog({
       setSettings(st);
       setMeta(mt);
       if (mt) {
-        // 记忆恢复优先，其次设置全局默认（draftFromPrefs 覆盖 standard 兜底）
-        const saved = loadDraft();
+        // 记忆恢复优先（REQ-279 净化：拒绝旧版污染的 standard 残留/空自定义），
+        // 其次设置全局默认（draftFromPrefs 覆盖 standard 兜底）
+        const saved = sanitizeDraft(loadDraft(), mt);
         setDraft(saved ?? draftFromPrefs(st?.refineStrategy, mt));
       }
       setEstimate(
@@ -99,6 +100,11 @@ export default function RefineLaunchDialog({
   /** 确认启动（策略随任务级覆盖传入；会话级/笔记级双命令） */
   const confirm = async () => {
     if (!draft) return;
+    // REQ-279 前端守卫：自定义档空文本 = 无效（后端会按标准精修兜底——先诚实提示）
+    if (draft.presetId === "custom" && !(draft.customText ?? "").trim()) {
+      setMsg("自定义档需先写下具体处理要求（或改选其它档位）");
+      return;
+    }
     setMsg("");
     setStarting(true);
     if (remember) {

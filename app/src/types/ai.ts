@@ -188,6 +188,8 @@ export interface RefineStrategyMeta {
 export interface StrategyOverride {
   presetId?: string | null;
   dims: Record<string, string>;
+  /** 自定义档自由文本（仅 presetId=custom 时有意义——REQ-279） */
+  customText?: string;
 }
 
 /** 全局策略偏好（Rust RefineStrategyPrefs；camelCase——设置页默认档位+逐维覆盖） */
@@ -200,6 +202,8 @@ export interface RefineStrategyPrefs {
 export interface RefineStrategyInfo {
   presetId: string;
   dims: Record<string, string>;
+  /** 自定义档自由文本（仅 preset=custom 时有值——溯源展示/重生成沿用，REQ-279） */
+  customText?: string | null;
 }
 
 // ────────────────────────────────────────────────────────────

@@ -212,6 +212,8 @@ export default function AiServicePanel() {
             meta={meta}
             value={strategyDraft ?? { presetId: "", dims: {} }}
             onChange={setStrategyDraft}
+            allowCustom={false}
+            showIntents={false}
           />
           {msg?.kind === "ok" && <div style={{ color: "#0d9488", marginTop: 6 }}>{msg.text}</div>}
         </div>

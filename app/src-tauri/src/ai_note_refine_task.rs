@@ -112,6 +112,8 @@ fn run_note_refine_inner(
             strategy: Some(crate::commands_ai_refine::RefineStrategyInfo {
                 preset_id: dims.preset_id.clone(),
                 dims: dims.dims.clone(),
+                // REQ-279：自定义档文本随结果落库（溯源/重生成沿用）
+                custom_text: if dims.custom_text.is_empty() { None } else { Some(dims.custom_text.clone()) },
             }),
         },
         turns,

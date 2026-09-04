@@ -42,7 +42,7 @@ fn deep_preset_injects_strategy_section() {
     let dims = resolve(
         &p,
         &RefineStrategyPrefs::default(),
-        Some(&StrategyOverride { preset_id: Some("deep".to_string()), dims: HashMap::new() }),
+        Some(&StrategyOverride { preset_id: Some("deep".to_string()), dims: HashMap::new(), custom_text: None }),
     );
     let s = strategy_instructions(&dims, &p);
     assert!(s.contains("深度改写"), "档级指令缺失: {}", s);
@@ -62,7 +62,7 @@ fn unknown_preset_falls_back_to_standard() {
     let dims = resolve(
         &p,
         &RefineStrategyPrefs::default(),
-        Some(&StrategyOverride { preset_id: Some("no-such".to_string()), dims: HashMap::new() }),
+        Some(&StrategyOverride { preset_id: Some("no-such".to_string()), dims: HashMap::new(), custom_text: None }),
     );
     assert_eq!(dims.preset_id, "standard");
     assert!(strategy_instructions(&dims, &p).is_empty());
@@ -77,6 +77,7 @@ fn invalid_dim_value_falls_back_to_declared_default() {
         Some(&StrategyOverride {
             preset_id: None,
             dims: dims_map(&[("examples", "bogus"), ("concept", "plain")]),
+            custom_text: None,
         }),
     );
     // bogus → 声明默认 standard；plain 合法保留
@@ -93,12 +94,13 @@ fn global_default_then_task_override_wins() {
     assert_eq!(d1.preset_id, "minimal");
     assert_eq!(d1.dims.get("examples").map(|s| s.as_str()), Some("condensed"));
     // 任务覆盖档位：深度覆盖极简
-    let d2 = resolve(&p, &prefs, Some(&StrategyOverride { preset_id: Some("deep".to_string()), dims: HashMap::new() }));
+    let d2 = resolve(&p, &prefs, Some(&StrategyOverride { preset_id: Some("deep".to_string()), dims: HashMap::new(), custom_text: None }));
     assert_eq!(d2.preset_id, "deep");
     // 单维覆盖只改目标维
     let d3 = resolve(&p, &prefs, Some(&StrategyOverride {
         preset_id: None,
         dims: dims_map(&[("emotion", "keep")]),
+        custom_text: None,
     }));
     assert_eq!(d3.preset_id, "minimal");
     assert_eq!(d3.dims.get("emotion").map(|s| s.as_str()), Some("keep"));
@@ -119,7 +121,7 @@ fn intent_meta_breaks_into_chips_and_keywords() {
 fn preview_system_contains_strategy_and_matches_real_build() {
     let p = NoteRefinePrompt::bundled();
     let prefs = RefineStrategyPrefs { default_ladder: "deep".to_string(), dim_overrides: HashMap::new() };
-    let over = StrategyOverride { preset_id: None, dims: dims_map(&[("examples", "condensed")]) };
+    let over = StrategyOverride { preset_id: None, dims: dims_map(&[("examples", "condensed")]), custom_text: None };
     let preview = preview_system(&p, "lecture", &prefs, Some(&over));
     let dims = resolve(&p, &prefs, Some(&over));
     // 预览与实发同一 build_system 路径（逐字节一致）
@@ -142,5 +144,95 @@ fn meta_serializes_declaration_with_all_intents() {
     for want in ["原文保真", "考点浓缩", "通俗转述", "速查纲要", "金句摘录"] {
         assert!(labels.contains(&want), "chips 书面命名缺失: {}（实得 {:?}）", want, labels);
     }
-    assert_eq!(meta.ladder_presets.len(), 4, "四档阶梯应齐全");
+    assert_eq!(meta.ladder_presets.len(), 5, "五档阶梯应齐全（REQ-279 新增自定义）");
+    assert!(meta.ladder_presets.iter().any(|l| l.id == "custom"), "custom 档应声明");
+}
+
+#[test]
+fn standard_ignores_legacy_global_overrides() {
+    // REQ-279 污染通道③后端兜底：standard 档不受全局逐维覆盖影响——
+    // 旧版 prefsFromDraft 曾把意图基准全维写入 dim_overrides，叠加后「标准」
+    // 语义漂移；后端对 standard 恒不叠加（与零覆盖解析逐字段等价）。
+    let p = NoteRefinePrompt::bundled();
+    let prefs = RefineStrategyPrefs {
+        default_ladder: String::new(),
+        dim_overrides: dims_map(&[("concept", "plain"), ("conclusion", "summary_top")]),
+    };
+    let dirty = resolve(&p, &prefs, None);
+    let clean = resolve(&p, &RefineStrategyPrefs::default(), None);
+    assert_eq!(dirty.preset_id, "standard");
+    assert_eq!(dirty, clean, "standard 必须与零覆盖逐字段等价（含指令与每维值）");
+    assert!(strategy_instructions(&dirty, &p).is_empty());
+    // 对照：显式阶梯档（deep）仍允许全局覆盖折叠（设置页默认偏好的语义保留）
+    let ladder_prefs = RefineStrategyPrefs {
+        default_ladder: "deep".to_string(),
+        dim_overrides: dims_map(&[("examples", "condensed")]),
+    };
+    let dl = resolve(&p, &ladder_prefs, None);
+    assert_eq!(dl.preset_id, "deep");
+    assert_eq!(dl.dims.get("examples").map(|s| s.as_str()), Some("condensed"));
+}
+
+#[test]
+fn custom_preset_free_text_becomes_instruction_and_surfaces_in_info() {
+    // REQ-279：自定义档自由文本 → 档级指令（预览/实发同路径可见）；无维度注入
+    let p = NoteRefinePrompt::bundled();
+    let dims = resolve(
+        &p,
+        &RefineStrategyPrefs::default(),
+        Some(&StrategyOverride {
+            preset_id: Some("custom".to_string()),
+            dims: HashMap::new(),
+            custom_text: Some("写得更口语一些，多举一个生活化例子。".to_string()),
+        }),
+    );
+    assert_eq!(dims.preset_id, "custom");
+    assert_eq!(dims.custom_text, "写得更口语一些，多举一个生活化例子。");
+    let s = strategy_instructions(&dims, &p);
+    assert!(s.contains("本次为自定义档"), "档级指令缺失: {}", s);
+    assert!(s.contains("生活化例子"), "自由文本未进指令: {}", s);
+    // 每维保持声明默认 → 无维度指令注入（纯文本档）
+    assert_eq!(dims.dims.get("conclusion").map(|s| s.as_str()), Some("as_is"));
+}
+
+#[test]
+fn custom_preset_empty_text_falls_back_to_standard() {
+    // 前端守卫 + 后端兜底统一口径：custom 无文本 = 无效 → standard（零变化）
+    let p = NoteRefinePrompt::bundled();
+    let dims = resolve(
+        &p,
+        &RefineStrategyPrefs::default(),
+        Some(&StrategyOverride {
+            preset_id: Some("custom".to_string()),
+            dims: HashMap::new(),
+            custom_text: Some("   ".to_string()),
+        }),
+    );
+    assert_eq!(dims.preset_id, "standard");
+    assert!(dims.custom_text.is_empty());
+    assert!(strategy_instructions(&dims, &p).is_empty());
+}
+
+#[test]
+fn custom_preset_ignores_global_overrides_and_caps_text_length() {
+    // 净化：custom 与 standard 同属「用户显式文本」档——全局残留不得叠加；
+    // 自由文本 500 字符截断（防提示词膨胀）
+    let p = NoteRefinePrompt::bundled();
+    let long: String = "a".repeat(1200);
+    let prefs = RefineStrategyPrefs {
+        default_ladder: String::new(),
+        dim_overrides: dims_map(&[("concept", "plain")]),
+    };
+    let dims = resolve(
+        &p,
+        &prefs,
+        Some(&StrategyOverride {
+            preset_id: Some("custom".to_string()),
+            dims: HashMap::new(),
+            custom_text: Some(long),
+        }),
+    );
+    assert_eq!(dims.preset_id, "custom");
+    assert_eq!(dims.custom_text.chars().count(), crate::ai_strategy::MAX_CUSTOM_TEXT_CHARS);
+    assert_eq!(dims.dims.get("concept").map(|s| s.as_str()), Some("original"), "全局覆盖不得进 custom 档");
 }

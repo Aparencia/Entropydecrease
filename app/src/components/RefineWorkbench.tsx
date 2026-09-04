@@ -311,6 +311,15 @@ export default function RefineWorkbench({
             {strategyDimsChips(taskResult.strategy, strategyMeta).map((c) => (
               <span key={c} style={{ background: "#ede9fe", borderRadius: 999, padding: "1px 8px", color: "#5b21b6" }}>{c}</span>
             ))}
+            {/* REQ-279：自定义档自由文本随溯源展示（可追溯「按什么要求变的」） */}
+            {taskResult.strategy.customText?.trim() && (
+              <span style={{
+                background: "#e0e7ff", borderRadius: 999, padding: "1px 8px", color: "#3730a3",
+                maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }} title={taskResult.strategy.customText}>
+                要求：{taskResult.strategy.customText}
+              </span>
+            )}
             {taskId != null && (
               <button
                 style={{ ...headerBtn, border: "1px solid #c7d2fe", background: "#fff", color: "#4c1d95", marginLeft: 4 }}

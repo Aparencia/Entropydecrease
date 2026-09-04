@@ -84,14 +84,21 @@ pub struct RefineStrategyPrefs {
     pub dim_overrides: HashMap<String, String>,
 }
 
-/// 任务级覆盖（发起点传参：预设档位 id + 逐维覆盖——可整体换档或单维微调）。
+/// 任务级覆盖（发起点传参：预设档位 id + 逐维覆盖 + 自定义档自由文本——
+/// 可整体换档/单维微调/自定义描述；custom_text 仅 preset=自定义 时生效）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct StrategyOverride {
     pub preset_id: Option<String>,
     #[serde(default)]
     pub dims: HashMap<String, String>,
+    /// 自定义档的自由文本（REQ-279；空/None=未启用——后端回退 standard）
+    #[serde(default)]
+    pub custom_text: Option<String>,
 }
+
+/// 自定义档自由文本上限（字符；防御性边界——防提示词膨胀）
+pub const MAX_CUSTOM_TEXT_CHARS: usize = 500;
 
 /// 解析结果（每维最终值——Send+Clone，可跨任务线程；instruction=档级总体
 /// 指令，空=不追加）。
@@ -100,6 +107,8 @@ pub struct ResolvedDims {
     pub preset_id: String,
     pub instruction: String,
     pub dims: HashMap<String, String>,
+    /// 自定义档自由文本（仅 preset=custom 且非空时非空——溯源展示/重生成沿用）
+    pub custom_text: String,
 }
 
 /// 解析：任务覆盖 > 全局默认 > 内置 standard；非法值回退声明默认。
@@ -107,11 +116,27 @@ pub struct ResolvedDims {
 /// @ai-context: 防御性边界：未知档位 → 回退 standard 基准；未知维度 key →
 ///              丢弃；非法档值 → 该维回退声明 default。返回的 ResolvedDims
 ///              永远只含声明维度（每维必有值）。
+/// @ai-context: REQ-279 净化规则（所见即所发 + 标准恒纯净）：
+///              ① 任务显式给出档位时（含 standard/custom）一律不叠加全局逐维
+///                 覆盖——草稿已把用户可见的全部维度值经 dims 传入，后端不得
+///                 再隐式叠加任何残留；
+///              ② 未给显式档位（走全局默认）时仅当 default_ladder 显式非空
+///                 才折叠偏好覆盖——旧版意图基准污染形状（default_ladder=""
+///                 + 全维 overrides）被跳过；
+///              ③ custom 档无文本 → 整档回退 standard（零变化保证不破裂）。
 pub fn resolve(
     decl: &NoteRefinePrompt,
     global: &RefineStrategyPrefs,
     over: Option<&StrategyOverride>,
 ) -> ResolvedDims {
+    // 自定义文本先取先净化（首 500 字符——防膨胀）
+    let custom_text: String = over
+        .and_then(|o| o.custom_text.as_deref())
+        .unwrap_or("")
+        .trim()
+        .chars()
+        .take(MAX_CUSTOM_TEXT_CHARS)
+        .collect();
     // ① 基准档位：任务 preset > 全局默认 > "standard"
     let base_id = over
         .and_then(|o| o.preset_id.as_ref().filter(|s| !s.is_empty()).cloned())
@@ -120,22 +145,43 @@ pub fn resolve(
             if s.is_empty() { None } else { Some(s.to_string()) }
         })
         .unwrap_or_else(|| "standard".to_string());
-    let base = decl.ladder_presets.iter().find(|p| p.id == base_id);
-    let (preset_id, mut dims, instruction) = match base {
+    // custom 无文本 = 无效档（前端守卫 + 后端兜底统一口径：回退标准）
+    let effective_id =
+        if base_id == "custom" && custom_text.is_empty() { "standard" } else { base_id.as_str() };
+    let base = decl.ladder_presets.iter().find(|p| p.id == effective_id);
+    let (preset_id, mut dims, mut instruction) = match base {
         Some(p) => (p.id.clone(), p.dim_values.clone(), p.instruction.clone()),
         // 未知档位回退标准（零变化基准——不阻断）
         None => ("standard".to_string(), HashMap::new(), String::new()),
     };
-    // ② 全局逐维覆盖 ③ 任务级逐维覆盖（任务优先）
-    for (k, v) in &global.dim_overrides {
-        dims.insert(k.clone(), v.clone());
+    // ② 全局逐维覆盖：仅「无任务显式档位 + 全局默认档显式非空」时折叠——
+    //    任务显式档位一律不叠（所见即所发）；""+overrides = 旧版意图基准
+    //    污染形状（legacy），跳过（REQ-279 标准恒纯净后端兜底）
+    let has_explicit_task_preset = over
+        .and_then(|o| o.preset_id.as_ref().filter(|s| !s.is_empty()))
+        .is_some();
+    if !has_explicit_task_preset && !global.default_ladder.trim().is_empty() {
+        for (k, v) in &global.dim_overrides {
+            dims.insert(k.clone(), v.clone());
+        }
     }
+    // ③ 任务级逐维覆盖（任务优先）
     if let Some(o) = over {
         for (k, v) in &o.dims {
             dims.insert(k.clone(), v.clone());
         }
     }
-    ResolvedDims { preset_id, instruction, dims: validate_dims(decl, &dims) }
+    // custom 档：自由文本落为档级指令（dimValues 为空——无叠加维度指令）
+    if preset_id == "custom" {
+        instruction = format!("本次为自定义档：{}", custom_text);
+    }
+    let custom_text_owned = if preset_id == "custom" { custom_text } else { String::new() };
+    ResolvedDims {
+        preset_id,
+        instruction,
+        dims: validate_dims(decl, &dims),
+        custom_text: custom_text_owned,
+    }
 }
 
 /// 维度值干净化：仅保留声明维度；非法值/缺省 → 声明 default。

@@ -74,11 +74,14 @@ pub struct AiRefineResult {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RefineStrategyInfo {
-    /// 档位 id（standard/faithful/deep/minimal 或 intent:xxx——名称由前端
+    /// 档位 id（standard/faithful/deep/minimal/custom 或 intent:xxx——名称由前端
     /// 按 meta 声明解析，未知 id 原样展示——诚实不猜）
     pub preset_id: String,
     /// 每维最终值（key → value；chips 渲染源）
     pub dims: std::collections::HashMap<String, String>,
+    /// 自定义档自由文本（仅 preset=custom 时有值——溯源条/重生成沿用，REQ-279）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_text: Option<String>,
 }
 
 /// 任务句柄（前端轮询/事件对应用）。

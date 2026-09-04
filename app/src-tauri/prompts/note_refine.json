@@ -140,6 +140,13 @@
       "desc": "只留骨架：概念/步骤/结论",
       "instruction": "本次为极简提取档：每节只保留核心概念/步骤/结论，删除例子与铺垫，单节内容块不超过 3 个，直接呈现骨架。",
       "dimValues": { "examples": "condensed", "colloquial": "purified", "emotion": "drop", "conclusion": "as_is", "sections": "inherit" }
+    },
+    {
+      "id": "custom",
+      "name": "自定义",
+      "desc": "写下你的具体处理要求（REQ-279）",
+      "instruction": "",
+      "dimValues": {}
     }
   ],
   "intents": [
