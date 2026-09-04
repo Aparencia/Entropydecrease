@@ -262,6 +262,8 @@ mod kb_prompt;
 mod commands_ai_chat_kb;
 // v0.19.3（REQ-261）：检索建议（发现路径）——证据候选/跨体系相似提示
 mod kb_discovery;
+// REQ-259（v0.19.5）：kb 语义索引 embedding 契约与纯函数（编解码/cosine top-K）
+mod kb_embed;
 mod commands_kb_discovery;
 mod concept_weakness;
 mod goal_interview;

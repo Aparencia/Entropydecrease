@@ -1293,6 +1293,7 @@ dependencies = [
  "fsrs",
  "image",
  "oar-ocr",
+ "ort",
  "rusqlite",
  "serde",
  "serde_json",
