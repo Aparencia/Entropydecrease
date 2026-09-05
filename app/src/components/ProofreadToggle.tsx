@@ -7,10 +7,11 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
+/** AiSettingsView 响应结构（serde camelCase——proofreadEnabled 须 camel 读取） */
 interface AiSettingsView {
   enabled: boolean;
   authorized: boolean;
-  proofread_enabled: boolean;
+  proofreadEnabled: boolean;
 }
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6 };
@@ -25,7 +26,7 @@ export function ProofreadToggle() {
   useEffect(() => {
     void invoke<AiSettingsView>("ai_get_settings")
       .then((v) => {
-        setOn(v.proofread_enabled);
+        setOn(v.proofreadEnabled);
         setGlobalEnabled(v.enabled);
         setAuthorized(v.authorized);
       })
@@ -35,15 +36,14 @@ export function ProofreadToggle() {
   const toggle = async (next: boolean) => {
     setErr("");
     setMsg("");
-    if (next && !globalEnabled) {
-      setMsg("提示：还需开启上方「AI 功能」全局开关（默认关——授权红线）");
-    }
     try {
       await invoke("ai_set_proofread", { enabled: next });
       setOn(next);
-      setMsg(next ? "已开启文本校对（建议制：机器只给建议，由你裁决采纳）" : "已关闭文本校对（转写链路零影响）");
+      // 成功态与错误态分开：门未开属引导提示，附在成功文案后而非当错误
+      const gateHint = next && !globalEnabled ? "（提示：还需开启「AI 功能」全局开关方可生效——默认关授权红线）" : "";
+      setMsg(next ? `已开启文本校对（建议制：机器只给建议，由你裁决采纳）${gateHint}` : "已关闭文本校对（转写链路零影响）");
     } catch (e) {
-      setErr(String(e));
+      setErr(`切换失败: ${e}`);
     }
   };
 

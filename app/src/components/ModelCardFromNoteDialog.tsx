@@ -6,7 +6,7 @@
  *              笔记摘录草稿（应用案例留空——复习面/卡编辑完善）；笔记未归组
  *              → 后端引导先归组（组=唯一容器）。
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 interface Props {
@@ -40,6 +40,15 @@ export default function ModelCardFromNoteDialog({ noteId, noteTitle, onClose, on
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [created, setCreated] = useState(false);
+  // 成功后延迟关闭的 timer（unmount 清理——防已关闭后二次回调/泄漏）
+  const closeTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    };
+  }, []);
 
   const create = async () => {
     setBusy(true);
@@ -47,8 +56,10 @@ export default function ModelCardFromNoteDialog({ noteId, noteTitle, onClose, on
     try {
       await invoke("model_card_from_note", { noteId, name, excerpt: excerpt.trim() || null });
       setMsg("✓ 已建模型卡草稿（组内 model 卡；复习面/卡编辑可继续完善定义与应用案例）");
+      setCreated(true);
       onCreated?.();
-      setTimeout(onClose, 900);
+      // 成功后禁用按钮（含取消）防二次提交/先关后关；900ms 后自动关闭
+      closeTimerRef.current = window.setTimeout(onClose, 900);
     } catch (e) {
       setErr(String(e));
     } finally {
@@ -62,7 +73,7 @@ export default function ModelCardFromNoteDialog({ noteId, noteTitle, onClose, on
         <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
           <h3 style={{ margin: 0, fontSize: 15 }}>🧠 提炼模型卡草稿</h3>
           <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>来源：{noteTitle.slice(0, 24)}</span>
-          <button style={{ ...btn, marginLeft: "auto" }} onClick={onClose}>取消</button>
+          <button style={{ ...btn, marginLeft: "auto" }} onClick={onClose} disabled={created}>取消</button>
         </div>
         {msg && <div style={{ fontSize: 12, color: "#047857", marginBottom: 8 }}>{msg}</div>}
         {err && <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 8 }}>{err}</div>}
@@ -78,7 +89,9 @@ export default function ModelCardFromNoteDialog({ noteId, noteTitle, onClose, on
             <textarea value={excerpt} onChange={(e) => setExcerpt(e.target.value)} rows={4} placeholder="粘贴笔记中的模型表述（≤200 字）…" style={{ width: "100%", boxSizing: "border-box", fontSize: 12, border: "1px solid #e5e7eb", borderRadius: 4, padding: "4px 6px", resize: "vertical" }} />
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
-            <button style={btn} disabled={busy} onClick={() => void create()}>创建草稿</button>
+            <button style={btn} disabled={busy || created} onClick={() => void create()}>
+              {created ? "已创建，即将关闭…" : "创建草稿"}
+            </button>
           </div>
         </div>
       </div>

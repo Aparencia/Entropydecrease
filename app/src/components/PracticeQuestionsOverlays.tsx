@@ -9,25 +9,26 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
+/** 响应结构（PracticeItem/QuestionItem 均 serde camelCase——字段须 camel 读取） */
 interface PracticeView {
   id: number;
-  note_id: number | null;
-  kb_concept_id: number | null;
+  noteId: number | null;
+  kbConceptId: number | null;
   text: string;
   frequency: string;
   goal: string | null;
   mastery: number | null;
-  next_due: number | null;
+  nextDue: number | null;
   status: string;
 }
 interface QuestionView {
   id: number;
-  note_id: number | null;
-  kb_concept_id: number | null;
+  noteId: number | null;
+  kbConceptId: number | null;
   text: string;
   context: string | null;
   status: string;
-  answer_ref: string | null;
+  answerRef: string | null;
 }
 
 const overlayStyle: React.CSSProperties = {
@@ -109,7 +110,7 @@ export function PracticeOverlay({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const dueCount = items.filter((i) => i.next_due != null && i.next_due <= Math.floor(Date.now() / 1000)).length;
+  const dueCount = items.filter((i) => i.nextDue != null && i.nextDue <= Math.floor(Date.now() / 1000)).length;
 
   return shell("🎯 练习条目", `该练了 ${dueCount} · 闪卡之外第二条复利曲线（宽容缺勤只记史）`, onClose, (
     <>
@@ -133,7 +134,7 @@ export function PracticeOverlay({ onClose }: { onClose: () => void }) {
               <span style={{ fontSize: 10.5, color: "#9ca3af" }}>
                 {it.frequency === "daily" ? "每日" : "手动"}
                 {it.mastery != null ? ` · 熟练 ${it.mastery}/5` : ""}
-                {it.next_due != null ? ` · 下次 ${new Date(it.next_due * 1000).toLocaleDateString()}` : ""}
+                {it.nextDue != null ? ` · 下次 ${new Date(it.nextDue * 1000).toLocaleDateString()}` : ""}
               </span>
               <button style={okBtn} onClick={() => void tick(it)}>🎯 打点</button>
             </div>
@@ -237,7 +238,7 @@ export function QuestionsOverlay({ onClose }: { onClose: () => void }) {
             {answered.map((q) => (
               <div key={q.id} style={{ fontSize: 12, color: "#6b7280", display: "flex", gap: 6 }}>
                 <span>✓ {q.text}</span>
-                {q.answer_ref && <span style={{ fontSize: 10.5, color: "#9ca3af" }}>→ {q.answer_ref}</span>}
+                {q.answerRef && <span style={{ fontSize: 10.5, color: "#9ca3af" }}>→ {q.answerRef}</span>}
               </div>
             ))}
           </div>

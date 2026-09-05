@@ -14,38 +14,39 @@ import { invoke } from "@tauri-apps/api/core";
 import SopRunOverlay from "./SopRunOverlay";
 import { PracticeOverlay, QuestionsOverlay } from "./PracticeQuestionsOverlays";
 
+/** 响应结构（SopTemplate/ActionQueueRow/CompletionEvent 均 serde camelCase——字段须 camel 读取） */
 interface SopTemplateView {
   id: number;
-  note_id: number;
+  noteId: number;
   name: string;
-  start_line: number;
-  end_line: number;
+  startLine: number;
+  endLine: number;
   mode: string;
-  note_title: string;
+  noteTitle: string;
 }
 
 interface ActionRow {
   id: number;
-  note_id: number;
-  line_no: number;
+  noteId: number;
+  lineNo: number;
   text: string;
   status: string;
   unrefined: boolean;
-  plan_date: number | null;
+  planDate: number | null;
   disposition: string | null;
-  note_title: string;
+  noteTitle: string;
 }
 
 interface HistoryRow {
   id: number;
   ts: number;
-  event_type: string;
-  source_type: string;
-  source_id: number | null;
-  note_id: number | null;
+  eventType: string;
+  sourceType: string;
+  sourceId: number | null;
+  noteId: number | null;
   text: string;
   note: string | null;
-  meta_json: string | null;
+  metaJson: string | null;
 }
 
 interface Props {
@@ -324,7 +325,7 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
   /** 迁出=放手：复制 todo.txt 行到剪贴板（保底三件套之复制面） */
   const exportCopy = async (r: ActionRow) => {
     try {
-      const line = `[ ] ${r.text} (via:${r.note_title})`;
+      const line = `[ ] ${r.text} (via:${r.noteTitle})`;
       await navigator.clipboard.writeText(line);
       setMsg(`⤴ 已复制 todo.txt 行（外部完成后可到完成史手动回填）：${line}`);
     } catch (e) {
@@ -336,7 +337,7 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
     <div key={r.id} style={{ border: overdueFlag ? "1px solid #fca5a5" : "1px solid #e5e7eb", background: overdueFlag ? "#fff7f7" : "#fff", borderRadius: 6, padding: "6px 8px", display: "flex", flexDirection: "column", gap: 4 }}>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <span style={{ fontSize: 12.5, color: "#111827", flex: 1 }}>{r.text}</span>
-        <span style={{ fontSize: 10.5, color: "#9ca3af" }}>@{r.note_title}</span>
+        <span style={{ fontSize: 10.5, color: "#9ca3af" }}>@{r.noteTitle}</span>
         {overdueFlag && <span style={{ fontSize: 10.5, color: "#dc2626", fontWeight: 600 }}>逾期</span>}
       </div>
       {reasonFor === r.id && (
@@ -438,7 +439,7 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
                     <label key={r.id} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, cursor: "pointer", padding: "2px 4px", borderRadius: 4, background: checked.has(r.id) ? "#f5f3ff" : "transparent" }}>
                       <input type="checkbox" checked={checked.has(r.id)} onChange={() => toggleChecked(r.id)} />
                       <span style={{ color: "#111827" }}>{r.text}</span>
-                      <span style={{ fontSize: 10.5, color: "#9ca3af", marginLeft: "auto" }}>@{r.note_title}</span>
+                      <span style={{ fontSize: 10.5, color: "#9ca3af", marginLeft: "auto" }}>@{r.noteTitle}</span>
                     </label>
                   ))}
               </div>
@@ -460,7 +461,7 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
               {unrefined.length === 0 ? empty("无待提炼产物行") : unrefined.map((r) => (
                 <div key={r.id} style={{ border: "1px solid #e5e7eb", borderRadius: 6, padding: "6px 8px", display: "flex", gap: 6, alignItems: "center" }}>
                   <span style={{ fontSize: 12.5, flex: 1 }}>☑️ {r.text}</span>
-                  <span style={{ fontSize: 10.5, color: "#9ca3af" }}>@{r.note_title}</span>
+                  <span style={{ fontSize: 10.5, color: "#9ca3af" }}>@{r.noteTitle}</span>
                   <button style={{ ...okBtn, fontSize: 11 }} onClick={() => void refineUnrefined(r.id)}>提炼为任务行</button>
                 </div>
               ))}
@@ -471,8 +472,8 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
             {history.length === 0 ? empty("暂无完成记录——完成即证据，周回顾原料在此沉淀") : history.map((h) => (
               <div key={h.id} style={{ display: "flex", gap: 8, fontSize: 12, borderBottom: "1px solid #f3f4f6", padding: "4px 2px" }}>
                 <span style={{ color: "#9ca3af", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{fmtDate(h.ts)}</span>
-                <span style={{ color: h.event_type === "abandoned" ? "#dc2626" : "#0f766e", flexShrink: 0, width: 90 }}>
-                  {TYPE_LABEL[h.event_type] ?? h.event_type}
+                <span style={{ color: h.eventType === "abandoned" ? "#dc2626" : "#0f766e", flexShrink: 0, width: 90 }}>
+                  {TYPE_LABEL[h.eventType] ?? h.eventType}
                 </span>
                 <span style={{ flex: 1, color: "#374151" }}>{h.text}</span>
                 {h.note && <span style={{ fontSize: 11, color: "#9ca3af" }}>因：{h.note}</span>}
@@ -511,7 +512,7 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
                   <div key={t.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px" }}>
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                       <span style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{t.name}</span>
-                      <span style={{ fontSize: 11, color: "#9ca3af" }}>@{t.note_title} · 行 {t.start_line}–{t.end_line} · {t.mode === "confirm" ? "总览核对" : "逐步引导"}</span>
+                      <span style={{ fontSize: 11, color: "#9ca3af" }}>@{t.noteTitle} · 行 {t.startLine}–{t.endLine} · {t.mode === "confirm" ? "总览核对" : "逐步引导"}</span>
                       <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
                         <button style={okBtn} onClick={() => setActiveTemplate(t)}>▶ 执行</button>
                         <button style={ghostBtn} onClick={() => void fetchSuggestions(t.id)}>💡 修订建议</button>

@@ -10,13 +10,14 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
+/** WebCaptureView 响应结构（serde camelCase——字段须 camel 读取） */
 interface CaptureView {
-  session_id: number;
+  sessionId: number;
   title: string;
   site: string | null;
   author: string | null;
   chars: number;
-  extracted_ok: boolean;
+  extractedOk: boolean;
 }
 
 interface Props {
@@ -57,11 +58,11 @@ export default function WebImportPanel({ onOpenSessions, onStatus }: Props) {
     try {
       const view = await invoke<CaptureView>("web_capture_url", { url: u });
       setMsg(
-        `✓ 已采集「${view.title}」${view.extracted_ok ? `（正文 ${view.chars} 字符）` : "（正文抽取失败——已保留原 HTML 附件）"}${view.site ? ` · ${view.site}` : ""}`,
+        `✓ 已采集「${view.title}」${view.extractedOk ? `（正文 ${view.chars} 字符）` : "（正文抽取失败——已保留原 HTML 附件）"}${view.site ? ` · ${view.site}` : ""}`,
       );
       setUrl("");
       onStatus?.(`URL 采集完成：${view.title}`);
-      onOpenSessions?.(view.session_id);
+      onOpenSessions?.(view.sessionId);
     } catch (e) {
       setErr(String(e));
     } finally {

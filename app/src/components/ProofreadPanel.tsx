@@ -10,19 +10,20 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { RefineDraftView, SecondPassView } from "./SecondPassPanel";
 
+/** 响应结构（ProofreadEstimateView/ProofreadRunView 均 serde camelCase——字段须 camel 读取） */
 interface EstimateView {
   sentences: number;
   chars: number;
-  cost_yuan: number;
+  costYuan: number;
   model: string;
   capped: boolean;
 }
 
 interface RunView {
-  draft_count: number;
-  suggestions_received: number;
+  draftCount: number;
+  suggestionsReceived: number;
   chars: number;
-  cost_yuan: number;
+  costYuan: number;
   model: string;
   capped: boolean;
 }
@@ -70,17 +71,18 @@ export default function ProofreadPanel({ sessionId, onClose }: Props) {
   const [msg, setMsg] = useState("");
 
   const reload = useCallback(async () => {
-    try {
-      setErr("");
-      const [e, l] = await Promise.all([
-        invoke<EstimateView>("proofread_estimate", { sessionId }),
-        invoke<SecondPassView>("proofread_list", { sessionId }),
-      ]);
-      setEst(e);
-      setList(l);
-    } catch (e) {
-      setErr(`加载失败: ${e}`);
-    }
+    setErr("");
+    // allSettled：单侧失败仍刷新成功侧（run 完成消息不因刷新失败被吞）
+    const [eR, lR] = await Promise.allSettled([
+      invoke<EstimateView>("proofread_estimate", { sessionId }),
+      invoke<SecondPassView>("proofread_list", { sessionId }),
+    ]);
+    if (eR.status === "fulfilled") setEst(eR.value);
+    if (lR.status === "fulfilled") setList(lR.value);
+    const reasons = [eR, lR]
+      .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+      .map((r) => String(r.reason));
+    if (reasons.length > 0) setErr(`刷新失败: ${reasons.join("；")}`);
   }, [sessionId]);
 
   useEffect(() => {
@@ -95,17 +97,20 @@ export default function ProofreadPanel({ sessionId, onClose }: Props) {
     setBusy(true);
     setErr("");
     setMsg("校对进行中（仅文本上云；长会话分块多次请求）…");
+    let ok = false;
     try {
       const v = await invoke<RunView>("proofread_run", { sessionId, authorized: true });
+      ok = true;
       setMsg(
-        `校对完成：${v.suggestions_received} 条建议 → ${v.draft_count} 条待裁决草稿（预估 ¥${v.cost_yuan.toFixed(4)}）${v.capped ? "（超出 240 句部分未校对）" : ""}`,
+        `校对完成：${v.suggestionsReceived} 条建议 → ${v.draftCount} 条待裁决草稿（预估 ¥${v.costYuan.toFixed(4)}）${v.capped ? "（超出 240 句部分未校对）" : ""}`,
       );
-      await reload();
     } catch (e) {
       setErr(String(e));
       setMsg("");
     } finally {
       setBusy(false);
+      // 成功路径必刷新草稿列表；reload 内部容错（allSettled），刷新失败不吞完成消息
+      if (ok) await reload();
     }
   };
 
@@ -148,7 +153,7 @@ export default function ProofreadPanel({ sessionId, onClose }: Props) {
           <div style={{ fontSize: 12, color: "#374151" }}>
             候选句：<b>{est?.sentences ?? "…"}</b> 句（约 {est?.chars ?? "…"} 字符）
             {est?.capped ? <span style={{ color: "#b45309" }}>（已超 240 句护栏，超出部分本次不校对）</span> : ""}
-            ，预估 <b>¥{(est?.cost_yuan ?? 0).toFixed(4)}</b>（模型 {est?.model ?? "…"}）
+            ，预估 <b>¥{(est?.costYuan ?? 0).toFixed(4)}</b>（模型 {est?.model ?? "…"}）
           </div>
           <label style={{ fontSize: 12, display: "flex", gap: 6, alignItems: "center", cursor: "pointer" }}>
             <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />

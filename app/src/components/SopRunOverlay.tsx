@@ -11,40 +11,41 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
+/** 响应结构（SopTemplate/SopRunStep/SopRun/SopRunDetail 均 serde camelCase——字段须 camel 读取） */
 interface SopTemplateView {
   id: number;
-  note_id: number;
+  noteId: number;
   name: string;
-  start_line: number;
-  end_line: number;
+  startLine: number;
+  endLine: number;
   mode: string;
-  note_title: string;
+  noteTitle: string;
 }
 interface SopStepView {
   id: number;
-  run_id: number;
-  step_no: number;
-  text_snapshot: string;
+  runId: number;
+  stepNo: number;
+  textSnapshot: string;
   status: string;
-  evidence_path: string | null;
-  failure_note: string | null;
-  checked_at: number | null;
+  evidencePath: string | null;
+  failureNote: string | null;
+  checkedAt: number | null;
 }
 interface SopRunView {
   id: number;
-  template_id: number;
-  note_id: number;
-  template_name: string;
+  templateId: number;
+  noteId: number;
+  templateName: string;
   mode: string;
   status: string;
-  started_at: number;
-  finished_at: number | null;
+  startedAt: number;
+  finishedAt: number | null;
 }
 interface RunDetailView {
   run: SopRunView;
   steps: SopStepView[];
   stats: { done: number; skipped: number; failed: number; total: number };
-  freshness_changed: boolean;
+  freshnessChanged: boolean;
 }
 
 interface Props {
@@ -100,10 +101,34 @@ export default function SopRunOverlay({ template, onClose, onChanged }: Props) {
     setBusy(true);
     setErr("");
     try {
+      // 续跑语义：先查该模板进行中 run（status=active）→ 存在则直接加载其详情续跑，
+      // 否则新建（防双开重复证据；后端拒绝路径在 catch 兜底引导）
+      const runs = await invoke<SopRunView[]>("sop_run_list", { templateId: template.id });
+      const active = runs.find((r) => r.status === "active");
+      if (active) {
+        await reloadDetail(active.id);
+        return;
+      }
       const runId = await invoke<number>("sop_run_start", { templateId: template.id });
       await reloadDetail(runId);
     } catch (e) {
-      setErr(String(e));
+      const raw = String(e);
+      if (raw.includes("已有进行中")) {
+        // 竞态（多窗/并发）：再查一次并直接续跑；不可得时引导「继续执行或中止」
+        try {
+          const runs = await invoke<SopRunView[]>("sop_run_list", { templateId: template.id });
+          const active = runs.find((r) => r.status === "active");
+          if (active) {
+            await reloadDetail(active.id);
+            return;
+          }
+        } catch {
+          // 落入下方引导文案
+        }
+        setErr("该模板已有进行中的执行——请先结算或中止旧 run；重新进入本模板「▶ 执行」会自动续跑");
+      } else {
+        setErr(raw);
+      }
     } finally {
       setBusy(false);
     }
@@ -159,7 +184,7 @@ export default function SopRunOverlay({ template, onClose, onChanged }: Props) {
       <div style={cardStyle} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
           <h3 style={{ margin: 0, fontSize: 15 }}>🧭 {template.name}</h3>
-          <span style={{ fontSize: 11, color: "#6b7280" }}>@{template.note_title}</span>
+          <span style={{ fontSize: 11, color: "#6b7280" }}>@{template.noteTitle}</span>
           <span style={{ fontSize: 11, color: "#0f766e", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 10, padding: "1px 8px" }}>
             {modeLabel}
           </span>
@@ -169,7 +194,7 @@ export default function SopRunOverlay({ template, onClose, onChanged }: Props) {
         </div>
 
         {err && <div style={{ fontSize: 12, color: "#dc2626", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 6, padding: "6px 10px", marginBottom: 8 }}>{err}</div>}
-        {detail?.freshness_changed && stage === "run" && (
+        {detail?.freshnessChanged && stage === "run" && (
           <div style={{ fontSize: 12, color: "#b45309", background: "#fffbeb", border: "1px solid #f59e0b", borderRadius: 6, padding: "6px 10px", marginBottom: 8 }}>
             ⚠ 笔记正文与启动快照已有出入——结算时请对比修订模板（执行即保鲜）
           </div>
@@ -193,8 +218,8 @@ export default function SopRunOverlay({ template, onClose, onChanged }: Props) {
                 return (
                   <div key={s.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 10px", background: done ? "#ecfdf5" : failed ? "#fef2f2" : "#fff" }}>
                     <div style={{ display: "flex", gap: 6 }}>
-                      <span style={{ fontSize: 11, color: "#9ca3af", flexShrink: 0 }}>步骤 {s.step_no}</span>
-                      <span style={{ fontSize: 13, color: "#111827", flex: 1 }}>{s.text_snapshot}</span>
+                      <span style={{ fontSize: 11, color: "#9ca3af", flexShrink: 0 }}>步骤 {s.stepNo}</span>
+                      <span style={{ fontSize: 13, color: "#111827", flex: 1 }}>{s.textSnapshot}</span>
                       <span style={{ fontSize: 11, color: "#9ca3af", flexShrink: 0 }}>
                         {done ? "✓" : failed ? "✗" : skipped ? "⏭" : s.status}
                       </span>
@@ -202,22 +227,22 @@ export default function SopRunOverlay({ template, onClose, onChanged }: Props) {
                     {!done && !failed && !skipped && (
                       <>
                         <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap" }}>
-                          <button style={okBtn} disabled={busy} onClick={() => void stepAction(s.step_no, "done")}>✓ 完成</button>
-                          <button style={ghostBtn} disabled={busy} onClick={() => void stepAction(s.step_no, "skipped")}>⏭ 跳过</button>
-                          <button style={{ ...ghostBtn, color: "#dc2626" }} disabled={busy} onClick={() => { setFailOpen(failOpen === s.step_no ? null : s.step_no); setFailNote(""); }}>✗ 失败</button>
+                          <button style={okBtn} disabled={busy} onClick={() => void stepAction(s.stepNo, "done")}>✓ 完成</button>
+                          <button style={ghostBtn} disabled={busy} onClick={() => void stepAction(s.stepNo, "skipped")}>⏭ 跳过</button>
+                          <button style={{ ...ghostBtn, color: "#dc2626" }} disabled={busy} onClick={() => { setFailOpen(failOpen === s.stepNo ? null : s.stepNo); setFailNote(""); }}>✗ 失败</button>
                         </div>
-                        {failOpen === s.step_no && (
+                        {failOpen === s.stepNo && (
                           <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
                             <input autoFocus placeholder="失败原因（建议记录可观测信号差在哪）" value={failNote} onChange={(e) => setFailNote(e.target.value)} style={{ flex: 1, fontSize: 12, border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 6px" }} />
-                            <button style={okBtn} disabled={busy} onClick={() => void stepAction(s.step_no, "failed")}>记录失败</button>
+                            <button style={okBtn} disabled={busy} onClick={() => void stepAction(s.stepNo, "failed")}>记录失败</button>
                           </div>
                         )}
                         {s.status === "todo" && (
                           <div style={{ display: "flex", gap: 4, marginTop: 4, alignItems: "center" }}>
                             <span style={{ fontSize: 11, color: "#9ca3af" }}>证据路径（notes-images/…，可选）：</span>
                             <input
-                              value={evidenceByStep[s.step_no] ?? ""}
-                              onChange={(e) => setEvidenceByStep((m) => ({ ...m, [s.step_no]: e.target.value }))}
+                              value={evidenceByStep[s.stepNo] ?? ""}
+                              onChange={(e) => setEvidenceByStep((m) => ({ ...m, [s.stepNo]: e.target.value }))}
                               placeholder="notes-images/xxx.png"
                               style={{ flex: 1, fontSize: 12, border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 6px" }}
                             />
@@ -249,7 +274,7 @@ export default function SopRunOverlay({ template, onClose, onChanged }: Props) {
             <div style={{ fontSize: 12, color: "#374151", marginBottom: 6 }}>
               轨迹：✓完成 {detail.stats.done} · ⏭跳过 {detail.stats.skipped} · ✗失败 {detail.stats.failed}（共 {detail.stats.total} 步）
             </div>
-            {detail.freshness_changed && (
+            {detail.freshnessChanged && (
               <div style={{ fontSize: 12, color: "#b45309", marginBottom: 6 }}>
                 📝 笔记正文有出入——可对比快照修订模板段落（编辑即模板，无双写）
               </div>

@@ -10,16 +10,17 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 
+/** WebPage 响应结构（db_web::WebPage 为 serde camelCase——字段须 camel 读取） */
 interface WebPageView {
-  session_id: number;
+  sessionId: number;
   url: string;
   site: string | null;
   author: string | null;
   published: string | null;
   markdown: string;
-  raw_html: string | null;
-  extracted_ok: boolean;
-  fetched_at: number;
+  rawHtml: string | null;
+  extractedOk: boolean;
+  fetchedAt: number;
 }
 
 interface Props {
@@ -58,9 +59,18 @@ export default function WebArticleView({ sessionId, onToNote, onRemove }: Props)
   };
 
   useEffect(() => {
+    // 乱序防护：sessionId 快速切换时丢弃旧响应（cancelled 标志）
+    let cancelled = false;
     void invoke<WebPageView | null>("web_page_get", { sessionId })
-      .then(setPage)
-      .catch((e) => setErr(String(e)));
+      .then((p) => {
+        if (!cancelled) setPage(p);
+      })
+      .catch((e) => {
+        if (!cancelled) setErr(String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId]);
 
   if (err) return <p style={{ fontSize: 12, color: "#dc2626" }}>{err}</p>;
@@ -98,18 +108,18 @@ export default function WebArticleView({ sessionId, onToNote, onRemove }: Props)
       <div style={{ fontSize: 11, marginBottom: 8 }}>
         🔗 <a href={page.url} target="_blank" rel="noreferrer" style={{ color: "#2563eb", wordBreak: "break-all" }}>{page.url}</a>
       </div>
-      {!page.extracted_ok && (
+      {!page.extractedOk && (
         <div style={{ fontSize: 12, color: "#b45309", background: "#fffbeb", border: "1px solid #f59e0b", borderRadius: 6, padding: "6px 10px", marginBottom: 8 }}>
           ⚠ 正文抽取失败——已保留原始 HTML 附件（raw_html），可等待扩展/快照路径再处理；本页暂不能转笔记。
         </div>
       )}
-      {page.extracted_ok && (
+      {page.extractedOk && (
         <div style={{ fontSize: 14, lineHeight: 1.8, color: "#111827", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
           {page.markdown}
         </div>
       )}
       <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
-        抓取于 {new Date(page.fetched_at * 1000).toLocaleString()} · 正文为整篇初稿（原子化拆解留给核心处理/提炼动线）
+        抓取于 {new Date(page.fetchedAt * 1000).toLocaleString()} · 正文为整篇初稿（原子化拆解留给核心处理/提炼动线）
       </div>
     </div>
   );
