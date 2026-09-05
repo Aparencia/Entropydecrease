@@ -1,4 +1,4 @@
-# 技术债清单（权威：2026-09-05）
+﻿# 技术债清单（权威：2026-09-05）
 
 > 本清单为当前唯一权威债务清单，归档日滚动更新；旧归档清单仅历史追溯。
 > 来源：2026-09-05（v0.19.6/7 交付后新增代码四区并行审查：捕获/会话（A）· AI 精修（B）· 笔记列表（C）· 挂体系与元数据（D）；昨日（2026-09-04）8 笔逐条核验均未发生偿还条件 → 继承 carried）。
@@ -15,8 +15,8 @@
 | TD-2026-08-31-A | BrowserChrome 对 contenteditable 右键无应用内文本菜单——当前应用无该编辑面 | 有意 | P3 | 2026-08-31 | carried |
 | TD-2026-08-31-B | window.prompt/confirm/alert 替换为应用内对话框——余 13 处未决 | 有意 | P2 | 2026-08-31 | carried |
 | TD-2026-08-31-C | App.css 从未被引入（死样式）——引入改全局暗色观感，需单独裁决 | 环境变化 | P3 | 2026-08-31 | carried |
-| TD-2026-09-05-A | 挂体系空体系「去建体系」引导按钮未交付（spec §2.5-4/需求池文本要求按钮跳体系页向导）——组件无跨页跳转通道；当前为空态提示文案 | 有意 | P3 | 2026-09-05 | open |
-| TD-2026-09-05-B | 模型 disciplines 入参三形态契约漂移：Rust `disciplines:String`（JSON 数组字符串）vs knowledge.ts `string[]` vs 存量两调用点传数组（KnowledgeModelDialog/KnowledgeDetailPanel）——本批新路径已按 JSON 字符串修正，存量待统一 | 无意 | P3 | 2026-09-05 | open |
+| TD-2026-09-05-A | 挂体系空体系「去建体系」引导按钮未交付（spec §2.5-4/需求池文本要求按钮跳体系页向导）——组件无跨页跳转通道；当前为空态提示文案 | 有意 | P3 | 2026-09-05 | closed（6b8f365） |
+| TD-2026-09-05-B | 模型 disciplines 入参三形态契约漂移：Rust `disciplines:String`（JSON 数组字符串）vs knowledge.ts `string[]` vs 存量两调用点传数组（KnowledgeModelDialog/KnowledgeDetailPanel）——本批新路径已按 JSON 字符串修正，存量待统一 | 无意 | P3 | 2026-09-05 | closed（14e3988） |
 
 ## 今日审查即修（不立债，四批提交）
 
@@ -28,16 +28,25 @@
 4. **`553e95a`（D 批）**：模型轻建 disciplines 改 JSON 数组字符串（原裸串必败）；Enter=有命中选首项/零命中新建 + IME isComposing 守卫；轻建与切体系代际守卫（防旧代覆盖）
 5. **`f15320d8`（元数据纠偏）**：requirements-pool REQ-281/282/285 状态收口"已实施 v0.19.6"；v0.19.6 版本文档范围表状态同步；豁免登记行数纠偏（ai_refine_protocol 撤登 340→295≤300；NoteListView 525→524；NoteLinkToSystem 314→325）
 
+## 技术债修复登记（2026-09-05 二轮，用户指令"技术债修复"）
+
+- **TD-2026-09-05-A closed（6b8f365）**：空体系引导「去体系页创建（向导）」——App 增 createSystemSignal 递增信号 + KnowledgePage 消费开向导 + NotesPage/NoteLinkToSystem 链路贯通；空体系测试补引导按钮断言
+- **TD-2026-09-05-B closed（14e3988）**：模型 disciplines 三形态统一——KnowledgeModelDialog/KnowledgeDetailPanel 均改 JSON.stringify（Rust String=JSON 数组字符串契约）；挂体系轻建路径此前已按同范式修正
+- **观察 2026-09-05-2 closed 核心项（b9571ccc）**：SSE 读取内核 read_sse_lines 收敛 + ndjson_feed 行缓冲纯函数（feed/flush）与 3 单测，adapter 闭包改调纯函数
+- **观察 2026-09-05-1/3 closed（bb24e84）**：暂停期声通道边界如实化文档；轨迹 system 注释如实化
+- **观察 2026-09-05-6 部分（bb24e84）**：recent_session_titles 加 LIMIT 200；其余整理项随后续批
+- **观察 2026-09-05-4/5 carried**：审计/预估 vision 维度、批量移动串行与双 IPC——未实施，随后续性能与审计批评估
+
 ## 审查观察项（登记不立债）
 
 | ID | 摘要 | 处置 |
 |----|------|------|
-| 观察 2026-09-05-1（A-F2） | 暂停期 audio_loopback 端点停采 → media_sound 槽冻结，auto 轮询的"声画任一恢复"实际只剩画面通道（与 media_state 单测契约不符） | 登记后续：暂停期低占空采样仅写槽，或如实化文档/测试（真机评估） |
-| 观察 2026-09-05-2（B-B10） | 流式行缓冲/整包回退解析无 Rust 单测；stream_sse_content 与 stream_chat SSE 循环近全同待抽公共 | 登记后续：抽 `sse_read_loop` + 行缓冲纯函数补测 |
-| 观察 2026-09-05-3（B-B7） | 轨迹 AiTurn.system 记 build_system 基座，缺 NDJSON 后缀与预算引导段（非实发原文）；AiTurn.response 为重组 JSON 非流式原文 | 登记后续：如实改注释或记录实发 system |
+| 观察 2026-09-05-1（A-F2） | 暂停期 audio_loopback 端点停采 → media_sound 槽冻结，auto 轮询的“声画任一恢复”实际只剩画面通道 | 已处理（bb24e84 边界如实化入 media_state 文档）；低占空采样仍为后续候选 |
+| 观察 2026-09-05-2（B-B10） | 流式行缓冲无单测；SSE 循环双实现 | 核心项已处理（b9571ccc：read_sse_lines 内核 + ndjson_feed 3 单测）；stream_chat 切换共用内核价值低——余项接受 |
+| 观察 2026-09-05-3（B-B7） | 轨迹 AiTurn.system 记基座（缺动态段）；response 为重组 JSON | 已处理（bb24e84 注释如实化） |
 | 观察 2026-09-05-4（B-B12） | 任务审计/AiRefineResult 无 vision 覆写标记；ai_refine_estimate 不含 vision 维度（开关切换预估费用不变） | 登记后续：审计补 vision 标记、预估随 effectiveVision 重算 |
 | 观察 2026-09-05-5（C-L10） | 批量移动串行 await N 次 invoke 无进度；每次 saveOrder 全量重拉 | 登记后续：并行/进度与局部刷新（量级小暂缓） |
-| 观察 2026-09-05-6（A-F6/提示） | live:frame-heartbeat 无前端消费（保留=诊断）；recent_session_titles 无 LIMIT；title_rules TITLE_MAX_CHARS=40 与 commands.rs 同名值 100；import 标题未 normalize 与实时入口不一致 | 登记后续整理批 |
+| 观察 2026-09-05-6（A-F6/提示） | live:frame-heartbeat 无前端消费（保留=诊断）；recent_session_titles 无 LIMIT；title_rules TITLE_MAX_CHARS=40 与 commands.rs 同名值 100；import 标题未 normalize 与实时入口不一致 | 部分处理（bb24e84：recent_session_titles LIMIT 200）；heartbeat 前端无消费=诊断保留、TITLE_MAX_CHARS 同名异值、import normalize 对齐——仍待整理批 |
 | 观察（继承 09-04B） | 事件名跨语言契约无机器校验 / kb_chunk 超窗尾段不入向量 / 本地写+总线双刷 / dock 无组件测试 / 播放中真检测 / 设置页技术串与模型下载进度 | 延续 |
 
 ## 验证记录
