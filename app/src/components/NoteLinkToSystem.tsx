@@ -1,24 +1,23 @@
 /**
- * NoteLinkToSystem — 笔记「挂到体系」选择器（v0.13.7 触点②；v0.14 C3 增强）。
+ * NoteLinkToSystem — 笔记「挂到体系」选择器（v0.13.7 触点②；v0.14 C3 增强；
+ *                     REQ-286 v0.19.7 重构：搜索列表 + 三类内联轻建）。
  *
- * @ai-context: 修复知识链接手工输 id 断点（v0.13.1 遗留）——用户在笔记
- *              阅读视图把当前笔记挂到体系：选体系→选目标（问题/概念/模型
- *              三选一，spec §3.3 根因 A 修复）→确认，targetType=note 与
- *              targetId 自动携带，用户零 id 知识。
- * @ai-context: v0.14 C3——已挂状态用反查命令 list_links_by_target 一次拉取
- *              （替代逐体系正查聚合）；挂接后可切换目标（先撤旧链再建新链——
- *              幂等语义下同 target 多链会堆积）；旧版本挂接数据（仅 nodeId）
- *              自动兼容，UI 显示「问题」徽标（spec §5）。变更经 onChanged 通知。
- * @ai-context: REQ-276（v0.19.4）浮层右缘钳制：挂体系按钮位于笔记阅读头右端，
- *              面板左锚点向右展开会越过阅读区/窗口右缘造成残缺——改按钮右
- *              对齐向左展开（与 NoteMoveToGroupMenu 同范式）+ 超高面板内滚动
- *              + 外部点击背板收起（同类浮层统查：分组已右对齐、色板靠左无越缘）。
+ * @ai-context: 用户痛点（反馈 #5）：挂接时体系常无目标节点，却须切体系页新建。
+ *              v0.19.7 起：Tab+下拉改为「Tab + LinkEntityPicker（搜索+树形
+ *              列表）」；问题行点击=挂接目标（同时充当「其下新建」父锚点）；
+ *              搜索输入非空 → 「＋ 新建『xx』」即建即选（问题挂选中节点下/
+ *              体系根；概念/模型体系级平铺、轻建=名称级，三问/命题详情回
+ *              体系页既有对话框补全）。创建命令复用既有 add_knowledge_*
+ *              （含 knowledge 域广播），零新后端。
+ * @ai-context: 反查已挂（list_links_by_target）、切换目标先撤旧链（幂等防堆
+ *              积）、REQ-276 右缘钳制浮层均保持既有语义。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   KnowledgeConcept, KnowledgeLink, KnowledgeModel, KnowledgeNode, KnowledgeSystem,
 } from "../types/knowledge";
+import LinkEntityPicker, { type LinkRow } from "./LinkEntityPicker";
 
 /** 挂接目标类型：问题节点 / 概念 / 模型（spec §3.3 三选一） */
 export type LinkEntityType = "node" | "concept" | "model";
@@ -33,6 +32,41 @@ interface Props {
   noteId: number;
   /** 挂接/取消后刷新回调（NotesPage 重载引用列表） */
   onChanged: () => void;
+}
+
+/** 问题节点树 → 缩进行（父链循环守卫防脏数据死循环；深度上限 30） */
+function flattenNodeRows(nodes: KnowledgeNode[]): LinkRow[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const children = new Map<number | null, KnowledgeNode[]>();
+  for (const n of nodes) {
+    const key = n.parentId ?? null;
+    const arr = children.get(key) ?? [];
+    arr.push(n);
+    children.set(key, arr);
+  }
+  const rows: LinkRow[] = [];
+  const depthOf = new Map<number, number>();
+  const walk = (node: KnowledgeNode, depth: number) => {
+    if (depth > 30) return; // 脏父链守卫（防御性，不 panic）
+    depthOf.set(node.id, Math.min(depth, 30));
+    for (const c of children.get(node.id) ?? []) walk(c, depth + 1);
+  };
+  for (const root of children.get(null) ?? []) walk(root, 0);
+  // 孤儿兜底（父节点被删的残留——仍可选可挂，深度按父链现算封顶）
+  for (const n of nodes) {
+    if (depthOf.has(n.id)) continue;
+    let d = 0;
+    let cur: KnowledgeNode | undefined = n;
+    const guard = new Set<number>();
+    while (cur?.parentId != null && !guard.has(cur.parentId)) {
+      guard.add(cur.parentId);
+      d += 1;
+      cur = byId.get(cur.parentId);
+    }
+    depthOf.set(n.id, Math.min(d, 30));
+  }
+  for (const n of nodes) rows.push({ id: n.id, label: n.text, depth: depthOf.get(n.id) ?? 0 });
+  return rows;
 }
 
 export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
@@ -52,10 +86,9 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
     try {
       const sysList = await invoke<KnowledgeSystem[]>("list_knowledge_systems");
       setSystems(sysList);
-      // v0.14 C3：反查命令一次拉取当前笔记全部挂接（替代逐体系正查聚合）
       const hits = await invoke<KnowledgeLink[]>("list_links_by_target", { targetType: "note", targetId: noteId });
       setLinked(hits[0] ?? null);
-      setErr(""); // 成功后清掉陈旧错误（审查修复）
+      setErr("");
     } catch (e) { setErr(`体系加载失败: ${e}`); }
   }, [noteId]);
 
@@ -64,15 +97,21 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
   // 已挂体系预选（未手动选体系时回退到当前挂接体系——实体名映射需要其列表）
   const effectiveSystemId = systemId ?? linked?.systemId ?? null;
 
-  // 选体系后并行加载三类实体（体系一变即重置实体选择——防残留实体串体系
-  // 被后端拒「引用实体不属于该体系」，审查修复）
+  /** 按体系装载三类实体（体系一变即重置选择——防残留实体串体系） */
+  const loadEntities = useCallback(async (sid: number | null) => {
+    if (sid == null) { setNodes([]); setConcepts([]); setModels([]); return; }
+    const [ns, cs, ms] = await Promise.all([
+      invoke<KnowledgeNode[]>("list_knowledge_nodes", { systemId: sid }).catch((e) => { setErr(`节点加载失败: ${e}`); return [] as KnowledgeNode[]; }),
+      invoke<KnowledgeConcept[]>("list_knowledge_concepts", { systemId: sid }).catch((e) => { setErr(`概念加载失败: ${e}`); return [] as KnowledgeConcept[]; }),
+      invoke<KnowledgeModel[]>("list_knowledge_models", { systemId: sid }).catch((e) => { setErr(`模型加载失败: ${e}`); return [] as KnowledgeModel[]; }),
+    ]);
+    setNodes(ns); setConcepts(cs); setModels(ms);
+  }, []);
+
   useEffect(() => {
     setEntityId(null);
-    if (effectiveSystemId == null) { setNodes([]); setConcepts([]); setModels([]); return; }
-    invoke<KnowledgeNode[]>("list_knowledge_nodes", { systemId: effectiveSystemId }).then(setNodes).catch((e) => setErr(`节点加载失败: ${e}`));
-    invoke<KnowledgeConcept[]>("list_knowledge_concepts", { systemId: effectiveSystemId }).then(setConcepts).catch((e) => setErr(`概念加载失败: ${e}`));
-    invoke<KnowledgeModel[]>("list_knowledge_models", { systemId: effectiveSystemId }).then(setModels).catch((e) => setErr(`模型加载失败: ${e}`));
-  }, [effectiveSystemId]);
+    void loadEntities(effectiveSystemId);
+  }, [effectiveSystemId, loadEntities]);
 
   const domainSystems = useMemo(() => systems.filter((s) => s.status !== "archived"), [systems]);
 
@@ -120,6 +159,49 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
 
   const linkedSystem = systems.find((s) => s.id === linked?.systemId) ?? null;
 
+  // REQ-286：三类内联轻建——复用既有 add_knowledge_* 命令（含 knowledge 域广播）；
+  // 问题=建于选中节点下（默认体系根）；概念/模型=名称级体系级平铺（三问/命题
+  // 留空，详情回体系页既有对话框补全；模型学科占位「未分类」可后改）
+  const createEntity = useCallback(async (name: string, anchorId: number | null) => {
+    if (effectiveSystemId == null) throw new Error("请先选择体系");
+    let id: number;
+    if (entityType === "node") {
+      const n = await invoke<KnowledgeNode>("add_knowledge_node", {
+        systemId: effectiveSystemId, parentId: anchorId ?? null, nodeType: "question", text: name,
+      });
+      id = n.id;
+    } else if (entityType === "concept") {
+      const c = await invoke<KnowledgeConcept>("add_knowledge_concept", {
+        systemId: effectiveSystemId, name, essence: null, boundary: null, relation: null,
+      });
+      id = c.id;
+    } else {
+      const m = await invoke<KnowledgeModel>("add_knowledge_model", {
+        systemId: effectiveSystemId, name, disciplines: "未分类",
+        claim: null, validWhen: null, invalidWhen: null,
+      });
+      id = m.id;
+    }
+    await loadEntities(effectiveSystemId); // 列表重载（新增即见）
+    setEntityId(id); // 即建即选——确认挂接一步收尾
+  }, [effectiveSystemId, entityType, loadEntities]);
+
+  const nodeRows = useMemo(() => flattenNodeRows(nodes), [nodes]);
+  const conceptRows = useMemo(
+    () => concepts.map((c): LinkRow => ({ id: c.id, label: c.name, depth: 0 })),
+    [concepts],
+  );
+  const modelRows = useMemo(
+    () => models.map((m): LinkRow => ({ id: m.id, label: m.name, depth: 0 })),
+    [models],
+  );
+  const activeRows = entityType === "node" ? nodeRows : entityType === "concept" ? conceptRows : modelRows;
+  const kindMeta = {
+    node: { kindLabel: "问题", placeholder: "搜索/输入新问题名…（回车即建）", rootAnchor: "体系根" },
+    concept: { kindLabel: "概念", placeholder: "搜索/输入新概念名…（回车即建）", rootAnchor: "体系内" },
+    model: { kindLabel: "模型", placeholder: "搜索/输入新模型名…（回车即建）", rootAnchor: "体系内" },
+  }[entityType];
+
   return (
     <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", gap: 4, position: "relative" }}>
       <button
@@ -154,10 +236,8 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
               position: "absolute", zIndex: 31, top: "calc(100% + 6px)", right: 0,
               padding: 10, background: "#fff", border: "1px solid #e5e7eb",
               borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
-              display: "flex", flexDirection: "column", gap: 6, width: 260,
-              // REQ-276：右缘钳制（挂体系按钮位于阅读头右端——向左展开不越右缘）；
-              // 内容超高时面板内滚动（不撑破视口下缘）
-              maxHeight: 380, overflowY: "auto",
+              display: "flex", flexDirection: "column", gap: 6, width: 280,
+              maxHeight: 460, overflowY: "auto",
             }}
           >
           {domainSystems.length === 0 ? (
@@ -176,7 +256,7 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
                 ))}
               </select>
 
-              {/* v0.14 C3：挂接目标三选一（spec §3.3 根因 A 修复——不再只支持问题节点） */}
+              {/* v0.14 C3：挂接目标三选一（问题/概念/模型） */}
               <div data-testid="note-link-entity-tabs" style={{ display: "flex", gap: 2, background: "#f3f4f6", borderRadius: 8, padding: 1 }}>
                 {ENTITY_TABS.map((t) => (
                   <button
@@ -190,28 +270,29 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
                 ))}
               </div>
 
-              <select
-                data-testid="note-link-entity"
-                value={entityId ?? ""}
-                onChange={(e) => setEntityId(Number(e.target.value) || null)}
-                style={{ fontSize: 12, padding: "4px 6px", border: "1px solid #e5e7eb", borderRadius: 4 }}
-                disabled={effectiveSystemId == null}
-              >
-                <option value="">选择{ENTITY_TABS.find((t) => t.key === entityType)?.label}…</option>
-                {(entityType === "node" ? nodes : entityType === "concept" ? concepts : models).map((n) => (
-                  <option key={n.id} value={n.id}>
-                    {"text" in n ? (n.text as string).slice(0, 24) : (n as KnowledgeConcept).name.slice(0, 24)}
-                  </option>
-                ))}
-              </select>
+              {/* REQ-286：搜索 + 列表（树形缩进）+ 行内轻建 */}
+              {effectiveSystemId == null ? (
+                <div style={{ fontSize: 11, color: "#9ca3af" }}>请先选择体系</div>
+              ) : (
+                <LinkEntityPicker
+                  rows={activeRows}
+                  selectedId={entityId}
+                  placeholder={kindMeta.placeholder}
+                  kindLabel={kindMeta.kindLabel}
+                  rootAnchorLabel={kindMeta.rootAnchor}
+                  onPick={(id) => setEntityId(id)}
+                  onCreate={createEntity}
+                  onClose={() => setOpen(false)}
+                />
+              )}
 
               {linked ? (
                 <div style={{ display: "flex", gap: 6 }}>
                   <button
                     data-testid="note-link-confirm"
                     onClick={() => void confirmLink()}
-                    disabled={busy || effectiveSystemId == null || entityId == null}
-                    style={{ flex: 1, fontSize: 12, cursor: "pointer", padding: "4px 0", borderRadius: 4, border: "1px solid #0f766e", background: effectiveSystemId == null || entityId == null ? "#f9fafb" : "#f0fdfa", color: effectiveSystemId == null || entityId == null ? "#9ca3af" : "#0f766e" }}
+                    disabled={busy || entityId == null}
+                    style={{ flex: 1, fontSize: 12, cursor: "pointer", padding: "4px 0", borderRadius: 4, border: "1px solid #0f766e", background: entityId == null ? "#f9fafb" : "#f0fdfa", color: entityId == null ? "#9ca3af" : "#0f766e" }}
                   >
                     {busy ? "处理中…" : "切换目标"}
                   </button>
@@ -228,8 +309,8 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
                 <button
                   data-testid="note-link-confirm"
                   onClick={() => void confirmLink()}
-                  disabled={busy || effectiveSystemId == null || entityId == null}
-                  style={{ fontSize: 12, cursor: "pointer", padding: "4px 0", borderRadius: 4, border: "1px solid #0f766e", background: effectiveSystemId == null || entityId == null ? "#f9fafb" : "#f0fdfa", color: effectiveSystemId == null || entityId == null ? "#9ca3af" : "#0f766e" }}
+                  disabled={busy || entityId == null}
+                  style={{ fontSize: 12, cursor: "pointer", padding: "4px 0", borderRadius: 4, border: "1px solid #0f766e", background: entityId == null ? "#f9fafb" : "#f0fdfa", color: entityId == null ? "#9ca3af" : "#0f766e" }}
                 >
                   {busy ? "挂接中…" : "确认挂接"}
                 </button>
