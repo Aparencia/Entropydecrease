@@ -154,3 +154,56 @@ fn correct_subtitles_clamps_negative() {
     assert_eq!(corrected[0].end_ms, 0);
     assert_eq!(corrected[1].start_ms, 6_000);
 }
+
+// ── correct_drift_if_any（REQ-264 生产接线包装）──
+
+#[test]
+fn correction_applies_within_band() {
+    // Arrange：字幕超前 800ms（在 [200, 15000] 带内）
+    let (subs, asrs) = synthetic_session(6, 800, 0);
+    // Act
+    let r = correct_drift_if_any(&subs, &asrs, 3, 200, 15_000);
+    // Assert：测量 ≈-800 且已采纳；回校后误差归零
+    let m = r.measured_ms.unwrap();
+    assert!((m + 800).abs() <= 100, "测得 {}", m);
+    assert_eq!(r.applied_ms, Some(m));
+    for (i, s) in r.corrected.iter().enumerate() {
+        let err = (s.start_ms as i64 - asrs[i].start_ms as i64).abs();
+        assert!(err <= 100, "第 {} 段误差 {}ms", i, err);
+    }
+}
+
+#[test]
+fn correction_skips_small_jitter() {
+    // Arrange：仅 50ms 偏移（抖动噪声，不值得动）
+    let (subs, asrs) = synthetic_session(6, 50, 0);
+    // Act
+    let r = correct_drift_if_any(&subs, &asrs, 3, 200, 15_000);
+    // Assert：测量存在但不采纳（原样克隆）
+    assert!(r.measured_ms.is_some());
+    assert_eq!(r.applied_ms, None);
+    assert_eq!(r.corrected, subs);
+}
+
+#[test]
+fn correction_rejects_absurd_drift() {
+    // Arrange：超大步进（-40s，首尾强对齐误差/异常数据）
+    let (subs, asrs) = synthetic_session(6, -40_000, 0);
+    // Act
+    let r = correct_drift_if_any(&subs, &asrs, 3, 200, 15_000);
+    // Assert：不采纳（但保留测量，供统计）
+    assert!(r.measured_ms.is_some());
+    assert_eq!(r.applied_ms, None);
+}
+
+#[test]
+fn correction_skips_when_too_few_segments() {
+    // Arrange：字幕 2 段 < min_segs=3（残片不足以估漂移）
+    let (subs, asrs) = synthetic_session(2, 800, 0);
+    // Act
+    let r = correct_drift_if_any(&subs, &asrs, 3, 200, 15_000);
+    // Assert：不测量不校正（原样）
+    assert_eq!(r.measured_ms, None);
+    assert_eq!(r.applied_ms, None);
+    assert_eq!(r.corrected, subs);
+}

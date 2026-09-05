@@ -169,6 +169,56 @@ pub fn alignment_accuracy(alignment: &Alignment, subtitles: &[SubtitleSegment], 
     matched as f32 / alignment.pairs.len() as f32
 }
 
+/// 融合前漂移校正的判定结果（REQ-264 生产接线）。
+///
+/// @ai-context: corrected 恒可用（未校正时为原样克隆）——调用方无需分支；
+///              measured_ms=全程测量值；applied_ms=实际采纳的平移量
+///              （仅当 |measured| 落在 [min_apply, max_apply] 内才校正——
+///              过小=抖动噪声不值得动、过大=首尾强对齐误差/数据异常应拒动）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct DriftCorrection {
+    /// 校正后的字幕流（未校正 = 原样克隆）。
+    pub corrected: Vec<SubtitleSegment>,
+    /// 测量的漂移（ms；负=字幕超前）。数据不足 → None。
+    pub measured_ms: Option<i64>,
+    /// 实际采纳的平移量（None=未校正）。
+    pub applied_ms: Option<i64>,
+}
+
+/// 生产接线包装（纯函数）：字幕流太少不估；漂移在合理带内才校正。
+pub fn correct_drift_if_any(
+    subtitles: &[SubtitleSegment],
+    asr_segments: &[TranscriptSegment],
+    min_segs: usize,
+    min_apply_ms: i64,
+    max_apply_ms: i64,
+) -> DriftCorrection {
+    let identity = || DriftCorrection {
+        corrected: subtitles.to_vec(),
+        measured_ms: None,
+        applied_ms: None,
+    };
+    if subtitles.len() < min_segs || asr_segments.len() < min_segs {
+        return identity();
+    }
+    let alignment = align_sequences(subtitles, asr_segments);
+    let Some(drift) = estimate_drift_ms(subtitles, asr_segments, &alignment) else {
+        return identity();
+    };
+    if drift.abs() < min_apply_ms || drift.abs() > max_apply_ms {
+        return DriftCorrection {
+            corrected: subtitles.to_vec(),
+            measured_ms: Some(drift),
+            applied_ms: None,
+        };
+    }
+    DriftCorrection {
+        corrected: correct_subtitles(subtitles, drift),
+        measured_ms: Some(drift),
+        applied_ms: Some(drift),
+    }
+}
+
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。
 #[cfg(test)]
 #[path = "dtw_align_tests.rs"]

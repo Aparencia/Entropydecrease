@@ -325,7 +325,20 @@ pub fn rewrite_with_fusion(
         eprintln!("[Fusion] 会话 {} 无字幕段，短路跳过融合（ASR 段原样保留）", session_id);
         return Ok(());
     }
-    let fused = merge_transcript(subtitles, asr_segments, 0);
+    // REQ-264（v0.20.1）：融合前做字幕漂移校正——字幕 OCR 流时间轴滞后/超前
+    // 是"字幕权威路线错位"主因；测量带内才采纳（过小=抖动噪声、过大=首尾强
+    // 对齐误差/异常拒动；段数不足不估——与 harness 会话信道门槛同口径）
+    const MIN_FUSION_DTW_SEGS: usize = 3;
+    const MIN_APPLY_DRIFT_MS: i64 = 200;
+    const MAX_APPLY_DRIFT_MS: i64 = 15_000;
+    let correction =
+        crate::dtw_align::correct_drift_if_any(subtitles, asr_segments, MIN_FUSION_DTW_SEGS, MIN_APPLY_DRIFT_MS, MAX_APPLY_DRIFT_MS);
+    if let Some(d) = correction.applied_ms {
+        eprintln!("[Fusion] 会话 {} 字幕漂移校正 {:+}ms（{} 段）", session_id, d, subtitles.len());
+    } else if correction.measured_ms.is_some() {
+        eprintln!("[Fusion] 会话 {} 字幕漂移测量 {:+}ms 未采纳（带外或段数不足）", session_id, correction.measured_ms.unwrap());
+    }
+    let fused = merge_transcript(&correction.corrected, asr_segments, 0);
     if fused.is_empty() {
         return Ok(());
     }
