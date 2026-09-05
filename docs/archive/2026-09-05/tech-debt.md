@@ -11,7 +11,7 @@
 | TD-2026-08-19-D | image_stream_store 已交付未接线（REQ-110/123/088）——lib.rs 仅 mod 声明，接线条件未发生 | 有意 | P2 | 2026-08-19 | carried |
 | TD-2026-08-24-A | lib.rs 超 600 硬限——实测 872（v0.19.3 模块/命令再 +5）；generate_handler 单点展开不可拆，拆分计划维持顺延 | 有意 | P1 | 2026-08-24 | carried |
 | TD-2026-08-30-A | ClassroomPage 超 600 硬限——实测 745；拆分计划（LiveCaptureCard）未启动 | 有意 | P1 | 2026-08-30 | carried |
-| TD-2026-08-30-B | note_filter 预存失败 2 笔（session29_live_ui_excluded_from_points / ocr_points_exclude_watermark_junk_and_dupes）——受限会话无法复跑全量，维持复现口径 | 预存 | P2 | 2026-08-30 | carried |
+| TD-2026-08-30-B | note_filter 预存失败 2 笔（session29_live_ui_excluded_from_points / ocr_points_exclude_watermark_junk_and_dupes）——受限会话无法复跑全量，维持复现口径；**2026-09-05 全量回归复现（asr_eval 批）**：疑水印聚类/跨帧同构规则误吞（牛顿双帧全弃）与 UI 词表边界（直播），修复需独立考古小批 | 预存 | P2 | 2026-08-30 | carried |
 | TD-2026-08-31-A | BrowserChrome 对 contenteditable 右键无应用内文本菜单——当前应用无该编辑面 | 有意 | P3 | 2026-08-31 | carried |
 | TD-2026-08-31-B | window.prompt/confirm/alert 替换为应用内对话框——余 13 处未决 | 有意 | P2 | 2026-08-31 | carried |
 | TD-2026-08-31-C | App.css 从未被引入（死样式）——引入改全局暗色观感，需单独裁决 | 环境变化 | P3 | 2026-08-31 | carried |

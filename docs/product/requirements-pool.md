@@ -522,7 +522,7 @@
 | REQ | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
 |----|------|--------|------|---------|------|
 | REQ-263 | asr_eval 自验证 harness：批量样本转写（流式/离线/参数矩阵/预处理开关）→ dtw 对齐 → CER/混淆画像 → A-B 对比表 → 回归退出码（CI）+ 有参考样本 fixtures 固化 + 首轮自测报告（含漂移分布） | P1 | 已实施（2026-09-05 首轮：M1 纯函数层/M2 双路 harness/M2b 会话信道；真机数据面验收待执行） | v0.20.0（P0） | 参考信道：字幕轨>字幕OCR>会话字幕段；无参考不进 CER；复用 cer_bench/cer.rs/dtw_align/asr_forensic；[首轮报告（已归档）](../archive/2026-09-05/asr-eval-first-report.md)；缺口：本机无 ≥3 段字幕会话（真参考/漂移待素材）、GBK SRT 与 CI e2e 接线 P1 |
-| REQ-264 | DTW 漂移校正生产接线（dtw_align 纯函数已备、现无调用点）：接入字幕融合入口 + 漂移估计分布统计 | P1 | 已实施（2026-09-05：`correct_drift_if_any` 生产包装 + rewrite_with_fusion 融合前校正接线；漂移统计=harness 会话信道已有） | v0.20.1（P1） | 字幕权威路线错位主因；门槛：段数 ≥3、带内 200ms~15s 才采纳（过小=抖动/过大=异常拒动），未采纳保留测量日志；dtw 单测 11 绿（含新 4）；9 个既有无关失败（frame_liveness/ndjson_feed/note_filter/title_rules）登记观察 |
+| REQ-264 | DTW 漂移校正生产接线（dtw_align 纯函数已备、现无调用点）：接入字幕融合入口 + 漂移估计分布统计 | P1 | 已实施（2026-09-05：`correct_drift_if_any` 生产包装 + rewrite_with_fusion 融合前校正接线；漂移统计=harness 会话信道已有） | v0.20.1（P1） | 字幕权威路线错位主因；门槛：段数 ≥3、带内 200ms~15s 才采纳（过小=抖动/过大=异常拒动），未采纳保留测量日志；dtw 单测 11 绿（含新 4）；全量回归 9 例既有失败处置：7 例测试纠偏/分隔符即修（`a33737e`，title_rules/frame_liveness/ndjson_feed），2 例 note_filter = 既有 TD-2026-08-30-B 复现（2026-09-05 注记） |
 | REQ-265 | 参数定案族：预处理默认定案 + VAD 预热/窗口/倍率、端点 rule1/2/3、重打分门限、融合 gap/SIM/权重、去重阈值——asr_eval 自动 A/B 标定 + 配置化/档案化（JSON/audio_preproc_config 先例） | P1 | 已立项 | v0.20.1（P1） | 向后兼容：默认值不变则零行为漂移；golden 防误删 |
 | REQ-266 | 热词加固与注入源扩展：tokens 表外字过滤/崩溃防护单测 + 标题/章节/术语候选自动注入（领域细分已有） | P1 | 已立项 | v0.20.1（P1） | 感知质量主战场（术语/专名错） |
 | REQ-267 | 重打分积压验证与停止 drain 策略（3s 有界超时下的 channel 积压/慢机内容缺失） | P1 | 已立项 | v0.20.1（P1） | harness 慢速档回放验证 |
