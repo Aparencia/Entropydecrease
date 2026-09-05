@@ -9,6 +9,7 @@ use rusqlite::{params, OptionalExtension};
 
 use crate::db::{unix_seconds, Db};
 use crate::error::Result;
+use crate::db_task_index::rebuild_note_tasks;
 use crate::kb_index::soft_rebuild_note;
 use crate::types::{NewNote, Note};
 
@@ -35,6 +36,8 @@ impl Db {
             // v0.19.0（REQ-258）索引钩子：新建笔记即入派生索引（同事务软失败
             // 记录不阻断——失败可见于 kb_index_stats 角标）
             soft_rebuild_note(conn, id, &new.content);
+            // v0.20.3（REQ-292）：任务行索引同钩子重扫（真相仍在正文 md 行）
+            rebuild_note_tasks(conn, id, &new.content);
             Ok(Note {
                 id,
                 title: new.title.clone(),
@@ -98,6 +101,9 @@ impl Db {
             )?;
             if affected > 0 && cur.as_deref() != Some(content) {
                 soft_rebuild_note(conn, id, content);
+                // v0.20.3（REQ-292）：正文变化即重扫任务索引（勾选/编辑/裁决
+                // 回写全收敛于此——行号漂移由重扫吸收）
+                rebuild_note_tasks(conn, id, content);
             }
             Ok(affected > 0)
         })

@@ -73,6 +73,8 @@ mod ai_chat_stream;
 mod ai_chat_client;
 mod commands_ai_chat;
 mod asr;
+mod tasks_core;
+mod db_task_index;
 mod asr_clean;
 mod asr_confusion;
 mod asr_dedupe;

@@ -503,6 +503,8 @@ CREATE TABLE IF NOT EXISTS contracts (
     // v0.20.2（REQ-268/270）：会话精修草稿表（离线第二遍/LLM 校对派生落点——
     // 原料 session_segments 不可变，替换文本走草稿表 + 有效轴合成）
     crate::db_session_refine::init(conn)?;
+    // v0.20.3（REQ-292）：任务行增量索引表（真相=md 行；聚合查询缓存）
+    crate::db_task_index::init(conn)?;
     Ok(())
 }
 
