@@ -6,10 +6,13 @@
  *              过滤）/组名点击=过滤切换（决策 1 语义）/搜索激活退化平铺/
  *              空组不渲染/未分组区收纳 group_id=null 笔记。
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Note, NoteGroup } from "../types";
 import NoteListView from "./NoteListView";
+
+// REQ-287：NoteListView 现读写 localStorage 组折叠——每测清空防串扰
+beforeEach(() => { try { window.localStorage.clear(); } catch { /* jsdom 守卫 */ } });
 
 function makeNote(id: number, title: string, groupId?: number | null): Note {
   return {
@@ -72,15 +75,15 @@ describe("NoteListView 分组树（v0.15）", () => {
     expect(screen.getByText("写了")).toBeTruthy();
   });
 
-  it("chevron 收起/展开（不触发过滤）", () => {
+  it("chevron 收起/展开（不触发过滤）", async () => {
     const notes = [makeNote(1, "拍了", 1)];
     render(<NoteListView notes={notes} groups={groups} groupFilter={null} {...baseProps} />);
-    const chevron = screen.getByTestId("tree-chevron-摄影");
-    fireEvent.click(chevron);
-    expect(screen.queryByTestId("tree-body-摄影")).toBeNull();
+    // 首次点击=收起；展开时 body 需等重渲染（父层折叠态驱动）
+    fireEvent.click(screen.getByTestId("tree-chevron-摄影"));
+    await waitFor(() => expect(screen.queryByTestId("tree-body-摄影")).toBeNull());
     expect(baseProps.onGroupFilterChange).not.toHaveBeenCalled();
-    fireEvent.click(chevron);
-    expect(screen.getByTestId("tree-body-摄影")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("tree-chevron-摄影"));
+    await waitFor(() => expect(screen.getByTestId("tree-body-摄影")).toBeTruthy());
   });
 
   it("组名点击=过滤切换（组头无选中+点章 → 组 id；再点 → null）", () => {

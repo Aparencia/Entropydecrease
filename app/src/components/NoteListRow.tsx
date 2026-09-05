@@ -1,32 +1,49 @@
 /**
- * NoteListRow — 笔记列表行（v0.15 自 NoteListView 拆出——树态/平铺共用）。
+ * NoteListRow — 笔记列表行（v0.15 自 NoteListView 拆出；REQ-287 v0.19.7 重构）。
  *
- * @ai-context: 行 id=`note-row-{id}` 供 focusNoteId 跨页直达滚动定位；
- *              拖拽源（组行为 drop target，move_note_to_group 命令）；
- *              勾选/固定/标签/来源会话跳转保持 v0.12.x 语义不变。
+ * @ai-context: 行 id=`note-row-{id}` 供 focusNoteId 跨页直达滚动定位。
+ * @ai-context: REQ-287 交互矩阵——行内 checkbox 移除：单击=打开（右栏读，
+ *              selectionMode 下由父层改判为勾选）；Ctrl/⌘+单击=加/减选（不
+ *              换右栏）；Shift+单击=区间选（父层按列表位置）。多选态视觉=
+ *              靛蓝底 + ✓ 前缀（替代勾选框）。拖拽源：本行（未选集）或多选
+ *              整组（选中态行拖任一行=整体带走）——载荷 text/note-ids JSON +
+ *              单 id 兜底；行间落点经 onDropOnRow 上抛（组内手动排序，父层
+ *              判定启用手排/禁入）。
  */
 import { useMemo } from "react";
 import type { Note } from "../types";
 import { paletteHex } from "../utils/colorPalette";
 import type { ThemeMode } from "../utils/colorPalette";
 import { fmtDate, parseTags } from "../utils/noteHelpers";
+import { crateDndWriteIds } from "./NoteTreeSection";
 
 interface Props {
   note: Note;
   /** 行左侧色条（父层 resolveNoteColor 解析结果） */
   accent: string;
-  selectedId: number | null;
-  checked: boolean;
+  /** 当前打开（右栏阅读）的笔记 id——teal 高亮优先 */
+  openId: number | null;
+  /** 本行是否在多选集内（靛蓝高亮 + ✓ 前缀） */
+  multiSelected: boolean;
   tagColors?: Record<string, string>;
-  onSelect: (note: Note) => void;
-  onToggleSelect: (id: number) => void;
+  /** 单击打开/右栏读（父层在批量选择模式下改判勾选） */
+  onOpen: (note: Note) => void;
+  /** Ctrl/⌘+单击=增删选集；Shift+单击=区间选（均不换右栏） */
+  onModifierClick: (note: Note, ctrl: boolean, shift: boolean) => void;
+  /** 拖拽行载荷（多选整组=选集 ids；未选中态=单行 id） */
+  dragIds: number[];
+  /** 行间落点（组内手动排序；父层判定） */
+  onDropOnRow?: (ids: number[], targetId: number, before: boolean) => void;
+  /** 父层行间落点指示（视觉反馈） */
+  dropIndicator?: "before" | "after" | null;
   onOpenSession: (sessionId: number) => void;
-  /** v0.16.1：右键菜单打开（父层持有坐标/状态；默认浏览器菜单已全局禁用） */
-  onContextMenu?: (e: React.MouseEvent) => void;
+  /** v0.16.1：右键菜单打开（父层持有坐标/状态；原生菜单已全局禁用） */
+  onContextMenu?: (e: React.MouseEvent, note: Note) => void;
 }
 
 export default function NoteListRow({
-  note, accent, selectedId, checked, tagColors, onSelect, onToggleSelect, onOpenSession, onContextMenu,
+  note, accent, openId, multiSelected, tagColors, onOpen, onModifierClick,
+  dragIds, onDropOnRow, dropIndicator = null, onOpenSession, onContextMenu,
 }: Props) {
   const tags = parseTags(note);
   // v0.14 B：当前主题（跟随 prefers-color-scheme；jsdom 无 matchMedia 回退 light）
@@ -34,39 +51,69 @@ export default function NoteListRow({
     () => (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
     [],
   );
+  const isOpen = openId === note.id;
   return (
     <div
       id={`note-row-${note.id}`}
+      data-testid={`note-row-${note.id}`}
       draggable
       onDragStart={(e) => {
-        // v0.14 C1：拖拽归组——笔记卡片为 drag source（组行为 drop target）
-        e.dataTransfer.setData("text/note-id", String(note.id));
-        e.dataTransfer.effectAllowed = "move";
+        // REQ-287：多选整组拖走（dragIds=选集）；未选中态=单行（左栏归组兼容）
+        crateDndWriteIds(e.dataTransfer, dragIds.length > 0 ? dragIds : [note.id]);
       }}
-      onContextMenu={(e) => {
-        // v0.16.1：应用内右键菜单——抑制原生菜单（前端兜底）+ 上抛坐标
+      onDragOver={(e) => {
+        if (!onDropOnRow) return;
+        const types = e.dataTransfer.types;
+        if (!types.includes("text/note-ids") && !types.includes("text/note-id")) return;
         e.preventDefault();
         e.stopPropagation();
-        onContextMenu?.(e);
       }}
-      onClick={() => onSelect(note)}
+      onDrop={(e) => {
+        if (!onDropOnRow) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const raw = e.dataTransfer.getData("text/note-ids");
+        let ids: number[] = [];
+        try {
+          const arr: unknown = JSON.parse(raw);
+          if (Array.isArray(arr)) ids = arr.filter((x): x is number => typeof x === "number" && x > 0);
+        } catch { /* 兜底单 id */ }
+        if (ids.length === 0) {
+          const single = Number(e.dataTransfer.getData("text/note-id"));
+          if (Number.isInteger(single) && single > 0) ids = [single];
+        }
+        if (ids.length === 0 || ids.includes(note.id)) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        onDropOnRow(ids, note.id, e.clientY < rect.top + rect.height / 2);
+      }}
+      onContextMenu={(e) => {
+        // v0.16.1：应用内右键菜单——抑制原生菜单 + 上抛坐标（多选语义父层裁决）
+        e.preventDefault();
+        e.stopPropagation();
+        onContextMenu?.(e, note);
+      }}
+      onClick={(e) => {
+        if (e.ctrlKey || e.metaKey) onModifierClick(note, true, false);
+        else if (e.shiftKey) onModifierClick(note, false, true);
+        else onOpen(note);
+      }}
       style={{
         padding: "10px 14px",
         borderBottom: "1px solid #f3f4f6",
         borderLeft: `4px solid ${accent}`,
         cursor: "pointer",
-        background: selectedId === note.id ? "#f0fdfa" : "transparent",
+        background: isOpen ? "#f0fdfa" : multiSelected ? "#eef2ff" : "transparent",
+        boxShadow: dropIndicator === "before"
+          ? "inset 0 2px 0 #4f46e5"
+          : dropIndicator === "after" ? "inset 0 -2px 0 #4f46e5" : "none",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <input
-          type="checkbox"
-          checked={checked}
-          onClick={(e) => e.stopPropagation()}
-          onChange={() => onToggleSelect(note.id)}
-          style={{ cursor: "pointer", flexShrink: 0 }}
-          title="勾选后可批量删除"
-        />
+        {multiSelected ? (
+          <span style={{ fontSize: 11, color: "#4f46e5", fontWeight: 700, flexShrink: 0 }}>✓</span>
+        ) : (
+          <span style={{ width: 11, flexShrink: 0 }} />
+        )}
         {note.pin ? <span style={{ fontSize: 11, color: "#b45309" }}>📌</span> : null}
         <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>
           {note.title}
@@ -79,7 +126,6 @@ export default function NoteListRow({
             key={t}
             style={{
               fontSize: 10, color: "#6b7280", borderRadius: 8, padding: "0 4px",
-              // v0.14 B：标签色徽标底色（tagColors 命中用色板色 13% 透明底；否则默认灰底）
               background: tagColors?.[t] ? `${paletteHex(tagColors[t], theme)}22` : "#f3f4f6",
             }}
           >

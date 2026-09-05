@@ -1,100 +1,120 @@
 // @vitest-environment jsdom
 /**
- * NoteListView.test.tsx — 笔记列表勾选批量删除交互测试（v0.12.8 审查补测）。
+ * NoteListView.test.tsx — 笔记列表交互（REQ-287 v0.19.7）关键路径。
  *
- * @ai-context: 覆盖关键路径——行勾选出现批量栏 / 全选三态 / 删除执行后清空勾选
- *              （resolve=true）/ 取消确认保留勾选（resolve=false）/ 列表数据变化
- *              后裁剪不可见勾选（只删可见子集安全边界）。纯 UI 组件无 invoke。
+ * @ai-context: 覆盖——去 checkbox 后：单击=打开右栏（onSelect）；Ctrl+单击=
+ *              加/减选（不触发打开）→ 批量栏浮现；Shift+单击=按列表位置区间
+ *              选；批量选择模式（工具栏「选择」）：行单击=勾选且不打开，Esc
+ *              退出并清空；批量删除（resolve=true 清空选择）；批量移动到组
+ *              （选集菜单 → 组 → move_note_to_group 逐条）。invoke/事件全 mock。
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { Note } from "../types";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { Note, NoteGroup } from "../types";
 import NoteListView from "./NoteListView";
 
-function makeNote(id: number, title: string): Note {
+const invokeMock = vi.fn();
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => invokeMock(...a) }));
+
+function makeNote(id: number, title: string, groupId: number | null = null): Note {
+  return { id, title, content: "", source: "manual", tags: "[]", pin: 0, group_id: groupId, created_at: 0, updated_at: 0 };
+}
+const groups = [
+  { id: 1, name: "摄影", color: null, terrain: null, createdAt: 0, updatedAt: 0 },
+] as unknown as NoteGroup[];
+const notes = [makeNote(1, "笔记一", 1), makeNote(2, "笔记二", 1), makeNote(3, "笔记三", null)];
+
+function baseProps(over: Record<string, unknown> = {}) {
   return {
-    id,
-    title,
-    content: "",
-    source: "manual",
-    tags: "[]",
-    pin: 0,
-    created_at: 0,
-    updated_at: 0,
-  };
+    width: 320, notes, groups, groupFilter: null, onGroupFilterChange: vi.fn(),
+    keyword: "", tagFilter: null, sortMode: "updated-desc" as const, allTags: [],
+    selectedId: null, status: "", noteColors: {}, tagColors: {},
+    onKeywordChange: vi.fn(), onTagFilterChange: vi.fn(), onSortModeChange: vi.fn(),
+    onSelect: vi.fn(), onCreate: vi.fn(), onRefresh: vi.fn(), onOpenSession: vi.fn(),
+    onBatchDelete: vi.fn(async () => true), onNoteMoved: vi.fn(), onCollapse: vi.fn(),
+    ...over,
+  } as Parameters<typeof NoteListView>[0];
 }
 
-const notesA = [makeNote(1, "笔记一"), makeNote(2, "笔记二")];
-
-const baseProps = {
-  keyword: "",
-  tagFilter: null,
-  sortMode: "updated-desc" as const,
-  allTags: [] as string[],
-  selectedId: null,
-  status: "",
-  onKeywordChange: vi.fn(),
-  onTagFilterChange: vi.fn(),
-  onSortModeChange: vi.fn(),
-  onSelect: vi.fn(),
-  onCreate: vi.fn(),
-  onRefresh: vi.fn(),
-  onOpenSession: vi.fn(),
-};
-
-function renderList(overrides: Partial<Parameters<typeof NoteListView>[0]> = {}) {
-  return render(<NoteListView notes={notesA} {...baseProps} onBatchDelete={vi.fn().mockResolvedValue(true)} {...overrides} />);
-}
-
-afterEach(() => cleanup());
-
-describe("NoteListView 勾选批量删除", () => {
-  it("行勾选后出现批量栏，计数正确（Arrange/Act/Assert）", () => {
-    renderList();
-    expect(screen.queryByText(/已选/)).toBeNull(); // 初始无批量栏
-    fireEvent.click(screen.getAllByRole("checkbox")[0]);
-    expect(screen.getByText(/已选 1 个/)).toBeTruthy();
+beforeEach(() => {
+  invokeMock.mockReset();
+  invokeMock.mockImplementation(async (cmd: string) => {
+    switch (cmd) {
+      case "note_order_list": return [];
+      case "note_order_save": return null;
+      case "note_order_clear": return true;
+      case "move_note_to_group": return true;
+      default: return null;
+    }
   });
+});
+afterEach(cleanup);
 
-  it("全选框三态：勾一后全选，再点全选清空", () => {
-    renderList();
-    fireEvent.click(screen.getAllByRole("checkbox")[0]); // 勾 1 行 → 批量栏出现
-    const selectAll = screen.getByTitle("全选当前列表的笔记");
-    expect((selectAll as HTMLInputElement).checked).toBe(false);
-    fireEvent.click(selectAll); // 未全选 → 全选
-    expect(screen.getByText(/已选 2 个/)).toBeTruthy();
-    fireEvent.click(screen.getByTitle("全选当前列表的笔记")); // 已全选 → 清空
+describe("NoteListView REQ-287 选择交互", () => {
+  it("单击=打开右栏（onSelect）；不出现批量栏", async () => {
+    const onSelect = vi.fn();
+    render(<NoteListView {...baseProps({ onSelect })} />);
+    fireEvent.click(await screen.findByTestId("note-row-1"));
+    expect(onSelect).toHaveBeenCalledWith(notes[0]);
     expect(screen.queryByText(/已选/)).toBeNull();
   });
 
-  it("删除执行成功（resolve=true）后清空勾选", async () => {
-    const onBatchDelete = vi.fn().mockResolvedValue(true);
-    renderList({ onBatchDelete });
-    fireEvent.click(screen.getAllByRole("checkbox")[0]);
-    fireEvent.click(screen.getByText("批量删除"));
-    expect(onBatchDelete).toHaveBeenCalledWith([1]);
-    await vi.waitFor(() => expect(screen.queryByText(/已选/)).toBeNull());
-  });
-
-  it("取消确认（resolve=false）保留勾选", async () => {
-    const onBatchDelete = vi.fn().mockResolvedValue(false);
-    renderList({ onBatchDelete });
-    fireEvent.click(screen.getAllByRole("checkbox")[0]);
-    fireEvent.click(screen.getByText("批量删除"));
-    await vi.waitFor(() => expect(onBatchDelete).toHaveBeenCalled());
-    expect(screen.getByText(/已选 1 个/)).toBeTruthy();
-  });
-
-  it("列表数据变化后裁剪不可见勾选（只删可见子集）", async () => {
-    const { rerender } = renderList();
-    fireEvent.click(screen.getAllByRole("checkbox")[0]);
-    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+  it("Ctrl+单击=加/减选（不打开）→ 批量栏浮现；Ctrl 再点=减选", async () => {
+    const onSelect = vi.fn();
+    render(<NoteListView {...baseProps({ onSelect })} />);
+    fireEvent.click(await screen.findByTestId("note-row-1"), { ctrlKey: true });
+    fireEvent.click(screen.getByTestId("note-row-2"), { ctrlKey: true });
+    expect(onSelect).not.toHaveBeenCalled();
     expect(screen.getByText(/已选 2 个/)).toBeTruthy();
-    // 模拟切过滤视图/删除刷新：notes 只剩 1 条 → 勾选裁剪到可见子集
-    const onBatchDelete = vi.fn().mockResolvedValue(true);
-    rerender(<NoteListView notes={[makeNote(1, "笔记一")]} {...baseProps} onBatchDelete={onBatchDelete} />);
+    fireEvent.click(screen.getByTestId("note-row-1"), { ctrlKey: true });
     expect(screen.getByText(/已选 1 个/)).toBeTruthy();
-    fireEvent.click(screen.getByText("批量删除"));
-    expect(onBatchDelete).toHaveBeenCalledWith([1]); // 被裁剪的不可见笔记不在删除集
+  });
+
+  it("Shift+单击=按列表位置区间选（锚=上次 Ctrl 点击行）", async () => {
+    render(<NoteListView {...baseProps()} />);
+    // 可见序=[未分组:3, 摄影:1,2]——锚 3（Ctrl），Shift 点 2 → 全段 {1,2,3}
+    fireEvent.click(await screen.findByTestId("note-row-3"), { ctrlKey: true });
+    fireEvent.click(screen.getByTestId("note-row-2"), { shiftKey: true });
+    expect(screen.getByText(/已选 3 个/)).toBeTruthy();
+  });
+
+  it("批量选择模式：工具栏「选择」→ 行单击=勾选且不打开；Esc 退出并清空", async () => {
+    const onSelect = vi.fn();
+    render(<NoteListView {...baseProps({ onSelect })} />);
+    fireEvent.click(await screen.findByTestId("batch-mode-toggle"));
+    expect(screen.getByText(/选择模式/)).toBeTruthy();
+    fireEvent.click(screen.getByTestId("note-row-1"));
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByText(/选择模式（1）/)).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByText(/选择模式/)).toBeNull();
+      expect(screen.queryByText(/已选/)).toBeNull();
+    });
+  });
+
+  it("批量删除：按钮 → onBatchDelete(选集)；resolve=true 后清空选择", async () => {
+    const onBatchDelete = vi.fn(async () => true);
+    render(<NoteListView {...baseProps({ onBatchDelete })} />);
+    fireEvent.click(await screen.findByTestId("note-row-1"), { ctrlKey: true });
+    fireEvent.click(screen.getByTestId("batch-delete-btn"));
+    await waitFor(() => expect(onBatchDelete).toHaveBeenCalledWith([1]));
+    await waitFor(() => expect(screen.queryByText(/已选/)).toBeNull());
+  });
+
+  it("批量移动到组：选集含他组笔记 → 组 → move_note_to_group 落库", async () => {
+    render(<NoteListView {...baseProps()} />);
+    // 选 2（已在摄影）+ 3（未分组）→ 移到摄影只发未分组那条（已在组内跳过）
+    fireEvent.click(await screen.findByTestId("note-row-2"), { ctrlKey: true });
+    fireEvent.click(screen.getByTestId("note-row-3"), { ctrlKey: true });
+    fireEvent.click(screen.getByTestId("batch-move-btn"));
+    const menu = await screen.findByTestId("batch-context-menu");
+    expect(menu).toBeTruthy();
+    fireEvent.click(screen.getByText("📁 移动到组…"));
+    fireEvent.click(await screen.findByText("📁 摄影"));
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("move_note_to_group", { noteId: 3, groupId: 1 });
+      expect(invokeMock).not.toHaveBeenCalledWith("move_note_to_group", { noteId: 2, groupId: 1 });
+    });
   });
 });
