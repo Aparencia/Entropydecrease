@@ -598,6 +598,9 @@ pub(crate) fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usiz
                                 .unwrap_or_else(|e| e.into_inner())
                                 .push(AiTurn {
                                     turn: idx + 1,
+                                    // 观察 2026-09-05-3（如实化）：system=策略基座；流式
+                                    // NDJSON 后缀/预算引导段为运行期动态段不入轨迹，
+                                    // 取证以 response 全文为准
                                     system: adapter.prompt.build_system(profile, Some(dims)),
                                     user: turn_user_text(req, vision_images),
                                     response: serde_json::to_string(&r).unwrap_or_default(),

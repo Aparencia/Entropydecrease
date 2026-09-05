@@ -139,7 +139,7 @@ impl Db {
         self.with_conn(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT title FROM sessions WHERE status <> ?1 AND started_at >= ?2
-                 ORDER BY started_at DESC, id DESC",
+                 ORDER BY started_at DESC, id DESC LIMIT 200",
             )?;
             let rows = stmt.query_map(params![SESSION_STATUS_FAILED, since], |row| {
                 row.get::<_, String>(0)
