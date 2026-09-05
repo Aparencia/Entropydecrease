@@ -8,6 +8,7 @@
 | 源 | 目的 | 说明 |
 |----|------|------|
 | — | — | **本日无文档入夹**。候选评估：`docs/superpowers/specs/2026-09-05-v0.19-feedback-batch-design.md` 仍含 v0.19.8 未实施项（REQ-283/288/289 与 D1/D2），`2026-09-05-goal-execution-agent-design.md`（v0.21 规划）未实施——均不满足"内容已实施完成、不再活跃维护"的归档判定，保持活跃待下批；版本文档（versions/）与需求池按机制常驻不入夹 |
+| [asr-eval-first-report](./asr-eval-first-report.md) | — | v0.20.0（REQ-263）asr_eval 首轮自测报告——harness 通道就绪 + 真实数据首跑（13 会话弱参考档 CER 均值 0.2784）+ 数据面缺口登记（无 ≥3 段字幕会话）；内容已实施（M1/M2/M2b）入夹 |
 
 ## 技术债变更摘要
 
@@ -24,4 +25,5 @@
 - v0.19.6：`4c7dad0` `49d8619` `ddf3cb6` `b1af826` `843886e0` `a21fd6d`
 - v0.19.7：`c0c6eff` `1c7f808` `d7d589b5` `a5c912d` `b6a00a4` `305d8cc0` `d001c2fc` `33aff9a` `7460ae3` `a3a7b781`
 - 审查即修：`e59c413` `fa1647a` `7569871` `553e95a` `f15320d8`（元数据纠偏）
+- v0.20.0 asr_eval（REQ-263 首轮）：`11b3bb8`（M1 纯函数层）`2250310`（M2 harness）`564ee1a`（M2b 会话信道）
 - 本归档提交：`docs(archive): archive 2026-09-05`
