@@ -30,6 +30,38 @@ pub fn normalize_source_title(raw: &str) -> String {
     trimmed.to_string()
 }
 
+/// 标题 → 热词候选（REQ-266 注入源扩展，纯函数）。
+///
+/// @ai-context: 采集目标窗口标题携带课程/主题专名（"项目从立项到交付全流程|落地
+///              式项目全流程 - 抖音"）——按分隔符切 token、剔除平台品牌与纯数字、
+///              长度 2..=14 字符，去重限量（≤10），供 preheat 注入；tokens 表外字
+///              风险由 use-time 过滤兜底（streaming_asr filter_hotwords_by_tokens）。
+pub fn title_hotword_candidates(raw: &str) -> Vec<String> {
+    const SEPARATORS: &[char] = &['|', '｜', '-', '_', ' ', '/', '·', ':', '：'];
+    let normalized = normalize_source_title(raw);
+    let mut out: Vec<String> = Vec::new();
+    for tok in normalized.split(SEPARATORS) {
+        let tok = tok.trim();
+        let n = tok.chars().count();
+        if !(2..=14).contains(&n) {
+            continue;
+        }
+        if tok.chars().all(|c| c.is_ascii_digit()) {
+            continue; // 纯数字（年份/计数）无术语价值
+        }
+        if BRAND_SUFFIXES.iter().any(|b| tok == *b) {
+            continue; // 平台品牌名不入词表
+        }
+        if !out.iter().any(|t| t == tok) {
+            out.push(tok.to_string());
+        }
+        if out.len() >= 10 {
+            break;
+        }
+    }
+    out
+}
+
 /// 同源去重：existing 含 base → 追加「 #N」（N=现有最大后缀 +1，首个为 #2）。
 ///
 /// @ai-context: 纯比较不猜测——只处理「恰好等于 base」与「base #N」两类；
@@ -162,5 +194,33 @@ mod tests {
             None
         );
         assert_eq!(first_line_title(std::iter::empty::<&str>()), None);
+    }
+
+    // ── title_hotword_candidates（REQ-266）──
+
+    #[test]
+    fn title_candidates_split_and_strip_brand() {
+        // "项目从立项到交付全流程|落地式项目全流程 - 抖音" → 两段主题词；品牌剔除
+        let cs = title_hotword_candidates("项目从立项到交付全流程|落地式项目全流程 - 抖音");
+        assert!(cs.contains(&"项目从立项到交付全流程".to_string()));
+        assert!(cs.contains(&"落地式项目全流程".to_string()));
+        assert!(!cs.iter().any(|t| t == "抖音"));
+    }
+
+    #[test]
+    fn title_candidates_bare_brand_and_tiny_empty() {
+        assert!(title_hotword_candidates("抖音").is_empty());
+        assert!(title_hotword_candidates("").is_empty());
+        assert!(title_hotword_candidates("a").is_empty());
+        assert!(title_hotword_candidates("2024").is_empty());
+    }
+
+    #[test]
+    fn title_candidates_dedupe_and_cap() {
+        // 重复 token 只取一次；超出 10 个截断不 panic
+        let many = "词一 词二 词三 词四 词五 词六 词七 词八 词九 词十 词十一 词一";
+        let cs = title_hotword_candidates(many);
+        assert!(cs.len() <= 10);
+        assert_eq!(cs.iter().filter(|t| *t == "词一").count(), 1);
     }
 }

@@ -382,3 +382,47 @@ fn sensevoice_inference_latency_per_window() {
         total
     );
 }
+
+// ── REQ-266（v0.20.1）：tokens 表外字过滤/崩溃防护单测 ──
+
+#[test]
+fn hotword_filter_keeps_in_vocab_words_only() {
+    // Arrange：tokens 表仅含 {a,b,心,理}；热词表混入表外字词
+    let chars: std::collections::HashSet<char> = ['a', 'b', '心', '理'].into_iter().collect();
+    // Act
+    let out = filter_hotwords_by_tokens("ab 心 a 焦虑 心理 xyz", &chars);
+    // Assert：整词剔除（"焦虑"含 焦 不在表 → 整词删，保语义完整）；全在表者保留
+    assert_eq!(out, "ab 心 a 心理");
+}
+
+#[test]
+fn hotword_filter_all_outside_returns_empty() {
+    // Arrange：无任何表内字
+    let chars: std::collections::HashSet<char> = ['a'].into_iter().collect();
+    // Act
+    let out = filter_hotwords_by_tokens("焦虑 冥想 哲学", &chars);
+    // Assert：空串——调用方回退普通流（防 ContextGraph 崩溃，2026-08-21 修复回归）
+    assert_eq!(out, "");
+}
+
+#[test]
+fn hotword_filter_empty_token_set_is_safe() {
+    let chars: std::collections::HashSet<char> = std::collections::HashSet::new();
+    assert_eq!(filter_hotwords_by_tokens("abc 中文", &chars), "");
+    assert_eq!(filter_hotwords_by_tokens("", &chars), "");
+}
+
+#[test]
+fn token_chars_load_single_char_columns_only() {
+    // Arrange：临时 tokens.txt（行格式 "<符号> <id>"）——只收单字符列
+    // （▁ 为 sherpa 空格 token，属单字符列一并收集——热词文本不含 ▁，无害）
+    let raw = "a 1\nb 2\nab 3\n焦 4\n▁ 5\n";
+    let path = std::env::temp_dir().join(format!("asr_eval_tokens_{}.txt", std::process::id()));
+    std::fs::write(&path, raw).expect("写临时 tokens");
+    // Act
+    let set = load_token_chars(path.to_string_lossy().as_ref()).expect("解析临时 tokens");
+    let _ = std::fs::remove_file(&path);
+    // Assert：单字符列收集；多字符符号不收集
+    assert!(set.contains(&'a') && set.contains(&'b') && set.contains(&'焦') && set.contains(&'▁'));
+    assert_eq!(set.len(), 4);
+}

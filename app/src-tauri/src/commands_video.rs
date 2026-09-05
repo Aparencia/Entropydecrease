@@ -178,11 +178,15 @@ pub fn detect_video_domain(
 /// @param kind - 领域标识（kebab-case；非法值明确报错）
 /// @param fine - v0.13.6（REQ-220）：细目 id 数组（可选）——候选集 = 粗种子 ∪ 细目种子
 ///               （前端/后端术语不同，细分预热命中率↑）；缺省 None 向后兼容
+/// @param title - v0.20.1（REQ-266）：窗口标题（可选）——标题主题词自动注入
+///               （title_rules::title_hotword_candidates；品牌/纯数字/超长剔除；
+///               tokens 表外字由 use-time filter 兜底）
 #[tauri::command]
 pub fn preheat_domain_hotwords(
     state: State<'_, AppState>,
     kind: String,
     fine: Option<Vec<String>>,
+    title: Option<String>,
 ) -> Result<usize, String> {
     let kind = crate::video_profile_domain::DomainKind::parse(
         &kind.chars().take(30).collect::<String>(),
@@ -196,6 +200,14 @@ pub fn preheat_domain_hotwords(
     ) {
         if !candidates.contains(&c) {
             candidates.push(c);
+        }
+    }
+    // 标题主题词候选（REQ-266：窗口标题自动注入源）
+    if let Some(t) = title {
+        for c in crate::title_rules::title_hotword_candidates(&t) {
+            if !candidates.contains(&c) {
+                candidates.push(c);
+            }
         }
     }
     let mut vocab = state
