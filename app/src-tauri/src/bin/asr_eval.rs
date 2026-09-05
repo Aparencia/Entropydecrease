@@ -34,8 +34,8 @@ use sherpa_onnx::{OfflineRecognizer, OfflineRecognizerConfig, OfflineSenseVoiceM
 
 /// 默认 SenseVoice 模型目录（与 cer_bench/download 脚本约定一致）。
 const DEFAULT_MODEL_DIR: &str = "models/asr/sensevoice";
-/// 流式 zipformer 模型目录（与 streaming 下载脚本约定一致）。
-const STREAM_MODEL_DEFAULT: &str = "models/asr/streaming-zipformer-zh-fp16-2025-06-30";
+/// 流式 zipformer 模型目录（与 download-streaming-asr.mjs 目标目录一致）。
+const STREAM_MODEL_DEFAULT: &str = "models/streaming-zipformer";
 /// 基线回归容差（v0.20.0 契约：相对基线均值 CER 退化 >2% 即失败）。
 const REGRESSION_TOLERANCE: f32 = 0.02;
 

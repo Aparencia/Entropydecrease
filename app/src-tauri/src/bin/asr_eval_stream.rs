@@ -41,9 +41,10 @@ const BLOCK_SAMPLES: usize = 16_000 / 5;
 ///              按生产 flush 语义取当前结果收尾。
 pub fn transcribe_stream(wav_path: &str, model_dir: &str, p: &StreamParams) -> Option<String> {
     let dir = Path::new(model_dir);
-    let encoder = dir.join("encoder.onnx");
-    let decoder = dir.join("decoder.onnx");
-    let joiner = dir.join("joiner.onnx");
+    // 文件名与 download-streaming-asr.mjs / streaming_endpoint::ensure_model_files 约定一致
+    let encoder = dir.join("encoder.fp16.onnx");
+    let decoder = dir.join("decoder.fp16.onnx");
+    let joiner = dir.join("joiner.fp16.onnx");
     let tokens = dir.join("tokens.txt");
     if ![&encoder, &decoder, &joiner, &tokens].iter().all(|f| f.exists()) {
         eprintln!("[Stream] 流式模型缺失（{}）——本档跳过（下载脚本见 docs）", dir.display());
