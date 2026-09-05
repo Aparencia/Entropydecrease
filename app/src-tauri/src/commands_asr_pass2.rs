@@ -101,7 +101,12 @@ fn run_second_pass(
     let mut inserted = 0usize;
     for (i, (start_ms, end_ms)) in windows.iter().enumerate() {
         if job.is_cancelled() {
-            let _ = app.emit("session:refine2:aborted", session_id);
+            // 取消：已完成的窗保留为 pending 草稿（重跑会清理）；payload 与
+            // 其余终态事件同构（对象含 sessionId——前端监听按对象消费）
+            let _ = app.emit(
+                "session:refine2:aborted",
+                serde_json::json!({ "sessionId": session_id }),
+            );
             return Ok(inserted);
         }
         let from = (*start_ms * sample_rate as u64 / 1000) as usize;
@@ -169,24 +174,46 @@ pub fn second_pass_start(
         return Err("未找到会话落盘音频（离线精修仅支持有 S4 音频的实时捕获会话）".to_string());
     }
     let job = Pass2Job::new();
+    // 单锁内原子“检查-注册”（审查 M4：防双击/跨窗口同跑）：
+    // 会话级防重 + 全局单飞（引擎池 ASR worker 串行，多会话并行只会互相排队）
     {
         let mut jobs = state.second_pass_jobs.lock().map_err(|_| "任务注册表锁中毒".to_string())?;
+        if jobs.contains_key(&session_id) {
+            return Err("该会话已有第二遍任务进行中".to_string());
+        }
+        if !jobs.is_empty() {
+            return Err("已有其他会话的第二遍在跑（引擎串行）——请先等待完成或取消".to_string());
+        }
         jobs.insert(session_id, job.clone());
     }
     let app = app.clone();
     let db = state.db.clone();
     let engines = state.engines.clone();
     let path = audio_path.clone();
+    // 线程内取消标志副本（run 移走 job 后 wrapper 仍需读取消态）
+    let cancel_flag = job.clone();
     let spawn = std::thread::Builder::new()
         .name("entropy-second-pass".into())
         .spawn(move || {
-            let result = run_second_pass(app.clone(), db.clone(), engines, path, session_id, job);
+            // panic 收尾（审查 M4）：catch_unwind 保证注册表清理与终态事件
+            // ——panic 永不残留 running 卡死态
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                run_second_pass(app.clone(), db.clone(), engines, path, session_id, job)
+            }))
+            .unwrap_or_else(|_| {
+                Err("第二遍内部错误（panic）——已清理注册表，请重试".to_string())
+            });
             // 无论成败先移除运行标记（注册表与线程一一对应）
             if let Ok(mut jobs) = app.state::<AppState>().second_pass_jobs.lock() {
                 jobs.remove(&session_id);
             }
             match result {
                 Ok(n) => {
+                    // 取消路径已发 aborted——不再补发 done（避免“已取消”被覆盖闪烁）
+                    if cancel_flag.is_cancelled() {
+                        eprintln!("[SecondPass] 会话 {} 第二遍已取消（保留 {} 条已完成草稿）", session_id, n);
+                        return;
+                    }
                     let _ = app.emit(
                         "session:refine2:done",
                         serde_json::json!({ "sessionId": session_id, "proposals": n }),

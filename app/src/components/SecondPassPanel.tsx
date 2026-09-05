@@ -119,8 +119,8 @@ export default function SecondPassPanel({ sessionId, onChanged, onClose }: Props
         setErr(`第二遍失败: ${e.payload.error}`);
         void reload();
       }),
-      listen<number>("session:refine2:aborted", (e) => {
-        if (e.payload !== sessionId) return;
+      listen<{ sessionId: number }>("session:refine2:aborted", (e) => {
+        if (e.payload.sessionId !== sessionId) return;
         setRunningMsg("已取消（已完成窗口保留为待裁决草稿）");
         void reload();
       }),

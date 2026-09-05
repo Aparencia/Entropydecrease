@@ -306,12 +306,26 @@ fn ingest_from_extension(
     let mut markdown = p.markdown.clone();
     let notes_images = data_dir.join("notes-images");
     let _ = std::fs::create_dir_all(&notes_images);
+    let mut written_files: Vec<String> = Vec::new();
     for img in &p.images {
         if let Some(bytes) = crate::web_inbox::data_uri_bytes(&img.data_base64) {
             let mime = img.data_base64.split_once(';').map(|(m, _)| m).unwrap_or("data:image/png");
-            let ext = mime.rsplit('/').next().unwrap_or("png");
+            let raw_ext = mime.rsplit('/').next().unwrap_or("png").to_ascii_lowercase();
+            // 审查 L1：扩展名白名单映射（内容类型断言——禁止 svg+xml/.html 落盘）
+            let ext = match raw_ext.as_str() {
+                "png" | "apng" => "png",
+                "jpg" | "jpeg" => "jpg",
+                "gif" => "gif",
+                "webp" => "webp",
+                "bmp" => "bmp",
+                _ => {
+                    eprintln!("[WebInbox] 拒绝非白名单图片类型: {}", raw_ext);
+                    continue;
+                }
+            };
             let filename = format!("web-{}-{}.{}", session.id, crate::web_inbox::short_hash(&bytes), ext);
             if std::fs::write(notes_images.join(&filename), bytes).is_ok() {
+                written_files.push(filename.clone());
                 // 替换 md 中 `![name](data:...)` 引用为相对路径（编辑器同解析基座）
                 markdown = markdown.replace(
                     &format!("]({})", img.data_base64),
@@ -320,7 +334,7 @@ fn ingest_from_extension(
             }
         }
     }
-    db.insert_web_page(&WebPage {
+    if let Err(e) = db.insert_web_page(&WebPage {
         session_id: session.id,
         url: p.url.clone().unwrap_or_else(|| "".to_string()),
         site: p.site.clone(),
@@ -330,8 +344,16 @@ fn ingest_from_extension(
         raw_html: None,
         extracted_ok: true,
         fetched_at: now,
-    })
-    .map_err(|e| e.to_string())?;
+    }) {
+        // 审查 M5：页面落库失败 → 清理孤儿会话与本次已落图文件
+        for f in &written_files {
+            let _ = std::fs::remove_file(notes_images.join(f));
+        }
+        if let Err(clean_err) = db.delete_session(session.id) {
+            eprintln!("[WebInbox] 孤儿会话清理失败 {}: {}", session.id, clean_err);
+        }
+        return Err(format!("页面落库失败（已清理本次会话与图文件）: {}", e));
+    }
     if let Some(app) = app {
         crate::notify::emit_changed(app, crate::notify::DataDomain::Sessions);
     }

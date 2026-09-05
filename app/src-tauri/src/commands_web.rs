@@ -100,19 +100,23 @@ fn capture_inner(st: &AppState, url: &str) -> Result<WebCaptureView, String> {
             kind: Some("web".to_string()),
         })
         .map_err(|e| e.to_string())?;
-    st.db
-        .insert_web_page(&WebPage {
-            session_id: session.id,
-            url: url.to_string(),
-            site: page.site.clone(),
-            author: page.author.clone(),
-            published: page.published.clone(),
-            markdown: if page.ok { page.markdown.clone() } else { String::new() },
-            raw_html: if page.ok { None } else { Some(html.clone()) },
-            extracted_ok: page.ok,
-            fetched_at: now,
-        })
-        .map_err(|e| e.to_string())?;
+    if let Err(e) = st.db.insert_web_page(&WebPage {
+        session_id: session.id,
+        url: url.to_string(),
+        site: page.site.clone(),
+        author: page.author.clone(),
+        published: page.published.clone(),
+        markdown: if page.ok { page.markdown.clone() } else { String::new() },
+        raw_html: if page.ok { None } else { Some(html.clone()) },
+        extracted_ok: page.ok,
+        fetched_at: now,
+    }) {
+        // 审查 M5：页面落库失败 → 清理孤儿会话（重试不产生重复/不可转笔记残留）
+        if let Err(clean_err) = st.db.delete_session(session.id) {
+            eprintln!("[WebCapture] 孤儿会话清理失败 {}: {}", session.id, clean_err);
+        }
+        return Err(format!("页面落库失败（已清理本次会话）: {}", e));
+    }
     // 会话域广播（列表即时可见）
     crate::notify::emit_changed(&st.app, crate::notify::DataDomain::Sessions);
     Ok(WebCaptureView {
