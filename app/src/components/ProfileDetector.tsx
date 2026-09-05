@@ -207,7 +207,8 @@ export default function ProfileDetector({
       // 审查 L2 修复：preheat 与 remember 相互独立（热词失败不阻断记忆写）
       let warmErr = "";
       try {
-        await invoke("preheat_domain_hotwords", { kind: d.kind, fine: fineIds });
+        // REQ-266（v0.20.1）：标题主题词随预热注入（后端 title_hotword_candidates 提取）
+        await invoke("preheat_domain_hotwords", { kind: d.kind, fine: fineIds, title: windowTitle });
       } catch (e) {
         warmErr = `领域热词预热失败: ${e}`;
       }

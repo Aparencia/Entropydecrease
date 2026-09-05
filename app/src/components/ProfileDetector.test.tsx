@@ -76,7 +76,11 @@ describe("ProfileDetector v0.13.6 三维交互", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "投资理财" })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "会计财务" }));
     await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith("preheat_domain_hotwords", { kind: "economy", fine: ["invest", "accounting"] }),
+      expect(invokeMock).toHaveBeenCalledWith("preheat_domain_hotwords", {
+        kind: "economy",
+        fine: ["invest", "accounting"],
+        title: "某视频_哔哩哔哩_bilibili",
+      }),
     );
     await waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith("remember_video_profile_domain", {
