@@ -172,11 +172,21 @@ export default function RefineLaunchDialog({
           <span style={{ fontSize: 11, color: "#6b7280" }}>{isNote ? "目标：当前笔记" : "目标：来源会话"}</span>
         </div>
 
-        {/* 授权卡（首次：上传说明 + 同意） */}
+        {/* 授权卡（首次：上传说明 + 同意）——审查 B11：文案按画面理解生效态条件化，
+            开启时明确"关键帧将随本次上传"（不再声称图像永不出本机） */}
         {!settings?.authorized && (
           <div style={{ border: "1px solid #f59e0b", background: "#fffbeb", borderRadius: 8, padding: 10, marginBottom: 10, fontSize: 12 }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>首次使用需授权</div>
-            精修将上传<strong>转写文本、笔记内容与最小上下文</strong>至 AI 服务；本地优先铁律：<strong>音视频/图像永不出本机</strong>。是否同意？
+            {effectiveVision ? (
+              <>
+                精修将上传<strong>转写文本、笔记内容与关键帧图片</strong>至 AI 服务（画面理解已开启——关键帧仅本次随请求上云，不落云端存储）。
+              </>
+            ) : (
+              <>
+                精修将上传<strong>转写文本、笔记内容与最小上下文</strong>至 AI 服务；本地优先铁律：<strong>音视频/图像永不出本机</strong>。
+              </>
+            )}
+            是否同意？
             <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
               <button style={{ ...btn, background: "#0d9488", color: "#fff", border: "none" }} onClick={() => void consent()}>同意并继续</button>
               <button style={btn} onClick={onClose}>暂不</button>

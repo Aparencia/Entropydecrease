@@ -58,6 +58,9 @@ pub struct StreamOutcome {
     pub content: String,
     pub usage_json: Option<String>,
     pub cancelled: bool,
+    /// REQ-290①：是否收到 SSE [DONE] 正常收尾（false=断流/服务端 error——
+    /// 调用方应视作失败走重试/回退，禁止把截断当成功）
+    pub completed: bool,
 }
 
 /// 发送流式 chat/completions（SSE），逐 delta 回调 emit。
@@ -104,6 +107,7 @@ pub fn stream_chat(
     let mut content = String::new();
     let mut usage_json: Option<String> = None;
     let mut cancelled = false;
+    let mut completed = false;
     for line in reader.lines() {
         if cancel.is_cancelled() {
             cancelled = true;
@@ -111,14 +115,17 @@ pub fn stream_chat(
         }
         let line = match line {
             Ok(l) => l,
-            Err(_) => break, // 传输中途断流：以已累积内容为准（无 usage）
+            Err(_) => break, // 传输中途断流：completed=false——调用方不得当成功
         };
         match parse_sse_line(&line) {
             SseEvent::Delta(d) => {
                 content.push_str(&d);
                 emit(ChatStreamEvent::Chunk { delta: d });
             }
-            SseEvent::Done => break,
+            SseEvent::Done => {
+                completed = true;
+                break;
+            }
             SseEvent::Ignore => {
                 // usage 可能挂在非 delta 的 data 行（OpenAI 兼容末 chunk）
                 if let Some(usage) = extract_usage(&line) {
@@ -127,7 +134,7 @@ pub fn stream_chat(
             }
         }
     }
-    Ok(StreamOutcome { content, usage_json, cancelled })
+    Ok(StreamOutcome { content, usage_json, cancelled, completed })
 }
 
 /// 从 data 行提取 usage（纯函数；无 usage → None）。
@@ -170,17 +177,21 @@ pub fn stream_sse_content(
     let reader = BufReader::new(resp.into_reader());
     let mut content = String::new();
     let mut usage_json: Option<String> = None;
+    let mut completed = false;
     for line in reader.lines() {
         let line = match line {
             Ok(l) => l,
-            Err(_) => break, // 传输中途断流：以已累积内容为准
+            Err(_) => break, // 传输中途断流：completed=false——调用方不得当成功
         };
         match parse_sse_line(&line) {
             SseEvent::Delta(d) => {
                 content.push_str(&d);
                 emit(&d);
             }
-            SseEvent::Done => break,
+            SseEvent::Done => {
+                completed = true;
+                break;
+            }
             SseEvent::Ignore => {
                 if let Some(usage) = extract_usage(&line) {
                     usage_json = Some(usage);
@@ -188,7 +199,7 @@ pub fn stream_sse_content(
             }
         }
     }
-    Ok(StreamOutcome { content, usage_json, cancelled: false })
+    Ok(StreamOutcome { content, usage_json, cancelled: false, completed })
 }
 
 /// HTTP 状态 → AiClientError（与 post_completions 同归一口径——四下一致）。

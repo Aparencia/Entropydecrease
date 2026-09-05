@@ -221,14 +221,16 @@ impl AiNoteRefineAdapter {
         let mut system = self.prompt.build_system(&request.profile, dims);
         system.push_str("\n\n");
         system.push_str(crate::ai_refine_protocol::NDJSON_SYSTEM_SUFFIX);
-        // REQ-290② 预算（与 refine_vision 同口径——流式不豁免上限）
+        // REQ-290② 预算（与 refine_vision 同口径——流式不豁免上限；含引导段）
         let budget = crate::refine_budget::output_budget(
             dims.map(|d| d.preset_id.as_str()).unwrap_or("standard"),
             request.content.chars().count(),
         );
+        system.push_str("\n\n");
+        system.push_str(&crate::refine_budget::guidance_suffix(&budget));
         let user = serde_json::to_string(request)
             .map_err(|e| AiClientError::Parse(format!("精修请求序列化失败: {}", e)))?;
-        let payload = if images.is_empty() {
+        let mut payload = if images.is_empty() {
             crate::ai_client::build_chat_payload(
                 &self.client.config.model, &system, &user, budget.max_tokens,
             )
@@ -237,6 +239,11 @@ impl AiNoteRefineAdapter {
                 &self.client.config.model, &system, &user, images, budget.max_tokens,
             )
         };
+        // B1（审查）：json_object=单一 JSON 值约束与 NDJSON 多行对象冲突——
+        // 流式拍必须去除 response_format（非流式回退路径保留既有约束）
+        if let Some(o) = payload.as_object_mut() {
+            o.remove("response_format");
+        }
         let mut sections: Vec<crate::ai_refine_protocol::AiRefineSection> = Vec::new();
         let mut pending = String::new();
         let outcome = crate::ai_chat_stream::stream_sse_content(
@@ -258,16 +265,47 @@ impl AiNoteRefineAdapter {
             sections.push(sec.clone());
             on_section(sec);
         }
-        let _ = outcome.content;
+        // B2（审查）：未收到 [DONE] 即断流——已累积节不可信（尾节可能丢失），
+        // 整体视作失败走同拍非流式回退（禁止静默截断当成功）
+        if !outcome.completed {
+            return Err(AiClientError::Network(
+                "流式响应未正常收尾（SSE 中断）——回退非流式".to_string(),
+            ));
+        }
+        // B3（审查）：整包回退承诺兑现——模型输出完整数组（紧凑/pretty）时
+        // 对已累积全文做整包解析（零额外请求；仅此路径无 Delta 帧）
+        if sections.is_empty() {
+            let text = outcome.content.trim();
+            if !text.is_empty() {
+                let v: serde_json::Value = serde_json::from_str(text)
+                    .map_err(|e| AiClientError::Parse(format!("流式整包解析失败: {}", e)))?;
+                let arr = v
+                    .get("sections")
+                    .cloned()
+                    .unwrap_or_else(|| v.clone());
+                let parsed: Vec<crate::ai_refine_protocol::AiRefineSection> =
+                    serde_json::from_value(arr).map_err(|e| {
+                        AiClientError::Parse(format!("流式整包结构非法: {}", e))
+                    })?;
+                if !parsed.is_empty() {
+                    sections = parsed;
+                }
+            }
+        }
         if sections.is_empty() {
             return Err(AiClientError::Parse(
                 "流式响应未解析出章节（模型未按逐节输出——回退非流式）".to_string(),
             ));
         }
-        Ok(crate::ai_refine_protocol::AiRefineResponse {
+        let resp = crate::ai_refine_protocol::AiRefineResponse {
             schema_version: crate::ai_refine_protocol::SCHEMA_VERSION_V2,
             sections,
-        })
+        };
+        // B6（审查）：与 refine_vision 同口径——组装后过整包校验
+        resp.validate().map_err(|e| {
+            AiClientError::Parse(format!("流式响应校验失败（已丢弃回退）: {}", e))
+        })?;
+        Ok(resp)
     }
 }
 
