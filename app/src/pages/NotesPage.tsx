@@ -373,11 +373,30 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
     return Array.from(set).sort();
   }, [notes]);
 
+  // v0.20.3（REQ-301）：SE 情绪 tag（#树洞）默认排除（设置可显）
+  const [sealedVisible, setSealedVisible] = useState(false);
+  useEffect(() => {
+    void invoke<{ sealedTagsVisible?: boolean }>("get_feature_flags")
+      .then((f) => setSealedVisible(!!f.sealedTagsVisible))
+      .catch(() => setSealedVisible(false));
+  }, [refreshToken]);
+
   // v0.11.0：组过滤在客户端生效（列表已全量加载；组切换零请求）
-  const visibleNotes = useMemo(
-    () => (groupFilter === null ? notes : notes.filter((n) => n.group_id === groupFilter)),
-    [notes, groupFilter],
-  );
+  // v0.20.3（REQ-301）：SE 封存默认不可见——#树洞 类 tag 笔记从默认列表排除
+  const visibleNotes = useMemo(() => {
+    let list = groupFilter === null ? notes : notes.filter((n) => n.group_id === groupFilter);
+    if (!sealedVisible && tagFilter == null) {
+      list = list.filter((n) => {
+        try {
+          const tags = JSON.parse(n.tags ?? "[]") as unknown[];
+          return !tags.some((t) => String(t).includes("树洞"));
+        } catch {
+          return true; // tags 非 JSON（旧数据）→ 不误滤
+        }
+      });
+    }
+    return list;
+  }, [notes, groupFilter, sealedVisible, tagFilter]);
 
   // v0.14 B：组映射（noteId → 组，resolveNoteColor 组继承档用）
   const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);

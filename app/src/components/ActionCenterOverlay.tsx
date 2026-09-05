@@ -107,6 +107,50 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
   const [sopStart, setSopStart] = useState("0");
   const [sopEnd, setSopEnd] = useState("0");
   const [suggestions, setSuggestions] = useState<Record<number, string[]>>({});
+  // v0.20.3（REQ-294）：批量周回顾（选中执行/放弃——batch_weekly_resolve 单事务）
+  const [batchMode, setBatchMode] = useState(false);
+  const [checked, setChecked] = useState<Set<number>>(new Set());
+  const [batchReason, setBatchReason] = useState("");
+
+  const toggleChecked = (id: number) => {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const runBatch = async (action: "done" | "abandon") => {
+    const candidates = [...overdue, ...planned, ...rows];
+    const decisions = candidates
+      .filter((r) => checked.has(r.id) && !r.unrefined)
+      .map((r) => ({ rowId: r.id, action, reason: action === "abandon" ? batchReason.trim() || null : null }));
+    if (decisions.length === 0) {
+      setErr("请先勾选要批决议的任务行");
+      return;
+    }
+    try {
+      const view = await invoke<{ done: number; abandoned: number; failed: string[] }>(
+        "batch_weekly_resolve",
+        { decisions },
+      );
+      setMsg(`⚖ 周回顾批提交完成：执行 ${view.done} · 放弃 ${view.abandoned}${view.failed.length > 0 ? ` · 失败 ${view.failed.length} 条（${view.failed[0]}）` : ""}`);
+      setChecked(new Set());
+      setBatchReason("");
+      setBatchMode(false);
+      onChanged?.();
+      const [o, p, s, u, h] = await Promise.all([
+        fetchTab("overdue"),
+        fetchTab("planned"),
+        fetchTab("someday"),
+        fetchTab("unrefined"),
+        invoke<HistoryRow[]>("completion_history_list", { eventType: null, limit: 150 }),
+      ]);
+      setOverdue(o); setPlanned(p); setRows(s); setUnrefined(u); setHistory(h);
+    } catch (e) {
+      setErr(String(e));
+    }
+  };
   // 裁决队列（四分区同拉全量行，前端按 tab 分区展示——逾期标红/计划/搁置/提炼）
   const [rows, setRows] = useState<ActionRow[]>([]);
   const [history, setHistory] = useState<HistoryRow[]>([]);
@@ -366,6 +410,39 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
 
         {tab === "queue" ? (
           <>
+            {/* v0.20.3（REQ-294）：周回顾批裁决（不留死尸——裁决机制批量面） */}
+            <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
+              <button style={ghostBtn} onClick={() => setBatchMode((m) => !m)} data-testid="weekly-batch-toggle">
+                {batchMode ? "退出批量（⚖ 周回顾）" : "⚖ 批量裁决（周回顾）"}
+              </button>
+              {batchMode && (
+                <>
+                  <input value={batchReason} onChange={(e) => setBatchReason(e.target.value)} placeholder="放弃原因（批量放弃共用，可空）" style={{ fontSize: 12, width: 200, border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 6px" }} />
+                  <button style={okBtn} disabled={checked.size === 0} onClick={() => void runBatch("done")}>
+                    ⚖ 执行选中（{checked.size}）
+                  </button>
+                  <button style={{ ...ghostBtn, color: "#dc2626" }} disabled={checked.size === 0} onClick={() => void runBatch("abandon")}>
+                    ✗ 放弃选中（留因）
+                  </button>
+                </>
+              )}
+            </div>
+            {batchMode && (
+              <div style={{ border: "1px dashed #c4b5fd", borderRadius: 8, padding: 6, marginBottom: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                {[...overdue, ...planned, ...rows].filter((r) => !r.unrefined).length === 0 && (
+                  <p style={{ margin: 0, fontSize: 12, color: "#9ca3af" }}>当前无可批决议的 todo 行</p>
+                )}
+                {[...overdue, ...planned, ...rows]
+                  .filter((r) => !r.unrefined)
+                  .map((r) => (
+                    <label key={r.id} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, cursor: "pointer", padding: "2px 4px", borderRadius: 4, background: checked.has(r.id) ? "#f5f3ff" : "transparent" }}>
+                      <input type="checkbox" checked={checked.has(r.id)} onChange={() => toggleChecked(r.id)} />
+                      <span style={{ color: "#111827" }}>{r.text}</span>
+                      <span style={{ fontSize: 10.5, color: "#9ca3af", marginLeft: "auto" }}>@{r.note_title}</span>
+                    </label>
+                  ))}
+              </div>
+            )}
             <h4 style={{ fontSize: 12.5, margin: "6px 0 4px", color: "#dc2626" }}>逾期（{overdue.length}）</h4>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {overdue.length === 0 ? empty("无逾期——裁决是机制不是自动清理") : overdue.map((r) => renderRow(r, true))}

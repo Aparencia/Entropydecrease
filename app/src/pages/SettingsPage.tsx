@@ -25,6 +25,8 @@ import LearningLibraryPanel from "../components/LearningLibraryPanel";
 import AiProviderSettings from "../components/AiProviderSettings";
 import AiTaskPanel from "../components/AiTaskPanel";
 import FeatureFlagSetting from "../components/FeatureFlagSetting";
+// v0.20.3（REQ-301）：SE 情绪 tag 封存显隐
+import SealToggle from "../components/SealToggle";
 // v0.20.2（REQ-269）：ASR 混淆画像闭环面板（候选确认制/规则管理）
 import AsrConfusionPanel from "../components/AsrConfusionPanel";
 // v0.20.2（REQ-270）：可选 LLM 文本校对开关（默认关双闸门之二）
@@ -125,7 +127,10 @@ export default function SettingsPage({ active = true }: Props) {
         {/* ── 功能预览（默认关的新能力开关，v4 §11.3）── */}
         <GroupTitle>功能预览</GroupTitle>
         <div style={{ ...panel, marginBottom: 4 }}>
-          <FeatureFlagSetting />
+          <SealToggle />
+          <div style={{ marginTop: 8 }}>
+            <FeatureFlagSetting />
+          </div>
         </div>
       </div>
     </div>
