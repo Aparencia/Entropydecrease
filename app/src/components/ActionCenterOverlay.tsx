@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import SopRunOverlay from "./SopRunOverlay";
+import { PracticeOverlay, QuestionsOverlay } from "./PracticeQuestionsOverlays";
 
 interface SopTemplateView {
   id: number;
@@ -98,6 +99,9 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
   const [templates, setTemplates] = useState<SopTemplateView[]>([]);
   const [notes, setNotes] = useState<{ id: number; title: string }[]>([]);
   const [activeTemplate, setActiveTemplate] = useState<SopTemplateView | null>(null);
+  // v0.20.3（REQ-299/300）：练习/问题轻量面（嵌套 Overlay）
+  const [showPractice, setShowPractice] = useState(false);
+  const [showQuestions, setShowQuestions] = useState(false);
   const [sopNoteId, setSopNoteId] = useState<number | null>(null);
   const [sopName, setSopName] = useState("");
   const [sopStart, setSopStart] = useState("0");
@@ -346,6 +350,14 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
               </button>
             ))}
           </div>
+          <div style={{ marginLeft: 12, display: "flex", gap: 4 }}>
+            <button style={{ ...btn, borderRadius: 6, border: "1px solid #7c3aed", background: "#f5f3ff", color: "#6d28d9" }} onClick={() => setShowPractice(true)}>
+              🎯 练习
+            </button>
+            <button style={{ ...btn, borderRadius: 6, border: "1px solid #2563eb", background: "#eff6ff", color: "#1d4ed8" }} onClick={() => setShowQuestions(true)}>
+              ❓ 问题
+            </button>
+          </div>
           <button style={{ ...btn, marginLeft: "auto" }} onClick={onClose}>关闭</button>
         </div>
 
@@ -451,6 +463,9 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
             onChanged={() => { void loadSop(); onChanged?.(); }}
           />
         )}
+        {/* v0.20.3（REQ-299/300）：练习/问题轻量面 */}
+        {showPractice && <PracticeOverlay onClose={() => setShowPractice(false)} />}
+        {showQuestions && <QuestionsOverlay onClose={() => setShowQuestions(false)} />}
       </div>
     </div>
   );
