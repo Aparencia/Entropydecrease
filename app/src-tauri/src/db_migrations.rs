@@ -507,6 +507,8 @@ CREATE TABLE IF NOT EXISTS contracts (
     crate::db_task_index::init(conn)?;
     // v0.20.3（REQ-298）：完成史统一事件表（周回顾原料/成长轨迹唯一数据源）
     crate::db_completion::init(conn)?;
+    // v0.20.3（REQ-296/297）：SOP 功能区三表（模板行范围引用/run/步骤轨迹）
+    crate::db_sop::init(conn)?;
     Ok(())
 }
 

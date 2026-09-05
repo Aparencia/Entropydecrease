@@ -77,6 +77,8 @@ mod tasks_core;
 mod db_task_index;
 mod db_completion;
 mod commands_tasks;
+mod db_sop;
+mod commands_sop;
 mod asr_clean;
 mod asr_confusion;
 mod asr_dedupe;
@@ -940,6 +942,16 @@ pub fn run() {
             commands_tasks::task_refine_unrefined,
             commands_tasks::task_set_plan_date,
             commands_tasks::completion_history_list,
+            // v0.20.3（REQ-296/297）：SOP——模板 CRUD/run 生命周期/步骤/建议
+            commands_sop::sop_template_create,
+            commands_sop::sop_template_list,
+            commands_sop::sop_template_delete,
+            commands_sop::sop_run_start,
+            commands_sop::sop_run_detail,
+            commands_sop::sop_step_update,
+            commands_sop::sop_run_finish,
+            commands_sop::sop_run_list,
+            commands_sop::sop_revision_suggestions,
             // v0.20.2（REQ-269）：ASR 混淆画像闭环——候选/确认/忽略/规则管理
             commands_asr_confusion::asr_confusion_get,
             commands_asr_confusion::asr_confusion_confirm,
