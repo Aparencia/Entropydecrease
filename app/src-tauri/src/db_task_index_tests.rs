@@ -72,6 +72,21 @@ fn rebuild_is_idempotent_and_delete_cleans() {
 }
 
 #[test]
+fn rebuild_preserves_plan_meta_across_saves() {
+    // 审查回归（高-1）：改期元数据是索引列——任何正文保存重扫都不得抹除
+    let db = Db::open(":memory:").unwrap();
+    let id = create_note_with(&db, "- [ ] 待办甲\n");
+    let rows = db.list_task_queue(Some(id)).unwrap();
+    let tomorrow = crate::db::unix_seconds() / 86_400 * 86_400 + 86_400;
+    db.set_task_plan_date(rows[0].id, Some(tomorrow)).unwrap();
+    // 异内容保存（前插一段——行号漂移 + 重扫）
+    db.update_note(id, "任务笔记", "新段\n\n- [ ] 待办甲\n").unwrap();
+    let after = db.list_task_queue(Some(id)).unwrap();
+    assert_eq!(after.len(), 1, "重扫吸收行漂移");
+    assert_eq!(after[0].plan_date, Some(tomorrow), "计划日元数据跨重扫保留");
+}
+
+#[test]
 fn content_without_tasks_indexes_empty() {
     let db = Db::open(":memory:").unwrap();
     let id = create_note_with(&db, "纯文本笔记，无任务行。\n");

@@ -279,10 +279,13 @@ pub fn second_pass_decide(
         return Err("草稿不存在于该会话（id 越界或已随会话删除）".to_string());
     }
     let status = if adopt { STATUS_ADOPTED } else { STATUS_REJECTED };
-    state
+    let affected = state
         .db
-        .decide_refine_draft(draft_id, status)
+        .decide_refine_draft_in_session(draft_id, Some(session_id), status)
         .map_err(|e| format!("裁决失败: {e}"))?;
+    if !affected {
+        return Err("草稿不存在于该会话（并发下已变更）".to_string());
+    }
     // REQ-269 采集：采纳第二遍草稿时把（旧文→新文）词级差异记入混淆画像
     // （仅 second_pass origin——校对源不采集；失败仅日志，不影响裁决主链路）
     if adopt {

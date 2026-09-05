@@ -18,12 +18,14 @@ fn inline_styles_imgs_and_strip_external_scripts() {
 <script src="https://evil.example/x.js"></script></head>
 <body><img src="pic/logo.png" alt="logo"><script>var ok=1;</script><p>正文</p></body></html>"#;
     let mut resolver = |url: &str| match url {
-        "https://a.com/css/main.css" => Some("aGFzaA==".to_string()), // base64('hash')
+        "https://a.com/css/main.css" => Some("Ym9keXtjb2xvcjpyZWR9".to_string()), // base64('body{color:red}')
         "https://a.com/x/pic/logo.png" => Some("aWNvbg==".to_string()),
         _ => None,
     };
     let out = inline_html("https://a.com/x/y.html", html, &mut resolver);
-    assert!(out.contains("data:text/css;base64,aGFzaA=="), "{}", out);
+    // CSS 必须解码为规则文本（data URI 字面量是非法规则——M1 修复断言）
+    assert!(out.contains("body{color:red}"), "{}", out);
+    assert!(!out.contains("data:text/css"), "{}", out);
     assert!(out.contains("data:image/png;base64,aWNvbg=="), "{}", out);
     assert!(!out.contains("evil.example"), "外链脚本剔除");
     assert!(!out.contains("var ok=1"), "行内脚本同样剔除（离线打开零执行面）");

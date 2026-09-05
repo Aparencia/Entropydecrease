@@ -194,18 +194,21 @@ fn read_request(stream: &mut TcpStream) -> Option<(String, String, HashMap<Strin
                                     .and_then(|(_, v)| v.trim().parse().ok())
                             })
                             .unwrap_or(0);
+                        // 审查 H1：声明体量预检——超上限立即断（超大流不再读入，
+                        // 与协议 8MB 契约一致；头部已定的积压阶段同样有界）
+                        if content_len > BODY_MAX {
+                            return None;
+                        }
                         if pos + 4 + content_len <= buf.len() {
                             let body = buf[pos + 4..pos + 4 + content_len].to_vec();
                             let head = String::from_utf8_lossy(&buf[..pos]).into_owned();
                             let (method, path, headers) = parse_headers(&head)?;
                             return Some((method, path, headers, body));
                         }
-                        if buf.len() > BODY_MAX {
-                            return None;
-                        }
                     }
                 }
-                if buf.len() > BODY_MAX && head_end.is_none() {
+                // 未含头的首段与头部已定的积压阶段统一有界（防谎报/流式放大）
+                if buf.len() > BODY_MAX {
                     return None;
                 }
             }

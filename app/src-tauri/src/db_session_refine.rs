@@ -210,16 +210,33 @@ impl Db {
     /// 裁决单条草稿（adopted/rejected 双向可翻转——回退=rejected 即恢复原料；
     /// 重新采纳=adopted。原料表始终不动）。
     pub fn decide_refine_draft(&self, draft_id: i64, status: &str) -> Result<bool> {
+        self.decide_refine_draft_in_session(draft_id, None, status)
+    }
+
+    /// 会话限定裁决（审查 L4：WHERE 带 session_id——TOCTOU 双保险，防
+    /// 预校验后归属变更的越权写）。
+    pub fn decide_refine_draft_in_session(
+        &self,
+        draft_id: i64,
+        session_id: Option<i64>,
+        status: &str,
+    ) -> Result<bool> {
         if status != STATUS_ADOPTED && status != STATUS_REJECTED {
             return Err(crate::error::AppError::Asr(format!(
                 "非法草稿裁决状态: {status}（仅 adopted/rejected）"
             )));
         }
         self.with_conn(|conn| {
-            let affected = conn.execute(
-                "UPDATE session_refine_drafts SET status = ?1, decided_at = ?2 WHERE id = ?3",
-                params![status, unix_seconds(), draft_id],
-            )?;
+            let affected = match session_id {
+                Some(sid) => conn.execute(
+                    "UPDATE session_refine_drafts SET status = ?1, decided_at = ?2 WHERE id = ?3 AND session_id = ?4",
+                    params![status, unix_seconds(), draft_id, sid],
+                )?,
+                None => conn.execute(
+                    "UPDATE session_refine_drafts SET status = ?1, decided_at = ?2 WHERE id = ?3",
+                    params![status, unix_seconds(), draft_id],
+                )?,
+            };
             Ok(affected > 0)
         })
     }

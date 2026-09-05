@@ -68,6 +68,30 @@ fn weekly_batch_tolerates_stale_rows() {
 }
 
 #[test]
+fn weekly_stale_line_flagged_without_history_pollution() {
+    // 审查回归（高-3）：队列加载后行内容被改 → 批决议不得静默照记史
+    let db = Db::open(":memory:").unwrap();
+    let nid = seed(&db);
+    let rows = db.list_task_queue(Some(nid)).unwrap();
+    let r1 = rows.iter().find(|r| r.task_text == "任务一").unwrap();
+    // 模拟后台改文：任务一被改写（行号不变、载荷不符）
+    let note = db.get_note(nid).unwrap().unwrap();
+    db.update_note(nid, &note.title, note.content.replace("- [ ] 任务一", "- [ ] 任务一改").as_str())
+        .unwrap();
+    let view = weekly_resolve_core(
+        &db,
+        &[WeeklyDecision { row_id: r1.id, action: "done".into(), reason: None }],
+    )
+    .unwrap();
+    assert_eq!(view.done, 0, "失效行不得计完成");
+    assert_eq!(view.failed.len(), 1, "显式报失效");
+    let note2 = db.get_note(nid).unwrap().unwrap();
+    assert!(note2.content.contains("- [ ] 任务一改"), "正文未被错误改写");
+    let hist = db.list_completion_events(Some("done"), 10).unwrap();
+    assert!(hist.is_empty(), "不得污染完成史");
+}
+
+#[test]
 fn manual_fill_export_done_records_history() {
     let db = Db::open(":memory:").unwrap();
     let id = db

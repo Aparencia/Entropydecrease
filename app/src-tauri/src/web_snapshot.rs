@@ -41,7 +41,14 @@ pub fn resolve_url(base: &str, href: &str) -> Option<String> {
     Some(format!("{}://{}{}", &base[..scheme_split], dir, href))
 }
 
-/// 内联单资源占位（style/img 空档——防空串替换破坏结构）。
+/// 解码 base64 为文本（CSS 内联用；失败=None 保留原引用降级）。
+fn decode_text(b64: &str) -> Option<String> {
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD.decode(b64.trim()).ok()?;
+    Some(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// 内联单资源占位（img 用 data URI；style 走 decode_text 分支）。
 fn data_or_keep(
     kind: &str,
     resolved: Option<String>,
@@ -90,13 +97,19 @@ pub fn inline_html(base: &str, html: &str, resolver: Resolver) -> String {
         if lower.starts_with("<link") {
             if let Some(href) = extract_attr(tag, "href") {
                 if lower.contains("stylesheet") {
-                    if let Some(data) = data_or_keep("style", resolve_url(base, &href), &mut *resolver) {
-                        out.push_str(&format!("<style data-inlined=\"{}\">{}</style>", escape_attr(&href), data));
-                        continue;
+                    // CSS 必须解码为纯文本塞入 <style>（data URI 字面量是非法规则——
+                    // 审查 M1：内联产物对外部样式要真实生效）
+                    if let Some(url) = resolve_url(base, &href) {
+                        if let Some(b64) = resolver(&url) {
+                            if let Some(css) = decode_text(b64.as_str()) {
+                                out.push_str(&format!("<style data-inlined=\"{}\">{}</style>", escape_attr(&href), css));
+                                continue;
+                            }
+                        }
                     }
                 }
             }
-            out.push_str(tag);
+            out.push_str(&scrub_tag(tag));
         } else if lower.starts_with("<img") {
             if let Some(src) = extract_attr(tag, "src") {
                 let data = data_or_keep("img", resolve_url(base, &src), &mut *resolver);
