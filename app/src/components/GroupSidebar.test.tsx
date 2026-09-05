@@ -35,6 +35,8 @@ beforeEach(() => {
     switch (cmd) {
       case "list_note_groups": return [groupA, groupB];
       case "count_due_cards": return 0;
+      // v0.20.3（REQ-293）：行动徽标（默认 0）
+      case "action_badge_count": return 0;
       case "list_fragments": return [];
       case "get_feature_flags": return { feedCapture: true };
       case "week_contract_status":
@@ -72,6 +74,7 @@ function renderSidebar() {
       onGroupFilterChange={vi.fn()}
       onChanged={vi.fn()}
       onOpenReview={vi.fn()}
+      onOpenAction={vi.fn()}
       selectedNoteId={null}
       onOpenInbox={vi.fn()}
       inboxActive={false}
@@ -90,6 +93,7 @@ describe("GroupSidebar ⓘ 弹层", () => {
         onGroupFilterChange={onGroupFilterChange}
         onChanged={vi.fn()}
         onOpenReview={vi.fn()}
+      onOpenAction={vi.fn()}
         selectedNoteId={null}
         onOpenInbox={vi.fn()}
         inboxActive={false}
@@ -132,6 +136,7 @@ describe("GroupSidebar ⓘ 弹层", () => {
         onGroupFilterChange={onGroupFilterChange}
         onChanged={vi.fn()}
         onOpenReview={vi.fn()}
+      onOpenAction={vi.fn()}
         selectedNoteId={null}
         onOpenInbox={vi.fn()}
         inboxActive={false}
@@ -236,6 +241,7 @@ describe("GroupSidebar v0.14.1 新建/重命名", () => {
         onGroupFilterChange={vi.fn()}
         onChanged={onChanged}
         onOpenReview={vi.fn()}
+      onOpenAction={vi.fn()}
         selectedNoteId={null}
         onOpenInbox={vi.fn()}
         inboxActive={false}
@@ -273,6 +279,7 @@ describe("GroupSidebar v0.14.1 新建/重命名", () => {
         onGroupFilterChange={vi.fn()}
         onChanged={onChanged}
         onOpenReview={vi.fn()}
+      onOpenAction={vi.fn()}
         selectedNoteId={null}
         onOpenInbox={vi.fn()}
         inboxActive={false}
@@ -299,6 +306,7 @@ describe("GroupSidebar v0.14.1 新建/重命名", () => {
         onGroupFilterChange={onGroupFilterChange}
         onChanged={onChanged}
         onOpenReview={vi.fn()}
+      onOpenAction={vi.fn()}
         selectedNoteId={null}
         onOpenInbox={vi.fn()}
         inboxActive={false}

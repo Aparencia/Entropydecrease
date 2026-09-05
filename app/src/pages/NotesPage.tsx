@@ -25,6 +25,7 @@ import RichEditorView from "../components/RichEditorView";
 import NoteListView, { parseTags } from "../components/NoteListView";
 import type { SortMode } from "../components/NoteListView";
 import GroupSidebar from "../components/GroupSidebar";
+import ActionCenterOverlay from "../components/ActionCenterOverlay";
 import FeedFragmentList from "../components/FeedFragmentList";
 import ReviewSessionOverlay from "../components/ReviewSessionOverlay";
 import NoteReadingView from "../components/NoteReadingView";
@@ -68,6 +69,8 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
   const [view, setView] = useState<MiddleView>("notes");
   // v0.11.2：复习面（groupId=null 全量；undefined=关闭）
   const [review, setReview] = useState<{ groupId: number | null; name: string } | undefined>(undefined);
+  // v0.20.3（REQ-293）：行动中心（✅ 全量入口——组侧栏底部按钮打开）
+  const [actionOpen, setActionOpen] = useState(false);
   const [selected, setSelected] = useState<Note | null>(null);
   const [status, setStatus] = useState("");
   // v0.19.1：阅读态命中词搜索请求（来自引用跳转；key 递增可重触发）
@@ -403,6 +406,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
           onGroupFilterChange={(id) => { setGroupFilter(id); setView("notes"); }}
           onChanged={refreshAll}
           onOpenReview={(groupId, name) => setReview({ groupId, name })}
+          onOpenAction={() => setActionOpen(true)}
           selectedNoteId={selected?.id ?? null}
           // 收件箱=全量碎片视图，与组过滤无关——清组过滤消除"组行高亮 + 收件箱"
           // 并存矛盾（审查修复）
@@ -588,6 +592,10 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
           groupName={review.name}
           onClose={() => setReview(undefined)}
         />
+      )}
+      {/* v0.20.3（REQ-293/294/298）：行动中心（裁决队列 + 完成史） */}
+      {actionOpen && (
+        <ActionCenterOverlay onClose={() => setActionOpen(false)} onChanged={() => { setRefreshToken((t) => t + 1); void refreshAll(); }} />
       )}
     </div>
   );
