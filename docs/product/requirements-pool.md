@@ -583,9 +583,9 @@
 | REQ-300 | 问题清单（Me 问题化）：questions 表 + 笔记段「转为问题」提炼入口 + 行动中心「❓ 问题」页签（open/answered/archived）；「问题→复习卡」出口 P2 | P2 | 已实施（2026-09-06 v0.20.3 批：c78e294~7dd8af2 提交链，逐 REQ 备注见版本文档） | v0.20 系列 | 核心处理 γ 分类型特化 |
 | REQ-301 | SE/AI 封存标记：tag 标记（#树洞/氛围标签）+ 列表/复习面默认排除（设置可显）；AI 随机漫步入口 P2 | P2 | 已实施（2026-09-06 v0.20.3 批：c78e294~7dd8af2 提交链，逐 REQ 备注见版本文档） | v0.20 系列 | 核心处理 γ；tags 已有零新表 |
 | REQ-302 | M 模型卡提炼接线：笔记段 → 模型卡草稿 → 复习面；先核对现有 model 卡生成路径防双轨 | P2 | 已实施（2026-09-06 v0.20.3 批：c78e294~7dd8af2 提交链，逐 REQ 备注见版本文档） | v0.20 系列 | 核心处理 γ；RouteInfoPopover「model 卡纳入体系」先例 |
-| REQ-303 | web 采集阶段 1 内核：课堂助手动线区「URL 采集」入口 → 本地抽取管线（静态直取 + 隐藏 wry 注入 readability 系兜底）→ `kind=web` 会话 + `BodySource::Web` + 元数据（URL/站点/作者/时间入 properties）+ 标题锚点回链 → 转笔记复用 | P1 | 已立项 | v0.20 系列 | [Foresight 定案](../Foresight/web-capture-ingestion-path.md)；正文失败降级原 HTML 附件；SPA 缺口由阶段 2 覆盖 |
-| REQ-304 | web 采集阶段 2 扩展薄壳：浏览器扩展（登录态 DOM 抽取：readability+turndown → MD+元数据）→ 本地 loopback 收件服务（127.0.0.1+随机 token+/ping 探测）→ 图 base64 落盘改写引用 | P2 | 已立项 | v0.20 系列 | 登录墙（公众号/知乎）正解；只绑 loopback+CORS+单向投递安全边界 |
-| REQ-305 | web 采集阶段 3 整页快照：隐藏 wry 窗口 DOM+子资源内联（自研 core.js，规避 SingleFile AGPL）+ monolith（CC0）静态降级 + 截图兜底链 | P2 | 已立项 | v0.20 系列 | 富格式/整页快照；WebView2 无 MHTML API 已否决 |
+| REQ-303 | web 采集阶段 1 内核：课堂助手动线区「URL 采集」入口 → 本地抽取管线（静态直取 + 隐藏 wry 注入 readability 系兜底）→ `kind=web` 会话 + `BodySource::Web` + 元数据（URL/站点/作者/时间入 properties）+ 标题锚点回链 → 转笔记复用 | P1 | 已实施（2026-09-06 v0.20.4 批：c47e394~1f0bace 提交链——URL 内核/扩展收件薄壳/整页快照静态档；渲染型快照与截图兜底登记后置，见 v0.20.md 与协议文档） | v0.20 系列 | [Foresight 定案](../Foresight/web-capture-ingestion-path.md)；正文失败降级原 HTML 附件；SPA 缺口由阶段 2 覆盖 |
+| REQ-304 | web 采集阶段 2 扩展薄壳：浏览器扩展（登录态 DOM 抽取：readability+turndown → MD+元数据）→ 本地 loopback 收件服务（127.0.0.1+随机 token+/ping 探测）→ 图 base64 落盘改写引用 | P2 | 已实施（2026-09-06 v0.20.4 批：c47e394~1f0bace 提交链——URL 内核/扩展收件薄壳/整页快照静态档；渲染型快照与截图兜底登记后置，见 v0.20.md 与协议文档） | v0.20 系列 | 登录墙（公众号/知乎）正解；只绑 loopback+CORS+单向投递安全边界 |
+| REQ-305 | web 采集阶段 3 整页快照：隐藏 wry 窗口 DOM+子资源内联（自研 core.js，规避 SingleFile AGPL）+ monolith（CC0）静态降级 + 截图兜底链 | P2 | 已实施（2026-09-06 v0.20.4 批：c47e394~1f0bace 提交链——URL 内核/扩展收件薄壳/整页快照静态档；渲染型快照与截图兜底登记后置，见 v0.20.md 与协议文档） | v0.20 系列 | 富格式/整页快照；WebView2 无 MHTML API 已否决 |
 
 ## 优先级定义
 
