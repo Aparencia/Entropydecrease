@@ -32,10 +32,8 @@ interface Props {
   onModifierClick: (note: Note, ctrl: boolean, shift: boolean) => void;
   /** 拖拽行载荷（多选整组=选集 ids；未选中态=单行 id） */
   dragIds: number[];
-  /** 行间落点（组内手动排序；父层判定） */
+  /** 行间落点（组内手动排序；父层判定——仅树模式传入） */
   onDropOnRow?: (ids: number[], targetId: number, before: boolean) => void;
-  /** 父层行间落点指示（视觉反馈） */
-  dropIndicator?: "before" | "after" | null;
   onOpenSession: (sessionId: number) => void;
   /** v0.16.1：右键菜单打开（父层持有坐标/状态；原生菜单已全局禁用） */
   onContextMenu?: (e: React.MouseEvent, note: Note) => void;
@@ -43,7 +41,7 @@ interface Props {
 
 export default function NoteListRow({
   note, accent, openId, multiSelected, tagColors, onOpen, onModifierClick,
-  dragIds, onDropOnRow, dropIndicator = null, onOpenSession, onContextMenu,
+  dragIds, onDropOnRow, onOpenSession, onContextMenu,
 }: Props) {
   const tags = parseTags(note);
   // v0.14 B：当前主题（跟随 prefers-color-scheme；jsdom 无 matchMedia 回退 light）
@@ -76,7 +74,7 @@ export default function NoteListRow({
         let ids: number[] = [];
         try {
           const arr: unknown = JSON.parse(raw);
-          if (Array.isArray(arr)) ids = arr.filter((x): x is number => typeof x === "number" && x > 0);
+          if (Array.isArray(arr)) ids = arr.filter((x): x is number => typeof x === "number" && Number.isInteger(x) && x > 0);
         } catch { /* 兜底单 id */ }
         if (ids.length === 0) {
           const single = Number(e.dataTransfer.getData("text/note-id"));
@@ -103,9 +101,6 @@ export default function NoteListRow({
         borderLeft: `4px solid ${accent}`,
         cursor: "pointer",
         background: isOpen ? "#f0fdfa" : multiSelected ? "#eef2ff" : "transparent",
-        boxShadow: dropIndicator === "before"
-          ? "inset 0 2px 0 #4f46e5"
-          : dropIndicator === "after" ? "inset 0 -2px 0 #4f46e5" : "none",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>

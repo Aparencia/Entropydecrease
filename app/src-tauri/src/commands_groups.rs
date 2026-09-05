@@ -180,6 +180,8 @@ pub fn move_note_to_group(
     let ok = state.db.update_note_group(note_id, group_id).map_err(|e| e.to_string())?;
     // REQ-278：归组 = 笔记归属 + 组内容双变 → 双域广播（成功才发）
     if ok {
+        // 审查 L6：移组即清旧 scope 手动序行（防"移出后移回复活旧序位"）
+        let _ = state.db.purge_note_ids(&[note_id]);
         crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
         crate::notify::emit_changed(&state.app, crate::notify::DataDomain::NoteGroups);
     }

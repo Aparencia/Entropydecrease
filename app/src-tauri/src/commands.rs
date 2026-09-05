@@ -470,6 +470,8 @@ pub async fn delete_note(state: State<'_, AppState>, id: i64) -> Result<bool, St
     }
     let deleted = state.db.delete_note(id).map_err(|e| e.to_string())?;
     if deleted {
+        // 审查 L6：删除即清手动序行（note_orders 无 FK——防孤儿行累积）
+        let _ = state.db.purge_note_ids(&[id]);
         // v0.15：notes-images/{nid}/ 只属于该笔记——删除笔记即清空（尽力而为：
         // 失败不阻断（用户重试删除无意义时也允许残留，垃圾回收后续单独任务）
         let img_dir = state.data_dir.join("notes-images").join(id.to_string());

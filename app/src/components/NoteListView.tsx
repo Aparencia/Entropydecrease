@@ -104,6 +104,8 @@ export default function NoteListView({
   const [manualOrders, setManualOrders] = useState<Record<string, number[]>>({});
 
   const visibleIdsRef = useRef<number[]>([]);
+  // L5：行落点并发锁（防陈旧快照互覆）
+  const dropBusyRef = useRef(false);
 
   const clearSelection = useCallback(() => {
     setSelection(emptySelection());
@@ -235,7 +237,16 @@ export default function NoteListView({
     return out;
   }, [treeMode, grouped, groups, notes, groupFolds, applyManual, theme, groupFilter]);
 
-  const visibleOrder = useMemo(() => sections.flatMap((s) => s.items.map((n) => n.id)), [sections]);
+  // 可见序（L1 审查：折叠组行不参与区间/划选——与渲染可见一致；折叠组头仍在）
+  const visibleOrder = useMemo(() => {
+    const out: number[] = [];
+    for (const sec of sections) {
+      const key = sec.groupId == null ? "none" : String(sec.groupId);
+      if (groupFolds[key] === true) continue; // 折叠=行不可见，排除出选择语义
+      for (const n of sec.items) out.push(n.id);
+    }
+    return out;
+  }, [sections, groupFolds]);
   useEffect(() => { visibleIdsRef.current = visibleOrder; }, [visibleOrder]);
 
   // ── 行交互 ──
@@ -246,16 +257,25 @@ export default function NoteListView({
       setAnchor(note.id);
       return;
     }
+    // 审查 L4：普通单击=单选并打开——先清既有选集，anchor 恒指向本次点击
+    if (selection.size > 0) clearSelection();
     onSelect(note);
-    if (selection.size === 0) setAnchor(note.id);
-  }, [selectionMode, onSelect, selection.size]);
+    setAnchor(note.id);
+  }, [selectionMode, onSelect, selection.size, clearSelection]);
 
   const handleModifierClick = useCallback((note: Note, ctrl: boolean, shift: boolean) => {
     if (ctrl) {
       setSelection((cur) => toggleSelection(cur, note.id));
+      // 审查 L4：Ctrl 后 anchor 指向本次点击行（即使该行被移除——Explorer 同款）
       setAnchor(note.id);
     } else if (shift) {
-      setSelection((cur) => rangeSelection(cur, visibleIdsRef.current, anchor, note.id));
+      if (anchor == null) {
+        // 审查 L4：无锚的首次 Shift=单选该行并设为锚（连按两次不再各加单行）
+        setSelection(new Set([note.id]));
+        setAnchor(note.id);
+      } else {
+        setSelection((cur) => rangeSelection(cur, visibleIdsRef.current, anchor, note.id));
+      }
     }
   }, [anchor]);
 
@@ -285,37 +305,62 @@ export default function NoteListView({
     }
   }, [notes, manualOrders, saveOrder, onNoteMoved]);
 
-  /** 行间落点（同 scope 手动排序；自动排序组=仅归组语义已在 header 处理） */
+  /** 行间落点（同 scope 手动排序；跨组归入目标组后按落点插入——L2 审查修正：
+   *  先归组、后整表覆写；目标不可见/无 ord 尾部不再静默 no-op） */
   const handleDropOnRow = useCallback(async (ids: number[], targetId: number, before: boolean) => {
+    // L3：平铺态（搜索/标签/非默认排序）禁排序拖拽——矩阵锁定规则
+    if (!treeMode) return;
+    if (dropBusyRef.current) return;
     const target = notes.find((n) => n.id === targetId);
-    if (!target) return;
-    const scope = scopeKey(target.group_id ?? null);
-    const order = manualOrders[scope];
-    const movers = ids.filter((id) => !order || order.includes(id) || notes.find((n) => n.id === id)?.group_id === target.group_id);
-    const current = order ?? sections.find((s) => s.scope === scope)?.items.map((n) => n.id) ?? [];
-    // 快照语义：首次拖=自动启用（当前可见序即快照）
-    const list = (order ?? current).filter((id) => !movers.includes(id));
-    const idx = list.indexOf(targetId);
-    if (idx < 0) return;
-    list.splice(before ? idx : idx + 1, 0, ...movers);
-    // 跨组落点：先把非本组笔记归入目标组
-    for (const id of ids) {
-      const n = notes.find((x) => x.id === id);
-      if (n && (n.group_id ?? null) !== (target.group_id ?? null)) {
+    if (!target || ids.includes(targetId)) return;
+    dropBusyRef.current = true;
+    try {
+      const targetGroup = target.group_id ?? null;
+      const scope = scopeKey(targetGroup);
+      const currentList = manualOrders[scope]
+        ?? sections.find((s) => s.scope === scope)?.items.map((n) => n.id)
+        ?? [];
+      // 跨组 id：先归入目标组（await 顺序执行——同事务语义由命令层保证）
+      const external = ids.filter((id) => {
+        const n = notes.find((x) => x.id === id);
+        return n && (n.group_id ?? null) !== targetGroup;
+      });
+      for (const id of external) {
         await invoke("move_note_to_group", { noteId: id, groupId: target.group_id });
       }
+      // 落位（移出原序再插入；未启手排的 scope=快照语义自动启用）
+      const list = currentList.filter((id) => !ids.includes(id));
+      const idx = list.indexOf(targetId);
+      if (idx < 0) {
+        // 目标不可见（折叠/异常）——至少完成归组，不写序
+        onNoteMoved?.();
+        return;
+      }
+      list.splice(before ? idx : idx + 1, 0, ...ids);
+      await saveOrder(scope, list);
+      onNoteMoved?.();
+    } catch (e) {
+      console.warn("[notes] 行落点排序失败（部分操作可能已提交）:", e);
+      onNoteMoved?.();
+    } finally {
+      dropBusyRef.current = false;
     }
-    await saveOrder(scope, list);
-    onNoteMoved?.();
-  }, [notes, manualOrders, sections, saveOrder, onNoteMoved]);
+  }, [treeMode, notes, manualOrders, sections, saveOrder, onNoteMoved]);
 
-  /** 划选（组头空白起 → 组内首行至当前行带；走既有行命中的全局序） */
+  /** 划选（组头空白起 → 组内首行至当前行带；走既有行命中的全局可见序）。
+   *  L9 审查修正：rAF 节流 + pointercancel/blur/松开（buttons=0）即清理——
+   *  不再有"窗口外释放后监听永久残留、悬停任意行改写选区"的泄漏。 */
   const startMarquee = useCallback((scope: string) => {
+    // 折叠组行不可见——不提供划选起点（避免选中不可见数据）
+    const foldKey = scope === "none" ? "none" : scope.slice(2);
+    if (groupFolds[foldKey] === true) return;
     const section = sections.find((s) => s.scope === scope);
     if (!section || section.items.length === 0) return;
     const startGlobal = visibleOrder.indexOf(section.items[0].id);
     if (startGlobal < 0) return;
-    const onMove = (e: PointerEvent) => {
+
+    let raf = 0;
+    const hit = (e: PointerEvent) => {
       const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
       const rowEl = el?.closest<HTMLElement>('[id^="note-row-"]');
       if (!rowEl) return;
@@ -326,13 +371,23 @@ export default function NoteListView({
       const hi = Math.max(startGlobal, gi);
       setSelection(new Set(visibleOrder.slice(lo, hi + 1)));
     };
-    const onUp = () => {
+    const onMove = (e: PointerEvent) => {
+      if (e.buttons === 0) { cleanup(); return; }
+      if (raf) return;
+      raf = requestAnimationFrame(() => { raf = 0; hit(e); });
+    };
+    const cleanup = () => {
+      if (raf) cancelAnimationFrame(raf);
       window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointerup", cleanup);
+      window.removeEventListener("pointercancel", cleanup);
+      window.removeEventListener("blur", cleanup);
     };
     window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  }, [sections, visibleOrder]);
+    window.addEventListener("pointerup", cleanup);
+    window.addEventListener("pointercancel", cleanup);
+    window.addEventListener("blur", cleanup);
+  }, [sections, visibleOrder, groupFolds]);
 
   const rowAccent = (n: Note) => paletteHex(noteColors?.[n.id] ?? null, theme);
 

@@ -44,12 +44,13 @@ impl Db {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let tx = conn.transaction()?;
-        tx.execute("DELETE FROM note_orders WHERE scope = ?1", [scope])?;
+        tx.execute("DELETE FROM note_orders WHERE scope = ?1", rusqlite::params![scope])?;
         {
             let mut stmt =
                 tx.prepare("INSERT INTO note_orders (scope, note_id, ord) VALUES (?1, ?2, ?3)")?;
             for (i, id) in note_ids.iter().enumerate() {
-                stmt.execute([scope, &id.to_string(), &(i as i64).to_string()])?;
+                // L12（审查）：INTEGER 列按类型直绑（不再字符串化依赖列亲和）
+                stmt.execute(rusqlite::params![scope, *id, i as i64])?;
             }
         }
         tx.commit()?;
@@ -61,6 +62,53 @@ impl Db {
         self.with_conn(|conn| {
             let affected = conn.execute("DELETE FROM note_orders WHERE scope = ?1", [scope])?;
             Ok(affected > 0)
+        })
+    }
+
+    /// 笔记删除/移组时清理其全部手动序行（审查 L6：无 FK——防孤儿行累积与
+    /// "移出后移回复活旧序位"；删除路径幂等，移组路径清除旧 scope 序）。
+    pub fn purge_note_ids(&self, note_ids: &[i64]) -> Result<()> {
+        self.with_conn(|conn| {
+            for id in note_ids {
+                conn.execute(
+                    "DELETE FROM note_orders WHERE note_id = ?1",
+                    rusqlite::params![*id],
+                )?;
+            }
+            Ok(())
+        })
+    }
+
+    /// 归属校验（审查 L6）：scope 要求每个 id 当前确属于该组/未分组——前端
+    /// bug/并发移组后的陈旧序不得污染（不匹配 → Err，调用方整体拒绝）。
+    pub fn verify_scope_membership(&self, scope: &str, note_ids: &[i64]) -> Result<bool> {
+        self.with_conn(|conn| {
+            let mut sql = String::from("SELECT id FROM notes WHERE ");
+            let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+            match scope.strip_prefix("g:") {
+                Some(rest) => {
+                    sql.push_str("group_id = ?1 AND id IN (");
+                    params.push(Box::new(rest.to_string()));
+                }
+                None => {
+                    sql.push_str("group_id IS NULL AND id IN (");
+                }
+            }
+            for (i, _) in note_ids.iter().enumerate() {
+                if i > 0 { sql.push(','); }
+                sql.push_str(&format!("?{}", i + params.len() + 1));
+                params.push(Box::new(note_ids[i].to_string()));
+            }
+            sql.push(')');
+            let mut stmt = conn.prepare(&sql)?;
+            let rows = stmt.query_map(
+                rusqlite::params_from_iter(params.iter().map(|b| b.as_ref())),
+                |row| row.get::<_, i64>(0),
+            )?;
+            let found: Vec<i64> = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+            let want: std::collections::HashSet<i64> = note_ids.iter().copied().collect();
+            let got: std::collections::HashSet<i64> = found.into_iter().collect();
+            Ok(got == want)
         })
     }
 }

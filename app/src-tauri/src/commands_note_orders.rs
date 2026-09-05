@@ -38,6 +38,14 @@ pub fn note_order_save(state: State<'_, AppState>, scope: String, note_ids: Vec<
     if !note_ids.iter().all(|id| *id > 0 && seen.insert(*id)) {
         return Err("笔记 id 非法或重复".to_string());
     }
+    // 审查 L6：归属校验——全部 id 必须当前属于该 scope（陈旧/跨组序整体拒绝）
+    let ok = state
+        .db
+        .verify_scope_membership(&scope, &note_ids)
+        .map_err(|e| e.to_string())?;
+    if !ok {
+        return Err("部分笔记不属于该排序范围——请先归组或刷新后再排序".to_string());
+    }
     state.db.save_note_order(&scope, &note_ids).map_err(|e| e.to_string())?;
     // REQ-278：notes 域广播（排序变化 → 列表刷新）
     crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
