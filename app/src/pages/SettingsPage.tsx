@@ -27,6 +27,8 @@ import AiTaskPanel from "../components/AiTaskPanel";
 import FeatureFlagSetting from "../components/FeatureFlagSetting";
 // v0.20.2（REQ-269）：ASR 混淆画像闭环面板（候选确认制/规则管理）
 import AsrConfusionPanel from "../components/AsrConfusionPanel";
+// v0.20.2（REQ-270）：可选 LLM 文本校对开关（默认关双闸门之二）
+import ProofreadToggle from "../components/ProofreadToggle";
 
 const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
 const groupTitle: React.CSSProperties = {
@@ -86,6 +88,10 @@ export default function SettingsPage({ active = true }: Props) {
           {/* v0.18.2（REQ-254）：目标 AI 规划师独立开关+预算档位（默认关） */}
           <div style={{ marginTop: 8 }}>
             <GoalAiSection />
+          </div>
+          {/* v0.20.2（REQ-270）：可选 LLM 文本校对独立开关（默认关） */}
+          <div style={{ marginTop: 8 }}>
+            <ProofreadToggle />
           </div>
           <div style={{ marginTop: 8 }}>
             <AiTaskPanel />

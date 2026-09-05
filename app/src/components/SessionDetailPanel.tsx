@@ -19,6 +19,7 @@ import { listen } from "@tauri-apps/api/event";
 import BoxSelectOverlay from "../components/BoxSelectOverlay";
 import ImageGallery from "../components/ImageGallery";
 import NotePreviewView from "../components/NotePreviewView";
+import ProofreadPanel from "../components/ProofreadPanel";
 import SecondPassPanel from "../components/SecondPassPanel";
 import SpeakerSwitchCard from "../components/SpeakerSwitchCard";
 import type { GlossaryTerm, QualityReport, SessionDetail, SessionOcrBlock } from "../types";
@@ -96,6 +97,9 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
   // v0.20.2（REQ-268）：离线精修（第二遍）裁决面板显隐（会话切换即关）
   const [showPass2, setShowPass2] = useState(false);
   useEffect(() => setShowPass2(false), [sessionId]);
+  // v0.20.2（REQ-270）：LLM 文本校对面板显隐（会话切换即关）
+  const [showProofread, setShowProofread] = useState(false);
+  useEffect(() => setShowProofread(false), [sessionId]);
 
   // toast 定时器卸载清理（防卸载后 setState）
   useEffect(
@@ -411,6 +415,16 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
             ⚡ 离线精修
           </button>
         )}
+        {/* v0.20.2（REQ-270）：可选 LLM 文本校对（建议制·默认关双闸门——
+            未开启时面板给引导文案；仅文本上云） */}
+        {detail.session.status === "finished" && detail.session.kind !== "photo" && (
+          <button
+            style={{ ...btn, borderRadius: 6, border: "1px solid #2563eb", background: "#eff6ff", color: "#1d4ed8" }}
+            onClick={() => setShowProofread(true)}
+          >
+            🔤 文本校对
+          </button>
+        )}
       </div>
       {refineMsg && (
         <div style={{ fontSize: 11, color: refining ? "#b45309" : "#0d9488", marginBottom: 6 }}>
@@ -616,6 +630,10 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
 
       {/* v0.20.2（REQ-268）：离线精修（第二遍）裁决面板 */}
       {showPass2 && <SecondPassPanel sessionId={sessionId} onClose={() => setShowPass2(false)} />}
+      {/* v0.20.2（REQ-270）：LLM 文本校对面板 */}
+      {showProofread && (
+        <ProofreadPanel sessionId={sessionId} onClose={() => setShowProofread(false)} />
+      )}
     </>
   );
 }
