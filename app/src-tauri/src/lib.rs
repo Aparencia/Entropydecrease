@@ -31,6 +31,8 @@ mod ai_task;
 mod ai_cost;
 mod note_diff;
 mod ai_note_refine;
+mod ai_proofread;
+mod commands_proofread;
 // v0.8.0 F2-B4（2026-08-21）：精修任务执行（自 commands_ai_refine 拆出——
 // 并发切片/单片重试/部分成功；豁免清单拆分计划兑现）
 mod ai_refine_task;
@@ -637,6 +639,8 @@ pub fn run() {
             commands_kb::kb_embedding_download,
             // v0.19.1（REQ-260）：学习库问答生成开关与预算档位（设置段读写）
             commands_ai_settings::ai_set_kb_qa,
+            // v0.20.2（REQ-270）：可选 LLM 文本校对开关（默认关）
+            commands_ai_settings::ai_set_proofread,
             // v0.19.3（REQ-261）：检索建议（发现路径——默认关，建议制）
             commands_kb_discovery::kb_discovery_suggest,
             // v0.13.1（REQ-202~205）：知识体系层——体系/问题树/概念/模型/引用/审计探测
@@ -919,6 +923,10 @@ pub fn run() {
             commands_asr_pass2::second_pass_cancel,
             commands_asr_pass2::second_pass_list,
             commands_asr_pass2::second_pass_decide,
+            // v0.20.2（REQ-270）：可选 LLM 文本校对——预估/运行（建议制）/草稿列表
+            commands_proofread::proofread_estimate,
+            commands_proofread::proofread_run,
+            commands_proofread::proofread_list,
             // v0.20.2（REQ-269）：ASR 混淆画像闭环——候选/确认/忽略/规则管理
             commands_asr_confusion::asr_confusion_get,
             commands_asr_confusion::asr_confusion_confirm,

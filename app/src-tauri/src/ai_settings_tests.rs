@@ -66,6 +66,8 @@ fn save_load_roundtrip() {
         // v0.19.1：学习库问答生成独立闸门 + 预算档位 roundtrip 保真
         kb_qa_enabled: true,
         kb_qa_tier: "light".to_string(),
+        // v0.20.2（REQ-270）：文本校对独立闸门 roundtrip 保真
+        proofread_enabled: true,
     };
     s.save(&path).expect("保存成功");
     let loaded = AiSettings::load(&path);

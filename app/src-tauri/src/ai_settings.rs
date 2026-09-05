@@ -57,6 +57,9 @@ pub struct AiSettings {
     /// v0.19.1（REQ-260）：学习库问答片段预算档位（light/standard/deep；
     /// 默认 standard——budget_allocator 档位硬顶复用）。
     pub kb_qa_tier: String,
+    /// v0.20.2（REQ-270）：可选 LLM 文本校对独立闸门——content_gate 之外的
+    /// 专用开关（默认关）；仅文本上云，语音不出本机红线（建议制·人类裁决）。
+    pub proofread_enabled: bool,
 }
 
 impl Default for AiSettings {
@@ -74,6 +77,7 @@ impl Default for AiSettings {
             goal_plan_tier: "standard".to_string(),
             kb_qa_enabled: false,
             kb_qa_tier: "standard".to_string(),
+            proofread_enabled: false,
         }
     }
 }
@@ -139,6 +143,19 @@ impl AiSettings {
         self.content_gate()?;
         if !self.kb_qa_enabled {
             return Err("学习库问答生成未开启（设置→AI 服务→学习库段打开开关；关闭时命中片段列表照常可用，零影响）".to_string());
+        }
+        Ok(())
+    }
+
+    /// 文本校对双闸门（v0.20.2 REQ-270）：content_gate + proofread 开关。
+    ///
+    /// @ai-context: 校对=逐句文本上云（语音/画面永不出本机）——在授权红线之上
+    ///              再设独立开关（默认关）；每次运行仍需命令层 authorized 确认。
+    ///              失败文案引导设置页「AI 服务」段开关，不静默。
+    pub fn proofread_gate(&self) -> Result<(), String> {
+        self.content_gate()?;
+        if !self.proofread_enabled {
+            return Err("文本校对未开启（设置→AI 服务→文本校对段打开开关；关闭时转写零影响）".to_string());
         }
         Ok(())
     }

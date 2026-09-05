@@ -42,6 +42,9 @@ pub struct AiSettingsView {
     pub kb_qa_enabled: bool,
     /// v0.19.1（REQ-260）：学习库问答片段预算档位（light/standard/deep）
     pub kb_qa_tier: String,
+    /// v0.20.2（REQ-270）：可选 LLM 文本校对开关——默认关（content_gate 外
+    /// 第二闸门；仅文本上云·建议制）
+    pub proofread_enabled: bool,
     /// 是否已配置密钥（env 或凭据库）
     pub has_key: bool,
     /// 密钥来源：credential | env | none
@@ -83,6 +86,7 @@ pub fn ai_get_settings(state: State<'_, AppState>) -> Result<AiSettingsView, Str
         goal_plan_tier: s.goal_plan_tier.clone(),
         kb_qa_enabled: s.kb_qa_enabled,
         kb_qa_tier: s.kb_qa_tier.clone(),
+        proofread_enabled: s.proofread_enabled,
         has_key,
         key_source,
     })
@@ -146,6 +150,21 @@ pub fn ai_set_kb_qa(
         .map_err(|e| format!("AI 设置锁中毒: {}", e))?;
     s.kb_qa_enabled = enabled;
     s.kb_qa_tier = tier;
+    s.save(&state.ai_settings_path).map_err(|e| e.to_string())
+}
+
+/// v0.20.2（REQ-270）：可选 LLM 文本校对开关（read-modify-write 最小面——
+/// 默认关双闸门之二；开启仍需全局 enabled+authorized）。
+#[tauri::command]
+pub fn ai_set_proofread(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<(), String> {
+    let mut s = state
+        .ai_settings
+        .lock()
+        .map_err(|e| format!("AI 设置锁中毒: {}", e))?;
+    s.proofread_enabled = enabled;
     s.save(&state.ai_settings_path).map_err(|e| e.to_string())
 }
 
