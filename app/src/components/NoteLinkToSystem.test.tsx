@@ -88,16 +88,19 @@ describe("NoteLinkToSystem v0.13.7 基础（REQ-286 列表选中语义）", () =
     });
   });
 
-  it("无体系时提示先创建体系（不显示确认按钮）", async () => {
+  it("无体系时提示先创建体系（不显示确认按钮）；引导按钮跳体系向导（TD-2026-09-05-A）", async () => {
     invokeMock.mockImplementation(async (cmd: string) => {
       if (cmd === "list_knowledge_systems") return [];
       if (cmd === "list_links_by_target") return [];
       throw new Error(`unexpected: ${cmd}`);
     });
-    render(<NoteLinkToSystem noteId={7} onChanged={vi.fn()} />);
+    const onGoto = vi.fn();
+    render(<NoteLinkToSystem noteId={7} onChanged={vi.fn()} onGotoKnowledgeSystem={onGoto} />);
     fireEvent.click(await screen.findByTestId("note-link-open"));
     expect(await screen.findByTestId("note-link-empty")).toBeTruthy();
     expect(screen.queryByTestId("note-link-confirm")).toBeNull();
+    fireEvent.click(screen.getByTestId("note-link-goto-system"));
+    expect(onGoto).toHaveBeenCalledTimes(1);
   });
 });
 

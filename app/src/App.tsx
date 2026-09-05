@@ -80,6 +80,8 @@ function App() {
   };
   // v0.13.7：跨页直达目标体系（组行徽标/结算简报 → 体系页自动选中）
   const [focusSystemId, setFocusSystemId] = useState<number | null>(null);
+  // TD-2026-09-05-A：外部请求打开建体系向导（笔记页空体系引导 → 体系页向导）
+  const [createSystemSignal, setCreateSystemSignal] = useState(0);
   // v0.14 C2：图谱组节点 → 笔记页过滤该组（同 focusNoteId 模式）
   const [focusGroupId, setFocusGroupId] = useState<number | null>(null);
   // v0.16.1：工作台深链（对话页任务视图 → 会话页自动展开精修工作台）与
@@ -343,6 +345,10 @@ function App() {
               setFocusSystemId(id);
               setPage("knowledge");
             }}
+            onCreateSystem={() => {
+              setCreateSystemSignal((s) => s + 1);
+              setPage("knowledge");
+            }}
             onOpenSessions={(id) => {
               setFocusSessionId(id);
               setPage("sessions");
@@ -377,6 +383,7 @@ function App() {
               v0.13.7：focusSystemId 跨页直达（组行徽标/结算简报 → 自动选中体系） */}
           <KnowledgePage
             focusSystemId={focusSystemId}
+            createSystemSignal={createSystemSignal}
             onOpenNote={(id) => { setFocusNoteId(id); setPage("notes"); }}
             onOpenGroup={(id) => { setFocusGroupId(id); setPage("notes"); }}
           />

@@ -50,12 +50,14 @@ interface Props {
   onOpenSessions?: (sessionId: number) => void;
   /** 打开体系页并选中体系（v0.13.7 触点① 组行徽标） */
   onOpenSystem?: (systemId: number) => void;
+  /** TD-2026-09-05-A：空体系引导——跳体系页并打开建体系向导 */
+  onCreateSystem?: () => void;
 }
 
 /** 中部视图：notes=笔记列表（组过滤/搜索/标签）；inbox=收件箱碎片列表 */
 type MiddleView = "notes" | "inbox";
 
-export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, onOpenSessions, onOpenSystem }: Props) {
+export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, onOpenSessions, onOpenSystem, onCreateSystem }: Props) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [keyword, setKeyword] = useState("");
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -531,7 +533,12 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
                   onChanged={() => void handleNoteChanged()}
                 />
                 {/* v0.13.7 触点②：标题栏「挂到体系」入口；key=note.id 切笔记重置内部态 */}
-                <NoteLinkToSystem key={`link-${selected.id}`} noteId={selected.id} onChanged={() => void handleNoteChanged()} />
+                <NoteLinkToSystem
+                  key={`link-${selected.id}`}
+                  noteId={selected.id}
+                  onChanged={() => void handleNoteChanged()}
+                  onGotoKnowledgeSystem={onCreateSystem}
+                />
                 {/* v0.17.0：编辑态 AI 能力统一入口（阅读态点击直接进入编辑态） */}
                 <button
                   data-testid="note-ai-entry"

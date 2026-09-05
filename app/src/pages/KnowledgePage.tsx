@@ -51,9 +51,11 @@ interface Props {
   onOpenNote?: (noteId: number) => void;
   /** 图谱双击组节点 → 笔记页过滤该组 */
   onOpenGroup?: (groupId: number) => void;
+  /** TD-2026-09-05-A：外部请求打开建体系向导（递增信号——挂起页常驻时仍触发） */
+  createSystemSignal?: number;
 }
 
-export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup }: Props) {
+export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup, createSystemSignal }: Props) {
   // v0.15：左列可拖拽/记忆/窄窗折叠（默认 260=历史值）；详情面板宽度由父层持有
   const leftCol = useColumnLayout("knowledge-left", { default: 260, min: 200, max: 360, autoFoldBelow: 860 });
   const detailCol = useColumnLayout("knowledge-detail", { default: 320, min: 260, max: 420 });
@@ -130,6 +132,12 @@ export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup }
   // 回调）。常驻理由：隐藏期事件不漏收——切回体系页即最新（display:none
   // 保留挂载下后台仅数次轻查询 + hook 内防抖合并风暴）
   useDbRefresh(["knowledge"], reloadAll);
+
+  // TD-2026-09-05-A：外部（笔记页空体系引导）请求打开建体系向导——递增信号
+  // 语义：挂起页（display:none 常驻）重复请求仍逐次触发
+  useEffect(() => {
+    if (createSystemSignal && createSystemSignal > 0) setWizardOpen(true);
+  }, [createSystemSignal]);
 
   // v0.13.7：跨页直达目标体系（与 NotesPage focusNoteId 同模式——仅 focusSystemId
   // 变化时跟随；空态无体系时该值无意义，由既有选中/创建逻辑接管）

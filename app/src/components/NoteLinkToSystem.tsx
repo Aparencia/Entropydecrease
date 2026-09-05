@@ -32,6 +32,8 @@ interface Props {
   noteId: number;
   /** 挂接/取消后刷新回调（NotesPage 重载引用列表） */
   onChanged: () => void;
+  /** TD-2026-09-05-A：空体系时引导跳体系页并打开建体系向导（App 级通道） */
+  onGotoKnowledgeSystem?: () => void;
 }
 
 /** 问题节点树 → 缩进行（父链循环守卫防脏数据死循环；深度上限 30） */
@@ -69,7 +71,7 @@ function flattenNodeRows(nodes: KnowledgeNode[]): LinkRow[] {
   return rows;
 }
 
-export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
+export default function NoteLinkToSystem({ noteId, onChanged, onGotoKnowledgeSystem }: Props) {
   const [open, setOpen] = useState(false);
   const [systems, setSystems] = useState<KnowledgeSystem[]>([]);
   const [nodes, setNodes] = useState<KnowledgeNode[]>([]);
@@ -252,7 +254,19 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
             }}
           >
           {domainSystems.length === 0 ? (
-            <div data-testid="note-link-empty" style={{ fontSize: 12, color: "#9ca3af" }}>暂无体系——请先到「🧠 体系」页创建。</div>
+            <div data-testid="note-link-empty" style={{ fontSize: 12, color: "#9ca3af", display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
+              <span>暂无体系——笔记无法挂接。</span>
+              {/* TD-2026-09-05-A：引导按钮（跳体系页并打开建体系向导） */}
+              {onGotoKnowledgeSystem && (
+                <button
+                  data-testid="note-link-goto-system"
+                  onClick={onGotoKnowledgeSystem}
+                  style={{ fontSize: 12, padding: "4px 10px", borderRadius: 6, border: "1px solid #0f766e", background: "#f0fdfa", color: "#0f766e", cursor: "pointer" }}
+                >
+                  ➕ 去体系页创建（向导）
+                </button>
+              )}
+            </div>
           ) : (
             <>
               <select
