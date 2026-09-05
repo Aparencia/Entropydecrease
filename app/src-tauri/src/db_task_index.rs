@@ -66,25 +66,25 @@ pub fn rebuild_note_tasks(conn: &Connection, note_id: i64, content: &str) {
 
 fn rebuild_inner(conn: &Connection, note_id: i64, content: &str) -> Result<()> {
     let now = crate::db::unix_seconds();
-    // 重扫前读取旧行元数据（plan_date/disposition/created_at）——行号漂移由
-    // (note_id,line_no) 键吸收；改期/纠偏为索引列元数据，不得被每次正文保存
-    // 的重扫抹除（审查高-1：先删后插必须回填，否则计划分区/徽标失真）
-    let mut meta: std::collections::HashMap<i64, (Option<i64>, Option<String>, i64)> = Default::default();
+    // 重扫前读取旧行元数据（plan_date/disposition/created_at）——正文保存不得
+    // 抹除索引列元数据（审查高-1）。匹配键=任务载荷优先（行号漂移由载荷追踪
+    // 吸收：同一条任务挪行后仍保留改期/纠偏），行号仅作兜底。
+    let mut meta_rows: Vec<(i64, String, Option<i64>, Option<String>, i64)> = Vec::new();
     {
         let mut stmt = conn.prepare(
-            "SELECT line_no, plan_date, disposition, created_at FROM task_index WHERE note_id = ?1",
+            "SELECT line_no, task_text, plan_date, disposition, created_at FROM task_index WHERE note_id = ?1",
         )?;
         let mapped = stmt.query_map(params![note_id], |r| {
             Ok((
                 r.get::<_, i64>(0)?,
-                r.get::<_, Option<i64>>(1)?,
-                r.get::<_, Option<String>>(2)?,
-                r.get::<_, i64>(3)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<i64>>(2)?,
+                r.get::<_, Option<String>>(3)?,
+                r.get::<_, i64>(4)?,
             ))
         })?;
         for row in mapped {
-            let (line_no, plan_date, disposition, created_at) = row?;
-            meta.insert(line_no, (plan_date, disposition, created_at));
+            meta_rows.push(row?);
         }
     }
     conn.execute("DELETE FROM task_index WHERE note_id = ?1", params![note_id])?;
@@ -98,8 +98,12 @@ fn rebuild_inner(conn: &Connection, note_id: i64, content: &str) -> Result<()> {
                 TaskStatus::Todo => "todo",
                 TaskStatus::Done => "done",
             };
-            let (plan_date, disposition, created_at) = match meta.get(&(line_no as i64)) {
-                Some((pd, dp, ca)) => (*pd, dp.clone(), *ca),
+            let old = meta_rows
+                .iter()
+                .find(|(_, text, _, _, _)| *text == p.payload)
+                .or_else(|| meta_rows.iter().find(|(ln, _, _, _, _)| *ln == line_no as i64));
+            let (plan_date, disposition, created_at) = match old {
+                Some((_, _, pd, dp, ca)) => (*pd, dp.clone(), *ca),
                 None => (None, None, now),
             };
             stmt.execute(params![
