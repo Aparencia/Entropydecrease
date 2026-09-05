@@ -145,6 +145,8 @@ pub async fn ai_refine_start(
     session_id: i64,
     authorized: bool,
     strategy: Option<StrategyOverride>,
+    // REQ-284（v0.19.7）：画面理解任务级覆写（None=跟随全局；前端「仅本次」勾选）
+    vision_refine: Option<bool>,
 ) -> Result<AiTaskHandle, String> {
     if session_id <= 0 {
         return Err("无效的会话 id".to_string());
@@ -240,7 +242,7 @@ pub async fn ai_refine_start(
         strategy.as_ref(),
     );
     tauri::async_runtime::spawn_blocking(move || {
-        crate::ai_refine_task::run_refine_task(st2, task_id, session_id, mock, dims)
+        crate::ai_refine_task::run_refine_task(st2, task_id, session_id, mock, dims, vision_refine)
     });
     Ok(AiTaskHandle { task_id, state: AiTaskState::Pending })
 }

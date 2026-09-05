@@ -168,14 +168,23 @@ pub(crate) fn run_refine_task_skeleton(
 ///
 /// @ai-context: v0.17.0（REQ-245）：dims=策略解析结果（command 层 resolve 后
 ///              传入）——每片提示词一致（切片间风格统一），协议零改动。
-pub fn run_refine_task(st: AppState, task_id: u64, session_id: i64, mock: bool, dims: ResolvedDims) {
+pub fn run_refine_task(
+    st: AppState,
+    task_id: u64,
+    session_id: i64,
+    mock: bool,
+    dims: ResolvedDims,
+    // REQ-284（v0.19.7）：任务级画面理解覆写（None=跟随全局设置；
+    // command 层透传前端「仅本次」勾选）
+    vision_override: Option<bool>,
+) {
     // 诊断日志（2026-08-21 真机"排队中"排查）：tauri dev 终端可见各阶段进度
     eprintln!(
         "[refine-task] task={} start session={} mock={} strategy={}",
         task_id, session_id, mock, dims.preset_id
     );
     run_refine_task_skeleton(st.clone(), task_id, format!("session={}", session_id), move || {
-        run_refine_task_inner(&st, task_id, session_id, mock, &dims)
+        run_refine_task_inner(&st, task_id, session_id, mock, &dims, vision_override)
     });
 }
 
@@ -223,6 +232,7 @@ fn run_refine_task_inner(
     session_id: i64,
     mock: bool,
     dims: &ResolvedDims,
+    vision_override: Option<bool>,
 ) -> Result<(AiRefineResult, Vec<AiTurn>), AiTaskFailure> {
     let env = PurifyEnv {
         config: st.purify.clone(),
@@ -289,7 +299,9 @@ fn run_refine_task_inner(
     let mock_adapter = AiMockAdapter;
     // v0.12.0 M5：画面理解——仅精修设置开启时装载会话屏卡图（≤1280px 控 token；
     // 空 → 精修纯文本，现有行为零变化；图文会话不触发——调用方只对视频会话接线）
-    let vision_images = if settings.vision_refine_enabled {
+    // REQ-284（v0.19.7）：任务级覆写优先于全局（resolve 纯函数——覆写缺省=全局）
+    let vision_enabled = crate::ai_settings::resolve_vision_refine(vision_override, settings.vision_refine_enabled);
+    let vision_images = if vision_enabled {
         load_session_vision_images(&st.data_dir, session_id)
     } else {
         Vec::new()

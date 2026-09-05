@@ -47,6 +47,10 @@ export default function RefineLaunchDialog({
   const [remember, setRemember] = useState(false);
   const [msg, setMsg] = useState("");
   const [starting, setStarting] = useState(false);
+  // REQ-284（v0.19.7）：画面理解任务级覆写——null=跟随全局；勾选变化仅本次
+  // 生效（不写全局；「设为默认」显式写回）
+  const [visionOverride, setVisionOverride] = useState<boolean | null>(null);
+  const [visionSavedNote, setVisionSavedNote] = useState("");
   const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // 装载：设置（授权态/策略默认）+ 策略声明 + 预估 + 余额（并行）
@@ -94,6 +98,21 @@ export default function RefineLaunchDialog({
     saveDraft(d);
   }, []);
 
+  // REQ-284：本次生效值（覆写优先）——供开关初值展示与「设为默认」写回
+  const effectiveVision = visionOverride ?? settings?.visionRefineEnabled ?? false;
+
+  /** 「设为默认」：显式把当前生效值写回全局（单向——覆写本身不写全局） */
+  const saveVisionAsDefault = async () => {
+    setVisionSavedNote("");
+    try {
+      await invoke("ai_set_vision_refine", { refineEnabled: effectiveVision });
+      setSettings(settings ? { ...settings, visionRefineEnabled: effectiveVision } : settings);
+      setVisionSavedNote(effectiveVision ? "已设为默认：下次精修默认启用画面理解" : "已设为默认：下次精修默认关闭画面理解");
+    } catch (e) {
+      setVisionSavedNote(`写回全局失败: ${e}`);
+    }
+  };
+
   const est = estimate?.estimate;
   const selectable = useMemo(() => draft !== null, [draft]);
 
@@ -116,7 +135,13 @@ export default function RefineLaunchDialog({
       isNote ? "ai_note_refine_start" : "ai_refine_start",
       isNote
         ? { noteId, content: noteContent ?? null, profile: noteProfile ?? null, authorized: true, strategy: toOverride(draft) }
-        : { sessionId, authorized: true, strategy: toOverride(draft) },
+        : {
+            sessionId,
+            authorized: true,
+            strategy: toOverride(draft),
+            // REQ-284：仅「本次已覆写」才带参（null=后端跟随全局，避免双写歧义）
+            ...(visionOverride != null ? { visionRefine: visionOverride } : {}),
+          },
     ).catch((e) => {
       setMsg(`启动失败：${e}`);
       setStarting(false);
@@ -184,6 +209,45 @@ export default function RefineLaunchDialog({
               background: "#f9fafb", resize: "none" }}
           />
         </div>
+
+        {/* REQ-284（v0.19.7）：画面理解开关——仅会话级精修（视频会话关键帧语境）
+            显示；笔记级精修（纯文本语境）隐藏。checkbox 初值=全局；勾选变化=本次
+            覆写；「设为默认」显式写回全局（单向同步，不双向自动）。 */}
+        {!isNote && (
+          <div style={{ marginTop: 8, border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
+              <input
+                data-testid="vision-refine-toggle"
+                type="checkbox"
+                checked={effectiveVision}
+                disabled={starting}
+                onChange={(e) => { setVisionOverride(e.target.checked); setVisionSavedNote(""); }}
+              />
+              画面理解（上传关键帧给 AI）
+            </label>
+            <span style={{ fontSize: 11, color: "#6b7280" }}>
+              {visionOverride != null
+                ? `本次：${effectiveVision ? "开" : "关"}（全局默认：${settings?.visionRefineEnabled ? "开" : "关"}）`
+                : `跟随全局默认（${settings?.visionRefineEnabled ? "开" : "关"}）——勾选即本次覆写`}
+            </span>
+            {effectiveVision && (
+              <span style={{ fontSize: 10, color: "#b45309" }}>⚠ 开启会显著增加耗时与费用</span>
+            )}
+            <button
+              data-testid="vision-set-default"
+              onClick={() => void saveVisionAsDefault()}
+              style={{ marginLeft: "auto", fontSize: 11, border: "none", background: "none", color: "#4f46e5", cursor: "pointer", textDecoration: "underline" }}
+              title="把当前生效值写回全局设置（AI 服务面板可随时修改）"
+            >
+              设为默认
+            </button>
+            {visionSavedNote && (
+              <span data-testid="vision-saved-note" style={{ width: "100%", fontSize: 11, color: visionSavedNote.startsWith("已") ? "#047857" : "#dc2626" }}>
+                {visionSavedNote}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* 成本确认行 */}
         {est && (

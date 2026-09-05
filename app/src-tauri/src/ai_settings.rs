@@ -156,6 +156,29 @@ impl AiSettings {
     }
 }
 
+/// 任务级画面理解解析（REQ-284，v0.19.7）：本次覆写优先，缺省跟随全局——
+/// 覆写不写回全局（单向同步；"设为默认"由命令层显式调 ai_set_vision_refine）。
+pub fn resolve_vision_refine(task_override: Option<bool>, global_enabled: bool) -> bool {
+    task_override.unwrap_or(global_enabled)
+}
+
+#[cfg(test)]
+mod resolve_tests {
+    use super::resolve_vision_refine;
+
+    #[test]
+    fn override_wins_when_present() {
+        assert!(resolve_vision_refine(Some(true), false), "本次开覆盖全局关");
+        assert!(!resolve_vision_refine(Some(false), true), "本次关覆盖全局开");
+    }
+
+    #[test]
+    fn missing_override_follows_global() {
+        assert!(resolve_vision_refine(None, true));
+        assert!(!resolve_vision_refine(None, false));
+    }
+}
+
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。
 #[cfg(test)]
 #[path = "ai_settings_tests.rs"]
