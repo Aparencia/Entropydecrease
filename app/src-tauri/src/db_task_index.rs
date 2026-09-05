@@ -121,6 +121,51 @@ const QUEUE_SQL_SCOPE: &str = "SELECT t.id, t.note_id, t.line_no, t.task_text, t
                  WHERE t.note_id = ?1
                  ORDER BY t.status = 'done', t.updated_at DESC, t.id DESC";
 
+impl Db {
+    /// 取单条任务行（含 note_id/行号——裁决回写正文需要）。
+    pub fn get_task_row(&self, row_id: i64) -> Result<Option<TaskIndexRow>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT t.id, t.note_id, t.line_no, t.task_text, t.status, t.unrefined,
+                        t.plan_date, t.disposition, n.title AS note_title, t.updated_at
+                 FROM task_index t JOIN notes n ON n.id = t.note_id
+                 WHERE t.id = ?1",
+            )?;
+            let mut mapped = stmt.query_map(params![row_id], row_to_task)?;
+            match mapped.next() {
+                Some(r) => r.map(Some).map_err(Into::into),
+                None => Ok(None),
+            }
+        })
+    }
+
+    /// 只落索引列的计划日（不写正文——计划日是元数据）。
+    pub fn set_task_plan_date(&self, row_id: i64, plan_date: Option<i64>) -> Result<bool> {
+        self.with_conn(|conn| {
+            let affected = conn.execute(
+                "UPDATE task_index SET plan_date = ?1, updated_at = ?2 WHERE id = ?3",
+                params![plan_date, crate::db::unix_seconds(), row_id],
+            )?;
+            Ok(affected > 0)
+        })
+    }
+
+    /// 索引列纠偏（learning|practice|sop|export——提炼/裁决时标注）。
+    pub fn set_task_disposition(
+        &self,
+        row_id: i64,
+        disposition: Option<&str>,
+    ) -> Result<bool> {
+        self.with_conn(|conn| {
+            let affected = conn.execute(
+                "UPDATE task_index SET disposition = ?1, updated_at = ?2 WHERE id = ?3",
+                params![disposition, crate::db::unix_seconds(), row_id],
+            )?;
+            Ok(affected > 0)
+        })
+    }
+}
+
 fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<TaskIndexRow> {
     Ok(TaskIndexRow {
         id: row.get(0)?,

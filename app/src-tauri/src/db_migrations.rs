@@ -505,6 +505,8 @@ CREATE TABLE IF NOT EXISTS contracts (
     crate::db_session_refine::init(conn)?;
     // v0.20.3（REQ-292）：任务行增量索引表（真相=md 行；聚合查询缓存）
     crate::db_task_index::init(conn)?;
+    // v0.20.3（REQ-298）：完成史统一事件表（周回顾原料/成长轨迹唯一数据源）
+    crate::db_completion::init(conn)?;
     Ok(())
 }
 

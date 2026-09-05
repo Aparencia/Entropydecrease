@@ -75,6 +75,8 @@ mod commands_ai_chat;
 mod asr;
 mod tasks_core;
 mod db_task_index;
+mod db_completion;
+mod commands_tasks;
 mod asr_clean;
 mod asr_confusion;
 mod asr_dedupe;
@@ -929,6 +931,15 @@ pub fn run() {
             commands_proofread::proofread_estimate,
             commands_proofread::proofread_run,
             commands_proofread::proofread_list,
+            // v0.20.3（REQ-293/294/298）：行动裁决命令族——队列分区/完成/放弃/
+            // 提炼/改期/完成史
+            commands_tasks::list_action_queue,
+            commands_tasks::action_badge_count,
+            commands_tasks::task_complete,
+            commands_tasks::task_abandon,
+            commands_tasks::task_refine_unrefined,
+            commands_tasks::task_set_plan_date,
+            commands_tasks::completion_history_list,
             // v0.20.2（REQ-269）：ASR 混淆画像闭环——候选/确认/忽略/规则管理
             commands_asr_confusion::asr_confusion_get,
             commands_asr_confusion::asr_confusion_confirm,
