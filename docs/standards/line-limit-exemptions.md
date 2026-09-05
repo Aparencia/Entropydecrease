@@ -1,4 +1,4 @@
-# 单文件行数豁免登记（AGENTS.md §3：单文件 ≤300 行；300-600 行须登记本清单）
+﻿# 单文件行数豁免登记（AGENTS.md §3：单文件 ≤300 行；300-600 行须登记本清单）
 
 > 登记规则：文件超过 300 行时在此登记（文件 + 行数 + 豁免理由 + 拆分计划）。
 > 超过 600 行必须硬拆（不允许豁免）。
@@ -100,6 +100,9 @@
 > 前端 **拆分中**（Task #9 笔记域修复进行中，暂不登记行数）：`app/src/types.ts`——待前端拆分完成后以实测行数重新评估。
 > 前端 SessionsPage.tsx 审查快照 304 行（登记值），v0.7.1 硬拆后长期 ≤300，本轮审查期间轻微越线；随 NotesPage/types.ts 拆分任务一并复核，若仍越线按上表模式登记。
 > 前端 EnrichPanel.tsx 实测已回归 299 行（登记值 ~330 移除）。
+
+| app/src-tauri/src/ai_refine_protocol.rs | 340 | v0.19.7（REQ-290①）逐节流式：render_sections 渲染出口重构 + NDJSON 行解析 + 常量（协议域内聚，to_markdown/validate 共用） | 若再增长：行解析与常量拆至 ai_protocol_ndjson.rs |
+| app/src/components/NoteListView.tsx | 525 | v0.19.7（REQ-287）列表交互重构：选择三通道/批量模式/拖拽矩阵（组头与行落点）/手动序消费/划选锚点/选集菜单——编排内聚；纯选择逻辑已拆 noteSelection.ts、组头载荷已拆 NoteTreeSection 导出 | 若再增长：拖拽/划选接线拆至 useNoteListDnD.ts；手动序拆至 useNoteOrders.ts |
 
 ## 已拆分 / 登记移除记录
 
