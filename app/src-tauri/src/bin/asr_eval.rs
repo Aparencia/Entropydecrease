@@ -22,34 +22,57 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 mod asr_eval_session;
+mod asr_eval_stream;
 
 use app_lib::audio_preprocess::{AudioPreprocessConfig, AudioPreprocessor};
 use app_lib::cer;
 use app_lib::eval_confusion::{profile, ConfusionAggregator};
 use app_lib::eval_report::{ab_verdict, cer_stats, is_regression, CerStats};
 use app_lib::eval_samples::{is_media_file, parse_srt, reference_text, srt_path_for};
+use asr_eval_stream::{transcribe_stream, StreamParams};
 use sherpa_onnx::{OfflineRecognizer, OfflineRecognizerConfig, OfflineSenseVoiceModelConfig};
 
 /// 默认 SenseVoice 模型目录（与 cer_bench/download 脚本约定一致）。
 const DEFAULT_MODEL_DIR: &str = "models/asr/sensevoice";
+/// 流式 zipformer 模型目录（与 streaming 下载脚本约定一致）。
+const STREAM_MODEL_DEFAULT: &str = "models/asr/streaming-zipformer-zh-fp16-2025-06-30";
 /// 基线回归容差（v0.20.0 契约：相对基线均值 CER 退化 >2% 即失败）。
 const REGRESSION_TOLERANCE: f32 = 0.02;
 
-/// A/B 路选择。
+/// A/B 路选择 + 流式档（序 2：stream 为附加被测路径）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Route {
     Off,
     On,
     Both,
+    Stream,
 }
 
 impl Route {
-    fn names(&self) -> Vec<&'static str> {
+    fn label(&self) -> &'static str {
         match self {
-            Route::Off => vec!["preproc_off"],
-            Route::On => vec!["preproc_on"],
-            Route::Both => vec!["preproc_off", "preproc_on"],
+            Route::Off => "preproc_off",
+            Route::On => "preproc_on",
+            Route::Both => unreachable!("Both 是组合态，不入单行标签"),
+            Route::Stream => "stream",
         }
+    }
+
+    fn steps(preproc: Route, stream: bool) -> Vec<Route> {
+        let mut v = Vec::new();
+        match preproc {
+            Route::Off => v.push(Route::Off),
+            Route::On => v.push(Route::On),
+            Route::Both => {
+                v.push(Route::Off);
+                v.push(Route::On);
+            }
+            Route::Stream => {}
+        }
+        if stream {
+            v.push(Route::Stream);
+        }
+        v
     }
 }
 
@@ -63,6 +86,10 @@ struct Options {
     baseline: Option<PathBuf>,
     update_baseline: bool,
     preproc: Route,
+    /// 流式档开关 + 模型目录 + 端点规则覆盖（REQ-265 参数注入面）。
+    stream: bool,
+    stream_model: String,
+    stream_params: StreamParams,
 }
 
 /// 单样本（文件对信道）。
@@ -116,16 +143,27 @@ fn main() -> ExitCode {
             continue;
         };
         let (sr, samples_f32) = (wave.sample_rate(), wave.samples());
-        for route in opts.preproc.names() {
-            let preproc_on = route == "preproc_on";
-            let text = transcribe(&recognizer, samples_f32, sr, preproc_on);
+        for route in Route::steps(opts.preproc, opts.stream) {
+            let text = match route {
+                Route::Off => transcribe(&recognizer, samples_f32, sr, false),
+                Route::On => transcribe(&recognizer, samples_f32, sr, true),
+                Route::Stream => {
+                    // 流式档自读音频（独立引擎），模型缺失 → None 提示后跳过该路
+                    match transcribe_stream(&s.wav.to_string_lossy(), &opts.stream_model, &opts.stream_params) {
+                        Some(t) => t,
+                        None => continue,
+                    }
+                }
+                Route::Both => unreachable!(),
+            };
+            let label = route.label();
             let c = cer::cer(&s.reference, &text);
-            rows.push((s.name.clone(), route.to_string(), c));
+            rows.push((s.name.clone(), label.to_string(), c));
             if let Some(v) = c {
-                cers.entry(route.to_string()).or_default().push(v);
+                cers.entry(label.to_string()).or_default().push(v);
             }
             portraits
-                .entry(route.to_string())
+                .entry(label.to_string())
                 .or_default()
                 .add(&profile(&s.reference, &text));
         }
@@ -141,7 +179,15 @@ fn main() -> ExitCode {
             None => out.push_str(&format!("{name}\t{route}\t-\n")),
         }
     }
-    for route in opts.preproc.names() {
+    // 汇总：按路统计（含 stream 档；Both 展开为两路后此处用单一路集合遍历）
+    let mut route_labels: Vec<&'static str> = Vec::new();
+    for r in Route::steps(opts.preproc, false) {
+        route_labels.push(r.label());
+    }
+    if opts.stream {
+        route_labels.push("stream");
+    }
+    for route in route_labels {
         let stats = cer_stats(cers.get(route).map(|v| v.as_slice()).unwrap_or(&[]));
         out.push_str(&format!(
             "\n[{}] 样本={} CER均值={} 范围={}~{}",
@@ -177,7 +223,7 @@ fn main() -> ExitCode {
     let _ = fs::write(opts.out_dir.join("summary.txt"), &out);
 
     // ── 基线回归门 ──
-    let primary = cers.get("preproc_off").map(|v| cer_stats(v)).flatten();
+    let primary = cers.get("preproc_off").and_then(|v| cer_stats(v));
     if let Some(bp) = &opts.baseline {
         let cur = primary.map(|s| s.mean);
         let base_mean = read_baseline_mean(bp);
@@ -273,6 +319,9 @@ fn parse_args() -> Option<Options> {
     let mut baseline = None;
     let mut update_baseline = false;
     let mut preproc = Route::Both;
+    let mut stream = false;
+    let mut stream_model = STREAM_MODEL_DEFAULT.to_string();
+    let mut stream_params = StreamParams::default();
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -288,6 +337,11 @@ fn parse_args() -> Option<Options> {
                         .collect(),
                 );
             }
+            "--stream" => stream = true,
+            "--stream-model" => stream_model = it.next()?.clone(),
+            "--rule1-s" => stream_params.rule1_s = it.next()?.parse().ok()?,
+            "--rule2-s" => stream_params.rule2_s = it.next()?.parse().ok()?,
+            "--rule3-s" => stream_params.rule3_s = it.next()?.parse().ok()?,
             "--update-baseline" => update_baseline = true,
             "--preproc" => {
                 preproc = match it.next()?.as_str() {
@@ -313,6 +367,9 @@ fn parse_args() -> Option<Options> {
         baseline,
         update_baseline,
         preproc,
+        stream,
+        stream_model,
+        stream_params,
     })
 }
 

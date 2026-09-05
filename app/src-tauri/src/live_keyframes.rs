@@ -335,8 +335,8 @@ pub fn rewrite_with_fusion(
         crate::dtw_align::correct_drift_if_any(subtitles, asr_segments, MIN_FUSION_DTW_SEGS, MIN_APPLY_DRIFT_MS, MAX_APPLY_DRIFT_MS);
     if let Some(d) = correction.applied_ms {
         eprintln!("[Fusion] 会话 {} 字幕漂移校正 {:+}ms（{} 段）", session_id, d, subtitles.len());
-    } else if correction.measured_ms.is_some() {
-        eprintln!("[Fusion] 会话 {} 字幕漂移测量 {:+}ms 未采纳（带外或段数不足）", session_id, correction.measured_ms.unwrap());
+    } else if let Some(m) = correction.measured_ms {
+        eprintln!("[Fusion] 会话 {} 字幕漂移测量 {:+}ms 未采纳（带外或段数不足）", session_id, m);
     }
     let fused = merge_transcript(&correction.corrected, asr_segments, 0);
     if fused.is_empty() {
