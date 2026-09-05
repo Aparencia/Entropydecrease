@@ -11,6 +11,17 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import SopRunOverlay from "./SopRunOverlay";
+
+interface SopTemplateView {
+  id: number;
+  note_id: number;
+  name: string;
+  start_line: number;
+  end_line: number;
+  mode: string;
+  note_title: string;
+}
 
 interface ActionRow {
   id: number;
@@ -64,6 +75,7 @@ const cardStyle: React.CSSProperties = {
 const btn: React.CSSProperties = { padding: "4px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6, border: "1px solid #e5e7eb", background: "#fff", color: "#374151" };
 const okBtn: React.CSSProperties = { ...btn, background: "#0d9488", color: "#fff", border: "none" };
 const dangerBtn: React.CSSProperties = { ...btn, color: "#dc2626" };
+const ghostBtn: React.CSSProperties = { ...btn };
 
 const TYPE_LABEL: Record<string, string> = {
   done: "✓ 完成",
@@ -81,7 +93,16 @@ function fmtDate(ts: number): string {
 }
 
 export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
-  const [tab, setTab] = useState<"queue" | "history">("queue");
+  const [tab, setTab] = useState<"queue" | "history" | "sop">("queue");
+  // SOP 库（模板/新建/执行——REQ-296）
+  const [templates, setTemplates] = useState<SopTemplateView[]>([]);
+  const [notes, setNotes] = useState<{ id: number; title: string }[]>([]);
+  const [activeTemplate, setActiveTemplate] = useState<SopTemplateView | null>(null);
+  const [sopNoteId, setSopNoteId] = useState<number | null>(null);
+  const [sopName, setSopName] = useState("");
+  const [sopStart, setSopStart] = useState("0");
+  const [sopEnd, setSopEnd] = useState("0");
+  const [suggestions, setSuggestions] = useState<Record<number, string[]>>({});
   // 裁决队列（四分区同拉全量行，前端按 tab 分区展示——逾期标红/计划/搁置/提炼）
   const [rows, setRows] = useState<ActionRow[]>([]);
   const [history, setHistory] = useState<HistoryRow[]>([]);
@@ -134,7 +155,61 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
       setUnrefined(u);
     })();
     void reload();
+    void loadSop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchTab, reload]);
+
+  const loadSop = useCallback(async () => {
+    try {
+      const [t, n] = await Promise.all([
+        invoke<SopTemplateView[]>("sop_template_list", { noteId: null }),
+        invoke<{ id: number; title: string }[]>("list_notes"),
+      ]);
+      setTemplates(t);
+      setNotes(n);
+      if (sopNoteId == null && n.length > 0) setSopNoteId(n[0].id);
+    } catch (e) {
+      setErr(`SOP 库加载失败: ${e}`);
+    }
+  }, [sopNoteId]);
+
+  const createTemplate = async () => {
+    const start = Number.parseInt(sopStart, 10);
+    const end = Number.parseInt(sopEnd, 10);
+    if (sopNoteId == null) { setErr("请先选择笔记"); return; }
+    if (!sopName.trim()) { setErr("请输入模板名"); return; }
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start) {
+      setErr("行范围非法（0 起整数，end ≥ start）");
+      return;
+    }
+    try {
+      await invoke("sop_template_create", { noteId: sopNoteId, name: sopName.trim(), startLine: start, endLine: end, mode: null });
+      setSopName("");
+      setMsg(`✓ 模板「${sopName.trim()}」已创建（段落行引用，编辑正文即编辑模板）`);
+      await loadSop();
+    } catch (e) {
+      setErr(String(e));
+    }
+  };
+
+  const fetchSuggestions = async (templateId: number) => {
+    try {
+      const list = await invoke<string[]>("sop_revision_suggestions", { templateId });
+      setSuggestions((m) => ({ ...m, [templateId]: list }));
+    } catch (e) {
+      setErr(String(e));
+    }
+  };
+
+  const deleteTemplate = async (t: SopTemplateView) => {
+    try {
+      await invoke("sop_template_delete", { templateId: t.id });
+      setMsg(`已删除模板「${t.name}」（正文未动）`);
+      await loadSop();
+    } catch (e) {
+      setErr(String(e));
+    }
+  };
 
   const afterMutate = async (info?: string) => {
     if (info) setMsg(info);
@@ -253,6 +328,7 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
               [
                 ["queue", `裁决队列（${overdue.length + planned.length + rows.length + unrefined.length}）`],
                 ["history", `完成史（${history.length}）`],
+                ["sop", `SOP 库（${templates.length}）`],
               ] as const
             ).map(([k, label]) => (
               <button
@@ -301,7 +377,7 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
               ))}
             </div>
           </>
-        ) : (
+        ) : tab === "history" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             {history.length === 0 ? empty("暂无完成记录——完成即证据，周回顾原料在此沉淀") : history.map((h) => (
               <div key={h.id} style={{ display: "flex", gap: 8, fontSize: 12, borderBottom: "1px solid #f3f4f6", padding: "4px 2px" }}>
@@ -314,10 +390,67 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
               </div>
             ))}
           </div>
+        ) : (
+          <>
+            {/* SOP 库：模板行范围引用 + 执行（REQ-296） */}
+            <div style={{ fontSize: 12, color: "#374151", marginBottom: 8 }}>
+              <b>SOP 模板（{templates.length}）</b>{" "}
+              <span style={{ color: "#9ca3af", fontSize: 11 }}>模板=笔记段落行范围引用（编辑正文即编辑模板，无双写）；执行=步骤快照跑 run</span>
+            </div>
+            <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, marginBottom: 10 }}>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: 11, color: "#6b7280" }}>新建：</span>
+                <select value={sopNoteId ?? undefined} onChange={(e) => setSopNoteId(Number(e.target.value))} style={{ fontSize: 12, maxWidth: 180 }}>
+                  {notes.map((n) => <option key={n.id} value={n.id}>{n.title.slice(0, 18)}</option>)}
+                </select>
+                <input value={sopName} onChange={(e) => setSopName(e.target.value)} placeholder="模板名" style={{ fontSize: 12, width: 110, border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 6px" }} />
+                <span style={{ fontSize: 11, color: "#9ca3af" }}>行</span>
+                <input value={sopStart} onChange={(e) => setSopStart(e.target.value)} style={{ fontSize: 12, width: 44, border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 6px" }} />
+                <span style={{ fontSize: 11, color: "#9ca3af" }}>–</span>
+                <input value={sopEnd} onChange={(e) => setSopEnd(e.target.value)} style={{ fontSize: 12, width: 44, border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 6px" }} />
+                <button style={okBtn} onClick={() => void createTemplate()}>创建</button>
+              </div>
+              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
+                行号 0 起（标题=0）；空行自动跳过；超 50 步拒绝。编辑器内选中段落生成入口在笔记工具栏接线（同款命令）。
+              </div>
+            </div>
+            {templates.length === 0 ? (
+              <p style={{ fontSize: 12, color: "#9ca3af" }}>暂无 SOP 模板——选中笔记步骤段落（行范围）即可创建</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {templates.map((t) => (
+                  <div key={t.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px" }}>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{t.name}</span>
+                      <span style={{ fontSize: 11, color: "#9ca3af" }}>@{t.note_title} · 行 {t.start_line}–{t.end_line} · {t.mode === "confirm" ? "总览核对" : "逐步引导"}</span>
+                      <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+                        <button style={okBtn} onClick={() => setActiveTemplate(t)}>▶ 执行</button>
+                        <button style={ghostBtn} onClick={() => void fetchSuggestions(t.id)}>💡 修订建议</button>
+                        <button style={{ ...ghostBtn, color: "#dc2626" }} onClick={() => void deleteTemplate(t)}>删除</button>
+                      </span>
+                    </div>
+                    {(suggestions[t.id]?.length ?? 0) > 0 && (
+                      <div style={{ fontSize: 11, color: "#b45309", marginTop: 4 }}>
+                        {suggestions[t.id].map((s, i) => <div key={i}>💡 {s}</div>)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
         <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
-          勾选任务行即被自动收录；产物 ☑️ 行可在上方「待提炼」区一键转标准任务行；🎴 转卡为规划中出口（G7 预留）。
+          勾选任务行即被自动收录；产物 ☑️ 行可在上方「待提炼」区一键转标准任务行；🎴 转卡为规划中出口（G7 预留）。SOP run 完成自动入完成史。
         </p>
+        {/* v0.20.3（REQ-296）：SOP 执行器（嵌套 Overlay——覆盖本面板） */}
+        {activeTemplate && (
+          <SopRunOverlay
+            template={activeTemplate}
+            onClose={() => setActiveTemplate(null)}
+            onChanged={() => { void loadSop(); onChanged?.(); }}
+          />
+        )}
       </div>
     </div>
   );
