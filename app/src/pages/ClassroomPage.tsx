@@ -28,6 +28,8 @@ import ColumnBar from "../components/ColumnBar";
 import { useColumnLayout } from "../hooks/useColumnLayout";
 // v0.11.7：图文采集（第三动线：截屏导入图文内容 → 图文会话）
 import PhotoCapturePanel from "../components/PhotoCapturePanel";
+// v0.20.4（REQ-303）：web 采集动线面板
+import WebImportPanel from "../components/WebImportPanel";
 import type { Note, WindowInfo, StreamingModelStatus, LiveSessionStatus, DownloadProgress, DownloadStatus, ProfileKind } from "../types";
 // v0.12.3：浮窗状态快照类型（与 Rust FloatUiView camelCase 契约同源；
 // 审查 LOW-3：统一共享类型替代内联重复声明）
@@ -748,6 +750,9 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
 
           {/* v0.11.7：图文采集（第三动线：截屏导入图文内容 → 图文会话） */}
           <PhotoCapturePanel onOpenSessions={onOpenSessions} onStatus={setStatus} />
+
+          {/* v0.20.4（REQ-303）：web 采集（第四条动线：URL 静态直取 → kind=web 会话） */}
+          <WebImportPanel onOpenSessions={onOpenSessions} onStatus={setStatus} />
 
           {status && <p style={{ fontSize: 12, color: "#2563eb" }}>{status}</p>}
         </div>

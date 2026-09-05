@@ -21,6 +21,7 @@ import ImageGallery from "../components/ImageGallery";
 import NotePreviewView from "../components/NotePreviewView";
 import ProofreadPanel from "../components/ProofreadPanel";
 import SecondPassPanel from "../components/SecondPassPanel";
+import WebArticleView from "../components/WebArticleView";
 import SpeakerSwitchCard from "../components/SpeakerSwitchCard";
 import type { GlossaryTerm, QualityReport, SessionDetail, SessionOcrBlock } from "../types";
 import { fmtMs } from "../utils/fmt";
@@ -234,6 +235,22 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
     setRenameMode(false);
     setRenameErr("");
   };
+
+  // v0.20.4（REQ-303）：web 会话专用详情（文章阅读 + 元数据回链 + 转笔记；
+  // 无时间轴/屏卡/精修面——h2 标题即页标题，改名在会话列表进行）
+  if (detail.session.kind === "web") {
+    return (
+      <div style={{ padding: "0 2px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+          <h2 style={{ margin: 0, fontSize: 16, flex: 1 }}>{detail.session.title}</h2>
+          <span style={{ fontSize: 11, color: "#0d9488", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 10, padding: "1px 8px" }}>
+            web 采集
+          </span>
+        </div>
+        <WebArticleView sessionId={sessionId} onToNote={onToNote} onRemove={onRemove} />
+      </div>
+    );
+  }
 
   return (
     <>
