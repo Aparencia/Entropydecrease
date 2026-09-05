@@ -19,6 +19,7 @@ import { listen } from "@tauri-apps/api/event";
 import BoxSelectOverlay from "../components/BoxSelectOverlay";
 import ImageGallery from "../components/ImageGallery";
 import NotePreviewView from "../components/NotePreviewView";
+import SecondPassPanel from "../components/SecondPassPanel";
 import SpeakerSwitchCard from "../components/SpeakerSwitchCard";
 import type { GlossaryTerm, QualityReport, SessionDetail, SessionOcrBlock } from "../types";
 import { fmtMs } from "../utils/fmt";
@@ -92,6 +93,9 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
   const [renameValue, setRenameValue] = useState("");
   const [renameErr, setRenameErr] = useState("");
   const [renameBusy, setRenameBusy] = useState(false);
+  // v0.20.2（REQ-268）：离线精修（第二遍）裁决面板显隐（会话切换即关）
+  const [showPass2, setShowPass2] = useState(false);
+  useEffect(() => setShowPass2(false), [sessionId]);
 
   // toast 定时器卸载清理（防卸载后 setState）
   useEffect(
@@ -397,6 +401,16 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
         >
           {refining ? "精修中…" : "🔬 课后精修"}
         </button>
+        {/* v0.20.2（REQ-268）：全量离线精修（第二遍）——仅已结束非图文会话
+            （需要 S4 落盘音频）；面板内预览/采纳/回退，原料视图恒原文 */}
+        {detail.session.status === "finished" && detail.session.kind !== "photo" && (
+          <button
+            style={{ ...btn, borderRadius: 6, border: "1px solid #7c3aed", background: "#f5f3ff", color: "#6d28d9" }}
+            onClick={() => setShowPass2(true)}
+          >
+            ⚡ 离线精修
+          </button>
+        )}
       </div>
       {refineMsg && (
         <div style={{ fontSize: 11, color: refining ? "#b45309" : "#0d9488", marginBottom: 6 }}>
@@ -599,6 +613,9 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
           <ImageGallery sessionId={sessionId} />
         </>
       )}
+
+      {/* v0.20.2（REQ-268）：离线精修（第二遍）裁决面板 */}
+      {showPass2 && <SecondPassPanel sessionId={sessionId} onClose={() => setShowPass2(false)} />}
     </>
   );
 }
