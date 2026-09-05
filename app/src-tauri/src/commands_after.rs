@@ -85,7 +85,13 @@ pub fn batch_weekly_resolve(
     if decisions.len() > 200 {
         return Err("单次批决议上限 200 条".to_string());
     }
-    weekly_resolve_core(&state.db, &decisions).map_err(|e| e.to_string())
+    let app = state.app.clone();
+    let view = weekly_resolve_core(&state.db, &decisions).map_err(|e| e.to_string())?;
+    // 直写路径跳过 update_note 事件面——补 notes 域广播（列表/检索侧刷新）
+    if view.done + view.abandoned > 0 {
+        crate::notify::emit_changed(&app, crate::notify::DataDomain::Notes);
+    }
+    Ok(view)
 }
 
 pub(crate) fn weekly_resolve_core(
@@ -156,6 +162,9 @@ pub(crate) fn weekly_resolve_core(
                 let mut stmt = conn.prepare("UPDATE notes SET content = ?1, updated_at = ?2 WHERE id = ?3")?;
                 for (note_id, (_title, content)) in &contents {
                     stmt.execute(params![content, now, note_id])?;
+                    // 派生索引同事务重建（kb 影子表——与 db_notes::update_note 同钩子；
+                    // 绕过高层 update_note 的直写路径必须在此补齐，防 kb 陈旧）
+                    crate::kb_index::soft_rebuild_note(conn, *note_id, content);
                     crate::db_task_index::rebuild_note_tasks(conn, *note_id, content);
                 }
             }

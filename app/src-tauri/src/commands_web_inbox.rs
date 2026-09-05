@@ -169,10 +169,14 @@ fn write_simple(stream: &mut TcpStream, status: &str, body: &str, cors: bool) {
 }
 
 fn read_request(stream: &mut TcpStream) -> Option<(String, String, HashMap<String, String>, Vec<u8>)> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     let mut buf = Vec::new();
     let mut chunk = [0u8; 4096];
     let mut head_end: Option<usize> = None;
     loop {
+        if std::time::Instant::now() > deadline {
+            return None; // 慢速/悬挂请求有界放弃（防连接占用线程）
+        }
         match stream.read(&mut chunk) {
             Ok(0) => break,
             Ok(n) => {
