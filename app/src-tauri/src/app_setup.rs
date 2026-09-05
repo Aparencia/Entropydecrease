@@ -288,6 +288,8 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         overlay_image_path: std::sync::Arc::new(std::sync::Mutex::new(None)),
         // v0.12.3：浮窗 UI 状态（locked/topmost——Rust 侧单一来源，见 commands_window.rs）
         float_ui: std::sync::Arc::new(std::sync::Mutex::new(crate::commands_window::FloatUi::default())),
+        // v0.20.2（REQ-268）：会话第二遍离线精修运行注册表（默认空）
+        second_pass_jobs: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
     });
     // v0.12.3（P2-10）：浮窗预创建常驻（隐藏）——打开秒显、点击期零建窗风险；
     // 失败幂等回落为打开时懒创建（open_capture_float 内部兜底）。

@@ -187,6 +187,11 @@ pub struct AppState {
     /// v0.12.3：浮窗 UI 状态（locked/topmost——set_ignore_cursor_events 无 getter，
     /// 锁定态必须自存；单一来源即 commands_window.rs，变更 emit float:state 事件）
     pub float_ui: std::sync::Arc<std::sync::Mutex<crate::commands_window::FloatUi>>,
+    /// v0.20.2（REQ-268）：会话第二遍离线精修运行注册表（session_id → 取消句柄；
+    /// 运行态=内存——崩溃后 pending 草稿可经重跑清理恢复，无需任务持久化）
+    pub second_pass_jobs: std::sync::Arc<
+        std::sync::Mutex<std::collections::HashMap<i64, crate::commands_asr_pass2::Pass2Job>>,
+    >,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。

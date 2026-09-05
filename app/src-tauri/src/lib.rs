@@ -75,6 +75,7 @@ mod asr_clean;
 mod asr_dedupe;
 mod asr_health;
 mod asr_merge;
+mod asr_pass2;
 mod asr_rescore;
 mod analysis;
 mod artifact;
@@ -165,6 +166,7 @@ mod commands_refine_inner;
 mod commands_session;
 // v0.7.6 审查硬拆：会话 → 笔记转换管线（原料装载/结构渲染/单条转换/批量编排/预览）
 mod commands_session_note;
+mod commands_asr_pass2;
 // v0.11.5（spec 8️⃣）：会话详情术语表——词汇表移出笔记后直供前端展示
 mod commands_session_glossary;
 // v0.7.7（REQ-182/183/184）：结构图命令层——批量捕获/手动框选/列表/删除
@@ -237,6 +239,7 @@ mod session_display;
 // v0.7.0 M3（REQ-133）：图内文字检索（OCR 块视图）
 mod db_ocr_search;
 mod db_sessions_rows;
+mod db_session_refine;
 mod device_config;
 // v0.6.0 M2（REQ-063）：DTW 时序对齐（spike 机制先行，真机校准待 M4 落盘）
 // v0.20.0（REQ-263）：mod → pub——asr_eval harness 复用（漂移估计分布；bin 为 crate 外消费者）
@@ -909,6 +912,11 @@ pub fn run() {
             // v0.11.5（spec 5️⃣）：课后精修懒自动化（详情进入原料视图自动触发；
             // 幂等——已精修屏跳过，与停止后自动触发双通道防重）
             commands_refine::auto_refine_session,
+            // v0.20.2（REQ-268）：会话全量离线精修（第二遍）——启动/取消/预览/裁决
+            commands_asr_pass2::second_pass_start,
+            commands_asr_pass2::second_pass_cancel,
+            commands_asr_pass2::second_pass_list,
+            commands_asr_pass2::second_pass_decide,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -48,7 +48,14 @@ fn load_note_material(
     if session.status == SESSION_STATUS_RECORDING {
         return Err("进行中的会话不能生成笔记，请先结束会话".to_string());
     }
-    let segments = db.list_segments(id).map_err(|e| e.to_string())?;
+    // v0.20.2（REQ-268/270）：已采纳精修草稿合成到装载副本——原料段表永不变
+    // （离线第二遍 + LLM 校对两 origin 依次覆盖：后落定者优先）
+    let s2 = db
+        .effective_session_segments(id, crate::db_session_refine::ORIGIN_SECOND_PASS)
+        .map_err(|e| e.to_string())?;
+    let segments = db
+        .overlay_adopted_rows(id, crate::db_session_refine::ORIGIN_PROOFREAD, &s2)
+        .map_err(|e| e.to_string())?;
     let ocr_blocks = db.list_ocr_blocks(id).map_err(|e| e.to_string())?;
     Ok((session, segments, ocr_blocks))
 }

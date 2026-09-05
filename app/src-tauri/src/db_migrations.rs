@@ -500,6 +500,9 @@ CREATE TABLE IF NOT EXISTS contracts (
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_uid ON notes(uid);
          CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_uid ON sessions(uid);",
     )?;
+    // v0.20.2（REQ-268/270）：会话精修草稿表（离线第二遍/LLM 校对派生落点——
+    // 原料 session_segments 不可变，替换文本走草稿表 + 有效轴合成）
+    crate::db_session_refine::init(conn)?;
     Ok(())
 }
 
