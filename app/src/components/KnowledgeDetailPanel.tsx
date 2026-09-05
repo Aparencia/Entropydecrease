@@ -1,4 +1,4 @@
-/**
+﻿/**
  * KnowledgeDetailPanel — 知识体系右栏详情面板（v0.13.x）。
  *
  * @ai-context: 按选中实体三态分派——节点（只读信息 + 引用）/概念（三问编辑）/
@@ -116,7 +116,7 @@ export default function KnowledgeDetailPanel({ width = 320, system, nodes, conce
       await invoke("update_knowledge_model", {
         id: selection.id,
         name: mName.trim(),
-        disciplines,
+        disciplines: JSON.stringify(disciplines), // TD-2026-09-05-B：Rust 契约=JSON 数组字符串
         claim: mClaim.trim() || null,
         validWhen: mValidWhen.trim() || null,
         invalidWhen: mInvalidWhen.trim() || null,

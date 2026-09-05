@@ -1,4 +1,4 @@
-/**
+﻿/**
  * KnowledgeModelDialog — 新建模型独立弹窗（v0.13.x）。
  *
  * @ai-context: 从模型列表「＋ 添加模型」按钮打开，独立于右栏详情面板——与概念弹窗
@@ -37,7 +37,7 @@ export default function KnowledgeModelDialog({ systemId, onCreated, onClose }: P
       await invoke("add_knowledge_model", {
         systemId,
         name: name.trim(),
-        disciplines: dList,
+        disciplines: JSON.stringify(dList), // TD-2026-09-05-B：Rust 契约=JSON 数组字符串
         claim: claim.trim() || null,
         validWhen: validWhen.trim() || null,
         invalidWhen: invalidWhen.trim() || null,
