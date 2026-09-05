@@ -94,15 +94,15 @@
 | app/src/types/knowledge.ts | 557 | 知识体系类型域（体系/节点/概念/模型/引用/审计/决策 + v0.13.8 画布契约 + v0.14.1 画布偏好枚举与下拉文案常量）——类型与文案常量同域防漂移（前端类型域拆分任务待执行） | 若再增长：画布偏好类型与文案拆至 types/canvas.ts |
 | app/src/pages/NotesPage.tsx | 572 | 三栏笔记页编排（组侧栏/列表/阅读编辑 + 列状态 + 焦点直达）；v0.19.1（REQ-260）引用跳笔记 + 命中词阅读搜索注入（focusNoteSearch 与 focusNoteId 合并单 effect 控线）+ 审查即修（编辑态退出先例 setEditing false，+4）——登记值 478 过期，实测纠偏 | 若再增长：跨页直达 effect 拆至 useNotesFocus.ts hook |
 | app/src/pages/ChatPage.tsx | 529 | AI 对话页编排（会话/任务/模型/双产物消息流）；v0.19.1（REQ-260）新会话模式（纯聊/学习库问答）+ 引用跳转接线 + 审查即修（regenerate 即刷，+7）——登记值 497 过期，实测纠偏 | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
-| app/src/components/NoteLinkToSystem.tsx | 314 | v0.19.7（REQ-286）重构：挂体系选择器（体系下拉 + 三 tab + LinkEntityPicker 搜索树列表 + 三类内联轻建编排 + 既有反查/撤链/钳制语义保持）——实体选择/创建交互已下沉 LinkEntityPicker.tsx（134 行），本文件保留编排与数据装载内聚 | 若再增长：树行构建（flattenNodeRows）与实体装载拆至 useSystemEntities.ts hook |
+| app/src/components/NoteLinkToSystem.tsx | 325 | v0.19.7（REQ-286）重构：挂体系选择器（体系下拉 + 三 tab + LinkEntityPicker 搜索树列表 + 三类内联轻建编排 + 既有反查/撤链/钳制语义保持）——实体选择/创建交互已下沉 LinkEntityPicker.tsx（134 行），本文件保留编排与数据装载内聚 | 若再增长：树行构建（flattenNodeRows）与实体装载拆至 useSystemEntities.ts hook |
 | app/src/App.tsx | 363 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）；v0.19.1 引用高亮焦点态 + 审查即修（openNotePlain 收敛普通打开清带词态 + SettingsPage active 透传，+6） | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
 
 > 前端 **拆分中**（Task #9 笔记域修复进行中，暂不登记行数）：`app/src/types.ts`——待前端拆分完成后以实测行数重新评估。
 > 前端 SessionsPage.tsx 审查快照 304 行（登记值），v0.7.1 硬拆后长期 ≤300，本轮审查期间轻微越线；随 NotesPage/types.ts 拆分任务一并复核，若仍越线按上表模式登记。
 > 前端 EnrichPanel.tsx 实测已回归 299 行（登记值 ~330 移除）。
 
-| app/src-tauri/src/ai_refine_protocol.rs | 340 | v0.19.7（REQ-290①）逐节流式：render_sections 渲染出口重构 + NDJSON 行解析 + 常量（协议域内聚，to_markdown/validate 共用） | 若再增长：行解析与常量拆至 ai_protocol_ndjson.rs |
-| app/src/components/NoteListView.tsx | 525 | v0.19.7（REQ-287）列表交互重构：选择三通道/批量模式/拖拽矩阵（组头与行落点）/手动序消费/划选锚点/选集菜单——编排内聚；纯选择逻辑已拆 noteSelection.ts、组头载荷已拆 NoteTreeSection 导出 | 若再增长：拖拽/划选接线拆至 useNoteListDnD.ts；手动序拆至 useNoteOrders.ts |
+> 登记移除：ai_refine_protocol.rs（2026-09-05 审查 M3）——实测 295 ≤300 无需登记（流式渲染/解析新增后仍合规），原登记 340 不实已撤
+| app/src/components/NoteListView.tsx | 524 | v0.19.7（REQ-287）列表交互重构：选择三通道/批量模式/拖拽矩阵（组头与行落点）/手动序消费/划选锚点/选集菜单——编排内聚；纯选择逻辑已拆 noteSelection.ts、组头载荷已拆 NoteTreeSection 导出 | 若再增长：拖拽/划选接线拆至 useNoteListDnD.ts；手动序拆至 useNoteOrders.ts |
 
 ## 已拆分 / 登记移除记录
 

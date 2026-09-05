@@ -501,11 +501,11 @@
 
 | REQ | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
 |----|------|--------|------|---------|------|
-| REQ-281 | 画面停更检测与捕获会话自愈：帧心跳（live:frame-heartbeat 每 2s：backend/新帧/计数/可见性）+ WGC 静默 watchdog（visible 且 5s 无新帧→重建，节流 30s）+ live:frame-stalled 轻提示横幅（区别于窗口丢失）+ 末帧保留 | P1 | 已立项 | v0.19.6 | 用户双屏复现：视频本身在动→我方链路；ScreenStats 计数已备仅未外露；watchdog 纯状态机单测 |
-| REQ-282 | 会话标题内容化 A 层（零 AI）：来源名净化+同源去重后缀（抖音 #2）+ 融合完成首句升级（8–40 字过 UI 垃圾/纯音乐不升级）+ sessions.title_kind（source/manual，改名=manual 停止覆写）+ 详情头改名入口（update_session_title + data:sessions-changed） | P1 | 已立项 | v0.19.6 | title_kind 幂等加列零重建；纯函数 golden 单测 |
+| REQ-281 | 画面停更检测与捕获会话自愈：帧心跳（live:frame-heartbeat 每 2s：backend/新帧/计数/可见性）+ WGC 静默 watchdog（visible 且 5s 无新帧→重建，节流 30s）+ live:frame-stalled 轻提示横幅（区别于窗口丢失）+ 末帧保留 | P1 | 已实施 | v0.19.6 | 用户双屏复现：视频本身在动→我方链路；ScreenStats 计数已备仅未外露；watchdog 纯状态机单测 |
+| REQ-282 | 会话标题内容化 A 层（零 AI）：来源名净化+同源去重后缀（抖音 #2）+ 融合完成首句升级（8–40 字过 UI 垃圾/纯音乐不升级）+ sessions.title_kind（source/manual，改名=manual 停止覆写）+ 详情头改名入口（update_session_title + data:sessions-changed） | P1 | 已实施 | v0.19.6 | title_kind 幂等加列零重建；纯函数 golden 单测 |
 | REQ-283 | 会话标题 AI 建议层：titleSuggestEnabled 默认关独立开关 + 会话结束轻任务（前 3000 字清洗转写 ≤1K token → ≤20 字标题 JSON）+ 精修采纳后基于精修稿刷新一次 + 徽标采纳/忽略（toast 可撤销） | P2 | 已立项 | v0.19.8 | AI 增强可选总则；op_type title_suggest；失败静默零阻断 |
 | REQ-284 | 画面理解开关入精修发起弹层：会话级弹层 checkbox（初值=全局）+ 任务级覆写传参（resolve 纯函数覆写优先）+「设为默认」显式写回全局（单向）+ 生效来源文案 | P1 | 已实施 | v0.19.7 | 笔记级不显示；设置页保持总入口 |
-| REQ-285 | ColumnResizer 全站增量拖拽修复：move 传相邻增量（lastX）替代累计位移；补 pointer 序列单测（50→70→80=[20,10]） | P1 | 已立项 | v0.19.6 | 根因：增量语义 resizeBy 收到累计 dx 重复累加=「加速」 |
+| REQ-285 | ColumnResizer 全站增量拖拽修复：move 传相邻增量（lastX）替代累计位移；补 pointer 序列单测（50→70→80=[20,10]） | P1 | 已实施 | v0.19.6 | 根因：增量语义 resizeBy 收到累计 dx 重复累加=「加速」 |
 | REQ-286 | 挂体系弹层搜索+三类内联轻建：实体区改 Tab+搜索列表（树形缩进选父锚点）+ 零命中「＋新建『x』」即建即选（问题挂所选父/概念模型体系级平铺）+ 空体系引导按钮 | P1 | 已实施 | v0.19.7 | SearchSelectList 通用零依赖；轻建=名称级详情后补；键盘 ↑↓/Enter/Esc 两段式 |
 | REQ-287 | 笔记列表交互重构：去行内 checkbox + Ctrl/Shift 修饰多选与「批量选择」模式 + 单击选中右栏读 + 即时拖拽（跨组=组行/组头双 drop；组内=手动排序模式 note_groups.order_mode+notes.order_index 命令族）+ 划过加选（空白锚点）+ 批量栏扩（删除/移动到组）+ 右键选集菜单（交互矩阵 §2.6/2.9） | P1 | 已实施 | v0.19.7 | HTML5 DnD 保留观察项；列表键盘导航观察项 |
 | REQ-288 | 体系 D1 证据反推生长：未挂接证据源 embedding 聚类（引擎缺=诚实降级关键词簇）→ 建议簇卡片（拟问题文案可编辑/相似节点查重/基于此新建/忽略软隐藏）——建节点不自动挂（红线） | P2 | 已立项 | v0.19.8 | 解决冷启动与"树不生长"；kb_evidence 纯函数+golden |
