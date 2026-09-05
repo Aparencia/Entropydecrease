@@ -96,6 +96,11 @@ mod card_generate;
 // v0.7.0 M1（REQ-101）：CER 计算（预处理链默认值定标的微基准依据）
 // pub：bin/cer_bench.rs 引用（审查 H1 修复，同 audio_preprocess）
 pub mod cer;
+// v0.20.0（REQ-263）：asr_eval 自验证 harness 纯函数层——混淆画像/样本侧/报告回归门
+// pub：bin/asr_eval.rs 引用（同 cer.rs 先例；dead_code 豁免见各模块头注）
+pub mod eval_confusion;
+pub mod eval_report;
+pub mod eval_samples;
 mod chapter_detect;
 // v0.7.0 M1（REQ-104/132）：剪贴板信号（文本信号 + 图片直贴；内存态，arboard 轮询）
 mod clipboard_signal;
@@ -232,7 +237,8 @@ mod db_ocr_search;
 mod db_sessions_rows;
 mod device_config;
 // v0.6.0 M2（REQ-063）：DTW 时序对齐（spike 机制先行，真机校准待 M4 落盘）
-mod dtw_align;
+// v0.20.0（REQ-263）：mod → pub——asr_eval harness 复用（漂移估计分布；bin 为 crate 外消费者）
+pub mod dtw_align;
 // GPU 适配器探测依赖 DXGI（Windows）；决策纯逻辑在 device_config（全平台）
 #[cfg(target_os = "windows")]
 mod device_probe;
