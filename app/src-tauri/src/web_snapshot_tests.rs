@@ -26,8 +26,21 @@ fn inline_styles_imgs_and_strip_external_scripts() {
     assert!(out.contains("data:text/css;base64,aGFzaA=="), "{}", out);
     assert!(out.contains("data:image/png;base64,aWNvbg=="), "{}", out);
     assert!(!out.contains("evil.example"), "外链脚本剔除");
-    assert!(out.contains("var ok=1"), "行内脚本保持原文（快照只存不开）");
+    assert!(!out.contains("var ok=1"), "行内脚本同样剔除（离线打开零执行面）");
     assert!(out.contains("<p>正文</p>"));
+}
+
+#[test]
+fn scrub_removes_event_attrs_and_javascript_urls() {
+    let html = r#"<a href="javascript:alert(1)" onclick="x()" data-x="1">点我</a><img src="pic/a.png" onerror="x()"><iframe src="javascript:void(0)"></iframe>"#;
+    let mut resolver = |url: &str| {
+        if url.ends_with("pic/a.png") { Some("aQ==".to_string()) } else { None }
+    };
+    let out = inline_html("https://a.com/x/", html, &mut resolver);
+    assert!(!out.contains("javascript:"), "{}", out);
+    assert!(!out.contains("onclick"), "{}", out);
+    assert!(!out.contains("onerror"), "{}", out);
+    assert!(out.contains(">点我</a>") || out.contains("点我"), "{}", out);
 }
 
 #[test]

@@ -102,14 +102,15 @@ pub fn inline_html(base: &str, html: &str, resolver: Resolver) -> String {
                 let data = data_or_keep("img", resolve_url(base, &src), &mut *resolver);
                 if let Some(d) = data {
                     let replaced = replace_attr(tag, "src", &d);
-                    out.push_str(&replaced);
+                    // 内联化后仍须过净化（原标签其余 on*/危险属性一并剥除）
+                    out.push_str(&scrub_tag(&replaced));
                     continue;
                 }
             }
-            out.push_str(tag);
-        } else if lower.starts_with("<script") && tag.contains("src=") {
-            // 外链脚本剔除（防快照执行第三方 JS——只存档不执行），连同闭合标签
-            out.push_str("<!-- entropy-snapshot: external script removed -->");
+            out.push_str(&scrub_tag(tag));
+        } else if lower.starts_with("<script") {
+            // 全部 script 剔除（外链+行内——快照离线打开语境不得执行任何原文脚本）
+            out.push_str("<!-- entropy-snapshot: script removed -->");
             let lower_rest = rest.to_ascii_lowercase();
             if let Some(close_idx) = lower_rest.find("</script") {
                 if let Some(gt) = rest[close_idx..].find('>') {
@@ -119,7 +120,8 @@ pub fn inline_html(base: &str, html: &str, resolver: Resolver) -> String {
             }
             // 无闭合标签的畸形脚本：继续正常扫描
         } else {
-            out.push_str(tag);
+            // 通用标签净化：on* 事件属性与 javascript:/data:text/html URL 剥除
+            out.push_str(&scrub_tag(tag));
         }
     }
     out.push_str(rest);
@@ -170,6 +172,55 @@ fn replace_attr(tag: &str, name: &str, new_value: &str) -> String {
 
 fn escape_attr(s: &str) -> String {
     s.replace('"', "&quot;")
+}
+
+/// 标签净化（纯函数）：剥除 on* 事件属性与 javascript:/data:text/html 危险
+/// URL——快照是离线下发的 HTML 文档，任何可执行面归零（安全边界）。
+fn scrub_tag(tag: &str) -> String {
+    // '>' 边界单独保留（不参与属性 token 判定——防整段误吞闭合符）
+    let (body, closer) = match tag.rfind('>') {
+        Some(i) => (&tag[..i], &tag[i..]),
+        None => (tag, ""),
+    };
+    let mut out = String::new();
+    let mut rest = body;
+    let mut first = true;
+    while let Some(ws) = rest.find(|c: char| c.is_whitespace()) {
+        let token = &rest[..ws];
+        rest = rest[ws..].trim_start();
+        if first {
+            out.push_str(token);
+            first = false;
+            continue;
+        }
+        if !token.is_empty() && !dangerous_attr(token) {
+            out.push(' ');
+            out.push_str(token);
+        }
+    }
+    if first {
+        out.push_str(rest);
+    } else if !rest.is_empty() && !dangerous_attr(rest) {
+        out.push(' ');
+        out.push_str(rest);
+    }
+    out.push_str(closer);
+    out
+}
+
+fn dangerous_attr(token: &str) -> bool {
+    let name: String = token.chars().take_while(|c| *c != '=').collect();
+    let lower_name = name.to_ascii_lowercase();
+    if lower_name.starts_with("on") {
+        return true; // 事件属性（onclick/onload/onerror…）
+    }
+    let lower_token = token.to_ascii_lowercase();
+    if lower_token.contains("javascript:") || lower_token.contains("data:text/html") {
+        return true;
+    }
+    // <a>/<img> 之外标签的 data:image 保留（仅图片类 data URI 安全）；href 上
+    // 的 data:text/html 已被上一行拦截
+    false
 }
 
 #[cfg(test)]
