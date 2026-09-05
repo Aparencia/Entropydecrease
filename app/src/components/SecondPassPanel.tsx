@@ -157,7 +157,7 @@ export default function SecondPassPanel({ sessionId, onChanged, onClose }: Props
 
   const decide = async (draftId: number, adopt: boolean) => {
     try {
-      await invoke("second_pass_decide", { draftId, adopt });
+      await invoke("second_pass_decide", { sessionId, draftId, adopt });
       onChanged?.();
       await reload();
     } catch (e) {

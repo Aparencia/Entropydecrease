@@ -25,6 +25,8 @@ import LearningLibraryPanel from "../components/LearningLibraryPanel";
 import AiProviderSettings from "../components/AiProviderSettings";
 import AiTaskPanel from "../components/AiTaskPanel";
 import FeatureFlagSetting from "../components/FeatureFlagSetting";
+// v0.20.2（REQ-269）：ASR 混淆画像闭环面板（候选确认制/规则管理）
+import AsrConfusionPanel from "../components/AsrConfusionPanel";
 
 const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
 const groupTitle: React.CSSProperties = {
@@ -106,6 +108,12 @@ export default function SettingsPage({ active = true }: Props) {
         <GroupTitle>词表</GroupTitle>
         <div style={{ ...panel, marginBottom: 4 }}>
           <VocabManager />
+        </div>
+
+        {/* v0.20.2（REQ-269）：ASR 同音混淆闭环（画像候选/确认制/规则管理） */}
+        <GroupTitle>ASR 纠错</GroupTitle>
+        <div style={{ ...panel, marginBottom: 4 }}>
+          <AsrConfusionPanel />
         </div>
       
         {/* ── 功能预览（默认关的新能力开关，v4 §11.3）── */}
