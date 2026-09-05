@@ -249,6 +249,8 @@ impl Db {
         // 则在此建笔记分支索引最终正文——事务内软失败记录不阻断）
         if !content.trim().is_empty() {
             crate::kb_index::soft_rebuild_note(&tx, note_id, &content);
+            // v0.20.3（REQ-292）保存收口钩子补齐：升笔记直写路径任务索引同事务
+            crate::db_task_index::rebuild_note_tasks(&tx, note_id, &content);
         }
         tx.commit()?;
         // ⑤ 组装返回（与库内一致）

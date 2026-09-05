@@ -98,12 +98,22 @@ pub(crate) fn weekly_resolve_core(
     db: &Db,
     decisions: &[WeeklyDecision],
 ) -> Result<WeeklyResolveView, String> {
-    // 预读：行 → (note_id, line_no, text, 是否 abandon) + 事件载荷
-    let mut by_note: std::collections::HashMap<i64, Vec<(i64, String)>> = Default::default();
+    // 校验并预读任务行（失效/非法显式记 failed——不静默）
+    struct Pending {
+        note_id: i64,
+        line_no: i64,
+        payload: String,
+        reason: Option<String>,
+        abandon: bool,
+    }
     let mut view = WeeklyResolveView { done: 0, abandoned: 0, failed: Vec::new() };
-    let mut events: Vec<(String, Option<String>, i64)> = Vec::new(); // (text, reason, note_id)
-    let mut items: Vec<(i64, i64, String)> = Vec::new(); // (note_id, line_no, action)
+    let mut pendings: Vec<Pending> = Vec::new();
     for d in decisions {
+        let action = d.action.clone();
+        if !matches!(action.as_str(), "done" | "abandon") {
+            view.failed.push(format!("行 {} 非法动作 {}", d.row_id, action));
+            continue;
+        }
         let row = match db.get_task_row(d.row_id) {
             Ok(Some(r)) => r,
             Ok(None) => {
@@ -115,45 +125,71 @@ pub(crate) fn weekly_resolve_core(
                 continue;
             }
         };
-        let action = d.action.clone();
-        if !matches!(action.as_str(), "done" | "abandon") {
-            view.failed.push(format!("行 {} 非法动作 {}", row.id, action));
-            continue;
-        }
-        items.push((row.note_id, row.line_no, action.clone()));
-        by_note.entry(row.note_id).or_default().push((row.line_no, row.task_text.clone()));
-        if action == "abandon" {
-            events.push((row.task_text.clone(), d.reason.clone(), row.note_id));
-        } else {
-            events.push((row.task_text.clone(), None, row.note_id));
-        }
-        if action == "abandon" {
-            view.abandoned += 1;
-        } else {
-            view.done += 1;
-        }
+        pendings.push(Pending {
+            note_id: row.note_id,
+            line_no: row.line_no,
+            payload: row.task_text,
+            reason: d.reason.clone(),
+            abandon: action == "abandon",
+        });
     }
-    if items.is_empty() {
+    if pendings.is_empty() {
         return Ok(view);
     }
-    // 每笔记单次读正文 + 行变换（字符级迁移）——事务外只读
-    let mut contents: std::collections::HashMap<i64, (String, String)> = Default::default(); // note_id -> (title, content)
-    for (note_id, lines) in &by_note {
+    // 按笔记分组（保持批内顺序——正文行独立迁移互不影响）
+    let mut by_note: std::collections::HashMap<i64, Vec<usize>> = Default::default();
+    for (i, p) in pendings.iter().enumerate() {
+        by_note.entry(p.note_id).or_default().push(i);
+    }
+    // 事务外只读+校验+字符级迁移；审查高-3：目标行必须是同一任务
+    // （parse 载荷完全吻合），失效行记 failed 剔除——计数/史/正文一致推进
+    let mut contents: std::collections::HashMap<i64, (String, String)> = Default::default();
+    let mut kept_events: Vec<(String, Option<String>, i64)> = Vec::new();
+    for (note_id, indices) in &by_note {
         let note = db
             .get_note(*note_id)
             .map_err(|e| e.to_string())?
             .ok_or_else(|| format!("笔记 {} 不存在", note_id))?;
         let mut body_lines: Vec<String> = note.content.split('\n').map(|s| s.to_string()).collect();
-        for (line_no, _) in lines {
-            if let Some(line) = body_lines.get_mut(*line_no as usize) {
-                if let Some(next) = migrate_status(line, TaskStatus::Done) {
-                    *line = next;
+        let mut changed = false;
+        for &i in indices {
+            let p = &pendings[i];
+            let line = match body_lines.get(p.line_no as usize) {
+                Some(l) => l.clone(),
+                None => {
+                    view.failed.push(format!("行 {} 已越界（正文变化请刷新后重试）", p.line_no));
+                    continue;
+                }
+            };
+            let Some(parsed) = crate::tasks_core::parse_task_line(&line) else {
+                view.failed.push(format!("行 {} 已非任务行（任务“{}”失效）", p.line_no, p.payload));
+                continue;
+            };
+            if parsed.payload != p.payload {
+                view.failed.push(format!("行 {} 内容已变化（任务“{}”失效，请刷新）", p.line_no, p.payload));
+                continue;
+            }
+            if let Some(next) = crate::tasks_core::migrate_status(&line, TaskStatus::Done) {
+                if next != line {
+                    body_lines[p.line_no as usize] = next;
+                    changed = true;
                 }
             }
+            kept_events.push((p.payload.clone(), p.reason.clone(), *note_id));
+            if p.abandon {
+                view.abandoned += 1;
+            } else {
+                view.done += 1;
+            }
         }
-        contents.insert(*note_id, (note.title.clone(), body_lines.join("\n")));
+        if changed {
+            contents.insert(*note_id, (note.title.clone(), body_lines.join("\n")));
+        }
     }
-    // 单事务提交：正文/索引/完成史原子
+    if kept_events.is_empty() {
+        return Ok(view);
+    }
+    // 单事务提交：正文/索引（kb+task）/完成史原子（任一步失败整体回滚）
     let now = crate::db::unix_seconds();
     let tx: crate::error::Result<()> = db.with_conn(|conn| {
         conn.execute("BEGIN TRANSACTION", [])?;
@@ -163,7 +199,7 @@ pub(crate) fn weekly_resolve_core(
                 for (note_id, (_title, content)) in &contents {
                     stmt.execute(params![content, now, note_id])?;
                     // 派生索引同事务重建（kb 影子表——与 db_notes::update_note 同钩子；
-                    // 绕过高层 update_note 的直写路径必须在此补齐，防 kb 陈旧）
+                    // 绕过高层 update_note 的直写路径必须在此补齐，防 kb/队列陈旧）
                     crate::kb_index::soft_rebuild_note(conn, *note_id, content);
                     crate::db_task_index::rebuild_note_tasks(conn, *note_id, content);
                 }
@@ -173,7 +209,7 @@ pub(crate) fn weekly_resolve_core(
                     "INSERT INTO completion_history (ts, event_type, source_type, source_id, note_id, text, note)
                      VALUES (?1, ?2, 'task_line', NULL, ?3, ?4, ?5)",
                 )?;
-                for (text, reason, note_id) in &events {
+                for (text, reason, note_id) in &kept_events {
                     let event_type = if reason.is_some() { "abandoned" } else { "done" };
                     stmt.execute(params![now, event_type, note_id, text, reason])?;
                 }

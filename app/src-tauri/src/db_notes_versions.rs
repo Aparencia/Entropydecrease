@@ -141,6 +141,9 @@ impl Db {
         // 单笔记毫秒级）；失败软记录进 kb_meta，主链路（保存）不反悔
         if cur != content {
             crate::kb_index::soft_rebuild_note(&tx, note_id, content);
+            // v0.20.3（REQ-292）保存收口钩子补齐：versioned_save 统一写路径
+            // （显式保存/AI 采纳/回滚/补充）正文变化同事务重扫任务索引
+            crate::db_task_index::rebuild_note_tasks(&tx, note_id, content);
         }
         tx.commit()?;
         Ok(NoteVersion {

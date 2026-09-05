@@ -66,10 +66,31 @@ pub fn rebuild_note_tasks(conn: &Connection, note_id: i64, content: &str) {
 
 fn rebuild_inner(conn: &Connection, note_id: i64, content: &str) -> Result<()> {
     let now = crate::db::unix_seconds();
+    // 重扫前读取旧行元数据（plan_date/disposition/created_at）——行号漂移由
+    // (note_id,line_no) 键吸收；改期/纠偏为索引列元数据，不得被每次正文保存
+    // 的重扫抹除（审查高-1：先删后插必须回填，否则计划分区/徽标失真）
+    let mut meta: std::collections::HashMap<i64, (Option<i64>, Option<String>, i64)> = Default::default();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT line_no, plan_date, disposition, created_at FROM task_index WHERE note_id = ?1",
+        )?;
+        let mapped = stmt.query_map(params![note_id], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, Option<i64>>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, i64>(3)?,
+            ))
+        })?;
+        for row in mapped {
+            let (line_no, plan_date, disposition, created_at) = row?;
+            meta.insert(line_no, (plan_date, disposition, created_at));
+        }
+    }
     conn.execute("DELETE FROM task_index WHERE note_id = ?1", params![note_id])?;
     let mut stmt = conn.prepare(
-        "INSERT INTO task_index (note_id, line_no, task_text, status, unrefined, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+        "INSERT INTO task_index (note_id, line_no, task_text, status, unrefined, plan_date, disposition, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
     )?;
     for (line_no, line) in content.split('\n').enumerate() {
         if let Some(p) = parse_task_line(line) {
@@ -77,12 +98,19 @@ fn rebuild_inner(conn: &Connection, note_id: i64, content: &str) -> Result<()> {
                 TaskStatus::Todo => "todo",
                 TaskStatus::Done => "done",
             };
+            let (plan_date, disposition, created_at) = match meta.get(&(line_no as i64)) {
+                Some((pd, dp, ca)) => (*pd, dp.clone(), *ca),
+                None => (None, None, now),
+            };
             stmt.execute(params![
                 note_id,
                 line_no as i64,
                 p.payload,
                 status,
                 p.unrefined as i64,
+                plan_date,
+                disposition,
+                created_at,
                 now
             ])?;
         }
