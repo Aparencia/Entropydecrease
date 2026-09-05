@@ -101,6 +101,8 @@ pub mod cer;
 pub mod eval_confusion;
 pub mod eval_report;
 pub mod eval_samples;
+// v0.20.0 M2b：会话信道（字幕/弱参考分档 + dtw 漂移适配层，见模块头注）
+pub mod eval_session;
 mod chapter_detect;
 // v0.7.0 M1（REQ-104/132）：剪贴板信号（文本信号 + 图片直贴；内存态，arboard 轮询）
 mod clipboard_signal;

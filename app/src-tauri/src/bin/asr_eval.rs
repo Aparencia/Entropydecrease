@@ -21,6 +21,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+mod asr_eval_session;
+
 use app_lib::audio_preprocess::{AudioPreprocessConfig, AudioPreprocessor};
 use app_lib::cer;
 use app_lib::eval_confusion::{profile, ConfusionAggregator};
@@ -53,7 +55,9 @@ impl Route {
 
 #[derive(Debug)]
 struct Options {
-    samples_dir: PathBuf,
+    samples_dir: Option<PathBuf>,
+    db: Option<String>,
+    session_ids: Option<Vec<i64>>,
     model_dir: PathBuf,
     out_dir: PathBuf,
     baseline: Option<PathBuf>,
@@ -73,9 +77,28 @@ fn main() -> ExitCode {
         Some(o) => o,
         None => return ExitCode::from(2),
     };
+    if opts.samples_dir.is_none() && opts.db.is_none() {
+        eprintln!("需提供 <样本目录> 或 --db <entropy.db>");
+        return ExitCode::from(2);
+    }
     let _ = fs::create_dir_all(&opts.out_dir);
 
-    let (samples, no_ref_skips) = collect_samples(&opts);
+    // ── 会话信道（--db；字幕档真参考 / 弱参考档仅相对对比）──
+    if let Some(db) = &opts.db {
+        let want_on = opts.preproc == Route::On || opts.preproc == Route::Both;
+        let s = asr_eval_session::run(db, &opts.model_dir.to_string_lossy(), want_on, opts.session_ids.as_deref());
+        println!("{s}");
+        let _ = fs::write(opts.out_dir.join("sessions.txt"), &s);
+        if opts.samples_dir.is_none() {
+            return ExitCode::SUCCESS;
+        }
+    }
+
+    // ── 文件对信道（样本目录；无则跳过）──
+    let Some(samples_dir) = &opts.samples_dir else {
+        return ExitCode::SUCCESS;
+    };
+    let (samples, no_ref_skips) = collect_samples(samples_dir);
     if samples.is_empty() {
         println!("无可用样本（wav+srt 配对为空）；跳过列表：{no_ref_skips:?}");
         return ExitCode::SUCCESS;
@@ -197,11 +220,11 @@ fn read_baseline_mean(path: &Path) -> Option<f32> {
 
 /// 收集样本：wav 文件 + 同名 srt（存在且 UTF-8 可解）→ Sample；
 /// 无参考/不可解 → no_ref 列表（只列名不产 CER）。
-fn collect_samples(opts: &Options) -> (Vec<Sample>, Vec<String>) {
+fn collect_samples(samples_dir: &Path) -> (Vec<Sample>, Vec<String>) {
     let mut samples = Vec::new();
     let mut skips = Vec::new();
-    let Ok(entries) = fs::read_dir(&opts.samples_dir) else {
-        eprintln!("样本目录不可读: {}", opts.samples_dir.display());
+    let Ok(entries) = fs::read_dir(samples_dir) else {
+        eprintln!("样本目录不可读: {}", samples_dir.display());
         return (samples, skips);
     };
     let mut names: Vec<String> = entries
@@ -211,9 +234,9 @@ fn collect_samples(opts: &Options) -> (Vec<Sample>, Vec<String>) {
         .collect();
     names.sort();
     for name in names {
-        let wav = opts.samples_dir.join(&name);
+        let wav = samples_dir.join(&name);
         let Some(srt_name) = srt_path_for(&name) else { continue };
-        let srt_path = opts.samples_dir.join(srt_name);
+        let srt_path = samples_dir.join(srt_name);
         let raw = match fs::read(&srt_path) {
             Ok(b) => b,
             Err(_) => {
@@ -238,10 +261,13 @@ fn collect_samples(opts: &Options) -> (Vec<Sample>, Vec<String>) {
     (samples, skips)
 }
 
-/// 参数解析：位置参数=样本目录；--model/--preproc/--baseline/--update-baseline/--out。
+/// 参数解析：位置参数=样本目录（可选）；--db/--model/--preproc/--baseline/
+/// --update-baseline/--out。
 fn parse_args() -> Option<Options> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let mut samples_dir = None;
+    let mut samples_dir: Option<String> = None;
+    let mut db: Option<String> = None;
+    let mut session_ids: Option<Vec<i64>> = None;
     let mut model_dir = DEFAULT_MODEL_DIR.to_string();
     let mut out_dir = "asr_eval_out".to_string();
     let mut baseline = None;
@@ -253,6 +279,15 @@ fn parse_args() -> Option<Options> {
             "--model" => model_dir = it.next()?.clone(),
             "--out" => out_dir = it.next()?.clone(),
             "--baseline" => baseline = Some(PathBuf::from(it.next()?.clone())),
+            "--db" => db = Some(it.next()?.clone()),
+            "--session-ids" => {
+                session_ids = Some(
+                    it.next()?
+                        .split(',')
+                        .filter_map(|s| s.trim().parse::<i64>().ok())
+                        .collect(),
+                );
+            }
             "--update-baseline" => update_baseline = true,
             "--preproc" => {
                 preproc = match it.next()?.as_str() {
@@ -264,13 +299,15 @@ fn parse_args() -> Option<Options> {
             }
             _ if samples_dir.is_none() => samples_dir = Some(a.clone()),
             _ => {
-                eprintln!("用法: asr_eval <样本目录> [--model <dir>] [--preproc off|on|both] [--baseline <json>] [--update-baseline] [--out <dir>]");
+                eprintln!("用法: asr_eval [<样本目录>] [--db <entropy.db>] [--model <dir>] [--preproc off|on|both] [--baseline <json>] [--update-baseline] [--out <dir>]");
                 return None;
             }
         }
     }
     Some(Options {
-        samples_dir: PathBuf::from(samples_dir?),
+        samples_dir: samples_dir.map(PathBuf::from),
+        db,
+        session_ids,
         model_dir: PathBuf::from(model_dir),
         out_dir: PathBuf::from(out_dir),
         baseline,
