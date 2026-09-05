@@ -237,6 +237,8 @@ pub fn preview_system(
     prompt.build_system(profile, Some(&dims))
 }
 
+// REQ-290 ② 输出预算化纯函数见 refine_budget.rs（AGENTS.md §3 行数纪律）
+
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。
 #[cfg(test)]
 #[path = "ai_strategy_tests.rs"]
