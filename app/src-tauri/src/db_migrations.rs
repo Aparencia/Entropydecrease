@@ -317,6 +317,14 @@ CREATE TABLE IF NOT EXISTS contracts (
     // v0.11.7（图文会话，ADR-020）：旧库迁移——sessions 表补 kind 列
     // （NULL=视频类会话零回归；'photo'=图文截屏会话；列表徽标/残留清扫依赖此列）
     ensure_column(conn, "sessions", "kind", "ALTER TABLE sessions ADD COLUMN kind TEXT")?;
+    // REQ-282（v0.19.6）：会话标题来源标记——'source'=来源名（可被首句/未来
+    // AI 建议自动升级覆写）；'manual'=用户改名（此后自动升级永不覆写）
+    ensure_column(
+        conn,
+        "sessions",
+        "title_kind",
+        "ALTER TABLE sessions ADD COLUMN title_kind TEXT NOT NULL DEFAULT 'source'",
+    )?;
     // v0.5.0 M4（REQ-048）：旧库迁移——ocr_blocks 表补 region_kind 列
     ensure_column(
         conn,

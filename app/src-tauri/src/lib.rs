@@ -1,4 +1,4 @@
-//! 熵减桌面应用入口（Tauri 装配层）。
+﻿//! 熵减桌面应用入口（Tauri 装配层）。
 //!
 //! @ai-context: 本文件只做模块声明与应用装配（插件注册 / 状态初始化 / command 注册），
 //!              不含业务逻辑；业务自底向上分布：types → concat/db → asr/ocr → engine → commands。
@@ -403,6 +403,7 @@ mod commands_speaker;
 mod session_events;
 mod symbol_normalize;
 mod table_reconstruct;
+mod title_rules;
 mod types;
 mod ui_junk;
 mod vad_adaptive;
@@ -657,6 +658,8 @@ pub fn run() {
             commands_session::list_sessions,
             commands_session::get_session_detail,
             commands_session::delete_session,
+            // REQ-282（v0.19.6）：会话改名（title_kind=manual 停止自动覆写）
+            commands_session::update_session_title,
             commands_session::add_session_segment,
             commands_session::add_session_ocr_block,
             // 会话 → 笔记（v0.7.6 审查硬拆：管线在 commands_session_note.rs，

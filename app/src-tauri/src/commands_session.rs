@@ -64,6 +64,33 @@ pub async fn finish_session(state: State<'_, AppState>, id: i64) -> Result<bool,
     Ok(ok)
 }
 
+/// 会话改名（REQ-282，v0.19.6）：详情头 ✎ 行内改名入口。
+///
+/// @ai-context: 改名落 title_kind='manual'——此后首句/AI 自动升级永不覆写
+///              （用户意志优先）；空标题拒绝（与 create_session 兜底口径不同——
+///              改名为显式动作，不静默回落）。
+#[tauri::command]
+pub fn update_session_title(state: State<'_, AppState>, id: i64, title: String) -> Result<(), String> {
+    if id <= 0 {
+        return Err("无效的会话 id".to_string());
+    }
+    let trimmed = title.trim();
+    if trimmed.is_empty() {
+        return Err("标题不能为空".to_string());
+    }
+    let title: String = trimmed.chars().take(TITLE_MAX_CHARS).collect();
+    let ok = state
+        .db
+        .update_session_title(id, &title)
+        .map_err(|e| e.to_string())?;
+    if !ok {
+        return Err("会话不存在".to_string());
+    }
+    // REQ-278：会话域变更广播（改名后列表/详情刷新）
+    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Sessions);
+    Ok(())
+}
+
 /// 列出会话（关键词可选；默认第 1 页 50 条，新→旧；v0.7.1 起携带转化状态标记）。
 ///
 /// @ai-context: display_no 为单次返回列表内的 rank 语义（按时间序 1..=len）——

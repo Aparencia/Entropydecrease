@@ -131,6 +131,52 @@ impl Db {
         })
     }
 
+    // ── REQ-282（v0.19.6）：标题内容化 A 层 ──
+
+    /// 近 N 天非失败会话的标题（同源去重候选；录制/已结束都算，失败排除）。
+    pub fn recent_session_titles(&self, days: i64) -> Result<Vec<String>> {
+        let since = unix_seconds() - days.saturating_mul(86_400);
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT title FROM sessions WHERE status <> ?1 AND started_at >= ?2
+                 ORDER BY started_at DESC, id DESC",
+            )?;
+            let rows = stmt.query_map(params![SESSION_STATUS_FAILED, since], |row| {
+                row.get::<_, String>(0)
+            })?;
+            rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+        })
+    }
+
+    /// 人工改名（title_kind=manual——此后首句/AI 自动升级永不覆写）。
+    pub fn update_session_title(&self, id: i64, title: &str) -> Result<bool> {
+        self.with_conn(|conn| {
+            let affected = conn.execute(
+                "UPDATE sessions SET title = ?1, title_kind = 'manual' WHERE id = ?2",
+                params![title, id],
+            )?;
+            Ok(affected > 0)
+        })
+    }
+
+    /// 首句自动升级（REQ-282）：取首个可用转写句（8–40 字）为标题——
+    /// 仅当 title_kind='source' 且标题确有变化时写（manual 永不被覆写）。
+    pub fn auto_title_upgrade(&self, session_id: i64) -> Result<bool> {
+        let segments = self.list_segments(session_id)?;
+        let Some(candidate) =
+            crate::title_rules::first_line_title(segments.iter().map(|seg| seg.text.as_str()))
+        else {
+            return Ok(false);
+        };
+        self.with_conn(|conn| {
+            let affected = conn.execute(
+                "UPDATE sessions SET title = ?1 WHERE id = ?2 AND title_kind = 'source' AND title <> ?1",
+                params![candidate, session_id],
+            )?;
+            Ok(affected > 0)
+        })
+    }
+
     /// 追加一条转写段（实时落库）。
     pub fn add_segment(&self, new: &NewSessionSegment) -> Result<SessionSegment> {
         self.with_conn(|conn| {

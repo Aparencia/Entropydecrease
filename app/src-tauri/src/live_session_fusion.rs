@@ -84,10 +84,25 @@ pub(crate) fn spawn_fusion(
             thread_tracker.end(session_id);
             match result {
                 Ok(()) => {
+                    // REQ-282（v0.19.6）：融合完成即首句升级——融合段为最终
+                    // 时间轴，此时取首个可用句最稳；仅 kind=source 生效，失败
+                    // 静默（标题保持来源名，不阻断 fused 事件）；升级成功广播
+                    // 会话域变更（列表/详情即时可见新标题）。
+                    match fusion_db.auto_title_upgrade(session_id) {
+                        Ok(true) => crate::notify::emit_changed(
+                            &fusion_app,
+                            crate::notify::DataDomain::Sessions,
+                        ),
+                        Ok(false) => {}
+                        Err(e) => eprintln!("[LiveSession] 会话标题首句升级失败: {}", e),
+                    }
                     let _ = fusion_app.emit("session:fused", session_id);
                 }
                 Err(e) => {
                     // 融合失败保留原段，前端提示（详情页仍可读原始轴）
+                    if let Err(t) = fusion_db.auto_title_upgrade(session_id) {
+                        eprintln!("[LiveSession] 会话标题首句升级失败（融合失败路径）: {}", t);
+                    }
                     let _ = fusion_app.emit(
                         "session:fusion-failed",
                         format!("融合失败（原始段已保留）: {}", e),

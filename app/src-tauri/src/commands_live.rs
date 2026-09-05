@@ -64,6 +64,18 @@ pub async fn start_live_session(
         trimmed.chars().take(100).collect()
     };
 
+    // REQ-282（v0.19.6）：标题内容化 A 层——来源名净化（剥「 - 抖音」等固定
+    // 平台尾缀）+ 近 90 天同源去重（抖音 #2）。查询失败不阻断采集（降级原标题）。
+    let title = match state.db.recent_session_titles(90) {
+        Ok(recent) => {
+            crate::title_rules::dedupe_title(&recent, &crate::title_rules::normalize_source_title(&title))
+        }
+        Err(e) => {
+            eprintln!("[title] 同源去重候选查询失败（降级原标题）: {}", e);
+            title
+        }
+    };
+
     let params = LiveSessionParams {
         title: title.clone(),
         source_window: source_window.map(|s| s.chars().take(100).collect()),

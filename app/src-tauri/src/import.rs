@@ -98,6 +98,10 @@ pub fn run_video_import<F: Fn(&ImportProgress)>(
         .map(|s| s.to_string_lossy().into_owned())
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| "视频导入会话".to_string());
+    // REQ-282（v0.19.6）：同源去重——同名视频重复导入不产生双胞胎标题
+    // （「xxx」→「xxx #2」）；候选查询失败降级原名（零阻断）。
+    let existing = db.recent_session_titles(90).unwrap_or_default();
+    let title = crate::title_rules::dedupe_title(&existing, &title);
     let session = db.create_session(&NewSession {
         title: title.chars().take(100).collect(),
         source_window: None,
@@ -126,6 +130,9 @@ pub fn run_video_import<F: Fn(&ImportProgress)>(
     result.inspect_err(|_| {
         let _ = db.mark_session_failed(session_id);
     })?;
+    // REQ-282（v0.19.6）：首句升级——转写就绪后用首个可用句替换文件名标题
+    // （仅 kind=source 生效；失败静默——不阻断导入主流程）。
+    let _ = db.auto_title_upgrade(session_id);
     Ok(session_id)
 }
 
