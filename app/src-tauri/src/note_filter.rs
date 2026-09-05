@@ -200,6 +200,11 @@ pub fn filter_note(
             filter_note_transcript(title, segments, ocr_blocks, ui_junk, env)
         }
         BodySource::OcrDirect => crate::note_filter_ocr::filter_note_from_ocr(title, ocr_blocks, env),
+        // v0.20.4（REQ-303）：web 正文不经过滤链（commands_session_note 已在
+        // kind=web 分支直落）；此处兜底按转写路径语义（防御未来误入）
+        BodySource::Web => {
+            filter_note_transcript(title, segments, ocr_blocks, ui_junk, env)
+        }
         BodySource::Empty => filter_note_empty(title),
     }
 }

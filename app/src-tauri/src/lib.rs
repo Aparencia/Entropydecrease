@@ -82,6 +82,9 @@ mod commands_sop;
 mod db_practice;
 mod db_questions;
 mod commands_after;
+mod web_capture;
+mod db_web;
+mod commands_web;
 mod asr_clean;
 mod asr_confusion;
 mod asr_dedupe;
@@ -968,6 +971,9 @@ pub fn run() {
             commands_after::question_set_status,
             // v0.20.3（REQ-302）：笔记段 → 模型卡草稿（复用既有 inner 防双轨）
             commands_knowledge_cards::model_card_from_note,
+            // v0.20.4（REQ-303）：web 采集阶段 1——URL 采集/页面读取
+            commands_web::web_capture_url,
+            commands_web::web_page_get,
             // v0.20.2（REQ-269）：ASR 混淆画像闭环——候选/确认/忽略/规则管理
             commands_asr_confusion::asr_confusion_get,
             commands_asr_confusion::asr_confusion_confirm,

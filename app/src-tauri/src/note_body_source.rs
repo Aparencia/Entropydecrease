@@ -21,6 +21,9 @@ pub enum BodySource {
     Transcript,
     /// OCR 块直接为正文（图文会话——photo_capture 写入的 region=full 块特征）
     OcrDirect,
+    /// v0.20.4（REQ-303）：web 会话正文直取（web_session_pages.markdown——
+    /// 不走口语过滤链，轻净化直落；标题层级保留供锚点回链）
+    Web,
     /// 无可用正文（标题仅）
     #[default]
     Empty,

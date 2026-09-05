@@ -512,6 +512,8 @@ CREATE TABLE IF NOT EXISTS contracts (
     // v0.20.3（REQ-299/300）：练习条目 + 问题清单（Me 问题化）
     crate::db_practice::init(conn)?;
     crate::db_questions::init(conn)?;
+    // v0.20.4（REQ-303）：web 会话页面表（kind=web 1:1；正文/元数据/降级附件）
+    crate::db_web::init(conn)?;
     Ok(())
 }
 

@@ -189,6 +189,14 @@ fn convert_to_note(
     // v0.20.2（REQ-269）：已确认 ASR 混淆纠错规则（产物文本共现纠错层）
     asr_rules: &[crate::asr_confusion::AsrRule],
 ) -> Result<Note, String> {
+    // v0.20.4（REQ-303）：web 会话走专用管线——正文 MD 直落（不走口语过滤链）
+    if db
+        .get_session(id)
+        .map_err(|e| e.to_string())?
+        .is_some_and(|s| s.kind.as_deref() == Some("web"))
+    {
+        return crate::commands_web::web_session_to_note_core(db, id);
+    }
     // v0.11.0：取草稿同时拿 analysis（章节/术语——结构密度路由信号，免二次分析）
     let (mut result, analysis) =
         build_rule_draft_with_analysis(db, ui_junk, env, data_dir, id, title)?;
