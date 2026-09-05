@@ -164,20 +164,33 @@ pub async fn proofread_run(
     });
 
     let started = std::time::Instant::now();
+    // 预估成本（成功/失败记账共用——内联不再重复估算）
+    let est_tokens = crate::ai_cost::estimate_tokens(chars);
+    let (est_price, _) = crate::ai_cost::price_for_model(&model);
+    let est_cost = crate::ai_cost::estimate_cost(est_tokens, est_price);
     let client = if mock {
         None
     } else {
-        let key = crate::commands_ai_providers::resolve_default_provider_key(&st)?;
-        let providers = st
-            .ai_providers
-            .lock()
-            .map_err(|e| format!("Provider 存储锁中毒: {}", e))?
-            .clone();
-        Some(crate::ai_client::AiClient::from_settings_with_store(
-            &settings,
-            key,
-            &providers,
-        ))
+        match crate::commands_ai_providers::resolve_default_provider_key(&st) {
+            Ok(key) => {
+                let providers = match st.ai_providers.lock() {
+                    Ok(g) => g.clone(),
+                    Err(e) => {
+                        record_proofread_failure(&db, task_id, session_id, &model, est_cost, created_at, 0, &format!("Provider 存储锁中毒: {}", e));
+                        return Err(format!("Provider 存储锁中毒: {}", e));
+                    }
+                };
+                Some(crate::ai_client::AiClient::from_settings_with_store(
+                    &settings,
+                    key,
+                    &providers,
+                ))
+            }
+            Err(e) => {
+                record_proofread_failure(&db, task_id, session_id, &model, est_cost, created_at, 0, &e);
+                return Err(e);
+            }
+        }
     };
 
     let chunks = ai_proofread::chunk_sentences(&expected.iter().map(|s| s.to_string()).collect::<Vec<_>>());
@@ -187,9 +200,14 @@ pub async fn proofread_run(
             let user = build_user_prompt(
                 &chunk.iter().map(|&i| expected[i].to_string()).collect::<Vec<_>>(),
             );
-            let raw = client
-                .chat_text(&build_system_prompt(), &user)
-                .map_err(|e| format!("校对请求 {}/{} 失败（原文未改动）: {}", ci + 1, chunks.len(), e))?;
+            let raw = match client.chat_text(&build_system_prompt(), &user) {
+                Ok(raw) => raw,
+                Err(e) => {
+                    let msg = format!("校对请求 {}/{} 失败（原文未改动）: {}", ci + 1, chunks.len(), e);
+                    record_proofread_failure(&db, task_id, session_id, &model, est_cost, created_at, started.elapsed().as_millis() as i64, &msg);
+                    return Err(msg);
+                }
+            };
             let batch_expected: Vec<String> =
                 chunk.iter().map(|&i| expected[i].to_string()).collect();
             suggestions.extend(parse_suggestions(&raw, &batch_expected));
@@ -242,12 +260,17 @@ pub async fn proofread_run(
             similarity: Some(similarity),
         });
     }
-    let draft_count = db.add_refine_drafts(&drafts).map_err(|e| format!("落校对草稿失败: {e}"))?;
+    let draft_count = match db.add_refine_drafts(&drafts) {
+        Ok(n) => n,
+        Err(e) => {
+            let msg = format!("落校对草稿失败: {}", e);
+            record_proofread_failure(&db, task_id, session_id, &model, est_cost, created_at, started.elapsed().as_millis() as i64, &msg);
+            return Err(msg);
+        }
+    };
 
     let elapsed = started.elapsed().as_millis() as i64;
-    let tokens = crate::ai_cost::estimate_tokens(chars);
-    let (price, _) = crate::ai_cost::price_for_model(&model);
-    let cost_yuan = crate::ai_cost::estimate_cost(tokens, price);
+    let cost_yuan = est_cost;
     let result_json = serde_json::json!({
         "draftCount": draft_count,
         "suggestionsReceived": suggestions_received,
@@ -275,6 +298,38 @@ pub async fn proofread_run(
     // 会话域广播（裁决列表可达）
     crate::notify::emit_changed(&st.app, crate::notify::DataDomain::Sessions);
     Ok(ProofreadRunView { draft_count, suggestions_received, chars, cost_yuan, model, capped })
+}
+
+/// 失败终态记账（网络/解析/落库错误路径不残留 running 行——任务中心/审计可查）。
+fn record_proofread_failure(
+    db: &crate::db::Db,
+    task_id: u64,
+    session_id: i64,
+    model: &str,
+    cost_yuan: f64,
+    created_at: i64,
+    elapsed_ms: i64,
+    error: &str,
+) {
+    let rec = crate::db_ai_tasks::AiTaskRecord {
+        task_id,
+        op_type: "proofread".to_string(),
+        ref_id: session_id,
+        state: "failed".to_string(),
+        target_kind: Some("session".to_string()),
+        result_json: None,
+        cost_yuan: Some(cost_yuan),
+        elapsed_ms: Some(elapsed_ms),
+        model: Some(model.to_string()),
+        error: Some(error.to_string()),
+        slices: None,
+        created_at,
+        finished_at: Some(crate::db::unix_seconds()),
+        adopted: false,
+    };
+    if let Err(e) = db.insert_ai_task(&rec) {
+        eprintln!("[Proofread] 失败任务记账失败: {e}");
+    }
 }
 
 /// 校对草稿列表（origin=proofread；裁决走 second_pass_decide——裁决与来源解耦）。
