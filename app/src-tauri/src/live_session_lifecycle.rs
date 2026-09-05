@@ -346,12 +346,9 @@ fn run_session(
     let epoch = Instant::now();
 
     // 1) 流式 ASR（SenseVoice 重打分接离线引擎池；M5 热词经共享词表注入）
-    // ADR-012 F3-1：rule3 最长句 env 可覆盖（默认 8s——5s 过短致句中硬切）
-    let rule3_secs = std::env::var("ENTROPY_ASR_RULE3_SECS")
-        .ok()
-        .and_then(|v| v.parse::<f32>().ok())
-        .unwrap_or(8.0);
-    let asr_config = StreamingAsrConfig { rule3_min_utterance_secs: rule3_secs };
+    // v0.20.1 REQ-265：端点配置档案化（asr-params.json + 遗留 env 覆盖；
+    // 默认值即原常量零行为变更——与 run_prepared 同口径防漂移）
+    let asr_config = StreamingAsrConfig::from_env();
     let asr_engine = match StreamingAsrEngine::load(
         &params.streaming_models,
         &asr_config,

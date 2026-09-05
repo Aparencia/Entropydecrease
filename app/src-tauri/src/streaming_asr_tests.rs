@@ -426,3 +426,36 @@ fn token_chars_load_single_char_columns_only() {
     assert!(set.contains(&'a') && set.contains(&'b') && set.contains(&'焦') && set.contains(&'▁'));
     assert_eq!(set.len(), 4);
 }
+
+// ── REQ-265（v0.20.1）：端点参数档案化（asr-params.json）──
+
+#[test]
+fn params_file_overrides_and_partial_fields_ok() {
+    // Arrange：临时 asr-params.json——只给 rule3（rule1/2 缺省走默认）
+    let raw = r#"{"rule3S": 6.5}"#;
+    let path = std::env::temp_dir().join(format!("asr_params_{}.json", std::process::id()));
+    std::fs::write(&path, raw).expect("写临时 params");
+    // Act
+    let cfg = StreamingAsrConfig::load_from_file(&path);
+    let _ = std::fs::remove_file(&path);
+    // Assert：覆盖生效；缺省字段保持默认（默认值即原常量，零行为变更）
+    assert_eq!(cfg.rule3_min_utterance_secs, 6.5);
+    assert_eq!(cfg.rule1_min_trailing_silence, 2.4);
+    assert_eq!(cfg.rule2_min_trailing_silence, 1.2);
+}
+
+#[test]
+fn params_file_bad_or_missing_falls_back_defaults() {
+    // Arrange：损坏 JSON 与缺失文件
+    let path = std::env::temp_dir().join(format!("asr_params_bad_{}.json", std::process::id()));
+    std::fs::write(&path, "{not json").expect("写坏 params");
+    // Act
+    let bad = StreamingAsrConfig::load_from_file(&path);
+    let missing = StreamingAsrConfig::load_from_file(
+        std::path::Path::new(&format!("{}.nope", path.to_string_lossy())),
+    );
+    let _ = std::fs::remove_file(&path);
+    // Assert：默认兜底（不阻断启动，同 audio-preproc.json 先例）
+    assert_eq!(bad, StreamingAsrConfig::default());
+    assert_eq!(missing, StreamingAsrConfig::default());
+}

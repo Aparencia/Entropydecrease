@@ -40,17 +40,81 @@ pub struct StreamingAsrModels {
     pub tokens: String,
 }
 
-/// 流式引擎配置（ADR-012 F3-1：rule3 可配置）。
-#[derive(Debug, Clone, Copy)]
+/// 流式引擎配置（ADR-012 F3-1：rule3 可配置；v0.20.1 REQ-265：rule1/2 一并入档——
+/// 默认值即原常量，零行为变更；档案化来源：`asr-params.json`（可选，经
+/// ENTROPY_ASR_PARAMS_JSON 指定）+ 遗留 env ENTROPY_ASR_RULE3_SECS 覆盖）。
+#[derive(Debug, Clone, PartialEq)]
 pub struct StreamingAsrConfig {
-    /// rule3 最长句强制断句（秒；默认 8s——5s 过短致句中硬切，20s 过长）
+    /// 端点 rule1：尾静音断句秒数（默认 2.4——sherpa-onnx 惯例）。
+    pub rule1_min_trailing_silence: f32,
+    /// 端点 rule2：短停顿断句秒数（默认 1.2）。
+    pub rule2_min_trailing_silence: f32,
+    /// rule3 最长句强制断句（秒；默认 8s——5s 过短致句中硬切，20s 过长）。
     pub rule3_min_utterance_secs: f32,
 }
 
 impl Default for StreamingAsrConfig {
     fn default() -> Self {
-        Self { rule3_min_utterance_secs: 8.0 }
+        Self {
+            rule1_min_trailing_silence: 2.4,
+            rule2_min_trailing_silence: 1.2,
+            rule3_min_utterance_secs: 8.0,
+        }
     }
+}
+
+impl StreamingAsrConfig {
+    /// 从 asr-params.json（可选）加载：缺失/损坏 → 默认 + 提示（不阻断启动，
+    /// 同 audio-preproc.json 先例）；字段可缺省。
+    ///
+    /// @ai-context: JSON 形态 `{"rule1S": 2.4, "rule2S": 1.2, "rule3S": 8.0}`——
+    ///              字段名沿用 harness 参数注入面的短名，标定结论可直接落档。
+    pub fn load_from_file(path: &std::path::Path) -> Self {
+        let mut cfg = Self::default();
+        if let Ok(raw) = std::fs::read_to_string(path) {
+            match serde_json::from_str::<AsrParamsFile>(&raw) {
+                Ok(f) => {
+                    if let Some(v) = f.rule1_s {
+                        cfg.rule1_min_trailing_silence = v;
+                    }
+                    if let Some(v) = f.rule2_s {
+                        cfg.rule2_min_trailing_silence = v;
+                    }
+                    if let Some(v) = f.rule3_s {
+                        cfg.rule3_min_utterance_secs = v;
+                    }
+                }
+                Err(e) => eprintln!("[AsrParams] asr-params.json 解析失败，使用默认: {}", e),
+            }
+        }
+        cfg
+    }
+
+    /// 档案 + 遗留 env 覆盖（生产装配入口：文件优先、env 最高优先级保持旧行为）。
+    pub fn from_env() -> Self {
+        let mut cfg = Self::default();
+        if let Ok(p) = std::env::var("ENTROPY_ASR_PARAMS_JSON") {
+            cfg = Self::load_from_file(std::path::Path::new(&p));
+        }
+        if let Ok(v) = std::env::var("ENTROPY_ASR_RULE3_SECS") {
+            if let Ok(s) = v.parse::<f32>() {
+                cfg.rule3_min_utterance_secs = s;
+            }
+        }
+        cfg
+    }
+}
+
+/// asr-params.json 的 serde 形态（字段可缺省）。
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AsrParamsFile {
+    #[serde(default)]
+    rule1_s: Option<f32>,
+    #[serde(default)]
+    rule2_s: Option<f32>,
+    #[serde(default)]
+    rule3_s: Option<f32>,
 }
 
 /// 流式 ASR 事件（文本事件，时间戳由编排层标注）。
@@ -127,10 +191,10 @@ impl StreamingAsrEngine {
         // 带 graph 的流，断言 abort（exit 0xffffffff，用户真机日志实证 Decode:101）；
         // 无热词时同样兼容（beam 搜索对普通流无副作用，识别质量相当或更优）。
         recognizer_config.decoding_method = Some("modified_beam_search".into());
-        // 端点规则：尾静音 2.4s / 1.2s 断句（sherpa-onnx 默认），
-        // rule3 强制断句 = 可配置（ADR-012 F3-1：默认 8s，env 可覆盖）
-        recognizer_config.rule1_min_trailing_silence = 2.4;
-        recognizer_config.rule2_min_trailing_silence = 1.2;
+        // 端点规则：rule1/2/3 来自配置（默认 2.4/1.2/8.0 即原常量，零行为变更；
+        // 档案/覆盖来源见 StreamingAsrConfig::from_env/load_from_file）
+        recognizer_config.rule1_min_trailing_silence = config.rule1_min_trailing_silence;
+        recognizer_config.rule2_min_trailing_silence = config.rule2_min_trailing_silence;
         recognizer_config.rule3_min_utterance_length = config.rule3_min_utterance_secs;
 
         let recognizer = OnlineRecognizer::create(&recognizer_config)

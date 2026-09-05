@@ -49,7 +49,7 @@ pub fn title_hotword_candidates(raw: &str) -> Vec<String> {
         if tok.chars().all(|c| c.is_ascii_digit()) {
             continue; // 纯数字（年份/计数）无术语价值
         }
-        if BRAND_SUFFIXES.iter().any(|b| tok == *b) {
+        if BRAND_SUFFIXES.contains(&tok) {
             continue; // 平台品牌名不入词表
         }
         if !out.iter().any(|t| t == tok) {

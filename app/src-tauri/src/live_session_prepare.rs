@@ -102,12 +102,9 @@ impl PreparedSession {
 
 /// 预备线程入口：加载引擎 → 置 Ready → park 等 Start/Cancel/TTL。
 pub fn run_prepared(rx: mpsc::Receiver<PrepareMsg>, env: PrepareEnv, status: Arc<Mutex<PrepareStatus>>) {
-    // 与 run_session 同口径的 rule3 配置（env 可覆盖，防两处漂移）
-    let rule3_secs = std::env::var("ENTROPY_ASR_RULE3_SECS")
-        .ok()
-        .and_then(|v| v.parse::<f32>().ok())
-        .unwrap_or(8.0);
-    let asr_config = StreamingAsrConfig { rule3_min_utterance_secs: rule3_secs };
+    // 与 run_session 同口径的端点配置（v0.20.1 REQ-265：档案 asr-params.json +
+    // 遗留 env 覆盖，防两处漂移；默认值即原常量零变更）
+    let asr_config = StreamingAsrConfig::from_env();
     let engine = match StreamingAsrEngine::load(
         &env.streaming_models,
         &asr_config,
