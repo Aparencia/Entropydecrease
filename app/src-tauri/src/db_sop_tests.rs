@@ -78,8 +78,12 @@ fn run_lifecycle_steps_history() {
     assert_eq!(hist.len(), 1);
     assert!(hist[0].meta_json.as_deref().unwrap_or("").contains("\"failed\":1"));
     assert_eq!(db.get_sop_run(run_id).unwrap().unwrap().status, RUN_DONE);
-    // 已结束再收尾（幂等外层拦截前）——直接调两次不崩（status 覆盖）即可
-    let _ = db.finish_sop_run(run_id, RUN_ABORTED).unwrap();
+    // 已收尾 run：重复收尾拒绝（审查中-7 幂等守卫）+ 步骤拒写
+    assert!(db.finish_sop_run(run_id, RUN_ABORTED).is_err(), "重复收尾必须拒绝");
+    assert!(!db.update_sop_step(run_id, 3, "done", None, None).unwrap(), "已收尾 run 步骤不可写");
+    // 非法状态仍拒绝
+    assert!(db.update_sop_step(run_id, 3, "weird", None, None).is_err());
+    assert!(db.update_sop_step(999_999, 1, "done", None, None).unwrap() == false, "不存在 run 不可写");
 }
 
 #[test]

@@ -16,7 +16,6 @@ use crate::db::Db;
 use crate::db_completion::EV_EXPORT_MANUAL_DONE;
 use crate::db_practice::PracticeItem;
 use crate::db_questions::QuestionItem;
-use crate::tasks_core::{migrate_status, TaskStatus};
 
 /// 迁出文件导出（保存对话框返回路径由用户授权；仅 .txt + 大小护栏）。
 #[tauri::command]
@@ -169,7 +168,9 @@ pub(crate) fn weekly_resolve_core(
                 view.failed.push(format!("行 {} 内容已变化（任务“{}”失效，请刷新）", p.line_no, p.payload));
                 continue;
             }
-            if let Some(next) = crate::tasks_core::migrate_status(&line, TaskStatus::Done) {
+            if let Some(next) =
+                crate::tasks_core::migrate_status(&line, crate::tasks_core::TaskStatus::Done)
+            {
                 if next != line {
                     body_lines[p.line_no as usize] = next;
                     changed = true;

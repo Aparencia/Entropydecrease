@@ -514,6 +514,22 @@ CREATE TABLE IF NOT EXISTS contracts (
     crate::db_questions::init(conn)?;
     // v0.20.4（REQ-303）：web 会话页面表（kind=web 1:1；正文/元数据/降级附件）
     crate::db_web::init(conn)?;
+    // v0.20.3（REQ-292，审查中-8）：升级存量回填——task_index 空表时对既有
+    // 笔记全量重扫（老库升级后行动中心不得“假空”；重复启动幂等：有行即跳过）
+    let has_rows: i64 = conn
+        .query_row("SELECT COUNT(*) FROM task_index", [], |r| r.get(0))
+        .unwrap_or(1);
+    if has_rows == 0 {
+        if let Ok(mut stmt) = conn.prepare("SELECT id, content FROM notes") {
+            if let Ok(rows) = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))) {
+                for row in rows {
+                    if let Ok((id, content)) = row {
+                        crate::db_task_index::rebuild_note_tasks(conn, id, &content);
+                    }
+                }
+            }
+        }
+    }
     Ok(())
 }
 

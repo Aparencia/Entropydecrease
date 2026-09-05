@@ -10,8 +10,8 @@ use tauri::State;
 
 use crate::commands::AppState;
 use crate::db_sop::{
-    lines_to_steps, EVIDENCE_PREFIX, MAX_SOP_STEPS, MODE_READDO, RUN_ABORTED,
-    RUN_DONE, SopRunDetail, SopTemplate,
+    EVIDENCE_PREFIX, MAX_SOP_STEPS, MODE_READDO, RUN_ABORTED, RUN_DONE, SopRunDetail,
+    SopTemplate,
 };
 
 /// 建模板（编辑器工具栏「生成 SOP」入口：当前选中段落行范围）。
@@ -39,11 +39,12 @@ pub fn sop_template_create(
         .get_note(note_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "笔记不存在".to_string())?;
-    let steps = lines_to_steps(&note.content, start_line, end_line);
-    if steps.is_empty() {
+    // 审查中-6：非截断计数先判（lines_to_steps 的 truncate 只是 DB 层兜底）
+    let steps_count = crate::db::Db::count_template_steps(&note.content, start_line, end_line);
+    if steps_count == 0 {
         return Err("所选段落无内容（无法生成空 SOP）".to_string());
     }
-    if steps.len() > MAX_SOP_STEPS {
+    if steps_count > MAX_SOP_STEPS {
         return Err(format!("所选段落超过 {} 步上限——请缩小范围", MAX_SOP_STEPS));
     }
     let mode = mode.unwrap_or_else(|| MODE_READDO.to_string());

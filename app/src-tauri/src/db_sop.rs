@@ -9,7 +9,7 @@
 //!              执行面=前端 Overlay（commands_sop.rs 出口）。证据路径白名单
 //!              `notes-images/` 前缀在命令层校验（G3）。
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 
 use crate::db::Db;
@@ -150,7 +150,8 @@ pub fn lines_to_steps(content: &str, start_line: i64, end_line: i64) -> Vec<Stri
 }
 
 impl Db {
-    /// 建模板（范围行数 ≤50；同笔记同名先删后插=覆盖校准）。
+    /// 建/校准模板（审查中-5：同名存在=原地 UPDATE——覆盖校准不得级联销毁
+    /// run 档案链/失败聚合，REQ-297 演进原料必须保留）。
     pub fn create_sop_template(
         &self,
         note_id: i64,
@@ -162,17 +163,41 @@ impl Db {
         let mode = if mode == MODE_CONFIRM { MODE_CONFIRM } else { MODE_READDO };
         let now = crate::db::unix_seconds();
         self.with_conn(|conn| {
-            conn.execute(
-                "DELETE FROM sop_templates WHERE note_id = ?1 AND name = ?2",
-                params![note_id, name],
-            )?;
-            conn.execute(
-                "INSERT INTO sop_templates (note_id, name, start_line, end_line, mode, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
-                params![note_id, name, start_line, end_line, mode, now],
-            )?;
-            Ok(conn.last_insert_rowid())
+            let existing: Option<i64> = conn
+                .query_row(
+                    "SELECT id FROM sop_templates WHERE note_id = ?1 AND name = ?2",
+                    params![note_id, name],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            match existing {
+                Some(id) => {
+                    conn.execute(
+                        "UPDATE sop_templates SET start_line = ?1, end_line = ?2, mode = ?3, updated_at = ?4 WHERE id = ?5",
+                        params![start_line, end_line, mode, now, id],
+                    )?;
+                    Ok(id)
+                }
+                None => {
+                    conn.execute(
+                        "INSERT INTO sop_templates (note_id, name, start_line, end_line, mode, created_at, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+                        params![note_id, name, start_line, end_line, mode, now],
+                    )?;
+                    Ok(conn.last_insert_rowid())
+                }
+            }
         })
+    }
+
+    /// 行范围步骤数（不截断——命令层 ≤50 校验用；审查中-6：先判后建，
+    /// truncate 只作 DB 层兜底）。
+    pub fn count_template_steps(content: &str, start_line: i64, end_line: i64) -> usize {
+        let lines: Vec<&str> = content.split('\n').collect();
+        (start_line..=end_line)
+            .filter_map(|i| lines.get(i as usize))
+            .filter(|l| !l.trim().is_empty())
+            .count()
     }
 
     pub fn list_sop_templates(&self, note_id: Option<i64>) -> Result<Vec<SopTemplate>> {
@@ -313,7 +338,8 @@ impl Db {
         })
     }
 
-    /// 步状态更新（done|skipped|failed；失败必填 failure_note 或忽略——命令层校验）。
+    /// 步状态更新（done|skipped|failed；审查中-7：DB 层守卫 run active——
+    /// 已收尾 run 拒写，防层间复用裸奔）。
     pub fn update_sop_step(
         &self,
         run_id: i64,
@@ -328,6 +354,16 @@ impl Db {
             )));
         }
         self.with_conn(|conn| {
+            let run_status: Option<String> = conn
+                .query_row(
+                    "SELECT status FROM sop_runs WHERE id = ?1",
+                    params![run_id],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if run_status.as_deref() != Some(RUN_ACTIVE) {
+                return Ok(false); // 不存在或已收尾——统一不可写语义
+            }
             let affected = conn.execute(
                 "UPDATE sop_run_steps SET status = ?1, evidence_path = ?2, failure_note = ?3, checked_at = ?4
                  WHERE run_id = ?5 AND step_no = ?6",
@@ -338,6 +374,7 @@ impl Db {
     }
 
     /// 结束 run（done/aborted）→ 结算统计写史（sop_run 事件；meta=统计 JSON）。
+    /// 审查中-7：幂等守卫——仅 active run 可收尾（重复 finish 报错且不重复入史）。
     pub fn finish_sop_run(&self, run_id: i64, status: &str) -> Result<SopRunDetail> {
         if !matches!(status, RUN_DONE | RUN_ABORTED) {
             return Err(crate::error::AppError::Asr("仅支持 done/aborted 收尾".to_string()));
@@ -345,9 +382,15 @@ impl Db {
         let Some(detail) = self.sop_run_detail(run_id)? else {
             return Err(crate::error::AppError::Io("run 不存在".to_string()));
         };
+        if detail.run.status != RUN_ACTIVE {
+            return Err(crate::error::AppError::Asr(format!(
+                "run 已收尾（{}）——不可重复结算",
+                detail.run.status
+            )));
+        }
         self.with_conn(|conn| {
             conn.execute(
-                "UPDATE sop_runs SET status = ?1, finished_at = ?2 WHERE id = ?3",
+                "UPDATE sop_runs SET status = ?1, finished_at = ?2 WHERE id = ?3 AND status = 'active'",
                 params![status, crate::db::unix_seconds(), run_id],
             )?;
             Ok(())
