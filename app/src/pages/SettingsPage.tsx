@@ -31,6 +31,8 @@ import SealToggle from "../components/SealToggle";
 import AsrConfusionPanel from "../components/AsrConfusionPanel";
 // v0.20.2（REQ-270）：可选 LLM 文本校对开关（默认关双闸门之二）
 import ProofreadToggle from "../components/ProofreadToggle";
+// v0.20.4（REQ-304）：web 扩展收件服务面板
+import WebInboxPanel from "../components/WebInboxPanel";
 
 const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
 const groupTitle: React.CSSProperties = {
@@ -122,6 +124,12 @@ export default function SettingsPage({ active = true }: Props) {
         <GroupTitle>ASR 纠错</GroupTitle>
         <div style={{ ...panel, marginBottom: 4 }}>
           <AsrConfusionPanel />
+        </div>
+
+        {/* v0.20.4（REQ-304）：web 采集（URL 采集在课堂助手动线；本组=扩展收件） */}
+        <GroupTitle>web 采集</GroupTitle>
+        <div style={{ ...panel, marginBottom: 4 }}>
+          <WebInboxPanel />
         </div>
       
         {/* ── 功能预览（默认关的新能力开关，v4 §11.3）── */}

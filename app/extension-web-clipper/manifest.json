@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "熵减 Web 剪藏（本地收件）",
+  "version": "0.20.4",
+  "description": "登录态 DOM 抽取 → 熵减本地收件服务（127.0.0.1 + token 单向投递）。仅开发期加载：Edge/Chrome 扩展管理页开启开发者模式后“加载已解压的扩展程序”。",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "action": {
+    "default_title": "剪藏到熵减",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>熵减 Web 剪藏</title>
+  <style>
+    body { font-family: system-ui, sans-serif; width: 280px; margin: 0; padding: 12px; font-size: 13px; }
+    h1 { font-size: 14px; margin: 0 0 8px; }
+    label { display: block; margin: 6px 0 2px; font-size: 12px; color: #444; }
+    input { width: 100%; box-sizing: border-box; padding: 3px 6px; font-size: 12px; }
+    button { margin-top: 10px; width: 100%; padding: 6px; border: none; border-radius: 6px;
+             background: #0d9488; color: #fff; cursor: pointer; }
+    #result { margin-top: 8px; font-size: 12px; color: #0f766e; white-space: pre-wrap; }
+    #result.err { color: #dc2626; }
+    .hint { font-size: 11px; color: #999; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h1>熵减 Web 剪藏</h1>
+  <label>收件端口（设置页 web 采集 显示）</label>
+  <input id="port" type="text" placeholder="如 38921" />
+  <label>Token</label>
+  <input id="token" type="password" placeholder="粘贴设置页 token" />
+  <button id="clip">✂ 剪藏当前页到熵减</button>
+  <div id="result"></div>
+  <div class="hint">登录态页面（公众号/知乎/付费墙）在已登录 DOM 内直取正文——不经第三方。</div>
+  <script src="popup.js"></script>
+</body>
+</html>
