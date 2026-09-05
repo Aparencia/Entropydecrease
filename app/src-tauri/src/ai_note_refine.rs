@@ -199,6 +199,76 @@ impl AiNoteRefineAdapter {
         }
         Ok(resp)
     }
+
+    /// REQ-290① 流式精修（NDJSON 逐节，默认路径）：SSE 增量累积 → 行级解析
+    /// （每行=与整包数组元素同构的节对象）；每解析一节即回调 on_section
+    /// （调用方渲染推 Delta 帧——打字机正文）。返回整包 Response（schema v2，
+    /// 与终稿同构；下游 diff/落库语义零变化）。
+    ///
+    /// @ai-context: 模型不遵守逐节约定（整包 JSON 输出）→ sections 空 → Err
+    ///              Parse，调用方同 attempt 回退非流式 refine()（行为与旧版
+    ///              逐字节一致——流式只是呈现增强，诚实降级）。
+    #[allow(clippy::type_complexity)]
+    pub fn refine_stream_ndjson(
+        &self,
+        request: &AiRefineRequest,
+        images: &[String],
+        dims: Option<&ResolvedDims>,
+        mut on_section: impl FnMut(crate::ai_refine_protocol::AiRefineSection),
+    ) -> Result<AiRefineResponse, AiClientError> {
+        use crate::ai_refine_protocol::parse_section_ndjson_line;
+
+        let mut system = self.prompt.build_system(&request.profile, dims);
+        system.push_str("\n\n");
+        system.push_str(crate::ai_refine_protocol::NDJSON_SYSTEM_SUFFIX);
+        // REQ-290② 预算（与 refine_vision 同口径——流式不豁免上限）
+        let budget = crate::refine_budget::output_budget(
+            dims.map(|d| d.preset_id.as_str()).unwrap_or("standard"),
+            request.content.chars().count(),
+        );
+        let user = serde_json::to_string(request)
+            .map_err(|e| AiClientError::Parse(format!("精修请求序列化失败: {}", e)))?;
+        let payload = if images.is_empty() {
+            crate::ai_client::build_chat_payload(
+                &self.client.config.model, &system, &user, budget.max_tokens,
+            )
+        } else {
+            crate::ai_client::build_vision_payload(
+                &self.client.config.model, &system, &user, images, budget.max_tokens,
+            )
+        };
+        let mut sections: Vec<crate::ai_refine_protocol::AiRefineSection> = Vec::new();
+        let mut pending = String::new();
+        let outcome = crate::ai_chat_stream::stream_sse_content(
+            &self.client,
+            payload,
+            |delta| {
+                pending.push_str(delta);
+                while let Some(pos) = pending.find('\n') {
+                    let line: String = pending.drain(..=pos).collect();
+                    if let Some(sec) = parse_section_ndjson_line(&line) {
+                        sections.push(sec.clone());
+                        on_section(sec);
+                    }
+                }
+            },
+        )?;
+        // 末行无换行（SSE 结束前 flush）
+        if let Some(sec) = parse_section_ndjson_line(&pending) {
+            sections.push(sec.clone());
+            on_section(sec);
+        }
+        let _ = outcome.content;
+        if sections.is_empty() {
+            return Err(AiClientError::Parse(
+                "流式响应未解析出章节（模型未按逐节输出——回退非流式）".to_string(),
+            ));
+        }
+        Ok(crate::ai_refine_protocol::AiRefineResponse {
+            schema_version: crate::ai_refine_protocol::SCHEMA_VERSION_V2,
+            sections,
+        })
+    }
 }
 
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。

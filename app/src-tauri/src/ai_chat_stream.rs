@@ -143,6 +143,54 @@ pub fn extract_usage(line: &str) -> Option<String> {
     }
 }
 
+/// 精修流式传输（REQ-290①）：对给定 payload 置 stream:true 发 SSE，逐 delta
+/// 回调 emit（无取消语义——精修片幂等由重试兜底，与 chat stream_chat 区分：
+/// 不自动重试/不落库/无 usage 消费）。返回全部累积文本供整包回退解析。
+pub fn stream_sse_content(
+    client: &AiClient,
+    mut payload: serde_json::Value,
+    mut emit: impl FnMut(&str),
+) -> Result<StreamOutcome, AiClientError> {
+    if !client.config.is_local && client.config.api_key.trim().is_empty() {
+        return Err(AiClientError::Auth(
+            "未配置 API 密钥（设置页保存或配置环境变量）".to_string(),
+        ));
+    }
+    payload["stream"] = serde_json::json!(true);
+    let url = chat_completions_url(&client.config.base_url);
+    let agent = ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_secs(client.config.timeout_secs.max(5)))
+        .build();
+    let resp = agent
+        .post(&url)
+        .set("Content-Type", "application/json")
+        .set("Authorization", &format!("Bearer {}", client.config.api_key.trim()))
+        .send_string(&payload.to_string())
+        .map_err(map_status)?;
+    let reader = BufReader::new(resp.into_reader());
+    let mut content = String::new();
+    let mut usage_json: Option<String> = None;
+    for line in reader.lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => break, // 传输中途断流：以已累积内容为准
+        };
+        match parse_sse_line(&line) {
+            SseEvent::Delta(d) => {
+                content.push_str(&d);
+                emit(&d);
+            }
+            SseEvent::Done => break,
+            SseEvent::Ignore => {
+                if let Some(usage) = extract_usage(&line) {
+                    usage_json = Some(usage);
+                }
+            }
+        }
+    }
+    Ok(StreamOutcome { content, usage_json, cancelled: false })
+}
+
 /// HTTP 状态 → AiClientError（与 post_completions 同归一口径——四下一致）。
 fn map_status(e: ureq::Error) -> AiClientError {
     match e {

@@ -45,6 +45,9 @@ pub enum RefineStreamFrame {
     Progress { slice_index: usize, slice_total: usize },
     /// 该片精修结果（validate 通过后的渲染 markdown——逐章正文流出）
     BlockDone { slice_index: usize, markdown: String },
+    /// REQ-290①：片内流式增量（NDJSON 逐节解析即推——打字机正文；text=节渲染
+    /// 的 markdown 片段，同片内按到达序拼接；终稿以 BlockDone 为准）
+    Delta { slice_index: usize, text: String },
     /// 该片失败（回退纯规则语义——诚实降级提示）
     SliceFailed { slice_index: usize, reason: String },
     /// 任务终态（全部片合并完成）
@@ -510,6 +513,7 @@ pub(crate) fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usiz
             let mock_adapter = ctx.mock_adapter;
             let mock = ctx.mock;
             let task_id = ctx.task_id;
+            let st = ctx.st; // REQ-290①：流式 Delta 帧推送（worker 线程内 emit）
             let profile = ctx.profile; // 轨迹 system 提示词构建用（模板分组同请求）
             let vision_images = ctx.vision_images;
             let dims = ctx.dims; // 策略解析结果（worker 只读共享）
@@ -524,11 +528,55 @@ pub(crate) fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usiz
                 let mut outcome: Option<String> = None;
                 for attempt in 0..=SLICE_RETRY {
                     // REQ-290（v0.19.6）埋点先行：单片耗时归因——任务级 elapsed_ms
-                    // 已有（db_ai_tasks），此处补片级时间（非流式阶段只有总耗时；
-                    // 流式上线后同点补首 delta 时刻，见批次设计 §2.8 ③）。
+                    // 已有（db_ai_tasks），此处补片级时间（含流式整包耗时口径）。
                     let started = std::time::Instant::now();
+                    // REQ-290①（v0.19.7）：首拍（attempt 0）优先流式（NDJSON 逐节，
+                    // 解析一节推一节 Delta——打字机正文）；流式不可用/模型未遵守
+                    // 逐节约定 → 同拍回退非流式（与旧版逐字节一致）；重试拍走非
+                    // 流式（幂等语义下不重复推流）。
+                    let stream_enabled = !mock
+                        && attempt == 0
+                        && std::env::var("REFINE_STREAM_NDJSON")
+                            .map(|v| v != "0")
+                            .unwrap_or(true);
                     let resp = if mock {
                         Ok(mock_adapter.refine(req))
+                    } else if stream_enabled {
+                        match adapter
+                            .refine_stream_ndjson(
+                                req,
+                                ctx.vision_images,
+                                Some(dims),
+                                |sec| {
+                                    emit_refine_stream(
+                                        st,
+                                        task_id,
+                                        RefineStreamFrame::Delta {
+                                            slice_index: idx + 1,
+                                            text: crate::ai_refine_protocol::render_sections(
+                                                std::slice::from_ref(&sec),
+                                            ),
+                                        },
+                                    );
+                                },
+                            )
+                            .map_err(AiTaskFailure::from)
+                        {
+                            Ok(r) => Ok(r),
+                            Err(e) => {
+                                eprintln!(
+                                    "[refine-task] task={} 片 {} 流式不可用，同拍回退非流式: {}",
+                                    task_id, idx + 1, e.message()
+                                );
+                                if ctx.vision_images.is_empty() {
+                                    adapter.refine(req, Some(dims)).map_err(AiTaskFailure::from)
+                                } else {
+                                    adapter
+                                        .refine_vision(req, ctx.vision_images, Some(dims))
+                                        .map_err(AiTaskFailure::from)
+                                }
+                            }
+                        }
                     } else if ctx.vision_images.is_empty() {
                         adapter.refine(req, Some(dims)).map_err(AiTaskFailure::from)
                     } else {

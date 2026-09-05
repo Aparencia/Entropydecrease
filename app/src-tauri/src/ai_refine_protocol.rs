@@ -193,44 +193,69 @@ impl AiRefineResponse {
     ///              image=原样配图行 `- ![画面](path)`（F3 v2——与规则版
     ///              画面要点行同形态，前端渲染器统一处理）。
     pub fn to_markdown(&self) -> String {
-        let mut out = String::new();
-        for sec in &self.sections {
-            out.push_str(&format!("## {}\n\n", sec.heading.trim()));
-            for b in &sec.blocks {
-                match b.block_type {
-                    AiRefineBlockType::Paragraph => {
-                        out.push_str(b.content.trim());
-                        out.push_str("\n\n");
+        render_sections(&self.sections).trim().to_string()
+    }
+}
+
+/// 章节序列 → Markdown（纯函数；to_markdown 与流式 Delta 渲染共用同一出口——
+/// REQ-290① 增量帧按前缀渲染，文本与终稿逐字节一致）。
+pub fn render_sections(sections: &[AiRefineSection]) -> String {
+    let mut out = String::new();
+    for sec in sections {
+        out.push_str(&format!("## {}\n\n", sec.heading.trim()));
+        for b in &sec.blocks {
+            match b.block_type {
+                AiRefineBlockType::Paragraph => {
+                    out.push_str(b.content.trim());
+                    out.push_str("\n\n");
+                }
+                AiRefineBlockType::List => {
+                    for line in b.content.lines().map(|l| l.trim()).filter(|l| !l.is_empty()) {
+                        out.push_str(&format!("- {}\n", line));
                     }
-                    AiRefineBlockType::List => {
-                        for line in b.content.lines().map(|l| l.trim()).filter(|l| !l.is_empty()) {
-                            out.push_str(&format!("- {}\n", line));
-                        }
-                        out.push('\n');
+                    out.push('\n');
+                }
+                AiRefineBlockType::Term => {
+                    out.push_str(&format!("- **{}**\n", b.content.trim()));
+                }
+                AiRefineBlockType::Highlight => {
+                    out.push_str(&format!("**{}**\n\n", b.content.trim()));
+                }
+                AiRefineBlockType::Quote => {
+                    for line in b.content.lines().map(|l| l.trim()).filter(|l| !l.is_empty()) {
+                        out.push_str(&format!("> {}\n", line));
                     }
-                    AiRefineBlockType::Term => {
-                        out.push_str(&format!("- **{}**\n", b.content.trim()));
-                    }
-                    AiRefineBlockType::Highlight => {
-                        out.push_str(&format!("**{}**\n\n", b.content.trim()));
-                    }
-                    AiRefineBlockType::Quote => {
-                        for line in b.content.lines().map(|l| l.trim()).filter(|l| !l.is_empty()) {
-                            out.push_str(&format!("> {}\n", line));
-                        }
-                        out.push('\n');
-                    }
-                    AiRefineBlockType::Image => {
-                        // F3 v2：配图行（content=session-images/{sid}/{rel}——
-                        // 原样输出；与规则版画面要点行同形态供前端渲染）
-                        out.push_str(&format!("- ![画面]({})\n", b.content.trim()));
-                    }
+                    out.push('\n');
+                }
+                AiRefineBlockType::Image => {
+                    // F3 v2：配图行（content=session-images/{sid}/{rel}——
+                    // 原样输出；与规则版画面要点行同形态供前端渲染）
+                    out.push_str(&format!("- ![画面]({})\n", b.content.trim()));
                 }
             }
         }
-        out.trim().to_string()
     }
+    out
 }
+
+/// 单行 NDJSON 节解析（REQ-290① 流式）：每节=与终稿数组元素同构的 JSON 对象
+/// （heading + blocks）；非对象行/解析失败 → None（由上层按整包回退解析）。
+pub fn parse_section_ndjson_line(line: &str) -> Option<AiRefineSection> {
+    let t = line.trim();
+    if t.is_empty() || t.starts_with('[') || t.starts_with(']') || t.starts_with(',') {
+        return None;
+    }
+    let v: serde_json::Value = serde_json::from_str(t).ok()?;
+    let obj = v.as_object()?;
+    if !obj.contains_key("heading") || !obj.contains_key("blocks") {
+        return None;
+    }
+    serde_json::from_value::<AiRefineSection>(v).ok()
+}
+
+/// 流式模式输出要求（附加在 system 尾部——逐节 JSONL；无法遵守时整体 JSON
+/// 数组亦可——解析端自动兼容回退，见 adapter）。
+pub const NDJSON_SYSTEM_SUFFIX: &str = "【流式输出要求】请逐节输出整理结果：每一节单独输出一行 JSON（对象含 heading 与 blocks 字段，字段格式与前述格式要求完全一致），节与节之间只换行、不写数组括号/逗号/多余说明；若必须一次性输出，则输出完整 JSON 数组（系统可自动兼容解析）。";
 
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。
 #[cfg(test)]
@@ -241,3 +266,30 @@ mod tests;
 #[cfg(test)]
 #[path = "refine_golden_tests.rs"]
 mod golden_tests;
+
+#[cfg(test)]
+mod ndjson_parse_tests {
+    use super::parse_section_ndjson_line;
+
+    #[test]
+    fn parses_single_section_object_line() {
+        let line = r#"{"heading":"第一节","blocks":[]}"#;
+        let sec = parse_section_ndjson_line(line).expect("应解析出节");
+        assert_eq!(sec.heading, "第一节");
+        assert!(sec.blocks.is_empty());
+    }
+
+    #[test]
+    fn ignores_array_wrappers_and_empty_lines() {
+        assert!(parse_section_ndjson_line("[").is_none());
+        assert!(parse_section_ndjson_line("]").is_none());
+        assert!(parse_section_ndjson_line(",").is_none());
+        assert!(parse_section_ndjson_line("  ").is_none());
+    }
+
+    #[test]
+    fn ignores_non_section_objects_and_garbage() {
+        assert!(parse_section_ndjson_line(r#"{"a":1}"#).is_none());
+        assert!(parse_section_ndjson_line("not json {").is_none());
+    }
+}

@@ -14,7 +14,7 @@ import type { AiTaskRecord } from "../types";
 // v0.17.0：流式 hook 依赖 tauri event listen——测试环境 mock 为空流（不报错）
 vi.mock("../hooks/useRefineStream", () => ({
   useRefineStream: () => [],
-  orderedBlockFrames: () => [],
+  sliceStreamContent: () => [],
 }));
 
 function task(partial: Partial<AiTaskRecord> & { taskId: number }): AiTaskRecord {

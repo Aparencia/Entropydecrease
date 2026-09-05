@@ -10,7 +10,8 @@
  *              [回到会话] [查看笔记]（用户裁决：完成后快速闭环）。
  */
 import type { AiTaskRecord } from "../types";
-import { orderedBlockFrames, useRefineStream } from "../hooks/useRefineStream";
+// REQ-290①（v0.19.7）：delta 逐节增量并入片正文（打字机）；blockDone 收尾
+import { sliceStreamContent, useRefineStream } from "../hooks/useRefineStream";
 
 interface Props {
   tasks: AiTaskRecord[];
@@ -51,26 +52,29 @@ function recentDone(tasks: AiTaskRecord[]): AiTaskRecord | null {
 /** 精修流式正文（进行中任务卡内——逐章流出；无帧则仅进度行） */
 function RefineStreamBody({ taskId, total }: { taskId: number; total: number | null }) {
   const frames = useRefineStream(taskId);
-  const blocks = orderedBlockFrames(frames);
+  const slices = sliceStreamContent(frames);
   const doneFrames = frames.filter((f) => f.kind === "done").length;
   const failedCount = frames.filter((f) => f.kind === "sliceFailed").length;
-  if (blocks.length === 0 && frames.length === 0) return null;
+  const streamingLive = slices.some((s) => !s.complete && s.text.length > 0);
+  if (slices.length === 0 && frames.length === 0) return null;
   return (
     <div style={{ width: "100%", marginTop: 4, borderTop: "1px dashed #e5e7eb", paddingTop: 4 }}>
       <div style={{ fontSize: 10.5, color: "#9ca3af", marginBottom: 2 }}>
-        已整理 {blocks.length}/{total ?? "?"} 片{failedCount > 0 && ` · 失败 ${failedCount} 片（保留规则版）`}
+        已整理 {slices.filter((s) => s.complete).length}/{total ?? "?"} 片{failedCount > 0 && ` · 失败 ${failedCount} 片（保留规则版）`}
+        {streamingLive && " · 逐节流出中"}
         {doneFrames > 0 && " · 完成"}
       </div>
-      {blocks.map((b) => (
+      {slices.map((s) => (
         <pre
-          key={b.sliceIndex}
+          key={s.sliceIndex}
           style={{
             whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "inherit",
             fontSize: 11.5, color: "#374151", margin: 0, padding: "2px 0",
-            borderTop: b.sliceIndex > 1 ? "1px solid #f3f4f6" : "none",
+            borderTop: s.sliceIndex > 1 ? "1px solid #f3f4f6" : "none",
           }}
         >
-          {b.markdown}
+          {s.text}
+          {!s.complete && s.text.length > 0 ? " ▍" : ""}
         </pre>
       ))}
     </div>

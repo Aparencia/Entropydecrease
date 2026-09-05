@@ -12,6 +12,7 @@ import { listen } from "@tauri-apps/api/event";
 export type RefineStreamFrame =
   | { kind: "progress"; sliceIndex: number; sliceTotal: number }
   | { kind: "blockDone"; sliceIndex: number; markdown: string }
+  | { kind: "delta"; sliceIndex: number; text: string }
   | { kind: "sliceFailed"; sliceIndex: number; reason: string }
   | { kind: "done"; slices: number; failedSlices: number };
 
@@ -38,4 +39,32 @@ export function orderedBlockFrames(frames: RefineStreamFrame[]) {
   return frames
     .filter((f): f is { kind: "blockDone"; sliceIndex: number; markdown: string } => f.kind === "blockDone")
     .sort((a, b) => a.sliceIndex - b.sliceIndex);
+}
+
+/** 片正文（REQ-290①）：Delta 逐节增量按到达序拼接（打字机正文）；
+ * 流式片完成后 blockDone 到达不再重复拼接（delta 已含全文）；非流式片
+ * （模型未逐节/重试拍）仍由 blockDone 提供整片。complete=该片终稿已到。 */
+export interface SliceStreamContent {
+  sliceIndex: number;
+  text: string;
+  complete: boolean;
+}
+
+export function sliceStreamContent(frames: RefineStreamFrame[]): SliceStreamContent[] {
+  const byIndex = new Map<number, SliceStreamContent>();
+  const collect = (idx: number, text: string, complete: boolean) => {
+    const cur = byIndex.get(idx);
+    if (!cur) {
+      byIndex.set(idx, { sliceIndex: idx, text, complete });
+      return;
+    }
+    // 同一片：delta 追加；blockDone 作为终稿标记（有 delta 时忽略其文本）
+    cur.text = complete && cur.text.length > 0 ? cur.text : cur.text + text;
+    cur.complete = cur.complete || complete;
+  };
+  for (const f of frames) {
+    if (f.kind === "delta") collect(f.sliceIndex, f.text, false);
+    else if (f.kind === "blockDone") collect(f.sliceIndex, f.markdown, true);
+  }
+  return [...byIndex.values()].sort((a, b) => a.sliceIndex - b.sliceIndex);
 }
