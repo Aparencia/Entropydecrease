@@ -366,6 +366,8 @@ mod practice_detect;
 mod quality_report;
 mod purify_config;
 mod refine;
+// REQ-290 ②（v0.19.7）：精修输出预算化（档位缩放纯函数）
+mod refine_budget;
 // v0.11.2：间隔重复调度器（FSRS-6；弹性承诺无 streak，ADR-018）
 mod scheduler;
 // v0.11.3：组结算纯函数（阈值/周期双触发 + 重复合并判据）

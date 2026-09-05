@@ -170,12 +170,22 @@ impl AiNoteRefineAdapter {
         dims: Option<&ResolvedDims>,
     ) -> Result<AiRefineResponse, AiClientError> {
         let system = self.prompt.build_system(&request.profile, dims);
+        // REQ-290 ②（v0.19.7）：逐片输出预算——档位缩放引导字数 + max_tokens
+        // 收敛（clone 客户端仅改上限，≤ 原 20000；guidance 段为逐片动态值，
+        // 不含在静态预览 system 内——refine_budget 注释如实声明）
+        let budget = crate::refine_budget::output_budget(
+            dims.map(|d| d.preset_id.as_str()).unwrap_or("standard"),
+            request.content.chars().count(),
+        );
+        let system = format!("{}\n\n{}", system, crate::refine_budget::guidance_suffix(&budget));
+        let mut client = self.client.clone();
+        client.config.max_tokens = budget.max_tokens;
         let user = serde_json::to_string(request)
             .map_err(|e| AiClientError::Parse(format!("精修请求序列化失败: {}", e)))?;
         let v = if images.is_empty() {
-            self.client.chat_json(&system, &user)?
+            client.chat_json(&system, &user)?
         } else {
-            let raw = self.client.chat_vision(&system, &user, images)?;
+            let raw = client.chat_vision(&system, &user, images)?;
             parse_json_object(&raw)?
         };
         let mut resp: AiRefineResponse = serde_json::from_value(v)
