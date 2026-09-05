@@ -87,6 +87,7 @@ mod db_web;
 mod commands_web;
 mod web_inbox;
 mod commands_web_inbox;
+mod web_snapshot;
 mod asr_clean;
 mod asr_confusion;
 mod asr_dedupe;
@@ -976,6 +977,8 @@ pub fn run() {
             // v0.20.4（REQ-303）：web 采集阶段 1——URL 采集/页面读取
             commands_web::web_capture_url,
             commands_web::web_page_get,
+            // v0.20.4（REQ-305）：整页快照（静态内联档→用户文件）
+            commands_web::web_snapshot_export,
             // v0.20.4（REQ-304）：扩展收件服务——起停/状态
             commands_web_inbox::web_inbox_start,
             commands_web_inbox::web_inbox_status,

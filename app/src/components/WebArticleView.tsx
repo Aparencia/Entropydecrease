@@ -8,6 +8,7 @@
  */
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
 
 interface WebPageView {
   session_id: number;
@@ -32,6 +33,29 @@ const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontS
 export default function WebArticleView({ sessionId, onToNote, onRemove }: Props) {
   const [page, setPage] = useState<WebPageView | null>(null);
   const [err, setErr] = useState("");
+  const [snapMsg, setSnapMsg] = useState("");
+  const [snapBusy, setSnapBusy] = useState(false);
+
+  /** REQ-305：整页快照（静态内联档——样式/图内联，外链脚本剔除防 XSS） */
+  const doSnapshot = async () => {
+    if (!page) return;
+    setSnapBusy(true);
+    setSnapMsg("");
+    setErr("");
+    try {
+      const path = await save({
+        defaultPath: `${(page.site ?? "page")}-snapshot.html`,
+        filters: [{ name: "HTML", extensions: ["html"] }],
+      });
+      if (!path) return;
+      const r = await invoke<{ chars: number; assets: number }>("web_snapshot_export", { sessionId, path });
+      setSnapMsg(`✓ 快照已保存（${r.chars} 字符 · 内联 ${r.assets} 项资源）——离线可开（不执行原文脚本）`);
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setSnapBusy(false);
+    }
+  };
 
   useEffect(() => {
     void invoke<WebPageView | null>("web_page_get", { sessionId })
@@ -57,11 +81,20 @@ export default function WebArticleView({ sessionId, onToNote, onRemove }: Props)
           >
             📝 转为笔记
           </button>
+          <button
+            style={{ ...btn, borderRadius: 6 }}
+            disabled={snapBusy}
+            title="整页快照（静态内联 HTML——样式/图内联，外链脚本剔除）"
+            onClick={() => void doSnapshot()}
+          >
+            {snapBusy ? "快照中…" : "📸 整页快照"}
+          </button>
           <button style={btn} onClick={() => onRemove(sessionId)}>
             删除
           </button>
         </span>
       </div>
+      {snapMsg && <div style={{ fontSize: 12, color: "#047857", marginBottom: 8 }}>{snapMsg}</div>}
       <div style={{ fontSize: 11, marginBottom: 8 }}>
         🔗 <a href={page.url} target="_blank" rel="noreferrer" style={{ color: "#2563eb", wordBreak: "break-all" }}>{page.url}</a>
       </div>

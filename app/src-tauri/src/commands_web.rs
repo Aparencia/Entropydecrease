@@ -173,3 +173,85 @@ pub(crate) fn web_session_to_note_core(db: &crate::db::Db, session_id: i64) -> R
 #[cfg(test)]
 #[path = "commands_web_tests.rs"]
 mod tests;
+
+// ── v0.20.4（REQ-305）整页快照（静态内联档——自研规避 SingleFile AGPL）──
+
+/// 快照预算（资源数量/单张/总量护栏——防拖垮与超大文件）。
+const SNAPSHOT_MAX_ASSETS: usize = 40;
+const SNAPSHOT_ASSET_CAP: usize = 2 * 1024 * 1024;
+const SNAPSHOT_TOTAL_CAP: usize = 24 * 1024 * 1024;
+
+fn fetch_bytes(url: &str, cap: usize) -> Option<Vec<u8>> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_secs(10))
+        .redirects(4)
+        .user_agent(UA)
+        .build();
+    let resp = agent.get(url).call().ok()?;
+    use std::io::Read;
+    let mut reader = resp.into_reader();
+    let mut body = Vec::new();
+    let mut chunk = [0u8; 8192];
+    loop {
+        let n = reader.read(&mut chunk).ok()?;
+        if n == 0 {
+            break;
+        }
+        body.extend_from_slice(&chunk[..n]);
+        if body.len() > cap {
+            return None;
+        }
+    }
+    Some(body)
+}
+
+/// 快照导出到用户选择路径（save 对话框授权；.html 白名单；快照=自研静态内联）。
+#[tauri::command]
+pub async fn web_snapshot_export(
+    state: State<'_, AppState>,
+    session_id: i64,
+    path: String,
+) -> Result<serde_json::Value, String> {
+    let p = std::path::Path::new(&path);
+    if p.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref() != Some("html") {
+        return Err("仅支持 .html 快照文件".to_string());
+    }
+    let st: AppState = (*state).clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let page = st
+            .db
+            .get_web_page(session_id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "web 页面不存在".to_string())?;
+        // HTML 源：raw_html（抽取失败保留）> 原文重抓（静态页兜底）
+        let html = match page.raw_html.clone() {
+            Some(h) => h,
+            None => {
+                let bytes = fetch_bytes(&page.url, SNAPSHOT_TOTAL_CAP)
+                    .ok_or_else(|| "原文重抓失败（离线/站点拒绝？）".to_string())?;
+                String::from_utf8_lossy(&bytes).into_owned()
+            }
+        };
+        let mut assets = 0usize;
+        let mut total_bytes = 0usize;
+        let mut resolver = |url: &str| -> Option<String> {
+            if assets >= SNAPSHOT_MAX_ASSETS {
+                return None;
+            }
+            let bytes = fetch_bytes(url, SNAPSHOT_ASSET_CAP)?;
+            assets += 1;
+            total_bytes += bytes.len();
+            if total_bytes > SNAPSHOT_TOTAL_CAP {
+                return None;
+            }
+            use base64::Engine as _;
+            Some(base64::engine::general_purpose::STANDARD.encode(bytes))
+        };
+        let snap = crate::web_snapshot::inline_html(&page.url, &html, &mut resolver);
+        let chars = snap.chars().count();
+        std::fs::write(&path, snap.as_bytes()).map_err(|e| format!("快照写入失败: {}", e))?;
+        Ok(serde_json::json!({ "chars": chars, "assets": assets }))
+    })
+    .await
+    .map_err(|e| format!("任务调度失败: {}", e))?
+}
