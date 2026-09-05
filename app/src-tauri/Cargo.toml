@@ -45,6 +45,12 @@ name = "cer_bench"
 path = "src/bin/cer_bench.rs"
 test = false
 
+# v0.20.0（REQ-263）：asr_eval 自验证 harness（批量/双路 A/B/基线回归门）
+[[bin]]
+name = "asr_eval"
+path = "src/bin/asr_eval.rs"
+test = false
+
 [features]
 # ADR-009（v0.4.0 M1）：OCR CUDA EP 编译开关（默认开）——ORT 1.28 官方 gpu_cuda12
 # 运行时存在（download-ort-cuda.ps1 分发）；feature 关闭时 CUDA 请求显式失败并
