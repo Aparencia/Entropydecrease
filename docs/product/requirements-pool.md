@@ -572,17 +572,17 @@
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
 |----|------|--------|------|---------|------|
-| REQ-292 | 行动底座：task_index 增量索引（保存钩子重扫）+ 回写原子层（parse/migrate/replace_line 纯函数，全入口收敛） | P1 | 已立项 | v0.20 系列 | 后处理支线；勾选继续走既有字符级回写 |
-| REQ-293 | 行动中心：待办裁决队列 UI（逾期/计划日/搁置/待提炼四区 + ✓完成/📅改期/🎴转卡/⤴迁出/✗放弃留因 行操作；组侧栏 ✅行动 N 入口） | P1 | 已立项 | v0.20 系列 | 锚定 ReviewSessionOverlay/GroupSidebar 模式 |
-| REQ-294 | 周回顾裁决仪式：逾期未办逐条裁决（执行/改期/转闪卡/迁出/有意识放弃）+ 完成史周视图 + batch_weekly_resolve 单事务 | P1 | 已立项 | v0.20 系列 | "不留死尸的机制是裁决不是自动清理" |
-| REQ-295 | 迁出通道集：保底三件套（复制 todo.txt 行/导出 .todo.txt/邮件说明）+ Todoist `todoist://quickadd` 与滴答 x-callback（先探测注册）；REST+keyring（ADR-016 DPAPI）二期；迁出=放手+手动回填（无 API 轮询） | P1 | 已立项 | v0.20 系列 | 内容随迁出文本携带；回填入完成史 |
-| REQ-296 | SOP 功能区：模板（段落行范围引用，无双写，≤50 步）+ 双模式执行（READ-DO 单步引导/DO-CONFIRM 总览核对）+ 预期结果/暂停点/失败点轻分支 + run 档案（轨迹/证据/复跑对比/保鲜 diff） | P1 | 已立项 | v0.20 系列 | 证据复用图片三入口+notes-images |
-| REQ-297 | SOP 演进：run 史聚合失败步 → 修订建议（v1 纯本地提示，AI 拟稿后置）+ 版本化复用 notes 版本链 + 模板生成入口（编辑态选区/课堂素材半自动草稿） | P2 | 已立项 | v0.20 系列 | 用户自定义一等约束 |
-| REQ-298 | 完成史：completion_history 统一事件（done/abandoned/exported/export_manual_done/practice_tick/sop_run）+ 周回顾原料 + Goals 回顾流接入 | P1 | 已立项 | v0.20 系列 | 完成即证据；成长轨迹唯一数据源 |
-| REQ-299 | 练习条目：practice_items（frequency daily\|manual/goal/mastery/next_due）+ 打点 + 宽容缺勤只记史；练习曲线 P2 | P2 | 已立项 | v0.20 系列 | 闪卡外第二条复利曲线接口预留 |
-| REQ-300 | 问题清单（Me 问题化）：questions 表 + 笔记段「转为问题」提炼入口 + 行动中心「❓ 问题」页签（open/answered/archived）；「问题→复习卡」出口 P2 | P2 | 已立项 | v0.20 系列 | 核心处理 γ 分类型特化 |
-| REQ-301 | SE/AI 封存标记：tag 标记（#树洞/氛围标签）+ 列表/复习面默认排除（设置可显）；AI 随机漫步入口 P2 | P2 | 已立项 | v0.20 系列 | 核心处理 γ；tags 已有零新表 |
-| REQ-302 | M 模型卡提炼接线：笔记段 → 模型卡草稿 → 复习面；先核对现有 model 卡生成路径防双轨 | P2 | 已立项 | v0.20 系列 | 核心处理 γ；RouteInfoPopover「model 卡纳入体系」先例 |
+| REQ-292 | 行动底座：task_index 增量索引（保存钩子重扫）+ 回写原子层（parse/migrate/replace_line 纯函数，全入口收敛） | P1 | 已实施（2026-09-06 v0.20.3 批：c78e294~7dd8af2 提交链，逐 REQ 备注见版本文档） | v0.20 系列 | 后处理支线；勾选继续走既有字符级回写 |
+| REQ-293 | 行动中心：待办裁决队列 UI（逾期/计划日/搁置/待提炼四区 + ✓完成/📅改期/🎴转卡/⤴迁出/✗放弃留因 行操作；组侧栏 ✅行动 N 入口） | P1 | 已实施（2026-09-06 v0.20.3 批：c78e294~7dd8af2 提交链，逐 REQ 备注见版本文档） | v0.20 系列 | 锚定 ReviewSessionOverlay/GroupSidebar 模式 |
+| REQ-294 | 周回顾裁决仪式：逾期未办逐条裁决（执行/改期/转闪卡/迁出/有意识放弃）+ 完成史周视图 + batch_weekly_resolve 单事务 | P1 | 已实施（2026-09-06 v0.20.3 批：c78e294~7dd8af2 提交链，逐 REQ 备注见版本文档） | v0.20 系列 | "不留死尸的机制是裁决不是自动清理" |
+| REQ-295 | 迁出通道集：保底三件套（复制 todo.txt 行/导出 .todo.txt/邮件说明）+ Todoist `todoist://quickadd` 与滴答 x-callback（先探测注册）；REST+keyring（ADR-016 DPAPI）二期；迁出=放手+手动回填（无 API 轮询） | P1 | 已实施（2026-09-06 v0.20.3 批：c78e294~7dd8af2 提交链，逐 REQ 备注见版本文档） | v0.20 系列 | 内容随迁出文本携带；回填入完成史 |
+| REQ-296 | SOP 功能区：模板（段落行范围引用，无双写，≤50 步）+ 双模式执行（READ-DO 单步引导/DO-CONFIRM 总览核对）+ 预期结果/暂停点/失败点轻分支 + run 档案（轨迹/证据/复跑对比/保鲜 diff） | P1 | 已实施（2026-09-06 v0.20.3 批：c78e294~7dd8af2 提交链，逐 REQ 备注见版本文档） | v0.20 系列 | 证据复用图片三入口+notes-images |
+| REQ-297 | SOP 演进：run 史聚合失败步 → 修订建议（v1 纯本地提示，AI 拟稿后置）+ 版本化复用 notes 版本链 + 模板生成入口（编辑态选区/课堂素材半自动草稿） | P2 | 已实施（2026-09-06 v0.20.3 批：c78e294~7dd8af2 提交链，逐 REQ 备注见版本文档） | v0.20 系列 | 用户自定义一等约束 |
+| REQ-298 | 完成史：completion_history 统一事件（done/abandoned/exported/export_manual_done/practice_tick/sop_run）+ 周回顾原料 + Goals 回顾流接入 | P1 | 已实施（2026-09-06 v0.20.3 批：c78e294~7dd8af2 提交链，逐 REQ 备注见版本文档） | v0.20 系列 | 完成即证据；成长轨迹唯一数据源 |
+| REQ-299 | 练习条目：practice_items（frequency daily\|manual/goal/mastery/next_due）+ 打点 + 宽容缺勤只记史；练习曲线 P2 | P2 | 已实施（2026-09-06 v0.20.3 批：c78e294~7dd8af2 提交链，逐 REQ 备注见版本文档） | v0.20 系列 | 闪卡外第二条复利曲线接口预留 |
+| REQ-300 | 问题清单（Me 问题化）：questions 表 + 笔记段「转为问题」提炼入口 + 行动中心「❓ 问题」页签（open/answered/archived）；「问题→复习卡」出口 P2 | P2 | 已实施（2026-09-06 v0.20.3 批：c78e294~7dd8af2 提交链，逐 REQ 备注见版本文档） | v0.20 系列 | 核心处理 γ 分类型特化 |
+| REQ-301 | SE/AI 封存标记：tag 标记（#树洞/氛围标签）+ 列表/复习面默认排除（设置可显）；AI 随机漫步入口 P2 | P2 | 已实施（2026-09-06 v0.20.3 批：c78e294~7dd8af2 提交链，逐 REQ 备注见版本文档） | v0.20 系列 | 核心处理 γ；tags 已有零新表 |
+| REQ-302 | M 模型卡提炼接线：笔记段 → 模型卡草稿 → 复习面；先核对现有 model 卡生成路径防双轨 | P2 | 已实施（2026-09-06 v0.20.3 批：c78e294~7dd8af2 提交链，逐 REQ 备注见版本文档） | v0.20 系列 | 核心处理 γ；RouteInfoPopover「model 卡纳入体系」先例 |
 | REQ-303 | web 采集阶段 1 内核：课堂助手动线区「URL 采集」入口 → 本地抽取管线（静态直取 + 隐藏 wry 注入 readability 系兜底）→ `kind=web` 会话 + `BodySource::Web` + 元数据（URL/站点/作者/时间入 properties）+ 标题锚点回链 → 转笔记复用 | P1 | 已立项 | v0.20 系列 | [Foresight 定案](../Foresight/web-capture-ingestion-path.md)；正文失败降级原 HTML 附件；SPA 缺口由阶段 2 覆盖 |
 | REQ-304 | web 采集阶段 2 扩展薄壳：浏览器扩展（登录态 DOM 抽取：readability+turndown → MD+元数据）→ 本地 loopback 收件服务（127.0.0.1+随机 token+/ping 探测）→ 图 base64 落盘改写引用 | P2 | 已立项 | v0.20 系列 | 登录墙（公众号/知乎）正解；只绑 loopback+CORS+单向投递安全边界 |
 | REQ-305 | web 采集阶段 3 整页快照：隐藏 wry 窗口 DOM+子资源内联（自研 core.js，规避 SingleFile AGPL）+ monolith（CC0）静态降级 + 截图兜底链 | P2 | 已立项 | v0.20 系列 | 富格式/整页快照；WebView2 无 MHTML API 已否决 |
