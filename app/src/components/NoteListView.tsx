@@ -442,12 +442,13 @@ export default function NoteListView({
         ))}
       </div>
 
-      {/* 批量操作栏（去勾选框后的批量入口：删除 + 移动到组） */}
-      {selection.size > 0 && !selectionMode && (
+      {/* 批量操作栏（去勾选框后的批量入口：删除 + 移动到组；选择模式下同样可用） */}
+      {selection.size > 0 && (
         <div style={{ borderTop: "1px solid #e5e7eb", padding: 8, display: "flex", gap: 6, alignItems: "center", background: "#fff" }}>
           <span style={{ fontSize: 12, color: "#3730a3" }}>已选 {selection.size} 个</span>
           <button data-testid="batch-move-btn" style={ghostBtn} onClick={() => setBatchMenu({ ids: [...selection], x: 0, y: 0 })}>移动到组</button>
           <button data-testid="batch-delete-btn" style={{ ...ghostBtn, borderColor: "#fca5a5", color: "#dc2626" }} onClick={() => void (async () => { if (await onBatchDelete([...selection])) clearSelection(); })()}>批量删除</button>
+          {selectionMode && <button data-testid="batch-done-btn" style={{ ...ghostBtn, color: "#3730a3" }} onClick={exitBatch}>完成</button>}
           <button style={{ ...ghostBtn, marginLeft: "auto" }} onClick={clearSelection}>取消</button>
         </div>
       )}

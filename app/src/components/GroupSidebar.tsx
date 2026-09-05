@@ -26,6 +26,8 @@ import {
 import RouteInfoPopover from "./RouteInfoPopover";
 import GroupSidebarRow from "./GroupSidebarRow";
 import GroupCreateDialog from "./GroupCreateDialog";
+// REQ-287：多选拖拽载荷读取（text/note-ids JSON + 单 id 兜底）
+import { crateDndReadIds } from "./NoteTreeSection";
 import { blobToBase64 } from "../utils/blobToBase64";
 
 interface Props {
@@ -206,15 +208,24 @@ export default function GroupSidebar({
     Object.entries(folded).forEach(([kind, value]) => writeFolded(window.localStorage, kind, value));
   }, [folded]);
 
-  /** 拖拽归组（组行 drop；noteId 来自 NoteListView 行 dragStart） */
+  /** 拖拽归组（组行 drop；载荷支持多选 JSON + 单 id 兜底——REQ-287 整组拖走） */
   const handleGroupDrop = (g: NoteGroup, e: React.DragEvent) => {
     e.preventDefault();
     setDragOverId(null);
-    const noteId = Number(e.dataTransfer.getData("text/note-id"));
-    if (!noteId) return;
-    invoke("move_note_to_group", { noteId, groupId: g.id })
-      .then(() => onChanged())
-      .catch((err) => setStatus(`归组失败: ${err}`));
+    const ids = crateDndReadIds(e.dataTransfer);
+    if (ids.length === 0) return;
+    void (async () => {
+      let failed = 0;
+      for (const noteId of ids) {
+        try {
+          await invoke("move_note_to_group", { noteId, groupId: g.id });
+        } catch {
+          failed += 1;
+        }
+      }
+      if (failed > 0) setStatus(`归组失败 ${failed}/${ids.length} 条`);
+      onChanged();
+    })();
   };
 
   /** v0.14.1：行内重命名提交（rename_note_group 命令自 v0.11.0 存在，本版接线） */
@@ -248,7 +259,8 @@ export default function GroupSidebar({
       onRename={(name) => void handleRename(g, name)}
       onOpenSystem={(id) => onOpenSystem(id)}
       onDragOver={(e) => {
-        if (e.dataTransfer.types.includes("text/note-id")) {
+        // REQ-287：多选载荷（note-ids JSON）+ 单 id 兜底均可落组
+        if (e.dataTransfer.types.includes("text/note-ids") || e.dataTransfer.types.includes("text/note-id")) {
           e.preventDefault();
           setDragOverId(g.id);
         }
