@@ -263,19 +263,30 @@ pub fn second_pass_decide(
     if session_id <= 0 || draft_id <= 0 {
         return Err("参数非法".to_string());
     }
+    // 属主校验：草稿必须属于该会话（second_pass 与 proofread 两 origin 共用
+    // 裁决通道——防跨会话 id 误改/越权访问，IPC 校验红线）
+    let mut drafts = state
+        .db
+        .list_refine_drafts(session_id, ORIGIN_SECOND_PASS, None)
+        .map_err(|e| format!("读取草稿失败: {e}"))?;
+    drafts.extend(
+        state
+            .db
+            .list_refine_drafts(session_id, crate::db_session_refine::ORIGIN_PROOFREAD, None)
+            .map_err(|e| format!("读取草稿失败: {e}"))?,
+    );
+    if !drafts.iter().any(|d| d.id == draft_id) {
+        return Err("草稿不存在于该会话（id 越界或已随会话删除）".to_string());
+    }
     let status = if adopt { STATUS_ADOPTED } else { STATUS_REJECTED };
     state
         .db
         .decide_refine_draft(draft_id, status)
         .map_err(|e| format!("裁决失败: {e}"))?;
-    // REQ-269 采集：采纳时把（旧文→新文）词级差异记入混淆画像（失败仅日志——
-    // 画像为质量增强层，不影响裁决主链路）
+    // REQ-269 采集：采纳第二遍草稿时把（旧文→新文）词级差异记入混淆画像
+    // （仅 second_pass origin——校对源不采集；失败仅日志，不影响裁决主链路）
     if adopt {
-        let drafts = state
-            .db
-            .list_refine_drafts(session_id, ORIGIN_SECOND_PASS, Some(STATUS_ADOPTED))
-            .map_err(|e| format!("读取草稿失败: {e}"))?;
-        if let Some(d) = drafts.iter().find(|x| x.id == draft_id) {
+        if let Some(d) = drafts.iter().find(|x| x.id == draft_id && x.origin == ORIGIN_SECOND_PASS) {
             if let Ok(mut store) = state.asr_confusion.lock() {
                 store.record_adoption(&d.base_text, &d.refined_text);
                 if let Err(e) = store.save(&state.asr_confusion_path) {
