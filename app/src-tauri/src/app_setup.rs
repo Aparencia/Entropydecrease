@@ -299,6 +299,8 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         // v0.20.2（REQ-269）：ASR 混淆画像闭环表（内存态单点 + JSON 校准路径）
         asr_confusion,
         asr_confusion_path,
+        // v0.20.4（REQ-304）：web 扩展收件服务（默认未启动——用户显式开启）
+        web_inbox: std::sync::Arc::new(std::sync::Mutex::new(None)),
     });
     // v0.12.3（P2-10）：浮窗预创建常驻（隐藏）——打开秒显、点击期零建窗风险；
     // 失败幂等回落为打开时懒创建（open_capture_float 内部兜底）。

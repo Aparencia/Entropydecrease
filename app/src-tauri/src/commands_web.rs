@@ -18,7 +18,7 @@ use tauri::State;
 use crate::commands::AppState;
 use crate::db_web::WebPage;
 use crate::types::NewNote;
-use crate::web_capture::extract_page;
+use crate::web_capture::{extract_page, host_of};
 
 /// 抓取体量上限（防超大响应拖垮内存/耗时）。
 const FETCH_MAX_BYTES: usize = 5 * 1024 * 1024;
@@ -123,18 +123,6 @@ fn capture_inner(st: &AppState, url: &str) -> Result<WebCaptureView, String> {
         chars: page.markdown.chars().count(),
         extracted_ok: page.ok,
     })
-}
-
-fn host_of(url: &str) -> Option<String> {
-    let rest = url.split("://").nth(1)?;
-    Some(
-        rest.split(['/', '?', '#'])
-            .next()
-            .unwrap_or("")
-            .chars()
-            .take(100)
-            .collect(),
-    )
 }
 
 /// web 会话页面读取（详情展示/回链跳转数据源）。

@@ -85,6 +85,8 @@ mod commands_after;
 mod web_capture;
 mod db_web;
 mod commands_web;
+mod web_inbox;
+mod commands_web_inbox;
 mod asr_clean;
 mod asr_confusion;
 mod asr_dedupe;
@@ -974,6 +976,10 @@ pub fn run() {
             // v0.20.4（REQ-303）：web 采集阶段 1——URL 采集/页面读取
             commands_web::web_capture_url,
             commands_web::web_page_get,
+            // v0.20.4（REQ-304）：扩展收件服务——起停/状态
+            commands_web_inbox::web_inbox_start,
+            commands_web_inbox::web_inbox_status,
+            commands_web_inbox::web_inbox_stop,
             // v0.20.2（REQ-269）：ASR 混淆画像闭环——候选/确认/忽略/规则管理
             commands_asr_confusion::asr_confusion_get,
             commands_asr_confusion::asr_confusion_confirm,

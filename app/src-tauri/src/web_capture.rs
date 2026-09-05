@@ -89,6 +89,19 @@ fn extract_title(html: &str) -> String {
     String::new()
 }
 
+/// URL 主机名（会话标题兜底；纯函数）。
+pub fn host_of(url: &str) -> Option<String> {
+    let rest = url.split("://").nth(1)?;
+    Some(
+        rest.split(['/', '?', '#'])
+            .next()
+            .unwrap_or("")
+            .chars()
+            .take(100)
+            .collect(),
+    )
+}
+
 /// HTML → Markdown 正文（轻量规则：script/style 剔除；块级换行；标题/列表/
 /// 链接/图片简化；实体解码）。
 ///

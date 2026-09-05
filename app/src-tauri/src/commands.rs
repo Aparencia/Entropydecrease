@@ -197,6 +197,10 @@ pub struct AppState {
     pub asr_confusion: std::sync::Arc<std::sync::Mutex<crate::asr_confusion::AsrConfusionStore>>,
     /// v0.20.2（REQ-269）：ASR 混淆表 JSON 路径（应用数据目录 asr_confusion.json）
     pub asr_confusion_path: std::path::PathBuf,
+    /// v0.20.4（REQ-304）：web 扩展收件服务运行时（None=未启动；token 持久化）
+    pub web_inbox: std::sync::Arc<
+        std::sync::Mutex<Option<crate::commands_web_inbox::WebInboxRuntime>>,
+    >,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。
