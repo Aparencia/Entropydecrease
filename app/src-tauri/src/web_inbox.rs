@@ -101,13 +101,6 @@ pub fn data_uri_bytes(data_base64: &str) -> Option<Vec<u8>> {
     base64::engine::general_purpose::STANDARD.decode(b64).ok()
 }
 
-/// md 内 data URI 引用名（扩展示例格式 `![name](data:...)`）改写为相对文件。
-pub fn data_uri_name(data_base64: &str) -> Option<String> {
-    // 形如 data:image/png;base64,xxx ——取前 12 字节摘要作文件名（哈希由落盘层给）
-    let bytes = data_uri_bytes(data_base64)?;
-    Some(short_hash(&bytes))
-}
-
 /// 短摘要（非密码用途——文件名去重即可；注释注明防误用）。
 pub fn short_hash(bytes: &[u8]) -> String {
     let mut h = 0xcbf2_9ce4_8422_2325u64;

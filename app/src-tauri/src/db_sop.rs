@@ -17,6 +17,7 @@ use crate::error::Result;
 
 pub const MODE_READDO: &str = "readdo";
 pub const MODE_CONFIRM: &str = "confirm";
+#[allow(dead_code)] // 与命令层字面量同值——保留为常量（防双处漂移），接入点登记
 pub const RUN_ACTIVE: &str = "active";
 pub const RUN_DONE: &str = "done";
 pub const RUN_ABORTED: &str = "aborted";

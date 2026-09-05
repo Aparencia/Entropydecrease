@@ -10,12 +10,12 @@
 //!              载荷白名单校验（web_inbox::validate_payload）、体量上限；
 //!              服务仅应用运行期有效（进程退出即停）——无驻留后门。
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 

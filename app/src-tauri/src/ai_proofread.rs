@@ -45,7 +45,7 @@ pub const SENTENCE_MAX_CHARS: usize = 120;
 pub fn split_sentences(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut buf: Vec<char> = Vec::new();
-    let mut flush = |buf: &mut Vec<char>, out: &mut Vec<String>| {
+    let flush = |buf: &mut Vec<char>, out: &mut Vec<String>| {
         let s: String = buf.iter().collect::<String>().trim().to_string();
         let len = s.chars().count();
         if (SENTENCE_MIN_CHARS..=SENTENCE_MAX_CHARS).contains(&len) {
@@ -77,7 +77,7 @@ pub fn chunk_sentences(sentences: &[String]) -> Vec<Vec<usize>> {
     let mut cur_chars = 0usize;
     for (i, s) in sentences.iter().enumerate() {
         let len = s.chars().count() + 4; // 编号 + 换行开销
-        if (!cur.is_empty() && (cur.len() >= MAX_SENTENCES_PER_CHUNK || cur_chars + len > CHUNK_MAX_CHARS))
+        if !cur.is_empty() && (cur.len() >= MAX_SENTENCES_PER_CHUNK || cur_chars + len > CHUNK_MAX_CHARS)
         {
             chunks.push(std::mem::take(&mut cur));
             cur_chars = 0;

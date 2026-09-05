@@ -214,6 +214,7 @@ pub fn completion_history_list(
 }
 
 /// 占位导出（todo.txt 行文本——REQ-295 保底三件套的「复制」面由前端剪贴板完成）。
+#[allow(dead_code)] // 文件导出由前端拼接行内容（保底通道）——本纯函数留作校验/复现用
 pub fn export_todotxt_lines(rows: &[ActionQueueRow]) -> String {
     rows.iter()
         .map(|r| format!("[ ] {} (via:{})", r.text, r.note_title))

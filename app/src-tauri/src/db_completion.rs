@@ -15,6 +15,7 @@ use crate::error::Result;
 /// 事件类型。
 pub const EV_DONE: &str = "done";
 pub const EV_ABANDONED: &str = "abandoned";
+#[allow(dead_code)] // 迁出事件由 export 复制/文件路径产生（meta 通道），常量预留给通道扩展
 pub const EV_EXPORTED: &str = "exported";
 pub const EV_EXPORT_MANUAL_DONE: &str = "export_manual_done";
 pub const EV_PRACTICE_TICK: &str = "practice_tick";

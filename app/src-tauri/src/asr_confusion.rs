@@ -180,7 +180,7 @@ fn word_pairs(old: &str, new: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
     let mut run_old: Vec<char> = Vec::new();
     let mut run_new: Vec<char> = Vec::new();
-    let mut flush = |run_old: &mut Vec<char>, run_new: &mut Vec<char>, out: &mut Vec<(String, String)>| {
+    let flush = |run_old: &mut Vec<char>, run_new: &mut Vec<char>, out: &mut Vec<(String, String)>| {
         if !run_old.is_empty()
             && !run_new.is_empty()
             && run_old.len() == run_new.len()

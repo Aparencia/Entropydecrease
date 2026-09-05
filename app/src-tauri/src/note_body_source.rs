@@ -23,6 +23,7 @@ pub enum BodySource {
     OcrDirect,
     /// v0.20.4（REQ-303）：web 会话正文直取（web_session_pages.markdown——
     /// 不走口语过滤链，轻净化直落；标题层级保留供锚点回链）
+    #[allow(dead_code)] // 预留：kind=web 直落管线暂不经 detect（经 convert 分支）
     Web,
     /// 无可用正文（标题仅）
     #[default]

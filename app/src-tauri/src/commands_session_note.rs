@@ -300,11 +300,9 @@ pub async fn session_to_note(
     inner
 }
 
-/// 批量转笔记核心编排（v0.7.1：部分成功语义——单条失败不阻塞其他）。
-///
-/// @ai-context: 纯编排纯函数（注入 Db + UiJunkList，无 Tauri 依赖，可单测）；
-///              跳过规则显式回传原因（不静默）：无效 id / 进行中 / 已转 / 会话不存在；
-///              DB 读错误视为硬失败中止（库损坏时继续处理无意义）。
+/// 批量转笔记核心编排外壳（仅测试基准——命令入口走
+/// run_batch_conversion_inner（REQ-269 规则注入），外壳保持既有测试签名）。
+#[cfg(test)]
 pub fn run_batch_conversion(
     db: &Db,
     ui_junk: &UiJunkList,

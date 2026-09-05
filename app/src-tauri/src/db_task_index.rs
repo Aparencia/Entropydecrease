@@ -151,6 +151,7 @@ impl Db {
     }
 
     /// 索引列纠偏（learning|practice|sop|export——提炼/裁决时标注）。
+    #[allow(dead_code)] // 纠偏命令面未接线（登记：disposition 标注随提炼/裁决 UI 后置）
     pub fn set_task_disposition(
         &self,
         row_id: i64,

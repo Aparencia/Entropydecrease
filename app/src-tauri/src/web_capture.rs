@@ -112,7 +112,7 @@ pub fn html_to_markdown(html: &str) -> String {
     let mut chars = html.chars().peekable();
     let mut in_script = 0usize;
     let mut buf: Vec<char> = Vec::new(); // 当前文本缓冲
-    let mut flush_text = |buf: &mut Vec<char>, out: &mut String| {
+    let flush_text = |buf: &mut Vec<char>, out: &mut String| {
         let t: String = buf.drain(..).collect();
         let t = collapse_space(&decode_entities(&t));
         if !t.is_empty() {

@@ -137,6 +137,7 @@ impl Db {
         })
     }
 
+    #[allow(dead_code)] // 停用/归档命令面未接线（登记：UI 操作列后置）
     pub fn set_practice_status(&self, item_id: i64, status: &str) -> Result<bool> {
         if !matches!(status, ITEM_ACTIVE | ITEM_PAUSED | ITEM_ARCHIVED) {
             return Err(crate::error::AppError::Asr("非法条目状态".to_string()));

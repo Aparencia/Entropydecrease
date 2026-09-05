@@ -10,7 +10,7 @@ use tauri::State;
 
 use crate::commands::AppState;
 use crate::db_sop::{
-    lines_to_steps, EVIDENCE_PREFIX, MAX_SOP_STEPS, MODE_CONFIRM, MODE_READDO, RUN_ABORTED,
+    lines_to_steps, EVIDENCE_PREFIX, MAX_SOP_STEPS, MODE_READDO, RUN_ABORTED,
     RUN_DONE, SopRunDetail, SopTemplate,
 };
 
