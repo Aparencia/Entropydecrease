@@ -49,7 +49,8 @@ pub struct StreamingAsrConfig {
     pub rule1_min_trailing_silence: f32,
     /// 端点 rule2：短停顿断句秒数（默认 1.2）。
     pub rule2_min_trailing_silence: f32,
-    /// rule3 最长句强制断句（秒；默认 8s——5s 过短致句中硬切，20s 过长）。
+    /// rule3 最长句强制断句（秒；默认 12s——REQ-265 首轮标定定案：
+    /// 8s 硬切中长句致句碎，12s 5/5 样本一致更优；20s 仍过长）。
     pub rule3_min_utterance_secs: f32,
 }
 
@@ -58,7 +59,9 @@ impl Default for StreamingAsrConfig {
         Self {
             rule1_min_trailing_silence: 2.4,
             rule2_min_trailing_silence: 1.2,
-            rule3_min_utterance_secs: 8.0,
+            // REQ-265 首轮标定（2026-09-05，弱参考 5 样本 5/5 一致改善 Δ≈0.029）：
+            // rule3 8s → 12s（8s 硬切中长句；12s 贴合自然语流）；用户裁决定案
+            rule3_min_utterance_secs: 12.0,
         }
     }
 }

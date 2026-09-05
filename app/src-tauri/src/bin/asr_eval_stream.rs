@@ -27,7 +27,8 @@ pub struct StreamParams {
 
 impl Default for StreamParams {
     fn default() -> Self {
-        Self { rule1_s: 2.4, rule2_s: 1.2, rule3_s: 8.0 }
+        // rule3 与生产同默认（12s，REQ-265 首轮标定定案 2026-09-05）
+        Self { rule1_s: 2.4, rule2_s: 1.2, rule3_s: 12.0 }
     }
 }
 

@@ -161,6 +161,16 @@ impl EnginePool {
         Self::assemble(asr_tx, ocr_tx)
     }
 
+    /// 测试用：注入 ASR 通道并共享 receiver（REQ-267 排空单测专用——
+    /// 队列中已有请求时 drain_asr_backlog 应逐条回复 Err 并清空）。
+    #[cfg(test)]
+    pub fn with_asr_channel_and_rx(asr_tx: Sender<AsrRequest>, asr_rx: Receiver<AsrRequest>) -> Self {
+        let (ocr_tx, _) = mpsc::channel::<OcrRequest>();
+        let mut p = Self::assemble(asr_tx, ocr_tx);
+        p.asr_rx = Some(Arc::new(Mutex::new(asr_rx)));
+        p
+    }
+
     /// 测试装配：计数/状态 Arc 全部归零或默认（start 与测试构造共用，避免重复）。
     #[cfg(test)]
     fn assemble(asr_tx: Sender<AsrRequest>, ocr_tx: Sender<OcrRequest>) -> Self {
@@ -477,6 +487,29 @@ mod tests {
         // Assert：Err 且超时计数 +1（正常应答路径不计数）
         assert!(result.is_err());
         assert_eq!(pool.rescore_timeout_count(), 1);
+    }
+
+    #[test]
+    fn drain_asr_backlog_replies_err_and_empties_queue() {
+        // Arrange：持活 receiver + 队列中 2 个待处理请求（REQ-267：worker 串行
+        // 慢机下调用方超时后积压——排空必须逐条回复 Err 而非滞留陈旧状态）
+        let (asr_tx, asr_rx) = mpsc::channel::<AsrRequest>();
+        let pool = EnginePool::with_asr_channel_and_rx(asr_tx, asr_rx);
+        let (r1, rr1) = mpsc::channel();
+        let (r2, rr2) = mpsc::channel();
+        pool.asr_tx
+            .send(AsrRequest::TranscribePcm { samples: vec![0.0f32], sample_rate: 16_000, reply: r1 })
+            .expect("send1");
+        pool.asr_tx
+            .send(AsrRequest::Transcribe { path: String::new(), reply: r2 })
+            .expect("send2");
+        // Act：排空
+        pool.drain_asr_backlog();
+        // Assert：两条积压请求即刻收到可诊断 Err；队列清空后再排为空操作
+        let e1 = rr1.recv_timeout(std::time::Duration::from_millis(200)).expect("reply1 应即时到达");
+        let e2 = rr2.recv_timeout(std::time::Duration::from_millis(200)).expect("reply2 应即时到达");
+        assert!(e1.is_err() && e2.is_err(), "积压请求应收到废弃 Err");
+        pool.drain_asr_backlog(); // 不 panic（空队列 no-op）
     }
 
     #[test]

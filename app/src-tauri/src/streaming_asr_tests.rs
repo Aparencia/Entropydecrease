@@ -62,12 +62,13 @@ fn silence_blocks_counter_counts_all_silent_blocks() {
     assert_eq!(blocks, 10);
 }
 
-// ── rule3 配置（ADR-012 F3-1）──
+// ── rule3 配置（ADR-012 F3-1；REQ-265 首轮标定定案 2026-09-05）──
 
 #[test]
-fn default_rule3_is_8_seconds() {
-    // 默认 8s（5s 过短致句中硬切，取证 ADR-012）
-    assert_eq!(StreamingAsrConfig::default().rule3_min_utterance_secs, 8.0);
+fn default_rule3_is_12_seconds_after_calibration() {
+    // REQ-265 首轮标定（弱参考 5 样本 5/5 一致改善 Δ≈0.029）：8s 硬切中长句
+    // 致句碎，12s 贴合自然语流——用户裁决（2026-09-05）默认 8s → 12s
+    assert_eq!(StreamingAsrConfig::default().rule3_min_utterance_secs, 12.0);
 }
 
 // ── 热词 tokens 过滤（2026-08-21：领域热词含 tokens 表外字 → 解码 abort）──
