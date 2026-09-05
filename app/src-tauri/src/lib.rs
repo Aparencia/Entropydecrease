@@ -56,6 +56,9 @@ mod commands_ai_enrich;
 // 记录/纯逻辑/命令层
 mod note_version;
 mod db_notes_versions;
+// REQ-287（v0.19.7）：笔记手动排序数据层（scope 独立表）
+mod db_note_orders;
+mod commands_note_orders;
 mod db_ai_usage;
 // v0.8.0 F2（2026-08-21）：AI 任务中心持久化——任务记录/结果恢复/保留策略
 mod db_ai_tasks;
@@ -539,6 +542,10 @@ pub fn run() {
             // v0.11.0（REQ-195~198）：笔记组——列表/详情/组内笔记/自建主题组/
             // 重命名/路由改判（修改即记忆）/移动笔记
             commands_groups::list_note_groups,
+            // REQ-287（v0.19.7）：笔记手动排序（scope=g{id}/none）
+            commands_note_orders::note_order_list,
+            commands_note_orders::note_order_save,
+            commands_note_orders::note_order_clear,
             commands_groups::get_note_group,
             commands_groups::list_group_notes,
             commands_groups::create_topic_group,

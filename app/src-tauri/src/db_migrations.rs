@@ -312,6 +312,18 @@ CREATE TABLE IF NOT EXISTS contracts (
         );
         ",
     )?;
+    // REQ-287（v0.19.7）：笔记手动排序表（scope=g{id} 组 / none 未分组；独立表
+    // 免改 notes 列与全库行映射涟漪——读写见 db_note_orders.rs）
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS note_orders (
+            scope TEXT NOT NULL,
+            note_id INTEGER NOT NULL,
+            ord INTEGER NOT NULL,
+            PRIMARY KEY (scope, note_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_note_orders_scope ON note_orders(scope, ord);
+        ",
+    )?;
     // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）
     ensure_column(conn, "sessions", "profile", "ALTER TABLE sessions ADD COLUMN profile TEXT")?;
     // v0.11.7（图文会话，ADR-020）：旧库迁移——sessions 表补 kind 列
