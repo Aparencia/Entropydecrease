@@ -174,11 +174,27 @@ pub fn stream_sse_content(
         .set("Authorization", &format!("Bearer {}", client.config.api_key.trim()))
         .send_string(&payload.to_string())
         .map_err(map_status)?;
-    let reader = BufReader::new(resp.into_reader());
+    let (content, usage_json, cancelled, completed) =
+        read_sse_lines(BufReader::new(resp.into_reader()), None, |d| emit(d));
+    Ok(StreamOutcome { content, usage_json, cancelled, completed })
+}
+
+/// 通用 SSE 读取内核（观察 2026-09-05-2：收敛与 stream_chat 高度同构的循环——
+/// 断流行 completed=false，调用方不得当成功；cancel 可选供聊天路径复用）。
+fn read_sse_lines(
+    reader: impl std::io::BufRead,
+    cancel: Option<&CancelFlag>,
+    mut on_delta: impl FnMut(&str),
+) -> (String, Option<String>, bool, bool) {
     let mut content = String::new();
     let mut usage_json: Option<String> = None;
+    let mut cancelled = false;
     let mut completed = false;
     for line in reader.lines() {
+        if cancel.is_some_and(|c| c.is_cancelled()) {
+            cancelled = true;
+            break;
+        }
         let line = match line {
             Ok(l) => l,
             Err(_) => break, // 传输中途断流：completed=false——调用方不得当成功
@@ -186,7 +202,7 @@ pub fn stream_sse_content(
         match parse_sse_line(&line) {
             SseEvent::Delta(d) => {
                 content.push_str(&d);
-                emit(&d);
+                on_delta(&d);
             }
             SseEvent::Done => {
                 completed = true;
@@ -199,7 +215,7 @@ pub fn stream_sse_content(
             }
         }
     }
-    Ok(StreamOutcome { content, usage_json, cancelled: false, completed })
+    (content, usage_json, cancelled, completed)
 }
 
 /// HTTP 状态 → AiClientError（与 post_completions 同归一口径——四下一致）。

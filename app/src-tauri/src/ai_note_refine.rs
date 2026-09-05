@@ -216,8 +216,6 @@ impl AiNoteRefineAdapter {
         dims: Option<&ResolvedDims>,
         mut on_section: impl FnMut(crate::ai_refine_protocol::AiRefineSection),
     ) -> Result<AiRefineResponse, AiClientError> {
-        use crate::ai_refine_protocol::parse_section_ndjson_line;
-
         let mut system = self.prompt.build_system(&request.profile, dims);
         system.push_str("\n\n");
         system.push_str(crate::ai_refine_protocol::NDJSON_SYSTEM_SUFFIX);
@@ -250,20 +248,21 @@ impl AiNoteRefineAdapter {
             &self.client,
             payload,
             |delta| {
-                pending.push_str(delta);
-                while let Some(pos) = pending.find('\n') {
-                    let line: String = pending.drain(..=pos).collect();
-                    if let Some(sec) = parse_section_ndjson_line(&line) {
-                        sections.push(sec.clone());
-                        on_section(sec);
-                    }
+                // 观察 2026-09-05-2：行缓冲收敛至 ndjson_feed 纯函数（可单测）
+                let before = sections.len();
+                crate::ndjson_feed::feed_ndjson(&mut pending, delta, &mut sections);
+                for sec in sections[before..].iter().cloned() {
+                    on_section(sec);
                 }
             },
         )?;
         // 末行无换行（SSE 结束前 flush）
-        if let Some(sec) = parse_section_ndjson_line(&pending) {
-            sections.push(sec.clone());
-            on_section(sec);
+        {
+            let before = sections.len();
+            crate::ndjson_feed::flush_ndjson(&mut pending, &mut sections);
+            for sec in sections[before..].iter().cloned() {
+                on_section(sec);
+            }
         }
         // B2（审查）：未收到 [DONE] 即断流——已累积节不可信（尾节可能丢失），
         // 整体视作失败走同拍非流式回退（禁止静默截断当成功）

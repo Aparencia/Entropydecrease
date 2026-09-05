@@ -348,6 +348,8 @@ mod media_state;
 mod note_filter;
 mod note_filter_ai;
 mod note_filter_discourse;
+// 观察 2026-09-05-2：NDJSON 流式喂入缓冲纯函数（审查收口）
+mod ndjson_feed;
 // v0.12.0 M1（ADR-021）：正文源多态——BodySource 判定 + OCR 精简过滤链
 mod note_body_source;
 mod note_filter_ocr;
