@@ -1,4 +1,4 @@
-﻿//! 熵减桌面应用入口（Tauri 装配层）。
+//! 熵减桌面应用入口（Tauri 装配层）。
 //!
 //! @ai-context: 本文件只做模块声明与应用装配（插件注册 / 状态初始化 / command 注册），
 //!              不含业务逻辑；业务自底向上分布：types → concat/db → asr/ocr → engine → commands。
@@ -244,6 +244,8 @@ mod follow_along_detect;
 mod formula_reconstruct;
 mod frame_cluster;
 mod frame_features;
+// REQ-281（v0.19.6）：画面停更监测（WGC watchdog 纯状态机）
+mod frame_liveness;
 // v0.7.0 M2（REQ-128）：前台时间线（前台切换事件落库 + 实践段标记）
 mod foreground_timeline;
 mod fusion;

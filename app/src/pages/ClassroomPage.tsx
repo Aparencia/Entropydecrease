@@ -72,6 +72,9 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   const [asrDegraded, setAsrDegraded] = useState<string | null>(null);
   // TD-2026-08-20-I 清偿：目标窗口丢失横幅（采集中画面源不可见提示）
   const [windowLost, setWindowLost] = useState(false);
+  // REQ-281（v0.19.6）：画面源停更提示（WGC 长时间无新帧——区别于窗口关闭；
+  // 恢复帧/停止采集自动清除；null=未停更）
+  const [frameStalledSecs, setFrameStalledSecs] = useState<number | null>(null);
   // P3：引擎预热状态（选窗口阶段后台加载；与 Rust PrepareStatus 契约一致）
   const [prepareState, setPrepareState] = useState<PrepareState>("idle");
   // v0.19.2：等待引擎就绪的启动过渡态（就绪/事件确认前不显示会话控件）
@@ -142,6 +145,10 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
       // TD-2026-08-20-I 清偿：目标窗口丢失提示（采集中画面源不可见的唯一信号；
       // 会话停止时清除）
       listen("live:window-lost", () => setWindowLost(true)),
+      // REQ-281（v0.19.6）：画面停更提示（帧恢复/停止时清除——不复原真实播放器
+      // 状态，仅提示画面源未出新帧；伴随 WGC 会话自愈重试）
+      listen<{ silentSecs: number }>("live:frame-stalled", (e) => setFrameStalledSecs(e.payload.silentSecs)),
+      listen("live:frame-recovered", () => setFrameStalledSecs(null)),
       // 修复（v0.3.0 审查反馈）：必须区分 payload——Rust 侧在 ASR 模型加载成功后
       // 才 emit "recording"（比 invoke resolve 晚 1-3s），旧实现无条件清态导致
       // 按钮变回"开始采集"而后端会话仍在跑，再点开始被拒绝
@@ -165,6 +172,7 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
           setStarting(false);
           setAsrDegraded(null);
           setWindowLost(false);
+          setFrameStalledSecs(null);
           setLivePaused(false);
         }
       }),
@@ -496,6 +504,13 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
             >
               知道了
             </button>
+          </div>
+        )}
+
+        {/* REQ-281（v0.19.6）：画面源停更轻提示（区别于窗口丢失；恢复帧自动消失） */}
+        {frameStalledSecs != null && (
+          <div style={{ padding: "6px 14px", background: "#eff6ff", borderBottom: "1px solid #bfdbfe", fontSize: 11, color: "#1d4ed8", display: "flex", alignItems: "center", gap: 8 }}>
+            🖼 画面源已 {frameStalledSecs}s 无新帧——可能播放器暂停渲染或窗口被遮挡（已自动重试；画面恢复即消失）
           </div>
         )}
 

@@ -120,7 +120,10 @@ pub fn capture_latest_only(
     epoch: Instant,
     latest_frame: &std::sync::Arc<std::sync::Mutex<Option<LatestCapturedFrame>>>,
     last_capture_error: &mut Option<Instant>,
+    // REQ-281（v0.19.6）：本拍是否取到新帧（停更监测输入；调用方先置 false）
+    got_frame: &mut bool,
 ) {
+    *got_frame = false;
     let Some(sampler) = screen else { return };
     // ADR-007：目标窗口关闭等捕获事件无论捕获结果如何都要转发（同 process_frame）
     match sampler.take_event() {
@@ -131,6 +134,7 @@ pub fn capture_latest_only(
     }
     match sampler.capture(None) {
         Ok(Some(frame)) => {
+            *got_frame = true;
             if let Ok(mut guard) = latest_frame.lock() {
                 *guard = Some(LatestCapturedFrame {
                     timestamp_ms: epoch.elapsed().as_millis() as u64,
@@ -195,11 +199,15 @@ pub fn process_frame(
     screen_tracker: &mut crate::screen_tracker::ScreenTracker,
     // v0.11.5（Task 2）：变化区域新颖度基准（独立于全量文本）+ 画面档（阈值自适应）
     last_changed_texts: &mut Vec<String>,
+    // REQ-281（v0.19.6）：本拍是否取到新帧（停更监测输入；调用方先置 false）
+    got_frame: &mut bool,
     tier: &str,
 ) {
+    *got_frame = false;
     let Some(sampler) = screen else { return };
     // 字幕区裁剪决策由 M2/REQ-037 RoiTracker 给出（播放区域 + ROI；首帧扫描期全帧）
     let capture_result = sampler.capture(None);
+    *got_frame = matches!(&capture_result, Ok(Some(_)));
     // ADR-007：目标窗口关闭等捕获事件无论捕获结果如何都要转发——
     // 窗口关闭瞬间若 GDI 捕获也失败，事件不得被吞掉（审查发现）
     match sampler.take_event() {

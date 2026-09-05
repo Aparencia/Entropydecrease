@@ -9,7 +9,7 @@
 //!              （行数豁免登记拆分计划，TD-033 实施时执行）；本文件只保留采样器编排。
 
 use windows::Win32::Foundation::{HWND, RECT};
-use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, IsIconic, IsWindowVisible};
 
 use super::dxgi_state::{point_in_output, window_center, DxgiState};
 use super::frame_diff::{crop_frame, Rect};
@@ -121,6 +121,47 @@ impl ScreenCaptureSampler {
     /// 取走待上报事件（worker 每次捕获后调用；无事件返回 None）。
     pub fn take_event(&mut self) -> Option<CaptureEvent> {
         self.pending_event.take()
+    }
+
+    // ── REQ-281（v0.19.6）：帧心跳与 WGC 自愈辅助 ──
+
+    /// 目标窗口是否可见且非最小化（watchdog 判停依据——业界口径：暂停只看
+    /// 最小化/不可见，失焦不停；全屏捕获无目标窗口视为恒可见）。
+    pub fn target_visible(&self) -> bool {
+        let Some(hwnd) = self.hwnd else { return true };
+        unsafe { IsWindowVisible(hwnd).as_bool() && !IsIconic(hwnd).as_bool() }
+    }
+
+    /// WGC 会话自愈：仅主路径（WGC）重建；重建失败降级 DXGI/GDI（与既有
+    /// capture() 错误路径同语义）。返回是否仍处于 WGC 主路径。
+    ///
+    /// @ai-context: WGC 内容驱动出帧，静默失活（会话未报错但不再有新帧）无
+    ///              错误信号可捕——watchdog 按"可见且长时间无帧"触发本方法。
+    pub fn revive_wgc(&mut self) -> bool {
+        if self.backend != CaptureBackend::Wgc {
+            return false;
+        }
+        let Some(hwnd) = self.hwnd else { return false };
+        match WgcState::create(hwnd) {
+            Ok(state) => {
+                eprintln!("[ScreenCapture] WGC 已重建（REQ-281 watchdog）");
+                self.wgc = Some(state);
+                true
+            }
+            Err(e) => {
+                // 重建失败（窗口最小化/遮挡等）→ 一次性降级 DXGI（沿用既有
+                // 降级语义；DXGI 周期重建逻辑保留，WGC 不回切——YAGNI）
+                eprintln!("[ScreenCapture] WGC 重建失败，降级 DXGI（REQ-281）: {}", e);
+                self.wgc = None;
+                self.dxgi = DxgiState::create(self.hwnd).ok();
+                self.backend = if self.dxgi.is_some() {
+                    CaptureBackend::Dxgi
+                } else {
+                    CaptureBackend::Gdi
+                };
+                false
+            }
+        }
     }
 
     /// 刷新目标窗口矩形（ADR-007）：窗口移动/缩放/分辨率变化后裁剪跟随；

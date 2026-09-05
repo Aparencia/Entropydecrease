@@ -41,6 +41,94 @@ pub struct LatestCapturedFrame {
     pub height: u32,
 }
 
+// ── REQ-281（v0.19.6）：帧心跳 / 停更提示事件载荷 ──
+
+/// live:frame-heartbeat 载荷（诊断观测：后端/帧到达/静默秒数/目标可见性）。
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct FrameHeartbeatPayload {
+    backend: String,
+    got_frame: bool,
+    silent_secs: u64,
+    visible: bool,
+}
+
+/// live:frame-stalled 载荷（停更秒数——前端提示语）。
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct FrameStalledPayload {
+    silent_secs: u64,
+}
+
+/// REQ-281 停更监测副作用执行点（真实采样拍后调用一次）：
+///
+/// @ai-context: 判定语义（frame_liveness 纯状态机）：仅 WGC 窗口捕获模式判停
+///              （DXGI 无帧=桌面无变化属正常，不重建不提示）；目标不可见时
+///              清提示不动作（最小化/遮挡另有既有 window-lost/用户感知路径）。
+///              心跳每 2s 一报（含后端名/帧到达/静默秒数/可见性——真机复现
+///              诊断与停更提示共用同一信号源）。
+#[allow(clippy::too_many_arguments)]
+fn liveness_check(
+    app: &tauri::AppHandle,
+    mut screen: Option<&mut ScreenCaptureSampler>,
+    liveness: &mut crate::frame_liveness::FrameLiveness,
+    got_frame: bool,
+    now: Instant,
+) {
+    let backend = screen
+        .as_ref()
+        .map(|s| s.backend_name().to_string())
+        .unwrap_or_else(|| "none".to_string());
+    let visible = screen.as_ref().is_none_or(|s| s.target_visible());
+    let silent_secs = liveness.stall_secs(now).unwrap_or(0);
+
+    // 心跳（独立于停更判定——诊断观测恒可用）
+    if liveness.heartbeat_due(now) {
+        liveness.mark_heartbeat(now);
+        let _ = app.emit(
+            "live:frame-heartbeat",
+            FrameHeartbeatPayload {
+                backend: backend.clone(),
+                got_frame,
+                silent_secs,
+                visible,
+            },
+        );
+    }
+
+    // 非 WGC/无窗口：无"停更"语义（DXGI 超时=桌面无变化）；残留提示清掉
+    if backend != "wgc" || !visible {
+        if liveness.stalled {
+            liveness.clear_stalled();
+            let _ = app.emit("live:frame-recovered", ());
+        }
+        return;
+    }
+
+    liveness.observe(now, got_frame);
+    if liveness.recover_edge(got_frame) {
+        liveness.clear_stalled();
+        let _ = app.emit("live:frame-recovered", ());
+        return;
+    }
+    if liveness.stall_edge(now) {
+        liveness.mark_stalled();
+        let _ = app.emit(
+            "live:frame-stalled",
+            FrameStalledPayload {
+                silent_secs: liveness.stall_secs(now).unwrap_or(0),
+            },
+        );
+    }
+    // 停更且到重建节流窗口 → WGC 会话自愈（用户复现=视频在动画面停更）
+    if !got_frame && liveness.recreate_due(now) {
+        if let Some(s) = screen.as_mut() {
+            s.revive_wgc();
+        }
+        liveness.mark_recreate(now);
+    }
+}
+
 /// 屏幕采样线程入口（TD-026 修复：OCR 从会话线程移出，音频消费不再被阻塞）。
 ///
 /// @ai-context: ScreenCaptureSampler 持 COM 对象（非 Send），在本线程内创建与使用，
@@ -150,6 +238,10 @@ pub fn run_screen_worker(
     // v0.11.5（Task 2）：变化区域新颖度基准（独立于全量文本——比较域解耦）
     let mut last_changed_texts: Vec<String> = Vec::new();
     let mut stats = ScreenStats::default();
+    // REQ-281（v0.19.6）：停更监测状态 + 本拍帧到达标记（每次采样调用前由
+    // process_frame/capture_latest_only 内部清零，无需手动重置）
+    let mut liveness = crate::frame_liveness::FrameLiveness::new();
+    let mut got_frame = false;
     // M2/REQ-037：动态字幕区域跟踪（播放区域检测 + ROI 锁定/重扫；尺寸首帧自适应）
     let mut roi_tracker = crate::region_tracker::RoiTracker::new(0, 0);
     // M6/REQ-051：关键帧样本缓冲（全帧分支收集，停止时投票产出关键图候选）
@@ -210,6 +302,7 @@ pub fn run_screen_worker(
                         comp_epoch,
                         &latest_frame,
                         &mut last_capture_error,
+                        &mut got_frame,
                     );
                     if last_player_check_at.elapsed() >= Duration::from_secs(5) {
                         last_player_check_at = Instant::now();
@@ -326,8 +419,11 @@ pub fn run_screen_worker(
                     &mut image_store, &ui_junk, &mut screen_tracker,
                     // v0.11.5（Task 2）：变化区域基准 + 生效画面档（None=未定档→medium 默认）
                     &mut last_changed_texts,
+                    &mut got_frame,
                     tier_applied_tier.map(|t| t.as_str()).unwrap_or("medium"),
                 );
+                // REQ-281（v0.19.6）：停更监测 + WGC watchdog + 帧心跳（真实采样拍）
+                liveness_check(&app, screen.as_mut(), &mut liveness, got_frame, Instant::now());
                 // v0.11.5（Task 6）：OCR 文本累计（去重→领域检测用）
                 // v0.11.5 审查修复（A6）：FIFO 上限 50→100——领域检测信号缓存
                 // 保守放大，避免 B站选集证据（`P3/12`/`第3集/共12集`）在
