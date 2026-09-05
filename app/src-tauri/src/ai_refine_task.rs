@@ -511,6 +511,10 @@ pub(crate) fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usiz
                 let req = &reqs[idx];
                 let mut outcome: Option<String> = None;
                 for attempt in 0..=SLICE_RETRY {
+                    // REQ-290（v0.19.6）埋点先行：单片耗时归因——任务级 elapsed_ms
+                    // 已有（db_ai_tasks），此处补片级时间（非流式阶段只有总耗时；
+                    // 流式上线后同点补首 delta 时刻，见批次设计 §2.8 ③）。
+                    let started = std::time::Instant::now();
                     let resp = if mock {
                         Ok(mock_adapter.refine(req))
                     } else if ctx.vision_images.is_empty() {
@@ -521,8 +525,13 @@ pub(crate) fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usiz
                             .refine_vision(req, ctx.vision_images, Some(dims))
                             .map_err(AiTaskFailure::from)
                     };
+                    let elapsed_ms = started.elapsed().as_millis();
                     match resp {
                         Ok(r) => {
+                            eprintln!(
+                                "[refine-task] task={} 片 {}/{} attempt={} ok elapsed_ms={}",
+                                task_id, idx + 1, total, attempt + 1, elapsed_ms
+                            );
                             // REQ-230：成功片记录轨迹（提示词/回答全文——任务对话视图）
                             turns
                                 .lock()
@@ -537,10 +546,10 @@ pub(crate) fn refine_slices_concurrent(ctx: RefineCtx<'_>) -> (Vec<String>, usiz
                             break;
                         }
                         Err(e) if attempt < SLICE_RETRY => {
-                            eprintln!("[refine-task] task={} 片 {} 第{}次失败，重试: {}", task_id, idx + 1, attempt + 1, e.message());
+                            eprintln!("[refine-task] task={} 片 {} 第{}次失败 elapsed_ms={}，重试: {}", task_id, idx + 1, attempt + 1, elapsed_ms, e.message());
                         }
                         Err(e) => {
-                            eprintln!("[refine-task] task={} 片 {} 重试后仍失败（保留已成功片）: {}", task_id, idx + 1, e.message());
+                            eprintln!("[refine-task] task={} 片 {} 重试后仍失败 elapsed_ms={}（保留已成功片）: {}", task_id, idx + 1, elapsed_ms, e.message());
                             break;
                         }
                     }
