@@ -181,7 +181,10 @@ fn session31_video_page_junk_single_char_and_correction() {
 /// 会话29 实证：直播 UI 不进画面要点（回归——v0.7.3 LiveUi 口径持续生效）。
 #[test]
 fn session29_live_ui_excluded_from_points() {
-    // Arrange：直播互动按钮 + 直播间正文
+    // Arrange：直播互动按钮 + 直播间正文。须带 asr 段激活视频画面要点路径——
+    // v0.12.0 正文源多态后，无 asr 的纯块输入走 OcrDirect（图文链路语义，
+    // 垃圾/水印过滤在采集端），断言视频路径需有语音段（TD-2026-08-30-B 根因）
+    let segments = vec![asr(1, 0, 2_000, "直播开始前的暖场讲解内容句子足够长")];
     let blocks = vec![
         block(1_000, "1人正在看", 0.9),
         block(1_000, "发送", 0.9),
@@ -190,7 +193,7 @@ fn session29_live_ui_excluded_from_points() {
         block(1_000, "直播间的朋友们大家好", 0.9),
     ];
     // Act
-    let result = run("测试", &[], &blocks);
+    let result = run("测试", &segments, &blocks);
     let all: String = result.ocr_points.join("\n");
     // Assert：互动按钮全滤；直播间正文（含"直播"词内）不误杀
     for junk_word in ["1人正在看", "发送", "下载", "预约"] {

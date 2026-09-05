@@ -156,7 +156,10 @@ fn ui_junk_fallback_filtered() {
 
 #[test]
 fn ocr_points_exclude_watermark_junk_and_dupes() {
-    // Arrange：水印"学习资料"每帧出现（7 帧跨 60s+，内容在变）；UI 垃圾块；重复块
+    // Arrange：水印"学习资料"每帧出现（7 帧跨 60s+，内容在变）；UI 垃圾块；重复块。
+    // 带占位 asr 段激活视频画面要点路径（v0.12.0 后无 asr 纯块走 OcrDirect——
+    // 该路径 ocr_points 恒空且净化链极简，TD-2026-08-30-B 根因）
+    let segments = vec![asr(1, 0, 2_000, "课程开场的暖场讲解内容句子足够长一些")];
     let mut blocks: Vec<SessionOcrBlock> = Vec::new();
     for i in 0..7 {
         blocks.push(block(i * 10_000, "学习资料", 0.9));
@@ -167,7 +170,7 @@ fn ocr_points_exclude_watermark_junk_and_dupes() {
     blocks.push(block(90_000, "牛顿第二定律", 0.9));
     blocks.push(block(100_000, "噪声", 0.3));
     // Act
-    let result = run("测试", &[], &blocks);
+    let result = run("测试", &segments, &blocks);
     // Assert：水印/UI 垃圾/低分/重复全排除，正文保留
     assert!(result.ocr_points.iter().any(|p| p.contains("牛顿第二定律")));
     assert!(!result.ocr_points.iter().any(|p| p.contains("学习资料")));
