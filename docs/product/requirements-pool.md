@@ -496,7 +496,7 @@
 ### v0.19.6 · 用户反馈批一：焦点采集/标题内容化/拖拽修复/精修埋点（2026-09-05 裁决立项）
 
 > 依据：用户 2026-09-05 反馈批 9 项逐项讨论裁决（第 8 项执行型智能体立项另文规划，建议 v0.21 系列；其余切 v0.19.6~8）；
-> 设计：[2026-09-05-v0.19-feedback-batch-design.md（[ ] 已归档）](../superpowers/specs/2026-09-05-v0.19-feedback-batch-design.md) ＋ [2026-09-05-goal-execution-agent-design.md（[ ] 已归档）](../superpowers/specs/2026-09-05-goal-execution-agent-design.md)；
+> 设计：[2026-09-05-v0.19-feedback-batch-design.md](../superpowers/specs/2026-09-05-v0.19-feedback-batch-design.md) ＋ [2026-09-05-goal-execution-agent-design.md](../superpowers/specs/2026-09-05-goal-execution-agent-design.md)；
 > 排期：v0.19.6（2.1 帧心跳/watchdog · 2.4 拖拽修复 · 2.2A 标题零 AI 层 · 2.8 埋点先行）→ v0.19.7（2.3 开关入弹层 · 2.5 挂体系轻建 · 2.6 列表交互重构 · 2.8 流式+预算）→ v0.19.8（2.2B AI 标题建议 · 2.7 体系 D1/D2）。
 
 | REQ | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
