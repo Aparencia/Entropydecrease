@@ -249,21 +249,43 @@ pub fn second_pass_list(
 }
 
 /// 裁决单条草稿（采纳/回退；双向可翻转——原料表永不变）。
+///
+/// @ai-context: 采纳即采集混淆画像（REQ-269）：旧文本 vs 采纳精修文本的词级
+///              差异进 asr_confusion 画像（JSON 校准）——用户裁决=有标注参考。
 #[tauri::command]
 pub fn second_pass_decide(
     app: AppHandle,
     state: State<'_, AppState>,
+    session_id: i64,
     draft_id: i64,
     adopt: bool,
 ) -> Result<(), String> {
-    if draft_id <= 0 {
-        return Err("draftId 非法".to_string());
+    if session_id <= 0 || draft_id <= 0 {
+        return Err("参数非法".to_string());
     }
     let status = if adopt { STATUS_ADOPTED } else { STATUS_REJECTED };
     state
         .db
         .decide_refine_draft(draft_id, status)
         .map_err(|e| format!("裁决失败: {e}"))?;
+    // REQ-269 采集：采纳时把（旧文→新文）词级差异记入混淆画像（失败仅日志——
+    // 画像为质量增强层，不影响裁决主链路）
+    if adopt {
+        let drafts = state
+            .db
+            .list_refine_drafts(session_id, ORIGIN_SECOND_PASS, Some(STATUS_ADOPTED))
+            .map_err(|e| format!("读取草稿失败: {e}"))?;
+        if let Some(d) = drafts.iter().find(|x| x.id == draft_id) {
+            if let Ok(mut store) = state.asr_confusion.lock() {
+                store.record_adoption(&d.base_text, &d.refined_text);
+                if let Err(e) = store.save(&state.asr_confusion_path) {
+                    eprintln!("[AsrConfusion] 采纳画像落盘失败: {e}");
+                }
+            } else {
+                eprintln!("[AsrConfusion] 混淆表锁中毒，跳过本次画像采集");
+            }
+        }
+    }
     // 会话域变更广播：详情/预览面即时可见采纳结果
     crate::notify::emit_changed(&app, crate::notify::DataDomain::Sessions);
     Ok(())

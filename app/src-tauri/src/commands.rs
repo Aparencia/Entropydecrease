@@ -192,6 +192,11 @@ pub struct AppState {
     pub second_pass_jobs: std::sync::Arc<
         std::sync::Mutex<std::collections::HashMap<i64, crate::commands_asr_pass2::Pass2Job>>,
     >,
+    /// v0.20.2（REQ-269）：ASR 混淆画像闭环（采纳流采集 → 候选确认制 → 共现纠错；
+    /// 锁内 read-modify-write，持久化见 asr_confusion_path）
+    pub asr_confusion: std::sync::Arc<std::sync::Mutex<crate::asr_confusion::AsrConfusionStore>>,
+    /// v0.20.2（REQ-269）：ASR 混淆表 JSON 路径（应用数据目录 asr_confusion.json）
+    pub asr_confusion_path: std::path::PathBuf,
 }
 
 /// 枚举可捕获的窗口/进程（课堂助手目标窗口选择，含推荐评分）。

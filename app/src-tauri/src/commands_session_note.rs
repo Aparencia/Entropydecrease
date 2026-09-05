@@ -186,6 +186,8 @@ fn convert_to_note(
     id: i64,
     title: Option<String>,
     ai_decisions: Option<Vec<TextFilterDecision>>,
+    // v0.20.2（REQ-269）：已确认 ASR 混淆纠错规则（产物文本共现纠错层）
+    asr_rules: &[crate::asr_confusion::AsrRule],
 ) -> Result<Note, String> {
     // v0.11.0：取草稿同时拿 analysis（章节/术语——结构密度路由信号，免二次分析）
     let (mut result, analysis) =
@@ -195,8 +197,17 @@ fn convert_to_note(
     }
     // v0.11.0（REQ-197）：容器侧组化——系列课程组/结构密度路由；组化失败
     // 不阻断转笔记主链路（笔记先落库，group_id=None 诚实降级）
+    let mut corpus: Option<String> = None;
     let group_id = match load_note_material(db, id) {
         Ok((session, segments, ocr_blocks)) => {
+            corpus = Some(
+                segments
+                    .iter()
+                    .map(|s| s.text.trim())
+                    .filter(|t| !t.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            );
             match crate::note_group_assign::resolve_group_for_session(
                 db, &session, &analysis, &segments, &ocr_blocks,
             ) {
@@ -212,6 +223,13 @@ fn convert_to_note(
             None
         }
     };
+    // v0.20.2（REQ-269）：ASR 混淆纠错应用（共现才替换——正确词须已在语料出现；
+    // 语料=会话有效段全文，原料段表永不变，只作用于产物正文）
+    if !asr_rules.is_empty() {
+        let text = result.markdown.clone();
+        let corpus_text = corpus.unwrap_or_default();
+        result.markdown = crate::asr_confusion::apply_rules(&text, &corpus_text, asr_rules);
+    }
     let new = NewNote {
         title: result.title.clone(),
         content: result.markdown.clone(),
@@ -242,6 +260,13 @@ pub async fn session_to_note(
     let state: AppState = (*state).clone();
     // REQ-278：spawn_blocking 移入 state 前先克隆 AppHandle（闭包 move 后不再可借）
     let app = state.app.clone();
+    // v0.20.2（REQ-269）：混淆规则在命令边界克隆（锁不跨 await/线程）
+    let asr_rules = state
+        .asr_confusion
+        .lock()
+        .map_err(|_| "混淆表锁中毒".to_string())?
+        .rules
+        .clone();
     let inner = tauri::async_runtime::spawn_blocking(move || {
         convert_to_note(
             &state.db,
@@ -255,6 +280,7 @@ pub async fn session_to_note(
             id,
             title,
             ai_decisions,
+            &asr_rules,
         )
     })
     .await
@@ -277,6 +303,18 @@ pub fn run_batch_conversion(
     env: &PurifyEnv,
     data_dir: &std::path::Path,
     ids: Vec<i64>,
+) -> Result<BatchNoteResult, String> {
+    run_batch_conversion_inner(db, ui_junk, env, data_dir, ids, &[])
+}
+
+/// 批量转换内部（命令入口注入 REQ-269 混淆规则；外壳保持测试/既有签名兼容）。
+fn run_batch_conversion_inner(
+    db: &Db,
+    ui_junk: &UiJunkList,
+    env: &PurifyEnv,
+    data_dir: &std::path::Path,
+    ids: Vec<i64>,
+    asr_rules: &[crate::asr_confusion::AsrRule],
 ) -> Result<BatchNoteResult, String> {
     if ids.len() > 50 {
         return Err("批量转换上限 50 条".to_string());
@@ -308,7 +346,7 @@ pub fn run_batch_conversion(
                     });
                     continue;
                 }
-                match convert_to_note(db, ui_junk, env, data_dir, id, None, None) {
+                match convert_to_note(db, ui_junk, env, data_dir, id, None, None, asr_rules) {
                     Ok(note) => converted.push(ConvertedNote { session_id: id, note_id: note.id }),
                     Err(reason) => skipped.push(SkippedNote { session_id: id, reason }),
                 }
@@ -335,8 +373,14 @@ pub async fn batch_session_to_note(
     let state: AppState = (*state).clone();
     // REQ-278：spawn_blocking 移入 state 前先克隆 AppHandle（闭包 move 后不再可借）
     let app = state.app.clone();
+    let asr_rules = state
+        .asr_confusion
+        .lock()
+        .map_err(|_| "混淆表锁中毒".to_string())?
+        .rules
+        .clone();
     let inner = tauri::async_runtime::spawn_blocking(move || {
-        run_batch_conversion(
+        run_batch_conversion_inner(
             &state.db,
             &state.ui_junk,
             &PurifyEnv {
@@ -346,6 +390,7 @@ pub async fn batch_session_to_note(
             },
             &state.data_dir,
             ids,
+            &asr_rules,
         )
     })
     .await
@@ -398,6 +443,22 @@ pub async fn preview_session_note(
         crate::note_filter::refresh_screen_points(&mut result);
         // v0.7.6（REQ-177/178）：结构渲染（与 convert_to_note 同函数同口径）
         apply_note_structure(&mut result, &state.db, &session, &segments, &ocr_blocks, &env);
+        // v0.20.2（REQ-269）：ASR 混淆纠错预览同口径（共现语料=有效段全文+正文）
+        let rules = state
+            .asr_confusion
+            .lock()
+            .map(|s| s.rules.clone())
+            .unwrap_or_default();
+        if !rules.is_empty() {
+            let corpus = segments
+                .iter()
+                .map(|s| s.text.trim())
+                .filter(|t| !t.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let text = result.markdown.clone();
+            result.markdown = crate::asr_confusion::apply_rules(&text, &corpus, &rules);
+        }
         Ok(result)
     })
     .await

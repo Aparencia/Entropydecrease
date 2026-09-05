@@ -98,6 +98,12 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
     let profile_memory = std::sync::Arc::new(std::sync::Mutex::new(
         crate::video_profile::ProfileMemory::load(&profile_memory_path),
     ));
+    // v0.20.2（REQ-269）：ASR 混淆画像闭环表（采纳流采集/候选确认制；
+    // asr_confusion.json 可校准——缺失走默认、损坏回退默认，同 ui_junk 先例）
+    let asr_confusion_path = data_dir.join("asr_confusion.json");
+    let asr_confusion = std::sync::Arc::new(std::sync::Mutex::new(
+        crate::asr_confusion::AsrConfusionStore::load(&asr_confusion_path),
+    ));
     // v0.5.0 M8（REQ-055）：补缝式 AI 护栏骨架（配额/缓存/审计；云端 V1.0 生效）
     let ai_guardrails =
         std::sync::Arc::new(std::sync::Mutex::new(crate::ai_guardrails::AiGuardrails::default()));
@@ -290,6 +296,9 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         float_ui: std::sync::Arc::new(std::sync::Mutex::new(crate::commands_window::FloatUi::default())),
         // v0.20.2（REQ-268）：会话第二遍离线精修运行注册表（默认空）
         second_pass_jobs: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        // v0.20.2（REQ-269）：ASR 混淆画像闭环表（内存态单点 + JSON 校准路径）
+        asr_confusion,
+        asr_confusion_path,
     });
     // v0.12.3（P2-10）：浮窗预创建常驻（隐藏）——打开秒显、点击期零建窗风险；
     // 失败幂等回落为打开时懒创建（open_capture_float 内部兜底）。

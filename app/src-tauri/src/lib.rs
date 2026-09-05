@@ -72,6 +72,7 @@ mod ai_chat_client;
 mod commands_ai_chat;
 mod asr;
 mod asr_clean;
+mod asr_confusion;
 mod asr_dedupe;
 mod asr_health;
 mod asr_merge;
@@ -153,6 +154,8 @@ mod commands_ai_providers;
 mod commands_analysis;
 mod commands_artifacts;
 mod commands_audio;
+mod commands_asr_confusion;
+mod commands_asr_pass2;
 // v0.7.0 M1（REQ-107，TRUST-1）：备份/恢复 command（数据目录 zip 打包/解压）
 mod commands_backup;
 mod commands_device;
@@ -166,7 +169,6 @@ mod commands_refine_inner;
 mod commands_session;
 // v0.7.6 审查硬拆：会话 → 笔记转换管线（原料装载/结构渲染/单条转换/批量编排/预览）
 mod commands_session_note;
-mod commands_asr_pass2;
 // v0.11.5（spec 8️⃣）：会话详情术语表——词汇表移出笔记后直供前端展示
 mod commands_session_glossary;
 // v0.7.7（REQ-182/183/184）：结构图命令层——批量捕获/手动框选/列表/删除
@@ -917,6 +919,11 @@ pub fn run() {
             commands_asr_pass2::second_pass_cancel,
             commands_asr_pass2::second_pass_list,
             commands_asr_pass2::second_pass_decide,
+            // v0.20.2（REQ-269）：ASR 混淆画像闭环——候选/确认/忽略/规则管理
+            commands_asr_confusion::asr_confusion_get,
+            commands_asr_confusion::asr_confusion_confirm,
+            commands_asr_confusion::asr_confusion_dismiss,
+            commands_asr_confusion::asr_confusion_remove_rule,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
