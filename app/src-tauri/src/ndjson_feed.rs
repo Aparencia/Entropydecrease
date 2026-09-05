@@ -42,15 +42,19 @@ mod tests {
     fn chunk_split_across_lines_accumulates() {
         let mut pending = String::new();
         let mut sink = Vec::new();
-        // 第 1 个对象被切成两半 + 第 2 个对象完整
-        feed_ndjson(&mut pending, r#"{"heading":"节A","blocks":[]}"#, &mut sink);
+        // 第 1 个对象被切成两半（半个 JSON 分两次到达），第 2 个对象随后完整到达
+        feed_ndjson(&mut pending, r#"{"heading":"节A","b"#, &mut sink);
+        assert_eq!(sink.len(), 0, "对象残缺未换行前不解析");
+        feed_ndjson(&mut pending, r#"locks":[]}"#, &mut sink);
         feed_ndjson(&mut pending, "\n", &mut sink);
+        assert_eq!(sink.len(), 1, "首行补全 + 换行后才解析");
         feed_ndjson(&mut pending, r#"{"heading":"节B","blocks":[]}"#, &mut sink);
-        assert_eq!(sink.len(), 0, "首行未换行前不解析");
+        assert_eq!(sink.len(), 1, "第二节未换行前不解析");
         feed_ndjson(&mut pending, "\n", &mut sink);
         assert_eq!(sink.len(), 2);
         assert_eq!(sink[0], sec("节A"));
         assert_eq!(sink[1], sec("节B"));
+        assert!(pending.is_empty());
     }
 
     #[test]
@@ -59,11 +63,12 @@ mod tests {
         let mut sink = Vec::new();
         feed_ndjson(&mut pending, "{\"heading\":\"A\",\"blocks\":[]}\r\n{\"heading\":\"B\",\"blocks\":[]}\n", &mut sink);
         assert_eq!(sink.len(), 2, "CRLF 尾部 \\r 应被 trim 忽略");
-        // 末行无换行 + 尾随解释文本 → flush 只取可解析对象
-        feed_ndjson(&mut pending, "{\"heading\":\"C\",\"blocks\":[]}", &mut sink);
+        // 末行 C 带换行到达（正常解析）；随后无换行的尾随解释文本 → flush 忽略垃圾
+        feed_ndjson(&mut pending, "{\"heading\":\"C\",\"blocks\":[]}\n", &mut sink);
+        assert_eq!(sink.len(), 3);
         feed_ndjson(&mut pending, "（以上为整理结果）", &mut sink);
         flush_ndjson(&mut pending, &mut sink);
-        assert_eq!(sink.len(), 3);
+        assert_eq!(sink.len(), 3, "垃圾尾串不产出伪节");
         assert_eq!(sink[2], sec("C"));
         assert!(pending.is_empty());
     }

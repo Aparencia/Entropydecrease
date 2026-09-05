@@ -12,8 +12,8 @@
 
 /// 平台尾缀品牌（v0.19.2 评分表同源白名单；只收"标题固定无内容"的平台）。
 const BRAND_SUFFIXES: &[&str] = &["抖音", "douyin", "Douyin", "抖音短视频", "快手", "kuaishou"];
-/// 品牌前分隔符（含空格变体）。
-const BRAND_SEPARATORS: &[&str] = &[" - ", "-", "｜", "|", "_"];
+/// 品牌前分隔符（含空格变体——实测窗口标题 "视频 | 快手" 半角竖线带空格）。
+const BRAND_SEPARATORS: &[&str] = &[" - ", " | ", "-", "｜", "|", "_"];
 
 /// 剥离平台尾缀：仅当标题以「分隔符+品牌」结尾时剥除（`视频名 - 抖音` →
 /// `视频名`；标题恰为「抖音」时原样返回——去重层负责加序号）。
@@ -130,8 +130,10 @@ mod tests {
 
     #[test]
     fn dedupe_ignores_unrelated_prefixes() {
-        // 「抖音官方账号」不应被当作已用序号
-        assert_eq!(dedupe_title(&s(&["抖音官方账号", "抖音极速版"]), "抖音"), "抖音 #2");
+        // 「抖音官方账号/抖音极速版」≠ base「抖音」——无关前缀不占号，
+        // base 空闲 → 原样返回（契约：仅"恰好等于 base"才触发编号）
+        assert_eq!(dedupe_title(&s(&["抖音官方账号", "抖音极速版"]), "抖音"), "抖音");
+        assert_eq!(dedupe_title(&s(&["抖音", "抖音官方账号"]), "抖音"), "抖音 #2");
     }
 
     #[test]
@@ -145,7 +147,8 @@ mod tests {
 
     #[test]
     fn first_line_truncates_long_text_at_40() {
-        let long = "这是一段非常非常非常非常非常非常非常非常非常长的开场白句子用来测试标题截断逻辑";
+        // 输入必须 >40 字才会触发截断（旧测试 39 字 < 上限——断言必败的测试缺陷）
+        let long = "这是一段非常非常非常非常非常非常非常非常非常非常非常长的开场白句子用来测试标题截断逻辑";
         let out = first_line_title(std::iter::once(long)).unwrap();
         assert!(out.chars().count() == TITLE_MAX_CHARS + 1); // 40 + '…'
         assert!(out.ends_with('…'));

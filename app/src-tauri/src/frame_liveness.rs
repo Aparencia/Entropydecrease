@@ -131,9 +131,12 @@ mod tests {
     fn fresh_samples_clear_stall_and_recover_edges() {
         let now = t0();
         let mut lv = FrameLiveness::new();
-        // 连续无帧 → 5s 进入停更边沿；恢复新帧 → recover 边沿 + 停更清零
+        // 连续无帧（采样频率保持新鲜窗口内）→ 5s 进入停更边沿；恢复新帧 →
+        // recover 边沿 + 停更清零。判停时刻必须在 SAMPLE_FRESH_MS 内有采样
         lv.observe(now, false);
         lv.observe(now + Duration::from_millis(500), false);
+        lv.observe(now + Duration::from_secs(3), false);
+        lv.observe(now + Duration::from_secs(5), false); // 维持新鲜度（距判停 ≤1.5s）
         let stalled_at = now + Duration::from_secs(6);
         assert!(lv.stall_edge(stalled_at), "≥5s 无帧应触发停更边沿");
         assert_eq!(lv.stall_secs(stalled_at), Some(6));
@@ -165,10 +168,15 @@ mod tests {
         let mut lv = FrameLiveness::new();
         lv.observe(now, false);
         lv.observe(now + Duration::from_secs(1), false);
+        lv.observe(now + Duration::from_secs(5), false); // 维持新鲜度
         let due = now + Duration::from_secs(6);
         assert!(lv.recreate_due(due));
         lv.mark_recreate(due);
+        // 节流窗内：保持采样新鲜，重建仍被 30s 最小间隔挡住
+        lv.observe(due + Duration::from_secs(9), false);
         assert!(!lv.recreate_due(due + Duration::from_secs(10)), "30s 节流内不重复重建");
+        // 节流窗外：到期且新鲜 → 允许重建
+        lv.observe(due + Duration::from_secs(30), false);
         assert!(lv.recreate_due(due + RECREATE_MIN_INTERVAL + Duration::from_secs(1)));
     }
 
