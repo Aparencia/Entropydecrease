@@ -32,6 +32,8 @@ import NoteReadingView from "../components/NoteReadingView";
 import ImagePreviewOverlay from "../components/ImagePreviewOverlay";
 import VersionPanel from "../components/VersionPanel";
 import NoteAiDialog from "../components/NoteAiDialog";
+// v0.20.3（REQ-302）：笔记段 → 模型卡草稿对话框
+import ModelCardFromNoteDialog from "../components/ModelCardFromNoteDialog";
 import NoteLinkToSystem from "../components/NoteLinkToSystem";
 // v0.16.1：阅读头「移动到组」显式手动分组入口（拖拽/ⓘ 之外的可发现路径）
 import NoteMoveToGroupMenu from "../components/NoteMoveToGroupMenu";
@@ -71,6 +73,8 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
   const [review, setReview] = useState<{ groupId: number | null; name: string } | undefined>(undefined);
   // v0.20.3（REQ-293）：行动中心（✅ 全量入口——组侧栏底部按钮打开）
   const [actionOpen, setActionOpen] = useState(false);
+  // v0.20.3（REQ-302）：笔记段 → 模型卡草稿对话框
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const [selected, setSelected] = useState<Note | null>(null);
   const [status, setStatus] = useState("");
   // v0.19.1：阅读态命中词搜索请求（来自引用跳转；key 递增可重触发）
@@ -555,6 +559,18 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
                 >
                   🤖 AI
                 </button>
+                {/* v0.20.3（REQ-302）：笔记段 → 模型卡草稿（组内 model 卡唯一生成链） */}
+                <button
+                  data-testid="note-model-card-entry"
+                  onClick={() => setModelDialogOpen(true)}
+                  title="把本条笔记提炼为模型卡草稿（需已归组）"
+                  style={{
+                    padding: "3px 8px", cursor: "pointer", fontSize: 11, borderRadius: 6,
+                    border: "1px solid #d1fae5", background: "#ecfdf5", color: "#047857",
+                  }}
+                >
+                  🧠 模型卡
+                </button>
               </>
             }
             onEdit={() => setEditing(true)}
@@ -579,6 +595,16 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
           noteContent={aiContent}
           onClose={() => setAiDialogOpen(false)}
           onUpdated={() => void handleNoteChanged()}
+        />
+      )}
+      {/* v0.20.3（REQ-302）：模型卡草稿（组内 model 卡唯一生成链，防双轨） */}
+      {modelDialogOpen && selected && (
+        <ModelCardFromNoteDialog
+          key={`mc-${selected.id}`}
+          noteId={selected.id}
+          noteTitle={selected.title}
+          onClose={() => setModelDialogOpen(false)}
+          onCreated={() => { void handleNoteChanged(); }}
         />
       )}
       {/* v0.10.1：图片放大预览（ESC/点击遮罩关闭——与编辑退出 ESC 互斥） */}

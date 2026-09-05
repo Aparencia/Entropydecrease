@@ -966,6 +966,8 @@ pub fn run() {
             commands_after::question_list,
             commands_after::question_answer,
             commands_after::question_set_status,
+            // v0.20.3（REQ-302）：笔记段 → 模型卡草稿（复用既有 inner 防双轨）
+            commands_knowledge_cards::model_card_from_note,
             // v0.20.2（REQ-269）：ASR 混淆画像闭环——候选/确认/忽略/规则管理
             commands_asr_confusion::asr_confusion_get,
             commands_asr_confusion::asr_confusion_confirm,

@@ -132,3 +132,39 @@ pub(crate) fn list_group_cards_inner(
 #[cfg(test)]
 #[path = "commands_knowledge_cards_tests.rs"]
 mod tests;
+
+/// 笔记段 → 模型卡草稿接线（v0.20.3 / REQ-302，核心处理 γ M 行）。
+///
+/// @ai-context: 防双轨核对（REQ-302 前置）：model 卡唯一生成路径 =
+///              create_model_card_inner（本文件，幂等同组同 front）——本命令
+///              复用同一 inner，只是把「来源笔记段摘录」作为初始定义草稿载入
+///              （应用案例留空——用户到卡编辑完善）；与既有「model 卡纳入
+///              体系」（promote_card_to_concept 升格链）不重复。
+/// @ai-context: 组=唯一容器——笔记需已归组（无组笔记引导先归组，防孤儿卡）。
+#[tauri::command]
+pub fn model_card_from_note(
+    state: State<'_, AppState>,
+    note_id: i64,
+    name: String,
+    excerpt: Option<String>,
+) -> Result<Flashcard, String> {
+    let note = state
+        .db
+        .get_note(note_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "笔记不存在".to_string())?;
+    let group_id = note
+        .group_id
+        .ok_or_else(|| "笔记未归组——请先把笔记归入组（组是唯一容器），或直接用组卡列表入口创建".to_string())?;
+    // 摘录仅作文本载入（200 字护栏）；不做内容推断
+    let excerpt = match excerpt {
+        Some(t) => {
+            let t = t.trim().to_string();
+            let cut: String = t.chars().take(200).collect();
+            if t.chars().count() > 200 { format!("{}…", cut) } else { cut }
+        }
+        None => String::new(),
+    };
+    let essence = if excerpt.is_empty() { None } else { Some(excerpt) };
+    create_model_card_inner(&state.db, group_id, name, essence, None, None)
+}
