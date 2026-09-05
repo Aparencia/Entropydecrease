@@ -44,7 +44,7 @@ fn save_and_reload_persists() {
     let dir = std::env::temp_dir().join("ff_save_test");
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("flags.json");
-    let flags = FeatureFlags { feed_capture: true, kb_discovery: true };
+    let flags = FeatureFlags { feed_capture: true, kb_discovery: true, sealed_tags_visible: true };
     // Act
     flags.save(&path).expect("save");
     let loaded = FeatureFlags::load(&path);

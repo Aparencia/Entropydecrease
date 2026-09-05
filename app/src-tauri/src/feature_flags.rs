@@ -19,11 +19,14 @@ pub struct FeatureFlags {
     /// 与跨体系相似概念提示；默认关（ADR-029：建议制·默认关延续；本地命中
     /// 片段检索本身恒可用，不受本开关约束）
     pub kb_discovery: bool,
+    /// v0.20.3（REQ-301）：SE 情绪 tag（#树洞 类）默认排除后的显隐开关——
+    /// 列表/视图默认不可见（设置可显）；默认关=保持排除
+    pub sealed_tags_visible: bool,
 }
 
 impl Default for FeatureFlags {
     fn default() -> Self {
-        Self { feed_capture: true, kb_discovery: false }
+        Self { feed_capture: true, kb_discovery: false, sealed_tags_visible: false }
     }
 }
 
@@ -53,6 +56,7 @@ impl FeatureFlags {
         match name {
             "feed_capture" => Some(self.feed_capture),
             "kb_discovery" => Some(self.kb_discovery),
+            "sealed_tags_visible" => Some(self.sealed_tags_visible),
             _ => None,
         }
     }
@@ -66,6 +70,10 @@ impl FeatureFlags {
             }
             "kb_discovery" => {
                 self.kb_discovery = value;
+                true
+            }
+            "sealed_tags_visible" => {
+                self.sealed_tags_visible = value;
                 true
             }
             _ => false,

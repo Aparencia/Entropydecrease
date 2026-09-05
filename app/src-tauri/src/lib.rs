@@ -79,6 +79,9 @@ mod db_completion;
 mod commands_tasks;
 mod db_sop;
 mod commands_sop;
+mod db_practice;
+mod db_questions;
+mod commands_after;
 mod asr_clean;
 mod asr_confusion;
 mod asr_dedupe;
@@ -952,6 +955,17 @@ pub fn run() {
             commands_sop::sop_run_finish,
             commands_sop::sop_run_list,
             commands_sop::sop_revision_suggestions,
+            // v0.20.3（REQ-294/295/299/300）：收尾命令族——批决议/迁出/练习/问题
+            commands_after::batch_weekly_resolve,
+            commands_after::export_write_todotxt_file,
+            commands_after::export_manual_fill_done,
+            commands_after::practice_create,
+            commands_after::practice_list,
+            commands_after::practice_tick,
+            commands_after::question_create,
+            commands_after::question_list,
+            commands_after::question_answer,
+            commands_after::question_set_status,
             // v0.20.2（REQ-269）：ASR 混淆画像闭环——候选/确认/忽略/规则管理
             commands_asr_confusion::asr_confusion_get,
             commands_asr_confusion::asr_confusion_confirm,

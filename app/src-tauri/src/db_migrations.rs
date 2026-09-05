@@ -509,6 +509,9 @@ CREATE TABLE IF NOT EXISTS contracts (
     crate::db_completion::init(conn)?;
     // v0.20.3（REQ-296/297）：SOP 功能区三表（模板行范围引用/run/步骤轨迹）
     crate::db_sop::init(conn)?;
+    // v0.20.3（REQ-299/300）：练习条目 + 问题清单（Me 问题化）
+    crate::db_practice::init(conn)?;
+    crate::db_questions::init(conn)?;
     Ok(())
 }
 
