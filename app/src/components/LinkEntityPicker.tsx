@@ -86,8 +86,19 @@ export default function LinkEntityPicker({
         value={query}
         onChange={(e) => { setQuery(e.target.value); setErr(""); }}
         onKeyDown={(e) => {
-          if (e.key === "Enter") void doCreate();
-          else if (e.key === "Escape") {
+          // 审查 D3：IME 中文组词回车（isComposing）不触发动作
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === "Enter") {
+            const name = query.trim();
+            if (!name || busy) return;
+            // 审查 D2：Enter=有命中选首项（spec §2.5），零命中才新建
+            if (visible.length > 0) {
+              onPick(visible[0].id);
+              setQuery("");
+            } else {
+              void doCreate();
+            }
+          } else if (e.key === "Escape") {
             if (query) setQuery("");
             else onClose?.();
           }
@@ -107,7 +118,6 @@ export default function LinkEntityPicker({
             data-testid={`note-link-row-${r.id}`}
             onClick={() => onPick(r.id)}
             style={rowBtn(selectedId === r.id)}
-            title={r.depth > 0 ? undefined : undefined}
           >
             <span style={{ display: "inline-block", width: r.depth * 12 }} />
             {selectedId === r.id ? "✓ " : ""}

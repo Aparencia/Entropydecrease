@@ -12,7 +12,7 @@
  * @ai-context: 反查已挂（list_links_by_target）、切换目标先撤旧链（幂等防堆
  *              积）、REQ-276 右缘钳制浮层均保持既有语义。
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   KnowledgeConcept, KnowledgeLink, KnowledgeModel, KnowledgeNode, KnowledgeSystem,
@@ -108,7 +108,12 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
     setNodes(ns); setConcepts(cs); setModels(ms);
   }, []);
 
+  // 审查 D4：体系切换代际守卫——轻建在途（await 列表重载）期间若用户切换
+  // 体系，旧代结果不得覆盖新体系选择/列表
+  const entityGenRef = useRef(0);
+
   useEffect(() => {
+    entityGenRef.current += 1;
     setEntityId(null);
     void loadEntities(effectiveSystemId);
   }, [effectiveSystemId, loadEntities]);
@@ -164,6 +169,7 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
   // 留空，详情回体系页既有对话框补全；模型学科占位「未分类」可后改）
   const createEntity = useCallback(async (name: string, anchorId: number | null) => {
     if (effectiveSystemId == null) throw new Error("请先选择体系");
+    const gen = entityGenRef.current;
     let id: number;
     if (entityType === "node") {
       const n = await invoke<KnowledgeNode>("add_knowledge_node", {
@@ -176,14 +182,19 @@ export default function NoteLinkToSystem({ noteId, onChanged }: Props) {
       });
       id = c.id;
     } else {
+      // 审查 D1：Rust 契约 disciplines:String=JSON 数组字符串（normalize_disciplines
+      // 只认 JSON 数组）——裸串必拒；同 KnowledgeSampleView JSON.stringify 范式
       const m = await invoke<KnowledgeModel>("add_knowledge_model", {
-        systemId: effectiveSystemId, name, disciplines: "未分类",
+        systemId: effectiveSystemId, name, disciplines: JSON.stringify(["未分类"]),
         claim: null, validWhen: null, invalidWhen: null,
       });
       id = m.id;
     }
     await loadEntities(effectiveSystemId); // 列表重载（新增即见）
-    setEntityId(id); // 即建即选——确认挂接一步收尾
+    // 审查 D4：代际一致才回填选择（期间切体系则丢弃本次回填）
+    if (entityGenRef.current === gen) {
+      setEntityId(id); // 即建即选——确认挂接一步收尾
+    }
   }, [effectiveSystemId, entityType, loadEntities]);
 
   const nodeRows = useMemo(() => flattenNodeRows(nodes), [nodes]);
