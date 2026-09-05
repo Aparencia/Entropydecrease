@@ -201,7 +201,8 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
       }),
       // 2026-08 A1：暂停/恢复事件（硬暂停状态驱动按钮组与徽标）
       listen("live:paused", () => setLivePaused(true)),
-      listen("live:resumed", () => setLivePaused(false)),
+      // 审查（A 区 F5 相关）：手动/自动恢复事件一并清除媒体暂停徽标——防残留
+      listen("live:resumed", () => { setLivePaused(false); setMediaPaused(false); }),
       // 模型自动下载进度（ADR-003）
       listen<DownloadProgress>("model:download-progress", (e) => setModelProgress(e.payload)),
       listen<boolean>("model:download-done", () => {

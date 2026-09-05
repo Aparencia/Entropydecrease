@@ -136,6 +136,30 @@ fn media_sound_recent(slot: &Arc<Mutex<Option<Instant>>>) -> bool {
     last.is_some_and(|t| t.elapsed().as_millis() as u64 <= crate::media_state::SOUND_RECENT_MS)
 }
 
+/// 审查 F3：自动暂停期 watchdog 探针（无提示无心跳——暂停语义下停更提示无
+/// 意义；仅做观测 + WGC 自愈）。防复合卡死：暂停期间 WGC 会话失活（REQ-281
+/// 原场景）→ 恢复检测读不到新帧 → 永久卡自动暂停；此处探针周期性复活会话。
+fn watchdog_paused_probe(
+    mut screen: Option<&mut ScreenCaptureSampler>,
+    liveness: &mut crate::frame_liveness::FrameLiveness,
+    got_frame: bool,
+    now: Instant,
+) {
+    let Some(_) = screen.as_mut() else { return };
+    liveness.observe(now, got_frame);
+    let wgc = screen.as_ref().is_some_and(|s| s.backend_name() == "wgc");
+    let visible = screen.as_ref().is_none_or(|s| s.target_visible());
+    if !wgc || !visible || got_frame {
+        return;
+    }
+    if liveness.recreate_due(now) {
+        if let Some(s) = screen.as_mut() {
+            s.revive_wgc();
+        }
+        liveness.mark_recreate(now);
+    }
+}
+
 /// 屏幕采样线程入口（TD-026 修复：OCR 从会话线程移出，音频消费不再被阻塞）。
 ///
 /// @ai-context: ScreenCaptureSampler 持 COM 对象（非 Send），在本线程内创建与使用，
@@ -318,6 +342,14 @@ pub fn run_screen_worker(
                         &mut last_capture_error,
                         &mut got_frame,
                     );
+                    // 审查 F3：暂停期 watchdog 探针（无提示）——WGC 会话失活时
+                    // 恢复检测永远读不到新帧 → 自动暂停永久卡死；此处定期自愈
+                    watchdog_paused_probe(
+                        screen.as_mut(),
+                        &mut liveness,
+                        got_frame,
+                        Instant::now(),
+                    );
                     // REQ-291 快恢复（主通道）：声画任一恢复 ≤~1.5s 解除自动暂停
                     // （OCR 5s 判定降级为辅助——保留其后兜底）
                     if last_media_tick.elapsed() >= Duration::from_secs(1) {
@@ -405,21 +437,33 @@ pub fn run_screen_worker(
                 last_media_tick.duration_since(t) <= Duration::from_millis(1500)
             });
             let decision = media_detector.tick(sound_recent, motion_recent);
-            if decision == crate::media_state::MediaDecision::Suspend {
-                let ms = comp_epoch.elapsed().as_millis() as u64;
-                pause.paused.store(true, Ordering::SeqCst);
-                auto_paused = true;
-                crate::player_behavior::record_action(
-                    &crate::player_behavior::PlayerAction {
-                        kind: crate::player_behavior::PlayerActionKind::Pause,
-                        value: None,
-                    },
-                    ms,
-                    session_id,
-                    &db,
-                );
-                let _ = app.emit("live:media-paused", ());
-                eprintln!("[ScreenWorker] 随播随停：声画双通道确认视频暂停 → 自动暂停捕获");
+            match decision {
+                crate::media_state::MediaDecision::Suspend => {
+                    let ms = comp_epoch.elapsed().as_millis() as u64;
+                    pause.paused.store(true, Ordering::SeqCst);
+                    auto_paused = true;
+                    crate::player_behavior::record_action(
+                        &crate::player_behavior::PlayerAction {
+                            kind: crate::player_behavior::PlayerActionKind::Pause,
+                            value: None,
+                        },
+                        ms,
+                        session_id,
+                        &db,
+                    );
+                    let _ = app.emit("live:media-paused", ());
+                    eprintln!("[ScreenWorker] 随播随停：声画双通道确认视频暂停 → 自动暂停捕获");
+                }
+                // 审查 F1：手动恢复（pause=false）后媒体相位为 Paused 的主路径拍——
+                // 声画恢复产出 Resume，必须同步清 auto_paused（否则后续手动暂停
+                // 被误当自动暂停走轻量轮询并在 1-2s 内被声通道自动解除）
+                crate::media_state::MediaDecision::Resume => {
+                    if auto_paused {
+                        auto_paused = false;
+                        eprintln!("[ScreenWorker] 随播随停：主路径恢复 → 清除自动暂停标记");
+                    }
+                }
+                crate::media_state::MediaDecision::None => {}
             }
         }
         // M4：每 2s 采样 CPU 负载（降级标志变化打印——静默失败可见化）
@@ -743,9 +787,11 @@ pub fn run_screen_worker(
                                 session_id,
                                 &db,
                             );
-                            if paused {
+                            if paused && !pause.paused.load(Ordering::SeqCst) {
                                 // P2：检测到视频暂停 → 自动暂停捕获（共享标志；
-                                // 下一轮循环进入轻量轮询，恢复检测不中断）
+                                // 下一轮循环进入轻量轮询，恢复检测不中断）。
+                                // 审查 F5：已由媒体通道暂停（pause=true）时不重复
+                                // 记账/发事件（同迭代双系统重复 Pause）
                                 pause.paused.store(true, Ordering::SeqCst);
                                 auto_paused = true;
                                 let _ = app.emit("live:media-paused", ());

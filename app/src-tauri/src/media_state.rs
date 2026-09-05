@@ -12,9 +12,10 @@
 //! @ai-context: 判定粒度=屏幕采样拍（1s）；音频槽只记"最后有声时刻"。标称
 //!              停检 ~2 拍、恢复 ≤~1.5s，阈值与滞回一次真机 A/B 标定（验收项）。
 
-/// 疑似暂停所需连续"无声且无画面动"拍数（采样拍≈1s）。
-pub const SUSPECT_AFTER_TICKS: u32 = 1;
-/// 确认暂停所需连续拍数（suspect 后再一拍无证即确认——总 ~2s）。
+/// 疑似暂停所需连续"无声且无画面动"拍数（采样拍≈1s；审查 F4：1 拍过锐，
+/// 静音+静止的真实讲解停顿 2-4s 即误停——标定前置为 2，总确认 ~3-4s）。
+pub const SUSPECT_AFTER_TICKS: u32 = 2;
+/// 确认暂停所需连续拍数（suspect 后一拍无证即确认）。
 pub const PAUSE_CONFIRM_TICKS: u32 = 1;
 /// "有任何声音"的 RMS 阈值（区别于 VAD 语音阈值 0.005——音乐/环境声也算；
 /// 需真机标定，验收项）。
@@ -59,7 +60,7 @@ impl MediaDetector {
     ///
     /// 规则（与设计 §2.10 一致）：
     /// - Playing：有声或画面动 → 计数清零；无声且无动 → silent_ticks++，
-    ///   ≥ SUSPECT_AFTER_TICKS 进入 Suspect；静音但有画面动=无音轨视频，
+    ///   ≥ SUSPECT_AFTER_TICKS(2) 进入 Suspect；静音但有画面动=无音轨视频，
     ///   计数清零不升（撤销路径同样在 Suspect 态生效）。
     /// - Suspect：声或画任一恢复 → 回 Playing（撤销）；仍双静默且
     ///   ≥ PAUSE_CONFIRM_TICKS → Paused（产出 Suspend）。
@@ -134,9 +135,10 @@ mod tests {
     }
 
     #[test]
-    fn silent_still_two_ticks_confirms_suspend() {
+    fn silent_still_three_ticks_confirms_suspend() {
         let mut m = MediaDetector::new();
-        // 拍 1：无声无动 → suspect；拍 2：仍无声无动 → Suspend
+        // 拍 1-2：无声无动 → suspect（第 2 拍）；拍 3：仍无声无动 → Suspend
+        assert_eq!(m.tick(false, false), MediaDecision::None);
         assert_eq!(m.tick(false, false), MediaDecision::None);
         assert_eq!(m.phase, MediaPhase::Suspect);
         assert_eq!(m.tick(false, false), MediaDecision::Suspend);
@@ -146,11 +148,14 @@ mod tests {
     #[test]
     fn suspect_revoked_by_brief_motion_then_reconfirms() {
         let mut m = MediaDetector::new();
+        assert_eq!(m.tick(false, false), MediaDecision::None);
         assert_eq!(m.tick(false, false), MediaDecision::None); // suspect
+        assert_eq!(m.phase, MediaPhase::Suspect);
         // 缓冲动画一拍 → 撤销回 playing
         assert_eq!(m.tick(false, true), MediaDecision::None);
         assert_eq!(m.phase, MediaPhase::Playing);
-        // 再两拍静默 → 正常确认暂停
+        // 再三段静默 → 正常确认暂停
+        assert_eq!(m.tick(false, false), MediaDecision::None);
         assert_eq!(m.tick(false, false), MediaDecision::None);
         assert_eq!(m.tick(false, false), MediaDecision::Suspend);
     }
@@ -159,11 +164,13 @@ mod tests {
     fn paused_resumes_on_either_channel() {
         let mut m = MediaDetector::new();
         assert_eq!(m.tick(false, false), MediaDecision::None);
+        assert_eq!(m.tick(false, false), MediaDecision::None);
         assert_eq!(m.tick(false, false), MediaDecision::Suspend);
         // 画面恢复（用户点播放瞬间帧到）
         assert_eq!(m.tick(false, true), MediaDecision::Resume);
         assert_eq!(m.phase, MediaPhase::Playing);
         // 再停再走，声音恢复路径
+        assert_eq!(m.tick(false, false), MediaDecision::None);
         assert_eq!(m.tick(false, false), MediaDecision::None);
         assert_eq!(m.tick(false, false), MediaDecision::Suspend);
         assert_eq!(m.tick(true, false), MediaDecision::Resume);
