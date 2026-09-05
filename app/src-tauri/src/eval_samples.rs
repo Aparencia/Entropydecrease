@@ -39,9 +39,10 @@ pub fn parse_srt(text: &str) -> Vec<SrtCue> {
         if block.trim().is_empty() {
             continue;
         }
-        // 块内解析：首行数字=序号（可缺失）；含 "-->" 的时间轴行一律跳过；
-        // 其余行按行序推入（同块多行合并为一条 cue，保持行序）
+        // 块内解析：首行数字=序号（可缺失，用计数）；含 "-->" 的时间轴行跳过；
+        // 内容行**块内累积**、块末一次性推入——防两块同序号时跨块误并文本
         let mut block_idx = index_counter;
+        let mut lines: Vec<&str> = Vec::new();
         for (pos, line) in block.lines().enumerate() {
             let t = line.trim();
             if t.is_empty() {
@@ -56,23 +57,14 @@ pub fn parse_srt(text: &str) -> Vec<SrtCue> {
             if t.contains("-->") {
                 continue;
             }
-            push_content_line(&mut cues, block_idx, t);
+            lines.push(t);
+        }
+        if !lines.is_empty() {
+            cues.push(SrtCue { index: block_idx, text: lines.join("") });
         }
         index_counter += 1;
     }
     cues
-}
-
-fn push_content_line(cues: &mut Vec<SrtCue>, idx: u32, line: &str) {
-    let line = line.trim();
-    if line.is_empty() {
-        return;
-    }
-    match cues.last_mut() {
-        // 同序号多行 → 拼接为一条 cue 文本（保持行序）
-        Some(last) if last.index == idx => last.text.push_str(line),
-        _ => cues.push(SrtCue { index: idx, text: line.to_string() }),
-    }
 }
 
 /// cue 集合 → 参考文本（纯函数）：按序号排序后拼接。

@@ -14,14 +14,24 @@
 
 use crate::asr_rescore::strip_punct;
 
+/// CER 单侧长度上限（字符）：levenshtein 为 O(n×m) 时间（滚动行内存安全），
+/// 超长文本（≥20k 字 ≈ 半小时以上口播）在工具路径会消耗分钟级 CPU——
+/// 审查修复（2026-09-05）：超限诚实返回 None（不可比），由调用方决定跳过；
+/// 画像侧更严护栏见 eval_confusion（2000）。harness 样本段级测量不受影响。
+const CER_MAX_CHARS: usize = 20_000;
+
 /// CER 计算（纯函数）：编辑距离 / 参考字符数。
 ///
 /// @ai-context: 返回 0.0~1.0+（插入错误可使 CER >1，如实反映退化）；参考文本
-///              为空 → None（无法计算——诚实表达，不返回假 0）。
+///              为空 → None（无法计算——诚实表达，不返回假 0）；任一侧超
+///              CER_MAX_CHARS → None（时间成本护栏，诚实不可比）。
 pub fn cer(reference: &str, hypothesis: &str) -> Option<f32> {
     let ref_chars: Vec<char> = strip_punct(reference);
     let hyp_chars: Vec<char> = strip_punct(hypothesis);
     if ref_chars.is_empty() {
+        return None;
+    }
+    if ref_chars.len() > CER_MAX_CHARS || hyp_chars.len() > CER_MAX_CHARS {
         return None;
     }
     let dist = crate::asr_rescore::levenshtein(
@@ -78,6 +88,14 @@ mod tests {
         // 参考文本空 → 无法计算（诚实 None，不返回假 0）
         assert_eq!(cer("", "有内容"), None);
         assert_eq!(cer("  ", "有内容"), None);
+    }
+
+    #[test]
+    fn cer_overlong_side_is_none_guard() {
+        // 超长护栏（审查修复）：任一侧超 20k 字 → None（O(n×m) 时间成本诚实不可比）
+        let long = "字".repeat(CER_MAX_CHARS + 1);
+        assert_eq!(cer(&long, "短"), None);
+        assert_eq!(cer("短", &long), None);
     }
 
     #[test]

@@ -169,6 +169,9 @@ fn main() -> ExitCode {
         }
         print!("{}. ", s.name);
     }
+    if !rows.is_empty() {
+        println!();
+    }
 
     // ── 汇总渲染 ──
     out.push_str(&render_rows(&rows));
