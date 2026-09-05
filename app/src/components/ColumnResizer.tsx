@@ -20,18 +20,22 @@ interface Props {
 export default function ColumnResizer({ side = "right", onResize, onReset }: Props) {
   const [hover, setHover] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const startXRef = useRef(0);
+  // REQ-285（v0.19.6）：上次事件 x——move 传**相邻增量**而非距起点累计位移。
+  // @ai-context: useColumnLayout.resizeBy 为增量语义（cur + delta）；旧实现每次
+  //              move 都传全程距离（clientX - startX）导致重复累加 =「拖拽加速」。
+  const lastXRef = useRef(0);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
-    startXRef.current = e.clientX;
+    lastXRef.current = e.clientX;
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* 旧 WebView 无捕获——move 仍走元素事件 */ }
     setDragging(true);
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragging) return;
-    const dx = e.clientX - startXRef.current;
+    const dx = e.clientX - lastXRef.current;
+    lastXRef.current = e.clientX;
     onResize(side === "right" ? dx : -dx);
   };
 
@@ -41,17 +45,31 @@ export default function ColumnResizer({ side = "right", onResize, onReset }: Pro
     setDragging(false);
   };
 
+  // REQ-285（v0.19.6）：键盘可达性（§2.9 交互矩阵）——←/→ 步进 ±16px（Shift=±8px）。
+  // @ai-context: 与 pointer 拖拽同走 onResize 增量语义；夹取由 useColumnLayout 负责。
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const step = e.shiftKey ? 8 : 16;
+    const dx = e.key === "ArrowRight" ? step : -step;
+    onResize(side === "right" ? dx : -dx);
+  };
+
   return (
     <div
       data-testid="column-resizer"
+      role="separator"
+      aria-orientation="vertical"
+      tabIndex={0}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
+      onKeyDown={onKeyDown}
       onPointerEnter={() => setHover(true)}
       onPointerLeave={() => setHover(false)}
       onDoubleClick={() => onReset?.()}
-      title="拖拽调整宽度（双击恢复默认）"
+      title="拖拽调整宽度（←/→ 微调；双击恢复默认）"
       style={{
         width: 5,
         flexShrink: 0,
