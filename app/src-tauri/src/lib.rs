@@ -340,6 +340,8 @@ mod log_redact;
 mod model_downloader;
 // v0.7.0 M3（REQ-131）：模型版本管理与磁盘占用（可查可回退）
 mod model_registry;
+// REQ-291（v0.19.7）：视频随播随停——声画双通道检测纯状态机
+mod media_state;
 mod note_filter;
 mod note_filter_ai;
 mod note_filter_discourse;

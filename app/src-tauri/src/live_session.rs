@@ -252,6 +252,8 @@ pub(crate) fn run_session_after_engine(
     let mut asr_segments: Vec<crate::types::TranscriptSegment> = Vec::new();
     let subtitle_segments: Arc<Mutex<Vec<SubtitleSegment>>> = Arc::new(Mutex::new(Vec::new()));
     let speech_active = Arc::new(AtomicBool::new(false));
+    // REQ-291（v0.19.7）：媒体级"最后有声时刻"共享戳（音频线程写/屏幕线程读）
+    let media_sound: Arc<Mutex<Option<std::time::Instant>>> = Arc::new(Mutex::new(None));
     // M4/REQ-068（S4）：实时链路音频落盘（WAV PCM16；创建失败降级不阻断）
     let mut audio_writer = crate::audio_store::SessionAudioWriter::create(
         &params.data_dir.join("session-audio"),
@@ -286,6 +288,8 @@ pub(crate) fn run_session_after_engine(
         let foreground_monitor = crate::foreground_timeline::ForegroundMonitor::new(params.hwnd);
         // 2026-08 A1：屏幕 worker 共享暂停状态（暂停跳过采样；恢复后时间戳补偿）
         let worker_pause = pause.clone();
+        // REQ-291（v0.19.7）：媒体级声音戳（worker 随播随停检测读取）
+        let worker_media_sound = media_sound.clone();
         // v0.7.2（REQ-151）：会话信息聚合（worker 播放器 OCR 写入）
         let worker_session_info = session_info.clone();
         // v0.9.0 M2（REQ-189）：画面档降档确认共享状态（前端确认后写入，
@@ -317,6 +321,8 @@ pub(crate) fn run_session_after_engine(
                     foreground_monitor,
                     // 2026-08 A1：暂停共享状态
                     worker_pause,
+                    // REQ-291（v0.19.7）：媒体级声音戳（随播随停检测输入）
+                    worker_media_sound,
                     // v0.7.2（REQ-151）：会话信息聚合（播放器 OCR 写入）
                     worker_session_info,
                     // v0.9.0 M2（REQ-189）：画面档降档确认共享状态
@@ -356,6 +362,8 @@ pub(crate) fn run_session_after_engine(
         vad_slot: Some(params.vad_slot.as_ref()),
         // 2026-08 A1：暂停共享状态（主循环做边沿断句/事件/落库）
         pause: &pause,
+        // REQ-291（v0.19.7）：媒体级声音戳（音频线程每块写"最后有声时刻"）
+        media_sound,
     };
     run_audio_loop(rx, audio, loop_ctx, &params.data_dir);
 

@@ -51,6 +51,10 @@ pub(crate) struct LiveLoopCtx<'a> {
     pub session_id: i64,
     pub asr_segments: &'a mut Vec<TranscriptSegment>,
     pub speech_active: Arc<AtomicBool>,
+    /// REQ-291（v0.19.7）：媒体级"最后有声时刻"戳（Arc<Mutex<Option<Instant>>>——
+    /// 音频线程每块写、屏幕线程拍级读；区别于 speech_active（VAD 语音级）——
+    /// 判定"有任何声音"（含音乐/环境声），随播随停双通道之一）
+    pub media_sound: Arc<std::sync::Mutex<Option<Instant>>>,
     pub asr_engine: &'a mut StreamingAsrEngine,
     pub audio_writer: &'a mut Option<crate::audio_store::SessionAudioWriter>,
     /// REQ-115：VAD 阈值共享槽（诊断可查；None=无槽注入——测试路径）
@@ -235,6 +239,13 @@ pub(crate) fn run_audio_loop(
                 let silent = raw_rms < vad_threshold;
                 // B3：语音活跃度共享（屏幕 worker 自适应采样依据）
                 ctx.speech_active.store(!silent, Ordering::Relaxed);
+                // REQ-291（v0.19.7）：媒体级"任何声音"戳（阈值低于 VAD 语音级——
+                // 音乐/环境声也算；屏幕 worker 随播随停检测读取，见 media_state.rs）
+                if raw_rms >= crate::media_state::MEDIA_AUDIO_ACTIVE_RMS {
+                    if let Ok(mut g) = ctx.media_sound.lock() {
+                        *g = Some(Instant::now());
+                    }
+                }
                 // REQ-108（v0.7.0 M1.5）：长静音事件——连续静音 ≥3s 落库
                 // （章节检测真实信号；与 analysis LONG_SILENCE_GAP_MS 同口径）
                 if silent {

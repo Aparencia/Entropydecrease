@@ -75,6 +75,8 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   // REQ-281（v0.19.6）：画面源停更提示（WGC 长时间无新帧——区别于窗口关闭；
   // 恢复帧/停止采集自动清除；null=未停更）
   const [frameStalledSecs, setFrameStalledSecs] = useState<number | null>(null);
+  // REQ-291（v0.19.7）：随播随停徽标——视频暂停 → 采集自动暂停（区别于手动暂停）
+  const [mediaPaused, setMediaPaused] = useState(false);
   // P3：引擎预热状态（选窗口阶段后台加载；与 Rust PrepareStatus 契约一致）
   const [prepareState, setPrepareState] = useState<PrepareState>("idle");
   // v0.19.2：等待引擎就绪的启动过渡态（就绪/事件确认前不显示会话控件）
@@ -149,6 +151,9 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
       // 状态，仅提示画面源未出新帧；伴随 WGC 会话自愈重试）
       listen<{ silentSecs: number }>("live:frame-stalled", (e) => setFrameStalledSecs(e.payload.silentSecs)),
       listen("live:frame-recovered", () => setFrameStalledSecs(null)),
+      // REQ-291（v0.19.7）：随播随停——视频暂停/恢复自动跟随（徽标随事件显隐）
+      listen("live:media-paused", () => setMediaPaused(true)),
+      listen("live:media-resumed", () => setMediaPaused(false)),
       // 修复（v0.3.0 审查反馈）：必须区分 payload——Rust 侧在 ASR 模型加载成功后
       // 才 emit "recording"（比 invoke resolve 晚 1-3s），旧实现无条件清态导致
       // 按钮变回"开始采集"而后端会话仍在跑，再点开始被拒绝
@@ -173,6 +178,7 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
           setAsrDegraded(null);
           setWindowLost(false);
           setFrameStalledSecs(null);
+          setMediaPaused(false);
           setLivePaused(false);
         }
       }),
@@ -511,6 +517,13 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
         {frameStalledSecs != null && (
           <div style={{ padding: "6px 14px", background: "#eff6ff", borderBottom: "1px solid #bfdbfe", fontSize: 11, color: "#1d4ed8", display: "flex", alignItems: "center", gap: 8 }}>
             🖼 画面源已 {frameStalledSecs}s 无新帧——可能播放器暂停渲染或窗口被遮挡（已自动重试；画面恢复即消失）
+          </div>
+        )}
+
+        {/* REQ-291（v0.19.7）：随播随停徽标——视频暂停采集自动跟随（非手动暂停） */}
+        {mediaPaused && (
+          <div style={{ padding: "6px 14px", background: "#ecfdf5", borderBottom: "1px solid #a7f3d0", fontSize: 11, color: "#047857", display: "flex", alignItems: "center", gap: 8 }}>
+            ⏸ 已随视频暂停——采集同步暂停（画面/声音恢复即自动继续）
           </div>
         )}
 

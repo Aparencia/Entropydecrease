@@ -129,6 +129,13 @@ fn liveness_check(
     }
 }
 
+/// REQ-291：媒体级"最近有声"判定（窗口=SOUND_RECENT_MS ≥ 采样拍 1s——
+/// 保证一拍内出现的声音必被读到；锁中毒按无声处理，零阻断）。
+fn media_sound_recent(slot: &Arc<Mutex<Option<Instant>>>) -> bool {
+    let last = slot.lock().ok().and_then(|g| *g);
+    last.is_some_and(|t| t.elapsed().as_millis() as u64 <= crate::media_state::SOUND_RECENT_MS)
+}
+
 /// 屏幕采样线程入口（TD-026 修复：OCR 从会话线程移出，音频消费不再被阻塞）。
 ///
 /// @ai-context: ScreenCaptureSampler 持 COM 对象（非 Send），在本线程内创建与使用，
@@ -159,6 +166,8 @@ pub fn run_screen_worker(
     mut foreground_monitor: crate::foreground_timeline::ForegroundMonitor,
     // 2026-08 A1：会话暂停共享状态（暂停跳过采样；恢复后时间戳补偿暂停时长）
     pause: crate::capture::audio_loopback::SessionPause,
+    // REQ-291（v0.19.7）：媒体级"最后有声时刻"戳（音频线程写；随播随停输入）
+    media_sound: Arc<Mutex<Option<Instant>>>,
     // v0.7.2（REQ-151）：会话信息聚合（播放器 OCR 文本 → 平台/时长/合集信息面板）
     session_info: crate::session_info::SessionInfoCollector,
     // v0.9.0 M2（REQ-189）：画面档降档确认共享状态（前端确认后写入——
@@ -242,6 +251,11 @@ pub fn run_screen_worker(
     // process_frame/capture_latest_only 内部清零，无需手动重置）
     let mut liveness = crate::frame_liveness::FrameLiveness::new();
     let mut got_frame = false;
+    // REQ-291（v0.19.7）：随播随停状态——双通道检测器 + 画面动最近时刻
+    // （got_frame 采样点更新；1s 媒体拍独立于采样——idle 静默期仍判暂停）
+    let mut media_detector = crate::media_state::MediaDetector::new();
+    let mut last_motion_at: Option<Instant> = None;
+    let mut last_media_tick = Instant::now();
     // M2/REQ-037：动态字幕区域跟踪（播放区域检测 + ROI 锁定/重扫；尺寸首帧自适应）
     let mut roi_tracker = crate::region_tracker::RoiTracker::new(0, 0);
     // M6/REQ-051：关键帧样本缓冲（全帧分支收集，停止时投票产出关键图候选）
@@ -304,6 +318,31 @@ pub fn run_screen_worker(
                         &mut last_capture_error,
                         &mut got_frame,
                     );
+                    // REQ-291 快恢复（主通道）：声画任一恢复 ≤~1.5s 解除自动暂停
+                    // （OCR 5s 判定降级为辅助——保留其后兜底）
+                    if last_media_tick.elapsed() >= Duration::from_secs(1) {
+                        last_media_tick = Instant::now();
+                        let sound_recent = media_sound_recent(&media_sound);
+                        if media_detector.tick(sound_recent, got_frame)
+                            == crate::media_state::MediaDecision::Resume
+                        {
+                            let resume_ms = comp_epoch.elapsed().as_millis() as u64;
+                            crate::player_behavior::record_action(
+                                &crate::player_behavior::PlayerAction {
+                                    kind: crate::player_behavior::PlayerActionKind::Play,
+                                    value: None,
+                                },
+                                resume_ms,
+                                session_id,
+                                &db,
+                            );
+                            pause.paused.store(false, Ordering::SeqCst);
+                            auto_paused = false;
+                            last_player_paused = false;
+                            let _ = app.emit("live:media-resumed", ());
+                            eprintln!("[ScreenWorker] 随播随停：声画恢复 → 自动解除暂停");
+                        }
+                    }
                     if last_player_check_at.elapsed() >= Duration::from_secs(5) {
                         last_player_check_at = Instant::now();
                         let check_now_ms = comp_epoch.elapsed().as_millis() as u64;
@@ -328,6 +367,7 @@ pub fn run_screen_worker(
                                     pause.paused.store(false, Ordering::SeqCst);
                                     auto_paused = false;
                                     last_player_paused = false;
+                                    let _ = app.emit("live:media-resumed", ());
                                     eprintln!("[ScreenWorker] 视频恢复播放，自动解除暂停");
                                 }
                             }
@@ -356,6 +396,32 @@ pub fn run_screen_worker(
         // 纪元传入（暂停期间不采样，补偿值在恢复后恒定）
         let comp_epoch = epoch
             + Duration::from_millis(pause.total_paused_ms.load(Ordering::SeqCst));
+        // REQ-291（v0.19.7）：随播随停 1s 拍（独立于采样——idle 静默期仍判暂停；
+        // 手动暂停不判：auto_paused=false 时语义是用户冻结，不跟随视频）
+        if !paused_now && last_media_tick.elapsed() >= Duration::from_secs(1) {
+            last_media_tick = Instant::now();
+            let sound_recent = media_sound_recent(&media_sound);
+            let motion_recent = last_motion_at.is_some_and(|t| {
+                last_media_tick.duration_since(t) <= Duration::from_millis(1500)
+            });
+            let decision = media_detector.tick(sound_recent, motion_recent);
+            if decision == crate::media_state::MediaDecision::Suspend {
+                let ms = comp_epoch.elapsed().as_millis() as u64;
+                pause.paused.store(true, Ordering::SeqCst);
+                auto_paused = true;
+                crate::player_behavior::record_action(
+                    &crate::player_behavior::PlayerAction {
+                        kind: crate::player_behavior::PlayerActionKind::Pause,
+                        value: None,
+                    },
+                    ms,
+                    session_id,
+                    &db,
+                );
+                let _ = app.emit("live:media-paused", ());
+                eprintln!("[ScreenWorker] 随播随停：声画双通道确认视频暂停 → 自动暂停捕获");
+            }
+        }
         // M4：每 2s 采样 CPU 负载（降级标志变化打印——静默失败可见化）
         if last_load_check_at.elapsed() >= Duration::from_secs(2) {
             last_load_check_at = Instant::now();
@@ -424,6 +490,11 @@ pub fn run_screen_worker(
                 );
                 // REQ-281（v0.19.6）：停更监测 + WGC watchdog + 帧心跳（真实采样拍）
                 liveness_check(&app, screen.as_mut(), &mut liveness, got_frame, Instant::now());
+                // REQ-291：画面动时刻（媒体拍 motion_recent 数据源——WGC 内容驱动
+                // 出帧，got_frame 即"画面变了"的近真信号）
+                if got_frame {
+                    last_motion_at = Some(Instant::now());
+                }
                 // v0.11.5（Task 6）：OCR 文本累计（去重→领域检测用）
                 // v0.11.5 审查修复（A6）：FIFO 上限 50→100——领域检测信号缓存
                 // 保守放大，避免 B站选集证据（`P3/12`/`第3集/共12集`）在
@@ -650,6 +721,7 @@ pub fn run_screen_worker(
                             if paused && !pause.paused.load(Ordering::SeqCst) {
                                 pause.paused.store(true, Ordering::SeqCst);
                                 auto_paused = true;
+                                let _ = app.emit("live:media-paused", ());
                                 eprintln!("[ScreenWorker] 视频处于暂停态，会话自动暂停");
                             }
                         } else if paused != last_player_paused {
@@ -676,6 +748,7 @@ pub fn run_screen_worker(
                                 // 下一轮循环进入轻量轮询，恢复检测不中断）
                                 pause.paused.store(true, Ordering::SeqCst);
                                 auto_paused = true;
+                                let _ = app.emit("live:media-paused", ());
                                 eprintln!("[ScreenWorker] 检测到视频暂停，自动暂停捕获");
                             }
                         } else if paused && !pause.paused.load(Ordering::SeqCst) {
@@ -683,6 +756,7 @@ pub fn run_screen_worker(
                             // （语义：捕获跟随视频状态，用户手动继续不覆盖）
                             pause.paused.store(true, Ordering::SeqCst);
                             auto_paused = true;
+                            let _ = app.emit("live:media-paused", ());
                             eprintln!("[ScreenWorker] 视频处于暂停态，重新自动暂停");
                         }
                     }
