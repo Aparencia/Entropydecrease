@@ -125,6 +125,15 @@ pub async fn proofread_run(
         return Err("无效的会话 id".to_string());
     }
     let st: AppState = (*state).clone();
+    // 审查 L3：会话存在性 + 非 recording 门控（与 second_pass 同口径——
+    // 幽灵/进行中会话不得零成本成功还记账）
+    {
+        let s = st.db.get_session(session_id).map_err(|e| e.to_string())?;
+        let Some(session) = s else { return Err("会话不存在".to_string()) };
+        if session.status == "recording" {
+            return Err("会话进行中——结束捕获后方可校对".to_string());
+        }
+    }
     let (settings, model) = model_and_settings(&st)?;
     settings.proofread_gate()?;
     if !authorized {

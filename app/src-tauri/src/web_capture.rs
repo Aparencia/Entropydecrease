@@ -89,17 +89,43 @@ fn extract_title(html: &str) -> String {
     String::new()
 }
 
-/// URL 主机名（会话标题兜底；纯函数）。
+/// URL 主机名（会话标题兜底；纯函数；剥 userinfo——审查 M2：凭证不得入库）。
 pub fn host_of(url: &str) -> Option<String> {
     let rest = url.split("://").nth(1)?;
-    Some(
-        rest.split(['/', '?', '#'])
-            .next()
-            .unwrap_or("")
-            .chars()
-            .take(100)
-            .collect(),
-    )
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = authority.rsplit('@').next().unwrap_or("").to_string();
+    Some(host.chars().take(100).collect())
+}
+
+/// 内网/回环/链路本地主机拦截（审查 M2：SSRF-lite 边界——公网页面的跳转与
+/// 子资源不得把本机/内网内容拉入产物）。局限注明：不做 DNS 再解析（域名解析
+/// 到内网 IP 的场景留待 resolver 级防护迭代）。
+pub fn is_blocked_host(url: &str) -> bool {
+    let Some(host) = host_of(url) else { return true };
+    let host = host.trim().to_ascii_lowercase();
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    if host.is_empty() {
+        return true;
+    }
+    if host == "localhost" || host.contains(':') || host.contains('%') {
+        return true; // 含冒号=IPv6 字面量（::1/fe80 等回环与链路本地一并拦截）
+    }
+    if host == "0.0.0.0"
+        || host.starts_with("127.")
+        || host.starts_with("10.")
+        || host.starts_with("169.254.")
+        || host.starts_with("192.168.")
+    {
+        return true;
+    }
+    if let Some(rest) = host.strip_prefix("172.") {
+        if let Some(second) = rest.split('.').next().and_then(|s| s.parse::<u32>().ok()) {
+            if (16..=31).contains(&second) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// HTML → Markdown 正文（轻量规则：script/style 剔除；块级换行；标题/列表/

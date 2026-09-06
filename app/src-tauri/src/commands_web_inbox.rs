@@ -285,6 +285,12 @@ fn ingest_from_extension(
     app: Option<&tauri::AppHandle>,
     p: &IngestPayload,
 ) -> Result<i64, String> {
+    // 审查 M2：投递 URL 拒绝内网主机（扩展可能位于内网/本地页面语境）
+    if let Some(u) = &p.url {
+        if crate::web_capture::is_blocked_host(u) {
+            return Err("投递 URL 为内网/回环地址（SSRF 边界拒绝）".to_string());
+        }
+    }
     let now = crate::db::unix_seconds();
     let session = db
         .create_session(&crate::types::NewSession {

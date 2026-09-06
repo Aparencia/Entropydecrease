@@ -18,7 +18,7 @@ use tauri::State;
 use crate::commands::AppState;
 use crate::db_web::WebPage;
 use crate::types::NewNote;
-use crate::web_capture::{extract_page, host_of};
+use crate::web_capture::{extract_page, host_of, is_blocked_host};
 
 /// 抓取体量上限（防超大响应拖垮内存/耗时）。
 const FETCH_MAX_BYTES: usize = 5 * 1024 * 1024;
@@ -57,6 +57,11 @@ pub async fn web_capture_url(
 }
 
 fn capture_inner(st: &AppState, url: &str) -> Result<WebCaptureView, String> {
+    // 审查 M2：内网/回环/链路本地拒绝（页面重定向链无法在客户端逐跳验证——
+    // 首跳阻断 + 注释明示局限；另由 ureq redirects 上限约束跳数）
+    if is_blocked_host(url) {
+        return Err("目标为内网/回环地址（SSRF 边界拒绝；如确需本机页面请用图文采集）".to_string());
+    }
     let agent = ureq::AgentBuilder::new()
         .timeout(FETCH_TIMEOUT)
         .redirects(5)
@@ -240,6 +245,10 @@ pub async fn web_snapshot_export(
         let mut total_bytes = 0usize;
         let mut resolver = |url: &str| -> Option<String> {
             if assets >= SNAPSHOT_MAX_ASSETS {
+                return None;
+            }
+            // 审查 M2：子资源同样拒绝内网主机（恶意页面植入的内网地址不得随快照带出）
+            if is_blocked_host(url) {
                 return None;
             }
             let bytes = fetch_bytes(url, SNAPSHOT_ASSET_CAP)?;

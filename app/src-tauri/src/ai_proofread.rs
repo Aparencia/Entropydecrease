@@ -136,7 +136,9 @@ pub fn parse_suggestions(raw: &str, expected: &[String]) -> Vec<ProofreadSuggest
         .filter(|s| {
             let orig_norm = normalize_for_match(&s.original);
             let sugg = s.suggestion.trim();
-            !sugg.is_empty()
+            // 审查 L3：建议长度护栏（≤2000 字符——防模型失控超长回文）
+            sugg.chars().count() <= 2000
+                && !sugg.is_empty()
                 && sugg != s.original.trim()
                 && expected_norm.iter().any(|e| *e == orig_norm)
         })
