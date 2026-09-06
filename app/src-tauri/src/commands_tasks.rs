@@ -168,22 +168,33 @@ pub fn refine_unrefined_core(db: &Db, row_id: i64) -> Result<String, String> {
     Ok(format!("已提炼为任务行：{}", payload))
 }
 
+/// 写正文成功后的 notes 域广播（v0.20.5：行动裁决=笔记正文行状态变更，
+/// 笔记页列表/右栏需被动刷新——任务命令此前零广播，前端靠 Overlay
+/// onChanged 回调；行动中心独立成页后该通道删除，补发为唯一被动刷新源）。
+/// 广播收敛于 IPC 包装层（core 层无 AppHandle；先例同 batch_weekly_resolve）。
+fn emit_notes_changed_on_ok(app: &tauri::AppHandle, r: Result<String, String>) -> Result<String, String> {
+    if r.is_ok() {
+        crate::notify::emit_changed(app, crate::notify::DataDomain::Notes);
+    }
+    r
+}
+
 /// ✓ 完成（IPC）。
 #[tauri::command]
 pub fn task_complete(state: State<'_, AppState>, row_id: i64) -> Result<String, String> {
-    complete_task_core(&state.db, row_id)
+    emit_notes_changed_on_ok(&state.app, complete_task_core(&state.db, row_id))
 }
 
 /// ✗ 放弃（IPC；reason 可空）。
 #[tauri::command]
 pub fn task_abandon(state: State<'_, AppState>, row_id: i64, reason: Option<String>) -> Result<String, String> {
-    abandon_task_core(&state.db, row_id, reason.as_deref().unwrap_or(""))
+    emit_notes_changed_on_ok(&state.app, abandon_task_core(&state.db, row_id, reason.as_deref().unwrap_or("")))
 }
 
 /// 提炼（IPC）。
 #[tauri::command]
 pub fn task_refine_unrefined(state: State<'_, AppState>, row_id: i64) -> Result<String, String> {
-    refine_unrefined_core(&state.db, row_id)
+    emit_notes_changed_on_ok(&state.app, refine_unrefined_core(&state.db, row_id))
 }
 
 /// 📅 改期（只落索引列；date=None 清除=归入「搁置」）。
