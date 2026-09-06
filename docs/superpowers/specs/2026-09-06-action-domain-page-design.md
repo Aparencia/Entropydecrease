@@ -1,6 +1,6 @@
 # 2026-09-06 · v0.20.5 信息架构批：行动域页独立（行动中心从笔记页剥离）
 
-> 状态：**设计批准（2026-09-06 用户逐项裁决）· 实施计划待批准**
+> 状态：**设计批准（2026-09-06 用户逐项裁决）· 已实施（2026-09-06 本线：5a4a1f28/b78ddae7 + docs 提交）**
 > 定位：意图分层——"做（行动裁决/SOP/练习/问题）"从笔记页剥离为顶层域页；笔记页回归"记/组织"单一职责。顶层 Tab = 稳定意图域，域内功能以页签承载（不再"一个功能一张页"线性堆 Tab）。
 > 关联：TD-2026-09-06-G（NotesPage 649 行超硬限拆件义务）· v0.20.3 行动底座（REQ-292~302）· REQ-293 入口变更登记 · v0.13.1/0.18/2026-08-21 页面剥离先例 · [goal-execution-agent-design](./2026-09-05-goal-execution-agent-design.md)（v0.21 系列执行层预留，与本批域模型不冲突）
 > 原则：不引入路由库（MVP 决策延续，display:none 保活挂载 TD-004 模式）；后端零数据模型改动；行动中心内部业务逻辑不改（🎴 转卡置灰、TD-A~H 其余项不在此批）。
@@ -69,6 +69,8 @@
 1. `hooks/useNotesSealedFilter.ts`：sealedVisible state + feature-flags effect + visibleNotes 过滤 memo（≈30 行）；
 2. `hooks/useNotesPageEditing.ts`：Ctrl+E/ESC window keydown + editorRef/editingRef 同步族（≈40 行）。
 最终以实测行数为准，压线后豁免表备注移除"超硬限"字样。
+
+> 实施注记（2026-09-06）：实际执行未采用上列 hook 候选——行动剥离后 NotesPage 仍 641 行，改拆「阅读头动作组」NoteHeaderActions（色点/归组/挂体系/AI/模型卡下沉为独立组件，主题推导与色板开合自持）达 575 行；同批 GroupSidebar 455 行（✅ 行动按钮/徽标移除）。豁免表按纠偏风格补登记 ActionCenterPanel 521 / NotesPage 575 / GroupSidebar 455。
 
 ## 8. 测试与验收
 
