@@ -112,10 +112,10 @@ fn freshness_diff_detects_template_edit() {
     let run_id = db.start_sop_run(&tmpl).unwrap();
     let before = db.sop_run_detail(run_id).unwrap().unwrap();
     assert!(!before.freshness_changed);
-    // 编辑正文（改首步文字）→ 保鲜 diff 亮起
+    // 编辑正文（改第二步行文字——首步不变）→ 保鲜 diff 亮起（TD-C：逐步 diff）
     let note = db.get_note(nid).unwrap().unwrap();
-    let changed = note.content.replace("第一步 卸眼唇", "第一步 卸眼唇唇彩");
+    let changed = note.content.replace("第二步 卸全脸", "第二步 卸全脸（按摩）");
     db.update_note(nid, &note.title, &changed).unwrap();
     let after = db.sop_run_detail(run_id).unwrap().unwrap();
-    assert!(after.freshness_changed, "执行即保鲜：正文有出入提示修订");
+    assert!(after.freshness_changed, "执行即保鲜：第二步行文字有出入也提示修订");
 }

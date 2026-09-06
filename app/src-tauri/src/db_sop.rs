@@ -311,19 +311,19 @@ impl Db {
             }
             stats.total += 1;
         }
-        // 保鲜 diff：模板当前行范围 vs 首步快照有无出入（执行即保鲜——提示修订）
+        // 保鲜 diff（2026-09-06 审查 TD-C 修）：模板当前行范围整段 vs 启动快照
+        // 全步骤文本——第 2..N 步改动同样提示（原实现仅比首步）
         let note = match self.get_note(run.note_id)? {
             Some(n) => n,
             None => return Ok(Some(SopRunDetail { run, steps, stats, freshness_changed: false })),
         };
         let tmpl = self.get_sop_template(run.template_id)?;
-        let current_first = tmpl.as_ref().map(|t| {
-            lines_to_steps(&note.content, t.start_line, t.end_line)
-                .first()
-                .map(|s| s.clone())
-        });
-        let snapshot_first = steps.first().map(|s| s.text_snapshot.clone());
-        let freshness_changed = current_first.flatten() != snapshot_first;
+        let current_text = tmpl
+            .as_ref()
+            .map(|t| lines_to_steps(&note.content, t.start_line, t.end_line).join("\n"))
+            .unwrap_or_default();
+        let snapshot_text = steps.iter().map(|s| s.text_snapshot.as_str()).collect::<Vec<_>>().join("\n");
+        let freshness_changed = current_text != snapshot_text;
         Ok(Some(SopRunDetail { run, steps, stats, freshness_changed }))
     }
 

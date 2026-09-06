@@ -146,6 +146,11 @@ pub async fn proofread_run(
         }
     }
     let db = st.db.clone();
+    // 审查 TD-B：重复 run 前清上次 pending（采纳/回退历史保留——与 second_pass
+    // 重跑语义对齐；清理失败不阻断（记录日志，重复建议由裁决面兜底）
+    if let Err(e) = db.clear_refine_drafts(session_id, ORIGIN_PROOFREAD, crate::db_session_refine::STATUS_PENDING) {
+        eprintln!("[Proofread] 旧 pending 清理失败（继续本次校对）: {e}");
+    }
     let material = load_material(&db, session_id)?;
     let flat = flatten(&material);
     let capped = flat.len() > MAX_SENTENCES_PER_RUN;

@@ -1,4 +1,4 @@
-﻿# 单文件行数豁免登记（AGENTS.md §3：单文件 ≤300 行；300-600 行须登记本清单）
+# 单文件行数豁免登记（AGENTS.md §3：单文件 ≤300 行；300-600 行须登记本清单）
 
 > 登记规则：文件超过 300 行时在此登记（文件 + 行数 + 豁免理由 + 拆分计划）。
 > 超过 600 行必须硬拆（不允许豁免）。
@@ -71,6 +71,11 @@
 | app/src-tauri/src/db_fragments.rs | 309 | 碎片数据层 + v0.19.0（REQ-258）索引生命周期钩子（建/删/升笔记事务内清块重建，+16）——promote 显式事务与知识链接清理同域 | 若再增长：promote_fragment_to_note 事务拆至 db_fragments_promote.rs |
 | app/src-tauri/src/windows.rs | 342 | 窗口枚举/评分域 + v0.19.2（REQ-271/272）：CaptureWindow.zOrder/systemWindow 字段 + 抖音/快手/B站客户端评分表（+28）——枚举系统副作用与评分纯函数同域便于单测（既有模式） | 若再增长：z 序/系统标记纯函数拆至 windows_meta.rs |
 | app/src-tauri/src/live_session_lifecycle.rs | 379 | 会话启动/预热生命周期 + v0.19.2/3（REQ-273 + 审查即修：锁外等待+枚举化+辅助函数抽取，+78）——start/prepare/release 与等待/回退策略强耦合于 impl 生命周期域 | 若再增长：wait_prepared_ready 与回退策略拆至 live_session_start.rs |
+| app/src-tauri/src/commands_proofread.rs | 351 | v0.20.2（REQ-270）LLM 校对命令域（预估/门控/分块请求/裁决源列表/失败记账）内聚；2026-09-06 实测登记（TD-2026-09-06-G） | 若再增长：record_proofread_failure 与载荷回写拆至 proofread_apply.rs |
+| app/src-tauri/src/commands_web_inbox.rs | 336 | v0.20.4（REQ-304）扩展收件命令域（起停/状态/HTTP 小循环/投递收口/图落盘）内聚；2026-09-06 实测登记（TD-2026-09-06-G） | 若再增长：HTTP 连接处理拆至 web_inbox_http.rs |
+| app/src-tauri/src/db_sop.rs | 433 | v0.20.3（REQ-296/297）SOP 三表数据域（模板/run/步骤/保鲜/聚合）+ 审查加固（保链更新/幂等守卫/步数计数）内聚 | 若再增长：run 执行族拆至 db_sop_run.rs |
+| app/src-tauri/src/commands_after.rs | 302 | v0.20.3（REQ-294/295/299/300）收尾命令域（批决议/导出/练习/问题）内聚；2026-09-06 实测登记（TD-2026-09-06-G） | 若再增长：批决议核心拆至 weekly_resolve.rs |
+| app/src-tauri/src/commands_session_note.rs | 458 | 既有登记 314 为过期快照——2026-09-06 实测纠偏（v0.20 装载合成/web 分支/批量 inner 扩展后 +144） | 若再增长：convert_to_note 拆至 commands_session_note_convert.rs |
 
 ## 前端（app/src/，数字来自前端审查快照；Task #9/10 拆分进行中）
 
@@ -103,6 +108,10 @@
 
 > 登记移除：ai_refine_protocol.rs（2026-09-05 审查 M3）——实测 295 ≤300 无需登记（流式渲染/解析新增后仍合规），原登记 340 不实已撤
 | app/src/components/NoteListView.tsx | 524 | v0.19.7（REQ-287）列表交互重构：选择三通道/批量模式/拖拽矩阵（组头与行落点）/手动序消费/划选锚点/选集菜单——编排内聚；纯选择逻辑已拆 noteSelection.ts、组头载荷已拆 NoteTreeSection 导出 | 若再增长：拖拽/划选接线拆至 useNoteListDnD.ts；手动序拆至 useNoteOrders.ts |
+| app/src/components/ActionCenterOverlay.tsx | 509 | v0.20.3（REQ-293/294/296/299/300）行动中心 Overlay（裁决四区/批量周回顾/SOP 库/练习问题入口）编排内聚；2026-09-06 实测登记（TD-2026-09-06-G） | 若再增长：队列/历史/SOP 三区拆至独立组件（按 action-center/ 目录） |
+| app/src/components/SessionDetailPanel.tsx | 631 | 会话详情面板（原料/预览/离线精修/校对/web 早返回/术语图集）；v0.20 系列 +52 后**超 600 硬限**（前置 v0.19.x 已越线，预存债务随 TD-2026-09-06-G 登记）——2026-09-06 实测纠偏（登记值 371 过期） | **超硬限必须拆**：web 早返回与精修区拆至 SessionWebView.tsx / SessionPass2Section.tsx |
+| app/src/pages/NotesPage.tsx | 616 | 三栏笔记页编排（组侧栏/列表/阅读编辑 + 行动中心/模型卡/AI/封存过滤）；2026-09-06 实测纠偏（登记值 572 过期；超 600 为既有累增债务随 TD-2026-09-06-G 登记） | **超硬限必须拆**：行动中心/封存/模型卡 state 族拆至 useNotesPageActions.ts |
+| app/src/components/GroupSidebar.tsx | 442 | 组筛选侧栏（分区/拖拽/徽标/行动中心 ✅ 入口/新建/路由浮层编排）；2026-09-06 实测纠偏（登记值 413 过期） | 若再增长：徽标聚合拆至 useGroupSidebarCounts.ts |
 
 ## 已拆分 / 登记移除记录
 
