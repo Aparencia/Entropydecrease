@@ -67,3 +67,22 @@
 - **审查即修（152cf56）**：CER 超长护栏（>20k 字 → None 诚实不可比，O(n×m) 时间成本防线）；SRT 跨块同号文本误并修复（块内累积一次性推入）；asr_eval 进度输出换行；豁免登记 bin/asr_eval.rs 386 行（300-600 档，见 v0.20.md 交付记录）
 - **观察（不立债）**：并行工作区 WIP（asr_pass2/v0.20.2 线，未入库）致全量回归暂含其失败用例——归并行线，非本批回归；harness 流式档无重打分（近似口径已文档化，慢速档回放待真机集成验证）
 - **验证记录**：目标测试全绿（eval_ 28/28、cer 11/11）；`cargo build --bin asr_eval` 通过；clippy 本批零新增告警；全量回归待并行 WIP 入库后终跑（口径：v0.20.0/0.20.1 已交付时点 2159 绿）
+
+## 2026-09-06 节（v0.20.2~0.20.4 主批 + 三路审查收口，本线）
+
+- **未偿表滚动**：carried 7 笔维持（closed 3 笔哈希不变，无新偿还条件）
+- **新增 open 8 笔（审查登记，台账见同夹 v020-batch-review-ledger.md）**：
+
+| ID | 摘要 | 类型 | 优先级 | 状态 |
+|----|------|------|--------|------|
+| TD-2026-09-06-A | 有效轴窗边裁剪：跨采纳窗段覆盖 ≥60% 整段让位致窗外 ≤40% 文本在产物缺位（asr_pass2 二值取舍，clip 未实现） | 无意 | P2 | open |
+| TD-2026-09-06-B | proofread_run async 内同步分块请求阻塞 worker（长会话）；重复 run 未清上次 pending | 无意 | P2 | open |
+| TD-2026-09-06-C | SOP 保鲜 diff 仅比首步（2..N 步改动不提示）；start 时段漂移 stale 提示未实现 | 无意 | P3 | open |
+| TD-2026-09-06-D | SOP 执行器 READ-DO/CONFIRM 渲染无实质差异；证据图片三入口上传流未接（现为相对路径文本输入） | 有意 | P3 | open |
+| TD-2026-09-06-E | SE 封存过滤仅 NotesPage 默认列表（复习面/检索/组视图未覆盖；tag 子串匹配含“树洞XX”） | 无意 | P3 | open |
+| TD-2026-09-06-F | kind=web 预览后端未统一路由（preview_session_note 走转写链）；渲染型整页快照与截图兜底未实现；扩展商店发布未做 | 有意 | P3 | open |
+| TD-2026-09-06-G | web_inbox token 非 CSPRNG 且 ACL 注释漂移；行数豁免登记批量过期（commands_proofread/commands_web_inbox/commands_session_note 及前端 ActionCenterOverlay/SessionDetailPanel） | 有意 | P3 | open |
+| TD-2026-09-06-H | 完成史 reverted 事件无来源；GoalsPage 回顾流未接 completion_history；set_task_disposition/练习暂停归档 UI/工具栏「生成 SOP」选区入口未接线 | 有意 | P3 | open |
+
+- **审查即修提交链**：`0796f14b`（周回顾直写补 kb/广播+收件慢速超时）`086ccbfe`（裁决属主）`ef0a1ec7`（校对失败记账）`a855cbce`（警告清零）`943238f`（快照净化）`17adf140`（CSS 解码内联/收件体量上限/会话限定写）`e19984f`（任务索引元数据载荷追踪）`775cf78e`（SOP 保链/步数/幂等/回填）`cb28f22`（前端 camelCase 契约）`a3a3b48`（批决议复核/钩子补齐）`c55bdefb`（second_pass 生命周期/孤儿清理/图白名单）`3fee11a9`（SSRF 边界/校对门控护栏）
+- **验证记录**：Rust 全量 2254/0（`cargo test --test app_lib_tests`）；tsc 0；vitest 571/571；origin/dev 推送截至 e19984f（后续 3 提交网络重置待续推）
