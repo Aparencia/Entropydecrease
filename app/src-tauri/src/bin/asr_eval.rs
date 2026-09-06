@@ -21,7 +21,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+// v0.20.5（2026-09-06 打包修复）：会话/流信道辅助模块移出 src/bin/——tauri
+// bundler stage-2 磁盘扫描 src/bin 会把无 main 模块误认为独立 bin（MSI 打包
+// LGHT0103 幻影 exe；cargo autodiscovery 同理，见 Cargo.toml 注释）
+#[path = "../asr_eval_session.rs"]
 mod asr_eval_session;
+#[path = "../asr_eval_stream.rs"]
 mod asr_eval_stream;
 
 use app_lib::audio_preprocess::{AudioPreprocessConfig, AudioPreprocessor};
