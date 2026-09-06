@@ -40,8 +40,6 @@ interface Props {
   onChanged: () => void;
   /** 打开复习面（groupId=null 全量；name 呈现用） */
   onOpenReview: (groupId: number | null, name: string) => void;
-  /** v0.20.3（REQ-293）：打开行动中心（✅ 徽标入口） */
-  onOpenAction: () => void;
   /** 当前选中笔记 id（ⓘ 弹层"移入/移出选中笔记"用；null=无） */
   selectedNoteId: number | null;
   /** 打开收件箱视图（中部列表原位切换为碎片列表） */
@@ -57,7 +55,7 @@ interface Props {
 }
 
 export default function GroupSidebar({
-  width = 240, groupFilter, onGroupFilterChange, onChanged, onOpenReview, onOpenAction, selectedNoteId,
+  width = 240, groupFilter, onGroupFilterChange, onChanged, onOpenReview, selectedNoteId,
   onOpenInbox, inboxActive, refreshToken, onOpenSystem, onCollapse,
 }: Props) {
   const [groups, setGroups] = useState<NoteGroup[]>([]);
@@ -65,8 +63,6 @@ export default function GroupSidebar({
   const [fragText, setFragText] = useState("");
   // 全量到期卡数（"复习 N"徽标）
   const [dueTotal, setDueTotal] = useState(0);
-  // v0.20.3（REQ-293）：逾期行动数（"✅ 行动 N"徽标）
-  const [actionCount, setActionCount] = useState(0);
   // 收件箱待处理数（active 碎片计数）
   const [inboxCount, setInboxCount] = useState(0);
   const [status, setStatus] = useState("");
@@ -104,9 +100,6 @@ export default function GroupSidebar({
       setGroups(feedCaptureOn ? list : list.filter((g) => g.terrain !== "feed"));
       const due = await invoke<number>("count_due_cards", { groupId: null });
       setDueTotal(due);
-      // v0.20.3（REQ-293）：逾期行动徽标（裁决队列数据源）
-      const actions = await invoke<number>("action_badge_count");
-      setActionCount(actions);
       const frags = await invoke<Fragment[]>("list_fragments", { status: "active", limit: 500 });
       setInboxCount(frags.length);
       // v0.13.7 触点①：体系 + 引用拉取（并行——徽标数据与组列表无依赖）
@@ -418,22 +411,15 @@ export default function GroupSidebar({
           </p>
         )}
 
-        {/* 🎴 复习（全量入口：UI 最小化——一个按钮 + 到期数） */}
-        <div style={{ marginTop: "auto", paddingTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+        {/* 🎴 复习（全量入口：UI 最小化——一个按钮 + 到期数；v0.20.5：✅ 行动
+            入口与徽标已移除——行动独立为顶层「✅ 行动」Tab 唯一入口） */}
+        <div style={{ marginTop: "auto", paddingTop: 6 }}>
           <button
             onClick={() => onOpenReview(null, "全部组")}
             style={{ width: "100%", fontSize: 11, cursor: "pointer", padding: "4px 8px", borderRadius: 4, border: "1px solid #0f766e", background: dueTotal > 0 ? "#f0fdfa" : "#fff", color: "#0f766e" }}
             title="开始复习到期卡片"
           >
             🎴 复习{dueTotal > 0 ? ` ${dueTotal}` : ""}
-          </button>
-          {/* v0.20.3（REQ-293）：✅ 行动（逾期裁决入口——组侧栏全量入口先例同款） */}
-          <button
-            onClick={onOpenAction}
-            style={{ width: "100%", fontSize: 11, cursor: "pointer", padding: "4px 8px", borderRadius: 4, border: "1px solid #7c3aed", background: actionCount > 0 ? "#f5f3ff" : "#fff", color: "#6d28d9" }}
-            title="行动中心——逾期裁决/完成史"
-          >
-            ✅ 行动{actionCount > 0 ? ` ${actionCount}` : ""}
           </button>
         </div>
       </div>

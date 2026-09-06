@@ -1,18 +1,25 @@
 /**
- * ActionCenterOverlay — ✅ 行动中心（v0.20.3 / REQ-293/294/298）。
+ * ActionCenterPanel — ✅ 行动中心（v0.20.3 / REQ-293/294/298；v0.20.5 独立页化）。
  *
  * @ai-context: 裁决漏斗（不留死尸的机制是裁决不是自动清理）：待办分区
  *              逾期(标红)/计划日/搁置/待提炼，行操作 ✓完成 · 📅改期 · ⤴迁出
  *              （剪贴板复制 todo.txt 行——保底三件套之复制面；文件/邮件与
  *              scheme 通道由导出命令面补足）· ✗放弃(留一行原因)；完成史页签
  *              展示统一证据流（周回顾原料/成长轨迹）。
+ * @ai-context: v0.20.5：行动域独立成页（顶层「✅ 行动」Tab 唯一入口，组侧栏
+ *              入口与徽标移除）——形态由全屏 Overlay 改为页面自适应（去遮罩/
+ *              关闭按钮，ActionPage 壳承载）；refreshToken>0 变化=全量重载
+ *              （ActionPage 的 active 门控切回时递增——常驻挂载隐藏期变更
+ *              补偿）；笔记侧被动刷新改由任务写回命令 data:notes-changed
+ *              广播承担（原 onChanged 回调通道随剥离删除，commands_tasks
+ *              包装层补发）。
  * @ai-context: 全部操作走 commands_tasks 命令族——正文回写收敛于 tasks_core
  *              原子层；操作后重载本面板（列表即真相；笔记域广播驱动阅读侧）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import SopRunOverlay from "./SopRunOverlay";
-import { PracticeOverlay, QuestionsOverlay } from "./PracticeQuestionsOverlays";
+import SopRunOverlay from "../SopRunOverlay";
+import { PracticeOverlay, QuestionsOverlay } from "../PracticeQuestionsOverlays";
 
 /** 响应结构（SopTemplate/ActionQueueRow/CompletionEvent 均 serde camelCase——字段须 camel 读取） */
 interface SopTemplateView {
@@ -50,30 +57,11 @@ interface HistoryRow {
 }
 
 interface Props {
-  onClose: () => void;
-  /** 数据变化回调（NotesPage 列表刷新等） */
-  onChanged?: () => void;
+  /** v0.20.5：切回重载令牌——ActionPage 在 active 变 true 时递增（常驻挂载
+   *  隐藏期变更补偿）；挂载 effect 首拉不依赖它（默认 0 也全量拉取） */
+  refreshToken?: number;
 }
 
-const overlayStyle: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,.45)",
-  zIndex: 1000,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
-const cardStyle: React.CSSProperties = {
-  background: "#fff",
-  borderRadius: 12,
-  width: 780,
-  maxWidth: "94vw",
-  maxHeight: "84vh",
-  overflow: "auto",
-  padding: 16,
-  fontSize: 13,
-};
 const btn: React.CSSProperties = { padding: "4px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6, border: "1px solid #e5e7eb", background: "#fff", color: "#374151" };
 const okBtn: React.CSSProperties = { ...btn, background: "#0d9488", color: "#fff", border: "none" };
 const dangerBtn: React.CSSProperties = { ...btn, color: "#dc2626" };
@@ -94,7 +82,7 @@ function fmtDate(ts: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
+export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
   const [tab, setTab] = useState<"queue" | "history" | "sop">("queue");
   // SOP 库（模板/新建/执行——REQ-296）
   const [templates, setTemplates] = useState<SopTemplateView[]>([]);
@@ -139,7 +127,6 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
       setChecked(new Set());
       setBatchReason("");
       setBatchMode(false);
-      onChanged?.();
       const [o, p, s, u, h] = await Promise.all([
         fetchTab("overdue"),
         fetchTab("planned"),
@@ -190,6 +177,8 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
   const [planned, setPlanned] = useState<ActionRow[]>([]);
   const [unrefined, setUnrefined] = useState<ActionRow[]>([]);
 
+  // v0.20.5：refreshToken 变化=切回重载（ActionPage active 门控递增）——常驻
+  // 挂载隐藏期由行动页外部写入（会话页提炼/笔记勾选回写等）在此补偿
   useEffect(() => {
     void (async () => {
       const [o, p, s, u] = await Promise.all([
@@ -206,7 +195,7 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
     void reload();
     void loadSop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchTab, reload]);
+  }, [fetchTab, reload, refreshToken]);
 
   const loadSop = useCallback(async () => {
     try {
@@ -262,7 +251,6 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
 
   const afterMutate = async (info?: string) => {
     if (info) setMsg(info);
-    onChanged?.();
     const [o, p, s, u, h] = await Promise.all([
       fetchTab("overdue"),
       fetchTab("planned"),
@@ -368,8 +356,8 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
   );
 
   return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={cardStyle} onClick={(e) => e.stopPropagation()}>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 16, fontSize: 13, boxSizing: "border-box" }}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 10, gap: 6 }}>
           <h3 style={{ margin: 0, fontSize: 15 }}>✅ 行动中心</h3>
           <div style={{ marginLeft: 12, display: "flex", gap: 4 }}>
@@ -403,7 +391,6 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
               ❓ 问题
             </button>
           </div>
-          <button style={{ ...btn, marginLeft: "auto" }} onClick={onClose}>关闭</button>
         </div>
 
         {msg && <div style={{ fontSize: 12, color: "#047857", background: "#ecfdf5", border: "1px solid #6ee7b7", borderRadius: 6, padding: "6px 10px", marginBottom: 8 }}>{msg}</div>}
@@ -538,7 +525,7 @@ export default function ActionCenterOverlay({ onClose, onChanged }: Props) {
           <SopRunOverlay
             template={activeTemplate}
             onClose={() => setActiveTemplate(null)}
-            onChanged={() => { void loadSop(); onChanged?.(); }}
+            onChanged={() => { void loadSop(); }}
           />
         )}
         {/* v0.20.3（REQ-299/300）：练习/问题轻量面 */}

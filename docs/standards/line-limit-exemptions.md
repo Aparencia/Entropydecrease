@@ -112,6 +112,9 @@
 | app/src/components/SessionDetailPanel.tsx | 631 | 会话详情面板（原料/预览/离线精修/校对/web 早返回/术语图集）；v0.20 系列 +52 后**超 600 硬限**（前置 v0.19.x 已越线，预存债务随 TD-2026-09-06-G 登记）——2026-09-06 实测纠偏（登记值 371 过期） | **超硬限必须拆**：web 早返回与精修区拆至 SessionWebView.tsx / SessionPass2Section.tsx |
 | app/src/pages/NotesPage.tsx | 616 | 三栏笔记页编排（组侧栏/列表/阅读编辑 + 行动中心/模型卡/AI/封存过滤）；2026-09-06 实测纠偏（登记值 572 过期；超 600 为既有累增债务随 TD-2026-09-06-G 登记） | **超硬限必须拆**：行动中心/封存/模型卡 state 族拆至 useNotesPageActions.ts |
 | app/src/components/GroupSidebar.tsx | 442 | 组筛选侧栏（分区/拖拽/徽标/行动中心 ✅ 入口/新建/路由浮层编排）；2026-09-06 实测纠偏（登记值 413 过期） | 若再增长：徽标聚合拆至 useGroupSidebarCounts.ts |
+| app/src/components/action-center/ActionCenterPanel.tsx | 521 | v0.20.5 行动中心独立页化：原 ActionCenterOverlay.tsx（509 行登记）更名迁移至 action-center/ 并去遮罩/关闭形态（refreshToken 切回重载）——编排内聚（TD-2026-09-06-G 预留目录兑现）；2026-09-06 实测登记 | 若再增长：队列/历史/SOP 三区拆至 action-center/ 子组件 |
+| app/src/pages/NotesPage.tsx | 575 | v0.20.5 行动中心剥离独立「行动」域页 + 阅读头动作组拆 NoteHeaderActions（色点/归组/挂体系/AI/模型卡下沉）——行动/封存/模型卡 state 族回归 600 硬限内（TD-2026-09-06-G 拆件义务兑现）；2026-09-06 实测登记（登记值 616/572 过期） | 若再增长：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts |
+| app/src/components/GroupSidebar.tsx | 455 | v0.20.5 行动入口/徽标移除（✅ 行动按钮与 actionCount 下线，仅剩 🎴 复习全量入口）；2026-09-06 实测登记（登记值 442 过期） | 若再增长：徽标聚合拆至 useGroupSidebarCounts.ts |
 
 ## 已拆分 / 登记移除记录
 

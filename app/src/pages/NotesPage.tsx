@@ -15,9 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { Note, NoteGroup, TagColor } from "../types";
-import { paletteHex, parseNoteProperties, resolveNoteColor } from "../utils/colorPalette";
-import type { ThemeMode } from "../utils/colorPalette";
-import NoteColorPicker from "../components/NoteColorPicker";
+import { resolveNoteColor } from "../utils/colorPalette";
 import type { NoteEditHandle } from "../components/NoteEditView";
 // v0.14 A：编辑器容器切换为 RichEditorView（CM 富编辑：图片内联/撤销/草稿恢复）；
 // NoteEditView 保留为 CM 初始化失败的降级路径（RichEditorView 内部回退）
@@ -25,7 +23,6 @@ import RichEditorView from "../components/RichEditorView";
 import NoteListView, { parseTags } from "../components/NoteListView";
 import type { SortMode } from "../components/NoteListView";
 import GroupSidebar from "../components/GroupSidebar";
-import ActionCenterOverlay from "../components/ActionCenterOverlay";
 import FeedFragmentList from "../components/FeedFragmentList";
 import ReviewSessionOverlay from "../components/ReviewSessionOverlay";
 import NoteReadingView from "../components/NoteReadingView";
@@ -34,9 +31,8 @@ import VersionPanel from "../components/VersionPanel";
 import NoteAiDialog from "../components/NoteAiDialog";
 // v0.20.3（REQ-302）：笔记段 → 模型卡草稿对话框
 import ModelCardFromNoteDialog from "../components/ModelCardFromNoteDialog";
-import NoteLinkToSystem from "../components/NoteLinkToSystem";
-// v0.16.1：阅读头「移动到组」显式手动分组入口（拖拽/ⓘ 之外的可发现路径）
-import NoteMoveToGroupMenu from "../components/NoteMoveToGroupMenu";
+// v0.20.5：阅读头动作组（色点/归组/挂体系/AI/模型卡）——编排瘦身拆分
+import NoteHeaderActions from "../components/NoteHeaderActions";
 import ColumnResizer from "../components/ColumnResizer";
 import ColumnBar from "../components/ColumnBar";
 import { useColumnLayout } from "../hooks/useColumnLayout";
@@ -71,8 +67,6 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
   const [view, setView] = useState<MiddleView>("notes");
   // v0.11.2：复习面（groupId=null 全量；undefined=关闭）
   const [review, setReview] = useState<{ groupId: number | null; name: string } | undefined>(undefined);
-  // v0.20.3（REQ-293）：行动中心（✅ 全量入口——组侧栏底部按钮打开）
-  const [actionOpen, setActionOpen] = useState(false);
   // v0.20.3（REQ-302）：笔记段 → 模型卡草稿对话框
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const [selected, setSelected] = useState<Note | null>(null);
@@ -88,20 +82,14 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
   const [previewImg, setPreviewImg] = useState<{ src: string; title?: string } | null>(null);
   // v0.12.2：侧栏刷新令牌（捕获/升降/结算后计数与组列表重载）
   const [refreshToken, setRefreshToken] = useState(0);
-  // v0.14 B：视觉系统数据——组列表（组色继承）与标签色映射；笔记色选择器开关
+  // v0.14 B：视觉系统数据——组列表（组色继承）与标签色映射
   const [groups, setGroups] = useState<NoteGroup[]>([]);
   const [tagColors, setTagColors] = useState<Record<string, string>>({});
-  const [noteColorPickerOpen, setNoteColorPickerOpen] = useState(false);
   const seqRef = useRef(0);
   // v0.15：三栏列状态（可拖拽 + 宽度记忆 + 窄窗自动折叠；默认值=历史固定宽度）
   const groupsCol = useColumnLayout("notes-groups", { default: 240, min: 180, max: 320, autoFoldBelow: 860 });
   const listCol = useColumnLayout("notes-list", { default: 320, min: 240, max: 420, autoFoldBelow: 700 });
   const outlineCol = useColumnLayout("notes-outline", { default: 180, min: 140, max: 260, autoFoldBelow: 1100 });
-  // v0.14 B：当前主题（跟随 prefers-color-scheme；jsdom 无 matchMedia 回退 light）
-  const theme: ThemeMode = useMemo(
-    () => (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
-    [],
-  );
 
   // v0.14 B：颜色数据加载（refreshToken 驱动——组色/标签色设置后经 onChanged 刷新）
   useEffect(() => {
@@ -431,7 +419,6 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
           onGroupFilterChange={(id) => { setGroupFilter(id); setView("notes"); }}
           onChanged={refreshAll}
           onOpenReview={(groupId, name) => setReview({ groupId, name })}
-          onOpenAction={() => setActionOpen(true)}
           selectedNoteId={selected?.id ?? null}
           // 收件箱=全量碎片视图，与组过滤无关——清组过滤消除"组行高亮 + 收件箱"
           // 并存矛盾（审查修复）
@@ -525,74 +512,17 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
             }
             auxPanels={auxPanels}
             headerExtra={
-              <>
-                {/* v0.14 B：笔记级颜色入口——色点显示解析色（含继承），picker 编辑显式色 */}
-                <div style={{ position: "relative" }}>
-                  <span
-                    data-testid="note-color-dot"
-                    onClick={() => setNoteColorPickerOpen((v) => !v)}
-                    title="设置笔记颜色"
-                    style={{ width: 12, height: 12, borderRadius: 3, cursor: "pointer", display: "inline-block", background: paletteHex(noteColors[selected.id] ?? null, theme) }}
-                  />
-                  {noteColorPickerOpen && (
-                    <div
-                      data-testid="note-color-picker-pop"
-                      style={{ position: "absolute", top: "100%", right: 0, zIndex: 30, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}
-                    >
-                      <NoteColorPicker
-                        value={parseNoteProperties(selected).color ?? null}
-                        onChange={(color) => {
-                          invoke("update_note_color", { id: selected.id, color })
-                            .then(() => {
-                              setNoteColorPickerOpen(false);
-                              // 刷新列表（色条）+ 右栏（笔记对象，handleNoteChanged 内 get_note 取最新）
-                              void handleNoteChanged();
-                            })
-                            .catch((e) => setStatus(`笔记颜色设置失败: ${e}`));
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-                {/* v0.16.1：手动分组显式入口——移动/移出组（handleNoteChanged 刷新列表+右栏） */}
-                <NoteMoveToGroupMenu
-                  key={`move-${selected.id}`}
-                  note={selected}
-                  groups={groups}
-                  onChanged={() => void handleNoteChanged()}
-                />
-                {/* v0.13.7 触点②：标题栏「挂到体系」入口；key=note.id 切笔记重置内部态 */}
-                <NoteLinkToSystem
-                  key={`link-${selected.id}`}
-                  noteId={selected.id}
-                  onChanged={() => void handleNoteChanged()}
-                  onGotoKnowledgeSystem={onCreateSystem}
-                />
-                {/* v0.17.0：编辑态 AI 能力统一入口（阅读态点击直接进入编辑态） */}
-                <button
-                  data-testid="note-ai-entry"
-                  onClick={openAiDialog}
-                  title="AI 精修 / 知识补充"
-                  style={{
-                    padding: "3px 8px", cursor: "pointer", fontSize: 11, borderRadius: 6,
-                    border: "1px solid #c7d2fe", background: "#f5f3ff", color: "#4c1d95",
-                  }}
-                >
-                  🤖 AI
-                </button>
-                {/* v0.20.3（REQ-302）：笔记段 → 模型卡草稿（组内 model 卡唯一生成链） */}
-                <button
-                  data-testid="note-model-card-entry"
-                  onClick={() => setModelDialogOpen(true)}
-                  title="把本条笔记提炼为模型卡草稿（需已归组）"
-                  style={{
-                    padding: "3px 8px", cursor: "pointer", fontSize: 11, borderRadius: 6,
-                    border: "1px solid #d1fae5", background: "#ecfdf5", color: "#047857",
-                  }}
-                >
-                  🧠 模型卡
-                </button>
-              </>
+              <NoteHeaderActions
+                key={`hdr-${selected.id}`}
+                note={selected}
+                resolvedColor={noteColors[selected.id] ?? null}
+                groups={groups}
+                onChanged={() => void handleNoteChanged()}
+                onError={(m) => setStatus(m)}
+                onGotoKnowledgeSystem={onCreateSystem}
+                onOpenAi={openAiDialog}
+                onOpenModelCard={() => setModelDialogOpen(true)}
+              />
             }
             onEdit={() => setEditing(true)}
             onPinToggle={() => void runPinToggle(selected)}
@@ -639,10 +569,6 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
           groupName={review.name}
           onClose={() => setReview(undefined)}
         />
-      )}
-      {/* v0.20.3（REQ-293/294/298）：行动中心（裁决队列 + 完成史） */}
-      {actionOpen && (
-        <ActionCenterOverlay onClose={() => setActionOpen(false)} onChanged={() => { setRefreshToken((t) => t + 1); void refreshAll(); }} />
       )}
     </div>
   );
