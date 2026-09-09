@@ -217,6 +217,14 @@ export interface NoteVersion {
 /** 段级 diff 操作（Rust DiffOp：三态外部标签） */
 export type DiffOp = { unchanged: string } | { added: string } | { removed: string };
 
+/** 整篇有序行级 diff 响应（Rust MarkdownDiffOps；camelCase——diff_markdown_ops：
+ * 工作台行级染色/差异模式数据源，ops 按 base/refined 原始出现序交错） */
+export interface MarkdownDiffOps {
+  ops: DiffOp[];
+  added: number;
+  removed: number;
+}
+
 /** AI 成本记录（Rust AiUsageRecord；camelCase 契约） */
 export interface AiUsageRecord {
   id: number;

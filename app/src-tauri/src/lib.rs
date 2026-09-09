@@ -934,6 +934,9 @@ pub fn run() {
             commands_notes_version::note_versions_usage,
             commands_notes_version::note_by_session,
             commands_notes_version::diff_markdown_sections,
+            // 批 3（问题11）：整篇有序行级 diff（精修工作台三入口统一取数——
+            // 章节分组 diff 丢失行间顺序，note_versions_diff 需 DB 版本 id）
+            commands_notes_version::diff_markdown_ops,
             // 结构模型与课后精修（REQ-047/049/050 模型版：下载/状态/精修）
             commands_refine::structure_model_download,
             commands_refine::structure_model_status,
