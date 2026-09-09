@@ -284,6 +284,34 @@ pub fn foreground_hwnd() -> Option<i64> {
     None
 }
 
+/// 前台窗口是否属于本进程（主窗/浮窗/overlay/原生对话框都算自身）。
+///
+/// @ai-context: 批 2a 前台自动暂停（foreground_pause.rs）的"自窗=中性"判定：
+///              用户切到熵减自己的浮窗/设置对话框不算"离开学习内容"——先
+///              GetAncestor(GA_ROOT) 归到进程根窗口再取 PID（子窗口/弹出层
+///              与主窗同进程，参照 list_capture_windows 的 self_pid 过滤先例）。
+#[cfg(windows)]
+pub fn is_self_hwnd(hwnd: i64) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{GetAncestor, GetWindowThreadProcessId, GA_ROOT};
+    let raw = hwnd as *mut core::ffi::c_void;
+    if raw.is_null() {
+        return false;
+    }
+    let root = unsafe { GetAncestor(windows::Win32::Foundation::HWND(raw), GA_ROOT) };
+    if root.0.is_null() {
+        return false;
+    }
+    let mut pid: u32 = 0;
+    unsafe { GetWindowThreadProcessId(root, Some(&mut pid)) };
+    pid == std::process::id()
+}
+
+/// 非 Windows 平台占位（自身判定依赖窗口 API，仅 Windows 生效）。
+#[cfg(not(windows))]
+pub fn is_self_hwnd(_hwnd: i64) -> bool {
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

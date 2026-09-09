@@ -310,23 +310,64 @@ pub fn run_screen_worker(
     let mut last_info_probe_at = Instant::now();
     // 2026-08 A1：暂停边沿跟踪（暂停期画面链整体冻结：采样/前台监控/播放器
     // 检测全部跳过——"会话时间"在暂停期间不前进）
+    // 批 2a：auto_paused 局部 bool 删除——暂停来源收敛在 pause_state 单状态机
+    // （reason/条件锁存）；本 worker 只按自身来源行动：media 条件持有时轻量
+    // 轮询找恢复信号、manual 锁存期全冻结（不跟随任何自动源）
     let mut worker_paused = pause.paused.load(Ordering::SeqCst);
-    // P2 自动暂停：本次暂停是否由本 worker 的视频检测置位（置位时保持轻量
-    // 轮询找恢复信号；手动暂停保持 A1 全冻结，二者互斥由标志来源区分）
-    let mut auto_paused = false;
+    // 前台自动暂停门控（批 2a）：250ms 节拍独立于采样拍；锚定资格=有目标
+    // 窗口（本 worker 存在 ⇔ 画面链开启，anchor_eligible 第二参装配侧已隐含）
+    let mut fg_gate = crate::foreground_pause::ForegroundGate::new();
+    let fg_eligible = crate::foreground_pause::anchor_eligible(hwnd.is_some(), true);
+    let mut last_fg_gate_ms: u64 = 0;
 
     while !stop.load(Ordering::SeqCst) {
-        // ── 暂停检查（2026-08 A1 硬暂停；P2 自动暂停扩展）──
+        // ── 前台门控采样（批 2a；250ms 节拍）──
+        // @ai-context: 非 manual 锁存期持续观察（含媒体/前台暂停期间——暂停期
+        //              也允许前台源锁存/解除）；manual 锁存期冻结。观察分类：
+        //              前台=目标 → Target；前台=本进程自窗（浮窗/overlay/原生
+        //              对话框）→ Neutral（中性：不推进也不撤销）；其余 Foreign；
+        //              全屏无锚点/探测失败 → Neutral（无证据不推断）
+        if fg_eligible {
+            let fg_now_ms = epoch.elapsed().as_millis() as u64;
+            if fg_now_ms.saturating_sub(last_fg_gate_ms) >= crate::foreground_pause::FG_TICK_MS
+                && !pause.manual_held()
+            {
+                last_fg_gate_ms = fg_now_ms;
+                let obs = match (hwnd, crate::windows::foreground_hwnd()) {
+                    (Some(target), Some(fg)) if fg == target => {
+                        crate::foreground_pause::ForegroundObs::Target
+                    }
+                    (Some(_), Some(fg)) if crate::windows::is_self_hwnd(fg) => {
+                        crate::foreground_pause::ForegroundObs::Neutral
+                    }
+                    (Some(_), Some(_)) => crate::foreground_pause::ForegroundObs::Foreign,
+                    _ => crate::foreground_pause::ForegroundObs::Neutral,
+                };
+                match fg_gate.tick(obs) {
+                    crate::foreground_pause::ForegroundDecision::Suspend => {
+                        let _ = pause
+                            .request_pause(crate::pause_state::PauseSource::Foreground);
+                        eprintln!("[ScreenWorker] 前台离开目标窗口（连续确认）→ 自动暂停捕获");
+                    }
+                    crate::foreground_pause::ForegroundDecision::Resume => {
+                        let _ = pause
+                            .request_release(crate::pause_state::PauseSource::Foreground);
+                        eprintln!("[ScreenWorker] 前台回到目标窗口 → 解除前台暂停");
+                    }
+                    crate::foreground_pause::ForegroundDecision::None => {}
+                }
+            }
+        }
+        // ── 暂停检查（2026-08 A1 硬暂停；批 2a 来源感知扩展）──
         let paused_now = pause.paused.load(Ordering::SeqCst);
         if paused_now {
             if !worker_paused {
                 worker_paused = true;
-                eprintln!(
-                    "[ScreenWorker] 会话暂停，画面链{}",
-                    if auto_paused { "进入轻量轮询（等视频恢复）" } else { "冻结" }
-                );
+                eprintln!("[ScreenWorker] 会话暂停，画面链冻结（等恢复/来源解除）");
             }
-            if auto_paused {
+            // 非 manual 锁存：media 条件持有时轻量轮询找恢复信号
+            // （fg 条件的回位检测由上方门控节拍负责——互不解除只解自己）
+            if pause.media_held() && !pause.manual_held() {
                 // P2 自动暂停：轻量轮询——仅取帧刷新 latest_frame + 播放检测。
                 // 检测读的就是 latest_frame，不刷新则永远看到暂停帧 → 无法发现
                 // 恢复；1s 一拍仅取帧（零分析），5s 一拍检测（沿用 REQ-125 节流）
@@ -368,8 +409,10 @@ pub fn run_screen_worker(
                                 session_id,
                                 &db,
                             );
-                            pause.paused.store(false, Ordering::SeqCst);
-                            auto_paused = false;
+                            // 批 2a：经 request API 解除媒体条件（只解自己——fg
+                            // 仍锁存则暂停延续，本 worker 暂停分支继续等）
+                            let _ = pause
+                                .request_release(crate::pause_state::PauseSource::Media);
                             last_player_paused = false;
                             let _ = app.emit("live:media-resumed", ());
                             eprintln!("[ScreenWorker] 随播随停：声画恢复 → 自动解除暂停");
@@ -386,7 +429,7 @@ pub fn run_screen_worker(
                                     crate::player_behavior::detect_player_action(&img).is_some();
                                 if !still_paused {
                                     // 恢复播放：落 Play 事件（REQ-125 语义一致）+
-                                    // 清自动暂停（音频/捕获线程沿边沿自动恢复）
+                                    // 解除媒体条件（音频/捕获线程沿边沿自动恢复）
                                     crate::player_behavior::record_action(
                                         &crate::player_behavior::PlayerAction {
                                             kind: crate::player_behavior::PlayerActionKind::Play,
@@ -396,8 +439,8 @@ pub fn run_screen_worker(
                                         session_id,
                                         &db,
                                     );
-                                    pause.paused.store(false, Ordering::SeqCst);
-                                    auto_paused = false;
+                                    let _ = pause
+                                        .request_release(crate::pause_state::PauseSource::Media);
                                     last_player_paused = false;
                                     let _ = app.emit("live:media-resumed", ());
                                     eprintln!("[ScreenWorker] 视频恢复播放，自动解除暂停");
@@ -429,7 +472,8 @@ pub fn run_screen_worker(
         let comp_epoch = epoch
             + Duration::from_millis(pause.total_paused_ms.load(Ordering::SeqCst));
         // REQ-291（v0.19.7）：随播随停 1s 拍（独立于采样——idle 静默期仍判暂停；
-        // 手动暂停不判：auto_paused=false 时语义是用户冻结，不跟随视频）
+        // 手动暂停不判：manual 锁存期语义是用户冻结，不跟随视频——批 2a 起
+        // 主路径只在未暂停时运行，暂停期恢复检测在暂停分支按媒体条件轮询）
         if !paused_now && last_media_tick.elapsed() >= Duration::from_secs(1) {
             last_media_tick = Instant::now();
             let sound_recent = media_sound_recent(&media_sound);
@@ -437,34 +481,26 @@ pub fn run_screen_worker(
                 last_media_tick.duration_since(t) <= Duration::from_millis(1500)
             });
             let decision = media_detector.tick(sound_recent, motion_recent);
-            match decision {
-                crate::media_state::MediaDecision::Suspend => {
-                    let ms = comp_epoch.elapsed().as_millis() as u64;
-                    pause.paused.store(true, Ordering::SeqCst);
-                    auto_paused = true;
-                    crate::player_behavior::record_action(
-                        &crate::player_behavior::PlayerAction {
-                            kind: crate::player_behavior::PlayerActionKind::Pause,
-                            value: None,
-                        },
-                        ms,
-                        session_id,
-                        &db,
-                    );
-                    let _ = app.emit("live:media-paused", ());
-                    eprintln!("[ScreenWorker] 随播随停：声画双通道确认视频暂停 → 自动暂停捕获");
-                }
-                // 审查 F1：手动恢复（pause=false）后媒体相位为 Paused 的主路径拍——
-                // 声画恢复产出 Resume，必须同步清 auto_paused（否则后续手动暂停
-                // 被误当自动暂停走轻量轮询并在 1-2s 内被声通道自动解除）
-                crate::media_state::MediaDecision::Resume => {
-                    if auto_paused {
-                        auto_paused = false;
-                        eprintln!("[ScreenWorker] 随播随停：主路径恢复 → 清除自动暂停标记");
-                    }
-                }
-                crate::media_state::MediaDecision::None => {}
+            if decision == crate::media_state::MediaDecision::Suspend {
+                let ms = comp_epoch.elapsed().as_millis() as u64;
+                // 批 2a：经 request API 锁存媒体条件（暂停动作由机器层完成——
+                // manual 锁存期 auto 提议只记条件不动作）
+                let _ = pause.request_pause(crate::pause_state::PauseSource::Media);
+                crate::player_behavior::record_action(
+                    &crate::player_behavior::PlayerAction {
+                        kind: crate::player_behavior::PlayerActionKind::Pause,
+                        value: None,
+                    },
+                    ms,
+                    session_id,
+                    &db,
+                );
+                let _ = app.emit("live:media-paused", ());
+                eprintln!("[ScreenWorker] 随播随停：声画双通道确认视频暂停 → 自动暂停捕获");
             }
+            // 注：主路径 Resume 决策（审查 F1 曾清 auto_paused 标记）已随
+            // auto_paused 删除——检测器相位自更新；媒体解除只发生在暂停分支
+            // 的恢复检测（机器层保证暂停 ⇔ 条件锁存，主路径无残留标记可清）
         }
         // M4：每 2s 采样 CPU 负载（降级标志变化打印——静默失败可见化）
         if last_load_check_at.elapsed() >= Duration::from_secs(2) {
@@ -760,11 +796,11 @@ pub fn run_screen_worker(
                             player_state_initialized = true;
                             last_player_paused = paused;
                             // P2：基线即暂停（会话开始时视频已暂停）→ 自动暂停。
-                            // 不写假 Pause 事件（MEDIUM-9），但置共享标志——
-                            // 音频/捕获线程沿边沿同步暂停
+                            // 不写假 Pause 事件（MEDIUM-9），但锁存媒体条件——
+                            // 音频/捕获线程沿边沿同步暂停（批 2a 经 request API）
                             if paused && !pause.paused.load(Ordering::SeqCst) {
-                                pause.paused.store(true, Ordering::SeqCst);
-                                auto_paused = true;
+                                let _ = pause
+                                    .request_pause(crate::pause_state::PauseSource::Media);
                                 let _ = app.emit("live:media-paused", ());
                                 eprintln!("[ScreenWorker] 视频处于暂停态，会话自动暂停");
                             }
@@ -788,20 +824,22 @@ pub fn run_screen_worker(
                                 &db,
                             );
                             if paused && !pause.paused.load(Ordering::SeqCst) {
-                                // P2：检测到视频暂停 → 自动暂停捕获（共享标志；
+                                // P2：检测到视频暂停 → 自动暂停捕获（媒体条件；
                                 // 下一轮循环进入轻量轮询，恢复检测不中断）。
-                                // 审查 F5：已由媒体通道暂停（pause=true）时不重复
-                                // 记账/发事件（同迭代双系统重复 Pause）
-                                pause.paused.store(true, Ordering::SeqCst);
-                                auto_paused = true;
+                                // 审查 F5：已暂停（pause=true）时不重复记账/发事件
+                                // （同迭代双系统重复 Pause——机器层同样幂等）
+                                let _ = pause
+                                    .request_pause(crate::pause_state::PauseSource::Media);
                                 let _ = app.emit("live:media-paused", ());
                                 eprintln!("[ScreenWorker] 检测到视频暂停，自动暂停捕获");
                             }
                         } else if paused && !pause.paused.load(Ordering::SeqCst) {
-                            // P2 兜底：手动恢复后视频仍暂停 → 重新自动暂停
-                            // （语义：捕获跟随视频状态，用户手动继续不覆盖）
-                            pause.paused.store(true, Ordering::SeqCst);
-                            auto_paused = true;
+                            // P2 兜底（批 2a 语义推广——机器层"manual 解除瞬间重评
+                            // 估 auto 条件"的 worker 侧实现）：手动恢复后视频仍
+                            // 暂停 → 重新锁存媒体条件（捕获跟随视频状态，用户
+                            // 手动继续不覆盖）；经 request API 只记条件不动作
+                            let _ = pause
+                                .request_pause(crate::pause_state::PauseSource::Media);
                             let _ = app.emit("live:media-paused", ());
                             eprintln!("[ScreenWorker] 视频处于暂停态，重新自动暂停");
                         }
