@@ -18,6 +18,8 @@ import {
 } from "./markdownEdit";
 // v0.16.1：正文多色荧光笔——色板复用（选中色 → 包裹 ==[色]…==）
 import NoteColorPicker from "./NoteColorPicker";
+// 批 3（用户问题9）：降级 textarea 底部留白与阅读/CM 同源（滚动行程一致）
+import { BOTTOM_BREATHER_CSS } from "../utils/contentBreather";
 
 interface Props {
   note: Note;
@@ -397,7 +399,7 @@ const NoteEditView = forwardRef<NoteEditHandle, Props>(function NoteEditView({ n
         onPaste={(e) => { handleImagePaste(e); }}
         onBlur={() => { if (dirty) void saveDraft(false); }}
         autoFocus // v0.12.2：新建即编辑态聚焦首行（去摩擦——零对话框新建后直接可输入）
-        style={{ flex: 1, padding: 16, fontSize: 14, lineHeight: 1.8, border: "none", outline: "none", resize: "none", fontFamily: "monospace", background: "#fcfcfc" }}
+        style={{ flex: 1, padding: `16px 16px ${BOTTOM_BREATHER_CSS}`, fontSize: 14, lineHeight: 1.8, border: "none", outline: "none", resize: "none", fontFamily: "monospace", background: "#fcfcfc" }}
         placeholder="在此编辑笔记内容…"
       />
 

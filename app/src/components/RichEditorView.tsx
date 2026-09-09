@@ -26,6 +26,8 @@ import { clearDraft, readDraft } from "../utils/draftStore";
 import NoteEditView, { type NoteEditHandle } from "./NoteEditView";
 // v0.16.1：正文多色荧光笔——色板复用（选中色 → 包裹 ==[色]…==）
 import NoteColorPicker from "./NoteColorPicker";
+// 批 3（用户问题9）：CM 内容底部留白与阅读/textarea 同源（末行可滚离底边）
+import { BOTTOM_BREATHER_CSS } from "../utils/contentBreather";
 
 interface Props {
   note: Note;
@@ -43,7 +45,8 @@ const TOOLBAR_BTN: React.CSSProperties = {
 const editorTheme = EditorView.theme({
   "&": { height: "100%", backgroundColor: "#fcfcfc" },
   ".cm-scroller": { fontFamily: "monospace", fontSize: "14px", lineHeight: "1.8" },
-  ".cm-content": { padding: "16px 0" },
+  // 底部留白 token 与阅读/textarea 同源（上 16 保留原观感；左右 0 不变）
+  ".cm-content": { padding: `16px 0 ${BOTTOM_BREATHER_CSS}` },
   "&.cm-focused": { outline: "none" },
 });
 

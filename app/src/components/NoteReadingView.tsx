@@ -15,6 +15,8 @@ import type { Note } from "../types";
 import NoteMarkdown from "./NoteMarkdown";
 import ColumnBar from "./ColumnBar";
 import { fmtDate, parseTags } from "./NoteListView";
+// 批 3（用户问题9）：阅读容器底部留白与编辑双面同源（末段不再贴底无法上移）
+import { BOTTOM_BREATHER_CSS } from "../utils/contentBreather";
 
 interface Props {
   note: Note;
@@ -240,7 +242,7 @@ export default function NoteReadingView({
         {editing ? (
           editor
         ) : (
-          <div ref={contentRef} style={{ flex: 1, overflowY: "auto", padding: 16, fontSize: 14, lineHeight: 1.8 }}>
+          <div ref={contentRef} style={{ flex: 1, overflowY: "auto", padding: `16px 16px ${BOTTOM_BREATHER_CSS}`, fontSize: 14, lineHeight: 1.8 }}>
             {auxPanels}
             <NoteMarkdown
               note={note}
