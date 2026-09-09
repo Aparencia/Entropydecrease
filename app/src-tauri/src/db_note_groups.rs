@@ -12,7 +12,7 @@ use crate::error::Result;
 use crate::types::{GroupDeleteImpact, NewNoteGroup, NoteGroup};
 
 /// note_groups 表统一查询列（列顺序与 row_to_group 严格对应）。
-const GROUP_COLUMNS: &str = "id, name, terrain, kind, domain_tag, source, series_key, route_reason, route_overridden, color, created_at, updated_at";
+const GROUP_COLUMNS: &str = "id, name, terrain, kind, domain_tag, source, series_key, route_reason, route_overridden, color, pin, created_at, updated_at";
 
 impl Db {
     /// 新建笔记组，返回含 id 与时间戳的完整记录。
@@ -40,6 +40,7 @@ impl Db {
                 route_overridden: 0,
                 note_count: 0,
                 color: None,
+                pin: 0,
                 created_at: now,
                 updated_at: now,
             })
@@ -149,6 +150,10 @@ impl Db {
     /// @ai-context: 审查修复（2026-08-22）：改判为非课程组时同步清空 series_key——
     /// 残留的系列键会让后续同系列会话经 find_group_by_series_key 误归入
     /// 已被改判的组（路由误判 ★★★★ 死法的改判侧漏洞）。
+    /// @ai-context: REQ-315（批 6）kind 变更边界：手动序 seq 是「kind 分区内」相对
+    /// 序号——改判换分区后旧行对新分区无意义（可能撞序/占位），同事务清该组
+    /// 手动序行（回落新分区自动区，updated_at 降序；不广播单独事件——命令层
+    /// 本就广播组域）。
     pub fn override_group_route(
         &self,
         id: i64,
@@ -156,16 +161,21 @@ impl Db {
         domain_tag: Option<&str>,
         reason: &str,
     ) -> Result<bool> {
-        self.with_conn(|conn| {
-            let affected = conn.execute(
-                "UPDATE note_groups SET kind = ?1, domain_tag = ?2, route_reason = ?3,
-                 route_overridden = 1,
-                 series_key = CASE WHEN ?1 = 'course' THEN series_key ELSE NULL END,
-                 updated_at = ?4 WHERE id = ?5",
-                params![kind, domain_tag, reason, unix_seconds(), id],
-            )?;
-            Ok(affected > 0)
-        })
+        // 事务需要 &mut Connection（同 delete_group 手法：直接锁 + 显式事务）
+        let mut conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let tx = conn.transaction()?;
+        let affected = tx.execute(
+            "UPDATE note_groups SET kind = ?1, domain_tag = ?2, route_reason = ?3,
+             route_overridden = 1,
+             series_key = CASE WHEN ?1 = 'course' THEN series_key ELSE NULL END,
+             updated_at = ?4 WHERE id = ?5",
+            params![kind, domain_tag, reason, unix_seconds(), id],
+        )?;
+        if affected > 0 {
+            tx.execute("DELETE FROM note_group_orders WHERE group_id = ?1", params![id])?;
+        }
+        tx.commit()?;
+        Ok(affected > 0)
     }
 
     /// v0.14 B（视觉系统）：组级颜色设置（色板 id；None=清除回默认灰）。
@@ -260,16 +270,17 @@ fn row_to_group(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteGroup> {
         route_reason: row.get(7)?,
         route_overridden: row.get(8)?,
         color: row.get(9)?,
+        pin: row.get(10)?,
         note_count: 0,
-        created_at: row.get(10)?,
-        updated_at: row.get(11)?,
+        created_at: row.get(11)?,
+        updated_at: row.get(12)?,
     })
 }
 
 /// 把 rusqlite 行映射为 NoteGroup（含 JOIN 计数列）。
 fn row_to_group_with_count(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteGroup> {
     let mut g = row_to_group(row)?;
-    g.note_count = row.get(12)?;
+    g.note_count = row.get(13)?;
     Ok(g)
 }
 

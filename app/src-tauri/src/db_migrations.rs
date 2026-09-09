@@ -324,6 +324,17 @@ CREATE TABLE IF NOT EXISTS contracts (
         CREATE INDEX IF NOT EXISTS idx_note_orders_scope ON note_orders(scope, ord);
         ",
     )?;
+    // REQ-315（v0.20.11 批 6）：组手动排序表——group_id 主键（组 1:1），seq=kind
+    // 分区内相对序号（渲染时按 kind 分区消费）。与 note_orders 无 FK 的差异：
+    // 笔记会跨 scope 迁移故需 purge 防 id 复活旧序位，组即排序 scope 本体、删除即
+    // 消亡无复用路径——FK ON DELETE CASCADE 即完整清理（读写在 db_note_group_orders.rs）
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS note_group_orders (
+            group_id INTEGER PRIMARY KEY REFERENCES note_groups(id) ON DELETE CASCADE,
+            seq INTEGER NOT NULL
+        );
+        ",
+    )?;
     // v0.5.0 M1（REQ-043）：旧库迁移——sessions 表补 profile 列（兼容既有数据库）
     ensure_column(conn, "sessions", "profile", "ALTER TABLE sessions ADD COLUMN profile TEXT")?;
     // v0.11.7（图文会话，ADR-020）：旧库迁移——sessions 表补 kind 列
@@ -463,6 +474,14 @@ CREATE TABLE IF NOT EXISTS contracts (
         "note_groups",
         "color",
         "ALTER TABLE note_groups ADD COLUMN color TEXT",
+    )?;
+    // REQ-315（v0.20.11 批 6）：旧库迁移——note_groups 补 pin 列
+    // （0=未置顶/1=置顶；NOT NULL DEFAULT 0——置顶区排序第一条件，老数据零迁移）
+    ensure_column(
+        conn,
+        "note_groups",
+        "pin",
+        "ALTER TABLE note_groups ADD COLUMN pin INTEGER NOT NULL DEFAULT 0",
     )?;
     // v0.14.1：旧库迁移——knowledge_canvas_states 补画布偏好三列
     // （CREATE TABLE 只对新库生效；旧行升级后落 DEFAULT——行为与默认设置一致，

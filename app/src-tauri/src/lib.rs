@@ -128,6 +128,8 @@ mod clipboard_signal;
 mod commands;
 // v0.11.0（REQ-195~198）：笔记组命令层（列表/详情/自建/改判/移动）
 mod commands_groups;
+// REQ-315（v0.20.11 批 6）：组排序/置顶命令层（pin + note_group_orders 分区快照）
+mod commands_group_orders;
 // v0.11.1：feed 进料口命令层（功能开关/碎片捕获/列表）
 mod commands_fragments;
 // v0.11.2：闪卡与复习命令层（生成/复习队列/评分/自测）
@@ -210,6 +212,8 @@ mod db_uid;
 mod notify;
 // v0.11.0（REQ-195）：笔记组数据层（统一产物层唯一容器，v4 §7.4）
 mod db_note_groups;
+// REQ-315（v0.20.11 批 6）：组手动排序表 + 置顶更新（kind 分区快照）
+mod db_note_group_orders;
 // v0.11.1：碎片原料层数据读写（fragments 表；碎片不是笔记，独立身份）
 mod db_fragments;
 // v0.11.2：闪卡/复习日志/指标事件数据层（学习循环统一）
@@ -597,6 +601,11 @@ pub fn run() {
             commands_groups::override_group_route,
             commands_groups::move_note_to_group,
             commands_groups::update_group_color,
+            // REQ-315（v0.20.11 批 6）：组置顶 + 手动排序（kind 分区快照/单组回自动）
+            commands_group_orders::update_note_group_pin,
+            commands_group_orders::note_group_order_list,
+            commands_group_orders::note_group_order_save,
+            commands_group_orders::note_group_order_clear,
             // v0.14.1：组删除（影响面确认后级联——两命令：只读影响面 + 执行删除）
             commands_groups::get_group_delete_impact,
             commands_groups::delete_note_group,

@@ -192,6 +192,10 @@ pub struct NoteGroup {
     /// v0.14 B（视觉系统）：组级颜色（色板 id；None=未设置——笔记未显式定义时继承组色）
     #[serde(default)]
     pub color: Option<String>,
+    /// 置顶标记（REQ-315 v0.20.11 批 6；0=未置顶，1=置顶——组列表置顶区第一条件；
+    /// 与 notes.pin 同语义同措辞「置顶」，数据字段名沿 notes 先例不复刻改名）
+    #[serde(default)]
+    pub pin: i64,
     pub created_at: i64,
     pub updated_at: i64,
 }
