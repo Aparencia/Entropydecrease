@@ -42,7 +42,7 @@
 
 ## 6. 文档与提交
 
-- 本设计：docs/superpowers/specs/2026-09-09-review-page-design.md（本文件）
+- 本设计：docs/archive/2026-09-09/2026-09-09-review-page-design.md（本文件，已归档 2026-09-09）
 - docs/versions/v0.20.md：v0.20.10 交付记录小节
 - 需求池 REQ-314 备注（用户 11 项问题 6）
 - docs/standards/line-limit-exemptions.md：App/NotesPage/GroupSidebar 实测行数纠偏

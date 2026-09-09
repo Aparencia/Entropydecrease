@@ -28,12 +28,18 @@
 | TD-2026-09-09-A | NoteListView 超 600 硬限——实测 646（v0.20.12 批 7 接线后；HEAD 基线 633 即越线，批 7 登记值 591 过期）——**正式登记**（批 7 起以本 ID 引用但 2026-09-09 夹当日未建，本夹补登为权威行） | 有意 | P1 | 2026-09-09 | open |
 | TD-2026-09-09-B | 「以对话处理」选区动作未接线（批 8 REQ-317 授权退路）：AiConversationDock 会话视图 v1 只读、无面板内发送通道（REQ-274 同源承诺：对话在 ChatPage 继续，防双实例流控冲突）；向 ChatPage composer 注入种子草稿需 App→ChatPage→NotesPage 三层 >3 组件深改——批 8 判为超面改动，菜单不显此项不伪实现；候选最小面=ChatPage 增 draft 种子 prop（App 持有种子态经跨页回调注入，不自动发送仅预填） | 有意 | P3 | 2026-09-09 | open |
 | TD-2026-09-09-C | 「加入行动」阅读态未接线（批 8 REQ-317 V1 仅编辑态）：阅读态渲染 DOM ↔ 源码行映射缺失——选中文本定位到 Markdown 源码行并插入任务行需建立映射层（阅读容器内 Range → 行号 → 源正文偏移），V1 隐藏菜单项并注释；候选=复刻 NoteMarkdown 既有任务行索引（taskLineIndices 渲染序）思路的选区行映射 | 有意 | P3 | 2026-09-09 | open |
+| TD-2026-09-09-D | SessionListPanel 604 / NotesPage 602 越 600 硬限（审查修复轮 3/4 净增；TD-2026-09-09-A 同族）——拆分计划已登豁免表（SessionSelectionToolbar / useNotesPageEditing） | 无意 | P1 | 2026-09-09 | open |
+| TD-2026-09-09-E | routeReason「已改判」行标签对"用户接管组"语义不贴切（改名/着色/置顶/手排即豁免清理；置位粘性已实现）——标签文案待用户裁决 | 有意 | P3 | 2026-09-09 | open |
+| TD-2026-09-09-F | SessionListRow titleEcho 桥接疑失效：setEcho 后 effect 在服务端 prop 刷新前清除回声（平铺短暂闪回/分组快照可能长期旧标题）——待复现走查后修 | 无意 | P2 | 2026-09-09 | open |
+| TD-2026-09-09-G | 审查批外同族遗留：db_sessions add_segments_batch/replace_segments 手写事务未统一 transaction()；diff_markdown_sections/note_versions_diff 仍同步主线程且无字符护栏（与已修 diff_markdown_ops 同族） | 无意 | P3 | 2026-09-09 | open |
+| TD-2026-09-09-H | HTML5 ⛶ 全屏视频新建独立顶层 HWND 被判 Foreign → 误自动暂停（审查 P2-5 待真机）：候选降级=前台与目标 pid 相等按 Target/中性——真机标定前勿实现 | 无意 | P2 | 2026-09-09 | open |
 
 ## 2026-09-09 节（批 1~8 交付 + 债务核验，同日连续线）
 
 - **未偿表滚动**：自 2026-09-06 权威清单——closed 3 笔哈希不变；carried 7 笔逐条核对无新偿还条件；TD-2026-09-09-A 补登为正式行（批 7 引用先行）；新增 open 2 笔（TD-2026-09-09-B/C，批 8 REQ-317 授权退路/范围裁剪登记）
 - **状态更新**：TD-2026-08-31-A → closed（部分兑现：REQ-317 v0.20.13 批 8——CM 编辑态选区右键菜单 + 正文阅读态选区右键菜单落地；残留面=非 CM contenteditable 与无选区右键静默为有意基线）
 - **批 8 拆件承接（TD-2026-09-06-G 义务延续）**：NotesPage 599 压线（模型卡对话框渲染拆 ModelCardDialogSlot.tsx 33 行 + 行动类编排拆 useNoteSelectionActions.ts 70 行）；选区纯逻辑/共享菜单独立文件（utils/noteSelectionMenu.ts 165 行 + components/note-selection/SelectionActionMenu.tsx 187 行）
+- **审查修复批（同日轮 1~4 收口）**：4f8a7102/68bf43a1（暂停域）/ f99b90e7/02aba9a2（proofread 统一认领 + diff 护栏）/ 23b0eeb5/7dfe3734/aa7add53/4fe09e08（编排接管 + 批删事务/toast/面板测试）/ 35f1d18c/2ab400ca/b0ee5578/177947c1/7b432c1e（refreshToken/选区菜单/ESC 门控/死分支/措辞）——审查 P2×13 与低风险 P3 全量即修（Rust 2337/0、vitest 738、tsc 0）；新增债务 TD-2026-09-09-D~H（open 5）；行数豁免实测纠偏与节序/行序修正已同步活跃区。
 - **验证记录**：前端全量 vitest（批 8 新增 37 例）+ `tsc --noEmit` 0 错误；Rust 零改动（纯前端批，无需 cargo 回归——批 5 同口径）；行数豁免实测登记见 [line-limit-exemptions.md](../../standards/line-limit-exemptions.md)（NoteReadingView 316 / RichEditorView 399 新增登记；RichEditorView 前置 323 超限为 v0.20.8 偏差未登记债务，本次纠偏）
 
 ## 关联

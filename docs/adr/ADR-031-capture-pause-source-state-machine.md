@@ -64,11 +64,11 @@ ADR-013 决策 2（播放暂停驱动 = 复用 A1 共享暂停标志；手动暂
 
 - `cargo test --test app_lib_tests`：2287 通过 / 0 失败 / 6 ignored（全量，隔离运行）；
 - 前端：全量 vitest 597/597、`tsc --noEmit` 0 错误；
-- 新文件 ≤300 行（pause_state.rs 250 / live_session_pause.rs 258 / foreground_pause.rs 180）；
+- 新增核心文件实测（2026-09-09 审查纠偏，原 ≤300 口径失真）：pause_state.rs 336 / live_session_pause.rs 353（审查修复轮 1 后）/ foreground_pause.rs 227——前两者超 300 已按 300-600 档登记 line-limit-exemptions.md；
 - 真机验收清单 8 条登记于 v0.20.7 交付记录（前台阈值标定待真机）。
 
 ## 相关决策
 
 - ADR-007（live-session 生命周期）、ADR-013（引擎预热与播放暂停驱动——本 ADR 修订其决策 2 的边沿 flush 语义与同标志/同事件表述）、ADR-030（ASR 质量批，flush/重打分参数化先例）
 - 需求：REQ-308/309/310（requirements-pool，2026-09-09 备注）
-- 设计：docs/superpowers/specs/2026-09-09-capture-pause-autopause-design.md
+- 设计：docs/archive/2026-09-09/2026-09-09-capture-pause-autopause-design.md（[ ] 已归档 2026-09-09）
