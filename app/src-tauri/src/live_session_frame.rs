@@ -136,9 +136,24 @@ fn media_sound_recent(slot: &Arc<Mutex<Option<Instant>>>) -> bool {
     last.is_some_and(|t| t.elapsed().as_millis() as u64 <= crate::media_state::SOUND_RECENT_MS)
 }
 
+/// 暂停分支轻量轮询门控（纯函数；P2-4 审查修复抽离以便单测）。
+///
+/// @ai-context(Why)：manual 锁存期语义=用户冻结，worker 不跟随任何自动源
+///              （全冻结不轮询）；media **或 fg** 任一 auto 条件持有时维持
+///              1s 取帧 + 媒体检测拍——fg 暂停期媒体条件照常锁存：用户离开
+///              期间视频暂停/结束即锁存 media（否则回位 fg 解除即"恢复采集"，
+///              主路径需 ~3-4s 滞回才重锁存 media，期间环境声混入/UI 闪采集
+///              中/时间轴伪运行段）；回位链条 = fg 解除 → media 仍 held →
+///              不真恢复 → 视频恢复播放 → 自动真恢复。
+fn light_poll_enabled(cond: crate::pause_state::PauseConditions) -> bool {
+    !cond.manual && (cond.media || cond.foreground)
+}
+
 /// 审查 F3：自动暂停期 watchdog 探针（无提示无心跳——暂停语义下停更提示无
 /// 意义；仅做观测 + WGC 自愈）。防复合卡死：暂停期间 WGC 会话失活（REQ-281
 /// 原场景）→ 恢复检测读不到新帧 → 永久卡自动暂停；此处探针周期性复活会话。
+/// P2-4：轻量轮询扩到 fg 暂停期后探针随之覆盖 fg 期（视频暂停/画面停更期间
+/// 同样需要 WGC 自愈；探针只观测 + 复活，任意暂停期无提示副作用）。
 fn watchdog_paused_probe(
     mut screen: Option<&mut ScreenCaptureSampler>,
     liveness: &mut crate::frame_liveness::FrameLiveness,
@@ -311,8 +326,9 @@ pub fn run_screen_worker(
     // 2026-08 A1：暂停边沿跟踪（暂停期画面链整体冻结：采样/前台监控/播放器
     // 检测全部跳过——"会话时间"在暂停期间不前进）
     // 批 2a：auto_paused 局部 bool 删除——暂停来源收敛在 pause_state 单状态机
-    // （reason/条件锁存）；本 worker 只按自身来源行动：media 条件持有时轻量
-    // 轮询找恢复信号、manual 锁存期全冻结（不跟随任何自动源）
+    // （reason/条件锁存）；本 worker 只按自身来源行动：auto 条件（media/fg，
+    // P2-4 起 fg 期同样）持有时轻量轮询找恢复信号、manual 锁存期全冻结
+    // （不跟随任何自动源）
     let mut worker_paused = pause.paused.load(Ordering::SeqCst);
     // 前台自动暂停门控（批 2a）：250ms 节拍独立于采样拍；锚定资格=有目标
     // 窗口（本 worker 存在 ⇔ 画面链开启，anchor_eligible 第二参装配侧已隐含）
@@ -365,9 +381,11 @@ pub fn run_screen_worker(
                 worker_paused = true;
                 eprintln!("[ScreenWorker] 会话暂停，画面链冻结（等恢复/来源解除）");
             }
-            // 非 manual 锁存：media 条件持有时轻量轮询找恢复信号
-            // （fg 条件的回位检测由上方门控节拍负责——互不解除只解自己）
-            if pause.media_held() && !pause.manual_held() {
+            // 非 manual 锁存：auto 条件（media/fg）持有时轻量轮询找恢复信号。
+            // P2-4：门控扩到 fg 期——fg 暂停期也维持媒体检测（视频暂停/结束即
+            // 锁存 media；否则回位 fg 解除即伪恢复采集，见 light_poll_enabled
+            // 注释）；fg 条件的解除仍由上方门控节拍负责（互不解除只解自己）
+            if light_poll_enabled(pause.conditions()) {
                 // P2 自动暂停：轻量轮询——仅取帧刷新 latest_frame + 播放检测。
                 // 检测读的就是 latest_frame，不刷新则永远看到暂停帧 → 无法发现
                 // 恢复；1s 一拍仅取帧（零分析），5s 一拍检测（沿用 REQ-125 节流）
@@ -384,7 +402,10 @@ pub fn run_screen_worker(
                         &mut got_frame,
                     );
                     // 审查 F3：暂停期 watchdog 探针（无提示）——WGC 会话失活时
-                    // 恢复检测永远读不到新帧 → 自动暂停永久卡死；此处定期自愈
+                    // 恢复检测永远读不到新帧 → 自动暂停永久卡死；此处定期自愈。
+                    // P2-4：轻量轮询扩到 fg 期后探针随之覆盖 fg 期（fg 期视频
+                    // 暂停/画面停更同样会饿死媒体恢复检测，需同款 WGC 自愈；
+                    // 探针只观测 + 复活，任意暂停期无提示副作用）
                     watchdog_paused_probe(
                         screen.as_mut(),
                         &mut liveness,
@@ -418,7 +439,13 @@ pub fn run_screen_worker(
                             eprintln!("[ScreenWorker] 随播随停：声画恢复 → 自动解除暂停");
                         }
                     }
-                    if last_player_check_at.elapsed() >= Duration::from_secs(5) {
+                    // P2-4：OCR 恢复判定只在 media 条件持有时有意义——fg-only
+                    // 暂停期视频正常播放（帧无暂停图标），裸跑会把"播放中"误当
+                    // 恢复沿，每 5s 落一次伪 Play/伪 live:media-resumed（时间轴
+                    // 伪运行段）；media 持有时仍是 REQ-125 恢复兜底（5s 判定）
+                    if pause.media_held()
+                        && last_player_check_at.elapsed() >= Duration::from_secs(5)
+                    {
                         last_player_check_at = Instant::now();
                         let check_now_ms = comp_epoch.elapsed().as_millis() as u64;
                         if let Some(f) = latest_frame.lock().ok().and_then(|g| g.clone()) {
@@ -473,7 +500,8 @@ pub fn run_screen_worker(
             + Duration::from_millis(pause.total_paused_ms.load(Ordering::SeqCst));
         // REQ-291（v0.19.7）：随播随停 1s 拍（独立于采样——idle 静默期仍判暂停；
         // 手动暂停不判：manual 锁存期语义是用户冻结，不跟随视频——批 2a 起
-        // 主路径只在未暂停时运行，暂停期恢复检测在暂停分支按媒体条件轮询）
+        // 主路径只在未暂停时运行，暂停期恢复检测在暂停分支按 auto 条件
+        // （media/fg）轮询）
         if !paused_now && last_media_tick.elapsed() >= Duration::from_secs(1) {
             last_media_tick = Instant::now();
             let sound_recent = media_sound_recent(&media_sound);

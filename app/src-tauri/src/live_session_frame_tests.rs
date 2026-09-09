@@ -5,6 +5,8 @@
 //! @ai-context: bgra_to_rgb_image 已随 M4 编排函数移入 region_ocr.rs
 //!              （保持本文件内联测试的引用更新）。
 
+use super::*;
+use crate::pause_state::PauseConditions;
 use crate::region_ocr::bgra_to_rgb_image;
 
 #[test]
@@ -23,4 +25,25 @@ fn bgra_rejects_mismatched_size() {
     // Act & Assert：尺寸与像素长度不匹配 → None
     assert!(bgra_to_rgb_image(&[0u8; 3], 2, 1).is_none());
     assert!(bgra_to_rgb_image(&[], 0, 0).is_none());
+}
+
+#[test]
+fn light_poll_runs_for_media_or_foreground_pause_but_not_manual() {
+    // Arrange & Act & Assert（P2-4 门控真值表）：
+    assert!(!light_poll_enabled(PauseConditions { manual: true, foreground: false, media: false }),
+        "manual 锁存期全冻结（用户冻结语义，不跟随任何自动源）");
+    assert!(light_poll_enabled(PauseConditions { manual: false, foreground: false, media: true }),
+        "media 暂停期维持轻量轮询（既有语义不回归）");
+    assert!(light_poll_enabled(PauseConditions { manual: false, foreground: true, media: false }),
+        "P2-4：fg 暂停期也维持媒体检测——离开期间视频暂停/结束即锁存 media");
+    assert!(light_poll_enabled(PauseConditions { manual: false, foreground: true, media: true }));
+    assert!(!light_poll_enabled(PauseConditions::default()), "防御：无持因不轮询");
+}
+
+#[test]
+fn light_poll_manual_latch_overrides_every_auto_condition() {
+    // Arrange & Act & Assert：manual 与任意 auto 条件叠加时门控仍关闭
+    assert!(!light_poll_enabled(PauseConditions { manual: true, foreground: true, media: false }));
+    assert!(!light_poll_enabled(PauseConditions { manual: true, foreground: false, media: true }));
+    assert!(!light_poll_enabled(PauseConditions { manual: true, foreground: true, media: true }));
 }
