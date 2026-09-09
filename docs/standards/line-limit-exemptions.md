@@ -132,6 +132,8 @@
 | app/src/components/NoteListView.tsx | 646 | v0.20.12 批 7（REQ-316）移组清理留痕接线（批量移/跨组拖移收集 + 右键菜单透传 +13；登记值 591 过期/实测纠偏——**超 600 硬限为预存债务**：HEAD 基线已 633 未登记，随 TD-2026-09-09-A 登记） | **超硬限必须拆**：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
 | app/src/components/GroupSidebar.tsx | 519 | v0.20.12 批 7（REQ-316）拖拽归组/ⓘ 弹层移组清理留痕透传（509→519；登记值过期纠偏） | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook |
 | app/src/components/RouteInfoPopover.tsx | 375 | v0.20.12 批 7（REQ-316）移入/移出选中笔记清理留痕透传（360→375） | 若再增长：简报拉取与渲染拆至 SystemBriefSection.tsx |
+| app/src/components/NoteReadingView.tsx | 316 | v0.20.13 批 8（REQ-317）正文选区右键菜单接线（正文容器 ref 化 + 选区判定/全选 + 共享菜单渲染，259→316）——选区纯逻辑已拆 utils/noteSelectionMenu.ts 与 note-selection/SelectionActionMenu.tsx，本文件仅留宿主接线 | 若再增长：搜索态/选区态/大纲态拆至 useNoteReadingViewState.ts |
+| app/src/components/RichEditorView.tsx | 399 | v0.20.13 批 8（REQ-317）编辑态选区右键菜单接线（CM contextmenu extension + 动作分发，323→399；**前置 323 超 300 为 v0.20.8 偏差登记未登记债务**，本次实测纠偏并登记）——选区纯逻辑已拆 utils/noteSelectionMenu.ts 与 note-selection/SelectionActionMenu.tsx，本文件仅留宿主接线 | 若再增长：工具栏 action 分派拆至 commands/ 域（既有 toolbarCommands/headingCommand 范式） |
 
 ## 已拆分 / 登记移除记录
 
