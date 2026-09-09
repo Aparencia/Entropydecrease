@@ -77,6 +77,12 @@
 | app/src-tauri/src/db_sop.rs | 433 | v0.20.3（REQ-296/297）SOP 三表数据域（模板/run/步骤/保鲜/聚合）+ 审查加固（保链更新/幂等守卫/步数计数）内聚 | 若再增长：run 执行族拆至 db_sop_run.rs |
 | app/src-tauri/src/commands_after.rs | 302 | v0.20.3（REQ-294/295/299/300）收尾命令域（批决议/导出/练习/问题）内聚；2026-09-06 实测登记（TD-2026-09-06-G） | 若再增长：批决议核心拆至 weekly_resolve.rs |
 | app/src-tauri/src/commands_session_note.rs | 458 | 既有登记 314 为过期快照——2026-09-06 实测纠偏（v0.20 装载合成/web 分支/批量 inner 扩展后 +144） | 若再增长：convert_to_note 拆至 commands_session_note_convert.rs |
+| app/src-tauri/src/db_notes.rs | 366 | REQ-316（批 7）：delete_note/update_note_group 改显式事务 + 同事务空组自动清理接线（结果契约扩展 + 旧组读出，净增 ~60 行；此前 305 未登记属漏登，本次补） | 若再增长：移组/删除事务族拆至 db_notes_group_ops.rs |
+| app/src-tauri/src/db_fragments.rs | 391 | REQ-316（批 7）：delete_fragment/update_fragment_group/promote 同事务空组自动清理接线（登记值 309 过期快照，实测纠偏） | 若再增长：promote_fragment_to_note 事务拆至 db_fragments_promote.rs（既有登记计划兑现） |
+| app/src-tauri/src/commands_fragments.rs | 374 | 碎片命令域 + REQ-316（批 7）结果契约与组域条件广播（登记值缺失为漏登——HEAD 基线已 347，本次补） | 若再增长：碎片组操作命令族拆至 commands_fragments_group.rs |
+| app/src-tauri/src/db_note_group_clean_tests.rs | 392 | REQ-316（批 7）测试域：判定表（自动/系列/手动/改判/五类残留/影响面外/级联卫生）+ 写路径集成 16 例，单模块 #[path] 挂载 | 若再增长：写路径集成组拆至 db_note_group_clean_flow_tests.rs |
+| app/src-tauri/src/commands.rs | 597 | 命令装配域（AppState + 通用命令 + 导入管线编排）；登记值 466 过期快照——2026-09-09 实测纠偏（含批 7 delete_note 结果契约 +12；600 硬限内压线） | 若再增长：导入管线命令拆至 commands_import.rs（既有登记计划） |
+| app/src-tauri/src/types.rs | 1017 | 全局共享类型域 + 批 7 五命令结果契约（+59；登记值 958 过期快照——实测纠偏） | 若再增长：笔记与 OCR 块类型拆至 types_note.rs / types_ocr.rs（既有登记计划） |
 
 ## 前端（app/src/，数字来自前端审查快照；Task #9/10 拆分进行中）
 
@@ -122,6 +128,10 @@
 | app/src/App.tsx | 439 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
 | app/src/components/NoteListView.tsx | 591 | v0.20.11 批 6（REQ-315）排序/置顶接线：scope 内 置顶→手排→自动 排序消费（orderScopeNotes）、组头排序行装载（note_group_order_list + orderGroups）、右键上移/下移与置顶拖拽底序重写（manualBaseOf/dropNotesIntoOrder）——编排内聚持续（登记值 524 过期，实测纠偏；排序纯函数已拆 orderBuckets/groupOrder/noteOrder 配单测） | 若再增长：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
 | app/src/components/GroupSidebar.tsx | 509 | v0.20.11 批 6（REQ-315）排序/置顶接线：组行右键菜单替代直开弹层、分区 置顶→手排→自动 渲染（orderGroups）、分区头「手排 ↺」复位、置顶 📌 标记（登记值 444 过期，实测纠偏）——排序操作域已拆 useGroupOrders.ts（123 行 hook），菜单 UI 拆 GroupRowContextMenu.tsx（131 行），本文件保留编排 | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook |
+| app/src/pages/NotesPage.tsx | 599 | v0.20.12 批 7（REQ-316）空组清理 toast 留痕接线（自绘 toast + onCleanNotice 分发；571→599，600 硬限内压线——登记值 571 过期） | 若再增长：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts |
+| app/src/components/NoteListView.tsx | 646 | v0.20.12 批 7（REQ-316）移组清理留痕接线（批量移/跨组拖移收集 + 右键菜单透传 +13；登记值 591 过期/实测纠偏——**超 600 硬限为预存债务**：HEAD 基线已 633 未登记，随 TD-2026-09-09-A 登记） | **超硬限必须拆**：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
+| app/src/components/GroupSidebar.tsx | 519 | v0.20.12 批 7（REQ-316）拖拽归组/ⓘ 弹层移组清理留痕透传（509→519；登记值过期纠偏） | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook |
+| app/src/components/RouteInfoPopover.tsx | 375 | v0.20.12 批 7（REQ-316）移入/移出选中笔记清理留痕透传（360→375） | 若再增长：简报拉取与渲染拆至 SystemBriefSection.tsx |
 
 ## 已拆分 / 登记移除记录
 
