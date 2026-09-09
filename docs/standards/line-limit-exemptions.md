@@ -40,7 +40,7 @@
 | app/src-tauri/src/vocab.rs | 373 | 词表域（存储/纠错/候选提取/n-gram 分词）内聚；分词纯逻辑与存储同域便于单测 | 若再增长：collect_tokens/split_runs 拆至 vocab_tokens.rs |
 | app/src-tauri/src/live_session_loop.rs | 369 | v0.7.0 M0 拆分产物（音频编排循环）：主循环 + 长静音/音量骤变/VAD 段事件写入 + drain/停止 flush；LiveSessionCtx 聚合上下文；A1 暂停边沿 + P1 停止 drain 重构；H1 修复（drain_deadline 改 Option，draining 置位时才计算） | 若再增长：事件写入块拆至 live_session_events.rs |
 | app/src-tauri/src/screens_tests.rs | 366 | 画面要点屏构建测试域（分组/聚类/图匹配/可消费块过滤回归）单模块 #[path] 挂载 | 若再增长：可消费块过滤组拆至 screens_filter_tests.rs |
-| app/src-tauri/src/db_sessions.rs | 394 | 会话仓储（会话/段/OCR 块/建议查询）；SQL 与行映射内聚；v0.7.1 列表标记子查询；TD-21-C 全部锁点迁移 with_conn 后 +35 行（闭包包裹） | 若再增长：recent_ocr_texts 等建议查询拆至 db_sessions_queries.rs |
+| app/src-tauri/src/db_sessions.rs | 482 | 会话仓储；批 4 delete_sessions_batch + 审查修复轮 3（transaction() 改造）——2026-09-09 实测纠偏（登记值 394 过期） | 若再增长：recent_ocr_texts 等建议查询拆至 db_sessions_queries.rs |
 | app/src-tauri/src/live_session_frame.rs | 692 | 屏幕采样线程（采样循环/暂停隔离/播放器检测/tier 重评/视频档案重评）单单体函数——TD-24-A 拆分方案已登记（SessionFrameCtx 聚合 + 段落方法提取），本轮评估：与 lib.rs 同批后置 | 若再增长：按 Ctx 聚合方案拆至 live_session_frame_scan.rs |
 | app/src-tauri/src/commands_refine_inner.rs | 353 | v0.5.0 模型版：课后精修编排（清单构建/降级决策/引擎懒加载/逐候选识别/产物回填/HTML→MD 转换）内聚于精修执行域 | 若再增长：html_to_markdown 拆至 html_table_md.rs |
 | app/src-tauri/src/ui_junk.rs | 347 | UI 噪声过滤域（水印/字幕条/角标检测规则 + 窗口过滤启发式）内聚于同一判定管线，规则共享窗口几何上下文 | 若再增长：窗口过滤拆至 ui_junk_window.rs |
@@ -83,6 +83,8 @@
 | app/src-tauri/src/db_note_group_clean_tests.rs | 392 | REQ-316（批 7）测试域：判定表（自动/系列/手动/改判/五类残留/影响面外/级联卫生）+ 写路径集成 16 例，单模块 #[path] 挂载 | 若再增长：写路径集成组拆至 db_note_group_clean_flow_tests.rs |
 | app/src-tauri/src/commands.rs | 597 | 命令装配域（AppState + 通用命令 + 导入管线编排）；登记值 466 过期快照——2026-09-09 实测纠偏（含批 7 delete_note 结果契约 +12；600 硬限内压线） | 若再增长：导入管线命令拆至 commands_import.rs（既有登记计划） |
 | app/src-tauri/src/types.rs | 1017 | 全局共享类型域 + 批 7 五命令结果契约（+59；登记值 958 过期快照——实测纠偏） | 若再增长：笔记与 OCR 块类型拆至 types_note.rs / types_ocr.rs（既有登记计划） |
+| app/src-tauri/src/pause_state.rs | 336 | 批 2（REQ-308）暂停来源状态机域（PauseSource/PauseShared/request 单写点）——2026-09-09 审查纠偏实测 336（交付口径 250 失真），300-600 档登记 | 若再增长：条件真值表与 request API 拆至 pause_machine.rs |
+| app/src-tauri/src/live_session_pause.rs | 353 | 批 2 暂停边沿收敛域 + 审查修复轮 1（own_pending 吸收/丢采样恢复沿补发）净增——2026-09-09 纠偏实测 353（交付口径 258 失真），300-600 档登记 | 若再增长：合成事件对构造拆至 live_session_pause_synth.rs |
 
 ## 前端（app/src/，数字来自前端审查快照；Task #9/10 拆分进行中）
 
@@ -90,7 +92,7 @@
 |------|------|---------|---------|
 | app/src/pages/ClassroomPage.tsx | 745 | 装配层页面：左栏配置区（就绪清单/窗口选择/实时捕获/视频导入/OCR 设备/词表/素材）+ 右栏内容区；v0.15 左栏列状态再增；v0.19.2/3（REQ-271/273 + 审查即修：状态机看门狗/预同步/文案收口，+43，实测 745）——**超 600 硬限为预存债务（TD-2026-08-30-A：v0.14 前已越线）持续累增，拆分计划（LiveCaptureCard）顺延待执行** | 若再增长：将实时捕获卡片拆出 LiveCaptureCard（状态与事件监听下沉）——超硬限必须拆 |
 | app/src/components/LiveActivityPanel.tsx | 510 | 实时活动面板：会话状态/转录流/OCR 预览/控制区多状态面板内聚（前端审查登记） | 若再增长：转录流与 OCR 预览拆至 LiveTranscriptStream.tsx / LiveOcrPreview.tsx |
-| app/src/components/SessionListPanel.tsx | 491 | v0.7.1 拆分产物：列表域 UI（双模式搜索/筛选排序/课程分组折叠/批量操作栏/内联转化）内聚——筛选/排序/选择为面板本地状态；v0.15 宽度 prop 适配（实测较登记值 501 回落） | 若再增长：批量操作栏与列表项拆至 SessionListRow.tsx |
+| app/src/components/SessionListPanel.tsx | 604 | v0.20.9 批 4（REQ-313）列表交互重写（选择模式/行右键/行内改名/批量栏）+ 审查修复轮 3（全选可见行基准/pending）净增——2026-09-09 实测纠偏（登记值 491 过期）；**超 600 硬限随 TD-2026-09-09-D 登记** | **超硬限必须拆**：批量操作栏与选择模式拆至 SessionSelectionToolbar.tsx（列表行已拆 SessionListRow.tsx） |
 | app/src/components/AiServicePanel.tsx | 390 | v0.8.0 M1（REQ-138/139/140）AI 服务设置面板：全局开关/密钥管理（掩码+DPAPI 保存）/端点模型/测试连接/余额卡片/授权确认卡/审计列表——配置面板 UI 内聚 | 若再增长：余额卡片与审计列表拆至 AiBalanceCard.tsx / AiAuditList.tsx |
 | app/src/components/SessionDetailPanel.tsx | 371 | 会话详情面板：质量报告/段列表/OCR 概览/操作区单一面板完整交互流内聚（前端审查登记） | 若再增长：质量报告区拆至 SessionQualityReport.tsx |
 | app/src/components/ProfileDetector.tsx | 373 | 档案检测组件：投票/确认流/记忆偏好 UI + v0.11.5 Task 5 冲突提示内聚 + v0.13.6（REQ-219~222）形态 10 下拉/领域 20 下拉/细目多选 chips/分区映射形态优先 + 审查轮（onProfileChange ref/独立 try/fine_ids 同步，实测 2026-08-24） | 若再增长：确认流与细目 chips 拆至 ProfileConfirmFlow.tsx |
@@ -105,7 +107,7 @@
 | app/src/utils/canvasElements.ts | 301 | v0.13.8 实体 → RF 元素纯转换域；v0.13.9 根卡/接线方向；v0.14.1 连线样式/箭头入参（+20 行）——单测共用纯函数域（零 React 依赖），拆分破坏转换一致性 | 若再增长：节点构建与边构建拆至 canvasNodes.ts / canvasEdges.ts |
 | app/src/types/knowledge.ts | 557 | 知识体系类型域（体系/节点/概念/模型/引用/审计/决策 + v0.13.8 画布契约 + v0.14.1 画布偏好枚举与下拉文案常量）——类型与文案常量同域防漂移（前端类型域拆分任务待执行） | 若再增长：画布偏好类型与文案拆至 types/canvas.ts |
 | app/src/pages/NotesPage.tsx | 572 | 三栏笔记页编排（组侧栏/列表/阅读编辑 + 列状态 + 焦点直达）；v0.19.1（REQ-260）引用跳笔记 + 命中词阅读搜索注入（focusNoteSearch 与 focusNoteId 合并单 effect 控线）+ 审查即修（编辑态退出先例 setEditing false，+4）——登记值 478 过期，实测纠偏 | 若再增长：跨页直达 effect 拆至 useNotesFocus.ts hook |
-| app/src/pages/ChatPage.tsx | 529 | AI 对话页编排（会话/任务/模型/双产物消息流）；v0.19.1（REQ-260）新会话模式（纯聊/学习库问答）+ 引用跳转接线 + 审查即修（regenerate 即刷，+7）——登记值 497 过期，实测纠偏 | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
+| app/src/pages/ChatPage.tsx | 593 | AI 对话页编排；批 1（REQ-306/307）active 门控/终态订阅接线净增——2026-09-09 实测纠偏（登记值 529 过期） | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
 | app/src/components/NoteLinkToSystem.tsx | 325 | v0.19.7（REQ-286）重构：挂体系选择器（体系下拉 + 三 tab + LinkEntityPicker 搜索树列表 + 三类内联轻建编排 + 既有反查/撤链/钳制语义保持）——实体选择/创建交互已下沉 LinkEntityPicker.tsx（134 行），本文件保留编排与数据装载内聚 | 若再增长：树行构建（flattenNodeRows）与实体装载拆至 useSystemEntities.ts hook |
 | app/src/App.tsx | 363 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）；v0.19.1 引用高亮焦点态 + 审查即修（openNotePlain 收敛普通打开清带词态 + SettingsPage active 透传，+6） | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
 
@@ -122,18 +124,19 @@
 | app/src/components/action-center/ActionCenterPanel.tsx | 521 | v0.20.5 行动中心独立页化：原 ActionCenterOverlay.tsx（509 行登记）更名迁移至 action-center/ 并去遮罩/关闭形态（refreshToken 切回重载）——编排内聚（TD-2026-09-06-G 预留目录兑现）；2026-09-06 实测登记 | 若再增长：队列/历史/SOP 三区拆至 action-center/ 子组件 |
 | app/src/pages/NotesPage.tsx | 575 | v0.20.5 行动中心剥离独立「行动」域页 + 阅读头动作组拆 NoteHeaderActions（色点/归组/挂体系/AI/模型卡下沉）——行动/封存/模型卡 state 族回归 600 硬限内（TD-2026-09-06-G 拆件义务兑现）；2026-09-06 实测登记（登记值 616/572 过期） | 若再增长：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts |
 | app/src/components/GroupSidebar.tsx | 455 | v0.20.5 行动入口/徽标移除（✅ 行动按钮与 actionCount 下线，仅剩 🎴 复习全量入口）；2026-09-06 实测登记（登记值 442 过期） | 若再增长：徽标聚合拆至 useGroupSidebarCounts.ts |
-| app/src/components/GroupSidebar.tsx | 455 | v0.20.5 行动入口/徽标移除（✅ 行动按钮与 actionCount 下线，仅剩 🎴 复习全量入口）；2026-09-06 实测登记（登记值 442 过期） | 若再增长：徽标聚合拆至 useGroupSidebarCounts.ts |
 | app/src/pages/NotesPage.tsx | 571 | v0.20.10 批 5 复习剥离：review state/Overlay 宿主/onOpenReview 本地实现删除，ⓘ「复习本组」改跨页深链透传（f702d876）——登记值 575 过期，实测回落；仍处 300-600 档编排层内聚（数据/选中态/快捷键/辅助面板插槽） | 若再增长：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts |
 | app/src/components/GroupSidebar.tsx | 444 | v0.20.10 批 5 复习入口移除：「🎴 复习 N」按钮与 dueTotal 拉取下线（无被动提醒裁决，同 v0.20.5 行动先例；f702d876）——登记值 455 过期，实测回落 | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook |
 | app/src/App.tsx | 439 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
 | app/src/components/NoteListView.tsx | 591 | v0.20.11 批 6（REQ-315）排序/置顶接线：scope 内 置顶→手排→自动 排序消费（orderScopeNotes）、组头排序行装载（note_group_order_list + orderGroups）、右键上移/下移与置顶拖拽底序重写（manualBaseOf/dropNotesIntoOrder）——编排内聚持续（登记值 524 过期，实测纠偏；排序纯函数已拆 orderBuckets/groupOrder/noteOrder 配单测） | 若再增长：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
 | app/src/components/GroupSidebar.tsx | 509 | v0.20.11 批 6（REQ-315）排序/置顶接线：组行右键菜单替代直开弹层、分区 置顶→手排→自动 渲染（orderGroups）、分区头「手排 ↺」复位、置顶 📌 标记（登记值 444 过期，实测纠偏）——排序操作域已拆 useGroupOrders.ts（123 行 hook），菜单 UI 拆 GroupRowContextMenu.tsx（131 行），本文件保留编排 | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook |
 | app/src/pages/NotesPage.tsx | 599 | v0.20.12 批 7（REQ-316）空组清理 toast 留痕接线（自绘 toast + onCleanNotice 分发；571→599，600 硬限内压线——登记值 571 过期） | 若再增长：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts |
-| app/src/components/NoteListView.tsx | 646 | v0.20.12 批 7（REQ-316）移组清理留痕接线（批量移/跨组拖移收集 + 右键菜单透传 +13；登记值 591 过期/实测纠偏——**超 600 硬限为预存债务**：HEAD 基线已 633 未登记，随 TD-2026-09-09-A 登记） | **超硬限必须拆**：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
+| app/src/pages/NotesPage.tsx | 602 | 审查修复轮 3/4（refreshToken 透传/选区动作编排承接）净增越 600 硬限（599→602）——随 TD-2026-09-09-D 登记 | **超硬限必须拆**：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts（既有登记计划兑现） |
+| app/src/components/NoteListView.tsx | 654 | v0.20.12 批 7 接线 + 审查修复轮 4（refreshToken 组序重拉）净增（646→654）——**超 600 硬限随 TD-2026-09-09-A 登记（值刷新）** | **超硬限必须拆**：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
 | app/src/components/GroupSidebar.tsx | 519 | v0.20.12 批 7（REQ-316）拖拽归组/ⓘ 弹层移组清理留痕透传（509→519；登记值过期纠偏） | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook |
 | app/src/components/RouteInfoPopover.tsx | 375 | v0.20.12 批 7（REQ-316）移入/移出选中笔记清理留痕透传（360→375） | 若再增长：简报拉取与渲染拆至 SystemBriefSection.tsx |
 | app/src/components/NoteReadingView.tsx | 316 | v0.20.13 批 8（REQ-317）正文选区右键菜单接线（正文容器 ref 化 + 选区判定/全选 + 共享菜单渲染，259→316）——选区纯逻辑已拆 utils/noteSelectionMenu.ts 与 note-selection/SelectionActionMenu.tsx，本文件仅留宿主接线 | 若再增长：搜索态/选区态/大纲态拆至 useNoteReadingViewState.ts |
 | app/src/components/RichEditorView.tsx | 399 | v0.20.13 批 8（REQ-317）编辑态选区右键菜单接线（CM contextmenu extension + 动作分发，323→399；**前置 323 超 300 为 v0.20.8 偏差登记未登记债务**，本次实测纠偏并登记）——选区纯逻辑已拆 utils/noteSelectionMenu.ts 与 note-selection/SelectionActionMenu.tsx，本文件仅留宿主接线 | 若再增长：工具栏 action 分派拆至 commands/ 域（既有 toolbarCommands/headingCommand 范式） |
+| app/src/components/AiConversationDock.tsx | 316 | 全局 AI 对话面板（REQ-274）+ 批 1 终态事件刷新接线——2026-09-09 审查纠偏实测登记（此前漏登），300-600 档 | 若再增长：会话列表段拆至 DockSessionList.tsx |
 
 ## 已拆分 / 登记移除记录
 
