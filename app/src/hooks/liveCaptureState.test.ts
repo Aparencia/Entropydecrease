@@ -33,8 +33,6 @@ function status(over: Partial<LiveSessionStatus> & { pausedReason?: string | nul
 }
 
 const t0 = 1_000_000;
-/** 快照：活动 + 手动暂停 */
-const snapPausedManual = status({ active: true, sessionId: 7, paused: true, pausedReason: "manual" });
 /** 快照：活动 + 自动（媒体）暂停 */
 const snapPausedMedia = status({ active: true, sessionId: 7, paused: true, pausedReason: "media" });
 
@@ -68,7 +66,7 @@ describe("事件序列幂等收敛", () => {
     let s = liveCaptureReducer(initialState, { type: "snapshot", status: status({ active: true }) });
     s = liveCaptureReducer(s, { type: "paused", reason: "media" });
     // 手动恢复但 auto 条件仍持 → 后端再发 paused(media)：终态=media
-    s = liveCaptureReducer(s, { type: "resumed", reason: "manual" });
+    s = liveCaptureReducer(s, { type: "resumed" });
     s = liveCaptureReducer(s, { type: "paused", reason: "media" });
     expect(s.pausedReason).toBe("media");
   });

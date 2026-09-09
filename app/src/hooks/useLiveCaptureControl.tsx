@@ -61,6 +61,10 @@ export interface CaptureActionResult {
   engineReady?: boolean;
 }
 
+/** 动作未启动的结果（Why：pending 期间再次触发=连点被忽略——ok=false 且无
+ *  message，调用方应静默返回，勿当失败弹错） */
+const IGNORED_RESULT: CaptureActionResult = { ok: false };
+
 /** 守卫错自愈文案（与后端错误串对应；具体串见 Rust command 层） */
 const GUARD_HINTS: Record<GuardErrorKind, string> = {
   "already-paused": "会话已处于暂停（状态已同步；自动暂停时条件恢复即自动继续）",
@@ -170,7 +174,7 @@ export function CaptureStatusProvider({ children }: { children: ReactNode }) {
 
   const start = useCallback(
     async (args: CaptureStartArgs): Promise<CaptureActionResult> => {
-      if (pendingRef.current) return { ok: false, message: "操作进行中，请稍候" };
+      if (pendingRef.current) return IGNORED_RESULT;
       beginPending("start");
       try {
         // 先幂等 prepare（与页面预热共享同一引擎态），再 start；既有会话 → 后端守卫错自愈
@@ -199,7 +203,7 @@ export function CaptureStatusProvider({ children }: { children: ReactNode }) {
   );
 
   const pause = useCallback(async (): Promise<CaptureActionResult> => {
-    if (pendingRef.current) return { ok: false, message: "操作进行中，请稍候" };
+    if (pendingRef.current) return IGNORED_RESULT;
     beginPending("pause");
     try {
       try {
@@ -220,7 +224,7 @@ export function CaptureStatusProvider({ children }: { children: ReactNode }) {
   }, [beginPending, endPending, pullStatus]);
 
   const resume = useCallback(async (): Promise<CaptureActionResult> => {
-    if (pendingRef.current) return { ok: false, message: "操作进行中，请稍候" };
+    if (pendingRef.current) return IGNORED_RESULT;
     beginPending("resume");
     try {
       try {
@@ -246,7 +250,7 @@ export function CaptureStatusProvider({ children }: { children: ReactNode }) {
   }, [beginPending, endPending, pullStatus]);
 
   const stop = useCallback(async (): Promise<CaptureActionResult> => {
-    if (pendingRef.current) return { ok: false, message: "操作进行中，请稍候" };
+    if (pendingRef.current) return IGNORED_RESULT;
     beginPending("stop");
     if (stateRef.current.active || stateRef.current.starting) {
       dispatch({ type: "stopping-intent" });

@@ -3,7 +3,12 @@
  *
  * @ai-context: 采集中全屏看视频时主面板被遮挡——常驻悬浮小窗（alwaysOnTop）
  *              顶部状态/时长、中部最近转写、底部最近画面要点、控制按钮。
- *              与主面板共用 useLiveSessionEvents hook（同一 live:* 数据流）。
+ *              与主面板共用 useLiveSessionEvents hook（同一 live:* 内容流）。
+ * @ai-context: 批 2b：本窗是**独立 webview**（?float=1，无法共享主窗 context）——
+ *              暂停/启停走本窗自己的 CaptureStatusProvider 实例（App float
+ *              分支包入；useCaptureControl 消费），暂停判定与文案以
+ *              pausedReason 单一来源（不再 phase 字符串推导），动作带 pending
+ *              防连点；useLiveSessionEvents 只负责内容流阶段展示（职责边界）。
  * @ai-context: v0.12.3 双形态：面板（360×240 全功能）⇄ 字幕条（360×44 只读
  *              展示，Esc 切换）；点击穿透锁定后只读悬浮（解锁走全局快捷键
  *              Ctrl+Shift+F——ADR-025，v0.12.6 起主窗随浮窗打开而隐藏）。
@@ -19,6 +24,9 @@ import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useLiveSessionEvents } from "../hooks/useLiveSessionEvents";
 import { useFloatWindow } from "../hooks/useFloatWindow";
+// 批 2b：本窗独立的采集控制实例（provider 由 App ?float=1 分支包入）
+import { useCaptureControl } from "../hooks/useLiveCaptureControl";
+import { AUTO_RESUME_HINTS, pauseReasonLabel } from "../hooks/liveCaptureState";
 
 function fmtTime(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -52,7 +60,17 @@ export default function CaptureFloatPanel() {
     useLiveSessionEvents();
   const { snapshot, mode, opacity, setViewMode, updateOpacity, startDrag, toggleLocked, toggleTopmost, backToMain } =
     useFloatWindow();
-  const paused = phase.startsWith("⏸");
+  // 批 2b：暂停单一来源 pausedReason（须会话活动才有意义——滞后事件/停止后为
+  // null 时回退内容流 phase；旧实现 phase.startsWith("⏸") 推导已废弃）
+  const capture = useCaptureControl();
+  const pauseReason = capture.active ? capture.pausedReason : null;
+  const paused = pauseReason != null;
+  const autoPaused = paused && pauseReason !== "manual";
+  const statusText = paused ? pauseReasonLabel(pauseReason) ?? phase : phase;
+  const statusColor = paused ? "#b45309" : "#dc2626";
+  const statusChar = paused ? "⏸" : (phase === "正在初始化…" ? "…" : phase).slice(0, 1);
+  const autoHint =
+    pauseReason === "media" || pauseReason === "foreground" ? AUTO_RESUME_HINTS[pauseReason] : undefined;
 
   // 浮窗窗口 body 默认 8px margin + 100vh 溢出 → 左右透明条 + 最右滚条
   // （用户反馈"两侧透明区"）；浮窗无全局 CSS——此处注入窗口级重置
@@ -65,14 +83,21 @@ export default function CaptureFloatPanel() {
   }, []);
 
   const togglePause = () => {
-    void invoke(paused ? "resume_live_session" : "pause_live_session").catch((e) =>
-      console.warn("[capture-float] 暂停/继续失败:", e),
-    );
+    if (capture.pending) return; // 防连点
+    void (paused ? capture.resume() : capture.pause()).then((o) => {
+      // 守卫错已由 hook 自愈（快照重拉）；console 保可观测，不吞
+      if (!o.ok && o.message) console.warn("[capture-float] 暂停/继续被拒（状态已同步）:", o.message);
+    });
   };
   const stop = () => {
-    void invoke("stop_live_session")
-      .catch((e) => console.warn("[capture-float] 停止采集失败:", e))
-      .then(() => void invoke("close_capture_float").catch(() => undefined));
+    if (capture.pending) return; // 防连点
+    void capture.stop().then((o) => {
+      if (o.ok) {
+        void invoke("close_capture_float").catch(() => undefined);
+      } else if (o.message) {
+        console.warn("[capture-float] 停止采集失败:", o.message);
+      }
+    });
   };
 
   /** 拖拽只在空白处触发（按钮/滑杆不劫持鼠标） */
@@ -108,8 +133,8 @@ export default function CaptureFloatPanel() {
           overflow: "hidden",
         }}
       >
-        <span style={{ color: paused ? "#b45309" : "#dc2626", fontWeight: 700, flexShrink: 0 }}>
-          {(phase === "正在初始化…" ? "…" : phase).slice(0, 1)}
+        <span style={{ color: statusColor, fontWeight: 700, flexShrink: 0 }}>
+          {statusChar}
         </span>
         <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {lastLine}
@@ -156,8 +181,8 @@ export default function CaptureFloatPanel() {
           flexShrink: 0,
         }}
       >
-        <span style={{ fontWeight: 600, color: paused ? "#b45309" : "#dc2626" }}>
-          {phase === "正在初始化…" ? "初始化…" : phase}
+        <span style={{ fontWeight: 600, color: statusColor }}>
+          {phase === "正在初始化…" ? "初始化…" : statusText}
         </span>
         <span style={{ color: "#6b7280", fontVariantNumeric: "tabular-nums" }}>⏱ {fmtTime(elapsedMs)}</span>
         <span style={{ marginLeft: "auto", color: "#6b7280" }}>{info?.platform ?? ""}</span>
@@ -224,12 +249,23 @@ export default function CaptureFloatPanel() {
             <span style={{ color: "#1e40af", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.text}</span>
           </div>
         ))}
-        {/* 控制按钮（暂停/继续 · 停止 · 回主窗——浮窗保留，主窗前置聚焦） */}
+        {/* 控制按钮（暂停/继续 · 停止 · 回主窗——浮窗保留，主窗前置聚焦）。
+            批 2b：auto 暂停（media/foreground）下 resume 无物理作用——按钮禁用
+            + title 提示，不误导；pending 期间全部禁用防连点 */}
         <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-          <button style={{ ...btn, background: paused ? "#0d9488" : "#f59e0b", color: "#fff", border: "none" }} onClick={togglePause}>
-            {paused ? "▶ 继续" : "⏸ 暂停"}
+          <button
+            style={{ ...btn, background: autoPaused ? "#d1d5db" : paused ? "#0d9488" : "#f59e0b", color: "#fff", border: "none" }}
+            disabled={capture.pending != null || autoPaused}
+            title={autoHint}
+            onClick={togglePause}
+          >
+            {paused ? (autoPaused ? "⏸ 自动暂停" : "▶ 继续") : "⏸ 暂停"}
           </button>
-          <button style={{ ...btn, background: "#dc2626", color: "#fff", border: "none" }} onClick={stop}>
+          <button
+            style={{ ...btn, background: "#dc2626", color: "#fff", border: "none" }}
+            disabled={capture.pending != null}
+            onClick={stop}
+          >
             ⏹ 停止
           </button>
           <button style={{ ...btn, ...iconBtn, border: "1px solid #d1d5db", background: "#fff", color: "#1f2937" }} onClick={backToMain}>

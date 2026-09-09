@@ -1,10 +1,14 @@
 /**
- * useLiveSessionEvents — 实时采集事件监听 hook（v0.12.0 M6，采集体验债）。
+ * useLiveSessionEvents — 实时采集**详情流**事件 hook（v0.12.0 M6，采集体验债）。
  *
- * @ai-context: 从 LiveActivityPanel 抽取的事件监听逻辑（partial/final/subtitle/
- *              ocr/status/session-info/fusing）——主面板与采集浮窗共用同一数据流，
+ * @ai-context: 从 LiveActivityPanel 抽取的内容流监听逻辑（partial/final/subtitle/
+ *              ocr/session-info/内容阶段文案）——采集浮窗与主面板共用同一数据流，
  *              避免两份监听各自维护状态导致不一致。返回只读状态（phase/转写/
  *              未沉淀行/计数/画面/时长/会话信息），展示层各自渲染。
+ * @ai-context: **职责边界（批 2b）**：本 hook 只管内容流展示阶段（phase 的
+ *              初始化/采集中/停止/异常/融合），**不再订阅/推导暂停**——暂停
+ *              与启停是采集控制状态，统一归 CaptureStatusProvider（useCaptureControl，
+ *              每窗口单实例），消费方按 pausedReason 覆盖暂停文案，避免双轨漂移。
  * @ai-context: 状态机：live:status（recording/stopped/failed）→ 文案映射；
  *              挂载时 invoke live_session_info + live_session_status 兜底还原
  *              （事件可能在面板挂载前已发出——页面刷新/重进后 phase 停在初始态）。
@@ -83,7 +87,8 @@ export function useLiveSessionEvents(sessionId?: number | null): LiveEventState 
   const [, setTick] = useState(0);
   const partialsRef = useRef<PendingLine[]>([]);
 
-  // 挂载兜底：事件可能在监听注册前已发出——拉取一次还原状态机。
+  // 挂载兜底：事件可能在监听注册前已发出——拉取一次还原状态机（只还原内容流
+  // 阶段；暂停态由 CaptureStatusProvider 快照负责——批 2b 职责边界）。
   // 不 gate 于 sessionId：采集浮窗无 React 会话 id，但采集期间必有活动会话，
   // 拉取返回当前活动会话状态（无则 status.active=false，phase 停在初始态）。
   useEffect(() => {
@@ -94,7 +99,7 @@ export function useLiveSessionEvents(sessionId?: number | null): LiveEventState 
     void invoke<LiveSessionStatus>("live_session_status")
       .then((s) => {
         if (s.active) {
-          setPhase(s.paused ? "⏸ 已暂停（时间轴冻结）" : "● 采集中");
+          setPhase("● 采集中");
           setCapturing(true);
           startedAtRef.current = startedAtRef.current ?? Date.now();
         }
@@ -203,9 +208,10 @@ export function useLiveSessionEvents(sessionId?: number | null): LiveEventState 
         countsRef.current.ocr += 1;
         setCounts({ ...countsRef.current });
       }),
-      listen("live:paused", () => setPhase("⏸ 已暂停（时间轴冻结）")),
-      listen("live:resumed", () => setPhase("● 采集中")),
       listen<SessionInfo>("live:session-info", (e) => setInfo(e.payload)),
+      // 批 2b：live:paused/resumed 不再由本 hook 消费——暂停为采集控制状态，
+      // 归 CaptureStatusProvider（useCaptureControl）；phase 的暂停文案由消费方
+      // 按 pausedReason 覆盖（Why: 单一状态源，防双轨漂移）
       listen<number>("session:fusing", () => setPhase("⏳ 融合中…")),
       listen<number>("session:fused", () => setPhase("✅ 融合完成")),
       listen<string>("session:fusion-failed", (e) => setPhase(`⚠ 融合失败（原始段保留）: ${e.payload}`)),

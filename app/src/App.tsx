@@ -1,12 +1,16 @@
 /**
- * App — 应用导航壳：课堂助手 / 会话 / 笔记 三个独立页面。
+ * App — 应用入口与导航壳：课堂助手 / 会话 / 笔记 等独立页面。
  *
  * @ai-context: 顶部标签导航 + 页面条件渲染（MVP 不引入路由库，保持轻量）；
  *              页面组件各自管理状态，切换不共享可变状态。
+ * @ai-context: 批 2b 采集控制单一状态源：主窗 UI 整体包在
+ *              <CaptureStatusProvider> 内（导航徽标/ClassroomPage/右栏同 context），
+ *              浮窗分支（?float=1）单独实例化同一 provider——每窗口恰一个实例。
  * @ai-context: ADR-007（REQ-033）：本层为全局采集生命周期宿主——
  *              ① 导航栏常驻采集状态徽标（页面切换/最小化后仍可感知采集在跑）
  *              ② 监听 app:close-requested（Rust 侧拦截了关闭）→ 确认框 →
  *                 确认后 stop_live_session 再 close，取消则采集继续。
+ *              ai:task-update 全局 toast（REQ-145 第二通道）与采集状态无关，保留。
  */
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
@@ -33,6 +37,9 @@ import CaptureFloatPanel from "./components/CaptureFloatPanel";
 import CaptureOverlayPanel from "./components/CaptureOverlayPanel";
 // v0.16.1：浏览器痕迹去除（原生右键菜单抑制 + 文本输入应用内右键小菜单）
 import BrowserChrome from "./components/BrowserChrome";
+// 批 2b：采集控制单一状态源（每窗口单实例 provider + 消费 hook + reason 文案）
+import { CaptureStatusProvider, useCaptureControl } from "./hooks/useLiveCaptureControl";
+import { pauseReasonLabel } from "./hooks/liveCaptureState";
 import type { AiTaskState } from "./types";
 
 type Page = "classroom" | "sessions" | "notes" | "action" | "chat" | "knowledge" | "goals" | "settings";
@@ -52,20 +59,37 @@ const NAV_ITEMS: { key: Page; label: string }[] = [
 ];
 
 function App() {
-  // v0.12.0 M3：系统级覆盖层截图窗口入口——URL 带 ?overlay=1 时仅渲染
-  // CaptureOverlayPanel（全屏透明 1:1 框选；不渲染主导航壳；独立窗口）。
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  if (new URLSearchParams(window.location.search).get("overlay") === "1") {
+  // URL per-window 标志早返回（不渲染主导航壳）。批 2b 采集控制单一状态源：
+  // 主窗与浮窗各持**一份** CaptureStatusProvider（独立 webview 无法共享 context，
+  // 各自实例化；同一窗口禁止第二实例——双监听双查询即漂移根源）
+  const query = new URLSearchParams(window.location.search);
+  // v0.12.0 M3：系统级覆盖层截图窗口入口（全屏透明 1:1 框选；无采集控制需求）
+  if (query.get("overlay") === "1") {
     return <CaptureOverlayPanel />;
   }
-  // v0.12.0 M6：采集浮窗入口——URL 带 ?float=1 时仅渲染 CaptureFloatPanel
-  //（不渲染主导航壳；浮窗独立窗口 alwaysOnTop，加载 index.html?float=1）。
-  // 规则：float 标志 per-window 恒定（URL 不变），故此处 before-hooks 早返回安全；
-  // 它使浮窗不注册主导航的 live:* 监听（数据流由 CaptureFloatPanel 的 hook 持有）。
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  if (new URLSearchParams(window.location.search).get("float") === "1") {
-    return <CaptureFloatPanel />;
+  // v0.12.0 M6：采集浮窗入口（独立窗口 alwaysOnTop，加载 index.html?float=1）；
+  // float 标志 per-window 恒定（URL 不变）——早返回安全
+  if (query.get("float") === "1") {
+    return (
+      <CaptureStatusProvider>
+        <CaptureFloatPanel />
+      </CaptureStatusProvider>
+    );
   }
+  return (
+    // v0.8.0 真机白屏防御（2026-08-21）：全局错误边界——渲染异常显示错误卡片
+    // 而非整树卸载白屏（AppErrorBoundary）
+    <AppErrorBoundary>
+      <CaptureStatusProvider>
+        <MainShell />
+      </CaptureStatusProvider>
+    </AppErrorBoundary>
+  );
+}
+
+/** 主导航壳（唯一实例由 App 包入 provider——同窗单实例纪律；状态与事件监听
+ *  保留挂载语义不变，TD-004） */
+function MainShell() {
   const [page, setPage] = useState<Page>("classroom");
   // 2026-08 A4：跨页直达目标会话（课堂助手融合完成 → 会话页自动打开详情）
   const [focusSessionId, setFocusSessionId] = useState<number | null>(null);
@@ -95,11 +119,10 @@ function App() {
   // REQ-274：对话面板开合 + 「在对话页继续」直达会话（消费后清空）
   const [dockOpen, setDockOpen] = useState(false);
   const [focusChatId, setFocusChatId] = useState<number | null>(null);
-  // 全局采集状态（ADR-007：与页面解耦，徽标常驻导航栏）
-  const [capturing, setCapturing] = useState(false);
-  const [recovering, setRecovering] = useState(false);
-  // 2026-08 A1：会话暂停（live:paused/resumed 事件；徽标区分暂停态）
-  const [paused, setPaused] = useState(false);
+  // 全局采集状态（ADR-007：与页面解耦，徽标常驻导航栏）。
+  // 批 2b：capturing/recovering/paused 三份本地状态删除——采集控制单一状态源
+  // （CaptureStatusProvider context；挂载拉取+事件+看门狗全在其内）
+  const capture = useCaptureControl();
   // v0.8.0 F2（2026-08-21）：AI 任务完成通知——全局监听 ai:task-update，
   // 跨页面可见（REQ-145"完成通知"落地；内联卡片之外的第二通道）
   const [aiToast, setAiToast] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
@@ -131,52 +154,9 @@ function App() {
           }, 3500);
         }),
       );
-      // 采集主状态：recording=采集中；stopped/failed=结束（live_session 事件）
-      unlisteners.push(
-        await listen<string>("live:status", (e) => {
-          if (disposed) return;
-          setCapturing(e.payload === "recording");
-          if (e.payload !== "recording") {
-            setRecovering(false);
-            setPaused(false);
-          }
-        }),
-      );
-      // REQ-175（v0.7.5）：停止残留兜底——融合开始 = 采集已停的可靠信号
-      // （session:fusing 在会话停止后无条件发出；live:status stopped 可能
-      // 因线程卡死/事件丢失而不到达——会话31 实证"采集中"残留至重启翻案）
-      unlisteners.push(
-        await listen<number>("session:fusing", () => {
-          if (disposed) return;
-          setCapturing(false);
-          setRecovering(false);
-          setPaused(false);
-        }),
-      );
-      // 2026-08 A1：暂停/恢复（全局徽标显示"⏸ 已暂停"）
-      unlisteners.push(
-        await listen("live:paused", () => {
-          if (!disposed) setPaused(true);
-        }),
-      );
-      unlisteners.push(
-        await listen("live:resumed", () => {
-          if (!disposed) setPaused(false);
-        }),
-      );
-      // 音频自动重连中（ADR-007）：会话未死，UI 提示恢复态
-      unlisteners.push(
-        await listen("live:recovering", () => {
-          if (disposed) return;
-          setCapturing(true);
-          setRecovering(true);
-        }),
-      );
-      unlisteners.push(
-        await listen("live:recovered", () => {
-          if (!disposed) setRecovering(false);
-        }),
-      );
+      // 批 2b：live:status / session:fusing / live:paused / live:resumed /
+      // live:recovering / live:recovered 监听删除——采集控制状态收敛全部下沉
+      // CaptureStatusProvider（本壳徽标消费 context；recovering 组合文案同源）
       // Rust 侧 CloseRequested 拦截（采集进行中）→ 用户确认后才停止并退出
       unlisteners.push(
         await listen("app:close-requested", async () => {
@@ -217,10 +197,8 @@ function App() {
   }, []);
 
   return (
-    // v0.8.0 真机白屏防御（2026-08-21）：全局错误边界——渲染异常显示错误
-    // 卡片而非整树卸载白屏；console 打印调用栈便于定位（AppErrorBoundary）
-    <AppErrorBoundary>
-      <div style={{ height: "100vh", display: "flex", flexDirection: "column", fontFamily: "system-ui, sans-serif" }}>
+    // 全局错误边界在 App 外层（批 2b 结构调整后包住 provider+壳，职责不变）
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", fontFamily: "system-ui, sans-serif" }}>
       {/* v0.16.1：浏览器痕迹去除——原生右键菜单抑制 + 文本输入应用内右键小菜单 */}
       <BrowserChrome />
       {/* 顶部导航 */}
@@ -270,30 +248,38 @@ function App() {
         >
           🤖 对话面板
         </button>
-        {/* 全局采集徽标（ADR-007）：切页/最小化后仍可见采集状态；2026-08 A1 暂停态 */}
-        {capturing && (
+        {/* 全局采集徽标（ADR-007）：切页/最小化后仍可见采集状态。
+            批 2b：paused → pausedReason 三态文案（manual/media/foreground 同源，
+            与右栏/浮窗一致）；recovering 与 paused 组合文案保持原语义 */}
+        {capture.active && (
           <span
             style={{
               marginLeft: "auto",
               fontSize: 12,
               fontWeight: 600,
-              color: paused ? "#b45309" : recovering ? "#b45309" : "#0d9488",
-              background: paused ? "#fffbeb" : recovering ? "#fffbeb" : "#f0fdfa",
-              border: `1px solid ${paused ? "#f59e0b" : recovering ? "#f59e0b" : "#14b8a6"}`,
+              color: capture.pausedReason || capture.recovering ? "#b45309" : "#0d9488",
+              background: capture.pausedReason || capture.recovering ? "#fffbeb" : "#f0fdfa",
+              border: `1px solid ${capture.pausedReason || capture.recovering ? "#f59e0b" : "#14b8a6"}`,
               borderRadius: 12,
               padding: "3px 10px",
             }}
           >
             {/* 审查修复（观察 2026-08-29-2）：恢复态文案区分"暂停挂起"——
                 暂停期重连风暴曾显示"采集中/恢复中"误导，现在明确"暂停中"语义 */}
-            {recovering ? (paused ? "⏸ 暂停挂起（重连中）" : "⚠️ 采集恢复中") : paused ? "⏸ 已暂停" : "🎙 采集中"}
+            {capture.recovering
+              ? capture.pausedReason
+                ? "⏸ 暂停挂起（重连中）"
+                : "⚠️ 采集恢复中"
+              : capture.pausedReason
+                ? pauseReasonLabel(capture.pausedReason)
+                : "🎙 采集中"}
           </span>
         )}
         {/* v0.8.0 F2：AI 任务完成通知（全局 toast——跨页面可见） */}
         {aiToast && (
           <span
             style={{
-              marginLeft: capturing ? 8 : "auto",
+              marginLeft: capture.active ? 8 : "auto",
               fontSize: 12,
               fontWeight: 500,
               color: aiToast.kind === "ok" ? "#047857" : "#b91c1c",
@@ -424,7 +410,6 @@ function App() {
         }}
       />
       </div>
-    </AppErrorBoundary>
   );
 }
 

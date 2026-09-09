@@ -8,6 +8,12 @@
  *              live:error / live:status 实时回显；停止后可到「会话」页查看时间轴。
  * @ai-context: 2026-08 审查硬拆（>600 硬上限）：右栏内容区拆至 ClassroomRightPane，
  *              文件素材输入与提取拆至 MaterialInputPanel——本文件回归装配层职责。
+ * @ai-context: 批 2b 采集生命周期收敛：active/sessionId/pausedReason/starting/
+ *              stopping 与 live:status/paused/resumed 事件不再由本页自持——
+ *              单一状态源在 CaptureStatusProvider（useCaptureControl，主窗 App
+ *              挂载）。本页只剩两职责：①按钮动作接 context（pending 防连点、
+ *              守卫错自愈文案如实展示）；②页面级提示（模型/窗口丢失/帧停更/
+ *              融合卡片/状态行文案）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -30,7 +36,12 @@ import { useColumnLayout } from "../hooks/useColumnLayout";
 import PhotoCapturePanel from "../components/PhotoCapturePanel";
 // v0.20.4（REQ-303）：web 采集动线面板
 import WebImportPanel from "../components/WebImportPanel";
-import type { Note, WindowInfo, StreamingModelStatus, LiveSessionStatus, DownloadProgress, DownloadStatus, ProfileKind } from "../types";
+// 批 2b：采集控制单一状态源（暂停/启停状态与动作全收敛于此——页内不再
+// 订阅 live:status/live:paused/live:resumed 与 media-* 双轨）
+import { useCaptureControl } from "../hooks/useLiveCaptureControl";
+// auto 暂停恢复按钮提示（AUTO_RESUME_HINTS——后端 Ok 但物理无变化的如实文案）
+import { AUTO_RESUME_HINTS } from "../hooks/liveCaptureState";
+import type { Note, WindowInfo, StreamingModelStatus, DownloadProgress, DownloadStatus, ProfileKind, PauseSource } from "../types";
 // v0.12.3：浮窗状态快照类型（与 Rust FloatUiView camelCase 契约同源；
 // 审查 LOW-3：统一共享类型替代内联重复声明）
 import type { FloatSnapshot } from "../hooks/useFloatWindow";
@@ -43,24 +54,31 @@ const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 
 /** P3：引擎预热状态（与 Rust PrepareStatus 的 camelCase 契约一致） */
 type PrepareState = "idle" | "loading" | "ready" | "failed";
 
+/** 采集卡暂停状态行文案（按 reason 三态；沿用原横幅语义——媒体暂停含"自动继续"
+ *  说明，前台切走含"回窗即继续"说明；徽标/右栏/浮窗用短文案 pauseReasonLabel） */
+function pausedCardText(reason: PauseSource): string {
+  switch (reason) {
+    case "media":
+      return "⏸ 已随视频暂停——画面/声音恢复即自动继续";
+    case "foreground":
+      return "⏸ 已自动暂停（切走）——回到目标窗口即自动继续";
+    default:
+      return "⏸ 已暂停（时间轴冻结，恢复后继续）";
+  }
+}
+
 export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (sessionId: number) => void }) {
   // v0.15：左栏列状态（可拖拽 + 记忆 + 窄窗折叠；默认 320=历史值）
   const leftCol = useColumnLayout("classroom-left", { default: 320, min: 240, max: 420, autoFoldBelow: 860 });
+  // 批 2b：采集生命周期单一状态源（挂载拉取+事件+看门狗在 provider；本页消费）
+  const { active, sessionId, pausedReason, starting, stopping, pending, notice, start, pause, resume, stop } =
+    useCaptureControl();
   // ── 窗口/进程选择 ──
   const [windows, setWindows] = useState<WindowInfo[]>([]);
   const [selectedWindow, setSelectedWindow] = useState<WindowInfo | null>(null);
   const [windowsLoading, setWindowsLoading] = useState(false);
 
-  // ── 实时捕获（v0.2.0）──
-  const [liveActive, setLiveActive] = useState(false);
-  const [liveSessionId, setLiveSessionId] = useState<number | null>(null);
-  // v0.19.2：liveActive 镜像 ref（resolve 分支判断 recording 事件是否已先行收口）
-  const liveActiveRef = useRef(false);
-  useEffect(() => { liveActiveRef.current = liveActive; }, [liveActive]);
-  // 2026-08 A1：会话暂停（硬暂停——完全停采；由 live:paused/resumed 事件驱动）
-  const [livePaused, setLivePaused] = useState(false);
-  // 停止过渡期（点停止 → stopped 事件到达前，右侧面板保持显示）
-  const [stopping, setStopping] = useState(false);
+  // ── 实时捕获页面级提示与编排（v0.2.0；采集生命周期状态见上 useCaptureControl）──
   // 后台融合期（session:fusing 期间，右侧面板显示"融合中"）
   const [fusionActive, setFusionActive] = useState(false);
   // 2026-08 A4：最近融合完成的会话 id（右侧"查看时间轴"直达卡片；切换窗口/新会话时清除）
@@ -77,12 +95,8 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   // REQ-281（v0.19.6）：画面源停更提示（WGC 长时间无新帧——区别于窗口关闭；
   // 恢复帧/停止采集自动清除；null=未停更）
   const [frameStalledSecs, setFrameStalledSecs] = useState<number | null>(null);
-  // REQ-291（v0.19.7）：随播随停徽标——视频暂停 → 采集自动暂停（区别于手动暂停）
-  const [mediaPaused, setMediaPaused] = useState(false);
   // P3：引擎预热状态（选窗口阶段后台加载；与 Rust PrepareStatus 契约一致）
   const [prepareState, setPrepareState] = useState<PrepareState>("idle");
-  // v0.19.2：等待引擎就绪的启动过渡态（就绪/事件确认前不显示会话控件）
-  const [starting, setStarting] = useState(false);
   // v0.19.2：系统窗口默认过滤（终端/资源管理器等）——开关找回兜底
   const [showSystemWindows, setShowSystemWindows] = useState(false);
   // v0.12.3：浮窗状态（按钮语义：浮窗化 ⇄ 收起 ⇄ 解锁穿透；Rust 单一来源）
@@ -134,14 +148,13 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 实时会话事件监听（v0.2.0；字幕/语音实时内容由右侧 LiveActivityPanel 自监听展示）
+  // 页面级提示与融合编排监听（v0.2.0）。批 2b：live:status / live:paused /
+  // live:resumed / live:media-* 不再在此订阅——采集生命周期（含随播随停随前台
+  // 自动暂停）收敛于 CaptureStatusProvider（useCaptureControl），防同窗双监听
   useEffect(() => {
     const unlisteners: Promise<() => void>[] = [
-      // v0.19.2：启动过渡期任何引擎错误即退出等待态（内联加载失败/预热失败）
-      listen<string>("live:error", (e) => {
-        setLiveError(e.payload);
-        setStarting(false);
-      }),
+      // 引擎错误横幅（页面级文案；starting 退出由控制 hook 的 engine-error 收敛）
+      listen<string>("live:error", (e) => setLiveError(e.payload)),
       // M7/REQ-042 F5：ASR 降级提示（静默失败可见化；会话停止时清除）
       listen<string>("live:asr-degraded", (e) => setAsrDegraded(e.payload)),
       // 降级恢复（审查修复）：清除降级横幅，避免残留误导
@@ -153,39 +166,10 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
       // 状态，仅提示画面源未出新帧；伴随 WGC 会话自愈重试）
       listen<{ silentSecs: number }>("live:frame-stalled", (e) => setFrameStalledSecs(e.payload.silentSecs)),
       listen("live:frame-recovered", () => setFrameStalledSecs(null)),
-      // REQ-291（v0.19.7）：随播随停——视频暂停/恢复自动跟随（徽标随事件显隐）
-      listen("live:media-paused", () => setMediaPaused(true)),
-      listen("live:media-resumed", () => setMediaPaused(false)),
-      // 修复（v0.3.0 审查反馈）：必须区分 payload——Rust 侧在 ASR 模型加载成功后
-      // 才 emit "recording"（比 invoke resolve 晚 1-3s），旧实现无条件清态导致
-      // 按钮变回"开始采集"而后端会话仍在跑，再点开始被拒绝
-      listen<string>("live:status", (e) => {
-        if (e.payload === "recording") {
-          // 后端确认录制中：保持/恢复活动态（invoke resolve 可能更早到达）；
-          // v0.19.2：此刻引擎真正就绪、音频与画面同刻启动——结束启动过渡态
-          liveActiveRef.current = true; // ref 同步直写——防 resolve 读旧值（审查 LOW-1）
-          setLiveActive(true);
-          setStopping(false);
-          setStarting(false);
-          // v0.19.3 审查 MED-1：starting→recording 迁移统一覆写文案——
-          // 非就绪启动成功路径不得残留「引擎就绪中…」常驻状态行
-          setStatus("实时捕获已开始");
-        } else {
-          // stopped / failed：会话已结束
-          liveActiveRef.current = false;
-          setLiveActive(false);
-          setLiveSessionId(null);
-          setStopping(false);
-          setStarting(false);
-          setAsrDegraded(null);
-          setWindowLost(false);
-          setFrameStalledSecs(null);
-          setMediaPaused(false);
-          setLivePaused(false);
-        }
-      }),
       // 后台融合事件（REQ-031）：面板显示"融合中"，完成后提示并回退
-      // 2026-08 A4：记录融合完成会话 id（右侧"查看时间轴"直达卡片）
+      // 2026-08 A4：记录融合完成会话 id（右侧"查看时间轴"直达卡片）。
+      // （fusing 同时是采集停止的兜底信号——其状态收敛在控制 hook，此处只管
+      // 面板显示与直达卡片，非重复状态机）
       listen<number>("session:fusing", (e) => {
         setFusionActive(true);
         setFusedSessionId(e.payload);
@@ -201,10 +185,6 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
         setFusedSessionId(null);
         setStatus(`融合失败（原始段保留）: ${e.payload}`);
       }),
-      // 2026-08 A1：暂停/恢复事件（硬暂停状态驱动按钮组与徽标）
-      listen("live:paused", () => setLivePaused(true)),
-      // 审查（A 区 F5 相关）：手动/自动恢复事件一并清除媒体暂停徽标——防残留
-      listen("live:resumed", () => { setLivePaused(false); setMediaPaused(false); }),
       // 模型自动下载进度（ADR-003）
       listen<DownloadProgress>("model:download-progress", (e) => setModelProgress(e.payload)),
       listen<boolean>("model:download-done", () => {
@@ -229,13 +209,32 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
     };
   }, []);
 
-  // TD-042：停止过渡态超时兜底——live:status stopped 事件异常丢失时，
-  // 10s 后自动清除过渡态（防右侧面板常驻"已停止"）
+  // 会话结束侧效复位（原 live:status stopped/failed 分支职责——停止信号现由
+  // 控制 hook 收敛为 active=false；此处只清页面级提示横幅，不留双状态）
   useEffect(() => {
-    if (!stopping) return;
-    const timer = setTimeout(() => setStopping(false), 10_000);
-    return () => clearTimeout(timer);
-  }, [stopping]);
+    if (!active) {
+      setAsrDegraded(null);
+      setWindowLost(false);
+      setFrameStalledSecs(null);
+    }
+  }, [active]);
+
+  // recording 收口文案：starting 结束时若已 active → 覆写"实时捕获已开始"
+  // （engineReady=false 受理路径的"引擎就绪中…"在此被真实开录事件替换；
+  // 与 v0.19.3 MED-1 的语义一致——starting 迁移不得残留就绪中文案）
+  const prevStartingRef = useRef(false);
+  useEffect(() => {
+    const prev = prevStartingRef.current;
+    prevStartingRef.current = starting;
+    if (prev && !starting && active) setStatus("实时捕获已开始");
+  }, [starting, active]);
+
+  // 看门狗结论镜像到状态行（restored=20s 后快照发现采集在跑；unconfirmed=
+  // 引擎未开录可重试）——两文案与 v0.19.3 看门狗原语义对齐
+  useEffect(() => {
+    if (notice === "start-restored") setStatus("检测到采集进行中，已恢复状态（引擎就绪后同刻开录）");
+    else if (notice === "start-unconfirmed") setStatus("启动状态未确认——引擎未开录；可直接重试（就绪即秒开）");
+  }, [notice]);
 
   // v0.5.0 M6（REQ-051）：用户截图快捷键 Ctrl+Shift+S（最高权重关键图信号）
   useEffect(() => {
@@ -284,25 +283,23 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
     const onKey = (e: KeyboardEvent) => {
       // v0.12.6：仅浮窗关闭时生效——浮窗打开期间快捷键已升级为全局快捷键
       // （Rust 侧统一处理，语义见 float_toggle_core），此处拦截避免双触发
-      if (liveActive && !floatSnap.open && e.ctrlKey && e.shiftKey && (e.key === "F" || e.key === "f")) {
+      if (active && !floatSnap.open && e.ctrlKey && e.shiftKey && (e.key === "F" || e.key === "f")) {
         e.preventDefault();
         toggleFloat();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [liveActive, floatSnap.open, toggleFloat]);
+  }, [active, floatSnap.open, toggleFloat]);
 
-  // 启动时检查流式模型状态 + 活动会话恢复 + 下载状态恢复
+  // 启动时检查流式模型状态 + 下载状态恢复。
+  // 批 2b：活动会话恢复（live_session_status 拉取）已下沉 CaptureStatusProvider
+  // 挂载兜底——本页不再独立查询（防双查询/双状态机）
   // TD-016：invoke 失败不再静默——展示错误并允许重试（此前按钮永久禁用且无提示）
   useEffect(() => {
     void invoke<StreamingModelStatus>("asr_streaming_model_status")
       .then(setModelStatus)
       .catch((e) => setModelError(`模型状态查询失败: ${e}`));
-    void invoke<LiveSessionStatus>("live_session_status").then((s) => {
-      setLiveActive(s.active);
-      setLiveSessionId(s.sessionId);
-    });
     void invoke<DownloadStatus>("model_download_status").then((d) => {
       setModelDownloading(d.state === "downloading");
       if (d.state === "failed" && d.error) setModelError(d.error);
@@ -337,140 +334,84 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   const [profileKind, setProfileKind] = useState<ProfileKind>("unknown");
 
   /** 开始实时捕获（REQ-007~012）：窗口可选（未选=全屏）；携带档案（REQ-043）。
-   *  v0.19.2（用户实测"无论是否就绪都会开始"）：点击进入启动过渡态——
-   *  引擎就绪（预热交接）时立即开录；未就绪时由后端有界等待（≤15s）就绪后
-   *  自动开录（音频/画面同刻）；只有 recording 事件到达（引擎真正就绪）才
-   *  显示会话控件，等待期不出现暂停/浮窗等"采集中"控件 */
+   *  批 2b：受理/等待态 starting、prepare 重同步、守卫错自愈、20s 看门狗全部
+   *  收敛于控制 hook（useCaptureControl.start）——本函数只组装参数并落地
+   *  结果文案（状态行），不再维护任何采集状态；防双击由 hook pending 挡住 */
   const startLive = async () => {
-    if (starting) return; // 防双击双会话（后端 active 检查前即挡住）
     setLiveError("");
-    setStarting(true);
-    // v0.19.3 审查 LOW-2：点击时重同步一次预热状态——TTL 静默回收后本地
-    // prepareState 可能仍为陈旧 'ready'（wasEngineReady 误判 → 控件提前/
-    // 丢音频头）；prepare 幂等：已有就绪秒返，无预备则新起加载（start 同槽
-    // 有界等待，单引擎语义不变）
-    const freshPrepare = await invoke<PrepareState>("prepare_live_session")
-      .then((s) => s as PrepareState)
-      .catch(() => "idle" as PrepareState);
-    setPrepareState(freshPrepare);
-    // 就绪态点击=交接路径（引擎已加载）——resolve 即已开录，可直接置活动；
-    // 非就绪态 resolve 可能只是"已排队/内联加载中"——等 recording 事件
-    const wasEngineReady = freshPrepare === "ready";
-    try {
-      const title = selectedWindow ? selectedWindow.title.slice(0, NOTE_TITLE_MAX_LEN) : "实时课堂";
-      const id = await invoke<number>("start_live_session", {
-        title,
-        sourceWindow: selectedWindow?.title ?? null,
-        windowId: selectedWindow?.id ?? null,
-        profile: profileKind,
-      });
-      setLiveSessionId(id);
-      setFusedSessionId(null); // 新会话开始：清除旧融合直达卡片
-      if (wasEngineReady) {
-        setLiveActive(true);
-        setStarting(false);
-        setStatus("实时捕获已开始");
-      } else if (liveActiveRef.current) {
-        // recording 事件已先行到达（引擎就绪窗口极短）——已开录，勿覆盖文案
-        setStarting(false);
-        setStatus("实时捕获已开始");
-      } else {
-        setStatus("引擎就绪中…就绪后自动开始（音频与画面同刻启动）");
-        // starting 保持 true——recording/error/stopped 事件负责收口
-      }
-    } catch (e) {
-      setStarting(false);
-      // 防御性恢复（修复反馈）：UI 与后端状态不同步（事件丢失/竞态）时，
-      // 查询真实状态恢复按钮语义，避免"假空闲"下重复点击被后端拒绝
-      if (String(e).includes("已有进行中的实时会话")) {
-        try {
-          const s = await invoke<LiveSessionStatus>("live_session_status");
-          liveActiveRef.current = s.active;
-          setLiveActive(s.active);
-          setLiveSessionId(s.sessionId);
-          setLiveError(s.active ? "检测到采集仍在进行，已恢复状态；如需重启请先停止" : "状态已恢复");
-        } catch {
-          setLiveError(`启动失败: ${e}`);
-        }
-      } else {
-        setLiveError(`启动失败: ${e}`);
-      }
+    const title = selectedWindow ? selectedWindow.title.slice(0, NOTE_TITLE_MAX_LEN) : "实时课堂";
+    const outcome = await start({
+      title,
+      sourceWindow: selectedWindow?.title ?? null,
+      windowId: selectedWindow?.id ?? null,
+      profile: profileKind,
+    });
+    if (!outcome.ok) {
+      // 无 message = 连点被 pending 忽略——静默，不当失败弹错
+      if (outcome.message) setLiveError(outcome.message);
+      return;
+    }
+    // 新会话开始：清除旧融合直达卡片
+    setFusedSessionId(null);
+    // v0.19.3 审查 LOW-2：点击时重同步的预热状态由 hook 返回（prepare 幂等）
+    if (outcome.prepare) setPrepareState(outcome.prepare as PrepareState);
+    // 就绪态点击=交接路径（引擎已加载，resolve 即已开录）；非就绪等 recording
+    // 事件——到达后由 starting 收口 effect 覆写本行（见"recording 收口文案"）
+    if (outcome.engineReady) {
+      setStatus("实时捕获已开始");
+    } else {
+      setStatus("引擎就绪中…就绪后自动开始（音频与画面同刻启动）");
     }
   };
 
-  // v0.19.3 审查 MED-2：starting 过渡态看门狗（对齐 TD-042 stopping 先例）——
-  // recording/error/stopped 事件全部丢失时 20s（>后端 15s 上限）后查询真实
-  // 状态收口：恢复活动态或退出等待态，避免"按钮永久禁用且无停止出口"死锁
-  useEffect(() => {
-    if (!starting || liveActive) return;
-    const timer = setTimeout(() => {
-      void (async () => {
-        try {
-          const s = await invoke<LiveSessionStatus>("live_session_status");
-          if (s.active) {
-            liveActiveRef.current = true;
-            setLiveActive(true);
-            setLiveSessionId(s.sessionId);
-            setStatus("检测到采集进行中，已恢复状态（引擎就绪后同刻开录）");
-          } else {
-            setLiveSessionId(null);
-            setStatus("启动状态未确认——引擎未开录；可直接重试（就绪即秒开）");
-          }
-        } catch (err) {
-          setStatus(`启动状态查询失败: ${err}——请重试`);
-        } finally {
-          setStarting(false);
-        }
-      })();
-    }, 20_000);
-    return () => clearTimeout(timer);
-  }, [starting, liveActive]);
-
-  /** 停止实时捕获 */
+  /** 停止实时捕获（批 2b：stopping 过渡态与状态收敛在控制 hook——本函数只
+   *  落地页面编排：浮窗关闭与下次秒启预热） */
   const stopLive = async () => {
-    // 停止过渡期：面板保持显示（live:status stopped 到达后由监听清除）
-    setStopping(true);
-    setStarting(false);
-    try {
-      await invoke<number | null>("stop_live_session");
-      setLiveActive(false);
-      setLiveSessionId(null);
-      setLivePaused(false);
-      setStatus("已停止会话，融合完成后可到「会话」页查看");
-      // v0.12.0 M6：停止后自动关闭采集浮窗（若已打开）
-      void invoke("close_capture_float").catch(() => undefined);
-      // P3：停止后重新预热（页面仍在，下一次开始同样秒启）
-      warmUp();
-    } catch (e) {
-      setStopping(false);
-      setLiveError(`停止失败: ${e}`);
+    const outcome = await stop();
+    if (!outcome.ok) {
+      // 无 message = 连点被 pending 忽略——静默
+      if (outcome.message) setLiveError(outcome.message);
+      return;
     }
+    setStatus("已停止会话，融合完成后可到「会话」页查看");
+    // v0.12.0 M6：停止后自动关闭采集浮窗（若已打开）
+    void invoke("close_capture_float").catch(() => undefined);
+    // P3：停止后重新预热（页面仍在，下一次开始同样秒启）
+    warmUp();
   };
 
-  /** 暂停实时捕获（2026-08 A1 硬暂停：完全停采，时间轴冻结） */
+  /** 暂停实时捕获（2026-08 A1 硬暂停：完全停采，时间轴冻结；动作经控制 hook——
+   *  守卫错自愈后以 outcome.message 如实提示，不吞） */
   const pauseLive = async () => {
     setLiveError("");
-    try {
-      await invoke("pause_live_session");
-      // live:paused 事件到达前先置位（事件延迟 <500ms，防按钮闪烁）
-      setLivePaused(true);
-    } catch (e) {
-      setLiveError(`暂停失败: ${e}`);
+    const outcome = await pause();
+    if (!outcome.ok) {
+      if (outcome.message) setLiveError(outcome.message); // 无 message=连点忽略
+    } else if (outcome.message) {
+      setStatus(outcome.message);
     }
   };
 
-  /** 恢复实时捕获 */
+  /** 恢复实时捕获（批 2b：自动暂停（media/foreground）期后端 Ok 但物理无变化——
+   *  hook 返回 AUTO_RESUME_HINTS 提示，UI 不宣称"恢复成功"） */
   const resumeLive = async () => {
     setLiveError("");
-    try {
-      await invoke("resume_live_session");
-      setLivePaused(false);
-    } catch (e) {
-      setLiveError(`恢复失败: ${e}`);
+    const outcome = await resume();
+    if (!outcome.ok) {
+      if (outcome.message) setLiveError(outcome.message); // 无 message=连点忽略
+    } else if (outcome.message) {
+      setStatus(outcome.message);
     }
   };
 
   /** 素材流水线（v0.1.0）：选素材/提取逻辑已下沉 MaterialInputPanel（审查硬拆） */
+
+  // ── 采集卡派生展示值（批 2b：暂停 reason 三态语义）──
+  const paused = pausedReason != null;
+  /** 自动暂停（media/foreground）：resume 无物理作用——按钮禁用 + 标题提示 */
+  const autoPaused = paused && pausedReason !== "manual";
+  const autoPauseHint =
+    pausedReason === "media" || pausedReason === "foreground" ? AUTO_RESUME_HINTS[pausedReason] : undefined;
 
   return (
     <div style={{ display: "flex", height: "calc(100vh - 56px)", minHeight: 0 }}>
@@ -523,12 +464,8 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
           </div>
         )}
 
-        {/* REQ-291（v0.19.7）：随播随停徽标——视频暂停采集自动跟随（非手动暂停） */}
-        {mediaPaused && (
-          <div style={{ padding: "6px 14px", background: "#ecfdf5", borderBottom: "1px solid #a7f3d0", fontSize: 11, color: "#047857", display: "flex", alignItems: "center", gap: 8 }}>
-            ⏸ 已随视频暂停——采集同步暂停（画面/声音恢复即自动继续）
-          </div>
-        )}
+        {/* 批 2b：原 REQ-291 随播随停横幅（mediaPaused）删除——暂停原因单一来源
+            pausedReason，横幅语义并入采集卡内状态行（pausedCardText，见下） */}
 
         <div style={{ flex: 1, minHeight: 0, padding: 12, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
           {/* 2026-08 C1：引擎与模型就绪清单（开始前准备流——缺什么一目了然） */}
@@ -557,9 +494,9 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
           {/* 实时捕获（v0.2.0：WASAPI + DXGI + 流式 ASR + 字幕 OCR） */}
           <div style={panel}>
             <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>
-              实时捕获{liveActive && <span style={{ color: "#dc2626" }}> ● 录制中</span>}
+              实时捕获{active && <span style={{ color: "#dc2626" }}> ● 录制中</span>}
             </div>
-            {!liveActive && !modelStatus?.ready && (
+            {!active && !modelStatus?.ready && (
               <div>
                 {modelStatus ? (
                   <p style={{ fontSize: 11, color: "#b45309", margin: "0 0 6px" }}>
@@ -601,33 +538,40 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
                 )}
               </div>
             )}
-            {liveActive && (
+            {active && (
               // 实时内容（字幕/语音/画面）统一由右侧 LiveActivityPanel 展示，
               // 左栏保持精简（状态徽标）——审查观察项修复
-              <div style={{ fontSize: 11, color: livePaused ? "#b45309" : "#0d9488", marginBottom: 6 }}>
-                {livePaused ? "⏸ 已暂停（时间轴冻结，恢复后继续）" : "● 正在采集（实时内容见右侧面板）"}
+              // 批 2b：暂停按 pausedReason 三态文案（media 行并入原随播随停
+              // 横幅语义——单一状态源后横幅/状态行不再双份维护）
+              <div style={{ fontSize: 11, color: paused ? "#b45309" : "#0d9488", marginBottom: 6 }}>
+                {paused ? pausedCardText(pausedReason) : "● 正在采集（实时内容见右侧面板）"}
               </div>
             )}
             {/* 2026-08 A2：音频电平条（仅采集中显示；暂停时电平静止） */}
-            {liveActive && !livePaused && <AudioLevelMeter />}
+            {active && !paused && <AudioLevelMeter />}
             {liveError && <p style={{ fontSize: 11, color: "#dc2626", margin: "0 0 6px" }}>{liveError}</p>}
-            {liveActive ? (
-              /* 采集中按钮组（2026-08 A1：暂停/继续 + 标记此刻 + 停止） */
+            {active ? (
+              /* 采集中按钮组（2026-08 A1：暂停/继续 + 标记此刻 + 停止）。
+                 批 2b：manual 暂停 → "继续捕获"可点；auto（media/foreground）
+                 暂停 → resume 后端 Ok 但物理无变化（auto 条件仍真）——按钮禁用
+                 + title 提示，不提供误导性"恢复成功"反馈；pending 期间防连点 */
               <div style={{ display: "flex", gap: 6 }}>
                 <button
-                  onClick={livePaused ? resumeLive : pauseLive}
+                  onClick={paused ? resumeLive : pauseLive}
+                  disabled={pending != null || autoPaused}
+                  title={autoPauseHint}
                   style={{
                     ...btn,
                     flex: 1,
                     padding: "8px 0",
                     fontWeight: 600,
-                    background: livePaused ? "#0d9488" : "#f59e0b",
+                    background: paused ? (pausedReason === "manual" ? "#0d9488" : "#d1d5db") : "#f59e0b",
                     color: "#fff",
                     border: "none",
                     borderRadius: 6,
                   }}
                 >
-                  {livePaused ? "▶ 继续捕获" : "⏸ 暂停"}
+                  {paused ? (pausedReason === "manual" ? "▶ 继续捕获" : "⏸ 自动暂停中") : "⏸ 暂停"}
                 </button>
                 {/* 2026-08 A3：手动标记此刻（最高权重关键图信号；Ctrl+Shift+S 同效） */}
                 <button
@@ -652,6 +596,7 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
                 </button>
                 <button
                   onClick={stopLive}
+                  disabled={pending != null}
                   style={{
                     ...btn,
                     flex: 1,
@@ -714,14 +659,14 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
                 )}
                 <button
                   onClick={startLive}
-                  disabled={!modelStatus?.ready || starting}
+                  disabled={!modelStatus?.ready || starting || pending != null}
                   style={{
                     ...btn,
                     width: "100%",
                     padding: "8px 0",
                     fontWeight: 600,
-                    background: modelStatus?.ready && !starting ? "#0d9488" : "#e5e7eb",
-                    color: modelStatus?.ready && !starting ? "#fff" : "#9ca3af",
+                    background: modelStatus?.ready && !starting && pending == null ? "#0d9488" : "#e5e7eb",
+                    color: modelStatus?.ready && !starting && pending == null ? "#fff" : "#9ca3af",
                     border: "none",
                     borderRadius: 6,
                   }}
@@ -730,7 +675,7 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
                 </button>
               </>
             )}
-            {liveSessionId && !starting && (
+            {sessionId && !starting && (
               <p style={{ fontSize: 11, color: "#6b7280", margin: "6px 0 0" }}>实时捕获中（可到「会话」页查看）</p>
             )}
           </div>
@@ -763,10 +708,10 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
       {/* ── 右栏：内容区（档案配置 + 实时活动面板 / 笔记预览 / 空态说明书） ── */}
       {/* 2026-08 审查硬拆：右栏内容区整体下沉 ClassroomRightPane */}
       <ClassroomRightPane
-        liveActive={liveActive}
+        liveActive={active}
         stopping={stopping}
         fusionActive={fusionActive}
-        liveSessionId={liveSessionId}
+        liveSessionId={sessionId}
         lastNote={lastNote}
         selectedWindow={selectedWindow}
         fusedSessionId={fusedSessionId}

@@ -19,6 +19,9 @@ import LiveImageStrip from "./LiveImageStrip";
 // v0.9.0 验收缺陷修复：采集态档案条（形态×画面档×领域 + 升降档提示/确认）
 import LiveProfileStrip from "./LiveProfileStrip";
 import type { AsrFinalEvent, LiveSessionStatus, OcrEvent, SessionInfo, SubtitleEvent } from "../types";
+// 批 2b：暂停展示单一来源（context 注入 pausedReason + 三态文案，防双轨）
+import { useCaptureControl } from "../hooks/useLiveCaptureControl";
+import { pauseReasonLabel } from "../hooks/liveCaptureState";
 
 /** 定稿转写行（字幕或语音） */
 interface TranscriptLine {
@@ -110,8 +113,11 @@ function hasText(seg: string): boolean {
 }
 
 export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionId?: number | null; windowTitle?: string | null }) {
+  // 批 2b：暂停展示单一来源（CaptureStatusProvider context，主窗单实例）——
+  // 本面板不再自订阅 live:paused/resumed（详情流只管内容阶段，防双轨漂移）
+  const capture = useCaptureControl();
   const [tab, setTab] = useState<"transcript" | "ocr">("transcript");
-  // 状态机（简要徽标文本）
+  // 状态机（简要徽标文本；内容阶段——暂停文案由 pausedReason 覆盖展示）
   const [phase, setPhase] = useState<string>("正在初始化…");
   const [transcripts, setTranscripts] = useState<TranscriptLine[]>([]);
   // 未沉淀行列表（识别中 partial + 已定稿待沉淀 committed；2026-08 多行挂起）
@@ -130,10 +136,10 @@ export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionI
   // 会话切换：清空旧会话信息 + 拉取兜底（live:session-info 事件在引擎就绪时
   // 发出，可能早于本面板挂载/监听注册——invoke 拉取保证信息条始终可见；
   // 拉取失败静默：无活动会话等场景语义正确）
-  // 2026-08 修复（状态不一致）：live:status recording / live:paused 事件只发
-  // 一次——页面刷新/重进课堂助手后本面板挂载晚于事件，phase 永远停在
-  // "正在初始化…"，而左侧已由 live_session_status 拉取显示"采集中"；
-  // 挂载时拉取一次按 active/paused 还原状态机（事件仍为增量更新通道）
+  // 2026-08 修复（状态不一致）：live:status recording 只发一次——页面刷新/重进
+  // 课堂助手后本面板挂载晚于事件，phase 永远停在"正在初始化…"，而左侧已由
+  // live_session_status 拉取显示"采集中"；挂载时拉取一次按 active 还原状态机
+  // （暂停态还原归 CaptureStatusProvider 快照——批 2b 职责边界）
   useEffect(() => {
     setInfo(null);
     if (!sessionId) return;
@@ -143,7 +149,7 @@ export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionI
     void invoke<LiveSessionStatus>("live_session_status")
       .then((s) => {
         if (s.active) {
-          setPhase(s.paused ? "⏸ 已暂停（时间轴冻结）" : "● 采集中");
+          setPhase("● 采集中");
           startedAtRef.current = startedAtRef.current ?? Date.now();
         }
       })
@@ -270,11 +276,10 @@ export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionI
         countsRef.current.ocr += 1;
         setCounts({ ...countsRef.current });
       }),
-      // 2026-08 A1：暂停/恢复状态机（硬暂停——时间轴冻结，面板显示暂停态）
-      listen("live:paused", () => setPhase("⏸ 已暂停（时间轴冻结）")),
-      listen("live:resumed", () => setPhase("● 采集中")),
       // v0.7.2（REQ-151）：采集信息（平台/时长/合集——标题信号 + 播放器 OCR）
       listen<SessionInfo>("live:session-info", (e) => setInfo(e.payload)),
+      // 批 2b：live:paused/resumed 不再由本面板订阅——暂停为采集控制状态，
+      // 单一来源 CaptureStatusProvider；暂停文案由 pausedReason 覆盖（见状态行）
       listen<number>("session:fusing", () => setPhase("⏳ 融合中…")),
       listen<number>("session:fused", () => setPhase("✅ 融合完成")),
       listen<string>("session:fusion-failed", (e) => setPhase(`⚠ 融合失败（原始段保留）: ${e.payload}`)),
@@ -285,7 +290,10 @@ export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionI
   }, []);
 
   const elapsedMs = startedAtRef.current ? Date.now() - startedAtRef.current : 0;
-  const phaseColor = phase.startsWith("●") ? "#dc2626" : phase.startsWith("⏸") ? "#b45309" : phase.startsWith("⏳") ? "#b45309" : phase.startsWith("⚠") ? "#dc2626" : "#374151";
+  // 暂停期间展示 reason 文案（三态短文案同徽标/浮窗）；否则为内容流阶段文案
+  const statusText = capture.pausedReason ? pauseReasonLabel(capture.pausedReason) ?? phase : phase;
+  const phaseColor = phase.startsWith("●") ? "#dc2626" : phase.startsWith("⏳") ? "#b45309" : phase.startsWith("⚠") ? "#dc2626" : "#374151";
+  const statusColor = capture.pausedReason ? "#b45309" : phaseColor;
   // 简要显示：只渲染最近几条（总数在状态行）
   const shownTranscripts = transcripts.slice(-SHOW_TRANSCRIPT_LINES);
   const shownOcr = ocrLines.slice(-SHOW_OCR_LINES);
@@ -305,7 +313,7 @@ export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionI
           flexShrink: 0,
         }}
       >
-        <span style={{ fontWeight: 600, color: phaseColor }}>{phase}</span>
+        <span style={{ fontWeight: 600, color: statusColor }}>{statusText}</span>
         <span style={{ color: "#6b7280", fontVariantNumeric: "tabular-nums" }}>⏱ {fmtTime(elapsedMs)}</span>
         <span style={{ color: "#0d9488" }}>字幕 {counts.subtitle}</span>
         <span style={{ color: "#6b7280" }}>语音 {counts.asr}</span>
