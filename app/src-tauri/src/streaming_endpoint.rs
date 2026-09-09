@@ -34,7 +34,9 @@ impl StreamingAsrEngine {
             .unwrap_or_default();
         // ADR-012 F1-1：尾静音端点（连续静音 ≥1.2s）才允许前缀扩展接受
         let silence_terminated = self.silent_blocks_since_speech >= SILENCE_TERMINATED_BLOCKS;
-        let (final_text, confidence) = self.maybe_rescore(&raw, silence_terminated);
+        // 端点路径保留 SenseVoice 重打分（allow_rescore=true；批 2a 仅在暂停
+        // 边沿 flush_no_rescore 跳过——见 streaming_asr.rs）
+        let (final_text, confidence) = self.maybe_rescore(&raw, silence_terminated, true);
         let final_text = crate::asr_clean::clean_asr_result(&final_text);
         let mut events = Vec::new();
         if !final_text.is_empty() && final_text != self.last_final_text {

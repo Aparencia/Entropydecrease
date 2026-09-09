@@ -39,6 +39,11 @@ impl LiveSessionManager {
         self.pause.paused.load(Ordering::SeqCst)
     }
 
+    /// 暂停来源（批 2a：status 查询下发——paused=false 恒 None）。
+    pub fn paused_reason(&self) -> Option<String> {
+        self.pause.paused_reason().map(|s| s.as_str().to_string())
+    }
+
     /// 画面档降档确认共享状态句柄（command 层组装 LiveSessionParams 时获取；
     /// v0.9.0 M2 REQ-189——前端确认降档后写入，worker 消费）。
     pub fn tier_override(&self) -> std::sync::Arc<std::sync::Mutex<Option<crate::video_profile_spec::VisualTier>>> {
@@ -99,33 +104,57 @@ impl LiveSessionManager {
         self.applied_profile.clone()
     }
 
-    /// 暂停活动会话（2026-08 A1 硬暂停：完全停采）。
+    /// 暂停活动会话（2026-08 A1 硬暂停：完全停采；批 2a 改经 request API——
+    /// Manual 来源锁存，reason 由此推导）。
     ///
-    /// @ai-context: 只置共享标志——实际暂停由捕获线程边沿检测执行
+    /// @ai-context: request 只落共享状态——实际暂停由捕获线程边沿检测执行
     ///              （WASAPI 端点 Stop）并累计补偿时长；事件/落库由会话
     ///              线程边沿检测发出（保证与真实暂停时序一致）。
-    /// @ai-context: 无活动会话/已暂停 → 明确报错（幂等拒绝）。
+    /// @ai-context: 守卫（文案与锁纪律不变）：无活动会话/已暂停 → 明确报错
+    ///              （幂等拒绝；自动暂停期按已暂停拒绝——手动接管留 2b UI
+    ///              层按 paused_reason 决策）。
     pub fn pause(&self) -> Result<()> {
         let guard = self.active.lock().expect("live session lock poisoned");
         if guard.is_none() {
             return Err(AppError::Io("无活动实时会话".to_string()));
         }
-        if self.pause.paused.swap(true, Ordering::SeqCst) {
+        if self.is_paused() {
+            // 先查后请求：Err 路径不得锁存 Manual（幂等拒绝，与旧 swap 语义一致）
             return Err(AppError::Io("会话已处于暂停".to_string()));
         }
-        Ok(())
+        use crate::pause_state::{PauseOutcome, PauseRequest, PauseSource};
+        match self.pause.request(PauseRequest::Pause(PauseSource::Manual)) {
+            PauseOutcome::Paused => Ok(()),
+            // 理论不可达（先查未暂停）——防御：不静默
+            _ => Err(AppError::Io("会话已处于暂停".to_string())),
+        }
     }
 
-    /// 恢复暂停的会话（2026-08 A1；未暂停 → 明确报错）。
+    /// 恢复暂停的会话（2026-08 A1；批 2a 改经 request API——Release(Manual)）。
+    ///
+    /// @ai-context: 单状态机语义：manual 解除瞬间重评估 auto 条件（媒体/前台
+    ///              锁存仍真 → 对应源自动重暂停——pause_state 模块头真值表）；
+    ///              自动暂停期按手动恢复请求：无 manual 锁存可释放 → Ok 但
+    ///              paused 保持（物理无变化，条件由 worker 检测器自行解除），
+    ///              前端以 paused_reason 感知。
     pub fn resume(&self) -> Result<()> {
         let guard = self.active.lock().expect("live session lock poisoned");
         if guard.is_none() {
             return Err(AppError::Io("无活动实时会话".to_string()));
         }
-        if !self.pause.paused.swap(false, Ordering::SeqCst) {
-            return Err(AppError::Io("会话未处于暂停".to_string()));
+        use crate::pause_state::{PauseOutcome, PauseRequest, PauseSource};
+        match self.pause.request(PauseRequest::Release(PauseSource::Manual)) {
+            PauseOutcome::Resumed => Ok(()),
+            PauseOutcome::StillHeld => {
+                // auto 条件仍持暂停（manual 解除瞬间重评估）——如实记录可观测
+                eprintln!("[LiveSession] 手动恢复但自动暂停条件仍持（reason={:?}）", self.pause.reason());
+                Ok(())
+            }
+            PauseOutcome::NotPaused => Err(AppError::Io("会话未处于暂停".to_string())),
+            PauseOutcome::Paused | PauseOutcome::AlreadyPaused => {
+                Err(AppError::Io("会话未处于暂停".to_string()))
+            }
         }
-        Ok(())
     }
 
     /// 停止活动会话（有界等待线程退出，返回其会话 id）。

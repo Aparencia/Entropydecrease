@@ -28,9 +28,10 @@ pub enum EventKind {
     ForegroundSwitch,
     /// 播放器行为（REQ-125；难点信号）
     PlayerBehavior,
-    /// 会话暂停（2026-08 A1 硬暂停；时间轴可见暂停区间）
+    /// 会话暂停（2026-08 A1 硬暂停；时间轴可见暂停区间；批 2a 起 payload
+    /// 携带来源 `{"source":"manual"|"media"|"foreground"}`——自动暂停区分底座）
     Pause,
-    /// 会话恢复（2026-08 A1；与 Pause 成对）
+    /// 会话恢复（2026-08 A1；与 Pause 成对；payload 同 Pause 写 source）
     Resume,
     /// v0.7.2（REQ-154 S-2）：语速骤变（段间语速骤降 ≥40% = 强调/变速；
     /// 与 VolumeSurge 音量骤变姊妹信号，重点标注备数据）

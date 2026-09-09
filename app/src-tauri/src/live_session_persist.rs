@@ -406,6 +406,10 @@ pub(crate) fn handle_final_event(
 /// @ai-context: 两处语义一致（句被"中断"）——单一实现防漂移；返回是否
 ///              落库了内容（当前调用方未消费——保留供诊断/单测断言，
 ///              不引入 must_use 以免无谓告警）。
+/// @ai-context: rescore=true 时 flush 走 SenseVoice 整句重打分（停止路径——
+///              尾句与端点同质量兜底）；false 走 flush_no_rescore（暂停边沿
+///              路径——重打分有界 3s 是暂停延迟根源，边沿只需断句，Zipformer
+///              + 标点兜底足够，见 live_session_pause.rs 模块头）。
 /// @ai-context: 参数为编排上下文传递（与 persist_final 同模式，登记豁免）。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn flush_tail_and_persist(
@@ -414,6 +418,7 @@ pub(crate) fn flush_tail_and_persist(
     now_ms: u64,
     sentence_rms_sum: &mut f32,
     sentence_rms_count: &mut u32,
+    rescore: bool,
 ) -> bool {
     let mut any = false;
     // 先兜底落库挂起段（F4-1：中断时无下一段可合并——半句不丢）
@@ -434,8 +439,14 @@ pub(crate) fn flush_tail_and_persist(
         );
         any = true;
     }
-    // flush 尾句（ADR-012 F1-2 重打分兜底；REQ-118 跨 final 去重）
-    if let Some(StreamingAsrEvent::Final { text, confidence, .. }) = asr_engine.flush() {
+    // flush 尾句（rescore 按调用路径：停止=ADR-012 F1-2 重打分兜底；
+    // 暂停边沿=no-rescore 快速断句；REQ-118 跨 final 去重）
+    let flushed = if rescore {
+        asr_engine.flush()
+    } else {
+        asr_engine.flush_no_rescore()
+    };
+    if let Some(StreamingAsrEvent::Final { text, confidence, .. }) = flushed {
         let text = match ctx.last_final_clean.as_ref() {
             Some(prev) => crate::asr_dedupe::dedupe_across_finals_normalized(prev, &text),
             None => text,

@@ -290,8 +290,21 @@ impl StreamingAsrEngine {
     ///              路径同质量兜底（此前直接取流内文本，无兜底）。
     /// @ai-context: REQ-098：flush 尾句置信度同端点路径（重打分一致性；None=诚实）。
     pub fn flush(&mut self) -> Option<StreamingAsrEvent> {
+        self.flush_inner(true)
+    }
+
+    /// 无重打分 flush（批 2a：暂停边沿用）——跳过 SenseVoice 整句重打分
+    /// （有界 3s 是暂停延迟根源①：暂停边沿只需断句，等整句重打分不值得；
+    /// Zipformer 文本 + 标点恢复兜底仍执行，见 maybe_rescore fallback）。
+    /// 停止路径 flush() 保留重打分不变（尾句与端点同质量兜底语义）。
+    pub fn flush_no_rescore(&mut self) -> Option<StreamingAsrEvent> {
+        self.flush_inner(false)
+    }
+
+    /// flush 公共实现（allow_rescore=false 时 maybe_rescore 走 fallback 分支）。
+    fn flush_inner(&mut self, allow_rescore: bool) -> Option<StreamingAsrEvent> {
         let raw = self.recognizer.get_result(&self.stream).map(|r| r.text).unwrap_or_default();
-        let (tail, confidence) = self.maybe_rescore(&raw, true);
+        let (tail, confidence) = self.maybe_rescore(&raw, true, allow_rescore);
         let tail = clean_asr_result(&tail);
         if tail.is_empty() || tail == self.last_final_text {
             return None;
@@ -300,9 +313,13 @@ impl StreamingAsrEngine {
         Some(StreamingAsrEvent::Final { text: tail, merge_with_next: false, confidence })
     }
 
-    /// 重置（新会话开始时调用，清空流状态与句音频；
-    /// 当前每次会话新建引擎实例未调用——复用预留，登记豁免）。
-    #[allow(dead_code)]
+    /// 重置流状态与句音频（**暂停边沿使用**——见 live_session_loop.rs /
+    /// live_session_pause.rs 的 detect_and_apply_pause_edges：暂停上升沿与
+    /// 漏边沿补偿都靠 reset 重建流，保证暂停前后语音不连句）。
+    ///
+    /// @ai-context: 2026-08 A1 注释曾登记"会话新建实例未调用"豁免——实际暂停
+    ///              边沿（live_session_loop.rs:169 原调用点，批 2a 迁至
+    ///              live_session_pause.rs）一直在用，注释失真，修正并移除豁免。
     pub fn reset(&mut self) {
         self.stream = self.new_stream();
         self.last_partial_text.clear();
@@ -357,7 +374,15 @@ impl StreamingAsrEngine {
     /// @ai-context: REQ-098（v0.7.0 M1）：返回 (文本, 置信度)——置信度=重打分
     ///              一致性相似度（双源互相印证）；重打分未产出/超时/不满足一致性
     ///              → None（诚实表达未知，不硬编码假置信度）。
-    fn maybe_rescore(&mut self, zipformer_text: &str, _silence_terminated: bool) -> (String, Option<f32>) {
+    /// @ai-context: allow_rescore=false（批 2a 暂停边沿 flush_no_rescore）：跳过
+    ///              SenseVoice 整句重打分（有界 3s 暂停延迟根源①），仍走标点
+    ///              fallback——Zipformer 结果质量不降级，只是无第二源印证。
+    fn maybe_rescore(
+        &mut self,
+        zipformer_text: &str,
+        _silence_terminated: bool,
+        allow_rescore: bool,
+    ) -> (String, Option<f32>) {
         // 字段级借用分离：闭包只捕获 punctuator 引用（不捕获 &self），
         // 与下方 sentence_pcm 的可变借用不冲突
         let punctuator = &self.punctuator;
@@ -366,6 +391,9 @@ impl StreamingAsrEngine {
             // F4-2：仅未被 SenseVoice 替换的文本补标点（替换文本自带 use_itn 标点）
             (endpoint::punctuate(punctuator, &text), None)
         };
+        if !allow_rescore {
+            return fallback();
+        }
         let Some(rescorer) = self.rescorer.as_ref() else {
             return fallback();
         };

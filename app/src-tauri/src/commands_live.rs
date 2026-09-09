@@ -28,6 +28,9 @@ pub struct LiveSessionStatus {
     /// 2026-08 修复：是否处于暂停（挂载拉取恢复右侧面板状态机用——
     /// recording 事件只发一次，刷新/重进页面后需靠此字段还原 phase）
     pub paused: bool,
+    /// 批 2a：暂停来源（kebab-case：manual/media/foreground；paused=false 恒
+    /// None——前端据此显示暂停原因与恢复语义，自动暂停可提示"视频仍暂停"）
+    pub paused_reason: Option<String>,
     /// v0.9.0 M2（REQ-189）：当前生效画面档（kebab-case；None=未定档——
     /// 前端面板挂载拉取兑底，tier-changed 事件可能早于监听注册）
     pub tier: Option<String>,
@@ -199,6 +202,8 @@ pub fn live_session_status(state: State<'_, AppState>) -> LiveSessionStatus {
             crate::live_session_prepare::PrepareStatus::Ready
         ),
         paused: state.live_session.is_paused(),
+        // 批 2a：暂停来源（None=未暂停）
+        paused_reason: state.live_session.paused_reason(),
         // v0.9.0 M2（REQ-189）：当前生效画面档（None=未定档/未激活）
         tier: state.live_session.applied_tier().map(|t| t.as_str().to_string()),
     }
@@ -258,17 +263,19 @@ pub fn release_live_prepare(state: State<'_, AppState>) -> Result<(), String> {
     state.live_session.release_prepare().map_err(|e| e.to_string())
 }
 
-/// 暂停实时会话（2026-08 A1 硬暂停：完全停采，时间轴冻结）。
+/// 暂停实时会话（2026-08 A1 硬暂停：完全停采，时间轴冻结；批 2a 经 request
+/// API 锁存 Manual 来源——reason=manual）。
 ///
-/// @ai-context: 只置共享标志——实际暂停由捕获线程边沿检测执行（WASAPI 端点
-///              Stop + 暂停时长累计），会话线程发出 live:paused 事件与落库；
-///              无活动会话/已暂停 → 明确报错（幂等拒绝）。
+/// @ai-context: request 只落共享状态——实际暂停由捕获线程边沿检测执行（WASAPI
+///              端点 Stop + 暂停时长累计），会话线程发出 live:paused 事件与落库
+///              （载荷带 reason）；无活动会话/已暂停 → 明确报错（幂等拒绝）。
 #[tauri::command]
 pub fn pause_live_session(state: State<'_, AppState>) -> Result<(), String> {
     state.live_session.pause().map_err(|e| e.to_string())
 }
 
-/// 恢复暂停的实时会话（2026-08 A1；未暂停 → 明确报错）。
+/// 恢复暂停的实时会话（2026-08 A1；批 2a Release(Manual)——manual 解除瞬间
+/// 重评估 auto 条件仍真则对应源自动重暂停；未暂停 → 明确报错）。
 #[tauri::command]
 pub fn resume_live_session(state: State<'_, AppState>) -> Result<(), String> {
     state.live_session.resume().map_err(|e| e.to_string())

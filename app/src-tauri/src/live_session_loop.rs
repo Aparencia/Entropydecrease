@@ -73,7 +73,7 @@ pub(crate) struct LiveLoopCtx<'a> {
 pub(crate) fn run_audio_loop(
     rx: mpsc::Receiver<AudioChunk>,
     mut audio: crate::capture::AudioLoopbackCapture,
-    ctx: LiveLoopCtx<'_>,
+    mut ctx: LiveLoopCtx<'_>,
     data_dir: &std::path::Path,
 ) {
     let mut asr_health = crate::asr_health::AsrHealthMonitor::new();
@@ -124,70 +124,28 @@ pub(crate) fn run_audio_loop(
     // deadline 早已过期，宽限从未生效；改为 draining 置位时才起算（Option<Instant>）
     let mut drain_deadline: Option<Instant> = None;
     let mut draining = false;
-    // 2026-08 A1：暂停边沿跟踪（false→true 断句隔离；暂停期捕获线程停采，
-    // channel 空 → recv_timeout 空转，无需显式消费处理）
-    let mut loop_paused = ctx.pause.paused.load(Ordering::SeqCst);
+    // 批 2a：暂停边沿收敛域（live_session_pause.rs）——可见边沿 flush_no_rescore
+    // 断句 + seq 漏边沿代数补偿 + 合成事件对；本循环只留编排调用。
+    // @ai-context: 暂停期捕获线程停采 → channel 空 → recv_timeout 空转，无需显式消费
+    let mut pause_view = crate::live_session_pause::PauseEdgeView::new(ctx.pause);
     loop {
-        // ── 暂停边沿（2026-08 A1）──
+        // ── 暂停边沿（批 2a：检测+应用收敛于 live_session_pause.rs）──
         // @ai-context: 时间戳 = 会话时间（epoch - 已补偿暂停时长）——暂停开始
         //              时补偿尚未累计（正确，时间轴冻结点）；恢复时补偿已更新
         //              （时间戳回到冻结点附近，时间轴无缝衔接）。
-        let paused_now = ctx.pause.paused.load(Ordering::SeqCst);
-        if paused_now != loop_paused {
-            let now_ms = ctx.epoch.elapsed().as_millis() as u64
-                - ctx.pause.total_paused_ms.load(Ordering::SeqCst);
-            if paused_now {
-                // 进入暂停（P2 增强：替代"喂 100ms 静音"方案——静音块不足以触发
-                // sherpa 端点规则（rule1 需 2.4s 尾静音），句无法断开；flush 尾句
-                // 落库 + reset 重建流才能保证暂停前后的语音不连句，恢复后干净开始）
-                // REQ-154（v0.7.2 S-1）：动态合并阈值先算（借用释放后再构造 ctx）
-                let merge_gap_ms = crate::asr_merge::adaptive_merge_gap(
-                    pause_history.iter().copied(),
-                );
-                flush_tail_and_persist(
-                    FinalEventCtx {
-                        app: ctx.app,
-                        db: ctx.db,
-                        session_id: ctx.session_id,
-                        asr_segments: ctx.asr_segments,
-                        sentence_start_ms: &mut sentence_start_ms,
-                        last_speech_ms: &mut last_speech_ms,
-                        last_final_clean: &mut last_final_clean,
-                        pending_merge: &mut pending_merge,
-                        last_segment_end: &mut last_segment_end,
-                        // REQ-154（v0.7.2 S-1/S-2）：停顿历史/动态阈值/语速基准
-                        pause_history: &mut pause_history,
-                        merge_gap_ms,
-                        last_speech_rate: &mut last_speech_rate,
-                    },
-                    ctx.asr_engine,
-                    now_ms,
-                    &mut sentence_rms_sum,
-                    &mut sentence_rms_count,
-                );
-                // 重建流（reset 预留给复用场景：清句音频/状态，热词重读）
-                ctx.asr_engine.reset();
-                // REQ-154（v0.7.2 S-2）：暂停边沿重置语速基准——恢复后首段与
-                // 暂停前比较会跨暂停区间误判语速骤变（暂停时长不计入段间）
-                last_speech_rate = None;
-                let _ = ctx.db.add_event(&crate::session_events::NewSessionEvent::simple(
-                    ctx.session_id,
-                    crate::session_events::EventKind::Pause,
-                    now_ms,
-                ));
-                let _ = ctx.app.emit("live:paused", ());
-                eprintln!("[LiveSession] 会话 {} 暂停 @{}ms", ctx.session_id, now_ms);
-            } else {
-                let _ = ctx.db.add_event(&crate::session_events::NewSessionEvent::simple(
-                    ctx.session_id,
-                    crate::session_events::EventKind::Resume,
-                    now_ms,
-                ));
-                let _ = ctx.app.emit("live:resumed", ());
-                eprintln!("[LiveSession] 会话 {} 恢复 @{}ms", ctx.session_id, now_ms);
-            }
-            loop_paused = paused_now;
-        }
+        crate::live_session_pause::detect_and_apply_pause_edges(
+            &mut pause_view,
+            &mut ctx,
+            &mut sentence_start_ms,
+            &mut last_speech_ms,
+            &mut last_final_clean,
+            &mut pending_merge,
+            &mut last_segment_end,
+            &mut pause_history,
+            &mut last_speech_rate,
+            &mut sentence_rms_sum,
+            &mut sentence_rms_count,
+        );
         // H1 修复：deadline 在 draining 置位时才起算（见声明处注释），此处
         // 仅在已置位的情况下判定到期；None 表示尚未进入 drain 阶段
         if draining
@@ -423,6 +381,8 @@ pub(crate) fn run_audio_loop(
         stop_now_ms,
         &mut sentence_rms_sum,
         &mut sentence_rms_count,
+        // 停止路径保留 SenseVoice 重打分（与端点同质量兜底；暂停边沿才跳过）
+        true,
     );
     audio.stop();
 

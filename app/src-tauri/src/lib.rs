@@ -372,6 +372,8 @@ mod live_session_lifecycle;
 #[cfg(target_os = "windows")]
 mod pause_state;
 #[cfg(target_os = "windows")]
+mod live_session_pause;
+#[cfg(target_os = "windows")]
 mod live_keyframes;
 mod load_monitor;
 // v0.7.0 M1（REQ-106，TRUST-4）：诊断日志脱敏（OCR 文本/会话标题等敏感内容过滤）
