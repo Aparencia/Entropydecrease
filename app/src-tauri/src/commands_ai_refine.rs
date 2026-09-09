@@ -205,8 +205,10 @@ pub async fn ai_refine_start(
         }
         drop(guards);
     }
-    // ③ 注册任务 + 后台执行（spawn_blocking——网络/分析不阻塞异步运行时）
-    let task_id = st.ai_task_seq.fetch_add(1, Ordering::Relaxed);
+    // ③ 注册任务 + 后台执行（spawn_blocking——网络/分析不阻塞异步运行时）；
+    // 任务 id 走全任务族统一认领封装（claim_task_id——见其 Why：proofread
+    // 原 +1 偏移与各族口径冲突，相邻认领撞 id 会被 INSERT OR REPLACE 顶替）
+    let task_id = claim_task_id(&st.ai_task_seq);
     {
         let mut tasks = st.ai_tasks.lock().map_err(|e| format!("任务注册表锁中毒: {}", e))?;
         tasks.insert(task_id, AiTaskEntry { state: AiTaskState::Pending, result: None, target_id: session_id });
@@ -614,6 +616,24 @@ pub fn task_seq() -> Arc<AtomicU64> {
 ///              溢出；序列只前进不回退（当前值更大时保持）。
 pub fn task_seq_lower_bound(current: u64, db_max_task_id: u64) -> u64 {
     current.max(db_max_task_id.saturating_add(1))
+}
+
+/// 认领下一个 AI 任务 id（全任务族唯一分配点——proofread/refine/enrich/
+/// note_refine/goal_plan 共用的单调序列，返回值即 task_id，推进量=认领量）。
+///
+/// @ai-context Why（2026-09-09 批 2 审查修复）：proofread 原写作
+///              fetch_add(1, SeqCst) + 1（+1 存量来源 1904c2c7——按「0 起
+///              序列」直觉，但 task_seq() 初值 1 且其余族均以 fetch_add
+///              返回值直接作 id）。fetch_add(1)+1 只把计数器推进 1 却领走
+///              后值：紧邻的下一次认领（任意其他族）恰好拿到同一 id →
+///              insert_ai_task 的 INSERT OR REPLACE 运行期顶替先落库行
+///              （running 记账/结果/成本丢行）。统一本函数分配：认领严格
+///              单调、相邻认领永不相交。Relaxed 即足——唯一性由 fetch_add
+///              原子读-改-写保证，无需跨线程同步排序（与启动序列下限
+///              fetch_update 及 enrich/note_refine/goal_plan 现场同式内联
+///              的 Relaxed 同档，口径一致）。
+pub fn claim_task_id(seq: &AtomicU64) -> u64 {
+    seq.fetch_add(1, Ordering::Relaxed)
 }
 
 /// 任务注册表（AppState 装配）。

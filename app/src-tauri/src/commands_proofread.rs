@@ -158,7 +158,12 @@ pub async fn proofread_run(
     let expected: Vec<&str> = flat.iter().take(take).map(|(_, s)| *s).collect();
     let chars: usize = expected.iter().map(|s| s.chars().count()).sum();
 
-    let task_id = st.ai_task_seq.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+    // 任务 id 认领走全任务族统一封装（claim_task_id——见其 Why：proofread
+    // 原 fetch_add(1, SeqCst) + 1（+1 存量来源 1904c2c7）与 refine/enrich/
+    // note_refine/goal_plan 的裸 fetch_add 口径冲突——fetch_add 只推进 1 却
+    // 领走后值，跨任务族紧邻认领会撞同 id，被 insert_ai_task 的 INSERT OR
+    // REPLACE 运行期顶替；修复：去掉 +1，与其他族同一单调分配）
+    let task_id = crate::commands_ai_refine::claim_task_id(&st.ai_task_seq);
     let created_at = crate::db::unix_seconds();
     let _ = db.insert_ai_task(&crate::db_ai_tasks::AiTaskRecord {
         task_id,
@@ -372,3 +377,7 @@ pub fn proofread_list(
         items,
     })
 }
+
+#[cfg(test)]
+#[path = "commands_proofread_tests.rs"]
+mod tests;
