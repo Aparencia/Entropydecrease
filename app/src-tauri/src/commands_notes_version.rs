@@ -90,6 +90,15 @@ pub struct MarkdownDiffOps {
     pub removed: usize,
 }
 
+/// 行级 diff 入口字符护栏上限（两段文本合计字符数）。
+///
+/// @ai-context Why（P2-6 审查修复）：note_diff 仅按「行数乘积 4M」回退
+///              （LCS_CELLS_MAX），无字符级上限——单行超长文本的行数乘积
+///              1×1 不触发回退，但行比较/克隆/ops 序列化与 JSON 传输仍随
+///              总字符数线性放大；2M 字符 ≈ 常规精修/笔记量级（万字符内）
+///              两个数量级以上的余量，超限即视为异常输入走降级。
+const DIFF_MD_CHARS_MAX: usize = 2_000_000;
+
 /// 任意两篇 markdown 的整篇有序行级 diff（精修工作台行级标色/差异模式）。
 ///
 /// @ai-context Why（批 3 / 用户问题11）：工作台此前只有章节分组
@@ -98,11 +107,37 @@ pub struct MarkdownDiffOps {
 ///              补薄命令直接暴露 note_diff::diff_markdown 全文档流（纯函数
 ///              复用，无第二套 diff 引擎）；前端三入口（会话级/笔记级/只读）
 ///              统一经本命令对"实际展示的两版文本"取数，保证行与渲染对齐。
+/// @ai-context Why（P2-6 审查修复）：改 async——Tauri 同步 command 在主线程
+///              执行，超长文本的 diff 会卡 UI；async 命令派发到异步运行时
+///              线程执行（仓库先例：commands.rs list_notes/proofread_run 等
+///              async 命令同步体，无 await 点直接返回）。计算核心无 await
+///              点、CPU 量已被 DIFF_MD_CHARS_MAX + note_diff 行数乘积 4M 回退
+///              双向封顶——同步算完即返即可，无需 spawn_blocking。
 #[tauri::command]
-pub fn diff_markdown_ops(old_md: String, new_md: String) -> MarkdownDiffOps {
-    let ops = diff_markdown(&old_md, &new_md);
+pub async fn diff_markdown_ops(
+    old_md: String,
+    new_md: String,
+) -> Result<MarkdownDiffOps, String> {
+    diff_markdown_ops_inner(&old_md, &new_md)
+}
+
+/// diff_markdown_ops 同步计算核心（纯函数；单测直接调用，不依赖运行时）。
+///
+/// 降级口径（P2-6）：超限返回 Err 而非空 ops——前端 RefineWorkbench.load
+/// 对本命令取数失败 catch(() => null) → ops=null → mdFallbackRows 全文本
+/// 不染色兜底（refineDiff.ts 既有「取数失败→不染色」路径）；空数组在 JS
+/// 是 truthy，splitDiffSides([]) 会让工作台双栏渲染成空白——不可用空 ops
+/// 表达降级（已核对前端对空/失败的消费，走失败路径）。
+fn diff_markdown_ops_inner(old_md: &str, new_md: &str) -> Result<MarkdownDiffOps, String> {
+    if old_md.chars().count() + new_md.chars().count() > DIFF_MD_CHARS_MAX {
+        return Err(format!(
+            "内容过长（两段合计超 {} 字符）——跳过行级染色，原文不受影响",
+            DIFF_MD_CHARS_MAX
+        ));
+    }
+    let ops = diff_markdown(old_md, new_md);
     let (added, removed, _) = diff_stats(&ops);
-    MarkdownDiffOps { ops, added, removed }
+    Ok(MarkdownDiffOps { ops, added, removed })
 }
 
 /// 读版本并校验归属（diff 输入防御）。
@@ -130,7 +165,7 @@ mod tests {
         let old_md = "甲\n删我\n尾".to_string();
         let new_md = "甲\n加我\n尾".to_string();
         // Act
-        let out = diff_markdown_ops(old_md, new_md);
+        let out = diff_markdown_ops_inner(&old_md, &new_md).expect("正常输入应成功");
         // Assert：三态各自一个且有序（unchanged → removed → added）
         assert_eq!(
             out.ops,
@@ -147,14 +182,15 @@ mod tests {
     /// AAA：空侧边界——单侧全量标记，另一侧无行。
     #[test]
     fn diff_markdown_ops_empty_side_counts_every_line() {
-        // Arrange
-        let out = diff_markdown_ops(String::new(), "新增1\n新增2".to_string());
-        // Act/Assert：空基线的整篇都是新增
+        // Arrange/Act
+        let out =
+            diff_markdown_ops_inner("", "新增1\n新增2").expect("正常输入应成功");
+        // Assert：空基线的整篇都是新增
         assert_eq!(out.ops.len(), 2);
         assert!(out.ops.iter().all(|o| matches!(o, DiffOp::Added(_))));
         assert_eq!((out.added, out.removed), (2, 0));
 
-        let out = diff_markdown_ops("删1\n删2".to_string(), String::new());
+        let out = diff_markdown_ops_inner("删1\n删2", "").expect("正常输入应成功");
         // Assert：空精修版的整篇都是删除
         assert!(out.ops.iter().all(|o| matches!(o, DiffOp::Removed(_))));
         assert_eq!((out.added, out.removed), (0, 2));
@@ -165,7 +201,8 @@ mod tests {
     #[test]
     fn diff_markdown_ops_serializes_camel_case_and_lowercase_tags() {
         // Arrange/Act
-        let out = diff_markdown_ops("旧\n同".to_string(), "新\n同".to_string());
+        let out =
+            diff_markdown_ops_inner("旧\n同", "新\n同").expect("正常输入应成功");
         let json = serde_json::to_value(&out).unwrap();
         // Assert：顶层键 camelCase（ops/added/removed）
         assert!(json.get("ops").is_some());
@@ -178,5 +215,35 @@ mod tests {
         assert_eq!(json["ops"][2]["unchanged"], "同");
         assert_eq!(json["added"], 1);
         assert_eq!(json["removed"], 1);
+    }
+
+    /// AAA（P2-6）：字符护栏——两段合计超 DIFF_MD_CHARS_MAX → Err 降级，
+    /// 不进入 diff 计算。选型：单行超长文本行数乘积 1×1，note_diff 的 4M
+    /// 行数回退拦不住，唯独入口字符护栏能拦下。
+    #[test]
+    fn diff_markdown_ops_over_char_limit_returns_err_degrade() {
+        // Arrange：old 距上限差 1 字符 + new 两字符 = 合计刚好超 1 字符
+        let old_md = "甲".repeat(DIFF_MD_CHARS_MAX - 1);
+        let new_md = "乙丙".to_string();
+        // Act
+        let res = diff_markdown_ops_inner(&old_md, &new_md);
+        // Assert：Err（前端按取数失败降级为全文本不染色）且报错可读
+        let err = res.expect_err("超限应返回 Err 降级");
+        assert!(err.contains("内容过长"), "报错应说明超限原因: {err}");
+    }
+
+    /// AAA（P2-6）：边界——合计恰为 DIFF_MD_CHARS_MAX 时不误伤（正常路径
+    /// 与原行为一致：与既有 3 例同内核，仅多一次字符计数）。
+    #[test]
+    fn diff_markdown_ops_at_char_limit_still_diffs() {
+        // Arrange：old 恰占满上限（单行——行数乘积 1×0 不触发 LCS 回退）
+        let old_md = "甲".repeat(DIFF_MD_CHARS_MAX);
+        let new_md = String::new();
+        // Act
+        let out = diff_markdown_ops_inner(&old_md, &new_md).expect("恰好上限不应降级");
+        // Assert：整行删除（行为与原实现逐字节一致）
+        assert_eq!(out.ops.len(), 1);
+        assert!(matches!(out.ops[0], DiffOp::Removed(_)));
+        assert_eq!((out.added, out.removed), (0, 1));
     }
 }
