@@ -63,8 +63,9 @@ pub(crate) struct PauseEdgeView {
     /// 已消化的区间计数（delta = seq - view.seq 即待判定的漏检区间数）
     pub seq: u64,
     /// 当前可见暂停区间的完成增量(+1)尚未被吸收（loop 已见上升沿但恢复的
-    /// Start 尚未执行，或 loop 起点即在暂停中）——对应 +1 到达时吸收一次，
-    /// 防把"本已可见的暂停"重复合成为漏检区间
+    /// Start 尚未执行，或 loop 起点即在暂停中）——对应 +1 到达时在稳态/
+    /// 上升沿/下降沿任一观察吸收一次，防把"本已可见的暂停"重复合成为
+    /// 漏检区间
     pub own_pending: bool,
     /// 当前暂停的上升沿是否已处理（未处理=引擎可能未清流——恢复边沿防御 flush）
     pub pause_processed: bool,
@@ -124,13 +125,18 @@ fn push_synth(
 /// +1，**含 loop 已可见处理的暂停区间**——完成增量须按归属吸收）：
 /// - own_pending=当前可见暂停的完成增量未吸收：上升沿置真；下降沿 delta 0
 ///   （恢复抢跑，Start 未执行）保持真；下降沿 delta ≥ 1（自身完成已在
-///   delta 内）与稳态吸收（+1 到达）后置假。loop 起点即在暂停中 → new 即真。
-///   上升沿覆盖旧 own_pending（旧期物理未结束——完成增量并入新期下降沿吸收）。
+///   delta 内）与稳态/上升沿吸收（own_pending 的 +1 到达）后置假。loop
+///   起点即在暂停中 → new 即真。旧完成增量在上升沿未到（delta 0）→ 待吸收
+///   位并入新期（由新期稳态/下降沿吸收一次）。
 /// - 稳态（标志未变）：delta 0 → 无；先吸收 own_pending 的 +1，余下 delta 为
 ///   双沿都漏检的区间（稳态假=轮询窗内往返；稳态真=暂停期 flap）→ 合成事件
-///   对 + flush_cut（引擎可能跨漏区间连句）
-/// - 上升沿（→暂停）：可见暂停事件 + flush_cut（no-rescore 断句）；delta ≥ 1
-///   = 此前的漏检完整区间 → 先补合成对
+///   对 + flush_cut（引擎可能跨漏区间连句）；稳态真吸收 own 完成且无余量
+///   时，若完成区间 resume 晚于已发 Pause 事件时刻（可见暂停的恢复沿丢
+///   采样）→ 补发合成 Resume + flush_cut + 复位 pause_processed（P2-3，
+///   见分支注释）
+/// - 上升沿（→暂停）：可见暂停事件 + flush_cut（no-rescore 断句）；先吸收
+///   own_pending 的 +1（其恢复沿若已可见发出，不得重复合成），余下
+///   delta_eff ≥ 1 = 此前的真漏检完整区间 → 先补合成对
 /// - 下降沿（→恢复）：可见恢复事件；delta ≥ 1 吸收自身区间完成 +1，余下
 ///   k = delta-1 为暂停期 flap → 合成 + flush_cut；!pause_processed（loop
 ///   起点即在暂停中，引擎未清流）→ 防御 flush（边界保护）
@@ -166,12 +172,42 @@ pub(crate) fn plan_edge_observation(
         if delta_eff > 0 {
             push_synth(&mut out, &mut next, interval, reason, session_now);
             out.flush_cut = true;
+        } else if paused_now && view.own_pending {
+            // P2-3（审查修复）：吸收的 +1 = 本已可见暂停**自身**区间的完成——
+            // 物理恢复已发生但 loop 未采到恢复沿（恢复+再次暂停同落一个
+            // <500ms 未采样窗，该次恢复从未落库，暂停区间会并入下次可见
+            // 恢复造成时长虚高）。若完成区间 resume 晚于已发出的 Pause
+            // 事件时刻（存在未见过的恢复沿）→ 补发合成 Resume（时刻夹逼
+            // ≥ Pause 事件保 DB 单调）+ flush_cut（恢复后采到的内容跨该
+            // 边界不得与后续连句——路径 C 防护）+ 复位 pause_processed
+            // （当前暂停=恢复后的再次暂停，其上升沿从未处理——后续下降沿
+            // k=0 时不再静默放行，防御 flush 兜底）。resume 不晚于 Pause
+            // 事件时刻 = 更早一次**已见**恢复（抢跑下降沿已发可见 Resume）
+            // 的迟到完成增量 → 保持现状（静默吸收）。
+            if let Some((iv, last_p)) =
+                interval.zip(view.last_pause_ms).filter(|(iv, p)| iv.resume_ms > *p)
+            {
+                let r = iv.resume_ms.max(last_p);
+                out.events.push(PlanEvent {
+                    kind: PlanEventKind::Resume,
+                    source: iv.source,
+                    moment_ms: r,
+                });
+                out.flush_cut = true;
+                next.pause_processed = false;
+            }
         }
     } else if paused_now {
-        // 上升沿：可见暂停。delta ≥ 1 = 此前的漏检完整区间（先补合成对）；
-        // 旧 own_pending 丢弃（旧期物理未结束——完成增量并入新期下降沿吸收）
-        out.missed_count = delta as u32;
-        if delta > 0 {
+        // 上升沿：可见暂停。先吸收 own_pending 的完成增量（+1——它对应本已
+        // 可见暂停的物理完成，其恢复沿已按可见边沿发出事件；不吸收会把
+        // delta 全数当漏检，manual <500ms 往返链上把已见暂停重复合成为
+        // Pause/Resume 对——DB 序倒挂 + missed_count 误报 + 多余 flush），
+        // 余下 delta_eff ≥ 1 = 此前的真漏检完整区间（先补合成对）；delta 0
+        // = 旧完成增量未到——待吸收位并入新期（下方 own_pending 保持真，
+        // 由新期稳态/下降沿吸收一次）
+        let delta_eff = delta.saturating_sub(u64::from(view.own_pending));
+        out.missed_count = delta_eff as u32;
+        if delta_eff > 0 {
             push_synth(&mut out, &mut next, interval, reason, session_now);
         }
         let src = reason.unwrap_or(PauseSource::Manual);
