@@ -477,12 +477,22 @@ pub async fn update_note(
 }
 
 /// 删除笔记（REQ-004；v0.15 顺带清理笔记图片目录——防孤立残留）。
+///
+/// @ai-context: REQ-316（批 7）返回契约扩展为 DeleteNoteResult——删除使空路由组
+///              被自动清理时回传组标题（前端 toast 留痕；组域刷新走下方条件
+///              广播，无清理零变化）。
 #[tauri::command]
-pub async fn delete_note(state: State<'_, AppState>, id: i64) -> Result<bool, String> {
+pub async fn delete_note(
+    state: State<'_, AppState>,
+    id: i64,
+) -> Result<crate::types::DeleteNoteResult, String> {
     if id <= 0 {
         return Err("无效的笔记 id".to_string());
     }
-    let deleted = state.db.delete_note(id).map_err(|e| e.to_string())?;
+    let out = state.db.delete_note(id).map_err(|e| e.to_string())?;
+    let deleted = out.deleted;
+    // 自动清理留痕（空数组=无清理——前端零变化）
+    let auto_cleaned_groups = out.auto_cleaned.iter().map(|g| g.name.clone()).collect();
     if deleted {
         // 审查 L6：删除即清手动序行（note_orders 无 FK——防孤儿行累积）
         let _ = state.db.purge_note_ids(&[id]);
@@ -498,8 +508,13 @@ pub async fn delete_note(state: State<'_, AppState>, id: i64) -> Result<bool, St
         // Knowledge 页图谱/引用同样需即时刷新（低-1 审查补端）
         crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
         crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Knowledge);
+        // REQ-316：删除触发空组自动清理 → 组域广播（侧栏空组消失即时可见；
+        // 无清理不发——零变化纪律）
+        if !out.auto_cleaned.is_empty() {
+            crate::notify::emit_changed(&state.app, crate::notify::DataDomain::NoteGroups);
+        }
     }
-    Ok(deleted)
+    Ok(crate::types::DeleteNoteResult { deleted, auto_cleaned_groups })
 }
 
 /// 搜索笔记（REQ-004；关键词截断——TD-005；v0.10.0 支持按标签过滤）。

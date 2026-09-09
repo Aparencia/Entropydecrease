@@ -166,8 +166,12 @@ fn delete_fragment_removes_and_detaches_cards() {
         })
         .expect("card");
     // Act：真删碎片
-    assert!(db.delete_fragment(f.id).expect("delete"));
-    // Assert：碎片消失；卡保留且 fragment_id 解绑（SET NULL——卡是独立资产）
+    let out = db.delete_fragment(f.id).expect("delete");
+    // Assert：碎片消失；卡保留且 fragment_id 解绑（SET NULL——卡是独立资产）；
+    // 组内仍有卡=残留 → 组不被自动清理（REQ-316 双闸之一）
+    assert!(out.deleted);
+    assert!(out.auto_cleaned.is_empty(), "有卡残留不得清组");
+    assert!(db.get_group(group.id).expect("get").is_some());
     assert!(db.get_fragment(f.id).expect("get").is_none());
     let fetched = db.get_card(card.id).expect("get").expect("卡应保留");
     assert_eq!(fetched.fragment_id, None);
@@ -189,7 +193,7 @@ fn get_fragment_roundtrip_and_missing() {
 fn delete_missing_fragment_returns_false() {
     // Arrange/Act/Assert：删不存在的碎片诚实返回 false（不报错不panic）
     let db = mem_db();
-    assert!(!db.delete_fragment(9999).expect("delete"));
+    assert!(!db.delete_fragment(9999).expect("delete").deleted);
 }
 
 #[test]
@@ -198,7 +202,10 @@ fn promote_fragment_to_note_creates_note_and_deletes_fragment() {
     let db = mem_db();
     let f = db.create_fragment(&frag("碎片文本：眼影要晕染", None, None)).expect("f");
     // Act：升为未归组笔记
-    let note = db.promote_fragment_to_note(std::path::Path::new("."), f.id, "眼影晕染", None).expect("promote");
+    let note = db
+        .promote_fragment_to_note(std::path::Path::new("."), f.id, "眼影晕染", None)
+        .expect("promote")
+        .note;
     // Assert：笔记成立（正文=碎片文本、source=manual、未归组）；碎片已删
     assert_eq!(note.content, "碎片文本：眼影要晕染");
     assert_eq!(note.source, "manual");
@@ -236,10 +243,12 @@ fn promote_fragment_copies_image_and_embeds_ref() {
             source: "manual".to_string(),
         })
         .expect("f");
-    // Act：升入指定组
-    let note = db
+    // Act：升入指定组（同组自升——源组=目标组，不触发清理）
+    let out = db
         .promote_fragment_to_note(&dir, f.id, "带图笔记", Some(group.id))
         .expect("promote");
+    let note = &out.note;
+    assert!(out.auto_cleaned.is_empty(), "笔记落回源组=组非空，不得清理");
     // Assert：图片已搬运入 notes-images/{nid}/ 且正文含引用；碎片已删；归组生效
     let img_ref = format!("![](notes-images/{}/1-abc.png)", note.id);
     assert!(note.content.contains(&img_ref), "正文应含图片引用: {}", note.content);
@@ -265,7 +274,8 @@ fn promote_fragment_image_missing_degrades_to_text() {
     // Act：升笔记（临时目录无 fragments/ghost.png）
     let note = db
         .promote_fragment_to_note(&std::env::temp_dir(), f.id, "降级笔记", None)
-        .expect("promote");
+        .expect("promote")
+        .note;
     // Assert：图片缺失降级纯文本（碎片文本不丢——诚实降级纪律）
     assert_eq!(note.content, "图丢了也要升");
     assert!(db.get_fragment(f.id).expect("get").is_none());

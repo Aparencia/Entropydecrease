@@ -235,6 +235,53 @@ pub struct GroupDeleteImpact {
 }
 
 // ────────────────────────────────────────────────────────────
+// 命令结果（REQ-316 v0.20.12 批 7：空组自动清理留痕——前端 toast 数据源）
+// ────────────────────────────────────────────────────────────
+
+/// 删除笔记结果（批 7：autoCleanedGroups=删除使组变空后自动清理的路由组标题；
+/// 无清理时为空数组——前端零变化，不打扰）。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteNoteResult {
+    pub deleted: bool,
+    pub auto_cleaned_groups: Vec<String>,
+}
+
+/// 笔记移组结果（批 7：autoCleanedGroups=源组变空被自动清理时留痕）。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MoveNoteResult {
+    pub moved: bool,
+    pub auto_cleaned_groups: Vec<String>,
+}
+
+/// 删除碎片结果（批 7：autoCleanedGroups=碎片源组变空被自动清理时留痕）。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteFragmentResult {
+    pub deleted: bool,
+    pub auto_cleaned_groups: Vec<String>,
+}
+
+/// 碎片移组结果（批 7：autoCleanedGroups=碎片源组变空被自动清理时留痕）。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MoveFragmentResult {
+    pub moved: bool,
+    pub auto_cleaned_groups: Vec<String>,
+}
+
+/// 碎片升笔记结果（批 7：note=新建笔记（旧返回契约原样前置）；autoCleanedGroups=
+/// 碎片源组变空被自动清理时留痕）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PromoteNoteResult {
+    pub note: Note,
+    #[serde(default)]
+    pub auto_cleaned_groups: Vec<String>,
+}
+
+// ────────────────────────────────────────────────────────────
 // 碎片类型（v0.11.1 feed 进料口；v4 契约：碎片不是笔记，身份诚实）
 // ────────────────────────────────────────────────────────────
 

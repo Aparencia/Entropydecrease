@@ -133,7 +133,7 @@ fn delete_note_clears_chunks_and_fts() {
     let note = db.create_note(&make_note("# 待删\n\n内容")).expect("create");
     assert_eq!(count_chunks(&db, None), 1);
     // Act
-    assert!(db.delete_note(note.id).expect("delete"));
+    assert!(db.delete_note(note.id).expect("delete").deleted);
     // Assert
     assert_eq!(count_chunks(&db, None), 0);
     assert_eq!(count_fts(&db), 0);
@@ -149,7 +149,7 @@ fn fragment_lifecycle_indexes_once_and_clears_on_delete() {
     assert_eq!(count_chunks(&db, Some("fragment")), 1);
     assert_eq!(count_fts(&db), 1);
     // Act：删除碎片 → 清块
-    assert!(db.delete_fragment(f.id).expect("delete"));
+    assert!(db.delete_fragment(f.id).expect("delete").deleted);
     // Assert
     assert_eq!(count_chunks(&db, Some("fragment")), 0);
     assert_eq!(count_fts(&db), 0);
@@ -164,9 +164,10 @@ fn promote_fragment_clears_fragment_chunks_and_indexes_new_note() {
         .expect("create");
     assert_eq!(count_chunks(&db, Some("fragment")), 1);
     // Act（建笔记 + 删碎片同事务——索引钩子随事务收口）
-    let note = db
+    let out = db
         .promote_fragment_to_note(Path::new("."), f.id, "升的笔记", None)
         .expect("promote");
+    let note = &out.note;
     // Assert
     assert_eq!(count_chunks(&db, Some("fragment")), 0, "碎片块应清");
     assert_eq!(count_chunks(&db, Some("note")), 1, "笔记入块");

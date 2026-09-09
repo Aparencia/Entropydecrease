@@ -4,12 +4,35 @@
 //!              本层只管读写——DomainTag 归组判定在 commands_fragments.rs
 //!              （复用 detect_domain 纯函数），组 CRUD 在 db_note_groups.rs。
 
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 
 use crate::db::{unix_seconds, Db};
+use crate::db_note_group_clean::CleanedGroup;
 use crate::error::Result;
 use crate::kb_index::{soft_clear_fragment, soft_index_fragment};
 use crate::types::{Fragment, Note};
+
+/// 删除碎片结果（REQ-316 批 7：auto_cleaned=删除使组变空后同事务清理的路由组）。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct FragmentDeleteOutcome {
+    pub deleted: bool,
+    pub auto_cleaned: Vec<CleanedGroup>,
+}
+
+/// 碎片移组结果（REQ-316 批 7：auto_cleaned=源组变空后同事务清理的路由组）。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct FragmentGroupMoveOutcome {
+    pub moved: bool,
+    pub auto_cleaned: Vec<CleanedGroup>,
+}
+
+/// 碎片升笔记结果（REQ-316 批 7：auto_cleaned=碎片源组变空后同事务清理的路由组；
+/// note=与旧返回契约同构的新建笔记）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct PromoteNoteOutcome {
+    pub note: Note,
+    pub auto_cleaned: Vec<CleanedGroup>,
+}
 
 /// fragments 表统一查询列（列顺序与 row_to_fragment 严格对应）。
 const FRAGMENT_COLUMNS: &str =
@@ -115,14 +138,35 @@ impl Db {
     }
 
     /// 移动碎片到组（None=移出；用户纠错/结算归组共用；v0.11.4 命令接线）。
-    pub fn update_fragment_group(&self, id: i64, group_id: Option<i64>) -> Result<bool> {
-        self.with_conn(|conn| {
-            let affected = conn.execute(
-                "UPDATE fragments SET group_id = ?1 WHERE id = ?2",
-                params![group_id, id],
-            )?;
-            Ok(affected > 0)
-        })
+    ///
+    /// @ai-context: REQ-316（批 7）：先读旧组再更新——源组若因此变空则同一事务
+    ///              内自动清理（谓词/残留双闸见 db_note_group_clean）。
+    pub fn update_fragment_group(&self, id: i64, group_id: Option<i64>) -> Result<FragmentGroupMoveOutcome> {
+        let mut conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let tx = conn.transaction()?;
+        let prev_group: Option<Option<i64>> = tx
+            .query_row(
+                "SELECT group_id FROM fragments WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let affected = tx.execute(
+            "UPDATE fragments SET group_id = ?1 WHERE id = ?2",
+            params![group_id, id],
+        )?;
+        let moved = affected > 0;
+        let old_group = prev_group.flatten();
+        let auto_cleaned = if moved && group_id != old_group {
+            match old_group {
+                Some(old) => crate::db_note_group_clean::auto_clean_empty_groups(&tx, &[old])?,
+                None => Vec::new(),
+            }
+        } else {
+            Vec::new()
+        };
+        tx.commit()?;
+        Ok(FragmentGroupMoveOutcome { moved, auto_cleaned })
     }
 
     /// 按 id 读取碎片；不存在返回 None（delete/移组命令的存在性校验）。
@@ -146,14 +190,34 @@ impl Db {
     /// @ai-context: 绑定闪卡经 flashcards.fragment_id ON DELETE SET NULL 自动
     ///              解绑保留（学习循环资产不被碎片删除连带——身份诚实：
     ///              卡已生成即独立资产）；结算归档走 set_fragment_status 不删。
-    pub fn delete_fragment(&self, id: i64) -> Result<bool> {
-        self.with_conn(|conn| {
-            // v0.19.0（REQ-258）：先清派生索引（kb_fts 影子表 FK 级联不负责——
-            // 显式清理为主路径；失败软记录不阻断删除）
-            soft_clear_fragment(conn, id);
-            let affected = conn.execute("DELETE FROM fragments WHERE id = ?1", params![id])?;
-            Ok(affected > 0)
-        })
+    /// @ai-context: REQ-316（批 7）：删除先读所属组——组若因此变空则同一事务
+    ///              内自动清理（残留闸含组内闪卡：delete_fragment_removes…
+    ///              既有"卡保留"场景天然挡住组清理）。
+    pub fn delete_fragment(&self, id: i64) -> Result<FragmentDeleteOutcome> {
+        let mut conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let tx = conn.transaction()?;
+        let prev_group: Option<Option<i64>> = tx
+            .query_row(
+                "SELECT group_id FROM fragments WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        // v0.19.0（REQ-258）：先清派生索引（kb_fts 影子表 FK 级联不负责——
+        // 显式清理为主路径；失败软记录不阻断删除）
+        soft_clear_fragment(&tx, id);
+        let affected = tx.execute("DELETE FROM fragments WHERE id = ?1", params![id])?;
+        let deleted = affected > 0;
+        let auto_cleaned = if deleted {
+            match prev_group.flatten() {
+                Some(gid) => crate::db_note_group_clean::auto_clean_empty_groups(&tx, &[gid])?,
+                None => Vec::new(),
+            }
+        } else {
+            Vec::new()
+        };
+        tx.commit()?;
+        Ok(FragmentDeleteOutcome { deleted, auto_cleaned })
     }
 
     /// 标记碎片状态（v0.11.3 结算归档：active↔archived）。
@@ -183,7 +247,7 @@ impl Db {
         fragment_id: i64,
         title: &str,
         group_id: Option<i64>,
-    ) -> Result<Note> {
+    ) -> Result<PromoteNoteOutcome> {
         let now = unix_seconds();
         // 显式事务（审查修复）：with_conn 只给 &Connection 无法开事务，而
         // rusqlite 默认 autocommit——多语句各自提交，④ 失败会留下"笔记已建/
@@ -252,22 +316,36 @@ impl Db {
             // v0.20.3（REQ-292）保存收口钩子补齐：升笔记直写路径任务索引同事务
             crate::db_task_index::rebuild_note_tasks(&tx, note_id, &content);
         }
+        // REQ-316（批 7）：碎片离开源组——源组若因此变空（且笔记未落回该组）
+        // 则同事务自动清理（谓词/残留双闸见 db_note_group_clean；残留闸含笔记
+        // 计数——笔记落回同组时该组 count≥1 自然挡住清理）。
+        let auto_cleaned = if fragment.group_id != group_id {
+            match fragment.group_id {
+                Some(gid) => crate::db_note_group_clean::auto_clean_empty_groups(&tx, &[gid])?,
+                None => Vec::new(),
+            }
+        } else {
+            Vec::new()
+        };
         tx.commit()?;
         // ⑤ 组装返回（与库内一致）
-        Ok(Note {
-            id: note_id,
-            title: title.to_string(),
-            content,
-            source: "manual".to_string(),
-            session_id: None,
-            rule_version: None,
-            purify_stats: None,
-            tags: "[]".to_string(),
-            properties: None,
-            pin: 0,
-            group_id,
-            created_at: now,
-            updated_at: now,
+        Ok(PromoteNoteOutcome {
+            auto_cleaned,
+            note: Note {
+                id: note_id,
+                title: title.to_string(),
+                content,
+                source: "manual".to_string(),
+                session_id: None,
+                rule_version: None,
+                purify_stats: None,
+                tags: "[]".to_string(),
+                properties: None,
+                pin: 0,
+                group_id,
+                created_at: now,
+                updated_at: now,
+            },
         })
     }
 }

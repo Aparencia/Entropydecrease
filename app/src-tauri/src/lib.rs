@@ -212,6 +212,8 @@ mod db_uid;
 mod notify;
 // v0.11.0（REQ-195）：笔记组数据层（统一产物层唯一容器，v4 §7.4）
 mod db_note_groups;
+// REQ-316（v0.20.12 批 7）：组删除行语义 + 空组自动清理（写事务内判定，无清扫任务）
+mod db_note_group_clean;
 // REQ-315（v0.20.11 批 6）：组手动排序表 + 置顶更新（kind 分区快照）
 mod db_note_group_orders;
 // v0.11.1：碎片原料层数据读写（fragments 表；碎片不是笔记，独立身份）

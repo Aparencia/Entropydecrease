@@ -8,10 +8,25 @@
 use rusqlite::{params, OptionalExtension};
 
 use crate::db::{unix_seconds, Db};
+use crate::db_note_group_clean::CleanedGroup;
 use crate::error::Result;
 use crate::db_task_index::rebuild_note_tasks;
 use crate::kb_index::soft_rebuild_note;
 use crate::types::{NewNote, Note};
+
+/// 删除笔记结果（REQ-316 批 7：auto_cleaned=删除使组变空后同事务清理的路由组）。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct NoteDeleteOutcome {
+    pub deleted: bool,
+    pub auto_cleaned: Vec<CleanedGroup>,
+}
+
+/// 笔记移组结果（REQ-316 批 7：auto_cleaned=源组变空后同事务清理的路由组）。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct NoteMoveOutcome {
+    pub moved: bool,
+    pub auto_cleaned: Vec<CleanedGroup>,
+}
 
 /// notes 表统一查询列（列顺序与 row_to_note 严格对应——改一处必须同步另一处）。
 const NOTE_COLUMNS: &str = "id, title, content, source, session_id, rule_version, purify_stats, created_at, updated_at, tags, properties, pin, group_id";
@@ -109,24 +124,48 @@ impl Db {
         })
     }
 
-    /// 删除笔记；返回是否实际删除。
-    pub fn delete_note(&self, id: i64) -> Result<bool> {
-        self.with_conn(|conn| {
-            // v0.19.0（REQ-258）：先清派生索引（kb_chunks + kb_fts 影子表——
-            // FK CASCADE 不负责 kb_fts，勿依赖；与 v0.14 C3 knowledge_links
-            // 清理同款"先清后删"位置）——失败软记录不阻断删除
-            crate::kb_index::soft_clear_note(conn, id);
-            // v0.14 C3 审查（L5 悬空边）：笔记删除级联清理 knowledge_links 的
-            // target 引用——图谱/反查不出现指向已删除笔记的悬空边。先清引用
-            // 后删笔记：失败半态 = 反查少一条（可重挂），优于悬空边；单连接
-            // Mutex 串行执行无并发窗口（项目无事务先例，保持 with_conn 风格）
-            conn.execute(
-                "DELETE FROM knowledge_links WHERE target_type = 'note' AND target_id = ?1",
+    /// 删除笔记；返回是否实际删除 + 同事务清理的空路由组（REQ-316 批 7）。
+    ///
+    /// @ai-context: 删除语义沿用既有——先清派生索引（kb_fts 影子表 FK 级联不
+    ///              负责）与 knowledge_links 悬空引用，再删行。批 7 收敛为显式
+    ///              事务：删除前读出笔记所属组，若该组因此变空且满足自动清理
+    ///              谓词（自动路由产物、五类残留全零），在**同一事务提交前**
+    ///              删组——清理与删除原子，杜绝"删除已提交但空组残留"半态。
+    pub fn delete_note(&self, id: i64) -> Result<NoteDeleteOutcome> {
+        // @ai-context: 事务需要 &mut Connection（with_conn 只给 &Connection）——
+        //              同 delete_group 手法：直接锁 + conn.transaction()。
+        let mut conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let tx = conn.transaction()?;
+        let prev_group: Option<Option<i64>> = tx
+            .query_row(
+                "SELECT group_id FROM notes WHERE id = ?1",
                 params![id],
-            )?;
-            let affected = conn.execute("DELETE FROM notes WHERE id = ?1", params![id])?;
-            Ok(affected > 0)
-        })
+                |row| row.get(0),
+            )
+            .optional()?;
+        // v0.19.0（REQ-258）：先清派生索引（kb_chunks + kb_fts 影子表——
+        // FK CASCADE 不负责 kb_fts，勿依赖；与 v0.14 C3 knowledge_links
+        // 清理同款"先清后删"位置）——失败软记录不阻断删除
+        crate::kb_index::soft_clear_note(&tx, id);
+        // v0.14 C3 审查（L5 悬空边）：笔记删除级联清理 knowledge_links 的
+        // target 引用——图谱/反查不出现指向已删除笔记的悬空边。先清引用
+        // 后删笔记：失败半态 = 反查少一条（可重挂），优于悬空边
+        tx.execute(
+            "DELETE FROM knowledge_links WHERE target_type = 'note' AND target_id = ?1",
+            params![id],
+        )?;
+        let affected = tx.execute("DELETE FROM notes WHERE id = ?1", params![id])?;
+        let deleted = affected > 0;
+        let auto_cleaned = if deleted {
+            match prev_group.flatten() {
+                Some(gid) => crate::db_note_group_clean::auto_clean_empty_groups(&tx, &[gid])?,
+                None => Vec::new(),
+            }
+        } else {
+            Vec::new()
+        };
+        tx.commit()?;
+        Ok(NoteDeleteOutcome { deleted, auto_cleaned })
     }
 
     /// 按关键词在标题与正文中模糊搜索。
@@ -257,14 +296,36 @@ impl Db {
         })
     }
     /// 更新笔记所属组（v0.11.0 组化接线/改判移动共用；None=移出组）。
-    pub fn update_note_group(&self, id: i64, group_id: Option<i64>) -> Result<bool> {
-        self.with_conn(|conn| {
-            let affected = conn.execute(
-                "UPDATE notes SET group_id = ?1, updated_at = ?2 WHERE id = ?3",
-                params![group_id, unix_seconds(), id],
-            )?;
-            Ok(affected > 0)
-        })
+    ///
+    /// @ai-context: REQ-316（批 7）：移动先读旧组再更新——源组若因此变空则
+    ///              同一事务内自动清理（谓词/残留双闸见 db_note_group_clean）；
+    ///              移到同组（old==new）跳过清理（组未因本次写而空）。
+    pub fn update_note_group(&self, id: i64, group_id: Option<i64>) -> Result<NoteMoveOutcome> {
+        let mut conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let tx = conn.transaction()?;
+        let prev_group: Option<Option<i64>> = tx
+            .query_row(
+                "SELECT group_id FROM notes WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let affected = tx.execute(
+            "UPDATE notes SET group_id = ?1, updated_at = ?2 WHERE id = ?3",
+            params![group_id, unix_seconds(), id],
+        )?;
+        let moved = affected > 0;
+        let old_group = prev_group.flatten();
+        let auto_cleaned = if moved && group_id != old_group {
+            match old_group {
+                Some(old) => crate::db_note_group_clean::auto_clean_empty_groups(&tx, &[old])?,
+                None => Vec::new(),
+            }
+        } else {
+            Vec::new()
+        };
+        tx.commit()?;
+        Ok(NoteMoveOutcome { moved, auto_cleaned })
     }
 
     /// 按组列出笔记（v0.11.0 组详情；按更新时间倒序）。

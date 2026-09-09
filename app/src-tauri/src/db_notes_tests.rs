@@ -57,7 +57,7 @@ fn delete_note_removes_row() {
     let ok = db.delete_note(created.id).expect("delete");
     let fetched = db.get_note(created.id).expect("get");
     // Assert
-    assert!(ok);
+    assert!(ok.deleted);
     assert!(fetched.is_none());
 }
 

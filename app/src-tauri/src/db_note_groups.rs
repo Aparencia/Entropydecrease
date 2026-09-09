@@ -194,36 +194,37 @@ impl Db {
     /// @ai-context: 删除语义=影响面确认后级联（规格 §2.1）：notes/fragments 将
     ///              SET NULL（移入"全部"），flashcards/settlements/contracts 将
     ///              CASCADE（级联删），knowledge_links 悬空引用将清理——六项计数
-    ///              如实呈现，用户确认前可反悔。
+    ///              如实呈现，用户确认前可反悔。五项内容计数复用
+    ///              db_note_group_clean::group_residue（批 7 REQ-316 自动清理同
+    ///              口径单点——防两处 SQL 漂移），本函数只补 system_refs 反查。
     pub fn group_delete_impact(&self, id: i64) -> Result<GroupDeleteImpact> {
         self.with_conn(|conn| {
-            let count = |sql: &str| -> Result<i64> { Ok(conn.query_row(sql, params![id], |row| row.get::<_, i64>(0))?) };
+            let r = crate::db_note_group_clean::group_residue(conn, id)?;
+            let system_refs: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM knowledge_links WHERE
+                   (target_type = 'note_group' AND target_id = ?1)
+                   OR (target_type = 'flashcard'
+                       AND target_id IN (SELECT id FROM flashcards WHERE group_id = ?1))",
+                params![id],
+                |row| row.get(0),
+            )?;
             Ok(GroupDeleteImpact {
-                notes: count("SELECT COUNT(*) FROM notes WHERE group_id = ?1")?,
-                fragments: count("SELECT COUNT(*) FROM fragments WHERE group_id = ?1")?,
-                cards: count("SELECT COUNT(*) FROM flashcards WHERE group_id = ?1")?,
-                settlements: count("SELECT COUNT(*) FROM settlements WHERE group_id = ?1")?,
-                contracts: count("SELECT COUNT(*) FROM contracts WHERE group_id = ?1")?,
-                system_refs: count(
-                    "SELECT COUNT(*) FROM knowledge_links WHERE
-                       (target_type = 'note_group' AND target_id = ?1)
-                       OR (target_type = 'flashcard'
-                           AND target_id IN (SELECT id FROM flashcards WHERE group_id = ?1))",
-                )?,
+                notes: r.notes,
+                fragments: r.fragments,
+                cards: r.cards,
+                settlements: r.settlements,
+                contracts: r.contracts,
+                system_refs,
             })
         })
     }
 
     /// 删除组（v0.14.1：单事务——先清悬空引用再删组，级联由 FK 自动生效）。
     ///
-    /// @ai-context: knowledge_links 无 FK 到 note_groups（target_type/target_id
-    ///              泛化目标，白名单校验在命令层），必须显式清理——否则体系页
-    ///              引用区出现悬空反查。两类引用都在本事务清理且**先于删组**：
-    ///              note_group 直引 + flashcard 间接引（组闪卡经 FK CASCADE 删除
-    ///              后其引用同样悬空——审查 R-中1 补漏；子查询必须在级联删行
-    ///              之前执行）。PRAGMA foreign_keys=ON 每连接开启（db.rs），
-    ///              notes/fragments SET NULL 与 flashcards/settlements/contracts
-    ///              CASCADE 由建表契约自动生效；组不存在 → false（命令层转错误）。
+    /// @ai-context: 行删除内部语义（knowledge_links 显式清理先于删组等）收敛在
+    ///              db_note_group_clean::delete_group_row——手动删除与批 7 REQ-316
+    ///              空组自动清理共用同一实现，防删除语义双轨漂移（Why 细节见
+    ///              该函数注释）；组不存在 → false（命令层转错误）。
     pub fn delete_group(&self, id: i64) -> Result<bool> {
         // @ai-context: 事务需要 &mut Connection，with_conn 只给 &Connection——
         //              同 db_knowledge_canvas::set_node_canvas_positions 手法：
@@ -232,19 +233,9 @@ impl Db {
         //              恢复路径语义一致）。
         let mut conn = self.conn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let tx = conn.transaction()?;
-        tx.execute(
-            "DELETE FROM knowledge_links WHERE target_type = 'note_group' AND target_id = ?1",
-            params![id],
-        )?;
-        // flashcard 间接引用清理（先于级联删行——子查询须在行存在时执行）
-        tx.execute(
-            "DELETE FROM knowledge_links WHERE target_type = 'flashcard'
-             AND target_id IN (SELECT id FROM flashcards WHERE group_id = ?1)",
-            params![id],
-        )?;
-        let affected = tx.execute("DELETE FROM note_groups WHERE id = ?1", params![id])?;
+        let affected = crate::db_note_group_clean::delete_group_row(&tx, id)?;
         tx.commit()?;
-        Ok(affected > 0)
+        Ok(affected)
     }
 }
 

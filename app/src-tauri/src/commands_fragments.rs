@@ -10,7 +10,7 @@ use tauri::State;
 
 use crate::commands::AppState;
 use crate::db_fragments::NewFragment;
-use crate::types::{Fragment, NewNoteGroup, Note};
+use crate::types::{Fragment, NewNoteGroup};
 use crate::video_profile_domain::{detect_domain, DomainSignals};
 
 /// 碎片文本最大长度（防超大 payload 拖垮 IPC/DB；几句话的碎片远用不到）。
@@ -143,12 +143,14 @@ pub fn list_group_fragments(state: State<'_, AppState>, group_id: i64) -> Result
 ///
 /// @ai-context: 与 capture_fragment 同开关准入（feed 能力默认关纪律对称——
 ///              后端不信前端隐藏）；目标组存在性校验（不写孤儿引用）。
+/// @ai-context: REQ-316（批 7）：源组因移走变空被自动清理时回传组标题
+///              （前端 toast 留痕；组域条件广播，无清理零变化）。
 #[tauri::command]
 pub fn update_fragment_group(
     state: State<'_, AppState>,
     fragment_id: i64,
     group_id: Option<i64>,
-) -> Result<bool, String> {
+) -> Result<crate::types::MoveFragmentResult, String> {
     require_feed_enabled(&state)?;
     if fragment_id <= 0 {
         return Err("无效的碎片 id".to_string());
@@ -164,18 +166,31 @@ pub fn update_fragment_group(
             return Err(format!("笔记组不存在: {}", gid));
         }
     }
-    state
+    let out = state
         .db
         .update_fragment_group(fragment_id, group_id)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    let moved = out.moved;
+    let auto_cleaned_groups = out.auto_cleaned.iter().map(|g| g.name.clone()).collect();
+    if moved && !out.auto_cleaned.is_empty() {
+        // REQ-316：自动清理删组 → 组域广播（碎片组无独立域事件——组消失
+        // 走组域通道刷新侧栏；无清理不发）
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::NoteGroups);
+    }
+    Ok(crate::types::MoveFragmentResult { moved, auto_cleaned_groups })
 }
 
 /// 删除碎片（REQ-201 用户主动删除——真删；绑定卡自动解绑保留）。
 ///
 /// @ai-context: 开关准入同 capture_fragment（feed 能力对称纪律）；存在性校验
 ///              前置（删不存在的碎片返回明确错误而非静默 false）。
+/// @ai-context: REQ-316（批 7）：碎片源组因删除变空被自动清理时回传组标题
+///              （前端 toast 留痕；组域条件广播，无清理零变化）。
 #[tauri::command]
-pub fn delete_fragment(state: State<'_, AppState>, fragment_id: i64) -> Result<bool, String> {
+pub fn delete_fragment(
+    state: State<'_, AppState>,
+    fragment_id: i64,
+) -> Result<crate::types::DeleteFragmentResult, String> {
     require_feed_enabled(&state)?;
     if fragment_id <= 0 {
         return Err("无效的碎片 id".to_string());
@@ -183,7 +198,14 @@ pub fn delete_fragment(state: State<'_, AppState>, fragment_id: i64) -> Result<b
     if state.db.get_fragment(fragment_id).map_err(|e| e.to_string())?.is_none() {
         return Err(format!("碎片不存在: {}", fragment_id));
     }
-    state.db.delete_fragment(fragment_id).map_err(|e| e.to_string())
+    let out = state.db.delete_fragment(fragment_id).map_err(|e| e.to_string())?;
+    let deleted = out.deleted;
+    let auto_cleaned_groups = out.auto_cleaned.iter().map(|g| g.name.clone()).collect();
+    if deleted && !out.auto_cleaned.is_empty() {
+        // REQ-316：自动清理删组 → 组域广播（无清理零变化）
+        crate::notify::emit_changed(&state.app, crate::notify::DataDomain::NoteGroups);
+    }
+    Ok(crate::types::DeleteFragmentResult { deleted, auto_cleaned_groups })
 }
 
 /// 碎片升为笔记（v0.12.2 收件箱动线：原料→沉淀；REQ-201 补升级出口）。
@@ -198,7 +220,7 @@ pub fn promote_fragment_to_note(
     fragment_id: i64,
     title: String,
     group_id: Option<i64>,
-) -> Result<Note, String> {
+) -> Result<crate::types::PromoteNoteResult, String> {
     require_feed_enabled(&state)?;
     if fragment_id <= 0 {
         return Err("无效的碎片 id".to_string());
@@ -226,8 +248,13 @@ pub fn promote_fragment_to_note(
         .map_err(|e| e.to_string())?;
     // REQ-278 审查补端：碎片升笔记 = 笔记新增 + 组内容/计数变化（碎片移出）
     crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+    // REQ-316：碎片源组若因升笔记变空，清理已在数据层事务内完成——组域
+    // 广播走既有通道（本命令本就广播组域，无双发）；清理标题随结果回传
     crate::notify::emit_changed(&state.app, crate::notify::DataDomain::NoteGroups);
-    Ok(note)
+    Ok(crate::types::PromoteNoteResult {
+        note: note.note,
+        auto_cleaned_groups: note.auto_cleaned.iter().map(|g| g.name.clone()).collect(),
+    })
 }
 
 /// 碎片图片 → 本地绝对路径（前端 convertFileSrc 消费；REQ-201 缩略图）。

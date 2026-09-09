@@ -160,12 +160,16 @@ pub fn override_group_route(
 }
 
 /// 移动笔记到组（group_id=None 移出组——手动纠错路由误判的兜底路径）。
+///
+/// @ai-context: REQ-316（批 7）返回契约扩展为 MoveNoteResult——源组因移走变空
+///              被自动清理时回传组标题（前端 toast 留痕；数据层同事务完成，
+///              广播仍走本命令既有 NoteGroups 通道，无双发）。
 #[tauri::command]
 pub fn move_note_to_group(
     state: State<'_, AppState>,
     note_id: i64,
     group_id: Option<i64>,
-) -> Result<bool, String> {
+) -> Result<crate::types::MoveNoteResult, String> {
     if note_id <= 0 {
         return Err("无效的笔记 id".to_string());
     }
@@ -177,15 +181,23 @@ pub fn move_note_to_group(
             return Err(format!("笔记组不存在: {}", gid));
         }
     }
-    let ok = state.db.update_note_group(note_id, group_id).map_err(|e| e.to_string())?;
+    let out = state
+        .db
+        .update_note_group(note_id, group_id)
+        .map_err(|e| e.to_string())?;
+    let moved = out.moved;
+    // 自动清理留痕（空数组=无清理——前端零变化）
+    let auto_cleaned_groups = out.auto_cleaned.iter().map(|g| g.name.clone()).collect();
     // REQ-278：归组 = 笔记归属 + 组内容双变 → 双域广播（成功才发）
-    if ok {
+    if moved {
         // 审查 L6：移组即清旧 scope 手动序行（防"移出后移回复活旧序位"）
         let _ = state.db.purge_note_ids(&[note_id]);
         crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
+        // REQ-316：清理发生在数据层写事务内；组域广播走既有通道（空组消失
+        // 即时可见——无双发：本命令本就广播组域）
         crate::notify::emit_changed(&state.app, crate::notify::DataDomain::NoteGroups);
     }
-    Ok(ok)
+    Ok(crate::types::MoveNoteResult { moved, auto_cleaned_groups })
 }
 
 
