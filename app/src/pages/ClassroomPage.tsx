@@ -229,11 +229,11 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
     if (prev && !starting && active) setStatus("实时捕获已开始");
   }, [starting, active]);
 
-  // 看门狗结论镜像到状态行（restored=20s 后快照发现采集在跑；unconfirmed=
-  // 引擎未开录可重试）——两文案与 v0.19.3 看门狗原语义对齐
+  // 看门狗结论镜像到状态行（unconfirmed=引擎未开录可重试——20s 未确认的单一
+  // 去向，见 liveCaptureState.WatchdogNotice 注释；"start-restored" 已删无产出
+  // 分支，审查 P3-6——恢复成功路径由轮询快照逐拍收敛，无独立文案可镜像）
   useEffect(() => {
-    if (notice === "start-restored") setStatus("检测到采集进行中，已恢复状态（引擎就绪后同刻开录）");
-    else if (notice === "start-unconfirmed") setStatus("启动状态未确认——引擎未开录；可直接重试（就绪即秒开）");
+    if (notice === "start-unconfirmed") setStatus("启动状态未确认——引擎未开录；可直接重试（就绪即秒开）");
   }, [notice]);
 
   // v0.5.0 M6（REQ-051）：用户截图快捷键 Ctrl+Shift+S（最高权重关键图信号）

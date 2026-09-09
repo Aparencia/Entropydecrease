@@ -16,8 +16,14 @@ import type { LiveSessionStatus, PauseSource } from "../types";
 /** 前端控制动作种类（pending 防连点） */
 export type CaptureActionKind = "start" | "pause" | "resume" | "stop";
 
-/** 看门狗一次性结论（起始态异常结束的两种去向；下一个 start 动作清除） */
-export type WatchdogNotice = "start-restored" | "start-unconfirmed";
+/**
+ * 看门狗一次性结论（起始态异常结束的**唯一去向**：start 受理后 20s 仍未见
+ * 活动/停止信号 = 引擎未实际开录，给"可直接重试"提示；下一个 start 动作清除。
+ * 审查 P3-6：原 "start-restored"（20s 后快照发现采集在跑=恢复成功）分支无任何
+ * 产出路径——快照在轮询 tick 时已逐拍收敛 active/starting（snapshot 事件覆写
+ * starting=false），restored 结论不可能再被产生，删类型分支防误导性死代码）
+ */
+export type WatchdogNotice = "start-unconfirmed";
 
 /** 控制状态（来源①挂载/看门狗快照 ②事件 ③守卫错自愈；单一 reducer 收敛） */
 export interface LiveCaptureState {
