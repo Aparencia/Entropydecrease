@@ -31,10 +31,16 @@ impl Db {
     ///
     /// @ai-context: updated_at 同步刷新：置顶动作把它推为置顶区内最新
     ///              （置顶区内部按更新时间降序，与取消置顶回落自动区的口径一致）。
+    /// @ai-context: 批 7 审查修复（P2-7 双保险·写侧）：置顶/取消置顶=用户在操作
+    ///              该组=编排痕迹——与路由改判同权置 route_overridden=1（仅
+    ///              route/series 自动产物；Why 见 db_note_groups::rename_group），
+    ///              空组自动清理不再误删被用户置过顶的组（REQ-315/REQ-316 边界）。
     pub fn update_note_group_pin(&self, id: i64, pin: i64) -> Result<bool> {
         self.with_conn(|conn| {
             let affected = conn.execute(
-                "UPDATE note_groups SET pin = ?1, updated_at = ?2 WHERE id = ?3",
+                "UPDATE note_groups SET pin = ?1,
+                 route_overridden = CASE WHEN source IN ('route', 'series') THEN 1 ELSE route_overridden END,
+                 updated_at = ?2 WHERE id = ?3",
                 params![pin, unix_seconds(), id],
             )?;
             Ok(affected > 0)
@@ -76,6 +82,28 @@ impl Db {
             for (i, id) in group_ids.iter().enumerate() {
                 stmt.execute(params![*id, i as i64])?;
             }
+        }
+        // 批 7 审查修复（P2-7 双保险·写侧）：手排保存=用户编排痕迹——快照内
+        // 全部组与路由改判同权置 route_overridden=1（仅 route/series 自动产物；
+        // Why 见 db_note_groups::rename_group），用户亲手排过位的空组不被自动
+        // 清理误删。同事务原子：快照回滚则编排标记一并回滚，无半态。
+        if !group_ids.is_empty() {
+            let mut sql = String::from(
+                "UPDATE note_groups SET route_overridden = 1
+                 WHERE source IN ('route', 'series') AND id IN (",
+            );
+            for (i, _) in group_ids.iter().enumerate() {
+                if i > 0 {
+                    sql.push(',');
+                }
+                sql.push_str(&format!("?{}", i + 1));
+            }
+            sql.push(')');
+            let mut ps: Vec<&dyn rusqlite::ToSql> = Vec::new();
+            for id in group_ids {
+                ps.push(id);
+            }
+            tx.execute(&sql, rusqlite::params_from_iter(ps))?;
         }
         tx.commit()?;
         Ok(())

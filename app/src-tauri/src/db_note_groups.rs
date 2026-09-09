@@ -134,10 +134,18 @@ impl Db {
     }
 
     /// 重命名组（用户可改；updated_at 刷新）。
+    ///
+    /// @ai-context: 批 7 审查修复（P2-7 双保险·写侧）：改名=用户编排痕迹——与
+    ///              路由改判同权置 route_overridden=1（仅 route/series 自动产物；
+    ///              手动组天然不在清理白名单，无需置位），此后该组即使被删空
+    ///              也不再被自动清理（REQ-316 口径：只清从未被用户动过的路由
+    ///              空组）。Why 单条 UPDATE 内 CASE 完成：无跨语句窗口，原子。
     pub fn rename_group(&self, id: i64, name: &str) -> Result<bool> {
         self.with_conn(|conn| {
             let affected = conn.execute(
-                "UPDATE note_groups SET name = ?1, updated_at = ?2 WHERE id = ?3",
+                "UPDATE note_groups SET name = ?1,
+                 route_overridden = CASE WHEN source IN ('route', 'series') THEN 1 ELSE route_overridden END,
+                 updated_at = ?2 WHERE id = ?3",
                 params![name, unix_seconds(), id],
             )?;
             Ok(affected > 0)
@@ -179,10 +187,18 @@ impl Db {
     }
 
     /// v0.14 B（视觉系统）：组级颜色设置（色板 id；None=清除回默认灰）。
+    ///
+    /// @ai-context: 批 7 审查修复（P2-7 双保险·写侧）：置色/清色都是用户在操作
+    ///              该组=编排痕迹——与路由改判同权置 route_overridden=1
+    ///              （仅 route/series 自动产物；Why 见 rename_group 同款注释）。
+    ///              注：清色回默认灰不撤销接管——标志粘性（用户一旦动过该组
+    ///              即不再自动清理，无"撤销痕迹"通道，语义简单可预期）。
     pub fn update_group_color(&self, id: i64, color: Option<&str>) -> Result<bool> {
         self.with_conn(|conn| {
             let affected = conn.execute(
-                "UPDATE note_groups SET color = ?1, updated_at = ?2 WHERE id = ?3",
+                "UPDATE note_groups SET color = ?1,
+                 route_overridden = CASE WHEN source IN ('route', 'series') THEN 1 ELSE route_overridden END,
+                 updated_at = ?2 WHERE id = ?3",
                 params![color, unix_seconds(), id],
             )?;
             Ok(affected > 0)

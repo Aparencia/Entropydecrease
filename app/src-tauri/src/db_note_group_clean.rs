@@ -3,9 +3,12 @@
 //! @ai-context: 用户问题 8——自动路由产生的空组堆积在组侧栏（手动删组需两步
 //!              确认，空路由组无治理出口）。本模块提供「仅自动路由空组自动
 //!              删除」的共享判定与删除：
-//!              ① 谓词 = note_groups.source IN ('route','series')（自动路由/系列
-//!                 检测产物）且 route_overridden = 0（用户改判过=修改即记忆，
-//!                 REQ-198 永不自动删）；source='manual' 手动建组天然不在白名单。
+//!              ① 谓词 = 自动路由/系列产物（source IN ('route','series')）且零
+//!                 用户编排痕迹——主闸 route_overridden = 0（用户改判/改名/
+//!                 置色/置顶/手排后置 1，批 7 审查 P2-7 修复：用户编排=接管
+//!                 该组，REQ-198 永不自动删）；存量副闸 pin=0 ∧ color IS NULL
+//!                 ∧ 无 note_group_orders 行（兜底修复前已被编排但 override
+//!                 仍 0 的存量行）；source='manual' 手动建组天然不在白名单。
 //!              ② 残留全零 = notes + fragments + flashcards + settlements +
 //!                 contracts 五类计数（与 get_group_delete_impact 同口径——SQL
 //!                 单点在本模块 group_residue，手动删除影响面复用，防口径漂移）。
@@ -80,11 +83,27 @@ pub fn delete_group_row(conn: &Connection, group_id: i64) -> rusqlite::Result<bo
     Ok(affected > 0)
 }
 
-/// 自动路由产物谓词（组行单表可判——source 白名单 + 未改判）。
-fn is_auto_route_candidate(conn: &Connection, group_id: i64) -> rusqlite::Result<bool> {
+/// 自动清理候选谓词（组行单表 + 手排子表可判）。
+///
+/// @ai-context: 双闸防误删（批 7 审查修复 P2-7）——source 白名单只证明「自动
+///              产物」，不足以证明「从未被用户编排」：改名/置色/置顶/手排等
+///              元数据操作在修复前不置 route_overridden，会把被用户接管过的
+///              空组静默删掉（REQ-315 交互与 REQ-316 清理边界冲突）。
+///              主闸=route_overridden=0：修复后所有用户编排写路径同权置 1
+///              （db_note_groups::rename_group / update_group_color、
+///              db_note_group_orders::update_note_group_pin / save_group_order）；
+///              副闸=存量兜底（修复前已被编排但 override 仍 0 的行）：
+///              pin=0 ∧ color IS NULL ∧ 无 note_group_orders 行——任一编排
+///              痕迹存在即不删。
+fn is_clean_candidate(conn: &Connection, group_id: i64) -> rusqlite::Result<bool> {
     let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM note_groups
-         WHERE id = ?1 AND source IN ('route', 'series') AND route_overridden = 0",
+        "SELECT COUNT(*) FROM note_groups g
+         WHERE g.id = ?1
+           AND g.source IN ('route', 'series')
+           AND g.route_overridden = 0
+           AND g.pin = 0
+           AND g.color IS NULL
+           AND NOT EXISTS (SELECT 1 FROM note_group_orders o WHERE o.group_id = g.id)",
         params![group_id],
         |row| row.get(0),
     )?;
@@ -92,11 +111,13 @@ fn is_auto_route_candidate(conn: &Connection, group_id: i64) -> rusqlite::Result
 }
 
 /// 空组自动清理（写事务提交前调用——对**本次写操作影响到的组**判定，防全表
-/// 扫描误删他组）：自动路由产物 + 残留全零 → 删组；返回实际清理的组。
+/// 扫描误删他组）：自动清理候选（谓词，见 is_clean_candidate）+ 残留全零 →
+/// 删组；返回实际清理的组。
 ///
-/// @ai-context: 边界（用户口径）——手动建组/改判组/有任意残留组绝不在本函数删除
-///              （谓词与残留双闸）；同一事务内检查与删除原子，无"检查后被并发
-///              写入"窗口（连接 Mutex 串行化）。重复 id 幂等安全（删除后不再出现）。
+/// @ai-context: 边界（用户口径）——手动建组/有任意编排痕迹/有任意残留组绝不
+///              在本函数删除（编排痕迹与残留双闸）；同一事务内检查与删除原子，
+///              无"检查后被并发写入"窗口（连接 Mutex 串行化）。重复 id 幂等
+///              安全（删除后不再出现）。
 pub fn auto_clean_empty_groups(
     conn: &Connection,
     affected_group_ids: &[i64],
@@ -106,7 +127,7 @@ pub fn auto_clean_empty_groups(
         if cleaned.iter().any(|c| c.id == *id) {
             continue; // 重复 id 幂等（同批多次命中只清一次）
         }
-        if !is_auto_route_candidate(conn, *id)? {
+        if !is_clean_candidate(conn, *id)? {
             continue;
         }
         let residue = group_residue(conn, *id)?;

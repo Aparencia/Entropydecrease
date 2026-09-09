@@ -166,3 +166,26 @@ fn group_pin_roundtrip_and_updated_at_refresh() {
     // 不存在组 → false
     assert!(!db.update_note_group_pin(9999, 1).expect("missing"));
 }
+
+#[test]
+fn pin_and_manual_order_save_mark_user_orchestration() {
+    // 批 7 审查修复（P2-7 写侧单点）：置顶/手排=用户编排痕迹——route/series
+    // 自动产物置 route_overridden=1（空组自动清理谓词主闸），防空组被静默删；
+    // 手排标记与快照同事务（save_group_order 内一并 UPDATE，回滚同生共死）。
+    let db = mem_db();
+    let a = make(&db, "A", "course"); // source=route（helper 默认）
+    assert!(db.update_note_group_pin(a.id, 1).expect("pin"));
+    assert_eq!(
+        db.get_group(a.id).expect("get").expect("a").route_overridden,
+        1,
+        "置顶=接管该组"
+    );
+    // 手排快照覆盖：快照内（未置顶）组全部接管
+    let b = make(&db, "B", "course");
+    db.save_group_order("course", &[a.id, b.id]).expect("snapshot");
+    assert_eq!(db.get_group(b.id).expect("get").expect("b").route_overridden, 1);
+    // 分区复位（空 ids）不置位任何组（无快照成员——无对象可标记）
+    let c = make(&db, "C", "course");
+    db.save_group_order("course", &[]).expect("reset");
+    assert_eq!(db.get_group(c.id).expect("get").expect("c").route_overridden, 0);
+}

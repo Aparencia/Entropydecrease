@@ -1,8 +1,10 @@
 //! db_note_group_clean 单测（REQ-316 批 7；内存库 AAA 模式）。
 //!
-//! @ai-context: 覆盖自动清理判定表——自动路由产物+五类残留全零才删；手动建组/
-//!              改判组/任一残留/影响面外组永不动；级联卫生（note_group_orders
-//!              行随删清）；写路径收敛（删除/移组/碎片删除/移组/升笔记触发点）。
+//! @ai-context: 覆盖自动清理判定表——自动路由产物+零编排痕迹+五类残留全零才删；
+//!              手动建组/改判组/任一编排痕迹（置顶/手排/置色——批 7 审查 P2-7
+//!              双保险）/任一残留/影响面外组永不动；写路径收敛（删除/移组/
+//!              碎片删除/升笔记触发点）。级联卫生（note_group_orders 行随删清）
+//!              由 db_note_group_orders_tests::delete_group_cascades_order_row 覆盖。
 
 use rusqlite::params;
 
@@ -213,22 +215,75 @@ fn groups_outside_affected_scope_untouched() {
 }
 
 #[test]
-fn cleanup_cascades_order_rows_and_pin_with_group() {
-    // Arrange：空路由组 + 置顶 + 分区手动序行（批 6 基建——组删随 FK CASCADE 清）
+fn pinned_or_hand_ordered_auto_group_is_never_auto_cleaned() {
+    // 批 7 审查修复（P2-7）：原测试固化「置顶/手排的空路由组照样被清」——与
+    // REQ-315 冲突（置顶/手排是用户编排动作，组删不得绕过用户交互），反转：
+    // 置顶组/手排组即使空也保留（写路径已同权置 route_overridden=1=主闸）。
+    // 级联卫生（随组删清 note_group_orders 行）由 db_note_group_orders_tests
+    // ::delete_group_cascades_order_row 覆盖（自动清理永不删有手排行的组）。
     let db = mem_db();
-    let g = db.create_group(&group("有序组", "route")).expect("g");
-    db.update_note_group_pin(g.id, 1).expect("pin");
-    db.save_group_order("standalone", &[g.id]).expect("order");
+    let pinned = db.create_group(&group("置顶组", "route")).expect("g");
+    db.update_note_group_pin(pinned.id, 1).expect("pin");
+    let ordered = db.create_group(&group("手排组", "route")).expect("g2");
+    db.save_group_order("standalone", &[ordered.id]).expect("order");
+    // Act
+    let guard = db_raw_conn(&db);
+    let cleaned = auto_clean_empty_groups(&guard, &[pinned.id, ordered.id]).expect("clean");
+    drop(guard);
+    // Assert：两组全存活（用户编排痕迹=接管该组——不再自动清理）
+    assert!(cleaned.is_empty());
+    assert!(db.get_group(pinned.id).expect("get").is_some());
+    assert!(db.get_group(ordered.id).expect("get").is_some());
+}
+
+#[test]
+fn legacy_pin_color_order_traces_block_cleanup_even_when_flag_zero() {
+    // 批 7 审查修复（P2-7 双保险·副闸=存量兜底）：修复前的存量行——用户已
+    // 置顶/置色/手排但旧写路径不置 route_overridden（仍 0）。直写 SQL 模拟
+    // 存量态（经 db 方法会连置位=主闸，单测副闸必须绕过）；任一编排痕迹
+    // 存在即不删——"仅 route 源+零编排+零残留才删"的存量侧护栏。
+    let db = mem_db();
+    let pinned = db.create_group(&group("旧置顶", "route")).expect("pinned");
+    let colored = db.create_group(&group("旧上色", "route")).expect("colored");
+    let ordered = db.create_group(&group("旧手排", "route")).expect("ordered");
+    db.with_conn(|conn| {
+        conn.execute("UPDATE note_groups SET pin = 1 WHERE id = ?1", params![pinned.id])?;
+        conn.execute("UPDATE note_groups SET color = 'pink' WHERE id = ?1", params![colored.id])?;
+        conn.execute(
+            "INSERT INTO note_group_orders (group_id, seq) VALUES (?1, 0)",
+            params![ordered.id],
+        )?;
+        Ok(())
+    })
+    .expect("seed legacy orchestration traces");
+    // Act：三个存量编排痕迹组全空、全在影响面内
+    let guard = db_raw_conn(&db);
+    let cleaned = auto_clean_empty_groups(&guard, &[pinned.id, colored.id, ordered.id]).expect("clean");
+    drop(guard);
+    // Assert：全部保留（存量兜底闸生效——修前数据不被静默误删）
+    assert!(cleaned.is_empty());
+    for gid in [pinned.id, colored.id, ordered.id] {
+        assert!(db.get_group(gid).expect("get").is_some(), "组 {gid} 有存量编排痕迹不得清");
+    }
+}
+
+#[test]
+fn user_rename_takes_over_auto_group_and_blocks_cleanup() {
+    // 批 7 审查修复（P2-7 双保险·主闸=写路径）：改名=用户编排痕迹——写路径与
+    // 路由改判同权置 route_overridden=1。仅改名的组无 pin/色/手排行（副闸
+    // 拦不住），必须靠主闸拦截——验证「新编排只留 flag 也删不掉」。
+    let db = mem_db();
+    let g = db.create_group(&group("路由产物", "route")).expect("g");
+    assert!(db.rename_group(g.id, "我自己改的名").expect("rename"));
     // Act
     let guard = db_raw_conn(&db);
     let cleaned = auto_clean_empty_groups(&guard, &[g.id]).expect("clean");
     drop(guard);
-    // Assert：组没了、序行/置顶残留零
-    assert_eq!(cleaned.len(), 1);
-    let orphan: i64 = db
-        .with_conn(|c| Ok(c.query_row("SELECT COUNT(*) FROM note_group_orders WHERE group_id = ?1", params![g.id], |r| r.get(0))?))
-        .expect("count");
-    assert_eq!(orphan, 0, "note_group_orders 随组删级联清行（无孤儿）");
+    // Assert：改名组即使空也保留（主闸：route_overridden=1）
+    assert!(cleaned.is_empty());
+    let fetched = db.get_group(g.id).expect("get").expect("exists");
+    assert_eq!(fetched.route_overridden, 1);
+    assert_eq!(fetched.name, "我自己改的名");
 }
 
 // ── 写路径集成（真实命令语义在 db 层事务内收敛的验证） ──

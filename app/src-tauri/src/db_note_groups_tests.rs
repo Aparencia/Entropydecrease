@@ -181,6 +181,44 @@ fn move_note_between_groups() {
 }
 
 #[test]
+fn rename_marks_user_orchestration_on_auto_product_only() {
+    // 批 7 审查修复（P2-7 写侧单点）：改名=用户编排痕迹→接管自动路由产物——
+    // route/series 组置 route_overridden=1（空组自动清理谓词主闸）；手动组
+    // 天然无权自动清理，不置位（override 语义只对自动产物有意义，模型不污染）。
+    let db = mem_db();
+    let auto = db.create_group(&group("路由组")).expect("auto");
+    assert!(db.rename_group(auto.id, "更名后的路由组").expect("rename"));
+    let fetched = db.get_group(auto.id).expect("get").expect("exists");
+    assert_eq!(fetched.name, "更名后的路由组");
+    assert_eq!(fetched.route_overridden, 1, "改名=用户编排痕迹→接管该组");
+    // 手动组改名：名照改、不置位
+    let mut manual = group("手动组");
+    manual.source = "manual".to_string();
+    let m = db.create_group(&manual).expect("manual");
+    assert!(db.rename_group(m.id, "手动组新名").expect("rename"));
+    let mf = db.get_group(m.id).expect("get").expect("exists");
+    assert_eq!(mf.name, "手动组新名");
+    assert_eq!(mf.route_overridden, 0);
+}
+
+#[test]
+fn group_color_set_marks_user_orchestration_and_stays_sticky() {
+    // 批 7 审查修复（P2-7 写侧单点）：置色/清色=用户在操作该组=编排痕迹→
+    // route/series 产物接管（route_overridden=1）；清色回默认灰不撤销接管
+    // （标志粘性——用户动过即不再自动清理，无"撤销痕迹"通道）。
+    let db = mem_db();
+    let auto = db.create_group(&group("路由组")).expect("auto");
+    assert!(db.update_group_color(auto.id, Some("pink")).expect("set"));
+    let fetched = db.get_group(auto.id).expect("get").expect("exists");
+    assert_eq!(fetched.color.as_deref(), Some("pink"));
+    assert_eq!(fetched.route_overridden, 1);
+    assert!(db.update_group_color(auto.id, None).expect("clear"));
+    let cleared = db.get_group(auto.id).expect("get").expect("exists");
+    assert_eq!(cleared.color, None);
+    assert_eq!(cleared.route_overridden, 1, "清色不撤销接管（粘性）");
+}
+
+#[test]
 fn delete_group_keeps_notes() {
     // Arrange：删组只断关联不删笔记（笔记是用户资产）
     let db = mem_db();
