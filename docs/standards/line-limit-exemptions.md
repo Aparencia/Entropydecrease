@@ -65,6 +65,7 @@
 | app/src-tauri/src/commands_goals.rs | 525 | v0.18.0（REQ-248~250）：学习目标命令域（15 命令 + inner 纯编排 + 访谈校验/埋点/宣言组装/进度收集）——命令薄壳与 inner 同域（commands_knowledge_core 先例）；列表/详情/进度三视图共用 collect_signals/goal_card_metrics；v0.18.1 生命周期命令已拆至 commands_goals_lifecycle.rs | 若再增长：里程碑命令组拆至 commands_goals_milestones.rs |
 | app/src-tauri/src/db_goals.rs | 431 | v0.18.0（REQ-248~250）：goals 三表 DDL + 实体 CRUD/绑定/结算钩子内聚；行映射与事务建目标共享 add_milestone 族；v0.18.1（REQ-255/256）毕业报告快照表与报告取数（结算快照/复习统计/成果物清单）再增 | 若再增长：毕业报告取数拆至 db_goals_graduation.rs |
 | app/src-tauri/src/db_migrations.rs | 492 | v0.19.0（REQ-258）kb 三表 DDL 接入后实测 492（登记值 204 为拆分当年过期快照——含全部既有 schema 建表/ensure_column 迁移，属 pre-0.19 未登记存量）；schema 单点收敛保证新库/旧库迁移幂等一致 | 若再增长：kb_* 与 chat_* 表 DDL 拆至 db_migrations_kb.rs（v0.19 系列内如再增即执行） |
+| app/src-tauri/src/db_migrations.rs | 573 | v0.20.11 批 6（REQ-315）再增：note_groups.pin ensure_column + note_group_orders 建表（+21，实测 573——登记值 492 过期；schema 单点收敛理由同左） | 若再增长：kb_* 与 chat_* 表 DDL 拆至 db_migrations_kb.rs |
 | app/src-tauri/src/commands_ai_chat.rs | 317 | v0.16 对话命令域 + v0.19.1（REQ-260）检索分支薄壳（纯聊链路零改动；kb 编排已拆至 commands_ai_chat_kb.rs 267 行）——检索分流点与 run_stream 共用会话编排上下文 | 若再增长：run_stream 与纯聊发送拆至 commands_ai_chat_plain.rs |
 | app/src-tauri/src/commands_ai_settings.rs | 330 | AI 设置命令域（视图/密钥/授权/目标 AI） + v0.19.1 ai_set_kb_qa 最小面命令（+28）——read-modify-write 同域先例（ai_set_goal_plan）内聚 | 若再增长：kb/goal 最小面命令拆至 commands_ai_settings_extra.rs |
 | app/src-tauri/src/db_ai_chat.rs | 309 | AI 对话双表仓储 + v0.19.1（REQ-260）retrieval/meta_json 补列与行映射（+42）——SQL/行映射内聚（db_* 文件先例） | 若再增长：消息侧读写拆至 db_ai_chat_messages.rs |
@@ -119,6 +120,8 @@
 | app/src/pages/NotesPage.tsx | 571 | v0.20.10 批 5 复习剥离：review state/Overlay 宿主/onOpenReview 本地实现删除，ⓘ「复习本组」改跨页深链透传（f702d876）——登记值 575 过期，实测回落；仍处 300-600 档编排层内聚（数据/选中态/快捷键/辅助面板插槽） | 若再增长：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts |
 | app/src/components/GroupSidebar.tsx | 444 | v0.20.10 批 5 复习入口移除：「🎴 复习 N」按钮与 dueTotal 拉取下线（无被动提醒裁决，同 v0.20.5 行动先例；f702d876）——登记值 455 过期，实测回落 | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook |
 | app/src/App.tsx | 439 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
+| app/src/components/NoteListView.tsx | 591 | v0.20.11 批 6（REQ-315）排序/置顶接线：scope 内 置顶→手排→自动 排序消费（orderScopeNotes）、组头排序行装载（note_group_order_list + orderGroups）、右键上移/下移与置顶拖拽底序重写（manualBaseOf/dropNotesIntoOrder）——编排内聚持续（登记值 524 过期，实测纠偏；排序纯函数已拆 orderBuckets/groupOrder/noteOrder 配单测） | 若再增长：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
+| app/src/components/GroupSidebar.tsx | 509 | v0.20.11 批 6（REQ-315）排序/置顶接线：组行右键菜单替代直开弹层、分区 置顶→手排→自动 渲染（orderGroups）、分区头「手排 ↺」复位、置顶 📌 标记（登记值 444 过期，实测纠偏）——排序操作域已拆 useGroupOrders.ts（123 行 hook），菜单 UI 拆 GroupRowContextMenu.tsx（131 行），本文件保留编排 | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook |
 
 ## 已拆分 / 登记移除记录
 
