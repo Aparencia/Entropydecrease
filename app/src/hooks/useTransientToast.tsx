@@ -38,10 +38,13 @@ export function useTransientToast(durationMs = 3000): {
     [durationMs],
   );
 
-  // L2：卸载清理（防卸载后定时器触发 setState）
+  // L2：卸载清理（防卸载后定时器触发 setState）——批 7 审查修复（P2-8）：
+  // 原实现把 timerRef.current 快照在 effect 建立时（恒为 null——toast 尚未
+  // 显示），卸载时清的是空快照=死守卫；改在 cleanup 执行时直接读 ref 取
+  // 当前挂起的计时器，判空后清除。
   useEffect(() => {
-    const timer = timerRef.current;
     return () => {
+      const timer = timerRef.current;
       if (timer) clearTimeout(timer);
     };
   }, []);
