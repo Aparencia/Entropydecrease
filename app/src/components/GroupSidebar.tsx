@@ -17,6 +17,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Fragment, NoteGroup } from "../types";
 import type { KnowledgeLink, KnowledgeSystem } from "../types/knowledge";
+// REQ-316（批 7）：移组返回契约（源空组清理留痕数据源）
+import type { MoveNoteResult } from "../types/notes";
 import {
   GROUP_SECTIONS,
   filterGroups,
@@ -59,13 +61,15 @@ interface Props {
   refreshToken: number;
   /** 跳转体系页并选中体系（v0.13.7 触点①） */
   onOpenSystem: (systemId: number) => void;
+  /** REQ-316（批 7）：移组触发源空组自动清理 → 上抛组标题（父层 toast 留痕） */
+  onCleanNotice?: (groupNames: string[]) => void;
   /** v0.15：折叠为窄条（父层 useColumnLayout.setManualFolded(true)） */
   onCollapse?: () => void;
 }
 
 export default function GroupSidebar({
   width = 240, groupFilter, onGroupFilterChange, onChanged, onOpenReview, selectedNoteId,
-  onOpenInbox, inboxActive, refreshToken, onOpenSystem, onCollapse,
+  onOpenInbox, inboxActive, refreshToken, onOpenSystem, onCleanNotice, onCollapse,
 }: Props) {
   const [groups, setGroups] = useState<NoteGroup[]>([]);
   const [feedCaptureOn, setFeedCaptureOn] = useState(true);
@@ -234,14 +238,19 @@ export default function GroupSidebar({
     if (ids.length === 0) return;
     void (async () => {
       let failed = 0;
+      const cleanedNames: string[] = [];
       for (const noteId of ids) {
         try {
-          await invoke("move_note_to_group", { noteId, groupId: g.id });
+          // REQ-316（批 7）：移组结果含自动清理列表（源组空 → 后端已删）
+          const r = await invoke<MoveNoteResult>("move_note_to_group", { noteId, groupId: g.id });
+          cleanedNames.push(...r.autoCleanedGroups);
         } catch {
           failed += 1;
         }
       }
       if (failed > 0) setStatus(`归组失败 ${failed}/${ids.length} 条`);
+      // 清理留痕（无清理零变化；父层 toast）
+      if (cleanedNames.length > 0) onCleanNotice?.([...new Set(cleanedNames)]);
       onChanged();
     })();
   };
@@ -473,6 +482,7 @@ export default function GroupSidebar({
           // 复习深链：关弹层后交 NotesPage→App 转复习页组预选（v0.20.10 批 5）
           onOpenReview={(gid, name) => { setPopover(null); onOpenReview(gid, name); }}
           selectedNoteId={selectedNoteId}
+          onCleanNotice={onCleanNotice}
         />
       )}
 

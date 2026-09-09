@@ -47,7 +47,7 @@ beforeEach(() => {
           ? [{ id: 1, systemId: 10, nodeId: null, conceptId: null, modelId: null, targetType: "note_group", targetId: 1, createdAt: 0 }]
           : [];
       case "override_group_route": return true;
-      case "move_note_to_group": return true;
+      case "move_note_to_group": return { moved: true, autoCleanedGroups: [] };
       // 审查修复：ⓘ 弹层静默降级依赖的 mock 补齐（简报拉取 list_group_cards——原缺省
       // throw 依赖"简报静默降级"容错，测试通过≠mock 完备）
       case "list_group_cards": return [];

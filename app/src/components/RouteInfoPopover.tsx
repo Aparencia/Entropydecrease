@@ -16,6 +16,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Flashcard, NoteGroup } from "../types";
 import type { KnowledgeConcept, KnowledgeLink, KnowledgeSystem } from "../types/knowledge";
+// REQ-316（批 7）：移组返回契约（源空组清理留痕数据源）
+import type { MoveNoteResult } from "../types/notes";
 import { humanRouteLine, parseRouteReason } from "../utils/routeReason";
 import { DOMAIN_OPTIONS } from "../utils/domainOptions";
 import WeekContractCard from "./WeekContractCard";
@@ -44,6 +46,8 @@ interface Props {
   onOpenReview: (groupId: number, name: string) => void;
   /** 当前选中笔记 id（移入/移出操作前提；null=无） */
   selectedNoteId: number | null;
+  /** REQ-316（批 7）：移组触发源空组自动清理 → 上抛组标题（父层 toast 留痕） */
+  onCleanNotice?: (groupNames: string[]) => void;
 }
 
 /** 弹层内统一的小按钮样式（四区视觉一致） */
@@ -53,7 +57,7 @@ const BTN: React.CSSProperties = {
 };
 
 export default function RouteInfoPopover({
-  group, anchor, onClose, onChanged, onOpenReview, selectedNoteId,
+  group, anchor, onClose, onChanged, onOpenReview, selectedNoteId, onCleanNotice,
 }: Props) {
   // ① 明细折叠（默认收起——原因可按需，不默认铺开）
   const [showDetails, setShowDetails] = useState(false);
@@ -189,8 +193,10 @@ export default function RouteInfoPopover({
     if (selectedNoteId == null) return;
     setBusy(true);
     try {
-      await invoke<boolean>("move_note_to_group", { noteId: selectedNoteId, groupId });
+      const r = await invoke<MoveNoteResult>("move_note_to_group", { noteId: selectedNoteId, groupId });
       setStatus("");
+      // REQ-316（批 7）：源组因移走变空 → 自动清理留痕（结果空=零变化）
+      if (r.autoCleanedGroups.length > 0) onCleanNotice?.([...new Set(r.autoCleanedGroups)]);
       onChanged();
     } catch (e) {
       setStatus(`移动失败: ${e}`);

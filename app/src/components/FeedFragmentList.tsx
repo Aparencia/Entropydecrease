@@ -13,6 +13,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import type { Fragment, Note, NoteGroup } from "../types";
+// REQ-316（批 7）：碎片删除/升笔记返回契约（源空组清理留痕数据源）
+import type { DeleteFragmentResult, PromoteNoteResult } from "../types/notes";
 import { fragmentPreview, promoteTitleFor } from "../utils/inbox";
 
 interface Props {
@@ -22,6 +24,8 @@ interface Props {
   onChanged: () => void;
   /** 升笔记成功——父层打开新笔记（右侧自动打开，闭环可见） */
   onPromoted: (note: Note) => void;
+  /** REQ-316（批 7）：碎片操作触发源空组自动清理 → 上抛组标题（父层 toast 留痕） */
+  onCleanNotice?: (groupNames: string[]) => void;
   /** v0.15：折叠为窄条（父层 useColumnLayout.setManualFolded(true)） */
   onCollapse?: () => void;
 }
@@ -67,7 +71,7 @@ interface PromoteForm {
   groupId: string;
 }
 
-export default function FeedFragmentList({ width = 320, onChanged, onPromoted, onCollapse }: Props) {
+export default function FeedFragmentList({ width = 320, onChanged, onPromoted, onCleanNotice, onCollapse }: Props) {
   const [fragments, setFragments] = useState<Fragment[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState("");
@@ -116,16 +120,18 @@ export default function FeedFragmentList({ width = 320, onChanged, onPromoted, o
     if (!promote) return;
     setBusy(true);
     try {
-      const note = await invoke<Note>("promote_fragment_to_note", {
+      const r = await invoke<PromoteNoteResult>("promote_fragment_to_note", {
         fragmentId: promote.fragmentId,
         title: promote.title,
         groupId: promote.groupId === "" ? null : Number(promote.groupId),
       });
       setPromote(null);
       setErr("");
+      // REQ-316（批 7）：碎片源组因升笔记变空 → 自动清理留痕（结果空=零变化）
+      if (r.autoCleanedGroups.length > 0) onCleanNotice?.([...new Set(r.autoCleanedGroups)]);
       await load();
       onChanged();
-      onPromoted(note);
+      onPromoted(r.note);
     } catch (e) {
       setErr(`升笔记失败: ${e}`);
     } finally {
@@ -157,7 +163,9 @@ export default function FeedFragmentList({ width = 320, onChanged, onPromoted, o
     if (!window.confirm(`删除这条碎片？\n「${f.text.slice(0, 30)}…」\n（绑定的闪卡会保留）`)) return;
     setBusy(true);
     try {
-      await invoke<boolean>("delete_fragment", { fragmentId: f.id });
+      const r = await invoke<DeleteFragmentResult>("delete_fragment", { fragmentId: f.id });
+      // REQ-316（批 7）：碎片源组因删除变空 → 自动清理留痕（结果空=零变化）
+      if (r.autoCleanedGroups.length > 0) onCleanNotice?.([...new Set(r.autoCleanedGroups)]);
       await load();
       onChanged();
     } catch (e) {

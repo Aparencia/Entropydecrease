@@ -240,3 +240,38 @@ export interface AiUsageRecord {
   slices: number;
   createdAt: number;
 }
+
+// ────────────────────────────────────────────────────────────
+// 命令结果契约（REQ-316 v0.20.12 批 7：空组自动清理留痕）
+// ────────────────────────────────────────────────────────────
+
+/** 删除笔记结果（批 7：autoCleanedGroups=删除使组变空后自动清理的路由组标题；
+ *  空数组=无清理——调用方零变化，不打扰） */
+export interface DeleteNoteResult {
+  deleted: boolean;
+  autoCleanedGroups: string[];
+}
+
+/** 笔记移组结果（批 7：autoCleanedGroups=源组变空被自动清理的组标题） */
+export interface MoveNoteResult {
+  moved: boolean;
+  autoCleanedGroups: string[];
+}
+
+/** 删除碎片结果（批 7：autoCleanedGroups=碎片源组变空被自动清理的组标题） */
+export interface DeleteFragmentResult {
+  deleted: boolean;
+  autoCleanedGroups: string[];
+}
+
+/** 碎片移组结果（批 7：autoCleanedGroups=碎片源组变空被自动清理的组标题） */
+export interface MoveFragmentResult {
+  moved: boolean;
+  autoCleanedGroups: string[];
+}
+
+/** 碎片升笔记结果（批 7：note=新建笔记；autoCleanedGroups=碎片源组清理留痕） */
+export interface PromoteNoteResult {
+  note: Note;
+  autoCleanedGroups: string[];
+}

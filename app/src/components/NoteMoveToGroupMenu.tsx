@@ -11,6 +11,8 @@
 import { useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Note, NoteGroup } from "../types";
+// REQ-316（批 7）：移组返回契约（源空组清理留痕数据源）
+import type { MoveNoteResult } from "../types/notes";
 import { paletteHex } from "../utils/colorPalette";
 import type { ThemeMode } from "../utils/colorPalette";
 
@@ -19,6 +21,8 @@ interface Props {
   groups: NoteGroup[];
   /** 变更后的刷新回调（父层重载列表 + 重取选中笔记） */
   onChanged: () => void;
+  /** REQ-316（批 7）：移组触发源空组自动清理 → 上抛组标题（父层 toast 留痕） */
+  onCleanNotice?: (groupNames: string[]) => void;
 }
 
 const DROPDOWN_ITEM: React.CSSProperties = {
@@ -58,7 +62,7 @@ function GroupDot({ colorId }: { colorId: string | null | undefined }) {
   );
 }
 
-export default function NoteMoveToGroupMenu({ note, groups, onChanged }: Props) {
+export default function NoteMoveToGroupMenu({ note, groups, onChanged, onCleanNotice }: Props) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
@@ -68,9 +72,11 @@ export default function NoteMoveToGroupMenu({ note, groups, onChanged }: Props) 
     if (busy || groupId === currentId) return;
     setBusy(true);
     try {
-      await invoke<boolean>("move_note_to_group", { noteId: note.id, groupId });
+      const r = await invoke<MoveNoteResult>("move_note_to_group", { noteId: note.id, groupId });
       setStatus("");
       setOpen(false);
+      // REQ-316（批 7）：源组因移走变空 → 自动清理留痕（结果空=零变化）
+      if (r.autoCleanedGroups.length > 0) onCleanNotice?.([...new Set(r.autoCleanedGroups)]);
       onChanged();
     } catch (e) {
       setStatus(`移动失败: ${e}`);

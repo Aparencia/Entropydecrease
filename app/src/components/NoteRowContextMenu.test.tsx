@@ -39,7 +39,7 @@ function renderMenu(overrides: Partial<Parameters<typeof NoteRowContextMenu>[0]>
 
 beforeEach(() => {
   invokeMock.mockReset();
-  invokeMock.mockResolvedValue(true);
+  invokeMock.mockResolvedValue({ moved: true, autoCleanedGroups: [] });
   writeTextMock.mockReset();
   writeTextMock.mockResolvedValue(undefined);
 });

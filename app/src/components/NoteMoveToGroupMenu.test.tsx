@@ -24,7 +24,7 @@ const noteBase: Note = {
   id: 42, title: "笔记", content: "x", source: "manual", tags: "[]", pin: 0, created_at: 0, updated_at: 0,
 };
 
-beforeEach(() => { invokeMock.mockReset(); invokeMock.mockResolvedValue(true); });
+beforeEach(() => { invokeMock.mockReset(); invokeMock.mockResolvedValue({ moved: true, autoCleanedGroups: [] }); });
 afterEach(() => cleanup());
 
 describe("NoteMoveToGroupMenu 手动分组", () => {
@@ -52,6 +52,42 @@ describe("NoteMoveToGroupMenu 手动分组", () => {
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("move_note_to_group", { noteId: 42, groupId: null });
     });
+  });
+
+  it("REQ-316：移出最后笔记 → 结果含 autoCleanedGroups 上抛 onCleanNotice（留痕）", async () => {
+    // Arrange：移出组命令返回清理列表（源组已自动删除）
+    const onCleanNotice = vi.fn();
+    invokeMock.mockResolvedValueOnce({ moved: true, autoCleanedGroups: ["乐理"] });
+    render(
+      <NoteMoveToGroupMenu
+        note={{ ...noteBase, group_id: 2 }}
+        groups={groups}
+        onChanged={vi.fn()}
+        onCleanNotice={onCleanNotice}
+      />,
+    );
+    // Act：移出分组
+    fireEvent.click(screen.getByTestId("move-to-group-open"));
+    fireEvent.click(screen.getByTestId("move-to-group-none"));
+    // Assert：清理组标题上抛（父层 toast「已自动清理空组：乐理」）
+    await waitFor(() => expect(onCleanNotice).toHaveBeenCalledWith(["乐理"]));
+  });
+
+  it("REQ-316：结果无清理（空数组）→ 不上抛（零变化）", async () => {
+    const onCleanNotice = vi.fn();
+    invokeMock.mockResolvedValueOnce({ moved: true, autoCleanedGroups: [] });
+    render(
+      <NoteMoveToGroupMenu
+        note={{ ...noteBase, group_id: 2 }}
+        groups={groups}
+        onChanged={vi.fn()}
+        onCleanNotice={onCleanNotice}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("move-to-group-open"));
+    fireEvent.click(screen.getByTestId("move-to-group-none"));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalled());
+    expect(onCleanNotice).not.toHaveBeenCalled();
   });
 
   it("无组：提示先新建组（零命令调用）", () => {

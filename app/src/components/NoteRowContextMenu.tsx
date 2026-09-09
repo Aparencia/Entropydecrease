@@ -18,6 +18,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Note, NoteGroup } from "../types";
+// REQ-316（批 7）：移组返回契约（源空组清理留痕数据源）
+import type { MoveNoteResult } from "../types/notes";
 import { paletteHex } from "../utils/colorPalette";
 import type { ThemeMode } from "../utils/colorPalette";
 
@@ -35,6 +37,8 @@ interface Props {
   onDelete: (note: Note) => void;
   /** 归组完成回调（父层刷新列表 + 右栏） */
   onMoved: () => void;
+  /** REQ-316（批 7）：移组触发源空组自动清理 → 上抛组标题（父层 toast 留痕） */
+  onCleanNotice?: (groupNames: string[]) => void;
   /** REQ-315：组内上移/下移（树视图 scope 上下文才传——父层按可见序计算可用性） */
   onMoveWithinScope?: (note: Note, dir: 1 | -1) => void;
   canMoveUp?: boolean;
@@ -60,7 +64,7 @@ const ITEM_ICON: React.CSSProperties = { width: 20, fontSize: 12, textAlign: "ce
 
 export default function NoteRowContextMenu({
   note, groups, x, y, onClose, onPinToggle, onEdit, onDelete, onMoved,
-  onMoveWithinScope, canMoveUp = false, canMoveDown = false,
+  onCleanNotice, onMoveWithinScope, canMoveUp = false, canMoveDown = false,
 }: Props) {
   const [view, setView] = useState<"root" | "groups">("root");
   const [busy, setBusy] = useState(false);
@@ -85,9 +89,11 @@ export default function NoteRowContextMenu({
     if (busy || groupId === currentId) return;
     setBusy(true);
     try {
-      await invoke<boolean>("move_note_to_group", { noteId: note.id, groupId });
+      const r = await invoke<MoveNoteResult>("move_note_to_group", { noteId: note.id, groupId });
       setStatus("");
       setBusy(false);
+      // REQ-316（批 7）：源组因移走变空 → 自动清理留痕（结果空=零变化）
+      if (r.autoCleanedGroups.length > 0) onCleanNotice?.([...new Set(r.autoCleanedGroups)]);
       onClose();
       onMoved();
     } catch (e) {

@@ -16,6 +16,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Note, NoteGroup } from "../types";
+// REQ-316（批 7）：移组返回契约（空组自动清理留痕数据源）
+import type { MoveNoteResult } from "../types/notes";
 import { paletteHex } from "../utils/colorPalette";
 import type { ThemeMode } from "../utils/colorPalette";
 import { emptySelection, rangeSelection, toggleSelection } from "../utils/noteSelection";
@@ -61,6 +63,8 @@ interface Props {
   onNoteEdit?: (note: Note) => void;
   onNoteDelete?: (note: Note) => void;
   onNoteMoved?: () => void;
+  /** REQ-316（批 7）：移组触发空组自动清理 → 上抛组标题（父层 toast 留痕） */
+  onCleanNotice?: (groupNames: string[]) => void;
   onCollapse?: () => void;
 }
 
@@ -85,7 +89,7 @@ export default function NoteListView({
   keyword, tagFilter, sortMode, allTags, selectedId, status,
   noteColors, tagColors,
   onKeywordChange, onTagFilterChange, onSortModeChange, onSelect, onCreate, onRefresh, onOpenSession, onBatchDelete,
-  onNotePinToggle, onNoteEdit, onNoteDelete, onNoteMoved, onCollapse,
+  onNotePinToggle, onNoteEdit, onNoteDelete, onNoteMoved, onCleanNotice, onCollapse,
 }: Props) {
   const theme: ThemeMode = useMemo(
     () => (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
@@ -305,9 +309,11 @@ export default function NoteListView({
       const groupNotes = new Set(
         notes.filter((n) => (groupId == null ? n.group_id == null : n.group_id === groupId)).map((n) => n.id),
       );
+      const cleanedNames: string[] = [];
       for (const id of ids) {
         if (groupNotes.has(id)) continue;
-        await invoke("move_note_to_group", { noteId: id, groupId });
+        const r = await invoke<MoveNoteResult>("move_note_to_group", { noteId: id, groupId });
+        cleanedNames.push(...r.autoCleanedGroups);
       }
       // 目标手排：新入组未置顶笔记追加末尾（跨组 drop 的"加入该组"语义；
       // 置顶成员由置顶区表达，不写手排行；重写快照顺带清存量置顶残行）
@@ -318,13 +324,15 @@ export default function NoteListView({
         await saveOrder(scope, [...cur, ...ids.filter((id) => !groupNotes.has(id) && !pinned.has(id))]);
       }
       onNoteMoved?.();
+      // REQ-316（批 7）：批量移走后源空组清理留痕（跨条聚合去重）
+      if (cleanedNames.length > 0) onCleanNotice?.([...new Set(cleanedNames)]);
       setBatchMenu(null);
     } catch (e) {
       console.warn("[notes] 归组失败:", e);
     } finally {
       setBusyMove(false);
     }
-  }, [notes, manualOrders, saveOrder, onNoteMoved]);
+  }, [notes, manualOrders, saveOrder, onNoteMoved, onCleanNotice]);
 
   /**
    * REQ-315：右键「上移/下移」组内显式移动——补"必须拖一次才触发手排快照"的
@@ -367,9 +375,13 @@ export default function NoteListView({
         const n = notes.find((x) => x.id === id);
         return n && (n.group_id ?? null) !== targetGroup;
       });
+      const cleanedNames: string[] = [];
       for (const id of external) {
-        await invoke("move_note_to_group", { noteId: id, groupId: target.group_id });
+        const r = await invoke<MoveNoteResult>("move_note_to_group", { noteId: id, groupId: target.group_id });
+        cleanedNames.push(...r.autoCleanedGroups);
       }
+      // REQ-316（批 7）：跨组拖走使源组变空 → 清理留痕（零清理零变化）
+      if (cleanedNames.length > 0) onCleanNotice?.([...new Set(cleanedNames)]);
       // 落位（REQ-315：只写置顶区外子序列；落点在置顶行上 = 置顶区下沿即手动区首位）
       const pinned = new Set(notes.filter((n) => n.pin === 1).map((n) => n.id));
       const moved = ids.filter((id) => !pinned.has(id));
@@ -402,7 +414,7 @@ export default function NoteListView({
     } finally {
       dropBusyRef.current = false;
     }
-  }, [treeMode, notes, manualOrders, manualBaseOf, saveOrder, onNoteMoved]);
+  }, [treeMode, notes, manualOrders, manualBaseOf, saveOrder, onNoteMoved, onCleanNotice]);
 
   /** 划选（组头空白起 → 组内首行至当前行带；走既有行命中的全局可见序）。
    *  L9 审查修正：rAF 节流 + pointercancel/blur/松开（buttons=0）即清理——
@@ -597,6 +609,7 @@ export default function NoteListView({
           onEdit={onNoteEdit}
           onDelete={onNoteDelete}
           onMoved={onNoteMoved}
+          onCleanNotice={onCleanNotice}
           // REQ-315：树视图才显 上移/下移（平铺态禁移动——orderActions 为 null）
           onMoveWithinScope={orderActions?.move}
           canMoveUp={orderActions?.canMoveUp ?? false}

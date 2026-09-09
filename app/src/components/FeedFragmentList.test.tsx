@@ -50,12 +50,12 @@ beforeEach(() => {
         return [containerGroup];
       case "promote_fragment_to_note":
         dbFragments = dbFragments.filter((f) => f.id !== args.fragmentId);
-        return noteStub;
+        return { note: noteStub, autoCleanedGroups: [] };
       case "promote_fragment_to_card":
         return 1;
       case "delete_fragment":
         dbFragments = dbFragments.filter((f) => f.id !== args.fragmentId);
-        return true;
+        return { deleted: true, autoCleanedGroups: [] };
       case "resolve_fragment_image":
         return null;
       default:

@@ -27,6 +27,8 @@ interface Props {
   onChanged: () => void;
   /** 错误上抛（父层 status 区展示） */
   onError: (msg: string) => void;
+  /** REQ-316（批 7）：移组触发源空组自动清理 → 上抛组标题（父层 toast 留痕） */
+  onCleanNotice?: (groupNames: string[]) => void;
   /** 跳体系页并打开建体系向导（TD-2026-09-05-A 空体系引导） */
   onGotoKnowledgeSystem?: () => void;
   /** 打开编辑态 AI 能力对话框（阅读态点击直接进入编辑态） */
@@ -36,7 +38,7 @@ interface Props {
 }
 
 export default function NoteHeaderActions({
-  note, resolvedColor, groups, onChanged, onError, onGotoKnowledgeSystem, onOpenAi, onOpenModelCard,
+  note, resolvedColor, groups, onChanged, onError, onCleanNotice, onGotoKnowledgeSystem, onOpenAi, onOpenModelCard,
 }: Props) {
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   // v0.14 B：当前主题（跟随 prefers-color-scheme；jsdom 无 matchMedia 回退 light）
@@ -81,6 +83,7 @@ export default function NoteHeaderActions({
         note={note}
         groups={groups}
         onChanged={onChanged}
+        onCleanNotice={onCleanNotice}
       />
       {/* v0.13.7 触点②：标题栏「挂到体系」入口；key=note.id 切笔记重置内部态 */}
       <NoteLinkToSystem
