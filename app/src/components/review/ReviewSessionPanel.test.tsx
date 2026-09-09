@@ -95,4 +95,16 @@ describe("ReviewSessionPanel 复习流", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onExit).toHaveBeenCalledTimes(2);
   });
+
+  it("active=false（页面隐藏保活期）→ ESC 不退出会话；active=true 后 ESC 恢复生效（审查 P2-11）", async () => {
+    const { onExit, rerender } = renderPanel({ active: false });
+    await screen.findByText("隔离霜作用");
+    // 隐藏期：别页 ESC 属他页语义，不得静默结束本会话
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onExit).not.toHaveBeenCalled();
+    // 切回可见 → 监听随 active 重新注册
+    rerender(<ReviewSessionPanel groupId={null} groupName="全部组" active={true} onExit={onExit} />);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
 });

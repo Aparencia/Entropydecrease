@@ -84,13 +84,22 @@ export default function ReviewPage({ active, focusGroupId, onFocusGroupConsumed 
 
   useEffect(() => { void load(); }, [load, token]);
 
-  // 跨页深链消费：预选组 + 退出进行中的会话（新意图优先）+ 通知父层清空
+  // 会话退出/完成：回总览并重载到期统计（评分已改变到期分布）。useCallback
+  // 化供深链打断复用（审查 P3-5a：两处退出必须同语义——裸 setSession(null)
+  // 会残留旧到期统计，深链新意图就位后展示的是会话前的过期数字）
+  const exitSession = useCallback(() => {
+    setSession(null);
+    setToken((t) => t + 1);
+  }, []);
+
+  // 跨页深链消费：预选组 + 退出进行中的会话（新意图优先）+ 通知父层清空。
+  // 退出走 exitSession（token++ 重载——与手动退出/完成同出口，防旧统计残留）
   useEffect(() => {
     if (focusGroupId == null) return;
-    setSession(null);
+    exitSession();
     setSelGroupId(focusGroupId);
     onFocusGroupConsumed?.();
-  }, [focusGroupId, onFocusGroupConsumed]);
+  }, [focusGroupId, onFocusGroupConsumed, exitSession]);
 
   // 到期>0 的组行（chips 数据源；纯归约见 utils/reviewStats）
   const dueRows = useMemo(() => dueGroupRows(groups, byGroupDue), [groups, byGroupDue]);
@@ -103,28 +112,26 @@ export default function ReviewPage({ active, focusGroupId, onFocusGroupConsumed 
     setSession({ groupId: selGroupId, groupName: scopeName });
   };
 
-  // 会话退出/完成：回总览并重载到期统计（评分已改变到期分布）
-  const exitSession = () => {
-    setSession(null);
-    setToken((t) => t + 1);
-  };
-
   if (session) {
     return (
       <div style={{ height: "calc(100vh - 56px)", display: "flex", flexDirection: "column", minHeight: 0, background: "#fff" }}>
         <ReviewSessionPanel
           groupId={session.groupId}
           groupName={session.groupName}
+          // 审查 P2-11：ESC 监听门控到页面可见（隐藏期保活会话不被别页 ESC 误退）
+          active={active}
           onExit={exitSession}
         />
       </div>
     );
   }
 
-  // 空态文案分支：全局无到期 / 本组无到期但别组有（引导换范围，避免困惑）
+  // 空态文案分支：全局无到期 / 本组无到期但别组有（引导换范围，避免困惑）。
+  // 审查 P3-5b：范围空态标题内嵌 scopeLabel 组名——零到期深链（focusGroupId
+  // 指向无到期组）只预选不弹窗，标题不带组名时用户看不出"预选到了哪一组"
   const emptyTitle = totalDue === 0
     ? "当前没有到期卡片 🎉"
-    : "该组当前没有到期卡片";
+    : `「${scopeName}」组当前没有到期卡片`;
   const emptyBody = totalDue === 0
     ? "闪卡由笔记组产出（组 ⓘ 管理「⚙ 生成闪卡」/「＋ 概念卡」/碎片升卡），到期时间由 FSRS 间隔调度——到期后再来复习（弹性承诺，不追债）。若从未生成过闪卡：到「📝 笔记」页任一组点 ⓘ →「⚙ 生成闪卡」起步。"
     : `其余组共 ${totalDue} 张到期——切换上方范围即可复习。`;

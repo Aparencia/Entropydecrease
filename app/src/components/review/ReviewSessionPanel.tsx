@@ -38,11 +38,14 @@ interface Props {
   groupId: number | null;
   /** 会话范围名（头部展示：组名 / 全部组） */
   groupName: string;
+  /** 页面是否可见（ReviewPage active 透传——display:none 保活期不注册 ESC；
+   *  缺省 true=既有测试/独立宿主兼容） */
+  active?: boolean;
   /** 退出本轮（返回总览；头部按钮与 ESC 同义） */
   onExit: () => void;
 }
 
-export default function ReviewSessionPanel({ groupId, groupName, onExit }: Props) {
+export default function ReviewSessionPanel({ groupId, groupName, active = true, onExit }: Props) {
   const [queue, setQueue] = useState<Flashcard[]>([]);
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
@@ -64,14 +67,21 @@ export default function ReviewSessionPanel({ groupId, groupName, onExit }: Props
 
   useEffect(() => { void loadQueue(); }, [loadQueue]);
 
-  // ESC 退出（复习中误触保护：原模态语义——直接退出本轮，未评分卡不算）
+  // ESC 退出（复习中误触保护：原模态语义——直接退出本轮，未评分卡不算）。
+  // 审查 P2-11：监听注册门控到 active——复习会话在页面隐藏期（display:none
+  // 保活）仍可能进行中，全局 window 监听会把**别页的 ESC** 误判为退出信号
+  // （静默结束隐藏中的复习会话）；仅可见期注册、隐藏期不注册，卸载清理照旧
   useEffect(() => {
+    if (!active) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onExit();
+      // 长按自动重复（e.repeat）只退一次——首次已触发 onExit 卸载面板，
+      // 重复 keydown 属物理按键噪声（防抖口径与行菜单 ESC 一致）
+      if (e.key !== "Escape" || e.repeat) return;
+      onExit();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onExit]);
+  }, [active, onExit]);
 
   const current = queue[index] ?? null;
 

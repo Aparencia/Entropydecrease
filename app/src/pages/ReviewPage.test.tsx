@@ -117,7 +117,9 @@ describe("ReviewPage 总览与组过滤器", () => {
     // 组 2 到期 0——chips 不列（到期>0 才可作范围），深链仍可达并显示范围空态
     render(<ReviewPage active={false} focusGroupId={2} />);
     const empty = await screen.findByTestId("review-empty");
-    expect(empty.textContent).toContain("该组当前没有到期卡片");
+    // 标题内嵌 scopeLabel 组名（审查 P3-5b：零到期深链只预选不弹窗，无组名时
+    // 用户看不出预选到了哪一组）
+    expect(empty.textContent).toContain("「手账 B」组当前没有到期卡片");
     expect(empty.textContent).toContain("其余组共 1 张到期");
   });
 });
@@ -157,9 +159,12 @@ describe("ReviewPage 刷新与深链", () => {
     // 先在全量范围开会话
     fireEvent.click(await screen.findByTestId("review-start"));
     await screen.findByTestId("session-exit");
-    // 深链到组 2：会话退出回总览 + 组 2 预选
+    const before = dueCalls();
+    // 深链到组 2：会话退出回总览 + 组 2 预选——退出与手动同一出口（token++
+    // 重载到期统计，审查 P3-5a：裸清 session 会残留会话前的过期统计）
     rerender(<ReviewPage active={false} focusGroupId={2} />);
     await waitFor(() => expect(screen.queryByTestId("session-exit")).toBeNull());
+    await waitFor(() => expect(dueCalls()).toBeGreaterThan(before));
     await screen.findByTestId("review-scope-all");
     const start = screen.getByTestId("review-start") as HTMLButtonElement;
     expect(start.textContent).toContain("1");
