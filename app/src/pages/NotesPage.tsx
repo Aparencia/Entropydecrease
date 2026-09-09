@@ -273,7 +273,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
       setSelected((prev) => (prev?.id === note.id ? { ...prev, pin: newPin } : prev));
       void load(keyword, tagFilter, sortMode);
     } catch (e) {
-      setStatus(`固定操作失败: ${e}`);
+      setStatus(`置顶操作失败: ${e}`);
     }
   };
 
@@ -478,7 +478,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
           onBatchDelete={runBatchDelete}
           noteColors={noteColors}
           tagColors={tagColors}
-          // v0.16.1：笔记行右键菜单动作（复用既有处理——固定/编辑/删除/归组刷新）
+          // v0.16.1：笔记行右键菜单动作（复用既有处理——置顶/编辑/删除/归组刷新）
           onNotePinToggle={(n) => void runPinToggle(n)}
           onNoteEdit={(n) => { handleSelect(n); setEditing(true); }}
           onNoteDelete={(n) => void runDelete(n.id)}

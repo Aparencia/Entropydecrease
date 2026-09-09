@@ -169,7 +169,7 @@ export default function NoteReadingView({
           <button
             onClick={onPinToggle}
             style={{ fontSize: 12, cursor: "pointer", padding: "4px 8px", borderRadius: 4, border: "1px solid #d1d5db", background: note.pin ? "#fffbeb" : "#fff" }}
-            title={note.pin ? "取消固定" : "固定"}
+            title={note.pin ? "取消置顶" : "置顶"}
           >
             📌
           </button>

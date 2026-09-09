@@ -46,7 +46,7 @@ export interface Note {
   tags: string;
   /** v0.10.0：属性 JSON 对象（null=无） */
   properties?: string | null;
-  /** v0.10.0：固定标记（0=未固定，1=固定） */
+  /** v0.10.0：置顶标记（0=未置顶，1=置顶——数据字段名 pin；v0.20.11 批 6 UI 措辞统一为「置顶」） */
   pin: number;
   /** v0.11.0（REQ-195）：所属笔记组 id（null=未归组/旧数据） */
   group_id?: number | null;
@@ -103,6 +103,9 @@ export interface NoteGroup {
   routeOverridden: number;
   /** v0.14 B：组色板 id（null=未设置；笔记未显式颜色时继承） */
   color?: string | null;
+  /** v0.20.11（REQ-315 批 6）：置顶标记（1=置顶——组列表置顶区第一条件；
+   * 与 Note.pin 同语义同措辞「置顶」；缺失=0，旧 mock/数据兼容） */
+  pin?: number;
   noteCount: number;
   createdAt: number;
   updatedAt: number;

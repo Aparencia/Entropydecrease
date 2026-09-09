@@ -41,6 +41,7 @@ beforeEach(() => {
   invokeMock.mockImplementation(async (cmd: string) => {
     switch (cmd) {
       case "note_order_list": return [];
+      case "note_group_order_list": return []; // REQ-315：组序行（树组头排序）
       case "note_order_save": return null;
       case "note_order_clear": return true;
       case "move_note_to_group": return true;

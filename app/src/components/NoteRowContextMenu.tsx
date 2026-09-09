@@ -1,13 +1,19 @@
 /**
- * NoteRowContextMenu — 笔记行右键菜单（v0.16.1 用户决定②完整菜单）。
+ * NoteRowContextMenu — 笔记行右键菜单（v0.16.1 用户决定②完整菜单；
+ * REQ-315 v0.20.11 批 6 扩展：显式上移/下移 + 措辞统一「置顶」）。
  *
  * @ai-context: 原生右键菜单已全局禁用（browser_chrome.rs）——本组件是笔记行的
  *              应用内替代：📁 移动到组（二级视图：全部组+移出组，复用
- *              move_note_to_group）/ 📌 固定 / 📋 复制标题/正文 / ✏ 编辑 / 🗑 删除。
- *              固定/编辑/删除委托父层既有处理（runPinToggle/setEditing/runDelete），
+ *              move_note_to_group）/ 📌 置顶（措辞统一：数据字段 pin 不变）/
+ *              ↑↓ 上移/下移（REQ-315：组内显式移动——树视图消费，补"必须拖
+ *              一次"发现性缺口）/ 📋 复制标题/正文 / ✏ 编辑 / 🗑 删除。
+ *              置顶/编辑/删除委托父层既有处理（runPinToggle/setEditing/runDelete），
  *              归组在本组件内 invoke 后经 onMoveToGroup 上抛刷新（含右栏选中重取）。
  *              复制经 navigator.clipboard.writeText（WebView2 安全上下文可用；
  *              失败静默——键盘复制仍是主路径）。
+ * @ai-context: 上移/下移语义——置顶项禁用（置顶区按更新时间定序，不占手动位，
+ *              取消置顶后可移动；交互矩阵 REQ-287 平铺态（搜索/标签/非默认
+ *              排序）本就不显示移动项）；边界项禁用由父层按可见序计算传入。
  */
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -21,7 +27,7 @@ interface Props {
   x: number;
   y: number;
   onClose: () => void;
-  /** 固定/取消固定（父层 invoke + 刷新） */
+  /** 置顶/取消置顶（父层 invoke + 刷新） */
   onPinToggle: (note: Note) => void;
   /** 进入编辑（父层选中 + 打开编辑态） */
   onEdit: (note: Note) => void;
@@ -29,6 +35,10 @@ interface Props {
   onDelete: (note: Note) => void;
   /** 归组完成回调（父层刷新列表 + 右栏） */
   onMoved: () => void;
+  /** REQ-315：组内上移/下移（树视图 scope 上下文才传——父层按可见序计算可用性） */
+  onMoveWithinScope?: (note: Note, dir: 1 | -1) => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }
 
 const ITEM: React.CSSProperties = {
@@ -50,6 +60,7 @@ const ITEM_ICON: React.CSSProperties = { width: 20, fontSize: 12, textAlign: "ce
 
 export default function NoteRowContextMenu({
   note, groups, x, y, onClose, onPinToggle, onEdit, onDelete, onMoved,
+  onMoveWithinScope, canMoveUp = false, canMoveDown = false,
 }: Props) {
   const [view, setView] = useState<"root" | "groups">("root");
   const [busy, setBusy] = useState(false);
@@ -65,8 +76,10 @@ export default function NoteRowContextMenu({
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
+  // REQ-315：置顶项移动禁用提示（置顶区按更新时间定序——非隐藏原因，见文件头）
+  const pinMoveHint = note.pin === 1 ? "置顶笔记固定于置顶区（按更新时间排序），取消置顶后可移动" : undefined;
   const px = Math.max(4, Math.min(x, window.innerWidth - 232));
-  const py = Math.max(4, Math.min(y, window.innerHeight - 380));
+  const py = Math.max(4, Math.min(y, window.innerHeight - 460));
 
   const moveTo = async (groupId: number | null) => {
     if (busy || groupId === currentId) return;
@@ -125,11 +138,34 @@ export default function NoteRowContextMenu({
 
         {view === "root" ? (
           <>
+            {/* REQ-315：显式组内移动（仅树视图 scope 上下文渲染；置顶/边界禁用） */}
+            {onMoveWithinScope && (
+              <>
+                <button
+                  data-testid="ctx-move-up"
+                  disabled={!canMoveUp}
+                  title={pinMoveHint ?? "已在首位"}
+                  style={{ ...ITEM, opacity: canMoveUp ? 1 : 0.45, cursor: canMoveUp ? "pointer" : "default" }}
+                  onClick={() => { if (canMoveUp) { onClose(); onMoveWithinScope(note, -1); } }}
+                >
+                  <span style={ITEM_ICON}>↑</span> 上移
+                </button>
+                <button
+                  data-testid="ctx-move-down"
+                  disabled={!canMoveDown}
+                  title={pinMoveHint ?? "已在末位"}
+                  style={{ ...ITEM, opacity: canMoveDown ? 1 : 0.45, cursor: canMoveDown ? "pointer" : "default" }}
+                  onClick={() => { if (canMoveDown) { onClose(); onMoveWithinScope(note, 1); } }}
+                >
+                  <span style={ITEM_ICON}>↓</span> 下移
+                </button>
+              </>
+            )}
+            <button data-testid="ctx-pin" style={ITEM} onClick={() => { onClose(); onPinToggle(note); }}>
+              <span style={ITEM_ICON}>📌</span> {note.pin ? "取消置顶" : "置顶"}
+            </button>
             <button data-testid="ctx-groups" style={ITEM} onClick={() => setView("groups")}>
               <span style={ITEM_ICON}>📁</span> 移动到组 <span style={{ marginLeft: "auto", color: "#9ca3af" }}>▸</span>
-            </button>
-            <button data-testid="ctx-pin" style={ITEM} onClick={() => { onClose(); onPinToggle(note); }}>
-              <span style={ITEM_ICON}>📌</span> {note.pin ? "取消固定" : "固定"}
             </button>
             <button data-testid="ctx-copy-title" style={ITEM} onClick={() => void copy(note.title, "标题")}>
               <span style={ITEM_ICON}>📋</span> 复制标题

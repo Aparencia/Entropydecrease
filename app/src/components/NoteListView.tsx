@@ -19,6 +19,10 @@ import type { Note, NoteGroup } from "../types";
 import { paletteHex } from "../utils/colorPalette";
 import type { ThemeMode } from "../utils/colorPalette";
 import { emptySelection, rangeSelection, toggleSelection } from "../utils/noteSelection";
+// REQ-315：scope 内 置顶→手排→自动 排序纯函数 + 显式移动（树视图 pin 生效）
+import { dropNotesIntoOrder, orderScopeNotes, shiftNoteOrder } from "../utils/noteOrder";
+// REQ-315：组展示序纯函数（树组头排序与组侧栏同规则）
+import { orderGroups } from "../utils/groupOrder";
 import NoteListRow from "./NoteListRow";
 import NoteTreeSection from "./NoteTreeSection";
 import NoteRowContextMenu from "./NoteRowContextMenu";
@@ -102,6 +106,8 @@ export default function NoteListView({
   const [groupFolds, setGroupFolds] = useState<Record<string, boolean>>({});
   // 手动排序 map（scope → 有序 ids）
   const [manualOrders, setManualOrders] = useState<Record<string, number[]>>({});
+  // REQ-315：组手动序行（group_id → seq；树组头排序消费——组置顶/手排在树面生效）
+  const [groupOrderRows, setGroupOrderRows] = useState<Map<number, number>>(new Map());
 
   const visibleIdsRef = useRef<number[]>([]);
   // L5：行落点并发锁（防陈旧快照互覆）
@@ -137,7 +143,7 @@ export default function NoteListView({
     return () => window.removeEventListener("keydown", onKey);
   }, [batchMenu, contextMenu, selectionMode, selection.size, exitBatch]);
 
-  // 手动序装载（REQ-287）
+  // 手动序装载（REQ-287：notes 行）+ REQ-315：组序行（树组头排序）
   const loadOrders = useCallback(() => {
     invoke<[string, number, number][]>("note_order_list")
       .then((rows) => {
@@ -148,6 +154,9 @@ export default function NoteListView({
         setManualOrders(map);
       })
       .catch((e) => console.warn("[notes] 手动排序读取失败（自动排序兜底）:", e));
+    invoke<[number, number][]>("note_group_order_list")
+      .then((rows) => setGroupOrderRows(new Map(rows.map(([gid, seq]) => [gid, seq]))))
+      .catch((e) => console.warn("[notes] 组排序读取失败（自动排序兜底）:", e));
   }, []);
   useEffect(() => { loadOrders(); }, [loadOrders]);
 
@@ -196,24 +205,21 @@ export default function NoteListView({
     } catch { /* 隐私模式 */ }
   }, [groupFolds]);
 
-  /** 手动序应用（scope 有序则按其排；否则原序） */
-  const applyManual = useCallback((items: Note[], scope: string): Note[] => {
-    const order = manualOrders[scope];
-    if (!order) return items;
-    const pos = new Map(order.map((id, i) => [id, i]));
-    return [...items].sort((a, b) => {
-      const pa = pos.get(a.id), pb = pos.get(b.id);
-      if (pa == null && pb == null) return 0;
-      if (pa == null) return 1;
-      if (pb == null) return -1;
-      return pa - pb;
-    });
-  }, [manualOrders]);
+  /**
+   * scope 展示序（REQ-315）：置顶区（updated_at 降序）→ 手排 seq → 自动区；
+   * 平铺（scope=flat）保持后端排序原样（排序模式语义在后端 list_notes——
+   * 平铺是过滤结果非完整 scope，不做 scope 级重排）。
+   */
+  const orderSectionItems = useCallback(
+    (items: Note[], scope: string): Note[] =>
+      scope === "flat" ? items : orderScopeNotes(items, manualOrders[scope]),
+    [manualOrders],
+  );
 
   // 显示节（树/平铺）→ sections（可见序）
   const sections: SectionData[] = useMemo(() => {
     const mk = (scope: string, groupId: number | null, title: string, accent: string, items: Note[]): SectionData =>
-      ({ scope, groupId, title, accent, items: applyManual(items, scope) });
+      ({ scope, groupId, title, accent, items: orderSectionItems(items, scope) });
     const out: SectionData[] = [];
     if (treeMode && grouped) {
       const ungrouped: Note[] = [];
@@ -226,7 +232,9 @@ export default function NoteListView({
       if (ungrouped.length > 0 || groupFilter === null) {
         out.push(mk("none", null, "未分组", paletteHex(null, theme), ungrouped));
       }
-      for (const g of groups) {
+      // REQ-315：组头序与组侧栏同规则（置顶→手排→自动）——组置顶在树面可见生效
+      const orderedGroups = orderGroups(groups, groupOrderRows);
+      for (const g of orderedGroups) {
         const items = byGroup.get(g.id) ?? [];
         if (items.length === 0) continue;
         out.push(mk(scopeKey(g.id), g.id, g.name, paletteHex(g.color ?? null, theme), items));
@@ -235,7 +243,7 @@ export default function NoteListView({
       out.push(mk("flat", null, "", paletteHex(null, theme), notes));
     }
     return out;
-  }, [treeMode, grouped, groups, notes, groupFolds, applyManual, theme, groupFilter]);
+  }, [treeMode, grouped, groups, notes, groupFolds, orderSectionItems, theme, groupFilter, groupOrderRows]);
 
   // 可见序（L1 审查：折叠组行不参与区间/划选——与渲染可见一致；折叠组头仍在）
   const visibleOrder = useMemo(() => {
@@ -279,6 +287,17 @@ export default function NoteListView({
     }
   }, [anchor]);
 
+  /**
+   * scope 手动底序（REQ-315）：可见展示序去掉置顶区——置顶笔记由 pin 列置顶区
+   * 表达（按更新时间定序），不占手动位；快照只写本子序列。置顶区外的笔记
+   * （含新笔记/未置顶）都在底序内——显式移动即整序快照（自动组首移转手排）。
+   */
+  const manualBaseOf = useCallback((scope: string): number[] | null => {
+    const section = sections.find((s) => s.scope === scope);
+    if (!section) return null;
+    return section.items.filter((n) => n.pin !== 1).map((n) => n.id);
+  }, [sections]);
+
   /** 拖拽归组（组头/左侧组行复用单 id 兜底仍可用） */
   const moveToGroup = useCallback(async (ids: number[], groupId: number | null) => {
     setBusyMove(true);
@@ -290,11 +309,13 @@ export default function NoteListView({
         if (groupNotes.has(id)) continue;
         await invoke("move_note_to_group", { noteId: id, groupId });
       }
-      // 目标手排：新入组笔记追加末尾（跨组 drop 的"加入该组"语义）
+      // 目标手排：新入组未置顶笔记追加末尾（跨组 drop 的"加入该组"语义；
+      // 置顶成员由置顶区表达，不写手排行；重写快照顺带清存量置顶残行）
       const scope = scopeKey(groupId);
       if (manualOrders[scope]) {
-        const cur = manualOrders[scope].filter((id) => !ids.includes(id));
-        await saveOrder(scope, [...cur, ...ids.filter((id) => !groupNotes.has(id))]);
+        const pinned = new Set(notes.filter((n) => n.pin === 1).map((n) => n.id));
+        const cur = manualOrders[scope].filter((id) => !ids.includes(id) && !pinned.has(id));
+        await saveOrder(scope, [...cur, ...ids.filter((id) => !groupNotes.has(id) && !pinned.has(id))]);
       }
       onNoteMoved?.();
       setBatchMenu(null);
@@ -304,6 +325,28 @@ export default function NoteListView({
       setBusyMove(false);
     }
   }, [notes, manualOrders, saveOrder, onNoteMoved]);
+
+  /**
+   * REQ-315：右键「上移/下移」组内显式移动——补"必须拖一次才触发手排快照"的
+   * 发现性缺口：自动排序 scope 的首次显式移动 = 以当前可见序快照转手排再移动
+   * （与行落点拖拽同一保存路径 saveOrder——无双轨）。
+   */
+  const moveWithinScope = useCallback(async (note: Note, dir: 1 | -1) => {
+    if (dropBusyRef.current || !treeMode) return;
+    const gid = note.group_id ?? null;
+    const base = manualBaseOf(scopeKey(gid));
+    const next = base ? shiftNoteOrder(base, note.id, dir) : null;
+    if (!next) return;
+    dropBusyRef.current = true;
+    try {
+      await saveOrder(scopeKey(gid), next);
+      onNoteMoved?.();
+    } catch (e) {
+      console.warn("[notes] 组内移动失败:", e);
+    } finally {
+      dropBusyRef.current = false;
+    }
+  }, [treeMode, manualBaseOf, saveOrder, onNoteMoved]);
 
   /** 行间落点（同 scope 手动排序；跨组归入目标组后按落点插入——L2 审查修正：
    *  先归组、后整表覆写；目标不可见/无 ord 尾部不再静默 no-op） */
@@ -317,9 +360,8 @@ export default function NoteListView({
     try {
       const targetGroup = target.group_id ?? null;
       const scope = scopeKey(targetGroup);
-      const currentList = manualOrders[scope]
-        ?? sections.find((s) => s.scope === scope)?.items.map((n) => n.id)
-        ?? [];
+      const base = manualBaseOf(scope);
+      if (!base) return;
       // 跨组 id：先归入目标组（await 顺序执行——同事务语义由命令层保证）
       const external = ids.filter((id) => {
         const n = notes.find((x) => x.id === id);
@@ -328,16 +370,31 @@ export default function NoteListView({
       for (const id of external) {
         await invoke("move_note_to_group", { noteId: id, groupId: target.group_id });
       }
-      // 落位（移出原序再插入；未启手排的 scope=快照语义自动启用）
-      const list = currentList.filter((id) => !ids.includes(id));
-      const idx = list.indexOf(targetId);
-      if (idx < 0) {
+      // 落位（REQ-315：只写置顶区外子序列；落点在置顶行上 = 置顶区下沿即手动区首位）
+      const pinned = new Set(notes.filter((n) => n.pin === 1).map((n) => n.id));
+      const moved = ids.filter((id) => !pinned.has(id));
+      if (moved.length === 0) {
+        // 仅置顶成员拖拽：置顶区按更新时间定序不可移动——归组已完成即返回，不制造快照
+        onNoteMoved?.();
+        return;
+      }
+      const anchor = target.pin === 1 ? { head: true as const } : { targetId, before };
+      const next = dropNotesIntoOrder(base, moved, anchor);
+      if (!next) {
         // 目标不可见（折叠/异常）——至少完成归组，不写序
         onNoteMoved?.();
         return;
       }
-      list.splice(before ? idx : idx + 1, 0, ...ids);
-      await saveOrder(scope, list);
+      // 与既有序一致（如仅拖置顶行）= 跳过保存——防无变化操作制造无谓快照
+      const prevBase = (manualOrders[scope] ?? []).filter((id) => {
+        const n = notes.find((x) => x.id === id);
+        return !n || n.pin !== 1;
+      });
+      if (prevBase.length === next.length && prevBase.every((id, i) => next[i] === id)) {
+        onNoteMoved?.();
+        return;
+      }
+      await saveOrder(scope, next);
       onNoteMoved?.();
     } catch (e) {
       console.warn("[notes] 行落点排序失败（部分操作可能已提交）:", e);
@@ -345,7 +402,7 @@ export default function NoteListView({
     } finally {
       dropBusyRef.current = false;
     }
-  }, [treeMode, notes, manualOrders, sections, saveOrder, onNoteMoved]);
+  }, [treeMode, notes, manualOrders, manualBaseOf, saveOrder, onNoteMoved]);
 
   /** 划选（组头空白起 → 组内首行至当前行带；走既有行命中的全局可见序）。
    *  L9 审查修正：rAF 节流 + pointercancel/blur/松开（buttons=0）即清理——
@@ -416,6 +473,24 @@ export default function NoteListView({
 
   const toggleGroupFold = (key: string) => setGroupFolds((cur) => ({ ...cur, [key]: !cur[key] }));
 
+  /**
+   * 右键菜单「上移/下移」可用性（REQ-315）：仅树视图 scope 上下文开放（交互矩阵：
+   * 平铺/搜索/标签/非默认排序禁移动——移动=scope 级手排快照，过滤结果是子集非
+   * 完整 scope）。置顶项 idx=-1 双禁用（提示语由菜单按 note.pin 呈现）。
+   */
+  const orderActions = useMemo(() => {
+    if (!contextMenu || !treeMode) return null;
+    const note = contextMenu.note;
+    const base = manualBaseOf(scopeKey(note.group_id ?? null));
+    if (!base) return null;
+    const idx = base.indexOf(note.id);
+    return {
+      canMoveUp: idx > 0,
+      canMoveDown: idx >= 0 && idx < base.length - 1,
+      move: (n: Note, dir: 1 | -1) => void moveWithinScope(n, dir),
+    };
+  }, [contextMenu, treeMode, manualBaseOf, moveWithinScope]);
+
   // 批处理：删除（父层确认）与移动到组
   const batchDelete = async () => {
     if (!batchMenu) return;
@@ -456,7 +531,7 @@ export default function NoteListView({
         </div>
         <select value={sortMode} onChange={(e) => onSortModeChange(e.target.value as SortMode)} style={{ fontSize: 12, padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 4 }}>
           <option value="updated-desc">按更新时间</option>
-          <option value="pin-first">固定优先</option>
+          <option value="pin-first">置顶优先</option>
           <option value="created-desc">按创建时间</option>
         </select>
         {allTags.length > 0 && (
@@ -522,6 +597,10 @@ export default function NoteListView({
           onEdit={onNoteEdit}
           onDelete={onNoteDelete}
           onMoved={onNoteMoved}
+          // REQ-315：树视图才显 上移/下移（平铺态禁移动——orderActions 为 null）
+          onMoveWithinScope={orderActions?.move}
+          canMoveUp={orderActions?.canMoveUp ?? false}
+          canMoveDown={orderActions?.canMoveDown ?? false}
         />
       )}
 

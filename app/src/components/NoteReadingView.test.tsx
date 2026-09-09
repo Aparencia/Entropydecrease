@@ -63,7 +63,7 @@ describe("NoteReadingView 标题栏扩展插槽", () => {
     renderView(undefined);
     expect(screen.getByRole("button", { name: /编辑/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: "删除" })).toBeTruthy();
-    // 固定按钮内容为 📌（title=「固定」是可访问名称兜底）
+    // 置顶按钮内容为 📌（title=「置顶」是可访问名称兜底——REQ-315 措辞统一）
     expect(screen.getByRole("button", { name: "📌" })).toBeTruthy();
   });
 });
