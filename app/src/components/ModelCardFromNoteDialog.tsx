@@ -14,6 +14,9 @@ interface Props {
   noteTitle: string;
   onClose: () => void;
   onCreated?: () => void;
+  /** 批 8（REQ-317）：初始定义草稿预填（选区右键「模型卡预填」通道——
+   *  挂载时一次性读入；对话框每次由父层条件挂载，无需 key 重触发） */
+  initialExcerpt?: string;
 }
 
 const overlayStyle: React.CSSProperties = {
@@ -34,9 +37,9 @@ const cardStyle: React.CSSProperties = {
 };
 const btn: React.CSSProperties = { padding: "5px 12px", cursor: "pointer", fontSize: 12, borderRadius: 6, border: "1px solid #e5e7eb", background: "#fff", color: "#374151" };
 
-export default function ModelCardFromNoteDialog({ noteId, noteTitle, onClose, onCreated }: Props) {
+export default function ModelCardFromNoteDialog({ noteId, noteTitle, onClose, onCreated, initialExcerpt = "" }: Props) {
   const [name, setName] = useState("");
-  const [excerpt, setExcerpt] = useState("");
+  const [excerpt, setExcerpt] = useState(initialExcerpt);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);

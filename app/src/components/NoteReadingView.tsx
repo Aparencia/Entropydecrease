@@ -17,6 +17,14 @@ import ColumnBar from "./ColumnBar";
 import { fmtDate, parseTags } from "./NoteListView";
 // 批 3（用户问题9）：阅读容器底部留白与编辑双面同源（末段不再贴底无法上移）
 import { BOTTOM_BREATHER_CSS } from "../utils/contentBreather";
+// 批 8（REQ-317）：正文选区右键菜单——纯判定/快照 util + 共享菜单组件
+import {
+  meaningfulSelection,
+  selectNodeContents,
+  type SelectionActionId,
+  type SelectionNoteAction,
+} from "../utils/noteSelectionMenu";
+import SelectionActionMenu from "./note-selection/SelectionActionMenu";
 
 interface Props {
   note: Note;
@@ -40,12 +48,16 @@ interface Props {
   onOpenSession: (sessionId: number) => void;
   onTaskToggle: (newContent: string) => void;
   onImageOpen: (src: string, title?: string) => void;
+  /** 批 8（REQ-317）：正文选区菜单行动类动作上抛（转问题/模型卡预填——
+   *  复制/全选就地执行，行动类由 NotesPage 层对话框/命令处理） */
+  onSelectionAction?: (action: SelectionNoteAction, text: string) => void;
 }
 
 export default function NoteReadingView({
   note, editing, editor, auxPanels, headerExtra,
   outlineFolded = false, externalSearch = null, onToggleOutline,
   onEdit, onPinToggle, onDelete, onTagClick, onOpenSession, onTaskToggle, onImageOpen,
+  onSelectionAction,
 }: Props) {
   // A2：搜索高亮（M6：匹配集合=渲染产物只读查询，计数经此状态驱动）
   const [searchQuery, setSearchQuery] = useState("");
@@ -53,6 +65,11 @@ export default function NoteReadingView({
   const [searchIndex, setSearchIndex] = useState(0);
   const [searchMatches, setSearchMatches] = useState<HTMLElement[]>([]);
   const contentRef = useRef<HTMLDivElement>(null);
+  // 批 8（REQ-317）：正文选区右键菜单态（x/y/文本快照——菜单打开瞬间捕获，
+  // 点击动作不再依赖 DOM 选区存活）与正文容器 ref（选区包含判定/全选目标；
+  // 容器=纯 Markdown 包装层，auxPanels 在容器外——跨容器选区不弹菜单）
+  const [selMenu, setSelMenu] = useState<{ x: number; y: number; text: string } | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
   // v0.19.1 审查 L1：已注入请求登记（{noteId,key}）——消费后不复活：
   // 用户关闭搜索/离开笔记再普通打开同一笔记时，旧命中词不得自动重现
   const injectedRef = useRef<{ noteId: number; key: number } | null>(null);
@@ -118,6 +135,29 @@ export default function NoteReadingView({
   };
 
   const selectedTags = parseTags(note);
+
+  // 批 8（REQ-317）：正文区右键——仅在正文容器内存在非空选区时弹菜单；
+  // 空选区/跨容器选区（auxPanels/链接等既有交互）维持现状（原生菜单已被
+  // BrowserChrome 抑制 → 静默，不新增空选区菜单）
+  const handleBodyContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    const text = meaningfulSelection(window.getSelection(), bodyRef.current);
+    if (!text) return;
+    e.preventDefault();
+    e.stopPropagation(); // 自绘菜单范式：不到 window（BrowserChrome 兜底仍在）
+    setSelMenu({ x: e.clientX, y: e.clientY, text });
+  };
+  // 菜单动作分发：全选=阅读容器全文（最小可行方案，纯 DOM Range）；行动类上抛
+  const handleSelAction = (action: Exclude<SelectionActionId, "copy">) => {
+    const text = selMenu?.text ?? "";
+    if (action === "selectAll") {
+      selectNodeContents(bodyRef.current);
+      return;
+    }
+    // 阅读态菜单 V1 不含 addTask（DOM↔源码行映射留后续 TD-2026-09-09-C）——
+    // 防御性忽略其余动作（类型上 action 仍是全集，注释说明 Why）
+    if (action !== "toQuestion" && action !== "toModelCard") return;
+    if (text && onSelectionAction) onSelectionAction(action, text);
+  };
 
   return (
     <>
@@ -244,16 +284,33 @@ export default function NoteReadingView({
         ) : (
           <div ref={contentRef} style={{ flex: 1, overflowY: "auto", padding: `16px 16px ${BOTTOM_BREATHER_CSS}`, fontSize: 14, lineHeight: 1.8 }}>
             {auxPanels}
-            <NoteMarkdown
-              note={note}
-              searchQuery={searchActive ? searchQuery : ""}
-              onTaskToggle={onTaskToggle}
-              onOpenSession={onOpenSession}
-              onImageOpen={onImageOpen}
-            />
+            {/* 批 8（REQ-317）：正文容器=纯 Markdown 包装层（选区判定/全选
+                scope；auxPanels 在容器外保持既有交互不被右键菜单截获） */}
+            <div ref={bodyRef} data-note-read-body="" onContextMenu={handleBodyContextMenu}>
+              <NoteMarkdown
+                note={note}
+                searchQuery={searchActive ? searchQuery : ""}
+                onTaskToggle={onTaskToggle}
+                onOpenSession={onOpenSession}
+                onImageOpen={onImageOpen}
+              />
+            </div>
           </div>
         )}
       </div>
+
+      {/* 批 8（REQ-317）：正文选区右键菜单（阅读态——复制就地、全选=容器全文、
+          加入行动 V1 隐藏[DOM↔源码行映射留后续 TD-2026-09-09-C]、行动类上抛） */}
+      {!editing && selMenu && (
+        <SelectionActionMenu
+          mode="reading"
+          x={selMenu.x}
+          y={selMenu.y}
+          text={selMenu.text}
+          onClose={() => setSelMenu(null)}
+          onAction={handleSelAction}
+        />
+      )}
     </>
   );
 }

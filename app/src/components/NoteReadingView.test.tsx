@@ -6,7 +6,7 @@
  *              且未传时不渲染（回归：既有标题栏按钮布局不受影响）。
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Note } from "../types";
 import NoteReadingView from "./NoteReadingView";
 
@@ -65,5 +65,55 @@ describe("NoteReadingView 标题栏扩展插槽", () => {
     expect(screen.getByRole("button", { name: "删除" })).toBeTruthy();
     // 置顶按钮内容为 📌（title=「置顶」是可访问名称兜底——REQ-315 措辞统一）
     expect(screen.getByRole("button", { name: "📌" })).toBeTruthy();
+  });
+});
+
+describe("阅读态正文选区右键菜单（批 8 REQ-317）", () => {
+  const renderSel = (extraProps: Partial<React.ComponentProps<typeof NoteReadingView>>) =>
+    render(
+      <NoteReadingView
+        note={baseNote()}
+        editing={false}
+        onEdit={noop}
+        onPinToggle={noop}
+        onDelete={noop}
+        onTagClick={noop}
+        onOpenSession={noop}
+        onTaskToggle={noop}
+        onImageOpen={noop}
+        {...extraProps}
+      />,
+    );
+
+  it("空选区右键不弹菜单（维持现状静默基线）", () => {
+    renderSel({});
+    const body = document.querySelector("[data-note-read-body]");
+    fireEvent.contextMenu(body!, { clientX: 60, clientY: 60 });
+    expect(screen.queryByTestId("note-sel-menu")).toBeNull();
+  });
+
+  it("正文内选区右键 → 阅读态菜单（无加入行动项），转问题上抛快照文本", () => {
+    const onSelectionAction = vi.fn();
+    renderSel({ onSelectionAction });
+    const body = document.querySelector("[data-note-read-body]");
+    expect(body).toBeTruthy();
+    const para = body!.querySelector("p");
+    expect(para).toBeTruthy();
+    // jsdom 无真实 Selection——用形状桩替 window.getSelection（handler 只读
+    // isCollapsed/rangeCount/锚焦/toString，锚=正文容器内段落文本节点）
+    const selStub = {
+      isCollapsed: false,
+      rangeCount: 1,
+      anchorNode: para!.firstChild,
+      focusNode: para!.firstChild,
+      toString: () => "选中段落文本",
+    };
+    vi.spyOn(window, "getSelection").mockReturnValue(selStub as unknown as Selection);
+    fireEvent.contextMenu(para!, { clientX: 80, clientY: 80 });
+    expect(screen.getByTestId("note-sel-menu")).toBeTruthy();
+    expect(screen.getByTestId("note-sel-copy")).toBeTruthy();
+    expect(screen.queryByTestId("note-sel-addTask")).toBeNull(); // 阅读态 V1 隐藏
+    fireEvent.click(screen.getByTestId("note-sel-toQuestion"));
+    expect(onSelectionAction).toHaveBeenCalledWith("toQuestion", "选中段落文本");
   });
 });

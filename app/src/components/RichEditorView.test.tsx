@@ -88,6 +88,44 @@ describe("RichEditorView 核心编辑", () => {
   });
 });
 
+describe("RichEditorView 选区右键菜单（批 8 REQ-317）", () => {
+  it("空选区右键不弹菜单（维持现状静默基线）", async () => {
+    render(<RichEditorView note={baseNote} onCancel={vi.fn()} />);
+    await waitFor(() => expect(cmContent().textContent).toContain("第一行"));
+    fireEvent.contextMenu(cmContent(), { clientX: 120, clientY: 120 });
+    expect(screen.queryByTestId("note-sel-menu")).toBeNull();
+  });
+
+  it("Ctrl+A 全选后右键 → 菜单含加入行动；点击后选区末行后插任务行", async () => {
+    render(<RichEditorView note={baseNote} onCancel={vi.fn()} />);
+    await waitFor(() => expect(cmContent().textContent).toContain("第一行"));
+    fireEvent.keyDown(cmContent(), { key: "a", ctrlKey: true });
+    fireEvent.contextMenu(cmContent(), { clientX: 120, clientY: 120 });
+    expect(await screen.findByTestId("note-sel-menu")).toBeTruthy();
+    expect(screen.getByTestId("note-sel-copy")).toBeTruthy();
+    expect(screen.getByTestId("note-sel-selectAll")).toBeTruthy();
+    expect(screen.getByTestId("note-sel-addTask")).toBeTruthy();
+    expect(screen.getByTestId("note-sel-toQuestion")).toBeTruthy();
+    expect(screen.getByTestId("note-sel-toModelCard")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("note-sel-addTask"));
+    // 全选快照单行化（含换行折叠）成任务文本，插在选区结束行（末行）之后；
+    // CM .cm-content 的 textContent 按行 div 拼接无换行符（行内断言见纯函数域）
+    await waitFor(() => {
+      expect(cmContent().textContent).toBe("第一行第二行- [ ] 第一行 第二行");
+    });
+  });
+
+  it("行动类（转为问题）经 onSelectionAction 上抛（含快照文本）", async () => {
+    const onSelectionAction = vi.fn();
+    render(<RichEditorView note={baseNote} onCancel={vi.fn()} onSelectionAction={onSelectionAction} />);
+    await waitFor(() => expect(cmContent().textContent).toContain("第一行"));
+    fireEvent.keyDown(cmContent(), { key: "a", ctrlKey: true });
+    fireEvent.contextMenu(cmContent(), { clientX: 120, clientY: 120 });
+    fireEvent.click(await screen.findByTestId("note-sel-toQuestion"));
+    expect(onSelectionAction).toHaveBeenCalledWith("toQuestion", "第一行\n第二行");
+  });
+});
+
 describe("RichEditorView 草稿恢复层", () => {
   it("存在更新草稿 → 提示恢复；点恢复 → title/content 生效", async () => {
     localStorage.setItem(

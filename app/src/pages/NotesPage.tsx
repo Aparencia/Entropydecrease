@@ -35,8 +35,9 @@ import NoteReadingView from "../components/NoteReadingView";
 import ImagePreviewOverlay from "../components/ImagePreviewOverlay";
 import VersionPanel from "../components/VersionPanel";
 import NoteAiDialog from "../components/NoteAiDialog";
-// v0.20.3（REQ-302）：笔记段 → 模型卡草稿对话框
-import ModelCardFromNoteDialog from "../components/ModelCardFromNoteDialog";
+// 批 8（REQ-317）：模型卡对话框槽（拆件）与选区行动类编排（hook 收敛）
+import ModelCardDialogSlot from "../components/note-selection/ModelCardDialogSlot";
+import { useNoteSelectionActions } from "../hooks/useNoteSelectionActions";
 // v0.20.5：阅读头动作组（色点/归组/挂体系/AI/模型卡）——编排瘦身拆分
 import NoteHeaderActions from "../components/NoteHeaderActions";
 import ColumnResizer from "../components/ColumnResizer";
@@ -75,8 +76,6 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
   const [groupFilter, setGroupFilter] = useState<number | null>(null);
   // v0.12.2：中部视图（收件箱 ↔ 笔记列表原位切换）
   const [view, setView] = useState<MiddleView>("notes");
-  // v0.20.3（REQ-302）：笔记段 → 模型卡草稿对话框
-  const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const [selected, setSelected] = useState<Note | null>(null);
   const [status, setStatus] = useState("");
   // REQ-316（批 7）：空组自动清理 toast（自绘——会话页批量删除 toast 同款）
@@ -329,6 +328,11 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
   const handleNoteChangedRef = useRef(handleNoteChanged);
   useEffect(() => { handleNoteChangedRef.current = handleNoteChanged; }, [handleNoteChanged]);
 
+  // 批 8（REQ-317）：选区行动类编排 hook 收敛（转问题/模型卡预填态）
+  const { modelDialog, openModelCard, closeModelCard, handleSelectionAction, onModelCardCreated } = useNoteSelectionActions({
+    noteId: selected?.id ?? null, onChanged: handleNoteChanged, notify: showToast,
+  });
+
   // REQ-278（v0.19.4 §5）：data:notes-changed / data:note-groups-changed 常驻订阅
   // ——覆盖"别处改动"（任务采纳/AI 落库/他页转化）。回调复用既有刷新职责：
   // refreshToken 递增重载组侧栏/色数据（refreshAll 的 refreshToken 通道）+
@@ -538,6 +542,8 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
                 }}
                 // v0.14 A：编辑态图片点击放大（与阅读态同一入口）
                 onImageOpen={(src, title) => setPreviewImg({ src, title })}
+                // 批 8（REQ-317）：编辑态选区行动类（转问题/模型卡预填）
+                onSelectionAction={handleSelectionAction}
               />
             }
             auxPanels={auxPanels}
@@ -551,7 +557,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
                 onError={(m) => setStatus(m)}
                 onGotoKnowledgeSystem={onCreateSystem}
                 onOpenAi={openAiDialog}
-                onOpenModelCard={() => setModelDialogOpen(true)}
+                onOpenModelCard={openModelCard}
                 onCleanNotice={notifyCleanNotice}
               />
             }
@@ -562,6 +568,8 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
             onOpenSession={(id) => onOpenSessions?.(id)}
             onTaskToggle={handleTaskToggle}
             onImageOpen={(src, title) => setPreviewImg({ src, title })}
+            // 批 8（REQ-317）：阅读态选区行动类（转问题/模型卡预填）
+            onSelectionAction={handleSelectionAction}
           />
         ) : (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: 13 }}>
@@ -579,16 +587,8 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
           onUpdated={() => void handleNoteChanged()}
         />
       )}
-      {/* v0.20.3（REQ-302）：模型卡草稿（组内 model 卡唯一生成链，防双轨） */}
-      {modelDialogOpen && selected && (
-        <ModelCardFromNoteDialog
-          key={`mc-${selected.id}`}
-          noteId={selected.id}
-          noteTitle={selected.title}
-          onClose={() => setModelDialogOpen(false)}
-          onCreated={() => { void handleNoteChanged(); }}
-        />
-      )}
+      {/* 批 8（REQ-317）：模型卡对话框槽（header 入口与选区菜单共用生成链） */}
+      {selected && <ModelCardDialogSlot note={selected} dialog={modelDialog} onClose={closeModelCard} onCreated={onModelCardCreated} />}
       {/* v0.10.1：图片放大预览（ESC/点击遮罩关闭——与编辑退出 ESC 互斥） */}
       {previewImg && (
         <ImagePreviewOverlay src={previewImg.src} title={previewImg.title} onClose={() => setPreviewImg(null)} />

@@ -28,12 +28,18 @@ import NoteEditView, { type NoteEditHandle } from "./NoteEditView";
 import NoteColorPicker from "./NoteColorPicker";
 // 批 3（用户问题9）：CM 内容底部留白与阅读/textarea 同源（末行可滚离底边）
 import { BOTTOM_BREATHER_CSS } from "../utils/contentBreather";
+// 批 8（REQ-317）：编辑态选区右键菜单——插入计划纯函数 + 共享菜单组件
+import { planTaskLineInsert, type SelectionActionId, type SelectionNoteAction } from "../utils/noteSelectionMenu";
+import SelectionActionMenu from "./note-selection/SelectionActionMenu";
 
 interface Props {
   note: Note;
   onCancel: () => void;
   /** 图片点击放大回调（透传 NotesPage 的 ImagePreviewOverlay） */
   onImageOpen?: (url: string, title?: string) => void;
+  /** 批 8（REQ-317）：选区菜单行动类动作上抛（转问题/模型卡预填——复制/
+   *  全选/加入行动就地执行，行动类由 NotesPage 层对话框/命令处理） */
+  onSelectionAction?: (action: SelectionNoteAction, text: string) => void;
 }
 
 const TOOLBAR_BTN: React.CSSProperties = {
@@ -51,7 +57,7 @@ const editorTheme = EditorView.theme({
 });
 
 const RichEditorView = forwardRef<NoteEditHandle, Props>(function RichEditorView(
-  { note, onCancel, onImageOpen }, ref,
+  { note, onCancel, onImageOpen, onSelectionAction }, ref,
 ) {
   const [title, setTitle] = useState(note.title);
   // CM 非受控持有正文；content state 仅作草稿恢复时的外部 doc 同步源
@@ -62,6 +68,9 @@ const RichEditorView = forwardRef<NoteEditHandle, Props>(function RichEditorView
   const [draftPrompt, setDraftPrompt] = useState<{ title: string; content: string } | null>(null);
   // v0.16.1：荧光笔色板弹层开合（受控——选色/默认黄/点击外部关闭）
   const [highlightOpen, setHighlightOpen] = useState(false);
+  // 批 8（REQ-317）：编辑态选区右键菜单态（CM 选区文本快照——点击动作不再
+  // 依赖“点击瞬间选区仍在”，快照语义与阅读态 SelectionActionMenu 一致）
+  const [selMenu, setSelMenu] = useState<{ x: number; y: number; text: string } | null>(null);
 
   // refs 快照（卸载/定时器闭包取最新值，防 state 闭包过期——同 NoteEditView）
   const titleRef = useRef(title);
@@ -69,10 +78,13 @@ const RichEditorView = forwardRef<NoteEditHandle, Props>(function RichEditorView
   // 内联回调 ref：CM extensions 构造后不可更新，keymap/plugin 闭包必须经 ref 取最新
   const onCancelRef = useRef(onCancel);
   const onImageOpenRef = useRef(onImageOpen);
+  // 批 8：onSelectionAction 同 ref 模式（CM extension 与菜单动作闭包取最新）
+  const onSelectionActionRef = useRef(onSelectionAction);
   useEffect(() => { titleRef.current = title; }, [title]);
   useEffect(() => { contentRef.current = content; }, [content]);
   useEffect(() => { onCancelRef.current = onCancel; }, [onCancel]);
   useEffect(() => { onImageOpenRef.current = onImageOpen; }, [onImageOpen]);
+  useEffect(() => { onSelectionActionRef.current = onSelectionAction; }, [onSelectionAction]);
 
   // ── v0.15 剪贴板图片：粘贴即落盘（import_note_image_b64）+ 插入相对引用 ──
   const onInsertImage = useCallback((rel: string) => {
@@ -125,6 +137,40 @@ const RichEditorView = forwardRef<NoteEditHandle, Props>(function RichEditorView
     autosave.scheduleDraftWrite();
   }, [autosave.markDirty, autosave.scheduleDraftWrite]);
 
+  // 批 8（REQ-317）：编辑态选区动作就地执行（复制已在菜单内用快照文本完成）
+  const runSelAction = (action: Exclude<SelectionActionId, "copy">) => {
+    const view = viewRef.current;
+    const snapshotText = selMenu?.text ?? "";
+    if (action === "selectAll") {
+      // 全选=CM 既有 select-all 语义（basicSetup Mod-a 同命令路径：主选区覆盖
+      // 全 doc）——不引 @codemirror/commands（无直接依赖），dispatch 等价
+      if (!view) return;
+      view.dispatch({
+        selection: { anchor: 0, head: view.state.doc.length },
+        scrollIntoView: true,
+      });
+      view.focus();
+      return;
+    }
+    if (action === "addTask") {
+      // 加入行动：以「选区结束处所在行」为锚插入 `- [ ] <快照文本>` 独立任务行；
+      // dispatch → 既有 onChange → 自动保存/草稿/任务索引重扫通道（不 bypass）
+      if (!view || !snapshotText) return;
+      const plan = planTaskLineInsert(view.state.doc.toString(), view.state.selection.main.to, snapshotText);
+      if (!plan) return;
+      view.dispatch({
+        changes: { from: plan.from, insert: plan.insert },
+        selection: { anchor: plan.from + plan.insert.length },
+        userEvent: "input.addtask",
+      });
+      view.focus();
+      return;
+    }
+    if (snapshotText && onSelectionActionRef.current) {
+      onSelectionActionRef.current(action, snapshotText);
+    }
+  };
+
   const extensions = useMemo(() => [
     basicSetup,
     markdown(),
@@ -136,6 +182,23 @@ const RichEditorView = forwardRef<NoteEditHandle, Props>(function RichEditorView
     ]),
     // v0.15：粘贴图片 → 拦截 + 落盘 + 插入引用（文字粘贴走默认行为）
     EditorView.domEventHandlers({ paste: (e) => handleImagePaste(e) }),
+    // 批 8（REQ-317）：编辑态选区右键菜单——CM 主选区非空（sliceDoc 非空串）
+    // 才弹菜单（右键落点通常已由 CM mousedown 语义定选区）；空选区维持现状
+    // （原生菜单已被全局抑制→静默，与阅读态“空选区不弹”取最小一致）
+    EditorView.domEventHandlers({
+      // domEventHandlers 回调签名为 (event, view)——事件在前、视图在后（与
+      // keymap 的 (view, event) 相反），paste 处理同型单参可用
+      contextmenu: (e, view) => {
+        const main = view.state.selection.main;
+        if (main.empty) return false;
+        const t = view.state.sliceDoc(main.from, main.to);
+        if (!t.trim()) return false;
+        e.preventDefault();
+        e.stopPropagation(); // 自绘菜单范式：到 window 前截停（原生兜底同在）
+        setSelMenu({ x: e.clientX, y: e.clientY, text: t });
+        return true;
+      },
+    }),
     imageDecorationPlugin({ noteId: note.id, onOpen: (url, t) => onImageOpenRef.current?.(url, t) }),
     editorTheme,
   ], [note.id, autosave.saveVersioned, autosave.flushLatestRef, handleImagePaste]);
@@ -316,6 +379,19 @@ const RichEditorView = forwardRef<NoteEditHandle, Props>(function RichEditorView
       <div ref={containerRef} style={{ flex: 1, overflow: "hidden" }} />
 
       {status && <p style={{ padding: "4px 16px", fontSize: 12, color: "#047857" }}>{status}</p>}
+
+      {/* 批 8（REQ-317）：编辑态选区右键菜单（复制就地、全选=CM select-all、
+          加入行动=选区内容插任务行走既有保存通道、行动类上抛 NotesPage） */}
+      {selMenu && (
+        <SelectionActionMenu
+          mode="editing"
+          x={selMenu.x}
+          y={selMenu.y}
+          text={selMenu.text}
+          onClose={() => setSelMenu(null)}
+          onAction={runSelAction}
+        />
+      )}
     </div>
   );
 });
