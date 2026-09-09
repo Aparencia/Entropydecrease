@@ -13,14 +13,19 @@
 use tauri::State;
 
 use crate::commands::AppState;
+use crate::commands_session::LIST_LIMIT_MAX;
 use crate::types::BatchSessionDeleteResult;
 
-/// 批量删除单次上限（= 列表单页上限，见 commands_session::LIST_LIMIT_MAX）。
+/// 批量删除单次上限（单一来源 = 列表单页上限 LIST_LIMIT_MAX——审查修复 P3-4：
+/// 曾在本文件复制 200 与 commands_session 双源，防漂移收口引用）。
 ///
-/// @ai-context Why 有界：勾选集恒为当前可见列表子集（≤200），上限只是防御
-///              越界 payload；与批量转笔记 50 条上限同为批次护栏，但删除是
-///              原子全删，超限直接拒绝而非截断（防误删）。
-const BATCH_DELETE_LIMIT: usize = 200;
+/// @ai-context Why 有界：勾选集恒为当前可见列表子集（≤单页上限），上限只是
+///              防御越界 payload；与批量转笔记 50 条上限同为批次护栏，但删除
+///              是原子全删，超限直接拒绝而非截断（防误删）。
+/// @ai-context: 口径说明（审查注 pre-existing，不加新行为）：运行中（recording）
+///              会话可否删除与单条 delete_session 完全同口径——数据层无运行中
+///              豁免，两条路径同样受 UI 勾选入口与确认弹窗约束。
+const BATCH_DELETE_LIMIT: u64 = LIST_LIMIT_MAX;
 
 /// 批量删除核心编排（仅测试基准——命令入口走同函数后补域广播）。
 ///
@@ -31,7 +36,7 @@ pub fn run_batch_delete(db: &crate::db::Db, ids: Vec<i64>) -> Result<BatchSessio
     if ids.is_empty() {
         return Err("批量删除 ids 不能为空".to_string());
     }
-    if ids.len() > BATCH_DELETE_LIMIT {
+    if ids.len() as u64 > BATCH_DELETE_LIMIT {
         return Err(format!("批量删除上限 {} 条", BATCH_DELETE_LIMIT));
     }
     if let Some(&bad) = ids.iter().find(|&&id| id <= 0) {

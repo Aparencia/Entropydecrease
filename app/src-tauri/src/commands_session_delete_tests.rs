@@ -4,7 +4,10 @@
 //!              被测对象 run_batch_delete 为命令核心（注入 Db，无 Tauri 态），
 //!              域广播在命令宏入口、不在此测试（与批量转笔记测试同构）。
 //! @ai-context: 原子性用 SQLite RAISE(ABORT) 触发器模拟中途失败——真实语句
-//!              失败难以在 :memory: 造出，触发器是 schema 层最接近的失败源。
+//!              失败难以在 :memory: 造出，触发器是 schema 层最接近的失败源；
+//!              COMMIT 期失败（P3-3 修复回归）用 defer_foreign_keys + 无级联
+//!              FK 守卫表模拟——删除全过、违约推迟到提交，专打"提交失败
+//!              悬挂事务"死法（见 batch_delete_commit_failure_* 用例）。
 
 use crate::commands_session_delete::run_batch_delete;
 use crate::db::Db;
@@ -176,6 +179,43 @@ fn batch_delete_coexists_with_batch_convert() {
     let kept = db.get_note(note_id).expect("db").expect("note kept");
     assert_eq!(kept.session_id, None);
     assert!(db.get_session(id).expect("db").is_none());
+}
+
+#[test]
+fn batch_delete_commit_failure_rolls_back_without_hanging_tx() {
+    // 批 7 审查修复（P3-3）：COMMIT 期失败不得悬挂事务——原手写
+    // BEGIN/COMMIT 在 COMMIT 报错路径不 ROLLBACK，SQLite 对提交期违约
+    // （延迟外键）保留打开的事务，后续语句全部落入旧事务。
+    // 造法：无 ON DELETE 的 FK 守卫表 + defer_foreign_keys=ON——删除语句
+    // 全部通过、违约推迟到 COMMIT（真实语句失败难以在 :memory: 造出，
+    // 延迟外键是 schema 层最贴近 COMMIT 失败语义的失败源）。
+    let db = mem_db();
+    let a = finished_session(&db, "A课");
+    db.with_conn(|conn| {
+        conn.execute_batch(
+            "CREATE TABLE batch_commit_guard (
+               id INTEGER PRIMARY KEY,
+               session_id INTEGER NOT NULL REFERENCES sessions(id)
+             );",
+        )?;
+        conn.execute(
+            "INSERT INTO batch_commit_guard (session_id) VALUES (?1)",
+            rusqlite::params![a],
+        )?;
+        conn.execute("PRAGMA defer_foreign_keys = ON", [])?;
+        Ok(())
+    })
+    .expect("seed deferred-fk guard");
+    // Act：删除命中 COMMIT 期 FK 违约（守卫行无级联可依）
+    let err = run_batch_delete(&db, vec![a]).expect_err("commit must fail");
+    // Assert：错误上抛且 A 仍在（transaction() 析构回滚——无半删残留）；
+    // 连接未悬挂：后续批量删除照常成功（旧实现会卡在"事务中开事务"）
+    assert!(err.contains("FOREIGN KEY"), "err={err}");
+    assert!(db.get_session(a).expect("db").is_some(), "COMMIT 失败须整体回滚");
+    let b = finished_session(&db, "B课");
+    let later = run_batch_delete(&db, vec![b]).expect("later batch delete works");
+    assert_eq!(later.deleted, 1);
+    assert!(db.get_session(a).expect("db").is_some(), "悬挂事务会把报错的删除迟到提交");
 }
 
 #[test]

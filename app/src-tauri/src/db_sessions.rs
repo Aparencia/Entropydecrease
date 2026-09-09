@@ -141,34 +141,33 @@ impl Db {
     /// @ai-context: 返回实际删除行数（已不存在/重复 id 计 0，不报错——与单条
     ///              delete_session 对不存在会话返回 Ok(false) 的宽容语义一致）；
     ///              ids 去重由命令层负责，本层不假设输入形状。
+    /// @ai-context: 审查修复（P3-3）：改 rusqlite transaction()（Drop 自动回滚）
+    ///              ——原手写 BEGIN/COMMIT 的 COMMIT 失败路径不执行 ROLLBACK，
+    ///              SQLite 对提交期失败（如延迟外键违约）会保留打开的事务，
+    ///              悬挂在共享连接上，后续语句全部落入旧事务、迟到 COMMIT 会
+    ///              把"报错称已删"的半删状态一并提交。Transaction 值在任意
+    ///              失败路径（含 commit() 报错）析构即回滚，无悬挂面；同
+    ///              db_notes/db_fragments 批删除手法。
     pub fn delete_sessions_batch(&self, ids: &[i64]) -> Result<usize> {
         if ids.is_empty() {
             return Ok(0);
         }
-        self.with_conn(|conn| {
-            conn.execute("BEGIN TRANSACTION", [])?;
-            let result = (|| -> rusqlite::Result<usize> {
-                let mut deleted = 0usize;
-                {
-                    let mut stmt = conn.prepare("DELETE FROM sessions WHERE id = ?1")?;
-                    for &id in ids {
-                        deleted += stmt.execute(params![id])?;
-                    }
-                }
-                Ok(deleted)
-            })();
-            match result {
-                Ok(n) => {
-                    conn.execute("COMMIT", [])?;
-                    Ok(n)
-                }
-                Err(e) => {
-                    let _ = conn.execute("ROLLBACK", []);
-                    Err(e)
-                }
+        // 事务需要 &mut Connection（with_conn 只给 &Connection——同
+        // db_note_groups::delete_group 手法：直接锁 + conn.transaction()）
+        let mut conn = self
+            .conn
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let tx = conn.transaction()?;
+        let mut deleted = 0usize;
+        {
+            let mut stmt = tx.prepare("DELETE FROM sessions WHERE id = ?1")?;
+            for &id in ids {
+                deleted += stmt.execute(params![id])?;
             }
-            .map_err(Into::into)
-        })
+        }
+        tx.commit()?;
+        Ok(deleted)
     }
 
     // ── REQ-282（v0.19.6）：标题内容化 A 层 ──

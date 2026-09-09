@@ -13,7 +13,11 @@ use crate::commands::{normalize_title, AppState, TITLE_MAX_CHARS};
 use crate::types::{NewSession, NewSessionOcrBlock, NewSessionSegment, Session, SessionDetail, SessionListItem};
 
 /// 会话列表单页上限。
-const LIST_LIMIT_MAX: u64 = 200;
+///
+/// @ai-context: pub(crate) 供 commands_session_delete 等引用（批 4 审查修复
+///              P3-4：批量删除上限曾复制为独立常量 200——双源漂移风险，
+///              列表页单页量=勾选集天然上界，单一来源收口于此）。
+pub(crate) const LIST_LIMIT_MAX: u64 = 200;
 
 /// 会话列表项填充显示序号（v0.11.5）：按 (started_at, id) 升序 rank 一次赋值。
 ///
