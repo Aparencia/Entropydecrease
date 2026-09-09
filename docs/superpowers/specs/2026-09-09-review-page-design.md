@@ -53,4 +53,4 @@
 - 入口遗漏：侧栏/导航任何残留复习入口或徽标=裁决违反（测试回归护栏 + 走查清单覆盖）；count_due_cards 命令保留不删（ActionPage 先例：API 面不缩小）。
 - active 门控漏接线：隐藏期生成卡/删组后切回统计陈旧（单测覆盖 false→true 重载）。
 - 深链消费遗漏：同组重复深链失效（消费即清空 + 单测覆盖）。
-- 行数：ReviewPage 184 / ReviewSessionPanel 180 / NotesPage 540 / GroupSidebar 418 / App 429——均 ≤600，豁免表纠偏登记。
+- 行数：ReviewPage 215 / ReviewSessionPanel 212 / NotesPage 571 / GroupSidebar 444 / App 439——均 ≤600，豁免表纠偏登记。

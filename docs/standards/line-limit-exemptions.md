@@ -116,9 +116,9 @@
 | app/src/pages/NotesPage.tsx | 575 | v0.20.5 行动中心剥离独立「行动」域页 + 阅读头动作组拆 NoteHeaderActions（色点/归组/挂体系/AI/模型卡下沉）——行动/封存/模型卡 state 族回归 600 硬限内（TD-2026-09-06-G 拆件义务兑现）；2026-09-06 实测登记（登记值 616/572 过期） | 若再增长：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts |
 | app/src/components/GroupSidebar.tsx | 455 | v0.20.5 行动入口/徽标移除（✅ 行动按钮与 actionCount 下线，仅剩 🎴 复习全量入口）；2026-09-06 实测登记（登记值 442 过期） | 若再增长：徽标聚合拆至 useGroupSidebarCounts.ts |
 | app/src/components/GroupSidebar.tsx | 455 | v0.20.5 行动入口/徽标移除（✅ 行动按钮与 actionCount 下线，仅剩 🎴 复习全量入口）；2026-09-06 实测登记（登记值 442 过期） | 若再增长：徽标聚合拆至 useGroupSidebarCounts.ts |
-| app/src/pages/NotesPage.tsx | 540 | v0.20.10 批 5 复习剥离：review state/Overlay 宿主/onOpenReview 本地实现删除，ⓘ「复习本组」改跨页深链透传（f702d876）——登记值 575 过期，实测回落；仍处 300-600 档编排层内聚（数据/选中态/快捷键/辅助面板插槽） | 若再增长：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts |
-| app/src/components/GroupSidebar.tsx | 418 | v0.20.10 批 5 复习入口移除：「🎴 复习 N」按钮与 dueTotal 拉取下线（无被动提醒裁决，同 v0.20.5 行动先例；f702d876）——登记值 455 过期，实测回落 | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook |
-| app/src/App.tsx | 429 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
+| app/src/pages/NotesPage.tsx | 571 | v0.20.10 批 5 复习剥离：review state/Overlay 宿主/onOpenReview 本地实现删除，ⓘ「复习本组」改跨页深链透传（f702d876）——登记值 575 过期，实测回落；仍处 300-600 档编排层内聚（数据/选中态/快捷键/辅助面板插槽） | 若再增长：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts |
+| app/src/components/GroupSidebar.tsx | 444 | v0.20.10 批 5 复习入口移除：「🎴 复习 N」按钮与 dueTotal 拉取下线（无被动提醒裁决，同 v0.20.5 行动先例；f702d876）——登记值 455 过期，实测回落 | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook |
+| app/src/App.tsx | 439 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
 
 ## 已拆分 / 登记移除记录
 
