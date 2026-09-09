@@ -514,6 +514,9 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
           onNoteMoved={() => { refreshAll(); void handleNoteChanged(); }}
           onCleanNotice={notifyCleanNotice}
           onCollapse={() => listCol.setManualFolded(true)}
+          // 批 6 审查 P2-10：侧栏手排/置顶/回自动（useGroupOrders→refreshAll）后
+          // 重拉组序行——树组头与组侧栏同序（原挂载单拉，旧序/已删序行残留）
+          refreshToken={refreshToken}
         />
       )}
       <ColumnResizer onResize={listCol.resizeBy} onReset={listCol.resetWidth} />

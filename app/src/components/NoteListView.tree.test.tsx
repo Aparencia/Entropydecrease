@@ -212,6 +212,36 @@ describe("NoteListView REQ-315 树视图排序/显式移动", () => {
     expect(idx("化妆")).toBeLessThan(idx("摄影"));
   });
 
+  it("refreshToken 变化 → 重拉组序行并重排树组头（侧栏手排/回自动后树面一致——审查 P2-10）", async () => {
+    // 组序行由"侧栏操作"改写（useGroupOrders→onChanged→NotesPage refreshToken++）；
+    // 挂载单拉会残留旧序/已删序行——令牌变化须重拉 note_group_order_list
+    let groupRows: [number, number][] = [[2, 1]]; // 编程=手动位（seq1）
+    invokeMock.mockImplementation(async (cmd: string) => {
+      switch (cmd) {
+        case "note_order_list": return [];
+        case "note_group_order_list": return groupRows;
+        default: return null;
+      }
+    });
+    const notes = [makeNote(1, "摄影笔记", 1), makeNote(2, "编程笔记", 2)];
+    const { rerender } = render(
+      <NoteListView notes={notes} groups={groups} groupFilter={null} refreshToken={0} {...baseProps} />,
+    );
+    await screen.findByTestId("note-tree-摄影");
+    const headers = () => Array.from(document.querySelectorAll('[data-testid^="note-tree-"]'));
+    const idx = (name: string) => headers().findIndex((h) => h.getAttribute("data-testid") === `note-tree-${name}`);
+    // 手排 seq 在前：编程(2) → 摄影(1)
+    expect(idx("编程")).toBeLessThan(idx("摄影"));
+    // 侧栏「手排 ↺/回自动」清行 → 父层令牌 +1 → 树面重拉后回到输入序：摄影(1) → 编程(2)
+    groupRows = [[1, 1]];
+    rerender(<NoteListView notes={notes} groups={groups} groupFilter={null} refreshToken={1} {...baseProps} />);
+    await waitFor(() => expect(idx("摄影")).toBeLessThan(idx("编程")));
+    // 令牌触发重拉断言（mount 1 次 + token 变更 1 次）
+    await waitFor(() => {
+      expect(invokeMock.mock.calls.filter((c) => c[0] === "note_group_order_list").length).toBe(2);
+    });
+  });
+
   it("平铺（搜索）态右键：不出现上移/下移（交互矩阵禁移动）", async () => {
     const notes = [makeNote(1, "拍了", 1), makeNote(2, "写了", 1)];
     render(<NoteListView notes={notes} groups={groups} groupFilter={null} {...baseProps} keyword="拍" />);

@@ -66,6 +66,9 @@ interface Props {
   /** REQ-316（批 7）：移组触发空组自动清理 → 上抛组标题（父层 toast 留痕） */
   onCleanNotice?: (groupNames: string[]) => void;
   onCollapse?: () => void;
+  /** 外部重载令牌（NotesPage refreshToken——侧栏手排/置顶/回自动经 onChanged
+   *  递增；本组件据此重拉组序行与笔记序行，树组头与侧栏保持同序） */
+  refreshToken?: number;
 }
 
 /** scope 键（组/null=未分组） */
@@ -90,6 +93,7 @@ export default function NoteListView({
   noteColors, tagColors,
   onKeywordChange, onTagFilterChange, onSortModeChange, onSelect, onCreate, onRefresh, onOpenSession, onBatchDelete,
   onNotePinToggle, onNoteEdit, onNoteDelete, onNoteMoved, onCleanNotice, onCollapse,
+  refreshToken = 0,
 }: Props) {
   const theme: ThemeMode = useMemo(
     () => (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
@@ -147,7 +151,11 @@ export default function NoteListView({
     return () => window.removeEventListener("keydown", onKey);
   }, [batchMenu, contextMenu, selectionMode, selection.size, exitBatch]);
 
-  // 手动序装载（REQ-287：notes 行）+ REQ-315：组序行（树组头排序）
+  // 手动序装载（REQ-287：notes 行）+ REQ-315：组序行（树组头排序）。
+  // Why 依赖 refreshToken：侧栏上移/下移/回自动/手排↺（useGroupOrders→onChanged→
+  // NotesPage refreshToken++）只经父层令牌通知——挂载单拉会在树面残留旧组序/
+  // 复位后残留已删序行（审查 P2-10）；与父层 refreshAll 同频重载，零去抖必要
+  // （重载=读操作，量级毫秒级；本组件自持的保存路径 saveOrder 仍内联 loadOrders）
   const loadOrders = useCallback(() => {
     invoke<[string, number, number][]>("note_order_list")
       .then((rows) => {
@@ -162,7 +170,7 @@ export default function NoteListView({
       .then((rows) => setGroupOrderRows(new Map(rows.map(([gid, seq]) => [gid, seq]))))
       .catch((e) => console.warn("[notes] 组排序读取失败（自动排序兜底）:", e));
   }, []);
-  useEffect(() => { loadOrders(); }, [loadOrders]);
+  useEffect(() => { loadOrders(); }, [loadOrders, refreshToken]);
 
   const saveOrder = useCallback(async (scope: string, ids: number[]) => {
     await invoke("note_order_save", { scope, noteIds: ids });
