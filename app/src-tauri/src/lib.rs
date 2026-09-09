@@ -186,6 +186,8 @@ mod commands_refine_inner;
 mod commands_session;
 // v0.7.6 审查硬拆：会话 → 笔记转换管线（原料装载/结构渲染/单条转换/批量编排/预览）
 mod commands_session_note;
+// 批 4（会话页交互矩阵）：批量删除会话（单事务原子；语义/广播与单条一致）
+mod commands_session_delete;
 // v0.11.5（spec 8️⃣）：会话详情术语表——词汇表移出笔记后直供前端展示
 mod commands_session_glossary;
 // v0.7.7（REQ-182/183/184）：结构图命令层——批量捕获/手动框选/列表/删除
@@ -715,6 +717,8 @@ pub fn run() {
             commands_session::list_sessions,
             commands_session::get_session_detail,
             commands_session::delete_session,
+            // 批 4（会话页交互矩阵）：批量删除（单事务原子，替代前端逐条循环）
+            commands_session_delete::batch_delete_sessions,
             // REQ-282（v0.19.6）：会话改名（title_kind=manual 停止自动覆写）
             commands_session::update_session_title,
             commands_session::add_session_segment,

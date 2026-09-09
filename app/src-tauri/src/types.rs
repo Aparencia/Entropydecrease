@@ -548,6 +548,14 @@ pub struct BatchNoteResult {
     pub skipped: Vec<SkippedNote>,
 }
 
+/// 批量删除会话结果（批 4：原子全删语义——失败整体报错，无部分成功）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchSessionDeleteResult {
+    /// 实际删除的会话行数（传入中已不存在的 id 不计入）。
+    pub deleted: usize,
+}
+
 /// 笔记列表排序模式（v0.10.0）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]

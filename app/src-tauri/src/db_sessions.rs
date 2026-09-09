@@ -131,6 +131,46 @@ impl Db {
         })
     }
 
+    /// 批量删除会话（批 4 会话页交互矩阵：后端原子 batch_delete_sessions）。
+    ///
+    /// @ai-context Why 单事务逐条 DELETE 而非一条 `WHERE id IN (...)`：本函数与
+    ///              单条 delete_session 走同一条 DELETE 语句（外键级联子表 +
+    ///              notes.session_id SET NULL 逐行生效），任一条中途失败（如
+    ///              外部触发器 RAISE）整体 ROLLBACK——批量=多次单条语义的原子版，
+    ///              绝不留半删状态（用户勾选多行后要的是"全删或全不删"）。
+    /// @ai-context: 返回实际删除行数（已不存在/重复 id 计 0，不报错——与单条
+    ///              delete_session 对不存在会话返回 Ok(false) 的宽容语义一致）；
+    ///              ids 去重由命令层负责，本层不假设输入形状。
+    pub fn delete_sessions_batch(&self, ids: &[i64]) -> Result<usize> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        self.with_conn(|conn| {
+            conn.execute("BEGIN TRANSACTION", [])?;
+            let result = (|| -> rusqlite::Result<usize> {
+                let mut deleted = 0usize;
+                {
+                    let mut stmt = conn.prepare("DELETE FROM sessions WHERE id = ?1")?;
+                    for &id in ids {
+                        deleted += stmt.execute(params![id])?;
+                    }
+                }
+                Ok(deleted)
+            })();
+            match result {
+                Ok(n) => {
+                    conn.execute("COMMIT", [])?;
+                    Ok(n)
+                }
+                Err(e) => {
+                    let _ = conn.execute("ROLLBACK", []);
+                    Err(e)
+                }
+            }
+            .map_err(Into::into)
+        })
+    }
+
     // ── REQ-282（v0.19.6）：标题内容化 A 层 ──
 
     /// 近 N 天非失败会话的标题（同源去重候选；录制/已结束都算，失败排除）。
