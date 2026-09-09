@@ -9,7 +9,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { AiRefineResult, WorkbenchData } from "../types";
+import type { AiRefineResult, MarkdownDiffOps, WorkbenchData } from "../types";
 
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({
@@ -40,9 +40,25 @@ const wbStub: WorkbenchData = {
   meta: { costYuan: null, model: "test-model", slices: 1, mergedFrom: null },
 };
 
+/** 批 3（问题11）：行级 ops 桩（与 wbStub/resultStub 两版文本同构的 LCS 流） */
+const opsStub: MarkdownDiffOps = {
+  ops: [
+    { unchanged: "# 标题" },
+    { removed: "规则内容" },
+    { added: "精修内容" },
+  ],
+  added: 1,
+  removed: 1,
+};
+
 beforeEach(() => {
   invokeMock.mockReset();
-  invokeMock.mockImplementation(async (_cmd: string) => wbStub);
+  invokeMock.mockImplementation(async (cmd: string) => {
+    // 批 3：diff_markdown_ops 按需返回行级 ops（其余命令默认回工作台桩）
+    if (cmd === "diff_markdown_ops") return opsStub;
+    if (cmd === "diff_markdown_sections") return wbStub.sections;
+    return wbStub;
+  });
 });
 
 afterEach(() => cleanup());
@@ -103,5 +119,99 @@ describe("RefineWorkbench 采纳前数据源（Bug# 回归）", () => {
     // Assert：占位提示可见，右栏不崩
     expect(await screen.findByText(/尚未精修/)).toBeTruthy();
     expect(screen.getByText(/规则内容/)).toBeTruthy();
+  });
+});
+
+describe("RefineWorkbench 行级染色与差异视图（批 3 / 问题11）", () => {
+  it("双栏行级染色：统一 ops 取数 + 左栏 removed 删除线红 / 右栏 added 绿", async () => {
+    // Arrange/Act：会话级（带内存结果——workbench 返回 wbStub 文本对）
+    render(<RefineWorkbench sessionId={1} onClose={vi.fn()} taskResult={resultStub} />);
+    // Assert：行级数据源 = 对工作台实际展示的两版文本统一取数（与
+    // refine_workbench 同对文本——渲染行与数据逐行对齐）
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("diff_markdown_ops", {
+        oldMd: wbStub.ruleMarkdown,
+        newMd: wbStub.refinedMarkdown,
+      });
+    });
+    // Assert：左栏规则版被删行 = 红 + 删除线
+    const removedRow = await screen.findByText("规则内容");
+    expect(removedRow.style.color).toBe("rgb(185, 28, 28)");
+    expect(removedRow.style.textDecoration).toBe("line-through");
+    // Assert：右栏精修版新增行 = 绿底绿字
+    const addedRow = screen.getByText("精修内容");
+    expect(addedRow.style.color).toBe("rgb(4, 120, 87)");
+    expect(addedRow.style.backgroundColor).toBe("rgb(236, 253, 245)");
+    // Assert：unchanged 标题行不染色（左栏无徽标污染文本——右侧标题带徽标
+    // 其 textContent 为「标题修改」，精确匹配仅命中左栏行）
+    expect(screen.getByText("标题").style.backgroundColor).toBe("");
+    // Assert：章节徽标与统计保留（差异显示不替代既有章节级标注）
+    expect(screen.getByText("修改")).toBeTruthy();
+  });
+
+  it("差异视图切换：单列三态（−删除线红 / +新增绿 / 灰共有），可切回并排", async () => {
+    // Arrange/Act
+    render(<RefineWorkbench sessionId={1} onClose={vi.fn()} taskResult={resultStub} />);
+    await screen.findByText("规则内容");
+    fireEvent.click(screen.getByRole("button", { name: "差异" }));
+    // Assert：单列展示两版行并置——removed 带 − 前缀红删除线
+    const removedRow = await screen.findByText(/− 规则内容/);
+    expect(removedRow.style.textDecoration).toBe("line-through");
+    expect(removedRow.style.color).toBe("rgb(185, 28, 28)");
+    // Assert：added 带 + 前缀绿
+    const addedRow = screen.getByText(/\+ 精修内容/);
+    expect(addedRow.style.color).toBe("rgb(4, 120, 87)");
+    // Assert：unchanged 灰显（剥标题符后展示「标题」）
+    const sharedRow = screen.getByText(/标题/);
+    expect(sharedRow.style.color).toBe("rgb(107, 114, 128)");
+    // Assert：并排模式专属栏头在差异模式消失
+    expect(screen.queryByText(/📄 规则版/)).toBeNull();
+    // Assert：切回并排恢复双栏（纯前端 toggle）
+    fireEvent.click(screen.getByRole("button", { name: "并排" }));
+    expect(await screen.findByText(/📄 规则版/)).toBeTruthy();
+    expect(screen.queryByText(/− 规则内容/)).toBeNull();
+  });
+
+  it("笔记级与只读路径：同一 diff_markdown_ops 命令取数（三入口不双轨）", async () => {
+    // Arrange：笔记级（noteMode——文本对来自 taskResult）
+    const { unmount } = render(
+      <RefineWorkbench sessionId={1} noteId={9} noteMode onClose={vi.fn()} taskResult={resultStub} />,
+    );
+    // Act/Assert：章节分组走 diff_markdown_sections、行级走 diff_markdown_ops
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("diff_markdown_sections", {
+        oldMd: resultStub.baseMarkdown,
+        newMd: resultStub.refinedMarkdown,
+      });
+      expect(invokeMock).toHaveBeenCalledWith("diff_markdown_ops", {
+        oldMd: resultStub.baseMarkdown,
+        newMd: resultStub.refinedMarkdown,
+      });
+    });
+    expect((await screen.findByText("规则内容")).style.textDecoration).toBe("line-through");
+    unmount();
+
+    // Arrange：只读路径（VersionPanel 对比——文本对由 props 透传）
+    invokeMock.mockClear();
+    render(
+      <RefineWorkbench
+        sessionId={1}
+        readonly
+        ruleMd={wbStub.ruleMarkdown}
+        refinedMd={wbStub.refinedMarkdown ?? ""}
+        onClose={vi.fn()}
+      />,
+    );
+    // Assert：只读入口同样统一走 diff_markdown_ops（对透传文本对取数）
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("diff_markdown_ops", {
+        oldMd: wbStub.ruleMarkdown,
+        newMd: wbStub.refinedMarkdown,
+      });
+    });
+    // Assert：差异切换在只读模式可用（底部无操作按钮）
+    expect(await screen.findByText("规则内容")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /采纳落库/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "差异" })).toBeTruthy();
   });
 });

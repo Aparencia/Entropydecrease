@@ -2,17 +2,23 @@
  * RefineWorkbench — 精修工作台模态组件（v0.11.5 Task 11 / spec 6️⃣）。
  *
  * @ai-context: 并排双栏（规则版 + 精修版）+ 章节级 diff 高亮 + 同步滚动 +
- *              采纳/重新生成/放弃。数据源：非只读带 taskResult（采纳前内存
- *              结果）→ refine_workbench 回传 result（消除未落库右侧恒空）；
- *              无 taskResult → refine_workbench（后端兜底未采纳任务/已落库
- *              笔记，重启可恢复）；只读（VersionPanel）→ ruleMd/refinedMd 透传。
+ *              采纳/重新生成/放弃。批 3（问题11）：行级三态染色（removed
+ *              删除线红/added 绿）与 并排/差异 单列视图切换——数据源为整篇
+ *              有序行级 diff（diff_markdown_ops，见 load 内 Why）。数据源：
+ *              非只读带 taskResult（采纳前内存结果）→ refine_workbench
+ *              回传 result（消除未落库右侧恒空）；无 taskResult →
+ *              refine_workbench（后端兜底未采纳任务/已落库笔记，重启可恢复）；
+ *              只读（VersionPanel）→ ruleMd/refinedMd 透传。
  * @ai-context: 只读模式（VersionPanel 对比）：ruleMd/refinedMd 透传，底部无操作。
  *              普通模式（AiRefineCard）：taskResult 可选——传入则采纳按钮可用。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AiRefineResult, RefineStrategyInfo, RefineStrategyMeta, WorkbenchData } from "../types";
-import { escapeHtml, renderTimestampAnchors } from "../utils/html";
+import type { AiRefineResult, DiffOp, MarkdownDiffOps, RefineStrategyInfo, RefineStrategyMeta, WorkbenchData } from "../types";
+import { escapeHtml } from "../utils/html";
+// 批 3（问题11）：行级 diff 纯渲染工具（ops 流→栏行序/单列 HTML——渲染内核
+// 移出组件，行级染色与差异视图共用，见 utils/refineDiff.ts）
+import { mdFallbackRows, opsToRows, renderDiffColumnHtml, renderSideHtml, splitDiffSides } from "../utils/refineDiff";
 
 /** 档位显示名（meta 声明解析；intent:xxx 前缀 → intent 名；未知 id 原样——诚实不猜） */
 function strategyName(presetId: string, meta: RefineStrategyMeta | null): string {
@@ -50,18 +56,11 @@ const headerBtn: React.CSSProperties = {
   padding: "4px 10px", cursor: "pointer", fontSize: 11, borderRadius: 6,
 };
 
-function renderMd(md: string): string {
-  return md.split("\n").map((line) => {
-    // v0.12.0：先转义再替换时间戳锚点（章节锚点 `## 标题 [[⏱ ...]]` 与段落锚点；
-    // 精修版回挂的章节锚点此前以原始 markdown 文本显示——真机验收修复）
-    if (line.startsWith("# ")) return `<h2 style="font-size:14px;margin:8px 0 3px">${renderTimestampAnchors(escapeHtml(line.slice(2)))}</h2>`;
-    if (line.startsWith("## ")) return `<h3 style="font-size:13px;margin:6px 0 2px;color:#0f766e">${renderTimestampAnchors(escapeHtml(line.slice(3)))}</h3>`;
-    if (line.startsWith("### ")) return `<h4 style="font-size:12px;margin:4px 0 2px;color:#374151">${renderTimestampAnchors(escapeHtml(line.slice(4)))}</h4>`;
-    if (line.startsWith("- ")) return `<div style="font-size:12px;color:#4b5563">• ${renderTimestampAnchors(escapeHtml(line.slice(2)))}</div>`;
-    if (line.trim() === "") return "";
-    return `<p style="font-size:12px;color:#374151;margin:2px 0">${renderTimestampAnchors(escapeHtml(line))}</p>`;
-  }).join("");
-}
+/**
+ * md-lite 行级渲染与三态 HTML 生成已移入 utils/refineDiff.ts（批 3：行级
+ * 染色/差异视图两模式共用同一渲染内核；unchanged 行输出与原 renderMd
+ * 字节一致——组件内不再持有第二份逐行渲染实现）。
+ */
 
 /** 按 sections 插入 diff 徽标 */
 function decorateRefined(md: string, sections: WorkbenchData["sections"]): string {
@@ -130,6 +129,10 @@ export default function RefineWorkbench({
   const [msg, setMsg] = useState("");
   // v0.17.0：策略溯源条（档位/旋钮 chips——meta 声明解析名称）
   const [strategyMeta, setStrategyMeta] = useState<RefineStrategyMeta | null>(null);
+  // 批 3（问题11）：整篇有序行级 diff ops（行级染色数据源；null=未取到→不染色
+  // 兜底）+ 视图切换（并排/差异——纯前端 toggle，不改变底部操作与保存路径）
+  const [ops, setOps] = useState<DiffOp[] | null>(null);
+  const [view, setView] = useState<"side" | "diff">("side");
 
   const leftRef = useRef<HTMLDivElement>(null);
   const rightRef = useRef<HTMLDivElement>(null);
@@ -143,6 +146,7 @@ export default function RefineWorkbench({
   const load = useCallback(async () => {
     setStatus("loading");
     try {
+      let d: WorkbenchData;
       if (readonly && propRuleMd !== undefined && propRefinedMd !== undefined) {
         const secs = await invoke<WorkbenchData["sections"]>("diff_markdown_sections", {
           oldMd: propRuleMd,
@@ -150,17 +154,14 @@ export default function RefineWorkbench({
         }).catch(() => []);
         const totalAdded = secs.reduce((s, x) => s + x.added_lines.length, 0);
         const totalRemoved = secs.reduce((s, x) => s + x.removed_lines.length, 0);
-        setData({
+        d = {
           ruleMarkdown: propRuleMd,
           refinedMarkdown: propRefinedMd,
           sections: secs,
           stats: { added: totalAdded, removed: totalRemoved, unchanged: secs.filter((s) => s.status === "unchanged").length },
           meta: null,
-        });
-        setStatus("ready");
-        return;
-      }
-      if (noteMode) {
+        };
+      } else if (noteMode) {
         // 笔记级：内存结果即基线（无规则草稿链路）；章节 diff 前端按基线/精修版算
         if (!taskResult) {
           throw new Error("笔记级精修缺少任务结果（请重新发起精修）");
@@ -171,23 +172,37 @@ export default function RefineWorkbench({
         }).catch(() => []);
         const totalAdded = secs.reduce((s, x) => s + x.added_lines.length, 0);
         const totalRemoved = secs.reduce((s, x) => s + x.removed_lines.length, 0);
-        setData({
+        d = {
           ruleMarkdown: taskResult.baseMarkdown,
           refinedMarkdown: taskResult.refinedMarkdown,
           sections: secs,
           stats: { added: totalAdded, removed: totalRemoved, unchanged: secs.filter((s) => s.status === "unchanged").length },
           meta: null,
+        };
+      } else {
+        // 非只读 + 精修结果在内存（采纳前）→ 回传后端 refine_workbench：
+        // 后端优先采用该结果（消除未落库右侧恒空 + 事件先行的 DB 写库竞态）
+        d = await invoke<WorkbenchData>("refine_workbench", {
+          sessionId,
+          refineResult: !readonly && taskResult ? taskResult : null,
         });
-        setStatus("ready");
-        return;
       }
-      // 非只读 + 精修结果在内存（采纳前）→ 回传后端 refine_workbench：
-      // 后端优先采用该结果（消除未落库右侧恒空 + 事件先行的 DB 写库竞态）
-      const d = await invoke<WorkbenchData>("refine_workbench", {
-        sessionId,
-        refineResult: !readonly && taskResult ? taskResult : null,
-      });
+      // 批 3（问题11）行级差异统一取数：三入口（会话级/笔记级/只读）都对
+      // "工作台实际展示的两版文本" 同一命令取整篇有序 ops——行级染色与渲染
+      // 逐行对齐，不引入第二套 diff 口径。不采用 taskResult.diff 的 Why：
+      // 其基线是任务时刻的含锚点草稿，与工作台剥离锚点后的展示文本可能错位。
+      // 取数失败降级 null → 行不染色（文本仍完整渲染，不阻断工作台）；精修版
+      // 为空串时无 diff 语义（整栏删除线会误读），同样不取数
+      const refinedText = d.refinedMarkdown;
+      const canDiff = refinedText != null && refinedText.trim() !== "";
+      const opsData = canDiff
+        ? await invoke<MarkdownDiffOps>("diff_markdown_ops", {
+            oldMd: d.ruleMarkdown ?? "",
+            newMd: refinedText,
+          }).catch(() => null)
+        : null;
       setData(d);
+      setOps(opsData?.ops ?? null);
       setStatus("ready");
     } catch (e) {
       setErrMsg(`加载失败：${e}`);
@@ -275,8 +290,23 @@ export default function RefineWorkbench({
   const sections = wb.sections ?? [];
   const stats = wb.stats ?? { added: 0, removed: 0, unchanged: 0 };
   const hasRefined = refinedMd != null;
-  const leftHtml = renderMd(ruleMd);
-  const rightHtml = hasRefined ? decorateRefined(renderMd(refinedMd), sections) : "";
+  // 批 3（问题11）：行级数据派生——ops 缺失（未精修/取数失败）→ 原文行全
+  // unchanged 兜底（不染色也不破坏渲染）；ops 存在 → 每栏各消费一侧流
+  // （栏行序与其源文本逐行一致，见 utils/refineDiff.splitDiffSides Why）
+  const sides = ops ? splitDiffSides(ops) : null;
+  const baseRows = sides?.base ?? mdFallbackRows(ruleMd);
+  const refinedRows = sides?.refined ?? (hasRefined ? mdFallbackRows(refinedMd) : []);
+  // 差异单列 = 整篇流序三态；取数失败兜底 = 两版文本顺序堆叠（灰显，仍可读全文）
+  const diffRows = ops
+    ? opsToRows(ops)
+    : hasRefined
+      ? [...mdFallbackRows(ruleMd), ...mdFallbackRows(refinedMd)]
+      : mdFallbackRows(ruleMd);
+  const leftHtml = renderSideHtml(baseRows);
+  const rightHtml = hasRefined ? decorateRefined(renderSideHtml(refinedRows), sections) : "";
+  const diffHtml = renderDiffColumnHtml(diffRows);
+  // 差异视图仅在两版可比时展示（精修版缺失时保持并排占位——单侧无 diff 语义）
+  const showDiff = view === "diff" && hasRefined;
 
   return (
     <div style={overlay} onClick={onClose}>
@@ -294,6 +324,26 @@ export default function RefineWorkbench({
           {wb.meta?.model && <span style={{ fontSize: 10, color: "#9ca3af" }}>{wb.meta.model}</span>}
           {wb.meta?.costYuan != null && (
             <span style={{ fontSize: 10, color: "#b45309" }}>¥{wb.meta.costYuan.toFixed(4)}</span>
+          )}
+          {/* 批 3（问题11）：视图切换（并排/差异——纯前端 toggle；差异=两版行
+              并置一列有序展示：灰=共有/删除线红=原版独有/绿=精修新增） */}
+          {hasRefined && (
+            <div style={{ display: "flex", border: "1px solid #d1d5db", borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
+              {(["side", "diff"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setView(m)}
+                  style={{
+                    ...headerBtn, border: "none", borderRadius: 0,
+                    background: view === m ? "#0d9488" : "transparent",
+                    color: view === m ? "#fff" : "#6b7280",
+                    fontWeight: 600,
+                  }}
+                >
+                  {m === "side" ? "并排" : "差异"}
+                </button>
+              ))}
+            </div>
           )}
           <span style={{ flex: 1 }} />
           <button style={{ ...headerBtn, border: "none", background: "transparent", fontWeight: 600, color: "#6b7280" }} onClick={onClose}>✕</button>
@@ -332,7 +382,25 @@ export default function RefineWorkbench({
           </div>
         )}
 
-        {/* 双栏 */}
+        {/* 双栏 / 差异单列（行级染色数据源同 diff_markdown_ops——并排与差异
+            两模式共用一行数据，见 load 内统一取数 Why） */}
+        {showDiff ? (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+            <div style={{ fontSize: 11, color: "#6b7280", padding: "6px 12px", background: "#f3f4f6", borderBottom: "1px solid #e5e7eb", borderRight: "1px solid #e5e7eb" }}>
+              <span style={{ color: "#b91c1c" }}>− 原版独有</span>
+              <span style={{ margin: "0 8px" }}>/</span>
+              <span style={{ color: "#047857" }}>+ 精修新增</span>
+              <span style={{ margin: "0 8px" }}>/</span>
+              <span>灰 = 两版共有</span>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+              <div
+                style={{ border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff", padding: 6, fontSize: 11, fontFamily: "monospace", lineHeight: 1.7 }}
+                dangerouslySetInnerHTML={{ __html: diffHtml }}
+              />
+            </div>
+          </div>
+        ) : (
         <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", borderRight: "1px solid #e5e7eb" }}>
             <div style={{
@@ -368,6 +436,7 @@ export default function RefineWorkbench({
             )}
           </div>
         </div>
+        )}
 
         {/* 底栏 */}
         {!readonly && (
