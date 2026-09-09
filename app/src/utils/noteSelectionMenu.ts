@@ -110,6 +110,10 @@ function clampOffset(at: number, len: number): number {
  * 在该行行尾插入独立 `- [ ] <单行化任务文本>` 行。返回 null=无可插文本。
  * 调用方以返回的 from/insert 直接 view.dispatch → 既有 onChange→自动保存→
  * 后端任务索引重扫通道，不 bypass 保存（Why：不建第二套数据轨）。
+ * @ai-context 边界（审查 P3-3，不做大改）：插入不做代码块/引用语境感知——
+ *   code fence / 引用行中间插入会破坏 Markdown 语义，接受并登记留后续；
+ *   换行风格以“源文按行分析、插入统一 \n”为最小口径（CRLF 源文的既有
+ *   \r\n 原样保留，仅新任务行用 \n，不重写全文）。
  */
 export function planTaskLineInsert(
   body: string,
@@ -118,13 +122,42 @@ export function planTaskLineInsert(
 ): { from: number; insert: string } | null {
   const taskText = singleLineTruncate(rawTaskText, SNIPPET_MAX);
   if (!taskText) return null;
-  const p = clampOffset(at, body.length);
+  const clampedAt = clampOffset(at, body.length);
+  // Why 先折叠 \r\n→\n 再按行分析：Windows 导入/粘贴的 CRLF 源文中，选区结束
+  // 可落在 \r 与 \n 之间（CM 视 \r 为行内容）——直接 indexOf("\n") 会把插入
+  // 锚点钉在 \r 后，任务行与下行粘连/游离 \r 残渣。折叠后锚点恒落在换行序列
+  // 之前；from 再换算回原坐标（跳过被折叠的 \r），既有 \r\n 原样保留。
+  const hasCRLF = body.includes("\r");
+  const norm = hasCRLF ? body.replace(/\r\n/g, "\n") : body;
+  // raw 偏移 → 折叠串偏移：每 1 个完全位于 at 之前的 \r\n 对折掉 1 个字符
+  // （at 恰落 \r 后 = 折叠串中该换行前——与"选区含整行退上一行行尾"同语义）
+  let normAt = clampedAt;
+  if (hasCRLF) {
+    let ahead = 0;
+    for (let i = 0; i < clampedAt && i + 1 < body.length; i += 1) {
+      if (body.charCodeAt(i) === 13 && body.charCodeAt(i + 1) === 10) ahead += 1;
+    }
+    normAt -= ahead;
+  }
+  const p = clampOffset(normAt, norm.length);
   // 锚定“选区结束内容所在行”：p-1 是换行 → 选区结束在行首，退到上一行行尾
-  const eff = p > 0 && body.charCodeAt(p - 1) === 10 ? p - 1 : p;
-  const nextBreak = body.indexOf("\n", eff);
-  const lineEnd = nextBreak === -1 ? body.length : nextBreak;
+  const eff = p > 0 && norm.charCodeAt(p - 1) === 10 ? p - 1 : p;
+  const nextBreak = norm.indexOf("\n", eff);
+  const lineEnd = nextBreak === -1 ? norm.length : nextBreak;
   const insert = `${lineEnd === 0 ? "" : "\n"}- [ ] ${taskText}`;
-  return { from: lineEnd, insert };
+  // 折叠串插入点 → 原串插入点（沿途把跳过的 \r 加回——lineEnd 前每过一对 +1）
+  let from = lineEnd;
+  if (hasCRLF) {
+    let raw = 0;
+    let walked = 0;
+    while (walked < lineEnd && raw < body.length) {
+      if (body.charCodeAt(raw) === 13 && body.charCodeAt(raw + 1) === 10) raw += 2;
+      else raw += 1;
+      walked += 1;
+    }
+    from = raw;
+  }
+  return { from, insert };
 }
 
 /** 菜单坐标钳制（行菜单范式：右缘/下缘收进视口 + 4px 内边距） */

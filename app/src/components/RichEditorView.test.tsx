@@ -124,6 +124,34 @@ describe("RichEditorView 选区右键菜单（批 8 REQ-317）", () => {
     fireEvent.click(await screen.findByTestId("note-sel-toQuestion"));
     expect(onSelectionAction).toHaveBeenCalledWith("toQuestion", "第一行\n第二行");
   });
+
+  it("菜单打开后光标移走 → 加入行动仍插在快照 to（不用点击瞬间光标——审查 P2-13）", async () => {
+    render(<RichEditorView note={baseNote} onCancel={vi.fn()} />);
+    await waitFor(() => expect(cmContent().textContent).toContain("第一行"));
+    // Ctrl+A 全选 → 右键开菜单（快照 to=doc 末 7）
+    fireEvent.keyDown(cmContent(), { key: "a", ctrlKey: true });
+    fireEvent.contextMenu(cmContent(), { clientX: 120, clientY: 120 });
+    expect(await screen.findByTestId("note-sel-menu")).toBeTruthy();
+    // 菜单开着时把光标移到文首（连按 ←——任何一次都会离开末位，快照 to 不变）
+    for (let i = 0; i < 20; i += 1) fireEvent.keyDown(cmContent(), { key: "ArrowLeft" });
+    fireEvent.click(screen.getByTestId("note-sel-addTask"));
+    // 断言：插在快照 to（末行行尾），而非点击瞬间光标处（文首→首行尾）——
+    // 若用点击瞬间光标，任务行会插进「第一行」之后（textContent 出现行间任务）
+    await waitFor(() => {
+      expect(cmContent().textContent).toBe("第一行第二行- [ ] 第一行 第二行");
+    });
+  });
+
+  it("荧光笔色板开着时正文右键 → 选区菜单打开且色板随机关闭（互斥——审查 P3-2）", async () => {
+    render(<RichEditorView note={baseNote} onCancel={vi.fn()} />);
+    await waitFor(() => expect(cmContent().textContent).toContain("第一行"));
+    fireEvent.click(screen.getByTestId("highlight-open"));
+    expect(screen.getByTestId("highlight-pop")).toBeTruthy();
+    fireEvent.keyDown(cmContent(), { key: "a", ctrlKey: true });
+    fireEvent.contextMenu(cmContent(), { clientX: 120, clientY: 120 });
+    expect(await screen.findByTestId("note-sel-menu")).toBeTruthy();
+    expect(screen.queryByTestId("highlight-pop")).toBeNull();
+  });
 });
 
 describe("RichEditorView 草稿恢复层", () => {

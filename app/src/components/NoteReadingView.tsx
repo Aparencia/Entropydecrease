@@ -74,6 +74,12 @@ export default function NoteReadingView({
   // 用户关闭搜索/离开笔记再普通打开同一笔记时，旧命中词不得自动重现
   const injectedRef = useRef<{ noteId: number; key: number } | null>(null);
 
+  // 批 8 审查 P2-12：菜单快照属"打开瞬间"——切笔记/进出编辑后旧快照作废
+  // （只靠 `!editing && selMenu` 渲染门控会让旧菜单在退出编辑/切笔记后复活，
+  // "转问题"会以旧文本 + 新 note 上下文错配）。状态清理而非仅渲染隐藏：
+  // 复活路径（Ctrl+E 进编辑→ESC 退出）与切笔记路径都被本条 effect 覆盖。
+  useEffect(() => { setSelMenu(null); }, [note.id, editing]);
+
   // v0.19.1：外部命中词搜索（引用跳转自动激活——key 递增允许同词重触发；
   // 编辑态不注入（审查 M2——高亮只属于阅读视图，且搜索框 autoFocus 不得抢
   // 编辑器焦点）；编辑退出后同一请求可再次注入）

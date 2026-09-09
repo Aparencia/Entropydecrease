@@ -116,4 +116,48 @@ describe("阅读态正文选区右键菜单（批 8 REQ-317）", () => {
     fireEvent.click(screen.getByTestId("note-sel-toQuestion"));
     expect(onSelectionAction).toHaveBeenCalledWith("toQuestion", "选中段落文本");
   });
+
+  it("进编辑再退出（Ctrl+E→ESC 往返）：旧菜单不复活——状态随 editing 失效（审查 P2-12）", () => {
+    const { rerender } = renderSel({});
+    const openMenu = () => {
+      const body = document.querySelector("[data-note-read-body]");
+      const para = body!.querySelector("p");
+      const selStub = {
+        isCollapsed: false,
+        rangeCount: 1,
+        anchorNode: para!.firstChild,
+        focusNode: para!.firstChild,
+        toString: () => "旧快照文本",
+      };
+      vi.spyOn(window, "getSelection").mockReturnValue(selStub as unknown as Selection);
+      fireEvent.contextMenu(para!, { clientX: 80, clientY: 80 });
+    };
+    openMenu();
+    expect(screen.getByTestId("note-sel-menu")).toBeTruthy();
+    // Ctrl+E 进编辑（编辑态替换正文区）→ 退出编辑回阅读
+    rerender(<NoteReadingView note={baseNote()} editing={true} onEdit={noop} onPinToggle={noop} onDelete={noop} onTagClick={noop} onOpenSession={noop} onTaskToggle={noop} onImageOpen={noop} />);
+    expect(screen.queryByTestId("note-sel-menu")).toBeNull();
+    rerender(<NoteReadingView note={baseNote()} editing={false} onEdit={noop} onPinToggle={noop} onDelete={noop} onTagClick={noop} onOpenSession={noop} onTaskToggle={noop} onImageOpen={noop} />);
+    // 旧菜单（旧快照）不得随 `!editing` 门控复活
+    expect(screen.queryByTestId("note-sel-menu")).toBeNull();
+  });
+
+  it("切笔记后旧菜单不复活（防旧快照文本 + 新 note 上下文错配——审查 P2-12）", () => {
+    const second = { ...baseNote(), id: 2, title: "另一篇", content: "别的正文" };
+    const { rerender } = renderSel({});
+    const body = document.querySelector("[data-note-read-body]");
+    const para = body!.querySelector("p");
+    const selStub = {
+      isCollapsed: false,
+      rangeCount: 1,
+      anchorNode: para!.firstChild,
+      focusNode: para!.firstChild,
+      toString: () => "甲笔记的选中文本",
+    };
+    vi.spyOn(window, "getSelection").mockReturnValue(selStub as unknown as Selection);
+    fireEvent.contextMenu(para!, { clientX: 80, clientY: 80 });
+    expect(screen.getByTestId("note-sel-menu")).toBeTruthy();
+    rerender(<NoteReadingView note={second} editing={false} onEdit={noop} onPinToggle={noop} onDelete={noop} onTagClick={noop} onOpenSession={noop} onTaskToggle={noop} onImageOpen={noop} />);
+    expect(screen.queryByTestId("note-sel-menu")).toBeNull();
+  });
 });

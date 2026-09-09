@@ -10,7 +10,7 @@
  *              预填**（≤200 单行化截断，组内 model 卡唯一生成链防双轨不变）。
  *              复制/全选/加入行动是宿主就地动作，不经本 hook。
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   SNIPPET_MAX,
@@ -32,6 +32,11 @@ export function useNoteSelectionActions({ noteId, onChanged, notify }: Options) 
   const [modelDialog, setModelDialog] = useState<{ excerpt: string } | null>(null);
   // 转问题幂等闸（连点菜单项防双写——命令本身无副作用需求，纯 UI 防抖）
   const questionBusyRef = useRef(false);
+
+  // 批 8 审查 P2-12：对话框快照（excerpt + noteId 上下文）随选中笔记失效——
+  // 切笔记后旧 excerpt 不得配新 noteId 打开（ModelCardDialogSlot 只做接线，
+  // 关闭语义必须收敛在状态持有者）；含 selected→null（关闭/删除笔记）路径
+  useEffect(() => { setModelDialog(null); }, [noteId]);
 
   /** header 🧠 模型卡入口（无选区上下文——excerpt 空预填保持原行为） */
   const openModelCard = useCallback(() => setModelDialog({ excerpt: "" }), []);

@@ -73,4 +73,27 @@ describe("useNoteSelectionActions", () => {
     expect(invokeMock).not.toHaveBeenCalled();
     expect(notify).not.toHaveBeenCalled();
   });
+
+  it("选中笔记变化 → 模型卡对话框随旧笔记快照关闭（旧 excerpt 不配新 noteId——审查 P2-12）", () => {
+    const { result, rerender } = renderHook<ReturnType<typeof useNoteSelectionActions>, { noteId: number | null }>(
+      ({ noteId }) =>
+        useNoteSelectionActions({ noteId, onChanged: vi.fn(), notify: vi.fn() }),
+      { initialProps: { noteId: 1 } },
+    );
+    act(() => result.current.handleSelectionAction("toModelCard", "甲笔记选中片段"));
+    expect(result.current.modelDialog).toEqual({ excerpt: "甲笔记选中片段" });
+    // 切笔记（列表选择另一篇——右栏 note 对象更换）
+    rerender({ noteId: 2 });
+    expect(result.current.modelDialog).toBeNull();
+    // 关闭选中（selected→null：删除/切空态）同样关闭
+    act(() => result.current.openModelCard());
+    expect(result.current.modelDialog).toEqual({ excerpt: "" });
+    rerender({ noteId: null });
+    expect(result.current.modelDialog).toBeNull();
+    // noteId 不变时打开/关闭照常（对话框生命周期不受 effect 干扰）
+    act(() => result.current.openModelCard());
+    expect(result.current.modelDialog).toEqual({ excerpt: "" });
+    act(() => result.current.closeModelCard());
+    expect(result.current.modelDialog).toBeNull();
+  });
 });

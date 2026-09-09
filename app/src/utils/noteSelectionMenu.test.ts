@@ -135,6 +135,22 @@ describe("planTaskLineInsert（加入行动插入计划）", () => {
     expect(planTaskLineInsert(doc, 999, "x")).toEqual({ from: doc.length, insert: "\n- [ ] x" });
     expect(planTaskLineInsert(doc, Number.NaN, "x")).toEqual({ from: doc.length, insert: "\n- [ ] x" });
   });
+
+  it("CRLF 文档：按行分析前折叠 \\r——锚点不落 \\r 后，任务为独立行且 \r\n 原样保留（批8 P3-3）", () => {
+    const doc = "行一\r\n行二\r\n行三";
+    // 整行选择结束（行二行首 at=4）：锚行一行尾——from 换算回原坐标=换行序列前（2）
+    const mid = planTaskLineInsert(doc, 4, "任务甲")!;
+    expect(mid).toEqual({ from: 2, insert: "\n- [ ] 任务甲" });
+    // 拼接验证：任务独立成行、无游离 \r、既有 CRLF 保留
+    expect(`${doc.slice(0, 2)}\n- [ ] 任务甲${doc.slice(2)}`).toBe("行一\n- [ ] 任务甲\r\n行二\r\n行三");
+    // 选区结束恰落在 \r 之后（at=3，介于 \r 与 \n）：同折到换行序列前（防插入点
+    // 钉在 \r 后把任务并入下行/留残渣）
+    expect(planTaskLineInsert(doc, 3, "任务乙")).toEqual({ from: 2, insert: "\n- [ ] 任务乙" });
+    // 末行结尾追加：from=doc.length，既有 \r\n 全量原样保留
+    const tail = planTaskLineInsert(doc, doc.length, "收尾")!;
+    expect(tail).toEqual({ from: doc.length, insert: "\n- [ ] 收尾" });
+    expect(`${doc}${tail.insert}`).toBe("行一\r\n行二\r\n行三\n- [ ] 收尾");
+  });
 });
 
 describe("clampMenuXY（坐标钳制）", () => {

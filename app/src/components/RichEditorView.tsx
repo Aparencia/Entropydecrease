@@ -68,9 +68,10 @@ const RichEditorView = forwardRef<NoteEditHandle, Props>(function RichEditorView
   const [draftPrompt, setDraftPrompt] = useState<{ title: string; content: string } | null>(null);
   // v0.16.1：荧光笔色板弹层开合（受控——选色/默认黄/点击外部关闭）
   const [highlightOpen, setHighlightOpen] = useState(false);
-  // 批 8（REQ-317）：编辑态选区右键菜单态（CM 选区文本快照——点击动作不再
-  // 依赖“点击瞬间选区仍在”，快照语义与阅读态 SelectionActionMenu 一致）
-  const [selMenu, setSelMenu] = useState<{ x: number; y: number; text: string } | null>(null);
+  // 批 8（REQ-317）：编辑态选区右键菜单态——CM 选区在菜单打开瞬间的**快照**
+  // （text + to：文本与插入锚点同源同刻捕获，菜单内点击不依赖“点击瞬间的
+  // CM 选区仍存活”——审查 P2-13：键盘移动光标后加入行动仍插在快照 to）
+  const [selMenu, setSelMenu] = useState<{ x: number; y: number; text: string; to: number } | null>(null);
 
   // refs 快照（卸载/定时器闭包取最新值，防 state 闭包过期——同 NoteEditView）
   const titleRef = useRef(title);
@@ -153,10 +154,14 @@ const RichEditorView = forwardRef<NoteEditHandle, Props>(function RichEditorView
       return;
     }
     if (action === "addTask") {
-      // 加入行动：以「选区结束处所在行」为锚插入 `- [ ] <快照文本>` 独立任务行；
-      // dispatch → 既有 onChange → 自动保存/草稿/任务索引重扫通道（不 bypass）
+      // 加入行动：以「快照 to（菜单打开瞬间选区结束处）」所在行为锚插入
+      // `- [ ] <快照文本>` 独立任务行；不用点击瞬间的 view.state.selection——
+      // 菜单打开后键盘移动光标会改变主选区（快照 to 才是动作时有效的锚点，
+      // 审查 P2-13）；dispatch → 既有 onChange → 自动保存/草稿/任务索引重扫
+      // 通道（不 bypass 保存）
       if (!view || !snapshotText) return;
-      const plan = planTaskLineInsert(view.state.doc.toString(), view.state.selection.main.to, snapshotText);
+      const snapshotTo = selMenu?.to ?? view.state.selection.main.to;
+      const plan = planTaskLineInsert(view.state.doc.toString(), snapshotTo, snapshotText);
       if (!plan) return;
       view.dispatch({
         changes: { from: plan.from, insert: plan.insert },
@@ -195,7 +200,11 @@ const RichEditorView = forwardRef<NoteEditHandle, Props>(function RichEditorView
         if (!t.trim()) return false;
         e.preventDefault();
         e.stopPropagation(); // 自绘菜单范式：到 window 前截停（原生兜底同在）
-        setSelMenu({ x: e.clientX, y: e.clientY, text: t });
+        // 审查 P3-2：选区菜单打开时顺带关荧光笔色板（互斥——色板弹层 z30 在
+        // 菜单背板 z60 之下，留开会形成视觉残留且只能靠点背板被动关闭）
+        setHighlightOpen(false);
+        // 快照含选区结束 offset（P2-13：加入行动锚点=打开瞬间，非点击瞬间）
+        setSelMenu({ x: e.clientX, y: e.clientY, text: t, to: main.to });
         return true;
       },
     }),

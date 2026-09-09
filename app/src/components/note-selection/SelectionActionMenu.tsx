@@ -39,6 +39,10 @@ const MENU_W = 224;
 /** 行高/头/状态行余量的高度估算（钳制用；菜单自身不溢出视口） */
 const ROW_H = 30;
 const HEAD_H = 34;
+/** 状态行高度（复制成功后出现；`已复制…` 反馈行 ≈18px 字高 + 8px 纵向留白） */
+const STATUS_H = 26;
+/** 面板上下 padding 合计（style padding: 4） */
+const PANEL_PAD = 8;
 
 const ITEM: React.CSSProperties = {
   display: "flex",
@@ -94,8 +98,13 @@ export default function SelectionActionMenu({ x, y, mode, text, onClose, onActio
     };
   }, [onClose]);
 
-  const menuH = HEAD_H + items.length * ROW_H + (statusShown ? 26 : 8);
-  const pos = clampMenuXY(x, y, MENU_W, menuH, window.innerWidth, window.innerHeight);
+  // 坐标钳制（审查 P3-4 取舍）：高度按「含状态行区」的最终形态**一次性**计算
+  // ——Why 不随 statusShown 重算：贴底菜单在复制成功、状态行出现时会因高度
+  // 增加（+18px 净增）被重钳上跳（位置抖动）；预留后位置=终位，复制只增高
+  // 不位移。代价：未触发状态行时菜单可比内容高出一截（多预留在上方空白），
+  // 视觉可接受且换取“打开即终位”的稳定性。实际渲染高度仍随内容伸缩。
+  const clampH = HEAD_H + items.length * ROW_H + STATUS_H + PANEL_PAD;
+  const pos = clampMenuXY(x, y, MENU_W, clampH, window.innerWidth, window.innerHeight);
 
   const copy = () => {
     void writeClipboardText(text).then((ok) => {
