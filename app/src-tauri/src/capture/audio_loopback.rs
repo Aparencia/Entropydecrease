@@ -54,31 +54,17 @@ pub struct AudioLoopbackCapture {
     handle: Option<JoinHandle<()>>,
 }
 
-/// 会话暂停共享状态（2026-08 A1 硬暂停：完全停采）。
+/// 会话暂停共享状态（2026-08 A1 硬暂停：完全停采）——批 2a 起实现在
+/// pause_state.rs（单状态机 + 来源层 + seq/edge 槽），本路径保留别名
+/// re-export：调用点（manager/loop/frame/lifecycle）零爆炸。
 ///
-/// @ai-context: paused 由命令层置位（pause_live_session/resume_live_session）；
-///              捕获线程是 total_paused_ms 的**唯一维护者**（暂停开始/结束时
-///              更新），屏幕 worker/其他消费方只读作时间戳补偿——多写者会
-///              重复累计，单一写者是防错约束。
+/// @ai-context: paused 由 request API 置位（手动经 manager；媒体/前台经屏幕
+///              worker）；捕获线程是 total_paused_ms/seq/edge 槽的**唯一维护者**
+///              （暂停开始/结束时更新）——多写者会重复累计，单一写者是防错约束。
 /// @ai-context: 暂停 = WASAPI 端点 Stop（对象不释放，恢复 Start 即可，无重连
 ///              风险）——暂停期系统声音照常播放但不采集，恢复后时间轴补偿
 ///              暂停时长，无跳跃、无内容混入。
-#[derive(Debug, Clone, Default)]
-pub struct SessionPause {
-    pub paused: Arc<AtomicBool>,
-    /// 累计暂停毫秒（原子 u64；捕获线程维护，消费方读作时间戳补偿）
-    pub total_paused_ms: Arc<std::sync::atomic::AtomicU64>,
-}
-
-impl SessionPause {
-    /// 按会话复位（P2 补漏：标志/补偿时长不得跨会话残留——上次会话若在
-    /// 暂停中停止，paused 残留会让新会话起始即暂停；补偿时长残留会让
-    /// 新会话时间戳整体偏移）。
-    pub fn reset(&self) {
-        self.paused.store(false, Ordering::SeqCst);
-        self.total_paused_ms.store(0, Ordering::SeqCst);
-    }
-}
+pub use crate::pause_state::SessionPause;
 
 impl AudioLoopbackCapture {
     /// 启动捕获。on_chunk 在捕获线程内被调用（消费者需自行做轻量处理或转发）。
@@ -201,6 +187,15 @@ fn reconnect_delay(attempt: u32) -> Duration {
     Duration::from_secs_f64((0.5 * 2f64.powi(attempt.min(5) as i32)).min(10.0))
 }
 
+/// 会话时刻（ms，暂停补偿后）——捕获线程在物理边沿实测的冻结基准。
+///
+/// @ai-context: 与主循环 live_session_loop.rs:137-138 公式同口径（epoch.elapsed
+///              - 累计暂停时长）；暂停区间在会话轴上为"冻结点"，pause_ms 与
+///              resume_ms 相等（补偿后时刻回到同一冻结点附近）。
+fn session_moment_ms(epoch: &Instant, p: &SessionPause) -> u64 {
+    epoch.elapsed().as_millis() as u64 - p.total_paused_ms.load(Ordering::SeqCst)
+}
+
 /// COM 初始化 guard：drop 时自动 CoUninitialize（TD-028 修复——CoInitializeEx 无配对调用会泄漏线程 COM 状态）。
 struct ComInitGuard;
 
@@ -303,12 +298,22 @@ where
         // 重复调用已启动的流：进入路径上 Start 恰好一次，别无分号。
         let mut capture_paused = matches!(pause.as_ref(), Some(p) if p.paused.load(Ordering::SeqCst));
         let mut paused_at: Option<std::time::Instant> = None;
+        // 批 2a：当前物理暂停区间的实测会话时刻/来源（Stop 成功或预检命中
+        // 暂停时记录起点；Start 成功时完成登记——经 pause_state::record_interval
+        // 写 edge 槽并推进区间计数 seq，供主循环漏边沿代数补偿）
+        let mut edge_pause_ms: Option<u64> = None;
+        let mut edge_source: Option<crate::pause_state::PauseSource> = None;
         if capture_paused {
             eprintln!("[AudioLoopback] 端点保持停机（会话已处于暂停——免 Start/Stop 重连循环）");
             // 预检命中暂停时记下空转起点：恢复边沿靠 paused_at 触发 Start + 累计
             // 暂停时长（2026-09 修复：此前置 None——恢复边沿取 None 走空分支，
-            // 端点永不启动、会话静默且暂停时长不补偿）
+            // 端点永不启动、会话静默且暂停时长不补偿）；区间起点同样记录——
+            // 补偿与事件时刻的冻结基准都是"捕获实际停采时刻"（=重连成功时刻）
             paused_at = Some(std::time::Instant::now());
+            if let Some(p) = pause {
+                edge_pause_ms = Some(session_moment_ms(epoch, p));
+                edge_source = p.snapshot_reason();
+            }
         } else {
             audio_client
                 .Start()
@@ -335,7 +340,7 @@ where
         // 暂停边沿状态（本线程内维护；paused 由命令层置位；已在启动预检处完成初始化）
 
         while !stop_flag.load(Ordering::SeqCst) {
-            // ── 暂停边沿处理（2026-08 A1）──
+            // ── 暂停边沿处理（2026-08 A1；批 2a：区间实测记账）──
             if let Some(p) = pause {
                 let paused_now = p.paused.load(Ordering::SeqCst);
                 if paused_now != capture_paused {
@@ -344,6 +349,10 @@ where
                         match audio_client.Stop() {
                             Ok(()) => {
                                 paused_at = Some(std::time::Instant::now());
+                                // 实测暂停起点（会话时刻）+ 持因快照——Start
+                                // 成功时经 record_interval 登记完整区间
+                                edge_pause_ms = Some(session_moment_ms(epoch, p));
+                                edge_source = p.snapshot_reason();
                                 eprintln!("[AudioLoopback] 会话暂停（端点已停止）");
                             }
                             Err(e) => {
@@ -363,6 +372,20 @@ where
                                     t.elapsed().as_millis() as u64,
                                     Ordering::SeqCst,
                                 );
+                                // 批 2a：登记完成的物理暂停区间（edge 槽先写、
+                                // seq 后推进——主循环见新 seq 必见新槽）。
+                                // 起点缺失（理论不可达：Start 前必经 Stop/预检
+                                // 记录）→ 不登记（快速往返静默语义一致）
+                                if let (Some(ps), Some(src)) =
+                                    (edge_pause_ms.take(), edge_source.take())
+                                {
+                                    let resume_ms = session_moment_ms(epoch, p);
+                                    p.record_interval(crate::pause_state::PauseInterval {
+                                        pause_ms: ps,
+                                        resume_ms,
+                                        source: src,
+                                    });
+                                }
                                 // 清空残留缓冲（2026-08 审查修复）：Stop 前缓冲内
                                 // 的数据在恢复后已无意义——不清空会以补偿后时间戳
                                 // 混入暂停前的音频（内容错位）；循环读到空为止
@@ -396,6 +419,9 @@ where
                     }
                     capture_paused = paused_now;
                 }
+                // 快速往返（置位/清位间隔 < 捕获轮询粒度，未执行 Stop）：
+                // 物理无暂停发生——不记区间、不推进 seq、不写事件（主循环
+                // 同样看不到标志边沿，两侧一致静默），注释即语义文档
                 if capture_paused {
                     // 暂停期空转（10ms 粒度检查停止/恢复）
                     std::thread::sleep(Duration::from_millis(10));

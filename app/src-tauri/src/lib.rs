@@ -365,6 +365,12 @@ mod live_session_prepare;
 mod live_session_manager;
 #[cfg(target_os = "windows")]
 mod live_session_lifecycle;
+// 批 2a（暂停来源单状态机）：pause_state=机器层+request API+seq/edge 槽
+// （audio_loopback 别名换装 SessionPause）；live_session_pause=主循环暂停
+// 边沿收敛域（flush_no_rescore/漏边沿代数补偿/边界切断）；foreground_pause=
+// 前台自动暂停门控（ForegroundGate 滞回状态机）
+#[cfg(target_os = "windows")]
+mod pause_state;
 #[cfg(target_os = "windows")]
 mod live_keyframes;
 mod load_monitor;
