@@ -121,6 +121,16 @@ export default function GroupSidebarRow({
         ) : (
           <span style={{ fontSize: 13, fontWeight: 500, flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{group.name}</span>
         )}
+        {/* REQ-315：置顶标记（视觉最小——与笔记行 📌 同款同色；行内可辨不喧宾） */}
+        {group.pin === 1 && (
+          <span
+            data-testid={`group-pin-${group.id}`}
+            title="已置顶（分区置顶区按更新时间排序）"
+            style={{ fontSize: 11, color: "#b45309", flexShrink: 0 }}
+          >
+            📌
+          </span>
+        )}
         <span style={{ fontSize: 11, color: "#9ca3af" }}>{group.noteCount}</span>
       </div>
       {/* 第二行：体系徽标 + 路由理由小字（ⓘ 弹层明细） */}

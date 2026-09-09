@@ -26,8 +26,13 @@ import {
   writeFolded,
   writeRecentGroupIds,
 } from "../utils/groupSidebar";
+// REQ-315（v0.20.11 批 6）：组排序/置顶操作 hook（序行装载/移动/置顶/复位）
+import { useGroupOrders } from "../hooks/useGroupOrders";
+// REQ-315：组展示排序纯函数（分区渲染/过滤平铺共用——orderRows 来自 hook）
+import { orderGroups } from "../utils/groupOrder";
 import RouteInfoPopover from "./RouteInfoPopover";
 import GroupSidebarRow from "./GroupSidebarRow";
+import GroupRowContextMenu from "./GroupRowContextMenu";
 import GroupCreateDialog from "./GroupCreateDialog";
 // REQ-287：多选拖拽载荷读取（text/note-ids JSON + 单 id 兜底）
 import { crateDndReadIds } from "./NoteTreeSection";
@@ -92,6 +97,8 @@ export default function GroupSidebar({
   const [recentIds, setRecentIds] = useState<number[]>(() =>
     typeof window === "undefined" ? [] : readRecentGroupIds(window.localStorage),
   );
+  // REQ-315：组行右键菜单（受控单开；坐标=右键点）
+  const [groupMenu, setGroupMenu] = useState<{ group: NoteGroup; x: number; y: number } | null>(null);
   // 拖拽悬停态（组行高亮）
   const [dragOverId, setDragOverId] = useState<number | null>(null);
 
@@ -131,6 +138,17 @@ export default function GroupSidebar({
   }, [feedCaptureOn]);
 
   useEffect(() => { void load(); }, [load, refreshToken]);
+
+  // REQ-315：组排序/置顶操作域（序行重载、上移/下移/置顶/复位、菜单可用性）
+  const {
+    orderRows,
+    partitionManual,
+    togglePin,
+    moveGroup,
+    clearGroupOrder,
+    resetPartition,
+    canMoveAt,
+  } = useGroupOrders({ groups, refreshKey: refreshToken, onChanged, onError: setStatus });
 
   // 开关读取（设置页改动后重进笔记页即刷新；refreshToken 同步兜底）
   useEffect(() => {
@@ -239,6 +257,15 @@ export default function GroupSidebar({
     }
   };
 
+  /** 右键菜单动作可用性（置顶/边界组禁用上移下移——置顶区按更新时间定序） */
+  const menuActions = groupMenu ? canMoveAt(groupMenu.group) : null;
+
+  /** 菜单「打开信息」→ 以菜单坐标合成 ⓘ 弹层锚点（行内 ⓘ 仍直开同一弹层） */
+  const openInfoFromMenu = () => {
+    if (!groupMenu) return;
+    setPopover({ group: groupMenu.group, anchor: { x: groupMenu.x, y: groupMenu.y } });
+  };
+
   const renderGroupRow = (g: NoteGroup) => (
     <GroupSidebarRow
       key={g.id}
@@ -267,8 +294,12 @@ export default function GroupSidebar({
       }}
       onDragLeave={() => setDragOverId((cur) => (cur === g.id ? null : cur))}
       onDrop={(e) => handleGroupDrop(g, e)}
-      // v0.16.1：右键组行 = 打开 ⓘ 组管理弹层（同语义；原生菜单已全局禁用）
-      onContextMenu={(e) => openPopover(g, e)}
+      // REQ-315：右键组行 = 操作菜单（置顶/上移/下移/回自动/打开信息）——
+      // 行内 ⓘ 按钮仍直开弹层（onInfo 不动）
+      onContextMenu={(e) => {
+        setPopover(null);
+        setGroupMenu({ group: g, x: e.clientX, y: e.clientY });
+      }}
     />
   );
 
@@ -375,16 +406,19 @@ export default function GroupSidebar({
         {/* v0.14 C1：组分区（无查询→按 kind 分区+折叠记忆；有查询→扁平过滤结果） */}
         {filtering ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {filteredGroups.map(renderGroupRow)}
+            {/* REQ-315：过滤平铺也走组展示序（置顶→手排→自动；跨 kind seq 撞值以 id 决胜） */}
+            {orderGroups(filteredGroups, orderRows).map(renderGroupRow)}
             {filteredGroups.length === 0 && (
               <p style={{ fontSize: 12, color: "#9ca3af", padding: "12px 8px" }}>无匹配组</p>
             )}
           </div>
         ) : (
           GROUP_SECTIONS.map((sec) => {
-            const secGroups = filteredGroups.filter((g) => g.kind === sec.kind);
+            // REQ-315：分区内按 置顶→手排→自动 排序（row 序来自 hook 装载）
+            const secGroups = orderGroups(filteredGroups.filter((g) => g.kind === sec.kind), orderRows);
             if (secGroups.length === 0) return null;
             const isFolded = folded[sec.kind] ?? false;
+            const manual = partitionManual(sec.kind);
             return (
               <div key={sec.kind} data-testid={`group-section-${sec.kind}`} style={{ marginTop: 6 }}>
                 <div
@@ -394,6 +428,17 @@ export default function GroupSidebar({
                 >
                   <span>{isFolded ? "▸" : "▾"}</span> {sec.title}
                   <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 400 }}>{secGroups.length}</span>
+                  {/* REQ-315：手排徽标（对齐 REQ-287 组头「手排 ↺」）——一键整分区回自动 */}
+                  {manual && (
+                    <button
+                      data-testid={`group-reset-${sec.kind}`}
+                      onClick={(e) => { e.stopPropagation(); void resetPartition(sec.kind); }}
+                      title="分区手动排序中——点击恢复自动排序"
+                      style={{ marginLeft: "auto", fontSize: 9, border: "1px solid #a7f3d0", background: "#ecfdf5", color: "#047857", borderRadius: 8, padding: "0 5px", cursor: "pointer", lineHeight: "14px" }}
+                    >
+                      手排 ↺
+                    </button>
+                  )}
                 </div>
                 {!isFolded && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -428,6 +473,26 @@ export default function GroupSidebar({
           // 复习深链：关弹层后交 NotesPage→App 转复习页组预选（v0.20.10 批 5）
           onOpenReview={(gid, name) => { setPopover(null); onOpenReview(gid, name); }}
           selectedNoteId={selectedNoteId}
+        />
+      )}
+
+      {/* REQ-315：组行右键操作菜单（置顶/上移/下移/回自动/打开信息——受控单开） */}
+      {groupMenu && (
+        <GroupRowContextMenu
+          key={groupMenu.group.id}
+          name={groupMenu.group.name}
+          pinned={groupMenu.group.pin === 1}
+          hasOrderRow={menuActions?.hasOrderRow ?? false}
+          canMoveUp={menuActions?.canMoveUp ?? false}
+          canMoveDown={menuActions?.canMoveDown ?? false}
+          x={groupMenu.x}
+          y={groupMenu.y}
+          onClose={() => setGroupMenu(null)}
+          onPinToggle={() => void togglePin(groupMenu.group)}
+          onMoveUp={() => void moveGroup(groupMenu.group, -1)}
+          onMoveDown={() => void moveGroup(groupMenu.group, 1)}
+          onClearOrder={() => void clearGroupOrder(groupMenu.group)}
+          onOpenInfo={openInfoFromMenu}
         />
       )}
 

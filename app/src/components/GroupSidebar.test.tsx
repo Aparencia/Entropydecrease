@@ -54,6 +54,11 @@ beforeEach(() => {
       case "create_topic_group": return { id: 99, name: args?.name ?? "新组", terrain: "container", kind: "topic", domainTag: args?.domainTag ?? "beauty", source: "manual", seriesKey: null, routeReason: null, routeOverridden: 0, noteCount: 0, createdAt: 0, updatedAt: 0 };
       case "update_group_color": return true;
       case "rename_note_group": return true;
+      // REQ-315（批 6）：组排序/置顶命令（默认空序行/成功）
+      case "note_group_order_list": return [];
+      case "update_note_group_pin": return true;
+      case "note_group_order_save": return null;
+      case "note_group_order_clear": return true;
       case "get_group_delete_impact":
         return { notes: 1, fragments: 0, cards: 0, settlements: 0, contracts: 0, systemRefs: 0 };
       case "delete_note_group": return true;
@@ -354,5 +359,139 @@ describe("GroupSidebar v0.14.1 新建/重命名", () => {  beforeEach(() => loca
     // 审查修复（低7）：编辑态点击行空白区只停止传播（不触发组过滤切换）
     fireEvent.click(screen.getByTestId("group-row-1"));
     expect(onGroupFilterChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("GroupSidebar REQ-315 排序/置顶", () => {
+  beforeEach(() => localStorage.clear());
+  const courseA: NoteGroup = {
+    id: 1, name: "课程 A", terrain: "container", kind: "course", domainTag: null,
+    source: "route", seriesKey: null, routeReason: null, routeOverridden: 0,
+    noteCount: 1, createdAt: 0, updatedAt: 10,
+  };
+  const courseC: NoteGroup = {
+    id: 3, name: "课程 C", terrain: "container", kind: "course", domainTag: null,
+    source: "route", seriesKey: null, routeReason: null, routeOverridden: 0,
+    noteCount: 1, createdAt: 0, updatedAt: 20,
+  };
+  const renderWith = (list: NoteGroup[], rows: [number, number][] = []) => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      switch (cmd) {
+        case "list_note_groups": return list;
+        case "list_fragments": return [];
+        case "get_feature_flags": return { feedCapture: true };
+        case "note_group_order_list": return rows;
+        case "list_knowledge_systems": return [];
+        case "list_knowledge_links": return [];
+        case "week_contract_status": return { contract: null, weekStart: 0, actualDays: 0, actualCards: 0, minimalDayMet: false };
+        case "update_note_group_pin": return true;
+        case "note_group_order_save": return null;
+        case "note_group_order_clear": return true;
+        case "list_group_cards": return [];
+        default: return null;
+      }
+    });
+    const onChanged = vi.fn();
+    render(
+      <GroupSidebar
+        groupFilter={null}
+        onGroupFilterChange={vi.fn()}
+        onChanged={onChanged}
+        onOpenReview={vi.fn()}
+        selectedNoteId={null}
+        onOpenInbox={vi.fn()}
+        inboxActive={false}
+        refreshToken={0}
+        onOpenSystem={vi.fn()}
+      />,
+    );
+    return onChanged;
+  };
+
+  it("分区行按 置顶(updatedAt 降序)→手排 seq→自动 渲染", async () => {
+    const pinned = { ...courseC, pin: 1, id: 3 };
+    const old = { ...courseA, id: 1 };
+    const fresh = { ...courseA, id: 2, name: "课程 B", updatedAt: 5 };
+    renderWith([old, fresh, pinned], [[1, 0]]); // 手排区只有课程 A(seq0)
+    await screen.findByTestId("group-row-3");
+    const rows = Array.from(screen.getByTestId("group-section-course").querySelectorAll('[data-testid^="group-row-"]'));
+    // 置顶课程C → 手排课程A → 自动区课程B（其余按 updatedAt 降序）
+    expect(rows.map((r) => r.getAttribute("data-testid"))).toEqual(["group-row-3", "group-row-1", "group-row-2"]);
+    // 置顶标记
+    expect(screen.getByTestId("group-pin-3")).toBeTruthy();
+  });
+
+  it("右键组行 = 操作菜单（替代直开弹层）；「打开信息」保留 ⓘ 入口", async () => {
+    renderWith([courseA, courseC]);
+    await screen.findByTestId("group-row-1");
+    fireEvent.contextMenu(screen.getByTestId("group-row-3"), { clientX: 120, clientY: 130 });
+    const menu = await screen.findByTestId("group-row-menu");
+    expect(menu).toBeTruthy();
+    expect(screen.getByTestId("ctx-group-pin").textContent).toContain("置顶");
+    expect(screen.queryByTestId("route-popover")).toBeNull(); // 右键不再直开弹层
+    fireEvent.click(screen.getByTestId("ctx-group-info"));
+    expect(await screen.findByTestId("route-popover")).toBeTruthy();
+  });
+
+  it("菜单置顶 → update_note_group_pin；置顶行菜单切「取消置顶」且移动禁用", async () => {
+    const onChanged = renderWith([{ ...courseA, pin: 1 }]);
+    await screen.findByTestId("group-row-1");
+    fireEvent.contextMenu(screen.getByTestId("group-row-1"), { clientX: 10, clientY: 10 });
+    const menu = await screen.findByTestId("group-row-menu");
+    expect(menu).toBeTruthy();
+    expect(screen.getByTestId("ctx-group-pin").textContent).toContain("取消置顶");
+    // 置顶区按更新时间定序——上移/下移禁用
+    expect((screen.getByTestId("ctx-group-up") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId("ctx-group-down") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByTestId("ctx-group-pin"));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_note_group_pin", { id: 1, pin: 0 }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it("分区内上移 = 可见序换位整表快照覆写（自动分区首移即转手排）", async () => {
+    const onChanged = renderWith([courseA, courseC]); // 自动区：C(20) 前 A(10) 后
+    await screen.findByTestId("group-row-1");
+    const rows0 = Array.from(screen.getByTestId("group-section-course").querySelectorAll('[data-testid^="group-row-"]'));
+    expect(rows0.map((r) => r.getAttribute("data-testid"))).toEqual(["group-row-3", "group-row-1"]);
+    // 右键课程 A（可上移）→ 上移
+    fireEvent.contextMenu(screen.getByTestId("group-row-1"), { clientX: 10, clientY: 10 });
+    expect((screen.getByTestId("ctx-group-up") as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByTestId("ctx-group-up"));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("note_group_order_save", { kind: "course", groupIds: [1, 3] }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it("分区「手排 ↺」徽标：有手动位才显示，点击=空快照整体回自动", async () => {
+    const onChanged = renderWith([courseA, courseC], [[1, 0], [3, 1]]);
+    await screen.findByTestId("group-row-1");
+    const resetBtn = await screen.findByTestId("group-reset-course");
+    expect(resetBtn.textContent).toContain("手排");
+    fireEvent.click(resetBtn);
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("note_group_order_save", { kind: "course", groupIds: [] }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it("菜单「回自动排序」仅组有手动位时显示；点击清单组手动位", async () => {
+    const onChanged = renderWith([courseA, courseC], [[3, 0]]); // 仅课程 C 有手动位
+    await screen.findByTestId("group-row-1");
+    // 课程 A 无手动位 → 无该项
+    fireEvent.contextMenu(screen.getByTestId("group-row-1"), { clientX: 10, clientY: 10 });
+    expect(screen.queryByTestId("ctx-group-reset")).toBeNull();
+    fireEvent.keyDown(window, { key: "Escape" });
+    // 课程 C 有手动位 → 显示并可清
+    fireEvent.contextMenu(screen.getByTestId("group-row-3"), { clientX: 10, clientY: 10 });
+    fireEvent.click(await screen.findByTestId("ctx-group-reset"));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("note_group_order_clear", { groupId: 3 }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it("序行空（全自动分区）→ 无「手排」徽标；ESC 关闭右键菜单", async () => {
+    renderWith([courseA, courseC]);
+    await screen.findByTestId("group-row-1");
+    expect(screen.queryByTestId("group-reset-course")).toBeNull();
+    fireEvent.contextMenu(screen.getByTestId("group-row-1"), { clientX: 10, clientY: 10 });
+    expect(await screen.findByTestId("group-row-menu")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("group-row-menu")).toBeNull();
   });
 });
