@@ -121,6 +121,14 @@ describe("RouteInfoPopover ⓘ 弹层", () => {
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
   });
 
+  it("v0.20.10：🎴 复习本组=跨页深链回调（组 id+名上抛，App 层转顶层复习页预选）", async () => {
+    const onOpenReview = vi.fn();
+    renderPopover({ onOpenReview });
+    await screen.findByText("系统按内容特征归入：系列连续内容");
+    fireEvent.click(screen.getByText("🎴 复习本组"));
+    expect(onOpenReview).toHaveBeenCalledWith(3, "化妆课");
+  });
+
   it("ESC 关闭弹层", async () => {
     const onClose = vi.fn();
     renderPopover({ onClose });

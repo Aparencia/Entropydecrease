@@ -9,7 +9,9 @@
  *              onPromoted 打开新笔记（右侧闭环可见），碎片即时从收件箱移除；
  *              未归组笔记在「全部笔记」可见（两种实体两条动线）。
  * @ai-context: H3 辅助面板插槽（VersionPanel/EnrichPanel）与 H1 任务回写、
- *              Ctrl+E/ESC、图片预览、组级复习面均沿用 v0.11.x 语义。
+ *              Ctrl+E/ESC、图片预览均沿用 v0.11.x 语义。v0.20.10（批 5）：
+ *              复习面已剥离为顶层「🔄 复习」Tab——本页不再宿主 Overlay，
+ *              ⓘ「复习本组」改为跨页深链（onOpenReview 透传 App 转页预选）。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -24,7 +26,6 @@ import NoteListView, { parseTags } from "../components/NoteListView";
 import type { SortMode } from "../components/NoteListView";
 import GroupSidebar from "../components/GroupSidebar";
 import FeedFragmentList from "../components/FeedFragmentList";
-import ReviewSessionOverlay from "../components/ReviewSessionOverlay";
 import NoteReadingView from "../components/NoteReadingView";
 import ImagePreviewOverlay from "../components/ImagePreviewOverlay";
 import VersionPanel from "../components/VersionPanel";
@@ -46,6 +47,10 @@ interface Props {
   focusNoteSearch?: { noteId: number; search: string; key: number } | null;
   /** v0.14 C2：图谱双击组节点 → 过滤该组（变化时跟随，同 focusNoteId 模式） */
   focusGroupId?: number | null;
+  /** v0.20.10（批 5）：复习域页深链——ⓘ「复习本组」→ App 转顶层复习页并预选
+   *  该组（groupId=null 保留为全量语义，当前无调用方——组侧栏全量按钮已随
+   *  无被动提醒裁决移除）；消费在 ReviewPage，本页只透传 */
+  onOpenReview?: (groupId: number | null, name: string) => void;
   onOpenSessions?: (sessionId: number) => void;
   /** 打开体系页并选中体系（v0.13.7 触点① 组行徽标） */
   onOpenSystem?: (systemId: number) => void;
@@ -56,7 +61,7 @@ interface Props {
 /** 中部视图：notes=笔记列表（组过滤/搜索/标签）；inbox=收件箱碎片列表 */
 type MiddleView = "notes" | "inbox";
 
-export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, onOpenSessions, onOpenSystem, onCreateSystem }: Props) {
+export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, onOpenReview, onOpenSessions, onOpenSystem, onCreateSystem }: Props) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [keyword, setKeyword] = useState("");
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -65,8 +70,6 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
   const [groupFilter, setGroupFilter] = useState<number | null>(null);
   // v0.12.2：中部视图（收件箱 ↔ 笔记列表原位切换）
   const [view, setView] = useState<MiddleView>("notes");
-  // v0.11.2：复习面（groupId=null 全量；undefined=关闭）
-  const [review, setReview] = useState<{ groupId: number | null; name: string } | undefined>(undefined);
   // v0.20.3（REQ-302）：笔记段 → 模型卡草稿对话框
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const [selected, setSelected] = useState<Note | null>(null);
@@ -418,7 +421,8 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
           groupFilter={groupFilter}
           onGroupFilterChange={(id) => { setGroupFilter(id); setView("notes"); }}
           onChanged={refreshAll}
-          onOpenReview={(groupId, name) => setReview({ groupId, name })}
+          // v0.20.10：复习=顶层页深链（ⓘ「复习本组」转页预选）——无本地 Overlay
+          onOpenReview={(groupId, name) => onOpenReview?.(groupId, name)}
           selectedNoteId={selected?.id ?? null}
           // 收件箱=全量碎片视图，与组过滤无关——清组过滤消除"组行高亮 + 收件箱"
           // 并存矛盾（审查修复）
@@ -561,14 +565,6 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
       {/* v0.10.1：图片放大预览（ESC/点击遮罩关闭——与编辑退出 ESC 互斥） */}
       {previewImg && (
         <ImagePreviewOverlay src={previewImg.src} title={previewImg.title} onClose={() => setPreviewImg(null)} />
-      )}
-      {/* v0.11.2：组级复习面（提取优先；评分推进 FSRS 调度） */}
-      {review && (
-        <ReviewSessionOverlay
-          groupId={review.groupId}
-          groupName={review.name}
-          onClose={() => setReview(undefined)}
-        />
       )}
     </div>
   );

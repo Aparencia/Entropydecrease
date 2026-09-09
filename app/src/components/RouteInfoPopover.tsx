@@ -39,7 +39,8 @@ interface Props {
   onClose: () => void;
   /** 组/笔记变更后刷新回调（NotesPage 重载列表） */
   onChanged: () => void;
-  /** 打开组级复习面 */
+  /** 复习域页深链（v0.20.10 批 5：「复习本组」→ 顶层「🔄 复习」页并预选本组；
+   *  经 GroupSidebar/NotesPage 上抛 App 转页——弹层先关再跳） */
   onOpenReview: (groupId: number, name: string) => void;
   /** 当前选中笔记 id（移入/移出操作前提；null=无） */
   selectedNoteId: number | null;

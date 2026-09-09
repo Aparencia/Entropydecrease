@@ -5,9 +5,10 @@
  * @ai-context: 覆盖串组场景——切换 ⓘ 弹层目标组时表单态必须重置（key=group.id
  *              修复）：组 A 改了判类（未确认）→ 点组 B ⓘ → 弹层显示 B 且
  *              判类下拉回到 B.kind（防把 A 的选择误用到 B——路径: 改判误操作）。
- *              invoke 全 mock（list_note_groups/count_due_cards/list_fragments/
+ *              invoke 全 mock（list_note_groups/list_fragments/
  *              get_feature_flags/week_contract_status/list_knowledge_systems/
- *              list_knowledge_links）。
+ *              list_knowledge_links）。v0.20.10 批 5：复习入口剥离顶层页——
+ *              侧栏不再拉 count_due_cards、不渲染「🎴 复习」入口（无被动提醒）。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -34,7 +35,6 @@ beforeEach(() => {
   invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
     switch (cmd) {
       case "list_note_groups": return [groupA, groupB];
-      case "count_due_cards": return 0;
       case "list_fragments": return [];
       case "get_feature_flags": return { feedCapture: true };
       case "week_contract_status":
@@ -209,7 +209,6 @@ describe("GroupSidebar v0.14 C1 Obsidian 式", () => {
     invokeMock.mockImplementation(async (cmd: string) => {
       if (cmd === "move_note_to_group") throw new Error("group not found");
       if (cmd === "list_note_groups") return [groupA, groupB];
-      if (cmd === "count_due_cards") return 0;
       if (cmd === "list_fragments") return [];
       if (cmd === "get_feature_flags") return { feedCapture: true };
       if (cmd === "week_contract_status") return { contract: null, weekStart: 0, actualDays: 0, actualCards: 0, minimalDayMet: false };
@@ -224,8 +223,34 @@ describe("GroupSidebar v0.14 C1 Obsidian 式", () => {
   });
 });
 
-describe("GroupSidebar v0.14.1 新建/重命名", () => {
-  beforeEach(() => localStorage.clear());
+describe("GroupSidebar v0.20.10 复习入口剥离", () => {
+  it("侧栏无「🎴 复习」全量入口、不拉 count_due_cards；ⓘ「复习本组」为深链回调", async () => {
+    const onOpenReview = vi.fn();
+    render(
+      <GroupSidebar
+        groupFilter={null}
+        onGroupFilterChange={vi.fn()}
+        onChanged={vi.fn()}
+        onOpenReview={onOpenReview}
+        selectedNoteId={null}
+        onOpenInbox={vi.fn()}
+        inboxActive={false}
+        refreshToken={0}
+        onOpenSystem={vi.fn()}
+      />,
+    );
+    await screen.findByTestId("group-row-1");
+    // 无被动提醒：到期感知收敛顶层「🔄 复习」Tab——侧栏按钮与徽标数据源移除
+    expect(screen.queryByText(/🎴 复习/)).toBeNull();
+    expect(invokeMock).not.toHaveBeenCalledWith("count_due_cards", expect.anything());
+    // ⓘ 弹层「复习本组」仍在——语义改为跨页深链回调（App 层转页预选）
+    fireEvent.click(screen.getByTestId("group-info-1"));
+    fireEvent.click(await screen.findByText("🎴 复习本组"));
+    expect(onOpenReview).toHaveBeenCalledWith(1, "化妆课 A");
+  });
+});
+
+describe("GroupSidebar v0.14.1 新建/重命名", () => {  beforeEach(() => localStorage.clear());
 
   it("「＋ 新建组」→ 弹窗校验拦截（空名/无领域），合法提交走 create→color→onChanged", async () => {
     // Arrange

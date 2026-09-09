@@ -47,8 +47,6 @@ describe("NotesPage 编辑完成即时刷新", () => {
           return [store];
         case "list_note_groups":
           return [];
-        case "count_due_cards":
-          return 0;
         case "list_fragments":
           return [];
         case "get_feature_flags":

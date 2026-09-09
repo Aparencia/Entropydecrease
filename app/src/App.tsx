@@ -22,6 +22,8 @@ import NotesPage from "./pages/NotesPage";
 import SessionsPage from "./pages/SessionsPage";
 // v0.20.5：行动域页（做——行动中心独立成页，意图分层）
 import ActionPage from "./pages/ActionPage";
+// v0.20.10（批 5，用户问题 6）：复习域页（练——复习面独立顶层 Tab；spec §9 二期兑现）
+import ReviewPage from "./pages/ReviewPage";
 // v0.16.0：AI 对话页（纯聊天 + AI 任务对话视图——DSH 交互范式）
 import ChatPage from "./pages/ChatPage";
 // 2026-08-21 用户需求：设置页（课堂助手设置类面板迁出，单页滚动+分组）
@@ -42,7 +44,7 @@ import { CaptureStatusProvider, useCaptureControl } from "./hooks/useLiveCapture
 import { pauseReasonLabel } from "./hooks/liveCaptureState";
 import type { AiTaskState } from "./types";
 
-type Page = "classroom" | "sessions" | "notes" | "action" | "chat" | "knowledge" | "goals" | "settings";
+type Page = "classroom" | "sessions" | "notes" | "action" | "review" | "chat" | "knowledge" | "goals" | "settings";
 
 const NAV_ITEMS: { key: Page; label: string }[] = [
   { key: "classroom", label: "📡 课堂助手" },
@@ -50,6 +52,9 @@ const NAV_ITEMS: { key: Page; label: string }[] = [
   { key: "notes", label: "📝 笔记" },
   // v0.20.5：行动域页（做——行动裁决/SOP/练习/问题；独立 Tab 唯一入口）
   { key: "action", label: "✅ 行动" },
+  // v0.20.10（批 5）：复习域页（练——到期感知唯一入口，无被动提醒；
+  // 顶层 Tab=9 触发 spec §9 导航收纳观察项，收纳设计另行立项）
+  { key: "review", label: "🔄 复习" },
   // v0.16.0：AI 对话页（纯聊天 + AI 任务对话视图）
   { key: "chat", label: "💬 AI 对话" },
   { key: "knowledge", label: "🧠 体系" },
@@ -112,6 +117,9 @@ function MainShell() {
   const [createSystemSignal, setCreateSystemSignal] = useState(0);
   // v0.14 C2：图谱组节点 → 笔记页过滤该组（同 focusNoteId 模式）
   const [focusGroupId, setFocusGroupId] = useState<number | null>(null);
+  // v0.20.10（批 5）：跨页直达复习页并预选组（笔记域 ⓘ「复习本组」深链；
+  // 仿 focusGroupId 模式——ReviewPage 消费后经 onFocusGroupConsumed 清空）
+  const [focusReviewGroupId, setFocusReviewGroupId] = useState<number | null>(null);
   // v0.16.1：工作台深链（对话页任务视图 → 会话页自动展开精修工作台）与
   // 任务进入对话页（会话页精修启动 → AI 对话页选中该任务）
   const [focusRefineTaskId, setFocusRefineTaskId] = useState<number | null>(null);
@@ -331,6 +339,11 @@ function MainShell() {
             focusNoteId={focusNoteId}
             focusNoteSearch={focusNoteSearch}
             focusGroupId={focusGroupId}
+            // v0.20.10（批 5）：ⓘ「复习本组」深链 → 复习页组预选
+            onOpenReview={(groupId) => {
+              setFocusReviewGroupId(groupId);
+              setPage("review");
+            }}
             onOpenSystem={(id) => {
               setFocusSystemId(id);
               setPage("knowledge");
@@ -348,6 +361,16 @@ function MainShell() {
         {/* v0.20.5：行动域页（保活挂载 + active 门控切回重载——TD-004 模式） */}
         <div style={{ flex: 1, display: page === "action" ? "block" : "none", overflow: "hidden" }}>
           <ActionPage active={page === "action"} />
+        </div>
+        {/* v0.20.10（批 5）：复习域页（保活挂载 + active 门控切回重载——
+            闪卡域无事件总线，TD-004 模式同 ActionPage；focusReviewGroupId 深链
+            组预选，消费后清空） */}
+        <div style={{ flex: 1, display: page === "review" ? "block" : "none", overflow: "hidden" }}>
+          <ReviewPage
+            active={page === "review"}
+            focusGroupId={focusReviewGroupId}
+            onFocusGroupConsumed={() => setFocusReviewGroupId(null)}
+          />
         </div>
         <div style={{ flex: 1, display: page === "chat" ? "block" : "none", overflow: "hidden" }}>
           {/* v0.16.0：AI 对话页——跨页跳转复用 focus 机制（任务对话引用 → 会话/笔记/设置）。

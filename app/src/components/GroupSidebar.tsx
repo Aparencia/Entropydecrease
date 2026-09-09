@@ -2,13 +2,16 @@
  * GroupSidebar — 笔记页左侧组筛选侧栏（v0.14 C1 Obsidian 式重构）。
  *
  * @ai-context: 原 240px 平铺混排（痛点 C1：展示混乱）——重构为分区组织：
- *              最近使用区（LRU≤5，访问组时写入 localStorage）+ 收件箱/全部/
- *              复习（移出"组"概念区）+ 组分区（按 kind：课程/主题/独立/feed，
+ *              最近使用区（LRU≤5，访问组时写入 localStorage）+ 收件箱/全部
+ *              （移出"组"概念区）+ 组分区（按 kind：课程/主题/独立/feed，
  *              折叠记忆 localStorage）+ 组过滤（纯函数 filterGroups）+
  *              拖拽归组（组行为 drop target，笔记卡片为 drag source，
  *              move_note_to_group 命令）。组行渲染提取至 GroupSidebarRow
  *              （行内徽标收敛为 1-2 个）。三条设计契约延续：展示层组织，
  *              不改组模型（无父子组）。
+ * @ai-context: v0.20.10（批 5）复习入口移除——组侧栏不再放「🎴 复习」按钮/
+ *              到期徽标（无被动提醒裁决，同 v0.20.5 行动入口先例）；到期感知
+ *              收敛于顶层「🔄 复习」Tab；本栏 ⓘ 弹层「复习本组」=跨页深链。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -38,7 +41,8 @@ interface Props {
   onGroupFilterChange: (id: number | null) => void;
   /** 组/笔记变更后的刷新回调（NotesPage 重载列表） */
   onChanged: () => void;
-  /** 打开复习面（groupId=null 全量；name 呈现用） */
+  /** 复习域页深链（v0.20.10 批 5：ⓘ「复习本组」→ App 转顶层复习页并预选组；
+   *  groupId=null 全量语义保留（组侧栏全量按钮已随无被动提醒裁决移除） */
   onOpenReview: (groupId: number | null, name: string) => void;
   /** 当前选中笔记 id（ⓘ 弹层"移入/移出选中笔记"用；null=无） */
   selectedNoteId: number | null;
@@ -61,8 +65,6 @@ export default function GroupSidebar({
   const [groups, setGroups] = useState<NoteGroup[]>([]);
   const [feedCaptureOn, setFeedCaptureOn] = useState(true);
   const [fragText, setFragText] = useState("");
-  // 全量到期卡数（"复习 N"徽标）
-  const [dueTotal, setDueTotal] = useState(0);
   // 收件箱待处理数（active 碎片计数）
   const [inboxCount, setInboxCount] = useState(0);
   const [status, setStatus] = useState("");
@@ -98,8 +100,6 @@ export default function GroupSidebar({
       const list = await invoke<NoteGroup[]>("list_note_groups", { terrain: null });
       // feed 组仅开关开启时显示（开关关闭时碎片操作面不可见——后端另有校验）
       setGroups(feedCaptureOn ? list : list.filter((g) => g.terrain !== "feed"));
-      const due = await invoke<number>("count_due_cards", { groupId: null });
-      setDueTotal(due);
       const frags = await invoke<Fragment[]>("list_fragments", { status: "active", limit: 500 });
       setInboxCount(frags.length);
       // v0.13.7 触点①：体系 + 引用拉取（并行——徽标数据与组列表无依赖）
@@ -410,18 +410,6 @@ export default function GroupSidebar({
             暂无笔记组——会话转笔记时自动归组
           </p>
         )}
-
-        {/* 🎴 复习（全量入口：UI 最小化——一个按钮 + 到期数；v0.20.5：✅ 行动
-            入口与徽标已移除——行动独立为顶层「✅ 行动」Tab 唯一入口） */}
-        <div style={{ marginTop: "auto", paddingTop: 6 }}>
-          <button
-            onClick={() => onOpenReview(null, "全部组")}
-            style={{ width: "100%", fontSize: 11, cursor: "pointer", padding: "4px 8px", borderRadius: 4, border: "1px solid #0f766e", background: dueTotal > 0 ? "#f0fdfa" : "#fff", color: "#0f766e" }}
-            title="开始复习到期卡片"
-          >
-            🎴 复习{dueTotal > 0 ? ` ${dueTotal}` : ""}
-          </button>
-        </div>
       </div>
 
       {status && <p style={{ padding: 8, fontSize: 12, color: "#dc2626" }}>{status}</p>}
@@ -437,6 +425,7 @@ export default function GroupSidebar({
           onClose={() => setPopover(null)}
           // via onChanged（refreshToken）驱动本组件 load——不再显式双跑
           onChanged={onChanged}
+          // 复习深链：关弹层后交 NotesPage→App 转复习页组预选（v0.20.10 批 5）
           onOpenReview={(gid, name) => { setPopover(null); onOpenReview(gid, name); }}
           selectedNoteId={selectedNoteId}
         />
