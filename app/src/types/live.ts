@@ -22,6 +22,16 @@ export interface WindowInfo {
   systemWindow: boolean;
 }
 
+/** 暂停来源（Rust PauseSource，kebab-case；live:paused/resumed 载荷 reason 与
+ *  live_session_status 的 pausedReason 共用同一契约——批 2a） */
+export type PauseSource = "manual" | "media" | "foreground";
+
+/** live:paused / live:resumed 事件载荷（批 2a：{ reason }；旧载荷为 unit——
+ *  监听方必须容忍 reason 缺省，缺省按 manual 防御处理） */
+export interface PauseChangeEvent {
+  reason?: PauseSource;
+}
+
 /** 实时会话状态（camelCase 契约） */
 export interface LiveSessionStatus {
   active: boolean;
@@ -30,6 +40,9 @@ export interface LiveSessionStatus {
   prepared: boolean;
   /** 是否处于暂停（2026-08 修复：刷新/重进页面后右侧面板状态机还原用） */
   paused: boolean;
+  /** 批 2a：当前暂停来源（未暂停恒 null；manual=手动 / media=随视频 /
+   *  foreground=切走自动——前端据此显示原因文案与恢复语义） */
+  pausedReason: PauseSource | null;
   /** v0.9.0（REQ-189）：当前生效画面档（kebab-case；null=未定档——采集态档案条拉取兑底） */
   tier: string | null;
 }
