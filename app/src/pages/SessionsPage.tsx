@@ -293,7 +293,7 @@ export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocu
           onOpenDetail={(id, targetSegId) => void openDetail(id, targetSegId)}
           onConvert={(item) => void convertOne(item)}
           onOpenNote={onOpenNote}
-          onBatchConvert={(ids) => void convertSelected(ids)}
+          onBatchConvert={(ids) => convertSelected(ids)}
           onBatchDelete={(ids) => deleteSelected(ids)}
           onDeleteOne={(id) => void removeOne(id)}
           onSessionRenamed={(id) => sessionRenamed(id)}

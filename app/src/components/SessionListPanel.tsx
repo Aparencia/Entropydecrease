@@ -53,7 +53,7 @@ interface Props {
   onConvert: (item: SessionListItem) => void;
   onOpenNote: (noteId: number) => void;
   /** 批量转笔记（入参已过滤为可转化 id；父层负责 invoke/toast/刷新） */
-  onBatchConvert: (eligibleIds: number[]) => void;
+  onBatchConvert: (eligibleIds: number[]) => void | Promise<unknown>;
   /** 批量删除（父层负责确认/invoke/toast/刷新；resolve=true=全部删除成功） */
   onBatchDelete: (ids: number[]) => Promise<boolean>;
   /** 单行删除（右键菜单；父层复用详情页删除动线——确认/清详情/刷新） */
@@ -89,6 +89,12 @@ export default function SessionListPanel({
   // 行内重命名请求（nonce：同一行连续两次「重命名」也能重启编辑态）
   const [renameReq, setRenameReq] = useState<SessionRenameRequest | null>(null);
   const renameNonceRef = useRef(0);
+  // 批 4 审查修复（P3-2）：批量操作 pending——state=按钮禁用视觉，ref=同 tick
+  // 拦截（state 更新异步，连点需 ref 立即生效；与行内改名 busyRef 同模式）。
+  // Why：原无防护，双击「批量删除」二次提交报"已删除 0 个"（首次已删空选集
+  // 数据、二次空跑）；批量转同理。
+  const [batchBusy, setBatchBusy] = useState<"convert" | "delete" | null>(null);
+  const batchBusyRef = useRef(false);
 
   const clearSelection = useCallback(() => { setSelected(emptySelection()); setAnchor(null); }, []);
   const exitBatch = useCallback(() => { setSelectionMode(false); clearSelection(); }, [clearSelection]);
@@ -228,8 +234,10 @@ export default function SessionListPanel({
     setKeyword("");
   };
 
-  /** 批量转：先过滤出可转化集合（已转/进行中/无内容不在其中） */
-  const runBatchConvert = () => {
+  /** 批量转：先过滤出可转化集合（已转/进行中/无内容不在其中）；pending 防连点
+   *（P3-2——onBatchConvert 允许返回 Promise：父层 invoke 完成前按钮保持禁用） */
+  const runBatchConvert = async () => {
+    if (batchBusyRef.current) return;
     const byId = new Map<number, SessionListItem>();
     for (const i of items) byId.set(i.session.id, i);
     for (const g of groups ?? []) for (const i of g.sessions) byId.set(i.session.id, i);
@@ -241,8 +249,15 @@ export default function SessionListPanel({
       showToast("选中的会话均不可转换（已转/进行中/无内容）", "err");
       return;
     }
+    batchBusyRef.current = true;
+    setBatchBusy("convert");
     clearSelection();
-    onBatchConvert(eligibleIds);
+    try {
+      await onBatchConvert(eligibleIds);
+    } finally {
+      batchBusyRef.current = false;
+      setBatchBusy(null);
+    }
   };
 
   // ── 行交互（批 4）：单击语义按模式分派；修饰键不换右栏 ──
@@ -512,38 +527,55 @@ export default function SessionListPanel({
       {/* 批量操作栏（出现后出现；段搜索命中视图隐藏——避免对不可见列表误操作） */}
       {!hits && !ocrHits && selected.size > 0 && (
         <div style={{ borderTop: "1px solid #e5e7eb", padding: 8, display: "flex", gap: 6, alignItems: "center", background: "#fff" }}>
-          {/* v0.7.7（REQ-186 修复）：全选框——当前筛选视图（filtered）口径三态
-              （indeterminate 用回调 ref 每渲染刷新——部分选中显示横杠） */}
+          {/* 批 4 审查修复（P3-1）：全选框口径 = 当前可见行序 visibleOrder——
+              平铺=筛选后序、分组=展开组顺次。原 filtered 口径在折叠组时把
+              不可见行也纳入全选（勾选后随即被裁剪 effect 清掉，计数误导且
+              折叠内容被误批量操作），与区间/自动裁剪同基准。三态 indeterminate
+              用回调 ref 每渲染刷新——部分选中显示横杠 */}
           <input
             type="checkbox"
+            data-testid="session-select-all"
             ref={(el) => {
-              if (el) el.indeterminate = selected.size > 0 && selected.size < filtered.length;
+              if (el) el.indeterminate = selected.size > 0 && selected.size < visibleOrder.length;
             }}
-            checked={selected.size === filtered.length && filtered.length > 0}
+            checked={selected.size === visibleOrder.length && visibleOrder.length > 0}
             onChange={() => {
-              if (selected.size === filtered.length && filtered.length > 0) {
+              if (selected.size === visibleOrder.length && visibleOrder.length > 0) {
                 clearSelection();
               } else {
-                setSelected(new Set(filtered.map((f) => f.session.id)));
+                setSelected(new Set(visibleOrder));
                 setAnchor(null); // 全选后无区间锚（下次 Shift 需新锚）
               }
             }}
             style={{ cursor: "pointer", flexShrink: 0 }}
-            title="全选当前筛选视图的会话"
+            title="全选当前可见的会话（折叠组行不含在内）"
           />
           <span style={{ fontSize: 12, color: "#374151" }}>已选 {selected.size} 个</span>
           <button
-            style={{ ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #0d9488", background: "#f0fdfa", color: "#0f766e", fontWeight: 600 }}
-            onClick={runBatchConvert}
+            style={{ ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #0d9488", background: "#f0fdfa", color: "#0f766e", fontWeight: 600, opacity: batchBusy ? 0.55 : 1 }}
+            disabled={batchBusy !== null}
+            onClick={() => void runBatchConvert()}
+            title={batchBusy ? "批量转处理中…" : undefined}
           >
             批量转笔记
           </button>
           <button
-            style={{ ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #fca5a5", color: "#dc2626" }}
+            style={{ ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #fca5a5", color: "#dc2626", opacity: batchBusy ? 0.55 : 1 }}
+            disabled={batchBusy !== null}
             onClick={() => void (async () => {
-              // 成功后清选集（全删或全不删——后端单事务原子，无半删计数）
-              if (await onBatchDelete([...selected])) clearSelection();
+              // P3-2 pending 防连点（ref 同 tick 拦截——双击不再二次提交）
+              if (batchBusyRef.current) return;
+              batchBusyRef.current = true;
+              setBatchBusy("delete");
+              try {
+                // 成功后清选集（全删或全不删——后端单事务原子，无半删计数）
+                if (await onBatchDelete([...selected])) clearSelection();
+              } finally {
+                batchBusyRef.current = false;
+                setBatchBusy(null);
+              }
             })()}
+            title={batchBusy ? "批量删除处理中…" : undefined}
           >
             批量删除
           </button>
