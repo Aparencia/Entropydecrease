@@ -556,7 +556,7 @@ pub async fn update_note_tags(
     Ok(ok)
 }
 
-/// 更新笔记固定状态（v0.10.0）。
+/// 更新笔记置顶状态（v0.10.0）。
 #[tauri::command]
 pub async fn update_note_pin(
     state: State<'_, AppState>,
@@ -570,7 +570,7 @@ pub async fn update_note_pin(
         .db
         .update_note_pin(id, pin)
         .map_err(|e| e.to_string())?;
-    // REQ-278：固定状态变更——广播 notes 域
+    // REQ-278：置顶状态变更——广播 notes 域
     crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
     Ok(ok)
 }

@@ -119,7 +119,7 @@ pub struct Note {
     /// 属性 JSON 对象（v0.10.0；扩展位，None=无）
     #[serde(default)]
     pub properties: Option<String>,
-    /// 固定标记（v0.10.0；0=未固定，1=固定）
+    /// 置顶标记（v0.10.0；0=未置顶，1=置顶——置顶笔记在树/列表置顶区按更新时间定序）
     #[serde(default)]
     pub pin: i64,
     /// 所属笔记组 id（v0.11.0 REQ-195；None=未归组/旧数据——不猜不填）
@@ -613,7 +613,7 @@ pub struct BatchSessionDeleteResult {
 pub enum NoteSortMode {
     /// 按更新时间倒序（默认）
     UpdatedDesc,
-    /// 固定优先 + 按更新时间倒序
+    /// 置顶优先 + 按更新时间倒序
     PinFirst,
     /// 按创建时间倒序
     CreatedDesc,

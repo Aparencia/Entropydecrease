@@ -6,9 +6,9 @@
  *              区内 updatedAt 降序）→ 手动序区（note_group_orders seq 升序）→
  *              自动区（其余 updatedAt 降序），桶核心见 orderBuckets.ts。
  * @ai-context: seq 为 kind 分区内相对序号：分区内调用语义精确；跨 kind 整表调用
- *              （树组头/过滤平铺）时不同分区的 seq 撞值以 id 决胜——确定且稳定，
- *              非主表面不引入分区头。改判换分区时后端已同事务清行（见 Rust 层
- *              override_group_route），不会带旧序占位。
+ *              （树组头/过滤平铺）时不同分区的 seq 撞值**并列保持输入序**（桶内
+ *              稳定排序——输入确定则结果确定，无 id 决胜）。改判换分区时后端已
+ *              同事务清行（见 Rust 层 override_group_route），不会带旧序占位。
  */
 import { nonPinnedIds, orderPinnedSeqAuto, shiftInList } from "./orderBuckets";
 

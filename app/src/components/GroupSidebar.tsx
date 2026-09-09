@@ -415,7 +415,7 @@ export default function GroupSidebar({
         {/* v0.14 C1：组分区（无查询→按 kind 分区+折叠记忆；有查询→扁平过滤结果） */}
         {filtering ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {/* REQ-315：过滤平铺也走组展示序（置顶→手排→自动；跨 kind seq 撞值以 id 决胜） */}
+            {/* REQ-315：过滤平铺也走组展示序（置顶→手排→自动；跨 kind seq 撞值并列保持输入序——稳定排序，无 id 决胜） */}
             {orderGroups(filteredGroups, orderRows).map(renderGroupRow)}
             {filteredGroups.length === 0 && (
               <p style={{ fontSize: 12, color: "#9ca3af", padding: "12px 8px" }}>无匹配组</p>

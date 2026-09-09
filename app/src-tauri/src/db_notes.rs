@@ -217,7 +217,7 @@ impl Db {
         })
     }
 
-    /// 更新笔记固定状态（v0.10.0；pin=0 取消，=1 固定）。
+    /// 更新笔记置顶状态（v0.10.0；pin=0 取消，=1 置顶）。
     pub fn update_note_pin(&self, id: i64, pin: i64) -> Result<bool> {
         self.with_conn(|conn| {
             let affected = conn.execute(
