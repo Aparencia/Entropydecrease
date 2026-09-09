@@ -6,7 +6,9 @@
  *              全部数据由 ChatPage 加载后透传（本组件纯展示 + 事件回调）。
  */
 import type { AiTaskRecord, ChatSession } from "../types";
-import { refLabel } from "../utils/entityLabel";
+// 2026-09-09 批 1：任务标题统一按类别解析（taskRefLabel——会话级/笔记级
+// 精修 ref_id 语义不同；enrich 恒笔记级），侧栏与对话页/dock 同口径
+import { taskRefLabel } from "../utils/entityLabel";
 
 /** 任务类型标签（refine/enrich → 中文 + 图标；模块内消费——审查修复：原
  *  export 无外部消费方，收窄为非导出） */
@@ -118,12 +120,20 @@ export default function ChatSidebar(props: Props) {
           </div>
         ))}
 
-        <div style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", padding: "14px 8px 4px" }}>🤖 AI 任务</div>
+        <div
+          style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", padding: "14px 8px 4px" }}
+          title="AI 精修/补充任务的轨迹条目（来源=会话或笔记），不是上方 💬 聊天会话——点选查看轨迹与采纳入口"
+        >🤖 AI 任务</div>
         {tasks.length === 0 && <div style={{ fontSize: 12, color: "#9ca3af", padding: "4px 8px" }}>暂无精修/补充任务</div>}
+        {/* 2026-09-09 批 1 语义说明：本段是精修/补充任务（来源会话/笔记）的
+            只读轨迹视图，不是 💬 聊天会话——点选打开任务对话、结果可采纳 */}
+        {tasks.length > 0 && (
+          <div style={{ fontSize: 10.5, color: "#9ca3af", lineHeight: 1.6, padding: "0 8px 6px" }}>
+            精修/补充任务的轨迹（来源：会话或笔记）——非聊天会话；完成结果可采纳
+          </div>
+        )}
         {tasks.map((t) => {
-          const refName = t.opType === "refine"
-            ? refLabel("session", sessionTitles.get(t.refId))
-            : refLabel("note", noteTitles.get(t.refId));
+          const refName = taskRefLabel(t, sessionTitles, noteTitles);
           const stateBadge = t.state === "succeeded" ? "#047857" : t.state === "failed" ? "#b91c1c" : "#b45309";
           return (
             <div

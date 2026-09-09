@@ -105,18 +105,33 @@ export default function AiTaskPanel() {
     }
     setMsg("");
     try {
-      // 采纳落库（返回 {id} 仅历史协议——REQ-277 后不再向用户展示裸编号）
-      await (selected.opType === "refine"
-        ? invoke<{ id: number }>("ai_refine_apply", {
-            sessionId: selected.refId,
-            result: await invoke<AiRefineResult>("ai_refine_result", { taskId: selected.taskId }),
-            taskId: selected.taskId,
-          })
-        : invoke<{ id: number }>("ai_enrich_apply", {
+      // 采纳落库（返回 {id} 仅历史协议——REQ-277 后不再向用户展示裸编号）。
+      // 2026-09-09 批 1 修复：精修按 target_kind 分发采纳链——笔记级任务
+      // （ref_id=笔记 id）走 ai_note_refine_apply（笔记现有版本上加 ai-refine
+      // 版本），会话级/NULL 旧数据走 ai_refine_apply（建基线笔记）——
+      // 原恒传 sessionId 使笔记级任务误入会话链报「会话不存在」。
+      if (selected.opType === "refine") {
+        const result = await invoke<AiRefineResult>("ai_refine_result", { taskId: selected.taskId });
+        if (selected.targetKind === "note") {
+          await invoke("ai_note_refine_apply", {
             noteId: selected.refId,
-            result: await invoke<AiEnrichResult>("ai_enrich_result", { taskId: selected.taskId }),
+            result,
             taskId: selected.taskId,
-          }));
+          });
+        } else {
+          await invoke<{ id: number }>("ai_refine_apply", {
+            sessionId: selected.refId,
+            result,
+            taskId: selected.taskId,
+          });
+        }
+      } else {
+        await invoke<{ id: number }>("ai_enrich_apply", {
+          noteId: selected.refId,
+          result: await invoke<AiEnrichResult>("ai_enrich_result", { taskId: selected.taskId }),
+          taskId: selected.taskId,
+        });
+      }
       // REQ-277：落库提示不带裸 # 数字（笔记身份=语义位置，不是编号）
       setMsg("已落库为笔记（可到笔记页查看版本时间线）");
       setSelected(null);

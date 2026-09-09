@@ -19,7 +19,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AiTaskRecord, AiTaskState, AiTurn, ChatMessage, ChatSession } from "../types";
 import TaskConversationView from "./TaskConversationView";
-import { refLabel } from "../utils/entityLabel";
+// 2026-09-09 批 1：任务标题统一按类别解析（taskRefLabel——笔记级精修
+// ref_id=笔记 id，仅按 opType 会错查会话标题表；enrich 恒笔记级）
+import { taskRefLabel } from "../utils/entityLabel";
 
 interface SessionRow { id: number; title: string }
 interface Props {
@@ -115,9 +117,7 @@ export default function AiConversationDock({
   }, []);
 
   const taskRefTitle = useCallback((t: AiTaskRecord): string =>
-    t.opType === "refine"
-      ? refLabel("session", sessionTitles.get(t.refId))
-      : refLabel("note", noteTitles.get(t.refId)),
+    taskRefLabel(t, sessionTitles, noteTitles),
   [sessionTitles, noteTitles]);
 
   // F9：懒加载 + open 翻转刷新——首次 open 装载；之后静态数据 10s 时效跳过，

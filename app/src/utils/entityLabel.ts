@@ -28,3 +28,36 @@ export function refLabel(
 export function kindWord(kind: RefKind): string {
   return kind === "session" ? "会话" : "笔记";
 }
+
+/** AI 任务标题解析所需的最小字段（不依赖 AiTaskRecord——纯函数防循环引用） */
+export interface TaskRefTitleInput {
+  opType: string;
+  /** v0.17.0 起落库（session|note）；NULL=旧数据 */
+  targetKind?: string | null;
+  refId: number;
+}
+
+/** AI 任务来源类别解析（标题查表前置——统一口径单一来源）。
+ *
+ * @ai-context Why（2026-09-09 批 1 修复）：精修双入口下 ref_id 语义不同——
+ *              会话级精修 ref_id=会话 id、笔记级精修 ref_id=笔记 id；只按
+ *              opType 分发会让笔记级精修错查会话标题表（错名/「会话（标题
+ *              不可用）」）。分发规则：enrich 恒为笔记级（后端入参即 note_id，
+ *              含 v0.17.0 前 target_kind=NULL 旧数据——不猜 session）；refine
+ *              按 target_kind 分流，NULL=旧数据（v0.17.0 前只有会话级精修）
+ *              → session 兜底（与 TaskConversationView 跳转分发同口径）。
+ */
+export function taskRefKind(t: TaskRefTitleInput): RefKind {
+  return t.opType === "enrich" || t.targetKind === "note" ? "note" : "session";
+}
+
+/** AI 任务目标语义标签：按类别查对应标题表；缺标题 → 类别中性占位（不裸号） */
+export function taskRefLabel(
+  t: TaskRefTitleInput,
+  sessionTitles?: ReadonlyMap<number, string>,
+  noteTitles?: ReadonlyMap<number, string>,
+): string {
+  const kind = taskRefKind(t);
+  const titles = kind === "note" ? noteTitles : sessionTitles;
+  return refLabel(kind, titles?.get(t.refId));
+}

@@ -11,6 +11,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { AiTaskRecord, AiProviderView, ChatMessage, ChatSession, ChatStreamEvent, NoteGroup } from "../types";
 import ChatSidebar from "../components/ChatSidebar";
@@ -25,9 +26,14 @@ import { buildConversationMarkdown } from "../utils/chatTranscript";
 import TaskLaunchDialog, { type LaunchTargetRow } from "../components/TaskLaunchDialog";
 import TaskThreadCard from "../components/TaskThreadCard";
 import { buildTaskFollowUpPrompt } from "../utils/taskFollowUp";
-import { refLabel } from "../utils/entityLabel";
+// 2026-09-09 批 1：任务标题统一按类别解析（taskRefLabel——笔记级精修
+// ref_id=笔记 id，仅按 opType 会错查会话标题表；enrich 恒笔记级）
+import { taskRefLabel } from "../utils/entityLabel";
 
 interface Props {
+  /** 页面可见门控（App 层注入——保活挂载下切回重同步；2026-09-09 批 1：
+      别页发起/完成的 AI 任务本页无感知，切回必须重拉。SessionsPage 同款语义） */
+  active: boolean;
   /** 跨页直达（任务对话引用跳转） */
   onOpenSessions: (sessionId: number) => void;
   onOpenNote: (noteId: number) => void;
@@ -53,11 +59,15 @@ interface SessionRow {
 /** 首次发送云端提示的记忆键（一次性确认） */
 const CLOUD_NOTICE_KEY = "entropy-ai-chat-cloud-notice";
 
+/** 静态数据时效（ms）：active 切回距上次拉取 <10s 则跳过——列表不抖动
+ *  （AiConversationDock F9 同口径） */
+const STATIC_TTL_MS = 10_000;
+
 const CLOUD_NOTICE_TEXT =
   "对话内容（纯文本）将发送至所选模型的云端服务商；本地音视频/图片/笔记永不出本机。是否同意？";
 
 export default function ChatPage(props: Props) {
-  const { onOpenSessions, onOpenNote, onOpenNoteHighlight, onOpenSettings, focusTaskId, onFocusTaskConsumed, focusChatId, onFocusChatConsumed, onOpenRefineWorkbench } = props;
+  const { active, onOpenSessions, onOpenNote, onOpenNoteHighlight, onOpenSettings, focusTaskId, onFocusTaskConsumed, focusChatId, onFocusChatConsumed, onOpenRefineWorkbench } = props;
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [tasks, setTasks] = useState<AiTaskRecord[]>([]);
   const [providers, setProviders] = useState<AiProviderView[]>([]);
@@ -71,7 +81,6 @@ export default function ChatPage(props: Props) {
   const [retryBusy, setRetryBusy] = useState(false);
   const [sessionTitles, setSessionTitles] = useState<Map<number, string>>(new Map());
   const [noteTitles, setNoteTitles] = useState<Map<number, string>>(new Map());
-  const [staticLoaded, setStaticLoaded] = useState(false);
   // v0.16.1：对话转笔记——组列表（目标组下拉）与保存对话框态
   const [noteGroups, setNoteGroups] = useState<NoteGroup[]>([]);
   const [saveDialog, setSaveDialog] = useState<{ initialTitle: string; content: string } | null>(null);
@@ -83,6 +92,10 @@ export default function ChatPage(props: Props) {
   const [noteRows, setNoteRows] = useState<LaunchTargetRow[]>([]);
   const activeChatRef = useRef<number | null>(null);
   activeChatRef.current = activeChatId;
+  // 2026-09-09 批 1：activeTaskId ref 镜像——ai:task-update 监听只注册一次，
+  // 回调读最新选中任务（AiConversationDock F2 同款——选中切换不触发重订阅）
+  const activeTaskIdRef = useRef<number | null>(null);
+  activeTaskIdRef.current = activeTaskId;
   // F3（审查竞态）：消息装载序号——并发装载只认最新（快速切会话时旧会话的
   // 异步返回不得覆盖新会话消息；与 selectChat 的同步 set 无关，纯防错序）
   const loadSeq = useRef(0);
@@ -101,34 +114,44 @@ export default function ChatPage(props: Props) {
 
   const { view, setActive, isStreaming, launch, stop } = useChatStream((sid, ev) => void onStreamSettled(sid, ev));
 
-  // 静态数据（会话/Provider/标题映射）只加载一次——审查优化：原 6s 全量刷新
-  useEffect(() => {
-    if (staticLoaded) return;
-    void (async () => {
-      setSessions(await invoke<ChatSession[]>("chat_list_sessions").catch(() => [] as ChatSession[]));
-      setProviders(await invoke<AiProviderView[]>("ai_provider_list").catch(() => [] as AiProviderView[]));
-      const sessRows = await invoke<SessionRow[]>("list_sessions", { limit: 500 }).catch(() => [] as SessionRow[]);
-      setSessionTitles(new Map(sessRows.map((s) => [s.id, s.title])));
-      setSessionRows(sessRows.map((s) => ({ id: s.id, title: s.title })));
-      const notes = await invoke<{ id: number; title: string }[]>("search_notes", { keyword: "", tag: null as string | null }).catch(() => [] as { id: number; title: string }[]);
-      setNoteTitles(new Map(notes.map((n) => [n.id, n.title])));
-      setNoteRows(notes.map((n) => ({ id: n.id, title: n.title })));
-      // v0.16.1：组列表（保存对话框目标组下拉——失败静默仅无组可选）
-      setNoteGroups(await invoke<NoteGroup[]>("list_note_groups", { terrain: null }).catch(() => [] as NoteGroup[]));
-      setStaticLoaded(true);
-    })();
-  }, [staticLoaded]);
+  // 静态数据（会话/Provider/标题/组映射）——2026-09-09 批 1：原「挂载即拉
+  // 一次」在保活挂载（TD-004）下等于应用启动即在隐藏页拉取；改为首激活拉取
+  // + 切回超 STATIC_TTL_MS 时效才重拉（AiConversationDock F9 同口径防抖动）。
+  // 标题映射覆盖会话/笔记全量——AI 任务侧栏条目按 ref_id 查表（taskRefLabel）。
+  const staticAtRef = useRef(0);
+  const loadStatic = useCallback(async () => {
+    staticAtRef.current = Date.now();
+    setSessions(await invoke<ChatSession[]>("chat_list_sessions").catch(() => [] as ChatSession[]));
+    setProviders(await invoke<AiProviderView[]>("ai_provider_list").catch(() => [] as AiProviderView[]));
+    const sessRows = await invoke<SessionRow[]>("list_sessions", { limit: 500 }).catch(() => [] as SessionRow[]);
+    setSessionTitles(new Map(sessRows.map((s) => [s.id, s.title])));
+    setSessionRows(sessRows.map((s) => ({ id: s.id, title: s.title })));
+    const notes = await invoke<{ id: number; title: string }[]>("search_notes", { keyword: "", tag: null as string | null }).catch(() => [] as { id: number; title: string }[]);
+    setNoteTitles(new Map(notes.map((n) => [n.id, n.title])));
+    setNoteRows(notes.map((n) => ({ id: n.id, title: n.title })));
+    // v0.16.1：组列表（保存对话框目标组下拉——失败静默仅无组可选）
+    setNoteGroups(await invoke<NoteGroup[]>("list_note_groups", { terrain: null }).catch(() => [] as NoteGroup[]));
+  }, []);
 
-  // 任务列表：初始 + 仅当存在未终态任务时轮询（审查优化：无进行中任务零轮询）
+  // 任务列表拉取（AI 任务段 + 线程卡数据源）；拉取时机见下方 active 切回/
+  // ai:task-update 终态事件，进行中任务由轮询 effect 兜底
   const reloadTasks = useCallback(async () => {
     const refine = await invoke<AiTaskRecord[]>("ai_task_history", { opType: "refine", limit: 30 }).catch(() => [] as AiTaskRecord[]);
     const enrich = await invoke<AiTaskRecord[]>("ai_task_history", { opType: "enrich", limit: 30 }).catch(() => [] as AiTaskRecord[]);
     setTasks([...refine, ...enrich].sort((a, b) => b.createdAt - a.createdAt).slice(0, 60));
   }, []);
 
+  // 2026-09-09 批 1（刷新缺口根治）：active 门控切回重同步——本页保活挂载、
+  // 隐藏期别页（会话页精修/笔记级 AI）发起/完成的任务本页无感知；每次切回
+  // 重拉任务列表，静态数据（会话/笔记标题映射）超时效才重拉（隐藏期可能有
+  // 新建/改名实体——标题查表要拿得到，否则任务条目回落中性占位）
   useEffect(() => {
+    if (!active) return;
+    if (staticAtRef.current === 0 || Date.now() - staticAtRef.current >= STATIC_TTL_MS) {
+      void loadStatic();
+    }
     void reloadTasks();
-  }, [reloadTasks]);
+  }, [active, loadStatic, reloadTasks]);
 
   const hasActiveTask = tasks.some((t) => t.state === "pending" || t.state === "running");
   useEffect(() => {
@@ -162,6 +185,30 @@ export default function ChatPage(props: Props) {
     }
   }, [setActive]);
 
+  // 2026-09-09 批 1（刷新缺口根治）：订阅 ai:task-update **终态**事件 → 重拉
+  // 任务列表——会话页/笔记页发起的精修/补充在本页（保活挂载）不可见的问题
+  // 根源是本页无事件通道；成功/失败判定同 App.tsx 全局 toast 口径（进行中
+  // 按片进度事件不刷列表，省无谓 IPC）。选中任务详情打开时终态后重取详情
+  // （轨迹/adopted 回写同 AiConversationDock F2——ref 镜像读最新选中）。
+  // 注：Rust 侧事件先于 DB 终态落库发出（set_task → finish_ai_task）——理论
+  // 竞态下本次刷新读到 running，由下方 hasActiveTask 轮询兜底收敛（不额外延时）
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<[number, import("../types").AiTaskState]>("ai:task-update", (e) => {
+      if (disposed) return;
+      const st = e.payload[1];
+      const terminal = st === "Succeeded" || (typeof st === "object" && st !== null && "Failed" in st);
+      if (!terminal) return;
+      void reloadTasks();
+      const tid = activeTaskIdRef.current;
+      if (tid != null) void selectTask(tid);
+    }).then((u) => {
+      if (disposed) u(); else unlisten = u;
+    });
+    return () => { disposed = true; unlisten?.(); };
+  }, [reloadTasks, selectTask]);
+
   const refreshSessions = useCallback(async () => {
     setSessions(await invoke<ChatSession[]>("chat_list_sessions").catch(() => [] as ChatSession[]));
   }, []);
@@ -169,9 +216,7 @@ export default function ChatPage(props: Props) {
   // v0.16.1：任务对话化——目标名解析 / 追问预填 / 启动成功（REQ-277：
   // 标题缺失语义占位——绝不回退裸 `#id`）
   const taskRefTitle = useCallback((t: import("../types").AiTaskRecord): string =>
-    t.opType === "refine"
-      ? refLabel("session", sessionTitles.get(t.refId))
-      : refLabel("note", noteTitles.get(t.refId)),
+    taskRefLabel(t, sessionTitles, noteTitles),
   [sessionTitles, noteTitles]);
   const followUpTask = useCallback((t: import("../types").AiTaskRecord) => {
     setDraft(buildTaskFollowUpPrompt(t, taskRefTitle(t)));

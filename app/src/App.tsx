@@ -364,8 +364,11 @@ function App() {
           <ActionPage active={page === "action"} />
         </div>
         <div style={{ flex: 1, display: page === "chat" ? "block" : "none", overflow: "hidden" }}>
-          {/* v0.16.0：AI 对话页——跨页跳转复用 focus 机制（任务对话引用 → 会话/笔记/设置） */}
+          {/* v0.16.0：AI 对话页——跨页跳转复用 focus 机制（任务对话引用 → 会话/笔记/设置）。
+              2026-09-09 批 1：active 门控透传——保活挂载下切回重同步（别页发起/完成的
+              AI 任务本页无感知；SessionsPage/ActionPage 同款 active 语义） */}
           <ChatPage
+            active={page === "chat"}
             onOpenSessions={(id) => { setFocusSessionId(id); setPage("sessions"); }}
             onOpenNote={(id) => { setFocusNoteId(id); setPage("notes"); }}
             onOpenNoteHighlight={(noteId, search) => {
