@@ -87,9 +87,11 @@ export default function SessionListRow({
   // 重命名期间输入框内容（随请求启动重置为服务端标题）
   const [value, setValue] = useState("");
   const [echo, setEcho] = useState<string | null>(null);
-  // busy=提交中（响应式——输入框禁用防连点）；editingRef=编辑态镜像
-  // （Esc/提交后 blur 不再触发重复提交——移除节点时 focusout 竞态）
+  // busy=提交中：state 供输入框禁用视觉；busyRef 供同步判定（state 更新
+  // 异步——同 tick 双击 Enter 需 ref 立即拦截防连点）；editingRef=编辑态
+  // 镜像（Esc/提交后 blur 不再触发重复提交——移除节点时 focusout 竞态）
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const editingRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -114,12 +116,13 @@ export default function SessionListRow({
 
   /** Enter/失焦提交：空标题或未变化=放弃退出（与详情页 ✎ 同口径） */
   const commitRename = async () => {
-    if (!editingRef.current || busy) return;
+    if (!editingRef.current || busyRef.current) return;
     const t = value.trim();
     if (!t || t === s.title) {
       endRename();
       return;
     }
+    busyRef.current = true;
     setBusy(true);
     try {
       await invoke("update_session_title", { id: s.id, title: t });
@@ -131,6 +134,7 @@ export default function SessionListRow({
     } catch (e) {
       showToast(`改名失败: ${e}`, "err");
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
