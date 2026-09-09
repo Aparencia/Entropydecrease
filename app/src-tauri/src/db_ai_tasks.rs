@@ -204,6 +204,24 @@ impl Db {
         .map_err(Into::into)
     }
 
+    /// 表内当前最大 task_id（应用启动时 id 序列基准；空表 → 0）。
+    ///
+    /// @ai-context Why（2026-09-09 批 1 修复）：恢复列表只含「succeeded 且
+    ///              未采纳」行，而已采纳/failed/proofread/goal_plan 等行的
+    ///              id 往往更大——启动序列若只越过恢复集 max，重启后新任务
+    ///              会复用历史 task_id，insert_ai_task 的 INSERT OR REPLACE
+    ///              静默顶替历史行（含已采纳的结果/成本/轨迹——数据丢失）。
+    ///              基准改查全表 max：覆盖全部状态的行，序列只前进不回退。
+    pub fn max_ai_task_id(&self) -> Result<u64> {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        // 空表时 MAX() 返回单行 NULL——须 Option<i64> 读取（rusqlite 严格类型，
+        // 教训同 get_ai_task_trajectory 的 NULL 列修复），再拍平为 0
+        let max: Option<Option<i64>> = conn
+            .query_row("SELECT MAX(task_id) FROM ai_tasks", [], |r| r.get(0))
+            .optional()?;
+        Ok(max.flatten().unwrap_or(0).max(0) as u64)
+    }
+
     /// 恢复未采纳的成功结果（应用启动时；供任务面板 + 结果重取）。
     pub fn list_restorable_succeeded(&self, limit: usize) -> Result<Vec<AiTaskRecord>> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());

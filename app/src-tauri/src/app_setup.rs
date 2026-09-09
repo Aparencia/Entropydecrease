@@ -196,8 +196,11 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
     // 执行，前端轮询/事件双通道——禁止同步阻塞 30s+ 长会话精修）
     let ai_tasks = crate::commands_ai_refine::task_registry();
     let ai_task_seq = crate::commands_ai_refine::task_seq();
-    // v0.8.0 F2（2026-08-21）：任务中心——启动恢复未采纳的成功结果
-    // （重启不丢；注册表 + id 序列以恢复结果为基准，防 id 冲突覆盖）
+    // v0.8.0 F2（2026-08-21）：任务中心——启动恢复未采纳的成功结果（重启
+    // 不丢；注册表以恢复集为准）。id 序列以 **DB 全表最大 id** 为基准防冲突
+    // （2026-09-09 批 1 修复：旧口径只按恢复集 max+1，会漏掉已采纳/failed/
+    // proofread/goal_plan 等 id 更大的历史行——重启后新任务复用旧 task_id，
+    // insert_ai_task 的 INSERT OR REPLACE 静默顶替历史行含已采纳，见下）
     {
         // 保留策略先行（清理超限旧终态——防表膨胀）
         let _ = db.trim_ai_tasks();
@@ -207,8 +210,13 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
                 eprintln!("[ai-tasks] 恢复失败（注册表空启动）: {}", e);
                 Vec::new()
             });
+        // 序列基准 = DB 全表 max（覆盖所有状态行）；查询失败降级为恢复集
+        // 口径（旧行为——DB 不可读时新任务也难落库，风险不放大）
+        let db_max_task_id = db.max_ai_task_id().unwrap_or_else(|e| {
+            eprintln!("[ai-tasks] 查询任务表最大 id 失败（按恢复集口径推进序列）: {}", e);
+            restored.iter().map(|r| r.task_id).max().unwrap_or(0)
+        });
         if let Ok(mut tasks) = ai_tasks.lock() {
-            let mut max_id = 0u64;
             for rec in &restored {
                 let result = rec
                     .result_json
@@ -223,13 +231,13 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
                         target_id: rec.ref_id,
                     },
                 );
-                max_id = max_id.max(rec.task_id);
             }
-            // id 序列越过恢复的最大 id——新任务不复用旧 id（防覆盖已恢复结果）
+            // id 序列越过 DB 最大 id——新任务不复用任何历史行 id
+            // （防 INSERT OR REPLACE 顶替已采纳/失败等历史行）
             let _ = ai_task_seq.fetch_update(
                 std::sync::atomic::Ordering::Relaxed,
                 std::sync::atomic::Ordering::Relaxed,
-                |cur| Some(cur.max(max_id + 1)),
+                |cur| Some(crate::commands_ai_refine::task_seq_lower_bound(cur, db_max_task_id)),
             );
             eprintln!("[ai-tasks] 启动恢复 {} 条未采纳任务", restored.len());
         }

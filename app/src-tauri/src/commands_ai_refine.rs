@@ -604,6 +604,18 @@ pub fn task_seq() -> Arc<AtomicU64> {
     Arc::new(AtomicU64::new(1))
 }
 
+/// id 序列下限（纯函数）：取「当前值」与「DB 最大 task_id + 1」之大。
+///
+/// @ai-context Why（2026-09-09 批 1 修复）：启动恢复后序列必须越过 **DB
+///              全表** 最大 id——恢复集只含未采纳成功任务，已采纳/failed/
+///              proofread/goal_plan 行 id 更大时，若只按恢复集推进，新任务
+///              将复用历史 task_id 并被 insert_ai_task 的 INSERT OR REPLACE
+///              静默顶替（历史行含已采纳——数据丢失）。saturating 防极端 id
+///              溢出；序列只前进不回退（当前值更大时保持）。
+pub fn task_seq_lower_bound(current: u64, db_max_task_id: u64) -> u64 {
+    current.max(db_max_task_id.saturating_add(1))
+}
+
 /// 任务注册表（AppState 装配）。
 pub fn task_registry() -> Arc<Mutex<HashMap<u64, AiTaskEntry>>> {
     Arc::new(Mutex::new(HashMap::new()))

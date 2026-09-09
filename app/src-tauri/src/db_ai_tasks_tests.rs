@@ -2,7 +2,10 @@
 //!
 //! @ai-context: 覆盖：插入/终态更新/采纳标记/成本回填/恢复（未采纳成功
 //!              结果）/历史列表/保留策略（每类型 50 条上限清理最旧）。
+//! @ai-context 2026-09-09 批 1：任务表最大 id 查询 + 启动序列下限纯函数
+//!              （防重启后新任务复用历史 task_id 顶替历史行——含已采纳）。
 
+use crate::commands_ai_refine::task_seq_lower_bound;
 use crate::db::Db;
 use crate::db_ai_tasks::{AiTaskRecord, TASKS_KEEP_PER_TYPE};
 
@@ -149,4 +152,34 @@ fn adopted_query_true_after_mark_false_otherwise() {
     assert!(db.is_ai_task_adopted(8));
     // 不存在的任务 → false（防御方向保守——旧任务无记录放行）
     assert!(!db.is_ai_task_adopted(999));
+}
+
+#[test]
+fn max_task_id_spans_all_states_not_only_restorable() {
+    // Arrange（2026-09-09 批 1 回归形状）：id 更大的已采纳/failed/running
+    // 行均不在启动恢复集——旧实现按恢复集越序列会漏掉它们，重启后新任务
+    // 复用这些 task_id 并 REPLACE 顶替（含已采纳——数据丢失）
+    let db = open_mem();
+    let mut adopted = rec(80, "refine", 1, "succeeded");
+    adopted.adopted = true;
+    db.insert_ai_task(&adopted).unwrap();
+    db.insert_ai_task(&rec(120, "refine", 2, "failed")).unwrap();
+    db.insert_ai_task(&rec(95, "enrich", 3, "running")).unwrap();
+    // Act + Assert：全表最大 id = 120（不被恢复集 80 封顶）
+    assert_eq!(db.max_ai_task_id().unwrap(), 120);
+    // 空表 → 0（序列下限不后退，起点维持 1）
+    assert_eq!(open_mem().max_ai_task_id().unwrap(), 0);
+}
+
+#[test]
+fn seq_lower_bound_never_reuses_existing_row_ids() {
+    // 空表（db_max=0）→ 至少 1（与 task_seq 初始值一致）
+    assert_eq!(task_seq_lower_bound(1, 0), 1);
+    // DB 最大 id 41（如已采纳历史行）→ 下限 42：新任务不复用 1..=41
+    assert_eq!(task_seq_lower_bound(1, 41), 42);
+    assert_eq!(task_seq_lower_bound(10, 41), 42);
+    // 当前值已更大 → 只前进不回退
+    assert_eq!(task_seq_lower_bound(300, 41), 300);
+    // 极端：u64::MAX 不 panic（saturating_add）且不前进
+    assert_eq!(task_seq_lower_bound(u64::MAX, u64::MAX), u64::MAX);
 }
