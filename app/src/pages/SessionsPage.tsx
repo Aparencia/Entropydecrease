@@ -21,7 +21,7 @@ import ColumnBar from "../components/ColumnBar";
 import { useColumnLayout } from "../hooks/useColumnLayout";
 import { useDbRefresh } from "../hooks/useDbRefresh";
 import type {
-  BatchNoteResult, CourseGroup, SessionDetail, SessionListItem,
+  BatchNoteResult, BatchSessionDeleteResult, CourseGroup, SessionDetail, SessionListItem,
 } from "../types";
 
 interface Props {
@@ -241,30 +241,34 @@ export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocu
     }
   };
 
-  /** 批量删除（确认框说明后果；笔记保留——SET NULL 语义） */
-  const deleteSelected = async (ids: number[]) => {
+  /** 批量删除（批 4：后端单事务原子 batch_delete_sessions——全删或全不删，
+   *  不再逐条循环半删；resolve=true=全部成功，调用方据此清选集） */
+  const deleteSelected = async (ids: number[]): Promise<boolean> => {
     const ok = await confirm(
       `确定删除选中的 ${ids.length} 个会话？将删除其转写/OCR/图集，关联笔记保留。`,
       { title: "熵减", kind: "warning" },
     );
-    if (!ok) return;
-    let failed = 0;
-    for (const id of ids) {
-      try {
-        await invoke<boolean>("delete_session", { id });
-        if (detail?.session.id === id) {
-          setDetail(null);
-          openIdRef.current = null;
-        }
-      } catch {
-        failed += 1;
+    if (!ok) return false;
+    try {
+      const r = await invoke<BatchSessionDeleteResult>("batch_delete_sessions", { ids });
+      if (detail && ids.includes(detail.session.id)) {
+        setDetail(null);
+        openIdRef.current = null;
       }
+      // 原子全删：deleted<ids.length 仅因勾选集中含已不存在的会话（宽容语义）
+      showToast(`已删除 ${r.deleted} 个会话`, "ok");
+      void refresh();
+      return true;
+    } catch (e) {
+      showToast(`批量删除失败: ${e}`, "err");
+      return false;
     }
-    showToast(
-      failed > 0 ? `已删除 ${ids.length - failed} 个，${failed} 个失败` : `已删除 ${ids.length} 个会话`,
-      failed > 0 ? "err" : "ok",
-    );
-    void refresh();
+  };
+
+  /** 行内改名成功（列表刷新经 data:sessions-changed 总线自动进行——update_session_title
+   *  命令侧已广播；本层只补：当前打开的详情若是被改名会话则重拉，防右侧标题陈旧） */
+  const sessionRenamed = (id: number) => {
+    if (detail?.session.id === id) void openDetail(id);
   };
 
   // id → 条目映射（批量可转化判定用；覆盖列表与课程分组两个数据源）
@@ -290,7 +294,9 @@ export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocu
           onConvert={(item) => void convertOne(item)}
           onOpenNote={onOpenNote}
           onBatchConvert={(ids) => void convertSelected(ids)}
-          onBatchDelete={(ids) => void deleteSelected(ids)}
+          onBatchDelete={(ids) => deleteSelected(ids)}
+          onDeleteOne={(id) => void removeOne(id)}
+          onSessionRenamed={(id) => sessionRenamed(id)}
           showToast={showToast}
           onCollapse={() => listCol.setManualFolded(true)}
         />

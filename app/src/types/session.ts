@@ -261,6 +261,12 @@ export interface BatchNoteResult {
   skipped: SkippedNote[];
 }
 
+/** 批量删除会话结果（批 4：原子全删——失败整体报错，无部分成功） */
+export interface BatchSessionDeleteResult {
+  /** 实际删除的会话行数（选中集中已不存在的 id 不计入） */
+  deleted: number;
+}
+
 /** 段搜索命中（Rust SegmentHit；REQ-079，camelCase 契约） */
 export interface SegmentHit {
   session_id: number;

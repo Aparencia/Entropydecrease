@@ -5,24 +5,28 @@
  *              状态与转化筛选、排序、课程分组折叠、勾选批量操作栏、内联一键转笔记。
  *              筛选/排序/选择均为面板本地状态（数据已在 SessionListItem 里，
  *              零后端往返）；数据获取与转化/删除副作用经回调上抛给 SessionsPage。
- * @ai-context: 转化状态可见化核心：录制中/待转/已转笔记/异常徽标 +
- *              可转化判定（已结束 + 有内容 + 未转）。
+ * @ai-context: 批 4 交互矩阵：去行内 checkbox → 笔记同款选择模式——「选择」
+ *              按钮进入（单击行=勾选）/ 再点或 Esc 退出；Ctrl/⌘+单击=加/减单
+ *              行、Shift+单击=按当前可见列表位置区间（复用 utils/noteSelection
+ *              纯函数，零笔记域耦合）；多选态视觉=靛蓝底 + ✓ 前缀（行级实现
+ *              在 SessionListRow）。列表变化（筛选/排序/折叠/刷新）自动裁剪
+ *              选集至当前可见行；批量栏口径=当前可见列表（全选框三态保留）。
+ * @ai-context: Esc 退出链：行内重命名（输入内 Esc 自吞）→ 右键菜单 → 选择
+ *              模式/多选态（清选集退出）；右键菜单=单行语义（打开详情/重命名/
+ *              复制标题/转笔记/删除——SessionRowContextMenu 委托父层处理）。
  */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { CourseGroup, OcrBlockHit, SegmentHit, Session, SessionListItem } from "../types";
-import { fmtDate, fmtDuration, fmtMs } from "../utils/fmt";
+import { fmtMs } from "../utils/fmt";
+import { emptySelection, rangeSelection, toggleSelection } from "../utils/noteSelection";
+import SessionListRow from "./SessionListRow";
+import type { SessionRenameRequest } from "./SessionListRow";
+import SessionRowContextMenu from "./SessionRowContextMenu";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 const selectStyle: React.CSSProperties = {
   fontSize: 12, padding: "4px 6px", border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff",
-};
-const convertBtn: React.CSSProperties = {
-  ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #0d9488",
-  background: "#f0fdfa", color: "#0f766e", fontWeight: 600,
-};
-const viewNoteBtn: React.CSSProperties = {
-  ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #e5e7eb", background: "#fff", color: "#0f766e",
 };
 
 type StatusFilter = "all" | "recording" | "finished" | "failed";
@@ -50,8 +54,12 @@ interface Props {
   onOpenNote: (noteId: number) => void;
   /** 批量转笔记（入参已过滤为可转化 id；父层负责 invoke/toast/刷新） */
   onBatchConvert: (eligibleIds: number[]) => void;
-  /** 批量删除（父层负责确认/invoke/toast/刷新） */
-  onBatchDelete: (ids: number[]) => void;
+  /** 批量删除（父层负责确认/invoke/toast/刷新；resolve=true=全部删除成功） */
+  onBatchDelete: (ids: number[]) => Promise<boolean>;
+  /** 单行删除（右键菜单；父层复用详情页删除动线——确认/清详情/刷新） */
+  onDeleteOne: (id: number) => void;
+  /** 行内改名成功（父层刷新当前打开详情——列表刷新走 data:sessions-changed 总线） */
+  onSessionRenamed: (id: number) => void;
   showToast: (msg: string, kind: "ok" | "err") => void;
   /** v0.15：折叠为窄条（父层 useColumnLayout.setManualFolded(true)） */
   onCollapse?: () => void;
@@ -59,8 +67,8 @@ interface Props {
 
 export default function SessionListPanel({
   width = 320, items, groups, grouped, onToggleGrouped, loading, justFinished, onDismissJustFinished,
-  openSessionId, onOpenDetail, onConvert, onOpenNote, onBatchConvert, onBatchDelete, showToast,
-  onCollapse,
+  openSessionId, onOpenDetail, onConvert, onOpenNote, onBatchConvert, onBatchDelete, onDeleteOne,
+  onSessionRenamed, showToast, onCollapse,
 }: Props) {
   const [keyword, setKeyword] = useState("");
   const [searchMode, setSearchMode] = useState<SearchMode>("title");
@@ -73,7 +81,17 @@ export default function SessionListPanel({
   const [filterConverted, setFilterConverted] = useState<ConvertedFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("time-desc");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  // ── 多选态（批 4）：selectionMode=选择模式（单击=勾选）；anchor=区间锚 ──
+  const [selected, setSelected] = useState<Set<number>>(emptySelection());
+  const [anchor, setAnchor] = useState<number | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ item: SessionListItem; x: number; y: number } | null>(null);
+  // 行内重命名请求（nonce：同一行连续两次「重命名」也能重启编辑态）
+  const [renameReq, setRenameReq] = useState<SessionRenameRequest | null>(null);
+  const renameNonceRef = useRef(0);
+
+  const clearSelection = useCallback(() => { setSelected(emptySelection()); setAnchor(null); }, []);
+  const exitBatch = useCallback(() => { setSelectionMode(false); clearSelection(); }, [clearSelection]);
 
   /** REQ-079：段搜索（片段上下文 + 点击跳详情） */
   const searchSegments = async () => {
@@ -163,16 +181,46 @@ export default function SessionListPanel({
       .filter((g) => g.sessions.length > 0);
   }, [groups, matchFilters, sortBy]);
 
-  const toggleSelect = (id: number) => {
-    setSelected((cur) => {
-      const next = new Set(cur);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  // 当前可见行序（批 4 区间语义基准）：分组视图=展开组顺次；平铺=筛选后序。
+  // 折叠组行不可见——不参与区间与选集裁剪（与笔记树语义一致）
+  const visibleOrder = useMemo(() => {
+    if (grouped && groupedView) {
+      const out: number[] = [];
+      for (const g of groupedView) {
+        if (collapsed[g.course]) continue;
+        for (const i of g.sessions) out.push(i.session.id);
+      }
+      return out;
+    }
+    return filtered.map((i) => i.session.id);
+  }, [grouped, groupedView, filtered, collapsed]);
 
-  const clearSelection = () => setSelected(new Set());
+  const visibleOrderRef = useRef<number[]>([]);
+  useEffect(() => { visibleOrderRef.current = visibleOrder; }, [visibleOrder]);
+
+  // 列表数据变化裁剪：只留当前可见行（筛选/折叠/删除后不残留幽灵勾选）
+  useEffect(() => {
+    setSelected((cur) => {
+      if (cur.size === 0) return cur;
+      const visible = new Set(visibleOrder);
+      let changed = false;
+      const next = new Set<number>();
+      for (const id of cur) if (visible.has(id)) next.add(id); else changed = true;
+      return changed ? next : cur;
+    });
+  }, [visibleOrder]);
+
+  // Esc 退出链：右键菜单 → 选择模式/多选态（清选集退出）。
+  // （行内重命名输入内已 stopPropagation 自吞 Esc——不在此列）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (contextMenu) { setContextMenu(null); return; }
+      if (selectionMode || selected.size > 0) exitBatch();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [contextMenu, selectionMode, selected.size, exitBatch]);
 
   const clearFilters = () => {
     setFilterStatus("all");
@@ -193,108 +241,60 @@ export default function SessionListPanel({
       showToast("选中的会话均不可转换（已转/进行中/无内容）", "err");
       return;
     }
-    setSelected(new Set());
+    clearSelection();
     onBatchConvert(eligibleIds);
   };
 
-  /** 列表项状态徽标（转化状态可见化核心） */
-  const statusBadge = (item: SessionListItem) => {
-    const s = item.session;
-    if (s.status === "recording")
-      return <span style={{ fontSize: 11, fontWeight: 600, color: "#dc2626" }}>● 录制中</span>;
-    if (item.hasNote)
-      return (
-        <span style={{ fontSize: 11, fontWeight: 600, color: "#047857", background: "#ecfdf5", border: "1px solid #6ee7b7", borderRadius: 10, padding: "1px 7px" }}>
-          ✓ 已转笔记
-        </span>
-      );
-    if (s.status === "failed") return <span style={{ fontSize: 11, color: "#dc2626" }}>异常</span>;
-    if (item.hasContent)
-      return (
-        <span style={{ fontSize: 11, color: "#b45309", background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 10, padding: "1px 7px" }}>
-          待转
-        </span>
-      );
-    return <span style={{ fontSize: 11, color: "#6b7280" }}>已完成</span>;
-  };
+  // ── 行交互（批 4）：单击语义按模式分派；修饰键不换右栏 ──
+  const rowOpen = useCallback((item: SessionListItem) => {
+    if (selectionMode) {
+      // 选择模式：单击=勾选（不打开详情）
+      setSelected((cur) => toggleSelection(cur, item.session.id));
+      setAnchor(item.session.id);
+      return;
+    }
+    // 普通单击=单选语义并打开——先清既有选集（防误以为仍处多选态），锚恒指向本次点击
+    if (selected.size > 0) clearSelection();
+    onOpenDetail(item.session.id);
+    setAnchor(item.session.id);
+  }, [selectionMode, selected.size, onOpenDetail, clearSelection]);
 
-  /** 列表项（列表/分组共用）：勾选 + 徽标 + 元信息 + 内联转化/查看笔记 */
-  const renderItem = (item: SessionListItem) => {
-    const s = item.session;
-    const checked = selected.has(s.id);
-    const now = Math.floor(Date.now() / 1000);
-    const durationMs = ((s.ended_at ?? now) - s.started_at) * 1000;
-    return (
-      <div
-        key={s.id}
-        onClick={() => onOpenDetail(s.id)}
-        onContextMenu={(e) => {
-          // v0.16.1：右键菜单完整性——会话行右键 = 打开详情（原生菜单已全局禁用）
-          e.preventDefault();
-          e.stopPropagation();
-          onOpenDetail(s.id);
-        }}
-        style={{
-          padding: "9px 14px",
-          borderBottom: "1px solid #f3f4f6",
-          cursor: "pointer",
-          background: openSessionId === s.id ? "#f0fdfa" : "#fff",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <input
-            type="checkbox"
-            checked={checked}
-            onClick={(e) => e.stopPropagation()}
-            onChange={() => toggleSelect(s.id)}
-            style={{ cursor: "pointer", flexShrink: 0 }}
-          />
-          <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={s.title}>
-            {s.title}
-          </span>
-          {statusBadge(item)}
-        </div>
-        <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3, display: "flex", alignItems: "center", gap: 8, paddingLeft: 22 }}>
-          <span style={{ fontVariantNumeric: "tabular-nums" }}>
-            #{item.displayNo} · {fmtDate(s.started_at)}
-          </span>
-          {/* v0.11.7：会话类型徽标（图文会话标识；视频类不显示零回归） */}
-          {s.kind === "photo" && <span style={{ fontWeight: 600 }}>📷 图文</span>}
-          <span>{s.status === "recording" ? "进行中" : fmtDuration(durationMs)}</span>
-          {s.source_window && (
-            <span style={{ maxWidth: 130, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {s.source_window}
-            </span>
-          )}
-          <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-            {item.hasNote ? (
-              <button
-                style={viewNoteBtn}
-                title="打开关联笔记"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (item.noteId != null) onOpenNote(item.noteId);
-                }}
-              >
-                查看笔记 →
-              </button>
-            ) : isEligible(item) ? (
-              <button
-                style={convertBtn}
-                title="一键转为笔记（与详情页同管线）"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onConvert(item);
-                }}
-              >
-                转笔记
-              </button>
-            ) : null}
-          </span>
-        </div>
-      </div>
-    );
-  };
+  const rowModifier = useCallback((item: SessionListItem, ctrl: boolean, shift: boolean) => {
+    const id = item.session.id;
+    if (ctrl) {
+      // Ctrl/⌘：加/减单行；锚指向本次点击行
+      setSelected((cur) => toggleSelection(cur, id));
+      setAnchor(id);
+    } else if (shift) {
+      if (anchor == null) {
+        // 无锚的首次 Shift=单选该行并设为锚（连按两次不再各加单行）
+        setSelected(new Set([id]));
+        setAnchor(id);
+      } else {
+        setSelected((cur) => rangeSelection(cur, visibleOrderRef.current, anchor, id));
+      }
+    }
+  }, [anchor]);
+
+  /** 行渲染（平铺/分组共用）；行内编辑与多选视觉在 SessionListRow */
+  const renderRow = (item: SessionListItem) => (
+    <SessionListRow
+      key={item.session.id}
+      item={item}
+      isOpen={openSessionId === item.session.id}
+      multiSelected={selected.has(item.session.id)}
+      canConvert={isEligible(item)}
+      renameRequest={renameReq}
+      onRenameEnd={() => setRenameReq(null)}
+      onRenamed={(id) => onSessionRenamed(id)}
+      showToast={showToast}
+      onOpen={rowOpen}
+      onModifierClick={rowModifier}
+      onContextMenu={(e, item) => setContextMenu({ item, x: e.clientX, y: e.clientY })}
+      onConvert={(it) => onConvert(it)}
+      onOpenNote={onOpenNote}
+    />
+  );
 
   const modeBtn = (activeMode: boolean): React.CSSProperties => ({
     fontSize: 11,
@@ -304,6 +304,16 @@ export default function SessionListPanel({
     background: activeMode ? "#ccfbf1" : "#fff",
     color: activeMode ? "#0f766e" : "#6b7280",
     fontWeight: activeMode ? 600 : 400,
+  });
+
+  const selectModeBtn = (on: boolean): React.CSSProperties => ({
+    ...btn,
+    fontSize: 11,
+    borderRadius: 6,
+    border: on ? "1px solid #4f46e5" : "1px solid #d1d5db",
+    background: on ? "#eef2ff" : "#fff",
+    color: on ? "#3730a3" : "#4b5563",
+    fontWeight: on ? 600 : 400,
   });
 
   return (
@@ -317,13 +327,32 @@ export default function SessionListPanel({
         >
           ⟨
         </button>
-        <button
-          style={{ ...btn, marginLeft: "auto", fontSize: 11, borderRadius: 6, border: grouped ? "1px solid #0d9488" : "1px solid #e5e7eb", background: grouped ? "#ccfbf1" : "#fff" }}
-          onClick={onToggleGrouped}
-          title="按课程分组（标题章节前缀）"
-        >
-          {grouped ? "分组中" : "按课程分组"}
-        </button>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}>
+          {/* 批 4：选择模式进入/退出（再点或 Esc 退出；进入后单击行=勾选） */}
+          {selectionMode && (
+            <span
+              data-testid="session-select-mode-chip"
+              style={{ fontSize: 10.5, color: "#4f46e5", border: "1px solid #c7d2fe", borderRadius: 10, padding: "0 6px", background: "#eef2ff", lineHeight: "16px", fontWeight: 400 }}
+            >
+              选择模式{selected.size > 0 ? `（${selected.size}）` : ""}
+            </span>
+          )}
+          <button
+            data-testid="session-select-mode-btn"
+            style={selectModeBtn(selectionMode)}
+            onClick={() => (selectionMode ? exitBatch() : setSelectionMode(true))}
+            title={selectionMode ? "退出选择模式（Esc）" : "进入选择模式：单击会话=勾选（Ctrl/Shift 多选）"}
+          >
+            选择
+          </button>
+          <button
+            style={{ ...btn, fontSize: 11, borderRadius: 6, border: grouped ? "1px solid #0d9488" : "1px solid #e5e7eb", background: grouped ? "#ccfbf1" : "#fff" }}
+            onClick={onToggleGrouped}
+            title="按课程分组（标题章节前缀）"
+          >
+            {grouped ? "分组中" : "按课程分组"}
+          </button>
+        </div>
       </div>
 
       {/* 搜索：标题（本地即时过滤）/ 转写内容（段搜索）双模式单输入框 */}
@@ -464,7 +493,7 @@ export default function SessionListPanel({
               >
                 {collapsed[g.course] ? "▸" : "▾"} {g.course}（{g.sessions.length}）
               </div>
-              {!collapsed[g.course] && g.sessions.map(renderItem)}
+              {!collapsed[g.course] && g.sessions.map(renderRow)}
             </div>
           ))
         ) : items.length > 0 && filtered.length === 0 ? (
@@ -476,11 +505,11 @@ export default function SessionListPanel({
             </button>
           </p>
         ) : (
-          filtered.map(renderItem)
+          filtered.map(renderRow)
         )}
       </div>
 
-      {/* 批量操作栏（勾选后出现；段搜索命中视图隐藏——避免对不可见列表误操作） */}
+      {/* 批量操作栏（出现后出现；段搜索命中视图隐藏——避免对不可见列表误操作） */}
       {!hits && !ocrHits && selected.size > 0 && (
         <div style={{ borderTop: "1px solid #e5e7eb", padding: 8, display: "flex", gap: 6, alignItems: "center", background: "#fff" }}>
           {/* v0.7.7（REQ-186 修复）：全选框——当前筛选视图（filtered）口径三态
@@ -496,6 +525,7 @@ export default function SessionListPanel({
                 clearSelection();
               } else {
                 setSelected(new Set(filtered.map((f) => f.session.id)));
+                setAnchor(null); // 全选后无区间锚（下次 Shift 需新锚）
               }
             }}
             style={{ cursor: "pointer", flexShrink: 0 }}
@@ -508,13 +538,34 @@ export default function SessionListPanel({
           >
             批量转笔记
           </button>
-          <button style={{ ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #fca5a5", color: "#dc2626" }} onClick={() => onBatchDelete([...selected])}>
+          <button
+            style={{ ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #fca5a5", color: "#dc2626" }}
+            onClick={() => void (async () => {
+              // 成功后清选集（全删或全不删——后端单事务原子，无半删计数）
+              if (await onBatchDelete([...selected])) clearSelection();
+            })()}
+          >
             批量删除
           </button>
           <button style={{ ...btn, marginLeft: "auto", fontSize: 11 }} onClick={clearSelection}>
             取消
           </button>
         </div>
+      )}
+
+      {/* 行右键菜单（单行语义；危险项红字） */}
+      {contextMenu && (
+        <SessionRowContextMenu
+          item={contextMenu.item}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          onOpenDetail={(id) => onOpenDetail(id)}
+          onRename={(it) => setRenameReq({ id: it.session.id, nonce: ++renameNonceRef.current })}
+          onConvert={(it) => onConvert(it)}
+          onDelete={(it) => onDeleteOne(it.session.id)}
+          canConvert={isEligible(contextMenu.item)}
+        />
       )}
     </div>
   );
