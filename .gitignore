@@ -18,6 +18,9 @@ target/
 dist-electron/
 .firecrawl/
 
+# 本地设计协作产物（brainstorming 可视化伴随工具的 mockup 与状态，不入库）
+.superpowers/
+
 # IDE
 .vscode/
 .idea/
