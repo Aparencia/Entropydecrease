@@ -484,9 +484,15 @@ describe("renderAll", () => {
     expect(SCALE_SOURCE.typeScale.length).toBeGreaterThanOrEqual(6);
   });
 
-  it("字阶下界为 12px（规范：消灭 10px/11px）", () => {
+  // 规范 §4.2 字阶逐字为「25/600 · 17/600 · 15.5/1.9 · 13/20 · 12/18 · 11.5/16 mono（下界 12px）」：
+  // 11.5/16 mono 是被**点名**的档位（等宽，用于时间码/元数据）；括注的 12px 下界约束其余档。
+  // 故硬下界钉在 11.5 —— 既守住「消灭 10px/11px」，又不把 mono 档私自抬到 12px。
+  // （更正记录：初版计划此处断言 `>= 12`，与同表 `11.5/16 mono` 自相矛盾；T3 实现者裁决为 11.5 并上报，
+  //   控制方已裁定采纳，规范 §4.2 同步补齐「11.5 mono 为点名例外」的措辞。）
+  it("字阶下界为 11.5px（规范点名的 mono 档；10px/11px 已消灭）", () => {
     const sizes = SCALE_SOURCE.typeScale.map((s) => Number.parseFloat(s));
-    expect(Math.min(...sizes)).toBeGreaterThanOrEqual(12);
+    expect(Math.min(...sizes)).toBeGreaterThanOrEqual(11.5);
+    expect(sizes.filter((n) => n < 12)).toEqual([11.5]);
   });
 });
 ```
