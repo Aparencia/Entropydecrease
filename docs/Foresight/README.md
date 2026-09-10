@@ -34,6 +34,11 @@
 | [classroom-capture-technical-review.md（[ ] 已归档）](../archive/2026-08-18/classroom-capture-technical-review.md) | 课堂采集链路技术审查（2026-08-18：四链要点核查 + 缺陷与更佳方案 + 头脑风暴项筛选；A 档七项已实施，2026-08-18 归档） |
 | [analysis-classroom-assistant-pipeline-deep-optimization.md（[ ] 已归档）](../archive/2026-08-19/analysis-classroom-assistant-pipeline-deep-optimization.md) | 课堂助手三阶段管线深度优化空间（2026-08-19：预处理/核心/后处理逐环节代码级缺陷定位 + 深度优化空间 30 项；2026-08-19 裁决完成——PRE/CORE/POST/X-O 流转 v0.7.0 REQ-098~120，归档） |
 | [requirements-decision-table-classroom-assistant-deepening.md（[ ] 已归档）](../archive/2026-08-19/requirements-decision-table-classroom-assistant-deepening.md) | 课堂助手深化需求裁决表（2026-08-19：三源合并 143 条目 + 六轴逐项裁决 + 二轮架构探讨（M-存储/三通道模型）；2026-08-19 裁决完成——v0.7.0 登记 REQ-088/098~134，归档） |
+| [asr-optimization-plan.md](./asr-optimization-plan.md) | ASR 质量与链路优化方案（2026-09-03：技术栈不受限 · 自验证路线版；**决策稿待裁决 D0~D6**；证据分级【代码证】/【wiki】/【推断】/【前沿】，wiki 断言一律以代码互证为准） |
+| [brainstorming-note-content-pipeline-design.md](./brainstorming-note-content-pipeline-design.md) | 头脑风暴：笔记「提→沉→派→用」全流程与内容八类图谱（2026-09-05：外部共享对话输入 + 多轮讨论综合产物；**未裁决未排期**，供评审后决定是否并入 PRD/需求池；八类 W/Y/H/M/Me/Act/SE/AI 即核心处理 γ 的来源） |
+| [ux-market-convention-audit.md](./ux-market-convention-audit.md) | UX 市场惯例符合度审计：操作习惯偏差清单（2026-09-05：6 个并行审计员对 `app/src` 全量页面按交互面分工逐行只读取证，证据带 `文件:行`；含 §J 布局与视觉专项；去重后约 14 个主题 + D1–D10 待裁决——**本仓库前端重设计的直接输入**） |
+| [web-capture-ingestion-path.md](./web-capture-ingestion-path.md) | Web 采集——第三条进料管道（2026-09-05：机制定案**未立项**；承接 v0.10.0 舍弃 #26 的有条件翻案——浏览器扩展前哨 → 本地 loopback 收件 → 应用内解析三件套；落点 `kind=web` 会话复用既有摄入脊柱） |
+| [web-capture-extension-protocol.md](./web-capture-extension-protocol.md) | Web 采集扩展投递契约（2026-09-06：落地文档，v0.20.4 / REQ-304 阶段 2 薄壳；与 AGENTS.md 红线对齐的安全边界——只绑 `127.0.0.1`、随机 token、单向投递） |
 | roadmap.md | 有阶段性路线图时 |
 | brainstorming-*.md | 功能创意发散时 |
 | competitive-analysis.md | 竞品调研时 |
