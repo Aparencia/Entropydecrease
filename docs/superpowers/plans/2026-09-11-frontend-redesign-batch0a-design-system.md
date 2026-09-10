@@ -146,7 +146,8 @@ git commit -m "docs(adr): ADR-032 前端设计系统与 token 层落地"
   - `contrastRatio(a: string, b: string): number` —— 返回 1..21
   - `meetsAA(ratio: number, opts?: { large?: boolean }): boolean` —— 默认阈值 4.5，`large` 时 3
 
-> Task 3 的生成器会用同一套公式（在 `.mjs` 内自带实现 —— `.mjs` 不能 import `.ts`）；本 Task 的实现是给**测试与运行时**用的权威版本，两者由 `tokens.drift.test.ts` 的策略性断言保持等价（见 Task 3 Step 6）。
+> **Task 3 不含第二份公式实现** —— 它的生成器只持有数据（无任何 WCAG 计算），其测试直接 `import` 本模块的 `contrastRatio` 来校验那份数据。因此**全仓只有这一份权威实现，不存在公式漂移面**。
+> （更正记录：初版计划此处误称「Task 3 会在 `.mjs` 内自带等价实现」；T2 任务评审据此提出了一条 Important 发现。核实后确认生成器代码中并无该实现 —— 发现源于这段错误文本，已在此更正。）
 
 - [ ] **Step 1: 写失败的测试**
 
@@ -377,7 +378,7 @@ git commit -m "feat(ui): 对比度纯函数（WCAG 相对亮度/对比度/AA 判
 - Create: `app/src/ui/tokens.drift.test.ts`
 
 **Interfaces:**
-- Consumes: Task 2 的对比度公式（**在 `.mjs` 内自带等价实现** —— `.mjs` 无法 import `.ts`）
+- Consumes: Task 2 的 `contrastRatio`（**直接 `import` `../src/ui/contrast.ts`**，**不复制公式** —— 全仓只保留一份权威实现，生成器本身不做任何 WCAG 计算，只持有数据）
 - Produces:
   - `renderAll(): { css: string; ts: string }` —— 从 `scripts/gen-tokens.mjs` 具名导出（供漂移测试 import）
   - `COLOR_TOKENS: readonly ColorToken[]` · `ColorToken = { name: string; light: string; dark: string; usage: string }` —— 从 `src/ui/tokens.gen.ts` 导出，`name` **不含** `--ed-` 前缀
@@ -778,8 +779,9 @@ describe("token 门面一致性", () => {
     expect(SCALE_TOKENS.radiusScale.map((r) => r.px)).toEqual([3, 5, 8, 10]);
   });
 
-  // .mjs 生成器自带对比度公式（不能 import .ts）；此处用权威实现复核它的数据，
-  // 防止两套公式悄悄分叉 —— 这是「两份实现」的代价，用断言买回来。
+  // 生成器只持有数据、不含任何 WCAG 计算；此处用 Task 2 的权威实现校验这份数据。
+  // 全仓仅此一份公式实现 —— 不存在「两套公式分叉」的面。
+  // （更正记录：初版计划曾误称「生成器自带等价实现」，T2 评审据此提了 Important 发现，核实后更正。）
   it("生成器数据经权威对比度实现复核仍达标", () => {
     const by = (n: string) => COLOR_TOKENS.find((t) => t.name === n);
     for (const theme of THEMES) {
