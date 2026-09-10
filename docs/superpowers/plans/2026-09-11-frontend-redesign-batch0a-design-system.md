@@ -70,7 +70,7 @@
 # ADR-032：前端设计系统与 token 层落地
 
 > 状态：已接受（2026-09-11）
-> 关联：[前端重设计规格](../../superpowers/specs/2026-09-11-frontend-redesign-design.md) · [theme.md](../../product/theme.md) · [ui-ux-system.md](../../product/ui-ux-system.md)
+> 关联：[前端重设计规格](../superpowers/specs/2026-09-11-frontend-redesign-design.md) · [theme.md](../product/theme.md) · [ui-ux-system.md](../product/ui-ux-system.md)
 
 ## 背景
 
@@ -120,7 +120,8 @@
 - [ ] **Step 4: 校验文档**
 
 Run（仓库根）：`node docs/scripts/docs-check.mjs`
-Expected: `✅ docs-check 通过`（exit 0）。若报「失效相对链接」，检查 ADR 中 `../../superpowers/specs/...` 的层级 —— ADR 位于 `docs/adr/`，到 `docs/superpowers/specs/` 需要 `../../superpowers/specs/`。
+Expected: `✅ docs-check 通过`（exit 0）。若报「失效相对链接」，检查 ADR 中的层级 —— ADR 位于 `docs/adr/`（**一层深**），因此到 `docs/superpowers/specs/` 只需**一个** `../`：`../superpowers/specs/2026-09-11-frontend-redesign-design.md`；到 `docs/product/` 同理是 `../product/…`。
+> **反例（勿用）**：`../../superpowers/specs/…` 会解析到仓库根的 `superpowers/`，该目录不存在 —— docs-check 直接判失败。两个 `../` 是**规格文件自己**（位于 `docs/superpowers/specs/`，两层深）引用 `docs/Foresight/` 时才需要的层级，两者不可混用。
 
 - [ ] **Step 5: 提交**
 
