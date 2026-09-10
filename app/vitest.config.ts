@@ -13,7 +13,8 @@ export default defineConfig({
     environment: "node",
     // v0.14 A：CM6 挂载需 Range 几何桩（见 src/test/setup.ts）
     setupFiles: ["src/test/setup.ts"],
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    // scripts/**/*.test.mjs：token 生成器的规范数据守卫（ADR-032）—— 不纳入则守卫形同虚设
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx", "scripts/**/*.test.mjs"],
     // v0.14 F1：全量并行下 jsdom 重量级页面测试（NotesPage 多子面板挂载 +
     // 多次 invoke 往返）在默认 5s 内间歇超时（STACK_TRACE_ERROR）——提升至
     // 15s 适配本机性能，仍能暴露死循环级问题

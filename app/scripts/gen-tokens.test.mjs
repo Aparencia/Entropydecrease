@@ -1,0 +1,115 @@
+/**
+ * @ai-context gen-tokens 生成器的规范数据守卫（ADR-032）。
+ *
+ * Why：生成器是 token 的单一真源，它一旦被改错（漏 token、写坏 hex、调低某档颜色），
+ * 全站样式会在无人察觉的情况下退化。本文件把「规范 §4.1/§4.2 说了什么」变成可执行断言。
+ *
+ * 边界：对比度用 Task 2 的 src/ui/contrast.ts 权威实现复核；生成器本身不做任何 WCAG 计算，
+ * 全仓仅存在一份公式实现（不存在两套公式分叉的面）。
+ */
+import { describe, expect, it } from "vitest";
+import { COLOR_TOKENS, CONTRAST_BASELINE, SCALE_SOURCE, renderAll } from "./gen-tokens.mjs";
+import { contrastRatio } from "../src/ui/contrast.ts";
+
+describe("gen-tokens 规范数据", () => {
+  it("每个 token 名唯一", () => {
+    const names = COLOR_TOKENS.map((t) => t.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("两档值齐全且为合法 hex", () => {
+    for (const t of COLOR_TOKENS) {
+      expect(t.light, `${t.name}.light`).toMatch(/^#[0-9A-Fa-f]{6}$/);
+      expect(t.dark, `${t.name}.dark`).toMatch(/^#[0-9A-Fa-f]{6}$/);
+      expect(t.usage.length, `${t.name}.usage 不得为空`).toBeGreaterThan(0);
+    }
+  });
+
+  it("规范 §4.1 的 16 个颜色 token 一个不少", () => {
+    expect(COLOR_TOKENS.map((t) => t.name).sort()).toEqual([
+      "bg-canvas", "bg-raised", "bg-sunken", "bg-surface",
+      "border", "border-strong",
+      "due", "ink-1", "ink-2", "ink-3", "ink-4",
+      "link", "mark-clip", "ok", "overlay", "stamp",
+    ]);
+  });
+
+  it("四档墨度在两档下都满足规范对比度（面为正文基准，纸放宽半档）", () => {
+    const by = (n) => COLOR_TOKENS.find((t) => t.name === n);
+    const base = CONTRAST_BASELINE;
+    for (const theme of ["light", "dark"]) {
+      expect(contrastRatio(by("ink-2")[theme], base[theme].surface), `${theme} ink-2/面`).toBeGreaterThanOrEqual(11);
+      expect(contrastRatio(by("ink-3")[theme], base[theme].surface), `${theme} ink-3/面`).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(by("ink-4")[theme], base[theme].surface), `${theme} ink-4/面`).toBeGreaterThanOrEqual(3);
+      expect(contrastRatio(by("ink-2")[theme], base[theme].canvas), `${theme} ink-2/纸`).toBeGreaterThanOrEqual(10.5);
+      expect(contrastRatio(by("ink-4")[theme], base[theme].canvas), `${theme} ink-4/纸`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("语义色在两档下都达 AA 正文线（修掉现状 #9CA3AF 的 2.54:1）", () => {
+    const by = (n) => COLOR_TOKENS.find((t) => t.name === n);
+    const base = CONTRAST_BASELINE;
+    for (const theme of ["light", "dark"]) {
+      for (const name of ["link", "stamp", "ok", "due"]) {
+        expect(contrastRatio(by(name)[theme], base[theme].surface), `${theme} ${name}/面`).toBeGreaterThanOrEqual(4.5);
+        expect(contrastRatio(by(name)[theme], base[theme].canvas), `${theme} ${name}/纸`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+});
+
+describe("renderAll", () => {
+  it("是纯函数：两次调用结果逐字节相同", () => {
+    expect(renderAll()).toEqual(renderAll());
+  });
+
+  it("CSS 含 :root 亮档与 [data-theme=\"dark\"] 暗档", () => {
+    const { css } = renderAll();
+    expect(css).toContain(":root");
+    expect(css).toContain('[data-theme="dark"]');
+  });
+
+  it("每个颜色 token 在两档各出现一次，且带 --ed- 前缀", () => {
+    const { css } = renderAll();
+    for (const t of COLOR_TOKENS) {
+      const varName = `--ed-${t.name}`;
+      // 必须逐「声明」计数而非子串计数：`--ed-border` 是 `--ed-border-strong` 的前缀，
+      // 裸 split 会把 strong 的两行也算进来（4 而非 2）。`(?![\\w-])` 只认完整变量名。
+      const hits = css.match(new RegExp(`${varName}(?![\\w-])`, "g"))?.length ?? 0;
+      // 亮档 1 次 + 暗档 1 次；overlay 两档同值仍各写一次（可读性优先于去重）
+      expect(hits, `${varName} 出现次数`).toBe(2);
+    }
+  });
+
+  it("CSS 不含未加前缀的裸底色变量（防碰撞）", () => {
+    const { css } = renderAll();
+    expect(css).not.toMatch(/^\s*--bg-/m);
+    expect(css).not.toMatch(/^\s*--ink-/m);
+  });
+
+  it("TS 产物导出 COLOR_TOKENS 与 SCALE_TOKENS", () => {
+    const { ts } = renderAll();
+    expect(ts).toContain("export const COLOR_TOKENS");
+    expect(ts).toContain("export const SCALE_TOKENS");
+    expect(ts).toContain("此文件由 scripts/gen-tokens.mjs 生成");
+  });
+
+  it("SCALE_SOURCE 覆盖三组字族、字阶、间距、圆角", () => {
+    expect(SCALE_SOURCE.fontFamilyBody).toContain("Source Han Serif SC");
+    expect(SCALE_SOURCE.fontFamilyMono).toContain("JetBrains Mono");
+    expect(SCALE_SOURCE.spaceScale).toEqual([4, 8, 12, 16, 24, 32, 48]);
+    expect(SCALE_SOURCE.radiusScale.map((r) => r.px)).toEqual([3, 5, 8, 10]);
+    expect(SCALE_SOURCE.typeScale.length).toBeGreaterThanOrEqual(6);
+  });
+
+  // 规范 §4.2 字阶逐字为「25/600 · 17/600 · 15.5/1.9 · 13/20 · 12/18 · 11.5/16 mono（下界 12px）」：
+  // 11.5/16 mono 是被**点名**的档位（等宽，用于时间码/元数据），括注的 12px 下界约束其余档。
+  // 故硬下界钉在 11.5：既守住「消灭 10px/11px」，又不把 mono 档私下抬到 12px
+  // —— 后者等于实现者替规范改设计值，超出本任务授权。
+  it("字阶下界为 11.5px（规范点名的 mono 档；10px/11px 已消灭）", () => {
+    const sizes = SCALE_SOURCE.typeScale.map((s) => Number.parseFloat(s));
+    expect(Math.min(...sizes)).toBeGreaterThanOrEqual(11.5);
+    // 下限之下只有这一个例外档位：若有人新增 11px，上面的断言会拦住
+    expect(sizes.filter((n) => n < 12)).toEqual([11.5]);
+  });
+});

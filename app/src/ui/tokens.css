@@ -1,0 +1,69 @@
+/*
+ * tokens.css — 由 scripts/gen-tokens.mjs 生成，请勿手改。
+ * 手改会被 src/ui/tokens.drift.test.ts 判失败。
+ * 依据：ADR-032 · docs/superpowers/specs/2026-09-11-frontend-redesign-design.md §4
+ */
+
+:root {
+  --ed-bg-sunken: #F1EEE7; /* 输入槽 / 骨架 / 内嵌 */
+  --ed-bg-canvas: #FBFAF8; /* 窗口底（纸） */
+  --ed-bg-surface: #FFFFFF; /* 卡片 / 列 / 阅读面 */
+  --ed-bg-raised: #FFFFFF; /* 弹层 / 菜单 / 浮窗（亮档另加 --ed-shadow-1） */
+  --ed-border: #EAE7E0; /* 横格 / 分隔 */
+  --ed-border-strong: #C9C4B8; /* 输入框 / 刻度底 / 引线 */
+  --ed-ink-4: #909088; /* 未确认（过渡态，3.1:1，见 ADR-032 第 4 条） */
+  --ed-ink-3: #6E6E68; /* 已重打分（≥4.5:1） */
+  --ed-ink-2: #3A3A36; /* 已确认 · 正文基准（≥11:1） */
+  --ed-ink-1: #1A1A1A; /* 已改写 · 唯一使用字重 +1 档的档位 */
+  --ed-mark-clip: #F4F1E9; /* 剪报底纹（默认开，仅背景色不加边框） */
+  --ed-stamp: #B3271E; /* 状态戳 —— 全站唯一非中性色，绝不用于按钮 */
+  --ed-ok: #2F7A4F; /* 掌握 / 已毕业 / 成功回执 */
+  --ed-due: #A05F10; /* 到期刻度 / 低置信点线 / 记忆语义文字（亮档原 #B26A12 实测仅 4.06:1，不合格，已改） */
+  --ed-link: #1F5FBF; /* 链接 / 时间码 / 引用 */
+  --ed-overlay: #1A1A1A; /* 遮罩基色（配 --ed-overlay-alpha 使用） */
+
+  /* 字族（界面用黑体，正文用中文衬线 —— 衬线只给正文） */
+  --ed-font-body: "Source Han Serif SC", "Songti SC", SimSun, serif;
+  --ed-font-ui: "Inter", "Segoe UI Variable", "Microsoft YaHei UI", system-ui, sans-serif;
+  --ed-font-mono: "JetBrains Mono", Consolas, ui-monospace, monospace;
+
+  /* 间距（4 为半档，仅图标内边距） */
+  --ed-space-4: 4px;
+  --ed-space-8: 8px;
+  --ed-space-12: 12px;
+  --ed-space-16: 16px;
+  --ed-space-24: 24px;
+  --ed-space-32: 32px;
+  --ed-space-48: 48px;
+
+  /* 圆角 */
+  --ed-radius-stamp: 3px;
+  --ed-radius-control: 5px;
+  --ed-radius-panel: 8px;
+  --ed-radius-overlay: 10px;
+
+  /* 遮罩 */
+  --ed-overlay-alpha: 0.34;
+
+  /* 图标 */
+  --ed-icon-stroke: 1.75;
+}
+
+[data-theme="dark"] {
+  --ed-bg-sunken: #100F0E;
+  --ed-bg-canvas: #141312;
+  --ed-bg-surface: #1C1A18;
+  --ed-bg-raised: #24211E;
+  --ed-border: #2E2A26;
+  --ed-border-strong: #423C36;
+  --ed-ink-4: #6E6A62;
+  --ed-ink-3: #9A958B;
+  --ed-ink-2: #D6D1C8;
+  --ed-ink-1: #F5F1E8;
+  --ed-mark-clip: #221F1B;
+  --ed-stamp: #E0604F;
+  --ed-ok: #4FAE74;
+  --ed-due: #E0A44B;
+  --ed-link: #6E9BE8;
+  --ed-overlay: #1A1A1A;
+}
