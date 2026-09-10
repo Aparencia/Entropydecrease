@@ -748,15 +748,23 @@ import { contrastRatio } from "./contrast";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
+/**
+ * 行尾归一。**为何不能逐字节比**：本仓库没有 `.gitattributes`，而 `core.autocrlf=true`,
+ * 因此新克隆/新检出时 git 会把 LF 转成 CRLF，工作区文件与生成器的 `\n` 模板将逐字节不等 ——
+ * 逐字节断言会在别人机器上失败，且失败原因与「有人手改了产物」无关，属假阳性。
+ * 归一后仍能守住真正要守的东西：**内容**漂移（手改即内容不同）。
+ */
+const normalizeEol = (s: string): string => s.replace(/\r\n/g, "\n");
+
 describe("token 产物漂移守卫", () => {
-  it("tokens.css 与生成器输出逐字节一致（手改即失败）", () => {
+  it("tokens.css 与生成器输出一致（手改即失败）", () => {
     const onDisk = readFileSync(join(HERE, "tokens.css"), "utf8");
-    expect(onDisk).toBe(renderAll().css);
+    expect(normalizeEol(onDisk)).toBe(normalizeEol(renderAll().css));
   });
 
-  it("tokens.gen.ts 与生成器输出逐字节一致（手改即失败）", () => {
+  it("tokens.gen.ts 与生成器输出一致（手改即失败）", () => {
     const onDisk = readFileSync(join(HERE, "tokens.gen.ts"), "utf8");
-    expect(onDisk).toBe(renderAll().ts);
+    expect(normalizeEol(onDisk)).toBe(normalizeEol(renderAll().ts));
   });
 });
 
