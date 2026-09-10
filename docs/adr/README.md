@@ -35,6 +35,7 @@
 | ADR-029 | [检索与发现层（RAG 接层）——派生索引 + 双读路径 + 人工裁决闸门](./ADR-029-rag-retrieval-discovery-layer.md) | 已接受（v0.19 系列） | 2026-09-03 |
 | ADR-030 | [ASR 质量增强批——自验证路线 + 参数治理 + 全量精修 + 混淆画像闭环](./ADR-030-asr-quality-batch.md) | 已接受（v0.20 系列） | 2026-09-03 |
 | ADR-031 | [采集暂停来源状态机与前台自动暂停（修订 ADR-013 决策 2 边沿语义）](./ADR-031-capture-pause-source-state-machine.md) | 已接受（v0.20.7 批 2a/2b） | 2026-09-09 |
+| ADR-032 | [前端设计系统与 token 层落地（`--ed-` 前缀单源生成 · 纸墨双档色阶 · 四档墨度的可及性裁决 · z-index 六档 · 自绘线性图标）](./ADR-032-frontend-design-system-tokens.md) | 已接受 | 2026-09-11 |
 
 ## 编号规则
 
