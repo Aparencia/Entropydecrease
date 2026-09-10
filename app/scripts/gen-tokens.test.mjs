@@ -4,8 +4,11 @@
  * Why：生成器是 token 的单一真源，它一旦被改错（漏 token、写坏 hex、调低某档颜色），
  * 全站样式会在无人察觉的情况下退化。本文件把「规范 §4.1/§4.2 说了什么」变成可执行断言。
  *
- * 边界：对比度用 Task 2 的 src/ui/contrast.ts 权威实现复核；生成器本身不做任何 WCAG 计算，
- * 全仓仅存在一份公式实现（不存在两套公式分叉的面）。
+ * 边界：对比度用 Task 2 的 src/ui/contrast.ts 权威实现复核；生成器本身不做任何 WCAG 计算。
+ * WCAG 实现范围：**本批三个模块之间**只有一份公式实现（src/ui/contrast.ts）。
+ * 既存例外（终局评审 I8）：scripts/gen-mark-css.mjs 的 note-mark 调色板自带第二份 lum/ratio，
+ * 其产物 src/note-mark.css 目前**无漂移守卫** —— 已登记于批 0-A 计划「交接给 0-B/0-C/0-D 的硬前置」，
+ * 待并入或显式豁免。
  */
 import { describe, expect, it } from "vitest";
 import { COLOR_TOKENS, CONTRAST_BASELINE, SCALE_SOURCE, renderAll } from "./gen-tokens.mjs";
@@ -25,6 +28,12 @@ describe("gen-tokens 规范数据", () => {
     }
   });
 
+  it("usage 串不得含注释终止符（会被写进 CSS 注释，含 `*/` 即截断后续声明）", () => {
+    for (const t of COLOR_TOKENS) {
+      expect(t.usage, `${t.name}.usage`).not.toContain("*/");
+    }
+  });
+
   it("规范 §4.1 的 16 个颜色 token 一个不少", () => {
     expect(COLOR_TOKENS.map((t) => t.name).sort()).toEqual([
       "bg-canvas", "bg-raised", "bg-sunken", "bg-surface",
@@ -38,6 +47,10 @@ describe("gen-tokens 规范数据", () => {
     const by = (n) => COLOR_TOKENS.find((t) => t.name === n);
     const base = CONTRAST_BASELINE;
     for (const theme of ["light", "dark"]) {
+      // 基准必须与底 token 同源，否则守卫会对着旧底色静默测错底：只改 bg-surface 而不同步
+      // 基准时，ink-2 的真实比值会跌破 §4.3 的 11:1 而断言仍绿（终局评审 C2）。
+      expect(by("bg-canvas")[theme], `${theme} 基准/纸底`).toBe(base[theme].canvas);
+      expect(by("bg-surface")[theme], `${theme} 基准/阅读面`).toBe(base[theme].surface);
       expect(contrastRatio(by("ink-2")[theme], base[theme].surface), `${theme} ink-2/面`).toBeGreaterThanOrEqual(11);
       expect(contrastRatio(by("ink-3")[theme], base[theme].surface), `${theme} ink-3/面`).toBeGreaterThanOrEqual(4.5);
       expect(contrastRatio(by("ink-4")[theme], base[theme].surface), `${theme} ink-4/面`).toBeGreaterThanOrEqual(3);

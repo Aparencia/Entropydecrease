@@ -3,7 +3,7 @@
  *
  * Why：生成器是 `.mjs`（**纯 node 必须能跑**，故不能是 `.ts`），而 `tsc` 默认对 `.mjs` 报 TS7016
  * （「implicitly has an 'any' type」）—— 该错误会随 `npm run build`（`tsc && vite build`）使构建失败。
- * `src/ui/tokens.drift.test.ts` 需要 `renderAll()` 与 `CONTRAST_BASELINE` 来守住产物。
+ * `src/ui/tokens.drift.test.ts` 需要 `renderAll()` / `CONTRAST_BASELINE` / `normalizeEol()` 来守住产物。
  *
  * 纪律：本文件是**类型契约**，不含运行时值 —— 声明与生成器实现不可能在运行时分叉。
  *
@@ -18,8 +18,11 @@
  * 后续可考虑引入 `@types/node` 并把生成器收敛到单一语言源以消掉这层手写镜像；那属于另一个任务，
  * 本任务因「不新增依赖 + 生成器须纯 node 可跑」而保留现状。
  *
- * 边界：`SCALE_SOURCE` / `COLOR_TOKENS` 在此为**源数据**（字面量较宽，`typeScale` 是 `string[]`）；
- * 产物 `tokens.gen.ts` 的 `SCALE_TOKENS` 才是 `as const` 后的窄化类型 —— 两者刻意不同。
+ * 边界：`SCALE_SOURCE` / `COLOR_TOKENS` 在此为**源数据**（字面量较宽：`typeScale` 是 `string[]`，
+ * `COLOR_TOKENS` 元素的 `name` 只是 `string`）；产物 `tokens.gen.ts` 里 `SCALE_TOKENS` 与
+ * `COLOR_TOKENS` 才是 `as const` 后的窄化类型（后者用 `as const satisfies readonly ColorToken[]`
+ * 保住 16 个字面量名，并据此导出 `ColorTokenName` 供门面 `cssVar` / `varRef` 收窄入参）。
+ * 本文件声明的是**生成器的导出**，产物自身的类型由 `renderTs()` 的模板给出 —— 两者刻意不同。
  */
 
 export interface ColorToken {
@@ -59,5 +62,5 @@ export declare const SCALE_SOURCE: {
 /** 纯渲染：返回两份产物的完整文本，不触磁盘 */
 export declare function renderAll(): { css: string; ts: string };
 
-/** 行尾归一：`\r\n` / 孤立 `\r` → `\n`。`--check` 与漂移测试共用同一口径 */
+/** 行尾归一：`\r\n` / 孤立 `\r` → `\n`。`--check` 与漂移测试 import 的是同一个函数（唯一实现） */
 export declare function normalizeEol(s: string): string;

@@ -1,3 +1,9 @@
+/**
+ * @ai-context src/ui/contrast.ts（WCAG 对比度纯函数）的单测（ADR-032）。
+ *
+ * Why：规范 §4.3 的硬数字（11 / 4.5 / 3 / 10.5）是本批验收口径，必须由机器而非人眼守护；
+ * 同时守住 hex 解析的边界（非法输入抛错而非静默回退）与两档不可合并且值不得回归。
+ */
 import { describe, expect, it } from "vitest";
 import { contrastRatio, meetsAA, parseHex, relativeLuminance } from "./contrast";
 
@@ -63,7 +69,8 @@ describe("contrastRatio", () => {
     );
   });
 
-  // 规范 §4.1 的四个硬数字 —— 这四个断言就是验收口径的机器化
+  // 规范 §4.3 的 7 条硬数字 —— 本块内 7 个「规范：」断言就是验收口径的机器化
+  // （§4.1 只定义色值，不含对比度阈值；阈值与四档墨度的升档规则都在 §4.3）
   it("规范：ink-2 对阅读面 >= 11:1", () => {
     expect(contrastRatio("#3A3A36", "#FFFFFF")).toBeGreaterThanOrEqual(11);
   });

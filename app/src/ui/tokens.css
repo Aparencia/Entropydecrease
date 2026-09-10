@@ -8,10 +8,10 @@
   --ed-bg-sunken: #F1EEE7; /* 输入槽 / 骨架 / 内嵌 */
   --ed-bg-canvas: #FBFAF8; /* 窗口底（纸） */
   --ed-bg-surface: #FFFFFF; /* 卡片 / 列 / 阅读面 */
-  --ed-bg-raised: #FFFFFF; /* 弹层 / 菜单 / 浮窗（亮档另加 --ed-shadow-1） */
+  --ed-bg-raised: #FFFFFF; /* 弹层 / 菜单 / 浮窗（亮档另加 --ed-shadow-1（0-D 前定值）） */
   --ed-border: #EAE7E0; /* 横格 / 分隔 */
   --ed-border-strong: #C9C4B8; /* 输入框 / 刻度底 / 引线 */
-  --ed-ink-4: #909088; /* 未确认（过渡态，3.1:1，见 ADR-032 第 4 条） */
+  --ed-ink-4: #909088; /* 未确认（过渡态，3.22:1，见 ADR-032 第 4 条） */
   --ed-ink-3: #6E6E68; /* 已重打分（≥4.5:1） */
   --ed-ink-2: #3A3A36; /* 已确认 · 正文基准（≥11:1） */
   --ed-ink-1: #1A1A1A; /* 已改写 · 唯一使用字重 +1 档的档位 */

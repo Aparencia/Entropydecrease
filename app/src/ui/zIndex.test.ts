@@ -1,3 +1,9 @@
+/**
+ * @ai-context src/ui/zIndex.ts（z-index 六档标尺）的单测（ADR-032 决策 5）。
+ *
+ * Why：17 个散值收敛成 6 档后，标尺的值、顺序与用途说明就是叠放语义的唯一依据 ——
+ * 改值或删档会让叠放重新变成「涌现的」，故逐条钉住（顺序即语义）。
+ */
 import { describe, expect, it } from "vitest";
 import { TIER_PURPOSE, Z_TIER, zIndex } from "./zIndex";
 import type { ZTierName } from "./zIndex";

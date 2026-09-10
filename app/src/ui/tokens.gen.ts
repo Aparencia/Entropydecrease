@@ -14,14 +14,14 @@ export interface ColorToken {
   readonly usage: string;
 }
 
-export const COLOR_TOKENS: readonly ColorToken[] = [
+export const COLOR_TOKENS = [
   { name: "bg-sunken", light: "#F1EEE7", dark: "#100F0E", usage: "输入槽 / 骨架 / 内嵌" },
   { name: "bg-canvas", light: "#FBFAF8", dark: "#141312", usage: "窗口底（纸）" },
   { name: "bg-surface", light: "#FFFFFF", dark: "#1C1A18", usage: "卡片 / 列 / 阅读面" },
-  { name: "bg-raised", light: "#FFFFFF", dark: "#24211E", usage: "弹层 / 菜单 / 浮窗（亮档另加 --ed-shadow-1）" },
+  { name: "bg-raised", light: "#FFFFFF", dark: "#24211E", usage: "弹层 / 菜单 / 浮窗（亮档另加 --ed-shadow-1（0-D 前定值））" },
   { name: "border", light: "#EAE7E0", dark: "#2E2A26", usage: "横格 / 分隔" },
   { name: "border-strong", light: "#C9C4B8", dark: "#423C36", usage: "输入框 / 刻度底 / 引线" },
-  { name: "ink-4", light: "#909088", dark: "#6E6A62", usage: "未确认（过渡态，3.1:1，见 ADR-032 第 4 条）" },
+  { name: "ink-4", light: "#909088", dark: "#6E6A62", usage: "未确认（过渡态，3.22:1，见 ADR-032 第 4 条）" },
   { name: "ink-3", light: "#6E6E68", dark: "#9A958B", usage: "已重打分（≥4.5:1）" },
   { name: "ink-2", light: "#3A3A36", dark: "#D6D1C8", usage: "已确认 · 正文基准（≥11:1）" },
   { name: "ink-1", light: "#1A1A1A", dark: "#F5F1E8", usage: "已改写 · 唯一使用字重 +1 档的档位" },
@@ -31,7 +31,16 @@ export const COLOR_TOKENS: readonly ColorToken[] = [
   { name: "due", light: "#A05F10", dark: "#E0A44B", usage: "到期刻度 / 低置信点线 / 记忆语义文字（亮档原 #B26A12 实测仅 4.06:1，不合格，已改）" },
   { name: "link", light: "#1F5FBF", dark: "#6E9BE8", usage: "链接 / 时间码 / 引用" },
   { name: "overlay", light: "#1A1A1A", dark: "#1A1A1A", usage: "遮罩基色（配 --ed-overlay-alpha 使用）" },
-];
+] as const satisfies readonly ColorToken[];
+
+/**
+ * 16 个 token 名的字面量联合 —— 门面 `cssVar` / `varRef` 的入参类型。
+ *
+ * Why：入参若退化成裸 `string`，批 4 的上千处 `varRef("...")` 里一个拼写错误
+ * （如 `varRef("ink-5")`）**编译期全绿、运行期静默取不到值** —— 未定义的 CSS 变量不报错。
+ * 窄类型把「token 名」这一业务术语变成可被编译器强制的契约（AGENTS.md §3.2）。
+ */
+export type ColorTokenName = (typeof COLOR_TOKENS)[number]["name"];
 
 export const SCALE_TOKENS = {
   fontFamilyBody: "\"Source Han Serif SC\", \"Songti SC\", SimSun, serif",

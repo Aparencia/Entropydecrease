@@ -36,10 +36,10 @@ export const COLOR_TOKENS = [
   { name: "bg-sunken", light: "#F1EEE7", dark: "#100F0E", usage: "输入槽 / 骨架 / 内嵌" },
   { name: "bg-canvas", light: "#FBFAF8", dark: "#141312", usage: "窗口底（纸）" },
   { name: "bg-surface", light: "#FFFFFF", dark: "#1C1A18", usage: "卡片 / 列 / 阅读面" },
-  { name: "bg-raised", light: "#FFFFFF", dark: "#24211E", usage: "弹层 / 菜单 / 浮窗（亮档另加 --ed-shadow-1）" },
+  { name: "bg-raised", light: "#FFFFFF", dark: "#24211E", usage: "弹层 / 菜单 / 浮窗（亮档另加 --ed-shadow-1（0-D 前定值））" },
   { name: "border", light: "#EAE7E0", dark: "#2E2A26", usage: "横格 / 分隔" },
   { name: "border-strong", light: "#C9C4B8", dark: "#423C36", usage: "输入框 / 刻度底 / 引线" },
-  { name: "ink-4", light: "#909088", dark: "#6E6A62", usage: "未确认（过渡态，3.1:1，见 ADR-032 第 4 条）" },
+  { name: "ink-4", light: "#909088", dark: "#6E6A62", usage: "未确认（过渡态，3.22:1，见 ADR-032 第 4 条）" },
   { name: "ink-3", light: "#6E6E68", dark: "#9A958B", usage: "已重打分（≥4.5:1）" },
   { name: "ink-2", light: "#3A3A36", dark: "#D6D1C8", usage: "已确认 · 正文基准（≥11:1）" },
   { name: "ink-1", light: "#1A1A1A", dark: "#F5F1E8", usage: "已改写 · 唯一使用字重 +1 档的档位" },
@@ -56,7 +56,7 @@ export const SCALE_SOURCE = {
   fontFamilyBody: '"Source Han Serif SC", "Songti SC", SimSun, serif',
   fontFamilyUi: '"Inter", "Segoe UI Variable", "Microsoft YaHei UI", system-ui, sans-serif',
   fontFamilyMono: '"JetBrains Mono", Consolas, ui-monospace, monospace',
-  /** 字阶：字号/行高·字重（规范 §4.2，下界 12px） */
+  /** 字阶：字号/行高·字重（规范 §4.2，下界 12px；`11.5/16 mono` 为唯一点名例外） */
   typeScale: ["25px/34px·600", "17px/24px·600", "15.5px/1.9·400", "13px/20px·400", "12px/18px·500", "11.5px/16px·500"],
   /** 间距：4 为半档，其余落 8px 网格 */
   spaceScale: [4, 8, 12, 16, 24, 32, 48],
@@ -135,9 +135,18 @@ function renderTs() {
   readonly usage: string;
 }
 
-export const COLOR_TOKENS: readonly ColorToken[] = [
+export const COLOR_TOKENS = [
 ${colorRows}
-];
+] as const satisfies readonly ColorToken[];
+
+/**
+ * 16 个 token 名的字面量联合 —— 门面 \`cssVar\` / \`varRef\` 的入参类型。
+ *
+ * Why：入参若退化成裸 \`string\`，批 4 的上千处 \`varRef("...")\` 里一个拼写错误
+ * （如 \`varRef("ink-5")\`）**编译期全绿、运行期静默取不到值** —— 未定义的 CSS 变量不报错。
+ * 窄类型把「token 名」这一业务术语变成可被编译器强制的契约（AGENTS.md §3.2）。
+ */
+export type ColorTokenName = (typeof COLOR_TOKENS)[number]["name"];
 
 export const SCALE_TOKENS = {
   fontFamilyBody: ${JSON.stringify(SCALE_SOURCE.fontFamilyBody)},
@@ -172,7 +181,9 @@ export function renderAll() {
  * 归一后仍守住真正要守的：**内容**漂移（值/行/结构变了就仍不相等）。
  *
  * 边界：本函数**只**抹平行尾差异，不碰空白与缩进 —— 故不掩盖内容漂移。
- * 一致性：漂移测试内的同名本地实现与本函数保持逐字同口径，改一处必须同步另一处。
+ * 一致性：`--check` 与漂移测试走的是**同一个**函数（测试直接 import 本模块）；
+ * 此前两边各持一份实现且口径已分叉（`\r\n?` vs `\r\n`），同一份产物两个守卫结论相反 ——
+ * 故不再保留第二份实现，也**不得**再复制一份。
  */
 export function normalizeEol(s) {
   return s.replace(/\r\n?/g, "\n");
