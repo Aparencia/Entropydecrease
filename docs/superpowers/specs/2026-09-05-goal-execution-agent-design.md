@@ -2,7 +2,7 @@
 
 > 状态：**本批裁决立项 · 实施规划待批准**（2026-09-05 用户裁决"执行型智能体本批执行，进行规划"）
 > 定位：把"目标 → 规划"延伸为"**每天该做什么、做完没有、明天做什么**"的回合制执行层；人类确认制，AI 为增强（总则：AI 增强一律可选默认关，见批次设计 §1）
-> 关联：ADR-027（目标层建模）· ADR-028（AI 目标规划师）· v0.18.0/0.18.2 系列 · 体系 D1/D2（批次设计 §2.7，v0.19.8）· [knowledge-system-design-philosophy](../product/knowledge-system-design-philosophy.md) 原则 4
+> 关联：ADR-027（目标层建模）· ADR-028（AI 目标规划师）· v0.18.0/0.18.2 系列 · 体系 D1/D2（批次设计 §2.7，v0.19.8）· [knowledge-system-design-philosophy](../../product/knowledge-system-design-philosophy.md) 原则 4
 > 前置立项动作：实施 P0 前需评审 **ADR-031（目标执行层：现算不落库/记录模型/授权边界）**
 
 ## 1. 现状资产盘点（全部复用，零重建）
