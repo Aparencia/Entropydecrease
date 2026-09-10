@@ -162,6 +162,22 @@ export function renderAll() {
   return { css: renderCss(), ts: renderTs() };
 }
 
+/**
+ * 行尾归一：`\r\n` 与孤立 `\r` 一律折成 `\n`。
+ *
+ * Why：本仓库没有 `.gitattributes`，而 `core.autocrlf=true` —— 新克隆/新检出时 git 会把
+ * 产物转成 CRLF，而本脚本的模板恒为 LF。若 `--check` 逐字节比对，此时会报「漂移」，
+ * 但同一份产物在 src/ui/tokens.drift.test.ts 里（已按本函数同口径归一）却是绿的 ——
+ * 两个守卫对同一份产物结论相反，且报错原因与「有人手改了产物」无关，属**假阳性**。
+ * 归一后仍守住真正要守的：**内容**漂移（值/行/结构变了就仍不相等）。
+ *
+ * 边界：本函数**只**抹平行尾差异，不碰空白与缩进 —— 故不掩盖内容漂移。
+ * 一致性：漂移测试内的同名本地实现与本函数保持逐字同口径，改一处必须同步另一处。
+ */
+export function normalizeEol(s) {
+  return s.replace(/\r\n?/g, "\n");
+}
+
 function main() {
   const check = process.argv.includes("--check");
   const { css, ts } = renderAll();
@@ -174,7 +190,7 @@ function main() {
       } catch {
         have = "";
       }
-      if (have !== want) {
+      if (normalizeEol(have) !== normalizeEol(want)) {
         console.error(`✗ 漂移：${path}（跑 node scripts/gen-tokens.mjs 重新生成）`);
         drifted = true;
       }

@@ -6,8 +6,19 @@
  * `src/ui/tokens.drift.test.ts` 需要 `renderAll()` 与 `CONTRAST_BASELINE` 来守住产物。
  *
  * 纪律：本文件是**类型契约**，不含运行时值 —— 声明与生成器实现不可能在运行时分叉。
- * 边界：新增/删除生成器的导出时必须同步本文件（名字对不上会直接编译失败，不会静默漂移）。
- * `SCALE_SOURCE` / `COLOR_TOKENS` 在此为**源数据**（字面量较宽，`typeScale` 是 `string[]`）；
+ *
+ * ⚠️ 已知维护成本（**本文件与 `.mjs` 的一致性没有任何机制强制**）：本文件是**手写类型镜像**，
+ * 并非从实现推导。TypeScript **信任环境声明** —— 它只读本文件，从不校验 `.mjs` 的实际导出：
+ *   · 改了某导出的**类型**（如把 `spaceScale` 从 `readonly number[]` 改成别的）：`tsc` **不报错**，
+ *     声明文件才是权威 → 漂移**是静默的**。（已实测：把本文件 `spaceScale` 声明成 `readonly string[]`
+ *     而 `.mjs` 实为数字数组，`npx tsc --noEmit` 仍 exit 0。）
+ *   · 生成器**新增**导出而未在此声明：import 方会报「模块无此导出」（假缺失），`tsc` 同样不会
+ *     拿 `.mjs` 来纠正。
+ * 结论：**改动生成器的导出或类型（增 / 删 / 改签名）时必须手工同步本文件** —— 没有编译器兜底。
+ * 后续可考虑引入 `@types/node` 并把生成器收敛到单一语言源以消掉这层手写镜像；那属于另一个任务，
+ * 本任务因「不新增依赖 + 生成器须纯 node 可跑」而保留现状。
+ *
+ * 边界：`SCALE_SOURCE` / `COLOR_TOKENS` 在此为**源数据**（字面量较宽，`typeScale` 是 `string[]`）；
  * 产物 `tokens.gen.ts` 的 `SCALE_TOKENS` 才是 `as const` 后的窄化类型 —— 两者刻意不同。
  */
 
@@ -47,3 +58,6 @@ export declare const SCALE_SOURCE: {
 
 /** 纯渲染：返回两份产物的完整文本，不触磁盘 */
 export declare function renderAll(): { css: string; ts: string };
+
+/** 行尾归一：`\r\n` / 孤立 `\r` → `\n`。`--check` 与漂移测试共用同一口径 */
+export declare function normalizeEol(s: string): string;
