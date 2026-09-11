@@ -111,28 +111,6 @@ pub fn diag_snapshot(state: State<'_, AppState>) -> DiagSnapshot {
     }
 }
 
-/// VAD 阈值诊断（REQ-115 PRE-O4 / v0.7.0 M2）：当前自适应阈值 + 基础阈值对照。
-///
-/// @ai-context: 降级提示（固定阈值判定）与切段判定（自适应阈值）口径对照——
-///              诊断可查阈值（验收点）；无活动会话时 current=上次会话残留值。
-/// @ai-context: 审查 MEDIUM-8 修复：source_session/is_live 标注新鲜度——
-///              诊断面板可区分"实时值"与"残留值"（避免误读旧会话口径）。
-#[tauri::command]
-pub fn vad_threshold_diag(state: State<'_, AppState>) -> crate::vad_threshold_slot::VadThresholdView {
-    let current = state.vad_slot.read();
-    let source = state.vad_slot.source_session_id();
-    // 活动会话判定（Windows 实时链路；非 Windows 无活动会话概念）
-    #[cfg(target_os = "windows")]
-    let is_live = state.live_session.active_session_id() == Some(source);
-    #[cfg(not(target_os = "windows"))]
-    let is_live = false;
-    crate::vad_threshold_slot::VadThresholdView {
-        current,
-        base: crate::streaming_asr::SILENCE_RMS_THRESHOLD,
-        source_session: source,
-        is_live,
-    }
-}
 
 /// 模型磁盘占用总览（REQ-131 P13 / v0.7.0 M3）：models 目录各子目录占用 + 版本。
 ///

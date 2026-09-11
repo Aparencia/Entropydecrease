@@ -130,14 +130,6 @@ pub fn list_fragments(
     state.db.list_fragments(status, limit).map_err(|e| e.to_string())
 }
 
-/// 组内碎片列表（feed 组详情消费）。
-#[tauri::command]
-pub fn list_group_fragments(state: State<'_, AppState>, group_id: i64) -> Result<Vec<Fragment>, String> {
-    if group_id <= 0 {
-        return Err("无效的组 id".to_string());
-    }
-    state.db.list_fragments_by_group(group_id).map_err(|e| e.to_string())
-}
 
 /// 移动碎片到组（None=移出组；用户纠错/重新归组——REQ-201 消费闭环）。
 ///

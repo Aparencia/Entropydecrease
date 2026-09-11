@@ -48,18 +48,6 @@ pub fn list_note_groups(
     state.db.list_groups(terrain).map_err(|e| e.to_string())
 }
 
-/// 单个组详情（不存在 → 错误；前端按 id 刷新用）。
-#[tauri::command]
-pub fn get_note_group(state: State<'_, AppState>, id: i64) -> Result<NoteGroup, String> {
-    if id <= 0 {
-        return Err("无效的组 id".to_string());
-    }
-    state
-        .db
-        .get_group(id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("笔记组不存在: {}", id))
-}
 
 /// 组内笔记列表（组详情面板数据源）。
 #[tauri::command]

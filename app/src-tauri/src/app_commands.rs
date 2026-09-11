@@ -68,14 +68,13 @@ pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync
         crate::commands::update_note_pin,
         // v0.14 B：视觉系统——笔记级颜色（properties.color）
         crate::commands::update_note_color,
-        // v0.11.0（REQ-195~198）：笔记组——列表/详情/组内笔记/自建主题组/
+        // v0.11.0（REQ-195~198）：笔记组——列表/组内笔记/自建主题组/
         // 重命名/路由改判（修改即记忆）/移动笔记
         crate::commands_groups::list_note_groups,
         // REQ-287（v0.19.7）：笔记手动排序（scope=g{id}/none）
         crate::commands_note_orders::note_order_list,
         crate::commands_note_orders::note_order_save,
         crate::commands_note_orders::note_order_clear,
-        crate::commands_groups::get_note_group,
         crate::commands_groups::list_group_notes,
         crate::commands_groups::create_topic_group,
         crate::commands_groups::rename_note_group,
@@ -95,7 +94,6 @@ pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync
         crate::commands_fragments::set_feature_flag,
         crate::commands_fragments::capture_fragment,
         crate::commands_fragments::list_fragments,
-        crate::commands_fragments::list_group_fragments,
         // v0.11.4（REQ-201）：feed 消费闭环——删除/移组/图片 resolve
         crate::commands_fragments::delete_fragment,
         crate::commands_fragments::update_fragment_group,
@@ -318,8 +316,6 @@ pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync
         // 健康巡检与诊断（REQ-042，M7：F2/F3/G2）
         crate::commands_diag::health_status,
         crate::commands_diag::diag_snapshot,
-        // REQ-115（v0.7.0 M2）：VAD 阈值诊断（口径对照可查）
-        crate::commands_diag::vad_threshold_diag,
         // 模型磁盘占用/版本（REQ-131，v0.7.0 M3）
         crate::commands_diag::model_disk_overview,
         // 会话图片配套（REQ-051，v0.5.0 M6：图集/走廊/删除）
@@ -423,7 +419,6 @@ pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync
         // 结构模型与课后精修（REQ-047/049/050 模型版：下载/状态/精修）
         crate::commands_refine::structure_model_download,
         crate::commands_refine::structure_model_status,
-        crate::commands_refine::structure_models_dir_cmd,
         crate::commands_refine::structure_formula_tier,
         crate::commands_refine::refine_session,
         // v0.11.5（spec 5️⃣）：课后精修懒自动化（详情进入原料视图自动触发；

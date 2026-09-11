@@ -95,11 +95,6 @@ pub fn structure_model_status(state: State<'_, AppState>) -> Vec<crate::structur
     list
 }
 
-/// 查询结构模型装配目录（前端展示用；不暴露内部模型路径细节）。
-#[tauri::command]
-pub fn structure_models_dir_cmd(state: State<'_, AppState>) -> String {
-    structure_models_dir(&state).to_string_lossy().into_owned()
-}
 
 /// 课后精修会话（方案 A 增强版：懒加载模型 → 表格/公式模型版识别 → 回填产物）。
 ///
