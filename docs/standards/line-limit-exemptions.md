@@ -210,6 +210,9 @@
 
 > **批 0-D（L1 原语层 + 批 1 删除批）新增文件记录 —— 全部 ≤300 行，无需登记**（2026-09-11，Task 14 收尾）。本节只**追加人工记录行**：收尾时 `node scripts/line-limits.mjs --full` 本就绿（`>600` 硬限 **0** · 301–600 档 **125** · 登记条目 **125**），故**未跑 `--write`**（避免把并行任务的在飞行连带提交）；本节数字与棘轮名单、301–600 档表**均无改动**。
 >
+> ⚠️ **来源标记：本节是人工维护的记录块，非机器生成** —— 数值写成 Markdown **引用行**（`> - ` 起首，形如 `> - 文件：**N**`），而 `parseTable()` 只认 4 列 `| path | N | … |` 表行（引用行一律忽略）；且本块位于 `## 已拆分` 标题**之后**，`parseHistory()` 对该节**逐字保留** ⇒ `--write` 永远既不重算也不删除它，数值过期后**没有任何门禁会报警**（2026-09-11 已发现 Loading / StatusLine 共 6 个值过期，实测更正）。
+> **刷新规则：本节与 `docs/adr/ADR-033-l1-primitives-and-view-layer-contract.md`、`docs/superpowers/specs/2026-09-11-frontend-redesign-design.md` 三处副本不一致时，一律在 HEAD 按 `countLines()` 口径（含空行）重新实测，并以实测值同步全部副本。**
+>
 > **新建目录 `app/src/ui/primitives/` 下 42 个文件**（实测行数口径 = `scripts/line-limits.mjs` 的 `countLines()`，即含空行的全部行数；**最大 297**）：
 > - `Text`：`Text.tsx` **89** · `Text.css` **46** · `Text.test.tsx` **130**
 > - `Surface`：`Surface.tsx` **97** · `Surface.css` **73** · `Surface.test.tsx` **168**
@@ -218,8 +221,8 @@
 > - `ConfirmDialog`：`ConfirmDialog.tsx` **192** · `ConfirmDialog.css` **58** · `ConfirmDialog.test.tsx` **297**
 > - `Toast`：`Toast.tsx` **210** · `Toast.css` **65** · `Toast.test.tsx` **249** · `Toast.interrupt.test.tsx` **167** · `Toast.style.test.ts` **132**（⚠️ 这 4 个 `Toast.*` 在本次收尾期间由 **T9 补正实施者**并行修改，已落入 `6cb44424`；上面数值与该次提交逐格一致）
 > - `EmptyState`：`EmptyState.tsx` **127** · `EmptyState.css` **81** · `EmptyState.test.tsx` **276**
-> - `Loading`/`Skeleton`/`Probe`：`Loading.tsx` **102** · `Loading.css` **72** · `Loading.test.tsx` **229**
-> - `StatusLine`：`StatusLine.tsx` **92** · `StatusLine.css` **41** · `StatusLine.test.tsx` **258**
+> - `Loading`/`Skeleton`/`Probe`：`Loading.tsx` **105** · `Loading.css` **79** · `Loading.test.tsx` **238**
+> - `StatusLine`：`StatusLine.tsx` **94** · `StatusLine.css` **42** · `StatusLine.test.tsx` **267**
 > - `usePresence`：`usePresence.ts` **200** · `usePresence.test.tsx` **282** · `usePresence.node.test.ts` **71**
 > - 接缝 / 导出面 / 守卫：`motion.css` **74** · `index.ts` **45** · `style-seams.test.ts` **271** · `style-contract.test.ts` **214** · `motion-coverage.test.ts` **145**
 >
