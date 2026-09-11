@@ -17,19 +17,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Note } from "../types";
 import { resolveNoteColor } from "../utils/colorPalette";
-// v0.14 A：编辑器容器切换为 RichEditorView（CM 富编辑：图片内联/撤销/草稿恢复）；
-// NoteEditView 保留为 CM 初始化失败的降级路径（RichEditorView 内部回退）
-import RichEditorView from "../components/RichEditorView";
 import NoteListView from "../components/NoteListView";
 import GroupSidebar from "../components/GroupSidebar";
 import FeedFragmentList from "../components/FeedFragmentList";
-import NoteReadingView from "../components/NoteReadingView";
-import VersionPanel from "../components/VersionPanel";
 // 批 8（REQ-317）：模型卡对话框槽（拆件）与选区行动类编排（hook 收敛）
 import { useNoteSelectionActions } from "../hooks/useNoteSelectionActions";
 import NotesOverlays from "../components/notes/NotesOverlays";
-// v0.20.5：阅读头动作组（色点/归组/挂体系/AI/模型卡）——编排瘦身拆分
-import NoteHeaderActions from "../components/NoteHeaderActions";
+import NotesReadingColumn from "../components/notes/NotesReadingColumn";
 import ColumnResizer from "../components/ColumnResizer";
 import ColumnBar from "../components/ColumnBar";
 import { useColumnLayout } from "../hooks/useColumnLayout";
@@ -196,14 +190,6 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
     return m;
   }, [visibleNotes, groupMap, list.tagColors]);
 
-  // H3：辅助面板插槽——VersionPanel（知识补充已迁移至编辑态 🤖 AI 菜单——
-  // v0.17.0 REQ-246：阅读态独立面板移除，用 AI 直接进入编辑态）
-  const auxPanels = selected ? (
-    <>
-      <VersionPanel key={`version-${selected.id}`} noteId={selected.id} onChanged={() => void list.handleNoteChanged()} />
-    </>
-  ) : null;
-
   return (
     <div style={{ display: "flex", height: "calc(100vh - 56px)", minHeight: 0 }}>
       {/* ── 左侧：组筛选侧栏（240px；v0.15 可拖拽/折叠为窄条）── */}
@@ -288,65 +274,30 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
       )}
       <ColumnResizer onResize={listCol.resizeBy} onReset={listCol.resetWidth} />
 
-      {/* ── 右栏：阅读视图 / 编辑视图 ── */}
-      <div style={{ flex: 1, minWidth: 0, display: "flex", overflow: "hidden" }}>
-        {selected ? (
-          <NoteReadingView
-            note={selected}
-            editing={editing}
-            // v0.19.1：命中词阅读搜索（仅当请求属于当前选中笔记——过期请求不注入）
-            externalSearch={readerSearch && selected?.id === readerSearch.noteId
-              ? { key: readerSearch.key, query: readerSearch.search }
-              : null}
-            outlineFolded={outlineCol.folded}
-            onToggleOutline={() => outlineCol.setManualFolded(!outlineCol.manuallyFolded)}
-            editor={
-              <RichEditorView
-                key={selected.id}
-                ref={editorRef}
-                note={selected}
-                onCancel={() => {
-                  // v0.13.6：完成编辑 → 列表重载 + 选中笔记重取（右栏立即显示新标题/正文）
-                  setEditing(false);
-                  void list.handleNoteChanged();
-                }}
-                // v0.14 A：编辑态图片点击放大（与阅读态同一入口）
-                onImageOpen={(src, title) => setPreviewImg({ src, title })}
-                // 批 8（REQ-317）：编辑态选区行动类（转问题/模型卡预填）
-                onSelectionAction={handleSelectionAction}
-              />
-            }
-            auxPanels={auxPanels}
-            headerExtra={
-              <NoteHeaderActions
-                key={`hdr-${selected.id}`}
-                note={selected}
-                resolvedColor={noteColors[selected.id] ?? null}
-                groups={list.groups}
-                onChanged={() => void list.handleNoteChanged()}
-                onError={(m) => list.setStatus(m)}
-                onGotoKnowledgeSystem={onCreateSystem}
-                onOpenAi={openAiDialog}
-                onOpenModelCard={openModelCard}
-                onCleanNotice={notifyCleanNotice}
-              />
-            }
-            onEdit={() => setEditing(true)}
-            onPinToggle={() => void runPinToggle(selected)}
-            onDelete={() => void runDelete(selected.id)}
-            onTagClick={(t) => { list.setTagFilter(t); list.setKeyword(""); setView("notes"); }}
-            onOpenSession={(id) => onOpenSessions?.(id)}
-            onTaskToggle={handleTaskToggle}
-            onImageOpen={(src, title) => setPreviewImg({ src, title })}
-            // 批 8（REQ-317）：阅读态选区行动类（转问题/模型卡预填）
-            onSelectionAction={handleSelectionAction}
-          />
-        ) : (
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: 13 }}>
-            从左侧选择一条笔记查看
-          </div>
-        )}
-      </div>
+      {/* ── 右栏：阅读视图 / 编辑视图（插槽装配见 components/notes/NotesReadingColumn）── */}
+      <NotesReadingColumn
+        selected={selected}
+        editing={editing}
+        setEditing={setEditing}
+        readerSearch={readerSearch}
+        noteColors={noteColors}
+        groups={list.groups}
+        editorRef={editorRef}
+        outlineCol={outlineCol}
+        onChanged={list.handleNoteChanged}
+        onError={list.setStatus}
+        onCreateSystem={onCreateSystem}
+        onOpenAi={openAiDialog}
+        onOpenModelCard={openModelCard}
+        onSelectionAction={handleSelectionAction}
+        onPinToggle={(n) => void runPinToggle(n)}
+        onDelete={(id) => void runDelete(id)}
+        onTaskToggle={handleTaskToggle}
+        onTagClick={(t) => { list.setTagFilter(t); list.setKeyword(""); setView("notes"); }}
+        onOpenSession={onOpenSessions}
+        onImageOpen={(src, title) => setPreviewImg({ src, title })}
+        onCleanNotice={notifyCleanNotice}
+      />
       {/* 覆盖层（AI 对话框 / 模型卡对话框 / 图片放大预览 / 清理留痕 toast）——
           条件门控与 key 语义见 components/notes/NotesOverlays */}
       <NotesOverlays
