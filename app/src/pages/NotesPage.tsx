@@ -45,6 +45,7 @@ import ColumnBar from "../components/ColumnBar";
 import { useColumnLayout } from "../hooks/useColumnLayout";
 import { useNoteAttention } from "../components/useNoteAttention";
 import { useDbRefresh } from "../hooks/useDbRefresh";
+import { useNotesSealedFilter } from "../hooks/useNotesSealedFilter";
 
 interface Props {
   focusNoteId?: number | null;
@@ -391,32 +392,17 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
     return Array.from(set).sort();
   }, [notes]);
 
-  // v0.20.3（REQ-301）：SE 情绪 tag（#树洞）默认排除（设置可显）
-  const [sealedVisible, setSealedVisible] = useState(false);
-  useEffect(() => {
-    void invoke<{ sealedTagsVisible?: boolean }>("get_feature_flags")
-      .then((f) => setSealedVisible(!!f.sealedTagsVisible))
-      .catch(() => setSealedVisible(false));
-  }, [refreshToken]);
+  // v0.20.3（REQ-301）：SE 情绪 tag（#树洞）默认排除（设置可显）——判定/开关在
+  // useNotesSealedFilter（refreshToken 由页面注入，与颜色数据同一令牌）
+  const { filterSealed } = useNotesSealedFilter(refreshToken);
 
   // v0.11.0：组过滤在客户端生效（列表已全量加载；组切换零请求）
   // v0.20.3（REQ-301）+2026-09-06 审查（TD-E）：SE 封存默认不可见——#树洞
   // tag 精确匹配（防“树洞XX”子串误滤）；除显式显隐开关外任何视图态均排除
   const visibleNotes = useMemo(() => {
-    let list = groupFilter === null ? notes : notes.filter((n) => n.group_id === groupFilter);
-    if (!sealedVisible) {
-      list = list.filter((n) => {
-        try {
-          const tags = JSON.parse(n.tags ?? "[]") as unknown[];
-          const sealed = tags.some((t) => String(t).replace(/^#/, "").trim() === "树洞");
-          return !sealed;
-        } catch {
-          return true; // tags 非 JSON（旧数据）→ 不误滤
-        }
-      });
-    }
-    return list;
-  }, [notes, groupFilter, sealedVisible]);
+    const list = groupFilter === null ? notes : notes.filter((n) => n.group_id === groupFilter);
+    return filterSealed(list);
+  }, [notes, groupFilter, filterSealed]);
 
   // v0.14 B：组映射（noteId → 组，resolveNoteColor 组继承档用）
   const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
