@@ -89,6 +89,24 @@ export function parseTable() {
 
 function check({ full }) {
   const measured = scanTree();
+  // 规模自检：没有它，扫描域失效会让 (a)/(c) 静默通过、(d) 反把 117 条登记行报成"指向不存在的文件"。
+  // 更危险的是未来：FROZEN_OVER_LIMIT 被清空（0-C2/C3 拆完后）时，双失效会给出 exit 0 绿灯。
+  if (measured.size === 0) {
+    console.error(
+      `❌ line-limits：扫描域为空 —— ${SCAN_DIRS.join(' / ')} 下没有匹配 ${SOURCE_EXT} 的文件。\n` +
+        `   这几乎总是路径写错或工作目录不对，**不是"没有超限文件"**。`,
+    );
+    process.exit(1);
+  }
+
+  // 登记表缺失自检：缺了它，(c) 会把每条超限文件逐条报成"未登记"，
+  // 而不提示真实原因是登记表不存在 —— 同样把人引向错误的修法。
+  const tableAbs = join(ROOT, TABLE_PATH);
+  if (!existsSync(tableAbs)) {
+    console.error(`❌ line-limits：登记表不存在 —— ${TABLE_PATH}。先运行 --write 生成，或检查路径。`);
+    process.exit(1);
+  }
+
   const rows = parseTable();
   const registered = new Set(rows.map((r) => r.path));
   const problems = [];
