@@ -75,3 +75,13 @@ describe("token 门面一致性", () => {
     }
   });
 });
+
+describe("token 接线守卫", () => {
+  // Why：未接线的 `var(--ed-*)` **不会报错**，只会静默取不到值（见 tokens.ts 头注）。
+  // 批 0-D 的原语全靠这些变量着色/取阴影，漏一次 import 就会让整层原语在运行时失效，
+  // 而所有单元测试仍全绿 —— 故把这条从纪律变成机器判据。
+  it("应用入口 import 了 ui/tokens.css（未接线则所有 var(--ed-*) 运行时无值）", () => {
+    const main = readFileSync(join(HERE, "..", "main.tsx"), "utf8");
+    expect(main, "main.tsx 必须 import ./ui/tokens.css（见批 0-D 控制方裁决）").toContain('import "./ui/tokens.css";');
+  });
+});

@@ -36,7 +36,7 @@ export const COLOR_TOKENS = [
   { name: "bg-sunken", light: "#F1EEE7", dark: "#100F0E", usage: "输入槽 / 骨架 / 内嵌" },
   { name: "bg-canvas", light: "#FBFAF8", dark: "#141312", usage: "窗口底（纸）" },
   { name: "bg-surface", light: "#FFFFFF", dark: "#1C1A18", usage: "卡片 / 列 / 阅读面" },
-  { name: "bg-raised", light: "#FFFFFF", dark: "#24211E", usage: "弹层 / 菜单 / 浮窗（亮档另加 --ed-shadow-1（0-D 前定值））" },
+  { name: "bg-raised", light: "#FFFFFF", dark: "#24211E", usage: "弹层 / 菜单 / 浮窗（亮档另加 --ed-shadow-1）" },
   { name: "border", light: "#EAE7E0", dark: "#2E2A26", usage: "横格 / 分隔" },
   { name: "border-strong", light: "#C9C4B8", dark: "#423C36", usage: "输入框 / 刻度底 / 引线" },
   { name: "ink-4", light: "#909088", dark: "#6E6A62", usage: "未确认（过渡态，3.22:1，见 ADR-032 第 4 条）" },
@@ -46,9 +46,34 @@ export const COLOR_TOKENS = [
   { name: "mark-clip", light: "#F4F1E9", dark: "#221F1B", usage: "剪报底纹（默认开，仅背景色不加边框）" },
   { name: "stamp", light: "#B3271E", dark: "#E0604F", usage: "状态戳 —— 全站唯一非中性色，绝不用于按钮" },
   { name: "ok", light: "#2F7A4F", dark: "#4FAE74", usage: "掌握 / 已毕业 / 成功回执" },
-  { name: "due", light: "#A05F10", dark: "#E0A44B", usage: "到期刻度 / 低置信点线 / 记忆语义文字（亮档原 #B26A12 实测仅 4.06:1，不合格，已改）" },
+  { name: "due", light: "#9F5E10", dark: "#E0A44B", usage: "到期刻度 / 低置信点线 / 记忆语义文字（亮档两次对比度修正：#B26A12 4.06:1 → #A05F10 → #9F5E10；最终值以剪报底余量 ≥0.05 为准）" },
   { name: "link", light: "#1F5FBF", dark: "#6E9BE8", usage: "链接 / 时间码 / 引用" },
   { name: "overlay", light: "#1A1A1A", dark: "#1A1A1A", usage: "遮罩基色（配 --ed-overlay-alpha 使用）" },
+];
+
+/**
+ * 字阶结构化真源（规范 §4.2）—— CSS 变量与人读串**同源派生**，不允许各写一份。
+ * 第 3 档原为无单位行高 `1.9`，其余为 px（两种写法并存会让 CSS 无法统一消费）；
+ * 换算依据：15.5px × 1.9 = 29.45px ⇒ 取一位小数 **29.5px**（0.5px 是可用精度，
+ * 差 0.05px 不影响任何排版判定，且比 29px 更接近真实行高）。
+ */
+export const TYPE_SCALE = [
+  { size: 25, line: 34, weight: 600 },
+  { size: 17, line: 24, weight: 600 },
+  { size: 15.5, line: 29.5, weight: 400 },
+  { size: 13, line: 20, weight: 400 },
+  { size: 12, line: 18, weight: 500 },
+  { size: 11.5, line: 16, weight: 500 },
+];
+
+/**
+ * 阴影 token（规范 §4.2② · 2026-09-11 用户裁决「纸感双层暖墨」，提交 `44b6e05a`）。
+ * **暗档不用投影**，改白色反相描边（沿用 `docs/product/ui-ux-system.md:204` 的既有做法）——
+ * 暗底上的黑色投影看不见，只会让面板边缘糊成一团。
+ */
+export const SHADOW_TOKENS = [
+  { name: "shadow-1", light: "0 1px 2px rgba(28,25,23,.06), 0 4px 12px rgba(28,25,23,.08)", dark: "0 0 0 1px rgba(255,255,255,.06)", usage: "低层：菜单 / 浮层 / 小卡（亮档投影；暗档反相描边）" },
+  { name: "shadow-2", light: "0 2px 4px rgba(28,25,23,.06), 0 12px 32px rgba(28,25,23,.14)", dark: "0 0 0 1px rgba(255,255,255,.06)", usage: "高层：Modal / 浮窗（亮档投影；暗档反相描边）" },
 ];
 
 /** 非颜色 token：两档共用（规范 §4.2） */
@@ -56,8 +81,8 @@ export const SCALE_SOURCE = {
   fontFamilyBody: '"Source Han Serif SC", "Songti SC", SimSun, serif',
   fontFamilyUi: '"Inter", "Segoe UI Variable", "Microsoft YaHei UI", system-ui, sans-serif',
   fontFamilyMono: '"JetBrains Mono", Consolas, ui-monospace, monospace',
-  /** 字阶：字号/行高·字重（规范 §4.2，下界 12px；`11.5/16 mono` 为唯一点名例外） */
-  typeScale: ["25px/34px·600", "17px/24px·600", "15.5px/1.9·400", "13px/20px·400", "12px/18px·500", "11.5px/16px·500"],
+  /** 字阶：字号/行高·字重（规范 §4.2，下界 12px；`11.5/16 mono` 为唯一点名例外）—— 由 TYPE_SCALE 派生 */
+  typeScale: TYPE_SCALE.map((t) => `${t.size}px/${t.line}px·${t.weight}`),
   /** 间距：4 为半档，其余落 8px 网格 */
   spaceScale: [4, 8, 12, 16, 24, 32, 48],
   /** 圆角：3 印章 · 5 控件与卡 · 8 面板 · 10 浮层 */
@@ -104,11 +129,21 @@ ${light}
   --ed-font-ui: ${SCALE_SOURCE.fontFamilyUi};
   --ed-font-mono: ${SCALE_SOURCE.fontFamilyMono};
 
+  /* 字阶（规范 §4.2）：--ed-type-<n>-{size,line,weight}，n 与 TYPE_SCALE 下标同序（1 起） */
+${TYPE_SCALE.map((t, i) => [
+  `  --ed-type-${i + 1}-size: ${t.size}px;`,
+  `  --ed-type-${i + 1}-line: ${t.line}px;`,
+  `  --ed-type-${i + 1}-weight: ${t.weight};`,
+].join("\n")).join("\n")}
+
   /* 间距（4 为半档，仅图标内边距） */
 ${SCALE_SOURCE.spaceScale.map((n) => `  --ed-space-${n}: ${n}px;`).join("\n")}
 
   /* 圆角 */
 ${SCALE_SOURCE.radiusScale.map((r) => `  --ed-radius-${r.name}: ${r.px}px;`).join("\n")}
+
+  /* 阴影（规范 §4.2②）：亮档投影；暗档在 [data-theme="dark"] 里改为反相白描边 */
+${SHADOW_TOKENS.map((t) => `  --ed-${t.name}: ${t.light}; /* ${t.usage} */`).join("\n")}
 
   /* 遮罩 */
   --ed-overlay-alpha: ${SCALE_SOURCE.overlayAlpha};
@@ -119,6 +154,9 @@ ${SCALE_SOURCE.radiusScale.map((r) => `  --ed-radius-${r.name}: ${r.px}px;`).joi
 
 [data-theme="dark"] {
 ${dark}
+
+  /* 阴影：暗档不用投影，改白色反相描边（暗底上黑色投影不可见） */
+${SHADOW_TOKENS.map((t) => `  --ed-${t.name}: ${t.dark};`).join("\n")}
 }
 `;
 }
@@ -153,6 +191,7 @@ export const SCALE_TOKENS = {
   fontFamilyUi: ${JSON.stringify(SCALE_SOURCE.fontFamilyUi)},
   fontFamilyMono: ${JSON.stringify(SCALE_SOURCE.fontFamilyMono)},
   typeScale: ${JSON.stringify(SCALE_SOURCE.typeScale)},
+  typeScaleVars: ${JSON.stringify(TYPE_SCALE)},
   spaceScale: ${JSON.stringify(SCALE_SOURCE.spaceScale)},
   radiusScale: ${JSON.stringify(SCALE_SOURCE.radiusScale)},
   overlayAlpha: ${SCALE_SOURCE.overlayAlpha},

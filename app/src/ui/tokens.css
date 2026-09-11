@@ -8,7 +8,7 @@
   --ed-bg-sunken: #F1EEE7; /* 输入槽 / 骨架 / 内嵌 */
   --ed-bg-canvas: #FBFAF8; /* 窗口底（纸） */
   --ed-bg-surface: #FFFFFF; /* 卡片 / 列 / 阅读面 */
-  --ed-bg-raised: #FFFFFF; /* 弹层 / 菜单 / 浮窗（亮档另加 --ed-shadow-1（0-D 前定值）） */
+  --ed-bg-raised: #FFFFFF; /* 弹层 / 菜单 / 浮窗（亮档另加 --ed-shadow-1） */
   --ed-border: #EAE7E0; /* 横格 / 分隔 */
   --ed-border-strong: #C9C4B8; /* 输入框 / 刻度底 / 引线 */
   --ed-ink-4: #909088; /* 未确认（过渡态，3.22:1，见 ADR-032 第 4 条） */
@@ -18,7 +18,7 @@
   --ed-mark-clip: #F4F1E9; /* 剪报底纹（默认开，仅背景色不加边框） */
   --ed-stamp: #B3271E; /* 状态戳 —— 全站唯一非中性色，绝不用于按钮 */
   --ed-ok: #2F7A4F; /* 掌握 / 已毕业 / 成功回执 */
-  --ed-due: #A05F10; /* 到期刻度 / 低置信点线 / 记忆语义文字（亮档原 #B26A12 实测仅 4.06:1，不合格，已改） */
+  --ed-due: #9F5E10; /* 到期刻度 / 低置信点线 / 记忆语义文字（亮档两次对比度修正：#B26A12 4.06:1 → #A05F10 → #9F5E10；最终值以剪报底余量 ≥0.05 为准） */
   --ed-link: #1F5FBF; /* 链接 / 时间码 / 引用 */
   --ed-overlay: #1A1A1A; /* 遮罩基色（配 --ed-overlay-alpha 使用） */
 
@@ -26,6 +26,26 @@
   --ed-font-body: "Source Han Serif SC", "Songti SC", SimSun, serif;
   --ed-font-ui: "Inter", "Segoe UI Variable", "Microsoft YaHei UI", system-ui, sans-serif;
   --ed-font-mono: "JetBrains Mono", Consolas, ui-monospace, monospace;
+
+  /* 字阶（规范 §4.2）：--ed-type-<n>-{size,line,weight}，n 与 TYPE_SCALE 下标同序（1 起） */
+  --ed-type-1-size: 25px;
+  --ed-type-1-line: 34px;
+  --ed-type-1-weight: 600;
+  --ed-type-2-size: 17px;
+  --ed-type-2-line: 24px;
+  --ed-type-2-weight: 600;
+  --ed-type-3-size: 15.5px;
+  --ed-type-3-line: 29.5px;
+  --ed-type-3-weight: 400;
+  --ed-type-4-size: 13px;
+  --ed-type-4-line: 20px;
+  --ed-type-4-weight: 400;
+  --ed-type-5-size: 12px;
+  --ed-type-5-line: 18px;
+  --ed-type-5-weight: 500;
+  --ed-type-6-size: 11.5px;
+  --ed-type-6-line: 16px;
+  --ed-type-6-weight: 500;
 
   /* 间距（4 为半档，仅图标内边距） */
   --ed-space-4: 4px;
@@ -41,6 +61,10 @@
   --ed-radius-control: 5px;
   --ed-radius-panel: 8px;
   --ed-radius-overlay: 10px;
+
+  /* 阴影（规范 §4.2②）：亮档投影；暗档在 [data-theme="dark"] 里改为反相白描边 */
+  --ed-shadow-1: 0 1px 2px rgba(28,25,23,.06), 0 4px 12px rgba(28,25,23,.08); /* 低层：菜单 / 浮层 / 小卡（亮档投影；暗档反相描边） */
+  --ed-shadow-2: 0 2px 4px rgba(28,25,23,.06), 0 12px 32px rgba(28,25,23,.14); /* 高层：Modal / 浮窗（亮档投影；暗档反相描边） */
 
   /* 遮罩 */
   --ed-overlay-alpha: 0.34;
@@ -66,4 +90,8 @@
   --ed-due: #E0A44B;
   --ed-link: #6E9BE8;
   --ed-overlay: #1A1A1A;
+
+  /* 阴影：暗档不用投影，改白色反相描边（暗底上黑色投影不可见） */
+  --ed-shadow-1: 0 0 0 1px rgba(255,255,255,.06);
+  --ed-shadow-2: 0 0 0 1px rgba(255,255,255,.06);
 }

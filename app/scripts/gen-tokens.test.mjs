@@ -11,7 +11,7 @@
  * 待并入或显式豁免。
  */
 import { describe, expect, it } from "vitest";
-import { COLOR_TOKENS, CONTRAST_BASELINE, SCALE_SOURCE, renderAll } from "./gen-tokens.mjs";
+import { COLOR_TOKENS, CONTRAST_BASELINE, SCALE_SOURCE, SHADOW_TOKENS, TYPE_SCALE, renderAll } from "./gen-tokens.mjs";
 import { contrastRatio } from "../src/ui/contrast.ts";
 
 describe("gen-tokens 规范数据", () => {
@@ -124,5 +124,86 @@ describe("renderAll", () => {
     expect(Math.min(...sizes)).toBeGreaterThanOrEqual(11.5);
     // 下限之下只有这一个例外档位：若有人新增 11px，上面的断言会拦住
     expect(sizes.filter((n) => n < 12)).toEqual([11.5]);
+  });
+});
+
+describe("字阶 CSS 变量（0-D 硬前置②）", () => {
+  it("6 档 × size/line/weight 共 18 个变量都在，且与 TYPE_SCALE 一一对应", () => {
+    const { css } = renderAll();
+    expect(TYPE_SCALE).toHaveLength(6);
+    for (const [i, t] of TYPE_SCALE.entries()) {
+      const n = i + 1;
+      expect(css, `第 ${n} 档 size`).toContain(`--ed-type-${n}-size: ${t.size}px;`);
+      expect(css, `第 ${n} 档 line`).toContain(`--ed-type-${n}-line: ${t.line}px;`);
+      expect(css, `第 ${n} 档 weight`).toContain(`--ed-type-${n}-weight: ${t.weight};`);
+    }
+    // 18 个变量名一个不多一个不少
+    expect(css.match(/--ed-type-\d-(size|line|weight)/g)?.length).toBe(18);
+  });
+
+  it("无单位行高已消灭（反例守门：/1.9 不得回归）", () => {
+    expect(SCALE_SOURCE.typeScale.join("|")).not.toContain("/1.9");
+    expect(SCALE_SOURCE.typeScale[2]).toBe("15.5px/29.5px·400");
+    expect(SCALE_SOURCE.typeScale[2]).toContain(`${TYPE_SCALE[2].line}px`);
+  });
+
+  it("字阶人读串与结构化真源同源（不允许各写一份）", () => {
+    expect([...SCALE_SOURCE.typeScale]).toEqual(
+      TYPE_SCALE.map((t) => `${t.size}px/${t.line}px·${t.weight}`),
+    );
+  });
+});
+
+describe("阴影 token（规范 §4.2②）", () => {
+  it("两档齐全，值逐字等于用户裁决", () => {
+    expect(SHADOW_TOKENS.map((t) => t.name)).toEqual(["shadow-1", "shadow-2"]);
+    expect(SHADOW_TOKENS[0].light).toBe("0 1px 2px rgba(28,25,23,.06), 0 4px 12px rgba(28,25,23,.08)");
+    expect(SHADOW_TOKENS[1].light).toBe("0 2px 4px rgba(28,25,23,.06), 0 12px 32px rgba(28,25,23,.14)");
+  });
+
+  it("暗档不是投影而是反相白描边，且两档各写一次", () => {
+    const { css } = renderAll();
+    for (const t of SHADOW_TOKENS) {
+      expect(t.dark).toBe("0 0 0 1px rgba(255,255,255,.06)");
+      expect(css).toContain(`--ed-${t.name}: ${t.light};`);
+      expect(css).toContain(`--ed-${t.name}: ${t.dark};`);
+    }
+  });
+
+  it("usage 串不得含注释终止符（会被写进 CSS 注释）", () => {
+    for (const t of SHADOW_TOKENS) expect(t.usage).not.toContain("*/");
+  });
+
+  it("产物里不再出现「引用未定义变量」的说明（0-A 交接第 1① 条）", () => {
+    const { css, ts } = renderAll();
+    expect(css).not.toContain("0-D 前定值");
+    expect(ts).not.toContain("0-D 前定值");
+  });
+});
+
+// 求解规则（Task 1 Step 6）：保持色相、RGB 三通道按同一系数 f 缩放取整，
+// 取满足「纸 ≥4.5 且 面 ≥4.5 且 剪报底 ≥4.55」的**最小加深量**。
+// 4.55 = 4.5 底线 + 0.05 余量：`#A05F10` 正是「卡在 4.4950」的反例，
+// hex 量化与将来底色微调都会吃掉没有余量的值 —— 故余量本身是硬要求。
+describe("--due 亮档第二次对比度修正（剪报底余量规则）", () => {
+  const CLIP = "#F4F1E9"; // --ed-mark-clip 亮档
+  const by = (n) => COLOR_TOKENS.find((t) => t.name === n);
+
+  it("新值满足全部三条（纸 / 面 / 剪报底），且剪报底留 ≥0.05 余量", () => {
+    const due = by("due").light;
+    expect(contrastRatio(due, "#FBFAF8"), "due/纸").toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(due, "#FFFFFF"), "due/面").toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(due, CLIP), "due/剪报底").toBeGreaterThanOrEqual(4.55);
+  });
+
+  it("反例守门：被替换掉的 #A05F10 在剪报底上仍低于 4.5（不得回归）", () => {
+    expect(contrastRatio("#A05F10", CLIP)).toBeLessThan(4.5);
+    // 更早的 #B26A12 连纸底都不过
+    expect(contrastRatio("#B26A12", "#FBFAF8")).toBeLessThan(4.5);
+  });
+
+  it("暗档 #E0A44B 未被牵连改动（暗档剪报底 7.49:1 本就达标）", () => {
+    expect(by("due").dark).toBe("#E0A44B");
+    expect(contrastRatio(by("due").dark, "#221F1B")).toBeGreaterThanOrEqual(4.5);
   });
 });

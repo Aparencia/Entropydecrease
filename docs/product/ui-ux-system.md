@@ -158,6 +158,7 @@
 - `prefers-reduced-motion`：按 §3.2 / §七 降级矩阵执行
 - 焦点：2px `--ed-primary` + 2px offset；列表行、卡片可独立聚焦
 - 颜色非唯一通道：影调+图标+文本三通道；低置信内容保证文本通道完整可读
+- **剪报底纹（`--ed-mark-clip`）上的文字只用 `ink-3` 及更深（`--ed-ink-3` / `--ed-ink-2` / `--ed-ink-1`）；`--ed-ink-4` 禁止用于剪报底纹** —— `--ed-ink-4` 的 3:1 过渡态例外只在阅读面上成立，换到剪报底上亮档实测 **2.8489**、暗档 **3.0480**，连该例外都不满足
 - 文本缩放：rem 单位；200% 不破版（组件按内容自适应高度）
 
 ---
@@ -183,7 +184,10 @@
   --ed-radius-control: 8px;
   --ed-radius-card: 12px;
   --ed-radius-panel: 16px;
-  --ed-shadow-card: 0 1px 2px rgba(0,0,0,.06), 0 3px 8px rgba(0,0,0,.05);
+  /* --ed-shadow-card 已被 --ed-shadow-1 取代（批 0-D Task 1 · 2026-09-11 用户裁决「纸感双层暖墨」）：
+     低层（菜单/浮层/小卡）= --ed-shadow-1；高层（Modal/浮窗）= --ed-shadow-2。旧值不再使用。 */
+  --ed-shadow-1: 0 1px 2px rgba(28,25,23,.06), 0 4px 12px rgba(28,25,23,.08);
+  --ed-shadow-2: 0 2px 4px rgba(28,25,23,.06), 0 12px 32px rgba(28,25,23,.14);
   --ed-blur: 20px;
   /* 动效 */
   --ed-ease: cubic-bezier(0.2, 0, 0, 1);
@@ -201,7 +205,9 @@
   --ed-text-secondary: #A0A09E;
   --ed-text-tertiary: #6A6A68;
   --ed-border: #2C2C30;
-  --ed-shadow-card: 0 0 0 1px rgba(255,255,255,.06);
+  /* 暗档做法已上升为 --ed-shadow-1/2 的统一策略：暗底不用投影（黑色投影不可见，只会让面板边缘糊成一团），改白色反相描边 */
+  --ed-shadow-1: 0 0 0 1px rgba(255,255,255,.06);
+  --ed-shadow-2: 0 0 0 1px rgba(255,255,255,.06);
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { /* 同深色块 */ } }
 ```
