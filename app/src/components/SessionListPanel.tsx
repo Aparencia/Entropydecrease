@@ -15,11 +15,17 @@
  *              模式/多选态（清选集退出）；右键菜单=单行语义（打开详情/重命名/
  *              复制标题/转笔记/删除——SessionRowContextMenu 委托父层处理）。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { CourseGroup, OcrBlockHit, SegmentHit, Session, SessionListItem } from "../types";
+import type { CourseGroup, OcrBlockHit, SegmentHit, SessionListItem } from "../types";
 import { fmtMs } from "../utils/fmt";
 import { isSessionConvertible } from "../utils/sessionEligibility";
+import {
+  useSessionListView,
+  type ConvertedFilter,
+  type SortBy,
+  type StatusFilter,
+} from "../hooks/useSessionListView";
 import { useSessionSelection } from "../hooks/useSessionSelection";
 import SessionListRow from "./SessionListRow";
 import type { SessionRenameRequest } from "./SessionListRow";
@@ -30,9 +36,6 @@ const selectStyle: React.CSSProperties = {
   fontSize: 12, padding: "4px 6px", border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff",
 };
 
-type StatusFilter = "all" | "recording" | "finished" | "failed";
-type ConvertedFilter = "all" | "todo" | "done";
-type SortBy = "time-desc" | "time-asc" | "duration";
 // TD-2026-08-19-E 清偿：三模式搜索——标题（本地）/ 内容（段搜索）/ 画面（图内文字检索）
 type SearchMode = "title" | "content" | "ocr";
 
@@ -124,69 +127,10 @@ export default function SessionListPanel({
     }
   };
 
-  /** 筛选谓词（列表与课程分组共用） */
-  const matchFilters = useCallback(
-    (item: SessionListItem) => {
-      if (filterStatus !== "all" && item.session.status !== filterStatus) return false;
-      if (filterConverted === "todo" && (item.hasNote || !item.hasContent)) return false;
-      if (filterConverted === "done" && !item.hasNote) return false;
-      const kw = keyword.trim().toLowerCase();
-      if (kw) {
-        const hay = `${item.session.title} ${item.session.source_window ?? ""}`.toLowerCase();
-        if (!hay.includes(kw)) return false;
-      }
-      return true;
-    },
-    [filterStatus, filterConverted, keyword],
-  );
-
-  /** 本地排序（时间倒序为后端默认序，保持稳定不重排） */
-  const sorted = useMemo(() => {
-    const list = [...items];
-    const endOf = (s: Session) => s.ended_at ?? Math.floor(Date.now() / 1000);
-    if (sortBy === "time-asc") {
-      list.sort((a, b) => a.session.started_at - b.session.started_at);
-    } else if (sortBy === "duration") {
-      list.sort(
-        (a, b) =>
-          (endOf(b.session) - b.session.started_at) - (endOf(a.session) - a.session.started_at),
-      );
-    }
-    return list;
-  }, [items, sortBy]);
-
-  const filtered = useMemo(() => sorted.filter(matchFilters), [sorted, matchFilters]);
-
-  /** 课程分组视图（组内同样应用筛选 + 排序） */
-  const groupedView = useMemo(() => {
-    if (!groups) return null;
-    const endOf = (s: Session) => s.ended_at ?? Math.floor(Date.now() / 1000);
-    return groups
-      .map((g) => ({
-        ...g,
-        sessions: g.sessions.filter(matchFilters).sort((a, b) => {
-          if (sortBy === "time-asc") return a.session.started_at - b.session.started_at;
-          if (sortBy === "duration")
-            return (endOf(b.session) - b.session.started_at) - (endOf(a.session) - a.session.started_at);
-          return 0; // time-desc：后端已按新→旧
-        }),
-      }))
-      .filter((g) => g.sessions.length > 0);
-  }, [groups, matchFilters, sortBy]);
-
-  // 当前可见行序（批 4 区间语义基准）：分组视图=展开组顺次；平铺=筛选后序。
-  // 折叠组行不可见——不参与区间与选集裁剪（与笔记树语义一致）
-  const visibleOrder = useMemo(() => {
-    if (grouped && groupedView) {
-      const out: number[] = [];
-      for (const g of groupedView) {
-        if (collapsed[g.course]) continue;
-        for (const i of g.sessions) out.push(i.session.id);
-      }
-      return out;
-    }
-    return filtered.map((i) => i.session.id);
-  }, [grouped, groupedView, filtered, collapsed]);
+  // ── 视图模型（批 0-C2 拆至 hooks/useSessionListView）──
+  const { filtered, groupedView, visibleOrder } = useSessionListView({
+    items, groups, grouped, collapsed, filterStatus, filterConverted, keyword, sortBy,
+  });
 
   // ── 多选/选择模式状态机（批 0-C2 拆至 hooks/useSessionSelection）──
   const {
