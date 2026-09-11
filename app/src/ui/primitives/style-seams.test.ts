@@ -6,15 +6,16 @@
  *   ① 字阶/字族的 `var(--ed-x, 兜底字面量)` 的兜底值必须等于真源 `SCALE_TOKENS`
  *      （生成器改档后不重跑本层，兜底值会静默退回旧档 —— 未定义变量不报错）；
  *   ② `Text.tsx` 产出的每个类，`Text.css` 里必须有对应规则（类名拼错 = 静默无样式，编译期全绿）；
- *   ③ `motion.css` 的 7 个动效变量与**全仓唯一一条** reduced-motion 块 —— 批 6 要靠它们删块接管。
+ *   ③ `motion.css` 的 10 个动效变量、**全仓唯一一条** reduced-motion 块，以及规格 §8.4 的
+ *      「位移上限 8px」—— 批 6 要靠前两者删块接管，靠第三者不越界。
  *
- * 副作用：只读磁盘（同目录三份文件），不修改任何文件。
+ * 副作用：只读磁盘（同目录 + `primitives/` 下的 `.css`），不修改任何文件。
  * 边界：口径与 `tokens.drift.test.ts` 一致 —— **必须归一 EOL**（本仓无 `.gitattributes` 且
  * `core.autocrlf=true`，逐字节断言会在别人机器上假阳性）；判据前先**剥掉注释**（注释里提到
- * `--ed-dur-x` / 颜色名不该让守卫误报）。颜色只做「本层不得出现字面量」的反例守门，
- * 不重述 token 真源（那是 `contrast.test.ts` / `tokens.drift.test.ts` 的职责）。
+ * `--ed-dur-x` / 颜色名 / `translateY(12px)` 这类反例不该让守卫误报）。颜色只做「本层不得出现
+ * 字面量」的反例守门，不重述 token 真源（那是 `contrast.test.ts` / `tokens.drift.test.ts` 的职责）。
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -45,6 +46,27 @@ const MOTION_CLASSES: readonly string[] = [
 ];
 
 const COLOR_LITERAL = /#[0-9a-fA-F]{3,8}\b|\b(?:rgb|hsl)a?\(/;
+
+/** 规格 §8.4 末句：位移上限 8px（响应层/编排层/环境层一律适用；批 6 的 GSAP 也不得越过） */
+const SHIFT_MAX_PX = 8;
+
+/**
+ * 取一段 CSS 里所有 `translate*()` 的**数值实参**（px/rem）并换算成 px。
+ * 百分比（`translate(-50%, -50%)` 居中技巧）、`calc()`、`var()` 一律跳过 —— 它们不是「位移量」，
+ * 而本条判据要守的正是「位移量 ≤ 8px」这一个规范硬数字。
+ */
+function shiftViolations(css: string, file: string): string[] {
+  const out: string[] = [];
+  for (const m of stripComments(css).matchAll(/translate(?:3d|X|Y|Z)?\(([^)]*)\)/g)) {
+    for (const arg of m[1].split(",")) {
+      const px = /^\s*(-?\d+(?:\.\d+)?)(px|rem)\s*$/.exec(arg);
+      if (!px) continue;
+      const value = px[2] === "rem" ? Math.abs(Number(px[1])) * 16 : Math.abs(Number(px[1]));
+      if (value > SHIFT_MAX_PX) out.push(`${file}: ${m[0]} = ${value}px > ${SHIFT_MAX_PX}px`);
+    }
+  }
+  return out;
+}
 
 describe("Text 类名 ↔ CSS 规则一致（类名拼错 = 静默无样式）", () => {
   it("Text.tsx 产出的每个类在 Text.css 里都有规则", () => {
@@ -95,7 +117,7 @@ describe("token 兜底字面量 == 真源（生成器改档后不重跑本层会
 });
 
 describe("motion.css 接缝契约（批 6 删块即接管，故名字与取值必须钉住）", () => {
-  it("规格 §8.4 的 7 个动效变量落值，一个不多一个不少", () => {
+  it("规格 §8.4 的 10 个动效变量落值，一个不多一个不少", () => {
     const clean = stripComments(MOTION_CSS);
     const expected: ReadonlyArray<readonly [string, string]> = [
       ["--ed-dur-micro", "120ms"],
@@ -104,10 +126,22 @@ describe("motion.css 接缝契约（批 6 删块即接管，故名字与取值�
       ["--ed-dur-toast-in", "180ms"],
       ["--ed-dur-toast-out", "140ms"],
       ["--ed-dur-skeleton", "1200ms"],
+      // 控制方 2026-09-11 裁决补入：批 6 的编排层 / 页面切换不得重新硬编码这三个
+      ["--ed-dur-card", "220ms"],
+      ["--ed-dur-reveal", "500ms"],
+      ["--ed-dur-page", "150ms"],
       ["--ed-ease", "cubic-bezier(0.2, 0, 0, 1)"],
     ];
     for (const [name, value] of expected) expect(clean).toContain(`${name}: ${value};`);
     expect(clean.match(/--ed-[a-z0-9-]+\s*:/g)).toHaveLength(expected.length);
+  });
+
+  it("规格 §8.4：原语 CSS 的位移一律 ≤ 8px（8px 是注释不变量，本条是它的机器判据）", () => {
+    const files = readdirSync(HERE).filter((f) => f.endsWith(".css"));
+    // 防空目录把守卫静默关掉（同 zIndex.guard.test.ts 的「名单非空」思路）
+    expect(files.length, "primitives/ 下应有 Text.css 与 motion.css").toBeGreaterThanOrEqual(2);
+    const violations = files.flatMap((f) => shiftViolations(read(f), f));
+    expect(violations, `位移超过规格 §8.4 的 8px 上限：\n${violations.join("\n")}`).toEqual([]);
   });
 
   it("全仓唯一一条 reduced-motion 块，覆盖 11 个 `.ed-*` 基类（含 transition 与 animation 两条）", () => {
