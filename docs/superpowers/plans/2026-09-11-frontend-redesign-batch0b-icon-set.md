@@ -493,6 +493,24 @@ Expected: FAIL —— 名单缺 23 个（当前只有 `notes`）
 
 - [ ] **Step 3: 补齐域图标（9 个）**
 
+> **⚠️ 数据文件的注解规则（T1 修复轮实测得出 —— 违反会让 `IconName` 静默塌回 `string`，而运行时测试拦不住）**
+>
+> 每个分组数据导出**必须**写成：
+> ```ts
+> export const XXX_ICON_PATHS = { … } satisfies Record<string, IconGeometry>;
+> ```
+> - **不得写宽注解** `: Readonly<Record<string, IconGeometry>>` —— 它会把该分组的键退化为 `string`，而联合里混入 `string` 会让**整条 `IconName` 塌回 `string`**（T1 修复轮明确指出的风险）
+> - **也不得加 `as const`** —— `as const` 使 `elements` 变 `readonly`，与 `satisfies` 的上下文类型（可变 `Record`）冲突 → **TS1360 编译失败**（T1 修复轮实测；评审最初给的 `as const satisfies` 组合就是错的）
+> - `satisfies` 自身已保留字面量键 —— 这就是全部所需，不需要额外手法
+>
+> 并在 `paths.test.ts` 顶部加**类型层反向断言**（把「有人加回宽注解」从静默退化变成编译错）：
+> ```ts
+> // 类型层断言：若 IconName 塌回 string，本行编译失败（tsc --noEmit 覆盖测试文件）
+> type _IconNameIsNarrow = string extends IconName ? never : true;
+> const _iconNameIsNarrow: _IconNameIsNarrow = true;
+> ```
+> 注意 `paths.ts` 里的 `GROUPS` **照旧用 `as const`**（那里没有 `satisfies` 约束，不冲突）。
+
 把 `app/src/ui/icons/paths.domain.ts` 的 `DOMAIN_ICON_PATHS` 替换为：
 
 ```ts
