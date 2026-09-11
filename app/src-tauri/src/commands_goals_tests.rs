@@ -1,9 +1,12 @@
 //! commands_goals 命令层单测（inner 纯编排——内存库 AAA 模式）。
 
+use crate::commands_goals::milestones::{
+    add_goal_milestone_inner, bind_goal_group_inner, set_goal_milestone_status_inner,
+    unbind_goal_group_inner,
+};
 use crate::commands_goals::views::{get_goal_detail_inner, get_goal_progress_inner, list_goals_inner};
 use crate::commands_goals::{
-    add_goal_milestone_inner, bind_goal_group_inner, create_goal_inner, delete_goal_inner,
-    require_goal, set_goal_milestone_status_inner, unbind_goal_group_inner, update_goal_inner,
+    create_goal_inner, delete_goal_inner, require_goal, update_goal_inner,
     update_goal_interview_inner, update_goal_status_inner, GoalCreateInput, GoalMilestoneInput,
 };
 use crate::db::Db;

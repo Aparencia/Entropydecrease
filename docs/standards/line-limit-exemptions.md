@@ -63,9 +63,9 @@
 | app/src-tauri/src/screens_tests.rs | 433 | 画面要点屏构建测试域（分组/聚类/图匹配/可消费块过滤回归）单模块 #[path] 挂载 | 若再增长：可消费块过滤组拆至 screens_filter_tests.rs |
 | app/src-tauri/src/note_filter_golden_tests.rs | 431 | v0.7.5（REQ-172）：黄金语料回归域（会话31/29 实证 + 结构渲染 2 例 + 审查补测）单模块 #[path] 挂载 | 若再增长：结构渲染组拆至 note_filter_golden_structure_tests.rs |
 | app/src-tauri/src/db_note_groups_tests.rs | 426 | v0.11.0 组数据层测试域 + v0.14.1 删除/影响面用例（级联归零/悬空清理/迁移回归）——单模块 #[path] 挂载（video_profile_tests.rs 同款先例），组删除语义变更集中验证 | 若再增长：删除/影响面组拆至 db_note_groups_delete_tests.rs |
+| app/src-tauri/src/note_filter.rs | 426 | **拆分进行中（批 0-C3 Task 8 S1/3）**：渲染层已拆至 note_filter_render.rs，本行行数每步由 `--write` 刷新 —— v0.6.0 M1（REQ-082/085）：笔记过滤域（过滤链 + AI 判定应用 + 画面要点净化）内聚于单一管线（双出口一致性由构造保证）；AI 部分已按登记计划拆至 note_filter_ai.rs | 拆分进行中：S2 净化纯函数族拆至 note_filter_purify.rs · S3 转写段过滤链拆至 note_filter_chain.rs（最终 ≤300 ⇒ 本条目整行移除） |
 | app/src-tauri/src/analysis.rs | 423 | v0.5.0 M2 起结构化分析编排域（章节/重点/术语/讲者 + 事件消费 + step_boundaries/practice_segments/player_actions 三字段 + 审查修复按类型判定）；各机制输出聚合内聚于单一分析函数 | 若再增长：build_chapter_signals 事件版拆至 analysis_signals.rs |
 | app/src-tauri/src/artifact_templates_tests.rs | 423 | 产物模板测试域（五档案模板 + 代码块/步骤卡扩展 + 叙事变体 golden）单模块 #[path] 挂载 | 若再增长：代码块/步骤卡组拆至 artifact_code_tests.rs |
-| app/src-tauri/src/note_filter.rs | 422 | **拆分进行中（批 0-C3 Task 8 S1/3）**：渲染层已拆至 note_filter_render.rs，本行行数每步由 `--write` 刷新 —— v0.6.0 M1（REQ-082/085）：笔记过滤域（过滤链 + AI 判定应用 + 画面要点净化）内聚于单一管线（双出口一致性由构造保证）；AI 部分已按登记计划拆至 note_filter_ai.rs | 拆分进行中：S2 净化纯函数族拆至 note_filter_purify.rs · S3 转写段过滤链拆至 note_filter_chain.rs（最终 ≤300 ⇒ 本条目整行移除） |
 | app/src-tauri/src/app_setup.rs | 420 | 本模块承载 setup 的 AppState 初始化（数据目录/DB/引擎池/可校准（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/bin/asr_eval.rs | 418 | 目的——"无人工语料也能测 ASR"（2026-09-03 用户裁决①）：（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/vocab.rs | 416 | 词表域（存储/纠错/候选提取/n-gram 分词）内聚；分词纯逻辑与存储同域便于单测 | 若再增长：collect_tokens/split_runs 拆至 vocab_tokens.rs |
