@@ -39,7 +39,7 @@
 
 1. **模块化**：单文件 ≤300 行（>600 行必须硬拆；300-600 行登记豁免清单）；纯逻辑与副作用物理分离；显式依赖注入。
    **行数口径（唯一有效）**：文件**全部行数**（含空行），以 `[System.IO.File]::ReadAllLines(path, UTF8).Count` 为准 —— 即 `scripts/line-limits.mjs` 的 `countLines()`。
-   ⚠️ **不要用**：`Get-Content`（本机 PowerShell 5.1 + 码页 `gb2312` 会按 GBK 解码、吞换行、**少算可达 56 行** —— 实测最大 `live_session_pause.rs` 353→297，**足以把越 300 红线的文件读成达标**）· `Measure-Object -Line`（**只数非空行**）· **字节 `0x0A` 计数**（对**末尾不带换行**的文件会少算 1；本仓实测有 8 个这样的源文件，含 `NotesPage.tsx`）。
+   ⚠️ **不要用**：`Get-Content`（本机 PowerShell 5.1 + 码页 `gb2312` 会按 GBK 解码、吞换行、**少算可达 56 行** —— 实测最大 `live_session_pause.rs` 353→297；**连硬限违规都能被读成合规**：`SessionListPanel.tsx` 604→577，>600 读成 ≤600）· `Measure-Object -Line`（**只数非空行**）· **字节 `0x0A` 计数**（对**末尾不带换行**的文件会少算 1；本仓实测有 8 个这样的源文件，含 `NotesPage.tsx`）。
    判定一律以 `node scripts/line-limits.mjs` 为准。
 2. **强类型契约**：业务术语贯穿全栈；禁止 `any`/无类型；入参出参必须定义类型（TS interface / Rust struct）。
 3. **上下文注释**：注释解释 Why 不解释 What；公共函数/模块必须含 `@ai-context` 业务背景注释；标注副作用与边界条件；Magic Number/Hack 必须说明原因。
