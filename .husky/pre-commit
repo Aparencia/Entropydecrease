@@ -1,1 +1,9 @@
-npx lint-staged
+# Why: lint-staged 默认 stash:true + hidePartiallyStaged:true，而它的**失败路径**是
+#   `git reset --hard HEAD` → 再靠 `git stash apply --index <备份>` 把工作树还原 → 最后 drop 掉
+#   那份备份（`git stash list` 随即为空，只剩一个悬空 commit）。即：工作树先被整体清掉、
+#   还原再不成立就当场丢在制品（控制方实测到过丢改动；本机实测到过整文件被 CRLF 化）。
+#   本批是多代理并发 + 常带未暂存改动 ⇒ 门禁在任何路径上都不得碰工作树。
+#   `--no-stash` 让 lint-staged 完全不碰工作树/索引（且上游 implies 关掉 hide）；
+#   这里把 `--no-hide-partially-staged` 也写死，避免将来 imply 变化后悄悄退回
+#   "藏了未暂存部分却没有备份可还原"（那条路失败时必丢）。
+npx lint-staged --no-stash --no-hide-partially-staged

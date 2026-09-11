@@ -715,6 +715,26 @@ git commit -m "ci: 行数红线接入提交门禁与 CI"
 ```
 ⚠️ `.github/workflows/` 属 AGENTS.md §10「变更需额外审查」——请评审者确认 job 未引入密钥/权限面。
 
+**★ Task 4 附带隐患（同日实测并修复）：门禁的失败路径会重写工作树**
+
+**实测事实**：`lint-staged@15.5.0` 默认 `stash:true` + `hidePartiallyStaged:true`，其**失败路径**是「先毁工作树，再赌一次还原」：`git stash create` + `stash store` 备份 → 跑任务 → **失败则 `git reset --hard HEAD`**（清掉整个工作树）→ `git stash apply --quiet --index <备份>` 重建 → `cleanup` 把备份 `stash drop`（实现：`node_modules/lint-staged/lib/gitWorkflow.js` 的 `prepare`/`restoreOriginalState`/`cleanup`、`runAll.js` 的 step 5–7、`state.js` 的 `restoreOriginalStateEnabled`）。部分暂存的文件还会被 `git checkout --force --` 强行改写（`hideUnstagedChanges`）—— 门禁会动别人的在制品，而本批是多代理并发。
+
+- **控制方实测**（`docs/standards/README.md` 追加 1 行未暂存 + 暂存未登记的 321 行 `app/src/__probe-fail.ts`）：`[COMPLETED] Backed up original state in git stash (c85e00a1)` → `[FAILED]` → **那行未暂存改动从工作树消失，且 `git stash list` 为空**。那次备份**确实含**这行改动：`git diff HEAD c85e00a1` 显示 `docs/standards/README.md` 增 2 行，而其二父 `6f66e014` 只含探针文件 ⇒ README 是**纯未暂存**改动、与 `hidePartiallyStaged` 无关。⇒ **备份里有、工作树里没有**：还原那一半没兑现，备份随后只被丢成悬空 commit。
+- **实施者复跑**（`git version 2.54.0.windows.1`，同一实验）：失败后内容侥幸还在（`git diff` 仍显示那行），但**整个文件被重写** —— LF→CRLF、`sha256 7D9EE928…→682FE077…`；`git stash list` 同样为空，只留悬空 commit `7a472ea6`。⇒ 「内容还在」是那次 `apply` 恰好成功，**不是设计保证**。
+- **修法**：`.husky/pre-commit` 改为 `npx lint-staged --no-stash --no-hide-partially-staged`（上游 `--no-stash` 本就 `implies` 关掉 hide；第二个 flag 写死，防将来 imply 变化后悄悄退回"藏了未暂存部分却没有备份可还原"—— 那条路失败时必丢）。修后 lint-staged 在**任何路径**都不碰工作树与索引：不 `stash create`、不 `reset --hard`、不 `checkout --force`、不 `stash drop`。逐字实测：`[FAILED]` + `exit=1`（拦截力不变，`husky - pre-commit script failed (code 1)`、HEAD 未动）；未暂存改动 **sha256 前后相同**；部分暂存（同一文件一段已暂存、一段未暂存）**工作树同样逐字相同**。
+- **代价（须知）**：上游把 hide 与 stash 绑在一起，故关掉 stash 必然一并失去 hide —— ① 门禁看到的是**工作树态**而不再是"隐去未暂存部分的索引态"；本仓两个任务都是**全树只读扫描**，看工作树反而口径单一，故可接受（**Step 1 的第 1 条行为说明自本条起不再成立**）。② 落在 `docs/**/*.md`、`app/**/*.{ts,tsx,rs}` 或三文件条目上的**部分暂存文件会在跑完时被 `git add` 整文件入暂存区**（`state.js`：`!shouldBackup` 时 `applyModifications` 不因任务失败而跳过）⇒ **不丢内容，但抹掉"只提交一半"的意图**：提交前看 `git status`（`MM` 会变 `M `）。③ 存在部分暂存时会残留 `.git/lint-staged_unstaged.patch`（没有步骤再删它）。
+- **补救指引（失败后怀疑丢了改动）**：备份是 `WIP on <分支>: <HEAD>` 的**悬空 commit**，`git stash list` 为空**不代表**它不存在：
+
+  ```powershell
+  git fsck --dangling                    # 或 git fsck --lost-found：列出悬空 commit
+  git log -1 --format='%H %s' <备份ID>    # 备份ID = 当次 lint-staged 打印的 (c85e00a1)
+  git diff --name-status HEAD <备份ID>    # 先确认它确实含你的改动
+  git stash apply --index <备份ID>        # 整份还原（索引 + 工作树）
+  git checkout <备份ID> -- <path>         # 只找回单个文件（不引入 stash）
+  ```
+
+  实例：控制方那次备份 `c85e00a1`（`c85e00a1e69c…`）至今可读，`git show c85e00a1:docs/standards/README.md` 就是丢掉的那 44 行版本（sha256 `4250548E…`；干净版为 `9DC65378…`）。
+
 ---
 
 ### ★★ Task 4 带回的系统性发现：**本地门禁在本机从未武装**（`7476fd0b`）
