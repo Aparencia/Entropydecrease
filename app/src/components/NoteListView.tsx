@@ -13,17 +13,18 @@
  * @ai-context: 树序范围：全局可见序（树=未分组+各组顺次、折叠组行不参与）为
  *              区间/划选唯一基准；跨组语义=归组（目标手排时按落点插入）。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Note, NoteGroup } from "../types";
 import { paletteHex } from "../utils/colorPalette";
 import type { ThemeMode } from "../utils/colorPalette";
-import { emptySelection, rangeSelection, toggleSelection } from "../utils/noteSelection";
 // 批 0-C2：展示节/可见序纯函数层（含 scope 键与裸折叠键派生——纯逻辑与副作用分离）
 import { buildSections, buildVisibleOrder, isTreeMode, manualBaseIds, scopeKey } from "../utils/noteSectionModel";
 // 批 0-C2：序行 store（笔记手排序行 + 组手排序行）——兑现既有登记拆分计划
 import { useNoteOrders } from "../hooks/useNoteOrders";
 // 批 0-C2：拖拽/移动三入口接线（共享一把行落点并发锁——硬性同文件约束）
 import { useNoteMoves } from "../hooks/useNoteMoves";
+// 批 0-C2：多选三通道 + 菜单三态 + 唯一 Esc handler（可见序镜像同文件）
+import { useNoteListSelection } from "../hooks/useNoteListSelection";
 import NoteListRow from "./NoteListRow";
 import NoteTreeSection from "./NoteTreeSection";
 import NoteRowContextMenu from "./NoteRowContextMenu";
@@ -88,52 +89,11 @@ export default function NoteListView({
     [],
   );
 
-  // ── 多选态（REQ-287）：selectionMode=批量选择模式（单击=勾选）；anchor=区间锚
-  const [selection, setSelection] = useState<Set<number>>(emptySelection());
-  const [anchor, setAnchor] = useState<number | null>(null);
-  const [selectionMode, setSelectionMode] = useState(false);
-  // 右键/批处理面板
-  const [contextMenu, setContextMenu] = useState<{ note: Note; x: number; y: number } | null>(null);
-  const [batchMenu, setBatchMenu] = useState<{ ids: number[]; x: number; y: number } | null>(null);
-  const [batchMoveOpen, setBatchMoveOpen] = useState(false);
-
   // 组折叠态
   const [groupFolds, setGroupFolds] = useState<Record<string, boolean>>({});
 
   // 序行 store（笔记手排序行 + 组手排序行）——装载/保存路径下沉 hooks/useNoteOrders
   const { manualOrders, groupOrderRows, saveOrder, resetOrder } = useNoteOrders(refreshToken);
-
-  const visibleIdsRef = useRef<number[]>([]);
-
-  const clearSelection = useCallback(() => {
-    setSelection(emptySelection());
-    setAnchor(null);
-  }, []);
-  const exitBatch = useCallback(() => { setSelectionMode(false); clearSelection(); }, [clearSelection]);
-
-  // 列表数据变化裁剪（只留可见子集——既有安全边界）
-  useEffect(() => {
-    setSelection((cur) => {
-      if (cur.size === 0) return cur;
-      const visible = new Set(notes.map((n) => n.id));
-      let changed = false;
-      const next = new Set<number>();
-      for (const id of cur) if (visible.has(id)) next.add(id); else changed = true;
-      return changed ? next : cur;
-    });
-  }, [notes]);
-
-  // Esc：先退批处理面板 → 批量模式（清多选退出）
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (batchMenu) { setBatchMenu(null); setBatchMoveOpen(false); return; }
-      if (contextMenu) { setContextMenu(null); return; }
-      if (selectionMode || selection.size > 0) exitBatch();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [batchMenu, contextMenu, selectionMode, selection.size, exitBatch]);
 
   // 手动序装载（REQ-287：notes 行）+ REQ-315：组序行（树组头排序）——见 hooks/useNoteOrders
   // （依赖 refreshToken 的理由随实现搬至该 hook 头注释：审查 P2-10 的令牌重拉）
@@ -171,43 +131,19 @@ export default function NoteListView({
 
   // 可见序（L1 审查：折叠组行不参与区间/划选——与渲染可见一致；折叠组头仍在）
   const visibleOrder = useMemo(() => buildVisibleOrder(sections, groupFolds), [sections, groupFolds]);
-  useEffect(() => { visibleIdsRef.current = visibleOrder; }, [visibleOrder]);
 
-  // ── 行交互 ──
-  const handleOpen = useCallback((note: Note) => {
-    if (selectionMode) {
-      // 批量模式：单击=勾选（不换右栏）
-      setSelection((cur) => toggleSelection(cur, note.id));
-      setAnchor(note.id);
-      return;
-    }
-    // 审查 L4：普通单击=单选并打开——先清既有选集，anchor 恒指向本次点击
-    if (selection.size > 0) clearSelection();
-    onSelect(note);
-    setAnchor(note.id);
-  }, [selectionMode, onSelect, selection.size, clearSelection]);
-
-  const handleModifierClick = useCallback((note: Note, ctrl: boolean, shift: boolean) => {
-    if (ctrl) {
-      setSelection((cur) => toggleSelection(cur, note.id));
-      // 审查 L4：Ctrl 后 anchor 指向本次点击行（即使该行被移除——Explorer 同款）
-      setAnchor(note.id);
-    } else if (shift) {
-      if (anchor == null) {
-        // 审查 L4：无锚的首次 Shift=单选该行并设为锚（连按两次不再各加单行）
-        setSelection(new Set([note.id]));
-        setAnchor(note.id);
-      } else {
-        setSelection((cur) => rangeSelection(cur, visibleIdsRef.current, anchor, note.id));
-      }
-    }
-  }, [anchor]);
+  // ── 行交互 / 多选 / 菜单（Esc 优先级链、可见序镜像、选集裁剪）——见 hooks/useNoteListSelection
+  const {
+    selection, setSelection, selectionMode, setSelectionMode,
+    contextMenu, setContextMenu, batchMenu, setBatchMenu, batchMoveOpen, setBatchMoveOpen,
+    clearSelection, exitBatch, handleOpen, handleModifierClick, openRowContextMenu,
+    closeBatchMenu, batchDelete,
+  } = useNoteListSelection({ notes, visibleOrder, onSelect, onBatchDelete });
 
   /** scope 手动底序（REQ-315）：可见展示序去掉置顶区（快照只写本子序列）——纯函数在 noteSectionModel */
   const manualBaseOf = useCallback((scope: string): number[] | null => manualBaseIds(sections, scope), [sections]);
 
   // 拖拽/移动三入口（归组 / 组内上移下移 / 行间落点）——共享一把并发锁，见 hooks/useNoteMoves
-  const closeBatchMenu = useCallback(() => setBatchMenu(null), []);
   const { busyMove, moveToGroup, moveWithinScope, handleDropOnRow } = useNoteMoves({
     notes, treeMode, manualOrders, manualBaseOf, saveOrder, onNoteMoved, onCleanNotice, closeBatchMenu,
   });
@@ -269,13 +205,7 @@ export default function NoteListView({
       dragIds={selection.size > 0 && selection.has(n.id) ? [...selection] : []}
       onDropOnRow={handleDropOnRow}
       onOpenSession={onOpenSession}
-      onContextMenu={(e, note) => {
-        if (selection.size > 0 && selection.has(note.id)) {
-          setBatchMenu({ ids: [...selection], x: e.clientX, y: e.clientY });
-        } else {
-          setContextMenu({ note, x: e.clientX, y: e.clientY });
-        }
-      }}
+      onContextMenu={openRowContextMenu}
     />
   );
 
@@ -298,13 +228,6 @@ export default function NoteListView({
       move: (n: Note, dir: 1 | -1) => void moveWithinScope(n, dir),
     };
   }, [contextMenu, treeMode, manualBaseOf, moveWithinScope]);
-
-  // 批处理：删除（父层确认）与移动到组
-  const batchDelete = async () => {
-    if (!batchMenu) return;
-    const ok = await onBatchDelete(batchMenu.ids);
-    if (ok) { setBatchMenu(null); setBatchMoveOpen(false); clearSelection(); }
-  };
 
   return (
     <div style={{ width, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minWidth: 0 }}>

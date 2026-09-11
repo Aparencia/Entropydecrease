@@ -15,7 +15,7 @@
 
 | 文件 | 行数 | 说明 | 拆分计划 |
 |---|---|---|---|
-| app/src-tauri/src/live_session_frame.rs | 866 | 超硬限（>600 行），不允许豁免 —— 屏幕采样线程（采样循环/暂停隔离/播放器检测/tier 重评/视频档案重评）单单体函数——TD-24-A 拆分方案已登记（SessionFrameCtx 聚合 + 段落方法提取），本轮评估：与 lib.rs 同批后置 | 若再增长：按 Ctx 聚合方案拆至 live_session_frame_scan.rs |
+| app/src-tauri/src/live_session_frame.rs | 761 | 超硬限（>600 行），不允许豁免 —— 屏幕采样线程（采样循环/暂停隔离/播放器检测/tier 重评/视频档案重评）单单体函数——TD-24-A 拆分方案已登记（SessionFrameCtx 聚合 + 段落方法提取），本轮评估：与 lib.rs 同批后置 | 若再增长：按 Ctx 聚合方案拆至 live_session_frame_scan.rs |
 | app/src-tauri/src/commands_ai_refine.rs | 751 | 超硬限（>600 行），不允许豁免 —— v0.8.0 M2（REQ-141/145）+ F1/F2/F3：AI 精修命令域（成本预估/异步任务编排/状态/结果/采纳落库/任务历史/配额去重门控/成本硬拦截 + 任务注册表容量守卫）；任务执行已拆至 ai_refine_task.rs；L4 修复（落库失败日志）微增 | 若再增长：门控/拦截拆至 commands_ai_refine_gate.rs |
 | app/src/pages/ClassroomPage.tsx | 724 | 超硬限（>600 行），不允许豁免 —— 装配层页面：左栏配置区（就绪清单/窗口选择/实时捕获/视频导入/OCR 设备/词表/素材）+ 右栏内容区；v0.15 左栏列状态再增；v0.19.2/3（REQ-271/273 + 审查即修：状态机看门狗/预同步/文案收口，+43，实测 745）——**超 600 硬限为预存债务（TD-2026-08-30-A：v0.14 前已越线）持续累增，拆分计划（LiveCaptureCard）顺延待执行** | 若再增长：将实时捕获卡片拆出 LiveCaptureCard（状态与事件监听下沉）——超硬限必须拆 |
 | app/src-tauri/src/db_goals.rs | 707 | 超硬限（>600 行），不允许豁免 —— v0.18.0（REQ-248~250）：goals 三表 DDL + 实体 CRUD/绑定/结算钩子内聚；行映射与事务建目标共享 add_milestone 族；v0.18.1（REQ-255/256）毕业报告快照表与报告取数（结算快照/复习统计/成果物清单）再增 | 若再增长：毕业报告取数拆至 db_goals_graduation.rs |
@@ -64,7 +64,6 @@
 | app/src-tauri/src/commands_session.rs | 443 | v0.6.0 M6 + v0.7.6 审查硬拆后回归：会话命令域（CRUD/质量报告/课程分组/段搜索）内聚；笔记转换管线已拆至 commands_session_note.rs；M2 修复（search_ocr_blocks 传 data_dir 参数） | 若再增长：course/search 拆至 commands_session_extra.rs |
 | app/src-tauri/src/symbol_normalize.rs | 443 | v0.6.0 M1（REQ-060）：口语符号映射域（映射表/上下文守卫/中文数字解析）内聚；数字解析与守卫共享字符判定 | 若再增长：parse_chinese_number/replace_number_runs 拆至 symbol_numbers.rs |
 | app/src-tauri/src/commands_goals_plan.rs | 442 | 规划＝单次同步调用 + spawn_blocking（10-30s 交互等待可接受，（自动摘取，待细化） | 若再增长：按职责拆分 |
-| app/src/components/NoteListView.tsx | 442 | 超硬限（>600 行），不允许豁免 —— v0.20.12 批 7 接线 + 审查修复轮 4（refreshToken 组序重拉）净增（646→654）——**超 600 硬限随 TD-2026-09-09-A 登记（值刷新）** | **超硬限必须拆**：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
 | app/src/App.tsx | 439 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
 | app/src-tauri/src/screens.rs | 437 | v0.7.3（REQ-155/156/160）：画面要点屏构建编排（分组/聚类/图匹配 IO）+ 可消费块过滤扩展——编排与纯函数分层（纯函数在 screen_merge.rs） | 若再增长：filter_usable_blocks 拆至 screen_filter.rs |
 | app/src/pages/KnowledgePage.tsx | 437 | v0.13.8 画布接线越线（原 296）：中栏「画布」标签 + 树/画布双入口 + v0.15 左列/详情列状态迁移（useColumnLayout + 折叠窄条 + 宽度 prop）——页面编排层内聚（数据获取/选中态/标签态为页面本地状态），子组件已全部下沉（Tree/Canvas/DetailPanel/Wizard/ConceptCardRow/Sample） | 若再增长：中栏视图块（树/画布/概念/模型 + 标签栏）拆至 KnowledgeMiddlePane.tsx，SystemCard 拆至 SystemSidebarCard.tsx |
@@ -103,6 +102,7 @@
 | app/src-tauri/src/commands_window.rs | 369 | 浮窗窗口命令域（v0.12.3 架构升级计划：全部窗口操作集中单文件）+ v0.12.6（ADR-025）显隐链路与全局快捷键三态切换核心（open/close/locked/topmost/toggle 核心 fn + 命令薄包装 + 状态机/序列化单测内联）；拆分需跨 fn 传递 AppHandle/State，内聚性优先 | 若再增长：浮窗核心逻辑拆至 float_core.rs（命令薄包装保留本文件） |
 | app/src/components/KnowledgeCanvasView.test.tsx | 368 | @xyflow/react 全 mock（ReactFlow 记录 props 供交互断言；节点组件（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/db_notes.rs | 366 | REQ-316（批 7）：delete_note/update_note_group 改显式事务 + 同事务空组自动清理接线（结果契约扩展 + 旧组读出，净增 ~60 行；此前 305 未登记属漏登，本次补） | 若再增长：移组/删除事务族拆至 db_notes_group_ops.rs |
+| app/src/components/NoteListView.tsx | 365 | 超硬限（>600 行），不允许豁免 —— v0.20.12 批 7 接线 + 审查修复轮 4（refreshToken 组序重拉）净增（646→654）——**超 600 硬限随 TD-2026-09-09-A 登记（值刷新）** | **超硬限必须拆**：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
 | app/src-tauri/src/ocr_cache.rs | 358 | OCR 结果缓存域（内容指纹键/容量淘汰/命中率统计）内聚；缓存策略与指纹算法共享上下文 | 若再增长：指纹算法拆至 ocr_fingerprint.rs |
 | app/src-tauri/src/db_sessions_tests.rs | 354 | 由 db_sessions.rs 以 #[cfg(test)] #[path] 引入，保持实现文件 ≤300 行（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/live_session_pause.rs | 353 | 批 2 暂停边沿收敛域 + 审查修复轮 1（own_pending 吸收/丢采样恢复沿补发）净增——2026-09-09 纠偏实测 353（交付口径 258 失真），300-600 档登记 | 若再增长：合成事件对构造拆至 live_session_pause_synth.rs |
