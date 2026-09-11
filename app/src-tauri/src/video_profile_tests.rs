@@ -287,6 +287,10 @@ fn memory_series_key_old_json_compat() {
     assert_eq!(memory.entries.len(), 1);
     assert!(!memory.entries[0].is_series);
     assert_eq!(memory.lookup("网课-数学"), Some(ProfileKind::Lecture));
+    // v0.9.0（REQ-188）：form 缺省 None（旧 JSON 零迁移）⇒ lookup_form 走 kind.to_form() 回退
+    // （控制方裁决的覆盖补救：该回退分支是活的生产路径，见 video_profile_memory.rs:217）
+    assert_eq!(memory.entries[0].form, None);
+    assert_eq!(memory.lookup_form("网课-数学"), Some(crate::video_profile_spec::ContentForm::Lecture));
 }
 
 #[test]
