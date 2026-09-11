@@ -31,7 +31,7 @@
 | 文件 | 行数 | 豁免理由 | 拆分计划 |
 |---|---|---|---|
 | app/src-tauri/src/commands.rs | 597 | 命令装配域（AppState + 通用命令 + 导入管线编排）；登记值 466 过期快照——2026-09-09 实测纠偏（含批 7 delete_note 结果契约 +12；600 硬限内压线） | 若再增长：导入管线命令拆至 commands_import.rs（既有登记计划） |
-| app/src-tauri/src/types.rs | 594 | 超硬限（>600 行），不允许豁免 —— 全局共享类型域 + 批 7 五命令结果契约（+59；登记值 958 过期快照——实测纠偏） | 若再增长：笔记与 OCR 块类型拆至 types_note.rs / types_ocr.rs（既有登记计划） |
+| app/src-tauri/src/types.rs | 594 | 拆分进行中（批 0-C3 Task 2）：原 1017 行全局共享类型域已按域拆出 types_session.rs / types_knowledge.rs；本文件现为 `#[path]` 门面 + 尚未搬出的域，终态 ≈27 行纯门面（6 个子模块 + 6 个 `pub use`，crate::types::X 全仓 236 处引用零改动） | S3 types_note.rs → S4 types_ocr.rs → S5 types_extract.rs → S6 types_decision.rs（v0.13.8 画布契约随 decision 以满足 ≤300）；每步一个提交 |
 | app/src/pages/ChatPage.tsx | 593 | AI 对话页编排；批 1（REQ-306/307）active 门控/终态订阅接线净增——2026-09-09 实测纠偏（登记值 529 过期） | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
 | app/src/components/NoteListView.tsx | 582 | 超硬限（>600 行），不允许豁免 —— v0.20.12 批 7 接线 + 审查修复轮 4（refreshToken 组序重拉）净增（646→654）——**超 600 硬限随 TD-2026-09-09-A 登记（值刷新）** | **超硬限必须拆**：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
 | app/src-tauri/src/lib.rs | 577 | crate 根 321 `mod` + 16 `#[cfg]` = **337 行地板**；注册清单已移至 `app_commands.rs`（**数据文件**，同属 300–600 豁免带）—— 结构性下界，非欠账 | 已完成（批 0-C3 Task 1，2026-09-11）；余下 161 行模块理由注释 + 装配逻辑，无进一步拆分标的 |
