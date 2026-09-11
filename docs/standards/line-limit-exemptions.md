@@ -15,7 +15,6 @@
 
 | 文件 | 行数 | 说明 | 拆分计划 |
 |---|---|---|---|
-| app/src-tauri/src/live_session_frame.rs | 761 | 超硬限（>600 行），不允许豁免 —— 屏幕采样线程（采样循环/暂停隔离/播放器检测/tier 重评/视频档案重评）单单体函数——TD-24-A 拆分方案已登记（SessionFrameCtx 聚合 + 段落方法提取），本轮评估：与 lib.rs 同批后置 | 若再增长：按 Ctx 聚合方案拆至 live_session_frame_scan.rs |
 | app/src-tauri/src/commands_ai_refine.rs | 751 | 超硬限（>600 行），不允许豁免 —— v0.8.0 M2（REQ-141/145）+ F1/F2/F3：AI 精修命令域（成本预估/异步任务编排/状态/结果/采纳落库/任务历史/配额去重门控/成本硬拦截 + 任务注册表容量守卫）；任务执行已拆至 ai_refine_task.rs；L4 修复（落库失败日志）微增 | 若再增长：门控/拦截拆至 commands_ai_refine_gate.rs |
 | app/src/pages/ClassroomPage.tsx | 724 | 超硬限（>600 行），不允许豁免 —— 装配层页面：左栏配置区（就绪清单/窗口选择/实时捕获/视频导入/OCR 设备/词表/素材）+ 右栏内容区；v0.15 左栏列状态再增；v0.19.2/3（REQ-271/273 + 审查即修：状态机看门狗/预同步/文案收口，+43，实测 745）——**超 600 硬限为预存债务（TD-2026-08-30-A：v0.14 前已越线）持续累增，拆分计划（LiveCaptureCard）顺延待执行** | 若再增长：将实时捕获卡片拆出 LiveCaptureCard（状态与事件监听下沉）——超硬限必须拆 |
 | app/src-tauri/src/db_goals.rs | 707 | 超硬限（>600 行），不允许豁免 —— v0.18.0（REQ-248~250）：goals 三表 DDL + 实体 CRUD/绑定/结算钩子内聚；行映射与事务建目标共享 add_milestone 族；v0.18.1（REQ-255/256）毕业报告快照表与报告取数（结算快照/复习统计/成果物清单）再增 | 若再增长：毕业报告取数拆至 db_goals_graduation.rs |
@@ -24,12 +23,13 @@
 | app/src-tauri/src/note_filter.rs | 642 | 超硬限（>600 行），不允许豁免 —— v0.6.0 M1（REQ-082/085）：笔记过滤域（过滤链 + AI 判定应用 + 画面要点净化）内聚于单一管线（双出口一致性由构造保证）；AI 部分已按登记计划拆至 note_filter_ai.rs | 若再增长：净化链拆至 note_filter_purify.rs |
 | app/src-tauri/src/artifact_templates.rs | 632 | 超硬限（>600 行），不允许豁免 —— v0.5.0 M7（REQ-052）：五档案模板函数（讲义/步骤卡/摘要/对话纪要/会议纪要）内聚于同一模板域，各模板共享原料注入签名；v0.9.0 M5 叙事变体再增 | 若再增长：会议/访谈模板拆至 artifact_templates_meeting.rs |
 | app/src-tauri/src/video_profile.rs | 628 | 超硬限（>600 行），不允许豁免 —— v0.5.0 M1（REQ-043）：档案域（类型/检测投票/记忆偏好/JSON IO）内聚；档案常量数据已拆至 video_profile_data.rs；v0.9.0 M1 记忆库 kind 映射迁移 + v0.11.5 Task 5 四象限记忆后置判定（apply_profile_memory）再增；v0.13.6（REQ-222）领域记忆独立通道（DomainMemoryEntry/remember_domain/lookup_domain）+ platform_form 字段再增 | 若再增长：检测投票与记忆偏好拆至 video_profile_detect.rs |
+| app/src-tauri/src/live_session_frame.rs | 607 | 超硬限（>600 行），不允许豁免 —— 屏幕采样线程（采样循环/暂停隔离/播放器检测/tier 重评/视频档案重评）单单体函数——TD-24-A 拆分方案已登记（SessionFrameCtx 聚合 + 段落方法提取），本轮评估：与 lib.rs 同批后置 | 若再增长：按 Ctx 聚合方案拆至 live_session_frame_scan.rs |
 
 ## 301–600 档（须登记）
 
 | 文件 | 行数 | 豁免理由 | 拆分计划 |
 |---|---|---|---|
-| app/src/components/SessionListPanel.tsx | 598 | 超硬限（>600 行），不允许豁免 —— v0.20.9 批 4（REQ-313）列表交互重写（选择模式/行右键/行内改名/批量栏）+ 审查修复轮 3（全选可见行基准/pending）净增——2026-09-09 实测纠偏（登记值 491 过期）；**超 600 硬限随 TD-2026-09-09-D 登记** | **超硬限必须拆**：批量操作栏与选择模式拆至 SessionSelectionToolbar.tsx（列表行已拆 SessionListRow.tsx） |
+| app/src/components/SessionListPanel.tsx | 598 | 超硬限（>600 行），不允许豁免 —— v0.20.9 批 4（REQ-313）列表交互重写（选择模式/行右键/行内改名/批量栏）+ 审查修复轮 3（全选可见行基准/pending）净增——2026-09-09 实测纠偏（登记值 491 过期）；**超 600 硬限随 TD-2026-09-09-D 登记** | **批 0-C2 Task 5 八文件边界**（原计划「批量栏 + 选择模式」只减 166 行 ⇒ 仍 ≈468 >300，不足）：`utils/sessionEligibility.ts`（可转化纯函数）· `hooks/useSessionSelection.ts`（选择态机 + visibleOrderRef + 裁剪 effect；**Esc 监听留面板**）· `hooks/useSessionListView.ts`（matchFilters/sorted/filtered/groupedView/visibleOrder）· `hooks/useSessionSearch.ts`（三模式搜索 + 两个 invoke 落点）· `components/SessionSearchBar.tsx`（三模式单输入框）· `components/SessionSearchHits.tsx`（段/画面命中视图）· `components/SessionListBody.tsx`（列表容器含 renderRow）· `components/SessionSelectionToolbar.tsx`（头部选择控件 + 底部批量栏）；列表行已拆 SessionListRow.tsx |
 | app/src-tauri/src/commands.rs | 597 | 命令装配域（AppState + 通用命令 + 导入管线编排）；登记值 466 过期快照——2026-09-09 实测纠偏（含批 7 delete_note 结果契约 +12；600 硬限内压线） | 若再增长：导入管线命令拆至 commands_import.rs（既有登记计划） |
 | app/src/pages/ChatPage.tsx | 593 | AI 对话页编排；批 1（REQ-306/307）active 门控/终态订阅接线净增——2026-09-09 实测纠偏（登记值 529 过期） | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
 | app/src-tauri/src/lib.rs | 577 | crate 根 321 `mod` + 16 `#[cfg]` = **337 行地板**；注册清单已移至 `app_commands.rs`（**数据文件**，同属 300–600 豁免带）—— 结构性下界，非欠账 | 已完成（批 0-C3 Task 1，2026-09-11）；余下 161 行模块理由注释 + 装配逻辑，无进一步拆分标的 |
@@ -124,7 +124,6 @@
 | app/src-tauri/src/db_graph_tests.rs | 330 | 覆盖三类边聚合正确性——link（体系实体→内容，node_id 引用跳过）、（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/image_store.rs | 330 | 会话目录本地存图（关键图/参考图集/缩略图走廊三级）：（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/subtitle.rs | 328 | L1 外挂字幕（.srt/.ass/.vtt）纯文本解析，零第三方依赖——（自动摘取，待细化） | 若再增长：按职责拆分 |
-| app/src/components/NoteListView.tsx | 328 | 超硬限（>600 行），不允许豁免 —— v0.20.12 批 7 接线 + 审查修复轮 4（refreshToken 组序重拉）净增（646→654）——**超 600 硬限随 TD-2026-09-09-A 登记（值刷新）** | **超硬限必须拆**：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
 | app/src-tauri/src/commands_ai_chat.rs | 324 | v0.16 对话命令域 + v0.19.1（REQ-260）检索分支薄壳（纯聊链路零改动；kb 编排已拆至 commands_ai_chat_kb.rs 267 行）——检索分流点与 run_stream 共用会话编排上下文 | 若再增长：run_stream 与纯聊发送拆至 commands_ai_chat_plain.rs |
 | app/src/components/EnrichPanel.tsx | 324 | 与精修语义分开：精修=处理已有内容，补充=生成新内容（模型（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src/components/NoteReadingView.tsx | 322 | v0.20.13 批 8（REQ-317）正文选区右键菜单接线（正文容器 ref 化 + 选区判定/全选 + 共享菜单渲染，259→316）——选区纯逻辑已拆 utils/noteSelectionMenu.ts 与 note-selection/SelectionActionMenu.tsx，本文件仅留宿主接线 | 若再增长：搜索态/选区态/大纲态拆至 useNoteReadingViewState.ts |

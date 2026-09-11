@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { CourseGroup, OcrBlockHit, SegmentHit, Session, SessionListItem } from "../types";
 import { fmtMs } from "../utils/fmt";
+import { isSessionConvertible } from "../utils/sessionEligibility";
 import { emptySelection, rangeSelection, toggleSelection } from "../utils/noteSelection";
 import SessionListRow from "./SessionListRow";
 import type { SessionRenameRequest } from "./SessionListRow";
@@ -130,13 +131,6 @@ export default function SessionListPanel({
     }
   };
 
-  /** 可转化判定：已结束 + 有内容 + 未转（批量转只对该集合生效） */
-  const isEligible = useCallback(
-    (item: SessionListItem) =>
-      item.session.status !== "recording" && item.hasContent && !item.hasNote,
-    [],
-  );
-
   /** 筛选谓词（列表与课程分组共用） */
   const matchFilters = useCallback(
     (item: SessionListItem) => {
@@ -243,7 +237,7 @@ export default function SessionListPanel({
     for (const g of groups ?? []) for (const i of g.sessions) byId.set(i.session.id, i);
     const eligibleIds = [...selected].filter((id) => {
       const item = byId.get(id);
-      return item ? isEligible(item) : false;
+      return item ? isSessionConvertible(item) : false;
     });
     if (eligibleIds.length === 0) {
       showToast("选中的会话均不可转换（已转/进行中/无内容）", "err");
@@ -298,7 +292,7 @@ export default function SessionListPanel({
       item={item}
       isOpen={openSessionId === item.session.id}
       multiSelected={selected.has(item.session.id)}
-      canConvert={isEligible(item)}
+      canConvert={isSessionConvertible(item)}
       renameRequest={renameReq}
       onRenameEnd={() => setRenameReq(null)}
       onRenamed={(id) => onSessionRenamed(id)}
@@ -596,7 +590,7 @@ export default function SessionListPanel({
           onRename={(it) => setRenameReq({ id: it.session.id, nonce: ++renameNonceRef.current })}
           onConvert={(it) => onConvert(it)}
           onDelete={(it) => onDeleteOne(it.session.id)}
-          canConvert={isEligible(contextMenu.item)}
+          canConvert={isSessionConvertible(contextMenu.item)}
         />
       )}
     </div>
