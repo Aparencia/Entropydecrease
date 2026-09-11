@@ -17,13 +17,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Note } from "../types";
 import { resolveNoteColor } from "../utils/colorPalette";
-import NoteListView from "../components/NoteListView";
 import GroupSidebar from "../components/GroupSidebar";
-import FeedFragmentList from "../components/FeedFragmentList";
 // 批 8（REQ-317）：模型卡对话框槽（拆件）与选区行动类编排（hook 收敛）
 import { useNoteSelectionActions } from "../hooks/useNoteSelectionActions";
 import NotesOverlays from "../components/notes/NotesOverlays";
 import NotesReadingColumn from "../components/notes/NotesReadingColumn";
+import NotesListColumn from "../components/notes/NotesListColumn";
 import ColumnResizer from "../components/ColumnResizer";
 import ColumnBar from "../components/ColumnBar";
 import { useColumnLayout } from "../hooks/useColumnLayout";
@@ -216,63 +215,51 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
       )}
       <ColumnResizer onResize={groupsCol.resizeBy} onReset={groupsCol.resetWidth} />
 
-      {/* ── 中部：收件箱视图 ↔ 笔记列表原位切换（布局不变；v0.15 分组树/可折叠）── */}
-      {listCol.folded ? (
-        <ColumnBar icon="📝" title="笔记列表" onClick={listCol.expand} />
-      ) : view === "inbox" ? (
-        <FeedFragmentList
-          width={listCol.width}
-          onChanged={list.refreshAll}
-          onCleanNotice={notifyCleanNotice}
-          onPromoted={(note) => {
-            // 右侧自动打开新笔记（闭环可见）；碎片已从收件箱移除（列表已刷新）
-            setSelected(note);
-            setEditing(false);
-            // 搜索/标签态同步清空（审查修复：原只 load("") 不更新 keyword/tagFilter，
-            // 防抖 effect 会用旧搜索词重新覆盖列表——新笔记在「全部笔记」可见）
-            list.setKeyword("");
-            list.setTagFilter(null);
-            setGroupFilter(null);
-            void list.load("", null, list.sortMode);
-          }}
-          onCollapse={() => listCol.setManualFolded(true)}
-        />
-      ) : (
-        <NoteListView
-          width={listCol.width}
-          notes={visibleNotes}
-          groups={list.groups}
-          groupFilter={groupFilter}
-          onGroupFilterChange={setGroupFilter}
-          keyword={list.keyword}
-          tagFilter={list.tagFilter}
-          sortMode={list.sortMode}
-          allTags={list.allTags}
-          selectedId={selected?.id ?? null}
-          status={list.status}
-          onKeywordChange={(kw) => { list.setKeyword(kw); list.setTagFilter(null); }}
-          onTagFilterChange={(tag) => { list.setTagFilter(tag); if (tag) list.setKeyword(""); }}
-          onSortModeChange={list.setSortMode}
-          onSelect={handleSelect}
-          onCreate={handleCreate}
-          onRefresh={() => void list.load(list.keyword, list.tagFilter, list.sortMode)}
-          onOpenSession={(id) => onOpenSessions?.(id)}
-          onBatchDelete={runBatchDelete}
-          noteColors={noteColors}
-          tagColors={list.tagColors}
-          // v0.16.1：笔记行右键菜单动作（复用既有处理——置顶/编辑/删除/归组刷新）
-          onNotePinToggle={(n) => void runPinToggle(n)}
-          onNoteEdit={(n) => { handleSelect(n); setEditing(true); }}
-          onNoteDelete={(n) => void runDelete(n.id)}
-          onNoteMoved={() => { list.refreshAll(); void list.handleNoteChanged(); }}
-          onCleanNotice={notifyCleanNotice}
-          onCollapse={() => listCol.setManualFolded(true)}
-          // 批 6 审查 P2-10：侧栏手排/置顶/回自动（useGroupOrders→refreshAll）后
-          // 重拉组序行——树组头与组侧栏同序（原挂载单拉，旧序/已删序行残留）
-          refreshToken={list.refreshToken}
-        />
-      )}
-      <ColumnResizer onResize={listCol.resizeBy} onReset={listCol.resetWidth} />
+      {/* ── 中部：收件箱视图 ↔ 笔记列表原位切换 + 列拖拽手柄（三形态切换见
+          components/notes/NotesListColumn；手柄在折叠态也渲染）── */}
+      <NotesListColumn
+        listCol={listCol}
+        view={view}
+        onChanged={list.refreshAll}
+        onCleanNotice={notifyCleanNotice}
+        onPromoted={(note) => {
+          // 右侧自动打开新笔记（闭环可见）；碎片已从收件箱移除（列表已刷新）
+          setSelected(note);
+          setEditing(false);
+          // 搜索/标签态同步清空（审查修复：原只 load("") 不更新 keyword/tagFilter，
+          // 防抖 effect 会用旧搜索词重新覆盖列表——新笔记在「全部笔记」可见）
+          list.setKeyword("");
+          list.setTagFilter(null);
+          setGroupFilter(null);
+          void list.load("", null, list.sortMode);
+        }}
+        notes={visibleNotes}
+        groups={list.groups}
+        groupFilter={groupFilter}
+        keyword={list.keyword}
+        tagFilter={list.tagFilter}
+        sortMode={list.sortMode}
+        allTags={list.allTags}
+        selectedId={selected?.id ?? null}
+        status={list.status}
+        noteColors={noteColors}
+        tagColors={list.tagColors}
+        refreshToken={list.refreshToken}
+        onGroupFilterChange={setGroupFilter}
+        onKeywordChange={(kw) => { list.setKeyword(kw); list.setTagFilter(null); }}
+        onTagFilterChange={(tag) => { list.setTagFilter(tag); if (tag) list.setKeyword(""); }}
+        onSortModeChange={list.setSortMode}
+        onSelect={handleSelect}
+        onCreate={handleCreate}
+        onRefresh={() => void list.load(list.keyword, list.tagFilter, list.sortMode)}
+        onOpenSession={(id) => onOpenSessions?.(id)}
+        onBatchDelete={runBatchDelete}
+        // v0.16.1：笔记行右键菜单动作（复用既有处理——置顶/编辑/删除/归组刷新）
+        onNotePinToggle={(n) => void runPinToggle(n)}
+        onNoteEdit={(n) => { handleSelect(n); setEditing(true); }}
+        onNoteDelete={(n) => void runDelete(n.id)}
+        onNoteMoved={() => { list.refreshAll(); void list.handleNoteChanged(); }}
+      />
 
       {/* ── 右栏：阅读视图 / 编辑视图（插槽装配见 components/notes/NotesReadingColumn）── */}
       <NotesReadingColumn

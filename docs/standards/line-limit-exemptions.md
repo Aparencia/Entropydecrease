@@ -133,7 +133,6 @@
 | app/src-tauri/src/bin/asr_forensic.rs | 321 | 定位"结尾识别不全/短句不清晰/断句不准"根因的三连验证：（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/db_ai_chat.rs | 321 | AI 对话双表仓储 + v0.19.1（REQ-260）retrieval/meta_json 补列与行映射（+42）——SQL/行映射内聚（db_* 文件先例） | 若再增长：消息侧读写拆至 db_ai_chat_messages.rs |
 | app/src-tauri/src/engine_worker.rs | 321 | 拆分动机（三维复审 #9 + 豁免登记计划）：engine.rs 在接入超时排空（自动摘取，待细化） | 若再增长：按职责拆分 |
-| app/src/pages/NotesPage.tsx | 318 | 超硬限（>600 行），不允许豁免 —— 审查修复轮 3/4（refreshToken 透传/选区动作编排承接）净增越 600 硬限（599→602）——随 TD-2026-09-09-D 登记 | **超硬限必须拆**：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts（既有登记计划兑现） |
 | app/src-tauri/src/commands_ai_providers.rs | 317 | v0.11.6 M1：Provider 管理命令域（8 命令 + 视图映射 + 密钥解析口 resolve_default_provider_key/default_provider_ready）内聚于命令层；2026-09-11 探活改 chat_plain。`resolve_input`/`to_view` 与命令同域便于契约一致 | 若再增长：默认 Provider 解析与就绪门禁拆至 ai_provider_resolve.rs |
 | app/src/components/AiConversationDock.tsx | 316 | 全局 AI 对话面板（REQ-274）+ 批 1 终态事件刷新接线——2026-09-09 审查纠偏实测登记（此前漏登），300-600 档 | 若再增长：会话列表段拆至 DockSessionList.tsx |
 | app/src/components/SessionListPanel.test.tsx | 316 | 覆盖批 4 选择/批量交互矩阵——选择模式进出（按钮+Esc）、单击勾选、（自动摘取，待细化） | 若再增长：按职责拆分 |
@@ -153,6 +152,7 @@
 | app/src/types/goals.ts | 308 | 目标是学习循环的意图层对象（规格 §一）——可追踪/可毕业/可复盘（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/commands_knowledge_systems.rs | 306 | 本层只做参数校验、调用数据层、错误映射（AGENTS.md §6）；编排逻辑（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/db_session_refine.rs | 306 | 原料 session_segments 不可变（ADR-030 决策 5 可逆契约延续）——（自动摘取，待细化） | 若再增长：按职责拆分 |
+| app/src/pages/NotesPage.tsx | 305 | 超硬限（>600 行），不允许豁免 —— 审查修复轮 3/4（refreshToken 透传/选区动作编排承接）净增越 600 硬限（599→602）——随 TD-2026-09-09-D 登记 | **超硬限必须拆**：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts（既有登记计划兑现） |
 | app/src-tauri/src/note_diff.rs | 304 | 纯函数：按行（块）比较 before/after，三态标记 unchanged/（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src/components/SecondPassPanel.tsx | 303 | 会话结束后把 S4 落盘音频全窗重跑 SenseVoice（后端 second_pass_* 命令），（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/region_ocr.rs | 302 | 原始帧 → LayoutAnalyzer → 区域列表 → 逐区域裁剪（内存 crop + 边距）（自动摘取，待细化） | 若再增长：按职责拆分 |
