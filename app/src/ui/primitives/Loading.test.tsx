@@ -6,10 +6,15 @@
  * 无文字的最小单点 → `Probe`）。批 4 要把 83 行/31 文件的「加载中…」按这张表迁移，边界一旦漂移，
  * 三个词就会退化成今天那种逐处手写的灰字。故本文件钉的是「谁渲染什么 + 类名 + 无障碍角色」。
  *
- * ② 后半段（`describe("Loading.css …")`）是 **CSS 文本契约**，不是样式复述：本任务是全仓第一批
- * `@keyframes` 的产地（recon §8.1 实测改造前 0 个），而**周期与 `infinite` 在 jsdom 里无从观测**
- * （jsdom 既不跑动画也不解析样式表）⇒ 只能直接读 `Loading.css` 文本断言（计划 Step 1 明写
- * 「node 与 jsdom 都能跑」）。该段只读盘、不依赖 DOM。
+ * ② 后半段（`describe("Loading.css …")`）是 **CSS 文本契约**，不是样式复述：本原语自带两条环境层
+ * `@keyframes`，而**周期与 `infinite` 在 jsdom 里无从观测**（jsdom 既不跑动画也不解析样式表）
+ * ⇒ 只能直接读 `Loading.css` 文本断言（计划 Step 1 明写「node 与 jsdom 都能跑」）。该段只读盘、不依赖 DOM。
+ *
+ * ③ **本文件的 reduced-motion 断言是「文本包含式」，不是「计算样式式」** —— 它只能证明
+ * `motion.css` 的名单里**写了**三个基类，**证明不了真正带动画的那个选择器被覆盖**：`.ed-skeleton`
+ * 的动画挂在伪元素 `::after` 上，而 `animation-*` 不可继承、伪元素也不在选择器匹配链上
+ * （T11 评审 C-1 实测：计算样式里 `::after` 仍是 `infinite 1200ms`）。修法与机器守卫在 `motion.css`
+ * 侧（控制方裁决交 T14），本文件**故意不加**该断言 —— 加了就会在 T14 修好之前常红。
  *
  * 副作用：无（纯展示组件；不读 store、不发请求、不写磁盘）。
  * 边界：本仓未装 `@testing-library/jest-dom` / `user-event`（硬约束：不新增依赖）⇒ 断言一律用
@@ -165,8 +170,8 @@ describe("Probe —— 不需要文字的最小单元（判定顺序第 3 问）
   });
 });
 
-describe("Loading.css —— 全仓第一批 @keyframes（周期与 infinite 只能从 CSS 文本钉）", () => {
-  it("恰好两个 @keyframes 各定义一次（骨架微光 + 探针摆动；本文件就是全仓产地）", () => {
+describe("Loading.css —— 两条环境层 @keyframes（周期与 infinite 只能从 CSS 文本钉）", () => {
+  it("恰好两个 @keyframes 各定义一次（骨架微光 + 探针摆动；均为循环环境动效）", () => {
     expect(CSS.match(/@keyframes ed-skeleton-shimmer/g)).toHaveLength(1);
     expect(CSS.match(/@keyframes ed-probe-swing/g)).toHaveLength(1);
     expect(CSS.match(/@keyframes/g)).toHaveLength(2);
@@ -196,11 +201,15 @@ describe("Loading.css —— 全仓第一批 @keyframes（周期与 infinite 只
 });
 
 describe("reduced-motion：静态由 motion.css 的既有块承担（§8.2「一条媒体查询即静态」）", () => {
-  it("本文件不得自带第二条媒体查询（全仓唯一一条 reduced-motion 块在 motion.css）", () => {
+  it("本文件不得自带第二条媒体查询（app/src 内唯一的 reduced-motion 规则块在 motion.css）", () => {
     expect(CSS).not.toContain("@media");
   });
 
-  it("motion.css 的块覆盖本文件三个基类，且 iteration-count: 1 让循环动画停住", () => {
+  it("motion.css 的块**列了**本文件三个基类，且 iteration-count: 1 让循环动画停住", () => {
+    // ⚠️ 本条只证「名单里有这三个基类」，**不证**「真正带动画的选择器被覆盖」：
+    // `.ed-skeleton` 的 animation 挂在伪元素 `::after` 上（`animation-*` 不可继承、伪元素不在
+    // 选择器匹配链上）⇒ 实际被停住的只有 `.ed-probe`。这是 T11 评审 C-1，修在 `motion.css` 侧
+    // （控制方裁决交 T14）；见文件头 ③ 与 `Loading.css` 边界⑦。
     const at = MOTION_CSS.indexOf("@media (prefers-reduced-motion");
     expect(at, "motion.css 缺少 reduced-motion 块").toBeGreaterThanOrEqual(0);
     const block = MOTION_CSS.slice(at);

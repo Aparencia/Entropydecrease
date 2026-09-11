@@ -7,13 +7,16 @@
  *
  * | 组件 | 一句话规则 | 现状靶子（批 4 迁移） |
  * |---|---|---|
- * | `Skeleton` | **知道要出现什么形状**（几行/几块）⇒ 用骨架微光占位那个形状 | `GoalDetail.tsx` 的「加载中…」一行灰字 → 3 行骨架 |
- * | `Loading` | **不知道形状，但需要一句文字说明在等什么**（时长未知）⇒ 文案 + 探针 | `ClassroomCapturePanel.tsx`「⏳ 正在下载模型（~650MB）…」 |
- * | `Probe` | **不需要文字的最小单元**：单点脉冲，可嵌按钮/行内，并被 `Loading` 内部复用 | `GroupDeleteConfirm.tsx` 的 `data-testid="group-delete-loading"` 单行灰字 |
+ * | `Skeleton` | **知道要出现什么形状**（几行/几块）⇒ 用骨架微光占位那个形状 | `GoalDetail.tsx:83` 的「加载中…」一行灰字 → 3 行骨架 |
+ * | `Loading` | **不知道形状，但需要一句文字说明在等什么**（时长未知）⇒ 文案 + 探针 | `ClassroomCapturePanel.tsx:125-127`「⏳ 正在下载模型（~650MB）…」· **`GroupDeleteConfirm.tsx:96`** 的 `data-testid="group-delete-loading"` |
+ * | `Probe` | **不需要文字的最小单元**：单点脉冲，可嵌按钮/行内，并被 `Loading` 内部复用 | 仓内**暂无**纯"无文字最小单点"的靶子 —— 它的形态今天由 `Loading` 内部复用（`.ed-loading` 里的圆点）承载；批 4 遇到按钮内/行内加载点再用 |
  * ⇒ 判定顺序：**先问"形状已知吗"**（是 → `Skeleton`）→ **再问"要文字吗"**（要 → `Loading`）→ 都不要 → `Probe`。
+ * ⚠️ **靶子口径订正（T11 评审 I-2，控制方采纳）**：`GroupDeleteConfirm.tsx:96` 渲染的是**文字**
+ * 「正在统计影响面…」且被替换的 impact 形状**已知** ⇒ 按判定表落 **`Loading`**，不落 `Probe`
+ * （该点原被列在 `Probe` 名下，是错的）。⇒ 三形态的靶子**2/3 成立**，`Probe` 暂无真实靶子。
  *
- * 副作用：`import "./Loading.css"` —— 首个引入本原语的模块会带上样式表与**全仓第一批 `@keyframes`**
- * （循环环境动效走 CSS，不占 JS 主线程）。组件本身不读 store、不发请求、不写磁盘、不注册计时器。
+ * 副作用：`import "./Loading.css"` —— 首个引入本原语的模块会带上样式表与本原语自带的
+ * **两条环境层 `@keyframes`**（循环动效走 CSS，不占 JS 主线程）。组件本身不读 store、不发请求、不写磁盘、不注册计时器。
  *
  * 边界：① 排版（字号/墨度）**一律交给 `Text`**，本文件不写字号与颜色（`.ed-loading--inline .ed-text`
  * 是"跟随宿主字阶"的唯一例外，且写在 CSS 里）；② 三个组件都是**纯展示**：`Loading`/`Skeleton` 的

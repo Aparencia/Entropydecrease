@@ -3,8 +3,11 @@
  *
  * Why（为什么存在）：全站加载提示现状是 **83 行/31 文件的一行灰字**，且**全站 0 骨架屏**
  * （recon §2）；规格 §5.1 把加载收敛为三形态（骨架 = 已知结构 / 探针 = 时长未知）。
- * 本文件同时是**全仓第一批 `@keyframes` 的产地**（实测改造前 0 个，recon §8.1）：循环环境动效
- * 按规格 §8.2 判据走 CSS keyframes —— **不占 JS 主线程**，且 reduced-motion 一条媒体查询即静态。
+ * 本文件自带**两条环境层 `@keyframes`**（骨架微光 + 探针摆动）：循环环境动效按规格 §8.2 判据走
+ * CSS keyframes —— **不占 JS 主线程**，且 reduced-motion 一条媒体查询即静态。
+ * **事实订正（本文件不宣称任何"首个/第一"）**：本仓第一条 `@keyframes` 是 `EmptyState.css` 的
+ * `ed-empty-in`（一次性入场，`0e5e78ab` @ 00:06:10，**先于**本文件所在的 `174b1893` @ 00:06:41；
+ * `git log -S "@keyframes ed-empty-in"` 可复核）；本文件的两条是**循环（`infinite`）**动画。
  *
  * 边界：① 零颜色字面量（色值只在 ui/tokens.css 与生成器里）；② 不写 `z-index`（层级是
  * `ui/zIndex.ts` 标尺的职责）；③ 位移一律 ≤ 8px（规格 §8.4 末句，由 `style-seams.test.ts` 扫
@@ -14,6 +17,10 @@
  * 第二条媒体查询**（§8.2 的「一条媒体查询即静态」）；⑥ 本文件只出三个**基类**
  * （`ed-loading` / `ed-skeleton` / `ed-probe`）+ 一个修饰类（`ed-loading--inline`）：多行骨架的
  * 条距走相邻兄弟规则而**不新增容器类**，免得 T14 的「基类 ⊆ reduced-motion 名单」守卫为第三处开口子。
+ * ⑦ **已知缺口（T11 评审 C-1；控制方裁决由 T14 在 `motion.css` 侧修，本文件不补）**：reduced-motion
+ * 块按「基类名单」覆盖 `.ed-skeleton`，但真正带 `animation` 的是它的**伪元素 `::after`** ——
+ * `animation-*` **不可继承**、伪元素也不在选择器匹配链上 ⇒ 计算样式层面 `::after` 仍是
+ * `infinite 1200ms`（`.ed-probe` 无此问题：动画就挂在元素本身）。
  */
 
 .ed-loading {
@@ -47,7 +54,7 @@
   animation: ed-skeleton-shimmer var(--ed-dur-skeleton, 1200ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)) infinite;
 }
 
-/* 全仓第一个 @keyframes：只动 `transform`（合成层，不逐帧触发布局） */
+/* 骨架微光：只动 `transform`（合成层，不逐帧触发布局） */
 @keyframes ed-skeleton-shimmer {
   from { transform: translateX(-100%); }
   to   { transform: translateX(100%); }
