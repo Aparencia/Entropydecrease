@@ -288,10 +288,89 @@ node scripts/line-limits.mjs --full
 
 ---
 
-<!-- 剩余：Task 4–7（commands_ai_refine.rs 751 / db_goals.rs 707 / commands_goals.rs 673 / ai_refine_task.rs 670）
-     按同一模式补入 —— **补入前不得派发该任务的实施者**。
-     已落盘分析（8 份）：lib-rs(189) · types-rs(178) · live-session-frame(159) · commands-ai-refine(⏳) · db-goals(255) ·
-     commands-goals(⏳) · ai-refine-task(278) · note-filter(239) · artifact-templates(303) · video-profile(258)。 -->
+### Task 4: 拆 `app/src-tauri/src/commands_ai_refine.rs`（751 → ≈205）
+
+> **边界取自**：`.../analysis-commands-ai-refine.md`（258 行：27 个顶层项、`ai_refine_start` 108 行的内部拆解、9 条命令的注册行号、7 个决策点 + 7 条不确定项）。
+
+**Files:**
+- Modify: `app/src-tauri/src/commands_ai_refine.rs` → **目录模块**：`app/src-tauri/src/commands_ai_refine/mod.rs`（外壳 ≈75）+ 子模块 `dto.rs`(~58) · `registry.rs`(~95) · `gate.rs`(~52) · `workbench.rs`(~205) · `session.rs`(~250) · `apply.rs`(~130)
+- 声明方式：**目录模块**（`mod.rs`）⇒ `lib.rs:48` 的 `mod commands_ai_refine;` **不动**，`crate::commands_ai_refine::X` 对 10 文件 20 处外部引用**零改动**（目录模块是 `/capture/` 之外的第二个先例，但 `capture/` 已证明可行）
+- Consumes: 分析报告；`lib.rs:916–923 + 929` 的 9 条注册；测试仅 2 个内联用例 + 外部 3 个用例（`commands_proofread_tests.rs` 2 + `db_ai_tasks_tests.rs` 1）
+- Produces: 上述目录模块；**9 个 `#[tauri::command]` 的 IPC 名逐字不变**
+
+**★ 裁决（分析 D1–D7）**
+- **D1 目录模块**（`mod.rs` 外壳）：唯一同时做到「零 `lib.rs` 改动」+「外部引用零改动」+（配合 D2）「≤300」的形态。
+- **D2 命令定义随域下沉，并同步改注册路径**：9 个命令**可以**移到子模块，但注册路径必须同批改成 `crate::commands_ai_refine::<子模块>::<cmd>`。
+  **为什么这是安全的**：① IPC 名 = 路径**末段** ⇒ 名不变（`tauri-macros-2.6.3/src/command/handler.rs:46-58` 已核实）；② 路径写错 = **编译期**找不到 `__cmd__<fn>` ⇒ **响亮失败**，不是静默；③ `pub use` **不能**替代（宏不随 `pub use` 重导出，仓内实证注释 `lib.rs:740–741`）。
+  **验收**：改完必须 `node scripts/check-command-registry.mjs` 报 334/334（Task 1 已建），并用注册清单探针证明「丢失 N 条 ↔ 新增 N 条」**按末段一一配对**：
+  ```powershell
+  $S = ".superpowers/sdd/2026-09-11-frontend-redesign-batch0c3-rust-splits"
+  node $S/probe-registry-parity.mjs verify $S/snap-registry-baseline.json app/src-tauri/src/app_commands.rs
+  ```
+  （它会报 `丢失 …`/`新增 …` 两组，**逐条列出末段相同的配对**作为"IPC 名未变"的证据；这一步是本任务唯一的静默风险面。）
+- **D3 `gate.rs` 独立**（余额/配额门控）· **D4 只放宽必要的可见性**（`stats_from` → `pub(super)`，不做整片改）· **D5 测试随迁**（`#[cfg(test)] #[path]` 声明跟着走，删声明 = 静默丢覆盖）· **D6 子模块命名按域**（`mod.rs` 文件头必须逐条写明每个子模块的职责）· **D7 既有缺陷只搬不改**。
+
+**分步（每步一个提交）**：≈751 → 步 1 建 `mod.rs` 外壳 + `dto`/`registry` → 步 2 `gate` + `workbench`（**主文件 ≈575 ≤600 ⇒ 本步提交里删 `FROZEN_OVER_LIMIT` 行 + `--write`**）→ 步 3 `session` → 步 4 `apply`（**≤300 ⇒ 档位行自动消失**）。步后行数以实测为准。
+
+**★ 等价核对**：① `ai_refine_start`(137–250) 的**三段顺序**（余额+配额校验 → DB 落库 → 去重）不可重排、不可提前/延后 await；② 9 条注册路径与 `check-command-registry` 全绿；③ 本文件测试覆盖极低（9 个 command 与 `ensure_balance_for` **零测试**）⇒ 改动只能靠**逐行 diff + 真机 IPC 冒烟**兜底；④ 既有缺陷（分析 §4 列出的）只记录不改。
+
+**验证**：`cargo test --test app_lib_tests`（用例数不减）· `cargo build` · `cargo clippy`（不增）· `node scripts/check-command-registry.mjs` · 探针配对 · `node scripts/line-limits.mjs --full`。**只能真机**：AI 精修的 9 个入口各点一次（只验可达，红线默认关），控制台不得出现 `command … not found`。
+**报告**：`.../task-4-report.md`。
+
+---
+
+### Task 5: 拆 `app/src-tauri/src/db_goals.rs`（707 → ≈258）
+
+> **边界取自**：`.../analysis-db-goals.md`（255 行：6 个顶层项、`goal_plan_context` 69 行的段级拆解、9 条 `CREATE` 的行号、7 个决策点）。
+
+**Files:**
+- Modify: `app/src-tauri/src/db_goals.rs`（终态 ≈88 地板 + 分派）
+- Create（6 个，平铺 `src/`）：`db_goals_milestone.rs`(~131) · `db_goals_plan.rs`(~220) · `db_goals_goal.rs`(~133) · `db_goals_retro.rs`(~96) · `db_goals_binding.rs`(~60) · `db_goals_graduation.rs`(~46)
+- 声明方式：**在 `db_goals.rs` 内 `#[path = "db_goals_plan.rs"] mod plan;` 逐条声明** ⇒ `lib.rs:248` 与 `crate::db_goals::init`（`db_migrations.rs:513`）**零改动**
+- Consumes: 分析报告；40 个相关用例全在 `cargo test --test app_lib_tests`（全内存库）
+- Produces: 上述 6 个模块；`Db` 的 `pub fn` 面不变（`impl Db` 与类型同 crate ⇒ 分模块 `impl` 合法）
+
+**★ 裁决（分析 D1–D7）**：**D1 用 `#[path]` 从父文件声明平铺子模块**（先例 `streaming_asr.rs:31` / `watermark_filter.rs:178`；不碰 `lib.rs`）· **D2 6 个文件** · **D3 `init` 原地不动**（它含 9 条 `CREATE`，**schema 敏感**）· **D4 步序按域**（先 `milestone` → 再 `plan` → 再 `goal` → 其余）· **D5 中间态照全局规则处理**（≤600 即删棘轮行 + `--write`，不要合并成一个大提交）· **D6 注释只搬不改** · **D7 同步 `docs/` 里的行号锚点**（若引用了本文件行号）。
+
+**★ schema 红线**：本任务**不触碰** schema —— `init`(20–69) 与 9 条 `CREATE`（23/35/36/48/49/56/59/66）**SQL 文本逐字不动**，**0 条** `PRAGMA`/`ALTER`/`DROP`。跨文件依赖：`contracts` 唯一索引（`db_migrations.rs:171`）、`knowledge_links` 无约束 —— 均不改。
+
+**分步（每步一个提交）**：707 → 步 1 `milestone`(~587) → 步 2 `plan`(~380) → 步 3 `goal`(**~258 ≤300**)。⚠️ **S1 后主文件 ≤600 ⇒ 必须在 S1 的提交里删 `FROZEN_OVER_LIMIT` 行 + `--write`**（守卫 (b) 否则 exit 1）；S3 后 ≤300 ⇒ 档位行由 `--write` 自动删除。步后行数以实测为准（±5%）。
+
+**★ 等价核对**：① **`add_milestone_row` 是三条写路径共用**（`create_goal` / `add_milestone` / `apply_plan_core`）⇒ 搬它必须同时确认三个调用点仍解析到同一函数（可见性 `pub(super)` 最小放宽）；② **`with_conn` 锁不可重入** ⇒ 367/587 的**预取行必须留在闭包之外**（搬进闭包 = 运行期自锁死）；③ 最大函数 `goal_plan_context`(582–654) **恰好是唯一零测试覆盖的方法** ⇒ 逐行 diff + 人工核对 4 个 SQL 执行点与 15 行 SQL 文本；④ `impl Db` 分模块后 `use` 面要够（漏 `use` = 编译失败，属响亮失败）。
+
+**验证**：`cargo test --test app_lib_tests`（40 个相关用例不减；全内存库，不连真实数据）· `cargo build` · `cargo clippy`（不增）· `node scripts/line-limits.mjs --full`。**只能真机**：目标创建/里程碑/计划应用/复盘/绑定/毕业六条动线的读写往返。
+**报告**：`.../task-5-report.md`。
+
+---
+
+### Task 7: 拆 `app/src-tauri/src/ai_refine_task.rs`（670 → ≈256）
+
+> **边界取自**：`.../analysis-ai-refine-task.md`（278 行：15 个顶层项、`refine_slices_concurrent` 180 行的三段拆解、12 条共享状态、2 个事件、7 个决策点）。
+
+**Files:**
+- Modify: `app/src-tauri/src/ai_refine_task.rs`（保留为模块根，**不改成 `mod.rs`**）
+- Create（4 个，**子目录**）：`ai_refine_task/workers.rs`(~240) · `ai_refine_task/skeleton.rs`(~113) · `ai_refine_task/vision.rs`(~72) · `ai_refine_task/stream.rs`(~36)
+- 声明方式：**在 `ai_refine_task.rs` 内 `#[path = "ai_refine_task/workers.rs"] mod workers;`** ⇒ `lib.rs:41` 的 `mod ai_refine_task;` **零改动**，父文件路径不变（先例 `streaming_asr.rs:31`）
+- Consumes: 分析报告；**本文件 0 专属测试**（`ai_refine_task_tests.rs` 不存在）；仅 `ai_note_refine_task_tests.rs:27` 引用 `RefineStreamFrame`；全仓 `#[tokio::test]` = 0
+- Produces: 上述 4 个模块；`RefineStreamFrame` 类型可见性不变
+
+**★ 裁决（分析 D1–D7）**：**D1 子目录 + 父文件用 `#[path]` 声明**（`lib.rs` 零改动；父文件保持 670 行的模块根身份）· **D2 4 个文件** · **D3 做满到 ≤300**（≈670 → 442 → 348 → **284**，推荐 4 步 ≈256）· **D4 `RefineCtx` 归属**：随 `workers.rs`（它是 worker 池的上下文）· **D5 帧类型 `RefineStreamFrame` 留在父文件**（外部唯一引用点）、由子模块 `use super::RefineStreamFrame` · **D6 门禁时机照全局规则**（步 1 后 ≈442 ≤600 ⇒ **步 1 的提交必须同删 `FROZEN_OVER_LIMIT` 行 + `--write`**）· **D7 本批不补测试**（本文件零覆盖，补测试另立条目）。
+
+**★ 等价核对（并发语义第一优先）**
+1. **`turns` 锁的语句级临时守卫（596–607）**：`build_system` / `turn_user_text` / `to_string(&r)` **全在持锁下执行** —— 「先建 `AiTurn` 再 `push`」= 缩短锁窗口 = **并发行为变更（禁止）**。
+2. **`rx.iter()`(627) 必须在 `scope` join 之后**（搬进 scope 内 = 死锁）。
+3. 线程创建链不变：命令层 `spawn_blocking`(`commands_ai_refine.rs:246`，JoinHandle 未 await) → `std::thread::scope`(506) → `scope.spawn`(521，1..=3 线程)；**本文件 0 处 tokio/abort/cancel/timeout**（超时在 `ai_client.rs:238` 的 300s）。
+4. 12 条共享状态的「谁写/谁读/持锁范围」逐条不变（含 worker 局部 `Arc<Mutex<VecDeque>>`(483) / `Arc<Mutex<Vec<AiTurn>>>`(487) / **std `mpsc`**(484)）。
+5. 事件名逐字不变：`"ai:refine-stream"`（唯一 emit 点 67，5 种帧）+ `"ai:task-update"`（经 `set_task`；本文件触发 4 处）。
+
+**验证**：`cargo test --test app_lib_tests`（用例数不减）· `cargo build` · `cargo clippy`（不增）· `cargo build --bin cer_bench --bin asr_eval` · `node scripts/line-limits.mjs --full`。**只能真机**：AI 精修并发（1..=3 线程）· 流式帧 5 种形态 · 任务状态流转 · 取消/失败路径。
+**报告**：`.../task-7-report.md`。
+
+---
+
+<!-- 剩余：Task 6（commands_goals.rs 673）待其分析落盘后补入 —— **补入前不得派发该任务的实施者**。
+     已落盘分析（9/10）：lib-rs(189) · types-rs(178) · live-session-frame(159) · commands-ai-refine(258) · db-goals(255) ·
+     ai-refine-task(278) · note-filter(239) · artifact-templates(303) · video-profile(258)；缺 commands-goals。 -->
 
 ---
 
