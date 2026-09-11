@@ -21,3 +21,10 @@ export type { ButtonProps, ButtonSize, ButtonVariant } from "./Button";
 
 export { usePresence } from "./usePresence";
 export type { Presence, PresenceOptions, PresencePhase, TransitionEndLike } from "./usePresence";
+
+export { Modal } from "./Modal";
+export type { ModalProps, ModalSize, ModalTier } from "./Modal";
+
+export { FOCUSABLE_SELECTOR, focusablesIn, useFocusTrap } from "./useFocusTrap";
+
+export { isImeComposing } from "./ime";

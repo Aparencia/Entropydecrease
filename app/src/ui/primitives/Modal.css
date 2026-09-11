@@ -1,0 +1,73 @@
+/*
+ * Modal.css —— 弹层的唯一外观出口（批 0-D Task 7；规格 §5.2 / §8.4）。
+ *
+ * Why（为什么存在）：全仓 28 个文件各自手写 `position:fixed; inset:0` 的遮罩、25 行/22 文件各写
+ * 一份深色遮罩 `rgba(...)`（recon §10）。本文件把那套外观收成一处：遮罩基色、透明度、圆角、阴影、
+ * 底色、描边一律经 token 消费。
+ *
+ * ⚠️ 本文件不得出现任何颜色字面量（色值只许出现在 `ui/tokens.css` 与 token 生成器里），
+ *    也不得写 `z-index`（层级是 TS 标尺 `ui/zIndex.ts` 的职责，由 Modal.tsx 内联到遮罩上）。
+ *
+ * ⚠️ **等时长不变量**：`usePresence` 以**首个** `transitionend` 收尾 —— 同一个元素上的
+ *    `opacity` 与 `transform` 必须等时长，否则短的那个一到就把弹层摘掉，长的那半永远看不到。
+ *    故面板基类的两条过渡都用 `--ed-dur-overlay-in`，出场统一在退出态里改成
+ *    `--ed-dur-overlay-out`（**出场 160 < 进场 200，出场比进场快** —— 规格 §8.4）。
+ *    每个 `var()` 都带同值兜底字面量：批 6 的动效 token 真源落地后删掉 motion.css 的变量块即生效。
+ */
+.ed-modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 遮罩 = --ed-overlay 按 --ed-overlay-alpha 压暗（不写 rgba 字面量：颜色只在 token 里） */
+  background: color-mix(in srgb, var(--ed-overlay) calc(var(--ed-overlay-alpha, 0.34) * 100%), transparent);
+  transition: opacity var(--ed-dur-overlay-in, 200ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));
+}
+.ed-modal-overlay[data-phase="enter"] { opacity: 0; }
+.ed-modal-overlay[data-phase="exit"] { opacity: 0; transition-duration: var(--ed-dur-overlay-out, 160ms); }
+
+.ed-modal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+  max-width: calc(100vw - 48px);
+  box-sizing: border-box;
+  background: var(--ed-bg-raised);
+  border: 1px solid var(--ed-border);
+  border-radius: var(--ed-radius-overlay, 10px);
+  box-shadow: var(--ed-shadow-2);
+  /* 面板的 opacity 与 transform 必须【等时长】（见文件头的等时长不变量） */
+  transition: opacity var(--ed-dur-overlay-in, 200ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)),
+    transform var(--ed-dur-overlay-in, 200ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));
+}
+.ed-modal[data-phase="enter"] { opacity: 0; transform: translateY(8px); } /* 位移 8px = 规格 §8.4 上限 */
+.ed-modal[data-phase="entered"] { opacity: 1; transform: translateY(0); }
+.ed-modal[data-phase="exit"] {
+  opacity: 0;
+  transform: translateY(4px); /* 出场位移只留一半：出场更短更快，4px 是它的配套量 */
+  transition-duration: var(--ed-dur-overlay-out, 160ms);
+}
+.ed-modal:focus-visible { outline: 2px solid var(--ed-ink-1); outline-offset: 2px; }
+
+.ed-modal--s { width: 380px; }
+.ed-modal--m { width: 520px; }
+.ed-modal--l { width: 720px; }
+
+.ed-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ed-space-8, 8px);
+  padding: var(--ed-space-12, 12px) var(--ed-space-16, 16px);
+  border-bottom: 1px solid var(--ed-border);
+}
+.ed-modal-body { padding: var(--ed-space-16, 16px); overflow: auto; }
+.ed-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--ed-space-8, 8px);
+  padding: var(--ed-space-12, 12px) var(--ed-space-16, 16px);
+  border-top: 1px solid var(--ed-border);
+}
