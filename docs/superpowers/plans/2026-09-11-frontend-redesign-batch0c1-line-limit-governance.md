@@ -578,7 +578,7 @@ git diff --stat -- docs/standards/line-limit-exemptions.md   # 期望：空（�
 git add scripts/line-limits.mjs docs/standards/line-limit-exemptions.md
 git commit -m "docs(standards): 重建行数豁免登记为快照表"
 ```
-提交信息里写明：**重建前后** —— 条目 117 行/95 路径 → 138 条（15 超硬限 + 123 登记档）；消除 12 组重复、1 条幽灵、45 条漏登、77 条数值偏差（其中 **10 个 >600 违规此前被 <600 的登记值伪装成合规**）。
+提交信息里写明：**重建前后** —— 条目 117 行 / 95 路径 → **138 条**（15 超硬限 + 123 登记档）；消除 **12 组重复**、**1 条幽灵**（`ActionCenterOverlay.tsx`）、**1 条已回落**（`AiServicePanel.tsx` 390→283）、**45 条漏登**、**数值偏差 90 条**（⚠️ 这是**按行**计，脚本 `--full` 的 `(e)` 就是这个口径；按**路径去重**是 77 条 —— 两个数都对，写提交信息时别只写一个而不说明口径）；其中 **10 个 >600 违规此前被 <600 的登记值伪装成合规**。
 
 ---
 
