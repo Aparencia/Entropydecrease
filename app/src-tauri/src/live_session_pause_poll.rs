@@ -188,7 +188,7 @@ impl FrameWorkerState {
                 // 会话开始时视频已暂停的场景，时长/集号识别不因此缺席
                 if self.last_info_probe_at.elapsed() >= Duration::from_secs(10) {
                     self.last_info_probe_at = Instant::now();
-                    super::probe_player_info(&self.app, &self.engines, &self.session_info, &self.roi_tracker, &self.latest_frame);
+                    super::live_player_probe::probe_player_info(&self.app, &self.engines, &self.session_info, &self.roi_tracker, &self.latest_frame);
                 }
             }
         }

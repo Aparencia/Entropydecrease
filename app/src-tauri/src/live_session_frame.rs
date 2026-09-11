@@ -53,6 +53,10 @@ pub(super) mod live_session_worker_state;
 #[path = "live_session_pause_poll.rs"]
 pub(super) mod live_session_pause_poll;
 
+/// 播放器行为/信息探测（5s 图标检测 + 10s 区域 OCR；§3）。
+#[path = "live_player_probe.rs"]
+pub(super) mod live_player_probe;
+
 
 /// 屏幕采样线程入口（TD-026 修复：OCR 从会话线程移出，音频消费不再被阻塞）。
 ///
@@ -436,86 +440,7 @@ pub fn run_screen_worker(
                     }));
                 }
             }
-            // M1/REQ-125：播放器行为检测（5s 节流——非每帧；从最新帧缓存取帧做
-            // 暂停图标检测；Pause→无图标 状态机推导 Play 事件；无帧/转换失败 →
-            // 状态保持（诚实：无证据不推断））
-            // 审查修复（v0.7.0 新增代码审查）：
-            // ① MEDIUM-6：now_ms 在此处现取（原用采样块开头的旧时刻——OCR 耗时
-            //    + 5s 周期叠加使暂停事件时戳滞后 5-10s）；
-            // ② MEDIUM-9：首次检测只初始化状态不写事件（录制开始前已暂停的视频
-            //    首轮 paused=true ≠ 初始 false 会写非转换假 Pause）
-            if w.last_player_check_at.elapsed() >= Duration::from_secs(5) {
-                w.last_player_check_at = Instant::now();
-                let check_now_ms = comp_epoch.elapsed().as_millis() as u64;
-                if let Some(f) = w.latest_frame.lock().ok().and_then(|g| g.clone()) {
-                    if let Some(img) =
-                        crate::region_ocr::bgra_to_rgb_image(&f.bgraw, f.width, f.height)
-                    {
-                        let paused =
-                            crate::player_behavior::detect_player_action(&img).is_some();
-                        if !w.player_state_initialized {
-                            // 首次检测：仅记录基线状态，不写事件（防假 Pause）
-                            w.player_state_initialized = true;
-                            w.last_player_paused = paused;
-                            // P2：基线即暂停（会话开始时视频已暂停）→ 自动暂停。
-                            // 不写假 Pause 事件（MEDIUM-9），但锁存媒体条件——
-                            // 音频/捕获线程沿边沿同步暂停（批 2a 经 request API）
-                            if paused && !w.pause.paused.load(Ordering::SeqCst) {
-                                let _ = w.pause
-                                    .request_pause(crate::pause_state::PauseSource::Media);
-                                let _ = w.app.emit("live:media-paused", ());
-                                eprintln!("[ScreenWorker] 视频处于暂停态，会话自动暂停");
-                            }
-                        } else if paused != w.last_player_paused {
-                            w.last_player_paused = paused;
-                            let action = if paused {
-                                crate::player_behavior::PlayerAction {
-                                    kind: crate::player_behavior::PlayerActionKind::Pause,
-                                    value: None,
-                                }
-                            } else {
-                                crate::player_behavior::PlayerAction {
-                                    kind: crate::player_behavior::PlayerActionKind::Play,
-                                    value: None,
-                                }
-                            };
-                            crate::player_behavior::record_action(
-                                &action,
-                                check_now_ms,
-                                w.session_id,
-                                &w.db,
-                            );
-                            if paused && !w.pause.paused.load(Ordering::SeqCst) {
-                                // P2：检测到视频暂停 → 自动暂停捕获（媒体条件；
-                                // 下一轮循环进入轻量轮询，恢复检测不中断）。
-                                // 审查 F5：已暂停（pause=true）时不重复记账/发事件
-                                // （同迭代双系统重复 Pause——机器层同样幂等）
-                                let _ = w.pause
-                                    .request_pause(crate::pause_state::PauseSource::Media);
-                                let _ = w.app.emit("live:media-paused", ());
-                                eprintln!("[ScreenWorker] 检测到视频暂停，自动暂停捕获");
-                            }
-                        } else if paused && !w.pause.paused.load(Ordering::SeqCst) {
-                            // P2 兜底（批 2a 语义推广——机器层"manual 解除瞬间重评
-                            // 估 auto 条件"的 worker 侧实现）：手动恢复后视频仍
-                            // 暂停 → 重新锁存媒体条件（捕获跟随视频状态，用户
-                            // 手动继续不覆盖）；经 request API 只记条件不动作
-                            let _ = w.pause
-                                .request_pause(crate::pause_state::PauseSource::Media);
-                            let _ = w.app.emit("live:media-paused", ());
-                            eprintln!("[ScreenWorker] 视频处于暂停态，重新自动暂停");
-                        }
-                    }
-                }
-            }
-            // v0.7.2（REQ-151）：播放器信息探测（10s 节流）——播放器区域 OCR
-            // 文本（时间对 `12:34 / 1:23:45`、分P `P3/12`）→ 会话信息更新 →
-            // 值变化才 emit live:session-info（防 IPC 风暴）；无播放区域/OCR
-            // 失败 → 静默跳过（诚实：不猜不填；下轮再试）
-            if w.last_info_probe_at.elapsed() >= Duration::from_secs(10) {
-                w.last_info_probe_at = Instant::now();
-                probe_player_info(&w.app, &w.engines, &w.session_info, &w.roi_tracker, &w.latest_frame);
-            }
+            w.player_tick(comp_epoch);
         }
         // 诊断：每 15s 打印采样统计（会话无 OCR 时定位失败阶段；静默失败可见化）
         if w.stats
@@ -544,62 +469,6 @@ pub fn run_screen_worker(
     eprintln!("[ScreenWorker] 屏幕采样线程退出（会话 {}）", w.session_id);
 }
 
-/// 播放器信息探测（REQ-151，v0.7.2）：播放器区域 OCR 文本（时间对/分P）→
-/// 会话信息更新 → 值变化才 emit live:session-info（防 IPC 风暴）。
-///
-/// @ai-context: 主采样循环与自动暂停轻量轮询共用——暂停时播放器时间文本仍
-///              在画面，时长/集号识别不因暂停缺席（10s 节流由调用方控制）；
-///              无播放区域/OCR 失败 → 静默跳过（诚实：不猜不填，下轮再试）。
-fn probe_player_info(
-    app: &tauri::AppHandle,
-    engines: &crate::engine::EnginePool,
-    session_info: &crate::session_info::SessionInfoCollector,
-    roi_tracker: &crate::region_tracker::RoiTracker,
-    latest_frame: &Arc<Mutex<Option<LatestCapturedFrame>>>,
-) {
-    let mut probe = latest_frame
-        .lock()
-        .ok()
-        .and_then(|g| g.clone())
-        .unwrap_or(LatestCapturedFrame { timestamp_ms: 0, bgraw: Vec::new(), width: 0, height: 0 });
-    if probe.bgraw.is_empty() {
-        return;
-    }
-    if let Some(rect) = roi_tracker.playback_rect() {
-        let w = probe.width as i32;
-        let h = probe.height as i32;
-        let q = crate::capture::frame_diff::Rect {
-            left: rect.left.clamp(0, w),
-            top: rect.top.clamp(0, h),
-            right: rect.right.clamp(0, w),
-            bottom: rect.bottom.clamp(0, h),
-        };
-        if q.width() > 0 && q.height() > 0 {
-            crate::capture::frame_diff::crop_frame(
-                &mut probe.bgraw,
-                &mut probe.width,
-                &mut probe.height,
-                Some(&q),
-            );
-        }
-    }
-    if probe.bgraw.is_empty() {
-        return;
-    }
-    // P4：OCR 输入缩小（播放器 UI 文字大，质量无损）
-    crate::capture::frame_diff::downscale_bgra(&mut probe.bgraw, &mut probe.width, &mut probe.height, 960);
-    let Some(img) =
-        crate::region_ocr::bgra_to_rgb_image(&probe.bgraw, probe.width, probe.height)
-    else {
-        return;
-    };
-    // H2 修复：有界等待变体——探测帧 OCR 卡死时超时即弃（实时链路不得无限阻塞）
-    let Ok(blocks) = engines.recognize_image_timeout(img, crate::engine::OCR_REQUEST_TIMEOUT) else { return };
-    let text = blocks.iter().map(|b| b.text.as_str()).collect::<Vec<_>>().join(" ");
-    if session_info.observe_player_text(&text) {
-        let _ = app.emit("live:session-info", session_info.snapshot());
-    }
-}
 
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。
 #[cfg(test)]
