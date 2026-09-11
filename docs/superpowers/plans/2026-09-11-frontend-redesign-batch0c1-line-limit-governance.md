@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **本次范围仅「口径 + 登记表 + 守卫」**：`0-C1` **不拆任何文件**。15 个 >600 文件的拆分是 `0-C2`（前端 5 个）与 `0-C3`（Rust 10 个）两份独立计划，本计划交付的是它们的**测量仪器与验收依据**。
-- **测量口径（唯一有效）**：行数 = 文件**全部行数**（含空行），以 `[System.IO.File]::ReadAllLines(path, UTF8).Count` 为准（即 `scripts/line-limits.mjs` 的 `countLines()`）。**不要用** `Get-Content`（本机 PowerShell 5.1 + 码页 `gb2312` 会按 GBK 解码、吞掉换行、最多少算 45 行/文件）· `Measure-Object -Line`（只数非空行）· **字节 `0x0A` 计数**（对末尾不带换行的文件会**少算 1**；本仓实测有 8 个这样的源文件，含 `NotesPage.tsx` 602/601）。
+- **测量口径（唯一有效）**：行数 = 文件**全部行数**（含空行），以 `[System.IO.File]::ReadAllLines(path, UTF8).Count` 为准（即 `scripts/line-limits.mjs` 的 `countLines()`）。**不要用** `Get-Content`（本机 PowerShell 5.1 + 码页 `gb2312` 会按 GBK 解码、吞掉换行、**少算可达 56 行**/文件 —— 实测最大 `live_session_pause.rs` 353→297）· `Measure-Object -Line`（只数非空行）· **字节 `0x0A` 计数**（对末尾不带换行的文件会**少算 1**；本仓实测有 8 个这样的源文件，含 `NotesPage.tsx` 602/601）。
 - **硬限范围为实测 15 个**（用户 2026-09-11 裁决）：前端 5 个 + Rust 10 个。规格原文的「4 个」只扫了前端且漏掉 `SessionListPanel.tsx`，本计划一并更正。
 - 单文件 ≤300 行（AGENTS.md §3）—— **本计划新增的脚本自身也必须满足**；若 `line-limits.mjs` 超过 300 行，必须拆分而不是登记。
 - 零新增依赖（`package.json` 的 `dependencies`/`devDependencies` 不得变化）。
@@ -84,7 +84,7 @@
 ```
 1. **模块化**：单文件 ≤300 行（>600 行必须硬拆；300-600 行登记豁免清单）；纯逻辑与副作用物理分离；显式依赖注入。
    **行数口径（唯一有效）**：文件**全部行数**（含空行），以 `[System.IO.File]::ReadAllLines(path, UTF8).Count` 为准 —— 即 `scripts/line-limits.mjs` 的 `countLines()`。
-   ⚠️ **不要用**：`Get-Content`（本机 PowerShell 5.1 + 码页 `gb2312` 会按 GBK 解码、吞换行、**少算最多 45 行**）· `Measure-Object -Line`（**只数非空行**）· **字节 `0x0A` 计数**（对**末尾不带换行**的文件会少算 1；本仓实测有 8 个这样的源文件，含 `NotesPage.tsx`）。
+   ⚠️ **不要用**：`Get-Content`（本机 PowerShell 5.1 + 码页 `gb2312` 会按 GBK 解码、吞换行、**少算可达 56 行**）· `Measure-Object -Line`（**只数非空行**）· **字节 `0x0A` 计数**（对**末尾不带换行**的文件会少算 1；本仓实测有 8 个这样的源文件，含 `NotesPage.tsx`）。
    判定一律以 `node scripts/line-limits.mjs` 为准。
 ```
 
@@ -117,7 +117,8 @@ Run（仓库根）：
 Select-String -Path AGENTS.md,docs/standards/refactoring.md -Pattern 'line-limits.mjs'
 node scripts/docs-check.mjs
 ```
-Expected: 命中 3 行（AGENTS.md 两处 + refactoring.md 一处）；`docs-check` ✅
+Expected: 命中 **4** 行（`AGENTS.md:41` 与 `:43` 同一节两处 + `AGENTS.md` §11 一处 + `refactoring.md:162`）；`docs-check` ✅
+（⚠️ 计划初稿写「3 行」是**我的计数错**：§3.1 的口径块里 `line-limits.mjs` 出现两次。**不要为了对齐这个 Expected 去删掉任一处** —— 两处各有作用：一处指出权威实现，一处规定判定动作。）
 
 - [ ] **Step 5: 提交**
 
@@ -601,7 +602,7 @@ git commit -m "ci: 行数红线接入提交门禁与 CI"
 **把注记改写为已裁决的状态**：
 ```
 1. **15 个 >600 行文件 → 0**（实测值：前端 5 + Rust 10；规格原文的「4 个」只扫了前端且漏掉 `SessionListPanel.tsx`）；>300 行 **100% 在豁免表内且数值与实测一致**。
-   > **2026-09-11 用户裁决**：范围取实测 15 个；口径取「全部行数」（`ReadAllLines` / 字节 `0x0A`），**禁用 `Get-Content` 与 `Measure-Object -Line`**。
+   > **2026-09-11 用户裁决**：范围取实测 15 个；口径取「全部行数」，**以 `[System.IO.File]::ReadAllLines(path, UTF8).Count` 为准**（即 `scripts/line-limits.mjs`），**禁用 `Get-Content`（少算可达 56 行）· `Measure-Object -Line`（只数非空行）· 字节 `0x0A` 计数（末尾无换行时少算 1）**。
    > 执行机制：`node scripts/line-limits.mjs`（本地提交门禁 + CI `--full` 守数值），>600 用**棘轮**只减不增 —— 拆分由 0-C2（前端 5）/ 0-C3（Rust 10）推进，每拆完一个从 `FROZEN_OVER_LIMIT` 删一行。
 ```
 
