@@ -1,0 +1,65 @@
+/*
+ * Surface.css —— 面（底 / 边框 / 圆角 / 阴影）的唯一出口（批 0-D Task 4）。
+ *
+ * Why（为什么存在）：现状 `borderRadius` 584 行/134 文件（6/8/10/12 四值混用）· `1px solid`
+ * 412 行/121 文件 · `boxShadow:` 38 行/38 文件且是 **18 个互不相同的字面值**（recon §2 / §4①）
+ * —— 面的四件事逐处手写，改一次「卡片长什么样」要动上百个文件。本文件是那一处的落点。
+ *
+ * 边界：① 颜色 / 圆角 / 阴影 / 间距一律 `var(--ed-*)`，**本文件零颜色字面量**（`var()` 的兜底
+ *       值也不许是色值 —— 色值只在 ui/tokens.css 与生成器里）；② 不得写 `z-index`（层级走
+ *       `ui/zIndex.ts` 六档标尺，规格 §4.2①）；③ **不写 `box-sizing`**：尺寸口径属调用点排版，
+ *       本原语只负责「底 / 边框 / 圆角 / 阴影」四件事（批 4 逐处迁移时按各处实际需要决定，
+ *       避免原语替调用点改掉盒模型而让迁移期的观感对不上）。
+ *
+ * 暗档策略（继承 token 层，本文件不写第二条规则）：`--ed-shadow-1` 在 `[data-theme="dark"]` 里
+ * 是 `0 0 0 1px rgba(255,255,255,.06)` 的**反相白描边**（暗底上黑色投影不可见）⇒ hover 的
+ * 「升起」在暗档自动退化为**边框墨度**的推进（`--ed-border` → `--ed-border-strong`）。
+ */
+
+.ed-surface {
+  background: var(--ed-bg-surface);
+  border-radius: var(--ed-radius-panel, 8px);
+}
+
+/* 默认 bordered=true（卡片 / 列的常态）；`bordered={false}` 用于「只有底色、不要分隔线」的阅读面 */
+.ed-surface--bordered { border: 1px solid var(--ed-border); }
+
+/* 四档底：与调色板 token 一一对应，原语不判断语义（该用哪档由消费方决定） */
+.ed-surface--sunken { background: var(--ed-bg-sunken); }   /* 输入槽 / 骨架 / 内嵌 */
+.ed-surface--canvas { background: var(--ed-bg-canvas); }   /* 窗口底（纸） */
+.ed-surface--surface { background: var(--ed-bg-surface); } /* 卡片 / 列 / 阅读面（= 基类，显式写出让四档对称） */
+.ed-surface--raised { background: var(--ed-bg-raised); box-shadow: var(--ed-shadow-1); } /* 弹层 / 菜单 / 浮窗 */
+
+/* 四档圆角：token 真源是 `SCALE_TOKENS.radiusScale`（3/5/8/10），类名带 `r-` 前缀以免与
+   同名的 level 档（如 `--surface`）撞在一起 */
+.ed-surface--r-stamp { border-radius: var(--ed-radius-stamp, 3px); }
+.ed-surface--r-control { border-radius: var(--ed-radius-control, 5px); }
+.ed-surface--r-panel { border-radius: var(--ed-radius-panel, 8px); }
+.ed-surface--r-overlay { border-radius: var(--ed-radius-overlay, 10px); }
+
+.ed-surface--padded { padding: var(--ed-space-12, 12px); }
+
+/* 接缝（规格 §8.6.1 接缝表第 2 行：hover 升起 / 边框墨度）——
+   ① 只用**单属性、无时序、120ms** 的属性 transition（规格 §8.2 判据）：交互反馈不排队，快速
+      划过时下一次 hover 直接接管当前动效（§8.6.1 第 3 条「可中断、可反向」）；若改用 keyframes
+      或长时序，连点会排队播完，用户会看到「迟到的回执」；
+   ② 位移 **1px** ≪ §8.4 的 8px 上限：升起感主要由阴影与边框墨度承载，位移只是「纸被指尖抬起」
+      的暗示，越大越像抖动；
+   ③ `interactive` **只加视觉、不加 `tabIndex`/`role`** —— 键盘可达性必须由消费方用真实
+      `<button>`/`<a>` 承载（现状全仓 `tabIndex` 仅 1 处，「用 div 假装可点」正是本批要消灭的形态，
+      §8.6.1 第 4 条：键盘路径与「活」冲突时无障碍优先）；
+   ④ reduced-motion 由 motion.css 的**唯一**媒体查询块统一覆盖，本文件不重复写媒体查询
+      （重复会让「一处改对所有地方」失效）。 */
+.ed-surface--interactive {
+  cursor: pointer;
+  transition: box-shadow var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)),
+              border-color var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)),
+              transform var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));
+}
+.ed-surface--interactive:hover { box-shadow: var(--ed-shadow-1); border-color: var(--ed-border-strong); transform: translateY(-1px); }
+/* 按下回执：位移归零（「收到了」= hover 的升起，「做完了」= 点击后的落位）；阴影与边框保持
+   hover 值不回落，否则按下瞬间整块面会「瘪一下」，回执反而变成噪音 */
+.ed-surface--interactive:active { transform: translateY(0); }
+/* 焦点可见：`--ed-ink-1` 亮档是墨黑、暗档是纸白 ⇒ 焦点环自动反相，无需第二条规则。
+   用 `:focus-visible` 而非 `:focus`：鼠标点击不该留焦点环，但键盘 Tab 必须看得见 */
+.ed-surface--interactive:focus-visible { outline: 2px solid var(--ed-ink-1); outline-offset: 2px; }
