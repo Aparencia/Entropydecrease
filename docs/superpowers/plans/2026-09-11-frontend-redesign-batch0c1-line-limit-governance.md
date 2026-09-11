@@ -415,8 +415,11 @@ function parseHistory() {
 function writeTable() {
   const measured = scanTree();
   const reasons = parseReasons();
-  const over = [...measured.entries()].filter(([, n]) => n > HARD_LIMIT).sort((a, b) => b[1] - a[1]);
-  const band = [...measured.entries()].filter(([, n]) => n > SOFT_LIMIT && n <= HARD_LIMIT).sort((a, b) => b[1] - a[1]);
+  // 并列时必须按路径断开：`scanTree` 的 Map 迭代序来自 readdirSync，**跨平台不一致**
+  // （Windows 与 Linux 的顺序可能不同）⇒ 只按行数排会让 `--write` 在不同平台产出不同字节。
+  const byLinesDesc = (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]);
+  const over = [...measured.entries()].filter(([, n]) => n > HARD_LIMIT).sort(byLinesDesc);
+  const band = [...measured.entries()].filter(([, n]) => n > SOFT_LIMIT && n <= HARD_LIMIT).sort(byLinesDesc);
   // 单元格净化：文本里的半角 `|` 会撑破 Markdown 表格，并让下次 `parseReasons` 误切列。
   // 换**全角** `｜` 而不是 `\|` —— 转义写法在下次读取时会被再次转义，破坏 `--write` 的幂等性。
   const cell = (t, fallback) => {
@@ -656,7 +659,7 @@ git commit -m "docs(versions): 0-C1 行数红线验收与门槛更正"
 2. 四条不变式是否**各自**用变异探针证明过会失败？
 3. 登记表是否**只剩一条有效路径一行**（`parseTable` 的行数 == 去重后的路径数）？
 4. `>600` 是否仍是 **15**（本批不拆文件，数字不应变化）？
-5. 新增脚本自身是否 ≤300 行（用 `node scripts/line-limits.mjs` 自己量自己）？
+5. 新增脚本自身是否 ≤300 行？⚠️ **不能**用 `node scripts/line-limits.mjs` 自己量 —— 它的扫描域**只有** `app/src` 与 `app/src-tauri/src`，**不含 `scripts/`**（刻意的边界：`.mjs` 不在本批口径内，见「未做（登记）」）。请直接量：`[System.IO.File]::ReadAllLines('scripts/line-limits.mjs', [Text.Encoding]::UTF8).Count`。
 
 ---
 
@@ -673,6 +676,7 @@ git commit -m "docs(versions): 0-C1 行数红线验收与门槛更正"
 - **15 个 >600 文件的拆分**：`0-C2`（`ClassroomPage.tsx` / `SessionDetailPanel.tsx` / `NoteListView.tsx` / `SessionListPanel.tsx` / `NotesPage.tsx`）与 `0-C3`（`lib.rs` / `types.rs` / `live_session_frame.rs` / `commands_ai_refine.rs` / `db_goals.rs` / `commands_goals.rs` / `ai_refine_task.rs` / `note_filter.rs` / `artifact_templates.rs` / `video_profile.rs`）。`0-C3` 含 `lib.rs`（AGENTS.md §10 需额外审查：Tauri command 注册边界）。
 - **`scripts/validate-all.mjs` 已失效**：它引用 `client/`、`server/ai-gateway` 等**本仓库不存在的目录**（重构前遗留），跑起来第一步即失败。并行审查曾建议把行数守卫挂进它 —— **该建议的前提不成立**（落点本身是坏的）。修它或删它属独立治理项。
 - **`REQ-201` 状态标注**、豁免表历史节的进一步精简：不属本批。
+- **扫描域不含 `scripts/` 与 `docs/`**：本批的口径域**只有** `app/src` + `app/src-tauri/src` 的 `.ts/.tsx/.rs`（868 个文件）。AGENTS.md §3 说"单文件 ≤300 行"字面上是**全仓**要求，故这是一处**有意的窄化**：`scripts/*.mjs`（现 62–238 行，均 ≤300）与 `docs/**` 未纳入登记表，也**不会**被守卫拦。若要扩域，须另立批次（并先把 `SOURCE_EXT` 与登记表节的措辞一起改）。
 
 ## 自审记录
 
