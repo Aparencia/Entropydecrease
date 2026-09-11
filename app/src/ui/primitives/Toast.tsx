@@ -24,8 +24,9 @@
  *    取消待回调、`closing` 归位（退场中 ⇒ `usePresence` 直回 `"entered"`，**不重放进场**，否则闪一下）、
  *    重新计时。`restartTimer` 先清后排 ⇒ 任意时刻**至多一个计时器**（「不排队」是机器可判的）。
  * ④ `durationMs <= 0` = **不自动消失**（何时收起只由父级 `open` 决定）。
- * ⑤ `action.onClick` **不自动消失**（撤销场景要用户看见结果）：点完仍挂在屏上，是否收起由调用方的
- *    `open` 决定；本组件不消费这次动作，也不因此重置计时。
+ * ⑤ `action.onClick` **既不自关、也不动计时器**（T9 评审实测后裁决的确定语义）：点完仍挂在屏上，
+ *    计时器**既不清、也不重排** ⇒ 到点仍会走退场并回调一次。**调用方必须在 `action.onClick` 里自己把
+ *    `open` 置 false** —— 否则用户点了"撤销"，toast 仍会自己消失（批 4 的撤销 toast 尤其要注意）。
  * ⑥ `durationMs` 变化只在**显示中**重新计时；退场中改它不取消退场（能取消退场的输入是 ③ 的
  *    `message` / `kind`，不含 `durationMs` —— 计划表如此）。
  * ⑦ 无障碍（§8.6.1 第 4 条）：`role="status"`；**只有 `err` 用 `aria-live="assertive"`**（唯一有
@@ -62,7 +63,8 @@ export interface ToastProps {
   kind?: ToastKind;
   /** 自动消失时长，默认 `3000`；**`<= 0` = 不自动消失**（规格 §5.3 的撤销 toast 用 10_000） */
   durationMs?: number;
-  /** 行动槽（撤销 / 重试）；不传则不渲染该按钮 */
+  /** 行动槽（撤销 / 重试）；不传则不渲染该按钮。**点击既不自关、也不重置计时**（见边界⑤）
+   *  ⇒ 调用方需要在 `onClick` 里自己置 `open=false`，否则到点仍会自动退场 */
   action?: ToastAction;
   /** **计时到点这类"自己消失"的退场**结束后的通知（恰好一次）；父级 `open=false` 不触发它 */
   onDismiss: () => void;

@@ -22,7 +22,11 @@
 .ed-toast {
   position: fixed;
   right: 18px;
-  /* 18px 与现状 4 套 toast 的落点一致（recon §3.2）—— 批 4 迁移时位置不得移动；
+  /* 本原语的**默认落点**：右下 18px。
+     ⚠️ 不声称"与现状 4 套 toast 一致"—— 实测它们彼此不一（`hooks/useTransientToast.tsx:58-61` 是右下 18，
+     `pages/SessionsPage.tsx:333-336` 是 `top:64/right:16`，`App.tsx:287-306` 与
+     `components/session-detail/SessionScreenCards.tsx:131-135` 根本不是浮层；`recon §3.2` 只记形态与时长，
+     未记坐标）。**迁移时每条 toast 的落点由它自己的场景决定**（本文件不为它们背书）。
      堆叠偏移留给批 6 的宿主按序赋值（见文件头接缝②），默认展开为 0px */
   bottom: calc(18px + var(--ed-toast-stack-offset, 0px));
   display: flex;

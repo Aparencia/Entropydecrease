@@ -1024,11 +1024,11 @@ return createPortal(
 | 计时到点 | 内部 `closing=true` ⇒ `phase="exit"`（140ms）；出场结束后 `onDismiss()` **只调用一次**（`dismissedRef` 防重） |
 | **显示中 `message`/`kind` 变化** | **接管**：清计时、若在 `exit` 则取消出场回 `entered`、重新计时（**不排队、不新开一条**） |
 | `durationMs` 变化 | 重新计时 |
-| `action.onClick` | 触发后**不自动消失**，由调用方的 `open` 决定（撤销场景需要用户看见结果） |
+| `action.onClick` | 触发后**既不自关、也不清/不重排计时器**（到点仍会走退场并回调一次）⇒ **调用方须在 `onClick` 里自己置 `open=false`**（撤销场景要用户看见结果）。⚠️ 2026-09-11 T9 评审后按实测行为定稿：原措辞"由调用方的 `open` 决定"会被读成"点了就自动关" |
 | 父级 `open=false` | 直接走出场（父级已知情，**不再**调 `onDismiss`） |
 | 卸载 | 清计时器（照 `useTransientToast.tsx:45-50` 的 cleanup 写法） |
 
-- [ ] **Step 1: 写失败测试（jsdom + fake timers）**：进入后 `role="status"` 存在 · `kind="err"` 时 `aria-live="assertive"`、其余 `"polite"` · `durationMs` 到点后先 `exit`（仍挂载）再卸载并**恰好一次** `onDismiss` · **打断用例**：出场期间改 `message` ⇒ 仍挂载、`data-phase` 回到 `entered`、旧计时器不再触发卸载 · **不排队用例**：连续改 3 次 message，`vi.getTimerCount()` 始终为 1 · `action` 渲染按钮且点击调 `onClick` 但**不卸载** · `zIndex` 断言 = `String(Z_TIER.toast)`
+- [ ] **Step 1: 写失败测试（jsdom + fake timers）**：进入后 `role="status"` 存在 · `kind="err"` 时 `aria-live="assertive"`、其余 `"polite"` · `durationMs` 到点后先 `exit`（仍挂载）再卸载并**恰好一次** `onDismiss` · **打断用例**：出场期间改 `message` ⇒ 仍挂载、`data-phase` 回到 `entered`、旧计时器不再触发卸载 · **不排队用例**：连续改 3 次 message，`vi.getTimerCount()` 始终为 1 · `action` 渲染按钮且点击调 `onClick` 但**不卸载**、**计时器不受影响**（推送时钟到 `durationMs` ⇒ 仍先 `exit`、兜底到点后卸载且 `onDismiss` 恰一次） · `zIndex` 断言 = `String(Z_TIER.toast)` · **退场时长两真源对拍**：`Toast.tsx` 的 `EXIT_MS` == `motion.css` 的 `--ed-dur-toast-out`（前者还决定 `usePresence` 的兜底窗口 +80ms）
 - [ ] **Step 2: 实现 + CSS**（`.ed-toast` 固定右下 `position: fixed; right: 18px; bottom: 18px`，三档 kind 配色走 token，`[data-phase]` 三态 + `.ed-toast-action`）
 - [ ] **Step 3: 门禁 + 提交**（commit `feat(ui): L1 原语 Toast（进出场 180/140 且可打断）`）
 

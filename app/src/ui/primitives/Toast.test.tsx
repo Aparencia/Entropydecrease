@@ -147,6 +147,23 @@ describe("① 渲染与语义契约", () => {
 });
 
 describe("② 自动消失与「恰好一次 onDismiss」", () => {
+  it("action 点击既不自关、也不动计时器 ⇒ 到点仍退场且 onDismiss 恰一次（调用方须自己置 open=false）", () => {
+    const onClick = vi.fn();
+    const onDismiss = vi.fn();
+    render(<Host open durationMs={3000} action={{ label: "撤销", onClick }} onDismiss={onDismiss} />);
+    settle();
+    tick(1000);
+    fireEvent.click(screen.getByRole("button", { name: "撤销" }));
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(toastOrNull(), "点击本身不关闭").not.toBeNull();
+    tick(2000); // t=3000：原计时器仍在（既没被清、也没被重排）⇒ 到点照样退场
+    expect(phase(), "点了 action 不等于把 toast 收起来").toBe("exit");
+    expect(onDismiss).not.toHaveBeenCalled();
+    tick(140 + 80); // 兜底窗口到点
+    expect(toastOrNull()).toBeNull();
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
   it("到点：先 exit 且仍挂载；transitionend 之后才卸载 + onDismiss 恰一次", () => {
     const onDismiss = vi.fn();
     render(<Host open durationMs={3000} onDismiss={onDismiss} />);
