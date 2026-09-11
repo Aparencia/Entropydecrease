@@ -15,7 +15,6 @@
 
 | 文件 | 行数 | 说明 | 拆分计划 |
 |---|---|---|---|
-| app/src-tauri/src/lib.rs | 1025 | 超硬限（>600 行），不允许豁免 —— Tauri 装配层（setup 初始化 + 决策链路 + command 注册 + 模块声明）；全部为声明与装配，拆分会破坏注册可读性；三维复审 #8 移除 opener 插件注册、新增 engine_worker 模块注册后再增；v0.13.1~5 知识体系模块/命令继续增——**注意：HEAD 即已 684 超 600 硬限（v0.12.x~v0.13.x 增长），本版 +19（v0.13.6 模块与命令注册），超限为预存债务** | **拆分计划（超硬限必须拆）**：command 注册清单拆至 app_commands.rs；v0.13.7 优先执行 |
 | app/src-tauri/src/types.rs | 1017 | 超硬限（>600 行），不允许豁免 —— 全局共享类型域 + 批 7 五命令结果契约（+59；登记值 958 过期快照——实测纠偏） | 若再增长：笔记与 OCR 块类型拆至 types_note.rs / types_ocr.rs（既有登记计划） |
 | app/src-tauri/src/live_session_frame.rs | 974 | 超硬限（>600 行），不允许豁免 —— 屏幕采样线程（采样循环/暂停隔离/播放器检测/tier 重评/视频档案重评）单单体函数——TD-24-A 拆分方案已登记（SessionFrameCtx 聚合 + 段落方法提取），本轮评估：与 lib.rs 同批后置 | 若再增长：按 Ctx 聚合方案拆至 live_session_frame_scan.rs |
 | app/src-tauri/src/commands_ai_refine.rs | 751 | 超硬限（>600 行），不允许豁免 —— v0.8.0 M2（REQ-141/145）+ F1/F2/F3：AI 精修命令域（成本预估/异步任务编排/状态/结果/采纳落库/任务历史/配额去重门控/成本硬拦截 + 任务注册表容量守卫）；任务执行已拆至 ai_refine_task.rs；L4 修复（落库失败日志）微增 | 若再增长：门控/拦截拆至 commands_ai_refine_gate.rs |
@@ -28,7 +27,6 @@
 | app/src-tauri/src/artifact_templates.rs | 632 | 超硬限（>600 行），不允许豁免 —— v0.5.0 M7（REQ-052）：五档案模板函数（讲义/步骤卡/摘要/对话纪要/会议纪要）内聚于同一模板域，各模板共享原料注入签名；v0.9.0 M5 叙事变体再增 | 若再增长：会议/访谈模板拆至 artifact_templates_meeting.rs |
 | app/src-tauri/src/video_profile.rs | 628 | 超硬限（>600 行），不允许豁免 —— v0.5.0 M1（REQ-043）：档案域（类型/检测投票/记忆偏好/JSON IO）内聚；档案常量数据已拆至 video_profile_data.rs；v0.9.0 M1 记忆库 kind 映射迁移 + v0.11.5 Task 5 四象限记忆后置判定（apply_profile_memory）再增；v0.13.6（REQ-222）领域记忆独立通道（DomainMemoryEntry/remember_domain/lookup_domain）+ platform_form 字段再增 | 若再增长：检测投票与记忆偏好拆至 video_profile_detect.rs |
 | app/src/components/SessionListPanel.tsx | 604 | 超硬限（>600 行），不允许豁免 —— v0.20.9 批 4（REQ-313）列表交互重写（选择模式/行右键/行内改名/批量栏）+ 审查修复轮 3（全选可见行基准/pending）净增——2026-09-09 实测纠偏（登记值 491 过期）；**超 600 硬限随 TD-2026-09-09-D 登记** | **超硬限必须拆**：批量操作栏与选择模式拆至 SessionSelectionToolbar.tsx（列表行已拆 SessionListRow.tsx） |
-| app/src/pages/NotesPage.tsx | 602 | 超硬限（>600 行），不允许豁免 —— 审查修复轮 3/4（refreshToken 透传/选区动作编排承接）净增越 600 硬限（599→602）——随 TD-2026-09-09-D 登记 | **超硬限必须拆**：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts（既有登记计划兑现） |
 
 ## 301–600 档（须登记）
 
@@ -36,6 +34,8 @@
 |---|---|---|---|
 | app/src-tauri/src/commands.rs | 597 | 命令装配域（AppState + 通用命令 + 导入管线编排）；登记值 466 过期快照——2026-09-09 实测纠偏（含批 7 delete_note 结果契约 +12；600 硬限内压线） | 若再增长：导入管线命令拆至 commands_import.rs（既有登记计划） |
 | app/src/pages/ChatPage.tsx | 593 | AI 对话页编排；批 1（REQ-306/307）active 门控/终态订阅接线净增——2026-09-09 实测纠偏（登记值 529 过期） | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
+| app/src/pages/NotesPage.tsx | 588 | 超硬限（>600 行），不允许豁免 —— 审查修复轮 3/4（refreshToken 透传/选区动作编排承接）净增越 600 硬限（599→602）——随 TD-2026-09-09-D 登记 | **超硬限必须拆**：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts（既有登记计划兑现） |
+| app/src-tauri/src/lib.rs | 577 | crate 根 321 `mod` + 16 `#[cfg]` = **337 行地板**；注册清单已移至 `app_commands.rs`（**数据文件**，同属 300–600 豁免带）—— 结构性下界，非欠账 | 已完成（批 0-C3 Task 1，2026-09-11）；余下 161 行模块理由注释 + 装配逻辑，无进一步拆分标的 |
 | app/src-tauri/src/db_migrations.rs | 573 | v0.20.11 批 6（REQ-315）再增：note_groups.pin ensure_column + note_group_orders 建表（+21，实测 573——登记值 492 过期；schema 单点收敛理由同左） | 若再增长：kb_* 与 chat_* 表 DDL 拆至 db_migrations_kb.rs |
 | app/src/types/knowledge.ts | 559 | 知识体系类型域（体系/节点/概念/模型/引用/审计/决策 + v0.13.8 画布契约 + v0.14.1 画布偏好枚举与下拉文案常量）——类型与文案常量同域防漂移（前端类型域拆分任务待执行） | 若再增长：画布偏好类型与文案拆至 types/canvas.ts |
 | app/src-tauri/src/capture/audio_loopback.rs | 558 | ADR-007 重连机制（重试循环/退避/恢复回调）内聚于捕获线程实现，拆出需跨函数传递 COM 生命周期参数，内聚性优先；2026-08 A1 硬暂停（端点 Stop/Start + 暂停时长补偿 + 残留缓冲清空）再增 | 若再增长：将 run_capture_inner 拆至 audio_loopback_session.rs |
@@ -49,6 +49,7 @@
 | app/src-tauri/src/video_profile_tests.rs | 518 | 档案测试域（12 档案断言矩阵 + 检测投票 + JSON 校准 + v0.13.6 领域记忆独立通道/旧 JSON 零迁移用例 + 审查回归（烘焙迁移/单字种子守卫））单模块 #[path] 挂载 | 若再增长：档案矩阵拆至 video_profile_data_tests.rs |
 | app/src/components/LiveActivityPanel.tsx | 517 | 实时活动面板：会话状态/转录流/OCR 预览/控制区多状态面板内聚（前端审查登记） | 若再增长：转录流与 OCR 预览拆至 LiveTranscriptStream.tsx / LiveOcrPreview.tsx |
 | app/src-tauri/src/ai_client.rs | 505 | v0.11.6 M1（AiClient::from_provider / from_settings_with_store / is_fallbackable / fallback_provider_ids）+ 2026-09-11 DeepSeek V4.1 适配（chat_plain 探活路径 / build_plain_payload / json 前置条件兜底接线 / thinking 策略落点 / 4xx 错误体透出——纯策略与提取逻辑已拆至 ai_request_policy.rs）——Provider 解析与错误分类内聚于 AiClient 域，构造入口与降级链纯函数同文件便于单测。**旧登记 322 为过期快照，本次按实测纠偏** | 若再增长：fallback_provider_ids 拆至 ai_fallback.rs；payload 构造族拆至 ai_payload.rs |
+| app/src-tauri/src/app_commands.rs | 503 | 宏约束下的**唯一**注册点：334 条 `generate_handler!` 条目是**数据不是逻辑** —— `Invoke` 按值语义使分域组合不可行（见文件头），拆成多份只会在域间新增「命令名 → 域」路由漂移面；一致性由 `scripts/check-command-registry.mjs` 机器门禁守 | 不拆（数据文件）；新增命令时同步条目，由门禁强制 |
 | app/src/components/GroupSidebar.test.tsx | 497 | 覆盖串组场景——切换 ⓘ 弹层目标组时表单态必须重置（key=group.id（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/db_sop.rs | 490 | v0.20.3（REQ-296/297）SOP 三表数据域（模板/run/步骤/保鲜/聚合）+ 审查加固（保链更新/幂等守卫/步数计数）内聚 | 若再增长：run 执行族拆至 db_sop_run.rs |
 | app/src-tauri/src/live_session_persist.rs | 488 | 定稿落库域（persist_final/digest_merged/handle_final_event）+ P2 flush_tail_and_persist（停止/暂停共用尾句落库）内聚 | 若再增长：flush_tail_and_persist 与 digest_merged 拆至 live_session_persist_tail.rs |
@@ -160,6 +161,7 @@
 
 ## 已拆分 / 登记移除记录
 
+> 已拆分：lib.rs（**1025 → 577 行**，批 0-C3 Task 1，2026-09-11）——`tauri::generate_handler![…]` 注册清单 450 行（334 条目 + 106 注释 + 10 条 `#[cfg(target_os="windows")]`）整体搬至 **app_commands.rs（503 行）**，条目只加 `crate::` 前缀（IPC 名 = 路径末段 ident，**零改名**）；`.plugin`/`.setup`/`.on_window_event`/`.run` 与 `punctuation_model` 一律留在 `run()`/`lib.rs`。**为什么不是 ≤300**：321 `mod` + 16 `#[cfg]` = **337 行地板**，`mod` 声明必须在 crate 根（挪进子模块会把全仓 `crate::x::y` 路径整体重写 = 违反行为等价）；`include!` 外移方案经评估**否决**（只是把 337 行挪个地方，且 crate 根的模块树不再可见）。⇒ lib.rs 停在 300–600 豁免带并如实登记本表；app_commands.rs 是**数据文件**（注册条目，非逻辑），同带登记。**机械等价证据**：`probe-registry-parity.mjs verify` = 334 条逐条相同（含 10 条 cfg 门控、顺序不变）；**行为等价**：`cargo test --test app_lib_tests` = 2357 passed / 0 failed / 6 ignored（与拆前一致）。**签名偏差（实测）**：`app_commands::handle()` 必须是具体 `tauri::Wry`，不能写成计划书的 `handle<R: Runtime>()` —— 334 条里有 13 条按值收 `AppHandle`（`commands_knowledge_core` 2 / `commands_window` 6 / `commands_overlay` 3 / `commands_asr_pass2` 2），泛型 `R` 下 `AppHandle<R>: CommandArg<'_, R>` 会被 rustc 退到 `Deserialize` 兜底 impl（13 × E0277），计划书给的 `Box<dyn Fn>` 退路同样是泛型、同样失败；`Builder::default()` 本就是 `Builder<Wry>`，故行为等价。**新增门禁**：`scripts/check-command-registry.mjs`（定义 ↔ 注册三向检查：漏 / 多 / 重名，含 `--self-test`）。
 > 已拆分：engine.rs（三维复审 #5 超时排空机制接入后逼近 600 行硬拆线）按登记计划将 worker 主循环与请求协议（AsrRequest/OcrRequest/双 worker 循环/词表纠错纯函数）拆至 engine_worker.rs（253 行）——engine.rs 回归 440 行（仍登记，300-600 区间），engine_worker.rs ≤300 行无需登记。
 > 已拆分：db.rs（2026-08-21 H3 硬拆，原 678 行超 600 硬限违规）：schema 建表 + ensure_column 列迁移拆至 db_migrations.rs（204 行），notes CRUD 拆至 db_notes.rs（216 行，测试迁至 db_notes_tests.rs 265 行）——db.rs 回归 72 行（Db 结构体/连接锁/with_conn/通用工具），三新文件均 ≤300 行，登记移除。M3 锁中毒恢复（with_conn + into_inner）随拆分一并落地。
 > 已拆分：live_session.rs（2026-08-21 Task #14 硬拆，实测 727 行超 600 硬限违规）：状态查询/控制方法簇（快照/暂停/停止/会话 id 查询）拆至 live_session_manager.rs（150 行），启动与预热生命周期（start/prepare/run_session/wait_prepared_ready）拆至 live_session_lifecycle.rs（288 行）——live_session.rs 回归 284 行（参数/结构体定义 + 构造 + run_session_after_engine 装配骨架），impl LiveSessionManager 跨文件分布，公共 API 签名零变化；三文件均 ≤300 行，登记移除。

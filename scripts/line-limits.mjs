@@ -30,7 +30,6 @@ export const SOFT_LIMIT = 300;
  * 每完成一个拆分（0-C2 / 0-C3），就从这里删掉对应一行。
  */
 export const FROZEN_OVER_LIMIT = [
-  'app/src-tauri/src/lib.rs',
   'app/src-tauri/src/types.rs',
   'app/src-tauri/src/live_session_frame.rs',
   'app/src-tauri/src/commands_ai_refine.rs',
@@ -43,7 +42,6 @@ export const FROZEN_OVER_LIMIT = [
   'app/src-tauri/src/artifact_templates.rs',
   'app/src-tauri/src/video_profile.rs',
   'app/src/components/SessionListPanel.tsx',
-  'app/src/pages/NotesPage.tsx',
 ];
 
 const toPosix = (p) => p.split(sep).join('/');
