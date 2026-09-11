@@ -26,11 +26,10 @@ import {
 } from "../hooks/useSessionListView";
 import { useSessionSearch } from "../hooks/useSessionSearch";
 import { useSessionSelection } from "../hooks/useSessionSelection";
-import SessionListRow from "./SessionListRow";
 import type { SessionRenameRequest } from "./SessionListRow";
 import SessionRowContextMenu from "./SessionRowContextMenu";
+import SessionListBody from "./SessionListBody";
 import SessionSearchBar from "./SessionSearchBar";
-import SessionSearchHits from "./SessionSearchHits";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 const selectStyle: React.CSSProperties = {
@@ -124,6 +123,9 @@ export default function SessionListPanel({
     setKeyword("");
   };
 
+  /** 分组折叠切换（列表区组头点击——原内联 setCollapsed 收敛于此，语义不变） */
+  const toggleCollapse = (course: string) => setCollapsed((c) => ({ ...c, [course]: !c[course] }));
+
   /** 批量转：先过滤出可转化集合（已转/进行中/无内容不在其中）；pending 防连点
    *（P3-2——onBatchConvert 允许返回 Promise：父层 invoke 完成前按钮保持禁用） */
   const runBatchConvert = async () => {
@@ -149,26 +151,6 @@ export default function SessionListPanel({
       setBatchBusy(null);
     }
   };
-
-  /** 行渲染（平铺/分组共用）；行内编辑与多选视觉在 SessionListRow */
-  const renderRow = (item: SessionListItem) => (
-    <SessionListRow
-      key={item.session.id}
-      item={item}
-      isOpen={openSessionId === item.session.id}
-      multiSelected={selected.has(item.session.id)}
-      canConvert={isSessionConvertible(item)}
-      renameRequest={renameReq}
-      onRenameEnd={() => setRenameReq(null)}
-      onRenamed={(id) => onSessionRenamed(id)}
-      showToast={showToast}
-      onOpen={rowOpen}
-      onModifierClick={rowModifier}
-      onContextMenu={(e, item) => setContextMenu({ item, x: e.clientX, y: e.clientY })}
-      onConvert={(it) => onConvert(it)}
-      onOpenNote={onOpenNote}
-    />
-  );
 
   const selectModeBtn = (on: boolean): React.CSSProperties => ({
     ...btn,
@@ -260,43 +242,32 @@ export default function SessionListPanel({
         </div>
       )}
 
-      {/* 列表区 */}
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-        {loading && items.length === 0 && (
-          <p style={{ fontSize: 12, color: "#9ca3af", padding: 16, textAlign: "center" }}>加载中…</p>
-        )}
-        {!loading && items.length === 0 && !hits && (
-          <p style={{ fontSize: 12, color: "#9ca3af", padding: 16, textAlign: "center" }}>
-            暂无会话，去「课堂助手」开始实时捕获
-          </p>
-        )}
-        {hits || ocrHits ? (
-          <SessionSearchHits hits={hits} ocrHits={ocrHits} searchKw={searchKw} onOpenDetail={onOpenDetail} />
-        ) : grouped && groupedView ? (
-          /* 课程分组（折叠 + 组内筛选排序） */
-          groupedView.map((g) => (
-            <div key={g.course}>
-              <div
-                onClick={() => setCollapsed((c) => ({ ...c, [g.course]: !c[g.course] }))}
-                style={{ padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#0f766e", cursor: "pointer", background: "#f8fafc", borderBottom: "1px solid #e5e7eb" }}
-              >
-                {collapsed[g.course] ? "▸" : "▾"} {g.course}（{g.sessions.length}）
-              </div>
-              {!collapsed[g.course] && g.sessions.map(renderRow)}
-            </div>
-          ))
-        ) : items.length > 0 && filtered.length === 0 ? (
-          /* 筛选无结果：给出清除入口 */
-          <p style={{ fontSize: 12, color: "#9ca3af", padding: 16, textAlign: "center" }}>
-            无匹配会话{" "}
-            <button style={{ ...btn, fontSize: 11 }} onClick={clearFilters}>
-              清除筛选
-            </button>
-          </p>
-        ) : (
-          filtered.map(renderRow)
-        )}
-      </div>
+      {/* 列表区（批 0-C2 拆至 components/SessionListBody） */}
+      <SessionListBody
+        loading={loading}
+        itemCount={items.length}
+        hits={hits}
+        ocrHits={ocrHits}
+        searchKw={searchKw}
+        grouped={grouped}
+        groupedView={groupedView}
+        collapsed={collapsed}
+        onToggleCollapse={toggleCollapse}
+        filtered={filtered}
+        onClearFilters={clearFilters}
+        onOpenDetail={onOpenDetail}
+        openSessionId={openSessionId}
+        selected={selected}
+        renameReq={renameReq}
+        onRenameEnd={() => setRenameReq(null)}
+        onSessionRenamed={onSessionRenamed}
+        showToast={showToast}
+        onRowOpen={rowOpen}
+        onRowModifier={rowModifier}
+        onRowContextMenu={(e, item) => setContextMenu({ item, x: e.clientX, y: e.clientY })}
+        onConvert={onConvert}
+        onOpenNote={onOpenNote}
+      />
 
       {/* 批量操作栏（出现后出现；段搜索命中视图隐藏——避免对不可见列表误操作） */}
       {!hits && !ocrHits && selected.size > 0 && (

@@ -96,7 +96,6 @@
 | app/src-tauri/src/commands_fragments.rs | 374 | 碎片命令域 + REQ-316（批 7）结果契约与组域条件广播（登记值缺失为漏登——HEAD 基线已 347，本次补） | 若再增长：碎片组操作命令族拆至 commands_fragments_group.rs |
 | app/src-tauri/src/analysis_tests.rs | 371 | 分析编排测试域（档案门控矩阵 + REQ-108 事件消费 + M2 三字段）单模块 #[path] 挂载 | 若再增长：事件消费组拆至 analysis_events_tests.rs |
 | app/src-tauri/src/commands_web_inbox.rs | 371 | v0.20.4（REQ-304）扩展收件命令域（起停/状态/HTTP 小循环/投递收口/图落盘）内聚；2026-09-06 实测登记（TD-2026-09-06-G） | 若再增长：HTTP 连接处理拆至 web_inbox_http.rs |
-| app/src/components/SessionListPanel.tsx | 371 | 超硬限（>600 行），不允许豁免 —— v0.20.9 批 4（REQ-313）列表交互重写（选择模式/行右键/行内改名/批量栏）+ 审查修复轮 3（全选可见行基准/pending）净增——2026-09-09 实测纠偏（登记值 491 过期）；**超 600 硬限随 TD-2026-09-09-D 登记** | **批 0-C2 Task 5 八文件边界**（原计划「批量栏 + 选择模式」只减 166 行 ⇒ 仍 ≈468 >300，不足）：`utils/sessionEligibility.ts`（可转化纯函数）· `hooks/useSessionSelection.ts`（选择态机 + visibleOrderRef + 裁剪 effect；**Esc 监听留面板**）· `hooks/useSessionListView.ts`（matchFilters/sorted/filtered/groupedView/visibleOrder）· `hooks/useSessionSearch.ts`（三模式搜索 + 两个 invoke 落点）· `components/SessionSearchBar.tsx`（三模式单输入框）· `components/SessionSearchHits.tsx`（段/画面命中视图）· `components/SessionListBody.tsx`（列表容器含 renderRow）· `components/SessionSelectionToolbar.tsx`（头部选择控件 + 底部批量栏）；列表行已拆 SessionListRow.tsx |
 | app/src-tauri/src/live_keyframes.rs | 370 | ① handle_full_frame：全帧画面要点落库 + 关键帧样本收集与（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/windows.rs | 370 | 窗口枚举/评分域 + v0.19.2（REQ-271/272）：CaptureWindow.zOrder/systemWindow 字段 + 抖音/快手/B站客户端评分表（+28）——枚举系统副作用与评分纯函数同域便于单测（既有模式） | 若再增长：z 序/系统标记纯函数拆至 windows_meta.rs |
 | app/src-tauri/src/commands_window.rs | 369 | 浮窗窗口命令域（v0.12.3 架构升级计划：全部窗口操作集中单文件）+ v0.12.6（ADR-025）显隐链路与全局快捷键三态切换核心（open/close/locked/topmost/toggle 核心 fn + 命令薄包装 + 状态机/序列化单测内联）；拆分需跨 fn 传递 AppHandle/State，内聚性优先 | 若再增长：浮窗核心逻辑拆至 float_core.rs（命令薄包装保留本文件） |
@@ -111,6 +110,7 @@
 | app/src/components/NoteLinkToSystem.tsx | 351 | v0.19.7（REQ-286）重构：挂体系选择器（体系下拉 + 三 tab + LinkEntityPicker 搜索树列表 + 三类内联轻建编排 + 既有反查/撤链/钳制语义保持）——实体选择/创建交互已下沉 LinkEntityPicker.tsx（134 行），本文件保留编排与数据装载内聚 | 若再增长：树行构建（flattenNodeRows）与实体装载拆至 useSystemEntities.ts hook |
 | app/src-tauri/src/commands_ai_settings.rs | 349 | AI 设置命令域（视图/密钥/授权/目标 AI） + v0.19.1 ai_set_kb_qa 最小面命令（+28）——read-modify-write 同域先例（ai_set_goal_plan）内聚 | 若再增长：kb/goal 最小面命令拆至 commands_ai_settings_extra.rs |
 | app/src-tauri/src/structure_models.rs | 343 | v0.5.0 模型版：模型清单/独立状态机下载器（进度事件/.part 原子写/按需启用三分类）+ 磁盘就绪判定（disk_done）内聚 | 若再增长：download_one 拆至 structure_download.rs |
+| app/src/components/SessionListPanel.tsx | 342 | 超硬限（>600 行），不允许豁免 —— v0.20.9 批 4（REQ-313）列表交互重写（选择模式/行右键/行内改名/批量栏）+ 审查修复轮 3（全选可见行基准/pending）净增——2026-09-09 实测纠偏（登记值 491 过期）；**超 600 硬限随 TD-2026-09-09-D 登记** | **批 0-C2 Task 5 八文件边界**（原计划「批量栏 + 选择模式」只减 166 行 ⇒ 仍 ≈468 >300，不足）：`utils/sessionEligibility.ts`（可转化纯函数）· `hooks/useSessionSelection.ts`（选择态机 + visibleOrderRef + 裁剪 effect；**Esc 监听留面板**）· `hooks/useSessionListView.ts`（matchFilters/sorted/filtered/groupedView/visibleOrder）· `hooks/useSessionSearch.ts`（三模式搜索 + 两个 invoke 落点）· `components/SessionSearchBar.tsx`（三模式单输入框）· `components/SessionSearchHits.tsx`（段/画面命中视图）· `components/SessionListBody.tsx`（列表容器含 renderRow）· `components/SessionSelectionToolbar.tsx`（头部选择控件 + 底部批量栏）；列表行已拆 SessionListRow.tsx |
 | app/src-tauri/src/db_ai_tasks.rs | 340 | 任务注册表在 AppState 内存（HashMap）——重启即失、未采纳（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/screen_merge_tests.rs | 339 | 屏级聚合/净化纯函数测试域（聚类/行合并/零跨度/图去重回归）单模块 #[path] 挂载 | 若再增长：净化组拆至 screen_merge_purify_tests.rs |
 | app/src-tauri/src/db_notes_tests.rs | 337 | db_notes.rs 单测域（15 例：笔记 CRUD/updated 倒序/搜索通配符转义/会话关联与旧库 ensure_column 迁移；全部走内存库，环境隔离铁律）——测试模块由 `#[cfg(test)] #[path]` 单点挂载（db_notes.rs:365），H3 硬拆时由原 db.rs 的 tests 模块整体迁入（语义不变）。**本条目由生成器补登（该文件无 @ai-context 头注释），理由为 2026-09-11 重建时人工补写** | 若再增长：会话关联与迁移用例拆至 db_notes_link_tests.rs |
@@ -151,6 +151,7 @@
 | app/src-tauri/src/commands_knowledge_systems.rs | 306 | 本层只做参数校验、调用数据层、错误映射（AGENTS.md §6）；编排逻辑（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/db_session_refine.rs | 306 | 原料 session_segments 不可变（ADR-030 决策 5 可逆契约延续）——（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/note_diff.rs | 304 | 纯函数：按行（块）比较 before/after，三态标记 unchanged/（自动摘取，待细化） | 若再增长：按职责拆分 |
+| app/src/components/ClassroomCapturePanel.tsx | 303 | 纯展示适配器 —— 采集生命周期（active/starting/pending/sessionId/（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src/components/SecondPassPanel.tsx | 303 | 会话结束后把 S4 落盘音频全窗重跑 SenseVoice（后端 second_pass_* 命令），（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/region_ocr.rs | 302 | 原始帧 → LayoutAnalyzer → 区域列表 → 逐区域裁剪（内存 crop + 边距）（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/series_detect.rs | 301 | 从窗口标题/文件名剥离"系列名 + 集号"（B站分P `P3`/`第3集`/`EP03`/（自动摘取，待细化） | 若再增长：按职责拆分 |
