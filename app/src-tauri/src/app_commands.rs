@@ -393,12 +393,12 @@ pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync
         crate::commands_ai_providers::ai_provider_test,
         // v0.8.0 M2（REQ-141/145 + REQ-143 基础版）：会话→笔记 AI 精修——
         // 成本预估/异步任务/状态/结果/采纳落库
-        crate::commands_ai_refine::ai_refine_estimate,
-        crate::commands_ai_refine::ai_refine_start,
-        crate::commands_ai_refine::ai_refine_status,
-        crate::commands_ai_refine::ai_refine_strategy_meta,
-        crate::commands_ai_refine::ai_refine_prompt_preview,
-        crate::commands_ai_refine::ai_refine_result,
+        crate::commands_ai_refine::session::ai_refine_estimate,
+        crate::commands_ai_refine::session::ai_refine_start,
+        crate::commands_ai_refine::session::ai_refine_status,
+        crate::commands_ai_refine::session::ai_refine_strategy_meta,
+        crate::commands_ai_refine::session::ai_refine_prompt_preview,
+        crate::commands_ai_refine::session::ai_refine_result,
         crate::commands_ai_refine::ai_refine_apply,
         crate::commands_ai_refine::workbench::refine_workbench,
         // v0.17.0（REQ-246）：笔记级 AI 精修——估计/启动/采纳（手写笔记）
