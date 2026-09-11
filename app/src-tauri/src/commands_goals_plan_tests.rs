@@ -1,6 +1,7 @@
 //! commands_goals_plan 单测（确认流落库/体系链接/概念弱信号——内存库）。
 
-use crate::commands_goals::{create_goal_inner, GoalCreateInput};
+use crate::commands_goals::create_goal_inner;
+use crate::commands_goals::intent::GoalCreateInput;
 use crate::db::Db;
 use crate::goal_schema::NewMilestone;
 use crate::types::NewNoteGroup;

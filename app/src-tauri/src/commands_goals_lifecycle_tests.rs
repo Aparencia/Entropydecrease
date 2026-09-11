@@ -1,7 +1,8 @@
 //! commands_goals_lifecycle 单测（毕业仪式守卫矩阵/回顾流/放弃/档案——内存库）。
 
+use crate::commands_goals::create_goal_inner;
+use crate::commands_goals::intent::{GoalCreateInput, GoalMilestoneInput};
 use crate::commands_goals::milestones::set_goal_milestone_status_inner;
-use crate::commands_goals::{create_goal_inner, GoalCreateInput, GoalMilestoneInput};
 use crate::commands_goals_lifecycle::{
     goal_abandon_inner, goal_retro_inner, goal_settle_inner, list_goal_graduations_inner,
 };

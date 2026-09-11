@@ -3,23 +3,26 @@
 //! @ai-context: 本层只做参数校验、调用数据层/纯函数、错误映射（AGENTS.md §6）。
 //!              访谈校验：第 1/3 问必答（访谈模式 tier+scenario 缺一即拒）；
 //!              快速模式（tier=None）判据走默认档——「访谈绝不允许变成负担」。
-//! @ai-context: 埋点（metrics_events kind 扩展契约）：goal_created /
-//!              goal_milestone_done（M1 写）；self_test_passed/failed 仅登记
+//! @ai-context: 埋点（metrics_events kind 扩展契约）：goal_created（本文件写）/
+//!              goal_milestone_done（commands_goals_milestones.rs 写）；
+//!              self_test_passed/failed 仅登记
 //!              占位契约（M3 真实化），本版不写。
 //! @ai-context: inner 函数统一收 &Db（commands_groups/commands_settlement 先例）
 //!              ——内存库单测直连，不构造重量级 AppState。
+//! @ai-context: 职责分布（批 0-C3 Task 6 拆出 3 个平铺子模块，`#[path]` 由本文件自己
+//!              声明 ⇒ lib.rs 的 `mod commands_goals;` 零改动）：读侧视图 → views；
+//!              里程碑与目标↔组绑定写入 → milestones；访谈输入契约与归一 → intent。
 
-use serde::Deserialize;
 use tauri::State;
 
 use crate::commands::{normalize_title, AppState};
+use crate::commands_goals::intent::{bounded, build_intent, parse_domain, GoalCreateInput};
 use crate::db::{unix_seconds, Db};
 use crate::goal_interview::{derive_criteria, horizon_end_secs};
 use crate::goal_progress::GoalSignals;
 use crate::goal_schema::{
-    Goal, GoalIntent, NewGoal, NewMilestone, SuccessCriteria, CRITERIA_MANUAL, TIER_DEFAULT,
+    Goal, NewGoal, NewMilestone, SuccessCriteria, CRITERIA_MANUAL, TIER_DEFAULT,
 };
-use crate::video_profile_domain::DomainKind;
 
 /// 读侧视图层（5 个视图 DTO + 3 条读命令 + 3 个读 inner；0 emit）。
 /// `pub(crate)`：注册清单在 app_commands.rs（crate 根的兄弟模块）按 `commands_goals::views::x` 解析。
@@ -31,54 +34,13 @@ pub(crate) mod views;
 #[path = "commands_goals_milestones.rs"]
 pub(crate) mod milestones;
 
+/// 访谈输入契约与归一（2 个输入 DTO + 4 个纯助手；无命令、无 DB、无 IO）。
+/// `pub(crate)`：父模块与 `commands_goals_lifecycle_tests.rs` / `_plan_tests.rs` 按名导入。
+#[path = "commands_goals_intent.rs"]
+pub(crate) mod intent;
+
 /// 一周秒数（草案 due_at 换算：第 N 周 = created_at + N*7d）。
 const WEEK_SECS: i64 = 7 * 86_400;
-/// 访谈答案文本上限（防御超大 payload；chips/填空兜底的答案均为短文本）。
-const INTENT_FIELD_MAX: usize = 200;
-
-/// 新建目标入参（前端访谈结果全量提交；serde camelCase 契约）。
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GoalCreateInput {
-    pub name: String,
-    #[serde(default)]
-    pub domain_tag: Option<String>,
-    /// 时限（3m/6m/none/2w；None=未填）
-    #[serde(default)]
-    pub horizon: Option<String>,
-    /// 判据档位（None=快速模式→默认档）
-    #[serde(default)]
-    pub tier: Option<String>,
-    #[serde(default)]
-    pub scenario: Option<String>,
-    #[serde(default)]
-    pub level: Option<String>,
-    #[serde(default)]
-    pub driver: Option<String>,
-    #[serde(default)]
-    pub criteria_statement: Option<String>,
-    #[serde(default)]
-    pub non_scope: Option<String>,
-    #[serde(default)]
-    pub weekly_commitment: Option<String>,
-    #[serde(default)]
-    pub obstacles: Option<String>,
-    /// 初始绑定组（访谈第 4 步预勾选）
-    #[serde(default)]
-    pub group_ids: Vec<i64>,
-    /// 里程碑草案（宣言页预填可删改；due_weeks=0 无期限）
-    #[serde(default)]
-    pub milestones: Vec<GoalMilestoneInput>,
-}
-
-/// 里程碑草案输入。
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GoalMilestoneInput {
-    pub title: String,
-    #[serde(default)]
-    pub due_weeks: usize,
-}
 
 /// 新建目标（访谈确认后一步创建——status=active，无 draft 仪式）。
 #[tauri::command]
@@ -293,40 +255,6 @@ pub(crate) fn update_goal_status_inner(db: &Db, id: i64, status: &str) -> Result
         return Err(format!("非法状态转移: {} → {}", goal.status, status));
     }
     db.set_goal_status(id, status).map_err(|e| e.to_string())
-}
-
-/// 领域标签校验（与 commands_groups 同口径：kebab-case 白名单；空 → None）。
-fn parse_domain(domain_tag: Option<&str>) -> Result<Option<String>, String> {
-    match domain_tag {
-        Some(t) if !t.trim().is_empty() => DomainKind::parse(t.trim())
-            .map(|k| Some(k.as_str().to_string()))
-            .ok_or_else(|| format!("不支持的领域标签: {}", t)),
-        _ => Ok(None),
-    }
-}
-
-/// 空白串归一为 None（访谈答案「跳过/以后想」的存储语义：不落空串）。
-fn trimmed(s: Option<&str>) -> Option<String> {
-    s.map(str::trim).filter(|v| !v.is_empty()).map(str::to_string)
-}
-
-/// 访谈答案：空白归一 + 长度截断（防超大 payload 入库；truncate 保留前 200 字）。
-fn bounded(s: Option<&str>) -> Option<String> {
-    trimmed(s).map(|v| v.chars().take(INTENT_FIELD_MAX).collect())
-}
-
-/// 访谈答案 → GoalIntent（全部可选字段过 bounded 归一）。
-fn build_intent(input: &GoalCreateInput) -> GoalIntent {
-    GoalIntent {
-        scenario: bounded(input.scenario.as_deref()),
-        level: bounded(input.level.as_deref()),
-        driver: bounded(input.driver.as_deref()),
-        criteria_statement: bounded(input.criteria_statement.as_deref()),
-        horizon: bounded(input.horizon.as_deref()),
-        non_scope: bounded(input.non_scope.as_deref()),
-        weekly_commitment: bounded(input.weekly_commitment.as_deref()),
-        obstacles: bounded(input.obstacles.as_deref()),
-    }
 }
 
 /// 进度信号收集（详情/列表共用——口径单一；lifecycle 命令组复用）。
