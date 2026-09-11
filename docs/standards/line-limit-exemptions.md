@@ -32,7 +32,6 @@
 |---|---|---|---|
 | app/src-tauri/src/commands.rs | 597 | 命令装配域（AppState + 通用命令 + 导入管线编排）；登记值 466 过期快照——2026-09-09 实测纠偏（含批 7 delete_note 结果契约 +12；600 硬限内压线） | 若再增长：导入管线命令拆至 commands_import.rs（既有登记计划） |
 | app/src/pages/ChatPage.tsx | 593 | AI 对话页编排；批 1（REQ-306/307）active 门控/终态订阅接线净增——2026-09-09 实测纠偏（登记值 529 过期） | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
-| app/src/components/NoteListView.tsx | 582 | 超硬限（>600 行），不允许豁免 —— v0.20.12 批 7 接线 + 审查修复轮 4（refreshToken 组序重拉）净增（646→654）——**超 600 硬限随 TD-2026-09-09-A 登记（值刷新）** | **超硬限必须拆**：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
 | app/src-tauri/src/lib.rs | 577 | crate 根 321 `mod` + 16 `#[cfg]` = **337 行地板**；注册清单已移至 `app_commands.rs`（**数据文件**，同属 300–600 豁免带）—— 结构性下界，非欠账 | 已完成（批 0-C3 Task 1，2026-09-11）；余下 161 行模块理由注释 + 装配逻辑，无进一步拆分标的 |
 | app/src-tauri/src/db_migrations.rs | 573 | v0.20.11 批 6（REQ-315）再增：note_groups.pin ensure_column + note_group_orders 建表（+21，实测 573——登记值 492 过期；schema 单点收敛理由同左） | 若再增长：kb_* 与 chat_* 表 DDL 拆至 db_migrations_kb.rs |
 | app/src/types/knowledge.ts | 559 | 知识体系类型域（体系/节点/概念/模型/引用/审计/决策 + v0.13.8 画布契约 + v0.14.1 画布偏好枚举与下拉文案常量）——类型与文案常量同域防漂移（前端类型域拆分任务待执行） | 若再增长：画布偏好类型与文案拆至 types/canvas.ts |
@@ -61,6 +60,7 @@
 | app/src/components/KnowledgeCanvasView.tsx | 466 | v0.13.8 画布主视图（RF 装配/拖拽防抖保存/视口持久化/自动排列）；v0.13.9 根卡 + 接线方向动态化；v0.14.1 布局/连线下拉 + 偏好读写（+72 行）+ 审查修复（布局 effect 原子化拆分建边 effect/prefsLoaded 控件门控/hasCore 统一 +31 行）——RF 状态与持久化编排内聚（元素构建已拆至 canvasElements/layout* 纯函数） | 若再增长：偏好读写与下拉拆至 useCanvasPrefs.ts；位置持久化拆至 useCanvasPositions.ts |
 | app/src-tauri/src/streaming_asr_tests.rs | 462 | 流式 ASR 测试域（端点处理/静音判定/段切分回归）单模块 #[path] 挂载 | 若再增长：端点处理组拆至 streaming_endpoint_tests.rs |
 | app/src-tauri/src/structure_note_tests.rs | 458 | v0.7.6（REQ-177~181）：结构渲染层单测域（章节插入位置/命名窗口/词汇表排序上限锚点/零回归护栏/JSON 往返）单模块 #[path] 挂载 | 若再增长：词汇表组拆至 structure_note_glossary_tests.rs |
+| app/src/components/NoteListView.tsx | 450 | 超硬限（>600 行），不允许豁免 —— v0.20.12 批 7 接线 + 审查修复轮 4（refreshToken 组序重拉）净增（646→654）——**超 600 硬限随 TD-2026-09-09-A 登记（值刷新）** | **超硬限必须拆**：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
 | app/src-tauri/src/db_note_group_clean_tests.rs | 447 | REQ-316（批 7）测试域：判定表（自动/系列/手动/改判/五类残留/影响面外/级联卫生）+ 写路径集成 16 例，单模块 #[path] 挂载 | 若再增长：写路径集成组拆至 db_note_group_clean_flow_tests.rs |
 | app/src-tauri/src/commands_session.rs | 443 | v0.6.0 M6 + v0.7.6 审查硬拆后回归：会话命令域（CRUD/质量报告/课程分组/段搜索）内聚；笔记转换管线已拆至 commands_session_note.rs；M2 修复（search_ocr_blocks 传 data_dir 参数） | 若再增长：course/search 拆至 commands_session_extra.rs |
 | app/src-tauri/src/symbol_normalize.rs | 443 | v0.6.0 M1（REQ-060）：口语符号映射域（映射表/上下文守卫/中文数字解析）内聚；数字解析与守卫共享字符判定 | 若再增长：parse_chinese_number/replace_number_runs 拆至 symbol_numbers.rs |
@@ -126,7 +126,6 @@
 | app/src-tauri/src/image_store.rs | 330 | 会话目录本地存图（关键图/参考图集/缩略图走廊三级）：（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/subtitle.rs | 328 | L1 外挂字幕（.srt/.ass/.vtt）纯文本解析，零第三方依赖——（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/commands_ai_chat.rs | 324 | v0.16 对话命令域 + v0.19.1（REQ-260）检索分支薄壳（纯聊链路零改动；kb 编排已拆至 commands_ai_chat_kb.rs 267 行）——检索分流点与 run_stream 共用会话编排上下文 | 若再增长：run_stream 与纯聊发送拆至 commands_ai_chat_plain.rs |
-| app/src-tauri/src/types.rs | 324 | 拆分进行中（批 0-C3 Task 2）：原 1017 行全局共享类型域已按域拆出 types_session.rs / types_knowledge.rs；本文件现为 `#[path]` 门面 + 尚未搬出的域，终态 ≈27 行纯门面（6 个子模块 + 6 个 `pub use`，crate::types::X 全仓 236 处引用零改动） | S3 types_note.rs → S4 types_ocr.rs → S5 types_extract.rs → S6 types_decision.rs（v0.13.8 画布契约随 decision 以满足 ≤300）；每步一个提交 |
 | app/src/components/EnrichPanel.tsx | 324 | 与精修语义分开：精修=处理已有内容，补充=生成新内容（模型（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src/components/NoteReadingView.tsx | 322 | v0.20.13 批 8（REQ-317）正文选区右键菜单接线（正文容器 ref 化 + 选区判定/全选 + 共享菜单渲染，259→316）——选区纯逻辑已拆 utils/noteSelectionMenu.ts 与 note-selection/SelectionActionMenu.tsx，本文件仅留宿主接线 | 若再增长：搜索态/选区态/大纲态拆至 useNoteReadingViewState.ts |
 | app/src-tauri/src/ai_note_refine.rs | 321 | v0.8.0 M2 + REQ-290①：精修适配器域（提示词装配/请求响应类型/非流式 refine/流式 NDJSON 逐节/预算接线）+ 2026-09-11 provider 策略落体（流式拍不走 post_completions）；协议与适配器同域便于 schema v2 一致性 | 若再增长：流式 NDJSON 路径拆至 ai_note_refine_stream.rs |

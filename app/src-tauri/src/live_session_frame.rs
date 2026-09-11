@@ -24,6 +24,8 @@ use crate::live_frame_process::{
 };
 use crate::subtitle_ocr::SubtitleVoter;
 
+use live_session_liveness::{liveness_check, watchdog_paused_probe};
+
 /// 采样节拍（ms）：与音频消费解耦，固定 1s 一拍（审查 M5 修复）。
 const SAMPLE_TICK_MS: u64 = 1000;
 /// 采样线程轮询休眠（ms）——空转粒度，影响停止响应延迟。
@@ -41,93 +43,9 @@ pub struct LatestCapturedFrame {
     pub height: u32,
 }
 
-// ── REQ-281（v0.19.6）：帧心跳 / 停更提示事件载荷 ──
-
-/// live:frame-heartbeat 载荷（诊断观测：后端/帧到达/静默秒数/目标可见性）。
-#[derive(serde::Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct FrameHeartbeatPayload {
-    backend: String,
-    got_frame: bool,
-    silent_secs: u64,
-    visible: bool,
-}
-
-/// live:frame-stalled 载荷（停更秒数——前端提示语）。
-#[derive(serde::Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct FrameStalledPayload {
-    silent_secs: u64,
-}
-
-/// REQ-281 停更监测副作用执行点（真实采样拍后调用一次）：
-///
-/// @ai-context: 判定语义（frame_liveness 纯状态机）：仅 WGC 窗口捕获模式判停
-///              （DXGI 无帧=桌面无变化属正常，不重建不提示）；目标不可见时
-///              清提示不动作（最小化/遮挡另有既有 window-lost/用户感知路径）。
-///              心跳每 2s 一报（含后端名/帧到达/静默秒数/可见性——真机复现
-///              诊断与停更提示共用同一信号源）。
-#[allow(clippy::too_many_arguments)]
-fn liveness_check(
-    app: &tauri::AppHandle,
-    mut screen: Option<&mut ScreenCaptureSampler>,
-    liveness: &mut crate::frame_liveness::FrameLiveness,
-    got_frame: bool,
-    now: Instant,
-) {
-    let backend = screen
-        .as_ref()
-        .map(|s| s.backend_name().to_string())
-        .unwrap_or_else(|| "none".to_string());
-    let visible = screen.as_ref().is_none_or(|s| s.target_visible());
-    let silent_secs = liveness.stall_secs(now).unwrap_or(0);
-
-    // 心跳（独立于停更判定——诊断观测恒可用）
-    if liveness.heartbeat_due(now) {
-        liveness.mark_heartbeat(now);
-        let _ = app.emit(
-            "live:frame-heartbeat",
-            FrameHeartbeatPayload {
-                backend: backend.clone(),
-                got_frame,
-                silent_secs,
-                visible,
-            },
-        );
-    }
-
-    // 非 WGC/无窗口：无"停更"语义（DXGI 超时=桌面无变化）；残留提示清掉
-    if backend != "wgc" || !visible {
-        if liveness.stalled {
-            liveness.clear_stalled();
-            let _ = app.emit("live:frame-recovered", ());
-        }
-        return;
-    }
-
-    liveness.observe(now, got_frame);
-    if liveness.recover_edge(got_frame) {
-        liveness.clear_stalled();
-        let _ = app.emit("live:frame-recovered", ());
-        return;
-    }
-    if liveness.stall_edge(now) {
-        liveness.mark_stalled();
-        let _ = app.emit(
-            "live:frame-stalled",
-            FrameStalledPayload {
-                silent_secs: liveness.stall_secs(now).unwrap_or(0),
-            },
-        );
-    }
-    // 停更且到重建节流窗口 → WGC 会话自愈（用户复现=视频在动画面停更）
-    if !got_frame && liveness.recreate_due(now) {
-        if let Some(s) = screen.as_mut() {
-            s.revive_wgc();
-        }
-        liveness.mark_recreate(now);
-    }
-}
+/// REQ-281 停更监测（停更判定/心跳载荷/WGC 自愈；本文件 ≤300 行，AGENTS.md §3）。
+#[path = "live_session_liveness.rs"]
+pub(super) mod live_session_liveness;
 
 /// REQ-291：媒体级"最近有声"判定（窗口=SOUND_RECENT_MS ≥ 采样拍 1s——
 /// 保证一拍内出现的声音必被读到；锁中毒按无声处理，零阻断）。
@@ -147,32 +65,6 @@ fn media_sound_recent(slot: &Arc<Mutex<Option<Instant>>>) -> bool {
 ///              不真恢复 → 视频恢复播放 → 自动真恢复。
 fn light_poll_enabled(cond: crate::pause_state::PauseConditions) -> bool {
     !cond.manual && (cond.media || cond.foreground)
-}
-
-/// 审查 F3：自动暂停期 watchdog 探针（无提示无心跳——暂停语义下停更提示无
-/// 意义；仅做观测 + WGC 自愈）。防复合卡死：暂停期间 WGC 会话失活（REQ-281
-/// 原场景）→ 恢复检测读不到新帧 → 永久卡自动暂停；此处探针周期性复活会话。
-/// P2-4：轻量轮询扩到 fg 暂停期后探针随之覆盖 fg 期（视频暂停/画面停更期间
-/// 同样需要 WGC 自愈；探针只观测 + 复活，任意暂停期无提示副作用）。
-fn watchdog_paused_probe(
-    mut screen: Option<&mut ScreenCaptureSampler>,
-    liveness: &mut crate::frame_liveness::FrameLiveness,
-    got_frame: bool,
-    now: Instant,
-) {
-    let Some(_) = screen.as_mut() else { return };
-    liveness.observe(now, got_frame);
-    let wgc = screen.as_ref().is_some_and(|s| s.backend_name() == "wgc");
-    let visible = screen.as_ref().is_none_or(|s| s.target_visible());
-    if !wgc || !visible || got_frame {
-        return;
-    }
-    if liveness.recreate_due(now) {
-        if let Some(s) = screen.as_mut() {
-            s.revive_wgc();
-        }
-        liveness.mark_recreate(now);
-    }
 }
 
 /// 屏幕采样线程入口（TD-026 修复：OCR 从会话线程移出，音频消费不再被阻塞）。
