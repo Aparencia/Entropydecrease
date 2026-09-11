@@ -211,7 +211,7 @@
 > **批 0-D（L1 原语层 + 批 1 删除批）新增文件记录 —— 全部 ≤300 行，无需登记**（2026-09-11，Task 14 收尾）。本节只**追加人工记录行**：收尾时 `node scripts/line-limits.mjs --full` 本就绿（`>600` 硬限 **0** · 301–600 档 **125** · 登记条目 **125**），故**未跑 `--write`**（避免把并行任务的在飞行连带提交）；本节数字与棘轮名单、301–600 档表**均无改动**。
 >
 > ⚠️ **来源标记：本节是人工维护的记录块，非机器生成** —— 数值写成 Markdown **引用行**（`> - ` 起首，形如 `> - 文件：**N**`），而 `parseTable()` 只认 4 列 `| path | N | … |` 表行（引用行一律忽略）；且本块位于 `## 已拆分` 标题**之后**，`parseHistory()` 对该节**逐字保留** ⇒ `--write` 永远既不重算也不删除它，数值过期后**没有任何门禁会报警**（2026-09-11 已发现 Loading / StatusLine 共 6 个值过期，实测更正）。
-> **刷新规则：本节与 `docs/adr/ADR-033-l1-primitives-and-view-layer-contract.md`、`docs/superpowers/specs/2026-09-11-frontend-redesign-design.md` 三处副本不一致时，一律在 HEAD 按 `countLines()` 口径（含空行）重新实测，并以实测值同步全部副本。**
+> **刷新规则：本节与 `docs/adr/ADR-033-l1-primitives-and-view-layer-contract.md`、`docs/superpowers/specs/2026-09-11-frontend-redesign-design.md` 三处副本不一致时，一律在 HEAD 按 `countLines()` 口径（含空行）重新实测，并以实测值同步全部副本。机器锚点：三处副本的每处数值行后紧跟一行 HTML 注释 `<!-- line-count-src: files=… caliber=… authority=… -->`，供门禁按 `files=` 逐个在 HEAD 重测、与相邻数值行对拍 —— 锚点内**刻意不写数值**，否则等于又造一份手抄副本。**
 >
 > **新建目录 `app/src/ui/primitives/` 下 42 个文件**（实测行数口径 = `scripts/line-limits.mjs` 的 `countLines()`，即含空行的全部行数；**最大 297**）：
 > - `Text`：`Text.tsx` **89** · `Text.css` **46** · `Text.test.tsx` **130**
@@ -224,9 +224,11 @@
 > - `Loading`/`Skeleton`/`Probe`：`Loading.tsx` **105** · `Loading.css` **79** · `Loading.test.tsx` **238**
 > - `StatusLine`：`StatusLine.tsx` **94** · `StatusLine.css` **42** · `StatusLine.test.tsx` **267**
 > - `usePresence`：`usePresence.ts` **200** · `usePresence.test.tsx` **282** · `usePresence.node.test.ts` **71**
-> - 接缝 / 导出面 / 守卫：`motion.css` **74** · `index.ts` **45** · `style-seams.test.ts` **271** · `style-contract.test.ts` **214** · `motion-coverage.test.ts` **145**
+> - 接缝 / 导出面 / 守卫：`motion.css` **74** · `index.ts` **45** · `style-seams.test.ts` **271** · `style-contract.test.ts` **214** · `motion-coverage.test.ts` **147**
+> <!-- line-count-src: files=app/src/ui/primitives/motion.css,app/src/ui/primitives/index.ts,app/src/ui/primitives/style-seams.test.ts,app/src/ui/primitives/style-contract.test.ts,app/src/ui/primitives/motion-coverage.test.ts caliber=countLines@scripts/line-limits.mjs authority=HEAD-remeasurement -->
 >
-> **★ 一次真实的口径事件（记在此以免被当成"新文件登记豁免"的先例）**：收尾实施者最初把 Task 14 的全部守卫**追加**进 `style-seams.test.ts` ⇒ 该文件涨到 **340 行 > 300**，`--full` **exit 1**（`(c) 超过 300 行但未登记`），**会拦下全仓所有人的提交**。处置**照批 0-D 裁决**：**不用 `--write` 登记豁免**（登记表/棘轮是给**存量**文件的历史债机制），而是**按语义拆** —— 「原语 CSS **文本**反例」（零颜色字面量 · `--ed-stamp` 不作底色）留在 `style-seams.test.ts`；「**跨文件**契约」（CSS 接线 · 联合契约锚 · 退场时长三方对拍）落 `style-contract.test.ts`；「**reduced-motion 覆盖**」（基类名单 · **动画落点含伪元素**）另立 `motion-coverage.test.ts`（T11 评审 Critical 修好后追加的那条守卫再次逼近 300 行红线，遂二次按语义拆）。三个文件 **271 / 214 / 145** 行、职责写进各自 `@ai-context` 文件头，T3/T4/T12 已追加的 describe **逐条保留**（追加式演进）。
+> **★ 一次真实的口径事件（记在此以免被当成"新文件登记豁免"的先例）**：收尾实施者最初把 Task 14 的全部守卫**追加**进 `style-seams.test.ts` ⇒ 该文件涨到 **340 行 > 300**，`--full` **exit 1**（`(c) 超过 300 行但未登记`），**会拦下全仓所有人的提交**。处置**照批 0-D 裁决**：**不用 `--write` 登记豁免**（登记表/棘轮是给**存量**文件的历史债机制），而是**按语义拆** —— 「原语 CSS **文本**反例」（零颜色字面量 · `--ed-stamp` 不作底色）留在 `style-seams.test.ts`；「**跨文件**契约」（CSS 接线 · 联合契约锚 · 退场时长三方对拍）落 `style-contract.test.ts`；「**reduced-motion 覆盖**」（基类名单 · **动画落点含伪元素**）另立 `motion-coverage.test.ts`（T11 评审 Critical 修好后追加的那条守卫再次逼近 300 行红线，遂二次按语义拆）。三个文件 **271 / 214 / 147** 行、职责写进各自 `@ai-context` 文件头，T3/T4/T12 已追加的 describe **逐条保留**（追加式演进）。
+> <!-- line-count-src: files=app/src/ui/primitives/style-seams.test.ts,app/src/ui/primitives/style-contract.test.ts,app/src/ui/primitives/motion-coverage.test.ts caliber=countLines@scripts/line-limits.mjs authority=HEAD-remeasurement -->
 >
 > **本批配套改动（不涉行数登记，仅为溯源）**：① `--ed-shadow-1/2` 定值（亮档投影 / **暗档反相描边** `0 0 0 1px rgba(255,255,255,.06)`）落在生成器真源 `app/scripts/gen-tokens.mjs` 与产物 `app/src/ui/tokens.css`（`--ed-shadow-card` 被取代，实测 0 处代码引用 ⇒ 不留兼容别名）；② **`ui/tokens.css` 入口接线** = `app/src/main.tsx:5` 的 `import "./ui/tokens.css";`（此前该文件从未被 import ⇒ 原语的 `var(--ed-*)` 运行时无值；该文件只有 `:root`/`[data-theme]` 自定义属性、无选择器 ⇒ 零视觉变化；防回归断言在 `tokens.drift.test.ts`）；③ `--ed-due` 亮档第二次修正 `#A05F10 → #9F5E10`（剪报底 4.4950 → **4.5571**，纸 4.9309 / 面 5.1436）；④ **守卫**（零颜色字面量 · `--ed-stamp` 不作底色 · reduced-motion **基类名单** · CSS 接线）+ 三条补充判据（联合契约锚 · 退场时长三方对拍 · **`animation` 落点含伪元素必须逐字进 reduced-motion 名单**）落在上述三个 `.test.ts`；⑤ `app/src/App.css`（123 行、非 UTF-8、**从未被 import** 的死样式）由 Task 13 删除 —— 它**本就不在** 301–600 档表内（`.css` 不在 `SOURCE_EXT` 管辖内），故删除对计数的贡献为 **0**。
 >

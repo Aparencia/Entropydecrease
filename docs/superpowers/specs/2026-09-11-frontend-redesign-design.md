@@ -230,7 +230,8 @@
 > | `Loading` / `Skeleton` / `Probe` | `Loading.tsx` 105 · `Loading.css` 79 · `Loading.test.tsx` 238 |
 > | `StatusLine` | `StatusLine.tsx` 94 · `StatusLine.css` 42 · `StatusLine.test.tsx` 267 |
 > | 共享内核 | `usePresence.ts` 200 · `usePresence.test.tsx` 282 · `usePresence.node.test.ts` 71 · `useFocusTrap.ts` 122 · `useFocusTrap.test.tsx` 236 · `ime.ts` 18 · `ime.test.ts` 32 |
-> | 接缝 / 导出面 / 守卫 | `motion.css` 74 · `index.ts` 45 · `style-seams.test.ts` 271 · `style-contract.test.ts` 214 · `motion-coverage.test.ts` 145 |
+> | 接缝 / 导出面 / 守卫 | `motion.css` 74 · `index.ts` 45 · `style-seams.test.ts` 271 · `style-contract.test.ts` 214 · `motion-coverage.test.ts` 147 |
+> <!-- line-count-src: files=app/src/ui/primitives/motion.css,app/src/ui/primitives/index.ts,app/src/ui/primitives/style-seams.test.ts,app/src/ui/primitives/style-contract.test.ts,app/src/ui/primitives/motion-coverage.test.ts caliber=countLines@scripts/line-limits.mjs authority=HEAD-remeasurement -->
 >
 > **行数口径（唯一有效）**：`countLines()`，即 `[System.IO.File]::ReadAllLines(path, UTF8).Count` —— **含空行**的全部行数（禁用 `Get-Content` / `Measure-Object -Line` / 数 `0x0A` 字节）。
 > **权威来源**：逐文件数值以机器生成的 [行数豁免登记](../../standards/line-limit-exemptions.md) 为准（`node scripts/line-limits.mjs --write` 生成、`--full` 校验，**不要手改其数字**）；本表只是**人读摘要**。
