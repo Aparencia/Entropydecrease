@@ -1,17 +1,17 @@
 /**
- * NotesPage — v0.12.2 笔记页三栏编排层（信息架构重构）。
+ * NotesPage — 笔记页三栏编排层（v0.12.2 信息架构重构；批 0-C2 Task 1 拆分后只留
+ * 编排：页面态 + 三栏/覆盖层装配 + 页面级动作）。
  *
- * @ai-context: 三栏分工（规划 §2）——GroupSidebar（240px 组筛选/快速记录/
- *              收件箱入口）+ 中部列表（收件箱视图 ↔ NoteListView 原位切换，
- *              布局不变）+ 右栏阅读/编辑（NoteReadingView）。groupFilter
- *              只做过滤——组行单击不再有展开动作（决策 1 三元分离）。
- * @ai-context: 收件箱动线（决策 2 二元论）——碎片=原料；升笔记成功后
- *              onPromoted 打开新笔记（右侧闭环可见），碎片即时从收件箱移除；
- *              未归组笔记在「全部笔记」可见（两种实体两条动线）。
- * @ai-context: H3 辅助面板插槽（VersionPanel/EnrichPanel）与 H1 任务回写、
- *              Ctrl+E/ESC、图片预览均沿用 v0.11.x 语义。v0.20.10（批 5）：
- *              复习面已剥离为顶层「🔄 复习」Tab——本页不再宿主 Overlay，
- *              ⓘ「复习本组」改为跨页深链（onOpenReview 透传 App 转页预选）。
+ * @ai-context: 逻辑归属——列表数据/过滤态/组与标签色/刷新中枢在 `useNotesListData`
+ *              （refreshToken/seqRef/handleNoteChanged 同一真源）；编辑态与
+ *              Ctrl+E/ESC 在 `useNotesPageEditing`；跨页深链在 `useNotesDeepLink`；
+ *              删除与清理留痕在 `useNotesBatchActions`；SE 封存在
+ *              `useNotesSealedFilter`；三栏与覆盖层是 `components/notes/` 下的薄
+ *              适配器（各自的 @ai-context 承载细节与 DOM 边界）。
+ * @ai-context: 页面级语义——groupFilter 只做过滤（组行单击不展开，决策 1 三元分离）；
+ *              碎片升笔记成功后 onPromoted 打开新笔记闭环、未归组笔记在「全部笔记」
+ *              可见（决策 2 二元论）；复习面已剥离为顶层 Tab —— ⓘ「复习本组」是
+ *              跨页深链（onOpenReview 透传 App 转页预选，本页不宿主 Overlay）。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
