@@ -28,10 +28,5 @@
     "husky": "9.1.7",
     "lint-staged": "15.5.0",
     "semantic-release": "24.2.3"
-  },
-  "lint-staged": {
-    "docs/**/*.md": "node scripts/docs-check.mjs",
-    "app/**/*.{ts,tsx,rs}": "node scripts/line-limits.mjs",
-    "{package.json,scripts/line-limits.mjs,docs/standards/line-limit-exemptions.md}": "node scripts/line-limits.mjs --full"
   }
 }

@@ -1,9 +1,16 @@
-# Why: lint-staged 默认 stash:true + hidePartiallyStaged:true，而它的**失败路径**是
-#   `git reset --hard HEAD` → 再靠 `git stash apply --index <备份>` 把工作树还原 → 最后 drop 掉
-#   那份备份（`git stash list` 随即为空，只剩一个悬空 commit）。即：工作树先被整体清掉、
-#   还原再不成立就当场丢在制品（控制方实测到过丢改动；本机实测到过整文件被 CRLF 化）。
-#   本批是多代理并发 + 常带未暂存改动 ⇒ 门禁在任何路径上都不得碰工作树。
-#   `--no-stash` 让 lint-staged 完全不碰工作树/索引（且上游 implies 关掉 hide）；
-#   这里把 `--no-hide-partially-staged` 也写死，避免将来 imply 变化后悄悄退回
-#   "藏了未暂存部分却没有备份可还原"（那条路失败时必丢）。
-npx lint-staged --no-stash --no-hide-partially-staged
+# Why（2026-09-11 终局评审后重接）：**绕开 lint-staged，直跑全树校验**。
+#   ① 两个检查都是**全树只读扫描**，且**忽略传入的文件参数**（`line-limits.mjs` 只认
+#      `--write` / `--full`）⇒ lint-staged「把暂存文件列表交给命令」的语义对它们**零贡献**，
+#      却带进 stash / `git reset --hard` / hide / auto-stage / `.git/lint-staged_unstaged.patch`
+#      一整类风险（`lint-staged@15.5.0` 的失败路径曾把未暂存改动丢出工作树，见
+#      docs/versions/v0.22.md「工具链真相 2」）。
+#   ② 这里用 `--full`：让**本地与 CI 同口径**守 (e)「登记值 == 实测值」。`--full` 是**只读**的
+#      （写登记表只走 `--write`），故它**不会**逼人每次提交重生成表。
+#   ③ 门禁**每次都跑全树**，不再依赖 `package.json` 的 glob：旧接线只在暂存到
+#      `{package.json, scripts/line-limits.mjs, docs/standards/line-limit-exemptions.md}` 之一时
+#      才跑 `--full`（只暂存一个改动过的源文件时该段 0 files / SKIPPED ⇒ (e) 在本地全时绿灯），
+#      而 glob `app/**/*.{ts,tsx,rs}` 命中的 **872** 个 tracked 文件也**大于**脚本扫描域的 **868** 个
+#      （差 `app/src-tauri/build.rs`、`app/src-tauri/examples/capture_ocr_diag.rs`、`app/vite.config.ts`、
+#      `app/vitest.config.ts`）⇒「命令跑了、这 4 个文件却没被看见」。直跑全树把这两处一起消掉。
+#   `&&` 串联：任一失败即以非零退出，husky 拦下提交（不吞前一段的退出码）。
+node scripts/line-limits.mjs --full && node scripts/docs-check.mjs

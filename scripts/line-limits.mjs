@@ -12,6 +12,7 @@
  * 「立刻为零」—— 拆分是 0-C2/C3 的事，本脚本负责让违规**不再增加**且**可见**。
  *
  * 用法：node scripts/line-limits.mjs [--write|--full]
+ * 忽略任何传入的文件参数，**永远全树扫描**（门禁因此不必依赖 glob —— 旧 glob 的命中集还大于扫描域）。
  */
 import { readdirSync, readFileSync, statSync, writeFileSync, existsSync } from 'node:fs';
 import { join, relative, dirname, sep, resolve } from 'node:path';
@@ -56,7 +57,8 @@ const stripOverPrefix = (t) =>
 
 /**
  * 行数口径的**唯一实现**：全部行数（含空行）。
- * 与 [System.IO.File]::ReadAllLines(path, UTF8).Count 等价：末尾换行不额外算一行。
+ * 与 [System.IO.File]::ReadAllLines(path, UTF8).Count 对**全部常规文本**等价（末尾换行不额外算一行）；
+ * 例外仅两处（评审 15 例边界比对中唯二不等，仓内 0 命中）：纯 `\r` 分行（无 `\n`）的文件、内容只有 BOM 的文件。
  */
 export function countLines(absPath) {
   const s = readFileSync(absPath, 'utf8');
@@ -285,7 +287,7 @@ function check({ full }) {
     console.error(`\n现状：>${HARD_LIMIT} 硬限 ${over}/${FROZEN_OVER_LIMIT.length}（棘轮）· ${SOFT_LIMIT+1}–${HARD_LIMIT} 档 ${band} · 登记条目 ${rows.length}`);
     process.exit(1);
   }
-  console.log(`✅ line-limits（${mode}）：>${HARD_LIMIT} 硬限 ${over}（棘轮内）· ${SOFT_LIMIT+1}–${HARD_LIMIT} 档 ${band} · 登记条目 ${rows.length}`);
+  console.log(`✅ line-limits（${mode}${full ? ' · 数值一致' : ''}）：>${HARD_LIMIT} 硬限 ${over}（棘轮内）· ${SOFT_LIMIT+1}–${HARD_LIMIT} 档 ${band} · 登记条目 ${rows.length}`);
 }
 
 // 主入口判定：**必须**用 fileURLToPath + resolve 比较。
