@@ -17,7 +17,17 @@
 - **行为等价**：纯搬运。不改逻辑、不改 SQL/`PRAGMA`/schema、不改 `serde` 属性与**字段声明顺序**（= JSON 键序）、不改 IPC 命令名与事件名、不改超时/重试/取消参数、**不改锁的粒度与加锁顺序**、不改文案、不顺手修 bug、不顺手清理 `dead_code`。
 - **★ Rust 侧只有一条可用测试门禁**：`cd app/src-tauri && cargo test --test app_lib_tests`（`Cargo.toml` 里 `[[test]] name = "app_lib_tests" path = "src/lib.rs"` 且 `[lib] test = false` ⇒ **`cargo test --lib` 根本不存在**，别把它当成"测试挂了"；本机 ONNX DLL 冲突那条路与本批无关）。基线：**2357 passed / 0 failed / 6 ignored**。
 - **`cargo clippy` 有预存失败**：本批之前就有 **15 个 error**（`-D warnings` 口径）⇒ 判据是「**错误数不增加**」，开工先录基线、收工再比一次。
-- **顺序硬约束：`lib.rs` 必须第一个拆**。其余 9 个文件每拆一个都要给 `lib.rs` 加 1–2 行 `mod`，而 `lib.rs` 现在 **1025 行 >600** —— 不先把它降到 ≤600，就是在往"未拆完的 >600 文件"里加代码（v0.22 红线）。
+- **顺序：`lib.rs` 第一个拆**（不是因为别人依赖它 —— 见下条，新模块**不必**进 `lib.rs`），而是因为它的注册清单改动是本批**最高危、唯一会静默失败**的一处（334 条、漏一条只有真机报 `command not found`），要在没有其他改动干扰时一次做干净、并当场建好注册一致性门禁。
+- **★ 新模块的声明位置（本批统一口径，与 `lib.rs` 无关）**：新文件由**父模块自己**用 `#[path]` 声明，**不动 `lib.rs` 的 `mod` 块**：
+  ```rust
+  /// <为什么拆出来>（≤300 行约束 / AGENTS.md §3）
+  #[path = "note_filter_chain.rs"]
+  mod note_filter_chain;
+  ```
+  本仓先例：`streaming_asr.rs:31`（`#[path = "streaming_endpoint.rs"] mod endpoint;`）、`watermark_filter.rs:178`（`#[path = "watermark_cluster.rs"] mod watermark_cluster;`）。
+  **理由**：① `lib.rs` 是 AGENTS.md §10 的额外审查文件（IPC 安全边界），少动一次少一次审查面；② 避免多个拆分任务在同一段 `mod` 块里互相冲突（分析 `note-filter` 的 U6 就点了这条）；③ 子模块路径在**父文件所在目录**解析 = `src/`，所以文件仍是平铺的 `src/<name>.rs`。
+  ⚠️ 若不用 `#[path]`：`src/types.rs` 里的 `mod foo;` 会去找 `src/types/foo.rs`（**不是** `src/foo.rs`）—— 这是最容易踩的编译错误。子目录形态（`src/ai_refine_task/workers.rs`）同样用 `#[path = "ai_refine_task/workers.rs"]` 或让父文件变 `mod.rs`；**两种都可以，但都必须由父模块声明**。
+  ⇒ 由此推论：`types.rs` 的门面、`db_goals.rs` 的 `#[path]` 子模块、`ai_refine_task/` 子目录都能**独立于 `lib.rs` 的拆分进展**开工。
 - **★ 门禁现在每次提交都跑数值一致性**：`.husky/pre-commit` = `node scripts/line-limits.mjs --full && node scripts/docs-check.mjs`（本批会再加一条注册一致性检查）。⇒ **每个拆分提交都必须同时带上刷新后的登记表**，否则 `(e)` 会拦下你的提交。
 - **多步拆分的门禁时机**（与 `0-C2` 同一条规则，逐字适用）：主文件**仍 >600** 时那条 `FROZEN_OVER_LIMIT` **必须留着**；一旦**降到 ≤600**，那条**必须立刻删掉**并在**同一个提交**里 `node scripts/line-limits.mjs --write` 刷新登记表。每步提交前先量行数再决定「不改 / 删棘轮行 + 刷表」。
 - **提交纪律**：`git add <显式路径>`（**禁止** `git add -A`）· **禁止** `git stash`（本仓无 `.gitattributes` 且 `core.autocrlf=true`，会把源码变 CRLF）· **禁止** `git checkout -- <file>` 回滚 · **禁止** `--no-verify` · **切勿** `git gc --prune=now`（悬空备份 commit 是丢改动时唯一的找回途径）· 提交信息 Conventional Commits，subject ≤50 字。
@@ -47,8 +57,8 @@
 | 6 | `app/src-tauri/src/commands_goals.rs` | 673 | ⏳ | 注册清单路径须同步 |
 | 7 | `app/src-tauri/src/ai_refine_task.rs` | 670 | ⏳ | 线程/锁/取消语义 |
 | 8 | `app/src-tauri/src/note_filter.rs` | 642 | ⏳ | 测试面厚 |
-| 9 | `app/src-tauri/src/artifact_templates.rs` | 632 | ⏳ | 字面量为主 |
-| 10 | `app/src-tauri/src/video_profile.rs` | 628 | ⏳ | 枚举 ↔ 前后端字面量契约 |
+| 9 | `app/src-tauri/src/artifact_templates.rs` | 632 | ✅ `analysis-artifact-templates.md` | 按**档案族**拆（**不是**字面量文件 —— 见 Task 9 的口径纠偏）；代码帧子域留主文件 |
+| 10 | `app/src-tauri/src/video_profile.rs` | 628 | ✅ `analysis-video-profile.md` | 枚举 ↔ 前后端字面量契约 |
 
 ---
 
@@ -148,9 +158,10 @@ node scripts/line-limits.mjs --full
 
 **Files:**
 - Modify: `app/src-tauri/src/types.rs`（终态 = 门面：模块文档 + `mod` 声明 + `pub use …::*;`）
-- Create（**6 个，全部 ≤300**）：`types_session.rs`(~135) · `types_knowledge.rs`(~245) · `types_note.rs`(~230) · `types_ocr.rs`(~82) · `types_extract.rs`(~68) · `types_decision.rs`(~75)
+- Create（**6 个，全部 ≤300，平铺 `src/`**）：`types_session.rs`(~135) · `types_knowledge.rs`(~245) · `types_note.rs`(~230) · `types_ocr.rs`(~82) · `types_extract.rs`(~68) · `types_decision.rs`(~75)
+- 声明方式：**在 `types.rs` 里用 `#[path]` 声明**（`#[path = "types_session.rs"] mod types_session;` …×6 + `pub use types_session::*;` …×6）—— **`lib.rs:469` 的 `mod types;` 不动**，也**不要**指望 `mod types_session;` 能解析到 `src/types_session.rs`（它会去找 `src/types/types_session.rs`）
 - Consumes: 分析报告；**引用面 157 个文件 / 236 处 `crate::types::…`（92 非测试 + 65 测试）⇒ 一处都不改**
-- Produces: 上述 6 个模块 + 门面；`lib.rs:469` 的 `mod types;` **不动**
+- Produces: 上述 6 个模块 + 门面；`crate::types::X` 对全仓可见性**完全等价**（门面再导出）
 
 **★ 裁决（分析 D1–D5）**：**D1 `pub use` 门面**（改引用点 0 处；禁「顺手把 `crate::types::X` 改成 `crate::types_note::X`」——那会把一次搬运变成 236 处编辑 + 双份回归面）· **D2 6 文件**（不建 `types_learning.rs`，待 `types_note` 超 ~250 行再摘）· **D3 保留 `types_extract.rs`**（ADR-004 已定性为引擎层内存态）· **D4 只给门面补 `@ai-context`，不改任何字段级注释**；契约快照测试**单独一个提交**（不与搬运混提，否则失败无法二分）· **D5 一步一文件一提交**。
 
@@ -189,7 +200,7 @@ node scripts/line-limits.mjs --full
 - Modify: `app/src-tauri/src/live_session_frame.rs`
 - Create（6 个，200–250 行区间，全 ≤300）：`live_session_liveness.rs`(~120) · `live_frame_worker_state.rs`(~240) · `live_session_pause_poll.rs`(~230) · `live_player_probe.rs`(~230) · `live_profile_runtime.rs`(~250) · `live_frame_consume.rs`(~220)
 - Consumes: 分析报告；调用点 `live_session.rs:305`；测试模块 `live_session_frame_tests.rs`（49 行 / 4 例）
-- Produces: 上述 6 个模块；`run_screen_worker` 的**公共签名与调用点保持不变**（改由 `FrameWorkerState` 聚合上下文 + 分文件 `impl`）
+- Produces: 上述 6 个模块（**由 `live_session_frame.rs` 自己用 `#[path]` 声明，不动 `lib.rs` 的 `mod` 块**）；`run_screen_worker` 的**公共签名与调用点保持不变**（改由 `FrameWorkerState` 聚合上下文 + 分文件 `impl`；`impl` 与被 impl 的类型同 crate 即可，模块不同不影响）
 
 **★ 裁决（分析 D1–D7）**：**D1 命名守 §10**：碰屏幕/暂停/隐私的用 `live_session_*`（liveness、pause_poll、consume），纯档案/领域决策用 `live_profile_runtime.rs` —— **不得为规避 §10 额外审查而取名 `live_frame_*`** · **D2 采用 `FrameWorkerState`**（20 参数 → 1；登记表 TD-24-A 既定方案）+ 分文件 `impl` · **D3 不修** 816–875 / 451–476 的长锁窗口（持锁做 CV + 落库 + IPC；改锁粒度 = 并发行为变更）⇒ 单独立项 · **D4 `LatestCapturedFrame` 不迁**（6 处跨 5 文件引用 + 命令层查询路径）· **D5 `light_poll_enabled` 随函数迁到 `live_session_pause_poll_tests.rs`**（否则 `use super::*` 断链 + 丢 2 个真值表用例）；`bgra_*` 两测归 `region_ocr` 所有，留原处 · **D6 不碰**其他 300–600 文件（如 `live_frame_process.rs` 529，出界）· **D7 抽 `FrameWorkerState::compensated_epoch()`**（纯读 `SeqCst`），三处调用时机不变（393 在暂停分支内、902 在收尾）。
 
@@ -227,7 +238,7 @@ node scripts/line-limits.mjs --full
 - Modify: `app/src-tauri/src/note_filter.rs`（终态 ≈240–255，≤300 ⇒ 登记条目整行删除）
 - Create（3 个，平铺 `src/`）：`note_filter_render.rs`(~140) · `note_filter_purify.rs`(~118) · `note_filter_chain.rs`(~185)
 - Consumes: 分析报告；域内测试 62 例（本文件挂载 25 例 = tests 11 + golden 14）
-- Produces: 上述 3 个模块 + `lib.rs` 新增 3 行 `mod`
+- Produces: 上述 3 个模块（**由 `note_filter.rs` 用 `#[path]` 声明，不动 `lib.rs` 的 `mod` 块**）
 
 **★ 裁决（分析 D1–D7）**：**D1 平铺顶层同级文件**（本仓既有形态；不用目录模块）· **D2 3 个文件**（**2 步不可达**：最大双单元 295 < 需搬 342）· **D3 叶子优先步序**（S1 render → S2 purify → S3 chain）· **D4 允许把必要的私有 fn 放宽到 `pub(crate)`**（9 个私有 fn 零直测，放宽不破测试；**只放宽必要的**，不整片改可见性）· **D5 再导出用 `pub(crate) use` 与项可见性 1:1**（`pub use` 再导出 `pub(crate)` 项会撞 E0365；分析未编译验证，按可见性对齐最稳）· **D6 6 条既有缺陷只搬不改**（含 `filter_note_empty` 丢 `env`、`refresh_screen_points` 对 `BodySource::Web` 退化为标题仅）· **D7 一步一提交**。
 
@@ -250,11 +261,37 @@ node scripts/line-limits.mjs --full
 
 ---
 
-<!-- 剩余：Task 4–7 / 9（commands_ai_refine.rs 751 / db_goals.rs 707 / commands_goals.rs 673 / ai_refine_task.rs 670 /
-     artifact_templates.rs 632）按同一模式补入 —— **补入前不得派发该任务的实施者**。
-     已落盘分析：lib-rs(189) · types-rs(178) · live-session-frame(159) · video-profile(258) · note-filter(239)。
-     ⚠️ 分析 note-filter 的 U6 提醒：**与 lib.rs 并行拆分会在 lib.rs 同一段插 `mod` 行而冲突** ——
-     本计划已用「lib.rs 必须第一个拆」消解（lib.rs 落定后其余任务才允许追加 `mod`）。 -->
+### Task 9: 拆 `app/src-tauri/src/artifact_templates.rs`（632 → ≈218）
+
+> **边界取自**：`.../analysis-artifact-templates.md`（303 行：20 个顶层项、字面量 vs 逻辑行数统计、17 个用例的断言覆盖、风险 R1/R3）。
+> ⚠️ **口径纠偏（分析实测推翻了我的初判）**：本文件**不是**模板正文字面量文件 —— 多行字面量 / raw string / `{{}}` / `{0}` / `%s` / emoji **全部 0 命中**，产物可见文本字面量仅 **8 行 / 约 69 字符 / 1.3%**，纯逻辑 **485 行**。⇒ **按「档案族」拆**，实施者不要去翻不存在的模板正文块、更不要自行发明边界。
+
+**Files:**
+- Modify: `app/src-tauri/src/artifact_templates.rs`（终态 ≈218）
+- Create（2 个，平铺 `src/`）：`artifact_templates_visual.rs`(~205：lecture + hands_on + step_cards，私有回退随 569 闭合组) · `artifact_templates_voice.rs`(~236：talking_head + storytelling + interview + meeting，私有回退随 196 闭合组)
+- 声明方式：**在 `artifact_templates.rs` 内用 `#[path]` 声明**（`#[path = "artifact_templates_visual.rs"] mod visual;`）—— **不动 `lib.rs`**
+- Consumes: 分析报告；唯一生产消费者 `commands_artifacts.rs:13,45`；测试直接调用 `code_blocks` / 构造 `CodeFrame`
+- Produces: 上述 2 个模块；`pub` 面仅 3 项（`CodeFrame` 403 / `code_blocks` 421 / `build_artifact` 578）**可见性不得变**
+
+**★ 裁决（分析 D1–D5）**：**D1 布局 = `#[path]` 平铺同级文件**（本批统一口径；分析给的 A 案「`artifact_templates.rs` + `artifact_templates/` 子目录」仓内 0 先例、C 案要动 `lib.rs`）· **D2 2 个文件** · **D3 一步做完**（最小可行 = **1 步**：单提交即 ≤300，地板 ≈218）· **D4 代码帧子域 398–534（137 行）留主文件**（测试直接调用，移出就得改已登记的 423 行测试文件）· **D5 不补测试**（出界，另立条目）。
+
+**分步（单提交）**：抽 2 个文件 → 主文件 ≈218（≤600 **且** ≤300）⇒ **同一个提交里删 `FROZEN_OVER_LIMIT` 的 `artifact_templates.rs` 行 + `--write`**（≤600 会触发守卫 (b)；≤300 ⇒ 档位行不生成）。验收后 `>600` 计数应为 **13 / 123 / 137**。
+
+**★ 等价核对（第一优先 = 输出文本没有金值拦网）**
+1. **17 个用例对输出文本零断言**：`"# {}"` / `"本章小结 @ {}ms"` / `"full/{}.webp"` / `"步骤 {}"` / `"{}（{}）"` 全无整串快照（只有 292 行的 code 文本、368 行的 label 有金值）⇒ **改一个字符测试照样绿**。**必须 `git diff` 逐行核对这 8 行字面量**（26 / 34 / 104 / 143 / 388 / 132 / 549 / 556；其中含全角括号的恰 1 行 = 556）。
+2. 全文件 **CRLF** ⇒ **禁止任何 formatter 触碰**这两处新老文件（本机没有 prettier 管辖权，但手工重排/去尾空格同样会改字节）。
+3. 档案族归属：`lecture_blocks`(18–112，最大单元 95 行) / `meeting_blocks`(66) / `talking_head_blocks`(63) 等按族整块搬，**不按函数大小硬切**。
+4. `build_artifact` 的分派臂与私有回退（196、569 闭合组）**必须与它调用的族函数同侧可见**（子模块可用 `super::` 访问父模块私有项；父模块调子模块项需 `pub(super)`）。
+
+**验证**：`cargo test --test app_lib_tests`（`artifact_templates` 用例数不减，含全 13 kind 矩阵）· `cargo build` · `cargo clippy`（不增）· `node scripts/line-limits.mjs --full`。
+**报告**：`.../task-9-report.md`。
+
+---
+
+<!-- 剩余：Task 4–7（commands_ai_refine.rs 751 / db_goals.rs 707 / commands_goals.rs 673 / ai_refine_task.rs 670）
+     按同一模式补入 —— **补入前不得派发该任务的实施者**。
+     已落盘分析（8 份）：lib-rs(189) · types-rs(178) · live-session-frame(159) · commands-ai-refine(⏳) · db-goals(255) ·
+     commands-goals(⏳) · ai-refine-task(278) · note-filter(239) · artifact-templates(303) · video-profile(258)。 -->
 
 ---
 
@@ -266,7 +303,7 @@ node scripts/line-limits.mjs --full
 - Modify: `app/src-tauri/src/video_profile.rs`
 - Create（2 个）：`video_profile_detect.rs`(~150) · `video_profile_memory.rs`(~230)
 - Consumes: 分析报告；落库值消费方 `live_session_lifecycle.rs:68` / `ai_refine_task.rs:318` / `artifact_templates.rs:624`；前端独立真值表 `app/src/types/live.ts:110–124` + `ProfileDetector.tsx:29/57/73/373`
-- Produces: 上述 2 个模块；`lib.rs:475` 的 `mod video_profile;` 不动 + 新增 2 行 `mod`
+- Produces: 上述 2 个模块（**由 `video_profile.rs` 用 `#[path]` 声明，不动 `lib.rs` 的 `mod` 块**）
 
 **★ 裁决（分析 D1–D6）**：**D1 采用职责横切**（每档参数表 v0.5.0 已抽到 `video_profile_data.rs`，按档横切无标的；与登记表既定名 `video_profile_detect.rs` 吻合）· **D2 做满 2 步**（无地板障碍）· **D3 `apply_profile_memory` 象限③「需确认时记忆反而生效」是已裁决行为，禁止顺手修** · **D4 不拆测试文件**（`video_profile_tests.rs` 属 300–600 档，出界）· **D5 命名 = `video_profile_detect.rs` / `video_profile_memory.rs`** · **D6 顶层同级文件 + `lib.rs` 加 2 行 `mod`**（`lib.rs` 已在 Task 1 降到 ≤600 ⇒ 追加合规；**不用**目录模块）。
 
