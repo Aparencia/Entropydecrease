@@ -12,7 +12,7 @@
  *       它，由 `style-seams.test.ts` 的「Surface 盒子契约」机器守。
  *
  * 暗档策略（继承 token 层，本文件不写第二条规则）：`--ed-shadow-1` 在 `[data-theme="dark"]` 里
- * 是 `0 0 0 1px rgba(255,255,255,.06)` 的**反相白描边**（暗底上黑色投影不可见）⇒ hover 的
+ * 是**反相白描边**（暗底上黑色投影不可见；具体值见 `ui/tokens.css`，本文件不重复色值）⇒ hover 的
  * 「升起」在暗档自动退化为**边框墨度**的推进（`--ed-border` → `--ed-border-strong`）。
  */
 
