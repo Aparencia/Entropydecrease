@@ -13,9 +13,15 @@ use rusqlite::{params, Connection};
 use crate::db::{unix_seconds, Db};
 use crate::error::Result;
 use crate::goal_schema::{
-    Goal, GoalMilestone, NewGoal, NewMilestone, CRITERIA_GROUP_SETTLED, MILESTONE_DONE,
+    Goal, NewGoal, NewMilestone, CRITERIA_GROUP_SETTLED, MILESTONE_DONE,
     MILESTONE_IN_PROGRESS, MILESTONE_PENDING,
 };
+use self::milestone::add_milestone_row;
+
+// 子模块声明（AGENTS.md §3 单文件 ≤300 行；#[path] 使兄弟文件平铺在同目录，各自带 @ai-context）。
+/// 里程碑域：里程碑 CRUD + 三写路径共用的插入行 helper。
+#[path = "db_goals_milestone.rs"]
+mod milestone;
 
 /// 三表 DDL + 索引（幂等：CREATE TABLE IF NOT EXISTS；旧库升级自动补表）。
 pub(crate) fn init(conn: &Connection) -> Result<()> {
@@ -173,96 +179,6 @@ impl Db {
     pub fn delete_goal(&self, id: i64) -> Result<bool> {
         self.with_conn(|conn| {
             let affected = conn.execute("DELETE FROM goals WHERE id = ?1", params![id])?;
-            Ok(affected > 0)
-        })
-    }
-
-    /// 目标里程碑清单（order_idx 升序——计划顺序即创建语义）。
-    pub fn list_milestones(&self, goal_id: i64) -> Result<Vec<GoalMilestone>> {
-        self.with_conn(|conn| {
-            let mut stmt = conn.prepare(
-                "SELECT * FROM goal_milestones WHERE goal_id = ?1 ORDER BY order_idx ASC, id ASC",
-            )?;
-            let rows = stmt.query_map(params![goal_id], row_to_milestone)?;
-            rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
-        })
-    }
-
-    /// 新增里程碑（order_idx ≤0 时自动追加在末尾；criteria_type 白名单在命令层）。
-    pub fn add_milestone(&self, goal_id: i64, new: &NewMilestone) -> Result<GoalMilestone> {
-        let now = unix_seconds();
-        self.with_conn(|conn| {
-            let idx = conn.query_row(
-                "SELECT COALESCE(MAX(order_idx), -1) + 1 FROM goal_milestones WHERE goal_id = ?1",
-                params![goal_id],
-                |r| r.get::<_, i64>(0),
-            )?;
-            let order = if new.order_idx > 0 { new.order_idx } else { idx };
-            conn.execute(
-                "INSERT INTO goal_milestones (goal_id, title, due_at, order_idx, status, criteria_type, ref_group_id, created_at)
-                 VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7)",
-                params![
-                    goal_id, new.title, new.due_at, order, new.criteria_type,
-                    new.ref_group_id, now
-                ],
-            )?;
-            Ok(GoalMilestone {
-                id: conn.last_insert_rowid(),
-                goal_id,
-                title: new.title.clone(),
-                due_at: new.due_at,
-                order_idx: order,
-                status: MILESTONE_PENDING.to_string(),
-                criteria_type: new.criteria_type.clone(),
-                ref_group_id: new.ref_group_id,
-                completed_at: None,
-                created_at: now,
-            })
-        })
-    }
-
-    /// 更新里程碑（整段覆盖：标题/期限；顺序不在此改——增删即重排语义）。
-    pub fn update_milestone(&self, id: i64, title: &str, due_at: Option<i64>) -> Result<bool> {
-        self.with_conn(|conn| {
-            let affected = conn.execute(
-                "UPDATE goal_milestones SET title = ?2, due_at = ?3 WHERE id = ?1",
-                params![id, title, due_at],
-            )?;
-            Ok(affected > 0)
-        })
-    }
-
-    /// 按 id 读取里程碑（旧状态读取——状态流转前判据，不存在 → None）。
-    pub fn get_milestone(&self, id: i64) -> Result<Option<GoalMilestone>> {
-        self.with_conn(|conn| {
-            let mut stmt = conn.prepare("SELECT * FROM goal_milestones WHERE id = ?1")?;
-            let mut rows = stmt.query_map(params![id], row_to_milestone)?;
-            match rows.next() {
-                Some(Ok(m)) => Ok(Some(m)),
-                Some(Err(e)) => Err(e.into()),
-                None => Ok(None),
-            }
-        })
-    }
-
-    /// 删除里程碑（不存在 → false）。
-    pub fn delete_milestone(&self, id: i64) -> Result<bool> {
-        self.with_conn(|conn| {
-            let affected = conn.execute("DELETE FROM goal_milestones WHERE id = ?1", params![id])?;
-            Ok(affected > 0)
-        })
-    }
-
-    /// 里程碑状态流转（done 写 completed_at；非完成态清空——状态机白名单在命令层）。
-    pub fn set_milestone_status(&self, id: i64, status: &str) -> Result<bool> {
-        let now = unix_seconds();
-        self.with_conn(|conn| {
-            let affected = conn.execute(
-                "UPDATE goal_milestones SET status = ?2,
-                 completed_at = CASE WHEN ?3 THEN ?4 ELSE NULL END
-                 WHERE id = ?1",
-                params![id, status, status == MILESTONE_DONE, now],
-            )?;
             Ok(affected > 0)
         })
     }
@@ -654,22 +570,6 @@ impl Db {
     }
 }
 
-/// 里程碑插入行（create_goal 事务与 add_milestone 共用；criteria_type 默认 manual）。
-fn add_milestone_row(
-    conn: &Connection,
-    goal_id: i64,
-    m: &NewMilestone,
-    order_idx: i64,
-    now: i64,
-) -> Result<()> {
-    conn.execute(
-        "INSERT INTO goal_milestones (goal_id, title, due_at, order_idx, status, criteria_type, ref_group_id, created_at)
-         VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7)",
-        params![goal_id, m.title, m.due_at, order_idx, m.criteria_type, m.ref_group_id, now],
-    )?;
-    Ok(())
-}
-
 /// goals 行 → Goal。
 fn row_to_goal(row: &rusqlite::Row<'_>) -> rusqlite::Result<Goal> {
     Ok(Goal {
@@ -683,22 +583,6 @@ fn row_to_goal(row: &rusqlite::Row<'_>) -> rusqlite::Result<Goal> {
         created_at: row.get(7)?,
         completed_at: row.get(8)?,
         updated_at: row.get(9)?,
-    })
-}
-
-/// goal_milestones 行 → GoalMilestone。
-fn row_to_milestone(row: &rusqlite::Row<'_>) -> rusqlite::Result<GoalMilestone> {
-    Ok(GoalMilestone {
-        id: row.get(0)?,
-        goal_id: row.get(1)?,
-        title: row.get(2)?,
-        due_at: row.get(3)?,
-        order_idx: row.get(4)?,
-        status: row.get(5)?,
-        criteria_type: row.get(6)?,
-        ref_group_id: row.get(7)?,
-        completed_at: row.get(8)?,
-        created_at: row.get(9)?,
     })
 }
 
