@@ -14,17 +14,14 @@ use std::time::{Duration, Instant};
 
 use tauri::Emitter;
 
-use crate::capture::frame_diff::{DualRateScheduler, SampleRegion};
-use crate::capture::ScreenCaptureSampler;
+use crate::capture::frame_diff::SampleRegion;
 use crate::db::Db;
 use crate::engine::EnginePool;
 use crate::fusion::SubtitleSegment;
-use crate::live_frame_process::{
-    capture_latest_only, persist_voted_subtitle, process_frame, ScreenStats, TriggerState,
-};
-use crate::subtitle_ocr::SubtitleVoter;
+use crate::live_frame_process::{capture_latest_only, persist_voted_subtitle, process_frame};
 
 use live_session_liveness::{liveness_check, watchdog_paused_probe};
+use live_session_worker_state::FrameWorkerState;
 
 /// 采样节拍（ms）：与音频消费解耦，固定 1s 一拍（审查 M5 修复）。
 const SAMPLE_TICK_MS: u64 = 1000;
@@ -46,6 +43,10 @@ pub struct LatestCapturedFrame {
 /// REQ-281 停更监测（停更判定/心跳载荷/WGC 自愈；本文件 ≤300 行，AGENTS.md §3）。
 #[path = "live_session_liveness.rs"]
 pub(super) mod live_session_liveness;
+
+/// 线程状态聚合 `FrameWorkerState`（TD-24-A：装配参数 + 主循环状态量 → 1；§3）。
+#[path = "live_session_worker_state.rs"]
+pub(super) mod live_session_worker_state;
 
 /// REQ-291：媒体级"最近有声"判定（窗口=SOUND_RECENT_MS ≥ 采样拍 1s——
 /// 保证一拍内出现的声音必被读到；锁中毒按无声处理，零阻断）。
@@ -72,8 +73,10 @@ fn light_poll_enabled(cond: crate::pause_state::PauseConditions) -> bool {
 /// @ai-context: ScreenCaptureSampler 持 COM 对象（非 Send），在本线程内创建与使用，
 ///              规避跨线程约束；节拍自驱动（与音频消费解耦）；字幕段写入共享缓存，
 ///              停止后由融合线程读取；epoch/speech_active 由会话线程注入（ADR-008）。
-/// @ai-context: 参数多为编排上下文传递（停止标志/纪元/活跃度/DB/引擎/事件/缓存），
-///              聚合会破坏内聚，登记 clippy 豁免。
+/// @ai-context: 参数为**装配上下文**（停止标志/纪元/活跃度/DB/引擎/事件/共享槽），
+///              函数体只做两件事：① 交给 `FrameWorkerState::new` 聚合（TD-24-A/D2）；
+///              ② 跑主循环骨架（各子系统在分文件 `impl` 里）。公共签名与调用点
+///              （live_session.rs 装配侧）保持不变，登记 clippy 豁免。
 #[allow(clippy::too_many_arguments)]
 pub fn run_screen_worker(
     stop: Arc<AtomicBool>,
@@ -88,13 +91,13 @@ pub fn run_screen_worker(
     // v0.5.0 M1（REQ-043）：视频类型档案（None=默认档案，采样档零回归）
     profile: Option<crate::video_profile::ProfileKind>,
     // v0.5.0 M6（REQ-051）：会话图片存储（关键帧归档；None=未启用）
-    mut image_store: Option<crate::image_store::SessionImageStore>,
+    image_store: Option<crate::image_store::SessionImageStore>,
     // v0.5.0 M6（REQ-051）：最新帧共享缓存（用户截图命令读取）
     latest_frame: std::sync::Arc<std::sync::Mutex<Option<LatestCapturedFrame>>>,
     // v0.6.0 M1（REQ-083）：UI 垃圾黑名单（字幕源头过滤——文本特征命中不进投票器）
     ui_junk: crate::ui_junk::UiJunkList,
     // v0.7.0 M2（REQ-128）：前台时间线监控（2s 轮询 observe → ForegroundSwitch 落库）
-    mut foreground_monitor: crate::foreground_timeline::ForegroundMonitor,
+    foreground_monitor: crate::foreground_timeline::ForegroundMonitor,
     // 2026-08 A1：会话暂停共享状态（暂停跳过采样；恢复后时间戳补偿暂停时长）
     pause: crate::capture::audio_loopback::SessionPause,
     // REQ-291（v0.19.7）：媒体级"最后有声时刻"戳（音频线程写；随播随停输入）
@@ -116,132 +119,27 @@ pub fn run_screen_worker(
     applied_profile:
         std::sync::Arc<std::sync::Mutex<Option<crate::live_session::ProfileOverride>>>,
 ) {
-    let mut screen = match ScreenCaptureSampler::new(hwnd.map(crate::windows::hwnd_from_i64)) {
-        Ok(s) => {
-            eprintln!("[LiveSession] 屏幕捕获后端: {}", s.backend_name());
-            Some(s)
-        }
-        Err(e) => {
-            // 采样器创建失败（DXGI/GDI 均不可用）时 worker 空转，但必须可观测（审查补充）
-            eprintln!("[LiveSession] 屏幕捕获初始化失败（字幕/画面识别不可用）: {}", e);
-            None
-        }
-    };
-    // REQ-043：档案驱动采样预算——按档案查表（默认档案 = Lecture 现状档，零回归）；
-    // 实操档案全帧高频（操作画面价值高），口播/访谈/会议全帧极低频（画面几乎无信息）
-    let budget = profile
-        .map(crate::video_profile::profile_by_kind)
-        .map(|p| p.sampling_budget)
-        .unwrap_or(crate::video_profile::SamplingBudget {
-            subtitle_every: 2,
-            full_every: 5,
-            silent_subtitle_every: 4,
-            silent_full_every: 2,
-        });
-    let mut scheduler = DualRateScheduler::from_budget(
-        budget.subtitle_every,
-        budget.full_every,
-        budget.silent_subtitle_every,
-        budget.silent_full_every,
+    let mut w = FrameWorkerState::new(
+        stop, hwnd, epoch, speech_active, db, engines, app, session_id, subtitle_segments,
+        profile, image_store, latest_frame, ui_junk, foreground_monitor, pause, media_sound,
+        session_info, tier_override, applied_tier, profile_override, window_title,
+        applied_profile,
     );
-    // v0.9.0 M2（REQ-189）：画面价值观测器（每 2-3 分钟重评窗口；
-    // 帧切换/OCR 面积/结构区三信号 → 升档静默/降档确认——见 video_tier_detect.rs）
-    let mut tier_observer =
-        crate::video_tier_detect::TierObserver::new(epoch.elapsed().as_secs());
-    // 观测增量基线（diff_pass/ocr_ok 只增不减——差量即本 tick 是否发生）
-    let mut last_tier_diff_pass: u64 = 0;
-    let mut last_tier_ocr_ok: u64 = 0;
-    // 已生效画面档（None=未定档——开始前默认中档占位由前端声明）
-    let mut tier_applied_tier: Option<crate::video_profile_spec::VisualTier> = None;
-    // v0.11.5（Task 6）：已生效形态/领域状态（内存跟踪；None=未定）
-    let mut current_form: Option<crate::video_profile_spec::ContentForm> = None;
-    let mut current_domain_kind: Option<crate::video_profile_domain::DomainKind> = None;
-    // v0.13.6（REQ-220）：已生效细目 id（与 domain 同栅——domain 未定时为空）
-    let mut current_fine_ids: Vec<String> = Vec::new();
-    // v0.11.5（终审 I-1）：领域用户手动覆写标记——用户裁决 > 自动检测，
-    // 覆写后自动重评不再覆盖该维度（用户手动改过的不自动推翻）
-    let mut domain_user_locked = false;
-    // OCR 文本累计（领域自动检测用；去重上限 50 条）
-    let mut accumulated_ocr_text: Vec<String> = Vec::new();
-    // 重评窗口计数器（form/domain 仅在窗口结算后做一次自动重评）
-    let mut last_profile_reeval_secs: u64 = 0;
-    // ADR-011：触发链路状态（全帧/ROI 网格 diff + 面板检测 + OCR 时刻）
-    let mut trigger = TriggerState::new();
-    let mut voter = SubtitleVoter::new();
-    let mut last_frame_text: Option<String> = None;
-    let mut last_preview = String::new();
-    let mut last_sample_at = Instant::now();
-    // 捕获失败日志节流状态（屏幕链路失效时每帧报错会刷屏，5s 一次）
-    let mut last_capture_error: Option<Instant> = None;
-    // 全帧文本去重（强制 OCR 下静止画面不重复落库）
-    let mut last_full_texts: Vec<String> = Vec::new();
-    // v0.11.5（Task 2）：变化区域新颖度基准（独立于全量文本——比较域解耦）
-    let mut last_changed_texts: Vec<String> = Vec::new();
-    let mut stats = ScreenStats::default();
-    // REQ-281（v0.19.6）：停更监测状态 + 本拍帧到达标记（每次采样调用前由
-    // process_frame/capture_latest_only 内部清零，无需手动重置）
-    let mut liveness = crate::frame_liveness::FrameLiveness::new();
-    let mut got_frame = false;
-    // REQ-291（v0.19.7）：随播随停状态——双通道检测器 + 画面动最近时刻
-    // （got_frame 采样点更新；1s 媒体拍独立于采样——idle 静默期仍判暂停）
-    let mut media_detector = crate::media_state::MediaDetector::new();
-    let mut last_motion_at: Option<Instant> = None;
-    let mut last_media_tick = Instant::now();
-    // M2/REQ-037：动态字幕区域跟踪（播放区域检测 + ROI 锁定/重扫；尺寸首帧自适应）
-    let mut roi_tracker = crate::region_tracker::RoiTracker::new(0, 0);
-    // M6/REQ-051：关键帧样本缓冲（全帧分支收集，停止时投票产出关键图候选）
-    let mut frame_samples: Vec<crate::frame_cluster::FrameSample> = Vec::new();
-    // M6/REQ-051：关键帧归档状态（新文本 + 间隔触发存图）
-    let mut last_archived_text: Option<String> = None;
-    let mut last_archived_at: Option<Instant> = None;
-    // v0.7.3（REQ-155，ADR-015）：在线屏分配器（全帧落库带屏号）
-    let mut screen_tracker = crate::screen_tracker::ScreenTracker::new();
-    // M4/REQ-039 P8：高负载自动降级（CPU 占用采样 → 全帧降频，保 ASR 主链路）
-    let mut load_monitor = crate::load_monitor::LoadMonitor::new();
-    let mut last_load_check_at = Instant::now();
-    let mut degraded = false;
-    // M5/REQ-073（PF6）：空闲降频——静音+画面无变化持续 → 跳过采样
-    // （引擎自然空闲）；空闲期低频探针（5s 一次全帧）检测画面恢复
-    let mut idle_governor = crate::idle_governor::IdleGovernor::new(Default::default());
-    let mut last_diff_pass: u64 = 0;
-    let mut last_probe_ms: u64 = 0;
-    // M16/REQ-128：前台时间线轮询节流（2s 一次；epoch 纪元 ms 时刻）
-    let mut last_fg_poll_ms: u64 = 0;
-    // M1/REQ-125：播放器行为检测节流（5s 一次；从最新帧缓存取帧）+ 暂停状态机
-    // 审查修复：player_state_initialized 标记首次检测（只初始化基线不写事件）
-    let mut last_player_check_at = Instant::now();
-    let mut last_player_paused = false;
-    let mut player_state_initialized = false;
-    // v0.7.2（REQ-151）：播放器信息探测节流（10s 一次——播放器区域 OCR 成本
-    // ~100-300ms，秒级粒度足够；信息变化才 emit）
-    let mut last_info_probe_at = Instant::now();
-    // 2026-08 A1：暂停边沿跟踪（暂停期画面链整体冻结：采样/前台监控/播放器
-    // 检测全部跳过——"会话时间"在暂停期间不前进）
-    // 批 2a：auto_paused 局部 bool 删除——暂停来源收敛在 pause_state 单状态机
-    // （reason/条件锁存）；本 worker 只按自身来源行动：auto 条件（media/fg，
-    // P2-4 起 fg 期同样）持有时轻量轮询找恢复信号、manual 锁存期全冻结
-    // （不跟随任何自动源）
-    let mut worker_paused = pause.paused.load(Ordering::SeqCst);
-    // 前台自动暂停门控（批 2a）：250ms 节拍独立于采样拍；锚定资格=有目标
-    // 窗口（本 worker 存在 ⇔ 画面链开启，anchor_eligible 第二参装配侧已隐含）
-    let mut fg_gate = crate::foreground_pause::ForegroundGate::new();
-    let fg_eligible = crate::foreground_pause::anchor_eligible(hwnd.is_some(), true);
-    let mut last_fg_gate_ms: u64 = 0;
 
-    while !stop.load(Ordering::SeqCst) {
+    while !w.stop.load(Ordering::SeqCst) {
         // ── 前台门控采样（批 2a；250ms 节拍）──
         // @ai-context: 非 manual 锁存期持续观察（含媒体/前台暂停期间——暂停期
         //              也允许前台源锁存/解除）；manual 锁存期冻结。观察分类：
         //              前台=目标 → Target；前台=本进程自窗（浮窗/overlay/原生
         //              对话框）→ Neutral（中性：不推进也不撤销）；其余 Foreign；
         //              全屏无锚点/探测失败 → Neutral（无证据不推断）
-        if fg_eligible {
-            let fg_now_ms = epoch.elapsed().as_millis() as u64;
-            if fg_now_ms.saturating_sub(last_fg_gate_ms) >= crate::foreground_pause::FG_TICK_MS
-                && !pause.manual_held()
+        if w.fg_eligible {
+            let fg_now_ms = w.epoch.elapsed().as_millis() as u64;
+            if fg_now_ms.saturating_sub(w.last_fg_gate_ms) >= crate::foreground_pause::FG_TICK_MS
+                && !w.pause.manual_held()
             {
-                last_fg_gate_ms = fg_now_ms;
-                let obs = match (hwnd, crate::windows::foreground_hwnd()) {
+                w.last_fg_gate_ms = fg_now_ms;
+                let obs = match (w.hwnd, crate::windows::foreground_hwnd()) {
                     (Some(target), Some(fg)) if fg == target => {
                         crate::foreground_pause::ForegroundObs::Target
                     }
@@ -251,14 +149,14 @@ pub fn run_screen_worker(
                     (Some(_), Some(_)) => crate::foreground_pause::ForegroundObs::Foreign,
                     _ => crate::foreground_pause::ForegroundObs::Neutral,
                 };
-                match fg_gate.tick(obs) {
+                match w.fg_gate.tick(obs) {
                     crate::foreground_pause::ForegroundDecision::Suspend => {
-                        let _ = pause
+                        let _ = w.pause
                             .request_pause(crate::pause_state::PauseSource::Foreground);
                         eprintln!("[ScreenWorker] 前台离开目标窗口（连续确认）→ 自动暂停捕获");
                     }
                     crate::foreground_pause::ForegroundDecision::Resume => {
-                        let _ = pause
+                        let _ = w.pause
                             .request_release(crate::pause_state::PauseSource::Foreground);
                         eprintln!("[ScreenWorker] 前台回到目标窗口 → 解除前台暂停");
                     }
@@ -267,31 +165,30 @@ pub fn run_screen_worker(
             }
         }
         // ── 暂停检查（2026-08 A1 硬暂停；批 2a 来源感知扩展）──
-        let paused_now = pause.paused.load(Ordering::SeqCst);
+        let paused_now = w.pause.paused.load(Ordering::SeqCst);
         if paused_now {
-            if !worker_paused {
-                worker_paused = true;
+            if !w.worker_paused {
+                w.worker_paused = true;
                 eprintln!("[ScreenWorker] 会话暂停，画面链冻结（等恢复/来源解除）");
             }
             // 非 manual 锁存：auto 条件（media/fg）持有时轻量轮询找恢复信号。
             // P2-4：门控扩到 fg 期——fg 暂停期也维持媒体检测（视频暂停/结束即
             // 锁存 media；否则回位 fg 解除即伪恢复采集，见 light_poll_enabled
             // 注释）；fg 条件的解除仍由上方门控节拍负责（互不解除只解自己）
-            if light_poll_enabled(pause.conditions()) {
+            if light_poll_enabled(w.pause.conditions()) {
                 // P2 自动暂停：轻量轮询——仅取帧刷新 latest_frame + 播放检测。
                 // 检测读的就是 latest_frame，不刷新则永远看到暂停帧 → 无法发现
                 // 恢复；1s 一拍仅取帧（零分析），5s 一拍检测（沿用 REQ-125 节流）
-                let comp_epoch = epoch
-                    + Duration::from_millis(pause.total_paused_ms.load(Ordering::SeqCst));
-                if last_sample_at.elapsed().as_millis() as u64 >= SAMPLE_TICK_MS {
-                    last_sample_at = Instant::now();
+                let comp_epoch = w.compensated_epoch();
+                if w.last_sample_at.elapsed().as_millis() as u64 >= SAMPLE_TICK_MS {
+                    w.last_sample_at = Instant::now();
                     capture_latest_only(
-                        screen.as_mut(),
-                        &app,
+                        w.screen.as_mut(),
+                        &w.app,
                         comp_epoch,
-                        &latest_frame,
-                        &mut last_capture_error,
-                        &mut got_frame,
+                        &w.latest_frame,
+                        &mut w.last_capture_error,
+                        &mut w.got_frame,
                     );
                     // 审查 F3：暂停期 watchdog 探针（无提示）——WGC 会话失活时
                     // 恢复检测永远读不到新帧 → 自动暂停永久卡死；此处定期自愈。
@@ -299,17 +196,17 @@ pub fn run_screen_worker(
                     // 暂停/画面停更同样会饿死媒体恢复检测，需同款 WGC 自愈；
                     // 探针只观测 + 复活，任意暂停期无提示副作用）
                     watchdog_paused_probe(
-                        screen.as_mut(),
-                        &mut liveness,
-                        got_frame,
+                        w.screen.as_mut(),
+                        &mut w.liveness,
+                        w.got_frame,
                         Instant::now(),
                     );
                     // REQ-291 快恢复（主通道）：声画任一恢复 ≤~1.5s 解除自动暂停
                     // （OCR 5s 判定降级为辅助——保留其后兜底）
-                    if last_media_tick.elapsed() >= Duration::from_secs(1) {
-                        last_media_tick = Instant::now();
-                        let sound_recent = media_sound_recent(&media_sound);
-                        if media_detector.tick(sound_recent, got_frame)
+                    if w.last_media_tick.elapsed() >= Duration::from_secs(1) {
+                        w.last_media_tick = Instant::now();
+                        let sound_recent = media_sound_recent(&w.media_sound);
+                        if w.media_detector.tick(sound_recent, w.got_frame)
                             == crate::media_state::MediaDecision::Resume
                         {
                             let resume_ms = comp_epoch.elapsed().as_millis() as u64;
@@ -319,15 +216,15 @@ pub fn run_screen_worker(
                                     value: None,
                                 },
                                 resume_ms,
-                                session_id,
-                                &db,
+                                w.session_id,
+                                &w.db,
                             );
                             // 批 2a：经 request API 解除媒体条件（只解自己——fg
                             // 仍锁存则暂停延续，本 worker 暂停分支继续等）
-                            let _ = pause
+                            let _ = w.pause
                                 .request_release(crate::pause_state::PauseSource::Media);
-                            last_player_paused = false;
-                            let _ = app.emit("live:media-resumed", ());
+                            w.last_player_paused = false;
+                            let _ = w.app.emit("live:media-resumed", ());
                             eprintln!("[ScreenWorker] 随播随停：声画恢复 → 自动解除暂停");
                         }
                     }
@@ -335,12 +232,12 @@ pub fn run_screen_worker(
                     // 暂停期视频正常播放（帧无暂停图标），裸跑会把"播放中"误当
                     // 恢复沿，每 5s 落一次伪 Play/伪 live:media-resumed（时间轴
                     // 伪运行段）；media 持有时仍是 REQ-125 恢复兜底（5s 判定）
-                    if pause.media_held()
-                        && last_player_check_at.elapsed() >= Duration::from_secs(5)
+                    if w.pause.media_held()
+                        && w.last_player_check_at.elapsed() >= Duration::from_secs(5)
                     {
-                        last_player_check_at = Instant::now();
+                        w.last_player_check_at = Instant::now();
                         let check_now_ms = comp_epoch.elapsed().as_millis() as u64;
-                        if let Some(f) = latest_frame.lock().ok().and_then(|g| g.clone()) {
+                        if let Some(f) = w.latest_frame.lock().ok().and_then(|g| g.clone()) {
                             if let Some(img) =
                                 crate::region_ocr::bgra_to_rgb_image(&f.bgraw, f.width, f.height)
                             {
@@ -355,13 +252,13 @@ pub fn run_screen_worker(
                                             value: None,
                                         },
                                         check_now_ms,
-                                        session_id,
-                                        &db,
+                                        w.session_id,
+                                        &w.db,
                                     );
-                                    let _ = pause
+                                    let _ = w.pause
                                         .request_release(crate::pause_state::PauseSource::Media);
-                                    last_player_paused = false;
-                                    let _ = app.emit("live:media-resumed", ());
+                                    w.last_player_paused = false;
+                                    let _ = w.app.emit("live:media-resumed", ());
                                     eprintln!("[ScreenWorker] 视频恢复播放，自动解除暂停");
                                 }
                             }
@@ -369,53 +266,52 @@ pub fn run_screen_worker(
                     }
                     // v0.7.2（REQ-151）：暂停态也探测播放器信息（时间文本仍在画面）——
                     // 会话开始时视频已暂停的场景，时长/集号识别不因此缺席
-                    if last_info_probe_at.elapsed() >= Duration::from_secs(10) {
-                        last_info_probe_at = Instant::now();
-                        probe_player_info(&app, &engines, &session_info, &roi_tracker, &latest_frame);
+                    if w.last_info_probe_at.elapsed() >= Duration::from_secs(10) {
+                        w.last_info_probe_at = Instant::now();
+                        probe_player_info(&w.app, &w.engines, &w.session_info, &w.roi_tracker, &w.latest_frame);
                     }
                 }
             }
             std::thread::sleep(Duration::from_millis(WORKER_POLL_MS));
             continue;
         }
-        if worker_paused {
+        if w.worker_paused {
             // 恢复：短暂等待捕获线程更新累计补偿时长（10ms 粒度），
             // 防恢复首帧时间戳读到旧补偿值（含暂停时长偏差）
-            worker_paused = false;
+            w.worker_paused = false;
             std::thread::sleep(Duration::from_millis(100));
             eprintln!("[ScreenWorker] 会话恢复，画面链继续");
         }
         // 时间戳补偿（2026-08 A1）：会话时间 = epoch - 累计暂停时长；
         // process_frame 内部以 epoch 为基准生成帧时间戳——每次构造补偿后的
         // 纪元传入（暂停期间不采样，补偿值在恢复后恒定）
-        let comp_epoch = epoch
-            + Duration::from_millis(pause.total_paused_ms.load(Ordering::SeqCst));
+        let comp_epoch = w.compensated_epoch();
         // REQ-291（v0.19.7）：随播随停 1s 拍（独立于采样——idle 静默期仍判暂停；
         // 手动暂停不判：manual 锁存期语义是用户冻结，不跟随视频——批 2a 起
         // 主路径只在未暂停时运行，暂停期恢复检测在暂停分支按 auto 条件
         // （media/fg）轮询）
-        if !paused_now && last_media_tick.elapsed() >= Duration::from_secs(1) {
-            last_media_tick = Instant::now();
-            let sound_recent = media_sound_recent(&media_sound);
-            let motion_recent = last_motion_at.is_some_and(|t| {
-                last_media_tick.duration_since(t) <= Duration::from_millis(1500)
+        if !paused_now && w.last_media_tick.elapsed() >= Duration::from_secs(1) {
+            w.last_media_tick = Instant::now();
+            let sound_recent = media_sound_recent(&w.media_sound);
+            let motion_recent = w.last_motion_at.is_some_and(|t| {
+                w.last_media_tick.duration_since(t) <= Duration::from_millis(1500)
             });
-            let decision = media_detector.tick(sound_recent, motion_recent);
+            let decision = w.media_detector.tick(sound_recent, motion_recent);
             if decision == crate::media_state::MediaDecision::Suspend {
                 let ms = comp_epoch.elapsed().as_millis() as u64;
                 // 批 2a：经 request API 锁存媒体条件（暂停动作由机器层完成——
                 // manual 锁存期 auto 提议只记条件不动作）
-                let _ = pause.request_pause(crate::pause_state::PauseSource::Media);
+                let _ = w.pause.request_pause(crate::pause_state::PauseSource::Media);
                 crate::player_behavior::record_action(
                     &crate::player_behavior::PlayerAction {
                         kind: crate::player_behavior::PlayerActionKind::Pause,
                         value: None,
                     },
                     ms,
-                    session_id,
-                    &db,
+                    w.session_id,
+                    &w.db,
                 );
-                let _ = app.emit("live:media-paused", ());
+                let _ = w.app.emit("live:media-paused", ());
                 eprintln!("[ScreenWorker] 随播随停：声画双通道确认视频暂停 → 自动暂停捕获");
             }
             // 注：主路径 Resume 决策（审查 F1 曾清 auto_paused 标记）已随
@@ -423,87 +319,87 @@ pub fn run_screen_worker(
             // 的恢复检测（机器层保证暂停 ⇔ 条件锁存，主路径无残留标记可清）
         }
         // M4：每 2s 采样 CPU 负载（降级标志变化打印——静默失败可见化）
-        if last_load_check_at.elapsed() >= Duration::from_secs(2) {
-            last_load_check_at = Instant::now();
-            let new_degraded = load_monitor.tick();
-            if new_degraded != degraded {
-                degraded = new_degraded;
-                if degraded {
+        if w.last_load_check_at.elapsed() >= Duration::from_secs(2) {
+            w.last_load_check_at = Instant::now();
+            let new_degraded = w.load_monitor.tick();
+            if new_degraded != w.degraded {
+                w.degraded = new_degraded;
+                if w.degraded {
                     eprintln!("[ScreenWorker] 负载高，采样降级（全帧 0.1fps 封顶，REQ-039 P8）");
                 } else {
                     eprintln!("[ScreenWorker] 负载恢复，采样档位还原");
                 }
             }
         }
-        if last_sample_at.elapsed().as_millis() as u64 >= SAMPLE_TICK_MS {
-            last_sample_at = Instant::now();
+        if w.last_sample_at.elapsed().as_millis() as u64 >= SAMPLE_TICK_MS {
+            w.last_sample_at = Instant::now();
             // REQ-084：前台窗口切换检测（每秒一次）——前台与录制目标不一致 →
             // ROI 强制重扫 + 字幕处理冻结（防其他窗口底部内容被当字幕）；
             // 无目标窗口（全屏捕获）或探测失败 → 静默跳过（误触发阈值校准）
-            let foreign = match (hwnd, crate::windows::foreground_hwnd()) {
+            let foreign = match (w.hwnd, crate::windows::foreground_hwnd()) {
                 (Some(target), Some(fg)) => fg != target,
                 _ => false,
             };
-            roi_tracker.on_foreground_switch(foreign);
+            w.roi_tracker.on_foreground_switch(foreign);
             // B3（P3 简化版）+ M4：语音活跃度 + 负载档驱动自适应采样
-            let mut region = scheduler.next_region(speech_active.load(Ordering::Relaxed), degraded);
+            let mut region = w.scheduler.next_region(w.speech_active.load(Ordering::Relaxed), w.degraded);
             // M5/REQ-073：空闲降频状态机——画面变化信号 = diff 通过计数增长
             // （process_frame 内更新，同线程可见）；idle 时跳过采样（引擎
             // 阻塞空闲零 CPU）；空闲期低频探针（5s 一次全帧）检测无声恢复
             let now_ms = comp_epoch.elapsed().as_millis() as u64;
             // M16/REQ-128：前台时间线监控（独立 2s 轮询——不改 region_tracker 行为；
             // 变化 → ForegroundSwitch 事件落库；观测失败 None → 静默跳过）
-            if now_ms.saturating_sub(last_fg_poll_ms) >= 2_000 {
-                last_fg_poll_ms = now_ms;
-                foreground_monitor.observe(
+            if now_ms.saturating_sub(w.last_fg_poll_ms) >= 2_000 {
+                w.last_fg_poll_ms = now_ms;
+                w.foreground_monitor.observe(
                     crate::windows::foreground_hwnd(),
                     now_ms,
-                    session_id,
-                    &db,
+                    w.session_id,
+                    &w.db,
                 );
             }
-            let changed = stats.diff_pass > last_diff_pass;
-            last_diff_pass = stats.diff_pass;
-            let _ = idle_governor.observe(
-                speech_active.load(Ordering::Relaxed),
+            let changed = w.stats.diff_pass > w.last_diff_pass;
+            w.last_diff_pass = w.stats.diff_pass;
+            let _ = w.idle_governor.observe(
+                w.speech_active.load(Ordering::Relaxed),
                 changed,
                 now_ms,
             );
-            let idle = idle_governor.is_idle();
-            let probe = idle && now_ms.saturating_sub(last_probe_ms) >= IDLE_PROBE_INTERVAL_MS;
+            let idle = w.idle_governor.is_idle();
+            let probe = idle && now_ms.saturating_sub(w.last_probe_ms) >= IDLE_PROBE_INTERVAL_MS;
             if probe {
-                last_probe_ms = now_ms;
+                w.last_probe_ms = now_ms;
                 region = SampleRegion::Full;
             }
             if (region != SampleRegion::Skip && !idle) || probe {
                 process_frame(
-                    screen.as_mut(), &mut trigger, &mut voter, &mut last_frame_text, &mut last_preview,
-                    &db, &engines, &app, session_id, region, &subtitle_segments, comp_epoch,
-                    &mut last_capture_error, &mut last_full_texts, &mut stats,
-                    &mut roi_tracker, &mut frame_samples,
-                    &mut last_archived_text, &mut last_archived_at, &latest_frame,
-                    &mut image_store, &ui_junk, &mut screen_tracker,
+                    w.screen.as_mut(), &mut w.trigger, &mut w.voter, &mut w.last_frame_text, &mut w.last_preview,
+                    &w.db, &w.engines, &w.app, w.session_id, region, &w.subtitle_segments, comp_epoch,
+                    &mut w.last_capture_error, &mut w.last_full_texts, &mut w.stats,
+                    &mut w.roi_tracker, &mut w.frame_samples,
+                    &mut w.last_archived_text, &mut w.last_archived_at, &w.latest_frame,
+                    &mut w.image_store, &w.ui_junk, &mut w.screen_tracker,
                     // v0.11.5（Task 2）：变化区域基准 + 生效画面档（None=未定档→medium 默认）
-                    &mut last_changed_texts,
-                    &mut got_frame,
-                    tier_applied_tier.map(|t| t.as_str()).unwrap_or("medium"),
+                    &mut w.last_changed_texts,
+                    &mut w.got_frame,
+                    w.tier_applied_tier.map(|t| t.as_str()).unwrap_or("medium"),
                 );
                 // REQ-281（v0.19.6）：停更监测 + WGC watchdog + 帧心跳（真实采样拍）
-                liveness_check(&app, screen.as_mut(), &mut liveness, got_frame, Instant::now());
+                liveness_check(&w.app, w.screen.as_mut(), &mut w.liveness, w.got_frame, Instant::now());
                 // REQ-291：画面动时刻（媒体拍 motion_recent 数据源——WGC 内容驱动
                 // 出帧，got_frame 即"画面变了"的近真信号）
-                if got_frame {
-                    last_motion_at = Some(Instant::now());
+                if w.got_frame {
+                    w.last_motion_at = Some(Instant::now());
                 }
                 // v0.11.5（Task 6）：OCR 文本累计（去重→领域检测用）
                 // v0.11.5 审查修复（A6）：FIFO 上限 50→100——领域检测信号缓存
                 // 保守放大，避免 B站选集证据（`P3/12`/`第3集/共12集`）在
                 // 150s 重评窗口前被 FIFO 淘汰而丢失平台证据
-                for t in &last_changed_texts {
-                    if !accumulated_ocr_text.contains(t) {
-                        accumulated_ocr_text.push(t.clone());
-                        if accumulated_ocr_text.len() > 100 {
-                            accumulated_ocr_text.remove(0);
+                for t in &w.last_changed_texts {
+                    if !w.accumulated_ocr_text.contains(t) {
+                        w.accumulated_ocr_text.push(t.clone());
+                        if w.accumulated_ocr_text.len() > 100 {
+                            w.accumulated_ocr_text.remove(0);
                         }
                     }
                 }
@@ -512,18 +408,18 @@ pub fn run_screen_worker(
             // 上升沿（diff_pass 增量）、OCR 面积占比（ocr_ok 增量：本版以
             // 固定 0.4 近似——全帧变化路径即画面有文字；区域构成留 M4 迭代）
             // @review C12: has_structure 恒 false(区域构成信号暂缺实际注入)
-            tier_observer.observe(
+            w.tier_observer.observe(
                 now_ms / 1000,
-                stats.diff_pass > last_tier_diff_pass,
-                (stats.ocr_ok > last_tier_ocr_ok).then_some(0.4),
+                w.stats.diff_pass > w.last_tier_diff_pass,
+                (w.stats.ocr_ok > w.last_tier_ocr_ok).then_some(0.4),
                 false,
             );
-            last_tier_diff_pass = stats.diff_pass;
-            last_tier_ocr_ok = stats.ocr_ok;
+            w.last_tier_diff_pass = w.stats.diff_pass;
+            w.last_tier_ocr_ok = w.stats.ocr_ok;
             // 重评窗口结算后：升档静默生效（retune 采样器）；降档需确认——
             // 确认结果经 tier_override 共享状态回流（前端 confirm_tier_downgrade）
-            if let Some(new_tier) = tier_observer.current_tier() {
-                let applied = tier_applied_tier;
+            if let Some(new_tier) = w.tier_observer.current_tier() {
+                let applied = w.tier_applied_tier;
                 if applied != Some(new_tier) {
                     let change = crate::video_tier_detect::decide_change(applied, Some(new_tier));
                     let budget = crate::video_profile_spec_data::sampling_for_tier(new_tier);
@@ -531,12 +427,12 @@ pub fn run_screen_worker(
                         crate::video_tier_detect::TierChange::UpgradeSilent
                         | crate::video_tier_detect::TierChange::None => {
                             // 升档/首定档静默应用（更积极采样无损失）；同档无需动作
-                            scheduler.retune(budget);
-                            tier_applied_tier = Some(new_tier);
-                            if let Ok(mut guard) = applied_tier.lock() {
+                            w.scheduler.retune(budget);
+                            w.tier_applied_tier = Some(new_tier);
+                            if let Ok(mut guard) = w.applied_tier.lock() {
                                 *guard = Some(new_tier);
                             }
-                            let _ = app.emit(
+                            let _ = w.app.emit(
                                 "live:tier-changed",
                                 serde_json::json!({
                                     "tier": new_tier.as_str(),
@@ -547,21 +443,21 @@ pub fn run_screen_worker(
                         crate::video_tier_detect::TierChange::DowngradeConfirm => {
                             // 降档需确认：读取共享确认状态——用户已确认 → 应用；
                             // 未确认 → 保持现状档（不丢信息），下轮重评再询
-                            let confirmed = tier_override
+                            let confirmed = w.tier_override
                                 .lock()
                                 .ok()
                                 .and_then(|g| *g)
                                 .filter(|t| *t == new_tier);
                             if confirmed.is_some() {
-                                scheduler.retune(budget);
-                                tier_applied_tier = Some(new_tier);
-                                if let Ok(mut guard) = applied_tier.lock() {
+                                w.scheduler.retune(budget);
+                                w.tier_applied_tier = Some(new_tier);
+                                if let Ok(mut guard) = w.applied_tier.lock() {
                                     *guard = Some(new_tier);
                                 }
-                                if let Ok(mut guard) = tier_override.lock() {
+                                if let Ok(mut guard) = w.tier_override.lock() {
                                     *guard = None;
                                 }
-                                let _ = app.emit(
+                                let _ = w.app.emit(
                                     "live:tier-changed",
                                     serde_json::json!({
                                         "tier": new_tier.as_str(),
@@ -569,10 +465,10 @@ pub fn run_screen_worker(
                                     }),
                                 );
                             } else {
-                                let _ = app.emit(
+                                let _ = w.app.emit(
                                     "live:tier-downgrade-request",
                                     serde_json::json!({
-                                        "from": tier_applied_tier.map(|t| t.as_str()),
+                                        "from": w.tier_applied_tier.map(|t| t.as_str()),
                                         "to": new_tier.as_str(),
                                     }),
                                 );
@@ -582,47 +478,47 @@ pub fn run_screen_worker(
                 }
             }
             // ── v0.11.5 Task 6: 消费档案三维覆写 ──
-            if let Ok(mut guard) = profile_override.lock() {
+            if let Ok(mut guard) = w.profile_override.lock() {
                 if let Some(po) = guard.take() {
                     let mut changed = false;
                     if let Some(t) = po.tier {
                         let budget = crate::video_profile_spec_data::sampling_for_tier(t);
-                        scheduler.retune(budget);
-                        tier_applied_tier = Some(t);
-                        if let Ok(mut ag) = applied_tier.lock() { *ag = Some(t); }
+                        w.scheduler.retune(budget);
+                        w.tier_applied_tier = Some(t);
+                        if let Ok(mut ag) = w.applied_tier.lock() { *ag = Some(t); }
                         changed = true;
                     }
-                    if let Some(f) = po.form { current_form = Some(f); changed = true; }
+                    if let Some(f) = po.form { w.current_form = Some(f); changed = true; }
                     // v0.11.5 审查修复（A3）：domain 为 None（用户未选领域）→
                     // 重置锁定，重新启用自动检测（领域重评不再跳过覆盖）；
                     // v0.13.6（审查修复）：领域一并清空——避免 emit 出
                     // domain=旧/fine=[] 的不一致快照（"领域自动"语义）
-                    if po.domain.is_none() && domain_user_locked {
-                        domain_user_locked = false;
-                        current_domain_kind = None;
-                        current_fine_ids.clear();
+                    if po.domain.is_none() && w.domain_user_locked {
+                        w.domain_user_locked = false;
+                        w.current_domain_kind = None;
+                        w.current_fine_ids.clear();
                     }
                     if let Some(d) = po.domain {
-                        current_domain_kind = Some(d);
+                        w.current_domain_kind = Some(d);
                         // 用户手动覆写 → 锁定该维度（重评不覆盖）
-                        domain_user_locked = true;
+                        w.domain_user_locked = true;
                         changed = true;
                         // v0.13.6（REQ-220）：细目随领域覆写（空=仅粗领域，合法）
-                        current_fine_ids = po.fine.clone();
+                        w.current_fine_ids = po.fine.clone();
                     }
                     if changed {
                         let snapshot = crate::live_session::ProfileOverride {
-                            form: current_form,
-                            tier: tier_applied_tier,
-                            domain: current_domain_kind,
-                            fine: current_fine_ids.clone(),
+                            form: w.current_form,
+                            tier: w.tier_applied_tier,
+                            domain: w.current_domain_kind,
+                            fine: w.current_fine_ids.clone(),
                         };
-                        if let Ok(mut ag) = applied_profile.lock() { *ag = Some(snapshot); }
-                        let _ = app.emit("live:profile-updated", serde_json::json!({
-                            "form": current_form.map(|f| f.as_str()),
-                            "tier": tier_applied_tier.map(|t| t.as_str()),
-                            "domain": current_domain_kind.map(|d| d.as_str()),
-                            "fine": current_fine_ids,
+                        if let Ok(mut ag) = w.applied_profile.lock() { *ag = Some(snapshot); }
+                        let _ = w.app.emit("live:profile-updated", serde_json::json!({
+                            "form": w.current_form.map(|f| f.as_str()),
+                            "tier": w.tier_applied_tier.map(|t| t.as_str()),
+                            "domain": w.current_domain_kind.map(|d| d.as_str()),
+                            "fine": w.current_fine_ids,
                         }));
                     } else {
                         // v0.11.5 审查修复（A2）：override 取到全空值（command 层
@@ -633,25 +529,25 @@ pub fn run_screen_worker(
             }
             // ── v0.11.5 Task 6: 领域自动重评（同画面档窗口节拍）──
             let profile_reeval_now = now_ms / 1000;
-            if profile_reeval_now >= last_profile_reeval_secs + 150 {
-                last_profile_reeval_secs = profile_reeval_now;
+            if profile_reeval_now >= w.last_profile_reeval_secs + 150 {
+                w.last_profile_reeval_secs = profile_reeval_now;
                 // v0.11.5 Task 7: B站 选集 OCR 证据增强——标题确认 B站 且累计
                 // OCR 中选集命中（`P3/12`/`第X集`，adapt_bilibili_episode 解析）
                 // → 累计 OCR 文本提升为平台证据（命中才加权，不命中不惩罚）
                 let mut platform_tags: Vec<String> = Vec::new();
                 if crate::platform_adapter::infer_platform(
-                    Some(&window_title),
+                    Some(&w.window_title),
                     None,
                 ) == Some(crate::platform_adapter::PlatformKind::Bilibili)
-                    && accumulated_ocr_text
+                    && w.accumulated_ocr_text
                         .iter()
                         .any(|t| crate::platform_adapter::adapt_bilibili_episode(t).is_some())
                 {
-                    platform_tags = accumulated_ocr_text.clone();
+                    platform_tags = w.accumulated_ocr_text.clone();
                 }
                 // v0.11.5 Task 7: ASR 开场白——前 30s 段文本（现有段累计可达，
                 // 不为它新建数据流）；无段 → None 诚实降级
-                let asr_opening: Option<String> = subtitle_segments
+                let asr_opening: Option<String> = w.subtitle_segments
                     .lock()
                     .ok()
                     .map(|g| {
@@ -663,34 +559,34 @@ pub fn run_screen_worker(
                     })
                     .filter(|t| !t.trim().is_empty());
                 let domain_signal = crate::video_profile_domain::DomainSignals {
-                    title: Some(window_title.clone()),
+                    title: Some(w.window_title.clone()),
                     platform_tags,
                     user_confirmed: None,
-                    term_freq: accumulated_ocr_text.clone(),
+                    term_freq: w.accumulated_ocr_text.clone(),
                     asr_opening,
                 };
                 let detected = crate::video_profile_domain::detect_domain(&domain_signal);
                 // 终审 I-1：用户已手动覆写领域 → 跳过自动覆盖（用户裁决优先）
-                if !domain_user_locked
+                if !w.domain_user_locked
                     && detected.kind.is_some()
-                    && detected.kind != current_domain_kind
+                    && detected.kind != w.current_domain_kind
                     && detected.confidence >= 0.6
                 {
-                    current_domain_kind = detected.kind;
+                    w.current_domain_kind = detected.kind;
                     // v0.13.6：自动重评命中的细目随之生效（curated 预选；空则仅粗领域）
-                    current_fine_ids = detected.fine_ids;
+                    w.current_fine_ids = detected.fine_ids;
                     let snapshot = crate::live_session::ProfileOverride {
-                        form: current_form,
-                        tier: tier_applied_tier,
-                        domain: current_domain_kind,
-                        fine: current_fine_ids.clone(),
+                        form: w.current_form,
+                        tier: w.tier_applied_tier,
+                        domain: w.current_domain_kind,
+                        fine: w.current_fine_ids.clone(),
                     };
-                    if let Ok(mut ag) = applied_profile.lock() { *ag = Some(snapshot); }
-                    let _ = app.emit("live:profile-updated", serde_json::json!({
-                        "form": current_form.map(|f| f.as_str()),
-                        "tier": tier_applied_tier.map(|t| t.as_str()),
-                        "domain": current_domain_kind.map(|d| d.as_str()),
-                        "fine": current_fine_ids,
+                    if let Ok(mut ag) = w.applied_profile.lock() { *ag = Some(snapshot); }
+                    let _ = w.app.emit("live:profile-updated", serde_json::json!({
+                        "form": w.current_form.map(|f| f.as_str()),
+                        "tier": w.tier_applied_tier.map(|t| t.as_str()),
+                        "domain": w.current_domain_kind.map(|d| d.as_str()),
+                        "fine": w.current_fine_ids,
                     }));
                 }
             }
@@ -702,30 +598,30 @@ pub fn run_screen_worker(
             //    + 5s 周期叠加使暂停事件时戳滞后 5-10s）；
             // ② MEDIUM-9：首次检测只初始化状态不写事件（录制开始前已暂停的视频
             //    首轮 paused=true ≠ 初始 false 会写非转换假 Pause）
-            if last_player_check_at.elapsed() >= Duration::from_secs(5) {
-                last_player_check_at = Instant::now();
+            if w.last_player_check_at.elapsed() >= Duration::from_secs(5) {
+                w.last_player_check_at = Instant::now();
                 let check_now_ms = comp_epoch.elapsed().as_millis() as u64;
-                if let Some(f) = latest_frame.lock().ok().and_then(|g| g.clone()) {
+                if let Some(f) = w.latest_frame.lock().ok().and_then(|g| g.clone()) {
                     if let Some(img) =
                         crate::region_ocr::bgra_to_rgb_image(&f.bgraw, f.width, f.height)
                     {
                         let paused =
                             crate::player_behavior::detect_player_action(&img).is_some();
-                        if !player_state_initialized {
+                        if !w.player_state_initialized {
                             // 首次检测：仅记录基线状态，不写事件（防假 Pause）
-                            player_state_initialized = true;
-                            last_player_paused = paused;
+                            w.player_state_initialized = true;
+                            w.last_player_paused = paused;
                             // P2：基线即暂停（会话开始时视频已暂停）→ 自动暂停。
                             // 不写假 Pause 事件（MEDIUM-9），但锁存媒体条件——
                             // 音频/捕获线程沿边沿同步暂停（批 2a 经 request API）
-                            if paused && !pause.paused.load(Ordering::SeqCst) {
-                                let _ = pause
+                            if paused && !w.pause.paused.load(Ordering::SeqCst) {
+                                let _ = w.pause
                                     .request_pause(crate::pause_state::PauseSource::Media);
-                                let _ = app.emit("live:media-paused", ());
+                                let _ = w.app.emit("live:media-paused", ());
                                 eprintln!("[ScreenWorker] 视频处于暂停态，会话自动暂停");
                             }
-                        } else if paused != last_player_paused {
-                            last_player_paused = paused;
+                        } else if paused != w.last_player_paused {
+                            w.last_player_paused = paused;
                             let action = if paused {
                                 crate::player_behavior::PlayerAction {
                                     kind: crate::player_behavior::PlayerActionKind::Pause,
@@ -740,27 +636,27 @@ pub fn run_screen_worker(
                             crate::player_behavior::record_action(
                                 &action,
                                 check_now_ms,
-                                session_id,
-                                &db,
+                                w.session_id,
+                                &w.db,
                             );
-                            if paused && !pause.paused.load(Ordering::SeqCst) {
+                            if paused && !w.pause.paused.load(Ordering::SeqCst) {
                                 // P2：检测到视频暂停 → 自动暂停捕获（媒体条件；
                                 // 下一轮循环进入轻量轮询，恢复检测不中断）。
                                 // 审查 F5：已暂停（pause=true）时不重复记账/发事件
                                 // （同迭代双系统重复 Pause——机器层同样幂等）
-                                let _ = pause
+                                let _ = w.pause
                                     .request_pause(crate::pause_state::PauseSource::Media);
-                                let _ = app.emit("live:media-paused", ());
+                                let _ = w.app.emit("live:media-paused", ());
                                 eprintln!("[ScreenWorker] 检测到视频暂停，自动暂停捕获");
                             }
-                        } else if paused && !pause.paused.load(Ordering::SeqCst) {
+                        } else if paused && !w.pause.paused.load(Ordering::SeqCst) {
                             // P2 兜底（批 2a 语义推广——机器层"manual 解除瞬间重评
                             // 估 auto 条件"的 worker 侧实现）：手动恢复后视频仍
                             // 暂停 → 重新锁存媒体条件（捕获跟随视频状态，用户
                             // 手动继续不覆盖）；经 request API 只记条件不动作
-                            let _ = pause
+                            let _ = w.pause
                                 .request_pause(crate::pause_state::PauseSource::Media);
-                            let _ = app.emit("live:media-paused", ());
+                            let _ = w.app.emit("live:media-paused", ());
                             eprintln!("[ScreenWorker] 视频处于暂停态，重新自动暂停");
                         }
                     }
@@ -770,37 +666,36 @@ pub fn run_screen_worker(
             // 文本（时间对 `12:34 / 1:23:45`、分P `P3/12`）→ 会话信息更新 →
             // 值变化才 emit live:session-info（防 IPC 风暴）；无播放区域/OCR
             // 失败 → 静默跳过（诚实：不猜不填；下轮再试）
-            if last_info_probe_at.elapsed() >= Duration::from_secs(10) {
-                last_info_probe_at = Instant::now();
-                probe_player_info(&app, &engines, &session_info, &roi_tracker, &latest_frame);
+            if w.last_info_probe_at.elapsed() >= Duration::from_secs(10) {
+                w.last_info_probe_at = Instant::now();
+                probe_player_info(&w.app, &w.engines, &w.session_info, &w.roi_tracker, &w.latest_frame);
             }
         }
         // 诊断：每 15s 打印采样统计（会话无 OCR 时定位失败阶段；静默失败可见化）
-        if stats
+        if w.stats
             .last_log_at
             .is_none_or(|t| t.elapsed() >= Duration::from_secs(15))
         {
-            stats.last_log_at = Some(Instant::now());
+            w.stats.last_log_at = Some(Instant::now());
             eprintln!(
                 "[ScreenWorker] 采样统计: sampled={} no_change={} capture_err={} diff_pass={} diff_skip={} ocr_ok={} ocr_err={} junk_filtered={} panel_filtered={}",
-                stats.sampled, stats.no_change, stats.capture_err, stats.diff_pass, stats.diff_skip, stats.ocr_ok, stats.ocr_err, stats.junk_filtered, stats.panel_filtered
+                w.stats.sampled, w.stats.no_change, w.stats.capture_err, w.stats.diff_pass, w.stats.diff_skip, w.stats.ocr_ok, w.stats.ocr_err, w.stats.junk_filtered, w.stats.panel_filtered
             );
         }
         std::thread::sleep(Duration::from_millis(WORKER_POLL_MS));
     }
     // 停止：冲刷未定稿的最后一组字幕（否则末句字幕丢失，T2 语义要求）
     // 2026-08 A1：flush 时间戳同样补偿暂停时长（会话时间基准）
-    let flush_epoch = epoch
-        + Duration::from_millis(pause.total_paused_ms.load(Ordering::SeqCst));
-    if let Some(voted) = voter.flush(flush_epoch.elapsed().as_millis() as u64) {
-        persist_voted_subtitle(&db, &app, session_id, &subtitle_segments, voted);
+    let flush_epoch = w.compensated_epoch();
+    if let Some(voted) = w.voter.flush(flush_epoch.elapsed().as_millis() as u64) {
+        persist_voted_subtitle(&w.db, &w.app, w.session_id, &w.subtitle_segments, voted);
     }
     // M6/REQ-051：关键帧投票（课后精修：多信号筛选 → 关键图候选；产物层 M7 消费）
-    crate::live_keyframes::vote_and_emit_keyframes(&frame_samples, &app, session_id);
+    crate::live_keyframes::vote_and_emit_keyframes(&w.frame_samples, &w.app, w.session_id);
     // 显式释放采样器（COM/DXGI 资源）——worker 退出即释放 duplication，
     // 防多会话快速连测时泄漏累积触发 DXGI 并发上限（4/5 会话无 OCR 排查项）
-    drop(screen);
-    eprintln!("[ScreenWorker] 屏幕采样线程退出（会话 {}）", session_id);
+    drop(w.screen);
+    eprintln!("[ScreenWorker] 屏幕采样线程退出（会话 {}）", w.session_id);
 }
 
 /// 播放器信息探测（REQ-151，v0.7.2）：播放器区域 OCR 文本（时间对/分P）→
