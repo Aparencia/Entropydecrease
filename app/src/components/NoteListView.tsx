@@ -30,7 +30,8 @@ import { useNoteListSelection } from "../hooks/useNoteListSelection";
 import { useNoteMarquee } from "../hooks/useNoteMarquee";
 // 批 0-C2：展示件（列表体 / 顶栏 / 批量栏与选集菜单）——纯透传适配器，逻辑在 hook
 import NoteListBody from "./NoteListBody";
-import NoteListToolbar, { ghostBtn } from "./NoteListToolbar";
+import NoteListToolbar from "./NoteListToolbar";
+import { NoteListBatchBar, NoteListBatchContextMenu } from "./NoteListBatchMenu";
 import NoteRowContextMenu from "./NoteRowContextMenu";
 
 // 兼容既有导入面（NoteReadingView/NotesPage/parseTags.test 从此解析——v0.15 移厝 utils）
@@ -175,13 +176,14 @@ export default function NoteListView({
 
       {/* 批量操作栏（去勾选框后的批量入口：删除 + 移动到组；选择模式下同样可用） */}
       {selection.size > 0 && (
-        <div style={{ borderTop: "1px solid #e5e7eb", padding: 8, display: "flex", gap: 6, alignItems: "center", background: "#fff" }}>
-          <span style={{ fontSize: 12, color: "#3730a3" }}>已选 {selection.size} 个</span>
-          <button data-testid="batch-move-btn" style={ghostBtn} onClick={() => setBatchMenu({ ids: [...selection], x: 0, y: 0 })}>移动到组</button>
-          <button data-testid="batch-delete-btn" style={{ ...ghostBtn, borderColor: "#fca5a5", color: "#dc2626" }} onClick={() => void (async () => { if (await onBatchDelete([...selection])) clearSelection(); })()}>批量删除</button>
-          {selectionMode && <button data-testid="batch-done-btn" style={{ ...ghostBtn, color: "#3730a3" }} onClick={exitBatch}>完成</button>}
-          <button style={{ ...ghostBtn, marginLeft: "auto" }} onClick={clearSelection}>取消</button>
-        </div>
+        <NoteListBatchBar
+          count={selection.size}
+          selectionMode={selectionMode}
+          onMoveToGroup={() => setBatchMenu({ ids: [...selection], x: 0, y: 0 })}
+          onDelete={() => void (async () => { if (await onBatchDelete([...selection])) clearSelection(); })()}
+          onDone={exitBatch}
+          onCancel={clearSelection}
+        />
       )}
 
       {status && <p style={{ padding: 8, fontSize: 12, color: "#dc2626" }}>{status}</p>}
@@ -206,29 +208,22 @@ export default function NoteListView({
         />
       )}
 
-      {/* 选集批处理菜单（删除/移动到组） */}
+      {/* 选集批处理菜单（删除/移动到组）——受控：菜单态与 Esc 链在 useNoteListSelection */}
       {batchMenu && (
-        <>
-          <div style={{ position: "fixed", inset: 0, zIndex: 40 }} onClick={() => { setBatchMenu(null); setBatchMoveOpen(false); }} />
-          <div data-testid="batch-context-menu" style={{ position: "fixed", zIndex: 41, left: batchMenu.x || 12, top: batchMenu.y || 12, minWidth: 180, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 6px 18px rgba(0,0,0,0.12)", padding: 6, fontSize: 12 }}>
-            <div style={{ padding: "2px 6px", color: "#9ca3af", fontSize: 11 }}>已选 {batchMenu.ids.length} 个</div>
-            {!batchMoveOpen ? (
-              <>
-                <button style={{ ...ghostBtn, width: "100%", marginTop: 4, textAlign: "left" }} disabled={busyMove} onClick={() => setBatchMoveOpen(true)}>📁 移动到组…</button>
-                <button data-testid="batch-menu-delete" style={{ ...ghostBtn, width: "100%", marginTop: 4, textAlign: "left", borderColor: "#fca5a5", color: "#dc2626" }} disabled={busyMove} onClick={() => void batchDelete()}>删除选中（{batchMenu.ids.length}）</button>
-                <button style={{ ...ghostBtn, width: "100%", marginTop: 4, textAlign: "left" }} onClick={() => { setBatchMenu(null); clearSelection(); }}>清除选择</button>
-              </>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 260, overflowY: "auto" }}>
-                <button style={{ ...ghostBtn, textAlign: "left" }} disabled={busyMove} onClick={() => void moveToGroup(batchMenu.ids, null)}>（移出组）</button>
-                {groups.map((g) => (
-                  <button key={g.id} style={{ ...ghostBtn, textAlign: "left" }} disabled={busyMove} onClick={() => void moveToGroup(batchMenu.ids, g.id)}>📁 {g.name}</button>
-                ))}
-                <button style={{ border: "none", background: "none", color: "#6b7280", cursor: "pointer", textAlign: "left" }} onClick={() => setBatchMoveOpen(false)}>← 返回</button>
-              </div>
-            )}
-          </div>
-        </>
+        <NoteListBatchContextMenu
+          ids={batchMenu.ids}
+          x={batchMenu.x}
+          y={batchMenu.y}
+          moveOpen={batchMoveOpen}
+          groups={groups}
+          busyMove={busyMove}
+          onClose={() => { setBatchMenu(null); setBatchMoveOpen(false); }}
+          onOpenMove={() => setBatchMoveOpen(true)}
+          onDelete={() => void batchDelete()}
+          onClearSelection={() => { setBatchMenu(null); clearSelection(); }}
+          onMoveToGroup={(groupId) => void moveToGroup(batchMenu.ids, groupId)}
+          onBack={() => setBatchMoveOpen(false)}
+        />
       )}
     </div>
   );
