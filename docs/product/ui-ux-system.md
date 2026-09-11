@@ -257,10 +257,14 @@
   `EmptyState` 的 `.ed-empty-enter` · `Loading` 的 `ed-skeleton-shimmer` / `ed-probe-swing`（循环环境动效走 CSS `@keyframes`）·
   `StatusLine` 的一次性浮现过渡。
 - **无障碍优先**：`app/src` 内**唯一**一条 `prefers-reduced-motion` 块在 `motion.css`，覆盖全部 `.ed-*` **基类**
-  （transition 与 animation 双双压到 1ms）。新原语只要**根类进名单**就自动被覆盖 —— 这是规格 §11 验收 5「覆盖率 100%」的判据，
-  由 `style-contract.test.ts` 机器守门（**判据 = 基类名单，不是「全类集合 ⊇」**：`.ed-modal-head/body/foot`、
-  `.ed-confirm-seal/-impacts/-keep`、`.ed-empty__title`、`.ed-empty-enter`、`.ed-toast-action` 这些子元素/钩子类
-  与基类同在一个元素上，逐字枚举只会假红）。
+  与**每一处 `animation` 声明的选择器原文（含伪元素）**（transition 与 animation 双双压到 1ms）。新原语只要**根类进名单**
+  就自动被覆盖 —— 这是规格 §11 验收 5「覆盖率 100%」的判据，由 `motion-coverage.test.ts` 机器守门
+  （**判据 = 基类名单 + 动画落点名单，不是「全类集合 ⊇」**：`.ed-modal-head/body/foot`、`.ed-confirm-seal/-impacts/-keep`、
+  `.ed-empty__title`、`.ed-toast-action` 这些子元素类与基类同在一个元素上，逐字枚举只会假红）。
+  ⚠️ **伪元素必须逐字列出**：`animation-duration` / `animation-iteration-count` **不是可继承属性**，覆盖写在宿主元素上
+  伪元素拿不到 —— T11 评审用 headless Chromium 实测：`.ed-skeleton` 已静止而 `.ed-skeleton::after` 仍是 `1.2s / infinite`。
+- **keyframes 只用于「循环环境动效」**（`Loading` 的骨架微光 / 探针）；`EmptyState` 的入场（`.ed-empty-enter`）与
+  `StatusLine` 的浮现都走**一次性** transition，**状态行不做循环动画**（它是信息不是「呼吸物」，循环会在长列表里变成噪音）。
 - **可中断、可反向**：`usePresence` 的退场途中 `open` 回 `true` ⇒ 清计时器、直回 `entered`（不重放进场）；`Toast` 的新消息**接管**而非排队。
 - **位移上限 8px**（规格 §8.4）：原语层任何位移 ≤8px，批 6 的 GSAP 时间线同样不得越过（机器判据在 `style-seams.test.ts`）。
 

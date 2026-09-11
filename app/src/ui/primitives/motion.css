@@ -55,10 +55,18 @@
   --ed-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
+/* ★ 名单 = 12 个 `.ed-*` **基类** + **每一处 `animation` 声明的选择器原文**（含伪元素）。
+   ⚠️ 为什么伪元素必须逐字列出（T11 评审用 headless Chromium `--force-prefers-reduced-motion` 实测的 Critical）：
+   `animation-duration` / `animation-iteration-count` **不是可继承属性** —— 覆盖写在宿主元素上，
+   伪元素（`.ed-skeleton::after`）**拿不到**，实测它仍是 `1.2s / infinite / ed-skeleton-shimmer`。
+   ⇒ 这条规则**不许**只写基类：漏掉伪元素是系统性洞（未来任何原语在伪元素上做动画都会再踩）。
+   机器判据：`motion-coverage.test.ts` 从 `primitives/*.css` 抽取每个 `animation`/`animation-name`
+   声明的选择器原文，逐个要求出现在下面这份名单里。 */
 @media (prefers-reduced-motion: reduce) {
   .ed-btn, .ed-surface, .ed-text, .ed-modal-overlay, .ed-modal, .ed-confirm,
   .ed-toast, .ed-empty, .ed-loading, .ed-skeleton, .ed-probe,
-  .ed-status {
+  .ed-status,
+  .ed-skeleton::after, .ed-empty-enter {
     transition-duration: 1ms !important;
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;

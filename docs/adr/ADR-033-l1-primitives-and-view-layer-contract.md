@@ -38,13 +38,13 @@ ADR-032 交付了 token 层（色阶 / 字阶 / z-index 标尺 / 图标），但
 | 8 | `Loading` / `Skeleton` / `Probe` | `Loading.tsx` 102 · `Loading.css` 72 · `Loading.test.tsx` 229 | 85 处/30 文件的手写灰字，全站 0 骨架屏 |
 | 9 | `StatusLine` | `StatusLine.tsx` 92 · `StatusLine.css` 41 · `StatusLine.test.tsx` 258 | 196 处/76 文件，三种红并存，错误常在列表最底部 |
 | — | 共享内核 | `usePresence.ts` 200 · `usePresence.test.tsx` 282 · `usePresence.node.test.ts` 71 · `useFocusTrap.ts` 122 · `useFocusTrap.test.tsx` 236 · `ime.ts` 18 · `ime.test.ts` 32 | 卸载时机 / 焦点陷阱 / IME 组合态 |
-| — | 接缝与守卫 | `motion.css` 66 · `index.ts` 45 · `style-seams.test.ts` 271 · `style-contract.test.ts` 267 | 动效变量与 reduced-motion 块 · 导出面 · 四条机器判据 |
+| — | 接缝与守卫 | `motion.css` 74 · `index.ts` 45 · `style-seams.test.ts` 271 · `style-contract.test.ts` 214 · `motion-coverage.test.ts` 145 | 动效变量与 reduced-motion 块 · 导出面 · 五条机器判据 |
 
 **导出面**：`primitives/index.ts` 是唯一公共入口（批 4 之后全站从这里 import）；**组内互引用走相对文件路径**
 （`./Text`），**不 import barrel** —— 避免循环依赖。`index.ts` 另承担 `import "./motion.css";`：导入本层即带上
 动效变量与 reduced-motion 块；**深导入单个原语不会带走 reduced-motion 块**（该边界写在 `index.ts` 的 `@ai-context` 里）。
 
-**本批全部 41 个文件逐个 ≤300 行（最大 297）**，无需行数豁免登记。
+**本批全部 42 个文件逐个 ≤300 行（最大 297）**，无需行数豁免登记。
 
 ### 2. 依赖方向：领域 → 视图 → 容器 → 原语，**禁止反向**
 
@@ -104,9 +104,22 @@ ADR-032 交付了 token 层（色阶 / 字阶 / z-index 标尺 / 图标），但
   `const EXIT_MS`）与 CSS 侧的**过渡时长**必须是同一个数，且与 `motion.css` 的 token 定值相等 —— 漂移时
   **不会有任何报错**：JS 早了 = 过渡被截断（看不见出场），JS 晚了 = 节点多残留一截（那段时间还能被点到）。
   机器判据：`style-contract.test.ts` 的「退场时长三方对拍」（`Modal.tsx`+`Modal.css` / `Toast.tsx`+`Toast.css` 各一行）。
-- **reduced-motion 判据 = 基类名单**，不是"全类集合 ⊇"：`.ed-modal-head/body/foot`、`.ed-confirm-seal/-impacts/-keep`、
-  `.ed-empty__title`、`.ed-empty-enter`、`.ed-toast-action` 这类**子元素/钩子类**与基类同在一个元素上，
-  已被同一条规则覆盖（逐字枚举只会假红）。
+- **reduced-motion 判据 = 基类名单 + 动画落点名单**，不是"全类集合 ⊇"：`.ed-modal-head/body/foot`、`.ed-confirm-seal/-impacts/-keep`、
+  `.ed-empty__title`、`.ed-toast-action` 这类**子元素类**与基类同在一个元素上，已被同一条规则覆盖（逐字枚举只会假红）；
+  但 **`animation` 声明的选择器原文必须逐字进名单（含伪元素）** —— `animation-duration` / `animation-iteration-count`
+  **不是可继承属性**，T11 评审用 headless Chromium（`--force-prefers-reduced-motion`）实测坐实：`.ed-skeleton` 元素是
+  `0.001s / 1`，而 **`.ed-skeleton::after` 仍是 `1.2s / infinite / ed-skeleton-shimmer`** ⇒ 计划验收「让两者都静止」
+  当时未达成。**裁决：名单里补 `.ed-skeleton::after`（伪元素）与 `.ed-empty-enter`（钩子类）**，理由是这一块是
+  "让一切都静止"的**唯一收口处**，漏掉伪元素是**系统性洞**（未来任何原语在伪元素上做动画都会再踩）；把微光挪到元素自身
+  只能修这一个实例。判据落在 `motion-coverage.test.ts`（抽取 `primitives/*.css` 里每个 `animation` / `animation-name`
+  声明的选择器原文，逐个要求出现在名单里；反向再断言名单无死条目）。
+- **分桶裁定（控制方 2026-09-11，回应 T12 评审 I-2）**：`StatusLine` 的接缝是**一次性浮现 `transition`（无循环动画）**，
+  **keyframes 桶只留 `Loading` / `Skeleton` / `Probe`**（骨架微光 / 探针）—— 依据 §8.6.1 第 1 条「环境层永远不抢注意力」：
+  状态行是**信息**不是「呼吸物」，循环动效会让它在长列表里变成噪音；"闲置时也有生命感"由 `Probe` 承担。
+  规格 §8.6.1 第 3 条已按此改写。
+- **本批 `@keyframes` 的先后（口径订正）**：本批**第一个** `@keyframes` 是 `EmptyState.css` 的 **`ed-empty-in`**
+  （提交 `0e5e78ab`，00:06:10），`Loading.css` 的 `ed-skeleton-shimmer` / `ed-probe-swing` 在其后（`174b1893`，00:06:41）。
+  `Loading.css:50` 与其报告写的「全仓第一个 `@keyframes`」**与事实相反**，此处以正确口径记录（该文件的措辞由 T11 自行处置）。
 
 ### 6. 退场期指针事件门控（`[data-phase="exit"]` ⇒ `pointer-events: none`）
 
@@ -221,7 +234,7 @@ z-index 的迁移纪律（0-A 交接第 3 条）：**必须按叠放段整段推
 |---|---|
 | 原语 CSS 零颜色字面量（**剥注释**后判，注释里的旧色值不算犯规） | `style-seams.test.ts`「守卫①」 |
 | `--ed-stamp` 不作底色 + `Button.css` 内计数为 0 | `style-seams.test.ts`「守卫②」（含口径锚：印章仍以 `color`/`border` 消费它） |
-| reduced-motion 覆盖率按**基类名单**双向一致 + 5 个非原语 `.ed-*` 名排除 | `style-contract.test.ts` |
+| reduced-motion 覆盖率：**基类**名单逐一覆盖 + **动画落点**（含伪元素）逐字覆盖 + 名单无死条目 + 5 个非原语 `.ed-*` 名排除 | `motion-coverage.test.ts` |
 | 每个 `primitives/*.css` 被其宿主模块 import（删掉那行 import 时其余用例仍全绿 —— T3 评审实测的洞） | `style-contract.test.ts` |
 | 11 个取值联合 ↔ CSS 类规则的全枚举锚（`Record<Union, …>` 编译期双向 + 档数运行期冗余） | `style-contract.test.ts` |
 | 退场时长三方对拍：`EXIT_MS` == 组件 CSS 的 `var(--ed-dur-*, <n>ms)` 兜底 == `motion.css` 定值 | `style-contract.test.ts` |

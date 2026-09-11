@@ -214,7 +214,7 @@
 ## 5. L1 · 原语层
 
 > **落地状态（批 0-D，2026-09-11）**：**9 类原语已落地**（第 10 类 z-index 标尺在批 0-A 已交付，本批只消费）。
-> 目录 `app/src/ui/primitives/`（**41 个文件，逐个 ≤300 行**，最大 297），唯一导出面 `index.ts`；契约见
+> 目录 `app/src/ui/primitives/`（**42 个文件，逐个 ≤300 行**，最大 297），唯一导出面 `index.ts`；契约见
 > [ADR-033](../../adr/ADR-033-l1-primitives-and-view-layer-contract.md)。**本批不迁移任何调用点** —— §5.1 的现状病灶要到**批 4** 才收敛，
 > 界面外观零变化是设计意图（§10）。
 >
@@ -230,7 +230,7 @@
 > | `Loading` / `Skeleton` / `Probe` | `Loading.tsx` 102 · `Loading.css` 72 · `Loading.test.tsx` 229 |
 > | `StatusLine` | `StatusLine.tsx` 92 · `StatusLine.css` 41 · `StatusLine.test.tsx` 258 |
 > | 共享内核 | `usePresence.ts` 200 · `usePresence.test.tsx` 282 · `usePresence.node.test.ts` 71 · `useFocusTrap.ts` 122 · `useFocusTrap.test.tsx` 236 · `ime.ts` 18 · `ime.test.ts` 32 |
-> | 接缝 / 导出面 / 守卫 | `motion.css` 66 · `index.ts` 45 · `style-seams.test.ts` 271 · `style-contract.test.ts` 291 |
+> | 接缝 / 导出面 / 守卫 | `motion.css` 74 · `index.ts` 45 · `style-seams.test.ts` 271 · `style-contract.test.ts` 214 · `motion-coverage.test.ts` 145 |
 
 ### 5.1 收敛账本
 
@@ -435,7 +435,9 @@
    - **第二优先 = 环境层（2–6s）保持"可感知的生命感"**：用户原话是"交互时最重要，**但闲置时也要有生命感（环境层别退太多）**"⇒ **不得**把环境层降为纯背景、**不得**把它压到看不见；它按 §8.1 已定的项目与量级存在（探针摆动 · 采集脉冲 · 未确认段落墨度极缓慢起伏 2% · 到期刻度微光），并在 §8.5 的「丰富」档**如实变丰富**（幅度与频率提高），而不是只在响应层加料。
    - **两者的分界**：环境层永远不抢注意力（幅度上限不动）、不阻塞交互、`prefers-reduced-motion` 下整体静态；响应层**必须每次都给回执**。
 2. **每个用户动作都要有即时回执**：点击 / 拖拽 / 悬停 / 键入 / 勾选 / 展开折叠 / 切换视图 —— 每一类都必须有**有质感的即时反馈**（"做完了"与"收到了"必须可区分）。**这是验收口径，不是形容词**：批 6 收口时逐类动作列出其响应层动效，缺一即不达标。
-3. **可中断、可反向是"活"的硬指标**：交互触发的动效必须能被**下一个输入打断**（下一个动作接管当前动效，而不是排队等待）。⇒ 批 0-D 的原语必须预留**动效接缝**：`Button`（hover / active / focus-visible / disabled 四态 + 按下微陷）· `Surface`（hover 升起 / 边框墨度）· `Text`（墨度与字距的可动画钩子）· `Modal`/`ConfirmDialog`（进出场 presence 钩子 + 遮罩淡入，走 §8.4 的 200/160）· `Toast`（进出场 180/140 + 可打断）· `EmptyState`/`Loading`/`StatusLine`（骨架微光/探针的 CSS keyframes 钩子）。**否则批 6 只能回头改每一处调用点**，而批 0 交付的正是"让后面每一批都能一次改对所有地方"的能力（§10）。
+3. **可中断、可反向是"活"的硬指标**：交互触发的动效必须能被**下一个输入打断**（下一个动作接管当前动效，而不是排队等待）。⇒ 批 0-D 的原语必须预留**动效接缝**：`Button`（hover / active / focus-visible / disabled 四态 + 按下微陷）· `Surface`（hover 升起 / 边框墨度）· `Text`（墨度与字距的可动画钩子）· `Modal`/`ConfirmDialog`（进出场 presence 钩子 + 遮罩淡入，走 §8.4 的 200/160）· `Toast`（进出场 180/140 + 可打断）· **`Loading`/`Skeleton`/`Probe`（骨架微光 / 探针的 CSS `@keyframes` 钩子 —— 只有这两个"循环环境动效"用 keyframes）** · `EmptyState`（一次性入场钩子 `.ed-empty-enter`） · **`StatusLine`（一次性浮现 `transition`，无循环动画）**。**否则批 6 只能回头改每一处调用点**，而批 0 交付的正是"让后面每一批都能一次改对所有地方"的能力（§10）。
+
+   > **分桶裁定（控制方 2026-09-11，回应 T12 评审 I-2）**：本节原先把 `StatusLine` 与 `Loading` 并列为「CSS keyframes 钩子」，与计划给它的实现（transition + 明确「无循环动画」）分叉。**裁定：`StatusLine` 归 transition（无循环），keyframes 桶只留 `Loading`/`Skeleton`/`Probe`。** 依据是本节第 1 条「环境层永远不抢注意力」——状态行是**信息**不是「呼吸物」，循环动效会让它在长列表里变成噪音；「闲置时也有生命感」由 `Probe` 承担。同裁定记入 [ADR-033](../../adr/ADR-033-l1-primitives-and-view-layer-contract.md)。
 4. **"活"不得以无障碍为代价**：`prefers-reduced-motion` 优先于强度档位（§8.5）；键盘路径（Tab 顺序 / 焦点可见 / Esc 退出）与"活"冲突时，**无障碍优先**。
 
 ### 8.7 明确不做（3 条，材质判断而非设计原则，可随时推翻）
@@ -532,12 +534,14 @@
 3. 空态 / 加载 / 错误行 / 弱化文本 / 卡片边框 五类重复 → 各自 **1 个原语**。
 4. CSS 变量 0 → 覆盖全部语义色 / 字阶 / 间距 / 圆角 / 时长 / 缓动；hex 88 → **≤ token 数**。
 5. `prefers-reduced-motion` 覆盖率 **100%**，且系统优先于强度档位。
-   **判据（批 0-D 拍定）= 基类名单，不是「全类集合 ⊇」**：每一类原语的**根类**（动效挂在它身上的选择器）必须在
-   `motion.css` 的媒体查询名单里，且名单**双向一致**（漏一个 = 那类原语在 reduced-motion 下照旧动；多一个 = 死名字）。
-   修饰类（`--`）与子元素/钩子类（`.ed-modal-head/body/foot` · `.ed-confirm-seal/-impacts/-keep` · `.ed-empty__title` ·
-   `.ed-empty-enter` · `.ed-toast-action`）**不进名单** —— 它们与基类同在一个元素上、已被同一条规则覆盖，
-   逐字枚举只会假红（T10 评审曾担心这条守卫会假红，实测 26/26 绿 ⇒ 不必另设兜底方案）。
-   机器判据在 `app/src/ui/primitives/style-contract.test.ts`。
+   **判据（批 0-D 拍定）= 基类名单 + 动画落点名单，不是「全类集合 ⊇」**：每一类原语的**根类**（动效挂在它身上的选择器）必须在
+   `motion.css` 的媒体查询名单里；**且每一处 `animation` 声明的选择器原文（含伪元素）也必须在名单里** ——
+   `animation-duration` / `animation-iteration-count` **不是可继承属性**，覆盖写在宿主元素上伪元素拿不到
+   （T11 评审用 headless Chromium `--force-prefers-reduced-motion` 实测：`.ed-skeleton` 是 `0.001s/1`，而
+   `.ed-skeleton::after` 仍是 `1.2s / infinite` ⇒ 当时「让两者都静止」未达成）。名单**双向一致**（漏一个 = 照旧动；多一个 = 死名字）。
+   修饰类（`--`）与子元素类（`.ed-modal-head/body/foot` · `.ed-confirm-seal/-impacts/-keep` · `.ed-empty__title`）**不进名单** ——
+   它们与基类同在一个元素上、已被同一条规则覆盖，逐字枚举只会假红（T10 评审曾担心这条守卫会假红，实测 26/26 绿 ⇒ 不必另设兜底方案）。
+   机器判据在 `app/src/ui/primitives/motion-coverage.test.ts`。
 6. 会话与笔记各 **≥2 种**展示形式可用，原文形态不丢。
 7. **47 条未接线命令逐个有结论**，无「不知道」。
 8. **标签能写进去**且标签过滤面板有内容；**画面档位选完真的生效**且跨会话记住。
