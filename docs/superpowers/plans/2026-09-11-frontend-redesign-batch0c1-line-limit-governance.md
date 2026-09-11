@@ -391,9 +391,16 @@ function parseReasons() {
 /** 取该文件 `@ai-context` 的首行要点，作为自动补登时的理由 */
 function autoReason(absPath) {
   const src = readFileSync(absPath, 'utf8');
-  const m = /@ai-context[：:]?\s*([^\n*]+)/.exec(src);
+  // 捕获**整行**再清洗，而不是用 `[^\n*]+` 直接卡在 `*` 上 —— 本仓大量 `@ai-context` 行以
+  // `**加粗**` 开头（如 `@ai-context **域图标**几何（9 个）：…`），卡 `*` 会**一格都捕获不到**，
+  // 使 45 条自动理由全部退化成占位符。
+  const m = /@ai-context[：:]?\s*([^\n]+)/.exec(src);
   if (!m) return '（待补理由：本条目由生成器补登）';
-  return `${m[1].trim()}（自动摘取，待细化）`;
+  const text = m[1]
+    .replace(/\*\/\s*$/, '') // 单行块注释的收尾 `*/`
+    .replace(/\*\*/g, '') // 加粗标记
+    .trim();
+  return text ? `${text}（自动摘取，待细化）` : '（待补理由：本条目由生成器补登）';
 }
 
 /** 逐字保留「已拆分 / 登记移除记录」整节 */
