@@ -12,7 +12,6 @@ use rusqlite::{params, Connection};
 
 use crate::db::{unix_seconds, Db};
 use crate::error::Result;
-use crate::goal_schema::{CRITERIA_GROUP_SETTLED, MILESTONE_DONE, MILESTONE_IN_PROGRESS, MILESTONE_PENDING};
 
 // 子模块声明（AGENTS.md §3 单文件 ≤300 行；#[path] 使兄弟文件平铺在同目录，各自带 @ai-context）。
 /// 里程碑域：里程碑 CRUD + 三写路径共用的插入行 helper。
@@ -27,6 +26,9 @@ mod goal;
 /// 回顾域：结算快照 / 复习统计 / 成果物清单聚合取数。
 #[path = "db_goals_retro.rs"]
 mod retro;
+/// 绑定域：目标↔组绑定 + 组结算钩子。
+#[path = "db_goals_binding.rs"]
+mod binding;
 
 /// 三表 DDL + 索引（幂等：CREATE TABLE IF NOT EXISTS；旧库升级自动补表）。
 pub(crate) fn init(conn: &Connection) -> Result<()> {
@@ -80,57 +82,6 @@ pub(crate) fn init(conn: &Connection) -> Result<()> {
 }
 
 impl Db {
-
-    /// 绑定组到目标（UNIQUE 幂等：重复绑定返回 false；组不存在靠外键报错，
-    /// 命令层先行校验）。
-    pub fn bind_group(&self, goal_id: i64, group_id: i64) -> Result<bool> {
-        self.with_conn(|conn| {
-            let affected = conn.execute(
-                "INSERT OR IGNORE INTO goal_groups (goal_id, group_id, added_at) VALUES (?1, ?2, ?3)",
-                params![goal_id, group_id, unix_seconds()],
-            )?;
-            Ok(affected > 0)
-        })
-    }
-
-    /// 解绑组（不影响组本身：组是唯一容器，绑定只是管道）。
-    pub fn unbind_group(&self, goal_id: i64, group_id: i64) -> Result<bool> {
-        self.with_conn(|conn| {
-            let affected = conn.execute(
-                "DELETE FROM goal_groups WHERE goal_id = ?1 AND group_id = ?2",
-                params![goal_id, group_id],
-            )?;
-            Ok(affected > 0)
-        })
-    }
-
-    /// 目标绑定组 id 列表（进度聚合/详情视图数据源）。
-    pub fn list_goal_group_ids(&self, goal_id: i64) -> Result<Vec<i64>> {
-        self.with_conn(|conn| {
-            let mut stmt =
-                conn.prepare("SELECT group_id FROM goal_groups WHERE goal_id = ?1 ORDER BY id ASC")?;
-            let rows = stmt.query_map(params![goal_id], |r| r.get::<_, i64>(0))?;
-            rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
-        })
-    }
-
-    /// 组结算钩子（execute_settlement 后调用）：绑该组的 group_settled
-    /// 里程碑 pending/in_progress → done（自动通过，进度信号随之生效）。
-    pub fn mark_group_settled_milestones(&self, group_id: i64) -> Result<usize> {
-        let now = unix_seconds();
-        self.with_conn(|conn| {
-            let affected = conn.execute(
-                &format!(
-                    "UPDATE goal_milestones SET status = '{}', completed_at = ?1
-                     WHERE criteria_type = '{}' AND ref_group_id = ?2
-                       AND status IN ('{}', '{}')",
-                    MILESTONE_DONE, CRITERIA_GROUP_SETTLED, MILESTONE_PENDING, MILESTONE_IN_PROGRESS
-                ),
-                params![now, group_id],
-            )?;
-            Ok(affected)
-        })
-    }
 
     // ─────────────────────── v0.18.1 毕业报告（REQ-255/256） ───────────────────────
 
