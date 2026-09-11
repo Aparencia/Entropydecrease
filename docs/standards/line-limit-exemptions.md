@@ -24,12 +24,12 @@
 | app/src-tauri/src/note_filter.rs | 642 | 超硬限（>600 行），不允许豁免 —— v0.6.0 M1（REQ-082/085）：笔记过滤域（过滤链 + AI 判定应用 + 画面要点净化）内聚于单一管线（双出口一致性由构造保证）；AI 部分已按登记计划拆至 note_filter_ai.rs | 若再增长：净化链拆至 note_filter_purify.rs |
 | app/src-tauri/src/artifact_templates.rs | 632 | 超硬限（>600 行），不允许豁免 —— v0.5.0 M7（REQ-052）：五档案模板函数（讲义/步骤卡/摘要/对话纪要/会议纪要）内聚于同一模板域，各模板共享原料注入签名；v0.9.0 M5 叙事变体再增 | 若再增长：会议/访谈模板拆至 artifact_templates_meeting.rs |
 | app/src-tauri/src/video_profile.rs | 628 | 超硬限（>600 行），不允许豁免 —— v0.5.0 M1（REQ-043）：档案域（类型/检测投票/记忆偏好/JSON IO）内聚；档案常量数据已拆至 video_profile_data.rs；v0.9.0 M1 记忆库 kind 映射迁移 + v0.11.5 Task 5 四象限记忆后置判定（apply_profile_memory）再增；v0.13.6（REQ-222）领域记忆独立通道（DomainMemoryEntry/remember_domain/lookup_domain）+ platform_form 字段再增 | 若再增长：检测投票与记忆偏好拆至 video_profile_detect.rs |
-| app/src/components/SessionListPanel.tsx | 604 | 超硬限（>600 行），不允许豁免 —— v0.20.9 批 4（REQ-313）列表交互重写（选择模式/行右键/行内改名/批量栏）+ 审查修复轮 3（全选可见行基准/pending）净增——2026-09-09 实测纠偏（登记值 491 过期）；**超 600 硬限随 TD-2026-09-09-D 登记** | **超硬限必须拆**：批量操作栏与选择模式拆至 SessionSelectionToolbar.tsx（列表行已拆 SessionListRow.tsx） |
 
 ## 301–600 档（须登记）
 
 | 文件 | 行数 | 豁免理由 | 拆分计划 |
 |---|---|---|---|
+| app/src/components/SessionListPanel.tsx | 598 | 超硬限（>600 行），不允许豁免 —— v0.20.9 批 4（REQ-313）列表交互重写（选择模式/行右键/行内改名/批量栏）+ 审查修复轮 3（全选可见行基准/pending）净增——2026-09-09 实测纠偏（登记值 491 过期）；**超 600 硬限随 TD-2026-09-09-D 登记** | **超硬限必须拆**：批量操作栏与选择模式拆至 SessionSelectionToolbar.tsx（列表行已拆 SessionListRow.tsx） |
 | app/src-tauri/src/commands.rs | 597 | 命令装配域（AppState + 通用命令 + 导入管线编排）；登记值 466 过期快照——2026-09-09 实测纠偏（含批 7 delete_note 结果契约 +12；600 硬限内压线） | 若再增长：导入管线命令拆至 commands_import.rs（既有登记计划） |
 | app/src/pages/ChatPage.tsx | 593 | AI 对话页编排；批 1（REQ-306/307）active 门控/终态订阅接线净增——2026-09-09 实测纠偏（登记值 529 过期） | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
 | app/src-tauri/src/lib.rs | 577 | crate 根 321 `mod` + 16 `#[cfg]` = **337 行地板**；注册清单已移至 `app_commands.rs`（**数据文件**，同属 300–600 豁免带）—— 结构性下界，非欠账 | 已完成（批 0-C3 Task 1，2026-09-11）；余下 161 行模块理由注释 + 装配逻辑，无进一步拆分标的 |

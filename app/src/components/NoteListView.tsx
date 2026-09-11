@@ -25,6 +25,8 @@ import { useNoteOrders } from "../hooks/useNoteOrders";
 import { useNoteMoves } from "../hooks/useNoteMoves";
 // 批 0-C2：多选三通道 + 菜单三态 + 唯一 Esc handler（可见序镜像同文件）
 import { useNoteListSelection } from "../hooks/useNoteListSelection";
+// 批 0-C2：划选（组头空白起手；window 监听 + elementFromPoint 命中——整块搬迁）
+import { useNoteMarquee } from "../hooks/useNoteMarquee";
 import NoteListRow from "./NoteListRow";
 import NoteTreeSection from "./NoteTreeSection";
 import NoteRowContextMenu from "./NoteRowContextMenu";
@@ -148,47 +150,8 @@ export default function NoteListView({
     notes, treeMode, manualOrders, manualBaseOf, saveOrder, onNoteMoved, onCleanNotice, closeBatchMenu,
   });
 
-  /** 划选（组头空白起 → 组内首行至当前行带；走既有行命中的全局可见序）。
-   *  L9 审查修正：rAF 节流 + pointercancel/blur/松开（buttons=0）即清理——
-   *  不再有"窗口外释放后监听永久残留、悬停任意行改写选区"的泄漏。 */
-  const startMarquee = useCallback((scope: string) => {
-    // 折叠组行不可见——不提供划选起点（避免选中不可见数据）
-    const foldKey = scope === "none" ? "none" : scope.slice(2);
-    if (groupFolds[foldKey] === true) return;
-    const section = sections.find((s) => s.scope === scope);
-    if (!section || section.items.length === 0) return;
-    const startGlobal = visibleOrder.indexOf(section.items[0].id);
-    if (startGlobal < 0) return;
-
-    let raf = 0;
-    const hit = (e: PointerEvent) => {
-      const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-      const rowEl = el?.closest<HTMLElement>('[id^="note-row-"]');
-      if (!rowEl) return;
-      const id = Number(rowEl.id.replace("note-row-", ""));
-      const gi = visibleOrder.indexOf(id);
-      if (gi < 0) return;
-      const lo = Math.min(startGlobal, gi);
-      const hi = Math.max(startGlobal, gi);
-      setSelection(new Set(visibleOrder.slice(lo, hi + 1)));
-    };
-    const onMove = (e: PointerEvent) => {
-      if (e.buttons === 0) { cleanup(); return; }
-      if (raf) return;
-      raf = requestAnimationFrame(() => { raf = 0; hit(e); });
-    };
-    const cleanup = () => {
-      if (raf) cancelAnimationFrame(raf);
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", cleanup);
-      window.removeEventListener("pointercancel", cleanup);
-      window.removeEventListener("blur", cleanup);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", cleanup);
-    window.addEventListener("pointercancel", cleanup);
-    window.addEventListener("blur", cleanup);
-  }, [sections, visibleOrder, groupFolds]);
+  // 划选（组头空白起手：window 四路监听 + elementFromPoint 行命中）——整块搬迁见 hooks/useNoteMarquee
+  const { startMarquee } = useNoteMarquee({ sections, visibleOrder, groupFolds, setSelection });
 
   const rowAccent = (n: Note) => paletteHex(noteColors?.[n.id] ?? null, theme);
 
