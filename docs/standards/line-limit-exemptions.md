@@ -32,7 +32,6 @@
 | app/src/components/action-center/ActionCenterPanel.tsx | 537 | v0.20.5 行动中心独立页化：原 ActionCenterOverlay.tsx（509 行登记）更名迁移至 action-center/ 并去遮罩/关闭形态（refreshToken 切回重载）——编排内聚（TD-2026-09-06-G 预留目录兑现）；2026-09-06 实测登记 | 若再增长：队列/历史/SOP 三区拆至 action-center/ 子组件 |
 | app/src-tauri/src/commands_knowledge_core.rs | 529 | v0.13.1（REQ-202~205）：知识体系命令域（概念/模型/引用/审计——commands 9-18）内聚；源 commands_knowledge.rs（18 命令 + 校验）超限按规格 §四拆，本文件承接后半；commands 薄壳 + inner 纯函数 + @ai-context 注释内聚于命令域 | 若再增长：引用与审计拆至 commands_knowledge_links.rs |
 | app/src-tauri/src/live_frame_process.rs | 529 | v0.6.0 ADR-011 拆分产物：帧处理域（网格差异触发/两级判变/带外事件驱动/UI 面板抑制/字幕落库）内聚；process_frame 上下文参数 20+；H2 修复（OCR 热路径切超时变体）+ L2 修复（score 口径诚实化）行数微增 + v0.11.5 Task 2 新颖度变化区域接线再增 | 若再增长：handle_subtitle_frame 与 persist_voted_subtitle 拆至 live_subtitle_persist.rs |
-| app/src-tauri/src/note_filter.rs | 528 | **拆分进行中（批 0-C3 Task 8 S1/3）**：渲染层已拆至 note_filter_render.rs，本行行数每步由 `--write` 刷新 —— v0.6.0 M1（REQ-082/085）：笔记过滤域（过滤链 + AI 判定应用 + 画面要点净化）内聚于单一管线（双出口一致性由构造保证）；AI 部分已按登记计划拆至 note_filter_ai.rs | 拆分进行中：S2 净化纯函数族拆至 note_filter_purify.rs · S3 转写段过滤链拆至 note_filter_chain.rs（最终 ≤300 ⇒ 本条目整行移除） |
 | app/src-tauri/src/engine.rs | 526 | 引擎池句柄与同步 API（双 worker 编排 + ADR-009 设备状态 + M7 心跳/失败/缓存计数 + 有界等待变体）；三维复审 #5 超时排空机制（drain_asr/ocr_backlog）与 #3 ASR_FILE_TIMEOUT 文件级超时常量接入后，worker 主循环与请求协议按登记计划拆至 engine_worker.rs（见文末"已拆分"注记）回归本值 | 若再增长：排空机制与同步 API 变体拆至 engine_request.rs |
 | app/src-tauri/src/asr_merge.rs | 524 | v0.5.0 ADR-012 F4-1 语义合并域 + v0.7.0 M2 REQ-119 混排空格（spacing_for/merge_segments_with_spacing）；合并决策与切分共用标点常量 | 若再增长：split_sentences/split_timestamps 拆至 asr_merge_split.rs |
 | app/src/components/GroupSidebar.tsx | 519 | v0.20.12 批 7（REQ-316）拖拽归组/ⓘ 弹层移组清理留痕透传（509→519；登记值过期纠偏） | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook |
@@ -66,6 +65,7 @@
 | app/src-tauri/src/db_note_groups_tests.rs | 426 | v0.11.0 组数据层测试域 + v0.14.1 删除/影响面用例（级联归零/悬空清理/迁移回归）——单模块 #[path] 挂载（video_profile_tests.rs 同款先例），组删除语义变更集中验证 | 若再增长：删除/影响面组拆至 db_note_groups_delete_tests.rs |
 | app/src-tauri/src/analysis.rs | 423 | v0.5.0 M2 起结构化分析编排域（章节/重点/术语/讲者 + 事件消费 + step_boundaries/practice_segments/player_actions 三字段 + 审查修复按类型判定）；各机制输出聚合内聚于单一分析函数 | 若再增长：build_chapter_signals 事件版拆至 analysis_signals.rs |
 | app/src-tauri/src/artifact_templates_tests.rs | 423 | 产物模板测试域（五档案模板 + 代码块/步骤卡扩展 + 叙事变体 golden）单模块 #[path] 挂载 | 若再增长：代码块/步骤卡组拆至 artifact_code_tests.rs |
+| app/src-tauri/src/note_filter.rs | 422 | **拆分进行中（批 0-C3 Task 8 S1/3）**：渲染层已拆至 note_filter_render.rs，本行行数每步由 `--write` 刷新 —— v0.6.0 M1（REQ-082/085）：笔记过滤域（过滤链 + AI 判定应用 + 画面要点净化）内聚于单一管线（双出口一致性由构造保证）；AI 部分已按登记计划拆至 note_filter_ai.rs | 拆分进行中：S2 净化纯函数族拆至 note_filter_purify.rs · S3 转写段过滤链拆至 note_filter_chain.rs（最终 ≤300 ⇒ 本条目整行移除） |
 | app/src-tauri/src/app_setup.rs | 420 | 本模块承载 setup 的 AppState 初始化（数据目录/DB/引擎池/可校准（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/bin/asr_eval.rs | 418 | 目的——"无人工语料也能测 ASR"（2026-09-03 用户裁决①）：（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/vocab.rs | 416 | 词表域（存储/纠错/候选提取/n-gram 分词）内聚；分词纯逻辑与存储同域便于单测 | 若再增长：collect_tokens/split_runs 拆至 vocab_tokens.rs |
