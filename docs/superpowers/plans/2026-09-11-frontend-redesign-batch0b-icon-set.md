@@ -4,7 +4,7 @@
 
 **Goal:** 用自绘线性 SVG 图标层替换 310 个 emoji（93 个文件），使图标可被 `currentColor` 语义着色、尺寸统一、并在暗色主题下不破坏三色信号体系。
 
-**Architecture:** 图标是**纯数据 + 一个薄组件**。`paths.ts` 持有 24 个图标的几何数据（只允许 `path`/`circle`/`rect`/`line` 四种元素，24 网格，无内联颜色），`Icon.tsx` 是唯一渲染入口（`stroke="currentColor"`、`fill="none"`、描边从 token 读、默认 `aria-hidden`），`index.ts` 收敛导出面。每个图标的几何正确性由**契约测试**保证（网格、元素白名单、无字面量颜色、`d` 非空），渲染行为由 jsdom 测试保证，另加一条**棘轮守卫**防止新代码继续写内联 `<svg>`。
+**Architecture:** 图标是**纯数据 + 一个薄组件**。`paths.ts` 持有 24 个图标的几何数据（只允许 `path`/`circle`/`rect` **三种**元素，24 网格，无内联颜色），`Icon.tsx` 是唯一渲染入口（`stroke="currentColor"`、`fill="none"`、描边从 token 读、默认 `aria-hidden`），`index.ts` 收敛导出面。每个图标的几何正确性由**契约测试**保证（网格、元素白名单、无字面量颜色、`d` 非空），渲染行为由 jsdom 测试保证，另加一条**棘轮守卫**防止新代码继续写内联 `<svg>`。
 
 **Tech Stack:** React 19 · TypeScript 5.8 · Vite 7 · Vitest 4（全局 node，按文件切 jsdom）· 复用批 0-A 的 `SCALE_TOKENS.icon*`
 
@@ -161,7 +161,7 @@ Expected: FAIL —— `Failed to resolve import "./paths"`（或 `Cannot find mo
  * 组件只有一个。
  *
  * 副作用：无（纯类型 + 常量）。
- * 边界：几何只允许四种 SVG 元素（见 `ICON_ELEMENT_TAGS`）——**不含任何颜色字段**，
+ * 边界：几何只允许三种 SVG 元素（见 `ICON_ELEMENT_TAGS`）——**不含任何颜色字段**，
  * 颜色一律由 `currentColor` 决定。新增元素类型必须先在此登记并同步契约测试。
  */
 
@@ -873,11 +873,22 @@ git commit -m "test(ui): 内联 svg 棘轮守卫与图标导出面收口"
 - ⚠️ **T1 任务评审曾预言「T2 引入 circle/rect 后自然闭合」—— 并未闭合**：T2 引入的是**数据**，`Icon.test.tsx` 自 T1 起从未被修改。**数据存在 ≠ 渲染被验。**
 - ⇒ **批 3/4 补两条渲染用例**：各渲染一个 circle 图标与一个 rect 图标，**断言 DOM 属性名**（`width`/`height`/`cx`/`cy`/`r`），而不只是数 `path` 的个数。批 3 的第一个消费方就会用到 `settings`（齿轮，圆构成）与 `search`（⌘K 入口）。
 
-**2. `Icon.tsx` 的末分支以 `return <rect>` 兜底**，而非穷尽 `switch` + `never`：将来加入第 4 种元素时**不会编译失败**，而是静默渲染一个坐标全 `undefined` 的 `rect`。
-⇒ **批 3/4 改成 `switch` + `default: assertNever(el)`**（约 5 行）。（登记来源：T1 任务评审 Minor #4。）
+**2. `Icon.tsx` 的末分支以 `return <rect>` 兜底**，而非穷尽 `switch` + `never`。
+⚠️ **本节原先写的失败模式不成立，已更正**：原写「将来加入第 4 种元素时不会编译失败，而是静默渲染坐标全 `undefined` 的 rect」—— **终局评审实测证伪**：把第 4 种元素（`line`，带 `x1/y1/x2/y2`）加进 `IconElement` 联合后跑 `tsc`，兜底分支报 **5×TS2339，编译必然失败**。只有「新元素恰好也带 `x/y/w/h`」这一巧合才会静默。
+⇒ **`switch` + `default: assertNever(el)` 是廉价的可读性收益，不是补洞**。**批 3/4 不必为它排期**；若顺手改，是锦上添花。（登记来源：T1 任务评审 Minor #4；失败模式由终局评审更正。）
 
-**3. `paths.ts` 的 `mergeGroups()` 重名抛错无测试**，且**不修改数据文件就无法构造**该输入（全仓 `app/src` 下没有任何 `toThrow` 指向它）。
-⇒ **控制方裁定：接受现状** —— 数据是静态的、重名只可能由人工编辑引入、且抛出即炸不会静默；把它抽成「可注入参数的纯函数」属**成本 > 收益**。
+**3. `paths.ts` 的 `mergeGroups()` 重名抛错无测试。**
+⚠️ **控制方原裁定「不修改数据文件就无法构造该输入 ⇒ 接受现状」已被终局评审证伪，现撤回。** 评审者用 `vi.doMock("./paths.action") + vi.resetModules()` **在不动任何数据文件的前提下**复现了导入期抛错（真实重名 → `图标重名：notes`），且本仓**已有 46 个测试文件在用 `vi.mock`**。
+⇒ **修正后的结论：可测，成本极低 —— 应补。** 二选一：① 补一条约 6 行的测试（`vi.doMock` + 动态 `import`，断言 `rejects/toThrow` 且消息含图标名）；② 按 AGENTS.md §3.1「显式依赖注入」把 `mergeGroups(groups)` 参数化（顺带让重名分支可被直接构造）。
+（守卫本身是有效的：必抛、不静默 —— 问题只在「没人守这条守卫」。）
+
+**5. `paths.ts` 的 `if (merged[name])` 走原型链（终局评审新发现，控制方已修）。**
+名为 `constructor` 的图标（命名规范 `/^[a-z][a-z0-9-]*$/` **恰好放行**）即使**毫无重名**，也会因取到 `Object.prototype.constructor`（truthy）而抛「图标重名：constructor」——**误导性的启动期崩溃**，排查成本高。
+⇒ **已修**：改为 `Object.prototype.hasOwnProperty.call(merged, name)`（不用 `Object.hasOwn`，它是 ES2022，而本仓 `lib` 为 ES2020）。
+
+**6. 图标规模基数「310 个 emoji / 93 个文件」需复测。**
+终局评审判用 `\p{Extended_Pictographic}` 复测为 **627 次 / 126 文件**（排除测试；含测试 694 / 146），与 `types.ts` 头注释及本计划 Goal 里写的 310 / 93 **差约 2 倍**（口径可能不同，评审者只计出现次数）。
+⇒ **批 4 的规模基数须先复测再排期**；在口径确定前**不擅自改动该数字**（把一个未核实的数换成另一个未核实的数是更坏的处置）。
 
 **4. `src/assets/react.svg` 是 Vite 模板遗留的死脚手架**（含 `<svg`，但**不在棘轮口径内** —— 守卫只扫 `.ts`/`.tsx`；看似无任何引用）。
 ⇒ **并入批 1（删除批）**：核实无引用后删除。此文件在建立本批基线时被发现，不是守卫的漏网。
