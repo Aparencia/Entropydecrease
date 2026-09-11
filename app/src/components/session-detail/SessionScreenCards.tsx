@@ -7,7 +7,9 @@
  *              头部文案与「原始 N 块」提示随类型分派。
  * @ai-context: 副作用边界——① 框选截取挂 BoxSelectOverlay（保存走后端 capture_structure_manual，
  *              图集经事件自刷新，本组件不参与）；② 保存反馈为**单屏** toast（screenKey=first_seen_ms，
- *              4s 自动消失、新消息重置计时），定时器 ref 随组件卸载清理（防卸载后 setState）。
+ *              4s 自动消失、新消息重置计时）。⚠️ 框选态与 toast 的**状态不在此组件内**（本组件只在
+ *              原料视图渲染，viewMode 切换即卸载）：二者由 useSessionDetailData 持有并经 props 下发，
+ *              使「保存 toast 的 4s 内」或「框选进行中」切视图再切回时的状态寿命与拆分前一致。
  * @ai-context: 性能契约——屏→OCR 块分组（M7 修复：排序 + 双指针一次遍历，替代逐屏 filter 的 O(n×m)）
  *              由调用方面板层/useSessionDetailData 以 memo 预构建并**以 prop 传 Map**；本组件内自行
  *              分组会随每次重渲重算，故不可下沉。
@@ -16,7 +18,6 @@
  * @ai-context: 样式口径——沿用拆分前的**全部 inline style**（本仓 .ed-* design token 尚未覆盖本域），
  *              拆分不改类名、不改色值。
  */
-import { useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import BoxSelectOverlay from "../BoxSelectOverlay";
 import type { SessionOcrBlock, SessionScreen } from "../../types";
@@ -37,6 +38,16 @@ interface Props {
   baseUrl: string;
   /** 屏→OCR 块分组（调用方 memo 预构建——见文件头性能契约） */
   ocrBlocksByScreen: Map<number, SessionOcrBlock[]>;
+  /** 框选态：正在框选的屏（first_seen_ms；null=无）——由 useSessionDetailData 持有（见文件头） */
+  selectingScreen: number | null;
+  /** 框选态写入（✂ 进入 / 完成 / 取消） */
+  onSelectScreen: (firstSeenMs: number | null) => void;
+  /** 单屏 toast（screenKey=first_seen_ms；null=无） */
+  panelToast: { screenKey: number; msg: string } | null;
+  /** 单屏 toast 触发（4s 自动消失；新消息重置计时） */
+  onShowToast: (screenKey: number, msg: string) => void;
+  /** 单屏 toast 立即清除（✂ 点击时清上一条） */
+  onClearToast: () => void;
 }
 
 export default function SessionScreenCards({
@@ -46,29 +57,12 @@ export default function SessionScreenCards({
   ocrBlockCount,
   baseUrl,
   ocrBlocksByScreen,
+  selectingScreen,
+  onSelectScreen,
+  panelToast,
+  onShowToast,
+  onClearToast,
 }: Props) {
-  // v0.7.7（REQ-184）：框选截取状态（first_seen_ms 标识屏）+ 保存反馈
-  const [selectingScreen, setSelectingScreen] = useState<number | null>(null);
-  // M2 修复：toast 携带屏键（first_seen_ms）——原单一 string 在 screens.map 内渲染导致 N 屏同显，
-  // 现仅匹配屏渲染（改动最小方案：保持原位展示，不提升到列表外）
-  const [panelToast, setPanelToast] = useState<{ screenKey: number; msg: string } | null>(null);
-  const panelToastTimerRef = useRef<number | null>(null);
-
-  // toast 定时器卸载清理（防卸载后 setState）
-  useEffect(
-    () => () => {
-      if (panelToastTimerRef.current) window.clearTimeout(panelToastTimerRef.current);
-    },
-    [],
-  );
-
-  /** 面板内单屏 toast（4s 自动消失；新消息重置计时） */
-  const showPanelToast = (screenKey: number, msg: string) => {
-    setPanelToast({ screenKey, msg });
-    if (panelToastTimerRef.current) window.clearTimeout(panelToastTimerRef.current);
-    panelToastTimerRef.current = window.setTimeout(() => setPanelToast(null), 4000);
-  };
-
   return (
     <>
       {/* 画面要点（v0.7.3 屏卡流：区间+标题+正文+标签+配图+结构徽标；可展开块级明细复查）
@@ -158,11 +152,11 @@ export default function SessionScreenCards({
                       sessionId={sessionId}
                       firstSeenMs={s.first_seen_ms}
                       onDone={() => {
-                        setSelectingScreen(null);
+                        onSelectScreen(null);
                         // 定时消失逻辑收敛到 showPanelToast（ref 持有 + 卸载清理）
-                        showPanelToast(s.first_seen_ms, "✓ 已保存为结构图（见图集「结构图」区段）");
+                        onShowToast(s.first_seen_ms, "✓ 已保存为结构图（见图集「结构图」区段）");
                       }}
-                      onCancel={() => setSelectingScreen(null)}
+                      onCancel={() => onSelectScreen(null)}
                     />
                   )}
                 </div>
@@ -170,8 +164,8 @@ export default function SessionScreenCards({
                   <button
                     style={{ ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #0d9488", background: "#f0fdfa", color: "#0f766e", marginTop: 4 }}
                     onClick={() => {
-                      setSelectingScreen(s.first_seen_ms);
-                      setPanelToast(null);
+                      onSelectScreen(s.first_seen_ms);
+                      onClearToast();
                     }}
                     title="拖框截取此屏中的流程图/图表等非线性结构为结构图"
                   >

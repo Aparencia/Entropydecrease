@@ -62,8 +62,11 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
   // v0.5.0 M7：会话切换回到原料视图（裁决 D1：viewMode 状态留面板；数据面重置见 useSessionDetailData）
   useEffect(() => { setViewMode("raw"); }, [sessionId]);
   // 数据面（质量/术语/baseUrl/屏→OCR 分组）+ 精修链路（懒触发/事件监听/手动入口/深链快照）
-  const { quality, glossary, baseUrl, ocrBlocksByScreen, refining, refineMsg, deepTaskId, setDeepTaskId, startRefine } =
-    useSessionDetailData({ detail, viewMode, onRefreshDetail });
+  // + 屏卡瞬时态（框选/单屏 toast——由 hook 持有以保证跨原料/预览视图切换不丢，见 hook 文件头）
+  const {
+    quality, glossary, baseUrl, ocrBlocksByScreen, refining, refineMsg, deepTaskId, setDeepTaskId, startRefine,
+    selectingScreen, setSelectingScreen, panelToast, showPanelToast, clearPanelToast,
+  } = useSessionDetailData({ detail, viewMode, onRefreshDetail });
   // REQ-282（v0.19.6）：标题行内改名 —— 连同改名状态与提交逻辑拆至 session-detail/SessionDetailHeader.tsx
   // v0.20.2（REQ-268）：离线精修（第二遍）裁决面板显隐（会话切换即关）
   const [showPass2, setShowPass2] = useState(false);
@@ -232,6 +235,11 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
             ocrBlockCount={detail.ocr_blocks.length}
             baseUrl={baseUrl}
             ocrBlocksByScreen={ocrBlocksByScreen}
+            selectingScreen={selectingScreen}
+            onSelectScreen={setSelectingScreen}
+            panelToast={panelToast}
+            onShowToast={showPanelToast}
+            onClearToast={clearPanelToast}
           />
 
           {/* 术语表（v0.11.5 spec 8️⃣：词汇表移出笔记 → 会话详情展示；

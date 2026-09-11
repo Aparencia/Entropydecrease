@@ -21,6 +21,10 @@
  * @ai-context: 陈旧闭包契约——listen 只在 [sessionId] 上注册（拆分前即带
  *              eslint-disable exhaustive-deps），回调经 onRefreshDetailRef 读最新 prop；
  *              改为 useCallback 直接闭包会让 session:refined 调用过期回调，屏卡回填静默失效。
+ * @ai-context: 屏卡瞬时态生命周期契约——框选态 selectingScreen 与单屏 toast panelToast 由**本 hook**
+ *              持有（拆分前在面板层）：屏卡只在原料视图渲染，viewMode 切到笔记预览会整块卸载，
+ *              状态下沉到屏卡会让「保存 toast 的 4s 内」或「框选进行中」切视图再切回时状态提前消失
+ *              （用户可见行为差异）。hook 由面板在早返回之前调用、面板跨视图切换不卸载 ⇒ 寿命等价。
  * @ai-context: 决策 D1——viewMode 状态仍归面板持有，本 hook 只按值判断懒触发；
  *              面板保留 DeepLink 切换 effect（setViewMode("preview")）与会话切换重置 effect。
  */
@@ -64,6 +68,16 @@ export interface SessionDetailData {
   setDeepTaskId: React.Dispatch<React.SetStateAction<number | null>>;
   /** 🔬 课后精修手动入口（失败文案与懒触发不同——见文件头） */
   startRefine: () => void;
+  /** 框选截取态：正在框选的屏（first_seen_ms；null=无）——由本 hook 持有生命周期，见文件头 */
+  selectingScreen: number | null;
+  /** 框选态写入（屏卡组件的 ✂/完成/取消回调） */
+  setSelectingScreen: React.Dispatch<React.SetStateAction<number | null>>;
+  /** 单屏 toast（screenKey=first_seen_ms；null=无）——生命周期同框选态 */
+  panelToast: { screenKey: number; msg: string } | null;
+  /** 单屏 toast 触发（4s 自动消失；新消息重置计时） */
+  showPanelToast: (screenKey: number, msg: string) => void;
+  /** 单屏 toast 立即清除（✂ 点击时清上一条） */
+  clearPanelToast: () => void;
 }
 
 export function useSessionDetailData({ detail, viewMode, onRefreshDetail }: Params): SessionDetailData {
@@ -83,6 +97,35 @@ export function useSessionDetailData({ detail, viewMode, onRefreshDetail }: Para
   const sessionId = detail.session.id;
   // v0.16.1：工作台深链快照（面板内持有——App 侧 focus 清空早于本层 effect，见文件头）
   const [deepTaskId, setDeepTaskId] = useState<number | null>(null);
+  // v0.7.7（REQ-184）：框选截取状态（first_seen_ms 标识屏）+ 保存反馈
+  //   ⚠️ 生命周期契约：这两者拆分前在面板层，**不能被屏卡组件持有** —— 屏卡只在原料视图
+  //   渲染（viewMode==="preview" 时整块卸载），状态下沉会让「保存 toast 4s 内」或「框选进行中」
+  //   切到笔记预览再切回时提前消失（用户可见行为差异）。本 hook 由面板在**早返回之前**调用，
+  //   面板在视图切换时不卸载 ⇒ 状态寿命与拆分前一致。
+  const [selectingScreen, setSelectingScreen] = useState<number | null>(null);
+  // M2 修复：toast 携带屏键（first_seen_ms）——原单一 string 在 screens.map 内渲染导致 N 屏同显，
+  // 现仅匹配屏渲染（改动最小方案：保持原位展示，不提升到列表外）
+  const [panelToast, setPanelToast] = useState<{ screenKey: number; msg: string } | null>(null);
+  const panelToastTimerRef = useRef<number | null>(null);
+
+  // toast 定时器卸载清理（防卸载后 setState）——拆分前挂在面板上（deps []），
+  // 现挂在面板调用的本 hook 内：注册与清理时机同为「面板挂载/卸载」，语义不变
+  useEffect(
+    () => () => {
+      if (panelToastTimerRef.current) window.clearTimeout(panelToastTimerRef.current);
+    },
+    [],
+  );
+
+  /** 面板内单屏 toast（4s 自动消失；新消息重置计时） */
+  const showPanelToast = (screenKey: number, msg: string) => {
+    setPanelToast({ screenKey, msg });
+    if (panelToastTimerRef.current) window.clearTimeout(panelToastTimerRef.current);
+    panelToastTimerRef.current = window.setTimeout(() => setPanelToast(null), 4000);
+  };
+
+  /** ✂ 框选前清掉上一条 toast（与拆分前 setPanelToast(null) 等价） */
+  const clearPanelToast = () => setPanelToast(null);
 
   // M7 修复：屏→OCR 块分组预构建（原 screens.map 内逐屏 filter 为 O(n×m)）——
   // 排序后双指针一次遍历归组；屏区间不重叠，与原 filter 语义一致
@@ -187,5 +230,8 @@ export function useSessionDetailData({ detail, viewMode, onRefreshDetail }: Para
       });
   };
 
-  return { quality, glossary, baseUrl, ocrBlocksByScreen, refining, refineMsg, deepTaskId, setDeepTaskId, startRefine };
+  return {
+    quality, glossary, baseUrl, ocrBlocksByScreen, refining, refineMsg, deepTaskId, setDeepTaskId, startRefine,
+    selectingScreen, setSelectingScreen, panelToast, showPanelToast, clearPanelToast,
+  };
 }
