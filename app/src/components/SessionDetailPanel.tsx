@@ -13,8 +13,8 @@
  *              refine-skipped 徽标提示（模型未下载降级链）。
  */
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { useSessionDetailData } from "../hooks/useSessionDetailData";
+import SessionDetailHeader from "./session-detail/SessionDetailHeader";
 import SessionScreenCards from "./session-detail/SessionScreenCards";
 import ImageGallery from "../components/ImageGallery";
 import NotePreviewView from "../components/NotePreviewView";
@@ -32,11 +32,6 @@ const SOURCE_LABEL: Record<string, string> = {
   subtitle: "字幕",
   asr: "语音",
   fused: "融合",
-};
-const STATUS_LABEL: Record<string, string> = {
-  recording: "录制中",
-  finished: "已完成",
-  failed: "异常中断",
 };
 
 interface Props {
@@ -68,12 +63,7 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
   // 数据面（质量/术语/baseUrl/屏→OCR 分组）+ 精修链路（懒触发/事件监听/手动入口/深链快照）
   const { quality, glossary, baseUrl, ocrBlocksByScreen, refining, refineMsg, deepTaskId, setDeepTaskId, startRefine } =
     useSessionDetailData({ detail, viewMode, onRefreshDetail });
-  // REQ-282（v0.19.6）：标题行内改名（详情头 ✎；Enter 保存/Esc 取消/失焦保存——
-  // 改名后 title_kind=manual，首句/AI 自动升级不再覆写）
-  const [renameMode, setRenameMode] = useState(false);
-  const [renameValue, setRenameValue] = useState("");
-  const [renameErr, setRenameErr] = useState("");
-  const [renameBusy, setRenameBusy] = useState(false);
+  // REQ-282（v0.19.6）：标题行内改名 —— 连同改名状态与提交逻辑拆至 session-detail/SessionDetailHeader.tsx
   // v0.20.2（REQ-268）：离线精修（第二遍）裁决面板显隐（会话切换即关）
   const [showPass2, setShowPass2] = useState(false);
   useEffect(() => setShowPass2(false), [sessionId]);
@@ -93,32 +83,6 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
     }
   }, [autoRefineTaskId, onAutoTaskConsumed, setDeepTaskId]);
 
-  /** 改名提交（Enter/失焦）：空标题=放弃退出；成功=退出并重拉详情 */
-  const commitRename = async () => {
-    if (renameBusy) return;
-    const t = renameValue.trim();
-    if (!t || t === detail.session.title) {
-      setRenameMode(false);
-      setRenameErr("");
-      return;
-    }
-    setRenameBusy(true);
-    try {
-      await invoke("update_session_title", { id: sessionId, title: t });
-      setRenameMode(false);
-      onRefreshDetail(sessionId);
-    } catch (e) {
-      setRenameErr(`改名失败: ${e}`);
-    } finally {
-      setRenameBusy(false);
-    }
-  };
-
-  const cancelRename = () => {
-    setRenameMode(false);
-    setRenameErr("");
-  };
-
   // v0.20.4（REQ-303）：web 会话专用详情（文章阅读 + 元数据回链 + 转笔记；
   // 无时间轴/屏卡/精修面——h2 标题即页标题，改名在会话列表进行）
   if (detail.session.kind === "web") {
@@ -137,84 +101,15 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
 
   return (
     <>
-      {degradedBanner && (
-        <div
-          style={{
-            fontSize: 12,
-            color: "#b45309",
-            background: "#fffbeb",
-            border: "1px solid #f59e0b",
-            borderRadius: 6,
-            padding: "6px 10px",
-            marginBottom: 8,
-          }}
-        >
-          ⚠ {degradedBanner}（恢复后自动消失）
-        </div>
-      )}
-
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-        {renameMode ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 220 }}>
-            <input
-              data-testid="session-title-input"
-              value={renameValue}
-              disabled={renameBusy}
-              onChange={(e) => { setRenameValue(e.target.value); setRenameErr(""); }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void commitRename();
-                else if (e.key === "Escape") cancelRename();
-              }}
-              onBlur={() => void commitRename()}
-              autoFocus
-              style={{ fontSize: 16, fontWeight: 600, padding: "2px 6px", border: "1px solid #0d9488", borderRadius: 4, maxWidth: 420 }}
-            />
-            {renameErr && <span style={{ fontSize: 11, color: "#dc2626" }}>{renameErr}</span>}
-          </div>
-        ) : (
-          <h2 style={{ margin: 0, fontSize: 16, display: "flex", alignItems: "center", gap: 6 }}>
-            {detail.session.title}
-            <button
-              data-testid="session-rename-open"
-              title="重命名会话（改名后不再被自动标题覆盖）"
-              onClick={() => { setRenameValue(detail.session.title); setRenameMode(true); }}
-              style={{ border: "none", background: "none", cursor: "pointer", fontSize: 12, padding: 0, color: "#6b7280" }}
-            >
-              ✎
-            </button>
-          </h2>
-        )}
-        <span style={{ fontSize: 11, color: "#6b7280" }}>
-          {STATUS_LABEL[detail.session.status]} · {detail.segments.length} 段转写 ·{" "}
-          {detail.ocr_blocks.length} 块画面
-        </span>
-        {fusing && (
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: "#b45309",
-              background: "#fffbeb",
-              border: "1px solid #f59e0b",
-              borderRadius: 10,
-              padding: "2px 8px",
-            }}
-          >
-            ⏳ 融合中（字幕/语音轴将自动升级）
-          </span>
-        )}
-        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-          <button
-            style={{ ...btn, background: "#0d9488", color: "#fff", border: "none", borderRadius: 6 }}
-            onClick={() => onToNote(sessionId)}
-          >
-            📝 转为笔记
-          </button>
-          <button style={btn} onClick={() => onRemove(sessionId)}>
-            删除
-          </button>
-        </div>
-      </div>
+      {/* 降级横幅 + 详情头（改名/状态行/融合中徽标/操作）—— 拆至 session-detail/SessionDetailHeader.tsx */}
+      <SessionDetailHeader
+        detail={detail}
+        fusing={fusing}
+        degradedBanner={degradedBanner}
+        onToNote={onToNote}
+        onRemove={onRemove}
+        onRefreshDetail={onRefreshDetail}
+      />
 
       {/* M6（REQ-076）：可信度总览卡片 */}
       {quality && (
