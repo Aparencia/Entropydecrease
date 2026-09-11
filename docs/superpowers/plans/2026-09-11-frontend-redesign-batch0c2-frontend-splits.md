@@ -56,6 +56,13 @@
    git commit -m "refactor(ui): 拆 <原文件> 至 ≤300 行"
    ```
 8. **报告**（路径见各任务）：拆前/拆后行数对照（含每个新文件）· 新文件的 `@ai-context` 摘要 · 门禁输出与 exit · **人工核对清单**及结论 · 登记表与棘轮名单的改动 · 顾虑（尤其**你没能验证的**地方）。
+9. **★ 机械不变式探针（推荐，零测试文件必做）**：控制方提供只读探针 `probe-verbatim-strings.mjs`，把「每一段用户可见文案 + 每个 IPC 命令/事件名在 `app/src` 全树里的出现次数」变成可机检的不变式 —— **搬运不改变全树计数**，所以拆分前后必须完全一致。任一被拆文件都可用：
+   ```powershell
+   $S = ".superpowers/sdd/2026-09-11-frontend-redesign-batch0c2-frontend-splits"
+   node $S/probe-verbatim-strings.mjs snapshot app/src/<被拆文件> $S/snap-<file>-baseline.json   # 仅拆前跑一次
+   node $S/probe-verbatim-strings.mjs verify   $S/snap-<file>-baseline.json                       # 每步 + 收尾各跑
+   ```
+   差异**不必然是缺陷**（注释改写、`{" "}` 挪成原位空格会改变片段）⇒ 逐条给结论；**计数归零或整段消失一定是缺陷**。
 
 ---
 
@@ -211,10 +218,67 @@ node scripts/line-limits.mjs --full     # 期望 exit 0，>600 计数少 1
 
 ---
 
-<!-- 剩余：Task 4（ClassroomPage 724）待其结构分析落地后按同一模式补入 —— 补入前不得派发该任务的实施者。
-     执行顺序：**串行**（Task 3 → Task 1 → Task 2 → Task 5 → Task 4）。
-     理由：三个实施者若并发，会在同一份登记表与 `FROZEN_OVER_LIMIT` 上互相覆盖；更危险的是
-     A 的 `git add` 与 B 的 `git commit` 交错会把 A 暂存的文件卷进 B 的提交。 -->
+### Task 4: 拆 `app/src/pages/ClassroomPage.tsx`（724 → 最小可行 ≈220，推荐 ≈160）
+
+> **边界取自**：`.superpowers/sdd/2026-09-11-frontend-redesign-batch0c2-frontend-splits/analysis-classroom-page.md`（140 行：顶层 25 项声明、每个 JSX 块的行号区间、7 个新文件与分步净减表、R1–R10 风险表）。**开工先读它**；与代码不符时**以代码为准**并在报告里指出。
+> **执行位置**：0-C2 的**最后一步**（串行顺序 Task 3 → 1 → 2 → 5 → 4 —— 并发实施者会在同一份登记表与 `FROZEN_OVER_LIMIT` 上互相覆盖，且 `git add` 与 `git commit` 交错会把别人的暂存文件卷进自己的提交）。
+
+**Files:**
+- Modify: `app/src/pages/ClassroomPage.tsx`
+- Create（**7 个，全部平铺** —— 与既有 `ClassroomRightPane.tsx` 同处）：`components/ClassroomCapturePanel.tsx`(~215，实时捕获卡 L495–681 整块 + `btn`/`panel` 样式 + `pausedCardText`) · `hooks/useClassroomHints.ts`(~175) · `components/ClassroomSourceColumn.tsx`(~135) · `hooks/useClassroomFloat.ts`(~70) · `components/ClassroomBanners.tsx`(~60) · `hooks/useClassroomShortcuts.ts`(~45) · `hooks/useClassroomWindows.ts`(~35)
+- Consumes: 分析报告；唯一消费者 `app/src/App.tsx`（`<ClassroomPage onOpenSessions=… />`，**常驻挂载**、`display:none` 切换不卸载）
+- Produces: 上述 7 个新文件；`ClassroomPage({ onOpenSessions })` 的 props 契约不变
+
+**★ 决定性事实**：JSX = L416–724 共 **309 行（42.7%）**，其中实时捕获卡 L495–681 = **187 行**（最大单块）。**只抽 hook 的下界仍 ≈350 > 300** ⇒ 必须搬 JSX；反过来，第 4 步就是最小可行点。
+**★ 本页零自动化覆盖**：`app/src/**` 里 grep `ClassroomPage` = **0 命中**，仓内无 e2e ⇒ 等价证据**只能**来自下面两条「机械不变式 + 人工走查」。
+
+| 步 | 动作 | 步后主文件 | 棘轮名单动作 |
+|---|---|---|---|
+| 0 | 基线 | 724 | 保留 |
+| 1 | 抽 `ClassroomCapturePanel` | ≈560 | **已 ≤600 ⇒ 本步提交里删掉 `'app/src/pages/ClassroomPage.tsx'` + `--write`** |
+| 2 | 抽 `useClassroomHints` | ≈440 | 已删，只 `--write` |
+| 3 | 抽 `ClassroomBanners` | ≈420 | 只 `--write` |
+| 4 | 抽 `ClassroomSourceColumn` | **≈220 ✅ 达标** | 只 `--write` |
+| 5 | 抽 `useClassroomWindows` | ≈205 | 只 `--write` |
+| 6 | 抽 `useClassroomFloat` + `useClassroomShortcuts` | ≈160 | 只 `--write` |
+
+⚠️ **第 1 步就可能把主文件压到 ≈560** ⇒ 棘轮行必须在**第 1 步的提交**里删掉（留着会触发 `(b)`）。每步提交前先量行数，按全局规则「≤600 就删 / 仍 >600 就留」判断。行数是估算，**逐步以 `ReadAllLines` 实测为准**。
+
+**控制方裁决（分析报告 §4 的 7 个待拍板项 —— 照此执行，不要另行发挥）**
+- **D1 `warmUp` / `prepareState`（最高危 R1）**：`warmUp`(L129–133) + `warmedRef`(L135) + 一次性预热 effect(L136–149，含原注释与 `eslint-disable react-hooks/exhaustive-deps`) **整体留在页面**；`useClassroomHints` **显式接收入参 `warmUp`**，自己持有 `prepareState` 并**导出 `setPrepareState`** 供 `startLive`(L357) 写。**理由**：`model:download-done`(L190–199) 在监听里调 `warmUp()` —— 监听下沉而 `warmUp` 留页面却忘了注入，就是**编译通过但"下载完成即预热"静默消失**；StrictMode 守卫留页面最不易误改。
+- **D2 捕获卡取状态的方式**：**props 显式下传**，卡内**不得**再调 `useCaptureControl()`。卡片是纯展示适配器（薄适配器允许，与 Task 1 同口径）；`paused`/`autoPaused`/`autoPauseHint` 三个派生值(L409–414)**随卡下沉**（已核对：仅 L546–635 使用），`pausedCardText` 与 `AUTO_RESUME_HINTS` 导入同迁。页面保留**唯一**的 `useCaptureControl()` 调用点(L73–75)，Provider 与 `pending` 语义不动。
+- **D3 横幅独立成文件**：`ClassroomBanners.tsx` 收 L441–465 三块 + L467–468 那条「为什么没有第四条横幅」的注释；props = `{ asrDegraded, windowLost, frameStalledSecs, onDismissWindowLost }`。
+- **D4 命名与目录**：平铺 `app/src/components/`，用 **`ClassroomCapturePanel.tsx`**（不用登记表旧名 `LiveCaptureCard`）⇒ 收尾必须把登记表该文件的「拆分计划」人工列改写成这 7 文件的边界。
+- **D5 `status`/`lastNote` 归属**：**留在页面**（被 4 个采集动作 + 3 个输入面板回调 + hints 写），以 `status` / `onStatus` 下传；`useClassroomHints` 与 `useClassroomWindows` 都接 `onStatus`（同一份页面状态，不产生第二来源）。
+- **D6 既有缺陷**：B1（Ctrl+Shift+S 与 NoteEditView 拆段同键双义）/ G6（ReadyCheckCard 与页内模型卡可能矛盾）/ G7（采集中仍可改选窗口）**只搬不改**，另立技术债条目（写进报告，不塞进本批提交）。
+- **D7 收尾**：删 `FROZEN_OVER_LIMIT` 行 → `--write` → 回写「拆分计划」列 → 「已拆分 / 登记移除记录」节追加一条。
+
+**★ 等价核对清单（本页无测试，这一节是主要证据，逐条给结论）**
+1. **R1 两条隐性耦合**：`model:download-done` 仍能触发预热；`startLive` 仍能写 `prepareState`（D1 的注入 + 导出 setter 正是为此）。
+2. **R2 `ColumnResizer` 是左栏的兄弟，不是子元素**：L706 在 `leftCol.folded` 三元**之外**、无条件渲染 —— 搬左栏 JSX 时**不得**顺手带进新组件（带进去 = 折叠态拖拽手柄消失，**且无编译错误**）。
+3. **R3 根 flex 只有 3 个直接子元素**：`ClassroomSourceColumn` 顶层必须**恰好返回一个**元素 —— 折叠态返回 `<ColumnBar icon="📡" title="课堂助手" onClick={…} />`，否则返回 L422–431 那个 div（5 个样式键逐字保留）。**不许**加包裹层、**不许**返回 fragment。
+4. **R4 快捷键仍是两个 `window` keydown**：L239–251（Ctrl+Shift+S，deps `[]`）与 L282–293（Ctrl+Shift+F，deps `[active, floatSnap.open, toggleFloat]`，含 `active && !floatSnap.open` 守卫）。**合并成一个监听 = 行为变更**（浮窗打开时必须让位 Rust 全局键，否则双触发双翻转）。`preventDefault()` 位置、守卫、deps、成对 cleanup 全部不变。
+5. **R7 `useColumnLayout("classroom-left", { default: 320, min: 240, max: 420, autoFoldBelow: 860 })` 逐字保留**（键 = `layout:col-width:classroom-left` / `layout:col-fold:classroom-left`；改键 = 静默清空用户列宽，改数字 = 改窄窗折叠阈值）。
+6. **R5/R6 文案与样式逐字**：本页 **零 className / 零 `.ed-*` / 零 id / 零 data-testid**，真实耦合是逐字中文文案与 `title`（`title="折叠侧栏"`、浮窗三态 title、`"知道了"`、`"（~650MB）"`、全角括号/破折号/emoji）与内联样式里的色值/魔数（`calc(100vh - 56px)`、`#0d9488/#dc2626/#f59e0b/#d1d5db/#b45309/#6b7280/#e5e7eb/#9ca3af`、`fontSize 11/12/13`、`gap 6/8/12`）。**不 token 化、不换 emoji**（`ui/tokens.drift.test.ts` 与 `ui/contrast.test.ts` 在看着）。
+7. **R8 拖拽不涉及**：本页零 `draggable/onDrag/onPointer*`（列拖拽在 `ColumnResizer.tsx`，pointer + `setPointerCapture`）⇒ 拆分只传 `leftCol.resizeBy/resetWidth` 两个回调。
+
+**★ 机械回归网（本页零测试，用这两条补上）**
+控制方已备好只读探针 `.superpowers/sdd/2026-09-11-frontend-redesign-batch0c2-frontend-splits/probe-verbatim-strings.mjs`，基线快照 `snap-classroom-baseline.json` = **53 段用户可见文案 + 22 个 IPC 命令/事件名**（全树计数）：
+```powershell
+node .superpowers/sdd/2026-09-11-frontend-redesign-batch0c2-frontend-splits/probe-verbatim-strings.mjs `
+  verify .superpowers/sdd/2026-09-11-frontend-redesign-batch0c2-frontend-splits/snap-classroom-baseline.json
+```
+- 不变式 1：**全树范围内每段文案的出现次数不变**（少 = 文案被吞，多 = 被复制）；
+- 不变式 2：**每个命令名/事件名的出现次数不变**（守 `invoke` 目标未变）；
+- **每步收尾各跑一次**，差异逐条给结论（允许：注释改写、`{" "}` 挪成原位空格；**不允许**：计数归零或缺段）；
+- ⚠️ 它只覆盖「名字/文案」，**不覆盖参数与时序** ⇒ `invoke` 的实参（如 `start({ title, sourceWindow, windowId, profile })`）仍须人工逐字比对。
+
+**★ 文档同提交（AGENTS.md §6）**：`docs/Foresight/ux-market-convention-audit.md` 用行号引用本文件（`ClassroomPage.tsx:240-246 / :239-250 / :651-665 / :208-217 / :547-553 / :498-529,531`）—— 拆分后这些行号**全部失效**。在**最后一步的提交**里把这些引用改指到新落点（文件名 + 该处文案/控件，如 `components/ClassroomCapturePanel.tsx`「⏹ 停止」按钮组），并保留「拆分前 = ClassroomPage.tsx:NNN」以便回溯；登记表「拆分计划」列同步改写（D4）。
+
+**收尾**：`node scripts/line-limits.mjs --write` → 从 `FROZEN_OVER_LIMIT` 删 `'app/src/pages/ClassroomPage.tsx'` → `--full` 期望 exit 0；把 7 个新文件的真实行数回写登记表；「已拆分 / 登记移除记录」节追加一条。
+**验证**：`npx tsc --noEmit` · `npx vitest run`（全量用例数不降；间接网 = `useColumnLayout` / `ColumnResizer` / `liveCaptureState` / `ui/contrast` / `ui/tokens.drift`）· `npm run build` · 上面两条探针不变式 · `node scripts/line-limits.mjs --full`。
+**只能人工**（分析报告 §4 清单）：左栏拖宽/记忆/窄窗自动折叠/展开 · 三条横幅与「知道了」· 模型四态（缺件清单 / 下载中带 MB 进度 / 失败 / 重试）· 预热三态文案 · 开始→录制中按钮组（`pending` 防连点、auto 暂停禁用 + title、标记此刻、停止、浮窗三态 title）· 两个快捷键（含浮窗打开时 Ctrl+Shift+F 让位）· 融合三事件对右栏与状态行 · 停止后关浮窗 + 再预热 · 会话结束横幅复位。
+**报告**：`.../task-4-report.md`（每步行数实测 · 两条不变式的逐步输出 · D1–D7 落实 · R1–R8 逐条结论 · 人工走查结论 · 文档改动 · 顾虑）。
 
 ---
 
@@ -278,12 +342,13 @@ git diff --stat -- docs/standards/line-limit-exemptions.md   # 期望空（连�
 - **`0-C3`（Rust 10 个 >600 文件）**：`lib.rs` 1025 / `types.rs` 1017 / `live_session_frame.rs` 974 / `commands_ai_refine.rs` 751 / `db_goals.rs` 707 / `commands_goals.rs` 673 / `ai_refine_task.rs` 670 / `note_filter.rs` 642 / `artifact_templates.rs` 632 / `video_profile.rs` 628。含 `lib.rs`（AGENTS.md §10 需额外审查：Tauri command 注册边界）。
 - **4 个扫描域外文件**（`0-C1` 登记）：`app/src-tauri/build.rs` 152 · `app/src-tauri/examples/capture_ocr_diag.rs` 208 · `app/vite.config.ts` 40 · `app/vitest.config.ts` 23 —— 均 ≤300，但不归红线管辖（扫描域只有 `app/src` + `app/src-tauri/src` 的 `.ts/.tsx/.rs`）。若要扩域须另立批次。
 - **CI 的 `app-rust` 预存失败**：本地以 CI 同一条命令实测 `cargo clippy -- -D warnings` = exit 101 / 15 个 error（**与本批无关**）。CI 在修好前不能充当 `(e)` 的兜底（本地门禁已能守）。
+- **`ClassroomPage` 的既有缺陷（本批只搬不改 —— 分析报告 R10）**：B1（Ctrl+Shift+S 与 `NoteEditView` 拆段同键双义）· G6（`ReadyCheckCard` 与页内模型卡状态可能矛盾）· G7（采集中仍可改选窗口）—— 出处 `docs/Foresight/ux-market-convention-audit.md`，留待批 4（动效/交互）或独立技术债批次。
 - **`docs/tech-debt/` 未入库**、**Starter Kit 双重身份**（`docs/` 既是对外可复制模板又是本项目活文档）—— 均为 `0-C1` 登记项。
 
 ## 自审记录
 
 **规范覆盖**：本计划对应规格 §10 批 0 行的「拆超限文件」与 §11 验收口径第 1 条；拆分顺序沿用规格 §37（NotesPage → NoteListView → SessionDetailPanel → ClassroomPage）。
 **数字来源**：5 个文件的行数（724 / 656 / 654 / 604 / 602）与 `FROZEN_OVER_LIMIT` 的 15 条均由批 0-C1 以 `ReadAllLines` 口径全量实测得出，并与 `docs/standards/line-limit-exemptions.md`（生成物）一致。
-**占位符扫描**：**Task 1 / 2 / 3 / 5 已按只读结构分析的实测结论写完**（`.superpowers/sdd/2026-09-11-frontend-redesign-batch0c2-frontend-splits/analysis-*.md`，各 348–402 行）—— 每节含：具体新文件清单与预计行数、分步实施顺序、控制方对分析所提决策点的**裁决**、该文件特有的**等价核对清单**、收尾（登记表 + 棘轮）与验证要求。**唯一未写的是 Task 4（`ClassroomPage.tsx` 724 行）** —— 其结构分析尚未落盘，**补入前不得派发该任务的实施者**（否则实施者会自行发明边界）。
+**占位符扫描**：**Task 1 / 2 / 3 / 4 / 5 全部写完**（`.superpowers/sdd/2026-09-11-frontend-redesign-batch0c2-frontend-splits/analysis-*.md`，各 140–402 行）—— 每节含：具体新文件清单与预计行数、分步实施顺序、控制方对分析所提决策点的**裁决**、该文件特有的**等价核对清单**、收尾（登记表 + 棘轮）与验证要求。Task 4（`ClassroomPage.tsx` 724）原缺其结构分析、已在分析落地后按同一模式补入（含「第 1 步就要删棘轮行」这一本文件特有的门禁时机）。**无占位符待补**。
 **分析纠偏（记录在案，勿再犯）**：我的派发词里有**两处错误前提**被分析实测推翻 —— ① 我写 NoteListView 有 `.ed-*` 耦合，实测**零 className / 零 `.ed-*`**（真正的耦合是行 id 与 data-testid/文案）；② 我写"拖拽（pointer capture）"，实测拖拽是 **HTML5 DnD**、**pointer 事件只服务划选**。两处已在 Task 2 节显式更正，以免实施者去找不存在的东西。
 **执行纪律**：拆分任务**串行**执行（Task 3 → 1 → 2 → 5 → 4）。理由：并发实施者会在**同一份登记表与 `FROZEN_OVER_LIMIT`** 上互相覆盖；更危险的是 A 的 `git add` 与 B 的 `git commit` 交错，会把 A 暂存的文件卷进 B 的提交。
