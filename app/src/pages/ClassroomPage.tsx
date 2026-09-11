@@ -28,6 +28,8 @@ import { SystemStatusBadge } from "../components/SystemStatusBadge";
 import ClassroomRightPane from "../components/ClassroomRightPane";
 // 批 0-C2 Task 4：左栏实时捕获卡整体抽出（纯展示适配器——采集/模型状态由本页注入）
 import ClassroomCapturePanel from "../components/ClassroomCapturePanel";
+// 批 0-C2 Task 4 步 3：三条页面级提示横幅整体抽出（ASR 降级/窗口丢失/画面停更）
+import ClassroomBanners from "../components/ClassroomBanners";
 import MaterialInputPanel from "../components/MaterialInputPanel";
 import ColumnResizer from "../components/ColumnResizer";
 import ColumnBar from "../components/ColumnBar";
@@ -297,34 +299,13 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
           </div>
         </div>
 
-        {asrDegraded && (
-          <div style={{ padding: "6px 14px", background: "#fef2f2", borderBottom: "1px solid #fecaca", fontSize: 11, color: "#b91c1c" }}>
-            ⚠ {asrDegraded}
-          </div>
-        )}
-
-        {/* TD-2026-08-20-I 清偿：目标窗口丢失横幅（画面采集中断提示；恢复/停止后清除） */}
-        {windowLost && (
-          <div style={{ padding: "6px 14px", background: "#fffbeb", borderBottom: "1px solid #fcd34d", fontSize: 11, color: "#b45309", display: "flex", alignItems: "center", gap: 8 }}>
-            ⚠ 目标窗口已关闭或不可见——画面采集中断（音频继续；请恢复窗口或重新选择）
-            <button
-              onClick={dismissWindowLost}
-              style={{ marginLeft: "auto", border: "none", background: "none", color: "#b45309", cursor: "pointer", fontSize: 11, fontWeight: 600 }}
-            >
-              知道了
-            </button>
-          </div>
-        )}
-
-        {/* REQ-281（v0.19.6）：画面源停更轻提示（区别于窗口丢失；恢复帧自动消失） */}
-        {frameStalledSecs != null && (
-          <div style={{ padding: "6px 14px", background: "#eff6ff", borderBottom: "1px solid #bfdbfe", fontSize: 11, color: "#1d4ed8", display: "flex", alignItems: "center", gap: 8 }}>
-            🖼 画面源已 {frameStalledSecs}s 无新帧——可能播放器暂停渲染或窗口被遮挡（已自动重试；画面恢复即消失）
-          </div>
-        )}
-
-        {/* 批 2b：原 REQ-291 随播随停横幅（mediaPaused）删除——暂停原因单一来源
-            pausedReason，横幅语义并入采集卡内状态行（pausedCardText，见下） */}
+        {/* 批 0-C2 Task 4 步 3：三条页面级横幅整体抽出（含"为什么没有第四条"注释） */}
+        <ClassroomBanners
+          asrDegraded={asrDegraded}
+          windowLost={windowLost}
+          frameStalledSecs={frameStalledSecs}
+          onDismissWindowLost={dismissWindowLost}
+        />
 
         <div style={{ flex: 1, minHeight: 0, padding: 12, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
           {/* 2026-08 C1：引擎与模型就绪清单（开始前准备流——缺什么一目了然） */}
