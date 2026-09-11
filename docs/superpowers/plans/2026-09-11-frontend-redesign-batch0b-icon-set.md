@@ -214,7 +214,7 @@ import type { IconName } from "./paths";
 
 import type { IconGeometry } from "./types";
 
-export const DOMAIN_ICON_PATHS: Readonly<Record<string, IconGeometry>> = {
+export const DOMAIN_ICON_PATHS = {
   /** 笔记：文档 + 文字行 */
   notes: {
     elements: [
@@ -242,13 +242,17 @@ export const DOMAIN_ICON_PATHS: Readonly<Record<string, IconGeometry>> = {
 import type { IconGeometry } from "./types";
 import { DOMAIN_ICON_PATHS } from "./paths.domain";
 
-const GROUPS: Readonly<Record<string, Readonly<Record<string, IconGeometry>>>> = {
+// `as const` 保留各分组的**字面量键** —— 这是 `IconName` 能成为字面量联合的前提
+const GROUPS = {
   domain: DOMAIN_ICON_PATHS,
-};
+} as const;
+
+/** 供 `mergeGroups` 的 `Object.entries` 使用；宽别名不会污染上面的字面量键 */
+const GROUPS_FOR_MERGE: Readonly<Record<string, Readonly<Record<string, IconGeometry>>>> = GROUPS;
 
 function mergeGroups(): Record<string, IconGeometry> {
   const merged: Record<string, IconGeometry> = {};
-  for (const [groupName, group] of Object.entries(GROUPS)) {
+  for (const [groupName, group] of Object.entries(GROUPS_FOR_MERGE)) {
     for (const [name, geometry] of Object.entries(group)) {
       if (merged[name]) {
         // 重名会让「哪个几何生效」取决于对象键顺序 —— 静默且难以定位，故直接拒绝
@@ -264,7 +268,11 @@ export const ICON_PATHS: Readonly<Record<string, IconGeometry>> = mergeGroups();
 
 export const ICON_NAMES: readonly string[] = Object.keys(ICON_PATHS).sort();
 
-export type IconName = keyof typeof ICON_PATHS;
+/**
+ * 由各分组的**字面量键**映射出的联合 —— **无需列出任何名字**，新增图标仍只改数据文件一处。
+ * 这是本层「拼错必须在编译期报错」的执行手段：`const x: IconName = "notez"` 会报 TS2322。
+ */
+export type IconName = { [G in keyof typeof GROUPS]: keyof (typeof GROUPS)[G] }[keyof typeof GROUPS];
 ```
 
 创建 `app/src/ui/icons/Icon.tsx`：
@@ -488,7 +496,7 @@ Expected: FAIL —— 名单缺 23 个（当前只有 `notes`）
 把 `app/src/ui/icons/paths.domain.ts` 的 `DOMAIN_ICON_PATHS` 替换为：
 
 ```ts
-export const DOMAIN_ICON_PATHS: Readonly<Record<string, IconGeometry>> = {
+export const DOMAIN_ICON_PATHS = {
   /** 课堂：显示器 + 底座（采集源） */
   classroom: {
     elements: [
@@ -648,10 +656,10 @@ export const ACTION_ICON_PATHS: Readonly<Record<string, IconGeometry>> = {
 import { ACTION_ICON_PATHS } from "./paths.action";
 import { DOMAIN_ICON_PATHS } from "./paths.domain";
 
-const GROUPS: Readonly<Record<string, Readonly<Record<string, IconGeometry>>>> = {
+const GROUPS = {
   domain: DOMAIN_ICON_PATHS,
   action: ACTION_ICON_PATHS,
-};
+} as const;
 ```
 
 - [ ] **Step 6: 运行全部图标测试**
@@ -823,6 +831,14 @@ git commit -m "test(ui): 内联 svg 棘轮守卫与图标导出面收口"
 **占位符扫描**：无 TBD / TODO；24 个图标的 `d` 与坐标全部给出可运行值；每条测试的期望值都是具体字面量。
 **唯一需要实施者填写的空**：Task 3 的 `FROZEN_BASELINE` —— 它**必须**由该步的实测输出决定，不能由我预写（预写就等于伪造基线）。
 
-**类型一致性**：`IconGeometry.elements` 的元素形态 ↔ `Icon.tsx` 的三分支渲染 ↔ `paths.test.ts` 的坐标检查三处一致（`path` 用 `d`；`circle` 用 `cx/cy/r`；`rect` 用 `x/y/w/h/rx?`）· `IconSize`（16|20|24）↔ `SCALE_TOKENS.iconSizes` 在测试里绑定 · `ICON_NAMES` 由 `Object.keys(ICON_PATHS)` 派生，故「名单断言」与「键集合断言」不会互相矛盾 · `IconName = keyof typeof ICON_PATHS`（注意：`ICON_PATHS` 声明为 `Readonly<Record<string, IconGeometry>>`，故 `keyof` 是 `string` —— **这是本计划的一处已知偏差**：真正的字面量联合需要 `paths.ts` 用 `as const` 聚合，而 `as const` 与「合并多个分组」的写法冲突。Task 1 交付的是 `Record` 版本（能跑、能校验），**字面量联合留待批 4 需要时再做**（届时应改为显式列出名字的 `as const` 映射，代价是要在新增图标时同步两处）。此偏差已在此显式记录，不隐藏。
+**类型一致性**：`IconGeometry.elements` 的元素形态 ↔ `Icon.tsx` 的三分支渲染 ↔ `paths.test.ts` 的坐标检查三处一致（`path` 用 `d`；`circle` 用 `cx/cy/r`；`rect` 用 `x/y/w/h/rx?`）· `IconSize`（16|20|24）↔ `SCALE_TOKENS.iconSizes` 在测试里绑定 · `ICON_NAMES` 由 `Object.keys(ICON_PATHS)` 派生，故「名单断言」与「键集合断言」不会互相矛盾。
+
+**一处已被撤回的裁定（记录在案，勿重犯）**：初版计划把 `ICON_PATHS` 注解为 `Readonly<Record<string, IconGeometry>>`，导致 `IconName = keyof typeof ICON_PATHS` 实际是 **`string`**；我起初裁定「接受该偏差、留待批 4」，理由是「字面量联合需显式列出全部名字」。
+**该理由已被 T1 任务评审用 `tsc` 探针证伪**：只要分组数据保留**字面量键**（`as const satisfies Record<string, IconGeometry>`），即可**零列名**地派生联合 ——
+```ts
+export type IconName = { [G in keyof typeof GROUPS]: keyof (typeof GROUPS)[G] }[keyof typeof GROUPS];
+```
+新增图标仍只改数据文件**一处**。故本计划已改为直接交付字面量联合（见 Task 1 Step 3 的 `paths.domain.ts` / `paths.ts`）。
+**为什么不能留到批 4**：批 4 会写数百处 `<Icon name="…" />`，而 `name: string` 时拼错**编译期无错、现有测试也拦不住**（唯一硬编码名字在 `Icon.test.tsx`），只在运行期以 `TypeError` 白屏 —— 这正是该层 `@ai-context` 自称要防住的失败。修复窗口是 1 个图标 / 1 个分组 / **0 个调用点**。
 
 **遗留到其他计划**：emoji 替换（批 4）· 图标集增至 44（随消费）· 规范 §八 图标节回写（批 8）· `ui-ux-system.md` 宣称的 1.5px 描边档未采用（本设计裁定 1.75，理由：纸色底上 1.5 偏细，批 0-A 的 C+D 视觉方向已定）。
