@@ -22,9 +22,9 @@ import { paletteHex } from "../utils/colorPalette";
 import type { ThemeMode } from "../utils/colorPalette";
 import { emptySelection, rangeSelection, toggleSelection } from "../utils/noteSelection";
 // REQ-315：scope 内 置顶→手排→自动 排序纯函数 + 显式移动（树视图 pin 生效）
-import { dropNotesIntoOrder, orderScopeNotes, shiftNoteOrder } from "../utils/noteOrder";
-// REQ-315：组展示序纯函数（树组头排序与组侧栏同规则）
-import { orderGroups } from "../utils/groupOrder";
+import { dropNotesIntoOrder, shiftNoteOrder } from "../utils/noteOrder";
+// 批 0-C2：展示节/可见序纯函数层（含 scope 键与裸折叠键派生——纯逻辑与副作用分离）
+import { buildSections, buildVisibleOrder, isTreeMode, manualBaseIds, scopeKey } from "../utils/noteSectionModel";
 import NoteListRow from "./NoteListRow";
 import NoteTreeSection from "./NoteTreeSection";
 import NoteRowContextMenu from "./NoteRowContextMenu";
@@ -71,20 +71,9 @@ interface Props {
   refreshToken?: number;
 }
 
-/** scope 键（组/null=未分组） */
-const scopeKey = (groupId: number | null): string => (groupId == null ? "none" : `g:${groupId}`);
-
 /** 读组折叠记忆（localStorage 损坏/无 → 默认展开） */
 function readGroupFold(key: string): boolean {
   try { return window.localStorage.getItem(`notes:group-fold:${key}`) === "1"; } catch { return false; }
-}
-
-interface SectionData {
-  scope: string;
-  groupId: number | null;
-  title: string;
-  accent: string;
-  items: Note[];
 }
 
 export default function NoteListView({
@@ -184,7 +173,7 @@ export default function NoteListView({
   // ── 分组树数据（同 v0.15 结构）——可见序统一从本结构生成 ──
   // Why 不再有分桶 memo：旧 `grouped` 是死载荷——仅被当作 treeMode 的第二真值，
   // 其 ungrouped/byGroup 从未被读取（真分桶一直在 sections 内重算）；批 0-C2 去重
-  const treeMode = keyword.trim() === "" && tagFilter === null && sortMode === "updated-desc";
+  const treeMode = isTreeMode(keyword, tagFilter, sortMode);
 
   // 折叠初始值（沿用 v0.15）
   useEffect(() => {
@@ -205,56 +194,15 @@ export default function NoteListView({
     } catch { /* 隐私模式 */ }
   }, [groupFolds]);
 
-  /**
-   * scope 展示序（REQ-315）：置顶区（updated_at 降序）→ 手排 seq → 自动区；
-   * 平铺（scope=flat）保持后端排序原样（排序模式语义在后端 list_notes——
-   * 平铺是过滤结果非完整 scope，不做 scope 级重排）。
-   */
-  const orderSectionItems = useCallback(
-    (items: Note[], scope: string): Note[] =>
-      scope === "flat" ? items : orderScopeNotes(items, manualOrders[scope]),
-    [manualOrders],
+  // 显示节（树/平铺）——节内展示序/分桶/accent 全在 utils/noteSectionModel.buildSections
+  // deps 保留 groupFolds：函数体不读它，但移除会改变重算次数（本批只搬家不优化）
+  const sections = useMemo(
+    () => buildSections({ notes, groups, groupFilter, theme, treeMode, manualOrders, groupOrderRows }),
+    [treeMode, groups, notes, groupFolds, manualOrders, theme, groupFilter, groupOrderRows],
   );
 
-  // 显示节（树/平铺）→ sections（可见序）
-  const sections: SectionData[] = useMemo(() => {
-    const mk = (scope: string, groupId: number | null, title: string, accent: string, items: Note[]): SectionData =>
-      ({ scope, groupId, title, accent, items: orderSectionItems(items, scope) });
-    const out: SectionData[] = [];
-    if (treeMode) {
-      const ungrouped: Note[] = [];
-      const byGroup = new Map<number, Note[]>();
-      for (const n of notes) {
-        if (n.group_id == null) ungrouped.push(n);
-        else { const a = byGroup.get(n.group_id) ?? []; a.push(n); byGroup.set(n.group_id, a); }
-      }
-      // 折叠只影响 body（folded prop）——组头必须常驻（chevron 再点可展开）
-      if (ungrouped.length > 0 || groupFilter === null) {
-        out.push(mk("none", null, "未分组", paletteHex(null, theme), ungrouped));
-      }
-      // REQ-315：组头序与组侧栏同规则（置顶→手排→自动）——组置顶在树面可见生效
-      const orderedGroups = orderGroups(groups, groupOrderRows);
-      for (const g of orderedGroups) {
-        const items = byGroup.get(g.id) ?? [];
-        if (items.length === 0) continue;
-        out.push(mk(scopeKey(g.id), g.id, g.name, paletteHex(g.color ?? null, theme), items));
-      }
-    } else {
-      out.push(mk("flat", null, "", paletteHex(null, theme), notes));
-    }
-    return out;
-  }, [treeMode, groups, notes, groupFolds, orderSectionItems, theme, groupFilter, groupOrderRows]);
-
   // 可见序（L1 审查：折叠组行不参与区间/划选——与渲染可见一致；折叠组头仍在）
-  const visibleOrder = useMemo(() => {
-    const out: number[] = [];
-    for (const sec of sections) {
-      const key = sec.groupId == null ? "none" : String(sec.groupId);
-      if (groupFolds[key] === true) continue; // 折叠=行不可见，排除出选择语义
-      for (const n of sec.items) out.push(n.id);
-    }
-    return out;
-  }, [sections, groupFolds]);
+  const visibleOrder = useMemo(() => buildVisibleOrder(sections, groupFolds), [sections, groupFolds]);
   useEffect(() => { visibleIdsRef.current = visibleOrder; }, [visibleOrder]);
 
   // ── 行交互 ──
@@ -287,16 +235,8 @@ export default function NoteListView({
     }
   }, [anchor]);
 
-  /**
-   * scope 手动底序（REQ-315）：可见展示序去掉置顶区——置顶笔记由 pin 列置顶区
-   * 表达（按更新时间定序），不占手动位；快照只写本子序列。置顶区外的笔记
-   * （含新笔记/未置顶）都在底序内——显式移动即整序快照（自动组首移转手排）。
-   */
-  const manualBaseOf = useCallback((scope: string): number[] | null => {
-    const section = sections.find((s) => s.scope === scope);
-    if (!section) return null;
-    return section.items.filter((n) => n.pin !== 1).map((n) => n.id);
-  }, [sections]);
+  /** scope 手动底序（REQ-315）：可见展示序去掉置顶区（快照只写本子序列）——纯函数在 noteSectionModel */
+  const manualBaseOf = useCallback((scope: string): number[] | null => manualBaseIds(sections, scope), [sections]);
 
   /** 拖拽归组（组头/左侧组行复用单 id 兜底仍可用） */
   const moveToGroup = useCallback(async (ids: number[], groupId: number | null) => {
