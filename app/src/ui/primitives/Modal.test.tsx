@@ -131,7 +131,7 @@ describe("关闭路径", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("最上层消费：拦住仍挂在 window 上的旧 ESC 监听（仓内 19 处手写弹层全在 window）", () => {
+  it("最上层消费：拦住 window 冒泡类的旧 ESC 监听（实测 15 处；capture 与元素级拦不住，见 Modal.tsx 边界④）", () => {
     const legacy = vi.fn();
     const onClose = vi.fn();
     window.addEventListener("keydown", legacy);

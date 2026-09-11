@@ -25,7 +25,14 @@
   transition: opacity var(--ed-dur-overlay-in, 200ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));
 }
 .ed-modal-overlay[data-phase="enter"] { opacity: 0; }
-.ed-modal-overlay[data-phase="exit"] { opacity: 0; transition-duration: var(--ed-dur-overlay-out, 160ms); }
+/* 退场窗口内**禁指针事件**：`open=false` 后弹层仍挂载 160ms（相位 = `[data-phase="exit"]`），
+   那时再点"确认 / 删除"不该触发回调（T8 探针实测：退场中按钮仍可点 ⇒ 批 4 迁移 28 个手写弹层后
+   这是删除类操作的误触面）。进场相位**不动**，也不使用 `!important`。 */
+.ed-modal-overlay[data-phase="exit"] {
+  opacity: 0;
+  pointer-events: none;
+  transition-duration: var(--ed-dur-overlay-out, 160ms);
+}
 
 .ed-modal {
   position: relative;
@@ -47,6 +54,7 @@
 .ed-modal[data-phase="exit"] {
   opacity: 0;
   transform: translateY(4px); /* 出场位移只留一半：出场更短更快，4px 是它的配套量 */
+  pointer-events: none; /* 同遮罩：退场期间的按钮不得再被点到（见上面的注释） */
   transition-duration: var(--ed-dur-overlay-out, 160ms);
 }
 .ed-modal:focus-visible { outline: 2px solid var(--ed-ink-1); outline-offset: 2px; }

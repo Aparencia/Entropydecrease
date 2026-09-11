@@ -18,10 +18,19 @@
  *    入栈序：React 的 effect 是**自底向上**跑的（子 Modal 先入栈 ⇒ 入栈序会把外层当栈顶），而
  *    portal 在 `document.body` 里的插入序**会随挂载时机反转**（同一次提交里内层反而更靠前 ——
  *    实测 `BODY_ORDER ["inner","outer"]`，晚挂载的内层才排在后面）⇒ 只有树深度稳定等于「最内层」。
- * ④ **ESC 的消费是排他的**：最内层 `stopPropagation()`（冒泡相里 `document` 先于 `window`）⇒
- *    一次 ESC 不会同时关掉弹层与它下面仍挂在 `window` 上的 19 处手写 ESC 监听（仓内退出链是
- *    "菜单优先、只响应一层"，`SessionListPanel.tsx:108-120`）。`closeOnEsc=false` 时**仍然消费**
- *    （弹层是最上层，ESC 不该穿透到下层），只是不调用 `onClose`。
+ * ④ **ESC 的消费是排他的，但只拦得住"冒泡类"**：最内层 `stopPropagation()` 挂在 `document`
+ *    **冒泡相**上（仓内退出链是"最上层优先、一次只响应一层"，`SessionListPanel.tsx:108-120`）。
+ *    **拦得住**：`window` 上**冒泡相**的 15 处手写 ESC 监听（document 冒泡先于 window 冒泡）。
+ *    **拦不住（批 4 迁移时必须一并处理）**：
+ *    ① `SelectionActionMenu.tsx:73-78` 的 `window` **capture** 相 ESC 监听 —— capture 从 window
+ *       开始，跑在 `document` 冒泡之前；
+ *    ② **4 处元素级 React `onKeyDown`**：`SessionDetailHeader.tsx:106` · `GroupSidebarRow.tsx:115` ·
+ *       `LinkEntityPicker.tsx:101` · `SessionListRow.tsx:188` —— React 19 把合成事件挂在根容器
+ *       （在 document 之内），故它们也早于本监听。
+ *    ⚠️ 口径更正：仓内 `addEventListener("keydown")` 共 19 个文件，其中 **16 个处理 Escape**
+ *    （15 冒泡 + 1 捕获），另 3 个（`App.tsx:203` · `useClassroomShortcuts.ts:37` ·
+ *    `useClassroomFloat.ts:73`）**不处理 Escape** —— 不要把它写成"19 处 ESC"。
+ *    `closeOnEsc=false` 时**仍然消费**（弹层是最上层，ESC 不该穿透到下层），只是不调用 `onClose`。
  * ⑤ **不做 body 滚动锁**：现状 20 个弹层也没有（属批 4 的观察项，已登记在报告的「未做」）。
  * ⑥ **不消费 `isImeComposing`**：计划 Task 7 Step 1 明确"本批只建不接"—— 需要 IME 守卫的是
  *    「Enter 提交」，那是调用点的动作（`Modal` 自己不定义提交）。
