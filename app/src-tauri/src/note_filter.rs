@@ -48,15 +48,19 @@ mod render;
 #[path = "note_filter_purify.rs"]
 mod purify;
 
+/// 转写段正文过滤链（8 阶段单遍 + 跨段后置 pass；判定顺序 = 语义）。
+#[path = "note_filter_chain.rs"]
+mod chain;
+
 /// 再导出：可见性与项 **1:1**（`pub` 项用 `pub use`、`pub(crate)` 项用
 /// `pub(crate) use`——后者写成 `pub use` 会触发 E0365，项本身不允许外泄）。
 pub use self::render::{refresh_screen_points, render_screen_points};
 pub(crate) use self::render::{apply_session_warning, rebuild_markdown};
 pub(crate) use self::purify::FILLER_WORDS;
 
-// 净化族（本步起 filter_note_transcript 仍在主文件 ⇒ 直接引入；S3 搬出后本行
-// 随之下线，否则触发 unused_imports）。
-use self::purify::{concat_transcript, is_filler_only, is_fragment, is_purified_empty, purify_segment};
+// 过滤链入口（模块私有——唯一消费者是下方 filter_note；可见性不放宽，
+// 调用点字面量 `filter_note_transcript(...)` 与拆前逐字一致）。
+use self::chain::filter_note_transcript;
 
 /// 净化环境（依赖注入聚合——净化配置 + 符号映射 + OCR 纠错表）。
 ///
@@ -217,174 +221,6 @@ pub fn filter_note(
             filter_note_transcript(title, segments, ocr_blocks, ui_junk, env)
         }
         BodySource::Empty => filter_note_empty(title),
-    }
-}
-
-/// 转写段正文过滤链（视频会话——既有路径，v0.12.0 提取自原 filter_note 主体，
-/// 逻辑零改动；OcrDirect/Empty 分派见 filter_note）。
-///
-/// @ai-context: 转写段按过滤链处理（见模块头）；OCR 画面要点先经
-///              screens::filter_usable_blocks（v0.7.5：低分 0.7/单字符/边缘
-///              条带/视频页 UI 共现/错字纠错）排除，再屏构建与精确去重。
-fn filter_note_transcript(
-    title: &str,
-    segments: &[SessionSegment],
-    ocr_blocks: &[SessionOcrBlock],
-    ui_junk: &UiJunkList,
-    env: &PurifyEnv,
-) -> NoteFilterResult {
-    let config = &env.config;
-    let symbol_cfg = &env.symbol;
-    let corrections = &env.corrections;
-    // ① 转写段过滤链（空文本段跳过；按时间排序保证相邻性）
-    let mut sorted: Vec<SessionSegment> = segments
-        .iter()
-        .filter(|s| !s.text.trim().is_empty())
-        .cloned()
-        .collect();
-    sorted.sort_by_key(|s| (s.start_ms, s.id));
-    let mut kept: Vec<SessionSegment> = Vec::new();
-    let mut stats = FilterStats::default();
-    let mut filtered = Vec::new();
-    let mut merged = Vec::new();
-    for mut seg in sorted {
-        let text = seg.text.trim();
-        // ① UI 垃圾特征兜底（与 REQ-083 同表——源头漏拦的兜底）
-        if ui_junk.is_junk(text) {
-            stats.ui_junk += 1;
-            filtered.push(FilteredItem {
-                segment_id: seg.id,
-                reason: FilterReason::UiJunk,
-                text: text.to_string(),
-                start_ms: seg.start_ms,
-            });
-            continue;
-        }
-        // ② 低置信丢弃（confidence=None 的字幕段跳过——无置信度证据不删）
-        if seg.confidence.is_some_and(|c| c < config.low_confidence_threshold) {
-            stats.low_confidence += 1;
-            filtered.push(FilteredItem {
-                segment_id: seg.id,
-                reason: FilterReason::LowConfidence,
-                text: text.to_string(),
-                start_ms: seg.start_ms,
-            });
-            continue;
-        }
-        // ③ 纯过渡短句删除（v0.7.5 扩展：整句 ∈ 精确表——"接下来/我们来看"
-        //     单独成段无信息；"接下来我们看第三章"不在表内不误杀）。
-        //     先于碎片检查：表内 2 字短语（首先/总之/好吧）若后置会被碎片规则
-        //     （≤2 字）先删，原因标签失真（过渡原因更准确）
-        if config.transition_delete
-            && crate::note_filter_discourse::is_transition_short(text, config.transition_max_chars)
-        {
-            stats.transition += 1;
-            filtered.push(FilteredItem {
-                segment_id: seg.id,
-                reason: FilterReason::Transition,
-                text: text.to_string(),
-                start_ms: seg.start_ms,
-            });
-            continue;
-        }
-        // ④ 口头禅短段规则级删除（REQ-163：免 AI——段 1018「对不对？」类；
-        //     基于原文判定——净化前形状特征未被破坏）
-        if config.filler_delete && is_filler_only(text, config) {
-            stats.filler += 1;
-            filtered.push(FilteredItem {
-                segment_id: seg.id,
-                reason: FilterReason::Filler,
-                text: text.to_string(),
-                start_ms: seg.start_ms,
-            });
-            continue;
-        }
-        // ⑤ 碎片段（≤2 字 / <500ms / 纯符号——"----/···" 等无信息内容）
-        if is_fragment(&seg, config) {
-            stats.fragments += 1;
-            filtered.push(FilteredItem {
-                segment_id: seg.id,
-                reason: FilterReason::Fragment,
-                text: text.to_string(),
-                start_ms: seg.start_ms,
-            });
-            continue;
-        }
-        // ⑥ 口语净化（REQ-162/164）：书面化（保守档）→ 符号 → 结巴折叠 → 术语替换
-        let original = seg.text.clone();
-        let purified = purify_segment(&original, config, symbol_cfg, &mut stats);
-        // ⑦ 净化残留检查：空/纯符号（"对不对？"→"？"）/ 短口头禅（"哈"）→ 删除
-        if is_purified_empty(&purified) {
-            stats.filler += 1;
-            filtered.push(FilteredItem {
-                segment_id: seg.id,
-                reason: FilterReason::Filler,
-                text: original,
-                start_ms: seg.start_ms,
-            });
-            continue;
-        }
-        seg.text = purified;
-        kept.push(seg);
-    }
-    // ⑥ 修辞问句删除（v0.7.5 扩展：自问自答——问句核心词在紧邻段复现，
-    //    会话31「过程是什么？」+「这个过程是制定项目章程」实证；跨段上下文
-    //    需 kept 全集，故在单遍循环后执行）
-    if config.rhetorical_delete {
-        kept = crate::note_filter_discourse::drop_rhetorical_questions(
-            kept,
-            config.rhetorical_max_chars,
-            &mut stats,
-            &mut filtered,
-        );
-    }
-    // ⑦ 相邻重复段合并（净化后文本精确去重——净化顺序契约；合并延伸 end_ms）
-    let mut deduped: Vec<SessionSegment> = Vec::new();
-    for seg in kept {
-        if let Some(last) = deduped.last_mut() {
-            if last.text.trim() == seg.text.trim() {
-                stats.duplicates += 1;
-                filtered.push(FilteredItem {
-                    segment_id: seg.id,
-                    reason: FilterReason::Duplicate,
-                    text: seg.text.clone(),
-                    start_ms: seg.start_ms,
-                });
-                merged.push(MergedItem {
-                    segment_id: seg.id,
-                    into_segment_id: last.id,
-                    text: seg.text.clone(),
-                    start_ms: seg.start_ms,
-                });
-                last.end_ms = last.end_ms.max(seg.end_ms);
-                continue;
-            }
-        }
-        deduped.push(seg);
-    }
-    let kept = deduped;
-    // 画面要点（v0.7.3 REQ-160：可消费块过滤 → 屏构建 → 屏段落渲染；
-    //    v0.7.5：过滤含单字符/边缘条带/视频页共现/错字纠错——见 screens.rs）
-    let transcript = concat_transcript(&kept);
-    let (usable, ocr_corrected) =
-        crate::screens::filter_usable_blocks(ocr_blocks, ui_junk, config, &transcript, corrections);
-    stats.ocr_corrected = ocr_corrected;
-    let ocr_screens = crate::screens::build_screens(&usable, None);
-    let ocr_points = render_screen_points(&ocr_screens);
-    let markdown = rebuild_markdown(title, &kept, &[], config, None);
-    NoteFilterResult {
-        title: title.to_string(),
-        markdown,
-        kept,
-        ocr_points,
-        ocr_screens,
-        stats,
-        filtered,
-        merged,
-        purify: config.clone(),
-        warning: None,
-        body_source: BodySource::Transcript,
-        ocr_body: Vec::new(),
     }
 }
 
