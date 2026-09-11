@@ -1,19 +1,22 @@
 /**
  * SessionListPanel — 会话管理台左栏（列表/筛选/批量/搜索，v0.7.1 自 SessionsPage 拆出）。
  *
- * @ai-context: 纯列表域 UI：双模式搜索（标题本地即时过滤/转写内容段搜索）、
- *              状态与转化筛选、排序、课程分组折叠、勾选批量操作栏、内联一键转笔记。
- *              筛选/排序/选择均为面板本地状态（数据已在 SessionListItem 里，
- *              零后端往返）；数据获取与转化/删除副作用经回调上抛给 SessionsPage。
- * @ai-context: 批 4 交互矩阵：去行内 checkbox → 笔记同款选择模式——「选择」
- *              按钮进入（单击行=勾选）/ 再点或 Esc 退出；Ctrl/⌘+单击=加/减单
- *              行、Shift+单击=按当前可见列表位置区间（复用 utils/noteSelection
- *              纯函数，零笔记域耦合）；多选态视觉=靛蓝底 + ✓ 前缀（行级实现
- *              在 SessionListRow）。列表变化（筛选/排序/折叠/刷新）自动裁剪
- *              选集至当前可见行；批量栏口径=当前可见列表（全选框三态保留）。
- * @ai-context: Esc 退出链：行内重命名（输入内 Esc 自吞）→ 右键菜单 → 选择
- *              模式/多选态（清选集退出）；右键菜单=单行语义（打开详情/重命名/
- *              复制标题/转笔记/删除——SessionRowContextMenu 委托父层处理）。
+ * @ai-context: 纯列表域 UI：三模式搜索（标题本地即时过滤 / 转写内容段搜索 / 画面图内
+ *              文字检索）、状态与转化筛选、排序、课程分组折叠、勾选批量操作栏、内联
+ *              一键转笔记。筛选/排序/选择均为本地状态（数据已在 SessionListItem 里，
+ *              零后端往返）；转化/删除副作用经回调上抛给 SessionsPage。
+ * @ai-context: 批 4 交互矩阵：选择模式「选择」按钮进入（单击行=勾选）/ 再点或 Esc
+ *              退出；Ctrl/⌘+单击=加/减单行、Shift+单击=按当前可见列表位置区间（复用
+ *              utils/noteSelection 纯函数）；多选态视觉=靛蓝底 + ✓ 前缀（行级实现在
+ *              SessionListRow）。列表变化自动裁剪选集至当前可见行；批量栏口径=当前
+ *              可见列表（全选框三态保留）。
+ * @ai-context: 批 0-C2 拆分后本文件=**编排层**，消费 utils/sessionEligibility +
+ *              hooks/useSessionSearch（两个 invoke 的落点）· useSessionListView ·
+ *              useSessionSelection（多选态机）· components/SessionSearchBar ·
+ *              SessionSearchHits · SessionListBody · SessionSelectionToolbar。
+ *              Esc 退出链（重命名自吞 → 右键菜单 → 选择模式/多选态）的**监听刻意留在
+ *              本文件**：全局只能有一个 window keydown，且菜单优先。本层仍持有右键菜单
+ *              态 · 行内改名 nonce · batchBusy/Ref 与批量转/删（清选集时机不对称）。
  */
 import { useEffect, useRef, useState } from "react";
 import type { CourseGroup, SessionListItem } from "../types";
@@ -30,6 +33,7 @@ import type { SessionRenameRequest } from "./SessionListRow";
 import SessionRowContextMenu from "./SessionRowContextMenu";
 import SessionListBody from "./SessionListBody";
 import SessionSearchBar from "./SessionSearchBar";
+import SessionSelectionToolbar, { SessionSelectionControls } from "./SessionSelectionToolbar";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 const selectStyle: React.CSSProperties = {
@@ -84,10 +88,9 @@ export default function SessionListPanel({
   // 行内重命名请求（nonce：同一行连续两次「重命名」也能重启编辑态）
   const [renameReq, setRenameReq] = useState<SessionRenameRequest | null>(null);
   const renameNonceRef = useRef(0);
-  // 批 4 审查修复（P3-2）：批量操作 pending——state=按钮禁用视觉，ref=同 tick
-  // 拦截（state 更新异步，连点需 ref 立即生效；与行内改名 busyRef 同模式）。
-  // Why：原无防护，双击「批量删除」二次提交报"已删除 0 个"（首次已删空选集
-  // 数据、二次空跑）；批量转同理。
+  // 批 4 审查修复（P3-2）：批量 pending——state=按钮禁用视觉，ref=同 tick 拦截
+  // （state 更新异步，连点需 ref 立即生效）。Why：原无防护，双击「批量删除」二次
+  // 提交报"已删除 0 个"（首次已删空选集数据、二次空跑）；批量转同理。
   const [batchBusy, setBatchBusy] = useState<"convert" | "delete" | null>(null);
   const batchBusyRef = useRef(false);
 
@@ -104,9 +107,8 @@ export default function SessionListPanel({
 
   // Esc 退出链：右键菜单 → 选择模式/多选态（清选集退出）。
   // （行内重命名输入内已 stopPropagation 自吞 Esc——不在此列）
-  // ★ 全面板唯一 window keydown：优先级=右键菜单先 return（菜单开着时按 Esc 只关菜单，
-  //   选集保留）。**不得**把 Esc 挪进 useSessionSelection 另建监听——两个监听会让一次
-  //   Esc 同时关菜单 + 清选集（行为不等价）。
+  // ★ 全局唯一 window keydown，优先级=右键菜单先 return（菜单开着时按 Esc 只关菜单，选集
+  //   保留）。**不得**挪进 useSessionSelection 另建监听——那会让一次 Esc 同时关菜单 + 清选集。
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -123,7 +125,7 @@ export default function SessionListPanel({
     setKeyword("");
   };
 
-  /** 分组折叠切换（列表区组头点击——原内联 setCollapsed 收敛于此，语义不变） */
+  // 分组折叠切换（列表区组头点击——原内联 setCollapsed 收敛于此，语义不变）
   const toggleCollapse = (course: string) => setCollapsed((c) => ({ ...c, [course]: !c[course] }));
 
   /** 批量转：先过滤出可转化集合（已转/进行中/无内容不在其中）；pending 防连点
@@ -152,15 +154,20 @@ export default function SessionListPanel({
     }
   };
 
-  const selectModeBtn = (on: boolean): React.CSSProperties => ({
-    ...btn,
-    fontSize: 11,
-    borderRadius: 6,
-    border: on ? "1px solid #4f46e5" : "1px solid #d1d5db",
-    background: on ? "#eef2ff" : "#fff",
-    color: on ? "#3730a3" : "#4b5563",
-    fontWeight: on ? 600 : 400,
-  });
+  /** 批量删：**成功后**才清选集（全删或全不删——后端单事务原子）；失败保留选集
+   * 以便重试。与批量转的「转前清选集」**不对称**，不得统一。 */
+  const runBatchDelete = async () => {
+    // P3-2 pending 防连点（ref 同 tick 拦截——双击不再二次提交）
+    if (batchBusyRef.current) return;
+    batchBusyRef.current = true;
+    setBatchBusy("delete");
+    try {
+      if (await onBatchDelete([...selected])) clearSelection();
+    } finally {
+      batchBusyRef.current = false;
+      setBatchBusy(null);
+    }
+  };
 
   return (
     <div style={{ width, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minWidth: 0 }}>
@@ -174,23 +181,12 @@ export default function SessionListPanel({
           ⟨
         </button>
         <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}>
-          {/* 批 4：选择模式进入/退出（再点或 Esc 退出；进入后单击行=勾选） */}
-          {selectionMode && (
-            <span
-              data-testid="session-select-mode-chip"
-              style={{ fontSize: 10.5, color: "#4f46e5", border: "1px solid #c7d2fe", borderRadius: 10, padding: "0 6px", background: "#eef2ff", lineHeight: "16px", fontWeight: 400 }}
-            >
-              选择模式{selected.size > 0 ? `（${selected.size}）` : ""}
-            </span>
-          )}
-          <button
-            data-testid="session-select-mode-btn"
-            style={selectModeBtn(selectionMode)}
-            onClick={() => (selectionMode ? exitBatch() : enterSelectionMode())}
-            title={selectionMode ? "退出选择模式（Esc）" : "进入选择模式：单击会话=勾选（Ctrl/Shift 多选）"}
-          >
-            选择
-          </button>
+          <SessionSelectionControls
+            selectionMode={selectionMode}
+            selectedCount={selected.size}
+            onEnter={enterSelectionMode}
+            onExit={exitBatch}
+          />
           <button
             style={{ ...btn, fontSize: 11, borderRadius: 6, border: grouped ? "1px solid #0d9488" : "1px solid #e5e7eb", background: grouped ? "#ccfbf1" : "#fff" }}
             onClick={onToggleGrouped}
@@ -269,58 +265,18 @@ export default function SessionListPanel({
         onOpenNote={onOpenNote}
       />
 
-      {/* 批量操作栏（出现后出现；段搜索命中视图隐藏——避免对不可见列表误操作） */}
+      {/* 批量操作栏（段搜索命中视图隐藏——避免对不可见列表误操作）。batchBusy/Ref 与两条
+          动线留在面板：批量转会先清空选集使本栏卸载，状态随组件走会让连点拦截失效。 */}
       {!hits && !ocrHits && selected.size > 0 && (
-        <div style={{ borderTop: "1px solid #e5e7eb", padding: 8, display: "flex", gap: 6, alignItems: "center", background: "#fff" }}>
-          {/* 批 4 审查修复（P3-1）：全选框口径 = 当前可见行序 visibleOrder——
-              平铺=筛选后序、分组=展开组顺次。原 filtered 口径在折叠组时把
-              不可见行也纳入全选（勾选后随即被裁剪 effect 清掉，计数误导且
-              折叠内容被误批量操作），与区间/自动裁剪同基准。三态 indeterminate
-              用回调 ref 每渲染刷新——部分选中显示横杠 */}
-          <input
-            type="checkbox"
-            data-testid="session-select-all"
-            ref={(el) => {
-              if (el) el.indeterminate = selected.size > 0 && selected.size < visibleOrder.length;
-            }}
-            checked={selected.size === visibleOrder.length && visibleOrder.length > 0}
-            onChange={toggleAllVisible}
-            style={{ cursor: "pointer", flexShrink: 0 }}
-            title="全选当前可见的会话（折叠组行不含在内）"
-          />
-          <span style={{ fontSize: 12, color: "#374151" }}>已选 {selected.size} 个</span>
-          <button
-            style={{ ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #0d9488", background: "#f0fdfa", color: "#0f766e", fontWeight: 600, opacity: batchBusy ? 0.55 : 1 }}
-            disabled={batchBusy !== null}
-            onClick={() => void runBatchConvert()}
-            title={batchBusy ? "批量转处理中…" : undefined}
-          >
-            批量转笔记
-          </button>
-          <button
-            style={{ ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #fca5a5", color: "#dc2626", opacity: batchBusy ? 0.55 : 1 }}
-            disabled={batchBusy !== null}
-            onClick={() => void (async () => {
-              // P3-2 pending 防连点（ref 同 tick 拦截——双击不再二次提交）
-              if (batchBusyRef.current) return;
-              batchBusyRef.current = true;
-              setBatchBusy("delete");
-              try {
-                // 成功后清选集（全删或全不删——后端单事务原子，无半删计数）
-                if (await onBatchDelete([...selected])) clearSelection();
-              } finally {
-                batchBusyRef.current = false;
-                setBatchBusy(null);
-              }
-            })()}
-            title={batchBusy ? "批量删除处理中…" : undefined}
-          >
-            批量删除
-          </button>
-          <button style={{ ...btn, marginLeft: "auto", fontSize: 11 }} onClick={clearSelection}>
-            取消
-          </button>
-        </div>
+        <SessionSelectionToolbar
+          selectedCount={selected.size}
+          visibleCount={visibleOrder.length}
+          batchBusy={batchBusy}
+          onToggleAll={toggleAllVisible}
+          onConvert={() => void runBatchConvert()}
+          onDelete={() => void runBatchDelete()}
+          onCancel={clearSelection}
+        />
       )}
 
       {/* 行右键菜单（单行语义；危险项红字） */}
