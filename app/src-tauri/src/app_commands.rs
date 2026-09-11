@@ -126,9 +126,9 @@ pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync
         crate::commands_contracts::week_contract_status,
         // v0.18.0（REQ-248~250）：学习目标层——目标 CRUD/绑定/进度/埋点（无 AI）
         crate::commands_goals::create_goal,
-        crate::commands_goals::list_goals,
-        crate::commands_goals::get_goal_detail,
-        crate::commands_goals::get_goal_progress,
+        crate::commands_goals::views::list_goals,
+        crate::commands_goals::views::get_goal_detail,
+        crate::commands_goals::views::get_goal_progress,
         crate::commands_goals::update_goal,
         crate::commands_goals::update_goal_interview,
         crate::commands_goals::delete_goal,

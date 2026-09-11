@@ -9,22 +9,24 @@
 //! @ai-context: inner 函数统一收 &Db（commands_groups/commands_settlement 先例）
 //!              ——内存库单测直连，不构造重量级 AppState。
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tauri::State;
 
 use crate::commands::{normalize_title, AppState};
 use crate::db::{unix_seconds, Db};
-use crate::goal_interview::{
-    assemble_declaration, derive_criteria, horizon_end_secs,
-};
-use crate::goal_progress::{build_report, progress_statement, GoalProgressReport, GoalSignals};
-use crate::goal_rules::graduation_readiness;
+use crate::goal_interview::{derive_criteria, horizon_end_secs};
+use crate::goal_progress::GoalSignals;
 use crate::goal_schema::{
     Goal, GoalIntent, GoalMilestone, NewGoal, NewMilestone, SuccessCriteria, CRITERIA_GROUP_SETTLED,
     CRITERIA_MANUAL, MILESTONE_DONE, MILESTONE_IN_PROGRESS, MILESTONE_PENDING, MILESTONE_SKIPPED,
     TIER_DEFAULT,
 };
 use crate::video_profile_domain::DomainKind;
+
+/// 读侧视图层（5 个视图 DTO + 3 条读命令 + 3 个读 inner；0 emit）。
+/// `pub(crate)`：注册清单在 app_commands.rs（crate 根的兄弟模块）按 `commands_goals::views::x` 解析。
+#[path = "commands_goals_views.rs"]
+pub(crate) mod views;
 
 /// 一周秒数（草案 due_at 换算：第 N 周 = created_at + N*7d）。
 const WEEK_SECS: i64 = 7 * 86_400;
@@ -75,61 +77,6 @@ pub struct GoalMilestoneInput {
     pub due_weeks: usize,
 }
 
-/// 目标卡视图（列表项：单行折叠=名称/状态/一句话进度/可毕业徽标）。
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GoalCardView {
-    pub goal: Goal,
-    /// 一句话进度（"62% · 里程碑 2/4"）
-    pub statement: String,
-    pub percent: f64,
-    pub milestone_done: usize,
-    pub milestone_total: usize,
-    /// 🎓 可毕业（判据配方全达标——状态必须 active）
-    pub ready: bool,
-}
-
-/// 目标详情视图（详情页一次取全：里程碑/组/判据/进度/可毕业）。
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GoalDetailView {
-    pub goal: Goal,
-    /// 判据检查（可毕业明细——毕业确认仪式数据源）
-    pub criteria: Vec<ReadinessView>,
-    pub progress: GoalProgressView,
-    pub milestones: Vec<GoalMilestone>,
-    pub groups: Vec<GoalGroupView>,
-    /// 宣言回显（重新访谈/详情页展示）
-    pub declaration: String,
-}
-
-/// 目标绑定组视图（详情关联组区）。
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GoalGroupView {
-    pub id: i64,
-    pub name: String,
-}
-
-/// 判据检查视图。
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReadinessView {
-    pub label: String,
-    pub met: bool,
-    pub detail: String,
-}
-
-/// 进度视图（现算信号 + 一句话进度 + 可毕业判定）。
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GoalProgressView {
-    pub progress: GoalProgressReport,
-    pub statement: String,
-    pub ready: bool,
-    pub checks: Vec<ReadinessView>,
-}
-
 /// 新建目标（访谈确认后一步创建——status=active，无 draft 仪式）。
 #[tauri::command]
 pub fn create_goal(state: State<'_, AppState>, input: GoalCreateInput) -> Result<Goal, String> {
@@ -137,24 +84,6 @@ pub fn create_goal(state: State<'_, AppState>, input: GoalCreateInput) -> Result
     // REQ-278：目标创建 → 广播 goals 域
     crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Goals);
     Ok(goal)
-}
-
-/// 全部目标卡（列表；每卡现算进度——聚合皆毫秒级查询）。
-#[tauri::command]
-pub fn list_goals(state: State<'_, AppState>) -> Result<Vec<GoalCardView>, String> {
-    list_goals_inner(&state.db)
-}
-
-/// 目标详情（里程碑/绑定组/判据/进度一次取全）。
-#[tauri::command]
-pub fn get_goal_detail(state: State<'_, AppState>, id: i64) -> Result<GoalDetailView, String> {
-    get_goal_detail_inner(&state.db, id)
-}
-
-/// 进度刷新（详情页动作后局部刷新；与 get_goal_detail 同口径）。
-#[tauri::command]
-pub fn get_goal_progress(state: State<'_, AppState>, id: i64) -> Result<GoalProgressView, String> {
-    get_goal_progress_inner(&state.db, id)
 }
 
 /// 编辑目标（名称/领域/时限——重访谈走 update_goal_interview）。
@@ -373,85 +302,6 @@ pub(crate) fn create_goal_inner(db: &Db, input: &GoalCreateInput) -> Result<Goal
     Ok(goal)
 }
 
-pub(crate) fn list_goals_inner(db: &Db) -> Result<Vec<GoalCardView>, String> {
-    let goals = db.list_goals().map_err(|e| e.to_string())?;
-    let mut cards = Vec::new();
-    for goal in goals {
-        let (statement, percent, done, total, ready) = goal_card_metrics(db, &goal)?;
-        cards.push(GoalCardView {
-            goal,
-            statement,
-            percent,
-            milestone_done: done,
-            milestone_total: total,
-            ready,
-        });
-    }
-    Ok(cards)
-}
-
-pub(crate) fn get_goal_detail_inner(db: &Db, id: i64) -> Result<GoalDetailView, String> {
-    require_goal(db, id)?;
-    let goal = db
-        .get_goal(id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("目标不存在: {}", id))?;
-    let milestones = db.list_milestones(id).map_err(|e| e.to_string())?;
-    let group_ids = db.list_goal_group_ids(id).map_err(|e| e.to_string())?;
-    let mut groups = Vec::new();
-    for gid in group_ids {
-        if let Some(g) = db.get_group(gid).map_err(|e| e.to_string())? {
-            groups.push(GoalGroupView { id: gid, name: g.name });
-        }
-    }
-    let signals = collect_signals(db, id)?;
-    let progress = build_report(&signals);
-    let statement = progress_statement(&progress);
-    let criteria = parse_criteria(&goal)?;
-    let ready = graduation_readiness(&goal.status, &progress, &criteria);
-    let intent: GoalIntent = serde_json::from_str(&goal.intent_json).unwrap_or_default();
-    let declaration = assemble_declaration(
-        &goal.name,
-        intent.scenario.as_deref(),
-        intent.criteria_statement.as_deref(),
-        &criteria.statement,
-        intent.non_scope.as_deref(),
-        intent.horizon.as_deref(),
-    );
-    Ok(GoalDetailView {
-        goal,
-        criteria: ready.checks.into_iter().map(client_check).collect(),
-        progress: GoalProgressView {
-            progress,
-            statement,
-            ready: ready.ready,
-            checks: vec![],
-        },
-        milestones,
-        groups,
-        declaration,
-    })
-}
-
-pub(crate) fn get_goal_progress_inner(db: &Db, id: i64) -> Result<GoalProgressView, String> {
-    require_goal(db, id)?;
-    let goal = db
-        .get_goal(id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("目标不存在: {}", id))?;
-    let signals = collect_signals(db, id)?;
-    let progress = build_report(&signals);
-    let statement = progress_statement(&progress);
-    let criteria = parse_criteria(&goal)?;
-    let ready = graduation_readiness(&goal.status, &progress, &criteria);
-    Ok(GoalProgressView {
-        progress,
-        statement,
-        ready: ready.ready,
-        checks: ready.checks.into_iter().map(client_check).collect(),
-    })
-}
-
 pub(crate) fn update_goal_inner(
     db: &Db,
     id: i64,
@@ -636,23 +486,6 @@ fn build_intent(input: &GoalCreateInput) -> GoalIntent {
     }
 }
 
-/// 目标卡指标（现算；判据 JSON 损坏 → ready=false 诚实降级不崩溃）。
-fn goal_card_metrics(db: &Db, goal: &Goal) -> Result<(String, f64, usize, usize, bool), String> {
-    let signals = collect_signals(db, goal.id)?;
-    let progress = build_report(&signals);
-    let ready = match parse_criteria(goal) {
-        Ok(criteria) => graduation_readiness(&goal.status, &progress, &criteria).ready,
-        Err(_) => false,
-    };
-    Ok((
-        progress_statement(&progress),
-        progress.percent,
-        progress.milestone_done,
-        progress.milestone_total,
-        ready,
-    ))
-}
-
 /// 进度信号收集（详情/列表共用——口径单一；lifecycle 命令组复用）。
 pub(crate) fn collect_signals(db: &Db, goal_id: i64) -> Result<GoalSignals, String> {
     db.goal_progress_signals(goal_id, unix_seconds()).map_err(|e| e.to_string())
@@ -661,11 +494,6 @@ pub(crate) fn collect_signals(db: &Db, goal_id: i64) -> Result<GoalSignals, Stri
 /// 判据 JSON 解析（损坏 → 错误——调用方降级 ready=false；不静默空白）。
 pub(crate) fn parse_criteria(goal: &Goal) -> Result<SuccessCriteria, String> {
     serde_json::from_str(&goal.success_criteria_json).map_err(|e| e.to_string())
-}
-
-/// ReadinessCheck → 客户端视图。
-fn client_check(c: crate::goal_rules::ReadinessCheck) -> ReadinessView {
-    ReadinessView { label: c.label, met: c.met, detail: c.detail }
 }
 
 #[cfg(test)]

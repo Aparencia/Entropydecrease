@@ -31,10 +31,6 @@ export const SOFT_LIMIT = 300;
  */
 export const FROZEN_OVER_LIMIT = [
   'app/src-tauri/src/commands_ai_refine.rs',
-  'app/src-tauri/src/db_goals.rs',
-  'app/src-tauri/src/commands_goals.rs',
-  'app/src-tauri/src/ai_refine_task.rs',
-  'app/src-tauri/src/note_filter.rs',
 ];
 
 const toPosix = (p) => p.split(sep).join('/');
