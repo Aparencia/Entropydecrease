@@ -89,7 +89,7 @@
 3. **`dead_code` 清单的权威性是有条件的**：它只覆盖**私有**死符号，且**只要清单里有符号落在计划明令保留的文件里，它就不再是「可照单删除」的清单**，而是「计划不自洽」的证据（证伪 #2、#5）。
 4. **任何「不删 / 保留 / 登记给后续批次」的条目，下游任务开工前必须自己实测复核一遍**，并把复核命令与输出写进报告；**不得**直接采信上游计划或规格的判断。
 
-### 收口二 · 被证伪的「测试数预测」——逐任务改正（本批实删 **55** 条，计划原预测 **16** 条）
+### 收口二 · 被证伪的「测试数预测」——逐任务改正（本批实删 **59** 条，计划原预测 **16** 条）
 
 | 任务 | 计划预测 | 实测 | 差额来源（全部经控制方裁决） |
 |---|---|---|---|
@@ -126,7 +126,7 @@ Task 8 的 Verification 原文要求「全仓 0 命中」。**按字面不可执
 
 ### 收口六 · 本批删除面总账
 
-**registry 334 → 312（−22）** · **Rust 用例 2359 → 2300（−55）** · **前端 1125 → 1124（−1）** · **删文件 10 个**（`git diff --name-status --diff-filter=D e96ab63d HEAD`：`ai_judge.rs` · `ai_judge_tests.rs` · `ai_mock_tests.rs` · `artifact_templates.rs` · `artifact_templates_tests.rs` · `artifact_templates_visual.rs` · `artifact_templates_voice.rs` · `commands_artifacts.rs` · `narrative_detect.rs` · `narrative_detect_tests.rs`）· **301–600 档 125 → 123**（`commands_ai.rs` 回落 ≤300 整行移除 + `artifact_templates_tests.rs` 删文件）。
+**registry 334 → 312（−22）** · **Rust 用例 2359 → 2300（−59）** · **前端 1125 → 1124（−1）** · **删文件 10 个**（`git diff --name-status --diff-filter=D e96ab63d HEAD`：`ai_judge.rs` · `ai_judge_tests.rs` · `ai_mock_tests.rs` · `artifact_templates.rs` · `artifact_templates_tests.rs` · `artifact_templates_visual.rs` · `artifact_templates_voice.rs` · `commands_artifacts.rs` · `narrative_detect.rs` · `narrative_detect_tests.rs`）· **301–600 档 125 → 123**（`commands_ai.rs` 回落 ≤300 整行移除 + `artifact_templates_tests.rs` 删文件）。
 **注意 Task 11 Verification 的 `git log --diff-filter=D` 行原文期望「只含 4 个文件」已失效**——实际 **10 个**（T3 扩大面 +7、T4+5 再 +3），已在该行就地标注。
 
 
@@ -143,7 +143,7 @@ Task 8 的 Verification 原文要求「全仓 0 命中」。**按字面不可执
 | 注册条目（官方逐行口径） | **334** | `node scripts/check-command-registry.mjs` → `✅ 命令注册一致：定义 334 / 注册 334 / 重复 0` |
 | 前端生产代码零引用的命令 | **47** | 见下方「复算脚本」；与规格 §9 的 47 条**逐条相同（0 漂移）** |
 | Rust 非测试用例总数（含 ignored） | **2365**（2359 有效 + 6 ignored） | `cargo test --test app_lib_tests` |
-| `app/src-tauri/src` 里由本批删除的测试 | **16**（**2026-09-12 更正：本批实际共删 51 条**） | `cargo test --test app_lib_tests ai_judge::` = 9 · `cargo test --test app_lib_tests ai_mock::` = 7 —— 另有 Task 3 连带 **−25**（控制方扩大删除面）与 `ai_protocol.rs` 的 `AiEnhance*` 半边 **−10** ⇒ `cargo test --test app_lib_tests` **2359 → 2334 → 2308** |
+| `app/src-tauri/src` 里由本批删除的测试 | **16**（**2026-09-12 更正：本批实际共删 51 条** —— 51 为 T4+T5 落地时的中途值，T6 后累计 55、T7 后累计 59 为**终值**） | `cargo test --test app_lib_tests ai_judge::` = 9 · `cargo test --test app_lib_tests ai_mock::` = 7 —— 另有 Task 3 连带 **−25**（控制方扩大删除面）与 `ai_protocol.rs` 的 `AiEnhance*` 半边 **−10** ⇒ `cargo test --test app_lib_tests` **2359 → 2334 → 2308** |
 | 前端 vitest 基线 | **124 文件 / 1125 用例全绿**（`dev@52856ab6` 复测，exit 0） | `cd app && npx vitest run` |
 
 **复算脚本（不要新建文件；用一段内联 node 或按上面的正则手写 PowerShell 均可，判据逐条对应本节的匹配式）**

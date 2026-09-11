@@ -527,7 +527,7 @@
 | **6 动效系统** | GSAP 接入 + token + 四层 + 三档 + 相变两态 + 6 个签名动效 + `usePresence` | 可中断可反向；三档正确；60fps |
 | **7 未接线落地** | 12 条补 UI（含 `kb_search` → ⌘K）· 标签线 · 档位通道 · B 桶 3 条撤下 IPC · **`structuredBlocks` 整模块存废**（批 1 控制方裁决：接线（4 个导出全接入、真实置信度渲染「低置信点线」）**或**删除（连同类名与规格/登记表一并移除）二选一，**批 1 未决前不得删**） | **标签能写进去**；**档位选完真生效**；**`structuredBlocks` 已作出接线或删除的明确裁决** |
 | **8 治理收口** | 豁免表终态 · 回写 `ui-ux-system.md` / `theme.md` · 新增动效规范章节 · 需求池同步 | 11 条验收全达标 |
-| ↳ 批 1 的收口（批 1 完成时更新） | **22 条命令已删**（本表原写 21 ＋ #41 `open_capture_float` 改判；`git diff --name-status --diff-filter=D e96ab63d HEAD` = **10 个文件**）· **补缝三连连带模块已删**（`ai_judge` + `AiMockAdapter::enhance` + `ai_protocol.rs` 的 `AiEnhance*` 半边，**−26 用例** = 9+7+10；另 T3 整族删除 **−25**、T6 **−4**、T7 **−4** ⇒ 全批 **−55**）· **ADR-010 已废弃**（文件保留）· **`structuredBlocks` 死文案已清**（**整模块存废登记给批 7**） | 收口门禁（2026-09-12 实测）：registry **312/312/0** · `cargo test` **2300/0/6** · `cargo build` 0 `dead_code` · clippy **19**（集合与开工基线 identical）· vitest **124 文件 / 1124 用例** · `tsc` 0 错 · `line-limits --full` **0 / 123 / 123** · `docs-check` exit 0 |
+| ↳ 批 1 的收口（批 1 完成时更新） | **22 条命令已删**（本表原写 21 ＋ #41 `open_capture_float` 改判；`git diff --name-status --diff-filter=D e96ab63d HEAD` = **10 个文件**）· **补缝三连连带模块已删**（`ai_judge` + `AiMockAdapter::enhance` + `ai_protocol.rs` 的 `AiEnhance*` 半边，**−26 用例** = 9+7+10；另 T3 整族删除 **−25**、T6 **−4**、T7 **−4** ⇒ 全批 **−59**）· **ADR-010 已废弃**（文件保留）· **`structuredBlocks` 死文案已清**（**整模块存废登记给批 7**） | 收口门禁（2026-09-12 实测）：registry **312/312/0** · `cargo test` **2300/0/6** · `cargo build` 0 `dead_code` · clippy **19**（集合与开工基线 identical）· vitest **124 文件 / 1124 用例** · `tsc` 0 错 · `line-limits --full` **0 / 123 / 123** · `docs-check` exit 0 |
 
 > **批 0–1–2 期间界面几乎不变 —— 这是设计意图，不是失败。** 批 0–1 交付的是「让后面每一批都能一次改对所有地方」的能力。观感从批 4 开始变，骨架在批 3，内容在批 5，手感在批 6。
 
@@ -583,7 +583,7 @@
 | 风险 | 触发条件 | 缓解 |
 |---|---|---|
 | 拆件行为不等价 | 拆 4 个超限文件时夹带功能改动 | 本批**不加任何新功能**；现有测试全绿 + 手工走查 |
-| 删命令删到活代码 | `[DEAD]` 判定被测试文件污染 | **每条删除前重新确认调用方**（一次 grep）—— 批 1 实测升级为**三向复核**（前端生产字面量 / 前端测试 / Rust 调用形态）＋**同名三域归属**（命令 vs 同名活函数 vs 注释提及）：22 条全部为空，OCR 引擎与导入转写链路的同名活函数**一处未伤**。⚠️ **裸 `includes()` / 子串 grep 会误判**（本批实测 6 例：`refine_session` ⊂ `"auto_refine_session"` · `finish_session` ⊂ `"finish_photo_session"` · `video_profile_memory` ⊂ `"video_profile_memory.json"` · `recognize_image` ⊂ `recognize_image_timeout` · `remember_video_profile` ⊂ `remember_video_profile_form`/`_domain`）⇒ 必须用**引号定界字面量 / 整词边界**，且**任何「0 命中」结论都要点名仪器并先自检**（计划 §收口三）。**代价**：本批因此额外删除 55 条测试（计划原预测 16 条），每一笔都由控制方逐条裁决 —— 见批 1 计划「收口回写」节 |
+| 删命令删到活代码 | `[DEAD]` 判定被测试文件污染 | **每条删除前重新确认调用方**（一次 grep）—— 批 1 实测升级为**三向复核**（前端生产字面量 / 前端测试 / Rust 调用形态）＋**同名三域归属**（命令 vs 同名活函数 vs 注释提及）：22 条全部为空，OCR 引擎与导入转写链路的同名活函数**一处未伤**。⚠️ **裸 `includes()` / 子串 grep 会误判**（本批实测 6 例：`refine_session` ⊂ `"auto_refine_session"` · `finish_session` ⊂ `"finish_photo_session"` · `video_profile_memory` ⊂ `"video_profile_memory.json"` · `recognize_image` ⊂ `recognize_image_timeout` · `remember_video_profile` ⊂ `remember_video_profile_form`/`_domain`）⇒ 必须用**引号定界字面量 / 整词边界**，且**任何「0 命中」结论都要点名仪器并先自检**（计划 §收口三）。**代价**：本批因此额外删除 59 条测试（计划原预测 16 条），每一笔都由控制方逐条裁决 —— 见批 1 计划「收口回写」节 |
 | 未确认档 3.22:1 被误用 | 有人把关键信息放进未确认档 | 4.3 三条规则写进规范 + review 检查 |
 | 剪报底纹标错来源 | 历史数据缺来源标记时「猜」 | 4.4 防御性规则：无标记即无标记，绝不猜 |
 | 视图层内存膨胀 | 每对象多视图全部常驻 | 7.3 惰性挂载契约 + 重挂载恢复 scrollTop |
