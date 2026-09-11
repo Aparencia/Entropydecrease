@@ -6,8 +6,8 @@
  * 读者无法判断哪行有效）、且 15 个 >600 违规中有 10 个被登记表用 <600 的数字
  * 「认证为合规」。故把「测量」收进一个脚本：写表与查表共用同一套逻辑，口径只有一处实现。
  *
- * 副作用：`--write` 会重写 docs/standards/line-limit-exemptions.md（人工维护的
- * 「豁免理由 / 拆分计划」两列按路径保留）；默认模式只读。
+ * 副作用：`--write` 会重写 docs/standards/line-limit-exemptions.md（人工列按路径保留，唯带
+ * `（自动摘取，待细化）` 标记的理由是生成物、每次重摘）；默认模式只读。
  * 边界：只扫 app/src 与 app/src-tauri/src 下的 .ts/.tsx/.rs。>600 用**棘轮**而非
  * 「立刻为零」—— 拆分是 0-C2/C3 的事，本脚本负责让违规**不再增加**且**可见**。
  *
@@ -68,43 +68,53 @@ export function scanTree() {
   return out;
 }
 
-/** 从登记表抽出条目：| 路径 | 行数 | … | */
+/**
+ * 从登记表抽出条目行：| 路径 | 行数 | 豁免理由 | 拆分计划 | —— **查表与写表共用这一处解析口径**。
+ * Why 合并（原为 parseTable / parseReasons 两份近似正则）：两者解析的是同一张表，改一处忘一处就会让
+ * `check` 与 `--write` 对行数/理由的理解漂移；且只有 4 列全取，写入口才能保留人工维护的两列。
+ */
 export function parseTable() {
   const abs = join(ROOT, TABLE_PATH);
   if (!existsSync(abs)) return [];
   const rows = [];
   for (const line of readFileSync(abs, 'utf8').split('\n')) {
-    const m = /^\|\s*`?([^|`]+?\.(?:rs|tsx?))`?\s*\|\s*(\d+)\s*\|/.exec(line);
-    if (m) rows.push({ path: m[1].trim(), declared: Number(m[2]) });
+    const m = /^\|\s*`?([^|`]+?\.(?:rs|tsx?))`?\s*\|\s*(\d+)\s*\|\s*([^|]*)\|\s*([^|]*)\|/.exec(line);
+    if (m) rows.push({ path: m[1].trim(), declared: Number(m[2]), why: m[3].trim(), split: m[4].trim() });
   }
   return rows;
 }
 
-/** 从现有登记表按路径抽出人工维护的两列（生成器保留它们） */
-function parseReasons() {
-  const abs = join(ROOT, TABLE_PATH);
-  const map = new Map();
-  if (!existsSync(abs)) return map;
-  for (const line of readFileSync(abs, 'utf8').split('\n')) {
-    const m = /^\|\s*`?([^|`]+?\.(?:rs|tsx?))`?\s*\|\s*\d+\s*\|\s*([^|]*)\|\s*([^|]*)\|/.exec(line);
-    if (m) map.set(m[1].trim(), { why: m[2].trim(), split: m[3].trim() });
-  }
-  return map;
-}
+/** 自动理由的**来源标记**：带它的单元格是生成物 ⇒ 每次 `--write` 重新摘取（见 `humanWhy`） */
+const AUTO_SUFFIX = '（自动摘取，待细化）';
+/** 注释行前缀（`//` `//!` `///` `*` `/*`）—— 续读时逐行剥离；无前缀的行（裸代码）即注释块已结束 */
+const COMMENT_EDGE = /^[ \t]*(?:\/\/[/!]*|\/\*+|\*+\/?)[ \t]?/;
+/** 续读上限：当前最长自然终止（`。！？` 句末）需 11 行，12 只作防御（防无空行无句末的注释块被整块吞进单元格） */
+const REASON_MAX_LINES = 12;
 
-/** 取该文件 `@ai-context` 的首行要点，作为自动补登时的理由 */
+/**
+ * 取该文件 `@ai-context` 的**首句**要点，作为自动补登时的理由。
+ * Why 抓整行再清洗：本仓大量 `@ai-context` 行以 `**加粗**` 开头（如 `@ai-context **域图标**几何（9 个）：…`），
+ * 用 `[^\n*]+` 直接卡在 `*` 上会**一格都捕获不到**，使自动理由全部退化成占位符。
+ * Why 续读：`@ai-context` 常折行（首行停在 `（`/`——`/`+` 等连接符处）⇒ 只取第一个物理行会让理由半句截断
+ * （2026-09-11 实测 43 条里 41 条如此）。续读到**句末 / 空行 / 注释块收尾**；句末只认 `。！？` —— 把 `；` 也算句末会停在未闭合括号里（实测 122 条有 1 条）。
+ */
 function autoReason(absPath) {
-  const src = readFileSync(absPath, 'utf8');
-  // 捕获**整行**再清洗，而不是用 `[^\n*]+` 直接卡在 `*` 上 —— 本仓大量 `@ai-context` 行以
-  // `**加粗**` 开头（如 `@ai-context **域图标**几何（9 个）：…`），卡 `*` 会**一格都捕获不到**，
-  // 使 45 条自动理由全部退化成占位符。
-  const m = /@ai-context[：:]?\s*([^\n]+)/.exec(src);
-  if (!m) return '（待补理由：本条目由生成器补登）';
-  const text = m[1]
-    .replace(/\*\/\s*$/, '') // 单行块注释的收尾 `*/`
-    .replace(/\*\*/g, '') // 加粗标记
-    .trim();
-  return text ? `${text}（自动摘取，待细化）` : '（待补理由：本条目由生成器补登）';
+  const lines = readFileSync(absPath, 'utf8').split('\n');
+  const at = lines.findIndex((l) => l.includes('@ai-context'));
+  if (at < 0) return '（待补理由：本条目由生成器补登）';
+  const parts = [];
+  for (let i = at; i < lines.length && i < at + REASON_MAX_LINES; i++) {
+    const raw = lines[i];
+    const close = raw.indexOf('*/'); // 行内块注释收尾：只取它前面的文字
+    const bare = close < 0 ? raw : raw.slice(0, close);
+    if (i > at && !COMMENT_EDGE.test(bare)) break; // 无注释前缀 = 注释块已结束
+    // 首行只取 `@ai-context` 之后的文字；续行剥注释前缀（折行处不补空格 —— 本仓注释在中英混排处断行）
+    const body = (i === at ? bare.replace(/^[\s\S]*?@ai-context[：:]?\s*/, '') : bare.replace(COMMENT_EDGE, '')).trim();
+    if (body) parts.push(body);
+    if (!body || close >= 0 || /[。！？]$/.test(body)) break; // 空行 / 块注释收尾 / 句末
+  }
+  const text = parts.join('').replace(/\*\*/g, '').trim();
+  return text ? `${text}${AUTO_SUFFIX}` : '（待补理由：本条目由生成器补登）';
 }
 
 /**
@@ -133,7 +143,7 @@ function assertScanSane(measured) {
     }
   }
   // 覆盖断言（上面两条的补集）：SCAN_DIRS **少写一个目录**时列出的目录都存在且有命中 ⇒ 上面全过，但棘轮/登记表里的文件整体落到扫描域外 ⇒ (b)/(d) 报成"→ 删除该行"、--write 整片删掉仍打印 ✅（实测 ['app/src']：10×(b)+102×(d)；--write exit 0，179 → 77 行 / 138 → 36 条）。
-  const declared = new Set([...FROZEN_OVER_LIMIT, ...parseReasons().keys()]);
+  const declared = new Set([...FROZEN_OVER_LIMIT, ...parseTable().map((r) => r.path)]);
   const uncovered = [...declared].filter((p) => !SCAN_DIRS.some((d) => p.startsWith(`${d}/`)));
   if (uncovered.length) {
     console.error(
@@ -155,15 +165,21 @@ function parseHistory() {
 
 function writeTable() {
   const measured = scanTree();
-  // ⚠️ 必须在 parseReasons()/writeFileSync() **之前**：否则扫描域失效时它会把 138 条清成表头 + 历史节（实测 179 → 41 行）还打印 ✅、exit 0。同类破坏在"SCAN_DIRS 少写一个目录"时同样可达。
+  // ⚠️ 必须在 parseTable()/writeFileSync() **之前**：否则扫描域失效时它会把 138 条清成表头 + 历史节（实测 179 → 41 行）还打印 ✅、exit 0。同类破坏在"SCAN_DIRS 少写一个目录"时同样可达。
   assertScanSane(measured);
-  const reasons = parseReasons();
+  const reasons = new Map(parseTable().map((r) => [r.path, r]));
+  // 带 AUTO_SUFFIX 的单元格是**生成物** ⇒ 重新摘取。少了这一步，旧实现留下的半句截断文本会被当成
+  // 人工理由在 `parseTable` 里永久固化，`autoReason` 的改进就永远落不到表上（实测 43 条全带该标记）。
+  const humanWhy = (p) => {
+    const w = reasons.get(p)?.why ?? '';
+    return w.endsWith(AUTO_SUFFIX) ? '' : w;
+  };
   // 并列时必须按路径断开：`scanTree` 的 Map 迭代序来自 readdirSync，**跨平台不一致**
   // （Windows 与 Linux 的顺序可能不同）⇒ 只按行数排会让 `--write` 在不同平台产出不同字节。
   const byLinesDesc = (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]);
   const over = [...measured.entries()].filter(([, n]) => n > HARD_LIMIT).sort(byLinesDesc);
   const band = [...measured.entries()].filter(([, n]) => n > SOFT_LIMIT && n <= HARD_LIMIT).sort(byLinesDesc);
-  // 单元格净化：文本里的半角 `|` 会撑破 Markdown 表格，并让下次 `parseReasons` 误切列。
+  // 单元格净化：文本里的半角 `|` 会撑破 Markdown 表格，并让下次 `parseTable` 误切列。
   // 换**全角** `｜` 而不是 `\|` —— 转义写法在下次读取时会被再次转义，破坏 `--write` 的幂等性。
   const cell = (t, fallback) => {
     const s = (t ?? '').replace(/\|/g, '｜').replace(/\s*\n\s*/g, ' ').trim();
@@ -183,7 +199,7 @@ function writeTable() {
     '',
     '> ⚠️ **本文件是生成物** —— 行数与条目成员关系由 `node scripts/line-limits.mjs --write` 生成，',
     '> **不要手改数字、手加行或手删行**（会被 `node scripts/line-limits.mjs` 判为违规）。',
-    '> 「豁免理由」「拆分计划」两列由**人工**维护，生成器按路径保留；「已拆分 / 登记移除记录」节逐字保留。',
+    '> 「豁免理由」「拆分计划」两列由**人工**维护，生成器按路径保留（唯带 `（自动摘取，待细化）` 标记的是生成物、每次重摘）；「已拆分 / 登记移除记录」节逐字保留。',
     '>',
     '> **测量口径（唯一有效）**：文件**全部行数**（含空行），等价于 `[System.IO.File]::ReadAllLines(path, UTF8).Count`。',
     '> ⚠️ **禁用** `Get-Content` 数行（本机 PowerShell 5.1 + 码页 `gb2312` 会按 GBK 解码、吞换行、**少算**）与 `Measure-Object -Line`（**只数非空行**）。',
@@ -194,7 +210,7 @@ function writeTable() {
     '',
     '> 本表受棘轮守卫保护：**只允许减少**。每完成一个拆分，从 `scripts/line-limits.mjs` 的 `FROZEN_OVER_LIMIT` 删掉对应一行。',
     '',
-    // ⚠️ 本表**保持 4 列**（与下一节同形），不要"顺手"简化成 3 列 —— `parseReasons` 用 4 列正则
+    // ⚠️ 本表**保持 4 列**（与下一节同形），不要"顺手"简化成 3 列 —— `parseTable` 用 4 列正则
     // 按路径保留人工维护的两列，改成 3 列会让这些拆分计划在**下一次重生成时静默丢失**。
     '| 文件 | 行数 | 说明 | 拆分计划 |',
     '|---|---|---|---|',
@@ -206,7 +222,7 @@ function writeTable() {
     '|---|---|---|---|',
     ...band.map(([p, n]) => {
       const r = reasons.get(p);
-      return row(p, n, r?.why || autoReason(join(ROOT, p)), r?.split);
+      return row(p, n, humanWhy(p) || autoReason(join(ROOT, p)), r?.split);
     }),
     '',
     parseHistory(),
