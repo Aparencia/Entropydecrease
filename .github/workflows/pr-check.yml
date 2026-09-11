@@ -183,8 +183,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      # --full：CI 在结构之外额外守 (e)「登记值 == 实测值」。本地提交门禁默认只守结构，原因是
-      # 本地跑 (e) 会让每次源码改动都被迫重新生成登记表；而 --full 本身是**只读**的（不会重写表），
-      # 故本地改为在「门禁自身/登记表被改动」时跑它（见 package.json 的 lint-staged 条目）。
+      # --full：CI 在结构之外额外守 (e)「登记值 == 实测值」，与**本地完全同口径**。
+      # 本地提交门禁（.husky/pre-commit）自 2026-09-11 起直跑
+      # `node scripts/line-limits.mjs --full && node scripts/docs-check.mjs`（不经 lint-staged），
+      # 故这条 job 是**第二道**网、不再是唯一守 (e) 的地方。--full 只读、不重写登记表
+      # （写表只走 --write），因此本地跑它不会逼迫任何人重新生成表。
       - name: Line limits
         run: node scripts/line-limits.mjs --full
