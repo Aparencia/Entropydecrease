@@ -15,7 +15,6 @@
  */
 import { useCallback, useMemo } from "react";
 import type { Note, NoteGroup } from "../types";
-import { paletteHex } from "../utils/colorPalette";
 import type { ThemeMode } from "../utils/colorPalette";
 // 批 0-C2：展示节/可见序纯函数层（含 scope 键与裸折叠键派生——纯逻辑与副作用分离）
 import { manualBaseIds, scopeKey } from "../utils/noteSectionModel";
@@ -29,8 +28,8 @@ import { useNoteMoves } from "../hooks/useNoteMoves";
 import { useNoteListSelection } from "../hooks/useNoteListSelection";
 // 批 0-C2：划选（组头空白起手；window 监听 + elementFromPoint 命中——整块搬迁）
 import { useNoteMarquee } from "../hooks/useNoteMarquee";
-import NoteListRow from "./NoteListRow";
-import NoteTreeSection from "./NoteTreeSection";
+// 批 0-C2：展示件（列表体 / 顶栏 / 批量栏与选集菜单）——纯透传适配器，逻辑在 hook
+import NoteListBody from "./NoteListBody";
 import NoteRowContextMenu from "./NoteRowContextMenu";
 
 // 兼容既有导入面（NoteReadingView/NotesPage/parseTags.test 从此解析——v0.15 移厝 utils）
@@ -117,25 +116,6 @@ export default function NoteListView({
   // 划选（组头空白起手：window 四路监听 + elementFromPoint 行命中）——整块搬迁见 hooks/useNoteMarquee
   const { startMarquee } = useNoteMarquee({ sections, visibleOrder, groupFolds, setSelection });
 
-  const rowAccent = (n: Note) => paletteHex(noteColors?.[n.id] ?? null, theme);
-
-  const renderRow = (n: Note) => (
-    <NoteListRow
-      key={n.id}
-      note={n}
-      accent={rowAccent(n)}
-      openId={selectedId}
-      multiSelected={selection.has(n.id)}
-      tagColors={tagColors}
-      onOpen={handleOpen}
-      onModifierClick={handleModifierClick}
-      dragIds={selection.size > 0 && selection.has(n.id) ? [...selection] : []}
-      onDropOnRow={handleDropOnRow}
-      onOpenSession={onOpenSession}
-      onContextMenu={openRowContextMenu}
-    />
-  );
-
   /**
    * 右键菜单「上移/下移」可用性（REQ-315）：仅树视图 scope 上下文开放（交互矩阵：
    * 平铺/搜索/标签/非默认排序禁移动——移动=scope 级手排快照，过滤结果是子集非
@@ -202,31 +182,28 @@ export default function NoteListView({
         )}
       </div>
 
-      <div style={{ flex: 1, overflowY: "auto" }}>
-        {sections.length === 0 && <p style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", marginTop: 24 }}>暂无笔记</p>}
-        {sections.map((sec) => (
-          sec.scope === "flat" ? (
-            <div key="flat">{notes.map(renderRow)}</div>
-          ) : (
-            <NoteTreeSection
-              key={sec.scope}
-              title={sec.title}
-              count={sec.items.length}
-              accent={sec.accent}
-              active={sec.groupId === null ? groupFilter === null : groupFilter === sec.groupId}
-              folded={groupFolds[sec.groupId == null ? "none" : String(sec.groupId)] === true}
-              onToggleFold={() => toggleGroupFold(sec.groupId == null ? "none" : String(sec.groupId))}
-              onSelectTitle={() => onGroupFilterChange?.(sec.groupId === null ? null : (groupFilter === sec.groupId ? null : sec.groupId))}
-              manual={!!manualOrders[sec.scope]}
-              onResetManual={() => void resetOrder(sec.scope)}
-              onDropNotes={(ids) => void moveToGroup(ids, sec.groupId)}
-              onMarqueeStart={() => startMarquee(sec.scope)}
-            >
-              {sec.items.map(renderRow)}
-            </NoteTreeSection>
-          )
-        ))}
-      </div>
+      <NoteListBody
+        sections={sections}
+        notes={notes}
+        groupFolds={groupFolds}
+        groupFilter={groupFilter}
+        manualOrders={manualOrders}
+        selection={selection}
+        selectedId={selectedId}
+        theme={theme}
+        noteColors={noteColors}
+        tagColors={tagColors}
+        onOpen={handleOpen}
+        onModifierClick={handleModifierClick}
+        onDropOnRow={handleDropOnRow}
+        onContextMenu={openRowContextMenu}
+        onOpenSession={onOpenSession}
+        onGroupFilterChange={onGroupFilterChange}
+        onToggleFold={toggleGroupFold}
+        onResetManual={resetOrder}
+        onDropNotes={moveToGroup}
+        onMarqueeStart={startMarquee}
+      />
 
       {/* 批量操作栏（去勾选框后的批量入口：删除 + 移动到组；选择模式下同样可用） */}
       {selection.size > 0 && (
