@@ -242,6 +242,13 @@ impl AiNoteRefineAdapter {
         if let Some(o) = payload.as_object_mut() {
             o.remove("response_format");
         }
+        // 2026-09-11（DeepSeek V4.1）：流式拍不走 post_completions，provider 级
+        // 策略须显式落体——否则默认开启的思考模式会吃掉逐节输出的 token 预算
+        crate::ai_request_policy::apply_thinking_policy(
+            &mut payload,
+            &self.client.config.base_url,
+            self.client.config.thinking,
+        );
         let mut sections: Vec<crate::ai_refine_protocol::AiRefineSection> = Vec::new();
         let mut pending = String::new();
         let outcome = crate::ai_chat_stream::stream_sse_content(

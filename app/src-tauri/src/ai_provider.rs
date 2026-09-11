@@ -153,12 +153,18 @@ pub fn preset_templates() -> Vec<AiProviderConfig> {
     vec![
         // v0.12.0 M4（默认链 DeepSeek）：DeepSeek 提首位——effective_default_id
         // 取第一个 enabled → 新装/迁移用户默认 Provider 即 DeepSeek。
+        // 2026-09-11（DeepSeek-V4.1-Flash 发布）：模型名现代化——
+        // `deepseek-flash`（V4.1 Flash，原生多模态）为默认；`deepseek-v4-pro`
+        // 官方有序退役中（2026-09-14 起请求全量路由到 V4.1 Flash 同价）。
+        // 旧名 `deepseek-v4-flash`/`deepseek-v4-flash-vision-exp` 仍被接受但
+        // 模型已退役；`deepseek-chat`/`deepseek-reasoner` 已于 2026-07-24 停用
+        // ——三者均从预设移除，既有安装由 normalize_retired_deepseek_models 归一。
         mk(
             "deepseek",
             "DeepSeek",
             "https://api.deepseek.com/v1",
-            &["deepseek-v4-flash-vision-exp", "deepseek-chat", "deepseek-reasoner"],
-            "deepseek-v4-flash-vision-exp",
+            &["deepseek-flash", "deepseek-v4-pro"],
+            "deepseek-flash",
         ),
         mk(
             "siliconflow",
@@ -245,6 +251,59 @@ pub fn upgrade_existing_default_to_deepseek(store: &mut AiProviderStore) -> bool
     store.providers.insert(0, ds);
     store.default_provider_id = Some("deepseek".to_string());
     true
+}
+
+/// 已退役/旧版 DeepSeek 模型名 → 现役名（纯函数；非 DeepSeek 旧名 → None）。
+///
+/// @ai-context: 2026-09-11（DeepSeek-V4.1-Flash 发布）：
+///              - `deepseek-chat` / `deepseek-reasoner`：2026-07-24 已停用；
+///              - `deepseek-v4-flash` / `deepseek-v4-flash-vision-exp`：模型已
+///                退役，官方为兼容临时路由到 V4.1 Flash（随时可能失效）；
+///              四者统一归一到现役 `deepseek-flash`（含视觉，V4.1 Flash 原生
+///              多模态——ADR-023 的 vision 精修路径不需要单独模型名）。
+pub fn current_deepseek_model(model: &str) -> Option<&'static str> {
+    match model.trim().to_ascii_lowercase().as_str() {
+        "deepseek-chat" | "deepseek-reasoner" | "deepseek-v4-flash" | "deepseek-v4-flash-vision-exp" => {
+            Some("deepseek-flash")
+        }
+        _ => None,
+    }
+}
+
+/// 既有安装的 DeepSeek 模型名归一（2026-09-11，返回是否变更）。
+///
+/// @ai-context: 预设改名不会回溯既有 ai_providers.json（真机取证：用户配置里
+///              仍是 deepseek-v4-flash/deepseek-v4-pro）。启动时归一一次：
+///              只对 **api.deepseek.com 端点**生效——OpenRouter 的
+///              `deepseek/deepseek-chat`、SiliconFlow 的
+///              `deepseek-ai/DeepSeek-V3.2` 等同名不同源的条目零改动。
+pub fn normalize_retired_deepseek_models(store: &mut AiProviderStore) -> bool {
+    let mut changed = false;
+    for provider in store.providers.iter_mut() {
+        if !crate::ai_request_policy::is_deepseek_endpoint(&provider.base_url) {
+            continue;
+        }
+        let mut models: Vec<String> = Vec::new();
+        for m in &provider.models {
+            let mapped = current_deepseek_model(m).unwrap_or(m.as_str()).to_string();
+            if !models.contains(&mapped) {
+                models.push(mapped);
+            }
+        }
+        let default_model = current_deepseek_model(&provider.default_model)
+            .unwrap_or(provider.default_model.as_str())
+            .to_string();
+        // 防御：映射后默认模型必须仍在列表内（validate 的不变量）
+        if !models.contains(&default_model) {
+            models.push(default_model.clone());
+        }
+        if models != provider.models || default_model != provider.default_model {
+            provider.models = models;
+            provider.default_model = default_model;
+            changed = true;
+        }
+    }
+    changed
 }
 
 /// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。

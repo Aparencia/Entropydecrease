@@ -219,27 +219,47 @@ fn read_sse_lines(
 }
 
 /// HTTP 状态 → AiClientError（与 post_completions 同归一口径——四下一致）。
+///
+/// @ai-context: 2026-09-11：流式路径同样透出上游 error.message（原先只报
+///              "HTTP 400"，用户无从定位——与 post_completions 对齐）。
 fn map_status(e: ureq::Error) -> AiClientError {
     match e {
-        ureq::Error::Status(401, _) => AiClientError::Auth(
-            "API 密钥无效（HTTP 401）——请检查设置页密钥或环境变量".to_string(),
-        ),
-        ureq::Error::Status(403, _) => AiClientError::Auth(
-            "API 密钥无权限（HTTP 403）——账号未开通该模型或额度受限".to_string(),
-        ),
-        ureq::Error::Status(402, _) => {
-            AiClientError::Balance("账户余额不足（请充值或切换免费档模型）".to_string())
+        ureq::Error::Status(401, resp) => AiClientError::Auth(format!(
+            "API 密钥无效（HTTP 401）——请检查设置页密钥或环境变量{}",
+            error_suffix(resp)
+        )),
+        ureq::Error::Status(403, resp) => AiClientError::Auth(format!(
+            "API 密钥无权限（HTTP 403）——账号未开通该模型或额度受限{}",
+            error_suffix(resp)
+        )),
+        ureq::Error::Status(402, resp) => AiClientError::Balance(format!(
+            "账户余额不足（请充值或切换免费档模型）{}",
+            error_suffix(resp)
+        )),
+        ureq::Error::Status(429, resp) => AiClientError::Quota(format!(
+            "请求过频或配额耗尽（HTTP 429）{}",
+            error_suffix(resp)
+        )),
+        ureq::Error::Status(code, resp) if code >= 500 => {
+            AiClientError::Server(format!("服务端错误 HTTP {}{}", code, error_suffix(resp)))
         }
-        ureq::Error::Status(429, _) => {
-            AiClientError::Quota("请求过频或配额耗尽（HTTP 429）".to_string())
-        }
-        ureq::Error::Status(code, _) if code >= 500 => {
-            AiClientError::Server(format!("服务端错误 HTTP {}", code))
-        }
-        ureq::Error::Status(code, _) => {
-            AiClientError::Network(format!("请求被拒绝 HTTP {}（不重试）", code))
-        }
+        ureq::Error::Status(code, resp) => AiClientError::Network(format!(
+            "请求被拒绝 HTTP {}（不重试）{}",
+            code,
+            error_suffix(resp)
+        )),
         e => AiClientError::Network(format!("传输错误: {}", e)),
+    }
+}
+
+/// 错误响应体 → 可读后缀（"：上游原因"；无可读信息 → 空串）。
+fn error_suffix(resp: ureq::Response) -> String {
+    match resp.into_string() {
+        Ok(body) => match crate::ai_request_policy::extract_api_error(&body) {
+            Some(msg) => format!("：{}", msg),
+            None => String::new(),
+        },
+        Err(_) => String::new(),
     }
 }
 

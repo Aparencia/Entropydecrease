@@ -45,6 +45,7 @@ fn client_for(port: u16) -> AiClient {
         max_retries: 0,
         max_tokens: 128,
         is_local: false,
+        thinking: crate::ai_request_policy::ThinkingPolicy::ProviderDefault,
     })
 }
 
@@ -124,6 +125,7 @@ fn stream_empty_key_is_auth_error() {
         max_retries: 0,
         max_tokens: 8,
         is_local: false,
+        thinking: crate::ai_request_policy::ThinkingPolicy::ProviderDefault,
     });
     let err = stream_chat(&client, &[], &CancelFlag::new(), |_| {}).unwrap_err();
     assert_eq!(err.kind(), "auth");

@@ -29,6 +29,9 @@ mod anchor_strip;
 mod ai_refine_protocol;
 mod ai_task;
 mod ai_cost;
+// 2026-09-11（DeepSeek V4.1 适配批）：请求级 provider 策略纯函数
+// （json_object 前置条件 / 错误体提取 / 思考模式开关）
+mod ai_request_policy;
 mod note_diff;
 mod ai_note_refine;
 mod ai_proofread;

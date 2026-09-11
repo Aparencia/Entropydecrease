@@ -19,6 +19,9 @@
 //!              用户/响应不降级；实际 fallback 调用由任务层接线）。
 
 use crate::ai_provider::{AiProviderConfig, AiProviderStore};
+use crate::ai_request_policy::{
+    apply_thinking_policy, extract_api_error, json_hint_needed, ThinkingPolicy, JSON_PRECONDITION_HINT,
+};
 use crate::ai_settings::AiSettings;
 
 /// 单请求超时默认（秒；env SILICONFLOW_TIMEOUT_SECS 可覆盖）。
@@ -39,6 +42,8 @@ pub const DEFAULT_MAX_RETRIES: u32 = 2;
 pub const DEFAULT_MAX_TOKENS: u32 = 20000;
 /// max_tokens env 覆盖键。
 const MAX_TOKENS_ENV: &str = "SILICONFLOW_MAX_TOKENS";
+/// 探活（连通性测试）输出上限——只回一句话，小上限防误触发长生成/长计费。
+pub const PLAIN_MAX_TOKENS: u32 = 512;
 
 /// 共享 client 配置（resolve 聚合：环境变量 > 设置 > 内置默认）。
 #[derive(Debug, Clone, PartialEq)]
@@ -51,6 +56,11 @@ pub struct AiClientConfig {
     pub max_tokens: u32,
     /// 本地端点（Ollama 等免密钥推理；空密钥不触发 Auth 检查——本地优先叙事）
     pub is_local: bool,
+    /// 思考模式策略（2026-09-11 DeepSeek V4.1 适配：结构化 JSON 任务默认
+    /// 关闭——V4 家族默认 effort=high，思考既翻倍输出 token 又挤占
+    /// max_tokens；AI 对话路径由调用方显式改回 ProviderDefault）。
+    /// env AI_THINKING=enabled/auto 可整体切回 provider 默认。
+    pub thinking: ThinkingPolicy,
 }
 
 /// 归一化 AI 错误（REQ-145 失败原因四类 + 服务端/解析补充）。
@@ -126,11 +136,18 @@ impl AiClient {
             max_retries: env_parse("SILICONFLOW_RETRIES", DEFAULT_MAX_RETRIES as u64) as u32,
             max_tokens: env_parse(MAX_TOKENS_ENV, DEFAULT_MAX_TOKENS as u64) as u32,
             is_local: false,
+            thinking: ThinkingPolicy::from_env(),
         })
     }
 
     pub fn new(config: AiClientConfig) -> Self {
         Self { config }
+    }
+
+    /// 思考模式策略替换（构建期一次性——AI 对话路径改回 provider 默认）。
+    pub fn with_thinking(mut self, policy: ThinkingPolicy) -> Self {
+        self.config.thinking = policy;
+        self
     }
 
     /// 从 Provider 配置构建（M1：BYOK 多 Provider 入口；密钥由 command 层
@@ -145,6 +162,7 @@ impl AiClient {
             max_tokens: env_parse(MAX_TOKENS_ENV, DEFAULT_MAX_TOKENS as u64) as u32,
             // Why: Ollama 本地端点无需密钥；空密钥不触发 Auth 检查——本地优先叙事
             is_local: provider.kind == crate::ai_provider::ProviderKind::Ollama,
+            thinking: ThinkingPolicy::from_env(),
         })
     }
 
@@ -174,6 +192,20 @@ impl AiClient {
         extract_content(&body)
     }
 
+    /// 最小对话请求（**无** response_format）→ 原始文本。
+    ///
+    /// @ai-context: 探活专用（设置页"测试连接"）。2026-09-11 真机事故：
+    ///              探活复用 chat_text（恒带 response_format=json_object），
+    ///              而探活提示词不含 "json" 字样 → DeepSeek 直接 HTTP 400
+    ///              invalid_request_error，"测密钥"变成"测提示词合规"，
+    ///              用户看到的是无法定位的 400。探活只该验证端点/密钥/模型
+    ///              三者可达，故走无 json 约束的最小请求 + 512 token 上限。
+    pub fn chat_plain(&self, system: &str, user: &str) -> Result<String, AiClientError> {
+        let payload = build_plain_payload(&self.config.model, system, user, PLAIN_MAX_TOKENS);
+        let body = self.post_completions(payload)?;
+        extract_content(&body)
+    }
+
     /// chat/completions 多模态请求（v0.12.0 M5：vision-exp 视觉提取）→ 原始文本。
     ///
     /// @ai-context: content 数组（text + image_url data URI，OpenAI 兼容）。
@@ -194,10 +226,13 @@ impl AiClient {
 
     /// 发送 chat/completions payload（HTTP + 指数退避重试 + 错误归一；纯网络
     /// 路径不单测）。chat_text/chat_vision 共用——降级链/重试单一实现。
-    fn post_completions(&self, payload: serde_json::Value) -> Result<String, AiClientError> {
+    fn post_completions(&self, mut payload: serde_json::Value) -> Result<String, AiClientError> {
         if !self.config.is_local && self.config.api_key.trim().is_empty() {
             return Err(AiClientError::Auth("未配置 API 密钥（设置页保存或配置环境变量）".to_string()));
         }
+        // 2026-09-11：provider 级请求策略（DeepSeek 默认开启的思考模式→结构化
+        // 任务关闭）——单一落点，chat_text/chat_plain/chat_vision 全覆盖
+        apply_thinking_policy(&mut payload, &self.config.base_url, self.config.thinking);
         let url = chat_completions_url(&self.config.base_url);
         let agent = ureq::AgentBuilder::new()
             .timeout(std::time::Duration::from_secs(self.config.timeout_secs.max(5)))
@@ -222,35 +257,50 @@ impl AiClient {
                 // 401/403 拆分（2026-08-21 真机 unauthorized 排查）：401=密钥
                 // 无效（换密钥），403=账号无权限/模型未开通（换模型或开权限）——
                 // 合并时用户无法区分该修密钥还是该换模型
-                Err(ureq::Error::Status(401, _)) => {
-                    return Err(AiClientError::Auth(
-                        "API 密钥无效（HTTP 401）——请检查设置页密钥或环境变量 DEEPSEEK_API_KEY".to_string(),
-                    ));
-                }
-                Err(ureq::Error::Status(403, _)) => {
-                    return Err(AiClientError::Auth(
-                        "API 密钥无权限（HTTP 403）——账号未开通该模型或额度受限".to_string(),
-                    ));
-                }
-                Err(ureq::Error::Status(402, _)) => {
-                    return Err(AiClientError::Balance("账户余额不足（请充值或切换免费档模型）".to_string()));
-                }
-                Err(ureq::Error::Status(429, _)) => {
-                    last_err = AiClientError::Quota("请求过频或配额耗尽（HTTP 429）".to_string());
-                    if attempt == self.config.max_retries {
-                        break;
+                //
+                // 2026-09-11（DeepSeek V4.1）：错误响应体不再丢弃——上游把根因
+                // 写在 error.message（"Model Not Exist"/"Prompt must contain the
+                // word 'json'" 等），丢掉它用户只剩"HTTP 400"无法自救。
+                Err(ureq::Error::Status(code, resp)) => {
+                    let suffix = error_suffix(resp);
+                    if code == 401 {
+                        return Err(AiClientError::Auth(format!(
+                            "API 密钥无效（HTTP 401）——请检查设置页密钥或环境变量 DEEPSEEK_API_KEY{}",
+                            suffix
+                        )));
                     }
-                }
-                Err(ureq::Error::Status(code, _)) if code >= 500 => {
-                    last_err = AiClientError::Server(format!("服务端错误 HTTP {}", code));
-                    if attempt == self.config.max_retries {
-                        break;
+                    if code == 403 {
+                        return Err(AiClientError::Auth(format!(
+                            "API 密钥无权限（HTTP 403）——账号未开通该模型或额度受限{}",
+                            suffix
+                        )));
                     }
-                }
-                Err(ureq::Error::Status(code, _)) => {
+                    if code == 402 {
+                        return Err(AiClientError::Balance(format!(
+                            "账户余额不足（请充值或切换免费档模型）{}",
+                            suffix
+                        )));
+                    }
+                    if code == 429 {
+                        last_err =
+                            AiClientError::Quota(format!("请求过频或配额耗尽（HTTP 429）{}", suffix));
+                        if attempt == self.config.max_retries {
+                            break;
+                        }
+                        continue;
+                    }
+                    if code >= 500 {
+                        last_err = AiClientError::Server(format!("服务端错误 HTTP {}{}", code, suffix));
+                        if attempt == self.config.max_retries {
+                            break;
+                        }
+                        continue;
+                    }
+                    // 其余 4xx（含 DeepSeek 的 422 Invalid Parameters）非瞬态：
+                    // 重试同一请求体只会重复失败——直接上抛并带上游原因
                     return Err(AiClientError::Network(format!(
-                        "请求被拒绝 HTTP {}（不重试——4xx 非瞬态）",
-                        code
+                        "请求被拒绝 HTTP {}（不重试——4xx 非瞬态）{}",
+                        code, suffix
                     )));
                 }
                 Err(e) => {
@@ -294,7 +344,11 @@ pub fn chat_completions_url(base_url: &str) -> String {
 /// @ai-context: max_tokens 显式传值（2026-08-21 真机排查）：DeepSeek 官方
 ///              缺省 8192 token 硬切 → JSON 截断；调用方经 AiClientConfig
 ///              注入（env SILICONFLOW_MAX_TOKENS 可覆盖）。
+/// @ai-context: 2026-09-11（DeepSeek V4.1）：json_object 有前置条件——提示词
+///              必须含 "json" 字样，否则 400 invalid_request_error。既有模板
+///              均已满足，本函数兜底补齐（见 ensure_json_hint）。
 pub fn build_chat_payload(model: &str, system: &str, user: &str, max_tokens: u32) -> serde_json::Value {
+    let system = ensure_json_hint(system, user);
     let mut body = serde_json::json!({
         "model": model,
         "messages": [
@@ -305,10 +359,44 @@ pub fn build_chat_payload(model: &str, system: &str, user: &str, max_tokens: u32
         "max_tokens": max_tokens,
         "response_format": {"type": "json_object"}
     });
+    apply_model_flags(&mut body, model);
+    body
+}
+
+/// 构建**无 json 约束**的最小 payload（探活路径；纯函数可单测）。
+///
+/// @ai-context: 只有 chat_plain 消费——不含 response_format，故不受 json 前置
+///              条件约束（provider 支持面更宽：连不支持 json_object 的兼容
+///              端点也能测通）。
+pub fn build_plain_payload(model: &str, system: &str, user: &str, max_tokens: u32) -> serde_json::Value {
+    let mut body = serde_json::json!({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user}
+        ],
+        "temperature": 0,
+        "max_tokens": max_tokens
+    });
+    apply_model_flags(&mut body, model);
+    body
+}
+
+/// json_object 前置条件兜底（纯函数）：提示词两侧都没有 "json" 时追加一句
+/// 格式要求；已有则原样返回（既有模板零改动）。
+pub fn ensure_json_hint(system: &str, user: &str) -> String {
+    if json_hint_needed(system, user) {
+        format!("{}{}", system, JSON_PRECONDITION_HINT)
+    } else {
+        system.to_string()
+    }
+}
+
+/// 模型名相关请求标志（R1 系推理模型关闭思考标签）。
+fn apply_model_flags(body: &mut serde_json::Value, model: &str) {
     if model.to_lowercase().contains("r1") {
         body["no_think"] = serde_json::json!(true);
     }
-    body
 }
 
 /// 构建多模态 chat/completions payload（v0.12.0 M5：vision-exp 视觉提取。
@@ -318,6 +406,8 @@ pub fn build_chat_payload(model: &str, system: &str, user: &str, max_tokens: u32
 ///              但多加 json_object 约束——视觉精修输出结构同 note_refine v2）。
 /// @ai-context: image_url 走 data URI（base64 内联，无本地上传路径——隐私红线：
 ///              图片仅随精修切片请求上云，不作独立提取命令）。
+/// @ai-context: json 前置条件同 build_chat_payload（DeepSeek 对带 response_format
+///              的请求一律校验提示词，视觉请求不豁免）。
 pub fn build_vision_payload(
     model: &str,
     system: &str,
@@ -325,6 +415,7 @@ pub fn build_vision_payload(
     images: &[String],
     max_tokens: u32,
 ) -> serde_json::Value {
+    let system = ensure_json_hint(system, user);
     let mut content: Vec<serde_json::Value> = Vec::new();
     content.push(serde_json::json!({"type": "text", "text": user}));
     for img in images {
@@ -340,10 +431,23 @@ pub fn build_vision_payload(
         "max_tokens": max_tokens,
         "response_format": {"type": "json_object"}
     });
-    if model.to_lowercase().contains("r1") {
-        body["no_think"] = serde_json::json!(true);
-    }
+    apply_model_flags(&mut body, model);
     body
+}
+
+/// 错误响应体 → 可读后缀（"：上游原因"；无可读信息 → 空串）。
+///
+/// @ai-context: 消费错误响应（`ureq::Error::Status` 携带的 body）——上游把
+///              根因写在 error.message 里，丢弃它等于把"能自救的错误"变成
+///              "HTTP 400"。提取逻辑为纯函数（ai_request_policy）。
+fn error_suffix(resp: ureq::Response) -> String {
+    match resp.into_string() {
+        Ok(body) => match extract_api_error(&body) {
+            Some(msg) => format!("：{}", msg),
+            None => String::new(),
+        },
+        Err(_) => String::new(),
+    }
 }
 
 /// 从 chat/completions 响应体提取 assistant 文本（纯函数）。

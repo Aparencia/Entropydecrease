@@ -40,9 +40,19 @@ fn builtin_prices() -> HashMap<&'static str, f64> {
     m.insert("deepseek-ai/DeepSeek-R1-0528-Qwen3-8B", 0.0);
     m.insert("deepseek-ai/DeepSeek-V3-0324", 2.0);
     m.insert("Qwen/Qwen3-235B-A22B", 2.0);
-    // v0.12.0 M4（默认链 DeepSeek）：deepseek-v4-flash-vision-exp 分段价
-    // （官方 2026-08：输入缓存未命中 1.5-3.0 元/百万 token，输出 4.5-9.0 元/百万）
-    // ——取保守上界 9.0 登记（宁可高估不可低估，待 golden 冒烟实测校准后分段）。
+    // 2026-09-11（DeepSeek-V4.1-Flash 发布，官方调价）：
+    // 官方价（美元/百万 token，峰谷双档——峰时为谷时两倍）：
+    //   deepseek-flash  输入缓存未命中 $0.15/$0.30、输出 $0.60/$1.20
+    //   deepseek-v4-pro 输入缓存未命中 $0.66/$1.32、输出 $1.98/$3.96
+    // 本表为单一"元/百万 token"口径（输入+输出同价），故取**输出峰时**保守
+    // 上界（≈7.1 汇率）：flash → 9.0；pro → 28.0。宁可高估不可低估。
+    // v4-pro 自 2026-09-14 起请求全量路由到 V4.1 Flash 并按 Flash 计费，
+    // 但仍按 pro 单价登记（V4.1 Pro 发布后价格回升时估计不过低）。
+    m.insert("deepseek-flash", 9.0);
+    m.insert("deepseek-v4-pro", 28.0);
+    // 旧名（模型已退役，官方为兼容临时路由到 V4.1 Flash，按 Flash 计费）
+    // ——登记使历史任务的成本回溯不显示"单价未登记"。
+    m.insert("deepseek-v4-flash", 9.0);
     m.insert("deepseek-v4-flash-vision-exp", 9.0);
     m
 }

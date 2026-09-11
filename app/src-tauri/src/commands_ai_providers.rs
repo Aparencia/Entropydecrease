@@ -186,6 +186,12 @@ pub fn ai_set_default_provider(state: State<'_, AppState>, id: String) -> Result
 }
 
 /// 一键测试连接（最小 chat 请求验证密钥有效性——通用 OpenAI 兼容端点）。
+///
+/// @ai-context: 2026-09-11 真机修复：探活曾走 chat_text（恒带
+///              response_format=json_object），探活提示词不含 "json" 字样时
+///              DeepSeek 直接 HTTP 400 invalid_request_error——"测密钥"变成
+///              "测提示词合规"。改走 chat_plain（无 json 约束、512 token 上限），
+///              并把模型名一起回显（换模型后能立刻确认测的是哪一个）。
 #[tauri::command]
 pub fn ai_provider_test(state: State<'_, AppState>, id: String) -> Result<String, String> {
     let provider = {
@@ -202,12 +208,13 @@ pub fn ai_provider_test(state: State<'_, AppState>, id: String) -> Result<String
     }
     let client = crate::ai_client::AiClient::from_provider(&provider, Some(api_key));
     let reply = client
-        .chat_text(
+        .chat_plain(
             "你是连通性测试助手。",
             "只回复两个字：正常",
         )
         .map_err(|e| e.to_string())?;
-    Ok(reply.chars().take(20).collect())
+    let reply: String = reply.chars().take(20).collect();
+    Ok(format!("{} → {}", provider.default_model, reply))
 }
 
 // ────────────────────────────────────────────────────────────

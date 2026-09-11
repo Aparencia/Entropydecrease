@@ -100,6 +100,28 @@ fn price_model_mapping_known_and_unknown() {
     });
 }
 
+/// 2026-09-11（DeepSeek-V4.1-Flash 调价）：现役模型名登记 + 旧名回溯可算。
+#[test]
+fn deepseek_v4_1_models_price_registered() {
+    with_env_locked(|| {
+        std::env::remove_var("SILICONFLOW_PRICE_PER_1M_TOKENS");
+        // 现役默认模型（输出峰时上界 ≈ ¥9/百万 token）
+        let (p, known) = price_for_model("deepseek-flash");
+        assert_eq!(p, 9.0);
+        assert!(known, "现役默认模型必须已登记——否则成本弹窗带未知警告");
+        // v4-pro（2026-09-14 起路由到 V4.1 Flash 同价，但按 pro 单价保守登记）
+        let (p_pro, known_pro) = price_for_model("deepseek-v4-pro");
+        assert_eq!(p_pro, 28.0);
+        assert!(known_pro);
+        // 旧名（模型退役、兼容路由中）——历史任务成本回溯不显示"未登记"
+        let (p_old, known_old) = price_for_model("deepseek-v4-flash-vision-exp");
+        assert_eq!(p_old, 9.0);
+        assert!(known_old);
+        let (p_old2, _) = price_for_model("deepseek-v4-flash");
+        assert_eq!(p_old2, 9.0);
+    });
+}
+
 /// v0.12.0 M4（默认链 DeepSeek）：vision 模型单价登记（保守上界 9.0——官方
 /// 分段价输入 1.5-3.0 / 输出 4.5-9.0 元/百万 token，取上界宁可高估）。
 #[test]

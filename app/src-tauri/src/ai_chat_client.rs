@@ -10,6 +10,7 @@
 use crate::ai_chat::CancelFlag;
 use crate::ai_client::AiClient;
 use crate::ai_provider::{AiProviderConfig, ProviderKind, provider_scope};
+use crate::ai_request_policy::ThinkingPolicy;
 use crate::commands::AppState;
 use crate::db_ai_chat::ChatSession;
 
@@ -25,6 +26,10 @@ pub fn validate_session(state: &AppState, session_id: i64) -> Result<ChatSession
 /// 会话客户端解析：session.provider_id 显式 > 默认 Provider；密钥口径
 /// 显式=per-scope（env 不覆盖显式选择），默认=resolve_default_provider_key
 /// （env > per-provider > legacy，与精修链同口径）。
+///
+/// @ai-context: 思考模式策略（2026-09-11）：AI 对话是**推理型**交互（用户要
+///              的是思考质量），故显式改回 ProviderDefault——V4 家族默认
+///              开启思考；结构化 JSON 任务仍走默认关闭（成本/预算可预期）。
 pub fn resolve_chat_client(
     state: &AppState,
     session: &ChatSession,
@@ -48,7 +53,9 @@ pub fn resolve_chat_client(
         .map_err(|e| format!("AI 设置锁中毒: {}", e))?
         .clone();
     let stored_key = crate::commands_ai_providers::resolve_default_provider_key(state)?;
-    Ok((AiClient::from_settings_with_store(&settings, stored_key, &store), None))
+    let client = AiClient::from_settings_with_store(&settings, stored_key, &store)
+        .with_thinking(ThinkingPolicy::ProviderDefault);
+    Ok((client, None))
 }
 
 /// 显式 Provider 客户端（Ollama 免密钥；其余 per-scope 凭据缺失 → 明确报错）。
@@ -58,13 +65,15 @@ pub fn build_provider_client(
     pid: &str,
 ) -> Result<AiClient, String> {
     if provider.kind == ProviderKind::Ollama {
-        return Ok(AiClient::from_provider(provider, None));
+        return Ok(AiClient::from_provider(provider, None)
+            .with_thinking(ThinkingPolicy::ProviderDefault));
     }
     let key = state
         .ai_credentials
         .load_key(&provider_scope(pid))?
         .ok_or_else(|| format!("Provider {} 未保存密钥（设置页保存后重试）", provider.name))?;
-    Ok(AiClient::from_provider(provider, Some(key)))
+    Ok(AiClient::from_provider(provider, Some(key))
+        .with_thinking(ThinkingPolicy::ProviderDefault))
 }
 
 /// 单活跃流注册（gate 之后、任何落库之前调用——防并发重复落库/扣费；

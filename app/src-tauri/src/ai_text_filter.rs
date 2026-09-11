@@ -169,6 +169,8 @@ impl AiTextFilterAdapter {
             // 硬切 JSON 截断）——与共享 client 同默认，env 可覆盖
             max_tokens: self.config.max_tokens,
             is_local: false,
+            // 结构化 JSON 任务：思考模式按缺省策略（DeepSeek 端点关闭）
+            thinking: crate::ai_request_policy::ThinkingPolicy::from_env(),
         });
         let raw = client
             .chat_text(&system, &user)

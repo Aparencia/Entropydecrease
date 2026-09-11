@@ -32,9 +32,10 @@ const inputStyle: React.CSSProperties = {
   minWidth: 0,
 };
 
-/** 预设模板（前端向导数据源——I-3 兜底；后端 ai_provider_presets 优先，v0.12.0 M4 默认链 DeepSeek 首位） */
+/** 预设模板（前端向导数据源——I-3 兜底；后端 ai_provider_presets 优先，v0.12.0 M4 默认链 DeepSeek 首位，
+ *  2026-09-11 DeepSeek-V4.1：默认模型改现役名 deepseek-flash） */
 const PRESET_OPTIONS: { kind: AiProviderInput["kind"]; name: string; baseUrl: string; models: string }[] = [
-  { kind: "openAiCompat", name: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", models: "deepseek-v4-flash-vision-exp" },
+  { kind: "openAiCompat", name: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", models: "deepseek-flash" },
   { kind: "openAiCompat", name: "SiliconFlow", baseUrl: "https://api.siliconflow.cn/v1", models: "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B" },
   { kind: "openAiCompat", name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", models: "openai/gpt-4o-mini" },
   { kind: "ollama", name: "Ollama（本地）", baseUrl: "http://127.0.0.1:11434/v1", models: "qwen2.5:7b" },

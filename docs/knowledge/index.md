@@ -7,7 +7,7 @@
 
 | 日期 | 标题 | 标签 |
 |------|------|------|
-| （空，从第一条开始） | | |
+| 2026-09-11 | [DeepSeek 测试连接 400：json_object 前置条件 + V4.1 适配](./bugs/2026-09-11-deepseek-json-object-400.md) | #DeepSeek #AI接入 #HTTP400 #供应商API变更 #token预算 #成本透明 |
 
 ## 💡 solutions/ — 技术方案
 

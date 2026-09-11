@@ -3,10 +3,11 @@
 use std::sync::Mutex;
 
 use crate::ai_client::{
-    build_chat_payload, chat_completions_url, extract_content, fallback_provider_ids, parse_json_object,
-    AiClient, AiClientConfig, AiClientError,
+    build_chat_payload, build_plain_payload, chat_completions_url, ensure_json_hint, extract_content,
+    fallback_provider_ids, parse_json_object, AiClient, AiClientConfig, AiClientError,
 };
 use crate::ai_provider::{preset_templates, AiProviderStore};
+use crate::ai_request_policy::{apply_thinking_policy, ThinkingPolicy, JSON_PRECONDITION_HINT};
 use crate::ai_settings::AiSettings;
 
 /// env 操作互斥（防并行测试互相覆盖 SILICONFLOW_*——与 ai_cost_tests 同模式）。
@@ -22,6 +23,7 @@ fn with_env_locked(f: impl FnOnce()) {
         "SILICONFLOW_TIMEOUT_SECS",
         "SILICONFLOW_RETRIES",
         "SILICONFLOW_MAX_TOKENS",
+        "AI_THINKING",
     ];
     let saved: Vec<(String, Option<String>)> =
         keys.iter().map(|k| (k.to_string(), std::env::var(k).ok())).collect();
@@ -63,10 +65,15 @@ fn chat_url_preserves_v1_segment() {
 #[test]
 fn payload_has_expected_shape() {
     // temperature=0 + json_object + max_tokens 显式上限 + system/user 消息
+    // （2026-09-11：system 侧可能被追加 json 前置条件兜底——见下条断言）
     let p = build_chat_payload("acme/model", "sys", "usr", 20000);
     assert_eq!(p["model"], "acme/model");
     assert_eq!(p["messages"][0]["role"], "system");
-    assert_eq!(p["messages"][0]["content"], "sys");
+    assert_eq!(
+        p["messages"][0]["content"],
+        format!("sys{}", JSON_PRECONDITION_HINT),
+        "提示词不含 json → 必须补前置条件（否则 DeepSeek 400）"
+    );
     assert_eq!(p["messages"][1]["content"], "usr");
     assert_eq!(p["temperature"], 0);
     assert_eq!(p["max_tokens"], 20000);
@@ -80,6 +87,81 @@ fn payload_r1_disables_think() {
     assert_eq!(r1["no_think"], true);
     let other = build_chat_payload("qwen/qwen3", "s", "u", 20000);
     assert!(other.get("no_think").is_none());
+}
+
+// ---- 2026-09-11：DeepSeek V4.1 适配（json_object 前置条件 / 探活 payload）----
+
+/// 回归：探活提示词不含 "json" 时，json_object payload 必须自带前置条件
+/// （旧行为 = 直接 HTTP 400 invalid_request_error，真机事故）。
+#[test]
+fn json_payload_adds_precondition_hint_when_prompt_lacks_json() {
+    let p = build_chat_payload("deepseek-flash", "你是连通性测试助手。", "只回复两个字：正常", 512);
+    let system = p["messages"][0]["content"].as_str().unwrap();
+    assert!(system.contains("JSON"), "缺少 json 字样 → DeepSeek 400");
+    assert!(system.ends_with(JSON_PRECONDITION_HINT.trim_end()), "追加兜底文案保持原提示词前缀");
+    // 用户消息不被改写（few-shot/输入语义零污染）
+    assert_eq!(p["messages"][1]["content"], "只回复两个字：正常");
+}
+
+/// 既有模板（已含 "只输出 JSON"）必须零改动——兜底只在缺失时生效。
+#[test]
+fn json_payload_keeps_prompt_untouched_when_json_present() {
+    let p = build_chat_payload("deepseek-flash", "你是内容判定助手。只输出 JSON：{\"a\":1}", "文本", 20000);
+    assert_eq!(p["messages"][0]["content"], "你是内容判定助手。只输出 JSON：{\"a\":1}");
+}
+
+#[test]
+fn ensure_json_hint_covers_both_sides_and_vision() {
+    // user 侧含 json → system 不改
+    assert_eq!(ensure_json_hint("你是助手。", "以 json 回答"), "你是助手。");
+    // 两侧都缺 → 追加
+    assert!(ensure_json_hint("你是助手。", "写一段话").contains("JSON"));
+    // 视觉 payload 同规则（DeepSeek 对带 response_format 的请求一律校验）
+    let v = crate::ai_client::build_vision_payload(
+        "deepseek-flash",
+        "你是画面理解助手。",
+        "这张图讲了什么？",
+        &["data:image/png;base64,AAA".to_string()],
+        20000,
+    );
+    assert!(v["messages"][0]["content"].as_str().unwrap().contains("JSON"));
+    assert_eq!(v["response_format"]["type"], "json_object");
+}
+
+/// 探活 payload：无 json 约束（连不支持 json_object 的兼容端点也能测通）。
+#[test]
+fn plain_payload_has_no_response_format() {
+    let p = build_plain_payload("deepseek-flash", "sys", "usr", crate::ai_client::PLAIN_MAX_TOKENS);
+    assert!(p.get("response_format").is_none());
+    assert_eq!(p["messages"][0]["content"], "sys");
+    assert_eq!(p["max_tokens"], crate::ai_client::PLAIN_MAX_TOKENS);
+}
+
+/// DeepSeek 端点 → 结构化任务默认关闭思考模式（成本/输出预算可预期）；
+/// 对话策略（ProviderDefault）保持 provider 默认——与 post_completions 同调用序。
+#[test]
+fn client_policy_applies_to_built_payload() {
+    let mk = |thinking: ThinkingPolicy| {
+        AiClient::new(AiClientConfig {
+            base_url: "https://api.deepseek.com/v1".to_string(),
+            api_key: "".to_string(),
+            model: "deepseek-flash".to_string(),
+            timeout_secs: 5,
+            max_retries: 0,
+            max_tokens: 20000,
+            is_local: false,
+            thinking,
+        })
+    };
+    let structured = mk(ThinkingPolicy::Disabled);
+    let mut p = build_chat_payload(&structured.config.model, "sys", "usr", 100);
+    apply_thinking_policy(&mut p, &structured.config.base_url, structured.config.thinking);
+    assert_eq!(p["thinking"]["type"], "disabled");
+
+    let chat = mk(ThinkingPolicy::ProviderDefault);
+    let mut p2 = build_chat_payload(&chat.config.model, "sys", "usr", 100);
+    apply_thinking_policy(&mut p2, &chat.config.base_url, chat.config.thinking);
+    assert!(p2.get("thinking").is_none(), "对话路径不得关闭思考模式");
 }
 
 #[test]
@@ -156,6 +238,7 @@ fn chat_json_without_key_is_auth_error() {
         max_retries: 0,
         max_tokens: 20000,
         is_local: false,
+        thinking: ThinkingPolicy::Disabled,
     });
     match client.chat_json("sys", "usr") {
         Err(AiClientError::Auth(_)) => {}
@@ -174,6 +257,7 @@ fn chat_json_without_key_skips_auth_when_local() {
         max_retries: 0,
         max_tokens: 20000,
         is_local: true,
+        thinking: ThinkingPolicy::Disabled,
     });
     // is_local 时空密钥应跳过 Auth 检查，实际会触发网络/传输错误（非 Auth）
     let result = client.chat_json("sys", "usr");
