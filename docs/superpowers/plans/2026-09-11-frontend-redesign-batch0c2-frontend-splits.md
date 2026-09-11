@@ -55,9 +55,72 @@
 
 ---
 
-<!-- 各文件的拆分任务（Task 1–5）在只读结构分析落地后按同一模式逐节补入：
-     内容取自 .superpowers/sdd/2026-09-11-frontend-redesign-batch0c2-frontend-splits/analysis-*.md
-     的实测结论（顶层单元与行号、提议边界、预计行数、状态归属、风险），不含占位符。 -->
+### Task 3: 拆 `app/src/components/SessionDetailPanel.tsx`（656 → ≤300）
+
+> **本节的边界取自只读结构分析的实测结论**：`.superpowers/sdd/2026-09-11-frontend-redesign-batch0c2-frontend-splits/analysis-session-detail-panel.md`（402 行，含每个单元的行号、依赖、8 个新文件的预计行数与分步净减表）。**开工先读它**；若你读代码后发现与分析不符，**以代码为准并在报告里指出**。
+
+**Files:**
+- Modify: `app/src/components/SessionDetailPanel.tsx`
+- Create（**最小可行路径 = 前 4 个**；全做完则 8 个）：
+  - `app/src/components/session-detail/SessionScreenCards.tsx`（~175 行）
+  - `app/src/hooks/useSessionDetailData.ts`（~180 行）
+  - `app/src/components/session-detail/SessionDetailHeader.tsx`（~150 行）
+  - `app/src/components/session-detail/SessionRefineSection.tsx`（~130 行）
+  - 可选：`SessionQualityCard.tsx`（~55）· `SessionTranscriptPane.tsx`（~50）· `SessionGlossarySection.tsx`（~55）· `SessionWebView.tsx`（~40）
+- Consumes: 分析报告；唯一消费者 `app/src/pages/SessionsPage.tsx`（L17 import / L313 使用）
+- Produces: 上述新文件；`SessionDetailPanel` 的 **props 契约不变**
+
+**★ 关键事实（分析实测，决定了本任务的形态）**
+- **只拆 `SessionWebView` + `SessionPass2Section` 只能到 ~582 行**（退出 600 硬限，但**仍远超 ≤300**）⇒ 必须追加数据面 hook + 头部 + 屏卡流。
+- **该文件 0 个专属测试文件** ⇒ 行为等价**没有自动化保障**，只能靠人工走查（见 Step 5）。
+- 该文件**零 `.ed-*` 类名、全部 inline style**；拆分会把旧色值从 1 个文件扩散到 9 个 ⇒ 后续 `ui/tokens.css` 化漏改概率大增（见 Step 5 的核对项）。
+
+- [ ] **Step 1: 基线**（`app/` 下）
+```powershell
+[System.IO.File]::ReadAllLines((Get-Item 'src/components/SessionDetailPanel.tsx').FullName,[System.Text.Encoding]::UTF8).Count   # 期望 656
+npx tsc --noEmit        # 期望 exit 0
+npx vitest run          # 记下用例数（本文件无专属测试，但全量必须不降）
+```
+
+- [ ] **Step 2: 依次抽出（每步一个提交，逐步验证）**
+顺序与净减（以分析报告的分步表为准）：
+1. `SessionScreenCards.tsx`（原 L482–603 附近，屏卡流 ≈122 行 + toast/框选）
+2. `useSessionDetailData.ts`（quality/glossary/baseUrl + `ocrBlocksByScreen` memo + 4 条 `listen` + 懒触发 + 深链快照）
+3. `SessionDetailHeader.tsx`（改名 + `degradedBanner` + `fusing` + 操作）
+4. `SessionRefineSection.tsx`（工具条 3 按钮 + `SecondPassPanel` / `ProofreadPanel` 挂载）
+   做完这 4 步应 ≈**250 行**（合规）。若想更薄，再依次做 5–8（全做完 ≈155 行）。
+每步结束跑 `npx tsc --noEmit` + `npx vitest run`，**并提交**（`refactor(ui): 拆 SessionDetailPanel 第 N 步 — <抽出的单元>`）。
+
+- [ ] **Step 3: 登记表与棘轮（全部抽完后）**
+```powershell
+node scripts/line-limits.mjs --write
+# 从 scripts/line-limits.mjs 的 FROZEN_OVER_LIMIT 删掉 'app/src/components/SessionDetailPanel.tsx'
+node scripts/line-limits.mjs --full     # 期望 exit 0，>600 计数少 1
+```
+
+- [ ] **Step 4: 控制方已裁决的 4 个决策点**（照此执行，不要另行发挥）
+- **D1 `viewMode` 不进 hook**：保留原处那 6 行切换 effect。
+- **D2 命名改为 `SessionRefineSection`**（原登记名 `SessionPass2Section` 名不副实：内容还含 `ProofreadPanel`）。抽出后请**同步更新登记表里该文件的「拆分计划」文字**（人工列，生成器按路径保留）。
+- **D3 `SecondPassPanel` 的 `onChanged` 现状未传 ⇒ 拆分后仍不传**（等价优先，不要"顺手补上"）。
+- **D4 规格 §227 同时列了 `SessionTranscriptPane` 与 `SessionSegmentsTimeline`，但本文件只有一块转写时间轴**（L460–480）⇒ **按单一文件实现**（`SessionTranscriptPane.tsx`），并把「规格此处疑似重复命名」写进报告。
+
+- [ ] **Step 5: 行为等价的人工核对清单**（本文件无测试，这一步是**主要**证据，逐条给结论）
+1. **DOM 锚点未变**：`seg-${sessionId}-${id}`（原 L470）与 `ocr-${sessionId}-${firstSeenMs}`（原 L502）的**字符串格式逐字不变** —— 它们的唯一消费者在 `SessionsPage.tsx:133`，改了就会静默失联。
+2. **陈旧闭包防护仍在**：精修事件监听依赖 `onRefreshDetailRef` 模式（且原代码带 `eslint-disable exhaustive-deps`）——迁 hook 时**必须保留 ref 模式**，否则 `session:refined` 的屏卡回填会**静默失效**。
+3. **性能不回归**：`ocrBlocksByScreen` 的 memo **必须留在 hook/面板层并以 prop 传 `Map`**；下沉到子组件会重算，O(n×m) 回归。
+4. **两处 `auto_refine_session` 的失败文案不得合并**（懒触发是静默、按钮显示「精修失败」）。
+5. **不要顺手加「粘性头」**：规格所述的 sticky header 本文件**并未实现**（L273–334 无 `position:sticky`）—— 保持现状。
+6. **零 `.ed-*` 类名**：拆分后逐一确认新文件同样不含 `.ed-*`（全 inline style），并**在报告里列出扩散后的旧色值清单**（供后续 token 化参考）。
+
+- [ ] **Step 6: 提交与报告**
+提交（Step 2 已逐步提交，此处是收口提交）：`refactor(ui): 拆 SessionDetailPanel 至 ≤300 行`（含新文件 + 原文件 + 登记表 + `scripts/line-limits.mjs`）。
+报告写到：`.superpowers/sdd/2026-09-11-frontend-redesign-batch0c2-frontend-splits/task-3-report.md`，含拆前/拆后行数对照（原文件 + 每个新文件）· Step 5 六条的逐条结论 · 门禁 exit · 登记表与棘轮改动 · D1–D4 的落实 · 顾虑。
+
+---
+
+<!-- 其余文件的拆分任务（NotesPage / NoteListView / SessionListPanel / ClassroomPage）待各自的结构分析落地后按同一模式逐节补入，
+     内容取自 .superpowers/sdd/2026-09-11-frontend-redesign-batch0c2-frontend-splits/analysis-*.md 的实测结论，不含占位符。
+     补入前不得派发对应任务的实施者。 -->
 
 ---
 
