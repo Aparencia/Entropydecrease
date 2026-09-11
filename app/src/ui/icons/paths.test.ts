@@ -54,16 +54,28 @@ describe("图标几何契约", () => {
     const inGrid = (n: number) => n >= 0 && n <= 24;
     // 各标签的实际执行次数 —— 让「守卫把分支整条跳过」变成可见的失败，
     // 而不是一份永远全绿的空转测试（T1 之后注册表里只有 path，circle/rect 分支一次都没跑过）。
-    const visited: Record<string, number> = { path: 0, circle: 0, rect: 0 };
+    // 计数器**由白名单派生**而非手写三键：手写的宽 `Record<string, number>` 在 ICON_ELEMENT_TAGS
+    // 加入第四种标签时会累加成 NaN，并以「注册表里没有任何 X 元素」这种误导信息失败 ——
+    // 真实原因只是计数器缺键，与被测的注册表无关。
+    const visited = ICON_ELEMENT_TAGS.map(() => 0);
     for (const name of ICON_NAMES) {
       for (const el of ICON_PATHS[name].elements) {
-        visited[el.tag] += 1;
+        visited[ICON_ELEMENT_TAGS.indexOf(el.tag)] += 1;
         if (el.tag === "circle") {
+          // 尺寸必须为正。r ≤ 0 的圆在 SVG 里**什么都渲染不出来**（静默的空图标），
+          // 而这是下面四向网格检查**结构性拦不住**的逃逸：cx±r / cy±r 在负半径下会对称地
+          // 落回网格内（cx12 / r-5 → 17 与 7，四向全部合法），故必须单独守。
+          expect(el.r, `${name} 圆的 r 必须为正（当前 ${el.r}）`).toBeGreaterThan(0);
           // 四向都要验：只验 cx-r / cy+r 时，「向右/向上溢出」的圆会漏过
           const fits = inGrid(el.cx - el.r) && inGrid(el.cx + el.r) && inGrid(el.cy - el.r) && inGrid(el.cy + el.r);
           expect(fits, `${name} 圆越界（cx${el.cx} cy${el.cy} r${el.r}）`).toBe(true);
         }
         if (el.tag === "rect") {
+          // 与圆对称：w/h 也必须为正。零尺寸**同样渲染不出东西**，且下面的网格检查对它是瞎的
+          // （x+0 = x 仍落在网格内）。负值也并非总能被拦下 —— x18 / w-3 满足 x+w=15 且在网格内，
+          // 只有「正数」这一条能同时堵住零与负。
+          expect(el.w, `${name} 矩形的 w 必须为正（当前 ${el.w}）`).toBeGreaterThan(0);
+          expect(el.h, `${name} 矩形的 h 必须为正（当前 ${el.h}）`).toBeGreaterThan(0);
           expect(inGrid(el.x) && inGrid(el.y) && inGrid(el.x + el.w) && inGrid(el.y + el.h), `${name} 矩形越界`).toBe(true);
         }
         if (el.tag === "path") {
@@ -80,9 +92,9 @@ describe("图标几何契约", () => {
         }
       }
     }
-    for (const tag of ICON_ELEMENT_TAGS) {
-      expect(visited[tag], `注册表里没有任何 ${tag} 元素，本测试在该分支上仍是空转`).toBeGreaterThan(0);
-    }
+    ICON_ELEMENT_TAGS.forEach((tag, i) => {
+      expect(visited[i], `注册表里没有任何 ${tag} 元素，本测试在该分支上仍是空转`).toBeGreaterThan(0);
+    });
   });
 
   it("几何数据里不得出现任何颜色（颜色只由 currentColor 决定）", () => {
