@@ -34,3 +34,6 @@ export type { ConfirmDialogProps, ConfirmImpact } from "./ConfirmDialog";
 
 export { EmptyState } from "./EmptyState";
 export type { EmptyStateAction, EmptyStateProps } from "./EmptyState";
+
+export { Loading, Probe, Skeleton } from "./Loading";
+export type { LoadingProps, ProbeProps, SkeletonProps } from "./Loading";

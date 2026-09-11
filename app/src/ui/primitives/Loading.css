@@ -1,0 +1,72 @@
+/*
+ * Loading.css —— 加载三形态（`Loading` / `Skeleton` / `Probe`）的唯一样式落点（批 0-D Task 11）。
+ *
+ * Why（为什么存在）：全站加载提示现状是 **83 行/31 文件的一行灰字**，且**全站 0 骨架屏**
+ * （recon §2）；规格 §5.1 把加载收敛为三形态（骨架 = 已知结构 / 探针 = 时长未知）。
+ * 本文件同时是**全仓第一批 `@keyframes` 的产地**（实测改造前 0 个，recon §8.1）：循环环境动效
+ * 按规格 §8.2 判据走 CSS keyframes —— **不占 JS 主线程**，且 reduced-motion 一条媒体查询即静态。
+ *
+ * 边界：① 零颜色字面量（色值只在 ui/tokens.css 与生成器里）；② 不写 `z-index`（层级是
+ * `ui/zIndex.ts` 标尺的职责）；③ 位移一律 ≤ 8px（规格 §8.4 末句，由 `style-seams.test.ts` 扫
+ * `primitives/*.css` 的 `translate*()` 数值实参机器判定）；④ 两条动画**必须 `infinite`** ——
+ * 环境层「闲置时也要有生命感」（§8.6.1 第 1 条），一次性动画等于没有生命感；
+ * ⑤ 静止态由 `motion.css` 的既有块承担（`animation-iteration-count: 1`），**本文件不得再写
+ * 第二条媒体查询**（§8.2 的「一条媒体查询即静态」）；⑥ 本文件只出三个**基类**
+ * （`ed-loading` / `ed-skeleton` / `ed-probe`）+ 一个修饰类（`ed-loading--inline`）：多行骨架的
+ * 条距走相邻兄弟规则而**不新增容器类**，免得 T14 的「基类 ⊆ reduced-motion 名单」守卫为第三处开口子。
+ */
+
+.ed-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ed-space-8, 8px);
+}
+
+/* `inline`：嵌进按钮 / 行内文本的用法。与相邻文字同基线、间隙收窄，且**标签跟随宿主字阶** ——
+   按钮里的「保存中…」若按原语自己的 13px 排版，同一行会出现两种字号（本原语不夺宿主的排版权）。 */
+.ed-loading--inline { vertical-align: middle; gap: var(--ed-space-4, 4px); }
+.ed-loading--inline .ed-text { font-size: inherit; line-height: inherit; }
+
+.ed-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--ed-bg-sunken);
+  border-radius: var(--ed-radius-control, 5px);
+}
+
+/* 多行：条距靠相邻兄弟规则（不新增容器类，见文件头边界⑥） */
+.ed-skeleton + .ed-skeleton { margin-top: var(--ed-space-8, 8px); }
+
+/* 微光：`::after` 是一条比骨架底更亮的窄带，横向扫过。`--ed-bg-surface` 在亮/暗两档下都比
+   `--ed-bg-sunken` 亮 ⇒ 两个主题都成立；取 60% 而非不透明 —— 环境层幅度上限不动（§8.6.1 第 1 条）。 */
+.ed-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ed-bg-surface) 60%, transparent), transparent);
+  animation: ed-skeleton-shimmer var(--ed-dur-skeleton, 1200ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)) infinite;
+}
+
+/* 全仓第一个 @keyframes：只动 `transform`（合成层，不逐帧触发布局） */
+@keyframes ed-skeleton-shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+.ed-probe {
+  display: inline-block;
+  flex: none; /* 作为 `.ed-loading` 的 flex 子项时，8px 圆点不被压成椭圆 */
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ed-ink-3);
+  /* 周期 2.4s 落在环境层 2–6s 区间（规格 §8.1）；`ease-in-out` 让两端有短暂停顿感 */
+  animation: ed-probe-swing 2.4s ease-in-out infinite;
+}
+
+/* 探针摆动：±2px（总幅度 4px，规格 §8.4 的 8px 上限内）· 墨度 0.45→1 —— 取「看得见但不抢注意力」
+   的最小幅度；停住时回到基类（实心圆点），不是空白（reduced-motion 的静态态要求）。 */
+@keyframes ed-probe-swing {
+  0%, 100% { transform: translateX(-2px); opacity: 0.45; }
+  50%      { transform: translateX(2px);  opacity: 1; }
+}
