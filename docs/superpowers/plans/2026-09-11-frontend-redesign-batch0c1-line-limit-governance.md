@@ -6,7 +6,7 @@
 
 **Architecture:** 单一工具 `scripts/line-limits.mjs` 同时承担**生成**（`--write`）与**校验**（默认 / `--full`）两种职责，保证「写」与「查」用的是同一套口径与同一份逻辑。登记表仍是**人可读的 Markdown**（沿用仓库文档习惯、可被 `docs-check` 覆盖），但其**行数与条目成员关系由生成器独占维护**，「豁免理由 / 拆分计划」两列由人工维护、生成器按路径保留。>600 硬限用**棘轮**（冻结当前 15 个文件，只允许减少）而非「立刻为零」——否则守卫在拆分完成前无法启用，等于又一个「写了但没人守」的规则。
 
-**Tech Stack:** Node ESM（`node:fs` / `node:path`，零依赖）· Markdown 登记表 · lint-staged + husky（本地门禁）· GitHub Actions `pr-check.yml`（远端门禁）
+**Tech Stack:** Node ESM（`node:fs` / `node:path`，零依赖）· Markdown 登记表 · husky pre-commit（本地门禁：**直跑全树校验**，二轮后不经 lint-staged —— 见 Task 4 Step 1）· GitHub Actions `pr-check.yml`（远端门禁）
 
 **Spec:** `docs/superpowers/specs/2026-09-11-frontend-redesign-design.md`（§10 批 0 行「豁免表纠偏」「拆 4 个超限文件」；§11 验收口径第 1 条）
 
@@ -34,7 +34,7 @@
 | 路径 | 角色 |
 |---|---|
 | `docs/scripts/docs-check.mjs` | **模板源** —— Starter Kit 自包含所必需（删掉它 = 破坏 README 记录的启用步骤） |
-| `scripts/docs-check.mjs` | **实例** —— lint-staged / `npm run docs:check` / CI 三处真正执行的那份 |
+| `scripts/docs-check.mjs` | **实例** —— husky pre-commit / `npm run docs:check` / CI 三处真正执行的那份（二轮前 pre-commit 走 lint-staged） |
 
 **初稿的错误写法（已撤回）**：「`docs/scripts/docs-check.mjs` 是散落副本 → `git rm` 删掉」。
 **为什么错**：删掉模板源会让 Starter Kit 的启用步骤指向不存在的路径，`docs/` 也不再"可整体复制"。前一位实施者**按计划执行后主动上报了该冲突**（未盲从），修复轮再纠正 —— 这是正确的处置链。
@@ -638,33 +638,34 @@ Task 3 评审结论 **NEEDS_FIXES**。两条 Important **根因都在本计划�
 ### Task 4: 接线（本地提交门禁 + CI）
 
 **Files:**
-- Modify: `package.json`（lint-staged）
+- Modify: `.husky/pre-commit`（**最终形态**：直跑全树校验 —— 见 Step 1 的 ★ 二轮接线）
+- Modify: `package.json`（初版加 lint-staged 条目；二轮**删除**该块）
 - Modify: `.github/workflows/pr-check.yml`（新增 line-limits job）
 - Test: 变异探针 + 实跑
 
 **Interfaces:**
 - Consumes: Task 2/3 的 `scripts/line-limits.mjs`
-- Produces: 让 (a)–(d) 在**每次提交**与**每次推送**时都被执行
+- Produces: 让 (a)–(e) 在**每次提交**（本地 hook 跑 `--full`）与**每次推送**（CI 跑 `--full`）时都被执行
 
-- [ ] **Step 1: 接进 lint-staged**
+- [ ] **Step 1: 接进本地提交门禁 —— ★ 2026-09-11 二轮（终局评审）后就地改写，最终形态是「直跑全树」而非 lint-staged**
 
-`package.json` 的 `lint-staged` 现为：
-```json
-{
-  "docs/**/*.md": "node scripts/docs-check.mjs"
-}
+**最终接线**（`.husky/pre-commit` 的命令行，逐字）：
+```sh
+node scripts/line-limits.mjs --full && node scripts/docs-check.mjs
 ```
-改为：
-```json
-{
-  "docs/**/*.md": "node scripts/docs-check.mjs",
-  "app/**/*.{ts,tsx,rs}": "node scripts/line-limits.mjs"
-}
-```
-（脚本忽略传入的文件名参数，只读全树 —— 这是刻意的：漏登与棘轮都是**全树性质**，只看暂存文件会漏。）
+配套：`package.json` 的 `lint-staged` 块**已删除**（`devDependencies` 里的 `lint-staged` 保留，留给将来的文件级任务）。
 
-> **两点行为说明（写下来避免将来困惑）**：
-> 1. **lint-staged 会附带暂存文件名**，脚本予以忽略。⚠️ **本条已于 2026-09-11 就地更正（本计划唯一一处被授权就地修改的行为说明）**：原文写「部分暂存时会把未暂存的改动 stash 起来再跑命令 ⇒ 校验看到的是『即将提交的状态』（暂存文件 = 暂存内容，其余 = `HEAD`）」，该行为在门禁加固后**不再成立** —— 加固见下文「Task 4 附带隐患」（`.husky/pre-commit` 改为 `npx lint-staged --no-stash --no-hide-partially-staged`）：现在 lint-staged **不 stash、不 hide**，校验看到的是**当前工作树**（含未暂存改动），**不再等于"即将提交的状态"**。若你看到行数与暂存内容不符，先想这一点；并注意加固的**代价**：落在受管 glob 上的部分暂存文件会在跑完时被整文件 `git add`（不丢内容，但抹掉"只提交一半"的意图）。
+**为什么不是 lint-staged**（三条，逐条已实测）：
+1. **暂存语义零贡献**：两个检查都是**全树只读扫描**、且**忽略传入的文件参数**（`line-limits.mjs` 只认 `--write` / `--full`）⇒ lint-staged「把暂存文件列表交给命令」对它**没有任何作用**。
+2. **风险整类消除**：lint-staged 的 stash / `git reset --hard` / hide / auto-stage / `.git/lint-staged_unstaged.patch` 是**一整类**工作树风险（本节末尾「附带隐患」记录的那次丢改动即出自这里）；`--no-stash` 只是把它从「会丢」降级成「不丢但仍有多余副作用」。**最终形态连 lint-staged 都不进** ⇒ `.git/lint-staged_unstaged.patch` 与「`MM` 被 auto-stage 成 `M `」一并消失（实测：部分暂存文件跑完仍是 `MM`，文件 sha256 不变）。
+3. **不再依赖 glob ⇒ 消除"假覆盖"**：旧接线的第三个条目只在暂存到 `{package.json, scripts/line-limits.mjs, docs/standards/line-limit-exemptions.md}` 之一时才跑 `--full` —— 只暂存一个改动过的源文件时该段 **0 files / `[SKIPPED]`** ⇒ **(e) 在本地全时绿灯**（实测：同一暂存态下旧门禁 `npx lint-staged` **exit 0**，新 hook **exit 1** 报 `(e) 行数不一致：app/src-tauri/src/lib.rs 声明 1025 / 实测 1026`）；而 glob `app/**/*.{ts,tsx,rs}` 命中 **872** 个 tracked 文件、脚本扫描域只有 **868** ⇒ 有 **4** 个文件（`app/src-tauri/build.rs`、`app/src-tauri/examples/capture_ocr_diag.rs`、`app/vite.config.ts`、`app/vitest.config.ts`）是「命令跑了却永远看不见」。（评审记录为 870 / 差 2 个，那是 `git ls-files 'app/**/*.ts' …` 的数 —— git pathspec 的 `**` 比 micromatch 少算 `app/*.config.ts`；按 lint-staged 实际使用的 micromatch 复核是 872 / 差 4 个。）每次都跑全树，这两处一起消掉。
+
+**为什么这里可以用 `--full`**（初版曾担心"会逼人每次提交重生成表"）：`--full` **只读** —— 写登记表只走 `--write` —— 门禁**不会**改任何文件；数值过期时它做的是**报错并要求人决定**（`--write` 重生成，或把改动改回去），而不是悄悄改表。这也正是把它与 CI 拉成**同一口径**的理由。
+
+**初版接线（已作废，保留以示来源）**：`package.json` 曾把 `docs/**/*.md` / `app/**/*.{ts,tsx,rs}` / `{package.json,scripts/line-limits.mjs,docs/standards/line-limit-exemptions.md}` 三条映射给 lint-staged；`.husky/pre-commit` 曾为 `npx lint-staged --no-stash --no-hide-partially-staged`。**不要在将来"补回"这个块** —— 它已不是生效路径，留着只会让人误以为它在守。
+
+> **两点行为说明（写下来避免将来困惑）** —— ★ **二轮后第 1 条整体作废**（门禁已不经 lint-staged），第 2 条仍成立：
+> 1. ~~**lint-staged 会附带暂存文件名**，脚本予以忽略。~~ **★ 2026-09-11 二轮：此条随 lint-staged 一并作废**（门禁改为直跑，不再有"附带暂存文件名"这回事）；下面保留它当日的首次就地更正记录，以示证据链：⚠️ **本条已于 2026-09-11 就地更正（本计划唯一一处被授权就地修改的行为说明）**：原文写「部分暂存时会把未暂存的改动 stash 起来再跑命令 ⇒ 校验看到的是『即将提交的状态』（暂存文件 = 暂存内容，其余 = `HEAD`）」，该行为在门禁加固后**不再成立** —— 加固见下文「Task 4 附带隐患」（`.husky/pre-commit` 改为 `npx lint-staged --no-stash --no-hide-partially-staged`）：现在 lint-staged **不 stash、不 hide**，校验看到的是**当前工作树**（含未暂存改动），**不再等于"即将提交的状态"**。若你看到行数与暂存内容不符，先想这一点；并注意加固的**代价**：落在受管 glob 上的部分暂存文件会在跑完时被整文件 `git add`（不丢内容，但抹掉"只提交一半"的意图）。
 > 2. **跨平台行数一致**：Windows 工作树是 CRLF、Linux 检出是 LF，而 `countLines` 只数 `\n` ⇒ 同一提交在两边的行数**相同**（`"a\r\nb\r\n"` 与 `"a\nb\n"` 都得 2）。故 CI 的 `--full` 与本地门禁不会互相打架。
 
 - [ ] **Step 2: 接进 CI**
@@ -694,7 +695,7 @@ Task 3 评审结论 **NEEDS_FIXES**。两条 Important **根因都在本计划�
 Set-Content -Path app\src\__probe-lines.ts -Value ("// x`n" * 320) -Encoding utf8
 git add app/src/__probe-lines.ts
 git commit -m "chore: 探针" 2>&1 | Select-String 'line-limits|超过 300'
-"↑ 期望：提交被 lint-staged 拦下并报 (c)"
+"↑ 期望：提交被 pre-commit hook 拦下并报 (c)"
 Remove-Item app\src\__probe-lines.ts
 git reset
 ```
@@ -706,6 +707,7 @@ git reset
 node -e "const s=require('fs').readFileSync('.github/workflows/pr-check.yml','utf8'); if(!/line-limits:/.test(s)) throw new Error('job 未写入'); console.log('job 存在，行数 ' + s.split('\n').length)"
 ```
 （本机无 YAML 解析器，且 workflow 语法由 GitHub 侧校验；这里只做存在性与整体结构的粗检。）
+⚠️ **二轮补记（2026-09-11）**：上面 `# --full` 那行注释里的「本地提交门禁不守」与本地跑 `--full` 的取舍，**已被 Step 1 的最终接线推翻**（本地现在每次提交都跑 `--full`）。**实际文件 `.github/workflows/pr-check.yml` 的注释仍写着旧理由**（含「见 `package.json` 的 lint-staged 条目」，而该块已删除）—— 本批按铁律边界**未改动该文件**（CI job 本身保留、行为仍正确：照跑 `--full`），注释更正已登记在「未做（登记）」。
 
 - [ ] **Step 5: 提交**
 
@@ -734,6 +736,8 @@ git commit -m "ci: 行数红线接入提交门禁与 CI"
   ```
 
   实例：控制方那次备份 `c85e00a1`（`c85e00a1e69c…`）至今可读，`git show c85e00a1:docs/standards/README.md` 就是丢掉的那 44 行版本（sha256 `4250548E…`；干净版为 `9DC65378…`）。
+
+- **★ 二轮后的现状（2026-09-11，`31b59239`）**：本节记录的**整类风险已随 lint-staged 一起从路径上消失** —— `.husky/pre-commit` 不再调用 lint-staged（见 Step 1 的最终接线），故上面的「修法」两个 flag、以及「代价」里的 ②「`MM` 跑完变 `M `」③「残留 `.git/lint-staged_unstaged.patch`」**都不再适用**（实测：部分暂存文件跑完仍是 `MM`、文件 sha256 前后相同）。**下面的补救指引仍然有效**（历史悬空 commit 依旧存在，找回方式不变；同理 `git gc --prune=now` 依旧禁止）。
 
 ---
 
@@ -789,9 +793,10 @@ git commit -m "ci: 行数红线接入提交门禁与 CI"
 
 `docs/versions/v0.22.md` 的「本机工具链的读数陷阱」一节需要补三件事（该节已存在，是控制方在批 0-B 期间写下的）：
 
-1. **★ 本地门禁此前从未武装**（Task 4 发现）：本克隆此前**从未安装 husky**（`core.hooksPath` 为空、无 `.git/hooks/pre-commit`、无 `node_modules`）⇒ `.husky/pre-commit`（lint-staged）与 `commit-msg`（commitlint）**对所有提交静默失效**，**包括批 0-A/0-B/0-C1 的全部交付提交**。⇒ **新克隆若未 `npm install`，门禁默认失效且无任何提示**。写清：现已武装（`node_modules` + `core.hooksPath=.husky/_`，两项均不进 git），且**后续提交会真被 lint-staged + commitlint 拦**。
+1. **★ 本地门禁此前从未武装**（Task 4 发现）：本克隆此前**从未安装 husky**（`core.hooksPath` 为空、无 `.git/hooks/pre-commit`、无 `node_modules`）⇒ `.husky/pre-commit`（当时是 lint-staged）与 `commit-msg`（commitlint）**对所有提交静默失效**，**包括批 0-A/0-B/0-C1 的全部交付提交**。⇒ **新克隆若未 `npm install`，门禁默认失效且无任何提示**。写清：现已武装（`node_modules` + `core.hooksPath=.husky/_`，两项均不进 git），且**后续提交会真被 pre-commit + commitlint 拦**（★ 二轮后 pre-commit 跑的是 `line-limits --full && docs-check`，**不再是 lint-staged**）。
 2. **陷阱 1 的量级要写准**：源码域实测最大少算 **56 行**（`live_session_pause.rs` 353→297）；而**文档域可远超** —— 本批台账自身实测 **真实 385 行 / `Get-Content` 报 247 行（少算 138 行、36%）**，因为少算幅度随**中文密度**放大。⇒ 「禁用 `Get-Content` 数行」不是只对源码成立。
 3. **门禁自身纳入校验**（Task 4 修复轮）：lint-staged 增加覆盖 `scripts/line-limits.mjs` 与 `docs/standards/line-limit-exemptions.md` 的条目（跑 `--full`）—— 否则"改工具/改登记表"在本地无自动拦截。写进该节时请与 `package.json` 的实际内容一致。
+   ⚠️ **★ 二轮已改写本条要求的落点**：直跑全树的最终接线（Task 4 Step 1）让 `--full` **每次提交都跑**、不再靠"暂存到某个文件才触发"，`lint-staged` 块也已从 `package.json` 删除。`docs/versions/v0.22.md` 的该段已按新架构改写（并如实登记「CI 从未跑过、最近 5 次 `PR Quality Check` 全为 failure ⇒ CI 兜底在修好前不成立」）——**不要**再照本条的旧措辞回写。
 
 - [ ] **Step 3: 全量门禁**
 
@@ -828,7 +833,7 @@ git commit -m "docs(versions): 0-C1 行数红线验收与门槛更正"
 - **红线的口径唯一且写进规范**：AGENTS.md §3.1 / §11 / refactoring.md / 表头四处同一措辞
 - **登记表是快照而非日志**：138 条（15 超硬限 + 123 登记档），一文件一行，数字由生成器独占维护
 - **>600 有棘轮守卫**：15 个违规**可见、只减不增**；每完成一个拆分删一行
-- **门禁只跑一份程序、且那份是最新的**：`docs-check` 的模板源与实例经守卫强制逐字节一致（此前实例落后于模板一处修复，门禁在干净树上本就是红的）；`line-limits` 同时挂在 lint-staged（结构）与 CI（结构 + 数值）
+- **门禁只跑一份程序、且那份是最新的**：`docs-check` 的模板源与实例经守卫强制逐字节一致（此前实例落后于模板一处修复，门禁在干净树上本就是红的）；`line-limits` 在**每次提交**（`.husky/pre-commit` 直跑 `--full`，不经 lint-staged、不依赖 glob）与**每次推送**（CI `line-limits` job 跑 `--full`）**同口径**执行 —— 结构 (a)–(d) 与数值 (e) 两处都守
 - **仍未做**：15 个文件的实际拆分 → `0-C2`（前端 5）/ `0-C3`（Rust 10）
 
 ## 未做（登记）
@@ -836,14 +841,16 @@ git commit -m "docs(versions): 0-C1 行数红线验收与门槛更正"
 - **15 个 >600 文件的拆分**：`0-C2`（`ClassroomPage.tsx` / `SessionDetailPanel.tsx` / `NoteListView.tsx` / `SessionListPanel.tsx` / `NotesPage.tsx`）与 `0-C3`（`lib.rs` / `types.rs` / `live_session_frame.rs` / `commands_ai_refine.rs` / `db_goals.rs` / `commands_goals.rs` / `ai_refine_task.rs` / `note_filter.rs` / `artifact_templates.rs` / `video_profile.rs`）。`0-C3` 含 `lib.rs`（AGENTS.md §10 需额外审查：Tauri command 注册边界）。
 - **`scripts/validate-all.mjs` 已失效**：它引用 `client/`、`server/ai-gateway` 等**本仓库不存在的目录**（重构前遗留），跑起来第一步即失败。并行审查曾建议把行数守卫挂进它 —— **该建议的前提不成立**（落点本身是坏的）。修它或删它属独立治理项。
 - **`REQ-201` 状态标注**、豁免表历史节的进一步精简：不属本批。
+- **`.github/workflows/pr-check.yml` 的 `line-limits` job 注释已过期**：它仍写「本地提交门禁默认只守结构」与「故本地改为在『门禁自身/登记表被改动』时跑它（见 `package.json` 的 lint-staged 条目）」，而这两点已被二轮接线推翻（本地每次提交都跑 `--full`）与删除（该 `lint-staged` 块已不存在）。本批的**铁律边界明确不动该文件**（CI job 保留，行为仍正确 —— 照跑 `node scripts/line-limits.mjs --full`），故注释更正登记为独立治理项。
 - **★ 自动摘取的 43 条理由里有 16 条在连接符处截断**（Task 3 实施者实测）：`autoReason` 只取 `@ai-context` 的**第一个物理行**，于是形如「…（自动摘取，待细化）」的理由中，有 16 条是半句话（以「，」「——」「+」等结尾）。**不算缺陷**（表格的验收口径是**结构一致性**：成员关系 + 数值，不含散文质量），且**修法零人工成本** —— 表格是生成物，改 `autoReason` 让它续读后续物理行直到句末或空行，再跑一次 `--write` 即可整体刷新。⇒ **并入 `0-C2` 顺手做**（建议同时把理由上限截到合理长度）。
-- **扫描域不含 `scripts/` 与 `docs/`**：本批的口径域**只有** `app/src` + `app/src-tauri/src` 的 `.ts/.tsx/.rs`（868 个文件）。AGENTS.md §3 说"单文件 ≤300 行"字面上是**全仓**要求，故这是一处**有意的窄化**：`scripts/**`（现 **80–297 行**，含本批新增的 `line-limits.mjs` = **297**）与 `docs/**` 未纳入登记表，也**不会**被守卫拦 ⇒ **`line-limits.mjs` 自己不被自己看守**。若要扩域，须另立批次（并先把 `SOURCE_EXT` 与登记表节的措辞一起改）。
+- **★ 扫描域外的 4 个 `app/**` 源文件（glob 假覆盖的另一半）**：旧门禁的 glob `app/**/*.{ts,tsx,rs}` 命中 **872** 个 tracked 文件，而 `SCAN_DIRS` 只覆盖 **868** 个 ⇒ 下列 4 个文件**从来不在守卫视野内**（`(a)`/`(c)` 永远看不到它们：长到 700 行本地仍绿）：**`app/src-tauri/build.rs`（152 行）**、**`app/src-tauri/examples/capture_ocr_diag.rs`（208 行）**、`app/vite.config.ts`（40 行）、`app/vitest.config.ts`（23 行）。本批**不扩域**（铁律边界未动 `SCAN_DIRS`；四个都 ≤300、当前无违规）。二轮后门禁已直跑全树、**"命令跑了却看不见"这层假覆盖消失**，但这 4 个文件本身**仍未纳入登记表** —— 扩域须另立批次（理由同下一条）。
+- **扫描域不含 `scripts/` 与 `docs/`**：本批的口径域**只有** `app/src` + `app/src-tauri/src` 的 `.ts/.tsx/.rs`（868 个文件）。AGENTS.md §3 说"单文件 ≤300 行"字面上是**全仓**要求，故这是一处**有意的窄化**：`scripts/**`（现 **80–299 行**，含本批的 `line-limits.mjs` = **299**）与 `docs/**` 未纳入登记表，也**不会**被守卫拦 ⇒ **`line-limits.mjs` 自己不被自己看守**。若要扩域，须另立批次（并先把 `SOURCE_EXT` 与登记表节的措辞一起改）。
 - **超硬限表里 10 行的拆分计划仍写「若再增长：…」**（继承来的人工文字；生成器只对**没有**人工计划的超硬限行写「**超硬限必须拆**」）。对**已经**越限的文件，这个前缀有误导性（像在说"长大了才拆"）。
   ⇒ **控制方裁定：不修**。理由有两条：① 强制语气已由**两处**承载（节标题「>600 行，必须硬拆，不允许豁免」+ 该行 `说明` 列逐行重复「超硬限（>600 行），不允许豁免」），`拆分计划` 列只回答"**拆什么**"；② **这些行正是 `0-C2`/`0-C3` 要拆掉的文件，拆完行就从表里消失** —— 给它们改措辞是**会被蒸发的工作**。若 0-C2/C3 因故长期不做，再回来改前缀（一行正则 + 重跑 `--write`）。
 
-> **执行结果（2026-09-11 收尾时补记）**：Task 0–5 已全部交付。工具现为**绿**（默认与 `--full` 都 `exit=0`，stderr 0 字节），登记表 **138 条 / 179 行**、历史节 16 条、占位符 0、脚本 **297 行**。
-> ⚠️ **`line-limits.mjs` 的 300 行余量只剩 3 行** ⇒ `0-C2` 拟并入的 `autoReason` 续行改进（见上）**很可能越线**，届时须在「**写紧**」（合并重复分支、缩短注释）与「**拆文件**」（把 `check` 与 `writeTable` 分文件）之间二选一 —— **不要**因为"它是工具"就默认它可豁免。
-> 门禁加固（`.husky/pre-commit` 加 `--no-stash --no-hide-partially-staged`）见 Task 4 节末尾；其**代价**之一是「部分暂存的文件跑完会被整文件 `git add`」，故本文档早先那句「校验看到的是即将提交的状态」已不成立（Task 5 已就地修正）。
+> **执行结果（2026-09-11 收尾时补记）**：Task 0–5 已全部交付。工具现为**绿**（默认与 `--full` 都 `exit=0`，stderr 0 字节），登记表 **138 条 / 179 行**、历史节 16 条、占位符 0、脚本 **299 行**（二轮把 docblock 等价性措辞改准、并给 `--full` 成功文案加「· 数值一致」标记后 **余量只剩 1 行**）。
+> ⚠️ **`line-limits.mjs` 的 300 行余量只剩 1 行** ⇒ `0-C2` 拟并入的 `autoReason` 续行改进（见上）**几乎必然越线**，届时须在「**写紧**」（合并重复分支、缩短注释）与「**拆文件**」（把 `check` 与 `writeTable` 分文件）之间二选一 —— **不要**因为"它是工具"就默认它可豁免。
+> 门禁接线两轮收敛：一版加固（`--no-stash --no-hide-partially-staged`，见 Task 4 节末尾）→ **二轮直接绕开 lint-staged**（`.husky/pre-commit` 每次提交直跑 `node scripts/line-limits.mjs --full && node scripts/docs-check.mjs`，`package.json` 的 `lint-staged` 块删除；见 Task 4 Step 1 的最终接线）。故「部分暂存的文件跑完会被整文件 `git add`」这条**代价已不存在**（实测 `MM` 跑完仍是 `MM`、文件 sha256 不变），本文档早先那句「校验看到的是即将提交的状态」同样不成立（Task 5 已就地修正）。
 
 ## 自审记录
 
