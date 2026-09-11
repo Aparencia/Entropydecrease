@@ -218,9 +218,43 @@ node scripts/line-limits.mjs --full
 
 ---
 
-<!-- 剩余：Task 4–9（commands_ai_refine.rs 751 / db_goals.rs 707 / commands_goals.rs 673 / ai_refine_task.rs 670 /
-     note_filter.rs 642 / artifact_templates.rs 632）按同一模式补入 —— **补入前不得派发该任务的实施者**。
-     已落盘分析：analysis-lib-rs.md(189) · analysis-types-rs.md(178) · analysis-live-session-frame.md(159) · analysis-video-profile.md(258)。 -->
+### Task 8: 拆 `app/src-tauri/src/note_filter.rs`（642 → ≈240–255）
+
+> **边界取自**：`.../analysis-note-filter.md`（239 行：25 个顶层命名项、`filter_note_transcript` 167 行的 8 阶段拆解、62 例域内测试分布、7 个决策点、6 条未核实项）。
+> ⚠️ **口径纠偏（分析实测）**：本文件**不是**查询构造层 —— SQL / `regex` / `LIKE` / `OnceLock` / `target_os` / feature 全部 **0 命中**，是**纯内存文本过滤管线**（无 IO、无 DB、无正则）。
+
+**Files:**
+- Modify: `app/src-tauri/src/note_filter.rs`（终态 ≈240–255，≤300 ⇒ 登记条目整行删除）
+- Create（3 个，平铺 `src/`）：`note_filter_render.rs`(~140) · `note_filter_purify.rs`(~118) · `note_filter_chain.rs`(~185)
+- Consumes: 分析报告；域内测试 62 例（本文件挂载 25 例 = tests 11 + golden 14）
+- Produces: 上述 3 个模块 + `lib.rs` 新增 3 行 `mod`
+
+**★ 裁决（分析 D1–D7）**：**D1 平铺顶层同级文件**（本仓既有形态；不用目录模块）· **D2 3 个文件**（**2 步不可达**：最大双单元 295 < 需搬 342）· **D3 叶子优先步序**（S1 render → S2 purify → S3 chain）· **D4 允许把必要的私有 fn 放宽到 `pub(crate)`**（9 个私有 fn 零直测，放宽不破测试；**只放宽必要的**，不整片改可见性）· **D5 再导出用 `pub(crate) use` 与项可见性 1:1**（`pub use` 再导出 `pub(crate)` 项会撞 E0365；分析未编译验证，按可见性对齐最稳）· **D6 6 条既有缺陷只搬不改**（含 `filter_note_empty` 丢 `env`、`refresh_screen_points` 对 `BodySource::Web` 退化为标题仅）· **D7 一步一提交**。
+
+**分步（每步一个提交）**
+| 步 | 动作 | 主文件 | 棘轮 / 登记动作 |
+|---|---|---|---|
+| S1 | 抽 `note_filter_render.rs` | ~517 | **≤600 ⇒ 本步提交里删 `FROZEN_OVER_LIMIT` 行 + `--write`**（转入 301–600 档，标注"拆分进行中"） |
+| S2 | 抽 `note_filter_purify.rs` | ~380 | `--write` |
+| S3 | 抽 `note_filter_chain.rs` | **~240–255** | **≤300 ⇒ 档位行自动消失** |
+
+**★ 等价核对（判定顺序 = 语义，第一优先）**
+1. **8 阶段单遍顺序不可重排**：③过渡判定先于⑤碎片、⑥净化先于⑧去重、⑦跨段后置 pass、fold 先于书面化 —— 任何重排都会静默改变输出文本（测试未必覆盖）。
+2. **`filter_note_transcript`（212–378）整块搬迁时逐行保持**；`purify_segment`(46) 与 `FilterStats`(40) 次之。
+3. **`use super::*` 的导入依赖**：25 个测试靠主文件的 `use` 行拿到类型名 ⇒ 拆完后主文件与新文件的 `use` 必须**仍能让 25 例编译**（剪导入 = 25 例集体编译失败）。移动测试时同步搬 `#[path]` 声明，**删声明 = 静默丢覆盖**。
+4. **测试盲区**：25 例中**无一例带 `image_ref`** ⇒ 配图行格式串（509–514 的 markdown 直接拼接、519 的路径串）**没有测试拦网**，只能**逐字 diff** 证明未改；既有注入面（OCR 文本直拼 markdown）**只记录不改**。
+5. 本文件 **0 IO / 0 DB** ⇒ 拆分不涉及连接/事务/锁语义；`#[cfg(test)] mod` 有 2 个挂载点，都要随对应单元走。
+
+**验证**：`cargo test --test app_lib_tests`（逐步全绿；域内 62 例计数不减 —— `note_filter` / `note_filter_ai` / `note_filter_discourse` / `note_filter_ocr` 各自用例数不变）· `cargo build` · `cargo clippy`（不增）· `node scripts/line-limits.mjs --full`。
+**报告**：`.../task-8-report.md`。
+
+---
+
+<!-- 剩余：Task 4–7 / 9（commands_ai_refine.rs 751 / db_goals.rs 707 / commands_goals.rs 673 / ai_refine_task.rs 670 /
+     artifact_templates.rs 632）按同一模式补入 —— **补入前不得派发该任务的实施者**。
+     已落盘分析：lib-rs(189) · types-rs(178) · live-session-frame(159) · video-profile(258) · note-filter(239)。
+     ⚠️ 分析 note-filter 的 U6 提醒：**与 lib.rs 并行拆分会在 lib.rs 同一段插 `mod` 行而冲突** ——
+     本计划已用「lib.rs 必须第一个拆」消解（lib.rs 落定后其余任务才允许追加 `mod`）。 -->
 
 ---
 
