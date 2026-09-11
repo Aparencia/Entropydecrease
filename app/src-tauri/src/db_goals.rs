@@ -8,9 +8,8 @@
 //!              goal_groups 随组删除级联清除，goal_milestones.ref_group_id
 //!              SET NULL（绑定组被删 → 里程碑降级手动判定，提示 UI 属 M2）。
 
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 
-use crate::db::{unix_seconds, Db};
 use crate::error::Result;
 
 // 子模块声明（AGENTS.md §3 单文件 ≤300 行；#[path] 使兄弟文件平铺在同目录，各自带 @ai-context）。
@@ -29,6 +28,9 @@ mod retro;
 /// 绑定域：目标↔组绑定 + 组结算钩子。
 #[path = "db_goals_binding.rs"]
 mod binding;
+/// 毕业报告域：goal_graduation_reports 快照表读写。
+#[path = "db_goals_graduation.rs"]
+mod graduation;
 
 /// 三表 DDL + 索引（幂等：CREATE TABLE IF NOT EXISTS；旧库升级自动补表）。
 pub(crate) fn init(conn: &Connection) -> Result<()> {
@@ -79,48 +81,6 @@ pub(crate) fn init(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_graduation_goal ON goal_graduation_reports(goal_id);",
     )?;
     Ok(())
-}
-
-impl Db {
-
-    // ─────────────────────── v0.18.1 毕业报告（REQ-255/256） ───────────────────────
-
-    /// 写毕业报告快照（目标删除后保留；goal_id SET NULL——报告独立于 goals 行）。
-    pub fn create_graduation_report(&self, goal_id: i64, goal_name: &str, report_json: &str) -> Result<i64> {
-        self.with_conn(|conn| {
-            conn.execute(
-                "INSERT INTO goal_graduation_reports (goal_id, goal_name, report_json, created_at)
-                 VALUES (?1, ?2, ?3, ?4)",
-                params![goal_id, goal_name, report_json, unix_seconds()],
-            )?;
-            Ok(conn.last_insert_rowid())
-        })
-    }
-
-    /// 目标的毕业报告 JSON（无 → None——毕业仪式只发一次，防重复确认；
-    /// 解析在命令层——AppError 无 serde 变体，存储态原样返回）。
-    pub fn get_graduation_report_json(&self, goal_id: i64) -> Result<Option<String>> {
-        self.with_conn(|conn| {
-            let mut stmt = conn.prepare(
-                "SELECT report_json FROM goal_graduation_reports WHERE goal_id = ?1 ORDER BY id DESC LIMIT 1",
-            )?;
-            let mut rows = stmt.query_map(params![goal_id], |r| r.get::<_, String>(0))?;
-            match rows.next() {
-                Some(Ok(json)) => Ok(Some(json)),
-                Some(Err(e)) => Err(e.into()),
-                None => Ok(None),
-            }
-        })
-    }
-
-    /// 全部毕业报告 JSON（档案区；已删目标的报告仍列出——解析在命令层）。
-    pub fn list_graduation_reports_json(&self) -> Result<Vec<String>> {
-        self.with_conn(|conn| {
-            let mut stmt = conn.prepare("SELECT report_json FROM goal_graduation_reports ORDER BY id ASC")?;
-            let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
-            rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
-        })
-    }
 }
 
 #[cfg(test)]
