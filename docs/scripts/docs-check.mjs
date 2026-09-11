@@ -197,7 +197,7 @@ if (missingFromIndex.length) {
 
 // 模板同步自检：docs/scripts/docs-check.mjs 是 Docs Starter Kit 的模板源（docs/README.md 的
 // 「复制即用」步骤拷贝它），scripts/ 下是本项目启用后的实例；两者必须逐字节一致，否则模板
-// 源与实际运行的行为漂移（c79c9719 曾误删模板源）。实例参与 lint-staged 与 CI，是真正被执行的
+// 源与实际运行的行为漂移（c79c9719 曾误删模板源）。实例参与本地提交门禁（pre-commit 直跑）与 CI，是真正被执行的
 // 那一份，因此守卫放在实例侧。模板不存在时跳过：本项目以外的实例不会有这个路径。
 const SELF_PATH = fileURLToPath(import.meta.url);
 const TEMPLATE_PATH = join(ROOT, 'docs/scripts/docs-check.mjs');

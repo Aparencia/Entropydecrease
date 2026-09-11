@@ -11,6 +11,6 @@
 #      才跑 `--full`（只暂存一个改动过的源文件时该段 0 files / SKIPPED ⇒ (e) 在本地全时绿灯），
 #      而 glob `app/**/*.{ts,tsx,rs}` 命中的 **872** 个 tracked 文件也**大于**脚本扫描域的 **868** 个
 #      （差 `app/src-tauri/build.rs`、`app/src-tauri/examples/capture_ocr_diag.rs`、`app/vite.config.ts`、
-#      `app/vitest.config.ts`）⇒「命令跑了、这 4 个文件却没被看见」。直跑全树把这两处一起消掉。
+#      `app/vitest.config.ts`）⇒「命令跑了、这 4 个文件却没被看见」。直跑全树把这两处**假覆盖**一起消掉（glob 不再决定门禁视野），但消掉的是**假覆盖这层、不是这 4 个文件本身** —— 它们仍在 `SCAN_DIRS` 之外、不归本红线管辖（计划「未做（登记）」已点名）。
 #   `&&` 串联：任一失败即以非零退出，husky 拦下提交（不吞前一段的退出码）。
 node scripts/line-limits.mjs --full && node scripts/docs-check.mjs

@@ -658,7 +658,7 @@ node scripts/line-limits.mjs --full && node scripts/docs-check.mjs
 **为什么不是 lint-staged**（三条，逐条已实测）：
 1. **暂存语义零贡献**：两个检查都是**全树只读扫描**、且**忽略传入的文件参数**（`line-limits.mjs` 只认 `--write` / `--full`）⇒ lint-staged「把暂存文件列表交给命令」对它**没有任何作用**。
 2. **风险整类消除**：lint-staged 的 stash / `git reset --hard` / hide / auto-stage / `.git/lint-staged_unstaged.patch` 是**一整类**工作树风险（本节末尾「附带隐患」记录的那次丢改动即出自这里）；`--no-stash` 只是把它从「会丢」降级成「不丢但仍有多余副作用」。**最终形态连 lint-staged 都不进** ⇒ `.git/lint-staged_unstaged.patch` 与「`MM` 被 auto-stage 成 `M `」一并消失（实测：部分暂存文件跑完仍是 `MM`，文件 sha256 不变）。
-3. **不再依赖 glob ⇒ 消除"假覆盖"**：旧接线的第三个条目只在暂存到 `{package.json, scripts/line-limits.mjs, docs/standards/line-limit-exemptions.md}` 之一时才跑 `--full` —— 只暂存一个改动过的源文件时该段 **0 files / `[SKIPPED]`** ⇒ **(e) 在本地全时绿灯**（实测：同一暂存态下旧门禁 `npx lint-staged` **exit 0**，新 hook **exit 1** 报 `(e) 行数不一致：app/src-tauri/src/lib.rs 声明 1025 / 实测 1026`）；而 glob `app/**/*.{ts,tsx,rs}` 命中 **872** 个 tracked 文件、脚本扫描域只有 **868** ⇒ 有 **4** 个文件（`app/src-tauri/build.rs`、`app/src-tauri/examples/capture_ocr_diag.rs`、`app/vite.config.ts`、`app/vitest.config.ts`）是「命令跑了却永远看不见」。（评审记录为 870 / 差 2 个，那是 `git ls-files 'app/**/*.ts' …` 的数 —— git pathspec 的 `**` 比 micromatch 少算 `app/*.config.ts`；按 lint-staged 实际使用的 micromatch 复核是 872 / 差 4 个。）每次都跑全树，这两处一起消掉。
+3. **不再依赖 glob ⇒ 消除"假覆盖"**：旧接线的第三个条目只在暂存到 `{package.json, scripts/line-limits.mjs, docs/standards/line-limit-exemptions.md}` 之一时才跑 `--full` —— 只暂存一个改动过的源文件时该段 **0 files / `[SKIPPED]`** ⇒ **(e) 在本地全时绿灯**（实测：同一暂存态下旧门禁 `npx lint-staged` **exit 0**，新 hook **exit 1** 报 `(e) 行数不一致：app/src-tauri/src/lib.rs 声明 1025 / 实测 1026`）；而 glob `app/**/*.{ts,tsx,rs}` 命中 **872** 个 tracked 文件、脚本扫描域只有 **868** ⇒ 有 **4** 个文件（`app/src-tauri/build.rs`、`app/src-tauri/examples/capture_ocr_diag.rs`、`app/vite.config.ts`、`app/vitest.config.ts`）是「命令跑了却永远看不见」。（评审记录为 870 / 差 2 个，那是 `git ls-files 'app/**/*.ts' …` 的数 —— git pathspec 的 `**` 比 micromatch 少算 `app/*.config.ts`；按 lint-staged 实际使用的 micromatch 复核是 872 / 差 4 个。）每次都跑全树，这两处**假覆盖**一起消掉 —— ⚠️ 消掉的是「命令跑了却看不见」这层，**不是那 4 个文件**：它们仍在 `SCAN_DIRS` 之外、不归本红线管辖（见「未做（登记）」）。
 
 **为什么这里可以用 `--full`**（初版曾担心"会逼人每次提交重生成表"）：`--full` **只读** —— 写登记表只走 `--write` —— 门禁**不会**改任何文件；数值过期时它做的是**报错并要求人决定**（`--write` 重生成，或把改动改回去），而不是悄悄改表。这也正是把它与 CI 拉成**同一口径**的理由。
 
@@ -707,7 +707,7 @@ git reset
 node -e "const s=require('fs').readFileSync('.github/workflows/pr-check.yml','utf8'); if(!/line-limits:/.test(s)) throw new Error('job 未写入'); console.log('job 存在，行数 ' + s.split('\n').length)"
 ```
 （本机无 YAML 解析器，且 workflow 语法由 GitHub 侧校验；这里只做存在性与整体结构的粗检。）
-⚠️ **二轮补记（2026-09-11）**：上面 `# --full` 那行注释里的「本地提交门禁不守」与本地跑 `--full` 的取舍，**已被 Step 1 的最终接线推翻**（本地现在每次提交都跑 `--full`）。**实际文件 `.github/workflows/pr-check.yml` 的注释仍写着旧理由**（含「见 `package.json` 的 lint-staged 条目」，而该块已删除）—— 本批按铁律边界**未改动该文件**（CI job 本身保留、行为仍正确：照跑 `--full`），注释更正已登记在「未做（登记）」。
+⚠️ **二轮补记（2026-09-11）→ 该项已由控制方完成（同日 `ac7dd15b`「ci: 更正 line-limits job 的过期注释」）**：上面 `# --full` 那行注释里的「本地提交门禁不守」与本地跑 `--full` 的取舍，**已被 Step 1 的最终接线推翻**（本地现在每次提交都跑 `--full`）。该注释当时**确实**仍写着旧理由（含「见 `package.json` 的 lint-staged 条目」，而该块已删除），本批初稿据此记为「本批未改动该文件（CI job 本身保留、行为仍正确）+ 注释更正登记为独立治理项」—— **这两条陈述均已作废**：控制方随后提交 `ac7dd15b` 就地改写了该注释（现文：「本地提交门禁（.husky/pre-commit）自 2026-09-11 起直跑 `node scripts/line-limits.mjs --full && node scripts/docs-check.mjs`（不经 lint-staged），故这条 job 是**第二道**网、不再是唯一守 (e) 的地方」），删去了「本地默认只守结构」与对 `package.json` lint-staged 条目的引用；**CI job 行为未变**（照跑 `node scripts/line-limits.mjs --full`）。⇒ 这不再是待办项，也不是"独立治理项"。
 
 - [ ] **Step 5: 提交**
 
@@ -751,7 +751,7 @@ git commit -m "ci: 行数红线接入提交门禁与 CI"
 
 **控制方裁决**：**保留武装**（这正是 Task 4 的目的；两项变更都不进 git，工作树仍只 `?? docs/tech-debt/`）。
 **⇒ 必须一并记住的三件事**：
-1. **本批（乃至 0-A/0-B）至今没有任何自动化门禁跑过**：本地门禁此前失效、CI 又因 **67 个提交未推送**而未触发。所有校验都是**人工/子代理跑出来的**（有证据），但**从未被强制**。⇒ 建议推送到 `dev` 以激活 CI（属用户决策）。
+1. **本批（乃至 0-A/0-B）至今没有任何自动化门禁跑过**：本地门禁此前失效、CI 又因 **67 个提交未推送**（当时实测 `git rev-list --count origin/dev..7476fd0b~1` = 67；该值随提交单调增长，勿引用为现状）而未触发。所有校验都是**人工/子代理跑出来的**（有证据），但**从未被强制**。⇒ 建议推送到 `dev` 以激活 CI（属用户决策）。
 2. **提交信息规范（AGENTS.md §5，subject ≤50 字等）此前也未被 commitlint 校验**；现已武装，**后续提交会真被拦**。
 3. **新克隆若未 `npm install`，门禁默认静默失效** —— 没有任何机制会提醒。这是本批发现的**环境依赖**，已写入 `7476fd0b` 的提交信息；Task 5 应把它一并回写进 `v0.22.md`（属"工具链真相"的一部分）。
 
@@ -837,14 +837,15 @@ git commit -m "docs(versions): 0-C1 行数红线验收与门槛更正"
 - **仍未做**：15 个文件的实际拆分 → `0-C2`（前端 5）/ `0-C3`（Rust 10）
 
 ## 未做（登记）
+> ★ **2026-09-11 收尾复核**：本节原有的一项（`pr-check.yml` 的过期注释）**已由 `ac7dd15b` 完成**，就地改记为下方 ✅ 条目（保留以示来龙去脉）；其余各项仍为待办。
 
 - **15 个 >600 文件的拆分**：`0-C2`（`ClassroomPage.tsx` / `SessionDetailPanel.tsx` / `NoteListView.tsx` / `SessionListPanel.tsx` / `NotesPage.tsx`）与 `0-C3`（`lib.rs` / `types.rs` / `live_session_frame.rs` / `commands_ai_refine.rs` / `db_goals.rs` / `commands_goals.rs` / `ai_refine_task.rs` / `note_filter.rs` / `artifact_templates.rs` / `video_profile.rs`）。`0-C3` 含 `lib.rs`（AGENTS.md §10 需额外审查：Tauri command 注册边界）。
 - **`scripts/validate-all.mjs` 已失效**：它引用 `client/`、`server/ai-gateway` 等**本仓库不存在的目录**（重构前遗留），跑起来第一步即失败。并行审查曾建议把行数守卫挂进它 —— **该建议的前提不成立**（落点本身是坏的）。修它或删它属独立治理项。
 - **`REQ-201` 状态标注**、豁免表历史节的进一步精简：不属本批。
-- **`.github/workflows/pr-check.yml` 的 `line-limits` job 注释已过期**：它仍写「本地提交门禁默认只守结构」与「故本地改为在『门禁自身/登记表被改动』时跑它（见 `package.json` 的 lint-staged 条目）」，而这两点已被二轮接线推翻（本地每次提交都跑 `--full`）与删除（该 `lint-staged` 块已不存在）。本批的**铁律边界明确不动该文件**（CI job 保留，行为仍正确 —— 照跑 `node scripts/line-limits.mjs --full`），故注释更正登记为独立治理项。
+- ✅ **（原「未做」项 —— 已由控制方完成：2026-09-11 `ac7dd15b`「ci: 更正 line-limits job 的过期注释」）`.github/workflows/pr-check.yml` 的 `line-limits` job 注释已更正**：旧注释写着「本地提交门禁默认只守结构」与「故本地改为在『门禁自身/登记表被改动』时跑它（见 `package.json` 的 lint-staged 条目）」—— 前者已被二轮接线推翻（本地每次提交都跑 `--full`）、后者已被删除（该 `lint-staged` 块已不存在）。`ac7dd15b` 把它就地改写为如实描述（本地与 CI 同口径守 (e) · 这条 job 是第二道网 · `--full` 只读不写表），**CI job 行为未变**。⇒ **本项已关闭、不再是治理项**；本批初稿曾写「本批未改动该文件」并把它登记为独立治理项 —— 两条陈述均已作废（见 Task 4 Step 4 的补记）。
 - **★ 自动摘取的 43 条理由里有 16 条在连接符处截断**（Task 3 实施者实测）：`autoReason` 只取 `@ai-context` 的**第一个物理行**，于是形如「…（自动摘取，待细化）」的理由中，有 16 条是半句话（以「，」「——」「+」等结尾）。**不算缺陷**（表格的验收口径是**结构一致性**：成员关系 + 数值，不含散文质量），且**修法零人工成本** —— 表格是生成物，改 `autoReason` 让它续读后续物理行直到句末或空行，再跑一次 `--write` 即可整体刷新。⇒ **并入 `0-C2` 顺手做**（建议同时把理由上限截到合理长度）。
 - **★ 扫描域外的 4 个 `app/**` 源文件（glob 假覆盖的另一半）**：旧门禁的 glob `app/**/*.{ts,tsx,rs}` 命中 **872** 个 tracked 文件，而 `SCAN_DIRS` 只覆盖 **868** 个 ⇒ 下列 4 个文件**从来不在守卫视野内**（`(a)`/`(c)` 永远看不到它们：长到 700 行本地仍绿）：**`app/src-tauri/build.rs`（152 行）**、**`app/src-tauri/examples/capture_ocr_diag.rs`（208 行）**、`app/vite.config.ts`（40 行）、`app/vitest.config.ts`（23 行）。本批**不扩域**（铁律边界未动 `SCAN_DIRS`；四个都 ≤300、当前无违规）。二轮后门禁已直跑全树、**"命令跑了却看不见"这层假覆盖消失**，但这 4 个文件本身**仍未纳入登记表** —— 扩域须另立批次（理由同下一条）。
-- **扫描域不含 `scripts/` 与 `docs/`**：本批的口径域**只有** `app/src` + `app/src-tauri/src` 的 `.ts/.tsx/.rs`（868 个文件）。AGENTS.md §3 说"单文件 ≤300 行"字面上是**全仓**要求，故这是一处**有意的窄化**：`scripts/**`（现 **80–299 行**，含本批的 `line-limits.mjs` = **299**）与 `docs/**` 未纳入登记表，也**不会**被守卫拦 ⇒ **`line-limits.mjs` 自己不被自己看守**。若要扩域，须另立批次（并先把 `SOURCE_EXT` 与登记表节的措辞一起改）。
+- **扫描域不含 `scripts/` 与 `docs/`**：本批的口径域**只有** `app/src` + `app/src-tauri/src` 的 `.ts/.tsx/.rs`（868 个文件）。AGENTS.md §3 说"单文件 ≤300 行"字面上是**全仓**要求，故这是一处**有意的窄化**：`scripts/**`（现 **62–299 行**：下限 `validate-all.mjs` = **62**、上限本批的 `line-limits.mjs` = **299**）与 `docs/**` 未纳入登记表，也**不会**被守卫拦 ⇒ **`line-limits.mjs` 自己不被自己看守**。若要扩域，须另立批次（并先把 `SOURCE_EXT` 与登记表节的措辞一起改）。
 - **超硬限表里 10 行的拆分计划仍写「若再增长：…」**（继承来的人工文字；生成器只对**没有**人工计划的超硬限行写「**超硬限必须拆**」）。对**已经**越限的文件，这个前缀有误导性（像在说"长大了才拆"）。
   ⇒ **控制方裁定：不修**。理由有两条：① 强制语气已由**两处**承载（节标题「>600 行，必须硬拆，不允许豁免」+ 该行 `说明` 列逐行重复「超硬限（>600 行），不允许豁免」），`拆分计划` 列只回答"**拆什么**"；② **这些行正是 `0-C2`/`0-C3` 要拆掉的文件，拆完行就从表里消失** —— 给它们改措辞是**会被蒸发的工作**。若 0-C2/C3 因故长期不做，再回来改前缀（一行正则 + 重跑 `--write`）。
 

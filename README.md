@@ -72,8 +72,8 @@
 ├── server/                 # 服务端部署配置（docker-compose / nginx / deploy.sh，不含业务代码）
 ├── docs/                   # 文档体系（见「文档导航」）
 ├── scripts/                # 辅助脚本（docs-check / version-bump / 学习会话检测）
-├── .github/workflows/      # CI/CD：pr-check（前端/Rust/文档三 job）+ release（NSIS 打包）
-├── .husky/                 # 提交门禁（commitlint + lint-staged）
+├── .github/workflows/      # CI/CD：pr-check（changes 分诊 + 前端/Rust/官网/文档/行数红线 5 job）+ release（NSIS 打包）
+├── .husky/                 # 提交门禁（pre-commit 直跑全树校验 + commitlint）
 └── package.json            # 仓库级发布工具链（semantic-release）
 ```
 

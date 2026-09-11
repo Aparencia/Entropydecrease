@@ -165,7 +165,17 @@ coverage/
 
 ### 第七部分：Git Hooks 配置
 
-使用 husky + lint-staged：
+使用 husky；`pre-commit` 挂什么由项目自定（本仓见下），`commit-msg` 固定挂 commitlint。
+
+**本仓实际接线（2026-09-11 起，逐字见 `.husky/pre-commit`）**：`pre-commit` **直跑全树校验、不经 lint-staged**：
+
+```sh
+node scripts/line-limits.mjs --full && node scripts/docs-check.mjs
+```
+
+理由：这两项检查都是**全树只读扫描、且忽略传入的文件参数** ⇒ lint-staged「把暂存文件列表交给命令」的语义对它们**零贡献**，却会带回 stash / `git reset --hard` / hide / auto-stage 一整类工作树风险（实测记录见 `docs/versions/v0.22.md`「工具链真相 2」）。⇒ 本仓 `package.json` **没有** `lint-staged` 配置块（该依赖仍留在 `devDependencies`，留给将来的文件级任务）。
+
+**通用示例（Starter Kit 模板）** —— 仅在项目确有「可按文件修复」的检查（eslint/prettier 之类）时才这样接，**本仓未用 eslint/prettier，故不适用**：
 
 ```json
 // package.json
@@ -178,7 +188,7 @@ coverage/
 }
 ```
 
-- `pre-commit`: lint-staged（格式化 + lint）
+- `pre-commit`: 本仓 = 直跑全树校验（见上）；Starter Kit 模板可选 lint-staged（格式化 + lint）
 - `commit-msg`: commitlint（验证提交格式）
 
 ## 检查清单
@@ -187,7 +197,7 @@ coverage/
 - [ ] 提交信息符合 Conventional Commits
 - [ ] 每个提交是原子的（一件事）
 - [ ] .gitignore 已配置（无敏感文件泄露）
-- [ ] Git Hooks 已配置（lint-staged + commitlint）
+- [ ] Git Hooks 已配置（pre-commit 全树校验 + commit-msg commitlint）
 - [ ] 版本号遵循 SemVer
 - [ ] Tag 有注释信息
 - [ ] 无密钥/密码提交到仓库
