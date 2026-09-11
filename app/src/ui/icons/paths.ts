@@ -27,7 +27,11 @@ function mergeGroups(): Record<string, IconGeometry> {
   const merged: Record<string, IconGeometry> = {};
   for (const [groupName, group] of Object.entries(GROUPS_FOR_MERGE)) {
     for (const [name, geometry] of Object.entries(group)) {
-      if (merged[name]) {
+      // 必须用 hasOwnProperty 而非 `merged[name]` 真值判断：后者会走**原型链**，于是名为
+      // `constructor` 的图标（命名规范 `/^[a-z][a-z0-9-]*$/` 恰好放行）即使毫无重名，
+      // 也会因取到 `Object.prototype.constructor` 而抛「图标重名」—— 误导性的启动期崩溃。
+      // 不用 `Object.hasOwn`：它是 ES2022，而本仓 `lib` 为 ES2020。
+      if (Object.prototype.hasOwnProperty.call(merged, name)) {
         // 重名会让「哪个几何生效」取决于对象键顺序 —— 静默且难以定位，故直接拒绝
         throw new Error(`图标重名：${name}（分组 ${groupName} 与其它分组冲突）`);
       }
