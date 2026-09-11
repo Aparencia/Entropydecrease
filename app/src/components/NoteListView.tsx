@@ -30,15 +30,13 @@ import { useNoteListSelection } from "../hooks/useNoteListSelection";
 import { useNoteMarquee } from "../hooks/useNoteMarquee";
 // 批 0-C2：展示件（列表体 / 顶栏 / 批量栏与选集菜单）——纯透传适配器，逻辑在 hook
 import NoteListBody from "./NoteListBody";
+import NoteListToolbar, { ghostBtn } from "./NoteListToolbar";
 import NoteRowContextMenu from "./NoteRowContextMenu";
 
 // 兼容既有导入面（NoteReadingView/NotesPage/parseTags.test 从此解析——v0.15 移厝 utils）
 export { parseTags, fmtDate } from "../utils/noteHelpers";
 
 export type SortMode = "updated-desc" | "pin-first" | "created-desc";
-
-const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
-const ghostBtn: React.CSSProperties = { ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" };
 
 interface Props {
   width?: number;
@@ -136,51 +134,21 @@ export default function NoteListView({
 
   return (
     <div style={{ width, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minWidth: 0 }}>
-      <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
-        <span>📝 笔记</span>
-        {selectionMode && (
-          <span style={{ fontSize: 10.5, color: "#4f46e5", border: "1px solid #c7d2fe", borderRadius: 10, padding: "0 6px", background: "#eef2ff", lineHeight: "16px" }}>
-            选择模式{selection.size > 0 ? `（${selection.size}）` : ""}
-          </span>
-        )}
-        <button
-          data-testid="batch-mode-toggle"
-          onClick={() => (selectionMode ? exitBatch() : setSelectionMode(true))}
-          style={{
-            ...ghostBtn,
-            marginLeft: "auto",
-            borderColor: selectionMode ? "#4f46e5" : undefined,
-            color: selectionMode ? "#3730a3" : "#4b5563",
-          }}
-          title={selectionMode ? "退出选择模式（Esc）" : "进入选择模式：单击笔记=勾选（可多选后批量操作）"}
-        >
-          选择
-        </button>
-        <button onClick={onCreate} style={{ fontSize: 12, cursor: "pointer", padding: "2px 8px", borderRadius: 4, border: "1px solid #d1d5db", background: "#f9fafb" }} title="新建笔记">+ 新建</button>
-        <button onClick={onCollapse} style={{ fontSize: 12, cursor: "pointer", border: "none", background: "none", color: "#9ca3af" }} title="折叠列表">⟨</button>
-      </div>
-
-      <div style={{ padding: 10, borderBottom: "1px solid #f3f4f6", display: "flex", flexDirection: "column", gap: 6 }}>
-        <div style={{ display: "flex", gap: 6 }}>
-          <input value={keyword} onChange={(e) => onKeywordChange(e.target.value)} placeholder="搜索标题/正文…" style={{ flex: 1, padding: "6px 8px", fontSize: 13, border: "1px solid #e5e7eb", borderRadius: 6, minWidth: 0 }} />
-          <button onClick={onRefresh} style={{ fontSize: 13, cursor: "pointer" }}>⟳</button>
-        </div>
-        <select value={sortMode} onChange={(e) => onSortModeChange(e.target.value as SortMode)} style={{ fontSize: 12, padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 4 }}>
-          <option value="updated-desc">按更新时间</option>
-          <option value="pin-first">置顶优先</option>
-          <option value="created-desc">按创建时间</option>
-        </select>
-        {allTags.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {tagFilter && (
-              <span onClick={() => onTagFilterChange(null)} style={{ fontSize: 11, color: "#6b7280", cursor: "pointer", border: "1px solid #d1d5db", borderRadius: 10, padding: "1px 6px", background: "#f3f4f6" }}>清除过滤 ✕</span>
-            )}
-            {allTags.map((t) => (
-              <span key={t} onClick={() => onTagFilterChange(t)} style={{ fontSize: 11, cursor: "pointer", border: `1px solid ${tagFilter === t ? "#0d9488" : "#e5e7eb"}`, borderRadius: 10, padding: "1px 6px", background: tagFilter === t ? "#f0fdfa" : "#f9fafb", color: tagFilter === t ? "#0d9488" : "#6b7280" }}>{t}</span>
-            ))}
-          </div>
-        )}
-      </div>
+      <NoteListToolbar
+        selectionMode={selectionMode}
+        selectionCount={selection.size}
+        onToggleBatchMode={() => (selectionMode ? exitBatch() : setSelectionMode(true))}
+        onCreate={onCreate}
+        onCollapse={onCollapse}
+        keyword={keyword}
+        onKeywordChange={onKeywordChange}
+        onRefresh={onRefresh}
+        sortMode={sortMode}
+        onSortModeChange={onSortModeChange}
+        allTags={allTags}
+        tagFilter={tagFilter}
+        onTagFilterChange={onTagFilterChange}
+      />
 
       <NoteListBody
         sections={sections}

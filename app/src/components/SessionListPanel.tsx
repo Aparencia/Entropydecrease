@@ -16,9 +16,7 @@
  *              复制标题/转笔记/删除——SessionRowContextMenu 委托父层处理）。
  */
 import { useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import type { CourseGroup, OcrBlockHit, SegmentHit, SessionListItem } from "../types";
-import { fmtMs } from "../utils/fmt";
+import type { CourseGroup, SessionListItem } from "../types";
 import { isSessionConvertible } from "../utils/sessionEligibility";
 import {
   useSessionListView,
@@ -26,18 +24,18 @@ import {
   type SortBy,
   type StatusFilter,
 } from "../hooks/useSessionListView";
+import { useSessionSearch } from "../hooks/useSessionSearch";
 import { useSessionSelection } from "../hooks/useSessionSelection";
 import SessionListRow from "./SessionListRow";
 import type { SessionRenameRequest } from "./SessionListRow";
 import SessionRowContextMenu from "./SessionRowContextMenu";
+import SessionSearchBar from "./SessionSearchBar";
+import SessionSearchHits from "./SessionSearchHits";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 const selectStyle: React.CSSProperties = {
   fontSize: 12, padding: "4px 6px", border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff",
 };
-
-// TD-2026-08-19-E 清偿：三模式搜索——标题（本地）/ 内容（段搜索）/ 画面（图内文字检索）
-type SearchMode = "title" | "content" | "ocr";
 
 interface Props {
   /** 列宽（v0.15 全站自适应——父层 useColumnLayout 驱动；缺省 320=历史值） */
@@ -74,13 +72,11 @@ export default function SessionListPanel({
   openSessionId, onOpenDetail, onConvert, onOpenNote, onBatchConvert, onBatchDelete, onDeleteOne,
   onSessionRenamed, showToast, onCollapse,
 }: Props) {
-  const [keyword, setKeyword] = useState("");
-  const [searchMode, setSearchMode] = useState<SearchMode>("title");
-  const [searchKw, setSearchKw] = useState("");
-  const [hits, setHits] = useState<SegmentHit[] | null>(null); // REQ-079：段搜索命中
-  // TD-2026-08-19-E 清偿：图内文字检索命中（REQ-133 search_ocr_blocks 前端接入）
-  const [ocrHits, setOcrHits] = useState<OcrBlockHit[] | null>(null);
-  const [ocrBusy, setOcrBusy] = useState(false);
+  // ── 三模式搜索（批 0-C2 拆至 hooks/useSessionSearch：唯一两个 invoke 的落点）──
+  const {
+    keyword, setKeyword, searchMode, selectMode, searchKw, setSearchKw,
+    hits, ocrHits, ocrBusy, searchSegments, searchOcrBlocks,
+  } = useSessionSearch({ showToast });
   const [filterStatus, setFilterStatus] = useState<StatusFilter>("all");
   const [filterConverted, setFilterConverted] = useState<ConvertedFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("time-desc");
@@ -95,37 +91,6 @@ export default function SessionListPanel({
   // 数据、二次空跑）；批量转同理。
   const [batchBusy, setBatchBusy] = useState<"convert" | "delete" | null>(null);
   const batchBusyRef = useRef(false);
-
-  /** REQ-079：段搜索（片段上下文 + 点击跳详情） */
-  const searchSegments = async () => {
-    const kw = searchKw.trim();
-    if (!kw) {
-      setHits(null);
-      return;
-    }
-    try {
-      setHits(await invoke<SegmentHit[]>("search_session_segments", { keyword: kw }));
-    } catch (e) {
-      showToast(`段搜索失败: ${e}`, "err");
-    }
-  };
-
-  /** TD-2026-08-19-E 清偿：图内文字检索（REQ-133——搜 PPT 上的词命中图） */
-  const searchOcrBlocks = async () => {
-    const kw = searchKw.trim();
-    if (!kw) {
-      setOcrHits(null);
-      return;
-    }
-    setOcrBusy(true);
-    try {
-      setOcrHits(await invoke<OcrBlockHit[]>("search_ocr_blocks", { keyword: kw }));
-    } catch (e) {
-      showToast(`画面检索失败: ${e}`, "err");
-    } finally {
-      setOcrBusy(false);
-    }
-  };
 
   // ── 视图模型（批 0-C2 拆至 hooks/useSessionListView）──
   const { filtered, groupedView, visibleOrder } = useSessionListView({
@@ -205,16 +170,6 @@ export default function SessionListPanel({
     />
   );
 
-  const modeBtn = (activeMode: boolean): React.CSSProperties => ({
-    fontSize: 11,
-    padding: "4px 8px",
-    border: "none",
-    cursor: "pointer",
-    background: activeMode ? "#ccfbf1" : "#fff",
-    color: activeMode ? "#0f766e" : "#6b7280",
-    fontWeight: activeMode ? 600 : 400,
-  });
-
   const selectModeBtn = (on: boolean): React.CSSProperties => ({
     ...btn,
     fontSize: 11,
@@ -264,46 +219,18 @@ export default function SessionListPanel({
         </div>
       </div>
 
-      {/* 搜索：标题（本地即时过滤）/ 转写内容（段搜索）双模式单输入框 */}
-      <div style={{ padding: 10, display: "flex", gap: 6 }}>
-        <div style={{ display: "flex", border: "1px solid #e5e7eb", borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
-          <button style={modeBtn(searchMode === "title")} onClick={() => { setSearchMode("title"); setHits(null); setOcrHits(null); }}>标题</button>
-          <button style={modeBtn(searchMode === "content")} onClick={() => { setSearchMode("content"); setHits(null); setOcrHits(null); }}>内容</button>
-          <button style={modeBtn(searchMode === "ocr")} onClick={() => { setSearchMode("ocr"); setHits(null); setOcrHits(null); }}>画面</button>
-        </div>
-        {searchMode === "title" ? (
-          <input
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="搜索标题/窗口…"
-            style={{ flex: 1, fontSize: 12, padding: "5px 8px" }}
-          />
-        ) : searchMode === "ocr" ? (
-          <>
-            <input
-              value={searchKw}
-              onChange={(e) => setSearchKw(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && void searchOcrBlocks()}
-              placeholder="画面文字关键词（PPT 上的词）…"
-              style={{ flex: 1, fontSize: 12, padding: "5px 8px" }}
-            />
-            <button style={btn} onClick={() => void searchOcrBlocks()} disabled={ocrBusy}>
-              {ocrBusy ? "检索中…" : "图搜"}
-            </button>
-          </>
-        ) : (
-          <>
-            <input
-              value={searchKw}
-              onChange={(e) => setSearchKw(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && void searchSegments()}
-              placeholder="转写内容关键词…"
-              style={{ flex: 1, fontSize: 12, padding: "5px 8px" }}
-            />
-            <button style={btn} onClick={() => void searchSegments()}>段搜</button>
-          </>
-        )}
-      </div>
+      {/* 搜索：标题（本地即时过滤）/ 转写内容（段搜索）/ 画面（图内文字）三模式单输入框 */}
+      <SessionSearchBar
+        searchMode={searchMode}
+        keyword={keyword}
+        searchKw={searchKw}
+        ocrBusy={ocrBusy}
+        onSelectMode={selectMode}
+        onKeywordChange={setKeyword}
+        onSearchKwChange={setSearchKw}
+        onSearchSegments={() => void searchSegments()}
+        onSearchOcrBlocks={() => void searchOcrBlocks()}
+      />
 
       {/* 筛选 + 排序（本地即时生效） */}
       <div style={{ padding: "0 10px 10px", display: "flex", gap: 6, alignItems: "center" }}>
@@ -343,55 +270,8 @@ export default function SessionListPanel({
             暂无会话，去「课堂助手」开始实时捕获
           </p>
         )}
-        {hits ? (
-          /* 段搜索命中列表（高亮片段 + 跳详情定位） */
-          <div style={{ padding: 8 }}>
-            <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>
-              「{searchKw}」命中 {hits.length} 条
-            </div>
-            {hits.map((h) => (
-              <div
-                key={`${h.session_id}-${h.segment_id}`}
-                onClick={() => onOpenDetail(h.session_id, h.segment_id)}
-                style={{ fontSize: 12, color: "#374151", padding: "6px 8px", cursor: "pointer", borderBottom: "1px solid #f3f4f6" }}
-              >
-                <div style={{ fontWeight: 500, color: "#0f766e" }}>{h.session_title}</div>
-                <div style={{ color: "#9ca3af", fontVariantNumeric: "tabular-nums" }}>[{fmtMs(h.start_ms)}]</div>
-                <div>
-                  {h.snippet.split(searchKw).map((part, j, arr) => (
-                    <span key={j}>
-                      {part}
-                      {j < arr.length - 1 && <mark style={{ background: "#fef08a", padding: "0 1px", borderRadius: 2 }}>{searchKw}</mark>}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : ocrHits ? (
-          /* TD-2026-08-19-E 清偿：图内文字检索命中（命中图 → 跳详情看屏卡/图集） */
-          <div style={{ padding: 8 }}>
-            <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>
-              「{searchKw}」画面命中 {ocrHits.length} 条（点击跳详情）
-            </div>
-            {ocrHits.map((h) => (
-              <div
-                key={`${h.sessionId}-${h.ocrBlockId}`}
-                onClick={() => onOpenDetail(h.sessionId)}
-                style={{ fontSize: 12, color: "#374151", padding: "6px 8px", cursor: "pointer", borderBottom: "1px solid #f3f4f6" }}
-              >
-                <div style={{ fontWeight: 500, color: "#0f766e" }}>
-                  {h.sessionTitle}
-                  {h.imagePath && <span style={{ marginLeft: 6 }} title="此命中有关联图">📷</span>}
-                </div>
-                <div style={{ color: "#9ca3af", fontVariantNumeric: "tabular-nums" }}>
-                  [{fmtMs(h.timestampMs)}]
-                  {h.screenFirstMs != null && ` · 屏 ${h.screenId ?? "?"} ${fmtMs(h.screenFirstMs)}–${fmtMs(h.screenLastMs ?? 0)}`}
-                </div>
-                <div>{h.text}</div>
-              </div>
-            ))}
-          </div>
+        {hits || ocrHits ? (
+          <SessionSearchHits hits={hits} ocrHits={ocrHits} searchKw={searchKw} onOpenDetail={onOpenDetail} />
         ) : grouped && groupedView ? (
           /* 课程分组（折叠 + 组内筛选排序） */
           groupedView.map((g) => (
