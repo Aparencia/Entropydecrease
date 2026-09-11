@@ -29,6 +29,17 @@
  * ③ **退出路径永不产生确认**：ESC / 点遮罩一律走 `onCancel`（`Modal` 的关闭意图）——「破坏性动作
  *    不得因误点遮罩而被确认」；本原语不区分退出路径，也不因 `busy` 改变退出语义（确定行为）。
  * ④ 不迁移任何现有 `confirm` 调用点（那 23 处是批 4 的迁移面；本批只交付被迁移的靶子）。
+ * ⑤ **退场相位（`open=false` 而面板仍在淡出的 160ms）内整个对话框失活**（评审 I-1 的修复）：
+ *    点击是**即时**的，而退场是**异步**的 —— 那 160ms 里面板还挂在屏上，用户「手一抖」的第二次点击
+ *    会真的落到按钮上（批 4 迁移后正是删除 / 级联删除的**误触面**）。两条落点：
+ *    ① 两颗按钮 `busy={busy || !open}`（`Button` 的 `busy` 已实测拦下 click，且不设原生 `disabled`
+ *       ⇒ 焦点与 Tab 序在退场期保持稳定，不会因卸载前的属性抖动打断读屏）；
+ *    ② `Modal` 的关闭意图（遮罩 / 头部「关闭」钮）经 `handleCloseIntent` **按 `open` 门控** ——
+ *       这条 `busy` 到不了（那是 `Modal` 自己的处理器），故在本文件补一道守卫；ESC 无需处理
+ *       （`Modal` 的 ESC 监听本就以 `open` 为门控，实测退场期不响应）。
+ *    ⚠️ **系统级修法建议（登记给 T7 的 `Modal`，本任务不改它的文件）**：在
+ *    `Modal.css` 给 `[data-phase="exit"]` 的面板与遮罩加 `pointer-events: none` —— 那能一次性
+ *    覆盖**所有** Modal 消费者（含批 4 迁移的 28 个手写弹层），而本原语这两行只是**文件内缓解**。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
@@ -105,6 +116,19 @@ export function ConfirmDialog({
     setCancelSlot(node);
   }, []);
 
+  /**
+   * 退场相位内按钮**必须失活**（见 @ai-context 边界⑤）：复用 `Button` 的 `busy`（它拦 click、不设原生
+   * `disabled`）而不是 `disabled` —— 退场只有 160ms，`disabled` 会把焦点踢出 Tab 序再被卸载，读屏会读成
+   * 「按钮被禁用」这种无意义的状态抖动。
+   */
+  const buttonsInert = busy || !open;
+
+  /** `Modal` 的关闭意图守卫（遮罩 / 头部「关闭」钮）：`open=false` 的那一瞬起就不再接受退出意图 */
+  const handleCloseIntent = useCallback((): void => {
+    if (!open) return;
+    onCancel();
+  }, [open, onCancel]);
+
   useEffect(() => {
     if (!open) {
       redirectedRef.current = false; // 关闭即复位：下一次打开重新定向
@@ -123,18 +147,25 @@ export function ConfirmDialog({
   const footer = (
     <>
       <span ref={attachCancelSlot}>
-        <Button variant="secondary" onClick={onCancel} busy={busy} testId={testId ? `${testId}-cancel` : undefined}>
+        <Button variant="secondary" onClick={onCancel} busy={buttonsInert} testId={testId ? `${testId}-cancel` : undefined}>
           {cancelLabel}
         </Button>
       </span>
-      <Button variant="secondary" onClick={onConfirm} busy={busy} testId={testId ? `${testId}-confirm` : undefined}>
+      <Button variant="secondary" onClick={onConfirm} busy={buttonsInert} testId={testId ? `${testId}-confirm` : undefined}>
         {confirmLabel}
       </Button>
     </>
   );
 
   return (
-    <Modal open={open} onClose={onCancel} title={title} size={CONFIRM_SIZE} testId={testId} footer={footer}>
+    <Modal
+      open={open}
+      onClose={handleCloseIntent}
+      title={title}
+      size={CONFIRM_SIZE}
+      testId={testId}
+      footer={footer}
+    >
       <div className="ed-confirm">
         <span className="ed-confirm-seal" aria-hidden="true">
           {SEAL_TEXT}

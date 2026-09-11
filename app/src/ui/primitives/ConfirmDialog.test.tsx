@@ -2,14 +2,14 @@
 /**
  * @ai-context ConfirmDialog.test.tsx —— 危险确认的**语义契约**测试（批 0-D Task 8；规格 §5.3）。
  *
- * Why jsdom：弹层经 `Modal` 走 portal 且带焦点陷阱 ⇒ 要真容器与 `document.activeElement`。
- * 本文件钉住四件事：① §5.3 的硬要求「框内必须列明级联影响与保留项」；② **危险语义用色**
- * （控制方 2026-09-11 裁决③ · §4.1「绝不用于按钮」）—— 确认按钮保持中性，`--ed-stamp` 绝不出现在
- * 任何 `background*` 声明里（与 Task 14 Step 1 第 4 条的批次守卫**同向**）；③ **复用 Modal 内核**：
- * 直接扫 `ConfirmDialog.tsx` 的源码作机器证据（含 `from "./Modal"`、不含 Portal 与层级标尺的符号），
- * 并断言本原语 CSS 无层级、无定位；④ 「可中断 / 可反向 / 重复触发」的确定行为（§8.6.1 第 3 条）。
+ * Why jsdom：弹层经 `Modal` 走 portal 且带焦点陷阱 ⇒ 要真容器与 `document.activeElement`（同理，
+ * 样式判据只能读文本：`vitest.config.ts` 的 `css` 为 false ⇒ 测试环境不加载样式表，范式 C）。
+ * 本文件钉住五件事：① §5.3「框内必须列明级联影响与保留项」；② **危险语义用色**：确认按钮保持中性、
+ * `--ed-stamp` 绝不出现在任何 `background*` 声明里（裁决③ · 与 Task 14 第 4 条守卫**同向**）；③ **复用
+ * Modal 内核**（扫源码作证据：含 `from "./Modal"`、不含 Portal 与层级标尺符号，且本原语 CSS 无层级无定位）；
+ * ④ 可中断 / 可反向 / 重复触发」的确定行为（§8.6.1 第 3 条）；⑤ 退场相位（`open=false` 仍在淡出的 160ms）
+ * 内整个对话框失活 —— 点击即时、退场异步 ⇒ 第二次点击会落到按钮上（评审 I-1，见该 describe 的用例）。
  *
- * 样式判据读文本：`vitest.config.ts` 的 `css` 为 false（测试环境不加载样式表）⇒ 范式 C（同 Modal.test.tsx）。
  * 副作用：无（只挂 React 树 + 读三个文本文件）；假计时器只用在推进 presence 计时的那个 describe。
  * 边界：不用 jest-dom（本仓未装）—— 一律 `getAttribute` / `textContent` / `document.activeElement`。
  */
@@ -36,10 +36,9 @@ const IMPACTS: readonly ConfirmImpact[] = [
   { text: "笔记 7 篇保留", keep: true },
 ];
 
-/** 宿主 props：派生自原语契约（每个用例只关心其中几项 ⇒ `Partial` + 必需的 `open`） */
+/** 宿主 props：派生自原语契约（`Partial` + 必需的 `open`）；受控形态，`open` 由测试 rerender 驱动 */
 type HostProps = Partial<ConfirmDialogProps> & { open: boolean };
 
-/** 宿主：受控形态（与真实调用点一致，`open` 由测试 rerender 驱动） */
 function Host({ open, title = "删除「高数」？", onConfirm = noop, onCancel = noop, ...rest }: HostProps) {
   return <ConfirmDialog open={open} title={title} onConfirm={onConfirm} onCancel={onCancel} testId="cd" {...rest} />;
 }
@@ -270,5 +269,29 @@ describe("⑦ 进出场时机（presence 由 Modal 承载）", () => {
     expect(panelOrNull(), "退场兜底计时器必须已被接管（不排队）").not.toBeNull();
     expect(onCancel).not.toHaveBeenCalled();
     expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("反例守门：退场相位（open=false 且仍挂载）内点确认 / 取消 / 遮罩 **一个回调都不产生**", () => {
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    const { rerender } = render(<Host open onConfirm={onConfirm} onCancel={onCancel} />);
+    tick(0);
+    rerender(<Host open={false} onConfirm={onConfirm} onCancel={onCancel} />);
+    expect(panel().getAttribute("data-phase")).toBe("exit");
+    fireEvent.click(confirmBtn()); // 批 4 的误触面：点了删除、弹层在淡出、手一抖又点到确认
+    fireEvent.click(cancelBtn());
+    fireEvent.mouseDown(screen.getByTestId("cd-overlay"));
+    expect([onConfirm.mock.calls.length, onCancel.mock.calls.length], "退场期不得再接受任何交互").toEqual([0, 0]);
+  });
+
+  it("对照组：**打开态**下三条路径各仍触发一次（防「把功能一起关掉」）", () => {
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    render(<Host open onConfirm={onConfirm} onCancel={onCancel} />);
+    fireEvent.click(confirmBtn());
+    fireEvent.click(cancelBtn());
+    fireEvent.mouseDown(screen.getByTestId("cd-overlay"));
+    // confirm 1 次；cancel 2 次 = 取消钮 1 + 遮罩 1
+    expect([onConfirm.mock.calls.length, onCancel.mock.calls.length], "confirm/cancel 次数").toEqual([1, 2]);
   });
 });
