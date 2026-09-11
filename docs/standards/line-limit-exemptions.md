@@ -34,11 +34,11 @@
 |---|---|---|---|
 | app/src-tauri/src/commands.rs | 597 | 命令装配域（AppState + 通用命令 + 导入管线编排）；登记值 466 过期快照——2026-09-09 实测纠偏（含批 7 delete_note 结果契约 +12；600 硬限内压线） | 若再增长：导入管线命令拆至 commands_import.rs（既有登记计划） |
 | app/src/pages/ChatPage.tsx | 593 | AI 对话页编排；批 1（REQ-306/307）active 门控/终态订阅接线净增——2026-09-09 实测纠偏（登记值 529 过期） | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
-| app/src/pages/NotesPage.tsx | 588 | 超硬限（>600 行），不允许豁免 —— 审查修复轮 3/4（refreshToken 透传/选区动作编排承接）净增越 600 硬限（599→602）——随 TD-2026-09-09-D 登记 | **超硬限必须拆**：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts（既有登记计划兑现） |
 | app/src-tauri/src/lib.rs | 577 | crate 根 321 `mod` + 16 `#[cfg]` = **337 行地板**；注册清单已移至 `app_commands.rs`（**数据文件**，同属 300–600 豁免带）—— 结构性下界，非欠账 | 已完成（批 0-C3 Task 1，2026-09-11）；余下 161 行模块理由注释 + 装配逻辑，无进一步拆分标的 |
 | app/src-tauri/src/db_migrations.rs | 573 | v0.20.11 批 6（REQ-315）再增：note_groups.pin ensure_column + note_group_orders 建表（+21，实测 573——登记值 492 过期；schema 单点收敛理由同左） | 若再增长：kb_* 与 chat_* 表 DDL 拆至 db_migrations_kb.rs |
 | app/src/types/knowledge.ts | 559 | 知识体系类型域（体系/节点/概念/模型/引用/审计/决策 + v0.13.8 画布契约 + v0.14.1 画布偏好枚举与下拉文案常量）——类型与文案常量同域防漂移（前端类型域拆分任务待执行） | 若再增长：画布偏好类型与文案拆至 types/canvas.ts |
 | app/src-tauri/src/capture/audio_loopback.rs | 558 | ADR-007 重连机制（重试循环/退避/恢复回调）内聚于捕获线程实现，拆出需跨函数传递 COM 生命周期参数，内聚性优先；2026-08 A1 硬暂停（端点 Stop/Start + 暂停时长补偿 + 残留缓冲清空）再增 | 若再增长：将 run_capture_inner 拆至 audio_loopback_session.rs |
+| app/src/pages/NotesPage.tsx | 556 | 超硬限（>600 行），不允许豁免 —— 审查修复轮 3/4（refreshToken 透传/选区动作编排承接）净增越 600 硬限（599→602）——随 TD-2026-09-09-D 登记 | **超硬限必须拆**：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts（既有登记计划兑现） |
 | app/src-tauri/src/screen_merge.rs | 548 | v0.7.3（REQ-155/158）：屏级聚合纯函数域（聚类/行合并/角色分类/块去重）+ v0.7.5 净化纯函数（单字符/边缘条带/零跨度合并/图去重/包含率）——纯逻辑内聚便于单测 | 若再增长：零跨度合并与图去重拆至 screen_fix.rs |
 | app/src/components/action-center/ActionCenterPanel.tsx | 537 | v0.20.5 行动中心独立页化：原 ActionCenterOverlay.tsx（509 行登记）更名迁移至 action-center/ 并去遮罩/关闭形态（refreshToken 切回重载）——编排内聚（TD-2026-09-06-G 预留目录兑现）；2026-09-06 实测登记 | 若再增长：队列/历史/SOP 三区拆至 action-center/ 子组件 |
 | app/src-tauri/src/commands_knowledge_core.rs | 529 | v0.13.1（REQ-202~205）：知识体系命令域（概念/模型/引用/审计——commands 9-18）内聚；源 commands_knowledge.rs（18 命令 + 校验）超限按规格 §四拆，本文件承接后半；commands 薄壳 + inner 纯函数 + @ai-context 注释内聚于命令域 | 若再增长：引用与审计拆至 commands_knowledge_links.rs |

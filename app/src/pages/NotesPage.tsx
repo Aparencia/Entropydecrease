@@ -23,7 +23,6 @@ import { resolveNoteColor } from "../utils/colorPalette";
 // REQ-316（批 7）：清理留痕统一 toast（文案拼接纯函数 + 自绘 toast hook）
 import { autoCleanNotice } from "../utils/groupClean";
 import { useTransientToast } from "../hooks/useTransientToast";
-import type { NoteEditHandle } from "../components/NoteEditView";
 // v0.14 A：编辑器容器切换为 RichEditorView（CM 富编辑：图片内联/撤销/草稿恢复）；
 // NoteEditView 保留为 CM 初始化失败的降级路径（RichEditorView 内部回退）
 import RichEditorView from "../components/RichEditorView";
@@ -46,6 +45,7 @@ import { useColumnLayout } from "../hooks/useColumnLayout";
 import { useNoteAttention } from "../components/useNoteAttention";
 import { useDbRefresh } from "../hooks/useDbRefresh";
 import { useNotesSealedFilter } from "../hooks/useNotesSealedFilter";
+import { useNotesPageEditing } from "../hooks/useNotesPageEditing";
 
 interface Props {
   focusNoteId?: number | null;
@@ -83,8 +83,15 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
   const { toast, showToast } = useTransientToast();
   // v0.19.1：阅读态命中词搜索请求（来自引用跳转；key 递增可重触发）
   const [readerSearch, setReaderSearch] = useState<{ noteId: number; search: string; key: number } | null>(null);
-  // M3：编辑态
-  const [editing, setEditing] = useState(false);
+  // M3：编辑态（Ctrl+E / ESC / 编辑器命令式出口）——见 useNotesPageEditing；
+  // selectedRef 由页面持有并注入（handleTaskToggle/handleNoteChanged/ESC 三处共享一份）
+  const selectedRef = useRef(selected);
+  useEffect(() => { selectedRef.current = selected; }, [selected]);
+  const { editing, setEditing, editorRef } = useNotesPageEditing({
+    selectedRef,
+    // 退出刷新经 hook 内 ref 镜像取最新闭包（防 []-deps 监听持有旧 keyword/tagFilter）
+    onExited: () => void handleNoteChanged(),
+  });
   // v0.17.0：编辑态 AI 能力对话框（精修/知识补充统一入口——REQ-246）
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [aiContent, setAiContent] = useState("");
@@ -202,36 +209,6 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
     setTagFilter(null);
   }, [focusGroupId]);
 
-  // v0.10.1 F5：Ctrl+E 进入 / ESC 退出编辑——单一 window 监听 + ref 持有
-  const editingRef = useRef(editing);
-  const selectedRef = useRef(selected);
-  useEffect(() => { editingRef.current = editing; }, [editing]);
-  useEffect(() => { selectedRef.current = selected; }, [selected]);
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === "e" && selectedRef.current && !editingRef.current) {
-        e.preventDefault();
-        setEditing(true);
-      } else if (e.key === "Escape" && editingRef.current) {
-        e.preventDefault();
-        // v0.13.6（审查 H1）：ESC 先 await 保存再刷新——原实现先 setEditing(false)
-        // 直出，卸载保存与 get_note/list load 竞态（UI 停留旧值）；保存失败也退出
-        // （编辑器 status 已展示错误），刷新照常执行
-        void (async () => {
-          try {
-            await editorRef.current?.flushSave?.();
-          } catch {
-            /* 保存失败不阻断退出——编辑器内已展示 */
-          }
-          setEditing(false);
-          void handleNoteChangedRef.current();
-        })();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
-
   // ── 操作 ──
   const refreshAll = useCallback(() => {
     setRefreshToken((t) => t + 1);
@@ -324,11 +301,6 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
     }
   }, [keyword, tagFilter, sortMode, load]);
 
-  // v0.13.6：编辑退出三出口（完成/Ctrl+E/ESC）统一刷新——ESC 是 []-deps 窗口监听，
-  // 经 ref 取最新 handleNoteChanged（防闭包持有旧 keyword/tagFilter 快照）
-  const handleNoteChangedRef = useRef(handleNoteChanged);
-  useEffect(() => { handleNoteChangedRef.current = handleNoteChanged; }, [handleNoteChanged]);
-
   // 批 8（REQ-317）：选区行动类编排 hook 收敛（转问题/模型卡预填态）
   const { modelDialog, openModelCard, closeModelCard, handleSelectionAction, onModelCardCreated } = useNoteSelectionActions({
     noteId: selected?.id ?? null, onChanged: handleNoteChanged, notify: showToast,
@@ -346,10 +318,6 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
   }, [handleNoteChanged]);
 
   useDbRefresh(["notes", "note-groups"], handleExternalDbChange);
-
-  // v0.13.6（审查 H1 修复）：编辑器命令式出口——ESC 先 await 保存再刷新（防卸载
-  // 保存与 get_note 竞态在 ESC 出口重演"编辑后右栏旧值"）
-  const editorRef = useRef<NoteEditHandle | null>(null);
 
   // v0.17.0：AI 能力入口——阅读态使用直接进入编辑态（用户裁决）+ 内容快照
   // （编辑态取编辑器当前内容=未保存所见即所修；阅读态用已存笔记内容——快照
