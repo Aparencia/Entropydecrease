@@ -36,6 +36,13 @@ export type PresencePhase = "enter" | "entered" | "exit";
  * `transitionend` 事件的**最小结构契约**。React 的 `TransitionEvent<T>` 结构上满足它
  * （`target` / `currentTarget` 都赋给 `unknown`），故消费方可直接 `onTransitionEnd={onTransitionEnd}`；
  * 测试也用普通对象构造事件 —— 不需要真元素、不需要真过渡（类型层断言见 `usePresence.test.tsx`）。
+ *
+ * **为什么不需要 `propertyName`**：本 hook 只判两件事 ——「是不是本节点自己的过渡」（`target ===
+ * currentTarget`）与「当前相位是不是 `exit`」，而"哪个属性结束了"由**同元素等时长**对冲：Modal /
+ * ConfirmDialog / Toast 的进出场属性都写在**同一个元素**上、时长同取 `--ed-dur-overlay-*` /
+ * `--ed-dur-toast-*`，故任一属性的 `transitionend` 都等价于「本节点退场结束」，多接一个字段只会让
+ * 消费方的类型面更脏。⚠️ 若将来出现「同元素多属性、时长不等」的场景（例如遮罩与面板分开计时），
+ * 才需要把 `propertyName` 纳入契约 —— 那时须连 T7/T9 的挂载点一起改（本注释就是那条触发条件）。
  */
 export interface TransitionEndLike {
   readonly target: unknown;

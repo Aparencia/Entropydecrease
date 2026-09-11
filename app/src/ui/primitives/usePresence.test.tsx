@@ -12,6 +12,7 @@
  *   ② open 假→真 enter→entered   → "open 假→真：…"
  *   ③ 已 entered 后真→假         → "已 entered 后 open 真→假：…"
  *   ④ 本节点 transitionend 卸载  → "出场期间收到本节点 transitionend：…"
+ *   ④' 未进场就关闭（表外边界④） → "进场未完成（下一 tick 未到）就关闭：…"
  *   ⑤ 出场期间反向（可中断可反向）→ "出场期间 open 又回 true：…"
  *   ⑥ 兜底计时器到点卸载         → "没有 transitionend 时兜底到点卸载：…" + "默认兜底窗口…"
  *   ⑦ reducedMotion=true 直跳终态 → "reducedMotion 命中：…"
@@ -135,6 +136,17 @@ describe("状态机（计划 Task 6 表 9 行逐行）", () => {
     act(() => result.current.onTransitionEnd(OWN_EVENT));
     expect(result.current.mounted).toBe(false);
     expect(vi.getTimerCount(), "transitionend 到达后兜底计时器应被清掉").toBe(0);
+  });
+
+  it("④' 进场未完成（下一 tick 未到）就关闭：不排退场窗口、清掉进场计时器、立即卸载", () => {
+    const { result, rerender } = setup(false);
+    rerender({ open: true });
+    expect(result.current.phase).toBe("enter");
+    expect(vi.getTimerCount(), "此时只有「下一 tick 进球」计时器在跑").toBe(1);
+    rerender({ open: false });
+    expect(result.current.mounted, "一次绘制都没发生过 ⇒ 没有可退的场，直接卸载").toBe(false);
+    expect(result.current.phase).toBe("exit");
+    expect(vi.getTimerCount(), "既不排退场窗口，也必须清掉进场计时器").toBe(0);
   });
 
   it("⑥ 没有 transitionend 时兜底到点卸载（reduced-motion 下永不触发 transitionend 的防线）", () => {
