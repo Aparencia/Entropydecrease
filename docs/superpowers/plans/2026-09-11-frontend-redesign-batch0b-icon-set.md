@@ -92,7 +92,7 @@ describe("图标几何契约", () => {
     }
   });
 
-  it("元素只用白名单内的四种标签", () => {
+  it("元素只用白名单内的三种标签", () => {
     for (const name of ICON_NAMES) {
       for (const el of ICON_PATHS[name].elements) {
         expect(ICON_ELEMENT_TAGS, `${name} 含越界标签 ${el.tag}`).toContain(el.tag);
@@ -165,7 +165,7 @@ Expected: FAIL —— `Failed to resolve import "./paths"`（或 `Cannot find mo
  * 颜色一律由 `currentColor` 决定。新增元素类型必须先在此登记并同步契约测试。
  */
 
-/** 几何白名单：只用这四种，足够表达全部图标且便于穷举校验 */
+/** 几何白名单：只用这三种，足够表达全部图标且便于穷举校验 */
 export const ICON_ELEMENT_TAGS = ["path", "circle", "rect"] as const;
 
 export type IconElementTag = (typeof ICON_ELEMENT_TAGS)[number];
@@ -335,13 +335,16 @@ export function Icon({ name, size = 20, label, className }: IconProps) {
 export { Icon } from "./Icon";
 export { ICON_PATHS, ICON_NAMES } from "./paths";
 export { ICON_ELEMENT_TAGS } from "./types";
-export type { IconElement, IconElementTag, IconGeometry, IconName, IconProps, IconSize } from "./types";
+export type { IconElement, IconElementTag, IconGeometry, IconProps, IconSize } from "./types";
+// `IconName` 由 `paths.ts` 派生（`types.ts` 只是 `import type` 它、并未导出），
+// 故必须从 `./paths` 再导出 —— 从 `./types` 再导出会报 TS2459（实测）。
+export type { IconName } from "./paths";
 ```
 
 - [ ] **Step 4: 运行几何契约测试确认通过**
 
 Run：`npx vitest run src/ui/icons/paths.test.ts`
-Expected: PASS（9 个 `it`）
+Expected: PASS（8 个 `it`）
 
 - [ ] **Step 5: 写渲染契约测试**
 
