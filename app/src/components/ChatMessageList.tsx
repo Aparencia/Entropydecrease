@@ -144,7 +144,7 @@ export default function ChatMessageList({ messages, streaming, onRegenerate, onE
           <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", maxWidth: "86%" }}>
             <ChatMessageMarkdown content={streaming.text} />
             {(streaming.hits?.length ?? 0) > 0 && <CitationChips hits={streaming.hits ?? []} onOpenNote={onOpenCitedNote} />}
-            <span style={{ display: "inline-block", width: 6, height: 14, background: "#0d9488", animation: "chatBlink 1s infinite", verticalAlign: "text-bottom", marginLeft: 2 }} />
+            <span style={{ display: "inline-block", width: 6, height: 14, background: "#0d9488", verticalAlign: "text-bottom", marginLeft: 2 }} />
           </div>
         </div>
       )}

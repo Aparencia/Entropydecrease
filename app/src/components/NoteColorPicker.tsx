@@ -4,7 +4,7 @@
  * @ai-context: spec §4.1/§4.2——固定 12 色语义色板（不开放自定义），null=未设置
  *              （渲染层回退默认灰）。色点内文字取 onColorText（黑/白高对比，
  *              WCAG AA ≥4.5:1 由 isThemeSafe 定义期保证）；主题经 matchMedia
- *              跟随 App.css 的 prefers-color-scheme。受控组件——选中态/清除
+ *              跟随 [data-theme="dark"] 的 --ed-* token。受控组件——选中态/清除
  *              完全由 value/onChange 驱动。
  */
 import { useMemo, useState } from "react";

@@ -13,7 +13,7 @@ export type ColorId =
   | "red" | "orange" | "yellow" | "green" | "teal" | "blue"
   | "purple" | "pink" | "brown" | "gray" | "black" | "white";
 
-/** 主题模式（与 App.css prefers-color-scheme 对齐） */
+/** 主题模式（暗档由 [data-theme="dark"] 与 ui/tokens.css 的 --ed-* 变量承载） */
 export type ThemeMode = "light" | "dark";
 
 /** 色板定义：双主题变体 + 中文语义（spec §4.1 表） */
