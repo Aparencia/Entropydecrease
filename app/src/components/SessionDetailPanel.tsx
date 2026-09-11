@@ -15,6 +15,7 @@
 import { useEffect, useState } from "react";
 import { useSessionDetailData } from "../hooks/useSessionDetailData";
 import SessionDetailHeader from "./session-detail/SessionDetailHeader";
+import SessionRefineSection from "./session-detail/SessionRefineSection";
 import SessionScreenCards from "./session-detail/SessionScreenCards";
 import ImageGallery from "../components/ImageGallery";
 import NotePreviewView from "../components/NotePreviewView";
@@ -175,34 +176,16 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
             {label}
           </button>
         ))}
-        {/* v0.11.5（spec 5️⃣）：课后精修入口迁移到面板层（与懒触发同命令，幂等防重） */}
-        <button
-          style={{ ...btn, borderRadius: 6, border: "1px solid #0d9488", background: "#f0fdfa", color: "#0f766e", marginLeft: "auto" }}
-          onClick={() => startRefine()}
-          disabled={refining}
-        >
-          {refining ? "精修中…" : "🔬 课后精修"}
-        </button>
-        {/* v0.20.2（REQ-268）：全量离线精修（第二遍）——仅已结束非图文会话
-            （需要 S4 落盘音频）；面板内预览/采纳/回退，原料视图恒原文 */}
-        {detail.session.status === "finished" && detail.session.kind !== "photo" && (
-          <button
-            style={{ ...btn, borderRadius: 6, border: "1px solid #7c3aed", background: "#f5f3ff", color: "#6d28d9" }}
-            onClick={() => setShowPass2(true)}
-          >
-            ⚡ 离线精修
-          </button>
-        )}
-        {/* v0.20.2（REQ-270）：可选 LLM 文本校对（建议制·默认关双闸门——
-            未开启时面板给引导文案；仅文本上云） */}
-        {detail.session.status === "finished" && detail.session.kind !== "photo" && (
-          <button
-            style={{ ...btn, borderRadius: 6, border: "1px solid #2563eb", background: "#eff6ff", color: "#1d4ed8" }}
-            onClick={() => setShowProofread(true)}
-          >
-            🔤 文本校对
-          </button>
-        )}
+        {/* v0.11.5（spec 5️⃣）+ v0.20.2（REQ-268/270）：精修工具条三按钮
+            —— 拆至 session-detail/SessionRefineSection.tsx（refineMsg 提示行与两裁决面板
+            挂载保留原位，DOM 顺序逐字不变） */}
+        <SessionRefineSection
+          refining={refining}
+          onStartRefine={startRefine}
+          canSecondPass={detail.session.status === "finished" && detail.session.kind !== "photo"}
+          onOpenPass2={() => setShowPass2(true)}
+          onOpenProofread={() => setShowProofread(true)}
+        />
       </div>
       {refineMsg && (
         <div style={{ fontSize: 11, color: refining ? "#b45309" : "#0d9488", marginBottom: 6 }}>
