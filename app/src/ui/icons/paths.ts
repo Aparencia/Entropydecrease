@@ -11,10 +11,12 @@
 
 import type { IconGeometry } from "./types";
 import { DOMAIN_ICON_PATHS } from "./paths.domain";
+import { ACTION_ICON_PATHS } from "./paths.action";
 
 // `as const` 保留各分组的**字面量键** —— 这正是 `IconName` 联合的来源，零列名即可派生。
 const GROUPS = {
   domain: DOMAIN_ICON_PATHS,
+  action: ACTION_ICON_PATHS,
 } as const;
 
 // 供 mergeGroups 的 Object.entries 使用：`as const` 的只读键会让 Object.entries 重载失配，
