@@ -86,22 +86,28 @@
 - 再加 161 行模块理由注释 + 16 行 `use`/`punctuation_model` + 59 行装配逻辑 ⇒ **≈575 就是本文件的结构性下界**（估算，以实测为准）。
 - **已评估并否决的两条「硬压到 300」的路**：① `include!("app_modules.rs")` ⇒ lib.rs ≈78，但把 337 行声明块藏进外部文件（crate 根的模块树不再可见），而那个文件自己仍 337 行 —— 只是把行数挪个地方，可读性净损失；② 把 161 行理由注释分发进 161 个模块文件头 —— 爆炸半径远超收益。⇒ **接受 300–600 并如实登记**（AGENTS.md §3 明文允许），把"337 行地板"写进豁免理由与「拆分计划」列。
 
-**本任务只做一步（单提交）**
+**本任务只做一步（单提交）—— ★ 下面是「实测已编译通过」的形态（`c409a956` 落地版，实施者修正了我计划里的两处想当然）**
 ```rust
 // app/src-tauri/src/app_commands.rs（新文件）
 //! @ai-context …（为什么是单文件清单：见上面"硬事实 2"）
-pub fn handle<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
+/// 类型锚点：让裸 `let handler = generate_handler![…]` 的闭包签名能被反推
+/// （直接在裸 let 处推断会报 E0282）
+fn anchored<F: Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool>(f: F) -> F { f }
+
+pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     // 334 条逐字搬来，只加 crate:: 前缀；注释与 #[cfg] 原样跟随
-    let handler = tauri::generate_handler![ /* … */ ];
-    move |invoke: tauri::ipc::Invoke<R>| handler(invoke)
+    anchored(tauri::generate_handler![ /* … */ ])
 }
 ```
+⚠️ **实测更正（两条，实施者已实测，勿再照抄旧稿）**
+1. **`handle` 不能是泛型 `R`**：334 条里有 **13 条按值收 `AppHandle`**（`commands_knowledge_core` 2 / `commands_window` 6 / `commands_overlay` 3 / `commands_asr_pass2` 2）——泛型 `R` 下 `AppHandle<R>: CommandArg<'_, R>` 会退到 `Deserialize` 兜底 impl ⇒ **13 × E0277**；计划里给的 `Box<dyn Fn(Invoke<R>) -> bool + Send + Sync>` 退路**同样是泛型、同样失败**（已实测）。⇒ 签名固定为具体 `tauri::Wry`；`run()` 里 `Builder::default()` 本就是 `Builder<Wry>`（`tauri-2.11.5/src/app.rs:1571-1578`），行为等价。
+2. **`let handler = generate_handler![…]; move |invoke: Invoke<R>| handler(invoke)` 编译不过**（E0282：闭包签名无法在裸 `let` 处反推）⇒ 用上面的 `fn anchored<F: …>(f: F) -> F` 类型锚点解决。
 ```rust
 // lib.rs
 mod app_commands;                                   // 声明块里按现有分组插入
         .invoke_handler(app_commands::handle())     // 原来那 452 行 generate_handler![…] 整体移除
 ```
-- 预计：`lib.rs` 1025 → **≈575**（−452 +1 `mod` +1 `--write` 刷新带来的行数变动），`app_commands.rs` ≈465。**两步都以实测为准**；若 `app_commands.rs` 落到 301–600，**它也要登记豁免行**（`--write` 会自动加，理由人工回写：宏约束下的唯一注册点，条目是数据不是逻辑）。
+- 实测（`c409a956`）：`lib.rs` 1025 → **577**，`app_commands.rs` **503**（两者都落在 301–600 豁免带，`--write` 已自动补登；理由已回写：宏约束下的唯一注册点，条目是数据不是逻辑）。`FROZEN_OVER_LIMIT` 已删 lib.rs 行 ⇒ `--full` exit 0，`>600` **14 → 12**（另一个 −1 来自并行的 0-C2 NotesPage）。门禁：`cargo build` 0 · `cargo build --bin cer_bench --bin asr_eval` 0 · `cargo test --test app_lib_tests` **2357 passed / 0 failed / 6 ignored**（与基线一致）· `cargo clippy -- -D warnings` **15 error（与基线相同，未增）** · 探针 `334 条逐条相同`。
 - **`run()` 的装配链一律不动**：`.plugin`(dialog / global_shortcut) · `.setup` · `.on_window_event` · `.run(generate_context!())` 全部留在 `run()`；`app_commands.rs` 里**禁止**出现 `tauri::Builder` 片段（插件重复 init 是运行期故障）。
 
 **★ `scripts/check-command-registry.mjs`（必须做，且必须自证有效）**
