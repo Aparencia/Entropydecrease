@@ -400,7 +400,7 @@ pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync
         crate::commands_ai_refine::ai_refine_prompt_preview,
         crate::commands_ai_refine::ai_refine_result,
         crate::commands_ai_refine::ai_refine_apply,
-        crate::commands_ai_refine::refine_workbench,
+        crate::commands_ai_refine::workbench::refine_workbench,
         // v0.17.0（REQ-246）：笔记级 AI 精修——估计/启动/采纳（手写笔记）
         crate::commands_ai_note_refine::ai_note_refine_estimate,
         crate::commands_ai_note_refine::ai_note_refine_start,
