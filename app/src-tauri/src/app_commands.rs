@@ -399,14 +399,14 @@ pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync
         crate::commands_ai_refine::session::ai_refine_strategy_meta,
         crate::commands_ai_refine::session::ai_refine_prompt_preview,
         crate::commands_ai_refine::session::ai_refine_result,
-        crate::commands_ai_refine::ai_refine_apply,
+        crate::commands_ai_refine::apply::ai_refine_apply,
         crate::commands_ai_refine::workbench::refine_workbench,
         // v0.17.0（REQ-246）：笔记级 AI 精修——估计/启动/采纳（手写笔记）
         crate::commands_ai_note_refine::ai_note_refine_estimate,
         crate::commands_ai_note_refine::ai_note_refine_start,
         crate::commands_ai_note_refine::ai_note_refine_apply,
         // v0.8.0 F2（2026-08-21）：任务中心——历史列表（面板数据源）
-        crate::commands_ai_refine::ai_task_history,
+        crate::commands_ai_refine::apply::ai_task_history,
         // v0.16.0（REQ-224/225/226/227/228/230）：内嵌 AI 对话——
         // 纯聊天（会话 CRUD/流式发送/停止/重发）+ 任务对话视图（轨迹详情）
         crate::commands_ai_chat::chat_create_session,
