@@ -1320,6 +1320,7 @@ git commit -m "docs(adr): ADR-033 原语层契约 + 规范回写（批 0-D 收�
 - **三条全仓新契约从 0 变成 1**：`createPortal` · `role="dialog"` + `aria-modal` + `aria-labelledby` · 焦点陷阱与焦点归还（规格 §5.2 的四个必补能力中除 IME 接线外的三条）。
 - **交互态从零基础建立**：`:hover` / `:active` / `:focus-visible` / `:disabled` 在活代码里**首次出现**（今天分别 0 / 0 / 0 / 0）；`aria-disabled` 首次使用；禁用态首次有视觉降级（今天全站 1 处）。
 - **动效接缝就位**：`usePresence`（`transitionend` + 超时兜底 + `matchMedia` 守卫）· `[data-phase]` 三态协议 · **全仓第一批 `@keyframes`**（骨架微光 / 探针）· **全仓第一条 `prefers-reduced-motion`**（今天 0 处）· 时长变量名与 §8.4 数值一致（批 6 换真源时整块删除）。
+  - ⚠️ **口径订正（2026-09-11，本批实测证伪）**：本批**第一个 `@keyframes` 是 `EmptyState` 的 `ed-empty-in`**（`0e5e78ab`，早于 `Loading` 的 `174b1893`）⇒「全仓第一批 `@keyframes`」不成立；这里的 reduced-motion 块只是 **`app/src` 内第一条**（仓库根 `website/components/dive/ChronosDemo.tsx:59` 早有 JS 侧 `matchMedia("(prefers-reduced-motion: reduce)")`）⇒「全仓第一条」也不成立。**权威表述见 `app/src/ui/primitives/motion.css:10-12` 与 ADR-033**；上面那行是计划写作时刻的快照，保留原样、不改写历史。
 - **token 缺口补齐**：`--ed-shadow-1/2`（亮投影 / 暗反相描边）· 18 个字阶 CSS 变量（含 `1.9 → 29.5px` 的换算记录）· **`ui/tokens.css` 已接线到 `app/src/main.tsx`**（原语的 `var(--ed-*)` 从此在运行时有值）· **`--due` 亮档第二次对比度修正**（求解所得新值，三个底都 ≥4.5 且剪报底留 ≥0.05 余量）· **`--ed-ink-4` 禁止用于剪报底纹**（不新增 token，写成规范条款 + 反例守门断言）。
 - **三条棘轮/守卫上线**：裸数字 z-index（58 行冻结，只许减少）· `ui/primitives/**/*.css` 的 300 行 / 零颜色字面量 / reduced-motion 覆盖率三合一守卫 · `--ed-stamp` 不得作底色的反例守卫。
 - **死代码清理**：`app/src/App.css`（123 行、非 UTF-8）删除；`ChatMessageList.tsx:147` 的死 `animation` 声明删除；两处失指注释改指真实来源。

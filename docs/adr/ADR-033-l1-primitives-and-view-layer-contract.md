@@ -38,7 +38,7 @@ ADR-032 交付了 token 层（色阶 / 字阶 / z-index 标尺 / 图标），但
 | 8 | `Loading` / `Skeleton` / `Probe` | `Loading.tsx` 105 · `Loading.css` 79 · `Loading.test.tsx` 238 | 85 处/30 文件的手写灰字，全站 0 骨架屏 |
 | 9 | `StatusLine` | `StatusLine.tsx` 94 · `StatusLine.css` 42 · `StatusLine.test.tsx` 267 | 196 处/76 文件，三种红并存，错误常在列表最底部 |
 | — | 共享内核 | `usePresence.ts` 200 · `usePresence.test.tsx` 282 · `usePresence.node.test.ts` 71 · `useFocusTrap.ts` 122 · `useFocusTrap.test.tsx` 236 · `ime.ts` 18 · `ime.test.ts` 32 | 卸载时机 / 焦点陷阱 / IME 组合态 |
-| — | 接缝与守卫 | `motion.css` 74 · `index.ts` 45 · `style-seams.test.ts` 271 · `style-contract.test.ts` 214 · `motion-coverage.test.ts` 145 | 动效变量与 reduced-motion 块 · 导出面 · 五条机器判据 |
+| — | 接缝与守卫 | `motion.css` 74 · `index.ts` 45 · `style-seams.test.ts` 271 · `style-contract.test.ts` 214 · `motion-coverage.test.ts` 145 | 动效变量与 reduced-motion 块 · 导出面 · 机器判据见 `style-seams` / `style-contract` / `motion-coverage` 三个测试文件 |
 
 > **行数口径（唯一有效）**：`countLines()`，即 `[System.IO.File]::ReadAllLines(path, UTF8).Count` —— **含空行**的全部行数（禁用 `Get-Content` / `Measure-Object -Line` / 数 `0x0A` 字节）。
 > **权威来源**：逐文件数值以机器生成的 [行数豁免登记](../standards/line-limit-exemptions.md) 为准（`node scripts/line-limits.mjs --write` 生成、`--full` 校验，**不要手改其数字**）；本表只是**人读摘要**。
@@ -209,7 +209,9 @@ z-index 的迁移纪律（0-A 交接第 3 条）：**必须按叠放段整段推
 
 - **正面**：批 4 有了迁移靶子，批 6 有了动效接缝（`[data-phase]` 三态 + 一套时长变量 + 一处 reduced-motion 块）；
   三条全仓新契约（`createPortal` / `role="dialog"` + `aria-modal` / 焦点陷阱与归还）从 0 变成 1；
-  交互态从零基础建立；样式首次可被**四处机器判据**守住（见下"合规性验证"）。
+  交互态从零基础建立；样式首次被机器判据守住：`style-seams` / `style-contract` / `motion-coverage`
+  三个测试文件（见下"合规性验证"）。**此处不写判据条数** —— 条数在历次修订中漂移过（同一份 ADR 内曾同时
+  出现三个数字），写死会让后续批次误以为还有判据没落地；**以三个守卫文件的断言为准**。
 - **负面 / 代价**：
   ① 迁移期会出现「内联 `style` + 新原语类」两种写法并存的窗口（与 token 迁移期同性质）；
   ② 原语层是**第三层**，组件树多了一层间接（换来的是"一处改对所有地方"）；

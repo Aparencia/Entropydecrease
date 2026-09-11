@@ -82,7 +82,9 @@ function animationSelectors(): string[] {
   const out: string[] = [];
   for (const file of CSS_FILES) {
     for (const m of stripComments(read(file)).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      if (!/(?:^|[;\s])animation(?:-name)?\s*:/.test(m[2])) continue;
+      // `/i` + 可选厂商前缀：`ANIMATION:`（大写属性名）与 `-webkit-animation:`（前缀）同样让元素在
+      // reduced-motion 下照旧动，必须一并抽出来 —— 否则这两写法下"真洞 + 守卫全绿"可共存（T14 评审 M-2 实测）。
+      if (!/(?:^|[;\s])(?:-(?:webkit|moz|ms|o)-)?animation(?:-name)?\s*:/i.test(m[2])) continue;
       for (const raw of m[1].split(",")) {
         const sel = raw.trim().replace(/\s+/g, " ");
         if (sel !== "" && !sel.startsWith("@")) out.push(sel);
