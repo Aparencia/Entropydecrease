@@ -10,8 +10,10 @@
  *
  * ★ 用色显式契约（控制方 2026-09-11 裁决③ · 规格 §4.1）：
  *   `error → var(--ed-stamp)`（**文字色**）· `warn → var(--ed-due)` · `ok → var(--ed-ok)` ·
- *   `info → var(--ed-ink-3)`。`--ed-stamp` 是**全站唯一非中性色**，规格原文写明「绝不用于按钮」
- *   ⇒ 本原语**不渲染任何按钮**：`action` 是纯 `ReactNode` 槽，由调用方传入 `Button` 原语节点
+ *   `info → var(--ed-ink-3)`。`--ed-stamp` 的真源注释（`app/scripts/gen-tokens.mjs:47` →
+ *   `ui/tokens.css:19`）原文是「状态戳 —— 全站唯一非中性色，绝不用于按钮」（规格 §4.1 那一行只写到
+ *   「唯一非中性色，只用于状态戳」）⇒ 本原语**不渲染任何按钮**：`action` 是纯 `ReactNode` 槽，
+ *   由调用方传入 `Button` 原语节点
  *   （因此本文件**不 import `./Button`** —— 「不能有按钮底色」于是成为**结构保证**而不是纪律：
  *   本原语连一个按钮元素都产不出来）。同向守卫：`StatusLine.css` 里连底色属性名都不出现，
  *   与本原语测试、Task 14 Step 1 第 4 条按**同一判据**扫。

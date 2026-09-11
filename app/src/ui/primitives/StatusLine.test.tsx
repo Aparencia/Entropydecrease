@@ -8,10 +8,12 @@
  *
  * 本文件钉住四件事：
  *   ① 四档 kind 的类映射 + `role` **二值契约**（`error → alert` 立即播报，其余三档 → `status`）；
- *   ② `detail` / `action` 两个槽的渲染与**缺席**行为（缺席时不得凭空出现按钮或空节点）；
- *   ③ **危险语义用色**（控制方 2026-09-11 裁决③ · 规格 §4.1「绝不用于按钮」）：危险色只作文字色
- *      —— 本原语 CSS 里连底色声明都没有，且**结构上不可能渲染按钮**（不 import `Button`）；
- *      与 Task 14 Step 1 第 4 条的批次守卫**同向**（同一判据、同一方向，不另立标准）。
+ *   ② `detail` / `action` 两个槽的渲染与**缺席**行为（缺席时不得凭空出现按钮、空节点或
+ *      `data-testid="undefined"`）；
+ *   ③ **危险语义用色**（控制方 2026-09-11 裁决③）：危险色只作文字色 —— 出处是 **token 真源注释**
+ *      （`app/scripts/gen-tokens.mjs:47` → `ui/tokens.css:19` 的「绝不用于按钮」；规格 §4.1 那一行
+ *      只写到「只用于状态戳」）。本原语 CSS 里连底色声明都没有，且**结构上不可能渲染按钮**
+ *      （不 import `Button`）；与 Task 14 Step 1 第 4 条的批次守卫**同向**（同一判据、同一方向）。
  *   ④ 动效接缝与 reduced-motion：浮现过渡的可动画属性齐备、**无循环动画**（环境层不得抢注意力）、
  *      `.ed-status` 已进 `motion.css` 那条唯一的媒体查询名单。
  *
@@ -100,6 +102,13 @@ describe("① 四档 kind 与 role 二值契约", () => {
       expect(line().getAttribute("aria-live")).toBeNull();
       cleanup();
     }
+  });
+
+  it("testId 缺席 ⇒ 不产生 `data-testid` 属性（不得渲染成字符串 undefined）", () => {
+    render(<StatusLine>已保存</StatusLine>);
+    const root = screen.getByRole("status");
+    expect(root.hasAttribute("data-testid")).toBe(false);
+    expect(root.outerHTML).not.toContain("undefined");
   });
 
   it("语义色只走类、不出内联 style（否则批 6 只能逐处改）", () => {
