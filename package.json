@@ -31,6 +31,7 @@
   },
   "lint-staged": {
     "docs/**/*.md": "node scripts/docs-check.mjs",
-    "app/**/*.{ts,tsx,rs}": "node scripts/line-limits.mjs"
+    "app/**/*.{ts,tsx,rs}": "node scripts/line-limits.mjs",
+    "{package.json,scripts/line-limits.mjs,docs/standards/line-limit-exemptions.md}": "node scripts/line-limits.mjs --full"
   }
 }
