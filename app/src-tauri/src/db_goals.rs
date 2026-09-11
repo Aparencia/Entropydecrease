@@ -24,6 +24,9 @@ mod plan;
 /// 目标域：goals 实体 CRUD（含事务建目标）+ goals 行映射。
 #[path = "db_goals_goal.rs"]
 mod goal;
+/// 回顾域：结算快照 / 复习统计 / 成果物清单聚合取数。
+#[path = "db_goals_retro.rs"]
+mod retro;
 
 /// 三表 DDL + 索引（幂等：CREATE TABLE IF NOT EXISTS；旧库升级自动补表）。
 pub(crate) fn init(conn: &Connection) -> Result<()> {
@@ -165,92 +168,6 @@ impl Db {
             let mut stmt = conn.prepare("SELECT report_json FROM goal_graduation_reports ORDER BY id ASC")?;
             let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
             rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
-        })
-    }
-
-    /// 组结算快照（绑定组维度：名称/历史计数/最近一次——毕业报告与时间线）。
-    /// @ai-context: group_ids 先于 with_conn 取（闭包内严禁再调 self.*——锁不可重入，
-    ///              见 db_goals_progress.rs 同款注释与修复先例）。
-    pub fn goal_settlements_snapshot(
-        &self,
-        goal_id: i64,
-    ) -> Result<Vec<crate::goal_retro::GroupSettlementSnapshot>> {
-        let group_ids = self.list_goal_group_ids(goal_id)?;
-        self.with_conn(|conn| {
-            let mut out = Vec::new();
-            for gid in &group_ids {
-                let name: Option<String> = conn
-                    .query_row("SELECT name FROM note_groups WHERE id = ?1", params![gid], |r| r.get(0))
-                    .ok();
-                let (count, last): (i64, Option<i64>) = conn.query_row(
-                    "SELECT COUNT(*), MAX(created_at) FROM settlements WHERE group_id = ?1",
-                    params![gid],
-                    |r| Ok((r.get(0)?, r.get(1)?)),
-                )?;
-                out.push(crate::goal_retro::GroupSettlementSnapshot {
-                    group_id: *gid,
-                    group_name: name.unwrap_or_else(|| format!("组#{}", gid)),
-                    settlement_count: count as usize,
-                    last_settled_at: last,
-                });
-            }
-            Ok(out)
-        })
-    }
-
-    /// 复习统计（毕业报告口径：卡数/复习次数/90 天活跃日/低稳定性卡数——现算）。
-    pub fn goal_review_stats(&self, goal_id: i64, now_secs: i64) -> Result<crate::goal_retro::ReviewStats> {
-        let window_ms = (now_secs - 90 * 86_400) * 1000;
-        self.with_conn(|conn| {
-            let (cards, logs, days90, weak): (i64, i64, i64, i64) = conn.query_row(
-                "SELECT
-                   (SELECT COUNT(*) FROM flashcards WHERE group_id IN
-                     (SELECT group_id FROM goal_groups WHERE goal_id = ?1)),
-                   (SELECT COUNT(*) FROM review_logs l JOIN flashcards c ON c.id = l.card_id
-                     WHERE c.group_id IN (SELECT group_id FROM goal_groups WHERE goal_id = ?1)),
-                   (SELECT COUNT(DISTINCT l.reviewed_at / 86400000) FROM review_logs l
-                     JOIN flashcards c ON c.id = l.card_id
-                     WHERE c.group_id IN (SELECT group_id FROM goal_groups WHERE goal_id = ?1)
-                       AND l.reviewed_at >= ?2),
-                   (SELECT COUNT(*) FROM flashcards WHERE group_id IN
-                     (SELECT group_id FROM goal_groups WHERE goal_id = ?1)
-                     AND json_valid(state_json) = 1
-                     AND json_extract(state_json, '$.stability') < ?3)",
-                params![goal_id, window_ms, crate::goal_progress::LOW_STABILITY_DAYS],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-            )?;
-            Ok(crate::goal_retro::ReviewStats {
-                card_total: cards as usize,
-                review_logs_total: logs as usize,
-                review_days_90: days90 as usize,
-                weak_cards: weak as usize,
-            })
-        })
-    }
-
-    /// 成果物清单（组/笔记/卡/概念——「我留下了什么」；概念经体系引用跨链）。
-    pub fn goal_artifacts(&self, goal_id: i64) -> Result<crate::goal_retro::ArtifactsInventory> {
-        self.with_conn(|conn| {
-            let (groups, notes, cards, concepts): (i64, i64, i64, i64) = conn.query_row(
-                "SELECT
-                   (SELECT COUNT(*) FROM goal_groups WHERE goal_id = ?1),
-                   (SELECT COUNT(*) FROM notes WHERE group_id IN
-                     (SELECT group_id FROM goal_groups WHERE goal_id = ?1)),
-                   (SELECT COUNT(*) FROM flashcards WHERE group_id IN
-                     (SELECT group_id FROM goal_groups WHERE goal_id = ?1)),
-                   (SELECT COUNT(DISTINCT l.concept_id) FROM knowledge_links l
-                     WHERE l.target_type = 'note_group'
-                       AND l.target_id IN (SELECT group_id FROM goal_groups WHERE goal_id = ?1)
-                       AND l.concept_id IS NOT NULL)",
-                params![goal_id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-            )?;
-            Ok(crate::goal_retro::ArtifactsInventory {
-                groups: groups as usize,
-                notes: notes as usize,
-                cards: cards as usize,
-                concepts: concepts as usize,
-            })
         })
     }
 }
