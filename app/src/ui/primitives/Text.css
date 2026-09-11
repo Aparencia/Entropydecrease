@@ -1,0 +1,46 @@
+/*
+ * Text.css —— 墨度 × 字阶的唯一出口（批 0-D Task 3）。
+ *
+ * Why（为什么存在）：全站排版现状是逐处手写（`fontSize` 1274 行/143 文件，recon §2），
+ * 规格 §4.2 的 6 档字阶与 §4.3 的四档墨度必须能被**一处**驱动。本文件是那一处的落点。
+ *
+ * 边界：① 颜色 / 字号 / 字重 / 行高一律 `var(--ed-*)`，**本文件零颜色字面量**（`var()` 的兜底
+ *       值也不许是色值 —— 色值只在 ui/tokens.css 与生成器里）；② 兜底字面量与真源
+ *       `SCALE_TOKENS.typeScaleVars` 的一致性由 `style-seams.test.ts` 机器复核（防生成器改档后漂移）；
+ *       ③ 不得写 `z-index`（层级走 `ui/zIndex.ts` 标尺）。
+ */
+
+.ed-text {
+  font-family: var(--ed-font-ui, "Inter", "Segoe UI Variable", "Microsoft YaHei UI", system-ui, sans-serif);
+  /* 接缝（规格 §8.6.1 第 3 条）：墨度与字距是批 6「记忆浮现」的可动画属性，先纳入 transition。
+     `letter-spacing` 的初值显式写 `0` 而非 `normal`：`normal` 与长度之间**不可插值**（离散跳变），
+     留 `normal` 会让这条接缝是死的 —— 批 6 改字距时不会有过渡。 */
+  letter-spacing: 0;
+  transition: color var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)),
+              letter-spacing var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));
+}
+
+.ed-text--s1 { font-size: var(--ed-type-1-size, 25px);   line-height: var(--ed-type-1-line, 34px);   font-weight: var(--ed-type-1-weight, 600); }
+.ed-text--s2 { font-size: var(--ed-type-2-size, 17px);   line-height: var(--ed-type-2-line, 24px);   font-weight: var(--ed-type-2-weight, 600); }
+.ed-text--s3 { font-size: var(--ed-type-3-size, 15.5px); line-height: var(--ed-type-3-line, 29.5px); font-weight: var(--ed-type-3-weight, 400); }
+.ed-text--s4 { font-size: var(--ed-type-4-size, 13px);   line-height: var(--ed-type-4-line, 20px);   font-weight: var(--ed-type-4-weight, 400); }
+.ed-text--s5 { font-size: var(--ed-type-5-size, 12px);   line-height: var(--ed-type-5-line, 18px);   font-weight: var(--ed-type-5-weight, 500); }
+.ed-text--s6 { font-size: var(--ed-type-6-size, 11.5px); line-height: var(--ed-type-6-line, 16px);   font-weight: var(--ed-type-6-weight, 500); }
+
+/* 墨度边界（不可省略的契约）：`ink-4` 是**过渡态**（面对 3.22:1，ADR-032 第 4 条）——
+   不得承载唯一关键信息（可用性不能挂在它身上）、任何交互须立即升到 `ink-2`、
+   **剪报底纹（`--ed-mark-clip`）上禁止使用**（亮档实测 2.8489:1，低于它自己的 3:1 例外；
+   该规则已写死在 docs/product/ui-ux-system.md）。 */
+.ed-text--ink-1 { color: var(--ed-ink-1); }  .ed-text--ink-2 { color: var(--ed-ink-2); }
+.ed-text--ink-3 { color: var(--ed-ink-3); }  .ed-text--ink-4 { color: var(--ed-ink-4); }
+.ed-text--stamp { color: var(--ed-stamp); }  .ed-text--ok { color: var(--ed-ok); }
+.ed-text--due { color: var(--ed-due); }      .ed-text--link { color: var(--ed-link); }
+.ed-text--inherit { color: inherit; }
+
+/* 字族：基类已是 ui（`.ed-text` 自足），此处的 `--font-ui` 规则让**类契约对称** ——
+   `font` 三档每档都有自己的类，动态切换时不必知道「ui 恰好等于基类」。 */
+.ed-text--font-ui { font-family: var(--ed-font-ui, "Inter", "Segoe UI Variable", "Microsoft YaHei UI", system-ui, sans-serif); }
+.ed-text--font-body { font-family: var(--ed-font-body, "Source Han Serif SC", "Songti SC", SimSun, serif); }
+.ed-text--font-mono { font-family: var(--ed-font-mono, "JetBrains Mono", Consolas, ui-monospace, monospace); font-variant-numeric: tabular-nums; }
+
+.ed-text--truncate { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
