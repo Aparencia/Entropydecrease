@@ -142,11 +142,115 @@ node scripts/line-limits.mjs --full
 
 ---
 
-<!-- 剩余：Task 2–10（types.rs 1017 / live_session_frame.rs 974 / commands_ai_refine.rs 751 / db_goals.rs 707 /
-     commands_goals.rs 673 / ai_refine_task.rs 670 / note_filter.rs 642 / artifact_templates.rs 632 / video_profile.rs 628）
-     按与 Task 1 相同的模式补入 —— **补入前不得派发该任务的实施者**（否则实施者会自行发明边界）。
-     已落盘的三份分析：analysis-types-rs.md（178 行）· analysis-live-session-frame.md（159 行）· analysis-lib-rs.md（189 行，已用）。
-     其余 7 份由控制方并行派发的只读分析产出中。 -->
+### Task 2: 拆 `app/src-tauri/src/types.rs`（1017 → ≈25 门面）
+
+> **边界取自**：`.../analysis-types-rs.md`（178 行：54 个顶层项的行号表、12 个域分组、serde 契约分布、5 条风险、5 个决策点）。
+
+**Files:**
+- Modify: `app/src-tauri/src/types.rs`（终态 = 门面：模块文档 + `mod` 声明 + `pub use …::*;`）
+- Create（**6 个，全部 ≤300**）：`types_session.rs`(~135) · `types_knowledge.rs`(~245) · `types_note.rs`(~230) · `types_ocr.rs`(~82) · `types_extract.rs`(~68) · `types_decision.rs`(~75)
+- Consumes: 分析报告；**引用面 157 个文件 / 236 处 `crate::types::…`（92 非测试 + 65 测试）⇒ 一处都不改**
+- Produces: 上述 6 个模块 + 门面；`lib.rs:469` 的 `mod types;` **不动**
+
+**★ 裁决（分析 D1–D5）**：**D1 `pub use` 门面**（改引用点 0 处；禁「顺手把 `crate::types::X` 改成 `crate::types_note::X`」——那会把一次搬运变成 236 处编辑 + 双份回归面）· **D2 6 文件**（不建 `types_learning.rs`，待 `types_note` 超 ~250 行再摘）· **D3 保留 `types_extract.rs`**（ADR-004 已定性为引擎层内存态）· **D4 只给门面补 `@ai-context`，不改任何字段级注释**；契约快照测试**单独一个提交**（不与搬运混提，否则失败无法二分）· **D5 一步一文件一提交**。
+
+**分步（每步一个提交；每步 `--write` + 量行数）**
+
+| 步 | 动作 | 主文件 | 棘轮 / 登记动作 |
+|---|---|---|---|
+| S1 | 门面骨架 + `types_session.rs` | ~826 | **仍 >600 ⇒ 棘轮行保留**；`--write` |
+| S2 | `types_knowledge.rs` | ~597 | **≤600 ⇒ 本步提交里删 `FROZEN_OVER_LIMIT` 行 + `--write`**（转入 301–600 档） |
+| S3 | `types_note.rs` | ~378 | `--write` |
+| S4 | `types_ocr.rs` | ~308 | `--write` |
+| S5 | `types_extract.rs` | ~254 | **≤300 ⇒ 档位行由 `--write` 自动消失** |
+| S6 | `types_decision.rs` | ~25 | `--write` |
+
+⚠️ **S1 必须先建门面 + `pub use` 再删旧体**（否则同名项重复定义 = 编译失败）。行数为估算，**每步以实测为准**。
+
+**★ 等价核对（第一优先 = serde 契约逐字）**
+1. **36 个 `rename_all="camelCase"` + 16 个刻意没有 `rename_all` + 1 个 enum `kebab-case`（`NoteSortMode`）** —— 16 个里含 `SessionScreen`，而它的同域邻居 `SessionListItem` **有** camelCase：这是历史有意的**不对称**，**禁止顺手统一**（一次改坏 16 个类型的线格式）。
+2. `#[serde(rename = "type")]` ×3（`KnowledgeNode`/`NewKnowledgeNode`/`GraphEdge`）· `skip_serializing_if = "Option::is_none"` ×1（`GraphNode.system_id`，丢了会让 `null` 字段重新出现）· `default` ×89 · `default = "default_tags"` 1 处（**`default_tags()` 与 `Note` 必须同模块**）。
+3. **字段声明顺序 = JSON 键序** ⇒ 逐字节搬运、不重排、不重排属性行。
+4. `#[allow(dead_code)]` ×3（`KnowledgeDecision`/`NewKnowledgeDecision`/`UsedRefs`，M1 预埋）**原样带走**（本仓无 `deny(warnings)`，漏带只多 warning、不会失败）。
+5. 跨域 `use` 仅 3 处：`types_ocr` → `super::types_extract::TextBox`；`types_session` → `super::types_ocr::{SessionOcrBlock, SessionScreen}`；`PromoteNoteResult` → `Note`（同域）。**避免两子模块 `pub use` 同名项**（本切法无名冲突）。
+6. 本文件 **0 个 `impl`**、全仓对 53 个类型名 `^impl <Type>` **0 命中** ⇒ 无孤儿规则问题。
+
+**验证**：`cargo test --test app_lib_tests`（逐步全绿、用例数不减；65 个测试文件仅 `use crate::types::…`，靠门面零改动）· `cargo build` · `cargo build --bin cer_bench --bin asr_eval` · `cargo clippy`（错误数不增）· `node scripts/line-limits.mjs --full`。
+**建议（分析 D4）**：另起一个提交加**契约快照测试**（对每个类型 `serde_json::to_value` 断言键集合与键序）—— 这是本文件唯一「改坏了也没人报错」的面。
+**报告**：`.../task-2-report.md`。
+
+---
+
+### Task 3: 拆 `app/src-tauri/src/live_session_frame.rs`（974 → ≈236）
+
+> **边界取自**：`.../analysis-live-session-frame.md`（159 行：`run_screen_worker` 735 行的内部结构拆解、9 条同步原语归属、15 处 emit 站点、两次历史拆分与"只增不减"的 10+ 提交证据、7 个决策点）。
+
+**Files:**
+- Modify: `app/src-tauri/src/live_session_frame.rs`
+- Create（6 个，200–250 行区间，全 ≤300）：`live_session_liveness.rs`(~120) · `live_frame_worker_state.rs`(~240) · `live_session_pause_poll.rs`(~230) · `live_player_probe.rs`(~230) · `live_profile_runtime.rs`(~250) · `live_frame_consume.rs`(~220)
+- Consumes: 分析报告；调用点 `live_session.rs:305`；测试模块 `live_session_frame_tests.rs`（49 行 / 4 例）
+- Produces: 上述 6 个模块；`run_screen_worker` 的**公共签名与调用点保持不变**（改由 `FrameWorkerState` 聚合上下文 + 分文件 `impl`）
+
+**★ 裁决（分析 D1–D7）**：**D1 命名守 §10**：碰屏幕/暂停/隐私的用 `live_session_*`（liveness、pause_poll、consume），纯档案/领域决策用 `live_profile_runtime.rs` —— **不得为规避 §10 额外审查而取名 `live_frame_*`** · **D2 采用 `FrameWorkerState`**（20 参数 → 1；登记表 TD-24-A 既定方案）+ 分文件 `impl` · **D3 不修** 816–875 / 451–476 的长锁窗口（持锁做 CV + 落库 + IPC；改锁粒度 = 并发行为变更）⇒ 单独立项 · **D4 `LatestCapturedFrame` 不迁**（6 处跨 5 文件引用 + 命令层查询路径）· **D5 `light_poll_enabled` 随函数迁到 `live_session_pause_poll_tests.rs`**（否则 `use super::*` 断链 + 丢 2 个真值表用例）；`bgra_*` 两测归 `region_ocr` 所有，留原处 · **D6 不碰**其他 300–600 文件（如 `live_frame_process.rs` 529，出界）· **D7 抽 `FrameWorkerState::compensated_epoch()`**（纯读 `SeqCst`），三处调用时机不变（393 在暂停分支内、902 在收尾）。
+
+**分步（每步一个提交）**
+
+| 步 | 动作 | 净减 | 主文件 | 棘轮 / 登记动作 |
+|---|---|---|---|---|
+| 1 | `live_session_liveness.rs`（无锁改动、3 个调用点） | −88 | ~886 | 保留棘轮行；`--write` |
+| 2 | `FrameWorkerState`（Ctx 聚合，后续块改 `impl` 方法） | −112 | ~774 | 保留；`--write` |
+| 3 | `live_session_pause_poll.rs`（含纯函数 + 测试随迁） | −140 | ~634 | 保留；`--write` |
+| 4 | `live_player_probe.rs`（含 FFI 超时变体） | −136 | ~498 | **≤600 ⇒ 删棘轮行 + `--write`** |
+| 5 | `live_profile_runtime.rs`（三步一体的状态机，整块搬） | −192 | ~306 | `--write` |
+| 6 | `live_frame_consume.rs` + 诊断打印 | −70 | **~236** | **≤300 ⇒ 档位行自动消失** |
+
+**★ 等价核对（顺序 / 锁 / 时序第一优先）**
+1. **1s 主循环节拍顺序不可变**：门控 250ms → 暂停检查 → 恢复沿 `sleep(100ms)` → `comp_epoch` → 媒体 1s → 负载 2s → 采样 1s（内含 fg 2s / tier 观测 / override 消费 / 领域 150s / 播放器 5s / 信息 10s）→ 15s 诊断 → `sleep(50ms)`。块间**隐式数据流**必须保持：`stats.diff_pass/ocr_ok` 在 `process_frame` 内更新、**其后**被 tier 观测读差量；`accumulated_ocr_text` 更新后被领域重评读；`got_frame` 由 `process_frame`/`capture_latest_only` **内部清零**（契约注释）再被读。
+2. **`if let Some(f) = latest_frame.lock()…clone()` 的守卫活到整个 `if let` 块结束**（edition 2021）⇒ 816–875 与 451–476 的**持锁窗口逐字保留**，**禁止**把 clone 提到 `if` 之前。
+3. **嵌套锁顺序不得倒置**：`profile_override` → `applied_profile`（693 取锁 → 728 取锁 → 729 `emit`，IPC 在持锁中发出）；700 也在持 `profile_override` 时取 `applied_tier`。
+4. **`db 写 → pause.request_* → app.emit` 三元组顺序**在 6 处（424–439 / 460–473 / 517–527 / 830–833 / 848–862 / 869–872）反复出现，不可重排；**15 处 emit 的事件名逐字不变**。
+5. **9 条同步原语归属**：`stop`(SeqCst) / `speech_active`(**Relaxed，勿改 SeqCst**) / `subtitle_segments`(762 的守卫必须保持短) / `latest_frame` / `media_sound`(锁中毒按无声处理，**勿加 `unwrap`**) / 4 个 override 槽（本线程是唯一消费者，`guard.take()`） / `pause`（`total_paused_ms` 的唯一维护者是**捕获线程**，本文件只读） / `ScreenCaptureSampler`（**非 Send 的 COM 对象**，本线程内创建与显式释放）。本文件 **0 个 `spawn` / 0 个 mpsc/watch/oneshot**（线程由 `live_session.rs:304` spawn）。
+6. **FFI 边界**：`engines.recognize_image_timeout(img, crate::engine::OCR_REQUEST_TIMEOUT)`（H2 的有界等待）**不得**被"统一"成无界 `recognize_image`；`bgraw.is_empty()` 的双重提前返回不可合并；`bgra_to_rgb_image` 返回 `Option` 需失败即返回。
+7. **`Ctx` 聚合的坑**：`screen.as_mut()` 与 `&mut liveness`/`&mut trigger` 同时借用 ⇒ 逐块按字段借用而非整 `&mut self`；`image_store`/`foreground_monitor` 是**按值传入的 `mut` 局部量**（非 `Arc`）⇒ 建字段时保留 move 语义；`&ui_junk`（共享借用）与 `&mut last_changed_texts` 混用。
+
+**验证**：`cargo test --test app_lib_tests`（逐步全绿；本文件只有 1 个 `#[path]` 测试模块，其余靠间接覆盖）· `cargo build` · `cargo clippy`（不增）· `node scripts/line-limits.mjs --full`。**只能真机**：WGC 停更判定与 `revive_wgc` 自愈 · 暂停冻结与 `comp_epoch` 时间戳补偿 · 空闲降频与 5s 探针唤醒 · 负载降级 0.1fps 封顶 · 前台切换 ROI 重扫 · 播放器图标检测 · `live:tier-downgrade-request` → 前端确认往返 · 截图命令读 `latest_frame`。
+**报告**：`.../task-3-report.md`。
+
+---
+
+<!-- 剩余：Task 4–9（commands_ai_refine.rs 751 / db_goals.rs 707 / commands_goals.rs 673 / ai_refine_task.rs 670 /
+     note_filter.rs 642 / artifact_templates.rs 632）按同一模式补入 —— **补入前不得派发该任务的实施者**。
+     已落盘分析：analysis-lib-rs.md(189) · analysis-types-rs.md(178) · analysis-live-session-frame.md(159) · analysis-video-profile.md(258)。 -->
+
+---
+
+### Task 10: 拆 `app/src-tauri/src/video_profile.rs`（628 → ≈272）
+
+> **边界取自**：`.../analysis-video-profile.md`（258 行：25 个顶层项行号表、三表同源契约、6 个决策点、6 条未核实项）。
+
+**Files:**
+- Modify: `app/src-tauri/src/video_profile.rs`
+- Create（2 个）：`video_profile_detect.rs`(~150) · `video_profile_memory.rs`(~230)
+- Consumes: 分析报告；落库值消费方 `live_session_lifecycle.rs:68` / `ai_refine_task.rs:318` / `artifact_templates.rs:624`；前端独立真值表 `app/src/types/live.ts:110–124` + `ProfileDetector.tsx:29/57/73/373`
+- Produces: 上述 2 个模块；`lib.rs:475` 的 `mod video_profile;` 不动 + 新增 2 行 `mod`
+
+**★ 裁决（分析 D1–D6）**：**D1 采用职责横切**（每档参数表 v0.5.0 已抽到 `video_profile_data.rs`，按档横切无标的；与登记表既定名 `video_profile_detect.rs` 吻合）· **D2 做满 2 步**（无地板障碍）· **D3 `apply_profile_memory` 象限③「需确认时记忆反而生效」是已裁决行为，禁止顺手修** · **D4 不拆测试文件**（`video_profile_tests.rs` 属 300–600 档，出界）· **D5 命名 = `video_profile_detect.rs` / `video_profile_memory.rs`** · **D6 顶层同级文件 + `lib.rs` 加 2 行 `mod`**（`lib.rs` 已在 Task 1 降到 ≤600 ⇒ 追加合规；**不用**目录模块）。
+
+**分步（每步一个提交）**
+| 步 | 动作 | 主文件 | 棘轮 / 登记动作 |
+|---|---|---|---|
+| 1 | 抽 `video_profile_detect.rs` | ~487 | **≤600 ⇒ 本步删 `FROZEN_OVER_LIMIT` 行 + `--write`**（转入 301–600 档） |
+| 2 | 抽 `video_profile_memory.rs` | **~272** | **≤300 ⇒ 档位行自动消失** |
+
+**★ 等价核对（第一优先 = `ProfileKind` 三表同源）**
+1. **`ProfileKind` 有 3 张必须同步的表**：serde `rename_all = "kebab-case"` + `parse` 12 臂（**无显式 `"lecture"` 臂，靠 `_` 兜底**）+ `as_str` 13 臂。**`as_str()` 是落库值**（3 个消费方）⇒ **搬错一臂编译与单测都不报错**。逐臂比对 + 与前端真值表逐字对照。
+2. **投票顺序即语义**：先剥系列名 → `max ≤ 0` 早返回 `Unknown`(score 1.0) → 稳定排序（平分依赖数据表顺序）→ 2.5 / 1.0 阈值。禁止重排、禁止改阈值。
+3. **`impl ProfileMemory`（179 行 / 13 方法）整块搬**，含 `apply_profile_memory` 的既有裁决行为。
+4. 本文件**零 `#[cfg]`/feature 门控**（仅文件末尾 `#[cfg(test)]`）；**无测试依赖私有项**（`score_profile`、2 个阈值 const、5 个私有 lookup 均无测试引用 ⇒ 33 个用例可整体不迁），但 `use super::*` 要求**再导出块齐全**（漏项 = 编译失败，属响亮失败）。
+5. 测试基线：`cargo test --test app_lib_tests video_profile` = **74 例**。
+
+**验证**：`cargo test --test app_lib_tests`（逐步全绿、74 例不减）· `cargo build` · `cargo clippy`（不增）· `node scripts/line-limits.mjs --full`。**只能真机**：档案三维热切换 + 自动重评（`apply_profile_memory` 三分支）。
+**报告**：`.../task-10-report.md`。
 
 ---
 
@@ -171,5 +275,6 @@ node scripts/line-limits.mjs --full
 **规范覆盖**：对应规格 §10 批 0「拆超限文件」与 §11 验收口径第 1 条；Rust 侧 10 个文件的行数由批 0-C1 以 `ReadAllLines` 口径全量实测得出，并与 `docs/standards/line-limit-exemptions.md`（生成物）一致。
 **顺序依据**：`lib.rs` 第一 —— 其余 9 个任务的 `mod` 追加都落在它身上，而它现在 >600；不先降下来就会持续违反 v0.22 红线。
 **已核实的宏行为**：`generate_handler!` 的命令名取路径末段、`Invoke` 按值传递、条目支持 `#[cfg]` 外层属性 —— 三条均读自本机 vendored 源码 `tauri-macros-2.6.3/src/command/handler.rs`（第 16–23 / 46–58 / 174–183 行），不是推测。
-**占位符扫描**：**Task 1 已写完**；**Task 2–10 待各自分析落盘后按同一模式补入**（10 份分析中 3 份已落盘，7 份由控制方并行派发中）。补入前不得派发对应任务的实施者。
+**占位符扫描**：**Task 1 / 2 / 3 / 10 已写完**（lib.rs · types.rs · live_session_frame.rs · video_profile.rs，对应分析报告各 159–258 行）；**Task 4–9 待各自分析落盘后补入**（`commands_ai_refine.rs` / `db_goals.rs` / `commands_goals.rs` / `ai_refine_task.rs` / `note_filter.rs` / `artifact_templates.rs`，6 份只读分析由控制方并行派发中）。补入前**不得派发**对应任务的实施者（否则实施者会自行发明边界）。
+**位置计数更正**：派发顺序表的「Task #」= 文件在该表中的序号（Task 10 = `video_profile.rs`），与实际派发顺序一致。
 **执行纪律**：串行（一次一个文件，一个实施者 + 一次任务评审），理由同 `0-C2`（共享登记表/棘轮/`lib.rs`，且 `git add` 与 `git commit` 交错会互相污染提交）。
