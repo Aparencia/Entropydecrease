@@ -13,14 +13,16 @@
  * @ai-context: 树序范围：全局可见序（树=未分组+各组顺次、折叠组行不参与）为
  *              区间/划选唯一基准；跨组语义=归组（目标手排时按落点插入）。
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import type { Note, NoteGroup } from "../types";
 import { paletteHex } from "../utils/colorPalette";
 import type { ThemeMode } from "../utils/colorPalette";
 // 批 0-C2：展示节/可见序纯函数层（含 scope 键与裸折叠键派生——纯逻辑与副作用分离）
-import { buildSections, buildVisibleOrder, isTreeMode, manualBaseIds, scopeKey } from "../utils/noteSectionModel";
+import { manualBaseIds, scopeKey } from "../utils/noteSectionModel";
 // 批 0-C2：序行 store（笔记手排序行 + 组手排序行）——兑现既有登记拆分计划
 import { useNoteOrders } from "../hooks/useNoteOrders";
+// 批 0-C2：折叠记忆（裸键）+ 展树数据接线（treeMode/sections/visibleOrder）
+import { useNoteSections } from "../hooks/useNoteSections";
 // 批 0-C2：拖拽/移动三入口接线（共享一把行落点并发锁——硬性同文件约束）
 import { useNoteMoves } from "../hooks/useNoteMoves";
 // 批 0-C2：多选三通道 + 菜单三态 + 唯一 Esc handler（可见序镜像同文件）
@@ -73,11 +75,6 @@ interface Props {
   refreshToken?: number;
 }
 
-/** 读组折叠记忆（localStorage 损坏/无 → 默认展开） */
-function readGroupFold(key: string): boolean {
-  try { return window.localStorage.getItem(`notes:group-fold:${key}`) === "1"; } catch { return false; }
-}
-
 export default function NoteListView({
   width = 320, notes, groups = [], groupFilter = null, onGroupFilterChange,
   keyword, tagFilter, sortMode, allTags, selectedId, status,
@@ -91,48 +88,15 @@ export default function NoteListView({
     [],
   );
 
-  // 组折叠态
-  const [groupFolds, setGroupFolds] = useState<Record<string, boolean>>({});
-
   // 序行 store（笔记手排序行 + 组手排序行）——装载/保存路径下沉 hooks/useNoteOrders
+  // （依赖 refreshToken 的理由随实现搬至该 hook 头注释：审查 P2-10 的令牌重拉）
   const { manualOrders, groupOrderRows, saveOrder, resetOrder } = useNoteOrders(refreshToken);
 
-  // 手动序装载（REQ-287：notes 行）+ REQ-315：组序行（树组头排序）——见 hooks/useNoteOrders
-  // （依赖 refreshToken 的理由随实现搬至该 hook 头注释：审查 P2-10 的令牌重拉）
-
-  // ── 分组树数据（同 v0.15 结构）——可见序统一从本结构生成 ──
-  // Why 不再有分桶 memo：旧 `grouped` 是死载荷——仅被当作 treeMode 的第二真值，
-  // 其 ungrouped/byGroup 从未被读取（真分桶一直在 sections 内重算）；批 0-C2 去重
-  const treeMode = isTreeMode(keyword, tagFilter, sortMode);
-
-  // 折叠初始值（沿用 v0.15）
-  useEffect(() => {
-    setGroupFolds((cur) => {
-      let changed = false;
-      const next = { ...cur };
-      for (const g of groups) {
-        const key = String(g.id);
-        if (!(key in next)) { next[key] = readGroupFold(key); changed = true; }
-      }
-      if (!("none" in next)) { next.none = readGroupFold("none"); changed = true; }
-      return changed ? next : cur;
-    });
-  }, [groups]);
-  useEffect(() => {
-    try {
-      for (const [k, v] of Object.entries(groupFolds)) window.localStorage.setItem(`notes:group-fold:${k}`, v ? "1" : "0");
-    } catch { /* 隐私模式 */ }
-  }, [groupFolds]);
-
-  // 显示节（树/平铺）——节内展示序/分桶/accent 全在 utils/noteSectionModel.buildSections
-  // deps 保留 groupFolds：函数体不读它，但移除会改变重算次数（本批只搬家不优化）
-  const sections = useMemo(
-    () => buildSections({ notes, groups, groupFilter, theme, treeMode, manualOrders, groupOrderRows }),
-    [treeMode, groups, notes, groupFolds, manualOrders, theme, groupFilter, groupOrderRows],
-  );
-
-  // 可见序（L1 审查：折叠组行不参与区间/划选——与渲染可见一致；折叠组头仍在）
-  const visibleOrder = useMemo(() => buildVisibleOrder(sections, groupFolds), [sections, groupFolds]);
+  // 折叠记忆 + 展树数据（treeMode 总闸 / sections 展示节 / visibleOrder 全局可见序）
+  // —— 裸键折叠记忆与纯函数派生见 hooks/useNoteSections + utils/noteSectionModel
+  const { treeMode, sections, visibleOrder, groupFolds, toggleGroupFold } = useNoteSections({
+    notes, groups, keyword, tagFilter, sortMode, groupFilter, theme, manualOrders, groupOrderRows,
+  });
 
   // ── 行交互 / 多选 / 菜单（Esc 优先级链、可见序镜像、选集裁剪）——见 hooks/useNoteListSelection
   const {
@@ -171,8 +135,6 @@ export default function NoteListView({
       onContextMenu={openRowContextMenu}
     />
   );
-
-  const toggleGroupFold = (key: string) => setGroupFolds((cur) => ({ ...cur, [key]: !cur[key] }));
 
   /**
    * 右键菜单「上移/下移」可用性（REQ-315）：仅树视图 scope 上下文开放（交互矩阵：
