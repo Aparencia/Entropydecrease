@@ -48,6 +48,12 @@ export const FROZEN_OVER_LIMIT = [
 
 const toPosix = (p) => p.split(sep).join('/');
 
+/** 超硬限表格的**生成器前缀**：人工理由追在其后，靠 `stripOverPrefix` 保证 `--write` 幂等 */
+const OVER_PREFIX = `超硬限（>${HARD_LIMIT} 行），不允许豁免`;
+/** 幂等：读回时先剥掉生成器自己加的前缀，否则每次 --write 都会叠加一层 */
+const stripOverPrefix = (t) =>
+  t.startsWith(OVER_PREFIX) ? t.slice(OVER_PREFIX.length).replace(/^\s*——\s*/, '').trim() : t.trim();
+
 /**
  * 行数口径的**唯一实现**：全部行数（含空行）。
  * 与 [System.IO.File]::ReadAllLines(path, UTF8).Count 等价：末尾换行不额外算一行。
@@ -114,6 +120,43 @@ function autoReason(absPath) {
   return text ? `${text}（自动摘取，待细化）` : '（待补理由：本条目由生成器补登）';
 }
 
+/**
+ * 扫描域规模守卫：`check()` 与 `writeTable()` **两个入口共用**，且必须在做任何事之前调用 ——
+ * 没有它，扫描域失效时 check 会把 (a)/(c) 静默判绿、write 会把登记表清空还打印 ✅ 并 exit 0。
+ */
+function assertScanSane(measured) {
+  if (measured.size === 0) {
+    console.error(
+      `❌ line-limits：扫描域为空 —— ${SCAN_DIRS.join(' / ')} 下没有匹配 ${SOURCE_EXT} 的文件。\n` +
+        `   这几乎总是路径写错或工作目录不对，**不是"没有超限文件"**，更不是"可以安全重写登记表"。`,
+    );
+    process.exit(1);
+  }
+  // 逐目录断言：只坏一个目录时，(b)/(d) 会刷出上百条"→ 删除该行"，把人引向删棘轮/删条目
+  for (const dir of SCAN_DIRS) {
+    const abs = join(ROOT, dir);
+    if (!existsSync(abs)) {
+      console.error(`❌ line-limits：扫描目录不存在 —— ${dir}（SCAN_DIRS 配置或工作目录有问题）`);
+      process.exit(1);
+    }
+    const hits = [...measured.keys()].filter((p) => p.startsWith(`${dir}/`)).length;
+    if (hits === 0) {
+      console.error(`❌ line-limits：扫描目录下没有任何匹配文件 —— ${dir}（期望 .ts/.tsx/.rs，实际 0 个）`);
+      process.exit(1);
+    }
+  }
+  // 覆盖断言（上面两条的补集）：SCAN_DIRS **少写一个目录**时列出的目录都存在且有命中 ⇒ 上面全过，但棘轮/登记表里的文件整体落到扫描域外 ⇒ (b)/(d) 报成"→ 删除该行"、--write 整片删掉仍打印 ✅（实测 ['app/src']：10×(b)+102×(d)；--write exit 0，179 → 77 行 / 138 → 36 条）。
+  const declared = new Set([...FROZEN_OVER_LIMIT, ...parseReasons().keys()]);
+  const uncovered = [...declared].filter((p) => !SCAN_DIRS.some((d) => p.startsWith(`${d}/`)));
+  if (uncovered.length) {
+    console.error(
+      `❌ line-limits：扫描域覆盖不全 —— 棘轮/登记表有 ${uncovered.length} 条不在 ${SCAN_DIRS.join(' / ')} 下（如 ${uncovered[0]}）：\n` +
+        `   SCAN_DIRS 少写目录会把它们误报成"→ 删除该行"，--write 更会整片删掉它们仍打印 ✅。`,
+    );
+    process.exit(1);
+  }
+}
+
 /** 逐字保留「已拆分 / 登记移除记录」整节 */
 function parseHistory() {
   const abs = join(ROOT, TABLE_PATH);
@@ -125,6 +168,8 @@ function parseHistory() {
 
 function writeTable() {
   const measured = scanTree();
+  // ⚠️ 必须在 parseReasons()/writeFileSync() **之前**：否则扫描域失效时它会把 138 条清成表头 + 历史节（实测 179 → 41 行）还打印 ✅、exit 0。同类破坏在"SCAN_DIRS 少写一个目录"时同样可达。
+  assertScanSane(measured);
   const reasons = parseReasons();
   // 并列时必须按路径断开：`scanTree` 的 Map 迭代序来自 readdirSync，**跨平台不一致**
   // （Windows 与 Linux 的顺序可能不同）⇒ 只按行数排会让 `--write` 在不同平台产出不同字节。
@@ -138,6 +183,13 @@ function writeTable() {
     return s || fallback;
   };
   const row = (p, n, why, split) => `| ${p} | ${n} | ${cell(why, '（待补理由）')} | ${cell(split, '若再增长：按职责拆分')} |`;
+  // 超硬限行的说明＝**生成器常量前缀 + 人工理由**。表头 :5 宣称这两列「由人工维护，生成器按路径保留」，
+  // 只写常量会让按表头指引写进这一列的文字在下一次 `--write` 被整列吞掉（旧表 15 条 / 1993 字即如此丢失）；
+  // 前缀保证"不允许豁免"不可被人工理由改写，人工文字仍完整保留（`stripOverPrefix` 保证幂等）。
+  const overWhy = (p) => {
+    const human = stripOverPrefix(reasons.get(p)?.why ?? '');
+    return human ? `${OVER_PREFIX} —— ${human}` : OVER_PREFIX;
+  };
 
   const lines = [
     '# 单文件行数豁免登记（AGENTS.md §3：单文件 ≤300 行；301–600 行须登记本清单）',
@@ -159,7 +211,7 @@ function writeTable() {
     // 按路径保留人工维护的两列，改成 3 列会让这些拆分计划在**下一次重生成时静默丢失**。
     '| 文件 | 行数 | 说明 | 拆分计划 |',
     '|---|---|---|---|',
-    ...over.map(([p, n]) => row(p, n, `超硬限（>${HARD_LIMIT} 行），不允许豁免`, reasons.get(p)?.split || `**超硬限必须拆**：拆到各文件 ≤${SOFT_LIMIT} 行`)),
+    ...over.map(([p, n]) => row(p, n, overWhy(p), reasons.get(p)?.split || `**超硬限必须拆**：拆到各文件 ≤${SOFT_LIMIT} 行`)),
     '',
     `## ${SOFT_LIMIT + 1}–${HARD_LIMIT} 档（须登记）`,
     '',
@@ -180,13 +232,8 @@ function check({ full }) {
   const measured = scanTree();
   // 规模自检：没有它，扫描域失效会让 (a)/(c) 静默通过、(d) 反把 117 条登记行报成"指向不存在的文件"。
   // 更危险的是未来：FROZEN_OVER_LIMIT 被清空（0-C2/C3 拆完后）时，双失效会给出 exit 0 绿灯。
-  if (measured.size === 0) {
-    console.error(
-      `❌ line-limits：扫描域为空 —— ${SCAN_DIRS.join(' / ')} 下没有匹配 ${SOURCE_EXT} 的文件。\n` +
-        `   这几乎总是路径写错或工作目录不对，**不是"没有超限文件"**。`,
-    );
-    process.exit(1);
-  }
+  // 守卫与 `--write` 入口**共用同一实现**，避免两处口径漂移。
+  assertScanSane(measured);
 
   // 登记表缺失自检：缺了它，(c) 会把每条超限文件逐条报成"未登记"，
   // 而不提示真实原因是登记表不存在 —— 同样把人引向错误的修法。
