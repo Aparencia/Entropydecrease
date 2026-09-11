@@ -367,8 +367,6 @@ pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync
         // v0.8.0 M1 AI 使能层（REQ-138/139/140：密钥管理/余额查询/
         // 授权默认关+审计可见化——共享 ai_client 由 M2/M3 消费）
         crate::commands_ai_settings::ai_get_settings,
-        crate::commands_ai_settings::ai_save_key,
-        crate::commands_ai_settings::ai_clear_key,
         crate::commands_ai_settings::ai_update_settings,
         crate::commands_ai_settings::ai_set_authorized,
         crate::commands_ai_settings::ai_set_enabled,
@@ -376,7 +374,6 @@ pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync
         // v0.18.2（REQ-254）：目标 AI 设置（独立开关+预算档位）
         crate::commands_ai_settings::ai_set_goal_plan,
         crate::commands_ai_settings::ai_set_refine_strategy,
-        crate::commands_ai_settings::ai_test_connection,
         crate::commands_ai_settings::ai_get_balance,
         crate::commands_ai_settings::ai_audit_list,
         crate::commands_ai_settings::ai_audit_clear,

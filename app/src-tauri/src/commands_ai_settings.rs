@@ -6,7 +6,7 @@
 //! @ai-context: 密钥解析优先级：环境变量 SILICONFLOW_API_KEY > 凭据库（DPAPI）；
 //!              密钥**永不回传前端**（视图只报存在性与来源——明文红线）。
 //! @ai-context: 授权红线：内容上传类调用（M2 精修/M3 补充）消费
-//!              content_gate（enabled+authorized 双条件）；余额查询/测试连接
+//!              content_gate（enabled+authorized 双条件）；余额查询
 //!              为配置验证读操作不 gate（但审计记录——AI 调用轨迹可见化）。
 //! @ai-context: 锁序：设置读写在短锁内完成即释放；网络调用（余额）不持锁。
 
@@ -16,8 +16,6 @@ use crate::ai_balance::{low_balance_warning, AiBalance, AiBalanceAdapter};
 use crate::ai_guardrails::AiAuditEntry;
 use crate::ai_settings::AiSettings;
 use crate::commands::AppState;
-/// 密钥最大长度（防超长字符串污染凭据文件；真实密钥远小于此）。
-const API_KEY_MAX_CHARS: usize = 512;
 
 /// 设置视图（前端展示；密钥只暴露存在性与来源，绝不回传明文——明文红线）。
 #[derive(Debug, Clone, serde::Serialize)]
@@ -90,25 +88,6 @@ pub fn ai_get_settings(state: State<'_, AppState>) -> Result<AiSettingsView, Str
         has_key,
         key_source,
     })
-}
-
-/// 保存密钥到凭据库（Windows DPAPI 加密文件；明文红线——不落 SQLite/明文）。
-#[tauri::command]
-pub fn ai_save_key(state: State<'_, AppState>, api_key: String) -> Result<(), String> {
-    let key = api_key.trim().to_string();
-    if key.is_empty() {
-        return Err("密钥不能为空".to_string());
-    }
-    if key.chars().count() > API_KEY_MAX_CHARS {
-        return Err(format!("密钥超长（上限 {} 字符）", API_KEY_MAX_CHARS));
-    }
-    state.ai_credentials.save_key("default", &key)
-}
-
-/// 清除凭据库密钥（文件不存在视为已清除——幂等）。
-#[tauri::command]
-pub fn ai_clear_key(state: State<'_, AppState>) -> Result<(), String> {
-    state.ai_credentials.clear_key("default")
 }
 
 /// v0.18.2（REQ-254）：目标 AI 设置（read-modify-write 最小面——
@@ -245,19 +224,6 @@ pub fn ai_set_refine_strategy(
         .map_err(|e| format!("AI 设置锁中毒: {}", e))?;
     lock.refine_strategy = prefs;
     lock.save(&state.ai_settings_path)
-}
-
-/// 一键测试连接（REQ-138：调余额接口验证密钥有效性——错误密钥明确报错）。
-///
-/// @ai-context: 配置验证类读操作，不 gate 授权；401/403 → 明确"密钥无效"
-///              提示（AiBalanceAdapter 归一）；无密钥 → 引导配置。
-#[tauri::command]
-pub fn ai_test_connection(state: State<'_, AppState>) -> Result<AiBalance, String> {
-    let adapter = balance_adapter(&state)?;
-    let balance = adapter.fetch()?;
-    // 测试连接也留审计痕迹（AI 调用轨迹可见化）
-    push_audit(&state, "test-connection", "ok");
-    Ok(balance)
 }
 
 /// 查询余额（REQ-139：实时可查 + 低余额提醒 + 审计记录）。
