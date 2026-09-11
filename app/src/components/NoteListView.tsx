@@ -14,19 +14,16 @@
  *              区间/划选唯一基准；跨组语义=归组（目标手排时按落点插入）。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import type { Note, NoteGroup } from "../types";
-// REQ-316（批 7）：移组返回契约（空组自动清理留痕数据源）
-import type { MoveNoteResult } from "../types/notes";
 import { paletteHex } from "../utils/colorPalette";
 import type { ThemeMode } from "../utils/colorPalette";
 import { emptySelection, rangeSelection, toggleSelection } from "../utils/noteSelection";
-// REQ-315：scope 内 置顶→手排→自动 排序纯函数 + 显式移动（树视图 pin 生效）
-import { dropNotesIntoOrder, shiftNoteOrder } from "../utils/noteOrder";
 // 批 0-C2：展示节/可见序纯函数层（含 scope 键与裸折叠键派生——纯逻辑与副作用分离）
 import { buildSections, buildVisibleOrder, isTreeMode, manualBaseIds, scopeKey } from "../utils/noteSectionModel";
 // 批 0-C2：序行 store（笔记手排序行 + 组手排序行）——兑现既有登记拆分计划
 import { useNoteOrders } from "../hooks/useNoteOrders";
+// 批 0-C2：拖拽/移动三入口接线（共享一把行落点并发锁——硬性同文件约束）
+import { useNoteMoves } from "../hooks/useNoteMoves";
 import NoteListRow from "./NoteListRow";
 import NoteTreeSection from "./NoteTreeSection";
 import NoteRowContextMenu from "./NoteRowContextMenu";
@@ -99,7 +96,6 @@ export default function NoteListView({
   const [contextMenu, setContextMenu] = useState<{ note: Note; x: number; y: number } | null>(null);
   const [batchMenu, setBatchMenu] = useState<{ ids: number[]; x: number; y: number } | null>(null);
   const [batchMoveOpen, setBatchMoveOpen] = useState(false);
-  const [busyMove, setBusyMove] = useState(false);
 
   // 组折叠态
   const [groupFolds, setGroupFolds] = useState<Record<string, boolean>>({});
@@ -108,8 +104,6 @@ export default function NoteListView({
   const { manualOrders, groupOrderRows, saveOrder, resetOrder } = useNoteOrders(refreshToken);
 
   const visibleIdsRef = useRef<number[]>([]);
-  // L5：行落点并发锁（防陈旧快照互覆）
-  const dropBusyRef = useRef(false);
 
   const clearSelection = useCallback(() => {
     setSelection(emptySelection());
@@ -212,119 +206,11 @@ export default function NoteListView({
   /** scope 手动底序（REQ-315）：可见展示序去掉置顶区（快照只写本子序列）——纯函数在 noteSectionModel */
   const manualBaseOf = useCallback((scope: string): number[] | null => manualBaseIds(sections, scope), [sections]);
 
-  /** 拖拽归组（组头/左侧组行复用单 id 兜底仍可用） */
-  const moveToGroup = useCallback(async (ids: number[], groupId: number | null) => {
-    setBusyMove(true);
-    try {
-      const groupNotes = new Set(
-        notes.filter((n) => (groupId == null ? n.group_id == null : n.group_id === groupId)).map((n) => n.id),
-      );
-      const cleanedNames: string[] = [];
-      for (const id of ids) {
-        if (groupNotes.has(id)) continue;
-        const r = await invoke<MoveNoteResult>("move_note_to_group", { noteId: id, groupId });
-        cleanedNames.push(...r.autoCleanedGroups);
-      }
-      // 目标手排：新入组未置顶笔记追加末尾（跨组 drop 的"加入该组"语义；
-      // 置顶成员由置顶区表达，不写手排行；重写快照顺带清存量置顶残行）
-      const scope = scopeKey(groupId);
-      if (manualOrders[scope]) {
-        const pinned = new Set(notes.filter((n) => n.pin === 1).map((n) => n.id));
-        const cur = manualOrders[scope].filter((id) => !ids.includes(id) && !pinned.has(id));
-        await saveOrder(scope, [...cur, ...ids.filter((id) => !groupNotes.has(id) && !pinned.has(id))]);
-      }
-      onNoteMoved?.();
-      // REQ-316（批 7）：批量移走后源空组清理留痕（跨条聚合去重）
-      if (cleanedNames.length > 0) onCleanNotice?.([...new Set(cleanedNames)]);
-      setBatchMenu(null);
-    } catch (e) {
-      console.warn("[notes] 归组失败:", e);
-    } finally {
-      setBusyMove(false);
-    }
-  }, [notes, manualOrders, saveOrder, onNoteMoved, onCleanNotice]);
-
-  /**
-   * REQ-315：右键「上移/下移」组内显式移动——补"必须拖一次才触发手排快照"的
-   * 发现性缺口：自动排序 scope 的首次显式移动 = 以当前可见序快照转手排再移动
-   * （与行落点拖拽同一保存路径 saveOrder——无双轨）。
-   */
-  const moveWithinScope = useCallback(async (note: Note, dir: 1 | -1) => {
-    if (dropBusyRef.current || !treeMode) return;
-    const gid = note.group_id ?? null;
-    const base = manualBaseOf(scopeKey(gid));
-    const next = base ? shiftNoteOrder(base, note.id, dir) : null;
-    if (!next) return;
-    dropBusyRef.current = true;
-    try {
-      await saveOrder(scopeKey(gid), next);
-      onNoteMoved?.();
-    } catch (e) {
-      console.warn("[notes] 组内移动失败:", e);
-    } finally {
-      dropBusyRef.current = false;
-    }
-  }, [treeMode, manualBaseOf, saveOrder, onNoteMoved]);
-
-  /** 行间落点（同 scope 手动排序；跨组归入目标组后按落点插入——L2 审查修正：
-   *  先归组、后整表覆写；目标不可见/无 ord 尾部不再静默 no-op） */
-  const handleDropOnRow = useCallback(async (ids: number[], targetId: number, before: boolean) => {
-    // L3：平铺态（搜索/标签/非默认排序）禁排序拖拽——矩阵锁定规则
-    if (!treeMode) return;
-    if (dropBusyRef.current) return;
-    const target = notes.find((n) => n.id === targetId);
-    if (!target || ids.includes(targetId)) return;
-    dropBusyRef.current = true;
-    try {
-      const targetGroup = target.group_id ?? null;
-      const scope = scopeKey(targetGroup);
-      const base = manualBaseOf(scope);
-      if (!base) return;
-      // 跨组 id：先归入目标组（await 顺序执行——同事务语义由命令层保证）
-      const external = ids.filter((id) => {
-        const n = notes.find((x) => x.id === id);
-        return n && (n.group_id ?? null) !== targetGroup;
-      });
-      const cleanedNames: string[] = [];
-      for (const id of external) {
-        const r = await invoke<MoveNoteResult>("move_note_to_group", { noteId: id, groupId: target.group_id });
-        cleanedNames.push(...r.autoCleanedGroups);
-      }
-      // REQ-316（批 7）：跨组拖走使源组变空 → 清理留痕（零清理零变化）
-      if (cleanedNames.length > 0) onCleanNotice?.([...new Set(cleanedNames)]);
-      // 落位（REQ-315：只写置顶区外子序列；落点在置顶行上 = 置顶区下沿即手动区首位）
-      const pinned = new Set(notes.filter((n) => n.pin === 1).map((n) => n.id));
-      const moved = ids.filter((id) => !pinned.has(id));
-      if (moved.length === 0) {
-        // 仅置顶成员拖拽：置顶区按更新时间定序不可移动——归组已完成即返回，不制造快照
-        onNoteMoved?.();
-        return;
-      }
-      const anchor = target.pin === 1 ? { head: true as const } : { targetId, before };
-      const next = dropNotesIntoOrder(base, moved, anchor);
-      if (!next) {
-        // 目标不可见（折叠/异常）——至少完成归组，不写序
-        onNoteMoved?.();
-        return;
-      }
-      // 与既有序一致（如仅拖置顶行）= 跳过保存——防无变化操作制造无谓快照
-      const prevBase = (manualOrders[scope] ?? []).filter((id) => {
-        const n = notes.find((x) => x.id === id);
-        return !n || n.pin !== 1;
-      });
-      if (prevBase.length === next.length && prevBase.every((id, i) => next[i] === id)) {
-        onNoteMoved?.();
-        return;
-      }
-      await saveOrder(scope, next);
-      onNoteMoved?.();
-    } catch (e) {
-      console.warn("[notes] 行落点排序失败（部分操作可能已提交）:", e);
-      onNoteMoved?.();
-    } finally {
-      dropBusyRef.current = false;
-    }
-  }, [treeMode, notes, manualOrders, manualBaseOf, saveOrder, onNoteMoved, onCleanNotice]);
+  // 拖拽/移动三入口（归组 / 组内上移下移 / 行间落点）——共享一把并发锁，见 hooks/useNoteMoves
+  const closeBatchMenu = useCallback(() => setBatchMenu(null), []);
+  const { busyMove, moveToGroup, moveWithinScope, handleDropOnRow } = useNoteMoves({
+    notes, treeMode, manualOrders, manualBaseOf, saveOrder, onNoteMoved, onCleanNotice, closeBatchMenu,
+  });
 
   /** 划选（组头空白起 → 组内首行至当前行带；走既有行命中的全局可见序）。
    *  L9 审查修正：rAF 节流 + pointercancel/blur/松开（buttons=0）即清理——
