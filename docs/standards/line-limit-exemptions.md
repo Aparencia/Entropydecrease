@@ -22,7 +22,6 @@
 |---|---|---|---|
 | app/src-tauri/src/commands.rs | 597 | 命令装配域（AppState + 通用命令 + 导入管线编排）；登记值 466 过期快照——2026-09-09 实测纠偏（含批 7 delete_note 结果契约 +12；600 硬限内压线） | 若再增长：导入管线命令拆至 commands_import.rs（既有登记计划） |
 | app/src/pages/ChatPage.tsx | 593 | AI 对话页编排；批 1（REQ-306/307）active 门控/终态订阅接线净增——2026-09-09 实测纠偏（登记值 529 过期） | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
-| app/src-tauri/src/db_goals.rs | 591 | v0.18.0（REQ-248~250）学习目标数据层：goals/goal_milestones/goal_groups 三表 DDL + 实体 CRUD/绑定/结算钩子 + v0.18.1/0.18.2 毕业报告与规划聚合。**拆分进行中**（批 0-C3 Task 5 第 1/6 步：里程碑域已拆至 db_goals_milestone.rs 141 行，707 → 591；schema init 原地未动） | 按域续拆至 db_goals_{plan,goal,retro,binding,graduation}.rs；主文件收敛为 init（9 条 CREATE）+ 子模块声明 ≈88 行，≤300 后本条自动移除 |
 | app/src-tauri/src/commands_ai_refine/mod.rs | 582 | **拆分进行中（批 0-C3 Task 4，S1 已拆 dto/registry/gate）**：AI 精修命令域外壳（跨域共享命令 + 门面重导出，10 文件 20 处 `crate::commands_ai_refine::X` 引用零改动）；v0.8.0 M2（REQ-141/145）+ F1/F2/F3：成本预估/异步任务编排/状态/结果/采纳落库/任务历史/配额去重门控/成本硬拦截 + 任务注册表容量守卫；任务执行已拆至 ai_refine_task.rs；L4 修复（落库失败日志）微增 | 拆分进行中：S1 dto/registry/gate ⇒ 582 · S2 workbench.rs · S3 session.rs · S4 apply.rs（终态外壳 ≤300 ⇒ 本条目整行移除；门控已按原计划落在 commands_ai_refine/gate.rs） |
 | app/src-tauri/src/lib.rs | 577 | crate 根 321 `mod` + 16 `#[cfg]` = **337 行地板**；注册清单已移至 `app_commands.rs`（**数据文件**，同属 300–600 豁免带）—— 结构性下界，非欠账 | 已完成（批 0-C3 Task 1，2026-09-11）；余下 161 行模块理由注释 + 装配逻辑，无进一步拆分标的 |
 | app/src-tauri/src/db_migrations.rs | 573 | v0.20.11 批 6（REQ-315）再增：note_groups.pin ensure_column + note_group_orders 建表（+21，实测 573——登记值 492 过期；schema 单点收敛理由同左） | 若再增长：kb_* 与 chat_* 表 DDL 拆至 db_migrations_kb.rs |
@@ -82,6 +81,7 @@
 | app/src-tauri/src/db_fragments.rs | 391 | REQ-316（批 7）：delete_fragment/update_fragment_group/promote 同事务空组自动清理接线（登记值 309 过期快照，实测纠偏） | 若再增长：promote_fragment_to_note 事务拆至 db_fragments_promote.rs（既有登记计划兑现） |
 | app/src-tauri/src/commands_ai.rs | 388 | v0.5.0 起 AI 复核命令域（边界批量复核/配额/缓存/审计 + 结构渲染接线）；与 note_filter_ai（纯逻辑）分层 | 若再增长：批量复核循环拆至 commands_ai_review.rs |
 | app/src-tauri/src/import.rs | 385 | 导入域编排（音视频/图片导入流程 + 帧提取调度）内聚；与 import_frame/import_transcribe 分层 | 若再增长：导入参数校验拆至 import_validate.rs |
+| app/src-tauri/src/db_goals.rs | 384 | v0.18.0（REQ-248~250）学习目标数据层：goals/goal_milestones/goal_groups 三表 DDL + 实体 CRUD/绑定/结算钩子 + v0.18.1/0.18.2 毕业报告与规划聚合。**拆分进行中**（批 0-C3 Task 5 第 1/6 步：里程碑域已拆至 db_goals_milestone.rs 141 行，707 → 591；schema init 原地未动） | 按域续拆至 db_goals_{plan,goal,retro,binding,graduation}.rs；主文件收敛为 init（9 条 CREATE）+ 子模块声明 ≈88 行，≤300 后本条自动移除 |
 | app/src-tauri/src/commands_proofread.rs | 383 | v0.20.2（REQ-270）LLM 校对命令域（预估/门控/分块请求/裁决源列表/失败记账）内聚；2026-09-06 实测登记（TD-2026-09-06-G） | 若再增长：record_proofread_failure 与载荷回写拆至 proofread_apply.rs |
 | app/src-tauri/src/capture/resample.rs | 381 | 音频重采样域（采样率转换/缓冲对齐/帧切分）内聚于捕获子模块，纯函数与捕获缓冲格式共享上下文 | 若再增长：帧切分拆至 resample_frames.rs |
 | app/src/components/GoalDetail.tsx | 379 | 一致性契约——进度信号每次现算（get_goal_progress），动作后（自动摘取，待细化） | 若再增长：按职责拆分 |
@@ -110,7 +110,6 @@
 | app/src-tauri/src/db_notes_tests.rs | 337 | db_notes.rs 单测域（15 例：笔记 CRUD/updated 倒序/搜索通配符转义/会话关联与旧库 ensure_column 迁移；全部走内存库，环境隔离铁律）——测试模块由 `#[cfg(test)] #[path]` 单点挂载（db_notes.rs:365），H3 硬拆时由原 db.rs 的 tests 模块整体迁入（语义不变）。**本条目由生成器补登（该文件无 @ai-context 头注释），理由为 2026-09-11 重建时人工补写** | 若再增长：会话关联与迁移用例拆至 db_notes_link_tests.rs |
 | app/src-tauri/src/pause_state.rs | 336 | 批 2（REQ-308）暂停来源状态机域（PauseSource/PauseShared/request 单写点）——2026-09-09 审查纠偏实测 336（交付口径 250 失真），300-600 档登记 | 若再增长：条件真值表与 request API 拆至 pause_machine.rs |
 | app/src-tauri/src/commands_asr_pass2.rs | 333 | 实时链路只有端点句 SenseVoice 重打分；本命令把"导入同级的（自动摘取，待细化） | 若再增长：按职责拆分 |
-| app/src-tauri/src/ai_refine_task.rs | 332 | 超硬限（>600 行），不允许豁免 —— v0.8.0 F2-B4 拆分产物：精修任务执行域（任务编排/并发切片 worker 池/单片重试/部分成功/审计/落库）——并发编排与状态流转内聚 | 若再增长：refine_slices_concurrent 拆至 ai_refine_task_workers.rs |
 | app/src-tauri/src/commands_after.rs | 332 | v0.20.3（REQ-294/295/299/300）收尾命令域（批决议/导出/练习/问题）内聚；2026-09-06 实测登记（TD-2026-09-06-G） | 若再增长：批决议核心拆至 weekly_resolve.rs |
 | app/src-tauri/src/fusion.rs | 332 | 纯规则融合（无 LLM，本地优先降级路径）。规则按优先级：（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/capture/dxgi_capture.rs | 331 | 主路径用 DXGI 桌面复制（GPU 直取，性能最优）；new 或运行时（自动摘取，待细化） | 若再增长：按职责拆分 |

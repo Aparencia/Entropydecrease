@@ -11,20 +11,35 @@
 //!              进度经 "ai:task-update" 事件 + ai_refine_status 查询双通道，
 //!              网络调用在 spawn_blocking（不阻塞异步运行时）。
 
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+//! @ai-context: 目录模块（批 0-C3 Task 4 拆分，2026-09-11，原 751 行 → 外壳 ≤300）。
+//!              子模块职责（D6，按域划分，逐条列出）：
+//!              · dto.rs        —— IPC 契约类型（4 个 serde 结构体；字段序 = JSON 键序）
+//!              · gate.rs       —— 成本硬拦截（免费档/本地 Provider 跳过；查询失败宽容放行）
+//!              · registry.rs   —— 任务注册表 + id 序列 + 容量守卫 + 状态写入口
+//!              @ai-context: 本外壳只留「跨域共享的命令 + 重导出门面」；外部 10 文件
+//!              20 处 crate::commands_ai_refine::X 引用**零改动**（逐项重导出在下方）；
+//!              #[tauri::command] 定义随域下沉后，注册路径同步改成
+//!              crate::commands_ai_refine::<子模块>::<cmd>（IPC 名 = 路径末段，逐字不变）。
 
-use tauri::{Emitter, State};
+mod dto;
+mod gate;
+mod registry;
 
-use crate::ai_cost::{estimate_for_content_model, CostEstimate};
+pub use dto::{AiRefineResult, AiTaskHandle, RefineEstimateView, RefineStrategyInfo};
+pub use registry::{claim_task_id, task_registry, task_seq, task_seq_lower_bound, AiTaskEntry};
+pub(crate) use gate::ensure_balance_for;
+pub(crate) use registry::{set_task, trim_tasks};
+
+use tauri::State;
+
+use crate::ai_cost::estimate_for_content_model;
 use crate::ai_note_refine::NoteRefinePrompt;
 use crate::ai_strategy::{RefineStrategyMeta, StrategyOverride};
 use crate::ai_task::AiTaskState;
+use crate::anchor_strip::strip_anchors;
 use crate::commands::AppState;
 use crate::commands_session_note::build_rule_draft_with_analysis;
-use crate::anchor_strip::strip_anchors;
-use crate::note_diff::{diff_sections, DiffOp, DiffStats, SectionDiff};
+use crate::note_diff::{diff_sections, DiffStats, SectionDiff};
 use crate::note_filter::PurifyEnv;
 use crate::note_version::VersionMeta;
 use crate::types::{NewNote, Note};
@@ -32,73 +47,6 @@ use crate::video_profile::ProfileKind;
 
 /// mock 模式 env 键（本地规则精修，不联网——测试/离线开发，ai_text_filter 先例）。
 const MOCK_ENV: &str = "AI_REFINE_MOCK";
-/// 任务注册表容量上限（防无界增长：超限丢弃最旧终态任务）。
-const TASKS_CAP: usize = 100;
-
-/// 任务条目（注册表内：状态 + 成功结果）。
-///
-/// @ai-context: result 为序列化 JSON——精修（AiRefineResult）/补充
-///              （AiEnrichResult，M3）共用同一任务注册表（REQ-145 基建复用），
-///              各命令层自行反序列化。
-pub struct AiTaskEntry {
-    pub state: AiTaskState,
-    pub result: Option<serde_json::Value>,
-    /// 任务目标（去重粒度：精修=session_id、补充=note_id——审查修复
-    /// 2026-08-21：原实现按全表 any 检查，会话 A 精修中时会话 B 也被拒）
-    pub target_id: i64,
-}
-
-/// 精修成功载荷（前端 diff 预览 + 采纳落库数据源）。
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiRefineResult {
-    pub title: String,
-    /// 规则基线（本地规则版——采纳落库时作为首快照，版本链 [rule, ai-refine]）
-    pub base_markdown: String,
-    pub refined_markdown: String,
-    /// 与规则版的段级 diff（本地版为基线，AI 变化点高亮）
-    pub diff: Vec<DiffOp>,
-    pub added_lines: usize,
-    pub removed_lines: usize,
-    pub slices: usize,
-    /// F2-B4：失败片数（>0 = 部分成功——重试后仍失败保留已成功片）
-    pub failed_slices: usize,
-    pub model: String,
-    /// v0.17.0：本次策略溯源（档位 + 每维最终值——工作台溯源条数据源；
-    /// serde default 向前兼容：旧任务结果无此字段）
-    #[serde(default)]
-    pub strategy: Option<RefineStrategyInfo>,
-}
-
-/// 策略溯源信息（AI 产出按什么规则变的——工作台溯源条展示）。
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RefineStrategyInfo {
-    /// 档位 id（standard/faithful/deep/minimal/custom 或 intent:xxx——名称由前端
-    /// 按 meta 声明解析，未知 id 原样展示——诚实不猜）
-    pub preset_id: String,
-    /// 每维最终值（key → value；chips 渲染源）
-    pub dims: std::collections::HashMap<String, String>,
-    /// 自定义档自由文本（仅 preset=custom 时有值——溯源条/重生成沿用，REQ-279）
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub custom_text: Option<String>,
-}
-
-/// 任务句柄（前端轮询/事件对应用）。
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiTaskHandle {
-    pub task_id: u64,
-    pub state: AiTaskState,
-}
-
-/// 成本预估视图（确认弹窗数据源；余额内联由前端复用 ai_get_balance）。
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RefineEstimateView {
-    pub estimate: CostEstimate,
-    pub remember_cost_choice: bool,
-}
 
 /// 成本预估（REQ-143 + F1 修复：按模型映射单价、预估含输出 token——
 /// 切付费模型后费用不再显示 ¥0，消灭成本失真）。
@@ -567,123 +515,6 @@ fn stats_from(secs: &[SectionDiff]) -> DiffStats {
         unchanged: secs.iter()
             .filter(|s| s.status == crate::note_diff::DiffStatus::Unchanged)
             .count(),
-    }
-}
-
-/// 更新任务状态并推送事件（短锁内完成即释放）。M3 补充任务复用（pub(crate)）。
-pub(crate) fn set_task(st: &AppState, task_id: u64, new_state: AiTaskState) {
-    if let Ok(mut tasks) = st.ai_tasks.lock() {
-        if let Some(entry) = tasks.get_mut(&task_id) {
-            entry.state = new_state.clone();
-            let _ = st.app.emit("ai:task-update", (task_id, &new_state));
-        }
-    }
-}
-
-/// 注册表容量守卫（超限丢弃最旧终态任务——防无界增长）。M3 补充任务复用。
-///
-/// @ai-context: 审查修复（2026-08-21）：原实现终态任务数 < excess 时删不完
-///              （并行 Running 占满时 len 持续 > CAP）——改为 while 循环，
-///              无终态可删时停止（Running 任务不可删——任务执行中）。
-pub(crate) fn trim_tasks(tasks: &mut HashMap<u64, AiTaskEntry>) {
-    while tasks.len() > TASKS_CAP {
-        let oldest_terminal = tasks
-            .iter()
-            .filter(|(_, t)| !matches!(t.state, AiTaskState::Pending | AiTaskState::Running { .. }))
-            .min_by_key(|(id, _)| **id)
-            .map(|(id, _)| *id);
-        match oldest_terminal {
-            Some(id) => {
-                tasks.remove(&id);
-            }
-            None => break,
-        }
-    }
-}
-
-/// 任务序列（AppState 装配）。
-pub fn task_seq() -> Arc<AtomicU64> {
-    Arc::new(AtomicU64::new(1))
-}
-
-/// id 序列下限（纯函数）：取「当前值」与「DB 最大 task_id + 1」之大。
-///
-/// @ai-context Why（2026-09-09 批 1 修复）：启动恢复后序列必须越过 **DB
-///              全表** 最大 id——恢复集只含未采纳成功任务，已采纳/failed/
-///              proofread/goal_plan 行 id 更大时，若只按恢复集推进，新任务
-///              将复用历史 task_id 并被 insert_ai_task 的 INSERT OR REPLACE
-///              静默顶替（历史行含已采纳——数据丢失）。saturating 防极端 id
-///              溢出；序列只前进不回退（当前值更大时保持）。
-pub fn task_seq_lower_bound(current: u64, db_max_task_id: u64) -> u64 {
-    current.max(db_max_task_id.saturating_add(1))
-}
-
-/// 认领下一个 AI 任务 id（全任务族唯一分配点——proofread/refine/enrich/
-/// note_refine/goal_plan 共用的单调序列，返回值即 task_id，推进量=认领量）。
-///
-/// @ai-context Why（2026-09-09 批 2 审查修复）：proofread 原写作
-///              fetch_add(1, SeqCst) + 1（+1 存量来源 1904c2c7——按「0 起
-///              序列」直觉，但 task_seq() 初值 1 且其余族均以 fetch_add
-///              返回值直接作 id）。fetch_add(1)+1 只把计数器推进 1 却领走
-///              后值：紧邻的下一次认领（任意其他族）恰好拿到同一 id →
-///              insert_ai_task 的 INSERT OR REPLACE 运行期顶替先落库行
-///              （running 记账/结果/成本丢行）。统一本函数分配：认领严格
-///              单调、相邻认领永不相交。Relaxed 即足——唯一性由 fetch_add
-///              原子读-改-写保证，无需跨线程同步排序（与启动序列下限
-///              fetch_update 及 enrich/note_refine/goal_plan 现场同式内联
-///              的 Relaxed 同档，口径一致）。
-pub fn claim_task_id(seq: &AtomicU64) -> u64 {
-    seq.fetch_add(1, Ordering::Relaxed)
-}
-
-/// 任务注册表（AppState 装配）。
-pub fn task_registry() -> Arc<Mutex<HashMap<u64, AiTaskEntry>>> {
-    Arc::new(Mutex::new(HashMap::new()))
-}
-
-/// 成本硬拦截安全系数（预估费用 × 系数 < 余额才放行——防预估偏差导致
-/// 中途余额耗尽；免费档 ¥0 预估恒放行）。
-const BALANCE_SAFETY_FACTOR: f64 = 1.2;
-
-/// 成本硬拦截（F3-D，2026-08-21）：启动前校验余额。
-///
-/// @ai-context: 流程：按字符数预估费用（模型映射单价 + 输出 token）→ 查余额
-///              （复用 AiBalanceAdapter）→ 余额 < 预估×1.2 → 拒绝启动 + 三出口
-///              引导（充值/切免费档模型/放弃）。免费档（预估 ¥0）→ 恒放行
-///              （余额 0 也可精修——免费模型不扣费）；余额查询失败 → 放行
-///              （不因余额接口抖动阻断功能——降级宽容，费用风险由确认弹窗
-///              展示承担）。精修/补充共用（补充经 enrich 命令调用本函数）。
-pub(crate) fn ensure_balance_for(st: &AppState, chars: usize, model: &str) -> Result<(), String> {
-    let est = estimate_for_content_model(chars, model);
-    if est.est_cost_yuan <= 0.0 {
-        return Ok(()); // 免费档/单价 0——无扣费风险，不拦截
-    }
-    let required = est.est_cost_yuan * BALANCE_SAFETY_FACTOR;
-    // 余额查询（短超时——余额接口抖动不阻断精修；失败放行宽容降级）
-    // M1 统一门禁：Ollama 本地 Provider 无计费语义——跳过余额检查（m-7.3）
-    if crate::commands_ai_providers::is_default_provider_local(st) {
-        return Ok(());
-    }
-    if !crate::commands_ai_providers::default_provider_ready(st)? {
-        return Err("未配置 API 密钥——请在设置页「AI 服务提供商」配置密钥（或使用 Ollama 本地）".to_string());
-    }
-    let api_key = crate::commands_ai_providers::resolve_default_provider_key(st)?.unwrap_or_default();
-    let settings = st.ai_settings.lock().map_err(|e| format!("AI 设置锁中毒: {}", e))?.clone();
-    let store = st.ai_providers.lock().map_err(|e| format!("AI Provider 存储锁中毒: {}", e))?.clone();
-    let cfg = crate::ai_client::AiClient::from_settings_with_store(&settings, Some(api_key), &store).config;
-    let adapter = crate::ai_balance::AiBalanceAdapter {
-        base_url: cfg.base_url,
-        api_key: cfg.api_key,
-        timeout_secs: cfg.timeout_secs,
-        max_retries: 0, // 拦截是前置守卫——不重试，失败放行
-    };
-    match adapter.fetch() {
-        Ok(balance) if balance.total_balance < required => Err(format!(
-            "余额不足：当前 ¥{:.2}，本次预估 ¥{:.4}（安全系数 ×1.2）——请充值或切换免费档模型后重试",
-            balance.total_balance, est.est_cost_yuan
-        )),
-        Ok(_) => Ok(()),
-        Err(_) => Ok(()), // 余额查询失败 → 放行（宽容降级，费用由确认弹窗展示）
     }
 }
 
