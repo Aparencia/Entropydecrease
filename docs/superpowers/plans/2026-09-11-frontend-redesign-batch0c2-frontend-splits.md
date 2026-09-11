@@ -342,6 +342,7 @@ git diff --stat -- docs/standards/line-limit-exemptions.md   # 期望空（连�
 - **`0-C3`（Rust 10 个 >600 文件）**：`lib.rs` 1025 / `types.rs` 1017 / `live_session_frame.rs` 974 / `commands_ai_refine.rs` 751 / `db_goals.rs` 707 / `commands_goals.rs` 673 / `ai_refine_task.rs` 670 / `note_filter.rs` 642 / `artifact_templates.rs` 632 / `video_profile.rs` 628。含 `lib.rs`（AGENTS.md §10 需额外审查：Tauri command 注册边界）。
 - **4 个扫描域外文件**（`0-C1` 登记）：`app/src-tauri/build.rs` 152 · `app/src-tauri/examples/capture_ocr_diag.rs` 208 · `app/vite.config.ts` 40 · `app/vitest.config.ts` 23 —— 均 ≤300，但不归红线管辖（扫描域只有 `app/src` + `app/src-tauri/src` 的 `.ts/.tsx/.rs`）。若要扩域须另立批次。
 - **CI 的 `app-rust` 预存失败**：本地以 CI 同一条命令实测 `cargo clippy -- -D warnings` = exit 101 / 15 个 error（**与本批无关**）。CI 在修好前不能充当 `(e)` 的兜底（本地门禁已能守）。
+- **Task 3 评审的覆盖 follow-up（评审者建议，本批不做）**：拆出的 `useSessionDetailData.ts` 等新文件**无测试**（全仓无 `*.test.tsx` 引用它们）。建议另立批次补 3 例：R3 最新回调 / R4 幂等 / 两处失败文案分离（见 `.superpowers/sdd/2026-09-11-frontend-redesign-batch0c2-frontend-splits/task-3-review.md` 的 Important ③）。
 - **`ClassroomPage` 的既有缺陷（本批只搬不改 —— 分析报告 R10）**：B1（Ctrl+Shift+S 与 `NoteEditView` 拆段同键双义）· G6（`ReadyCheckCard` 与页内模型卡状态可能矛盾）· G7（采集中仍可改选窗口）—— 出处 `docs/Foresight/ux-market-convention-audit.md`，留待批 4（动效/交互）或独立技术债批次。
 - **`docs/tech-debt/` 未入库**、**Starter Kit 双重身份**（`docs/` 既是对外可复制模板又是本项目活文档）—— 均为 `0-C1` 登记项。
 
