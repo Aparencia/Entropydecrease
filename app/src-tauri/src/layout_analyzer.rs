@@ -24,7 +24,7 @@ pub enum RegionKind {
     Code,
     /// 图片/照片区域
     Image,
-    /// 无法分类（低置信 → AI 补缝候选，V1.0）
+    /// 无法分类（低置信；原 AI 补缝候选通道已随 ADR-010 退役）
     Unknown,
 }
 
@@ -454,7 +454,7 @@ fn is_code_block(grid: &FrameGrid, x0: u32, y0: u32, x1: u32, y1: u32) -> bool {
 ///
 /// @ai-context: table/code 高权重高分辨率（结构信息价值高）；formula 中权重；
 ///              text 常规；image 跳过（非文字信息，M6 图集处理）；
-///              unknown 低权重（低置信 → 补缝 AI 候选，V1.0）。
+///              unknown 低权重（低置信；原补缝 AI 候选通道已随 ADR-010 退役）。
 /// @ai-context: 返回 (采样权重 0.0-1.0, 是否跳过)。权重乘到区域级采样频率。
 /// @ai-context: M4（region_ocr 调度）消费本表；当前仅测试覆盖，登记豁免 dead_code。
 #[allow(dead_code)]

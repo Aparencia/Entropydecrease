@@ -6,7 +6,7 @@
 //! @ai-context: 本模块为纯逻辑（坐标还原/裁剪参数/区域调度封顶），可单测；
 //!              实际 OCR 调用由编排层（live_session_frame）执行。
 //! @ai-context: 回退链：layout 失败 → 整帧直跑（现状行为）；区域识别失败 →
-//!              该区域标记 unknown（低置信 → 图片归档候选/AI 补缝 V1.0）。
+//!              该区域标记 unknown（低置信 → 图片归档候选；原 AI 补缝通道已退役）。
 
 // v0.12.0 M5 补完成后（ADR-023 视频会话不再识别画面要点）：region_ocr_blocks
 // 及其专属辅助（schedule_regions/crop_spec/map_to_frame/crop_region_bgra/
@@ -112,7 +112,7 @@ pub fn schedule_regions(regions: &[LayoutRegion]) -> Vec<&LayoutRegion> {
 /// 区域识别结果（编排层回填：区域 + 还原后的块）。
 ///
 /// @ai-context: 当前编排层内联处理区域结果（region_ocr_blocks），本结构为
-///              测试契约与后续产物/补缝消费预留，登记豁免 dead_code。
+///              测试契约与机制先行预留（原产物/补缝消费方已于批 1 删除），登记豁免。
 #[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
 pub struct RegionOcrResult {
@@ -191,7 +191,7 @@ pub fn region_ocr_blocks(
                             h: bbox.h / spec.scale,
                         });
                     }
-                    // 区域类型标注（M4：产物/补缝判定器消费）
+                    // 区域类型标注（M4；原产物/补缝判定器消费方已于批 1 删除）
                     b.region_kind = Some(region.kind.as_str().to_string());
                     merged.push(b);
                 }

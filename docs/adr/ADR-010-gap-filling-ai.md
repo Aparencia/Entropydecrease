@@ -2,7 +2,9 @@
 
 ## 状态
 
-已接受（2026-08-18，六轮头脑风暴轮 6 产出；0.5.0 做协议前置构建，V1.0 实装云端）
+**已废弃（2026-09-11 批 1 裁决 · 2026-09-12 落地，退役修订）** —— 原「已接受（2026-08-18，六轮头脑风暴轮 6 产出；0.5.0 做协议前置构建，V1.0 实装云端）」。
+退役依据：[前端重设计规格 §9/§10](../superpowers/specs/2026-09-11-frontend-redesign-design.md)（批 1「删除批」）· 控制方 2026-09-11 裁决。状态词取自 [ADR 标准](../standards/adr.md) 的状态流转 `Proposed → Accepted → (Deprecated | Superseded)` 与本目录索引词表：**已废弃** =「不再适用，但保留供历史追溯」；取「已废弃」而非「已取代」，因为**没有任何新 ADR 取代它**（本决策是被撤回，不是被替代）。
+**本文档保留供历史追溯，不删除**（ADR 纪律：被废弃的 ADR 不删除，见 [ADR 标准](../standards/adr.md)）。
 
 ## 日期
 
@@ -91,3 +93,42 @@
 - [头脑风暴：视频类型 × 提取优化（轮 6，[ ] 已归档）](../archive/2026-08-19/brainstorming-video-types.md)
 - [头脑风暴：无云端 AI 的内容提取极限](../Foresight/brainstorming-no-cloud-ai-extraction-limit.md)
 - [v0.5.0 版本计划](../versions/v0.5.0.md)（M8 补缝前置 / 七、远期规划）
+
+## 退役修订（2026-09-11 裁决 / 2026-09-12 落地）
+
+### 退役范围（**只此一项**）
+
+**「补缝式 AI」这一具体形态退役**：块级 `ai_candidate` 判定器 · 上传协议 schema 与 mock 适配器 · 三条前置 IPC 命令（`scan_ai_candidates` / `ai_enhance_mock` / `ai_enhance_status`）· `ai_judge` 判定器模块。
+
+落地于**批 1（删除批，规格日期 2026-09-11 / 提交日期 2026-09-12）**，逐条可复现：
+
+| 事实 | 实测（2026-09-12） | 复现命令 |
+|---|---|---|
+| 注册命令总数 | **312**（334 → 312；本批共删 **22** 条，其中补缝三连 **3** 条） | `node scripts/check-command-registry.mjs` → `✅ 命令注册一致：定义 312 / 注册 312 / 重复 0` |
+| 被删命令名（全批 22 条） | `ai_enhance_mock` · `ai_enhance_status` · `scan_ai_candidates` + 另 19 条 | 对 `e96ab63d`（批 1 开工前）与 HEAD 各取 `app/src-tauri/src/app_commands.rs` 的 `generate_handler!` 清单，按 `scripts/check-command-registry.mjs` 的官方逐行解析口径做集合差；探针 `.superpowers/sdd/2026-09-11-frontend-redesign-batch1-deletions/tmp/diff-registry.js`（未入库）→ `before=334 after=312 removed=22 added=0` |
+| 被删模块/符号（补缝面） | `ai_judge.rs`（158 行，整文件）· `ai_judge_tests.rs`（139 行 / 9 用例）· `ai_mock_tests.rs`（7 用例）· `AiMockAdapter::enhance` · `ai_protocol.rs` 的 `AiEnhance*` 半边（`AiEnhanceRequest`/`AiEnhanceResponse`/`AiResponseContent`/`AiNode`/`AiRequestType` 等 8 符号 + 10 用例） | `git diff --name-status --diff-filter=D e96ab63d HEAD` · `git grep -nF AiEnhance -- app/` → 只剩持久化来源标记 `BlockSource::AiEnhanced`（**不是**协议类型） |
+| 主提交 | `fd9dd8f9 chore(rust): 删补缝三连及连带死模块与协议半边`（10 文件 +22 / −904） | `git show --stat fd9dd8f9` |
+| 本 ADR 的修订史 | **仅 2 次提交**（`0a4dabf0` 创建 / `1cbb56bf` 归档搬移）⇒ 本次退役是它自创建以来的**第一次实质修订**（"从未被实质修订"这一主张因此可查） | `git log --oneline -- docs/adr/ADR-010-gap-filling-ai.md` |
+| 仍然活着的替代通道 | `review_text_filter` / `text_filter_status`（REQ-085 文本复核）仍注册；`ai_protocol.rs` 现为 `TextFilter*` 单一协议；`ai_mock.rs` 仍在（`review_text` 离线 mock） | `git grep -nF TextFilter -- app/src-tauri/src/ai_protocol.rs` · `Select-String -Path app/src-tauri/src/app_commands.rs -Pattern 'review_text_filter'` |
+
+### 退役理由（三条，均为实测）
+
+1. **宿主特性已下线**：本决策的渲染宿主「产物视图」在 v0.11.5 已删除 ⇒ `ai_candidate` 块与 `AiEnhanceResponse` 的渲染链路没有消费端。（批 1 Task 3 随后删掉整个产物子系统：`commands_artifacts.rs` / `artifact_templates*.rs` / `narrative_detect*.rs`。）
+2. **能力已被更好的通道覆盖**：本地失败块的「文本侧」由 REQ-085 文本复核（`review_text_filter` / `text_filter_status`，**活**）承载；「图像侧」由 [ADR-023](./ADR-023-video-ocr-offline-vision-extract.md) 的精修图片理解承载；二者都不依赖 `ai_candidate` 判定器。
+3. **从未实装且不再排期**：V1.0 云端实装（REQ-056）从未开工，规格 §9 已把三条命令归入「删」。
+
+### ★ 退役**不包含**的内容（仍然生效，逐条）
+
+下列条款**继续有效**，其出处仍在本文档（因此其他 ADR 对本 ADR 的引用**不失效、不悬空**）：
+
+- **本地优先**：数据不出本机；本地结果永远保留（AI 是叠加层而非替代层）。
+- **AI 默认关闭 + 用户授权**：任何上传必须用户显式授权，上传前可见、可拒绝。
+- **必须有本地降级路径**：云端不可用/未授权/超配额 ⇒ 回退纯本地结果，永不阻断主链路（现由 `review_text_filter` 的降级链与 `ai_refine_task` 的纯文本降级承载）。
+- **上传最小化**：只传完成本次理解所必需的最小内容（现由精修切片与文本复核批次承载）——ADR-023 的图片授权契约是它在图像侧的扩展。
+- **凭据与隐私**：密钥走 DPAPI 凭据库（ADR-016），审计留痕（`ai_guardrails`，现服务活着的精修/文本复核链路）。
+
+⇒ **本 ADR 退役 ≠ 本地优先红线放松**。红线全文见 `AGENTS.md` §4 与规格 §3；引用本 ADR 的 ADR-016 / 017 / 021 / 023 / 026 / 027 / 028 / 029 / 030 引用的是上述**仍然生效**的条款（另 [ADR-033](./ADR-033-l1-primitives-and-view-layer-contract.md) 的「登记」节与本目录索引已同步为「已废弃 / 批 1 已落」）。
+
+### 残留（**已清零**，2026-09-12 更正）
+
+计划原文曾把 `ai_protocol.rs` 的 `AiEnhance*` 半边登记为「未随本批删除的残留，给批 8」；**该判断已被控制方 2026-09-12 裁决推翻** —— 半边与 `TextFilter` 半边已物理切开并随 `fd9dd8f9` 一起删除 ⇒ **本决策「判定器 / 协议 / mock / 三命令」这一面的在码残留为 0**。不在删除面内、因此仍然存在的只有 `artifact.rs` 的持久化来源标记 `BlockSource::AiEnhanced`（历史数据的格式契约，**不可删**，与协议类型无关）。

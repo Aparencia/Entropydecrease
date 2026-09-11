@@ -68,7 +68,7 @@ v0.8.0 M1（REQ-138）需要 AI 密钥（SiliconFlow API Key）的安全存储�
 
 - `ai_credentials.rs` 单测（内存桩 roundtrip/清除/空密钥拒绝）；DPAPI 为系统调用不单测（与 model_downloader 同口径）。
 - 构建验证：`cargo build` 在 windows crate 增加 `Win32_Security_Cryptography` feature 后通过。
-- 代码审查：设置视图无密钥字段回传；`ai_save_key` 仅写凭据库。
+- 代码审查：设置视图无密钥字段回传；密钥写入只经凭据库（原单 provider 入口 `ai_save_key` 已于批 1 删除，2026-09-12；现行入口 `ai_provider_save_key` 走同一条写入路径）。
 
 ## 相关决策
 

@@ -1,11 +1,12 @@
-//! 补缝式 AI 护栏骨架（REQ-055 / v0.5.0 M8，依据 ADR-010）。
+//! AI 护栏（起源 REQ-055 / v0.5.0 M8；其原宿主「补缝式 AI」已随 ADR-010 退役，本模块留存）。
 //!
-//! @ai-context: 成本与隐私护栏（云端 V1.0 实装后生效，本版骨架就位）：
-//!              ① 同图 hash 缓存（不重复上传/计费）；② 每日配额计数器；
-//!              ③ 审计日志（上传了什么/何时/结果——V1.0 启用）；
+//! @ai-context: 成本与隐私护栏，现服务活着的 AI 链路（笔记文本复核 / 精修 / 笔记精修）：
+//!              ① 内容 hash 缓存（不重复上传、不重复计费）；② 每日配额计数器；
+//!              ③ 审计日志（上传了什么/何时/结果——经 `ai_audit_list` 可见化）；
 //!              ④ 来源标记 ai-enhanced 永远可辨认（产物块 source）。
 //! @ai-context: 纯逻辑可单测（日期翻转/配额耗尽/hash 命中）；
-//!              hash 缓存与审计落库由 command 层接 SQLite（骨架接口已定）。
+//!              全部状态**纯内存**（`AiGuardrails` 由 AppState 持有）：hash 缓存与审计缓冲
+//!              都不落库 —— 本模块零 SQLite 依赖（旧文案称"落库由 command 层接"不成立）。
 
 use std::collections::HashMap;
 
@@ -69,9 +70,9 @@ pub fn text_hash(text: &str) -> u64 {
     h.finish()
 }
 
-/// 同图 hash 缓存（不重复上传/计费）：裁剪图 hash → 已获取的 AI 响应。
+/// 内容 hash 缓存（不重复上传/计费）：送审内容 hash → 已获取的 AI 响应。
 ///
-/// @ai-context: 判定器同图多次失败（静止画面多帧）→ 命中缓存零重复上传；
+/// @ai-context: 同一内容重复送审（同文本段/同图多帧）→ 命中缓存零重复上传；
 ///              缓存带容量上限（LRU 淘汰）。
 #[derive(Debug)]
 pub struct AiHashCache {
@@ -131,7 +132,7 @@ impl AiHashCache {
     }
 }
 
-/// 审计日志条目（V1.0 实装后启用；落库字段契约）。
+/// 审计日志条目（**纯内存**缓冲条目；`at_ms`/序列化仅供 IPC 与前端展示，无落库路径）。
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AiAuditEntry {
     pub at_unix: i64,
@@ -141,15 +142,15 @@ pub struct AiAuditEntry {
     pub result: String,
 }
 
-/// 护栏聚合状态（AppState 持有：每日配额 + 同图缓存 + 审计日志内存缓冲）。
+/// 护栏聚合状态（AppState 持有：每日配额 + 内容缓存 + 审计日志内存缓冲）。
 ///
 /// @ai-context: command 层在锁内 read-modify-write（防 TOCTOU）；
-///              审计日志 V1.0 实装后落库（骨架接口：push 缓冲已就位）。
+///              审计日志**只留在内存**（`ai_audit_list` 读、`ai_audit_clear` 清，无落库）。
 #[derive(Debug)]
 pub struct AiGuardrails {
     pub quota: DailyQuota,
     pub cache: AiHashCache,
-    /// 审计缓冲（V1.0 落库前保留最近 200 条）
+    /// 审计缓冲（纯内存，保留最近 200 条）
     pub audit: Vec<AiAuditEntry>,
 }
 

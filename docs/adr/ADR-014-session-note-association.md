@@ -26,7 +26,7 @@
    - 删除会话只断开关联、不删笔记（SET NULL 语义——与级联删除转写/OCR/图集的既有行为刻意区分）。
    - 旧数据诚实处理：历史 `classroom` 笔记无关联信息 → 保持 NULL（不猜不填）；用户可在详情页重新转换建立关联。
    - 一个会话可多次转换（详情页"转为笔记"= 有意的重新生成）：`find_note_by_session` 按 `created_at DESC, id DESC` 取最新，历史笔记保留可手动删。
-   - 手写笔记（create_note/save_draft_as_note/process_to_note）不写 session_id（手动路径无来源会话）；`artifact_to_note` 写 session_id（产物→笔记同样是会话转化，has_note 口径统一）。
+   - 手写笔记（`create_note` / `process_to_note`）不写 session_id（手动路径无来源会话）；会话→笔记通道（`session_to_note` / `batch_session_to_note`，`commands_session_note.rs:245`）写 session_id（同样是会话转化，has_note 口径统一）。**2026-09-12 批 1 更正**：原列的两条命令已删——`save_draft_as_note`（手写路径，批 1 Task 2）与 `artifact_to_note`（产物路径，批 1 Task 3，整个产物子系统随之下线）；上述口径由存活的 `create_note` / `process_to_note` / `session_to_note` 承载。
 
 2. **新契约 `SessionListItem`**（包装而非扩展 `Session`，隔离风险）：
    - `{ session, has_note, note_id, note_title, has_content }`，camelCase 序列化（与 CourseGroup/SegmentHit 同口径）。

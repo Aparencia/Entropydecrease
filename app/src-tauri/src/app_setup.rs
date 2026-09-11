@@ -104,7 +104,7 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
     let asr_confusion = std::sync::Arc::new(std::sync::Mutex::new(
         crate::asr_confusion::AsrConfusionStore::load(&asr_confusion_path),
     ));
-    // v0.5.0 M8（REQ-055）：补缝式 AI 护栏骨架（配额/缓存/审计；云端 V1.0 生效）
+    // v0.5.0 M8（REQ-055）：AI 护栏状态（配额/缓存/审计；纯内存，服务活着的 AI 链路）
     let ai_guardrails =
         std::sync::Arc::new(std::sync::Mutex::new(crate::ai_guardrails::AiGuardrails::default()));
     // v0.11.1：功能开关（feed_capture 默认关——v4 §11.3；JSON 持久化，

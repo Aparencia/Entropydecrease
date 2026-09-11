@@ -73,7 +73,7 @@
 | REQ-052 | 产物体系：Artifact 块模型+五档案模板+产物视图+落笔记 | P1 | 已实施（M7） | v0.5.0 | 轮 5 落地；块引用原料不复制；沿用 NoteDraft→Note 通道 |
 | REQ-053 | 渲染器升级：LaTeX/表格/代码/图集块渲染 | P1 | 已实施（M5/M7） | v0.5.0 | KaTeX 本地化（无 CDN）；低置信/AI 占位样式（图集组件随 M6/M7 落地） |
 | REQ-054 | 词级时间戳（B8）+ 置信度落库（B3） | P1 | 已实施（M9） | v0.5.0 | 词级时间戳协议/提取纯函数就位（sherpa-onnx 1.13 Rust 包装未暴露 enable_token_timestamps，启用点=V1.0 升级/FFI）；置信度落库已有（段 confidence/块 score） |
-| REQ-055 | 补缝式 AI 前置：判定器+ai_candidate 块+协议 schema+mock+护栏骨架 | P1 | 已实施（M8） | v0.5.0 | 轮 6 + [ADR-010](../adr/ADR-010-gap-filling-ai.md)；协议先行，云端实装 V1.0（REQ-056） |
+| REQ-055 | 补缝式 AI 前置：判定器+ai_candidate 块+协议 schema+mock+护栏骨架 | P1 | **已退役（2026-09-11 批 1 删除；ADR-010 转已废弃）** | v0.5.0 | 轮 6 + [ADR-010](../adr/ADR-010-gap-filling-ai.md)（**已废弃**）；协议先行，云端实装 V1.0（REQ-056）；**实现（判定器/协议/mock/三命令）已于批 1 删除（2026-09-12 落地，`fd9dd8f9`），见 ADR-010「退役修订」** |
 
 ### v0.6.0 · 提取质量与信任 + 性能资源 + 会话体验（第六阶段）
 
@@ -170,7 +170,7 @@
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
 |----|------|--------|------|---------|------|
-| REQ-135 | 转化状态可视化 + 会话↔笔记双向关联：notes.session_id 列（SET NULL 保笔记）+ SessionListItem 标记（has_note/note_id/has_content）+ 笔记页「来源会话 →」互跳 | P1 | 已实施 | v0.7.1 | 旧 classroom 笔记诚实 NULL（不猜不填）；详情页重新转换可建立关联；artifact_to_note 同步写关联（口径统一） |
+| REQ-135 | 转化状态可视化 + 会话↔笔记双向关联：notes.session_id 列（SET NULL 保笔记）+ SessionListItem 标记（has_note/note_id/has_content）+ 笔记页「来源会话 →」互跳 | P1 | 已实施 | v0.7.1 | 旧 classroom 笔记诚实 NULL（不猜不填）；详情页重新转换可建立关联；artifact_to_note 同步写关联（口径统一）；⚠️ **2026-09-12 批 1 更正**：`artifact_to_note` 已随产物子系统删除（批 1 Task 3）——写关联的活通道是 `session_to_note` / `batch_session_to_note`（`commands_session_note.rs:245`）；`notes.session_id` 列与 `SessionListItem` 标记本身未动 |
 | REQ-136 | 批量转笔记：batch_session_to_note（≤50、部分成功语义、跳过规则显式回传）+ 列表行内一键转笔记（4 步→1 步）+ 已转会话显示「查看笔记 →」 | P1 | 已实施 | v0.7.1 | convert_to_note 核心提取（单条/批量共用单一管线，REQ-081/082 原则延续）；批量跳过已转防重复，详情页保留有意重新生成 |
 | REQ-137 | 会话列表管理增强：状态/转化筛选 + 排序 + 批量删除（笔记保留）+ 双模式搜索整合（标题/转写内容）+ 事件驱动刷新（live:status/session:fused/切页 active）+ 新完成提示条 + 空态/加载态 | P1 | 已实施 | v0.7.1 | display:none 挂载不刷新导致的"采集中"残留根治（TD-004 副作用）；筛选本地过滤零后端改动 |
 
@@ -295,7 +295,7 @@
 | REQ-190 | 领域标签体系（粗+细两级）：粗 15 领域（内置种子词表 20-50 词）+ 细标签开放（平台原文/术语频率自动命中）；接线 hotwords 预热（VocabManager 通道）/术语表筛选/区域预期（数学→公式区、代码→code 区）；来源=平台分区标签→标题领域词→用户确认→会话中术语频率 | P1 | 已实施 | v0.9.0 | 领域错判代价低：无需确认门禁，可随时改；细标签"公积金"类不必枚举；video_profile_domain.rs 已落地 |
 | REQ-191 | 平台信号适配：轻量平台适配器（detect_video_profile 增 platform 输入，前端从窗口标题/进程名推断；初期 bilibili 分区标签→领域+画面暗示 + local 文件路径→路径语义）+ OCR 标签通用化（画面内标签/标题卡文字入投票词表映射）；无平台信号时零回归 | P2 | 已实施 | v0.9.0 | 会话 33 分区标签（`知识科普\|经济管理`）实证；浏览器/独立播放器场景靠通用层信号；platform_adapter.rs 已落地 |
 | REQ-192 | 检测卡 v2 三维一体交互：形态/画面/领域各自可点击下拉修改（修改即记忆）；置信不足维度高亮"待确认"；未知维度"识别中"不阻塞会话开始；档案卡不含"开始捕获"按钮（归课堂助手采集控制区） | P1 | 已实施 | v0.9.0 | 用户裁决 2026-08-21；询问门禁=错判代价（形态必问/画面不问/领域可改）；ProfileDetector.tsx 已重写 |
-| REQ-193 | 叙事结构产物模板变体：故事线/结构化条目/直接教学；讲义/摘要模板"叙事线+要点提取"变体（专有名词角色+口语故事化转折词检测），保留叙事主线同时提取结构化要点 | P2 | 已实施 | v0.9.0 | 会话 33 故事化科普（小马故事+1/2 要点）实证；模板内部规则，非独立维度；narrative_detect.rs 已落地 |
+| REQ-193 | 叙事结构产物模板变体：故事线/结构化条目/直接教学；讲义/摘要模板"叙事线+要点提取"变体（专有名词角色+口语故事化转折词检测），保留叙事主线同时提取结构化要点 | P2 | 已实施（2026-09-12 批 1 起已回退，见备注） | v0.9.0 | 会话 33 故事化科普（小马故事+1/2 要点）实证；模板内部规则，非独立维度；narrative_detect.rs 已落地；⚠️ **2026-09-12 批 1 更正**：`narrative_detect.rs` 与 `artifact_templates*.rs`（模板变体的宿主）已随产物子系统整套删除（批 1 Task 3）⇒ 本需求的实现已不在代码中 |
 
 ### v0.11 · 大目标版本系列：v4 路线图落地（两地形、一产物、一循环，2026-08-22 裁决立项）
 
@@ -334,7 +334,7 @@
 |----|------|--------|------|---------|------|
 | REQ-199 | 内容分型动作卡（N13 续）：flashcards.kind 扩展 fact/action（model 留接口）；动作卡生成规则纯函数（碎片含步骤语义信号→action 卡，front=动作名 back=步骤清单；无信号维持 fact）；golden TDD | P1 | 已实施 | v0.11.4 | v2 §8.1 内容分型最小版；不做动手闭环 UI（N12 另议）；**代码已交付（2026-08-22，card_generate 分型规则 + 5 个 golden 用例，22 测通过）** |
 | REQ-200 | 周契约视图 UI（弹性承诺呈现层 P31+N10）：contracts 表（group_id/week_start/target_days/target_cards）+ upsert_week_contract 幂等 + week_contract_status（review_logs 周聚合纯函数）；组面板周契约卡（目标设定/完成进度/断签不清零视觉/最小可行日徽标） | P1 | 已实施 | v0.11.4 | 弹性承诺纪律不变：无 streak、无惩罚、欠账不追；**代码已交付（2026-08-22，week_contract 纯函数 16 测通过 + contracts 表 + 周契约卡）** |
-| REQ-201 | feed 消费闭环（最小范围）：delete_fragment 命令 + list_group_fragments/update_fragment_group 接线；feed 组展开区碎片列表（文本+图片缩略，resolve 复用 app_data_dir）+ 删除/移出 + 空态引导；复习面"碎片卡"徽标（fragmentId） | P1 | 已实施 | v0.11.4 | 开关默认关（v4 §11.3）；零新界面；碎片→笔记升级不做（身份诚实）；契约二兑现；**代码已交付（2026-08-22，delete/移组/图片 resolve 三命令 + feed 碎片列表 + 复习面徽标）** |
+| REQ-201 | feed 消费闭环（最小范围）：delete_fragment 命令 + list_group_fragments/update_fragment_group 接线；feed 组展开区碎片列表（文本+图片缩略，resolve 复用 app_data_dir）+ 删除/移出 + 空态引导；复习面"碎片卡"徽标（fragmentId） | P1 | 已实施（2026-09-12 批 1 起部分回退，见备注） | v0.11.4 | 开关默认关（v4 §11.3）；零新界面；碎片→笔记升级不做（身份诚实）；契约二兑现；**代码已交付（2026-08-22，delete/移组/图片 resolve 三命令 + feed 碎片列表 + 复习面徽标）**；⚠️ **2026-09-12 批 1 更正**：`list_group_fragments` 命令已随 IPC 面收敛删除（`commands_fragments.rs` 整段），feed 组展开区碎片列表现由仍活的 `list_fragments` 兑现（`FeedFragmentList.tsx:87` · `GroupSidebar.tsx:114`）；`delete_fragment` 仍活（`FeedFragmentList.tsx:166`）；`update_fragment_group` 仍注册但**前端零调用方**（登记见规格 §14） |
 
 #### v0.12.2 · 笔记页信息架构重构（三栏 + 收件箱动线 + 路由信息收敛，2026-08-23 交付）
 
@@ -534,7 +534,7 @@
 
 | ID | 需求 | 优先级 | 状态 | 目标版本 | 备注 |
 |----|------|--------|------|---------|------|
-| REQ-056 | 补缝式 AI 实装：Qwen-VL 接入+授权计费+配额+审计 UI | P1 | 待评估 | V1.0 | 复用 REQ-055 协议与 mock；用户授权默认关闭；上传预览；审计可见化 |
+| REQ-056 | 补缝式 AI 实装：Qwen-VL 接入+授权计费+配额+审计 UI | P1 | 待评估 | V1.0 | 复用 REQ-055 协议与 mock；用户授权默认关闭；上传预览；审计可见化；⚠️ **REQ-055 的实现已于批 1 删除（2026-09-12）⇒ 若重启，需按 ADR-023 的图片理解通道重新设计，不再复用已删协议** |
 | REQ-057 | PP-Structure 模型组完整版：layout 模型+SLANet+UniMERNet 统一管理 | P2 | 部分落地（v0.5.0） | V1.0 余项 | layout/SLANet/公式模型已经 oar-ocr OARStructure 落地（按需下载）；余项：无线表格/手写公式模型增强（规则版"半做"边界覆盖） |
 | REQ-058 | 流程图语义重建：AI 补缝返回 nodes/edges 结构 | P2 | 待评估 | V1.0 | 本地规则版 0.5.0 仅区域标记；Mermaid 渲染可选 |
 | REQ-093 | AI 参考图上下文：补缝/问答自动附带相关图作视觉上下文 | P2 | 待评估 | V1.0 | 2026-08-19 头脑风暴（图像复用）；C14 授权维度已有，"自动选图"规则未定义；依赖 REQ-056 |

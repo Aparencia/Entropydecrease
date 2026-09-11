@@ -3,8 +3,8 @@
 //! @ai-context: 双轨保障——UniMERNet 模型版（spike 通过则为主）与规则版（兜底）：
 //!              本模块为规则版：字符基线 + 字号聚类 → 上下标判定 → LaTeX 片段
 //!              （x² → x^2、H₂O → H_2O）；分数线/根号/积分包围关系检测（渲染公式限定）。
-//! @ai-context: 手写公式 → 标 unknown → AI 补缝（V1.0）；本模块输入为
-//!              字符级识别结果（编排层由 OCR bbox 填充：字符 + 相对基线 + 字号）。
+//! @ai-context: 手写公式 → 标 unknown（原 AI 补缝判定器已于批 1 删除，ADR-010 退役）；
+//!              本模块输入为字符级识别结果（编排层由 OCR bbox 填充：字符 + 相对基线 + 字号）。
 //! @ai-context: 纯逻辑可单测；输入带 y 偏移与字号比，输出 LaTeX 与置信度。
 
 use serde::{Deserialize, Serialize};
@@ -110,8 +110,8 @@ pub fn build_fraction(numerator: &str, denominator: &str) -> Option<String> {
 ///
 /// @ai-context: 空输入 → 空块（confidence 0）；仅文本（无 y/字号特征）由编排层
 ///              构造 size_ratio=1.0 输入 → 全部 Normal → 原文直出 + 低置信。
-/// @ai-context: 消费方 = M7 产物体系（FormulaBlock 作为产物块类型）+ AI 补缝
-///              判定器（低置信 → ai_candidate）；当前阶段仅测试覆盖，登记豁免。
+/// @ai-context: 消费方 = 无（原 M7 产物体系与 AI 补缝判定器均已于批 1 删除，ADR-010 转已废弃）；
+///              当前仅测试覆盖，登记豁免 dead_code。
 #[allow(dead_code)]
 pub fn reconstruct_formula(chars: &[FormulaChar]) -> FormulaBlock {
     let source_text: String = chars.iter().map(|c| c.ch).collect();

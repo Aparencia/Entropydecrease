@@ -31,7 +31,8 @@ pub struct TranscriptSegment {
     pub volume: Option<f32>,
 }
 
-/// 词级时间戳（B8：产物双向定位 + AI 补缝判定器基础）。
+/// 词级时间戳（B8：`TranscriptSegment.word_timestamps` 的传输契约，serde 线格式由
+/// `types_contract_tests.rs` 锚定；产物双向定位与补缝判定器的消费方已于批 1 删除）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WordTimestamp {
     pub word: String,

@@ -600,7 +600,7 @@
 |---|---|
 | `docs/product/ui-ux-system.md` · `docs/product/theme.md` | **回写为目标态**（C+D、四层动效、三档强度、断点与窗口）—— 属 AGENTS.md §10「额外审查文件」。**批 0-D 已落**：`--ed-shadow-card → --ed-shadow-1/2` 的命名关系与定值 · **「L1 原语层」章节（§十一：10 类原语清单/消费场景/禁止事项 · 交互态契约 · 动效接缝与 reduced-motion 承诺 · token 消费纪律与两条用色禁令）** · 「剪报底纹上只用 `ink-3` 及更深」规则 · `--due` 第二次对比度修正。**四层动效 / 三档强度 / 断点与窗口 / §五§十 的旧参数仍留批 8**（T1 已登记：§十 tokens 代码块整体是旧版，与 ADR-032 不一致，未顺手重写） |
 | `docs/adr/ADR-032..035` | 新建 4 条 —— **ADR-032 ✅ · ADR-033 ✅（批 0-D）· ADR-034/035 顺延至批 3 / 批 6** |
-| `docs/adr/ADR-010-gap-filling-ai.md` | **修订为退役** |
+| `docs/adr/ADR-010-gap-filling-ai.md` | **修订为退役** —— ✅ **批 1 已落（2026-09-11 裁决 / 2026-09-12 落地）**：状态转**已废弃** + 文内「退役修订」节，索引与交叉引用同步（**保留文件，不删**） |
 | `docs/standards/line-limit-exemptions.md` | 纠偏 + 新拆文件登记 |
 | `docs/standards/` | 新增动效规范章节（现对动效**零命中**） |
 | `docs/product/requirements-pool.md` | REQ-201 修正（`update_fragment_group` 实际无调用方）· 新增 REQ 登记 |
