@@ -1,0 +1,41 @@
+/*
+ * StatusLine.css —— 状态行的**语义用色唯一出口**（批 0-D Task 12；规格 §5.1「三红归一」 / §4.1）。
+ *
+ * Why（为什么存在）：错误行现状 175 行 / 98 文件里三种红并存（recon §2.1 的色值分词：主红 138 次 /
+ * 深红 37 次 / 亮红 2 次），另有 30 行 / 23 文件的错误块底色各自手写；错误行还常挂在列表最底部
+ * （规格 §5.1 判为「视觉盲区」）。四档语义必须有**一处**出口，否则「哪一种红才算错」永远没有答案。
+ *
+ * 边界（四条都是硬约束）：
+ *   ① 颜色一律 `var(--ed-*)`，**本文件零颜色字面量**（色值只许在 ui/tokens.css 与 token 生成器里）。
+ *      这条也约束注释：本文件的注释里**不写任何色值**（写次数与 token 名即可）—— 守卫按文件文本判，
+ *      注释里的色值会制造假红（先例：`Button.css` 连危险色 token 的字面名字都不写）。
+ *   ② **本文件不写任何底色声明**（连该属性名都不出现）：危险色是全站唯一非中性色，规格 §4.1 原文
+ *      写明「绝不用于按钮」⇒ 四档一律只写 `color:`。机器判据在本原语的测试里，与 Task 14 Step 1
+ *      第 4 条**同向**（同一判据、同一方向，不另立标准）。
+ *   ③ 不写 `z-index`（层级走 `ui/zIndex.ts` 六档标尺）；不写 `position`（定位是调用点的事）。
+ *   ④ **不写 `@keyframes`、不写循环动画**：环境层的「探针摆动」落在 `Loading` 的 `Probe`，而状态行
+ *      是阅读面 —— 「不抢注意力」在这条原语上的正确形态就是**没有**持续动效（§8.6.1 第 1 条）。
+ *      reduced-motion 由 `motion.css` 的唯一媒体查询块统一覆盖（`.ed-status` 已在名单里），
+ *      本文件不重复写媒体查询（重复会让「一处改对所有地方」失效）。
+ */
+
+.ed-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ed-space-8, 8px);
+  /* 接缝（§8.6.1 第 2/3 条）：`color` 与 `opacity` 是批 6「错误浮现 / 消退」的两个可动画属性。
+     单属性、无时序、120ms（§8.2 判据：<200ms 的单属性反馈一律 CSS transition）⇒ 下一个输入直接
+     接管当前过渡，不排队、可反向。刻意**不加** `translate` / `scale`：状态行是阅读面，位移会让它
+     抢注意力；它的「即时回执」由 `role` 承载（见 StatusLine.tsx 的边界①），不由动效承载。 */
+  transition: color var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)),
+              opacity var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));
+}
+
+/* 四档语义色 —— 一律 `color:`，全文件没有任何底色声明。
+   四者对两档底 ≥4.5:1 由 `gen-tokens.test.mjs` / `contrast.test.ts` 断言（本文件不重述 token 真源）；
+   其中到期色亮档在剪报底上 4.5571:1 是余量最小的一条（第二次对比度修正后的值）。 */
+.ed-status--error { color: var(--ed-stamp); }
+.ed-status--warn  { color: var(--ed-due); }
+.ed-status--info  { color: var(--ed-ink-3); }
+.ed-status--ok    { color: var(--ed-ok); }

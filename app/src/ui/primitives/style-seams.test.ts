@@ -43,10 +43,10 @@ const TEXT_CLASSES: readonly string[] = [
   "ed-text--truncate",
 ];
 
-/** `motion.css` 的 11 个 `.ed-*` 基类（含本批后面才实现的选择器 —— 未实现的选择器无害） */
+/** `motion.css` 的 12 个 `.ed-*` 基类（含本批后面才实现的选择器 —— 未实现的选择器无害） */
 const MOTION_CLASSES: readonly string[] = [
   "ed-btn", "ed-surface", "ed-text", "ed-modal-overlay", "ed-modal", "ed-confirm",
-  "ed-toast", "ed-empty", "ed-loading", "ed-skeleton", "ed-probe",
+  "ed-toast", "ed-empty", "ed-loading", "ed-skeleton", "ed-probe", "ed-status",
 ];
 
 const COLOR_LITERAL = /#[0-9a-fA-F]{3,8}\b|\b(?:rgb|hsl)a?\(/;
@@ -186,7 +186,7 @@ describe("motion.css 接缝契约（批 6 删块即接管，故名字与取值�
     expect(violations, `位移超过规格 §8.4 的 8px 上限：\n${violations.join("\n")}`).toEqual([]);
   });
 
-  it("全仓唯一一条 reduced-motion 块，覆盖 11 个 `.ed-*` 基类（含 transition 与 animation 两条）", () => {
+  it("全仓唯一一条 reduced-motion 块，覆盖 12 个 `.ed-*` 基类（含 transition 与 animation 两条）", () => {
     const clean = stripComments(MOTION_CSS);
     expect(clean.match(/@media \(prefers-reduced-motion: reduce\)/g)).toHaveLength(1);
     const block = clean.slice(clean.indexOf("@media (prefers-reduced-motion"));

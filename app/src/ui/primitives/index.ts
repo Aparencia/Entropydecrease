@@ -41,3 +41,5 @@ export type { LoadingProps, ProbeProps, SkeletonProps } from "./Loading";
 export { Toast } from "./Toast";
 export type { ToastAction, ToastKind, ToastProps } from "./Toast";
 
+export { StatusLine } from "./StatusLine";
+export type { StatusKind, StatusLineProps } from "./StatusLine";

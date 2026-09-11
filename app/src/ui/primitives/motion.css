@@ -1,5 +1,6 @@
 /*
- * motion.css —— 原语层的**动效接缝**（批 0-D Task 3 一次写全，后续任务不再改本文件）。
+ * motion.css —— 原语层的**动效接缝**（批 0-D Task 3 一次写全；Task 12 经控制方 2026-09-11 明确
+ * 授权**只追加** `.ed-status` 一个基类名，其余内容逐字不动）。
  *
  * Why（为什么存在）：规格 §8.4 的时长/缓动在批 0-D 还没有真源（0-A 计划自审把「时长与缓动」
  * 推迟到批 6），但本批的每个原语都要在 transition 里引用它们（如 `.ed-text` 的墨度过渡）。
@@ -7,7 +8,8 @@
  * 所有引用点写的是 `var(--ed-dur-x, <同值字面量>)`，删块即生效，无需改任何规则。
  *
  * ② 本文件是**全仓第一条 `prefers-reduced-motion` 块**（实测改造前 0 处，recon §8.1）。
- *    名单一次写全 11 个 `.ed-*` 基类（含本批后面才实现的选择器 —— 未实现的选择器无害），
+ *    名单一次写全 12 个 `.ed-*` 基类（含本批后面才实现的选择器 —— 未实现的选择器无害；
+ *    Task 12 追加 `.ed-status`），
  *    换来「后续任务永不改本文件」；Task 14 的样式守卫断言每个 `.ed-*` **基类**都在名单里
  *    （**T14 判据 = 基类名单，不含修饰类** —— `.ed-text--s4` 这类修饰类与基类同在一个元素上，
  *    已被同一条规则覆盖，字面枚举修饰类会假红。控制方 2026-09-11 拍定）。
@@ -46,7 +48,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .ed-btn, .ed-surface, .ed-text, .ed-modal-overlay, .ed-modal, .ed-confirm,
-  .ed-toast, .ed-empty, .ed-loading, .ed-skeleton, .ed-probe {
+  .ed-toast, .ed-empty, .ed-loading, .ed-skeleton, .ed-probe,
+  .ed-status {
     transition-duration: 1ms !important;
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
