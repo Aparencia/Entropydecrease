@@ -30,6 +30,7 @@
     "semantic-release": "24.2.3"
   },
   "lint-staged": {
-    "docs/**/*.md": "node scripts/docs-check.mjs"
+    "docs/**/*.md": "node scripts/docs-check.mjs",
+    "app/**/*.{ts,tsx,rs}": "node scripts/line-limits.mjs"
   }
 }

@@ -171,3 +171,18 @@ jobs:
           node-version: 20
       - name: Docs check
         run: node scripts/docs-check.mjs
+
+  # ===========================================================================
+  # 行数红线 — AGENTS.md §3（全部行数口径；>600 棘轮只减不增）
+  # ===========================================================================
+  line-limits:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # --full：CI 额外守「登记值 == 实测值」（本地提交门禁不守，避免每次提交重写表）
+      - name: Line limits
+        run: node scripts/line-limits.mjs --full
