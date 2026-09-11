@@ -7,7 +7,10 @@
  *      （生成器改档后不重跑本层，兜底值会静默退回旧档 —— 未定义变量不报错）；
  *   ② `Text.tsx` 产出的每个类，`Text.css` 里必须有对应规则（类名拼错 = 静默无样式，编译期全绿）；
  *   ③ `motion.css` 的 10 个动效变量、**全仓唯一一条** reduced-motion 块，以及规格 §8.4 的
- *      「位移上限 8px」—— 批 6 要靠前两者删块接管，靠第三者不越界。
+ *      「位移上限 8px」—— 批 6 要靠前两者删块接管，靠第三者不越界；
+ *   ④ `Surface.css` 的**盒子口径**（控制方 2026-09-11 裁决）：基类必须自带
+ *      `box-sizing: border-box` 且**只声明一次** —— `padded` + `bordered` + `width:100%` 在
+ *      content-box 下溢出 26px，而本仓**没有全局 CSS reset**，盒子原语不自己声明就没人声明。
  *
  * 副作用：只读磁盘（同目录 + `primitives/` 下的 `.css`），不修改任何文件。
  * 边界：口径与 `tokens.drift.test.ts` 一致 —— **必须归一 EOL**（本仓无 `.gitattributes` 且
@@ -28,6 +31,7 @@ const stripComments = (s: string): string => s.replace(/\/\*[\s\S]*?\*\//g, "");
 
 const TEXT_CSS = read("Text.css");
 const MOTION_CSS = read("motion.css");
+const SURFACE_CSS = read("Surface.css");
 const INDEX_TS = read("index.ts");
 
 /** `Text.tsx` 产出的类名契约（与 `Text.test.tsx` 的名单同源；改名单必须同时改 CSS 与两份测试） */
@@ -78,6 +82,44 @@ describe("Text 类名 ↔ CSS 规则一致（类名拼错 = 静默无样式）",
   it("反例守门：`ed-text--mono` 是计划里的笔误写法，契约是 `ed-text--font-mono`", () => {
     expect(TEXT_CLASSES).toContain("ed-text--font-mono");
     expect(TEXT_CSS).not.toMatch(/\.ed-text--mono\b/);
+  });
+});
+
+/** `Surface.tsx` 产出的 12 个类名（与 `Surface.test.tsx` 的名单同源） */
+const SURFACE_CLASSES: readonly string[] = [
+  "ed-surface",
+  ...["sunken", "canvas", "surface", "raised"].map((l) => `ed-surface--${l}`),
+  ...["stamp", "control", "panel", "overlay"].map((r) => `ed-surface--r-${r}`),
+  "ed-surface--bordered",
+  "ed-surface--interactive",
+  "ed-surface--padded",
+];
+
+describe("Surface 盒子契约（控制方 2026-09-11 裁决 · 类名 ↔ CSS 一致）", () => {
+  it("基类必须自带 `box-sizing: border-box`（padded+bordered+width:100% 在 content-box 下溢出 26px）", () => {
+    const clean = stripComments(SURFACE_CSS);
+    const start = clean.indexOf(".ed-surface {");
+    expect(start, "Surface.css 缺少 `.ed-surface` 基类规则").toBeGreaterThanOrEqual(0);
+    const base = clean.slice(start, clean.indexOf("}", start));
+    expect(
+      base,
+      "`.ed-surface` 基类必须声明盒模型口径（本仓无全局 CSS reset，原语不声明就没人声明；批 4 迁移时才溢出 = 20 个弹层逐个补样式）",
+    ).toContain("box-sizing: border-box");
+  });
+
+  it("盒模型口径只声明一次（档位修饰符不得各自声明 —— 各档漂移会让「一处改对所有面」失效）", () => {
+    const clean = stripComments(SURFACE_CSS);
+    expect(clean.match(/box-sizing\s*:/g)).toHaveLength(1);
+  });
+
+  it("Surface.tsx 产出的每个类在 Surface.css 里都有规则；且零颜色字面量、无 z-index", () => {
+    const clean = stripComments(SURFACE_CSS);
+    expect(SURFACE_CLASSES).toHaveLength(12);
+    for (const cls of SURFACE_CLASSES) {
+      expect(clean, `Surface.css 缺少 .${cls} 的规则`).toContain(`.${cls} {`);
+    }
+    expect(clean, "Surface.css 出现颜色字面量（色值只在 ui/tokens.css 与生成器里）").not.toMatch(COLOR_LITERAL);
+    expect(clean, "Surface.css 写了 z-index（层级是 ui/zIndex.ts 标尺的职责）").not.toMatch(/z-index/);
   });
 });
 

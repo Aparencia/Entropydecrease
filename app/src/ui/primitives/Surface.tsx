@@ -18,8 +18,10 @@
  *       逐处改）；`style` 只是透传，供批 6 的接缝（直接驱动 `transform` / `boxShadow`）与调用点
  *       布局使用；② `interactive` 只给视觉，**不加 `tabIndex` / `role`** —— 键盘可达性由消费方
  *       用真实 `<button>` / `<a>` 承载（§8.6.1 第 4 条：键盘路径优先于「活」）；③ `bordered`
- *       默认 `true`，`bordered={false}` 用于「只有底色、不要分隔线」的阅读面；④ 不写 `box-sizing`
- *       （尺寸口径属调用点排版，见 `Surface.css` 的边界注释）。
+ *       默认 `true`，`bordered={false}` 用于「只有底色、不要分隔线」的阅读面；④ 盒模型口径由**基类
+ *       自带**（`box-sizing: border-box`，控制方 2026-09-11 裁决 —— 本仓无全局 CSS reset，
+ *       `padded` + `bordered` + `width:100%` 在 content-box 下会溢出 26px；理由详见
+ *       `Surface.css` 的基类注释），调用点不必再自己补。
  */
 
 import type { CSSProperties, ReactElement, ReactNode } from "react";

@@ -7,16 +7,24 @@
  *
  * 边界：① 颜色 / 圆角 / 阴影 / 间距一律 `var(--ed-*)`，**本文件零颜色字面量**（`var()` 的兜底
  *       值也不许是色值 —— 色值只在 ui/tokens.css 与生成器里）；② 不得写 `z-index`（层级走
- *       `ui/zIndex.ts` 六档标尺，规格 §4.2①）；③ **不写 `box-sizing`**：尺寸口径属调用点排版，
- *       本原语只负责「底 / 边框 / 圆角 / 阴影」四件事（批 4 逐处迁移时按各处实际需要决定，
- *       避免原语替调用点改掉盒模型而让迁移期的观感对不上）。
+ *       `ui/zIndex.ts` 六档标尺，规格 §4.2①）；③ **基类声明 `box-sizing: border-box`**（控制方
+ *       2026-09-11 裁决，理由见下方 `.ed-surface` 规则上方的注释）；档位修饰符一律**不重复声明**
+ *       它，由 `style-seams.test.ts` 的「Surface 盒子契约」机器守。
  *
  * 暗档策略（继承 token 层，本文件不写第二条规则）：`--ed-shadow-1` 在 `[data-theme="dark"]` 里
  * 是 `0 0 0 1px rgba(255,255,255,.06)` 的**反相白描边**（暗底上黑色投影不可见）⇒ hover 的
  * 「升起」在暗档自动退化为**边框墨度**的推进（`--ed-border` → `--ed-border-strong`）。
  */
 
+/* 基类：底 + 圆角 + 盒模型口径。
+   ⚠️ `box-sizing: border-box` **必须在基类声明**（控制方 2026-09-11 裁决）：`padded`（12px）+
+   `bordered`（1px）+ 调用点写 `width:100%` 时，content-box 下会**溢出 26px**（12×2 + 1×2）
+   —— 这是真缺陷，不是「等批 4 再说」的风格偏好。本仓 `app/src` 只有 `tokens.css` /
+   `note-mark.css`，**没有全局 CSS reset** ⇒ 「盒子原语自己声明盒模型」是唯一可靠做法；否则
+   批 4 迁移 20 个弹层时才发现溢出，会变成逐处补样式的返工。档位修饰符（`--<level>` / `--r-*` /
+   布尔开关）**不再重复声明**它（各档各自声明会漂移，让「一处改对所有面」失效）。 */
 .ed-surface {
+  box-sizing: border-box;
   background: var(--ed-bg-surface);
   border-radius: var(--ed-radius-panel, 8px);
 }
