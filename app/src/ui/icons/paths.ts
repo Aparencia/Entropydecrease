@@ -12,13 +12,18 @@
 import type { IconGeometry } from "./types";
 import { DOMAIN_ICON_PATHS } from "./paths.domain";
 
-const GROUPS: Readonly<Record<string, Readonly<Record<string, IconGeometry>>>> = {
+// `as const` 保留各分组的**字面量键** —— 这正是 `IconName` 联合的来源，零列名即可派生。
+const GROUPS = {
   domain: DOMAIN_ICON_PATHS,
-};
+} as const;
+
+// 供 mergeGroups 的 Object.entries 使用：`as const` 的只读键会让 Object.entries 重载失配，
+// 故给一个宽别名专供遍历。别名不参与类型推导，故不会污染上面 GROUPS 的字面量键。
+const GROUPS_FOR_MERGE: Readonly<Record<string, Readonly<Record<string, IconGeometry>>>> = GROUPS;
 
 function mergeGroups(): Record<string, IconGeometry> {
   const merged: Record<string, IconGeometry> = {};
-  for (const [groupName, group] of Object.entries(GROUPS)) {
+  for (const [groupName, group] of Object.entries(GROUPS_FOR_MERGE)) {
     for (const [name, geometry] of Object.entries(group)) {
       if (merged[name]) {
         // 重名会让「哪个几何生效」取决于对象键顺序 —— 静默且难以定位，故直接拒绝
@@ -34,4 +39,8 @@ export const ICON_PATHS: Readonly<Record<string, IconGeometry>> = mergeGroups();
 
 export const ICON_NAMES: readonly string[] = Object.keys(ICON_PATHS).sort();
 
-export type IconName = keyof typeof ICON_PATHS;
+/**
+ * 全部已注册图标名的字面量联合 —— 由分组数据的键集**派生**（而非手写清单），
+ * 故新增图标时无需改类型，且拼错名字必然是编译错误。
+ */
+export type IconName = { [G in keyof typeof GROUPS]: keyof (typeof GROUPS)[G] }[keyof typeof GROUPS];

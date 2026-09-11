@@ -12,7 +12,10 @@
 
 import type { IconGeometry } from "./types";
 
-export const DOMAIN_ICON_PATHS: Readonly<Record<string, IconGeometry>> = {
+// 此处**不得**写 `: Readonly<Record<string, IconGeometry>>` 宽注解 —— 那会把键类型抹成 `string`，
+// 使 `IconName` 退化为 `string`，批 4 数百处 `<Icon name="…" />` 的拼写错误在编译期静默通过。
+// `satisfies` 只校验形状、不改变推导结果，故键仍是字面量且几何仍被类型约束。
+export const DOMAIN_ICON_PATHS = {
   /** 笔记：文档 + 文字行 */
   notes: {
     elements: [
@@ -20,4 +23,4 @@ export const DOMAIN_ICON_PATHS: Readonly<Record<string, IconGeometry>> = {
       { tag: "path", d: "M14 3v5h5M9 13h6M9 17h4" },
     ],
   },
-};
+} satisfies Record<string, IconGeometry>;
