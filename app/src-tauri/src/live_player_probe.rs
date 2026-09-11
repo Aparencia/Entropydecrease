@@ -4,9 +4,9 @@
 //!              （Pause↔Play 状态机，从 latest_frame 取帧做纯 CV）与 10s 播放器区域
 //!              OCR 信息探测（时间对/分P → live:session-info）。两者都是"无证据不推断"：
 //!              无帧/转换失败/OCR 失败一律静默保持或跳过。
-//! @ai-context: 副作用 = 读 latest_frame 共享槽（`if let` 守卫持锁窗口逐字保留，D3 不缩短）/
-//!              `db` 落库（PlayerAction）/ `pause.request_pause` 条件锁存 / `app.emit`
-//!              （live:media-paused、live:session-info）/ 有界等待 OCR（OCR_REQUEST_TIMEOUT）。
+//! @ai-context: 副作用 = 读 latest_frame 共享槽（`lock().ok().and_then(|g| g.clone())` 为语句级短锁：
+//!              守卫 move 进闭包、返回即释放 ⇒ 块体 CV/落库/emit/OCR **无锁**〔Task 3 评审 rustc 探针实证〕）/
+//!              `db` 落库 / `pause.request_pause` 条件锁存 / `app.emit`（live:media-paused、live:session-info）/ 有界等待 OCR（OCR_REQUEST_TIMEOUT）。
 //! @ai-context: `probe_player_info` 同时服务暂停轻量轮询（live_session_pause_poll），
 //!              故为 `pub(super)` 自由函数而非方法；10s/5s 节流由调用方控制。
 
