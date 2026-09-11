@@ -15,7 +15,8 @@ use crate::ai_task::{AiTaskFailure, AiTaskState};
 use crate::commands::AppState;
 use crate::commands_ai_refine::{set_task, AiRefineResult};
 
-use super::RefineStreamFrame;use super::stream::emit_refine_stream;
+use super::RefineStreamFrame;
+use super::stream::emit_refine_stream;
 
 /// 精修任务审计记录（F1：REQ-140 轨迹可见化——summary 不含原文，隐私红线）。
 /// v0.17.0：summary_ctx 泛化（"session=1"/"note=3"——会话级/笔记级共用）。
