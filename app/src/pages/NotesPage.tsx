@@ -24,12 +24,10 @@ import NoteListView from "../components/NoteListView";
 import GroupSidebar from "../components/GroupSidebar";
 import FeedFragmentList from "../components/FeedFragmentList";
 import NoteReadingView from "../components/NoteReadingView";
-import ImagePreviewOverlay from "../components/ImagePreviewOverlay";
 import VersionPanel from "../components/VersionPanel";
-import NoteAiDialog from "../components/NoteAiDialog";
 // 批 8（REQ-317）：模型卡对话框槽（拆件）与选区行动类编排（hook 收敛）
-import ModelCardDialogSlot from "../components/note-selection/ModelCardDialogSlot";
 import { useNoteSelectionActions } from "../hooks/useNoteSelectionActions";
+import NotesOverlays from "../components/notes/NotesOverlays";
 // v0.20.5：阅读头动作组（色点/归组/挂体系/AI/模型卡）——编排瘦身拆分
 import NoteHeaderActions from "../components/NoteHeaderActions";
 import ColumnResizer from "../components/ColumnResizer";
@@ -349,23 +347,21 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
           </div>
         )}
       </div>
-      {/* v0.17.0：编辑态 AI 能力对话框（精修/知识补充——REQ-246） */}
-      {aiDialogOpen && selected && (
-        <NoteAiDialog
-          key={`ai-${selected.id}`}
-          noteId={selected.id}
-          noteContent={aiContent}
-          onClose={() => setAiDialogOpen(false)}
-          onUpdated={() => void list.handleNoteChanged()}
-        />
-      )}
-      {/* 批 8（REQ-317）：模型卡对话框槽（header 入口与选区菜单共用生成链） */}
-      {selected && <ModelCardDialogSlot note={selected} dialog={modelDialog} onClose={closeModelCard} onCreated={onModelCardCreated} />}
-      {/* v0.10.1：图片放大预览（ESC/点击遮罩关闭——与编辑退出 ESC 互斥） */}
-      {previewImg && (
-        <ImagePreviewOverlay src={previewImg.src} title={previewImg.title} onClose={() => setPreviewImg(null)} />
-      )}
-      {/* REQ-316（批 7）：空组自动清理 toast（自绘 fixed 全页可见） */}{toast}
+      {/* 覆盖层（AI 对话框 / 模型卡对话框 / 图片放大预览 / 清理留痕 toast）——
+          条件门控与 key 语义见 components/notes/NotesOverlays */}
+      <NotesOverlays
+        selected={selected}
+        aiOpen={aiDialogOpen}
+        aiContent={aiContent}
+        onAiClose={() => setAiDialogOpen(false)}
+        onAiUpdated={() => void list.handleNoteChanged()}
+        modelDialog={modelDialog}
+        onModelCardClose={closeModelCard}
+        onModelCardCreated={onModelCardCreated}
+        previewImg={previewImg}
+        onPreviewClose={() => setPreviewImg(null)}
+        toast={toast}
+      />
     </div>
   );
 }

@@ -99,11 +99,11 @@
 | app/src-tauri/src/commands_fragments.rs | 374 | 碎片命令域 + REQ-316（批 7）结果契约与组域条件广播（登记值缺失为漏登——HEAD 基线已 347，本次补） | 若再增长：碎片组操作命令族拆至 commands_fragments_group.rs |
 | app/src-tauri/src/analysis_tests.rs | 371 | 分析编排测试域（档案门控矩阵 + REQ-108 事件消费 + M2 三字段）单模块 #[path] 挂载 | 若再增长：事件消费组拆至 analysis_events_tests.rs |
 | app/src-tauri/src/commands_web_inbox.rs | 371 | v0.20.4（REQ-304）扩展收件命令域（起停/状态/HTTP 小循环/投递收口/图落盘）内聚；2026-09-06 实测登记（TD-2026-09-06-G） | 若再增长：HTTP 连接处理拆至 web_inbox_http.rs |
-| app/src/pages/NotesPage.tsx | 371 | 超硬限（>600 行），不允许豁免 —— 审查修复轮 3/4（refreshToken 透传/选区动作编排承接）净增越 600 硬限（599→602）——随 TD-2026-09-09-D 登记 | **超硬限必须拆**：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts（既有登记计划兑现） |
 | app/src-tauri/src/live_keyframes.rs | 370 | ① handle_full_frame：全帧画面要点落库 + 关键帧样本收集与（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/windows.rs | 370 | 窗口枚举/评分域 + v0.19.2（REQ-271/272）：CaptureWindow.zOrder/systemWindow 字段 + 抖音/快手/B站客户端评分表（+28）——枚举系统副作用与评分纯函数同域便于单测（既有模式） | 若再增长：z 序/系统标记纯函数拆至 windows_meta.rs |
 | app/src-tauri/src/commands_window.rs | 369 | 浮窗窗口命令域（v0.12.3 架构升级计划：全部窗口操作集中单文件）+ v0.12.6（ADR-025）显隐链路与全局快捷键三态切换核心（open/close/locked/topmost/toggle 核心 fn + 命令薄包装 + 状态机/序列化单测内联）；拆分需跨 fn 传递 AppHandle/State，内聚性优先 | 若再增长：浮窗核心逻辑拆至 float_core.rs（命令薄包装保留本文件） |
 | app/src/components/KnowledgeCanvasView.test.tsx | 368 | @xyflow/react 全 mock（ReactFlow 记录 props 供交互断言；节点组件（自动摘取，待细化） | 若再增长：按职责拆分 |
+| app/src/pages/NotesPage.tsx | 367 | 超硬限（>600 行），不允许豁免 —— 审查修复轮 3/4（refreshToken 透传/选区动作编排承接）净增越 600 硬限（599→602）——随 TD-2026-09-09-D 登记 | **超硬限必须拆**：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts（既有登记计划兑现） |
 | app/src-tauri/src/db_notes.rs | 366 | REQ-316（批 7）：delete_note/update_note_group 改显式事务 + 同事务空组自动清理接线（结果契约扩展 + 旧组读出，净增 ~60 行；此前 305 未登记属漏登，本次补） | 若再增长：移组/删除事务族拆至 db_notes_group_ops.rs |
 | app/src-tauri/src/ocr_cache.rs | 358 | OCR 结果缓存域（内容指纹键/容量淘汰/命中率统计）内聚；缓存策略与指纹算法共享上下文 | 若再增长：指纹算法拆至 ocr_fingerprint.rs |
 | app/src-tauri/src/db_sessions_tests.rs | 354 | 由 db_sessions.rs 以 #[cfg(test)] #[path] 引入，保持实现文件 ≤300 行（自动摘取，待细化） | 若再增长：按职责拆分 |
