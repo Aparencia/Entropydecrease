@@ -696,7 +696,8 @@ const GROUPS = {
 - [ ] **Step 6: 运行全部图标测试**
 
 Run：`npx vitest run src/ui/icons`
-Expected: 全绿 —— `paths.test.ts` 的 10 个 `it`（含新增的首付名单）与 `Icon.test.tsx` 的 10 个 `it`。
+Expected: 全绿 —— `paths.test.ts` 的 **9** 个 `it`（含新增的首付名单）与 `Icon.test.tsx` 的 10 个 `it`。
+（⚠️ 原写「`paths.test.ts` 的 10 个」**是我的计数错**，实为 9 —— T2 任务评审再次实测确认。实施者**没有为了凑数发明第 10 条**，处置正确。这是本计划第三次出现同类计数偏差。）
 **若几何契约测试报「越界」或「命名不规范」，改几何数据，不要放宽测试。**
 
 - [ ] **Step 7: 类型检查**
@@ -743,6 +744,12 @@ Get-ChildItem -Recurse -File src -Include *.tsx,*.ts |
 创建 `app/src/ui/icons/no-inline-svg.test.ts`：
 
 ```ts
+// ⚠️ 上面这几行 `node:*` import 需要 `app/src/node-builtins.d.ts` 里已有对应声明 ——
+// 本仓库不装 `@types/node`（零新增依赖的硬约束），改由该文件内置「只声明实际用到的符号」的
+// 最小环境声明。缺符号会报 **TS2305**（不是静默通过）；**正确处置是显式扩写那个声明文件**，
+// 按 Node 官方签名如实书写、**不得用 `any`** —— 这正是该文件头注释自陈的边界约定。
+// 原计划给出的这段代码在本仓 **`tsc` exit 2（4×TS2305：readdirSync/statSync/relative/sep）**，
+// 即「Step 7 零错」在原始代码下**不可达**；批 0-B 实施者发现后按上述约定扩写了声明文件。
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -809,14 +816,14 @@ describe("内联 svg 棘轮", () => {
 
 Run：`npx vitest run src/ui/icons/no-inline-svg.test.ts`
 Expected: PASS（2 个 `it`）。
-**再验证它真的会拦**：临时在 `app/src/ui/icons/Icon.test.tsx` 里加一行含 `<svg` 的注释，重跑 —— 应报「新增了内联 svg 的文件」而失败；**然后撤销该改动**并重跑确认通过。
+**再验证它真的会拦** —— ⚠️ **探针必须放在 `src/ui/icons/` 之外**。原计划这里写的是「在 `Icon.test.tsx` 里加一行含 `<svg` 的注释」，**那是错的**（已修）：`Icon.test.tsx` 位于 `src/ui/icons/`，而守卫**设计性地排除**该目录（图标层的合法 svg 渲染器就在那里）⇒ 加 `<svg` **不会失败**，得到的是**假阴性**，还可能诱使实施者去删掉那条排除项。
+正确做法：在 `app/src/` 下（例如新建 `src/__ratchet-probe.tsx`）写一个含 `<svg` 的临时文件 → 重跑应报「新增了内联 svg 的文件」而失败 → **删除临时文件** → 重跑确认通过 → 确认 `git status` 干净。
 
 - [ ] **Step 5: 确认导出面完整**
 
 Run（`app/` 下）：
 
 ```powershell
-node -e "import('./src/ui/icons/index.ts').catch(()=>{})" 2>$null
 Select-String -Path src/ui/icons/index.ts -Pattern '^export' | ForEach-Object { $_.Line }
 ```
 
