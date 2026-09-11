@@ -11,7 +11,7 @@
  * 四态与本文件的对应（验收逐条打勾）：
  *   ① hover          → `.ed-btn--{primary,secondary,ghost}:hover:not(...)`（三档各自成立）
  *   ② active 按下微陷 → `.ed-btn:active:not(...)` 的 `translateY(1px)`
- *   ③ focus-visible  → `.ed-btn:focus-visible` 的 2px `--ed-ink-1` 焦点环（全仓首个 `:focus-visible`）
+ *   ③ focus-visible  → `.ed-btn:focus-visible` 的 2px `--ed-ink-1` 焦点环（本批第二个；全仓首个在 `Surface.css`）
  *   ④ disabled/busy  → `.ed-btn:disabled, .ed-btn[aria-disabled="true"]` 的视觉降级
  *
  * 边界：
@@ -75,7 +75,7 @@
    「收到了」= 悬停变色，「正在按」= 下沉 1px；松开即回到 hover 值（transition 自动回程）。 */
 .ed-btn:active:not(:disabled):not([aria-disabled="true"]) { transform: translateY(1px); }
 
-/* ③ focus-visible：全仓首个焦点环。`--ed-ink-1` 亮档是墨黑、暗档是纸白 ⇒ 自动反相，无需第二条规则。
+/* ③ focus-visible：本批的焦点环（全仓首个在 `Surface.css:73`，本文件非首创）。`--ed-ink-1` 亮档是墨黑、暗档是纸白 ⇒ 自动反相，无需第二条规则。
    用 `:focus-visible` 而非 `:focus`：鼠标点击不该留环，键盘 Tab 必须看得见。
    outline 不吃 hover 背景 ⇒ 与 hover 同时成立时**焦点环永远可见**（§8.6.1 第 4 条：无障碍优先于「活」）。 */
 .ed-btn:focus-visible { outline: 2px solid var(--ed-ink-1); outline-offset: 2px; }
