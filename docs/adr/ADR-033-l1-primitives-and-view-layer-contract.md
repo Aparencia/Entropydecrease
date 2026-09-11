@@ -33,12 +33,16 @@ ADR-032 交付了 token 层（色阶 / 字阶 / z-index 标尺 / 图标），但
 | 3 | `Button` | `Button.tsx` 132 · `Button.css` 92 · `Button.test.tsx` 286 | `<button>` 510 行/121 文件全是内联样式 · 按钮样式常量 86 行/60 文件 |
 | 4 | `Modal` | `Modal.tsx` 188 · `Modal.css` 81 · `Modal.test.tsx` 296 · `Modal.exit.test.tsx` 91 | 28 个手写弹层（其中 11 个早退式卸载） |
 | 5 | `ConfirmDialog` | `ConfirmDialog.tsx` 192 · `ConfirmDialog.css` 58 · `ConfirmDialog.test.tsx` 297 | 23 处命令式确认（`window.confirm` 在 WebView2 下可能静默返回 false） |
-| 6 | `Toast` | `Toast.tsx` 208 · `Toast.css` 61 · `Toast.test.tsx` 232 · `Toast.interrupt.test.tsx` 167 · `Toast.style.test.ts` 108 | 4 套自绘 toast，**全部只有进、没有出** |
+| 6 | `Toast` | `Toast.tsx` 210 · `Toast.css` 65 · `Toast.test.tsx` 249 · `Toast.interrupt.test.tsx` 167 · `Toast.style.test.ts` 132 | 4 套自绘 toast，**全部只有进、没有出** |
 | 7 | `EmptyState` | `EmptyState.tsx` 127 · `EmptyState.css` 81 · `EmptyState.test.tsx` 276 | 40 行/28 文件的「暂无…」灰字，5 套空态，首启无主行动按钮 |
-| 8 | `Loading` / `Skeleton` / `Probe` | `Loading.tsx` 102 · `Loading.css` 72 · `Loading.test.tsx` 229 | 85 处/30 文件的手写灰字，全站 0 骨架屏 |
-| 9 | `StatusLine` | `StatusLine.tsx` 92 · `StatusLine.css` 41 · `StatusLine.test.tsx` 258 | 196 处/76 文件，三种红并存，错误常在列表最底部 |
+| 8 | `Loading` / `Skeleton` / `Probe` | `Loading.tsx` 105 · `Loading.css` 79 · `Loading.test.tsx` 238 | 85 处/30 文件的手写灰字，全站 0 骨架屏 |
+| 9 | `StatusLine` | `StatusLine.tsx` 94 · `StatusLine.css` 42 · `StatusLine.test.tsx` 267 | 196 处/76 文件，三种红并存，错误常在列表最底部 |
 | — | 共享内核 | `usePresence.ts` 200 · `usePresence.test.tsx` 282 · `usePresence.node.test.ts` 71 · `useFocusTrap.ts` 122 · `useFocusTrap.test.tsx` 236 · `ime.ts` 18 · `ime.test.ts` 32 | 卸载时机 / 焦点陷阱 / IME 组合态 |
 | — | 接缝与守卫 | `motion.css` 74 · `index.ts` 45 · `style-seams.test.ts` 271 · `style-contract.test.ts` 214 · `motion-coverage.test.ts` 145 | 动效变量与 reduced-motion 块 · 导出面 · 五条机器判据 |
+
+> **行数口径（唯一有效）**：`countLines()`，即 `[System.IO.File]::ReadAllLines(path, UTF8).Count` —— **含空行**的全部行数（禁用 `Get-Content` / `Measure-Object -Line` / 数 `0x0A` 字节）。
+> **权威来源**：逐文件数值以机器生成的 [行数豁免登记](../standards/line-limit-exemptions.md) 为准（`node scripts/line-limits.mjs --write` 生成、`--full` 校验，**不要手改其数字**）；本表只是**人读摘要**。
+> 注：本表所列原语全部 ≤300 行，在登记表内属**人工追加的记录块**（`--write` 只重算 >300 行的登记区）⇒ 两份不一致时按上句口径在 HEAD **重新实测**，再同步两份。
 
 **导出面**：`primitives/index.ts` 是唯一公共入口（批 4 之后全站从这里 import）；**组内互引用走相对文件路径**
 （`./Text`），**不 import barrel** —— 避免循环依赖。`index.ts` 另承担 `import "./motion.css";`：导入本层即带上
