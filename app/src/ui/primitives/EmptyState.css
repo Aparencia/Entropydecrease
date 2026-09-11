@@ -1,0 +1,81 @@
+/*
+ * EmptyState.css —— 空态的**唯一形态出口**（批 0-D Task 10；规格 §5.1 收敛账本的 `EmptyState` 行）。
+ *
+ * Why（为什么存在）：现状**没有空态组件**，等价物是散落在 40 行 / 28 文件的「暂无…」灰字
+ * （recon §2.1：`暂无|还没有|尚无|空空|没有任何`），5 套空态并存 —— 每个面板各自决定
+ * 「离中心多远、灰到什么程度、有没有出路」，改一次要动 28 个文件。本文件是那一处的落点。
+ *
+ * 边界：
+ *   ① 颜色 / 间距 / 圆角一律 `var(--ed-*)`，**本文件零颜色字面量**（色值只在 `ui/tokens.css`
+ *      与生成器里；`var()` 的兜底值也不许是色值）；
+ *   ② 不得写 `z-index`（层级走 `ui/zIndex.ts` 六档标尺，规格 §4.2①）；
+ *   ③ **不得定义任何 `--ed-*` 变量**：时长/缓动的真源是 `motion.css`（批 6 一整块接管），
+ *      本文件只消费 —— 入场时长写 `var(--ed-dur-micro, 120ms)`，**不新造时长**（计划 Task 10 契约）；
+ *   ④ 一律**单属性 ≤200ms 的 CSS transition / 一次性 animation**（§8.2 判据）。空态**不做循环动画**
+ *      （§8.6.1 第 1 条：环境层永远不抢注意力；「闲置时的生命感」由 `Loading`/`Probe` 承载）；
+ *   ⑤ reduced-motion 由 `motion.css` 的**唯一**媒体查询块统一覆盖（`.ed-empty` 已在名单里），
+ *      本文件**不重复写媒体查询**（重复会让「一处改对所有地方」失效）；
+ *   ⑥ 盒模型口径由**基类自带**（控制方 2026-09-11 裁决：本仓无全局 CSS reset，`Surface`/`Button`
+ *      同款口径 —— padded + 边框 + `width: 100%` 在 content-box 下会溢出）。
+ */
+
+.ed-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ed-space-8, 8px);
+  /* 空态自己的呼吸（与 spacing 标尺同值但语义不同，同 `Button` 的内边距口径） */
+  padding: var(--ed-space-24, 24px) var(--ed-space-16, 16px);
+  text-align: center;
+  box-sizing: border-box;
+}
+
+/* `compact`：给**列表行 / 侧栏内**的小空态（28 个迁移靶子里多数是这种），只收空气与间距，
+   不动排版 —— 字阶与墨度的权威在 `Text`，空态不越过它去改字号。 */
+.ed-empty--compact {
+  gap: var(--ed-space-4, 4px);
+  padding: var(--ed-space-8, 8px);
+}
+
+/* 图标：弱化墨度（装饰性顿点，视觉焦点让给标题与主行动按钮）；`flex: none` 防被压扁。
+   颜色走 `currentColor`（图标层 `stroke="currentColor"`）⇒ 批 6 想换墨度只需改这一行。 */
+.ed-empty__icon {
+  flex: none;
+  color: var(--ed-ink-3);
+}
+
+/* 标题与描述都渲染成 `<p>`（语义标签，见 `EmptyState.tsx` 边界③）：UA 对 `<p>` 自带
+   `margin: 1em 0`，而本仓没有全局 CSS reset ⇒ 不减掉就会与容器的 flex `gap` 叠加成双倍留白。 */
+.ed-empty__title {
+  margin: 0;
+}
+
+.ed-empty__description {
+  margin: 0;
+  /* 约 36 个半角字符（中文约 18 字）：空态说明是引导语，行宽过大时居中排版会失去可读性。
+     字面量而非 token —— 它是**行宽**（排版度量），不在 spacing 标尺的语义里。 */
+  max-width: 36ch;
+}
+
+/* 次要内容槽（次要行动 / 快捷键提示）：自己是一个可换行的居中行，不与主行动按钮挤在一行。 */
+.ed-empty__secondary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--ed-space-8, 8px);
+}
+
+/* ★ 入场接缝（批 6 的唯一挂点）：一次性透明度入场，**不做位移**（环境层不抢注意力）。
+   `both` 是给批 6 留的：编排层若要加 stagger 延迟，元素在延迟期保持 `from` 的「先隐后现」，
+   而不是先闪一下再动。`from` 只在动画期间生效 ⇒ 动画被取消/未加载时元素就是自然态（opacity 1），
+   不存在「永久隐身」的失效模式。批 6 换 GSAP 时：改本规则或直接接管 `.ed-empty-enter` 元素，
+   `.ed-empty` 本身保持不动（它是批 4 迁移的稳定锚点）。 */
+.ed-empty-enter {
+  animation: ed-empty-in var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)) both;
+}
+
+@keyframes ed-empty-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}

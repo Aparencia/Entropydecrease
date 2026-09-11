@@ -31,3 +31,6 @@ export { isImeComposing } from "./ime";
 
 export { ConfirmDialog } from "./ConfirmDialog";
 export type { ConfirmDialogProps, ConfirmImpact } from "./ConfirmDialog";
+
+export { EmptyState } from "./EmptyState";
+export type { EmptyStateAction, EmptyStateProps } from "./EmptyState";
