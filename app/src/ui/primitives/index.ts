@@ -28,3 +28,6 @@ export type { ModalProps, ModalSize, ModalTier } from "./Modal";
 export { FOCUSABLE_SELECTOR, focusablesIn, useFocusTrap } from "./useFocusTrap";
 
 export { isImeComposing } from "./ime";
+
+export { ConfirmDialog } from "./ConfirmDialog";
+export type { ConfirmDialogProps, ConfirmImpact } from "./ConfirmDialog";
