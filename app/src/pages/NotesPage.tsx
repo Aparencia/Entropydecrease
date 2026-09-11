@@ -15,14 +15,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { confirm } from "@tauri-apps/plugin-dialog";
 import type { Note, NoteGroup, TagColor } from "../types";
-// REQ-316（批 7）：删除/移组返回契约（空组自动清理留痕数据源）
-import type { DeleteNoteResult } from "../types/notes";
 import { resolveNoteColor } from "../utils/colorPalette";
-// REQ-316（批 7）：清理留痕统一 toast（文案拼接纯函数 + 自绘 toast hook）
-import { autoCleanNotice } from "../utils/groupClean";
-import { useTransientToast } from "../hooks/useTransientToast";
 // v0.14 A：编辑器容器切换为 RichEditorView（CM 富编辑：图片内联/撤销/草稿恢复）；
 // NoteEditView 保留为 CM 初始化失败的降级路径（RichEditorView 内部回退）
 import RichEditorView from "../components/RichEditorView";
@@ -46,6 +40,7 @@ import { useNoteAttention } from "../components/useNoteAttention";
 import { useDbRefresh } from "../hooks/useDbRefresh";
 import { useNotesSealedFilter } from "../hooks/useNotesSealedFilter";
 import { useNotesPageEditing } from "../hooks/useNotesPageEditing";
+import { useNotesBatchActions } from "../hooks/useNotesBatchActions";
 
 interface Props {
   focusNoteId?: number | null;
@@ -79,8 +74,6 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
   const [view, setView] = useState<MiddleView>("notes");
   const [selected, setSelected] = useState<Note | null>(null);
   const [status, setStatus] = useState("");
-  // REQ-316（批 7）：空组自动清理 toast（自绘——会话页批量删除 toast 同款）
-  const { toast, showToast } = useTransientToast();
   // v0.19.1：阅读态命中词搜索请求（来自引用跳转；key 递增可重触发）
   const [readerSearch, setReaderSearch] = useState<{ noteId: number; search: string; key: number } | null>(null);
   // M3：编辑态（Ctrl+E / ESC / 编辑器命令式出口）——见 useNotesPageEditing；
@@ -215,56 +208,13 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
     void load(keyword, tagFilter, sortMode);
   }, [keyword, tagFilter, sortMode, load]);
 
-  // REQ-316（批 7）：清理留痕统一出口（子组件移组/碎片结果含清理列表时经此
-  // 上抛 toast——无清理时 autoCleanNotice 返回 null，零变化）
-  const notifyCleanNotice = useCallback(
-    (groupNames: string[]) => {
-      const msg = autoCleanNotice(groupNames);
-      if (msg) showToast(msg, "ok");
-    },
-    [showToast],
-  );
-
-  const runDelete = async (id: number) => {
-    try {
-      const r = await invoke<DeleteNoteResult>("delete_note", { id });
-      if (selected?.id === id) setSelected(null);
-      // 删的是组内最后一篇 → 后端自动清理空路由组（结果回传标题留痕）
-      notifyCleanNotice(r.autoCleanedGroups);
-      void load(keyword, tagFilter, sortMode);
-    } catch (e) {
-      setStatus(`删除失败: ${e}`);
-    }
-  };
-
-  /**
-   * v0.12.8：列表级批量删除（用户要求：与「会话」管理台同操作逻辑——勾选 +
-   * 确认 + 逐条 invoke，无需先打开笔记；删除选中笔记同步清空右栏选中态）。
-   * 返回是否执行了删除（取消确认返回 false——父面板据此保留/清空勾选）。
-   */
-  const runBatchDelete = async (ids: number[]): Promise<boolean> => {
-    const ok = await confirm(`确定删除选中的 ${ids.length} 个笔记？删除后不可恢复。`, {
-      title: "熵减",
-      kind: "warning",
-    });
-    if (!ok) return false;
-    let failed = 0;
-    // REQ-316（批 7）：批量删逐条触发清理——聚合去重单次 toast（单条由 runDelete 各自 toast）
-    const cleanedNames: string[] = [];
-    for (const id of ids) {
-      try {
-        const r = await invoke<DeleteNoteResult>("delete_note", { id });
-        if (selected?.id === id) setSelected(null);
-        cleanedNames.push(...r.autoCleanedGroups);
-      } catch {
-        failed += 1;
-      }
-    }
-    setStatus(failed > 0 ? `已删除 ${ids.length - failed} 个，${failed} 个失败` : "");
-    notifyCleanNotice([...new Set(cleanedNames)]);
-    void load(keyword, tagFilter, sortMode);
-    return true;
-  };
+  // REQ-316（批 7）+ v0.12.8：单删/批量删/空组清理留痕 toast——见 useNotesBatchActions
+  const { toast, showToast, notifyCleanNotice, runDelete, runBatchDelete } = useNotesBatchActions({
+    selectedId: selected?.id ?? null,
+    onCleared: () => setSelected(null),
+    onReload: () => void load(keyword, tagFilter, sortMode),
+    onStatus: setStatus,
+  });
 
   const runPinToggle = async (note: Note) => {
     try {
