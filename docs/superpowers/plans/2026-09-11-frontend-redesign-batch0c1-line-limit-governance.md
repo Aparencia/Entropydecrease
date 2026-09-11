@@ -410,7 +410,13 @@ function writeTable() {
   const reasons = parseReasons();
   const over = [...measured.entries()].filter(([, n]) => n > HARD_LIMIT).sort((a, b) => b[1] - a[1]);
   const band = [...measured.entries()].filter(([, n]) => n > SOFT_LIMIT && n <= HARD_LIMIT).sort((a, b) => b[1] - a[1]);
-  const row = (p, n, why, split) => `| ${p} | ${n} | ${why || '（待补理由）'} | ${split || '若再增长：按职责拆分'} |`;
+  // 单元格净化：文本里的半角 `|` 会撑破 Markdown 表格，并让下次 `parseReasons` 误切列。
+  // 换**全角** `｜` 而不是 `\|` —— 转义写法在下次读取时会被再次转义，破坏 `--write` 的幂等性。
+  const cell = (t, fallback) => {
+    const s = (t ?? '').replace(/\|/g, '｜').replace(/\s*\n\s*/g, ' ').trim();
+    return s || fallback;
+  };
+  const row = (p, n, why, split) => `| ${p} | ${n} | ${cell(why, '（待补理由）')} | ${cell(split, '若再增长：按职责拆分')} |`;
 
   const lines = [
     '# 单文件行数豁免登记（AGENTS.md §3：单文件 ≤300 行；301–600 行须登记本清单）',
@@ -432,7 +438,7 @@ function writeTable() {
     // 按路径保留人工维护的两列，改成 3 列会让这些拆分计划在**下一次重生成时静默丢失**。
     '| 文件 | 行数 | 说明 | 拆分计划 |',
     '|---|---|---|---|',
-    ...over.map(([p, n]) => row(p, n, `超硬限（>${HARD_LIMIT} 行），不允许豁免`, reasons.get(p)?.split)),
+    ...over.map(([p, n]) => row(p, n, `超硬限（>${HARD_LIMIT} 行），不允许豁免`, reasons.get(p)?.split || `**超硬限必须拆**：拆到各文件 ≤${SOFT_LIMIT} 行`)),
     '',
     `## ${SOFT_LIMIT + 1}–${HARD_LIMIT} 档（须登记）`,
     '',
