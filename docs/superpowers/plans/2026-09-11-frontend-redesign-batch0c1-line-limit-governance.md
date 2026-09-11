@@ -23,90 +23,41 @@
 
 ---
 
-### Task 0: 统一 `docs-check` 的两个副本
+### Task 0: 统一 `docs-check` 的两个副本 —— ✅ **已完成**（含一次**设计更正**）
 
-**为什么先做这个**：本计划新增的守卫要挂进 `lint-staged`，而它当前指向的 `docs-check` 有**两份内容不同的被跟踪副本**。不先统一，就会出现「守卫挂在 A 上、大家验证时跑 B」——正是本批要消灭的那类缺陷。
+**交付**：`c79c9719`（把缺失的修复移植到实例）+ `c48ccf4a`（恢复模板源 + 加模板同步守卫）。两份现同为 blob `a18f988c…`，各 218 行，门禁绿。
 
-**Files:**
-- Modify: `scripts/docs-check.mjs`（权威副本）
-- Delete: `docs/scripts/docs-check.mjs`（散落副本）
-- Test: 临时构造坏链接验证
+**★ 更正后的模型（本计划初稿写错了，记录在案，勿重犯）**
 
-**Interfaces:**
-- Consumes: 无
-- Produces: 唯一的 `docs-check` 入口 `scripts/docs-check.mjs`（后续任务与 CI 都指向它）
+`docs/` 是一套 **Docs Starter Kit**（`docs/README.md:4`「复制即用」、`:16` 的启用步骤 `cp docs/scripts/docs-check.mjs <你的项目>/scripts/`、`:49` 把 `scripts/` 列为骨架结构）。因此两份文件的真实关系**不是「权威副本 + 散落副本」**，而是：
 
-**现状（已实测，勿再假设）**：
-- `scripts/docs-check.mjs` = 7775 字节，改于 08-21，**是 lint-staged（`package.json:33`）、`npm run docs:check`（`package.json:15`）与 CI（`pr-check.yml` 的 docs job）三处指向的权威副本**
-- `docs/scripts/docs-check.mjs` = 8077 字节，改于 08-27，**多出唯一一处修复**：`extractLinks` 在提取链接前先剔除围栏代码块与行内代码
-- 两者其余部分逐字相同（`git diff --no-index` 只有这一处 hunk）
-- ⇒ **后果**：那处修复从未进入真正生效的门禁；而所有人（含批 0-B 的 T3 实施者）手工验证时跑的是 `docs/scripts/` 那份，于是「验证通过」与「提交时实际生效」不是同一个程序
+| 路径 | 角色 |
+|---|---|
+| `docs/scripts/docs-check.mjs` | **模板源** —— Starter Kit 自包含所必需（删掉它 = 破坏 README 记录的启用步骤） |
+| `scripts/docs-check.mjs` | **实例** —— lint-staged / `npm run docs:check` / CI 三处真正执行的那份 |
 
-- [ ] **Step 1: 确认没有代码引用散落副本**
+**初稿的错误写法（已撤回）**：「`docs/scripts/docs-check.mjs` 是散落副本 → `git rm` 删掉」。
+**为什么错**：删掉模板源会让 Starter Kit 的启用步骤指向不存在的路径，`docs/` 也不再"可整体复制"。前一位实施者**按计划执行后主动上报了该冲突**（未盲从），修复轮再纠正 —— 这是正确的处置链。
+**为什么当时看不出来**：初稿只比对了两个文件的**内容差异**（确实只差 1 个 hunk），没有查它们的**角色**。⇒ 教训：发现两份同源文件时，先查"谁在什么流程里被引用"，再判断哪份该留。
 
-Run（仓库根）：
-```powershell
-Select-String -Path package.json,.github/workflows/*.yml,.husky/*,scripts/*.mjs -Pattern 'docs/scripts/docs-check' -SimpleMatch
-```
-Expected: **无输出**（只有文档正文提到过 `docs/scripts/docs-check.mjs`，那些是历史叙述，不必改）。
-若出现引用，先把引用改为 `scripts/docs-check.mjs` 再继续。
+**★ 为什么守卫必须同时写在两份里**
 
-- [ ] **Step 2: 把缺失的修复移植到权威副本**
+修复轮的第一次派发又踩了一个坑（**控制方指令自相矛盾**）：要求「模板还原成不含守卫的旧 blob」+「守卫只加在实例」+「还原后门禁绿」三者同时成立 —— **不可能**，因为守卫的不变量正是「实例 == 模板」，只加在实例上会立刻恒红、让 lint-staged/CI 永久失败。
+⇒ **唯一自洽解**：守卫**写入两份**（两份逐字节一致，不变量为真，门禁绿）。代价：模板相对原文多 20 行。
 
-打开 `scripts/docs-check.mjs`，找到 `extractLinks` 函数（约第 66 行起），把：
-```js
-function extractLinks(content) {
-  const links = [];
-  const re = /\[[^\]]*\]\(([^)]+)\)/g;
-  let m;
-  while ((m = re.exec(content)) !== null) {
-```
-改为：
-```js
-function extractLinks(content) {
-  const links = [];
-  // 先剔除围栏代码块与行内代码：代码示例中的 ](...) 模式不是真实链接，
-  // 不剔除会把配图格式示例等误判为失效链接（v0.10.1.md 实证，2026-08-21 十轮修复）
-  const stripped = content.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '');
-  const re = /\[[^\]]*\]\(([^)]+)\)/g;
-  let m;
-  while ((m = re.exec(stripped)) !== null) {
-```
-（`stripped` 只用于**提取链接**；后续解析链接目标时若用到 `content`，保持原样不动 —— 先读完整函数再改，不要机械替换。）
+**守卫规格（现已在 `scripts/docs-check.mjs`，模板侧同一份）**：
+- 用 `fileURLToPath(import.meta.url)` 定位自身；用 `ROOT` 拼 `docs/scripts/docs-check.mjs`
+- **必须行尾归一化后再比较**：`normalizeEol = (t) => t.replace(/\r\n/g, '\n')` —— 本仓库 `core.autocrlf=true`，不归一化会**在 Windows 检出上恒定误报**（同 批 0-A `tokens.drift.test.ts` 的坑）
+- 模板不存在时**跳过**并打印一行说明（本项目以外的实例不会有该路径）
+- 失败信息可操作：指明「模板源与实例已分叉，请把改动同步到另一份」
 
-- [ ] **Step 3: 验证权威副本真的会做事（非空转）**
+**验证记录**：
+- 移植精确性：移植后实例与模板 **blob 同哈希 `68452fff…`** ⇒ 零损失
+- 变异探针（非空转）：破坏模板一致性 → `exit=1` 并报「已分叉」；还原 → `exit=0`
+- **事实登记**：BASE 的实例在**干净树**上原本就是红的（`exit=1`，18 处误报，含 `v0.10.1.md` 的"配图格式示例"被误判为坏链）⇒ 那处修复此前**从未进入真正生效的门禁**，本任务把门禁从红修成绿
+- 行尾：提交内容 `i/lf`、工作树 `w/crlf`（本仓库常态）；两份 218 行、无 BOM
 
-Run（仓库根）：
-```powershell
-node scripts/docs-check.mjs
-```
-Expected: `✅ docs-check 通过`
-
-再验证它会拦（**用 `docs/` 下一个临时文件**，验证后删除）：
-```powershell
-Set-Content -Path docs\__probe-link.md -Value "[坏链](./__not-exist.md)" -Encoding utf8
-node scripts/docs-check.mjs
-"exit=$LASTEXITCODE   ← 期望非 0，且报出 __probe-link.md"
-Remove-Item docs\__probe-link.md
-node scripts/docs-check.mjs
-"exit=$LASTEXITCODE   ← 期望 0"
-```
-
-- [ ] **Step 4: 删除散落副本**
-
-```powershell
-git rm docs/scripts/docs-check.mjs
-```
-（`docs/scripts/` 若因此变空，目录也随之消失 —— 不必手工删目录。）
-
-- [ ] **Step 5: 复跑门禁并提交**
-
-```powershell
-node scripts/docs-check.mjs   # 期望 ✅（删掉一个 .md 之外的脚本不影响链接检查）
-git add -A
-git commit -m "chore(docs): 统一 docs-check 为单一权威副本"
-```
-⚠️ **本提交只动这两个文件**：`scripts/docs-check.mjs` 与删除 `docs/scripts/docs-check.mjs`。
+**遗留观察（未处理，属独立治理项）**：`docs/README.md` 的启用步骤本身没问题；但**模板与实例靠守卫保持一致**这件事，是"同一份代码存在两处"的固有成本 —— 若将来 Starter Kit 独立演进，应改为「模板生成实例」而非「两处手工同步」。
 
 ---
 
@@ -699,7 +650,7 @@ git commit -m "docs(versions): 0-C1 行数红线验收与门槛更正"
 - **红线的口径唯一且写进规范**：AGENTS.md §3.1 / §11 / refactoring.md / 表头四处同一措辞
 - **登记表是快照而非日志**：138 条（15 超硬限 + 123 登记档），一文件一行，数字由生成器独占维护
 - **>600 有棘轮守卫**：15 个违规**可见、只减不增**；每完成一个拆分删一行
-- **三处门禁都指向同一个程序**：`docs-check` 只剩一份；`line-limits` 同时挂在 lint-staged（结构）与 CI（结构 + 数值）
+- **门禁只跑一份程序、且那份是最新的**：`docs-check` 的模板源与实例经守卫强制逐字节一致（此前实例落后于模板一处修复，门禁在干净树上本就是红的）；`line-limits` 同时挂在 lint-staged（结构）与 CI（结构 + 数值）
 - **仍未做**：15 个文件的实际拆分 → `0-C2`（前端 5）/ `0-C3`（Rust 10）
 
 ## 未做（登记）
