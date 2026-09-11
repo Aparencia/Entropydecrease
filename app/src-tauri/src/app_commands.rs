@@ -50,10 +50,6 @@ fn anchored<F: Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool>(f: F) -> F {
 pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     anchored(tauri::generate_handler![
         crate::commands::list_windows,
-        crate::commands::transcribe_audio,
-        crate::commands::recognize_image,
-        crate::commands::build_draft,
-        crate::commands::save_draft_as_note,
         crate::commands::process_to_note,
         // v0.11.7（图文会话，ADR-020）：图文采集 5 命令
         crate::commands_photo::start_photo_session,

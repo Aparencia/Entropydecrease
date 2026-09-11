@@ -15,7 +15,7 @@ use crate::engine::EnginePool;
 use crate::live_session::LiveSessionManager;
 use crate::model_downloader::ModelDownloader;
 use crate::streaming_asr::StreamingAsrModels;
-use crate::types::{NewNote, Note, NoteDraft, OcrBlock, TranscriptSegment};
+use crate::types::{NewNote, Note};
 use crate::video_profile::ProfileMemory;
 use crate::windows::{self, CaptureWindow};
 
@@ -29,13 +29,11 @@ const KEYWORD_MAX_CHARS: usize = 100;
 const TAG_MAX_CHARS: usize = 50;
 /// 一键流水线最大图片数。
 const MAX_IMAGES: usize = 20;
-/// 拼接输入段/块数量上限（防恶意超大列表拖垮拼接）。
-const MAX_INPUT_ITEMS: usize = 5000;
 
-/// 音频文件扩展名白名单（安全 L1 修复：transcribe_audio 不得接受任意非音频路径，
+/// 音频文件扩展名白名单（安全 L1 修复：音频路径不得是任意非音频文件，
 /// 与 commands_import::VIDEO_EXTENSIONS 同口径）。
 const AUDIO_EXTENSIONS: [&str; 6] = ["mp3", "wav", "m4a", "flac", "ogg", "aac"];
-/// 图片文件扩展名白名单（安全 L1 修复：recognize_image 同口径）。
+/// 图片文件扩展名白名单（安全 L1 修复：与音频路径校验同口径）。
 const IMAGE_EXTENSIONS: [&str; 5] = ["png", "jpg", "jpeg", "webp", "bmp"];
 
 /// 扩展名白名单校验（安全 L1）：返回小写扩展名，不在白名单内返回可诊断错误。
@@ -213,78 +211,6 @@ pub async fn list_windows() -> Result<Vec<CaptureWindow>, String> {
         .map_err(|e| format!("任务调度失败: {}", e))
 }
 
-/// 本地 ASR：转写一个 WAV 文件（REQ-001）。
-#[tauri::command]
-pub async fn transcribe_audio(state: State<'_, AppState>, path: String) -> Result<TranscriptSegment, String> {
-    if path.trim().is_empty() {
-        return Err("音频路径为空".to_string());
-    }
-    // 安全 L1 修复：扩展名白名单前置校验（拒绝非音频路径）
-    require_media_extension(&path, &AUDIO_EXTENSIONS, "音频")?;
-    let engines = state.engines.clone();
-    // H2 修复：有界等待变体——引擎卡死时返回可诊断超时错误而非永久阻塞
-    tauri::async_runtime::spawn_blocking(move || {
-        engines.transcribe_timeout(&path, crate::engine::ASR_REQUEST_TIMEOUT)
-    })
-        .await
-        .map_err(|e| format!("任务调度失败: {}", e))?
-        .map_err(|e| e.to_string())
-}
-
-/// 本地 OCR：识别一张图片（REQ-002）。
-#[tauri::command]
-pub async fn recognize_image(state: State<'_, AppState>, path: String) -> Result<Vec<OcrBlock>, String> {
-    if path.trim().is_empty() {
-        return Err("图片路径为空".to_string());
-    }
-    // 安全 L1 修复：扩展名白名单前置校验（拒绝非图片路径）
-    require_media_extension(&path, &IMAGE_EXTENSIONS, "图片")?;
-    let engines = state.engines.clone();
-    // H2 修复：有界等待变体（同 transcribe_audio）
-    tauri::async_runtime::spawn_blocking(move || {
-        engines.recognize_timeout(&path, crate::engine::OCR_REQUEST_TIMEOUT)
-    })
-        .await
-        .map_err(|e| format!("任务调度失败: {}", e))?
-        .map_err(|e| e.to_string())
-}
-
-/// 本地拼接：转写段 + OCR 块 → 笔记初稿（REQ-003，纯本地无 LLM）。
-#[tauri::command]
-pub async fn build_draft(
-    title: String,
-    segments: Vec<TranscriptSegment>,
-    ocr_blocks: Vec<OcrBlock>,
-) -> Result<NoteDraft, String> {
-    if segments.len() > MAX_INPUT_ITEMS || ocr_blocks.len() > MAX_INPUT_ITEMS {
-        return Err(format!("拼接输入数量超限（上限 {}）", MAX_INPUT_ITEMS));
-    }
-    let title = normalize_title(title, "未命名笔记");
-    tauri::async_runtime::spawn_blocking(move || concat::build_note_draft(&title, &segments, &ocr_blocks))
-        .await
-        .map_err(|e| format!("任务调度失败: {}", e))
-}
-
-/// 课堂助手 → 笔记联动：把拼接初稿一键存为笔记（REQ-005）。
-#[tauri::command]
-pub async fn save_draft_as_note(state: State<'_, AppState>, draft: NoteDraft) -> Result<Note, String> {
-    let new = NewNote {
-        title: normalize_title(draft.title, "未命名笔记"),
-        content: truncate_chars(draft.markdown, CONTENT_MAX_CHARS),
-        source: "classroom".to_string(),
-        session_id: None,
-        rule_version: None,
-        purify_stats: None,
-        tags: None,
-        properties: None,
-        group_id: None,
-    };
-    let note = state.db.create_note(&new).map_err(|e| e.to_string())?;
-    // REQ-278：笔记域变更广播（其它视图即时刷新）
-    crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
-    Ok(note)
-}
-
 /// 一键流水线：音频转写 + 多图 OCR → 本地拼接 → 自动存为笔记。
 ///
 /// @ai-context: 这是"课堂助手 → 笔记"的核心体验编排（高价值优化②）：用户一次提交素材，
@@ -308,7 +234,7 @@ pub async fn process_to_note(
         return Err("音频路径为空".to_string());
     }
     // 安全 L1 修复（三维复审 #4）：直送媒体路径同样套用扩展名白名单，
-    // 与 transcribe_audio/recognize_image 同口径（此前本 command 是缺口）
+    // 与音频/图片路径白名单同口径（此前本 command 是缺口）
     if let Some(p) = audio_path.as_deref() {
         require_media_extension(p, &AUDIO_EXTENSIONS, "音频")?;
     }

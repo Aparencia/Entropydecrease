@@ -22,14 +22,9 @@ use crate::ocr::{OcrModels, OcrParams};
 use crate::types::{OcrBlock, TranscriptSegment};
 use crate::vocab::VocabStore;
 
-/// H2 修复：ASR 单请求默认超时预算。
-/// Why 60s：文件导入分窗转写正常在数十秒内完成，但引擎异常（CPU 竞争/
-/// 模型卡顿）时不得让调用方裸 recv 永久挂起；特殊长任务可自行传更大 timeout。
-pub const ASR_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
-
 /// 三维复审 #3：整文件 WAV 转写（process_to_note 一键流水线）专用超时预算。
-/// Why 30 分钟：整文件转写耗时与音频时长线性相关（40 分钟课堂录音远超短请求
-/// 60s 预算）——行为契约是"长录音必达"，与短请求路径（ASR_REQUEST_TIMEOUT）
+/// Why 30 分钟：整文件转写耗时与音频时长线性相关（40 分钟课堂录音远超秒级
+/// 预算）——行为契约是"长录音必达"，与实时/短请求热路径的秒级预算
 /// 语义不同，不得复用同一常量。
 pub const ASR_FILE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
