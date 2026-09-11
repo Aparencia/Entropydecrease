@@ -14,8 +14,6 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::video_profile_domain::{detect_domain, DomainSignals};
-
 /// 平台标识（前端从窗口标题/进程名推断；None=无平台信号——零回归）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlatformKind {
@@ -139,22 +137,6 @@ pub fn adapt_local(title: Option<&str>) -> PlatformHints {
         }
     }
     PlatformHints { platform_tags: Vec::new(), path_segments: segments }
-}
-
-/// OCR 标签通用化（③）：画面内标签/标题卡文字 → 领域投票。
-///
-/// @ai-context: 不依赖平台枚举——任何平台画面内的分类标签（B站分区/网课
-///              "课程章节"/视频标题卡）都是通用 OCR 信号；经领域词表映射
-///              投给对应领域（"知识科普|经济管理" 中"经济管理"命中经济领域）。
-pub fn ocr_tags_to_domain(texts: &[String]) -> crate::video_profile_domain::DomainDetection {
-    let signals = DomainSignals {
-        title: None,
-        platform_tags: texts.to_vec(),
-        user_confirmed: None,
-        term_freq: Vec::new(),
-        asr_opening: None,
-    };
-    detect_domain(&signals)
 }
 
 /// 分区标签形态判定：B站分区名特征（2-8 字中文/已知分区词；防标题正文误判）。

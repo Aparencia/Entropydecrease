@@ -277,15 +277,11 @@ pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync
         // 视频类型档案（REQ-043，v0.5.0 M1：混合检测 + 记忆偏好 + 档案导出）
         crate::commands_video::video_profiles,
         crate::commands_video::detect_video_profile,
-        crate::commands_video::remember_video_profile,
         crate::commands_video::video_profile_memory,
-        crate::commands_video::video_profile_by_kind,
-        // v0.9.0 M1（REQ-188）：四维解耦 command（矩阵查询/旧档案映射/形态记忆）
+        // v0.9.0 M1（REQ-188）：四维解耦 command（矩阵查询/形态记忆）
         crate::commands_video::video_profile_for_spec,
-        crate::commands_video::video_profile_spec_by_kind,
         crate::commands_video::remember_video_profile_form,
-        // v0.9.0 M3（REQ-190）：领域标签检测 + hotwords 预热
-        crate::commands_video::detect_video_domain,
+        // v0.9.0 M3（REQ-190）：hotwords 预热
         crate::commands_video::preheat_domain_hotwords,
         // v0.13.6（REQ-220/222）：细目选项表 + 领域记忆（coarse+细目多选）
         crate::commands_video::list_domain_fine,

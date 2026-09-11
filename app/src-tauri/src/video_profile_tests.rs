@@ -196,8 +196,8 @@ fn detect_subtitle_preference_boosts_lecture() {
 fn memory_remember_and_lookup_longest_keyword() {
     // Arrange：空记忆库 + 记录两条
     let mut memory = ProfileMemory::default();
-    memory.remember("网课", ProfileKind::Lecture);
-    memory.remember("网课-数学", ProfileKind::HandsOn);
+    memory.remember_form("网课", crate::video_profile_spec::ContentForm::Lecture);
+    memory.remember_form("网课-数学", crate::video_profile_spec::ContentForm::HandsOn);
     // Act：标题同时命中两条
     let hit = memory.lookup("网课-数学-第2章");
     // Assert：最长关键词优先（更具体的记忆生效）
@@ -208,11 +208,11 @@ fn memory_remember_and_lookup_longest_keyword() {
 fn memory_lookup_miss_returns_none() {
     // Arrange
     let mut memory = ProfileMemory::default();
-    memory.remember("会议", ProfileKind::Meeting);
+    memory.remember_form("会议", crate::video_profile_spec::ContentForm::Meeting);
     // Act/Assert：不相关标题无命中
     assert_eq!(memory.lookup("化妆教程"), None);
     // 空关键词不写入（长度保持 1，不新增空条目）
-    memory.remember("  ", ProfileKind::Lecture);
+    memory.remember_form("  ", crate::video_profile_spec::ContentForm::Lecture);
     assert_eq!(memory.entries.len(), 1);
     assert_eq!(memory.entries[0].keyword, "会议");
 }
@@ -221,9 +221,9 @@ fn memory_lookup_miss_returns_none() {
 fn memory_remember_overwrites_existing() {
     // Arrange
     let mut memory = ProfileMemory::default();
-    memory.remember("教程", ProfileKind::Lecture);
+    memory.remember_form("教程", crate::video_profile_spec::ContentForm::Lecture);
     // Act：用户修改档案（覆盖）
-    memory.remember("教程", ProfileKind::HandsOn);
+    memory.remember_form("教程", crate::video_profile_spec::ContentForm::HandsOn);
     // Assert：单条且已更新
     assert_eq!(memory.entries.len(), 1);
     assert_eq!(memory.lookup("软件教程"), Some(ProfileKind::HandsOn));
@@ -260,7 +260,7 @@ fn detect_series_vote_uses_series_name() {
 fn memory_series_key_cross_episode_hits() {
     // Arrange：P3 确认实操 → 存系列键
     let mut memory = ProfileMemory::default();
-    memory.remember("零基础化妆教程 P3", ProfileKind::HandsOn);
+    memory.remember_form("零基础化妆教程 P3", crate::video_profile_spec::ContentForm::HandsOn);
     // Assert：键已剥离序号为系列名 + is_series 标记
     assert_eq!(memory.entries.len(), 1);
     assert_eq!(memory.entries[0].keyword, "零基础化妆教程");
@@ -293,7 +293,7 @@ fn memory_series_key_old_json_compat() {
 fn memory_series_roundtrip_preserves_flag() {
     // Arrange
     let mut memory = ProfileMemory::default();
-    memory.remember("零基础化妆教程 P3", ProfileKind::HandsOn);
+    memory.remember_form("零基础化妆教程 P3", crate::video_profile_spec::ContentForm::HandsOn);
     // Act：序列化 → 反序列化
     let raw = serde_json::to_string(&memory).unwrap();
     let back: ProfileMemory = serde_json::from_str(&raw).unwrap();
@@ -369,7 +369,7 @@ fn memory_json_roundtrip_and_corrupt_fallback() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("profile_memory.json");
     let mut memory = ProfileMemory::default();
-    memory.remember("网课", ProfileKind::Lecture);
+    memory.remember_form("网课", crate::video_profile_spec::ContentForm::Lecture);
     // Act
     memory.save(&path).unwrap();
     let loaded = ProfileMemory::load(&path);

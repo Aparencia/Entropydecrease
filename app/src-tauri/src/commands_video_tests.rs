@@ -35,7 +35,7 @@ fn quadrant1_high_conf_same_kind_memory_wins() {
     // Arrange：强网课信号（高置信 Lecture）+ 记忆同为 Lecture
     let memory = {
         let mut m = ProfileMemory::default();
-        m.remember("高等数学", ProfileKind::Lecture);
+        m.remember_form("高等数学", ContentForm::Lecture);
         m
     };
     // Act：检测 → 记忆后置判定
@@ -54,7 +54,7 @@ fn quadrant2_high_conf_conflict_detection_wins() {
     // Arrange：强实操信号（高置信 HandsOn）+ 记忆为 Lecture（用户上次裁决冲突）
     let memory = {
         let mut m = ProfileMemory::default();
-        m.remember("实操演练", ProfileKind::Lecture);
+        m.remember_form("实操演练", ContentForm::Lecture);
         m
     };
     // Act
@@ -75,7 +75,7 @@ fn quadrant3_low_conf_memory_wins() {
     assert!(vote_detect(&s).needs_confirmation, "前置条件：信号冲突需确认");
     let memory = {
         let mut m = ProfileMemory::default();
-        m.remember("课程", ProfileKind::Lecture);
+        m.remember_form("课程", ContentForm::Lecture);
         m
     };
     // Act
@@ -98,7 +98,7 @@ fn no_signal_memory_fallback_wins() {
     assert!(base.needs_confirmation, "前置条件：无信号需确认");
     let memory = {
         let mut m = ProfileMemory::default();
-        m.remember("某无关标题", ProfileKind::Lecture);
+        m.remember_form("某无关标题", ContentForm::Lecture);
         m
     };
     // Act
@@ -129,7 +129,7 @@ fn quadrant1_series_key_cross_episode_memory_wins() {
     // Arrange：P1 确认 Lecture → 存系列键；P5 强网课信号（剥系列名后高置信）
     let memory = {
         let mut m = ProfileMemory::default();
-        m.remember("高等数学 微积分课程 网课教学 P1", ProfileKind::Lecture);
+        m.remember_form("高等数学 微积分课程 网课教学 P1", ContentForm::Lecture);
         m
     };
     assert!(memory.entries[0].is_series, "前置条件：系列键标记");
@@ -151,7 +151,7 @@ fn apply_preserves_domain_and_detection_candidates() {
     // Arrange：强实操信号 + 冲突记忆（Lecture）
     let memory = {
         let mut m = ProfileMemory::default();
-        m.remember("实操演练", ProfileKind::Lecture);
+        m.remember_form("实操演练", ContentForm::Lecture);
         m
     };
     let base = vote_detect(&strong_hands_on_signals());

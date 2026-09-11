@@ -73,26 +73,6 @@ fn mapping_13_to_7_follows_framework_table() {
     assert_eq!(ProfileKind::Unknown.to_form(), None);
 }
 
-#[test]
-fn mapping_default_tier_follows_framework_table() {
-    // Assert：画面档默认（映射表第三列）
-    assert_eq!(ProfileKind::Lecture.default_tier(), VisualTier::Medium);
-    assert_eq!(ProfileKind::Whiteboard.default_tier(), VisualTier::Rich);
-    assert_eq!(ProfileKind::HandsOn.default_tier(), VisualTier::Medium);
-    assert_eq!(ProfileKind::FollowAlong.default_tier(), VisualTier::Rich);
-    assert_eq!(ProfileKind::GameTutorial.default_tier(), VisualTier::Rich);
-    assert_eq!(ProfileKind::TalkingHead.default_tier(), VisualTier::Low);
-    assert_eq!(ProfileKind::Interview.default_tier(), VisualTier::Low);
-    assert_eq!(ProfileKind::Meeting.default_tier(), VisualTier::Low);
-    assert_eq!(ProfileKind::Exercise.default_tier(), VisualTier::Rich);
-    assert_eq!(ProfileKind::Coding.default_tier(), VisualTier::Rich);
-    assert_eq!(ProfileKind::Podcast.default_tier(), VisualTier::None);
-    // v0.13.6：直播独立形态——浅画面，OCR 待命（不再短路画面链）
-    assert_eq!(ProfileKind::Live.default_tier(), VisualTier::Low);
-    // unknown 走默认中档（参数不阻塞）
-    assert_eq!(ProfileKind::Unknown.default_tier(), VisualTier::Medium);
-}
-
 // ── 参数矩阵（形态 → 模板/后处理；画面档 → 采样/权重/存储）──
 
 #[test]
@@ -198,21 +178,6 @@ fn none_tier_skips_ocr_chain() {
     assert!(!tier_skips_ocr(VisualTier::Rich));
     assert_eq!(profile.artifact_template, ArtifactTemplate::Summary);
     assert!((profile.signal_weights.ocr_weight - 0.0).abs() < 1e-6);
-}
-
-// ── 旧档案 → 四维规格（记忆库 kind 映射/旧会话解读）──
-
-#[test]
-fn spec_from_legacy_kind_maps_both_dimensions() {
-    // Arrange/Act：旧 talking-head（会话 33 检测前的状态）
-    let spec = spec_from_kind(ProfileKind::TalkingHead);
-    // Assert：形态=解说 + 默认档=低（动画升中由会话中重评驱动）
-    assert_eq!(spec.form, Some(ContentForm::Explainer));
-    assert_eq!(spec.visual_tier, VisualTier::Low);
-    // 旧 unknown → 默认规格（识别中：形态 None + 中档）
-    let unknown = spec_from_kind(ProfileKind::Unknown);
-    assert_eq!(unknown.form, None);
-    assert_eq!(unknown.visual_tier, VisualTier::Medium);
 }
 
 // ── JSON 契约（检测卡 v2 / 会话落库传输）──

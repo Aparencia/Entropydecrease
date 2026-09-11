@@ -39,8 +39,8 @@
 | app/src/components/GroupSidebar.test.tsx | 497 | 覆盖串组场景——切换 ⓘ 弹层目标组时表单态必须重置（key=group.id修复）：组 A 改了判类（未确认）→ 点组 B ⓘ → 弹层显示 B 且判类下拉回到 B.kind（防把 A 的选择误用到 B——路径: 改判误操作）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/db_sop.rs | 490 | v0.20.3（REQ-296/297）SOP 三表数据域（模板/run/步骤/保鲜/聚合）+ 审查加固（保链更新/幂等守卫/步数计数）内聚 | 若再增长：run 执行族拆至 db_sop_run.rs |
 | app/src-tauri/src/live_session_persist.rs | 488 | 定稿落库域（persist_final/digest_merged/handle_final_event）+ P2 flush_tail_and_persist（停止/暂停共用尾句落库）内聚 | 若再增长：flush_tail_and_persist 与 digest_merged 拆至 live_session_persist_tail.rs |
-| app/src-tauri/src/app_commands.rs | 483 | 宏约束下的**唯一**注册点：334 条 `generate_handler!` 条目是**数据不是逻辑** —— `Invoke` 按值语义使分域组合不可行（见文件头），拆成多份只会在域间新增「命令名 → 域」路由漂移面；一致性由 `scripts/check-command-registry.mjs` 机器门禁守 | 不拆（数据文件）；新增命令时同步条目，由门禁强制 |
 | app/src-tauri/src/db_sessions.rs | 482 | 会话仓储；批 4 delete_sessions_batch + 审查修复轮 3（transaction() 改造）——2026-09-09 实测纠偏（登记值 394 过期） | 若再增长：recent_ocr_texts 等建议查询拆至 db_sessions_queries.rs |
+| app/src-tauri/src/app_commands.rs | 479 | 宏约束下的**唯一**注册点：334 条 `generate_handler!` 条目是**数据不是逻辑** —— `Invoke` 按值语义使分域组合不可行（见文件头），拆成多份只会在域间新增「命令名 → 域」路由漂移面；一致性由 `scripts/check-command-registry.mjs` 机器门禁守 | 不拆（数据文件）；新增命令时同步条目，由门禁强制 |
 | app/src-tauri/src/commands_ai_enrich.rs | 479 | v0.8.0 M3（REQ-142）+ F1/F2/F3：知识补充命令域（九子项校验/预估/异步任务/采纳/撤销 + 配额去重门控 + 成本硬拦截 + 任务落库）——与精修共用任务注册表上下文，命令域内聚；2026-09 修复（章节目录注入/逐块审查回执）微增 | 若再增长：门控/拦截拆至 commands_ai_enrich_gate.rs |
 | app/src-tauri/src/region_tracker.rs | 478 | v0.4.0 M2（REQ-037）起：ROI 跟踪状态机（播放区域检测/锁定聚簇/重扫/前台切换冻结）+ 纯函数单测内联；与 RoiTracker 状态强耦合 | 若再增长：lock_roi/prior_roi 纯函数拆至 region_lock.rs |
 | app/src-tauri/src/layout_analyzer.rs | 475 | v0.5.0 M3（REQ-047）：规则版版面分析（行/列投影 + 表格线检测 + 区域分类启发式）内聚于同一分类管线；审查加固（公式启发 + 低信息纯色方差滤除） | 若再增长：区域分类启发式拆至 layout_classify.rs |
@@ -70,7 +70,6 @@
 | app/src-tauri/src/live_session_loop.rs | 410 | v0.7.0 M0 拆分产物（音频编排循环）：主循环 + 长静音/音量骤变/VAD 段事件写入 + drain/停止 flush；LiveSessionCtx 聚合上下文；A1 暂停边沿 + P1 停止 drain 重构；H1 修复（drain_deadline 改 Option，draining 置位时才计算） | 若再增长：事件写入块拆至 live_session_events.rs |
 | app/src/components/RichEditorView.tsx | 408 | v0.20.13 批 8（REQ-317）编辑态选区右键菜单接线（CM contextmenu extension + 动作分发，323→399；**前置 323 超 300 为 v0.20.8 偏差登记未登记债务**，本次实测纠偏并登记）——选区纯逻辑已拆 utils/noteSelectionMenu.ts 与 note-selection/SelectionActionMenu.tsx，本文件仅留宿主接线 | 若再增长：工具栏 action 分派拆至 commands/ 域（既有 toolbarCommands/headingCommand 范式） |
 | app/src-tauri/src/commands_live.rs | 399 | 实时采集命令域（启动/停止/档案热切换/剪辑监听）；v0.13.6（REQ-220）update_live_profile 细目参数与校验 + 审查轮（clear sentinel 空串语义/fine 计入至少一项）再增 | 若再增长：档案覆写命令拆至 commands_live_profile.rs |
-| app/src-tauri/src/commands_video.rs | 399 | v0.5.0 M1（REQ-043）起：视频档案命令域（检测装配/领域检测/预热/记忆）；v0.13.6（REQ-219~222）形态/领域/细目/记忆命令 + 分区映射形态接线再增；审查轮（H1 领域记忆兜底顺序修复/L2 独立 try）微增 | 若再增长：领域命令组拆至 commands_video_domain.rs |
 | app/src/components/ProfileDetector.tsx | 397 | 档案检测组件：投票/确认流/记忆偏好 UI + v0.11.5 Task 5 冲突提示内聚 + v0.13.6（REQ-219~222）形态 10 下拉/领域 20 下拉/细目多选 chips/分区映射形态优先 + 审查轮（onProfileChange ref/独立 try/fine_ids 同步，实测 2026-08-24） | 若再增长：确认流与细目 chips 拆至 ProfileConfirmFlow.tsx |
 | app/src-tauri/src/live_session_pause_tests.rs | 395 | plan_edge_observation 为纯函数（无 epoch/DB/emit 依赖——会话时刻由调用方以参数传入），可完整离线测真值表；事件对时刻单调性在此验证（DB 插入顺序 = events 顺序，单调即时间轴有序）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/live_session.rs | 394 | 会话装配/状态（LiveSessionParams 聚合 + run_session_after_engine 骨架 + ProfileOverride 细目字段）；v0.13.6 +2 | 若再增长：ProfileOverride 与参数分拆至 live_session_params.rs |
@@ -129,6 +128,7 @@
 | app/src-tauri/src/ai_provider.rs | 312 | v0.11.6 M1 + v0.12.0 M4：Provider 配置域（类型/校验/存储 IO/预设模板/legacy 迁移/默认链升级）+ 2026-09-11 DeepSeek V4.1 模型名归一（`current_deepseek_model` / `normalize_retired_deepseek_models`）——预设与迁移共处一文件保证"预设即迁移模板"的单一真源 | 若再增长：预设模板与迁移链拆至 ai_provider_migrate.rs |
 | app/src-tauri/src/commands_refine_inner.rs | 312 | v0.5.0 模型版：课后精修编排（清单构建/降级决策/引擎懒加载/逐候选识别/产物回填/HTML→MD 转换）内聚于精修执行域 | 若再增长：html_to_markdown 拆至 html_table_md.rs |
 | app/src/components/NotePreviewView.tsx | 312 | 原料/产物/笔记预览三视图之一：过滤后笔记正文（标题+讲述内容+画面要点）+ 过滤统计卡（UI 垃圾 x/重复 y/碎片 z/低置信 w）+被过滤内容折叠对照（可复查误杀，点击定位原料）+ 一键落库（复用 session_to_note 单一管线）+「✨ AI 复核」按需触发（REQ-085：授权默认关——上传前确认；判定结果就地更新预览；merge 段以拼接形态展示，落库仍按原始段——原料不动原则）。（自动摘取，待细化） | 若再增长：按职责拆分 |
+| app/src-tauri/src/commands_video.rs | 311 | v0.5.0 M1（REQ-043）起：视频档案命令域（检测装配/领域检测/预热/记忆）；v0.13.6（REQ-219~222）形态/领域/细目/记忆命令 + 分区映射形态接线再增；审查轮（H1 领域记忆兜底顺序修复/L2 独立 try）微增 | 若再增长：领域命令组拆至 commands_video_domain.rs |
 | app/src-tauri/src/commands_ai_chat_kb.rs | 310 | 读路径 A 发送流——本地 kb_search 命中 → 命中片段列表恒返回（本地零成本零上传，不受 AI 闸门约束）→ 生成仅当 content_gate+ kb_qa_enabled 双闸门开（默认关）→ 片段打包（budget_allocatorpack_fragments 转正：预算硬顶 + 诚实截断标记）→ 流式生成 →回答 + meta_json 引用落库（命中清单/引用溯源）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src/components/KnowledgeTreeView.tsx | 310 | 树＋列表，不做图可视化（§五 UI 原则）——节点以递归列表呈现，每节点一个身份标签（问题/场景/领域入口）+ 挂载引用数（link 按nodeId 计数，整树批量拉取后计数）。节点操作 inline（加子节点/编辑文本/删除），避免弹窗割裂，符合"决策仪表盘"而非 Notion 树。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/kb_fts.rs | 309 | 中文 BM25 切词口径校准（M0 spike 定案，2026-09-03）：索引表用 FTS5 trigram tokenizer（SQLite ≥3.34，bundled已使能）——unicode61 把连续中文句整段当一个 token（无分词），整句/子串查询全部落空（LIKE 都不如）；trigram 以 3-gram 窗口索引并支持子串匹配，免分词器与 FFI 自定义 tokenizer。（自动摘取，待细化） | 若再增长：按职责拆分 |

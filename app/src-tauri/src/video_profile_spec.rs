@@ -9,7 +9,7 @@
 //!              - 画面档独立决定采样/OCR/存储（tier_params 表）
 //!              - 维度独立降级：形态 unknown 时画面档照常生效
 //! @ai-context: 纯逻辑模块（无 IO/DB），矩阵数据在 video_profile_spec_data.rs；
-//!              旧 13 类保留为兼容层（ProfileKind::to_form/default_tier 映射），
+//!              旧 13 类保留为兼容层（ProfileKind::to_form 映射），
 //!              profile_by_kind 消费端契约零改动（见 video_profile.rs）。
 
 use serde::{Deserialize, Serialize};
@@ -181,26 +181,6 @@ impl ProfileKind {
             ProfileKind::Unknown => None,
         }
     }
-
-    /// 旧 13 类 → 默认画面档（映射表第三列；迁移/旧会话零回归用）。
-    pub fn default_tier(self) -> VisualTier {
-        match self {
-            // lecture 中档（板书时升档由会话中重评驱动）；whiteboard 画面=主体 → 高
-            ProfileKind::Lecture => VisualTier::Medium,
-            ProfileKind::Whiteboard => VisualTier::Rich,
-            // 实操中-高：hands-on 中档（跟练/游戏教程画面价值更高）
-            ProfileKind::HandsOn => VisualTier::Medium,
-            ProfileKind::FollowAlong | ProfileKind::GameTutorial => VisualTier::Rich,
-            // 解说低档（动画升中由重评驱动——会话 33 实证）
-            ProfileKind::TalkingHead => VisualTier::Low,
-            ProfileKind::Interview | ProfileKind::Meeting => VisualTier::Low,
-            ProfileKind::Exercise | ProfileKind::Coding => VisualTier::Rich,
-            ProfileKind::Podcast => VisualTier::None,
-            // v0.13.6：直播独立形态——浅画面（OCR 待命，不再短路画面链）
-            ProfileKind::Live => VisualTier::Low,
-            ProfileKind::Unknown => VisualTier::Medium,
-        }
-    }
 }
 
 /// 按四维规格查参数矩阵：形态 → 产物模板 + 后处理；画面档 → 采样/OCR/存储。
@@ -212,17 +192,6 @@ pub fn profile_for_spec(spec: &ProfileSpec) -> VideoProfile {
     let form = spec.form.unwrap_or(ContentForm::Lecture);
     crate::video_profile_spec_data::resolve_profile(form, spec.visual_tier)
 }
-
-/// 旧档案 → 四维规格（记忆库 kind 映射/旧会话解读用；Unknown → 默认规格）。
-pub fn spec_from_kind(kind: ProfileKind) -> ProfileSpec {
-    ProfileSpec {
-        form: kind.to_form(),
-        visual_tier: kind.default_tier(),
-        domain: None,
-        language: LanguageTag::Zh,
-    }
-}
-
 /// 形态 → 默认档位（无任何信号时的新会话起点；解说/对话/会议/直播/影视低档、
 /// 实操中档——直播/影视有画面但价值低，不开天窗也不短路）。
 pub fn default_tier_for_form(form: ContentForm) -> VisualTier {

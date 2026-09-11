@@ -84,23 +84,6 @@ fn local_path_segments_extracted() {
 }
 
 #[test]
-fn ocr_tags_to_domain_generalized() {
-    // Arrange：画面内分区标签 OCR（会话 33 实证：`知识科普|经济管理`）
-    let d = ocr_tags_to_domain(&["知识科普".to_string(), "经济管理".to_string()]);
-    // Act/Assert：不依赖平台枚举——通用 OCR 信号命中经济领域
-    assert_eq!(d.kind, Some(crate::video_profile_domain::DomainKind::Economy));
-    assert_eq!(d.source, "platform");
-}
-
-#[test]
-fn ocr_tags_unknown_text_no_domain() {
-    // Arrange：画面内非分类文字（防骗提示/标题卡正文——无领域种子词）
-    let d = ocr_tags_to_domain(&["谨防诈骗".to_string(), "小马的故事".to_string()]);
-    // Act/Assert：无领域命中（诚实空——不误判）
-    assert_eq!(d.kind, None);
-}
-
-#[test]
 fn bilibili_episode_ocr_parsed() {
     // Arrange/Act/Assert：B站 选集按钮 OCR（P分P/总集数 → 合集信息；证据增强）
     assert_eq!(adapt_bilibili_episode("P3/12"), Some((3, Some(12))));

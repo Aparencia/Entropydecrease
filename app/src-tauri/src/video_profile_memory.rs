@@ -101,15 +101,6 @@ impl ProfileMemory {
         best.map(|(_, kind)| kind)
     }
 
-    /// 记录用户确认（关键词已存在则覆盖档案；新增追加）。
-    ///
-    /// @ai-context: v0.7.2（REQ-152）：标题可识别系列 → 存**系列键**（is_series=true，
-    ///              同系列各集共享）；否则存完整标题（现状行为零回归）。
-    pub fn remember(&mut self, keyword: &str, kind: ProfileKind) {
-        let form = kind.to_form();
-        self.remember_with_form(keyword, kind, form);
-    }
-
     /// 记录用户确认（四维形态优先版，REQ-188）：kind 存代表旧类（消费端兼容），
     /// form 存新形态（检测卡 v2 下次直接生效——同标题/同系列）。
     ///
