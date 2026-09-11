@@ -5,7 +5,6 @@
 //! @ai-context: AppState 在 setup 时初始化：SQLite 数据库 + 常驻引擎池（后台加载 ASR/OCR 模型）。
 
 mod ai_guardrails;
-mod ai_judge;
 mod ai_mock;
 mod ai_protocol;
 mod ai_text_filter;

@@ -22,7 +22,7 @@
 |---|---|---|---|
 | app/src/pages/ChatPage.tsx | 593 | AI 对话页编排；批 1（REQ-306/307）active 门控/终态订阅接线净增——2026-09-09 实测纠偏（登记值 529 过期） | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
 | app/src-tauri/src/db_migrations.rs | 573 | v0.20.11 批 6（REQ-315）再增：note_groups.pin ensure_column + note_group_orders 建表（+21，实测 573——登记值 492 过期；schema 单点收敛理由同左） | 若再增长：kb_* 与 chat_* 表 DDL 拆至 db_migrations_kb.rs |
-| app/src-tauri/src/lib.rs | 573 | crate 根 **322 `mod` + 15 `#[cfg]` = 337 行地板**（Task 1 评审实测更正：原写「321 `mod` + 16 `#[cfg]`」，总数 337 不变；322 含本任务新增的 `mod app_commands;`）；注册清单已移至 `app_commands.rs`（**数据文件**，同属 300–600 豁免带）—— 结构性下界，非欠账 | 已完成（批 0-C3 Task 1，2026-09-11）；余下 161 行模块理由注释 + 装配逻辑，无进一步拆分标的 |
+| app/src-tauri/src/lib.rs | 572 | crate 根 **322 `mod` + 15 `#[cfg]` = 337 行地板**（Task 1 评审实测更正：原写「321 `mod` + 16 `#[cfg]`」，总数 337 不变；322 含本任务新增的 `mod app_commands;`）；注册清单已移至 `app_commands.rs`（**数据文件**，同属 300–600 豁免带）—— 结构性下界，非欠账 | 已完成（批 0-C3 Task 1，2026-09-11）；余下 161 行模块理由注释 + 装配逻辑，无进一步拆分标的 |
 | app/src/types/knowledge.ts | 559 | 知识体系类型域（体系/节点/概念/模型/引用/审计/决策 + v0.13.8 画布契约 + v0.14.1 画布偏好枚举与下拉文案常量）——类型与文案常量同域防漂移（前端类型域拆分任务待执行） | 若再增长：画布偏好类型与文案拆至 types/canvas.ts |
 | app/src-tauri/src/capture/audio_loopback.rs | 558 | ADR-007 重连机制（重试循环/退避/恢复回调）内聚于捕获线程实现，拆出需跨函数传递 COM 生命周期参数，内聚性优先；2026-08 A1 硬暂停（端点 Stop/Start + 暂停时长补偿 + 残留缓冲清空）再增 | 若再增长：将 run_capture_inner 拆至 audio_loopback_session.rs |
 | app/src-tauri/src/screen_merge.rs | 548 | v0.7.3（REQ-155/158）：屏级聚合纯函数域（聚类/行合并/角色分类/块去重）+ v0.7.5 净化纯函数（单字符/边缘条带/零跨度合并/图去重/包含率）——纯逻辑内聚便于单测 | 若再增长：零跨度合并与图去重拆至 screen_fix.rs |
@@ -37,8 +37,8 @@
 | app/src/components/LiveActivityPanel.tsx | 517 | 实时活动面板：会话状态/转录流/OCR 预览/控制区多状态面板内聚（前端审查登记） | 若再增长：转录流与 OCR 预览拆至 LiveTranscriptStream.tsx / LiveOcrPreview.tsx |
 | app/src-tauri/src/ai_client.rs | 505 | v0.11.6 M1（AiClient::from_provider / from_settings_with_store / is_fallbackable / fallback_provider_ids）+ 2026-09-11 DeepSeek V4.1 适配（chat_plain 探活路径 / build_plain_payload / json 前置条件兜底接线 / thinking 策略落点 / 4xx 错误体透出——纯策略与提取逻辑已拆至 ai_request_policy.rs）——Provider 解析与错误分类内聚于 AiClient 域，构造入口与降级链纯函数同文件便于单测。**旧登记 322 为过期快照，本次按实测纠偏** | 若再增长：fallback_provider_ids 拆至 ai_fallback.rs；payload 构造族拆至 ai_payload.rs |
 | app/src/components/GroupSidebar.test.tsx | 497 | 覆盖串组场景——切换 ⓘ 弹层目标组时表单态必须重置（key=group.id修复）：组 A 改了判类（未确认）→ 点组 B ⓘ → 弹层显示 B 且判类下拉回到 B.kind（防把 A 的选择误用到 B——路径: 改判误操作）。（自动摘取，待细化） | 若再增长：按职责拆分 |
-| app/src-tauri/src/app_commands.rs | 492 | 宏约束下的**唯一**注册点：334 条 `generate_handler!` 条目是**数据不是逻辑** —— `Invoke` 按值语义使分域组合不可行（见文件头），拆成多份只会在域间新增「命令名 → 域」路由漂移面；一致性由 `scripts/check-command-registry.mjs` 机器门禁守 | 不拆（数据文件）；新增命令时同步条目，由门禁强制 |
 | app/src-tauri/src/db_sop.rs | 490 | v0.20.3（REQ-296/297）SOP 三表数据域（模板/run/步骤/保鲜/聚合）+ 审查加固（保链更新/幂等守卫/步数计数）内聚 | 若再增长：run 执行族拆至 db_sop_run.rs |
+| app/src-tauri/src/app_commands.rs | 488 | 宏约束下的**唯一**注册点：334 条 `generate_handler!` 条目是**数据不是逻辑** —— `Invoke` 按值语义使分域组合不可行（见文件头），拆成多份只会在域间新增「命令名 → 域」路由漂移面；一致性由 `scripts/check-command-registry.mjs` 机器门禁守 | 不拆（数据文件）；新增命令时同步条目，由门禁强制 |
 | app/src-tauri/src/live_session_persist.rs | 488 | 定稿落库域（persist_final/digest_merged/handle_final_event）+ P2 flush_tail_and_persist（停止/暂停共用尾句落库）内聚 | 若再增长：flush_tail_and_persist 与 digest_merged 拆至 live_session_persist_tail.rs |
 | app/src-tauri/src/db_sessions.rs | 482 | 会话仓储；批 4 delete_sessions_batch + 审查修复轮 3（transaction() 改造）——2026-09-09 实测纠偏（登记值 394 过期） | 若再增长：recent_ocr_texts 等建议查询拆至 db_sessions_queries.rs |
 | app/src-tauri/src/commands_ai_enrich.rs | 479 | v0.8.0 M3（REQ-142）+ F1/F2/F3：知识补充命令域（九子项校验/预估/异步任务/采纳/撤销 + 配额去重门控 + 成本硬拦截 + 任务落库）——与精修共用任务注册表上下文，命令域内聚；2026-09 修复（章节目录注入/逐块审查回执）微增 | 若再增长：门控/拦截拆至 commands_ai_enrich_gate.rs |
@@ -76,7 +76,6 @@
 | app/src-tauri/src/live_session.rs | 394 | 会话装配/状态（LiveSessionParams 聚合 + run_session_after_engine 骨架 + ProfileOverride 细目字段）；v0.13.6 +2 | 若再增长：ProfileOverride 与参数分拆至 live_session_params.rs |
 | app/src-tauri/src/fusion_tests.rs | 392 | 融合测试域（ADR-005 四规则 + REQ-062 概率加权 + REQ-103 音量透传 + REQ-111 切分对齐）单模块 #[path] 挂载 | 若再增长：REQ-111 切分对齐组拆至 fusion_split_tests.rs |
 | app/src-tauri/src/db_fragments.rs | 391 | REQ-316（批 7）：delete_fragment/update_fragment_group/promote 同事务空组自动清理接线（登记值 309 过期快照，实测纠偏） | 若再增长：promote_fragment_to_note 事务拆至 db_fragments_promote.rs（既有登记计划兑现） |
-| app/src-tauri/src/commands_ai.rs | 388 | v0.5.0 起 AI 复核命令域（边界批量复核/配额/缓存/审计 + 结构渲染接线）；与 note_filter_ai（纯逻辑）分层 | 若再增长：批量复核循环拆至 commands_ai_review.rs |
 | app/src-tauri/src/import.rs | 385 | 导入域编排（音视频/图片导入流程 + 帧提取调度）内聚；与 import_frame/import_transcribe 分层 | 若再增长：导入参数校验拆至 import_validate.rs |
 | app/src-tauri/src/commands_proofread.rs | 383 | v0.20.2（REQ-270）LLM 校对命令域（预估/门控/分块请求/裁决源列表/失败记账）内聚；2026-09-06 实测登记（TD-2026-09-06-G） | 若再增长：record_proofread_failure 与载荷回写拆至 proofread_apply.rs |
 | app/src-tauri/src/capture/resample.rs | 381 | 音频重采样域（采样率转换/缓冲对齐/帧切分）内聚于捕获子模块，纯函数与捕获缓冲格式共享上下文 | 若再增长：帧切分拆至 resample_frames.rs |
