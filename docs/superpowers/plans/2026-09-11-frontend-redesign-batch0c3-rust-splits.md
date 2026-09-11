@@ -38,7 +38,7 @@
 
 1. **先读结构分析的实测结论**：`.superpowers/sdd/2026-09-11-frontend-redesign-batch0c3-rust-splits/analysis-<file>.md`（顶层项与行号、依赖面、提议边界、风险表、测试覆盖）。计划里该任务的「拆分边界」节据它写成；**若你读代码后发现与分析不符，以代码为准并在报告里指出**。
 2. **录基线**：该文件行数（`ReadAllLines` 口径）· `cargo test --test app_lib_tests` 的通过/失败/忽略数 · `cargo clippy` 的 error 数 · 该文件的直接测试覆盖（哪些 `*_tests.rs` 引用它）。
-3. **抽出单元 → 新文件**：新文件含 `//! @ai-context`（业务背景 / 副作用 / 边界）；公共 API（`pub`/`pub(crate)` 可见性、函数签名、结构体字段顺序）保持兼容；**在 `lib.rs` 声明块按现有分组插入 `mod <新文件>;`**（若目标是私有模块，插在对应分组旁；`pub mod` 需保持 `pub` 且在 crate 根）。
+3. **抽出单元 → 新文件**：新文件含 `//! @ai-context`（业务背景 / 副作用 / 边界）；公共 API（`pub`/`pub(crate)` 可见性、函数签名、结构体字段顺序）保持兼容；**新模块由「父模块自己」用 `#[path]` 声明**（见 Global Constraints 的「新模块的声明位置」——**不要**往 `lib.rs` 的 `mod` 块里加行）：`#[path = "<新文件>.rs"] mod <短名>;`。**例外只有一个**：`lib.rs` 自己的 Task 1（它本就是 crate 根，加 `mod app_commands;`）。
 4. **跑门禁**（`app/src-tauri/` 下）：`cargo test --test app_lib_tests`（必绿、用例数不减）→ `cargo clippy`（error 数不增）→ `cargo build`。
 5. **刷新登记表并从棘轮名单删行**（仓库根）：`node scripts/line-limits.mjs --write` → 从 `scripts/line-limits.mjs` 的 `FROZEN_OVER_LIMIT` 删掉本文件路径 → `node scripts/line-limits.mjs --full`（期望 exit 0，且 `>600` 计数比拆前少 1）。
 6. **行为等价的证明**（写进报告）：用例数与结果不减 + 对**测试未覆盖**的路径给出**人工核对清单**（至少：`pub` 可见性未变、`use` 路径可达、`serde` 属性与字段顺序逐字未变、`emit` 事件名未变、IPC 命令名未变、锁的加锁顺序与持锁范围未变）。**纯搬运类改动**（清单/常量/注释）优先用**机械 diff 证据**（见 Task 1 的注册清单探针）。
@@ -368,9 +368,44 @@ node scripts/line-limits.mjs --full
 
 ---
 
-<!-- 剩余：Task 6（commands_goals.rs 673）待其分析落盘后补入 —— **补入前不得派发该任务的实施者**。
-     已落盘分析（9/10）：lib-rs(189) · types-rs(178) · live-session-frame(159) · commands-ai-refine(258) · db-goals(255) ·
-     ai-refine-task(278) · note-filter(239) · artifact-templates(303) · video-profile(258)；缺 commands-goals。 -->
+### Task 6: 拆 `app/src-tauri/src/commands_goals.rs`（673 → ≈253）
+
+> **边界取自**：`.../analysis-commands-goals.md`（430 行：48 个顶层项、15 条 command 的注册行号、11 处 emit 站点、7 个决策点 + 7 条不确定项）。
+
+**Files:**
+- Modify: `app/src-tauri/src/commands_goals.rs`（终态 ≈253；内容地板 213 行，≤300 可达）
+- Create（3 个，平铺 `src/`）：`commands_goals_views.rs`(~194：读侧 5 DTO + 3 命令，**0 emit**) · `commands_goals_milestones.rs`(~180：7 命令 + 4 inner + 2 常量，**6 emit**) · `commands_goals_intent.rs`(~102：输入 DTO + 纯助手，**无命令**)
+- 声明方式：**在 `commands_goals.rs` 内 `#[path = "commands_goals_views.rs"] mod views;` 逐条声明** ⇒ `lib.rs:150` 的 `mod commands_goals;` **零改动**
+- Consumes: 分析报告；15 条命令注册在 `lib.rs:648–662`；测试 3 文件 23 用例（全直调 `*_inner` + `Db::open(":memory:")`）
+- Produces: 上述 3 个模块；**15 条 IPC 名逐字不变**（注册路径由两段变三段）
+
+**★ 裁决（分析 D1–D7）**：**D1 3 个文件**（不用目录模块、**不用 `pub use` 重导出**——tauri 宏生成项不随 `pub use` 走，`lib.rs:740–741` + `tauri-macros-2.6.3` wrapper.rs:296–352 取证）· **D2 bind/unbind 归 `milestones`**（与 6 处 emit 同侧）· **D3 输入 DTO 独立成 `intent.rs`**（不并入 `goal_interview.rs`：那是另一模块的职责，并入会把它推到 ~297 行）· **D4 测试 `use` 行直接改**（编译期可查；不加兼容层）· **D5 步序 views → milestones → intent** · **D6 不补**那 4 条零覆盖命令的测试（出界，另立条目）· **D7 不做 facade**。
+
+**★ 注册路径必改（本任务唯一静默风险面）**：10 条注册项要改成 `crate::commands_goals::<子模块>::<cmd>`，**必须在 `app_commands.rs`（Task 1 的产物）里同批改**，并跑：
+```powershell
+node scripts/check-command-registry.mjs        # 期望 ✅ 定义 334 / 注册 334 / 重复 0
+$S = ".superpowers/sdd/2026-09-11-frontend-redesign-batch0c3-rust-splits"
+node $S/probe-registry-parity.mjs verify $S/snap-registry-baseline.json app/src-tauri/src/app_commands.rs
+# 期望：✅ 按末段名逐条相同 + 打印若干条「路径前缀变化」——这就是"IPC 名未变"的机械证据
+```
+**失败模式是静默的**：把注册行整条删掉 ⇒ 编译通过 + 23 个用例全绿，**只有真机点该功能才报 `command not found`**（`pub fn` 不触 `dead_code`）。反面已证伪：ACL 静默过滤在本仓不触发（`REMOVE_UNUSED_COMMANDS` 0 命中、无 `permissions/`）。
+
+**分步（每步一个提交）**：673 → 步 1 `views`(~500 ⇒ **删 `FROZEN_OVER_LIMIT` 行 + `--write`**) → 步 2 `milestones`(~345) → 步 3 `intent`(**~253 ≤300 ⇒ 档位行自动消失**)。步后行数以实测为准。
+
+**★ 等价核对**
+1. **11 处 `emit_changed(DataDomain::Goals)` 的位置与条件逐字不变**（其中 `add_goal_milestone` 是**唯一无条件** emit）；视图侧 0 emit。
+2. 15 条命令壳的入参/返回/`State` 用法不变 —— **15 条命令壳与 11 处 emit 完全未被测试覆盖**（既有 23 个用例只直调 `*_inner`；前端测试 mock 掉 `invoke`、只断言名字串 ⇒ 不能替代注册验证）。
+3. 3 个测试文件的 `use` 行改完后仍全绿（`#[path]` 测试声明**不得删**，删了 = 静默丢覆盖）。
+4. 既有缺陷只搬不改。
+
+**验证**：`cargo test --test app_lib_tests`（goals 相关 ≥23 用例且不降）· `cargo build` · `cargo clippy`（不增）· `node scripts/check-command-registry.mjs` · 注册清单探针 · `node scripts/line-limits.mjs --full`。**只能真机**：15 条命令各点一次（只验可达）。
+**报告**：`.../task-6-report.md`。
+
+---
+
+<!-- 全部 10 个 Task 节已写完。10 份只读分析全部落盘：lib-rs(189) · types-rs(178) · live-session-frame(159) ·
+     commands-ai-refine(258) · db-goals(255) · commands-goals(430) · ai-refine-task(278) · note-filter(239) ·
+     artifact-templates(303) · video-profile(258)。**无占位符待补。** -->
 
 ---
 
@@ -425,6 +460,6 @@ node scripts/line-limits.mjs --full
 **规范覆盖**：对应规格 §10 批 0「拆超限文件」与 §11 验收口径第 1 条；Rust 侧 10 个文件的行数由批 0-C1 以 `ReadAllLines` 口径全量实测得出，并与 `docs/standards/line-limit-exemptions.md`（生成物）一致。
 **顺序依据**：`lib.rs` 第一 —— 其余 9 个任务的 `mod` 追加都落在它身上，而它现在 >600；不先降下来就会持续违反 v0.22 红线。
 **已核实的宏行为**：`generate_handler!` 的命令名取路径末段、`Invoke` 按值传递、条目支持 `#[cfg]` 外层属性 —— 三条均读自本机 vendored 源码 `tauri-macros-2.6.3/src/command/handler.rs`（第 16–23 / 46–58 / 174–183 行），不是推测。
-**占位符扫描**：**Task 1 / 2 / 3 / 10 已写完**（lib.rs · types.rs · live_session_frame.rs · video_profile.rs，对应分析报告各 159–258 行）；**Task 4–9 待各自分析落盘后补入**（`commands_ai_refine.rs` / `db_goals.rs` / `commands_goals.rs` / `ai_refine_task.rs` / `note_filter.rs` / `artifact_templates.rs`，6 份只读分析由控制方并行派发中）。补入前**不得派发**对应任务的实施者（否则实施者会自行发明边界）。
-**位置计数更正**：派发顺序表的「Task #」= 文件在该表中的序号（Task 10 = `video_profile.rs`），与实际派发顺序一致。
+**占位符扫描**：**Task 1–10 全部写完**（10 份只读分析全部落盘，各 159–430 行）—— 每节含：源自分析的边界与新文件清单、分步表（含**每一步**的 `FROZEN_OVER_LIMIT`/登记表动作）、控制方对分析所提决策点的**裁决**、该文件特有的等价核对清单、验证命令与报告路径。**无占位符**。
+**口径一致性（本轮修掉的一处自相矛盾）**：统一作业模式第 3 步原写「在 `lib.rs` 声明块插入 `mod`」，与 Global Constraints 的「新模块由父模块用 `#[path]` 声明」冲突（分析 `commands-goals` 代理发现并登记）⇒ 已统一为「**父模块 `#[path]` 声明，唯一例外是 `lib.rs` 自己的 Task 1**」。
 **执行纪律**：串行（一次一个文件，一个实施者 + 一次任务评审），理由同 `0-C2`（共享登记表/棘轮/`lib.rs`，且 `git add` 与 `git commit` 交错会互相污染提交）。
