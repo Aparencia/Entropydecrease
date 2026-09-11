@@ -197,7 +197,7 @@ mod commands_structures;
 mod commands_streaming;
 mod commands_vocab;
 mod commands_video;
-// v0.12.0 M6（采集体验债）：采集浮窗窗口命令（open/close_capture_float）
+// v0.12.0 M6（采集体验债）：采集浮窗窗口命令（close_capture_float/float_toggle 等）
 mod commands_window;
 // v0.12.0 M3（交互债）：系统级覆盖层截图命令（open/close/submit/cancel）
 mod commands_overlay;

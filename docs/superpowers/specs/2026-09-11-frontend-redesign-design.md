@@ -495,7 +495,7 @@
 | 38 | `detect_video_domain` | **删** | 上游 OCR 标签通道**从未建起来**；平台信号不是瓶颈（`infer_platform` 已从标题/URL 自行补标签） |
 | 39 | `finish_session` | **补 UI（本批）** | 恢复动作「结束会话」（崩溃后卡在录制态的收尾通道） |
 | 40 | `get_decision` | **补 UI（本批）** | 决策日志单条详情 —— 顺带修审计 H7 |
-| 41 | `open_capture_float` | **待核实** | 前端现有开浮窗方式未确认（B 桶唯一无把握项） |
+| 41 | `open_capture_float` | **删** | 2026-09-11 结清：前端 0 调用者；开路径由 `float_toggle`（`useClassroomFloat.ts:38`）与 `FloatAction::Open => float_open_core`（`commands_window.rs:250`）承载，本命令只是又包一层 `float_open_core` ⇒ 批 1 Task 8 删 |
 | 42 | `refine_session` | **补 UI（本批）** | 会话详情「手动精修」（UI 现只调 auto 版） |
 | 43 | `release_live_prepare` | **有意保留** | 前端注释「保留供未来显式调用」 |
 | 44 | `remember_video_profile` | **删** | 功能被 `remember_video_profile_form` **完整覆盖**，双重死亡 |
@@ -503,7 +503,9 @@
 | 46 | `update_fragment_group` | **补 UI（本批）** | REQ-201 **声称已接线但实际无调用方** —— 需同步修正记录 |
 | 47 | `update_knowledge_system` | **补 UI（本批）** | 体系改名 / 核心问题 / 状态 —— 最明确的功能缺口 |
 
-**汇总**：删 **21** · 本批补 UI **12** · 登记不排期 **7** · 撤下 IPC **3** · 有意保留 **3** · 待核实 **1** ＝ 47。
+**汇总**：删 **22** · 本批补 UI **12** · 登记不排期 **7** · 撤下 IPC **3** · 有意保留 **3** · 待核实 **0** ＝ 47。
+
+> **2026-09-11 改判**：#41 `open_capture_float` 由「待核实」改为「删」（依据见该行说明）⇒ 删除批由 21 条升至 **22** 条。
 
 > **两条更正，可单点回退**：#38 `detect_video_domain` 与 #44 `remember_video_profile` 在早期分桶中被列入「A 桶 · 补 UI」，经专项侦察后**更正为删除** —— 前者的上游 OCR 标签通道从未建起来（平台信号不是瓶颈，`infer_platform` 已从标题/URL 自行补标签），后者的功能被 `remember_video_profile_form` 完整覆盖。这两行**独立于其他决策**，若需回退为「补 UI」，只改这两行即可。
 
@@ -517,7 +519,7 @@
 |---|---|---|
 | **0 基座** | 4 条 ADR + 修订 ADR-010 · 豁免表纠偏 · 拆 4 个超限文件 · token 层 · z-index 标尺 · 图标集 + 单测 · 原语三层 | 4 个 >600 行 → 0；豁免表 100% 一致 |
 | ↳ 批 0 的 ADR 归属（批 0-D 收口时更新） | **ADR-032 ✅（批 0-A/0-D）** · **ADR-033 ✅（批 0-D，L1 原语层与视图层契约）** · **ADR-034/035 顺延**（推定为批 3 壳层 / 批 6 动效，见 ADR-033 的「登记」节）· 修订 ADR-010 属**批 1** | — |
-| **1 删除批** | 21 条命令 + 补缝三连连带模块 + ADR-010 修订 + 清理 `structuredBlocks.ts:63` 死文案 | 注册表条目下降；cargo test 全绿 |
+| **1 删除批** | **22** 条命令 + 补缝三连连带模块 + ADR-010 修订 + 清理 `structuredBlocks.ts:63` 死文案 | 注册表条目下降；cargo test 全绿 |
 | **2 包体治理**（可并行） | `manualChunks` + 按页动态 import + 量首屏 gzip | 从 651KB gzip 降到达标或给出瓶颈清单 |
 | **3 壳层落地** | A′ 顶栏 + ⌘K + 溢出策略 + 窗口尺寸 + 列注册表 + 断点 + `--nav-h` | 9 页全走注册表；1024 无溢出；7 处魔数归零 |
 | **4 原语迁移** | 20 弹层 / 44 空态 / 85 加载 / 196 错误行 / 4 toast / 2 confirm / Button/Surface/Text | z-index ≤6；`role="dialog"` 20/20 |
@@ -560,7 +562,7 @@
 
 | 项 | 状态 |
 |---|---|
-| `open_capture_float` 前端现有开法 | **需核实**（B 桶唯一无把握项） |
+| `open_capture_float` 前端现有开法 | ✅ **已结清 2026-09-11**：前端 0 调用者（活路径为 `float_toggle` + `close_capture_float`）⇒ 改判为「删」，落地于**批 1** |
 | 软删 / 回收站（审计 D2 丙方案） | 独立技术债 —— 需 schema 迁移 |
 | T7 档案记忆增量（命中计数 + 会话后自动修正） | 基础闭环已通，增量登记 |
 | `image_stream_store.rs` 图像流接线（L6） | 档位通道做完后才具备前提 |

@@ -257,18 +257,6 @@ pub(crate) fn float_toggle_core(app: &tauri::AppHandle) -> Result<FloatUiView, S
     Ok(view(&after))
 }
 
-/// 打开采集浮窗（幂等——已存在则前置显示并聚焦）。
-///
-/// @ai-context: ?float=1 让 App.tsx 渲染 CaptureFloatPanel；窗口不加载数据库/
-///              采集引擎（纯前端消费 live:* 事件），创建失败返回错误由调用方
-///              引导（浮窗是增强，失败不阻断采集主链路）。已存在时同步应用
-///              stored topmost（precreated 窗口初态可能被用户关过置顶）。
-/// @ai-context: async——见模块头注释（wry#583 主线程建窗死锁）。
-#[tauri::command]
-pub async fn open_capture_float(app: tauri::AppHandle) -> Result<(), String> {
-    float_open_core(&app)
-}
-
 /// 关闭采集浮窗（**隐藏**而非销毁——v0.12.3 常驻语义；重复调用幂等）。
 ///
 /// @ai-context: 停止采集由 ClassroomPage / CaptureFloatPanel 调用；隐藏保留

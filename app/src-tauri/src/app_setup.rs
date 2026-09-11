@@ -315,7 +315,7 @@ pub fn setup_app_state(app: &mut tauri::App) -> Result<(), String> {
         web_inbox: std::sync::Arc::new(std::sync::Mutex::new(None)),
     });
     // v0.12.3（P2-10）：浮窗预创建常驻（隐藏）——打开秒显、点击期零建窗风险；
-    // 失败幂等回落为打开时懒创建（open_capture_float 内部兜底）。
+    // 失败幂等回落为打开时懒创建（float_open_core 内部兜底）。
     crate::commands_window::precreate_float(app.handle());
     Ok(())
 }
