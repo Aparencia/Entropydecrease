@@ -15,3 +15,6 @@ export type { TextFont, TextProps, TextSize, TextTag, TextTone } from "./Text";
 
 export { Surface } from "./Surface";
 export type { SurfaceLevel, SurfaceProps, SurfaceRadius, SurfaceTag } from "./Surface";
+
+export { Button } from "./Button";
+export type { ButtonProps, ButtonSize, ButtonVariant } from "./Button";
