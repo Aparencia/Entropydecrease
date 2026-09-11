@@ -3,7 +3,7 @@
 //! @ai-context: 由 types.rs 门面 `#[path]` 声明 + `pub use` 再导出 ⇒ crate::types::X 引用路径逐字不变。
 
 use serde::{Deserialize, Serialize};
-use super::TextBox;
+use super::types_extract::TextBox;
 
 /// 会话 OCR 块（关键帧画面文字 / 字幕区文字）。
 ///
