@@ -12,11 +12,7 @@ use rusqlite::{params, Connection};
 
 use crate::db::{unix_seconds, Db};
 use crate::error::Result;
-use crate::goal_schema::{
-    Goal, NewGoal, CRITERIA_GROUP_SETTLED, MILESTONE_DONE,
-    MILESTONE_IN_PROGRESS, MILESTONE_PENDING,
-};
-use self::milestone::add_milestone_row;
+use crate::goal_schema::{CRITERIA_GROUP_SETTLED, MILESTONE_DONE, MILESTONE_IN_PROGRESS, MILESTONE_PENDING};
 
 // 子模块声明（AGENTS.md §3 单文件 ≤300 行；#[path] 使兄弟文件平铺在同目录，各自带 @ai-context）。
 /// 里程碑域：里程碑 CRUD + 三写路径共用的插入行 helper。
@@ -25,6 +21,9 @@ mod milestone;
 /// AI 规划域：规划落库事务 / 体系链接 / 概念活动 / 规划上下文。
 #[path = "db_goals_plan.rs"]
 mod plan;
+/// 目标域：goals 实体 CRUD（含事务建目标）+ goals 行映射。
+#[path = "db_goals_goal.rs"]
+mod goal;
 
 /// 三表 DDL + 索引（幂等：CREATE TABLE IF NOT EXISTS；旧库升级自动补表）。
 pub(crate) fn init(conn: &Connection) -> Result<()> {
@@ -78,113 +77,6 @@ pub(crate) fn init(conn: &Connection) -> Result<()> {
 }
 
 impl Db {
-    /// 新建目标（事务：goal + 里程碑草案 + 初始绑定组；status=active 一步到位）。
-    pub fn create_goal(&self, new: &NewGoal) -> Result<Goal> {
-        let now = unix_seconds();
-        self.with_conn(|conn| {
-            let tx = conn.unchecked_transaction()?;
-            tx.execute(
-                "INSERT INTO goals (name, domain_tag, status, horizon_end, success_criteria_json, intent_json, created_at, updated_at)
-                 VALUES (?1, ?2, 'active', ?3, ?4, ?5, ?6, ?6)",
-                params![
-                    new.name,
-                    new.domain_tag,
-                    new.horizon_end,
-                    new.success_criteria_json,
-                    new.intent_json,
-                    now
-                ],
-            )?;
-            let goal_id = tx.last_insert_rowid();
-            for (idx, m) in new.milestones.iter().enumerate() {
-                add_milestone_row(&tx, goal_id, m, idx as i64, now)?;
-            }
-            for gid in &new.group_ids {
-                tx.execute(
-                    "INSERT OR IGNORE INTO goal_groups (goal_id, group_id, added_at) VALUES (?1, ?2, ?3)",
-                    params![goal_id, gid, now],
-                )?;
-            }
-            tx.commit()?;
-            Ok(Goal {
-                id: goal_id,
-                name: new.name.clone(),
-                domain_tag: new.domain_tag.clone(),
-                status: "active".to_string(),
-                horizon_end: new.horizon_end,
-                success_criteria_json: new.success_criteria_json.clone(),
-                intent_json: new.intent_json.clone(),
-                created_at: now,
-                completed_at: None,
-                updated_at: now,
-            })
-        })
-    }
-
-    /// 全部目标（列表页；按创建时间倒序——同秒并列时按 id 倒序，顺序确定）。
-    pub fn list_goals(&self) -> Result<Vec<Goal>> {
-        self.with_conn(|conn| {
-            let mut stmt =
-                conn.prepare("SELECT * FROM goals ORDER BY created_at DESC, id DESC")?;
-            let rows = stmt.query_map([], row_to_goal)?;
-            rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
-        })
-    }
-
-    /// 按 id 读取目标（不存在 → None）。
-    pub fn get_goal(&self, id: i64) -> Result<Option<Goal>> {
-        self.with_conn(|conn| {
-            let mut stmt = conn.prepare("SELECT * FROM goals WHERE id = ?1")?;
-            let mut rows = stmt.query_map(params![id], row_to_goal)?;
-            match rows.next() {
-                Some(Ok(g)) => Ok(Some(g)),
-                Some(Err(e)) => Err(e.into()),
-                None => Ok(None),
-            }
-        })
-    }
-
-    /// 更新目标元数据（名称/领域/时限/判据配方/访谈答案——重访谈配方重推入口）。
-    pub fn update_goal_core(
-        &self,
-        id: i64,
-        name: &str,
-        domain_tag: Option<&str>,
-        horizon_end: Option<i64>,
-        success_criteria_json: &str,
-        intent_json: &str,
-    ) -> Result<bool> {
-        self.with_conn(|conn| {
-            let affected = conn.execute(
-                "UPDATE goals SET name = ?2, domain_tag = ?3, horizon_end = ?4,
-                 success_criteria_json = ?5, intent_json = ?6, updated_at = ?7
-                 WHERE id = ?1",
-                params![id, name, domain_tag, horizon_end, success_criteria_json, intent_json, unix_seconds()],
-            )?;
-            Ok(affected > 0)
-        })
-    }
-
-    /// 状态转移（graduated/abandoned 时写 completed_at；恢复后清空）。
-    pub fn set_goal_status(&self, id: i64, status: &str) -> Result<bool> {
-        let now = unix_seconds();
-        self.with_conn(|conn| {
-            let affected = conn.execute(
-                "UPDATE goals SET status = ?2, completed_at = CASE WHEN ?3 THEN ?4 ELSE NULL END, updated_at = ?4
-                 WHERE id = ?1",
-                params![id, status, status == "graduated" || status == "abandoned", now],
-            )?;
-            Ok(affected > 0)
-        })
-    }
-
-    /// 删除目标（里程碑/绑定随 FK CASCADE；毕业快照保留属 M2——M1 无快照表）。
-    pub fn delete_goal(&self, id: i64) -> Result<bool> {
-        self.with_conn(|conn| {
-            let affected = conn.execute("DELETE FROM goals WHERE id = ?1", params![id])?;
-            Ok(affected > 0)
-        })
-    }
 
     /// 绑定组到目标（UNIQUE 幂等：重复绑定返回 false；组不存在靠外键报错，
     /// 命令层先行校验）。
@@ -361,22 +253,6 @@ impl Db {
             })
         })
     }
-}
-
-/// goals 行 → Goal。
-fn row_to_goal(row: &rusqlite::Row<'_>) -> rusqlite::Result<Goal> {
-    Ok(Goal {
-        id: row.get(0)?,
-        name: row.get(1)?,
-        domain_tag: row.get(2)?,
-        status: row.get(3)?,
-        horizon_end: row.get(4)?,
-        success_criteria_json: row.get(5)?,
-        intent_json: row.get(6)?,
-        created_at: row.get(7)?,
-        completed_at: row.get(8)?,
-        updated_at: row.get(9)?,
-    })
 }
 
 #[cfg(test)]
