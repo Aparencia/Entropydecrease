@@ -78,7 +78,6 @@
 | app/src-tauri/src/app_setup.rs | 420 | 本模块承载 setup 的 AppState 初始化（数据目录/DB/引擎池/可校准（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/bin/asr_eval.rs | 418 | 目的——"无人工语料也能测 ASR"（2026-09-03 用户裁决①）：（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/vocab.rs | 416 | 词表域（存储/纠错/候选提取/n-gram 分词）内聚；分词纯逻辑与存储同域便于单测 | 若再增长：collect_tokens/split_runs 拆至 vocab_tokens.rs |
-| app/src/pages/NotesPage.tsx | 416 | 超硬限（>600 行），不允许豁免 —— 审查修复轮 3/4（refreshToken 透传/选区动作编排承接）净增越 600 硬限（599→602）——随 TD-2026-09-09-D 登记 | **超硬限必须拆**：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts（既有登记计划兑现） |
 | app/src-tauri/src/ui_junk.rs | 415 | UI 噪声过滤域（水印/字幕条/角标检测规则 + 窗口过滤启发式）内聚于同一判定管线，规则共享窗口几何上下文 | 若再增长：窗口过滤拆至 ui_junk_window.rs |
 | app/src/components/NoteEditView.tsx | 411 | v0.13.6（审查 H1 修复）：forwardRef 命令式 flushSave 出口（ESC 先保存后刷新）+ flushLatest 最终保存；v0.15 剪贴板图片 paste（useClipboardImagePaste+插入）+ 外链图下载导入——编辑视图保存/快捷键/工具栏/图片入口内聚（textarea 降级路径与 CM 版同步） | 若再增长：工具栏与 MarkdownEdit 快捷键拆至 NoteToolbar.tsx |
 | app/src-tauri/src/live_session_loop.rs | 410 | v0.7.0 M0 拆分产物（音频编排循环）：主循环 + 长静音/音量骤变/VAD 段事件写入 + drain/停止 flush；LiveSessionCtx 聚合上下文；A1 暂停边沿 + P1 停止 drain 重构；H1 修复（drain_deadline 改 Option，draining 置位时才计算） | 若再增长：事件写入块拆至 live_session_events.rs |
@@ -100,6 +99,7 @@
 | app/src-tauri/src/commands_fragments.rs | 374 | 碎片命令域 + REQ-316（批 7）结果契约与组域条件广播（登记值缺失为漏登——HEAD 基线已 347，本次补） | 若再增长：碎片组操作命令族拆至 commands_fragments_group.rs |
 | app/src-tauri/src/analysis_tests.rs | 371 | 分析编排测试域（档案门控矩阵 + REQ-108 事件消费 + M2 三字段）单模块 #[path] 挂载 | 若再增长：事件消费组拆至 analysis_events_tests.rs |
 | app/src-tauri/src/commands_web_inbox.rs | 371 | v0.20.4（REQ-304）扩展收件命令域（起停/状态/HTTP 小循环/投递收口/图落盘）内聚；2026-09-06 实测登记（TD-2026-09-06-G） | 若再增长：HTTP 连接处理拆至 web_inbox_http.rs |
+| app/src/pages/NotesPage.tsx | 371 | 超硬限（>600 行），不允许豁免 —— 审查修复轮 3/4（refreshToken 透传/选区动作编排承接）净增越 600 硬限（599→602）——随 TD-2026-09-09-D 登记 | **超硬限必须拆**：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts（既有登记计划兑现） |
 | app/src-tauri/src/live_keyframes.rs | 370 | ① handle_full_frame：全帧画面要点落库 + 关键帧样本收集与（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/windows.rs | 370 | 窗口枚举/评分域 + v0.19.2（REQ-271/272）：CaptureWindow.zOrder/systemWindow 字段 + 抖音/快手/B站客户端评分表（+28）——枚举系统副作用与评分纯函数同域便于单测（既有模式） | 若再增长：z 序/系统标记纯函数拆至 windows_meta.rs |
 | app/src-tauri/src/commands_window.rs | 369 | 浮窗窗口命令域（v0.12.3 架构升级计划：全部窗口操作集中单文件）+ v0.12.6（ADR-025）显隐链路与全局快捷键三态切换核心（open/close/locked/topmost/toggle 核心 fn + 命令薄包装 + 状态机/序列化单测内联）；拆分需跨 fn 传递 AppHandle/State，内聚性优先 | 若再增长：浮窗核心逻辑拆至 float_core.rs（命令薄包装保留本文件） |

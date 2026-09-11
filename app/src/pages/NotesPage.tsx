@@ -40,6 +40,7 @@ import { useNotesSealedFilter } from "../hooks/useNotesSealedFilter";
 import { useNotesPageEditing } from "../hooks/useNotesPageEditing";
 import { useNotesBatchActions } from "../hooks/useNotesBatchActions";
 import { useNotesListData } from "../hooks/useNotesListData";
+import { useNotesDeepLink } from "../hooks/useNotesDeepLink";
 
 interface Props {
   focusNoteId?: number | null;
@@ -69,8 +70,6 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
   const [groupFilter, setGroupFilter] = useState<number | null>(null);
   // v0.12.2：中部视图（收件箱 ↔ 笔记列表原位切换）
   const [view, setView] = useState<MiddleView>("notes");
-  // v0.19.1：阅读态命中词搜索请求（来自引用跳转；key 递增可重触发）
-  const [readerSearch, setReaderSearch] = useState<{ noteId: number; search: string; key: number } | null>(null);
   // v0.17.0：编辑态 AI 能力对话框（精修/知识补充统一入口——REQ-246）
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [aiContent, setAiContent] = useState("");
@@ -102,65 +101,21 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
   const listCol = useColumnLayout("notes-list", { default: 320, min: 240, max: 420, autoFoldBelow: 700 });
   const outlineCol = useColumnLayout("notes-outline", { default: 180, min: 140, max: 260, autoFoldBelow: 1100 });
 
-  // L2：收集异步流程中的 setTimeout——effect cleanup 统一清理防卸载后触发
-  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   // A6：注意力跟踪
   useNoteAttention(selected?.id ?? null, selected?.title ?? "");
 
-  // L2：卸载时清理所有登记的延迟定时器
-  useEffect(() => {
-    const timers = timersRef.current;
-    return () => timers.forEach((t) => clearTimeout(t));
-  }, []);
-
-  // 跨页直达（focusNoteId 定位滚动；v0.19.1 focusNoteSearch 追加命中词阅读
-  // 搜索注入——两入口共用一次列表重载/选中/滚动，防双 effect 双拉取竞态）
-  useEffect(() => {
-    const targetId = focusNoteSearch ? focusNoteSearch.noteId : focusNoteId;
-    if (targetId == null) return;
-    let disposed = false;
-    (async () => {
-      list.setKeyword("");
-      list.setTagFilter(null);
-      setView("notes");
-      const seq = ++list.seqRef.current;
-      try {
-        const rows = await invoke<Note[]>("list_notes", { sortMode: "updated-desc" });
-        if (disposed || list.seqRef.current !== seq) return;
-        list.setNotes(rows);
-        const target = rows.find((n) => n.id === targetId);
-        if (target) {
-          // v0.19.1 审查 M2：引用跳转=阅读+高亮主路径——先退出编辑态
-          // （handleSelect 同款语义：NoteEditView 卸载自动保存 dirty 草稿，
-          // 防旧内容串写 + 防 externalSearch 注入落到编辑视图）
-          setEditing(false);
-          setSelected(target);
-          // L2：定时器登记入 ref（cleanup 可清理），不再裸 setTimeout
-          timersRef.current.push(
-            setTimeout(() => {
-              document.getElementById(`note-row-${target.id}`)?.scrollIntoView({ block: "center" });
-            }, 50),
-          );
-        }
-        if (focusNoteSearch) setReaderSearch({ ...focusNoteSearch });
-      } catch (e) {
-        if (!disposed) {
-          if (focusNoteSearch) setReaderSearch({ ...focusNoteSearch });
-          list.setStatus(`加载失败: ${e}`);
-        }
-      }
-    })();
-    return () => { disposed = true; };
-  }, [focusNoteId, focusNoteSearch]);
-
-  // v0.14 C2：图谱组节点直达——仅过滤（三栏下列表常驻；不触发展开）
-  useEffect(() => {
-    if (focusGroupId == null) return;
-    setGroupFilter(focusGroupId);
-    setView("notes");
-    list.setKeyword("");
-    list.setTagFilter(null);
-  }, [focusGroupId]);
+  // v0.19.1 / v0.14 C2：跨页深链（focusNoteId ∪ focusNoteSearch 合并一次重载 + 组直达）
+  // ——见 useNotesDeepLink（两入口共用一次 effect / 序号比对 / 定时器登记全在该文件）
+  const { readerSearch } = useNotesDeepLink({
+    focusNoteId,
+    focusNoteSearch,
+    focusGroupId,
+    notesApi: list,
+    setSelected,
+    setEditing,
+    setView,
+    setGroupFilter,
+  });
 
   // ── 操作 ──
   const runPinToggle = async (note: Note) => {
