@@ -7,7 +7,9 @@
  * 先把变量按规格 §8.4 的名字与取值落在这里，批 6 的动效 token 真源完成后**整块删除** ——
  * 所有引用点写的是 `var(--ed-dur-x, <同值字面量>)`，删块即生效，无需改任何规则。
  *
- * ② 本文件是**全仓第一条 `prefers-reduced-motion` 块**（实测改造前 0 处，recon §8.1）。
+ * ② 本文件是 **`app/src` 内第一条 `prefers-reduced-motion` 块**（实测改造前 `app/src` 里 0 处，recon §8.1；
+ *    ⚠️ 口径只到 `app/src`：仓库根的 `website/components/dive/ChronosDemo.tsx:59` 早已有 JS 侧
+ *    `matchMedia("(prefers-reduced-motion: reduce)")`，故「全仓第一条 reduced-motion」的说法不成立）。
  *    名单一次写全 12 个 `.ed-*` 基类（含本批后面才实现的选择器 —— 未实现的选择器无害；
  *    Task 12 追加 `.ed-status`），
  *    换来「后续任务永不改本文件」；Task 14 的样式守卫断言每个 `.ed-*` **基类**都在名单里
@@ -23,6 +25,13 @@
  *    这条**故意不做成 CSS 变量**：位移的落点是 CSS `translate*()` 的字面量与批 6 的 JS 数值，
  *    没有消费者读它，做成变量就是个死变量（还会给人「已被强制」的错觉）。强制手段是
  *    `style-seams.test.ts` 的机器判据：扫 `primitives/*.css` 的 `translate*()` 数值实参，>8px 即红。
+ *
+ * ⑤ **行内 `style` 覆盖 CSS 类**（批 6 的接法澄清，T3 评审 I-4 实测订正）：原语的排版/透明/位移一律
+ *    只出类名，`style` 是**纯透传**（`Text` / `Surface` / `Button` 三个原语都已实测）。批 6 若用
+ *    `style` 直驱属性值（如 `style={{ color }}` 或 GSAP 写的内联属性），**类上的 transition 仍然在**
+ *    （过渡由类规则声明，不因值来自何处而消失），但**终值以 `style` 为准**（行内优先于类选择器）——
+ *    即：接管是可行的，只是"目标值"要从类挪到 `style`。反过来，若批 6 想让类规则重新当家，
+ *    必须先把 `style` 摘掉，否则改类不会有观感变化。
  */
 
 :root {

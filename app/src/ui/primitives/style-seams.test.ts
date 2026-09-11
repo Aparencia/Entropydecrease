@@ -6,7 +6,7 @@
  *   ① 字阶/字族的 `var(--ed-x, 兜底字面量)` 的兜底值必须等于真源 `SCALE_TOKENS`
  *      （生成器改档后不重跑本层，兜底值会静默退回旧档 —— 未定义变量不报错）；
  *   ② `Text.tsx` 产出的每个类，`Text.css` 里必须有对应规则（类名拼错 = 静默无样式，编译期全绿）；
- *   ③ `motion.css` 的 10 个动效变量、**全仓唯一一条** reduced-motion 块，以及规格 §8.4 的
+ *   ③ `motion.css` 的 10 个动效变量、**`app/src` 内唯一一条** reduced-motion 块，以及规格 §8.4 的
  *      「位移上限 8px」—— 批 6 要靠前两者删块接管，靠第三者不越界；
  *   ④ `Surface.css` 的**盒子口径**（控制方 2026-09-11 裁决）：基类必须自带
  *      `box-sizing: border-box` 且**只声明一次** —— `padded` + `bordered` + `width:100%` 在
@@ -186,7 +186,7 @@ describe("motion.css 接缝契约（批 6 删块即接管，故名字与取值�
     expect(violations, `位移超过规格 §8.4 的 8px 上限：\n${violations.join("\n")}`).toEqual([]);
   });
 
-  it("全仓唯一一条 reduced-motion 块，覆盖 12 个 `.ed-*` 基类（含 transition 与 animation 两条）", () => {
+  it("`app/src` 内唯一一条 reduced-motion 块，覆盖 12 个 `.ed-*` 基类（含 transition 与 animation 两条）", () => {
     const clean = stripComments(MOTION_CSS);
     expect(clean.match(/@media \(prefers-reduced-motion: reduce\)/g)).toHaveLength(1);
     const block = clean.slice(clean.indexOf("@media (prefers-reduced-motion"));
@@ -204,5 +204,68 @@ describe("原语层导出面", () => {
     expect(INDEX_TS).toContain('import "./motion.css";');
     expect(INDEX_TS).toContain('export { Text } from "./Text";');
     expect(INDEX_TS).toContain('export type { TextFont, TextProps, TextSize, TextTag, TextTone } from "./Text";');
+  });
+});
+
+/* ─────────────────── 批 0-D Task 14 追加的守卫（一）：本层 CSS **文本**反例 ───────────────────
+ * 追加而非重写（`progress.md` §十「后续 Unit 若要扩守卫，尽量追加」）。口径复用本文件已有的
+ * `read` / `stripComments` / `COLOR_LITERAL`（颜色字面量的定义只有一处，避免两份正则各自漂移）。
+ * 另三条守卫在 `style-contract.test.ts`：reduced-motion **覆盖名单** · CSS **接线** · 联合**契约锚** ——
+ * 它们判的是**跨文件**的名单与类型契约，不是单个文件的文本；两条文件各自都要守住 300 行红线
+ * （硬约束：新文件超了按语义拆，不许登记豁免 ⇒ 本文件不承载那三条）。
+ */
+
+const PRIMITIVE_CSS_FILES: readonly string[] = readdirSync(HERE).filter((f) => f.endsWith(".css"));
+
+describe("守卫① 原语 CSS 零颜色字面量（色值只许在 ui/tokens.css 与 app/scripts/gen-tokens.mjs）", () => {
+  it("primitives/*.css 逐文件 0 命中（判据先剥注释：注释里提到的旧色值不算犯规）", () => {
+    // 防空目录把守卫静默关掉（同 zIndex.guard.test.ts 的「名单非空」思路）
+    expect(PRIMITIVE_CSS_FILES.length, "primitives/ 下的样式表数量不应减少").toBeGreaterThanOrEqual(10);
+    for (const file of PRIMITIVE_CSS_FILES) {
+      const clean = stripComments(read(file));
+      expect(clean, `${file} 出现颜色字面量（色值只在 ui/tokens.css 与生成器里）`).not.toMatch(COLOR_LITERAL);
+    }
+  });
+
+  it("口径锚：剥注释这一步真的有效（`Surface.css:15` 的旧注释曾让本判据假红 —— T4 I-1）", () => {
+    const synthetic = "/* rgba(255,255,255,.06) #fff */\n.ed-x { color: var(--ed-ink-1); }";
+    expect(synthetic, "锚本身必须含犯规样本，否则它在测空气").toMatch(COLOR_LITERAL);
+    expect(stripComments(synthetic), "剥注释失效 ⇒ 本守卫会在注释上假红").not.toMatch(COLOR_LITERAL);
+  });
+});
+
+describe("守卫② 反例守卫：`--ed-stamp` 绝不作底色（规格 §4.1「绝不用于按钮」· 控制方裁决③）", () => {
+  /**
+   * 匹配「属性名以 `background` 开头 + 值里含该 token」。
+   * ⚠️ **不得锚在行首**：本层最常见的写法是 `.ed-x { background: … }`（选择器与声明同一行），
+   * 锚 `^` 会漏掉它们 —— 这是本守卫的负例探针实测出来的洞（2026-09-11，塞一条
+   * `.ed-btn--probe { background: var(--ed-stamp); }` 只触发了下面第 2 条而没触发本条）。
+   * 前置断言 `(?<![\w-])` 只为避开 `xbackground` 这类拼接，不是 CSS parser；本守卫是**反例守卫**，
+   * 不是通用 linter（真 CSS parser 需要新依赖，违反「零新增依赖」）。
+   */
+  const STAMP_BG = /(?<![\w-])background[a-z-]*\s*:[^;{}]*var\(--ed-stamp\)/;
+  const STAMP = "--ed-stamp";
+
+  it("primitives/*.css 的声明里 0 命中（命中即打印 `文件:行号` 与整条声明）", () => {
+    const hits: string[] = [];
+    for (const file of PRIMITIVE_CSS_FILES) {
+      const clean = stripComments(read(file));
+      // 整文件再匹配一遍：本层约定「声明不跨行」，但守卫不能建立在约定上（跨行声明会被逐行扫描漏掉）
+      const whole = [...clean.matchAll(new RegExp(STAMP_BG.source, "g"))].length;
+      const byLine = clean.split("\n").flatMap((line, i) => (STAMP_BG.test(line) ? [`${file}:${i + 1}: ${line.trim()}`] : []));
+      if (whole !== byLine.length) byLine.push(`${file}: 有 ${whole - byLine.length} 条命中的声明跨了行（逐行扫描漏掉）`);
+      hits.push(...byLine);
+    }
+    expect(hits, `危险色被当作底色（它只做文字色与描边）：\n${hits.join("\n")}`).toEqual([]);
+  });
+
+  it("Button.css 的**原文**（含注释）里该 token 出现 0 次 —— 按钮连这个名字都不写（见该文件边界③）", () => {
+    expect(read("Button.css").split(STAMP).length - 1).toBe(0);
+  });
+
+  it("口径锚：印章仍以「文字色 / 描边」消费该 token（证明上面那条不是空扫）", () => {
+    const confirm = stripComments(read("ConfirmDialog.css"));
+    expect(confirm).toContain(`border: 1px solid var(${STAMP})`);
+    expect(confirm).toContain(`color: var(${STAMP})`);
   });
 });

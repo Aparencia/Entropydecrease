@@ -160,6 +160,7 @@
 - 颜色非唯一通道：影调+图标+文本三通道；低置信内容保证文本通道完整可读
 - **剪报底纹（`--ed-mark-clip`）上的文字只用 `ink-3` 及更深（`--ed-ink-3` / `--ed-ink-2` / `--ed-ink-1`）；`--ed-ink-4` 禁止用于剪报底纹** —— `--ed-ink-4` 的 3:1 过渡态例外只在阅读面上成立，换到剪报底上亮档实测 **2.8489**、暗档 **3.0480**，连该例外都不满足
 - 文本缩放：rem 单位；200% 不破版（组件按内容自适应高度）
+- **`--ed-due` 亮档第二次对比度修正（批 0-D，2026-09-11）**：`#A05F10` → **`#9F5E10`**。触发底是**剪报底纹**这第三种底 —— `--ed-due` 要承载「记忆语义」文字（如「3 天后」），而旧值在剪报底上仅 **4.4950:1**，低于正文线。实测：剪报底 **4.5571** / 纸 4.9309 / 面 5.1436（暗档 `#E0A44B` 不动，剪报底 7.4863 本就达标）。求解规则与余量要求见 [ADR-033](../adr/ADR-033-l1-primitives-and-view-layer-contract.md)
 
 ---
 
@@ -213,6 +214,64 @@
 ```
 
 **主题机制**：显式 `data-theme` 优先，未显式时跟随系统偏好。切换时 200ms 交叉淡入。
+
+---
+
+## 十一、L1 原语层（批 0-D 落地 · [ADR-033](../adr/ADR-033-l1-primitives-and-view-layer-contract.md)）
+
+> 本节记录**已落地的代码事实**：`app/src/ui/primitives/` 一个子域、41 个文件、唯一导出面 `index.ts`、逐个 **≤300 行**。
+> 数值真源一律是 `app/src/ui/tokens.css` 与 `app/src/ui/primitives/motion.css`；**§五/§十 的旧目标态参数（靛蓝主色、8/12/16px 圆角、旧灰阶）仍是 2026-08-24 版本，待批 8 统一回写**，不要以它们为准。
+> 迁移在**批 4**（本批只交付靶子，界面外观零变化是设计意图）。
+
+### 11.1 原语清单：用途 / 消费场景 / 禁止事项
+
+| 原语 | 用途（一句话） | 消费场景（批 4 迁移面） | 禁止事项 |
+|------|--------------|----------------------|---------|
+| `Text` | **墨度 × 字阶的唯一出口** | 全部正文/标签/标题（现状 `fontSize` 1274 行 / 143 文件） | 不做语义色决策（`tone` 只是「取哪一档墨度的名字」）；不额外包裹 DOM；`ink-4` 是过渡态，不得承载唯一关键信息 |
+| `Surface` | **面（底 / 边框 / 圆角 / 阴影）的唯一出口** | 卡片 / 列 / 阅读面 / 弹层底（现状 `borderRadius` 584 行、`boxShadow` 18 个不同字面值） | 不承载排版（属 `Text`）；`interactive` 只给视觉，**键盘可达性由消费方用真实 `<button>`/`<a>` 承载** |
+| `Button` | **四态契约的唯一出口**（hover / active / focus-visible / disabled+busy） | 121 个文件的按钮与 60 个文件的按钮样式常量 | **无 `danger` 变体、绝不用 `--ed-stamp`**；不覆写 `tabIndex`/`role`；危险语义用 `ConfirmDialog` |
+| `Modal` | **弹层唯一实现**（`createPortal` + `role="dialog"` + `aria-modal` + 焦点陷阱 + ESC 栈） | 28 个手写弹层 | 消费者**不得**自建第二套 Portal / 焦点陷阱 / ESC 监听 |
+| `ConfirmDialog` | **危险确认**（印章标记 + 级联影响清单） | 23 处 `window.confirm` / 裸 `confirm(` | 确认按钮保持中性（`variant="secondary"`）；**级联一律不给撤销**（只给确认） |
+| `Toast` | 进出场 180/140 + **可打断**（新消息接管，不排队） | 4 套自绘 toast（现状全部只有进、没有出） | 不排队；`action` 点击后不自动消失；只有 `err` 用 `aria-live="assertive"` |
+| `EmptyState` | 空态三段槽位 + **主行动按钮** | 40 行 / 28 文件的「暂无…」灰字（5 套空态） | 不设 `role`；装饰图标不给 `label`；不加 `className`/`style`（空态是「一处的形态」） |
+| `Loading` / `Skeleton` / `Probe` | 加载三形态：**形状已知 → 骨架；要一句文字 → 加载；都不要 → 探针** | 85 处 / 30 文件的手写灰字 | 不写字号与颜色（排版属 `Text`）；`Probe` 恒为装饰（`aria-hidden`）；需要被朗读的加载态不许用 `Probe` |
+| `StatusLine` | 错误 / 警告 / 成功 / 信息**四档语义的唯一出口** | 196 处 / 76 文件（三种红并存） | **本原语不渲染任何按钮**（`action` 是纯插槽）；**颜色不是唯一信号** —— 「这是什么」必须由 `children` 的文字说清 |
+| z-index 六档标尺（批 0-A） | 叠放顺序的唯一来源 | 32 文件 45 处硬编码（17 个不同值） | 不写裸数字（一律 `zIndex("modal" \| "modalNested" \| "toast")`）；**迁移必须按叠放段整段推进** |
+
+### 11.2 交互态契约（本批从零建立）
+
+- **承载方式 = CSS 类**（`.ed-<原语>` + `--<档>` 修饰类 + `-<部位>`/`__<部位>` 子元素类），不是内联 style：
+  `:hover` / `:active` / `:focus-visible` / `@keyframes` / `@media (prefers-reduced-motion)` 都无法内联表达。
+- **四态**：hover（`Button` 三档各异、`Surface--interactive` 升起 `--ed-shadow-1` + `translateY(-1px)`）·
+  active（按下微陷 1px）· focus-visible（2px `--ed-ink-1` 焦点环 + 2px offset；鼠标点击不留环、键盘 Tab 必须可见）·
+  disabled / busy（`cursor: not-allowed` + `opacity: .55`；`disabled` 移出 Tab 序，`busy` **保留焦点与 Tab 序**）。
+- **墨度即确定度**：`Text` 的 `tone` 九档；**任何交互（悬停/聚焦/选中）立即升到正文墨度**（§4.3 规则 2）。
+- **出现场**：`Modal`/`ConfirmDialog`/`Toast` 一律走 `[data-phase]` 三态（`enter` / `entered` / `exit`），
+  退场期**禁用指针事件**（见 11.3）。
+
+### 11.3 动效接缝与 `prefers-reduced-motion` 承诺
+
+- **一处改对所有地方**：所有时长/缓动只经 `var(--ed-dur-*, 同值字面量)` / `var(--ed-ease, …)` 消费，变量块在
+  `motion.css` 一处定义（真源属**批 6**，届时整块删除即生效，无需改任何规则）。
+- **接缝锚点**：`Button`/`Surface` 的四态类 · `Text` 的墨度与字距 transition · `Modal`/`Toast` 的 `[data-phase]` ·
+  `EmptyState` 的 `.ed-empty-enter` · `Loading` 的 `ed-skeleton-shimmer` / `ed-probe-swing`（循环环境动效走 CSS `@keyframes`）·
+  `StatusLine` 的一次性浮现过渡。
+- **无障碍优先**：`app/src` 内**唯一**一条 `prefers-reduced-motion` 块在 `motion.css`，覆盖全部 `.ed-*` **基类**
+  （transition 与 animation 双双压到 1ms）。新原语只要**根类进名单**就自动被覆盖 —— 这是规格 §11 验收 5「覆盖率 100%」的判据，
+  由 `style-contract.test.ts` 机器守门（**判据 = 基类名单，不是「全类集合 ⊇」**：`.ed-modal-head/body/foot`、
+  `.ed-confirm-seal/-impacts/-keep`、`.ed-empty__title`、`.ed-empty-enter`、`.ed-toast-action` 这些子元素/钩子类
+  与基类同在一个元素上，逐字枚举只会假红）。
+- **可中断、可反向**：`usePresence` 的退场途中 `open` 回 `true` ⇒ 清计时器、直回 `entered`（不重放进场）；`Toast` 的新消息**接管**而非排队。
+- **位移上限 8px**（规格 §8.4）：原语层任何位移 ≤8px，批 6 的 GSAP 时间线同样不得越过（机器判据在 `style-seams.test.ts`）。
+
+### 11.4 token 消费纪律与两条用色禁令
+
+- 原语只许用 `var(--ed-*)` 与 `zIndex()`；`primitives/**/*.css` 内**零颜色字面量**（色值只在
+  `app/scripts/gen-tokens.mjs` 与产物 `tokens.css`）。z-index 用 TS 标尺，**不作 CSS 变量**。
+- **禁令一（危险色）**：`--ed-stamp` 是全站唯一非中性色，**绝不用于按钮，也不得出现在任何 `background*` 声明里** ——
+  它只做**文字色**（`StatusLine.error`、`Text tone="stamp"`、`ConfirmDialog` 的印章）与**描边**
+  （`ConfirmDialog` 印章边框、`Toast--err` 的左边框）。按钮一律中性。反例守卫在 `style-seams.test.ts`。
+- **禁令二（剪报底纹）**：**剪报底纹上只用 `ink-3` 及更深**（§九同款条款）；`--ed-ink-4` 禁止用于剪报底纹。
 
 ---
 

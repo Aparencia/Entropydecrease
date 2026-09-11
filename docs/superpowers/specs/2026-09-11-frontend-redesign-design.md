@@ -213,6 +213,25 @@
 
 ## 5. L1 · 原语层
 
+> **落地状态（批 0-D，2026-09-11）**：**9 类原语已落地**（第 10 类 z-index 标尺在批 0-A 已交付，本批只消费）。
+> 目录 `app/src/ui/primitives/`（**41 个文件，逐个 ≤300 行**，最大 297），唯一导出面 `index.ts`；契约见
+> [ADR-033](../../adr/ADR-033-l1-primitives-and-view-layer-contract.md)。**本批不迁移任何调用点** —— §5.1 的现状病灶要到**批 4** 才收敛，
+> 界面外观零变化是设计意图（§10）。
+>
+> | 原语 | 实际文件（实测行数 · `countLines()` 口径） |
+> |---|---|
+> | `Text` | `Text.tsx` 89 · `Text.css` 46 · `Text.test.tsx` 130 |
+> | `Surface` | `Surface.tsx` 97 · `Surface.css` 73 · `Surface.test.tsx` 168 |
+> | `Button` | `Button.tsx` 132 · `Button.css` 92 · `Button.test.tsx` 286 |
+> | `Modal` | `Modal.tsx` 188 · `Modal.css` 81 · `Modal.test.tsx` 296 · `Modal.exit.test.tsx` 91 |
+> | `ConfirmDialog` | `ConfirmDialog.tsx` 192 · `ConfirmDialog.css` 58 · `ConfirmDialog.test.tsx` 297 |
+> | `Toast` | `Toast.tsx` 208 · `Toast.css` 61 · `Toast.test.tsx` 232 · `Toast.interrupt.test.tsx` 167 · `Toast.style.test.ts` 108 |
+> | `EmptyState` | `EmptyState.tsx` 127 · `EmptyState.css` 81 · `EmptyState.test.tsx` 276 |
+> | `Loading` / `Skeleton` / `Probe` | `Loading.tsx` 102 · `Loading.css` 72 · `Loading.test.tsx` 229 |
+> | `StatusLine` | `StatusLine.tsx` 92 · `StatusLine.css` 41 · `StatusLine.test.tsx` 258 |
+> | 共享内核 | `usePresence.ts` 200 · `usePresence.test.tsx` 282 · `usePresence.node.test.ts` 71 · `useFocusTrap.ts` 122 · `useFocusTrap.test.tsx` 236 · `ime.ts` 18 · `ime.test.ts` 32 |
+> | 接缝 / 导出面 / 守卫 | `motion.css` 66 · `index.ts` 45 · `style-seams.test.ts` 271 · `style-contract.test.ts` 291 |
+
 ### 5.1 收敛账本
 
 | 原语 | 吸收 | 现状病灶 |
@@ -231,8 +250,23 @@
 ### 5.2 Modal 契约
 
 - **尺寸三档**：S 380（确认类）· M 520（表单类）· L 720（向导/工作台）；遮罩统一 `rgba(26,26,26,.34)`，圆角 10。
+  **落地（批 0-D）**：三档 = `.ed-modal--s|m|l`（`ModalSize`），层级两档 `tier: "modal" | "modalNested"`（300 / 400，
+  值一律从 `zIndex()` 标尺取），默认 `m` / `modal`。
 - **四个必补能力**：① `role="dialog"` + `aria-modal` + `aria-labelledby`；② 焦点陷阱 + 打开聚焦首元素 + 关闭归还焦点；③ ESC / 点遮罩关闭（脏表单时先内联确认）；④ **进出场接口**（L4 动效的前置）。
+  **落地（批 0-D）**：①②③④ **全部已实现**（三条全仓 0 命中的契约 `createPortal` / `role="dialog"` / `aria-modal` 从 0 变成 1；
+  进出场 200/**160**，出场比进场快）。未做：body 滚动锁（现状 20 个弹层也没有，批 4 观察项）。
 - **`Enter` 提交必须带 IME 组合守卫** —— 现状全库仅 1/9 处有，中文输入法回车会直接触发危险动作。
+  **落地（批 0-D）**：判定出口 `isImeComposing()`（`ime.ts`）**只建不接** —— 本批无表单；批 4/5 在每个「Enter 提交」处消费它。
+- **★ 两条批 0-D 实测新增的契约**（不是设计推导，是踩出来的；批 4 必须遵守）：
+  1. **`Modal` 是 Portal / 焦点陷阱 / ESC 栈的唯一持有者，消费者不得自建第二套**。`ConfirmDialog` 已按此改写
+     （无 `createPortal` / 无 `zIndex` / 无文档级键盘监听 —— 有源码与 CSS 扫描断言钉住），28 个手写弹层迁移后同样不得
+     保留自己的遮罩与 `window` ESC 监听。ESC 的「最内层」判定**必须用 React 树深度**：实测朴素入栈序（effect 自底向上）
+     与 DOM 序（portal 插入序反转）都会把外层当成栈顶。
+  2. **退场相位必须禁指针事件**：`[data-phase="exit"]` ⇒ `pointer-events: none`。`open=false` 后弹层仍挂载 160ms
+     （`Modal.css`），那段时间面板还在屏上 —— 点击是**即时**的而退场是**异步**的，删除 / 级联删除的误触面就在这里。
+     **已落盘**（T7 `83710e27`，遮罩与面板各一条；`ConfirmDialog` 侧另有两条文件内缓解，T8 `ef240816`）。
+     附带纪律：**JS 侧兜底窗口与 CSS 侧过渡时长必须同值**（`Modal.tsx` / `Toast.tsx` 的 `EXIT_MS` ↔
+     `var(--ed-dur-overlay-out|toast-out, …)` ↔ `motion.css` 定值，三方对拍守卫在 `style-contract.test.ts`）。
 
 ### 5.3 删除语义（两档分级）
 
@@ -475,6 +509,7 @@
 | 批 | 内容 | 验收 |
 |---|---|---|
 | **0 基座** | 4 条 ADR + 修订 ADR-010 · 豁免表纠偏 · 拆 4 个超限文件 · token 层 · z-index 标尺 · 图标集 + 单测 · 原语三层 | 4 个 >600 行 → 0；豁免表 100% 一致 |
+| ↳ 批 0 的 ADR 归属（批 0-D 收口时更新） | **ADR-032 ✅（批 0-A/0-D）** · **ADR-033 ✅（批 0-D，L1 原语层与视图层契约）** · **ADR-034/035 顺延**（推定为批 3 壳层 / 批 6 动效，见 ADR-033 的「登记」节）· 修订 ADR-010 属**批 1** | — |
 | **1 删除批** | 21 条命令 + 补缝三连连带模块 + ADR-010 修订 + 清理 `structuredBlocks.ts:63` 死文案 | 注册表条目下降；cargo test 全绿 |
 | **2 包体治理**（可并行） | `manualChunks` + 按页动态 import + 量首屏 gzip | 从 651KB gzip 降到达标或给出瓶颈清单 |
 | **3 壳层落地** | A′ 顶栏 + ⌘K + 溢出策略 + 窗口尺寸 + 列注册表 + 断点 + `--nav-h` | 9 页全走注册表；1024 无溢出；7 处魔数归零 |
@@ -497,6 +532,12 @@
 3. 空态 / 加载 / 错误行 / 弱化文本 / 卡片边框 五类重复 → 各自 **1 个原语**。
 4. CSS 变量 0 → 覆盖全部语义色 / 字阶 / 间距 / 圆角 / 时长 / 缓动；hex 88 → **≤ token 数**。
 5. `prefers-reduced-motion` 覆盖率 **100%**，且系统优先于强度档位。
+   **判据（批 0-D 拍定）= 基类名单，不是「全类集合 ⊇」**：每一类原语的**根类**（动效挂在它身上的选择器）必须在
+   `motion.css` 的媒体查询名单里，且名单**双向一致**（漏一个 = 那类原语在 reduced-motion 下照旧动；多一个 = 死名字）。
+   修饰类（`--`）与子元素/钩子类（`.ed-modal-head/body/foot` · `.ed-confirm-seal/-impacts/-keep` · `.ed-empty__title` ·
+   `.ed-empty-enter` · `.ed-toast-action`）**不进名单** —— 它们与基类同在一个元素上、已被同一条规则覆盖，
+   逐字枚举只会假红（T10 评审曾担心这条守卫会假红，实测 26/26 绿 ⇒ 不必另设兜底方案）。
+   机器判据在 `app/src/ui/primitives/style-contract.test.ts`。
 6. 会话与笔记各 **≥2 种**展示形式可用，原文形态不丢。
 7. **47 条未接线命令逐个有结论**，无「不知道」。
 8. **标签能写进去**且标签过滤面板有内容；**画面档位选完真的生效**且跨会话记住。
@@ -546,8 +587,8 @@
 
 | 文档 | 动作 |
 |---|---|
-| `docs/product/ui-ux-system.md` · `docs/product/theme.md` | **回写为目标态**（C+D、四层动效、三档强度、断点与窗口）—— 属 AGENTS.md §10「额外审查文件」 |
-| `docs/adr/ADR-032..035` | 新建 4 条 |
+| `docs/product/ui-ux-system.md` · `docs/product/theme.md` | **回写为目标态**（C+D、四层动效、三档强度、断点与窗口）—— 属 AGENTS.md §10「额外审查文件」。**批 0-D 已落**：`--ed-shadow-card → --ed-shadow-1/2` 的命名关系与定值 · **「L1 原语层」章节（§十一：10 类原语清单/消费场景/禁止事项 · 交互态契约 · 动效接缝与 reduced-motion 承诺 · token 消费纪律与两条用色禁令）** · 「剪报底纹上只用 `ink-3` 及更深」规则 · `--due` 第二次对比度修正。**四层动效 / 三档强度 / 断点与窗口 / §五§十 的旧参数仍留批 8**（T1 已登记：§十 tokens 代码块整体是旧版，与 ADR-032 不一致，未顺手重写） |
+| `docs/adr/ADR-032..035` | 新建 4 条 —— **ADR-032 ✅ · ADR-033 ✅（批 0-D）· ADR-034/035 顺延至批 3 / 批 6** |
 | `docs/adr/ADR-010-gap-filling-ai.md` | **修订为退役** |
 | `docs/standards/line-limit-exemptions.md` | 纠偏 + 新拆文件登记 |
 | `docs/standards/` | 新增动效规范章节（现对动效**零命中**） |
