@@ -21,13 +21,13 @@ import { listen } from "@tauri-apps/api/event";
 import { WindowSelectCard } from "../components/WindowSelectCard";
 import VideoImportPanel from "../components/VideoImportPanel";
 // 2026-08-21 用户需求：设置类面板迁出至设置页（模型/音频/AI/数据/词表）
-// 2026-08 A2：实时音频电平条（VU 表——试听自检实时化）
-import AudioLevelMeter from "../components/AudioLevelMeter";
 // 2026-08 C1：引擎与模型就绪清单（开始前准备流——聚合现有只读命令）
 import ReadyCheckCard from "../components/ReadyCheckCard";
 import { SystemStatusBadge } from "../components/SystemStatusBadge";
 // 2026-08 审查硬拆：右栏内容区 / 文件素材输入与提取
 import ClassroomRightPane from "../components/ClassroomRightPane";
+// 批 0-C2 Task 4：左栏实时捕获卡整体抽出（纯展示适配器——采集/模型状态由本页注入）
+import ClassroomCapturePanel, { type PrepareState } from "../components/ClassroomCapturePanel";
 import MaterialInputPanel from "../components/MaterialInputPanel";
 import ColumnResizer from "../components/ColumnResizer";
 import ColumnBar from "../components/ColumnBar";
@@ -39,33 +39,12 @@ import WebImportPanel from "../components/WebImportPanel";
 // 批 2b：采集控制单一状态源（暂停/启停状态与动作全收敛于此——页内不再
 // 订阅 live:status/live:paused/live:resumed 与 media-* 双轨）
 import { useCaptureControl } from "../hooks/useLiveCaptureControl";
-// auto 暂停恢复按钮提示（AUTO_RESUME_HINTS——后端 Ok 但物理无变化的如实文案）
-import { AUTO_RESUME_HINTS } from "../hooks/liveCaptureState";
-import type { Note, WindowInfo, StreamingModelStatus, DownloadProgress, DownloadStatus, ProfileKind, PauseSource } from "../types";
+import type { Note, WindowInfo, StreamingModelStatus, DownloadProgress, DownloadStatus, ProfileKind } from "../types";
 // v0.12.3：浮窗状态快照类型（与 Rust FloatUiView camelCase 契约同源；
 // 审查 LOW-3：统一共享类型替代内联重复声明）
 import type { FloatSnapshot } from "../hooks/useFloatWindow";
 // Low 清扫：标题截断长度单一定义源（与 MaterialInputPanel 共享）
 import { NOTE_TITLE_MAX_LEN } from "../utils/constants";
-
-const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
-const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
-
-/** P3：引擎预热状态（与 Rust PrepareStatus 的 camelCase 契约一致） */
-type PrepareState = "idle" | "loading" | "ready" | "failed";
-
-/** 采集卡暂停状态行文案（按 reason 三态；沿用原横幅语义——媒体暂停含"自动继续"
- *  说明，前台切走含"回窗即继续"说明；徽标/右栏/浮窗用短文案 pauseReasonLabel） */
-function pausedCardText(reason: PauseSource): string {
-  switch (reason) {
-    case "media":
-      return "⏸ 已随视频暂停——画面/声音恢复即自动继续";
-    case "foreground":
-      return "⏸ 已自动暂停（切走）——回到目标窗口即自动继续";
-    default:
-      return "⏸ 已暂停（时间轴冻结，恢复后继续）";
-  }
-}
 
 export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (sessionId: number) => void }) {
   // v0.15：左栏列状态（可拖拽 + 记忆 + 窄窗折叠；默认 320=历史值）
@@ -406,13 +385,6 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
 
   /** 素材流水线（v0.1.0）：选素材/提取逻辑已下沉 MaterialInputPanel（审查硬拆） */
 
-  // ── 采集卡派生展示值（批 2b：暂停 reason 三态语义）──
-  const paused = pausedReason != null;
-  /** 自动暂停（media/foreground）：resume 无物理作用——按钮禁用 + 标题提示 */
-  const autoPaused = paused && pausedReason !== "manual";
-  const autoPauseHint =
-    pausedReason === "media" || pausedReason === "foreground" ? AUTO_RESUME_HINTS[pausedReason] : undefined;
-
   return (
     <div style={{ display: "flex", height: "calc(100vh - 56px)", minHeight: 0 }}>
       {/* ── 左栏：配置面板（窗口选择 → 素材 → 启动按钮；v0.15 可拖拽/折叠） ── */}
@@ -492,193 +464,31 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
           />
 
           {/* 实时捕获（v0.2.0：WASAPI + DXGI + 流式 ASR + 字幕 OCR） */}
-          <div style={panel}>
-            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>
-              实时捕获{active && <span style={{ color: "#dc2626" }}> ● 录制中</span>}
-            </div>
-            {!active && !modelStatus?.ready && (
-              <div>
-                {modelStatus ? (
-                  <p style={{ fontSize: 11, color: "#b45309", margin: "0 0 6px" }}>
-                    流式 ASR 模型未就绪（缺 {modelStatus.missing.join(", ")}）
-                  </p>
-                ) : (
-                  <p style={{ fontSize: 11, color: "#dc2626", margin: "0 0 6px" }}>
-                    {modelError || "模型状态检查中…"}
-                  </p>
-                )}
-                {modelStatus &&
-                  (modelDownloading ? (
-                    <div style={{ fontSize: 11, color: "#374151", marginBottom: 6 }}>
-                      <div>⏳ 正在下载模型（~650MB）…</div>
-                      {modelProgress && (
-                        <div>
-                          {modelProgress.file}：
-                          {((modelProgress.downloadedBytes / 1024 / 1024) | 0)}MB /{" "}
-                          {((modelProgress.totalBytes / 1024 / 1024) | 0)}MB
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => void downloadModel()}
-                      style={{ ...btn, width: "100%", padding: "8px 0", fontWeight: 600, background: "#0d9488", color: "#fff", border: "none", borderRadius: 6, marginBottom: 6 }}
-                    >
-                      ⬇ 一键下载并配置模型
-                    </button>
-                  ))}
-                {modelError && <p style={{ fontSize: 11, color: "#dc2626", margin: "0 0 6px" }}>{modelError}</p>}
-                {!modelStatus && (
-                  <button
-                    onClick={() => void retryModelStatus()}
-                    style={{ ...btn, width: "100%", padding: "6px 0", border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff" }}
-                  >
-                    ⟳ 重试检查
-                  </button>
-                )}
-              </div>
-            )}
-            {active && (
-              // 实时内容（字幕/语音/画面）统一由右侧 LiveActivityPanel 展示，
-              // 左栏保持精简（状态徽标）——审查观察项修复
-              // 批 2b：暂停按 pausedReason 三态文案（media 行并入原随播随停
-              // 横幅语义——单一状态源后横幅/状态行不再双份维护）
-              <div style={{ fontSize: 11, color: paused ? "#b45309" : "#0d9488", marginBottom: 6 }}>
-                {paused ? pausedCardText(pausedReason) : "● 正在采集（实时内容见右侧面板）"}
-              </div>
-            )}
-            {/* 2026-08 A2：音频电平条（仅采集中显示；暂停时电平静止） */}
-            {active && !paused && <AudioLevelMeter />}
-            {liveError && <p style={{ fontSize: 11, color: "#dc2626", margin: "0 0 6px" }}>{liveError}</p>}
-            {active ? (
-              /* 采集中按钮组（2026-08 A1：暂停/继续 + 标记此刻 + 停止）。
-                 批 2b：manual 暂停 → "继续捕获"可点；auto（media/foreground）
-                 暂停 → resume 后端 Ok 但物理无变化（auto 条件仍真）——按钮禁用
-                 + title 提示，不提供误导性"恢复成功"反馈；pending 期间防连点 */
-              <div style={{ display: "flex", gap: 6 }}>
-                <button
-                  onClick={paused ? resumeLive : pauseLive}
-                  disabled={pending != null || autoPaused}
-                  title={autoPauseHint}
-                  style={{
-                    ...btn,
-                    flex: 1,
-                    padding: "8px 0",
-                    fontWeight: 600,
-                    background: paused ? (pausedReason === "manual" ? "#0d9488" : "#d1d5db") : "#f59e0b",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 6,
-                  }}
-                >
-                  {paused ? (pausedReason === "manual" ? "▶ 继续捕获" : "⏸ 自动暂停中") : "⏸ 暂停"}
-                </button>
-                {/* 2026-08 A3：手动标记此刻（最高权重关键图信号；Ctrl+Shift+S 同效） */}
-                <button
-                  onClick={() => {
-                    void invoke<string>("save_user_screenshot")
-                      .then(() => setStatus("⭐ 已标记此刻画面（关键图候选置顶）"))
-                      .catch((err) => setLiveError(`标记失败: ${err}`));
-                  }}
-                  title="快捷键 Ctrl+Shift+S"
-                  style={{
-                    ...btn,
-                    flex: 1,
-                    padding: "8px 0",
-                    fontWeight: 600,
-                    background: "#fff",
-                    color: "#0d9488",
-                    border: "1px solid #99f6e4",
-                    borderRadius: 6,
-                  }}
-                >
-                  ⭐ 标记此刻
-                </button>
-                <button
-                  onClick={stopLive}
-                  disabled={pending != null}
-                  style={{
-                    ...btn,
-                    flex: 1,
-                    padding: "8px 0",
-                    fontWeight: 600,
-                    background: "#dc2626",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 6,
-                  }}
-                >
-                  ⏹ 停止
-                </button>
-                {/* v0.12.0 M6：浮窗化——采集中全屏看视频时悬浮常显（快捷键 Ctrl+Shift+F）
-                    v0.12.3：三态语义（浮窗化 ⇄ 收起 ⇄ 解锁点击穿透） */}
-                <button
-                  onClick={toggleFloat}
-                  title={
-                    floatSnap.open
-                      ? floatSnap.locked
-                        ? "点击穿透已锁定——点击解锁（快捷键 Ctrl+Shift+F）"
-                        : "收起采集浮窗（快捷键 Ctrl+Shift+F）"
-                      : "采集中全屏看视频时悬浮常显（快捷键 Ctrl+Shift+F）"
-                  }
-                  style={{
-                    ...btn,
-                    flex: 1,
-                    padding: "8px 0",
-                    fontWeight: 600,
-                    background: "#fff",
-                    color: floatSnap.locked ? "#dc2626" : "#0d9488",
-                    border: floatSnap.locked ? "1px solid #fecaca" : "1px solid #99f6e4",
-                    borderRadius: 6,
-                  }}
-                >
-                  {floatSnap.open ? (floatSnap.locked ? "🔓 解锁浮窗" : "🗕 收起浮窗") : "🗕 浮窗化"}
-                </button>
-              </div>
-            ) : (
-              <>
-                {/* v0.19.2：启动过渡态（等待引擎就绪自动开录——不显示采集中控件） */}
-                {starting ? (
-                  <p style={{ fontSize: 11, color: "#b45309", margin: "6px 0 0" }}>
-                    ⏳ 引擎初始化中…就绪后自动开始（音频与画面同刻启动，请勿重复点击）
-                  </p>
-                ) : (
-                  <>
-                    {/* P3：引擎预热状态提示（就绪后点"开始"即录） */}
-                    {prepareState === "loading" && (
-                      <p style={{ fontSize: 11, color: "#6b7280", margin: "6px 0 0" }}>
-                        ⏳ 引擎预热中…（就绪后开始即录）
-                      </p>
-                    )}
-                    {prepareState === "ready" && (
-                      <p style={{ fontSize: 11, color: "#0d9488", margin: "6px 0 0" }}>
-                        ✓ 引擎已就绪，开始即录
-                      </p>
-                    )}
-                  </>
-                )}
-                <button
-                  onClick={startLive}
-                  disabled={!modelStatus?.ready || starting || pending != null}
-                  style={{
-                    ...btn,
-                    width: "100%",
-                    padding: "8px 0",
-                    fontWeight: 600,
-                    background: modelStatus?.ready && !starting && pending == null ? "#0d9488" : "#e5e7eb",
-                    color: modelStatus?.ready && !starting && pending == null ? "#fff" : "#9ca3af",
-                    border: "none",
-                    borderRadius: 6,
-                  }}
-                >
-                  {starting ? "⏳ 引擎初始化中…" : "▶ 开始实时捕获"}
-                </button>
-              </>
-            )}
-            {sessionId && !starting && (
-              <p style={{ fontSize: 11, color: "#6b7280", margin: "6px 0 0" }}>实时捕获中（可到「会话」页查看）</p>
-            )}
-          </div>
+          {/* 批 0-C2 Task 4：卡片整体抽出至 ClassroomCapturePanel（纯展示适配器——
+              采集/模型/预热状态与全部动作由本页注入，卡内不再消费 useCaptureControl） */}
+          <ClassroomCapturePanel
+            active={active}
+            starting={starting}
+            pending={pending}
+            sessionId={sessionId}
+            pausedReason={pausedReason}
+            liveError={liveError}
+            modelStatus={modelStatus}
+            modelDownloading={modelDownloading}
+            modelProgress={modelProgress}
+            modelError={modelError}
+            prepareState={prepareState}
+            floatSnap={floatSnap}
+            onStart={startLive}
+            onStop={stopLive}
+            onPause={pauseLive}
+            onResume={resumeLive}
+            onToggleFloat={toggleFloat}
+            onDownloadModel={downloadModel}
+            onRetryModelStatus={retryModelStatus}
+            onStatus={setStatus}
+            onLiveError={setLiveError}
+          />
 
           {/* 视频文件导入（v0.3.0：REQ-015 第二入口，字幕优先 + ASR fallback） */}
           <VideoImportPanel onOpenSessions={onOpenSessions} />
