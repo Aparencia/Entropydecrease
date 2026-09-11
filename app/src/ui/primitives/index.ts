@@ -18,3 +18,6 @@ export type { SurfaceLevel, SurfaceProps, SurfaceRadius, SurfaceTag } from "./Su
 
 export { Button } from "./Button";
 export type { ButtonProps, ButtonSize, ButtonVariant } from "./Button";
+
+export { usePresence } from "./usePresence";
+export type { Presence, PresenceOptions, PresencePhase, TransitionEndLike } from "./usePresence";
