@@ -25,3 +25,8 @@ pub use types_note::*;
 pub use types_ocr::*;
 pub use types_extract::*;
 pub use types_decision::*;
+
+/// serde 线格式契约快照（批 0-C3 Task 2 单独一个提交补入；本文件的唯一静默风险面）。
+#[cfg(test)]
+#[path = "types_contract_tests.rs"]
+mod types_contract_tests;
