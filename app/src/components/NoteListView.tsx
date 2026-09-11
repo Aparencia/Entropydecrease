@@ -1,5 +1,6 @@
 /**
- * NoteListView — 笔记页中部列表：搜索/标签/排序 + 列表（REQ-287 v0.19.7 重构）。
+ * NoteListView — 笔记页中部列表**编排层**：搜索/标签/排序 + 列表（REQ-287 v0.19.7 重构；
+ * 批 0-C2 Task 2 拆分：654 → 230 行，逻辑下沉 hook、展示下沉组件）。
  *
  * @ai-context: 交互矩阵落地（§2.6/2.9）——行内 checkbox 移除：多选三通道
  *              （Ctrl/⌘+单击=加/减、Shift+单击=按列表位置区间、工具栏「选择」
@@ -8,10 +9,20 @@
  *              位置语义只做归组、搜索/标签平铺禁排序拖拽）；组头空白=划选
  *              锚点（区间=组内自首行至当前行带）；批量栏=删除+移动到组；
  *              右键=选集批处理（删除/移动）或单行既有菜单。手动序落库
- *              note_orders（scope=g{id}/none）——本组件全权管理（拉取/保存/
- *              回自动），父层只经 onNoteMoved 重载数据。
+ *              note_orders（scope=g{id}/none），父层只经 onNoteMoved 重载数据。
  * @ai-context: 树序范围：全局可见序（树=未分组+各组顺次、折叠组行不参与）为
  *              区间/划选唯一基准；跨组语义=归组（目标手排时按落点插入）。
+ * @ai-context: 模块边界（本文件只做装配——状态与副作用的唯一宿主在各拆件，改行为
+ *              请改对应文件）——
+ *              · 节模型/可见序/scope 键/裸折叠键/手动底序 → `utils/noteSectionModel`
+ *              · 折叠记忆 + 展树数据接线 → `hooks/useNoteSections`
+ *              · 序行 store（拉取/整表覆写/回自动）→ `hooks/useNoteOrders`
+ *              · 拖拽/移动三入口 + **共用并发锁 dropBusyRef** → `hooks/useNoteMoves`
+ *              · 多选三通道 + 菜单三态 + 唯一 Esc handler → `hooks/useNoteListSelection`
+ *              · 划选（window 监听 + elementFromPoint 行命中）→ `hooks/useNoteMarquee`
+ *              · 展示件 → `components/NoteListToolbar | NoteListBody | NoteListBatchMenu`
+ * @ai-context: 公共 API 冻结（勿改）：default export · `export type SortMode` ·
+ *              再导出 `{ parseTags, fmtDate }`（NoteReadingView / parseTags.test 依赖）。
  */
 import { useCallback, useMemo } from "react";
 import type { Note, NoteGroup } from "../types";

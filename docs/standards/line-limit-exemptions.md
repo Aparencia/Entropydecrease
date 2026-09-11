@@ -70,7 +70,6 @@
 | app/src-tauri/src/db_note_groups_tests.rs | 426 | v0.11.0 组数据层测试域 + v0.14.1 删除/影响面用例（级联归零/悬空清理/迁移回归）——单模块 #[path] 挂载（video_profile_tests.rs 同款先例），组删除语义变更集中验证 | 若再增长：删除/影响面组拆至 db_note_groups_delete_tests.rs |
 | app/src-tauri/src/analysis.rs | 423 | v0.5.0 M2 起结构化分析编排域（章节/重点/术语/讲者 + 事件消费 + step_boundaries/practice_segments/player_actions 三字段 + 审查修复按类型判定）；各机制输出聚合内聚于单一分析函数 | 若再增长：build_chapter_signals 事件版拆至 analysis_signals.rs |
 | app/src-tauri/src/artifact_templates_tests.rs | 423 | 产物模板测试域（五档案模板 + 代码块/步骤卡扩展 + 叙事变体 golden）单模块 #[path] 挂载 | 若再增长：代码块/步骤卡组拆至 artifact_code_tests.rs |
-| app/src/pages/ClassroomPage.tsx | 421 | 超硬限（>600 行），不允许豁免 —— 装配层页面：左栏配置区（就绪清单/窗口选择/实时捕获/视频导入/OCR 设备/词表/素材）+ 右栏内容区；v0.15 左栏列状态再增；v0.19.2/3（REQ-271/273 + 审查即修：状态机看门狗/预同步/文案收口，+43，实测 745）——**超 600 硬限为预存债务（TD-2026-08-30-A：v0.14 前已越线）持续累增，拆分计划（LiveCaptureCard）顺延待执行** | 若再增长：将实时捕获卡片拆出 LiveCaptureCard（状态与事件监听下沉）——超硬限必须拆 |
 | app/src-tauri/src/app_setup.rs | 420 | 本模块承载 setup 的 AppState 初始化（数据目录/DB/引擎池/可校准（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/bin/asr_eval.rs | 418 | 目的——"无人工语料也能测 ASR"（2026-09-03 用户裁决①）：（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/vocab.rs | 416 | 词表域（存储/纠错/候选提取/n-gram 分词）内聚；分词纯逻辑与存储同域便于单测 | 若再增长：collect_tokens/split_runs 拆至 vocab_tokens.rs |
@@ -78,6 +77,7 @@
 | app/src/components/NoteEditView.tsx | 411 | v0.13.6（审查 H1 修复）：forwardRef 命令式 flushSave 出口（ESC 先保存后刷新）+ flushLatest 最终保存；v0.15 剪贴板图片 paste（useClipboardImagePaste+插入）+ 外链图下载导入——编辑视图保存/快捷键/工具栏/图片入口内聚（textarea 降级路径与 CM 版同步） | 若再增长：工具栏与 MarkdownEdit 快捷键拆至 NoteToolbar.tsx |
 | app/src-tauri/src/live_session_loop.rs | 410 | v0.7.0 M0 拆分产物（音频编排循环）：主循环 + 长静音/音量骤变/VAD 段事件写入 + drain/停止 flush；LiveSessionCtx 聚合上下文；A1 暂停边沿 + P1 停止 drain 重构；H1 修复（drain_deadline 改 Option，draining 置位时才计算） | 若再增长：事件写入块拆至 live_session_events.rs |
 | app/src/components/RichEditorView.tsx | 408 | v0.20.13 批 8（REQ-317）编辑态选区右键菜单接线（CM contextmenu extension + 动作分发，323→399；**前置 323 超 300 为 v0.20.8 偏差登记未登记债务**，本次实测纠偏并登记）——选区纯逻辑已拆 utils/noteSelectionMenu.ts 与 note-selection/SelectionActionMenu.tsx，本文件仅留宿主接线 | 若再增长：工具栏 action 分派拆至 commands/ 域（既有 toolbarCommands/headingCommand 范式） |
+| app/src/pages/ClassroomPage.tsx | 402 | 超硬限（>600 行），不允许豁免 —— 装配层页面：左栏配置区（就绪清单/窗口选择/实时捕获/视频导入/OCR 设备/词表/素材）+ 右栏内容区；v0.15 左栏列状态再增；v0.19.2/3（REQ-271/273 + 审查即修：状态机看门狗/预同步/文案收口，+43，实测 745）——**超 600 硬限为预存债务（TD-2026-08-30-A：v0.14 前已越线）持续累增，拆分计划（LiveCaptureCard）顺延待执行** | 若再增长：将实时捕获卡片拆出 LiveCaptureCard（状态与事件监听下沉）——超硬限必须拆 |
 | app/src-tauri/src/commands_live.rs | 399 | 实时采集命令域（启动/停止/档案热切换/剪辑监听）；v0.13.6（REQ-220）update_live_profile 细目参数与校验 + 审查轮（clear sentinel 空串语义/fine 计入至少一项）再增 | 若再增长：档案覆写命令拆至 commands_live_profile.rs |
 | app/src-tauri/src/commands_video.rs | 399 | v0.5.0 M1（REQ-043）起：视频档案命令域（检测装配/领域检测/预热/记忆）；v0.13.6（REQ-219~222）形态/领域/细目/记忆命令 + 分区映射形态接线再增；审查轮（H1 领域记忆兜底顺序修复/L2 独立 try）微增 | 若再增长：领域命令组拆至 commands_video_domain.rs |
 | app/src/components/ProfileDetector.tsx | 397 | 档案检测组件：投票/确认流/记忆偏好 UI + v0.11.5 Task 5 冲突提示内聚 + v0.13.6（REQ-219~222）形态 10 下拉/领域 20 下拉/细目多选 chips/分区映射形态优先 + 审查轮（onProfileChange ref/独立 try/fine_ids 同步，实测 2026-08-24） | 若再增长：确认流与细目 chips 拆至 ProfileConfirmFlow.tsx |
