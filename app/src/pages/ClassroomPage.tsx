@@ -11,43 +11,40 @@
  * @ai-context: 批 2b 采集生命周期收敛：active/sessionId/pausedReason/starting/
  *              stopping 与 live:status/paused/resumed 事件不再由本页自持——
  *              单一状态源在 CaptureStatusProvider（useCaptureControl，主窗 App
- *              挂载）。本页只剩两职责：①按钮动作接 context（pending 防连点、
- *              守卫错自愈文案如实展示）；②页面级提示（模型/窗口丢失/帧停更/
- *              融合卡片/状态行文案）。
+ *              挂载）。
+ * @ai-context: 批 0-C2 Task 4 拆分（724 → ≤300）：本文件只留装配——左栏
+ *              `ClassroomSourceColumn` · 捕获卡 `ClassroomCapturePanel` · 横幅
+ *              `ClassroomBanners` · 提示/模型/预热 `useClassroomHints` · 窗口枚举
+ *              `useClassroomWindows` · 浮窗 `useClassroomFloat` · 快捷键
+ *              `useClassroomShortcuts`。页面保留：warmUp 一次性预热（D1，hook 经
+ *              入参依赖它）、四个采集动作（组装参数 + 落地状态行）、status/lastNote
+ *              单一状态源、列状态与两个 window keydown 的**注入点**。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { WindowSelectCard } from "../components/WindowSelectCard";
-import VideoImportPanel from "../components/VideoImportPanel";
-// 2026-08-21 用户需求：设置类面板迁出至设置页（模型/音频/AI/数据/词表）
-// 2026-08 C1：引擎与模型就绪清单（开始前准备流——聚合现有只读命令）
-import ReadyCheckCard from "../components/ReadyCheckCard";
-import { SystemStatusBadge } from "../components/SystemStatusBadge";
 // 2026-08 审查硬拆：右栏内容区 / 文件素材输入与提取
 import ClassroomRightPane from "../components/ClassroomRightPane";
 // 批 0-C2 Task 4：左栏实时捕获卡整体抽出（纯展示适配器——采集/模型状态由本页注入）
 import ClassroomCapturePanel from "../components/ClassroomCapturePanel";
 // 批 0-C2 Task 4 步 3：三条页面级提示横幅整体抽出（ASR 降级/窗口丢失/画面停更）
 import ClassroomBanners from "../components/ClassroomBanners";
-import MaterialInputPanel from "../components/MaterialInputPanel";
+// 批 0-C2 Task 4 步 4：左栏配置列整体抽出（就绪清单/窗口选择/六块面板装配/状态行）
+import ClassroomSourceColumn from "../components/ClassroomSourceColumn";
 import ColumnResizer from "../components/ColumnResizer";
-import ColumnBar from "../components/ColumnBar";
 import { useColumnLayout } from "../hooks/useColumnLayout";
-// v0.11.7：图文采集（第三动线：截屏导入图文内容 → 图文会话）
-import PhotoCapturePanel from "../components/PhotoCapturePanel";
-// v0.20.4（REQ-303）：web 采集动线面板
-import WebImportPanel from "../components/WebImportPanel";
 // 批 2b：采集控制单一状态源（暂停/启停状态与动作全收敛于此——页内不再
 // 订阅 live:status/live:paused/live:resumed 与 media-* 双轨）
 import { useCaptureControl } from "../hooks/useLiveCaptureControl";
 // 批 0-C2 Task 4 步 2：页面级提示/融合编排/流式模型与预热状态下沉
 // （D1：warmUp 由本页注入——model:download-done 内依赖它）
 import { useClassroomHints, type PrepareState } from "../hooks/useClassroomHints";
-import type { Note, WindowInfo, ProfileKind } from "../types";
-// v0.12.3：浮窗状态快照类型（与 Rust FloatUiView camelCase 契约同源；
-// 审查 LOW-3：统一共享类型替代内联重复声明）
-import type { FloatSnapshot } from "../hooks/useFloatWindow";
+// 批 0-C2 Task 4 步 5：窗口枚举/选中态下沉（失败文案经 onStatus 回写状态行）
+import { useClassroomWindows } from "../hooks/useClassroomWindows";
+// 批 0-C2 Task 4 步 6：浮窗状态/快捷键（Ctrl+Shift+F）与截图快捷键（Ctrl+Shift+S）
+// 各自下沉——**两个独立 window keydown**，不得合并（见两文件 @ai-context 的 R4 说明）
+import { useClassroomFloat } from "../hooks/useClassroomFloat";
+import { useClassroomShortcuts } from "../hooks/useClassroomShortcuts";
+import type { Note, ProfileKind } from "../types";
 // Low 清扫：标题截断长度单一定义源（与 MaterialInputPanel 共享）
 import { NOTE_TITLE_MAX_LEN } from "../utils/constants";
 
@@ -57,41 +54,22 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   // 批 2b：采集生命周期单一状态源（挂载拉取+事件+看门狗在 provider；本页消费）
   const { active, sessionId, pausedReason, starting, stopping, pending, notice, start, pause, resume, stop } =
     useCaptureControl();
-  // ── 窗口/进程选择 ──
-  const [windows, setWindows] = useState<WindowInfo[]>([]);
-  const [selectedWindow, setSelectedWindow] = useState<WindowInfo | null>(null);
-  const [windowsLoading, setWindowsLoading] = useState(false);
-
   // ── 实时捕获页面级提示与编排（v0.2.0；采集生命周期状态见上 useCaptureControl）──
   // 批 0-C2 Task 4 步 2：融合/模型/预热/横幅等提示态整体下沉 useClassroomHints
-  // （调用点在下方 warmUp 之后——D1 要求把 warmUp 作为入参注入）；本页只剩
-  // 系统窗口开关与浮窗快照两个页面级开关。
+  // （调用点在下方 warmUp 之后——D1 要求把 warmUp 作为入参注入）；浮窗快照随步 6
+  // 下沉 useClassroomFloat，本页只剩「显示系统窗口」一个采集相关开关。
   // v0.19.2：系统窗口默认过滤（终端/资源管理器等）——开关找回兜底
   const [showSystemWindows, setShowSystemWindows] = useState(false);
-  // v0.12.3：浮窗状态（按钮语义：浮窗化 ⇄ 收起 ⇄ 解锁穿透；Rust 单一来源）
-  const [floatSnap, setFloatSnap] = useState<FloatSnapshot>({ open: false, locked: false, topmost: true });
 
   // ── 素材与结果（文件流水线，v0.1.0）──
   // 素材路径/处理中状态已下沉 MaterialInputPanel（审查硬拆）；父级仅保留产物与提示
   const [lastNote, setLastNote] = useState<Note | null>(null);
   const [status, setStatus] = useState("");
 
-  const refreshWindows = useCallback(async (background = false) => {
-    if (!background) setWindowsLoading(true);
-    try {
-      const list = await invoke<WindowInfo[]>("list_windows");
-      setWindows(list);
-    } catch (e) {
-      setStatus(`窗口枚举失败: ${e}`);
-    } finally {
-      if (!background) setWindowsLoading(false);
-    }
-  }, []);
-
-  // 首次进入自动枚举一次窗口
-  useEffect(() => {
-    void refreshWindows();
-  }, [refreshWindows]);
+  // ── 窗口/进程选择（批 0-C2 Task 4 步 5：枚举/选中/loading 下沉 useClassroomWindows）──
+  // 失败文案经 onStatus 写回本页状态行（D5：status 单一状态源）。
+  const { windows, selectedWindow, setSelectedWindow, windowsLoading, refreshWindows } =
+    useClassroomWindows(setStatus);
 
   // P3：预热引擎——进课堂助手页（=开始选窗口）即后台加载，点"开始"毫秒级
   // 启动；幂等（后端已有预备则返回当前状态）；失败回 idle（start 有内联兜底）
@@ -141,61 +119,11 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
     downloadModel,
   } = useClassroomHints({ active, starting, notice, warmUp, onStatus: setStatus });
 
-  // v0.5.0 M6（REQ-051）：用户截图快捷键 Ctrl+Shift+S（最高权重关键图信号）
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && (e.key === "S" || e.key === "s")) {
-        e.preventDefault();
-        void invoke<string>("save_user_screenshot")
-          .then(() => setStatus("📷 截图已保存（关键图候选置顶）"))
-          .catch((err) => setLiveError(`截图失败: ${err}`));
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  // v0.12.0 M6：浮窗化快捷键 Ctrl+Shift+F（采集中一键浮窗——全屏看视频不中断）
-  // v0.12.6（ADR-025）：三态语义收拢到 Rust float_toggle（单一来源，防主窗键与
-  // 全局快捷键双触发双翻转）——前端按钮/键只调 toggle，状态由 float:state 事件回流
-  const toggleFloat = useCallback(() => {
-    void invoke<FloatSnapshot>("float_toggle")
-      .then(setFloatSnap)
-      .catch((err) => setLiveError(`浮窗切换失败: ${err}`));
-  }, []);
-
-  // v0.12.3：浮窗状态同步（挂载拉取 + float:state 事件订阅——Rust 单一来源）
-  useEffect(() => {
-    let disposed = false;
-    const unlisteners: Promise<() => void>[] = [];
-    void invoke<FloatSnapshot>("float_state")
-      .then((s) => {
-        if (!disposed) setFloatSnap(s);
-      })
-      .catch(() => undefined);
-    unlisteners.push(
-      listen<FloatSnapshot>("float:state", (e) => {
-        if (!disposed) setFloatSnap(e.payload);
-      }),
-    );
-    return () => {
-      disposed = true;
-      unlisteners.forEach((p) => void p.then((fn) => fn()));
-    };
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      // v0.12.6：仅浮窗关闭时生效——浮窗打开期间快捷键已升级为全局快捷键
-      // （Rust 侧统一处理，语义见 float_toggle_core），此处拦截避免双触发
-      if (active && !floatSnap.open && e.ctrlKey && e.shiftKey && (e.key === "F" || e.key === "f")) {
-        e.preventDefault();
-        toggleFloat();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [active, floatSnap.open, toggleFloat]);
+  // 批 0-C2 Task 4 步 6：两个页面级快捷键与浮窗状态各自下沉（R4：**仍是两个**
+  // window keydown——Ctrl+Shift+S 在 useClassroomShortcuts、Ctrl+Shift+F 在
+  // useClassroomFloat，后者带 `active && !floatSnap.open` 让位守卫，不得合并）。
+  useClassroomShortcuts({ onStatus: setStatus, onLiveError: setLiveError });
+  const { floatSnap, toggleFloat } = useClassroomFloat({ active, onLiveError: setLiveError });
 
   // ── 视频类型档案（v0.5.0 M1，REQ-043：混合检测用户确认结果）──
   // v0.7.1：初始「未知」——未检测/无法自动识别时如实标注（参数走默认档零回归）
@@ -277,63 +205,22 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   return (
     <div style={{ display: "flex", height: "calc(100vh - 56px)", minHeight: 0 }}>
       {/* ── 左栏：配置面板（窗口选择 → 素材 → 启动按钮；v0.15 可拖拽/折叠） ── */}
-      {leftCol.folded ? (
-        <ColumnBar icon="📡" title="课堂助手" onClick={leftCol.expand} />
-      ) : (
-      <div
-        style={{
-          width: leftCol.width,
-          flexShrink: 0,
-          borderRight: "1px solid #e5e7eb",
-          display: "flex",
-          flexDirection: "column",
-          minWidth: 0,
-        }}
-      >
-        <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span>📡 课堂助手</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            {/* M7/REQ-042 F2/G2：健康徽标 + 诊断面板（开发期可见） */}
-            <SystemStatusBadge />
-            <button onClick={() => leftCol.setManualFolded(true)} style={{ fontSize: 12, cursor: "pointer", border: "none", background: "none", color: "#9ca3af" }} title="折叠侧栏">⟨</button>
-          </div>
-        </div>
-
-        {/* 批 0-C2 Task 4 步 3：三条页面级横幅整体抽出（含"为什么没有第四条"注释） */}
-        <ClassroomBanners
-          asrDegraded={asrDegraded}
-          windowLost={windowLost}
-          frameStalledSecs={frameStalledSecs}
-          onDismissWindowLost={dismissWindowLost}
-        />
-
-        <div style={{ flex: 1, minHeight: 0, padding: 12, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
-          {/* 2026-08 C1：引擎与模型就绪清单（开始前准备流——缺什么一目了然） */}
-          <ReadyCheckCard />
-
-          {/* 目标窗口/进程选择（v0.2.0 实时捕获上下文） */}
-          {/* v0.19.2（用户实测）：系统窗口默认过滤，开关找回（能力不丢） */}
-          {windows.some((w) => w.systemWindow) && (
-            <label style={{ fontSize: 11, color: "#6b7280", display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={showSystemWindows}
-                onChange={(e) => setShowSystemWindows(e.target.checked)}
-              />
-              显示系统窗口（终端/资源管理器等）
-            </label>
-          )}
-          <WindowSelectCard
-            windows={showSystemWindows ? windows : windows.filter((w) => !w.systemWindow)}
-            selected={selectedWindow}
-            onSelect={setSelectedWindow}
-            onRefresh={refreshWindows}
-            loading={windowsLoading}
+      {/* 批 0-C2 Task 4 步 4：左栏整体抽出至 ClassroomSourceColumn（顶层恰好一个元素）；
+          R2：ColumnResizer 仍是本列的**兄弟**——留在本页、无条件渲染，不随之搬走 */}
+      <ClassroomSourceColumn
+        folded={leftCol.folded}
+        width={leftCol.width}
+        onExpand={leftCol.expand}
+        onFold={() => leftCol.setManualFolded(true)}
+        banners={
+          <ClassroomBanners
+            asrDegraded={asrDegraded}
+            windowLost={windowLost}
+            frameStalledSecs={frameStalledSecs}
+            onDismissWindowLost={dismissWindowLost}
           />
-
-          {/* 实时捕获（v0.2.0：WASAPI + DXGI + 流式 ASR + 字幕 OCR） */}
-          {/* 批 0-C2 Task 4：卡片整体抽出至 ClassroomCapturePanel（纯展示适配器——
-              采集/模型/预热状态与全部动作由本页注入，卡内不再消费 useCaptureControl） */}
+        }
+        capturePanel={
           <ClassroomCapturePanel
             active={active}
             starting={starting}
@@ -357,30 +244,19 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
             onStatus={setStatus}
             onLiveError={setLiveError}
           />
-
-          {/* 视频文件导入（v0.3.0：REQ-015 第二入口，字幕优先 + ASR fallback） */}
-          <VideoImportPanel onOpenSessions={onOpenSessions} />
-
-          {/* 2026-08-21 用户需求：OCR 设备/音频预处理/备份/AI 服务/词表/模型管理等
-              设置类面板已迁出至「⚙ 设置」页——课堂助手左栏仅保留采集动线 */}
-
-          {/* 素材输入 + 提取按钮（v0.1.0 文件流水线；审查硬拆——MaterialInputPanel） */}
-          <MaterialInputPanel
-            windowTitle={selectedWindow?.title ?? null}
-            onNote={setLastNote}
-            onStatus={setStatus}
-          />
-
-          {/* v0.11.7：图文采集（第三动线：截屏导入图文内容 → 图文会话） */}
-          <PhotoCapturePanel onOpenSessions={onOpenSessions} onStatus={setStatus} />
-
-          {/* v0.20.4（REQ-303）：web 采集（第四条动线：URL 静态直取 → kind=web 会话） */}
-          <WebImportPanel onOpenSessions={onOpenSessions} onStatus={setStatus} />
-
-          {status && <p style={{ fontSize: 12, color: "#2563eb" }}>{status}</p>}
-        </div>
-      </div>
-      )}
+        }
+        windows={windows}
+        selectedWindow={selectedWindow}
+        onSelectWindow={setSelectedWindow}
+        onRefreshWindows={refreshWindows}
+        windowsLoading={windowsLoading}
+        showSystemWindows={showSystemWindows}
+        onShowSystemWindows={setShowSystemWindows}
+        onOpenSessions={onOpenSessions}
+        onNote={setLastNote}
+        status={status}
+        onStatus={setStatus}
+      />
       <ColumnResizer onResize={leftCol.resizeBy} onReset={leftCol.resetWidth} />
 
       {/* ── 右栏：内容区（档案配置 + 实时活动面板 / 笔记预览 / 空态说明书） ── */}

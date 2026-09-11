@@ -33,8 +33,8 @@
 
 | # | 偏差 | 代表证据 | 影响 | 建议 |
 |---|---|---|---|---|
-| B1 | **真实冲突**：正文 Ctrl+Shift+S=拆段（textarea 未 stopPropagation），同键 ClassroomPage window 监听同时触发截图 invoke | NoteEditView.tsx:180-184 vs ClassroomPage.tsx:240-246 | 编辑笔记按该键 = 拆段 + 误触发截图 | 局部监听 stopPropagation 或全局按 e.target 排除编辑器 |
-| B2 | window keydown 注册散落 3 处，无集中注册表/冲突检测/帮助入口；display:none 保留挂载页的快捷键/ESC 仍全局生效（隐藏页编辑态可被误改） | App.tsx:204-213；NotesPage.tsx:205-228；ClassroomPage.tsx:239-250；App.tsx:314-399 | 跨页串扰；无快捷键发现性 | 命令注册中心 + 可见性/焦点守卫 + 快捷键帮助弹层 |
+| B1 | **真实冲突**：正文 Ctrl+Shift+S=拆段（textarea 未 stopPropagation），同键 ClassroomPage window 监听同时触发截图 invoke | NoteEditView.tsx:180-184 vs useClassroomShortcuts.ts（Ctrl+Shift+S 监听）〔拆分前 = ClassroomPage.tsx:240-246〕 | 编辑笔记按该键 = 拆段 + 误触发截图 | 局部监听 stopPropagation 或全局按 e.target 排除编辑器 |
+| B2 | window keydown 注册散落 3 处，无集中注册表/冲突检测/帮助入口；display:none 保留挂载页的快捷键/ESC 仍全局生效（隐藏页编辑态可被误改） | App.tsx:204-213；NotesPage.tsx:205-228；useClassroomShortcuts.ts（Ctrl+Shift+S）+ useClassroomFloat.ts（Ctrl+Shift+F）〔拆分前 = ClassroomPage.tsx:239-250 / :282-293〕；App.tsx:314-399 | 跨页串扰；无快捷键发现性 | 命令注册中心 + 可见性/焦点守卫 + 快捷键帮助弹层 |
 | B3 | IME 组合守卫仅 1/9（GroupSidebarRow 有；GoalDetail/VocabManager/KnowledgeConceptDialog/KnowledgeModelDialog/KnowledgeTreeView/LinkEntityPicker/RefineStrategyPicker 无） | GroupSidebarRow.tsx:109-116 vs 其余 9 处 | **中文输入法候选回车直接创建/保存/触发动作**（中文桌面高发 bug），同仓不一致 | 抽 `useFormEnterSubmit`（含 isComposing）统一替换 |
 | B4 | 市场语义键缺位：无 Ctrl+K 切换器/聚焦搜索、Ctrl+F 页内、Ctrl+N 新建、Mod+B/I（tooltip 宣称存在但全库无绑定）、Tab 切换、Delete/F2 | 全库 grep；RichEditorView.tsx:242-243 | 键盘流用户全走鼠标；误导性 UI 文案 | 补语义键：Ctrl+F 聚焦页内搜索、Ctrl+K 笔记切换器、Ctrl+B/I 绑定、F2 改名 |
 | B5 | 复习面仅 Esc，无空格翻面/1-4 评分（Anki 固化心智） | ReviewSessionOverlay.tsx:138-174 | 复习速度低于基准 | 空格=翻面、1-4=评分、Esc=退出（两段式） |
@@ -91,11 +91,11 @@
 |---|---|---|---|
 | G1 | 图文采集「放弃」无确认即级联丢弃整场截图集合（与删除会话带确认双重标准） | PhotoCapturePanel.tsx:140-150 | 累计>0 时 confirm（列明将删 N 张）或撤销 toast |
 | G2 | 录制中会话可勾选入批量删除（无豁免/警示）[需人工确认后端行为] | SessionListPanel.tsx:245-251；SessionsPage.tsx:245-268 | 过滤录制态并提示"先停止再删除" |
-| G3 | 停止单点即停无确认/撤销；暂停与停止三钮紧邻 | ClassroomPage.tsx:651-665；CaptureFloatPanel.tsx:72-76 | 停止后融合前留 5s「撤销/继续」出口或强视觉分离 |
+| G3 | 停止单点即停无确认/撤销；暂停与停止三钮紧邻 | ClassroomCapturePanel.tsx「⏹ 停止」按钮组〔拆分前 = ClassroomPage.tsx:651-665〕；CaptureFloatPanel.tsx:72-76 | 停止后融合前留 5s「撤销/继续」出口或强视觉分离 |
 | G4 | 计时=墙钟差：暂停照走、停止不清 ref，跨会话累加 | LiveActivityPanel.tsx:146-151,153-157,287 | 维护累计活动时长；stop/失败重置 |
 | G5 | OCR 画面检索命中宣称"点击跳详情"却不定位命中屏（锚点已存在无人消费） | SessionListPanel.tsx:439-455；SessionDetailPanel.tsx:457 | openDetail 带屏锚点 scrollIntoView |
-| G6 | 就绪清单仅挂载检查+手动⟳，与同页内联模型卡下载完成态冲突（上卡红✗下卡✓并存） | ReadyCheckCard.tsx:111-155；ClassroomPage.tsx:208-217 | 订阅下载事件/回页面自动复查 |
-| G7 | 采集中窗口卡仍可改选（无效果无提示）；时间轴纯文本不可点、无回听/段↔屏联动（音频保留 30 天却无播放消费路径） | ClassroomPage.tsx:547-553；SessionDetailPanel.tsx:416-435,451-558 | 采集中锁定并标注目标；行点击联动同时间屏卡 |
+| G6 | 就绪清单仅挂载检查+手动⟳，与同页内联模型卡下载完成态冲突（上卡红✗下卡✓并存） | ReadyCheckCard.tsx:111-155；ClassroomCapturePanel.tsx（页内流式模型卡：未就绪缺件/下载中/⟳ 重试）〔拆分前 = ClassroomPage.tsx:208-217〕 | 订阅下载事件/回页面自动复查 |
+| G7 | 采集中窗口卡仍可改选（无效果无提示）；时间轴纯文本不可点、无回听/段↔屏联动（音频保留 30 天却无播放消费路径） | ClassroomCapturePanel.tsx（采集中状态行「● 正在采集（实时内容见右侧面板）」）〔拆分前 = ClassroomPage.tsx:547-553〕；SessionDetailPanel.tsx:416-435,451-558 | 采集中锁定并标注目标；行点击联动同时间屏卡 |
 
 ### H. 体系/复习/目标（除 D 外）〔P1×4 + P2×20〕
 | # | 偏差 | 代表证据 | 建议 |
@@ -225,7 +225,7 @@
 | J2-5 | GoalsPage:80 | 左列 380 固定：不可拖/折/记忆/无窄窗兜底（其余 4 数据页均已接入 useColumnLayout） | 接入 useColumnLayout | P2 |
 | J2-6 | ChatSidebar:63 | 侧栏 240 固定不可调/折叠；行高 29px | 接入 useColumnLayout + autoFold；行高 ≥36 | P2 |
 | J2-7 | ClassroomRightPane:60/81/114 vs 89-111 | 同右栏 640 与全宽分支混用（状态切换宽度跳动） | 统一 wrapper | P2 |
-| J2-8 | ClassroomPage:498-529,531 | 4 类横幅可叠 + 6 模块纵向堆 | 横幅合并/置底，采集入口首屏可达 | P2 |
+| J2-8 | ClassroomBanners.tsx（页面级横幅叠放）+ ClassroomSourceColumn.tsx（六模块纵向堆；模型四态卡见 ClassroomCapturePanel.tsx）〔拆分前 = ClassroomPage:498-529,531〕 | 4 类横幅可叠 + 6 模块纵向堆 | 横幅合并/置底，采集入口首屏可达 | P2 |
 | J2-9 | 弹窗组（13 个） | 宽度 340–680 五档以上、遮罩/圆角/居中/限高各表（680 破规格 560） | 定 S/M/L 三档 + 统一 overlay/radius | P2 |
 | J2-10 | KnowledgeDetailPanel:130-138 | 折叠 34px 窄条 + 折叠态不持久（其余列 26px+记忆） | 并入 detailCol hook | P3 |
 | J2-11 | 页头三套（固定 44/padding 式/无）+ 行高三档（29/44/56）+ 空态五套 + 高度链 calc 与 100% 混用 | 跨页观感参差 | 页头统一 44/48、列头 40、行高统一、EmptyState 组件 | P2/P3 |
