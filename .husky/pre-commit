@@ -13,4 +13,8 @@
 #      （差 `app/src-tauri/build.rs`、`app/src-tauri/examples/capture_ocr_diag.rs`、`app/vite.config.ts`、
 #      `app/vitest.config.ts`）⇒「命令跑了、这 4 个文件却没被看见」。直跑全树把这两处**假覆盖**一起消掉（glob 不再决定门禁视野），但消掉的是**假覆盖这层、不是这 4 个文件本身** —— 它们仍在 `SCAN_DIRS` 之外、不归本红线管辖（计划「未做（登记）」已点名）。
 #   `&&` 串联：任一失败即以非零退出，husky 拦下提交（不吞前一段的退出码）。
-node scripts/line-limits.mjs --full && node scripts/docs-check.mjs
+#   ④ 批 0-C3 Task 1 起接上 `check-command-registry.mjs`：IPC 注册是唯一**静默失败**的面
+#      （漏一条 ⇒ 编译通过、单测全绿，只有真机点到才报 `command … not found`），而注册清单
+#      已从 lib.rs 搬进 app_commands.rs ⇒ 每次提交都验「定义 ↔ 注册」三向一致（漏/多/重名）。
+#      同为纯文本全树只读扫描、无需 Rust 工具链。
+node scripts/line-limits.mjs --full && node scripts/docs-check.mjs && node scripts/check-command-registry.mjs

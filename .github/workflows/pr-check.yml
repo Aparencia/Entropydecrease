@@ -190,3 +190,8 @@ jobs:
       # （写表只走 --write），因此本地跑它不会逼迫任何人重新生成表。
       - name: Line limits
         run: node scripts/line-limits.mjs --full
+      # 批 0-C3 Task 1：IPC 命令注册一致性（`#[tauri::command]` 定义 ↔ app_commands.rs 注册清单，
+      # 三向检查漏/多/重名）。注册清单拆分后漏一条是**唯一会静默失败**的改动面（编译通过、单测全绿，
+      # 只有真机点到才报 `command … not found`）⇒ 与 line-limits 同 job（同为纯文本全树只读扫描）。
+      - name: Command registry consistency
+        run: node scripts/check-command-registry.mjs
