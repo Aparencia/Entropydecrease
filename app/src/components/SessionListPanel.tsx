@@ -20,7 +20,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { CourseGroup, OcrBlockHit, SegmentHit, Session, SessionListItem } from "../types";
 import { fmtMs } from "../utils/fmt";
 import { isSessionConvertible } from "../utils/sessionEligibility";
-import { emptySelection, rangeSelection, toggleSelection } from "../utils/noteSelection";
+import { useSessionSelection } from "../hooks/useSessionSelection";
 import SessionListRow from "./SessionListRow";
 import type { SessionRenameRequest } from "./SessionListRow";
 import SessionRowContextMenu from "./SessionRowContextMenu";
@@ -82,10 +82,6 @@ export default function SessionListPanel({
   const [filterConverted, setFilterConverted] = useState<ConvertedFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("time-desc");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  // ── 多选态（批 4）：selectionMode=选择模式（单击=勾选）；anchor=区间锚 ──
-  const [selected, setSelected] = useState<Set<number>>(emptySelection());
-  const [anchor, setAnchor] = useState<number | null>(null);
-  const [selectionMode, setSelectionMode] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ item: SessionListItem; x: number; y: number } | null>(null);
   // 行内重命名请求（nonce：同一行连续两次「重命名」也能重启编辑态）
   const [renameReq, setRenameReq] = useState<SessionRenameRequest | null>(null);
@@ -96,9 +92,6 @@ export default function SessionListPanel({
   // 数据、二次空跑）；批量转同理。
   const [batchBusy, setBatchBusy] = useState<"convert" | "delete" | null>(null);
   const batchBusyRef = useRef(false);
-
-  const clearSelection = useCallback(() => { setSelected(emptySelection()); setAnchor(null); }, []);
-  const exitBatch = useCallback(() => { setSelectionMode(false); clearSelection(); }, [clearSelection]);
 
   /** REQ-079：段搜索（片段上下文 + 点击跳详情） */
   const searchSegments = async () => {
@@ -195,23 +188,17 @@ export default function SessionListPanel({
     return filtered.map((i) => i.session.id);
   }, [grouped, groupedView, filtered, collapsed]);
 
-  const visibleOrderRef = useRef<number[]>([]);
-  useEffect(() => { visibleOrderRef.current = visibleOrder; }, [visibleOrder]);
-
-  // 列表数据变化裁剪：只留当前可见行（筛选/折叠/删除后不残留幽灵勾选）
-  useEffect(() => {
-    setSelected((cur) => {
-      if (cur.size === 0) return cur;
-      const visible = new Set(visibleOrder);
-      let changed = false;
-      const next = new Set<number>();
-      for (const id of cur) if (visible.has(id)) next.add(id); else changed = true;
-      return changed ? next : cur;
-    });
-  }, [visibleOrder]);
+  // ── 多选/选择模式状态机（批 0-C2 拆至 hooks/useSessionSelection）──
+  const {
+    selected, selectionMode, clearSelection, exitBatch, enterSelectionMode,
+    rowOpen, rowModifier, toggleAllVisible,
+  } = useSessionSelection({ visibleOrder, onOpenDetail });
 
   // Esc 退出链：右键菜单 → 选择模式/多选态（清选集退出）。
   // （行内重命名输入内已 stopPropagation 自吞 Esc——不在此列）
+  // ★ 全面板唯一 window keydown：优先级=右键菜单先 return（菜单开着时按 Esc 只关菜单，
+  //   选集保留）。**不得**把 Esc 挪进 useSessionSelection 另建监听——两个监听会让一次
+  //   Esc 同时关菜单 + 清选集（行为不等价）。
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -253,37 +240,6 @@ export default function SessionListPanel({
       setBatchBusy(null);
     }
   };
-
-  // ── 行交互（批 4）：单击语义按模式分派；修饰键不换右栏 ──
-  const rowOpen = useCallback((item: SessionListItem) => {
-    if (selectionMode) {
-      // 选择模式：单击=勾选（不打开详情）
-      setSelected((cur) => toggleSelection(cur, item.session.id));
-      setAnchor(item.session.id);
-      return;
-    }
-    // 普通单击=单选语义并打开——先清既有选集（防误以为仍处多选态），锚恒指向本次点击
-    if (selected.size > 0) clearSelection();
-    onOpenDetail(item.session.id);
-    setAnchor(item.session.id);
-  }, [selectionMode, selected.size, onOpenDetail, clearSelection]);
-
-  const rowModifier = useCallback((item: SessionListItem, ctrl: boolean, shift: boolean) => {
-    const id = item.session.id;
-    if (ctrl) {
-      // Ctrl/⌘：加/减单行；锚指向本次点击行
-      setSelected((cur) => toggleSelection(cur, id));
-      setAnchor(id);
-    } else if (shift) {
-      if (anchor == null) {
-        // 无锚的首次 Shift=单选该行并设为锚（连按两次不再各加单行）
-        setSelected(new Set([id]));
-        setAnchor(id);
-      } else {
-        setSelected((cur) => rangeSelection(cur, visibleOrderRef.current, anchor, id));
-      }
-    }
-  }, [anchor]);
 
   /** 行渲染（平铺/分组共用）；行内编辑与多选视觉在 SessionListRow */
   const renderRow = (item: SessionListItem) => (
@@ -349,7 +305,7 @@ export default function SessionListPanel({
           <button
             data-testid="session-select-mode-btn"
             style={selectModeBtn(selectionMode)}
-            onClick={() => (selectionMode ? exitBatch() : setSelectionMode(true))}
+            onClick={() => (selectionMode ? exitBatch() : enterSelectionMode())}
             title={selectionMode ? "退出选择模式（Esc）" : "进入选择模式：单击会话=勾选（Ctrl/Shift 多选）"}
           >
             选择
@@ -533,14 +489,7 @@ export default function SessionListPanel({
               if (el) el.indeterminate = selected.size > 0 && selected.size < visibleOrder.length;
             }}
             checked={selected.size === visibleOrder.length && visibleOrder.length > 0}
-            onChange={() => {
-              if (selected.size === visibleOrder.length && visibleOrder.length > 0) {
-                clearSelection();
-              } else {
-                setSelected(new Set(visibleOrder));
-                setAnchor(null); // 全选后无区间锚（下次 Shift 需新锚）
-              }
-            }}
+            onChange={toggleAllVisible}
             style={{ cursor: "pointer", flexShrink: 0 }}
             title="全选当前可见的会话（折叠组行不含在内）"
           />
