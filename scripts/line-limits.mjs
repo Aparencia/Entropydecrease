@@ -38,7 +38,6 @@ export const FROZEN_OVER_LIMIT = [
   'app/src-tauri/src/db_goals.rs',
   'app/src-tauri/src/commands_goals.rs',
   'app/src-tauri/src/ai_refine_task.rs',
-  'app/src/components/SessionDetailPanel.tsx',
   'app/src/components/NoteListView.tsx',
   'app/src-tauri/src/note_filter.rs',
   'app/src-tauri/src/artifact_templates.rs',

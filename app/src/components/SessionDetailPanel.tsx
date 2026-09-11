@@ -14,9 +14,8 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import BoxSelectOverlay from "../components/BoxSelectOverlay";
+import SessionScreenCards from "./session-detail/SessionScreenCards";
 import ImageGallery from "../components/ImageGallery";
 import NotePreviewView from "../components/NotePreviewView";
 import ProofreadPanel from "../components/ProofreadPanel";
@@ -75,12 +74,6 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
   const [glossary, setGlossary] = useState<GlossaryTerm[] | null>(null);
   // v0.7.3（REQ-160）：屏卡配图 baseUrl（图集同款：convertFileSrc 拼本地路径）
   const [baseUrl, setBaseUrl] = useState("");
-  // v0.7.7（REQ-184）：框选截取状态（first_seen_ms 标识屏）+ 保存反馈
-  const [selectingScreen, setSelectingScreen] = useState<number | null>(null);
-  // M2 修复：toast 携带屏键（first_seen_ms）——原单一 string 在 screens.map 内渲染导致 N 屏同显，
-  // 现仅匹配屏渲染（改动最小方案：保持原位展示，不提升到列表外）
-  const [panelToast, setPanelToast] = useState<{ screenKey: number; msg: string } | null>(null);
-  const panelToastTimerRef = useRef<number | null>(null);
   // v0.11.5（spec 5️⃣）：课后精修状态（精修中/完成/跳过——面板层徽标，自 ArtifactView 迁移）
   const [refining, setRefining] = useState(false);
   const [refineMsg, setRefineMsg] = useState("");
@@ -101,21 +94,6 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
   // v0.20.2（REQ-270）：LLM 文本校对面板显隐（会话切换即关）
   const [showProofread, setShowProofread] = useState(false);
   useEffect(() => setShowProofread(false), [sessionId]);
-
-  // toast 定时器卸载清理（防卸载后 setState）
-  useEffect(
-    () => () => {
-      if (panelToastTimerRef.current) window.clearTimeout(panelToastTimerRef.current);
-    },
-    [],
-  );
-
-  /** 面板内单屏 toast（4s 自动消失；新消息重置计时） */
-  const showPanelToast = (screenKey: number, msg: string) => {
-    setPanelToast({ screenKey, msg });
-    if (panelToastTimerRef.current) window.clearTimeout(panelToastTimerRef.current);
-    panelToastTimerRef.current = window.setTimeout(() => setPanelToast(null), 4000);
-  };
 
   // M7 修复：屏→OCR 块分组预构建（原 screens.map 内逐屏 filter 为 O(n×m)）——
   // 排序后双指针一次遍历归组；屏区间不重叠，与原 filter 语义一致
@@ -479,128 +457,16 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
             ))}
           </div>
 
-          {/* 画面要点（v0.7.3 屏卡流：区间+标题+正文+标签+配图+结构徽标；可展开块级明细复查）
-              v0.12.0 M5 补完成：视频会话（kind≠photo）画面要点 = 关键帧纯图（无 OCR 文字）；
-              图文会话（kind=photo）保持 OCR 文本屏 —— 头部文案与原始块提示随类型分派 */}
-          <h3 style={{ fontSize: 13, margin: "16px 0 6px" }}>
-            {detail.session.kind === "photo" ? "画面要点（OCR）" : "画面要点（关键帧纯图）"} · {detail.screens.length} 屏
-            <span style={{ color: "#9ca3af", fontWeight: 400 }}>
-              {detail.screens.length === 0 || detail.session.kind !== "photo" ? "" : `（原始 ${detail.ocr_blocks.length} 块）`}
-            </span>
-          </h3>
-          {detail.screens.length === 0 && (
-            <p style={{ fontSize: 12, color: "#9ca3af" }}>
-              {detail.session.kind === "photo" ? "本会话无画面识别内容" : "本会话无关键帧图"}
-            </p>
-          )}
-          {detail.screens.map((s, i) => {
-            // 块级明细（原料复查）：预构建分组直取（M7：替代逐屏 O(n×m) filter）
-            const raw = ocrBlocksByScreen.get(s.first_seen_ms) ?? [];
-            return (
-              <div
-                key={s.first_seen_ms}
-                id={`ocr-${sessionId}-${s.first_seen_ms}`}
-                style={{
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 8,
-                  padding: "8px 10px",
-                  marginBottom: 8,
-                  background: "#fafafa",
-                }}
-              >
-                <div style={{ fontSize: 11, color: "#0f766e", fontWeight: 600, marginBottom: 4 }}>
-                  📄 屏 {s.screen_id ?? i + 1} · {fmtMs(s.first_seen_ms)} – {fmtMs(s.last_seen_ms)}
-                  {s.structure.length > 0 &&
-                    s.structure.map((st, j) => (
-                      <span key={j} style={{ marginLeft: 8, color: "#7c3aed" }}>
-                        {st.kind === "table" ? "📊" : st.kind === "formula" ? "∑" : "⟨code⟩"} {st.kind}
-                      </span>
-                    ))}
-                </div>
-                {s.title && (
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", marginBottom: 2 }}>
-                    {s.title}
-                  </div>
-                )}
-                {s.body.map((b, j) => (
-                  <div key={j} style={{ fontSize: 12.5, color: "#374151", lineHeight: 1.6 }}>
-                    {b}
-                  </div>
-                ))}
-                {s.labels.length > 0 && (
-                  <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>
-                    标签：{s.labels.join(" · ")}
-                  </div>
-                )}
-                {s.structure.length > 0 && (
-                  <div style={{ fontSize: 11.5, color: "#7c3aed", marginTop: 3 }}>
-                    {s.structure.map((st, j) => (
-                      <div key={j}>[{st.kind}] {st.rendered ?? st.text.slice(0, 60)}</div>
-                    ))}
-                  </div>
-                )}
-                {s.image_ref && baseUrl && (
-                  <div style={{ marginTop: 6 }}>
-                    {/* M2：仅匹配屏渲染 toast（screenKey=first_seen_ms） */}
-                    {panelToast && panelToast.screenKey === s.first_seen_ms && (
-                      <div style={{ fontSize: 11, color: "#047857", background: "#ecfdf5", border: "1px solid #6ee7b7", borderRadius: 6, padding: "4px 8px", marginBottom: 4 }}>
-                        {panelToast.msg}
-                      </div>
-                    )}
-                    <div style={{ position: "relative", display: "inline-block" }}>
-                      <img
-                        src={convertFileSrc(`${baseUrl}/${s.image_ref}`)}
-                        alt={`屏 ${i + 1}`}
-                        loading="lazy"
-                        style={{
-                          maxWidth: 260,
-                          borderRadius: 6,
-                          border: "1px solid #e5e7eb",
-                          display: "block",
-                        }}
-                      />
-                      {/* v0.7.7（REQ-184）：屏卡全帧图框选截取（无图屏不出现按钮） */}
-                      {selectingScreen === s.first_seen_ms && (
-                        <BoxSelectOverlay
-                          src={convertFileSrc(`${baseUrl}/${s.image_ref}`)}
-                          sessionId={sessionId}
-                          firstSeenMs={s.first_seen_ms}
-                          onDone={() => {
-                            setSelectingScreen(null);
-                            // 定时消失逻辑收敛到 showPanelToast（ref 持有 + 卸载清理）
-                            showPanelToast(s.first_seen_ms, "✓ 已保存为结构图（见图集「结构图」区段）");
-                          }}
-                          onCancel={() => setSelectingScreen(null)}
-                        />
-                      )}
-                    </div>
-                    <div>
-                      <button
-                        style={{ ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #0d9488", background: "#f0fdfa", color: "#0f766e", marginTop: 4 }}
-                        onClick={() => {
-                          setSelectingScreen(s.first_seen_ms);
-                          setPanelToast(null);
-                        }}
-                        title="拖框截取此屏中的流程图/图表等非线性结构为结构图"
-                      >
-                        ✂ 框选截取
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {raw.length > 0 && (
-                  <details style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
-                    <summary style={{ cursor: "pointer" }}>块级明细（{raw.length} 块，可复查误合并）</summary>
-                    {raw.map((b) => (
-                      <div key={b.id}>
-                        [{fmtMs(b.timestamp_ms)}] {b.text}
-                      </div>
-                    ))}
-                  </details>
-                )}
-              </div>
-            );
-          })}
+          {/* 画面要点屏卡流（v0.7.3 区间/标题/正文/标签/配图/结构徽标 + v0.7.7 框选截取）
+              —— 拆至 session-detail/SessionScreenCards.tsx（toast/框选状态随之下沉） */}
+          <SessionScreenCards
+            sessionId={sessionId}
+            kind={detail.session.kind}
+            screens={detail.screens}
+            ocrBlockCount={detail.ocr_blocks.length}
+            baseUrl={baseUrl}
+            ocrBlocksByScreen={ocrBlocksByScreen}
+          />
 
           {/* 术语表（v0.11.5 spec 8️⃣：词汇表移出笔记 → 会话详情展示；
               分析层 glossary 产出——画面高频 × 语音低频交叉，score 降序） */}
