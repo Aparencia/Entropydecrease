@@ -227,7 +227,7 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
           </div>
 
           {/* 画面要点屏卡流（v0.7.3 区间/标题/正文/标签/配图/结构徽标 + v0.7.7 框选截取）
-              —— 拆至 session-detail/SessionScreenCards.tsx（toast/框选状态随之下沉） */}
+              —— 拆至 session-detail/SessionScreenCards.tsx；toast/框选态**留在 useSessionDetailData**（屏卡子树随 viewMode 卸载，状态不能跟着走） */}
           <SessionScreenCards
             sessionId={sessionId}
             kind={detail.session.kind}
