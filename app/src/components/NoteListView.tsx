@@ -182,21 +182,9 @@ export default function NoteListView({
   }, [loadOrders]);
 
   // ── 分组树数据（同 v0.15 结构）——可见序统一从本结构生成 ──
+  // Why 不再有分桶 memo：旧 `grouped` 是死载荷——仅被当作 treeMode 的第二真值，
+  // 其 ungrouped/byGroup 从未被读取（真分桶一直在 sections 内重算）；批 0-C2 去重
   const treeMode = keyword.trim() === "" && tagFilter === null && sortMode === "updated-desc";
-  const grouped = useMemo(() => {
-    if (!treeMode) return null;
-    const ungrouped: Note[] = [];
-    const byGroup = new Map<number, Note[]>();
-    for (const n of notes) {
-      if (n.group_id == null) ungrouped.push(n);
-      else {
-        const arr = byGroup.get(n.group_id) ?? [];
-        arr.push(n);
-        byGroup.set(n.group_id, arr);
-      }
-    }
-    return { ungrouped, byGroup };
-  }, [notes, treeMode]);
 
   // 折叠初始值（沿用 v0.15）
   useEffect(() => {
@@ -233,7 +221,7 @@ export default function NoteListView({
     const mk = (scope: string, groupId: number | null, title: string, accent: string, items: Note[]): SectionData =>
       ({ scope, groupId, title, accent, items: orderSectionItems(items, scope) });
     const out: SectionData[] = [];
-    if (treeMode && grouped) {
+    if (treeMode) {
       const ungrouped: Note[] = [];
       const byGroup = new Map<number, Note[]>();
       for (const n of notes) {
@@ -255,7 +243,7 @@ export default function NoteListView({
       out.push(mk("flat", null, "", paletteHex(null, theme), notes));
     }
     return out;
-  }, [treeMode, grouped, groups, notes, groupFolds, orderSectionItems, theme, groupFilter, groupOrderRows]);
+  }, [treeMode, groups, notes, groupFolds, orderSectionItems, theme, groupFilter, groupOrderRows]);
 
   // 可见序（L1 审查：折叠组行不参与区间/划选——与渲染可见一致；折叠组头仍在）
   const visibleOrder = useMemo(() => {
