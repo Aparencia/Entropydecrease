@@ -199,10 +199,16 @@ describe("Button 透传与内容", () => {
     expect(cls).toContain("my-slot");
     expect(cls).toContain("ed-btn");
   });
+
+  it("style 纯透传且不影响类名顺序（与 Text/Surface 同一写法；视觉权威仍在类）", () => {
+    const { container } = render(<Button className="my-slot" style={{ marginTop: 4 }}>x</Button>);
+    expect(root(container).style.marginTop).toBe("4px");
+    expect(root(container).className).toBe("ed-btn ed-btn--secondary ed-btn--md my-slot");
+  });
 });
 
 describe("Button 反例守门（批 6 要一处改对所有地方）", () => {
-  it("四态与位移**只走类**，绝不落内联 style", () => {
+  it("四态与位移**只走类**：不传 style 时不产生任何内联样式", () => {
     const el = root(
       render(<Button variant="primary" size="lg" block disabled>x</Button>).container,
     );

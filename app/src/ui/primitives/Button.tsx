@@ -21,8 +21,10 @@
  *    这一行即可，CSS 的 `:disabled` 分支与测试不受影响。
  * ② 不可用时**不派发 `onClick`**：`busy` 没有原生 `disabled` 替我们拦截，click 仍会到达 ⇒ 处理器
  *    显式 `preventDefault()` 后返回（顺带挡住 `type="submit"` 的隐式表单提交）。
- * ③ 四态与位移**只出类名、不出内联 style**（否则批 6 只能逐处改）。本组件**不提供 `style` 参数**
- *    —— 计划的 Produces 未列它，且样式一律走类（唯一例外是 z-index 走 `zIndex()` 标尺，本组件不涉）。
+ * ③ 四态与位移**只出类名、不出内联 style**（否则批 6 只能逐处改）。`style` 是**纯透传**
+ *    （与 `Text` / `Surface` 逐字同一写法，控制方 2026-09-11 裁决补入）：本组件**没有基类内联
+ *    style**，故不存在合并与顺序问题 —— 调用点传什么就是什么。视觉权威仍在类：调用点若用
+ *    `style` 去覆盖四态的底色/位移，等于把批 6 的"一处改对所有地方"重新打散（那正是本批要消灭的形态）。
  * ④ **不加 `tabIndex` / `role`**：它是**真实 `<button>`**，Tab 到达与 Enter/Space 激活由浏览器免费
  *    提供（现状全仓 `tabIndex` 仅 1 处、大量可点 `<div>` 不可键盘到达，见 recon §8.2 与 §8.6.1 第 4 条）。
  * ⑤ **无 `danger` 变体**：危险语义由 `ConfirmDialog` 的印章标记 + 级联影响清单承载，按钮保持中性
@@ -31,7 +33,7 @@
  *    类名，而该类名不在 `motion.css` 的 reduced-motion 基类名单里，会给 Task 14 的守卫制造假红。
  */
 
-import type { MouseEvent, ReactElement, ReactNode } from "react";
+import type { CSSProperties, MouseEvent, ReactElement, ReactNode } from "react";
 import "./Button.css";
 
 /** 三档变体：`primary` 墨底（主行动）· `secondary` 纸底（默认）· `ghost` 透明（工具条 / 关闭） */
@@ -63,6 +65,8 @@ export interface ButtonProps {
   icon?: ReactNode;
   /** 追加类名（调用点只做定位，不参与按钮的视觉权威） */
   className?: string;
+  /** 透传内联样式（纯透传：调用点布局微调、批 6 的动效接缝；**视觉一律由类决定**） */
+  style?: CSSProperties;
   /** 落到 `data-testid`；不传时不产生该属性 */
   testId?: string;
 }
@@ -85,6 +89,7 @@ export function Button({
   title,
   icon,
   className,
+  style,
   testId,
 }: ButtonProps): ReactElement {
   const unavailable = disabled || busy;
@@ -117,6 +122,7 @@ export function Button({
       aria-disabled={unavailable ? true : undefined}
       aria-busy={busy ? true : undefined}
       title={title}
+      style={style}
       data-testid={testId}
     >
       {icon}
