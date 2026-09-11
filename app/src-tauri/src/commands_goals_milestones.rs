@@ -2,7 +2,7 @@
 //!
 //! @ai-context: 从 commands_goals.rs 拆出（≤300 行约束 / AGENTS.md §3）。
 //!              本文件 7 条命令**全部广播 `DataDomain::Goals`**（REQ-278 前端刷新
-//!              的唯一触发源），共 **6 处** emit：`add_goal_milestone` 是**唯一无条件**
+//!              的唯一触发源），共 **6 处** emit：`add_goal_milestone` 是**本文件内唯一无条件**
 //!              发的一位（新增即变），其余 5 条包在 `if ok { … }` 里（未落库不发）。
 //!              搬动时**禁止**改域名、禁止去掉/加上 `if ok` 条件——缩进层级即语义。
 //! @ai-context: inner 函数统一收 &Db（commands_groups/commands_settlement 先例）
