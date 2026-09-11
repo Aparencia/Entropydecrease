@@ -765,6 +765,14 @@ git commit -m "ci: 行数红线接入提交门禁与 CI"
 | [line-limit-exemptions.md](./line-limit-exemptions.md) | 行数豁免登记（**生成物**，>300 行文件清单；口径与守卫见 `scripts/line-limits.mjs`） | ✅ | ✅ |
 ```
 
+- [ ] **Step 2b: 一并回写三条"工具链真相"（Task 3/4 期间发现，勿漏）**
+
+`docs/versions/v0.22.md` 的「本机工具链的读数陷阱」一节需要补三件事（该节已存在，是控制方在批 0-B 期间写下的）：
+
+1. **★ 本地门禁此前从未武装**（Task 4 发现）：本克隆此前**从未安装 husky**（`core.hooksPath` 为空、无 `.git/hooks/pre-commit`、无 `node_modules`）⇒ `.husky/pre-commit`（lint-staged）与 `commit-msg`（commitlint）**对所有提交静默失效**，**包括批 0-A/0-B/0-C1 的全部交付提交**。⇒ **新克隆若未 `npm install`，门禁默认失效且无任何提示**。写清：现已武装（`node_modules` + `core.hooksPath=.husky/_`，两项均不进 git），且**后续提交会真被 lint-staged + commitlint 拦**。
+2. **陷阱 1 的量级要写准**：源码域实测最大少算 **56 行**（`live_session_pause.rs` 353→297）；而**文档域可远超** —— 本批台账自身实测 **真实 385 行 / `Get-Content` 报 247 行（少算 138 行、36%）**，因为少算幅度随**中文密度**放大。⇒ 「禁用 `Get-Content` 数行」不是只对源码成立。
+3. **门禁自身纳入校验**（Task 4 修复轮）：lint-staged 增加覆盖 `scripts/line-limits.mjs` 与 `docs/standards/line-limit-exemptions.md` 的条目（跑 `--full`）—— 否则"改工具/改登记表"在本地无自动拦截。写进该节时请与 `package.json` 的实际内容一致。
+
 - [ ] **Step 3: 全量门禁**
 
 ```powershell
